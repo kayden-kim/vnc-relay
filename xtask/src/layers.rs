@@ -11,6 +11,7 @@ use crate::cargo::{self, Package};
 /// Change this list in the same commit as the PRD row.
 const APPROVED: &[&str] = &[
     "argon2",
+    "aws-lc-rs",
     "axum",
     "clap",
     "notify",
@@ -23,8 +24,6 @@ const APPROVED: &[&str] = &[
     "tokio-rustls",
     "tokio-tungstenite",
     "toml",
-    "tracing",
-    "tracing-subscriber",
 ];
 
 enum External {

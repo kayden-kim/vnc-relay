@@ -6,7 +6,7 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 이름과 버전 | `vnc-relay-cli` 1.1.0. 1.1.0은 오류 코드 `runtime_unavailable`을 더했다(호환 변경, 사용자 결정 2026-10-20). |
+| 이름과 버전 | `vnc-relay-cli` 1.2.0. 1.1.0은 오류 코드 `runtime_unavailable`을 더했다. 1.2.0은 오류 코드 `log_file_unavailable`(종료 코드 3)과 경고 코드 `log_write_failed`를 더했다. 모두 호환 변경이며 사용자가 결정했다(2026-10-20). |
 | 상태 | Active(2026-10-16 채택) |
 | 소유자 | vnc-relay 프로젝트 관리자 |
 | 만드는 쪽(Producer) | `vnc-relay` 실행파일. 명령행 출력·종료 코드·계정 파일을 만든다. |
@@ -157,14 +157,14 @@ $argon2id$v=19$m=<memory_kib>,t=<iterations>,p=<parallelism>$<솔트>$<해시>
 | 항목 | 규칙 |
 | --- | --- |
 | 시작 | 터미널에서 `vnc-relay serve --config <path>`를 실행한다. 프로세스는 종료 때까지 돌아오지 않는다. 백그라운드 전환(daemon), PID 파일, OS 서비스 등록은 하지 않는다. |
-| 시작 순서 | (1) 설정 읽기·검증, (2) 계정 파일 읽기·검증, (3) 파일 변경 감지 준비, (4) 리스너·TLS 준비. 다음 단계는 앞 단계가 성공해야 한다. 처음 실패한 단계에서 멈추고 확보한 자원을 회수한다. 4단계는 먼저 비동기 런타임과 종료 신호 처리기를 준비한다. 준비하지 못하면 `runtime_unavailable`(종료 코드 1)로 멈춘다. 이어 인증서·개인키 파일 검사(`tls_file_invalid`, 종료 코드 3)를 리스너 바인드(`listener_bind_failed`, 종료 코드 4)보다 먼저 한다. 인증서·개인키 파일 오류가 있으면 종료 코드는 3이고, 그 오류가 없을 때의 바인드 실패만 4다. 모두 성공하면 준비됨이다([운영 스펙 2절](../specs/operations.md#2-상태와-검증-매개변수)). |
+| 시작 순서 | (1) 설정 읽기·검증과 로그 출력 열기, (2) 계정 파일 읽기·검증, (3) 파일 변경 감지 준비, (4) 리스너·TLS 준비. 다음 단계는 앞 단계가 성공해야 한다. 처음 실패한 단계에서 멈추고 확보한 자원을 회수한다. 1단계는 설정 검증이 끝난 뒤 `log.output`의 로그 파일을 연다. 열지 못하면 `log_file_unavailable`(종료 코드 3)로 멈춘다. 4단계는 먼저 비동기 런타임과 종료 신호 처리기를 준비한다. 준비하지 못하면 `runtime_unavailable`(종료 코드 1)로 멈춘다. 이어 인증서·개인키 파일 검사(`tls_file_invalid`, 종료 코드 3)를 리스너 바인드(`listener_bind_failed`, 종료 코드 4)보다 먼저 한다. 인증서·개인키 파일 오류가 있으면 종료 코드는 3이고, 그 오류가 없을 때의 바인드 실패만 4다. 모두 성공하면 준비됨이다([운영 스펙 2절](../specs/operations.md#2-상태와-검증-매개변수)). 각 단계의 실패는 stderr의 오류 줄과 함께 운영 로그의 `startup_failed`로도 기록한다([운영 정보 계약 1.5절](ops-info-v1.md#15-사건-목록)). |
 | 종료 요청 | Ctrl+C와 SIGTERM을 정상 종료 요청으로 처리한다. Ubuntu는 SIGINT(Ctrl+C)와 SIGTERM이다. Windows 11은 Ctrl+C와 Ctrl+Break다. Windows에는 SIGTERM이 없다. 콘솔 창 닫기·로그오프의 처리는 관찰로 확인 필요다. |
 | 종료 절차 | 정상 종료 요청을 받으면 [운영 스펙 3.4절](../specs/operations.md#34-정상-종료와-재시작)을 따른다. 유예 시간은 `timeouts.shutdown_grace_secs`다. 유예가 끝나 남은 세션을 강제 정리하는 경우도 정상 종료 요청에 따른 종료이며 종료 코드 0이다. 이때 각 세션의 종료 원인은 `server_shutdown`이다. |
 | 두 번째 종료 요청 | 사용자 승인(2026-10-16). 종료 유예 중 두 번째 종료 요청(Ctrl+C·SIGTERM 등)을 받으면 남은 유예를 건너뛰고 남은 세션을 즉시 강제 정리한다. 각 세션의 종료 원인은 `server_shutdown`이다. 정상 종료 요청에 따른 종료이므로 정리가 끝나면 종료 코드 0이다. 외부 동작은 [운영 스펙 3.4절](../specs/operations.md#34-정상-종료와-재시작)이 정한다. |
 | 강제 종료 | SIGKILL, 작업 관리자의 프로세스 종료, 전원 장애는 정상 유예를 보장하지 않는다. |
 | 두 번째 인스턴스 | 이미 사용 중인 리스너 주소로 시작하면 4단계에서 `listener_bind_failed`가 난다. 종료 코드 4다. 시작 중 확보한 자원을 회수하고 첫 번째 프로세스의 대기·활성 세션에 영향을 주지 않는다. 다른 주소를 쓰는 설정의 프로세스는 막지 않는다. 두 OS 모두에서 주소 공유를 허용하지 않는 방식으로 바인드해야 한다. 특히 Windows의 주소 재사용 동작은 관찰로 확인 필요다. |
 
-두 번째 인스턴스 시작 실패의 출력 예(stderr). stdout은 비어 있다. 종료 코드는 4다.
+두 번째 인스턴스 시작 실패의 출력 예(stderr). 종료 코드는 4다. `log.output = "stdout"`이면 stdout에는 운영 로그 줄(`server_starting`, `startup_failed`)만 있다. 로그 파일을 쓰면 stdout은 비어 있다.
 
 ```text
 error[listener_bind_failed] key=relay.tcp_viewer.listen: 0.0.0.0:15901에 바인드할 수 없다. 이미 사용 중이다.
@@ -179,7 +179,7 @@ error[listener_bind_failed] key=relay.tcp_viewer.listen: 0.0.0.0:15901에 바인
 | `0` | 성공 | 명령이 끝났다. `serve`는 정상 종료 요청의 정리가 끝났다(유예 만료·두 번째 종료 요청으로 강제 정리한 경우 포함). `--help`·`--version`·`admin list`(계정 0개 포함)도 해당한다. |
 | `1` | 실행 중 오류 | 명령을 실행하는 중에 실패했다. 입력 취소, 비밀번호 검사 실패, 계정 중복·없음, 변경 감지 준비 불가, 비동기 런타임·종료 신호 처리기 준비 불가, 서버가 계속 운영할 수 없는 실패, 정리 실패가 해당한다. |
 | `2` | 사용법 오류 | 알 수 없는 하위 명령·옵션, `--config` 누락·중복, 인수 개수 오류, 계정 이름 규칙 위반, 터미널이 아닌 입력. 사용법을 stderr에 쓴다. |
-| `3` | 설정 오류 | 설정 파일의 읽기·구문·키·값 오류 전체와 인증서·개인키 파일 오류(경로·형식 오류, 인증서와 개인키가 맞지 않음). 시작 실패 포함. 코드는 [설정 파일 계약 2.1절](config-v1.md#21-설정-오류와-준비-실패)의 `config_*`와 `tls_file_invalid`다. |
+| `3` | 설정 오류 | 설정 파일의 읽기·구문·키·값 오류 전체, 인증서·개인키 파일 오류(경로·형식 오류, 인증서와 개인키가 맞지 않음), 로그 파일을 열 수 없음. 시작 실패 포함. 코드는 [설정 파일 계약 2.1절](config-v1.md#21-설정-오류와-준비-실패)의 `config_*`·`tls_file_invalid`·`log_file_unavailable`이다. |
 | `4` | 리스너 준비 실패 | 리스너 바인드 실패(이미 사용 중인 주소 포함). |
 | `5` | 계정 파일 오류 | 계정 파일을 읽을 수 없거나 형식·해시 하한이 맞지 않거나, 파일이 없거나(`serve`), 계정이 하나도 없거나, 잠금·저장에 실패했다. |
 
@@ -206,9 +206,10 @@ error[listener_bind_failed] key=relay.tcp_viewer.listen: 0.0.0.0:15901에 바인
 | `accounts_file_write_failed` | 임시 파일 쓰기·검증·교체에 실패했다. 기존 계정 파일은 그대로다. | 5 | OPS-030 |
 | `listener_bind_failed` | 리스너 주소에 바인드하지 못했다. 이미 사용 중인 경우를 포함한다. `key`는 해당 `listen` 키다. | 4 | OPS-002, OPS-039 |
 | `tls_file_invalid` | 인증서·개인키 경로·형식 오류. 의미는 [설정 파일 계약 2.1절](config-v1.md#21-설정-오류와-준비-실패)이 정한다. 시작 때 4단계에서 보고하지만 종료 코드는 설정 오류와 같다. | 3 | OPS-002 |
+| `log_file_unavailable` | `serve`: `log.output`의 로그 파일을 열 수 없다. 의미는 [설정 파일 계약 2.1절](config-v1.md#21-설정-오류와-준비-실패)이 정한다. `key`는 `log.output`이다. | 3 | 없음 |
 | `config_*` | 설정 오류. 이름은 [설정 파일 계약](config-v1.md#21-설정-오류와-준비-실패)을 따른다. | 3 | OPS-001 |
 
-경고(종료 코드에 영향 없음): `accounts_file_permissive`, `last_account_removed`. 설정 경고는 [설정 파일 계약 2.2절](config-v1.md#22-경고)을 따른다.
+경고(종료 코드에 영향 없음): `accounts_file_permissive`, `last_account_removed`, `log_write_failed`(`serve`: 운영 로그 줄을 쓰지 못했다. 처음 한 번만 쓴다. `key`는 `log.output`이다. [운영 정보 계약 1.1절](ops-info-v1.md#11-로그-일반-규칙)). 설정 경고는 [설정 파일 계약 2.2절](config-v1.md#22-경고)을 따른다.
 
 ## 3. 호환성 규칙
 
@@ -274,6 +275,7 @@ error[account_name_invalid]: 계정 이름은 소문자 영문·숫자·점·밑
 | Consumer·`tests/serve.rs` `second_instance_fails_with_exit_code_4_and_leaves_the_first_running`, `fails_with_exit_code_4_and_releases_listeners_when_a_port_is_taken` | 두 번째 인스턴스 시작 실패(종료 코드 4)와 리스너마다 `listener_bind_failed`, 앞서 바인드한 리스너 회수, 첫 인스턴스의 리스너 유지(1.8절). [OPS-039](../specs/operations.md#7-수용-테스트), [OPS-002](../specs/operations.md#7-수용-테스트)의 리스너 부분 | 통과 | [실행 기록](#계약-테스트-실행-기록) |
 | Consumer·`serve` 통합 테스트(미생성, 작업 2.10·3.1) | 두 번째 인스턴스 시작 때 첫 인스턴스의 대기·활성 세션 유지, 내장 TLS 준비 실패의 자원 회수(1.8절). [OPS-039](../specs/operations.md#7-수용-테스트), [OPS-002](../specs/operations.md#7-수용-테스트) | 미실행 | 세션·TLS 미구현 |
 | Consumer·`tests/serve.rs` `stops_with_exit_code_0_on_interrupt_and_terminate`, `second_instance_fails_with_exit_code_4_and_leaves_the_first_running` | Ctrl+C(SIGINT)·SIGTERM을 받으면 리스너를 닫고 종료 코드 0(1.8절). 세션이 없는 경우만 확인한다. | 통과 | [실행 기록](#계약-테스트-실행-기록) |
+| Consumer·`tests/serve.rs` `fails_with_exit_code_3_when_the_log_file_cannot_be_opened`, `warns_once_when_log_writes_fail_and_keeps_running`, `writes_the_log_to_the_configured_file_from_start_to_stop` | 시작 순서 1단계의 로그 출력 열기: 열 수 없으면 `error[log_file_unavailable] key=log.output`과 종료 코드 3, 실패 줄은 stdout에 쓴다. `log.output`이 파일이면 stdout은 비어 있다. 로그 쓰기 실패는 `warning[log_write_failed]`를 한 번만 쓰고 계속 실행한다(1.5·1.8·2절). | 통과 | [운영 정보 계약 실행 기록](ops-info-v1.md#계약-테스트-실행-기록) |
 | Consumer·`serve` 통합 테스트, 양 OS(미생성, 작업 5.3) | 유예 안 자발 종료·유예 만료, 유예 중 두 번째 종료 요청의 즉시 강제 정리, Windows의 Ctrl+C·Ctrl+Break(1.8절). [OPS-007](../specs/operations.md#7-수용-테스트)~[OPS-010](../specs/operations.md#7-수용-테스트), [OPS-019](../specs/operations.md#7-수용-테스트), [OPS-042](../specs/operations.md#7-수용-테스트) | 미실행 | 종료 유예 미구현 |
 | Consumer·`serve` 통합 테스트(미생성) | 실행 중 계정 파일 변경이 서버에 반영되지 않고 재시작 뒤 반영(1.7절). [OPS-003](../specs/operations.md#7-수용-테스트), [OPS-029](../specs/operations.md#7-수용-테스트) | 미실행 | 구현·테스트 파일 없음 |
 | Producer·배포 검토(미생성) | 배포 문서·예시에 실제 비밀값·기본 비밀번호가 없다. [OPS-031](../specs/operations.md#7-수용-테스트) | 미실행 | 예시 파일·구현 없음 |
@@ -285,6 +287,8 @@ error[account_name_invalid]: 계정 이름은 소문자 영문·숫자·점·밑
 | 커밋 `4e594f4`에 작업 2.2를 더한 작업 트리(루트 `src/`·`tests/`, `crates/*`의 계정·리스너 모듈, `Cargo.toml`, `xtask/src/layers.rs`, 문서) | Ubuntu 24.04.4(WSL2), Rust 1.99.1, `CARGO_TARGET_DIR=~/vnc-relay-target` | `cargo xtask scenarios`(내부에서 `cargo test --workspace --no-fail-fast` 실행) | 통과. `src/cli.rs` 단위 5건, `tests/cli.rs` 2건, `tests/serve.rs` 7건, 계정 파일 계약 테스트 7건, domain 단위 15건(계정 5건 포함), `config_contract` 21건 모두 통과. 시나리오 보고: 통과 1(OPS-001), 부분 4(OPS-002, OPS-038, OPS-039, OPS-040), 미연결 143, 오류 0, 판정 통과 |
 | 같음 | 같음 | `tests/serve.rs` 테스트 실행파일을 60번 반복 | 통과(60번 모두 통과). 테스트가 동시에 같은 빈 포트를 고르던 문제를 포트 잠금으로 고친 뒤 측정했다. |
 | 같음 | 같음 | `cargo clippy --workspace --all-targets --target x86_64-pc-windows-msvc -- -D warnings` | 통과. Windows 분기(`cfg(windows)`의 종료 신호 처리기)는 타입 검사만 했고 실행하지 않았다. |
+| 커밋 `f25983a`에 작업 2.3을 더한 작업 트리 | 같음 | `cargo xtask scenarios` | 통과. `tests/serve.rs` 10건(시작 실패 때 stdout의 `startup_failed` 줄 검사로 고친 기존 7건 포함), `tests/cli.rs` 2건, `src/cli.rs` 단위 5건, 계정 파일 계약 테스트 7건 모두 통과. 시나리오 보고는 [운영 정보 계약 실행 기록](ops-info-v1.md#계약-테스트-실행-기록)에 있다. |
+| 같음 | 같음(교차 대상) | `cargo clippy --workspace --all-targets --target x86_64-pc-windows-msvc -- -D warnings` | 실패. 작업 2.3이 더한 aws-lc-sys의 빌드 스크립트가 Windows용 NASM·C 컴파일러 없이 끝나지 않는다. Windows 분기는 타입 검사도 하지 못했다([개발 환경 how-to](../how-to/set-up-and-verify.md)). |
 | 같음 | Windows 11 | `cargo xtask scenarios` | 미실행. Visual Studio Build Tools 설치가 UAC 미승인으로 멈춰(종료 코드 1602) MSVC 링커가 없다([개발 환경 how-to](../how-to/set-up-and-verify.md)). 사용자가 Windows 검증을 뒤로 미뤘다(2026-10-20). |
 
 ## 6. 초안을 확정하기 전에 해결할 사항

@@ -10,7 +10,7 @@ VNC Relay는 TCP·WS·WSS로 들어온 Viewer를 Mode I 대상이나 Mode II Ser
 | 관련 PRD | [PRD](../requirements/PRD.md) [8절 유지보수성](../requirements/PRD.md#8-비기능-요구사항), [1절 구현 기술](../requirements/PRD.md#확정-기준) |
 | 관련 ADR | [ADR-0001 내장 TLS](../decisions/ADR-0001-built-in-tls.md), [ADR-0003 단일 인스턴스·메모리 상태](../decisions/ADR-0003-single-instance-memory-state.md), [ADR-0004 tokio·rustls](../decisions/ADR-0004-tokio-rustls.md) |
 
-현재 코드는 개발 도구 `xtask/`, 설정 로딩, `serve` 시작과 CLI 골격이다. 설정 로딩은 `crates/domain`·`crates/app`·`crates/adapters`의 설정 모듈이다. `serve` 시작은 루트 crate의 `src/main.rs`·`src/cli.rs`·`src/serve.rs`와 계정 파일 읽기·리스너 바인드 모듈이다. 세 부분 모두 구현과 대조했다([xtask 모듈 설계](xtask.md), [설정 로딩 모듈 설계](config-loading.md), [`serve` 시작 모듈 설계](serve-startup.md), 모두 Current). 이 문서의 나머지 경로와 심볼은 모두 계획(Target)이다. 레이어를 crate로 나누는 방식은 사용자가 2026-10-20에 골랐다. 각 crate의 나머지 모듈은 해당 구현 작업에서 만든다.
+현재 코드는 개발 도구 `xtask/`, 설정 로딩, `serve` 시작과 CLI 골격, 운영 로그다. 설정 로딩은 `crates/domain`·`crates/app`·`crates/adapters`의 설정 모듈이다. `serve` 시작은 루트 crate의 `src/main.rs`·`src/cli.rs`·`src/serve.rs`와 계정 파일 읽기·리스너 바인드 모듈이다. 운영 로그는 사건 타입(`crates/app/src/events.rs`), 사건 기록 포트(`crates/app/src/ports.rs`), JSON Lines 출력(`crates/adapters/src/ops_log.rs`), `relay_id_ref` 계산(`crates/adapters/src/crypto.rs`), 상대 IP 값(`crates/domain/src/peer_ip.rs`)이다. 네 부분 모두 구현과 대조했다([xtask 모듈 설계](xtask.md), [설정 로딩 모듈 설계](config-loading.md), [`serve` 시작 모듈 설계](serve-startup.md), [운영 로그 모듈 설계](ops-log.md), 모두 Current). 이 문서의 나머지 경로와 심볼은 모두 계획(Target)이다. 레이어를 crate로 나누는 방식은 사용자가 2026-10-20에 골랐다. 각 crate의 나머지 모듈은 해당 구현 작업에서 만든다.
 
 ## 1. 전체 구조
 
@@ -104,11 +104,13 @@ flowchart LR
 | `crates/domain/src/allow_list.rs` | 출발지 IP 허용 목록 | 단일 IP·CIDR·범위 항목 해석과 허용 판정, 전체 허용 항목 판별 | 설정 파일 읽기 | 없음 | [설정 로딩 모듈 설계](config-loading.md)(항목 해석). 허용 판정은 작업 2.4에서 더한다. |
 | `crates/domain/src/target_policy.rs` | 대상 허용 정책 | Mode I 대상 항목 해석, 최종 연결 IP·포트 허용 판정 | 주소 해석, 연결 | `allow_list` | [설정 로딩 모듈 설계](config-loading.md)(항목 해석). 허용 판정은 작업 2.8에서 더한다. |
 | `crates/domain/src/origin.rs` | Origin 비교 | Origin 정규화와 정확 일치 비교([설정 계약 1.4절](../contracts/config-v1.md#14-origin-값-문법과-비교)) | HTTP 헤더 읽기 | 없음 | [설정 로딩 모듈 설계](config-loading.md) |
+| `crates/domain/src/peer_ip.rs` | 상대 IP | 소켓 상대 IP 값. IPv4-mapped IPv6를 IPv4로 바꾸고, 포트·영역 식별자 없이 표기한다([운영 정보 계약 1.10절](../contracts/ops-info-v1.md#110-상대-주소-표기)). | 소켓 읽기, 허용 판정 | 없음 | [운영 로그 모듈 설계](ops-log.md) |
 | `crates/domain/src/budget.rs` | 연결 예산 | 중계 측 연결 L, 관리·상태 연결 Lm의 집계 규칙 | 소켓 수락 | 없음 | 없음 |
 | `crates/domain/src/account.rs` | 관리자 계정 규칙 | 계정 이름 규칙, Argon2id 해시 문자열 형식과 승인 매개변수 범위([CLI 계약 1.2·1.4절](../contracts/cli-v1.md#12-계정-이름과-비밀번호-규칙)). 비밀번호 규칙은 작업 4.1에서 더한다. | 해시 계산, 파일 | 없음 | [`serve` 시작 모듈 설계](serve-startup.md) |
 | `crates/domain/src/recent_closed.rs` | 최근 종료 목록 | 최대 R개 보관, 오래된 항목 제거 | 시각 읽기 | `session` | 없음 |
-| `crates/app/src/ports.rs` | 포트 | 시계, 사건 기록, 대상 연결, 계정 저장소, 비밀번호 검증, 난수 등 바깥 기능의 trait | 구현 | domain | 없음 |
+| `crates/app/src/ports.rs` | 포트 | 바깥 기능의 trait. 지금은 사건 기록(`EventSink`, 작업 2.3)이 있다. 시계, 대상 연결, 계정 저장소, 비밀번호 검증, 난수는 쓰는 작업이 더한다. | 구현 | domain | [운영 로그 모듈 설계](ops-log.md)(`EventSink`) |
 | `crates/app/src/settings.rs` | 유효 설정 | 검증을 마친 설정 값의 타입, 설정 오류·경고 코드, 진단. 재로드 대상과 재시작 필요 값을 구분한다. | TOML 해석 | domain | [설정 로딩 모듈 설계](config-loading.md) |
+| `crates/app/src/events.rs` | 운영 로그 사건 | 사건 종류(`Event`)와 사건 이름·`level`, `phase` 값, `relay_id_ref` 값 타입, `log_contract` 값([운영 정보 계약 1.3~1.5절](../contracts/ops-info-v1.md#15-사건-목록)). 기능 작업이 사건을 더한다. | 줄 형식, 출력 | `settings` | [운영 로그 모듈 설계](ops-log.md) |
 | `crates/app/src/relay/` | 중계 | 접속 처리 순서, 초기 교환 제한 시간 H, Mode I 대상 연결, Mode II 매칭과 대기 W, 중계 스트림 전달, 한쪽 종료와 정리 제한 시간 E, 끊긴 연결 처리 | 소켓 수락, TLS, WebSocket 프레임 | domain, `ports` | 없음(작업 2.7에서 작성) |
 | `crates/app/src/management/` | 관리 | 서버 요약·대기 연결·활성 세션·최근 종료 조회, 관리자 종료, 로그인·관리 세션·CSRF 토큰, 로그인 실패 제한 | HTTP 해석, 쿠키 헤더 | domain, `ports` | 없음(작업 4.3에서 작성) |
 | `crates/app/src/reload/` | 재로드 | 재로드 후보를 실행 중 유효 설정과 비교하고 원자적으로 적용, 결과 사건 | 파일 감지, 파일 읽기 | domain, `settings`, `ports` | 없음 |
@@ -121,12 +123,12 @@ flowchart LR
 | `crates/adapters/src/status_http.rs` | 상태 HTTP | `/livez`·`/readyz` 응답 | 준비 판정 | app | 없음 |
 | `crates/adapters/src/config_file.rs`, `crates/adapters/src/config_file/`, `crates/adapters/src/toml_text.rs` | 설정 파일 | TOML 해석과 검증, `config_*` 오류. `toml_text.rs`는 TOML 구문 오류 위치를 계정 파일과 함께 쓴다. | 재로드 판정 | app, domain | [설정 로딩 모듈 설계](config-loading.md) |
 | `crates/adapters/src/accounts_file.rs`, `crates/adapters/src/accounts_file/` | 계정 파일 | 계정 파일 읽기·검증(작업 2.2), 잠금·원자적 교체, Argon2id 해시·검증 | 계정 규칙 | app, domain | [`serve` 시작 모듈 설계](serve-startup.md)(읽기). 쓰기는 작업 4.1에서 작성 |
-| `crates/adapters/src/ops_log.rs` | 운영 로그 | 사건을 JSON Lines로 표준 출력이나 파일에 쓴다([운영 정보 계약](../contracts/ops-info-v1.md)). | 사건 내용 결정 | app | 없음 |
+| `crates/adapters/src/ops_log.rs` | 운영 로그 | `EventSink` 구현. 사건을 JSON Lines로 표준 출력이나 파일에 쓴다. 줄 형식, 길이 제한, 로그 파일 열기 실패(`log_file_unavailable`), 쓰기 실패 처리([운영 정보 계약](../contracts/ops-info-v1.md) 1.1~1.4절) | 사건 내용 결정 | app, serde_json | [운영 로그 모듈 설계](ops-log.md) |
 | `crates/adapters/src/file_watch.rs` | 파일 변경 감지 | OS 파일 알림과 주기 확인 | 후보 검증 | app | 없음 |
 | `crates/adapters/src/terminal.rs` | 터미널 입력 | 숨김 비밀번호 입력, 삭제 확인 입력 | 비밀번호 규칙 | app | 없음 |
-| `crates/adapters/src/crypto.rs` | 난수·HMAC | 관리 세션 식별자·CSRF 토큰·`session_id` 난수, `relay_id_ref` HMAC-SHA-256 | 사용처 규칙 | app | 없음 |
+| `crates/adapters/src/crypto.rs` | 난수·HMAC | `relay_id_ref` 키 생성과 HMAC-SHA-256(작업 2.3). 관리 세션 식별자·CSRF 토큰·`session_id` 난수는 작업 4.x·2.10이 더한다. | 사용처 규칙 | app, aws-lc-rs | [운영 로그 모듈 설계](ops-log.md)(`relay_id_ref`) |
 | `src/main.rs`, `src/cli.rs` | 명령행 | 하위 명령·옵션 해석, 사용법 오류, 진단 출력 형식, 종료 코드([CLI 계약](../contracts/cli-v1.md)) | 명령 실행 내용 | `serve`, `admin`, clap | [`serve` 시작 모듈 설계](serve-startup.md) |
-| `src/serve.rs` | 서버 조립 | 시작 순서([CLI 계약 1.8절](../contracts/cli-v1.md#18-수동-시작과-종료))대로 설정·계정·감지·리스너를 준비하고 포트에 구현체를 넣는다. 비동기 런타임을 만들고 종료 신호를 수명 관리에 넘긴다. | 업무 규칙 | adapters, app, tokio | [`serve` 시작 모듈 설계](serve-startup.md) |
+| `src/serve.rs` | 서버 조립 | 시작 순서([CLI 계약 1.8절](../contracts/cli-v1.md#18-수동-시작과-종료))대로 설정·로그 출력·계정·감지·리스너를 준비하고 포트에 구현체를 넣는다. 단계마다 운영 로그 사건을 기록한다. 비동기 런타임을 만들고 종료 신호를 수명 관리에 넘긴다. | 업무 규칙 | adapters, app, tokio | [`serve` 시작 모듈 설계](serve-startup.md) |
 | `src/admin.rs` | 계정 명령 조립 | `admin` 하위 명령에 구현체를 넣고 app 절차를 실행한다. | 계정 규칙 | adapters, app | 없음 |
 | `xtask/` | 개발 도구 | `cargo xtask scenarios`(시나리오 커버리지 보고), `cargo xtask layers`(레이어 의존 검사) | 제품 기능 | serde_json. 제품 crate에 의존하지 않는다. | [xtask 모듈 설계](xtask.md) |
 | `web/dashboard/` | 대시보드 | 정적 화면 | 서버 규칙 | 관리 API(HTTP) | 없음(작업 0.9에서 구조 결정) |
@@ -165,7 +167,7 @@ flowchart LR
 
 ## 5. 시작과 연결
 
-- 시작 순서: `src/serve.rs` `run`이 [CLI 계약 1.8절](../contracts/cli-v1.md#18-수동-시작과-종료)의 순서를 따른다. (1) 설정 읽기·검증, (2) 계정 파일 읽기·검증, (3) 파일 변경 감지 준비, (4) 비동기 런타임·종료 신호 처리기 준비, 인증서·개인키 검사 뒤 리스너 바인드. 모두 성공하면 수명 상태를 준비됨으로 바꾸고 리스너 작업을 시작한다. 실패하면 확보한 자원을 회수하고 종료 코드를 돌려준다. 지금 구현은 (3)과 인증서 검사, 수명 상태, 리스너 작업이 없다([`serve` 시작 모듈 설계](serve-startup.md) 1절).
+- 시작 순서: `src/serve.rs` `run`이 [CLI 계약 1.8절](../contracts/cli-v1.md#18-수동-시작과-종료)의 순서를 따른다. (1) 설정 읽기·검증과 로그 출력 열기, (2) 계정 파일 읽기·검증, (3) 파일 변경 감지 준비, (4) 비동기 런타임·종료 신호 처리기 준비, 인증서·개인키 검사 뒤 리스너 바인드. 로그 출력을 열면 `server_starting`과 설정 경고를 기록한다. 모두 성공하면 수명 상태를 준비됨으로 바꾸고 리스너 작업을 시작한다. 실패하면 진단마다 `startup_failed`를 기록하고, 확보한 자원을 회수하고, 종료 코드를 돌려준다. 지금 구현은 (3)과 인증서 검사, 수명 상태, 리스너 작업, `server_ready`가 없다([`serve` 시작 모듈 설계](serve-startup.md) 1절).
 - 설정 위치: `crates/adapters/src/config_file/`가 `--config` 파일을 읽어 `crates/app/src/settings.rs`의 유효 설정을 만든다. 환경 변수는 읽지 않는다.
 - 객체 연결 위치: `src/serve.rs`와 `src/admin.rs`. DI 프레임워크는 쓰지 않는다. 함수 인수와 `Arc`로 포트 구현체를 넘긴다.
 
@@ -181,6 +183,6 @@ flowchart LR
 
 | 항목 | 확인하지 못한 이유 | 확인 방법 |
 | --- | --- | --- |
-| 설정 로딩, `serve` 시작, `xtask/`를 뺀 경로·심볼 | 구현 전 계획이다. | 각 구현 작업에서 모듈 설계를 쓰고, 작업 5.8에서 코드와 대조해 `Current`로 바꾼다. |
+| 설정 로딩, `serve` 시작, 운영 로그, `xtask/`를 뺀 경로·심볼 | 구현 전 계획이다. | 각 구현 작업에서 모듈 설계를 쓰고, 작업 5.8에서 코드와 대조해 `Current`로 바꾼다. |
 | 초기 교환 해석의 입력 단위 | Repeater 초기 교환 계약이 Draft다. | 작업 1.5에서 계약을 채택한 뒤 `handshake` 모듈 설계에 반영한다. |
 | app의 tokio 입출력 금지 목록 | `crates/app/clippy.toml`은 std의 파일·소켓·프로세스·환경 변수·시각 읽기를 막는다(작업 2.1). app은 아직 tokio에 의존하지 않아 tokio 입출력 타입 목록은 정하지 않았다. | app에 tokio를 더하는 작업에서 같은 파일에 `tokio::net`·`tokio::fs`·`tokio::process`·`tokio::signal` 항목을 더하고 이 행을 지운다. |

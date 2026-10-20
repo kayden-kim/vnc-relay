@@ -3,5 +3,7 @@
 
 pub mod accounts_file;
 pub mod config_file;
+pub mod crypto;
 pub mod net;
+pub mod ops_log;
 mod toml_text;

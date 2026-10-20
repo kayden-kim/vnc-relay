@@ -13,7 +13,7 @@
 - 제품 요구사항은 [docs/requirements/PRD.md](docs/requirements/PRD.md)에서 관리한다.
 - PRD는 초안이다. [사용자 확정 기준](docs/requirements/PRD.md#확정-기준)은 적용하고, 나머지 제안·미확정 사항과 구현·테스트 완료 여부를 구분한다.
 - 구현은 Rust를 사용하며, 기존 UltraVNC·websockify 소스를 복사·번역·포팅하지 않는다. noVNC 클라이언트는 구현·번들링·배포 범위에서 제외한다.
-- 현재 구현 코드는 실행파일의 `serve` 시작·종료 골격과 CLI(`src/`), 설정 파일 로더와 계정 파일 읽기·리스너 바인드(`crates/domain`·`crates/app`·`crates/adapters`), 개발 도구 `xtask`다. 개발 환경 준비와 검증 명령은 [개발 환경·검증 how-to](docs/how-to/set-up-and-verify.md)를 따른다.
+- 현재 구현 코드는 실행파일의 `serve` 시작·종료 골격과 CLI(`src/`), 설정 파일 로더와 계정 파일 읽기·리스너 바인드·운영 로그 출력(`crates/domain`·`crates/app`·`crates/adapters`), 개발 도구 `xtask`다. 개발 환경 준비와 검증 명령은 [개발 환경·검증 how-to](docs/how-to/set-up-and-verify.md)를 따른다.
 
 ## 작업 순서와 필수 참조
 

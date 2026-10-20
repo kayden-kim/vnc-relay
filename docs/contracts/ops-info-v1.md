@@ -4,7 +4,7 @@ VNC Relay가 운영자에게 내보내는 두 가지 정보의 교환 형식을 
 
 | 항목 | 값 |
 | --- | --- |
-| 이름과 버전 | `ops-info` 1.1.0. 1.1.0은 `startup_failed`의 `reason`에 `runtime_unavailable`을 더했다(호환 변경, 사용자 결정 2026-10-20). |
+| 이름과 버전 | `ops-info` 1.2.0. 1.1.0은 `startup_failed`의 `reason`에 `runtime_unavailable`을 더했다. 1.2.0은 `reason`에 `log_file_unavailable`을 더하고, 로그 쓰기 실패 처리(1.1절)를 정하고, `startup_failed`를 진단마다 한 줄로 정했다(1.6절). 모두 사용자가 결정했다(2026-10-20). |
 | 상태 | Active(2026-10-16 채택) |
 | 소유자 | vnc-relay 프로젝트 관리자 |
 | 만드는 쪽(Producer) | `vnc-relay` (`vnc-relay serve` 프로세스) |
@@ -13,8 +13,8 @@ VNC Relay가 운영자에게 내보내는 두 가지 정보의 교환 형식을 
 | 스키마 기준 파일 | 없음. 1절의 Markdown 표가 형식의 기준이다. |
 | 기준 스펙 | [운영 스펙 3.5절](../specs/operations.md#35-운영-정보), [4절](../specs/operations.md#4-보안과-신뢰-경계), [5절](../specs/operations.md#5-오류와-복구), [중계 스펙](../specs/relay.md), [WS·WSS 스펙](../specs/websocket.md), [관리 스펙](../specs/management.md) |
 | 관련 요구사항 | [PRD](../requirements/PRD.md) FR-08, FR-07, 7절 보안, AC-23, AC-25 |
-| 호환성 범위 | 이 계약의 1.x 형식을 따르는 `vnc-relay` 구현과 소비자. 구현은 아직 없다. |
-| 관련 테스트 | [운영 스펙 7절](../specs/operations.md#7-수용-테스트)의 OPS-011·OPS-012·OPS-013·OPS-032를 중심으로 5절 표에 연결한다. 계약 테스트 파일은 아직 없다. |
+| 호환성 범위 | 이 계약의 1.x 형식을 따르는 `vnc-relay` 구현과 소비자. 작업 2.3이 공통 규칙(1.1~1.4절), 시작 단계 사건(`server_starting`·`startup_failed`·`server_stopped`), 설정 경고 4종, `relay_id_ref` 계산(1.9절), `peer_ip` 표기(1.10절)를 구현했다. 그 밖의 사건은 구현 전이다. |
+| 관련 테스트 | [운영 스펙 7절](../specs/operations.md#7-수용-테스트)의 OPS-011·OPS-012·OPS-013·OPS-032를 중심으로 5절 표에 연결한다. 계약 테스트는 `crates/adapters/tests/ops_info_contract.rs`와 `tests/serve.rs`에 있다. |
 
 관련 문서: [설정 계약](config-v1.md)(`[log]`·`[status]` 키, 경고 코드, 오류 코드, 재로드 결과 코드), [관리 API 계약](management-api-v1.md)(`session_id`·`close_cause`·바이트 필드 이름), [CLI·계정 파일 계약](cli-v1.md)(시작 실패 오류 코드), [WebSocket 중계 계약](websocket-relay-v1.md)(close 코드와 종료 원인 대응), [Repeater 초기 교환 계약](repeater-handshake-v1.md)(초기 교환 오류 코드), [ADR-0002 출발지 IP 허용 목록](../decisions/ADR-0002-source-ip-allowlist.md), [ADR-0003 단일 인스턴스·메모리 상태](../decisions/ADR-0003-single-instance-memory-state.md).
 
@@ -36,7 +36,8 @@ VNC Relay가 운영자에게 내보내는 두 가지 정보의 교환 형식을 
 | 선택 필드 | 값이 없으면 필드를 생략한다. `null`을 쓰지 않는다. |
 | 순서 | 한 줄 안의 필드 순서는 의미가 없다. 같은 연결·세션의 사건은 발생 순서대로 기록한다. |
 | 문자열 길이 | `detail`은 512바이트, `origin`·`target_host`는 256바이트까지 쓴다. 넘는 부분은 잘라낸다. |
-| 출력 위치 | 설정(`[log] output`)이 정한다. 설정을 읽기 전에 생긴 사건(설정 파일 오류로 인한 `startup_failed`)은 표준 출력에 쓴다. |
+| 출력 위치 | 설정(`[log] output`)이 정한다. 설정을 읽기 전에 생긴 사건(설정 파일 오류로 인한 `startup_failed`)과 로그 파일을 열지 못한 사건(`log_file_unavailable`의 `startup_failed`)은 표준 출력에 쓴다. |
+| 출력 실패 | 줄을 쓰지 못하면 그 줄을 버리고 서비스를 계속한다. 처음 실패할 때만 stderr에 `warning[log_write_failed] key=log.output: <message>`를 한 줄 쓴다([CLI 계약 1.5절](cli-v1.md#15-입력과-출력-규칙)의 형식). 이후 실패는 알리지 않는다(사용자 결정 2026-10-20). |
 
 ### 1.2 공통 필드
 
@@ -92,7 +93,7 @@ VNC Relay가 운영자에게 내보내는 두 가지 정보의 교환 형식을 
 
 | 사건 | `level` | 발생 시점 | 필드 | 스펙 근거 |
 | --- | --- | --- | --- | --- |
-| `server_starting` | `info` | 설정이 유효해 시작 중 상태로 들어갔을 때 | `log_contract`: 문자열. 값은 `ops-info/1.1.0`이다. | OPS-001, OPS-010 |
+| `server_starting` | `info` | 설정이 유효하고 로그 출력을 연 뒤 시작 중 상태로 들어갔을 때 | `log_contract`: 문자열. 값은 `ops-info/1.2.0`이다. | OPS-001, OPS-010 |
 | `server_ready` | `info` | 필수 리스너와 접근 경계가 모두 준비돼 준비됨 상태로 들어갔을 때 | `listeners`: 객체 배열. 각 객체는 `name`(`listener` 값)과 `listen`(바인딩 주소 문자열)을 가진다. | OPS-002, OPS-013, OPS-032 |
 | `startup_failed` | `error` | 시작 실패가 확정됐을 때. 자원을 회수한 뒤 프로세스가 끝난다. | `reason`(시작을 막은 오류 코드, 1.6절), `config_key?`, `listener?`, `detail?`. | OPS-001, OPS-002, OPS-028, OPS-034, OPS-038, OPS-039, OPS-040 |
 | `shutdown_started` | `info`. `trigger`가 `fatal_error`이면 `error` | 종료 유예 중 상태로 들어갔을 때. 이후 신규 중계 접속을 받지 않는다. | `trigger`: `requested` 또는 `fatal_error`. `grace_secs`: 정수(G). `active_sessions`: 정수. `detail?` | OPS-007, OPS-008 |
@@ -183,10 +184,10 @@ VNC Relay가 운영자에게 내보내는 두 가지 정보의 교환 형식을 
 
 | 사건 | `reason` 값의 출처 |
 | --- | --- |
-| `startup_failed` | [설정 계약 2.1절](config-v1.md#21-설정-오류와-준비-실패)의 `config_*`·`tls_file_invalid`, [CLI 계약 2.2절](cli-v1.md#22-오류-코드)의 `accounts_*`·`listener_bind_failed`·`watch_unavailable`·`runtime_unavailable` |
+| `startup_failed` | [설정 계약 2.1절](config-v1.md#21-설정-오류와-준비-실패)의 `config_*`·`tls_file_invalid`·`log_file_unavailable`, [CLI 계약 2.2절](cli-v1.md#22-오류-코드)의 `accounts_*`·`listener_bind_failed`·`watch_unavailable`·`runtime_unavailable` |
 | `reload_rejected` | [설정 계약 2.1절](config-v1.md#21-설정-오류와-준비-실패)의 `config_*`·`tls_file_invalid` |
 
-`startup_failed`는 오류 코드마다 한 줄을 쓴다. 종료 코드는 [CLI 계약 2.1절](cli-v1.md#21-종료-코드)이 정한다. 인증서·개인키 한쪽만 바뀐 후보와 참조 파일을 읽을 수 없는 후보는 `reload_rejected`의 `tls_file_invalid`다.
+`startup_failed`는 진단 하나에 한 줄을 쓴다. stderr의 오류 줄([CLI 계약 1.5절](cli-v1.md#15-입력과-출력-규칙))과 1:1로 대응한다. 같은 오류 코드의 진단이 여럿이면 줄도 여럿이며, 줄마다 그 진단의 `config_key`·`listener`를 쓴다(사용자 결정 2026-10-20). 종료 코드는 [CLI 계약 2.1절](cli-v1.md#21-종료-코드)이 정한다. 인증서·개인키 한쪽만 바뀐 후보와 참조 파일을 읽을 수 없는 후보는 `reload_rejected`의 `tls_file_invalid`다.
 
 #### `connection_rejected`의 `stage`와 `reason`
 
@@ -353,7 +354,7 @@ Lm 상한에서 거절한 연결은 HTTP 응답을 받지 못하고 연결이 �
 로그 줄(실제로는 줄바꿈 없이 한 줄씩 쓴다).
 
 ```jsonl
-{"ts":"2026-10-16T01:00:00.000Z","level":"info","event":"server_starting","log_contract":"ops-info/1.1.0"}
+{"ts":"2026-10-16T01:00:00.000Z","level":"info","event":"server_starting","log_contract":"ops-info/1.2.0"}
 {"ts":"2026-10-16T01:00:00.010Z","level":"warn","event":"plaintext_ws_enabled","listener":"ws_viewer","listen":"127.0.0.1:8080"}
 {"ts":"2026-10-16T01:00:00.011Z","level":"warn","event":"allow_all_source","listener":"tcp_viewer","item":"0.0.0.0/0","phase":"startup"}
 {"ts":"2026-10-16T01:00:00.120Z","level":"info","event":"server_ready","listeners":[{"name":"tcp_viewer","listen":"0.0.0.0:5900"},{"name":"status","listen":"127.0.0.1:9000"}]}
@@ -375,23 +376,37 @@ GET /readyz ->  200 {"status":"ready"}
 GET /readyz ->  503 {"status":"not_ready","reason":"shutting_down"}
 ```
 
-결과와 증거는 [검증 기록](../AGENTS.md#검증-기록)을 따른다. 아래 테스트는 스펙의 시나리오 기록을 연결한다. Producer 계약 테스트는 해당 시나리오 위에 이 계약의 필드·사건 이름 검사를 더한다. 계약 테스트 파일은 아직 없다.
+결과와 증거는 [검증 기록](../AGENTS.md#검증-기록)을 따른다. 아래 테스트는 스펙의 시나리오 기록을 연결한다. Producer 계약 테스트는 해당 시나리오 위에 이 계약의 필드·사건 이름 검사를 더한다. 작업 2.3의 테스트는 `crates/adapters/tests/ops_info_contract.rs`(아래 표에서 "운영 로그 계약 테스트"), `tests/serve.rs`(실행파일 시스템 테스트), `crates/adapters/src/ops_log.rs`·`crates/adapters/src/crypto.rs`·`crates/domain/src/peer_ip.rs` 단위 테스트에 있다. 실행 기록은 표 아래 [계약 테스트 실행 기록](#계약-테스트-실행-기록)에 있다.
 
 | 주체·테스트 위치 | 확인할 계약 규칙 | 결과 | 실행 기록 |
 | --- | --- | --- | --- |
-| Producer / 통합, 미생성 | 줄마다 JSON 객체 하나, 공통 필드 `ts`·`level`·`event`, 접속·대기·매칭·연결 실패·종료 사건의 필드(1.5절). 스펙 [OPS-011](../specs/operations.md#7-수용-테스트), [RLY-020](../specs/relay.md#7-수용-테스트) | 미실행 | 구현·테스트 파일 없음 |
+| Producer / 운영 로그 계약 테스트 9건, `ops_log`·`crypto`·`peer_ip` 단위 테스트 | 줄마다 JSON 객체 하나와 LF, 공통 필드 `ts`(UTC, 밀리초, `Z`)·`level`·`event`가 맨 앞, 값이 없는 선택 필드 생략(`null` 없음), 줄바꿈·따옴표·제어 문자 이스케이프, `detail` 512바이트를 문자 경계에서 자름, 파일 이어 쓰기와 없는 파일 만들기, 동시 기록에서 줄이 섞이지 않음, 쓰기 실패 때 줄을 버리고 첫 실패만 알림(1.1~1.4절). 설정 경고 4종의 필드(1.5절). `peer_ip` 표기(1.10절). HMAC-SHA-256 참조 값 일치 | 통과 | [실행 기록](#계약-테스트-실행-기록) |
+| Producer / 통합, 미생성 | 접속·대기·매칭·연결 실패·종료 사건의 필드(1.5절). 스펙 [OPS-011](../specs/operations.md#7-수용-테스트), [RLY-020](../specs/relay.md#7-수용-테스트) | 미실행 | 해당 사건 미구현 |
 | Producer / 통합, 미생성 | 종료 원인 값 6종과 `level`(1.6절), `peer_eof`·`connection_error`·`admin_terminated`·`dead_connection`·`close_timeout`·`server_shutdown`. 스펙 [RLY-020](../specs/relay.md#7-수용-테스트), [RLY-026](../specs/relay.md#7-수용-테스트), [WS-016](../specs/websocket.md#7-수용-테스트), [WS-017](../specs/websocket.md#7-수용-테스트), [WS-026](../specs/websocket.md#7-수용-테스트), [OPS-009](../specs/operations.md#7-수용-테스트), [OPS-042](../specs/operations.md#7-수용-테스트), [MGT-023](../specs/management.md#7-수용-테스트) | 미실행 | 구현·테스트 파일 없음 |
 | Producer / 통합, 미생성 | 관리자 종료 사건의 `admin_account`(1.8절). 스펙 [OPS-011](../specs/operations.md#7-수용-테스트), [OPS-029](../specs/operations.md#7-수용-테스트), [MGT-009](../specs/management.md#7-수용-테스트) | 미실행 | 구현·테스트 파일 없음 |
-| Producer / 보안 통합, 미생성 | 로그에 넣지 않는 값(1.11절)과 중계 ID 원문 비노출(1.9절). 스펙 [OPS-012](../specs/operations.md#7-수용-테스트), [OPS-030](../specs/operations.md#7-수용-테스트), [MGT-013](../specs/management.md#7-수용-테스트) | 미실행 | 구현·테스트 파일 없음 |
-| Producer / 통합, 미생성 | 평문 WS 경고, 전체 허용 경고(시작·재로드). 스펙 [OPS-016](../specs/operations.md#7-수용-테스트), [WS-024](../specs/websocket.md#7-수용-테스트), [OPS-038](../specs/operations.md#7-수용-테스트) | 미실행 | 구현·테스트 파일 없음 |
+| Producer / 운영 로그 계약 테스트 `relay_id_ref_is_a_keyed_16_hex_digest_without_the_relay_id`, `tests/serve.rs`의 설정 오류·계정 파일 오류·바인드 실패·로그 파일 열기 실패 테스트 | 시작 실패 줄에 설정 값(IP 항목, 주소, 포트, 로그 파일 경로)과 해시·솔트가 없음. `relay_id_ref`는 키를 쓴 소문자 16진수 16자이고 키마다 다르며, 키의 `Debug`는 값을 가림(1.9·1.11절). 스펙 [OPS-012](../specs/operations.md#7-수용-테스트)의 시작 부분 | 통과 | [실행 기록](#계약-테스트-실행-기록) |
+| Producer / 보안 통합, 미생성 | 세션·관리자·재로드 사건에서 로그에 넣지 않는 값(1.11절)과 실제 사건의 중계 ID 원문 비노출(1.9절). 스펙 [OPS-012](../specs/operations.md#7-수용-테스트), [OPS-030](../specs/operations.md#7-수용-테스트), [MGT-013](../specs/management.md#7-수용-테스트) | 미실행 | 해당 사건 미구현 |
+| Producer / `tests/serve.rs` `writes_the_log_to_the_configured_file_from_start_to_stop`, 운영 로그 계약 테스트 `writes_each_config_warning_with_its_contract_fields` | 시작 때 전체 허용 경고(`allow_all_source`, `phase` = `startup`)를 `server_starting` 다음에 기록. 경고 4종의 사건 이름·`level`·필드 | 통과 | [실행 기록](#계약-테스트-실행-기록) |
+| Producer / 통합, 미생성 | 평문 WS 리스너의 경고와 재로드 때의 전체 허용 경고. 스펙 [OPS-016](../specs/operations.md#7-수용-테스트), [WS-024](../specs/websocket.md#7-수용-테스트), [OPS-038](../specs/operations.md#7-수용-테스트) | 미실행 | WS 리스너·재로드 미구현 |
 | Producer / 통합, 미생성 | 재로드 성공·실패·재시작 필요·감지 장애·주기 확인 감지 사건(1.5절). 스펙 [OPS-024](../specs/operations.md#7-수용-테스트), [OPS-026](../specs/operations.md#7-수용-테스트), [OPS-027](../specs/operations.md#7-수용-테스트), [OPS-028](../specs/operations.md#7-수용-테스트), [OPS-035](../specs/operations.md#7-수용-테스트), [OPS-041](../specs/operations.md#7-수용-테스트) | 미실행 | 구현·테스트 파일 없음 |
-| Producer / 통합, 미생성 | 시작 실패 원인 코드(1.6절)와 시작·준비·종료 단계 사건. 스펙 [OPS-001](../specs/operations.md#7-수용-테스트), [OPS-002](../specs/operations.md#7-수용-테스트), [OPS-007](../specs/operations.md#7-수용-테스트), [OPS-010](../specs/operations.md#7-수용-테스트), [OPS-034](../specs/operations.md#7-수용-테스트), [OPS-039](../specs/operations.md#7-수용-테스트), [OPS-040](../specs/operations.md#7-수용-테스트) | 미실행 | 구현·테스트 파일 없음 |
+| Producer / `tests/serve.rs` 10건 | 시작 실패 원인 코드 `config_*`·`log_file_unavailable`·`accounts_*`·`listener_bind_failed`를 진단 하나에 한 줄로 기록. 로그 출력을 열기 전에는 표준 출력에 씀. `config_key`·`listener`·`detail` 필드. `server_starting`(`log_contract`)이 처음, 종료 요청 뒤 `server_stopped`가 마지막(1.5·1.6절). 스펙 [OPS-001](../specs/operations.md#7-수용-테스트), [OPS-002](../specs/operations.md#7-수용-테스트)·[OPS-039](../specs/operations.md#7-수용-테스트)의 리스너 부분 | 통과 | [실행 기록](#계약-테스트-실행-기록) |
+| Producer / 통합, 미생성 | `server_ready`, `shutdown_started`·`shutdown_forced`, `tls_file_invalid`·`watch_unavailable` 줄, `runtime_unavailable` 줄(코드는 있으나 실패를 일으킬 방법이 없어 테스트하지 않음). 스펙 [OPS-002](../specs/operations.md#7-수용-테스트), [OPS-007](../specs/operations.md#7-수용-테스트), [OPS-010](../specs/operations.md#7-수용-테스트), [OPS-034](../specs/operations.md#7-수용-테스트), [OPS-040](../specs/operations.md#7-수용-테스트) | 미실행 | 준비 상태·종료 유예·TLS·파일 감지 미구현 |
 | Producer / 통합, 미생성 | 접속 거절 `stage`·`reason`(1.6절). 스펙 [OPS-004](../specs/operations.md#7-수용-테스트), [OPS-005](../specs/operations.md#7-수용-테스트), [OPS-023](../specs/operations.md#7-수용-테스트), [OPS-036](../specs/operations.md#7-수용-테스트), [OPS-037](../specs/operations.md#7-수용-테스트), [RLY-004](../specs/relay.md#7-수용-테스트), [RLY-022](../specs/relay.md#7-수용-테스트), [RLY-023](../specs/relay.md#7-수용-테스트), [WS-012](../specs/websocket.md#7-수용-테스트), [WS-015](../specs/websocket.md#7-수용-테스트), [WS-022](../specs/websocket.md#7-수용-테스트), [WS-027](../specs/websocket.md#7-수용-테스트) | 미실행 | 구현·테스트 파일 없음 |
 | Producer / 통합, 미생성 | 대상 연결 실패 3종과 정책 거절 구분. 스펙 [RLY-007](../specs/relay.md#7-수용-테스트), [RLY-008](../specs/relay.md#7-수용-테스트), [RLY-009](../specs/relay.md#7-수용-테스트) | 미실행 | 구현·테스트 파일 없음 |
 | Producer / 통합, 미생성 | 관리자 로그인 성공·실패·제한 사건. 스펙 [MGT-017](../specs/management.md#7-수용-테스트), [MGT-018](../specs/management.md#7-수용-테스트), [MGT-022](../specs/management.md#7-수용-테스트) | 미실행 | 구현·테스트 파일 없음 |
 | Producer / 통합, 미생성 | `/livez`·`/readyz` 메서드·상태 코드·본문, 시작 전·준비 후·종료 중 구분(유예 중 `/readyz`는 503), 세션 정보 미포함, 루프백 별도 리스너. 스펙 [OPS-013](../specs/operations.md#7-수용-테스트), [OPS-032](../specs/operations.md#7-수용-테스트), [OPS-033](../specs/operations.md#7-수용-테스트), [OPS-043](../specs/operations.md#7-수용-테스트) | 미실행 | 구현·테스트 파일 없음 |
 | Consumer / 수집 도구 계약 테스트, 위치 미정 | 알 수 없는 필드·사건·값 무시(3절), `level`·`event` 분기 | 미실행 | 소비자 테스트 위치 없음 |
 | Consumer / 상태 도구 계약 테스트, 위치 미정 | HTTP 상태 코드로 판정, 알 수 없는 `reason` 무시(3절) | 미실행 | 소비자 테스트 위치 없음 |
+
+### 계약 테스트 실행 기록
+
+| 대상 | 환경 | 명령 | 결과 |
+| --- | --- | --- | --- |
+| 커밋 `f25983a`에 작업 2.3을 더한 작업 트리(`crates/*`의 운영 로그·암호·상대 IP 모듈, `crates/adapters/src/net.rs`, `src/serve.rs`, `tests/serve.rs`, `Cargo.toml`, `Cargo.lock`, `xtask/src/layers.rs`, 문서) | Ubuntu 24.04.4(WSL2), Rust 1.99.1, `CARGO_TARGET_DIR=~/vnc-relay-target` | `cargo xtask scenarios`(내부에서 `cargo test --workspace --no-fail-fast` 실행) | 통과. 운영 로그 계약 테스트 9건(Linux 전용 `/dev/full` 1건 포함), `tests/serve.rs` 10건, adapters 단위 5건, domain 단위 18건(`peer_ip` 3건 포함), 설정·계정 파일 계약 테스트 28건 모두 통과. 시나리오 보고: 통과 1(OPS-001), 부분 5(OPS-002, OPS-012, OPS-038, OPS-039, OPS-040), 미연결 142, 오류 0, 판정 통과 |
+| 같음 | 같음 | `tests/serve.rs` 테스트 실행파일을 60번 반복 | 통과(60번 모두 통과) |
+| 같음 | 같음 | `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo xtask layers`, `cargo deny check licenses` | 통과 |
+| 같음 | 같음(교차 대상 `x86_64-pc-windows-msvc`) | `cargo clippy --workspace --all-targets --target x86_64-pc-windows-msvc -- -D warnings` | 실패. aws-lc-sys 빌드 스크립트가 끝나지 않았다(`NASM command not found! Build cannot continue.`). `AWS_LC_SYS_PREBUILT_NASM=1`을 주어도 Linux의 gcc가 Windows용 C 파일을 컴파일하지 못했다. 영향: Windows 분기는 타입 검사도 하지 못했다([개발 환경 how-to](../how-to/set-up-and-verify.md)). |
+| 같음 | Windows 11 | `cargo xtask scenarios` | 미실행. Visual Studio Build Tools 설치가 UAC 미승인으로 멈춰(종료 코드 1602) MSVC가 없다. 사용자가 Windows 검증을 뒤로 미뤘다(2026-10-20). |
 
 ## 6. 초안을 확정하기 전에 해결할 사항
 
@@ -402,7 +417,7 @@ GET /readyz ->  503 {"status":"not_ready","reason":"shutting_down"}
 - `waiting_expired`(대기 시간 W 만료)를 검증하는 스펙 시나리오가 없으며, 사용자가 추가하지 않기로 했다(2026-10-16). 이 계약의 사건 정의는 유지한다.
 - `reload_watch_failed`가 해소된 뒤 복구를 알리는 사건은 스펙에 없어 정하지 않았다. 운영자가 복구를 알아야 하면 사건을 추가한다(호환 변경).
 - 이 계약은 로그가 폭증할 때의 제한(예: Lm·L 도달 거절 기록의 속도 제한)을 정하지 않는다. 스펙에 요구가 없다.
-- 로그 출력(표준 출력·파일) 자체가 실패했을 때의 동작은 스펙에 없어 정하지 않았다.
+- 로그 출력이 실패했을 때의 동작은 스펙에 없어 사용자가 정했다(2026-10-20). 로그 파일을 열 수 없으면 시작 실패 `log_file_unavailable`이다. 실행 중 쓰기 실패는 1.1절 "출력 실패" 행을 따른다.
 - 설정 파일 오류로 로그 출력 위치를 알 수 없을 때 표준 출력에 쓰는 규칙(1.1절)은 채택 범위다.
 - 상태 리스너를 다른 필수 리스너보다 먼저 여는 순서(1.12절)는 채택 범위다.
 - 중계 ID 키 있는 해시(1.9절)는 채택 범위다. 구현에서 쓸 수 있는 라이브러리는 이 계약이 정하지 않는다.

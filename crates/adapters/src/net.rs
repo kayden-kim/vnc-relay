@@ -12,11 +12,12 @@ pub struct BoundListener {
     pub listener: TcpListener,
 }
 
-/// A plan that could not be bound. `message` names the address and the cause.
+/// A plan that could not be bound. `cause` is one Korean sentence without
+/// the address, so the operation log can carry it (ops-info-v1 §1.11).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BindFailure {
     pub plan: ListenerPlan,
-    pub message: String,
+    pub cause: String,
 }
 
 /// Binds every plan in order. After a failure it still tries the rest so
@@ -33,7 +34,7 @@ pub async fn bind(plans: &[ListenerPlan]) -> Result<Vec<BoundListener>, Vec<Bind
             }),
             Err(error) => failures.push(BindFailure {
                 plan: *plan,
-                message: bind_message(plan, &error),
+                cause: bind_cause(&error),
             }),
         }
     }
@@ -45,14 +46,11 @@ pub async fn bind(plans: &[ListenerPlan]) -> Result<Vec<BoundListener>, Vec<Bind
     }
 }
 
-fn bind_message(plan: &ListenerPlan, error: &io::Error) -> String {
-    let addr = plan.addr;
+fn bind_cause(error: &io::Error) -> String {
     match error.kind() {
-        ErrorKind::AddrInUse => format!("{addr}에 바인드할 수 없다. 이미 사용 중이다."),
-        ErrorKind::AddrNotAvailable => {
-            format!("{addr}에 바인드할 수 없다. 이 호스트의 주소가 아니다.")
-        }
-        ErrorKind::PermissionDenied => format!("{addr}에 바인드할 수 없다. 권한이 없다."),
-        _ => format!("{addr}에 바인드할 수 없다({error})."),
+        ErrorKind::AddrInUse => "이미 사용 중이다.".to_owned(),
+        ErrorKind::AddrNotAvailable => "이 호스트의 주소가 아니다.".to_owned(),
+        ErrorKind::PermissionDenied => "권한이 없다.".to_owned(),
+        _ => format!("{error}."),
     }
 }

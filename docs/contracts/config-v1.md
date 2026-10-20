@@ -6,7 +6,7 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 이름과 버전 | `vnc-relay-config` 1.0.0 |
+| 이름과 버전 | `vnc-relay-config` 1.1.0. 1.1.0은 오류 코드 `log_file_unavailable`을 더했다(호환 변경, 사용자 결정 2026-10-20). |
 | 상태 | Active(2026-10-16 채택) |
 | 소유자 | vnc-relay 프로젝트 관리자 |
 | 만드는 쪽(Producer) | 운영자(설정 파일 작성자) |
@@ -326,6 +326,7 @@ TLS 1.2 미만은 거절한다. 허용 암호 스위트는 선택한 rustls 암�
 | `config_plaintext_management_not_loopback` | 평문 HTTP 관리 리스너가 루프백이 아닌 주소다. | 시작 실패 | 후보 거절 | OPS-014, OPS-034 |
 | `config_tls_pair_incomplete` | `management.cert_file`·`key_file` 중 하나만 있다. | 시작 실패 | 후보 거절 | OPS-034 |
 | `tls_file_invalid` | 인증서·개인키 경로·형식 오류. 파일이 없거나 읽을 수 없거나 PEM이 아니거나 서로 맞지 않는다. 시작 종료 코드는 설정 오류와 같은 3이다([CLI·계정 파일 계약 2.1절](cli-v1.md#21-종료-코드)). | 시작 실패(설정 오류와 같은 종료 코드) | 후보 거절, 기존 인증서 유지 | OPS-002, OPS-026 |
+| `log_file_unavailable` | `log.output`이 가리키는 로그 파일을 이어 쓰기로 열 수 없다. 디렉터리가 없거나 권한이 없거나 디렉터리이거나 입출력 오류다. `key`는 `log.output`이다. 설정 검증이 끝난 뒤 시작 때만 검사한다. 시작 종료 코드는 설정 오류와 같은 3이다([CLI·계정 파일 계약 2.1절](cli-v1.md#21-종료-코드)). | 시작 실패(설정 오류와 같은 종료 코드) | 검사하지 않는다. `log.output`은 재시작이 필요한 키다(1.8절). | 없음 |
 
 후보에 설정 오류가 있으면 어느 키의 오류든 후보 전체를 `reload_rejected`로 거절한다. 오류가 없고 재로드 대상이 아닌 값이 실행 중 값과 다르면 `reload_restart_required`다(1.8절).
 
@@ -435,7 +436,7 @@ output = "stdout"
 | 주체·테스트 위치 | 확인할 계약 규칙 | 결과 | 실행 기록 |
 | --- | --- | --- | --- |
 | Consumer·계약 테스트 파일 `reports_every_problem_in_one_pass`, `rejects_syntax_errors_and_duplicate_keys_with_one_diagnostic`, `rejects_missing_unreadable_and_non_utf8_files`, `rejects_non_table_values_in_place_of_tables` | 구문 오류, 알 수 없는 키, 자료형 오류, 필수 키 누락(1.1·1.7절)을 모두 모아 진단으로 돌려준다. [OPS-001](../specs/operations.md#7-수용-테스트)의 설정 검증 부분 | 통과 | [실행 기록](#계약-테스트-실행-기록) |
-| Consumer·`tests/serve.rs` `rejects_invalid_config_with_exit_code_3_and_every_cause`, `rejects_toml_syntax_error_and_missing_config_file_with_exit_code_3` | 위 진단이 시작 실패(종료 코드 3)와 비밀 없는 원인 표시(`error[<code>] key=<key>: <message>`)로 이어진다. stdout은 비어 있다. [OPS-001](../specs/operations.md#7-수용-테스트) | 통과 | [CLI 계약 실행 기록](cli-v1.md#계약-테스트-실행-기록) |
+| Consumer·`tests/serve.rs` `rejects_invalid_config_with_exit_code_3_and_every_cause`, `rejects_toml_syntax_error_and_missing_config_file_with_exit_code_3` | 위 진단이 시작 실패(종료 코드 3)와 비밀 없는 원인 표시(`error[<code>] key=<key>: <message>`)로 이어진다. stdout에는 진단마다 운영 로그 `startup_failed` 줄이 있고 설정 값은 없다. [OPS-001](../specs/operations.md#7-수용-테스트) | 통과 | [운영 정보 계약 실행 기록](ops-info-v1.md#계약-테스트-실행-기록) |
 | Consumer·계약 테스트 파일 `accepts_minimal_example_and_fills_every_default`, `checks_every_numeric_key_at_its_bounds`, `checks_relations_between_values` | 승인 수치의 기본값, 최소·최대와 그 바깥(1.2절). Lw ≤ L, Si ≤ Sa, I ≤ B(1.6절). 수치가 각 기능에 주는 효과는 [OPS-004~006](../specs/operations.md#7-수용-테스트)·[OPS-023](../specs/operations.md#7-수용-테스트)를 다루는 작업에서 확인한다. | 통과 | [실행 기록](#계약-테스트-실행-기록) |
 | Consumer·계약 테스트 파일 `applies_default_ports_only_to_tcp_entry_points`, `rejects_listen_conflicts_after_default_ports` | 기본 포트: 주소만 쓴 `tcp_viewer`는 5901, `tcp_server`는 5500, IPv6는 대괄호 필수. `ws_viewer`·`wss_viewer`·관리·상태 `listen`의 포트 생략은 `config_listen_invalid`. 충돌 검사는 기본 포트를 붙인 뒤 적용(1.2·1.6절). [OPS-001](../specs/operations.md#7-수용-테스트) | 통과 | [실행 기록](#계약-테스트-실행-기록) |
 | Consumer·`crates/domain/src/allow_list.rs` 단위 테스트, 계약 테스트 파일 `accepts_single_cidr_and_range_items_of_both_families`, `rejects_bad_ip_items_with_their_own_codes`, `requires_allow_list_only_for_enabled_entry_points`, `accepts_an_empty_allow_list`, `accepts_items_covering_a_whole_family_with_warnings` | IP 항목: 단일·CIDR·범위 해석, 역순 범위·체계 혼합·표기 오류의 코드, 목록 누락은 오류, 빈 목록은 받음, 전체 허용 항목의 경고 대상 계산(1.3·2절). [OPS-038](../specs/operations.md#7-수용-테스트), [OPS-040](../specs/operations.md#7-수용-테스트)의 설정 검증 부분 | 통과 | [실행 기록](#계약-테스트-실행-기록) |
@@ -445,8 +446,9 @@ output = "stdout"
 | Consumer·`crates/domain/src/target_policy.rs` 단위 테스트, 계약 테스트 파일 `checks_mode1_targets`, `accepts_tls_example_and_resolves_relative_paths` | Mode I 대상 항목 문법과 세부 원인(1.5절), `mode1.enabled = true`일 때 필수 | 통과 | [실행 기록](#계약-테스트-실행-기록) |
 | Consumer·중계 통합 테스트(미생성, 작업 2.8) | 최종 IP 판정(1.5절). 꺼진 모드 거절. [RLY-007](../specs/relay.md#7-수용-테스트), [RLY-008](../specs/relay.md#7-수용-테스트), [RLY-022](../specs/relay.md#7-수용-테스트) | 미실행 | Mode I 미구현 |
 | Consumer·계약 테스트 파일 `allows_plaintext_management_only_on_loopback`, `warns_for_plaintext_ws_and_non_loopback_status` | 평문 관리 리스너는 루프백만, 관리 TLS 파일 쌍, 평문 WS·비루프백 상태 리스너의 경고 대상 계산(1.6·2.2절) | 통과 | [실행 기록](#계약-테스트-실행-기록) |
-| Consumer·`serve`·WebSocket 통합 테스트(미생성, 작업 2.2·3.2·4.2) | 비루프백 평문 관리 설정의 시작 실패, 평문 WS는 명시적으로 켠 경우만 열림, 경고 기록. [OPS-014](../specs/operations.md#7-수용-테스트), [OPS-016](../specs/operations.md#7-수용-테스트), [OPS-034](../specs/operations.md#7-수용-테스트), [WS-024](../specs/websocket.md#7-수용-테스트) | 미실행 | `serve`·WebSocket 진입점 미구현 |
+| Consumer·`serve`·WebSocket 통합 테스트(미생성, 작업 3.2·4.2) | 비루프백 평문 관리 설정의 시작 실패, 평문 WS는 명시적으로 켠 경우만 열림, 경고 기록. [OPS-014](../specs/operations.md#7-수용-테스트), [OPS-016](../specs/operations.md#7-수용-테스트), [OPS-034](../specs/operations.md#7-수용-테스트), [WS-024](../specs/websocket.md#7-수용-테스트) | 미실행 | 관리·WebSocket 진입점 미구현 |
 | Consumer·계약 테스트 파일 `rejects_empty_paths_and_reads_log_output`, `load_resolves_relative_paths_against_the_config_directory` | 빈 경로 거절, 상대 경로는 설정 파일 디렉터리 기준, `log.output`의 `"stdout"`과 경로 구분(1.1·1.2절) | 통과 | [실행 기록](#계약-테스트-실행-기록) |
+| Consumer·`tests/serve.rs` `fails_with_exit_code_3_when_the_log_file_cannot_be_opened`, `writes_the_log_to_the_configured_file_from_start_to_stop` | `log.output` 파일을 열 수 없으면 `log_file_unavailable`(`key=log.output`)로 시작 실패, 종료 코드 3. 열 수 있으면 기존 내용 뒤에 이어 쓴다(1.2·2.1절) | 통과 | [운영 정보 계약 실행 기록](ops-info-v1.md#계약-테스트-실행-기록) |
 | Consumer·재로드 통합 테스트(미생성) | 재로드 대상과 재시작 필요 구분, 비재로드 차이가 남은 후보 거절, 후보 실패 시 기존 유지, 주기 확인(1.8·2.3절). [OPS-003](../specs/operations.md#7-수용-테스트), [OPS-024~028](../specs/operations.md#7-수용-테스트), [OPS-035](../specs/operations.md#7-수용-테스트), [OPS-041](../specs/operations.md#7-수용-테스트), [WS-022](../specs/websocket.md#7-수용-테스트) | 미실행 | 구현·테스트 파일 없음 |
 | Consumer·설정 로더·각 기능 통합 테스트(미생성) | K·Kw·G·F·Si·Sa·P·R 값이 각 기능에 반영. [RLY-025~027](../specs/relay.md#7-수용-테스트), [WS-026](../specs/websocket.md#7-수용-테스트), [OPS-008](../specs/operations.md#7-수용-테스트)·[OPS-009](../specs/operations.md#7-수용-테스트)·[OPS-042](../specs/operations.md#7-수용-테스트), [MGT-022](../specs/management.md#7-수용-테스트), [MGT-024](../specs/management.md#7-수용-테스트), [MGT-025](../specs/management.md#7-수용-테스트), [DASH-022](../specs/dashboard.md#7-수용-테스트) | 미실행 | 구현·테스트 파일 없음 |
 | Producer·배포 검토(미생성) | 배포하는 설정 예시가 이 계약을 통과하고 비밀·기본 비밀번호가 없다. [OPS-031](../specs/operations.md#7-수용-테스트) | 미실행 | 예시 파일·구현 없음 |
@@ -456,6 +458,7 @@ output = "stdout"
 | 대상 | 환경 | 명령 | 결과 |
 | --- | --- | --- | --- |
 | 커밋 `4e594f4`에 작업 2.2를 더한 작업 트리(`[admin.argon2]` 범위를 domain 상수로 옮김 포함) | Ubuntu 24.04.4(WSL2), Rust 1.99.1, `CARGO_TARGET_DIR=~/vnc-relay-target` | `cargo xtask scenarios`(내부에서 `cargo test --workspace --no-fail-fast` 실행) | 통과. `config_contract` 21건, adapters 단위 2건, domain 단위 15건 모두 통과. 시나리오 보고는 [CLI 계약 실행 기록](cli-v1.md#계약-테스트-실행-기록)에 있다. |
+| 커밋 `f25983a`에 작업 2.3을 더한 작업 트리 | 같음 | 같음 | 통과. `config_contract` 21건과 `tests/serve.rs` 10건 모두 통과. 시나리오 보고는 [운영 정보 계약 실행 기록](ops-info-v1.md#계약-테스트-실행-기록)에 있다. |
 | 같음 | Windows 11 | 같음 | 미실행. Visual Studio Build Tools 설치가 UAC 미승인으로 멈춰(종료 코드 1602) MSVC 링커가 없다([개발 환경 how-to](../how-to/set-up-and-verify.md)). 사용자가 Windows 검증을 뒤로 미뤘다(2026-10-20). Windows 경로 분기(`cfg!(windows)`)는 실행하지 않았다. |
 
 ## 6. 초안을 확정하기 전에 해결할 사항

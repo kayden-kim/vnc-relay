@@ -7,4 +7,5 @@ pub mod account;
 pub mod allow_list;
 pub mod entry_point;
 pub mod origin;
+pub mod peer_ip;
 pub mod target_policy;
