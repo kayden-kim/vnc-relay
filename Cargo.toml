@@ -1,14 +1,42 @@
-[package]
-name = "vnc-relay"
+[workspace]
+resolver = "3"
+
+[workspace.package]
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.99"
 license = "MIT"
-description = "UltraVNC Repeater 호환 TCP·WS·WSS 중계 서버"
 publish = false
+
+# Lint policy: docs/conventions/rust.md section 2.
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+allow_attributes_without_reason = "deny"
+dbg_macro = "deny"
+expect_used = "deny"
+mod_module_files = "deny"
+print_stderr = "deny"
+print_stdout = "deny"
+todo = "deny"
+unimplemented = "deny"
+unwrap_used = "deny"
+
+[package]
+name = "vnc-relay"
+description = "UltraVNC Repeater compatible TCP/WS/WSS relay server"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
 
 [[bin]]
 name = "vnc-relay"
 path = "src/main.rs"
+
+[lints]
+workspace = true
 
 [dependencies]

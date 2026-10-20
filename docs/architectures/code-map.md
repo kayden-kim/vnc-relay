@@ -138,9 +138,9 @@ flowchart LR
 | TCP 접속 | `crates/adapters/src/net/` `TcpEntryPoint::run` | TCP Viewer·TCP Server 진입점이 접속을 수락 | `crates/app/src/relay/` `RelayService::handle_connection` |
 | WS·WSS 접속 | `crates/adapters/src/websocket/` `WebSocketEntryPoint::run` | WS·WSS Viewer 진입점이 접속을 수락하고 업그레이드 | `crates/app/src/relay/` `RelayService::handle_connection` |
 | 관리 HTTP 요청 | `crates/adapters/src/management_http/` `router` | 관리 리스너가 요청을 받음 | `crates/app/src/management/` `ManagementService`의 조회·종료·로그인 함수 |
-| 상태 HTTP 요청 | `crates/adapters/src/status_http.rs` `router` | 상태 리스너가 `/livez`·`/readyz` 요청을 받음 | `crates/app/src/lifecycle.rs` `Lifecycle::readiness` |
-| 파일 변경 | `crates/adapters/src/file_watch.rs` `FileWatcher::run` | OS 파일 알림 또는 주기 확인이 변경을 찾음 | `crates/app/src/reload/` `ReloadCoordinator::on_change` |
-| 종료 신호 | `src/serve.rs` `wait_shutdown_signal` | Ctrl+C, SIGTERM(Ubuntu), Ctrl+Break(Windows) | `crates/app/src/lifecycle.rs` `Lifecycle::request_shutdown` |
+| 상태 HTTP 요청 | `crates/adapters/src/status_http.rs` `router` | 상태 리스너가 `/livez`·`/readyz` 요청을 받음 | `crates/app/src/lifecycle.rs` `LifecycleService::readiness` |
+| 파일 변경 | `crates/adapters/src/file_watch.rs` `ReloadWatcher::run` | OS 파일 알림 또는 주기 확인이 변경을 찾음 | `crates/app/src/reload/` `ReloadService::on_change` |
+| 종료 신호 | `src/serve.rs` `wait_shutdown_signal` | Ctrl+C, SIGTERM(Ubuntu), Ctrl+Break(Windows) | `crates/app/src/lifecycle.rs` `LifecycleService::request_shutdown` |
 | 예약 작업 | `crates/app/src/relay/`, `crates/app/src/lifecycle.rs`의 타이머 | 대기 W, 초기 교환 H, 정리 E, 종료 유예 G 만료 | 각 사용 사례의 정리 함수 |
 
 ## 4. 핵심 흐름
@@ -151,14 +151,14 @@ flowchart LR
 | --- | --- | --- | --- |
 | 1 | `crates/adapters/src/net/` `TcpEntryPoint::run` | TCP Server 진입점에서 접속을 수락한다. 데이터를 읽기 전에 출발지 IP를 허용 목록으로 판정하고 연결 예산 L을 확보한다. | `TcpStream`, `peer_ip`, 진입점 종류를 `RelayService::handle_connection`에 넘긴다. 허용이면 `connection_accepted`, 거절이면 `connection_rejected` 사건 |
 | 2 | `crates/domain/src/allow_list.rs` `AllowList::permits`, `crates/domain/src/budget.rs` `ConnectionBudget::try_acquire` | 허용 여부와 예산을 판정한다. | 허용·거절 결과, 예산 사용량 증가 |
-| 3 | `crates/app/src/relay/` `RelayService::handle_connection` | 제한 시간 H 안에 초기 교환을 읽는다. | 바이트를 `handshake::Parser`에 넣는다. |
-| 4 | `crates/domain/src/handshake.rs` `Parser::feed` | 받은 바이트를 해석한다. | Mode II, 역할 Server, `RelayId`, 이미 받은 후속 바이트 |
-| 5 | `crates/app/src/relay/` `Mode2::register_or_match`, `crates/domain/src/matching.rs` `WaitingTable::register` | 짝이 없으므로 대기 연결로 등록하고 대기 시간 W를 잰다. | 대기 연결 표에 등록, `waiting_registered` 사건 |
+| 3 | `crates/app/src/relay/` `RelayService::handle_connection` | 제한 시간 H 안에 초기 교환을 읽는다. | 바이트를 `HandshakeParser`에 넣는다. |
+| 4 | `crates/domain/src/handshake.rs` `HandshakeParser::feed` | 받은 바이트를 해석한다. | Mode II, 역할 Server, `RelayId`, 이미 받은 후속 바이트 |
+| 5 | `crates/app/src/relay/` `RelayService::register_or_match`, `crates/domain/src/matching.rs` `WaitingTable::register` | 짝이 없으므로 대기 연결로 등록하고 대기 시간 W를 잰다. | 대기 연결 표에 등록, `waiting_registered` 사건 |
 | 6 | 1~4와 같은 경로 | TCP Viewer 진입점에 같은 중계 ID의 Viewer가 접속한다. | Mode II, 역할 Viewer, 같은 `RelayId` |
 | 7 | `crates/domain/src/matching.rs` `WaitingTable::take_peer` | 대기 중인 Server를 꺼내 한 번만 짝짓는다. | 대기 연결 표에서 제거, 짝이 된 두 연결 |
-| 8 | `crates/app/src/relay/` `Session::run` | 활성 세션을 만들고 양방향으로 바이트를 전달한다. 후속 바이트를 먼저 보낸다. 쓰기 성공한 바이트를 센다. | `session_id` 발급, 활성 세션 목록에 등록, `session_started` 사건 |
-| 9 | `crates/app/src/relay/` `Session::close` | 한쪽 EOF·오류·관리자 종료·끊긴 연결에서 정리한다. | 활성 세션에서 제거, 최근 종료 목록에 추가, 예산 반환, `session_closed` 사건 |
-| 10 | `crates/adapters/src/ops_log.rs` `JsonLinesLog::record` | 사건을 한 줄 JSON으로 쓴다. | 표준 출력이나 로그 파일에 한 줄 |
+| 8 | `crates/app/src/relay/` `RelayService::run_session` | 활성 세션을 만들고 양방향으로 바이트를 전달한다. 후속 바이트를 먼저 보낸다. 쓰기 성공한 바이트를 센다. | `session_id` 발급, 활성 세션 목록에 등록, `session_started` 사건 |
+| 9 | `crates/app/src/relay/` `RelayService::close_session` | 한쪽 EOF·오류·관리자 종료·끊긴 연결에서 정리한다. | 활성 세션에서 제거, 최근 종료 목록에 추가, 예산 반환, `session_closed` 사건 |
+| 10 | `crates/adapters/src/ops_log.rs` `JsonLinesEventSink::record` | 사건을 한 줄 JSON으로 쓴다. | 표준 출력이나 로그 파일에 한 줄 |
 
 사건 이름은 [운영 정보 계약 1.5절](../contracts/ops-info-v1.md#15-사건-목록)이 기준이다. 위 표의 사건 이름은 흐름 설명용이며 구현할 때 계약과 대조한다.
 

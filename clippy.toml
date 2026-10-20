@@ -1,0 +1,5 @@
+# Clippy settings: docs/conventions/rust.md section 2.
+# A crate-level clippy.toml replaces this file for that crate; copy these keys into it.
+allow-expect-in-tests = true
+allow-print-in-tests = true
+allow-unwrap-in-tests = true
