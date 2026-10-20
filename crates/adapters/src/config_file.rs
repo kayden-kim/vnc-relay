@@ -16,11 +16,13 @@ use vnc_relay_app::settings::{
     RecentClosedSettings, RelaySettings, ReloadSettings, Settings, StatusSettings, TimeoutSettings,
     TlsFiles,
 };
+use vnc_relay_domain::account::Argon2Params;
 use vnc_relay_domain::allow_list::{AllowList, IpItem, IpItemError};
 use vnc_relay_domain::entry_point::EntryPoint;
 use vnc_relay_domain::origin::Origin;
 use vnc_relay_domain::target_policy::{TargetItem, TargetItemError, TargetPolicy};
 
+use crate::toml_text::error_position;
 use listen::parse_listen;
 use reader::{Diagnostics, Field, Section, out_of_range};
 
@@ -65,7 +67,7 @@ pub fn parse(text: &str, base_dir: &Path) -> Result<Settings, Vec<ConfigDiagnost
         vec![ConfigDiagnostic {
             error: ConfigError::SyntaxError,
             key: String::new(),
-            message: syntax_message(text, error.span()),
+            message: syntax_message(text, &error),
         }]
     })?;
     let mut d = Diagnostics::default();
@@ -79,18 +81,11 @@ pub fn parse(text: &str, base_dir: &Path) -> Result<Settings, Vec<ConfigDiagnost
 }
 
 /// Position only; the message must not quote file content (config-v1 §2.1).
-fn syntax_message(text: &str, span: Option<std::ops::Range<usize>>) -> String {
-    let Some(span) = span else {
-        return "TOML 구문 오류 또는 중복 키다.".to_owned();
-    };
-    let before = text.get(..span.start).unwrap_or(text);
-    let line = before.matches('\n').count() + 1;
-    let column = before
-        .rsplit('\n')
-        .next()
-        .map_or(0, |last| last.chars().count())
-        + 1;
-    format!("TOML 구문 오류 또는 중복 키다({line}행 {column}열).")
+fn syntax_message(text: &str, error: &toml::de::Error) -> String {
+    match error_position(text, error) {
+        Some((line, column)) => format!("TOML 구문 오류 또는 중복 키다({line}행 {column}열)."),
+        None => "TOML 구문 오류 또는 중복 키다.".to_owned(),
+    }
 }
 
 /// Reads every table. Returns `None` when any value is invalid or missing;
@@ -140,9 +135,15 @@ fn read_admin(
     let accounts_file = read_path(&mut admin, "accounts_file", base_dir, d);
     let accounts_file = required(&admin, "accounts_file", accounts_file, "", d);
     let mut argon2 = admin.section("argon2", d);
-    let memory_kib = count(&mut argon2, "memory_kib", 19_456, 19_456..=1_048_576, d);
-    let iterations = count(&mut argon2, "iterations", 2, 2..=10, d);
-    let parallelism = count(&mut argon2, "parallelism", 1, 1..=16, d);
+    let memory_kib = count(
+        &mut argon2,
+        "memory_kib",
+        19_456,
+        Argon2Params::MEMORY_KIB,
+        d,
+    );
+    let iterations = count(&mut argon2, "iterations", 2, Argon2Params::ITERATIONS, d);
+    let parallelism = count(&mut argon2, "parallelism", 1, Argon2Params::PARALLELISM, d);
     argon2.finish(d);
     admin.finish(d);
     Some(AdminSettings {

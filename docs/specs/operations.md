@@ -8,8 +8,8 @@
 | 관련 요구사항 | [PRD](../requirements/PRD.md) FR-06·FR-07·FR-08, 7절 보안, 8절 비기능, 9절 독립 구현, AC-07·AC-08·AC-11~14, AC-32·AC-34·AC-35 |
 | 용어 | [VNC Relay 용어집](../../GLOSSARY.md) |
 | 관련 스펙 | [중계와 매칭](relay.md), [WS·WSS](websocket.md), [관리 기능](management.md), [화면](dashboard.md) |
-| 관련 계약 | [설정 파일 v1](../contracts/config-v1.md), [CLI와 관리자 계정 파일 v1](../contracts/cli-v1.md), [운영 로그와 상태 엔드포인트 v1](../contracts/ops-info-v1.md). 세 계약 모두 Active(2026-10-16 채택)이며 이름·형식·종료 코드는 각 계약이 기준이다. 설정 로더만 구현했고 나머지 구현·계약 테스트가 없어 지원 완료로 표시하지 않는다. |
-| 관련 아키텍처 문서·ADR | [코드 지도](../architectures/code-map.md), [설정 로딩 모듈 설계](../architectures/config-loading.md)(3.1절의 설정 검증), [ADR-0001 내장 TLS](../decisions/ADR-0001-built-in-tls.md), [ADR-0002 출발지 IP 허용 목록](../decisions/ADR-0002-source-ip-allowlist.md), [ADR-0003 단일 인스턴스·메모리 상태](../decisions/ADR-0003-single-instance-memory-state.md), [ADR-0004 tokio·rustls](../decisions/ADR-0004-tokio-rustls.md). 설정 로딩 밖의 구현 구조는 코드 지도의 계획(Target)이다. |
+| 관련 계약 | [설정 파일 v1](../contracts/config-v1.md), [CLI와 관리자 계정 파일 v1](../contracts/cli-v1.md), [운영 로그와 상태 엔드포인트 v1](../contracts/ops-info-v1.md). 세 계약 모두 Active(2026-10-16 채택)이며 이름·형식·종료 코드는 각 계약이 기준이다. 설정 로더와 `serve` 시작 골격만 구현했고 나머지 구현·계약 테스트가 없어 지원 완료로 표시하지 않는다. |
+| 관련 아키텍처 문서·ADR | [코드 지도](../architectures/code-map.md), [설정 로딩 모듈 설계](../architectures/config-loading.md)(3.1절의 설정 검증), [`serve` 시작 모듈 설계](../architectures/serve-startup.md)(3.1절의 시작 순서), [ADR-0001 내장 TLS](../decisions/ADR-0001-built-in-tls.md), [ADR-0002 출발지 IP 허용 목록](../decisions/ADR-0002-source-ip-allowlist.md), [ADR-0003 단일 인스턴스·메모리 상태](../decisions/ADR-0003-single-instance-memory-state.md), [ADR-0004 tokio·rustls](../decisions/ADR-0004-tokio-rustls.md). 설정 로딩과 `serve` 시작 밖의 구현 구조는 코드 지도의 계획(Target)이다. |
 
 ## 1. 범위와 적용 상태
 
@@ -93,7 +93,7 @@ Mode I의 Viewer 연결과 생성한 대상 연결은 L에서 각각 한 개다.
 5. 입력 취소·검증·저장 실패 시 이전의 유효한 자격 증명을 손상하지 않는다. 준비 완료는 필요한 저장이 성공한 뒤에만 알린다.
 6. 실행 중인 서버의 계정 변경·세션 변경을 위한 네트워크 API는 추가하지 않는다. 기존 계정 정보를 바꿀 때는 서버를 정상 종료하고 로컬 CLI로 준비한 뒤 다시 시작한다.
 
-하위 명령 이름·옵션·파일 위치는 [CLI 계약](../contracts/cli-v1.md)이, Argon2id 매개변수는 [설정 계약](../contracts/config-v1.md)이 정한다. 두 계약은 Active(2026-10-16 채택)지만 구현이 없어 실행 가능한 명령은 아직 없다. 존재한다고 안내하지 않는다.
+하위 명령 이름·옵션·파일 위치는 [CLI 계약](../contracts/cli-v1.md)이, Argon2id 매개변수는 [설정 계약](../contracts/config-v1.md)이 정한다. 두 계약은 Active(2026-10-16 채택)다. `admin` 하위 명령은 아직 구현하지 않아 실행할 수 없다. 존재한다고 안내하지 않는다.
 
 ### 3.3 파일 변경 자동 감지와 부분 재로드
 

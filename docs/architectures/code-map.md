@@ -10,7 +10,7 @@ VNC Relay는 TCP·WS·WSS로 들어온 Viewer를 Mode I 대상이나 Mode II Ser
 | 관련 PRD | [PRD](../requirements/PRD.md) [8절 유지보수성](../requirements/PRD.md#8-비기능-요구사항), [1절 구현 기술](../requirements/PRD.md#확정-기준) |
 | 관련 ADR | [ADR-0001 내장 TLS](../decisions/ADR-0001-built-in-tls.md), [ADR-0003 단일 인스턴스·메모리 상태](../decisions/ADR-0003-single-instance-memory-state.md), [ADR-0004 tokio·rustls](../decisions/ADR-0004-tokio-rustls.md) |
 
-현재 코드는 루트 crate의 `src/main.rs`(`--version`만 처리), 개발 도구 `xtask/`, 그리고 설정 로딩 부분의 `crates/domain`·`crates/app`·`crates/adapters`다. `xtask/`와 설정 로딩은 구현과 대조했다([xtask 모듈 설계](xtask.md), [설정 로딩 모듈 설계](config-loading.md), 둘 다 Current). 이 문서의 나머지 경로와 심볼은 모두 계획(Target)이다. 레이어를 crate로 나누는 방식은 사용자가 2026-10-20에 골랐다. 각 crate의 나머지 모듈은 해당 구현 작업에서 만든다.
+현재 코드는 개발 도구 `xtask/`, 설정 로딩, `serve` 시작과 CLI 골격이다. 설정 로딩은 `crates/domain`·`crates/app`·`crates/adapters`의 설정 모듈이다. `serve` 시작은 루트 crate의 `src/main.rs`·`src/cli.rs`·`src/serve.rs`와 계정 파일 읽기·리스너 바인드 모듈이다. 세 부분 모두 구현과 대조했다([xtask 모듈 설계](xtask.md), [설정 로딩 모듈 설계](config-loading.md), [`serve` 시작 모듈 설계](serve-startup.md), 모두 Current). 이 문서의 나머지 경로와 심볼은 모두 계획(Target)이다. 레이어를 crate로 나누는 방식은 사용자가 2026-10-20에 골랐다. 각 crate의 나머지 모듈은 해당 구현 작업에서 만든다.
 
 ## 1. 전체 구조
 
@@ -69,7 +69,7 @@ app이 adapters를 부르는 화살표(`RELAY → LOG`, `ADMIN → ACC` 등)는 
 | domain | `crates/domain` (`vnc-relay-domain`) | 업무 규칙과 값. 초기 교환 해석, 중계 ID, 대기 연결 표, 활성 세션 상태와 종료 원인, 출발지 IP 허용 목록 판정, 대상 허용 정책, Origin 비교, 연결 예산, 계정 이름·비밀번호 규칙, 최근 종료 목록. 입출력·시계·난수를 직접 쓰지 않고 값으로 받는다. | 없음. 외부 crate도 쓰지 않는다. | Cargo가 선언하지 않은 crate의 `use`를 컴파일 오류로 막는다. 외부 의존 0개는 `cargo xtask layers`가 검사한다. |
 | app | `crates/app` (`vnc-relay-app`) | 사용 사례. 접속 처리 순서, Mode I 대상 연결과 Mode II 매칭, 중계 스트림 전달과 정리, 관리 조회·로그인·관리자 종료, 재로드 판정·적용, 준비·종료 유예 관리, 관리자 계정 준비 절차. 외부 입출력은 포트(trait)로 정의한다. | domain. 외부 crate는 tokio의 동기화·시간·입출력 trait만 쓴다. | crate 의존은 컴파일과 `cargo xtask layers`가 검사한다. 소켓·파일·신호 같은 tokio·std 입출력 타입은 `crates/app/clippy.toml`의 `disallowed-types`·`disallowed-methods`로 막고 `cargo clippy`가 검사한다. |
 | adapters | `crates/adapters` (`vnc-relay-adapters`) | 외부와 연결. TCP 리스너, TLS, WebSocket, 관리·상태 HTTP, 설정 파일, 계정 파일과 Argon2id, 운영 로그 출력, 파일 변경 감지, 터미널 숨김 입력, 난수·HMAC. app의 포트를 구현한다. | domain, app, [PRD "구현 기술" 행](../requirements/PRD.md#확정-기준)의 라이브러리 | `cargo xtask layers`가 외부 crate가 PRD 목록 안에 있는지 검사한다. 라이선스는 [의존성 라이선스 검사](../how-to/check-dependency-licenses.md)를 따른다. |
-| 실행파일 조립 | 루트 crate `vnc-relay`의 `src/` | 명령행 해석과 종료 코드, 시작 순서, 포트에 구현체를 넣는 객체 연결. 업무 규칙을 두지 않는다. | domain, app, adapters, clap | 코드 리뷰. 이 crate에 업무 규칙 함수가 생기면 domain이나 app으로 옮긴다. |
+| 실행파일 조립 | 루트 crate `vnc-relay`의 `src/` | 명령행 해석과 종료 코드, 시작 순서, 비동기 런타임 생성과 종료 신호 받기, 포트에 구현체를 넣는 객체 연결. 업무 규칙을 두지 않는다. | domain, app, adapters, clap, tokio | 코드 리뷰. 이 crate에 업무 규칙 함수가 생기면 domain이나 app으로 옮긴다. |
 | 개발 도구 | `xtask/` | 시나리오 커버리지 보고, 레이어 검사 같은 개발용 명령. 제품 실행파일에 들어가지 않는다. | 제품 crate에 의존하지 않는다. | `cargo xtask layers`가 검사한다. |
 | 정적 대시보드 | `web/dashboard/` | 정적 HTML·CSS·JS. 내부 파일 구조는 [작업 0.9](../TODO.md)에서 정한다. | 관리 API만 HTTP로 부른다. JS 의존성이 없다. | 프런트엔드 컨벤션(작업 0.9)의 검증 방법 |
 
@@ -105,7 +105,7 @@ flowchart LR
 | `crates/domain/src/target_policy.rs` | 대상 허용 정책 | Mode I 대상 항목 해석, 최종 연결 IP·포트 허용 판정 | 주소 해석, 연결 | `allow_list` | [설정 로딩 모듈 설계](config-loading.md)(항목 해석). 허용 판정은 작업 2.8에서 더한다. |
 | `crates/domain/src/origin.rs` | Origin 비교 | Origin 정규화와 정확 일치 비교([설정 계약 1.4절](../contracts/config-v1.md#14-origin-값-문법과-비교)) | HTTP 헤더 읽기 | 없음 | [설정 로딩 모듈 설계](config-loading.md) |
 | `crates/domain/src/budget.rs` | 연결 예산 | 중계 측 연결 L, 관리·상태 연결 Lm의 집계 규칙 | 소켓 수락 | 없음 | 없음 |
-| `crates/domain/src/account.rs` | 관리자 계정 규칙 | 계정 이름·비밀번호 규칙([CLI 계약 1.2절](../contracts/cli-v1.md#12-계정-이름과-비밀번호-규칙)) | 해시, 파일 | 없음 | 없음 |
+| `crates/domain/src/account.rs` | 관리자 계정 규칙 | 계정 이름 규칙, Argon2id 해시 문자열 형식과 승인 매개변수 범위([CLI 계약 1.2·1.4절](../contracts/cli-v1.md#12-계정-이름과-비밀번호-규칙)). 비밀번호 규칙은 작업 4.1에서 더한다. | 해시 계산, 파일 | 없음 | [`serve` 시작 모듈 설계](serve-startup.md) |
 | `crates/domain/src/recent_closed.rs` | 최근 종료 목록 | 최대 R개 보관, 오래된 항목 제거 | 시각 읽기 | `session` | 없음 |
 | `crates/app/src/ports.rs` | 포트 | 시계, 사건 기록, 대상 연결, 계정 저장소, 비밀번호 검증, 난수 등 바깥 기능의 trait | 구현 | domain | 없음 |
 | `crates/app/src/settings.rs` | 유효 설정 | 검증을 마친 설정 값의 타입, 설정 오류·경고 코드, 진단. 재로드 대상과 재시작 필요 값을 구분한다. | TOML 해석 | domain | [설정 로딩 모듈 설계](config-loading.md) |
@@ -113,20 +113,20 @@ flowchart LR
 | `crates/app/src/management/` | 관리 | 서버 요약·대기 연결·활성 세션·최근 종료 조회, 관리자 종료, 로그인·관리 세션·CSRF 토큰, 로그인 실패 제한 | HTTP 해석, 쿠키 헤더 | domain, `ports` | 없음(작업 4.3에서 작성) |
 | `crates/app/src/reload/` | 재로드 | 재로드 후보를 실행 중 유효 설정과 비교하고 원자적으로 적용, 결과 사건 | 파일 감지, 파일 읽기 | domain, `settings`, `ports` | 없음 |
 | `crates/app/src/lifecycle.rs` | 수명 | 준비 상태, 종료 유예 G, 두 번째 종료 요청 처리 | 신호 수신 | domain, `ports` | 없음 |
-| `crates/app/src/accounts.rs` | 관리자 계정 준비 | `admin add`·`passwd`·`remove`·`list`의 절차 | 숨김 입력, 파일 잠금·교체 | domain, `ports` | 없음(작업 4.1에서 작성) |
-| `crates/adapters/src/net/` | TCP 진입점 | 리스너 바인드, 수락 직후 출발지 IP 검사, TCP keepalive | 초기 교환 해석 | app, domain | 없음 |
+| `crates/app/src/accounts.rs` | 관리자 계정 | 계정 파일 오류·경고 코드와 진단, 계정 없음 거절(작업 2.2). `admin add`·`passwd`·`remove`·`list`의 절차(작업 4.1) | 숨김 입력, 파일 잠금·교체 | domain, `ports` | [`serve` 시작 모듈 설계](serve-startup.md)(오류 코드). 절차는 작업 4.1에서 작성 |
+| `crates/adapters/src/net.rs`, `crates/adapters/src/net/` | TCP 리스너·진입점 | 리스너 바인드와 실패 수집(작업 2.2), 수락 직후 출발지 IP 검사, TCP keepalive | 초기 교환 해석 | app, domain | [`serve` 시작 모듈 설계](serve-startup.md)(바인드). 진입점은 작업 2.4에서 작성 |
 | `crates/adapters/src/tls.rs` | TLS | rustls 서버 설정, PEM 인증서·개인키 읽기, 인증서 교체 | 리스너 | app | 없음 |
 | `crates/adapters/src/websocket/` | WebSocket | HTTP 업그레이드, Origin·IP 재검사 호출, 바이너리 메시지와 바이트 스트림 변환, ping | 중계 규칙 | app, domain | 없음(작업 3.2에서 작성) |
 | `crates/adapters/src/management_http/` | 관리 HTTP | 관리 API 경로, 쿠키·CSRF 헤더, 오류 본문, 정적 대시보드 파일 제공 | 관리 규칙 | app | 없음 |
 | `crates/adapters/src/status_http.rs` | 상태 HTTP | `/livez`·`/readyz` 응답 | 준비 판정 | app | 없음 |
-| `crates/adapters/src/config_file.rs`, `crates/adapters/src/config_file/` | 설정 파일 | TOML 해석과 검증, `config_*` 오류 | 재로드 판정 | app, domain | [설정 로딩 모듈 설계](config-loading.md) |
-| `crates/adapters/src/accounts_file/` | 계정 파일 | 계정 파일 읽기·잠금·원자적 교체, Argon2id 해시·검증 | 계정 규칙 | app, domain | 없음 |
+| `crates/adapters/src/config_file.rs`, `crates/adapters/src/config_file/`, `crates/adapters/src/toml_text.rs` | 설정 파일 | TOML 해석과 검증, `config_*` 오류. `toml_text.rs`는 TOML 구문 오류 위치를 계정 파일과 함께 쓴다. | 재로드 판정 | app, domain | [설정 로딩 모듈 설계](config-loading.md) |
+| `crates/adapters/src/accounts_file.rs`, `crates/adapters/src/accounts_file/` | 계정 파일 | 계정 파일 읽기·검증(작업 2.2), 잠금·원자적 교체, Argon2id 해시·검증 | 계정 규칙 | app, domain | [`serve` 시작 모듈 설계](serve-startup.md)(읽기). 쓰기는 작업 4.1에서 작성 |
 | `crates/adapters/src/ops_log.rs` | 운영 로그 | 사건을 JSON Lines로 표준 출력이나 파일에 쓴다([운영 정보 계약](../contracts/ops-info-v1.md)). | 사건 내용 결정 | app | 없음 |
 | `crates/adapters/src/file_watch.rs` | 파일 변경 감지 | OS 파일 알림과 주기 확인 | 후보 검증 | app | 없음 |
 | `crates/adapters/src/terminal.rs` | 터미널 입력 | 숨김 비밀번호 입력, 삭제 확인 입력 | 비밀번호 규칙 | app | 없음 |
 | `crates/adapters/src/crypto.rs` | 난수·HMAC | 관리 세션 식별자·CSRF 토큰·`session_id` 난수, `relay_id_ref` HMAC-SHA-256 | 사용처 규칙 | app | 없음 |
-| `src/main.rs`, `src/cli.rs` | 명령행 | 하위 명령·옵션 해석, 사용법 오류, 종료 코드([CLI 계약](../contracts/cli-v1.md)) | 명령 실행 내용 | `serve`, `admin` | 없음 |
-| `src/serve.rs` | 서버 조립 | 시작 순서([CLI 계약 1.8절](../contracts/cli-v1.md#18-수동-시작과-종료))대로 설정·계정·감지·리스너를 준비하고 포트에 구현체를 넣는다. 종료 신호를 수명 관리에 넘긴다. | 업무 규칙 | adapters, app | 없음 |
+| `src/main.rs`, `src/cli.rs` | 명령행 | 하위 명령·옵션 해석, 사용법 오류, 진단 출력 형식, 종료 코드([CLI 계약](../contracts/cli-v1.md)) | 명령 실행 내용 | `serve`, `admin`, clap | [`serve` 시작 모듈 설계](serve-startup.md) |
+| `src/serve.rs` | 서버 조립 | 시작 순서([CLI 계약 1.8절](../contracts/cli-v1.md#18-수동-시작과-종료))대로 설정·계정·감지·리스너를 준비하고 포트에 구현체를 넣는다. 비동기 런타임을 만들고 종료 신호를 수명 관리에 넘긴다. | 업무 규칙 | adapters, app, tokio | [`serve` 시작 모듈 설계](serve-startup.md) |
 | `src/admin.rs` | 계정 명령 조립 | `admin` 하위 명령에 구현체를 넣고 app 절차를 실행한다. | 계정 규칙 | adapters, app | 없음 |
 | `xtask/` | 개발 도구 | `cargo xtask scenarios`(시나리오 커버리지 보고), `cargo xtask layers`(레이어 의존 검사) | 제품 기능 | serde_json. 제품 crate에 의존하지 않는다. | [xtask 모듈 설계](xtask.md) |
 | `web/dashboard/` | 대시보드 | 정적 화면 | 서버 규칙 | 관리 API(HTTP) | 없음(작업 0.9에서 구조 결정) |
@@ -141,7 +141,7 @@ flowchart LR
 | 관리 HTTP 요청 | `crates/adapters/src/management_http/` `router` | 관리 리스너가 요청을 받음 | `crates/app/src/management/` `ManagementService`의 조회·종료·로그인 함수 |
 | 상태 HTTP 요청 | `crates/adapters/src/status_http.rs` `router` | 상태 리스너가 `/livez`·`/readyz` 요청을 받음 | `crates/app/src/lifecycle.rs` `LifecycleService::readiness` |
 | 파일 변경 | `crates/adapters/src/file_watch.rs` `ReloadWatcher::run` | OS 파일 알림 또는 주기 확인이 변경을 찾음 | `crates/app/src/reload/` `ReloadService::on_change` |
-| 종료 신호 | `src/serve.rs` `wait_shutdown_signal` | Ctrl+C, SIGTERM(Ubuntu), Ctrl+Break(Windows) | `crates/app/src/lifecycle.rs` `LifecycleService::request_shutdown` |
+| 종료 신호 | `src/serve.rs` `ShutdownSignal::wait` | Ctrl+C, SIGTERM(Ubuntu), Ctrl+Break(Windows) | 지금은 리스너를 닫고 종료 코드 0으로 끝난다. 작업 5.3에서 `crates/app/src/lifecycle.rs` `LifecycleService::request_shutdown`을 부른다. |
 | 예약 작업 | `crates/app/src/relay/`, `crates/app/src/lifecycle.rs`의 타이머 | 대기 W, 초기 교환 H, 정리 E, 종료 유예 G 만료 | 각 사용 사례의 정리 함수 |
 
 ## 4. 핵심 흐름
@@ -165,7 +165,7 @@ flowchart LR
 
 ## 5. 시작과 연결
 
-- 시작 순서: `src/serve.rs` `run`이 [CLI 계약 1.8절](../contracts/cli-v1.md#18-수동-시작과-종료)의 순서를 따른다. (1) 설정 읽기·검증, (2) 계정 파일 읽기·검증, (3) 파일 변경 감지 준비, (4) 인증서·개인키 검사 뒤 리스너 바인드. 모두 성공하면 수명 상태를 준비됨으로 바꾸고 리스너 작업을 시작한다. 실패하면 확보한 자원을 회수하고 종료 코드를 돌려준다.
+- 시작 순서: `src/serve.rs` `run`이 [CLI 계약 1.8절](../contracts/cli-v1.md#18-수동-시작과-종료)의 순서를 따른다. (1) 설정 읽기·검증, (2) 계정 파일 읽기·검증, (3) 파일 변경 감지 준비, (4) 비동기 런타임·종료 신호 처리기 준비, 인증서·개인키 검사 뒤 리스너 바인드. 모두 성공하면 수명 상태를 준비됨으로 바꾸고 리스너 작업을 시작한다. 실패하면 확보한 자원을 회수하고 종료 코드를 돌려준다. 지금 구현은 (3)과 인증서 검사, 수명 상태, 리스너 작업이 없다([`serve` 시작 모듈 설계](serve-startup.md) 1절).
 - 설정 위치: `crates/adapters/src/config_file/`가 `--config` 파일을 읽어 `crates/app/src/settings.rs`의 유효 설정을 만든다. 환경 변수는 읽지 않는다.
 - 객체 연결 위치: `src/serve.rs`와 `src/admin.rs`. DI 프레임워크는 쓰지 않는다. 함수 인수와 `Arc`로 포트 구현체를 넘긴다.
 
@@ -181,6 +181,6 @@ flowchart LR
 
 | 항목 | 확인하지 못한 이유 | 확인 방법 |
 | --- | --- | --- |
-| 설정 로딩과 `xtask/`를 뺀 경로·심볼 | 구현 전 계획이다. | 각 구현 작업에서 모듈 설계를 쓰고, 작업 5.8에서 코드와 대조해 `Current`로 바꾼다. |
+| 설정 로딩, `serve` 시작, `xtask/`를 뺀 경로·심볼 | 구현 전 계획이다. | 각 구현 작업에서 모듈 설계를 쓰고, 작업 5.8에서 코드와 대조해 `Current`로 바꾼다. |
 | 초기 교환 해석의 입력 단위 | Repeater 초기 교환 계약이 Draft다. | 작업 1.5에서 계약을 채택한 뒤 `handshake` 모듈 설계에 반영한다. |
 | app의 tokio 입출력 금지 목록 | `crates/app/clippy.toml`은 std의 파일·소켓·프로세스·환경 변수·시각 읽기를 막는다(작업 2.1). app은 아직 tokio에 의존하지 않아 tokio 입출력 타입 목록은 정하지 않았다. | app에 tokio를 더하는 작업에서 같은 파일에 `tokio::net`·`tokio::fs`·`tokio::process`·`tokio::signal` 항목을 더하고 이 행을 지운다. |

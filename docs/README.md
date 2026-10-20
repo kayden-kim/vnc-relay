@@ -38,7 +38,7 @@
 | --- | --- |
 | 외부 동작과 수용 시나리오 | [스펙 목록](specs/README.md) — Draft, 확정·제안·미결정 범위 구분 |
 | 교환 형식(계약)과 기술 결정 | [계약 목록](contracts/README.md) — Active 5건(2026-10-16 채택), Draft 1건(Repeater 초기 교환). [ADR 목록](decisions/README.md) — Accepted 4건 |
-| 코드 지도(변경 대상의 코드 위치와 연결 관계) | [코드 지도](architectures/code-map.md) — Target, Draft. 현재 코드는 `src/main.rs`(`--version`만 처리), 설정 로더([설정 로딩 모듈 설계](architectures/config-loading.md): `crates/domain`·`crates/app`·`crates/adapters`), 개발 도구 [`xtask/`](architectures/xtask.md)다 |
+| 코드 지도(변경 대상의 코드 위치와 연결 관계) | [코드 지도](architectures/code-map.md) — Target, Draft. 현재 코드는 `serve` 시작과 CLI 골격([`serve` 시작 모듈 설계](architectures/serve-startup.md): `src/`와 계정 파일·리스너 모듈), 설정 로더([설정 로딩 모듈 설계](architectures/config-loading.md): `crates/domain`·`crates/app`·`crates/adapters`), 개발 도구 [`xtask/`](architectures/xtask.md)다 |
 | 적용할 컨벤션 | [컨벤션 목록](conventions/README.md) — [Rust 코드 컨벤션](conventions/rust.md)(Active, 2026-10-20), [테스트 컨벤션](conventions/testing.md)(Active, 2026-10-20). 프런트엔드 컨벤션은 미작성. 디자인 시스템은 [디자인 목록](design/README.md)의 [운영 대시보드 디자인 시스템](design/DESIGN.md)(Accepted, 2026-10-20)과 채택된 [대시보드 HTML 시안](design/mockups/dashboard.html) |
 | 개발 환경 준비와 실행 방법 | [개발 환경을 준비하고 변경을 검증하는 방법](how-to/set-up-and-verify.md) — Draft. Ubuntu는 확인, Windows는 미실행(Build Tools 설치에 UAC 승인이 필요하다. 사용자가 2026-10-20에 뒤로 미뤘다) |
 | 변경 범위별 테스트와 전체 완료 검증 | [개발 환경·검증 how-to 3.3·3.4절](how-to/set-up-and-verify.md#33-변경-범위별-검증). 시나리오 표식과 보고 명령은 [테스트 컨벤션](conventions/testing.md)이 정한다. 의존성을 바꾸면 [의존성 라이선스 검사](how-to/check-dependency-licenses.md)를 실행한다. [스펙 문서 검증 기록](specs/README.md#문서-검증-기록)은 문서 구조 확인만 포함 |

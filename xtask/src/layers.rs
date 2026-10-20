@@ -60,7 +60,7 @@ const RULES: &[Rule] = &[
     Rule {
         package: "vnc-relay",
         internal: &["vnc-relay-domain", "vnc-relay-app", "vnc-relay-adapters"],
-        external: External::Only(&["clap"]),
+        external: External::Only(&["clap", "tokio"]),
     },
     Rule {
         package: "xtask",

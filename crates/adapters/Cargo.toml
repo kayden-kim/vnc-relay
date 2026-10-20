@@ -11,6 +11,7 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
+tokio = { workspace = true, features = ["net"] }
 toml.workspace = true
 vnc-relay-app.workspace = true
 vnc-relay-domain.workspace = true

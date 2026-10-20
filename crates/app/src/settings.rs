@@ -230,6 +230,53 @@ impl Settings {
         }
         warnings
     }
+
+    /// Listeners to bind at startup, in bind order: status first
+    /// (ops-info-v1 §1.12), then management, then the enabled entry points.
+    pub fn listeners(&self) -> Vec<ListenerPlan> {
+        let mut plans = vec![
+            ListenerPlan {
+                name: "status",
+                key: "status.listen",
+                addr: self.status.listen,
+            },
+            ListenerPlan {
+                name: "management",
+                key: "management.listen",
+                addr: self.management.listen,
+            },
+        ];
+        for entry_point in EntryPoint::ALL {
+            let settings = self.relay.get(entry_point);
+            if let Some(addr) = settings.listen.filter(|_| settings.enabled) {
+                plans.push(ListenerPlan {
+                    name: entry_point.name(),
+                    key: listen_key(entry_point),
+                    addr,
+                });
+            }
+        }
+        plans
+    }
+}
+
+/// One listener to bind at startup.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ListenerPlan {
+    /// `listener` value of the operation log (ops-info-v1 §1.5).
+    pub name: &'static str,
+    /// Config key of the address, used as the `key` of diagnostics.
+    pub key: &'static str,
+    pub addr: SocketAddr,
+}
+
+fn listen_key(entry_point: EntryPoint) -> &'static str {
+    match entry_point {
+        EntryPoint::TcpViewer => "relay.tcp_viewer.listen",
+        EntryPoint::TcpServer => "relay.tcp_server.listen",
+        EntryPoint::WsViewer => "relay.ws_viewer.listen",
+        EntryPoint::WssViewer => "relay.wss_viewer.listen",
+    }
 }
 
 /// Config error codes (config-v1 §2.1) that the config loader reports.
