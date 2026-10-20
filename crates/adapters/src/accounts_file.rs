@@ -1,5 +1,9 @@
-//! Administrator account file reader (cli-v1 §1.3, §1.4, §1.6).
-//! Design: docs/architectures/serve-startup.md.
+//! Administrator account file reader (cli-v1 §1.3, §1.4, §1.6), writer
+//! (`store`), and password hasher (`hasher`).
+//! Design: docs/architectures/serve-startup.md, docs/architectures/admin-accounts.md.
+
+mod hasher;
+mod store;
 
 use std::collections::BTreeMap;
 use std::io::ErrorKind;
@@ -7,51 +11,58 @@ use std::path::Path;
 
 use toml::{Table, Value};
 use vnc_relay_app::accounts::{
-    ACCOUNTS_FILE_KEY, AccountsDiagnostic, AccountsError, AccountsWarning,
+    ACCOUNTS_FILE_KEY, AccountsDiagnostic, AccountsError, AccountsWarning, LoadedAccounts,
 };
 use vnc_relay_domain::account::{
     Account, AccountName, Argon2Params, Argon2ParamsError, PasswordHash,
 };
 
 use crate::toml_text::error_position;
+pub use hasher::Argon2Hasher;
+pub use store::AccountsFile;
 
-/// Accounts read from a valid file, in file order.
-#[derive(Debug)]
-pub struct LoadedAccounts {
-    pub accounts: Vec<Account>,
-    pub warnings: Vec<AccountsWarning>,
+/// What to do with a hash whose parameters are below the approved minimum.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HashFloor {
+    /// `serve`: `accounts_hash_below_minimum`.
+    Reject,
+    /// `admin`: accepted without a warning, so `admin passwd` can replace it.
+    Accept,
 }
 
 /// Reads and checks the account file at `path`. A file without accounts is
 /// valid here; `serve` rejects it with `accounts::require_any`.
-pub fn load(path: &Path) -> Result<LoadedAccounts, Vec<AccountsDiagnostic>> {
-    let file_error = |error, message: String| {
+pub fn load(path: &Path, floor: HashFloor) -> Result<LoadedAccounts, Vec<AccountsDiagnostic>> {
+    read(path, floor)?.ok_or_else(|| {
         vec![AccountsDiagnostic {
-            error,
+            error: AccountsError::FileMissing,
             key: ACCOUNTS_FILE_KEY.to_owned(),
-            message,
-        }]
-    };
-    let bytes = std::fs::read(path).map_err(|error| match error.kind() {
-        ErrorKind::NotFound => file_error(
-            AccountsError::FileMissing,
-            format!(
+            message: format!(
                 "계정 파일이 없다: {}. `vnc-relay admin add`로 계정을 만든다.",
                 path.display()
             ),
-        ),
-        kind => {
-            let reason = match kind {
+        }]
+    })
+}
+
+/// Like [`load`], but a missing file is `Ok(None)`.
+fn read(path: &Path, floor: HashFloor) -> Result<Option<LoadedAccounts>, Vec<AccountsDiagnostic>> {
+    let bytes = match std::fs::read(path) {
+        Ok(bytes) => bytes,
+        Err(error) if error.kind() == ErrorKind::NotFound => return Ok(None),
+        Err(error) => {
+            let reason = match error.kind() {
                 ErrorKind::PermissionDenied => "읽을 권한이 없다",
                 ErrorKind::IsADirectory => "파일이 아니라 디렉터리다",
                 _ => "읽을 수 없다",
             };
-            file_error(
-                AccountsError::FileUnreadable,
-                format!("계정 파일을 읽을 수 없다({reason}): {}", path.display()),
-            )
+            return Err(vec![AccountsDiagnostic {
+                error: AccountsError::FileUnreadable,
+                key: ACCOUNTS_FILE_KEY.to_owned(),
+                message: format!("계정 파일을 읽을 수 없다({reason}): {}", path.display()),
+            }]);
         }
-    })?;
+    };
     let text = String::from_utf8(bytes).map_err(|_| {
         vec![AccountsDiagnostic {
             error: AccountsError::FileInvalid,
@@ -59,18 +70,18 @@ pub fn load(path: &Path) -> Result<LoadedAccounts, Vec<AccountsDiagnostic>> {
             message: "계정 파일이 UTF-8 텍스트가 아니다.".to_owned(),
         }]
     })?;
-    let accounts = parse(&text)?;
+    let accounts = parse(&text, floor)?;
     let warnings = if is_permissive(path) {
         vec![AccountsWarning::FilePermissive]
     } else {
         Vec::new()
     };
-    Ok(LoadedAccounts { accounts, warnings })
+    Ok(Some(LoadedAccounts { accounts, warnings }))
 }
 
 /// Checks account file text and returns every diagnostic found, or the
 /// accounts in file order.
-pub fn parse(text: &str) -> Result<Vec<Account>, Vec<AccountsDiagnostic>> {
+pub fn parse(text: &str, floor: HashFloor) -> Result<Vec<Account>, Vec<AccountsDiagnostic>> {
     let table: Table = text.parse().map_err(|error: toml::de::Error| {
         let message = match error_position(text, &error) {
             Some((line, column)) => {
@@ -108,7 +119,9 @@ pub fn parse(text: &str) -> Result<Vec<Account>, Vec<AccountsDiagnostic>> {
         Some(Value::Array(items)) => {
             let mut first_index: BTreeMap<String, usize> = BTreeMap::new();
             for (index, item) in items.iter().enumerate() {
-                if let Some(account) = read_account(index, item, &mut first_index, &mut problems) {
+                if let Some(account) =
+                    read_account(index, item, floor, &mut first_index, &mut problems)
+                {
                     accounts.push(account);
                 }
             }
@@ -130,6 +143,7 @@ pub fn parse(text: &str) -> Result<Vec<Account>, Vec<AccountsDiagnostic>> {
 fn read_account(
     index: usize,
     item: &Value,
+    floor: HashFloor,
     first_index: &mut BTreeMap<String, usize>,
     problems: &mut Vec<AccountsDiagnostic>,
 ) -> Option<Account> {
@@ -164,7 +178,7 @@ fn read_account(
         Some(name)
     });
     let password_hash = string_field(table, &path, "password_hash", problems)
-        .and_then(|text| read_hash(text, format!("{path}.password_hash"), problems));
+        .and_then(|text| read_hash(text, format!("{path}.password_hash"), floor, problems));
     Some(Account {
         name: name?,
         password_hash: password_hash?,
@@ -195,6 +209,7 @@ fn string_field<'a>(
 fn read_hash(
     text: &str,
     key: String,
+    floor: HashFloor,
     problems: &mut Vec<AccountsDiagnostic>,
 ) -> Option<PasswordHash> {
     let hash = match PasswordHash::parse(text) {
@@ -212,6 +227,7 @@ fn read_hash(
         return Some(hash);
     };
     let (code, hint) = match error {
+        Argon2ParamsError::BelowMinimum if floor == HashFloor::Accept => return Some(hash),
         Argon2ParamsError::BelowMinimum => (
             AccountsError::HashBelowMinimum,
             " `vnc-relay admin passwd`로 해시를 다시 만든다.",
@@ -257,7 +273,8 @@ fn is_permissive(path: &Path) -> bool {
     std::fs::metadata(path).is_ok_and(|metadata| metadata.permissions().mode() & 0o077 != 0)
 }
 
-/// Windows permission warnings wait for observation (cli-v1 §1.6, Windows 11 row).
+/// Windows gives no permission warning; the operator sets the access
+/// control list (cli-v1 §1.6, user decision 2026-10-20).
 #[cfg(not(unix))]
 fn is_permissive(_path: &Path) -> bool {
     false

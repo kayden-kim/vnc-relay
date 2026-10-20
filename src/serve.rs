@@ -10,11 +10,12 @@ use std::task::Poll;
 
 use tokio::sync::watch;
 use tokio::task::JoinSet;
+use vnc_relay_adapters::accounts_file::HashFloor;
 use vnc_relay_adapters::net::{AcceptPolicy, BindFailure, TcpEntryPoint};
 use vnc_relay_adapters::ops_log::JsonLinesEventSink;
 use vnc_relay_adapters::status_http::StatusListener;
 use vnc_relay_adapters::{accounts_file, config_file, net};
-use vnc_relay_app::accounts::{self, ACCOUNTS_FILE_KEY, AccountsDiagnostic, AccountsWarning};
+use vnc_relay_app::accounts::{self, ACCOUNTS_FILE_KEY, AccountsDiagnostic};
 use vnc_relay_app::events::{Event, Phase};
 use vnc_relay_app::lifecycle::LifecycleService;
 use vnc_relay_app::ports::EventSink;
@@ -79,17 +80,17 @@ pub fn run(config: &Path) -> ExitCode {
     }
 
     // Stage 2: account file. Stage 3 (file watch) comes with task 5.1.
-    let loaded = match accounts_file::load(&settings.admin.accounts_file) {
+    let loaded = match accounts_file::load(&settings.admin.accounts_file, HashFloor::Reject) {
         Ok(loaded) => loaded,
         Err(diagnostics) => return accounts_failure(log.as_ref(), &diagnostics),
     };
     for warning in &loaded.warnings {
-        let message = match warning {
-            AccountsWarning::FilePermissive => {
-                "그룹이나 다른 사용자에게 계정 파일 권한이 있다. 권한을 0600으로 바꾸기를 권장한다."
-            }
-        };
-        cli::report("warning", warning.code(), ACCOUNTS_FILE_KEY, message);
+        cli::report(
+            "warning",
+            warning.code(),
+            ACCOUNTS_FILE_KEY,
+            &warning.message(),
+        );
     }
     if let Err(diagnostic) = accounts::require_any(&loaded.accounts) {
         return accounts_failure(log.as_ref(), &[diagnostic]);

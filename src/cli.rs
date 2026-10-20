@@ -1,5 +1,6 @@
 //! Command line parsing, diagnostic lines, and exit codes (cli-v1 §1.1, §1.5,
-//! §2.1). Design: docs/architectures/serve-startup.md.
+//! §2.1). Design: docs/architectures/serve-startup.md,
+//! docs/architectures/admin-accounts.md.
 
 use std::ffi::OsString;
 use std::io::{self, Write};
@@ -19,15 +20,25 @@ pub const HELP: &str = "\
 vnc-relay: UltraVNC Repeater 호환 TCP·WS·WSS 중계 서버
 
 사용법:
-  vnc-relay serve --config <path>   서버를 포그라운드로 실행한다.
-  vnc-relay --help, -h              이 사용법을 쓴다.
-  vnc-relay --version, -V           버전을 쓴다.
+  vnc-relay serve --config <path>                  서버를 포그라운드로 실행한다.
+  vnc-relay admin add <account> --config <path>    계정을 추가한다.
+  vnc-relay admin passwd <account> --config <path> 계정의 비밀번호를 바꾼다.
+  vnc-relay admin remove <account> [--yes] --config <path>
+                                                   계정을 삭제한다. --yes는 확인을 생략한다.
+  vnc-relay admin list --config <path>             계정 이름을 나열한다.
+  vnc-relay --help, -h                             이 사용법을 쓴다.
+  vnc-relay --version, -V                          버전을 쓴다.
+
+비밀번호는 터미널에서 숨김 입력으로만 받는다. admin 명령은 실행 중인 서버에 반영되지 않는다.
 
 종료 코드: 0 성공, 1 실행 중 오류, 2 사용법 오류, 3 설정 오류, 4 리스너 준비 실패, 5 계정 파일 오류
 ";
 
 const USAGE: &str = "\
 사용법: vnc-relay serve --config <path>
+       vnc-relay admin add|passwd <account> --config <path>
+       vnc-relay admin remove <account> [--yes] --config <path>
+       vnc-relay admin list --config <path>
        vnc-relay --help
        vnc-relay --version
 ";
@@ -36,7 +47,23 @@ const USAGE: &str = "\
 pub enum Command {
     Help,
     Version,
-    Serve { config: PathBuf },
+    Serve {
+        config: PathBuf,
+    },
+    Admin {
+        config: PathBuf,
+        action: AdminAction,
+    },
+}
+
+/// The `admin` subcommands. `account` is the argument as typed; the name
+/// rule is checked by `admin::run` (`account_name_invalid`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AdminAction {
+    Add { account: String },
+    Passwd { account: String },
+    Remove { account: String, yes: bool },
+    List,
 }
 
 /// A usage error. `message` is the Korean sentence of the `usage_error` line.
@@ -55,17 +82,62 @@ pub fn parse(args: impl IntoIterator<Item = OsString>) -> Result<Command, UsageE
     match (help, version, matches.subcommand()) {
         (true, false, None) => Ok(Command::Help),
         (false, true, None) => Ok(Command::Version),
-        (false, false, Some(("serve", serve))) => serve
-            .get_one::<PathBuf>("config")
-            .map(|config| Command::Serve {
-                config: config.clone(),
-            })
-            .ok_or_else(|| usage("`--config <path>`가 필요하다.")),
+        (false, false, Some(("serve", serve))) => Ok(Command::Serve {
+            config: config(serve)?,
+        }),
+        (false, false, Some(("admin", admin))) => parse_admin(admin),
         (false, false, _) => Err(usage("하위 명령이 필요하다.")),
         _ => Err(usage(
             "`--help`와 `--version`은 다른 인수와 함께 쓸 수 없다.",
         )),
     }
+}
+
+fn parse_admin(admin: &clap::ArgMatches) -> Result<Command, UsageError> {
+    let account = |matches: &clap::ArgMatches| {
+        matches
+            .get_one::<String>("account")
+            .cloned()
+            .ok_or_else(|| usage("`<account>`가 필요하다."))
+    };
+    let (action, matches) = match admin.subcommand() {
+        Some(("add", m)) => (
+            AdminAction::Add {
+                account: account(m)?,
+            },
+            m,
+        ),
+        Some(("passwd", m)) => (
+            AdminAction::Passwd {
+                account: account(m)?,
+            },
+            m,
+        ),
+        Some(("remove", m)) => (
+            AdminAction::Remove {
+                account: account(m)?,
+                yes: m.get_flag("yes"),
+            },
+            m,
+        ),
+        Some(("list", m)) => (AdminAction::List, m),
+        _ => {
+            return Err(usage(
+                "`admin` 다음에 `add`, `passwd`, `remove`, `list` 중 하나가 필요하다.",
+            ));
+        }
+    };
+    Ok(Command::Admin {
+        config: config(matches)?,
+        action,
+    })
+}
+
+fn config(matches: &clap::ArgMatches) -> Result<PathBuf, UsageError> {
+    matches
+        .get_one::<PathBuf>("config")
+        .cloned()
+        .ok_or_else(|| usage("`--config <path>`가 필요하다."))
 }
 
 /// Writes `error[usage_error]: <message>` and the usage text to stderr.
@@ -122,16 +194,39 @@ fn command() -> clap::Command {
                 .long("version")
                 .action(ArgAction::SetTrue),
         )
+        .subcommand(leaf("serve"))
         .subcommand(
-            clap::Command::new("serve").disable_help_flag(true).arg(
-                Arg::new("config")
-                    .long("config")
-                    .value_name("path")
-                    .value_parser(clap::value_parser!(PathBuf))
-                    .action(ArgAction::Set)
-                    .required(true),
-            ),
+            clap::Command::new("admin")
+                .disable_help_flag(true)
+                .disable_help_subcommand(true)
+                .subcommand(leaf("add").arg(account_arg()))
+                .subcommand(leaf("passwd").arg(account_arg()))
+                .subcommand(
+                    leaf("remove")
+                        .arg(account_arg())
+                        .arg(Arg::new("yes").long("yes").action(ArgAction::SetTrue)),
+                )
+                .subcommand(leaf("list")),
         )
+}
+
+/// A subcommand that takes the required `--config <path>`.
+fn leaf(name: &'static str) -> clap::Command {
+    clap::Command::new(name).disable_help_flag(true).arg(
+        Arg::new("config")
+            .long("config")
+            .value_name("path")
+            .value_parser(clap::value_parser!(PathBuf))
+            .action(ArgAction::Set)
+            .required(true),
+    )
+}
+
+fn account_arg() -> Arg {
+    Arg::new("account")
+        .value_name("account")
+        .action(ArgAction::Set)
+        .required(true)
 }
 
 fn clap_message(error: &clap::Error) -> String {
@@ -219,10 +314,9 @@ mod tests {
     #[test]
     fn rejects_unknown_commands_and_arguments() {
         assert_eq!(run(&[]), Err("하위 명령이 필요하다.".to_owned()));
-        // `admin` stays unknown until task 4.1.
         assert_eq!(
-            run(&["admin", "list", "--config", "a.toml"]),
-            Err("알 수 없는 하위 명령 `admin`이다.".to_owned())
+            run(&["start", "--config", "a.toml"]),
+            Err("알 수 없는 하위 명령 `start`이다.".to_owned())
         );
         assert_eq!(
             run(&["serve", "--config", "a.toml", "--verbose"]),
@@ -232,6 +326,121 @@ mod tests {
             run(&["serve", "--config", "a.toml", "extra"]),
             Err("알 수 없는 인수 `extra`다.".to_owned())
         );
+    }
+
+    fn admin(config: &str, action: AdminAction) -> Result<Command, String> {
+        Ok(Command::Admin {
+            config: PathBuf::from(config),
+            action,
+        })
+    }
+
+    /// spec: operations.md:OPS-030 partial
+    #[test]
+    fn parses_admin_subcommands_with_their_own_options() {
+        let account = "alice".to_owned();
+        assert_eq!(
+            run(&["admin", "add", "alice", "--config", "a.toml"]),
+            admin(
+                "a.toml",
+                AdminAction::Add {
+                    account: account.clone()
+                }
+            )
+        );
+        assert_eq!(
+            run(&["admin", "passwd", "--config=a.toml", "alice"]),
+            admin(
+                "a.toml",
+                AdminAction::Passwd {
+                    account: account.clone()
+                }
+            )
+        );
+        assert_eq!(
+            run(&["admin", "remove", "alice", "--config", "a.toml"]),
+            admin(
+                "a.toml",
+                AdminAction::Remove {
+                    account: account.clone(),
+                    yes: false
+                }
+            )
+        );
+        assert_eq!(
+            run(&["admin", "remove", "--yes", "alice", "--config", "a.toml"]),
+            admin(
+                "a.toml",
+                AdminAction::Remove {
+                    account: account.clone(),
+                    yes: true
+                }
+            )
+        );
+        assert_eq!(
+            run(&["admin", "list", "--config", "a.toml"]),
+            admin("a.toml", AdminAction::List)
+        );
+        // The name rule is not a usage error; `admin::run` checks it.
+        assert_eq!(
+            run(&["admin", "add", "Alice!", "--config", "a.toml"]),
+            admin(
+                "a.toml",
+                AdminAction::Add {
+                    account: "Alice!".to_owned()
+                }
+            )
+        );
+
+        let errors = [
+            (
+                &["admin"][..],
+                "`admin` 다음에 `add`, `passwd`, `remove`, `list` 중 하나가 필요하다.",
+            ),
+            (
+                &["admin", "--config", "a.toml"],
+                "알 수 없는 인수 `--config`다.",
+            ),
+            (
+                &["admin", "rename", "a", "--config", "a.toml"],
+                "알 수 없는 하위 명령 `rename`이다.",
+            ),
+            (
+                &["admin", "add", "--config", "a.toml"],
+                "`<account>`가 필요하다.",
+            ),
+            (&["admin", "add", "alice"], "`--config <path>`가 필요하다."),
+            (&["admin", "list"], "`--config <path>`가 필요하다."),
+            (
+                &["admin", "add", "alice", "bob", "--config", "a.toml"],
+                "알 수 없는 인수 `bob`다.",
+            ),
+            (
+                &["admin", "add", "alice", "--yes", "--config", "a.toml"],
+                "알 수 없는 인수 `--yes`다.",
+            ),
+            (
+                &["admin", "list", "alice", "--config", "a.toml"],
+                "알 수 없는 인수 `alice`다.",
+            ),
+            (
+                &[
+                    "admin", "remove", "alice", "--yes", "--yes", "--config", "a.toml",
+                ],
+                "`--yes`는 한 번만 쓸 수 있다.",
+            ),
+            (
+                &["admin", "list", "--config", "a.toml", "--config", "b.toml"],
+                "`--config <path>`는 한 번만 쓸 수 있다.",
+            ),
+            (
+                &["admin", "list", "--config", "a.toml", "--help"],
+                "알 수 없는 인수 `--help`다.",
+            ),
+        ];
+        for (args, message) in errors {
+            assert_eq!(run(args), Err(message.to_owned()), "{args:?}");
+        }
     }
 
     #[test]

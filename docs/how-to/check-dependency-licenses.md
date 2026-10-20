@@ -6,7 +6,7 @@ Rust 의존성의 라이선스가 사용자가 승인한 허용 목록 안에 �
 | --- | --- |
 | 대상 독자 | 의존성을 추가·갱신하는 개발자, 배포를 준비하는 프로젝트 관리자 |
 | 검증 상태 | Verified |
-| 검증 환경·버전 | Ubuntu 24.04.4 LTS x86_64(WSL2), Rust 1.99.1, cargo-deny 0.20.2 |
+| 검증 환경·버전 | Ubuntu 24.04.4 LTS x86_64(WSL2)와 Windows 11 Pro 10.0.26200, Rust 1.99.1, cargo-deny 0.20.2 |
 | 최종 검증일 | 2026-10-20 |
 | 관련 기준 문서 | [PRD 확정 기준](../requirements/PRD.md#확정-기준) "구현 기술"·"라이선스" 행, [OPS-021](../specs/operations.md#7-수용-테스트), 허용 목록 [`deny.toml`](../../deny.toml) |
 
@@ -76,6 +76,7 @@ Rust 의존성의 라이선스가 사용자가 승인한 허용 목록 안에 �
 | 채택 묶음의 고지 파일 | 모든 패키지에 라이선스 파일이 있다. `NOTICE` 파일 유무를 안다. | 두 대상의 의존성 패키지 디렉터리에서 파일 이름 확인 | 통과(2026-10-20). 142개 패키지 모두 라이선스 파일이 있고 `NOTICE` 파일은 없다. | 아래 실행 기록 1 |
 | socket2 직접 의존성(작업 2.5) | `licenses ok`, 종료 코드 0. 라이선스 파일이 있다. `NOTICE` 파일 유무를 안다. | 3단계 명령, 패키지 디렉터리에서 파일 이름 확인 | 통과(2026-10-20). socket2 0.6.5는 `MIT OR Apache-2.0`이고 `LICENSE-MIT`·`LICENSE-APACHE`가 있으며 `NOTICE` 파일은 없다. | 아래 실행 기록 3 |
 | axum 직접 의존성(작업 2.6) | `licenses ok`, 종료 코드 0. 새로 들어온 패키지마다 라이선스 파일이 있다. `NOTICE` 파일 유무를 안다. | 3단계 명령, 패키지 디렉터리에서 파일 이름 확인 | 통과(2026-10-20). 새 패키지 23개 모두 라이선스 파일이 있고 `NOTICE` 파일은 없다. | 아래 실행 기록 4 |
+| argon2·rpassword 직접 의존성(작업 4.1) | `licenses ok`, 종료 코드 0. 새로 들어온 패키지마다 라이선스 파일이 있다. `NOTICE` 파일 유무를 안다. | 3단계 명령, 패키지 디렉터리에서 파일 이름 확인 | 통과(2026-10-20). 새 패키지 15개 모두 라이선스 파일이 있고 `NOTICE` 파일은 없다. | 아래 실행 기록 5 |
 
 실행 기록 1: 의존성을 추가하기 전에 [PRD "구현 기술" 행](../requirements/PRD.md#확정-기준)의 라이브러리를 검토했다.
 
@@ -91,6 +92,8 @@ Rust 의존성의 라이선스가 사용자가 승인한 허용 목록 안에 �
 실행 기록 3: 커밋 `c89beb4`에 작업 2.5를 더한 작업 트리에서 실행했다. 환경은 실행 기록 1과 같다. socket2 0.6.5는 그 전부터 tokio의 의존성으로 `Cargo.lock`에 있었고, 작업 2.5가 adapters의 직접 의존성(`features = ["all"]`)으로 더했다. 결과는 `licenses ok`, 종료 코드 0이다. `~/.cargo/registry/src/index.crates.io-*/socket2-0.6.5/`의 파일 이름과 `Cargo.toml`의 `license` 값을 확인했다.
 
 실행 기록 4: 커밋 `b1f2ad5`에 작업 2.6을 더한 작업 트리에서 실행했다. 환경은 실행 기록 1과 같다. 작업 2.6이 adapters의 직접 의존성으로 axum 0.8.9(`default-features = false`, `features = ["http1", "tokio"]`)를 더했다. 이 변경으로 `Cargo.lock`에 23개 패키지가 새로 들어왔다. atomic-waker 1.1.2, axum 0.8.9, axum-core 0.5.6, bytes 1.12.1, futures-core·futures-task·futures-util 0.3.34, http 1.5.0, http-body 1.1.0, http-body-util 0.1.5, httparse 1.10.1, httpdate 1.0.3, hyper 1.12.0, hyper-util 0.1.21, matchit 0.8.4, mime 0.3.17, percent-encoding 2.3.2, slab 0.4.12, smallvec 1.16.3, sync_wrapper 1.0.2, tower 0.5.3, tower-layer·tower-service 0.3.3이다. 결과는 `licenses ok`, 종료 코드 0이다. 패키지마다 `~/.cargo/registry/src/index.crates.io-*/<이름>-<버전>/`의 `LICENSE*`·`COPYING*`·`UNLICENSE*`·`NOTICE*` 파일 이름과 `Cargo.toml`의 `license` 값을 확인했다. 라이선스는 `MIT`, `Apache-2.0`, `MIT OR Apache-2.0`, `Apache-2.0 OR MIT`, `MIT AND BSD-3-Clause`(matchit)였다.
+
+실행 기록 5: 커밋 `ed68104`에 작업 4.1을 더한 작업 트리에서 실행했다. 환경은 실행 기록 1과 같다. 같은 실행을 Windows 11 Pro 10.0.26200(cargo-deny 0.20.2)에서도 했다. 작업 4.1이 adapters의 직접 의존성으로 argon2 0.6.0(`default-features = false`, `features = ["alloc", "password-hash"]`)과 rpassword 7.5.4를 더했다. 이 변경으로 `Cargo.lock`에 15개 패키지가 새로 들어왔다. argon2 0.6.0, base64ct 1.8.3, blake2 0.11.0, block-buffer 0.12.1, cmov 0.5.4, cpufeatures 0.3.1, crypto-common 0.2.2, ctutils 0.4.3, digest 0.11.3, hybrid-array 0.4.15, password-hash 0.6.1, phc 0.6.1, rpassword 7.5.4, rtoolbox 0.0.6, typenum 1.20.1이다. 결과는 두 환경 모두 `licenses ok`, 종료 코드 0이다. 패키지마다 레지스트리 디렉터리의 `LICENSE*`·`COPYING*`·`UNLICENSE*`·`NOTICE*` 파일 이름과 `Cargo.toml`의 `license` 값을 확인했다. rpassword와 rtoolbox의 라이선스는 `Apache-2.0`이고 `LICENSE-APACHE`만 있다. 나머지는 `MIT OR Apache-2.0`이고 `LICENSE-MIT`·`LICENSE-APACHE`가 있다. typenum은 `LICENSE` 파일도 있다. `NOTICE` 파일은 없다.
 
 ## 5. 중단 조건
 

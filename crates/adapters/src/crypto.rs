@@ -1,5 +1,6 @@
 //! OS random numbers and HMAC-SHA-256 with aws-lc-rs. Design:
-//! docs/architectures/ops-log.md (`relay_id_ref`, ops-info-v1 §1.9).
+//! docs/architectures/ops-log.md (`relay_id_ref`, ops-info-v1 §1.9) and
+//! docs/architectures/admin-accounts.md (password hash salts).
 
 use std::fmt;
 
@@ -7,6 +8,11 @@ use aws_lc_rs::{hmac, rand};
 use vnc_relay_app::events::RelayIdRef;
 
 const KEY_BYTES: usize = 32;
+
+/// Fills `bytes` from the OS random source.
+pub fn random_bytes(bytes: &mut [u8]) -> Result<(), CryptoError> {
+    rand::fill(bytes).map_err(|_| CryptoError)
+}
 
 /// The per-process key of `relay_id_ref`. It is made from OS random bytes,
 /// never stored, and never written; `Debug` hides it.
@@ -16,7 +22,7 @@ impl RelayIdKey {
     /// A new key from 32 OS random bytes.
     pub fn generate() -> Result<Self, CryptoError> {
         let mut bytes = [0u8; KEY_BYTES];
-        rand::fill(&mut bytes).map_err(|_| CryptoError)?;
+        random_bytes(&mut bytes)?;
         Ok(Self::from_bytes(&bytes))
     }
 

@@ -36,7 +36,8 @@ fn help_and_version_write_to_stdout_with_exit_code_0() {
 fn usage_errors_exit_with_code_2_and_usage_on_stderr() {
     for args in [
         &[][..],
-        &["admin", "list", "--config", "relay.toml"],
+        &["admin"],
+        &["admin", "add", "alice"],
         &["serve"],
         &["serve", "--config", "a.toml", "--config", "b.toml"],
         &["--help", "serve", "--config", "relay.toml"],

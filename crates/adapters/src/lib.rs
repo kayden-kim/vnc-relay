@@ -7,4 +7,5 @@ pub mod crypto;
 pub mod net;
 pub mod ops_log;
 pub mod status_http;
+pub mod terminal;
 mod toml_text;

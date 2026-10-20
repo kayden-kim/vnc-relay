@@ -29,6 +29,26 @@ use reader::{Diagnostics, Field, Section, out_of_range};
 /// Reads and checks the config file at `path`. Relative paths inside the
 /// file are resolved against the file's directory.
 pub fn load(path: &Path) -> Result<Settings, Vec<ConfigDiagnostic>> {
+    let (text, absolute) = read_text(path)?;
+    parse(&text, base_dir(&absolute))
+}
+
+/// Reads the config file for the `admin` commands: the whole TOML syntax and
+/// the `[admin]` table only. Other tables are not checked (cli-v1 §1.5).
+pub fn load_admin(path: &Path) -> Result<AdminSettings, Vec<ConfigDiagnostic>> {
+    let (text, absolute) = read_text(path)?;
+    let table = parse_table(&text)?;
+    let mut d = Diagnostics::default();
+    let mut root = Section::root(&table);
+    let admin = read_admin(&mut root, base_dir(&absolute), &mut d);
+    match admin {
+        Some(admin) if d.is_empty() => Ok(admin),
+        _ => Err(d.into_vec()),
+    }
+}
+
+/// The file text and the absolute path of `path`.
+fn read_text(path: &Path) -> Result<(String, PathBuf), Vec<ConfigDiagnostic>> {
     let unreadable = |message: String| {
         vec![ConfigDiagnostic {
             error: ConfigError::FileUnreadable,
@@ -56,20 +76,17 @@ pub fn load(path: &Path) -> Result<Settings, Vec<ConfigDiagnostic>> {
             absolute.display()
         ))
     })?;
-    let base_dir = absolute.parent().unwrap_or(Path::new(""));
-    parse(&text, base_dir)
+    Ok((text, absolute))
+}
+
+fn base_dir(absolute: &Path) -> &Path {
+    absolute.parent().unwrap_or(Path::new(""))
 }
 
 /// Checks config text. `base_dir` is the directory that relative paths are
 /// resolved against. Returns every diagnostic found, or the settings.
 pub fn parse(text: &str, base_dir: &Path) -> Result<Settings, Vec<ConfigDiagnostic>> {
-    let table: toml::Table = text.parse().map_err(|error: toml::de::Error| {
-        vec![ConfigDiagnostic {
-            error: ConfigError::SyntaxError,
-            key: String::new(),
-            message: syntax_message(text, &error),
-        }]
-    })?;
+    let table = parse_table(text)?;
     let mut d = Diagnostics::default();
     let mut root = Section::root(&table);
     let settings = read_settings(&mut root, base_dir, &mut d);
@@ -78,6 +95,16 @@ pub fn parse(text: &str, base_dir: &Path) -> Result<Settings, Vec<ConfigDiagnost
         Some(settings) if d.is_empty() => Ok(settings),
         _ => Err(d.into_vec()),
     }
+}
+
+fn parse_table(text: &str) -> Result<toml::Table, Vec<ConfigDiagnostic>> {
+    text.parse().map_err(|error: toml::de::Error| {
+        vec![ConfigDiagnostic {
+            error: ConfigError::SyntaxError,
+            key: String::new(),
+            message: syntax_message(text, &error),
+        }]
+    })
 }
 
 /// Position only; the message must not quote file content (config-v1 §2.1).

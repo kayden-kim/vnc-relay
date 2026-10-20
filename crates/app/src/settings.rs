@@ -6,6 +6,7 @@ use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::time::Duration;
 
+use vnc_relay_domain::account::Argon2Params;
 use vnc_relay_domain::allow_list::{AllowList, IpItem};
 use vnc_relay_domain::entry_point::EntryPoint;
 use vnc_relay_domain::origin::Origin;
@@ -42,6 +43,17 @@ pub struct Argon2Settings {
     pub memory_kib: u32,
     pub iterations: u32,
     pub parallelism: u32,
+}
+
+impl Argon2Settings {
+    /// Parameters of new hashes made by `admin add` and `admin passwd`.
+    pub fn params(self) -> Argon2Params {
+        Argon2Params {
+            memory_kib: self.memory_kib,
+            iterations: self.iterations,
+            parallelism: self.parallelism,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

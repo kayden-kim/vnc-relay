@@ -16,7 +16,7 @@
 ## 1. 책임과 경계
 
 - 맡는 책임:
-  - 명령행 해석: `serve --config <path>`(`--config=<path>` 포함, 한 번만), `--help`·`-h`, `--version`·`-V`. 그 밖의 하위 명령·옵션은 `usage_error`(종료 코드 2)다.
+  - 명령행 해석: `serve --config <path>`(`--config=<path>` 포함, 한 번만), `--help`·`-h`, `--version`·`-V`. 그 밖의 하위 명령·옵션은 `usage_error`(종료 코드 2)다. `admin` 하위 명령의 해석은 `cli::parse`가 하고, 실행은 [관리자 계정 준비 CLI 모듈 설계](admin-accounts.md)가 맡는다.
   - 진단 출력: `error[<code>] key=<key>: <message>`, `warning[<code>] key=<key>: <message>`. 키가 없으면 ` key=`를 뺀다(1.5절).
   - 종료 코드 매핑: 사용법 2, 설정 3, 리스너 4, 계정 파일 5, 런타임 준비 1, 정상 종료 0.
   - `serve` 시작 순서(1.8절): 설정 읽기·검증·로그 출력 열기 → 계정 파일 읽기·검증 → 비동기 런타임·종료 신호 처리기 준비 → 리스너 바인드. 같은 단계의 오류는 모두 모은다.
@@ -25,18 +25,18 @@
   - 리스너 바인드 실패 수집과 실패 때 이미 바인드한 리스너 닫기.
   - 종료 요청(Ctrl+C, Ubuntu의 SIGTERM, Windows의 Ctrl+Break)을 받으면 TCP 진입점 작업에 종료를 알리고, 그 작업이 끝난 뒤 나머지 리스너를 닫고 종료 코드 0으로 끝내기.
 - 맡지 않는 책임:
-  - `admin` 하위 명령. 작업 4.1 전까지는 알 수 없는 하위 명령으로 보고 `usage_error`다(사용자 결정 2026-10-20).
+  - `admin` 하위 명령의 실행. [관리자 계정 준비 CLI 모듈 설계](admin-accounts.md)가 맡는다.
   - 파일 변경 감지 준비(시작 순서 3단계, `watch_unavailable`). 작업 5.1·5.2가 맡는다(사용자 결정 2026-10-20).
   - 인증서·개인키 파일 검사(`tls_file_invalid`). 작업 3.1이 4단계의 바인드 앞에 넣는다.
   - 준비 상태, `server_ready`, 상태 리스너의 응답. [상태 리스너와 준비 상태 모듈 설계](status-listener.md)가 맡는다. 이 문서는 5·6단계에서 그 기능을 부르는 순서만 다룬다.
   - WS·WSS·관리 리스너의 연결 수락. 작업 3.2(WS·WSS), 4.2(관리)가 바인드한 리스너에 붙인다. 그 전까지 이 리스너는 바인드만 하고 연결을 받지 않는다(사용자 결정 2026-10-20). TCP 진입점의 수락은 작업 2.4가 붙였다([TCP 진입점 모듈 설계](tcp-entry-point.md)). 상태 리스너의 수락은 작업 2.6이 붙였다.
   - 종료 유예 G, 두 번째 종료 요청, 세션 정리. 작업 5.3이 맡는다.
-  - 비밀번호 해시 검증과 비밀번호 규칙. 작업 4.1·4.4가 맡는다.
+  - 비밀번호 규칙(`Password`)은 [관리자 계정 준비 CLI 모듈 설계](admin-accounts.md)가 맡는다. 로그인 때 비밀번호 해시 검증은 작업 4.3이 맡는다.
 - 다른 모듈에 공개하는 기능:
   - `vnc_relay_domain::account::{Account, AccountName, AccountNameError, PasswordHash, PasswordHashError, Argon2Params, Argon2ParamsError}`
-  - `vnc_relay_app::accounts::{ACCOUNTS_FILE_KEY, AccountsError, AccountsDiagnostic, AccountsWarning, require_any}`
+  - `vnc_relay_app::accounts::{ACCOUNTS_FILE_KEY, AccountsError, AccountsDiagnostic, AccountsWarning, LoadedAccounts, require_any}`
   - `vnc_relay_app::settings::{ListenerPlan, Settings::status_listener, Settings::other_listeners}`
-  - `vnc_relay_adapters::accounts_file::{load, parse, LoadedAccounts}`
+  - `vnc_relay_adapters::accounts_file::{load, parse}`
   - `vnc_relay_adapters::net::{bind, bind_one, BindFailure, BoundListener}`
 
 ## 2. 내부 구조
@@ -72,7 +72,7 @@ flowchart LR
 | `crates/app/src/accounts.rs` `AccountsError`, `AccountsDiagnostic`, `AccountsWarning` | 계정 파일 오류 코드 5종(`accounts_file_missing`·`accounts_file_unreadable`·`accounts_file_invalid`·`accounts_hash_below_minimum`·`accounts_none`)과 경고 `accounts_file_permissive`, 진단 한 건(`error`, `key`, `message`) | 값 타입 | domain |
 | `crates/app/src/accounts.rs` `require_any` | 계정이 하나도 없으면 `accounts_none` 진단을 준다(운영 스펙 3.1절 5). | `serve` 2단계 | domain |
 | `crates/app/src/settings.rs` `ListenerPlan`, `Settings::status_listener`, `Settings::other_listeners` | 바인드할 리스너 계획. `status_listener`는 상태 리스너 하나, `other_listeners`는 관리, 켠 진입점(`tcp_viewer`, `tcp_server`, `ws_viewer`, `wss_viewer`) 순서다. 각 항목은 리스너 이름, 설정 키(`status.listen` 등), 주소, 진입점이다. | 4단계 | domain |
-| `crates/adapters/src/accounts_file.rs` `load`, `parse`, `LoadedAccounts` | 파일 읽기, UTF-8 확인, TOML 해석, `version`·`[[account]]` 키 검사, 중복 이름 검사, 해시 하한·상한 판정, Ubuntu 권한 경고. 모든 진단을 모은다. | 호출마다 | toml, domain, app |
+| `crates/adapters/src/accounts_file.rs` `load`, `parse` | 파일 읽기, UTF-8 확인, TOML 해석, `version`·`[[account]]` 키 검사, 중복 이름 검사, 해시 하한·상한 판정, Ubuntu 권한 경고. 모든 진단을 모은다. `LoadedAccounts`(app `accounts.rs`)를 돌려준다. | 호출마다 | toml, domain, app |
 | `crates/adapters/src/net.rs` `bind`, `bind_one`, `BindFailure`, `BoundListener` | `bind_one`은 `ListenerPlan` 하나를 tokio `TcpListener::bind`로 바인드한다. `bind`는 계획마다 `bind_one`을 부르고, 실패도 계속 시도해 모두 모은다. 하나라도 실패하면 성공한 리스너를 닫고 실패 목록을 돌려준다. 성공하면 계획과 리스너 쌍(`BoundListener`)을 돌려준다. 실패 원인은 주소를 뺀 한국어 문장이다. | 4단계 | tokio, app |
 | `crates/adapters/src/toml_text.rs` `error_position` | TOML 구문 오류의 행·열. 설정 파일과 계정 파일이 함께 쓴다. 파일 내용은 돌려주지 않는다. | 호출마다 | toml |
 
@@ -86,7 +86,7 @@ flowchart LR
 | --- | --- | --- | --- |
 | `Command` | `Help`, `Version`, `Serve { config: PathBuf }` | 메모리 | `Help`·`Version`은 다른 인수가 없을 때만 만든다. |
 | `AccountName` | `String` | `Account` | 1~32자, `a-z0-9._-` |
-| `PasswordHash` | 원문 PHC 문자열, `Argon2Params` | `Account` | 1.4절 형식을 통과한 값만 담는다. 원문은 작업 4.4의 검증에 쓴다. `Debug`·오류 메시지에 원문을 넣지 않는다. |
+| `PasswordHash` | 원문 PHC 문자열, `Argon2Params` | `Account` | 1.4절 형식을 통과한 값만 담는다. 원문은 로그인 때의 검증(작업 4.3)에 쓴다. `Debug`·오류 메시지에 원문을 넣지 않는다. |
 | `Argon2Params` | `memory_kib`, `iterations`, `parallelism`: `u32` | `PasswordHash` | 승인 범위: 19456~1048576, 2~10, 1~16([설정 계약 1.2절](../contracts/config-v1.md#12-키-표)) |
 | `AccountsDiagnostic` | `error: AccountsError`, `key: String`, `message: String` | 반환 값 | `key` 규칙은 [CLI 계약 1.3절](../contracts/cli-v1.md#13-계정-파일-형식). 빈 문자열이면 출력에서 ` key=`를 뺀다. 메시지에 해시·파일 내용을 넣지 않는다. |
 | `LoadedAccounts` | `accounts: Vec<Account>`, `warnings: Vec<AccountsWarning>` | 반환 값 | 파일 순서를 유지한다. |

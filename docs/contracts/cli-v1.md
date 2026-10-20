@@ -2,11 +2,11 @@
 
 `vnc-relay` 실행파일의 하위 명령·옵션·종료 코드·출력 규칙과, `vnc-relay admin` 명령이 쓰고 `vnc-relay serve`가 읽는 관리자 계정 파일 형식을 정한다. 서버 실행과 관리자 계정 준비는 같은 실행파일의 서로 다른 하위 명령이다. 외부 동작은 [운영 스펙](../specs/operations.md)이 정하고, 설정 파일 키는 [설정 파일 계약](config-v1.md)이 정한다.
 
-이 계약은 2026-10-16에 사용자가 채택했다(상태 Active). 하위 명령·옵션, 비밀번호 숨김 입력, 해시 형식, 계정 이름·비밀번호 규칙, 계정 파일 형식, 오류·경고 코드, 종료 코드가 모두 채택 범위다. 해시는 Argon2id이고 승인된 범위는 설정 계약이 정한다. 같은 날 사용자가 종료 코드를 확정했다. 설정 오류는 3, 인증서·개인키 파일 오류는 3, 리스너 바인드 실패는 4, 계정 파일 오류(파일 없음·계정 없음 포함)는 5다. 정상 종료 유예 중 두 번째 종료 요청의 처리도 확정했다. 6절에 관찰·구현에서 확인한다고 남긴 항목은 채택으로 해소되지 않았다. 지금 실행할 수 있는 명령은 `serve`(시작·종료 골격)와 `--help`·`--version`이다. `admin` 하위 명령은 작업 4.1 전까지 `usage_error`다.
+이 계약은 2026-10-16에 사용자가 채택했다(상태 Active). 하위 명령·옵션, 비밀번호 숨김 입력, 해시 형식, 계정 이름·비밀번호 규칙, 계정 파일 형식, 오류·경고 코드, 종료 코드가 모두 채택 범위다. 해시는 Argon2id이고 승인된 범위는 설정 계약이 정한다. 같은 날 사용자가 종료 코드를 확정했다. 설정 오류는 3, 인증서·개인키 파일 오류는 3, 리스너 바인드 실패는 4, 계정 파일 오류(파일 없음·계정 없음 포함)는 5다. 정상 종료 유예 중 두 번째 종료 요청의 처리도 확정했다. 6절에 관찰·구현에서 확인한다고 남긴 항목은 채택으로 해소되지 않았다. 지금 실행할 수 있는 명령은 `serve`(시작·종료 골격), `admin add|passwd|remove|list`, `--help`·`--version`이다.
 
 | 항목 | 값 |
 | --- | --- |
-| 이름과 버전 | `vnc-relay-cli` 1.2.0. 1.1.0은 오류 코드 `runtime_unavailable`을 더했다. 1.2.0은 오류 코드 `log_file_unavailable`(종료 코드 3)과 경고 코드 `log_write_failed`를 더했다. 모두 호환 변경이며 사용자가 결정했다(2026-10-20). |
+| 이름과 버전 | `vnc-relay-cli` 1.3.0. 1.1.0은 오류 코드 `runtime_unavailable`을 더했다. 1.2.0은 오류 코드 `log_file_unavailable`(종료 코드 3)과 경고 코드 `log_write_failed`를 더했다. 1.3.0은 경고 코드 `accounts_file_cleanup_failed`를 더하고 `runtime_unavailable`을 `admin` 명령에도 쓰게 했다. 1.3.0의 두 변경은 사용자가 결정했다(2026-10-20). 모두 호환 변경이다. |
 | 상태 | Active(2026-10-16 채택) |
 | 소유자 | vnc-relay 프로젝트 관리자 |
 | 만드는 쪽(Producer) | `vnc-relay` 실행파일. 명령행 출력·종료 코드·계정 파일을 만든다. |
@@ -16,7 +16,7 @@
 | 기준 스펙 | [운영 스펙 3.1절](../specs/operations.md#31-설정-검증과-시작), [3.2절](../specs/operations.md#32-로컬-cli-계정-준비), [3.4절](../specs/operations.md#34-정상-종료와-재시작) |
 | 관련 요구사항 | [PRD](../requirements/PRD.md) FR-06·FR-07, [7절 보안 및 신뢰 경계](../requirements/PRD.md#7-보안-및-신뢰-경계) |
 | 호환성 범위 | Windows 11 x64·Ubuntu 24.04 LTS x64의 `vnc-relay` 1.x. Windows Server는 제외한다. 계정 파일 `version = 1`. |
-| 관련 테스트 | [운영 스펙 수용 테스트](../specs/operations.md#7-수용-테스트) OPS-001~002·OPS-007~010·OPS-019·OPS-029~031·OPS-039·OPS-042. 계약 테스트는 5절에 연결한다. `serve` 시작·종료 골격과 계정 파일 읽기는 Ubuntu와 Windows에서 통과했다. Windows에서는 Unix 신호·권한 테스트를 실행하지 않았다. `admin` 명령과 종료 유예는 미실행이다. |
+| 관련 테스트 | [운영 스펙 수용 테스트](../specs/operations.md#7-수용-테스트) OPS-001~002·OPS-007~010·OPS-019·OPS-029~031·OPS-039·OPS-042. 계약 테스트는 5절에 연결한다. `serve` 시작·종료 골격과 계정 파일 읽기는 Ubuntu와 Windows에서 통과했다. Windows에서는 Unix 신호·권한 테스트를 실행하지 않았다. `admin` 명령은 Ubuntu에서 통과했다. Windows에서는 터미널이 없는 테스트만 자동으로 실행했다. 종료 유예는 미실행이다. |
 
 용어는 [VNC Relay 용어집](../../GLOSSARY.md)을 따른다. 설정 파일 키는 [설정 파일 계약](config-v1.md)을 따른다. 이 문서에서 "계정"은 관리자 계정이다.
 
@@ -70,7 +70,7 @@ TOML이다. UTF-8 텍스트 한 파일이다. 경로는 설정 파일의 `admin.
 | `account.password_hash` | 문자열 | 필수 | Argon2id 해시 문자열(1.4절). |
 
 - 알 수 없는 키, 중복 이름, 자료형 오류, 이름 규칙 위반, 해시 문자열 오류는 파일 오류 `accounts_file_invalid`다. 파일을 일부만 읽지 않는다. UTF-8이 아닌 파일과 TOML 구문 오류도 형식 오류이므로 `accounts_file_invalid`다.
-- 진단의 `key`(사용자 결정 2026-10-20): 파일 안의 오류는 계정 파일 안의 경로를 쓴다. 배열은 0부터 센 `[i]` 첨자다(예: `version`, `account[1].name`, `account[1].password_hash`). 중복 이름은 뒤에 나온 계정에 보고한다. 구문 오류·UTF-8 오류는 `key`를 생략한다. 파일 단위 오류(`accounts_file_missing`, `accounts_file_unreadable`, `accounts_none`)와 경고 `accounts_file_permissive`는 설정 키 `admin.accounts_file`을 쓴다.
+- 진단의 `key`(사용자 결정 2026-10-20): 파일 안의 오류는 계정 파일 안의 경로를 쓴다. 배열은 0부터 센 `[i]` 첨자다(예: `version`, `account[1].name`, `account[1].password_hash`). 중복 이름은 뒤에 나온 계정에 보고한다. 구문 오류·UTF-8 오류는 `key`를 생략한다. 파일 단위 오류(`accounts_file_missing`, `accounts_file_unreadable`, `accounts_none`, `accounts_file_locked`, `accounts_file_write_failed`)와 경고(`accounts_file_permissive`, `last_account_removed`, `accounts_file_cleanup_failed`)는 설정 키 `admin.accounts_file`을 쓴다.
 - 저장할 때 `[[account]]`를 이름순으로 쓴다. 주석은 보존하지 않는다.
 - 계정이 0개인 파일은 형식상 유효하다. `serve`는 이 파일로 시작하지 않는다.
 
@@ -85,7 +85,7 @@ $argon2id$v=19$m=<memory_kib>,t=<iterations>,p=<parallelism>$<솔트>$<해시>
 | 부분 | 규칙 |
 | --- | --- |
 | 알고리즘·버전 | `argon2id`, `v=19`만 받는다. |
-| `m`·`t`·`p` | 이 순서의 십진수. 메모리(KiB)·반복·병렬이다. 범위는 승인값이며 [설정 파일 계약 1.2절](config-v1.md#12-키-표)의 `admin.argon2.memory_kib`·`iterations`·`parallelism`과 같다. 하한 미만은 `accounts_hash_below_minimum`이다. 상한 초과는 승인 범위 밖의 해시 문자열이므로 `accounts_file_invalid`다. 다른 매개변수(`keyid`·`data`)가 있으면 `accounts_file_invalid`다. |
+| `m`·`t`·`p` | 이 순서의 십진수. 메모리(KiB)·반복·병렬이다. 범위는 승인값이며 [설정 파일 계약 1.2절](config-v1.md#12-키-표)의 `admin.argon2.memory_kib`·`iterations`·`parallelism`과 같다. 하한 미만은 `serve`에서 `accounts_hash_below_minimum`이다. `admin` 명령은 하한 미만 해시를 오류·경고 없이 받는다. 그 계정의 해시를 `admin passwd`로 다시 만들 수 있어야 하기 때문이다(사용자 결정 2026-10-20). 상한 초과는 승인 범위 밖의 해시 문자열이므로 `accounts_file_invalid`다. 다른 매개변수(`keyid`·`data`)가 있으면 `accounts_file_invalid`다. |
 | 솔트 | 운영체제 난수원으로 만든 16바이트. 읽을 때는 16바이트 이상을 받는다. |
 | 해시 | 32바이트. 솔트·해시의 인코딩은 패딩 없는 표준 Base64다. |
 
@@ -108,7 +108,7 @@ $argon2id$v=19$m=<memory_kib>,t=<iterations>,p=<parallelism>$<솔트>$<해시>
 | 반영 안내 | 계정을 바꾸는 명령은 성공한 뒤 stderr에 `notice`를 한 줄 쓴다: 실행 중인 서버에는 반영되지 않으며 서버를 정상 종료하고 다시 시작해야 한다(1.7절). |
 | 마지막 계정 삭제 | 허용한다. 삭제 뒤 계정이 0개면 경고 `last_account_removed`를 stderr에 쓴다. 서버는 이 상태로 시작하지 않는다. |
 | 계정 파일이 없을 때 | `add`는 새 파일을 만든다. 상위 디렉터리는 만들지 않는다. `list`는 stdout을 비우고 stderr에 안내 한 줄을 쓰며 종료 코드 0이다. `passwd`·`remove`는 `account_not_found`다. `serve`는 `accounts_file_missing`이다. |
-| 글자 인코딩 | UTF-8. Windows 콘솔의 코드 페이지 처리는 관찰로 확인 필요다. |
+| 글자 인코딩 | UTF-8. Windows 11에서 숨김 입력은 UTF-8 바이트로 저장했다. 콘솔 출력은 코드 페이지 949에서 한글 오류 줄이 바르게 보였다. 파이프·파일 출력은 UTF-8 바이트다. 읽는 쪽은 UTF-8로 해석해야 한다(PowerShell은 `[Console]::OutputEncoding`을 UTF-8로 맞춘다). 관찰 기록은 [실행 기록](#계약-테스트-실행-기록)에 있다. |
 
 명령별 순서:
 
@@ -123,7 +123,7 @@ $argon2id$v=19$m=<memory_kib>,t=<iterations>,p=<parallelism>$<솔트>$<해시>
 
 계정 파일의 변경은 읽고 고치고 교체하는 한 번의 작업이다. 모든 단계를 지킨다.
 
-1. 계정 파일 옆에 잠금 파일 `<계정 파일 이름>.lock`을 독점으로 만든다. 이미 있으면 기다리지 않고 `accounts_file_locked`로 끝난다. 끝나면 지운다.
+1. 계정 파일 옆에 잠금 파일 `<계정 파일 이름>.lock`을 독점으로 만든다. 이미 있으면 기다리지 않고 `accounts_file_locked`로 끝난다. 끝나면 지운다. 명령이 강제로 끝나면 잠금 파일이 남을 수 있다. 실행 중인 `admin` 명령이 없으면 운영자가 지운다. `accounts_file_locked` 메시지가 잠금 파일 경로와 이 조건을 알린다(사용자 결정 2026-10-20). 잠금 파일을 만들 수 없으면(디렉터리 없음·권한 없음) `accounts_file_write_failed`다(사용자 결정 2026-10-20).
 2. 계정 파일을 읽고 1.3절 검사를 한다. 실패하면 `accounts_file_invalid` 등으로 끝나고 아무것도 쓰지 않는다.
 3. 같은 디렉터리에 임시 파일을 새로 만든다. 만든 즉시 소유자만 읽고 쓰도록 권한을 제한한 뒤 내용을 쓴다.
 4. 임시 파일 내용을 디스크에 반영한다. 다시 읽어 1.3절 검사를 통과하는지 확인한다.
@@ -131,14 +131,14 @@ $argon2id$v=19$m=<memory_kib>,t=<iterations>,p=<parallelism>$<솔트>$<해시>
 6. Unix에서는 디렉터리 내용도 디스크에 반영한다.
 7. 잠금 파일을 지운다.
 
-4단계까지 어느 단계가 실패해도 임시 파일을 지우고 대상 파일은 그대로다. 5단계가 실패해도 대상 파일은 원래 내용이다. 이때 종료 코드는 5, 코드는 `accounts_file_write_failed`다. 교체가 끝난 뒤 실패한 단계(6·7)는 경고만 쓰고 성공으로 끝난다.
+4단계까지 어느 단계가 실패해도 임시 파일을 지우고 대상 파일은 그대로다. 5단계가 실패해도 대상 파일은 원래 내용이다. 이때 종료 코드는 5, 코드는 `accounts_file_write_failed`다. 교체가 끝난 뒤 실패한 단계(6·7)는 경고 `accounts_file_cleanup_failed`를 쓰고 성공으로 끝난다.
 
 파일 권한(권장):
 
 | OS | 권장 |
 | --- | --- |
 | Ubuntu 24.04 LTS | 계정 파일 권한 `0600`, 소유자는 서버를 실행하는 OS 계정. 상위 디렉터리를 다른 계정이 쓰지 못하게 한다. CLI는 새 파일을 `0600`으로 만든다. 읽을 때 그룹·기타 권한이 있으면 경고 `accounts_file_permissive`를 쓴다. 경고만 하고 계속한다. |
-| Windows 11 | 서버를 실행하는 OS 계정과 관리자만 읽고 쓰도록 디렉터리의 접근 제어 목록을 제한한다. CLI가 접근 권한을 직접 설정하는지와 권한 경고는 관찰로 확인 필요다. |
+| Windows 11 | 서버를 실행하는 OS 계정과 관리자만 읽고 쓰도록 운영자가 디렉터리의 접근 제어 목록을 제한한다. CLI는 접근 제어 목록을 바꾸지 않고 권한 경고도 쓰지 않는다. 새 파일은 디렉터리의 접근 제어 목록을 물려받는다(사용자 결정 2026-10-20). |
 
 설정 파일의 `key_file`도 같은 원칙으로 권한을 제한하기를 권장한다. 계정 파일·개인키 파일은 버전 관리에 넣지 않는다.
 
@@ -178,7 +178,7 @@ error[listener_bind_failed] key=relay.tcp_viewer.listen: 0.0.0.0:15901에 바인
 | --- | --- | --- |
 | `0` | 성공 | 명령이 끝났다. `serve`는 정상 종료 요청의 정리가 끝났다(유예 만료·두 번째 종료 요청으로 강제 정리한 경우 포함). `--help`·`--version`·`admin list`(계정 0개 포함)도 해당한다. |
 | `1` | 실행 중 오류 | 명령을 실행하는 중에 실패했다. 입력 취소, 비밀번호 검사 실패, 계정 중복·없음, 변경 감지 준비 불가, 비동기 런타임·종료 신호 처리기 준비 불가, 서버가 계속 운영할 수 없는 실패, 정리 실패가 해당한다. |
-| `2` | 사용법 오류 | 알 수 없는 하위 명령·옵션, `--config` 누락·중복, 인수 개수 오류, 계정 이름 규칙 위반, 터미널이 아닌 입력. 사용법을 stderr에 쓴다. |
+| `2` | 사용법 오류 | 알 수 없는 하위 명령·옵션, `--config` 누락·중복, 인수 개수 오류, 계정 이름 규칙 위반, 터미널이 아닌 입력. 사용법은 `usage_error`일 때만 stderr에 쓴다(사용자 결정 2026-10-20). |
 | `3` | 설정 오류 | 설정 파일의 읽기·구문·키·값 오류 전체, 인증서·개인키 파일 오류(경로·형식 오류, 인증서와 개인키가 맞지 않음), 로그 파일을 열 수 없음. 시작 실패 포함. 코드는 [설정 파일 계약 2.1절](config-v1.md#21-설정-오류와-준비-실패)의 `config_*`·`tls_file_invalid`·`log_file_unavailable`이다. |
 | `4` | 리스너 준비 실패 | 리스너 바인드 실패(이미 사용 중인 주소 포함). |
 | `5` | 계정 파일 오류 | 계정 파일을 읽을 수 없거나 형식·해시 하한이 맞지 않거나, 파일이 없거나(`serve`), 계정이 하나도 없거나, 잠금·저장에 실패했다. |
@@ -196,20 +196,20 @@ error[listener_bind_failed] key=relay.tcp_viewer.listen: 0.0.0.0:15901에 바인
 | `password_mismatch` | 두 번 입력한 비밀번호가 다르다. | 1 | OPS-030 |
 | `input_canceled` | 입력 취소(Ctrl+C·EOF)·삭제 확인 거절. 계정 파일은 그대로다. | 1 | OPS-030 |
 | `watch_unavailable` | `serve`: 파일 변경 감지를 준비할 수 없다. 묵시적으로 끄고 시작하지 않는다. | 1 | OPS-028 |
-| `runtime_unavailable` | `serve`: 비동기 런타임이나 종료 신호 처리기를 준비할 수 없다. 운영체제 자원(스레드·이벤트 대기 핸들) 부족 같은 실행 환경 문제다. 키는 없다. | 1 | 없음 |
+| `runtime_unavailable` | `serve`: 비동기 런타임이나 종료 신호 처리기를 준비할 수 없다. `admin`: 입력 취소(Ctrl+C) 감지기를 준비할 수 없거나, 운영체제 난수원·해시 계산 메모리를 쓸 수 없다(사용자 결정 2026-10-20). 운영체제 자원(스레드·이벤트 대기 핸들) 부족 같은 실행 환경 문제다. 키는 없다. | 1 | 없음 |
 | `accounts_file_missing` | `serve`: 계정 파일이 없다. | 5 | OPS-001 |
 | `accounts_file_unreadable` | 계정 파일이 있으나 읽을 수 없다(권한·입출력 오류). | 5 | OPS-030 |
 | `accounts_file_invalid` | 계정 파일 형식 오류(1.3절)와 해시 문자열 형식 오류(1.4절). | 5 | OPS-030 |
-| `accounts_hash_below_minimum` | 저장된 해시의 `m`·`t`·`p` 중 하나가 승인된 하한 미만이다. | 5 | OPS-029 |
+| `accounts_hash_below_minimum` | `serve`: 저장된 해시의 `m`·`t`·`p` 중 하나가 승인된 하한 미만이다. `admin` 명령은 이 해시를 받는다(1.4절). | 5 | OPS-029 |
 | `accounts_none` | `serve`: 읽은 계정이 하나도 없다. 시작 실패다. `admin add`로 준비한 뒤 다시 시작한다. | 5 | OPS-001 |
 | `accounts_file_locked` | 다른 `admin` 명령이 계정 파일을 고치는 중이다(1.6절). | 5 | OPS-030 |
-| `accounts_file_write_failed` | 임시 파일 쓰기·검증·교체에 실패했다. 기존 계정 파일은 그대로다. | 5 | OPS-030 |
+| `accounts_file_write_failed` | 잠금 파일 만들기, 임시 파일 쓰기·검증, 교체에 실패했다. 기존 계정 파일은 그대로다. | 5 | OPS-030 |
 | `listener_bind_failed` | 리스너 주소에 바인드하지 못했다. 이미 사용 중인 경우를 포함한다. `key`는 해당 `listen` 키다. | 4 | OPS-002, OPS-039 |
 | `tls_file_invalid` | 인증서·개인키 경로·형식 오류. 의미는 [설정 파일 계약 2.1절](config-v1.md#21-설정-오류와-준비-실패)이 정한다. 시작 때 4단계에서 보고하지만 종료 코드는 설정 오류와 같다. | 3 | OPS-002 |
 | `log_file_unavailable` | `serve`: `log.output`의 로그 파일을 열 수 없다. 의미는 [설정 파일 계약 2.1절](config-v1.md#21-설정-오류와-준비-실패)이 정한다. `key`는 `log.output`이다. | 3 | 없음 |
 | `config_*` | 설정 오류. 이름은 [설정 파일 계약](config-v1.md#21-설정-오류와-준비-실패)을 따른다. | 3 | OPS-001 |
 
-경고(종료 코드에 영향 없음): `accounts_file_permissive`, `last_account_removed`, `log_write_failed`(`serve`: 운영 로그 줄을 쓰지 못했다. 처음 한 번만 쓴다. `key`는 `log.output`이다. [운영 정보 계약 1.1절](ops-info-v1.md#11-로그-일반-규칙)). 설정 경고는 [설정 파일 계약 2.2절](config-v1.md#22-경고)을 따른다.
+경고(종료 코드에 영향 없음): `accounts_file_permissive`, `last_account_removed`, `accounts_file_cleanup_failed`(`admin`: 계정 파일을 교체한 뒤 디렉터리 반영이나 잠금 파일 삭제에 실패했다. 1.6절), `log_write_failed`(`serve`: 운영 로그 줄을 쓰지 못했다. 처음 한 번만 쓴다. `key`는 `log.output`이다. [운영 정보 계약 1.1절](ops-info-v1.md#11-로그-일반-규칙)). 설정 경고는 [설정 파일 계약 2.2절](config-v1.md#22-경고)을 따른다.
 
 ## 3. 호환성 규칙
 
@@ -237,7 +237,7 @@ error[listener_bind_failed] key=relay.tcp_viewer.listen: 0.0.0.0:15901에 바인
 $ vnc-relay admin add alice --config ./relay.toml
 비밀번호:
 비밀번호 확인:
-계정 'alice'을 추가했다.
+계정 'alice'을(를) 추가했다.
 notice: 실행 중인 서버에는 반영되지 않는다. 서버를 정상 종료하고 다시 시작해야 한다.
 ```
 
@@ -262,15 +262,16 @@ password_hash = "$argon2id$v=19$m=19456,t=2,p=1$<솔트 Base64>$<해시 Base64>"
 error[account_name_invalid]: 계정 이름은 소문자 영문·숫자·점·밑줄·하이픈 1~32자여야 한다.
 ```
 
-결과와 증거는 [검증 기록](../AGENTS.md#검증-기록)을 따른다. 스펙과 같은 테스트는 해당 시나리오의 기록을 연결한다. 작업 2.2의 테스트는 `src/cli.rs` 단위 테스트, `tests/cli.rs`·`tests/serve.rs`(실행파일 시스템 테스트), `crates/adapters/tests/accounts_contract.rs`(아래 표에서 "계정 파일 계약 테스트"), `crates/domain/src/account.rs` 단위 테스트에 있다. 실행 기록은 표 아래 [계약 테스트 실행 기록](#계약-테스트-실행-기록)에 있다. 아직 기능이 없는 규칙은 미실행이다.
+결과와 증거는 [검증 기록](../AGENTS.md#검증-기록)을 따른다. 스펙과 같은 테스트는 해당 시나리오의 기록을 연결한다. 작업 2.2의 테스트는 `src/cli.rs` 단위 테스트, `tests/cli.rs`·`tests/serve.rs`(실행파일 시스템 테스트), `crates/adapters/tests/accounts_contract.rs`(아래 표에서 "계정 파일 계약 테스트"), `crates/domain/src/account.rs` 단위 테스트에 있다. 작업 4.1의 테스트는 `tests/admin.rs`(실행파일 시스템 테스트), `crates/app/src/accounts.rs` 단위 테스트, `crates/adapters/src/accounts_file/hasher.rs` 단위 테스트에 있다. 실행 기록은 표 아래 [계약 테스트 실행 기록](#계약-테스트-실행-기록)에 있다. 아직 기능이 없는 규칙은 미실행이다.
 
 | 주체·테스트 위치 | 확인할 계약 규칙 | 결과 | 실행 기록 |
 | --- | --- | --- | --- |
-| Producer·CLI 통합 테스트, 양 OS(미생성) | 계정 두 개 이상 준비, 숨김 입력, 솔트 포함 Argon2id 해시(1.4절), 하한 이상, 모든 계정이 같은 권한. [OPS-029](../specs/operations.md#7-수용-테스트) | 미실행 | 구현·테스트 파일 없음 |
-| Producer·CLI 통합 테스트, 양 OS(미생성) | 입력 취소·검증 실패·저장 실패에서 기존 계정 파일 유지, 출력·로그에 비밀 없음(1.5·1.6절). [OPS-030](../specs/operations.md#7-수용-테스트) | 미실행 | 구현·테스트 파일 없음 |
-| Producer·`src/cli.rs` 단위 테스트, `tests/cli.rs` | `serve --config`(`=` 형식 포함)·`--help`·`--version` 파싱, `--config` 누락·중복·빈 값, 알 수 없는 하위 명령·옵션(`admin` 포함)의 `usage_error`와 종료 코드 2, 사용법을 stderr에 씀, 도움말·버전은 stdout과 종료 코드 0, 진단 줄의 ` key=` 생략(1.1·1.5·2.1절) | 통과 | [실행 기록](#계약-테스트-실행-기록) |
-| Producer·CLI 단위 테스트(미생성, 작업 4.1) | `admin` 하위 명령·옵션 파싱, 비밀번호 규칙, `account_name_invalid`(1.1·1.2·2절). [OPS-030](../specs/operations.md#7-수용-테스트) | 미실행 | `admin` 미구현 |
-| Consumer·계정 파일 계약 테스트 7건, `crates/domain/src/account.rs` 단위 테스트 | 계정 파일 형식(1.3절): `version`, 알 수 없는 키, 자료형, 이름 규칙(1.2절), 중복 이름, 파일 안 경로의 `key`. 해시 문자열 형식(1.4절)과 하한 미만·상한 초과 구분. 구문·UTF-8 오류, 파일 없음·읽기 불가. 메시지에 해시가 없음. Ubuntu 권한 경고(1.6절) | 통과 | [실행 기록](#계약-테스트-실행-기록) |
+| Producer·`tests/admin.rs` OPS-029 테스트 `list_prints_account_names_in_name_order`·`list_without_an_account_file_prints_a_notice_and_exits_0`·`list_accepts_a_hash_below_the_serve_minimum`·`list_warns_when_others_can_read_the_account_file`(Ubuntu)·`remove_with_yes_deletes_one_account_and_keeps_the_others`·`removing_the_last_account_warns_and_list_shows_none`·`account_commands_without_a_terminal_exit_2_without_usage_text`·`existing_and_unknown_names_fail_before_any_password_prompt`·`tables_other_than_admin_are_not_checked`·`add_saves_two_accounts_with_argon2id_hashes_from_hidden_input`(Ubuntu)·`passwd_replaces_only_the_named_hash`(Ubuntu) | 계정 두 개 이상 준비, 숨김 입력, 솔트 포함 Argon2id 해시(1.4절), 하한 이상, 모든 계정이 같은 권한. [OPS-029](../specs/operations.md#7-수용-테스트) | 부분 통과. 계정 준비, 숨김 입력, 솔트 포함 Argon2id 해시는 통과했다. Ubuntu는 터미널 테스트를 실행했다. Windows는 터미널이 없는 테스트만 실행했다. 각 계정으로 로그인하는 검사와 모든 계정의 같은 권한 검사는 작업 4.3이 맡으며 실행하지 않았다. | [실행 기록](#계약-테스트-실행-기록) |
+| Producer·`tests/admin.rs` OPS-030 테스트 `config_problems_exit_3_with_their_codes`·`broken_account_files_exit_5_and_are_not_changed`·`an_account_path_that_is_a_directory_exits_5`·`a_lock_file_stops_account_changes_and_is_left_in_place`·`a_failed_save_exits_5_and_keeps_the_account_file`·`rejected_password_entries_exit_1_and_keep_the_account_file`(Ubuntu)·`ctrl_c_at_the_password_prompt_cancels_and_restores_the_terminal`(Ubuntu)·`remove_confirmation_accepts_only_yes_and_ctrl_c_cancels`(Ubuntu)·`every_failed_preparation_keeps_the_account_file_and_prints_no_secret`(Ubuntu) | 입력 취소·검증 실패·저장 실패에서 기존 계정 파일 유지, 출력·로그에 비밀 없음(1.5·1.6절). [OPS-030](../specs/operations.md#7-수용-테스트) | 통과(Ubuntu). Windows는 `tests/admin.rs` 14건을 실행해 통과했다. 터미널 테스트는 Linux 전용이라 실행하지 않았다. Windows 콘솔 수동 관찰: Ctrl+C 20/20에서 입력 취소·계정 파일 유지. 입력 모드 복원은 열린 문제다(6절). | [실행 기록](#계약-테스트-실행-기록) |
+| Producer·`src/cli.rs` 단위 테스트, `tests/cli.rs` | `serve --config`(`=` 형식 포함)·`--help`·`--version` 파싱, `--config` 누락·중복·빈 값, 알 수 없는 하위 명령·옵션의 `usage_error`와 종료 코드 2, 사용법을 stderr에 씀, 도움말·버전은 stdout과 종료 코드 0, 진단 줄의 ` key=` 생략(1.1·1.5·2.1절) | 통과 | [실행 기록](#계약-테스트-실행-기록) |
+| Producer·`src/cli.rs` 단위 테스트 `parses_admin_subcommands_with_their_own_options`, `crates/domain/src/account.rs` 단위 테스트 `accepts_names_inside_the_rule_only`·`accepts_passwords_inside_the_rule_and_names_the_broken_part`, `tests/admin.rs` `invalid_account_names_exit_2_and_create_no_file`·`account_commands_without_a_terminal_exit_2_without_usage_text`, `tests/cli.rs` `usage_errors_exit_with_code_2_and_usage_on_stderr` | `admin` 하위 명령·옵션 파싱, 비밀번호 규칙, `account_name_invalid`(1.1·1.2·2절). 사용법은 `usage_error`일 때만 stderr에 쓴다. `not_interactive`와 `account_name_invalid`는 종료 코드 2이지만 사용법을 쓰지 않는다(2.1절). [OPS-030](../specs/operations.md#7-수용-테스트) | 통과 | [실행 기록](#계약-테스트-실행-기록) |
+| Producer·`crates/adapters/tests/accounts_contract.rs` 쓰기 테스트 `creates_a_missing_file_in_name_order_and_leaves_no_lock_or_temporary_file`·`keeps_the_file_when_the_change_fails_the_lock_exists_or_writing_fails`·`fails_to_write_when_the_directory_does_not_exist`·`admin_reads_hashes_below_the_minimum`, `crates/adapters/src/accounts_file/hasher.rs` 단위 테스트 `makes_salted_argon2id_hashes_that_verify_the_password`, `crates/app/src/accounts.rs` 단위 테스트 `adds_an_account_after_two_matching_entries_and_creates_a_missing_file`·`checks_the_name_before_asking_and_again_under_the_lock`·`stops_before_saving_on_invalid_mismatched_or_canceled_input`·`changes_only_the_hash_of_the_named_account`·`removes_only_after_y_or_yes_and_warns_when_none_is_left`·`passes_on_cleanup_warnings_after_saving`·`lists_names_in_name_order_and_tells_a_missing_file` | 저장 순서(1.6절): 잠금 파일 독점 생성, 다시 읽기, 임시 파일 쓰기와 교체, 잠금 파일 삭제. 잠금 파일이 있으면 `accounts_file_locked`다. 저장 실패 때 대상 파일과 다른 임시 파일은 그대로다. 디렉터리가 없으면 `accounts_file_write_failed`다. 이름순 쓰기(1.3절). 솔트 포함 Argon2id 해시(1.4절). 명령별 순서(1.5절): 이름 검사 뒤 입력, 취소·검증 실패 때 저장하지 않음, 정리 경고 뒤 성공. | 통과 | [실행 기록](#계약-테스트-실행-기록) |
+| Consumer·계정 파일 읽기 계약 테스트 7건(Ubuntu. Windows에서는 Unix 권한 테스트 1건을 뺀 6건), `crates/domain/src/account.rs` 단위 테스트 | 계정 파일 형식(1.3절): `version`, 알 수 없는 키, 자료형, 이름 규칙(1.2절), 중복 이름, 파일 안 경로의 `key`. 해시 문자열 형식(1.4절)과 하한 미만·상한 초과 구분. 구문·UTF-8 오류, 파일 없음·읽기 불가. 메시지에 해시가 없음. Ubuntu 권한 경고(1.6절) | 통과 | [실행 기록](#계약-테스트-실행-기록) |
 | Consumer·`tests/serve.rs` `refuses_to_start_without_a_usable_account_with_exit_code_5` | 계정 없음·계정 파일 없음·형식 오류·해시 하한 미만은 시작 실패(종료 코드 5), 리스너를 열기 전에 멈춤, 출력에 해시 없음. [OPS-001](../specs/operations.md#7-수용-테스트), [OPS-029](../specs/operations.md#7-수용-테스트)의 하한 부분 | 통과 | [실행 기록](#계약-테스트-실행-기록) |
 | Consumer·`tests/serve.rs` `second_instance_fails_with_exit_code_4_and_leaves_the_first_running`, `fails_with_exit_code_4_and_releases_listeners_when_a_port_is_taken` | 두 번째 인스턴스 시작 실패(종료 코드 4)와 리스너마다 `listener_bind_failed`, 앞서 바인드한 리스너 회수, 첫 인스턴스의 리스너 유지(1.8절). [OPS-039](../specs/operations.md#7-수용-테스트), [OPS-002](../specs/operations.md#7-수용-테스트)의 리스너 부분 | 통과 | [실행 기록](#계약-테스트-실행-기록) |
 | Consumer·`serve` 통합 테스트(미생성, 작업 2.10·3.1) | 두 번째 인스턴스 시작 때 첫 인스턴스의 대기·활성 세션 유지, 내장 TLS 준비 실패의 자원 회수(1.8절). [OPS-039](../specs/operations.md#7-수용-테스트), [OPS-002](../specs/operations.md#7-수용-테스트) | 미실행 | 세션·TLS 미구현 |
@@ -291,13 +292,18 @@ error[account_name_invalid]: 계정 이름은 소문자 영문·숫자·점·밑
 | 같음 | 같음(교차 대상) | `cargo clippy --workspace --all-targets --target x86_64-pc-windows-msvc -- -D warnings` | 실패. 작업 2.3이 더한 aws-lc-sys의 빌드 스크립트가 Windows용 NASM·C 컴파일러 없이 끝나지 않는다. Windows 분기는 타입 검사도 하지 못했다([개발 환경 how-to](../how-to/set-up-and-verify.md)). |
 | 같음 | Windows 11 | `cargo xtask scenarios` | 미실행. Visual Studio Build Tools 설치가 UAC 미승인으로 멈춰(종료 코드 1602) MSVC 링커가 없다([개발 환경 how-to](../how-to/set-up-and-verify.md)). 사용자가 Windows 검증을 뒤로 미뤘다(2026-10-20). |
 | 커밋 `e1cfc4f`에 Windows 경고 수정(`crates/adapters/src/net.rs`·`tests/serve.rs`의 `cfg`)을 더한 작업 트리 | Windows 11 Pro 10.0.26200 x64, Rust 1.99.1(`x86_64-pc-windows-msvc`), Visual Studio Build Tools 2022 17.14.37806.7, `AWS_LC_SYS_PREBUILT_NASM=1` | `cargo xtask scenarios`(내부에서 `cargo test --workspace --no-fail-fast` 실행) | 통과. `src/cli.rs` 단위 5건, `tests/cli.rs` 2건, `tests/serve.rs` 12건, 계정 파일 계약 테스트 6건 모두 통과. Unix 신호를 쓰는 `tests/serve.rs` 테스트와 Ubuntu 권한 경고 테스트는 `cfg`로 빠져 실행하지 않았다. 시나리오 보고는 [운영 정보 계약 실행 기록](ops-info-v1.md#계약-테스트-실행-기록)에 있다. |
+| 커밋 `ed68104`에 작업 4.1을 더한 작업 트리 | Ubuntu 24.04.4(WSL2), Rust 1.99.1, `CARGO_TARGET_DIR=~/vnc-relay-target` | `cargo xtask scenarios`(내부에서 `cargo test --workspace --no-fail-fast` 실행) | 통과. `tests/admin.rs` 21건 모두 통과. 나머지 테스트: `src/cli.rs` 단위(`vnc-relay`) 6건(`accepts_both_config_spellings`·`help_and_version_stand_alone`·`rejects_missing_repeated_or_empty_config`·`rejects_unknown_commands_and_arguments`·`parses_admin_subcommands_with_their_own_options`·`leaves_out_key_when_empty`), `tests/cli.rs` 2건, `tests/serve.rs` 18건, adapters 단위 7건, `accounts_contract` 11건, `config_contract` 21건, `ops_info_contract` 14건, app 단위 9건, domain 단위 27건, xtask 12건 모두 통과. 시나리오 보고: 통과 4, 부분 14, 실패 0, 미실행 0, 미연결 130, 오류 0, 판정 통과. OPS-030은 통과, OPS-029는 부분 |
+| 같음 | 같음 | `tests/admin.rs` 테스트 실행파일을 20번 반복 | 통과(20번 모두 통과, 매번 21건 통과) |
+| 같은 작업 트리 | Windows 11 Pro 10.0.26200 x64, Rust 1.99.1(`x86_64-pc-windows-msvc`), Visual Studio Build Tools 2022 17.14.37806.7, `AWS_LC_SYS_PREBUILT_NASM=1` | `cargo xtask scenarios`(내부에서 `cargo test --workspace --no-fail-fast` 실행) | 통과. `tests/admin.rs` 14건 통과(터미널 테스트 제외). 나머지 테스트: `src/cli.rs` 단위(`vnc-relay`) 6건, `tests/cli.rs` 2건, `tests/serve.rs` 12건, adapters 단위 6건, `accounts_contract` 10건, `config_contract` 21건, `ops_info_contract` 13건, app 단위 9건, domain 단위 27건, xtask 12건 모두 통과. 시나리오 보고: 통과 3, 부분 14, 실패 0, 미실행 1, 미연결 130, 오류 0, 판정 통과. 미실행은 OPS-007(Unix 전용). OPS-030은 부분(터미널 테스트는 Linux 전용) |
+| Windows 11 Pro 10.0.26200 x64 작업 트리(커밋 `ed68104` + 작업 4.1) | Windows 11 Pro 10.0.26200 x64, 콘솔 코드 페이지 949 | 임시 Python 하네스가 새 콘솔에서 `vnc-relay`를 실행하고 `WriteConsoleInputW`로 키를 입력(하네스는 삭제함) | Ctrl+C 20/20: 모두 `error[input_canceled]`, 종료 코드 1, 계정 파일 바이트 동일, 534~592 ms에 종료. 대상은 `add`의 `비밀번호: `·`비밀번호 확인: `, `passwd`의 `새 비밀번호: `, `remove`의 `[y/N]`이며 각 5회. 숨김 입력 중 Ctrl+C 뒤 입력 모드가 되돌아오지 않음(cmd `0x1E7`→`0x007`, PowerShell `0x1E4`→`0x000`). `[y/N]`에서 Ctrl+C 뒤에는 모드가 그대로다. 한글 비밀번호는 UTF-8 바이트로 저장됨. 해시는 UTF-8 바이트로 argon2-cffi 검증이 통과했고, cp949·UTF-16LE 바이트로는 검증이 실패했다(음성 대조). Ctrl+Z 뒤 Enter는 입력 끝이 아니며 `password_invalid`, 계정 파일 변경 없음. 한글 비밀번호와 Ctrl+Z 시험은 숨김 읽기가 도우미 스레드로 옮겨지기 전에 관찰했다. 읽기 함수(`rpassword::read_password`)는 같다 |
 
 ## 6. 초안을 확정하기 전에 해결할 사항
 
 - 이 계약의 이름·코드 선택(하위 명령 옵션 `--yes`·`--help`·`--version`, 오류·경고 코드, 계정 파일 TOML 형식과 필드 이름, 잠금 파일 이름)은 2026-10-16에 사용자가 채택했다. 하위 명령 이름 `serve`·`admin add|passwd|remove|list`와 `--config`는 공유 인터페이스 이름을 따른다.
 - 계정 이름·비밀번호 규칙(1.2절), 솔트·해시 길이(1.4절), 성공 문장과 `notice`, 마지막 계정 삭제 허용도 채택 범위다.
 - 종료 코드는 확정했다(2026-10-16). 준비된 계정이 없을 때(`accounts_none`)와 계정 파일이 없을 때(`accounts_file_missing`)는 5다. 인증서·개인키 파일 오류(`tls_file_invalid`)는 설정 오류와 같은 3이다. 리스너 바인드 실패는 4다.
-- Windows에서 확인이 필요한 사항: 콘솔 창 닫기·로그오프 신호 처리, 계정 파일의 접근 권한 설정 방식, 콘솔 코드 페이지, 다른 프로그램이 주소 공유 옵션으로 같은 주소를 쓸 때의 바인드. 같은 설정의 두 번째 인스턴스는 Windows에서도 바인드에 실패했다([실행 기록](#계약-테스트-실행-기록)).
-- 계정 파일 권한 경고(Ubuntu)는 1.6절 표대로 `serve`의 계정 파일 읽기에 넣었다(작업 2.2). `admin` 명령의 경고와 잠금 파일 사용(1.6절)은 작업 4.1 구현 전에 필요성을 확인한다.
-- 비밀번호 입력의 정규화(1.2절)는 입력 바이트 그대로 쓰기로 채택했다. 입력기마다 같은 비밀번호가 다른 바이트가 될 가능성은 관찰로 확인 필요다.
+- Windows에서 확인이 필요한 사항: 콘솔 창 닫기·로그오프 신호 처리, 다른 프로그램이 주소 공유 옵션으로 같은 주소를 쓸 때의 바인드. 같은 설정의 두 번째 인스턴스는 Windows에서도 바인드에 실패했다([실행 기록](#계약-테스트-실행-기록)). 계정 파일의 Windows 접근 권한은 운영자가 정하고 CLI는 바꾸지 않는다(1.6절, 사용자 결정 2026-10-20).
+- 열린 문제(Windows): 숨김 비밀번호 입력 중 Ctrl+C는 입력을 바로 끝내고 종료 코드 1을 돌려준다(20회 관찰). 그러나 취소 뒤 콘솔 입력 모드가 되돌아오지 않는다. cmd는 `0x1E7`에서 `0x007`로, PowerShell은 `0x1E4`에서 `0x000`으로 남았다. [1.5절](#15-입력과-출력-규칙)의 "종료할 때(취소 포함) 터미널의 표시 설정을 되돌린다"와 맞지 않는다. 사용자가 정한다. 관련 기록은 [실행 기록](#계약-테스트-실행-기록)과 [관리자 계정 준비 CLI 모듈 설계 9절](../architectures/admin-accounts.md#9-미결정-사항)이다.
+- 계정 파일 권한 경고(Ubuntu)는 `serve`와 `admin` 명령 모두 쓴다. `admin` 명령도 잠금 파일을 쓴다(1.6절). 둘 다 2026-10-20에 사용자가 필요성을 확인했다.
+- 비밀번호 입력의 정규화(1.2절)는 입력 바이트 그대로 쓰기로 채택했다. Windows 11에서 한글 비밀번호 한 개를 UTF-8 바이트로 저장한 것을 관찰했다. 다른 입력기의 바이트는 관찰하지 않았다.
 - 로그 파일을 교체할 때 서버의 재오픈 여부는 관찰로 확인 필요다. 운영 로그 필드는 [운영 정보 계약](ops-info-v1.md)이 정한다.

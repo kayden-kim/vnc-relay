@@ -1,5 +1,5 @@
-//! Administrator account values: the account name rule (cli-v1 §1.2) and the
-//! Argon2id hash string format (cli-v1 §1.4).
+//! Administrator account values: the account name rule, the password rule
+//! (cli-v1 §1.2), and the Argon2id hash string format (cli-v1 §1.4).
 
 use std::fmt;
 use std::ops::RangeInclusive;
@@ -40,6 +40,65 @@ impl AccountName {
 impl fmt::Display for AccountName {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(&self.0)
+    }
+}
+
+/// A password that keeps the rule: 12 to 128 characters, at most 512 bytes
+/// in UTF-8, no control character. The bytes are kept as typed, without
+/// normalization. `Debug` hides the value.
+#[derive(Clone, PartialEq, Eq)]
+pub struct Password(String);
+
+/// Which part of the password rule the text breaks.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PasswordError {
+    /// Fewer than 12 characters.
+    TooShort,
+    /// More than 128 characters or more than 512 bytes.
+    TooLong,
+    /// A control character such as a line break or a tab.
+    ControlCharacter,
+}
+
+impl fmt::Display for PasswordError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Self::TooShort => "비밀번호가 12자보다 짧다",
+            Self::TooLong => "비밀번호가 128자 또는 UTF-8 512바이트보다 길다",
+            Self::ControlCharacter => "비밀번호에 제어 문자가 있다",
+        })
+    }
+}
+
+impl std::error::Error for PasswordError {}
+
+impl Password {
+    pub const MIN_CHARS: usize = 12;
+    pub const MAX_CHARS: usize = 128;
+    pub const MAX_BYTES: usize = 512;
+
+    pub fn parse(text: String) -> Result<Self, PasswordError> {
+        let chars = text.chars().count();
+        if text.chars().any(char::is_control) {
+            Err(PasswordError::ControlCharacter)
+        } else if chars < Self::MIN_CHARS {
+            Err(PasswordError::TooShort)
+        } else if chars > Self::MAX_CHARS || text.len() > Self::MAX_BYTES {
+            Err(PasswordError::TooLong)
+        } else {
+            Ok(Self(text))
+        }
+    }
+
+    /// The typed bytes, for hashing. Never write them to output or logs.
+    pub fn as_bytes(&self) -> &[u8] {
+        self.0.as_bytes()
+    }
+}
+
+impl fmt::Debug for Password {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("Password(<redacted>)")
     }
 }
 
@@ -359,6 +418,43 @@ mod tests {
             params(19_455, 11, 1).check_range(),
             Err(Argon2ParamsError::BelowMinimum)
         );
+    }
+
+    /// spec: operations.md:OPS-030 partial
+    #[test]
+    fn accepts_passwords_inside_the_rule_and_names_the_broken_part() {
+        let parse = |text: &str| Password::parse(text.to_owned()).map(|p| p.as_bytes().to_vec());
+        let shortest = "a".repeat(12);
+        // 128 characters of 4 bytes each: the character and byte limits meet.
+        let longest = "😀".repeat(128);
+        for text in [
+            shortest.as_str(),
+            "비밀번호는열두글자이상이다",
+            longest.as_str(),
+            "  spaces ok  ",
+        ] {
+            assert_eq!(parse(text), Ok(text.as_bytes().to_vec()), "{text}");
+        }
+        // Not normalized: the composed and decomposed forms stay different.
+        assert_ne!(parse("caf\u{e9}-password"), parse("cafe\u{301}-password"));
+        assert_eq!(parse(&"a".repeat(11)), Err(PasswordError::TooShort));
+        assert_eq!(parse(""), Err(PasswordError::TooShort));
+        assert_eq!(parse(&"a".repeat(129)), Err(PasswordError::TooLong));
+        assert_eq!(parse(&"😀".repeat(129)), Err(PasswordError::TooLong));
+        for text in [
+            "password-with\n",
+            "pass\tword-tab",
+            "password\u{7f}del",
+            "password\u{85}nel",
+        ] {
+            assert_eq!(
+                parse(text),
+                Err(PasswordError::ControlCharacter),
+                "{text:?}"
+            );
+        }
+        let password = Password::parse(shortest.clone()).unwrap_or_else(|e| panic!("{e}"));
+        assert!(!format!("{password:?}").contains(&shortest));
     }
 
     #[test]
