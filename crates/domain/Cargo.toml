@@ -1,0 +1,13 @@
+[package]
+name = "vnc-relay-domain"
+description = "VNC Relay business rules and values; no I/O and no external crates"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]

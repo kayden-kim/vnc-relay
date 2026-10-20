@@ -8,8 +8,8 @@
 | 관련 요구사항 | [PRD](../requirements/PRD.md) FR-06·FR-07·FR-08, 7절 보안, 8절 비기능, 9절 독립 구현, AC-07·AC-08·AC-11~14, AC-32·AC-34·AC-35 |
 | 용어 | [VNC Relay 용어집](../../GLOSSARY.md) |
 | 관련 스펙 | [중계와 매칭](relay.md), [WS·WSS](websocket.md), [관리 기능](management.md), [화면](dashboard.md) |
-| 관련 계약 | [설정 파일 v1](../contracts/config-v1.md), [CLI와 관리자 계정 파일 v1](../contracts/cli-v1.md), [운영 로그와 상태 엔드포인트 v1](../contracts/ops-info-v1.md). 세 계약 모두 Active(2026-10-16 채택)이며 이름·형식·종료 코드는 각 계약이 기준이다. 구현·계약 테스트가 없어 지원 완료로 표시하지 않는다. |
-| 관련 아키텍처 문서·ADR | [ADR-0001 내장 TLS](../decisions/ADR-0001-built-in-tls.md), [ADR-0002 출발지 IP 허용 목록](../decisions/ADR-0002-source-ip-allowlist.md), [ADR-0003 단일 인스턴스·메모리 상태](../decisions/ADR-0003-single-instance-memory-state.md), [ADR-0004 tokio·rustls](../decisions/ADR-0004-tokio-rustls.md). 아키텍처 문서는 없고 구현 구조는 미확정이다. |
+| 관련 계약 | [설정 파일 v1](../contracts/config-v1.md), [CLI와 관리자 계정 파일 v1](../contracts/cli-v1.md), [운영 로그와 상태 엔드포인트 v1](../contracts/ops-info-v1.md). 세 계약 모두 Active(2026-10-16 채택)이며 이름·형식·종료 코드는 각 계약이 기준이다. 설정 로더만 구현했고 나머지 구현·계약 테스트가 없어 지원 완료로 표시하지 않는다. |
+| 관련 아키텍처 문서·ADR | [코드 지도](../architectures/code-map.md), [설정 로딩 모듈 설계](../architectures/config-loading.md)(3.1절의 설정 검증), [ADR-0001 내장 TLS](../decisions/ADR-0001-built-in-tls.md), [ADR-0002 출발지 IP 허용 목록](../decisions/ADR-0002-source-ip-allowlist.md), [ADR-0003 단일 인스턴스·메모리 상태](../decisions/ADR-0003-single-instance-memory-state.md), [ADR-0004 tokio·rustls](../decisions/ADR-0004-tokio-rustls.md). 설정 로딩 밖의 구현 구조는 코드 지도의 계획(Target)이다. |
 
 ## 1. 범위와 적용 상태
 

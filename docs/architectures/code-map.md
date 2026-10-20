@@ -10,7 +10,7 @@ VNC Relay는 TCP·WS·WSS로 들어온 Viewer를 Mode I 대상이나 Mode II Ser
 | 관련 PRD | [PRD](../requirements/PRD.md) [8절 유지보수성](../requirements/PRD.md#8-비기능-요구사항), [1절 구현 기술](../requirements/PRD.md#확정-기준) |
 | 관련 ADR | [ADR-0001 내장 TLS](../decisions/ADR-0001-built-in-tls.md), [ADR-0003 단일 인스턴스·메모리 상태](../decisions/ADR-0003-single-instance-memory-state.md), [ADR-0004 tokio·rustls](../decisions/ADR-0004-tokio-rustls.md) |
 
-현재 코드는 루트 crate의 `src/main.rs`(`--version`만 처리)와 개발 도구 `xtask/`다. `xtask/`는 구현과 대조했다([xtask 모듈 설계](xtask.md), Current). 이 문서의 나머지 경로와 심볼은 모두 계획(Target)이다. 레이어를 crate로 나누는 방식은 사용자가 2026-10-20에 골랐다. 하위 crate는 해당 구현 작업에서 처음 만든다.
+현재 코드는 루트 crate의 `src/main.rs`(`--version`만 처리), 개발 도구 `xtask/`, 그리고 설정 로딩 부분의 `crates/domain`·`crates/app`·`crates/adapters`다. `xtask/`와 설정 로딩은 구현과 대조했다([xtask 모듈 설계](xtask.md), [설정 로딩 모듈 설계](config-loading.md), 둘 다 Current). 이 문서의 나머지 경로와 심볼은 모두 계획(Target)이다. 레이어를 crate로 나누는 방식은 사용자가 2026-10-20에 골랐다. 각 crate의 나머지 모듈은 해당 구현 작업에서 만든다.
 
 ## 1. 전체 구조
 
@@ -100,14 +100,15 @@ flowchart LR
 | `crates/domain/src/relay_id.rs` | 중계 ID | 중계 ID 값과 비교 규칙 | `relay_id_ref` 계산(HMAC은 adapters) | 없음 | 없음 |
 | `crates/domain/src/matching.rs` | 대기 연결 표 | Mode II 대기 등록, 짝 찾기, 중복 ID 판정, 대기 상한 Lw | 대기 시간 측정, 소켓 | `relay_id` | 없음(작업 2.9에서 작성) |
 | `crates/domain/src/session.rs` | 활성 세션 상태 | 세션 상태 전이, 종료 원인(`close_cause`), 방향별 전송량 | 바이트 전달 | 없음 | 없음 |
-| `crates/domain/src/allow_list.rs` | 출발지 IP 허용 목록 | 단일 IP·CIDR·범위 항목 해석과 허용 판정, 전체 허용 항목 판별 | 설정 파일 읽기 | 없음 | 없음(작업 2.1에서 작성) |
-| `crates/domain/src/target_policy.rs` | 대상 허용 정책 | Mode I 최종 연결 IP·포트 허용 판정 | 주소 해석, 연결 | 없음 | 없음 |
-| `crates/domain/src/origin.rs` | Origin 비교 | Origin 정규화와 정확 일치 비교([설정 계약 1.4절](../contracts/config-v1.md#14-origin-값-문법과-비교)) | HTTP 헤더 읽기 | 없음 | 없음 |
+| `crates/domain/src/entry_point.rs` | 진입점 | 진입점 네 종류의 이름(`tcp_viewer` 등)과 TCP 진입점 기본 포트 | 리스너 열기 | 없음 | [설정 로딩 모듈 설계](config-loading.md) |
+| `crates/domain/src/allow_list.rs` | 출발지 IP 허용 목록 | 단일 IP·CIDR·범위 항목 해석과 허용 판정, 전체 허용 항목 판별 | 설정 파일 읽기 | 없음 | [설정 로딩 모듈 설계](config-loading.md)(항목 해석). 허용 판정은 작업 2.4에서 더한다. |
+| `crates/domain/src/target_policy.rs` | 대상 허용 정책 | Mode I 대상 항목 해석, 최종 연결 IP·포트 허용 판정 | 주소 해석, 연결 | `allow_list` | [설정 로딩 모듈 설계](config-loading.md)(항목 해석). 허용 판정은 작업 2.8에서 더한다. |
+| `crates/domain/src/origin.rs` | Origin 비교 | Origin 정규화와 정확 일치 비교([설정 계약 1.4절](../contracts/config-v1.md#14-origin-값-문법과-비교)) | HTTP 헤더 읽기 | 없음 | [설정 로딩 모듈 설계](config-loading.md) |
 | `crates/domain/src/budget.rs` | 연결 예산 | 중계 측 연결 L, 관리·상태 연결 Lm의 집계 규칙 | 소켓 수락 | 없음 | 없음 |
 | `crates/domain/src/account.rs` | 관리자 계정 규칙 | 계정 이름·비밀번호 규칙([CLI 계약 1.2절](../contracts/cli-v1.md#12-계정-이름과-비밀번호-규칙)) | 해시, 파일 | 없음 | 없음 |
 | `crates/domain/src/recent_closed.rs` | 최근 종료 목록 | 최대 R개 보관, 오래된 항목 제거 | 시각 읽기 | `session` | 없음 |
 | `crates/app/src/ports.rs` | 포트 | 시계, 사건 기록, 대상 연결, 계정 저장소, 비밀번호 검증, 난수 등 바깥 기능의 trait | 구현 | domain | 없음 |
-| `crates/app/src/settings.rs` | 유효 설정 | 검증을 마친 설정 값의 타입. 재로드 대상과 재시작 필요 값을 구분한다. | TOML 해석 | domain | 없음(작업 2.1에서 작성) |
+| `crates/app/src/settings.rs` | 유효 설정 | 검증을 마친 설정 값의 타입, 설정 오류·경고 코드, 진단. 재로드 대상과 재시작 필요 값을 구분한다. | TOML 해석 | domain | [설정 로딩 모듈 설계](config-loading.md) |
 | `crates/app/src/relay/` | 중계 | 접속 처리 순서, 초기 교환 제한 시간 H, Mode I 대상 연결, Mode II 매칭과 대기 W, 중계 스트림 전달, 한쪽 종료와 정리 제한 시간 E, 끊긴 연결 처리 | 소켓 수락, TLS, WebSocket 프레임 | domain, `ports` | 없음(작업 2.7에서 작성) |
 | `crates/app/src/management/` | 관리 | 서버 요약·대기 연결·활성 세션·최근 종료 조회, 관리자 종료, 로그인·관리 세션·CSRF 토큰, 로그인 실패 제한 | HTTP 해석, 쿠키 헤더 | domain, `ports` | 없음(작업 4.3에서 작성) |
 | `crates/app/src/reload/` | 재로드 | 재로드 후보를 실행 중 유효 설정과 비교하고 원자적으로 적용, 결과 사건 | 파일 감지, 파일 읽기 | domain, `settings`, `ports` | 없음 |
@@ -118,7 +119,7 @@ flowchart LR
 | `crates/adapters/src/websocket/` | WebSocket | HTTP 업그레이드, Origin·IP 재검사 호출, 바이너리 메시지와 바이트 스트림 변환, ping | 중계 규칙 | app, domain | 없음(작업 3.2에서 작성) |
 | `crates/adapters/src/management_http/` | 관리 HTTP | 관리 API 경로, 쿠키·CSRF 헤더, 오류 본문, 정적 대시보드 파일 제공 | 관리 규칙 | app | 없음 |
 | `crates/adapters/src/status_http.rs` | 상태 HTTP | `/livez`·`/readyz` 응답 | 준비 판정 | app | 없음 |
-| `crates/adapters/src/config_file/` | 설정 파일 | TOML 해석과 검증, `config_*` 오류 | 재로드 판정 | app, domain | 없음(작업 2.1에서 작성) |
+| `crates/adapters/src/config_file.rs`, `crates/adapters/src/config_file/` | 설정 파일 | TOML 해석과 검증, `config_*` 오류 | 재로드 판정 | app, domain | [설정 로딩 모듈 설계](config-loading.md) |
 | `crates/adapters/src/accounts_file/` | 계정 파일 | 계정 파일 읽기·잠금·원자적 교체, Argon2id 해시·검증 | 계정 규칙 | app, domain | 없음 |
 | `crates/adapters/src/ops_log.rs` | 운영 로그 | 사건을 JSON Lines로 표준 출력이나 파일에 쓴다([운영 정보 계약](../contracts/ops-info-v1.md)). | 사건 내용 결정 | app | 없음 |
 | `crates/adapters/src/file_watch.rs` | 파일 변경 감지 | OS 파일 알림과 주기 확인 | 후보 검증 | app | 없음 |
@@ -180,6 +181,6 @@ flowchart LR
 
 | 항목 | 확인하지 못한 이유 | 확인 방법 |
 | --- | --- | --- |
-| 모든 경로·심볼 | 구현 전 계획이다. | 각 구현 작업에서 모듈 설계를 쓰고, 작업 5.8에서 코드와 대조해 `Current`로 바꾼다. |
+| 설정 로딩과 `xtask/`를 뺀 경로·심볼 | 구현 전 계획이다. | 각 구현 작업에서 모듈 설계를 쓰고, 작업 5.8에서 코드와 대조해 `Current`로 바꾼다. |
 | 초기 교환 해석의 입력 단위 | Repeater 초기 교환 계약이 Draft다. | 작업 1.5에서 계약을 채택한 뒤 `handshake` 모듈 설계에 반영한다. |
-| app의 tokio 사용 범위 | `disallowed-types` 목록은 구현하면서 정한다. | 작업 2.1에서 `crates/app/clippy.toml`을 만들고 이 문서를 갱신한다. |
+| app의 tokio 입출력 금지 목록 | `crates/app/clippy.toml`은 std의 파일·소켓·프로세스·환경 변수·시각 읽기를 막는다(작업 2.1). app은 아직 tokio에 의존하지 않아 tokio 입출력 타입 목록은 정하지 않았다. | app에 tokio를 더하는 작업에서 같은 파일에 `tokio::net`·`tokio::fs`·`tokio::process`·`tokio::signal` 항목을 더하고 이 행을 지운다. |

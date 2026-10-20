@@ -430,20 +430,33 @@ output = "stdout"
 
 두 번째 예제의 `192.0.2.0/24:5900-5905`와 `[2001:db8::/32]:5900`는 최종 연결 IP 항목이다. `pc1.example:5900`은 이름 항목이다. `pc1.example`이 이 두 IP 항목 밖의 주소로 해석되면 연결하지 않는다.
 
-결과와 증거는 [검증 기록](../AGENTS.md#검증-기록)을 따른다. 스펙과 같은 테스트는 해당 시나리오의 기록을 연결한다. 테스트 파일·구현이 아직 없어 모두 미실행이다.
+결과와 증거는 [검증 기록](../AGENTS.md#검증-기록)을 따른다. 스펙과 같은 테스트는 해당 시나리오의 기록을 연결한다. 설정 로더의 테스트는 `crates/adapters/tests/config_contract.rs`(아래 표에서 "계약 테스트 파일")와 domain 단위 테스트에 있다. 실행 기록은 표 아래 [계약 테스트 실행 기록](#계약-테스트-실행-기록)에 있다. 아직 기능이 없는 규칙은 미실행이다.
 
 | 주체·테스트 위치 | 확인할 계약 규칙 | 결과 | 실행 기록 |
 | --- | --- | --- | --- |
-| Consumer·설정 로더 단위 테스트(미생성) | 구문 오류, 알 수 없는 키, 자료형 오류, 필수 키 누락(1.1·1.7절)이 모두 시작 실패. [OPS-001](../specs/operations.md#7-수용-테스트) | 미실행 | 구현·테스트 파일 없음 |
-| Consumer·설정 로더 단위 테스트(미생성) | 승인 수치의 기본값, 최소·최대와 그 바깥(1.2절). Lw ≤ L, Si ≤ Sa, I ≤ B(1.6절). [OPS-001](../specs/operations.md#7-수용-테스트), [OPS-004~006](../specs/operations.md#7-수용-테스트)·[OPS-023](../specs/operations.md#7-수용-테스트) | 미실행 | 구현·테스트 파일 없음 |
-| Consumer·설정 로더 단위 테스트(미생성) | 기본 포트: 주소만 쓴 `tcp_viewer`는 5901, `tcp_server`는 5500, IPv6는 대괄호 필수. `ws_viewer`·`wss_viewer`·관리·상태 `listen`의 포트 생략은 `config_listen_invalid`. 충돌 검사는 기본 포트를 붙인 뒤 적용(1.2·1.6절). [OPS-001](../specs/operations.md#7-수용-테스트) | 미실행 | 구현·테스트 파일 없음 |
-| Consumer·설정 로더 단위 테스트(미생성) | IP 항목: 단일·CIDR·범위, 경계 주소, 역순 범위·체계 혼합·표기 오류, 목록 누락·빈 목록·전체 허용 경고(1.3·2절). [OPS-038](../specs/operations.md#7-수용-테스트), [OPS-040](../specs/operations.md#7-수용-테스트), [OPS-037](../specs/operations.md#7-수용-테스트) | 미실행 | 구현·테스트 파일 없음 |
-| Consumer·설정 로더·WebSocket 통합 테스트(미생성) | Origin 문법과 정규화·정확 일치(1.4절). [WS-027](../specs/websocket.md#7-수용-테스트), [WS-015](../specs/websocket.md#7-수용-테스트) | 미실행 | 구현·테스트 파일 없음 |
-| Consumer·설정 로더·중계 통합 테스트(미생성) | Mode I 대상 항목과 최종 IP 판정(1.5절). 꺼진 모드 거절. [RLY-007](../specs/relay.md#7-수용-테스트), [RLY-008](../specs/relay.md#7-수용-테스트), [RLY-022](../specs/relay.md#7-수용-테스트) | 미실행 | 구현·테스트 파일 없음 |
-| Consumer·설정 로더 통합 테스트(미생성) | 평문 관리 리스너는 루프백만, 평문 WS는 명시적으로 켠 경우만과 경고(1.6·2.2절). [OPS-014](../specs/operations.md#7-수용-테스트), [OPS-016](../specs/operations.md#7-수용-테스트), [OPS-034](../specs/operations.md#7-수용-테스트), [WS-024](../specs/websocket.md#7-수용-테스트) | 미실행 | 구현·테스트 파일 없음 |
+| Consumer·계약 테스트 파일 `reports_every_problem_in_one_pass`, `rejects_syntax_errors_and_duplicate_keys_with_one_diagnostic`, `rejects_missing_unreadable_and_non_utf8_files`, `rejects_non_table_values_in_place_of_tables` | 구문 오류, 알 수 없는 키, 자료형 오류, 필수 키 누락(1.1·1.7절)을 모두 모아 진단으로 돌려준다. [OPS-001](../specs/operations.md#7-수용-테스트)의 설정 검증 부분 | 통과 | [실행 기록](#계약-테스트-실행-기록) |
+| Consumer·`serve` 시스템 테스트(미생성, 작업 2.2) | 위 진단이 시작 실패와 비밀 없는 원인 표시로 이어진다. [OPS-001](../specs/operations.md#7-수용-테스트) | 미실행 | `serve` 미구현 |
+| Consumer·계약 테스트 파일 `accepts_minimal_example_and_fills_every_default`, `checks_every_numeric_key_at_its_bounds`, `checks_relations_between_values` | 승인 수치의 기본값, 최소·최대와 그 바깥(1.2절). Lw ≤ L, Si ≤ Sa, I ≤ B(1.6절). 수치가 각 기능에 주는 효과는 [OPS-004~006](../specs/operations.md#7-수용-테스트)·[OPS-023](../specs/operations.md#7-수용-테스트)를 다루는 작업에서 확인한다. | 통과 | [실행 기록](#계약-테스트-실행-기록) |
+| Consumer·계약 테스트 파일 `applies_default_ports_only_to_tcp_entry_points`, `rejects_listen_conflicts_after_default_ports` | 기본 포트: 주소만 쓴 `tcp_viewer`는 5901, `tcp_server`는 5500, IPv6는 대괄호 필수. `ws_viewer`·`wss_viewer`·관리·상태 `listen`의 포트 생략은 `config_listen_invalid`. 충돌 검사는 기본 포트를 붙인 뒤 적용(1.2·1.6절). [OPS-001](../specs/operations.md#7-수용-테스트) | 통과 | [실행 기록](#계약-테스트-실행-기록) |
+| Consumer·`crates/domain/src/allow_list.rs` 단위 테스트, 계약 테스트 파일 `accepts_single_cidr_and_range_items_of_both_families`, `rejects_bad_ip_items_with_their_own_codes`, `requires_allow_list_only_for_enabled_entry_points`, `accepts_an_empty_allow_list`, `accepts_items_covering_a_whole_family_with_warnings` | IP 항목: 단일·CIDR·범위 해석, 역순 범위·체계 혼합·표기 오류의 코드, 목록 누락은 오류, 빈 목록은 받음, 전체 허용 항목의 경고 대상 계산(1.3·2절). [OPS-038](../specs/operations.md#7-수용-테스트), [OPS-040](../specs/operations.md#7-수용-테스트)의 설정 검증 부분 | 통과 | [실행 기록](#계약-테스트-실행-기록) |
+| Consumer·TCP 진입점 통합 테스트(미생성, 작업 2.4) | 경계 주소의 허용·거절, 빈 목록의 모든 출발지 거절, 진입점별 목록, 전체 허용 경고 기록(1.3·2절). [OPS-037](../specs/operations.md#7-수용-테스트), [OPS-038](../specs/operations.md#7-수용-테스트), [OPS-040](../specs/operations.md#7-수용-테스트) | 미실행 | TCP 진입점 미구현 |
+| Consumer·`crates/domain/src/origin.rs` 단위 테스트, 계약 테스트 파일 `checks_origin_values_and_entry_point_specific_keys` | Origin 문법과 정규화·정확 일치(1.4절). 진입점별로 쓸 수 있는 키 | 통과 | [실행 기록](#계약-테스트-실행-기록) |
+| Consumer·WebSocket 통합 테스트(미생성, 작업 3.2) | 업그레이드 요청의 Origin 비교. [WS-027](../specs/websocket.md#7-수용-테스트), [WS-015](../specs/websocket.md#7-수용-테스트) | 미실행 | WebSocket 진입점 미구현 |
+| Consumer·`crates/domain/src/target_policy.rs` 단위 테스트, 계약 테스트 파일 `checks_mode1_targets`, `accepts_tls_example_and_resolves_relative_paths` | Mode I 대상 항목 문법과 세부 원인(1.5절), `mode1.enabled = true`일 때 필수 | 통과 | [실행 기록](#계약-테스트-실행-기록) |
+| Consumer·중계 통합 테스트(미생성, 작업 2.8) | 최종 IP 판정(1.5절). 꺼진 모드 거절. [RLY-007](../specs/relay.md#7-수용-테스트), [RLY-008](../specs/relay.md#7-수용-테스트), [RLY-022](../specs/relay.md#7-수용-테스트) | 미실행 | Mode I 미구현 |
+| Consumer·계약 테스트 파일 `allows_plaintext_management_only_on_loopback`, `warns_for_plaintext_ws_and_non_loopback_status` | 평문 관리 리스너는 루프백만, 관리 TLS 파일 쌍, 평문 WS·비루프백 상태 리스너의 경고 대상 계산(1.6·2.2절) | 통과 | [실행 기록](#계약-테스트-실행-기록) |
+| Consumer·`serve`·WebSocket 통합 테스트(미생성, 작업 2.2·3.2·4.2) | 비루프백 평문 관리 설정의 시작 실패, 평문 WS는 명시적으로 켠 경우만 열림, 경고 기록. [OPS-014](../specs/operations.md#7-수용-테스트), [OPS-016](../specs/operations.md#7-수용-테스트), [OPS-034](../specs/operations.md#7-수용-테스트), [WS-024](../specs/websocket.md#7-수용-테스트) | 미실행 | `serve`·WebSocket 진입점 미구현 |
+| Consumer·계약 테스트 파일 `rejects_empty_paths_and_reads_log_output`, `load_resolves_relative_paths_against_the_config_directory` | 빈 경로 거절, 상대 경로는 설정 파일 디렉터리 기준, `log.output`의 `"stdout"`과 경로 구분(1.1·1.2절) | 통과 | [실행 기록](#계약-테스트-실행-기록) |
 | Consumer·재로드 통합 테스트(미생성) | 재로드 대상과 재시작 필요 구분, 비재로드 차이가 남은 후보 거절, 후보 실패 시 기존 유지, 주기 확인(1.8·2.3절). [OPS-003](../specs/operations.md#7-수용-테스트), [OPS-024~028](../specs/operations.md#7-수용-테스트), [OPS-035](../specs/operations.md#7-수용-테스트), [OPS-041](../specs/operations.md#7-수용-테스트), [WS-022](../specs/websocket.md#7-수용-테스트) | 미실행 | 구현·테스트 파일 없음 |
 | Consumer·설정 로더·각 기능 통합 테스트(미생성) | K·Kw·G·F·Si·Sa·P·R 값이 각 기능에 반영. [RLY-025~027](../specs/relay.md#7-수용-테스트), [WS-026](../specs/websocket.md#7-수용-테스트), [OPS-008](../specs/operations.md#7-수용-테스트)·[OPS-009](../specs/operations.md#7-수용-테스트)·[OPS-042](../specs/operations.md#7-수용-테스트), [MGT-022](../specs/management.md#7-수용-테스트), [MGT-024](../specs/management.md#7-수용-테스트), [MGT-025](../specs/management.md#7-수용-테스트), [DASH-022](../specs/dashboard.md#7-수용-테스트) | 미실행 | 구현·테스트 파일 없음 |
 | Producer·배포 검토(미생성) | 배포하는 설정 예시가 이 계약을 통과하고 비밀·기본 비밀번호가 없다. [OPS-031](../specs/operations.md#7-수용-테스트) | 미실행 | 예시 파일·구현 없음 |
+
+### 계약 테스트 실행 기록
+
+| 대상 | 환경 | 명령 | 결과 |
+| --- | --- | --- | --- |
+| 작업 2.1 변경(기준 커밋 `80267b2`에 `crates/domain`·`crates/app`·`crates/adapters`와 작업 공간 설정 추가) | Ubuntu 24.04.4(WSL2), Rust 1.99.1, `CARGO_TARGET_DIR=~/vnc-relay-target` | `cargo xtask scenarios`(내부에서 `cargo test --workspace --no-fail-fast` 실행) | 통과. `config_contract` 21건, adapters 단위 2건, domain 단위 10건 모두 통과. 시나리오 보고: 통과 3(OPS-001, OPS-038, OPS-040의 설정 검증 부분), 미연결 145, 오류 0, 판정 통과 |
+| 같음 | Windows 11 | 같음 | 미실행. Windows MSVC 링커가 없어 빌드할 수 없다(작업 0.1). Windows 경로 분기(`cfg!(windows)`)는 실행하지 않았다. |
 
 ## 6. 초안을 확정하기 전에 해결할 사항
 

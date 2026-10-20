@@ -1,0 +1,25 @@
+# Clippy settings for vnc-relay-app. This file replaces the root clippy.toml for
+# this crate, so the root keys are repeated here.
+# I/O bans: docs/architectures/code-map.md, layer "app". Add tokio I/O types when
+# the crate starts to depend on tokio.
+allow-expect-in-tests = true
+allow-print-in-tests = true
+allow-unwrap-in-tests = true
+
+disallowed-types = [
+    { path = "std::fs::File", reason = "app does file I/O only through port traits" },
+    { path = "std::net::TcpListener", reason = "app does network I/O only through port traits" },
+    { path = "std::net::TcpStream", reason = "app does network I/O only through port traits" },
+    { path = "std::net::UdpSocket", reason = "app does network I/O only through port traits" },
+    { path = "std::process::Command", reason = "app does not start processes" },
+]
+
+disallowed-methods = [
+    { path = "std::fs::read", reason = "app does file I/O only through port traits" },
+    { path = "std::fs::read_to_string", reason = "app does file I/O only through port traits" },
+    { path = "std::fs::write", reason = "app does file I/O only through port traits" },
+    { path = "std::env::var", reason = "settings come only from the config file (config-v1 §1.1)" },
+    { path = "std::env::var_os", reason = "settings come only from the config file (config-v1 §1.1)" },
+    { path = "std::time::SystemTime::now", reason = "app reads time through the Clock port" },
+    { path = "std::time::Instant::now", reason = "app reads time through the Clock port" },
+]

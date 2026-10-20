@@ -1,0 +1,16 @@
+[package]
+name = "vnc-relay-adapters"
+description = "VNC Relay adapters: config file, network, TLS, HTTP, and other outside I/O"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+toml.workspace = true
+vnc-relay-app.workspace = true
+vnc-relay-domain.workspace = true
