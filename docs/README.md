@@ -39,9 +39,10 @@
 | 외부 동작과 수용 시나리오 | [스펙 목록](specs/README.md) — Draft, 확정·제안·미결정 범위 구분 |
 | 교환 형식(계약)과 기술 결정 | [계약 목록](contracts/README.md) — Active 5건(2026-10-16 채택), Draft 1건(Repeater 초기 교환). [ADR 목록](decisions/README.md) — Accepted 4건 |
 | 코드 지도(변경 대상의 코드 위치와 연결 관계) | 미작성 — 현재 구현 코드 없음 |
-| 적용할 컨벤션 | [컨벤션 목록](conventions/README.md) — 프런트엔드 컨벤션과 코드 컨벤션은 미작성. 디자인 시스템은 [디자인 목록](design/README.md)의 [운영 대시보드 디자인 시스템](design/DESIGN.md) Draft(사용자 승인 대기)와 [대시보드 HTML 시안](design/mockups/dashboard.html) |
+| 적용할 컨벤션 | [컨벤션 목록](conventions/README.md) — 프런트엔드 컨벤션과 코드 컨벤션은 미작성. 디자인 시스템은 [디자인 목록](design/README.md)의 [운영 대시보드 디자인 시스템](design/DESIGN.md)(Accepted, 2026-10-20)과 채택된 [대시보드 HTML 시안](design/mockups/dashboard.html) |
 | 개발 환경 준비와 실행 방법 | 미작성 — 실행 설정 없음 |
 | 변경 범위별 테스트와 전체 완료 검증 | 구현 검증 how-to·실행 설정은 미작성. [스펙 문서 검증 기록](specs/README.md#문서-검증-기록)은 문서 구조 확인만 포함 |
+| 구현 작업 순서와 완료 조건 | [구현 작업 목록](TODO.md) — 기준 문서가 아니다. 작업마다 기준 문서를 링크한다 |
 
 프런트엔드 프로젝트는 위 표에 실제 디자인 기준·컨벤션·검증 절차를 연결한다. 작업은 [frontend-workflow 스킬](../.agents/skills/frontend-workflow/SKILL.md)을 따른다.
 
