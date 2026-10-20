@@ -55,7 +55,7 @@ flowchart LR
   - 기준: [검증 기록](AGENTS.md#검증-기록)
   - 완료 조건: 스펙 5개의 모든 시나리오가 `미연결`로 나오는 보고서를 만든다.
   - 선행: 0.5
-- [ ] **0.7 코드 지도(Target)**: 초기 교환·매칭·중계·WebSocket·관리·설정·운영 로그의 구성요소와 계획 경로, 레이어별 허용 의존, 의존 위반 확인 방법을 정한다.
+- [x] **0.7 코드 지도(Target)**: 초기 교환·매칭·중계·WebSocket·관리·설정·운영 로그의 구성요소와 계획 경로, 레이어별 허용 의존, 의존 위반 확인 방법을 정한다.
   - 기준: [아키텍처 작성 규칙](architectures/AGENTS.md), [PRD 8절](requirements/PRD.md#8-비기능-요구사항)의 유지보수성, [ADR-0003](decisions/ADR-0003-single-instance-memory-state.md)
   - 완료 조건: [아키텍처 목록](architectures/README.md)에 등록하고 프로젝트 작업 안내 표의 코드 지도 행을 갱신한다.
   - 선행: 0.1
