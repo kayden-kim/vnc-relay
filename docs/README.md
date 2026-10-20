@@ -38,7 +38,7 @@
 | --- | --- |
 | 외부 동작과 수용 시나리오 | [스펙 목록](specs/README.md) — Draft, 확정·제안·미결정 범위 구분 |
 | 교환 형식(계약)과 기술 결정 | [계약 목록](contracts/README.md) — Active 5건(2026-10-16 채택), Draft 1건(Repeater 초기 교환). [ADR 목록](decisions/README.md) — Accepted 4건 |
-| 코드 지도(변경 대상의 코드 위치와 연결 관계) | [코드 지도](architectures/code-map.md) — Target, Draft. 현재 코드는 `src/main.rs`(`--version`만 처리)뿐이다 |
+| 코드 지도(변경 대상의 코드 위치와 연결 관계) | [코드 지도](architectures/code-map.md) — Target, Draft. 현재 코드는 `src/main.rs`(`--version`만 처리)와 개발 도구 [`xtask/`](architectures/xtask.md)뿐이다 |
 | 적용할 컨벤션 | [컨벤션 목록](conventions/README.md) — [Rust 코드 컨벤션](conventions/rust.md)(Draft), [테스트 컨벤션](conventions/testing.md)(Draft). 프런트엔드 컨벤션은 미작성. 디자인 시스템은 [디자인 목록](design/README.md)의 [운영 대시보드 디자인 시스템](design/DESIGN.md)(Accepted, 2026-10-20)과 채택된 [대시보드 HTML 시안](design/mockups/dashboard.html) |
 | 개발 환경 준비와 실행 방법 | 미작성 — 실행 설정 없음 |
 | 변경 범위별 테스트와 전체 완료 검증 | 구현 검증 how-to는 미작성. 시나리오 표식과 보고 명령은 [테스트 컨벤션](conventions/testing.md)이 정한다. 의존성을 바꾸면 [의존성 라이선스 검사](how-to/check-dependency-licenses.md)를 실행한다. [스펙 문서 검증 기록](specs/README.md#문서-검증-기록)은 문서 구조 확인만 포함 |

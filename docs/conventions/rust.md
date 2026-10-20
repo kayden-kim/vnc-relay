@@ -10,7 +10,7 @@
 | 관련 아키텍처 문서 | [코드 지도](../architectures/code-map.md) |
 | 관련 ADR | [ADR-0004 tokio·rustls](../decisions/ADR-0004-tokio-rustls.md) |
 | 적용 시작일 | 2026-10-20 |
-| 규칙 준수 확인 방법 | `cargo fmt`, `cargo clippy`(작업 공간 lint), `cargo xtask layers`(작업 0.6), 코드 리뷰 |
+| 규칙 준수 확인 방법 | `cargo fmt`, `cargo clippy`(작업 공간 lint), `cargo xtask layers`, 코드 리뷰 |
 
 ## 1. 규칙 우선순위
 
@@ -81,7 +81,7 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo xtask layers
 ```
 
-`cargo xtask layers`는 작업 0.6에서 만든다. 만들기 전에는 앞의 두 명령만 실행한다. 전체 검증 절차는 개발 환경·검증 how-to(작업 0.8)가 정한다.
+`cargo xtask layers`는 패키지마다 허용한 내부 crate·외부 crate만 쓰는지, 같은 외부 crate의 버전 요구가 하나인지 검사한다([xtask 모듈 설계](../architectures/xtask.md)). 전체 검증 절차는 개발 환경·검증 how-to(작업 0.8)가 정한다.
 
 ## 6. 기존 코드 마이그레이션
 

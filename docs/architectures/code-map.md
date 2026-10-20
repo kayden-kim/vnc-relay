@@ -10,7 +10,7 @@ VNC Relay는 TCP·WS·WSS로 들어온 Viewer를 Mode I 대상이나 Mode II Ser
 | 관련 PRD | [PRD](../requirements/PRD.md) [8절 유지보수성](../requirements/PRD.md#8-비기능-요구사항), [1절 구현 기술](../requirements/PRD.md#확정-기준) |
 | 관련 ADR | [ADR-0001 내장 TLS](../decisions/ADR-0001-built-in-tls.md), [ADR-0003 단일 인스턴스·메모리 상태](../decisions/ADR-0003-single-instance-memory-state.md), [ADR-0004 tokio·rustls](../decisions/ADR-0004-tokio-rustls.md) |
 
-현재 코드는 루트 crate의 `src/main.rs` 하나다. 이 파일은 `--version`만 처리한다. 이 문서의 나머지 경로와 심볼은 모두 계획(Target)이다. 레이어를 crate로 나누는 방식은 사용자가 2026-10-20에 골랐다. 하위 crate는 해당 구현 작업에서 처음 만든다.
+현재 코드는 루트 crate의 `src/main.rs`(`--version`만 처리)와 개발 도구 `xtask/`다. `xtask/`는 구현과 대조했다([xtask 모듈 설계](xtask.md), Current). 이 문서의 나머지 경로와 심볼은 모두 계획(Target)이다. 레이어를 crate로 나누는 방식은 사용자가 2026-10-20에 골랐다. 하위 crate는 해당 구현 작업에서 처음 만든다.
 
 ## 1. 전체 구조
 
@@ -127,7 +127,7 @@ flowchart LR
 | `src/main.rs`, `src/cli.rs` | 명령행 | 하위 명령·옵션 해석, 사용법 오류, 종료 코드([CLI 계약](../contracts/cli-v1.md)) | 명령 실행 내용 | `serve`, `admin` | 없음 |
 | `src/serve.rs` | 서버 조립 | 시작 순서([CLI 계약 1.8절](../contracts/cli-v1.md#18-수동-시작과-종료))대로 설정·계정·감지·리스너를 준비하고 포트에 구현체를 넣는다. 종료 신호를 수명 관리에 넘긴다. | 업무 규칙 | adapters, app | 없음 |
 | `src/admin.rs` | 계정 명령 조립 | `admin` 하위 명령에 구현체를 넣고 app 절차를 실행한다. | 계정 규칙 | adapters, app | 없음 |
-| `xtask/` | 개발 도구 | `cargo xtask scenarios`(시나리오 커버리지 보고), `cargo xtask layers`(레이어 의존 검사) | 제품 기능 | 없음 | 없음(작업 0.6에서 작성) |
+| `xtask/` | 개발 도구 | `cargo xtask scenarios`(시나리오 커버리지 보고), `cargo xtask layers`(레이어 의존 검사) | 제품 기능 | serde_json. 제품 crate에 의존하지 않는다. | [xtask 모듈 설계](xtask.md) |
 | `web/dashboard/` | 대시보드 | 정적 화면 | 서버 규칙 | 관리 API(HTTP) | 없음(작업 0.9에서 구조 결정) |
 
 ## 3. 진입점
