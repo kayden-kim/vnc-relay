@@ -198,6 +198,42 @@ fn push_event_fields(fields: &mut Vec<(&'static str, Value)>, event: &Event) {
                 fields.push(("detail", Value::from(cut(detail, DETAIL_MAX_BYTES))));
             }
         }
+        Event::ConnectionAccepted {
+            conn_id,
+            entry_point,
+            peer_ip,
+        } => {
+            fields.push(("conn_id", Value::from(conn_id.to_string())));
+            fields.push(("listener", Value::from(entry_point.name())));
+            fields.push(("role", Value::from(entry_point.role().as_str())));
+            fields.push(("peer_ip", Value::from(peer_ip.to_string())));
+        }
+        Event::ConnectionRejected {
+            entry_point,
+            stage,
+            reason,
+            peer_ip,
+        } => {
+            fields.push(("listener", Value::from(entry_point.name())));
+            fields.push(("stage", Value::from(stage.as_str())));
+            fields.push(("reason", Value::from(reason.as_str())));
+            fields.push(("peer_ip", Value::from(peer_ip.to_string())));
+        }
+        Event::ConnectionAborted {
+            conn_id,
+            entry_point,
+            stage,
+            reason,
+            peer_ip,
+            elapsed_ms,
+        } => {
+            fields.push(("conn_id", Value::from(conn_id.to_string())));
+            fields.push(("listener", Value::from(entry_point.name())));
+            fields.push(("stage", Value::from(stage.as_str())));
+            fields.push(("reason", Value::from(reason.as_str())));
+            fields.push(("peer_ip", Value::from(peer_ip.to_string())));
+            fields.push(("elapsed_ms", Value::from(*elapsed_ms)));
+        }
         Event::ServerStopped => {}
     }
 }

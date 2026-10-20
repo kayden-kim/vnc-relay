@@ -239,11 +239,13 @@ impl Settings {
                 name: "status",
                 key: "status.listen",
                 addr: self.status.listen,
+                entry_point: None,
             },
             ListenerPlan {
                 name: "management",
                 key: "management.listen",
                 addr: self.management.listen,
+                entry_point: None,
             },
         ];
         for entry_point in EntryPoint::ALL {
@@ -253,6 +255,7 @@ impl Settings {
                     name: entry_point.name(),
                     key: listen_key(entry_point),
                     addr,
+                    entry_point: Some(entry_point),
                 });
             }
         }
@@ -268,6 +271,8 @@ pub struct ListenerPlan {
     /// Config key of the address, used as the `key` of diagnostics.
     pub key: &'static str,
     pub addr: SocketAddr,
+    /// The entry point, or `None` for the status and management listeners.
+    pub entry_point: Option<EntryPoint>,
 }
 
 fn listen_key(entry_point: EntryPoint) -> &'static str {

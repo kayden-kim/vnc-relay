@@ -13,7 +13,7 @@ workspace = true
 [dependencies]
 aws-lc-rs.workspace = true
 serde_json.workspace = true
-tokio = { workspace = true, features = ["net"] }
+tokio = { workspace = true, features = ["macros", "net", "rt", "sync", "time"] }
 toml.workspace = true
 vnc-relay-app.workspace = true
 vnc-relay-domain.workspace = true

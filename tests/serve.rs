@@ -1,9 +1,9 @@
-//! System tests of `vnc-relay serve` start and stop: the start order, exit
-//! codes, diagnostic lines, and operation log lines of
-//! docs/contracts/cli-v1.md §1.5, §1.8, §2 and docs/contracts/ops-info-v1.md
-//! §1.1, §1.5, §1.6.
+//! System tests of `vnc-relay serve`: the start order, exit codes,
+//! diagnostic lines, and operation log lines of docs/contracts/cli-v1.md
+//! §1.5, §1.8, §2 and docs/contracts/ops-info-v1.md §1.1, §1.5, §1.6, and
+//! the source IP check of the TCP entry points (relay spec §3.1 step 1).
 
-use std::io::Read;
+use std::io::{ErrorKind, Read, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, ExitStatus, Stdio};
@@ -119,6 +119,15 @@ fn field<'a>(line: &'a str, name: &str) -> Option<&'a str> {
 fn events(log: &str) -> Vec<&str> {
     log.lines()
         .map(|line| field(line, "event").unwrap_or_else(|| panic!("no event: {line}")))
+        .collect()
+}
+
+/// `events` without connection events. `wait_listening` connects to the
+/// TCP entry points from 127.0.0.1, so a running server logs those probes.
+fn lifecycle_events(log: &str) -> Vec<&str> {
+    events(log)
+        .into_iter()
+        .filter(|event| !event.starts_with("connection_"))
         .collect()
 }
 
@@ -548,7 +557,10 @@ fn second_instance_fails_with_exit_code_4_and_leaves_the_first_running() {
         send_signal(&child, "TERM");
         let run = finish(child);
         assert_eq!(run.code, Some(0), "{}", run.stderr);
-        assert_eq!(events(&run.stdout), ["server_starting", "server_stopped"]);
+        assert_eq!(
+            lifecycle_events(&run.stdout),
+            ["server_starting", "server_stopped"]
+        );
         assert_released(ports);
     }
 }
@@ -566,7 +578,10 @@ fn stops_with_exit_code_0_on_interrupt_and_terminate() {
         send_signal(&child, signal);
         let run = finish(child);
         assert_eq!(run.code, Some(0), "SIG{signal}: {}", run.stderr);
-        assert_eq!(events(&run.stdout), ["server_starting", "server_stopped"]);
+        assert_eq!(
+            lifecycle_events(&run.stdout),
+            ["server_starting", "server_stopped"]
+        );
         assert_eq!(run.stderr, "");
         assert_released(ports);
     }
@@ -628,7 +643,7 @@ fn writes_the_log_to_the_configured_file_from_start_to_stop() {
         .strip_prefix("earlier line\n")
         .unwrap_or_else(|| panic!("log was not appended: {log}"));
     assert_eq!(
-        events(log),
+        lifecycle_events(log),
         ["server_starting", "allow_all_source", "server_stopped"]
     );
     let lines: Vec<&str> = log.lines().collect();
@@ -689,4 +704,299 @@ fn warns_once_when_log_writes_fail_and_keeps_running() {
     );
     // server_starting and server_stopped both fail; only the first is told.
     assert_eq!(run.stderr.lines().count(), 1, "{}", run.stderr);
+}
+
+/// `config_text` with other allow lists for `tcp_viewer` and `tcp_server`
+/// (TOML arrays) and the log in `relay.log`.
+fn entry_config(ports: Ports, viewer_allow: &str, server_allow: &str) -> String {
+    let default = "allow = [\"127.0.0.1\"]";
+    let text = config_text(ports);
+    let (viewer, server) = text
+        .split_once(default)
+        .unwrap_or_else(|| panic!("no allow line: {text}"));
+    let server = server.replacen(default, &format!("allow = {server_allow}"), 1);
+    format!("{viewer}allow = {viewer_allow}{server}\n[log]\noutput = \"relay.log\"\n")
+}
+
+/// Connects to the loopback `port` from `source`, any address of
+/// 127.0.0.0/8. std cannot choose the source address, so tokio opens the
+/// socket and hands it back as a blocking std stream.
+fn connect_from(source: [u8; 4], port: u16) -> TcpStream {
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_io()
+        .build()
+        .unwrap_or_else(|error| panic!("runtime: {error}"));
+    runtime.block_on(async {
+        let socket =
+            tokio::net::TcpSocket::new_v4().unwrap_or_else(|error| panic!("socket: {error}"));
+        socket
+            .bind(SocketAddr::from((source, 0)))
+            .unwrap_or_else(|error| panic!("bind {source:?}: {error}"));
+        let stream = socket
+            .connect(SocketAddr::from(([127, 0, 0, 1], port)))
+            .await
+            .unwrap_or_else(|error| panic!("connect {port}: {error}"));
+        let stream = stream
+            .into_std()
+            .unwrap_or_else(|error| panic!("into std: {error}"));
+        stream
+            .set_nonblocking(false)
+            .unwrap_or_else(|error| panic!("blocking: {error}"));
+        stream
+    })
+}
+
+/// True when the server closes the connection (EOF or reset) within
+/// `wait`, false when the connection is still open after it.
+fn closed_within(stream: &mut TcpStream, wait: Duration) -> bool {
+    stream
+        .set_read_timeout(Some(wait))
+        .unwrap_or_else(|error| panic!("read timeout: {error}"));
+    let mut buf = [0; 64];
+    match stream.read(&mut buf) {
+        Ok(0) => true,
+        Ok(n) => panic!("the server sent {n} bytes"),
+        Err(error) => match error.kind() {
+            ErrorKind::ConnectionReset | ErrorKind::ConnectionAborted => true,
+            ErrorKind::WouldBlock | ErrorKind::TimedOut => false,
+            _ => panic!("read: {error}"),
+        },
+    }
+}
+
+/// Whether a log line is `event` on `listener` from `peer_ip`.
+fn is(line: &str, event: &str, listener: &str, peer_ip: &str) -> bool {
+    field(line, "event") == Some(event)
+        && field(line, "listener") == Some(listener)
+        && field(line, "peer_ip") == Some(peer_ip)
+}
+
+/// Waits until the log file has a line that `wanted` accepts and returns it.
+fn wait_for_line(log: &Path, wanted: impl Fn(&str) -> bool) -> String {
+    let deadline = Instant::now() + EXIT_LIMIT;
+    loop {
+        let text = std::fs::read_to_string(log).unwrap_or_default();
+        if let Some(line) = text.lines().find(|line| wanted(line)) {
+            return line.to_owned();
+        }
+        assert!(
+            Instant::now() < deadline,
+            "line not logged in {EXIT_LIMIT:?}: {text}"
+        );
+        std::thread::sleep(Duration::from_millis(20));
+    }
+}
+
+fn read_log(log: &Path) -> String {
+    std::fs::read_to_string(log).unwrap_or_else(|error| panic!("read {}: {error}", log.display()))
+}
+
+/// spec: relay.md:RLY-023 partial
+/// spec: relay.md:RLY-024
+/// spec: operations.md:OPS-037 partial
+#[test]
+fn checks_each_tcp_entry_point_against_its_own_allow_list() {
+    let _lock = lock_ports();
+    let ports = Ports::free();
+    let config = valid_setup("entry-allow", ports);
+    write(
+        &config,
+        &entry_config(ports, r#"["127.0.0.2"]"#, r#"["127.0.0.3"]"#),
+    );
+    let log = config.with_file_name("relay.log");
+    let mut guard = Guard(Some(spawn(&config)));
+    wait_listening(guard.child(), ports);
+
+    let mut viewer = connect_from([127, 0, 0, 2], ports.tcp_viewer);
+    let accepted_viewer = wait_for_line(&log, |line| {
+        is(line, "connection_accepted", "tcp_viewer", "127.0.0.2")
+    });
+    assert_eq!(field(&accepted_viewer, "role"), Some("viewer"));
+    assert_eq!(field(&accepted_viewer, "level"), Some("info"));
+
+    // Each IP is allowed only on the other entry point. The bytes claim an
+    // allowed IP; the server decides before it reads them.
+    let claim = b"ID:1234 from 127.0.0.2 and 127.0.0.3";
+    for (source, port, listener, ip) in [
+        ([127, 0, 0, 3], ports.tcp_viewer, "tcp_viewer", "127.0.0.3"),
+        ([127, 0, 0, 2], ports.tcp_server, "tcp_server", "127.0.0.2"),
+    ] {
+        let mut refused = connect_from(source, port);
+        // The server may close first; a failed write changes nothing here.
+        let _ = refused.write_all(claim);
+        assert!(
+            closed_within(&mut refused, EXIT_LIMIT),
+            "{listener} kept {ip}"
+        );
+        let rejected = wait_for_line(&log, |line| is(line, "connection_rejected", listener, ip));
+        assert_eq!(field(&rejected, "level"), Some("warn"));
+        assert_eq!(field(&rejected, "stage"), Some("accept"));
+        assert_eq!(field(&rejected, "reason"), Some("ip_not_allowed"));
+        assert_eq!(field(&rejected, "conn_id"), None);
+    }
+
+    let mut server = connect_from([127, 0, 0, 3], ports.tcp_server);
+    let accepted_server = wait_for_line(&log, |line| {
+        is(line, "connection_accepted", "tcp_server", "127.0.0.3")
+    });
+    assert_eq!(field(&accepted_server, "role"), Some("server"));
+    let viewer_id = field(&accepted_viewer, "conn_id").unwrap_or_default();
+    let server_id = field(&accepted_server, "conn_id").unwrap_or_default();
+    for id in [viewer_id, server_id] {
+        let digits = id.strip_prefix('c').unwrap_or_default();
+        assert!(
+            !digits.is_empty() && digits.bytes().all(|b| b.is_ascii_digit()),
+            "conn_id {id:?}"
+        );
+    }
+    assert_ne!(viewer_id, server_id);
+
+    // The refusals left the accepted connections open.
+    assert!(!closed_within(&mut viewer, Duration::from_millis(300)));
+    assert!(!closed_within(&mut server, Duration::from_millis(300)));
+    let text = read_log(&log);
+    for (listener, ip) in [("tcp_viewer", "127.0.0.3"), ("tcp_server", "127.0.0.2")] {
+        assert!(
+            !text
+                .lines()
+                .any(|line| is(line, "connection_accepted", listener, ip)),
+            "{text}"
+        );
+    }
+    assert!(!text.contains("ID:1234"), "{text}");
+}
+
+/// spec: operations.md:OPS-040 partial
+/// spec: operations.md:OPS-038 partial
+#[test]
+fn applies_item_boundaries_and_an_empty_list_at_accept() {
+    let _lock = lock_ports();
+    let ports = Ports::free();
+    let config = valid_setup("entry-bounds", ports);
+    write(
+        &config,
+        &entry_config(
+            ports,
+            r#"["127.0.0.2-127.0.0.4", "127.0.0.8/30", "127.0.0.20"]"#,
+            "[]",
+        ),
+    );
+    let log = config.with_file_name("relay.log");
+    let mut guard = Guard(Some(spawn(&config)));
+    wait_listening(guard.child(), ports);
+
+    let mut open = Vec::new();
+    for last in [2, 4, 8, 11, 20] {
+        open.push(connect_from([127, 0, 0, last], ports.tcp_viewer));
+        let ip = format!("127.0.0.{last}");
+        wait_for_line(&log, |line| {
+            is(line, "connection_accepted", "tcp_viewer", &ip)
+        });
+    }
+    let refusals = [5, 7, 12, 19, 21]
+        .map(|last| (last, ports.tcp_viewer, "tcp_viewer"))
+        .into_iter()
+        // The empty list of tcp_server refuses an address that tcp_viewer
+        // allows.
+        .chain([(2, ports.tcp_server, "tcp_server")]);
+    for (last, port, listener) in refusals {
+        let mut refused = connect_from([127, 0, 0, last], port);
+        assert!(closed_within(&mut refused, EXIT_LIMIT), "{listener} {last}");
+        let ip = format!("127.0.0.{last}");
+        wait_for_line(&log, |line| is(line, "connection_rejected", listener, &ip));
+    }
+    for stream in &mut open {
+        assert!(!closed_within(stream, Duration::from_millis(100)));
+    }
+}
+
+/// spec: operations.md:OPS-038 partial
+/// spec: operations.md:OPS-007 partial
+#[cfg(unix)]
+#[test]
+fn closes_and_logs_every_held_connection_when_stopping() {
+    let _lock = lock_ports();
+    let ports = Ports::free();
+    let config = valid_setup("entry-stop", ports);
+    write(
+        &config,
+        &entry_config(ports, r#"["0.0.0.0/0"]"#, r#"["127.0.0.3"]"#),
+    );
+    let log = config.with_file_name("relay.log");
+    let mut guard = Guard(Some(spawn(&config)));
+    wait_listening(guard.child(), ports);
+
+    // The whole-family item admits any IPv4 source after its warning.
+    let mut held = connect_from([127, 0, 0, 2], ports.tcp_viewer);
+    let accepted = wait_for_line(&log, |line| {
+        is(line, "connection_accepted", "tcp_viewer", "127.0.0.2")
+    });
+    let conn_id = field(&accepted, "conn_id").unwrap_or_default().to_owned();
+
+    let child = guard.take();
+    send_signal(&child, "TERM");
+    assert!(closed_within(&mut held, EXIT_LIMIT), "connection kept open");
+    let run = finish(child);
+    assert_eq!(run.code, Some(0), "{}", run.stderr);
+
+    let text = read_log(&log);
+    let lines: Vec<&str> = text.lines().collect();
+    assert_eq!(field(lines[1], "event"), Some("allow_all_source"));
+    assert_eq!(field(lines[1], "item"), Some("0.0.0.0/0"));
+    assert_eq!(
+        lines.last().and_then(|line| field(line, "event")),
+        Some("server_stopped")
+    );
+    let aborted = lines
+        .iter()
+        .find(|line| {
+            field(line, "event") == Some("connection_aborted")
+                && field(line, "conn_id") == Some(&conn_id)
+        })
+        .unwrap_or_else(|| panic!("no connection_aborted for {conn_id}: {text}"));
+    assert_eq!(field(aborted, "level"), Some("info"));
+    assert_eq!(field(aborted, "listener"), Some("tcp_viewer"));
+    assert_eq!(field(aborted, "stage"), Some("initial_exchange"));
+    assert_eq!(field(aborted, "reason"), Some("server_shutdown"));
+    assert_eq!(field(aborted, "peer_ip"), Some("127.0.0.2"));
+    assert!(aborted.contains("\"elapsed_ms\":"), "{aborted}");
+    // Every accepted connection, the readiness probes included, is closed
+    // and logged before the last line.
+    let count = |event: &str| {
+        lines
+            .iter()
+            .filter(|line| field(line, "event") == Some(event))
+            .count()
+    };
+    assert_eq!(
+        count("connection_accepted"),
+        count("connection_aborted"),
+        "{text}"
+    );
+    assert_released(ports);
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn checks_an_ipv4_peer_of_a_dual_stack_listener_against_ipv4_items() {
+    let _lock = lock_ports();
+    let ports = Ports::free();
+    let config = valid_setup("entry-dual-stack", ports);
+    let text = entry_config(ports, r#"["127.0.0.2"]"#, r#"["127.0.0.3"]"#).replacen(
+        &format!("listen = \"127.0.0.1:{}\"", ports.tcp_viewer),
+        &format!("listen = \"[::]:{}\"", ports.tcp_viewer),
+        1,
+    );
+    write(&config, &text);
+    let log = config.with_file_name("relay.log");
+    let mut guard = Guard(Some(spawn(&config)));
+    wait_listening(guard.child(), ports);
+
+    // The [::] listener sees ::ffff:127.0.0.2; the log and the allow list
+    // both use 127.0.0.2.
+    let mut viewer = connect_from([127, 0, 0, 2], ports.tcp_viewer);
+    wait_for_line(&log, |line| {
+        is(line, "connection_accepted", "tcp_viewer", "127.0.0.2")
+    });
+    assert!(!closed_within(&mut viewer, Duration::from_millis(100)));
 }

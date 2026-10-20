@@ -3,6 +3,8 @@
 use std::fmt;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
+use crate::peer_ip::PeerIp;
+
 /// One IP item: a single address, a CIDR block, or an inclusive range.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum IpItem {
@@ -70,6 +72,20 @@ impl IpItem {
         }
     }
 
+    /// True when `ip` is this address, inside this block, or inside this
+    /// inclusive range. An item of the other address family never matches.
+    pub fn contains(&self, ip: IpAddr) -> bool {
+        match *self {
+            Self::Single(address) => address == ip,
+            Self::Cidr { network, prefix } => {
+                same_family(network, ip) && (bits(ip) & !host_mask(ip, prefix)) == bits(network)
+            }
+            Self::Range { start, end } => {
+                same_family(start, ip) && (bits(start)..=bits(end)).contains(&bits(ip))
+            }
+        }
+    }
+
     fn written_addresses(&self) -> impl Iterator<Item = IpAddr> {
         let (first, second) = match *self {
             Self::Single(address) => (address, None),
@@ -111,6 +127,14 @@ impl AllowList {
     pub fn whole_family_items(&self) -> impl Iterator<Item = &IpItem> {
         self.items.iter().filter(|item| item.covers_whole_family())
     }
+
+    /// Admission of one source (RLY-R16): true when any item contains the
+    /// peer IP. `PeerIp` has already turned an IPv4-mapped IPv6 peer into
+    /// IPv4, and items never hold mapped addresses, so such a peer matches
+    /// IPv4 items.
+    pub fn permits(&self, peer: PeerIp) -> bool {
+        self.items.iter().any(|item| item.contains(peer.ip()))
+    }
 }
 
 /// Parses one address. IPv6 text must not use brackets, zone IDs, or the
@@ -142,16 +166,27 @@ fn parse_prefix(text: &str, network: IpAddr) -> Result<u8, IpItemError> {
 }
 
 fn host_bits(network: IpAddr, prefix: u8) -> u128 {
-    match network {
-        IpAddr::V4(address) => {
-            let mask = u32::MAX.checked_shr(u32::from(prefix)).unwrap_or(0);
-            u128::from(u32::from(address) & mask)
-        }
-        IpAddr::V6(address) => {
-            let mask = u128::MAX.checked_shr(u32::from(prefix)).unwrap_or(0);
-            u128::from(address) & mask
-        }
+    bits(network) & host_mask(network, prefix)
+}
+
+/// The address as an integer; IPv4 uses the low 32 bits.
+fn bits(address: IpAddr) -> u128 {
+    match address {
+        IpAddr::V4(address) => u128::from(u32::from(address)),
+        IpAddr::V6(address) => u128::from(address),
     }
+}
+
+/// Ones in the host part after `prefix` bits, for the family of `address`.
+fn host_mask(address: IpAddr, prefix: u8) -> u128 {
+    let unused = if address.is_ipv4() { 96 } else { 0 };
+    u128::MAX
+        .checked_shr(unused + u32::from(prefix))
+        .unwrap_or(0)
+}
+
+fn same_family(a: IpAddr, b: IpAddr) -> bool {
+    a.is_ipv4() == b.is_ipv4()
 }
 
 fn is_ipv4_mapped(address: IpAddr) -> bool {
@@ -257,5 +292,83 @@ mod tests {
         let list = AllowList::new(vec![ok("192.0.2.0/24"), ok("::/0")]);
         let whole: Vec<String> = list.whole_family_items().map(ToString::to_string).collect();
         assert_eq!(whole, ["::/0"]);
+    }
+
+    fn peer(text: &str) -> PeerIp {
+        PeerIp::new(text.parse().unwrap_or_else(|e| panic!("parse {text}: {e}")))
+    }
+
+    fn list(items: &[&str]) -> AllowList {
+        AllowList::new(items.iter().map(|text| ok(text)).collect())
+    }
+
+    /// spec: operations.md:OPS-040 partial
+    #[test]
+    fn permits_the_boundaries_of_each_item_and_nothing_just_outside() {
+        let allow = list(&[
+            "192.0.2.7",
+            "198.51.100.0/30",
+            "203.0.113.10-203.0.113.20",
+            "2001:db8::7",
+            "2001:db8:1::/127",
+            "2001:db8:2::a-2001:db8:2::14",
+        ]);
+        for inside in [
+            "192.0.2.7",
+            "198.51.100.0",
+            "198.51.100.3",
+            "203.0.113.10",
+            "203.0.113.20",
+            "2001:db8::7",
+            "2001:db8:1::",
+            "2001:db8:1::1",
+            "2001:db8:2::a",
+            "2001:db8:2::14",
+        ] {
+            assert!(allow.permits(peer(inside)), "{inside}");
+        }
+        for outside in [
+            "192.0.2.6",
+            "192.0.2.8",
+            "198.51.99.255",
+            "198.51.100.4",
+            "203.0.113.9",
+            "203.0.113.21",
+            "2001:db8::6",
+            "2001:db8::8",
+            "2001:db8:0:ffff:ffff:ffff:ffff:ffff",
+            "2001:db8:1::2",
+            "2001:db8:2::9",
+            "2001:db8:2::15",
+        ] {
+            assert!(!allow.permits(peer(outside)), "{outside}");
+        }
+    }
+
+    #[test]
+    fn matches_only_items_of_the_same_address_family() {
+        // 0.0.0.0/0 covers every IPv4 address but no IPv6 address, and the
+        // IPv6 block whose low bits equal an IPv4 address does not match it.
+        let allow = list(&["0.0.0.0/0", "::c000:207/128"]);
+        assert!(allow.permits(peer("192.0.2.7")));
+        assert!(!allow.permits(peer("2001:db8::1")));
+        assert!(!list(&["::/0"]).permits(peer("192.0.2.7")));
+        assert!(list(&["::/0"]).permits(peer("2001:db8::1")));
+        assert!(!list(&["::-::ffff"]).permits(peer("0.0.0.1")));
+    }
+
+    #[test]
+    fn checks_an_ipv4_mapped_peer_against_ipv4_items() {
+        let allow = list(&["192.0.2.0/24"]);
+        assert!(allow.permits(peer("::ffff:192.0.2.9")));
+        assert!(!allow.permits(peer("::ffff:198.51.100.9")));
+    }
+
+    /// spec: operations.md:OPS-038 partial
+    #[test]
+    fn an_empty_list_rejects_every_source() {
+        let allow = AllowList::default();
+        assert!(!allow.permits(peer("192.0.2.1")));
+        assert!(!allow.permits(peer("::1")));
     }
 }

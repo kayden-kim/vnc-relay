@@ -5,6 +5,7 @@
 
 pub mod account;
 pub mod allow_list;
+pub mod conn_id;
 pub mod entry_point;
 pub mod origin;
 pub mod peer_ip;

@@ -16,7 +16,7 @@
 ## 1. 책임과 경계
 
 - 맡는 책임:
-  - 줄 형식(1.1절): 줄마다 JSON 객체 하나와 LF, UTF-8, 값이 없는 선택 필드는 생략(`null` 없음). `detail`은 512바이트에서 UTF-8 문자 경계로 자른다. `origin`(256바이트)·`target_host`(256바이트) 자르기는 그 필드를 가진 사건을 더하는 작업(2.4·3.2)이 같은 `cut` 함수로 더한다.
+  - 줄 형식(1.1절): 줄마다 JSON 객체 하나와 LF, UTF-8, 값이 없는 선택 필드는 생략(`null` 없음). `detail`은 512바이트에서 UTF-8 문자 경계로 자른다. `origin`(256바이트)·`target_host`(256바이트) 자르기는 그 필드를 가진 사건을 더하는 작업(3.2·2.8)이 같은 `cut` 함수로 더한다.
   - 공통 필드(1.2·1.3절): `ts`(UTC, 밀리초, 끝에 `Z`), `level`(`info`·`warn`·`error`), `event`.
   - 출력 위치: `log.output`이 `"stdout"`이면 표준 출력, 경로면 그 파일에 이어 쓴다. 파일이 없으면 만든다. 설정을 읽기 전과 로그 파일을 열기 전의 사건은 표준 출력에 쓴다.
   - 줄 섞임 방지: 한 줄을 다 만든 뒤 잠금을 잡고 한 번에 쓴다.
@@ -27,9 +27,9 @@
   - `peer_ip` 표기(1.10절): IPv4-mapped IPv6 주소는 IPv4로 바꾼다. IPv6는 RFC 5952 소문자 축약형이다. 포트와 영역 식별자는 쓰지 않는다.
   - 로그에 넣지 않는 값(1.11절)을 타입으로 막는다. 사건 필드에 원시 바이트·비밀 타입을 받지 않는다. 중계 ID는 `RelayIdRef`로만 사건에 들어간다.
 - 맡지 않는 책임:
-  - 접속·대기·매칭·세션·재로드·관리자 사건. 작업 2.4 이후 각 기능 작업이 `Event`에 변형을 더한다.
+  - 대기·매칭·세션·재로드·관리자 사건. 각 기능 작업이 `Event`에 변형을 더한다. 접속 수락·거절·중단 사건은 작업 2.4가 더했다([TCP 진입점 모듈 설계](tcp-entry-point.md)). 그 사건의 나머지 `stage`·`reason` 값도 그 값을 만드는 작업이 더한다.
   - `shutdown_started`·`shutdown_forced`. 종료 유예를 만드는 작업 5.3이 맡는다.
-  - `server_ready`. 준비 상태와 `/readyz`를 만드는 작업 2.6이 맡는다. 지금 리스너는 바인드만 하고 연결을 받지 않아 준비됨이 아니다(사용자 결정 2026-10-20).
+  - `server_ready`. 준비 상태와 `/readyz`를 만드는 작업 2.6이 맡는다(사용자 결정 2026-10-20). 지금은 준비 상태가 없고 상태 리스너가 연결을 받지 않는다.
   - 프로세스 시작 때 `RelayIdKey`를 만드는 일과 그 실패 처리, `relay_id_ref`를 실제 사건에 넣는 일. 중계 ID를 처음 다루는 작업 2.9가 맡는다(사용자 결정 2026-10-20).
   - 로그 파일 교체 뒤 다시 열기. [CLI 계약 6절](../contracts/cli-v1.md#6-초안을-확정하기-전에-해결할-사항)의 관찰 항목이다.
   - `accounts_file_permissive` 경고. 운영 정보 계약의 사건이 아니며 stderr에만 쓴다([`serve` 시작 모듈 설계](serve-startup.md)).
@@ -57,7 +57,7 @@ flowchart LR
 | 요소(파일·심볼) | 역할 | 만들어지는 시점과 소유자 | 의존 대상 |
 | --- | --- | --- | --- |
 | `crates/domain/src/peer_ip.rs` `PeerIp` | 상대 IP 값. 만들 때 IPv4-mapped IPv6를 IPv4로 바꾼다. `Display`가 1.10절 표기다. 작업 2.4의 허용 판정도 같은 값을 쓴다. | 연결을 수락할 때 | 없음 |
-| `crates/app/src/events.rs` `Event` | 사건 하나. 변형마다 계약 1.5절의 사건 하나다. `name()`이 사건 이름, `level()`이 1.3·1.5절의 `level`을 준다. | 사건이 생길 때, 기록한 뒤 버린다 | `settings`(`ConfigWarning`) |
+| `crates/app/src/events.rs` `Event` | 사건 하나. 변형마다 계약 1.5절의 사건 하나다. `name()`이 사건 이름, `level()`이 1.3·1.5절의 `level`을 준다. | 사건이 생길 때, 기록한 뒤 버린다 | `settings`(`ConfigWarning`), domain(`ConnId`, `EntryPoint`, `PeerIp`) |
 | `crates/app/src/events.rs` `Level`, `Phase`, `RelayIdRef`, `LOG_CONTRACT` | `level` 값, `phase` 값(`startup`·`reload`), 중계 ID 참조 값(16진수 16자만 만든다), `server_starting`의 `log_contract` 값 | 값 타입 | 없음 |
 | `crates/app/src/ports.rs` `EventSink` | 사건 기록 포트. `record(&self, &Event)`. 실패를 돌려주지 않는다. 기록 실패가 사용 사례의 흐름을 바꾸지 않게 하기 위해서다. | trait | `events` |
 | `crates/adapters/src/ops_log.rs` `JsonLinesEventSink` | `EventSink` 구현. 출력(표준 출력 또는 이어 쓰기 파일)을 잠금 안에 두고 한 줄을 `write_all` 한 번으로 쓴다. 첫 쓰기 실패 때 생성할 때 받은 알림 함수를 한 번 부른다. | `serve::run`이 설정 검증 뒤 만든다. 프로세스가 끝날 때까지 | app, serde_json |
@@ -99,7 +99,7 @@ flowchart LR
 ## 5. 상태와 초기화
 
 - 초기화 시점: `JsonLinesEventSink`는 설정 검증 뒤, 계정 파일을 읽기 전에 만든다. 그 전의 `startup_failed`는 표준 출력용 싱크(`JsonLinesEventSink::stdout`)로 쓴다.
-- 상태 소유자와 제거 시점: `serve::run`이 싱크를 소유한다. 연결 작업에는 `Arc<dyn EventSink>`로 넘긴다(작업 2.4부터). 파일은 프로세스가 끝날 때 닫힌다.
+- 상태 소유자와 제거 시점: `serve::run`이 싱크를 소유한다. TCP 진입점 작업과 연결 작업에는 `Arc<dyn EventSink>`로 넘긴다. 파일은 프로세스가 끝날 때 닫힌다.
 - 동시 실행과 순서: 여러 작업이 동시에 `record`를 부를 수 있다. 줄은 잠금 안에서 한 번에 쓰므로 섞이지 않는다. 같은 연결의 사건은 그 연결 작업이 차례로 부르므로 발생 순서대로 남는다.
 - `RelayIdKey`는 프로세스마다 한 번 만든다. 재시작하면 키가 바뀐다(1.9절).
 

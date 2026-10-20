@@ -1,7 +1,11 @@
 //! Operation log events (ops-info-v1 §1.5) and their `level` (§1.3).
-//! Design: docs/architectures/ops-log.md.
+//! Design: docs/architectures/ops-log.md, docs/architectures/tcp-entry-point.md.
 
 use std::fmt;
+
+use vnc_relay_domain::conn_id::ConnId;
+use vnc_relay_domain::entry_point::EntryPoint;
+use vnc_relay_domain::peer_ip::PeerIp;
 
 use crate::settings::ConfigWarning;
 
@@ -42,6 +46,60 @@ impl Phase {
     }
 }
 
+/// `stage` values of `connection_rejected` and `connection_aborted`
+/// (ops-info-v1 §1.6). Tasks that add a stage add its value.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Stage {
+    Accept,
+    InitialExchange,
+}
+
+impl Stage {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Accept => "accept",
+            Self::InitialExchange => "initial_exchange",
+        }
+    }
+}
+
+/// `reason` values of `connection_rejected` (ops-info-v1 §1.6).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RejectReason {
+    /// The source IP is not in the allow list of the entry point.
+    IpNotAllowed,
+}
+
+impl RejectReason {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::IpNotAllowed => "ip_not_allowed",
+        }
+    }
+}
+
+/// `reason` values of `connection_aborted` (ops-info-v1 §1.6).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AbortReason {
+    /// The server is stopping and ends unfinished work.
+    ServerShutdown,
+}
+
+impl AbortReason {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::ServerShutdown => "server_shutdown",
+        }
+    }
+
+    /// `level` of the `connection_aborted` line with this reason.
+    fn level(self) -> Level {
+        match self {
+            Self::ServerShutdown => Level::Info,
+        }
+    }
+}
+
 /// One operation log event. Each variant is one event of ops-info-v1 §1.5.
 /// Fields carry no secret, no raw relay ID, and no config value other than
 /// the ones the contract names (§1.11). Feature tasks add variants.
@@ -62,6 +120,30 @@ pub enum Event {
         listener: Option<&'static str>,
         detail: Option<String>,
     },
+    /// A relay listener accepted a connection that passed the source IP
+    /// check. `role` comes from the entry point.
+    ConnectionAccepted {
+        conn_id: ConnId,
+        entry_point: EntryPoint,
+        peer_ip: PeerIp,
+    },
+    /// The server refused a connection. At `Stage::Accept` the connection
+    /// has no `conn_id` yet.
+    ConnectionRejected {
+        entry_point: EntryPoint,
+        stage: Stage,
+        reason: RejectReason,
+        peer_ip: PeerIp,
+    },
+    /// An accepted connection ended before it waited or joined a session.
+    ConnectionAborted {
+        conn_id: ConnId,
+        entry_point: EntryPoint,
+        stage: Stage,
+        reason: AbortReason,
+        peer_ip: PeerIp,
+        elapsed_ms: u64,
+    },
     /// Last event: resources are released and the process ends.
     ServerStopped,
 }
@@ -73,6 +155,9 @@ impl Event {
             Self::ServerStarting => "server_starting",
             Self::ConfigWarning { warning, .. } => warning.code(),
             Self::StartupFailed { .. } => "startup_failed",
+            Self::ConnectionAccepted { .. } => "connection_accepted",
+            Self::ConnectionRejected { .. } => "connection_rejected",
+            Self::ConnectionAborted { .. } => "connection_aborted",
             Self::ServerStopped => "server_stopped",
         }
     }
@@ -80,8 +165,11 @@ impl Event {
     /// The `level` field of ops-info-v1 §1.5.
     pub fn level(&self) -> Level {
         match self {
-            Self::ServerStarting | Self::ServerStopped => Level::Info,
-            Self::ConfigWarning { .. } => Level::Warn,
+            Self::ServerStarting | Self::ServerStopped | Self::ConnectionAccepted { .. } => {
+                Level::Info
+            }
+            Self::ConfigWarning { .. } | Self::ConnectionRejected { .. } => Level::Warn,
+            Self::ConnectionAborted { reason, .. } => reason.level(),
             Self::StartupFailed { .. } => Level::Error,
         }
     }

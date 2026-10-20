@@ -53,6 +53,11 @@ workspace = true
 
 [dependencies]
 clap.workspace = true
-tokio = { workspace = true, features = ["rt-multi-thread", "signal"] }
+tokio = { workspace = true, features = ["rt-multi-thread", "signal", "sync"] }
 vnc-relay-adapters.workspace = true
 vnc-relay-app.workspace = true
+vnc-relay-domain.workspace = true
+
+# System tests open client sockets from chosen loopback source addresses.
+[dev-dependencies]
+tokio = { workspace = true, features = ["net", "rt"] }

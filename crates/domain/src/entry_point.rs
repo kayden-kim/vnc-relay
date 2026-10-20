@@ -40,6 +40,32 @@ impl EntryPoint {
             Self::WsViewer | Self::WssViewer => None,
         }
     }
+
+    /// Role of every connection this entry point accepts (ops-info-v1
+    /// §1.4 `role`). WS and WSS entry points take only viewers.
+    pub fn role(self) -> Role {
+        match self {
+            Self::TcpServer => Role::Server,
+            Self::TcpViewer | Self::WsViewer | Self::WssViewer => Role::Viewer,
+        }
+    }
+}
+
+/// Role of a connection: the VNC viewer or the VNC server side.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Role {
+    Viewer,
+    Server,
+}
+
+impl Role {
+    /// `role` value of operation events (ops-info-v1 §1.4).
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Viewer => "viewer",
+            Self::Server => "server",
+        }
+    }
 }
 
 impl fmt::Display for EntryPoint {

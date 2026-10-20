@@ -1,17 +1,23 @@
 //! `serve` start sequence and shutdown wait (cli-v1 §1.8).
-//! Design: docs/architectures/serve-startup.md, docs/architectures/ops-log.md.
+//! Design: docs/architectures/serve-startup.md, docs/architectures/ops-log.md,
+//! docs/architectures/tcp-entry-point.md.
 
 use std::io;
 use std::path::Path;
 use std::process::ExitCode;
+use std::sync::Arc;
 use std::task::Poll;
 
+use tokio::sync::watch;
+use tokio::task::JoinSet;
+use vnc_relay_adapters::net::TcpEntryPoint;
 use vnc_relay_adapters::ops_log::JsonLinesEventSink;
 use vnc_relay_adapters::{accounts_file, config_file, net};
 use vnc_relay_app::accounts::{self, ACCOUNTS_FILE_KEY, AccountsDiagnostic, AccountsWarning};
 use vnc_relay_app::events::{Event, Phase};
 use vnc_relay_app::ports::EventSink;
 use vnc_relay_app::settings::{LogOutput, Settings};
+use vnc_relay_domain::entry_point::EntryPoint;
 
 use crate::cli::{self, EXIT_ACCOUNTS, EXIT_CONFIG, EXIT_LISTENER, EXIT_RUNTIME};
 
@@ -36,30 +42,31 @@ pub fn run(config: &Path) -> ExitCode {
             return ExitCode::from(EXIT_CONFIG);
         }
     };
-    let log = match JsonLinesEventSink::open(&settings.log.output, report_log_write_failure) {
-        Ok(log) => log,
-        Err(error) => {
-            let path = match &settings.log.output {
-                LogOutput::File(path) => path.display().to_string(),
-                LogOutput::Stdout => String::new(),
-            };
-            cli::report(
-                "error",
-                error.code(),
-                LOG_OUTPUT_KEY,
-                &format!("로그 파일을 열 수 없다({path}). {}", error.cause()),
-            );
-            let stdout = JsonLinesEventSink::stdout(report_log_write_failure);
-            record_failure(
-                &stdout,
-                error.code(),
-                Some(LOG_OUTPUT_KEY.to_owned()),
-                None,
-                Some(error.cause().to_owned()),
-            );
-            return ExitCode::from(EXIT_CONFIG);
-        }
-    };
+    let log: Arc<dyn EventSink> =
+        match JsonLinesEventSink::open(&settings.log.output, report_log_write_failure) {
+            Ok(log) => Arc::new(log),
+            Err(error) => {
+                let path = match &settings.log.output {
+                    LogOutput::File(path) => path.display().to_string(),
+                    LogOutput::Stdout => String::new(),
+                };
+                cli::report(
+                    "error",
+                    error.code(),
+                    LOG_OUTPUT_KEY,
+                    &format!("로그 파일을 열 수 없다({path}). {}", error.cause()),
+                );
+                let stdout = JsonLinesEventSink::stdout(report_log_write_failure);
+                record_failure(
+                    &stdout,
+                    error.code(),
+                    Some(LOG_OUTPUT_KEY.to_owned()),
+                    None,
+                    Some(error.cause().to_owned()),
+                );
+                return ExitCode::from(EXIT_CONFIG);
+            }
+        };
     log.record(&Event::ServerStarting);
     for warning in settings.warnings() {
         log.record(&Event::ConfigWarning {
@@ -71,7 +78,7 @@ pub fn run(config: &Path) -> ExitCode {
     // Stage 2: account file. Stage 3 (file watch) comes with task 5.1.
     let loaded = match accounts_file::load(&settings.admin.accounts_file) {
         Ok(loaded) => loaded,
-        Err(diagnostics) => return accounts_failure(&log, &diagnostics),
+        Err(diagnostics) => return accounts_failure(log.as_ref(), &diagnostics),
     };
     for warning in &loaded.warnings {
         let message = match warning {
@@ -82,25 +89,30 @@ pub fn run(config: &Path) -> ExitCode {
         cli::report("warning", warning.code(), ACCOUNTS_FILE_KEY, message);
     }
     if let Err(diagnostic) = accounts::require_any(&loaded.accounts) {
-        return accounts_failure(&log, &[diagnostic]);
+        return accounts_failure(log.as_ref(), &[diagnostic]);
     }
 
     // Stage 4: runtime, then listeners.
     let runtime = match tokio::runtime::Builder::new_multi_thread()
         .enable_io()
+        .enable_time()
         .build()
     {
         Ok(runtime) => runtime,
-        Err(error) => return runtime_failure(&log, "비동기 런타임을 만들 수 없다", &error),
+        Err(error) => {
+            return runtime_failure(log.as_ref(), "비동기 런타임을 만들 수 없다", &error);
+        }
     };
-    runtime.block_on(listen_until_shutdown(&settings, &log))
+    runtime.block_on(listen_until_shutdown(&settings, log))
 }
 
-async fn listen_until_shutdown(settings: &Settings, log: &dyn EventSink) -> ExitCode {
+async fn listen_until_shutdown(settings: &Settings, log: Arc<dyn EventSink>) -> ExitCode {
     // Registered before binding so that a request during startup is not lost.
     let mut shutdown = match ShutdownSignal::register() {
         Ok(shutdown) => shutdown,
-        Err(error) => return runtime_failure(log, "종료 신호 처리기를 준비할 수 없다", &error),
+        Err(error) => {
+            return runtime_failure(log.as_ref(), "종료 신호 처리기를 준비할 수 없다", &error);
+        }
     };
     let listeners = match net::bind(&settings.listeners()).await {
         Ok(listeners) => listeners,
@@ -114,7 +126,7 @@ async fn listen_until_shutdown(settings: &Settings, log: &dyn EventSink) -> Exit
                     &format!("{}에 바인드할 수 없다. {}", plan.addr, failure.cause),
                 );
                 record_failure(
-                    log,
+                    log.as_ref(),
                     "listener_bind_failed",
                     Some(plan.key.to_owned()),
                     Some(plan.name),
@@ -124,8 +136,36 @@ async fn listen_until_shutdown(settings: &Settings, log: &dyn EventSink) -> Exit
             return ExitCode::from(EXIT_LISTENER);
         }
     };
+
+    // TCP entry points accept from here on. Other listeners stay bound
+    // without accepting until their tasks (2.6, 3.2, 4.2) attach to them.
+    let (stop, stopped) = watch::channel(false);
+    let mut entry_points = JoinSet::new();
+    let mut idle = Vec::new();
+    for bound in listeners {
+        match bound.plan.entry_point {
+            Some(entry_point @ (EntryPoint::TcpViewer | EntryPoint::TcpServer)) => {
+                // An enabled entry point always has a list; an empty list
+                // rejects every source.
+                let allow = settings
+                    .relay
+                    .get(entry_point)
+                    .allow
+                    .clone()
+                    .unwrap_or_default();
+                let entry = TcpEntryPoint::new(entry_point, bound.listener, allow);
+                entry_points.spawn(entry.run(Arc::clone(&log), stopped.clone()));
+            }
+            _ => idle.push(bound),
+        }
+    }
+
     shutdown.wait().await;
-    drop(listeners);
+    // Entry points close their listeners and log every open connection
+    // before the last event.
+    stop.send_replace(true);
+    while entry_points.join_next().await.is_some() {}
+    drop(idle);
     log.record(&Event::ServerStopped);
     ExitCode::SUCCESS
 }

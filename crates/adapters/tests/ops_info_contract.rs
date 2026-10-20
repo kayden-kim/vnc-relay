@@ -7,11 +7,13 @@ use std::sync::Arc;
 use serde_json::{Map, Value};
 use vnc_relay_adapters::crypto::RelayIdKey;
 use vnc_relay_adapters::ops_log::JsonLinesEventSink;
-use vnc_relay_app::events::{Event, Phase};
+use vnc_relay_app::events::{AbortReason, Event, Phase, RejectReason, Stage};
 use vnc_relay_app::ports::EventSink;
 use vnc_relay_app::settings::{ConfigWarning, LogOutput};
 use vnc_relay_domain::allow_list::IpItem;
+use vnc_relay_domain::conn_id::ConnId;
 use vnc_relay_domain::entry_point::EntryPoint;
+use vnc_relay_domain::peer_ip::PeerIp;
 
 fn temp_dir(name: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!("vnc-relay-ops-log-{}-{name}", std::process::id()));
@@ -177,6 +179,84 @@ fn writes_each_config_warning_with_its_contract_fields() {
     for line in &lines {
         assert_eq!(text(line, "level"), "warn");
     }
+}
+
+#[test]
+fn writes_connection_events_with_their_contract_fields() {
+    let dir = temp_dir("connections");
+    let path = dir.join("relay.log");
+    let log = file_sink(&path);
+    let peer = |text: &str| PeerIp::new(text.parse().unwrap_or_else(|e| panic!("{text}: {e}")));
+    let conn_id = ConnId::next();
+    log.record(&Event::ConnectionRejected {
+        entry_point: EntryPoint::TcpViewer,
+        stage: Stage::Accept,
+        reason: RejectReason::IpNotAllowed,
+        peer_ip: peer("::ffff:198.51.100.21"),
+    });
+    log.record(&Event::ConnectionAccepted {
+        conn_id,
+        entry_point: EntryPoint::TcpServer,
+        peer_ip: peer("2001:db8::5"),
+    });
+    log.record(&Event::ConnectionAborted {
+        conn_id,
+        entry_point: EntryPoint::TcpServer,
+        stage: Stage::InitialExchange,
+        reason: AbortReason::ServerShutdown,
+        peer_ip: peer("2001:db8::5"),
+        elapsed_ms: 1234,
+    });
+    let lines = objects(&read(&path));
+
+    // A connection refused at accept has no conn_id (ops-info-v1 §1.5).
+    assert_eq!(text(&lines[0], "event"), "connection_rejected");
+    assert_eq!(text(&lines[0], "level"), "warn");
+    assert_eq!(
+        keys(&lines[0]),
+        [
+            "event", "level", "listener", "peer_ip", "reason", "stage", "ts"
+        ]
+    );
+    assert_eq!(text(&lines[0], "listener"), "tcp_viewer");
+    assert_eq!(text(&lines[0], "stage"), "accept");
+    assert_eq!(text(&lines[0], "reason"), "ip_not_allowed");
+    assert_eq!(text(&lines[0], "peer_ip"), "198.51.100.21");
+
+    assert_eq!(text(&lines[1], "event"), "connection_accepted");
+    assert_eq!(text(&lines[1], "level"), "info");
+    assert_eq!(
+        keys(&lines[1]),
+        [
+            "conn_id", "event", "level", "listener", "peer_ip", "role", "ts"
+        ]
+    );
+    assert_eq!(text(&lines[1], "conn_id"), conn_id.to_string());
+    assert_eq!(text(&lines[1], "listener"), "tcp_server");
+    assert_eq!(text(&lines[1], "role"), "server");
+    assert_eq!(text(&lines[1], "peer_ip"), "2001:db8::5");
+
+    // server_shutdown is an info line (ops-info-v1 §1.5).
+    assert_eq!(text(&lines[2], "event"), "connection_aborted");
+    assert_eq!(text(&lines[2], "level"), "info");
+    assert_eq!(
+        keys(&lines[2]),
+        [
+            "conn_id",
+            "elapsed_ms",
+            "event",
+            "level",
+            "listener",
+            "peer_ip",
+            "reason",
+            "stage",
+            "ts"
+        ]
+    );
+    assert_eq!(text(&lines[2], "conn_id"), conn_id.to_string());
+    assert_eq!(text(&lines[2], "stage"), "initial_exchange");
+    assert_eq!(text(&lines[2], "reason"), "server_shutdown");
+    assert_eq!(lines[2].get("elapsed_ms"), Some(&Value::from(1234)));
 }
 
 #[test]
