@@ -1,7 +1,8 @@
 //! System tests of `vnc-relay serve`: the start order, exit codes,
 //! diagnostic lines, and operation log lines of docs/contracts/cli-v1.md
-//! §1.5, §1.8, §2 and docs/contracts/ops-info-v1.md §1.1, §1.5, §1.6, and
-//! the source IP check of the TCP entry points (relay spec §3.1 step 1).
+//! §1.5, §1.8, §2 and docs/contracts/ops-info-v1.md §1.1, §1.5, §1.6, the
+//! source IP check of the TCP entry points (relay spec §3.1 step 1), and
+//! the relay connection limit L and the initial exchange time H.
 
 use std::io::{ErrorKind, Read, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream};
@@ -999,4 +1000,117 @@ fn checks_an_ipv4_peer_of_a_dual_stack_listener_against_ipv4_items() {
         is(line, "connection_accepted", "tcp_viewer", "127.0.0.2")
     });
     assert!(!closed_within(&mut viewer, Duration::from_millis(100)));
+}
+
+/// spec: operations.md:OPS-004 partial
+#[test]
+fn refuses_relay_connections_beyond_l_and_accepts_again_after_a_release() {
+    let _lock = lock_ports();
+    let ports = Ports::free();
+    let config = valid_setup("entry-limit", ports);
+    write(
+        &config,
+        &(entry_config(ports, r#"["127.0.0.2"]"#, r#"["127.0.0.3"]"#)
+            + "\n[limits]\nrelay_connections = 2\nwaiting = 1\n"),
+    );
+    let log = config.with_file_name("relay.log");
+    let mut guard = Guard(Some(spawn(&config)));
+    wait_listening(guard.child(), ports);
+
+    // Both entry points take places from the one L.
+    let viewer = connect_from([127, 0, 0, 2], ports.tcp_viewer);
+    let accepted = wait_for_line(&log, |line| {
+        is(line, "connection_accepted", "tcp_viewer", "127.0.0.2")
+    });
+    let mut server = connect_from([127, 0, 0, 3], ports.tcp_server);
+    wait_for_line(&log, |line| {
+        is(line, "connection_accepted", "tcp_server", "127.0.0.3")
+    });
+
+    let mut refused = connect_from([127, 0, 0, 2], ports.tcp_viewer);
+    assert!(closed_within(&mut refused, EXIT_LIMIT), "third kept");
+    let rejected = wait_for_line(&log, |line| {
+        is(line, "connection_rejected", "tcp_viewer", "127.0.0.2")
+    });
+    assert_eq!(field(&rejected, "reason"), Some("relay_connection_limit"));
+    assert_eq!(field(&rejected, "stage"), Some("accept"));
+    assert!(rejected.contains("\"limit\":2"), "{rejected}");
+    // A source outside the allow list is refused for its IP even at L.
+    let mut stranger = connect_from([127, 0, 0, 4], ports.tcp_viewer);
+    assert!(closed_within(&mut stranger, EXIT_LIMIT), "stranger kept");
+    let rejected = wait_for_line(&log, |line| {
+        is(line, "connection_rejected", "tcp_viewer", "127.0.0.4")
+    });
+    assert_eq!(field(&rejected, "reason"), Some("ip_not_allowed"));
+    assert!(!closed_within(&mut server, Duration::from_millis(100)));
+
+    // The client leaves; the server notices, gives the place back, and
+    // takes the next connection.
+    drop(viewer);
+    let conn_id = field(&accepted, "conn_id").unwrap_or_default().to_owned();
+    let aborted = wait_for_line(&log, |line| {
+        field(line, "event") == Some("connection_aborted")
+            && field(line, "conn_id") == Some(conn_id.as_str())
+    });
+    assert_eq!(field(&aborted, "reason"), Some("peer_eof"));
+    assert_eq!(field(&aborted, "level"), Some("info"));
+    let mut next = connect_from([127, 0, 0, 2], ports.tcp_viewer);
+    assert!(!closed_within(&mut next, Duration::from_millis(300)));
+    let text = read_log(&log);
+    let accepted_viewer = text
+        .lines()
+        .filter(|line| is(line, "connection_accepted", "tcp_viewer", "127.0.0.2"))
+        .count();
+    assert_eq!(accepted_viewer, 2, "{text}");
+}
+
+/// spec: relay.md:RLY-005 partial
+/// spec: operations.md:OPS-006 partial
+#[test]
+fn tells_a_peer_close_from_an_initial_exchange_that_outlives_h() {
+    let _lock = lock_ports();
+    let ports = Ports::free();
+    let config = valid_setup("entry-handshake", ports);
+    write(
+        &config,
+        &(entry_config(ports, r#"["127.0.0.2"]"#, r#"["127.0.0.3"]"#)
+            + "\n[timeouts]\nhandshake_secs = 1\n"),
+    );
+    let log = config.with_file_name("relay.log");
+    let mut guard = Guard(Some(spawn(&config)));
+    wait_listening(guard.child(), ports);
+
+    // Bytes that never finish an initial exchange: H closes the connection.
+    let started = Instant::now();
+    let mut slow = connect_from([127, 0, 0, 2], ports.tcp_viewer);
+    slow.write_all(b"partial")
+        .unwrap_or_else(|error| panic!("write: {error}"));
+    assert!(closed_within(&mut slow, EXIT_LIMIT), "kept past H");
+    assert!(started.elapsed() >= Duration::from_secs(1));
+    let timed_out = wait_for_line(&log, |line| {
+        is(line, "connection_aborted", "tcp_viewer", "127.0.0.2")
+    });
+    assert_eq!(field(&timed_out, "reason"), Some("handshake_timeout"));
+    assert_eq!(field(&timed_out, "level"), Some("warn"));
+    assert_eq!(field(&timed_out, "stage"), Some("initial_exchange"));
+    let elapsed = timed_out
+        .split("\"elapsed_ms\":")
+        .nth(1)
+        .and_then(|rest| rest.split([',', '}']).next())
+        .and_then(|digits| digits.parse::<u64>().ok())
+        .unwrap_or_else(|| panic!("no elapsed_ms: {timed_out}"));
+    assert!(elapsed >= 1000, "{timed_out}");
+    assert!(!read_log(&log).contains("partial"));
+
+    // A peer that closes before sending anything is a peer_eof.
+    let quitter = connect_from([127, 0, 0, 3], ports.tcp_server);
+    wait_for_line(&log, |line| {
+        is(line, "connection_accepted", "tcp_server", "127.0.0.3")
+    });
+    drop(quitter);
+    let closed = wait_for_line(&log, |line| {
+        is(line, "connection_aborted", "tcp_server", "127.0.0.3")
+    });
+    assert_eq!(field(&closed, "reason"), Some("peer_eof"));
+    assert_eq!(field(&closed, "level"), Some("info"));
 }

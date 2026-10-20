@@ -218,6 +218,9 @@ fn push_event_fields(fields: &mut Vec<(&'static str, Value)>, event: &Event) {
             fields.push(("stage", Value::from(stage.as_str())));
             fields.push(("reason", Value::from(reason.as_str())));
             fields.push(("peer_ip", Value::from(peer_ip.to_string())));
+            if let Some(limit) = reason.limit() {
+                fields.push(("limit", Value::from(limit)));
+            }
         }
         Event::ConnectionAborted {
             conn_id,
@@ -233,6 +236,9 @@ fn push_event_fields(fields: &mut Vec<(&'static str, Value)>, event: &Event) {
             fields.push(("reason", Value::from(reason.as_str())));
             fields.push(("peer_ip", Value::from(peer_ip.to_string())));
             fields.push(("elapsed_ms", Value::from(*elapsed_ms)));
+            if let Some(kind) = reason.error_kind() {
+                fields.push(("error_kind", Value::from(kind.as_str())));
+            }
         }
         Event::ServerStopped => {}
     }

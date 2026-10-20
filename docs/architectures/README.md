@@ -10,6 +10,7 @@
 | [`serve` 시작 모듈 설계](serve-startup.md) | `serve`가 어떤 순서로 설정·계정 파일을 읽고 리스너를 바인드하며, 실패를 어떤 종료 코드와 진단으로 알리는가 | Current | Draft | Verified — [대조 기록](serve-startup.md#대조-기록) |
 | [운영 로그 모듈 설계](ops-log.md) | 운영 로그 사건을 어떤 타입으로 만들고, 어떤 형식으로 어디에 쓰며, 쓰기 실패와 비밀 값을 어떻게 다루는가 | Current | Draft | Verified — [대조 기록](ops-log.md#대조-기록) |
 | [TCP 진입점 모듈 설계](tcp-entry-point.md) | TCP Viewer·Server 진입점이 접속을 어떻게 받고, 데이터를 읽기 전에 출발지 IP를 어떻게 판정하며, 허용·거절·종료를 어떻게 기록하는가 | Current | Draft | Verified — [대조 기록](tcp-entry-point.md#대조-기록) |
+| [연결 상한과 시간 제한 모듈 설계](connection-limits.md) | 연결 상한 L·Lm·Lw를 어떻게 세고, TCP 진입점이 수락한 연결에 초기 교환 시간 H와 TCP keepalive를 어떻게 적용하는가 | Current | Draft | Verified — [대조 기록](connection-limits.md#대조-기록) |
 
 - 구조 시점: 문서가 설명하는 구조가 현재 코드(`Current`), 목표(`Target`), 전환 중(`Transitional`), 과거(`Historical`) 중 무엇인지 나타낸다.
 - 문서 상태: 구현 기준으로 채택했는지 나타낸다. `Draft`는 초안, `Active`는 채택되어 적용 중, `Retired`는 더 이상 쓰지 않음을 뜻한다.

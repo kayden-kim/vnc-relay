@@ -9,7 +9,7 @@ Viewer와 Server가 VNC Relay에 접속했을 때 관찰하는 연결 수명, �
 | 용어 | [VNC Relay 용어집](../../GLOSSARY.md) |
 | 관련 스펙 | [WS·WSS](websocket.md), [관리 기능](management.md), [설정·운영](operations.md) |
 | 관련 계약 | [Repeater 초기 교환 v1](../contracts/repeater-handshake-v1.md). Draft이며 대상 버전의 관찰 증거가 있기 전에는 구현 기준이 아니다. 초기 메시지 형식은 RLY-TBD-002에서 관리한다. |
-| 관련 아키텍처 문서·ADR | [TCP 진입점 모듈 설계](../architectures/tcp-entry-point.md)(3.1절 1항의 출발지 IP 검사), [코드 지도](../architectures/code-map.md), [ADR-0002 출발지 IP 허용 목록](../decisions/ADR-0002-source-ip-allowlist.md), [ADR-0003 단일 인스턴스·메모리 상태](../decisions/ADR-0003-single-instance-memory-state.md). 구현 코드는 TCP 진입점의 수락과 출발지 IP 검사뿐이다. 초기 교환·매칭·중계는 구현하지 않았다. |
+| 관련 아키텍처 문서·ADR | [TCP 진입점 모듈 설계](../architectures/tcp-entry-point.md)(3.1절 1항의 출발지 IP 검사), [연결 상한과 시간 제한 모듈 설계](../architectures/connection-limits.md)(초기 교환 시간 H와 TCP keepalive 설정), [코드 지도](../architectures/code-map.md), [ADR-0002 출발지 IP 허용 목록](../decisions/ADR-0002-source-ip-allowlist.md), [ADR-0003 단일 인스턴스·메모리 상태](../decisions/ADR-0003-single-instance-memory-state.md). 구현 코드는 TCP 진입점의 수락, 출발지 IP 검사, 연결 상한 L, 초기 교환 시간 H, TCP keepalive 설정뿐이다. 초기 교환 해석·매칭·중계는 구현하지 않았다. |
 
 ## 1. 범위와 적용 상태
 

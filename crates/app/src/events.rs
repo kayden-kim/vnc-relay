@@ -63,17 +63,29 @@ impl Stage {
     }
 }
 
-/// `reason` values of `connection_rejected` (ops-info-v1 §1.6).
+/// `reason` values of `connection_rejected` (ops-info-v1 §1.6). A reason
+/// that comes from a limit carries the limit, written as `limit`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RejectReason {
     /// The source IP is not in the allow list of the entry point.
     IpNotAllowed,
+    /// Every place of the relay connection limit L is held.
+    RelayConnectionLimit { limit: u32 },
 }
 
 impl RejectReason {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::IpNotAllowed => "ip_not_allowed",
+            Self::RelayConnectionLimit { .. } => "relay_connection_limit",
+        }
+    }
+
+    /// The `limit` field: the configured limit that refused the connection.
+    pub fn limit(self) -> Option<u32> {
+        match self {
+            Self::IpNotAllowed => None,
+            Self::RelayConnectionLimit { limit } => Some(limit),
         }
     }
 }
@@ -81,6 +93,12 @@ impl RejectReason {
 /// `reason` values of `connection_aborted` (ops-info-v1 §1.6).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AbortReason {
+    /// The initial exchange did not end within H.
+    HandshakeTimeout,
+    /// The peer closed the connection before the initial exchange ended.
+    PeerEof,
+    /// A network error ended the connection; written with `error_kind`.
+    ConnectionError(ConnectionErrorKind),
     /// The server is stopping and ends unfinished work.
     ServerShutdown,
 }
@@ -88,14 +106,42 @@ pub enum AbortReason {
 impl AbortReason {
     pub fn as_str(self) -> &'static str {
         match self {
+            Self::HandshakeTimeout => "handshake_timeout",
+            Self::PeerEof => "peer_eof",
+            Self::ConnectionError(_) => "connection_error",
             Self::ServerShutdown => "server_shutdown",
+        }
+    }
+
+    /// The `error_kind` field, present for `connection_error` only.
+    pub fn error_kind(self) -> Option<ConnectionErrorKind> {
+        match self {
+            Self::ConnectionError(kind) => Some(kind),
+            Self::HandshakeTimeout | Self::PeerEof | Self::ServerShutdown => None,
         }
     }
 
     /// `level` of the `connection_aborted` line with this reason.
     fn level(self) -> Level {
         match self {
-            Self::ServerShutdown => Level::Info,
+            Self::PeerEof | Self::ServerShutdown => Level::Info,
+            Self::HandshakeTimeout | Self::ConnectionError(_) => Level::Warn,
+        }
+    }
+}
+
+/// `error_kind` values of ops-info-v1 §1.7. Tasks that meet another kind
+/// add its value.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ConnectionErrorKind {
+    /// A socket read or write failed, or the peer reset the connection.
+    IoError,
+}
+
+impl ConnectionErrorKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::IoError => "io_error",
         }
     }
 }
@@ -121,7 +167,7 @@ pub enum Event {
         detail: Option<String>,
     },
     /// A relay listener accepted a connection that passed the source IP
-    /// check. `role` comes from the entry point.
+    /// check and took a place of L. `role` comes from the entry point.
     ConnectionAccepted {
         conn_id: ConnId,
         entry_point: EntryPoint,

@@ -1,18 +1,22 @@
 //! TCP listeners and TCP entry points. Startup binding:
 //! docs/architectures/serve-startup.md. Entry points:
-//! docs/architectures/tcp-entry-point.md.
+//! docs/architectures/tcp-entry-point.md. Limits, H, and keepalive:
+//! docs/architectures/connection-limits.md.
 
 use std::io::{self, ErrorKind};
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
+use socket2::{SockRef, TcpKeepalive};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::watch;
 use tokio::task::JoinSet;
-use vnc_relay_app::events::{AbortReason, Event, RejectReason, Stage};
+use tokio::time::Instant;
+use vnc_relay_app::events::{AbortReason, ConnectionErrorKind, Event, RejectReason, Stage};
 use vnc_relay_app::ports::EventSink;
-use vnc_relay_app::settings::ListenerPlan;
+use vnc_relay_app::settings::{KeepaliveSettings, ListenerPlan};
 use vnc_relay_domain::allow_list::AllowList;
+use vnc_relay_domain::budget::{BudgetPermit, ConnectionBudget};
 use vnc_relay_domain::conn_id::ConnId;
 use vnc_relay_domain::entry_point::EntryPoint;
 use vnc_relay_domain::peer_ip::PeerIp;
@@ -71,13 +75,27 @@ fn bind_cause(error: &io::Error) -> String {
     }
 }
 
-/// The TCP Viewer or TCP Server entry point: accepts connections and checks
+/// What a TCP entry point applies to each connection it accepts.
+#[derive(Debug, Clone)]
+pub struct AcceptPolicy {
+    /// Allow list of this entry point.
+    pub allow: AllowList,
+    /// L, shared by every relay entry point.
+    pub relay_budget: Arc<ConnectionBudget>,
+    /// H, counted from the accept: a TCP connection enters the initial
+    /// exchange as soon as it is accepted.
+    pub handshake: Duration,
+    /// K, set on every accepted relay socket.
+    pub keepalive: KeepaliveSettings,
+}
+
+/// The TCP Viewer or TCP Server entry point: accepts connections, checks
 /// each source IP against the entry point's allow list before reading any
-/// byte (relay spec §3.1 step 1, RLY-R16).
+/// byte (relay spec §3.1 step 1, RLY-R16), then takes a place of L.
 pub struct TcpEntryPoint {
     entry_point: EntryPoint,
     listener: TcpListener,
-    allow: AllowList,
+    policy: AcceptPolicy,
 }
 
 /// An accepted connection while it waits for the next stage.
@@ -89,11 +107,11 @@ struct Accepted {
 }
 
 impl TcpEntryPoint {
-    pub fn new(entry_point: EntryPoint, listener: TcpListener, allow: AllowList) -> Self {
+    pub fn new(entry_point: EntryPoint, listener: TcpListener, policy: AcceptPolicy) -> Self {
         Self {
             entry_point,
             listener,
-            allow,
+            policy,
         }
     }
 
@@ -105,6 +123,8 @@ impl TcpEntryPoint {
         loop {
             let accepted = tokio::select! {
                 _ = stop.wait_for(|stop| *stop) => break,
+                // Reaps ended holds so that their results do not pile up.
+                Some(_) = held.join_next() => continue,
                 accepted = self.listener.accept() => accepted,
             };
             let (stream, addr) = match accepted {
@@ -116,18 +136,36 @@ impl TcpEntryPoint {
                 }
             };
             let peer_ip = PeerIp::from(addr);
-            if !self.allow.permits(peer_ip) {
-                // Logged before the close, so a peer that sees the close
-                // also finds the line.
-                log.record(&Event::ConnectionRejected {
-                    entry_point: self.entry_point,
-                    stage: Stage::Accept,
-                    reason: RejectReason::IpNotAllowed,
-                    peer_ip,
-                });
-                drop(stream);
-                continue;
-            }
+            // The source IP comes first: a refused source neither takes a
+            // place of L nor learns that L is full.
+            let admission = if !self.policy.allow.permits(peer_ip) {
+                Err(RejectReason::IpNotAllowed)
+            } else {
+                self.policy
+                    .relay_budget
+                    .try_acquire()
+                    .ok_or(RejectReason::RelayConnectionLimit {
+                        limit: self.policy.relay_budget.limit(),
+                    })
+            };
+            let permit = match admission {
+                Ok(permit) => permit,
+                Err(reason) => {
+                    // Logged before the close, so a peer that sees the
+                    // close also finds the line.
+                    log.record(&Event::ConnectionRejected {
+                        entry_point: self.entry_point,
+                        stage: Stage::Accept,
+                        reason,
+                        peer_ip,
+                    });
+                    drop(stream);
+                    continue;
+                }
+            };
+            // A socket that cannot take the options is already broken; the
+            // hold sees that as an error and ends it.
+            let _ = set_keepalive(&stream, &self.policy.keepalive);
             let conn = Accepted {
                 conn_id: ConnId::next(),
                 entry_point: self.entry_point,
@@ -139,32 +177,115 @@ impl TcpEntryPoint {
                 entry_point: conn.entry_point,
                 peer_ip,
             });
-            held.spawn(hold(stream, conn, Arc::clone(&log), stop.clone()));
+            held.spawn(hold(
+                stream,
+                conn,
+                permit,
+                self.policy.handshake,
+                Arc::clone(&log),
+                stop.clone(),
+            ));
         }
         drop(self.listener);
         while held.join_next().await.is_some() {}
     }
 }
 
-/// Keeps an accepted connection unread until the server stops, then closes
-/// it. The initial exchange (task 2.7) takes this place once the handshake
-/// contract is adopted; until then no byte is read, so no format is guessed
-/// (user decision 2026-10-20).
+/// Sets TCP keepalive with the idle time, probe interval, and probe count
+/// of K (config-v1 §1.2 `[keepalive]`).
+fn set_keepalive(stream: &TcpStream, keepalive: &KeepaliveSettings) -> io::Result<()> {
+    let params = TcpKeepalive::new()
+        .with_time(keepalive.tcp_idle)
+        .with_interval(keepalive.tcp_interval)
+        .with_retries(keepalive.tcp_probes);
+    SockRef::from(stream).set_tcp_keepalive(&params)
+}
+
+/// Keeps an accepted connection unread until H passes, the peer closes it
+/// first, or the server stops. The initial exchange (task 2.7) takes this
+/// place once the handshake contract is adopted; until then no byte is
+/// read, so no format is guessed (user decision 2026-10-20). The place of
+/// L goes back before the line is logged, so a client that sees the line
+/// can connect again at once.
 async fn hold(
     stream: TcpStream,
     conn: Accepted,
+    permit: BudgetPermit,
+    handshake: Duration,
     log: Arc<dyn EventSink>,
     mut stop: watch::Receiver<bool>,
 ) {
-    // An error means the sender is gone, which also ends the server.
-    let _ = stop.wait_for(|stop| *stop).await;
+    let reason = tokio::select! {
+        // An error means the sender is gone, which also ends the server.
+        _ = stop.wait_for(|stop| *stop) => AbortReason::ServerShutdown,
+        () = tokio::time::sleep_until(conn.at + handshake) => AbortReason::HandshakeTimeout,
+        reason = closed_before_data(&stream) => reason,
+    };
     drop(stream);
+    drop(permit);
     log.record(&Event::ConnectionAborted {
         conn_id: conn.conn_id,
         entry_point: conn.entry_point,
         stage: Stage::InitialExchange,
-        reason: AbortReason::ServerShutdown,
+        reason,
         peer_ip: conn.peer_ip,
         elapsed_ms: u64::try_from(conn.at.elapsed().as_millis()).unwrap_or(u64::MAX),
     });
+}
+
+/// Resolves when the peer closes or breaks the connection before it sends
+/// a byte. `peek` leaves bytes in the socket for the initial exchange. Once
+/// a byte waits, this never resolves: only H or the stop ends the hold.
+async fn closed_before_data(stream: &TcpStream) -> AbortReason {
+    let mut byte = [0; 1];
+    match stream.peek(&mut byte).await {
+        Ok(0) => AbortReason::PeerEof,
+        Ok(_) => std::future::pending().await,
+        Err(_) => AbortReason::ConnectionError(ConnectionErrorKind::IoError),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Reading the options back needs getters that socket2 offers on Linux
+    // but not on Windows.
+    #[cfg(target_os = "linux")]
+    #[tokio::test]
+    async fn sets_keepalive_idle_interval_and_probes_from_the_settings() {
+        let listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .unwrap_or_else(|error| panic!("bind: {error}"));
+        let addr = listener
+            .local_addr()
+            .unwrap_or_else(|error| panic!("local addr: {error}"));
+        let _client = TcpStream::connect(addr)
+            .await
+            .unwrap_or_else(|error| panic!("connect: {error}"));
+        let (server, _) = listener
+            .accept()
+            .await
+            .unwrap_or_else(|error| panic!("accept: {error}"));
+        let settings = KeepaliveSettings {
+            tcp_idle: Duration::from_secs(70),
+            tcp_interval: Duration::from_secs(11),
+            tcp_probes: 7,
+            ws_ping: Duration::from_secs(30),
+            ws_pong_timeout: Duration::from_secs(30),
+        };
+        set_keepalive(&server, &settings).unwrap_or_else(|error| panic!("set: {error}"));
+
+        let socket = SockRef::from(&server);
+        fn got<T>(result: io::Result<T>) -> T {
+            result.unwrap_or_else(|error| panic!("get: {error}"))
+        }
+        assert!(got(socket.keepalive()));
+        assert_eq!(got(socket.tcp_keepalive_time()), Duration::from_secs(70));
+        assert_eq!(
+            got(socket.tcp_keepalive_interval()),
+            Duration::from_secs(11)
+        );
+        assert_eq!(got(socket.tcp_keepalive_retries()), 7);
+    }
 }

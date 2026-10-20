@@ -10,13 +10,14 @@ use std::task::Poll;
 
 use tokio::sync::watch;
 use tokio::task::JoinSet;
-use vnc_relay_adapters::net::TcpEntryPoint;
+use vnc_relay_adapters::net::{AcceptPolicy, TcpEntryPoint};
 use vnc_relay_adapters::ops_log::JsonLinesEventSink;
 use vnc_relay_adapters::{accounts_file, config_file, net};
 use vnc_relay_app::accounts::{self, ACCOUNTS_FILE_KEY, AccountsDiagnostic, AccountsWarning};
 use vnc_relay_app::events::{Event, Phase};
 use vnc_relay_app::ports::EventSink;
 use vnc_relay_app::settings::{LogOutput, Settings};
+use vnc_relay_domain::budget::ConnectionBudget;
 use vnc_relay_domain::entry_point::EntryPoint;
 
 use crate::cli::{self, EXIT_ACCOUNTS, EXIT_CONFIG, EXIT_LISTENER, EXIT_RUNTIME};
@@ -139,21 +140,28 @@ async fn listen_until_shutdown(settings: &Settings, log: Arc<dyn EventSink>) -> 
 
     // TCP entry points accept from here on. Other listeners stay bound
     // without accepting until their tasks (2.6, 3.2, 4.2) attach to them.
+    // Every relay entry point takes places from one L.
+    let relay_budget = ConnectionBudget::new(settings.limits.relay_connections);
     let (stop, stopped) = watch::channel(false);
     let mut entry_points = JoinSet::new();
     let mut idle = Vec::new();
     for bound in listeners {
         match bound.plan.entry_point {
             Some(entry_point @ (EntryPoint::TcpViewer | EntryPoint::TcpServer)) => {
-                // An enabled entry point always has a list; an empty list
-                // rejects every source.
-                let allow = settings
-                    .relay
-                    .get(entry_point)
-                    .allow
-                    .clone()
-                    .unwrap_or_default();
-                let entry = TcpEntryPoint::new(entry_point, bound.listener, allow);
+                let policy = AcceptPolicy {
+                    // An enabled entry point always has a list; an empty
+                    // list rejects every source.
+                    allow: settings
+                        .relay
+                        .get(entry_point)
+                        .allow
+                        .clone()
+                        .unwrap_or_default(),
+                    relay_budget: Arc::clone(&relay_budget),
+                    handshake: settings.timeouts.handshake,
+                    keepalive: settings.keepalive,
+                };
+                let entry = TcpEntryPoint::new(entry_point, bound.listener, policy);
                 entry_points.spawn(entry.run(Arc::clone(&log), stopped.clone()));
             }
             _ => idle.push(bound),

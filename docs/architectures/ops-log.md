@@ -27,7 +27,7 @@
   - `peer_ip` 표기(1.10절): IPv4-mapped IPv6 주소는 IPv4로 바꾼다. IPv6는 RFC 5952 소문자 축약형이다. 포트와 영역 식별자는 쓰지 않는다.
   - 로그에 넣지 않는 값(1.11절)을 타입으로 막는다. 사건 필드에 원시 바이트·비밀 타입을 받지 않는다. 중계 ID는 `RelayIdRef`로만 사건에 들어간다.
 - 맡지 않는 책임:
-  - 대기·매칭·세션·재로드·관리자 사건. 각 기능 작업이 `Event`에 변형을 더한다. 접속 수락·거절·중단 사건은 작업 2.4가 더했다([TCP 진입점 모듈 설계](tcp-entry-point.md)). 그 사건의 나머지 `stage`·`reason` 값도 그 값을 만드는 작업이 더한다.
+  - 대기·매칭·세션·재로드·관리자 사건. 각 기능 작업이 `Event`에 변형을 더한다. 접속 수락·거절·중단 사건은 작업 2.4가 더했다([TCP 진입점 모듈 설계](tcp-entry-point.md)). 작업 2.5가 `relay_connection_limit`(`limit` 필드)과 `handshake_timeout`·`peer_eof`·`connection_error`(`error_kind` 필드)를 더했다([연결 상한과 시간 제한 모듈 설계](connection-limits.md)). 그 사건의 나머지 `stage`·`reason` 값도 그 값을 만드는 작업이 더한다.
   - `shutdown_started`·`shutdown_forced`. 종료 유예를 만드는 작업 5.3이 맡는다.
   - `server_ready`. 준비 상태와 `/readyz`를 만드는 작업 2.6이 맡는다(사용자 결정 2026-10-20). 지금은 준비 상태가 없고 상태 리스너가 연결을 받지 않는다.
   - 프로세스 시작 때 `RelayIdKey`를 만드는 일과 그 실패 처리, `relay_id_ref`를 실제 사건에 넣는 일. 중계 ID를 처음 다루는 작업 2.9가 맡는다(사용자 결정 2026-10-20).

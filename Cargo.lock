@@ -402,6 +402,7 @@ version = "0.1.0"
 dependencies = [
  "aws-lc-rs",
  "serde_json",
+ "socket2",
  "tokio",
  "toml",
  "vnc-relay-app",

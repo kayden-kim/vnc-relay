@@ -20,6 +20,7 @@ const APPROVED: &[&str] = &[
     "rustls-pki-types",
     "serde",
     "serde_json",
+    "socket2",
     "tokio",
     "tokio-rustls",
     "tokio-tungstenite",

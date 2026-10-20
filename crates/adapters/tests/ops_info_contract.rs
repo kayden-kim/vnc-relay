@@ -7,7 +7,7 @@ use std::sync::Arc;
 use serde_json::{Map, Value};
 use vnc_relay_adapters::crypto::RelayIdKey;
 use vnc_relay_adapters::ops_log::JsonLinesEventSink;
-use vnc_relay_app::events::{AbortReason, Event, Phase, RejectReason, Stage};
+use vnc_relay_app::events::{AbortReason, ConnectionErrorKind, Event, Phase, RejectReason, Stage};
 use vnc_relay_app::ports::EventSink;
 use vnc_relay_app::settings::{ConfigWarning, LogOutput};
 use vnc_relay_domain::allow_list::IpItem;
@@ -257,6 +257,64 @@ fn writes_connection_events_with_their_contract_fields() {
     assert_eq!(text(&lines[2], "stage"), "initial_exchange");
     assert_eq!(text(&lines[2], "reason"), "server_shutdown");
     assert_eq!(lines[2].get("elapsed_ms"), Some(&Value::from(1234)));
+}
+
+#[test]
+fn writes_limit_and_error_kind_with_the_reasons_that_carry_them() {
+    let dir = temp_dir("connection-reasons");
+    let path = dir.join("relay.log");
+    let log = file_sink(&path);
+    let peer = PeerIp::new([192, 0, 2, 7].into());
+    let conn_id = ConnId::next();
+    log.record(&Event::ConnectionRejected {
+        entry_point: EntryPoint::TcpServer,
+        stage: Stage::Accept,
+        reason: RejectReason::RelayConnectionLimit { limit: 2 },
+        peer_ip: peer,
+    });
+    for reason in [
+        AbortReason::HandshakeTimeout,
+        AbortReason::PeerEof,
+        AbortReason::ConnectionError(ConnectionErrorKind::IoError),
+    ] {
+        log.record(&Event::ConnectionAborted {
+            conn_id,
+            entry_point: EntryPoint::TcpViewer,
+            stage: Stage::InitialExchange,
+            reason,
+            peer_ip: peer,
+            elapsed_ms: 10_000,
+        });
+    }
+    let lines = objects(&read(&path));
+
+    assert_eq!(text(&lines[0], "reason"), "relay_connection_limit");
+    assert_eq!(text(&lines[0], "level"), "warn");
+    assert_eq!(lines[0].get("limit"), Some(&Value::from(2)));
+    assert_eq!(
+        keys(&lines[0]),
+        [
+            "event", "level", "limit", "listener", "peer_ip", "reason", "stage", "ts"
+        ]
+    );
+
+    let aborted = [
+        ("handshake_timeout", "warn", None),
+        ("peer_eof", "info", None),
+        ("connection_error", "warn", Some("io_error")),
+    ];
+    for (line, (reason, level, error_kind)) in lines[1..].iter().zip(aborted) {
+        assert_eq!(text(line, "event"), "connection_aborted");
+        assert_eq!(text(line, "reason"), reason);
+        assert_eq!(text(line, "level"), level);
+        assert_eq!(
+            line.get("error_kind").and_then(Value::as_str),
+            error_kind,
+            "{reason}"
+        );
+        assert!(line.get("limit").is_none(), "{reason}");
+    }
+    assert_eq!(lines.len(), 4);
 }
 
 #[test]
