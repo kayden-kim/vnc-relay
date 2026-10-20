@@ -71,7 +71,9 @@ impl Terminal {
             .spawn(move || {
                 let _ = tx.send(read());
             })
-            .map_err(|_| InputError::Canceled)?;
+            .map_err(|error| {
+                InputError::Unavailable(format!("입력 읽기 스레드를 시작하지 못했다({error})."))
+            })?;
         loop {
             if self.canceled() {
                 // The read is abandoned. A read that is still pending gets
@@ -83,8 +85,12 @@ impl Terminal {
                 Ok(_) if self.canceled() => return Err(InputError::Canceled),
                 Ok(result) => return Ok(result),
                 Err(RecvTimeoutError::Timeout) => {}
-                // The reader ended without a result, which only a panic does.
-                Err(RecvTimeoutError::Disconnected) => return Err(InputError::Canceled),
+                // The reader ended without a result. Only a panic does that.
+                Err(RecvTimeoutError::Disconnected) => {
+                    return Err(InputError::Unavailable(
+                        "입력 읽기 스레드가 결과 없이 끝났다.".to_owned(),
+                    ));
+                }
             }
         }
     }

@@ -266,6 +266,9 @@ impl AdminService<'_> {
                 }
                 Ok(None) | Err(InputError::Canceled | InputError::InvalidText) => false,
                 Err(InputError::NotInteractive) => return Err(AdminFailure::NotInteractive),
+                Err(InputError::Unavailable(message)) => {
+                    return Err(AdminFailure::RuntimeUnavailable(message));
+                }
             };
             if !approved {
                 return Err(AdminFailure::InputCanceled);
@@ -313,6 +316,7 @@ impl AdminService<'_> {
         self.input.hidden(prompt).map_err(|error| match error {
             InputError::NotInteractive => AdminFailure::NotInteractive,
             InputError::Canceled => AdminFailure::InputCanceled,
+            InputError::Unavailable(message) => AdminFailure::RuntimeUnavailable(message),
             InputError::InvalidText => {
                 AdminFailure::PasswordInvalid("입력한 비밀번호가 UTF-8 텍스트가 아니다".to_owned())
             }
@@ -432,7 +436,7 @@ mod tests {
                 answers: RefCell::new(
                     answers
                         .iter()
-                        .map(|a| a.map(|text| text.map(str::to_owned)))
+                        .map(|a| a.clone().map(|text| text.map(str::to_owned)))
                         .collect(),
                 ),
                 ..Self::default()
@@ -574,7 +578,7 @@ mod tests {
     /// spec: operations.md:OPS-030 partial
     #[test]
     fn stops_before_saving_on_invalid_mismatched_or_canceled_input() {
-        let cases: [(&[Answer], AdminFailure, usize); 6] = [
+        let cases: [(&[Answer], AdminFailure, usize); 7] = [
             (
                 &[Ok(Some("short"))],
                 AdminFailure::PasswordInvalid("비밀번호가 12자보다 짧다".to_owned()),
@@ -599,6 +603,13 @@ mod tests {
             (
                 &[Err(InputError::InvalidText)],
                 AdminFailure::PasswordInvalid("입력한 비밀번호가 UTF-8 텍스트가 아니다".to_owned()),
+                1,
+            ),
+            (
+                &[Err(InputError::Unavailable(
+                    "입력 읽기 스레드를 시작하지 못했다".to_owned(),
+                ))],
+                AdminFailure::RuntimeUnavailable("입력 읽기 스레드를 시작하지 못했다".to_owned()),
                 1,
             ),
         ];
@@ -673,7 +684,7 @@ mod tests {
             Err(InputError::Canceled),
         ] {
             let store = FakeStore::with(vec![account("alice", HASH_A)]);
-            let input = FakeInput::answering(&[answer]);
+            let input = FakeInput::answering(std::slice::from_ref(&answer));
             assert_eq!(
                 service(&store, &input).remove(&name("alice"), false, &mut |_| {}),
                 Err(AdminFailure::InputCanceled),

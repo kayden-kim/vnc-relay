@@ -223,11 +223,16 @@ fn read_hash(
         }
     };
     let params = hash.params();
-    let Err(error) = params.check_range() else {
-        return Some(hash);
+    let error = match (params.check_range(), floor) {
+        (Ok(()), _) => return Some(hash),
+        // The admin accepts a hash below the minimum so that `admin passwd`
+        // can replace it. A parameter above the maximum is refused even when
+        // another parameter is also below its minimum.
+        (Err(_), HashFloor::Accept) if !params.exceeds_maximum() => return Some(hash),
+        (Err(_), HashFloor::Accept) => Argon2ParamsError::AboveMaximum,
+        (Err(error), HashFloor::Reject) => error,
     };
     let (code, hint) = match error {
-        Argon2ParamsError::BelowMinimum if floor == HashFloor::Accept => return Some(hash),
         Argon2ParamsError::BelowMinimum => (
             AccountsError::HashBelowMinimum,
             " `vnc-relay admin passwd`로 해시를 다시 만든다.",

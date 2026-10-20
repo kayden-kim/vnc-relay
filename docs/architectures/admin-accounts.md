@@ -19,7 +19,7 @@
   - 명령 해석: `admin add <account>`, `admin passwd <account>`, `admin remove <account> [--yes]`, `admin list`. 모두 `--config <path>`가 필요하다. 사용법 오류는 `usage_error`(종료 코드 2)이고 사용법을 함께 쓴다.
   - 이름 검사: 설정을 읽기 전에 계정 이름 규칙(1.2절)을 검사한다. 어기면 `account_name_invalid`(종료 코드 2)다. 사용법은 쓰지 않는다.
   - 설정 읽기: 설정 파일의 TOML 구문 전체와 `[admin]` 테이블만 검사한다. 다른 테이블은 보지 않는다. 오류는 `config_*`(종료 코드 3)다.
-  - 계정 파일 읽기: `serve`와 같은 1.3·1.4절 검사를 한다. 다만 해시 매개변수가 하한 미만이어도 받는다. 경고는 내지 않는다(사용자 결정 2026-10-20). 하한 미만 해시를 `admin passwd`로 바꿀 수 있어야 하기 때문이다. Ubuntu에서 그룹·기타 권한이 있으면 `accounts_file_permissive`를 경고한다.
+  - 계정 파일 읽기: `serve`와 같은 1.3·1.4절 검사를 한다. 다만 해시 매개변수가 하한 미만이어도 받는다. 상한을 넘는 매개변수가 하나라도 있으면 하한 미만이 함께 있어도 `accounts_file_invalid`로 거절한다(`serve`는 같은 해시를 하한 미만으로 보고한다). 경고는 내지 않는다(사용자 결정 2026-10-20). 하한 미만 해시를 `admin passwd`로 바꿀 수 있어야 하기 때문이다. Ubuntu에서 그룹·기타 권한이 있으면 `accounts_file_permissive`를 경고한다.
   - 비밀번호 입력: 첫 입력 → 규칙 검사 → 확인 입력 → 비교. 표준 입력이 터미널이 아니면 `not_interactive`다. Ctrl+C와 빈 입력의 Ctrl+D(EOF)는 `input_canceled`다. Unix에서는 터미널 표시 설정을 되돌린다. Windows의 제약은 9절을 본다.
   - 해시: 설정의 `admin.argon2` 값과 운영체제 난수원의 16바이트 솔트로 Argon2id PHC 문자열을 만든다.
   - 저장: 1.6절 1~7단계. 잠금 파일, 다시 읽기, 임시 파일(Ubuntu `0600`), 디스크 반영과 검증, 교체, 디렉터리 반영(Ubuntu), 잠금 해제.
@@ -63,7 +63,7 @@ flowchart LR
 | `crates/app/src/ports.rs` `AccountStore` | `read`(파일이 없으면 `None`)와 `update`(잠금 안에서 다시 읽고 바꾸고 교체) | 포트 | `accounts` |
 | `crates/app/src/ports.rs` `AccountInput` | `hidden`(숨김 한 줄), `line`(보이는 한 줄, 끝이면 `None`), `canceled`(입력을 연 뒤 Ctrl+C가 왔는지) | 포트 | 없음 |
 | `crates/app/src/ports.rs` `PasswordHasher` | 비밀번호와 매개변수로 `PasswordHash`를 만든다. | 포트 | domain |
-| `crates/adapters/src/accounts_file.rs` `load`, `parse`, `HashFloor` | 읽기와 검사. `HashFloor::Reject`(`serve`)는 하한 미만을 `accounts_hash_below_minimum`으로, `HashFloor::Accept`(`admin`)는 받는다. | 호출마다 | toml, app, domain |
+| `crates/adapters/src/accounts_file.rs` `load`, `parse`, `HashFloor` | 읽기와 검사. `HashFloor::Reject`(`serve`)는 하한 미만을 `accounts_hash_below_minimum`으로 거절한다. `HashFloor::Accept`(`admin`)는 하한 미만을 받되, 상한 초과는 하한 미만과 함께 있어도 `accounts_file_invalid`로 거절한다. | 호출마다 | toml, app, domain |
 | `crates/adapters/src/accounts_file/store.rs` `AccountsFile` | `AccountStore` 구현. 1.6절 단계와 계정 파일 TOML 쓰기(이름순) | `src/admin.rs`가 하나 | std, app, domain |
 | `crates/adapters/src/accounts_file/hasher.rs` `Argon2Hasher` | `PasswordHasher` 구현. argon2 crate의 Argon2id·버전 19·출력 32바이트 | `src/admin.rs`가 하나 | argon2, `crypto`, app, domain |
 | `crates/adapters/src/crypto.rs` `random_bytes` | 운영체제 난수로 바이트 배열을 채운다. `RelayIdKey::generate`도 쓴다. | 호출마다 | aws-lc-rs |
@@ -110,7 +110,7 @@ flowchart LR
 - 초기화 시점: `Terminal::open`이 감지 스레드 하나를 띄운다. 그 스레드는 tokio 현재 스레드 런타임으로 Ctrl+C를 기다리고, 받으면 공유 플래그를 켠다. 프로세스가 끝날 때까지 남는다.
 - 감지기를 먼저 등록하는 이유: rpassword는 숨김 입력 중 터미널의 신호 생성(`ISIG`)을 끄고, Ctrl+C를 읽으면 스스로 `SIGINT`를 보낸다(Unix). 처리기가 없으면 프로세스가 터미널 설정을 되돌리기 전에 끝난다. 처리기가 있으면 rpassword가 `Interrupted`를 돌려주고 터미널 설정을 되돌린다. Windows에서는 되돌리기가 읽기가 끝난 뒤에야 실행되므로, 취소된 숨김 입력은 콘솔 입력 모드 일부를 되돌리지 못한다(9절).
 - Ctrl+C 무시 상속: `CreateProcess`에 `CREATE_NEW_PROCESS_GROUP`을 주면 새 프로세스에 Ctrl+C 무시 설정(`SetConsoleCtrlHandler(NULL, TRUE)`와 같은 설정)이 생기고, 이 설정은 자식 프로세스에 상속된다. 무시 설정이 있는 프로세스에는 Ctrl+C가 전달되지 않으므로 그 상태의 숨김 입력은 Ctrl+C로 끝나지 않는다. 근거: [CreateProcess](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-createprocessa), [SetConsoleCtrlHandler](https://learn.microsoft.com/en-us/windows/console/setconsolectrlhandler).
-- 확인 입력(`line`)과 숨김 입력(`hidden`)은 읽기 스레드를 띄우고 50밀리초마다 플래그를 본다. 읽기 스레드는 Windows 콘솔 읽기를 Ctrl+C로 끝낼 수 없어서 따로 띄운다. 플래그가 켜지면 500밀리초까지 읽기가 끝나기를 기다린 뒤 `input_canceled`로 끝낸다. 남은 읽기는 프로세스가 끝날 때 함께 끝난다. 취소된 프롬프트는 줄을 바꾼 뒤 오류 줄을 쓴다.
+- 확인 입력(`line`)과 숨김 입력(`hidden`)은 읽기 스레드를 띄우고 50밀리초마다 플래그를 본다. 읽기 스레드는 Windows 콘솔 읽기를 Ctrl+C로 끝낼 수 없어서 따로 띄운다. 플래그가 켜지면 500밀리초까지 읽기가 끝나기를 기다린 뒤 `input_canceled`로 끝낸다. 남은 읽기는 프로세스가 끝날 때 함께 끝난다. 취소된 프롬프트는 줄을 바꾼 뒤 오류 줄을 쓴다. 읽기 스레드를 띄우지 못하거나 읽기가 결과 없이 끝나면 `runtime_unavailable`로 끝낸다(취소가 아니다).
 - 상태 소유자와 제거 시점: 잠금 파일은 `update`가 만들고 같은 호출에서 지운다. 실패해도 지운다. 지우지 못하면 경고한다.
 - 동시 실행과 순서: 두 `admin` 명령이 같은 파일을 고치면 늦게 잠금 파일을 만들려는 쪽이 `accounts_file_locked`로 끝난다. 실행 중인 `serve`는 파일을 다시 읽지 않는다(1.7절).
 
@@ -120,12 +120,12 @@ flowchart LR
 | --- | --- | --- | --- |
 | 이름 규칙 위반 | `account_name_invalid`, 종료 코드 2 | 없음 | OPS-030 |
 | 설정 오류 | `config_*`, 종료 코드 3 | 없음 | OPS-030 |
-| 감지기·감지 스레드 준비 실패, 난수·해시 계산 실패 | `runtime_unavailable`, 종료 코드 1 | 계정 파일 그대로 | 없음 |
+| 감지기·감지 스레드 준비 실패, 입력 읽기 스레드를 만들지 못함 또는 결과 없이 끝남, 난수·해시 계산 실패 | `runtime_unavailable`, 종료 코드 1 | 계정 파일 그대로 | 없음 |
 | 계정 파일 읽기·형식 오류 | 진단마다 한 줄, 종료 코드 5 | 그대로 | OPS-030 |
 | 터미널이 아님 | `not_interactive`, 종료 코드 2. 사용법은 쓰지 않는다. | 그대로 | OPS-029 |
 | 같은 이름, 없는 이름 | `account_exists`·`account_not_found`, 종료 코드 1 | 그대로 | OPS-029 |
 | 비밀번호 규칙 위반, 확인 불일치 | `password_invalid`·`password_mismatch`, 종료 코드 1. UTF-8이 아닌 입력은 `password_invalid`다. | 그대로 | OPS-030 |
-| Ctrl+C, 빈 입력의 EOF, 삭제 거절, 확인 입력 읽기 스레드를 만들지 못함 | `input_canceled`, 종료 코드 1 | 그대로 | OPS-030 |
+| Ctrl+C, 빈 입력의 EOF, 삭제 거절 | `input_canceled`, 종료 코드 1 | 그대로 | OPS-030 |
 | 잠금 파일이 있음 | `accounts_file_locked`, 종료 코드 5. 메시지에 잠금 파일 경로와 지우는 조건을 쓴다. | 그대로 | OPS-030 |
 | 잠금 파일 만들기 실패(디렉터리 없음·권한), 임시 파일 쓰기·반영·검증 실패, 교체 실패 | 임시 파일을 지우고 `accounts_file_write_failed`, 종료 코드 5. 기존 계정 파일은 그대로다. | 그대로 | OPS-030 |
 | 임시 파일 이름이 이미 있음 | `accounts_file_write_failed`, 종료 코드 5. 이미 있던 파일은 지우지 않는다. | 이미 있던 임시 파일이 남는다 | OPS-030 |
@@ -137,7 +137,7 @@ flowchart LR
 
 | 선택 | 이유 | 검토한 다른 방법 | 근거 |
 | --- | --- | --- | --- |
-| `admin`은 하한 미만 해시를 경고 없이 받는다. | 하한을 올린 뒤 기존 해시를 `admin passwd`로 바꿔야 한다(3절). 거절하면 고칠 방법이 파일 직접 편집뿐이다. | 경고하고 받기, 거절하기 | 사용자 결정 2026-10-20 |
+| `admin`은 하한 미만 해시를 경고 없이 받고, 상한 초과 해시는 거절한다. | 하한을 올린 뒤 기존 해시를 `admin passwd`로 바꿔야 한다(3절). 거절하면 고칠 방법이 파일 직접 편집뿐이다. | 경고하고 받기, 거절하기 | 사용자 결정 2026-10-20 |
 | 교체 뒤 정리 실패는 경고 코드 하나 `accounts_file_cleanup_failed`로 알린다. | 계정 파일은 이미 바뀌었다. 운영자가 할 일(잠금 파일 확인)은 같다. | 단계별 코드 두 개, 경고 없이 무시 | 사용자 결정 2026-10-20, [CLI 계약 2.2절](../contracts/cli-v1.md#22-오류-코드) 1.3.0 |
 | Ctrl+C는 tokio 신호 감지기로 받는다. 감지기는 한 번 등록하면 프로세스 끝까지 남는다. | Unix에서 rpassword의 숨김 입력이 터미널 설정을 되돌리려면 `SIGINT` 처리기가 있어야 한다. tokio는 이미 쓰는 crate이고 두 OS의 Ctrl+C를 같은 방식으로 받는다. `unsafe`는 금지다. | 직접 `sigaction`(unsafe), ctrlc crate(PRD 목록 밖) | [PRD "구현 기술" 행](../requirements/PRD.md#확정-기준), [Rust 코드 컨벤션](../conventions/rust.md) |
 | 저장 단계는 `AccountStore::update` 한 호출에 묶고, 바꾸는 내용은 함수로 넘긴다. | 1.6절 2단계가 잠금 안에서 다시 읽기를 요구한다. 다시 읽은 목록에 같은 검사를 다시 해야 한다. | app이 잠금·읽기·쓰기를 따로 부르기. 잠금 수명이 app에 드러난다. | [CLI 계약 1.6절](../contracts/cli-v1.md#16-저장과-파일-권한) |
@@ -155,9 +155,12 @@ flowchart LR
 | --- | --- | --- | --- |
 | 작업 4.1 변경(기준 커밋 `ed68104` + 작업 트리): 1~7절 파일·심볼·흐름, 계정 파일 저장, 숨김 입력과 Ctrl+C 감지기 | Ubuntu 24.04.4 LTS(WSL2), Rust 1.99.1 | `vr-full.sh`를 실행했다: `cargo build`, `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo xtask layers`, `cargo xtask scenarios`, `cargo deny check licenses`. 1~7절의 파일·심볼·흐름은 소스와 대조했다. 테스트 수(바이너리별): vnc-relay 6, admin 21, cli 2, serve 18, vnc_relay_adapters 7, accounts_contract 11, config_contract 21, ops_info_contract 14, vnc_relay_app 9, vnc_relay_domain 27, xtask 12. 시나리오: 통과 4, 부분 14, 실패 0, 미실행 0, 미연결 130, 오류 0. | 통과 |
 | 작업 4.1 변경(기준 커밋 `ed68104` + 작업 트리) | Windows 11 Pro 10.0.26200, Rust 1.99.1(`x86_64-pc-windows-msvc`) | `vr-win.ps1 -Only all`: versions·build·version·fmt·clippy·layers·scenarios·deny 모두 종료 코드 0. 취소 시험은 `CREATE_NEW_CONSOLE`(`CREATE_NEW_PROCESS_GROUP` 없음)로 띄운 콘솔에 `WriteConsoleInputW`로 키를 넣었다. `add`의 `비밀번호:`·`비밀번호 확인:`, `passwd`의 `새 비밀번호:`, `remove`의 `[y/N]` 프롬프트마다 Ctrl+C 5회, 총 20회: 모두 종료 코드 1, `input_canceled`, 계정 파일 그대로, 534–592밀리초, 멈춤 없음. 숨김 입력 취소 뒤 콘솔 입력 모드: cmd `0x1E7`→`0x007`, PowerShell `0x1E4`→`0x000`. 테스트 수(바이너리별): vnc-relay 6, admin 14, cli 2, serve 12, vnc_relay_adapters 6, accounts_contract 10, config_contract 21, ops_info_contract 13, vnc_relay_app 9, vnc_relay_domain 27, xtask 12. 시나리오: 통과 3, 부분 14, 실패 0, 미실행 1(OPS-007, Unix 신호 전용), 미연결 130, 오류 0. 콘솔 관찰(같은 임시 하네스): 코드 페이지 949에서 한글 메시지가 깨지지 않았다. UTF-8 바이트로 만든 한글 비밀번호 해시가 argon2-cffi 검증과 맞았다. cp949·UTF-16LE 바이트로 만든 해시는 맞지 않았다(음성 대조). Ctrl+Z 뒤 Enter는 `password_invalid`로 끝났다. 이 관찰은 숨김 읽기가 도우미 스레드로 옮겨지기 전에 했다. 읽기 함수(`rpassword::read_password`)는 같다. | 통과(설계와 코드가 같다). 숨김 입력 취소 뒤 콘솔 입력 모드는 9절의 미결정 사항이다. |
+| 작업 수정(기준 커밋 `1aed781` + 작업 트리): 상한 초과 해시 거절, 입력 실패 분류(`InputError::Unavailable` → `runtime_unavailable`), 계약 테스트, 1~7절 파일·심볼·흐름 | Ubuntu 24.04.4 LTS(WSL2), Rust 1.99.1 | `vr-full.sh`: `cargo build`, `vnc-relay --version`, `cargo fmt --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo xtask layers`, `cargo xtask scenarios`(내부에서 `cargo test --workspace --no-fail-fast`), `cargo deny check licenses`. `tests/admin.rs`를 20번 반복(매번 21건 통과). 수정한 문서 행의 심볼(`HashFloor`, `Argon2Params::exceeds_maximum`, `InputError::Unavailable`, `AdminFailure::RuntimeUnavailable`)은 소스에서 찾았다. 시나리오: 통과 4, 부분 14, 실패 0, 미실행 0, 미연결 130, 오류 0 | 통과 |
+| 같은 작업 트리(기준 커밋 `1aed781` + 작업 트리) | Windows 11 Pro 10.0.26200, Rust 1.99.1(`x86_64-pc-windows-msvc`) | `vr-win.ps1 -Only all`: versions·build·version·fmt·clippy·layers·scenarios·deny 모두 종료 코드 0. 콘솔 하네스: `CREATE_NEW_CONSOLE`로 띄운 `cmd.exe`에서 `vnc-relay admin` 실행, `WriteConsoleInputW`로 키 입력. `add`에서 Ctrl+Z 뒤 Enter 2회: `password_invalid`. `add`에서 Ctrl+D 뒤 Enter 2회: `input_canceled`(원인은 확인하지 않음). `remove`의 `[y/N]`에서 Ctrl+Z 뒤 Enter 3회: `input_canceled`. `add`에서 Ctrl+C 3회: `input_canceled`. 실패 10회 모두 계정 파일 그대로. 시나리오: 통과 3, 부분 14, 실패 0, 미실행 1(OPS-007, 이번 실행에 없음), 미연결 130 | 통과. Ctrl+Z 뒤 Enter는 §9 열린 항목으로 남았다. Ctrl+C 뒤 콘솔 입력 모드는 이번에 측정하지 않았다 |
 
 ## 9. 미결정 사항
 
 | 항목 | 영향 | 확정 위치 |
 | --- | --- | --- |
 | Windows 숨김 입력 취소 뒤 콘솔 입력 모드 | 관찰: 숨김 입력(rpassword)을 Ctrl+C로 취소하면 콘솔 입력 모드가 바뀐 채 남는다. cmd `0x1E7`→`0x007`(QUICK_EDIT·INSERT·EXTENDED_FLAGS·AUTO_POSITION 꺼짐), PowerShell `0x1E4`→`0x000`(ECHO_INPUT 포함 꺼짐). rpassword 7.5.4는 복원을 `RawModeInput`의 `drop`에서 하는데, 읽기가 막혀 있는 동안 `drop`이 실행되지 않는다(코드 읽기로 확인). `[y/N]`(rpassword 없음)의 취소와 프롬프트 없는 명령에서는 모드가 바뀌지 않았다. [CLI 계약 1.5절](../contracts/cli-v1.md#15-입력과-출력-규칙)의 취소 때도 표시 설정을 되돌린다는 규칙과 어긋난다. 사용자가 정한다. 선택지는 다음과 같다. (1) 지금 동작을 받아들이고 계약 1.5절에 Windows 예외를 적는다. (2) 콘솔 입력 모드를 저장·복원하는 작은 Win32 호출을 넣는다. `unsafe` 예외와 `windows-sys` 직접 의존성이 필요하다. `windows-sys`는 이미 간접 의존성이다. (3) Windows에서 Ctrl+C 뒤 Enter를 기다려 rpassword가 모드를 되돌리게 한다. | [CLI 계약 6절](../contracts/cli-v1.md#6-초안을-확정하기-전에-해결할-사항) |
+| Windows 숨김 입력에서 Ctrl+Z 뒤 Enter(입력 끝) | 관찰: rpassword 7.5.4는 Ctrl+Z(`\x1a`)를 제어 문자로 버린다(`lib.rs` 코드 읽기로 확인). 그래서 Ctrl+Z 뒤 Enter가 빈 입력이 되어 `password_invalid`(종료 코드 1)로 끝난다. 계정 파일은 바뀌지 않는다. 같은 결과를 콘솔 하네스 2회에서 재현했다. `[y/N]`에서 Ctrl+Z 뒤 Enter는 `input_canceled`다. [CLI 계약 1.5절](../contracts/cli-v1.md#15-입력과-출력-규칙)은 비밀번호 입력의 입력 끝(EOF)을 취소로 정한다. Windows의 입력 끝 키(Ctrl+Z)가 숨김 입력에서 취소로 이어지지 않아 계약과 어긋난다. 사용자가 정한다. 선택지는 다음과 같다. (1) 지금 동작을 받아들이고 1.5절에 Windows 숨김 입력의 끝 키를 적는다. (2) Windows 콘솔 입력을 직접 읽어 Ctrl+Z를 취소로 받는다. Win32 호출이라 위 콘솔 입력 모드 선택지 (2)와 같은 종류의 `unsafe` 예외가 필요하다. 두 선택지 모두 채택하지 않았다. | [CLI 계약 6절](../contracts/cli-v1.md#6-초안을-확정하기-전에-해결할-사항) |

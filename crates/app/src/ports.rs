@@ -46,7 +46,7 @@ pub trait AccountInput {
 }
 
 /// Why operator input gave no text.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum InputError {
     /// Standard input is not a terminal.
     NotInteractive,
@@ -54,6 +54,8 @@ pub enum InputError {
     Canceled,
     /// The typed bytes are not UTF-8.
     InvalidText,
+    /// Input cannot be read at all. The message says why (`runtime_unavailable`).
+    Unavailable(String),
 }
 
 /// Makes password hashes (cli-v1 §1.4).

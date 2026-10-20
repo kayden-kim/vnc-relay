@@ -408,3 +408,24 @@ fn admin_reads_hashes_below_the_minimum() {
         Err("accounts_hash_below_minimum")
     );
 }
+
+#[test]
+fn admin_refuses_an_above_maximum_parameter_even_with_a_below_minimum_one() {
+    let key = "account[0].password_hash";
+    // `serve` reports the minimum first. `admin` still refuses the maximum,
+    // so `admin passwd` never keeps a hash that is outside the range.
+    let text = format!(
+        "version = 1\n{}",
+        account("alice", &phc("m=19455,t=11,p=1"))
+    );
+    assert_eq!(
+        problems(&text),
+        [problem("accounts_hash_below_minimum", key)]
+    );
+    assert_eq!(
+        parse(&text, HashFloor::Accept)
+            .map(|a| a.len())
+            .map_err(|d| (d[0].error.code(), d[0].key.clone())),
+        Err(("accounts_file_invalid", key.to_owned()))
+    );
+}

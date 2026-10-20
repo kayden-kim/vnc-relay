@@ -135,15 +135,25 @@ impl Argon2Params {
     pub const ITERATIONS: RangeInclusive<u32> = 2..=10;
     pub const PARALLELISM: RangeInclusive<u32> = 1..=16;
 
+    /// Some parameter is below its approved minimum.
+    pub fn below_minimum(&self) -> bool {
+        self.memory_kib < *Self::MEMORY_KIB.start()
+            || self.iterations < *Self::ITERATIONS.start()
+            || self.parallelism < *Self::PARALLELISM.start()
+    }
+
+    /// Some parameter is above its approved maximum.
+    pub fn exceeds_maximum(&self) -> bool {
+        self.memory_kib > *Self::MEMORY_KIB.end()
+            || self.iterations > *Self::ITERATIONS.end()
+            || self.parallelism > *Self::PARALLELISM.end()
+    }
+
+    /// The minimum is reported first when both kinds of parameter are outside.
     pub fn check_range(&self) -> Result<(), Argon2ParamsError> {
-        let pairs = [
-            (self.memory_kib, Self::MEMORY_KIB),
-            (self.iterations, Self::ITERATIONS),
-            (self.parallelism, Self::PARALLELISM),
-        ];
-        if pairs.iter().any(|(value, range)| value < range.start()) {
+        if self.below_minimum() {
             Err(Argon2ParamsError::BelowMinimum)
-        } else if pairs.iter().any(|(value, range)| value > range.end()) {
+        } else if self.exceeds_maximum() {
             Err(Argon2ParamsError::AboveMaximum)
         } else {
             Ok(())
@@ -418,6 +428,11 @@ mod tests {
             params(19_455, 11, 1).check_range(),
             Err(Argon2ParamsError::BelowMinimum)
         );
+        // Each helper reports its own side, whatever the other parameters are.
+        assert!(params(19_455, 11, 1).below_minimum());
+        assert!(params(19_455, 11, 1).exceeds_maximum());
+        assert!(!params(19_456, 2, 1).below_minimum());
+        assert!(!params(19_456, 2, 1).exceeds_maximum());
     }
 
     /// spec: operations.md:OPS-030 partial
