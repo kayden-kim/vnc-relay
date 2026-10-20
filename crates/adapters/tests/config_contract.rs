@@ -276,7 +276,7 @@ output = "stdout"
     assert_eq!(settings.log.output, LogOutput::Stdout);
 }
 
-/// spec: operations.md:OPS-001
+/// spec: operations.md:OPS-001 partial
 #[test]
 fn reports_every_problem_in_one_pass() {
     let found = problems(
@@ -321,7 +321,7 @@ key = 1
     );
 }
 
-/// spec: operations.md:OPS-001
+/// spec: operations.md:OPS-001 partial
 #[test]
 fn rejects_syntax_errors_and_duplicate_keys_with_one_diagnostic() {
     for text in [
@@ -338,7 +338,7 @@ fn rejects_syntax_errors_and_duplicate_keys_with_one_diagnostic() {
     }
 }
 
-/// spec: operations.md:OPS-001
+/// spec: operations.md:OPS-001 partial
 #[test]
 fn rejects_missing_unreadable_and_non_utf8_files() {
     let dir = temp_dir("unreadable");
@@ -384,7 +384,7 @@ fn load_resolves_relative_paths_against_the_config_directory() {
     std::fs::remove_dir_all(&dir).expect("remove test dir");
 }
 
-/// spec: operations.md:OPS-001
+/// spec: operations.md:OPS-001 partial
 #[test]
 fn checks_every_numeric_key_at_its_bounds() {
     type Getter = fn(&Settings) -> u64;
@@ -545,7 +545,7 @@ fn checks_every_numeric_key_at_its_bounds() {
     }
 }
 
-/// spec: operations.md:OPS-001
+/// spec: operations.md:OPS-001 partial
 #[test]
 fn checks_relations_between_values() {
     let at_limit = with_required(
@@ -571,7 +571,7 @@ fn checks_relations_between_values() {
     );
 }
 
-/// spec: operations.md:OPS-001
+/// spec: operations.md:OPS-001 partial
 #[test]
 fn applies_default_ports_only_to_tcp_entry_points() {
     let settings = parse_ok(&with_required(
@@ -632,7 +632,7 @@ listen = "localhost:18081"
     );
 }
 
-/// spec: operations.md:OPS-001
+/// spec: operations.md:OPS-001 partial
 #[test]
 fn rejects_listen_conflicts_after_default_ports() {
     // The disabled tcp_server shares the management address and is not checked.
@@ -667,7 +667,7 @@ listen = "127.0.0.1:5901"
     );
 }
 
-/// spec: operations.md:OPS-038
+/// spec: operations.md:OPS-038 partial
 #[test]
 fn requires_allow_list_only_for_enabled_entry_points() {
     let found = problems(&with_required(
@@ -700,7 +700,7 @@ fn requires_allow_list_only_for_enabled_entry_points() {
     );
 }
 
-/// spec: operations.md:OPS-038
+/// spec: operations.md:OPS-038 partial
 #[test]
 fn accepts_an_empty_allow_list() {
     let settings = parse_ok(&with_required(
@@ -710,7 +710,7 @@ fn accepts_an_empty_allow_list() {
     assert_eq!(settings.warnings(), []);
 }
 
-/// spec: operations.md:OPS-038
+/// spec: operations.md:OPS-038 partial
 #[test]
 fn accepts_items_covering_a_whole_family_with_warnings() {
     let settings = parse_ok(&with_required(
@@ -754,7 +754,7 @@ allow_targets = ["0.0.0.0/0:5900", "pc1.example:5900"]
     );
 }
 
-/// spec: operations.md:OPS-040
+/// spec: operations.md:OPS-040 partial
 #[test]
 fn accepts_single_cidr_and_range_items_of_both_families() {
     let items = [
@@ -772,7 +772,7 @@ fn accepts_single_cidr_and_range_items_of_both_families() {
     assert_eq!(settings.relay.tcp_viewer.allow, Some(allow(&items)));
 }
 
-/// spec: operations.md:OPS-040
+/// spec: operations.md:OPS-040 partial
 #[test]
 fn rejects_bad_ip_items_with_their_own_codes() {
     let found = problems(&with_required(

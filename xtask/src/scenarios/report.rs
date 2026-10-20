@@ -19,11 +19,14 @@ pub struct TestEntry {
     /// `None` when the test did not appear in the `cargo test` output, for
     /// example when `#[cfg]` removed it on this OS.
     pub outcome: Option<Outcome>,
+    /// The marker says the test checks only part of the scenario.
+    pub partial: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Status {
     Passed,
+    Partial,
     Failed,
     NotRun,
     Unlinked,
@@ -31,13 +34,22 @@ pub enum Status {
 
 impl Status {
     pub fn of(tests: &[TestEntry]) -> Self {
-        let has = |outcome| tests.iter().any(|test| test.outcome == Some(outcome));
+        let passed = |partial| {
+            tests
+                .iter()
+                .any(|test| test.outcome == Some(Outcome::Passed) && test.partial == partial)
+        };
         if tests.is_empty() {
             Self::Unlinked
-        } else if has(Outcome::Failed) {
+        } else if tests
+            .iter()
+            .any(|test| test.outcome == Some(Outcome::Failed))
+        {
             Self::Failed
-        } else if has(Outcome::Passed) {
+        } else if passed(false) {
             Self::Passed
+        } else if passed(true) {
+            Self::Partial
         } else {
             Self::NotRun
         }
@@ -46,6 +58,7 @@ impl Status {
     fn label(self) -> &'static str {
         match self {
             Self::Passed => "통과",
+            Self::Partial => "부분",
             Self::Failed => "실패",
             Self::NotRun => "미실행",
             Self::Unlinked => "미연결",
@@ -102,9 +115,13 @@ impl Report {
             reasons.push("`cargo test` 실패".to_owned());
         }
         if self.require_all {
-            let open = self.count(Status::NotRun) + self.count(Status::Unlinked);
+            let open = self.count(Status::Partial)
+                + self.count(Status::NotRun)
+                + self.count(Status::Unlinked);
             if open > 0 {
-                reasons.push(format!("--require-all: 미실행·미연결 시나리오 {open}건"));
+                reasons.push(format!(
+                    "--require-all: 부분·미실행·미연결 시나리오 {open}건"
+                ));
             }
         }
         reasons
@@ -125,9 +142,10 @@ impl Report {
 
     pub fn summary_line(&self) -> String {
         format!(
-            "시나리오 {}건: 통과 {}, 실패 {}, 미실행 {}, 미연결 {}. 오류 {}건.",
+            "시나리오 {}건: 통과 {}, 부분 {}, 실패 {}, 미실행 {}, 미연결 {}. 오류 {}건.",
             self.rows.len(),
             self.count(Status::Passed),
+            self.count(Status::Partial),
             self.count(Status::Failed),
             self.count(Status::NotRun),
             self.count(Status::Unlinked),
@@ -168,7 +186,7 @@ impl Report {
         let _ = writeln!(out, "## 요약\n");
         let _ = writeln!(
             out,
-            "| 스펙 | 시나리오 | 통과 | 실패 | 미실행 | 미연결 |\n| --- | ---: | ---: | ---: | ---: | ---: |"
+            "| 스펙 | 시나리오 | 통과 | 부분 | 실패 | 미실행 | 미연결 |\n| --- | ---: | ---: | ---: | ---: | ---: | ---: |"
         );
         let mut specs: Vec<&str> = self.rows.iter().map(|row| row.spec.as_str()).collect();
         specs.dedup();
@@ -177,9 +195,10 @@ impl Report {
             let count = |status| rows.iter().filter(|r| r.status == status).count();
             let _ = writeln!(
                 out,
-                "| {spec} | {} | {} | {} | {} | {} |",
+                "| {spec} | {} | {} | {} | {} | {} | {} |",
                 rows.len(),
                 count(Status::Passed),
+                count(Status::Partial),
                 count(Status::Failed),
                 count(Status::NotRun),
                 count(Status::Unlinked)
@@ -187,9 +206,10 @@ impl Report {
         }
         let _ = writeln!(
             out,
-            "| 합계 | {} | {} | {} | {} | {} |\n",
+            "| 합계 | {} | {} | {} | {} | {} | {} |\n",
             self.rows.len(),
             self.count(Status::Passed),
+            self.count(Status::Partial),
             self.count(Status::Failed),
             self.count(Status::NotRun),
             self.count(Status::Unlinked)
@@ -226,7 +246,8 @@ impl Report {
                             Some(Outcome::Ignored) => "미실행(무시됨)",
                             None => "미실행(이번 실행에 없음)",
                         };
-                        format!("`{}` `{}` {outcome}", test.file, test.name)
+                        let scope = if test.partial { " (부분)" } else { "" };
+                        format!("`{}` `{}` {outcome}{scope}", test.file, test.name)
                     })
                     .collect();
                 let _ = writeln!(
@@ -315,28 +336,37 @@ fn civil_from_days(days: u64) -> (u64, u64, u64) {
 mod tests {
     use super::*;
 
-    fn entry(outcome: Option<Outcome>) -> TestEntry {
+    fn entry(outcome: Option<Outcome>, partial: bool) -> TestEntry {
         TestEntry {
             file: "f.rs".to_owned(),
             name: "t".to_owned(),
             outcome,
+            partial,
         }
     }
 
     #[test]
-    fn status_prefers_failure_then_pass_then_not_run() {
+    fn status_prefers_failure_then_full_pass_then_partial_then_not_run() {
         use Outcome::{Failed, Ignored, Passed};
         assert_eq!(Status::of(&[]), Status::Unlinked);
         assert_eq!(
-            Status::of(&[entry(Some(Passed)), entry(Some(Failed))]),
+            Status::of(&[entry(Some(Passed), false), entry(Some(Failed), true)]),
             Status::Failed
         );
         assert_eq!(
-            Status::of(&[entry(Some(Ignored)), entry(Some(Passed))]),
+            Status::of(&[entry(Some(Ignored), false), entry(Some(Passed), false)]),
             Status::Passed
         );
         assert_eq!(
-            Status::of(&[entry(Some(Ignored)), entry(None)]),
+            Status::of(&[entry(Some(Passed), true), entry(Some(Passed), false)]),
+            Status::Passed
+        );
+        assert_eq!(
+            Status::of(&[entry(Some(Passed), true), entry(Some(Ignored), false)]),
+            Status::Partial
+        );
+        assert_eq!(
+            Status::of(&[entry(Some(Ignored), false), entry(None, true)]),
             Status::NotRun
         );
     }

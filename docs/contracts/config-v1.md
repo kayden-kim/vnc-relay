@@ -2,7 +2,7 @@
 
 운영자가 쓰는 TOML 설정 파일의 키, 자료형, 기본값, 유효 범위, 항목 문법, 재로드 구분을 정한다. `vnc-relay serve`는 이 계약에 맞지 않는 파일로 시작하지 않으며, 실행 중에도 이 계약에 맞지 않는 재로드 후보를 적용하지 않는다. 이 문서는 파일 형식만 정한다. 시작·재로드의 외부 동작은 [운영 스펙](../specs/operations.md)이 정하고, 관리자 계정 파일과 하위 명령은 [CLI·계정 파일 계약](cli-v1.md)이 정한다.
 
-이 계약은 2026-10-16에 사용자가 채택했다(상태 Active). 승인 표의 기본값·유효 범위, 추가로 승인한 값, 이 문서에서 정한 키 이름·테이블 구조·형식·오류 코드가 모두 채택 범위다. 6절에 "구현에서 확인"·"관찰로 확인 필요"로 남긴 항목은 채택으로 해소되지 않았다. 구현과 계약 테스트가 아직 없어 5절 테스트 결과는 모두 미실행이다.
+이 계약은 2026-10-16에 사용자가 채택했다(상태 Active). 승인 표의 기본값·유효 범위, 추가로 승인한 값, 이 문서에서 정한 키 이름·테이블 구조·형식·오류 코드가 모두 채택 범위다. 6절에 "구현에서 확인"·"관찰로 확인 필요"로 남긴 항목은 채택으로 해소되지 않았다. 설정 로더의 계약 테스트 결과는 5절에 있다. 아직 기능이 없는 규칙의 테스트는 미실행이다.
 
 | 항목 | 값 |
 | --- | --- |
@@ -16,7 +16,7 @@
 | 기준 스펙 | [설정·프로세스 수명·운영 보안 스펙](../specs/operations.md) |
 | 관련 요구사항 | [PRD](../requirements/PRD.md) FR-02·FR-05·FR-06·FR-07, [7절 보안 및 신뢰 경계](../requirements/PRD.md#7-보안-및-신뢰-경계) |
 | 호환성 범위 | 설정 파일 v1. Windows 11 x64·Ubuntu 24.04 LTS x64의 `vnc-relay` 1.x. 파일 안에 형식 버전 키는 없다. |
-| 관련 테스트 | [운영 스펙 수용 테스트](../specs/operations.md#7-수용-테스트) OPS-001~006·OPS-016·OPS-023~027·OPS-031·OPS-034~042, [WS·WSS 스펙](../specs/websocket.md#7-수용-테스트) WS-015·WS-022·WS-024·WS-027, [중계 스펙](../specs/relay.md#7-수용-테스트) RLY-007·RLY-008·RLY-022~027. 계약 테스트는 5절에 연결한다. 구현·테스트 파일이 없어 모두 미실행이다. |
+| 관련 테스트 | [운영 스펙 수용 테스트](../specs/operations.md#7-수용-테스트) OPS-001~006·OPS-016·OPS-023~027·OPS-031·OPS-034~042, [WS·WSS 스펙](../specs/websocket.md#7-수용-테스트) WS-015·WS-022·WS-024·WS-027, [중계 스펙](../specs/relay.md#7-수용-테스트) RLY-007·RLY-008·RLY-022~027. 계약 테스트는 5절에 연결한다. 설정 로더 부분만 구현·통과했고, 나머지는 미실행이다. |
 
 용어는 [VNC Relay 용어집](../../GLOSSARY.md)을 따른다. 테스트·검증 기호 L~Dp 등은 [운영 스펙 2절](../specs/operations.md#2-상태와-검증-매개변수)의 기호이며, 이 계약이 각 기호를 키에 연결한다.
 
@@ -455,8 +455,8 @@ output = "stdout"
 
 | 대상 | 환경 | 명령 | 결과 |
 | --- | --- | --- | --- |
-| 작업 2.1 변경(기준 커밋 `80267b2`에 `crates/domain`·`crates/app`·`crates/adapters`와 작업 공간 설정 추가) | Ubuntu 24.04.4(WSL2), Rust 1.99.1, `CARGO_TARGET_DIR=~/vnc-relay-target` | `cargo xtask scenarios`(내부에서 `cargo test --workspace --no-fail-fast` 실행) | 통과. `config_contract` 21건, adapters 단위 2건, domain 단위 10건 모두 통과. 시나리오 보고: 통과 3(OPS-001, OPS-038, OPS-040의 설정 검증 부분), 미연결 145, 오류 0, 판정 통과 |
-| 같음 | Windows 11 | 같음 | 미실행. Windows MSVC 링커가 없어 빌드할 수 없다(작업 0.1). Windows 경로 분기(`cfg!(windows)`)는 실행하지 않았다. |
+| 작업 2.1 커밋 `4fb7acb`에 부분 표식(` partial`)을 더한 작업 트리(`xtask/src/scenarios*`, `crates/adapters/tests/config_contract.rs` 표식, 컨벤션·설계 문서) | Ubuntu 24.04.4(WSL2), Rust 1.99.1, `CARGO_TARGET_DIR=~/vnc-relay-target` | `cargo xtask scenarios`(내부에서 `cargo test --workspace --no-fail-fast` 실행) | 통과. `config_contract` 21건, adapters 단위 2건, domain 단위 10건 모두 통과. 시나리오 보고: 부분 3(OPS-001, OPS-038, OPS-040의 설정 검증 부분), 통과 0, 미연결 145, 오류 0, 판정 통과 |
+| 같음 | Windows 11 | 같음 | 미실행. Visual Studio Build Tools 설치가 UAC 미승인으로 멈춰(종료 코드 1602) MSVC 링커가 없다([개발 환경 how-to](../how-to/set-up-and-verify.md)). 사용자가 Windows 검증을 뒤로 미뤘다(2026-10-20). Windows 경로 분기(`cfg!(windows)`)는 실행하지 않았다. |
 
 ## 6. 초안을 확정하기 전에 해결할 사항
 

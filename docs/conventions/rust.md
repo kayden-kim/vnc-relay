@@ -4,7 +4,7 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 상태 | Draft |
+| 상태 | Active(2026-10-20 사용자 채택) |
 | 적용 대상 | 사람이 작성한 Rust 소스 코드와 테스트 코드, `Cargo.toml`, `clippy.toml` |
 | 기준 버전 | Rust 1.99.1(`rust-toolchain.toml`), edition 2024, [Rust API Guidelines](https://rust-lang.github.io/api-guidelines/naming.html) |
 | 관련 아키텍처 문서 | [코드 지도](../architectures/code-map.md) |

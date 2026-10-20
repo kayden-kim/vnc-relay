@@ -198,6 +198,7 @@ fn link(
                             file: test.file.clone(),
                             name: test.name.clone(),
                             outcome: run.outcomes.get(&test.key).copied(),
+                            partial: marker.partial,
                         });
                 }
             }

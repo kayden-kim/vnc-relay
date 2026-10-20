@@ -1,4 +1,5 @@
-//! Finds scenario markers (`/// spec: <path>:<ID>`) and the test functions they label.
+//! Finds scenario markers (`/// spec: <path>:<ID>`, optionally followed by
+//! `partial`) and the test functions they label.
 //!
 //! A small lexer skips comments, strings, and character literals so that braces
 //! inside them do not change the module nesting.
@@ -12,6 +13,8 @@ pub struct Marker {
     /// Spec path relative to `docs/specs/`, for example `relay.md`.
     pub spec: String,
     pub id: String,
+    /// The test checks only part of the scenario (`... partial`).
+    pub partial: bool,
 }
 
 /// A test function with at least one valid marker.
@@ -37,7 +40,7 @@ pub struct Scan {
     pub bad: Vec<BadMarker>,
 }
 
-const MALFORMED: &str = "표식 형식이 `/// spec: <specs/ 기준 경로>.md:<시나리오 ID>`가 아니다.";
+const MALFORMED: &str = "표식 형식이 `/// spec: <specs/ 기준 경로>.md:<시나리오 ID>`(일부만 검증하면 끝에 ` partial`)가 아니다.";
 const NOT_ON_TEST: &str = "표식이 테스트 함수(`#[test]`·`#[tokio::test]`)에 붙어 있지 않다.";
 
 pub fn scan(source: &str) -> Scan {
@@ -75,7 +78,12 @@ pub fn scan(source: &str) -> Scan {
                     let mut markers = Vec::new();
                     for (line, text) in pending.drain(..) {
                         match parse_marker(text) {
-                            Some((spec, id)) => markers.push(Marker { line, spec, id }),
+                            Some((spec, id, partial)) => markers.push(Marker {
+                                line,
+                                spec,
+                                id,
+                                partial,
+                            }),
                             None => scan.bad.push(bad(line, text, MALFORMED)),
                         }
                     }
@@ -137,10 +145,15 @@ fn bad(line: usize, text: &str, reason: &'static str) -> BadMarker {
     }
 }
 
-/// Parses the text after `///`. Returns `(spec path, scenario ID)`.
-fn parse_marker(text: &str) -> Option<(String, String)> {
-    let value = text.trim_start().strip_prefix("spec:")?.trim();
-    let (spec, id) = value.rsplit_once(':')?;
+/// Parses the text after `///`. Returns `(spec path, scenario ID, partial)`.
+fn parse_marker(text: &str) -> Option<(String, String, bool)> {
+    let mut words = text.trim_start().strip_prefix("spec:")?.split_whitespace();
+    let (spec, id) = words.next()?.rsplit_once(':')?;
+    let partial = match (words.next(), words.next()) {
+        (None, _) => false,
+        (Some("partial"), None) => true,
+        _ => return None,
+    };
     let valid_spec = spec.len() > ".md".len()
         && spec.ends_with(".md")
         && spec.split('/').all(|segment| {
@@ -151,7 +164,7 @@ fn parse_marker(text: &str) -> Option<(String, String)> {
                     .bytes()
                     .all(|b| b.is_ascii_alphanumeric() || b"-_.".contains(&b))
         });
-    (valid_spec && is_scenario_id(id)).then(|| (spec.to_owned(), id.to_owned()))
+    (valid_spec && is_scenario_id(id)).then(|| (spec.to_owned(), id.to_owned(), partial))
 }
 
 /// Reads an attribute that starts after `#`. Returns its path and the index after `]`.
@@ -366,11 +379,12 @@ fn skip_quote(source: &str, start: usize) -> usize {
 mod tests {
     use super::*;
 
-    fn marker(line: usize, spec: &str, id: &str) -> Marker {
+    fn marker(line: usize, spec: &str, id: &str, partial: bool) -> Marker {
         Marker {
             line,
             spec: spec.to_owned(),
             id: id.to_owned(),
+            partial,
         }
     }
 
@@ -389,7 +403,7 @@ mod tests {
     mod matching {
         /// Pairs one Viewer with one Server.
         /// spec: relay.md:RLY-010
-        /// spec: websocket.md:WS-001
+        /// spec: websocket.md:WS-001  partial
         #[tokio::test(flavor = "multi_thread")]
         async fn pairs_in_order<'a>() {}
     }
@@ -409,14 +423,14 @@ mod tests {
                     modules: vec!["tests".to_owned(), "matching".to_owned()],
                     name: "pairs_in_order".to_owned(),
                     markers: vec![
-                        marker(13, "relay.md", "RLY-010"),
-                        marker(14, "websocket.md", "WS-001"),
+                        marker(13, "relay.md", "RLY-010", false),
+                        marker(14, "websocket.md", "WS-001", true),
                     ],
                 },
                 MarkedTest {
                     modules: vec!["tests".to_owned()],
                     name: "top".to_owned(),
-                    markers: vec![marker(19, "auth/login.md", "SCN-003")],
+                    markers: vec![marker(19, "auth/login.md", "SCN-003", false)],
                 },
             ]
         );
@@ -438,10 +452,24 @@ struct NotAFunction;
 //// spec: relay.md:RLY-005
 #[test]
 fn plain_comment_is_ignored() {}
+
+/// spec: relay.md:RLY-006 partly
+/// spec: relay.md:RLY-007 partial extra
+#[test]
+fn unknown_trailing_words() {}
 ";
         let scan = scan(source);
         assert_eq!(scan.tests, []);
         let lines: Vec<(usize, &str)> = scan.bad.iter().map(|b| (b.line, b.reason)).collect();
-        assert_eq!(lines, [(2, MALFORMED), (6, NOT_ON_TEST), (9, NOT_ON_TEST)]);
+        assert_eq!(
+            lines,
+            [
+                (2, MALFORMED),
+                (6, NOT_ON_TEST),
+                (9, NOT_ON_TEST),
+                (16, MALFORMED),
+                (17, MALFORMED),
+            ]
+        );
     }
 }
