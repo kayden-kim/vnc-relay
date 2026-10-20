@@ -6,4 +6,5 @@ pub mod config_file;
 pub mod crypto;
 pub mod net;
 pub mod ops_log;
+pub mod status_http;
 mod toml_text;

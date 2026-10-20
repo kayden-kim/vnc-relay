@@ -3,5 +3,6 @@
 
 pub mod accounts;
 pub mod events;
+pub mod lifecycle;
 pub mod ports;
 pub mod settings;

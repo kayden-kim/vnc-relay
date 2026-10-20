@@ -1,16 +1,23 @@
-//! Contract tests of the operation log writer and `relay_id_ref`
-//! (docs/contracts/ops-info-v1.md §1.1-1.6, §1.9, §1.11; recorded in §5).
+//! Contract tests of the operation log writer, `relay_id_ref`, and the
+//! status listener (docs/contracts/ops-info-v1.md §1.1-1.6, §1.9, §1.11,
+//! §1.12, §2; recorded in §5).
 
+use std::io::{Read, Write};
+use std::net::{SocketAddr, TcpStream};
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::Duration;
 
-use serde_json::{Map, Value};
+use serde_json::{Map, Value, json};
 use vnc_relay_adapters::crypto::RelayIdKey;
 use vnc_relay_adapters::ops_log::JsonLinesEventSink;
+use vnc_relay_adapters::status_http::StatusListener;
 use vnc_relay_app::events::{AbortReason, ConnectionErrorKind, Event, Phase, RejectReason, Stage};
+use vnc_relay_app::lifecycle::LifecycleService;
 use vnc_relay_app::ports::EventSink;
 use vnc_relay_app::settings::{ConfigWarning, LogOutput};
 use vnc_relay_domain::allow_list::IpItem;
+use vnc_relay_domain::budget::ConnectionBudget;
 use vnc_relay_domain::conn_id::ConnId;
 use vnc_relay_domain::entry_point::EntryPoint;
 use vnc_relay_domain::peer_ip::PeerIp;
@@ -189,7 +196,7 @@ fn writes_connection_events_with_their_contract_fields() {
     let peer = |text: &str| PeerIp::new(text.parse().unwrap_or_else(|e| panic!("{text}: {e}")));
     let conn_id = ConnId::next();
     log.record(&Event::ConnectionRejected {
-        entry_point: EntryPoint::TcpViewer,
+        listener: "tcp_viewer",
         stage: Stage::Accept,
         reason: RejectReason::IpNotAllowed,
         peer_ip: peer("::ffff:198.51.100.21"),
@@ -267,9 +274,15 @@ fn writes_limit_and_error_kind_with_the_reasons_that_carry_them() {
     let peer = PeerIp::new([192, 0, 2, 7].into());
     let conn_id = ConnId::next();
     log.record(&Event::ConnectionRejected {
-        entry_point: EntryPoint::TcpServer,
+        listener: "tcp_server",
         stage: Stage::Accept,
         reason: RejectReason::RelayConnectionLimit { limit: 2 },
+        peer_ip: peer,
+    });
+    log.record(&Event::ConnectionRejected {
+        listener: "status",
+        stage: Stage::Accept,
+        reason: RejectReason::AdminConnectionLimit { limit: 64 },
         peer_ip: peer,
     });
     for reason in [
@@ -288,22 +301,30 @@ fn writes_limit_and_error_kind_with_the_reasons_that_carry_them() {
     }
     let lines = objects(&read(&path));
 
-    assert_eq!(text(&lines[0], "reason"), "relay_connection_limit");
-    assert_eq!(text(&lines[0], "level"), "warn");
-    assert_eq!(lines[0].get("limit"), Some(&Value::from(2)));
-    assert_eq!(
-        keys(&lines[0]),
-        [
-            "event", "level", "limit", "listener", "peer_ip", "reason", "stage", "ts"
-        ]
-    );
+    let rejected = [
+        ("tcp_server", "relay_connection_limit", 2),
+        ("status", "admin_connection_limit", 64),
+    ];
+    for (line, (listener, reason, limit)) in lines.iter().zip(rejected) {
+        assert_eq!(text(line, "event"), "connection_rejected");
+        assert_eq!(text(line, "listener"), listener);
+        assert_eq!(text(line, "reason"), reason);
+        assert_eq!(text(line, "level"), "warn");
+        assert_eq!(line.get("limit"), Some(&Value::from(limit)));
+        assert_eq!(
+            keys(line),
+            [
+                "event", "level", "limit", "listener", "peer_ip", "reason", "stage", "ts"
+            ]
+        );
+    }
 
     let aborted = [
         ("handshake_timeout", "warn", None),
         ("peer_eof", "info", None),
         ("connection_error", "warn", Some("io_error")),
     ];
-    for (line, (reason, level, error_kind)) in lines[1..].iter().zip(aborted) {
+    for (line, (reason, level, error_kind)) in lines[2..].iter().zip(aborted) {
         assert_eq!(text(line, "event"), "connection_aborted");
         assert_eq!(text(line, "reason"), reason);
         assert_eq!(text(line, "level"), level);
@@ -314,7 +335,261 @@ fn writes_limit_and_error_kind_with_the_reasons_that_carry_them() {
         );
         assert!(line.get("limit").is_none(), "{reason}");
     }
-    assert_eq!(lines.len(), 4);
+    assert_eq!(lines.len(), 5);
+}
+
+#[test]
+fn writes_server_ready_with_the_name_and_address_of_every_listener() {
+    let dir = temp_dir("ready");
+    let path = dir.join("relay.log");
+    file_sink(&path).record(&Event::ServerReady {
+        listeners: vec![
+            ("status", SocketAddr::from(([127, 0, 0, 1], 9000))),
+            ("tcp_viewer", SocketAddr::from(([0, 0, 0, 0], 5900))),
+            (
+                "tcp_server",
+                "[::]:5500".parse().unwrap_or_else(|e| panic!("{e}")),
+            ),
+        ],
+    });
+    let lines = objects(&read(&path));
+
+    assert_eq!(text(&lines[0], "event"), "server_ready");
+    assert_eq!(text(&lines[0], "level"), "info");
+    assert_eq!(keys(&lines[0]), ["event", "level", "listeners", "ts"]);
+    assert_eq!(
+        lines[0].get("listeners"),
+        Some(&json!([
+            { "name": "status", "listen": "127.0.0.1:9000" },
+            { "name": "tcp_viewer", "listen": "0.0.0.0:5900" },
+            { "name": "tcp_server", "listen": "[::]:5500" },
+        ]))
+    );
+}
+
+/// A status listener on 127.0.0.1 in a thread of its own. Dropping it
+/// stops the listener.
+struct StatusServer {
+    addr: SocketAddr,
+    stop: Option<tokio::sync::oneshot::Sender<()>>,
+    thread: Option<std::thread::JoinHandle<()>>,
+}
+
+impl StatusServer {
+    fn start(lifecycle: Arc<LifecycleService>, log: Arc<dyn EventSink>) -> Self {
+        let (addr_tx, addr_rx) = std::sync::mpsc::channel();
+        let (stop, stopped) = tokio::sync::oneshot::channel::<()>();
+        let thread = std::thread::spawn(move || {
+            let runtime = tokio::runtime::Builder::new_current_thread()
+                .enable_io()
+                .enable_time()
+                .build()
+                .unwrap_or_else(|error| panic!("runtime: {error}"));
+            runtime.block_on(async move {
+                let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+                    .await
+                    .unwrap_or_else(|error| panic!("bind: {error}"));
+                let addr = listener
+                    .local_addr()
+                    .unwrap_or_else(|error| panic!("local_addr: {error}"));
+                addr_tx
+                    .send(addr)
+                    .unwrap_or_else(|error| panic!("send: {error}"));
+                let status = StatusListener::new(listener, ConnectionBudget::new(64), lifecycle);
+                tokio::select! {
+                    () = status.run(log) => {}
+                    _ = stopped => {}
+                }
+            });
+        });
+        let addr = addr_rx
+            .recv()
+            .unwrap_or_else(|error| panic!("status listener did not start: {error}"));
+        Self {
+            addr,
+            stop: Some(stop),
+            thread: Some(thread),
+        }
+    }
+}
+
+impl Drop for StatusServer {
+    fn drop(&mut self) {
+        if let Some(stop) = self.stop.take() {
+            let _ = stop.send(());
+        }
+        if let Some(thread) = self.thread.take() {
+            let _ = thread.join();
+        }
+    }
+}
+
+/// One HTTP reply, read until the server closes the connection.
+struct Reply {
+    status: u16,
+    /// Header names in lower case.
+    headers: Vec<(String, String)>,
+    body: String,
+}
+
+impl Reply {
+    fn header(&self, name: &str) -> Option<&str> {
+        self.headers
+            .iter()
+            .find(|(key, _)| key == name)
+            .map(|(_, value)| value.as_str())
+    }
+
+    fn json(&self) -> Value {
+        serde_json::from_str(&self.body)
+            .unwrap_or_else(|error| panic!("body is not JSON ({error}): {:?}", self.body))
+    }
+}
+
+/// Sends `method target` with `extra` header lines and `Connection: close`.
+fn send(addr: SocketAddr, method: &str, target: &str, extra: &str) -> Reply {
+    exchange(
+        addr,
+        &format!("{method} {target} HTTP/1.1\r\nHost: status\r\n{extra}Connection: close\r\n\r\n"),
+    )
+}
+
+/// Sends the whole `request` and reads the reply until the server closes.
+fn exchange(addr: SocketAddr, request: &str) -> Reply {
+    let mut stream =
+        TcpStream::connect(addr).unwrap_or_else(|error| panic!("connect {addr}: {error}"));
+    stream
+        .set_read_timeout(Some(Duration::from_secs(5)))
+        .unwrap_or_else(|error| panic!("read timeout: {error}"));
+    stream
+        .write_all(request.as_bytes())
+        .unwrap_or_else(|error| panic!("write: {error}"));
+    let mut raw = String::new();
+    stream
+        .read_to_string(&mut raw)
+        .unwrap_or_else(|error| panic!("read: {error}"));
+    let (head, body) = raw
+        .split_once("\r\n\r\n")
+        .unwrap_or_else(|| panic!("no header end: {raw:?}"));
+    let mut head = head.lines();
+    let status = head
+        .next()
+        .and_then(|line| line.split(' ').nth(1))
+        .and_then(|code| code.parse().ok())
+        .unwrap_or_else(|| panic!("no status line: {raw:?}"));
+    let headers = head
+        .map(|line| {
+            let (name, value) = line
+                .split_once(':')
+                .unwrap_or_else(|| panic!("bad header: {line:?}"));
+            (name.to_ascii_lowercase(), value.trim().to_owned())
+        })
+        .collect();
+    Reply {
+        status,
+        headers,
+        body: body.to_owned(),
+    }
+}
+
+fn assert_json_reply(reply: &Reply, status: u16, body: &Value) {
+    assert_eq!(reply.status, status, "{}", reply.body);
+    assert_eq!(reply.header("content-type"), Some("application/json"));
+    assert_eq!(reply.header("cache-control"), Some("no-store"));
+    assert_eq!(&reply.json(), body);
+}
+
+/// The error body of ops-info-v1 §2: only `code` and a non-empty `message`.
+fn assert_error_reply(reply: &Reply, status: u16, code: &str) {
+    let body = reply.json();
+    let message = body
+        .pointer("/error/message")
+        .and_then(Value::as_str)
+        .unwrap_or_else(|| panic!("no message: {body}"));
+    assert!(!message.is_empty());
+    assert_json_reply(
+        reply,
+        status,
+        &json!({ "error": { "code": code, "message": message } }),
+    );
+}
+
+/// spec: operations.md:OPS-013 partial
+/// spec: operations.md:OPS-032 partial
+#[test]
+fn answers_liveness_and_readiness_in_each_state_with_only_the_contract_fields() {
+    let dir = temp_dir("status-states");
+    let log: Arc<dyn EventSink> = Arc::new(file_sink(&dir.join("relay.log")));
+    let lifecycle = Arc::new(LifecycleService::new());
+    let server = StatusServer::start(Arc::clone(&lifecycle), log);
+    let alive = json!({ "status": "alive" });
+
+    assert_json_reply(&send(server.addr, "GET", "/livez", ""), 200, &alive);
+    assert_json_reply(
+        &send(server.addr, "GET", "/readyz", ""),
+        503,
+        &json!({ "status": "not_ready", "reason": "starting" }),
+    );
+
+    lifecycle.mark_ready();
+    assert_json_reply(&send(server.addr, "GET", "/livez", ""), 200, &alive);
+    assert_json_reply(
+        &send(server.addr, "GET", "/readyz", ""),
+        200,
+        &json!({ "status": "ready" }),
+    );
+
+    lifecycle.begin_shutdown();
+    assert_json_reply(&send(server.addr, "GET", "/livez", ""), 200, &alive);
+    assert_json_reply(
+        &send(server.addr, "GET", "/readyz", ""),
+        503,
+        &json!({ "status": "not_ready", "reason": "shutting_down" }),
+    );
+}
+
+/// spec: operations.md:OPS-032 partial
+#[test]
+fn ignores_credentials_and_queries_and_refuses_other_methods_and_paths() {
+    let dir = temp_dir("status-requests");
+    let log: Arc<dyn EventSink> = Arc::new(file_sink(&dir.join("relay.log")));
+    let lifecycle = Arc::new(LifecycleService::new());
+    lifecycle.mark_ready();
+    let server = StatusServer::start(lifecycle, log);
+    let ready = json!({ "status": "ready" });
+
+    let credentials = "Authorization: Basic YWxpY2U6cGFzcw==\r\nCookie: session=abc\r\n";
+    assert_json_reply(
+        &send(server.addr, "GET", "/readyz?verbose=1", credentials),
+        200,
+        &ready,
+    );
+    let with_body = "GET /readyz HTTP/1.1\r\nHost: status\r\nContent-Type: application/json\r\n\
+                     Content-Length: 2\r\nConnection: close\r\n\r\n{}";
+    assert_json_reply(&exchange(server.addr, with_body), 200, &ready);
+
+    for method in ["POST", "PUT", "DELETE", "HEAD"] {
+        for path in ["/livez", "/readyz"] {
+            let reply = send(server.addr, method, path, "Content-Length: 0\r\n");
+            assert_eq!(reply.status, 405, "{method} {path}");
+            assert_eq!(reply.header("allow"), Some("GET"), "{method} {path}");
+            assert_eq!(reply.header("content-type"), Some("application/json"));
+            assert_eq!(reply.header("cache-control"), Some("no-store"));
+            if method != "HEAD" {
+                assert_error_reply(&reply, 405, "method_not_allowed");
+            }
+        }
+    }
+    for (method, path) in [
+        ("GET", "/"),
+        ("GET", "/livez/"),
+        ("GET", "/metrics"),
+        ("POST", "/metrics"),
+    ] {
+        let reply = send(server.addr, method, path, "Content-Length: 0\r\n");
+        assert_error_reply(&reply, 404, "not_found");
+        assert_eq!(reply.header("allow"), None, "{method} {path}");
+    }
 }
 
 #[test]

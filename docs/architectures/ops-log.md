@@ -27,9 +27,9 @@
   - `peer_ip` 표기(1.10절): IPv4-mapped IPv6 주소는 IPv4로 바꾼다. IPv6는 RFC 5952 소문자 축약형이다. 포트와 영역 식별자는 쓰지 않는다.
   - 로그에 넣지 않는 값(1.11절)을 타입으로 막는다. 사건 필드에 원시 바이트·비밀 타입을 받지 않는다. 중계 ID는 `RelayIdRef`로만 사건에 들어간다.
 - 맡지 않는 책임:
-  - 대기·매칭·세션·재로드·관리자 사건. 각 기능 작업이 `Event`에 변형을 더한다. 접속 수락·거절·중단 사건은 작업 2.4가 더했다([TCP 진입점 모듈 설계](tcp-entry-point.md)). 작업 2.5가 `relay_connection_limit`(`limit` 필드)과 `handshake_timeout`·`peer_eof`·`connection_error`(`error_kind` 필드)를 더했다([연결 상한과 시간 제한 모듈 설계](connection-limits.md)). 그 사건의 나머지 `stage`·`reason` 값도 그 값을 만드는 작업이 더한다.
+  - 대기·매칭·세션·재로드·관리자 사건. 각 기능 작업이 `Event`에 변형을 더한다. 접속 수락·거절·중단 사건은 작업 2.4가 더했다([TCP 진입점 모듈 설계](tcp-entry-point.md)). 작업 2.5가 `relay_connection_limit`(`limit` 필드)과 `handshake_timeout`·`peer_eof`·`connection_error`(`error_kind` 필드)를 더했다([연결 상한과 시간 제한 모듈 설계](connection-limits.md)). 작업 2.6이 `server_ready`(`listeners` 필드)와 `admin_connection_limit`을 더했다([상태 리스너와 준비 상태 모듈 설계](status-listener.md)). 그 사건의 나머지 `stage`·`reason` 값도 그 값을 만드는 작업이 더한다.
   - `shutdown_started`·`shutdown_forced`. 종료 유예를 만드는 작업 5.3이 맡는다.
-  - `server_ready`. 준비 상태와 `/readyz`를 만드는 작업 2.6이 맡는다(사용자 결정 2026-10-20). 지금은 준비 상태가 없고 상태 리스너가 연결을 받지 않는다.
+  - `server_ready`를 기록하는 시점. 준비 상태를 바꾸는 [상태 리스너와 준비 상태 모듈 설계](status-listener.md)가 맡는다. 이 모듈은 줄 형식만 맡는다.
   - 프로세스 시작 때 `RelayIdKey`를 만드는 일과 그 실패 처리, `relay_id_ref`를 실제 사건에 넣는 일. 중계 ID를 처음 다루는 작업 2.9가 맡는다(사용자 결정 2026-10-20).
   - 로그 파일 교체 뒤 다시 열기. [CLI 계약 6절](../contracts/cli-v1.md#6-초안을-확정하기-전에-해결할-사항)의 관찰 항목이다.
   - `accounts_file_permissive` 경고. 운영 정보 계약의 사건이 아니며 stderr에만 쓴다([`serve` 시작 모듈 설계](serve-startup.md)).
@@ -144,6 +144,7 @@ flowchart LR
 | 대조 범위 | 환경 | 확인 방법 | 결과 |
 | --- | --- | --- | --- |
 | 작업 2.3 변경(기준 커밋 `f25983a` + 작업 트리) | Ubuntu 24.04.4(WSL2), Rust 1.99.1 | 2~4절의 파일·심볼과 실제 코드를 대조했다. 줄 형식·출력·`relay_id_ref`는 [운영 정보 계약의 계약 테스트 실행 기록](../contracts/ops-info-v1.md#계약-테스트-실행-기록), `peer_ip` 표기는 `crates/domain/src/peer_ip.rs` 단위 테스트로 확인했다. 레이어 규칙은 `cargo xtask layers`로 확인했다. Windows는 빌드도 타입 검사도 하지 않았다(9절). | 통과 |
+| 작업 2.6 변경(기준 커밋 `b1f2ad5` + 작업 트리): `server_ready`의 `listeners` 배열, `ConnectionRejected::listener` | Ubuntu 24.04.4(WSL2), Rust 1.99.1 | `crates/adapters/src/ops_log.rs` `push_event_fields`를 대조했다. `writes_server_ready_with_the_name_and_address_of_every_listener`와 `writes_limit_and_error_kind_with_the_reasons_that_carry_them`이 통과했다. | 통과 |
 
 ## 9. 미결정 사항
 

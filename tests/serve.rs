@@ -39,9 +39,16 @@ struct Ports {
 
 impl Ports {
     fn free() -> Self {
+        Self::free_on("127.0.0.1:0")
+    }
+
+    /// Ports that `probe` (an address with port 0) can bind. A listener on
+    /// `[::]` also needs the port free on every 127.0.0.x, where earlier
+    /// tests leave client sockets, so such a test probes `[::]:0`.
+    fn free_on(probe: &str) -> Self {
         // Hold all four until every port is chosen so that they differ.
         let holders: Vec<TcpListener> = (0..4)
-            .map(|_| TcpListener::bind("127.0.0.1:0").unwrap_or_else(|e| panic!("free port: {e}")))
+            .map(|_| TcpListener::bind(probe).unwrap_or_else(|e| panic!("free port: {e}")))
             .collect();
         let port = |i: usize| {
             holders[i]
@@ -560,7 +567,7 @@ fn second_instance_fails_with_exit_code_4_and_leaves_the_first_running() {
         assert_eq!(run.code, Some(0), "{}", run.stderr);
         assert_eq!(
             lifecycle_events(&run.stdout),
-            ["server_starting", "server_stopped"]
+            ["server_starting", "server_ready", "server_stopped"]
         );
         assert_released(ports);
     }
@@ -581,7 +588,7 @@ fn stops_with_exit_code_0_on_interrupt_and_terminate() {
         assert_eq!(run.code, Some(0), "SIG{signal}: {}", run.stderr);
         assert_eq!(
             lifecycle_events(&run.stdout),
-            ["server_starting", "server_stopped"]
+            ["server_starting", "server_ready", "server_stopped"]
         );
         assert_eq!(run.stderr, "");
         assert_released(ports);
@@ -645,7 +652,12 @@ fn writes_the_log_to_the_configured_file_from_start_to_stop() {
         .unwrap_or_else(|| panic!("log was not appended: {log}"));
     assert_eq!(
         lifecycle_events(log),
-        ["server_starting", "allow_all_source", "server_stopped"]
+        [
+            "server_starting",
+            "allow_all_source",
+            "server_ready",
+            "server_stopped"
+        ]
     );
     let lines: Vec<&str> = log.lines().collect();
     assert_eq!(field(lines[0], "level"), Some("info"));
@@ -981,7 +993,7 @@ fn closes_and_logs_every_held_connection_when_stopping() {
 #[test]
 fn checks_an_ipv4_peer_of_a_dual_stack_listener_against_ipv4_items() {
     let _lock = lock_ports();
-    let ports = Ports::free();
+    let ports = Ports::free_on("[::]:0");
     let config = valid_setup("entry-dual-stack", ports);
     let text = entry_config(ports, r#"["127.0.0.2"]"#, r#"["127.0.0.3"]"#).replacen(
         &format!("listen = \"127.0.0.1:{}\"", ports.tcp_viewer),
@@ -1113,4 +1125,142 @@ fn tells_a_peer_close_from_an_initial_exchange_that_outlives_h() {
     });
     assert_eq!(field(&closed, "reason"), Some("peer_eof"));
     assert_eq!(field(&closed, "level"), Some("info"));
+}
+
+/// `GET path` on the loopback `port`: the status code and the body, or
+/// `None` when the server closed the connection without a reply.
+fn http_get(port: u16, path: &str) -> Option<(u16, String)> {
+    let mut stream = TcpStream::connect(("127.0.0.1", port))
+        .unwrap_or_else(|error| panic!("connect {port}: {error}"));
+    stream
+        .set_read_timeout(Some(EXIT_LIMIT))
+        .unwrap_or_else(|error| panic!("read timeout: {error}"));
+    let request = format!("GET {path} HTTP/1.1\r\nHost: status\r\nConnection: close\r\n\r\n");
+    // A refused connection may close before the request is written.
+    if stream.write_all(request.as_bytes()).is_err() {
+        return None;
+    }
+    let mut raw = String::new();
+    match stream.read_to_string(&mut raw) {
+        Ok(_) if raw.is_empty() => return None,
+        Ok(_) => {}
+        Err(error)
+            if matches!(
+                error.kind(),
+                ErrorKind::ConnectionReset | ErrorKind::ConnectionAborted
+            ) =>
+        {
+            return None;
+        }
+        Err(error) => panic!("read: {error}"),
+    }
+    let (head, body) = raw
+        .split_once("\r\n\r\n")
+        .unwrap_or_else(|| panic!("no header end: {raw:?}"));
+    let status = head
+        .split(' ')
+        .nth(1)
+        .and_then(|code| code.parse().ok())
+        .unwrap_or_else(|| panic!("no status line: {raw:?}"));
+    Some((status, body.to_owned()))
+}
+
+/// spec: operations.md:OPS-013 partial
+/// spec: operations.md:OPS-032
+#[test]
+fn answers_status_queries_without_login_once_ready() {
+    let _lock = lock_ports();
+    let ports = Ports::free();
+    let config = valid_setup("status-ready", ports);
+    write(
+        &config,
+        &entry_config(ports, r#"["127.0.0.1"]"#, r#"["127.0.0.1"]"#),
+    );
+    let log = config.with_file_name("relay.log");
+    let _guard = Guard(Some(spawn(&config)));
+
+    let ready = wait_for_line(&log, |line| field(line, "event") == Some("server_ready"));
+    assert_eq!(field(&ready, "level"), Some("info"));
+    for (name, port) in [
+        ("status", ports.status),
+        ("management", ports.management),
+        ("tcp_viewer", ports.tcp_viewer),
+        ("tcp_server", ports.tcp_server),
+    ] {
+        assert!(ready.contains(&format!("\"name\":\"{name}\"")), "{ready}");
+        assert!(
+            ready.contains(&format!("\"listen\":\"127.0.0.1:{port}\"")),
+            "{ready}"
+        );
+    }
+    // The status listener is its own listener and needs no login.
+    assert_eq!(
+        http_get(ports.status, "/readyz"),
+        Some((200, r#"{"status":"ready"}"#.to_owned()))
+    );
+    assert_eq!(
+        http_get(ports.status, "/livez"),
+        Some((200, r#"{"status":"alive"}"#.to_owned()))
+    );
+}
+
+/// spec: operations.md:OPS-033 partial
+/// spec: operations.md:OPS-004 partial
+#[test]
+fn refuses_status_connections_beyond_lm_and_keeps_lm_and_l_apart() {
+    let _lock = lock_ports();
+    let ports = Ports::free();
+    let config = valid_setup("status-limit", ports);
+    write(
+        &config,
+        &(entry_config(ports, r#"["127.0.0.2"]"#, r#"["127.0.0.3"]"#)
+            + "\n[limits]\nrelay_connections = 2\nwaiting = 1\nadmin_connections = 1\n"),
+    );
+    let log = config.with_file_name("relay.log");
+    // No `wait_listening`: its probe of the status port would take the one
+    // place of Lm for a moment.
+    let _guard = Guard(Some(spawn(&config)));
+    wait_for_line(&log, |line| field(line, "event") == Some("server_ready"));
+
+    // An idle status connection holds the one place of Lm.
+    let holder = connect_from([127, 0, 0, 5], ports.status);
+    let mut refused = connect_from([127, 0, 0, 6], ports.status);
+    assert!(closed_within(&mut refused, EXIT_LIMIT), "second kept");
+    let rejected = wait_for_line(&log, |line| {
+        is(line, "connection_rejected", "status", "127.0.0.6")
+    });
+    assert_eq!(field(&rejected, "reason"), Some("admin_connection_limit"));
+    assert_eq!(field(&rejected, "stage"), Some("accept"));
+    assert!(rejected.contains("\"limit\":1"), "{rejected}");
+
+    // A full Lm does not stop relay connections, and the status connection
+    // takes no place of L: both places of L are still free.
+    let mut viewer = connect_from([127, 0, 0, 2], ports.tcp_viewer);
+    wait_for_line(&log, |line| {
+        is(line, "connection_accepted", "tcp_viewer", "127.0.0.2")
+    });
+    let mut server = connect_from([127, 0, 0, 3], ports.tcp_server);
+    wait_for_line(&log, |line| {
+        is(line, "connection_accepted", "tcp_server", "127.0.0.3")
+    });
+    let mut third = connect_from([127, 0, 0, 2], ports.tcp_viewer);
+    assert!(closed_within(&mut third, EXIT_LIMIT), "third kept");
+    let full = wait_for_line(&log, |line| {
+        is(line, "connection_rejected", "tcp_viewer", "127.0.0.2")
+    });
+    assert_eq!(field(&full, "reason"), Some("relay_connection_limit"));
+
+    // With L full, a status query is answered once Lm has a place again.
+    drop(holder);
+    let deadline = Instant::now() + EXIT_LIMIT;
+    let answer = loop {
+        if let Some(answer) = http_get(ports.status, "/readyz") {
+            break answer;
+        }
+        assert!(Instant::now() < deadline, "Lm place not given back");
+        std::thread::sleep(Duration::from_millis(20));
+    };
+    assert_eq!(answer, (200, r#"{"status":"ready"}"#.to_owned()));
+    assert!(!closed_within(&mut viewer, Duration::from_millis(100)));
+    assert!(!closed_within(&mut server, Duration::from_millis(100)));
 }

@@ -1,6 +1,6 @@
 //! `serve` start sequence and shutdown wait (cli-v1 §1.8).
 //! Design: docs/architectures/serve-startup.md, docs/architectures/ops-log.md,
-//! docs/architectures/tcp-entry-point.md.
+//! docs/architectures/tcp-entry-point.md, docs/architectures/status-listener.md.
 
 use std::io;
 use std::path::Path;
@@ -10,11 +10,13 @@ use std::task::Poll;
 
 use tokio::sync::watch;
 use tokio::task::JoinSet;
-use vnc_relay_adapters::net::{AcceptPolicy, TcpEntryPoint};
+use vnc_relay_adapters::net::{AcceptPolicy, BindFailure, TcpEntryPoint};
 use vnc_relay_adapters::ops_log::JsonLinesEventSink;
+use vnc_relay_adapters::status_http::StatusListener;
 use vnc_relay_adapters::{accounts_file, config_file, net};
 use vnc_relay_app::accounts::{self, ACCOUNTS_FILE_KEY, AccountsDiagnostic, AccountsWarning};
 use vnc_relay_app::events::{Event, Phase};
+use vnc_relay_app::lifecycle::LifecycleService;
 use vnc_relay_app::ports::EventSink;
 use vnc_relay_app::settings::{LogOutput, Settings};
 use vnc_relay_domain::budget::ConnectionBudget;
@@ -115,31 +117,51 @@ async fn listen_until_shutdown(settings: &Settings, log: Arc<dyn EventSink>) -> 
             return runtime_failure(log.as_ref(), "종료 신호 처리기를 준비할 수 없다", &error);
         }
     };
-    let listeners = match net::bind(&settings.listeners()).await {
-        Ok(listeners) => listeners,
-        Err(failures) => {
-            for failure in &failures {
-                let plan = failure.plan;
-                cli::report(
-                    "error",
-                    "listener_bind_failed",
-                    plan.key,
-                    &format!("{}에 바인드할 수 없다. {}", plan.addr, failure.cause),
-                );
-                record_failure(
-                    log.as_ref(),
-                    "listener_bind_failed",
-                    Some(plan.key.to_owned()),
-                    Some(plan.name),
-                    Some(failure.cause.clone()),
-                );
-            }
-            return ExitCode::from(EXIT_LISTENER);
+    let lifecycle = Arc::new(LifecycleService::new());
+    // Lm, shared by the status listener and the management listener (4.2).
+    let admin_budget = ConnectionBudget::new(settings.limits.admin_connections);
+    let status_plan = settings.status_listener();
+
+    // The status listener answers before the others are bound, so a query
+    // during the start sees `starting` (ops-info-v1 §1.12).
+    let mut failures = Vec::new();
+    let status_task = match net::bind_one(status_plan).await {
+        Ok(bound) => {
+            let status = StatusListener::new(
+                bound.listener,
+                Arc::clone(&admin_budget),
+                Arc::clone(&lifecycle),
+            );
+            Some(tokio::spawn(status.run(Arc::clone(&log))))
+        }
+        Err(failure) => {
+            failures.push(failure);
+            None
         }
     };
+    let listeners = match net::bind(&settings.other_listeners()).await {
+        Ok(listeners) => listeners,
+        Err(others) => {
+            failures.extend(others);
+            Vec::new()
+        }
+    };
+    if !failures.is_empty() {
+        drop(listeners);
+        stop_status(status_task).await;
+        report_bind_failures(log.as_ref(), &failures);
+        return ExitCode::from(EXIT_LISTENER);
+    }
+
+    lifecycle.mark_ready();
+    let ready = std::iter::once(&status_plan)
+        .chain(listeners.iter().map(|bound| &bound.plan))
+        .map(|plan| (plan.name, plan.addr))
+        .collect();
+    log.record(&Event::ServerReady { listeners: ready });
 
     // TCP entry points accept from here on. Other listeners stay bound
-    // without accepting until their tasks (2.6, 3.2, 4.2) attach to them.
+    // without accepting until their tasks (3.2, 4.2) attach to them.
     // Every relay entry point takes places from one L.
     let relay_budget = ConnectionBudget::new(settings.limits.relay_connections);
     let (stop, stopped) = watch::channel(false);
@@ -169,13 +191,44 @@ async fn listen_until_shutdown(settings: &Settings, log: Arc<dyn EventSink>) -> 
     }
 
     shutdown.wait().await;
-    // Entry points close their listeners and log every open connection
-    // before the last event.
+    // `/readyz` answers `shutting_down` while entry points close their
+    // listeners and log every open connection before the last event.
+    lifecycle.begin_shutdown();
     stop.send_replace(true);
     while entry_points.join_next().await.is_some() {}
     drop(idle);
+    stop_status(status_task).await;
     log.record(&Event::ServerStopped);
     ExitCode::SUCCESS
+}
+
+/// Stops the status listener and waits until its listener is closed.
+/// Status connections still open close when the runtime ends.
+async fn stop_status(task: Option<tokio::task::JoinHandle<()>>) {
+    if let Some(task) = task {
+        task.abort();
+        // The result is the cancellation that `abort` asked for.
+        let _ = task.await;
+    }
+}
+
+fn report_bind_failures(log: &dyn EventSink, failures: &[BindFailure]) {
+    for failure in failures {
+        let plan = failure.plan;
+        cli::report(
+            "error",
+            "listener_bind_failed",
+            plan.key,
+            &format!("{}에 바인드할 수 없다. {}", plan.addr, failure.cause),
+        );
+        record_failure(
+            log,
+            "listener_bind_failed",
+            Some(plan.key.to_owned()),
+            Some(plan.name),
+            Some(failure.cause.clone()),
+        );
+    }
 }
 
 fn record_failure(

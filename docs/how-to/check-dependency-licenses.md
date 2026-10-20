@@ -75,6 +75,7 @@ Rust 의존성의 라이선스가 사용자가 승인한 허용 목록 안에 �
 | 저장소의 현재 의존성 | `licenses ok`, 종료 코드 0 | 3단계 명령 | 통과(2026-10-20). 외부 의존성은 아직 없다. | 아래 실행 기록 2 |
 | 채택 묶음의 고지 파일 | 모든 패키지에 라이선스 파일이 있다. `NOTICE` 파일 유무를 안다. | 두 대상의 의존성 패키지 디렉터리에서 파일 이름 확인 | 통과(2026-10-20). 142개 패키지 모두 라이선스 파일이 있고 `NOTICE` 파일은 없다. | 아래 실행 기록 1 |
 | socket2 직접 의존성(작업 2.5) | `licenses ok`, 종료 코드 0. 라이선스 파일이 있다. `NOTICE` 파일 유무를 안다. | 3단계 명령, 패키지 디렉터리에서 파일 이름 확인 | 통과(2026-10-20). socket2 0.6.5는 `MIT OR Apache-2.0`이고 `LICENSE-MIT`·`LICENSE-APACHE`가 있으며 `NOTICE` 파일은 없다. | 아래 실행 기록 3 |
+| axum 직접 의존성(작업 2.6) | `licenses ok`, 종료 코드 0. 새로 들어온 패키지마다 라이선스 파일이 있다. `NOTICE` 파일 유무를 안다. | 3단계 명령, 패키지 디렉터리에서 파일 이름 확인 | 통과(2026-10-20). 새 패키지 23개 모두 라이선스 파일이 있고 `NOTICE` 파일은 없다. | 아래 실행 기록 4 |
 
 실행 기록 1: 의존성을 추가하기 전에 [PRD "구현 기술" 행](../requirements/PRD.md#확정-기준)의 라이브러리를 검토했다.
 
@@ -88,6 +89,8 @@ Rust 의존성의 라이선스가 사용자가 승인한 허용 목록 안에 �
 실행 기록 2: 커밋 `17a9305`에 `deny.toml`을 더한 작업 트리에서 실행했다. 환경은 실행 기록 1과 같다. 결과는 `licenses ok`, 종료 코드 0이다.
 
 실행 기록 3: 커밋 `c89beb4`에 작업 2.5를 더한 작업 트리에서 실행했다. 환경은 실행 기록 1과 같다. socket2 0.6.5는 그 전부터 tokio의 의존성으로 `Cargo.lock`에 있었고, 작업 2.5가 adapters의 직접 의존성(`features = ["all"]`)으로 더했다. 결과는 `licenses ok`, 종료 코드 0이다. `~/.cargo/registry/src/index.crates.io-*/socket2-0.6.5/`의 파일 이름과 `Cargo.toml`의 `license` 값을 확인했다.
+
+실행 기록 4: 커밋 `b1f2ad5`에 작업 2.6을 더한 작업 트리에서 실행했다. 환경은 실행 기록 1과 같다. 작업 2.6이 adapters의 직접 의존성으로 axum 0.8.9(`default-features = false`, `features = ["http1", "tokio"]`)를 더했다. 이 변경으로 `Cargo.lock`에 23개 패키지가 새로 들어왔다. atomic-waker 1.1.2, axum 0.8.9, axum-core 0.5.6, bytes 1.12.1, futures-core·futures-task·futures-util 0.3.34, http 1.5.0, http-body 1.1.0, http-body-util 0.1.5, httparse 1.10.1, httpdate 1.0.3, hyper 1.12.0, hyper-util 0.1.21, matchit 0.8.4, mime 0.3.17, percent-encoding 2.3.2, slab 0.4.12, smallvec 1.16.3, sync_wrapper 1.0.2, tower 0.5.3, tower-layer·tower-service 0.3.3이다. 결과는 `licenses ok`, 종료 코드 0이다. 패키지마다 `~/.cargo/registry/src/index.crates.io-*/<이름>-<버전>/`의 `LICENSE*`·`COPYING*`·`UNLICENSE*`·`NOTICE*` 파일 이름과 `Cargo.toml`의 `license` 값을 확인했다. 라이선스는 `MIT`, `Apache-2.0`, `MIT OR Apache-2.0`, `Apache-2.0 OR MIT`, `MIT AND BSD-3-Clause`(matchit)였다.
 
 ## 5. 중단 조건
 

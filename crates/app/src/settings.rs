@@ -231,23 +231,26 @@ impl Settings {
         warnings
     }
 
-    /// Listeners to bind at startup, in bind order: status first
-    /// (ops-info-v1 §1.12), then management, then the enabled entry points.
-    pub fn listeners(&self) -> Vec<ListenerPlan> {
-        let mut plans = vec![
-            ListenerPlan {
-                name: "status",
-                key: "status.listen",
-                addr: self.status.listen,
-                entry_point: None,
-            },
-            ListenerPlan {
-                name: "management",
-                key: "management.listen",
-                addr: self.management.listen,
-                entry_point: None,
-            },
-        ];
+    /// The status listener, bound and answering before every other
+    /// listener (ops-info-v1 §1.12).
+    pub fn status_listener(&self) -> ListenerPlan {
+        ListenerPlan {
+            name: "status",
+            key: "status.listen",
+            addr: self.status.listen,
+            entry_point: None,
+        }
+    }
+
+    /// Listeners bound after the status listener, in bind order:
+    /// management, then the enabled entry points.
+    pub fn other_listeners(&self) -> Vec<ListenerPlan> {
+        let mut plans = vec![ListenerPlan {
+            name: "management",
+            key: "management.listen",
+            addr: self.management.listen,
+            entry_point: None,
+        }];
         for entry_point in EntryPoint::ALL {
             let settings = self.relay.get(entry_point);
             if let Some(addr) = settings.listen.filter(|_| settings.enabled) {

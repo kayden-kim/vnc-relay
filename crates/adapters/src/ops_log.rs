@@ -9,7 +9,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, PoisonError};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use serde_json::Value;
+use serde_json::{Value, json};
 use vnc_relay_app::events::{Event, LOG_CONTRACT};
 use vnc_relay_app::ports::EventSink;
 use vnc_relay_app::settings::{ConfigWarning, LogOutput};
@@ -163,6 +163,13 @@ pub fn format_line(event: &Event, at: SystemTime) -> String {
 fn push_event_fields(fields: &mut Vec<(&'static str, Value)>, event: &Event) {
     match event {
         Event::ServerStarting => fields.push(("log_contract", Value::from(LOG_CONTRACT))),
+        Event::ServerReady { listeners } => {
+            let listeners = listeners
+                .iter()
+                .map(|(name, listen)| json!({ "name": name, "listen": listen.to_string() }))
+                .collect();
+            fields.push(("listeners", Value::Array(listeners)));
+        }
         Event::ConfigWarning { warning, phase } => match warning {
             ConfigWarning::PlaintextWsEnabled { listen } => {
                 fields.push(("listener", Value::from("ws_viewer")));
@@ -209,12 +216,12 @@ fn push_event_fields(fields: &mut Vec<(&'static str, Value)>, event: &Event) {
             fields.push(("peer_ip", Value::from(peer_ip.to_string())));
         }
         Event::ConnectionRejected {
-            entry_point,
+            listener,
             stage,
             reason,
             peer_ip,
         } => {
-            fields.push(("listener", Value::from(entry_point.name())));
+            fields.push(("listener", Value::from(*listener)));
             fields.push(("stage", Value::from(stage.as_str())));
             fields.push(("reason", Value::from(reason.as_str())));
             fields.push(("peer_ip", Value::from(peer_ip.to_string())));

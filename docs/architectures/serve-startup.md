@@ -7,7 +7,7 @@
 | 구조 시점 | Current |
 | 문서 상태 | Draft |
 | 구현 대조 | Verified — [대조 기록](#대조-기록) |
-| 코드 위치 | `src/main.rs`, `src/cli.rs`, `src/serve.rs`, `crates/domain/src/account.rs`, `crates/app/src/accounts.rs`, `crates/app/src/settings.rs`(`ListenerPlan`), `crates/adapters/src/accounts_file.rs`, `crates/adapters/src/net.rs`, `crates/adapters/src/toml_text.rs` |
+| 코드 위치 | `src/main.rs`, `src/cli.rs`, `src/serve.rs`, `crates/domain/src/account.rs`, `crates/app/src/accounts.rs`, `crates/app/src/settings.rs`(`ListenerPlan`, `Settings::status_listener`, `Settings::other_listeners`), `crates/adapters/src/accounts_file.rs`, `crates/adapters/src/net.rs`, `crates/adapters/src/toml_text.rs` |
 | 코드 지도 | [코드 지도 2절](code-map.md#2-코드-위치와-구성요소) |
 | 관련 스펙 | [운영 스펙 3.1절](../specs/operations.md#31-설정-검증과-시작), OPS-001, OPS-002(일부), OPS-039(일부) |
 | 관련 계약 | [CLI 계약](../contracts/cli-v1.md) 1.1·1.3·1.4·1.5·1.8·2절, [설정 계약 2.1절](../contracts/config-v1.md#21-설정-오류와-준비-실패), [운영 정보 계약](../contracts/ops-info-v1.md) 1.5·1.6절(시작·종료 사건)·[1.12절](../contracts/ops-info-v1.md#112-상태-리스너와-엔드포인트)(상태 리스너를 먼저 연다) |
@@ -28,16 +28,16 @@
   - `admin` 하위 명령. 작업 4.1 전까지는 알 수 없는 하위 명령으로 보고 `usage_error`다(사용자 결정 2026-10-20).
   - 파일 변경 감지 준비(시작 순서 3단계, `watch_unavailable`). 작업 5.1·5.2가 맡는다(사용자 결정 2026-10-20).
   - 인증서·개인키 파일 검사(`tls_file_invalid`). 작업 3.1이 4단계의 바인드 앞에 넣는다.
-  - `server_ready`. 준비 상태와 `/readyz`를 만드는 작업 2.6이 맡는다(사용자 결정 2026-10-20).
-  - 상태·WS·WSS·관리 리스너의 연결 수락. 작업 2.6(상태), 3.2(WS·WSS), 4.2(관리)가 바인드한 리스너에 붙인다. 그 전까지 이 리스너는 바인드만 하고 연결을 받지 않는다(사용자 결정 2026-10-20). TCP 진입점의 수락은 작업 2.4가 붙였다([TCP 진입점 모듈 설계](tcp-entry-point.md)).
+  - 준비 상태, `server_ready`, 상태 리스너의 응답. [상태 리스너와 준비 상태 모듈 설계](status-listener.md)가 맡는다. 이 문서는 5·6단계에서 그 기능을 부르는 순서만 다룬다.
+  - WS·WSS·관리 리스너의 연결 수락. 작업 3.2(WS·WSS), 4.2(관리)가 바인드한 리스너에 붙인다. 그 전까지 이 리스너는 바인드만 하고 연결을 받지 않는다(사용자 결정 2026-10-20). TCP 진입점의 수락은 작업 2.4가 붙였다([TCP 진입점 모듈 설계](tcp-entry-point.md)). 상태 리스너의 수락은 작업 2.6이 붙였다.
   - 종료 유예 G, 두 번째 종료 요청, 세션 정리. 작업 5.3이 맡는다.
   - 비밀번호 해시 검증과 비밀번호 규칙. 작업 4.1·4.4가 맡는다.
 - 다른 모듈에 공개하는 기능:
   - `vnc_relay_domain::account::{Account, AccountName, AccountNameError, PasswordHash, PasswordHashError, Argon2Params, Argon2ParamsError}`
   - `vnc_relay_app::accounts::{ACCOUNTS_FILE_KEY, AccountsError, AccountsDiagnostic, AccountsWarning, require_any}`
-  - `vnc_relay_app::settings::{ListenerPlan, Settings::listeners}`
+  - `vnc_relay_app::settings::{ListenerPlan, Settings::status_listener, Settings::other_listeners}`
   - `vnc_relay_adapters::accounts_file::{load, parse, LoadedAccounts}`
-  - `vnc_relay_adapters::net::{bind, BindFailure, BoundListener}`
+  - `vnc_relay_adapters::net::{bind, bind_one, BindFailure, BoundListener}`
 
 ## 2. 내부 구조
 
@@ -51,8 +51,9 @@ flowchart LR
     SERVE -->|"2 호출"| ACC["adapters accounts_file.rs<br/>load"]
     ACC -->|"호출"| DACC["domain account.rs<br/>AccountName·PasswordHash"]
     SERVE -->|"2 호출"| REQ["app accounts.rs<br/>require_any"]
-    SERVE -->|"4 호출"| PLAN["app settings.rs<br/>Settings::listeners"]
-    SERVE -->|"4 호출"| NET["adapters net.rs<br/>bind"]
+    SERVE -->|"4 호출"| PLAN["app settings.rs<br/>Settings::status_listener, other_listeners"]
+    SERVE -->|"4 호출"| NET["adapters net.rs<br/>bind_one, bind"]
+    SERVE -->|"상태 리스너 바인드 뒤 시작"| STATUS["adapters status_http.rs<br/>StatusListener::run"]
     SERVE -->|"바인드 뒤 시작, 종료 알림"| EP["adapters net.rs<br/>TcpEntryPoint::run"]
     SERVE -->|"단계마다 Event"| LOG["adapters ops_log.rs<br/>JsonLinesEventSink"]
     SERVE -->|"진단 출력"| CLI
@@ -70,9 +71,9 @@ flowchart LR
 | `crates/domain/src/account.rs` `Account` | 이름과 해시 한 쌍 | 계정 파일을 읽을 때, 호출한 쪽이 소유 | 위 두 타입 |
 | `crates/app/src/accounts.rs` `AccountsError`, `AccountsDiagnostic`, `AccountsWarning` | 계정 파일 오류 코드 5종(`accounts_file_missing`·`accounts_file_unreadable`·`accounts_file_invalid`·`accounts_hash_below_minimum`·`accounts_none`)과 경고 `accounts_file_permissive`, 진단 한 건(`error`, `key`, `message`) | 값 타입 | domain |
 | `crates/app/src/accounts.rs` `require_any` | 계정이 하나도 없으면 `accounts_none` 진단을 준다(운영 스펙 3.1절 5). | `serve` 2단계 | domain |
-| `crates/app/src/settings.rs` `ListenerPlan`, `Settings::listeners` | 바인드할 리스너 목록: 상태, 관리, 켠 진입점(`tcp_viewer`, `tcp_server`, `ws_viewer`, `wss_viewer`) 순서. 각 항목은 리스너 이름, 설정 키(`status.listen` 등), 주소, 진입점이다. | 4단계 | domain |
+| `crates/app/src/settings.rs` `ListenerPlan`, `Settings::status_listener`, `Settings::other_listeners` | 바인드할 리스너 계획. `status_listener`는 상태 리스너 하나, `other_listeners`는 관리, 켠 진입점(`tcp_viewer`, `tcp_server`, `ws_viewer`, `wss_viewer`) 순서다. 각 항목은 리스너 이름, 설정 키(`status.listen` 등), 주소, 진입점이다. | 4단계 | domain |
 | `crates/adapters/src/accounts_file.rs` `load`, `parse`, `LoadedAccounts` | 파일 읽기, UTF-8 확인, TOML 해석, `version`·`[[account]]` 키 검사, 중복 이름 검사, 해시 하한·상한 판정, Ubuntu 권한 경고. 모든 진단을 모은다. | 호출마다 | toml, domain, app |
-| `crates/adapters/src/net.rs` `bind`, `BindFailure`, `BoundListener` | `ListenerPlan`마다 tokio `TcpListener::bind`. 실패도 계속 시도해 모두 모은다. 하나라도 실패하면 성공한 리스너를 닫고 실패 목록을 돌려준다. 성공하면 계획과 리스너 쌍(`BoundListener`)을 돌려준다. 실패 원인은 주소를 뺀 한국어 문장이다. | 4단계 | tokio, app |
+| `crates/adapters/src/net.rs` `bind`, `bind_one`, `BindFailure`, `BoundListener` | `bind_one`은 `ListenerPlan` 하나를 tokio `TcpListener::bind`로 바인드한다. `bind`는 계획마다 `bind_one`을 부르고, 실패도 계속 시도해 모두 모은다. 하나라도 실패하면 성공한 리스너를 닫고 실패 목록을 돌려준다. 성공하면 계획과 리스너 쌍(`BoundListener`)을 돌려준다. 실패 원인은 주소를 뺀 한국어 문장이다. | 4단계 | tokio, app |
 | `crates/adapters/src/toml_text.rs` `error_position` | TOML 구문 오류의 행·열. 설정 파일과 계정 파일이 함께 쓴다. 파일 내용은 돌려주지 않는다. | 호출마다 | toml |
 
 `crates/adapters/src/config_file.rs`는 `[admin.argon2]` 범위를 `Argon2Params`의 승인 범위 상수로 검사한다. 설정과 계정 파일이 같은 범위를 쓰게 하기 위해서다.
@@ -102,14 +103,14 @@ flowchart LR
 | 2 | `src/serve.rs` `run`, `config_file::load`, `JsonLinesEventSink::open` | 설정을 읽고 검증한다. 진단이 있으면 모두 쓰고 표준 출력에 진단마다 `startup_failed`를 쓴 뒤 3으로 끝난다. 로그 출력을 연다. 열 수 없으면 `log_file_unavailable`로 3. 열면 `server_starting`과 설정 경고를 기록한다. | `Settings`, 로그 출력 | 3단계 |
 | 3 | `accounts_file::load`, `accounts::require_any` | `settings.admin.accounts_file`을 읽고 검증한다. 경고는 stderr에 쓴다. 진단이 있거나 계정이 없으면 모두 쓰고, 진단마다 `startup_failed`를 기록하고, 5로 끝난다. | `LoadedAccounts` | 4단계 |
 | 4 | `src/serve.rs` `run`, `ShutdownSignal::register` | tokio 다중 스레드 런타임을 만들고 종료 신호 처리기를 등록한다. 실패하면 `runtime_unavailable`로 1. | 런타임, 신호 처리기 | 5단계 |
-| 5 | `Settings::listeners`, `net::bind` | 목록 순서대로 바인드한다. 두 번째 프로세스는 모든 주소가 사용 중이라 실패 목록을 받는다. 실패한 리스너마다 `error[listener_bind_failed] key=<설정 키>`를 쓰고 `startup_failed`(`listener`, `config_key`, `detail`)를 기록한다. 성공한 리스너를 닫은 뒤 4로 끝난다. 첫 프로세스의 소켓에는 손대지 않는다. | 바인드한 리스너 | 6단계 |
-| 6 | `listen_until_shutdown`, `ShutdownSignal::wait` | `ConnectionBudget::new(limits.relay_connections)`로 L 예산을 만든다. TCP 진입점 리스너마다 `TcpEntryPoint::run`을 띄우고 첫 종료 요청까지 기다린다([연결 상한과 시간 제한 모듈 설계 4절](connection-limits.md#4-처리-순서)). 받으면 종료를 알리고 진입점 작업이 모두 끝나기를 기다린다([TCP 진입점 모듈 설계 4절](tcp-entry-point.md#4-처리-순서)). 그 뒤 나머지 리스너를 닫고 `server_stopped`를 기록한 뒤 런타임을 끝낸다. | L 예산 | 종료 코드 0 |
+| 5 | `Settings::status_listener`, `net::bind_one`, `Settings::other_listeners`, `net::bind` | 상태 리스너를 먼저 바인드해 `StatusListener::run`을 띄운다. 그 뒤 나머지를 목록 순서대로 바인드한다([상태 리스너와 준비 상태 모듈 설계 4절](status-listener.md#4-처리-순서)). 두 번째 프로세스는 모든 주소가 사용 중이라 실패 목록을 받는다. 실패가 있으면 성공한 리스너를 닫고 상태 리스너 작업을 멈춘다. 실패한 리스너마다 `error[listener_bind_failed] key=<설정 키>`를 쓰고 `startup_failed`(`listener`, `config_key`, `detail`)를 기록한 뒤 4로 끝난다. 첫 프로세스의 소켓에는 손대지 않는다. | 바인드한 리스너, 상태 리스너 작업 | 6단계 |
+| 6 | `listen_until_shutdown`, `ShutdownSignal::wait` | 준비됨으로 바꾸고 `server_ready`를 기록한다. `ConnectionBudget::new(limits.relay_connections)`로 L 예산을 만든다. TCP 진입점 리스너마다 `TcpEntryPoint::run`을 띄우고 첫 종료 요청까지 기다린다([연결 상한과 시간 제한 모듈 설계 4절](connection-limits.md#4-처리-순서)). 받으면 종료 중으로 바꾸고, 종료를 알리고, 진입점 작업이 모두 끝나기를 기다린다([TCP 진입점 모듈 설계 4절](tcp-entry-point.md#4-처리-순서)). 그 뒤 나머지 리스너를 닫고 상태 리스너 작업을 멈추고 `server_stopped`를 기록한 뒤 런타임을 끝낸다. | 준비 상태, L 예산 | 종료 코드 0 |
 
 ## 5. 상태와 초기화
 
 - 초기화 시점: 런타임과 신호 처리기는 계정 파일 검증이 끝난 뒤 만든다. 앞 단계에서 실패하면 스레드를 만들지 않는다.
-- 상태 소유자와 제거 시점: `Settings`·계정 목록·리스너는 `serve::run`이 소유한다. TCP 진입점 리스너는 바인드 뒤 `TcpEntryPoint`가 넘겨받는다. 함수가 끝나면 모두 닫힌다. 프로세스 사이에 공유하는 상태는 없다(ADR-0003).
-- 동시 실행과 순서: 바인드는 목록 순서대로 한 번에 하나씩 한다. 상태 리스너가 처음이다([운영 정보 계약 1.12절](../contracts/ops-info-v1.md#112-상태-리스너와-엔드포인트)).
+- 상태 소유자와 제거 시점: `Settings`·계정 목록·리스너는 `serve::run`이 소유한다. 상태 리스너는 바인드 뒤 `StatusListener`가, TCP 진입점 리스너는 `TcpEntryPoint`가 넘겨받는다. 함수가 끝나면 모두 닫힌다. 프로세스 사이에 공유하는 상태는 없다(ADR-0003).
+- 동시 실행과 순서: 바인드는 한 번에 하나씩 한다. 상태 리스너가 처음이고, 바인드 직후부터 응답한다([운영 정보 계약 1.12절](../contracts/ops-info-v1.md#112-상태-리스너와-엔드포인트)).
 
 ## 6. 오류 처리
 
@@ -121,7 +122,7 @@ flowchart LR
 | `accounts_file::load` | 파일이 없으면 `accounts_file_missing`, 읽을 수 없으면 `accounts_file_unreadable` 하나. 내용 오류는 모두 모은다. 종료 코드 5 | 없음 | OPS-001 |
 | `accounts::require_any` | `accounts_none`, 종료 코드 5 | 없음 | OPS-001 |
 | 런타임·신호 처리기 생성 | `runtime_unavailable`, 종료 코드 1 | 없음 | 없음 |
-| `net::bind` | 실패마다 `listener_bind_failed`, 성공한 리스너를 닫고 종료 코드 4 | 없음 | OPS-002, OPS-039 |
+| `net::bind_one`, `net::bind` | 실패마다 `listener_bind_failed`, 성공한 리스너를 닫고 상태 리스너 작업을 멈춘 뒤 종료 코드 4 | 없음 | OPS-002, OPS-039 |
 
 ## 7. 설계 선택
 
@@ -148,6 +149,7 @@ flowchart LR
 | 작업 2.3 변경(기준 커밋 `f25983a` + 작업 트리): 로그 출력 열기, 단계별 사건 기록, `BindFailure::cause` | Ubuntu 24.04.4(WSL2), Rust 1.99.1 | 1·2·4·6절과 `src/serve.rs`·`crates/adapters/src/net.rs`를 대조했다. 단계별 로그 줄은 `tests/serve.rs`로 확인했다([운영 정보 계약의 계약 테스트 실행 기록](../contracts/ops-info-v1.md#계약-테스트-실행-기록)). | 통과 |
 | 작업 2.4 변경(기준 커밋 `6d6f789` + 작업 트리): 진입점 작업 시작·종료, `ListenerPlan::entry_point` | Ubuntu 24.04.4(WSL2), Rust 1.99.1 | 1·2·3·4·5절과 `src/serve.rs`·`crates/app/src/settings.rs`를 대조했다. 종료 순서는 `tests/serve.rs`의 `closes_and_logs_every_held_connection_when_stopping`으로 확인했다. | 통과 |
 | 작업 2.5 변경(기준 커밋 `c89beb4` + 작업 트리): L 예산 만들기, `AcceptPolicy` 넘기기 | Ubuntu 24.04.4(WSL2), Rust 1.99.1 | 2·4절과 `src/serve.rs`를 대조했다. `tests/serve.rs`의 진입점 테스트가 모두 통과했다. | 통과 |
+| 작업 2.6 변경(기준 커밋 `b1f2ad5` + 작업 트리): 상태 리스너 먼저 바인드, `Settings::status_listener`·`other_listeners`, `bind_one`, 준비됨·종료 중 전환 | Ubuntu 24.04.4(WSL2), Rust 1.99.1 | 1~6절과 `src/serve.rs`·`crates/app/src/settings.rs`·`crates/adapters/src/net.rs`를 대조했다. 바인드 실패 보고 순서는 `tests/serve.rs`의 `second_instance_fails_with_exit_code_4_and_leaves_the_first_running`, 사건 순서는 `writes_the_log_to_the_configured_file_from_start_to_stop`으로 확인했다. | 통과 |
 
 ## 9. 미결정 사항
 

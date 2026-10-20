@@ -1,7 +1,8 @@
 //! TCP listeners and TCP entry points. Startup binding:
 //! docs/architectures/serve-startup.md. Entry points:
 //! docs/architectures/tcp-entry-point.md. Limits, H, and keepalive:
-//! docs/architectures/connection-limits.md.
+//! docs/architectures/connection-limits.md. The status listener first:
+//! docs/architectures/status-listener.md.
 
 use std::io::{self, ErrorKind};
 use std::sync::Arc;
@@ -23,7 +24,7 @@ use vnc_relay_domain::peer_ip::PeerIp;
 
 /// Wait after a failed `accept`, so that a lasting error such as running
 /// out of file descriptors does not spin the accept loop.
-const ACCEPT_RETRY_DELAY: Duration = Duration::from_millis(100);
+pub(crate) const ACCEPT_RETRY_DELAY: Duration = Duration::from_millis(100);
 
 /// A listener bound for its plan.
 #[derive(Debug)]
@@ -47,15 +48,9 @@ pub async fn bind(plans: &[ListenerPlan]) -> Result<Vec<BoundListener>, Vec<Bind
     let mut bound = Vec::with_capacity(plans.len());
     let mut failures = Vec::new();
     for plan in plans {
-        match TcpListener::bind(plan.addr).await {
-            Ok(listener) => bound.push(BoundListener {
-                plan: *plan,
-                listener,
-            }),
-            Err(error) => failures.push(BindFailure {
-                plan: *plan,
-                cause: bind_cause(&error),
-            }),
+        match bind_one(*plan).await {
+            Ok(listener) => bound.push(listener),
+            Err(failure) => failures.push(failure),
         }
     }
     if failures.is_empty() {
@@ -63,6 +58,18 @@ pub async fn bind(plans: &[ListenerPlan]) -> Result<Vec<BoundListener>, Vec<Bind
     } else {
         drop(bound);
         Err(failures)
+    }
+}
+
+/// Binds one plan. The status listener is bound alone first so that it
+/// answers while the others are bound (ops-info-v1 §1.12).
+pub async fn bind_one(plan: ListenerPlan) -> Result<BoundListener, BindFailure> {
+    match TcpListener::bind(plan.addr).await {
+        Ok(listener) => Ok(BoundListener { plan, listener }),
+        Err(error) => Err(BindFailure {
+            plan,
+            cause: bind_cause(&error),
+        }),
     }
 }
 
@@ -154,7 +161,7 @@ impl TcpEntryPoint {
                     // Logged before the close, so a peer that sees the
                     // close also finds the line.
                     log.record(&Event::ConnectionRejected {
-                        entry_point: self.entry_point,
+                        listener: self.entry_point.name(),
                         stage: Stage::Accept,
                         reason,
                         peer_ip,

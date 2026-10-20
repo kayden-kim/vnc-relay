@@ -1,7 +1,9 @@
 //! Operation log events (ops-info-v1 §1.5) and their `level` (§1.3).
-//! Design: docs/architectures/ops-log.md, docs/architectures/tcp-entry-point.md.
+//! Design: docs/architectures/ops-log.md, docs/architectures/tcp-entry-point.md,
+//! docs/architectures/status-listener.md.
 
 use std::fmt;
+use std::net::SocketAddr;
 
 use vnc_relay_domain::conn_id::ConnId;
 use vnc_relay_domain::entry_point::EntryPoint;
@@ -71,6 +73,9 @@ pub enum RejectReason {
     IpNotAllowed,
     /// Every place of the relay connection limit L is held.
     RelayConnectionLimit { limit: u32 },
+    /// Every place of the management and status connection limit Lm is
+    /// held.
+    AdminConnectionLimit { limit: u32 },
 }
 
 impl RejectReason {
@@ -78,6 +83,7 @@ impl RejectReason {
         match self {
             Self::IpNotAllowed => "ip_not_allowed",
             Self::RelayConnectionLimit { .. } => "relay_connection_limit",
+            Self::AdminConnectionLimit { .. } => "admin_connection_limit",
         }
     }
 
@@ -85,7 +91,9 @@ impl RejectReason {
     pub fn limit(self) -> Option<u32> {
         match self {
             Self::IpNotAllowed => None,
-            Self::RelayConnectionLimit { limit } => Some(limit),
+            Self::RelayConnectionLimit { limit } | Self::AdminConnectionLimit { limit } => {
+                Some(limit)
+            }
         }
     }
 }
@@ -166,6 +174,11 @@ pub enum Event {
         listener: Option<&'static str>,
         detail: Option<String>,
     },
+    /// The server entered the ready state: every required listener is
+    /// bound. Each item is the `listener` name and the bound address.
+    ServerReady {
+        listeners: Vec<(&'static str, SocketAddr)>,
+    },
     /// A relay listener accepted a connection that passed the source IP
     /// check and took a place of L. `role` comes from the entry point.
     ConnectionAccepted {
@@ -174,9 +187,10 @@ pub enum Event {
         peer_ip: PeerIp,
     },
     /// The server refused a connection. At `Stage::Accept` the connection
-    /// has no `conn_id` yet.
+    /// has no `conn_id` yet. `listener` is the ops-info-v1 §1.5 name of the
+    /// listener that refused it.
     ConnectionRejected {
-        entry_point: EntryPoint,
+        listener: &'static str,
         stage: Stage,
         reason: RejectReason,
         peer_ip: PeerIp,
@@ -199,6 +213,7 @@ impl Event {
     pub fn name(&self) -> &'static str {
         match self {
             Self::ServerStarting => "server_starting",
+            Self::ServerReady { .. } => "server_ready",
             Self::ConfigWarning { warning, .. } => warning.code(),
             Self::StartupFailed { .. } => "startup_failed",
             Self::ConnectionAccepted { .. } => "connection_accepted",
@@ -211,9 +226,10 @@ impl Event {
     /// The `level` field of ops-info-v1 §1.5.
     pub fn level(&self) -> Level {
         match self {
-            Self::ServerStarting | Self::ServerStopped | Self::ConnectionAccepted { .. } => {
-                Level::Info
-            }
+            Self::ServerStarting
+            | Self::ServerReady { .. }
+            | Self::ServerStopped
+            | Self::ConnectionAccepted { .. } => Level::Info,
             Self::ConfigWarning { .. } | Self::ConnectionRejected { .. } => Level::Warn,
             Self::ConnectionAborted { reason, .. } => reason.level(),
             Self::StartupFailed { .. } => Level::Error,
