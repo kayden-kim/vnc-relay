@@ -1,0 +1,22 @@
+# 의존성 라이선스 허용 목록이다. 사용자가 2026-10-20에 승인했다.
+# 목록 밖의 라이선스가 들어오면 `cargo deny check licenses`가 실패한다. 이때 사용자 검토를 받는다.
+# 절차: docs/how-to/check-dependency-licenses.md
+
+[graph]
+targets = ["x86_64-pc-windows-msvc", "x86_64-unknown-linux-gnu"]
+
+[licenses]
+allow = [
+    "Apache-2.0",
+    "BSD-3-Clause",
+    "BSL-1.0",
+    "CC0-1.0",
+    "ISC",
+    "MIT",
+    "MIT-0",
+    "Unicode-3.0",
+    "Unlicense",
+]
+# 아직 쓰지 않는 허용 라이선스는 경고하지 않는다. 허용 목록은 의존성보다 먼저 승인했다.
+unused-allowed-license = "allow"
+confidence-threshold = 0.93

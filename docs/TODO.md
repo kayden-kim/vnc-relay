@@ -39,7 +39,7 @@ flowchart LR
   - 기준: [운영 스펙 8절](specs/operations.md#8-미결정-사항), [ADR-0004 후속 작업](decisions/ADR-0004-tokio-rustls.md#후속-작업)
   - 완료 조건: 운영 스펙에서 OPS-TBD-009를 해소하고 [설정 계약 1.9절](contracts/config-v1.md#19-인증서개인키-파일-형식)과 PRD를 갱신한다. [ADR 작성 조건](decisions/AGENTS.md)을 만족하면 ADR을 쓴다.
   - 선행: 0.1
-- [ ] **0.3 조건부 채택 라이브러리 검토**: axum, tokio-tungstenite, toml·serde, argon2, notify, clap, tracing의 라이선스와 고지 의무를 확인한다.
+- [x] **0.3 조건부 채택 라이브러리 검토**: axum, tokio-tungstenite, toml·serde, argon2, notify, clap, tracing의 라이선스와 고지 의무를 확인한다.
   - 기준: [PRD 확정 기준](requirements/PRD.md#확정-기준)의 "구현 기술" 행, [OPS-021](specs/operations.md#7-수용-테스트)
   - 완료 조건: 검토 결과를 기록하고 PRD "구현 기술" 행을 확정 상태로 고친다. 조건을 통과하지 못한 라이브러리가 있으면 대안을 사용자에게 묻는다.
   - 선행: 0.1

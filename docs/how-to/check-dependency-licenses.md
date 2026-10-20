@@ -1,0 +1,100 @@
+# 의존성 라이선스를 검사하는 방법
+
+Rust 의존성의 라이선스가 사용자가 승인한 허용 목록 안에 있는지 검사한다. 검사가 통과하면 모든 의존성이 허용 라이선스이고, 실패하면 승인되지 않은 라이선스가 들어온 것이다. 의존성을 추가·갱신하는 변경과 배포 전에 이 절차를 실행한다.
+
+| 항목 | 값 |
+| --- | --- |
+| 대상 독자 | 의존성을 추가·갱신하는 개발자, 배포를 준비하는 프로젝트 관리자 |
+| 검증 상태 | Verified |
+| 검증 환경·버전 | Ubuntu 24.04.4 LTS x86_64(WSL2), Rust 1.99.1, cargo-deny 0.20.2 |
+| 최종 검증일 | 2026-10-20 |
+| 관련 기준 문서 | [PRD 확정 기준](../requirements/PRD.md#확정-기준) "구현 기술"·"라이선스" 행, [OPS-021](../specs/operations.md#7-수용-테스트), 허용 목록 [`deny.toml`](../../deny.toml) |
+
+## 1. 대상과 영향
+
+- 대상: 저장소 루트의 `Cargo.lock`이 가리키는 의존성 전체. `deny.toml`의 `[graph] targets`에 따라 Windows(`x86_64-pc-windows-msvc`)와 Ubuntu(`x86_64-unknown-linux-gnu`)의 의존성을 함께 검사한다. 한 OS에서 실행해도 두 대상을 모두 검사한다.
+- 예상 사용자 영향: 없다. 파일을 바꾸지 않는 읽기 전용 검사다.
+- 작업 허용 시간: 제한 없다.
+
+허용 목록은 사용자가 2026-10-20에 승인했다. MIT, Apache-2.0, ISC, BSD-3-Clause, Unlicense, CC0-1.0, BSL-1.0, Unicode-3.0, MIT-0의 9종이다. GPL·LGPL·MPL 등 copyleft 라이선스는 허용하지 않는다. 목록을 바꾸려면 사용자 승인이 필요하다.
+
+허용 라이선스의 고지 의무는 다음과 같다. 배포 고지 파일의 작성은 OPS-021에서 확인한다.
+
+| 라이선스 | 배포할 때 할 일 |
+| --- | --- |
+| MIT, ISC, BSD-3-Clause, BSL-1.0, Unicode-3.0 | 저작권 고지와 라이선스 전문을 배포물에 넣는다. BSL-1.0은 소스 배포에만 요구하지만 같은 방식으로 넣는다. |
+| Apache-2.0 | 라이선스 전문을 넣는다. 의존성에 `NOTICE` 파일이 있으면 그 내용도 넣는다. |
+| CC0-1.0, Unlicense, MIT-0 | 고지 의무가 없다. |
+
+## 2. 전제 조건
+
+- [ ] Rust 툴체인을 설치했다. 버전은 저장소 루트의 `rust-toolchain.toml`이 정한다.
+- [ ] 인터넷에 연결되어 있다. cargo-deny가 crates.io 색인과 crate 파일을 내려받는다.
+- [ ] 저장소 루트에 `Cargo.lock`과 `deny.toml`이 있다.
+
+## 3. 절차
+
+- 실행 환경: Ubuntu 24.04 LTS의 bash 또는 Windows 11의 PowerShell
+- 실행 위치: 저장소 루트
+- 바꿔 넣을 값: 없다.
+- 최대 대기 시간: cargo-deny 설치는 5분, 검사는 1분이다. 넘으면 Ctrl+C로 중단하고 네트워크 연결을 확인한다.
+
+1. cargo-deny가 설치되어 있는지 확인한다.
+
+   ```shell
+   cargo deny --version
+   ```
+
+   기대 결과: `cargo-deny 0.20.2`
+
+2. 1단계에서 명령을 찾지 못했거나 버전이 다르면 cargo-deny를 설치한다.
+
+   영향: 사용자 홈의 `.cargo/bin`에 실행파일을 설치한다. `cargo uninstall cargo-deny`로 지울 수 있다.
+
+   ```shell
+   cargo install --locked cargo-deny@0.20.2
+   ```
+
+   기대 결과: ``Installed package `cargo-deny v0.20.2` ``
+
+3. 라이선스를 검사한다.
+
+   ```shell
+   cargo deny check licenses
+   ```
+
+   기대 결과: 종료 코드 0과 마지막 줄 `licenses ok`
+
+## 4. 검증
+
+[검증 기록](../AGENTS.md#검증-기록)에 따라 실제 결과와 성공 조건을 대조한다.
+
+| 관찰 대상 | 성공 조건 | 확인 명령·방법 | 실제 결과 | 실행 증거 위치 |
+| --- | --- | --- | --- | --- |
+| 채택 라이브러리 묶음의 라이선스 | `licenses ok`, 종료 코드 0 | 아래 묶음으로 만든 임시 crate에서 3단계 명령 | 통과(2026-10-20). 잠금 파일 166개 패키지, 오류·경고 없음 | 아래 실행 기록 1 |
+| 저장소의 현재 의존성 | `licenses ok`, 종료 코드 0 | 3단계 명령 | 통과(2026-10-20). 외부 의존성은 아직 없다. | 아래 실행 기록 2 |
+
+실행 기록 1: 의존성을 추가하기 전에 [PRD "구현 기술" 행](../requirements/PRD.md#확정-기준)의 라이브러리를 검토했다.
+
+- 대상: 저장소 밖의 임시 crate(`license = "MIT"`)에 아래 직접 의존성을 넣고 `cargo generate-lockfile`로 잠금 파일을 만들었다. 저장소의 `deny.toml`을 복사해 검사했다. 임시 crate는 남기지 않았다.
+- 직접 의존성: tokio 1.54.0, rustls 0.23.46(`aws_lc_rs`), aws-lc-rs 1.18.2, tokio-rustls 0.26.6, rustls-pki-types 1.15.1, axum 0.8.9, tokio-tungstenite 0.30.0, toml 1.1.8, serde 1.0.229, serde_json 1.0.154, argon2 0.6.0, notify 8.2.0, clap 4.6.7, tracing 0.1.44, tracing-subscriber 0.3.23, rpassword 7.5.4
+- 환경: Ubuntu 24.04.4 LTS x86_64(WSL2), Rust 1.99.1, cargo-deny 0.20.2
+- 결과: `licenses ok`, 종료 코드 0. 발견한 라이선스는 허용 목록 9종뿐이었다.
+
+실행 기록 2: 커밋 `17a9305`에 `deny.toml`을 더한 작업 트리에서 실행했다. 환경은 실행 기록 1과 같다. 결과는 `licenses ok`, 종료 코드 0이다.
+
+## 5. 중단 조건
+
+- `error[rejected]`가 나오면 그 의존성을 병합하지 않는다. 다른 crate를 찾거나 사용자에게 허용 목록 검토를 요청한다. `deny.toml`의 허용 목록을 승인 없이 늘리지 않는다.
+- `error[unlicensed]`가 나오면 해당 crate의 라이선스 파일을 직접 확인하고 사용자 검토를 받는다.
+
+## 6. 롤백 또는 복구
+
+1. 검사는 파일을 바꾸지 않으므로 되돌릴 것이 없다.
+2. 의존성 추가로 검사가 실패했으면 그 변경의 `Cargo.toml`·`Cargo.lock`을 되돌리고 3단계를 다시 실행한다.
+
+## 7. 해결되지 않을 때 전달할 대상
+
+- 전달 대상: vnc-relay 프로젝트 관리자
+- 보존할 증거: `cargo deny check licenses`의 전체 출력, 문제 crate의 이름·버전, 추가하려던 변경
+- 비밀 값 제외 규칙: 이 검사는 비밀 값을 다루지 않는다.

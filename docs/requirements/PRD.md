@@ -14,7 +14,7 @@
 | 사용자 확정 | Rust 독립 구현(tokio·rustls), TCP·WS·WSS, Mode I·II, Windows 11 x64·Ubuntu 24.04 LTS x64(Windows Server 제외), 실행파일 하나의 하위 명령 CLI, TOML 설정 파일, 내장 TLS(TLS 1.2 미만 거절), 공개 관리 HTTPS·내장 로그인·조회·활성 세션 종료(단일 관리자 역할, 여러 계정 준비), 관리 API(JSON over HTTP, `/api/v1/`), 관리 세션 쿠키 속성(HttpOnly·SameSite=Strict, HTTPS에서 Secure, 평문 루프백은 Secure 제외), Argon2id 비밀번호 해시, 진입점별 출발지 IP 허용 목록(단일 IP·CIDR·범위), WS·WSS 진입점은 Viewer만 제공, Origin 정확 일치, 최근 종료 목록, 방향별 전송량 집계 기준과 시각·단위 표현(API는 UTC ISO 8601·바이트 정수, 대시보드는 현지 시각·KiB/MiB), 관리자 종료의 정리 후 완료 응답과 종료 중 세션의 활성 수 포함, 서버 메모리 관리 세션(재시작 시 무효), TCP 한쪽 종료 처리, 상태 리스너 분리, 단일 인스턴스 운영, TCP keepalive·WebSocket ping 기반 끊긴 연결 감지, 연결 수·상한 사용량 표시, 폴링 주기 설정 가능(기본 2초), 정적 HTML·JS 대시보드, 대시보드 디자인 기준과 HTML 시안(2026-10-20 채택), 데스크톱·모바일 폭과 최신 Chrome·Edge·Firefox·Safari 지원, 대시보드 한국어·영어 문구(브라우저 언어 자동 선택, 직접 선택은 브라우저에 저장), 최신 안정판 고정 검증, 활성 100세션 목표, MIT, 로컬 CLI 관리자 계정 준비, JSON Lines 로그(출력만 제공, 보관·접근은 운영자 책임), 실행파일·설정 예시 배포, 인증서/IP 자동 부분 재로드(OS 파일 알림과 주기 확인)·새 접속 적용, 종료 유예 중 관리 처리와 두 번째 종료 요청의 즉시 강제 정리, TCP 진입점 기본 포트(UltraVNC Repeater 기준), noVNC 제외(외부 검증 도구로만 사용) |
 | 구현 원칙 | 기존 UltraVNC·websockify 소스의 복사·번역·포팅 없이 통신 규칙을 독립 구현 |
 | 세부 제안 | 중복 ID 후발 거절 |
-| 미확정 | 실제 검증 버전·환경과 통신 관찰 결과, 처리량·지연·CPU·메모리 목표, [교환 계약](../contracts/README.md) 중 Repeater 초기 교환 계약 채택(Draft, 관찰 뒤 채택. 설정·CLI·관리 API·WebSocket·운영 정보 5건은 2026-10-16에 Active로 채택), rustls 암호 모듈 선택(OPS-TBD-009), 파일 감지의 플랫폼별 세부, Windows 콘솔 닫기 처리·주소 재사용 같은 OS 동작의 관찰 확인, 검증용 noVNC 버전 기록 방식(WS-TBD-005), 조건부 채택한 Rust 라이브러리의 의존성 라이선스 검토 |
+| 미확정 | 실제 검증 버전·환경과 통신 관찰 결과, 처리량·지연·CPU·메모리 목표, [교환 계약](../contracts/README.md) 중 Repeater 초기 교환 계약 채택(Draft, 관찰 뒤 채택. 설정·CLI·관리 API·WebSocket·운영 정보 5건은 2026-10-16에 Active로 채택), rustls 암호 모듈 선택(OPS-TBD-009), 파일 감지의 플랫폼별 세부, Windows 콘솔 닫기 처리·주소 재사용 같은 OS 동작의 관찰 확인, 검증용 noVNC 버전 기록 방식(WS-TBD-005) |
 
 이하 요구사항은 별도 표시가 없으면 제안된 제품 기준이다. 확정 기준 표의 항목과 그 내용을 옮긴 문장은 사용자 확정 사항이다. 미확정 사항을 이미 합의된 조건이나 검증된 사실로 취급하지 않는다.
 
@@ -60,7 +60,7 @@ TCP·WS·WSS와 아래 기준은 이번 사용자 선택으로 확정한 요구�
 | noVNC 사용 범위 | 제품 구현·번들링·배포물·제품 의존성에 넣지 않음. 외부 상호운용 검증 도구로만 사용하며, 검증에 쓰는 noVNC 버전도 기록해 고정 |
 | 초기 규모 | 단일 서버의 동시 활성 세션 100개, 세션 한 개는 연결 한 쌍 |
 | 라이선스 | 독립 구현 코드는 MIT, 의존성의 라이선스·고지 의무는 별도 준수 |
-| 구현 기술 | 비동기 런타임 tokio, TLS rustls는 확정. 나머지 Rust 라이브러리는 조건부로 채택하며 의존성 라이선스 검토(OPS-021) 뒤 확정: HTTP axum(hyper 기반), WebSocket tokio-tungstenite, 설정 toml·serde, 비밀번호 해시 argon2, 파일 감지 notify, CLI clap, 로그 tracing(JSON 출력). TLS 어댑터(tokio-rustls 등)와 rustls 암호 모듈은 이 묶음에 포함하지 않으며 별도로 정함(OPS-TBD-009) |
+| 구현 기술 | 비동기 런타임 tokio, TLS rustls. 의존성 라이선스 검토(2026-10-20) 뒤 다음 라이브러리를 확정: TLS 어댑터 tokio-rustls, 인증서·개인키 PEM 읽기 rustls-pki-types, HTTP axum(hyper 기반), WebSocket tokio-tungstenite, 설정 toml·serde, JSON serde_json, 비밀번호 해시 argon2, 숨김 비밀번호 입력 rpassword, 파일 감지 notify, CLI clap, 로그 tracing·tracing-subscriber(JSON 출력). 의존성 라이선스는 사용자가 승인한 허용 목록(MIT·Apache-2.0·ISC·BSD-3-Clause·Unlicense·CC0-1.0·BSL-1.0·Unicode-3.0·MIT-0) 안에 있어야 함. 검사 방법은 [의존성 라이선스 검사](../how-to/check-dependency-licenses.md). 이 행에 없는 라이브러리를 더하려면 이 행을 갱신하고 검사를 통과해야 함. rustls 암호 모듈은 별도로 정함(OPS-TBD-009) |
 | 관리자 계정 준비 | 로컬 CLI에서 숨김 비밀번호 입력, Argon2id 검증용 해시만 저장(매개변수는 설정 계약에서 정함). 여러 계정을 준비할 수 있음. 준비된 계정이 하나도 없으면 시작 실패. 공개 웹 가입·기본 비밀번호 제외 |
 | 배포 산출물 | Windows 11 x64·Ubuntu 24.04 LTS x64용 실행파일, 비밀 없는 설정 예시, 수동 운영 안내. OS 서비스 등록·컨테이너 제외 |
 | 재로드 범위 | TLS 인증서·개인키와 진입점별 출발지 IP 허용 목록만 재시작 없이 교체 |
@@ -347,7 +347,7 @@ UltraVNC Server와 Viewer 사이의 TCP 연결을 중계하면서, WS 또는 WSS
 | 끊긴 연결 점유 | 감지 방식은 확정(1절). 감지 시간 K·Kw가 지나기 전까지 응답 없는 대기 연결이 같은 ID를 점유할 수 있음. K·Kw의 기본값은 설정 계약이 정함. 중복 ID 정책은 RLY-TBD-003에서 관찰 뒤 결정 |
 | 성능 목표 | 활성 100세션 목표는 확정. 처리량·지연·CPU·메모리 합격 수치와 측정 환경은 미확정(OPS-TBD-004) |
 | 라이선스 고지 | 배포 전 저작권자·적용 연도를 확정해 LICENSE에 실제 고지를 작성. 이 PRD 자체는 라이선스 부여 문서가 아님 |
-| 라이브러리·UI 기술 | UI는 정적 HTML·JS로 확정(1절). 시각 기준·모바일 폭 배치는 [디자인 기준](../design/DESIGN.md)(2026-10-20 채택)이 정한다. 비동기 런타임 tokio와 TLS rustls는 확정(1절). 나머지 Rust 라이브러리는 1절 "구현 기술" 행의 조건부 채택이며 의존성 라이선스 검토(OPS-021) 뒤 확정 |
+| 라이브러리·UI 기술 | UI는 정적 HTML·JS로 확정(1절). 시각 기준·모바일 폭 배치는 [디자인 기준](../design/DESIGN.md)(2026-10-20 채택)이 정한다. Rust 라이브러리는 1절 "구현 기술" 행에서 확정(2026-10-20 의존성 라이선스 검토). rustls 암호 모듈은 OPS-TBD-009에서 정함 |
 | 호환 명세 불완전 | 공개 사용 문서는 완결된 wire 명세가 아니므로 실행 관찰과 상호운용 검증으로 보완 |
 | ID 도용·세션 탈취 | ID를 인증으로 취급하지 않음. TCP·WS·WSS 모두 실제 출발지 IP 제한 적용. 허용 IP 내부의 개별 사용자 구분은 보장하지 않음 |
 | 공개 프록시 악용 | Mode I의 최종 대상 제한과 접속 경계 적용 |
