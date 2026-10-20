@@ -81,7 +81,7 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo xtask layers
 ```
 
-`cargo xtask layers`는 패키지마다 허용한 내부 crate·외부 crate만 쓰는지, 같은 외부 crate의 버전 요구가 하나인지 검사한다([xtask 모듈 설계](../architectures/xtask.md)). 전체 검증 절차는 개발 환경·검증 how-to(작업 0.8)가 정한다.
+`cargo xtask layers`는 패키지마다 허용한 내부 crate·외부 crate만 쓰는지, 같은 외부 crate의 버전 요구가 하나인지 검사한다([xtask 모듈 설계](../architectures/xtask.md)). 전체 검증 절차는 [개발 환경·검증 how-to](../how-to/set-up-and-verify.md)가 정한다.
 
 ## 6. 기존 코드 마이그레이션
 

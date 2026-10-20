@@ -56,7 +56,7 @@ async fn rejects_second_server_with_same_relay_id() {
 
 ## 5. 검증 명령과 통과 기준
 
-전체 검증 절차는 개발 환경·검증 how-to(작업 0.8)가 정한다. 이 절은 시나리오 보고에 필요한 것만 적는다.
+전체 검증 절차는 [개발 환경·검증 how-to](../how-to/set-up-and-verify.md)가 정한다. 이 절은 시나리오 보고에 필요한 것만 적는다.
 
 - 실행 환경: Ubuntu 24.04 LTS의 bash 또는 Windows 11의 PowerShell, Rust 1.99.1
 - 실행 위치: 저장소 루트
@@ -78,7 +78,7 @@ cargo xtask scenarios --require-all
 - 형식 예: `/// spec: relay.md:RLY-001`
 - 커버리지·결과 보고 명령: `cargo xtask scenarios`. `docs/specs/`의 스펙(`README.md`·`AGENTS.md` 제외)에서 "수용 테스트" 절 표의 시나리오 ID를 모은다. `xtask`를 뺀 작업 공간 패키지의 `src/`·`tests/` 아래 `.rs` 파일에서 표식을 모은다. `cargo test --workspace --no-fail-fast`를 실행해 테스트별 결과를 대조한다. 동작 방식은 [xtask 모듈 설계](../architectures/xtask.md)에 있다.
 - 표식을 둘 수 없는 곳: 여러 통합 테스트가 함께 쓰는 `tests/common/` 같은 하위 모듈은 속한 테스트 대상을 정할 수 없다. 이런 파일의 표식은 `오류`가 된다. 표식은 테스트 함수가 있는 파일에 둔다.
-- 보고서·CI 결과 위치: Cargo 대상 디렉터리의 `scenario-report.md`(4절). 표준 출력에는 상태별 수, 보고서 경로, 판정을 쓴다. CI는 없다. 로컬 실행 기록은 개발 환경·검증 how-to(작업 0.8)의 검증 표에 남긴다.
+- 보고서·CI 결과 위치: Cargo 대상 디렉터리의 `scenario-report.md`(4절). 표준 출력에는 상태별 수, 보고서 경로, 판정을 쓴다. CI는 없다. 로컬 실행 기록은 작업의 완료 보고와, 절차를 바꾼 경우 [개발 환경·검증 how-to](../how-to/set-up-and-verify.md#4-검증)의 검증 표에 남긴다.
 - 통과 조건: 5절의 성공 조건과 같다.
 
 보고서의 시나리오별 상태는 다음 중 하나다.
