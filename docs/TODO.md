@@ -35,7 +35,7 @@ flowchart LR
 - [x] **0.1 Rust 작업 공간**: 실행파일 `vnc-relay` 하나를 만드는 Cargo 프로젝트를 만든다. Rust 툴체인 버전을 고정한다.
   - 기준: [PRD 확정 기준](requirements/PRD.md#확정-기준)의 "실행 형태"·"구현 기술" 행, [ADR-0004](decisions/ADR-0004-tokio-rustls.md)
   - 완료 조건: Windows 11 x64와 Ubuntu 24.04 LTS x64에서 빌드하고 `vnc-relay --version`을 실행한다.
-- [ ] **0.2 rustls 암호 모듈 선택(OPS-TBD-009, 결정)**: aws-lc-rs와 ring을 두 OS에서 빌드하고 라이선스를 확인한 뒤 고른다. TLS 어댑터 crate(tokio-rustls 등)도 함께 정한다.
+- [x] **0.2 rustls 암호 모듈 선택(OPS-TBD-009, 결정)**: aws-lc-rs와 ring을 두 OS에서 빌드하고 라이선스를 확인한 뒤 고른다. TLS 어댑터 crate(tokio-rustls 등)도 함께 정한다.
   - 기준: [운영 스펙 8절](specs/operations.md#8-미결정-사항), [ADR-0004 후속 작업](decisions/ADR-0004-tokio-rustls.md#후속-작업)
   - 완료 조건: 운영 스펙에서 OPS-TBD-009를 해소하고 [설정 계약 1.9절](contracts/config-v1.md#19-인증서개인키-파일-형식)과 PRD를 갱신한다. [ADR 작성 조건](decisions/AGENTS.md)을 만족하면 ADR을 쓴다.
   - 선행: 0.1
