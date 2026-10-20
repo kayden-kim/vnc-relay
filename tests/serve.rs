@@ -132,6 +132,8 @@ fn events(log: &str) -> Vec<&str> {
 
 /// `events` without connection events. `wait_listening` connects to the
 /// TCP entry points from 127.0.0.1, so a running server logs those probes.
+/// Only the Unix signal tests stop a running server and read its whole log.
+#[cfg(unix)]
 fn lifecycle_events(log: &str) -> Vec<&str> {
     events(log)
         .into_iter()

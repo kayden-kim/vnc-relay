@@ -145,6 +145,7 @@ flowchart LR
 | --- | --- | --- | --- |
 | 작업 2.3 변경(기준 커밋 `f25983a` + 작업 트리) | Ubuntu 24.04.4(WSL2), Rust 1.99.1 | 2~4절의 파일·심볼과 실제 코드를 대조했다. 줄 형식·출력·`relay_id_ref`는 [운영 정보 계약의 계약 테스트 실행 기록](../contracts/ops-info-v1.md#계약-테스트-실행-기록), `peer_ip` 표기는 `crates/domain/src/peer_ip.rs` 단위 테스트로 확인했다. 레이어 규칙은 `cargo xtask layers`로 확인했다. Windows는 빌드도 타입 검사도 하지 않았다(9절). | 통과 |
 | 작업 2.6 변경(기준 커밋 `b1f2ad5` + 작업 트리): `server_ready`의 `listeners` 배열, `ConnectionRejected::listener` | Ubuntu 24.04.4(WSL2), Rust 1.99.1 | `crates/adapters/src/ops_log.rs` `push_event_fields`를 대조했다. `writes_server_ready_with_the_name_and_address_of_every_listener`와 `writes_limit_and_error_kind_with_the_reasons_that_carry_them`이 통과했다. | 통과 |
+| Windows 실행(기준 커밋 `e1cfc4f` + Windows 경고 수정) | Windows 11 Pro 10.0.26200, Rust 1.99.1(`x86_64-pc-windows-msvc`), Visual Studio Build Tools 2022 17.14.37806.7, `AWS_LC_SYS_PREBUILT_NASM=1` | aws-lc-sys를 미리 만든 NASM 오브젝트로 빌드했다. `crates/adapters/tests/ops_info_contract.rs` 13건(파일 이어 쓰기·새 파일 만들기 포함)과 `tests/serve.rs`의 표준 출력 `startup_failed` 줄 검사가 통과했다. Linux 전용인 쓰기 실패 테스트(`/dev/full`)는 실행하지 않았다. | 통과 |
 
 ## 9. 미결정 사항
 
@@ -152,4 +153,3 @@ flowchart LR
 | --- | --- | --- |
 | 로그 파일 교체 뒤 다시 열기 | 운영자가 파일 이름을 바꾸면 서버는 옛 파일에 계속 쓴다. | [CLI 계약 6절](../contracts/cli-v1.md#6-초안을-확정하기-전에-해결할-사항) 관찰 항목 |
 | `RelayIdKey` 생성 실패의 시작 처리 | 오류 코드와 종료 코드가 없다. | 작업 2.9 |
-| Windows의 파일 이어 쓰기, 표준 출력, aws-lc-sys 빌드 | Windows에서 빌드하거나 실행하지 않았다. aws-lc-sys 빌드에 MSVC와 NASM(또는 `AWS_LC_SYS_PREBUILT_NASM=1`)이 필요하다. 그래서 Linux에서 하던 Windows 대상 `cargo clippy` 타입 검사도 이 작업부터 할 수 없다([개발 환경 how-to](../how-to/set-up-and-verify.md)). | 작업 0.1 Windows 빌드 뒤 |

@@ -129,10 +129,10 @@ flowchart LR
 | 대조 범위 | 환경 | 확인 방법 | 결과 |
 | --- | --- | --- | --- |
 | 작업 2.1 변경(기준 커밋 `80267b2` + `crates/` 추가) | Ubuntu 24.04.4(WSL2), Rust 1.99.1 | 2·4절의 파일·심볼과 실제 코드를 대조했다. 처리 순서는 [설정 계약의 계약 테스트 실행 기록](../contracts/config-v1.md#계약-테스트-실행-기록)으로 확인했다. app의 입출력 금지는 `SystemTime::now` 호출을 임시로 넣어 `cargo clippy -p vnc-relay-app`가 `disallowed method` 오류를 내는 것을 확인하고 되돌렸다. | 통과 |
+| Windows 실행(기준 커밋 `e1cfc4f` + Windows 경고 수정) | Windows 11 Pro 10.0.26200, Rust 1.99.1(`x86_64-pc-windows-msvc`) | `cargo xtask scenarios`에서 `config_contract` 21건이 통과했다. 테스트의 Windows 절대 경로 분기(`C:\relay`, `D:\logs\relay.log`)와 상대 경로 풀이를 실행했다([설정 계약의 계약 테스트 실행 기록](../contracts/config-v1.md#계약-테스트-실행-기록)). | 통과 |
 
 ## 9. 미결정 사항
 
 | 항목 | 영향 | 확정 위치 |
 | --- | --- | --- |
 | `tls_file_invalid` 검사 위치 | 인증서·개인키 내용 검사는 rustls 암호 모듈(OPS-TBD-009)이 정해진 뒤 TLS 어댑터에서 한다. 그 전에는 경로 값만 검사한다. | 작업 0.2·3.1 |
-| Windows 실행 확인 | Windows MSVC 빌드 환경이 아직 없다. Windows 절대 경로 분기는 실행하지 않았다. | 작업 0.1 Windows 빌드 확인 |

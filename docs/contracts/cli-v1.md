@@ -16,7 +16,7 @@
 | 기준 스펙 | [운영 스펙 3.1절](../specs/operations.md#31-설정-검증과-시작), [3.2절](../specs/operations.md#32-로컬-cli-계정-준비), [3.4절](../specs/operations.md#34-정상-종료와-재시작) |
 | 관련 요구사항 | [PRD](../requirements/PRD.md) FR-06·FR-07, [7절 보안 및 신뢰 경계](../requirements/PRD.md#7-보안-및-신뢰-경계) |
 | 호환성 범위 | Windows 11 x64·Ubuntu 24.04 LTS x64의 `vnc-relay` 1.x. Windows Server는 제외한다. 계정 파일 `version = 1`. |
-| 관련 테스트 | [운영 스펙 수용 테스트](../specs/operations.md#7-수용-테스트) OPS-001~002·OPS-007~010·OPS-019·OPS-029~031·OPS-039·OPS-042. 계약 테스트는 5절에 연결한다. `serve` 시작·종료 골격과 계정 파일 읽기는 Ubuntu에서 통과했다. `admin` 명령, 종료 유예, Windows는 미실행이다. |
+| 관련 테스트 | [운영 스펙 수용 테스트](../specs/operations.md#7-수용-테스트) OPS-001~002·OPS-007~010·OPS-019·OPS-029~031·OPS-039·OPS-042. 계약 테스트는 5절에 연결한다. `serve` 시작·종료 골격과 계정 파일 읽기는 Ubuntu와 Windows에서 통과했다. Windows에서는 Unix 신호·권한 테스트를 실행하지 않았다. `admin` 명령과 종료 유예는 미실행이다. |
 
 용어는 [VNC Relay 용어집](../../GLOSSARY.md)을 따른다. 설정 파일 키는 [설정 파일 계약](config-v1.md)을 따른다. 이 문서에서 "계정"은 관리자 계정이다.
 
@@ -290,13 +290,14 @@ error[account_name_invalid]: 계정 이름은 소문자 영문·숫자·점·밑
 | 커밋 `f25983a`에 작업 2.3을 더한 작업 트리 | 같음 | `cargo xtask scenarios` | 통과. `tests/serve.rs` 10건(시작 실패 때 stdout의 `startup_failed` 줄 검사로 고친 기존 7건 포함), `tests/cli.rs` 2건, `src/cli.rs` 단위 5건, 계정 파일 계약 테스트 7건 모두 통과. 시나리오 보고는 [운영 정보 계약 실행 기록](ops-info-v1.md#계약-테스트-실행-기록)에 있다. |
 | 같음 | 같음(교차 대상) | `cargo clippy --workspace --all-targets --target x86_64-pc-windows-msvc -- -D warnings` | 실패. 작업 2.3이 더한 aws-lc-sys의 빌드 스크립트가 Windows용 NASM·C 컴파일러 없이 끝나지 않는다. Windows 분기는 타입 검사도 하지 못했다([개발 환경 how-to](../how-to/set-up-and-verify.md)). |
 | 같음 | Windows 11 | `cargo xtask scenarios` | 미실행. Visual Studio Build Tools 설치가 UAC 미승인으로 멈춰(종료 코드 1602) MSVC 링커가 없다([개발 환경 how-to](../how-to/set-up-and-verify.md)). 사용자가 Windows 검증을 뒤로 미뤘다(2026-10-20). |
+| 커밋 `e1cfc4f`에 Windows 경고 수정(`crates/adapters/src/net.rs`·`tests/serve.rs`의 `cfg`)을 더한 작업 트리 | Windows 11 Pro 10.0.26200 x64, Rust 1.99.1(`x86_64-pc-windows-msvc`), Visual Studio Build Tools 2022 17.14.37806.7, `AWS_LC_SYS_PREBUILT_NASM=1` | `cargo xtask scenarios`(내부에서 `cargo test --workspace --no-fail-fast` 실행) | 통과. `src/cli.rs` 단위 5건, `tests/cli.rs` 2건, `tests/serve.rs` 12건, 계정 파일 계약 테스트 6건 모두 통과. Unix 신호를 쓰는 `tests/serve.rs` 테스트와 Ubuntu 권한 경고 테스트는 `cfg`로 빠져 실행하지 않았다. 시나리오 보고는 [운영 정보 계약 실행 기록](ops-info-v1.md#계약-테스트-실행-기록)에 있다. |
 
 ## 6. 초안을 확정하기 전에 해결할 사항
 
 - 이 계약의 이름·코드 선택(하위 명령 옵션 `--yes`·`--help`·`--version`, 오류·경고 코드, 계정 파일 TOML 형식과 필드 이름, 잠금 파일 이름)은 2026-10-16에 사용자가 채택했다. 하위 명령 이름 `serve`·`admin add|passwd|remove|list`와 `--config`는 공유 인터페이스 이름을 따른다.
 - 계정 이름·비밀번호 규칙(1.2절), 솔트·해시 길이(1.4절), 성공 문장과 `notice`, 마지막 계정 삭제 허용도 채택 범위다.
 - 종료 코드는 확정했다(2026-10-16). 준비된 계정이 없을 때(`accounts_none`)와 계정 파일이 없을 때(`accounts_file_missing`)는 5다. 인증서·개인키 파일 오류(`tls_file_invalid`)는 설정 오류와 같은 3이다. 리스너 바인드 실패는 4다.
-- Windows에서 확인이 필요한 사항: 콘솔 창 닫기·로그오프 신호 처리, 계정 파일의 접근 권한 설정 방식, 두 번째 인스턴스가 같은 주소 바인드에 실패하는 설정, 콘솔 코드 페이지.
+- Windows에서 확인이 필요한 사항: 콘솔 창 닫기·로그오프 신호 처리, 계정 파일의 접근 권한 설정 방식, 콘솔 코드 페이지, 다른 프로그램이 주소 공유 옵션으로 같은 주소를 쓸 때의 바인드. 같은 설정의 두 번째 인스턴스는 Windows에서도 바인드에 실패했다([실행 기록](#계약-테스트-실행-기록)).
 - 계정 파일 권한 경고(Ubuntu)는 1.6절 표대로 `serve`의 계정 파일 읽기에 넣었다(작업 2.2). `admin` 명령의 경고와 잠금 파일 사용(1.6절)은 작업 4.1 구현 전에 필요성을 확인한다.
 - 비밀번호 입력의 정규화(1.2절)는 입력 바이트 그대로 쓰기로 채택했다. 입력기마다 같은 비밀번호가 다른 바이트가 될 가능성은 관찰로 확인 필요다.
 - 로그 파일을 교체할 때 서버의 재오픈 여부는 관찰로 확인 필요다. 운영 로그 필드는 [운영 정보 계약](ops-info-v1.md)이 정한다.

@@ -5,8 +5,8 @@ Windows 11 x64 또는 Ubuntu 24.04 LTS x64에서 고정된 Rust 툴체인으로 
 | 항목 | 값 |
 | --- | --- |
 | 대상 독자 | 이 저장소의 코드를 바꾸는 개발자와 코딩 에이전트 |
-| 검증 상태 | Draft — Ubuntu 절차는 실행해 확인했다. Windows 절차는 미실행이다([4절](#4-검증)). |
-| 검증 환경·버전 | Ubuntu 24.04.4 LTS x86_64(WSL2), rustup 1.29.1, Rust 1.99.1, cc 13.3.0, git 2.43.0, cargo-deny 0.20.2 |
+| 검증 상태 | Draft — 1·3·4·6단계는 Ubuntu와 Windows에서 실행해 확인했다. 2단계(rustup 설치)는 두 OS 모두 이미 설치되어 있어 실행하지 않았다([4절](#4-검증)). |
+| 검증 환경·버전 | Ubuntu 24.04.4 LTS x86_64(WSL2), rustup 1.29.1, Rust 1.99.1, cc 13.3.0, git 2.43.0, cargo-deny 0.20.2. Windows 11 Pro 10.0.26200 x64, rustup 1.29.1, Rust 1.99.1, Visual Studio Build Tools 2022 17.14.37806.7, git 2.55.0.windows.3, cargo-deny 0.20.2, NASM 미설치 |
 | 최종 검증일 | 2026-10-20 |
 | 관련 기준 문서 | [Rust 코드 컨벤션](../conventions/rust.md), [테스트 컨벤션](../conventions/testing.md), [코드 지도](../architectures/code-map.md), [의존성 라이선스 검사](check-dependency-licenses.md), [PRD 확정 기준](../requirements/PRD.md#확정-기준)의 지원 OS |
 
@@ -66,9 +66,9 @@ Windows 11 x64 또는 Ubuntu 24.04 LTS x64에서 고정된 Rust 툴체인으로 
 
    기대 결과: winget이 설치 성공을 알리고 종료 코드 0으로 끝난다. 종료 코드 1602는 UAC 승인이 거절되었거나 승인하지 않은 상태다.
 
-   Windows에서는 aws-lc-sys(HMAC·난수·TLS 암호 모듈의 C 라이브러리) 빌드에 NASM도 필요하다. [nasm.us](https://nasm.us/)에서 설치하고 설치 디렉터리를 `PATH`에 더한다. NASM을 설치하지 않으면 빌드하는 PowerShell에서 `$env:AWS_LC_SYS_PREBUILT_NASM = "1"`을 먼저 실행한다. 두 방법 모두 Windows에서 실행해 확인하지 않았다.
+   Windows에서는 aws-lc-sys(HMAC·난수·TLS 암호 모듈의 C 라이브러리) 빌드에 NASM도 필요하다. NASM을 설치하지 않으면 빌드하는 PowerShell에서 `$env:AWS_LC_SYS_PREBUILT_NASM = "1"`을 먼저 실행한다. crate에 든 미리 만든 NASM 오브젝트를 쓴다. 검증 환경은 NASM 없이 이 방법으로 빌드했다. [nasm.us](https://nasm.us/)에서 NASM을 설치하고 `PATH`에 더하는 방법도 있지만 실행해 확인하지 않았다.
 
-   Linux에서 `--target x86_64-pc-windows-msvc`로 `cargo clippy`를 실행하는 타입 검사는 할 수 없다. aws-lc-sys의 빌드 스크립트가 Windows용 C 컴파일러를 요구한다.
+   Linux에서 `--target x86_64-pc-windows-msvc`로 `cargo clippy`를 실행하는 타입 검사는 할 수 없다. aws-lc-sys의 빌드 스크립트가 Windows용 C 컴파일러를 요구한다. Windows 분기는 Windows에서 6단계를 실행해 확인한다.
 
 2. rustup을 설치한다. 이미 있으면 건너뛴다.
 
@@ -89,6 +89,8 @@ Windows 11 x64 또는 Ubuntu 24.04 LTS x64에서 고정된 Rust 툴체인으로 
    ```
 
    기대 결과: 새 셸에서 `rustup --version`이 버전을 출력한다.
+
+   Windows에서 명령을 찾지 못하면 `%USERPROFILE%\.cargo\bin`이 `PATH`에 없는 것이다. 검증 환경도 그랬다. 그 PowerShell에서 `$env:Path = "$env:USERPROFILE\.cargo\bin;$env:Path"`를 먼저 실행한다. 사용자 `PATH`에 영구로 더할 수도 있다.
 
 ### 3.2 빌드
 
@@ -150,11 +152,16 @@ Windows 11 x64 또는 Ubuntu 24.04 LTS x64에서 고정된 Rust 툴체인으로 
 | Ubuntu 빌드 | `vnc-relay 0.1.0` | 4단계(실행파일 직접 실행) | 통과(2026-10-20) | 아래 실행 기록 1 |
 | Ubuntu 전체 완료 검증 | 다섯 명령 종료 코드 0 | 6단계 | 통과(2026-10-20). 레이어 검사 통과(패키지 2개), 시나리오 148건 모두 `미연결`·오류 0건·판정 통과, 단위 테스트 12건 통과, `licenses ok` | 아래 실행 기록 1 |
 | Ubuntu 도구 설치 | rustup 설치 | 2단계 | 미실행. 검증 환경에는 rustup이 이미 설치되어 있었다. 영향: 설치 명령 자체는 이 문서에서 확인하지 않았다. | — |
-| Windows 전체 절차 | 1~6단계 기대 결과 | 1~6단계 | 미실행. 1단계 Build Tools 설치가 종료 코드 1602로 끝났다. 사용자가 UAC를 승인할 수 없었다. 영향: Windows 빌드와 검증 명령의 동작을 확인하지 못했다. 작업 0.1·0.2에서 다시 실행한다. | 아래 실행 기록 2 |
+| Windows 링커·툴체인 | 1단계 설치 성공, 3단계 기대 결과 | 1단계, 3단계 | 통과(2026-10-20). Build Tools 설치는 UAC 승인 뒤 성공했다. `vswhere`가 VCTools 작업 부하가 있는 Build Tools 2022 17.14.37806.7을 찾았다. `rustc 1.99.1 (58cf8f9c3 2026-10-13)`, 활성 툴체인 `1.99.1-x86_64-pc-windows-msvc` | 아래 실행 기록 3 |
+| Windows 빌드 | `vnc-relay 0.1.0` | 4단계(`AWS_LC_SYS_PREBUILT_NASM=1`, 실행파일 직접 실행) | 통과(2026-10-20). 처음 빌드는 1분 걸렸다. | 아래 실행 기록 3 |
+| Windows 전체 완료 검증 | 다섯 명령 종료 코드 0 | 6단계 | 통과(2026-10-20). 처음 실행에서 clippy가 Windows에서만 나는 경고 2건으로 실패했고, 고친 뒤 다섯 명령 모두 통과했다. 시나리오 148건: 통과 3, 부분 12, 미실행 1, 미연결 132, 오류 0, 판정 통과. `licenses ok` | 아래 실행 기록 3 |
+| Windows 도구 설치 | rustup 설치 | 2단계 | 미실행. 검증 환경에는 rustup이 이미 설치되어 있었다. `%USERPROFILE%\.cargo\bin`은 사용자 `PATH`에 없었다. | 아래 실행 기록 2 |
 
 실행 기록 1: 커밋 `b7d23ee`에서 실행했다. Windows 쪽 `git status`는 변경 없음이었다. 환경은 Ubuntu 24.04.4 LTS x86_64(WSL2), rustup 1.29.1, cargo 1.99.1, cargo-deny 0.20.2, `CARGO_TARGET_DIR=$HOME/vnc-relay-target`이다. 3·4·6단계의 명령은 모두 종료 코드 0이었다.
 
-실행 기록 2: 2026-10-20 Windows 11 x64에서 1단계 winget 명령을 실행했다. 종료 코드는 1602였다. rustup은 `%USERPROFILE%\.cargo\bin`에 설치되어 있지만 사용자 PATH에 없다. 이 상태의 `cargo build`는 `` `link.exe` returned an unexpected error ``로 실패했다.
+실행 기록 2: 2026-10-20 Windows 11 x64에서 1단계 winget 명령을 처음 실행했다. UAC를 승인하지 않아 종료 코드는 1602였다. rustup은 `%USERPROFILE%\.cargo\bin`에 설치되어 있지만 사용자 PATH에 없다. 이 상태의 `cargo build`는 `` `link.exe` returned an unexpected error ``로 실패했다.
+
+실행 기록 3: 2026-10-20 같은 Windows 11 Pro 10.0.26200 x64에서 UAC를 승인해 1단계 설치를 마쳤다. 커밋 `e1cfc4f`에 Windows 경고 수정(`crates/adapters/src/net.rs` 테스트 모듈을 Linux 전용으로, `tests/serve.rs`의 `lifecycle_events`를 Unix 전용으로)을 더한 작업 트리에서 실행했다. PowerShell에서 `PATH`에 `%USERPROFILE%\.cargo\bin`을 더하고 `AWS_LC_SYS_PREBUILT_NASM=1`을 정했다. Cargo 대상 디렉터리는 저장소의 `target\`이다. 3·4·6단계의 명령은 모두 종료 코드 0이었다. 수정 전 clippy 오류는 `unused import: super::*`(`crates\adapters\src\net.rs`)와 `function lifecycle_events is never used`(`tests\serve.rs`)였다. 같은 작업 트리에서 Ubuntu 6단계도 다시 통과했다. 테스트별 결과는 [운영 정보 계약 실행 기록](../contracts/ops-info-v1.md#계약-테스트-실행-기록)에 있다.
 
 ## 5. 중단 조건
 

@@ -110,10 +110,10 @@ flowchart LR
 | --- | --- | --- | --- |
 | 이 문서를 추가한 커밋의 `xtask/` | Ubuntu 24.04.4(WSL2), Rust 1.99.1 | 2·4절의 파일·심볼과 실제 코드를 대조했다. 단위 테스트 12건(`cargo test --workspace`)과 [테스트 컨벤션의 보고 도구 확인 기록](../conventions/testing.md#보고-도구-확인-기록)의 시험 실행으로 처리 순서를 확인했다. | 통과 |
 | 부분 표식을 추가한 변경(기준 커밋 `4fb7acb` + `xtask/src/scenarios*` 수정) | 같음 | 2·3·4절의 `Marker`·`TestEntry`·`Status`와 실제 코드를 대조했다. 단위 테스트 12건과 [보고 도구 확인 기록](../conventions/testing.md#보고-도구-확인-기록)의 부분 표식 실행으로 판정을 확인했다. | 통과 |
+| Windows 실행(기준 커밋 `e1cfc4f` + Windows 경고 수정) | Windows 11 Pro 10.0.26200, Rust 1.99.1(`x86_64-pc-windows-msvc`) | `cargo xtask layers`는 `레이어 검사: 통과 (패키지 5개)`였다. `cargo xtask scenarios`가 `target\scenario-report.md`를 만들었다. 보고서의 테스트 위치는 `/` 구분자(`tests/serve.rs`)로 나왔고, `#[cfg(unix)]`로 빠진 테스트는 `미실행(이번 실행에 없음)`으로 표시됐다. | 통과 |
 
 ## 8. 미결정 사항
 
 | 항목 | 영향 | 확정 위치 |
 | --- | --- | --- |
 | 대시보드 테스트 결과 수집 | 정적 HTML·JS 테스트를 보고서에 합치는 방법이 없다. DASH 시나리오 25건은 그 전까지 `미연결`이다. | 프런트엔드 컨벤션(작업 0.9) |
-| Windows 실행 확인 | Windows MSVC 빌드 환경이 아직 없다. 경로 구분자 `\`와 `.exe` 처리는 단위 테스트로만 확인했다. | 작업 0.1 Windows 빌드 확인 |

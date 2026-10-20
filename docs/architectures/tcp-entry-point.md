@@ -133,9 +133,10 @@ flowchart LR
 | 작업 2.4 변경(기준 커밋 `6d6f789` + 작업 트리) | Ubuntu 24.04.4(WSL2), Rust 1.99.1 | 1~4절의 파일·심볼과 실제 코드를 대조했다. 허용 판정은 `crates/domain/src/allow_list.rs`의 단위 테스트, 줄 필드는 `crates/adapters/tests/ops_info_contract.rs`, 수락·거절·보류·종료 순서는 `tests/serve.rs`의 진입점 테스트 4개로 확인했다([운영 정보 계약의 계약 테스트 실행 기록](../contracts/ops-info-v1.md#계약-테스트-실행-기록)). 레이어 규칙은 `cargo xtask layers`로 확인했다. | 통과 |
 | 작업 2.5 변경(기준 커밋 `c89beb4` + 작업 트리): L 판정, 보류의 끝, `AcceptPolicy` | Ubuntu 24.04.4(WSL2), Rust 1.99.1 | 1~6절과 `crates/adapters/src/net.rs`·`src/serve.rs`를 대조했다. 2.4의 진입점 테스트 4개와 2.5의 L·H 테스트 2개가 `tests/serve.rs`에서 통과했다. | 통과 |
 | 작업 2.6 변경(기준 커밋 `b1f2ad5` + 작업 트리): `ConnectionRejected::listener` | Ubuntu 24.04.4(WSL2), Rust 1.99.1 | 3절과 `crates/app/src/events.rs`·`crates/adapters/src/net.rs`를 대조했다. 진입점 테스트와 `writes_connection_events_with_their_contract_fields`가 통과했다. | 통과 |
+| Windows 실행(기준 커밋 `e1cfc4f` + Windows 경고 수정) | Windows 11 Pro 10.0.26200, Rust 1.99.1(`x86_64-pc-windows-msvc`) | `tests/serve.rs`의 `checks_each_tcp_entry_point_against_its_own_allow_list`·`applies_item_boundaries_and_an_empty_list_at_accept`가 통과했다. Windows에서도 `127.0.0.2` 같은 루프백 주소를 출발지로 써서 허용·거절을 확인했다. 종료 때 보류 연결 정리(`closes_and_logs_every_held_connection_when_stopping`)와 이중 스택 테스트는 Unix·Linux 전용이라 실행하지 않았다. | 통과 |
 
 ## 9. 미결정 사항
 
 | 항목 | 영향 | 확정 위치 |
 | --- | --- | --- |
-| Windows에서 `127.0.0.2` 같은 루프백 주소를 출발지로 쓰는 시스템 테스트, 이중 스택 리스너의 IPv4 상대 | Windows에서 실행하지 않았다. Windows는 `[::]` 리스너가 기본으로 IPv6만 받는다. | 작업 0.1 Windows 빌드 뒤 |
+| Windows의 이중 스택 리스너와 종료 때 보류 연결 정리 | 이중 스택 테스트는 Linux 전용이다. Windows는 `[::]` 리스너가 기본으로 IPv6만 받는다. 종료 정리 테스트는 Unix 신호로 종료를 요청하므로 Windows에서 실행하지 않았다. | 작업 5.3(Windows 종료 신호 처리 확인) |

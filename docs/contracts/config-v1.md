@@ -460,6 +460,7 @@ output = "stdout"
 | 커밋 `4e594f4`에 작업 2.2를 더한 작업 트리(`[admin.argon2]` 범위를 domain 상수로 옮김 포함) | Ubuntu 24.04.4(WSL2), Rust 1.99.1, `CARGO_TARGET_DIR=~/vnc-relay-target` | `cargo xtask scenarios`(내부에서 `cargo test --workspace --no-fail-fast` 실행) | 통과. `config_contract` 21건, adapters 단위 2건, domain 단위 15건 모두 통과. 시나리오 보고는 [CLI 계약 실행 기록](cli-v1.md#계약-테스트-실행-기록)에 있다. |
 | 커밋 `f25983a`에 작업 2.3을 더한 작업 트리 | 같음 | 같음 | 통과. `config_contract` 21건과 `tests/serve.rs` 10건 모두 통과. 시나리오 보고는 [운영 정보 계약 실행 기록](ops-info-v1.md#계약-테스트-실행-기록)에 있다. |
 | 같음 | Windows 11 | 같음 | 미실행. Visual Studio Build Tools 설치가 UAC 미승인으로 멈춰(종료 코드 1602) MSVC 링커가 없다([개발 환경 how-to](../how-to/set-up-and-verify.md)). 사용자가 Windows 검증을 뒤로 미뤘다(2026-10-20). Windows 경로 분기(`cfg!(windows)`)는 실행하지 않았다. |
+| 커밋 `e1cfc4f`에 Windows 경고 수정(`crates/adapters/src/net.rs`·`tests/serve.rs`의 `cfg`)을 더한 작업 트리 | Windows 11 Pro 10.0.26200 x64, Rust 1.99.1(`x86_64-pc-windows-msvc`), Visual Studio Build Tools 2022 17.14.37806.7, `AWS_LC_SYS_PREBUILT_NASM=1` | 같음 | 통과. `config_contract` 21건과 adapters 단위 5건 모두 통과. 테스트의 Windows 경로 분기(`cfg!(windows)`: `C:\relay`, `D:\logs\relay.log`)를 실행했다. 시나리오 보고는 [운영 정보 계약 실행 기록](ops-info-v1.md#계약-테스트-실행-기록)에 있다. |
 
 ## 6. 초안을 확정하기 전에 해결할 사항
 
@@ -468,4 +469,4 @@ output = "stdout"
 - `buffer_bytes`(B)와 `ws_message_bytes`(M)의 관계를 정하지 않았다. M이 B보다 클 때 메시지 처리 방식은 구현에서 확인한다([WS-TBD-004](../specs/websocket.md#8-미결정-사항)).
 - 알림을 놓친 변경의 최대 지연은 Dp + D다([운영 스펙 3.3절](../specs/operations.md#33-파일-변경-자동-감지와-부분-재로드), [OPS-041](../specs/operations.md#7-수용-테스트)). 변경 안정화·교체 저장 감지·동시성의 실제 방식은 [OPS-TBD-007](../specs/operations.md#8-미결정-사항)에서 구체화한다.
 - Origin 정규화(1.4절)는 채택했으며 WebSocket 계약 1.3절이 이 규칙을 인용한다. 두 계약이 같은 값을 쓴다.
-- Windows 파일 권한 설정과 경로 처리, 로그 파일을 교체할 때 서버의 재오픈 여부는 관찰로 확인 필요하다.
+- Windows 파일 권한 설정, 로그 파일을 교체할 때 서버의 재오픈 여부는 관찰로 확인 필요하다. Windows 경로 처리는 계약 테스트로 확인했다([실행 기록](#계약-테스트-실행-기록)).

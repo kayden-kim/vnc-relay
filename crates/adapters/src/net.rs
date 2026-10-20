@@ -252,13 +252,12 @@ async fn closed_before_data(stream: &TcpStream) -> AbortReason {
     }
 }
 
-#[cfg(test)]
+// Reading the options back needs getters that socket2 offers on Linux but
+// not on Windows.
+#[cfg(all(test, target_os = "linux"))]
 mod tests {
     use super::*;
 
-    // Reading the options back needs getters that socket2 offers on Linux
-    // but not on Windows.
-    #[cfg(target_os = "linux")]
     #[tokio::test]
     async fn sets_keepalive_idle_interval_and_probes_from_the_settings() {
         let listener = TcpListener::bind("127.0.0.1:0")

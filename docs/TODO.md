@@ -32,7 +32,7 @@ flowchart LR
 
 기능 코드를 쓰기 전에 빌드·컨벤션·검증 기반을 만든다. [프로젝트 작업 안내](README.md#프로젝트-작업-안내) 표의 "미작성" 항목을 채운다.
 
-- [ ] **0.1 Rust 작업 공간**: 실행파일 `vnc-relay` 하나를 만드는 Cargo 프로젝트를 만든다. Rust 툴체인 버전을 고정한다.
+- [x] **0.1 Rust 작업 공간**: 실행파일 `vnc-relay` 하나를 만드는 Cargo 프로젝트를 만든다. Rust 툴체인 버전을 고정한다.
   - 기준: [PRD 확정 기준](requirements/PRD.md#확정-기준)의 "실행 형태"·"구현 기술" 행, [ADR-0004](decisions/ADR-0004-tokio-rustls.md)
   - 완료 조건: Windows 11 x64와 Ubuntu 24.04 LTS x64에서 빌드하고 `vnc-relay --version`을 실행한다.
 - [ ] **0.2 rustls 암호 모듈 선택(OPS-TBD-009, 결정)**: aws-lc-rs와 ring을 두 OS에서 빌드하고 라이선스를 확인한 뒤 고른다. TLS 어댑터 crate(tokio-rustls 등)도 함께 정한다.
@@ -59,7 +59,7 @@ flowchart LR
   - 기준: [아키텍처 작성 규칙](architectures/AGENTS.md), [PRD 8절](requirements/PRD.md#8-비기능-요구사항)의 유지보수성, [ADR-0003](decisions/ADR-0003-single-instance-memory-state.md)
   - 완료 조건: [아키텍처 목록](architectures/README.md)에 등록하고 프로젝트 작업 안내 표의 코드 지도 행을 갱신한다.
   - 선행: 0.1
-- [ ] **0.8 개발 환경·검증 how-to**: 환경·버전·실행 위치, 빌드·테스트 명령, 변경 범위별 검증 명령, 전체 완료 명령과 성공 조건을 쓴다. 두 OS의 차이를 적는다.
+- [x] **0.8 개발 환경·검증 how-to**: 환경·버전·실행 위치, 빌드·테스트 명령, 변경 범위별 검증 명령, 전체 완료 명령과 성공 조건을 쓴다. 두 OS의 차이를 적는다.
   - 기준: [how-to 작성 규칙](how-to/AGENTS.md), [프로젝트 작업 안내](README.md#프로젝트-작업-안내)
   - 완료 조건: [how-to 목록](how-to/README.md)에 등록한다. 프로젝트 작업 안내 표의 실행·검증 행과 루트 [AGENTS.md](../AGENTS.md)의 "구현 코드와 실행·검증 설정은 없다" 문장을 갱신한다.
   - 선행: 0.5, 0.6

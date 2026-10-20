@@ -119,6 +119,7 @@ flowchart LR
 | 대조 범위 | 환경 | 확인 방법 | 결과 |
 | --- | --- | --- | --- |
 | 작업 2.6 변경(기준 커밋 `b1f2ad5` + 작업 트리) | Ubuntu 24.04.4(WSL2), Rust 1.99.1 | 1~4절의 파일·심볼과 실제 코드를 대조했다. 준비 상태 전이는 `crates/app/src/lifecycle.rs` 단위 테스트 2건, 상태별 응답·헤더·405·404·`server_ready`·`admin_connection_limit` 줄은 `crates/adapters/tests/ops_info_contract.rs`, 준비됨 뒤 응답과 Lm·L 독립은 `tests/serve.rs`의 `answers_status_queries_without_login_once_ready`·`refuses_status_connections_beyond_lm_and_keeps_lm_and_l_apart`로 확인했다([운영 정보 계약의 계약 테스트 실행 기록](../contracts/ops-info-v1.md#계약-테스트-실행-기록)). 실행 중인 프로세스에서 `starting`·`shutting_down` 응답은 관찰하지 않았다. 그 구간이 밀리초 단위라 시스템 테스트가 맞출 수 없다. | 통과 |
+| Windows 실행(기준 커밋 `e1cfc4f` + Windows 경고 수정) | Windows 11 Pro 10.0.26200, Rust 1.99.1(`x86_64-pc-windows-msvc`) | 같은 단위·계약 테스트와 `tests/serve.rs`의 `answers_status_queries_without_login_once_ready`·`refuses_status_connections_beyond_lm_and_keeps_lm_and_l_apart`가 통과했다. | 통과 |
 
 ## 9. 미결정 사항
 
@@ -126,4 +127,3 @@ flowchart LR
 | --- | --- | --- |
 | 상태 연결의 요청 대기 시간 | hyper에 시간 제한을 주지 않았다. 요청을 보내지 않는 연결이 Lm 자리를 계속 잡을 수 있다. 계약에 값이 없다. | 작업 4.2에서 관리 연결과 함께 정한다 |
 | `listener_failed` | 판정할 실패 경로가 없다. | 리스너 실패를 판정하는 작업 |
-| Windows 실행 | Windows에서 실행하지 않았다. | 작업 0.1 Windows 빌드 뒤 |
