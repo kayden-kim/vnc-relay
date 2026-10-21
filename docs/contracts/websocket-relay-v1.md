@@ -6,7 +6,7 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 이름과 버전 | `websocket-relay` 1.0.0 |
+| 이름과 버전 | `websocket-relay` 1.0.0. H 시작점과 검사 순서의 명확화(사용자 결정 2026-10-22(Q22), 2026-10-22(Q24))는 버전을 올리지 않았다. |
 | 상태 | Active(2026-10-16 채택) |
 | 소유자 | vnc-relay 프로젝트 관리자 |
 | 만드는 쪽(Producer) | 외부 WebSocket 클라이언트(요청·바이너리 메시지·Close 송신), `vnc-relay` WS·WSS 리스너(응답·바이너리 메시지·ping·Close 송신). 방향마다 만드는 쪽이 다르며, 각 절에 방향을 적는다. |
@@ -46,13 +46,20 @@
 
 1. 접속 수락 직후: 출발지 IP 허용 목록. 실패하면 TLS·HTTP 처리 전에 연결을 닫는다. HTTP 응답은 없다.
 2. WSS: TLS 협상. 실패하면 연결이 성립하지 않는다.
-3. 요청 구문, 경로, 메서드, 업그레이드 헤더와 버전, 키.
+3. 요청 구문, 경로, 메서드, 업그레이드 헤더와 버전, 키. 이 단계 안의 순서는 다음과 같다(사용자 결정 2026-10-22(Q24)).
+   - 가. 요청 구문. HTTP 400이다.
+   - 나. 경로(404), 메서드(405), HTTP 버전(400).
+   - 다. `Host`, `Upgrade`, `Connection` 헤더(400).
+   - 라. `Sec-WebSocket-Version`(426).
+   - 마. `Sec-WebSocket-Key`(400).
 4. `Origin`.
 5. 서브프로토콜.
 6. 업그레이드 직전 출발지 IP 재검사. 그 순간의 유효한 목록을 쓴다.
 7. 모두 통과하면 `101`을 보낸다.
 
 TLS 협상과 업그레이드 단계에는 제한 시간 U(`tls_upgrade_secs`)가 적용된다. `101` 전에 U가 지나면 HTTP 응답 없이 연결을 닫는다. 출발지 IP 허용 목록 값의 형식은 [설정 계약](config-v1.md)이 정한다.
+
+H(`handshake_secs`)는 초기 교환 제한 시간이다. WS·WSS에서는 `101` 응답을 보낸 뒤부터 잰다. 101 전의 시간은 U가 맡는다(사용자 결정 2026-10-22(Q22)).
 
 ### 1.2 업그레이드 응답과 서브프로토콜
 
@@ -187,7 +194,7 @@ Close를 보낸 뒤에는 데이터 메시지를 보내지 않는다([RFC 6455 5
 | 4006 | 끊긴 연결 감지. | [relay.md 4절](../specs/relay.md#4-오류와-복구) '끊긴 연결 감지' 행, [RLY-025](../specs/relay.md#7-수용-테스트), [RLY-026](../specs/relay.md#7-수용-테스트), [WS-026](../specs/websocket.md#7-수용-테스트) | `dead_connection` |
 | 4007 | 상대 연결 오류, 또는 EOF 뒤 데이터 소진 불가. | [relay.md 4절](../specs/relay.md#4-오류와-복구) '중계 I/O 오류' 행, [websocket.md 4절](../specs/websocket.md#4-오류와-종료) 'TCP 정상 EOF' 행, [RLY-020](../specs/relay.md#7-수용-테스트), [WS-016](../specs/websocket.md#7-수용-테스트) | `connection_error` |
 | 4008 | 초기 교환 오류. | [websocket.md 4절](../specs/websocket.md#4-오류와-종료) 'Repeater 초기 교환 오류·시간 초과' 행, [relay.md 4절](../specs/relay.md#4-오류와-복구) 첫 행, [RLY-004](../specs/relay.md#7-수용-테스트) | 해당 없음 |
-| 4009 | 초기 교환 시간 초과. | [relay.md 4절](../specs/relay.md#4-오류와-복구) '초기 교환 미완료·시간 초과' 행, [RLY-005](../specs/relay.md#7-수용-테스트), [OPS-006](../specs/operations.md#7-수용-테스트) | 해당 없음 |
+| 4009 | 초기 교환 시간 초과. | [relay.md 4절](../specs/relay.md#4-오류와-복구) '초기 교환 미완료·시간 초과' 행, [RLY-005](../specs/relay.md#7-수용-테스트), [OPS-006](../specs/operations.md#7-수용-테스트) | 해당 없음. 운영 로그는 `connection_aborted`(`handshake_timeout`, `stage` `initial_exchange`)다. 101 뒤 H가 지나 이 코드를 보내는 연결은 활성 세션이 아니다. 작업 2.7 전까지 이 동작은 임시다(사용자 결정 2026-10-22(Q21)). |
 | 4010 | 대기 상한 도달. | [operations.md 5절](../specs/operations.md#5-오류와-복구) 'Lw 상한 도달' 행, [OPS-005](../specs/operations.md#7-수용-테스트) | 해당 없음 |
 
 코드를 받을 수 없는 종료(클라이언트의 pong 제한 초과, 네트워크 단절)는 서버가 코드를 보내지 않는다. 이 경우의 종료 원인은 `dead_connection`이며 테스트는 [WS-017](../specs/websocket.md#7-수용-테스트), [WS-026](../specs/websocket.md#7-수용-테스트)이다. Close 교환 중 E 초과의 종료 원인은 `close_timeout`이다.

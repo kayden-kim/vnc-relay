@@ -18,8 +18,8 @@
 - 맡는 책임:
   - 연결 예산: 상한 하나 아래에서 자리를 잡고 돌려준다. 동시에 잡아도 상한을 넘지 않는다. 예산마다 따로 세므로 한 예산이 고갈돼도 다른 예산은 영향을 받지 않는다(OPS-R20).
   - L: 모든 중계 진입점(TCP·WS·WSS)이 L 예산 하나를 함께 쓴다. TCP·WS·WSS 진입점은 출발지 IP 검사를 통과한 연결에서 자리를 잡는다. 자리가 없으면 `connection_rejected`(`stage` = `accept`, `reason` = `relay_connection_limit`, `limit`)를 기록하고 닫는다. 연결이 끝나면 자리를 돌려준다.
-  - H: TCP 연결은 수락하자마자 초기 교환 상태에 들어간다. H가 지나면 닫고 `connection_aborted`(`handshake_timeout`)를 기록한다. WS·WSS의 H는 101 응답 뒤부터 잰다(사용자 결정 2026-10-22 (Q22)). 그 H가 지나면 4009 닫기 코드로 닫고 `connection_aborted`(`handshake_timeout`)를 기록한다.
-  - U: WS·WSS와 관리 리스너 연결의 요청 시간 제한. `[timeouts] tls_upgrade_secs`를 쓰고 수락부터 잰다. WS·WSS는 TLS 핸드셰이크(WSS)와 업그레이드 요청을 끝내야 한다. 관리 리스너는 TLS 핸드셰이크와 첫 요청 머리를 끝내야 한다(사용자 결정 Q12). 관리 리스너는 첫 요청 머리 뒤 읽기·쓰기마다 U를 다시 잰다(사용자 결정 2026-10-22 (Q25), [관리 리스너 모듈 설계](management-listener.md) 9절 11번). 기한이 지나면 WS·WSS는 `connection_aborted`(`tls_upgrade_timeout`)를 기록하고 닫는다. 관리 리스너는 평문 응답 없이 닫고 기록하지 않는다.
+  - H: TCP 연결은 수락하자마자 초기 교환 상태에 들어간다. H가 지나면 닫고 `connection_aborted`(`handshake_timeout`)를 기록한다. WS·WSS의 H는 101 응답 뒤부터 잰다(사용자 결정 2026-10-22(Q22)). 그 H가 지나면 4009 닫기 코드로 닫고 `connection_aborted`(`handshake_timeout`)를 기록한다.
+  - U: WS·WSS와 관리 리스너 연결의 요청 시간 제한. `[timeouts] tls_upgrade_secs`를 쓰고 수락부터 잰다. WS·WSS는 TLS 핸드셰이크(WSS)와 업그레이드 요청을 끝내야 한다. 관리 리스너는 TLS 핸드셰이크와 첫 요청 머리를 끝내야 한다(사용자 결정 Q12). 관리 리스너는 첫 요청 머리 뒤 읽기·쓰기마다 U를 다시 잰다(사용자 결정 2026-10-22(Q25), [관리 리스너 모듈 설계](management-listener.md) 9절 11번). 기한이 지나면 WS·WSS는 `connection_aborted`(`tls_upgrade_timeout`)를 기록하고 닫는다. 관리 리스너는 평문 응답 없이 닫고 기록하지 않는다.
   - 보류 중 상대 종료 감지: 상대가 바이트를 보내기 전에 닫으면 `peer_eof`, 연결이 재설정되면 `connection_error`(`error_kind` = `io_error`)로 정리한다. 바이트를 소비하지 않는 `peek`로 확인한다(사용자 결정 2026-10-20).
   - K: 수락한 중계 소켓마다 TCP keepalive의 유휴 시간·탐색 간격·탐색 횟수를 설정한다.
 - 맡지 않는 책임:
@@ -75,7 +75,7 @@ flowchart LR
 | `ConnectionBudget` | `limit: u32`, `used: AtomicU32` | `Arc`로 공유하는 메모리 | `used ≤ limit`. 자리를 잡을 때만 늘고 `BudgetPermit`이 버려질 때만 준다. |
 | `BudgetPermit` | `budget: Arc<ConnectionBudget>` | 연결 작업 | 연결 하나에 하나. 소켓을 닫은 뒤 버린다. |
 | `AcceptPolicy` | `allow: AllowList`, `relay_budget: Arc<ConnectionBudget>`, `handshake: Duration`(H), `keepalive: KeepaliveSettings`(K) | `TcpEntryPoint`, `WsPolicy.accept` | 모든 진입점의 `relay_budget`은 같은 예산이다. 값은 시작할 때 정하고 바꾸지 않는다(설정 계약에서 모두 재시작 필요). |
-| `WsPolicy` | `accept: AcceptPolicy`, `upgrade: Duration`(U), `origins`(허용 Origin 목록) | `WsEntryPoint` | `accept.handshake`(H)는 101 뒤부터 잰다(사용자 결정 2026-10-22 (Q22)). `upgrade`(U)는 수락부터 잰다. 값은 시작할 때 정한다. |
+| `WsPolicy` | `accept: AcceptPolicy`, `upgrade: Duration`(U), `origins`(허용 Origin 목록) | `WsEntryPoint` | `accept.handshake`(H)는 101 뒤부터 잰다(사용자 결정 2026-10-22(Q22)). `upgrade`(U)는 수락부터 잰다. 값은 시작할 때 정한다. |
 
 `connection_rejected`와 `connection_aborted`의 줄 필드는 [TCP 진입점 모듈 설계 3절](tcp-entry-point.md#3-데이터-모델)과 같다. `limit`은 `peer_ip` 다음, `error_kind`는 `elapsed_ms` 다음에 쓴다.
 
@@ -95,7 +95,7 @@ flowchart LR
 
 H가 먼저 지나면 5~6단계 대신 `handshake_timeout`(`warn`)으로, 서버가 종료하면 `server_shutdown`(`info`)으로 같은 정리를 한다.
 
-WS·WSS는 자리를 잡은 뒤 U 안에서 TLS 핸드셰이크(WSS)와 업그레이드 요청을 끝낸다. 끝내지 못하면 `connection_aborted`(`tls_upgrade_timeout`, `warn`)를 기록하고 닫는다. 101 응답 뒤에는 H를 잰다(사용자 결정 2026-10-22 (Q22)). H가 지나면 4009 닫기 코드로 닫고 `connection_aborted`(`handshake_timeout`)를 기록한다.
+WS·WSS는 자리를 잡은 뒤 U 안에서 TLS 핸드셰이크(WSS)와 업그레이드 요청을 끝낸다. 끝내지 못하면 `connection_aborted`(`tls_upgrade_timeout`, `warn`)를 기록하고 닫는다. 101 응답 뒤에는 H를 잰다(사용자 결정 2026-10-22(Q22)). H가 지나면 4009 닫기 코드로 닫고 `connection_aborted`(`handshake_timeout`)를 기록한다.
 
 ## 5. 상태와 초기화
 
@@ -128,9 +128,9 @@ WS·WSS는 자리를 잡은 뒤 U 안에서 TLS 핸드셰이크(WSS)와 업그�
 | 보류 중 상대 종료는 `peek`로 확인한다. | 바이트를 소비하지 않아 작업 2.7의 초기 교환이 같은 바이트를 읽을 수 있다. 바이트가 오면 확인을 멈추므로 바쁜 반복이 없다. | H 만료까지 기다리기. 떠난 클라이언트의 자리가 H 동안 남는다. | 사용자 결정 2026-10-20 |
 | keepalive 매개변수는 socket2로 설정한다. | tokio·std에는 유휴 시간·탐색 간격·탐색 횟수를 정하는 API가 없다. `unsafe`는 금지다. socket2는 tokio가 이미 쓰는 crate다(MIT OR Apache-2.0). | keepalive를 작업 2.11로 미루기 | 사용자 결정 2026-10-20, [PRD "구현 기술" 행](../requirements/PRD.md#확정-기준) |
 | 자리를 돌려준 뒤 사건을 기록한다. | 줄을 본 클라이언트가 바로 다시 접속할 때 자리가 있어야 한다. 시스템 테스트가 이 순서에 기댄다. | 기록 뒤 반환 | 없음 |
-| WS·WSS의 H는 101 응답 뒤부터 잰다. | U가 101 전 시간을 맡는다. 수락부터 H를 재면 U와 같은 구간을 두 번 잰다. | 수락부터 H 재기(U와 겹침) | 사용자 결정 2026-10-22 (Q22) |
+| WS·WSS의 H는 101 응답 뒤부터 잰다. | U가 101 전 시간을 맡는다. 수락부터 H를 재면 U와 같은 구간을 두 번 잰다. | 수락부터 H 재기(U와 겹침) | 사용자 결정 2026-10-22(Q22) |
 | U는 수락부터 잰다. WS·WSS는 TLS 핸드셰이크와 업그레이드 요청을, 관리 리스너는 TLS 핸드셰이크와 첫 요청 머리를 한 기한으로 덮는다. | 자리가 정해진 시간 안에 돌아오게 한다. | 단계마다 따로 시간 재기 | 사용자 결정 2026-10-21 Q12(관리), websocket-relay-v1 §1.1(WS) |
-| 관리 리스너는 첫 요청 머리 뒤 읽기·쓰기마다 U를 다시 잰다. | 요청 사이에 머무는 연결이 자리를 무기한 잡지 않는다. 첫 요청 뒤 U는 유휴 제한만이며 요청마다 절대 기한은 없다. | 첫 요청 뒤에도 수락부터 절대 기한 하나 | 사용자 결정 2026-10-22 (Q25). [관리 리스너 모듈 설계](management-listener.md) 9절 11번 |
+| 관리 리스너는 첫 요청 머리 뒤 읽기·쓰기마다 U를 다시 잰다. | 요청 사이에 머무는 연결이 자리를 무기한 잡지 않는다. 첫 요청 뒤 U는 유휴 제한만이며 요청마다 절대 기한은 없다. | 첫 요청 뒤에도 수락부터 절대 기한 하나 | 사용자 결정 2026-10-22(Q25). [관리 리스너 모듈 설계](management-listener.md) 9절 11번 |
 
 ## 8. 현재 코드와의 차이
 
@@ -151,4 +151,4 @@ WS·WSS는 자리를 잡은 뒤 U 안에서 TLS 핸드셰이크(WSS)와 업그�
 | 항목 | 영향 | 확정 위치 |
 | --- | --- | --- |
 | Windows의 keepalive 값 | 설정한 유휴 시간·탐색 간격·탐색 횟수를 Windows에서 읽어 확인하지 않았다. socket2가 그 값을 읽는 함수를 Linux에서만 준다. | 작업 2.11(끊긴 연결 감지)에서 동작으로 확인 |
-| WS H 시작점(101 뒤) (해결) | 101 뒤부터 H를 잰다. 수락부터 재면 U와 기한이 겹친다. | 사용자 결정 2026-10-22 (Q22) |
+| WS H 시작점(101 뒤) (해결) | 101 뒤부터 H를 잰다. 수락부터 재면 U와 기한이 겹친다. | 사용자 결정 2026-10-22(Q22) |
