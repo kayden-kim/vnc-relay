@@ -541,6 +541,8 @@ X-CSRF-Token: <csrf-token>
 | Consumer / 화면 E2E(미생성) | 세션 정보의 `dashboard.poll_secs`로 폴링하고, 조회 제한 시간을 넘으면 실패로 처리하며, 같은 조회를 겹치지 않는다. [DASH-005](../specs/dashboard.md#7-수용-테스트)·[DASH-016](../specs/dashboard.md#7-수용-테스트)·[DASH-022](../specs/dashboard.md#7-수용-테스트) | 미실행 | 구현·테스트 파일 없음 |
 | Consumer / 화면 E2E(미생성) | `401`에서 보호 데이터를 제거하고 `/login/`으로 이동하며, 로그인·로그아웃 흐름이 1.5절·1.2절을 따른다. [DASH-008](../specs/dashboard.md#7-수용-테스트)·[DASH-014](../specs/dashboard.md#7-수용-테스트)·[DASH-017](../specs/dashboard.md#7-수용-테스트)·[DASH-018](../specs/dashboard.md#7-수용-테스트)·[DASH-019](../specs/dashboard.md#7-수용-테스트) | 미실행 | 구현·테스트 파일 없음 |
 | Consumer / 화면 E2E(미생성) | 종료 흐름: 취소는 요청 없음, 완료·`404`·`terminate_failed`·응답 유실을 구분하고, 응답 유실 때 자동 재전송 없이 먼저 재조회한다. [DASH-007](../specs/dashboard.md#7-수용-테스트)·[DASH-009](../specs/dashboard.md#7-수용-테스트)·[DASH-010](../specs/dashboard.md#7-수용-테스트)·[DASH-011](../specs/dashboard.md#7-수용-테스트)·[DASH-012](../specs/dashboard.md#7-수용-테스트)·[DASH-013](../specs/dashboard.md#7-수용-테스트) | 미실행 | 구현·테스트 파일 없음 |
+| Consumer / 화면 E2E(미생성) | 형식이 틀린 세션 식별자의 상세 URL은 요청을 보내지 않고 '잘못된 세션 식별자'를 보인다(1.11절). 종료 행동은 두지 않고, 대상 없음(`404`)과 구분한다. [DASH-026](../specs/dashboard.md#7-수용-테스트) | 미실행 | 구현·테스트 파일 없음 |
+| Consumer / 화면 E2E(미생성) | 로그인 요청 뒤 서버 오류 또는 응답 없음이면 로그인 요청 실패 안내를 보이고, 인증 실패(`401`)의 공통 안내와 다른 문구로 보이며, 중복 전송을 막는다. 계약 2.3절에는 이 규칙이 없고 스펙 4절이 정한다. [DASH-027](../specs/dashboard.md#7-수용-테스트) | 미실행 | 구현·테스트 파일 없음 |
 
 작업 4.3 실행 기록(커밋 `59f3f62` + 문서 변경 작업 트리): WSL `vr-full.sh` ALL PASSED(통과 11, 부분 27, 미연결 110). Windows `vr-win.ps1 -Only all` ALL PASSED (all)(통과 10, 부분 27, 미실행 1 = OPS-007, 미연결 110). 위 표의 결과 열은 검증 기록 규칙에 따라 부분 행을 `미실행`으로 둔다. 빠진 부분은 작업 4.4·4.5에서 채운다. 대조 기록: [관리 로그인과 세션 설계](../architectures/management-session.md#대조-기록).
 
