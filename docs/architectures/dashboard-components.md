@@ -4,9 +4,9 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 구조 시점 | Target |
+| 구조 시점 | Current |
 | 문서 상태 | Draft |
-| 구현 대조 | 미대조 |
+| 구현 대조 | 대조함, [대조 기록](#대조-기록) |
 | 코드 위치 | `web/dashboard/app/components/`, `web/dashboard/app/styles/`, `web/dashboard/preview/`, `web/dashboard/tests/` |
 | 코드 지도 | [코드 지도 2절](code-map.md#2-코드-위치와-구성요소) |
 | 관련 스펙 | [대시보드 화면 스펙](../specs/dashboard.md)의 화면 상태 표. 이 모듈은 화면이 아니라서 시나리오 ID를 가지지 않는다. |
@@ -45,14 +45,14 @@ flowchart LR
 | --- | --- | --- |
 | `app/components/icons.js` `icon` | 이름으로 아이콘 SVG 하나를 만든다. 정적 SVG 문자열을 모듈 안 `<template>`에 한 번 넣고 `cloneNode`로 복제한다. | 없음 |
 | `app/components/button.js` `createButton` | 버튼 요소를 만든다. | `icons.js` |
-| `app/components/text-field.js` `createTextField` | 레이블, 입력, 오류 문구를 묶은 `div`를 만든다. | 없음 |
+| `app/components/text-field.js` `createTextField` | 레이블, 입력, 오류 문구를 묶은 `div`를 만든다. 오류 아이콘은 `icons.js`로 만든다. | `icons.js` |
 | `app/components/badge.js` `createBadge` | 상태 배지를 만든다. | `icons.js` |
 | `app/components/alert.js` `createAlert` | 상태 안내 상자를 만든다. | `icons.js` |
-| `app/components/card.js` `createCard` | 제목이 있는 카드 `section`을 만든다. | 없음 |
+| `app/components/card.js` `createCard` | 제목이 있는 카드 `section`을 만든다. 개수는 배지로 보인다. | `badge.js` |
 | `app/components/stat.js` `createStat` | 값 하나와 이름을 묶은 지표를 만든다. 값은 `metric` 글꼴을 쓴다. | 없음 |
 | `app/components/gauge.js` `createGauge` | 원형 게이지를 `progressbar` 역할로 만든다. | 없음 |
-| `app/components/navbar.js` `createNavbar` | 상단 막대와 "주 메뉴" `nav`를 만든다. | `link.js`, `icons.js` |
-| `app/components/language-select.js` `createLanguageSelect` | 레이블이 있는 네이티브 `select`를 만든다. | 없음 |
+| `app/components/navbar.js` `createNavbar` | 상단 막대와 호출자가 준 레이블의 `nav`를 만든다. | `link.js`, `icons.js` |
+| `app/components/language-select.js` `createLanguageSelect` | 레이블이 있는 네이티브 `select`를 만든다. 지구본과 화살표 아이콘을 붙인다. | `icons.js` |
 | `app/components/data-table.js` `createDataTable` | 표 요소를 만든다. 좁은 폭의 카드 배치는 CSS가 맡는다. | 없음 |
 | `app/components/link.js` `createLink` | 링크 `a`를 만든다. | `icons.js` |
 | `app/components/dialog.js` `createDialog` | 네이티브 `dialog`로 확인 대화상자를 만든다. | `button.js` |
@@ -82,14 +82,14 @@ flowchart LR
 | `createTextField({id, label, type, value, required, autocomplete, helpText, error})` | `type`은 `text` 또는 `password`. `error`가 있으면 오류 상태다. | `HTMLDivElement`. 오류가 있으면 `aria-invalid="true"`, `aria-describedby`에 오류 문구 id를 쓴다. |
 | `createBadge({tone, label, icon})` | `icon` 기본값은 `tone`별 아이콘(`neutral`은 없음). `icon: false`로 끈다. | `HTMLSpanElement` |
 | `createAlert({tone, title, message})` | `warning`·`destructive`는 `role="alert"`, 나머지는 `role="status"` | `HTMLDivElement` |
-| `createCard({title, headingLevel, count, actions, body, footer})` | `headingLevel` 기본 2 | `HTMLElement`(`section`). `aria-labelledby`로 제목과 묶는다. |
-| `createStat({label, value, unit, tone})` | 값은 `metric` 글꼴과 `tnum`을 쓴다. | `HTMLDivElement` |
-| `createGauge({label, value, max, valueText})` | `value`는 `0`~`max`. 채움 길이는 `setProperty`로 쓴다. | `HTMLDivElement`. `role="progressbar"`, `aria-valuemin`, `aria-valuemax`, `aria-valuenow`, `aria-valuetext`. |
-| `createNavbar({brand, items, language, action, label})` | `items`는 `{label, href, current}`. `label` 기본값 "주 메뉴". | `HTMLElement`(`header`). 안에 `nav`를 둔다. 현재 항목은 `aria-current="page"`. |
-| `createLanguageSelect({id, label, value, options, variant})` | `options`는 `{value, label}` 배열 | `HTMLDivElement`. 안에 `label`과 `select`. |
+| `createCard({title, headingLevel, count, actions, body, footer})` | `title` 필수. `headingLevel` 기본 2(1~6의 정수). `count`는 `createBadge`로 붙인다. | `HTMLElement`(`section`). `aria-labelledby`로 제목과 묶는다. |
+| `createStat({label, value, unit, tone})` | `label` 필수. 값은 문자열 또는 숫자이며 `metric` 글꼴과 `tnum`을 쓴다. | `HTMLDivElement` |
+| `createGauge({label, value, max, valueText, limitText, unknownText})` | `value`는 `0`~`max`. `label`과 `limitText`는 필수다. `value`가 `null`이면 알 수 없음이며 링을 그리지 않고 `unknownText`(필수)를 쓴다. 채움 길이는 `style.setProperty`로 쓴다. | `HTMLDivElement`. `role="progressbar"`, `aria-label`, `aria-valuemin`, `aria-valuemax`, `aria-valuenow`, `aria-valuetext`. |
+| `createNavbar({brand, items, language, action, label})` | `label`은 필수다(기본값 없음, 호출자가 준다). `items`는 `{label, href, current, desktopOnly}`. `desktopOnly` 항목은 1024px 미만에서 숨긴다. | `HTMLElement`(`header`). 안에 `nav`를 둔다. 현재 항목은 `aria-current="page"`. |
+| `createLanguageSelect({id, label, value, options, variant})` | `id`, `label`, `options`(`{value, label}` 배열, 빈 배열이면 `TypeError`)는 필수. `variant` 기본 `form`(`navbar`·`form`). | `HTMLDivElement`. 안에 `label`과 `select`. |
 | `createDataTable({caption, columns, rows, emptyText, numericColumns})` | `columns`는 `{key, label}`. `rows`는 값 배열의 배열. | `HTMLTableElement`. 열 머리글은 `scope="col"`. 행이 없으면 `emptyText`를 한 행으로 쓴다. |
 | `createLink({href, label, icon})` | `icon`은 아이콘 이름 | `HTMLAnchorElement` |
-| `createDialog({title, description, confirmLabel, cancelLabel, destructive, onConfirm, onCancel})` | 확인 버튼은 `destructive`면 위험 스타일 | `{element, show(), hide()}`. `show`는 `showModal()`을 부르고, 닫기와 취소는 네이티브 포커스 복귀를 쓴다. |
+| `createDialog({title, description, confirmLabel, cancelLabel, destructive, onConfirm, onCancel})` | `title`, `confirmLabel`, `cancelLabel`은 필수. 확인 버튼은 `destructive`면 위험 스타일 | `{element, show(), hide()}`. `show`는 `showModal()`을 부르고, 닫기와 취소는 네이티브 포커스 복귀를 쓴다. |
 
 모든 함수는 API 값을 `textContent`나 속성 값으로만 넣는다. `innerHTML`에는 정적 문자열만 넣는다.
 
@@ -110,7 +110,7 @@ flowchart LR
 
 ## 6. 오류 처리
 
-- 개발 실수(허용하지 않는 옵션): `TypeError`를 던진다. 호출한 모듈이 처리하지 않는다. 테스트 페이지가 이 경로를 확인하지 않는다.
+- 개발 실수(허용하지 않는 옵션, 빠진 필수 값): `TypeError`를 던진다. 호출한 모듈이 처리하지 않는다. 테스트 페이지(`tests/components.js`)가 `navbar`의 빠진 `label`로 이 경로를 확인한다.
 - API 값과 긴 값: 텍스트로만 넣는다. 한글은 `word-break: keep-all`, 긴 영어와 숫자는 `overflow-wrap: anywhere`로 줄인다.
 - 네트워크 오류, 권한 오류는 이 모듈에 없다. 화면 모듈이 `createAlert`로 표시한다.
 
@@ -126,16 +126,27 @@ flowchart LR
 | 언어 선택 | 네이티브 `select` | 키보드 동작과 스크린 리더 이름을 브라우저가 맡는다. | 직접 만든 목록 상자. |
 | 아이콘 | 인라인 SVG와 `<template>` 복제 | 외부 파일 요청이 없고 CSP를 지킨다. | 외부 스프라이트 `<use href>`. 외부 파일 요청이 생긴다. |
 
-## 8. 현재 코드와의 차이
+## 8. 미결정 사항
 
-구현 전이다. 구현 뒤 이 절을 지우고 구조 시점을 `Current`로 바꾼다. 코드 지도의 `web/dashboard/` 행도 같은 변경에서 갱신한다.
-
-## 9. 미결정 사항
-
-- 브라우저 시험(`tests/dashboard_browser.rs`)을 4.8에 넣는 범위와 WSL의 Chromium 전제는 작업 보고에서 결정을 요청한다. 권장: 4.8에 넣고 Windows에서 실행하며, WSL에는 Chromium을 설치하기 전까지 실행하지 않는다.
+- 브라우저 시험(`tests/dashboard_browser.rs`)은 4.8에 넣었다. Windows의 Chrome(없으면 Edge)으로 실행한다. WSL Ubuntu에는 Chromium이 없어 실행하지 않는다. 결정 요청: WSL에 Chromium을 설치해 같은 시험을 WSL에서도 돌릴지. 권장: 설치하지 않고 Windows 실행을 유지한다. 브라우저가 없으면 시험은 실패한다(건너뛰지 않는다).
 - 성능 예산(FE-TBD-016)은 화면이 생긴 뒤 정한다(사용자 결정 2026-10-22(Q39)).
 - 로그인(4.9)과 운영 화면(4.10·4.11)이 조각을 더 요구하면 이 문서에 API를 추가한다.
 
 ## 대조 기록
 
-아직 없다. 구현 뒤 경로, 함수 이름, 상태 속성을 대조하고 기록한다.
+대조일 2026-10-22, 환경 Windows 10.0.26200. 경로, 함수 이름, 상태 속성은 소스와 일치한다. 아래 표의 "차이"는 설계 문서를 코드에 맞춘 것이다.
+
+| 대상 | 확인 방법 | 결과 |
+| --- | --- | --- |
+| 파일 경로(2절 표) | 13개 조각 파일, `app/styles/base.css`·`components.css`, `preview/`, `tests/components.js` 존재 확인 | 통과 |
+| 공개 함수 이름과 옵션(3.1 표) | 각 `export function`의 옵션 구조 분해와 `TypeError` 검사를 대조 | 차이 7건을 고쳤다: card(`badge.js` 의존, 개수 배지), stat(`label` 필수), gauge(`limitText`·`unknownText` 추가), navbar(`label` 필수, "주 메뉴" 기본값 없음, `desktopOnly`), language-select(`icons.js` 의존, `variant` 기본 `form`), text-field(`icons.js` 의존, 2절 표), dialog(`title`·`confirmLabel`·`cancelLabel` 필수) |
+| 아이콘 이름 13개와 크기 md·sm | `PATHS` 키, `SIZE_CLASS`, CSS `.icon-md`·`.icon-sm` | 통과 |
+| 상태 속성 | `aria-busy`, `aria-current`, `aria-invalid`, `aria-describedby`, `aria-labelledby`, `role`(alert·status·progressbar) 검색 | 통과 |
+| 상태 클래스 | `is-hover`·`is-focus`를 미리보기 `preview.js`만 붙이고 `app/components/`는 붙이지 않는지 검색 | 통과 |
+| 색과 움직임 | `color-scheme: light`(base.css), 전환·애니메이션 검색 | 통과. 전환과 애니메이션은 없다 |
+| 줄바꿈 | `word-break: keep-all`(base.css), `overflow-wrap: anywhere`(components.css) | 통과 |
+| 미리보기와 테스트 호출 | `preview.js`와 `tests/components.js`가 `app/components/`의 함수를 import한다 | 통과 |
+| 토큰 CSS 연결 | `cargo xtask tokens --check` | 통과(종료 코드 0) |
+| 브라우저 시험 | `cargo test --test dashboard_browser` | 통과(시험 2개 ok). 미리보기와 테스트 페이지를 6폭 × ko/en 12회 열어 `data-result=pass`, CSP 위반 0, 가로 스크롤 0 |
+
+3.1 표에 없는 문자열 필수 옵션(`button`의 `label`, `badge`의 `label`, `link`의 `href`·`label`, `text-field`의 `id`·`label`, `alert`의 `title`)도 빈 값이면 `TypeError`를 던진다.

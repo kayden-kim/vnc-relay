@@ -70,8 +70,8 @@ app이 adapters를 부르는 화살표(`RELAY → LOG`, `ADMIN → ACC` 등)는 
 | app | `crates/app` (`vnc-relay-app`) | 사용 사례. 접속 처리 순서, Mode I 대상 연결과 Mode II 매칭, 중계 스트림 전달과 정리, 관리 조회·로그인·관리자 종료, 재로드 판정·적용, 준비·종료 유예 관리, 관리자 계정 준비 절차. 외부 입출력은 포트(trait)로 정의한다. | domain. 외부 crate는 tokio의 동기화·시간·입출력 trait만 쓴다. | crate 의존은 컴파일과 `cargo xtask layers`가 검사한다. 소켓·파일·신호 같은 tokio·std 입출력 타입은 `crates/app/clippy.toml`의 `disallowed-types`·`disallowed-methods`로 막고 `cargo clippy`가 검사한다. |
 | adapters | `crates/adapters` (`vnc-relay-adapters`) | 외부와 연결. TCP 리스너, TLS, WebSocket, 관리·상태 HTTP, 설정 파일, 계정 파일과 Argon2id, 운영 로그 출력, 파일 변경 감지, 터미널 숨김 입력, 난수·HMAC. app의 포트를 구현한다. | domain, app, [PRD "구현 기술" 행](../requirements/PRD.md#확정-기준)의 라이브러리 | `cargo xtask layers`가 외부 crate가 PRD 목록 안에 있는지 검사한다. 라이선스는 [의존성 라이선스 검사](../how-to/check-dependency-licenses.md)를 따른다. |
 | 실행파일 조립 | 루트 crate `vnc-relay`의 `src/` | 명령행 해석과 종료 코드, 시작 순서, 비동기 런타임 생성과 종료 신호 받기, 포트에 구현체를 넣는 객체 연결. 업무 규칙을 두지 않는다. | domain, app, adapters, clap, tokio, rustls(개발 의존성: `tests/serve.rs`의 TLS 클라이언트만) | 코드 리뷰. 이 crate에 업무 규칙 함수가 생기면 domain이나 app으로 옮긴다. |
-| 개발 도구 | `xtask/` | 시나리오 커버리지 보고, 레이어 검사 같은 개발용 명령. 제품 실행파일에 들어가지 않는다. | 제품 crate에 의존하지 않는다. | `cargo xtask layers`가 검사한다. |
-| 정적 대시보드 | `web/dashboard/` | 정적 HTML·CSS·JS. 내부 파일 구조는 [프런트엔드 컨벤션 1.1절](../conventions/frontend.md#11-정적-파일-구조)에 적는다. | 관리 API만 HTTP로 부른다. JS 의존성이 없다. | [프런트엔드 컨벤션](../conventions/frontend.md)과 [대시보드 검증 방법](../how-to/verify-dashboard-frontend.md) |
+| 개발 도구 | `xtask/` | 시나리오 커버리지 보고, 레이어 검사, 토큰 CSS 생성과 대조, 로컬 미리보기 서버 같은 개발용 명령. 제품 실행파일에 들어가지 않는다. | 제품 crate에 의존하지 않는다. | `cargo xtask layers`가 검사한다. |
+| 정적 대시보드 | `web/dashboard/` | 정적 HTML·CSS·JS. 공통 컴포넌트(`app/components/`), 토큰 CSS(`app/tokens.css`, `login/tokens.css`), 미리보기(`preview/`), 브라우저 시험 페이지(`tests/`)를 담는다. 내부 파일 구조는 [프런트엔드 컨벤션 1.1절](../conventions/frontend.md#11-정적-파일-구조)에 적는다. | 관리 API만 HTTP로 부른다. JS 의존성이 없다. | [프런트엔드 컨벤션](../conventions/frontend.md)과 [대시보드 검증 방법](../how-to/verify-dashboard-frontend.md). 컴포넌트 책임과 API는 [대시보드 공통 컴포넌트 모듈 설계](dashboard-components.md). |
 
 ```mermaid
 flowchart LR
@@ -139,8 +139,8 @@ flowchart LR
 | `src/main.rs`, `src/cli.rs` | 명령행 | 하위 명령·옵션 해석, 사용법 오류, 진단 출력 형식, 종료 코드([CLI 계약](../contracts/cli-v1.md)) | 명령 실행 내용 | `serve`, `admin`, clap | [`serve` 시작 모듈 설계](serve-startup.md), [관리자 계정 준비 CLI 모듈 설계](admin-accounts.md)(admin 하위 명령) |
 | `src/serve.rs` | 서버 조립 | 시작 순서([CLI 계약 1.8절](../contracts/cli-v1.md#18-수동-시작과-종료))대로 설정·로그 출력·계정·감지·리스너를 준비하고 포트에 구현체를 넣는다. 단계마다 운영 로그 사건을 기록한다. 비동기 런타임을 만들고 종료 신호를 수명 관리에 넘긴다. 지금은 상태 리스너를 먼저 열고, 관리 리스너를 그 다음에 바인드하고, 나머지 리스너를 바인드한 뒤 준비됨으로 바꾸고 `server_ready`를 기록한다. 준비됨 뒤 관리 리스너 작업을 띄운다. L 예산을 하나 만들어 TCP 진입점과 WS·WSS 진입점 작업에 `Arc`로 나눠 주고 시작하며, 종료 때 끝나기를 기다린다. 관리 HTTPS 수락기는 `management_tls`로 관리 리스너에 넘기고, WSS 수락기는 `wss_tls`에서 꺼내(`take`) WSS 진입점에만 넘긴다(작업 3.2). 계정 확인(`require_any`) 뒤에 `AdminAuth`를 만들고, 더미 해시 만들기가 실패하면 종료 코드 1로 끝난다(작업 4.3). | 업무 규칙 | adapters, app, domain, tokio | [`serve` 시작 모듈 설계](serve-startup.md), [TCP 진입점 모듈 설계](tcp-entry-point.md)(진입점 시작·정지), [WebSocket 진입점 모듈 설계](websocket-entry-point.md)(진입점 시작·정지), [연결 상한과 시간 제한 모듈 설계](connection-limits.md)(L 예산), [상태 리스너와 준비 상태 모듈 설계](status-listener.md)(상태 리스너·준비 상태), [관리 리스너 모듈 설계](management-listener.md)(관리 리스너 바인드·시작·정지), [관리 로그인과 세션 설계](management-session.md)(`AdminAuth` 준비) |
 | `src/admin.rs` | 계정 명령 조립 | `admin` 하위 명령에 구현체를 넣고 app 절차를 실행한다. | 계정 규칙 | adapters, app | [관리자 계정 준비 CLI 모듈 설계](admin-accounts.md) |
-| `xtask/` | 개발 도구 | `cargo xtask scenarios`(시나리오 커버리지 보고), `cargo xtask layers`(레이어 의존 검사) | 제품 기능 | serde_json. 제품 crate에 의존하지 않는다. | [xtask 모듈 설계](xtask.md) |
-| `web/dashboard/` | 대시보드 | 정적 화면 | 서버 규칙 | 관리 API(HTTP) | [프런트엔드 컨벤션](../conventions/frontend.md)과 [대시보드 검증 방법](../how-to/verify-dashboard-frontend.md) |
+| `xtask/` | 개발 도구 | `cargo xtask scenarios`(시나리오 커버리지 보고), `cargo xtask layers`(레이어 의존 검사), `cargo xtask tokens [--check]`(토큰 CSS 생성과 대조), `cargo xtask dashboard-serve`(로컬 미리보기 서버) | 제품 기능 | serde_json. 제품 crate에 의존하지 않는다. | [xtask 모듈 설계](xtask.md) |
+| `web/dashboard/` | 대시보드 | 정적 화면, 공통 컴포넌트, 미리보기, 브라우저 시험 페이지 | 서버 규칙 | 관리 API(HTTP) | [프런트엔드 컨벤션](../conventions/frontend.md), [대시보드 검증 방법](../how-to/verify-dashboard-frontend.md), [대시보드 공통 컴포넌트 모듈 설계](dashboard-components.md) |
 
 ## 3. 진입점
 

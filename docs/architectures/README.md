@@ -5,7 +5,7 @@
 | 문서 | 답하는 질문 | 구조 시점 | 문서 상태 | 구현 대조 |
 | --- | --- | --- | --- | --- |
 | [코드 지도](code-map.md) | 코드를 어떤 레이어와 구성요소로 나누고, 대표 요청은 어디서 시작해 어디서 끝나는가 | Target | Draft | 미대조 |
-| [xtask 개발 도구 모듈 설계](xtask.md) | 시나리오 커버리지 보고와 레이어 의존 검사는 무엇을 읽고 어떻게 판정하는가 | Current | Draft | Verified — [대조 기록](xtask.md#대조-기록) |
+| [xtask 개발 도구 모듈 설계](xtask.md) | 시나리오 커버리지 보고, 레이어 의존 검사, 토큰 CSS 생성과 대조, 미리보기 서버는 무엇을 읽고 어떻게 판정하거나 띄우는가 | Current | Draft | Verified — [대조 기록](xtask.md#대조-기록) |
 | [설정 로딩 모듈 설계](config-loading.md) | 설정 파일을 어떻게 읽고 검증해 유효 설정이나 진단 목록을 만드는가 | Current | Draft | Verified — [대조 기록](config-loading.md#대조-기록) |
 | [`serve` 시작 모듈 설계](serve-startup.md) | `serve`가 어떤 순서로 설정·계정 파일을 읽고 리스너를 바인드하며, 실패를 어떤 종료 코드와 진단으로 알리는가 | Current | Draft | Verified — [대조 기록](serve-startup.md#대조-기록) |
 | [운영 로그 모듈 설계](ops-log.md) | 운영 로그 사건을 어떤 타입으로 만들고, 어떤 형식으로 어디에 쓰며, 쓰기 실패와 비밀 값을 어떻게 다루는가 | Current | Draft | Verified — [대조 기록](ops-log.md#대조-기록) |
@@ -17,6 +17,7 @@
 | [내장 TLS 모듈 설계](tls.md) | PEM 인증서·개인키를 읽어 TLS 1.2·1.3 서버 설정을 만들고, 시작 때 WSS·관리 TLS 파일을 어떻게 검사하는가 | Current | Draft | Verified — [대조 기록](tls.md#대조-기록) |
 | [관리 리스너 모듈 설계](management-listener.md) | 관리 리스너가 관리 HTTPS와 루프백 평문 HTTP 접속을 어떻게 받고, Lm을 어떻게 세며, TLS 1.2 미만 거절을 어떻게 기록하고, 요청 경로 순서를 어떻게 처리하는가 | Current | Draft | Verified — [대조 기록](management-listener.md#대조-기록) |
 | [관리 로그인과 세션 모듈 설계](management-session.md) | 관리자 로그인이 계정과 비밀번호를 어떻게 검증하고, 실패를 계정별·출발지별로 어떻게 세어 로그인을 제한하며, 관리 세션과 CSRF 토큰을 어떻게 만들고 검사·연장·무효화하는가 | Current | Draft | Verified — [대조 기록](management-session.md#대조-기록) |
+| [대시보드 공통 컴포넌트 모듈 설계](dashboard-components.md) | 대시보드 공통 조각(버튼·입력·배지·경고·카드·지표·게이지·상단 메뉴·언어 선택·데이터 표·링크·대화상자)과 아이콘을 어떤 DOM·옵션·상태 속성으로 만들고, 색과 크기를 토큰 CSS에서 가져오는가 | Current | Draft | Verified — [대조 기록](dashboard-components.md#대조-기록) |
 | [파일 변경 감지 모듈 설계](file-watch.md) | 설정 파일과 인증서·개인키 파일의 변경을 어떻게 감지하고, 안정된 후보를 어떻게 한 번에 검증해 교체하며, 실패와 재시작 필요를 어떻게 알리는가 | Target | Draft | 미대조 |
 
 - 구조 시점: 문서가 설명하는 구조가 현재 코드(`Current`), 목표(`Target`), 전환 중(`Transitional`), 과거(`Historical`) 중 무엇인지 나타낸다.
