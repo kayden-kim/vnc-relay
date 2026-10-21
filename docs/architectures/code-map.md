@@ -205,5 +205,7 @@ flowchart LR
 | `c1c24d2` (코드는 HEAD `0f63227`과 같음) | 기록 없음 | WSL2 Ubuntu 24.04, Rust 1.99.1 | `wsl -d Ubuntu -- bash /mnt/d/vr-tools/vr-full.sh` | `시나리오 148건: 통과 9, 부분 22, 실패 0, 미실행 0, 미연결 117. 오류 0건.` ALL PASSED |
 | `c1c24d2` (코드는 HEAD `0f63227`과 같음) | 기록 없음 | Windows 10.0.26200, Rust 1.99.1 | `powershell -NoProfile -ExecutionPolicy Bypass -File D:/vr-tools/vr-win.ps1 -Only all` | `통과 8, 부분 22, 실패 0, 미실행 1, 미연결 117` ALL PASSED |
 | `e701997` (Main 보고, OPS-036 테스트 포함) | 기록 없음 | WSL2 Ubuntu 24.04 | `wsl -d Ubuntu -- bash /mnt/d/vr-tools/vr-full.sh` (이 작업에서 재실행하지 않음) | `시나리오 148건: 통과 11, 부분 20, 실패 0, 미실행 0, 미연결 117.` |
+| `59f3f62` | 문서 변경만(코드 차이 없음) | WSL2 Ubuntu 24.04, Rust 1.99.1 | `wsl -d Ubuntu -- bash /mnt/d/vr-tools/vr-full.sh` | `시나리오 148건: 통과 11, 부분 27, 실패 0, 미실행 0, 미연결 110. 오류 0건.` ALL PASSED |
+| `59f3f62` | 문서 변경만(코드 차이 없음) | Windows 10.0.26200, Rust 1.99.1 | `powershell -NoProfile -ExecutionPolicy Bypass -File D:/vr-tools/vr-win.ps1 -Only all` | `시나리오 148건: 통과 10, 부분 27, 실패 0, 미실행 1, 미연결 110. 오류 0건.` ALL PASSED (all) |
 
 `e701997`의 Windows 결과는 확인하지 못했다(미관찰).

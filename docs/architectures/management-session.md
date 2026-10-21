@@ -4,9 +4,9 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 구조 시점 | Target |
+| 구조 시점 | Current |
 | 문서 상태 | Draft |
-| 구현 대조 | 미대조 |
+| 구현 대조 | Verified — 커밋 `59f3f62` + 작업 트리(문서만 변경). 기록은 [대조 기록](#대조-기록) |
 | 코드 위치 | `crates/domain/src/admin_session.rs`(`AdminSessionToken`, `AdminCsrfToken`, `AdminSession`, `AdminSessionTable`, `AdminSessionPolicy`), `crates/domain/src/login_limit.rs`(`LoginLimitPolicy`, `LoginLimiter`, `LimitScope`), `crates/app/src/management.rs`(`AdminAuth`), `crates/app/src/management/login.rs`, `crates/app/src/management/session.rs`, `crates/app/src/ports.rs`(`Clock`, `PasswordVerifier`, `TokenSource`), `crates/adapters/src/clock.rs`(`SystemClock`, `timestamp`), `crates/adapters/src/crypto.rs`(`SystemTokenSource`), `crates/adapters/src/accounts_file/hasher.rs`(`Argon2Verifier`), `crates/adapters/src/management_http.rs`(`ManagementListener`, `answer`), `crates/adapters/src/management_http/session_api.rs`, `src/serve.rs` |
 | 코드 지도 | [코드 지도 2절](code-map.md#2-코드-위치와-구성요소), [3절](code-map.md#3-진입점) |
 | 관련 스펙 | [관리 스펙 3.0절](../specs/management.md#30-관리자-로그인과-세션)과 [7절](../specs/management.md#7-수용-테스트)의 MGT-014, MGT-017~020, MGT-022, MGT-025, MGT-027(MGT-018 포함); [운영 스펙](../specs/operations.md)의 OPS-029, OPS-012(로그인 사건 부분) |
@@ -103,7 +103,7 @@ flowchart LR
 | 순서 | 코드 위치(파일·심볼) | 조건·계산 | 바뀌는 상태 | 결과를 쓰는 곳 |
 | --- | --- | --- | --- | --- |
 | 1 | `session_api` 쿠키 읽기 | `Cookie` 헤더에서 `relay_admin_session` 값을 찾는다. 형식이 틀리면 없는 것으로 본다 | 없음 | 다음 단계 |
-| 2 | `AdminAuth::authorize` | 기한 안에서 세션을 찾는다. 만료 시각은 `now ≥ deadline`이면 이미 무효다. 무효이면 만료된 항목을 지운다 | 만료 항목 삭제 | 없으면 `401 unauthenticated` + 쿠키 지우기 |
+| 2 | `AdminAuth::authorize` | 조회 전에 기한이 지난 항목을 모두 지운다(`prune`, 7절 자동 정리). 남은 항목에서 토큰을 찾는다. 만료 시각은 `now ≥ deadline`이면 이미 무효다 | 만료 항목 삭제 | 없으면 `401 unauthenticated` + 쿠키 지우기 |
 | 3 | `AdminAuth::authorize`(CSRF) | `POST`·`DELETE`만. `TokenSource::same_token(세션 값, X-CSRF-Token 값)`이 거짓이면 `403 csrf_invalid`. 세션은 그대로 둔다 | 없음 | 응답 |
 | 4 | 경로·메서드 검사(어댑터) | 404·405·400(`X-Relay-Poll`)·415·400(본문) 검사 | 없음 | 응답 |
 | 5 | `AdminAuth::touch` | 성공한 사용자 행동 요청만. `idle_deadline = min(now + Si, absolute_deadline)` | 유휴 기한 연장 | 응답 |
@@ -125,7 +125,7 @@ flowchart LR
 | 실패 지점 | 처리 방법 | 남는 상태 | 관련 스펙 시나리오 |
 | --- | --- | --- | --- |
 | 본문 형식·크기·필드 검사(`session_api`) | `415` 또는 `400 invalid_request`. 로그인 실패로 세지 않는다 | 변화 없음 | MGT-018(계약 2.1절) |
-| `X-Relay-Poll` 값이 `1`이 아니거나, `GET`이 아닌 요청에 있다(어댑터) | `400 invalid_request`. 세션을 연장하지 않는다 | 변화 없음 | MGT-025(계약 1.4.2절) |
+| `X-Relay-Poll` 값이 `1`이 아니거나, `GET`이 아닌 요청에 있다(어댑터). 허용되지 않는 메서드(예: `PUT`)는 4.2절 4단계 순서대로 `405`가 먼저다 | `400 invalid_request`. 세션을 연장하지 않는다 | 변화 없음 | MGT-025(계약 1.4.2절) |
 | 계정 없음·틀린 비밀번호(`AdminAuth::login`) | `401 login_failed`, 본문과 헤더는 제한 중과 같다. 실패를 두 키에 적는다 | 실패 기록 추가 | MGT-018, MGT-022 |
 | 제한 중(`LoginLimiter::check`) | `401 login_failed`(같은 본문). 실패를 세지 않고 제한을 늘리지 않는다 | 변화 없음 | MGT-022 |
 | 해시 검증 실패(`Argon2Verifier`, OS 오류) | `500 internal`. 세션을 만들지 않고 실패를 세지 않는다. 사건을 기록하지 않는다(9절 하) | 변화 없음 | 계약 2.1절 |
@@ -152,7 +152,7 @@ flowchart LR
 | 상수 시간 비교는 `aws_lc_rs::constant_time::verify_slices_are_equal`로 한다(어댑터). `subtle`은 쓰지 않는다 | 승인된 크레이트만 쓴다(`xtask/src/layers.rs`). 길이가 다르면 거짓이다 | `subtle` 추가 | `docs/conventions/rust.md` |
 | 세션 표와 제한 표는 `HashMap`(토큰·계정·출발지를 키로)이다. 조회는 상수 시간이 아니다 | 토큰은 256비트 무작위 값이라 추측으로 찾을 수 없다. 비교가 필요한 CSRF만 상수 시간이다. **구현 판단(사용자 결정 없음)** | 정렬 맵(이득 없음) | MGT-R13 |
 | 자동 정리: 로그인과 조회 때 만료 항목을 지운다. 상한은 두지 않는다. **구현 판단(사용자 결정 없음)** | 세션 수와 실패 키 수는 요청 속도에 따라 자란다. 정리만으로 Sa·W 뒤에는 줄어든다 | 용량 상한과 가장 오래된 항목 삭제(9절 바) | MGT-R13, MGT-R14 |
-| 쿠키 속성: `Path=/; HttpOnly; SameSite=Strict`, HTTPS에서만 `; Secure`. `Max-Age`·`Expires`·`Domain`은 쓰지 않는다 | 계약 1.4.1절과 관리 스펙 MGT-017 행의 규칙 | 없음 | 계약 1.4.1절 |
+| 세션 쿠키 속성: `Path=/; HttpOnly; SameSite=Strict`, HTTPS에서만 `; Secure`. 세션 쿠키에는 `Max-Age`·`Expires`·`Domain`을 쓰지 않는다. 쿠키를 지우는 `Set-Cookie`(6절, 7절 148행)만 `Max-Age=0`을 쓴다 | 계약 1.4.1절과 관리 스펙 MGT-017 행의 규칙. 지우기 쿠키는 계약 1.4.1절이 `Max-Age=0`을 요구한다 | 없음 | 계약 1.4.1절 |
 | 응답 헤더: 모든 관리 응답 `Cache-Control: no-store`, 401은 `WWW-Authenticate: Session realm="vnc-relay"` | 계약 1.1절·2.1절 | 없음 | 계약 1.1·2.1절 |
 | `GET`·`DELETE` 요청의 본문은 검사하지 않는다(현재 구현). **구현 판단(사용자 결정 없음, 9절 너)** | 계약 1.1절 본문 형식은 본문이 있는 모든 요청의 `Content-Type`을 보고 `415`로 거절한다고 적었다. 계약 1.3절 4단계도 본문을 검증한다고 적었다. 두 규칙이 `GET`·`DELETE`에 어떻게 적용되는지 계약이 정하지 않았다 | 본문이 있으면 `Content-Type`을 보고 `415`(계약 1.1절 문장 그대로) | 계약 1.1절, 1.3절 4단계 |
 | 로그인 본문의 미디어 타입 매개변수(`charset` 등)는 보지 않고, 읽기 실패는 `400 invalid_request`로 답한다. **구현 판단(사용자 결정 없음)** | 계약은 미디어 타입만 정한다. 읽기 실패를 본문 형식 오류로 본다 | 매개변수가 다르면 415 | 계약 2.1절(`invalid_request`) |
@@ -165,14 +165,14 @@ flowchart LR
 
 | 항목 | 설계 시점의 코드(파일·심볼) | 목표 설계 | 해소 위치 | 상태 |
 | --- | --- | --- | --- | --- |
-| 로그인 처리 | 없음. `management_http.rs` `answer`가 `/api/v1/`을 모두 401로 답했다 | 4.1절 | `session_api.rs`, `AdminAuth::login` | 구현 완료, 검증 전 |
-| 관리 세션 검사 | 없음. `has_session_cookie`는 쿠키 이름만 봤다 | 4.2절 | `session.rs`의 `AdminAuth::authorize`·`check_csrf`·`touch`·`logout` | 구현 완료, 검증 전 |
-| 요청 처리 순서 | `answer`가 `/api/v1/` 401을 항상 줬다(management-listener.md 4절 5단계) | 계약 1.3절 순서 | `answer`가 `/api/v1/`을 `session_api::answer`에 넘긴다. 관리 리스너 4절 갱신 | 구현 완료, 검증 전 |
-| 피어 주소 | `ManagementListener`는 `ConnectInfo`를 쓰지 않았다 | 출발지 `PeerIp`를 로그인 제한에 쓴다 | `management_http.rs`의 `into_make_service_with_connect_info::<SocketAddr>()` | 구현 완료, 검증 전 |
-| 시계·토큰·검증 포트 | 없음. `ports.rs`에는 `EventSink`, `AccountStore`, `AccountInput`, `PasswordHasher`만 있었다 | 2절 | `ports.rs`(`Clock`, `PasswordVerifier`, `TokenSource`), `clock.rs`, `crypto.rs`(`SystemTokenSource`) | 구현 완료, 검증 전 |
-| `timestamp` | `ops_log.rs` 비공개 함수 | `clock.rs` 공개 함수 | `clock.rs` | 구현 완료, 검증 전 |
+| 로그인 처리 | 없음. `management_http.rs` `answer`가 `/api/v1/`을 모두 401로 답했다 | 4.1절 | `session_api.rs`, `AdminAuth::login` | 구현 완료, 검증 통과 |
+| 관리 세션 검사 | 없음. `has_session_cookie`는 쿠키 이름만 봤다 | 4.2절 | `session.rs`의 `AdminAuth::authorize`·`check_csrf`·`touch`·`logout` | 구현 완료, 검증 통과 |
+| 요청 처리 순서 | `answer`가 `/api/v1/` 401을 항상 줬다(management-listener.md 4절 5단계) | 계약 1.3절 순서 | `answer`가 `/api/v1/`을 `session_api::answer`에 넘긴다. 관리 리스너 4절 갱신 | 구현 완료, 검증 통과 |
+| 피어 주소 | `ManagementListener`는 `ConnectInfo`를 쓰지 않았다 | 출발지 `PeerIp`를 로그인 제한에 쓴다 | `management_http.rs`의 `PeerAddr`(`Connected` 구현)와 `into_make_service_with_connect_info::<PeerAddr>()` | 구현 완료, 검증 통과 |
+| 시계·토큰·검증 포트 | 없음. `ports.rs`에는 `EventSink`, `AccountStore`, `AccountInput`, `PasswordHasher`만 있었다 | 2절 | `ports.rs`(`Clock`, `PasswordVerifier`, `TokenSource`), `clock.rs`, `crypto.rs`(`SystemTokenSource`) | 구현 완료, 검증 통과 |
+| `timestamp` | `ops_log.rs` 비공개 함수 | `clock.rs` 공개 함수 | `clock.rs` | 구현 완료, 검증 통과 |
 | 로그인 사건 | 없음. `events.rs`에 `admin_login_*` 변형이 없었다 | 4.1절 6·7·8단계 | `events.rs`, `ops_log.rs`(줄 형식 시험은 없음, 운영 정보 계약 표 참고) | 구현 완료, 일부 시험 |
-| 더미 해시·Argon2 검증 | `hasher.rs`의 `Argon2Hasher`는 해시 만들기만 했다 | `Argon2Verifier` 추가 | `hasher.rs`(`Argon2Verifier`), `login.rs`(`dummy_hash`) | 구현 완료, 검증 전 |
+| 더미 해시·Argon2 검증 | `hasher.rs`의 `Argon2Hasher`는 해시 만들기만 했다 | `Argon2Verifier` 추가 | `hasher.rs`(`Argon2Verifier`), `login.rs`(`dummy_hash`) | 구현 완료, 검증 통과 |
 
 ## 9. 미결정 사항
 
@@ -187,7 +187,7 @@ flowchart LR
 | 마. 제한 기록과 실패 키 표의 상한. 옵션: (1) 상한 없음, 정리만(현재 구현). (2) 상한과 가장 오래된 항목 삭제. 추천: (1) | 많은 다른 계정 이름으로 공격하면 메모리가 W 동안 자란다. 요청 크기는 16 KiB로 제한된다 | 관리 스펙 3.0절, 사용자 |
 | 바. 세션 표의 상한. 추천: 상한 없음. 로그인은 관리자 계정 비밀번호를 알아야만 세션을 만든다 | 계정이 맞는 요청은 세션을 계속 만들 수 있다. 정리는 Sa 뒤에 된다 | 관리 스펙 3.0절, 사용자 |
 | 사. 응답 시간 동등성의 측정 방법. 계약 6절이 정하지 않았다 | MGT-018, MGT-022의 "응답 구분 불가"를 자동 시간 검사로 증명하지 못한다. 4.3은 검증 횟수 검사(단위 테스트)만 한다 | 관리 API 계약 6절 |
-| 아. IPv4 매핑 IPv6 주소를 그대로 셀지. 계약 6절과 관리 리스너 9절 5번이 열어 둔 항목이다 | 같은 장치가 두 표기로 오면 제한이 나뉜다 | 관리 API 계약 6절, 사용자 |
+| 아. (해결) IPv4 매핑 IPv6 주소는 `PeerIp`가 바꾼 IPv4 값을 쓴다. 로그인 제한 키와 로그 `peer_ip`가 같은 값을 쓴다(운영 정보 계약 1.10절, `peer_ip.rs`). 소켓 원형 값은 쓰지 않는다. 계약 6절 표기 항목을 닫을지는 사용자가 정한다 | 같은 장치가 두 표기로 오면 제한이 나뉘는 일을 막는다 | 관리 API 계약 6절(닫기 확인), 사용자 |
 | 자. 브라우저가 `WWW-Authenticate: Session`을 기본 인증 창으로 바꾸는지 | 401이 로그인 창을 띄우면 화면 동작이 달라진다 | 관리 API 계약 6절(관찰 항목) |
 | 차. 재시작 뒤 활성 VNC 세션 유지 여부는 이 문서가 다루지 않는다 | 관리 세션만 무효다. 중계는 재시작 때 이미 끊긴다 | 관리 스펙 3.0절 7번(기존 규칙) |
 | 카. 4.3에서 `/api/v1/summary`·`waiting`·`sessions`·`closed-sessions`·`terminate` 경로는 인증 검사 뒤 `404 not_found`로 답한다(작업 4.4·4.5 전까지) | 계약의 경로가 아직 없다. 세션 검사는 적용되어 있다 | 작업 4.4·4.5 |
@@ -196,3 +196,36 @@ flowchart LR
 | 하. 응용 계층의 내부 오류(`AuthError::Internal`)는 사건을 남기지 않는다. 옵션: (1) `500 internal` 응답만 준다(현재 구현). (2) 내부 오류 사건을 정의한다. 추천: (1) | 운영 정보 계약에 내부 오류 사건이 없다. 500의 원인은 기록에 남지 않는다 | 운영 정보 계약, 사용자 |
 | 거. `dashboard` 값의 모양. 계약 1.5절은 `dashboard.poll_secs`·`dashboard.query_timeout_secs`·`dashboard.terminate_timeout_secs`로 적었다. 옵션: (1) 중첩 객체 `dashboard`(현재 구현). (2) 점이 들어간 평면 키. (3) 계약 문장을 고친다. 추천: (1), 사용자 확인 필요 | 대시보드 화면이 값을 읽는 방식이 달라진다 | 관리 API 계약 1.5절, 사용자 |
 | 너. `GET`·`DELETE` 요청 본문의 `Content-Type` 검사. 계약 1.1절은 본문이 있는 요청에 `415`를 요구한다. 현재 구현은 `GET`·`DELETE` 본문을 검사하지 않는다(7절). 옵션: (1) 계약 1.1절 문장을 본문을 받는 요청으로 좁힌다. (2) 본문이 있는 모든 요청에서 `Content-Type`을 검사해 `415`를 준다(코드 변경 필요). 추천: (2), 코드 변경은 사용자 확인 후 진행 | `GET`·`DELETE`에 본문을 보내면 현재는 본문과 무관하게 응답한다. 계약 문장과 다르다 | 관리 API 계약 1.1절·1.3절 4단계, 사용자 |
+
+## 대조 기록
+
+### 작업 4.3 대조
+
+- 대조 범위: 커밋 `59f3f62` + 작업 트리(이 문서, `management-listener.md`, `management-api-v1.md`, `ops-info-v1.md`, `code-map.md`, `architectures/README.md`, `docs/TODO.md`의 문서 변경).
+- 대조 방법:
+  - 2절 기호: `same_token`(`crypto.rs` 39행), `dummy_hash`(`login.rs` 18행), `PeerAddr`(`management_http.rs` 118행), `timestamp`(`clock.rs`)를 `grep`으로 찾았다.
+  - 4.1절 5–8단계: `login.rs` `login`(39행)과 비교했다.
+  - 4.2절 1–5단계: `session.rs` `authorize`(25행), `check_csrf`(46행), `touch`(61행); `session_api.rs` `login`(68행), `get_session`(97행), `delete_session`(109행), `refuse`(163행)와 비교했다.
+  - 6절: `refuse`(`session_api.rs`), `unauthorized`(`management_http.rs` 206행), `src/cli.rs` `EXIT_RUNTIME`과 비교했다.
+  - 7절 쿠키: `CLEAR_SESSION_COOKIE`(`management_http.rs` 42행)와 비교했다.
+- 구현과 어긋나 문서를 고친 곳:
+  - 4.2절 2단계: 코드의 `prune`은 조회와 로그인 때 기한이 지난 항목을 모두 지운다. 문서의 "무효이면 지운다" 문장을 고쳤다.
+  - 6절 `X-Relay-Poll` 행: 허용되지 않는 메서드는 4.2절 4단계 순서대로 `405`가 먼저다.
+  - 7절 쿠키 행: 세션 쿠키 속성과 지우기 쿠키 속성(`Max-Age=0`)을 나눴다.
+  - 8절 상태 열: 검증 결과에 맞췄다. 로그인 사건 행만 일부 시험이다.
+- 대조하지 않은 것:
+  - 9절 미결정 항목(가–너): 사용자 결정 전이라 구현을 바꾸지 않았다. 대조는 현재 구현 기준이다.
+  - 응답 시간 동등성(MGT-018, MGT-022): 측정하지 않았다(9절 사). 검증 횟수 검사는 `login.rs` 시험 `every_attempt_runs_one_password_check_including_unknown_and_limited`가 맡는다.
+  - 4.4·4.5 경로: 아직 없다. 조회·종료 경로의 `401` 시험은 없다(9절 카).
+  - `500 internal` 경로(검증 오류, `spawn_blocking` 중단): 코드만 대조했다. 강제로 실패시키는 시험은 없다.
+- 환경: Windows 11 Pro 10.0.26200 x64, Visual Studio Build Tools 2022 17.14.37806.7, `AWS_LC_SYS_PREBUILT_NASM=1`; WSL2 Ubuntu 24.04.4, Rust 1.99.1.
+- 검증 기록:
+
+| 명령 | 환경 | 결과 |
+| --- | --- | --- |
+| `wsl -d Ubuntu -- bash /mnt/d/vr-tools/vr-full.sh` | WSL2 Ubuntu 24.04.4, Rust 1.99.1, `CARGO_TARGET_DIR=~/vnc-relay-target` | `ALL PASSED`. `시나리오 148건: 통과 11, 부분 27, 실패 0, 미실행 0, 미연결 110. 오류 0건.` `판정: 통과` |
+| `powershell -NoProfile -ExecutionPolicy Bypass -File D:/vr-tools/vr-win.ps1 -Only all` | Windows 11 Pro 10.0.26200 x64, Rust 1.99.1, Visual Studio Build Tools 2022 17.14.37806.7, `AWS_LC_SYS_PREBUILT_NASM=1` | `ALL PASSED (all)`. `시나리오 148건: 통과 10, 부분 27, 실패 0, 미실행 1, 미연결 110. 오류 0건.` `판정: 통과`. 미실행 1은 OPS-007(Unix 전용 `closes_and_logs_every_held_connection_when_stopping`) |
+
+- 두 명령은 이 기록을 쓰기 전에 실행했다. `xtask`는 이 기록 문서를 읽지 않는다.
+- 시나리오 결과 열은 부분 행을 `미실행`으로 둔다(`docs/AGENTS.md` 검증 기록 규칙). 4.3의 부분 상태는 위 표와 9절 카 항목에 적었다.
+- 판정: 구조 시점 `Current`. 구현 대조 `Verified`(커밋 `59f3f62` + 작업 트리). 문서 상태 `Draft`는 그대로다. 9절 미결정 항목은 남는다.

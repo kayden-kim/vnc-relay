@@ -6,8 +6,8 @@
 | --- | --- |
 | 구조 시점 | Current |
 | 문서 상태 | Draft |
-| 구현 대조 | 미대조 — 작업 4.3이 로그인과 세션 처리를 더해 1절과 4절이 바뀌었다. 대조는 검증 단계에서 다시 한다. |
-| 코드 위치 | `crates/adapters/src/admission.rs`(`AdmittingListener`, `Admitted`), `crates/adapters/src/tls_listener.rs`(`TlsListener`, `TlsIo`, `Handshake`, `Recorded`, `offers_no_tls12`), `crates/adapters/src/request_deadline.rs`(`DeadlineListener`, `Deadlined`), `crates/adapters/src/management_http.rs`(`ManagementListener`, `answer`), `crates/adapters/src/status_http.rs`(`StatusListener`), `crates/adapters/src/config_file.rs`(`read_management`), `crates/app/src/events.rs`(`Stage::Tls`, `RejectReason::TlsVersionUnsupported`), `crates/app/src/settings.rs`(`Settings::management_listener`, `Settings::other_listeners`), `src/serve.rs`(`listen_until_shutdown`, `stop_task`) |
+| 구현 대조 | Verified — 작업 4.3 시점, 커밋 `59f3f62` + 작업 트리. 4.3 항목은 [대조 기록](#대조-기록)에 있다 |
+| 코드 위치 | `crates/adapters/src/admission.rs`(`AdmittingListener`, `Admitted`), `crates/adapters/src/tls_listener.rs`(`TlsListener`, `TlsIo`, `Handshake`, `Recorded`, `offers_no_tls12`), `crates/adapters/src/request_deadline.rs`(`DeadlineListener`, `Deadlined`), `crates/adapters/src/management_http.rs`(`ManagementListener`, `PeerAddr`, `answer`), `crates/adapters/src/management_http/session_api.rs`(`answer`), `crates/adapters/src/status_http.rs`(`StatusListener`), `crates/adapters/src/config_file.rs`(`read_management`), `crates/app/src/events.rs`(`Stage::Tls`, `RejectReason::TlsVersionUnsupported`), `crates/app/src/settings.rs`(`Settings::management_listener`, `Settings::other_listeners`), `src/serve.rs`(`listen_until_shutdown`, `stop_task`) |
 | 코드 지도 | [코드 지도 2절](code-map.md#2-코드-위치와-구성요소), [3절](code-map.md#3-진입점) |
 | 관련 스펙 | [운영 스펙 2절](../specs/operations.md#2-상태와-검증-매개변수)의 OPS-014, OPS-034, OPS-033(일부: 관리 연결), OPS-004(일부: 관리 연결을 L에 세지 않음), OPS-036, OPS-006(일부: 관리 TLS 협상과 첫 요청 머리의 U, 사용자 결정 2026-10-21 Q12), [관리 스펙 7절](../specs/management.md#7-수용-테스트)의 MGT-015(4.4 완료 조건으로 옮김, 사용자 결정 2026-10-21 Q14) |
 | 관련 계약 | [관리 API 계약 1.1·1.3·1.4.1·1.11절](../contracts/management-api-v1.md#11-공통-규칙)(라우팅 순서, 쿠키, 정적 경로), [2.1·2.2절](../contracts/management-api-v1.md#21-오류-본문과-상태-코드)(401 본문과 헤더), [운영 정보 계약 1.5·1.6절](../contracts/ops-info-v1.md#15-사건-목록)(`connection_rejected`, `tls_version_unsupported`), [설정 계약 1.2절](../contracts/config-v1.md#12-키-표)(`management.listen`, `management.cert_file`·`key_file`) |
@@ -61,6 +61,8 @@ flowchart LR
 | `crates/adapters/src/request_deadline.rs` `DeadlineListener`, `Deadlined` | `axum::serve::Listener`를 감싼다. 접속마다 U 타이머를 든다. 첫 요청 머리(`\r\n\r\n`)가 끝나기 전에는 수락 때부터 잰 절대 기한이다. 끝난 뒤에는 읽기·쓰기가 있을 때마다 U를 다시 건다. 기한이 지나면 `TimedOut` 오류를 돌려준다. | `ManagementListener::run`이 HTTPS·평문 모두에서 `axum::serve`에 넘기는 가장 바깥 리스너로 만든다 | tokio, axum |
 | `crates/adapters/src/management_http.rs` `ManagementListener` | 관리 리스너 하나. 관리 HTTPS 또는 루프백 평문 HTTP를 처리한다. | `serve`가 관리 리스너를 바인드한 뒤 띄운다. 종료 때 `serve`가 멈춘다. | axum, tokio, tokio-rustls, adapters 내부 모듈 |
 | `crates/adapters/src/management_http.rs` `answer` | fallback 라우터. 3·4절 순서로 응답을 고른다. `/api/v1/` 요청은 `management_http/session_api.rs`의 `answer`로 넘긴다. | `ManagementListener::run`이 만든다 | axum, serde_json |
+| `crates/adapters/src/management_http.rs` `PeerAddr` | 접속의 상대 소켓 주소를 `PeerIp`로 바꾼다(IPv4 매핑 IPv6는 IPv4로). 로그인 제한 키와 로그 `peer_ip`가 같은 값을 쓴다. `axum::extract::connect_info::Connected`를 구현한다. | `ManagementListener::run`이 `into_make_service_with_connect_info::<PeerAddr>()`로 만든다 | domain(`PeerIp`), axum |
+| `crates/adapters/src/management_http/session_api.rs` `answer` | `/api/v1/` 요청을 맡는다. `POST /api/v1/session`은 로그인(`login`)이다. 그 밖은 세션 검사 → CSRF → 경로 → 메서드 순으로 검사한다. 4.4·4.5 경로는 아직 없어 인증 뒤 `404 not_found`다(관리 로그인과 세션 설계 9절 카). | `management_http.rs` `answer`가 `/api/v1/`일 때 부른다 | axum, app(`AdminAuth`) |
 | `crates/adapters/src/status_http.rs` `StatusListener` | 상태 리스너. 이 문서가 옮긴 `AdmittingListener`를 `status` 이름으로 쓴다. | `serve`가 상태 리스너를 바인드한 직후 띄운다. | `admission` 모듈 |
 | `crates/app/src/events.rs` `Stage::Tls`, `RejectReason::TlsVersionUnsupported` | `connection_rejected`의 `stage` 값 `tls`와 `reason` 값 `tls_version_unsupported` | 사건이 생길 때 | 없음 |
 | `crates/adapters/src/config_file.rs` `read_management` | 평문 HTTP 주소가 루프백이 아니면 `config_plaintext_management_not_loopback` 설정 오류를 낸다. 관리 리스너는 이 검사를 다시 하지 않는다. | 설정 읽기 때 | 없음 |
@@ -89,7 +91,7 @@ flowchart LR
 | 2 | `tls_listener.rs` `TlsListener::accept` | 평문이면 이 단계를 건너뛴다(`tls` = `None`일 때 `serve`가 `TlsListener`를 만들지 않는다). HTTPS면 `TlsIo::Handshaking`을 만든다. 핸드셰이크는 하지 않는다. | `TlsIo` 상태 `Handshaking` | 없음 |
 | 3 | `tls_listener.rs` `TlsIo::poll_handshake` | `poll_read`·`poll_write`·`poll_flush`가 먼저 부른다. 핸드셰이크를 진행한다. 성공하면 `Established`로 바꾸고 캡처를 `None`으로 바꾼다. 실패하면 캡처한 ClientHello 바이트(레코드 한 개 분)로 버전을 판정한다. `supported_versions`가 있으면 그 목록에 TLS 1.2 이상이 없을 때, 없으면 `legacy_version`이 TLS 1.2 미만일 때 버전 거절이다. 버전 거절이면 기록을 먼저 쓴다. 그다음 `Failed`로 바꾸고 `io::Error`를 돌려준다. | `TlsIo` 상태 `Established` 또는 `Failed` | 버전 거절: `connection_rejected`(`listener` = `management`, `stage` = `tls`, `reason` = `tls_version_unsupported`). 그 밖의 실패: 기록 없음(사용자 결정 Q13). |
 | 4 | `request_deadline.rs` `Deadlined::poll_read`·`poll_write`·`poll_flush` | 읽기·쓰기 전에 타이머를 먼저 본다. 기한이 지났으면 `TimedOut`을 돌려준다. 첫 요청 머리가 끝나기 전에는 절대 기한(수락 + U)이다. 끝난 뒤 바이트가 오가면 U를 다시 건다. 2·3단계의 TLS 핸드셰이크도 이 안에서 진행된다. | 타이머, `head_done`, `window` | 기한이 지나면 axum이 접속을 닫는다(6절). 머리가 끝나면 axum이 요청을 5단계(`answer`)로 넘긴다. |
-| 5 | `management_http.rs` `answer` 1단계 | 경로가 `/api/v1/`로 시작하면 관리 세션을 먼저 본다. 세션이 없으면 경로·메서드와 관계없이 `401`. 요청에 `relay_admin_session` 쿠키가 있으면 지우기 `Set-Cookie`를 붙인다. 세션이 있으면 CSRF·경로·메서드 검사로 넘긴다. `POST /api/v1/session`은 세션 검사 없이 로그인으로 넘긴다(관리 로그인과 세션 설계 4절). | 없음 | 401 응답(`WWW-Authenticate`, `Cache-Control: no-store`) |
+| 5 | `management_http.rs` `answer` 1단계 | 경로가 `/api/v1/`로 시작하면 `management_http/session_api.rs` `answer`로 넘긴다. 그 안에서 `POST /api/v1/session`은 세션을 보지 않고 로그인한다. 그 밖의 `/api/v1/` 요청은 세션을 먼저 본다. 세션이 없으면 경로·메서드와 관계없이 `401`이고, 요청에 `relay_admin_session` 쿠키가 있었으면 지우기 `Set-Cookie`를 붙인다. 세션이 있으면 CSRF(`POST`·`DELETE`) → 경로 → 메서드 순으로 검사한다(관리 로그인과 세션 설계 4절, 관리 API 계약 1.3절). | 없음 | 응답(`WWW-Authenticate`, `Cache-Control: no-store`). 로그인과 세션의 응답 본문·상태 코드는 관리 로그인과 세션 설계 4·6절 |
 | 6 | `management_http.rs` `answer` 2단계 | 경로가 `/`이거나 `/app/`로 시작하면 메서드가 `GET`·`HEAD`가 아닐 때 `405`(`Allow: GET, HEAD`, `invalid_request` 본문). 그 밖에는 `303`, `Location: /login/`, 본문 없음. | 없음 | 응답 |
 | 7 | `management_http.rs` `answer` 3단계 | 경로가 `/login/`로 시작하면 메서드가 `GET`·`HEAD`가 아닐 때 `405`(`Allow: GET, HEAD`, `invalid_request` 본문). 그 밖에는 `404` `not_found` 본문(열린 질문 2). | 없음 | 응답 |
 | 8 | `management_http.rs` `answer` 4단계 | 나머지 경로는 메서드와 관계없이 `303`, `Location: /login/`. | 없음 | 응답 |
@@ -133,9 +135,27 @@ flowchart LR
 
 ## 8. 현재 코드와의 차이
 
-- 4.2의 대조 결과는 더 이상 맞지 않는다. 작업 4.3이 '맡지 않는 책임' 목록과 4절 5단계를 바꿨다. 아래 대조 기록은 4.2 시점의 기록이다. 검증 단계에서 다시 대조한다.
+- 4.2의 대조 결과는 4.3 이후 현재 구현과 맞지 않는다. 작업 4.3이 '맡지 않는 책임' 목록과 4절 5단계를 바꿨다. 아래 대조 기록의 4.2 항목은 그 시점 기록으로 남기고, 4.3 항목이 현재 기준이다.
 
 ## 대조 기록
+
+### 작업 4.3
+
+- 대조 범위: 커밋 `59f3f62` + 작업 트리(이 문서, `management-session.md`, `management-api-v1.md`, `ops-info-v1.md`, `code-map.md`, `architectures/README.md`, `docs/TODO.md`의 문서 변경).
+- 대조 방법: 2절 요소 표의 파일·심볼을 `grep`으로 찾았다. `PeerAddr`(`management_http.rs` 118행)와 `session_api.rs` `answer`를 2절 표에 더했다. `management_http.rs` `answer`의 `/api/v1/` 분기와 `session_api.rs`의 검사 순서(세션 → CSRF → 경로 → 메서드)를 4절 5단계와 비교해 5단계를 고쳤다. 1절 응답 헤더 규칙은 `unauthorized`(206행), `CLEAR_SESSION_COOKIE`(42행)·`CLEAR_SESSION_COOKIE_SECURE`(44행)와 맞는다. 4절 6–8단계(정적 경로)는 이번 작업의 변경 범위 밖이라 다시 읽지 않았다.
+- 대조 결과: 1절 맡는 책임·맡지 않는 책임(4.3 항목 포함), 2절 요소 표, 4절 5단계가 구현과 맞다. 4.2 시점 설명(`/api/v1/`를 항상 401로 답함)은 4절 5단계와 8절에서 고쳤다.
+- 작업 4.3 시점 상태: OPS-034 부분(운영 조회 API 4.4 전), OPS-014 부분(운영 조회·종료 API 4.4·4.5 전), OPS-006 부분(로그인 본문 읽기는 9절 11번과 같이 읽기마다 U를 다시 잰다), OPS-033 부분, MGT-015 미연결(작업 4.4).
+- 환경: Windows 11 Pro 10.0.26200 x64, Visual Studio Build Tools 2022 17.14.37806.7, `AWS_LC_SYS_PREBUILT_NASM=1`; WSL2 Ubuntu 24.04.4, Rust 1.99.1.
+- 검증 기록:
+
+| 명령 | 환경 | 결과 |
+| --- | --- | --- |
+| `wsl -d Ubuntu -- bash /mnt/d/vr-tools/vr-full.sh` | WSL2 Ubuntu 24.04.4 | 통과(`ALL PASSED`). 시나리오 148건: 통과 11, 부분 27, 실패 0, 미실행 0, 미연결 110. 오류 0건. |
+| `powershell -NoProfile -ExecutionPolicy Bypass -File D:/vr-tools/vr-win.ps1 -Only all` | Windows 11 Pro 10.0.26200 x64 | 통과(`ALL PASSED (all)`). 시나리오 148건: 통과 10, 부분 27, 실패 0, 미실행 1, 미연결 110. 오류 0건. Windows 미실행 1은 OPS-007(Unix 전용)이다. |
+
+- 판정: 구조 시점 `Current`, 구현 대조 `Verified`(커밋 `59f3f62` + 작업 트리). 문서 상태 `Draft`는 그대로다. 9절 5번(표기)과 11번(keep-alive 절대 제한)은 남는다.
+
+### 작업 4.2
 
 - 대조 범위: 커밋 `ea024fc`(작업 4.2, 관리 TLS 핸드셰이크와 요청 머리 읽기에 U 적용) + 작업 트리 변경(이 문서, `docs/TODO.md`, `docs/contracts/config-v1.md`, `docs/architectures/code-map.md`).
 - 대조 방법: 2절 요소 표의 파일·심볼을 grep으로 찾았다. `request_deadline.rs`의 `DeadlineListener`·`Deadlined`를 읽어 U 적용 순서를 4절 표와 맞췄다. 접속 수락부터 첫 요청 머리 끝까지는 절대 제한이고, 그 뒤에는 읽기·쓰기마다 다시 잰다. `management_http.rs` `answer`(3·4절 순서), `tls_listener.rs` `TlsIo::poll_handshake`·`offers_no_tls12`(버전 판정), `src/serve.rs` `listen_until_shutdown`·`stop_task`(바인드·준비됨·종료 순서)를 읽어 4절 표와 맞췄다. U 규칙은 `crates/adapters/tests/management.rs`의 `stalled_tls_handshake_is_closed_after_u_without_an_answer`, `stalled_request_frees_its_lm_place_after_u`, `idle_connection_after_a_reply_is_closed_after_u`로 시험했다. 세 시험은 U를 300 ms로 줄인 설정(`SHORT_UPGRADE`)을 쓴다.
@@ -161,7 +181,7 @@ flowchart LR
 | 2. (해결) `GET /login/`·`/login/<파일>`(4.2)의 404 `not_found`는 사용자 결정 2026-10-21(Q15)로 승인됐다. 정적 파일은 4.6에서 준다. | 로그인 화면이 4.6 전까지 없다 | 사용자 결정 2026-10-21(Q15) |
 | 3. (해결) 핸드셰이크와 요청 읽기 제한 시간은 U(`[timeouts] tls_upgrade_secs`)를 쓴다. 사용자 결정 2026-10-21(Q12). 설정 계약 1.2절 U 행을 넓혔다. | 멈춘 핸드셰이크가 Lm 자리를 무기한 잡지 않는다 | 사용자 결정 2026-10-21(Q12), 설정 계약 1.2절 |
 | 4. (해결) 관리 HTTPS의 ALPN은 쓰지 않는다. 사용자 결정 2026-10-21(Q15)로 승인됐다. | 클라이언트 협상 방식(HTTP/1.1만) | 사용자 결정 2026-10-21(Q15) |
-| 5. IPv4 매핑 IPv6 주소(`::ffff:a.b.c.d`) 표기. 가정은 소켓 값을 그대로 쓴다(`peer_ip.rs`가 매핑을 IPv4로 바꾼다). | 관리 응답의 `address.ip` 표기 | 관리 API 계약 6절 열린 항목 |
+| 5. IPv4 매핑 IPv6 주소(`::ffff:a.b.c.d`) 표기. 가정은 `PeerIp`(`peer_ip.rs`)가 IPv4로 바꾼 값을 쓴다. 로그인 제한과 로그가 같은 값을 쓴다. 계약 6절의 표기 항목은 아직 닫히지 않았다. | 관리 응답의 `address.ip` 표기 | 관리 API 계약 6절 열린 항목 |
 | 6. (해결) 버전 거절이 아닌 TLS 실패(인증서 오류, 클라이언트 중단)는 기록하지 않는다. 사용자 결정 2026-10-21(Q13). 운영 정보 계약은 바뀌지 않는다. | 관리 TLS 실패의 감사 흔적이 없다 | 사용자 결정 2026-10-21(Q13) |
 | 7. (해결) U의 관리 TLS 적용은 3번과 같은 사용자 결정 2026-10-21(Q12)이다. | 3번과 같음 | 사용자 결정 2026-10-21(Q12) |
 | 8. (해결) MGT-015(상대 주소)는 TODO 4.4 완료 조건으로 옮긴다. TODO 4.2 완료 조건에서는 뺀다. 사용자 결정 2026-10-21(Q14). | TODO 4.2·4.4 완료 판정 | 사용자 결정 2026-10-21(Q14), `docs/TODO.md` |
