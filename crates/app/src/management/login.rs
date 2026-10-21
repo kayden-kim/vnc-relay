@@ -5,7 +5,7 @@ use vnc_relay_domain::account::{AccountName, Argon2Params, Password, PasswordHas
 use vnc_relay_domain::admin_session::{AdminCsrfToken, AdminSession, AdminSessionToken};
 use vnc_relay_domain::peer_ip::PeerIp;
 
-use super::{session_view, AdminAuth, AuthError, SessionView};
+use super::{AdminAuth, AuthError, SessionView, session_view};
 use crate::events::{Event, LoginFailReason};
 use crate::ports::{HashError, PasswordHasher};
 
@@ -19,8 +19,8 @@ pub fn dummy_hash(
     hasher: &dyn PasswordHasher,
     params: Argon2Params,
 ) -> Result<PasswordHash, HashError> {
-    let password = Password::parse(DUMMY_PASSWORD.to_owned())
-        .map_err(|error| HashError(error.to_string()))?;
+    let password =
+        Password::parse(DUMMY_PASSWORD.to_owned()).map_err(|error| HashError(error.to_string()))?;
     hasher.hash(&password, params)
 }
 
@@ -134,8 +134,8 @@ impl AdminAuth {
             .map_err(|error| AuthError::Internal(error.0))?;
         let token = AdminSessionToken::parse(&token)
             .map_err(|error| AuthError::Internal(error.to_string()))?;
-        let csrf = AdminCsrfToken::parse(&csrf)
-            .map_err(|error| AuthError::Internal(error.to_string()))?;
+        let csrf =
+            AdminCsrfToken::parse(&csrf).map_err(|error| AuthError::Internal(error.to_string()))?;
         Ok((token, csrf))
     }
 }
@@ -145,10 +145,10 @@ mod tests {
     use vnc_relay_domain::login_limit::{LimitScope, LoginLimitPolicy};
 
     use super::super::AuthError;
-    use super::{Password, DUMMY_PASSWORD};
+    use super::{DUMMY_PASSWORD, Password};
     use crate::events::{Event, LoginFailReason};
     use crate::management::test_support::{
-        harness, harness_with, peer, secs, session_policy, OTHER_PASSWORD, PASSWORD,
+        OTHER_PASSWORD, PASSWORD, harness, harness_with, peer, secs, session_policy,
     };
 
     #[test]
@@ -168,11 +168,12 @@ mod tests {
             .unwrap_or_else(|error| panic!("{error:?}"));
         assert_eq!(login.session.account.as_str(), "alice");
         assert!(h.auth.authorize(Some(login.token.as_str())).is_ok());
-        assert!(h
-            .events
-            .all()
-            .iter()
-            .any(|event| matches!(event, Event::AdminLoginSucceeded { .. })));
+        assert!(
+            h.events
+                .all()
+                .iter()
+                .any(|event| matches!(event, Event::AdminLoginSucceeded { .. }))
+        );
     }
 
     // The HTTP response bodies are compared in the adapter tests. Here only the
@@ -181,7 +182,10 @@ mod tests {
     #[test]
     fn wrong_password_and_unknown_account_give_the_same_refusal() {
         let h = harness();
-        let wrong = h.auth.login("alice", "wrong-password-1", peer(1), None).err();
+        let wrong = h
+            .auth
+            .login("alice", "wrong-password-1", peer(1), None)
+            .err();
         let unknown = h
             .auth
             .login("nobody", "wrong-password-1", peer(1), None)

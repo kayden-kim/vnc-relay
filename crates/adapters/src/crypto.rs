@@ -108,7 +108,11 @@ mod tests {
             panic!("the OS random source must answer in tests");
         };
         assert_eq!(token.len(), 64);
-        assert!(token.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)));
+        assert!(
+            token
+                .bytes()
+                .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+        );
         assert!(source.same_token(&token, &token));
         assert!(!source.same_token(&token, "0"));
     }

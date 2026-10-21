@@ -127,7 +127,12 @@ pub fn run(config: &Path) -> ExitCode {
             events: Arc::clone(&log),
         },
         AdminSessionPolicy::new(session.idle, session.max_lifetime),
-        LoginLimitPolicy::new(limit.per_account, limit.per_source, limit.window, limit.lockout),
+        LoginLimitPolicy::new(
+            limit.per_account,
+            limit.per_source,
+            limit.window,
+            limit.lockout,
+        ),
     ));
 
     // Stage 4: runtime, then listeners.

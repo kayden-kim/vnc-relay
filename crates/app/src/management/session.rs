@@ -3,7 +3,7 @@
 
 use vnc_relay_domain::admin_session::AdminSessionToken;
 
-use super::{session_view, AdminAuth, AuthError, SessionView};
+use super::{AdminAuth, AuthError, SessionView, session_view};
 
 /// A request that has a live session. The token names the session for
 /// `touch` and `logout`.
@@ -85,7 +85,7 @@ mod tests {
     use super::super::AuthError;
     use crate::management::login::LoggedIn;
     use crate::management::test_support::{
-        harness, harness_with, limit_policy, peer, secs, Harness, PASSWORD,
+        Harness, PASSWORD, harness, harness_with, limit_policy, peer, secs,
     };
 
     fn login(h: &Harness) -> LoggedIn {
@@ -188,10 +188,11 @@ mod tests {
             Some(AuthError::CsrfInvalid)
         );
         assert!(h.auth.authorize(Some(login.token.as_str())).is_ok());
-        assert!(h
-            .auth
-            .check_csrf(&admin, Some(admin.session().csrf.as_str()))
-            .is_ok());
+        assert!(
+            h.auth
+                .check_csrf(&admin, Some(admin.session().csrf.as_str()))
+                .is_ok()
+        );
     }
 
     /// spec: management.md:MGT-019 partial
@@ -235,9 +236,6 @@ mod tests {
             after.auth.authorize(Some(login.token.as_str())).err(),
             Some(AuthError::Unauthenticated)
         );
-        assert!(after
-            .auth
-            .login("alice", PASSWORD, peer(1), None)
-            .is_ok());
+        assert!(after.auth.login("alice", PASSWORD, peer(1), None).is_ok());
     }
 }

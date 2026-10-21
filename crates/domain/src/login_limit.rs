@@ -197,19 +197,41 @@ mod tests {
     fn locks_on_the_failure_after_f_and_does_not_count_locked_attempts() {
         let policy = LoginLimitPolicy::new(2, 100, secs(900), secs(60));
         let mut limiter = LoginLimiter::new(policy);
-        assert!(limiter.record_failure("admin", source(1), secs(0)).is_empty());
-        assert!(limiter.record_failure("admin", source(1), secs(1)).is_empty());
+        assert!(
+            limiter
+                .record_failure("admin", source(1), secs(0))
+                .is_empty()
+        );
+        assert!(
+            limiter
+                .record_failure("admin", source(1), secs(1))
+                .is_empty()
+        );
         let started = limiter.record_failure("admin", source(1), secs(2));
         assert_eq!(started, vec![LimitScope::Account]);
-        assert_eq!(limiter.check("admin", source(1), secs(3)), Some(LimitScope::Account));
+        assert_eq!(
+            limiter.check("admin", source(1), secs(3)),
+            Some(LimitScope::Account)
+        );
 
         // A locked attempt is not counted, so it does not move the lock end.
-        assert!(limiter.record_failure("admin", source(1), secs(30)).is_empty());
-        assert_eq!(limiter.check("admin", source(1), secs(61)), Some(LimitScope::Account));
+        assert!(
+            limiter
+                .record_failure("admin", source(1), secs(30))
+                .is_empty()
+        );
+        assert_eq!(
+            limiter.check("admin", source(1), secs(61)),
+            Some(LimitScope::Account)
+        );
         assert_eq!(limiter.check("admin", source(1), secs(62)), None);
 
         // After the lock ends, the history is clear: one failure does not lock.
-        assert!(limiter.record_failure("admin", source(1), secs(62)).is_empty());
+        assert!(
+            limiter
+                .record_failure("admin", source(1), secs(62))
+                .is_empty()
+        );
         assert_eq!(limiter.check("admin", source(1), secs(63)), None);
     }
 
@@ -217,10 +239,22 @@ mod tests {
     fn failures_older_than_the_window_do_not_count() {
         let policy = LoginLimitPolicy::new(2, 100, secs(100), secs(60));
         let mut limiter = LoginLimiter::new(policy);
-        assert!(limiter.record_failure("admin", source(1), secs(0)).is_empty());
-        assert!(limiter.record_failure("admin", source(1), secs(50)).is_empty());
+        assert!(
+            limiter
+                .record_failure("admin", source(1), secs(0))
+                .is_empty()
+        );
+        assert!(
+            limiter
+                .record_failure("admin", source(1), secs(50))
+                .is_empty()
+        );
         // The first failure is 100 s old now, so it no longer counts.
-        assert!(limiter.record_failure("admin", source(1), secs(100)).is_empty());
+        assert!(
+            limiter
+                .record_failure("admin", source(1), secs(100))
+                .is_empty()
+        );
         assert_eq!(limiter.check("admin", source(1), secs(100)), None);
     }
 
@@ -229,10 +263,17 @@ mod tests {
     fn same_source_is_locked_for_other_accounts_too() {
         let policy = LoginLimitPolicy::new(100, 1, secs(900), secs(60));
         let mut limiter = LoginLimiter::new(policy);
-        assert!(limiter.record_failure("alice", source(7), secs(0)).is_empty());
+        assert!(
+            limiter
+                .record_failure("alice", source(7), secs(0))
+                .is_empty()
+        );
         let started = limiter.record_failure("bob", source(7), secs(1));
         assert_eq!(started, vec![LimitScope::Source]);
-        assert_eq!(limiter.check("carol", source(7), secs(2)), Some(LimitScope::Source));
+        assert_eq!(
+            limiter.check("carol", source(7), secs(2)),
+            Some(LimitScope::Source)
+        );
         assert_eq!(limiter.check("carol", source(8), secs(2)), None);
     }
 

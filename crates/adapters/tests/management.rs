@@ -874,11 +874,7 @@ async fn source_limit_refuses_other_accounts_too() {
         let reply = plain_exchange(running.addr, &login_request(ACCOUNT, "wrong-password")).await;
         assert_eq!(reply.status, 401);
     }
-    let reply = plain_exchange(
-        running.addr,
-        &login_request(OTHER_ACCOUNT, OTHER_PASSWORD),
-    )
-    .await;
+    let reply = plain_exchange(running.addr, &login_request(OTHER_ACCOUNT, OTHER_PASSWORD)).await;
     assert_eq!(reply.status, 401);
     assert_eq!(error_code(&reply), "login_failed");
     assert!(running.events.snapshot().iter().any(|event| matches!(
@@ -1144,11 +1140,7 @@ async fn login_body_must_be_a_json_account_and_password() {
         json!({ "account": ACCOUNT, "password": "" }),
         json!("alice"),
     ] {
-        let reply = plain_exchange(
-            running.addr,
-            &post_json("/api/v1/session", &body, &[]),
-        )
-        .await;
+        let reply = plain_exchange(running.addr, &post_json("/api/v1/session", &body, &[])).await;
         assert_eq!(reply.status, 400, "body {body}");
         assert_eq!(error_code(&reply), "invalid_request");
     }
@@ -1159,7 +1151,10 @@ async fn login_body_must_be_a_json_account_and_password() {
     let mut bytes = request(
         "POST",
         "/api/v1/session",
-        &["Content-Type: application/json; charset=utf-8", length.as_str()],
+        &[
+            "Content-Type: application/json; charset=utf-8",
+            length.as_str(),
+        ],
     );
     bytes.extend_from_slice(body.as_bytes());
     let reply = plain_exchange(running.addr, &bytes).await;

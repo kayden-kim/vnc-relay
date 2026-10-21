@@ -52,8 +52,6 @@ impl PasswordVerifier for Argon2Verifier {
 
 #[cfg(test)]
 mod tests {
-    use argon2::PasswordVerifier as _;
-
     use super::*;
 
     /// The lowest approved cost keeps the test fast.

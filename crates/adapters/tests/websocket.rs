@@ -21,16 +21,24 @@ use tokio::net::{TcpListener, TcpSocket, TcpStream};
 use tokio::sync::watch;
 use tokio::time::timeout;
 use tokio_rustls::{TlsAcceptor, TlsConnector};
-use vnc_relay_adapters::management_http::ManagementListener;
+use vnc_relay_adapters::accounts_file::{Argon2Hasher, Argon2Verifier};
+use vnc_relay_adapters::clock::SystemClock;
+use vnc_relay_adapters::crypto::SystemTokenSource;
+use vnc_relay_adapters::management_http::{DashboardHints, ManagementListener};
 use vnc_relay_adapters::net::AcceptPolicy;
 use vnc_relay_adapters::tls;
 use vnc_relay_adapters::websocket::{WsEntryPoint, WsPolicy};
 use vnc_relay_app::events::{AbortReason, ConnectionErrorKind, Event, RejectReason, Stage};
+use vnc_relay_app::management::login::dummy_hash;
+use vnc_relay_app::management::{AdminAuth, AdminPorts};
 use vnc_relay_app::ports::EventSink;
 use vnc_relay_app::settings::KeepaliveSettings;
+use vnc_relay_domain::account::Argon2Params;
+use vnc_relay_domain::admin_session::AdminSessionPolicy;
 use vnc_relay_domain::allow_list::{AllowList, IpItem};
 use vnc_relay_domain::budget::ConnectionBudget;
 use vnc_relay_domain::entry_point::EntryPoint;
+use vnc_relay_domain::login_limit::LoginLimitPolicy;
 use vnc_relay_domain::origin::Origin;
 
 /// Upper bound for one exchange. A hang fails the test instead of blocking it.
@@ -890,7 +898,34 @@ async fn start_management(tls: Option<TlsAcceptor>) -> (SocketAddr, Arc<Recorder
     let events = Arc::new(Recorder::default());
     let log: Arc<dyn EventSink> = events.clone();
     let budget = ConnectionBudget::new(8);
-    tokio::spawn(ManagementListener::new(listener, tls, budget, UPGRADE).run(log));
+    // No admin account: the tests only need the TLS handshake and a 401 for a
+    // stale session cookie.
+    let params = Argon2Params {
+        memory_kib: 8,
+        iterations: 1,
+        parallelism: 1,
+    };
+    let dummy = dummy_hash(&Argon2Hasher, params)
+        .unwrap_or_else(|error| panic!("dummy hash is made: {error}"));
+    let auth = Arc::new(AdminAuth::new(
+        Vec::new(),
+        dummy,
+        AdminPorts {
+            verifier: Arc::new(Argon2Verifier),
+            tokens: Arc::new(SystemTokenSource),
+            clock: Arc::new(SystemClock::new()),
+            events: Arc::clone(&log),
+        },
+        AdminSessionPolicy::new(Duration::from_secs(600), Duration::from_secs(3600)),
+        LoginLimitPolicy::new(5, 20, Duration::from_secs(300), Duration::from_secs(60)),
+    ));
+    let dashboard = DashboardHints::new(
+        Duration::from_secs(2),
+        Duration::from_secs(5),
+        Duration::from_secs(10),
+    );
+    let listener = ManagementListener::new(listener, tls, budget, UPGRADE, auth, dashboard);
+    tokio::spawn(listener.run(log));
     (addr, events)
 }
 

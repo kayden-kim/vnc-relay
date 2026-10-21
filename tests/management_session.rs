@@ -59,10 +59,7 @@ fn free_ports() -> [u16; 4] {
 }
 
 fn setup_dir(name: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!(
-        "vnc-relay-session-{}-{name}",
-        std::process::id()
-    ));
+    let dir = std::env::temp_dir().join(format!("vnc-relay-session-{}-{name}", std::process::id()));
     if dir.exists() {
         fs::remove_dir_all(&dir).unwrap_or_else(|e| panic!("clear {}: {e}", dir.display()));
     }
@@ -76,8 +73,7 @@ fn write(path: &Path, text: &str) {
 
 /// A real Argon2id hash of `password` with the test cost.
 fn hash(password: &str) -> String {
-    let typed = Password::parse(password.to_owned())
-        .unwrap_or_else(|e| panic!("password: {e:?}"));
+    let typed = Password::parse(password.to_owned()).unwrap_or_else(|e| panic!("password: {e:?}"));
     let hashed = Argon2Hasher
         .hash(&typed, PARAMS)
         .unwrap_or_else(|e| panic!("hash: {e}"));
@@ -212,8 +208,7 @@ impl Reply {
 
 fn send(port: u16, method: &str, path: &str, headers: &[(&str, &str)], body: &str) -> Reply {
     let addr = SocketAddr::from(([127, 0, 0, 1], port));
-    let mut stream =
-        TcpStream::connect(addr).unwrap_or_else(|e| panic!("connect {addr}: {e}"));
+    let mut stream = TcpStream::connect(addr).unwrap_or_else(|e| panic!("connect {addr}: {e}"));
     stream
         .set_read_timeout(Some(Duration::from_secs(10)))
         .unwrap_or_else(|e| panic!("read timeout: {e}"));
@@ -330,12 +325,7 @@ fn plain_loopback_login_opens_the_session_and_logs_success() {
     let log = server.stop();
     assert!(log.contains("\"event\":\"admin_login_succeeded\""), "{log}");
     assert!(log.contains("\"admin_account\":\"alice\""), "{log}");
-    for secret in [
-        ALICE_PASSWORD,
-        token.as_str(),
-        csrf.as_str(),
-        "$argon2id$",
-    ] {
+    for secret in [ALICE_PASSWORD, token.as_str(), csrf.as_str(), "$argon2id$"] {
         assert!(!log.contains(secret), "ops log has a secret: {log}");
     }
     let _ = fs::remove_dir_all(&dir);

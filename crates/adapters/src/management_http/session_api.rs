@@ -3,7 +3,6 @@
 //! management-api-v1 §1.3. Other `/api/v1/` paths answer `404` for a valid
 //! session until tasks 4.4 and 4.5 add their routes.
 
-use std::net::SocketAddr;
 use std::sync::Arc;
 
 use axum::body::Body;
@@ -38,12 +37,7 @@ const MEDIA_TYPE_MESSAGE: &str = "요청 본문은 application/json이어야 한
 
 /// Answers one `/api/v1/` request. A login does not need a session. Every other
 /// request needs a valid session before its path and method are judged.
-pub(super) async fn answer(
-    shared: &Shared,
-    peer: SocketAddr,
-    parts: Parts,
-    body: Body,
-) -> Response {
+pub(super) async fn answer(shared: &Shared, peer: PeerIp, parts: Parts, body: Body) -> Response {
     if parts.uri.path() == SESSION_PATH && parts.method == Method::POST {
         return login(shared, peer, &parts.headers, body).await;
     }
@@ -51,10 +45,10 @@ pub(super) async fn answer(
         Ok(admin) => admin,
         Err(error) => return refuse(error, shared.secure, &parts.headers),
     };
-    if matches!(parts.method, Method::POST | Method::DELETE) {
-        if let Err(error) = shared.auth.check_csrf(&admin, csrf_header(&parts.headers)) {
-            return refuse(error, shared.secure, &parts.headers);
-        }
+    if matches!(parts.method, Method::POST | Method::DELETE)
+        && let Err(error) = shared.auth.check_csrf(&admin, csrf_header(&parts.headers))
+    {
+        return refuse(error, shared.secure, &parts.headers);
     }
     if parts.uri.path() != SESSION_PATH {
         return not_found();
@@ -71,7 +65,7 @@ pub(super) async fn answer(
 
 /// `POST /api/v1/session`: checks the body, then runs the login on a blocking
 /// thread. The password check takes measurable time.
-async fn login(shared: &Shared, peer: SocketAddr, headers: &HeaderMap, body: Body) -> Response {
+async fn login(shared: &Shared, peer: PeerIp, headers: &HeaderMap, body: Body) -> Response {
     if headers.contains_key("x-relay-poll") {
         return bad_request(POLL_MESSAGE);
     }
@@ -86,10 +80,9 @@ async fn login(shared: &Shared, peer: SocketAddr, headers: &HeaderMap, body: Bod
         return bad_request(BODY_MESSAGE);
     };
     let prior = session_cookie(headers).map(str::to_owned);
-    let source = PeerIp::from(peer);
     let auth = Arc::clone(&shared.auth);
     let outcome = tokio::task::spawn_blocking(move || {
-        auth.login(&account, &password, source, prior.as_deref())
+        auth.login(&account, &password, peer, prior.as_deref())
     })
     .await;
     match outcome {

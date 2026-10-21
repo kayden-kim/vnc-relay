@@ -10,18 +10,21 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use axum::Router;
+use axum::extract::connect_info::Connected;
 use axum::extract::{ConnectInfo, Request, State};
 use axum::http::header::{
     ALLOW, CACHE_CONTROL, CONTENT_TYPE, COOKIE, LOCATION, SET_COOKIE, WWW_AUTHENTICATE,
 };
 use axum::http::{HeaderMap, HeaderValue, Method, StatusCode};
 use axum::response::{IntoResponse, Response};
+use axum::serve::IncomingStream;
 use serde_json::{Value, json};
 use tokio::net::TcpListener;
 use tokio_rustls::TlsAcceptor;
 use vnc_relay_app::management::AdminAuth;
 use vnc_relay_app::ports::EventSink;
 use vnc_relay_domain::budget::ConnectionBudget;
+use vnc_relay_domain::peer_ip::PeerIp;
 
 use crate::admission::AdmittingListener;
 use crate::request_deadline::DeadlineListener;
@@ -90,7 +93,7 @@ impl ManagementListener {
         let router = Router::new()
             .fallback(answer)
             .with_state(shared)
-            .into_make_service_with_connect_info::<SocketAddr>();
+            .into_make_service_with_connect_info::<PeerAddr>();
         // `serve` ends only on a listener error. Both listeners retry or
         // refuse without error, so there is no error to handle here.
         match self.tls {
@@ -104,6 +107,22 @@ impl ManagementListener {
                 let _ = axum::serve(listener, router).await;
             }
         }
+    }
+}
+
+/// The peer of a management connection, as `ConnectInfo` gives it to the
+/// handlers. axum implements `Connected` for `TcpListener` only. The listener
+/// here is wrapped in `DeadlineListener`, so this type supplies the impl. It
+/// keeps the normalized peer IP (domain `PeerIp`, ops-info-v1 §1.10).
+#[derive(Debug, Clone, Copy)]
+struct PeerAddr(PeerIp);
+
+impl<L> Connected<IncomingStream<'_, DeadlineListener<L>>> for PeerAddr
+where
+    L: axum::serve::Listener<Addr = SocketAddr>,
+{
+    fn connect_info(stream: IncomingStream<'_, DeadlineListener<L>>) -> Self {
+        Self(PeerIp::from(*stream.remote_addr()))
     }
 }
 
@@ -140,13 +159,13 @@ struct Shared {
 /// session before the path and the method. Static paths keep their rules.
 async fn answer(
     State(shared): State<Shared>,
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    ConnectInfo(peer): ConnectInfo<PeerAddr>,
     request: Request,
 ) -> Response {
     let (parts, body) = request.into_parts();
     let path = parts.uri.path();
     if path.starts_with("/api/v1/") {
-        return session_api::answer(&shared, peer, parts, body).await;
+        return session_api::answer(&shared, peer.0, parts, body).await;
     }
     if path == "/" || path.starts_with("/app/") {
         return if is_read(&parts.method) {
@@ -184,12 +203,7 @@ fn unauthenticated(secure: bool, request_headers: &HeaderMap) -> Response {
 
 /// A `401` with `WWW-Authenticate` (management-api-v1 §2.1). A request that
 /// carries the session cookie also clears it (management-api-v1 §1.4.1).
-fn unauthorized(
-    code: &str,
-    message: &str,
-    secure: bool,
-    request_headers: &HeaderMap,
-) -> Response {
+fn unauthorized(code: &str, message: &str, secure: bool, request_headers: &HeaderMap) -> Response {
     let mut response = json_error(StatusCode::UNAUTHORIZED, code, message);
     response.headers_mut().insert(
         WWW_AUTHENTICATE,
