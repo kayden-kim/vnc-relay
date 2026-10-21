@@ -51,17 +51,13 @@ where
 
     async fn accept(&mut self) -> (TlsIo<L::Io>, SocketAddr) {
         let (stream, addr) = self.inner.accept().await;
-        let capture: Capture = Arc::new(Mutex::new(Some(Vec::new())));
-        let io = TlsIo::Handshaking(Handshake {
-            accept: self.acceptor.accept(Recorded {
-                io: stream,
-                capture: Arc::clone(&capture),
-            }),
-            capture,
-            peer: PeerIp::from(addr),
-            log: Arc::clone(&self.log),
-            name: self.name,
-        });
+        let io = TlsIo::handshaking(
+            stream,
+            &self.acceptor,
+            PeerIp::from(addr),
+            Arc::clone(&self.log),
+            self.name,
+        );
         (io, addr)
     }
 
@@ -75,7 +71,7 @@ pub(crate) enum TlsIo<IO> {
     Handshaking(Handshake<IO>),
     Established(TlsStream<Recorded<IO>>),
     /// The handshake failed. Every later call fails too.
-    Failed,
+    Failed(HandshakeFailure),
 }
 
 /// A handshake in progress, with what a refusal needs for its event.
@@ -87,13 +83,80 @@ pub(crate) struct Handshake<IO> {
     name: &'static str,
 }
 
+/// Why a handshake failed. The entry points use it to pick the event of the
+/// connection.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum HandshakeFailure {
+    /// The client offered no TLS 1.2 or later (OPS-036). The rejection is
+    /// logged.
+    VersionUnsupported,
+    /// rustls refused the handshake, for example after a fatal alert from the
+    /// client or when no cipher suite is shared.
+    Negotiation,
+    /// The client closed the connection before the handshake ended.
+    PeerEof,
+    /// A socket error ended the handshake.
+    Io,
+}
+
+impl HandshakeFailure {
+    /// Classifies an error that the version check did not claim.
+    fn from_error(error: &io::Error) -> Self {
+        if error
+            .get_ref()
+            .is_some_and(|inner| inner.is::<rustls::Error>())
+        {
+            Self::Negotiation
+        } else if error.kind() == io::ErrorKind::UnexpectedEof {
+            Self::PeerEof
+        } else {
+            Self::Io
+        }
+    }
+}
+
 impl<IO: AsyncRead + AsyncWrite + Unpin> TlsIo<IO> {
+    /// A connection whose handshake has not started. The handshake runs in the
+    /// first read or write, as in `TlsListener::accept`.
+    pub(crate) fn handshaking(
+        io: IO,
+        acceptor: &TlsAcceptor,
+        peer: PeerIp,
+        log: Arc<dyn EventSink>,
+        name: &'static str,
+    ) -> Self {
+        let capture: Capture = Arc::new(Mutex::new(Some(Vec::new())));
+        Self::Handshaking(Handshake {
+            accept: acceptor.accept(Recorded {
+                io,
+                capture: Arc::clone(&capture),
+            }),
+            capture,
+            peer,
+            log,
+            name,
+        })
+    }
+
+    /// Whether the handshake has ended in a TLS stream.
+    pub(crate) fn is_established(&self) -> bool {
+        matches!(self, Self::Established(_))
+    }
+
+    /// Why the handshake failed, or `None` while it runs or after it succeeded.
+    pub(crate) fn handshake_failure(&self) -> Option<HandshakeFailure> {
+        match self {
+            Self::Failed(failure) => Some(*failure),
+            Self::Handshaking(_) | Self::Established(_) => None,
+        }
+    }
+
     /// Drives the handshake. `Ready(Ok)` once the connection is established,
     /// `Ready(Err)` once the handshake has failed.
     fn poll_handshake(&mut self, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         match self {
             Self::Established(_) => Poll::Ready(Ok(())),
-            Self::Failed => Poll::Ready(Err(not_connected())),
+            Self::Failed(_) => Poll::Ready(Err(not_connected())),
             Self::Handshaking(handshake) => {
                 let outcome = ready!(Pin::new(&mut handshake.accept).poll(cx));
                 match outcome {
@@ -107,15 +170,18 @@ impl<IO: AsyncRead + AsyncWrite + Unpin> TlsIo<IO> {
                         // Logged before the close, so a peer that sees the
                         // close also finds the line.
                         let hello = lock(&handshake.capture).take().unwrap_or_default();
-                        if offers_no_tls12(&hello) {
+                        let failure = if offers_no_tls12(&hello) {
                             handshake.log.record(&Event::ConnectionRejected {
                                 listener: handshake.name,
                                 stage: Stage::Tls,
                                 reason: RejectReason::TlsVersionUnsupported,
                                 peer_ip: handshake.peer,
                             });
-                        }
-                        *self = Self::Failed;
+                            HandshakeFailure::VersionUnsupported
+                        } else {
+                            HandshakeFailure::from_error(&error)
+                        };
+                        *self = Self::Failed(failure);
                         Poll::Ready(Err(error))
                     }
                 }
@@ -288,7 +354,7 @@ impl<IO: AsyncRead + AsyncWrite + Unpin> AsyncRead for TlsIo<IO> {
         ready!(this.poll_handshake(cx))?;
         match this {
             Self::Established(stream) => Pin::new(stream).poll_read(cx, buf),
-            Self::Handshaking(_) | Self::Failed => Poll::Ready(Err(not_connected())),
+            Self::Handshaking(_) | Self::Failed(_) => Poll::Ready(Err(not_connected())),
         }
     }
 }
@@ -303,7 +369,7 @@ impl<IO: AsyncRead + AsyncWrite + Unpin> AsyncWrite for TlsIo<IO> {
         ready!(this.poll_handshake(cx))?;
         match this {
             Self::Established(stream) => Pin::new(stream).poll_write(cx, buf),
-            Self::Handshaking(_) | Self::Failed => Poll::Ready(Err(not_connected())),
+            Self::Handshaking(_) | Self::Failed(_) => Poll::Ready(Err(not_connected())),
         }
     }
 
@@ -312,7 +378,7 @@ impl<IO: AsyncRead + AsyncWrite + Unpin> AsyncWrite for TlsIo<IO> {
         ready!(this.poll_handshake(cx))?;
         match this {
             Self::Established(stream) => Pin::new(stream).poll_flush(cx),
-            Self::Handshaking(_) | Self::Failed => Poll::Ready(Err(not_connected())),
+            Self::Handshaking(_) | Self::Failed(_) => Poll::Ready(Err(not_connected())),
         }
     }
 
@@ -320,7 +386,7 @@ impl<IO: AsyncRead + AsyncWrite + Unpin> AsyncWrite for TlsIo<IO> {
         match self.get_mut() {
             Self::Established(stream) => Pin::new(stream).poll_shutdown(cx),
             // Nothing was established, so there is no TLS stream to close.
-            Self::Handshaking(_) | Self::Failed => Poll::Ready(Ok(())),
+            Self::Handshaking(_) | Self::Failed(_) => Poll::Ready(Ok(())),
         }
     }
 }

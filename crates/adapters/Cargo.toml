@@ -21,6 +21,7 @@ serde_json.workspace = true
 socket2.workspace = true
 tokio = { workspace = true, features = ["macros", "net", "rt", "signal", "sync", "time"] }
 tokio-rustls.workspace = true
+tokio-tungstenite.workspace = true
 toml.workspace = true
 vnc-relay-app.workspace = true
 vnc-relay-domain.workspace = true

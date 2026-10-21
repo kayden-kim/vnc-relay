@@ -4,6 +4,7 @@
 //! docs/architectures/connection-limits.md. The status listener first:
 //! docs/architectures/status-listener.md.
 
+use std::future::Future;
 use std::io::{self, ErrorKind};
 use std::sync::Arc;
 use std::time::Duration;
@@ -106,11 +107,11 @@ pub struct TcpEntryPoint {
 }
 
 /// An accepted connection while it waits for the next stage.
-struct Accepted {
-    conn_id: ConnId,
-    entry_point: EntryPoint,
-    peer_ip: PeerIp,
-    at: Instant,
+pub(crate) struct Accepted {
+    pub(crate) conn_id: ConnId,
+    pub(crate) entry_point: EntryPoint,
+    pub(crate) peer_ip: PeerIp,
+    pub(crate) at: Instant,
 }
 
 impl TcpEntryPoint {
@@ -125,77 +126,104 @@ impl TcpEntryPoint {
     /// Accepts connections until `stop` holds true or its sender is gone.
     /// Then it closes the listener and returns once every accepted
     /// connection is closed and logged.
-    pub async fn run(self, log: Arc<dyn EventSink>, mut stop: watch::Receiver<bool>) {
-        let mut held = JoinSet::new();
-        loop {
-            let accepted = tokio::select! {
-                _ = stop.wait_for(|stop| *stop) => break,
-                // Reaps ended holds so that their results do not pile up.
-                Some(_) = held.join_next() => continue,
-                accepted = self.listener.accept() => accepted,
-            };
-            let (stream, addr) = match accepted {
-                Ok(accepted) => accepted,
-                Err(_) => {
-                    // ops-info-v1 has no event for a failed accept.
-                    tokio::time::sleep(ACCEPT_RETRY_DELAY).await;
-                    continue;
-                }
-            };
-            let peer_ip = PeerIp::from(addr);
-            // The source IP comes first: a refused source neither takes a
-            // place of L nor learns that L is full.
-            let admission = if !self.policy.allow.permits(peer_ip) {
-                Err(RejectReason::IpNotAllowed)
-            } else {
-                self.policy
-                    .relay_budget
-                    .try_acquire()
-                    .ok_or(RejectReason::RelayConnectionLimit {
-                        limit: self.policy.relay_budget.limit(),
-                    })
-            };
-            let permit = match admission {
-                Ok(permit) => permit,
-                Err(reason) => {
-                    // Logged before the close, so a peer that sees the
-                    // close also finds the line.
-                    log.record(&Event::ConnectionRejected {
-                        listener: self.entry_point.name(),
-                        stage: Stage::Accept,
-                        reason,
-                        peer_ip,
-                    });
-                    drop(stream);
-                    continue;
-                }
-            };
-            // A socket that cannot take the options is already broken; the
-            // hold sees that as an error and ends it.
-            let _ = set_keepalive(&stream, &self.policy.keepalive);
-            let conn = Accepted {
-                conn_id: ConnId::next(),
-                entry_point: self.entry_point,
-                peer_ip,
-                at: Instant::now(),
-            };
-            log.record(&Event::ConnectionAccepted {
-                conn_id: conn.conn_id,
-                entry_point: conn.entry_point,
-                peer_ip,
-            });
-            held.spawn(hold(
-                stream,
-                conn,
-                permit,
-                self.policy.handshake,
-                Arc::clone(&log),
-                stop.clone(),
-            ));
-        }
-        drop(self.listener);
-        while held.join_next().await.is_some() {}
+    pub async fn run(self, log: Arc<dyn EventSink>, stop: watch::Receiver<bool>) {
+        let handshake = self.policy.handshake;
+        let hold_log = Arc::clone(&log);
+        accept_connections(
+            self.entry_point,
+            self.listener,
+            self.policy,
+            log,
+            stop,
+            move |stream, conn, permit, stop| {
+                hold(stream, conn, permit, handshake, Arc::clone(&hold_log), stop)
+            },
+        )
+        .await;
     }
+}
+
+/// The accept loop of a relay entry point, shared by the TCP and WebSocket
+/// entry points. Until `stop` holds true it accepts each connection, admits
+/// it by source IP and then by L, and logs a refusal or the accept. Each
+/// admitted connection runs `serve` with its place of L. When `stop` holds
+/// true, the listener closes and the function returns after every served
+/// connection has ended.
+pub(crate) async fn accept_connections<Serve, Fut>(
+    entry_point: EntryPoint,
+    listener: TcpListener,
+    policy: AcceptPolicy,
+    log: Arc<dyn EventSink>,
+    mut stop: watch::Receiver<bool>,
+    serve: Serve,
+) where
+    Serve: Fn(TcpStream, Accepted, BudgetPermit, watch::Receiver<bool>) -> Fut,
+    Fut: Future<Output = ()> + Send + 'static,
+{
+    let mut held = JoinSet::new();
+    loop {
+        let accepted = tokio::select! {
+            _ = stop.wait_for(|stop| *stop) => break,
+            // Reaps ended holds so that their results do not pile up.
+            Some(_) = held.join_next() => continue,
+            accepted = listener.accept() => accepted,
+        };
+        let (stream, addr) = match accepted {
+            Ok(accepted) => accepted,
+            Err(_) => {
+                // ops-info-v1 has no event for a failed accept.
+                tokio::time::sleep(ACCEPT_RETRY_DELAY).await;
+                continue;
+            }
+        };
+        let peer_ip = PeerIp::from(addr);
+        let permit = match admit(&policy, peer_ip) {
+            Ok(permit) => permit,
+            Err(reason) => {
+                // Logged before the close, so a peer that sees the
+                // close also finds the line.
+                log.record(&Event::ConnectionRejected {
+                    listener: entry_point.name(),
+                    stage: Stage::Accept,
+                    reason,
+                    peer_ip,
+                });
+                drop(stream);
+                continue;
+            }
+        };
+        // A socket that cannot take the options is already broken; the
+        // serve step sees that as an error and ends the connection.
+        let _ = set_keepalive(&stream, &policy.keepalive);
+        let conn = Accepted {
+            conn_id: ConnId::next(),
+            entry_point,
+            peer_ip,
+            at: Instant::now(),
+        };
+        log.record(&Event::ConnectionAccepted {
+            conn_id: conn.conn_id,
+            entry_point: conn.entry_point,
+            peer_ip,
+        });
+        held.spawn(serve(stream, conn, permit, stop.clone()));
+    }
+    drop(listener);
+    while held.join_next().await.is_some() {}
+}
+
+/// The source IP check, then a place of L (relay spec §3.1 step 1, RLY-R16).
+/// A refused source neither takes a place of L nor learns that L is full.
+fn admit(policy: &AcceptPolicy, peer_ip: PeerIp) -> Result<BudgetPermit, RejectReason> {
+    if !policy.allow.permits(peer_ip) {
+        return Err(RejectReason::IpNotAllowed);
+    }
+    policy
+        .relay_budget
+        .try_acquire()
+        .ok_or(RejectReason::RelayConnectionLimit {
+            limit: policy.relay_budget.limit(),
+        })
 }
 
 /// Sets TCP keepalive with the idle time, probe interval, and probe count

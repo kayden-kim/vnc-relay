@@ -14,3 +14,5 @@ pub mod terminal;
 pub mod tls;
 mod tls_listener;
 mod toml_text;
+mod upgrade;
+pub mod websocket;

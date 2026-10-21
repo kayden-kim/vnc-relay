@@ -10,7 +10,7 @@ use std::sync::{Mutex, PoisonError};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde_json::{Value, json};
-use vnc_relay_app::events::{Event, LOG_CONTRACT};
+use vnc_relay_app::events::{Event, LOG_CONTRACT, Stage};
 use vnc_relay_app::ports::EventSink;
 use vnc_relay_app::settings::{ConfigWarning, LogOutput};
 
@@ -227,6 +227,22 @@ fn push_event_fields(fields: &mut Vec<(&'static str, Value)>, event: &Event) {
             fields.push(("peer_ip", Value::from(peer_ip.to_string())));
             if let Some(limit) = reason.limit() {
                 fields.push(("limit", Value::from(limit)));
+            }
+        }
+        Event::UpgradeRejected {
+            conn_id,
+            listener,
+            reason,
+            peer_ip,
+            origin,
+        } => {
+            fields.push(("conn_id", Value::from(conn_id.to_string())));
+            fields.push(("listener", Value::from(*listener)));
+            fields.push(("stage", Value::from(Stage::Upgrade.as_str())));
+            fields.push(("reason", Value::from(reason.as_str())));
+            fields.push(("peer_ip", Value::from(peer_ip.to_string())));
+            if let Some(origin) = origin {
+                fields.push(("origin", Value::from(origin.as_str())));
             }
         }
         Event::ConnectionAborted {

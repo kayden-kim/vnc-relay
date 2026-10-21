@@ -16,6 +16,7 @@ use vnc_relay_adapters::net::{AcceptPolicy, BindFailure, TcpEntryPoint};
 use vnc_relay_adapters::ops_log::JsonLinesEventSink;
 use vnc_relay_adapters::status_http::StatusListener;
 use vnc_relay_adapters::tls::{self, TlsError, TlsFile};
+use vnc_relay_adapters::websocket::{WsEntryPoint, WsPolicy};
 use vnc_relay_adapters::{accounts_file, config_file, net};
 use vnc_relay_app::accounts::{self, ACCOUNTS_FILE_KEY, AccountsDiagnostic};
 use vnc_relay_app::events::{Event, Phase};
@@ -122,16 +123,15 @@ async fn listen_until_shutdown(settings: &Settings, log: Arc<dyn EventSink>) -> 
     };
 
     // TLS identity files of the enabled WSS entry point and of the management
-    // listener are checked before any listener is bound (cli-v1 §1.8). The
-    // management acceptor goes to its task. The WSS acceptors stay alive until
-    // 3.2 attaches them.
+    // listener are checked before any listener is bound (cli-v1 §1.8). Each
+    // acceptor goes to its task.
     let mut management_tls = None;
-    let mut _wss_acceptors = Vec::new();
+    let mut wss_tls = None;
     let mut tls_failed = false;
     for check in tls_checks(settings) {
         match tls::load_acceptor(&check.files.cert_file, &check.files.key_file) {
             Ok(acceptor) if check.listener == "management" => management_tls = Some(acceptor),
-            Ok(acceptor) => _wss_acceptors.push(acceptor),
+            Ok(acceptor) => wss_tls = Some(acceptor),
             Err(error) => {
                 tls_failed = true;
                 tls_failure(log.as_ref(), &check, &error);
@@ -205,8 +205,7 @@ async fn listen_until_shutdown(settings: &Settings, log: Arc<dyn EventSink>) -> 
         tokio::spawn(listener.run(Arc::clone(&log)))
     });
 
-    // The TCP entry points accept from here on. The WebSocket listeners stay
-    // bound without accepting until 3.2 attaches their tasks. Every relay entry
+    // The TCP and WebSocket entry points accept from here on. Every relay entry
     // point takes places from one L.
     let relay_budget = ConnectionBudget::new(settings.limits.relay_connections);
     let (stop, stopped) = watch::channel(false);
@@ -229,6 +228,33 @@ async fn listen_until_shutdown(settings: &Settings, log: Arc<dyn EventSink>) -> 
                     keepalive: settings.keepalive,
                 };
                 let entry = TcpEntryPoint::new(entry_point, bound.listener, policy);
+                entry_points.spawn(entry.run(Arc::clone(&log), stopped.clone()));
+            }
+            Some(entry_point @ (EntryPoint::WsViewer | EntryPoint::WssViewer)) => {
+                let entry_settings = settings.relay.get(entry_point);
+                // The WSS acceptor was loaded before any bind (tls_checks). A
+                // WSS listener without it stays idle; it never runs as plaintext.
+                let tls = match entry_point {
+                    EntryPoint::WssViewer => wss_tls.take(),
+                    _ => None,
+                };
+                if matches!(entry_point, EntryPoint::WssViewer) && tls.is_none() {
+                    idle.push(bound);
+                    continue;
+                }
+                let policy = WsPolicy {
+                    accept: AcceptPolicy {
+                        // An enabled entry point always has a list; an empty
+                        // list rejects every source.
+                        allow: entry_settings.allow.clone().unwrap_or_default(),
+                        relay_budget: Arc::clone(&relay_budget),
+                        handshake: settings.timeouts.handshake,
+                        keepalive: settings.keepalive,
+                    },
+                    upgrade: settings.timeouts.tls_upgrade,
+                    origins: entry_settings.allowed_origins.clone(),
+                };
+                let entry = WsEntryPoint::new(entry_point, bound.listener, tls, policy);
                 entry_points.spawn(entry.run(Arc::clone(&log), stopped.clone()));
             }
             _ => idle.push(bound),

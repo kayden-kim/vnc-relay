@@ -55,6 +55,7 @@ pub enum Stage {
     Accept,
     InitialExchange,
     Tls,
+    Upgrade,
 }
 
 impl Stage {
@@ -63,6 +64,7 @@ impl Stage {
             Self::Accept => "accept",
             Self::InitialExchange => "initial_exchange",
             Self::Tls => "tls",
+            Self::Upgrade => "upgrade",
         }
     }
 }
@@ -81,6 +83,15 @@ pub enum RejectReason {
     /// The client offered no TLS 1.2 or later. The connection closes with
     /// no plaintext fallback (OPS-036).
     TlsVersionUnsupported,
+    /// The request is not a WebSocket upgrade request, or its head is
+    /// malformed (websocket-relay-v1 §1.1).
+    InvalidUpgrade,
+    /// The Origin header is not in the allowed list (websocket-relay-v1
+    /// §1.3).
+    OriginNotAllowed,
+    /// The client offered subprotocols and none of them is `binary`
+    /// (websocket-relay-v1 §1.2).
+    SubprotocolNotSupported,
 }
 
 impl RejectReason {
@@ -90,13 +101,20 @@ impl RejectReason {
             Self::RelayConnectionLimit { .. } => "relay_connection_limit",
             Self::AdminConnectionLimit { .. } => "admin_connection_limit",
             Self::TlsVersionUnsupported => "tls_version_unsupported",
+            Self::InvalidUpgrade => "invalid_upgrade",
+            Self::OriginNotAllowed => "origin_not_allowed",
+            Self::SubprotocolNotSupported => "subprotocol_not_supported",
         }
     }
 
     /// The `limit` field: the configured limit that refused the connection.
     pub fn limit(self) -> Option<u32> {
         match self {
-            Self::IpNotAllowed | Self::TlsVersionUnsupported => None,
+            Self::IpNotAllowed
+            | Self::TlsVersionUnsupported
+            | Self::InvalidUpgrade
+            | Self::OriginNotAllowed
+            | Self::SubprotocolNotSupported => None,
             Self::RelayConnectionLimit { limit } | Self::AdminConnectionLimit { limit } => {
                 Some(limit)
             }
@@ -109,6 +127,8 @@ impl RejectReason {
 pub enum AbortReason {
     /// The initial exchange did not end within H.
     HandshakeTimeout,
+    /// The TLS handshake or the upgrade request did not end within U.
+    TlsUpgradeTimeout,
     /// The peer closed the connection before the initial exchange ended.
     PeerEof,
     /// A network error ended the connection; written with `error_kind`.
@@ -121,6 +141,7 @@ impl AbortReason {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::HandshakeTimeout => "handshake_timeout",
+            Self::TlsUpgradeTimeout => "tls_upgrade_timeout",
             Self::PeerEof => "peer_eof",
             Self::ConnectionError(_) => "connection_error",
             Self::ServerShutdown => "server_shutdown",
@@ -131,7 +152,10 @@ impl AbortReason {
     pub fn error_kind(self) -> Option<ConnectionErrorKind> {
         match self {
             Self::ConnectionError(kind) => Some(kind),
-            Self::HandshakeTimeout | Self::PeerEof | Self::ServerShutdown => None,
+            Self::HandshakeTimeout
+            | Self::PeerEof
+            | Self::ServerShutdown
+            | Self::TlsUpgradeTimeout => None,
         }
     }
 
@@ -139,7 +163,9 @@ impl AbortReason {
     fn level(self) -> Level {
         match self {
             Self::PeerEof | Self::ServerShutdown => Level::Info,
-            Self::HandshakeTimeout | Self::ConnectionError(_) => Level::Warn,
+            Self::HandshakeTimeout | Self::TlsUpgradeTimeout | Self::ConnectionError(_) => {
+                Level::Warn
+            }
         }
     }
 }
@@ -150,12 +176,16 @@ impl AbortReason {
 pub enum ConnectionErrorKind {
     /// A socket read or write failed, or the peer reset the connection.
     IoError,
+    /// The TLS handshake failed in the negotiation, for example an alert
+    /// from the client or no shared cipher suite.
+    TlsFailed,
 }
 
 impl ConnectionErrorKind {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::IoError => "io_error",
+            Self::TlsFailed => "tls_failed",
         }
     }
 }
@@ -201,6 +231,17 @@ pub enum Event {
         reason: RejectReason,
         peer_ip: PeerIp,
     },
+    /// The server refused an upgrade request on an accepted WS or WSS
+    /// connection (websocket-relay-v1 §1.1, §1.3). The event name is
+    /// `connection_rejected`, and `stage` is always `upgrade`.
+    UpgradeRejected {
+        listener: &'static str,
+        conn_id: ConnId,
+        reason: RejectReason,
+        peer_ip: PeerIp,
+        /// The raw Origin header value; present for `origin_not_allowed`.
+        origin: Option<String>,
+    },
     /// An accepted connection ended before it waited or joined a session.
     ConnectionAborted {
         conn_id: ConnId,
@@ -223,7 +264,7 @@ impl Event {
             Self::ConfigWarning { warning, .. } => warning.code(),
             Self::StartupFailed { .. } => "startup_failed",
             Self::ConnectionAccepted { .. } => "connection_accepted",
-            Self::ConnectionRejected { .. } => "connection_rejected",
+            Self::ConnectionRejected { .. } | Self::UpgradeRejected { .. } => "connection_rejected",
             Self::ConnectionAborted { .. } => "connection_aborted",
             Self::ServerStopped => "server_stopped",
         }
@@ -236,7 +277,9 @@ impl Event {
             | Self::ServerReady { .. }
             | Self::ServerStopped
             | Self::ConnectionAccepted { .. } => Level::Info,
-            Self::ConfigWarning { .. } | Self::ConnectionRejected { .. } => Level::Warn,
+            Self::ConfigWarning { .. }
+            | Self::ConnectionRejected { .. }
+            | Self::UpgradeRejected { .. } => Level::Warn,
             Self::ConnectionAborted { reason, .. } => reason.level(),
             Self::StartupFailed { .. } => Level::Error,
         }
