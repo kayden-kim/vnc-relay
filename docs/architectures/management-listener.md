@@ -96,7 +96,7 @@ flowchart LR
 | 7 | `management_http.rs` `answer` 3단계 | 경로가 `/login/`로 시작하면 메서드가 `GET`·`HEAD`가 아닐 때 `405`(`Allow: GET, HEAD`, `invalid_request` 본문). 그 밖에는 `404` `not_found` 본문(열린 질문 2). | 없음 | 응답 |
 | 8 | `management_http.rs` `answer` 4단계 | 나머지 경로는 메서드와 관계없이 `303`, `Location: /login/`. | 없음 | 응답 |
 
-관리 응답은 모두 `Cache-Control: no-store`를 가진다. 정적 보안 헤더(`X-Content-Type-Options`·`Referrer-Policy`·`Content-Security-Policy`, 1.11절 권장)는 정적 파일 응답에만 붙이며 4.2에는 정적 파일 응답이 없다.
+관리 응답은 모두 `Cache-Control: no-store`를 가진다. 정적 보안 헤더(`X-Content-Type-Options`·`Referrer-Policy`·`Content-Security-Policy`, 1.11절)는 정적 파일 응답에만 붙인다. 계약 1.1.0부터 CSP는 필수다(사용자 결정 2026-10-22(Q37)). 4.2·4.3에는 정적 파일 응답이 없어 아직 보내지 않는다. 구현은 작업 4.6에서 한다.
 
 ## 5. 상태와 초기화
 

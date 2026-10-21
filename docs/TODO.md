@@ -63,11 +63,11 @@ flowchart LR
   - 기준: [how-to 작성 규칙](how-to/AGENTS.md), [프로젝트 작업 안내](README.md#프로젝트-작업-안내)
   - 완료 조건: [how-to 목록](how-to/README.md)에 등록한다. 프로젝트 작업 안내 표의 실행·검증 행과 루트 [AGENTS.md](../AGENTS.md)의 "구현 코드와 실행·검증 설정은 없다" 문장을 갱신한다.
   - 선행: 0.5, 0.6
-- [ ] **0.9 프런트엔드 컨벤션과 검증 방법(DESIGN-TBD-005)**: DESIGN.md YAML에서 토큰 CSS를 만들고 대조하는 방법을 정한다. 정적 파일 구조, 실행파일에 넣는 방식, 컴포넌트 미리보기 위치, 시안 대조·접근성·브라우저 확인 방법도 정한다. 빌드 단계와 JS 의존성은 두지 않는다.
+- [x] **0.9 프런트엔드 컨벤션과 검증 방법(DESIGN-TBD-005)**: DESIGN.md YAML에서 토큰 CSS를 만들고 대조하는 방법을 정한다. 정적 파일 구조, 실행파일에 넣는 방식, 컴포넌트 미리보기 위치, 시안 대조·접근성·브라우저 확인 방법도 정한다. 빌드 단계와 JS 의존성은 두지 않는다.
   - 기준: [디자인 기준 미결정 사항](design/DESIGN.md#미결정-사항), [컨벤션 작성 규칙](conventions/AGENTS.md), [frontend-workflow 6절](../.agents/skills/frontend-workflow/references/frontend-workflow.md#6-검증-환경과-통과-기준)
   - 완료 조건: DESIGN-TBD-005를 해소하고 [디자인 기준 검증 절](design/DESIGN.md#검증)에 how-to를 연결한다.
   - 선행: 0.4, 0.8
-  - 현재: 사용자 결정 2026-10-22(Q09)로 시작했다. [프런트엔드 컨벤션](conventions/frontend.md)과 [대시보드 프런트엔드 검증 how-to](how-to/verify-dashboard-frontend.md)를 Draft로 썼다. 8절의 FE-TBD-001~016을 채택하기 전까지 DESIGN-TBD-005는 열려 있다.
+  - 현재: [프런트엔드 컨벤션](conventions/frontend.md)을 채택했다. FE-TBD-001~015는 사용자 결정 2026-10-22(Q32~Q38)로 정했고 DESIGN-TBD-005를 해소했다. [대시보드 프런트엔드 검증 how-to](how-to/verify-dashboard-frontend.md)를 디자인 기준 검증 절에 연결했다. 성능 지표(FE-TBD-016)는 화면 구현 뒤 정한다(사용자 결정 2026-10-22(Q39)). `cargo xtask tokens`·`dashboard-serve`와 브라우저 시험은 아직 구현하지 않았다(작업 4.8 이후). WSL Ubuntu에는 Chromium이 아직 없다.
 
 ## 1. 호환 계약 확정
 
@@ -201,10 +201,11 @@ Mode I·II 초기 흐름을 추정 없이 설명할 수 있게 한다. 관찰은
   - 기준: [CLI 계약 1.1~1.6절](contracts/cli-v1.md#1-형식과-의미), [CLI 계약 6절](contracts/cli-v1.md#6-초안을-확정하기-전에-해결할-사항), [운영 스펙 3.2절](specs/operations.md#32-로컬-cli-계정-준비)
   - 완료 조건: OPS-029(일부), OPS-030. CLI 계약 5절의 `admin` 계약 테스트.
   - 선행: 2.2
-- [ ] **4.2 관리 리스너**: 관리 HTTPS와 루프백 전용 평문 HTTP, 요청 처리 순서, 실제 소켓 상대 주소 사용, Lm 집계를 구현한다.
+- [x] **4.2 관리 리스너**: 관리 HTTPS와 루프백 전용 평문 HTTP, 요청 처리 순서, 실제 소켓 상대 주소 사용, Lm 집계를 구현한다.
   - 기준: [관리 API 계약 1.1~1.3절](contracts/management-api-v1.md#1-형식과-의미), [운영 스펙 4.1절](specs/operations.md#41-판정-가능한-규칙)의 OPS-R18
   - 완료 조건: OPS-014, OPS-034, OPS-033(일부: 관리 연결), OPS-004(일부: 관리 연결을 L에 세지 않음)
   - 선행: 2.5, 3.1
+  - 현재: OPS-014·OPS-034는 비부분 시험으로 통과했다(커밋 `856c100`, 두 OS). OPS-033·OPS-004는 완료 조건대로 관리 연결 부분만 시험한다.
 - [ ] **4.3 로그인과 관리 세션**: 로그인·로그아웃·세션 정보, 관리 세션 쿠키, CSRF 토큰, 유휴 만료 Si·절대 수명 Sa, 자동 폴링 표시, 로그인 실패 제한, 재시작 무효를 구현한다. 관리 API 계약 6절에 남은 브라우저 기본 인증 창과 로그인 CSRF 방어를 확인한다. 로그인 응답 시간 판정은 구조 시험으로 정했다(사용자 결정 2026-10-22(Q31)).
   - 기준: [관리 API 계약 1.4·1.5절](contracts/management-api-v1.md#14-관리-세션), [관리 스펙 3.0절](specs/management.md#30-관리자-로그인과-세션), [관리 API 계약 6절](contracts/management-api-v1.md#6-초안을-확정하기-전에-해결할-사항)
   - 완료 조건: MGT-014, MGT-017~020, MGT-022, MGT-025, MGT-027, OPS-029. 조회·종료 경로가 필요한 시나리오는 4.4·4.5에서 마무리한다.
