@@ -518,7 +518,7 @@ fn refuses_plaintext_management_on_a_public_address_with_exit_code_3() {
     assert_released(ports);
 }
 
-/// spec: operations.md:OPS-002 partial
+/// spec: operations.md:OPS-002
 #[test]
 fn fails_with_exit_code_4_and_releases_listeners_when_a_port_is_taken() {
     let _lock = lock_ports();
@@ -637,7 +637,7 @@ fn fails_with_exit_code_3_when_management_certificate_is_missing() {
     assert_released(ports);
 }
 
-/// spec: operations.md:OPS-002 partial
+/// spec: operations.md:OPS-002
 #[test]
 fn checks_tls_files_before_binding_a_taken_status_port() {
     let _lock = lock_ports();
