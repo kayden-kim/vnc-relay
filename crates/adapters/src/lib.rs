@@ -8,4 +8,5 @@ pub mod net;
 pub mod ops_log;
 pub mod status_http;
 pub mod terminal;
+pub mod tls;
 mod toml_text;

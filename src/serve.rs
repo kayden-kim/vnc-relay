@@ -14,12 +14,13 @@ use vnc_relay_adapters::accounts_file::HashFloor;
 use vnc_relay_adapters::net::{AcceptPolicy, BindFailure, TcpEntryPoint};
 use vnc_relay_adapters::ops_log::JsonLinesEventSink;
 use vnc_relay_adapters::status_http::StatusListener;
+use vnc_relay_adapters::tls::{self, TlsError, TlsFile};
 use vnc_relay_adapters::{accounts_file, config_file, net};
 use vnc_relay_app::accounts::{self, ACCOUNTS_FILE_KEY, AccountsDiagnostic};
 use vnc_relay_app::events::{Event, Phase};
 use vnc_relay_app::lifecycle::LifecycleService;
 use vnc_relay_app::ports::EventSink;
-use vnc_relay_app::settings::{LogOutput, Settings};
+use vnc_relay_app::settings::{LogOutput, Settings, TlsFiles};
 use vnc_relay_domain::budget::ConnectionBudget;
 use vnc_relay_domain::entry_point::EntryPoint;
 
@@ -118,6 +119,24 @@ async fn listen_until_shutdown(settings: &Settings, log: Arc<dyn EventSink>) -> 
             return runtime_failure(log.as_ref(), "종료 신호 처리기를 준비할 수 없다", &error);
         }
     };
+
+    // TLS identity files of the enabled WSS entry point and of the management
+    // listener are checked before any listener is bound (cli-v1 §1.8). The
+    // acceptors of passing checks stay alive until 3.2 and 4.2 attach them.
+    let mut _tls_acceptors = Vec::new();
+    let mut tls_failed = false;
+    for check in tls_checks(settings) {
+        match tls::load_acceptor(&check.files.cert_file, &check.files.key_file) {
+            Ok(acceptor) => _tls_acceptors.push(acceptor),
+            Err(error) => {
+                tls_failed = true;
+                tls_failure(log.as_ref(), &check, &error);
+            }
+        }
+    }
+    if tls_failed {
+        return ExitCode::from(EXIT_CONFIG);
+    }
     let lifecycle = Arc::new(LifecycleService::new());
     // Lm, shared by the status listener and the management listener (4.2).
     let admin_budget = ConnectionBudget::new(settings.limits.admin_connections);
@@ -245,6 +264,49 @@ fn record_failure(
         listener,
         detail,
     });
+}
+
+/// One TLS identity that startup checks before any listener is bound.
+struct TlsCheck<'a> {
+    /// Config key prefix of the two files, such as `relay.wss_viewer`.
+    prefix: &'static str,
+    /// `listener` value of the operation log (ops-info-v1 §1.5).
+    listener: &'static str,
+    files: &'a TlsFiles,
+}
+
+/// The enabled WSS entry point, then management, when they set TLS files.
+fn tls_checks(settings: &Settings) -> Vec<TlsCheck<'_>> {
+    let mut checks = Vec::new();
+    let wss = settings.relay.get(EntryPoint::WssViewer);
+    if let (true, Some(files)) = (wss.enabled, wss.tls.as_ref()) {
+        checks.push(TlsCheck {
+            prefix: "relay.wss_viewer",
+            listener: EntryPoint::WssViewer.name(),
+            files,
+        });
+    }
+    if let Some(files) = settings.management.tls.as_ref() {
+        checks.push(TlsCheck {
+            prefix: "management",
+            listener: "management",
+            files,
+        });
+    }
+    checks
+}
+
+/// Reports one TLS file error on stderr and in the operation log. The config
+/// key names the file that failed. The detail stays empty, so the log never
+/// carries file paths or key material.
+fn tls_failure(log: &dyn EventSink, check: &TlsCheck<'_>, error: &TlsError) {
+    let file = match error.file() {
+        TlsFile::Cert => "cert_file",
+        TlsFile::Key => "key_file",
+    };
+    let key = format!("{}.{file}", check.prefix);
+    cli::report("error", error.code(), &key, &error.to_string());
+    record_failure(log, error.code(), Some(key), Some(check.listener), None);
 }
 
 /// Account file diagnostics may quote file paths inside the file, so the log

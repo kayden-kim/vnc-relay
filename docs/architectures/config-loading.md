@@ -135,4 +135,4 @@ flowchart LR
 
 | 항목 | 영향 | 확정 위치 |
 | --- | --- | --- |
-| `tls_file_invalid` 검사 위치 | 인증서·개인키 내용 검사는 rustls 암호 모듈(OPS-TBD-009)이 정해진 뒤 TLS 어댑터에서 한다. 그 전에는 경로 값만 검사한다. | 작업 0.2·3.1 |
+| 재로드 때 `tls_file_invalid` 검사 위치 | 시작 때 내용 검사는 작업 3.1에서 TLS 어댑터(`tls::load_acceptor`)가 한다([`serve` 시작 모듈 설계 4절](serve-startup.md)). 재로드 후보의 내용 검사 방식은 정하지 않았다. | 작업 5.x |

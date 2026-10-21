@@ -77,6 +77,7 @@ Rust 의존성의 라이선스가 사용자가 승인한 허용 목록 안에 �
 | socket2 직접 의존성(작업 2.5) | `licenses ok`, 종료 코드 0. 라이선스 파일이 있다. `NOTICE` 파일 유무를 안다. | 3단계 명령, 패키지 디렉터리에서 파일 이름 확인 | 통과(2026-10-20). socket2 0.6.5는 `MIT OR Apache-2.0`이고 `LICENSE-MIT`·`LICENSE-APACHE`가 있으며 `NOTICE` 파일은 없다. | 아래 실행 기록 3 |
 | axum 직접 의존성(작업 2.6) | `licenses ok`, 종료 코드 0. 새로 들어온 패키지마다 라이선스 파일이 있다. `NOTICE` 파일 유무를 안다. | 3단계 명령, 패키지 디렉터리에서 파일 이름 확인 | 통과(2026-10-20). 새 패키지 23개 모두 라이선스 파일이 있고 `NOTICE` 파일은 없다. | 아래 실행 기록 4 |
 | argon2·rpassword 직접 의존성(작업 4.1) | `licenses ok`, 종료 코드 0. 새로 들어온 패키지마다 라이선스 파일이 있다. `NOTICE` 파일 유무를 안다. | 3단계 명령, 패키지 디렉터리에서 파일 이름 확인 | 통과(2026-10-20). 새 패키지 15개 모두 라이선스 파일이 있고 `NOTICE` 파일은 없다. | 아래 실행 기록 5 |
+| 작업 3.1 직접 의존성(rustls 0.23.46, rustls-pki-types 1.15.1, tokio-rustls 0.26.6, tokio `io-util`) | `licenses ok`, 종료 코드 0. 새로 들어온 패키지마다 라이선스 파일이 있다. `NOTICE` 파일 유무를 안다. | 3단계 명령, 패키지 디렉터리에서 파일 이름 확인 | 통과(2026-10-21). 새 패키지 19개 모두 라이선스 파일이 있고 `NOTICE` 파일은 없다. Ubuntu와 Windows 모두 `licenses ok`다. | 아래 실행 기록 6 |
 
 실행 기록 1: 의존성을 추가하기 전에 [PRD "구현 기술" 행](../requirements/PRD.md#확정-기준)의 라이브러리를 검토했다.
 
@@ -96,6 +97,12 @@ Rust 의존성의 라이선스가 사용자가 승인한 허용 목록 안에 �
 실행 기록 5: 커밋 `ed68104`에 작업 4.1을 더한 작업 트리에서 실행했다. 환경은 실행 기록 1과 같다. 같은 실행을 Windows 11 Pro 10.0.26200(cargo-deny 0.20.2)에서도 했다. 작업 4.1이 adapters의 직접 의존성으로 argon2 0.6.0(`default-features = false`, `features = ["alloc", "password-hash"]`)과 rpassword 7.5.4를 더했다. 이 변경으로 `Cargo.lock`에 15개 패키지가 새로 들어왔다. argon2 0.6.0, base64ct 1.8.3, blake2 0.11.0, block-buffer 0.12.1, cmov 0.5.4, cpufeatures 0.3.1, crypto-common 0.2.2, ctutils 0.4.3, digest 0.11.3, hybrid-array 0.4.15, password-hash 0.6.1, phc 0.6.1, rpassword 7.5.4, rtoolbox 0.0.6, typenum 1.20.1이다. 결과는 두 환경 모두 `licenses ok`, 종료 코드 0이다. 패키지마다 레지스트리 디렉터리의 `LICENSE*`·`COPYING*`·`UNLICENSE*`·`NOTICE*` 파일 이름과 `Cargo.toml`의 `license` 값을 확인했다. rpassword와 rtoolbox의 라이선스는 `Apache-2.0`이고 `LICENSE-APACHE`만 있다. 나머지는 `MIT OR Apache-2.0`이고 `LICENSE-MIT`·`LICENSE-APACHE`가 있다. typenum은 `LICENSE` 파일도 있다. `NOTICE` 파일은 없다.
 
 실행 기록 5 재실행(2026-10-21): 커밋 `1aed781`과 작업 트리에서 3단계 명령을 다시 실행했다. 작업 트리의 변경은 `Cargo.toml`·`Cargo.lock`을 건드리지 않았다. 결과는 WSL과 Windows 11 모두 `licenses ok`, 종료 코드 0이다. 고지 파일 확인은 다시 하지 않았다.
+
+실행 기록 6: 커밋 `b7b43cb`에 작업 3.1을 더한 작업 트리에서 실행했다. 환경은 실행 기록 1과 같다. 같은 실행을 Windows 11 Pro 10.0.26200에서도 했다. 작업 3.1이 adapters의 직접 의존성으로 rustls 0.23.46(`default-features = false`, `features = ["std", "tls12", "aws_lc_rs"]`), rustls-pki-types 1.15.1(`std`), tokio-rustls 0.26.6(`tls12`, `aws_lc_rs`)을 더했고, `[dev-dependencies]`에 tokio의 `io-util`을 더했다. 이 변경으로 `Cargo.lock`에 19개 패키지 항목이 새로 들어왔다. 직접 의존성 세 개 외의 패키지는 getrandom 0.2.17, once_cell 1.21.4, ring 0.17.14, rustls-webpki 0.103.16, subtle 2.6.1, untrusted 0.9.0, windows-sys 0.52.0, windows-targets 0.52.6, windows_aarch64_gnullvm·windows_aarch64_msvc·windows_i686_gnu·windows_i686_gnullvm·windows_i686_msvc·windows_x86_64_gnu·windows_x86_64_gnullvm·windows_x86_64_msvc 0.52.6이다.
+
+라이선스는 모두 허용 목록 안에 있다. rustls-pki-types, tokio-rustls, getrandom, once_cell, windows-sys, windows-targets, windows_* 패키지는 MIT OR Apache-2.0이고 `LICENSE-MIT`·`LICENSE-APACHE` 또는 소문자 `license-mit`·`license-apache-2.0`이 있다. rustls는 Apache-2.0 OR ISC OR MIT이고 `LICENSE-APACHE`·`LICENSE-ISC`·`LICENSE-MIT`가 있다. ring은 Apache-2.0 AND ISC이고 `LICENSE`·`LICENSE-BoringSSL`·`LICENSE-other-bits`가 있다. rustls-webpki는 ISC(`LICENSE`), untrusted 0.9.0은 ISC(`LICENSE.txt`), subtle은 BSD-3-Clause(`LICENSE`)다. 19개 패키지 모두 라이선스 파일이 있고 `NOTICE` 파일은 없다. 결과는 Ubuntu와 Windows 모두 `licenses ok`, 종료 코드 0이다.
+
+ring 0.17.14는 rustls-webpki의 `alloc` 기능이 `ring?/alloc`으로 켜는 약한 간선이다. `cargo tree -i ring`에 출력이 없으므로 컴파일되지 않는다. 잠금 파일에는 남는다. 배포 고지 의무는 [OPS-021](../specs/operations.md#7-수용-테스트)에서 확인한다.
 
 ## 5. 중단 조건
 

@@ -118,7 +118,7 @@ flowchart LR
 | `crates/app/src/lifecycle.rs` | 수명 | 준비 상태(`Readiness`, `LifecycleService`: 시작 중·준비됨·종료 중, 작업 2.6). 종료 유예 G, 두 번째 종료 요청 처리는 작업 5.3이 더한다. | 신호 수신 | std 원자 변수. G를 더할 때 domain, `ports` | [상태 리스너와 준비 상태 모듈 설계](status-listener.md) |
 | `crates/app/src/accounts.rs` | 관리자 계정 | 계정 파일 오류·경고 코드와 진단, 계정 없음 거절(작업 2.2). `admin` 절차(`AdminService`)와 `list` 함수 | 숨김 입력, 파일 잠금·교체 | domain, `ports` | [`serve` 시작 모듈 설계](serve-startup.md)(오류 코드), [관리자 계정 준비 CLI 모듈 설계](admin-accounts.md)(절차) |
 | `crates/adapters/src/net.rs`, `crates/adapters/src/net/` | TCP 리스너·진입점 | 리스너 바인드와 실패 수집(작업 2.2), 상태 리스너를 먼저 여는 계획 하나 바인드(`bind_one`, 작업 2.6), TCP 진입점의 수락과 수락 직후 출발지 IP 검사, 허용한 연결의 보류와 종료 때 정리(작업 2.4), L 판정·H·보류 중 상대 종료 감지·TCP keepalive 설정(작업 2.5) | 초기 교환 해석, 끊긴 연결 판정(작업 2.11) | app, domain, tokio, socket2 | [`serve` 시작 모듈 설계](serve-startup.md)(바인드), [TCP 진입점 모듈 설계](tcp-entry-point.md)(진입점), [연결 상한과 시간 제한 모듈 설계](connection-limits.md)(L·H·K) |
-| `crates/adapters/src/tls.rs` | TLS | rustls 서버 설정, PEM 인증서·개인키 읽기, 인증서 교체 | 리스너 | app | 없음 |
+| `crates/adapters/src/tls.rs` | TLS | rustls 서버 설정, PEM 인증서·개인키 읽기와 오류 분류(작업 3.1), 인증서 교체(작업 5.x) | 리스너 | rustls, rustls-pki-types, tokio-rustls | [내장 TLS 모듈 설계](tls.md) |
 | `crates/adapters/src/websocket/` | WebSocket | HTTP 업그레이드, Origin·IP 재검사 호출, 바이너리 메시지와 바이트 스트림 변환, ping | 중계 규칙 | app, domain | 없음(작업 3.2에서 작성) |
 | `crates/adapters/src/management_http/` | 관리 HTTP | 관리 API 경로, 쿠키·CSRF 헤더, 오류 본문, 정적 대시보드 파일 제공 | 관리 규칙 | app | 없음 |
 | `crates/adapters/src/status_http.rs` | 상태 HTTP | `StatusListener`: 수락 직후 Lm 판정과 거절 기록, `/livez`·`/readyz` 응답과 404·405 오류 본문([운영 정보 계약 1.12·2절](../contracts/ops-info-v1.md#112-상태-리스너와-엔드포인트)) | 준비 판정 | app, domain, axum, serde_json, tokio | [상태 리스너와 준비 상태 모듈 설계](status-listener.md) |

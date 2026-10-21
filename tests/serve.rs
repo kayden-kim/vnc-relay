@@ -210,14 +210,20 @@ fn accounts_text(params: &str) -> String {
 /// Writes a valid config and account file into a new directory and returns
 /// the config path.
 fn valid_setup(name: &str, ports: Ports) -> PathBuf {
+    setup_with(name, &config_text(ports))
+}
+
+/// Writes `config` and a valid account file into a new directory and returns
+/// the config path.
+fn setup_with(name: &str, config: &str) -> PathBuf {
     let dir = temp_dir(name);
     write(
         &dir.join("admin-accounts.toml"),
         &accounts_text("m=19456,t=2,p=1"),
     );
-    let config = dir.join("relay.toml");
-    write(&config, &config_text(ports));
-    config
+    let config_path = dir.join("relay.toml");
+    write(&config_path, config);
+    config_path
 }
 
 fn spawn(config: &Path) -> Child {
@@ -512,6 +518,117 @@ fn fails_with_exit_code_4_and_releases_listeners_when_a_port_is_taken() {
     );
     drop(taken);
     // Status and management were bound before the failure and are free again.
+    assert_released(ports);
+}
+
+/// Path of a fixture in `crates/adapters/tests/fixtures/tls`, for a TOML
+/// literal string (no escapes, so Windows separators are safe).
+fn tls_file(name: &str) -> String {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("crates/adapters/tests/fixtures/tls")
+        .join(name)
+        .display()
+        .to_string()
+}
+
+/// Valid config with an enabled WSS entry point that uses `cert` and `key`.
+fn wss_config(ports: Ports, cert: &str, key: &str) -> String {
+    let wss_port = TcpListener::bind("127.0.0.1:0")
+        .and_then(|listener| listener.local_addr())
+        .unwrap_or_else(|error| panic!("free port: {error}"))
+        .port();
+    format!(
+        "{}\n[relay.wss_viewer]\nenabled = true\nlisten = '127.0.0.1:{wss_port}'\nallow = ['127.0.0.1']\ncert_file = '{}'\nkey_file = '{}'\n",
+        config_text(ports),
+        tls_file(cert),
+        tls_file(key)
+    )
+}
+
+/// Valid config whose management listener uses `cert` and `key`.
+fn management_config(ports: Ports, cert: &str, key: &str) -> String {
+    config_text(ports).replacen(
+        "[management]\n",
+        &format!(
+            "[management]\ncert_file = '{}'\nkey_file = '{}'\n",
+            tls_file(cert),
+            tls_file(key)
+        ),
+        1,
+    )
+}
+
+/// spec: operations.md:OPS-002 partial
+#[test]
+fn fails_with_exit_code_3_when_wss_key_does_not_match() {
+    let _lock = lock_ports();
+    let ports = Ports::free();
+    let config = setup_with(
+        "wss-key-mismatch",
+        &wss_config(ports, "server-chain.pem", "other-key-p256.pem"),
+    );
+    let run = serve(&config);
+    assert_eq!(run.code, Some(3), "{}", run.stderr);
+    assert_eq!(events(&run.stdout), ["server_starting", "startup_failed"]);
+    let lines: Vec<&str> = run.stdout.lines().collect();
+    assert_eq!(field(lines[1], "reason"), Some("tls_file_invalid"));
+    assert_eq!(field(lines[1], "listener"), Some("wss_viewer"));
+    assert_eq!(
+        field(lines[1], "config_key"),
+        Some("relay.wss_viewer.key_file")
+    );
+    assert_eq!(field(lines[1], "detail"), None);
+    assert_eq!(
+        run.stderr,
+        "error[tls_file_invalid] key=relay.wss_viewer.key_file: 개인키가 인증서와 맞지 않다.\n"
+    );
+    assert_released(ports);
+}
+
+/// spec: operations.md:OPS-002 partial
+#[test]
+fn fails_with_exit_code_3_when_management_certificate_is_missing() {
+    let _lock = lock_ports();
+    let ports = Ports::free();
+    let config = setup_with(
+        "management-cert-missing",
+        &management_config(ports, "no-such-file.pem", "server-key-p256.pem"),
+    );
+    let run = serve(&config);
+    assert_eq!(run.code, Some(3), "{}", run.stderr);
+    assert_eq!(events(&run.stdout), ["server_starting", "startup_failed"]);
+    let lines: Vec<&str> = run.stdout.lines().collect();
+    assert_eq!(field(lines[1], "reason"), Some("tls_file_invalid"));
+    assert_eq!(field(lines[1], "listener"), Some("management"));
+    assert_eq!(field(lines[1], "config_key"), Some("management.cert_file"));
+    assert_eq!(
+        run.stderr,
+        "error[tls_file_invalid] key=management.cert_file: 인증서 파일을 읽을 수 없다.\n"
+    );
+    assert_released(ports);
+}
+
+/// spec: operations.md:OPS-002 partial
+#[test]
+fn checks_tls_files_before_binding_a_taken_status_port() {
+    let _lock = lock_ports();
+    let ports = Ports::free();
+    let config = setup_with(
+        "tls-before-bind",
+        &wss_config(ports, "server-chain.pem", "other-key-p256.pem"),
+    );
+    // Status is the first listener bound. If the TLS check ran after the
+    // binds, this held port would fail with exit code 4 instead.
+    let taken = TcpListener::bind(("127.0.0.1", ports.status))
+        .unwrap_or_else(|error| panic!("hold status port: {error}"));
+    let run = serve(&config);
+    drop(taken);
+    assert_eq!(run.code, Some(3), "{}", run.stderr);
+    assert_eq!(events(&run.stdout), ["server_starting", "startup_failed"]);
+    assert_eq!(
+        run.stderr,
+        "error[tls_file_invalid] key=relay.wss_viewer.key_file: 개인키가 인증서와 맞지 않다.\n"
+    );
     assert_released(ports);
 }
 

@@ -13,6 +13,7 @@
 | [연결 상한과 시간 제한 모듈 설계](connection-limits.md) | 연결 상한 L·Lm·Lw를 어떻게 세고, TCP 진입점이 수락한 연결에 초기 교환 시간 H와 TCP keepalive를 어떻게 적용하는가 | Current | Draft | Verified — [대조 기록](connection-limits.md#대조-기록) |
 | [상태 리스너와 준비 상태 모듈 설계](status-listener.md) | 상태 리스너가 `/livez`·`/readyz`에 어떻게 답하고, 준비 상태를 언제 바꾸며, 상태 연결을 Lm으로 어떻게 세는가 | Current | Draft | Verified — [대조 기록](status-listener.md#대조-기록) |
 | [관리자 계정 준비 CLI 모듈 설계](admin-accounts.md) | `vnc-relay admin add|passwd|remove|list`가 관리자 계정 파일을 어떻게 읽고 잠금 파일로 보호해 원자적으로 바꾸며, 비밀번호를 어떻게 입력받고 해시하는가 | Current | Draft | Verified — [대조 기록](admin-accounts.md#대조-기록) |
+| [내장 TLS 모듈 설계](tls.md) | PEM 인증서·개인키를 읽어 TLS 1.2·1.3 서버 설정을 만들고, 시작 때 WSS·관리 TLS 파일을 어떻게 검사하는가 | Current | Draft | Verified — [대조 기록](tls.md#대조-기록) |
 
 - 구조 시점: 문서가 설명하는 구조가 현재 코드(`Current`), 목표(`Target`), 전환 중(`Transitional`), 과거(`Historical`) 중 무엇인지 나타낸다.
 - 문서 상태: 구현 기준으로 채택했는지 나타낸다. `Draft`는 초안, `Active`는 채택되어 적용 중, `Retired`는 더 이상 쓰지 않음을 뜻한다.

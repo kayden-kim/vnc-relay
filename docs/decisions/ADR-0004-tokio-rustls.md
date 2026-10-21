@@ -74,7 +74,7 @@ native-tls 행의 "미확인" 항목은 이 ADR에서 조사하지 않았다. �
 
 ### 후속 작업
 
-- 암호 모듈 선택(OPS-TBD-009): 2026-10-20에 사용자가 aws-lc-rs를 골랐다. Windows 11 x64와 Ubuntu 24.04 LTS x64에서 저장소 의존성 aws-lc-rs가 빌드되었고 라이선스 검사(`licenses ok`)가 통과했다. 근거는 [개발 환경 how-to](../how-to/set-up-and-verify.md) 4절 실행 기록 1·3과 [의존성 라이선스 검사](../how-to/check-dependency-licenses.md) 실행 기록 5다. Windows 빌드는 NASM 없이 `AWS_LC_SYS_PREBUILT_NASM=1`로 확인했다. rustls 의존성은 아직 저장소에 없다(작업 3.1).
+- 암호 모듈 선택(OPS-TBD-009): 2026-10-20에 사용자가 aws-lc-rs를 골랐다. Windows 11 x64와 Ubuntu 24.04 LTS x64에서 저장소 의존성 aws-lc-rs가 빌드되었고 라이선스 검사(`licenses ok`)가 통과했다. 근거는 [개발 환경 how-to](../how-to/set-up-and-verify.md) 4절 실행 기록 1·3과 [의존성 라이선스 검사](../how-to/check-dependency-licenses.md) 실행 기록 5다. Windows 빌드는 NASM 없이 `AWS_LC_SYS_PREBUILT_NASM=1`로 확인했다. rustls 의존성은 작업 3.1에서 `crates/adapters`에 더했다.
 - 설정 계약: `cert_file`·`key_file` 형식은 [설정 계약 1.9절](../contracts/config-v1.md#19-인증서개인키-파일-형식)이 PEM으로 채택(2026-10-16)했다.
 - 허용 암호 스위트는 선택한 암호 모듈의 rustls 기본 목록으로 정했고 설정 키는 없다(2026-10-16). OPS-TBD-003은 결번이다.
 - tokio-rustls 등 어댑터 crate: tokio-rustls를 채택했다(2026-10-20 의존성 라이선스 검토, [PRD 확정 기준](../requirements/PRD.md#확정-기준)의 "구현 기술" 행).
@@ -83,11 +83,11 @@ native-tls 행의 "미확인" 항목은 이 ADR에서 조사하지 않았다. �
 
 | 가설·결정 요인 | 검증 방법 | 합격 기준 | 증거 |
 | --- | --- | --- | --- |
-| 요인 3: TLS 1.2 미만을 거절한다 | 보안 통합 테스트 | TLS 1.0·1.1 협상 실패, 1.2 이상 성립 | [OPS-036](../specs/operations.md#7-수용-테스트): 미실행(구현·테스트 파일 없음) |
+| 요인 3: TLS 1.2 미만을 거절한다 | 보안 통합 테스트 | TLS 1.0·1.1 협상 실패, 1.2 이상 성립 | [OPS-036](../specs/operations.md#7-수용-테스트): 부분(작업 3.1: `crates/adapters/tests/tls.rs`에서 TLS 1.0·1.1 거절과 1.2·1.3 성립을 확인. 리스너 연결은 작업 3.2·4.2) |
 | 요인 1: 두 OS에서 같은 협상 결과를 보인다 | 배포 호환성 테스트 | 두 플랫폼의 실행 증거 확보 | [OPS-019](../specs/operations.md#7-수용-테스트): 미실행(구현·테스트 파일 없음) |
 | 요인 2: 인증서 교체가 파일 변경으로 적용된다 | 통합 테스트 | 새 핸드셰이크는 새 인증서, 기존 연결 유지 | [OPS-024](../specs/operations.md#7-수용-테스트): 미실행(구현·테스트 파일 없음) |
 | 요인 2: 잘못된 인증서·키 후보를 거절한다 | 통합 테스트 | 키 불일치·한쪽 교체는 후보 전체 거절, 기존 유지 | [OPS-026](../specs/operations.md#7-수용-테스트): 미실행(구현·테스트 파일 없음) |
-| 요인 2: TLS 준비 실패가 정상 준비로 표시되지 않는다 | 통합 테스트 | 준비 완료 아님, 자원 회수 | [OPS-002](../specs/operations.md#7-수용-테스트): 미실행(구현·테스트 파일 없음) |
+| 요인 2: TLS 준비 실패가 정상 준비로 표시되지 않는다 | 통합 테스트 | 준비 완료 아님, 자원 회수 | [OPS-002](../specs/operations.md#7-수용-테스트): 부분(작업 3.1: `tests/serve.rs`의 `fails_with_exit_code_3_when_wss_key_does_not_match`·`fails_with_exit_code_3_when_management_certificate_is_missing`이 종료 코드 3을, `checks_tls_files_before_binding_a_taken_status_port`가 바인드 전 검사를 확인) |
 | 요인 5: 의존성 라이선스를 확인한다 | 출처·라이선스 검토 | 의존성 고지 의무 확인 | [OPS-021](../specs/operations.md#7-수용-테스트): 미실행(구현·의존성 없음) |
 | 요인 4: 두 OS에서 빌드·배포가 된다 | 배포 통합 테스트 | 외부 서비스·컨테이너 없이 실행 | [OPS-031](../specs/operations.md#7-수용-테스트): 미실행(구현·테스트 파일 없음) |
 
