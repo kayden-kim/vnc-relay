@@ -129,7 +129,7 @@ flowchart LR
 
 ## 대조 기록
 
-- 대조 범위: HEAD `ead7be0` + 작업 트리 변경. 작업 4.2 커밋에 들어간다.
+- 대조 범위: HEAD `de25cde`(작업 4.2) + 작업 트리 변경(`tests/serve.rs` 서버 수준 테스트 2건, 문서). 커밋 `test(management): check plaintext management start failure`에 들어간다.
 - 대조 방법: 2절 요소 표의 파일·심볼을 grep으로 찾았다. `management_http.rs` `answer`(3·4절 순서), `tls_listener.rs` `TlsIo::poll_handshake`·`offers_no_tls12`(버전 판정), `src/serve.rs` `listen_until_shutdown`·`stop_task`(바인드·준비됨·종료 순서)를 읽어 4절 표와 맞췄다.
 - 환경: Windows 11 Pro 10.0.26200 x64, WSL2 Ubuntu 24.04.4, Rust 1.99.1, tokio-rustls 0.26.6, rustls 0.23.46, axum 0.8.9.
 
@@ -138,9 +138,9 @@ flowchart LR
 | `wsl -d Ubuntu -- bash /mnt/d/vr-tools/vr-full.sh` | WSL2 Ubuntu 24.04.4 | 통과(`ALL PASSED`). 시나리오 148건: 통과 4, 부분 19, 실패 0, 미실행 0, 미연결 125. |
 | `powershell -NoProfile -ExecutionPolicy Bypass -File D:/vr-tools/vr-win.ps1 -Only all` | Windows 11 Pro 10.0.26200 x64 | 통과(`ALL PASSED (all)`). 시나리오 148건: 통과 3, 부분 19, 실패 0, 미실행 1(OPS-007, `#[cfg(unix)]`), 미연결 125. |
 
-- 4.2 대상 시나리오 상태(두 환경 같음): OPS-014 부분, OPS-033 부분, OPS-034 부분, OPS-004 부분, OPS-036 부분, MGT-017 부분, MGT-015 미연결.
+- 대상 시나리오 상태(두 환경 같음): OPS-014 부분, OPS-033 부분, OPS-034 부분(운영 조회 API 작업 4.4 전까지 전체가 아니다), OPS-004 부분, OPS-036 부분, MGT-017 부분, MGT-015 미연결.
 - 판정: 구조 대조를 마쳤다. 구조 시점은 `Current`, 구현 대조는 `Verified`(작업 트리 범위)다. 문서 상태는 `Draft`로 둔다(열린 질문 3·6·8 미결정).
-- TODO 4.2는 `[ ]`로 둔다. MGT-015는 4.3~4.6 완료 조건에 없어 소유 작업이 없다(열린 질문 8). OPS-014 부분 사유: 계정 없음 시작 거절(`serve` 테스트)·인증서 누락 시작 거절(3.1 `serve` 테스트)·미인증 401(`management.rs`)은 확인했다. 공개 평문 주소 시작 거절은 설정 테스트만 있다(열린 질문 9와 같은 공백). OPS-034 부분 사유: 평문 비루프백 거절은 설정 테스트에 있다. 시작 실패 serve 테스트는 없다(열린 질문 9).
+- TODO 4.2는 `[ ]`로 둔다. MGT-015는 4.3~4.6 완료 조건에 없어 소유 작업이 없다(열린 질문 8). OPS-014 부분 사유: 운영 조회·종료 API가 아직 없다(작업 4.4·4.5). 공개 평문 주소 시작 거절(`tests/serve.rs` `refuses_plaintext_management_on_a_public_address_with_exit_code_3`), 계정 없음 시작 거절(`serve`), 인증서 누락 시작 거절(3.1 `serve`), 미인증 401(`management.rs`와 `answers_api_queries_with_401_without_login_on_loopback_plaintext`)은 확인했다. OPS-034 부분 사유: 운영 조회 엔드포인트(작업 4.4)가 아직 없어, 로그인 없이 `/api/v1/` 요청이 401로 거절되는 것만 확인했다. 비루프백 평문 시작 실패와 루프백 평문 시작은 serve 테스트로 확인했다.
 
 ## 9. 미결정 사항
 
@@ -154,4 +154,4 @@ flowchart LR
 | 6. 버전 거절이 아닌 TLS 실패 기록. `connection_aborted`는 `conn_id`가 필요하다. 대안은 (a) `conn_id` 없는 새 사건(계약 변경) 또는 (b) 기록하지 않음(기본값). | 관리 TLS 실패의 감사 흔적 | 운영 정보 계약 1.5·1.7절 변경 여부 사용자 결정 |
 | 7. U(`tls_upgrade_secs`)의 관리 TLS 적용 여부. 열린 질문 3과 같은 결정이다. | 열린 질문 3과 같음 | 열린 질문 3과 같음 |
 | 8. MGT-015(상대 주소)의 소유 작업이 없다. 4.2 완료 조건에는 있지만 4.3~4.6 완료 조건에 없다. 상대 주소는 조회 API(4.4)의 응답에서 처음 보이고, 4.2 응답에는 상대 주소가 없다. 옵션은 (a) TODO 4.2를 `[ ]`로 둔다(기본값, 소유 작업이 없어 판정이 열린다), (b) `MGT-015 partial`로 4.2를 `[x]` 처리한다, (c) MGT-015를 4.4 완료 조건에 넣는다(TODO 편집). | TODO 4.2 완료 판정 | 사용자 결정 |
-| 9. 비루프백 평문 시작 실패(OPS-034)의 검증 위치. 기본값은 `config_contract.rs`의 기존 테스트에 `OPS-034 partial` 표식을 붙인다. 대안은 serve 수준 테스트 추가. | 표식 위치만 바뀜 | 작업 4.2 구현 중 결정(기본값 적용) |
+| 9. (해결) 비루프백 평문 시작 실패(OPS-014·OPS-034)의 검증 위치. 서버 수준 테스트 2건을 추가했다. `tests/serve.rs`의 `refuses_plaintext_management_on_a_public_address_with_exit_code_3`(시작 실패, OPS-014 부분·OPS-034 부분)와 `answers_api_queries_with_401_without_login_on_loopback_plaintext`(루프백 평문 시작 뒤 401, OPS-034 부분). 설정 규칙 테스트 `allows_plaintext_management_only_on_loopback`(OPS-034 부분)는 그대로 둔다. | 표식 위치만 바뀜(해결됨) | 사용자 결정(서버 수준 테스트 추가, 해결됨) |

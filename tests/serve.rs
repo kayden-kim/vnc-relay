@@ -490,6 +490,34 @@ fn refuses_to_start_without_a_usable_account_with_exit_code_5() {
     }
 }
 
+/// spec: operations.md:OPS-014 partial
+/// spec: operations.md:OPS-034 partial
+#[test]
+fn refuses_plaintext_management_on_a_public_address_with_exit_code_3() {
+    let _lock = lock_ports();
+    let ports = Ports::free();
+    let public = config_text(ports).replace(
+        &format!("listen = \"127.0.0.1:{}\"", ports.management),
+        &format!("listen = \"0.0.0.0:{}\"", ports.management),
+    );
+    let config = setup_with("plaintext-public", &public);
+    let run = serve(&config);
+    assert_eq!(run.code, Some(3), "{}", run.stderr);
+    let expected = pairs(&[(
+        "config_plaintext_management_not_loopback",
+        "management.listen",
+    )]);
+    assert_eq!(run.errors(), expected);
+    assert_eq!(startup_failures(&run.stdout), expected);
+    assert_eq!(events(&run.stdout), ["startup_failed"]);
+    // One stderr line per error, in the `error[code] key=key: message` form.
+    let prefix = "error[config_plaintext_management_not_loopback] key=management.listen: ";
+    assert!(run.stderr.starts_with(prefix), "{}", run.stderr);
+    assert_eq!(run.stderr.lines().count(), 1, "{}", run.stderr);
+    // Config checks run before any bind, so every port is still free.
+    assert_released(ports);
+}
+
 /// spec: operations.md:OPS-002 partial
 #[test]
 fn fails_with_exit_code_4_and_releases_listeners_when_a_port_is_taken() {
@@ -1322,6 +1350,31 @@ fn answers_status_queries_without_login_once_ready() {
         http_get(ports.status, "/livez"),
         Some((200, r#"{"status":"alive"}"#.to_owned()))
     );
+}
+
+/// spec: operations.md:OPS-034 partial
+#[test]
+fn answers_api_queries_with_401_without_login_on_loopback_plaintext() {
+    let _lock = lock_ports();
+    let ports = Ports::free();
+    let config = valid_setup("plaintext-loopback", ports);
+    write(
+        &config,
+        &entry_config(ports, r#"["127.0.0.1"]"#, r#"["127.0.0.1"]"#),
+    );
+    let log = config.with_file_name("relay.log");
+    let _guard = Guard(Some(spawn(&config)));
+    let ready = wait_for_line(&log, |line| field(line, "event") == Some("server_ready"));
+    assert!(
+        ready.contains(&format!("\"listen\":\"127.0.0.1:{}\"", ports.management)),
+        "{ready}"
+    );
+    // Plaintext on loopback starts. No session exists before login, so the
+    // API answers 401 before it judges the path.
+    let (status, body) = http_get(ports.management, "/api/v1/session")
+        .unwrap_or_else(|| panic!("no reply on the management port"));
+    assert_eq!(status, 401, "{body}");
+    assert!(body.contains(r#""code":"unauthenticated""#), "{body}");
 }
 
 /// spec: operations.md:OPS-033 partial
