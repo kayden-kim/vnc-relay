@@ -75,12 +75,12 @@ WSS와 관리 HTTPS는 인터넷에서 접근할 수 있다. 일반적인 웹 �
 | 가설·결정 요인 | 검증 방법 | 합격 기준 | 증거 |
 | --- | --- | --- | --- |
 | 요인 1: 비허용 IP는 TLS 협상 전에 끊는다 | 통합 테스트 | 비허용 출발지는 TLS 협상 없이 종료 | [WS-023](../specs/websocket.md#7-수용-테스트), [WS-014](../specs/websocket.md#7-수용-테스트): 미실행(구현·테스트 파일 없음) |
-| 요인 1: 전달 헤더로 정책을 우회할 수 없다 | 보안 통합 테스트 | 헤더를 보내도 주소·접근 정책이 바뀌지 않음 | [MGT-015](../specs/management.md#7-수용-테스트): 미실행(구현·테스트 파일 없음) |
-| 요인 2: 내장 TLS 없이 공개 관리 접속을 받지 않는다 | 배포 보안 테스트 | 공개 평문 HTTP 수락 없음 | [OPS-014](../specs/operations.md#7-수용-테스트), [OPS-034](../specs/operations.md#7-수용-테스트): 미실행(구현·테스트 파일 없음) |
+| 요인 1: 전달 헤더로 정책을 우회할 수 없다 | 보안 통합 테스트 | 헤더를 보내도 주소·접근 정책이 바뀌지 않음 | [MGT-015](../specs/management.md#7-수용-테스트): 미실행(전달 헤더 시험 없음. 관리 리스너는 작업 4.2에서 구현했으나 MGT-015의 소유 작업은 정해지지 않음. [관리 리스너 모듈 설계](../architectures/management-listener.md) 9절 질문 8) |
+| 요인 2: 내장 TLS 없이 공개 관리 접속을 받지 않는다 | 배포 보안 테스트 | 공개 평문 HTTP 수락 없음 | [OPS-014](../specs/operations.md#7-수용-테스트), [OPS-034](../specs/operations.md#7-수용-테스트): 부분(`tests/serve.rs` `refuses_plaintext_management_on_a_public_address_with_exit_code_3`, `answers_api_queries_with_401_without_login_on_loopback_plaintext`, `crates/adapters/tests/config_contract.rs` `allows_plaintext_management_only_on_loopback`, `crates/adapters/tests/management.rs` `plaintext_api_requests_are_refused_without_a_session`. 운영 조회(작업 4.4)와 관리자 종료(작업 4.5)는 미구현이라 미실행) |
 | 요인 3: 인증서 교체가 재시작 없이 적용된다 | 통합 테스트 | 새 핸드셰이크는 새 인증서, 기존 연결 유지 | [OPS-024](../specs/operations.md#7-수용-테스트): 미실행(구현·테스트 파일 없음) |
-| 요인 4: TLS 1.2 미만을 거절한다 | 보안 통합 테스트 | TLS 1.0·1.1 협상 실패, 1.2 이상 성립 | [OPS-036](../specs/operations.md#7-수용-테스트): 미실행(구현·테스트 파일 없음) |
-| 요인 4: WSS 인증서 오류에서 평문으로 전환하지 않는다 | 배포 통합 테스트 | 인증서 오류마다 TLS 실패 | [WS-013](../specs/websocket.md#7-수용-테스트): 미실행(구현·테스트 파일 없음) |
-| 요인 4: 관리 세션 쿠키 속성이 리스너 종류와 맞는다 | 보안 통합 테스트 | HTTPS는 Secure 포함, 평문 루프백은 Secure 제외 | [MGT-017](../specs/management.md#7-수용-테스트): 미실행(구현·테스트 파일 없음) |
+| 요인 4: TLS 1.2 미만을 거절한다 | 보안 통합 테스트 | TLS 1.0·1.1 협상 실패, 1.2 이상 성립 | [OPS-036](../specs/operations.md#7-수용-테스트): 부분(작업 3.1 `crates/adapters/tests/tls.rs` `tls10_and_tls11_hellos_are_refused`, `tls12_client_completes_handshake`, `tls13_client_completes_handshake`. 작업 4.2 `crates/adapters/tests/management.rs` `tls10_and_tls11_hellos_are_refused_without_plaintext_fallback`, `https_clients_on_tls12_and_tls13_get_the_unauthenticated_answer`. WSS 리스너 연결은 작업 3.2) |
+| 요인 4: WSS 인증서 오류에서 평문으로 전환하지 않는다 | 배포 통합 테스트 | 인증서 오류마다 TLS 실패 | [WS-013](../specs/websocket.md#7-수용-테스트): 부분(작업 3.1 `crates/adapters/tests/tls.rs` `expired_certificate_fails_client_without_plaintext_fallback`, `untrusted_issuer_fails_client_without_plaintext_fallback`, `host_mismatch_fails_client_without_plaintext_fallback`. WSS 리스너 연결은 작업 3.2) |
+| 요인 4: 관리 세션 쿠키 속성이 리스너 종류와 맞는다 | 보안 통합 테스트 | HTTPS는 Secure 포함, 평문 루프백은 Secure 제외 | [MGT-017](../specs/management.md#7-수용-테스트): 부분(`crates/adapters/tests/management.rs` `stale_session_cookie_is_cleared_without_secure_over_plain_http`, HTTPS 쿠키 삭제의 Secure는 `https_clients_on_tls12_and_tls13_get_the_unauthenticated_answer`. 로그인 쿠키 속성은 작업 4.3) |
 
 ## 8. 재검토 조건
 
