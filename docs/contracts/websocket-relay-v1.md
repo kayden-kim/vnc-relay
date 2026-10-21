@@ -233,13 +233,18 @@ Close 예: 대기 시간이 W를 넘으면 서버는 코드 `4001`과 reason `wa
 
 | 주체·테스트 위치 | 확인할 계약 규칙 | 결과 | 실행 기록 |
 | --- | --- | --- | --- |
-| Consumer: `vnc-relay` WS·WSS 리스너 / 미생성 | 1.1절 경로·메서드·헤더, 2.1절 HTTP 상태: [WS-012](../specs/websocket.md#7-수용-테스트) | 미실행 | 구현·테스트 파일 없음 |
-| Consumer: `vnc-relay` WS·WSS 리스너 / 미생성 | 1.1절 출발지 IP 검사 순서와 연결 종료: [WS-014](../specs/websocket.md#7-수용-테스트), [WS-022](../specs/websocket.md#7-수용-테스트), [WS-023](../specs/websocket.md#7-수용-테스트) | 미실행 | 구현·테스트 파일 없음 |
-| Consumer: `vnc-relay` WS·WSS 리스너 / 미생성 | 1.3절 Origin 비교: [WS-015](../specs/websocket.md#7-수용-테스트), [WS-027](../specs/websocket.md#7-수용-테스트), [WS-021](../specs/websocket.md#7-수용-테스트) | 미실행 | 구현·테스트 파일 없음 |
+| Consumer: `vnc-relay` WS·WSS 리스너 / `crates/adapters/src/upgrade.rs` 단위 테스트 `header_names_must_be_tokens`·`control_characters_in_the_head_are_refused`·`syntax_is_checked_before_the_path`·`wrong_version_is_refused_before_a_bad_key`, `crates/adapters/tests/websocket.rs` `management_paths_and_malformed_upgrades_are_refused_without_upgrade` | 1.1절 경로·메서드·헤더 검사 순서, 2.1절 HTTP 상태: [WS-012](../specs/websocket.md#7-수용-테스트)(일부) | 부분 | [실행 기록](#계약-테스트-실행-기록) |
+| Consumer: `vnc-relay` WS·WSS 리스너 / `crates/adapters/tests/websocket.rs` `disallowed_source_is_closed_before_tls_or_http_even_with_session_hints`, `disallowed_source_on_wss_is_closed_before_tls_and_holds_no_relay_place`, `stalled_upgrade_request_is_closed_at_u_without_a_reply`, `stalled_tls_handshake_on_wss_is_closed_at_u_without_a_reply`, `head_completed_after_u_gets_no_answer` | 1.1절 출발지 IP 검사 순서와 제한 시간 U 뒤 연결 종료: [WS-014](../specs/websocket.md#7-수용-테스트), [WS-023](../specs/websocket.md#7-수용-테스트)(WSS), [WS-022](../specs/websocket.md#7-수용-테스트)(테스트 없음), [OPS-006](../specs/operations.md#7-수용-테스트)(일부) | 부분 | [실행 기록](#계약-테스트-실행-기록) |
+| Consumer: `vnc-relay` WS·WSS 리스너 / `crates/adapters/tests/websocket.rs` `origin_must_equal_the_allowed_value`, `origin_must_equal_the_allowed_value_on_wss`, `allowed_source_with_disallowed_origin_is_refused_with_403`, `allowed_source_with_disallowed_origin_is_refused_with_403_on_wss`, `allowed_client_without_origin_or_session_gets_switching_protocols` | 1.3절 Origin 비교: [WS-015](../specs/websocket.md#7-수용-테스트), [WS-027](../specs/websocket.md#7-수용-테스트)(WS·WSS), [WS-021](../specs/websocket.md#7-수용-테스트)(일부) | 부분 | [실행 기록](#계약-테스트-실행-기록) |
 | Producer: 고정 버전 noVNC / Consumer: `vnc-relay` / 미생성 | 1.2절 서브프로토콜(noVNC 기본값 포함), 초기 교환 연동: [WS-025](../specs/websocket.md#7-수용-테스트) | 미실행 | noVNC 버전 미고정(WS-TBD-005), 구현 없음 |
 | Producer: 테스트용 WebSocket 클라이언트 / Consumer: `vnc-relay` / 미생성 | 1.4절 바이너리·분할·ping·pong·텍스트·M 경계: [WS-007](../specs/websocket.md#7-수용-테스트), [WS-008](../specs/websocket.md#7-수용-테스트), [WS-009](../specs/websocket.md#7-수용-테스트), [WS-010](../specs/websocket.md#7-수용-테스트), [WS-018](../specs/websocket.md#7-수용-테스트), [WS-019](../specs/websocket.md#7-수용-테스트), [WS-026](../specs/websocket.md#7-수용-테스트) | 미실행 | 구현·테스트 파일 없음 |
 | Producer: `vnc-relay` / Consumer: 테스트용 WebSocket 클라이언트 / 미생성 | 1.5절 close 코드와 reason: 2.2절의 시나리오 | 미실행 | 구현·테스트 파일 없음 |
 | Producer·Consumer: 테스트용 클라이언트와 TCP 상대 / 미생성 | 1.6절 종료 의미: [WS-016](../specs/websocket.md#7-수용-테스트), [WS-017](../specs/websocket.md#7-수용-테스트), [OPS-042](../specs/operations.md#7-수용-테스트) | 미실행 | 구현·테스트 파일 없음 |
+
+### 계약 테스트 실행 기록
+
+| 대상 | 환경 | 명령 | 결과 |
+| --- | --- | --- | --- |
 
 ## 6. 초안을 확정하기 전에 해결할 사항
 
