@@ -67,7 +67,8 @@ export function createGauge({
   root.setAttribute('aria-label', label);
   root.setAttribute('aria-valuemin', '0');
   root.setAttribute('aria-valuemax', String(max));
-  root.setAttribute('aria-valuetext', text);
+  // Known values announce the value and the limit line; unknown values announce only the unknown text.
+  root.setAttribute('aria-valuetext', known ? `${text}, ${limitText}` : text);
 
   const center = document.createElement('div');
   center.className = 'gauge-center';

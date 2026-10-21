@@ -307,7 +307,7 @@ function runChecks() {
     expect(gauge.getAttribute("aria-valuemin") === "0");
     expect(gauge.getAttribute("aria-valuemax") === "100");
     expect(gauge.getAttribute("aria-valuenow") === "50");
-    expect(gauge.getAttribute("aria-valuetext") === "50%");
+    expect(gauge.getAttribute("aria-valuetext") === `50%, ${t.gaugeLimit}`);
   });
 
   check("gauge-unknown", () => {

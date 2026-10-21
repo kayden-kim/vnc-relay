@@ -192,7 +192,7 @@ const REQUIRED_SAMPLES = [
   "alert-success", "alert-info", "alert-warning", "alert-destructive", "alert-neutral", "alert-long-ko", "alert-long-en",
   "card-default", "card-empty", "card-long-ko", "card-long-en",
   "stat-default", "stat-long-numbers", "stat-long-ko", "stat-long-en",
-  "gauge-0", "gauge-50", "gauge-100", "gauge-unknown", "gauge-long-ko", "gauge-long-en",
+  "gauge-0", "gauge-312", "gauge-1000", "gauge-unknown", "gauge-long-ko", "gauge-long-en",
   "navbar-default", "navbar-long-ko", "navbar-long-en",
   "language-select-navbar", "language-select-form", "language-select-long-ko", "language-select-long-en",
   "data-table-default", "data-table-empty", "data-table-long-ko", "data-table-long-en", "data-table-long-numbers",
@@ -299,16 +299,27 @@ function alertSample(tone) {
   );
 }
 
+// Gauge samples share one fixed limit, so the 상한 line is the same in every sample.
+const GAUGE_MAX = 1000;
+
+function formatCount(value) {
+  return value.toLocaleString("en-US");
+}
+
+function gaugeLimitText() {
+  return `${t.gaugeLimit} ${formatCount(GAUGE_MAX)}`;
+}
+
 function gaugeSample(value) {
   const unknown = value === null;
-  const caption = unknown ? t.gaugeUnknown : `${value}%`;
+  const caption = unknown ? t.gaugeUnknown : formatCount(value);
   return sample(unknown ? "gauge-unknown" : `gauge-${value}`, cap(t.gauge, caption), () =>
     createGauge({
       label: t.gauge,
       value,
-      max: 100,
-      valueText: unknown ? undefined : `${value}%`,
-      limitText: `${t.gaugeLimit} 100`,
+      max: GAUGE_MAX,
+      valueText: unknown ? undefined : formatCount(value),
+      limitText: gaugeLimitText(),
       unknownText: t.gaugeUnknown,
     }),
   );
@@ -454,19 +465,23 @@ function buildGroups() {
       ],
     ], true),
     group(t.gauge, [
-      [gaugeSample(0), gaugeSample(50), gaugeSample(100)],
+      [gaugeSample(0), gaugeSample(312), gaugeSample(GAUGE_MAX)],
       [
         gaugeSample(null),
         sample("gauge-long-ko", cap(t.gauge, t.longKo), () =>
-          createGauge({
-            label: LONG_KO_LABEL, value: 50, max: 100, valueText: "50%",
-            limitText: t.longKo,
+          createCard({
+            title: LONG_KO_LABEL,
+            body: createGauge({
+              label: t.gauge, value: 312, max: GAUGE_MAX, valueText: formatCount(312), limitText: gaugeLimitText(),
+            }),
           }),
         ),
         sample("gauge-long-en", cap(t.gauge, t.longEn), () =>
-          createGauge({
-            label: LONG_EN_LABEL, value: 50, max: 100, valueText: "50%",
-            limitText: t.longEn,
+          createCard({
+            title: LONG_EN_LABEL,
+            body: createGauge({
+              label: t.gauge, value: 312, max: GAUGE_MAX, valueText: formatCount(312), limitText: gaugeLimitText(),
+            }),
           }),
         ),
       ],
