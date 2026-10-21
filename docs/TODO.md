@@ -194,7 +194,7 @@ Mode I·II 초기 흐름을 추정 없이 설명할 수 있게 한다. 관찰은
 
 ### 4-A. 관리자 계정과 관리 API
 
-- [ ] **4.1 관리자 계정 준비 CLI**: `vnc-relay admin add|passwd|remove|list`, 숨김 비밀번호 입력, Argon2id 해시, 관리자 계정 파일의 원자적 교체를 구현한다. 먼저 CLI 계약 6절의 Windows 확인 사항(콘솔 신호·파일 권한·코드 페이지)과 Unix 권한 경고·잠금 파일의 필요성을 확인한다.
+- [x] **4.1 관리자 계정 준비 CLI**: `vnc-relay admin add|passwd|remove|list`, 숨김 비밀번호 입력, Argon2id 해시, 관리자 계정 파일의 원자적 교체를 구현한다. 먼저 CLI 계약 6절의 Windows 확인 사항(콘솔 신호·파일 권한·코드 페이지)과 Unix 권한 경고·잠금 파일의 필요성을 확인한다.
   - 기준: [CLI 계약 1.1~1.6절](contracts/cli-v1.md#1-형식과-의미), [CLI 계약 6절](contracts/cli-v1.md#6-초안을-확정하기-전에-해결할-사항), [운영 스펙 3.2절](specs/operations.md#32-로컬-cli-계정-준비)
   - 완료 조건: OPS-029(일부), OPS-030. CLI 계약 5절의 `admin` 계약 테스트.
   - 선행: 2.2
