@@ -754,3 +754,50 @@ async fn stalled_tls_handshake_on_wss_is_closed_at_u_without_a_reply() {
     })
     .await;
 }
+
+/// spec: operations.md:OPS-006 partial
+#[tokio::test]
+async fn head_completed_after_u_gets_no_answer() {
+    // The test thread blocks in `std::thread::sleep`, so the single-threaded
+    // runtime cannot run the server task. The server reads the head only after
+    // U has passed. Neither the 101 nor a refusal may be sent.
+    for path in ["/relay", "/api/v1/session"] {
+        let running = start(
+            EntryPoint::WsViewer,
+            None,
+            &["127.0.0.1/32"],
+            &[ALLOWED_ORIGIN],
+            SHORT_UPGRADE,
+        )
+        .await;
+        let mut stream = TcpStream::connect(running.addr)
+            .await
+            .unwrap_or_else(|error| panic!("connect: {error}"));
+        wait_for(&running.events, |event| {
+            matches!(event, Event::ConnectionAccepted { .. })
+        })
+        .await;
+        stream
+            .write_all(&upgrade_request(path, &[]))
+            .await
+            .unwrap_or_else(|error| panic!("request is sent: {error}"));
+        std::thread::sleep(SHORT_UPGRADE + Duration::from_millis(200));
+        let reply = read_head(&mut stream).await;
+        assert!(
+            reply.is_empty(),
+            "{path}: no reply once U has passed, got {:?}",
+            String::from_utf8_lossy(&reply)
+        );
+        wait_for(&running.events, |event| {
+            matches!(
+                event,
+                Event::ConnectionAborted {
+                    reason: AbortReason::TlsUpgradeTimeout,
+                    stage: Stage::Upgrade,
+                    ..
+                }
+            )
+        })
+        .await;
+    }
+}

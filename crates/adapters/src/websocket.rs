@@ -196,6 +196,7 @@ async fn connection(
             return;
         }
         Some(Ok(Ok(Step::Refused))) => None,
+        Some(Ok(Ok(Step::TimedOut))) => Some(AbortReason::TlsUpgradeTimeout),
         Some(Ok(Ok(Step::PeerEof))) => Some(AbortReason::PeerEof),
         Some(Ok(Err(_io_error))) => io_reason(&wire),
         Some(Err(_elapsed)) => Some(AbortReason::TlsUpgradeTimeout),
@@ -217,12 +218,21 @@ enum Step {
     Refused,
     /// The peer closed before the request head ended.
     PeerEof,
+    /// U passed before the head was read. Nothing is answered; the abort is
+    /// logged as `tls_upgrade_timeout`.
+    TimedOut,
 }
 
 /// Reads the request head, checks it, runs the pre-upgrade IP recheck, and
-/// writes either the 101 or the refusal.
+/// writes either the 101 or the refusal. Nothing is written after U.
 async fn upgrade(wire: &mut Wire, conn: &Accepted, shared: &WsShared) -> io::Result<Step> {
-    let head = match read_head(wire).await? {
+    let read = read_head(wire).await?;
+    // The outer timeout polls the upgrade first, so a head that finishes after
+    // U is caught here. Nothing is answered once U has passed.
+    if Instant::now() >= conn.at + shared.policy.upgrade {
+        return Ok(Step::TimedOut);
+    }
+    let head = match read {
         HeadRead::Complete(head) => head,
         HeadRead::Eof => return Ok(Step::PeerEof),
         HeadRead::TooLarge => return Ok(refuse(wire, conn, shared, Refusal::Invalid).await),
