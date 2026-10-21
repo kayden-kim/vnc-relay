@@ -38,6 +38,14 @@ const LOGIN_LESS_REQUESTS: [(&str, &str); 7] = [
     ),
 ];
 
+/// True when `body` is only the error object of management-api-v1 §2.1 with
+/// the code `unauthenticated`: no other field and no query data.
+fn is_bare_unauthenticated(body: &str) -> bool {
+    body.strip_prefix(r#"{"error":{"code":"unauthenticated","message":""#)
+        .and_then(|rest| rest.strip_suffix(r#""}}"#))
+        .is_some_and(|message| !message.contains('"'))
+}
+
 /// Tests pick free ports by binding port 0 and releasing it. Two tests that
 /// run at the same time can get the same port, so tests that bind take this
 /// lock first.
@@ -571,10 +579,7 @@ fn public_https_refuses_plaintext_and_answers_login_less_requests_with_401() {
     for (method, path) in LOGIN_LESS_REQUESTS {
         let (status, body) = https_request(ports.management, method, path);
         assert_eq!(status, 401, "{method} {path}: {body}");
-        assert!(
-            body.contains(r#""code":"unauthenticated""#),
-            "{method} {path}: {body}"
-        );
+        assert!(is_bare_unauthenticated(&body), "{method} {path}: {body}");
     }
 }
 
@@ -1636,10 +1641,7 @@ fn answers_api_queries_with_401_without_login_on_loopback_plaintext() {
         let (status, body) = http_request(ports.management, method, path)
             .unwrap_or_else(|| panic!("no reply to {method} {path}"));
         assert_eq!(status, 401, "{method} {path}: {body}");
-        assert!(
-            body.contains(r#""code":"unauthenticated""#),
-            "{method} {path}: {body}"
-        );
+        assert!(is_bare_unauthenticated(&body), "{method} {path}: {body}");
     }
 }
 
