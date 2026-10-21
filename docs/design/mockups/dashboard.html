@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>운영 대시보드 HTML 시안</title>
 <style>
-/* 토큰: docs/design/DESIGN.md의 YAML 머리말에서 이름 규칙대로 만든 값이다. 값을 직접 고치지 않는다. */
+/* DESIGN-TOKENS:START */
+/* 생성 파일이다. 직접 고치지 않는다. 원본: docs/design/DESIGN.md */
 :root {
-  color-scheme: light;
   --color-background: #f4f6f5;
   --color-foreground: #0d1a15;
   --color-card: #ffffff;
@@ -50,42 +50,6 @@
   --color-gauge-track: #e2eae7;
   --color-overlay: #0d1a1580;
   --color-shadow: #0d1a1514;
-  --space-xs: 4px;
-  --space-sm: 8px;
-  --space-md: 12px;
-  --space-lg: 16px;
-  --space-xl: 24px;
-  --space-2xl: 32px;
-  --space-control-height: 36px;
-  --space-control-height-sm: 32px;
-  --space-control-height-touch: 44px;
-  --space-target-min: 24px;
-  --space-content-max: 1440px;
-  --space-appbar-height: 56px;
-  --space-brand-size: 32px;
-  --space-border-width: 1px;
-  --space-indicator-width: 3px;
-  --space-focus-ring-width: 2px;
-  --space-focus-ring-offset: 2px;
-  --space-shadow-y: 1px;
-  --space-shadow-blur: 3px;
-  --space-mark-size: 10px;
-  --space-icon-size: 16px;
-  --space-icon-size-sm: 14px;
-  --space-icon-stroke: 1.75px;
-  --space-gauge-size: 120px;
-  --space-gauge-stroke: 12px;
-  --space-label-col: 128px;
-  --space-kv-label-col: 160px;
-  --space-alert-text-min: 192px;
-  --space-index-min: 240px;
-  --space-login-max: 400px;
-  --space-dialog-max: 480px;
-  --radius-sm: 6px;
-  --radius-md: 8px;
-  --radius-lg: 10px;
-  --radius-xl: 14px;
-  --radius-mark: 3px;
   --type-heading-page-family: 'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans KR', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --type-heading-page-size: 24px;
   --type-heading-page-weight: 700;
@@ -133,6 +97,46 @@
   --type-metric-weight: 700;
   --type-metric-line: 1.15;
   --type-metric-feature: 'tnum';
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 12px;
+  --space-lg: 16px;
+  --space-xl: 24px;
+  --space-2xl: 32px;
+  --space-control-height: 36px;
+  --space-control-height-sm: 32px;
+  --space-control-height-touch: 44px;
+  --space-target-min: 24px;
+  --space-content-max: 1440px;
+  --space-appbar-height: 56px;
+  --space-brand-size: 32px;
+  --space-border-width: 1px;
+  --space-indicator-width: 3px;
+  --space-focus-ring-width: 2px;
+  --space-focus-ring-offset: 2px;
+  --space-shadow-y: 1px;
+  --space-shadow-blur: 3px;
+  --space-mark-size: 10px;
+  --space-icon-size: 16px;
+  --space-icon-size-sm: 14px;
+  --space-icon-stroke: 1.75px;
+  --space-gauge-size: 120px;
+  --space-gauge-stroke: 12px;
+  --space-label-col: 128px;
+  --space-kv-label-col: 160px;
+  --space-alert-text-min: 192px;
+  --space-index-min: 240px;
+  --space-login-max: 400px;
+  --space-dialog-max: 480px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
+  --radius-xl: 14px;
+  --radius-mark: 3px;
+}
+/* DESIGN-TOKENS:END */
+:root {
+  color-scheme: light;
 }
 
 *,*::before,*::after{box-sizing:border-box}
