@@ -1,0 +1,141 @@
+# 대시보드 공통 컴포넌트 모듈 설계
+
+대시보드 화면이 함께 쓰는 공통 조각(버튼, 입력, 배지, 경고, 카드, 지표, 게이지, 상단 메뉴, 언어 선택, 데이터 표, 링크, 대화상자)과 아이콘을 만든다. 각 조각은 DOM 요소를 돌려주는 ES 모듈 함수다. 상태 표현은 속성과 클래스로 하고, 색·크기·간격은 토큰 CSS의 `var(--…)`로 그린다. 이 모듈은 관리 API를 부르지 않고 상태를 저장하지 않는다.
+
+| 항목 | 값 |
+| --- | --- |
+| 구조 시점 | Target |
+| 문서 상태 | Draft |
+| 구현 대조 | 미대조 |
+| 코드 위치 | `web/dashboard/app/components/`, `web/dashboard/app/styles/`, `web/dashboard/preview/`, `web/dashboard/tests/` |
+| 코드 지도 | [코드 지도 2절](code-map.md#2-코드-위치와-구성요소) |
+| 관련 스펙 | [대시보드 화면 스펙](../specs/dashboard.md)의 화면 상태 표. 이 모듈은 화면이 아니라서 시나리오 ID를 가지지 않는다. |
+| 관련 계약 | 없음 |
+| 관련 ADR | 없음 |
+
+## 1. 책임과 경계
+
+- 맡는 책임:
+  - 공통 조각을 만든다: 버튼, 텍스트 입력, 배지, 경고, 카드, 지표, 게이지, 상단 메뉴, 언어 선택, 데이터 표, 링크, 대화상자.
+  - 아이콘 SVG를 만든다([프런트엔드 컨벤션 5절](../conventions/frontend.md)의 아이콘 규칙).
+  - 상태를 속성(`disabled`, `aria-*`, `data-tone`)과 클래스(`is-hover`, `is-focus`)로 나타낸다.
+  - 미리보기와 테스트 페이지가 같은 조각을 쓴다(복제하지 않는다).
+- 맡지 않는 책임:
+  - 관리 API 호출, 폴링, 세션 상태, 오류 분류: 화면 모듈(작업 4.10·4.11)이 맡는다.
+  - 로그인 화면 조립: 작업 4.9가 맡는다.
+  - 토큰 값 정의: [DESIGN.md](../design/DESIGN.md) YAML과 `cargo xtask tokens`가 맡는다.
+  - 정적 파일 제공: 작업 4.6이 맡는다. `cargo xtask dashboard-serve`는 로컬 미리보기 전용이다.
+  - 언어 선택 저장과 문구 번역: 화면 모듈이 맡는다.
+- 다른 모듈에 공개하는 기능: `web/dashboard/app/components/` 아래 모듈의 함수. 아래 2절 표.
+
+## 2. 내부 구조
+
+화살표의 의미: 실행 중 호출(`import`와 함수 호출), 클래스·속성 연결(요소가 CSS 선택자와 맞는다), 토큰 참조(CSS가 `var(--…)`를 쓴다).
+
+```mermaid
+flowchart LR
+    PRV["preview/preview.js<br/>미리보기 페이지"] -->|"호출"| CMP["app/components/*.js<br/>create 함수"]
+    TST["tests/components.js<br/>테스트 페이지"] -->|"호출"| CMP
+    CMP -->|"호출"| ICO["app/components/icons.js<br/>icon"]
+    CMP -->|"클래스·속성 연결"| CSS["app/styles/base.css<br/>app/styles/components.css"]
+    CSS -->|"토큰 참조"| TOK["app/tokens.css<br/>생성 파일"]
+```
+
+| 요소(파일·심볼) | 역할 | 의존 대상 |
+| --- | --- | --- |
+| `app/components/icons.js` `icon` | 이름으로 아이콘 SVG 하나를 만든다. 정적 SVG 문자열을 모듈 안 `<template>`에 한 번 넣고 `cloneNode`로 복제한다. | 없음 |
+| `app/components/button.js` `createButton` | 버튼 요소를 만든다. | `icons.js` |
+| `app/components/text-field.js` `createTextField` | 레이블, 입력, 오류 문구를 묶은 `div`를 만든다. | 없음 |
+| `app/components/badge.js` `createBadge` | 상태 배지를 만든다. | `icons.js` |
+| `app/components/alert.js` `createAlert` | 상태 안내 상자를 만든다. | `icons.js` |
+| `app/components/card.js` `createCard` | 제목이 있는 카드 `section`을 만든다. | 없음 |
+| `app/components/stat.js` `createStat` | 값 하나와 이름을 묶은 지표를 만든다. 값은 `metric` 글꼴을 쓴다. | 없음 |
+| `app/components/gauge.js` `createGauge` | 원형 게이지를 `progressbar` 역할로 만든다. | 없음 |
+| `app/components/navbar.js` `createNavbar` | 상단 막대와 "주 메뉴" `nav`를 만든다. | `link.js`, `icons.js` |
+| `app/components/language-select.js` `createLanguageSelect` | 레이블이 있는 네이티브 `select`를 만든다. | 없음 |
+| `app/components/data-table.js` `createDataTable` | 표 요소를 만든다. 좁은 폭의 카드 배치는 CSS가 맡는다. | 없음 |
+| `app/components/link.js` `createLink` | 링크 `a`를 만든다. | `icons.js` |
+| `app/components/dialog.js` `createDialog` | 네이티브 `dialog`로 확인 대화상자를 만든다. | `button.js` |
+| `app/styles/base.css` | `color-scheme`, 본문 글꼴, 포커스 링, 화면 밖 글 클래스 | `tokens.css` |
+| `app/styles/components.css` | 조각별 클래스와 상태 선택자 | `tokens.css` |
+
+## 3. 데이터 모델
+
+모듈은 전역 상태가 없다. 입력은 옵션 객체, 출력은 DOM 요소다.
+
+| 이름 | 값 | 제약 |
+| --- | --- | --- |
+| `tone` | `success`, `info`, `warning`, `destructive`, `neutral` | 다른 값이면 `TypeError`. 요소에 `data-tone`으로 쓴다. |
+| `variant`(버튼) | `primary`, `outline`, `ghost`, `destructive` | 다른 값이면 `TypeError` |
+| `variant`(언어 선택) | `navbar`, `form` | 다른 값이면 `TypeError` |
+| 아이콘 이름 | `check`, `clock`, `warning`, `alert`, `refresh`, `logout`, `back`, `chevron-right`, `chevron-down`, `cancel`, `globe`, `grid`, `brand` | 다른 값이면 `TypeError` |
+| 아이콘 크기 | `md`(`--space-icon-size`), `sm`(`--space-icon-size-sm`) | 기본값 `md` |
+| 상태 클래스 | `is-hover`, `is-focus` | 미리보기가 상태를 고정할 때만 붙인다. 화면 코드는 붙이지 않는다. |
+| 상태 속성 | `disabled`, `aria-busy`, `aria-invalid`, `aria-current`, `aria-describedby` | 상태 표현은 이 속성으로 한다. |
+
+### 3.1 공개 함수
+
+| 함수 | 옵션 | 반환 |
+| --- | --- | --- |
+| `icon(name, {size})` | 아이콘 이름, 크기 | `SVGSVGElement`. `aria-hidden="true"`, `focusable="false"`. |
+| `createButton({variant, label, icon, disabled, busy, type})` | `variant` 기본 `primary`. `icon`은 아이콘 이름. `busy`는 진행 중 상태다. | `HTMLButtonElement`. `busy`이면 `disabled`와 `aria-busy="true"`를 붙인다. 문구는 호출자가 바꾼다. |
+| `createTextField({id, label, type, value, required, autocomplete, helpText, error})` | `type`은 `text` 또는 `password`. `error`가 있으면 오류 상태다. | `HTMLDivElement`. 오류가 있으면 `aria-invalid="true"`, `aria-describedby`에 오류 문구 id를 쓴다. |
+| `createBadge({tone, label, icon})` | `icon` 기본값은 `tone`별 아이콘(`neutral`은 없음). `icon: false`로 끈다. | `HTMLSpanElement` |
+| `createAlert({tone, title, message})` | `warning`·`destructive`는 `role="alert"`, 나머지는 `role="status"` | `HTMLDivElement` |
+| `createCard({title, headingLevel, count, actions, body, footer})` | `headingLevel` 기본 2 | `HTMLElement`(`section`). `aria-labelledby`로 제목과 묶는다. |
+| `createStat({label, value, unit, tone})` | 값은 `metric` 글꼴과 `tnum`을 쓴다. | `HTMLDivElement` |
+| `createGauge({label, value, max, valueText})` | `value`는 `0`~`max`. 채움 길이는 `setProperty`로 쓴다. | `HTMLDivElement`. `role="progressbar"`, `aria-valuemin`, `aria-valuemax`, `aria-valuenow`, `aria-valuetext`. |
+| `createNavbar({brand, items, language, action, label})` | `items`는 `{label, href, current}`. `label` 기본값 "주 메뉴". | `HTMLElement`(`header`). 안에 `nav`를 둔다. 현재 항목은 `aria-current="page"`. |
+| `createLanguageSelect({id, label, value, options, variant})` | `options`는 `{value, label}` 배열 | `HTMLDivElement`. 안에 `label`과 `select`. |
+| `createDataTable({caption, columns, rows, emptyText, numericColumns})` | `columns`는 `{key, label}`. `rows`는 값 배열의 배열. | `HTMLTableElement`. 열 머리글은 `scope="col"`. 행이 없으면 `emptyText`를 한 행으로 쓴다. |
+| `createLink({href, label, icon})` | `icon`은 아이콘 이름 | `HTMLAnchorElement` |
+| `createDialog({title, description, confirmLabel, cancelLabel, destructive, onConfirm, onCancel})` | 확인 버튼은 `destructive`면 위험 스타일 | `{element, show(), hide()}`. `show`는 `showModal()`을 부르고, 닫기와 취소는 네이티브 포커스 복귀를 쓴다. |
+
+모든 함수는 API 값을 `textContent`나 속성 값으로만 넣는다. `innerHTML`에는 정적 문자열만 넣는다.
+
+## 4. 처리 순서
+
+1. 호출자가 함수를 `import`하고 옵션 객체를 넘긴다.
+2. 함수가 옵션을 검사한다. 허용하지 않는 `tone`·`variant`·아이콘 이름, 빠진 필수 `label`이면 `TypeError`를 던진다. 이 오류는 개발 중 실수를 알리며 화면 오류로 바꾸지 않는다.
+3. 함수가 요소를 만든다. 아이콘은 `icon`의 캐시 템플릿에서 복제한다.
+4. 상태 속성과 클래스를 붙인다. 호출자는 반환된 요소를 DOM에 넣는다.
+5. 상태가 바뀌면 호출자가 같은 요소의 속성을 바꾼다. 모듈은 다시 만들지 않는다. 대화상자는 `show()`와 `hide()`로 열고 닫는다.
+
+## 5. 상태와 초기화
+
+- 전역 상태: 아이콘 템플릿 캐시(`Map`, 처음 쓸 때 채운다)만 있다.
+- 상태 표현: 호버와 포커스는 CSS 가상 클래스(`:hover`, `:focus-visible`)와 미리보기 클래스(`is-hover`, `is-focus`)를 함께 쓴다. 비활성은 `disabled`, 진행 중은 `aria-busy`, 오류는 `aria-invalid`다.
+- 테마: 밝은 테마만 있다. `base.css`가 `color-scheme: light`를 준다.
+- 움직임: 없다. 애니메이션, 전환 효과, 스피너를 쓰지 않는다([DESIGN.md 모션 절](../design/DESIGN.md#components)).
+
+## 6. 오류 처리
+
+- 개발 실수(허용하지 않는 옵션): `TypeError`를 던진다. 호출한 모듈이 처리하지 않는다. 테스트 페이지가 이 경로를 확인하지 않는다.
+- API 값과 긴 값: 텍스트로만 넣는다. 한글은 `word-break: keep-all`, 긴 영어와 숫자는 `overflow-wrap: anywhere`로 줄인다.
+- 네트워크 오류, 권한 오류는 이 모듈에 없다. 화면 모듈이 `createAlert`로 표시한다.
+
+## 7. 설계 선택
+
+| 선택 | 채택 | 이유 | 채택하지 않은 선택지 |
+| --- | --- | --- | --- |
+| 조각의 형태 | 요소를 돌려주는 함수 | 빌드와 프레임워크가 없다. 요소를 직접 검사하기 쉽다. | 사용자 정의 요소(`customElements`). 생명주기와 공개 표면이 늘어난다. |
+| 스타일 위치 | `app/styles/` CSS 파일에 클래스로 둔다 | 미리보기와 화면이 같은 CSS를 직접 가져온다. | 조각마다 스타일 문자열을 넣는다. CSP가 막는다. |
+| 상태 미리보기 | `is-hover`·`is-focus` 클래스 | 호버와 포커스를 재현할 수 있고 복제 CSS가 없다. | 미리보기 전용 CSS 복사본. 두 곳을 맞춰야 한다. |
+| 좁은 폭의 표 | CSS로 카드처럼 배치하고 표 역할은 유지 | 역할과 읽기 순서를 그대로 쓴다. | 폭마다 다른 마크업. |
+| 대화상자 | 네이티브 `dialog`와 `showModal()` | 포커스 가두기와 복귀를 브라우저가 한다. | 직접 만든 포커스 가두기. |
+| 언어 선택 | 네이티브 `select` | 키보드 동작과 스크린 리더 이름을 브라우저가 맡는다. | 직접 만든 목록 상자. |
+| 아이콘 | 인라인 SVG와 `<template>` 복제 | 외부 파일 요청이 없고 CSP를 지킨다. | 외부 스프라이트 `<use href>`. 외부 파일 요청이 생긴다. |
+
+## 8. 현재 코드와의 차이
+
+구현 전이다. 구현 뒤 이 절을 지우고 구조 시점을 `Current`로 바꾼다. 코드 지도의 `web/dashboard/` 행도 같은 변경에서 갱신한다.
+
+## 9. 미결정 사항
+
+- 브라우저 시험(`tests/dashboard_browser.rs`)을 4.8에 넣는 범위와 WSL의 Chromium 전제는 작업 보고에서 결정을 요청한다. 권장: 4.8에 넣고 Windows에서 실행하며, WSL에는 Chromium을 설치하기 전까지 실행하지 않는다.
+- 성능 예산(FE-TBD-016)은 화면이 생긴 뒤 정한다(사용자 결정 2026-10-22(Q39)).
+- 로그인(4.9)과 운영 화면(4.10·4.11)이 조각을 더 요구하면 이 문서에 API를 추가한다.
+
+## 대조 기록
+
+아직 없다. 구현 뒤 경로, 함수 이름, 상태 속성을 대조하고 기록한다.
