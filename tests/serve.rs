@@ -1059,17 +1059,28 @@ fn plaintext_ws_listener_is_off_by_default_and_warns_at_start_when_enabled() {
     let ws_section = format!(
         "\n[relay.ws_viewer]\nenabled = true\nlisten = \"{ws_listen}\"\nallow = [\"127.0.0.1\"]\n"
     );
-    let config = setup_with("ws-enabled", &(config_text(ports) + &ws_section + log_section));
+    let config = setup_with(
+        "ws-enabled",
+        &(config_text(ports) + &ws_section + log_section),
+    );
     let log = config.with_file_name("relay.log");
     let mut guard = Guard(Some(spawn(&config)));
     wait_listening(guard.child(), ports);
     wait_for_line(&log, |line| field(line, "event") == Some("server_ready"));
-    assert!(connects(ws_port), "the enabled WS listener accepts TCP on {ws_listen}");
+    assert!(
+        connects(ws_port),
+        "the enabled WS listener accepts TCP on {ws_listen}"
+    );
     let text = read_log(&log);
     let order = events(&text);
-    let warned = order.iter().position(|event| *event == "plaintext_ws_enabled");
+    let warned = order
+        .iter()
+        .position(|event| *event == "plaintext_ws_enabled");
     let ready = order.iter().position(|event| *event == "server_ready");
-    assert!(matches!((warned, ready), (Some(w), Some(r)) if w < r), "{text}");
+    assert!(
+        matches!((warned, ready), (Some(w), Some(r)) if w < r),
+        "{text}"
+    );
     let warning = text
         .lines()
         .find(|line| field(line, "event") == Some("plaintext_ws_enabled"))

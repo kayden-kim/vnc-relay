@@ -246,7 +246,10 @@ fn push_event_fields(fields: &mut Vec<(&'static str, Value)>, event: &Event) {
             fields.push(("reason", Value::from(reason.as_str())));
             fields.push(("peer_ip", Value::from(peer_ip.to_string())));
             if let Some(origin) = origin {
-                fields.push(("origin", Value::from(cut(origin.as_str(), ORIGIN_MAX_BYTES))));
+                fields.push((
+                    "origin",
+                    Value::from(cut(origin.as_str(), ORIGIN_MAX_BYTES)),
+                ));
             }
         }
         Event::ConnectionAborted {
@@ -321,8 +324,8 @@ fn civil_date(days: u64) -> (u64, u64, u64) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::time::Duration;
     use std::net::IpAddr;
+    use std::time::Duration;
     use vnc_relay_app::events::RejectReason;
     use vnc_relay_domain::conn_id::ConnId;
     use vnc_relay_domain::peer_ip::PeerIp;

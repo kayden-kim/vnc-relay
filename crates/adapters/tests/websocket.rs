@@ -534,7 +534,11 @@ async fn disallowed_source_on_wss_is_closed_before_tls_and_holds_no_relay_place(
     // The refused client starts a real TLS handshake. The server must close
     // before ServerHello within PROMPT, far below U.
     let tcp = connect_from([127, 0, 0, 2], running.addr).await;
-    let attempt = timeout(PROMPT, connector(&[&TLS12, &TLS13]).connect(name.clone(), tcp)).await;
+    let attempt = timeout(
+        PROMPT,
+        connector(&[&TLS12, &TLS13]).connect(name.clone(), tcp),
+    )
+    .await;
     assert!(
         matches!(attempt, Ok(Err(_))),
         "a refused source sees the close before ServerHello within {PROMPT:?}"
@@ -591,7 +595,10 @@ async fn ws_and_wss_check_only_their_own_allow_lists() {
     let _ = plain.write_all(&request).await;
     let mut reply = Vec::new();
     let closed = timeout(PROMPT, plain.read_to_end(&mut reply)).await;
-    assert!(closed.is_ok(), "ws_viewer closes 127.0.0.3 within {PROMPT:?}");
+    assert!(
+        closed.is_ok(),
+        "ws_viewer closes 127.0.0.3 within {PROMPT:?}"
+    );
     assert!(reply.is_empty(), "ws_viewer gives 127.0.0.3 no HTTP reply");
     wait_for(&ws.events, |event| {
         matches!(
@@ -607,7 +614,11 @@ async fn ws_and_wss_check_only_their_own_allow_lists() {
     .await;
 
     let tcp = connect_from([127, 0, 0, 2], wss.addr).await;
-    let attempt = timeout(PROMPT, connector(&[&TLS12, &TLS13]).connect(name.clone(), tcp)).await;
+    let attempt = timeout(
+        PROMPT,
+        connector(&[&TLS12, &TLS13]).connect(name.clone(), tcp),
+    )
+    .await;
     assert!(
         matches!(attempt, Ok(Err(_))),
         "wss_viewer closes 127.0.0.2 before ServerHello within {PROMPT:?}"
