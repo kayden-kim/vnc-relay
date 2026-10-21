@@ -186,20 +186,23 @@ async fn connection(
         None => Wire::Plain(stream),
     };
     let deadline = conn.at + shared.policy.upgrade;
+    // Biased: the stop and U are polled before the upgrade, so a write that
+    // becomes ready after U is never finished (websocket-relay-v1 §1.1).
     let finished = tokio::select! {
+        biased;
         _ = stop.wait_for(|stopped| *stopped) => None,
-        done = tokio::time::timeout_at(deadline, upgrade(&mut wire, &conn, &shared)) => Some(done),
+        () = tokio::time::sleep_until(deadline) => Some(Ok(Step::TimedOut)),
+        done = upgrade(&mut wire, &conn, &shared) => Some(done),
     };
     let reason = match finished {
-        Some(Ok(Ok(Step::Switched))) => {
+        Some(Ok(Step::Switched)) => {
             hold_upgraded(wire, permit, &conn, &shared, stop).await;
             return;
         }
-        Some(Ok(Ok(Step::Refused))) => None,
-        Some(Ok(Ok(Step::TimedOut))) => Some(AbortReason::TlsUpgradeTimeout),
-        Some(Ok(Ok(Step::PeerEof))) => Some(AbortReason::PeerEof),
-        Some(Ok(Err(_io_error))) => io_reason(&wire),
-        Some(Err(_elapsed)) => Some(AbortReason::TlsUpgradeTimeout),
+        Some(Ok(Step::Refused)) => None,
+        Some(Ok(Step::TimedOut)) => Some(AbortReason::TlsUpgradeTimeout),
+        Some(Ok(Step::PeerEof)) => Some(AbortReason::PeerEof),
+        Some(Err(_io_error)) => io_reason(&wire),
         None => Some(AbortReason::ServerShutdown),
     };
     let stage = wire.stage();
@@ -227,8 +230,8 @@ enum Step {
 /// writes either the 101 or the refusal. Nothing is written after U.
 async fn upgrade(wire: &mut Wire, conn: &Accepted, shared: &WsShared) -> io::Result<Step> {
     let read = read_head(wire).await?;
-    // The outer timeout polls the upgrade first, so a head that finishes after
-    // U is caught here. Nothing is answered once U has passed.
+    // U can pass inside the poll that finishes the head. Nothing is answered
+    // once U has passed.
     if Instant::now() >= conn.at + shared.policy.upgrade {
         return Ok(Step::TimedOut);
     }
