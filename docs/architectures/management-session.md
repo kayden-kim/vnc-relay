@@ -29,7 +29,7 @@
   - 조회 응답 작성: 작업 4.4.
   - 활성 VNC 세션 조회와 종료: 관리 세션과 독립이다. 세션 검사는 활성 세션 표를 읽거나 바꾸지 않는다.
   - 계정 파일 읽기와 쓰기: 관리자 계정 준비 CLI와 시작 모듈이 맡는다([관리자 계정 준비 CLI 모듈 설계](admin-accounts.md)).
-- 다른 모듈에 공개하는 기능: `AdminAuth::login`, `AdminAuth::authorize`, `AdminAuth::touch`, `AdminAuth::logout`, `SessionView`, `LoginOutcome`, `AuthError`(작업 4.4·4.5가 `authorize`와 `touch`를 호출한다).
+- 다른 모듈에 공개하는 기능: `AdminAuth::login`, `AdminAuth::authorize`, `AdminAuth::check_csrf`, `AdminAuth::touch`, `AdminAuth::logout`, `SessionView`, `LoggedIn`, `AuthorizedAdmin`, `AuthError`(작업 4.4·4.5가 `authorize`와 `touch`를 호출한다).
 
 ## 2. 내부 구조
 
@@ -87,7 +87,7 @@ flowchart LR
 
 | 순서 | 코드 위치(파일·심볼) | 조건·계산 | 바뀌는 상태 | 결과를 쓰는 곳 |
 | --- | --- | --- | --- | --- |
-| 1 | `session_api` 로그인 처리 | `Content-Type`의 미디어 타입이 `application/json`이 아니면 `415 invalid_request`. 본문을 16384바이트까지 읽는다. 넘으면 `400 invalid_request` | 없음 | 응답 |
+| 1 | `session_api` 로그인 처리 | `Content-Type`의 미디어 타입이 `application/json`이 아니면 `415 invalid_request`(매개변수는 보지 않는다). 본문을 16384바이트까지 읽는다. 넘거나 읽기에 실패하면 `400 invalid_request`. 본문 읽기에 별도 시간 제한은 없다(9절 파) | 없음 | 응답 |
 | 2 | `session_api` 본문 검사 | JSON 객체여야 한다. `account`·`password`는 있어야 하고 문자열이며 비어 있으면 안 된다. 아니면 `400 invalid_request`. 알 수 없는 필드는 무시한다 | 없음(이 실패는 F에 세지 않는다) | 응답 |
 | 3 | `AdminAuth::login` | 계정 이름을 `AccountName::parse`로 본다. 실패하거나 목록에 없으면 더미 해시를 쓴다 | 없음 | 다음 단계 |
 | 4 | `PasswordVerifier::verify` | 계정이 있든 없든 검증을 정확히 한 번 한다(잠금 중에도 한다). 결과는 `matched`로 둔다. 검증 오류는 `500 internal` | 없음(잠금 밖에서 한다) | 다음 단계 |
@@ -125,11 +125,12 @@ flowchart LR
 | 실패 지점 | 처리 방법 | 남는 상태 | 관련 스펙 시나리오 |
 | --- | --- | --- | --- |
 | 본문 형식·크기·필드 검사(`session_api`) | `415` 또는 `400 invalid_request`. 로그인 실패로 세지 않는다 | 변화 없음 | MGT-018(계약 2.1절) |
+| `X-Relay-Poll` 값이 `1`이 아니거나, `GET`이 아닌 요청에 있다(어댑터) | `400 invalid_request`. 세션을 연장하지 않는다 | 변화 없음 | MGT-025(계약 1.4.2절) |
 | 계정 없음·틀린 비밀번호(`AdminAuth::login`) | `401 login_failed`, 본문과 헤더는 제한 중과 같다. 실패를 두 키에 적는다 | 실패 기록 추가 | MGT-018, MGT-022 |
 | 제한 중(`LoginLimiter::check`) | `401 login_failed`(같은 본문). 실패를 세지 않고 제한을 늘리지 않는다 | 변화 없음 | MGT-022 |
-| 해시 검증 실패(`Argon2Verifier`, OS 오류) | `500 internal`. 세션을 만들지 않고 실패를 세지 않는다 | 변화 없음 | 계약 2.1절 |
+| 해시 검증 실패(`Argon2Verifier`, OS 오류) | `500 internal`. 세션을 만들지 않고 실패를 세지 않는다. 사건을 기록하지 않는다(9절 하) | 변화 없음 | 계약 2.1절 |
 | 더미 해시 만들기 실패(시작) | 서버 시작을 실패로 끝낸다(종료 코드 1, 런타임 오류) | 없음 | 구현 판단(9절 다) |
-| 세션 없음·만료·로그아웃·재시작 뒤(`authorize`) | `401 unauthenticated` + `WWW-Authenticate` + 쿠키 지우기 | 만료 항목 삭제 | MGT-019, MGT-020, MGT-027 |
+| 세션 없음·만료·로그아웃·재시작 뒤(`authorize`) | `401 unauthenticated` + `WWW-Authenticate`. 요청에 쿠키가 있었으면 쿠키 지우기 `Set-Cookie`도 보낸다 | 만료 항목 삭제 | MGT-019, MGT-020, MGT-027 |
 | CSRF 불일치·없음(`authorize`) | `403 csrf_invalid`. 세션 유지 | 변화 없음 | MGT-014 |
 | 로그인 사건 기록 실패 | 기록기가 흡수한다([운영 로그 모듈 설계](ops-log.md)). 흐름을 바꾸지 않는다 | 변화 없음 | OPS-029 |
 
@@ -153,23 +154,29 @@ flowchart LR
 | 자동 정리: 로그인과 조회 때 만료 항목을 지운다. 상한은 두지 않는다. **구현 판단(사용자 결정 없음)** | 세션 수와 실패 키 수는 요청 속도에 따라 자란다. 정리만으로 Sa·W 뒤에는 줄어든다 | 용량 상한과 가장 오래된 항목 삭제(9절 바) | MGT-R13, MGT-R14 |
 | 쿠키 속성: `Path=/; HttpOnly; SameSite=Strict`, HTTPS에서만 `; Secure`. `Max-Age`·`Expires`·`Domain`은 쓰지 않는다 | 계약 1.4.1절과 관리 스펙 MGT-017 행의 규칙 | 없음 | 계약 1.4.1절 |
 | 응답 헤더: 모든 관리 응답 `Cache-Control: no-store`, 401은 `WWW-Authenticate: Session realm="vnc-relay"` | 계약 1.1절·2.1절 | 없음 | 계약 1.1·2.1절 |
+| `GET`·`DELETE` 요청의 본문은 검사하지 않는다(현재 구현). **구현 판단(사용자 결정 없음, 9절 너)** | 계약 1.1절 본문 형식은 본문이 있는 모든 요청의 `Content-Type`을 보고 `415`로 거절한다고 적었다. 계약 1.3절 4단계도 본문을 검증한다고 적었다. 두 규칙이 `GET`·`DELETE`에 어떻게 적용되는지 계약이 정하지 않았다 | 본문이 있으면 `Content-Type`을 보고 `415`(계약 1.1절 문장 그대로) | 계약 1.1절, 1.3절 4단계 |
+| 로그인 본문의 미디어 타입 매개변수(`charset` 등)는 보지 않고, 읽기 실패는 `400 invalid_request`로 답한다. **구현 판단(사용자 결정 없음)** | 계약은 미디어 타입만 정한다. 읽기 실패를 본문 형식 오류로 본다 | 매개변수가 다르면 415 | 계약 2.1절(`invalid_request`) |
+| `spawn_blocking` 작업 중단(`JoinError`)은 `500 internal`로 답한다. **구현 판단(사용자 결정 없음)** | 계약은 중단 상황을 정하지 않았다. 검증 오류와 같은 내부 오류로 본다 | 연결 끊기 | 계약 2.1절(`internal`) |
+| 세션 정보의 `dashboard`는 중첩 객체다. **구현 판단(사용자 결정 없음, 9절 거)** | 계약 1.5절 표는 `dashboard.poll_secs`처럼 점 표기로 적었다 | 점이 들어간 평면 키 | 계약 1.5절 |
+| 로그인 실패 본문 문장은 `로그인할 수 없다.`다. **구현 판단(사용자 결정 없음)** | 계약은 문장을 정하지 않았다. 계정 없음·틀린 비밀번호·제한 중 세 경우가 같아야 한다 | 경우별 문장(존재 여부가 드러남) | 계약 2.1절(`login_failed`) |
+| 어댑터 시험은 Argon2 매개변수를 8 KiB·1·1로 낮춘다. 루트 시험은 19456·2·1이다(`tests/admin.rs`·`tests/serve.rs`와 같다). **구현 판단(사용자 결정 없음, 시험 코드만)** | 시험 시간을 줄인다. 운영 코드의 매개변수는 바뀌지 않는다 | 운영 매개변수 사용 | 없음 |
 
 ## 8. 현재 코드와의 차이
 
-| 항목 | 현재 코드(파일·심볼) | 목표 설계 | 전환 계획 |
-| --- | --- | --- | --- |
-| 로그인 처리 | 없음. `management_http.rs` `answer`가 `/api/v1/`을 모두 401로 답한다 | 4·1절 | 작업 4.3 구현 |
-| 관리 세션 검사 | 없음. `has_session_cookie`는 쿠키 이름만 본다 | 4.2절 | 작업 4.3 구현 |
-| 요청 처리 순서 | `answer`가 `/api/v1/` 401을 항상 준다(management-listener.md 4절 5단계) | 계약 1.3절 순서 | 작업 4.3 구현 후 management-listener.md 4절 갱신 |
-| 피어 주소 | `ManagementListener`는 `ConnectInfo`를 쓰지 않는다 | 출발지 `PeerIp`를 로그인 제한에 쓴다 | 작업 4.3에서 `into_make_service_with_connect_info::<SocketAddr>()` 추가 |
-| 시계·토큰·검증 포트 | 없음. `ports.rs`에는 `EventSink`, `AccountStore`, `AccountInput`, `PasswordHasher`만 있다 | 2절 | 작업 4.3에서 추가 |
-| `timestamp` | `ops_log.rs` 비공개 함수 | `clock.rs` 공개 함수 | 작업 4.3에서 옮긴다 |
-| 로그인 사건 | 없음. `events.rs`에 `admin_login_*` 변형이 없다 | 4.1절 6·7·8단계 | `events.rs`, `ops_log.rs`에 추가 |
-| 더미 해시·Argon2 검증 | `hasher.rs`의 `Argon2Hasher`는 해시 만들기만 한다 | `Argon2Verifier` 추가 | 작업 4.3에서 추가 |
+| 항목 | 설계 시점의 코드(파일·심볼) | 목표 설계 | 해소 위치 | 상태 |
+| --- | --- | --- | --- | --- |
+| 로그인 처리 | 없음. `management_http.rs` `answer`가 `/api/v1/`을 모두 401로 답했다 | 4.1절 | `session_api.rs`, `AdminAuth::login` | 구현 완료, 검증 전 |
+| 관리 세션 검사 | 없음. `has_session_cookie`는 쿠키 이름만 봤다 | 4.2절 | `session.rs`의 `AdminAuth::authorize`·`check_csrf`·`touch`·`logout` | 구현 완료, 검증 전 |
+| 요청 처리 순서 | `answer`가 `/api/v1/` 401을 항상 줬다(management-listener.md 4절 5단계) | 계약 1.3절 순서 | `answer`가 `/api/v1/`을 `session_api::answer`에 넘긴다. 관리 리스너 4절 갱신 | 구현 완료, 검증 전 |
+| 피어 주소 | `ManagementListener`는 `ConnectInfo`를 쓰지 않았다 | 출발지 `PeerIp`를 로그인 제한에 쓴다 | `management_http.rs`의 `into_make_service_with_connect_info::<SocketAddr>()` | 구현 완료, 검증 전 |
+| 시계·토큰·검증 포트 | 없음. `ports.rs`에는 `EventSink`, `AccountStore`, `AccountInput`, `PasswordHasher`만 있었다 | 2절 | `ports.rs`(`Clock`, `PasswordVerifier`, `TokenSource`), `clock.rs`, `crypto.rs`(`SystemTokenSource`) | 구현 완료, 검증 전 |
+| `timestamp` | `ops_log.rs` 비공개 함수 | `clock.rs` 공개 함수 | `clock.rs` | 구현 완료, 검증 전 |
+| 로그인 사건 | 없음. `events.rs`에 `admin_login_*` 변형이 없었다 | 4.1절 6·7·8단계 | `events.rs`, `ops_log.rs`(줄 형식 시험은 없음, 운영 정보 계약 표 참고) | 구현 완료, 일부 시험 |
+| 더미 해시·Argon2 검증 | `hasher.rs`의 `Argon2Hasher`는 해시 만들기만 했다 | `Argon2Verifier` 추가 | `hasher.rs`(`Argon2Verifier`), `login.rs`(`dummy_hash`) | 구현 완료, 검증 전 |
 
 ## 9. 미결정 사항
 
-사용자 결정이 필요한 항목은 아래 표에 옵션과 추천을 적는다. 추천은 구현에 반영했다.
+사용자 결정이 필요한 항목은 아래 표에 옵션과 추천을 적는다. 추천은 구현에 반영했다. 파와 너 항목만 예외다. 파는 본문 읽기 시간 제한이 아직 없다. 너는 추천이 코드 변경을 요구해 사용자 확인 뒤에 한다.
 
 | 항목 | 영향 | 확정 위치 |
 | --- | --- | --- |
@@ -185,3 +192,7 @@ flowchart LR
 | 차. 재시작 뒤 활성 VNC 세션 유지 여부는 이 문서가 다루지 않는다 | 관리 세션만 무효다. 중계는 재시작 때 이미 끊긴다 | 관리 스펙 3.0절 7번(기존 규칙) |
 | 카. 4.3에서 `/api/v1/summary`·`waiting`·`sessions`·`closed-sessions`·`terminate` 경로는 인증 검사 뒤 `404 not_found`로 답한다(작업 4.4·4.5 전까지) | 계약의 경로가 아직 없다. 세션 검사는 적용되어 있다 | 작업 4.4·4.5 |
 | 타. 관리 리스너 9절 11번(요청 머리의 절대 기한 없음)과 TODO 4.2 `[ ]` 상태는 이 작업의 범위 밖이다 | 4.2의 미해결 항목이 남아 있다 | 사용자 결정(관리 리스너 9절 11번) |
+| 파. 로그인 본문 읽기에 시간 제한이 없다. 관리 리스너의 제한 시간은 요청 머리만 덮는다. 옵션: (1) 지금은 두고 관리 리스너 9절 11번과 함께 정한다(현재 구현). (2) 본문 읽기에 별도 시간 제한을 둔다. 추천: (2), 값은 사용자가 정한다 | 천천히 보내는 본문이 관리 연결 자리(Lm)를 오래 잡을 수 있다 | 관리 리스너 9절 11번, 사용자 |
+| 하. 응용 계층의 내부 오류(`AuthError::Internal`)는 사건을 남기지 않는다. 옵션: (1) `500 internal` 응답만 준다(현재 구현). (2) 내부 오류 사건을 정의한다. 추천: (1) | 운영 정보 계약에 내부 오류 사건이 없다. 500의 원인은 기록에 남지 않는다 | 운영 정보 계약, 사용자 |
+| 거. `dashboard` 값의 모양. 계약 1.5절은 `dashboard.poll_secs`·`dashboard.query_timeout_secs`·`dashboard.terminate_timeout_secs`로 적었다. 옵션: (1) 중첩 객체 `dashboard`(현재 구현). (2) 점이 들어간 평면 키. (3) 계약 문장을 고친다. 추천: (1), 사용자 확인 필요 | 대시보드 화면이 값을 읽는 방식이 달라진다 | 관리 API 계약 1.5절, 사용자 |
+| 너. `GET`·`DELETE` 요청 본문의 `Content-Type` 검사. 계약 1.1절은 본문이 있는 요청에 `415`를 요구한다. 현재 구현은 `GET`·`DELETE` 본문을 검사하지 않는다(7절). 옵션: (1) 계약 1.1절 문장을 본문을 받는 요청으로 좁힌다. (2) 본문이 있는 모든 요청에서 `Content-Type`을 검사해 `415`를 준다(코드 변경 필요). 추천: (2), 코드 변경은 사용자 확인 후 진행 | `GET`·`DELETE`에 본문을 보내면 현재는 본문과 무관하게 응답한다. 계약 문장과 다르다 | 관리 API 계약 1.1절·1.3절 4단계, 사용자 |

@@ -1,12 +1,12 @@
 # 관리 리스너 모듈 설계
 
-관리 리스너(`[management] listen`)가 접속을 받고, 관리 HTTPS(내장 TLS)와 루프백 평문 HTTP를 처리하는 구조를 다룬다. 접속은 상태 리스너와 같은 관리·상태 연결 상한 Lm을 쓴다. 관리 리스너의 접속은 L을 쓰지 않는다. 이 문서는 작업 4.2 범위다. 로그인과 세션 검사(4.3)·조회(4.4)·종료(4.5)·정적 파일(4.6)은 맡지 않는다.
+관리 리스너(`[management] listen`)가 접속을 받고, 관리 HTTPS(내장 TLS)와 루프백 평문 HTTP를 처리하는 구조를 다룬다. 접속은 상태 리스너와 같은 관리·상태 연결 상한 Lm을 쓴다. 관리 리스너의 접속은 L을 쓰지 않는다. 이 문서는 작업 4.2에서 썼다. 로그인과 세션 검사는 작업 4.3이 더했다. 조회(4.4)·종료(4.5)·정적 파일(4.6)은 맡지 않는다.
 
 | 항목 | 값 |
 | --- | --- |
 | 구조 시점 | Current |
 | 문서 상태 | Draft |
-| 구현 대조 | Verified — [대조 기록](#대조-기록) |
+| 구현 대조 | 미대조 — 작업 4.3이 로그인과 세션 처리를 더해 1절과 4절이 바뀌었다. 대조는 검증 단계에서 다시 한다. |
 | 코드 위치 | `crates/adapters/src/admission.rs`(`AdmittingListener`, `Admitted`), `crates/adapters/src/tls_listener.rs`(`TlsListener`, `TlsIo`, `Handshake`, `Recorded`, `offers_no_tls12`), `crates/adapters/src/request_deadline.rs`(`DeadlineListener`, `Deadlined`), `crates/adapters/src/management_http.rs`(`ManagementListener`, `answer`), `crates/adapters/src/status_http.rs`(`StatusListener`), `crates/adapters/src/config_file.rs`(`read_management`), `crates/app/src/events.rs`(`Stage::Tls`, `RejectReason::TlsVersionUnsupported`), `crates/app/src/settings.rs`(`Settings::management_listener`, `Settings::other_listeners`), `src/serve.rs`(`listen_until_shutdown`, `stop_task`) |
 | 코드 지도 | [코드 지도 2절](code-map.md#2-코드-위치와-구성요소), [3절](code-map.md#3-진입점) |
 | 관련 스펙 | [운영 스펙 2절](../specs/operations.md#2-상태와-검증-매개변수)의 OPS-014, OPS-034, OPS-033(일부: 관리 연결), OPS-004(일부: 관리 연결을 L에 세지 않음), OPS-036, OPS-006(일부: 관리 TLS 협상과 첫 요청 머리의 U, 사용자 결정 2026-10-21 Q12), [관리 스펙 7절](../specs/management.md#7-수용-테스트)의 MGT-015(4.4 완료 조건으로 옮김, 사용자 결정 2026-10-21 Q14) |
@@ -19,13 +19,13 @@
   - 접속 수락: 관리 리스너는 바인드한 뒤 접속을 받는다. 수락 직후 Lm 예산의 자리를 잡는다. 자리가 없으면 `connection_rejected`(`listener` = `management`, `stage` = `accept`, `reason` = `admin_connection_limit`, `limit`)를 기록하고 HTTP 응답 없이 닫는다.
   - 관리 HTTPS: `[management] cert_file`·`key_file`이 있으면 수락한 접속마다 내장 TLS 핸드셰이크를 한다(`TlsAcceptor`, 작업 3.1). TLS 1.2 미만만 제안한 클라이언트는 `connection_rejected`(`listener` = `management`, `stage` = `tls`, `reason` = `tls_version_unsupported`)를 기록하고 평문 응답 없이 닫는다(OPS-036).
   - 평문 HTTP: 두 파일이 모두 없으면 평문 HTTP를 쓴다. 설정 검사가 주소를 루프백으로 제한한다(`config_file.rs` `read_management`, 설정 계약 1.2절). 관리 리스너는 이 제한을 다시 검사하지 않는다.
-  - 요청 처리 순서(3·4절): `/api/v1/` 요청은 관리 세션을 먼저 본다. 세션이 없으면 경로·메서드와 관계없이 401을 준다(관리 API 계약 1.3절 2단계). 정적 경로는 1.11절 표를 따른다.
+  - 요청 처리 순서(3·4절): `POST /api/v1/session`은 로그인이다. 세션을 보지 않고 로그인 처리로 넘긴다(관리 로그인과 세션 설계 4절). 나머지 `/api/v1/` 요청은 관리 세션을 먼저 본다. 세션이 없으면 경로·메서드와 관계없이 401을 준다(관리 API 계약 1.3절 2단계). 정적 경로는 1.11절 표를 따른다.
   - 응답 헤더: 모든 관리 응답에 `Cache-Control: no-store`를 붙인다(1.1절). 모든 401에 `WWW-Authenticate: Session realm="vnc-relay"`를 붙인다(2.1절). 쿠키가 있었던 401은 `relay_admin_session` 쿠키를 지운다(1.4.1절). HTTPS 리스너가 보낸 지우기 쿠키에는 `Secure`를 붙인다.
   - 상대 주소: 관리 응답에 들어가는 주소는 소켓의 실제 상대 주소다. 전달 헤더(`Forwarded`·`X-Forwarded-For`)는 읽지 않는다(1.1절, 관리 스펙 MGT-015).
   - 요청 시간 제한: 접속마다 U(`[timeouts] tls_upgrade_secs`)를 건다. TLS 핸드셰이크와 첫 요청 머리가 끝날 때까지는 수락 때부터 잰 절대 기한이다. 그 뒤에는 읽기·쓰기가 있을 때마다 U를 다시 잰다(구현 판단, 9절 11번). 기한이 지나면 평문 응답 없이 닫는다(4·6절).
 - 맡지 않는 책임:
-  - 로그인 처리와 관리 세션 발급(작업 4.3). 4.2에는 유효한 관리 세션이 없다.
-  - 관리 세션 검사·CSRF 검사·유휴 만료(작업 4.3). 4.2에서 쿠키는 항상 무효다.
+  - 로그인 처리와 관리 세션 발급(작업 4.3, [관리 로그인과 세션 설계](management-session.md)).
+  - 관리 세션 검사·CSRF 검사·유휴 만료(작업 4.3, [관리 로그인과 세션 설계](management-session.md)).
   - 조회 API 처리(작업 4.4), 종료 API 처리(작업 4.5), 정적 파일 제공(작업 4.6).
   - 관리 리스너의 연결 기록 `connection_accepted`. ops-info-v1 §1.5가 관리 리스너에 이 사건을 정하지 않는다.
   - TLS 핸드셰이크 실패 가운데 버전 거절이 아닌 것(인증서 오류, 클라이언트 중단). 9절 6번(Q13).
@@ -60,7 +60,7 @@ flowchart LR
 | `crates/adapters/src/tls_listener.rs` `TlsListener` | `axum::serve::Listener`를 감싼다. 수락 때는 핸드셰이크를 기다리지 않는다. 접속의 `Io`가 읽기·쓰기 때 핸드셰이크를 진행한다. | HTTPS 관리 리스너가 `run` 안에서 만든다 | tokio-rustls, app, domain |
 | `crates/adapters/src/request_deadline.rs` `DeadlineListener`, `Deadlined` | `axum::serve::Listener`를 감싼다. 접속마다 U 타이머를 든다. 첫 요청 머리(`\r\n\r\n`)가 끝나기 전에는 수락 때부터 잰 절대 기한이다. 끝난 뒤에는 읽기·쓰기가 있을 때마다 U를 다시 건다. 기한이 지나면 `TimedOut` 오류를 돌려준다. | `ManagementListener::run`이 HTTPS·평문 모두에서 `axum::serve`에 넘기는 가장 바깥 리스너로 만든다 | tokio, axum |
 | `crates/adapters/src/management_http.rs` `ManagementListener` | 관리 리스너 하나. 관리 HTTPS 또는 루프백 평문 HTTP를 처리한다. | `serve`가 관리 리스너를 바인드한 뒤 띄운다. 종료 때 `serve`가 멈춘다. | axum, tokio, tokio-rustls, adapters 내부 모듈 |
-| `crates/adapters/src/management_http.rs` `answer` | fallback 라우터. 3·4절 순서로 응답을 고른다. | `ManagementListener::run`이 만든다 | axum, serde_json |
+| `crates/adapters/src/management_http.rs` `answer` | fallback 라우터. 3·4절 순서로 응답을 고른다. `/api/v1/` 요청은 `management_http/session_api.rs`의 `answer`로 넘긴다. | `ManagementListener::run`이 만든다 | axum, serde_json |
 | `crates/adapters/src/status_http.rs` `StatusListener` | 상태 리스너. 이 문서가 옮긴 `AdmittingListener`를 `status` 이름으로 쓴다. | `serve`가 상태 리스너를 바인드한 직후 띄운다. | `admission` 모듈 |
 | `crates/app/src/events.rs` `Stage::Tls`, `RejectReason::TlsVersionUnsupported` | `connection_rejected`의 `stage` 값 `tls`와 `reason` 값 `tls_version_unsupported` | 사건이 생길 때 | 없음 |
 | `crates/adapters/src/config_file.rs` `read_management` | 평문 HTTP 주소가 루프백이 아니면 `config_plaintext_management_not_loopback` 설정 오류를 낸다. 관리 리스너는 이 검사를 다시 하지 않는다. | 설정 읽기 때 | 없음 |
@@ -89,7 +89,7 @@ flowchart LR
 | 2 | `tls_listener.rs` `TlsListener::accept` | 평문이면 이 단계를 건너뛴다(`tls` = `None`일 때 `serve`가 `TlsListener`를 만들지 않는다). HTTPS면 `TlsIo::Handshaking`을 만든다. 핸드셰이크는 하지 않는다. | `TlsIo` 상태 `Handshaking` | 없음 |
 | 3 | `tls_listener.rs` `TlsIo::poll_handshake` | `poll_read`·`poll_write`·`poll_flush`가 먼저 부른다. 핸드셰이크를 진행한다. 성공하면 `Established`로 바꾸고 캡처를 `None`으로 바꾼다. 실패하면 캡처한 ClientHello 바이트(레코드 한 개 분)로 버전을 판정한다. `supported_versions`가 있으면 그 목록에 TLS 1.2 이상이 없을 때, 없으면 `legacy_version`이 TLS 1.2 미만일 때 버전 거절이다. 버전 거절이면 기록을 먼저 쓴다. 그다음 `Failed`로 바꾸고 `io::Error`를 돌려준다. | `TlsIo` 상태 `Established` 또는 `Failed` | 버전 거절: `connection_rejected`(`listener` = `management`, `stage` = `tls`, `reason` = `tls_version_unsupported`). 그 밖의 실패: 기록 없음(사용자 결정 Q13). |
 | 4 | `request_deadline.rs` `Deadlined::poll_read`·`poll_write`·`poll_flush` | 읽기·쓰기 전에 타이머를 먼저 본다. 기한이 지났으면 `TimedOut`을 돌려준다. 첫 요청 머리가 끝나기 전에는 절대 기한(수락 + U)이다. 끝난 뒤 바이트가 오가면 U를 다시 건다. 2·3단계의 TLS 핸드셰이크도 이 안에서 진행된다. | 타이머, `head_done`, `window` | 기한이 지나면 axum이 접속을 닫는다(6절). 머리가 끝나면 axum이 요청을 5단계(`answer`)로 넘긴다. |
-| 5 | `management_http.rs` `answer` 1단계 | 경로가 `/api/v1/`로 시작하면 세션이 없으므로 `401`. 요청에 `relay_admin_session` 쿠키가 있으면 지우기 `Set-Cookie`를 붙인다. 메서드는 보지 않는다. | 없음 | 401 응답(`WWW-Authenticate`, `Cache-Control: no-store`) |
+| 5 | `management_http.rs` `answer` 1단계 | 경로가 `/api/v1/`로 시작하면 관리 세션을 먼저 본다. 세션이 없으면 경로·메서드와 관계없이 `401`. 요청에 `relay_admin_session` 쿠키가 있으면 지우기 `Set-Cookie`를 붙인다. 세션이 있으면 CSRF·경로·메서드 검사로 넘긴다. `POST /api/v1/session`은 세션 검사 없이 로그인으로 넘긴다(관리 로그인과 세션 설계 4절). | 없음 | 401 응답(`WWW-Authenticate`, `Cache-Control: no-store`) |
 | 6 | `management_http.rs` `answer` 2단계 | 경로가 `/`이거나 `/app/`로 시작하면 메서드가 `GET`·`HEAD`가 아닐 때 `405`(`Allow: GET, HEAD`, `invalid_request` 본문). 그 밖에는 `303`, `Location: /login/`, 본문 없음. | 없음 | 응답 |
 | 7 | `management_http.rs` `answer` 3단계 | 경로가 `/login/`로 시작하면 메서드가 `GET`·`HEAD`가 아닐 때 `405`(`Allow: GET, HEAD`, `invalid_request` 본문). 그 밖에는 `404` `not_found` 본문(열린 질문 2). | 없음 | 응답 |
 | 8 | `management_http.rs` `answer` 4단계 | 나머지 경로는 메서드와 관계없이 `303`, `Location: /login/`. | 없음 | 응답 |
@@ -133,7 +133,7 @@ flowchart LR
 
 ## 8. 현재 코드와의 차이
 
-- 차이는 없다. 2절부터 4절까지의 파일·심볼과 처리 순서가 현재 코드와 같다. 대조 방법은 아래 대조 기록에 적었다.
+- 4.2의 대조 결과는 더 이상 맞지 않는다. 작업 4.3이 '맡지 않는 책임' 목록과 4절 5단계를 바꿨다. 아래 대조 기록은 4.2 시점의 기록이다. 검증 단계에서 다시 대조한다.
 
 ## 대조 기록
 
@@ -157,7 +157,7 @@ flowchart LR
 
 | 항목 | 영향 | 확정 위치 |
 | --- | --- | --- |
-| 1. (해결) `POST /api/v1/session`(4.2) 응답은 401 `unauthenticated`다(1.3절 2단계). 사용자 결정 2026-10-21(Q15)로 승인됐다. 4.3이 로그인을 구현할 때 바뀐다. | 로그인 전까지 응답 본문 | 사용자 결정 2026-10-21(Q15) |
+| 1. (해결) `POST /api/v1/session`(4.2) 응답은 4.2 시점의 401 `unauthenticated`였다. 작업 4.3이 로그인을 구현해 응답이 바뀌었다(관리 로그인과 세션 설계 4.1절). 사용자 결정 2026-10-21(Q15)로 승인됐던 값이다. | 로그인 전까지 응답 본문 | 사용자 결정 2026-10-21(Q15) |
 | 2. (해결) `GET /login/`·`/login/<파일>`(4.2)의 404 `not_found`는 사용자 결정 2026-10-21(Q15)로 승인됐다. 정적 파일은 4.6에서 준다. | 로그인 화면이 4.6 전까지 없다 | 사용자 결정 2026-10-21(Q15) |
 | 3. (해결) 핸드셰이크와 요청 읽기 제한 시간은 U(`[timeouts] tls_upgrade_secs`)를 쓴다. 사용자 결정 2026-10-21(Q12). 설정 계약 1.2절 U 행을 넓혔다. | 멈춘 핸드셰이크가 Lm 자리를 무기한 잡지 않는다 | 사용자 결정 2026-10-21(Q12), 설정 계약 1.2절 |
 | 4. (해결) 관리 HTTPS의 ALPN은 쓰지 않는다. 사용자 결정 2026-10-21(Q15)로 승인됐다. | 클라이언트 협상 방식(HTTP/1.1만) | 사용자 결정 2026-10-21(Q15) |
