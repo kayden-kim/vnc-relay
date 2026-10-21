@@ -518,7 +518,7 @@ X-CSRF-Token: <csrf-token>
 {"error": {"code": "not_found", "message": "지정한 세션을 찾을 수 없습니다."}}
 ```
 
-계약 테스트 위치는 작업 4.2의 `crates/adapters/tests/management.rs`만 있다. 나머지 행의 위치는 해당 작업에서 채운다. 아래 표는 Producer와 Consumer가 만들 계약 테스트가 확인할 규칙을 기존 스펙 시나리오에 연결한다. 이 표는 테스트가 있다는 증거가 아니다. 결과와 증거는 [검증 기록](../AGENTS.md#검증-기록)을 따른다. 스펙과 같은 테스트는 해당 시나리오의 기록을 연결한다.
+계약 테스트 위치는 작업 4.2·4.3·4.6이 만든 `crates/adapters/tests/management.rs`, `tests/management_session.rs`, `tests/dashboard_assets.rs`, `tests/serve.rs`만 있다. 나머지 행의 위치는 해당 작업에서 채운다. 아래 표는 Producer와 Consumer가 만들 계약 테스트가 확인할 규칙을 기존 스펙 시나리오에 연결한다. 이 표는 테스트가 있다는 증거가 아니다. 결과와 증거는 [검증 기록](../AGENTS.md#검증-기록)을 따른다. 스펙과 같은 테스트는 해당 시나리오의 기록을 연결한다.
 
 | 주체·테스트 위치 | 확인할 계약 규칙 | 결과 | 실행 기록 |
 | --- | --- | --- | --- |
@@ -535,6 +535,7 @@ X-CSRF-Token: <csrf-token>
 | Producer / 단위·통합(미생성) | 최근 종료 목록의 필드·종료 원인 여섯 값·`max_entries` 초과 시 제거·재시작 뒤 빈 목록, 종료된 `session_id`의 상세·종료는 `404`다. [MGT-023](../specs/management.md#7-수용-테스트)·[MGT-024](../specs/management.md#7-수용-테스트) | 미실행 | 구현·테스트 파일 없음 |
 | Producer / 통합(미생성) | 서버 요약의 초기 교환 중·대상 연결 중 연결 수와 L·Lm 사용량·상한이 실제와 일치하고, 읽지 못한 값은 `null`과 사유로 준다. [MGT-026](../specs/management.md#7-수용-테스트) | 미실행 | 구현·테스트 파일 없음 |
 | Producer / 보안 통합(미생성) | 오류 본문과 응답에 비밀·원시 스트림이 없고, 상대 주소는 실제 소켓 주소다. [MGT-013](../specs/management.md#7-수용-테스트)·[MGT-015](../specs/management.md#7-수용-테스트) | 미실행 | 이 규칙의 테스트 없음. MGT-015는 4.3~4.6 완료 조건에 없어 소유 작업이 없다([관리 리스너 모듈 설계 9절](../architectures/management-listener.md#9-미결정-사항) Q8). |
+| Producer / 통합(일부 생성) | 1.11절 정적 경로: 로그인 파일은 세션 없이 제공하고, `/`·`/app/` 아래는 세션이 없으면 파일 존재와 관계없이 `303 /login/`이다. 정적 경로는 `GET`·`HEAD`만 받고 나머지는 `405`다. 정적 파일 응답에는 `Cache-Control: no-store`, `X-Content-Type-Options`, `Referrer-Policy`, `Content-Security-Policy`가 붙는다. 실행 파일의 제공 표와 `web/dashboard/login`·`app` 파일이 일치하고, 미리보기·시험 페이지는 들어가지 않는다. [DASH-014](../specs/dashboard.md#7-수용-테스트) | 미실행 | `management.rs`의 `static_paths_redirect_to_login_without_a_session`, `static_paths_accept_only_get_and_head`, `login_paths_without_a_file_are_not_found`, `login_files_are_served_without_a_session`, `protected_files_redirect_to_login_without_a_session`(DASH-014 부분), `protected_files_are_served_with_a_session`(작업 4.6). `tests/dashboard_assets.rs`의 `asset_table_lists_exactly_the_dashboard_files`, `asset_table_entries_have_matching_type_and_bytes`. 빠진 부분: `GET /login/`·`GET /`의 HTML 응답. HTML 파일은 작업 4.9·4.10에서 생긴다. |
 | Consumer / 화면 E2E(미생성) | 응답 필드를 현지 시각·KiB/MiB로 표시하고, 확인 불가 값을 0으로 표시하지 않는다. [DASH-001](../specs/dashboard.md#7-수용-테스트)·[DASH-006](../specs/dashboard.md#7-수용-테스트)·[DASH-020](../specs/dashboard.md#7-수용-테스트)·[DASH-021](../specs/dashboard.md#7-수용-테스트) | 미실행 | 구현·테스트 파일 없음 |
 | Consumer / 화면 E2E(미생성) | 빈 성공과 조회 실패를 구분하고, 실패 뒤 재조회로 복구한다. [DASH-002](../specs/dashboard.md#7-수용-테스트)·[DASH-003](../specs/dashboard.md#7-수용-테스트)·[DASH-004](../specs/dashboard.md#7-수용-테스트) | 미실행 | 구현·테스트 파일 없음 |
 | Consumer / 화면 E2E(미생성) | 세션 정보의 `dashboard.poll_secs`로 폴링하고, 조회 제한 시간을 넘으면 실패로 처리하며, 같은 조회를 겹치지 않는다. [DASH-005](../specs/dashboard.md#7-수용-테스트)·[DASH-016](../specs/dashboard.md#7-수용-테스트)·[DASH-022](../specs/dashboard.md#7-수용-테스트) | 미실행 | 구현·테스트 파일 없음 |
@@ -561,4 +562,4 @@ X-CSRF-Token: <csrf-token>
 - 계정명의 허용 문자와 길이는 [CLI 계약 1.2절](cli-v1.md#12-계정-이름과-비밀번호-규칙)이 정한다. 로그인 본문 한도 16 KiB와 종료 대기 여유 5초도 채택 범위다.
 - 스펙 시나리오가 직접 다루지 않는 오류가 있다. 형식이 잘못된 요청(`invalid_request` 중 본문·필드 오류), 알 수 없는 경로와 허용되지 않는 메서드(`404`·`405`)다. 이 계약은 가장 가까운 시나리오(DASH-018·MGT-013·MGT-025)와 화면 스펙 5절에 연결했다. 대응 시나리오는 스펙에 없으며 사용자가 추가하지 않기로 했다(2026-10-16). 계약 본문의 해당 응답 정의는 유지한다.
 - 종료 원인 `close_cause`의 값은 여섯 개이며 [관리 스펙 2.3절](../specs/management.md#23-최근-종료-목록)·PRD FR-06의 종료 원인 목록과 같다. 프로세스가 끝나면 목록도 사라지므로 `server_shutdown` 항목이 실제로 조회되는지는 구현에서 확인해야 한다.
-- 계약 테스트는 `crates/adapters/tests/management.rs`(작업 4.2·4.3)와 `tests/serve.rs`의 `answers_api_queries_with_401_without_login_on_loopback_plaintext`, 단위 시험(`crates/app/src/management/login.rs`·`session.rs`), `tests/management_session.rs`(작업 4.3)다. CI 실행 기록은 없다. 나머지 테스트 파일이 생기면 5절 표의 테스트 위치와 결과를 채운다.
+- 계약 테스트는 `crates/adapters/tests/management.rs`(작업 4.2·4.3·4.6), `tests/dashboard_assets.rs`(작업 4.6), `tests/serve.rs`의 `refuses_public_plaintext_and_answers_login_less_queries_with_401_on_loopback`, 단위 시험(`crates/app/src/management/login.rs`·`session.rs`), `tests/management_session.rs`(작업 4.3)다. CI 실행 기록은 없다. 나머지 테스트 파일이 생기면 5절 표의 테스트 위치와 결과를 채운다.
