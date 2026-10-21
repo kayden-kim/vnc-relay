@@ -186,8 +186,9 @@ async fn connection(
         None => Wire::Plain(stream),
     };
     let deadline = conn.at + shared.policy.upgrade;
-    // Biased: the stop and U are polled before the upgrade, so a write that
-    // becomes ready after U is never finished (websocket-relay-v1 §1.1).
+    // Biased: on every wake-up the stop and U are polled before the upgrade.
+    // A poll that is already inside `upgrade` is covered by its own U check
+    // right before the answer (websocket-relay-v1 §1.1).
     let finished = tokio::select! {
         biased;
         _ = stop.wait_for(|stopped| *stopped) => None,
@@ -221,41 +222,65 @@ enum Step {
     Refused,
     /// The peer closed before the request head ended.
     PeerEof,
-    /// U passed before the head was read. Nothing is answered; the abort is
-    /// logged as `tls_upgrade_timeout`.
+    /// U passed before the answer was written. Nothing is answered; the abort
+    /// is logged as `tls_upgrade_timeout`.
     TimedOut,
 }
 
 /// Reads the request head, checks it, runs the pre-upgrade IP recheck, and
-/// writes either the 101 or the refusal. Nothing is written after U.
+/// writes either the 101 or the refusal. Nothing is written once U is seen
+/// to have passed.
 async fn upgrade(wire: &mut Wire, conn: &Accepted, shared: &WsShared) -> io::Result<Step> {
     let read = read_head(wire).await?;
-    // U can pass inside the poll that finishes the head. Nothing is answered
-    // once U has passed.
-    if Instant::now() >= conn.at + shared.policy.upgrade {
+    let decision = match read {
+        HeadRead::Complete(head) => check(&head, &shared.policy.origins).and_then(|upgrade| {
+            // websocket-relay-v1 §1.1: the source IP is checked again before the 101.
+            if shared.policy.accept.allow.permits(conn.peer_ip) {
+                Ok(upgrade)
+            } else {
+                Err(Refusal::IpNotAllowed)
+            }
+        }),
+        HeadRead::TooLarge => Err(Refusal::Invalid),
+        HeadRead::Eof if !expired(conn, shared) => return Ok(Step::PeerEof),
+        HeadRead::Eof => return Ok(Step::TimedOut),
+    };
+    // The answer bytes are built before the last U check, so only the refusal
+    // log line runs between that check and the write.
+    let (answer, refusal) = match decision {
+        Ok(upgrade) => (switching_protocols(&upgrade), None),
+        Err(refusal) => (refusal.answer(), Some(refusal)),
+    };
+    if expired(conn, shared) {
         return Ok(Step::TimedOut);
     }
-    let head = match read {
-        HeadRead::Complete(head) => head,
-        HeadRead::Eof => return Ok(Step::PeerEof),
-        HeadRead::TooLarge => return Ok(refuse(wire, conn, shared, Refusal::Invalid).await),
-    };
-    let upgrade = match check(&head, &shared.policy.origins) {
-        Ok(upgrade) => upgrade,
-        Err(refusal) => return Ok(refuse(wire, conn, shared, refusal).await),
-    };
-    // websocket-relay-v1 §1.1: the source IP is checked again before the 101.
-    if !shared.policy.accept.allow.permits(conn.peer_ip) {
-        return Ok(refuse(wire, conn, shared, Refusal::IpNotAllowed).await);
+    match refusal {
+        None => {
+            wire.write_all(&answer).await?;
+            wire.flush().await?;
+            Ok(Step::Switched)
+        }
+        Some(refusal) => {
+            refuse(wire, conn, shared, &refusal, &answer).await;
+            Ok(Step::Refused)
+        }
     }
-    wire.write_all(&switching_protocols(&upgrade)).await?;
-    wire.flush().await?;
-    Ok(Step::Switched)
+}
+
+/// Whether U has passed since accept (websocket-relay-v1 §1.1).
+fn expired(conn: &Accepted, shared: &WsShared) -> bool {
+    Instant::now() >= conn.at + shared.policy.upgrade
 }
 
 /// Logs a refusal (`connection_rejected`, stage `upgrade`), then writes its
 /// answer and closes. The log comes first; the answer is best effort.
-async fn refuse(wire: &mut Wire, conn: &Accepted, shared: &WsShared, refusal: Refusal) -> Step {
+async fn refuse(
+    wire: &mut Wire,
+    conn: &Accepted,
+    shared: &WsShared,
+    refusal: &Refusal,
+    answer: &[u8],
+) {
     shared.log.record(&Event::UpgradeRejected {
         listener: conn.entry_point.name(),
         conn_id: conn.conn_id,
@@ -263,9 +288,8 @@ async fn refuse(wire: &mut Wire, conn: &Accepted, shared: &WsShared, refusal: Re
         peer_ip: conn.peer_ip,
         origin: refusal.origin().map(str::to_owned),
     });
-    let _ = wire.write_all(&refusal.answer()).await;
+    let _ = wire.write_all(answer).await;
     let _ = wire.shutdown().await;
-    Step::Refused
 }
 
 /// Holds an upgraded connection until H passes from the 101, the server
