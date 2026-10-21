@@ -132,6 +132,7 @@ flowchart LR
 | 시간 제한은 `serve::Listener` 래퍼(`request_deadline.rs`)로 건다 | `axum::serve`에는 읽기 제한 설정이 없다. 래퍼는 HTTPS와 평문에 같은 규칙을 준다. | hyper 연결 설정을 직접 쓴다(hyper를 직접 크레이트로 쓰는 결정이 없다). | axum 0.8.9 `serve` |
 | ALPN을 쓰지 않는다 | `tls.rs`가 ALPN을 설정하지 않는다. 관리 API는 HTTP/1.1만 쓴다. | `http/1.1`을 광고한다(사용자 결정 2026-10-21, Q15로 쓰지 않기로 했다). | tls.md 7절, 9절 |
 | 버전 거절은 ClientHello 바이트로 판정한다(RFC 8446 4.2.1). | rustls는 버전을 보기 전에 `signature_algorithms` 확장을 검사한다(`server/hs.rs` `process_client_hello`). rustls 오류 변형으로 판정하면 TLS 1.0·1.1 클라이언트를 버전 거절로 못 보고, `signature_algorithms`가 없는 TLS 1.2 클라이언트를 잘못 거절한다. | rustls 오류 변형으로 판정(기각). | rustls 0.23.46 `server/hs.rs`, RFC 8446 4.2.1 |
+| 루트 시험(`tests/serve.rs`)에 `rustls`를 개발 의존성으로 더한다. 공개 주소의 HTTPS 401과 평문 요청 거절을 확인하려면 TLS 클라이언트가 필요하다. 동기 `rustls::StreamOwned`와 `TcpStream`을 써서 `tokio-rustls`와 `rustls-pki-types`는 더하지 않는다. | OPS-014의 공개 주소 조건은 루트 시험에서만 확인할 수 있다. 어댑터 시험의 루프백 HTTPS 401은 공개 주소의 수락을 보여 주지 않는다. | 어댑터 시험에만 둔다(OPS-014가 부분으로 남는다). 수동 확인으로 둔다(자동 시험이 없어 회귀를 막지 못한다). | PRD '구현 기술' 행(rustls 승인), `xtask/src/layers.rs` 루트 외부 crate 목록, 코드 지도 2절 실행파일 조립 행, 서버 시작 설계 루트 외부 crate 행(tokio 선례). |
 
 ## 8. 현재 코드와의 차이
 
@@ -194,6 +195,14 @@ flowchart LR
   - Ubuntu `vr-full.sh`: `ALL PASSED`. `시나리오 148건: 통과 15, 부분 23, 실패 0, 미실행 0, 미연결 110`.
   - Windows `vr-win.ps1 -Only all`: `ALL PASSED (all)`. `시나리오 148건: 통과 14, 부분 23, 실패 0, 미실행 1, 미연결 110`. 미실행 1건은 OPS-007이다. Unix 전용 시험 `closes_and_logs_every_held_connection_when_stopping`이 Windows 실행에 없다(Ubuntu에서는 부분).
   - 대상 행(두 환경 같음): OPS-002 통과, OPS-034 통과, OPS-014 부분, OPS-033 부분, OPS-004 부분.
+
+- 추가 기록(작업 트리, 2026-10-22, 루트 시험에 TLS 클라이언트를 더함). 위 "빠진 부분", "OPS-014 부분", "TODO 4.2는 `[ ]`" 문장은 이 기록으로 바뀌었다.
+  - 개발 의존성: 루트 `Cargo.toml`의 `[dev-dependencies]`에 `rustls`(작업공간 설정 그대로)를 더했다. 시험 전용이라 제품 의존성은 바뀌지 않았다. `xtask/src/layers.rs`의 루트 외부 crate 목록에 `rustls`를 더했다. 근거는 7절 설계 선택 표의 마지막 행이다.
+  - OPS-014 통과: `public_management_never_starts_on_plaintext_or_without_tls_or_an_account`(비부분)가 네 조건을 함께 확인한다. 공개 주소 평문 거절, 인증서 누락 거절, 계정 없음 거절(위 세 줄)과, 공개 HTTPS 확인이다. 관리 리스너를 `0.0.0.0`에 열고 `127.0.0.1`로 접속한다. 평문 `GET /api/v1/summary`에는 `HTTP/` 응답이 없다. TLS로 보낸 로그인 없는 요청(GET 여섯 개, 세션 종료 POST 하나)은 `401 unauthenticated`이고 데이터가 없다.
+  - 헬퍼: `public_https_refuses_plaintext_and_answers_login_less_requests_with_401`, `https_request`(동기 `rustls::StreamOwned`와 `TcpStream`, 신뢰하는 것은 테스트용 루트 CA뿐), `plaintext_request_gets_no_http_reply`.
+  - 상태: OPS-014 통과, OPS-034 통과. OPS-033·OPS-004는 4.2 완료 조건대로 관리 연결 부분만 보며, 판정은 부분 그대로다. TODO 4.2의 완료 표시는 Main이 정한다. `docs/TODO.md`는 이 작업에서 고치지 않았다.
+  - 검증 기록(작업 트리, `cargo fmt --all` 뒤): Ubuntu `vr-full.sh` ALL PASSED, 시나리오 148건: 통과 16, 부분 22, 실패 0, 미실행 0, 미연결 110. Windows `vr-win.ps1 -Only all` ALL PASSED (all), 시나리오 148건: 통과 15, 부분 22, 실패 0, 미실행 1, 미연결 110. 미실행 1건은 OPS-007(Unix 전용).
+  - 위험: 이 시험은 `0.0.0.0`에 바인드한다. 모든 네트워크 인터페이스에 잠깐 열린다. Windows에서 방화벽 허용 창이 뜰 수 있다(관찰하지 않았다). 바인드가 막히는 환경에서는 이 시험이 실패한다.
 
 ## 9. 미결정 사항
 

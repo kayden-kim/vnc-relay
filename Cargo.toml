@@ -68,6 +68,8 @@ vnc-relay-adapters.workspace = true
 vnc-relay-app.workspace = true
 vnc-relay-domain.workspace = true
 
-# System tests open client sockets from chosen loopback source addresses.
+# System tests open client sockets from chosen loopback source addresses, and
+# check the public HTTPS management listener with a TLS client.
 [dev-dependencies]
+rustls = { workspace = true }
 tokio = { workspace = true, features = ["net", "rt"] }

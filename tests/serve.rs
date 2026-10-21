@@ -8,8 +8,13 @@ use std::io::{ErrorKind, Read, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, ExitStatus, Stdio};
-use std::sync::{Mutex, MutexGuard, PoisonError};
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, Instant};
+
+use rustls::pki_types::pem::PemObject;
+use rustls::pki_types::{CertificateDer, ServerName};
+use rustls::version::{TLS12, TLS13};
+use rustls::{ClientConfig, ClientConnection, RootCertStore, StreamOwned};
 
 const BIN: &str = env!("CARGO_BIN_EXE_vnc-relay");
 
@@ -18,6 +23,20 @@ const SALT: &str = "AAAAAAAAAAAAAAAAAAAAAA";
 const HASH: &str = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
 
 const EXIT_LIMIT: Duration = Duration::from_secs(20);
+
+/// Requests that carry no login. Each one gets `401 unauthenticated` with no data.
+const LOGIN_LESS_REQUESTS: [(&str, &str); 7] = [
+    ("GET", "/api/v1/session"),
+    ("GET", "/api/v1/summary"),
+    ("GET", "/api/v1/waiting"),
+    ("GET", "/api/v1/sessions"),
+    ("GET", "/api/v1/sessions/ses_3k9d2m7q4x8v1b6n5c0z2h4w7y"),
+    ("GET", "/api/v1/closed-sessions"),
+    (
+        "POST",
+        "/api/v1/sessions/ses_3k9d2m7q4x8v1b6n5c0z2h4w7y/terminate",
+    ),
+];
 
 /// Tests pick free ports by binding port 0 and releasing it. Two tests that
 /// run at the same time can get the same port, so tests that bind take this
@@ -521,14 +540,112 @@ fn refuses_public_plaintext_and_answers_login_less_queries_with_401_on_loopback(
     answers_api_queries_with_401_without_login_on_loopback_plaintext();
 }
 
-/// spec: operations.md:OPS-014 partial
+/// spec: operations.md:OPS-014
 #[test]
 fn public_management_never_starts_on_plaintext_or_without_tls_or_an_account() {
-    // OPS-014 has more conditions than this test checks. The HTTPS 401 on the
-    // public listener is not checked here: the root tests have no TLS client.
+    // OPS-014 has four conditions, and this test runs all of them. A plaintext
+    // config on a public address does not start. A missing certificate or
+    // account does not start it either. The running public HTTPS port gives no
+    // HTTP reply to plaintext and answers login-less requests with 401.
     refuses_plaintext_management_on_a_public_address_with_exit_code_3();
     refuses_public_management_without_its_certificate_with_exit_code_3();
     refuses_public_management_without_an_account_with_exit_code_5();
+    public_https_refuses_plaintext_and_answers_login_less_requests_with_401();
+}
+
+/// Public management with a built-in certificate and an account starts on
+/// `0.0.0.0`. A plain HTTP request to its port gets no HTTP reply, and every
+/// login-less request gets `401 unauthenticated` with no data over HTTPS.
+fn public_https_refuses_plaintext_and_answers_login_less_requests_with_401() {
+    let _lock = lock_ports();
+    let ports = Ports::free();
+    let public = with_public_management(
+        ports,
+        &management_config(ports, "server-chain.pem", "server-key-p256.pem"),
+    );
+    let config = setup_with("public-https", &public);
+    let mut guard = Guard(Some(spawn(&config)));
+    // A listener bound on 0.0.0.0 also answers on 127.0.0.1, so every port connects.
+    wait_listening(guard.child(), ports);
+    plaintext_request_gets_no_http_reply(ports.management);
+    for (method, path) in LOGIN_LESS_REQUESTS {
+        let (status, body) = https_request(ports.management, method, path);
+        assert_eq!(status, 401, "{method} {path}: {body}");
+        assert!(
+            body.contains(r#""code":"unauthenticated""#),
+            "{method} {path}: {body}"
+        );
+    }
+}
+
+/// `method path` over TLS to the loopback `port`. The client trusts only the
+/// test root CA. Returns the status code and the body.
+fn https_request(port: u16, method: &str, path: &str) -> (u16, String) {
+    let mut roots = RootCertStore::empty();
+    let certs = CertificateDer::pem_file_iter(tls_file("root-ca.pem"))
+        .unwrap_or_else(|error| panic!("root CA opens: {error}"));
+    for cert in certs {
+        let cert = cert.unwrap_or_else(|error| panic!("root CA is PEM: {error}"));
+        roots
+            .add(cert)
+            .unwrap_or_else(|error| panic!("root CA is a certificate: {error}"));
+    }
+    let config = ClientConfig::builder_with_provider(Arc::new(
+        rustls::crypto::aws_lc_rs::default_provider(),
+    ))
+    .with_protocol_versions(&[&TLS13, &TLS12])
+    .unwrap_or_else(|error| panic!("client protocol versions: {error}"))
+    .with_root_certificates(roots)
+    .with_no_client_auth();
+    let name = ServerName::try_from("localhost")
+        .unwrap_or_else(|error| panic!("server name is valid: {error}"));
+    let connection = ClientConnection::new(Arc::new(config), name)
+        .unwrap_or_else(|error| panic!("client connection: {error}"));
+    let tcp = TcpStream::connect(("127.0.0.1", port))
+        .unwrap_or_else(|error| panic!("connect {port}: {error}"));
+    tcp.set_read_timeout(Some(EXIT_LIMIT))
+        .unwrap_or_else(|error| panic!("read timeout: {error}"));
+    let mut stream = StreamOwned::new(connection, tcp);
+    let request =
+        format!("{method} {path} HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n");
+    stream
+        .write_all(request.as_bytes())
+        .unwrap_or_else(|error| panic!("request is sent: {error}"));
+    stream
+        .flush()
+        .unwrap_or_else(|error| panic!("request is flushed: {error}"));
+    let mut raw = Vec::new();
+    // A TLS peer may close without close_notify. The bytes read so far are the reply.
+    let _ = stream.read_to_end(&mut raw);
+    let raw = String::from_utf8_lossy(&raw).into_owned();
+    let (head, body) = raw
+        .split_once("\r\n\r\n")
+        .unwrap_or_else(|| panic!("no header end: {raw:?}"));
+    let status = head
+        .split(' ')
+        .nth(1)
+        .and_then(|code| code.parse().ok())
+        .unwrap_or_else(|| panic!("no status line: {raw:?}"));
+    (status, body.to_owned())
+}
+
+/// Plain HTTP sent to the TLS port. The server must not answer it as HTTP. It
+/// may send a TLS alert or nothing, and it may close the connection.
+fn plaintext_request_gets_no_http_reply(port: u16) {
+    let mut stream = TcpStream::connect(("127.0.0.1", port))
+        .unwrap_or_else(|error| panic!("connect {port}: {error}"));
+    stream
+        .set_read_timeout(Some(EXIT_LIMIT))
+        .unwrap_or_else(|error| panic!("read timeout: {error}"));
+    // The server may close before the request is written. That is a refusal too.
+    let _ = stream.write_all(b"GET /api/v1/summary HTTP/1.1\r\nHost: x\r\n\r\n");
+    let mut reply = Vec::new();
+    // A reset or the read timeout ends the reply. The bytes read so far are kept.
+    let _ = stream.read_to_end(&mut reply);
+    assert!(
+        !String::from_utf8_lossy(&reply).contains("HTTP/"),
+        "plaintext got an HTTP reply: {reply:?}"
+    );
 }
 
 /// Public management with the built-in certificate file missing: exit code 3
@@ -1515,19 +1632,7 @@ fn answers_api_queries_with_401_without_login_on_loopback_plaintext() {
     // Plaintext on loopback starts. No session exists before login, so the
     // API answers 401 before it judges the path or the method. The query
     // paths and the termination path refuse alike, with no data in the body.
-    let refused = [
-        ("GET", "/api/v1/session"),
-        ("GET", "/api/v1/summary"),
-        ("GET", "/api/v1/waiting"),
-        ("GET", "/api/v1/sessions"),
-        ("GET", "/api/v1/sessions/ses_3k9d2m7q4x8v1b6n5c0z2h4w7y"),
-        ("GET", "/api/v1/closed-sessions"),
-        (
-            "POST",
-            "/api/v1/sessions/ses_3k9d2m7q4x8v1b6n5c0z2h4w7y/terminate",
-        ),
-    ];
-    for (method, path) in refused {
+    for (method, path) in LOGIN_LESS_REQUESTS {
         let (status, body) = http_request(ports.management, method, path)
             .unwrap_or_else(|| panic!("no reply to {method} {path}"));
         assert_eq!(status, 401, "{method} {path}: {body}");
