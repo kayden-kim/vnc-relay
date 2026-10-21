@@ -472,6 +472,26 @@ function runChecks() {
     expect(dialog.element.open === false);
   });
 
+  check("dialog-closed-hidden", () => {
+    const dialog = createDialog({
+      title: t.dialogTitle,
+      description: t.dialogDescription,
+      confirmLabel: t.confirm,
+      cancelLabel: t.cancel,
+      destructive: false,
+      onConfirm: () => {},
+      onCancel: () => {},
+    });
+    mount(dialog.element);
+    try {
+      expect(getComputedStyle(dialog.element).display === "none");
+      dialog.show();
+      expect(getComputedStyle(dialog.element).display !== "none");
+    } finally {
+      dialog.hide();
+    }
+  });
+
   check("long-text", () => {
     const button = mount(createButton({ variant: "primary", label: LONG_KO_LABEL }));
     const badge = mount(createBadge({ tone: "info", label: LONG_EN_LABEL }));
