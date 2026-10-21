@@ -6,7 +6,7 @@
 | --- | --- |
 | 구조 시점 | Current |
 | 문서 상태 | Draft |
-| 구현 대조 | 미대조. Phase 2 설계 수정(아래 대조 기록)을 구현하기 전이다. 구현 뒤 다시 대조한다 |
+| 구현 대조 | Verified — 커밋 `a143539`(설계 수정 구현) + 작업 트리 기준. 대조 기록은 [대조 기록](#대조-기록)의 작업 4.3 구현 대조(Phase 2) |
 | 코드 위치 | `crates/domain/src/admin_session.rs`(`AdminSessionToken`, `AdminCsrfToken`, `AdminSession`, `AdminSessionTable`, `AdminSessionPolicy`), `crates/domain/src/login_limit.rs`(`LoginLimitPolicy`, `LoginLimiter`, `LimitScope`), `crates/app/src/management.rs`(`AdminAuth`), `crates/app/src/management/login.rs`, `crates/app/src/management/session.rs`, `crates/app/src/ports.rs`(`Clock`, `PasswordVerifier`, `TokenSource`), `crates/adapters/src/clock.rs`(`SystemClock`, `timestamp`), `crates/adapters/src/crypto.rs`(`SystemTokenSource`), `crates/adapters/src/accounts_file/hasher.rs`(`Argon2Verifier`), `crates/adapters/src/management_http.rs`(`ManagementListener`, `answer`), `crates/adapters/src/management_http/session_api.rs`, `src/serve.rs` |
 | 코드 지도 | [코드 지도 2절](code-map.md#2-코드-위치와-구성요소), [3절](code-map.md#3-진입점) |
 | 관련 스펙 | [관리 스펙 3.0절](../specs/management.md#30-관리자-로그인과-세션)과 [7절](../specs/management.md#7-수용-테스트)의 MGT-014, MGT-017~020, MGT-022, MGT-025, MGT-027(MGT-018 포함); [운영 스펙](../specs/operations.md)의 OPS-029, OPS-012(로그인 사건 부분) |
@@ -71,7 +71,7 @@ flowchart LR
 | --- | --- | --- | --- |
 | `AdminSessionToken` | 문자열(64자 소문자 16진수) | 쿠키 값으로 클라이언트에만 있음. 서버는 `AdminSessionTable`의 키로 든다 | 32바이트 무작위 값에서 만든다. 형식이 틀리면 조회하지 않고 `unauthenticated`다. 로그에 쓰지 않는다. `Debug`는 `<redacted>`만 찍는다 |
 | `AdminCsrfToken` | 문자열(64자 소문자 16진수) | 세션 값의 한 필드. 로그인 응답 본문과 세션 정보로만 나간다 | 세션마다 하나다. 세션 전체 수명 동안 바뀌지 않는다. 로그에 쓰지 않는다. `Debug`는 `<redacted>` |
-| `AdminSession` | `account: AccountName`, `csrf: AdminCsrfToken`, `idle_deadline`·`absolute_deadline: Duration`(단조, 만료 판정), `idle_expires_at`·`absolute_expires_at: SystemTime`(벽시계, 공개 값) | `AdminSessionTable`(메모리) | 단조 기한은 `idle_deadline ≤ absolute_deadline`이다. 공개 값도 `idle_expires_at ≤ absolute_expires_at`이다. `absolute_*`는 로그인 뒤 바뀌지 않는다. `idle_*`는 유휴 연장 때만 바뀐다. 조회 때 다시 계산하지 않는다 |
+| `AdminSession` | `account: AccountName`, `csrf: AdminCsrfToken`, `idle_deadline`·`absolute_deadline: Duration`(단조, 만료 판정), `idle_wall`·`absolute_wall: SystemTime`(벽시계, 발급·연장 때 정한 값) | `AdminSessionTable`(메모리) | 단조 기한은 `idle_deadline ≤ absolute_deadline`이다. 벽시계 값도 `idle_wall ≤ absolute_wall`이다. `absolute_*`는 로그인 뒤 바뀌지 않는다. `idle_*`는 유휴 연장 때만 바뀐다. 조회 때 다시 계산하지 않는다. 응답의 `idle_expires_at`·`absolute_expires_at`은 `idle_wall()`·`absolute_wall()` 값이다 |
 | `AdminSessionTable` | 토큰 문자열 → `AdminSession` 맵 | 메모리 | 만료되거나 로그아웃된 항목은 로그인과 조회 때 지운다. 프로세스 재시작 때 비운다(ADR-0003) |
 | `AdminSessionPolicy` | `idle: Duration`(Si), `max_lifetime: Duration`(Sa) | 시작 때 설정에서 만들어 `AdminAuth`가 든다 | Si ≤ Sa. 설정 검사가 보장한다([설정 계약](../contracts/config-v1.md#12-키-표)) |
 | `LoginLimitPolicy` | `per_account: u32`(F_a), `per_source: u32`(F_s), `window: Duration`(W), `lockout: Duration`(L) | 메모리(설정에서 만든다) | 설정 범위를 따른다: F 1–100, W 60–86400초, 제한 시간 60–86400초 |
@@ -175,9 +175,9 @@ flowchart LR
 | `timestamp` | `ops_log.rs` 비공개 함수 | `clock.rs` 공개 함수 | `clock.rs` | 구현 완료, 검증 통과 |
 | 로그인 사건 | 없음. `events.rs`에 `admin_login_*` 변형이 없었다 | 4.1절 6·7·8단계 | `events.rs`, `ops_log.rs`(줄 형식 시험은 없음, 운영 정보 계약 표 참고) | 구현 완료, 일부 시험 |
 | 더미 해시·Argon2 검증 | `hasher.rs`의 `Argon2Hasher`는 해시 만들기만 했다 | `Argon2Verifier` 추가 | `hasher.rs`(`Argon2Verifier`), `login.rs`(`dummy_hash`) | 구현 완료, 검증 통과 |
-| 세션 공개 값과 `as_of` | 조회 때 `wall_at`으로 계산(`management.rs`). `as_of` 없음 | 저장된 벽시계 값, GET에 `as_of` | `admin_session.rs`, `management.rs`(`SessionView`), `session.rs`, `session_api.rs` | 수정 예정(구현 전) |
-| GET·DELETE 본문 미디어 타입 | 검사하지 않음 | 본문이 있으면 `application/json`이 아니면 415 | `session_api.rs` | 수정 예정(구현 전) |
-| 계정 이름 문법 | 문법을 어긴 이름도 계정 없음으로 보고 `401 login_failed`로 답하며 셈에 넣었다 | 400, 검증·셈·사건 없음 | `login.rs`, `session_api.rs` | 수정 예정(구현 전) |
+| 세션 공개 값과 `as_of` | 조회 때 `wall_at`으로 계산(`management.rs`). `as_of` 없음 | 저장된 벽시계 값, GET에 `as_of` | `admin_session.rs`, `management.rs`(`SessionView`), `session.rs`, `session_api.rs` | 구현 완료, 검증 통과 |
+| GET·DELETE 본문 미디어 타입 | 검사하지 않음 | 본문이 있으면 `application/json`이 아니면 415 | `session_api.rs` | 구현 완료, 검증 통과(HTTP/1.1만 시험) |
+| 계정 이름 문법 | 문법을 어긴 이름도 계정 없음으로 보고 `401 login_failed`로 답하며 셈에 넣었다 | 400, 검증·셈·사건 없음 | `login.rs`, `session_api.rs` | 구현 완료, 검증 통과 |
 
 ## 9. 미결정 사항
 
@@ -187,7 +187,7 @@ flowchart LR
 | --- | --- | --- |
 | 나. 헤더 없는 `GET /api/v1/session`이 유휴 만료를 연장할지. 옵션: (1) 연장한다(계약 문장대로, 현재 구현). (2) 연장하지 않는다. 추천: (1) | 화면을 다시 불러올 때마다 Si가 늘어난다 | 관리 API 계약 1.4.2절, 사용자 |
 | 다. 더미 해시 만들기가 시작 때 실패하면 시작을 실패로 볼지. 추천: 실패로 끝낸다 | 실패가 조용히 넘어가면 계정 없음과 있음의 시간 차가 생긴다 | 구현 판단 확정 필요 없음(사용자 확인 권장) |
-| 라. 계정 이름이 문법을 어긴 경우의 응답. 옵션: (1) 400 `invalid_request`(7절 계정 이름 행, 수정 구현). (2) 401 `login_failed`와 셈에 넣기(수정 전 구현). 추천: (1). 계약 2.1절이 필드 오류를 400으로 정하고, 문법은 공개 규칙이다 | 400이면 문법이 응답에 드러난다. 401이면 셈과 응답 규칙이 계약 밖 설명을 요구한다 | 관리 API 계약 1.5절·2.1절, 사용자 |
+| 라. 계정 이름이 문법을 어긴 경우의 응답. 옵션: (1) 400 `invalid_request`(7절 계정 이름 행, 구현 완료). (2) 401 `login_failed`와 셈에 넣기(수정 전 구현). 추천: (1). 계약 2.1절이 필드 오류를 400으로 정하고, 문법은 공개 규칙이다 | 400이면 문법이 응답에 드러난다. 401이면 셈과 응답 규칙이 계약 밖 설명을 요구한다 | 관리 API 계약 1.5절·2.1절, 사용자 |
 | 마. 제한 기록과 실패 키 표의 상한. 옵션: (1) 상한 없음, 정리만(현재 구현). (2) 상한과 가장 오래된 항목 삭제. 추천: (1) | 많은 다른 계정 이름으로 공격하면 메모리가 W 동안 자란다. 요청 크기는 16 KiB로 제한된다 | 관리 스펙 3.0절, 사용자 |
 | 바. 세션 표의 상한. 추천: 상한 없음. 로그인은 관리자 계정 비밀번호를 알아야만 세션을 만든다 | 계정이 맞는 요청은 세션을 계속 만들 수 있다. 정리는 Sa 뒤에 된다 | 관리 스펙 3.0절, 사용자 |
 | 사. 응답 시간 동등성의 측정 방법. 계약 6절이 정하지 않았다. 기존 계정 해시의 Argon2 매개변수가 시작 때 만든 더미 해시의 매개변수와 같은지도 확인하지 않았다 [INFERENCE: 다를 수 있다] | MGT-018, MGT-022의 "응답 구분 불가"를 자동 시간 검사로 증명하지 못한다. 검증 횟수가 같아도 시간이 같다는 증거는 아니다. 4.3은 검증 횟수 검사(단위 테스트)만 한다 | 관리 API 계약 6절 |
@@ -231,7 +231,7 @@ flowchart LR
 
 - 두 명령은 이 기록을 쓰기 전에 실행했다. `xtask`는 이 기록 문서를 읽지 않는다.
 - 시나리오 결과 열은 부분 행을 `미실행`으로 둔다(`docs/AGENTS.md` 검증 기록 규칙). 4.3의 부분 상태는 위 표와 9절 카 항목에 적었다.
-- 판정: 구조 시점 `Current`. 위 대조 기록의 `Verified`는 커밋 `59f3f62` 구현 기준이다. 설계 수정(아래) 뒤의 구현은 다시 대조한다. 문서 상태 `Draft`는 그대로다. 9절 미결정 항목은 남는다.
+- 판정: 구조 시점 `Current`. 위 대조 기록의 `Verified`는 커밋 `59f3f62` 구현 기준이다. 설계 수정(아래) 뒤의 구현은 아래 Phase 2 기록에서 다시 대조했다. 문서 상태 `Draft`는 그대로다. 9절 미결정 항목은 남는다.
 
 ### 작업 4.3 설계 수정(Phase 2)
 
@@ -241,3 +241,32 @@ flowchart LR
 - 계약이 정한 항목으로 닫았다: 가(401 쿠키 지우기, 계약 1.4.1절), 너(GET·DELETE 본문 415, 계약 1.1절), 거(중첩 `dashboard`, 계약 5절 예시). 9절에서 뺐다.
 - 구현 판단으로 남긴 것: 계정 이름 문법 400(라), 벽시계 공개 값 저장(7절), 본문 유무 판정과 JSON 본문 무시(7절), 로그인 응답에 `as_of`를 넣지 않음(7절).
 - 고친 설명: 9절 파의 이전 문장 "관리 리스너의 제한 시간은 요청 머리만 덮는다"는 틀렸다. `request_deadline.rs`는 머리가 끝난 뒤 전송마다 타이머를 다시 시작한다.
+
+### 작업 4.3 구현 대조(Phase 2)
+
+- 대조 범위: 커밋 `a143539`(설계 수정 구현, 6개 파일)의 내용. 검증 뒤 코드를 바꾸지 않았다. 이 기록을 담은 문서 변경은 별도 커밋이다.
+- 대조 방법: 아래 심볼은 읽기와 `grep`으로 확인했다.
+  - 3절 `AdminSession`: `admin_session.rs`의 `idle_wall`·`absolute_wall` 필드(112–113행). `start`(120행)와 `extend_idle`(144행)이 발급·연장 때 벽시계 값을 정한다. `idle_deadlines`(190–203행)는 두 시계 모두 절대 기한으로 자른다. 응답 값은 `idle_wall()`(178행)·`absolute_wall()`(183행)이다.
+  - 3절 `SessionView`와 4.2절 5단계: `management.rs`의 `session_view(session, wall)`(129행)가 저장된 값을 옮긴다. `wall_at`은 운영 코드에 남아 있지 않다.
+  - 7절 `as_of`: `session_api.rs`의 `session_response(…, as_of: bool)`(162–173행)가 GET에서만 `as_of`를 넣는다.
+  - 4.2절 4단계와 7절 본문 행: `get_session`(99행)과 `delete_session`(119행)은 `X-Relay-Poll` 400을 본 뒤 `media_type_allows`(236행)로 415를 본다. `is_json`(225행)을 함께 읽었다.
+  - 7절 계정 이름 행: `login.rs`의 `AccountName::parse`(50행)가 실패하면 `AuthError::InvalidAccount`(`management.rs` 45행)가 된다. `refuse`(`session_api.rs` 200행)가 `400 invalid_request`(`ACCOUNT_MESSAGE`, 37행)로 답한다. `admin_account`는 실제 계정에만 넣는다(`login.rs` 55행).
+- 고치기 전후 시험: 수정 전에 시험을 추가해 실패를 먼저 확인했다. 어댑터 `tests/management.rs`는 30 통과, 3 실패였다(`login_account_outside_the_name_grammar_is_a_bad_request`, `get_and_delete_with_a_body_must_send_application_json`, `session_view_carries_as_of_as_a_timestamp`). 앱 라이브러리는 22 통과, 2 실패였다(`management::login::tests::account_outside_the_name_grammar_is_refused_and_not_counted`, `management::session::tests::wall_clock_jumps_do_not_move_the_published_deadlines`). 고친 뒤 모두 통과한다. 도메인 시험 `wall_deadlines_are_the_values_at_issue_and_extension`(`admin_session.rs` 305행)은 발급·연장 때 벽시계 값을 확인하는 새 시험이다(MGT-025 일부).
+- 구현 판단(사용자 결정 없음)으로 남긴 것은 위 설계 수정 항목과 7절 표다. 9절 미결정 중 나·다·라·마·바·하·러는 추천과 같은 쪽으로 구현했다. 파는 추천(2)과 달리 현재 구현(1)이다. 사·자·차·카·타는 열어 두었다.
+- 대조하지 않은 것:
+  - 응답 시간 동등성(MGT-018, MGT-022): 측정하지 않았다(9절 사).
+  - 4.4·4.5 경로: 아직 없다. 세션 검사 뒤의 조회·종료 시험은 없다(9절 카).
+  - `500 internal` 경로(검증 오류, `spawn_blocking` 중단): 강제로 실패시키는 시험은 없다. 코드만 대조했다.
+  - HTTP/2 본문: 시험하지 않았다(7절 159행).
+  - 관리 리스너 문서(`management-listener.md`)는 고치지 않았다. 리스너 서술(경로 나누기, 시간 제한, TLS)은 이번 수정으로 바뀌지 않았다. 그 문서의 검증 기록은 `59f3f62` 그대로다.
+- 환경: Windows 11 Pro 10.0.26200 x64, Visual Studio Build Tools 2022 17.14.37806.7, `AWS_LC_SYS_PREBUILT_NASM=1`. WSL2 Ubuntu 24.04.4, Rust 1.99.1, `CARGO_TARGET_DIR=~/vnc-relay-target`(WSL).
+- 검증 기록:
+
+| 명령 | 환경 | 결과 |
+| --- | --- | --- |
+| `wsl -d Ubuntu -- bash /mnt/d/vr-tools/vr-full.sh` | WSL2 Ubuntu 24.04.4, Rust 1.99.1, `CARGO_TARGET_DIR=~/vnc-relay-target` | `ALL PASSED`. `시나리오 148건: 통과 11, 부분 27, 실패 0, 미실행 0, 미연결 110. 오류 0건.` `판정: 통과` |
+| `powershell -NoProfile -ExecutionPolicy Bypass -File D:/vr-tools/vr-win.ps1 -Only all` | Windows 11 Pro 10.0.26200 x64, Rust 1.99.1, Visual Studio Build Tools 2022 17.14.37806.7, `AWS_LC_SYS_PREBUILT_NASM=1` | `ALL PASSED (all)`. `시나리오 148건: 통과 10, 부분 27, 실패 0, 미실행 1, 미연결 110. 오류 0건.` `판정: 통과`. 미실행 1은 OPS-007(Unix 전용 `closes_and_logs_every_held_connection_when_stopping`) |
+
+- 두 명령은 커밋 `a143539`와 같은 내용의 트리에서 한 번씩 실행했다. 검증 뒤 코드를 바꾸지 않았다.
+- 판정: 구현 대조 `Verified`는 커밋 `a143539` 구현 기준이다. 문서 상태 `Draft`는 그대로다. 9절 미결정 항목은 사용자 결정까지 남는다.
+

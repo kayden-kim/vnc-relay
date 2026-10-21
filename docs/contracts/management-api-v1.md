@@ -542,6 +542,8 @@ X-CSRF-Token: <csrf-token>
 
 작업 4.3 실행 기록(커밋 `59f3f62` + 문서 변경 작업 트리): WSL `vr-full.sh` ALL PASSED(통과 11, 부분 27, 미연결 110). Windows `vr-win.ps1 -Only all` ALL PASSED (all)(통과 10, 부분 27, 미실행 1 = OPS-007, 미연결 110). 위 표의 결과 열은 검증 기록 규칙에 따라 부분 행을 `미실행`으로 둔다. 빠진 부분은 작업 4.4·4.5에서 채운다. 대조 기록: [관리 로그인과 세션 설계](../architectures/management-session.md#대조-기록).
 
+작업 4.3 설계 수정 구현 실행 기록(커밋 `a143539`, 검증 뒤 코드 변경 없음): WSL `vr-full.sh` ALL PASSED(통과 11, 부분 27, 미연결 110). Windows `vr-win.ps1 -Only all` ALL PASSED (all)(통과 10, 부분 27, 미실행 1 = OPS-007, 미연결 110). 이 커밋은 계약 1.1절의 GET·DELETE 본문 415와 GET의 `as_of`를 구현했다. 계정 이름 문법 위반의 400 응답은 구현 판단이다(설계 문서 9절 라). 표 행은 바꾸지 않았다. 대조 기록: [관리 로그인과 세션 설계](../architectures/management-session.md#대조-기록).
+
 ## 6. 초안을 확정하기 전에 해결할 사항
 
 - 이 계약의 이름·코드 선택은 2026-10-16에 사용자가 채택했다. 채택 범위는 `/api/v1/` 아래 경로 이름과 메서드, 필드 이름, 오류 코드 일곱 개, `X-Relay-Poll`·`X-CSRF-Token` 값 규칙, 종료 원인 값 이름, 화면 URL이다. 쿠키 이름 `relay_admin_session`과 헤더 이름은 공유 인터페이스 이름이다. 사용자가 앞서 확정한 값은 이 문서 앞부분에 따로 적었다.
