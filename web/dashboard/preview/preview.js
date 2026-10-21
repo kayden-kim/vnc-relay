@@ -189,7 +189,7 @@ const REQUIRED_SAMPLES = [
   "button-destructive-default", "button-destructive-hover", "button-destructive-focus", "button-destructive-disabled", "button-destructive-busy",
   "button-navbar-default", "button-navbar-hover", "button-navbar-focus", "button-navbar-disabled", "button-navbar-busy",
   "button-long-ko", "button-long-en",
-  "text-field-default", "text-field-error", "text-field-disabled", "text-field-help-long-ko", "text-field-help-long-en",
+  "text-field-default", "text-field-error", "text-field-focus", "text-field-help-long-ko", "text-field-help-long-en",
   "badge-success", "badge-info", "badge-warning", "badge-destructive", "badge-neutral", "badge-long-ko", "badge-long-en",
   "alert-success", "alert-info", "alert-warning", "alert-destructive", "alert-neutral", "alert-long-ko", "alert-long-en",
   "card-default", "card-empty", "card-long-ko", "card-long-en",
@@ -291,8 +291,9 @@ function textField(sid, extra = {}) {
   });
 }
 
-function disableInput(field) {
-  field.querySelector("input").disabled = true;
+function focusInput(field) {
+  // Preview-only focus state. App code never adds this class.
+  field.querySelector("input").classList.add("is-focus");
   return field;
 }
 
@@ -391,7 +392,7 @@ function buildGroups() {
       [
         sample("text-field-default", cap(t.textField, t.default), (sid) => textField(sid)),
         sample("text-field-error", cap(t.textField, t.error), (sid) => textField(sid, { error: t.fieldError })),
-        sample("text-field-disabled", cap(t.textField, t.disabled), (sid) => disableInput(textField(sid))),
+        sample("text-field-focus", cap(t.textField, t.focus), (sid) => focusInput(textField(sid))),
       ],
       [
         sample("text-field-help-long-ko", cap(t.textField, t.help, t.longKo), (sid) =>
