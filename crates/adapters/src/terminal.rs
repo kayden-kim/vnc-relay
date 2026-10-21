@@ -11,6 +11,32 @@ use std::time::Duration;
 
 use vnc_relay_app::ports::{AccountInput, InputError};
 
+#[cfg(windows)]
+#[expect(
+    unsafe_code,
+    reason = "Win32 console mode save and restore; see docs/conventions/rust.md"
+)]
+mod windows_console;
+
+#[cfg(windows)]
+use windows_console::SavedInputMode as KeptInputMode;
+
+/// On Unix rpassword gives the terminal settings back when its read ends, so
+/// there is nothing to keep here.
+#[cfg(not(windows))]
+struct KeptInputMode;
+
+#[cfg(not(windows))]
+impl KeptInputMode {
+    fn save() -> io::Result<Self> {
+        Ok(Self)
+    }
+
+    fn restore(&self) -> io::Result<()> {
+        Ok(())
+    }
+}
+
 /// How often a read on a helper thread checks for Ctrl+C.
 const CANCEL_POLL: Duration = Duration::from_millis(50);
 
@@ -29,8 +55,8 @@ pub struct Terminal {
 impl Terminal {
     /// Starts the Ctrl+C detector. It lives until the process ends. From now
     /// on Ctrl+C sets a flag instead of ending the process, so rpassword can
-    /// give the terminal settings back first on Unix. On Windows a blocked read
-    /// keeps some of them (docs/architectures/admin-accounts.md §9). The error text is Korean.
+    /// give the terminal settings back first on Unix. On Windows `hidden`
+    /// gives the console input mode back itself (docs/architectures/admin-accounts.md §5).
     pub fn open() -> Result<Self, String> {
         let canceled = Arc::new(AtomicBool::new(false));
         let flag = Arc::clone(&canceled);
@@ -149,6 +175,9 @@ fn end_canceled_prompt<T>(outcome: Result<T, InputError>) -> Result<T, InputErro
 impl AccountInput for Terminal {
     fn hidden(&self, prompt: &str) -> Result<String, InputError> {
         self.ready()?;
+        let kept = KeptInputMode::save().map_err(|error| {
+            InputError::Unavailable(format!("콘솔 입력 모드를 읽지 못했다({error})."))
+        })?;
         write_prompt(prompt);
         let outcome = self
             .read_on_thread("password", rpassword::read_password)
@@ -160,7 +189,13 @@ impl AccountInput for Terminal {
                     _ => InputError::NotInteractive,
                 })
             });
-        end_canceled_prompt(outcome)
+        let outcome = end_canceled_prompt(outcome);
+        match kept.restore() {
+            Ok(()) => outcome,
+            Err(error) => Err(InputError::Unavailable(format!(
+                "콘솔 입력 모드를 되돌리지 못했다({error})."
+            ))),
+        }
     }
 
     /// Reads one visible line on a helper thread.

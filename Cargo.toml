@@ -23,13 +23,15 @@ socket2 = { version = "0.6.5", features = ["all"] }
 tokio = { version = "1.54.0", default-features = false }
 tokio-rustls = { version = "0.26.6", default-features = false, features = ["tls12", "aws_lc_rs"] }
 toml = { version = "1.1.8", default-features = false, features = ["std", "parse", "serde"] }
+windows-sys = { version = "0.61.2", default-features = false, features = ["Win32_Foundation", "Win32_Security", "Win32_Storage_FileSystem", "Win32_System_Console"] }
 vnc-relay-adapters = { path = "crates/adapters" }
 vnc-relay-app = { path = "crates/app" }
 vnc-relay-domain = { path = "crates/domain" }
 
 # Lint policy: docs/conventions/rust.md section 2.
 [workspace.lints.rust]
-unsafe_code = "forbid"
+# Only crates/adapters/src/terminal/windows_console.rs allows `unsafe` (docs/conventions/rust.md section 2).
+unsafe_code = "deny"
 
 [workspace.lints.clippy]
 allow_attributes_without_reason = "deny"

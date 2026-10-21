@@ -25,5 +25,8 @@ toml.workspace = true
 vnc-relay-app.workspace = true
 vnc-relay-domain.workspace = true
 
+[target.'cfg(windows)'.dependencies]
+windows-sys.workspace = true
+
 [dev-dependencies]
 tokio = { workspace = true, features = ["io-util"] }
