@@ -15,7 +15,7 @@ UltraVNC Viewer·Server와 외부 WebSocket 클라이언트가 VNC Relay에 접�
 | 스키마 기준 파일 | 없음. 관찰 뒤 1절의 표가 형식의 기준이 된다. |
 | 기준 스펙 | [TCP 중계와 연결 매칭](../specs/relay.md), [WS·WSS 전송](../specs/websocket.md) |
 | 관련 요구사항 | [PRD](../requirements/PRD.md) FR-01·FR-02·FR-03·FR-05, 9절·9.1절 |
-| 호환성 범위 | 목표: Mode I·II, TCP·WS·WSS Viewer 진입. 지원을 주장하는 버전은 아직 없다. 대상 버전은 검증 시작 시 고정한다(RLY-TBD-001). |
+| 호환성 범위 | 목표: Mode I·II, TCP·WS·WSS Viewer 진입. 지원을 주장하는 버전은 아직 없다. 검증 대상 버전은 [호환성 검증 기록](repeater-compat-record.md) 2절에 고정했다. 지원 주장은 그 버전으로 관찰과 검증을 마친 뒤에 한다. |
 | 관련 테스트 | [RLY-001~005, RLY-010~015, RLY-022](../specs/relay.md#7-수용-테스트), [WS-003~006, WS-018, WS-025](../specs/websocket.md#7-수용-테스트). 계약 테스트는 5절을 따른다. |
 
 관련 계약: [WebSocket 중계](websocket-relay-v1.md)(WS·WSS 쪽 전송 규칙과 종료 코드), [운영 정보](ops-info-v1.md)(로그에서 중계 ID 노출 방식과 오류 코드의 로그 이름), [설정](config-v1.md)(`initial_message_bytes`·`handshake_secs`·`mode1`·`mode2`·`allow_targets` 키). 관련 결정: [ADR-0002 출발지 IP 허용 목록](../decisions/ADR-0002-source-ip-allowlist.md).
