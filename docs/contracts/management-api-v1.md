@@ -4,8 +4,9 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 이름과 버전 | `management-api` 1.0.0 |
+| 이름과 버전 | `management-api` 1.1.0 |
 | 상태 | Active(2026-10-16 채택) |
+| 변경 | 1.1.0(2026-10-22): 1.11절 CSP 헤더를 권장에서 필수로 바꿨다(사용자 결정 2026-10-22(Q37)). 소비하는 쪽의 동작은 바뀌지 않는다. 만드는 쪽은 CSP 헤더를 보내야 한다. |
 | 소유자 | vnc-relay 프로젝트 관리자 |
 | 만드는 쪽(Producer) | `vnc-relay` 관리 리스너(서버) |
 | 사용하는 쪽(Consumer) | 같은 실행파일에 내장된 대시보드(정적 HTML·JS). 같은 규칙으로 호출하는 외부 HTTP 클라이언트도 Consumer로 본다. |
@@ -318,7 +319,7 @@
 - 화면 URL: SCR-003은 `/login/`, SCR-001은 `/`, SCR-002는 `/#/sessions/{session_id}`다. 세션 식별자는 URL의 조각(`#` 뒤)에 두므로 서버로 전송되지 않고 서버 접근 로그에 남지 않는다. 서버는 이 조각을 해석하지 않는다.
 - 화면은 URL의 `session_id`가 1.8절 형식을 만족하는지 먼저 확인한다. 형식이 틀리면 요청을 보내지 않고 "잘못된 세션 식별자"를 표시한다. 형식이 맞으면 상세를 조회하고, `404`이면 "대상 없음"을 표시한다. 두 상황을 서로 다른 안내로 구분한다.
 - 보호된 정적 응답과 API 응답에 `Cache-Control: no-store`를 붙인다. 서버를 갱신한 뒤 브라우저가 이전 버전의 화면 코드를 다시 쓰지 않게 하기 위해서다.
-- 정적 응답에 `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, `Content-Security-Policy: default-src 'self'; frame-ancestors 'none'`을 권장한다. 대시보드는 인라인 스크립트를 쓰지 않는다.
+- 정적 응답에 `X-Content-Type-Options: nosniff`와 `Referrer-Policy: no-referrer`를 권장한다. `Content-Security-Policy: default-src 'self'; frame-ancestors 'none'`은 필수다(사용자 결정 2026-10-22(Q37)). 대시보드는 인라인 스크립트와 인라인 스타일(`<style>`, `style` 속성)을 쓰지 않는다.
 
 ### 1.12 폴링 주기와 조회 제한 시간의 전달
 
