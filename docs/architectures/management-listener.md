@@ -6,7 +6,7 @@
 | --- | --- |
 | 구조 시점 | Current (작업 4.6 구현 뒤) |
 | 문서 상태 | Draft |
-| 구현 대조 | Verified — 작업 4.6 시점, 작업 트리(커밋 전). WSL 전체 게이트는 Chromium이 없어 `dashboard_browser` 두 시험이 실패한다([대조 기록](#대조-기록) 4.6). 4.3 항목도 [대조 기록](#대조-기록)에 있다 |
+| 구현 대조 | Verified — 작업 4.6 시점, 커밋 `54a59e7`. WSL 전체 게이트는 Chromium이 없어 `dashboard_browser` 두 시험이 실패한다([대조 기록](#대조-기록) 4.6). 4.3 항목도 [대조 기록](#대조-기록)에 있다 |
 | 코드 위치 | `crates/adapters/src/admission.rs`(`AdmittingListener`, `Admitted`), `crates/adapters/src/tls_listener.rs`(`TlsListener`, `TlsIo`, `Handshake`, `Recorded`, `offers_no_tls12`), `crates/adapters/src/request_deadline.rs`(`DeadlineListener`, `Deadlined`), `crates/adapters/src/management_http.rs`(`ManagementListener`, `PeerAddr`, `answer`, `static_answer`, `static_file`), `crates/adapters/src/management_http/session_api.rs`(`answer`), `crates/adapters/src/status_http.rs`(`StatusListener`), `crates/adapters/src/dashboard_assets.rs`(`Asset`, `ASSETS`, `find_asset`), `crates/adapters/src/config_file.rs`(`read_management`), `crates/app/src/events.rs`(`Stage::Tls`, `RejectReason::TlsVersionUnsupported`), `crates/app/src/settings.rs`(`Settings::management_listener`, `Settings::other_listeners`), `src/serve.rs`(`listen_until_shutdown`, `stop_task`) |
 | 코드 지도 | [코드 지도 2절](code-map.md#2-코드-위치와-구성요소), [3절](code-map.md#3-진입점) |
 | 관련 스펙 | [운영 스펙 2절](../specs/operations.md#2-상태와-검증-매개변수)의 OPS-014, OPS-034, OPS-033(일부: 관리 연결), OPS-004(일부: 관리 연결을 L에 세지 않음), OPS-036, OPS-006(일부: 관리 TLS 협상과 첫 요청 머리의 U, 사용자 결정 2026-10-21 Q12), [관리 스펙 7절](../specs/management.md#7-수용-테스트)의 MGT-015(4.4 완료 조건으로 옮김, 사용자 결정 2026-10-21 Q14), [대시보드 스펙 7절](../specs/dashboard.md#7-수용-테스트)의 DASH-014(일부: 세션 없이 `/app/` 파일을 직접 요청하면 로그인 화면으로 보낸다. 상세 화면 행동은 작업 4.10·4.11) |
