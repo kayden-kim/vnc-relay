@@ -270,6 +270,41 @@ fn push_event_fields(fields: &mut Vec<(&'static str, Value)>, event: &Event) {
                 fields.push(("error_kind", Value::from(kind.as_str())));
             }
         }
+        Event::AdminLoginSucceeded {
+            admin_account,
+            peer_ip,
+        } => {
+            fields.push(("admin_account", Value::from(admin_account.as_str())));
+            fields.push(("peer_ip", Value::from(peer_ip.to_string())));
+        }
+        Event::AdminLoginFailed {
+            reason,
+            scope,
+            admin_account,
+            peer_ip,
+        } => {
+            fields.push(("reason", Value::from(reason.as_str())));
+            if let Some(scope) = scope {
+                fields.push(("scope", Value::from(scope.as_str())));
+            }
+            if let Some(admin_account) = admin_account {
+                fields.push(("admin_account", Value::from(admin_account.as_str())));
+            }
+            fields.push(("peer_ip", Value::from(peer_ip.to_string())));
+        }
+        Event::AdminLoginLimited {
+            scope,
+            lockout_secs,
+            admin_account,
+            peer_ip,
+        } => {
+            fields.push(("scope", Value::from(scope.as_str())));
+            fields.push(("lockout_secs", Value::from(*lockout_secs)));
+            if let Some(admin_account) = admin_account {
+                fields.push(("admin_account", Value::from(admin_account.as_str())));
+            }
+            fields.push(("peer_ip", Value::from(peer_ip.to_string())));
+        }
         Event::ServerStopped => {}
     }
 }

@@ -5,8 +5,10 @@
 use std::fmt;
 use std::net::SocketAddr;
 
+use vnc_relay_domain::account::AccountName;
 use vnc_relay_domain::conn_id::ConnId;
 use vnc_relay_domain::entry_point::EntryPoint;
+use vnc_relay_domain::login_limit::LimitScope;
 use vnc_relay_domain::peer_ip::PeerIp;
 
 use crate::settings::ConfigWarning;
@@ -190,6 +192,22 @@ impl ConnectionErrorKind {
     }
 }
 
+/// The `reason` of `admin_login_failed` (ops-info-v1 §1.5).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LoginFailReason {
+    InvalidCredentials,
+    Limited,
+}
+
+impl LoginFailReason {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::InvalidCredentials => "invalid_credentials",
+            Self::Limited => "limited",
+        }
+    }
+}
+
 /// One operation log event. Each variant is one event of ops-info-v1 §1.5.
 /// Fields carry no secret, no raw relay ID, and no config value other than
 /// the ones the contract names (§1.11). Feature tasks add variants.
@@ -251,6 +269,28 @@ pub enum Event {
         peer_ip: PeerIp,
         elapsed_ms: u64,
     },
+    /// An administrator logged in and got a session (ops-info-v1 §1.5,
+    /// management.md MGT-017). The login event carries no session ID.
+    AdminLoginSucceeded {
+        admin_account: AccountName,
+        peer_ip: PeerIp,
+    },
+    /// A login attempt was refused (ops-info-v1 §1.5, MGT-018, MGT-022).
+    /// `scope` is set for `Limited`. `admin_account` is set only when the
+    /// typed name is a real account (ops-info-v1 §1.8).
+    AdminLoginFailed {
+        reason: LoginFailReason,
+        scope: Option<LimitScope>,
+        admin_account: Option<AccountName>,
+        peer_ip: PeerIp,
+    },
+    /// A login lock started. One event for each lock (ops-info-v1 §1.5).
+    AdminLoginLimited {
+        scope: LimitScope,
+        lockout_secs: u64,
+        admin_account: Option<AccountName>,
+        peer_ip: PeerIp,
+    },
     /// Last event: resources are released and the process ends.
     ServerStopped,
 }
@@ -266,6 +306,9 @@ impl Event {
             Self::ConnectionAccepted { .. } => "connection_accepted",
             Self::ConnectionRejected { .. } | Self::UpgradeRejected { .. } => "connection_rejected",
             Self::ConnectionAborted { .. } => "connection_aborted",
+            Self::AdminLoginSucceeded { .. } => "admin_login_succeeded",
+            Self::AdminLoginFailed { .. } => "admin_login_failed",
+            Self::AdminLoginLimited { .. } => "admin_login_limited",
             Self::ServerStopped => "server_stopped",
         }
     }
@@ -281,6 +324,8 @@ impl Event {
             | Self::ConnectionRejected { .. }
             | Self::UpgradeRejected { .. } => Level::Warn,
             Self::ConnectionAborted { reason, .. } => reason.level(),
+            Self::AdminLoginSucceeded { .. } => Level::Info,
+            Self::AdminLoginFailed { .. } | Self::AdminLoginLimited { .. } => Level::Warn,
             Self::StartupFailed { .. } => Level::Error,
         }
     }

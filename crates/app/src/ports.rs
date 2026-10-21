@@ -2,6 +2,7 @@
 //! implements them (docs/architectures/code-map.md, layer "app").
 
 use std::fmt;
+use std::time::{Duration, SystemTime};
 
 use vnc_relay_domain::account::{Account, Argon2Params, Password, PasswordHash};
 
@@ -76,3 +77,42 @@ impl fmt::Display for HashError {
 }
 
 impl std::error::Error for HashError {}
+
+/// Time for administrator sessions and the login limit. Deadlines use
+/// `monotonic`. `wall` is only used to report expiry times. The app never
+/// calls `Instant::now` or `SystemTime::now` (`crates/app/clippy.toml`).
+pub trait Clock: Send + Sync {
+    /// Time since a fixed start point. It never goes backwards.
+    fn monotonic(&self) -> Duration;
+
+    /// Wall-clock time for the expiry values in the session response.
+    fn wall(&self) -> SystemTime;
+}
+
+/// Checks a typed password against a stored hash (management-api-v1 §1.5).
+pub trait PasswordVerifier: Send + Sync {
+    /// `Ok(false)` for a mismatch. `Err` only when the check itself failed.
+    fn verify(&self, typed: &str, hash: &PasswordHash) -> Result<bool, HashError>;
+}
+
+/// Makes admin session tokens and compares them (management-api-v1 §1.4.3).
+pub trait TokenSource: Send + Sync {
+    /// A new random token of 64 lowercase hex digits.
+    fn new_token(&self) -> Result<String, RandomError>;
+
+    /// True when both texts are equal. The comparison takes the same time
+    /// whatever the first difference is.
+    fn same_token(&self, expected: &str, given: &str) -> bool;
+}
+
+/// The OS random source could not give bytes.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RandomError(pub String);
+
+impl fmt::Display for RandomError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl std::error::Error for RandomError {}

@@ -4,10 +4,12 @@
 //! (docs/architectures/code-map.md, layer "domain").
 
 pub mod account;
+pub mod admin_session;
 pub mod allow_list;
 pub mod budget;
 pub mod conn_id;
 pub mod entry_point;
+pub mod login_limit;
 pub mod origin;
 pub mod peer_ip;
 pub mod target_policy;
