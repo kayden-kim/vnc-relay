@@ -293,7 +293,7 @@ components:
 | 관련 아키텍처 문서·ADR | 없음. 정적 HTML·JS 선택은 [PRD 확정 기준](../requirements/PRD.md#확정-기준)이 정한다 |
 | 기준 시안 | [dashboard.html](mockups/dashboard.html). 이 문서의 토큰으로 만든 화면별 시안이며 사용자가 2026-10-20에 채택했다 |
 | 토큰 원본 | 이 파일의 YAML 머리말 |
-| 컴포넌트 미리보기 | 없음. 실제 컴포넌트가 없다 |
+| 컴포넌트 미리보기 | `web/dashboard/preview/`. `cargo xtask dashboard-serve`로 띄운다. 로컬 전용이며 실행 파일에 넣지 않는다. 명세의 컴포넌트를 상태별로 보여 준다(작업 4.8). |
 | 명세·도구 버전 | [DESIGN.md 명세](https://github.com/google-labs-code/design.md/blob/main/docs/spec.md) `version: alpha`(2026-10-16 확인). 검사 도구 버전은 [검증](#검증)에 기록한다 |
 
 ### 디자인 방향
@@ -678,7 +678,7 @@ shadcn/ui처럼 경계선과 얕은 그림자로 층을 나눈다.
 
 - 실행 절차: [대시보드 프런트엔드를 검증하는 방법](../how-to/verify-dashboard-frontend.md)(Draft)이 정한다. 사용자 결정 2026-10-22(Q09)로 작업 0.9를 시작했고, 사용자 결정 2026-10-22(Q32~Q38)로 DESIGN-TBD-005를 해소했다. 아래 기록은 채택(2026-10-20) 전에 한 일회성 확인이다.
 - 통과 조건: lint 오류 0건. 대비는 [대비 기준](#대비-기준) 표의 기준 이상이다.
-- 생성 산출물 대조: `cargo xtask tokens --check`가 이 문서의 YAML에서 만든 CSS를 저장된 CSS 파일과 시안 토큰 블록에 대조한다. 절차와 방법은 [프런트엔드 컨벤션 2절](../conventions/frontend.md#2-토큰-적용과-재사용)이 정한다(사용자 결정 2026-10-22(Q32)). 이 명령은 아직 구현하지 않았다.
+- 생성 산출물 대조: `cargo xtask tokens --check`가 이 문서의 YAML에서 만든 CSS를 저장된 CSS 파일과 시안 토큰 블록에 대조한다. 절차와 방법은 [프런트엔드 컨벤션 2절](../conventions/frontend.md#2-토큰-적용과-재사용)이 정한다(사용자 결정 2026-10-22(Q32)). 작업 4.8에서 구현했다.
 - 시각 검토 범위: 대표 화면 SCR-001·SCR-002·SCR-003, 데스크톱·모바일 폭.
 - 실행 결과와 증거: 아래 표.
 
