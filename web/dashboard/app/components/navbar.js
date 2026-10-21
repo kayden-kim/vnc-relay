@@ -5,11 +5,11 @@ import { createLink } from './link.js';
 /**
  * @param {{brand?: string, items?: Array<{label: string, href: string, current?: boolean,
  *   desktopOnly?: boolean}>,
- *   language?: Node, action?: Node, label?: string}} options
+ *   language?: Node, action?: Node, label: string}} options
  * @returns {HTMLElement}
  */
 export function createNavbar({
-  brand, items = [], language, action, label = '주 메뉴',
+  brand, items = [], language, action, label,
 } = {}) {
   if (typeof label !== 'string' || label === '') {
     throw new TypeError('navbar label is required');
