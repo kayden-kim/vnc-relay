@@ -34,7 +34,7 @@ impl AdminAuth {
             .sessions
             .get(&token)
             .ok_or(AuthError::Unauthenticated)?;
-        let view = session_view(session, mono, wall);
+        let view = session_view(session, wall);
         Ok(AuthorizedAdmin {
             token,
             session: view,
@@ -68,8 +68,8 @@ impl AdminAuth {
         if !session.is_live(mono) {
             return;
         }
-        session.extend_idle(mono, self.session_policy);
-        admin.session = session_view(session, mono, wall);
+        session.extend_idle(mono, wall, self.session_policy);
+        admin.session = session_view(session, wall);
     }
 
     /// Ends the session of `admin`. Relay sessions are not touched (MGT-020).

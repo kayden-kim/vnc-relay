@@ -1210,7 +1210,10 @@ fn chunked_login(text: &str) -> Vec<u8> {
     let mut bytes = request(
         "POST",
         "/api/v1/session",
-        &["Content-Type: application/json", "Transfer-Encoding: chunked"],
+        &[
+            "Content-Type: application/json",
+            "Transfer-Encoding: chunked",
+        ],
     );
     bytes.extend_from_slice(&chunked(text));
     bytes
@@ -1281,7 +1284,11 @@ async fn get_and_delete_with_a_body_must_send_application_json() {
     let mut streamed = request(
         "GET",
         "/api/v1/session",
-        &[cookie.as_str(), "Content-Type: text/plain", "Transfer-Encoding: chunked"],
+        &[
+            cookie.as_str(),
+            "Content-Type: text/plain",
+            "Transfer-Encoding: chunked",
+        ],
     );
     streamed.extend_from_slice(&chunked(text));
     let reply = plain_exchange(running.addr, &streamed).await;
@@ -1372,7 +1379,10 @@ async fn x_relay_poll_is_refused_on_login_and_logout() {
     .await;
     assert_eq!(reply.status, 400);
     assert_eq!(error_code(&reply), "invalid_request");
-    assert!(reply.header("set-cookie").is_none(), "a refused login sets no cookie");
+    assert!(
+        reply.header("set-cookie").is_none(),
+        "a refused login sets no cookie"
+    );
 
     let login = plain_exchange(running.addr, &login_request(ACCOUNT, PASSWORD)).await;
     let cookie = cookie_line(&login);

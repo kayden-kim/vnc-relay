@@ -43,15 +43,16 @@ impl AdminAuth {
         source: PeerIp,
         prior: Option<&str>,
     ) -> Result<LoggedIn, AuthError> {
-        // A name that breaks the CLI rules can never be real. It is still
-        // counted under the typed text (ops-info-v1 §1.8 admin_account rule).
-        let name = AccountName::parse(account)
-            .ok()
-            .filter(|name| self.accounts.contains_key(name));
-        let hash = name
-            .as_ref()
-            .and_then(|name| self.accounts.get(name))
-            .unwrap_or(&self.dummy);
+        // A name outside the account grammar can never be a real account. It
+        // is refused before any password check. It writes no event and does
+        // not count against the login limit (management-api-v1 §2.1;
+        // 구현 판단(사용자 결정 없음)).
+        let name = AccountName::parse(account).map_err(|_| AuthError::InvalidAccount)?;
+        let stored = self.accounts.get(&name);
+        let hash = stored.unwrap_or(&self.dummy);
+        // `admin_account` names the account only when the account is real
+        // (ops-info-v1 §1.8).
+        let admin_account = stored.map(|_| name.clone());
 
         // Every attempt runs one password check, and the check runs outside
         // the lock. This keeps the cost the same for unknown, locked and
@@ -62,8 +63,8 @@ impl AdminAuth {
             .map_err(|error| AuthError::Internal(error.0))?;
 
         // Tokens are made before the lock. A limited attempt may waste them.
-        let tokens = match (&name, verified) {
-            (Some(_), true) => Some(self.new_tokens()?),
+        let tokens = match (stored.is_some(), verified) {
+            (true, true) => Some(self.new_tokens()?),
             _ => None,
         };
 
@@ -78,18 +79,18 @@ impl AdminAuth {
             self.record(Event::AdminLoginFailed {
                 reason: LoginFailReason::Limited,
                 scope: Some(scope),
-                admin_account: name,
+                admin_account,
                 peer_ip: source,
             });
             return Err(AuthError::LoginFailed);
         }
 
-        if let (Some(name), Some((token, csrf))) = (name.clone(), tokens) {
+        if let Some((token, csrf)) = tokens {
             if let Some(prior) = prior.and_then(|text| AdminSessionToken::parse(text).ok()) {
                 state.sessions.remove(&prior);
             }
-            let session = AdminSession::start(name.clone(), csrf, mono, self.session_policy);
-            let view = session_view(&session, mono, wall);
+            let session = AdminSession::start(name.clone(), csrf, mono, wall, self.session_policy);
+            let view = session_view(&session, wall);
             state.sessions.insert(token.clone(), session);
             drop(state);
             self.record(Event::AdminLoginSucceeded {
@@ -108,14 +109,14 @@ impl AdminAuth {
         self.record(Event::AdminLoginFailed {
             reason: LoginFailReason::InvalidCredentials,
             scope: None,
-            admin_account: name.clone(),
+            admin_account: admin_account.clone(),
             peer_ip: source,
         });
         for scope in started {
             self.record(Event::AdminLoginLimited {
                 scope,
                 lockout_secs,
-                admin_account: name.clone(),
+                admin_account: admin_account.clone(),
                 peer_ip: source,
             });
         }

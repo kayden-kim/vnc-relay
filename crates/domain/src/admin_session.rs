@@ -7,7 +7,7 @@
 
 use std::collections::HashMap;
 use std::fmt;
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 
 use crate::account::AccountName;
 
@@ -98,39 +98,62 @@ impl AdminSessionPolicy {
 
 /// One administrator session. The account name and the CSRF token are fixed
 /// for the whole session.
+///
+/// Each deadline is kept twice. The monotonic pair decides whether the
+/// session is live. The wall-clock pair is the value that responses show. It
+/// is fixed when the session is issued or extended, so a later wall-clock jump
+/// does not change it (구현 판단(사용자 결정 없음)).
 #[derive(Debug, Clone)]
 pub struct AdminSession {
     account: AccountName,
     csrf: AdminCsrfToken,
     idle_deadline: Duration,
     absolute_deadline: Duration,
+    idle_wall: SystemTime,
+    absolute_wall: SystemTime,
 }
 
 impl AdminSession {
-    /// A new session at `now`. The absolute deadline is `now + Sa`. The idle
-    /// deadline is `now + Si`, never after the absolute deadline.
+    /// A new session at monotonic time `now` and wall-clock time `wall`. The
+    /// absolute deadline is `now + Sa`. The idle deadline is `now + Si`, never
+    /// after the absolute deadline. The wall-clock pair follows the same rules.
     pub fn start(
         account: AccountName,
         csrf: AdminCsrfToken,
         now: Duration,
+        wall: SystemTime,
         policy: AdminSessionPolicy,
     ) -> Self {
         let absolute_deadline = now.saturating_add(policy.max_lifetime);
+        let absolute_wall = wall.checked_add(policy.max_lifetime).unwrap_or(wall);
+        let (idle_deadline, idle_wall) =
+            idle_deadlines(now, wall, absolute_deadline, absolute_wall, policy);
         Self {
             account,
             csrf,
-            idle_deadline: idle_deadline_from(now, absolute_deadline, policy),
+            idle_deadline,
             absolute_deadline,
+            idle_wall,
+            absolute_wall,
         }
     }
 
-    /// A user action at `now` moves the idle deadline to `now + Si`, but not
-    /// past the absolute deadline. The absolute deadline never moves.
-    pub fn extend_idle(&mut self, now: Duration, policy: AdminSessionPolicy) {
-        self.idle_deadline = idle_deadline_from(now, self.absolute_deadline, policy);
+    /// A user action at monotonic time `now` and wall-clock time `wall` moves
+    /// the idle deadlines to `+ Si`, but not past the absolute deadlines. The
+    /// absolute deadlines never move.
+    pub fn extend_idle(&mut self, now: Duration, wall: SystemTime, policy: AdminSessionPolicy) {
+        let (idle_deadline, idle_wall) = idle_deadlines(
+            now,
+            wall,
+            self.absolute_deadline,
+            self.absolute_wall,
+            policy,
+        );
+        self.idle_deadline = idle_deadline;
+        self.idle_wall = idle_wall;
     }
 
-    /// True while `now` is before both deadlines.
+    /// True while `now` is before both monotonic deadlines.
     pub fn is_live(&self, now: Duration) -> bool {
         now < self.idle_deadline && now < self.absolute_deadline
     }
@@ -150,10 +173,33 @@ impl AdminSession {
     pub fn absolute_deadline(&self) -> Duration {
         self.absolute_deadline
     }
+
+    /// The idle deadline as wall-clock time, for responses.
+    pub fn idle_wall(&self) -> SystemTime {
+        self.idle_wall
+    }
+
+    /// The absolute deadline as wall-clock time, for responses.
+    pub fn absolute_wall(&self) -> SystemTime {
+        self.absolute_wall
+    }
 }
 
-fn idle_deadline_from(now: Duration, absolute: Duration, policy: AdminSessionPolicy) -> Duration {
-    now.saturating_add(policy.idle).min(absolute)
+/// The new idle deadlines: `now + Si` and `wall + Si`, each capped at the
+/// absolute deadline of the same clock.
+fn idle_deadlines(
+    now: Duration,
+    wall: SystemTime,
+    absolute: Duration,
+    absolute_wall: SystemTime,
+    policy: AdminSessionPolicy,
+) -> (Duration, SystemTime) {
+    let idle = now.saturating_add(policy.idle).min(absolute);
+    let idle_wall = wall
+        .checked_add(policy.idle)
+        .unwrap_or(absolute_wall)
+        .min(absolute_wall);
+    (idle, idle_wall)
 }
 
 /// The administrator sessions of this process. A restart empties it
@@ -204,6 +250,10 @@ mod tests {
         AdminSessionPolicy::new(Duration::from_secs(idle), Duration::from_secs(max))
     }
 
+    fn wall_at(secs: u64) -> SystemTime {
+        SystemTime::UNIX_EPOCH + Duration::from_secs(secs)
+    }
+
     #[test]
     fn accepts_only_64_lowercase_hex_digits() {
         assert!(AdminSessionToken::parse(TOKEN).is_ok());
@@ -224,15 +274,16 @@ mod tests {
     #[test]
     fn idle_deadline_moves_only_on_extension_and_never_past_the_absolute_one() {
         let policy = policy(300, 1000);
-        let mut session = AdminSession::start(account(), csrf(), Duration::ZERO, policy);
+        let mut session =
+            AdminSession::start(account(), csrf(), Duration::ZERO, wall_at(0), policy);
         assert!(session.is_live(Duration::from_secs(299)));
         assert!(!session.is_live(Duration::from_secs(300)));
 
-        session.extend_idle(Duration::from_secs(200), policy);
+        session.extend_idle(Duration::from_secs(200), wall_at(200), policy);
         assert!(session.is_live(Duration::from_secs(499)));
         assert!(!session.is_live(Duration::from_secs(500)));
 
-        session.extend_idle(Duration::from_secs(900), policy);
+        session.extend_idle(Duration::from_secs(900), wall_at(900), policy);
         assert_eq!(session.idle_deadline(), Duration::from_secs(1000));
         assert!(!session.is_live(Duration::from_secs(1000)));
     }
@@ -241,11 +292,27 @@ mod tests {
     #[test]
     fn absolute_deadline_is_not_moved_by_user_actions() {
         let policy = policy(300, 600);
-        let mut session = AdminSession::start(account(), csrf(), Duration::ZERO, policy);
-        session.extend_idle(Duration::from_secs(550), policy);
+        let mut session =
+            AdminSession::start(account(), csrf(), Duration::ZERO, wall_at(0), policy);
+        session.extend_idle(Duration::from_secs(550), wall_at(550), policy);
         assert_eq!(session.absolute_deadline(), Duration::from_secs(600));
         assert!(session.is_live(Duration::from_secs(599)));
         assert!(!session.is_live(Duration::from_secs(600)));
+    }
+
+    /// spec: management.md:MGT-025 partial
+    #[test]
+    fn wall_deadlines_are_the_values_at_issue_and_extension() {
+        let policy = policy(300, 3600);
+        let mut session =
+            AdminSession::start(account(), csrf(), Duration::ZERO, wall_at(5000), policy);
+        assert_eq!(session.idle_wall(), wall_at(5300));
+        assert_eq!(session.absolute_wall(), wall_at(8600));
+
+        session.extend_idle(Duration::from_secs(1000), wall_at(6000), policy);
+        assert_eq!(session.idle_deadline(), Duration::from_secs(1300));
+        assert_eq!(session.idle_wall(), wall_at(6300));
+        assert_eq!(session.absolute_wall(), wall_at(8600));
     }
 
     #[test]
@@ -255,7 +322,7 @@ mod tests {
         let token = AdminSessionToken::parse(TOKEN).unwrap_or_else(|error| panic!("{error}"));
         table.insert(
             token.clone(),
-            AdminSession::start(account(), csrf(), Duration::ZERO, policy),
+            AdminSession::start(account(), csrf(), Duration::ZERO, wall_at(0), policy),
         );
         table.prune(Duration::from_secs(300));
         assert!(table.get(&token).is_none());

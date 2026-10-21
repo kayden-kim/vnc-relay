@@ -10,7 +10,7 @@ pub mod session;
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
-use std::time::{Duration, SystemTime};
+use std::time::SystemTime;
 
 use vnc_relay_domain::account::{Account, AccountName, PasswordHash};
 use vnc_relay_domain::admin_session::{
@@ -39,6 +39,10 @@ pub enum AuthError {
     CsrfInvalid,
     /// Login refused for any reason. Maps to `401 login_failed`.
     LoginFailed,
+    /// The account name is outside the account grammar. Maps to
+    /// `400 invalid_request`. It is refused before any password check and is
+    /// not counted against the login limit (구현 판단(사용자 결정 없음)).
+    InvalidAccount,
     /// A port failed. Maps to `500 internal`. The text is for diagnosis only
     /// and never goes to a client.
     Internal(String),
@@ -51,6 +55,9 @@ pub struct SessionView {
     pub csrf: AdminCsrfToken,
     pub idle_expires_at: SystemTime,
     pub absolute_expires_at: SystemTime,
+    /// The wall-clock time of the view. Only GET responses show it
+    /// (management-api-v1 §1.1).
+    pub as_of: SystemTime,
 }
 
 /// Session table and login limit, guarded by one lock.
@@ -116,19 +123,16 @@ impl AdminAuth {
     }
 }
 
-/// Converts a monotonic deadline to wall-clock time for a response.
-/// A deadline that is already past gives `wall`.
-fn wall_at(deadline: Duration, now: Duration, wall: SystemTime) -> SystemTime {
-    wall.checked_add(deadline.saturating_sub(now))
-        .unwrap_or(wall)
-}
-
-fn session_view(session: &AdminSession, now: Duration, wall: SystemTime) -> SessionView {
+/// The session values for a response. The two deadlines are the wall-clock
+/// values fixed when the session was issued or extended, so later clock
+/// readings do not move them.
+fn session_view(session: &AdminSession, wall: SystemTime) -> SessionView {
     SessionView {
         account: session.account().clone(),
         csrf: session.csrf().clone(),
-        idle_expires_at: wall_at(session.idle_deadline(), now, wall),
-        absolute_expires_at: wall_at(session.absolute_deadline(), now, wall),
+        idle_expires_at: session.idle_wall(),
+        absolute_expires_at: session.absolute_wall(),
+        as_of: wall,
     }
 }
 
