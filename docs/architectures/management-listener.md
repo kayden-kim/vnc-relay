@@ -103,7 +103,7 @@ flowchart LR
 | 실패 지점 | 처리 방법 | 남는 상태 | 관련 스펙 시나리오 |
 | --- | --- | --- | --- |
 | Lm 자리 없음 | `connection_rejected`(`stage` = `accept`, `admin_connection_limit`, `limit`). HTTP 응답 없이 닫는다. | 접속 없음. L은 바뀌지 않는다. | OPS-033(일부), OPS-004(일부) |
-| TLS 1.2 미만만 제안 | 평문 응답 없이 닫는다. 같은 접속에서 평문으로 바꾸지 않는다. `connection_rejected`(`stage` = `tls`, `tls_version_unsupported`). | 접속 없음 | OPS-036(일부) |
+| TLS 1.2 미만만 제안 | 평문 응답 없이 닫는다. 같은 접속에서 평문으로 바꾸지 않는다. `connection_rejected`(`stage` = `tls`, `tls_version_unsupported`). 버전 판정은 접속의 첫 TLS 레코드(5 + 16384 = 16389바이트)만 본다. ClientHello가 그 레코드를 넘으면 판정하지 못해 기록하지 않는다. rustls는 그래도 접속을 거절한다(열린 질문 10). | 접속 없음 | OPS-036(일부) |
 | 그 밖의 TLS 핸드셰이크 실패(인증서 오류, 클라이언트가 중간에 끊음) | 평문 응답 없이 닫는다. 기록하지 않는다(열린 질문 6). | 접속 없음. 자리는 돌아간다. | OPS-036(일부) |
 | 핸드셰이크가 끝나지 않음 | 제한 시간이 없다(열린 질문 3). 자리를 든 채 기다린다. | Lm 자리 하나가 묶인다. | OPS-033(열린 질문 3) |
 | 수락 오류 | `ACCEPT_RETRY_DELAY` 뒤 다시 수락한다. 기록하지 않는다(ops-info-v1은 수락 실패 사건이 없다). | 없음 | 없음 |
@@ -155,3 +155,4 @@ flowchart LR
 | 7. U(`tls_upgrade_secs`)의 관리 TLS 적용 여부. 열린 질문 3과 같은 결정이다. | 열린 질문 3과 같음 | 열린 질문 3과 같음 |
 | 8. MGT-015(상대 주소)의 소유 작업이 없다. 4.2 완료 조건에는 있지만 4.3~4.6 완료 조건에 없다. 상대 주소는 조회 API(4.4)의 응답에서 처음 보이고, 4.2 응답에는 상대 주소가 없다. 옵션은 (a) TODO 4.2를 `[ ]`로 둔다(기본값, 소유 작업이 없어 판정이 열린다), (b) `MGT-015 partial`로 4.2를 `[x]` 처리한다, (c) MGT-015를 4.4 완료 조건에 넣는다(TODO 편집). | TODO 4.2 완료 판정 | 사용자 결정 |
 | 9. (해결) 비루프백 평문 시작 실패(OPS-014·OPS-034)의 검증 위치. 서버 수준 테스트 2건을 추가했다. `tests/serve.rs`의 `refuses_plaintext_management_on_a_public_address_with_exit_code_3`(시작 실패, OPS-014 부분·OPS-034 부분)와 `answers_api_queries_with_401_without_login_on_loopback_plaintext`(루프백 평문 시작 뒤 401, OPS-034 부분). 설정 규칙 테스트 `allows_plaintext_management_only_on_loopback`(OPS-034 부분)는 그대로 둔다. | 표식 위치만 바뀜(해결됨) | Q9 해결 작업 중 결정(서버 수준 테스트 추가, 해결됨) |
+| 10. ClientHello가 첫 TLS 레코드를 넘으면 버전 거절을 판정하지 못한다(`tls_listener.rs` `CAPTURE_LIMIT`, `offers_tls12`가 `None`). 그러면 rustls가 TLS 1.0·1.1만 제안한 접속을 거절해도 `connection_rejected` 줄이 없다. 옵션은 (a) 한계를 받아들이고 문서에 적는다, (b) 여러 레코드에 걸친 핸드셰이크 조각을 정해진 상한까지 이어 붙여 판정한다. 현재 코드는 (a)다. | 관리 TLS 버전 거절의 감사 흔적(OPS-036 부분) | 사용자 결정. 현재 코드는 옵션 (a)이며 사용자가 고른 것이 아니다. |

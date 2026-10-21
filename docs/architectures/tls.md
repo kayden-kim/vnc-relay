@@ -83,7 +83,7 @@ flowchart LR
 | `classify_config` 인증서와 개인키 불일치 | `KeyMismatch` 반환 | 같음 | OPS-002, OPS-026(재로드 후보) |
 | `serve.rs` 실패 집계 | 모든 진단을 stderr 줄과 `startup_failed`(`reason=tls_file_invalid`)로 쓰고 종료 코드 3 | 준비 완료 아님, 리스너 없음 | OPS-002 |
 | 협상 중 TLS 1.2 미만 요청 | 협상이 실패한다. 이 모듈은 관여하지 않는다. 관리 리스너는 `tls_listener.rs`에서 이 거절을 `tls_version_unsupported`로 기록한다([관리 리스너 모듈 설계 4절](management-listener.md#4-처리-순서)). | 해당 연결만 끝난다 | OPS-036(WSS는 작업 3.2가 기록한다) |
-| 협상 중 만료·신뢰되지 않음·호스트 불일치 인증서 | 클라이언트가 협상을 거절한다. 이 모듈은 관여하지 않는다. | 해당 연결만 끝난다 | WS-013(작업 3.2가 `tls_failed`를 기록한다. 관리 리스너는 기록하지 않는다. 기록 방법은 [관리 리스너 모듈 설계 9절](management-listener.md#9-미결정-사항) Q6) |
+| 협상 중 만료·신뢰되지 않음·호스트 불일치 인증서 | 클라이언트가 협상을 거절한다. 이 모듈은 관여하지 않는다. | 해당 연결만 끝난다 | WS-013(작업 3.2가 `error_kind` `tls_failed`로 기록한다. 관리 리스너는 기록하지 않는다. 기록 방법은 [관리 리스너 모듈 설계 9절](management-listener.md#9-미결정-사항) Q6) |
 
 ## 7. 설계 선택
 
