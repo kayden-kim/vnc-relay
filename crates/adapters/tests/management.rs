@@ -7,7 +7,7 @@
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use rustls::crypto::aws_lc_rs;
 use rustls::pki_types::pem::PemObject;
@@ -27,8 +27,8 @@ use vnc_relay_adapters::tls;
 use vnc_relay_app::events::{Event, RejectReason, Stage};
 use vnc_relay_app::management::login::dummy_hash;
 use vnc_relay_app::management::{AdminAuth, AdminPorts};
-use vnc_relay_app::ports::{EventSink, PasswordHasher};
-use vnc_relay_domain::account::{Account, AccountName, Argon2Params, Password};
+use vnc_relay_app::ports::{Clock, EventSink, HashError, PasswordHasher, PasswordVerifier};
+use vnc_relay_domain::account::{Account, AccountName, Argon2Params, Password, PasswordHash};
 use vnc_relay_domain::admin_session::AdminSessionPolicy;
 use vnc_relay_domain::budget::ConnectionBudget;
 use vnc_relay_domain::login_limit::{LimitScope, LoginLimitPolicy};
@@ -149,6 +149,28 @@ async fn start_with(
     session: AdminSessionPolicy,
     limit: LoginLimitPolicy,
 ) -> Running {
+    start_with_ports(
+        tls,
+        admin_connections,
+        upgrade,
+        session,
+        limit,
+        Arc::new(Argon2Verifier),
+        Arc::new(SystemClock::new()),
+    )
+    .await
+}
+
+/// Like `start_with`, but the admin state uses `verifier` and `clock`.
+async fn start_with_ports(
+    tls: Option<TlsAcceptor>,
+    admin_connections: u32,
+    upgrade: Duration,
+    session: AdminSessionPolicy,
+    limit: LoginLimitPolicy,
+    verifier: Arc<dyn PasswordVerifier>,
+    clock: Arc<dyn Clock>,
+) -> Running {
     let listener = TcpListener::bind("127.0.0.1:0")
         .await
         .unwrap_or_else(|error| panic!("loopback bind: {error}"));
@@ -158,7 +180,7 @@ async fn start_with(
     let events = Arc::new(Recorder::default());
     let log: Arc<dyn EventSink> = events.clone();
     let budget = ConnectionBudget::new(admin_connections);
-    let auth = admin_auth(Arc::clone(&log), session, limit);
+    let auth = admin_auth(Arc::clone(&log), session, limit, verifier, clock);
     let dashboard = DashboardHints::new(
         Duration::from_secs(2),
         Duration::from_secs(5),
@@ -649,10 +671,13 @@ const TEST_PARAMS: Argon2Params = Argon2Params {
 const CLEARED_COOKIE: &str = "relay_admin_session=; Path=/; Max-Age=0; HttpOnly; SameSite=Strict";
 
 /// Admin state of one listener: `alice` and `bob` with their test passwords.
+/// `verifier` and `clock` are the ports that the test chooses.
 fn admin_auth(
     log: Arc<dyn EventSink>,
     session: AdminSessionPolicy,
     limit: LoginLimitPolicy,
+    verifier: Arc<dyn PasswordVerifier>,
+    clock: Arc<dyn Clock>,
 ) -> Arc<AdminAuth> {
     let accounts: Vec<Account> = [(ACCOUNT, PASSWORD), (OTHER_ACCOUNT, OTHER_PASSWORD)]
         .into_iter()
@@ -673,12 +698,96 @@ fn admin_auth(
     let dummy = dummy_hash(&Argon2Hasher, TEST_PARAMS)
         .unwrap_or_else(|error| panic!("dummy hash is made: {error}"));
     let ports = AdminPorts {
-        verifier: Arc::new(Argon2Verifier),
+        verifier,
         tokens: Arc::new(SystemTokenSource),
-        clock: Arc::new(SystemClock::new()),
+        clock,
         events: log,
     };
     Arc::new(AdminAuth::new(accounts, dummy, ports, session, limit))
+}
+
+/// A clock that moves only when the test sets it. Its wall clock follows the
+/// monotonic one from a fixed start.
+#[derive(Default)]
+struct FakeClock(Mutex<Duration>);
+
+impl FakeClock {
+    fn set(&self, now: Duration) {
+        *self.0.lock().unwrap_or_else(PoisonError::into_inner) = now;
+    }
+}
+
+impl Clock for FakeClock {
+    fn monotonic(&self) -> Duration {
+        *self.0.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+
+    fn wall(&self) -> SystemTime {
+        UNIX_EPOCH + Duration::from_secs(1_700_000_000) + self.monotonic()
+    }
+}
+
+/// The real Argon2 check, with a count of the checks that ran.
+#[derive(Default)]
+struct CountingVerifier(Mutex<usize>);
+
+impl CountingVerifier {
+    fn calls(&self) -> usize {
+        *self.0.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+}
+
+impl PasswordVerifier for CountingVerifier {
+    fn verify(&self, typed: &str, hash: &PasswordHash) -> Result<bool, HashError> {
+        *self.0.lock().unwrap_or_else(PoisonError::into_inner) += 1;
+        Argon2Verifier.verify(typed, hash)
+    }
+}
+
+/// Sends one login and checks that it ran exactly one password check. A refused
+/// attempt runs the check too (management-api-v1 §6).
+async fn checked_login(
+    running: &Running,
+    verifier: &CountingVerifier,
+    account: &str,
+    password: &str,
+) -> Reply {
+    let before = verifier.calls();
+    let reply = plain_exchange(running.addr, &login_request(account, password)).await;
+    assert_eq!(
+        verifier.calls(),
+        before + 1,
+        "one password check for {account}"
+    );
+    reply
+}
+
+/// How many `admin_login_limited` events the listener recorded for `scope`.
+fn limited_events(running: &Running, scope: LimitScope) -> usize {
+    running
+        .events
+        .snapshot()
+        .iter()
+        .filter(|event| {
+            matches!(event, Event::AdminLoginLimited { scope: found, .. } if *found == scope)
+        })
+        .count()
+}
+
+/// Asserts that two replies match in status, headers, and body. The `date`
+/// header is left out, because the server stamps each reply with its own time.
+fn assert_same_reply(first: &Reply, second: &Reply) {
+    assert_eq!(first.status, second.status);
+    let headers = |reply: &Reply| -> Vec<(String, String)> {
+        reply
+            .headers
+            .iter()
+            .filter(|(name, _)| name.as_str() != "date")
+            .cloned()
+            .collect()
+    };
+    assert_eq!(headers(first), headers(second));
+    assert_eq!(first.body, second.body);
 }
 
 /// A `POST` request with a JSON body. Its length comes from the body.
@@ -793,97 +902,127 @@ async fn plain_http_login_sets_a_cookie_without_secure() {
     assert_eq!(json_body(&reply)["account"], ACCOUNT);
 }
 
-// Covers the refusal of a wrong password and of an unknown account. The response
-// time is not measured yet, so the timing of the two cases is not compared (contract §6).
-/// spec: management.md:MGT-018 partial
+// Covers the refusal of a wrong password and of an unknown account (MGT-018). The
+// session view is the only operational data path in 4.3. The queries (4.4) take the
+// same session check, so a refused login cannot open them either.
+/// spec: management.md:MGT-018
 #[tokio::test]
 async fn wrong_password_and_unknown_account_get_the_same_refusal() {
-    let running = start(None, ROOMY_LM).await;
+    let verifier = Arc::new(CountingVerifier::default());
+    let running = start_with_ports(
+        None,
+        ROOMY_LM,
+        UPGRADE,
+        session_policy(),
+        limit_policy(),
+        verifier.clone(),
+        Arc::new(SystemClock::new()),
+    )
+    .await;
 
-    let wrong = plain_exchange(running.addr, &login_request(ACCOUNT, "wrong-password")).await;
-    let unknown = plain_exchange(running.addr, &login_request("nobody", PASSWORD)).await;
+    let wrong = checked_login(&running, &verifier, ACCOUNT, "wrong-password").await;
+    let unknown = checked_login(&running, &verifier, "nobody", PASSWORD).await;
 
     for reply in [&wrong, &unknown] {
         assert_eq!(reply.status, 401);
         assert_eq!(error_code(reply), "login_failed");
         assert_eq!(reply.header("set-cookie"), None);
     }
-    for name in ["www-authenticate", "cache-control", "content-type"] {
-        assert_eq!(wrong.header(name), unknown.header(name), "{name}");
+    assert_same_reply(&wrong, &unknown);
+    let text = String::from_utf8_lossy(&wrong.body);
+    for name in [ACCOUNT, "nobody"] {
+        assert!(!text.contains(name), "the refusal names no account: {text}");
     }
-    assert_eq!(wrong.body, unknown.body);
+
+    // With no session, the session view and the query paths of 4.4 are refused
+    // by the same check, before routing.
+    for path in [
+        "/api/v1/session",
+        "/api/v1/summary",
+        "/api/v1/waiting",
+        "/api/v1/sessions",
+        "/api/v1/closed-sessions",
+    ] {
+        let reply = plain_exchange(running.addr, &get(path, &[])).await;
+        assert_eq!(reply.status, 401, "{path}");
+        assert_eq!(error_code(&reply), "unauthenticated", "{path}");
+    }
 }
 
-// Covers the account limit and the end of its lock. The delay that the contract
-// also allows is not used, and the timing of the two cases is not measured yet (contract §6).
-/// spec: management.md:MGT-022 partial
+// Covers the account limit, the source limit, and the end of both locks (MGT-022).
+// A limited login gets the same refusal as a wrong password, for an existing and for
+// an unknown account. Every attempt runs one password check. The fake clock ends the
+// locks at a set time, and then only the right password gets a session. The contract's
+// delay variant is not used.
+/// spec: management.md:MGT-022
 #[tokio::test]
-async fn account_limit_refuses_logins_until_the_lock_ends() {
-    let limit = LoginLimitPolicy::new(2, 100, Duration::from_secs(60), Duration::from_millis(600));
-    let running = start_with(None, ROOMY_LM, UPGRADE, session_policy(), limit).await;
+async fn limited_logins_refuse_alike_and_the_right_password_works_after_the_locks() {
+    // Two failures per account are allowed, and six per source. Each lock lasts 60 s.
+    let limit = LoginLimitPolicy::new(2, 6, Duration::from_secs(900), Duration::from_secs(60));
+    let verifier = Arc::new(CountingVerifier::default());
+    let clock = Arc::new(FakeClock::default());
+    let running = start_with_ports(
+        None,
+        ROOMY_LM,
+        UPGRADE,
+        session_policy(),
+        limit,
+        verifier.clone(),
+        clock.clone(),
+    )
+    .await;
 
-    // F = 2 failures are allowed. The third failure starts the lock.
-    for _ in 0..3 {
-        let reply = plain_exchange(running.addr, &login_request(ACCOUNT, "wrong-password")).await;
-        assert_eq!(reply.status, 401);
-        assert_eq!(error_code(&reply), "login_failed");
+    // The third failure for alice starts her lock. Every failure gets the same refusal.
+    let ordinary = checked_login(&running, &verifier, ACCOUNT, "wrong-password").await;
+    assert_eq!(ordinary.status, 401);
+    assert_eq!(error_code(&ordinary), "login_failed");
+    for _ in 0..2 {
+        let reply = checked_login(&running, &verifier, ACCOUNT, "wrong-password").await;
+        assert_same_reply(&ordinary, &reply);
     }
-    // While locked, the right password is refused too.
-    let locked = plain_exchange(running.addr, &login_request(ACCOUNT, PASSWORD)).await;
-    assert_eq!(locked.status, 401);
-    assert_eq!(error_code(&locked), "login_failed");
-    assert_eq!(locked.header("set-cookie"), None);
+    assert_eq!(limited_events(&running, LimitScope::Account), 1);
 
-    // An unknown account is limited the same way.
+    // The right password is refused during the lock, and the refusal is not counted.
+    let locked = checked_login(&running, &verifier, ACCOUNT, PASSWORD).await;
+    assert_same_reply(&ordinary, &locked);
+
+    // An unknown name is limited the same way: its third failure starts its lock.
     for _ in 0..3 {
-        let reply = plain_exchange(running.addr, &login_request("nobody", "wrong-password")).await;
-        assert_eq!(reply.status, 401);
+        let reply = checked_login(&running, &verifier, "nobody", "wrong-password").await;
+        assert_same_reply(&ordinary, &reply);
     }
-    let limited = running
-        .events
-        .snapshot()
-        .iter()
-        .filter(|event| {
-            matches!(
-                event,
-                Event::AdminLoginLimited {
-                    scope: LimitScope::Account,
-                    ..
-                }
-            )
-        })
-        .count();
-    assert_eq!(limited, 2, "one limited event per locked account");
+    assert_eq!(limited_events(&running, LimitScope::Account), 2);
+    // Six failures from this source do not exceed the limit of six.
+    assert_eq!(limited_events(&running, LimitScope::Source), 0);
+    let nobody_locked = checked_login(&running, &verifier, "nobody", PASSWORD).await;
+    assert_same_reply(&ordinary, &nobody_locked);
 
-    // The lock ends with its time, and then the right password works.
-    tokio::time::sleep(Duration::from_millis(700)).await;
-    let reply = plain_exchange(running.addr, &login_request(ACCOUNT, PASSWORD)).await;
-    assert_eq!(reply.status, 200);
-    check_session_cookie(&reply, false);
-}
+    // The seventh failure from this source starts the source lock. bob has no
+    // failure of his own.
+    let tipped = checked_login(&running, &verifier, OTHER_ACCOUNT, "wrong-password").await;
+    assert_same_reply(&ordinary, &tipped);
+    assert_eq!(limited_events(&running, LimitScope::Source), 1);
 
-// Covers the source limit: after it starts, other accounts from the same source are
-// refused too. The delay variant and the timing are not covered yet (contract §6).
-/// spec: management.md:MGT-022 partial
-#[tokio::test]
-async fn source_limit_refuses_other_accounts_too() {
-    let limit = LoginLimitPolicy::new(10, 2, Duration::from_secs(60), Duration::from_secs(60));
-    let running = start_with(None, ROOMY_LM, UPGRADE, session_policy(), limit).await;
+    // The source lock refuses bob's right password too.
+    let refused = checked_login(&running, &verifier, OTHER_ACCOUNT, OTHER_PASSWORD).await;
+    assert_same_reply(&ordinary, &refused);
 
-    for _ in 0..3 {
-        let reply = plain_exchange(running.addr, &login_request(ACCOUNT, "wrong-password")).await;
-        assert_eq!(reply.status, 401);
-    }
-    let reply = plain_exchange(running.addr, &login_request(OTHER_ACCOUNT, OTHER_PASSWORD)).await;
-    assert_eq!(reply.status, 401);
-    assert_eq!(error_code(&reply), "login_failed");
-    assert!(running.events.snapshot().iter().any(|event| matches!(
-        event,
-        Event::AdminLoginLimited {
-            scope: LimitScope::Source,
-            ..
-        }
-    )));
+    // Both locks end at 60 s. Then only the right password gets a session.
+    clock.set(Duration::from_secs(61));
+    let wrong = checked_login(&running, &verifier, ACCOUNT, "wrong-password").await;
+    assert_same_reply(&ordinary, &wrong);
+    let unknown = checked_login(&running, &verifier, "nobody", PASSWORD).await;
+    assert_same_reply(&ordinary, &unknown);
+    let bob = checked_login(&running, &verifier, OTHER_ACCOUNT, OTHER_PASSWORD).await;
+    assert_eq!(bob.status, 200);
+    check_session_cookie(&bob, false);
+    let alice = checked_login(&running, &verifier, ACCOUNT, PASSWORD).await;
+    assert_eq!(alice.status, 200);
+    check_session_cookie(&alice, false);
+
+    // No new lock started in the meantime.
+    assert_eq!(limited_events(&running, LimitScope::Account), 2);
+    assert_eq!(limited_events(&running, LimitScope::Source), 1);
 }
 
 // Covers the expired session for the session view and for logout. The query (4.4)
