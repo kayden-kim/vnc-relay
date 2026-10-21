@@ -46,7 +46,6 @@ const STRINGS = {
     gaugeUnknown: "측정 없음",
     navLabel: "주 메뉴",
     navItemA: "운영 현황",
-    navItemB: "로그 보기",
     languageLabel: "언어 (Language)",
     tableCaption: "활성 세션 목록",
     colSession: "세션",
@@ -81,7 +80,6 @@ const STRINGS = {
     gaugeUnknown: "No reading",
     navLabel: "Main menu",
     navItemA: "Operations",
-    navItemB: "Logs",
     languageLabel: "Language (언어)",
     tableCaption: "Active session list",
     colSession: "Session",
@@ -98,7 +96,7 @@ const STRINGS = {
 const t = STRINGS[lang];
 
 const TONES = ["success", "info", "warning", "destructive", "neutral"];
-const BUTTON_VARIANTS = ["primary", "outline", "ghost", "destructive"];
+const BUTTON_VARIANTS = ["primary", "outline", "ghost", "destructive", "navbar"];
 const ICON_NAMES = [
   "check", "clock", "warning", "alert", "refresh", "logout", "back",
   "chevron-right", "chevron-down", "cancel", "globe", "grid", "brand",
@@ -170,8 +168,7 @@ function makeNavbar(sid, extra) {
   return createNavbar({
     brand: "VNC Relay",
     items: [
-      { label: t.navItemA, href: `#${sid}-a`, current: true },
-      { label: t.navItemB, href: `#${sid}-b`, desktopOnly: true },
+      { label: t.navItemA, href: `#${sid}-a`, current: true, desktopOnly: true },
     ],
     language: createLanguageSelect({
       id: `${sid}-language`,
@@ -180,7 +177,7 @@ function makeNavbar(sid, extra) {
       options: LANGUAGE_OPTIONS,
       variant: "navbar",
     }),
-    action: createButton({ variant: "ghost", label: t.logout, icon: "logout" }),
+    action: createButton({ variant: "navbar", label: t.logout, icon: "logout" }),
     label: t.navLabel,
     ...extra,
   });
@@ -351,8 +348,8 @@ function runChecks() {
     const navbar = makeNavbar("test-nav-desktop", {});
     const items = navbar.querySelectorAll(".navbar-item");
     const desktop = navbar.querySelectorAll(".navbar-desktop-only");
-    expect(items.length === 2 && desktop.length === 1);
-    expect(desktop[0].textContent.includes(t.navItemB));
+    expect(items.length === 1 && desktop.length === 1);
+    expect(desktop[0].textContent.includes(t.navItemA));
   });
 
   check("create-language-select", () => {

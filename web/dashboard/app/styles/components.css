@@ -85,6 +85,22 @@
   background: var(--color-destructive-hover);
 }
 
+/* Top bar item: a dark-bar button (logout). Its focus ring follows the navbar ring token. */
+.button-navbar {
+  padding: 0 var(--space-md);
+  background: var(--color-navbar);
+  color: var(--color-navbar-muted-foreground);
+}
+
+.button-navbar:is(:hover, .is-hover) {
+  background: var(--color-navbar-accent);
+  color: var(--color-navbar-foreground);
+}
+
+.button-navbar:is(:focus-visible, .is-focus) {
+  outline-color: var(--color-navbar-ring);
+}
+
 .button[aria-busy="true"] {
   cursor: progress;
 }

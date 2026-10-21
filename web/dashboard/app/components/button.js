@@ -1,7 +1,7 @@
 // Button: native <button> with a variant, optional icon, and busy/disabled states.
 import { icon } from './icons.js';
 
-const VARIANTS = ['primary', 'outline', 'ghost', 'destructive'];
+const VARIANTS = ['primary', 'outline', 'ghost', 'destructive', 'navbar'];
 const TYPES = ['button', 'submit', 'reset'];
 
 /**

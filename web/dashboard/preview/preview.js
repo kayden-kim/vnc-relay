@@ -44,6 +44,7 @@ const STRINGS = {
     back: "목록으로",
     endSession: "세션 종료",
     logout: "로그아웃",
+    navbarAction: "상단 막대 항목",
     textField: "텍스트 입력",
     fieldLabel: "관리자 ID",
     fieldHelp: "로그인에 쓰는 ID를 입력하세요.",
@@ -68,7 +69,6 @@ const STRINGS = {
     gaugeUnknown: "측정 없음",
     navbar: "상단 메뉴",
     navItem: "운영 현황",
-    navItemDesktop: "로그 보기",
     languageSelect: "언어 선택",
     languageLabel: "언어 (Language)",
     form: "입력 양식",
@@ -110,6 +110,7 @@ const STRINGS = {
     back: "Back to list",
     endSession: "End session",
     logout: "Sign out",
+    navbarAction: "Top bar item",
     textField: "Text field",
     fieldLabel: "Admin ID",
     fieldHelp: "Enter the ID you use to sign in.",
@@ -134,7 +135,6 @@ const STRINGS = {
     gaugeUnknown: "No reading",
     navbar: "Navbar",
     navItem: "Operations",
-    navItemDesktop: "Logs",
     languageSelect: "Language select",
     languageLabel: "Language (언어)",
     form: "Form",
@@ -169,10 +169,11 @@ const LONG_NUMBER = "18,446,744,073,709,551,615";
 
 const TONES = ["success", "info", "warning", "destructive", "neutral"];
 const BUTTON_VARIANTS = {
-  primary: { label: t.signIn },
-  outline: { label: t.refresh, icon: "refresh" },
-  ghost: { label: t.back, icon: "back" },
-  destructive: { label: t.endSession, icon: "cancel" },
+  primary: { name: t.primary, label: t.signIn },
+  outline: { name: t.outline, label: t.refresh, icon: "refresh" },
+  ghost: { name: t.ghost, label: t.back, icon: "back" },
+  destructive: { name: t.destructive, label: t.endSession, icon: "cancel" },
+  navbar: { name: t.navbarAction, label: t.logout, icon: "logout" },
 };
 const BUTTON_STATES = ["default", "hover", "focus", "disabled", "busy"];
 const LANGUAGE_OPTIONS = [
@@ -186,6 +187,7 @@ const REQUIRED_SAMPLES = [
   "button-outline-default", "button-outline-hover", "button-outline-focus", "button-outline-disabled", "button-outline-busy",
   "button-ghost-default", "button-ghost-hover", "button-ghost-focus", "button-ghost-disabled", "button-ghost-busy",
   "button-destructive-default", "button-destructive-hover", "button-destructive-focus", "button-destructive-disabled", "button-destructive-busy",
+  "button-navbar-default", "button-navbar-hover", "button-navbar-focus", "button-navbar-disabled", "button-navbar-busy",
   "button-long-ko", "button-long-en",
   "text-field-default", "text-field-error", "text-field-disabled", "text-field-help-long-ko", "text-field-help-long-en",
   "badge-success", "badge-info", "badge-warning", "badge-destructive", "badge-neutral", "badge-long-ko", "badge-long-en",
@@ -259,8 +261,8 @@ function sessionTable(rows, emptyText = t.empty) {
 }
 
 function buttonSample(variant, state) {
-  const { label, icon } = BUTTON_VARIANTS[variant];
-  return sample(`button-${variant}-${state}`, cap(t.button, t[variant], t[state]), () => {
+  const { name, label, icon } = BUTTON_VARIANTS[variant];
+  return sample(`button-${variant}-${state}`, cap(t.button, name, t[state]), () => {
     const button = createButton({
       variant,
       label: state === "busy" ? t.busyLabel : label,
@@ -271,7 +273,8 @@ function buttonSample(variant, state) {
     // Preview-only state classes. App code never adds these.
     if (state === "hover") button.classList.add("is-hover");
     if (state === "focus") button.classList.add("is-focus");
-    return button;
+    // The top bar item sits on the dark bar, so it gets the same backdrop as the navbar sample.
+    return variant === "navbar" ? onDark(button) : button;
   });
 }
 
@@ -338,12 +341,10 @@ function languageSelect(sid, variant, label) {
 function navbar(sid, itemLabel) {
   return createNavbar({
     brand: "VNC Relay",
-    items: [
-      { label: itemLabel, href: `#${sid}`, current: true },
-      { label: t.navItemDesktop, href: `#${sid}-logs`, desktopOnly: true },
-    ],
+    // The single nav item is hidden below 1024px, as DESIGN.md's top bar specifies.
+    items: [{ label: itemLabel, href: `#${sid}`, current: true, desktopOnly: true }],
     language: languageSelect(`${sid}-language`, "navbar", t.languageLabel),
-    action: createButton({ variant: "ghost", label: t.logout, icon: "logout" }),
+    action: createButton({ variant: "navbar", label: t.logout, icon: "logout" }),
     label: t.navLabel,
   });
 }
