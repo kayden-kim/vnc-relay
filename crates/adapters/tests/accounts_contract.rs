@@ -381,10 +381,7 @@ fn keeps_the_file_when_the_change_fails_the_lock_exists_or_writing_fails() {
 fn a_failed_change_returns_its_error_and_warns_when_the_lock_cannot_be_removed() {
     let dir = temp_dir("lock-cleanup");
     let path = dir.join("admin-accounts.toml");
-    let original = format!(
-        "version = 1\n{}",
-        account("alice", &phc("m=19456,t=2,p=1"))
-    );
+    let original = format!("version = 1\n{}", account("alice", &phc("m=19456,t=2,p=1")));
     std::fs::write(&path, &original).unwrap_or_else(|e| panic!("write: {e}"));
     let file = AccountsFile::new(path.clone());
     let lock = dir.join("admin-accounts.toml.lock");

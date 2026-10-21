@@ -25,6 +25,7 @@ const APPROVED: &[&str] = &[
     "tokio-rustls",
     "tokio-tungstenite",
     "toml",
+    "windows-sys",
 ];
 
 enum External {
