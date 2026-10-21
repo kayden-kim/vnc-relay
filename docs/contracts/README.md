@@ -11,4 +11,8 @@
 | [Repeater 초기 교환 v1](repeater-handshake-v1.md) | Draft | UltraVNC Viewer·Server, 외부 WebSocket 클라이언트 → `vnc-relay` 진입점 | 없음(Markdown 표) | [중계](../specs/relay.md), [WS·WSS](../specs/websocket.md) |
 | [운영 로그와 상태 엔드포인트 v1](ops-info-v1.md) | Active | `vnc-relay serve` → 운영자의 로그 수집·상태 확인 도구 | 없음(Markdown 표) | [운영](../specs/operations.md), [관리](../specs/management.md) |
 
+## 호환성 검증 기록
+
+[Repeater·UltraVNC·noVNC 호환성 검증 기록](repeater-compat-record.md)은 관찰 허용 검토 결과, 검증 대상 버전과 배포본 해시, 관찰 증거를 남긴다. 관찰 증거는 아직 없다(미실행).
+
 작성 규칙은 [AGENTS.md](AGENTS.md)를 따른다.
