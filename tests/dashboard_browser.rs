@@ -1,0 +1,385 @@
+//! Browser tests of the dashboard pages. Each page runs its own checks in the
+//! browser and sets `data-result`. These tests start headless Chromium with
+//! `--dump-dom` and read the result from the dumped DOM.
+//!
+//! Set `DASHBOARD_BROWSER` to the browser executable. Without it, the tests
+//! look for Chrome or Edge in the usual install folders and on `PATH`. When no
+//! browser is found, the tests fail. They are never skipped.
+//!
+//! The static server below repeats the policy of `xtask/src/dashboard_serve.rs`
+//! (docs/contracts/management-api-v1.md §1.11, docs/conventions/frontend.md
+//! §1.2). Keep the two in sync.
+
+use std::fs::{self, File};
+use std::io::{self, Read, Write};
+use std::net::{TcpListener, TcpStream};
+use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::thread;
+use std::time::{Duration, Instant};
+
+/// Same policy string as `xtask/src/dashboard_serve.rs` (frontend.md §1.2, Q37).
+const CSP: &str = "default-src 'self'; frame-ancestors 'none'";
+const WIDTHS: [u32; 6] = [1280, 1024, 1023, 768, 390, 320];
+const LANGS: [&str; 2] = ["ko", "en"];
+const RUN_LIMIT: Duration = Duration::from_secs(60);
+const IO_TIMEOUT: Duration = Duration::from_secs(5);
+const MAX_HEAD: usize = 8 * 1024;
+
+// Chrome comes first: Edge's launcher can exit before it writes the DOM dump.
+const ABSOLUTE_BROWSERS: [&str; 4] = [
+    r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+    r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+    r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+    r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
+];
+const PATH_BROWSERS: [&str; 5] = [
+    "google-chrome",
+    "chromium",
+    "chromium-browser",
+    "msedge",
+    "microsoft-edge",
+];
+
+/// Shown when no browser is found. The tests fail with this message.
+const MISSING_BROWSER: &str = concat!(
+    "Chromium is required for the dashboard browser tests. ",
+    "Install Edge or Chrome, or set DASHBOARD_BROWSER to the browser executable.",
+);
+
+/// Makes temp folder names unique across the runs of this test process.
+static RUN_COUNTER: AtomicUsize = AtomicUsize::new(0);
+
+#[test]
+fn dashboard_components_pass_in_browser() {
+    check_page("/tests/components.html");
+}
+
+#[test]
+fn dashboard_preview_pass_in_browser() {
+    check_page("/preview/index.html");
+}
+
+/// Runs one page at every width and language, then reports all failing runs at once.
+fn check_page(page: &str) {
+    let browser = match find_browser() {
+        Ok(browser) => browser,
+        Err(message) => panic!("{message}"),
+    };
+    let port = start_server();
+    let mut failures = Vec::new();
+    let mut runs = 0_usize;
+    for lang in LANGS {
+        for width in WIDTHS {
+            runs += 1;
+            let url = format!("http://127.0.0.1:{port}{page}?lang={lang}");
+            let label = format!("{page} width={width} lang={lang}");
+            match dump_dom(&browser, &url, width) {
+                Ok(dom) if dom.contains("data-result=\"pass\"") => {}
+                Ok(dom) => failures.push(describe(&label, &dom)),
+                Err(message) => failures.push(format!("{label}: {message}")),
+            }
+        }
+    }
+    assert!(
+        failures.is_empty(),
+        "{} of {runs} browser runs failed:\n{}",
+        failures.len(),
+        failures.join("\n")
+    );
+}
+
+/// Finds the browser: `DASHBOARD_BROWSER`, then the usual Edge and Chrome
+/// install paths, then `PATH`.
+fn find_browser() -> Result<PathBuf, String> {
+    if let Some(value) = std::env::var_os("DASHBOARD_BROWSER") {
+        let path = PathBuf::from(value);
+        return if path.is_file() {
+            Ok(path)
+        } else {
+            Err(format!(
+                "DASHBOARD_BROWSER does not point to a file: {}",
+                path.display()
+            ))
+        };
+    }
+    for candidate in ABSOLUTE_BROWSERS {
+        let path = PathBuf::from(candidate);
+        if path.is_file() {
+            return Ok(path);
+        }
+    }
+    for name in PATH_BROWSERS {
+        if let Some(path) = on_path(name) {
+            return Ok(path);
+        }
+    }
+    Err(MISSING_BROWSER.to_string())
+}
+
+/// Finds `name` (or `name.exe`) in a `PATH` folder.
+fn on_path(name: &str) -> Option<PathBuf> {
+    let paths = std::env::var_os("PATH")?;
+    std::env::split_paths(&paths)
+        .flat_map(|dir| [dir.join(name), dir.join(format!("{name}.exe"))])
+        .find(|candidate| candidate.is_file())
+}
+
+/// Runs headless Chromium once and returns the DOM it dumps.
+fn dump_dom(browser: &Path, url: &str, width: u32) -> Result<String, String> {
+    let run = RUN_COUNTER.fetch_add(1, Ordering::Relaxed);
+    let dir =
+        std::env::temp_dir().join(format!("vr-dashboard-browser-{}-{run}", std::process::id()));
+    fs::create_dir_all(&dir)
+        .map_err(|error| format!("cannot create {}: {error}", dir.display()))?;
+    let dom_path = dir.join("dom.html");
+    let result = run_chromium(browser, url, width, &dir, &dom_path);
+    // Best effort: the browser may still hold files for a moment after exit.
+    let _ = fs::remove_dir_all(&dir);
+    result
+}
+
+/// Starts the browser and waits up to `RUN_LIMIT`. The DOM goes to a file, not a
+/// pipe, so a full pipe cannot block the wait loop.
+fn run_chromium(
+    browser: &Path,
+    url: &str,
+    width: u32,
+    dir: &Path,
+    dom_path: &Path,
+) -> Result<String, String> {
+    let dom_file = File::create(dom_path)
+        .map_err(|error| format!("cannot create {}: {error}", dom_path.display()))?;
+    let mut child = Command::new(browser)
+        .args([
+            "--headless",
+            "--disable-gpu",
+            "--no-first-run",
+            "--no-default-browser-check",
+        ])
+        .arg(format!("--user-data-dir={}", dir.join("profile").display()))
+        .arg(format!("--window-size={width},900"))
+        .args(["--virtual-time-budget=10000", "--dump-dom", url])
+        .stdin(Stdio::null())
+        .stdout(Stdio::from(dom_file))
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(|error| format!("cannot start {}: {error}", browser.display()))?;
+    let started = Instant::now();
+    loop {
+        match child.try_wait() {
+            Ok(Some(_)) => break,
+            Ok(None) if started.elapsed() < RUN_LIMIT => thread::sleep(Duration::from_millis(100)),
+            Ok(None) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(format!(
+                    "browser did not exit within {} s",
+                    RUN_LIMIT.as_secs()
+                ));
+            }
+            Err(error) => return Err(format!("cannot wait for browser: {error}")),
+        }
+    }
+    let bytes = fs::read(dom_path).map_err(|error| format!("cannot read DOM dump: {error}"))?;
+    if bytes.is_empty() {
+        return Err(format!("{} wrote no DOM dump", browser.display()));
+    }
+    Ok(String::from_utf8_lossy(&bytes).into_owned())
+}
+
+/// One line for a failing run: the result and failure ids the page reported.
+fn describe(label: &str, dom: &str) -> String {
+    let result = attribute(dom, "data-result").unwrap_or_else(|| "missing".to_string());
+    let failures = attribute(dom, "data-failures").unwrap_or_default();
+    let csp = attribute(dom, "data-csp-violations")
+        .map(|count| format!(" data-csp-violations={count}"))
+        .unwrap_or_default();
+    format!("{label}: data-result={result} data-failures=\"{failures}\"{csp}")
+}
+
+/// Value of the first `name="…"` attribute in the dumped DOM.
+fn attribute(dom: &str, name: &str) -> Option<String> {
+    let needle = format!(" {name}=\"");
+    let start = dom.find(needle.as_str())? + needle.len();
+    let end = dom[start..].find('"')? + start;
+    Some(dom[start..end].to_string())
+}
+
+/// Starts the static server on a free loopback port. It runs until the test process exits.
+fn start_server() -> u16 {
+    let dashboard = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("web")
+        .join("dashboard");
+    let Ok(root) = fs::canonicalize(&dashboard) else {
+        panic!("cannot open {}", dashboard.display());
+    };
+    let Ok(listener) = TcpListener::bind(("127.0.0.1", 0)) else {
+        panic!("cannot bind 127.0.0.1");
+    };
+    let Ok(addr) = listener.local_addr() else {
+        panic!("cannot read the bound address");
+    };
+    thread::spawn(move || {
+        for stream in listener.incoming().flatten() {
+            let root = root.clone();
+            thread::spawn(move || {
+                let _ = serve_connection(stream, &root);
+            });
+        }
+    });
+    addr.port()
+}
+
+/// Handles one connection: read the request, write one response, close.
+fn serve_connection(mut stream: TcpStream, root: &Path) -> io::Result<()> {
+    stream.set_read_timeout(Some(IO_TIMEOUT))?;
+    stream.set_write_timeout(Some(IO_TIMEOUT))?;
+    let Some(head) = read_head(&mut stream)? else {
+        return write_reply(&mut stream, "400 Bad Request", &[], &[], false);
+    };
+    let Some((method, target)) = request_line(&head) else {
+        return write_reply(&mut stream, "400 Bad Request", &[], &[], false);
+    };
+    if method != "GET" && method != "HEAD" {
+        let allow = [("Allow", "GET, HEAD")];
+        return write_reply(&mut stream, "405 Method Not Allowed", &allow, &[], false);
+    }
+    let path = target.split(['?', '#']).next().unwrap_or_default();
+    if path == "/" {
+        let location = [("Location", "/preview/index.html")];
+        return write_reply(&mut stream, "302 Found", &location, &[], false);
+    }
+    let file = match resolve(root, path) {
+        Ok(file) => file,
+        Err(status) => return write_reply(&mut stream, status, &[], &[], false),
+    };
+    let (Some(kind), Ok(body)) = (content_type(&file), fs::read(&file)) else {
+        return write_reply(&mut stream, "404 Not Found", &[], &[], false);
+    };
+    let kind = [("Content-Type", kind)];
+    write_reply(&mut stream, "200 OK", &kind, &body, method == "GET")
+}
+
+/// Reads up to the blank line that ends the head. `None` when the head is too
+/// long or the client closes first.
+fn read_head(stream: &mut TcpStream) -> io::Result<Option<Vec<u8>>> {
+    let mut head = Vec::new();
+    let mut chunk = [0_u8; 1024];
+    loop {
+        if head.windows(4).any(|window| window == b"\r\n\r\n") {
+            return Ok(Some(head));
+        }
+        if head.len() >= MAX_HEAD {
+            return Ok(None);
+        }
+        let want = chunk.len().min(MAX_HEAD - head.len());
+        let read = stream.read(&mut chunk[..want])?;
+        if read == 0 {
+            return Ok(None);
+        }
+        head.extend_from_slice(&chunk[..read]);
+    }
+}
+
+/// Method and raw request target. `None` when the request line is malformed.
+fn request_line(head: &[u8]) -> Option<(&str, &str)> {
+    let end = head.windows(2).position(|pair| pair == b"\r\n")?;
+    let line = std::str::from_utf8(&head[..end]).ok()?;
+    let mut parts = line.split(' ');
+    let (method, target, version) = (parts.next()?, parts.next()?, parts.next()?);
+    let well_formed = parts.next().is_none()
+        && !method.is_empty()
+        && target.starts_with('/')
+        && version.starts_with("HTTP/1.");
+    well_formed.then_some((method, target))
+}
+
+/// Maps a request path to a file under `root`. `Err` carries the status line:
+/// 400 for a forbidden sequence, 404 for anything missing or outside the root.
+fn resolve(root: &Path, raw: &str) -> Result<PathBuf, &'static str> {
+    let decoded = percent_decode(raw).ok_or("400 Bad Request")?;
+    if decoded.contains("..") || decoded.contains(['\\', '\0', ':']) {
+        return Err("400 Bad Request");
+    }
+    let mut path = root.to_path_buf();
+    for part in decoded.split('/').filter(|part| !part.is_empty()) {
+        path.push(part);
+    }
+    let found = fs::canonicalize(&path).map_err(|_| "404 Not Found")?;
+    let file = if found.is_dir() {
+        fs::canonicalize(found.join("index.html")).map_err(|_| "404 Not Found")?
+    } else {
+        found
+    };
+    if file.starts_with(root) && file.is_file() {
+        Ok(file)
+    } else {
+        Err("404 Not Found")
+    }
+}
+
+/// Decodes `%XX` escapes. `None` for a broken escape or bytes that are not UTF-8.
+fn percent_decode(raw: &str) -> Option<String> {
+    let bytes = raw.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut index = 0;
+    while index < bytes.len() {
+        if bytes[index] == b'%' {
+            let high = hex_value(*bytes.get(index + 1)?)?;
+            let low = hex_value(*bytes.get(index + 2)?)?;
+            out.push(high * 16 + low);
+            index += 3;
+        } else {
+            out.push(bytes[index]);
+            index += 1;
+        }
+    }
+    String::from_utf8(out).ok()
+}
+
+fn hex_value(byte: u8) -> Option<u8> {
+    (byte as char).to_digit(16).map(|digit| digit as u8)
+}
+
+/// Content type of the extensions the dashboard serves. Other files are not served.
+fn content_type(path: &Path) -> Option<&'static str> {
+    let extension = path.extension()?.to_str()?.to_ascii_lowercase();
+    match extension.as_str() {
+        "html" => Some("text/html; charset=utf-8"),
+        "css" => Some("text/css; charset=utf-8"),
+        "js" => Some("text/javascript; charset=utf-8"),
+        "svg" => Some("image/svg+xml"),
+        _ => None,
+    }
+}
+
+/// Writes one response with the common headers. A HEAD response keeps the
+/// `Content-Length` of the body but sends no body.
+fn write_reply(
+    stream: &mut TcpStream,
+    status: &str,
+    extra: &[(&str, &str)],
+    body: &[u8],
+    send_body: bool,
+) -> io::Result<()> {
+    let mut head = format!("HTTP/1.1 {status}\r\n");
+    for (name, value) in extra {
+        head.push_str(&format!("{name}: {value}\r\n"));
+    }
+    head.push_str(&format!(
+        "Content-Security-Policy: {CSP}\r\n\
+         X-Content-Type-Options: nosniff\r\n\
+         Cache-Control: no-store\r\n\
+         Referrer-Policy: no-referrer\r\n\
+         Content-Length: {}\r\n\
+         Connection: close\r\n\r\n",
+        body.len()
+    ));
+    stream.write_all(head.as_bytes())?;
+    if send_body {
+        stream.write_all(body)?;
+    }
+    stream.flush()
+}
