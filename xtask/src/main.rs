@@ -3,19 +3,33 @@
 //! - `cargo xtask scenarios [--require-all]`: scenario coverage report
 //!   (docs/conventions/testing.md section 7).
 //! - `cargo xtask layers`: layer dependency check (docs/architectures/code-map.md).
+//! - `cargo xtask tokens [--check]`: token CSS from DESIGN.md
+//!   (docs/conventions/frontend.md section 2).
+//! - `cargo xtask dashboard-serve [--port N]`: local preview server for `web/dashboard/`
+//!   (docs/architectures/xtask.md).
 
 mod cargo;
+mod dashboard_serve;
 mod layers;
 mod scenarios;
+mod tokens;
 
 use std::fmt;
 use std::io::Write;
 use std::process::ExitCode;
 
-const USAGE: &str = "usage: cargo xtask scenarios [--require-all] | cargo xtask layers";
+const USAGE: &str = "usage: cargo xtask scenarios [--require-all] | cargo xtask layers | cargo xtask tokens [--check] | cargo xtask dashboard-serve [--port N]";
 
 /// Exit code for a usage error, same as the product CLI (cli-v1 §2.1).
 const EXIT_USAGE: u8 = 2;
+
+/// Port of the local dashboard preview when `--port` is not given.
+const DEFAULT_DASHBOARD_PORT: u16 = 8080;
+
+fn usage() -> ExitCode {
+    let _ = writeln!(std::io::stderr(), "{USAGE}");
+    ExitCode::from(EXIT_USAGE)
+}
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -24,10 +38,14 @@ fn main() -> ExitCode {
         ["scenarios"] => scenarios::run(false),
         ["scenarios", "--require-all"] => scenarios::run(true),
         ["layers"] => layers::run(),
-        _ => {
-            let _ = writeln!(std::io::stderr(), "{USAGE}");
-            return ExitCode::from(EXIT_USAGE);
-        }
+        ["tokens"] => tokens::run(false),
+        ["tokens", "--check"] => tokens::run(true),
+        ["dashboard-serve"] => dashboard_serve::run(DEFAULT_DASHBOARD_PORT),
+        ["dashboard-serve", "--port", port] => match port.parse::<u16>() {
+            Ok(port) => dashboard_serve::run(port),
+            Err(_) => return usage(),
+        },
+        _ => return usage(),
     };
     match result {
         Ok(true) => ExitCode::SUCCESS,
