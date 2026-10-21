@@ -24,8 +24,9 @@
   justify-content: center;
   gap: var(--space-sm);
   min-width: var(--space-target-min);
-  height: var(--space-control-height);
-  padding: 0 var(--space-lg);
+  min-height: var(--space-control-height);
+  max-width: 100%;
+  padding: var(--space-xs) var(--space-lg);
   border: var(--space-border-width) solid transparent;
   border-radius: var(--radius-md);
   font-family: var(--type-button-family);
@@ -33,7 +34,8 @@
   font-weight: var(--type-button-weight);
   line-height: var(--type-button-line);
   text-decoration: none;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  text-align: center;
   cursor: pointer;
 }
 
@@ -158,7 +160,8 @@
   font-size: var(--type-label-size);
   font-weight: var(--type-label-weight);
   line-height: var(--type-label-line);
-  white-space: nowrap;
+  max-width: 100%;
+  overflow-wrap: anywhere;
 }
 
 .badge-tone-success {
@@ -515,8 +518,8 @@
   position: relative;
   display: inline-flex;
   align-items: center;
-  height: var(--space-control-height);
-  padding: 0 var(--space-md);
+  min-height: var(--space-control-height);
+  padding: var(--space-xs) var(--space-md);
   border-radius: var(--radius-md);
   background: var(--color-navbar);
   color: var(--color-navbar-muted-foreground);
@@ -525,7 +528,8 @@
   font-weight: var(--type-button-weight);
   line-height: var(--type-button-line);
   text-decoration: none;
-  white-space: nowrap;
+  max-width: 100%;
+  overflow-wrap: anywhere;
 }
 
 .navbar-item:is(:hover, .is-hover),
@@ -778,12 +782,6 @@
 
   .navbar-brand {
     margin-right: 0;
-  }
-
-  .navbar,
-  .navbar-nav,
-  .navbar-tools {
-    flex-wrap: nowrap;
   }
 
   .navbar-desktop-only {
