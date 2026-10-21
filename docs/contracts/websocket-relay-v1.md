@@ -245,6 +245,8 @@ Close 예: 대기 시간이 W를 넘으면 서버는 코드 `4001`과 reason `wa
 
 | 대상 | 환경 | 명령 | 결과 |
 | --- | --- | --- | --- |
+| 커밋 `c1c24d2`(작업 3.2 업그레이드 단계, 검토 결함 5건 수정 뒤). 작업 트리에 `docs/contracts/config-v1.md`의 커밋 안 된 변경 1개가 있었으나 이 작업과 무관하다 | Ubuntu 24.04.4(WSL2), Rust 1.99.1, `CARGO_TARGET_DIR=~/vnc-relay-target` | `wsl -d Ubuntu -- bash /mnt/d/vr-tools/vr-full.sh` | 통과(`ALL PASSED`). `tests/websocket.rs` 14건과 `src/upgrade.rs` 단위 테스트 4건(`header_names_must_be_tokens`, `control_characters_in_the_head_are_refused`, `syntax_is_checked_before_the_path`, `wrong_version_is_refused_before_a_bad_key`) 모두 통과. 시나리오 보고: 통과 9, 부분 22, 미실행 0, 미연결 117, 오류 0, 판정 통과 |
+| 같은 커밋 `c1c24d2`, 같은 작업 트리 | Windows 11 Pro 10.0.26200 x64, Rust 1.99.1(`x86_64-pc-windows-msvc`), Visual Studio Build Tools 2022 17.14.37806.7, `AWS_LC_SYS_PREBUILT_NASM=1` | `powershell -NoProfile -ExecutionPolicy Bypass -File D:/vr-tools/vr-win.ps1 -Only all` | 통과(`ALL PASSED (all)`). `tests/websocket.rs` 14건과 `src/upgrade.rs` 단위 테스트 4건 모두 통과. 시나리오 보고: 통과 8, 부분 22, 미실행 1(OPS-007: Unix 전용 `closes_and_logs_every_held_connection_when_stopping`), 미연결 117, 오류 0, 판정 통과 |
 
 ## 6. 초안을 확정하기 전에 해결할 사항
 

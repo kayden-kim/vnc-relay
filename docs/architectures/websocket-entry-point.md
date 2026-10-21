@@ -8,7 +8,7 @@
 | --- | --- |
 | 구조 시점 | Current |
 | 문서 상태 | Draft |
-| 구현 대조 | 미대조. 최종 검증 뒤 [대조 기록](#대조-기록)에 적는다. |
+| 구현 대조 | Verified — [대조 기록](#대조-기록) (기준 커밋 `c1c24d2`) |
 | 코드 위치 | `crates/adapters/src/websocket.rs`(`WsPolicy`, `WsEntryPoint`, 연결 처리, 101 뒤 보류), `crates/adapters/src/upgrade.rs`(머리 읽기, 검사, 101 응답, 거절 응답), `crates/adapters/src/net.rs`(`accept_connections`, `AcceptPolicy`), `crates/adapters/src/tls_listener.rs`(`TlsIo`), `crates/domain/src/origin.rs`(`Origin`), `src/serve.rs`(WS·WSS 진입점 시작) |
 | 코드 지도 | [코드 지도 2절](code-map.md#2-코드-위치와-구성요소), [3절](code-map.md#3-진입점) |
 | 관련 스펙 | [WebSocket 스펙 7절](../specs/websocket.md#7-수용-테스트)의 WS-012(일부), WS-013(일부), WS-014, WS-015(WS·WSS), WS-021(일부), WS-022(테스트 없음), WS-023(WSS), WS-027(WS·WSS); [운영 스펙 7절](../specs/operations.md#7-수용-테스트)의 OPS-006(일부), OPS-037(WS·WSS, 일부) |
@@ -179,6 +179,8 @@ flowchart LR
 | --- | --- | --- | --- |
 | 작업 3.2 업그레이드 단계(기준 커밋 `ba80d7b`, 작업 트리 깨끗함. 결함 수정 전 대조) | Ubuntu 24.04.4(WSL2), Rust 1.99.1 | 1~8절의 파일·심볼을 실제 코드와 대조했다. 접속 테스트 `crates/adapters/tests/websocket.rs` 10개(표시 8개, 표시 없음 2개), `tests/tls.rs`의 WS-013 테스트 3개(일부), 검사 단위 테스트(`upgrade.rs`)를 확인했다. `wsl -d Ubuntu -- bash /mnt/d/vr-tools/vr-dev.sh`와 `vr-full.sh`를 실행했다. | `vr-dev.sh` exit=0. `vr-full.sh` ALL PASSED. 시나리오 148건: 통과 7, 부분 22, 실패 0, 미실행 0, 미연결 119. WS-013의 WSS 사건 기록(`tls_failed`)은 테스트가 없다. |
 | 작업 3.2 업그레이드 단계(기준 커밋 `ba80d7b`, 작업 트리 깨끗함. 결함 수정 전 대조) | Windows 11(10.0.26200), Rust 1.99.1(`x86_64-pc-windows-msvc`) | `powershell -NoProfile -ExecutionPolicy Bypass -File D:/vr-tools/vr-win.ps1 -Only all`을 실행했다. | `ALL PASSED (all)`. 시나리오 148건: 통과 6, 부분 22, 실패 0, 미실행 1, 미연결 119. 미실행 1건은 Unix 전용 테스트로 보인다([INFERENCE]). |
+| 작업 3.2 업그레이드 단계(기준 커밋 `c1c24d2`, 문서 커밋 `9c07cf4` 뒤. 검토 결함 5건 수정 뒤. 작업 트리에 `docs/contracts/config-v1.md`의 커밋 안 된 변경 1개가 있었으나 이 작업과 무관하다) | Ubuntu 24.04.4(WSL2), Rust 1.99.1 | 1~8절의 파일·심볼(`WsPolicy`, `WsEntryPoint`, `connection`, `upgrade`, `hold_upgraded`, `refuse`, `read_head`, `check`, `Refusal`, `switching_protocols`, `Wire`, `TlsIo`, `Origin`, `accept_connections`, `AcceptPolicy`, `ORIGIN_MAX_BYTES`, `Event::ConnectionRejected`, `Event::ConnectionAborted`, `AbortReason`, `ConnectionErrorKind::TlsFailed`, `Stage::InitialExchange`, `listen_until_shutdown`)을 실제 코드와 대조했다. 4절의 `check` 검사 순서와 3절의 `Refusal` 응답 표를 코드와 대조했다. 접속 테스트 `crates/adapters/tests/websocket.rs` 14건과 검사 단위 테스트 4건을 확인했다. `wsl -d Ubuntu -- bash /mnt/d/vr-tools/vr-full.sh`를 실행했다. | 불일치 0건. `vr-full.sh` ALL PASSED. 테스트 223건 통과, 실패 0. 시나리오 148건: 통과 9, 부분 22, 실패 0, 미실행 0, 미연결 117. 오류 0건. |
+| 같은 커밋 `c1c24d2`, 같은 작업 트리 | Windows 11(10.0.26200), Rust 1.99.1(`x86_64-pc-windows-msvc`), Visual Studio Build Tools 2022 17.14.37806.7 | `powershell -NoProfile -ExecutionPolicy Bypass -File D:/vr-tools/vr-win.ps1 -Only all`을 실행했다. | 불일치 0건. `ALL PASSED (all)`. 테스트 207건 통과, 실패 0. 시나리오 148건: 통과 8, 부분 22, 실패 0, 미실행 1, 미연결 117. 미실행 1건은 OPS-007(Unix 전용 `closes_and_logs_every_held_connection_when_stopping`)이다. 오류 0건. |
 
 ### 검토 결함 기록
 
