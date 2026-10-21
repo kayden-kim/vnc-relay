@@ -2,7 +2,7 @@
 
 대시보드 프런트엔드(`web/dashboard/`)가 [프런트엔드 컨벤션](../conventions/frontend.md)과 [디자인 기준](../design/DESIGN.md)을 지키는지 확인한다. 완료 상태는 4절의 모든 행이 실제 결과와 함께 "통과"로 기록된 상태다. 수동 검토를 하지 못한 행은 "미실행"과 이유를 적고, 완료로 표시하지 않는다.
 
-이 문서는 Draft다. 아직 `web/dashboard/`, `tokens` 명령, 테스트 파일이 없다. 그래서 이 절차를 실행한 기록은 없다.
+이 문서는 Draft다. 절차의 방법은 사용자 결정 2026-10-22(Q32)~(Q38)를 따른다. 아직 `web/dashboard/`, `tokens` 명령, 테스트 파일이 없어 이 절차를 실행하지 않았다. 그래서 실행 기록은 없다. 실행 기록이 쌓인 뒤 상태를 다시 정한다.
 
 | 항목 | 값 |
 | --- | --- |
@@ -14,28 +14,28 @@
 
 ## 1. 대상과 영향
 
-- 대상: `web/dashboard/` 정적 파일, `docs/design/DESIGN.md`의 YAML 토큰, `docs/design/mockups/dashboard.html`의 토큰 블록, 대시보드 테스트 파일(제안: `tests/dashboard_assets.rs`, `tests/dashboard_browser.rs`)
+- 대상: `web/dashboard/` 정적 파일, `docs/design/DESIGN.md`의 YAML 토큰, `docs/design/mockups/dashboard.html`의 토큰 블록, 대시보드 테스트 파일(파일 이름은 이 문서의 기본값: `tests/dashboard_assets.rs`, `tests/dashboard_browser.rs`)
 - 예상 사용자 영향: 없음. 자동 검사는 파일을 읽고 `target/` 아래에 결과를 쓴다. 운영 서버를 멈추지 않는다.
 - 작업 허용 시간: 자동 검사는 서버 중단이 필요 없다. 수동 검토(3.4~3.7절)는 검토자의 시간이 필요하다.
-- 이 문서는 사용자 결정 2026-10-22(Q09)에 따라 작업 0.9와 함께 초안으로 작성했다.
+- 이 문서는 사용자 결정 2026-10-22(Q09)에 따라 작업 0.9와 함께 작성했다. 절차는 사용자 결정 2026-10-22(Q32)~(Q38)를 따른다.
 
 ## 2. 전제 조건
 
 - [ ] 검증할 커밋을 정했고, `git status --short` 결과를 검증 기록에 적었다.
 - [ ] 고정 Rust 툴체인 1.99.1을 쓴다(`rust-toolchain.toml`).
-- [ ] Chromium 계열 브라우저 실행 파일 경로를 환경 변수 `DASHBOARD_BROWSER`에 넣었다. 필수 여부는 [FE-TBD-006](../conventions/frontend.md#8-미결정-사항)에서 정한다.
-- [ ] Firefox·Safari 수동 검토에 쓸 최신 버전을 정했다([FE-TBD-009](../conventions/frontend.md#8-미결정-사항)).
-- [ ] (선택) Node.js와 고정 버전의 `@google/design.md`를 준비했다([FE-TBD-012](../conventions/frontend.md#8-미결정-사항)).
+- [ ] Chromium(Chrome 또는 Edge) 실행 파일 경로를 환경 변수 `DASHBOARD_BROWSER`에 넣었다. 두 OS 모두 필수이며, 없으면 브라우저 시험은 실패한다(사용자 결정 2026-10-22(Q35)). 환경 변수 이름은 이 문서의 기본값이다.
+- [ ] Firefox·Safari 수동 검토에 쓸 버전을 정했다. 실제 버전은 검증 기록에 적는다(사용자 결정 2026-10-22(Q36)).
+- [ ] (선택) Node.js와 고정 버전의 `@google/design.md`를 준비했다. 고정 버전은 검증 기록에 적는다(사용자 결정 2026-10-22(Q38)).
 - [ ] 수동 검토자와 스크린 리더 환경을 정했다.
 
-주의: `cargo xtask tokens`, `cargo xtask dashboard-serve`, `cargo test --test dashboard_assets`, `cargo test --test dashboard_browser`는 아직 저장소에 없다. 채택되고 구현된 뒤에만 실행한다. 지금 실행하면 실패하며, 그 실패를 대시보드 결함으로 기록하지 않는다.
+주의: `cargo xtask tokens`, `cargo xtask dashboard-serve`, `cargo test --test dashboard_assets`, `cargo test --test dashboard_browser`는 아직 저장소에 없다. 구현된 뒤에만 실행한다. 지금 실행하면 실패하며, 그 실패를 대시보드 결함으로 기록하지 않는다.
 
 ## 3. 절차
 
 - 실행 환경: Ubuntu 24.04 LTS x64는 bash, Windows 11 x64는 PowerShell을 쓴다. 지원 환경은 [개발 환경·검증 how-to 2절](set-up-and-verify.md#2-전제-조건)을 따른다.
 - 실행 위치: 저장소 루트
 - 바꿔 넣을 값: `DASHBOARD_BROWSER`에는 Chromium 실행 파일 경로를 넣는다. 확인하려면 경로를 직접 실행해 `--version`이 버전을 출력하는지 본다. 경로에 공백이 있으면 큰따옴표로 감싼다.
-- 최대 대기 시간: 자동 명령은 10분(제안)을 넘기면 중단하고 5절을 따른다. 수동 검토에는 시간 한도가 없다.
+- 최대 대기 시간: 자동 명령은 10분(이 문서의 기본값)을 넘기면 중단하고 5절을 따른다. 수동 검토에는 시간 한도가 없다.
 
 ### 3.1 토큰과 문서 확인
 
@@ -51,10 +51,10 @@
 
 2. (선택) DESIGN.md 린트를 실행한다.
 
-   영향: 없음. `npx`가 패키지를 내려받는다. 버전을 고정하면 `@google/design.md@<고정 버전>`으로 바꾼다.
+   영향: 없음. `npx`가 패키지를 내려받는다. 고정 버전은 아직 정하지 않았다. 처음 실행할 때 정하고 검증 기록에 적는다.
 
    ```shell
-   npx -y -p @google/design.md designmd lint docs/design/DESIGN.md
+   npx -y -p @google/design.md@<고정 버전> designmd lint docs/design/DESIGN.md
    ```
 
    기대 결과: 오류 0건. 경고 수와 정보 수를 검증 기록에 적는다. 2026-10-20 실행 기록은 오류 0건, 경고 18건, 정보 1건이다([디자인 기준 검증 절](../design/DESIGN.md#검증)).
@@ -75,13 +75,13 @@
 
 1. 헤드리스 Chromium으로 브라우저 테스트를 실행한다.
 
-   영향: 임시 브라우저 프로필을 만든다. 실행이 끝나면 지운다(제안).
+   영향: 임시 브라우저 프로필을 만든다. 실행이 끝나면 지운다(이 문서의 기본값).
 
    ```shell
    cargo test --test dashboard_browser
    ```
 
-   기대 결과: `test result: ok.` 줄이 나온다. 각 테스트 페이지의 `data-result` 값이 `pass`다. `DASHBOARD_BROWSER`가 없거나 실행되지 않으면 테스트가 실패해야 한다([FE-TBD-006](../conventions/frontend.md#8-미결정-사항) 제안).
+   기대 결과: `test result: ok.` 줄이 나온다. 각 테스트 페이지의 `data-result` 값이 `pass`다. `DASHBOARD_BROWSER`가 없거나 실행되지 않으면 테스트가 실패해야 한다(사용자 결정 2026-10-22(Q35)).
 
 2. 시나리오 보고서를 갱신한다.
 
@@ -91,11 +91,11 @@
    cargo xtask scenarios
    ```
 
-   기대 결과: 자동으로 연결된 DASH 항목의 상태가 `통과`다. `부분` 표식이 붙으면 검증 기록에 이유를 적는다. 현재 저장소에서는 DASH 25건이 모두 `미연결`이다([xtask 모듈 설계 8절](../architectures/xtask.md)).
+   기대 결과: 자동으로 연결된 DASH 항목의 상태가 `통과`다. `부분` 표식이 붙으면 검증 기록에 이유를 적는다. 현재 저장소에서는 DASH 시나리오가 모두 `미연결`이다. 브라우저 테스트 파일이 생기고 표식이 붙으면 연결된다([테스트 컨벤션 7절](../conventions/testing.md#7-테스트와-스펙-시나리오-연결)).
 
 ### 3.4 폭별 스크린샷과 시안 대조 (수동)
 
-1. 미리보기 서버를 실행한다(제안).
+1. 미리보기 서버를 실행한다(사용자 결정 2026-10-22(Q34)).
 
    영향: 루프백 주소의 포트 하나를 연다. Ctrl+C로 멈춘다.
 
@@ -111,7 +111,7 @@
 
    기대 결과: 페이지에 가로 스크롤이 없다. 화면 상태는 [화면 스펙 4절](../specs/dashboard.md#4-화면-상태와-갱신)의 SCR-001·SCR-002·SCR-003이다.
 
-3. 구현 스크린샷과 시안 스크린샷을 나란히 두고 차이를 적는다.
+3. 구현 스크린샷과 시안 스크린샷을 나란히 두고 차이를 적는다. 자동 픽셀 비교는 하지 않는다(사용자 결정 2026-10-22(Q36)).
 
    영향: 없음.
 
@@ -153,13 +153,13 @@
 
 ### 3.7 다른 브라우저와 실기기 확인 (수동)
 
-1. Firefox와 Safari에서 3.4의 2단계와 3.5 전체를 실행한다. 실행할 수 없는 브라우저는 "미실행"과 이유를 적는다.
+1. Firefox와 Safari에서 3.4의 2단계와 3.5 전체를 실행한다. 실행한 브라우저의 이름과 버전을 적는다. 실행할 수 없는 브라우저는 "미실행"과 이유를 적는다(사용자 결정 2026-10-22(Q36)).
 
    영향: 없음.
 
    기대 결과: 결과가 Chromium과 같다. 차이가 있으면 검증 기록에 적는다.
 
-2. 실제 모바일 기기에서 390px 폭 화면을 확인한다. 릴리스 전 한 번 실행한다([FE-TBD-014](../conventions/frontend.md#8-미결정-사항) 제안).
+2. 실제 모바일 기기에서 390px 폭 화면을 확인한다. 릴리스 전 한 번 실행한다(사용자 결정 2026-10-22(Q36)).
 
    영향: 없음.
 
@@ -191,13 +191,13 @@
 
 ## 6. 롤백 또는 복구
 
-검증 절차는 저장소 파일을 바꾸지 않는다. 생성 산출물이 원본과 다르면 원본을 고친 뒤 `cargo xtask tokens`로 다시 쓴다(제안).
+검증 절차는 저장소 파일을 바꾸지 않는다. 생성 산출물이 원본과 다르면 원본을 고친 뒤 `cargo xtask tokens`로 다시 쓴다(사용자 결정 2026-10-22(Q32)).
 
 1. `target/dashboard-shots/`와 `target/scenario-report.md`를 지운다. 저장소 밖에 만든 임시 파일도 지운다.
 2. `git status --short`로 `web/dashboard/`와 `docs/design/mockups/`에 의도하지 않은 변경이 없는지 확인한다. 변경이 있으면 검증 기록에 적고 전달 대상에게 넘긴다.
 
 ## 7. 해결되지 않을 때 전달할 대상
 
-- 전달 대상: 대시보드 프런트엔드 담당자와 디자인 결정 담당자([DESIGN-TBD-005](../design/DESIGN.md#미결정-사항))
+- 전달 대상: 대시보드 프런트엔드 담당자와 검토자.
 - 보존할 증거: 실행한 명령과 전체 출력, `rustc --version`, 브라우저 이름과 `--version` 결과, 스크린 리더 이름과 버전, `target/scenario-report.md`, 실패한 폭과 화면 상태의 스크린샷 경로, 커밋 해시와 `git status --short` 결과
 - 비밀 값 제외 규칙: 스크린샷과 로그에 비밀번호, 세션 식별자, 쿠키 값이 보이면 공유 전에 지운다. 지운 자리에 `<redacted>`를 적는다.

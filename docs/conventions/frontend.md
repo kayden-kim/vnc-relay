@@ -1,18 +1,18 @@
 # VNC Relay 운영 대시보드 프런트엔드 컨벤션
 
-채택된 디자인 기준을 `web/dashboard/`의 HTML·CSS·JavaScript에 일관되게 적용하는 규칙이다. 제품 동작은 [대시보드 화면 스펙](../specs/dashboard.md)에서, 코드의 책임과 내부 구조는 아키텍처 문서에서 정한다. 이 문서는 Draft다. [8절](#8-미결정-사항)의 결정이 채택되기 전까지 DESIGN-TBD-005는 열려 있다.
+채택된 디자인 기준을 `web/dashboard/`의 HTML·CSS·JavaScript에 일관되게 적용하는 규칙이다. 제품 동작은 [대시보드 화면 스펙](../specs/dashboard.md)에서, 코드의 책임과 내부 구조는 아키텍처 문서에서 정한다. 작업 0.9는 사용자 결정 2026-10-22(Q09)로 시작했고, 사용자 결정 2026-10-22(Q32~Q39)로 DESIGN-TBD-005(컨벤션과 검증 방법)를 해소했다. 결정 내용은 [8절](#8-미결정-사항)에 있다. 열린 항목은 FE-TBD-016(성능 지표) 하나다.
 
 | 항목 | 값 |
 | --- | --- |
-| 상태 | Draft (2026-10-22 초안. 사용자 채택 전) |
+| 상태 | Active (2026-10-22. 사용자 결정 2026-10-22(Q09·Q32~Q39) 반영. FE-TBD-016은 열려 있다) |
 | 적용 대상 | `web/dashboard/` 아래 HTML·CSS·JavaScript, 토큰 생성·대조 코드(`xtask/`), 테스트 페이지(`web/dashboard/tests/`), 미리보기(`web/dashboard/preview/`), 시안의 토큰 블록(`docs/design/mockups/dashboard.html`) |
 | 기준 버전 | Rust 1.99.1(`rust-toolchain.toml`). 대시보드 런타임 의존성 없음. 브라우저 검증에 쓴 Chromium 버전은 검증 기록에 적는다 |
 | 관련 디자인 기준 | [운영 대시보드 디자인 시스템](../design/DESIGN.md) (Accepted, 2026-10-20) |
 | 관련 아키텍처 문서 | [코드 지도](../architectures/code-map.md), [xtask 모듈 설계](../architectures/xtask.md) |
 | 관련 계약 | [관리 API 계약 1.11절](../contracts/management-api-v1.md) (정적 경로·비인증 범위·응답 헤더) |
 | 관련 ADR | 없음 |
-| 적용 시작일 | 채택 후 기록 |
-| 규칙 준수 확인 방법 | `cargo xtask tokens --check`, 제공 표 대조 테스트, 브라우저 테스트, [검증 how-to](../how-to/verify-dashboard-frontend.md)의 수동 검토 |
+| 적용 시작일 | 2026-10-22 |
+| 규칙 준수 확인 방법 | `cargo xtask tokens --check`, 제공 표 대조 테스트, 브라우저 테스트, [검증 how-to](../how-to/verify-dashboard-frontend.md)의 수동 검토. 명령과 시험 파일은 아직 구현하지 않았다(6절) |
 
 이 문서가 다루는 작업 0.9 항목은 다음과 같다.
 
@@ -35,7 +35,7 @@
 | 스타일 적용 방식 | 외부 CSS 파일. 토큰 CSS는 DESIGN.md에서 생성하고, 화면 CSS는 `var(--…)`로만 토큰을 쓴다 | [DESIGN.md 정적 파일 원칙](../design/DESIGN.md#정적-파일-원칙), [2절](#2-토큰-적용과-재사용) |
 | 컴포넌트 기반 | 외부 UI 라이브러리를 쓰지 않는다. ES 모듈 함수로 공통 컴포넌트를 만들고, 반복 조각은 `<template>` 요소로 둔다 | [PRD](../requirements/PRD.md) (JS 프레임워크 없음), [3절](#3-컴포넌트와-콘텐츠) |
 | 아이콘 | 직접 그린 인라인 SVG다. 규격은 [DESIGN.md 아이콘 규칙](../design/DESIGN.md#아이콘-규칙)(크기 16px·14px, 선 두께 `spacing.icon-stroke`)을 따른다. 장식용 SVG는 `aria-hidden="true"`, `focusable="false"`를 붙인다 | [DESIGN.md 아이콘 규칙](../design/DESIGN.md#아이콘-규칙) |
-| 미리보기 | 실제 컴포넌트를 불러 쓰는 정적 페이지(`web/dashboard/preview/`) | [3절 컴포넌트 미리보기](#컴포넌트-미리보기) |
+| 미리보기 | 실제 컴포넌트를 불러 쓰는 정적 페이지(`web/dashboard/preview/`, 사용자 결정 2026-10-22(Q34)) | [3절 컴포넌트 미리보기](#컴포넌트-미리보기) |
 
 선택이 비어 있으면 특정 프레임워크나 라이브러리를 기본값으로 설치하지 않는다. 기존 설정과 사용자 요청을 먼저 확인한다.
 
@@ -51,7 +51,7 @@ web/dashboard/
 │   ├── login.css
 │   └── tokens.css    생성 산출물. 직접 고치지 않는다
 ├── app/              관리 세션이 있어야 제공한다 (SCR-001·SCR-002)
-│   ├── index.html    제공 경로 /  (이 문서의 제안: /app/index.html은 제공하지 않는다)
+│   ├── index.html    제공 경로 /  (이 문서의 기본값, 사용자 결정 아님: /app/index.html은 제공하지 않는다)
 │   ├── main.js
 │   ├── components/   공통 컴포넌트 ES 모듈
 │   ├── styles/       화면 CSS
@@ -82,16 +82,16 @@ web/dashboard/
 - 제공 경로, 원본 파일, `Content-Type`을 한 Rust 파일의 표에 적는다. 표에 없는 파일은 넣지 않는다.
 - `Content-Type`은 확장자로 정한다: `text/html; charset=utf-8`, `text/css; charset=utf-8`, `text/javascript; charset=utf-8`.
 - 표 대조 테스트는 `login/`과 `app/`을 걸어 실제 파일 목록과 표를 비교한다. 표에 없는 파일이나 표에만 있는 항목이 있으면 실패한다. 제공 표에 `preview/`나 `tests/` 경로가 있어도 실패한다.
-- 정적 응답에는 계약 1.11절의 헤더를 붙인다. `Cache-Control: no-store`는 계약이 보호된 정적 응답에 붙인다고 정했다. `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, `Content-Security-Policy`는 계약에서 권장이다. 이 문서는 로그인 화면 응답에도 `Cache-Control: no-store`를 붙이기를 제안한다. CSP를 필수로 할지는 [FE-TBD-010](#8-미결정-사항)에서 정한다.
-- 내장 방법(표 한 곳, build.rs, 외부 crate)은 [FE-TBD-003](#8-미결정-사항)에서 정한다.
+- 정적 응답에는 계약 1.11절의 헤더를 붙인다. `Cache-Control: no-store`는 계약이 보호된 정적 응답에 붙인다고 정했다. `Content-Security-Policy: default-src 'self'; frame-ancestors 'none'`은 필수다(사용자 결정 2026-10-22(Q37)). `X-Content-Type-Options: nosniff`와 `Referrer-Policy: no-referrer`는 계약에서 권장이다. 로그인 화면 응답에도 `Cache-Control: no-store`를 붙인다(이 문서의 기본값, 사용자 결정 아님).
+- 내장 방법은 `include_bytes!` 표와 대조 테스트다(사용자 결정 2026-10-22(Q33)). `build.rs`와 외부 crate는 쓰지 않는다.
 
 ### 1.3 HTML·CSS·JavaScript 작성 규칙
 
-다음 규칙은 CSP `default-src 'self'`를 전제로 한다. [계약 1.11절](../contracts/management-api-v1.md)은 대시보드가 인라인 스크립트를 쓰지 않는다고 정하고, CSP 값을 권장으로 적는다. CSP를 필수로 할지는 [FE-TBD-010](#8-미결정-사항)에서 확정한다.
+다음 규칙은 CSP `default-src 'self'`를 전제로 한다. CSP는 필수다([계약 1.11절](../contracts/management-api-v1.md), 사용자 결정 2026-10-22(Q37)). 계약 1.11절은 대시보드가 인라인 스크립트를 쓰지 않는다고 정한다.
 
 - HTML 루트에 `lang`을 둔다. 언어 선택에 따라 값을 바꾼다([화면 언어](../specs/dashboard.md#화면-언어)).
 - 스크립트는 `<script type="module" src="…">`로만 불러온다. 인라인 스크립트, `on…` 이벤트 속성, `javascript:` 주소를 쓰지 않는다.
-- 스타일은 `<link rel="stylesheet">`로 같은 출처의 파일만 불러온다. `<style>` 요소와 `style` 속성을 쓰지 않는다. 시안(`docs/design/mockups/dashboard.html`)의 `<style>`은 시안 파일 안에서만 쓴다.
+- 스타일은 `<link rel="stylesheet">`로 같은 출처의 파일만 불러온다. `<style>` 요소와 `style` 속성을 쓰지 않는다(사용자 결정 2026-10-22(Q37)). 시안(`docs/design/mockups/dashboard.html`)의 `<style>`은 시안 파일 안에서만 쓴다.
 - 스크립트로 값을 넣을 때는 `element.style.setProperty()`를 쓴다. 이 방식이 CSP에서 막히는지는 브라우저 테스트로 확인한다.
 - 외부 자원을 쓰지 않는다. CDN, 외부 글꼴, 외부 이미지, 외부 스크립트, 외부 `@import`를 금지한다. 요청은 같은 출처의 제공 경로와 `/api/v1/`만 보낸다.
 - API에서 받은 값은 `textContent`나 속성으로 넣는다. `innerHTML`에 API 값을 넣지 않는다.
@@ -113,14 +113,14 @@ web/dashboard/
 | 토큰 관리 항목 | 프로젝트 기준 |
 | --- | --- |
 | 원본 참조 | [DESIGN.md](../design/DESIGN.md) 첫 `---`부터 둘째 `---`까지의 YAML 머리말. 본문의 표는 원본이 아니다 |
-| 참조·생성 관계 | DESIGN.md YAML → `web/dashboard/login/tokens.css`, `web/dashboard/app/tokens.css`(같은 내용) → 화면 CSS가 `var(--…)`로 참조 → 시안의 토큰 블록(표식 사이, [FE-TBD-013](#8-미결정-사항)) |
-| 생성 방법 | `cargo xtask tokens`가 원본을 읽어 `:root` 블록을 쓴다. 도구 형태는 [FE-TBD-001](#8-미결정-사항)에서 정한다 |
+| 참조·생성 관계 | DESIGN.md YAML → `web/dashboard/login/tokens.css`, `web/dashboard/app/tokens.css`(같은 내용) → 화면 CSS가 `var(--…)`로 참조 → 시안의 토큰 블록(표식 사이, 사용자 결정 2026-10-22(Q32)) |
+| 생성 방법 | `cargo xtask tokens`가 원본을 읽어 `:root` 블록을 쓴다. 도구 형태와 커밋 방식은 사용자 결정 2026-10-22(Q32)다. 생성 파일은 저장소에 커밋한다 |
 | 대조 방법 | `cargo xtask tokens --check`가 생성 결과와 두 CSS 파일, 시안 표식 사이 줄을 비교한다. 차이가 있으면 파일과 줄 번호를 출력하고 종료 코드 1로 끝난다 |
 | 생성 대상 밖의 규칙 | 중단점과 미디어 쿼리는 [DESIGN.md 중단점 절](../design/DESIGN.md#중단점과-모바일-배치)을 따른다. 모션은 없다([DESIGN.md 모션 절](../design/DESIGN.md#모션)). 대비 기준은 [DESIGN.md 대비 기준](../design/DESIGN.md#대비-기준)을 따른다. 한글 글꼴 굵기는 400·700만 쓴다 |
 
 ### 2.1 원본 읽기와 이름 규칙
 
-- 허용 키는 `colors`, `typography`, `spacing`, `rounded`다. `version`, `name`, `description`과 `components`는 CSS로 내보내지 않는다. `components`는 원본 참조용이다([FE-TBD-011](#8-미결정-사항)).
+- 허용 키는 `colors`, `typography`, `spacing`, `rounded`다. `version`, `name`, `description`과 `components`는 CSS로 내보내지 않는다. `components`는 원본 참조용이다(사용자 결정 2026-10-22(Q32)).
 - `typography`의 단계 아래에는 `fontFamily`, `fontSize`, `fontWeight`, `lineHeight`, `fontFeature`만 쓴다. 현재 원본에는 `letterSpacing`이 없다.
 - 허용하지 않는 키, 중복된 키, 해석할 수 없는 줄이 있으면 생성과 대조를 멈추고 종료 코드 1로 끝난다.
 - 값은 YAML 값을 그대로 쓰고, 바깥 따옴표만 벗긴다. 값 안의 따옴표(`'tnum'`, 글꼴 이름)는 그대로 둔다. `#`으로 시작하는 색 값은 따옴표로 감싸야 한다. YAML에서 `#`은 주석 시작이다. 현재 원본은 이 규칙을 따른다(예: `overlay: "#0d1a1580"`).
@@ -165,7 +165,7 @@ web/dashboard/
 
 | 미리보기 관리 항목 | 프로젝트 기준 |
 | --- | --- |
-| 구현과 실행 위치 | `web/dashboard/preview/` 아래 정적 HTML 페이지. 실행은 로컬 전용 서버로 한다([FE-TBD-004](#8-미결정-사항)). 브라우저는 모듈 스크립트를 `file://`로 읽지 않으므로 서버가 필요하다 |
+| 구현과 실행 위치 | `web/dashboard/preview/` 아래 정적 HTML 페이지. 실행은 `cargo xtask dashboard-serve`로 하는 로컬 전용 서버로 한다(사용자 결정 2026-10-22(Q34)). 브라우저는 모듈 스크립트를 `file://`로 읽지 않으므로 서버가 필요하다 |
 | 재사용 대상 | `web/dashboard/app/components/`, `web/dashboard/app/tokens.css`, `web/dashboard/app/styles/`. 원본은 한 곳이다 |
 | 확인할 상태 | DESIGN.md 컴포넌트 표의 항목별 기본·호버·비활성·포커스 상태. 오류·빈 값·긴 한글·긴 영문·긴 숫자(`data` 단계) 상태 |
 | 확인 환경 | 폭 1280·1024·1023·768·390·320px, 한국어·영어 문구, 라이트 테마 |
@@ -178,8 +178,8 @@ web/dashboard/
 
 - HTML 시안은 디자인 기준과 화면 구성을 보여 주는 산출물이다([디자인 문서 작성 규칙](../design/AGENTS.md#html-시안)). 시안은 동작·상태·검증의 기준이 아니다([화면 스펙 서문](../specs/dashboard.md)).
 - 시안과 스펙 문장이 다르면 스펙 문장을 따른다.
-- 대조는 같은 화면 상태와 같은 폭에서 구현 스크린샷과 시안 스크린샷을 나란히 두고 한다. 차이를 검증 기록에 적는다. 자동 픽셀 비교는 [FE-TBD-008](#8-미결정-사항)에서 정한다.
-- 시안의 토큰 블록은 생성 결과와 같아야 한다([FE-TBD-013](#8-미결정-사항)).
+- 대조는 같은 화면 상태와 같은 폭에서 구현 스크린샷과 시안 스크린샷을 나란히 두고 한다. 차이를 검증 기록에 적는다. 자동 픽셀 비교는 쓰지 않는다. 스크린샷은 `target/`에 두고 사람이 비교한다(사용자 결정 2026-10-22(Q36)).
+- 시안의 토큰 블록은 시작·끝 표식으로 감싸고, 생성 결과와 같아야 한다. `cargo xtask tokens --check`가 이 표식 사이를 대조한다(사용자 결정 2026-10-22(Q32)).
 
 ## 4. 접근성·반응형·성능 확인
 
@@ -187,13 +187,13 @@ web/dashboard/
 
 | 대상 | 적용 기준 | 확인 방법 |
 | --- | --- | --- |
-| 접근성 수준 | WCAG 2.2 AA([DESIGN.md 접근성 기준](../design/DESIGN.md#접근성-기준)). 동작 요구 범위는 [화면 스펙 6절](../specs/dashboard.md#6-화면-크기와-접근성) | 자동: 테스트 페이지가 역할·이름·속성을 확인한다. 수동: 키보드 전체 순회와 스크린 리더 확인([FE-TBD-007](#8-미결정-사항)) |
+| 접근성 수준 | WCAG 2.2 AA([DESIGN.md 접근성 기준](../design/DESIGN.md#접근성-기준)). 동작 요구 범위는 [화면 스펙 6절](../specs/dashboard.md#6-화면-크기와-접근성) | 자동: 테스트 페이지가 역할·이름·속성을 확인한다. 수동 체크리스트(1차, 사용자 결정 2026-10-22(Q36)): 키보드 전체 순회와 스크린 리더 확인. 해당 시나리오는 부분으로 본다 |
 | 키보드와 포커스 | 포커스 표시는 토큰 `spacing.focus-ring-width`와 `spacing.focus-ring-offset`, 링 색 `colors.ring`(상단 막대 안은 `colors.navbar-ring`). 대화상자 포커스 규칙은 [화면 스펙 6절](../specs/dashboard.md#6-화면-크기와-접근성) | 자동: 포커스 순서, 대화상자 열기·닫기 뒤 포커스 위치. 수동: Tab 순회, Esc로 닫기, 기록 |
 | 이름과 의미 | 시맨틱 HTML. 상단 막대 메뉴는 `nav`(이름 "주 메뉴"), 본문은 `main`. 카드 배치에서도 `table`·`row`·`cell`·`columnheader` 역할을 명시한다([DESIGN.md 중단점 절](../design/DESIGN.md#중단점과-모바일-배치)) | 자동: 역할과 이름. 수동: 접근성 트리 확인 |
 | 대비와 의미 전달 | DESIGN.md [대비 기준](../design/DESIGN.md#대비-기준) 표. 상태는 글씨 레이블과 도형으로 구분한다 | 토큰 쌍은 WCAG 상대 휘도 공식으로 다시 계산하고 값을 검증 기록에 적는다. 색 외 표시는 수동 확인 |
 | 반응형과 확대 | 폭 1280·1024·1023·768·390·320px. 200% 확대는 640px과 같다([DESIGN.md 중단점 절](../design/DESIGN.md#중단점과-모바일-배치)) | 자동: 폭별로 Chromium을 열어 `scrollWidth`가 `clientWidth`를 넘지 않는지 확인. 대상 크기는 수동 측정 |
 | 모션 | 없다([DESIGN.md 모션 절](../design/DESIGN.md#모션)). 모션을 추가하기 전에 DESIGN.md를 먼저 고친다 | 해당 없음. 추가하면 움직임 감소 설정 처리를 이 표에 추가한다 |
-| 성능 | 확인한 PRD에 대시보드 성능 지표가 없다. 지표가 정해질 때까지 성능 통과 조건을 만들지 않는다([FE-TBD-016](#8-미결정-사항)) | 측정 도구와 환경은 지표가 정해진 뒤 적는다 |
+| 성능 | 확인한 PRD에 대시보드 성능 지표가 없다. 사용자 결정 2026-10-22(Q39)로 지표와 예산은 보류한다. 화면이 생긴 뒤 정하며, 그때까지 성능 통과 조건을 만들지 않는다([FE-TBD-016](#8-미결정-사항), 열려 있음) | 측정 도구와 환경은 지표가 정해진 뒤 적는다 |
 
 ## 5. 예외와 외부 자료
 
@@ -206,15 +206,15 @@ web/dashboard/
 
 절차는 [대시보드 프런트엔드를 검증하는 방법](../how-to/verify-dashboard-frontend.md)(Draft)이 정한다. 결과와 증거는 [검증 기록](../AGENTS.md#검증-기록)을 따른다.
 
-- 실행 환경: [개발 환경·검증 how-to](../how-to/set-up-and-verify.md)의 [전제 조건](../how-to/set-up-and-verify.md#2-전제-조건)이 정한 지원 환경(Windows 11 x64·PowerShell, Ubuntu 24.04 LTS x64·bash)과 고정 Rust 툴체인(1.99.1). Chromium 경로는 환경 변수 `DASHBOARD_BROWSER`로 준다(제안, [FE-TBD-006](#8-미결정-사항)). Node.js는 선택 항목인 DESIGN lint에만 필요하다.
+- 실행 환경: [개발 환경·검증 how-to](../how-to/set-up-and-verify.md)의 [전제 조건](../how-to/set-up-and-verify.md#2-전제-조건)이 정한 지원 환경(Windows 11 x64·PowerShell, Ubuntu 24.04 LTS x64·bash)과 고정 Rust 툴체인(1.99.1). Chromium(Chrome 또는 Edge)은 두 OS 모두에 필수다. 없거나 실행되지 않으면 브라우저 시험은 실패한다(사용자 결정 2026-10-22(Q35)). Chromium 실행 파일 경로는 환경 변수 `DASHBOARD_BROWSER`로 준다(이 문서의 기본값, 사용자 결정 아님). Node.js는 선택 항목인 DESIGN lint에만 필요하다(사용자 결정 2026-10-22(Q38)).
 - 실행 위치: 저장소 루트.
-- 명령 확인 근거: `xtask/src/main.rs`의 현재 명령은 `scenarios`와 `layers`다. 아래의 `tokens`, `dashboard-serve`와 테스트 파일 이름은 채택 뒤 추가할 대상이다.
+- 명령 확인 근거: `xtask/src/main.rs`의 현재 명령은 `scenarios`와 `layers`다. 아래의 `tokens`, `dashboard-serve`와 시험 파일(`tests/dashboard_assets.rs`, `tests/dashboard_browser.rs`)은 아직 없다. 구현할 때 추가한다.
 
 | 변경 범위 | 확인 명령·방법 | 통과 조건 | 절차와 증거 위치 |
 | --- | --- | --- | --- |
-| 디자인 토큰·문서 | `cargo xtask tokens --check`. 선택: DESIGN.md lint(`@google/design.md`, 고정 버전) | 종료 코드 0. 차이 0건, 금지 항목 0건. lint 오류 0건. 경고 수는 기록한다 | [검증 how-to 3.1절](../how-to/verify-dashboard-frontend.md) |
+| 디자인 토큰·문서 | `cargo xtask tokens --check`. 선택: DESIGN.md lint(`@google/design.md`, 고정 버전. 사용자 결정 2026-10-22(Q38)) | 종료 코드 0. 차이 0건, 금지 항목 0건. lint 오류 0건. 경고 수는 기록한다 | [검증 how-to 3.1절](../how-to/verify-dashboard-frontend.md) |
 | 정적 파일과 내장 | 제공 표 대조 테스트(`tests/dashboard_assets.rs`) | 실제 파일과 표가 일치한다. 금지 경로가 없다 | [검증 how-to 3.2절](../how-to/verify-dashboard-frontend.md) |
-| 컴포넌트·스타일 | 브라우저 테스트(`tests/dashboard_browser.rs`)와 화면 CSS 검사(2.2절) | 테스트 페이지의 `data-result`가 `pass`다 | [검증 how-to 3.3절](../how-to/verify-dashboard-frontend.md) |
+| 컴포넌트·스타일 | 브라우저 테스트(`tests/dashboard_browser.rs`, 사용자 결정 2026-10-22(Q35))와 화면 CSS 검사(2.2절) | 테스트 페이지의 `data-result`가 `pass`다 | [검증 how-to 3.3절](../how-to/verify-dashboard-frontend.md) |
 | 사용자 동작 | 브라우저 테스트와 `cargo xtask scenarios` | DASH 시나리오가 통과 또는 부분으로 보고된다. 부분은 Chromium 한 곳만 검증한 경우다 | [테스트 컨벤션 7절](testing.md#7-테스트와-스펙-시나리오-연결), `target/scenario-report.md` |
 | 시각 결과·접근성 | 폭별 스크린샷, 시안과 나란히 대조, 키보드·스크린 리더 수동 확인 | 스펙과 DESIGN.md 기준을 만족한다. 검토자가 기록한다 | [검증 how-to 3.4~3.7절](../how-to/verify-dashboard-frontend.md) |
 | 전체 완료 | [개발 환경·검증 how-to 3.4절](../how-to/set-up-and-verify.md)의 명령과 위 명령 | 모든 필수 검사가 종료 코드 0이다 | [개발 환경·검증 how-to](../how-to/set-up-and-verify.md) |
@@ -227,55 +227,55 @@ web/dashboard/
 
 ## 8. 미결정 사항
 
-사용자 결정 2026-10-22(Q09): 작업 0.9를 지금 시작한다. 이 문서는 그 초안이다. DESIGN-TBD-005는 아래 결정이 채택될 때까지 열려 있다.
+작업 0.9는 사용자 결정 2026-10-22(Q09)로 시작했다. FE-TBD-001~015는 사용자 결정 2026-10-22(Q32)~(Q38)로 정했다. FE-TBD-016은 사용자 결정 2026-10-22(Q39)로 보류했다. 열린 항목은 FE-TBD-016 하나다.
 
-아래 권장안은 초안 작성자의 추천이다. 사용자 결정이 아니다. 채택 전까지 이 문서는 Draft다. 책임자는 [DESIGN.md 미결정 사항](../design/DESIGN.md#미결정-사항)의 DESIGN-TBD-005 책임자와 같다.
-
-| ID | 항목 | 영향 범위 | 책임자 | 확정 위치 |
+| ID | 항목 | 영향 범위 | 결정 | 확정 위치 |
 | --- | --- | --- | --- | --- |
-| FE-TBD-001 | 토큰 생성·대조 도구 형태 | 토큰 파일, `xtask/` | 프로젝트 요구사항·디자인 결정 담당자 | 이 문서 2절, [xtask 모듈 설계](../architectures/xtask.md) |
-| FE-TBD-002 | 생성 산출물을 저장소에 커밋할지 | 빌드, 토큰 파일 | 같은 담당자 | 이 문서 2절 |
-| FE-TBD-003 | 실행 파일 내장 방법 | 관리 리스너, `Cargo.toml` | 같은 담당자 | 이 문서 1.2절 |
-| FE-TBD-004 | 미리보기 위치와 실행 방법 | `preview/`, `xtask/` | 같은 담당자 | 이 문서 3절 |
-| FE-TBD-005 | 브라우저 테스트 방식과 보고서 연결 | `tests/`, 테스트 컨벤션, `xtask/` | 같은 담당자 | 이 문서 6절, [테스트 컨벤션 7절](testing.md#7-테스트와-스펙-시나리오-연결) |
-| FE-TBD-006 | Chromium 필요 여부와 없을 때 처리 | 검증 환경, 검증 how-to | 같은 담당자 | 이 문서 6절, [개발 환경 how-to 2절](../how-to/set-up-and-verify.md) |
-| FE-TBD-007 | 키보드·포커스·스크린 리더 확인의 자동화 범위 | 접근성 검증 | 같은 담당자 | 이 문서 4절 |
-| FE-TBD-008 | 시각 비교 방법(수동 또는 자동 픽셀 비교) | 스크린샷 검증 | 같은 담당자 | 이 문서 3절 |
-| FE-TBD-009 | 자동 검증 브라우저 범위와 수동 범위 | 검증 기록 | 같은 담당자 | 이 문서 4·6절 |
-| FE-TBD-010 | CSP 필수 여부와 인라인 스타일 금지 | 응답 헤더, 계약 | 같은 담당자 | 이 문서 1.2·1.3절, [관리 API 계약 1.11절](../contracts/management-api-v1.md) |
-| FE-TBD-011 | DESIGN.md `components` 블록의 내보내기 | 토큰 파일 | 같은 담당자 | 이 문서 2.1절 |
-| FE-TBD-012 | DESIGN.md lint 도구의 검증 절차 내 위치 | 문서 검증 | 같은 담당자 | 이 문서 6절 |
-| FE-TBD-013 | 시안 토큰 블록의 표식과 대조 | `docs/design/mockups/dashboard.html`, 토큰 대조 | 같은 담당자 | 이 문서 2절, [DESIGN.md 검증 절](../design/DESIGN.md#검증) |
-| FE-TBD-014 | 실기기 모바일 확인의 시점 | 릴리스 검증 | 같은 담당자 | 이 문서 4·6절 |
-| FE-TBD-015 | 검증 how-to의 위치 | `docs/how-to/` | 같은 담당자 | [검증 how-to](../how-to/verify-dashboard-frontend.md) |
-| FE-TBD-016 | 대시보드 성능 지표와 예산 | 성능 검증 | 같은 담당자 | [PRD](../requirements/PRD.md) |
+| FE-TBD-001 | 토큰 생성·대조 도구 형태 | 토큰 파일, `xtask/` | 사용자 결정 2026-10-22(Q32): `cargo xtask tokens`와 `--check` 하위 명령 | 이 문서 2절, [xtask 모듈 설계](../architectures/xtask.md) |
+| FE-TBD-002 | 생성 산출물을 저장소에 커밋할지 | 빌드, 토큰 파일 | 사용자 결정 2026-10-22(Q32): 커밋한다 | 이 문서 2절 |
+| FE-TBD-003 | 실행 파일 내장 방법 | 관리 리스너, `Cargo.toml` | 사용자 결정 2026-10-22(Q33): `include_bytes!` 표와 대조 테스트 | 이 문서 1.2절 |
+| FE-TBD-004 | 미리보기 위치와 실행 방법 | `preview/`, `xtask/` | 사용자 결정 2026-10-22(Q34): `web/dashboard/preview/`와 `cargo xtask dashboard-serve`(로컬 전용) | 이 문서 3절, [xtask 모듈 설계](../architectures/xtask.md) |
+| FE-TBD-005 | 브라우저 테스트 방식과 보고서 연결 | `tests/`, 테스트 컨벤션, `xtask/` | 사용자 결정 2026-10-22(Q35): Rust 통합 시험이 Chromium을 `--headless --dump-dom`으로 실행하고 `data-result`를 읽는다. `/// spec:` 표식은 Rust 시험에 둔다. 스캐너는 바꾸지 않는다 | 이 문서 6절, [테스트 컨벤션 7절](testing.md#7-테스트와-스펙-시나리오-연결) |
+| FE-TBD-006 | Chromium 필요 여부와 없을 때 처리 | 검증 환경, 검증 how-to | 사용자 결정 2026-10-22(Q35): Chrome 또는 Edge를 두 OS 모두 필수로 둔다. 없으면 시험이 실패한다 | 이 문서 6절, [개발 환경 how-to 2절](../how-to/set-up-and-verify.md) |
+| FE-TBD-007 | 키보드·포커스·스크린 리더 확인의 자동화 범위 | 접근성 검증 | 사용자 결정 2026-10-22(Q36): 1차는 수동 체크리스트다. 해당 시나리오는 부분으로 본다 | 이 문서 4절 |
+| FE-TBD-008 | 시각 비교 방법 | 스크린샷 검증 | 사용자 결정 2026-10-22(Q36): 스크린샷을 `target/`에 두고 사람이 시안과 비교한다. 자동 픽셀 비교는 쓰지 않는다 | 이 문서 3절 |
+| FE-TBD-009 | 자동 검증 브라우저 범위와 수동 범위 | 검증 기록 | 사용자 결정 2026-10-22(Q36): 자동은 Chromium만 쓴다. Firefox와 Safari는 수동으로 확인하고 버전을 기록한다 | 이 문서 4·6절 |
+| FE-TBD-010 | CSP 필수 여부와 인라인 스타일 금지 | 응답 헤더, 계약 | 사용자 결정 2026-10-22(Q37): CSP를 필수로 둔다. 인라인 `<style>`과 `style` 속성을 금지한다 | 이 문서 1.2·1.3절, [관리 API 계약 1.11절](../contracts/management-api-v1.md) |
+| FE-TBD-011 | DESIGN.md `components` 블록의 내보내기 | 토큰 파일 | 사용자 결정 2026-10-22(Q32): CSS로 내보내지 않는다. 원본 참조용이다 | 이 문서 2.1절 |
+| FE-TBD-012 | DESIGN lint 도구의 검증 절차 내 위치 | 문서 검증 | 사용자 결정 2026-10-22(Q38): 선택 항목이다. `@google/design.md` 버전을 고정하고 결과를 기록한다 | 이 문서 6절 |
+| FE-TBD-013 | 시안 토큰 블록의 표식과 대조 | 시안, 토큰 대조 | 사용자 결정 2026-10-22(Q32): 시작·끝 표식으로 감싸고 `--check`가 생성 결과와 같은지 본다 | 이 문서 2절, [DESIGN.md 검증 절](../design/DESIGN.md#검증) |
+| FE-TBD-014 | 실기기 모바일 확인의 시점 | 릴리스 검증 | 사용자 결정 2026-10-22(Q36): 변경마다가 아니라 릴리스 전에 한 번 확인하고 기록한다 | 이 문서 4·6절 |
+| FE-TBD-015 | 검증 how-to의 위치 | `docs/how-to/` | 사용자 결정 2026-10-22(Q38): `docs/how-to/verify-dashboard-frontend.md`를 새로 둔다 | [검증 how-to](../how-to/verify-dashboard-frontend.md) |
+| FE-TBD-016 | 대시보드 성능 지표와 예산 | 성능 검증 | 보류(사용자 결정 2026-10-22(Q39)). 화면이 생긴 뒤 정한다(작업 4.8~4.12). **열려 있다** | [PRD](../requirements/PRD.md) |
 
-### 8.1 선택지와 권장안
+### 8.1 결정 내용과 채택하지 않은 선택지
 
-- **FE-TBD-001 도구 형태.** (가) `cargo xtask tokens`와 `--check` 하위 명령. 권장. 추가 언어나 의존성이 없고 xtask 설계의 Rust 전용 선택과 맞다. (나) Node나 Python 스크립트. 두 OS의 실행 환경이 갈린다. (다) 수동 복사. 대조가 없어 DESIGN.md의 생성 원칙을 지키지 못한다.
-- **FE-TBD-002 커밋 방식.** (가) 생성 파일을 커밋하고 `--check`로 대조. 권장. 빌드 없이 검토할 수 있다. (나) 빌드 때 `build.rs`가 생성. 빌드 입력이 늘고 생성 결과를 검토하기 어렵다.
-- **FE-TBD-003 내장 방법.** (가) 한 Rust 파일의 `include_bytes!` 표와 대조 테스트. 권장. 새 crate가 없다. (나) `build.rs`가 표를 생성. 빌드 스크립트 로직이 늘어난다. (다) 새 crate(예: `include_dir`, `rust-embed`). 새 crate이므로 사용자 승인이 필요하다.
-- **FE-TBD-004 미리보기.** (가) `web/dashboard/preview/`에 두고 `cargo xtask dashboard-serve`로 로컬 서버를 연다. 권장. 제공 표에 없어 실행 파일에 들어가지 않는다. 새 xtask 명령이므로 xtask 설계 문서를 고친다. (나) `examples/` 바이너리. 실행 파일과 같은 빌드를 타서 경계가 흐리다. 브라우저는 모듈을 `file://`로 열 수 없으므로 어느 쪽이든 로컬 서버가 필요하다.
-- **FE-TBD-005 브라우저 테스트.** (가) Rust 통합 테스트가 Chromium을 `--headless --dump-dom`으로 실행한다. 테스트 페이지가 결과를 `data-result`에 쓰고, `/// spec:` 표식은 Rust 테스트에 둔다. 권장. 새 crate와 스캐너 변경이 없다. 실제 키 입력은 이 방식으로 보낼 수 없어 제외된다. (나) xtask 스캐너가 JavaScript 파일의 표식도 읽는다. 테스트 컨벤션 7절과 xtask 설계를 함께 고쳐야 한다. (다) DevTools 프로토콜 클라이언트로 실제 키 입력을 보낸다. 새 의존성 승인이 필요하다.
-- **FE-TBD-006 Chromium.** (가) 필수 전제로 두고 `DASHBOARD_BROWSER`가 없으면 테스트를 실패시킨다. 권장. 실행하지 않은 검사가 통과로 보이지 않는다. 개발 환경 전제 목록에 추가해야 한다. (나) `#[ignore]`로 표시한다. 기본 실행에서 빠지고 보고서는 미실행이 된다. `--require-all`에서 항상 실패한다.
-- **FE-TBD-007 키보드·스크린 리더.** (가) 1차는 수동 체크리스트를 검증 기록에 남긴다. 권장. 해당 시나리오는 부분으로 본다. (나) FE-TBD-005의 (다)로 자동화한다. 승인이 필요하다.
-- **FE-TBD-008 시각 비교.** (가) 스크린샷을 `target/`에 두고 사람이 시안과 비교한다. 권장. (나) 픽셀 비교 도구를 쓴다. 도구 승인과 설치 절차가 필요하다.
-- **FE-TBD-009 브라우저 범위.** (가) 자동은 Chromium 한 곳(Chrome·Edge 엔진). Firefox와 Safari는 수동으로 확인하고 버전을 기록한다. 권장. (나) 모든 브라우저를 수동으로 확인한다. 기록 부담이 크다.
-- **FE-TBD-010 CSP.** (가) 정적 응답에 `default-src 'self'; frame-ancestors 'none'`을 필수로 한다. 인라인 `<style>`과 `style` 속성을 금지한다. 권장. 계약 1.11절의 "권장"을 "필수"로 바꾸는 변경이 따로 필요하다. (나) CSP는 권장으로 두고, 인라인 스타일을 허용하려면 `style-src 'unsafe-inline'`을 추가한다. 보호가 약해진다.
-- **FE-TBD-011 `components` 블록.** (가) CSS로 내보내지 않는다. 원본 참조용이다. 권장. (나) 컴포넌트마다 CSS 변수를 만든다. DESIGN.md의 이름 규칙을 바꿔야 한다.
-- **FE-TBD-012 DESIGN lint.** (가) 선택 항목으로 두고 `@google/design.md`의 버전을 고정한다. 결과를 기록한다. 권장. (나) 검증 절차에서 뺀다.
-- **FE-TBD-013 시안 토큰 블록.** (가) 시안의 토큰 블록을 시작·끝 표식으로 감싸고, `--check`가 생성 결과와 같은지 본다. 권장. (나) 일회성 확인을 유지한다. 원본과 시안이 어긋날 수 있다.
-- **FE-TBD-014 실기기.** (가) 변경마다 필수는 아니다. 릴리스 전에 한 번 확인하고 기록한다. 권장. (나) 변경마다 확인한다. 비용이 크다.
-- **FE-TBD-015 검증 how-to 위치.** (가) 새 파일 `docs/how-to/verify-dashboard-frontend.md`. 권장. 개발 환경 how-to와 주제가 다르다. (나) 개발 환경 how-to에 절을 추가한다. 다른 작업과 충돌할 수 있다.
-- **FE-TBD-016 성능 지표.** 확인한 PRD에 대시보드 성능 지표가 없다. 지표와 예산을 정한다. 정하기 전까지 성능 통과 조건을 두지 않는다.
+각 항목은 채택한 방법을 먼저 쓰고, 채택하지 않은 선택지와 이유를 뒤에 쓴다.
 
-### 8.2 채택 시 함께 고칠 문서
+- **FE-TBD-001 도구 형태** (사용자 결정 2026-10-22(Q32)). 채택: (가) `cargo xtask tokens`와 `--check` 하위 명령. 추가 언어나 의존성이 없고 xtask 설계의 Rust 전용 선택과 맞다. 채택하지 않음: (나) Node나 Python 스크립트. 두 OS의 실행 환경이 갈린다. (다) 수동 복사. 대조가 없어 DESIGN.md의 생성 원칙을 지키지 못한다.
+- **FE-TBD-002 커밋 방식** (사용자 결정 2026-10-22(Q32)). 채택: (가) 생성 파일을 커밋하고 `--check`로 대조한다. 빌드 없이 검토할 수 있다. 채택하지 않음: (나) 빌드 때 `build.rs`가 생성한다. 빌드 입력이 늘고 생성 결과를 검토하기 어렵다.
+- **FE-TBD-003 내장 방법** (사용자 결정 2026-10-22(Q33)). 채택: (가) 한 Rust 파일의 `include_bytes!` 표와 대조 테스트. 새 crate가 없다. 채택하지 않음: (나) `build.rs`가 표를 생성한다. 빌드 스크립트 로직이 늘어난다. (다) 새 crate(예: `include_dir`, `rust-embed`). 새 crate는 사용자 승인이 필요하다.
+- **FE-TBD-004 미리보기** (사용자 결정 2026-10-22(Q34)). 채택: (가) `web/dashboard/preview/`와 `cargo xtask dashboard-serve`(로컬 전용). 제공 표에 없어 실행 파일에 들어가지 않는다. 채택하지 않음: (나) `examples/` 바이너리. 실행 파일과 같은 빌드를 타서 경계가 흐리다. 브라우저는 모듈을 `file://`로 열 수 없으므로 어느 쪽이든 로컬 서버가 필요하다.
+- **FE-TBD-005 브라우저 테스트** (사용자 결정 2026-10-22(Q35)). 채택: (가) Rust 통합 시험이 Chromium을 `--headless --dump-dom`으로 실행하고, 테스트 페이지가 결과를 `data-result`에 쓴다. `/// spec:` 표식은 Rust 시험에 둔다. 새 crate와 스캐너 변경이 없다. 실제 키 입력은 이 방식으로 보낼 수 없으므로 수동 체크리스트(FE-TBD-007)로 확인한다. 채택하지 않음: (나) xtask 스캐너가 JavaScript 파일의 표식도 읽는다. 테스트 컨벤션 7절과 xtask 설계를 함께 고쳐야 한다. (다) DevTools 프로토콜 클라이언트로 실제 키 입력을 보낸다. 새 의존성 승인이 필요하다.
+- **FE-TBD-006 Chromium** (사용자 결정 2026-10-22(Q35)). 채택: (가) Chrome 또는 Edge를 Windows와 Ubuntu 모두에 필수 전제로 둔다. 브라우저를 찾지 못하면 시험을 실패시킨다. 채택하지 않음: (나) `#[ignore]`로 표시한다. 기본 실행에서 빠지고 보고서는 미실행이 된다. `--require-all`에서 항상 실패한다.
+- **FE-TBD-007 키보드·스크린 리더** (사용자 결정 2026-10-22(Q36)). 채택: (가) 1차는 수동 체크리스트를 검증 기록에 남긴다. 해당 시나리오는 부분으로 본다. 채택하지 않음: (나) FE-TBD-005의 (다)로 자동화한다. 승인이 필요하다.
+- **FE-TBD-008 시각 비교** (사용자 결정 2026-10-22(Q36)). 채택: (가) 스크린샷을 `target/`에 두고 사람이 시안과 비교한다. 채택하지 않음: (나) 픽셀 비교 도구를 쓴다. 도구 승인과 설치 절차가 필요하다.
+- **FE-TBD-009 브라우저 범위** (사용자 결정 2026-10-22(Q36)). 채택: (가) 자동은 Chromium 한 곳(Chrome·Edge 엔진)만 쓴다. Firefox와 Safari는 수동으로 확인하고 버전을 기록한다. 채택하지 않음: (나) 모든 브라우저를 수동으로 확인한다. 기록 부담이 크다.
+- **FE-TBD-010 CSP** (사용자 결정 2026-10-22(Q37)). 채택: (가) 정적 응답에 `default-src 'self'; frame-ancestors 'none'`을 필수로 한다. 인라인 `<style>`과 `style` 속성을 금지한다. 계약 1.11절의 "권장"을 "필수"로 고친다. 채택하지 않음: (나) CSP를 권장으로 두고 인라인 스타일을 허용하려고 `style-src 'unsafe-inline'`을 추가한다. 보호가 약해진다.
+- **FE-TBD-011 `components` 블록** (사용자 결정 2026-10-22(Q32)). 채택: (가) CSS로 내보내지 않는다. 원본 참조용이다. 채택하지 않음: (나) 컴포넌트마다 CSS 변수를 만든다. DESIGN.md의 이름 규칙을 바꿔야 한다.
+- **FE-TBD-012 DESIGN lint** (사용자 결정 2026-10-22(Q38)). 채택: (가) 선택 항목으로 두고 `@google/design.md`의 버전을 고정한다. 결과를 기록한다. 채택하지 않음: (나) 검증 절차에서 뺀다.
+- **FE-TBD-013 시안 토큰 블록** (사용자 결정 2026-10-22(Q32)). 채택: (가) 시안의 토큰 블록을 시작·끝 표식으로 감싸고, `--check`가 생성 결과와 같은지 본다. 채택하지 않음: (나) 일회성 확인을 유지한다. 원본과 시안이 어긋날 수 있다.
+- **FE-TBD-014 실기기** (사용자 결정 2026-10-22(Q36)). 채택: (가) 변경마다 필수는 아니다. 릴리스 전에 한 번 확인하고 기록한다. 채택하지 않음: (나) 변경마다 확인한다. 비용이 크다.
+- **FE-TBD-015 검증 how-to 위치** (사용자 결정 2026-10-22(Q38)). 채택: (가) 새 파일 `docs/how-to/verify-dashboard-frontend.md`. 채택하지 않음: (나) 개발 환경 how-to에 절을 추가한다. 다른 작업과 충돌할 수 있다.
+- **FE-TBD-016 성능 지표** (사용자 결정 2026-10-22(Q39)). 보류한다. 확인한 PRD에 대시보드 성능 지표가 없다. 지표와 예산은 화면이 생긴 뒤 정한다. 정하기 전까지 성능 통과 조건을 두지 않는다. 열린 항목이다.
 
-채택되면 다음 문서를 같은 변경에서 고친다. 이 초안 변경에서는 고치지 않는다.
+### 8.2 같은 변경에서 고친 문서
 
-- [xtask 모듈 설계](../architectures/xtask.md) 1·7·8절: 새 하위 명령과 대시보드 테스트 수집 방법
-- [코드 지도](../architectures/code-map.md) `web/dashboard/` 행: 파일 구조와 내장 위치
-- [관리 API 계약 1.11절](../contracts/management-api-v1.md): CSP 문구(FE-TBD-010)
-- [테스트 컨벤션 7절](testing.md#7-테스트와-스펙-시나리오-연결): 브라우저 테스트 표식 규칙(FE-TBD-005)
-- [개발 환경·검증 how-to 2절](../how-to/set-up-and-verify.md): Chromium 전제(FE-TBD-006)
-- [DESIGN.md 검증 절](../design/DESIGN.md#검증): 검증 how-to와 생성 절차 링크(DESIGN-TBD-005를 해소할 때만)
+다음 문서를 이 결정과 같은 변경에서 고쳤다.
+
+- [xtask 모듈 설계](../architectures/xtask.md) 1·7·8절: 목표 명령 `tokens [--check]`·`dashboard-serve`(미구현 표시), 시험 수집 방법(Q35), 미결정 행 해소.
+- [관리 API 계약 1.11절](../contracts/management-api-v1.md): CSP 필수(FE-TBD-010). 계약 버전 1.1.0.
+- [테스트 컨벤션 2·7절](testing.md#7-테스트와-스펙-시나리오-연결): 브라우저 시험은 `#[ignore]` 예외이고, 표식은 Rust 시험에 둔다(FE-TBD-005·006).
+- [개발 환경·검증 how-to 2절](../how-to/set-up-and-verify.md): Chromium 전제(FE-TBD-006).
+- [DESIGN.md 검증 절](../design/DESIGN.md#검증): 검증 how-to 링크와 생성 절차 연결. DESIGN-TBD-005 해소.
+- [코드 지도](../architectures/code-map.md) `web/dashboard/` 행: 파일 구조와 내장 위치 연결.

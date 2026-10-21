@@ -2,6 +2,8 @@
 
 `xtask`는 저장소 검증용 명령 두 개를 제공하는 개발 전용 crate다. `cargo xtask scenarios`는 스펙 수용 테스트 표, 테스트 코드의 시나리오 표식, `cargo test` 결과를 대조해 시나리오별 상태 보고서를 만든다. `cargo xtask layers`는 `cargo metadata`의 crate 의존을 코드 지도의 레이어 표와 대조한다. 두 명령 모두 Cargo가 주는 정보(`cargo metadata`, 테스트 빌드 JSON 메시지, 테스트 출력)만 읽고 제품 crate를 링크하지 않는다.
 
+작업 0.9의 결정에 따라 `cargo xtask tokens`와 `cargo xtask dashboard-serve`를 추가하기로 했다. 두 명령은 아직 구현하지 않았다(사용자 결정 2026-10-22(Q32)·(Q34)).
+
 | 항목 | 값 |
 | --- | --- |
 | 구조 시점 | Current |
@@ -21,8 +23,8 @@
 - 맡지 않는 책임:
   - 라이선스 검사. [의존성 라이선스 검사](../how-to/check-dependency-licenses.md)의 `cargo deny`가 맡는다.
   - 모듈 안의 입출력 타입 금지. `crates/app/clippy.toml`과 `cargo clippy`가 맡는다.
-  - 대시보드 테스트 결과 수집. 프런트엔드 컨벤션(작업 0.9)에서 정한다.
-- 다른 모듈에 공개하는 기능: 없음. 명령행 `cargo xtask scenarios [--require-all]`, `cargo xtask layers`만 있다. 별칭은 `.cargo/config.toml`의 `[alias] xtask`다.
+  - 대시보드 테스트 결과 수집. 대시보드 브라우저 테스트는 Rust 통합 테스트라서 기존 스캐너가 읽는다(사용자 결정 2026-10-22(Q35)). 이 명령이 따로 모으지 않는다.
+- 다른 모듈에 공개하는 기능: 없음. 명령행 `cargo xtask scenarios [--require-all]`, `cargo xtask layers`만 있다. 목표(미구현): `cargo xtask tokens [--check]`(사용자 결정 2026-10-22(Q32)), `cargo xtask dashboard-serve`(사용자 결정 2026-10-22(Q34)). 별칭은 `.cargo/config.toml`의 `[alias] xtask`다.
 
 ## 2. 내부 구조
 
@@ -103,6 +105,7 @@ flowchart LR
 | 안정판 테스트 출력 형식만 사용 | libtest JSON 출력은 불안정 옵션(`-Z unstable-options`)이다. | `--format json`. 안정판에서 쓸 수 없다. | 고정 도구 모음 Rust 1.99.1 |
 | `layers`의 승인 crate 목록을 코드 상수로 유지 | PRD 표는 사람이 읽는 문장이라 기계적으로 읽기 어렵다. 목록을 바꿀 때 PRD 행과 같은 변경에서 고친다. | PRD 문장 해석. 문구가 바뀌면 깨진다. | `xtask/src/layers.rs` `APPROVED` 주석 |
 | 일부만 확인하는 테스트를 ` partial` 표식과 `부분` 상태로 구분 | 시스템 동작보다 먼저 만든 계약 테스트가 시나리오의 일부만 확인해도 보고서가 시나리오 전체를 `통과`로 보이지 않게 한다. | 부분 테스트에 표식을 달지 않기. 문서 규칙상 연결해야 할 테스트가 보고서에서 빠진다. 표식은 그대로 두고 `통과`로 읽기. 완료 여부를 오해한다. | 사용자 결정(2026-10-20) |
+| 대시보드 브라우저 테스트를 Rust 통합 테스트로 두고 기존 스캐너가 읽는다 | 테스트 결과를 별도 경로로 합치지 않아 보고 도구의 판정 규칙과 표식 문법을 바꾸지 않는다. Chromium을 실행하고 판정하는 일은 테스트 안에서 한다. | 별도 결과 파일을 `xtask`가 합치는 방법. 보고서가 두 곳으로 나뉜다. | 사용자 결정 2026-10-22(Q35) |
 
 ## 대조 기록
 
@@ -114,6 +117,4 @@ flowchart LR
 
 ## 8. 미결정 사항
 
-| 항목 | 영향 | 확정 위치 |
-| --- | --- | --- |
-| 대시보드 테스트 결과 수집 | 정적 HTML·JS 테스트를 보고서에 합치는 방법이 없다. DASH 시나리오 25건은 그 전까지 `미연결`이다. | 프런트엔드 컨벤션(작업 0.9) |
+현재 이 문서에 열린 항목은 없다. 대시보드 테스트 결과 수집은 사용자 결정 2026-10-22(Q35)로 정했다(1절과 7절). 대시보드 시나리오(DASH)는 브라우저 테스트 파일에 `/// spec:` 표식이 붙기 전까지 `미연결`이다.
