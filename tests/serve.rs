@@ -1027,6 +1027,59 @@ fn checks_each_tcp_entry_point_against_its_own_allow_list() {
     assert!(!text.contains("ID:1234"), "{text}");
 }
 
+/// spec: websocket.md:WS-024
+/// spec: operations.md:OPS-016 partial
+#[test]
+fn plaintext_ws_listener_is_off_by_default_and_warns_at_start_when_enabled() {
+    let _lock = lock_ports();
+    // Hold the WS port while the other ports are chosen, so that they differ.
+    let holder =
+        TcpListener::bind("127.0.0.1:0").unwrap_or_else(|error| panic!("free port: {error}"));
+    let ws_port = holder
+        .local_addr()
+        .unwrap_or_else(|error| panic!("local addr: {error}"))
+        .port();
+    let ports = Ports::free();
+    drop(holder);
+    let ws_listen = format!("127.0.0.1:{ws_port}");
+    let log_section = "\n[log]\noutput = \"relay.log\"\n";
+
+    // Default: no WS section. No WS listener opens and no WS warning is logged.
+    let config = setup_with("ws-default", &(config_text(ports) + log_section));
+    let log = config.with_file_name("relay.log");
+    let mut guard = Guard(Some(spawn(&config)));
+    wait_listening(guard.child(), ports);
+    wait_for_line(&log, |line| field(line, "event") == Some("server_ready"));
+    assert!(!connects(ws_port), "a default start opens no WS listener");
+    let text = read_log(&log);
+    assert!(!events(&text).contains(&"plaintext_ws_enabled"), "{text}");
+    drop(guard);
+
+    // Enabled: the WS listener opens, and the warning comes before server_ready.
+    let ws_section = format!(
+        "\n[relay.ws_viewer]\nenabled = true\nlisten = \"{ws_listen}\"\nallow = [\"127.0.0.1\"]\n"
+    );
+    let config = setup_with("ws-enabled", &(config_text(ports) + &ws_section + log_section));
+    let log = config.with_file_name("relay.log");
+    let mut guard = Guard(Some(spawn(&config)));
+    wait_listening(guard.child(), ports);
+    wait_for_line(&log, |line| field(line, "event") == Some("server_ready"));
+    assert!(connects(ws_port), "the enabled WS listener accepts TCP on {ws_listen}");
+    let text = read_log(&log);
+    let order = events(&text);
+    let warned = order.iter().position(|event| *event == "plaintext_ws_enabled");
+    let ready = order.iter().position(|event| *event == "server_ready");
+    assert!(matches!((warned, ready), (Some(w), Some(r)) if w < r), "{text}");
+    let warning = text
+        .lines()
+        .find(|line| field(line, "event") == Some("plaintext_ws_enabled"))
+        .unwrap_or_default();
+    assert_eq!(field(warning, "level"), Some("warn"));
+    assert_eq!(field(warning, "listener"), Some("ws_viewer"));
+    assert_eq!(field(warning, "listen"), Some(ws_listen.as_str()));
+    drop(guard);
+}
+
 /// spec: operations.md:OPS-040 partial
 /// spec: operations.md:OPS-038 partial
 #[test]

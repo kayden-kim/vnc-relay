@@ -17,7 +17,7 @@ use rustls::pki_types::{CertificateDer, ServerName};
 use rustls::version::{TLS12, TLS13};
 use rustls::{ClientConfig, RootCertStore, SupportedProtocolVersion};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt};
-use tokio::net::{TcpListener, TcpStream};
+use tokio::net::{TcpListener, TcpSocket, TcpStream};
 use tokio::sync::watch;
 use tokio::time::timeout;
 use tokio_rustls::{TlsAcceptor, TlsConnector};
@@ -138,13 +138,26 @@ struct Running {
     _stop: watch::Sender<bool>,
 }
 
-/// Starts a WS or WSS viewer entry point on loopback with the given policy.
+/// Starts a WS or WSS viewer entry point on loopback with the given policy
+/// and 8 relay places.
 async fn start(
     entry: EntryPoint,
     tls: Option<TlsAcceptor>,
     allow: &[&str],
     origins: &[&str],
     upgrade: Duration,
+) -> Running {
+    start_with_budget(entry, tls, allow, origins, upgrade, 8).await
+}
+
+/// Like `start`, with `places` relay places (L) instead of 8.
+async fn start_with_budget(
+    entry: EntryPoint,
+    tls: Option<TlsAcceptor>,
+    allow: &[&str],
+    origins: &[&str],
+    upgrade: Duration,
+    places: u32,
 ) -> Running {
     let listener = TcpListener::bind("127.0.0.1:0")
         .await
@@ -164,7 +177,7 @@ async fn start(
                     })
                     .collect(),
             ),
-            relay_budget: ConnectionBudget::new(8),
+            relay_budget: ConnectionBudget::new(places),
             handshake: HANDSHAKE,
             keepalive: KEEPALIVE,
         },
@@ -292,6 +305,19 @@ async fn refused(addr: SocketAddr, request: &[u8]) -> Vec<u8> {
         "the refused connection closes within {PROMPT:?}"
     );
     reply
+}
+
+/// Opens a loopback connection whose client address is `source`. Every
+/// 127.0.0.0/8 address is local, so the server sees `source` as the peer.
+async fn connect_from(source: [u8; 4], addr: SocketAddr) -> TcpStream {
+    let socket = TcpSocket::new_v4().unwrap_or_else(|error| panic!("socket: {error}"));
+    socket
+        .bind(SocketAddr::from((source, 0)))
+        .unwrap_or_else(|error| panic!("bind {source:?}: {error}"));
+    socket
+        .connect(addr)
+        .await
+        .unwrap_or_else(|error| panic!("connect from {source:?}: {error}"))
 }
 
 /// A plain request whose Origin header has the given value.
@@ -433,26 +459,30 @@ async fn disallowed_source_is_closed_before_tls_or_http_even_with_session_hints(
     .await;
 }
 
-/// spec: websocket.md:WS-023 partial
+/// spec: websocket.md:WS-023
 #[tokio::test]
-async fn disallowed_source_on_wss_gets_no_server_hello() {
-    let running = start(
+async fn disallowed_source_on_wss_is_closed_before_tls_and_holds_no_relay_place() {
+    // One relay place. A refused source that took it would leave none for
+    // the allowed client below.
+    let running = start_with_budget(
         EntryPoint::WssViewer,
         Some(tls_acceptor()),
-        &["10.0.0.1/32"],
+        &["127.0.0.1/32"],
         &[],
         UPGRADE,
+        1,
     )
     .await;
-    let tcp = TcpStream::connect(running.addr)
-        .await
-        .unwrap_or_else(|error| panic!("connect: {error}"));
     let name =
         ServerName::try_from("localhost").unwrap_or_else(|error| panic!("server name: {error}"));
-    let attempt = timeout(PROMPT, connector(&[&TLS12, &TLS13]).connect(name, tcp)).await;
+
+    // The refused client starts a real TLS handshake. The server must close
+    // before ServerHello within PROMPT, far below U.
+    let tcp = connect_from([127, 0, 0, 2], running.addr).await;
+    let attempt = timeout(PROMPT, connector(&[&TLS12, &TLS13]).connect(name.clone(), tcp)).await;
     assert!(
         matches!(attempt, Ok(Err(_))),
-        "a real TLS client sees the server close before ServerHello within {PROMPT:?}"
+        "a refused source sees the close before ServerHello within {PROMPT:?}"
     );
     wait_for(&running.events, |event| {
         matches!(
@@ -466,6 +496,100 @@ async fn disallowed_source_on_wss_gets_no_server_hello() {
         )
     })
     .await;
+
+    // The refusal left the one place free. The allowed client completes TLS
+    // and the upgrade.
+    let tcp = TcpStream::connect(running.addr)
+        .await
+        .unwrap_or_else(|error| panic!("connect: {error}"));
+    let mut stream = connector(&[&TLS12, &TLS13])
+        .connect(name, tcp)
+        .await
+        .unwrap_or_else(|error| panic!("allowed client gets a TLS session: {error}"));
+    stream
+        .write_all(&upgrade_request("/relay", &[]))
+        .await
+        .unwrap_or_else(|error| panic!("request is sent: {error}"));
+    let head = read_head(&mut stream).await;
+    assert_eq!(status_of(&head), 101);
+}
+
+/// spec: operations.md:OPS-037 partial
+#[tokio::test]
+async fn ws_and_wss_check_only_their_own_allow_lists() {
+    let ws = start(EntryPoint::WsViewer, None, &["127.0.0.2/32"], &[], UPGRADE).await;
+    let wss = start(
+        EntryPoint::WssViewer,
+        Some(tls_acceptor()),
+        &["127.0.0.3/32"],
+        &[],
+        UPGRADE,
+    )
+    .await;
+    let request = upgrade_request("/relay", &[]);
+    let name =
+        ServerName::try_from("localhost").unwrap_or_else(|error| panic!("server name: {error}"));
+
+    // Each address is allowed on one entry point only. The server decides at
+    // accept, so the refused WS client gets no HTTP reply.
+    let mut plain = connect_from([127, 0, 0, 3], ws.addr).await;
+    let _ = plain.write_all(&request).await;
+    let mut reply = Vec::new();
+    let closed = timeout(PROMPT, plain.read_to_end(&mut reply)).await;
+    assert!(closed.is_ok(), "ws_viewer closes 127.0.0.3 within {PROMPT:?}");
+    assert!(reply.is_empty(), "ws_viewer gives 127.0.0.3 no HTTP reply");
+    wait_for(&ws.events, |event| {
+        matches!(
+            event,
+            Event::ConnectionRejected {
+                listener: "ws_viewer",
+                stage: Stage::Accept,
+                reason: RejectReason::IpNotAllowed,
+                ..
+            }
+        )
+    })
+    .await;
+
+    let tcp = connect_from([127, 0, 0, 2], wss.addr).await;
+    let attempt = timeout(PROMPT, connector(&[&TLS12, &TLS13]).connect(name.clone(), tcp)).await;
+    assert!(
+        matches!(attempt, Ok(Err(_))),
+        "wss_viewer closes 127.0.0.2 before ServerHello within {PROMPT:?}"
+    );
+    wait_for(&wss.events, |event| {
+        matches!(
+            event,
+            Event::ConnectionRejected {
+                listener: "wss_viewer",
+                stage: Stage::Accept,
+                reason: RejectReason::IpNotAllowed,
+                ..
+            }
+        )
+    })
+    .await;
+
+    // Each address gets the upgrade on its own entry point.
+    let mut plain = connect_from([127, 0, 0, 2], ws.addr).await;
+    plain
+        .write_all(&request)
+        .await
+        .unwrap_or_else(|error| panic!("request is sent: {error}"));
+    let head = read_head(&mut plain).await;
+    assert_eq!(status_of(&head), 101);
+
+    let tcp = connect_from([127, 0, 0, 3], wss.addr).await;
+    let mut secure = connector(&[&TLS12, &TLS13])
+        .connect(name, tcp)
+        .await
+        .unwrap_or_else(|error| panic!("TLS handshake: {error}"));
+    secure
+        .write_all(&request)
+        .await
+        .unwrap_or_else(|error| panic!("request is sent: {error}"));
+    let head = read_head(&mut secure).await;
+    assert_eq!(status_of(&head), 101);
 }
 
 /// spec: websocket.md:WS-012 partial
