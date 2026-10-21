@@ -91,7 +91,7 @@ flowchart LR
 | --- | --- | --- | --- |
 | rustls, 암호 모듈 aws-lc-rs만 쓴다. `default-features = false`로 `std`·`tls12`·`aws_lc_rs`만 켠다. | 암호 모듈은 2026-10-20 사용자 결정으로 aws-lc-rs로 정했다. `log`와 `prefer-post-quantum`은 PRD 구현 기술 목록에 없어 켜지 않는다. | `ring` 단독. Cargo.lock의 `ring` 항목은 rustls-webpki의 약한 기능(`ring?/alloc`) 때문에 남고, 빌드에는 들어가지 않는다(`cargo tree -i ring` 결과 없음). | [설정 계약 1.9절](../contracts/config-v1.md#19-인증서개인키-파일-형식), [ADR-0004](../decisions/ADR-0004-tokio-rustls.md) |
 | TLS 1.2·1.3만 `with_protocol_versions`로 명시한다. | 설정 계약 1.9절이 TLS 1.2 미만 거절을 정한다. 코드에 의도를 남긴다. | 기본값 사용 | [설정 계약 1.9절](../contracts/config-v1.md#19-인증서개인키-파일-형식), [OPS-036](../specs/operations.md) |
-| 클라이언트 인증과 ALPN을 설정하지 않는다. | 3.1 범위는 서버 인증이다. WSS의 ALPN 값은 작업 3.2에서 정할 예정이었으나 정하지 않았다. 현재 코드는 ALPN을 고르지 않는다(§9). 관리 HTTPS도 ALPN을 설정하지 않는다([관리 리스너 모듈 설계 9절](management-listener.md#9-미결정-사항) 4번, 사용자 결정 2026-10-21). | 지금 `http/1.1` 설정 | [미결정 사항](#9-미결정-사항) |
+| 클라이언트 인증과 ALPN을 설정하지 않는다. | 3.1 범위는 서버 인증이다. WSS도 ALPN을 설정하지 않는다(사용자 결정 2026-10-22(Q29)). 현재 코드는 ALPN을 고르지 않는다. 관리 HTTPS도 ALPN을 설정하지 않는다([관리 리스너 모듈 설계 9절](management-listener.md#9-미결정-사항) 4번, 사용자 결정 2026-10-21). | 지금 `http/1.1` 설정 | 사용자 결정 2026-10-22(Q29), [미결정 사항](#9-미결정-사항) |
 | 개인키 종류는 시험한 것만 계약에 적는다. | 설정 계약 1.9절이 "구현에서 확인한 범위"로 정하라고 한다. rustls가 받는 종류를 모두 약속하지 않는다. | rustls가 받는 종류 전부 기록 | `crates/adapters/tests/tls.rs` 테스트 결과 |
 | 개인키 파일 권한은 검사하지 않는다. | 설정 계약 1.9절은 권한 제한을 권장만 한다. | 시작 때 권한 검사 | [설정 계약 1.9절](../contracts/config-v1.md#19-인증서개인키-파일-형식) |
 | 테스트 인증서는 커밋한 고정 파일로 두고 `rcgen`을 쓰지 않는다. | `rcgen`은 승인된 의존성과 PRD 구현 기술 목록에 없다. 생성 명령은 테스트 파일 머리 주석에 적는다. | 테스트마다 생성 | [테스트 규칙](../conventions/testing.md) |
@@ -111,9 +111,9 @@ flowchart LR
 | 항목 | 영향 | 확정 위치 |
 | --- | --- | --- |
 | 재로드 때 인증서 교체 방식(새 `TlsAcceptor`를 원자적으로 바꾸는 방법) | 실행 중 인증서 교체와 연결 유지 | 작업 5.x |
-| ALPN 값(WSS) | HTTP 종류 협상. 현재 코드는 ALPN을 고르지 않는다. | 사용자 결정 필요. 옵션은 ALPN 없음(관리 HTTPS와 같음)과 `http/1.1` 명시다. 관리 HTTPS는 [관리 리스너 모듈 설계 9절](management-listener.md#9-미결정-사항) 4번(해결). |
+| ALPN 값(WSS) | HTTP 종류 협상. 현재 코드는 ALPN을 고르지 않는다. | 해결: WSS도 ALPN을 설정하지 않는다(§7). 관리 HTTPS는 [관리 리스너 모듈 설계 9절](management-listener.md#9-미결정-사항) 4번(해결). 사용자 결정 2026-10-22(Q29) |
 | 개인키 메모리를 명시적으로 지우는 방법 | 현재 코드는 지우지 않는다. rustls가 드롭 때 하는 일에 기대고 있다. | 보안 검토 작업 |
-| OPS-002 조건 '리스너 바인드 뒤 내장 TLS 준비 실패'. 현재 시작 순서는 TLS 검사를 바인드 앞에 둔다([CLI 계약 1.8절](../contracts/cli-v1.md#18-수동-시작과-종료)). 그래서 이 조건이 일어나지 않는다. | TODO 3.1 완료 조건(OPS-002 부분). 스펙 문구 또는 시작 순서를 정해야 완료할 수 있다. | 사용자 결정 필요(스펙 문구 변경 또는 시작 순서 변경) |
+| OPS-002 조건 '리스너 바인드 뒤 내장 TLS 준비 실패'. 현재 시작 순서는 TLS 검사를 바인드 앞에 둔다([CLI 계약 1.8절](../contracts/cli-v1.md#18-수동-시작과-종료)). | TODO 3.1 완료 조건(OPS-002). 사용자 결정 2026-10-22(Q26)로 스펙 조건에서 '바인드 뒤'를 뺐다. 내장 TLS 준비 실패는 바인드 전에 시작을 중단한다. | 해결(사용자 결정 2026-10-22(Q26)) |
 
 ## 대조 기록
 
@@ -125,3 +125,4 @@ flowchart LR
 | 작업 3.1 검증(기준 커밋 `e701997`, 작업 트리 깨끗함). 코드 커밋 `89a1001`(WSS·관리 TLS 테스트)과 `e701997`(rustfmt). §6의 OPS-036·WS-013 행을 확인했다. | Ubuntu 24.04.4(WSL2), Rust 1.99.1 | `wsl -d Ubuntu -- bash /mnt/d/vr-tools/vr-full.sh`. 빌드·fmt·clippy·layers·scenarios·deny가 모두 종료 코드 0이다. 시나리오 결과 `시나리오 148건: 통과 11, 부분 20, 실패 0, 미실행 0, 미연결 117. 오류 0건.`, 판정 `통과`, 마지막 줄 `ALL PASSED`. `crates/adapters/tests/websocket.rs`의 `expired_untrusted_and_mismatched_certificates_fail_the_client_on_wss`(WS-013)와 `tls10_and_tls11_are_refused_and_tls12_and_tls13_succeed_on_wss_and_management`(OPS-036)가 통과했다. | OPS-036·WS-013 통과. OPS-002는 부분 유지(다음 행). |
 | OPS-002 조건(시작 중 TLS 준비 실패, 리스너 바인드 뒤)과 시작 순서 | 코드 대조(기준 커밋 `e701997`) | `src/serve.rs` `listen_until_shutdown`에서 `tls_checks`와 `tls::load_acceptor`가 `net::bind_one`·`net::bind`보다 먼저 실행된다. 스펙 조건은 이 순서에서 일어나지 않는다. `tests/serve.rs`의 `fails_with_exit_code_3_when_wss_key_does_not_match`·`fails_with_exit_code_3_when_management_certificate_is_missing`·`checks_tls_files_before_binding_a_taken_status_port`는 바인드 전 실패만 확인한다. | 부분 유지. TODO 3.1은 `[ ]`로 둔다. §9의 OPS-002 행 참조. |
 | 작업 3.1 검증(기준 커밋 `e701997`, 작업 트리 깨끗함) | Windows 11 Pro 10.0.26200, Rust 1.99.1(`x86_64-pc-windows-msvc`) | `powershell -NoProfile -ExecutionPolicy Bypass -File D:/vr-tools/vr-win.ps1 -Only all`. 판정 `통과`, 마지막 줄 `ALL PASSED (all)`. 시나리오 결과 `시나리오 148건: 통과 10, 부분 20, 실패 0, 미실행 1, 미연결 117. 오류 0건.` 미실행 1건은 기존 기록의 Unix 전용 시험(OPS-007)이다. | OPS-036·WS-013 통과. OPS-002는 부분 유지. |
+| 작업 3.1 검증(기준 커밋 `b505c60` + 작업 트리: 커밋 전 문서 변경 포함). OPS-002 스펙 조건(사용자 결정 2026-10-22(Q26))과 `tests/serve.rs` 비부분 표식 2건 | Ubuntu 24.04.4(WSL2)·Windows 11 Pro 10.0.26200, Rust 1.99.1 | `cargo fmt --all`(Windows), `wsl -d Ubuntu -- bash /mnt/d/vr-tools/vr-full.sh`, `powershell -NoProfile -ExecutionPolicy Bypass -File D:/vr-tools/vr-win.ps1 -Only all`. 판정 `통과`, 마지막 줄 `ALL PASSED`(Ubuntu)·`ALL PASSED (all)`(Windows). 시나리오 Ubuntu `시나리오 148건: 통과 12, 부분 26, 실패 0, 미실행 0, 미연결 110. 오류 0건.`, Windows `시나리오 148건: 통과 11, 부분 26, 실패 0, 미실행 1, 미연결 110. 오류 0건.`(미실행 1건은 Windows에서 건너뛰는 Unix 전용 시험). OPS-002는 두 OS에서 `통과`(`fails_with_exit_code_4_and_releases_listeners_when_a_port_is_taken`·`checks_tls_files_before_binding_a_taken_status_port`가 비부분 통과). OPS-036·WS-013도 두 OS에서 `통과`. | OPS-002·OPS-036·WS-013 통과(양 OS). TODO 3.1 완료 조건 충족. |
