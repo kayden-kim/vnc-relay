@@ -14,16 +14,24 @@ use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, ServerName};
 use rustls::version::{TLS12, TLS13};
 use rustls::{ClientConfig, RootCertStore, SupportedProtocolVersion};
-use serde_json::Value;
+use serde_json::{Value, json};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::time::timeout;
 use tokio_rustls::{TlsAcceptor, TlsConnector};
-use vnc_relay_adapters::management_http::ManagementListener;
+use vnc_relay_adapters::accounts_file::{Argon2Hasher, Argon2Verifier};
+use vnc_relay_adapters::clock::SystemClock;
+use vnc_relay_adapters::crypto::SystemTokenSource;
+use vnc_relay_adapters::management_http::{DashboardHints, ManagementListener};
 use vnc_relay_adapters::tls;
 use vnc_relay_app::events::{Event, RejectReason, Stage};
-use vnc_relay_app::ports::EventSink;
+use vnc_relay_app::management::login::dummy_hash;
+use vnc_relay_app::management::{AdminAuth, AdminPorts};
+use vnc_relay_app::ports::{EventSink, PasswordHasher};
+use vnc_relay_domain::account::{Account, AccountName, Argon2Params, Password};
+use vnc_relay_domain::admin_session::AdminSessionPolicy;
 use vnc_relay_domain::budget::ConnectionBudget;
+use vnc_relay_domain::login_limit::{LimitScope, LoginLimitPolicy};
 use vnc_relay_domain::peer_ip::PeerIp;
 
 /// Upper bound for one exchange. A hang fails the test instead of blocking it.
@@ -123,6 +131,24 @@ async fn start_with_upgrade(
     admin_connections: u32,
     upgrade: Duration,
 ) -> Running {
+    start_with(
+        tls,
+        admin_connections,
+        upgrade,
+        session_policy(),
+        limit_policy(),
+    )
+    .await
+}
+
+/// Starts a management listener on loopback with its own admin state.
+async fn start_with(
+    tls: Option<TlsAcceptor>,
+    admin_connections: u32,
+    upgrade: Duration,
+    session: AdminSessionPolicy,
+    limit: LoginLimitPolicy,
+) -> Running {
     let listener = TcpListener::bind("127.0.0.1:0")
         .await
         .unwrap_or_else(|error| panic!("loopback bind: {error}"));
@@ -132,8 +158,25 @@ async fn start_with_upgrade(
     let events = Arc::new(Recorder::default());
     let log: Arc<dyn EventSink> = events.clone();
     let budget = ConnectionBudget::new(admin_connections);
-    tokio::spawn(ManagementListener::new(listener, tls, budget, upgrade).run(log));
+    let auth = admin_auth(Arc::clone(&log), session, limit);
+    let dashboard = DashboardHints::new(
+        Duration::from_secs(2),
+        Duration::from_secs(5),
+        Duration::from_secs(10),
+    );
+    let listener = ManagementListener::new(listener, tls, budget, upgrade, auth, dashboard);
+    tokio::spawn(listener.run(log));
     Running { addr, events }
+}
+
+/// Session times that the login tests never reach by accident.
+fn session_policy() -> AdminSessionPolicy {
+    AdminSessionPolicy::new(Duration::from_secs(600), Duration::from_secs(3600))
+}
+
+/// Limits that the login tests never reach. The limit tests pass their own.
+fn limit_policy() -> LoginLimitPolicy {
+    LoginLimitPolicy::new(50, 500, Duration::from_secs(60), Duration::from_secs(60))
 }
 
 /// The loopback peer that the test client uses. The port does not matter for
@@ -585,4 +628,567 @@ async fn login_paths_have_no_page_before_static_files_arrive() {
         assert_eq!(reply.status, 404, "GET {path}");
         assert_eq!(error_code(&reply), "not_found", "GET {path}");
     }
+}
+
+// Admin login and session API (management-api-v1 §1.2–§1.5).
+
+/// Accounts of the login tests. Both are administrators.
+const ACCOUNT: &str = "alice";
+const PASSWORD: &str = "correct-horse-battery";
+const OTHER_ACCOUNT: &str = "bob";
+const OTHER_PASSWORD: &str = "another-long-password";
+
+/// Minimal Argon2id parameters. The tests log in often, so each hash must be cheap.
+const TEST_PARAMS: Argon2Params = Argon2Params {
+    memory_kib: 8,
+    iterations: 1,
+    parallelism: 1,
+};
+
+/// The cookie that a refused or ended session clears over plain HTTP.
+const CLEARED_COOKIE: &str = "relay_admin_session=; Path=/; Max-Age=0; HttpOnly; SameSite=Strict";
+
+/// Admin state of one listener: `alice` and `bob` with their test passwords.
+fn admin_auth(
+    log: Arc<dyn EventSink>,
+    session: AdminSessionPolicy,
+    limit: LoginLimitPolicy,
+) -> Arc<AdminAuth> {
+    let accounts: Vec<Account> = [(ACCOUNT, PASSWORD), (OTHER_ACCOUNT, OTHER_PASSWORD)]
+        .into_iter()
+        .map(|(name, password)| {
+            let name = AccountName::parse(name)
+                .unwrap_or_else(|error| panic!("test account name is valid: {error}"));
+            let password = Password::parse(password.to_owned())
+                .unwrap_or_else(|error| panic!("test password is valid: {error:?}"));
+            let password_hash = Argon2Hasher
+                .hash(&password, TEST_PARAMS)
+                .unwrap_or_else(|error| panic!("test hash is made: {error}"));
+            Account {
+                name,
+                password_hash,
+            }
+        })
+        .collect();
+    let dummy = dummy_hash(&Argon2Hasher, TEST_PARAMS)
+        .unwrap_or_else(|error| panic!("dummy hash is made: {error}"));
+    let ports = AdminPorts {
+        verifier: Arc::new(Argon2Verifier),
+        tokens: Arc::new(SystemTokenSource),
+        clock: Arc::new(SystemClock::new()),
+        events: log,
+    };
+    Arc::new(AdminAuth::new(accounts, dummy, ports, session, limit))
+}
+
+/// A `POST` request with a JSON body. Its length comes from the body.
+fn post_json(path: &str, body: &Value, extra_headers: &[&str]) -> Vec<u8> {
+    let text = body.to_string();
+    let length = format!("Content-Length: {}", text.len());
+    let mut headers = vec!["Content-Type: application/json", length.as_str()];
+    headers.extend_from_slice(extra_headers);
+    let mut bytes = request("POST", path, &headers);
+    bytes.extend_from_slice(text.as_bytes());
+    bytes
+}
+
+/// The login request for `account` with `password`.
+fn login_request(account: &str, password: &str) -> Vec<u8> {
+    post_json(
+        "/api/v1/session",
+        &json!({ "account": account, "password": password }),
+        &[],
+    )
+}
+
+/// The `Cookie` header that sends the session cookie of a login reply.
+fn cookie_line(login: &Reply) -> String {
+    let set_cookie = login
+        .header("set-cookie")
+        .unwrap_or_else(|| panic!("login sets the session cookie"));
+    let pair = set_cookie.split(';').next().unwrap_or_default();
+    format!("Cookie: {pair}")
+}
+
+/// The `X-CSRF-Token` header with the token of a session view.
+fn csrf_line(view: &Reply) -> String {
+    let body = json_body(view);
+    let token = body["csrf_token"]
+        .as_str()
+        .unwrap_or_else(|| panic!("view has csrf_token: {body}"));
+    format!("X-CSRF-Token: {token}")
+}
+
+fn json_body(reply: &Reply) -> Value {
+    serde_json::from_slice(&reply.body).unwrap_or_else(|error| panic!("body is JSON: {error}"))
+}
+
+/// Checks the `Set-Cookie` of a login reply: its attributes and the token form.
+fn check_session_cookie(login: &Reply, secure: bool) {
+    let set_cookie = login
+        .header("set-cookie")
+        .unwrap_or_else(|| panic!("login sets the session cookie"));
+    let (pair, attributes) = set_cookie
+        .split_once(';')
+        .unwrap_or_else(|| panic!("cookie has attributes: {set_cookie}"));
+    let expected = if secure {
+        " Path=/; HttpOnly; SameSite=Strict; Secure"
+    } else {
+        " Path=/; HttpOnly; SameSite=Strict"
+    };
+    assert_eq!(attributes, expected, "cookie attributes");
+    let token = pair
+        .strip_prefix("relay_admin_session=")
+        .unwrap_or_else(|| panic!("cookie has the session name: {pair}"));
+    assert_eq!(token.len(), 64, "token has 64 characters");
+    assert!(
+        token
+            .bytes()
+            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)),
+        "token is lowercase hex"
+    );
+}
+
+// Covers the login and the session view over HTTPS. The operational queries
+// (4.4) are not built yet, so the session view stands in for them here.
+/// spec: management.md:MGT-017 partial
+#[tokio::test]
+async fn https_login_sets_a_secure_cookie_and_opens_the_session_view() {
+    let running = start(Some(tls_acceptor()), ROOMY_LM).await;
+
+    let login = https_exchange(running.addr, &[&TLS13], &login_request(ACCOUNT, PASSWORD)).await;
+    assert_eq!(login.status, 200);
+    check_session_cookie(&login, true);
+    let view = json_body(&login);
+    assert_eq!(view["account"], ACCOUNT);
+    assert_eq!(view["dashboard"]["poll_secs"], 2);
+    assert_eq!(view["dashboard"]["query_timeout_secs"], 5);
+    assert_eq!(view["dashboard"]["terminate_timeout_secs"], 15);
+
+    let cookie = cookie_line(&login);
+    let reply = https_exchange(
+        running.addr,
+        &[&TLS13],
+        &get("/api/v1/session", &[cookie.as_str()]),
+    )
+    .await;
+    assert_eq!(reply.status, 200);
+    assert_eq!(json_body(&reply)["account"], ACCOUNT);
+}
+
+// Covers the login and the session view over plain loopback HTTP. The operational
+// queries (4.4) are not built yet, so the session view stands in for them here.
+/// spec: management.md:MGT-017 partial
+#[tokio::test]
+async fn plain_http_login_sets_a_cookie_without_secure() {
+    let running = start(None, ROOMY_LM).await;
+
+    let login = plain_exchange(running.addr, &login_request(ACCOUNT, PASSWORD)).await;
+    assert_eq!(login.status, 200);
+    check_session_cookie(&login, false);
+
+    let cookie = cookie_line(&login);
+    let reply = plain_exchange(running.addr, &get("/api/v1/session", &[cookie.as_str()])).await;
+    assert_eq!(reply.status, 200);
+    assert_eq!(json_body(&reply)["account"], ACCOUNT);
+}
+
+// Covers the refusal of a wrong password and of an unknown account. The response
+// time is not measured yet, so the timing of the two cases is not compared (contract §6).
+/// spec: management.md:MGT-018 partial
+#[tokio::test]
+async fn wrong_password_and_unknown_account_get_the_same_refusal() {
+    let running = start(None, ROOMY_LM).await;
+
+    let wrong = plain_exchange(running.addr, &login_request(ACCOUNT, "wrong-password")).await;
+    let unknown = plain_exchange(running.addr, &login_request("nobody", PASSWORD)).await;
+
+    for reply in [&wrong, &unknown] {
+        assert_eq!(reply.status, 401);
+        assert_eq!(error_code(reply), "login_failed");
+        assert_eq!(reply.header("set-cookie"), None);
+    }
+    for name in ["www-authenticate", "cache-control", "content-type"] {
+        assert_eq!(wrong.header(name), unknown.header(name), "{name}");
+    }
+    assert_eq!(wrong.body, unknown.body);
+}
+
+// Covers the account limit and the end of its lock. The delay that the contract
+// also allows is not used, and the timing of the two cases is not measured yet (contract §6).
+/// spec: management.md:MGT-022 partial
+#[tokio::test]
+async fn account_limit_refuses_logins_until_the_lock_ends() {
+    let limit = LoginLimitPolicy::new(2, 100, Duration::from_secs(60), Duration::from_millis(600));
+    let running = start_with(None, ROOMY_LM, UPGRADE, session_policy(), limit).await;
+
+    // F = 2 failures are allowed. The third failure starts the lock.
+    for _ in 0..3 {
+        let reply = plain_exchange(running.addr, &login_request(ACCOUNT, "wrong-password")).await;
+        assert_eq!(reply.status, 401);
+        assert_eq!(error_code(&reply), "login_failed");
+    }
+    // While locked, the right password is refused too.
+    let locked = plain_exchange(running.addr, &login_request(ACCOUNT, PASSWORD)).await;
+    assert_eq!(locked.status, 401);
+    assert_eq!(error_code(&locked), "login_failed");
+    assert_eq!(locked.header("set-cookie"), None);
+
+    // An unknown account is limited the same way.
+    for _ in 0..3 {
+        let reply = plain_exchange(running.addr, &login_request("nobody", "wrong-password")).await;
+        assert_eq!(reply.status, 401);
+    }
+    let limited = running
+        .events
+        .snapshot()
+        .iter()
+        .filter(|event| {
+            matches!(
+                event,
+                Event::AdminLoginLimited {
+                    scope: LimitScope::Account,
+                    ..
+                }
+            )
+        })
+        .count();
+    assert_eq!(limited, 2, "one limited event per locked account");
+
+    // The lock ends with its time, and then the right password works.
+    tokio::time::sleep(Duration::from_millis(700)).await;
+    let reply = plain_exchange(running.addr, &login_request(ACCOUNT, PASSWORD)).await;
+    assert_eq!(reply.status, 200);
+    check_session_cookie(&reply, false);
+}
+
+// Covers the source limit: after it starts, other accounts from the same source are
+// refused too. The delay variant and the timing are not covered yet (contract §6).
+/// spec: management.md:MGT-022 partial
+#[tokio::test]
+async fn source_limit_refuses_other_accounts_too() {
+    let limit = LoginLimitPolicy::new(10, 2, Duration::from_secs(60), Duration::from_secs(60));
+    let running = start_with(None, ROOMY_LM, UPGRADE, session_policy(), limit).await;
+
+    for _ in 0..3 {
+        let reply = plain_exchange(running.addr, &login_request(ACCOUNT, "wrong-password")).await;
+        assert_eq!(reply.status, 401);
+    }
+    let reply = plain_exchange(
+        running.addr,
+        &login_request(OTHER_ACCOUNT, OTHER_PASSWORD),
+    )
+    .await;
+    assert_eq!(reply.status, 401);
+    assert_eq!(error_code(&reply), "login_failed");
+    assert!(running.events.snapshot().iter().any(|event| matches!(
+        event,
+        Event::AdminLoginLimited {
+            scope: LimitScope::Source,
+            ..
+        }
+    )));
+}
+
+// Covers the expired session for the session view and for logout. The query (4.4)
+// and terminate (4.5) paths are not built yet, and relay sessions are not checked here.
+/// spec: management.md:MGT-019 partial
+#[tokio::test]
+async fn expired_session_cookie_is_refused_by_the_view_and_by_logout() {
+    let session = AdminSessionPolicy::new(Duration::from_millis(300), Duration::from_secs(3600));
+    let running = start_with(None, ROOMY_LM, UPGRADE, session, limit_policy()).await;
+
+    let login = plain_exchange(running.addr, &login_request(ACCOUNT, PASSWORD)).await;
+    assert_eq!(login.status, 200);
+    let cookie = cookie_line(&login);
+    let csrf = csrf_line(&login);
+    tokio::time::sleep(Duration::from_millis(500)).await;
+
+    let view = plain_exchange(running.addr, &get("/api/v1/session", &[cookie.as_str()])).await;
+    assert_eq!(view.status, 401);
+    assert_eq!(error_code(&view), "unauthenticated");
+    assert_eq!(view.header("set-cookie"), Some(CLEARED_COOKIE));
+
+    let logout = plain_exchange(
+        running.addr,
+        &request(
+            "DELETE",
+            "/api/v1/session",
+            &[cookie.as_str(), csrf.as_str()],
+        ),
+    )
+    .await;
+    assert_eq!(logout.status, 401);
+    assert_eq!(error_code(&logout), "unauthenticated");
+}
+
+// Covers the idle deadline: automatic polls (X-Relay-Poll: 1) do not extend it. Relay
+// sessions are not checked here.
+/// spec: management.md:MGT-025 partial
+#[tokio::test]
+async fn automatic_polls_do_not_extend_the_idle_deadline() {
+    let idle = Duration::from_millis(500);
+    let session = AdminSessionPolicy::new(idle, Duration::from_secs(3600));
+    let running = start_with(None, ROOMY_LM, UPGRADE, session, limit_policy()).await;
+
+    let started = Instant::now();
+    let login = plain_exchange(running.addr, &login_request(ACCOUNT, PASSWORD)).await;
+    let cookie = cookie_line(&login);
+    let mut refused = None;
+    for _ in 0..50 {
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        let poll = plain_exchange(
+            running.addr,
+            &get("/api/v1/session", &[cookie.as_str(), "X-Relay-Poll: 1"]),
+        )
+        .await;
+        if poll.status == 401 {
+            refused = Some(poll);
+            break;
+        }
+        assert_eq!(poll.status, 200, "poll before the idle deadline");
+    }
+    let refused = refused.unwrap_or_else(|| panic!("polls do not extend the idle deadline"));
+    assert_eq!(error_code(&refused), "unauthenticated");
+    assert!(
+        started.elapsed() >= idle,
+        "refused only after the idle time"
+    );
+}
+
+// Covers the absolute deadline: user actions extend the idle deadline, but the
+// absolute deadline still ends the session. Relay sessions are not checked here.
+/// spec: management.md:MGT-025 partial
+#[tokio::test]
+async fn user_actions_keep_the_session_until_the_absolute_deadline() {
+    let max_lifetime = Duration::from_millis(1200);
+    let session = AdminSessionPolicy::new(Duration::from_millis(400), max_lifetime);
+    let running = start_with(None, ROOMY_LM, UPGRADE, session, limit_policy()).await;
+
+    let started = Instant::now();
+    let login = plain_exchange(running.addr, &login_request(ACCOUNT, PASSWORD)).await;
+    let cookie = cookie_line(&login);
+    let mut refused = None;
+    for _ in 0..40 {
+        tokio::time::sleep(Duration::from_millis(150)).await;
+        let view = plain_exchange(running.addr, &get("/api/v1/session", &[cookie.as_str()])).await;
+        if view.status == 401 {
+            refused = Some(view);
+            break;
+        }
+        assert_eq!(view.status, 200, "user action before the absolute deadline");
+    }
+    let refused = refused.unwrap_or_else(|| panic!("the absolute deadline ends the session"));
+    assert_eq!(error_code(&refused), "unauthenticated");
+    assert!(
+        started.elapsed() >= max_lifetime,
+        "refused only after the absolute lifetime"
+    );
+}
+
+// Covers the logout of one admin session. The relay sessions that stay open need a
+// running relay, which this listener test does not start.
+/// spec: management.md:MGT-020 partial
+#[tokio::test]
+async fn logout_ends_only_its_own_session() {
+    let running = start(None, ROOMY_LM).await;
+
+    let first = plain_exchange(running.addr, &login_request(ACCOUNT, PASSWORD)).await;
+    let second = plain_exchange(running.addr, &login_request(ACCOUNT, PASSWORD)).await;
+    assert_eq!(first.status, 200);
+    assert_eq!(second.status, 200);
+    let first_cookie = cookie_line(&first);
+    let first_csrf = csrf_line(&first);
+    let second_cookie = cookie_line(&second);
+
+    let logout = plain_exchange(
+        running.addr,
+        &request(
+            "DELETE",
+            "/api/v1/session",
+            &[first_cookie.as_str(), first_csrf.as_str()],
+        ),
+    )
+    .await;
+    assert_eq!(logout.status, 204);
+    assert_eq!(logout.header("set-cookie"), Some(CLEARED_COOKIE));
+    assert_eq!(logout.header("cache-control"), Some("no-store"));
+    assert!(logout.body.is_empty());
+
+    let reused = plain_exchange(
+        running.addr,
+        &get("/api/v1/session", &[first_cookie.as_str()]),
+    )
+    .await;
+    assert_eq!(reused.status, 401);
+    let kept = plain_exchange(
+        running.addr,
+        &get("/api/v1/session", &[second_cookie.as_str()]),
+    )
+    .await;
+    assert_eq!(kept.status, 200);
+}
+
+// Covers the CSRF check of logout. The terminate path (4.5) is not built yet, so the
+// check of a terminate request is not covered here.
+/// spec: management.md:MGT-014 partial
+#[tokio::test]
+async fn logout_without_the_csrf_token_is_refused_and_keeps_the_session() {
+    let running = start(None, ROOMY_LM).await;
+    let login = plain_exchange(running.addr, &login_request(ACCOUNT, PASSWORD)).await;
+    let cookie = cookie_line(&login);
+    let csrf = csrf_line(&login);
+
+    let missing = plain_exchange(
+        running.addr,
+        &request("DELETE", "/api/v1/session", &[cookie.as_str()]),
+    )
+    .await;
+    assert_eq!(missing.status, 403);
+    assert_eq!(error_code(&missing), "csrf_invalid");
+
+    let wrong = plain_exchange(
+        running.addr,
+        &request(
+            "DELETE",
+            "/api/v1/session",
+            &[cookie.as_str(), "X-CSRF-Token: not-the-token"],
+        ),
+    )
+    .await;
+    assert_eq!(wrong.status, 403);
+    assert_eq!(error_code(&wrong), "csrf_invalid");
+
+    let view = plain_exchange(running.addr, &get("/api/v1/session", &[cookie.as_str()])).await;
+    assert_eq!(view.status, 200, "refused logouts keep the session");
+
+    let logout = plain_exchange(
+        running.addr,
+        &request(
+            "DELETE",
+            "/api/v1/session",
+            &[cookie.as_str(), csrf.as_str()],
+        ),
+    )
+    .await;
+    assert_eq!(logout.status, 204);
+}
+
+// Simulates the restart with a second listener and fresh admin state. A real process
+// restart is not tested here.
+/// spec: management.md:MGT-027 partial
+#[tokio::test]
+async fn cookie_from_before_a_restart_is_refused_and_login_works_again() {
+    let before = start(None, ROOMY_LM).await;
+    let login = plain_exchange(before.addr, &login_request(ACCOUNT, PASSWORD)).await;
+    let old_cookie = cookie_line(&login);
+    let old_csrf = csrf_line(&login);
+
+    // The restarted listener starts with no sessions.
+    let after = start(None, ROOMY_LM).await;
+    let stale = plain_exchange(after.addr, &get("/api/v1/session", &[old_cookie.as_str()])).await;
+    assert_eq!(stale.status, 401);
+    assert_eq!(error_code(&stale), "unauthenticated");
+    let stale_logout = plain_exchange(
+        after.addr,
+        &request(
+            "DELETE",
+            "/api/v1/session",
+            &[old_cookie.as_str(), old_csrf.as_str()],
+        ),
+    )
+    .await;
+    assert_eq!(stale_logout.status, 401);
+
+    let relogin = plain_exchange(after.addr, &login_request(ACCOUNT, PASSWORD)).await;
+    assert_eq!(relogin.status, 200);
+    let new_cookie = cookie_line(&relogin);
+    let view = plain_exchange(after.addr, &get("/api/v1/session", &[new_cookie.as_str()])).await;
+    assert_eq!(view.status, 200);
+}
+
+// Covers the logins of both admin accounts. The local CLI account setup and the query
+// and terminate permissions (4.4, 4.5) are not covered here.
+/// spec: operations.md:OPS-029 partial
+#[tokio::test]
+async fn each_admin_account_logs_in_to_the_same_session_view() {
+    let running = start(None, ROOMY_LM).await;
+
+    for (account, password) in [(ACCOUNT, PASSWORD), (OTHER_ACCOUNT, OTHER_PASSWORD)] {
+        let login = plain_exchange(running.addr, &login_request(account, password)).await;
+        assert_eq!(login.status, 200, "{account} logs in");
+        assert_eq!(json_body(&login)["account"], account);
+        let cookie = cookie_line(&login);
+        let view = plain_exchange(running.addr, &get("/api/v1/session", &[cookie.as_str()])).await;
+        assert_eq!(view.status, 200, "{account} opens the session view");
+        assert_eq!(json_body(&view)["account"], account);
+    }
+}
+
+#[tokio::test]
+async fn login_body_must_be_a_json_account_and_password() {
+    let running = start(None, ROOMY_LM).await;
+
+    let mut text_plain = request(
+        "POST",
+        "/api/v1/session",
+        &["Content-Type: text/plain", "Content-Length: 2"],
+    );
+    text_plain.extend_from_slice(b"{}");
+    let reply = plain_exchange(running.addr, &text_plain).await;
+    assert_eq!(reply.status, 415);
+    assert_eq!(error_code(&reply), "invalid_request");
+
+    for body in [
+        json!({ "account": ACCOUNT }),
+        json!({ "account": ACCOUNT, "password": "" }),
+        json!("alice"),
+    ] {
+        let reply = plain_exchange(
+            running.addr,
+            &post_json("/api/v1/session", &body, &[]),
+        )
+        .await;
+        assert_eq!(reply.status, 400, "body {body}");
+        assert_eq!(error_code(&reply), "invalid_request");
+    }
+
+    // A charset parameter does not change the media type.
+    let body = json!({ "account": ACCOUNT, "password": PASSWORD }).to_string();
+    let length = format!("Content-Length: {}", body.len());
+    let mut bytes = request(
+        "POST",
+        "/api/v1/session",
+        &["Content-Type: application/json; charset=utf-8", length.as_str()],
+    );
+    bytes.extend_from_slice(body.as_bytes());
+    let reply = plain_exchange(running.addr, &bytes).await;
+    assert_eq!(reply.status, 200);
+}
+
+#[tokio::test]
+async fn valid_session_gets_not_found_or_refusal_for_other_api_paths() {
+    let running = start(None, ROOMY_LM).await;
+    let login = plain_exchange(running.addr, &login_request(ACCOUNT, PASSWORD)).await;
+    let cookie = cookie_line(&login);
+
+    let unknown = plain_exchange(running.addr, &get("/api/v1/unknown", &[cookie.as_str()])).await;
+    assert_eq!(unknown.status, 404);
+    assert_eq!(error_code(&unknown), "not_found");
+
+    let method = plain_exchange(
+        running.addr,
+        &request("PUT", "/api/v1/session", &[cookie.as_str()]),
+    )
+    .await;
+    assert_eq!(method.status, 405);
+    assert_eq!(method.header("allow"), Some("GET, POST, DELETE"));
+
+    let poll = plain_exchange(
+        running.addr,
+        &get("/api/v1/session", &[cookie.as_str(), "X-Relay-Poll: 0"]),
+    )
+    .await;
+    assert_eq!(poll.status, 400);
+    assert_eq!(error_code(&poll), "invalid_request");
 }

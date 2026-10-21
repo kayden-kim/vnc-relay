@@ -1,17 +1,44 @@
-//! OS random numbers and HMAC-SHA-256 with aws-lc-rs. Design:
-//! docs/architectures/ops-log.md (`relay_id_ref`, ops-info-v1 §1.9) and
-//! docs/architectures/admin-accounts.md (password hash salts).
+//! OS random numbers, admin session tokens, and HMAC-SHA-256 with aws-lc-rs.
+//! Design: docs/architectures/ops-log.md (`relay_id_ref`, ops-info-v1 §1.9),
+//! docs/architectures/admin-accounts.md (password hash salts), and
+//! docs/architectures/management-session.md (session IDs, CSRF tokens).
 
 use std::fmt;
 
-use aws_lc_rs::{hmac, rand};
+use aws_lc_rs::{constant_time, hmac, rand};
 use vnc_relay_app::events::RelayIdRef;
+use vnc_relay_app::ports::{RandomError, TokenSource};
 
 const KEY_BYTES: usize = 32;
+const TOKEN_BYTES: usize = 32;
 
 /// Fills `bytes` from the OS random source.
 pub fn random_bytes(bytes: &mut [u8]) -> Result<(), CryptoError> {
     rand::fill(bytes).map_err(|_| CryptoError)
+}
+
+/// Admin session IDs and CSRF tokens: 32 OS random bytes as 64 lowercase hex
+/// digits (management-api-v1 §1.4.1, §1.4.3). The comparison runs in
+/// constant time.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct SystemTokenSource;
+
+impl TokenSource for SystemTokenSource {
+    fn new_token(&self) -> Result<String, RandomError> {
+        const HEX: &[u8; 16] = b"0123456789abcdef";
+        let mut bytes = [0u8; TOKEN_BYTES];
+        random_bytes(&mut bytes).map_err(|e| RandomError(e.to_string()))?;
+        let mut text = String::with_capacity(TOKEN_BYTES * 2);
+        for byte in bytes {
+            text.push(char::from(HEX[usize::from(byte >> 4)]));
+            text.push(char::from(HEX[usize::from(byte & 0x0f)]));
+        }
+        Ok(text)
+    }
+
+    fn same_token(&self, expected: &str, given: &str) -> bool {
+        constant_time::verify_slices_are_equal(expected.as_bytes(), given.as_bytes()).is_ok()
+    }
 }
 
 /// The per-process key of `relay_id_ref`. It is made from OS random bytes,
@@ -72,5 +99,17 @@ mod tests {
         let key = RelayIdKey::from_bytes(&bytes);
         assert_eq!(key.reference(b"1234").as_str(), "75a2b0661f593e7c");
         assert_eq!(key.reference(b"relay-id-1234").as_str(), "8800f76acc6dd1d2");
+    }
+
+    #[test]
+    fn tokens_are_64_lowercase_hex_digits_and_compare_exactly() {
+        let source = SystemTokenSource;
+        let Ok(token) = source.new_token() else {
+            panic!("the OS random source must answer in tests");
+        };
+        assert_eq!(token.len(), 64);
+        assert!(token.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)));
+        assert!(source.same_token(&token, &token));
+        assert!(!source.same_token(&token, "0"));
     }
 }

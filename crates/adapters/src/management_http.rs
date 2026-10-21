@@ -1,28 +1,33 @@
 //! The management listener: HTTPS through the built-in TLS acceptor, or plain
-//! HTTP on loopback only (config-v1 §1.2 `[management]`, operations.md OPS-034). It answers
-//! the routes that need no session. Login, session views, queries, termination
-//! and static files come with tasks 4.3–4.6.
-//! Design: docs/architectures/management-listener.md.
+//! HTTP on loopback only (config-v1 §1.2 `[management]`, operations.md OPS-034).
+//! It answers the login and session routes (management-api-v1 §1.5). Queries
+//! and termination come with tasks 4.4–4.5, static files with 4.6.
+//! Design: docs/architectures/management-listener.md and
+//! docs/architectures/management-session.md.
 
+use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 
 use axum::Router;
-use axum::extract::State;
+use axum::extract::{ConnectInfo, Request, State};
 use axum::http::header::{
     ALLOW, CACHE_CONTROL, CONTENT_TYPE, COOKIE, LOCATION, SET_COOKIE, WWW_AUTHENTICATE,
 };
-use axum::http::{HeaderMap, HeaderValue, Method, StatusCode, Uri};
+use axum::http::{HeaderMap, HeaderValue, Method, StatusCode};
 use axum::response::{IntoResponse, Response};
-use serde_json::json;
+use serde_json::{Value, json};
 use tokio::net::TcpListener;
 use tokio_rustls::TlsAcceptor;
+use vnc_relay_app::management::AdminAuth;
 use vnc_relay_app::ports::EventSink;
 use vnc_relay_domain::budget::ConnectionBudget;
 
 use crate::admission::AdmittingListener;
 use crate::request_deadline::DeadlineListener;
 use crate::tls_listener::TlsListener;
+
+mod session_api;
 
 /// `listener` of the management listener in operation events (ops-info-v1 §1.5).
 const LISTENER: &str = "management";
@@ -43,22 +48,29 @@ pub struct ManagementListener {
     tls: Option<TlsAcceptor>,
     admin_budget: Arc<ConnectionBudget>,
     tls_upgrade: Duration,
+    auth: Arc<AdminAuth>,
+    dashboard: DashboardHints,
 }
 
 impl ManagementListener {
     /// `admin_budget` is Lm, shared with the status listener. `tls_upgrade` is U:
-    /// the limit on the TLS handshake and on reading each request head.
+    /// the limit on the TLS handshake and on reading each request head. `auth`
+    /// holds the admin accounts and the admin sessions.
     pub fn new(
         listener: TcpListener,
         tls: Option<TlsAcceptor>,
         admin_budget: Arc<ConnectionBudget>,
         tls_upgrade: Duration,
+        auth: Arc<AdminAuth>,
+        dashboard: DashboardHints,
     ) -> Self {
         Self {
             listener,
             tls,
             admin_budget,
             tls_upgrade,
+            auth,
+            dashboard,
         }
     }
 
@@ -68,8 +80,17 @@ impl ManagementListener {
         let admitting =
             AdmittingListener::new(self.listener, self.admin_budget, Arc::clone(&log), LISTENER);
         // One fallback judges path and method itself, so every method reaches
-        // the same rules (management-api-v1 §1.3, §1.11).
-        let router = Router::new().fallback(answer).with_state(Scheme { secure });
+        // the same rules (management-api-v1 §1.3, §1.11). The peer address
+        // reaches the login limit through `ConnectInfo`.
+        let shared = Shared {
+            secure,
+            auth: self.auth,
+            dashboard: self.dashboard,
+        };
+        let router = Router::new()
+            .fallback(answer)
+            .with_state(shared)
+            .into_make_service_with_connect_info::<SocketAddr>();
         // `serve` ends only on a listener error. Both listeners retry or
         // refuse without error, so there is no error to handle here.
         match self.tls {
@@ -86,40 +107,59 @@ impl ManagementListener {
     }
 }
 
-/// What the handlers need from the connection they answer.
-#[derive(Clone, Copy)]
-struct Scheme {
-    /// `true` when the connection runs over TLS.
-    secure: bool,
+/// The dashboard values that the session view carries (management-api-v1 §1.5).
+#[derive(Debug, Clone, Copy)]
+pub struct DashboardHints {
+    poll_secs: u64,
+    query_timeout_secs: u64,
+    terminate_timeout_secs: u64,
 }
 
-/// Answers the routes that need no session. No admin session exists before
-/// login (task 4.3), so every request is judged as unauthenticated.
+impl DashboardHints {
+    /// `close` is `[timeouts] close_secs`. The terminate wait adds 5 seconds.
+    pub fn new(poll: Duration, query_timeout: Duration, close: Duration) -> Self {
+        Self {
+            poll_secs: poll.as_secs(),
+            query_timeout_secs: query_timeout.as_secs(),
+            terminate_timeout_secs: close.as_secs().saturating_add(5),
+        }
+    }
+}
+
+/// What the handlers need: the connection kind, the admin accounts and
+/// sessions, and the dashboard values of the session view.
+#[derive(Clone)]
+struct Shared {
+    /// `true` when the connection runs over TLS.
+    secure: bool,
+    auth: Arc<AdminAuth>,
+    dashboard: DashboardHints,
+}
+
+/// Answers every request. `/api/v1/` goes to the session API, which judges the
+/// session before the path and the method. Static paths keep their rules.
 async fn answer(
-    State(scheme): State<Scheme>,
-    method: Method,
-    uri: Uri,
-    headers: HeaderMap,
+    State(shared): State<Shared>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    request: Request,
 ) -> Response {
-    let path = uri.path();
-    // Management API requests need a session before path and method are
-    // judged, so an unauthenticated caller cannot learn which paths exist
-    // (management-api-v1 §1.3 step 2).
+    let (parts, body) = request.into_parts();
+    let path = parts.uri.path();
     if path.starts_with("/api/v1/") {
-        return unauthenticated(scheme, &headers);
+        return session_api::answer(&shared, peer, parts, body).await;
     }
     if path == "/" || path.starts_with("/app/") {
-        return if is_read(&method) {
+        return if is_read(&parts.method) {
             redirect_to_login()
         } else {
-            method_not_allowed()
+            method_not_allowed("GET, HEAD", "이 경로는 GET과 HEAD 요청만 받는다.")
         };
     }
     if path.starts_with("/login/") {
-        return if is_read(&method) {
+        return if is_read(&parts.method) {
             not_found()
         } else {
-            method_not_allowed()
+            method_not_allowed("GET, HEAD", "이 경로는 GET과 HEAD 요청만 받는다.")
         };
     }
     redirect_to_login()
@@ -133,37 +173,50 @@ fn is_read(method: &Method) -> bool {
 
 /// `401 unauthenticated`. A request that carries the session cookie also
 /// clears it (management-api-v1 §1.4.1).
-fn unauthenticated(scheme: Scheme, request_headers: &HeaderMap) -> Response {
-    let mut response = json_error(
-        StatusCode::UNAUTHORIZED,
+fn unauthenticated(secure: bool, request_headers: &HeaderMap) -> Response {
+    unauthorized(
         "unauthenticated",
         "유효한 관리 세션이 없다.",
-    );
+        secure,
+        request_headers,
+    )
+}
+
+/// A `401` with `WWW-Authenticate` (management-api-v1 §2.1). A request that
+/// carries the session cookie also clears it (management-api-v1 §1.4.1).
+fn unauthorized(
+    code: &str,
+    message: &str,
+    secure: bool,
+    request_headers: &HeaderMap,
+) -> Response {
+    let mut response = json_error(StatusCode::UNAUTHORIZED, code, message);
     response.headers_mut().insert(
         WWW_AUTHENTICATE,
         HeaderValue::from_static(r#"Session realm="vnc-relay""#),
     );
-    if has_session_cookie(request_headers) {
+    if session_cookie(request_headers).is_some() {
         response
             .headers_mut()
-            .insert(SET_COOKIE, clear_session_cookie(scheme));
+            .insert(SET_COOKIE, clear_session_cookie(secure));
     }
     response
 }
 
-/// `true` when a `Cookie` header names the admin session cookie.
-fn has_session_cookie(headers: &HeaderMap) -> bool {
+/// The value of the admin session cookie in a request, when it has one.
+fn session_cookie(headers: &HeaderMap) -> Option<&str> {
     headers
         .get_all(COOKIE)
         .iter()
         .filter_map(|value| value.to_str().ok())
         .flat_map(|value| value.split(';'))
         .filter_map(|pair| pair.split_once('='))
-        .any(|(name, _)| name.trim() == SESSION_COOKIE)
+        .find(|(name, _)| name.trim() == SESSION_COOKIE)
+        .map(|(_, value)| value.trim())
 }
 
-fn clear_session_cookie(scheme: Scheme) -> HeaderValue {
-    if scheme.secure {
+fn clear_session_cookie(secure: bool) -> HeaderValue {
+    if secure {
         HeaderValue::from_static(CLEAR_SESSION_COOKIE_SECURE)
     } else {
         HeaderValue::from_static(CLEAR_SESSION_COOKIE)
@@ -183,28 +236,23 @@ fn redirect_to_login() -> Response {
     response
 }
 
-/// `405` with `Allow` for a static path that takes only `GET` and `HEAD`.
-fn method_not_allowed() -> Response {
-    let mut response = json_error(
-        StatusCode::METHOD_NOT_ALLOWED,
-        "invalid_request",
-        "이 경로는 GET과 HEAD 요청만 받는다.",
-    );
+/// `405` with `Allow` for a path that takes only the methods in `allow`.
+fn method_not_allowed(allow: &'static str, message: &str) -> Response {
+    let mut response = json_error(StatusCode::METHOD_NOT_ALLOWED, "invalid_request", message);
     response
         .headers_mut()
-        .insert(ALLOW, HeaderValue::from_static("GET, HEAD"));
+        .insert(ALLOW, HeaderValue::from_static(allow));
     response
 }
 
-/// `404 not_found` for a login path with no page in this task.
+/// `404 not_found` for a static login path with no page in this task.
 fn not_found() -> Response {
     json_error(StatusCode::NOT_FOUND, "not_found", "정의하지 않은 경로다.")
 }
 
-/// The error body of management-api-v1 §2.1 with the JSON headers of §1.1.
-fn json_error(status: StatusCode, code: &str, message: &str) -> Response {
-    let body = json!({ "error": { "code": code, "message": message } }).to_string();
-    let mut response = (status, body).into_response();
+/// A JSON response with the headers of management-api-v1 §1.1.
+fn json_response(status: StatusCode, body: &Value) -> Response {
+    let mut response = (status, body.to_string()).into_response();
     let headers = response.headers_mut();
     headers.insert(
         CONTENT_TYPE,
@@ -212,4 +260,12 @@ fn json_error(status: StatusCode, code: &str, message: &str) -> Response {
     );
     headers.insert(CACHE_CONTROL, HeaderValue::from_static("no-store"));
     response
+}
+
+/// The error body of management-api-v1 §2.1.
+fn json_error(status: StatusCode, code: &str, message: &str) -> Response {
+    json_response(
+        status,
+        &json!({ "error": { "code": code, "message": message } }),
+    )
 }

@@ -1,8 +1,8 @@
 //! Argon2id password hashes (cli-v1 §1.4) with the argon2 crate.
 //! Design: docs/architectures/admin-accounts.md.
 
-use argon2::{Algorithm, Argon2, Params, PasswordHasher as _, Version};
-use vnc_relay_app::ports::{HashError, PasswordHasher};
+use argon2::{Algorithm, Argon2, Params, PasswordHasher as _, PasswordVerifier as _, Version};
+use vnc_relay_app::ports::{HashError, PasswordHasher, PasswordVerifier};
 use vnc_relay_domain::account::{Argon2Params, Password, PasswordHash};
 
 use crate::crypto::random_bytes;
@@ -32,6 +32,21 @@ impl PasswordHasher for Argon2Hasher {
             .to_string();
         PasswordHash::parse(&encoded)
             .map_err(|e| HashError(format!("만든 해시 문자열이 계정 파일 형식과 다르다: {e}.")))
+    }
+}
+
+/// Checks a typed password against a stored Argon2id hash (management-api-v1
+/// §1.5). `Ok(false)` is a wrong password; `Err` means the check itself failed.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Argon2Verifier;
+
+impl PasswordVerifier for Argon2Verifier {
+    fn verify(&self, typed: &str, hash: &PasswordHash) -> Result<bool, HashError> {
+        match Argon2::default().verify_password(typed.as_bytes(), hash.as_str()) {
+            Ok(()) => Ok(true),
+            Err(argon2::password_hash::Error::PasswordInvalid) => Ok(false),
+            Err(e) => Err(HashError(format!("비밀번호 해시를 검증할 수 없다: {e}."))),
+        }
     }
 }
 
@@ -78,5 +93,25 @@ mod tests {
                 .verify_password(b"correct horse batterz", first.as_str())
                 .is_err()
         );
+    }
+
+    // Covers the hash check only. The HTTP refusal and the identical answer
+    // are tested in the integration tests.
+    /// spec: management.md:MGT-018 partial
+    #[test]
+    fn verifier_accepts_the_right_password_and_refuses_another() {
+        let password =
+            Password::parse("correct horse battery".to_owned()).unwrap_or_else(|e| panic!("{e}"));
+        let hash = Argon2Hasher
+            .hash(&password, PARAMS)
+            .unwrap_or_else(|e| panic!("{e}"));
+        let right = Argon2Verifier
+            .verify("correct horse battery", &hash)
+            .unwrap_or_else(|e| panic!("{e}"));
+        let wrong = Argon2Verifier
+            .verify("correct horse batterz", &hash)
+            .unwrap_or_else(|e| panic!("{e}"));
+        assert!(right);
+        assert!(!wrong);
     }
 }

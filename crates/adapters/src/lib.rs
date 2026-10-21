@@ -3,6 +3,7 @@
 
 pub mod accounts_file;
 mod admission;
+pub mod clock;
 pub mod config_file;
 pub mod crypto;
 pub mod management_http;

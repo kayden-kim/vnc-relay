@@ -2,6 +2,7 @@
 //! Design: docs/architectures/serve-startup.md, docs/architectures/ops-log.md,
 //! docs/architectures/tcp-entry-point.md, docs/architectures/status-listener.md.
 
+use std::fmt::Display;
 use std::io;
 use std::path::Path;
 use std::process::ExitCode;
@@ -10,8 +11,10 @@ use std::task::Poll;
 
 use tokio::sync::watch;
 use tokio::task::JoinSet;
-use vnc_relay_adapters::accounts_file::HashFloor;
-use vnc_relay_adapters::management_http::ManagementListener;
+use vnc_relay_adapters::accounts_file::{Argon2Hasher, Argon2Verifier, HashFloor};
+use vnc_relay_adapters::clock::SystemClock;
+use vnc_relay_adapters::crypto::SystemTokenSource;
+use vnc_relay_adapters::management_http::{DashboardHints, ManagementListener};
 use vnc_relay_adapters::net::{AcceptPolicy, BindFailure, TcpEntryPoint};
 use vnc_relay_adapters::ops_log::JsonLinesEventSink;
 use vnc_relay_adapters::status_http::StatusListener;
@@ -21,10 +24,14 @@ use vnc_relay_adapters::{accounts_file, config_file, net};
 use vnc_relay_app::accounts::{self, ACCOUNTS_FILE_KEY, AccountsDiagnostic};
 use vnc_relay_app::events::{Event, Phase};
 use vnc_relay_app::lifecycle::LifecycleService;
+use vnc_relay_app::management::login::dummy_hash;
+use vnc_relay_app::management::{AdminAuth, AdminPorts};
 use vnc_relay_app::ports::EventSink;
 use vnc_relay_app::settings::{LogOutput, Settings, TlsFiles};
+use vnc_relay_domain::admin_session::AdminSessionPolicy;
 use vnc_relay_domain::budget::ConnectionBudget;
 use vnc_relay_domain::entry_point::EntryPoint;
+use vnc_relay_domain::login_limit::LoginLimitPolicy;
 
 use crate::cli::{self, EXIT_ACCOUNTS, EXIT_CONFIG, EXIT_LISTENER, EXIT_RUNTIME};
 
@@ -99,6 +106,30 @@ pub fn run(config: &Path) -> ExitCode {
         return accounts_failure(log.as_ref(), &[diagnostic]);
     }
 
+    // Admin sessions (management-api-v1 §1.4). An unknown account is checked
+    // against the dummy hash, so it costs one password check like a known one
+    // (MGT-022).
+    let dummy = match dummy_hash(&Argon2Hasher, settings.admin.argon2.params()) {
+        Ok(dummy) => dummy,
+        Err(error) => {
+            return runtime_failure(log.as_ref(), "관리 세션용 더미 해시를 만들 수 없다", &error);
+        }
+    };
+    let session = settings.management.session;
+    let limit = settings.management.login_limit;
+    let auth = Arc::new(AdminAuth::new(
+        loaded.accounts,
+        dummy,
+        AdminPorts {
+            verifier: Arc::new(Argon2Verifier),
+            tokens: Arc::new(SystemTokenSource),
+            clock: Arc::new(SystemClock::new()),
+            events: Arc::clone(&log),
+        },
+        AdminSessionPolicy::new(session.idle, session.max_lifetime),
+        LoginLimitPolicy::new(limit.per_account, limit.per_source, limit.window, limit.lockout),
+    ));
+
     // Stage 4: runtime, then listeners.
     let runtime = match tokio::runtime::Builder::new_multi_thread()
         .enable_io()
@@ -110,10 +141,14 @@ pub fn run(config: &Path) -> ExitCode {
             return runtime_failure(log.as_ref(), "비동기 런타임을 만들 수 없다", &error);
         }
     };
-    runtime.block_on(listen_until_shutdown(&settings, log))
+    runtime.block_on(listen_until_shutdown(&settings, log, auth))
 }
 
-async fn listen_until_shutdown(settings: &Settings, log: Arc<dyn EventSink>) -> ExitCode {
+async fn listen_until_shutdown(
+    settings: &Settings,
+    log: Arc<dyn EventSink>,
+    auth: Arc<AdminAuth>,
+) -> ExitCode {
     // Registered before binding so that a request during startup is not lost.
     let mut shutdown = match ShutdownSignal::register() {
         Ok(shutdown) => shutdown,
@@ -196,11 +231,18 @@ async fn listen_until_shutdown(settings: &Settings, log: Arc<dyn EventSink>) -> 
 
     // The management listener accepts from here on.
     let management_task = management.map(|bound| {
+        let dashboard = DashboardHints::new(
+            settings.dashboard.poll,
+            settings.dashboard.query_timeout,
+            settings.timeouts.close,
+        );
         let listener = ManagementListener::new(
             bound.listener,
             management_tls,
             Arc::clone(&admin_budget),
             settings.timeouts.tls_upgrade,
+            auth,
+            dashboard,
         );
         tokio::spawn(listener.run(Arc::clone(&log)))
     });
@@ -377,7 +419,7 @@ fn accounts_failure(log: &dyn EventSink, diagnostics: &[AccountsDiagnostic]) -> 
     ExitCode::from(EXIT_ACCOUNTS)
 }
 
-fn runtime_failure(log: &dyn EventSink, what: &str, error: &io::Error) -> ExitCode {
+fn runtime_failure(log: &dyn EventSink, what: &str, error: &dyn Display) -> ExitCode {
     cli::report(
         "error",
         "runtime_unavailable",
