@@ -157,9 +157,10 @@ UltraVNC·websockify·noVNC 소스 코드는 관찰·분석에 쓰지 않는다.
 
 | ID | 해소 조건 | 해소 후 갱신할 문서 |
 | --- | --- | --- |
-| RLY-TBD-001 | 최신 안정판 UltraVNC Server·Viewer·Repeater와 noVNC의 버전·배포본 해시·OS를 6.2절 형식으로 기록하고 고정한다. | 호환성 검증 기록, [PRD](../requirements/PRD.md) 호환 버전 행, [relay.md 8절](../specs/relay.md#8-미결정-사항) |
 | RLY-TBD-002 | 1.1절 표의 모든 '관찰로 확정할 항목'(방향·길이·패딩·종료 문자·ID 비교·오류 형식·후속 바이트 순서)에 증거를 연결한다. Mode I·II의 모든 시나리오가 끝난다. 1절을 증거 기반 표로 바꾸고 프로젝트 소유자가 채택한다. | 이 계약 1절·4절, [relay.md](../specs/relay.md)의 RLY-002~005 실행 기록, 필요하면 [WebSocket 중계 계약](websocket-relay-v1.md)의 close 코드 대응 |
 | RLY-TBD-003 | 대상 버전에서 같은 역할 중복 ID의 결과(후발 거절·기존 교체·함께 대기 등)를 관찰해 기록한다. 제안 정책(후발 거절)과 같으면 채택한다. 다르면 차이를 기록하고 프로젝트 소유자가 정책을 고른다. | 이 계약 2절, [relay.md 3.3절](../specs/relay.md#33-mode-ii), PRD |
+
+RLY-TBD-001은 2026-10-22에 해소되어 이 표에서 뺐다. 근거는 [호환성 검증 기록](repeater-compat-record.md) 2절이다. 재사용하지 않는다.
 
 ### 6.4 그 밖의 해결할 사항
 
