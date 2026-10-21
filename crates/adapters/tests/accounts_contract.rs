@@ -378,6 +378,36 @@ fn keeps_the_file_when_the_change_fails_the_lock_exists_or_writing_fails() {
 }
 
 #[test]
+fn a_failed_change_returns_its_error_and_warns_when_the_lock_cannot_be_removed() {
+    let dir = temp_dir("lock-cleanup");
+    let path = dir.join("admin-accounts.toml");
+    let original = format!(
+        "version = 1\n{}",
+        account("alice", &phc("m=19456,t=2,p=1"))
+    );
+    std::fs::write(&path, &original).unwrap_or_else(|e| panic!("write: {e}"));
+    let file = AccountsFile::new(path.clone());
+    let lock = dir.join("admin-accounts.toml.lock");
+    let name = AccountName::parse("alice").unwrap_or_else(|e| panic!("{e}"));
+
+    // The change turns the lock file into a directory, so removing the lock fails.
+    let (result, warnings) = update(&file, |_| {
+        std::fs::remove_file(&lock).unwrap_or_else(|e| panic!("remove: {e}"));
+        std::fs::create_dir(&lock).unwrap_or_else(|e| panic!("create_dir: {e}"));
+        Err(AdminFailure::AccountExists(name.clone()))
+    });
+    assert_eq!(result, Err(AdminFailure::AccountExists(name)));
+    let codes: Vec<&str> = warnings.iter().map(AccountsWarning::code).collect();
+    assert_eq!(codes, ["accounts_file_cleanup_failed"]);
+    assert_eq!(
+        std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read: {e}")),
+        original
+    );
+    std::fs::remove_dir(&lock).unwrap_or_else(|e| panic!("remove_dir: {e}"));
+    assert_eq!(entries(&dir), ["admin-accounts.toml"]);
+}
+
+#[test]
 fn fails_to_write_when_the_directory_does_not_exist() {
     let dir = temp_dir("nodir");
     let file = AccountsFile::new(dir.join("missing").join("admin-accounts.toml"));
