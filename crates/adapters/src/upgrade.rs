@@ -133,15 +133,35 @@ pub(crate) struct ValidUpgrade {
     pub(crate) binary: bool,
 }
 
-/// Checks a request head in the order of websocket-relay-v1 §1.1. The first
-/// failed check decides the refusal. The IP recheck is not part of this
-/// function; the caller runs it after a request passes.
+/// Checks a request head in the order of websocket-relay-v1 §1.1: request
+/// syntax, then path, method, and HTTP version, then the upgrade headers and
+/// `Sec-WebSocket-Version`, then `Sec-WebSocket-Key`, then Origin, then the
+/// subprotocol. The first failed check decides the refusal. The IP recheck is
+/// not part of this function; the caller runs it after a request passes.
 pub(crate) fn check(head: &[u8], origins: &[Origin]) -> Result<ValidUpgrade, Refusal> {
     let text = String::from_utf8_lossy(head);
     let mut lines = text.split("\r\n");
     let Some(request_line) = lines.next() else {
         return Err(Refusal::Invalid);
     };
+    // Syntax comes first, so a malformed line is refused before its path is judged.
+    if has_control(request_line) {
+        return Err(Refusal::Invalid);
+    }
+    let mut headers: Vec<(String, &str)> = Vec::new();
+    for line in lines {
+        if line.is_empty() {
+            break;
+        }
+        let Some((name, value)) = line.split_once(':') else {
+            return Err(Refusal::Invalid);
+        };
+        if !is_token(name) || has_control(value) {
+            return Err(Refusal::Invalid);
+        }
+        headers.push((name.to_ascii_lowercase(), value.trim_matches([' ', '\t'])));
+    }
+
     let mut parts = request_line.split(' ');
     let (Some(method), Some(target), Some(version), None) =
         (parts.next(), parts.next(), parts.next(), parts.next())
@@ -159,20 +179,6 @@ pub(crate) fn check(head: &[u8], origins: &[Origin]) -> Result<ValidUpgrade, Ref
         return Err(Refusal::Invalid);
     }
 
-    let mut headers: Vec<(String, &str)> = Vec::new();
-    for line in lines {
-        if line.is_empty() {
-            break;
-        }
-        let Some((name, value)) = line.split_once(':') else {
-            return Err(Refusal::Invalid);
-        };
-        if name.is_empty() || name.contains([' ', '\t']) {
-            return Err(Refusal::Invalid);
-        }
-        headers.push((name.to_ascii_lowercase(), value.trim_matches([' ', '\t'])));
-    }
-
     if values(&headers, "host").next().is_none() {
         return Err(Refusal::Invalid);
     }
@@ -182,15 +188,15 @@ pub(crate) fn check(head: &[u8], origins: &[Origin]) -> Result<ValidUpgrade, Ref
     if !values(&headers, "connection").any(|value| has_token(value, "upgrade")) {
         return Err(Refusal::Invalid);
     }
+    let mut versions = values(&headers, "sec-websocket-version");
+    if !matches!((versions.next(), versions.next()), (Some("13"), None)) {
+        return Err(Refusal::VersionUnsupported);
+    }
     let mut keys = values(&headers, "sec-websocket-key");
     let key = match (keys.next(), keys.next()) {
         (Some(key), None) if is_sixteen_byte_key(key) => key,
         _ => return Err(Refusal::Invalid),
     };
-    let mut versions = values(&headers, "sec-websocket-version");
-    if !matches!((versions.next(), versions.next()), (Some("13"), None)) {
-        return Err(Refusal::VersionUnsupported);
-    }
 
     let mut origin_values = values(&headers, "origin");
     if let Some(origin) = origin_values.next() {
@@ -272,6 +278,22 @@ fn is_sixteen_byte_key(key: &str) -> bool {
         && bytes[..22]
             .iter()
             .all(|byte| byte.is_ascii_alphanumeric() || *byte == b'+' || *byte == b'/')
+}
+
+/// Whether a header name is an RFC 9110 token: ASCII letters, digits, and
+/// `!#$%&'*+-.^_`|~`. Empty names and names with spaces are not tokens.
+fn is_token(name: &str) -> bool {
+    !name.is_empty()
+        && name
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || b"!#$%&'*+-.^_`|~".contains(&byte))
+}
+
+/// Whether text has a control character other than tab. Bare CR, bare LF,
+/// NUL, and DEL are refused; tab is allowed inside field values (RFC 9110 §5.5).
+fn has_control(text: &str) -> bool {
+    text.bytes()
+        .any(|byte| (byte < 0x20 && byte != b'\t') || byte == 0x7f)
 }
 
 #[cfg(test)]
@@ -546,5 +568,52 @@ mod tests {
         let flood = vec![b'a'; HEAD_LIMIT + 1];
         let mut bytes: &[u8] = &flood;
         assert_eq!(read_head(&mut bytes).await.ok(), Some(HeadRead::TooLarge));
+    }
+
+    /// spec: websocket.md:WS-012 partial
+    #[test]
+    fn header_names_must_be_tokens() {
+        for line in ["Bad(Name: x", "Bad\"Name: x", ": no name"] {
+            let mut lines = VALID.to_vec();
+            lines.push(line);
+            assert_eq!(check(&head(&lines), &[]), Err(Refusal::Invalid), "{line}");
+        }
+    }
+
+    /// spec: websocket.md:WS-012 partial
+    #[test]
+    fn control_characters_in_the_head_are_refused() {
+        let cases = [
+            request(Some(("GET ", "GET /relay\u{0} HTTP/1.1")), &[]),
+            request(Some(("Host", "Host: a\u{0}b")), &[]),
+            request(Some(("Host", "Host: a\rb")), &[]),
+            request(Some(("Host", "Host: a\nb")), &[]),
+        ];
+        for bytes in cases {
+            assert_eq!(check(&bytes, &[]), Err(Refusal::Invalid), "{bytes:?}");
+        }
+        let tab = request(None, &["X-Note: a\tb"]);
+        assert!(check(&tab, &[]).is_ok(), "a tab inside a value is allowed");
+    }
+
+    /// spec: websocket.md:WS-012 partial
+    #[test]
+    fn syntax_is_checked_before_the_path() {
+        let bytes = request(Some(("GET ", "GET /other HTTP/1.1")), &["Bad(Name: x"]);
+        assert_eq!(check(&bytes, &[]), Err(Refusal::Invalid));
+    }
+
+    /// spec: websocket.md:WS-012 partial
+    #[test]
+    fn wrong_version_is_refused_before_a_bad_key() {
+        let bytes = head(&[
+            "GET /relay HTTP/1.1",
+            "Host: relay.example:8443",
+            "Upgrade: websocket",
+            "Connection: Upgrade",
+            "Sec-WebSocket-Key: c2hvcnQ=",
+            "Sec-WebSocket-Version: 12",
+        ]);
+        assert_eq!(check(&bytes, &[]), Err(Refusal::VersionUnsupported));
     }
 }
