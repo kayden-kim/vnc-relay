@@ -17,6 +17,10 @@ use vnc_relay_app::settings::{ConfigWarning, LogOutput};
 /// Longest `detail` in bytes (ops-info-v1 §1.1).
 const DETAIL_MAX_BYTES: usize = 512;
 
+/// Longest logged `origin` in bytes (ops-info-v1 §1.1). The full value stays
+/// in the refusal itself.
+const ORIGIN_MAX_BYTES: usize = 256;
+
 type FailureNotice = Box<dyn Fn(&io::Error) + Send + Sync>;
 
 /// `EventSink` that writes JSON Lines. A line is built first and written
@@ -242,7 +246,7 @@ fn push_event_fields(fields: &mut Vec<(&'static str, Value)>, event: &Event) {
             fields.push(("reason", Value::from(reason.as_str())));
             fields.push(("peer_ip", Value::from(peer_ip.to_string())));
             if let Some(origin) = origin {
-                fields.push(("origin", Value::from(origin.as_str())));
+                fields.push(("origin", Value::from(cut(origin.as_str(), ORIGIN_MAX_BYTES))));
             }
         }
         Event::ConnectionAborted {
@@ -318,6 +322,10 @@ fn civil_date(days: u64) -> (u64, u64, u64) {
 mod tests {
     use super::*;
     use std::time::Duration;
+    use std::net::IpAddr;
+    use vnc_relay_app::events::RejectReason;
+    use vnc_relay_domain::conn_id::ConnId;
+    use vnc_relay_domain::peer_ip::PeerIp;
 
     fn at_millis(millis: u64) -> SystemTime {
         UNIX_EPOCH + Duration::from_millis(millis)
@@ -354,5 +362,31 @@ mod tests {
         assert!(line.ends_with(&kept), "{line}");
         assert_eq!(cut("가나다", 512), "가나다");
         assert_eq!(cut("가나다", 5), "가");
+    }
+
+    #[test]
+    fn cuts_origin_to_256_bytes_on_a_character_boundary() {
+        // ops-info-v1 §1.1: `origin` is cut to 256 bytes at a character boundary.
+        let line = |origin: String| {
+            format_line(
+                &Event::UpgradeRejected {
+                    listener: "ws_viewer",
+                    conn_id: ConnId::next(),
+                    reason: RejectReason::OriginNotAllowed,
+                    peer_ip: PeerIp::new(IpAddr::from([127, 0, 0, 1])),
+                    origin: Some(origin),
+                },
+                UNIX_EPOCH,
+            )
+        };
+        // 254 + 3 bytes would pass 256, so the Hangul syllable goes.
+        let text = line(format!("{}가", "a".repeat(254)));
+        let kept = format!("\"origin\":\"{}\"", "a".repeat(254));
+        assert!(text.contains(&kept), "{text}");
+        assert!(!text.contains('가'), "{text}");
+        let text = line("b".repeat(300));
+        let kept = format!("\"origin\":\"{}\"", "b".repeat(256));
+        assert!(text.contains(&kept), "{text}");
+        assert!(!text.contains(&"b".repeat(257)), "{text}");
     }
 }
