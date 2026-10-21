@@ -462,6 +462,7 @@ output = "stdout"
 | 커밋 `f25983a`에 작업 2.3을 더한 작업 트리 | 같음 | 같음 | 통과. `config_contract` 21건과 `tests/serve.rs` 10건 모두 통과. 시나리오 보고는 [운영 정보 계약 실행 기록](ops-info-v1.md#계약-테스트-실행-기록)에 있다. |
 | 같음 | Windows 11 | 같음 | 미실행. Visual Studio Build Tools 설치가 UAC 미승인으로 멈춰(종료 코드 1602) MSVC 링커가 없다([개발 환경 how-to](../how-to/set-up-and-verify.md)). 사용자가 Windows 검증을 뒤로 미뤘다(2026-10-20). Windows 경로 분기(`cfg!(windows)`)는 실행하지 않았다. |
 | 커밋 `e1cfc4f`에 Windows 경고 수정(`crates/adapters/src/net.rs`·`tests/serve.rs`의 `cfg`)을 더한 작업 트리 | Windows 11 Pro 10.0.26200 x64, Rust 1.99.1(`x86_64-pc-windows-msvc`), Visual Studio Build Tools 2022 17.14.37806.7, `AWS_LC_SYS_PREBUILT_NASM=1` | 같음 | 통과. `config_contract` 21건과 adapters 단위 5건 모두 통과. 테스트의 Windows 경로 분기(`cfg!(windows)`: `C:\relay`, `D:\logs\relay.log`)를 실행했다. 시나리오 보고는 [운영 정보 계약 실행 기록](ops-info-v1.md#계약-테스트-실행-기록)에 있다. |
+| 커밋 `e701997`(작업 3.1 검증. 이 커밋들은 설정 계약 시험을 바꾸지 않았다). 작업 트리 깨끗함 | Ubuntu 24.04.4(WSL2), Rust 1.99.1 · Windows 11 Pro 10.0.26200 x64, Rust 1.99.1(`x86_64-pc-windows-msvc`) | `wsl -d Ubuntu -- bash /mnt/d/vr-tools/vr-full.sh` · `powershell -NoProfile -ExecutionPolicy Bypass -File D:/vr-tools/vr-win.ps1 -Only all` | Ubuntu `ALL PASSED`, Windows `ALL PASSED (all)`. 두 실행 모두 전체 `cargo test --workspace`를 포함하며 통과했다. 시나리오 보고는 [운영 정보 계약 실행 기록](ops-info-v1.md#계약-테스트-실행-기록)에 있다. |
 
 ## 6. 초안을 확정하기 전에 해결할 사항
 
