@@ -66,7 +66,7 @@ flowchart LR
 | 이름 | 값 | 제약 |
 | --- | --- | --- |
 | `tone` | `success`, `info`, `warning`, `destructive`, `neutral` | 다른 값이면 `TypeError`. 요소에 `data-tone`으로 쓴다. |
-| `variant`(버튼) | `primary`, `outline`, `ghost`, `destructive` | 다른 값이면 `TypeError` |
+| `variant`(버튼) | `primary`, `outline`, `ghost`, `destructive`, `navbar` | 다른 값이면 `TypeError`. `navbar`는 상단 막대의 항목형(로그아웃) 버튼이다. |
 | `variant`(언어 선택) | `navbar`, `form` | 다른 값이면 `TypeError` |
 | 아이콘 이름 | `check`, `clock`, `warning`, `alert`, `refresh`, `logout`, `back`, `chevron-right`, `chevron-down`, `cancel`, `globe`, `grid`, `brand` | 다른 값이면 `TypeError` |
 | 아이콘 크기 | `md`(`--space-icon-size`), `sm`(`--space-icon-size-sm`) | 기본값 `md` |
@@ -78,18 +78,18 @@ flowchart LR
 | 함수 | 옵션 | 반환 |
 | --- | --- | --- |
 | `icon(name, {size})` | 아이콘 이름, 크기 | `SVGSVGElement`. `aria-hidden="true"`, `focusable="false"`. |
-| `createButton({variant, label, icon, disabled, busy, type})` | `variant` 기본 `primary`. `icon`은 아이콘 이름. `busy`는 진행 중 상태다. | `HTMLButtonElement`. `busy`이면 `disabled`와 `aria-busy="true"`를 붙인다. 문구는 호출자가 바꾼다. |
-| `createTextField({id, label, type, value, required, autocomplete, helpText, error})` | `type`은 `text` 또는 `password`. `error`가 있으면 오류 상태다. | `HTMLDivElement`. 오류가 있으면 `aria-invalid="true"`, `aria-describedby`에 오류 문구 id를 쓴다. |
+| `createButton({variant, label, icon, disabled, busy, type})` | `variant` 기본 `primary`. `navbar`는 상단 막대 항목형 버튼이다(DESIGN.md 버튼 변형). `icon`은 아이콘 이름. `busy`는 진행 중 상태다. | `HTMLButtonElement`. `busy`이면 `disabled`와 `aria-busy="true"`를 붙인다. 문구는 호출자가 바꾼다. |
+| `createTextField({id, label, type, value, required, autocomplete, helpText, error})` | `type`은 `text` 또는 `password`. `error`가 있으면 오류 상태다. 비활성 옵션은 없다(DESIGN.md 입력 상태는 기본·포커스·오류). 포커스는 CSS의 `:focus-visible`과 미리보기 클래스 `is-focus`로 나타난다. | `HTMLDivElement`. 오류가 있으면 `aria-invalid="true"`, `aria-describedby`에 오류 문구 id를 쓴다. |
 | `createBadge({tone, label, icon})` | `icon` 기본값은 `tone`별 아이콘(`neutral`은 없음). `icon: false`로 끈다. | `HTMLSpanElement` |
 | `createAlert({tone, title, message})` | `warning`·`destructive`는 `role="alert"`, 나머지는 `role="status"` | `HTMLDivElement` |
 | `createCard({title, headingLevel, count, actions, body, footer})` | `title` 필수. `headingLevel` 기본 2(1~6의 정수). `count`는 `createBadge`로 붙인다. | `HTMLElement`(`section`). `aria-labelledby`로 제목과 묶는다. |
 | `createStat({label, value, unit, tone})` | `label` 필수. 값은 문자열 또는 숫자이며 `metric` 글꼴과 `tnum`을 쓴다. | `HTMLDivElement` |
-| `createGauge({label, value, max, valueText, limitText, unknownText})` | `value`는 `0`~`max`. `label`과 `limitText`는 필수다. `value`가 `null`이면 알 수 없음이며 링을 그리지 않고 `unknownText`(필수)를 쓴다. 채움 길이는 `style.setProperty`로 쓴다. | `HTMLDivElement`. `role="progressbar"`, `aria-label`, `aria-valuemin`, `aria-valuemax`, `aria-valuenow`, `aria-valuetext`. |
+| `createGauge({label, value, max, valueText, limitText, unknownText})` | `value`는 `0`~`max`. `label`과 `limitText`는 필수다. 알려진 값은 가운데에 `valueText`(없으면 값)를 크게 보이고, 아래 줄에 `limitText`(상한 줄)를 보인다. `value`가 `null`이면 알 수 없음이며 링을 그리지 않고 `unknownText`(필수)를 쓴다. 채움 길이는 `style.setProperty`로 쓴다. | `HTMLDivElement`. `role="progressbar"`, `aria-label`, `aria-valuemin`, `aria-valuemax`, `aria-valuenow`, `aria-valuetext`. 알려진 값의 `aria-valuetext`는 `valueText, limitText`다. |
 | `createNavbar({brand, items, language, action, label})` | `label`은 필수다(기본값 없음, 호출자가 준다). `items`는 `{label, href, current, desktopOnly}`. `desktopOnly` 항목은 1024px 미만에서 숨긴다. | `HTMLElement`(`header`). 안에 `nav`를 둔다. 현재 항목은 `aria-current="page"`. |
 | `createLanguageSelect({id, label, value, options, variant})` | `id`, `label`, `options`(`{value, label}` 배열, 빈 배열이면 `TypeError`)는 필수. `variant` 기본 `form`(`navbar`·`form`). | `HTMLDivElement`. 안에 `label`과 `select`. |
 | `createDataTable({caption, columns, rows, emptyText, numericColumns})` | `columns`는 `{key, label}`. `rows`는 값 배열의 배열. | `HTMLTableElement`. 열 머리글은 `scope="col"`. 행이 없으면 `emptyText`를 한 행으로 쓴다. |
 | `createLink({href, label, icon})` | `icon`은 아이콘 이름 | `HTMLAnchorElement` |
-| `createDialog({title, description, confirmLabel, cancelLabel, destructive, onConfirm, onCancel})` | `title`, `confirmLabel`, `cancelLabel`은 필수. 확인 버튼은 `destructive`면 위험 스타일 | `{element, show(), hide()}`. `show`는 `showModal()`을 부르고, 닫기와 취소는 네이티브 포커스 복귀를 쓴다. |
+| `createDialog({title, description, confirmLabel, cancelLabel, destructive, onConfirm, onCancel})` | `title`, `confirmLabel`, `cancelLabel`은 필수. 확인 버튼은 `destructive`면 위험 스타일. 닫힌 대화상자는 CSS가 숨긴다(`display`는 `.dialog[open]`에만 준다). 미리보기는 열린 견본을 비모달 `open` 속성으로 프레임 안에 둔다(미리보기 전용). | `{element, show(), hide()}`. `show`는 `showModal()`을 부르고, 닫기와 취소는 네이티브 포커스 복귀를 쓴다. |
 
 모든 함수는 API 값을 `textContent`나 속성 값으로만 넣는다. `innerHTML`에는 정적 문자열만 넣는다.
 
@@ -148,5 +148,6 @@ flowchart LR
 | 미리보기와 테스트 호출 | `preview.js`와 `tests/components.js`가 `app/components/`의 함수를 import한다 | 통과 |
 | 토큰 CSS 연결 | `cargo xtask tokens --check` | 통과(종료 코드 0) |
 | 브라우저 시험 | `cargo test --test dashboard_browser` | 통과(시험 2개 ok). 미리보기와 테스트 페이지를 6폭 × ko/en 12회 열어 `data-result=pass`, CSP 위반 0, 가로 스크롤 0 |
+| 리뷰 수정 A–D(Q42, 2026-10-22) | 3.1 표와 CSS를 다시 대조: 게이지 `aria-valuetext`(gauge.js L71), 버튼 `navbar` 변형(button.js), 입력 상태(옵션 없음), 대화상자 `display`(components.css `.dialog[open]`) | 차이 4건을 고쳤다. A 게이지: 가운데에 현재 값, 아래 "상한" 줄. DESIGN.md 게이지 절을 따랐고 리뷰의 "비율" 표기는 쓰지 않았다(결정 요청 참고). B 상단 막대 로그아웃: `navbar` 변형, 항목 1개(`bc6248e`, `fc7c325`). C 입력: 비활성 견본을 포커스 견본으로 바꿈(`e1ba857`). D 대화상자: 닫힌 상태는 숨기고, 열린 견본은 프레임 안에 둠(`0741c3c`, 시험 `4e65789`). |
 
 3.1 표에 없는 문자열 필수 옵션(`button`의 `label`, `badge`의 `label`, `link`의 `href`·`label`, `text-field`의 `id`·`label`, `alert`의 `title`)도 빈 값이면 `TypeError`를 던진다.
