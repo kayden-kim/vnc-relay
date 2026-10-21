@@ -173,6 +173,28 @@ flowchart LR
 - 판정: 구조 대조를 마쳤다. 구조 시점은 `Current`, 구현 대조는 `Verified`(작업 트리 범위)다. 문서 상태는 `Draft`로 둔다(열린 질문 5·11이 남아 있다. 11은 사용자 결정이 필요하다).
 - TODO 4.2는 `[ ]`로 둔다. MGT-015는 사용자 결정 2026-10-21(Q14)로 작업 4.4 완료 조건에 옮겼다. OPS-014 부분 사유: 운영 조회·종료 API가 아직 없다(작업 4.4·4.5). 공개 평문 주소 시작 거절(`tests/serve.rs` `refuses_plaintext_management_on_a_public_address_with_exit_code_3`), 계정 없음 시작 거절(`serve`), 인증서 누락 시작 거절(3.1 `serve`), 미인증 401(`management.rs`와 `answers_api_queries_with_401_without_login_on_loopback_plaintext`)은 확인했다. OPS-034 부분 사유: 운영 조회 엔드포인트(작업 4.4)가 아직 없어, 로그인 없이 `/api/v1/` 요청이 401로 거절되는 것만 확인했다. 비루프백 평문 시작 실패와 루프백 평문 시작은 serve 테스트로 확인했다.
 
+### 작업 4.2 시나리오 범위 (2026-10-22)
+
+- 기준: 커밋 `ed71c77` + 작업 트리(테스트 커밋과 이 문서 커밋). 시험 파일은 `tests/serve.rs`다.
+- 앞의 `### 작업 4.2` 기록에서 OPS-014·OPS-034에 붙였던 테스트 이름과 표식은 이 기록으로 바뀌었다.
+- OPS-034 통과: `refuses_public_plaintext_and_answers_login_less_queries_with_401_on_loopback`(비부분)가 두 조건을 헬퍼로 실행한다.
+  - 공개 주소 평문 관리 설정: `refuses_plaintext_management_on_a_public_address_with_exit_code_3`. 종료 코드 3, 포트를 잡지 않는다.
+  - 루프백 평문에서 로그인 없는 조회·종료: `answers_api_queries_with_401_without_login_on_loopback_plaintext`. 세션 정보, 요약, 대기, 세션 목록, 세션 상세, 최근 종료 목록(GET 여섯 개)과 세션 종료(POST 하나)가 모두 `401 unauthenticated`다.
+  - 401은 `/api/v1/` 경로를 라우팅하기 전에 판정한다(관리 API 계약 1.3절). 그래서 아직 없는 조회 경로(작업 4.4)도 401로 거절한다. 실제 조회 응답은 작업 4.4에서, 종료 응답은 작업 4.5에서 확인한다.
+- OPS-014 부분: `public_management_never_starts_on_plaintext_or_without_tls_or_an_account`(부분)가 세 시작 거절을 확인한다.
+  - 공개 주소 평문: 위 `refuses_plaintext_management_on_a_public_address_with_exit_code_3`.
+  - 공개 주소 인증서 누락: `refuses_public_management_without_its_certificate_with_exit_code_3`(종료 코드 3, `tls_file_invalid`).
+  - 공개 주소 계정 없음: `refuses_public_management_without_an_account_with_exit_code_5`(종료 코드 5, `accounts_file_missing`).
+  - 세 경우 모두 종료 뒤 포트가 비어 있다(`assert_released`).
+  - 빠진 부분: 공개 주소의 HTTPS 401과 TLS 실행 중 평문 요청 거절. 루트 `tests/serve.rs`에는 TLS 클라이언트가 없고, 이 작업에서 개발 의존성을 더하지 않았다. 루프백 HTTPS 401은 `crates/adapters/tests/management.rs`의 `https_clients_on_tls12_and_tls13_get_the_unauthenticated_answer`(OPS-036 부분)가 확인한다. 그래서 OPS-014는 부분이다.
+- OPS-001·OPS-012 부분: `refuses_to_start_without_a_usable_account_with_exit_code_5`에서 OPS-014 부분 표식을 뺐다. 루프백 계정 시험은 공개 주소의 수락 결과를 확인하지 않는다.
+- OPS-033·OPS-004(관리 연결): `refuses_management_connections_beyond_lm_and_keeps_lm_and_l_apart`와 `refuses_status_connections_beyond_lm_and_keeps_lm_and_l_apart`는 부분 표식을 그대로 둔다. 관리 로그인·조회·종료 가능 여부는 작업 4.4·4.5에서 확인한다.
+- TODO 4.2는 `[ ]`로 둔다. OPS-014가 부분이라 완료 조건을 다 채우지 못했다.
+- 검증 기록(작업 트리, 2026-10-22, `cargo fmt --all` 뒤):
+  - Ubuntu `vr-full.sh`: `ALL PASSED`. `시나리오 148건: 통과 15, 부분 23, 실패 0, 미실행 0, 미연결 110`.
+  - Windows `vr-win.ps1 -Only all`: `ALL PASSED (all)`. `시나리오 148건: 통과 14, 부분 23, 실패 0, 미실행 1, 미연결 110`. 미실행 1건은 OPS-007이다. Unix 전용 시험 `closes_and_logs_every_held_connection_when_stopping`이 Windows 실행에 없다(Ubuntu에서는 부분).
+  - 대상 행(두 환경 같음): OPS-002 통과, OPS-034 통과, OPS-014 부분, OPS-033 부분, OPS-004 부분.
+
 ## 9. 미결정 사항
 
 | 항목 | 영향 | 확정 위치 |
@@ -185,6 +207,6 @@ flowchart LR
 | 6. (해결) 버전 거절이 아닌 TLS 실패(인증서 오류, 클라이언트 중단)는 기록하지 않는다. 사용자 결정 2026-10-21(Q13). 운영 정보 계약은 바뀌지 않는다. | 관리 TLS 실패의 감사 흔적이 없다 | 사용자 결정 2026-10-21(Q13) |
 | 7. (해결) U의 관리 TLS 적용은 3번과 같은 사용자 결정 2026-10-21(Q12)이다. | 3번과 같음 | 사용자 결정 2026-10-21(Q12) |
 | 8. (해결) MGT-015(상대 주소)는 TODO 4.4 완료 조건으로 옮긴다. TODO 4.2 완료 조건에서는 뺀다. 사용자 결정 2026-10-21(Q14). | TODO 4.2·4.4 완료 판정 | 사용자 결정 2026-10-21(Q14), `docs/TODO.md` |
-| 9. (해결) 비루프백 평문 시작 실패(OPS-014·OPS-034)의 검증 위치. 서버 수준 테스트 2건을 추가했다. `tests/serve.rs`의 `refuses_plaintext_management_on_a_public_address_with_exit_code_3`(시작 실패, OPS-014 부분·OPS-034 부분)와 `answers_api_queries_with_401_without_login_on_loopback_plaintext`(루프백 평문 시작 뒤 401, OPS-034 부분). 설정 규칙 테스트 `allows_plaintext_management_only_on_loopback`(OPS-034 부분)는 그대로 둔다. | 표식 위치만 바뀜(해결됨) | 구현 판단(서버 수준 테스트 추가, 해결됨) |
+| 9. (해결) 비루프백 평문 시작 실패(OPS-014·OPS-034)의 검증 위치. 서버 수준 테스트를 두 개로 나눴다. `tests/serve.rs`의 `refuses_public_plaintext_and_answers_login_less_queries_with_401_on_loopback`(OPS-034 통과, 비부분: 공개 평문 시작 거절과 루프백 평문 401을 함께 확인)와 `public_management_never_starts_on_plaintext_or_without_tls_or_an_account`(OPS-014 부분: 공개 평문·인증서 누락·계정 없음의 시작 거절). 설정 규칙 테스트 `allows_plaintext_management_only_on_loopback`(OPS-034 부분)는 그대로 둔다. 범위는 작업 4.2 시나리오 범위 기록을 본다. | 표식 위치만 바뀜(해결됨) | 구현 판단(서버 수준 테스트 추가, 해결됨) |
 | 10. (해결) 첫 TLS 레코드(16 389바이트)만으로 버전을 판정하는 한계를 받아들인다. 사용자 결정 2026-10-21(Q17). 현재 코드가 이 옵션이다. | 관리 TLS 버전 거절의 감사 흔적. OPS-036 시험(`crates/adapters/tests/websocket.rs`의 `tls10_and_tls11_are_refused_and_tls12_and_tls13_succeed_on_wss_and_management`)은 첫 레코드 안의 거절 기록을 확인한다. 첫 레코드를 넘는 ClientHello의 기록은 시험하지 않는다. | 사용자 결정 2026-10-21(Q17) |
 | 11. (해결) 첫 요청 머리 뒤 keep-alive 요청 머리에는 절대 제한이 없다. 읽기·쓰기가 없는 동안 U만 잰다. 검토한 옵션은 (a) 요청마다 절대 제한을 다시 건다, (b) 관리 응답에 `Connection: close`를 붙인다(계약 변경), (c) 접속 수명 상한을 둔다. 모두 채택하지 않는다. | 느린 keep-alive 요청이 U 간격마다 Lm 자리를 연장할 수 있다(OPS-006 부분). 받아들인 한계다. | 사용자 결정 2026-10-22(Q25) |
