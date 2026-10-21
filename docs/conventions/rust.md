@@ -32,7 +32,7 @@
 | 실패 처리 | 테스트 밖 코드에서 `unwrap`·`expect`를 쓰지 않는다. 오류를 반환하거나 연결 하나만 정리한다. | 연결 오류로 프로세스가 끝나는 코드 | clippy `unwrap_used`·`expect_used`(deny, 테스트 허용) |
 | 출력 | 명령행 출력은 실행파일 조립 crate에서 `std::io::Write`로 쓴다. 운영 로그는 adapters의 운영 로그 모듈만 쓴다. | `println!`·`eprintln!`·`dbg!` | clippy `print_stdout`·`print_stderr`·`dbg_macro`(deny) |
 | 비밀 값 | 비밀번호·해시·쿠키 값·CSRF 토큰·개인키를 담는 타입은 `Debug`를 직접 구현해 값을 가린다(`"<redacted>"`). | 비밀 값 타입에 `#[derive(Debug)]` | 리뷰, 운영 정보 계약 1.11절 계약 테스트 |
-| unsafe | `unsafe` 코드를 쓰지 않는다. | `unsafe` 블록 | rustc `unsafe_code`(forbid) |
+| unsafe | `unsafe` 코드를 쓰지 않는다. 예외는 `crates/adapters/src/terminal/windows_console.rs` 한 파일뿐이며, 이 파일의 Win32 콘솔 호출만 `unsafe`를 쓴다(사용자 결정 2026-10-21). | `unsafe` 블록(예외 파일 밖) | rustc `unsafe_code`(deny). 예외는 `crates/adapters/src/terminal.rs`의 모듈 선언에 `#[expect(unsafe_code, reason = "...")]`로 쓴다. |
 | 미완성 표시 | 끝나지 않은 코드를 병합하지 않는다. | `todo!()`, `unimplemented!()` | clippy `todo`·`unimplemented`(deny) |
 | lint 예외 | 꼭 필요하면 가장 좁은 범위에 `#[expect(lint, reason = "...")]`를 쓴다. | crate 전체 `#![allow(...)]`, 이유 없는 `allow` | clippy `allow_attributes_without_reason`(deny), 리뷰 |
 | 의존성 | [PRD "구현 기술" 행](../requirements/PRD.md#확정-기준)의 crate만 쓴다. 버전은 작업 공간 `[workspace.dependencies]`에 한 번만 적는다. | crate마다 다른 버전, 목록 밖 crate | `cargo xtask layers`, `cargo deny check licenses` |
