@@ -87,7 +87,7 @@ native-tls 행의 "미확인" 항목은 이 ADR에서 조사하지 않았다. �
 | 요인 1: 두 OS에서 같은 협상 결과를 보인다 | 배포 호환성 테스트 | 두 플랫폼의 실행 증거 확보 | [OPS-019](../specs/operations.md#7-수용-테스트): 미실행(구현·테스트 파일 없음) |
 | 요인 2: 인증서 교체가 파일 변경으로 적용된다 | 통합 테스트 | 새 핸드셰이크는 새 인증서, 기존 연결 유지 | [OPS-024](../specs/operations.md#7-수용-테스트): 미실행(구현·테스트 파일 없음) |
 | 요인 2: 잘못된 인증서·키 후보를 거절한다 | 통합 테스트 | 키 불일치·한쪽 교체는 후보 전체 거절, 기존 유지 | [OPS-026](../specs/operations.md#7-수용-테스트): 미실행(구현·테스트 파일 없음) |
-| 요인 2: TLS 준비 실패가 정상 준비로 표시되지 않는다 | 통합 테스트 | 준비 완료 아님, 자원 회수 | [OPS-002](../specs/operations.md#7-수용-테스트): 통과(작업 3.1: `tests/serve.rs`의 `fails_with_exit_code_4_and_releases_listeners_when_a_port_is_taken`이 포트 점유 때 자원 회수를, `checks_tls_files_before_binding_a_taken_status_port`가 내장 TLS 준비 실패는 바인드 전에 멈춤을 확인. 사용자 결정 2026-10-22(Q26)로 스펙 조건을 고침. Ubuntu·Windows 모두 통과) |
+| 요인 2: TLS 준비 실패가 정상 준비로 표시되지 않는다 | 통합 테스트 | 준비 완료 아님, 자원 회수 | [OPS-002](../specs/operations.md#7-수용-테스트): 통과(작업 3.1: `tests/serve.rs`의 `fails_before_ready_and_frees_every_port_when_a_port_is_taken_or_tls_fails`가 두 조건을 한 시험에서 확인한다. 포트 점유 때는 자원을 회수하고, 내장 TLS 준비 실패 때는 바인드 전에 멈춘다. 사용자 결정 2026-10-22(Q26)로 스펙 조건을 고침. Ubuntu·Windows 모두 통과) |
 | 요인 5: 의존성 라이선스를 확인한다 | 출처·라이선스 검토 | 의존성 고지 의무 확인 | [OPS-021](../specs/operations.md#7-수용-테스트): 미실행(구현·의존성 없음) |
 | 요인 4: 두 OS에서 빌드·배포가 된다 | 배포 통합 테스트 | 외부 서비스·컨테이너 없이 실행 | [OPS-031](../specs/operations.md#7-수용-테스트): 미실행(구현·테스트 파일 없음) |
 

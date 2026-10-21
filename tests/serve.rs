@@ -441,7 +441,6 @@ fn rejects_toml_syntax_error_and_missing_config_file_with_exit_code_3() {
 
 /// spec: operations.md:OPS-001
 /// spec: operations.md:OPS-012 partial
-/// spec: operations.md:OPS-014 partial
 #[test]
 fn refuses_to_start_without_a_usable_account_with_exit_code_5() {
     let _lock = lock_ports();
@@ -490,16 +489,12 @@ fn refuses_to_start_without_a_usable_account_with_exit_code_5() {
     }
 }
 
-/// spec: operations.md:OPS-014 partial
-/// spec: operations.md:OPS-034 partial
-#[test]
+/// Plaintext management on a public address stops at the config check (exit
+/// code 3), before any bind.
 fn refuses_plaintext_management_on_a_public_address_with_exit_code_3() {
     let _lock = lock_ports();
     let ports = Ports::free();
-    let public = config_text(ports).replace(
-        &format!("listen = \"127.0.0.1:{}\"", ports.management),
-        &format!("listen = \"0.0.0.0:{}\"", ports.management),
-    );
+    let public = with_public_management(ports, &config_text(ports));
     let config = setup_with("plaintext-public", &public);
     let run = serve(&config);
     assert_eq!(run.code, Some(3), "{}", run.stderr);
@@ -518,8 +513,79 @@ fn refuses_plaintext_management_on_a_public_address_with_exit_code_3() {
     assert_released(ports);
 }
 
+/// spec: operations.md:OPS-034
+#[test]
+fn refuses_public_plaintext_and_answers_login_less_queries_with_401_on_loopback() {
+    // OPS-034 has two conditions; this test runs both.
+    refuses_plaintext_management_on_a_public_address_with_exit_code_3();
+    answers_api_queries_with_401_without_login_on_loopback_plaintext();
+}
+
+/// spec: operations.md:OPS-014 partial
+#[test]
+fn public_management_never_starts_on_plaintext_or_without_tls_or_an_account() {
+    // OPS-014 has more conditions than this test checks. The HTTPS 401 on the
+    // public listener is not checked here: the root tests have no TLS client.
+    refuses_plaintext_management_on_a_public_address_with_exit_code_3();
+    refuses_public_management_without_its_certificate_with_exit_code_3();
+    refuses_public_management_without_an_account_with_exit_code_5();
+}
+
+/// Public management with the built-in certificate file missing: exit code 3
+/// before any bind.
+fn refuses_public_management_without_its_certificate_with_exit_code_3() {
+    let _lock = lock_ports();
+    let ports = Ports::free();
+    let public = with_public_management(
+        ports,
+        &management_config(ports, "no-such-file.pem", "server-key-p256.pem"),
+    );
+    let config = setup_with("public-cert-missing", &public);
+    let run = serve(&config);
+    assert_eq!(run.code, Some(3), "{}", run.stderr);
+    assert_eq!(events(&run.stdout), ["server_starting", "startup_failed"]);
+    let lines: Vec<&str> = run.stdout.lines().collect();
+    assert_eq!(field(lines[1], "reason"), Some("tls_file_invalid"));
+    assert_eq!(field(lines[1], "listener"), Some("management"));
+    assert_eq!(field(lines[1], "config_key"), Some("management.cert_file"));
+    assert_eq!(
+        run.stderr,
+        "error[tls_file_invalid] key=management.cert_file: 인증서 파일을 읽을 수 없다.\n"
+    );
+    // Start-up stops before any listener binds, so every port is still free.
+    assert_released(ports);
+}
+
+/// Public management with valid TLS and no account file: exit code 5 before
+/// any bind.
+fn refuses_public_management_without_an_account_with_exit_code_5() {
+    let _lock = lock_ports();
+    let ports = Ports::free();
+    let public = with_public_management(
+        ports,
+        &management_config(ports, "server-chain.pem", "server-key-p256.pem"),
+    );
+    let config = setup_with("public-no-account", &public);
+    let _ = std::fs::remove_file(config.with_file_name("admin-accounts.toml"));
+    let run = serve(&config);
+    assert_eq!(run.code, Some(5), "{}", run.stderr);
+    assert_eq!(events(&run.stdout), ["server_starting", "startup_failed"]);
+    let expected = pairs(&[("accounts_file_missing", "admin.accounts_file")]);
+    assert_eq!(startup_failures(&run.stdout), expected);
+    assert_eq!(run.errors(), expected);
+    run.assert_no_secret();
+    // The account stage comes before any listener.
+    assert_released(ports);
+}
+
 /// spec: operations.md:OPS-002
 #[test]
+fn fails_before_ready_and_frees_every_port_when_a_port_is_taken_or_tls_fails() {
+    // OPS-002 has two conditions; this test runs both.
+    fails_with_exit_code_4_and_releases_listeners_when_a_port_is_taken();
+    checks_tls_files_before_binding_a_taken_status_port();
+}
+
 fn fails_with_exit_code_4_and_releases_listeners_when_a_port_is_taken() {
     let _lock = lock_ports();
     let ports = Ports::free();
@@ -587,6 +653,15 @@ fn management_config(ports: Ports, cert: &str, key: &str) -> String {
     )
 }
 
+/// `config` with the management listener on the public address `0.0.0.0`.
+/// Only tests whose start-up stops before any bind use it.
+fn with_public_management(ports: Ports, config: &str) -> String {
+    config.replace(
+        &format!("listen = \"127.0.0.1:{}\"", ports.management),
+        &format!("listen = \"0.0.0.0:{}\"", ports.management),
+    )
+}
+
 /// spec: operations.md:OPS-002 partial
 #[test]
 fn fails_with_exit_code_3_when_wss_key_does_not_match() {
@@ -637,8 +712,6 @@ fn fails_with_exit_code_3_when_management_certificate_is_missing() {
     assert_released(ports);
 }
 
-/// spec: operations.md:OPS-002
-#[test]
 fn checks_tls_files_before_binding_a_taken_status_port() {
     let _lock = lock_ports();
     let ports = Ports::free();
@@ -1342,12 +1415,18 @@ fn tells_a_peer_close_from_an_initial_exchange_that_outlives_h() {
 /// `GET path` on the loopback `port`: the status code and the body, or
 /// `None` when the server closed the connection without a reply.
 fn http_get(port: u16, path: &str) -> Option<(u16, String)> {
+    http_request(port, "GET", path)
+}
+
+/// `method path` on the loopback `port` with no body: the status code and the
+/// body, or `None` when the server closed the connection without a reply.
+fn http_request(port: u16, method: &str, path: &str) -> Option<(u16, String)> {
     let mut stream = TcpStream::connect(("127.0.0.1", port))
         .unwrap_or_else(|error| panic!("connect {port}: {error}"));
     stream
         .set_read_timeout(Some(EXIT_LIMIT))
         .unwrap_or_else(|error| panic!("read timeout: {error}"));
-    let request = format!("GET {path} HTTP/1.1\r\nHost: status\r\nConnection: close\r\n\r\n");
+    let request = format!("{method} {path} HTTP/1.1\r\nHost: status\r\nConnection: close\r\n\r\n");
     // A refused connection may close before the request is written.
     if stream.write_all(request.as_bytes()).is_err() {
         return None;
@@ -1416,8 +1495,8 @@ fn answers_status_queries_without_login_once_ready() {
     );
 }
 
-/// spec: operations.md:OPS-034 partial
-#[test]
+/// Loopback plaintext starts, and every API request without a session gets
+/// `401 unauthenticated` with no data, before the path or method is judged.
 fn answers_api_queries_with_401_without_login_on_loopback_plaintext() {
     let _lock = lock_ports();
     let ports = Ports::free();
@@ -1434,11 +1513,29 @@ fn answers_api_queries_with_401_without_login_on_loopback_plaintext() {
         "{ready}"
     );
     // Plaintext on loopback starts. No session exists before login, so the
-    // API answers 401 before it judges the path.
-    let (status, body) = http_get(ports.management, "/api/v1/session")
-        .unwrap_or_else(|| panic!("no reply on the management port"));
-    assert_eq!(status, 401, "{body}");
-    assert!(body.contains(r#""code":"unauthenticated""#), "{body}");
+    // API answers 401 before it judges the path or the method. The query
+    // paths and the termination path refuse alike, with no data in the body.
+    let refused = [
+        ("GET", "/api/v1/session"),
+        ("GET", "/api/v1/summary"),
+        ("GET", "/api/v1/waiting"),
+        ("GET", "/api/v1/sessions"),
+        ("GET", "/api/v1/sessions/ses_3k9d2m7q4x8v1b6n5c0z2h4w7y"),
+        ("GET", "/api/v1/closed-sessions"),
+        (
+            "POST",
+            "/api/v1/sessions/ses_3k9d2m7q4x8v1b6n5c0z2h4w7y/terminate",
+        ),
+    ];
+    for (method, path) in refused {
+        let (status, body) = http_request(ports.management, method, path)
+            .unwrap_or_else(|| panic!("no reply to {method} {path}"));
+        assert_eq!(status, 401, "{method} {path}: {body}");
+        assert!(
+            body.contains(r#""code":"unauthenticated""#),
+            "{method} {path}: {body}"
+        );
+    }
 }
 
 /// spec: operations.md:OPS-033 partial
