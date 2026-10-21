@@ -7,7 +7,7 @@
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use rustls::crypto::aws_lc_rs;
 use rustls::pki_types::pem::PemObject;
@@ -32,6 +32,12 @@ const LIMIT: Duration = Duration::from_secs(10);
 /// Lm for tests that send several requests in a row. Each request uses a new
 /// connection, so a small limit could still be held by a closing one.
 const ROOMY_LM: u32 = 8;
+
+/// U of the default configuration (config-v1 §1.2, `tls_upgrade_secs` = 10).
+const UPGRADE: Duration = Duration::from_secs(10);
+
+/// A short U for tests that wait for the deadline to end a connection.
+const SHORT_UPGRADE: Duration = Duration::from_millis(300);
 
 fn fixture(name: &str) -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -106,8 +112,17 @@ struct Running {
     events: Arc<Recorder>,
 }
 
-/// Starts a management listener on loopback with the given Lm.
+/// Starts a management listener on loopback with the given Lm and U of 10 s.
 async fn start(tls: Option<TlsAcceptor>, admin_connections: u32) -> Running {
+    start_with_upgrade(tls, admin_connections, UPGRADE).await
+}
+
+/// Starts a management listener on loopback with the given Lm and U.
+async fn start_with_upgrade(
+    tls: Option<TlsAcceptor>,
+    admin_connections: u32,
+    upgrade: Duration,
+) -> Running {
     let listener = TcpListener::bind("127.0.0.1:0")
         .await
         .unwrap_or_else(|error| panic!("loopback bind: {error}"));
@@ -117,7 +132,7 @@ async fn start(tls: Option<TlsAcceptor>, admin_connections: u32) -> Running {
     let events = Arc::new(Recorder::default());
     let log: Arc<dyn EventSink> = events.clone();
     let budget = ConnectionBudget::new(admin_connections);
-    tokio::spawn(ManagementListener::new(listener, tls, budget).run(log));
+    tokio::spawn(ManagementListener::new(listener, tls, budget, upgrade).run(log));
     Running { addr, events }
 }
 
@@ -447,6 +462,75 @@ async fn management_connection_beyond_lm_is_refused_at_accept() {
             peer_ip: loopback(),
         }
     );
+}
+
+/// spec: operations.md:OPS-006 partial
+#[tokio::test]
+async fn stalled_tls_handshake_is_closed_after_u_without_an_answer() {
+    let running = start_with_upgrade(Some(tls_acceptor()), ROOMY_LM, SHORT_UPGRADE).await;
+    // Connects and sends no ClientHello.
+    let mut stalled = TcpStream::connect(running.addr)
+        .await
+        .unwrap_or_else(|error| panic!("loopback connect: {error}"));
+    let started = Instant::now();
+    let mut reply = Vec::new();
+    timeout(LIMIT, stalled.read_to_end(&mut reply))
+        .await
+        .unwrap_or_else(|error| panic!("stalled handshake is closed in time: {error}"))
+        .unwrap_or_else(|error| panic!("stalled handshake is read: {error}"));
+    assert!(started.elapsed() >= SHORT_UPGRADE, "closed before U");
+    assert!(reply.is_empty(), "a stalled handshake gets no HTTP answer");
+}
+
+/// spec: operations.md:OPS-033 partial
+#[tokio::test]
+async fn stalled_request_frees_its_lm_place_after_u() {
+    let running = start_with_upgrade(None, 1, SHORT_UPGRADE).await;
+    // Sends a request line and part of the head, then stops.
+    let mut stalled = TcpStream::connect(running.addr)
+        .await
+        .unwrap_or_else(|error| panic!("loopback connect: {error}"));
+    stalled
+        .write_all(b"GET /api/v1/session HTTP/1.1\r\nHost: localhost\r\n")
+        .await
+        .unwrap_or_else(|error| panic!("partial head is sent: {error}"));
+    let mut reply = Vec::new();
+    timeout(LIMIT, stalled.read_to_end(&mut reply))
+        .await
+        .unwrap_or_else(|error| panic!("stalled request is closed in time: {error}"))
+        .unwrap_or_else(|error| panic!("stalled request is read: {error}"));
+    assert!(reply.is_empty(), "a stalled request gets no HTTP answer");
+
+    // Lm had one place. Once the stalled connection is closed, the place is free.
+    let reply = plain_exchange(running.addr, &get("/api/v1/session", &[])).await;
+    assert_eq!(reply.status, 401);
+    assert_eq!(error_code(&reply), "unauthenticated");
+}
+
+/// spec: operations.md:OPS-006 partial
+#[tokio::test]
+async fn idle_connection_after_a_reply_is_closed_after_u() {
+    let running = start_with_upgrade(None, ROOMY_LM, SHORT_UPGRADE).await;
+    let mut idle = TcpStream::connect(running.addr)
+        .await
+        .unwrap_or_else(|error| panic!("loopback connect: {error}"));
+    let started = Instant::now();
+    // No `Connection: close`, so the server keeps the connection after the reply.
+    idle.write_all(b"GET /api/v1/session HTTP/1.1\r\nHost: localhost\r\n\r\n")
+        .await
+        .unwrap_or_else(|error| panic!("request is sent: {error}"));
+    let mut raw = Vec::new();
+    timeout(LIMIT, idle.read_to_end(&mut raw))
+        .await
+        .unwrap_or_else(|error| panic!("idle connection is closed in time: {error}"))
+        .unwrap_or_else(|error| panic!("idle connection is read: {error}"));
+    assert!(
+        started.elapsed() >= SHORT_UPGRADE,
+        "closed before U of idle time"
+    );
+    let reply = parse(&raw);
+    assert_eq!(reply.status, 401);
+    assert_eq!(error_code(&reply), "unauthenticated");
 }
 
 #[tokio::test]

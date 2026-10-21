@@ -196,8 +196,12 @@ async fn listen_until_shutdown(settings: &Settings, log: Arc<dyn EventSink>) -> 
 
     // The management listener accepts from here on.
     let management_task = management.map(|bound| {
-        let listener =
-            ManagementListener::new(bound.listener, management_tls, Arc::clone(&admin_budget));
+        let listener = ManagementListener::new(
+            bound.listener,
+            management_tls,
+            Arc::clone(&admin_budget),
+            settings.timeouts.tls_upgrade,
+        );
         tokio::spawn(listener.run(Arc::clone(&log)))
     });
 

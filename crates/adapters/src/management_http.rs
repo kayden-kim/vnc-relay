@@ -5,6 +5,7 @@
 //! Design: docs/architectures/management-listener.md.
 
 use std::sync::Arc;
+use std::time::Duration;
 
 use axum::Router;
 use axum::extract::State;
@@ -20,6 +21,7 @@ use vnc_relay_app::ports::EventSink;
 use vnc_relay_domain::budget::ConnectionBudget;
 
 use crate::admission::AdmittingListener;
+use crate::request_deadline::DeadlineListener;
 use crate::tls_listener::TlsListener;
 
 /// `listener` of the management listener in operation events (ops-info-v1 §1.5).
@@ -40,19 +42,23 @@ pub struct ManagementListener {
     listener: TcpListener,
     tls: Option<TlsAcceptor>,
     admin_budget: Arc<ConnectionBudget>,
+    tls_upgrade: Duration,
 }
 
 impl ManagementListener {
-    /// `admin_budget` is Lm, shared with the status listener.
+    /// `admin_budget` is Lm, shared with the status listener. `tls_upgrade` is U:
+    /// the limit on the TLS handshake and on reading each request head.
     pub fn new(
         listener: TcpListener,
         tls: Option<TlsAcceptor>,
         admin_budget: Arc<ConnectionBudget>,
+        tls_upgrade: Duration,
     ) -> Self {
         Self {
             listener,
             tls,
             admin_budget,
+            tls_upgrade,
         }
     }
 
@@ -69,10 +75,12 @@ impl ManagementListener {
         match self.tls {
             Some(acceptor) => {
                 let listener = TlsListener::new(admitting, acceptor, log, LISTENER);
+                let listener = DeadlineListener::new(listener, self.tls_upgrade);
                 let _ = axum::serve(listener, router).await;
             }
             None => {
-                let _ = axum::serve(admitting, router).await;
+                let listener = DeadlineListener::new(admitting, self.tls_upgrade);
+                let _ = axum::serve(listener, router).await;
             }
         }
     }
