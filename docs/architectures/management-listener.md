@@ -22,16 +22,16 @@
   - 요청 처리 순서(3·4절): `/api/v1/` 요청은 관리 세션을 먼저 본다. 세션이 없으면 경로·메서드와 관계없이 401을 준다(관리 API 계약 1.3절 2단계). 정적 경로는 1.11절 표를 따른다.
   - 응답 헤더: 모든 관리 응답에 `Cache-Control: no-store`를 붙인다(1.1절). 모든 401에 `WWW-Authenticate: Session realm="vnc-relay"`를 붙인다(2.1절). 쿠키가 있었던 401은 `relay_admin_session` 쿠키를 지운다(1.4.1절). HTTPS 리스너가 보낸 지우기 쿠키에는 `Secure`를 붙인다.
   - 상대 주소: 관리 응답에 들어가는 주소는 소켓의 실제 상대 주소다. 전달 헤더(`Forwarded`·`X-Forwarded-For`)는 읽지 않는다(1.1절, 관리 스펙 MGT-015).
-  - 요청 시간 제한: 접속마다 U(`[timeouts] tls_upgrade_secs`)를 건다. 첫 요청 머리가 끝날 때까지는 수락 때부터 잰 절대 기한이다. TLS 핸드셰이크도 같은 기한 안에 끝나야 한다. 기한이 지나면 평문 응답 없이 닫는다(4·6절).
+  - 요청 시간 제한: 접속마다 U(`[timeouts] tls_upgrade_secs`)를 건다. TLS 핸드셰이크와 첫 요청 머리가 끝날 때까지는 수락 때부터 잰 절대 기한이다. 그 뒤에는 읽기·쓰기가 있을 때마다 U를 다시 잰다(구현 판단, 9절 11번). 기한이 지나면 평문 응답 없이 닫는다(4·6절).
 - 맡지 않는 책임:
   - 로그인 처리와 관리 세션 발급(작업 4.3). 4.2에는 유효한 관리 세션이 없다.
   - 관리 세션 검사·CSRF 검사·유휴 만료(작업 4.3). 4.2에서 쿠키는 항상 무효다.
   - 조회 API 처리(작업 4.4), 종료 API 처리(작업 4.5), 정적 파일 제공(작업 4.6).
   - 관리 리스너의 연결 기록 `connection_accepted`. ops-info-v1 §1.5가 관리 리스너에 이 사건을 정하지 않는다.
-  - TLS 핸드셰이크 실패 가운데 버전 거절이 아닌 것(인증서 오류, 클라이언트 중단). 열린 질문 6.
+  - TLS 핸드셰이크 실패 가운데 버전 거절이 아닌 것(인증서 오류, 클라이언트 중단). 9절 6번(Q13).
 - 다른 모듈에 공개하는 기능:
   - `vnc_relay_adapters::management_http::ManagementListener`
-  - `vnc_relay_adapters::tls_listener::TlsListener`(WSS 진입점 작업 3.2가 같은 방식으로 쓴다)
+  - `vnc_relay_adapters::tls_listener::TlsListener`(관리 HTTPS가 쓴다. WSS 진입점은 `TlsIo`를 소켓마다 직접 쓴다)
   - `vnc_relay_adapters::admission::AdmittingListener`(상태·관리 리스너가 같이 쓴다)
 
 ## 2. 내부 구조
@@ -65,7 +65,7 @@ flowchart LR
 | `crates/app/src/events.rs` `Stage::Tls`, `RejectReason::TlsVersionUnsupported` | `connection_rejected`의 `stage` 값 `tls`와 `reason` 값 `tls_version_unsupported` | 사건이 생길 때 | 없음 |
 | `crates/adapters/src/config_file.rs` `read_management` | 평문 HTTP 주소가 루프백이 아니면 `config_plaintext_management_not_loopback` 설정 오류를 낸다. 관리 리스너는 이 검사를 다시 하지 않는다. | 설정 읽기 때 | 없음 |
 | `crates/app/src/settings.rs` `Settings::management_listener`, `Settings::other_listeners` | `management_listener`는 관리 리스너 바인드 계획(이름 `management`, 키 `management.listen`)을 만든다. `other_listeners`는 관리 리스너를 넣지 않는다. | `serve`가 바인드 전에 부른다 | 없음 |
-| `src/serve.rs` `listen_until_shutdown` | 관리 리스너를 바인드하고, 준비됨 뒤 띄우고, 종료 때 진입점 정리 뒤에 멈춘다. 관리 TLS acceptor를 관리 리스너에 넘긴다. WSS acceptor는 3.2까지 보관만 한다. | `serve` 실행마다 | adapters, app, domain, tokio |
+| `src/serve.rs` `listen_until_shutdown` | 관리 리스너를 바인드하고, 준비됨 뒤 띄우고, 종료 때 진입점 정리 뒤에 멈춘다. 관리 TLS acceptor를 `ManagementListener`에 넘긴다. WSS용 `wss_tls`는 `take()`로 꺼내 `WsEntryPoint`에 넘긴다(작업 3.2). | serve 실행마다 | adapters, app, domain, tokio |
 
 ## 3. 데이터 모델
 
@@ -73,7 +73,7 @@ flowchart LR
 | --- | --- | --- | --- |
 | `ManagementListener` | `listener: TcpListener`, `tls: Option<TlsAcceptor>`, `admin_budget: Arc<ConnectionBudget>`, `tls_upgrade: Duration`(U) | 메모리, `run`이 소비 | `tls`가 `Some`이면 HTTPS, `None`이면 평문. 두 값 중 하나만 쓴다. `tls_upgrade`는 설정 `[timeouts] tls_upgrade_secs`다. |
 | `TlsListener<L>` | `inner: L`, `acceptor: TlsAcceptor`, `log: Arc<dyn EventSink>`, `name: &'static str` | 메모리 | `L::Addr`는 `SocketAddr`여야 한다. 거절 기록에 상대 IP를 쓴다. |
-| `TlsIo<IO>` | `Handshaking(Handshake<IO>)`, `Established(TlsStream<Recorded<IO>>)`, `Failed` | 접속 하나의 `Io`값 | 상태는 앞으로만 간다: `Handshaking` → `Established` 또는 `Failed`. `Failed`에서는 되돌아가지 않는다. |
+| `TlsIo<IO>` | `Handshaking(Handshake<IO>)`, `Established(TlsStream<Recorded<IO>>)`, `Failed(HandshakeFailure)` | 접속 하나의 `Io`값 | 상태는 앞으로만 간다: `Handshaking` → `Established` 또는 `Failed`. `Failed`에서는 되돌아가지 않는다. |
 | `Handshake<IO>` | `accept: Accept<Recorded<IO>>`, `capture: Capture`, `peer: PeerIp`, `log: Arc<dyn EventSink>`, `name: &'static str` | `TlsIo::Handshaking` 안 | 핸드셰이크가 끝나면 `Accept`를 버린다. 버전 거절을 기록할 때 `peer`를 쓴다. |
 | `Recorded<IO>` | `io: IO`, `capture: Capture`(`Arc<Mutex<Option<Vec<u8>>>>`) | 접속 하나. `Accept`가 읽는 `Io`를 감싼다 | 핸드셰이크 동안 읽은 바이트를 `capture`에 복사한다(최대 `CAPTURE_LIMIT` = 5 + 16 384 바이트). 핸드셰이크가 끝나면 `capture`를 `None`으로 바꾼다. |
 | `Admitted` | `stream: TcpStream`, `_permit: BudgetPermit` | 접속 하나 | `_permit`은 `Admitted`가 사라질 때 Lm으로 돌아간다. 핸드셰이크 중에도 자리를 든다. |
@@ -87,7 +87,7 @@ flowchart LR
 | --- | --- | --- | --- | --- |
 | 1 | `admission.rs` `AdmittingListener::accept` | TCP 수락 뒤 Lm 자리를 잡는다. 수락 오류는 `ACCEPT_RETRY_DELAY` 뒤 다시 수락한다. | Lm 사용량 +1 | 자리 없음: `connection_rejected`(`stage` = `accept`, `admin_connection_limit`), 연결 닫음 |
 | 2 | `tls_listener.rs` `TlsListener::accept` | 평문이면 이 단계를 건너뛴다(`tls` = `None`일 때 `serve`가 `TlsListener`를 만들지 않는다). HTTPS면 `TlsIo::Handshaking`을 만든다. 핸드셰이크는 하지 않는다. | `TlsIo` 상태 `Handshaking` | 없음 |
-| 3 | `tls_listener.rs` `TlsIo::poll_handshake` | `poll_read`·`poll_write`·`poll_flush`가 먼저 부른다. 핸드셰이크를 진행한다. 성공하면 `Established`로 바꾸고 캡처를 `None`으로 바꾼다. 실패하면 캡처한 ClientHello 바이트(레코드 한 개 분)로 버전을 판정한다. `supported_versions`가 있으면 그 목록에 TLS 1.2 이상이 없을 때, 없으면 `legacy_version`이 TLS 1.2 미만일 때 버전 거절이다. 버전 거절이면 기록을 먼저 쓴다. 그다음 `Failed`로 바꾸고 `io::Error`를 돌려준다. | `TlsIo` 상태 `Established` 또는 `Failed` | 버전 거절: `connection_rejected`(`listener` = `management`, `stage` = `tls`, `reason` = `tls_version_unsupported`). 그 밖의 실패: 기록 없음(열린 질문 6). |
+| 3 | `tls_listener.rs` `TlsIo::poll_handshake` | `poll_read`·`poll_write`·`poll_flush`가 먼저 부른다. 핸드셰이크를 진행한다. 성공하면 `Established`로 바꾸고 캡처를 `None`으로 바꾼다. 실패하면 캡처한 ClientHello 바이트(레코드 한 개 분)로 버전을 판정한다. `supported_versions`가 있으면 그 목록에 TLS 1.2 이상이 없을 때, 없으면 `legacy_version`이 TLS 1.2 미만일 때 버전 거절이다. 버전 거절이면 기록을 먼저 쓴다. 그다음 `Failed`로 바꾸고 `io::Error`를 돌려준다. | `TlsIo` 상태 `Established` 또는 `Failed` | 버전 거절: `connection_rejected`(`listener` = `management`, `stage` = `tls`, `reason` = `tls_version_unsupported`). 그 밖의 실패: 기록 없음(사용자 결정 Q13). |
 | 4 | `request_deadline.rs` `Deadlined::poll_read`·`poll_write`·`poll_flush` | 읽기·쓰기 전에 타이머를 먼저 본다. 기한이 지났으면 `TimedOut`을 돌려준다. 첫 요청 머리가 끝나기 전에는 절대 기한(수락 + U)이다. 끝난 뒤 바이트가 오가면 U를 다시 건다. 2·3단계의 TLS 핸드셰이크도 이 안에서 진행된다. | 타이머, `head_done`, `window` | 기한이 지나면 axum이 접속을 닫는다(6절). 머리가 끝나면 axum이 요청을 5단계(`answer`)로 넘긴다. |
 | 5 | `management_http.rs` `answer` 1단계 | 경로가 `/api/v1/`로 시작하면 세션이 없으므로 `401`. 요청에 `relay_admin_session` 쿠키가 있으면 지우기 `Set-Cookie`를 붙인다. 메서드는 보지 않는다. | 없음 | 401 응답(`WWW-Authenticate`, `Cache-Control: no-store`) |
 | 6 | `management_http.rs` `answer` 2단계 | 경로가 `/`이거나 `/app/`로 시작하면 메서드가 `GET`·`HEAD`가 아닐 때 `405`(`Allow: GET, HEAD`, `invalid_request` 본문). 그 밖에는 `303`, `Location: /login/`, 본문 없음. | 없음 | 응답 |
@@ -108,13 +108,13 @@ flowchart LR
 | 실패 지점 | 처리 방법 | 남는 상태 | 관련 스펙 시나리오 |
 | --- | --- | --- | --- |
 | Lm 자리 없음 | `connection_rejected`(`stage` = `accept`, `admin_connection_limit`, `limit`). HTTP 응답 없이 닫는다. | 접속 없음. L은 바뀌지 않는다. | OPS-033(일부), OPS-004(일부) |
-| TLS 1.2 미만만 제안 | 평문 응답 없이 닫는다. 같은 접속에서 평문으로 바꾸지 않는다. `connection_rejected`(`stage` = `tls`, `tls_version_unsupported`). 버전 판정은 접속의 첫 TLS 레코드(5 + 16384 = 16389바이트)만 본다. ClientHello가 그 레코드를 넘으면 판정하지 못해 기록하지 않는다. rustls는 그래도 접속을 거절한다(사용자 결정 2026-10-21, Q17). | 접속 없음 | OPS-036(일부) |
+| TLS 1.2 미만만 제안 | 평문 응답 없이 닫는다. 같은 접속에서 평문으로 바꾸지 않는다. `connection_rejected`(`stage` = `tls`, `tls_version_unsupported`). 버전 판정은 접속의 첫 TLS 레코드(5 + 16384 = 16389바이트)만 본다. ClientHello가 그 레코드를 넘으면 판정하지 못해 기록하지 않는다. rustls는 그래도 접속을 거절한다(사용자 결정 2026-10-21, Q17). | 접속 없음 | OPS-036 |
 | 그 밖의 TLS 핸드셰이크 실패(인증서 오류, 클라이언트가 중간에 끊음) | 평문 응답 없이 닫는다. 기록하지 않는다(사용자 결정 2026-10-21, Q13). | 접속 없음. 자리는 돌아간다. | OPS-036(일부) |
 | TLS 핸드셰이크가 U 안에 끝나지 않음 | 수락 때부터 U가 지나면 읽기·쓰기가 `TimedOut`으로 끝나고 axum이 접속을 닫는다. 평문 응답을 보내지 않는다. 기록하지 않는다(구현 판단: `connection_aborted`는 `conn_id`가 필요하다). | 접속 없음. Lm 자리는 돌아간다. | OPS-006(일부), OPS-033(일부) |
 | 첫 요청 머리가 U 안에 끝나지 않음 | 같은 방법으로 닫는다. 기록하지 않는다(구현 판단). | 접속 없음. Lm 자리는 돌아간다. | OPS-006(일부), OPS-033(일부) |
-| 첫 요청 뒤 읽기·쓰기가 U 동안 없음(keep-alive 유휴) | 같은 방법으로 닫는다. 기록하지 않는다(구현 판단, 열린 질문 11). | 접속 없음. Lm 자리는 돌아간다. | OPS-006(일부) |
+| 첫 요청 뒤 읽기·쓰기가 U 동안 없음(keep-alive 유휴) | 같은 방법으로 닫는다. 기록하지 않는다(구현 판단, 9절 11번). | 접속 없음. Lm 자리는 돌아간다. | OPS-006(일부) |
 | 수락 오류 | `ACCEPT_RETRY_DELAY` 뒤 다시 수락한다. 기록하지 않는다(ops-info-v1은 수락 실패 사건이 없다). | 없음 | 없음 |
-| 관리 요청의 읽기 오류 | axum이 접속을 닫는다. 기록하지 않는다(`connection_aborted`는 `conn_id`가 필요하다). | 접속 없음 | 열린 질문 6 |
+| 관리 요청의 읽기 오류 | axum이 접속을 닫는다. 기록하지 않는다(`connection_aborted`는 `conn_id`가 필요하다). | 접속 없음 | 구현 판단(Q13은 TLS 실패만 다룬다) |
 
 ## 7. 설계 선택
 
@@ -122,11 +122,11 @@ flowchart LR
 | --- | --- | --- | --- |
 | TLS 핸드셰이크를 `TlsIo`의 읽기·쓰기 때 진행한다 | 한 클라이언트가 핸드셰이크를 멈춰도 다른 접속의 수락이 막히지 않는다. axum이 접속마다 작업을 만든다. | 수락 루프에서 `TlsAcceptor::accept`를 기다린다(수락이 한 접속에 묶임). 수락마다 백그라운드 작업과 채널을 만든다(구조가 커짐). | ADR-0004 tokio·rustls. 설계의 같은 접속 수락 원칙(tcp-entry-point 설계). |
 | Lm 자리를 TLS 핸드셰이크 전에 잡는다 | 핸드셰이크 작업도 Lm 안에 들어가 자원을 제한한다. 관리 TLS는 Lm을 넘지 않는다. | 핸드셰이크 뒤에 자리를 잡는다(핸드셰이크 작업이 Lm 밖에서 늘어남). | OPS-033(Lm은 관리·상태 연결 상한). |
-| `TlsListener<L>`을 일반 `Listener`로 만든다 | 작업 3.2 WSS 진입점도 같은 wrapper를 쓴다. | 관리 리스너 안에 TLS 코드를 넣는다(WSS 중복). | tls.md 1절(연결 수락은 진입점 모듈) |
+| `TlsListener<L>`을 일반 `Listener`로 만든다 | 관리 HTTPS가 이 wrapper를 쓴다. WSS 진입점은 `TlsIo`를 소켓마다 직접 쓴다(`Wire`, 작업 3.2). | 관리 리스너 안에 TLS 코드를 넣는다(WSS 중복). | tls.md 1절(연결 수락은 진입점 모듈) |
 | `Admitted`는 `TcpStream`만 감싼다 | 관리·상태 리스너 모두 평문 TCP 위에 Lm을 세운다. TLS는 그 위에 쌓는다. | `Admitted<S>`로 일반화한다(사용처가 없다). | 이 문서 2절 |
 | 관리 라우팅은 fallback 한 곳에서 한다 | 1.3절 순서(세션 확인이 경로·메서드 판정보다 먼저)를 한 함수에 둔다. 상태 리스너와 같은 방식이다. | 경로마다 axum 라우트를 둔다(순서가 흩어지고 HEAD·405 기본 응답이 계약과 다르다). | 관리 API 계약 1.3절, `status_http.rs` 주석 |
 | 지우기 쿠키의 `Secure`는 리스너 종류로 정한다 | 1.4.1절 표가 HTTPS 리스너에만 `Secure`를 정한다. | 요청 헤더로 판정한다(전달 헤더를 쓰지 않는다는 1.1절과 충돌). | 관리 API 계약 1.4.1절, MGT-017 |
-| 관리 요청 읽기와 TLS 핸드셰이크에 U를 쓴다. 첫 요청 머리가 끝날 때까지 접속 수락 때부터 잰다. 그 뒤에는 읽기·쓰기가 없는 동안만 잰다(구현 판단, 열린 질문 11). | 멈춘 클라이언트가 Lm 자리를 무기한 잡지 못하게 한다. U는 WS·WSS 업그레이드와 같은 설정 값이다(사용자 결정 2026-10-21, Q12). | 새 설정 키를 만든다(계약 변경). 제한 없이 둔다(멈춘 클라이언트가 자리를 무기한 잡는다). | 설정 계약 1.2절 U 행, 운영 스펙 1절 U, OPS-006 |
+| 관리 요청 읽기와 TLS 핸드셰이크에 U를 쓴다. 첫 요청 머리가 끝날 때까지 접속 수락 때부터 잰다. 그 뒤에는 읽기·쓰기가 한 번 있을 때마다 U를 다시 잰다(구현 판단, 9절 11번). | 멈춘 클라이언트가 Lm 자리를 무기한 잡지 못하게 한다. U는 WS·WSS 업그레이드와 같은 설정 값이다(사용자 결정 2026-10-21, Q12). | 새 설정 키를 만든다(계약 변경). 제한 없이 둔다(멈춘 클라이언트가 자리를 무기한 잡는다). | 설정 계약 1.2절 U 행, 운영 스펙 1절 U, OPS-006 |
 | 시간 제한은 `serve::Listener` 래퍼(`request_deadline.rs`)로 건다 | `axum::serve`에는 읽기 제한 설정이 없다. 래퍼는 HTTPS와 평문에 같은 규칙을 준다. | hyper 연결 설정을 직접 쓴다(hyper를 직접 크레이트로 쓰는 결정이 없다). | axum 0.8.9 `serve` |
 | ALPN을 쓰지 않는다 | `tls.rs`가 ALPN을 설정하지 않는다. 관리 API는 HTTP/1.1만 쓴다. | `http/1.1`을 광고한다(사용자 결정 2026-10-21, Q15로 쓰지 않기로 했다). | tls.md 7절, 9절 |
 | 버전 거절은 ClientHello 바이트로 판정한다(RFC 8446 4.2.1). | rustls는 버전을 보기 전에 `signature_algorithms` 확장을 검사한다(`server/hs.rs` `process_client_hello`). rustls 오류 변형으로 판정하면 TLS 1.0·1.1 클라이언트를 버전 거절로 못 보고, `signature_algorithms`가 없는 TLS 1.2 클라이언트를 잘못 거절한다. | rustls 오류 변형으로 판정(기각). | rustls 0.23.46 `server/hs.rs`, RFC 8446 4.2.1 |
@@ -145,8 +145,10 @@ flowchart LR
 | --- | --- | --- |
 | `wsl -d Ubuntu -- bash /mnt/d/vr-tools/vr-full.sh` | WSL2 Ubuntu 24.04 | 통과(`ALL PASSED`). 시나리오 148건: 통과 4, 부분 19, 실패 0, 미실행 0, 미연결 125. 오류 0건. |
 | `powershell -NoProfile -ExecutionPolicy Bypass -File D:/vr-tools/vr-win.ps1 -Only all` | Windows 11 Pro 10.0.26200 x64 | 통과(`ALL PASSED (all)`). 시나리오 148건: 통과 3, 부분 19, 실패 0, 미실행 1, 미연결 125. 오류 0건. |
+| `wsl -d Ubuntu -- bash /mnt/d/vr-tools/vr-full.sh` (커밋 `e701997`, 테스트 추가 뒤) | WSL2 Ubuntu 24.04 | Main이 보고한 실행 결과(이 작업에서 다시 실행하지 않음): 시나리오 148건: 통과 11, 부분 20, 실패 0, 미실행 0, 미연결 117. |
 
-- 대상 시나리오 상태(두 환경 같음): OPS-006 부분(이번 작업: 관리 TLS 핸드셰이크·첫 요청 머리·유휴 U 시험), OPS-033 부분(이번 작업: 멈춘 요청의 Lm 자리 반환 시험 추가), OPS-014 부분, OPS-034 부분(운영 조회 API 작업 4.4 전까지 전체가 아니다), OPS-004 부분, OPS-036 부분, MGT-017 부분, MGT-015 미연결(작업 4.4 완료 조건).
+- 대상 시나리오 상태(`ea024fc`, 두 환경 같음): OPS-006 부분(이번 작업: 관리 TLS 핸드셰이크·첫 요청 머리·유휴 U 시험), OPS-033 부분(이번 작업: 멈춘 요청의 Lm 자리 반환 시험 추가), OPS-014 부분, OPS-034 부분(운영 조회 API 작업 4.4 전까지 전체가 아니다), OPS-004 부분, OPS-036 부분(아래 `e701997` 행에서 통과로 바뀜), MGT-017 부분, MGT-015 미연결(작업 4.4 완료 조건).
+- `e701997` 변화: OPS-036 통과. 시험은 `crates/adapters/tests/websocket.rs`의 `tls10_and_tls11_are_refused_and_tls12_and_tls13_succeed_on_wss_and_management`(`/// spec: operations.md:OPS-036`, 부분 표식 없음)다. TLS 1.0·1.1 거절과 TLS 1.2·1.3 성립을 WSS와 관리 HTTPS에서 함께 본다. Ubuntu 실행 결과만 있다(위 표). Windows 실행 결과는 이 문서에 없다. 이 문서의 나머지 상태는 `e701997`에서 다시 대조하지 않았다(미관찰).
 - Windows 보고서의 미실행 1건은 OPS-007이다(`tests/serve.rs` `closes_and_logs_every_held_connection_when_stopping`이 이번 실행에 없음).
 - 판정: 구조 대조를 마쳤다. 구조 시점은 `Current`, 구현 대조는 `Verified`(작업 트리 범위)다. 문서 상태는 `Draft`로 둔다(열린 질문 5·11이 남아 있다. 11은 사용자 결정이 필요하다).
 - TODO 4.2는 `[ ]`로 둔다. MGT-015는 사용자 결정 2026-10-21(Q14)로 작업 4.4 완료 조건에 옮겼다. OPS-014 부분 사유: 운영 조회·종료 API가 아직 없다(작업 4.4·4.5). 공개 평문 주소 시작 거절(`tests/serve.rs` `refuses_plaintext_management_on_a_public_address_with_exit_code_3`), 계정 없음 시작 거절(`serve`), 인증서 누락 시작 거절(3.1 `serve`), 미인증 401(`management.rs`와 `answers_api_queries_with_401_without_login_on_loopback_plaintext`)은 확인했다. OPS-034 부분 사유: 운영 조회 엔드포인트(작업 4.4)가 아직 없어, 로그인 없이 `/api/v1/` 요청이 401로 거절되는 것만 확인했다. 비루프백 평문 시작 실패와 루프백 평문 시작은 serve 테스트로 확인했다.
@@ -163,6 +165,6 @@ flowchart LR
 | 6. (해결) 버전 거절이 아닌 TLS 실패(인증서 오류, 클라이언트 중단)는 기록하지 않는다. 사용자 결정 2026-10-21(Q13). 운영 정보 계약은 바뀌지 않는다. | 관리 TLS 실패의 감사 흔적이 없다 | 사용자 결정 2026-10-21(Q13) |
 | 7. (해결) U의 관리 TLS 적용은 3번과 같은 사용자 결정 2026-10-21(Q12)이다. | 3번과 같음 | 사용자 결정 2026-10-21(Q12) |
 | 8. (해결) MGT-015(상대 주소)는 TODO 4.4 완료 조건으로 옮긴다. TODO 4.2 완료 조건에서는 뺀다. 사용자 결정 2026-10-21(Q14). | TODO 4.2·4.4 완료 판정 | 사용자 결정 2026-10-21(Q14), `docs/TODO.md` |
-| 9. (해결) 비루프백 평문 시작 실패(OPS-014·OPS-034)의 검증 위치. 서버 수준 테스트 2건을 추가했다. `tests/serve.rs`의 `refuses_plaintext_management_on_a_public_address_with_exit_code_3`(시작 실패, OPS-014 부분·OPS-034 부분)와 `answers_api_queries_with_401_without_login_on_loopback_plaintext`(루프백 평문 시작 뒤 401, OPS-034 부분). 설정 규칙 테스트 `allows_plaintext_management_only_on_loopback`(OPS-034 부분)는 그대로 둔다. | 표식 위치만 바뀜(해결됨) | Q9 해결 작업 중 결정(서버 수준 테스트 추가, 해결됨) |
-| 10. (해결) 첫 TLS 레코드(16 389바이트)만으로 버전을 판정하는 한계를 받아들인다. 사용자 결정 2026-10-21(Q17). 현재 코드가 이 옵션이다. | 관리 TLS 버전 거절의 감사 흔적(OPS-036 부분) | 사용자 결정 2026-10-21(Q17) |
+| 9. (해결) 비루프백 평문 시작 실패(OPS-014·OPS-034)의 검증 위치. 서버 수준 테스트 2건을 추가했다. `tests/serve.rs`의 `refuses_plaintext_management_on_a_public_address_with_exit_code_3`(시작 실패, OPS-014 부분·OPS-034 부분)와 `answers_api_queries_with_401_without_login_on_loopback_plaintext`(루프백 평문 시작 뒤 401, OPS-034 부분). 설정 규칙 테스트 `allows_plaintext_management_only_on_loopback`(OPS-034 부분)는 그대로 둔다. | 표식 위치만 바뀜(해결됨) | 구현 판단(서버 수준 테스트 추가, 해결됨) |
+| 10. (해결) 첫 TLS 레코드(16 389바이트)만으로 버전을 판정하는 한계를 받아들인다. 사용자 결정 2026-10-21(Q17). 현재 코드가 이 옵션이다. | 관리 TLS 버전 거절의 감사 흔적. OPS-036 시험(`crates/adapters/tests/websocket.rs`의 `tls10_and_tls11_are_refused_and_tls12_and_tls13_succeed_on_wss_and_management`)은 첫 레코드 안의 거절 기록을 확인한다. 첫 레코드를 넘는 ClientHello의 기록은 시험하지 않는다. | 사용자 결정 2026-10-21(Q17) |
 | 11. 첫 요청 머리 뒤 keep-alive 요청 머리에는 절대 제한이 없다. 구현 판단(사용자 결정 없음): 읽기·쓰기가 없는 동안 U만 잰다. 옵션은 (a) 요청마다 절대 제한을 다시 건다, (b) 관리 응답에 `Connection: close`를 붙인다(계약 변경), (c) 접속 수명 상한을 둔다. | 느린 keep-alive 요청이 U 간격마다 Lm 자리를 연장할 수 있다(OPS-006 부분) | 사용자 결정 필요 |

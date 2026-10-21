@@ -1,13 +1,13 @@
 # `serve` 시작과 CLI 골격 모듈 설계
 
-`vnc-relay` 실행파일의 명령행 해석, 오류 출력, 종료 코드와 `serve`의 시작 순서를 다룬다. `serve`는 설정 파일과 관리자 계정 파일을 검증하고, 필요한 리스너를 모두 바인드한 뒤 종료 요청을 기다린다. 어느 단계든 실패하면 그 단계의 오류를 모두 stderr에 쓰고, 운영 로그에 `startup_failed`를 남기고, 확보한 자원을 놓고, [CLI 계약 2.1절](../contracts/cli-v1.md#21-종료-코드)의 종료 코드로 끝난다. 운영 로그의 줄 형식과 출력은 [운영 로그 모듈 설계](ops-log.md)가 다룬다. TCP 진입점의 연결 수락은 [TCP 진입점 모듈 설계](tcp-entry-point.md)가 다룬다. 인증서·개인키 파일 검사는 바인드 앞에서 이 골격이 한다. 나머지 리스너의 연결 수락, TLS 연결 처리, 파일 변경 감지는 뒤 작업이 이 골격에 더한다.
+`vnc-relay` 실행파일의 명령행 해석, 오류 출력, 종료 코드와 `serve`의 시작 순서를 다룬다. `serve`는 설정 파일과 관리자 계정 파일을 검증하고, 필요한 리스너를 모두 바인드한 뒤 종료 요청을 기다린다. 어느 단계든 실패하면 그 단계의 오류를 모두 stderr에 쓰고, 운영 로그에 `startup_failed`를 남기고, 확보한 자원을 놓고, [CLI 계약 2.1절](../contracts/cli-v1.md#21-종료-코드)의 종료 코드로 끝난다. 운영 로그의 줄 형식과 출력은 [운영 로그 모듈 설계](ops-log.md)가 다룬다. TCP 진입점의 연결 수락은 [TCP 진입점 모듈 설계](tcp-entry-point.md)가, WS·WSS 진입점의 연결 수락과 101 응답 전 처리는 [WebSocket 진입점 모듈 설계](websocket-entry-point.md)가 다룬다. 인증서·개인키 파일 검사는 바인드 앞에서 이 골격이 한다. 파일 변경 감지는 뒤 작업이 이 골격에 더한다.
 
 | 항목 | 값 |
 | --- | --- |
 | 구조 시점 | Current |
 | 문서 상태 | Draft |
 | 구현 대조 | Verified — [대조 기록](#대조-기록) |
-| 코드 위치 | `src/main.rs`, `src/cli.rs`, `src/serve.rs`, `crates/domain/src/account.rs`, `crates/app/src/accounts.rs`, `crates/app/src/settings.rs`(`ListenerPlan`, `Settings::status_listener`, `Settings::management_listener`, `Settings::other_listeners`), `crates/adapters/src/accounts_file.rs`, `crates/adapters/src/management_http.rs`, `crates/adapters/src/net.rs`, `crates/adapters/src/tls.rs`, `crates/adapters/src/toml_text.rs` |
+| 코드 위치 | `src/main.rs`, `src/cli.rs`, `src/serve.rs`, `crates/domain/src/account.rs`, `crates/app/src/accounts.rs`, `crates/app/src/settings.rs`(`ListenerPlan`, `Settings::status_listener`, `Settings::management_listener`, `Settings::other_listeners`), `crates/adapters/src/accounts_file.rs`, `crates/adapters/src/management_http.rs`, `crates/adapters/src/net.rs`, `crates/adapters/src/websocket.rs`(`WsEntryPoint`), `crates/adapters/src/tls.rs`, `crates/adapters/src/toml_text.rs` |
 | 코드 지도 | [코드 지도 2절](code-map.md#2-코드-위치와-구성요소) |
 | 관련 스펙 | [운영 스펙 3.1절](../specs/operations.md#31-설정-검증과-시작), OPS-001, OPS-002(일부), OPS-039(일부) |
 | 관련 계약 | [CLI 계약](../contracts/cli-v1.md) 1.1·1.3·1.4·1.5·1.8·2절, [설정 계약 2.1절](../contracts/config-v1.md#21-설정-오류와-준비-실패), [운영 정보 계약](../contracts/ops-info-v1.md) 1.5·1.6절(시작·종료 사건)·[1.12절](../contracts/ops-info-v1.md#112-상태-리스너와-엔드포인트)(상태 리스너를 먼저 연다) |
@@ -24,12 +24,12 @@
   - 계정 파일 읽기와 형식·해시 문자열 검사(1.3·1.4절), 계정이 없을 때의 시작 거절, Ubuntu의 권한 경고(1.6절).
   - 리스너 바인드 실패 수집과 실패 때 이미 바인드한 리스너 닫기.
   - 인증서·개인키 파일 검사(`tls_file_invalid`, 종료 코드 3). 활성화된 WSS 진입점과 관리 리스너의 인증서·개인키 파일을 어떤 리스너도 바인드하기 전에 검사하고, 오류는 모두 모은다([CLI 계약 1.8절](../contracts/cli-v1.md#18-수동-시작과-종료), [설정 계약 2.1절](../contracts/config-v1.md#21-설정-오류와-준비-실패)).
-  - 종료 요청(Ctrl+C, Ubuntu의 SIGTERM, Windows의 Ctrl+Break)을 받으면 TCP 진입점 작업에 종료를 알리고, 그 작업이 끝난 뒤 나머지 리스너를 닫고 종료 코드 0으로 끝내기.
+  - 종료 요청(Ctrl+C, Ubuntu의 SIGTERM, Windows의 Ctrl+Break)을 받으면 TCP·WS·WSS 진입점 작업에 종료를 알리고, 그 작업이 끝난 뒤 나머지 리스너를 닫고 종료 코드 0으로 끝내기.
 - 맡지 않는 책임:
   - `admin` 하위 명령의 실행. [관리자 계정 준비 CLI 모듈 설계](admin-accounts.md)가 맡는다.
   - 파일 변경 감지 준비(시작 순서 3단계, `watch_unavailable`). 작업 5.1·5.2가 맡는다(사용자 결정 2026-10-20).
   - 준비 상태, `server_ready`, 상태 리스너의 응답. [상태 리스너와 준비 상태 모듈 설계](status-listener.md)가 맡는다. 이 문서는 5·6단계에서 그 기능을 부르는 순서만 다룬다.
-  - WS·WSS 리스너의 연결 수락. 작업 3.2가 바인드한 리스너에 붙인다. 그 전까지 이 리스너는 바인드만 하고 연결을 받지 않는다(사용자 결정 2026-10-20). 관리 리스너의 연결 수락은 작업 4.2가 붙였다([관리 리스너 모듈 설계](management-listener.md)). TCP 진입점의 수락은 작업 2.4가 붙였다([TCP 진입점 모듈 설계](tcp-entry-point.md)). 상태 리스너의 수락은 작업 2.6이 붙였다.
+  - WS·WSS 진입점의 연결 수락은 작업 3.2가 붙였다([WebSocket 진입점 모듈 설계](websocket-entry-point.md)). 관리 리스너의 연결 수락은 작업 4.2가 붙였다([관리 리스너 모듈 설계](management-listener.md)). TCP 진입점의 수락은 작업 2.4가 붙였다([TCP 진입점 모듈 설계](tcp-entry-point.md)). 상태 리스너의 수락은 작업 2.6이 붙였다.
   - 종료 유예 G, 두 번째 종료 요청, 세션 정리. 작업 5.3이 맡는다.
   - 비밀번호 규칙(`Password`)은 [관리자 계정 준비 CLI 모듈 설계](admin-accounts.md)가 맡는다. 로그인 때 비밀번호 해시 검증은 작업 4.3이 맡는다.
 - 다른 모듈에 공개하는 기능:
@@ -57,6 +57,7 @@ flowchart LR
     SERVE -->|"상태 리스너 바인드 뒤 시작"| STATUS["adapters status_http.rs<br/>StatusListener::run"]
     SERVE -->|"준비됨 뒤 시작"| MGMT["adapters management_http.rs<br/>ManagementListener::run"]
     SERVE -->|"바인드 뒤 시작, 종료 알림"| EP["adapters net.rs<br/>TcpEntryPoint::run"]
+    SERVE -->|"바인드 뒤 시작, 종료 알림"| WSEP["adapters websocket.rs<br/>WsEntryPoint::run"]
     SERVE -->|"단계마다 Event"| LOG["adapters ops_log.rs<br/>JsonLinesEventSink"]
     SERVE -->|"진단 출력"| CLI
 ```
@@ -66,7 +67,7 @@ flowchart LR
 | `src/main.rs` `main` | `cli::parse` 결과에 따라 도움말·버전을 쓰거나 `serve::run`을 부르고 `ExitCode`를 돌려준다. | 프로세스마다 한 번 | `cli`, `serve` |
 | `src/cli.rs` `parse`, `Command`, `UsageError` | clap으로 인수를 해석한다. clap 오류를 한국어 `usage_error` 문장으로 바꾼다. `--help`·`--version`이 다른 인수와 함께 오면 사용법 오류다. | 호출마다 | clap |
 | `src/cli.rs` `report`, `report_usage`, `HELP`, `EXIT_*` | 진단 한 줄을 stderr에 쓴다(`report`). 사용법 오류 줄과 사용법 문장을 stderr에 쓴다(`report_usage`). 도움말 문장과 종료 코드 상수를 둔다. | 호출마다 | 없음 |
-| `src/serve.rs` `run`, `listen_until_shutdown` | 시작 순서 실행, 단계별 진단 출력과 종료 코드 결정, 운영 로그 사건 기록. 바인드 뒤 L 예산을 하나 만들고, TCP 진입점마다 허용 목록·L 예산·H·keepalive 값을 `AcceptPolicy`로 넘겨 작업을 띄우고, 종료 요청을 기다린다(`listen_until_shutdown`). | `serve` 실행마다 | adapters, app, domain, tokio, `cli` |
+| `src/serve.rs` `run`, `listen_until_shutdown` | 시작 순서 실행, 단계별 진단 출력과 종료 코드 결정, 운영 로그 사건 기록. 바인드 뒤 L 예산을 하나 만들고, TCP 진입점마다 허용 목록·L 예산·H·keepalive 값을 `AcceptPolicy`로, WS·WSS 진입점마다 `WsPolicy`(U 포함)를 넘겨 작업을 띄운다. WSS 진입점에는 `wss_tls.take()`로 받은 TLS 수락기를 넘긴다. 그 뒤 종료 요청을 기다린다(`listen_until_shutdown`). | `serve` 실행마다 | adapters, app, domain, tokio, `cli` |
 | `src/serve.rs` `ShutdownSignal::register`, `ShutdownSignal::wait` | 종료 요청 처리기. Ubuntu는 SIGINT·SIGTERM, Windows는 Ctrl+C·Ctrl+Break다. 바인드 전에 등록해 시작 중의 요청도 놓치지 않는다. `wait`가 첫 요청을 기다린다. | 4단계 처음 | tokio |
 | `src/serve.rs` `tls_checks`, `tls_failure` | 활성화된 WSS 진입점과 관리 리스너의 TLS 파일 설정을 검사 목록으로 모은다. 파일 오류 한 건을 stderr 한 줄과 `startup_failed`로 쓴다. | 4단계 | adapters `tls.rs` |
 | `crates/domain/src/account.rs` `AccountName` | 1~32자, `a-z0-9._-`만 받는 계정 이름 값 타입 | 계정 파일을 읽을 때 | 없음 |
@@ -108,14 +109,14 @@ flowchart LR
 | 3 | `accounts_file::load`, `accounts::require_any` | `settings.admin.accounts_file`을 읽고 검증한다. 경고는 stderr에 쓴다. 진단이 있거나 계정이 없으면 모두 쓰고, 진단마다 `startup_failed`를 기록하고, 5로 끝난다. | `LoadedAccounts` | 4단계 |
 | 4 | `src/serve.rs` `run`, `ShutdownSignal::register`, `listen_until_shutdown`(TLS 검사) | tokio 다중 스레드 런타임을 만들고 종료 신호 처리기를 등록한다. 실패하면 `runtime_unavailable`로 1. 이어 활성화된 WSS 진입점과 관리 리스너의 인증서·개인키를 `tls::load_acceptor`로 검사한다(`tls_checks`). 검사 대상을 모두 확인한 뒤 실패가 하나라도 있으면, 실패한 파일마다 `error[tls_file_invalid] key=<키>`를 쓰고 `startup_failed`(`config_key`, `listener`)를 기록한 뒤 3으로 끝난다. 키는 `relay.wss_viewer.cert_file`·`relay.wss_viewer.key_file`·`management.cert_file`·`management.key_file` 가운데 하나이고, `listener`는 WSS 진입점 이름 또는 `management`다. 통과한 acceptor는 `listen_until_shutdown`이 가진다. | 런타임, 신호 처리기, 검사 통과 acceptor | 5단계 |
 | 5 | `Settings::status_listener`, `net::bind_one`, `Settings::management_listener`, `Settings::other_listeners`, `net::bind` | 상태 리스너를 먼저 바인드해 `StatusListener::run`을 띄운다. 그 뒤 관리 리스너를 바인드한다(작업 4.2). 그 뒤 나머지를 목록 순서대로 바인드한다([상태 리스너와 준비 상태 모듈 설계 4절](status-listener.md#4-처리-순서)). 두 번째 프로세스는 모든 주소가 사용 중이라 실패 목록을 받는다. 실패가 있으면 성공한 리스너를 닫고 상태 리스너 작업을 멈춘다. 실패한 리스너마다 `error[listener_bind_failed] key=<설정 키>`를 쓰고 `startup_failed`(`listener`, `config_key`, `detail`)를 기록한 뒤 4로 끝난다. 첫 프로세스의 소켓에는 손대지 않는다. | 바인드한 리스너, 상태 리스너 작업 | 6단계 |
-| 6 | `listen_until_shutdown`, `ShutdownSignal::wait` | 준비됨으로 바꾸고 `server_ready`를 기록한다. 관리 리스너를 `ManagementListener::new`로 감싸 `ManagementListener::run`을 띄운다(작업 4.2). `ConnectionBudget::new(limits.relay_connections)`로 L 예산을 만든다. TCP 진입점 리스너마다 `TcpEntryPoint::run`을 띄우고 첫 종료 요청까지 기다린다([연결 상한과 시간 제한 모듈 설계 4절](connection-limits.md#4-처리-순서)). 받으면 종료 중으로 바꾸고, 종료를 알리고, 진입점 작업이 모두 끝나기를 기다린다([TCP 진입점 모듈 설계 4절](tcp-entry-point.md#4-처리-순서)). 그 뒤 나머지 리스너를 닫고, 관리 리스너 작업을 멈추고, 상태 리스너 작업을 멈춘 뒤 `server_stopped`를 기록하고 런타임을 끝낸다. | 준비 상태, L 예산 | 종료 코드 0 |
+| 6 | `listen_until_shutdown`, `ShutdownSignal::wait` | 준비됨으로 바꾸고 `server_ready`를 기록한다. 관리 리스너를 `ManagementListener::new`로 감싸 `ManagementListener::run`을 띄운다(작업 4.2). `ConnectionBudget::new(limits.relay_connections)`로 L 예산을 만든다. TCP 진입점 리스너마다 `TcpEntryPoint::run`을, WS·WSS 진입점 리스너마다 `WsEntryPoint::run`을 띄우고(WSS는 `wss_tls.take()`로 받은 TLS 수락기를 넘긴다) 첫 종료 요청까지 기다린다([연결 상한과 시간 제한 모듈 설계 4절](connection-limits.md#4-처리-순서)). 받으면 종료 중으로 바꾸고, 종료를 알리고, 진입점 작업이 모두 끝나기를 기다린다([TCP 진입점 모듈 설계 4절](tcp-entry-point.md#4-처리-순서)). 그 뒤 나머지 리스너를 닫고, 관리 리스너 작업을 멈추고, 상태 리스너 작업을 멈춘 뒤 `server_stopped`를 기록하고 런타임을 끝낸다. | 준비 상태, L 예산 | 종료 코드 0 |
 
 ## 5. 상태와 초기화
 
 - 초기화 시점: 런타임과 신호 처리기는 계정 파일 검증이 끝난 뒤 만든다. 앞 단계에서 실패하면 스레드를 만들지 않는다.
-- 상태 소유자와 제거 시점: `Settings`·계정 목록·리스너는 `serve::run`이 소유한다. 상태 리스너는 바인드 뒤 `StatusListener`가, TCP 진입점 리스너는 `TcpEntryPoint`가 넘겨받는다. 함수가 끝나면 모두 닫힌다. 프로세스 사이에 공유하는 상태는 없다(ADR-0003).
+- 상태 소유자와 제거 시점: `Settings`·계정 목록·리스너는 `serve::run`이 소유한다. 상태 리스너는 바인드 뒤 `StatusListener`가, TCP 진입점 리스너는 `TcpEntryPoint`가, WS·WSS 진입점 리스너는 `WsEntryPoint`가 넘겨받는다. 함수가 끝나면 모두 닫힌다. 프로세스 사이에 공유하는 상태는 없다(ADR-0003).
 - 동시 실행과 순서: 바인드는 한 번에 하나씩 한다. 상태 리스너가 처음이고, 바인드 직후부터 응답한다([운영 정보 계약 1.12절](../contracts/ops-info-v1.md#112-상태-리스너와-엔드포인트)).
-- TLS acceptor: 검사를 통과한 것만 쓴다. 관리 리스너의 acceptor는 `management_tls`로 들어가 `ManagementListener::new`에 넘긴다(작업 4.2). WSS acceptor는 `_wss_acceptors`로 들고, 작업 3.2가 붙이기 전까지 쓰지 않으며 함수가 끝나면 버린다.
+- TLS acceptor: 검사를 통과한 것만 쓴다. 관리 리스너의 acceptor는 `management_tls`로 들어가 `ManagementListener::new`에 넘긴다(작업 4.2). WSS acceptor는 `wss_tls`로 들고, WSS 진입점을 띄울 때 `take()`로 꺼내 `WsEntryPoint::new`의 `tls` 인수로 넘긴다(작업 3.2). 받은 값이 없으면 그 WSS 진입점은 연결을 받지 않는다.
 
 ## 6. 오류 처리
 
@@ -161,6 +162,8 @@ flowchart LR
 | 작업 3.1 변경(작업 트리): 시작 때 TLS 파일 검사, `tls::load_acceptor` | Windows 11 Pro 10.0.26200, Rust 1.99.1(`x86_64-pc-windows-msvc`) | 1·4·6절과 `src/serve.rs`의 `listen_until_shutdown`·`tls_checks`·`tls_failure`를 대조했다. `tests/serve.rs`의 `fails_with_exit_code_3_when_wss_key_does_not_match`·`fails_with_exit_code_3_when_management_certificate_is_missing`이 종료 코드 3으로 끝나는 것을 확인했다. `checks_tls_files_before_binding_a_taken_status_port`는 상태 포트가 이미 점유된 상태에서 TLS 파일 오류가 바인드 실패(종료 코드 4)보다 먼저 보고되는 것을 확인했다. 종료 신호 테스트는 Unix 신호를 쓰므로 실행하지 않았다. OPS-007(`closes_and_logs_every_held_connection_when_stopping`)은 `cfg(unix)`라 Windows에서 실행하지 않았다. | 통과 |
 | 작업 3.1 변경(작업 트리): 시작 때 TLS 파일 검사, `tls::load_acceptor` | Ubuntu 24.04.4(WSL2), Rust 1.99.1 | 1·4·6절과 `src/serve.rs`의 `listen_until_shutdown`·`tls_checks`·`tls_failure`를 대조했다. `tests/serve.rs` 21건이 모두 통과했다. 상태 포트가 점유된 경우의 TLS 파일 오류 종료 코드 3은 `checks_tls_files_before_binding_a_taken_status_port`로 확인했다. | 통과 |
 | 작업 4.2 변경(기준 커밋 `ead7be0` + 작업 트리): 관리 리스너 바인드 순서, 준비됨 뒤 수락 시작, 종료 순서 | Ubuntu 24.04.4(WSL2)·Windows 11 Pro 10.0.26200, Rust 1.99.1 | 1·4·5·6절과 `src/serve.rs`의 `listen_until_shutdown`·`stop_task`를 대조했다. `tests/serve.rs`의 `refuses_management_connections_beyond_lm_and_keeps_lm_and_l_apart`·`refuses_to_start_without_a_usable_account_with_exit_code_5`가 두 환경에서 통과했다. | 통과 |
+| 작업 3.2 변경(기준 커밋 `c1c24d2`, 코드 = HEAD `0f63227`): WS·WSS 진입점 시작, `wss_tls.take()`로 TLS 수락기 넘기기, `WsPolicy` | Ubuntu 24.04(WSL2), Rust 1.99.1 | 1·2·4·5·6절과 `src/serve.rs`의 `listen_until_shutdown`을 대조했다. 전체 검증 기록(Main 전달, 재실행 안 함): `vr-full.sh`, `시나리오 148건: 통과 9, 부분 22, 실패 0, 미실행 0, 미연결 117. 오류 0건.`, 마지막 줄 `ALL PASSED`. | 통과 |
+| Windows 실행(기준 커밋 `c1c24d2`, 코드 = HEAD `0f63227`) | Windows 10.0.26200, Rust 1.99.1 | 전체 검증 기록(Main 전달, 재실행 안 함): `vr-win.ps1 -Only all`, `통과 8, 부분 22, 실패 0, 미실행 1, 미연결 117`, 마지막 줄 `ALL PASSED`. 미실행 1건은 [TCP 진입점 모듈 설계](tcp-entry-point.md) §9의 종료 정리 테스트로 보인다([INFERENCE]). | 통과 |
 
 ## 9. 미결정 사항
 
