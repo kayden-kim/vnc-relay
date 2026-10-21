@@ -112,3 +112,21 @@ body {
   color: var(--color-navbar-foreground);
   border-radius: var(--radius-md);
 }
+
+/* Open dialog sample: a non-modal dialog placed in the frame, over a preview-only scrim. */
+.dialog-frame {
+  position: relative;
+  isolation: isolate;
+  padding: var(--space-md);
+}
+
+.dialog-frame .dialog {
+  position: relative;
+  z-index: 1;
+}
+
+.dialog-frame-scrim {
+  position: absolute;
+  inset: 0;
+  background: var(--color-overlay);
+}

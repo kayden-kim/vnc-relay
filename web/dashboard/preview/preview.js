@@ -79,6 +79,8 @@ const STRINGS = {
     colBytes: "바이트",
     link: "링크",
     dialog: "대화상자",
+    closed: "닫힘",
+    open: "열림",
     openConfirm: "확인 창 열기",
     confirmTitle: "설정을 저장할까요?",
     confirmDescription: "바꾼 값이 적용됩니다.",
@@ -145,6 +147,8 @@ const STRINGS = {
     colBytes: "Bytes",
     link: "Link",
     dialog: "Dialog",
+    closed: "Closed",
+    open: "Open",
     openConfirm: "Open confirmation",
     confirmTitle: "Save settings?",
     confirmDescription: "Changed values will apply.",
@@ -199,7 +203,7 @@ const REQUIRED_SAMPLES = [
   "language-select-navbar", "language-select-form", "language-select-long-ko", "language-select-long-en",
   "data-table-default", "data-table-empty", "data-table-long-ko", "data-table-long-en", "data-table-long-numbers",
   "link-default", "link-hover", "link-focus", "link-long-ko", "link-long-en",
-  "dialog-default", "dialog-destructive", "dialog-long-ko", "dialog-long-en",
+  "dialog-closed", "dialog-default", "dialog-destructive", "dialog-long-ko", "dialog-long-en",
 ];
 
 // Failed check ids. Written to data-failures as a space-separated list.
@@ -354,7 +358,8 @@ function link(sid, label) {
   return createLink({ href: `#${sid}`, label });
 }
 
-function dialogSample(options) {
+// Builds a dialog whose buttons close it. Each sample decides how the dialog is shown.
+function makeDialog(options) {
   const dialog = createDialog({
     title: options.title,
     description: options.description,
@@ -364,6 +369,12 @@ function dialogSample(options) {
     onConfirm: () => dialog.hide(),
     onCancel: () => dialog.hide(),
   });
+  return dialog;
+}
+
+// Closed sample: the trigger opens the dialog as a real modal.
+function dialogSample(options) {
+  const dialog = makeDialog(options);
   const trigger = createButton({
     variant: options.destructive ? "destructive" : "outline",
     label: options.trigger,
@@ -372,6 +383,20 @@ function dialogSample(options) {
   const wrap = document.createElement("div");
   wrap.append(trigger, dialog.element);
   return wrap;
+}
+
+// Open sample: a modal would leave the page frame, so the dialog is set open in place
+// (non-modal) and a preview-only scrim stands in for the backdrop.
+function dialogOpenSample(options) {
+  const dialog = makeDialog(options);
+  dialog.element.open = true;
+  const scrim = document.createElement("div");
+  scrim.className = "dialog-frame-scrim";
+  scrim.setAttribute("aria-hidden", "true");
+  const frame = document.createElement("div");
+  frame.className = "dialog-frame";
+  frame.append(scrim, dialog.element);
+  return frame;
 }
 
 // Rows of samples, in page order. A row of N samples gets class `sample-row-N`.
@@ -546,7 +571,7 @@ function buildGroups() {
     ]),
     group(t.dialog, [
       [
-        sample("dialog-default", cap(t.dialog, t.default), () =>
+        sample("dialog-closed", cap(t.dialog, t.closed), () =>
           dialogSample({
             title: t.confirmTitle,
             description: t.confirmDescription,
@@ -554,21 +579,27 @@ function buildGroups() {
             trigger: t.openConfirm,
           }),
         ),
-        sample("dialog-destructive", cap(t.dialog, t.destructive), () =>
-          dialogSample({
+        sample("dialog-default", cap(t.dialog, t.open, t.default), () =>
+          dialogOpenSample({
+            title: t.confirmTitle,
+            description: t.confirmDescription,
+            destructive: false,
+          }),
+        ),
+        sample("dialog-destructive", cap(t.dialog, t.open, t.destructive), () =>
+          dialogOpenSample({
             title: t.endTitle,
             description: t.endDescription,
             destructive: true,
-            trigger: t.endSession,
           }),
         ),
       ],
       [
-        sample("dialog-long-ko", cap(t.dialog, t.longKo), () =>
-          dialogSample({ title: LONG_KO_LABEL, description: LONG_KO, destructive: false, trigger: t.openConfirm }),
+        sample("dialog-long-ko", cap(t.dialog, t.open, t.longKo), () =>
+          dialogOpenSample({ title: LONG_KO_LABEL, description: LONG_KO, destructive: false }),
         ),
-        sample("dialog-long-en", cap(t.dialog, t.longEn), () =>
-          dialogSample({ title: LONG_EN_LABEL, description: LONG_EN, destructive: false, trigger: t.openConfirm }),
+        sample("dialog-long-en", cap(t.dialog, t.open, t.longEn), () =>
+          dialogOpenSample({ title: LONG_EN_LABEL, description: LONG_EN, destructive: false }),
         ),
       ],
     ]),
@@ -629,6 +660,10 @@ function finish() {
   const overflowX = document.documentElement.scrollWidth > document.documentElement.clientWidth;
   if (cspViolations > 0) fail("csp-violation");
   if (overflowX) fail("overflow-x");
+  // A closed dialog must stay hidden. A visible one would show as a stray panel.
+  for (const dialog of document.querySelectorAll("dialog:not([open])")) {
+    if (getComputedStyle(dialog).display !== "none") fail("closed-dialog-visible");
+  }
   main.dataset.lang = lang;
   main.dataset.cspViolations = String(cspViolations);
   main.dataset.overflowX = overflowX ? "1" : "0";
