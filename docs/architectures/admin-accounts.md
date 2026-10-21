@@ -6,7 +6,7 @@
 | --- | --- |
 | 구조 시점 | Current |
 | 문서 상태 | Draft |
-| 구현 대조 | 미대조 — 2026-10-21 변경(Windows 콘솔 입력 모드 저장·복원, 5절·7절)은 아직 대조하지 않았다. 이전 대조는 [대조 기록](#대조-기록)에 있다. |
+| 구현 대조 | Verified — 기준 커밋 `cfddb85`(코드는 `ec2e6e6`과 같다). 2026-10-21 Windows 콘솔 입력 모드 변경(5절·7절)을 포함해 대조했다. 기록은 [대조 기록](#대조-기록)의 마지막 행이다. |
 | 코드 위치 | `crates/domain/src/account.rs`(`Password`), `crates/app/src/accounts.rs`(`AdminService`, `AdminFailure`, `AccountsWarning`, `LoadedAccounts`), `crates/app/src/ports.rs`(`AccountStore`, `AccountInput`, `PasswordHasher`), `crates/adapters/src/accounts_file.rs`·`crates/adapters/src/accounts_file/`(`AccountsFile`, `HashFloor`, `Argon2Hasher`), `crates/adapters/src/terminal.rs`(`Terminal`), `crates/adapters/src/terminal/windows_console.rs`(`SavedInputMode`, Windows 전용), `crates/adapters/src/config_file.rs`(`load_admin`), `src/cli.rs`(`Command::Admin`), `src/admin.rs` |
 | 코드 지도 | [코드 지도 2절](code-map.md#2-코드-위치와-구성요소), [3절](code-map.md#3-진입점) |
 | 관련 스펙 | [운영 스펙 3.2절](../specs/operations.md#32-로컬-cli-계정-준비), OPS-R15, OPS-029(일부: 로그인 제외), OPS-030 |
@@ -149,7 +149,7 @@ flowchart LR
 
 ## 8. 현재 코드와의 차이
 
-2026-10-21 변경(`windows_console.rs`, `Terminal::hidden`의 콘솔 입력 모드 저장·복원, 5절·7절)은 아직 대조하지 않았다. 대조 뒤 이 절을 다시 적는다. 이전 대조에서 고친 문서 차이는 [대조 기록](#대조-기록)에 적었다.
+기준 커밋 `cfddb85`(코드는 `ec2e6e6`과 같다)에서 설계와 코드 사이의 차이를 찾지 못했다. 2026-10-21 Windows 콘솔 입력 모드 변경(5절·7절)도 대조했다. 이전 대조에서 고친 문서 차이는 [대조 기록](#대조-기록)에 적었다.
 
 ## 대조 기록
 
@@ -159,7 +159,10 @@ flowchart LR
 | 작업 4.1 변경(기준 커밋 `ed68104` + 작업 트리) | Windows 11 Pro 10.0.26200, Rust 1.99.1(`x86_64-pc-windows-msvc`) | `vr-win.ps1 -Only all`: versions·build·version·fmt·clippy·layers·scenarios·deny 모두 종료 코드 0. 취소 시험은 `CREATE_NEW_CONSOLE`(`CREATE_NEW_PROCESS_GROUP` 없음)로 띄운 콘솔에 `WriteConsoleInputW`로 키를 넣었다. `add`의 `비밀번호:`·`비밀번호 확인:`, `passwd`의 `새 비밀번호:`, `remove`의 `[y/N]` 프롬프트마다 Ctrl+C 5회, 총 20회: 모두 종료 코드 1, `input_canceled`, 계정 파일 그대로, 534–592밀리초, 멈춤 없음. 숨김 입력 취소 뒤 콘솔 입력 모드: cmd `0x1E7`→`0x007`, PowerShell `0x1E4`→`0x000`. 테스트 수(바이너리별): vnc-relay 6, admin 14, cli 2, serve 12, vnc_relay_adapters 6, accounts_contract 10, config_contract 21, ops_info_contract 13, vnc_relay_app 9, vnc_relay_domain 27, xtask 12. 시나리오: 통과 3, 부분 14, 실패 0, 미실행 1(OPS-007, Unix 신호 전용), 미연결 130, 오류 0. 콘솔 관찰(같은 임시 하네스): 코드 페이지 949에서 한글 메시지가 깨지지 않았다. UTF-8 바이트로 만든 한글 비밀번호 해시가 argon2-cffi 검증과 맞았다. cp949·UTF-16LE 바이트로 만든 해시는 맞지 않았다(음성 대조). Ctrl+Z 뒤 Enter는 `password_invalid`로 끝났다. 이 관찰은 숨김 읽기가 도우미 스레드로 옮겨지기 전에 했다. 읽기 함수(`rpassword::read_password`)는 같다. | 통과(설계와 코드가 같다). 숨김 입력 취소 뒤 콘솔 입력 모드는 9절의 미결정 사항이다. |
 | 작업 수정(기준 커밋 `1aed781` + 작업 트리): 상한 초과 해시 거절, 입력 실패 분류(`InputError::Unavailable` → `runtime_unavailable`), 계약 테스트, 1~7절 파일·심볼·흐름 | Ubuntu 24.04.4 LTS(WSL2), Rust 1.99.1 | `vr-full.sh`: `cargo build`, `vnc-relay --version`, `cargo fmt --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo xtask layers`, `cargo xtask scenarios`(내부에서 `cargo test --workspace --no-fail-fast`), `cargo deny check licenses`. `tests/admin.rs`를 20번 반복(매번 21건 통과). 수정한 문서 행의 심볼(`HashFloor`, `Argon2Params::exceeds_maximum`, `InputError::Unavailable`, `AdminFailure::RuntimeUnavailable`)은 소스에서 찾았다. 시나리오: 통과 4, 부분 14, 실패 0, 미실행 0, 미연결 130, 오류 0 | 통과 |
 | 같은 작업 트리(기준 커밋 `1aed781` + 작업 트리) | Windows 11 Pro 10.0.26200, Rust 1.99.1(`x86_64-pc-windows-msvc`) | `vr-win.ps1 -Only all`: versions·build·version·fmt·clippy·layers·scenarios·deny 모두 종료 코드 0. 콘솔 하네스: `CREATE_NEW_CONSOLE`로 띄운 `cmd.exe`에서 `vnc-relay admin` 실행, `WriteConsoleInputW`로 키 입력. `add`에서 Ctrl+Z 뒤 Enter 2회: `password_invalid`. `add`에서 Ctrl+D 뒤 Enter 2회: `input_canceled`(원인: rpassword 7.5.4 `src/lib.rs` 140–147행이 빈 입력의 Ctrl+D를 `UnexpectedEof`로 돌려주고, `Terminal::hidden`이 이를 `input_canceled`로 옮긴다. 코드 읽기로 확인). `remove`의 `[y/N]`에서 Ctrl+Z 뒤 Enter 3회: `input_canceled`. `add`에서 Ctrl+C 3회: `input_canceled`. 실패 10회 모두 계정 파일 그대로. 시나리오: 통과 3, 부분 14, 실패 0, 미실행 1(OPS-007, 이번 실행에 없음), 미연결 130 | 통과. Ctrl+Z 뒤 Enter는 §9 열린 항목으로 남았다. Ctrl+C 뒤 콘솔 입력 모드는 이번에 측정하지 않았다 |
+| 작업 4.1 변경(기준 커밋 `cfddb85`, 코드는 `ec2e6e6`과 같다). 1aed781 뒤 바뀐 admin 파일(`terminal.rs`, `terminal/windows_console.rs`, `accounts_file.rs`, `app/accounts.rs`, `app/ports.rs`, `domain/account.rs`)을 읽고 1~7절과 대조했다. §2 표의 파일·심볼은 소스에서 찾았다 | Windows 11 Pro 10.0.26200 x64, Rust 1.99.1(`x86_64-pc-windows-msvc`). Ubuntu 24.04.4 LTS(WSL2), Rust 1.99.1 | Windows: `vr-win.ps1 -Only all`의 모든 단계 종료 코드 0. 콘솔 하네스(임시 Python, 삭제함)로 19회 관찰: 취소 18회(Ctrl+C 16회, Ctrl+D 2회), 정상 입력 1회. Ubuntu: `vr-full.sh`의 `ALL PASSED`. 수치는 [CLI 계약 실행 기록](../contracts/cli-v1.md#계약-테스트-실행-기록)에 있다 | 통과. 설계와 코드의 차이는 없다. Windows에서 취소 18회 뒤 콘솔 입력 모드가 시작 값으로 돌아왔다. |
 
 ## 9. 미결정 사항
 
-2026-10-21 사용자 결정으로 두 항목을 정했다. Windows 숨김 입력 취소 뒤 콘솔 입력 모드는 저장·복원으로 구현했다(7절). Windows 숨김 입력의 Ctrl+Z 뒤 Enter는 코드를 바꾸지 않고, 입력 끝 키가 빈 입력의 Ctrl+D라고 [CLI 계약 1.5절](../contracts/cli-v1.md#15-입력과-출력-규칙)에 적었다. 남은 미결정 사항은 없다.
+2026-10-21 사용자 결정으로 두 항목을 정했다. Windows 숨김 입력 취소 뒤 콘솔 입력 모드는 저장·복원으로 구현했다(7절). Windows 숨김 입력의 Ctrl+Z 뒤 Enter는 코드를 바꾸지 않고, 입력 끝 키가 빈 입력의 Ctrl+D라고 [CLI 계약 1.5절](../contracts/cli-v1.md#15-입력과-출력-규칙)에 적었다.
+
+구현 판단(사용자 결정 없음): 콘솔 입력 모드를 읽거나 되돌리지 못하면 `runtime_unavailable`(6절)로 끝난다. 계정 파일은 바뀌지 않는다. 이 처리를 바꿀지는 사용자가 정한다([CLI 계약 6절](../contracts/cli-v1.md#6-초안을-확정하기-전에-해결할-사항)).

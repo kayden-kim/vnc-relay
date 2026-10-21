@@ -78,6 +78,7 @@ Rust 의존성의 라이선스가 사용자가 승인한 허용 목록 안에 �
 | axum 직접 의존성(작업 2.6) | `licenses ok`, 종료 코드 0. 새로 들어온 패키지마다 라이선스 파일이 있다. `NOTICE` 파일 유무를 안다. | 3단계 명령, 패키지 디렉터리에서 파일 이름 확인 | 통과(2026-10-20). 새 패키지 23개 모두 라이선스 파일이 있고 `NOTICE` 파일은 없다. | 아래 실행 기록 4 |
 | argon2·rpassword 직접 의존성(작업 4.1) | `licenses ok`, 종료 코드 0. 새로 들어온 패키지마다 라이선스 파일이 있다. `NOTICE` 파일 유무를 안다. | 3단계 명령, 패키지 디렉터리에서 파일 이름 확인 | 통과(2026-10-20). 새 패키지 15개 모두 라이선스 파일이 있고 `NOTICE` 파일은 없다. | 아래 실행 기록 5 |
 | 작업 3.1 직접 의존성(rustls 0.23.46, rustls-pki-types 1.15.1, tokio-rustls 0.26.6, tokio `io-util`) | `licenses ok`, 종료 코드 0. 새로 들어온 패키지마다 라이선스 파일이 있다. `NOTICE` 파일 유무를 안다. | 3단계 명령, 패키지 디렉터리에서 파일 이름 확인 | 통과(2026-10-21). 새 패키지 19개 모두 라이선스 파일이 있고 `NOTICE` 파일은 없다. Ubuntu와 Windows 모두 `licenses ok`다. | 아래 실행 기록 6 |
+| windows-sys 직접 의존성(작업 4.1, Windows 전용) | `licenses ok`, 종료 코드 0. 새로 들어온 패키지마다 라이선스 파일이 있다. `NOTICE` 파일 유무를 안다. | 3단계 명령, 잠금 파일 변화와 패키지 디렉터리에서 파일 이름 확인 | 통과(2026-10-21). 잠금 파일에 새 패키지는 없다. windows-sys 0.61.2는 MIT OR Apache-2.0이고 `license-mit`·`license-apache-2.0`이 있으며 `NOTICE` 파일은 없다. Windows와 Ubuntu 모두 deny 단계를 통과했다. | 아래 실행 기록 7 |
 
 실행 기록 1: 의존성을 추가하기 전에 [PRD "구현 기술" 행](../requirements/PRD.md#확정-기준)의 라이브러리를 검토했다.
 
@@ -103,6 +104,8 @@ Rust 의존성의 라이선스가 사용자가 승인한 허용 목록 안에 �
 라이선스는 모두 허용 목록 안에 있다. rustls-pki-types, tokio-rustls, getrandom, once_cell, windows-sys, windows-targets, windows_* 패키지는 MIT OR Apache-2.0이고 `LICENSE-MIT`·`LICENSE-APACHE` 또는 소문자 `license-mit`·`license-apache-2.0`이 있다. rustls는 Apache-2.0 OR ISC OR MIT이고 `LICENSE-APACHE`·`LICENSE-ISC`·`LICENSE-MIT`가 있다. ring은 Apache-2.0 AND ISC이고 `LICENSE`·`LICENSE-BoringSSL`·`LICENSE-other-bits`가 있다. rustls-webpki는 ISC(`LICENSE`), untrusted 0.9.0은 ISC(`LICENSE.txt`), subtle은 BSD-3-Clause(`LICENSE`)다. 19개 패키지 모두 라이선스 파일이 있고 `NOTICE` 파일은 없다. 결과는 Ubuntu와 Windows 모두 `licenses ok`, 종료 코드 0이다.
 
 ring 0.17.14는 rustls-webpki의 `alloc` 기능이 `ring?/alloc`으로 켜는 약한 간선이다. `cargo tree -i ring`에 출력이 없으므로 컴파일되지 않는다. 잠금 파일에는 남는다. 배포 고지 의무는 [OPS-021](../specs/operations.md#7-수용-테스트)에서 확인한다.
+
+실행 기록 7: 커밋 `f21a6bc`에 작업 4.1의 콘솔 입력 모드 복원을 더했다. 측정 커밋은 `ec2e6e6`이다. 환경은 실행 기록 1과 같고, Windows에서는 실행 기록 5의 Windows 환경이다. 이 변경으로 adapters의 Windows 전용 직접 의존성 `windows-sys` 0.61.2(`default-features = false`, `features = ["Win32_Foundation", "Win32_Security", "Win32_Storage_FileSystem", "Win32_System_Console"]`)가 생겼다. `f21a6bc`는 `Cargo.lock`을 바꾸지 않았다. 0.61.2는 그 전부터 잠금 파일에 있었다. 라이선스는 `Cargo.toml`의 `license = "MIT OR Apache-2.0"`과 패키지 디렉터리의 `license-mit`·`license-apache-2.0` 파일로 확인했다. `NOTICE` 파일은 없다. 결과: Windows의 `vr-win.ps1 -Only all`에서 deny 단계가 종료 코드 0이고 `licenses ok`를 출력했다. Ubuntu의 `vr-full.sh`는 `ALL PASSED`로 끝났다. `deny.toml`의 대상에 Windows가 있으므로 이 검사는 Ubuntu에서도 windows-sys를 본다.
 
 ## 5. 중단 조건
 
