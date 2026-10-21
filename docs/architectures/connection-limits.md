@@ -65,7 +65,7 @@ flowchart LR
 | `crates/adapters/src/net.rs` `set_keepalive` | socket2 `SockRef`로 `SO_KEEPALIVE`와 유휴 시간·탐색 간격·탐색 횟수를 설정한다. | 자리를 잡은 연결마다 | socket2 |
 | `crates/adapters/src/net.rs` `hold`, `closed_before_data` | 종료 알림, H 만료, 상대 종료 중 먼저 오는 것으로 연결을 끝낸다. 소켓을 닫고 자리를 돌려준 뒤 `connection_aborted`를 기록한다. | 허용한 연결마다 | tokio, app, domain |
 | `crates/adapters/src/net.rs` `accept_connections` | TCP·WS·WSS가 함께 쓰는 수락 반복. IP 검사 뒤 L 자리를 잡는다. 자리가 없으면 `connection_rejected`(`relay_connection_limit`)를 기록하고 닫는다. 있으면 K를 설정하고 `BudgetPermit`을 연결 작업에 넘긴다. | 진입점 `run`마다 하나 | tokio, socket2, app, domain |
-| `crates/adapters/src/websocket.rs` `WsPolicy` | WS·WSS 진입점에 적용할 값: `accept`(`AcceptPolicy`, H는 101 뒤부터 잼), `upgrade`(U, `[timeouts] tls_upgrade_secs`), `origins`. | `serve`가 WS·WSS 진입점마다 만든다 | adapters |
+| `crates/adapters/src/websocket.rs` `WsPolicy` | WS·WSS 진입점에 적용할 값: `accept`(`AcceptPolicy`. H는 101 뒤부터 잰다), `upgrade`(U, `[timeouts] tls_upgrade_secs`), `origins`. | `serve`가 WS·WSS 진입점마다 만든다 | adapters |
 | `crates/adapters/src/websocket.rs` `connection`, `hold_upgraded` | `connection`은 U 안에서 WSS의 TLS 핸드셰이크와 업그레이드 요청을 끝낸다. 101 뒤 `hold_upgraded`가 H를 잰다. 자리는 연결 작업이 소유하고 소켓을 닫은 뒤 돌려준다. | 허용한 WS·WSS 연결마다 | tokio, tokio-rustls, tokio-tungstenite, app, domain |
 
 ## 3. 데이터 모델
