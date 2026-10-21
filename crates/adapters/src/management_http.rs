@@ -1,7 +1,7 @@
 //! The management listener: HTTPS through the built-in TLS acceptor, or plain
 //! HTTP on loopback only (config-v1 §1.2 `[management]`, operations.md OPS-034).
-//! It answers the login and session routes (management-api-v1 §1.5). Queries
-//! and termination come with tasks 4.4–4.5, static files with 4.6.
+//! It answers the login and session routes (management-api-v1 §1.5) and serves
+//! the dashboard files (§1.11). Queries and termination come with tasks 4.4–4.5.
 //! Design: docs/architectures/management-listener.md and
 //! docs/architectures/management-session.md.
 
@@ -13,8 +13,10 @@ use axum::Router;
 use axum::extract::connect_info::Connected;
 use axum::extract::{ConnectInfo, Request, State};
 use axum::http::header::{
-    ALLOW, CACHE_CONTROL, CONTENT_TYPE, COOKIE, LOCATION, SET_COOKIE, WWW_AUTHENTICATE,
+    ALLOW, CACHE_CONTROL, CONTENT_LENGTH, CONTENT_SECURITY_POLICY, CONTENT_TYPE, COOKIE, LOCATION,
+    REFERRER_POLICY, SET_COOKIE, WWW_AUTHENTICATE, X_CONTENT_TYPE_OPTIONS,
 };
+use axum::http::request::Parts;
 use axum::http::{HeaderMap, HeaderValue, Method, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::serve::IncomingStream;
@@ -27,6 +29,7 @@ use vnc_relay_domain::budget::ConnectionBudget;
 use vnc_relay_domain::peer_ip::PeerIp;
 
 use crate::admission::AdmittingListener;
+use crate::dashboard_assets::{Asset, find_asset};
 use crate::request_deadline::DeadlineListener;
 use crate::tls_listener::TlsListener;
 
@@ -156,7 +159,8 @@ struct Shared {
 }
 
 /// Answers every request. `/api/v1/` goes to the session API, which judges the
-/// session before the path and the method. Static paths keep their rules.
+/// session before the path and the method. Static paths go to `static_answer`.
+/// Any other path gets a `303` to the login page.
 async fn answer(
     State(shared): State<Shared>,
     ConnectInfo(peer): ConnectInfo<PeerAddr>,
@@ -167,21 +171,58 @@ async fn answer(
     if path.starts_with("/api/v1/") {
         return session_api::answer(&shared, peer.0, parts, body).await;
     }
-    if path == "/" || path.starts_with("/app/") {
-        return if is_read(&parts.method) {
-            redirect_to_login()
-        } else {
-            method_not_allowed("GET, HEAD", "이 경로는 GET과 HEAD 요청만 받는다.")
-        };
-    }
-    if path.starts_with("/login/") {
-        return if is_read(&parts.method) {
-            not_found()
-        } else {
-            method_not_allowed("GET, HEAD", "이 경로는 GET과 HEAD 요청만 받는다.")
-        };
+    if path == "/" || path.starts_with("/app/") || path.starts_with("/login/") {
+        return static_answer(&shared, &parts);
     }
     redirect_to_login()
+}
+
+/// The `Content-Security-Policy` of a dashboard file (management-api-v1 §1.11).
+const STATIC_CSP: &str = "default-src 'self'; frame-ancestors 'none'";
+
+/// A static path (management-api-v1 §1.11). Only `GET` and `HEAD` are allowed.
+/// `/` and `/app/` need a valid session. The check only reads the session, so
+/// it does not extend the idle time. Without a session the request goes to the
+/// login page, even for a file that does not exist.
+fn static_answer(shared: &Shared, parts: &Parts) -> Response {
+    if !is_read(&parts.method) {
+        return method_not_allowed("GET, HEAD", "이 경로는 GET과 HEAD 요청만 받는다.");
+    }
+    let path = parts.uri.path();
+    let protected = path == "/" || path.starts_with("/app/");
+    if protected
+        && shared
+            .auth
+            .authorize(session_cookie(&parts.headers))
+            .is_err()
+    {
+        return redirect_to_login();
+    }
+    match find_asset(path) {
+        Some(asset) => static_file(asset, parts.method == Method::HEAD),
+        None => not_found(),
+    }
+}
+
+/// A `200` with a dashboard file. `HEAD` gets the same headers, including
+/// `Content-Length`, and no body.
+fn static_file(asset: &'static Asset, head: bool) -> Response {
+    let mut response = if head {
+        StatusCode::OK.into_response()
+    } else {
+        asset.body.into_response()
+    };
+    let headers = response.headers_mut();
+    headers.insert(CONTENT_TYPE, HeaderValue::from_static(asset.content_type));
+    headers.insert(CONTENT_LENGTH, HeaderValue::from(asset.body.len()));
+    headers.insert(CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    headers.insert(X_CONTENT_TYPE_OPTIONS, HeaderValue::from_static("nosniff"));
+    headers.insert(REFERRER_POLICY, HeaderValue::from_static("no-referrer"));
+    headers.insert(
+        CONTENT_SECURITY_POLICY,
+        HeaderValue::from_static(STATIC_CSP),
+    );
+    response
 }
 
 /// `GET` and `HEAD` are the only methods of static paths (management-api-v1
@@ -259,7 +300,7 @@ fn method_not_allowed(allow: &'static str, message: &str) -> Response {
     response
 }
 
-/// `404 not_found` for a static login path with no page in this task.
+/// `404 not_found` for a static path with no file in the dashboard asset table.
 fn not_found() -> Response {
     json_error(StatusCode::NOT_FOUND, "not_found", "정의하지 않은 경로다.")
 }

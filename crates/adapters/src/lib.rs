@@ -6,6 +6,7 @@ mod admission;
 pub mod clock;
 pub mod config_file;
 pub mod crypto;
+pub mod dashboard_assets;
 pub mod management_http;
 pub mod net;
 pub mod ops_log;

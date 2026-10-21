@@ -1,16 +1,16 @@
 # 관리 리스너 모듈 설계
 
-관리 리스너(`[management] listen`)가 접속을 받고, 관리 HTTPS(내장 TLS)와 루프백 평문 HTTP를 처리하는 구조를 다룬다. 접속은 상태 리스너와 같은 관리·상태 연결 상한 Lm을 쓴다. 관리 리스너의 접속은 L을 쓰지 않는다. 이 문서는 작업 4.2에서 썼다. 로그인과 세션 검사는 작업 4.3이 더했다. 조회(4.4)·종료(4.5)·정적 파일(4.6)은 맡지 않는다.
+관리 리스너(`[management] listen`)가 접속을 받고, 관리 HTTPS(내장 TLS)와 루프백 평문 HTTP를 처리하는 구조를 다룬다. 접속은 상태 리스너와 같은 관리·상태 연결 상한 Lm을 쓴다. 관리 리스너의 접속은 L을 쓰지 않는다. 이 문서는 작업 4.2에서 썼다. 로그인과 세션 검사는 작업 4.3이 더했다. 정적 파일 제공은 작업 4.6이 더했다. 조회(4.4)·종료(4.5)는 맡지 않는다.
 
 | 항목 | 값 |
 | --- | --- |
-| 구조 시점 | Current |
+| 구조 시점 | Current (작업 4.6 구현 뒤) |
 | 문서 상태 | Draft |
-| 구현 대조 | Verified — 작업 4.3 시점, 커밋 `59f3f62` + 작업 트리. 4.3 항목은 [대조 기록](#대조-기록)에 있다 |
-| 코드 위치 | `crates/adapters/src/admission.rs`(`AdmittingListener`, `Admitted`), `crates/adapters/src/tls_listener.rs`(`TlsListener`, `TlsIo`, `Handshake`, `Recorded`, `offers_no_tls12`), `crates/adapters/src/request_deadline.rs`(`DeadlineListener`, `Deadlined`), `crates/adapters/src/management_http.rs`(`ManagementListener`, `PeerAddr`, `answer`), `crates/adapters/src/management_http/session_api.rs`(`answer`), `crates/adapters/src/status_http.rs`(`StatusListener`), `crates/adapters/src/config_file.rs`(`read_management`), `crates/app/src/events.rs`(`Stage::Tls`, `RejectReason::TlsVersionUnsupported`), `crates/app/src/settings.rs`(`Settings::management_listener`, `Settings::other_listeners`), `src/serve.rs`(`listen_until_shutdown`, `stop_task`) |
+| 구현 대조 | Verified — 작업 4.6 시점, 작업 트리(커밋 전). WSL 전체 게이트는 Chromium이 없어 `dashboard_browser` 두 시험이 실패한다([대조 기록](#대조-기록) 4.6). 4.3 항목도 [대조 기록](#대조-기록)에 있다 |
+| 코드 위치 | `crates/adapters/src/admission.rs`(`AdmittingListener`, `Admitted`), `crates/adapters/src/tls_listener.rs`(`TlsListener`, `TlsIo`, `Handshake`, `Recorded`, `offers_no_tls12`), `crates/adapters/src/request_deadline.rs`(`DeadlineListener`, `Deadlined`), `crates/adapters/src/management_http.rs`(`ManagementListener`, `PeerAddr`, `answer`, `static_answer`, `static_file`), `crates/adapters/src/management_http/session_api.rs`(`answer`), `crates/adapters/src/status_http.rs`(`StatusListener`), `crates/adapters/src/dashboard_assets.rs`(`Asset`, `ASSETS`, `find_asset`), `crates/adapters/src/config_file.rs`(`read_management`), `crates/app/src/events.rs`(`Stage::Tls`, `RejectReason::TlsVersionUnsupported`), `crates/app/src/settings.rs`(`Settings::management_listener`, `Settings::other_listeners`), `src/serve.rs`(`listen_until_shutdown`, `stop_task`) |
 | 코드 지도 | [코드 지도 2절](code-map.md#2-코드-위치와-구성요소), [3절](code-map.md#3-진입점) |
-| 관련 스펙 | [운영 스펙 2절](../specs/operations.md#2-상태와-검증-매개변수)의 OPS-014, OPS-034, OPS-033(일부: 관리 연결), OPS-004(일부: 관리 연결을 L에 세지 않음), OPS-036, OPS-006(일부: 관리 TLS 협상과 첫 요청 머리의 U, 사용자 결정 2026-10-21 Q12), [관리 스펙 7절](../specs/management.md#7-수용-테스트)의 MGT-015(4.4 완료 조건으로 옮김, 사용자 결정 2026-10-21 Q14) |
-| 관련 계약 | [관리 API 계약 1.1·1.3·1.4.1·1.11절](../contracts/management-api-v1.md#11-공통-규칙)(라우팅 순서, 쿠키, 정적 경로), [2.1·2.2절](../contracts/management-api-v1.md#21-오류-본문과-상태-코드)(401 본문과 헤더), [운영 정보 계약 1.5·1.6절](../contracts/ops-info-v1.md#15-사건-목록)(`connection_rejected`, `tls_version_unsupported`), [설정 계약 1.2절](../contracts/config-v1.md#12-키-표)(`management.listen`, `management.cert_file`·`key_file`) |
+| 관련 스펙 | [운영 스펙 2절](../specs/operations.md#2-상태와-검증-매개변수)의 OPS-014, OPS-034, OPS-033(일부: 관리 연결), OPS-004(일부: 관리 연결을 L에 세지 않음), OPS-036, OPS-006(일부: 관리 TLS 협상과 첫 요청 머리의 U, 사용자 결정 2026-10-21 Q12), [관리 스펙 7절](../specs/management.md#7-수용-테스트)의 MGT-015(4.4 완료 조건으로 옮김, 사용자 결정 2026-10-21 Q14), [대시보드 스펙 7절](../specs/dashboard.md#7-수용-테스트)의 DASH-014(일부: 세션 없이 `/app/` 파일을 직접 요청하면 로그인 화면으로 보낸다. 상세 화면 행동은 작업 4.10·4.11) |
+| 관련 계약 | [관리 API 계약 1.1·1.3·1.4.1·1.11절](../contracts/management-api-v1.md#11-공통-규칙)(라우팅 순서, 쿠키, 정적 경로), [2.1·2.2절](../contracts/management-api-v1.md#21-오류-본문과-상태-코드)(401 본문과 헤더), [운영 정보 계약 1.5·1.6절](../contracts/ops-info-v1.md#15-사건-목록)(`connection_rejected`, `tls_version_unsupported`), [설정 계약 1.2절](../contracts/config-v1.md#12-키-표)(`management.listen`, `management.cert_file`·`key_file`), [프런트엔드 컨벤션 1.1·1.2절](../conventions/frontend.md#11-정적-파일-구조)(정적 파일 구조, 실행 파일 내장) |
 | 관련 ADR | [ADR-0001 내장 TLS](../decisions/ADR-0001-built-in-tls.md), [ADR-0004 tokio·rustls](../decisions/ADR-0004-tokio-rustls.md) |
 
 ## 1. 책임과 경계
@@ -23,10 +23,11 @@
   - 응답 헤더: 모든 관리 응답에 `Cache-Control: no-store`를 붙인다(1.1절). 모든 401에 `WWW-Authenticate: Session realm="vnc-relay"`를 붙인다(2.1절). 쿠키가 있었던 401은 `relay_admin_session` 쿠키를 지운다(1.4.1절). HTTPS 리스너가 보낸 지우기 쿠키에는 `Secure`를 붙인다.
   - 상대 주소: 관리 응답에 들어가는 주소는 소켓의 실제 상대 주소다. 전달 헤더(`Forwarded`·`X-Forwarded-For`)는 읽지 않는다(1.1절, 관리 스펙 MGT-015).
   - 요청 시간 제한: 접속마다 U(`[timeouts] tls_upgrade_secs`)를 건다. TLS 핸드셰이크와 첫 요청 머리가 끝날 때까지는 수락 때부터 잰 절대 기한이다. 그 뒤에는 읽기·쓰기가 있을 때마다 U를 다시 잰다(사용자 결정 2026-10-22(Q25), 9절 11번). 기한이 지나면 평문 응답 없이 닫는다(4·6절).
+  - 정적 파일 제공(작업 4.6): 실행 파일에 넣은 대시보드 파일을 준다. 제공 경로와 Content-Type은 `dashboard_assets.rs` 표가 정한다(프런트엔드 컨벤션 1.2절). `/login/` 아래 파일은 세션 없이 받는다. `/`(`app/index.html`)와 `/app/` 아래 파일은 세션이 있어야 받는다. 없으면 `/login/`으로 303한다. 정적 요청의 세션 확인은 읽기만 하고 유휴 기한을 늘리지 않는다(계약 1.4.2절).
 - 맡지 않는 책임:
   - 로그인 처리와 관리 세션 발급(작업 4.3, [관리 로그인과 세션 설계](management-session.md)).
   - 관리 세션 검사·CSRF 검사·유휴 만료(작업 4.3, [관리 로그인과 세션 설계](management-session.md)).
-  - 조회 API 처리(작업 4.4), 종료 API 처리(작업 4.5), 정적 파일 제공(작업 4.6).
+  - 조회 API 처리(작업 4.4), 종료 API 처리(작업 4.5).
   - 관리 리스너의 연결 기록 `connection_accepted`. ops-info-v1 §1.5가 관리 리스너에 이 사건을 정하지 않는다.
   - TLS 핸드셰이크 실패 가운데 버전 거절이 아닌 것(인증서 오류, 클라이언트 중단). 9절 6번(Q13).
 - 다른 모듈에 공개하는 기능:
@@ -60,10 +61,12 @@ flowchart LR
 | `crates/adapters/src/tls_listener.rs` `TlsListener` | `axum::serve::Listener`를 감싼다. 수락 때는 핸드셰이크를 기다리지 않는다. 접속의 `Io`가 읽기·쓰기 때 핸드셰이크를 진행한다. | HTTPS 관리 리스너가 `run` 안에서 만든다 | tokio-rustls, app, domain |
 | `crates/adapters/src/request_deadline.rs` `DeadlineListener`, `Deadlined` | `axum::serve::Listener`를 감싼다. 접속마다 U 타이머를 든다. 첫 요청 머리(`\r\n\r\n`)가 끝나기 전에는 수락 때부터 잰 절대 기한이다. 끝난 뒤에는 읽기·쓰기가 있을 때마다 U를 다시 건다. 기한이 지나면 `TimedOut` 오류를 돌려준다. | `ManagementListener::run`이 HTTPS·평문 모두에서 `axum::serve`에 넘기는 가장 바깥 리스너로 만든다 | tokio, axum |
 | `crates/adapters/src/management_http.rs` `ManagementListener` | 관리 리스너 하나. 관리 HTTPS 또는 루프백 평문 HTTP를 처리한다. | `serve`가 관리 리스너를 바인드한 뒤 띄운다. 종료 때 `serve`가 멈춘다. | axum, tokio, tokio-rustls, adapters 내부 모듈 |
-| `crates/adapters/src/management_http.rs` `answer` | fallback 라우터. 3·4절 순서로 응답을 고른다. `/api/v1/` 요청은 `management_http/session_api.rs`의 `answer`로 넘긴다. | `ManagementListener::run`이 만든다 | axum, serde_json |
+| `crates/adapters/src/management_http.rs` `answer` | fallback 라우터. 4절 순서로 응답을 고른다. `/api/v1/` 요청은 `management_http/session_api.rs`의 `answer`로 넘긴다. 정적 경로(`/`·`/login/`·`/app/`)는 `static_answer`로 넘긴다. 그 밖의 경로는 303이다. | `ManagementListener::run`이 만든다 | axum, serde_json |
+| `crates/adapters/src/management_http.rs` `static_answer`, `static_file` | 정적 경로 응답을 만든다(4절 6–8단계). 메서드를 검사하고, `/`·`/app/`은 세션을 읽기만 확인한 뒤 `dashboard_assets.rs` 표에서 파일을 찾는다. 파일 응답에 헤더를 붙인다. | `answer`가 정적 경로일 때 부른다 | axum, app(`AdminAuth::authorize`), `dashboard_assets.rs` |
 | `crates/adapters/src/management_http.rs` `PeerAddr` | 접속의 상대 소켓 주소를 `PeerIp`로 바꾼다(IPv4 매핑 IPv6는 IPv4로). 로그인 제한 키와 로그 `peer_ip`가 같은 값을 쓴다. `axum::extract::connect_info::Connected`를 구현한다. | `ManagementListener::run`이 `into_make_service_with_connect_info::<PeerAddr>()`로 만든다 | domain(`PeerIp`), axum |
 | `crates/adapters/src/management_http/session_api.rs` `answer` | `/api/v1/` 요청을 맡는다. `POST /api/v1/session`은 로그인(`login`)이다. 그 밖은 세션 검사 → CSRF → 경로 → 메서드 순으로 검사한다. 4.4·4.5 경로는 아직 없어 인증 뒤 `404 not_found`다(관리 로그인과 세션 설계 9절 카). | `management_http.rs` `answer`가 `/api/v1/`일 때 부른다 | axum, app(`AdminAuth`) |
 | `crates/adapters/src/status_http.rs` `StatusListener` | 상태 리스너. 이 문서가 옮긴 `AdmittingListener`를 `status` 이름으로 쓴다. | `serve`가 상태 리스너를 바인드한 직후 띄운다. | `admission` 모듈 |
+| `crates/adapters/src/dashboard_assets.rs` `Asset`, `ASSETS`, `find_asset` | 정적 파일 표. 한 항목은 제공 경로, Content-Type, `include_bytes!`로 넣은 본문을 가진다. `find_asset`은 요청 경로와 정확히 같은 항목만 찾는다. `preview/`·`tests/`는 넣지 않는다. | 빌드 때 상수로 실행 파일에 들어간다 | 없음(std) |
 | `crates/app/src/events.rs` `Stage::Tls`, `RejectReason::TlsVersionUnsupported` | `connection_rejected`의 `stage` 값 `tls`와 `reason` 값 `tls_version_unsupported` | 사건이 생길 때 | 없음 |
 | `crates/adapters/src/config_file.rs` `read_management` | 평문 HTTP 주소가 루프백이 아니면 `config_plaintext_management_not_loopback` 설정 오류를 낸다. 관리 리스너는 이 검사를 다시 하지 않는다. | 설정 읽기 때 | 없음 |
 | `crates/app/src/settings.rs` `Settings::management_listener`, `Settings::other_listeners` | `management_listener`는 관리 리스너 바인드 계획(이름 `management`, 키 `management.listen`)을 만든다. `other_listeners`는 관리 리스너를 넣지 않는다. | `serve`가 바인드 전에 부른다 | 없음 |
@@ -82,6 +85,7 @@ flowchart LR
 | `Deadlined<IO>` | `io: IO`, `limit: Duration`(U), `timer: Pin<Box<Sleep>>`, `head_done: bool`, `window: u32`(마지막 4바이트) | 접속 하나 | `head_done`은 `\r\n\r\n`을 읽으면 참이 되고 되돌아가지 않는다. `window`는 머리 끝을 찾는 데만 쓴다. 기한이 지나면 읽기·쓰기가 `TimedOut`을 돌려준다. |
 | 관리 응답 본문 | `{"error":{"code":"unauthenticated","message":…}}`, `{"error":{"code":"not_found","message":…}}` | HTTP 응답 | 2.1절 형식만 쓴다. `message`는 요청 입력값을 담지 않는다. |
 | 지우기 쿠키 | `relay_admin_session=; Path=/; Max-Age=0; HttpOnly; SameSite=Strict` (HTTPS면 `; Secure` 추가) | `Set-Cookie` 헤더 | 1.4.1절 속성과 맞춘다. 값은 비운다. |
+| `Asset` | `path: &'static str`(제공 경로, 예: `/app/tokens.css`), `content_type: &'static str`, `body: &'static [u8]`(`include_bytes!`) | 실행 파일의 상수(`ASSETS`) | 경로는 `/login/`·`/app/`로 시작하거나 `/`(`app/index.html`에 대응)다. 확장자는 `.html`·`.css`·`.js`만 쓴다. `preview/`·`tests/` 경로는 넣지 않는다. 대조 시험(`tests/dashboard_assets.rs`)이 표와 `web/dashboard/` 파일 목록을 비교한다. |
 
 ## 4. 처리 순서
 
@@ -92,11 +96,12 @@ flowchart LR
 | 3 | `tls_listener.rs` `TlsIo::poll_handshake` | `poll_read`·`poll_write`·`poll_flush`가 먼저 부른다. 핸드셰이크를 진행한다. 성공하면 `Established`로 바꾸고 캡처를 `None`으로 바꾼다. 실패하면 캡처한 ClientHello 바이트(레코드 한 개 분)로 버전을 판정한다. `supported_versions`가 있으면 그 목록에 TLS 1.2 이상이 없을 때, 없으면 `legacy_version`이 TLS 1.2 미만일 때 버전 거절이다. 버전 거절이면 기록을 먼저 쓴다. 그다음 `Failed`로 바꾸고 `io::Error`를 돌려준다. | `TlsIo` 상태 `Established` 또는 `Failed` | 버전 거절: `connection_rejected`(`listener` = `management`, `stage` = `tls`, `reason` = `tls_version_unsupported`). 그 밖의 실패: 기록 없음(사용자 결정 Q13). |
 | 4 | `request_deadline.rs` `Deadlined::poll_read`·`poll_write`·`poll_flush` | 읽기·쓰기 전에 타이머를 먼저 본다. 기한이 지났으면 `TimedOut`을 돌려준다. 첫 요청 머리가 끝나기 전에는 절대 기한(수락 + U)이다. 끝난 뒤 바이트가 오가면 U를 다시 건다. 2·3단계의 TLS 핸드셰이크도 이 안에서 진행된다. | 타이머, `head_done`, `window` | 기한이 지나면 axum이 접속을 닫는다(6절). 머리가 끝나면 axum이 요청을 5단계(`answer`)로 넘긴다. |
 | 5 | `management_http.rs` `answer` 1단계 | 경로가 `/api/v1/`로 시작하면 `management_http/session_api.rs` `answer`로 넘긴다. 그 안에서 `POST /api/v1/session`은 세션을 보지 않고 로그인한다. 그 밖의 `/api/v1/` 요청은 세션을 먼저 본다. 세션이 없으면 경로·메서드와 관계없이 `401`이고, 요청에 `relay_admin_session` 쿠키가 있었으면 지우기 `Set-Cookie`를 붙인다. 세션이 있으면 CSRF(`POST`·`DELETE`) → 경로 → 메서드 순으로 검사한다(관리 로그인과 세션 설계 4절, 관리 API 계약 1.3절). | 없음 | 응답(`WWW-Authenticate`, `Cache-Control: no-store`). 로그인과 세션의 응답 본문·상태 코드는 관리 로그인과 세션 설계 4·6절 |
-| 6 | `management_http.rs` `answer` 2단계 | 경로가 `/`이거나 `/app/`로 시작하면 메서드가 `GET`·`HEAD`가 아닐 때 `405`(`Allow: GET, HEAD`, `invalid_request` 본문). 그 밖에는 `303`, `Location: /login/`, 본문 없음. | 없음 | 응답 |
-| 7 | `management_http.rs` `answer` 3단계 | 경로가 `/login/`로 시작하면 메서드가 `GET`·`HEAD`가 아닐 때 `405`(`Allow: GET, HEAD`, `invalid_request` 본문). 그 밖에는 `404` `not_found` 본문(열린 질문 2). | 없음 | 응답 |
-| 8 | `management_http.rs` `answer` 4단계 | 나머지 경로는 메서드와 관계없이 `303`, `Location: /login/`. | 없음 | 응답 |
+| 6 | `management_http.rs` `answer` 2단계, `static_answer` | 경로가 `/`, `/login/`, `/app/`로 시작하면(정적 경로) 메서드가 `GET`·`HEAD`가 아닐 때 `405`(`Allow: GET, HEAD`, `invalid_request` 본문). 세션은 보지 않는다. | 없음 | 응답 |
+| 7 | `static_answer` 3단계 | 경로가 `/`이거나 `/app/`로 시작하면(보호 경로) `AdminAuth::authorize`로 세션을 읽기만 확인한다. 세션이 없으면 `303`, `Location: /login/`, 본문 없음. 쿠키는 지우지 않고 유휴 기한은 늘리지 않는다(계약 1.4.2절). | 없음 | 응답 |
+| 8 | `static_answer` 4단계, `dashboard_assets.rs` `find_asset` | 표에서 요청 경로와 정확히 같은 항목을 찾는다. 있으면 `200`: GET은 본문, HEAD는 본문 없이 같은 `Content-Length`. 헤더는 파일 응답 규칙(`Content-Type`, `Cache-Control`, 보안 헤더)을 따른다. 없으면 `404` `not_found` 본문(9절 13번). 세션이 있는 `/`도 항목이 없으면 `404`다(9절 12번). | 없음 | 응답 |
+| 9 | `management_http.rs` `answer` 4단계 | 나머지 경로는 메서드와 관계없이 `303`, `Location: /login/`, 본문 없음. 계약 1.11절 표는 존재하는 그 밖의 경로에 `404`를, 없는 경로에 `303`을 준다. 이 리스너에는 존재하는 그 밖의 경로가 없어 모두 `303`이다. | 없음 | 응답 |
 
-관리 응답은 모두 `Cache-Control: no-store`를 가진다. 정적 보안 헤더(`X-Content-Type-Options`·`Referrer-Policy`·`Content-Security-Policy`, 1.11절)는 정적 파일 응답에만 붙인다. 계약 1.1.0부터 CSP는 필수다(사용자 결정 2026-10-22(Q37)). 4.2·4.3에는 정적 파일 응답이 없어 아직 보내지 않는다. 구현은 작업 4.6에서 한다.
+관리 응답은 모두 `Cache-Control: no-store`를 가진다. 정적 보안 헤더(`X-Content-Type-Options`·`Referrer-Policy`·`Content-Security-Policy`, 1.11절)는 정적 파일 응답(200)에만 붙인다. CSP는 계약 1.1.0부터 필수다(사용자 결정 2026-10-22(Q37)). 303과 404 응답에는 보안 헤더를 붙이지 않는다. 작업 4.6이 구현했다.
 
 ## 5. 상태와 초기화
 
@@ -117,6 +122,7 @@ flowchart LR
 | 첫 요청 뒤 읽기·쓰기가 U 동안 없음(keep-alive 유휴) | 같은 방법으로 닫는다(사용자 결정 2026-10-22(Q25)). 기록하지 않는다(구현 판단, 9절 11번). | 접속 없음. Lm 자리는 돌아간다. | OPS-006(일부) |
 | 수락 오류 | `ACCEPT_RETRY_DELAY` 뒤 다시 수락한다. 기록하지 않는다(ops-info-v1은 수락 실패 사건이 없다). | 없음 | 없음 |
 | 관리 요청의 읽기 오류 | axum이 접속을 닫는다. 기록하지 않는다(`connection_aborted`는 `conn_id`가 필요하다). | 접속 없음 | 구현 판단(Q13은 TLS 실패만 다룬다) |
+| 보호 정적 경로(`/`, `/app/`)에 세션이 없거나 만료됨 | `303`, `Location: /login/`, 본문 없음. 쿠키를 지우지 않는다. 유휴 기한을 늘리지 않는다(계약 1.4.2절). | 없음 | DASH-014(일부) |
 
 ## 7. 설계 선택
 
@@ -133,12 +139,42 @@ flowchart LR
 | ALPN을 쓰지 않는다 | `tls.rs`가 ALPN을 설정하지 않는다. 관리 API는 HTTP/1.1만 쓴다. | `http/1.1`을 광고한다(사용자 결정 2026-10-21, Q15로 쓰지 않기로 했다). | tls.md 7절, 9절 |
 | 버전 거절은 ClientHello 바이트로 판정한다(RFC 8446 4.2.1). | rustls는 버전을 보기 전에 `signature_algorithms` 확장을 검사한다(`server/hs.rs` `process_client_hello`). rustls 오류 변형으로 판정하면 TLS 1.0·1.1 클라이언트를 버전 거절로 못 보고, `signature_algorithms`가 없는 TLS 1.2 클라이언트를 잘못 거절한다. | rustls 오류 변형으로 판정(기각). | rustls 0.23.46 `server/hs.rs`, RFC 8446 4.2.1 |
 | 루트 시험(`tests/serve.rs`)에 `rustls`를 개발 의존성으로 더한다. 공개 주소의 HTTPS 401과 평문 요청 거절을 확인하려면 TLS 클라이언트가 필요하다. 동기 `rustls::StreamOwned`와 `TcpStream`을 써서 `tokio-rustls`와 `rustls-pki-types`는 더하지 않는다. | OPS-014의 공개 주소 조건은 루트 시험에서만 확인할 수 있다. 어댑터 시험의 루프백 HTTPS 401은 공개 주소의 수락을 보여 주지 않는다. | 어댑터 시험에만 둔다(OPS-014가 부분으로 남는다). 수동 확인으로 둔다(자동 시험이 없어 회귀를 막지 못한다). | PRD '구현 기술' 행(rustls 승인), `xtask/src/layers.rs` 루트 외부 crate 목록, 코드 지도 2절 실행파일 조립 행, 서버 시작 설계 루트 외부 crate 행(tokio 선례). |
+| 정적 파일을 `include_bytes!` 표로 실행 파일에 넣는다. 제공 경로는 표의 정확한 문자열과 비교한다. | 배포 파일이 실행 파일 하나에 들어가고 실행 위치의 파일에 의존하지 않는다. 표가 한 곳에 있어 대조 시험(`tests/dashboard_assets.rs`)이 목록 어긋남을 잡는다. | `build.rs`가 표를 생성한다(빌드 입력이 늘어난다). 실행 파일 옆 디렉터리에서 읽는다(설치 위치에 의존한다). 새 crate(`include_dir`·`rust-embed`)를 쓴다(사용자 승인이 필요하다). | 프런트엔드 컨벤션 1.2절, 사용자 결정 2026-10-22(Q33) |
 
 ## 8. 현재 코드와의 차이
 
 - 4.2의 대조 결과는 4.3 이후 현재 구현과 맞지 않는다. 작업 4.3이 '맡지 않는 책임' 목록과 4절 5단계를 바꿨다. 아래 대조 기록의 4.2 항목은 그 시점 기록으로 남기고, 4.3 항목이 현재 기준이다.
 
 ## 대조 기록
+
+### 작업 4.6
+
+- 대조 범위: 커밋 `e1ba857`(`7b136a1` 이후 dashboard 커밋 3개 포함, 제 경로는 아님) + 작업 트리(이 문서, `crates/adapters/src/dashboard_assets.rs`(새 파일), `crates/adapters/src/lib.rs`, `crates/adapters/src/management_http.rs`, `crates/adapters/tests/management.rs`, `tests/dashboard_assets.rs`(새 파일), `docs/architectures/code-map.md`).
+- 대조 방법: 2절 요소 표의 `answer`, `static_answer`, `static_file`, `dashboard_assets.rs`(`Asset`, `ASSETS`, `find_asset`)를 `grep`으로 찾았다. 4절 6–9단계를 `management_http.rs`의 검사 순서(메서드 → 세션 읽기 → 표 조회 → 303)와 맞췄다. 정적 200 응답 헤더는 `static_file`을 읽어 1절 규칙과 맞췄다. 자동 시험은 `crates/adapters/tests/management.rs`의 정적 경로 시험과 `tests/dashboard_assets.rs`의 표 대조 시험이다. 실제 서버는 `cargo run -- serve`로 한 번 띄워 curl로 확인했다(아래 스모크 표).
+- 대조 결과: 2절 요소 표와 4절 6–9단계가 구현과 맞다. 9절 2번은 해결로 바꿨고, 12번은 `/`의 404 조건을 세션 유무로 나눴다. 관리 API 계약 5절에는 정적 경로 행이 없다. 시험은 계약 1.11절 표를 기준으로 했다. 5절에 행을 넣을지는 계약 변경이라 사용자 확인이 필요하다.
+- 작업 4.6 시나리오 변화: DASH-014 미연결 → 부분. 표식은 `crates/adapters/tests/management.rs`의 `protected_files_redirect_to_login_without_a_session`(`/// spec: dashboard.md:DASH-014 partial`)이다. 다른 시나리오 표식은 바뀌지 않았다. 4.3 시점 수치(통과 10, 부분 27, 미연결 110)와 이번 수치의 나머지 차이는 4.3 이후 커밋에서 왔을 것으로 본다. `7b136a1`을 따로 돌려 확인하지 않았다 [INFERENCE].
+- 환경: Windows 11 Pro 10.0.26200 x64; WSL2 Ubuntu 24.04.4, Rust 1.99.1.
+- 검증 기록:
+
+| 명령 | 환경 | 결과 |
+| --- | --- | --- |
+| `powershell -NoProfile -ExecutionPolicy Bypass -File D:/vr-tools/vr-win.ps1 -Only all` | Windows 11 Pro 10.0.26200 x64 | 통과(`ALL PASSED (all)`). 시나리오 148건: 통과 15, 부분 23, 실패 0, 미실행 1, 미연결 109. 오류 0건. 미실행 1건은 OPS-007(Unix 전용)이다. `dashboard_browser.rs` 2개는 Windows에서 통과한다(Chromium 있음). |
+| `wsl -d Ubuntu -- bash /mnt/d/vr-tools/vr-full.sh` | WSL2 Ubuntu 24.04.4 | 실패(`판정: 실패 (cargo test 실패)`, `error: 1 target failed: -p vnc-relay --test dashboard_browser`, `FAILED: scenarios`). 실패한 시험은 `dashboard_browser.rs`의 `dashboard_components_pass_in_browser`와 `dashboard_preview_pass_in_browser` 두 개뿐이다. 원인은 WSL에 Chromium이 없는 것이다. 나머지 단계(fmt, clippy, layers, tokens, `management.rs` 37개, `dashboard_assets.rs` 2개, `serve`, licenses, deny)는 통과했다. 시나리오 148건: 통과 16, 부분 23, 실패 0, 미실행 0, 미연결 109. 오류 0건. |
+
+- 판정: 구조 시점 `Current`, 구현 대조 `Verified`(작업 트리 범위). WSL 전체 게이트의 브라우저 시험 두 개는 알려진 환경 문제(Chromium 부재)다. 이 작업의 변경과 무관하다. 문서 상태 `Draft`는 그대로다.
+- 스모크(`cargo run -- serve --config`, 루프백 평문 관리 `127.0.0.1:18090`, 세션은 `POST /api/v1/session`으로 얻음. 임시 설정과 계정 파일은 삭제했다):
+
+| 요청 | 세션 | 결과 |
+| --- | --- | --- |
+| `GET /login/tokens.css` | 없음 | `200 OK`, `Content-Type: text/css; charset=utf-8`, `Content-Length: 4928`, `Cache-Control: no-store`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, `Content-Security-Policy: default-src 'self'; frame-ancestors 'none'` |
+| `HEAD /login/tokens.css` | 없음 | `200 OK`, 같은 헤더와 `Content-Length: 4928`, 본문 0바이트 |
+| `GET /app/tokens.css`, `GET /`, `GET /preview/index.html` | 없음 | `303 See Other`, `Location: /login/`, 보안 헤더 없음 |
+| `GET /login/missing.css` | 없음 | `404 Not Found`, JSON `not_found`, 보안 헤더 없음 |
+| `POST /login/tokens.css` | 없음 | `405 Method Not Allowed`, `Allow: GET, HEAD` |
+| `GET /app/tokens.css` | 있음 | `200 OK`, `Content-Length: 4928`, 헤더는 위와 같음 |
+| `GET /app/styles/base.css` | 있음 | `200 OK`, `Content-Length: 950`, 헤더는 위와 같음 |
+| `GET /`, `GET /app/missing.js` | 있음 | `404 Not Found`, JSON `not_found`(표에 `app/index.html` 항목이 없다. 9절 12번) |
+| `GET /preview/index.html`, `GET /tests/components.html` | 있음 | `303 See Other`, `Location: /login/`(표에 없는 경로) |
 
 ### 작업 4.3
 
@@ -209,7 +245,7 @@ flowchart LR
 | 항목 | 영향 | 확정 위치 |
 | --- | --- | --- |
 | 1. (해결) `POST /api/v1/session`(4.2) 응답은 4.2 시점의 401 `unauthenticated`였다. 작업 4.3이 로그인을 구현해 응답이 바뀌었다(관리 로그인과 세션 설계 4.1절). 사용자 결정 2026-10-21(Q15)로 승인됐던 값이다. | 로그인 전까지 응답 본문 | 사용자 결정 2026-10-21(Q15) |
-| 2. (해결) `GET /login/`·`/login/<파일>`(4.2)의 404 `not_found`는 사용자 결정 2026-10-21(Q15)로 승인됐다. 정적 파일은 4.6에서 준다. | 로그인 화면이 4.6 전까지 없다 | 사용자 결정 2026-10-21(Q15) |
+| 2. (해결) `GET /login/`·`/login/<파일>`(4.2)의 404 `not_found`는 사용자 결정 2026-10-21(Q15)로 승인됐다. 작업 4.6이 `dashboard_assets.rs` 표에 있는 파일을 준다. 표에 없는 파일은 404다. | 로그인 HTML 본문은 4.9 전까지 없다(12번) | 사용자 결정 2026-10-21(Q15), 9절 12번 |
 | 3. (해결) 핸드셰이크와 요청 읽기 제한 시간은 U(`[timeouts] tls_upgrade_secs`)를 쓴다. 사용자 결정 2026-10-21(Q12). 설정 계약 1.2절 U 행을 넓혔다. | 멈춘 핸드셰이크가 Lm 자리를 무기한 잡지 않는다 | 사용자 결정 2026-10-21(Q12), 설정 계약 1.2절 |
 | 4. (해결) 관리 HTTPS의 ALPN은 쓰지 않는다. 사용자 결정 2026-10-21(Q15)로 승인됐다. | 클라이언트 협상 방식(HTTP/1.1만) | 사용자 결정 2026-10-21(Q15) |
 | 5. IPv4 매핑 IPv6 주소(`::ffff:a.b.c.d`) 표기. 가정은 `PeerIp`(`peer_ip.rs`)가 IPv4로 바꾼 값을 쓴다. 로그인 제한과 로그가 같은 값을 쓴다. 계약 6절의 표기 항목은 아직 닫히지 않았다. | 관리 응답의 `address.ip` 표기 | 관리 API 계약 6절 열린 항목 |
@@ -219,3 +255,7 @@ flowchart LR
 | 9. (해결) 비루프백 평문 시작 실패(OPS-014·OPS-034)의 검증 위치. 서버 수준 테스트를 두 개로 나눴다. `tests/serve.rs`의 `refuses_public_plaintext_and_answers_login_less_queries_with_401_on_loopback`(OPS-034 통과, 비부분: 공개 평문 시작 거절과 루프백 평문 401을 함께 확인)와 `public_management_never_starts_on_plaintext_or_without_tls_or_an_account`(OPS-014 부분: 공개 평문·인증서 누락·계정 없음의 시작 거절). 설정 규칙 테스트 `allows_plaintext_management_only_on_loopback`(OPS-034 부분)는 그대로 둔다. 범위는 작업 4.2 시나리오 범위 기록을 본다. | 표식 위치만 바뀜(해결됨) | 구현 판단(서버 수준 테스트 추가, 해결됨) |
 | 10. (해결) 첫 TLS 레코드(16 389바이트)만으로 버전을 판정하는 한계를 받아들인다. 사용자 결정 2026-10-21(Q17). 현재 코드가 이 옵션이다. | 관리 TLS 버전 거절의 감사 흔적. OPS-036 시험(`crates/adapters/tests/websocket.rs`의 `tls10_and_tls11_are_refused_and_tls12_and_tls13_succeed_on_wss_and_management`)은 첫 레코드 안의 거절 기록을 확인한다. 첫 레코드를 넘는 ClientHello의 기록은 시험하지 않는다. | 사용자 결정 2026-10-21(Q17) |
 | 11. (해결) 첫 요청 머리 뒤 keep-alive 요청 머리에는 절대 제한이 없다. 읽기·쓰기가 없는 동안 U만 잰다. 검토한 옵션은 (a) 요청마다 절대 제한을 다시 건다, (b) 관리 응답에 `Connection: close`를 붙인다(계약 변경), (c) 접속 수명 상한을 둔다. 모두 채택하지 않는다. | 느린 keep-alive 요청이 U 간격마다 Lm 자리를 연장할 수 있다(OPS-006 부분). 받아들인 한계다. | 사용자 결정 2026-10-22(Q25) |
+| 12. 미결정. `login/index.html`과 `app/index.html`(화면 HTML)을 4.6이 쓰지 않는다. 최소 HTML 셸을 4.6이 쓸지는 문서가 정하지 않는다. 추천: 쓰지 않는다(화면 본문은 작업 4.9·4.10 소유). 구현은 쓰지 않는 쪽으로 했다. 그래서 `/login/`은 404이고, 세션이 있는 `/`도 404다(세션이 없는 `/`는 303). | 로그인 화면은 4.9 전까지 열리지 않는다. 표에 HTML 항목이 없다. | 작업 4.9·4.10, 사용자 확인 필요 |
+| 13. 미결정. 정적 `404`의 본문. 현재는 JSON `not_found`(사용자 결정 2026-10-21(Q15)의 값)다. 관리 API 계약 2.1절은 JSON 본문을 `/api/v1/`에 적용하고 정적 `303`·`404`를 예외로 적는다(1.11절). 예외가 본문 없음인지 JSON 유지인지 문서가 분명하지 않다. 추천: 현재 값을 유지한다. 구현은 유지했다. | 정적 404 응답 형식 | 관리 API 계약 2.1절, 사용자 확인 필요 |
+| 14. 미결정. `/app/` 아래 하위 디렉터리 파일(`components/`, `styles/`)을 `/app/<파일>`로 준다. 추천: 허용(프런트엔드 컨벤션 1.1절 트리와 맞다). 구현은 허용했다. | 정적 경로 규칙 | 프런트엔드 컨벤션 1.1절, 사용자 확인 필요 |
+| 15. 미결정. 로그인 화면 정적 응답에 `Cache-Control: no-store`를 붙인다. 계약 1.11절은 보호 정적 응답에 이 헤더를 요구한다. 추천: 유지(프런트엔드 컨벤션 1.2절의 기본값). 구현은 유지했다. | 로그인 화면 응답의 캐시 | 프런트엔드 컨벤션 1.2절 |

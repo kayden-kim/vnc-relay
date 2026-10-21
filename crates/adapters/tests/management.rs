@@ -642,11 +642,177 @@ async fn static_paths_accept_only_get_and_head() {
 }
 
 #[tokio::test]
-async fn login_paths_have_no_page_before_static_files_arrive() {
+async fn login_paths_without_a_file_are_not_found() {
     let running = start(None, ROOMY_LM).await;
 
     for path in ["/login/", "/login/app.js"] {
         let reply = plain_exchange(running.addr, &get(path, &[])).await;
+        assert_eq!(reply.status, 404, "GET {path}");
+        assert_eq!(error_code(&reply), "not_found", "GET {path}");
+    }
+}
+
+/// The bytes of the dashboard file `disk`, relative to `web/dashboard/`.
+fn dashboard_file(disk: &str) -> Vec<u8> {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../web/dashboard")
+        .join(disk);
+    std::fs::read(&path).unwrap_or_else(|error| panic!("reads {}: {error}", path.display()))
+}
+
+/// Checks the headers of a dashboard file reply (management-api-v1 §1.11).
+fn check_file_headers(reply: &Reply, content_type: &str, length: usize) {
+    let length = length.to_string();
+    assert_eq!(reply.header("content-type"), Some(content_type));
+    assert_eq!(reply.header("content-length"), Some(length.as_str()));
+    assert_eq!(reply.header("cache-control"), Some("no-store"));
+    assert_eq!(reply.header("x-content-type-options"), Some("nosniff"));
+    assert_eq!(reply.header("referrer-policy"), Some("no-referrer"));
+    assert_eq!(
+        reply.header("content-security-policy"),
+        Some("default-src 'self'; frame-ancestors 'none'")
+    );
+}
+
+#[tokio::test]
+async fn login_files_are_served_without_a_session() {
+    let running = start(None, ROOMY_LM).await;
+    let disk = dashboard_file("login/tokens.css");
+
+    let reply = plain_exchange(running.addr, &get("/login/tokens.css", &[])).await;
+    assert_eq!(reply.status, 200);
+    check_file_headers(&reply, "text/css; charset=utf-8", disk.len());
+    assert_eq!(reply.body, disk);
+
+    // HEAD takes the same headers, `Content-Length` included, and no body.
+    let reply = plain_exchange(running.addr, &request("HEAD", "/login/tokens.css", &[])).await;
+    assert_eq!(reply.status, 200);
+    check_file_headers(&reply, "text/css; charset=utf-8", disk.len());
+    assert!(reply.body.is_empty());
+
+    // Only GET and HEAD reach a file (management-api-v1 §1.11).
+    let reply = plain_exchange(running.addr, &request("POST", "/login/tokens.css", &[])).await;
+    assert_eq!(reply.status, 405);
+    assert_eq!(reply.header("allow"), Some("GET, HEAD"));
+}
+
+/// spec: dashboard.md:DASH-014 partial
+#[tokio::test]
+async fn protected_files_redirect_to_login_without_a_session() {
+    let running = start(None, ROOMY_LM).await;
+
+    // A missing file redirects too, so the reply does not show whether it exists.
+    for path in [
+        "/",
+        "/app/tokens.css",
+        "/app/styles/base.css",
+        "/app/components/button.js",
+        "/app/missing.js",
+    ] {
+        let reply = plain_exchange(running.addr, &get(path, &[])).await;
+        assert_eq!(reply.status, 303, "GET {path}");
+        assert_eq!(reply.header("location"), Some("/login/"), "GET {path}");
+        assert!(reply.body.is_empty(), "GET {path} has no body");
+        assert_eq!(
+            reply.header("cache-control"),
+            Some("no-store"),
+            "GET {path}"
+        );
+        assert_eq!(reply.header("content-security-policy"), None, "GET {path}");
+    }
+
+    // HEAD takes the same redirect.
+    let reply = plain_exchange(running.addr, &request("HEAD", "/app/tokens.css", &[])).await;
+    assert_eq!(reply.status, 303);
+    assert_eq!(reply.header("location"), Some("/login/"));
+}
+
+#[tokio::test]
+async fn protected_files_are_served_with_a_session() {
+    let running = start(None, ROOMY_LM).await;
+    let login = plain_exchange(running.addr, &login_request(ACCOUNT, PASSWORD)).await;
+    assert_eq!(login.status, 200);
+    let cookie = cookie_line(&login);
+
+    for (url, disk, content_type) in [
+        (
+            "/app/tokens.css",
+            "app/tokens.css",
+            "text/css; charset=utf-8",
+        ),
+        (
+            "/app/styles/base.css",
+            "app/styles/base.css",
+            "text/css; charset=utf-8",
+        ),
+        (
+            "/app/components/button.js",
+            "app/components/button.js",
+            "text/javascript; charset=utf-8",
+        ),
+    ] {
+        let reply = plain_exchange(running.addr, &get(url, &[cookie.as_str()])).await;
+        let expected = dashboard_file(disk);
+        assert_eq!(reply.status, 200, "GET {url}");
+        check_file_headers(&reply, content_type, expected.len());
+        assert_eq!(reply.body, expected, "GET {url}");
+    }
+
+    // The app index comes with task 4.10, so `/` has no file yet. A session
+    // does not make a missing file exist.
+    for url in ["/", "/app/missing.js"] {
+        let reply = plain_exchange(running.addr, &get(url, &[cookie.as_str()])).await;
+        assert_eq!(reply.status, 404, "GET {url}");
+        assert_eq!(error_code(&reply), "not_found", "GET {url}");
+    }
+}
+
+#[tokio::test]
+async fn preview_and_test_pages_are_never_served() {
+    let running = start(None, ROOMY_LM).await;
+    let login = plain_exchange(running.addr, &login_request(ACCOUNT, PASSWORD)).await;
+    let cookie = cookie_line(&login);
+
+    // Outside the served paths, every request redirects, with or without a session.
+    for path in ["/preview/index.html", "/tests/components.html"] {
+        let reply = plain_exchange(running.addr, &get(path, &[])).await;
+        assert_eq!(reply.status, 303, "GET {path}");
+        let reply = plain_exchange(running.addr, &get(path, &[cookie.as_str()])).await;
+        assert_eq!(reply.status, 303, "GET {path} with a session");
+        assert_eq!(reply.header("location"), Some("/login/"), "GET {path}");
+    }
+    // Under `/app/` the session decides, and the page is not in the table.
+    let reply = plain_exchange(
+        running.addr,
+        &get("/app/preview/index.html", &[cookie.as_str()]),
+    )
+    .await;
+    assert_eq!(reply.status, 404);
+    assert_eq!(error_code(&reply), "not_found");
+}
+
+#[tokio::test]
+async fn static_paths_match_the_table_exactly() {
+    let running = start(None, ROOMY_LM).await;
+    let login = plain_exchange(running.addr, &login_request(ACCOUNT, PASSWORD)).await;
+    let cookie = cookie_line(&login);
+
+    // Case, a trailing slash, and an extra segment name no file.
+    for path in [
+        "/login/TOKENS.CSS",
+        "/login/tokens.css/",
+        "/login/styles/base.css",
+    ] {
+        let reply = plain_exchange(running.addr, &get(path, &[])).await;
+        assert_eq!(reply.status, 404, "GET {path}");
+        assert_eq!(error_code(&reply), "not_found", "GET {path}");
+    }
+    for path in [
+        "/app/TOKENS.CSS",
+        "/app/styles/",
+        "/app/components/button.js/",
+    ] {
+        let reply = plain_exchange(running.addr, &get(path, &[cookie.as_str()])).await;
         assert_eq!(reply.status, 404, "GET {path}");
         assert_eq!(error_code(&reply), "not_found", "GET {path}");
     }
