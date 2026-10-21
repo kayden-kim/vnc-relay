@@ -85,7 +85,7 @@ mod tests {
     use super::super::AuthError;
     use crate::management::login::LoggedIn;
     use crate::management::test_support::{
-        Harness, PASSWORD, harness, harness_with, limit_policy, peer, secs,
+        Harness, PASSWORD, base_wall, harness, harness_with, limit_policy, peer, secs,
     };
 
     fn login(h: &Harness) -> LoggedIn {
@@ -237,5 +237,35 @@ mod tests {
             Some(AuthError::Unauthenticated)
         );
         assert!(after.auth.login("alice", PASSWORD, peer(1), None).is_ok());
+    }
+
+    // Covers the published values only. Relay continuity after expiry is not
+    // checked here.
+    // The published deadlines are fixed when they are issued. A wall-clock
+    // jump, forward or back, does not change them. Only the monotonic clock
+    // decides when the session ends.
+    /// spec: management.md:MGT-025 partial
+    #[test]
+    fn wall_clock_jumps_do_not_move_the_published_deadlines() {
+        let h = harness();
+        let login = login(&h);
+        let idle = login.session.idle_expires_at;
+        let absolute = login.session.absolute_expires_at;
+
+        h.clock.set_wall(base_wall() + secs(3600));
+        let admin = h
+            .auth
+            .authorize(Some(login.token.as_str()))
+            .unwrap_or_else(|error| panic!("{error:?}"));
+        assert_eq!(admin.session().idle_expires_at, idle);
+        assert_eq!(admin.session().absolute_expires_at, absolute);
+
+        h.clock.set_wall(base_wall() - secs(3600));
+        let admin = h
+            .auth
+            .authorize(Some(login.token.as_str()))
+            .unwrap_or_else(|error| panic!("{error:?}"));
+        assert_eq!(admin.session().idle_expires_at, idle);
+        assert_eq!(admin.session().absolute_expires_at, absolute);
     }
 }

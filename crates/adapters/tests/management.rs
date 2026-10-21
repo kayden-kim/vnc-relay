@@ -1187,3 +1187,232 @@ async fn valid_session_gets_not_found_or_refusal_for_other_api_paths() {
     assert_eq!(poll.status, 400);
     assert_eq!(error_code(&poll), "invalid_request");
 }
+
+/// The body of a chunked request: one chunk, then the last chunk.
+fn chunked(body: &str) -> Vec<u8> {
+    format!("{:x}\r\n{body}\r\n0\r\n\r\n", body.len()).into_bytes()
+}
+
+/// A login request whose body is sent with `Content-Length`.
+fn sized_login(text: &str) -> Vec<u8> {
+    let length = format!("Content-Length: {}", text.len());
+    let mut bytes = request(
+        "POST",
+        "/api/v1/session",
+        &["Content-Type: application/json", length.as_str()],
+    );
+    bytes.extend_from_slice(text.as_bytes());
+    bytes
+}
+
+/// A login request whose body is sent with chunked framing.
+fn chunked_login(text: &str) -> Vec<u8> {
+    let mut bytes = request(
+        "POST",
+        "/api/v1/session",
+        &["Content-Type: application/json", "Transfer-Encoding: chunked"],
+    );
+    bytes.extend_from_slice(&chunked(text));
+    bytes
+}
+
+/// A login body of exactly `size` bytes. The `pad` field fills the rest.
+fn login_body_of(size: usize) -> String {
+    let bare = json!({ "account": ACCOUNT, "password": PASSWORD, "pad": "" }).to_string();
+    let text = json!({
+        "account": ACCOUNT,
+        "password": PASSWORD,
+        "pad": "x".repeat(size - bare.len()),
+    })
+    .to_string();
+    assert_eq!(text.len(), size);
+    text
+}
+
+// Covers the session view's `as_of` (management-api-v1 §1.1). The aggregate
+// consistency of the operational queries is checked in 4.4.
+/// spec: management.md:MGT-017 partial
+#[tokio::test]
+async fn session_view_carries_as_of_as_a_timestamp() {
+    let running = start(None, ROOMY_LM).await;
+    let login = plain_exchange(running.addr, &login_request(ACCOUNT, PASSWORD)).await;
+    let cookie = cookie_line(&login);
+    let view = plain_exchange(running.addr, &get("/api/v1/session", &[cookie.as_str()])).await;
+    assert_eq!(view.status, 200);
+    let body = json_body(&view);
+    let as_of = body["as_of"]
+        .as_str()
+        .unwrap_or_else(|| panic!("view has as_of: {body}"));
+    // Same form as the other timestamps: UTC, milliseconds, and `Z`.
+    assert_eq!(as_of.len(), 24, "{as_of}");
+    assert!(as_of.ends_with('Z'), "{as_of}");
+}
+
+// Covers the media type of bodies on GET and DELETE (management-api-v1 §1.1).
+// A body that is not `application/json` is refused with 415 and changes nothing.
+#[tokio::test]
+async fn get_and_delete_with_a_body_must_send_application_json() {
+    let running = start(None, ROOMY_LM).await;
+    let login = plain_exchange(running.addr, &login_request(ACCOUNT, PASSWORD)).await;
+    let cookie = cookie_line(&login);
+    let view = plain_exchange(running.addr, &get("/api/v1/session", &[cookie.as_str()])).await;
+    let csrf = csrf_line(&view);
+    let text = "{}";
+    let length = format!("Content-Length: {}", text.len());
+
+    let bare = request(
+        "GET",
+        "/api/v1/session",
+        &[cookie.as_str(), "Content-Type: text/plain"],
+    );
+    let reply = plain_exchange(running.addr, &bare).await;
+    assert_eq!(reply.status, 200, "text/plain without a body is accepted");
+
+    let mut sized = request(
+        "GET",
+        "/api/v1/session",
+        &[cookie.as_str(), "Content-Type: text/plain", length.as_str()],
+    );
+    sized.extend_from_slice(text.as_bytes());
+    let reply = plain_exchange(running.addr, &sized).await;
+    assert_eq!(reply.status, 415);
+    assert_eq!(error_code(&reply), "invalid_request");
+
+    let mut streamed = request(
+        "GET",
+        "/api/v1/session",
+        &[cookie.as_str(), "Content-Type: text/plain", "Transfer-Encoding: chunked"],
+    );
+    streamed.extend_from_slice(&chunked(text));
+    let reply = plain_exchange(running.addr, &streamed).await;
+    assert_eq!(reply.status, 415);
+    assert_eq!(error_code(&reply), "invalid_request");
+
+    let mut delete = request(
+        "DELETE",
+        "/api/v1/session",
+        &[
+            cookie.as_str(),
+            csrf.as_str(),
+            "Content-Type: text/plain",
+            length.as_str(),
+        ],
+    );
+    delete.extend_from_slice(text.as_bytes());
+    let reply = plain_exchange(running.addr, &delete).await;
+    assert_eq!(reply.status, 415);
+    assert_eq!(error_code(&reply), "invalid_request");
+
+    // A refused request changes nothing: the session still answers.
+    let still = plain_exchange(running.addr, &get("/api/v1/session", &[cookie.as_str()])).await;
+    assert_eq!(still.status, 200);
+}
+
+// Covers the 400 for a name that cannot be an account (management-api-v1 §1.5
+// and §2.1). The refusal for names that follow the grammar is checked by the
+// app login tests.
+/// spec: management.md:MGT-018 partial
+#[tokio::test]
+async fn login_account_outside_the_name_grammar_is_a_bad_request() {
+    let running = start(None, ROOMY_LM).await;
+    let long = "x".repeat(33);
+    for account in ["Alice", "al ice", "bob!", long.as_str()] {
+        let reply = plain_exchange(running.addr, &login_request(account, PASSWORD)).await;
+        assert_eq!(reply.status, 400, "{account}");
+        assert_eq!(error_code(&reply), "invalid_request");
+        assert!(reply.header("set-cookie").is_none(), "{account}");
+    }
+}
+
+// Covers the 16 KiB limit on the login body (management-api-v1 §1.5) for both
+// framings. A body one byte over the limit is refused with 400.
+#[tokio::test]
+async fn login_body_limit_is_16_kib_for_sized_and_chunked_bodies() {
+    let running = start(None, ROOMY_LM).await;
+    let fitting = login_body_of(16_384);
+    let over = login_body_of(16_385);
+
+    let reply = plain_exchange(running.addr, &sized_login(&fitting)).await;
+    assert_eq!(reply.status, 200);
+    let reply = plain_exchange(running.addr, &chunked_login(&fitting)).await;
+    assert_eq!(reply.status, 200);
+
+    for bytes in [sized_login(&over), chunked_login(&over)] {
+        let reply = plain_exchange(running.addr, &bytes).await;
+        assert_eq!(reply.status, 400);
+        assert_eq!(error_code(&reply), "invalid_request");
+    }
+}
+
+// A 400 for the body is not counted (management-api-v1 §2.1). With a limit of
+// 2 counted failures per source, three malformed bodies must not lock it.
+// Covers the not-counted rule only; response timing is not covered.
+/// spec: management.md:MGT-022 partial
+#[tokio::test]
+async fn malformed_login_bodies_are_not_counted_against_the_limit() {
+    let limit = LoginLimitPolicy::new(2, 2, Duration::from_secs(60), Duration::from_secs(60));
+    let running = start_with(None, ROOMY_LM, UPGRADE, session_policy(), limit).await;
+    for _ in 0..3 {
+        let reply = plain_exchange(running.addr, &sized_login("{")).await;
+        assert_eq!(reply.status, 400);
+        assert_eq!(error_code(&reply), "invalid_request");
+    }
+    let reply = plain_exchange(running.addr, &login_request(ACCOUNT, PASSWORD)).await;
+    assert_eq!(reply.status, 200);
+}
+
+#[tokio::test]
+async fn x_relay_poll_is_refused_on_login_and_logout() {
+    let running = start(None, ROOMY_LM).await;
+    let body = json!({ "account": ACCOUNT, "password": PASSWORD });
+    let reply = plain_exchange(
+        running.addr,
+        &post_json("/api/v1/session", &body, &["X-Relay-Poll: 1"]),
+    )
+    .await;
+    assert_eq!(reply.status, 400);
+    assert_eq!(error_code(&reply), "invalid_request");
+    assert!(reply.header("set-cookie").is_none(), "a refused login sets no cookie");
+
+    let login = plain_exchange(running.addr, &login_request(ACCOUNT, PASSWORD)).await;
+    let cookie = cookie_line(&login);
+    let view = plain_exchange(running.addr, &get("/api/v1/session", &[cookie.as_str()])).await;
+    let csrf = csrf_line(&view);
+    let reply = plain_exchange(
+        running.addr,
+        &request(
+            "DELETE",
+            "/api/v1/session",
+            &[cookie.as_str(), csrf.as_str(), "X-Relay-Poll: 1"],
+        ),
+    )
+    .await;
+    assert_eq!(reply.status, 400);
+    assert_eq!(error_code(&reply), "invalid_request");
+    let still = plain_exchange(running.addr, &get("/api/v1/session", &[cookie.as_str()])).await;
+    assert_eq!(still.status, 200, "a refused logout keeps the session");
+}
+
+#[tokio::test]
+async fn a_login_with_a_valid_prior_cookie_ends_that_session() {
+    let running = start(None, ROOMY_LM).await;
+    let first = plain_exchange(running.addr, &login_request(ACCOUNT, PASSWORD)).await;
+    let old = cookie_line(&first);
+    let second = plain_exchange(
+        running.addr,
+        &post_json(
+            "/api/v1/session",
+            &json!({ "account": ACCOUNT, "password": PASSWORD }),
+            &[old.as_str()],
+        ),
+    )
+    .await;
+    assert_eq!(second.status, 200);
+    let new = cookie_line(&second);
+
+    let refused = plain_exchange(running.addr, &get("/api/v1/session", &[old.as_str()])).await;
+    assert_eq!(refused.status, 401);
+    assert_eq!(error_code(&refused), "unauthenticated");
+    let kept = plain_exchange(running.addr, &get("/api/v1/session", &[new.as_str()])).await;
+    assert_eq!(kept.status, 200);
+}

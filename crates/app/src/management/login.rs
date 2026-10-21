@@ -333,4 +333,23 @@ mod tests {
         assert!(h.auth.authorize(Some(third.token.as_str())).is_ok());
         assert!(h.auth.authorize(Some(second.token.as_str())).is_ok());
     }
+
+    // Contract §2.1: a name outside the account grammar is a field error. It
+    // is refused before any password check, writes no event, and does not
+    // count against the source limit.
+    #[test]
+    fn account_outside_the_name_grammar_is_refused_and_not_counted() {
+        let h = harness();
+        let long = "x".repeat(33);
+        for name in ["Alice", "al ice", "bob!", "가나다", "ALICE", long.as_str()] {
+            let refused = h.auth.login(name, PASSWORD, peer(1), None).err();
+            assert!(refused.is_some(), "{name} is refused");
+            assert_ne!(refused, Some(AuthError::LoginFailed), "{name}");
+        }
+        assert_eq!(h.verifier.calls(), 0);
+        assert!(h.events.all().is_empty());
+        // Six refusals from one source would lock it under the default limit
+        // of 5 per source. The valid login must still get through.
+        assert!(h.auth.login("alice", PASSWORD, peer(1), None).is_ok());
+    }
 }

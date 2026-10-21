@@ -326,8 +326,10 @@ mod tests {
     use super::*;
     use std::net::IpAddr;
     use std::time::UNIX_EPOCH;
-    use vnc_relay_app::events::RejectReason;
+    use vnc_relay_app::events::{LoginFailReason, RejectReason};
+    use vnc_relay_domain::account::AccountName;
     use vnc_relay_domain::conn_id::ConnId;
+    use vnc_relay_domain::login_limit::LimitScope;
     use vnc_relay_domain::peer_ip::PeerIp;
 
     #[test]
@@ -373,5 +375,61 @@ mod tests {
         let kept = format!("\"origin\":\"{}\"", "b".repeat(256));
         assert!(text.contains(&kept), "{text}");
         assert!(!text.contains(&"b".repeat(257)), "{text}");
+    }
+
+    #[test]
+    fn admin_login_lines_carry_only_their_own_fields() {
+        // ops-info-v1 §1.8: `admin_account` is set only for a real account,
+        // and `scope` is set only for a refusal by a limit.
+        let peer_ip = || PeerIp::new(IpAddr::from([127, 0, 0, 1]));
+        let alice = AccountName::parse("alice")
+            .unwrap_or_else(|error| panic!("test account name is valid: {error}"));
+        let failed = format_line(
+            &Event::AdminLoginFailed {
+                reason: LoginFailReason::InvalidCredentials,
+                scope: None,
+                admin_account: Some(alice),
+                peer_ip: peer_ip(),
+            },
+            UNIX_EPOCH,
+        );
+        let tail = concat!(
+            "\"level\":\"warn\",\"event\":\"admin_login_failed\",",
+            "\"reason\":\"invalid_credentials\",\"admin_account\":\"alice\",",
+            "\"peer_ip\":\"127.0.0.1\"}\n",
+        );
+        assert!(failed.ends_with(tail), "{failed}");
+
+        let limited = format_line(
+            &Event::AdminLoginFailed {
+                reason: LoginFailReason::Limited,
+                scope: Some(LimitScope::Account),
+                admin_account: None,
+                peer_ip: peer_ip(),
+            },
+            UNIX_EPOCH,
+        );
+        let tail = concat!(
+            "\"level\":\"warn\",\"event\":\"admin_login_failed\",",
+            "\"reason\":\"limited\",\"scope\":\"account\",",
+            "\"peer_ip\":\"127.0.0.1\"}\n",
+        );
+        assert!(limited.ends_with(tail), "{limited}");
+
+        let lock = format_line(
+            &Event::AdminLoginLimited {
+                scope: LimitScope::Source,
+                lockout_secs: 60,
+                admin_account: None,
+                peer_ip: peer_ip(),
+            },
+            UNIX_EPOCH,
+        );
+        let tail = concat!(
+            "\"level\":\"warn\",\"event\":\"admin_login_limited\",",
+            "\"scope\":\"source\",\"lockout_secs\":60,",
+            "\"peer_ip\":\"127.0.0.1\"}\n",
+        );
+        assert!(lock.ends_with(tail), "{lock}");
     }
 }

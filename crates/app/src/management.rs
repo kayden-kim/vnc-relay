@@ -166,6 +166,11 @@ mod test_support {
         Duration::from_secs(value)
     }
 
+    /// The wall-clock time at monotonic zero in the fake clock.
+    pub fn base_wall() -> SystemTime {
+        UNIX_EPOCH + Duration::from_secs(1_700_000_000)
+    }
+
     pub fn peer(last: u8) -> PeerIp {
         PeerIp::new(IpAddr::V4(Ipv4Addr::new(192, 0, 2, last)))
     }
@@ -186,15 +191,31 @@ mod test_support {
         }
     }
 
-    /// A clock that moves only when a test sets it.
-    #[derive(Default)]
+    /// A clock that moves only when a test sets it. `set` moves the monotonic
+    /// and wall clocks together. `set_wall` moves the wall clock alone, as a
+    /// clock correction does.
     pub struct FakeClock {
         now: Mutex<Duration>,
+        wall: Mutex<SystemTime>,
+    }
+
+    impl Default for FakeClock {
+        fn default() -> Self {
+            Self {
+                now: Mutex::new(Duration::ZERO),
+                wall: Mutex::new(base_wall()),
+            }
+        }
     }
 
     impl FakeClock {
         pub fn set(&self, now: Duration) {
             *self.now.lock().unwrap_or_else(PoisonError::into_inner) = now;
+            *self.wall.lock().unwrap_or_else(PoisonError::into_inner) = base_wall() + now;
+        }
+
+        pub fn set_wall(&self, wall: SystemTime) {
+            *self.wall.lock().unwrap_or_else(PoisonError::into_inner) = wall;
         }
     }
 
@@ -204,7 +225,7 @@ mod test_support {
         }
 
         fn wall(&self) -> SystemTime {
-            UNIX_EPOCH + Duration::from_secs(1_700_000_000) + self.monotonic()
+            *self.wall.lock().unwrap_or_else(PoisonError::into_inner)
         }
     }
 
