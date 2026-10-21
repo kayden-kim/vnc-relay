@@ -405,6 +405,61 @@ async fn allowed_source_with_disallowed_origin_is_refused_with_403() {
     );
 }
 
+/// A TLS request whose Origin header has the given value.
+async fn tls_with_origin(addr: SocketAddr, origin: &str) -> Vec<u8> {
+    let line = format!("Origin: {origin}");
+    tls_head(addr, &upgrade_request("/relay", &[line.as_str()])).await
+}
+
+/// spec: websocket.md:WS-027
+#[tokio::test]
+async fn origin_must_equal_the_allowed_value_on_wss() {
+    let running = start(
+        EntryPoint::WssViewer,
+        Some(tls_acceptor()),
+        &["127.0.0.1/32"],
+        &[ALLOWED_ORIGIN],
+        UPGRADE,
+    )
+    .await;
+    let same = tls_with_origin(running.addr, ALLOWED_ORIGIN).await;
+    assert_eq!(status_of(&same), 101, "the same origin upgrades");
+    for origin in [
+        "http://a.example:8443",
+        "https://a.example:9443",
+        "https://x.a.example:8443",
+    ] {
+        let head = tls_with_origin(running.addr, origin).await;
+        assert_eq!(status_of(&head), 403, "origin {origin} is refused");
+    }
+}
+
+/// spec: websocket.md:WS-015
+#[tokio::test]
+async fn allowed_source_with_disallowed_origin_is_refused_with_403_on_wss() {
+    let running = start(
+        EntryPoint::WssViewer,
+        Some(tls_acceptor()),
+        &["127.0.0.1/32"],
+        &[ALLOWED_ORIGIN],
+        UPGRADE,
+    )
+    .await;
+    let head = tls_with_origin(running.addr, "https://evil.example").await;
+    assert_eq!(status_of(&head), 403);
+    wait_for(&running.events, |event| {
+        matches!(
+            event,
+            Event::UpgradeRejected {
+                reason: RejectReason::OriginNotAllowed,
+                origin: Some(origin),
+                ..
+            } if origin.as_str() == "https://evil.example"
+        )
+    })
+    .await;
+}
+
 /// spec: websocket.md:WS-014
 #[tokio::test]
 async fn disallowed_source_is_closed_before_tls_or_http_even_with_session_hints() {
