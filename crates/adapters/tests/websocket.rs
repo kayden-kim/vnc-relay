@@ -920,11 +920,7 @@ fn legacy_client_hello(legacy_version: [u8; 2]) -> Vec<u8> {
 
 /// Sends a ClientHello that offers only `legacy_version`. The server must send
 /// no HTTP reply and must record the version refusal at the TLS stage.
-async fn assert_legacy_hello_refused(
-    addr: SocketAddr,
-    legacy_version: [u8; 2],
-    events: &Recorder,
-) {
+async fn assert_legacy_hello_refused(addr: SocketAddr, legacy_version: [u8; 2], events: &Recorder) {
     let mut stream = TcpStream::connect(addr)
         .await
         .unwrap_or_else(|error| panic!("connect: {error}"));
@@ -1011,42 +1007,30 @@ async fn assert_client_refuses_wss_certificate(
 /// spec: websocket.md:WS-013
 #[tokio::test]
 async fn expired_untrusted_and_mismatched_certificates_fail_the_client_on_wss() {
-    assert_client_refuses_wss_certificate(
-        "expired-chain.pem",
-        "expired-key.pem",
-        |error| {
-            matches!(
-                error,
-                rustls::Error::InvalidCertificate(
-                    CertificateError::Expired | CertificateError::ExpiredContext { .. }
-                )
+    assert_client_refuses_wss_certificate("expired-chain.pem", "expired-key.pem", |error| {
+        matches!(
+            error,
+            rustls::Error::InvalidCertificate(
+                CertificateError::Expired | CertificateError::ExpiredContext { .. }
             )
-        },
-    )
+        )
+    })
     .await;
-    assert_client_refuses_wss_certificate(
-        "untrusted-chain.pem",
-        "untrusted-key.pem",
-        |error| {
-            matches!(
-                error,
-                rustls::Error::InvalidCertificate(CertificateError::UnknownIssuer)
-            )
-        },
-    )
+    assert_client_refuses_wss_certificate("untrusted-chain.pem", "untrusted-key.pem", |error| {
+        matches!(
+            error,
+            rustls::Error::InvalidCertificate(CertificateError::UnknownIssuer)
+        )
+    })
     .await;
-    assert_client_refuses_wss_certificate(
-        "other-host-chain.pem",
-        "other-host-key.pem",
-        |error| {
-            matches!(
-                error,
-                rustls::Error::InvalidCertificate(
-                    CertificateError::NotValidForName | CertificateError::NotValidForNameContext { .. }
-                )
+    assert_client_refuses_wss_certificate("other-host-chain.pem", "other-host-key.pem", |error| {
+        matches!(
+            error,
+            rustls::Error::InvalidCertificate(
+                CertificateError::NotValidForName | CertificateError::NotValidForNameContext { .. }
             )
-        },
-    )
+        )
+    })
     .await;
 }
 
