@@ -441,6 +441,7 @@ fn rejects_toml_syntax_error_and_missing_config_file_with_exit_code_3() {
 
 /// spec: operations.md:OPS-001
 /// spec: operations.md:OPS-012 partial
+/// spec: operations.md:OPS-014 partial
 #[test]
 fn refuses_to_start_without_a_usable_account_with_exit_code_5() {
     let _lock = lock_ports();
@@ -1380,6 +1381,67 @@ fn refuses_status_connections_beyond_lm_and_keeps_lm_and_l_apart() {
         std::thread::sleep(Duration::from_millis(20));
     };
     assert_eq!(answer, (200, r#"{"status":"ready"}"#.to_owned()));
+    assert!(!closed_within(&mut viewer, Duration::from_millis(100)));
+    assert!(!closed_within(&mut server, Duration::from_millis(100)));
+}
+
+/// spec: operations.md:OPS-033 partial
+/// spec: operations.md:OPS-004 partial
+#[test]
+fn refuses_management_connections_beyond_lm_and_keeps_lm_and_l_apart() {
+    let _lock = lock_ports();
+    let ports = Ports::free();
+    let config = valid_setup("management-limit", ports);
+    write(
+        &config,
+        &(entry_config(ports, r#"["127.0.0.2"]"#, r#"["127.0.0.3"]"#)
+            + "\n[limits]\nrelay_connections = 2\nwaiting = 1\nadmin_connections = 1\n"),
+    );
+    let log = config.with_file_name("relay.log");
+    // No `wait_listening`: its probe of the management port would take the one
+    // place of Lm for a moment.
+    let _guard = Guard(Some(spawn(&config)));
+    wait_for_line(&log, |line| field(line, "event") == Some("server_ready"));
+
+    // An idle management connection holds the one place of Lm.
+    let holder = connect_from([127, 0, 0, 5], ports.management);
+    let mut refused = connect_from([127, 0, 0, 6], ports.management);
+    assert!(closed_within(&mut refused, EXIT_LIMIT), "second kept");
+    let rejected = wait_for_line(&log, |line| {
+        is(line, "connection_rejected", "management", "127.0.0.6")
+    });
+    assert_eq!(field(&rejected, "reason"), Some("admin_connection_limit"));
+    assert_eq!(field(&rejected, "stage"), Some("accept"));
+    assert!(rejected.contains("\"limit\":1"), "{rejected}");
+
+    // A full Lm does not stop relay connections. The management connection
+    // takes no place of L: both places of L are still free.
+    let mut viewer = connect_from([127, 0, 0, 2], ports.tcp_viewer);
+    wait_for_line(&log, |line| {
+        is(line, "connection_accepted", "tcp_viewer", "127.0.0.2")
+    });
+    let mut server = connect_from([127, 0, 0, 3], ports.tcp_server);
+    wait_for_line(&log, |line| {
+        is(line, "connection_accepted", "tcp_server", "127.0.0.3")
+    });
+    let mut third = connect_from([127, 0, 0, 2], ports.tcp_viewer);
+    assert!(closed_within(&mut third, EXIT_LIMIT), "third kept");
+    let full = wait_for_line(&log, |line| {
+        is(line, "connection_rejected", "tcp_viewer", "127.0.0.2")
+    });
+    assert_eq!(field(&full, "reason"), Some("relay_connection_limit"));
+
+    // With Lm given back, a management request is answered again.
+    drop(holder);
+    let deadline = Instant::now() + EXIT_LIMIT;
+    let answer = loop {
+        if let Some(answer) = http_get(ports.management, "/") {
+            break answer;
+        }
+        assert!(Instant::now() < deadline, "Lm place not given back");
+        std::thread::sleep(Duration::from_millis(20));
+    };
+    assert_eq!(answer.0, 303);
     assert!(!closed_within(&mut viewer, Duration::from_millis(100)));
     assert!(!closed_within(&mut server, Duration::from_millis(100)));
 }

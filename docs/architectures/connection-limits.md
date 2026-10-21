@@ -1,6 +1,6 @@
 # 연결 상한과 시간 제한 모듈 설계
 
-중계 측 연결 상한 L, 관리·상태 연결 상한 Lm, 대기 상한 Lw를 세는 연결 예산과, TCP 진입점이 수락한 연결에 적용하는 초기 교환 시간 H·TCP keepalive(K)를 다룬다. 연결 예산은 L·Lm·Lw가 같은 타입을 쓴다. L은 TCP 진입점, Lm은 상태 리스너가 쓴다([상태 리스너와 준비 상태 모듈 설계](status-listener.md)). 관리 리스너(작업 4.2)가 같은 Lm을, Mode II 대기 등록(작업 2.9)이 Lw를 연결한다(사용자 결정 2026-10-20). 진입점의 수락 순서는 [TCP 진입점 모듈 설계](tcp-entry-point.md)가 다룬다.
+중계 측 연결 상한 L, 관리·상태 연결 상한 Lm, 대기 상한 Lw를 세는 연결 예산과, TCP 진입점이 수락한 연결에 적용하는 초기 교환 시간 H·TCP keepalive(K)를 다룬다. 연결 예산은 L·Lm·Lw가 같은 타입을 쓴다. L은 TCP 진입점, Lm은 상태 리스너와 관리 리스너가 쓴다([상태 리스너와 준비 상태 모듈 설계](status-listener.md), [관리 리스너 모듈 설계](management-listener.md)). Mode II 대기 등록(작업 2.9)이 Lw를 연결한다(사용자 결정 2026-10-20). 진입점의 수락 순서는 [TCP 진입점 모듈 설계](tcp-entry-point.md)가 다룬다.
 
 | 항목 | 값 |
 | --- | --- |
@@ -22,7 +22,7 @@
   - 보류 중 상대 종료 감지: 상대가 바이트를 보내기 전에 닫으면 `peer_eof`, 연결이 재설정되면 `connection_error`(`error_kind` = `io_error`)로 정리한다. 바이트를 소비하지 않는 `peek`로 확인한다(사용자 결정 2026-10-20).
   - K: 수락한 중계 소켓마다 TCP keepalive의 유휴 시간·탐색 간격·탐색 횟수를 설정한다.
 - 맡지 않는 책임:
-  - Lm의 판정과 거절 기록. [상태 리스너와 준비 상태 모듈 설계](status-listener.md)가 맡는다. 관리 리스너(작업 4.2)도 같은 Lm 예산을 쓴다.
+  - Lm의 판정과 거절 기록. 수락 판정은 `admission.rs`의 `AdmittingListener`가 맡고, 상태·관리 리스너가 쓴다([상태 리스너와 준비 상태 모듈 설계](status-listener.md), [관리 리스너 모듈 설계](management-listener.md)). 관리 리스너는 작업 4.2에서 같은 Lm 예산을 쓴다.
   - Lw의 사용처. 작업 2.9(대기 등록)가 같은 `ConnectionBudget`으로 연결한다. 그 전까지 Lw 예산을 만들지 않는다.
   - Mode I 대상 소켓의 L 집계. 작업 2.8이 대상 연결 전에 같은 L 예산에서 자리를 잡는다(OPS-023).
   - WS·WSS 진입점의 L 집계와 U. 작업 3.2가 맡는다.
@@ -104,7 +104,7 @@ H가 먼저 지나면 5~6단계 대신 `handshake_timeout`(`warn`)으로, 서버
 | 선택 | 이유 | 검토한 다른 방법 | 근거 |
 | --- | --- | --- | --- |
 | 출발지 IP를 L보다 먼저 판정한다. | 목록 밖 출발지는 자리를 쓰지 않고, L이 찼는지도 알 수 없다. 코드 지도 4절 1단계의 순서와 같다. | L을 먼저 확인. 목록 밖 출발지가 상한 상태를 알게 된다. | [운영 정보 계약 1.5절](../contracts/ops-info-v1.md#15-사건-목록) `connection_accepted` 조건 |
-| L·Lm·Lw를 같은 `ConnectionBudget` 타입으로 센다. 예산은 사용처가 생길 때 만든다(L은 2.5, Lm은 2.6). | 세 상한의 규칙(상한까지 잡고, 끝나면 반환하고, 서로 독립)이 같다. 사용처가 없는 예산을 미리 만들지 않는다. | 상한마다 다른 타입, 2.5에서 Lm·Lw 예산까지 만들기 | 사용자 결정 2026-10-20 |
+| L·Lm·Lw를 같은 `ConnectionBudget` 타입으로 센다. 예산은 사용처가 생길 때 만든다(L은 2.5, Lm은 2.6, 관리 리스너의 Lm 사용은 4.2). | 세 상한의 규칙(상한까지 잡고, 끝나면 반환하고, 서로 독립)이 같다. 사용처가 없는 예산을 미리 만들지 않는다. | 상한마다 다른 타입, 2.5에서 Lm·Lw 예산까지 만들기 | 사용자 결정 2026-10-20 |
 | 자리 수는 `AtomicU32`의 비교·교환으로 센다. | 잠금 없이 상한을 지킨다. domain은 외부 crate를 쓰지 않는다. | `tokio::sync::Semaphore`. domain이 tokio에 의존하게 된다. | [코드 지도 레이어 표](code-map.md#레이어와-의존-방향) |
 | 작업 2.7 전의 보류 연결에도 H를 적용한다. | TCP 연결은 수락 직후 초기 교환 상태다. 보류를 서버 종료까지 두면 L 자리가 돌아오지 않는다. | 서버 종료까지 보류(작업 2.4의 방식) | 사용자 결정 2026-10-20 |
 | 보류 중 상대 종료는 `peek`로 확인한다. | 바이트를 소비하지 않아 작업 2.7의 초기 교환이 같은 바이트를 읽을 수 있다. 바이트가 오면 확인을 멈추므로 바쁜 반복이 없다. | H 만료까지 기다리기. 떠난 클라이언트의 자리가 H 동안 남는다. | 사용자 결정 2026-10-20 |
@@ -121,6 +121,7 @@ H가 먼저 지나면 5~6단계 대신 `handshake_timeout`(`warn`)으로, 서버
 | --- | --- | --- | --- |
 | 작업 2.5 변경(기준 커밋 `c89beb4` + 작업 트리) | Ubuntu 24.04.4(WSL2), Rust 1.99.1 | 1~4절의 파일·심볼과 실제 코드를 대조했다. 예산은 `crates/domain/src/budget.rs` 단위 테스트 3건, keepalive 값은 `crates/adapters/src/net.rs` 단위 테스트, 줄 필드는 `crates/adapters/tests/ops_info_contract.rs`, L·H·상대 종료 처리는 `tests/serve.rs`의 `refuses_relay_connections_beyond_l_and_accepts_again_after_a_release`·`tells_a_peer_close_from_an_initial_exchange_that_outlives_h`로 확인했다([운영 정보 계약의 계약 테스트 실행 기록](../contracts/ops-info-v1.md#계약-테스트-실행-기록)). | 통과 |
 | Windows 실행(기준 커밋 `e1cfc4f` + Windows 경고 수정) | Windows 11 Pro 10.0.26200, Rust 1.99.1(`x86_64-pc-windows-msvc`) | `tests/serve.rs`의 `refuses_relay_connections_beyond_l_and_accepts_again_after_a_release`·`tells_a_peer_close_from_an_initial_exchange_that_outlives_h`, `budget` 단위 테스트 3건이 통과했다. keepalive 설정 호출은 오류 없이 끝났다. 설정한 값을 읽어 확인하는 단위 테스트는 Linux 전용이라 실행하지 않았다. | 통과 |
+| 작업 4.2 변경(기준 커밋 `ead7be0` + 작업 트리): 관리 리스너의 Lm 사용 | Ubuntu 24.04.4(WSL2)·Windows 11 Pro 10.0.26200, Rust 1.99.1 | 2·4절과 `crates/domain/src/budget.rs` 사용처를 대조했다. `tests/serve.rs`의 `refuses_management_connections_beyond_lm_and_keeps_lm_and_l_apart`가 두 환경에서 통과했다. | 통과 |
 
 ## 9. 미결정 사항
 

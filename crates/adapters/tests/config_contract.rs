@@ -886,6 +886,7 @@ allow_targets = [
     assert_eq!(settings.mode1.allow_targets, Some(TargetPolicy::default()));
 }
 
+/// spec: operations.md:OPS-034 partial
 #[test]
 fn allows_plaintext_management_only_on_loopback() {
     let config = |management: &str| {

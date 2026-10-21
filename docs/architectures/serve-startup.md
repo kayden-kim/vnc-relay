@@ -7,7 +7,7 @@
 | 구조 시점 | Current |
 | 문서 상태 | Draft |
 | 구현 대조 | Verified — [대조 기록](#대조-기록) |
-| 코드 위치 | `src/main.rs`, `src/cli.rs`, `src/serve.rs`, `crates/domain/src/account.rs`, `crates/app/src/accounts.rs`, `crates/app/src/settings.rs`(`ListenerPlan`, `Settings::status_listener`, `Settings::other_listeners`), `crates/adapters/src/accounts_file.rs`, `crates/adapters/src/net.rs`, `crates/adapters/src/tls.rs`, `crates/adapters/src/toml_text.rs` |
+| 코드 위치 | `src/main.rs`, `src/cli.rs`, `src/serve.rs`, `crates/domain/src/account.rs`, `crates/app/src/accounts.rs`, `crates/app/src/settings.rs`(`ListenerPlan`, `Settings::status_listener`, `Settings::management_listener`, `Settings::other_listeners`), `crates/adapters/src/accounts_file.rs`, `crates/adapters/src/management_http.rs`, `crates/adapters/src/net.rs`, `crates/adapters/src/tls.rs`, `crates/adapters/src/toml_text.rs` |
 | 코드 지도 | [코드 지도 2절](code-map.md#2-코드-위치와-구성요소) |
 | 관련 스펙 | [운영 스펙 3.1절](../specs/operations.md#31-설정-검증과-시작), OPS-001, OPS-002(일부), OPS-039(일부) |
 | 관련 계약 | [CLI 계약](../contracts/cli-v1.md) 1.1·1.3·1.4·1.5·1.8·2절, [설정 계약 2.1절](../contracts/config-v1.md#21-설정-오류와-준비-실패), [운영 정보 계약](../contracts/ops-info-v1.md) 1.5·1.6절(시작·종료 사건)·[1.12절](../contracts/ops-info-v1.md#112-상태-리스너와-엔드포인트)(상태 리스너를 먼저 연다) |
@@ -29,13 +29,13 @@
   - `admin` 하위 명령의 실행. [관리자 계정 준비 CLI 모듈 설계](admin-accounts.md)가 맡는다.
   - 파일 변경 감지 준비(시작 순서 3단계, `watch_unavailable`). 작업 5.1·5.2가 맡는다(사용자 결정 2026-10-20).
   - 준비 상태, `server_ready`, 상태 리스너의 응답. [상태 리스너와 준비 상태 모듈 설계](status-listener.md)가 맡는다. 이 문서는 5·6단계에서 그 기능을 부르는 순서만 다룬다.
-  - WS·WSS·관리 리스너의 연결 수락. 작업 3.2(WS·WSS), 4.2(관리)가 바인드한 리스너에 붙인다. 그 전까지 이 리스너는 바인드만 하고 연결을 받지 않는다(사용자 결정 2026-10-20). TCP 진입점의 수락은 작업 2.4가 붙였다([TCP 진입점 모듈 설계](tcp-entry-point.md)). 상태 리스너의 수락은 작업 2.6이 붙였다.
+  - WS·WSS 리스너의 연결 수락. 작업 3.2가 바인드한 리스너에 붙인다. 그 전까지 이 리스너는 바인드만 하고 연결을 받지 않는다(사용자 결정 2026-10-20). 관리 리스너의 연결 수락은 작업 4.2가 붙였다([관리 리스너 모듈 설계](management-listener.md)). TCP 진입점의 수락은 작업 2.4가 붙였다([TCP 진입점 모듈 설계](tcp-entry-point.md)). 상태 리스너의 수락은 작업 2.6이 붙였다.
   - 종료 유예 G, 두 번째 종료 요청, 세션 정리. 작업 5.3이 맡는다.
   - 비밀번호 규칙(`Password`)은 [관리자 계정 준비 CLI 모듈 설계](admin-accounts.md)가 맡는다. 로그인 때 비밀번호 해시 검증은 작업 4.3이 맡는다.
 - 다른 모듈에 공개하는 기능:
   - `vnc_relay_domain::account::{Account, AccountName, AccountNameError, PasswordHash, PasswordHashError, Argon2Params, Argon2ParamsError}`
   - `vnc_relay_app::accounts::{ACCOUNTS_FILE_KEY, AccountsError, AccountsDiagnostic, AccountsWarning, LoadedAccounts, require_any}`
-  - `vnc_relay_app::settings::{ListenerPlan, Settings::status_listener, Settings::other_listeners}`
+  - `vnc_relay_app::settings::{ListenerPlan, Settings::status_listener, Settings::management_listener, Settings::other_listeners}`
   - `vnc_relay_adapters::accounts_file::{load, parse}`
   - `vnc_relay_adapters::net::{bind, bind_one, BindFailure, BoundListener}`
 
@@ -51,10 +51,11 @@ flowchart LR
     SERVE -->|"2 호출"| ACC["adapters accounts_file.rs<br/>load"]
     ACC -->|"호출"| DACC["domain account.rs<br/>AccountName·PasswordHash"]
     SERVE -->|"2 호출"| REQ["app accounts.rs<br/>require_any"]
-    SERVE -->|"4 호출"| PLAN["app settings.rs<br/>Settings::status_listener, other_listeners"]
+    SERVE -->|"4 호출"| PLAN["app settings.rs<br/>Settings::status_listener, management_listener, other_listeners"]
     SERVE -->|"4 호출"| NET["adapters net.rs<br/>bind_one, bind"]
     SERVE -->|"4 호출"| TLS["adapters tls.rs<br/>load_acceptor"]
     SERVE -->|"상태 리스너 바인드 뒤 시작"| STATUS["adapters status_http.rs<br/>StatusListener::run"]
+    SERVE -->|"준비됨 뒤 시작"| MGMT["adapters management_http.rs<br/>ManagementListener::run"]
     SERVE -->|"바인드 뒤 시작, 종료 알림"| EP["adapters net.rs<br/>TcpEntryPoint::run"]
     SERVE -->|"단계마다 Event"| LOG["adapters ops_log.rs<br/>JsonLinesEventSink"]
     SERVE -->|"진단 출력"| CLI
@@ -73,7 +74,7 @@ flowchart LR
 | `crates/domain/src/account.rs` `Account` | 이름과 해시 한 쌍 | 계정 파일을 읽을 때, 호출한 쪽이 소유 | 위 두 타입 |
 | `crates/app/src/accounts.rs` `AccountsError`, `AccountsDiagnostic`, `AccountsWarning` | 계정 파일 오류 코드 5종(`accounts_file_missing`·`accounts_file_unreadable`·`accounts_file_invalid`·`accounts_hash_below_minimum`·`accounts_none`)과 경고 `accounts_file_permissive`, 진단 한 건(`error`, `key`, `message`) | 값 타입 | domain |
 | `crates/app/src/accounts.rs` `require_any` | 계정이 하나도 없으면 `accounts_none` 진단을 준다(운영 스펙 3.1절 5). | `serve` 2단계 | domain |
-| `crates/app/src/settings.rs` `ListenerPlan`, `Settings::status_listener`, `Settings::other_listeners` | 바인드할 리스너 계획. `status_listener`는 상태 리스너 하나, `other_listeners`는 관리, 켠 진입점(`tcp_viewer`, `tcp_server`, `ws_viewer`, `wss_viewer`) 순서다. 각 항목은 리스너 이름, 설정 키(`status.listen` 등), 주소, 진입점이다. | 4단계 | domain |
+| `crates/app/src/settings.rs` `ListenerPlan`, `Settings::status_listener`, `Settings::management_listener`, `Settings::other_listeners` | 바인드할 리스너 계획. `status_listener`는 상태 리스너 하나, `management_listener`는 관리 리스너 하나(`management.listen`), `other_listeners`는 켠 진입점(`tcp_viewer`, `tcp_server`, `ws_viewer`, `wss_viewer`) 순서다. 각 항목은 리스너 이름, 설정 키(`status.listen` 등), 주소, 진입점이다. | 4단계 | domain |
 | `crates/adapters/src/accounts_file.rs` `load`, `parse` | 파일 읽기, UTF-8 확인, TOML 해석, `version`·`[[account]]` 키 검사, 중복 이름 검사, 해시 하한·상한 판정, Ubuntu 권한 경고. 모든 진단을 모은다. `LoadedAccounts`(app `accounts.rs`)를 돌려준다. | 호출마다 | toml, domain, app |
 | `crates/adapters/src/net.rs` `bind`, `bind_one`, `BindFailure`, `BoundListener` | `bind_one`은 `ListenerPlan` 하나를 tokio `TcpListener::bind`로 바인드한다. `bind`는 계획마다 `bind_one`을 부르고, 실패도 계속 시도해 모두 모은다. 하나라도 실패하면 성공한 리스너를 닫고 실패 목록을 돌려준다. 성공하면 계획과 리스너 쌍(`BoundListener`)을 돌려준다. 실패 원인은 주소를 뺀 한국어 문장이다. | 4단계 | tokio, app |
 | `crates/adapters/src/toml_text.rs` `error_position` | TOML 구문 오류의 행·열. 설정 파일과 계정 파일이 함께 쓴다. 파일 내용은 돌려주지 않는다. | 호출마다 | toml |
@@ -106,15 +107,15 @@ flowchart LR
 | 2 | `src/serve.rs` `run`, `config_file::load`, `JsonLinesEventSink::open` | 설정을 읽고 검증한다. 진단이 있으면 모두 쓰고 표준 출력에 진단마다 `startup_failed`를 쓴 뒤 3으로 끝난다. 로그 출력을 연다. 열 수 없으면 `log_file_unavailable`로 3. 열면 `server_starting`과 설정 경고를 기록한다. | `Settings`, 로그 출력 | 3단계 |
 | 3 | `accounts_file::load`, `accounts::require_any` | `settings.admin.accounts_file`을 읽고 검증한다. 경고는 stderr에 쓴다. 진단이 있거나 계정이 없으면 모두 쓰고, 진단마다 `startup_failed`를 기록하고, 5로 끝난다. | `LoadedAccounts` | 4단계 |
 | 4 | `src/serve.rs` `run`, `ShutdownSignal::register`, `listen_until_shutdown`(TLS 검사) | tokio 다중 스레드 런타임을 만들고 종료 신호 처리기를 등록한다. 실패하면 `runtime_unavailable`로 1. 이어 활성화된 WSS 진입점과 관리 리스너의 인증서·개인키를 `tls::load_acceptor`로 검사한다(`tls_checks`). 검사 대상을 모두 확인한 뒤 실패가 하나라도 있으면, 실패한 파일마다 `error[tls_file_invalid] key=<키>`를 쓰고 `startup_failed`(`config_key`, `listener`)를 기록한 뒤 3으로 끝난다. 키는 `relay.wss_viewer.cert_file`·`relay.wss_viewer.key_file`·`management.cert_file`·`management.key_file` 가운데 하나이고, `listener`는 WSS 진입점 이름 또는 `management`다. 통과한 acceptor는 `listen_until_shutdown`이 가진다. | 런타임, 신호 처리기, 검사 통과 acceptor | 5단계 |
-| 5 | `Settings::status_listener`, `net::bind_one`, `Settings::other_listeners`, `net::bind` | 상태 리스너를 먼저 바인드해 `StatusListener::run`을 띄운다. 그 뒤 나머지를 목록 순서대로 바인드한다([상태 리스너와 준비 상태 모듈 설계 4절](status-listener.md#4-처리-순서)). 두 번째 프로세스는 모든 주소가 사용 중이라 실패 목록을 받는다. 실패가 있으면 성공한 리스너를 닫고 상태 리스너 작업을 멈춘다. 실패한 리스너마다 `error[listener_bind_failed] key=<설정 키>`를 쓰고 `startup_failed`(`listener`, `config_key`, `detail`)를 기록한 뒤 4로 끝난다. 첫 프로세스의 소켓에는 손대지 않는다. | 바인드한 리스너, 상태 리스너 작업 | 6단계 |
-| 6 | `listen_until_shutdown`, `ShutdownSignal::wait` | 준비됨으로 바꾸고 `server_ready`를 기록한다. `ConnectionBudget::new(limits.relay_connections)`로 L 예산을 만든다. TCP 진입점 리스너마다 `TcpEntryPoint::run`을 띄우고 첫 종료 요청까지 기다린다([연결 상한과 시간 제한 모듈 설계 4절](connection-limits.md#4-처리-순서)). 받으면 종료 중으로 바꾸고, 종료를 알리고, 진입점 작업이 모두 끝나기를 기다린다([TCP 진입점 모듈 설계 4절](tcp-entry-point.md#4-처리-순서)). 그 뒤 나머지 리스너를 닫고 상태 리스너 작업을 멈추고 `server_stopped`를 기록한 뒤 런타임을 끝낸다. | 준비 상태, L 예산 | 종료 코드 0 |
+| 5 | `Settings::status_listener`, `net::bind_one`, `Settings::management_listener`, `Settings::other_listeners`, `net::bind` | 상태 리스너를 먼저 바인드해 `StatusListener::run`을 띄운다. 그 뒤 관리 리스너를 바인드한다(작업 4.2). 그 뒤 나머지를 목록 순서대로 바인드한다([상태 리스너와 준비 상태 모듈 설계 4절](status-listener.md#4-처리-순서)). 두 번째 프로세스는 모든 주소가 사용 중이라 실패 목록을 받는다. 실패가 있으면 성공한 리스너를 닫고 상태 리스너 작업을 멈춘다. 실패한 리스너마다 `error[listener_bind_failed] key=<설정 키>`를 쓰고 `startup_failed`(`listener`, `config_key`, `detail`)를 기록한 뒤 4로 끝난다. 첫 프로세스의 소켓에는 손대지 않는다. | 바인드한 리스너, 상태 리스너 작업 | 6단계 |
+| 6 | `listen_until_shutdown`, `ShutdownSignal::wait` | 준비됨으로 바꾸고 `server_ready`를 기록한다. 관리 리스너를 `ManagementListener::new`로 감싸 `ManagementListener::run`을 띄운다(작업 4.2). `ConnectionBudget::new(limits.relay_connections)`로 L 예산을 만든다. TCP 진입점 리스너마다 `TcpEntryPoint::run`을 띄우고 첫 종료 요청까지 기다린다([연결 상한과 시간 제한 모듈 설계 4절](connection-limits.md#4-처리-순서)). 받으면 종료 중으로 바꾸고, 종료를 알리고, 진입점 작업이 모두 끝나기를 기다린다([TCP 진입점 모듈 설계 4절](tcp-entry-point.md#4-처리-순서)). 그 뒤 나머지 리스너를 닫고, 관리 리스너 작업을 멈추고, 상태 리스너 작업을 멈춘 뒤 `server_stopped`를 기록하고 런타임을 끝낸다. | 준비 상태, L 예산 | 종료 코드 0 |
 
 ## 5. 상태와 초기화
 
 - 초기화 시점: 런타임과 신호 처리기는 계정 파일 검증이 끝난 뒤 만든다. 앞 단계에서 실패하면 스레드를 만들지 않는다.
 - 상태 소유자와 제거 시점: `Settings`·계정 목록·리스너는 `serve::run`이 소유한다. 상태 리스너는 바인드 뒤 `StatusListener`가, TCP 진입점 리스너는 `TcpEntryPoint`가 넘겨받는다. 함수가 끝나면 모두 닫힌다. 프로세스 사이에 공유하는 상태는 없다(ADR-0003).
 - 동시 실행과 순서: 바인드는 한 번에 하나씩 한다. 상태 리스너가 처음이고, 바인드 직후부터 응답한다([운영 정보 계약 1.12절](../contracts/ops-info-v1.md#112-상태-리스너와-엔드포인트)).
-- TLS acceptor: 검사를 통과한 것만 `listen_until_shutdown`이 `_tls_acceptors`로 든다. 3.2·4.2 작업이 리스너에 붙이기 전까지 쓰지 않으며, 함수가 끝나면 버린다.
+- TLS acceptor: 검사를 통과한 것만 쓴다. 관리 리스너의 acceptor는 `management_tls`로 들어가 `ManagementListener::new`에 넘긴다(작업 4.2). WSS acceptor는 `_wss_acceptors`로 들고, 작업 3.2가 붙이기 전까지 쓰지 않으며 함수가 끝나면 버린다.
 
 ## 6. 오류 처리
 
@@ -159,6 +160,7 @@ flowchart LR
 | Windows 실행(기준 커밋 `e1cfc4f` + Windows 경고 수정) | Windows 11 Pro 10.0.26200, Rust 1.99.1(`x86_64-pc-windows-msvc`) | `tests/serve.rs` 12건이 통과했다. `second_instance_fails_with_exit_code_4_and_leaves_the_first_running`으로 같은 주소의 두 번째 프로세스가 `listener_bind_failed`·종료 코드 4로 끝나고 첫 프로세스의 리스너가 남는 것을 확인했다. 종료 신호 테스트는 Unix 신호를 쓰므로 실행하지 않았다. | 통과 |
 | 작업 3.1 변경(작업 트리): 시작 때 TLS 파일 검사, `tls::load_acceptor` | Windows 11 Pro 10.0.26200, Rust 1.99.1(`x86_64-pc-windows-msvc`) | 1·4·6절과 `src/serve.rs`의 `listen_until_shutdown`·`tls_checks`·`tls_failure`를 대조했다. `tests/serve.rs`의 `fails_with_exit_code_3_when_wss_key_does_not_match`·`fails_with_exit_code_3_when_management_certificate_is_missing`이 종료 코드 3으로 끝나는 것을 확인했다. `checks_tls_files_before_binding_a_taken_status_port`는 상태 포트가 이미 점유된 상태에서 TLS 파일 오류가 바인드 실패(종료 코드 4)보다 먼저 보고되는 것을 확인했다. 종료 신호 테스트는 Unix 신호를 쓰므로 실행하지 않았다. OPS-007(`closes_and_logs_every_held_connection_when_stopping`)은 `cfg(unix)`라 Windows에서 실행하지 않았다. | 통과 |
 | 작업 3.1 변경(작업 트리): 시작 때 TLS 파일 검사, `tls::load_acceptor` | Ubuntu 24.04.4(WSL2), Rust 1.99.1 | 1·4·6절과 `src/serve.rs`의 `listen_until_shutdown`·`tls_checks`·`tls_failure`를 대조했다. `tests/serve.rs` 21건이 모두 통과했다. 상태 포트가 점유된 경우의 TLS 파일 오류 종료 코드 3은 `checks_tls_files_before_binding_a_taken_status_port`로 확인했다. | 통과 |
+| 작업 4.2 변경(기준 커밋 `ead7be0` + 작업 트리): 관리 리스너 바인드 순서, 준비됨 뒤 수락 시작, 종료 순서 | Ubuntu 24.04.4(WSL2)·Windows 11 Pro 10.0.26200, Rust 1.99.1 | 1·4·5·6절과 `src/serve.rs`의 `listen_until_shutdown`·`stop_task`를 대조했다. `tests/serve.rs`의 `refuses_management_connections_beyond_lm_and_keeps_lm_and_l_apart`·`refuses_to_start_without_a_usable_account_with_exit_code_5`가 두 환경에서 통과했다. | 통과 |
 
 ## 9. 미결정 사항
 

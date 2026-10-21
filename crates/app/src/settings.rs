@@ -254,15 +254,21 @@ impl Settings {
         }
     }
 
-    /// Listeners bound after the status listener, in bind order:
-    /// management, then the enabled entry points.
-    pub fn other_listeners(&self) -> Vec<ListenerPlan> {
-        let mut plans = vec![ListenerPlan {
+    /// The management listener, bound after the status listener and before
+    /// the entry points (management-api-v1 §1.1).
+    pub fn management_listener(&self) -> ListenerPlan {
+        ListenerPlan {
             name: "management",
             key: "management.listen",
             addr: self.management.listen,
             entry_point: None,
-        }];
+        }
+    }
+
+    /// Listeners bound after the status and management listeners, in bind
+    /// order: the enabled entry points.
+    pub fn other_listeners(&self) -> Vec<ListenerPlan> {
+        let mut plans = Vec::new();
         for entry_point in EntryPoint::ALL {
             let settings = self.relay.get(entry_point);
             if let Some(addr) = settings.listen.filter(|_| settings.enabled) {

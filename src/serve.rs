@@ -11,6 +11,7 @@ use std::task::Poll;
 use tokio::sync::watch;
 use tokio::task::JoinSet;
 use vnc_relay_adapters::accounts_file::HashFloor;
+use vnc_relay_adapters::management_http::ManagementListener;
 use vnc_relay_adapters::net::{AcceptPolicy, BindFailure, TcpEntryPoint};
 use vnc_relay_adapters::ops_log::JsonLinesEventSink;
 use vnc_relay_adapters::status_http::StatusListener;
@@ -122,12 +123,15 @@ async fn listen_until_shutdown(settings: &Settings, log: Arc<dyn EventSink>) -> 
 
     // TLS identity files of the enabled WSS entry point and of the management
     // listener are checked before any listener is bound (cli-v1 §1.8). The
-    // acceptors of passing checks stay alive until 3.2 and 4.2 attach them.
-    let mut _tls_acceptors = Vec::new();
+    // management acceptor goes to its task. The WSS acceptors stay alive until
+    // 3.2 attaches them.
+    let mut management_tls = None;
+    let mut _wss_acceptors = Vec::new();
     let mut tls_failed = false;
     for check in tls_checks(settings) {
         match tls::load_acceptor(&check.files.cert_file, &check.files.key_file) {
-            Ok(acceptor) => _tls_acceptors.push(acceptor),
+            Ok(acceptor) if check.listener == "management" => management_tls = Some(acceptor),
+            Ok(acceptor) => _wss_acceptors.push(acceptor),
             Err(error) => {
                 tls_failed = true;
                 tls_failure(log.as_ref(), &check, &error);
@@ -141,6 +145,7 @@ async fn listen_until_shutdown(settings: &Settings, log: Arc<dyn EventSink>) -> 
     // Lm, shared by the status listener and the management listener (4.2).
     let admin_budget = ConnectionBudget::new(settings.limits.admin_connections);
     let status_plan = settings.status_listener();
+    let management_plan = settings.management_listener();
 
     // The status listener answers before the others are bound, so a query
     // during the start sees `starting` (ops-info-v1 §1.12).
@@ -159,6 +164,13 @@ async fn listen_until_shutdown(settings: &Settings, log: Arc<dyn EventSink>) -> 
             None
         }
     };
+    let management = match net::bind_one(management_plan).await {
+        Ok(bound) => Some(bound),
+        Err(failure) => {
+            failures.push(failure);
+            None
+        }
+    };
     let listeners = match net::bind(&settings.other_listeners()).await {
         Ok(listeners) => listeners,
         Err(others) => {
@@ -168,21 +180,30 @@ async fn listen_until_shutdown(settings: &Settings, log: Arc<dyn EventSink>) -> 
     };
     if !failures.is_empty() {
         drop(listeners);
-        stop_status(status_task).await;
+        drop(management);
+        stop_task(status_task).await;
         report_bind_failures(log.as_ref(), &failures);
         return ExitCode::from(EXIT_LISTENER);
     }
 
     lifecycle.mark_ready();
     let ready = std::iter::once(&status_plan)
+        .chain(management.iter().map(|bound| &bound.plan))
         .chain(listeners.iter().map(|bound| &bound.plan))
         .map(|plan| (plan.name, plan.addr))
         .collect();
     log.record(&Event::ServerReady { listeners: ready });
 
-    // TCP entry points accept from here on. Other listeners stay bound
-    // without accepting until their tasks (3.2, 4.2) attach to them.
-    // Every relay entry point takes places from one L.
+    // The management listener accepts from here on.
+    let management_task = management.map(|bound| {
+        let listener =
+            ManagementListener::new(bound.listener, management_tls, Arc::clone(&admin_budget));
+        tokio::spawn(listener.run(Arc::clone(&log)))
+    });
+
+    // The TCP entry points accept from here on. The WebSocket listeners stay
+    // bound without accepting until 3.2 attaches their tasks. Every relay entry
+    // point takes places from one L.
     let relay_budget = ConnectionBudget::new(settings.limits.relay_connections);
     let (stop, stopped) = watch::channel(false);
     let mut entry_points = JoinSet::new();
@@ -217,14 +238,15 @@ async fn listen_until_shutdown(settings: &Settings, log: Arc<dyn EventSink>) -> 
     stop.send_replace(true);
     while entry_points.join_next().await.is_some() {}
     drop(idle);
-    stop_status(status_task).await;
+    stop_task(management_task).await;
+    stop_task(status_task).await;
     log.record(&Event::ServerStopped);
     ExitCode::SUCCESS
 }
 
-/// Stops the status listener and waits until its listener is closed.
-/// Status connections still open close when the runtime ends.
-async fn stop_status(task: Option<tokio::task::JoinHandle<()>>) {
+/// Stops an admin listener task and waits until its listener is closed.
+/// Admin connections still open close when the runtime ends.
+async fn stop_task(task: Option<tokio::task::JoinHandle<()>>) {
     if let Some(task) = task {
         task.abort();
         // The result is the cancellation that `abort` asked for.

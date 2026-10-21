@@ -54,6 +54,7 @@ impl Phase {
 pub enum Stage {
     Accept,
     InitialExchange,
+    Tls,
 }
 
 impl Stage {
@@ -61,6 +62,7 @@ impl Stage {
         match self {
             Self::Accept => "accept",
             Self::InitialExchange => "initial_exchange",
+            Self::Tls => "tls",
         }
     }
 }
@@ -76,6 +78,9 @@ pub enum RejectReason {
     /// Every place of the management and status connection limit Lm is
     /// held.
     AdminConnectionLimit { limit: u32 },
+    /// The client offered no TLS 1.2 or later. The connection closes with
+    /// no plaintext fallback (OPS-036).
+    TlsVersionUnsupported,
 }
 
 impl RejectReason {
@@ -84,13 +89,14 @@ impl RejectReason {
             Self::IpNotAllowed => "ip_not_allowed",
             Self::RelayConnectionLimit { .. } => "relay_connection_limit",
             Self::AdminConnectionLimit { .. } => "admin_connection_limit",
+            Self::TlsVersionUnsupported => "tls_version_unsupported",
         }
     }
 
     /// The `limit` field: the configured limit that refused the connection.
     pub fn limit(self) -> Option<u32> {
         match self {
-            Self::IpNotAllowed => None,
+            Self::IpNotAllowed | Self::TlsVersionUnsupported => None,
             Self::RelayConnectionLimit { limit } | Self::AdminConnectionLimit { limit } => {
                 Some(limit)
             }

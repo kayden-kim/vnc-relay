@@ -2,11 +2,14 @@
 //! (docs/architectures/code-map.md, layer "adapters").
 
 pub mod accounts_file;
+mod admission;
 pub mod config_file;
 pub mod crypto;
+pub mod management_http;
 pub mod net;
 pub mod ops_log;
 pub mod status_http;
 pub mod terminal;
 pub mod tls;
+mod tls_listener;
 mod toml_text;

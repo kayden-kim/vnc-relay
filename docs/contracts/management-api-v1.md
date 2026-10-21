@@ -14,7 +14,7 @@
 | 기준 스펙 | [관리 조회와 세션 종료](../specs/management.md), [운영 대시보드 화면](../specs/dashboard.md). L·Lm·E·P 등 매개변수 정의는 [운영 스펙 2절](../specs/operations.md#2-상태와-검증-매개변수)을 따른다. |
 | 관련 요구사항 | [PRD](../requirements/PRD.md) FR-06, FR-08(비밀 비노출), 7절 보안 경계, AC-09·AC-10·AC-19~AC-21 |
 | 호환성 범위 | 경로 접두사 `/api/v1/`. 같은 릴리스의 서버와 내장 대시보드. HTTPS 관리 리스너와 평문 HTTP 루프백 관리 리스너. |
-| 관련 테스트 | [관리 스펙 7절](../specs/management.md#7-수용-테스트) MGT-001~MGT-027, [화면 스펙 7절](../specs/dashboard.md#7-수용-테스트) DASH-001~DASH-023, [운영 스펙 7절](../specs/operations.md#7-수용-테스트) OPS-043. 계약 테스트 파일은 아직 없다(5절). |
+| 관련 테스트 | [관리 스펙 7절](../specs/management.md#7-수용-테스트) MGT-001~MGT-027, [화면 스펙 7절](../specs/dashboard.md#7-수용-테스트) DASH-001~DASH-023, [운영 스펙 7절](../specs/operations.md#7-수용-테스트) OPS-043. 계약 테스트는 작업 4.2의 `crates/adapters/tests/management.rs`만 있다(5절). |
 
 관련 문서: [설정 계약](config-v1.md)(`[dashboard]`·`[limits]`·`[recent_closed]`·`[timeouts]`·`[management]` 키와 기본값·범위), [CLI·계정 파일 계약](cli-v1.md)(계정명 규칙), [운영 정보 계약](ops-info-v1.md)(`session_id`·종료 사건 로그, 상태 리스너), [WebSocket 중계 계약](websocket-relay-v1.md)(관리자 종료의 Close 4005), [ADR-0001 내장 TLS](../decisions/ADR-0001-built-in-tls.md), [ADR-0003 단일 인스턴스·메모리 상태](../decisions/ADR-0003-single-instance-memory-state.md).
 
@@ -517,23 +517,23 @@ X-CSRF-Token: <csrf-token>
 {"error": {"code": "not_found", "message": "지정한 세션을 찾을 수 없습니다."}}
 ```
 
-계약 테스트 위치는 아직 없다. 아래 표는 Producer와 Consumer가 만들 계약 테스트가 확인할 규칙을 기존 스펙 시나리오에 연결한다. 이 표는 테스트가 있다는 증거가 아니다. 결과와 증거는 [검증 기록](../AGENTS.md#검증-기록)을 따른다. 스펙과 같은 테스트는 해당 시나리오의 기록을 연결한다.
+계약 테스트 위치는 작업 4.2의 `crates/adapters/tests/management.rs`만 있다. 나머지 행의 위치는 해당 작업에서 채운다. 아래 표는 Producer와 Consumer가 만들 계약 테스트가 확인할 규칙을 기존 스펙 시나리오에 연결한다. 이 표는 테스트가 있다는 증거가 아니다. 결과와 증거는 [검증 기록](../AGENTS.md#검증-기록)을 따른다. 스펙과 같은 테스트는 해당 시나리오의 기록을 연결한다.
 
 | 주체·테스트 위치 | 확인할 계약 규칙 | 결과 | 실행 기록 |
 | --- | --- | --- | --- |
 | Producer / 통합(미생성) | 1.2절의 경로·메서드·상태 코드로 서버 요약·대기·활성 목록·상세를 조회하고 집계와 목록이 일치한다. [MGT-001](../specs/management.md#7-수용-테스트)·[MGT-002](../specs/management.md#7-수용-테스트)·[MGT-003](../specs/management.md#7-수용-테스트)·[MGT-016](../specs/management.md#7-수용-테스트) | 미실행 | 구현·테스트 파일 없음 |
 | Producer / 단위·통합(미생성) | 시각은 UTC ISO 8601(`Z`, 밀리초 3자리), 전송량은 바이트 정수, 방향 고정, 새 세션 카운터 분리, 경과 시간이 음수가 아니다. [MGT-003](../specs/management.md#7-수용-테스트)·[MGT-005](../specs/management.md#7-수용-테스트)·[MGT-006](../specs/management.md#7-수용-테스트)·[MGT-007](../specs/management.md#7-수용-테스트) | 미실행 | 구현·테스트 파일 없음 |
 | Producer / 통합(미생성) | 빈 성공(`200`·`items: []`)과 조회 오류(`500 internal`)를 구분한다. [MGT-004](../specs/management.md#7-수용-테스트) | 미실행 | 구현·테스트 파일 없음 |
-| Producer / 보안 통합(미생성) | 로그인 성공 뒤 쿠키 속성(HTTPS는 Secure·HttpOnly·SameSite=Strict, 평문 루프백은 Secure 없음), 틀린 로그인은 `login_failed`이고 세션을 발급하지 않는다. [MGT-017](../specs/management.md#7-수용-테스트)·[MGT-018](../specs/management.md#7-수용-테스트) | 미실행 | 구현·테스트 파일 없음 |
+| Producer / 보안 통합(일부 생성) | 로그인 성공 뒤 쿠키 속성(HTTPS는 Secure·HttpOnly·SameSite=Strict, 평문 루프백은 Secure 없음), 틀린 로그인은 `login_failed`이고 세션을 발급하지 않는다. [MGT-017](../specs/management.md#7-수용-테스트)·[MGT-018](../specs/management.md#7-수용-테스트) | 미실행 | MGT-017 부분: `management.rs`의 `stale_session_cookie_is_cleared_without_secure_over_plain_http`. 로그인 뒤 쿠키 속성과 틀린 로그인은 작업 4.3이 맡는다. |
 | Producer / 보안 통합(미생성) | 로그인 제한 중 올바른 비밀번호도 `login_failed`이고, 계정이 있을 때와 없을 때 응답이 같다. [MGT-022](../specs/management.md#7-수용-테스트) | 미실행 | 구현·테스트 파일 없음 |
-| Producer / 보안 통합(미생성) | 쿠키 없음·만료·로그아웃·재시작 뒤 쿠키는 모두 `401 unauthenticated`이고 중계는 유지된다. [MGT-008](../specs/management.md#7-수용-테스트)·[MGT-019](../specs/management.md#7-수용-테스트)·[MGT-020](../specs/management.md#7-수용-테스트)·[MGT-021](../specs/management.md#7-수용-테스트)·[MGT-027](../specs/management.md#7-수용-테스트) | 미실행 | 구현·테스트 파일 없음 |
+| Producer / 보안 통합(일부 생성) | 쿠키 없음·만료·로그아웃·재시작 뒤 쿠키는 모두 `401 unauthenticated`이고 중계는 유지된다. [MGT-008](../specs/management.md#7-수용-테스트)·[MGT-019](../specs/management.md#7-수용-테스트)·[MGT-020](../specs/management.md#7-수용-테스트)·[MGT-021](../specs/management.md#7-수용-테스트)·[MGT-027](../specs/management.md#7-수용-테스트) | 미실행 | 쿠키 없는 요청의 401은 `management.rs`의 `plaintext_api_requests_are_refused_without_a_session`이 평문 루프백에서 확인했다(OPS-034 부분). 만료·로그아웃·재시작·중계 유지 규칙의 테스트는 없다. |
 | Producer / 보안 통합(미생성) | CSRF 토큰 없는 종료·로그아웃은 `403 csrf_invalid`이고 상태가 그대로다. [MGT-014](../specs/management.md#7-수용-테스트) | 미실행 | 구현·테스트 파일 없음 |
 | Producer / 보안 통합(미생성) | `X-Relay-Poll: 1` 요청은 유휴 만료를 연장하지 않고, 헤더 없는 사용자 행동 요청은 연장하며, Sa는 활동과 관계없이 무효로 만든다. [MGT-025](../specs/management.md#7-수용-테스트) | 미실행 | 구현·테스트 파일 없음 |
 | Producer / 통합(미생성) | 종료 유예 중 로그인·`summary` 조회·세션 종료 요청이 모두 처리되고 `server.state`가 `shutdown_grace`다. [OPS-043](../specs/operations.md#7-수용-테스트) | 미실행 | 구현·테스트 파일 없음 |
 | Producer / 통합(미생성) | 종료 결과 구분(`terminated`·`already_closed`·`404 not_found`·`terminate_failed`), 지정한 세션만 종료, 이전 `session_id`는 새 세션에 영향이 없다. [MGT-009](../specs/management.md#7-수용-테스트)·[MGT-010](../specs/management.md#7-수용-테스트)·[MGT-011](../specs/management.md#7-수용-테스트)·[MGT-012](../specs/management.md#7-수용-테스트) | 미실행 | 구현·테스트 파일 없음 |
 | Producer / 단위·통합(미생성) | 최근 종료 목록의 필드·종료 원인 여섯 값·`max_entries` 초과 시 제거·재시작 뒤 빈 목록, 종료된 `session_id`의 상세·종료는 `404`다. [MGT-023](../specs/management.md#7-수용-테스트)·[MGT-024](../specs/management.md#7-수용-테스트) | 미실행 | 구현·테스트 파일 없음 |
 | Producer / 통합(미생성) | 서버 요약의 초기 교환 중·대상 연결 중 연결 수와 L·Lm 사용량·상한이 실제와 일치하고, 읽지 못한 값은 `null`과 사유로 준다. [MGT-026](../specs/management.md#7-수용-테스트) | 미실행 | 구현·테스트 파일 없음 |
-| Producer / 보안 통합(미생성) | 오류 본문과 응답에 비밀·원시 스트림이 없고, 상대 주소는 실제 소켓 주소다. [MGT-013](../specs/management.md#7-수용-테스트)·[MGT-015](../specs/management.md#7-수용-테스트) | 미실행 | 구현·테스트 파일 없음 |
+| Producer / 보안 통합(미생성) | 오류 본문과 응답에 비밀·원시 스트림이 없고, 상대 주소는 실제 소켓 주소다. [MGT-013](../specs/management.md#7-수용-테스트)·[MGT-015](../specs/management.md#7-수용-테스트) | 미실행 | 이 규칙의 테스트 없음. MGT-015는 4.3~4.6 완료 조건에 없어 소유 작업이 없다([관리 리스너 모듈 설계 9절](../architectures/management-listener.md#9-미결정-사항) Q8). |
 | Consumer / 화면 E2E(미생성) | 응답 필드를 현지 시각·KiB/MiB로 표시하고, 확인 불가 값을 0으로 표시하지 않는다. [DASH-001](../specs/dashboard.md#7-수용-테스트)·[DASH-006](../specs/dashboard.md#7-수용-테스트)·[DASH-020](../specs/dashboard.md#7-수용-테스트)·[DASH-021](../specs/dashboard.md#7-수용-테스트) | 미실행 | 구현·테스트 파일 없음 |
 | Consumer / 화면 E2E(미생성) | 빈 성공과 조회 실패를 구분하고, 실패 뒤 재조회로 복구한다. [DASH-002](../specs/dashboard.md#7-수용-테스트)·[DASH-003](../specs/dashboard.md#7-수용-테스트)·[DASH-004](../specs/dashboard.md#7-수용-테스트) | 미실행 | 구현·테스트 파일 없음 |
 | Consumer / 화면 E2E(미생성) | 세션 정보의 `dashboard.poll_secs`로 폴링하고, 조회 제한 시간을 넘으면 실패로 처리하며, 같은 조회를 겹치지 않는다. [DASH-005](../specs/dashboard.md#7-수용-테스트)·[DASH-016](../specs/dashboard.md#7-수용-테스트)·[DASH-022](../specs/dashboard.md#7-수용-테스트) | 미실행 | 구현·테스트 파일 없음 |
@@ -554,4 +554,4 @@ X-CSRF-Token: <csrf-token>
 - 계정명의 허용 문자와 길이는 [CLI 계약 1.2절](cli-v1.md#12-계정-이름과-비밀번호-규칙)이 정한다. 로그인 본문 한도 16 KiB와 종료 대기 여유 5초도 채택 범위다.
 - 스펙 시나리오가 직접 다루지 않는 오류가 있다. 형식이 잘못된 요청(`invalid_request` 중 본문·필드 오류), 알 수 없는 경로와 허용되지 않는 메서드(`404`·`405`)다. 이 계약은 가장 가까운 시나리오(DASH-018·MGT-013·MGT-025)와 화면 스펙 5절에 연결했다. 대응 시나리오는 스펙에 없으며 사용자가 추가하지 않기로 했다(2026-10-16). 계약 본문의 해당 응답 정의는 유지한다.
 - 종료 원인 `close_cause`의 값은 여섯 개이며 [관리 스펙 2.3절](../specs/management.md#23-최근-종료-목록)·PRD FR-06의 종료 원인 목록과 같다. 프로세스가 끝나면 목록도 사라지므로 `server_shutdown` 항목이 실제로 조회되는지는 구현에서 확인해야 한다.
-- 계약 테스트 파일·CI 실행 기록이 없다. 구현과 테스트 파일이 생기면 5절 표의 테스트 위치와 결과를 채운다.
+- 계약 테스트는 작업 4.2의 `crates/adapters/tests/management.rs`만 있다. CI 실행 기록은 없다. 나머지 테스트 파일이 생기면 5절 표의 테스트 위치와 결과를 채운다.
