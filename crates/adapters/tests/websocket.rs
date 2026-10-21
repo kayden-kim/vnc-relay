@@ -15,16 +15,17 @@ use rustls::crypto::aws_lc_rs;
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, ServerName};
 use rustls::version::{TLS12, TLS13};
-use rustls::{ClientConfig, RootCertStore, SupportedProtocolVersion};
+use rustls::{CertificateError, ClientConfig, RootCertStore, SupportedProtocolVersion};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpSocket, TcpStream};
 use tokio::sync::watch;
 use tokio::time::timeout;
 use tokio_rustls::{TlsAcceptor, TlsConnector};
+use vnc_relay_adapters::management_http::ManagementListener;
 use vnc_relay_adapters::net::AcceptPolicy;
 use vnc_relay_adapters::tls;
 use vnc_relay_adapters::websocket::{WsEntryPoint, WsPolicy};
-use vnc_relay_app::events::{AbortReason, Event, RejectReason, Stage};
+use vnc_relay_app::events::{AbortReason, ConnectionErrorKind, Event, RejectReason, Stage};
 use vnc_relay_app::ports::EventSink;
 use vnc_relay_app::settings::KeepaliveSettings;
 use vnc_relay_domain::allow_list::{AllowList, IpItem};
@@ -274,12 +275,21 @@ async fn plain_head(addr: SocketAddr, request: &[u8]) -> Vec<u8> {
 
 /// Sends a request over TLS and reads the reply head.
 async fn tls_head(addr: SocketAddr, request: &[u8]) -> Vec<u8> {
+    tls_head_with(addr, &[&TLS12, &TLS13], request).await
+}
+
+/// Sends a request over TLS, offering only `versions`, and reads the reply head.
+async fn tls_head_with(
+    addr: SocketAddr,
+    versions: &[&'static SupportedProtocolVersion],
+    request: &[u8],
+) -> Vec<u8> {
     let tcp = TcpStream::connect(addr)
         .await
         .unwrap_or_else(|error| panic!("connect: {error}"));
     let name =
         ServerName::try_from("localhost").unwrap_or_else(|error| panic!("server name: {error}"));
-    let mut stream = connector(&[&TLS12, &TLS13])
+    let mut stream = connector(versions)
         .connect(name, tcp)
         .await
         .unwrap_or_else(|error| panic!("TLS handshake: {error}"));
@@ -865,5 +875,218 @@ async fn head_completed_after_u_gets_no_answer() {
             )
         })
         .await;
+    }
+}
+
+/// Starts a management listener on loopback with the given TLS acceptor. Returns
+/// its address and what it records. Lm is 8 and U is `UPGRADE`.
+async fn start_management(tls: Option<TlsAcceptor>) -> (SocketAddr, Arc<Recorder>) {
+    let listener = TcpListener::bind("127.0.0.1:0")
+        .await
+        .unwrap_or_else(|error| panic!("loopback bind: {error}"));
+    let addr = listener
+        .local_addr()
+        .unwrap_or_else(|error| panic!("local address: {error}"));
+    let events = Arc::new(Recorder::default());
+    let log: Arc<dyn EventSink> = events.clone();
+    let budget = ConnectionBudget::new(8);
+    tokio::spawn(ManagementListener::new(listener, tls, budget, UPGRADE).run(log));
+    (addr, events)
+}
+
+/// The lowest `width` big-endian bytes of `value`.
+fn be_bytes(value: usize, width: usize) -> Vec<u8> {
+    value.to_be_bytes()[std::mem::size_of::<usize>() - width..].to_vec()
+}
+
+/// A TLS record with a ClientHello that offers `legacy_version`, no extensions,
+/// and one cipher suite. Both TLS listeners must refuse it.
+fn legacy_client_hello(legacy_version: [u8; 2]) -> Vec<u8> {
+    let mut body = Vec::new();
+    body.extend_from_slice(&legacy_version);
+    body.extend_from_slice(&[0x5A; 32]); // random
+    body.push(0); // legacy_session_id: empty
+    body.extend_from_slice(&[0x00, 0x02, 0x00, 0x2F]); // TLS_RSA_WITH_AES_128_CBC_SHA
+    body.extend_from_slice(&[0x01, 0x00]); // compression methods: null
+    body.extend_from_slice(&[0x00, 0x00]); // extensions: none
+    let mut handshake = vec![0x01]; // msg_type: client_hello
+    handshake.extend_from_slice(&be_bytes(body.len(), 3));
+    handshake.extend_from_slice(&body);
+    let mut record = vec![0x16, 0x03, 0x01]; // handshake record
+    record.extend_from_slice(&be_bytes(handshake.len(), 2));
+    record.extend_from_slice(&handshake);
+    record
+}
+
+/// Sends a ClientHello that offers only `legacy_version`. The server must send
+/// no HTTP reply and must record the version refusal at the TLS stage.
+async fn assert_legacy_hello_refused(
+    addr: SocketAddr,
+    legacy_version: [u8; 2],
+    events: &Recorder,
+) {
+    let mut stream = TcpStream::connect(addr)
+        .await
+        .unwrap_or_else(|error| panic!("connect: {error}"));
+    stream
+        .write_all(&legacy_client_hello(legacy_version))
+        .await
+        .unwrap_or_else(|error| panic!("hello is sent: {error}"));
+    let mut reply = Vec::new();
+    let closed = timeout(PROMPT, stream.read_to_end(&mut reply)).await;
+    assert!(closed.is_ok(), "the refused hello closes within {PROMPT:?}");
+    assert!(
+        !reply.starts_with(b"HTTP/"),
+        "no plaintext reply to a refused hello, got {:?}",
+        String::from_utf8_lossy(&reply)
+    );
+    wait_for(events, |event| {
+        matches!(
+            event,
+            Event::ConnectionRejected {
+                reason: RejectReason::TlsVersionUnsupported,
+                stage: Stage::Tls,
+                ..
+            }
+        )
+    })
+    .await;
+}
+
+/// Starts a WSS entry point with the certificate in `chain` and `key`, then
+/// runs a client that trusts only the test root CA. The client must fail with a
+/// rustls error that `expected` accepts. The server must record the failure at
+/// the TLS stage, and the same port must answer no plaintext request.
+async fn assert_client_refuses_wss_certificate(
+    chain: &str,
+    key: &str,
+    expected: fn(&rustls::Error) -> bool,
+) {
+    let acceptor = tls::load_acceptor(&fixture(chain), &fixture(key))
+        .unwrap_or_else(|error| panic!("{chain} loads: {error}"));
+    let running = start(
+        EntryPoint::WssViewer,
+        Some(acceptor),
+        &["127.0.0.1/32"],
+        &[],
+        UPGRADE,
+    )
+    .await;
+    let tcp = TcpStream::connect(running.addr)
+        .await
+        .unwrap_or_else(|error| panic!("connect: {error}"));
+    let name =
+        ServerName::try_from("localhost").unwrap_or_else(|error| panic!("server name: {error}"));
+    let error = connector(&[&TLS12, &TLS13])
+        .connect(name, tcp)
+        .await
+        .err()
+        .unwrap_or_else(|| panic!("{chain}: the verifying client must refuse the certificate"));
+    let cause = error
+        .get_ref()
+        .and_then(|inner| inner.downcast_ref::<rustls::Error>());
+    assert!(
+        cause.is_some_and(expected),
+        "{chain}: the client fails on the certificate, got {error:?}"
+    );
+    wait_for(&running.events, |event| {
+        matches!(
+            event,
+            Event::ConnectionAborted {
+                stage: Stage::Tls,
+                reason: AbortReason::ConnectionError(ConnectionErrorKind::TlsFailed),
+                ..
+            }
+        )
+    })
+    .await;
+    let reply = refused(running.addr, &upgrade_request("/relay", &[])).await;
+    assert!(
+        !reply.starts_with(b"HTTP/"),
+        "{chain}: no plaintext reply on the WSS port, got {:?}",
+        String::from_utf8_lossy(&reply)
+    );
+}
+
+/// spec: websocket.md:WS-013
+#[tokio::test]
+async fn expired_untrusted_and_mismatched_certificates_fail_the_client_on_wss() {
+    assert_client_refuses_wss_certificate(
+        "expired-chain.pem",
+        "expired-key.pem",
+        |error| {
+            matches!(
+                error,
+                rustls::Error::InvalidCertificate(
+                    CertificateError::Expired | CertificateError::ExpiredContext { .. }
+                )
+            )
+        },
+    )
+    .await;
+    assert_client_refuses_wss_certificate(
+        "untrusted-chain.pem",
+        "untrusted-key.pem",
+        |error| {
+            matches!(
+                error,
+                rustls::Error::InvalidCertificate(CertificateError::UnknownIssuer)
+            )
+        },
+    )
+    .await;
+    assert_client_refuses_wss_certificate(
+        "other-host-chain.pem",
+        "other-host-key.pem",
+        |error| {
+            matches!(
+                error,
+                rustls::Error::InvalidCertificate(
+                    CertificateError::NotValidForName | CertificateError::NotValidForNameContext { .. }
+                )
+            )
+        },
+    )
+    .await;
+}
+
+/// spec: operations.md:OPS-036
+#[tokio::test]
+async fn tls10_and_tls11_are_refused_and_tls12_and_tls13_succeed_on_wss_and_management() {
+    // Each refused hello gets fresh listeners, so every log entry belongs to one hello.
+    for legacy_version in [[0x03, 0x01], [0x03, 0x02]] {
+        let wss = start(
+            EntryPoint::WssViewer,
+            Some(tls_acceptor()),
+            &["127.0.0.1/32"],
+            &[],
+            UPGRADE,
+        )
+        .await;
+        assert_legacy_hello_refused(wss.addr, legacy_version, &wss.events).await;
+        let (management, events) = start_management(Some(tls_acceptor())).await;
+        assert_legacy_hello_refused(management, legacy_version, &events).await;
+    }
+
+    // TLS 1.2 and TLS 1.3 clients complete the handshake on both listeners.
+    let wss = start(
+        EntryPoint::WssViewer,
+        Some(tls_acceptor()),
+        &["127.0.0.1/32"],
+        &[],
+        UPGRADE,
+    )
+    .await;
+    let (management, _) = start_management(Some(tls_acceptor())).await;
+    let session = request("/api/v1/session", &["Cookie: relay_admin_session=stale"]);
+    for versions in [&[&TLS12][..], &[&TLS13][..]] {
+        let head = tls_head_with(wss.addr, versions, &upgrade_request("/relay", &[])).await;
+        assert_eq!(status_of(&head), 101, "WSS answers the upgrade");
+        let head = tls_head_with(management, versions, &session).await;
+        assert_eq!(
+            status_of(&head),
+            401,
+            "management answers the unauthenticated request"
+        );
     }
 }
