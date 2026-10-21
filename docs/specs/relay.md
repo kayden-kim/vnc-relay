@@ -164,7 +164,7 @@ IP 목록 재로드는 [운영 스펙](operations.md#33-파일-변경-자동-감
 
 | ID | 항목 | 영향과 제약 | 확정 위치 |
 | --- | --- | --- | --- |
-| RLY-TBD-001 | 실제 UltraVNC 검증 버전 고정 | Windows 11 x64·Ubuntu 24.04 LTS x64와 Mode I·II는 확정. 검증 시작 시 공식 최신 안정판 각 구성요소를 고정하고 배포본·환경 기록. 현재 Server·Viewer 1.8.3.0, Repeater(Windows) 1.6.0.0 고정. Repeater(Ubuntu 24.04) 버전 미확정 | [호환성 검증 기록](../contracts/repeater-compat-record.md)과 PRD |
+| RLY-TBD-001 | 실제 UltraVNC 검증 버전 고정 | Windows 11 x64·Ubuntu 24.04 LTS x64와 Mode I·II는 확정. 검증 시작 시 공식 최신 안정판 각 구성요소를 고정하고 배포본·환경 기록. 현재 Server·Viewer 1.8.3.0, Repeater(Windows) 1.6.0.0 고정(사용자 결정 2026-10-22 (Q20): 공식 표기 1.4.0.0과 다름을 기록). Repeater(Ubuntu 24.04)는 고정 보류(사용자 결정 2026-10-22 (Q19))이며 버전이 미확정이어서 이 항목은 아직 열려 있다 | [호환성 검증 기록](../contracts/repeater-compat-record.md)과 PRD |
 | RLY-TBD-002 | 초기 메시지·대상 문법·ID 비교·오류 형식 | 바이트·길이·전송 순서를 추정하지 않음. 계약 초안(Draft)은 관찰 증거 전까지 구현 기준이 아님 | [Repeater 초기 교환 v1](../contracts/repeater-handshake-v1.md) 6절의 관찰 절차와 증거 기록 |
 | RLY-TBD-003 | 대기·활성 ID 중복 정책 | 후발 거절은 초안 제안이며 실제 제품과의 차이 명시 필요 | PRD와 이 문서 3.3절, [Repeater 초기 교환 v1](../contracts/repeater-handshake-v1.md) |
 
