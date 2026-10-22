@@ -138,6 +138,11 @@ function checkFieldError(root, field, copyKey, label) {
 function checkLayout(label) {
   const page = document.documentElement;
   check(`${label}: no horizontal scroll`, page.scrollWidth <= page.clientWidth);
+  const card = document.querySelector('.login-card');
+  const language = document.querySelector('#login-language');
+  check(`${label}: shared card has a divided heading and body`, !!card?.querySelector('.card-head + .card-body'));
+  check(`${label}: language select aligns with the card right edge`, !!card && !!language
+    && Math.abs(card.getBoundingClientRect().right - language.getBoundingClientRect().right) < 1);
 }
 
 async function caseDash017() {
@@ -290,6 +295,7 @@ async function caseDash027() {
   check('DASH-027 server error: not the sign-in failure notice', !shownNotices(root).includes('failed'));
   check('DASH-027 server error: button enabled for a retry', !refs(root).submit.disabled);
   check('DASH-027 server error: password kept for a retry', refs(root).password.value === 'pw');
+  check('DASH-027 server error: focus returns to submit for a retry', document.activeElement === refs(root).submit);
 
   // No response at all.
   root = await mount({
@@ -302,6 +308,8 @@ async function caseDash027() {
   submit(root);
   await tick();
   checkNotice(root, 'DASH-027 no response', 'request-failed');
+  check('DASH-027 no response: password kept for a retry', refs(root).password.value === 'pw');
+  check('DASH-027 no response: focus returns to submit for a retry', document.activeElement === refs(root).submit);
 
   // Time limit: the request waits until the page aborts it.
   root = await mount({
@@ -316,6 +324,8 @@ async function caseDash027() {
   submit(root);
   await wait(80);
   checkNotice(root, 'DASH-027 time limit', 'request-failed');
+  check('DASH-027 time limit: password kept for a retry', refs(root).password.value === 'pw');
+  check('DASH-027 time limit: focus returns to submit for a retry', document.activeElement === refs(root).submit);
 
   // Duplicate sending: the second submit is ignored while the first request waits.
   const calls = [];

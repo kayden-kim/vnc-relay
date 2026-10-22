@@ -52,7 +52,6 @@ const STRINGS = {
 const LANGUAGE_LABEL = '언어 (Language)';
 // Each language is named in its own language.
 const LANGUAGE_NAMES = { ko: '한국어', en: 'English' };
-const BRAND_NAME = 'VNC Relay'; // CPY-003
 
 // Each notice is an alert: its tone and the copy key of its title.
 // The key is also set as data-notice on the alert.
@@ -200,21 +199,28 @@ export function mountLogin(root, deps = {}) {
     void submit();
   });
 
+  // Only the brand mark sits above the card, as in the mockup. The product name is in the card title (CPY-006).
   const brandMark = el('span', 'login-mark');
   brandMark.append(icon('brand'));
   const brand = el('div', 'login-brand');
-  brand.append(brandMark, el('span', 'login-brand-text', BRAND_NAME));
+  brand.append(brandMark);
 
   const top = el('div', 'login-top');
   top.append(languageSelect);
 
-  const card = el('section', 'login-card');
+  // The title row has a divider below it, as in the mockup. The body holds the notice and the form.
+  const head = el('header', 'card-head');
+  head.append(title);
+  const body = el('div', 'card-body');
+  body.append(notices, form);
+
+  const card = el('section', 'card login-card');
   card.setAttribute('aria-labelledby', 'login-title');
-  card.append(title, notices, form);
+  card.append(head, body);
 
   const main = el('main', 'login-main');
-  main.append(brand, card);
-  root.replaceChildren(top, main);
+  main.append(top, brand, card);
+  root.replaceChildren(main);
 
   /** Shows the notice for `state.notice`. The node is replaced only when the kind changes. */
   function renderNotice(copy) {
@@ -299,6 +305,9 @@ export function mountLogin(root, deps = {}) {
     update();
     if (status === 401) {
       passwordInput.focus();
+    } else {
+      // Disabling submit removes focus in Chromium. Restore it for an explicit retry.
+      submitButton.focus();
     }
   }
 

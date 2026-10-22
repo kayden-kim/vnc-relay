@@ -12,6 +12,7 @@
 .login-top {
   display: flex;
   justify-content: flex-end;
+  width: min(100%, var(--space-login-max));
 }
 
 .login-main {
@@ -20,7 +21,7 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: var(--space-xl);
+  gap: var(--space-lg);
   padding: var(--space-xl) 0;
 }
 
@@ -41,20 +42,8 @@
   color: var(--color-navbar-brand);
 }
 
-.login-brand-text {
-  font-family: var(--type-body-strong-family);
-  font-size: var(--type-body-strong-size);
-  font-weight: var(--type-body-strong-weight);
-  line-height: var(--type-body-strong-line);
-}
-
 .login-card {
   width: min(100%, var(--space-login-max));
-  padding: var(--space-xl);
-  background: var(--color-card);
-  border: var(--space-border-width) solid var(--color-border);
-  border-radius: var(--radius-xl);
-  box-shadow: 0 var(--space-shadow-y) var(--space-shadow-blur) var(--color-shadow);
 }
 
 .login-title {
@@ -65,15 +54,14 @@
   line-height: var(--type-heading-page-line);
 }
 
-.login-notices {
-  margin-top: var(--space-lg);
+.login-notices:not(:empty) {
+  margin-bottom: var(--space-lg);
 }
 
 .login-form {
   display: flex;
   flex-direction: column;
   gap: var(--space-lg);
-  margin-top: var(--space-lg);
 }
 
 .login-form > .button {
