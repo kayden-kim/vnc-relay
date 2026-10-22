@@ -75,12 +75,6 @@
   display: none;
 }
 
-.summary-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(var(--space-label-col), 1fr));
-  gap: var(--space-md);
-}
-
 .fact-label {
   margin: 0;
   color: var(--color-muted-foreground);

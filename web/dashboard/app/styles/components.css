@@ -792,6 +792,12 @@
   grid-column: span 12;
 }
 
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-md);
+}
+
 .fact-list {
   margin: 0;
 }
@@ -812,6 +818,14 @@
   .span-6,
   .span-8 {
     grid-column: span 12;
+  }
+
+  .summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .summary-grid > :nth-child(-n + 2) {
+    grid-column: 1 / -1;
   }
 
   .fact {
