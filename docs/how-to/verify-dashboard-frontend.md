@@ -353,54 +353,54 @@
 ### 4.7 검토 기록 (작업 4.11 세션 상세, 2026-10-22)
 
 - 검토자: 에이전트 Dash411(작업 위임: Main). 사람의 검토가 아니다. 사람 검토는 작업 4.12에서 한다.
-- 구현: 세션 상세 `web/dashboard/app/session.js`, 해시 라우터 `router.js`, 공통 셸 `shell.js`, 조회 상태 `query.js`, 대화상자 Tab 순환 `components/dialog.js`. 시험 페이지는 `tests/session.html`(`session-scenarios.js`)과 `tests/router.html`(`router-scenarios.js`)이다.
-- 환경: Windows 10.0.26200 x64, PowerShell, Rust 1.99.1. 시험 브라우저는 헤드리스 Chrome이다. 버전은 이 기록에서 확인하지 않았다(4.8절: Chrome 155.0.8059.84).
-- 기준과 커밋: 기준 커밋 `7294d96`(4.10 기록). 구현 `172764a`, 시험 `9a35adf`, 문서 `5368dec`. 아래 명령과 상태 캡처는 커밋 전 작업 트리에서 얻었다. 최종 게이트는 `5368dec`에서 다시 돌렸다(기록 끝).
-- 명령과 결과:
-  - `cargo fmt --all`: 종료 코드 0.
-  - `cargo xtask tokens`, `cargo xtask tokens --check`: 통과.
-  - `vr-win.ps1 -Only check`: `ALL PASSED (check)`.
-  - `cargo test --test dashboard_assets`: 시험 2개 통과.
-  - `cargo test --test dashboard_browser`: 시험 31개 통과, 실패 0. 바이트·레이아웃 수정 전 실행이다.
-  - 수정 뒤 `cargo test --test dashboard_browser -- session_ router_`: 시험 12개 통과, 실패 0.
-- 상태 캡처(3.4): SCR-001 목록, SCR-002 상세·대화상자·실패, SCR-003 로그인 × ko·en × 6폭 = 60장. `target/dashboard-shots/scr/<폭>/<언어>-<상태>.png`, 보고서 `scr/report.json`. 가로 넘침 0, CSP 위반 0, 페이지 오류 0, 클릭 실패 0. 이 60장은 바이트·레이아웃 수정 전에 찍었다.
-- 시안 대조(3.4, 1280 ko): 목업 프레임 `scr002-normal`, `scr002-dialog`를 `target/dashboard-shots/compare/mock-scr002-*-1280.png`로 찍어 구현 캡처와 나란히 봤다. 차이 4건은 아래 "남은 차이"에 적었다.
-- 고친 것:
-  - 바이트 행 누락: DASH-006과 스펙 117행의 방향별 바이트(`Viewer->대상`, `대상->Viewer`)가 없었다. `createStat` 항목으로 넣었다.
-  - 요약 값 줄바꿈: 28px 지표 크기에서 값이 어색하게 줄바꿈됐다. `app.css`의 `.session-facts .stat-value`로 범위를 좁혀 고쳤다. SCR-001의 `.stat-value`는 바꾸지 않았다.
-  - `세션 undefined`: `session.js`가 상태에 세션 `id`를 저장하지 않아 제목과 종료 본문에 `undefined`가 나왔다. 저장하도록 고쳤다.
-  - 대화상자 Tab 누출(DASH-015): 탐침에서 `종료 확인`에 포커스가 있을 때 Tab이 `body`로 나갔다. `components/dialog.js`의 keydown이 Tab·Shift+Tab을 두 단추 사이에서 돌린다. 시험 `DASH-015: Tab wraps…`(`session-scenarios.js`)는 합성 keydown이라 핸들러만 확인한다. 수정 뒤 네이티브 Tab 키로는 다시 확인하지 않았다.
-  - 포커스 복귀의 처음 실패는 점검 아티팩트였다: `b.click()`은 포커스를 주지 않는다. `focus()`와 Enter로 다시 보니 Escape와 키보드 취소 뒤 포커스가 `세션 종료`로 돌아왔다(ko·en).
-- 수정 뒤 확인:
-  - ko 1280: `dash-006` `pass`, CSP 위반 0. 바이트 `Viewer->대상` 1.5 KiB, `대상->Viewer` 1.0 MiB. 캡처 `compare/impl-dash006-ko-1280.png`를 봤다. 값이 줄바꿈 없이 읽힌다.
-  - ko 390, ko 320: `pass`, 가로 넘침 0(측정). 캡처 `compare/impl-dash006-ko-390.png`, `impl-dash006-ko-320.png`는 측정만 했고 육안으로 보지 않았다.
-  - en은 따로 찍지 않았다. 바이트 표시는 언어와 무관하다(스펙 153–154행). 두 언어는 `session_`·`router_` 시험 12개 안에서 돈다.
-- 남은 차이(시안 1280 ko, 구현 판단, 해소하지 않음):
-  1. 배치: 시안은 전송량을 정보 카드 옆 별도 카드로 둔다. 스펙 99–109행 ASCII는 `목록으로`를 왼쪽 위, `세션 종료`를 본문 아래 줄에 둔다. 구현은 상단 `page-actions` 줄에 `목록으로`·`상태 재조회`·`세션 종료`를 둔다. `page-head`가 SCR-001과 공유되어 SCR-002만 바꿀 수 없다.
-  2. 모드: 시안은 배지 칩, 구현은 평문이다.
-  3. 주소와 전송량: 시안은 monospace 주소와 dt/dd 목록, 구현은 `.stat` 카드다.
-  4. 상태 행: 구현은 `상태`(`stateLabel`, 구현 판단, 개요 15절 Q3)에 `active`를 보인다. 시안에는 상태 행이 없다.
-- 접근성과 포커스(자동 대체, 청취 아님):
-  - 포커스 표시: 포커스를 받을 수 있는 모든 요소에 `outline: solid 2px`, `offset 2px`. 색은 측정값만 적는다(상단 막대 rgb(255,255,255), 본문 rgb(18,53,43)). 토큰 `colors.ring`·`colors.navbar-ring`과 대조하지 않았고 대비 비율도 계산하지 않았다.
+- 구현: 세션 상세 `web/dashboard/app/session.js`, 패널 `panels.js`(`pageHead`, `panelCard`, `peerCell`), 복사 `copy.js`, 스타일 `app.css`, 해시 라우터 `router.js`, 공통 셸 `shell.js`, 조회 상태 `query.js`, 대화상자 Tab 순환 `components/dialog.js`. 시험 페이지는 `tests/session.html`(`session-scenarios.js`)과 `tests/router.html`(`router-scenarios.js`)이다.
+- 환경: Windows 10.0.26200 x64, PowerShell, Rust 1.99.1. WSL Ubuntu에서도 같은 게이트를 돌렸다. 시험 브라우저는 헤드리스 Chrome이다. 버전은 이 기록에서 확인하지 않았다(4.8절: Chrome 155.0.8059.84).
+- 기준과 커밋: 기준 `7294d96`(4.10 기록). 1차 구현 `172764a`, 시험 `9a35adf`, 문서 `5368dec`. 수정 라운드(SCR-002 개정): 구현 `e9fb429`, 스타일 `d88665c`, 시험 `db08863`, 문서 `8975537`(개요·TODO). 최종 게이트는 `8975537`에서 돌렸다(아래). 이 기록 커밋은 문서만 바꾼다.
+- 1차 명령 결과(`5368dec`): `cargo fmt --all` 종료 0. `cargo xtask tokens --check` 통과. `vr-win.ps1 -Only check` ALL PASSED(check). `dashboard_assets` 2 통과. `dashboard_browser` 31 통과(바이트·레이아웃 수정 전). 수정 뒤 `session_`·`router_` 12 통과.
+- 수정 라운드 명령 결과: `vr-win.ps1 -Only all`과 `vr-full.sh`가 빌드, `fmt`, clippy, 레이어 검사, `tokens --check`, 전체 시험, 시나리오 보고서, `deny`를 모두 돌렸다. 결과는 아래 "최종 HEAD 게이트".
+- 상태 캡처(3.4): 1차 캡처는 SCR-001 목록, SCR-002 상세·대화상자·실패, SCR-003 로그인 × ko·en × 6폭 = 60장이며 바이트·레이아웃 수정 전에 찍었다. 수정 라운드에서 SCR-002 정상·대화상자 × 1280·390·320 × ko·en 12장을 `target/dashboard-shots/scr/<폭>/<언어>-scr002-<normal|dialog>.png`로 다시 찍었다. 1차 SCR-002 캡처(`*-scr2-*.png`)와 `compare/impl-dash006-*.png`는 지웠다. `scr/report.json`의 SCR-002 항목은 새로 썼다. SCR-001과 SCR-003은 이 라운드에서 다시 찍지 않았다.
+- 재촬영 12장 측정(`dash-serve` 127.0.0.1:8765, 코드 `db08863`): 가로 넘침 0, 넘치는 요소 0, CSP 위반 0, 페이지 오류 0, `lang` 일치, 제목 `VNC Relay 세션 sess_1`/`VNC Relay Session sess_1`. `.fact` 열 수는 1280에서 2, 390·320에서 1. 방향 표식은 장마다 2개(10×10px, `rgb(98,182,200)`, `rgb(79,180,136)`). 종료 아이콘은 12장 모두 있고 라벨은 `세션 종료`/`Terminate session`이다.
+- 시안 대조(3.4, 1280 ko): 재촬영 `scr/1280/ko-scr002-normal.png` 한 장을 육안으로 봤다. 종료 아이콘, 방향 표식 두 개, 사실 행이 제대로 그려진다. 대화상자 캡처와 390·320 캡처는 측정만 했고 육안으로 보지 않았다. 시안과의 차이는 아래 "남은 차이"에 적었다.
+- 고친 것(수정 라운드, 요청 항목 기준. 시안에서 DESIGN 위반으로 확인된 항목):
+  - 배치: 정보 카드는 `span-8`, 전송량 카드는 `span-4`다. 1023px 이하에서 한 열로 쌓인다(DESIGN 557행). 종료 버튼은 정보 카드 바닥(`card-foot`)에 있다.
+  - 정보 행: `dl.fact-list`·`.fact` 행으로 바꿨다. 모드와 전송 경로는 중립 배지(`createBadge`, 아이콘 없음, DESIGN 626행). 주소는 monospace `fact-address` 한 줄이다(CPY-056·057). CPY-058 주소 안내를 붙였다.
+  - 상태 행(`stateLabel`, `active`)을 지웠다.
+  - 전송량: 방향 표식 `chart-1`(Viewer→대상)·`chart-2`(대상→Viewer)를 10×10 정사각형으로 붙였다(DESIGN 378행, `aria-hidden`). 공유 `createStat`은 바꾸지 않았고 `session.js`의 지역 `directionStat`이 맡는다. SCR-001에는 영향이 없다.
+  - 종료 아이콘 `cancel`(DESIGN 623행). 렌더 중 `textContent`가 아이콘을 지우던 결함을 `.button-label`로 고쳤다.
+  - 복사 키: `documentTitle`, `sessionDocumentTitle`, `peerViewer`, `peerTarget`, `stateLabel`을 지웠다. `transferTitle`(DESIGN 465행)을 넣었다. `sessionInfoTitle`(DESIGN 529행)은 남겼다.
+  - 767px 이하 `.fact` 1열(판단: DESIGN 기준은 1023.98px). 라벨 폭 160px에서 값이 밀리지 않게 하려고 넣었다. 이 규칙이 없을 때 390·320에서 `.fact`가 2열이었다.
+  - 시험: DASH-006·007·012·014 확인을 갱신하고 `factValue` 도우미를 넣었다. DASH-015 표식(`tests/dashboard_browser.rs`의 `/// spec: dashboard.md:DASH-015 partial`)을 `session_cancel_sends_no_request_and_restores_focus_in_browser`에 달았다. 이 시험은 합성 keydown이다.
+  - `pageHead`·`panelCard`·`peerCell`은 SCR-001과 공유된다. 목록 시험 `operations_*`는 두 게이트에서 모두 통과했다. SCR-001 캡처는 다시 찍지 않았다.
+- 1차 라운드에서 고친 것(기록 유지): 바이트 행 누락(DASH-006, 스펙 117행, `createStat`), 요약 값 줄바꿈(`.session-facts .stat-value`), `세션 undefined`(`id` 저장), 대화상자 Tab 누출(DASH-015, `components/dialog.js`). 포커스 복귀 실패는 점검 아티팩트였다(`b.click()`은 포커스를 주지 않음).
+- 남은 차이(시안 1280 ko 대조, 해소하지 않음):
+  1. 제목의 세션 id: 시안은 monospace, 구현은 sans다.
+  2. 방향 라벨: 구현은 스펙 표기 `Viewer->대상`·`대상->Viewer`(스펙 117·153–154행)를 쓴다. 시안은 `Viewer -> Server/대상`이다.
+  3. 새로고침 이름: 구현은 CPY-014 `상태 재조회`(`session-refresh`)를 쓴다. 시안과 요청 문구는 `새로고침`이다. 사람 확인이 필요하다.
+  4. CPY-058 주소 안내: 스펙에 따라 표시한다. 시안에는 없다.
+  5. 구현 판단 키(Q3): `navLabel`(잠정), `limit`·`limitUnknown`(게이지 상한), `sessionInfoTitle`, `transferTitle`(영문 문구는 스펙에 없음). `dayUnit`은 DESIGN 491행 근거로 남았다.
+  6. 표 접근 이름은 비어 있다. 스펙에 규칙이 없어 열린 관찰로 둔다.
+- 접근성과 포커스(자동 대체, 청취 아님. 1차 관찰):
+  - 포커스 표시: 포커스를 받을 수 있는 요소에 `outline: solid 2px`, `offset 2px`. 측정값만 적는다(상단 막대 rgb(255,255,255), 본문 rgb(18,53,43)). 토큰 `colors.ring`·`colors.navbar-ring`과 대조하지 않았고 대비 비율도 계산하지 않았다.
   - Tab 순서: 상단 막대(브랜드, 언어 선택, 로그아웃) → 페이지 동작 → 본문.
-  - 접근성 트리: `banner`, `main`, `navigation`(`주 메뉴`/`Main menu`), 이름 있는 영역, `progressbar`(`중계 연결`, `관리 연결`), 언어 `combobox`(`언어 (Language)`), `columnheader`. 표 자체의 접근 이름은 비어 있다. 스펙에 표 이름 규칙이 없어 열린 관찰로 둔다.
+  - 접근성 트리: `banner`, `main`, `navigation`(`주 메뉴`/`Main menu`), 이름 있는 영역, `progressbar`(`중계 연결`, `관리 연결`), 언어 `combobox`(`언어 (Language)`), `columnheader`. 표 자체의 접근 이름은 비어 있다.
+  - 대화상자 Tab 순환: 자동 시험은 합성 keydown으로 핸들러만 확인한다. 네이티브 Tab 키는 수동 실행 1회로 확인했다. 헤드리스 Chrome에서 `session.html?case=dash-026&lang=ko`를 열고 `#session-terminate`를 누르자 포커스가 `취소`로 갔다. Tab → `종료 확인` → Tab → `취소`(순환), Shift+Tab은 역방향이었다. 포커스는 열린 대화상자 밖으로 나가지 않았다. 이 수동 실행은 자동 시험에 넣지 않았다.
 - 복사 키(스펙 9.3절 대조):
-  - CPY 키 14개(`sessionScreen` 005, `sessionTitle` 051, `back` 010, `cancel` 011, `recheck` 014, `terminate` 060, `terminateTitle` 061, `terminateBody` 062, `terminateConfirm` 063, `terminating` 064, `terminateFailed` 065, `terminateUnknown` 066, `invalidSessionId` 067, `terminateRejected` 068)는 스펙 문구와 같다. `notFound`는 CPY-059(`현재 세션을 찾을 수 없음`)와 같다.
-  - 스펙에 없는 키: `directionViewerToTarget`·`directionTargetToViewer`는 CPY-040·043 표 머리글이라 스펙 근거가 있다. 구현 판단으로 표시한 키는 7개다: `documentTitle`, `sessionDocumentTitle`, `peerViewer`, `peerTarget`, `dayUnit`, `sessionInfoTitle`, `stateLabel`. `navLabel`은 Q3 잠정이다. 이 중 개요 15절 Q3에 없던 4개(`documentTitle`, `peerViewer`, `peerTarget`, `dayUnit`)를 Q3 보충으로 올렸다.
+  - 스펙 문구와 같은 키 14개: `sessionScreen`(005), `sessionTitle`(051), `back`(010), `cancel`(011), `recheck`(014), `terminate`(060), `terminateTitle`(061), `terminateBody`(062), `terminateConfirm`(063), `terminating`(064), `terminateFailed`(065), `terminateUnknown`(066), `invalidSessionId`(067), `terminateRejected`(068). `notFound`는 CPY-059와 같다.
+  - 스펙 CPY id가 있는 키: `directionViewerToTarget`·`directionTargetToViewer`(CPY-040·043), `modeLabel`(053), `transportLabel`(054), `startedLabel`(055), `viewerAddressLabel`·`targetAddressLabel`(056·057), `addressNote`(058).
+  - 스펙 CPY id가 없는 키(DESIGN 근거 또는 Q3): `sessionInfoTitle`(DESIGN 529), `transferTitle`(DESIGN 465), `dayUnit`(DESIGN 491), `navLabel`(Q3 잠정).
 - 바인딩: `cargo xtask dashboard-serve --port 8765`는 `127.0.0.1:8765`에서만 듣는다. `[::1]:8765`와 이 PC의 LAN 주소 3개는 연결이 거부됐다. 코드는 `xtask/src/dashboard_serve.rs`의 `TcpListener::bind(("127.0.0.1", port))`다.
 - 확인하지 못한 것:
-  - 3.5의 1번(로그인 화면 Tab 순서)과 실제 키 입력 전체. 이번에는 SCR-002만 자동으로 확인했다.
-  - 수정 뒤 네이티브 Tab 키로 대화상자 순환을 다시 확인하지 않았다.
+  - 3.5의 1번(로그인 화면 Tab 순서)과 실제 키 입력 전체. 네이티브 Tab은 대화상자 한 번만 수동으로 봤다.
   - 스크린 리더(3.6), Firefox·Safari·Edge·실기기(3.7)는 미실행이다.
-  - 실서버 목록·상세·종료(4.4·4.5 뒤). 이 시험은 목 응답이다.
-  - 시안 차이 4건의 해소와 사람 비교(4.12). 표 접근 이름(열린 관찰).
-  - 4.6의 `.sr-only`(320 뷰포트 밖)와 목업 `.app` 클립, 200% 줌, 글자 크기 조정, 다크 모드는 이번에 보지 않았다.
-  - 60장 중 수정 뒤 다시 찍은 것은 ko 1280·390·320뿐이다.
-
-- 최종 HEAD 게이트(대상 HEAD `5368dec`, 이 기록 커밋은 문서만 바꾼다. 기준 게이트는 4.6절 `3b3a179`):
-  - WSL `vr-full.sh`: ALL PASSED, `WSL_EXIT=0`. 시나리오 150건 통과 24, 부분 48, 실패 0, 미실행 0, 미연결 78. dashboard_browser 31 passed, 0 failed(89.48초). 로그 파일은 없고 표준 출력만 남았다.
-  - Windows `vr-win.ps1 -Only all`: ALL PASSED (all), `WIN_EXIT=0`. 시나리오 150건 통과 23, 부분 48, 실패 0, 미실행 1(OPS-007, Unix 전용), 미연결 78. dashboard_browser 31 passed, 0 failed(148.88초). 보고서 `D:\Workspace\vnc-relay\target\scenario-report.md`.
-  - DASH 27건(Windows 보고서): 통과 0, 부분 25, 미연결 2. 미연결은 DASH-015와 DASH-023이다. DASH-015 탐침(`session-scenarios.js`의 `caseDash009`, 합성 keydown)은 `session_cancel_sends_no_request_and_restores_focus_in_browser`에서 돌지만, DASH-015 표식을 단 시험 함수가 없어 보고서에서 연결되지 않는다. DASH-023은 이번 작업 대상이 아니다.
+  - 실서버 목록·상세·종료. `docs/TODO.md` 250행에서 `/api/v1/summary`, `waiting`, `sessions`, `closed-sessions`가 404다. 이 시험은 목 응답이다.
+  - 실패(`failed`), 사라짐(`gone`), 잘못된 id 상태의 캡처는 찍지 않았다. 시험 자동화에서만 확인했다.
+  - 시안 차이 6건의 해소와 사람 비교(4.12).
+  - 4.6의 `.sr-only`(320 뷰포트 밖), 목업 `.app` 클립, 200% 줌, 글자 크기 조정, 다크 모드는 보지 않았다. 대비 비율은 계산하지 않았다.
+- 최종 HEAD 게이트(대상 HEAD `8975537`; 코드는 `db08863`과 같고 `8975537`은 문서만 바꾼다. 이 기록 커밋도 문서만 바꾼다. 기준 게이트는 4.6절 `3b3a179`):
+  - WSL `vr-full.sh`: ALL PASSED, 종료 0. 시나리오 150건: 통과 24, 부분 49, 실패 0, 미실행 0, 미연결 77, 오류 0건. dashboard_browser 31 passed, 0 failed(87.67초). 보고서 `/home/kaydenkim/vnc-relay-target/scenario-report.md`. 소요 173.26초.
+  - Windows `vr-win.ps1 -Only all`: ALL PASSED (all), 종료 0. 시나리오 150건: 통과 23, 부분 49, 실패 0, 미실행 1(OPS-007, Unix 전용), 미연결 77, 오류 0건. dashboard_browser 31 passed, 0 failed(143.11초). 보고서 `D:\Workspace\vnc-relay\target\scenario-report.md`. 소요 238.19초.
+  - DASH 27건(Windows 보고서): 통과 0, 부분 26, 미연결 1(DASH-023). 이전 미연결 2건 중 DASH-015는 표식으로 부분이 됐다. DASH-023은 이번 작업 대상이 아니다.
+  - 1차 게이트(`5368dec`, 기록 유지): WSL 통과 24, 부분 48, 미연결 78. Windows 통과 23, 부분 48, 미실행 1, 미연결 78. dashboard_browser 31 passed(두 환경).
 
 ## 5. 중단 조건
 
