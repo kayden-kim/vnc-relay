@@ -9,7 +9,7 @@
 | 대상 독자 | 대시보드 프런트엔드 구현자와 검토자 |
 | 검증 상태 | Draft |
 | 검증 환경·버전 | 작업 4.8(2026-10-22): Windows 10.0.26200 x64, PowerShell, Chrome 155.0.8059.84. Ubuntu 24.04.4 LTS x64(WSL2), Google Chrome 156.0.8078.47. 4.11·4.12절: Microsoft Edge 155.0.4283.62(Windows)도 사용했다. 4.14절: Firefox 158.0.1(WSL Ubuntu)도 사용했다. rustc는 두 OS 모두 1.99.1(`rust-toolchain.toml`). 나머지 환경은 실행할 때 기록한다 |
-| 최종 검증일 | 2026-10-22. 3.1 1단계, 3.2 1단계, 3.3 1단계, 3.4 일부를 실행했다(4절). 작업 4.10 재실행(4.5절, 커밋 `3944dc2`): WSL·Windows 게이트 모두 `ALL PASSED`. 작업 4.11(4.7절, 커밋 `5368dec`): 3.3 1단계, 3.4 SCR-002 일부, 3.5 자동 확인 일부를 실행했다. 최종 HEAD 게이트는 WSL·Windows 모두 `ALL PASSED`. 같은 절의 후속 게이트 대상 `8975537`·`06753e3`·`98b2fc1`도 WSL·Windows 모두 `ALL PASSED`. 작업 4.10·4.11 중단점 통합(4.8절, 수정·게이트 대상 `0ca9466`): WSL·Windows 게이트 모두 `ALL PASSED`. 작업 4.11 세션 시험 보강(4.9절, 커밋 `d0ef8d0`): 3.4 SCR-002 일부(DASH-016·019·022·024·025 시험)를 실행했다. 이 게이트도 WSL·Windows 모두 `ALL PASSED`. 작업 4.11 라우터 언어 시험(4.10절, 커밋 `a917eb1`): 3.4 일부(DASH-025 라우터 시험)를 실행했다. 최종 HEAD `48918d3`의 게이트도 WSL·Windows 모두 `ALL PASSED`. 작업 4.12 검토(4.11절, 수정 `5cfe4c9`·`50ae0ba`, 게이트 대상 `50ae0ba`): WSL·Windows 게이트 모두 `ALL PASSED`. 작업 4.12(4.12절, 수정 `91f3fc1`·`05f4989`·`3cf643d`, 게이트 대상 `3cf643d`): 3.3·3.4 일부를 실행했고 WSL·Windows 게이트 모두 `ALL PASSED`. 작업 4.12 후속 검토(4.13절, 수정 `f24ca68`·`6cc47a1`, 게이트 대상 `6cc47a1`): `fmt`, 토큰 대조, dashboard_browser 37건, dashboard_assets 2건을 실행했다. WSL·Windows 모두 `ALL PASSED`. 시나리오 150건: WSL 통과 24·부분 49·실패 0·미실행 0·미연결 77, Windows 통과 23·부분 49·실패 0·미실행 1(OPS-007)·미연결 77. 3.5의 사람 확인, 3.6, 3.7은 미실행. 작업 4.12 Firefox(4.14절, 2026-10-23, 기준 `154d3ec`와 요약 격자 수정 작업 트리): 37개 사례의 403회 탐색 통과, 80장 가로 넘침·CSP 위반 0건, 실제 키 입력으로 3.5 확인. 기존 모바일 표 배치 차이, Safari·실기기·스크린 리더·사람 비교는 남음. 작업 4.12 SCR-001 표 대조(4.15절, 기준 `849b0ba`와 표·연결 카드 수정 작업 트리): 토큰 대조·dashboard_assets 2건 통과, Chrome 정상 6장과 시안 대조, 가로 넘침·CSP 위반 0건. 모바일 표 첫 줄·링크·배지·설명 위치를 수정했다. 개수 배지 문구 승인과 변경 뒤 다른 브라우저·사람 확인은 남음. 사용자 결정 반영과 통합 확인(4.16절, 2026-10-23, 게이트 대상 `eecaa5b`): WSL·Windows 모두 `ALL PASSED`, 시나리오 수는 4.13절과 같다 |
+| 최종 검증일 | 2026-10-22. 3.1 1단계, 3.2 1단계, 3.3 1단계, 3.4 일부를 실행했다(4절). 작업 4.10 재실행(4.5절, 커밋 `3944dc2`): WSL·Windows 게이트 모두 `ALL PASSED`. 작업 4.11(4.7절, 커밋 `5368dec`): 3.3 1단계, 3.4 SCR-002 일부, 3.5 자동 확인 일부를 실행했다. 최종 HEAD 게이트는 WSL·Windows 모두 `ALL PASSED`. 같은 절의 후속 게이트 대상 `8975537`·`06753e3`·`98b2fc1`도 WSL·Windows 모두 `ALL PASSED`. 작업 4.10·4.11 중단점 통합(4.8절, 수정·게이트 대상 `0ca9466`): WSL·Windows 게이트 모두 `ALL PASSED`. 작업 4.11 세션 시험 보강(4.9절, 커밋 `d0ef8d0`): 3.4 SCR-002 일부(DASH-016·019·022·024·025 시험)를 실행했다. 이 게이트도 WSL·Windows 모두 `ALL PASSED`. 작업 4.11 라우터 언어 시험(4.10절, 커밋 `a917eb1`): 3.4 일부(DASH-025 라우터 시험)를 실행했다. 최종 HEAD `48918d3`의 게이트도 WSL·Windows 모두 `ALL PASSED`. 작업 4.12 검토(4.11절, 수정 `5cfe4c9`·`50ae0ba`, 게이트 대상 `50ae0ba`): WSL·Windows 게이트 모두 `ALL PASSED`. 작업 4.12(4.12절, 수정 `91f3fc1`·`05f4989`·`3cf643d`, 게이트 대상 `3cf643d`): 3.3·3.4 일부를 실행했고 WSL·Windows 게이트 모두 `ALL PASSED`. 작업 4.12 후속 검토(4.13절, 수정 `f24ca68`·`6cc47a1`, 게이트 대상 `6cc47a1`): `fmt`, 토큰 대조, dashboard_browser 37건, dashboard_assets 2건을 실행했다. WSL·Windows 모두 `ALL PASSED`. 시나리오 150건: WSL 통과 24·부분 49·실패 0·미실행 0·미연결 77, Windows 통과 23·부분 49·실패 0·미실행 1(OPS-007)·미연결 77. 3.5의 사람 확인, 3.6, 3.7은 미실행. 작업 4.12 Firefox(4.14절, 2026-10-23, 기준 `154d3ec`와 요약 격자 수정 작업 트리): 37개 사례의 403회 탐색 통과, 80장 가로 넘침·CSP 위반 0건, 실제 키 입력으로 3.5 확인. 기존 모바일 표 배치 차이, Safari·실기기·스크린 리더·사람 비교는 남음. 작업 4.12 SCR-001 표 대조(4.15절, 기준 `849b0ba`와 표·연결 카드 수정 작업 트리): 토큰 대조·dashboard_assets 2건 통과, Chrome 정상 6장과 시안 대조, 가로 넘침·CSP 위반 0건. 모바일 표 첫 줄·링크·배지·설명 위치를 수정했다. 개수 배지 문구 승인과 변경 뒤 다른 브라우저·사람 확인은 남음. 사용자 결정 반영과 통합 확인(4.16절, 2026-10-23, 게이트 대상 `eecaa5b`): WSL·Windows 모두 `ALL PASSED`, 시나리오 수는 4.13절과 같다. 표 수정 뒤 Firefox·Edge 재확인(4.17절, 2026-10-23, 기준 `8f3c20f`와 표 버튼 줄바꿈 수정 작업 트리): Firefox 192회 통과, 정상 8장 가로 넘침·CSP 위반 0건. Firefox·Edge의 새 세션 링크 Tab 순서·Enter 이동 통과. 1024px 표 버튼 줄바꿈을 고쳤다 |
 | 관련 기준 문서 | [프런트엔드 컨벤션](../conventions/frontend.md), [디자인 기준](../design/DESIGN.md), [화면 스펙](../specs/dashboard.md), [관리 API 계약 1.11절](../contracts/management-api-v1.md) |
 
 ## 1. 대상과 영향
@@ -179,7 +179,7 @@
 | 폭별 시각 대조 | 6개 폭에서 가로 스크롤 0건, 차이가 스펙·디자인 기준에 맞음 | 3.4 | 부분. 작업 4.8: 미리보기 6폭 × ko·en 12장(4.1절). 작업 4.9(2026-10-22): 로그인 화면 `/login/`을 6폭 × 7장으로 찍어 42장을 얻었다(`target/dashboard-shots/<폭>/{input-ko,invalid-ko,busy-ko,failed-ko,request-failed-ko,input-en,invalid-en}.png`). 6폭 모두 `scrollWidth`와 `clientWidth`가 같았고(320 포함), CSP 위반은 0건이었다. 콘솔 오류는 가로챈 401·500 응답의 "Failed to load resource"뿐이었다. 시안과의 차이는 4.2절. 작업 4.9 재작업(4.3절)에서 같은 42장을 다시 찍었다. 6폭 모두 가로 스크롤 0건, CSP 위반 0건이었다. 4.9 기준선과는 42장 모두 바이트가 달랐다(화면을 구성 요소로 바꾼 결과). 작업 4.10(4.4절): 실제 서버에서 `/login/`(ko 입력 화면)과 `/`(ko 운영 화면)를 6폭으로 찍었다. 가로 스크롤 0건. 320 폭의 상단 막대 언어 선택은 밑줄과 가까워 사람 확인이 필요하다. 사람 비교는 4.12에서 한다. 작업 4.10 화면 상태 대조(4.6절): SCR-001 목업 21장과 1280·390·320 × ko·en × 상태 8종 48장을 대조했다. 6폭·언어 모두 가로 스크롤 0건, CSP 위반 0건. 수정 필요 6건이 나왔다(상단 막대 5건, `Unavailable` 줄바꿈 1건). 1280은 정상 상태와 빈 목록 문구만 판정했다. 작업 4.11(4.7절): SCR-002 상태 5종(SCR-001 목록, SCR-002 상세·대화상자·실패, SCR-003 로그인) × 6폭 × ko·en 60장을 찍었다. 가로 넘침 0, CSP 위반 0. 이 60장은 바이트·레이아웃 수정 전 촬영이다. 수정 뒤에는 ko 1280·390·320만 다시 찍었다. 시안 차이 4건은 4.7절과 개요 14절 차이 표에 있다. 사람 비교는 4.12에서 한다 |
 | 키보드 | 3.5의 4개 항목 통과 | 3.5 | 부분. 작업 4.11(4.7절, 작업 트리): SCR-002에서 Tab 순서, 포커스 링 두께(2px)·간격(2px), Enter로 취소 실행, 대화상자 Escape·취소 뒤 포커스 복귀(ko·en)를 자동으로 확인했다. 대화상자 Tab 순환을 고쳤고 합성 keydown으로만 시험했다. 로그인 화면 Tab 순서(3.5의 1번)와 실제 키 입력 전체는 확인하지 않았다. 4개 항목 전체 통과가 아니다 | 검토 기록 4.7절 |
 | 스크린 리더 | 3.6의 항목 통과 | 3.6 | 미실행 | 검토 기록과 스크린 리더 이름·버전 |
-| 다른 브라우저·실기기 | 3.7 통과 또는 미실행 사유 기록 | 3.7 | 부분. Firefox 158.0.1(WSL Ubuntu)에서 3.4 2단계와 3.5를 실행했다. 403회 시나리오 탐색 통과, 캡처 80장 가로 넘침·CSP 위반 0건. 요약 격자 결함을 고쳤고, Chromium과 같은 기존 모바일 표 배치 차이는 남았다(4.14절). Safari는 macOS가 필요해 미실행. 실제 모바일 기기는 기기가 없어 미실행. Edge 155.0.4283.62의 캡처·키보드 기록은 4.11·4.12절 | 4.14절과 `target/firefox-412/` |
+| 다른 브라우저·실기기 | 3.7 통과 또는 미실행 사유 기록 | 3.7 | 부분. Firefox 158.0.1(WSL Ubuntu)에서 3.4 2단계와 3.5를 실행했다. 403회 시나리오 탐색 통과, 캡처 80장 가로 넘침·CSP 위반 0건. 요약 격자 결함을 고쳤고, Chromium과 같은 기존 모바일 표 배치 차이는 남았다(4.14절). Safari는 macOS가 필요해 미실행. 실제 모바일 기기는 기기가 없어 미실행. Edge 155.0.4283.62의 캡처·키보드 기록은 4.11·4.12절. 표 수정 뒤 재확인(4.17절, 2026-10-23): Firefox 192회 통과, 정상 8장·Edge 정상 3장 가로 넘침·CSP 위반 0건. 두 브라우저에서 세션 ID 링크의 Tab 순서·포커스 링·Enter 상세 이동을 확인했다. 4.14절의 모바일 표 배치 차이는 수정 뒤 해소됐다. Safari·실기기 미실행 사유는 그대로다 | 4.14·4.17절과 `target/firefox-412/`, `target/firefox-417/` |
 
 ### 4.1 검토 기록 (작업 4.8, 2026-10-22)
 
@@ -914,6 +914,118 @@ BiDi `input.performActions`로 Tab·Shift+Tab·Enter·Space·Escape를 보냈다
 
 - 카드 개수 배지(DESIGN 316·638행)는 승인 문구가 없다. 사용자 질문으로 남긴다.
 - 4.15절 변경 뒤 Firefox·Edge 재확인, Safari, 실제 모바일 기기, 스크린 리더, 사람의 시안 비교는 하지 않았다.
+
+### 4.17 검토 기록 (작업 4.12 표 수정 뒤 Firefox·Edge 재확인, 2026-10-23)
+
+- 검토자: 에이전트 Firefox412(작업 위임: Main). 사람의 검토가 아니다.
+- 기준 커밋: `8f3c20f`(`git rev-parse --short HEAD`). 시작 시 `git status --short` 출력은 비어 있었다. `459c5bd`의 표·연결 카드·공통 `createDataTable`·`createCard` 변경과 `1d019d0`·`849b0ba`의 요약 격자 변경을 확인했다. 최종 기록에는 아래 표 버튼 줄바꿈 수정 작업 트리도 포함한다.
+- 환경: Firefox 158.0.1, WSL2 Ubuntu 24.04.4 LTS x64, `fonts-noto-cjk`를 설치한 4.14절 환경. Edge 155.0.4283.62, Windows 10.0.26200 x64. 두 브라우저 모두 헤드리스, 높이 900px, DPR 1, 라이트 테마다. 패키지를 추가 설치하지 않았다.
+- 방법: WSL Python 서버를 `127.0.0.1:18717`, Firefox BiDi를 `127.0.0.1:18716`에만 바인드했다. 제품·시험 페이지의 CSP와 보안 헤더는 4.14절과 같다. 시안 경로에만 인라인 CSS를 허용했다. Windows Bun 1.3.14로 BiDi와 Edge CDP(`127.0.0.1:18718`)를 구동했다. Edge의 실행 파일은 `C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe`다. 방화벽 승인 창은 없었다.
+
+#### Firefox 시험 페이지
+
+요청한 세 페이지의 모든 사례를 폭 1280·1024·1023·768·390·320px, `lang=ko`·`lang=en`으로 실행했다. 아래 `6폭`은 이 여섯 폭이다. `router.html` DASH-025도 이번 요청에 맞춰 6폭·두 언어로 실행했다. Rust 실행기의 1280px·`lang` 미지정 한 번보다 넓은 범위다. 언어 선택 사례는 실행 도중 문서 언어를 바꾸므로 요청 언어와 마지막 문서 언어를 나누어 기록했다.
+
+| 페이지·사례 | 폭(px) | ko | en | 실패·CSP 위반 |
+| --- | --- | --- | --- | --- |
+| components.html 전체 | 6폭 | 6/6 통과 | 6/6 통과 | 없음·0 |
+| operations.html DASH-001 | 6폭 | 6/6 통과 | 6/6 통과 | 없음·0 |
+| operations.html DASH-002 | 6폭 | 6/6 통과 | 6/6 통과 | 없음·0 |
+| operations.html DASH-003 | 6폭 | 6/6 통과 | 6/6 통과 | 없음·0 |
+| operations.html DASH-004 | 6폭 | 6/6 통과 | 6/6 통과 | 없음·0 |
+| operations.html DASH-005 | 6폭 | 6/6 통과 | 6/6 통과 | 없음·0 |
+| operations.html DASH-008 | 6폭 | 6/6 통과 | 6/6 통과 | 없음·0 |
+| operations.html DASH-016 | 6폭 | 6/6 통과 | 6/6 통과 | 없음·0 |
+| operations.html DASH-019 | 6폭 | 6/6 통과 | 6/6 통과 | 없음·0 |
+| operations.html DASH-020 | 6폭 | 6/6 통과 | 6/6 통과 | 없음·0 |
+| operations.html DASH-021 | 6폭 | 6/6 통과 | 6/6 통과 | 없음·0 |
+| operations.html DASH-022 | 6폭 | 6/6 통과 | 6/6 통과 | 없음·0 |
+| operations.html DASH-024 | 6폭 | 6/6 통과 | 6/6 통과 | 없음·0 |
+| operations.html DASH-025 | 6폭 | 6/6 통과 | 6/6 통과 | 없음·0 |
+| router.html DASH-006 | 6폭 | 6/6 통과 | 6/6 통과 | 없음·0 |
+| router.html DASH-025 | 6폭 | 6/6 통과 | 6/6 통과 | 없음·0 |
+
+- 최종 결과: **16개 사례, 192회 모두 `pass`, 실패 문구 없음, CSP 위반 0건**. `data-result`가 `running`일 때 수집하지 않고 `pass` 또는 `fail`까지 기다렸다.
+- 수정 전 1차 실행도 192회 통과했다. 그러나 아래 1024px 시각 결함은 기존 단언이 잡지 못했다. 높이 단언을 강화하고 수정 뒤 192회를 모두 다시 실행한 결과가 위 표다.
+- 증거: `target/firefox-417/firefox.json`의 `scenarios`. 수정 전 결과는 `firefox-before.json`이다. `cargo test`나 전체 게이트 실행 결과가 아니다.
+
+#### SCR-001 캡처와 시안 대조
+
+`/tests/operations.html?case=dash-001&lang=ko|en`의 정상 화면을 찍었다. Firefox는 ko 6폭·en 1280·320px, Edge는 ko 1280·390px에 경계 확인용 1024px를 더했다. 아래 값은 모두 버튼 줄바꿈 수정 뒤 수치다.
+
+| 브라우저 | 언어 | 뷰포트 폭(px) | scrollWidth/clientWidth | CSP 위반 |
+| --- | --- | --- | --- | --- |
+| Firefox | ko | 1280 | 1268/1268 | 0 |
+| Firefox | ko | 1024 | 1012/1012 | 0 |
+| Firefox | ko | 1023 | 1011/1011 | 0 |
+| Firefox | ko | 768 | 756/756 | 0 |
+| Firefox | ko | 390 | 378/378 | 0 |
+| Firefox | ko | 320 | 308/308 | 0 |
+| Firefox | en | 1280 | 1268/1268 | 0 |
+| Firefox | en | 320 | 308/308 | 0 |
+| Edge | ko | 1280 | 1265/1265 | 0 |
+| Edge | ko | 1024 | 1009/1009 | 0 |
+| Edge | ko | 390 | 375/375 | 0 |
+
+- 모든 정상 캡처에서 가로 넘침은 없었고 시험 페이지도 `pass`였다. `innerWidth`는 요청한 폭과 같았다. Firefox의 세로 스크롤바는 12px, Edge는 15px다. 4.14절과 같은 환경 차이다.
+- Firefox ko 1280·390·320px 최종 PNG와 같은 폭의 시안 `scr001-normal` 프레임을 열어 보았다. 1024px의 수정 전후 PNG, en 320px, 모바일 표의 원래 크기 조각도 보았다. Edge ko 1280·390px 최종 PNG와 1024px 수정 전후 PNG도 열어 보았다. 자동 픽셀 비교는 하지 않았다.
+
+| 확인 대상 | Firefox 관찰 | 시안·DESIGN 대조 |
+| --- | --- | --- |
+| 세션 링크 | `sess_1`·`sess_2`가 밑줄 있는 링크다. 각각 `/#/sessions/sess_1`·`/#/sessions/sess_2`를 가리킨다. 데이터 글꼴 13px와 긴 값 줄바꿈 검사를 통과했다 | 473·555·644행과 일치 |
+| 역할·모드·전송 경로 | Viewer·Mode I·WSS가 아이콘 없는 중립 배지다. 모바일에서도 값 칸 전체로 늘어나지 않는다 | 395·626·636행과 일치 |
+| 방향 표식 | 두 방향에 10×10px 표식이 있다. 색은 `rgb(98,182,200)`·`rgb(79,180,136)`이고 `aria-hidden=true`다. 방향 이름·바이트 값은 글씨로 남는다 | 378·643행과 일치 |
+| 카드 설명 | 중계 연결·관리 연결의 CPY-032·034가 제목 아래 `.card-description`에 있고 그 아래 고리가 있다. 1280px에서 제목 y=176, 설명 y≈202.4px다 | 527·638행과 일치. 4.14절의 고리 아래 설명 차이는 해소됐다 |
+| 모바일 첫 줄 | 대기 연결은 중계 ID+역할, 활성 세션은 ID 링크+상세, 최근 종료는 ID+종료 원인이 같은 y좌표에 놓인다. 첫 두 머리 셀의 `::before`는 모두 `none`이다 | 554~556·563행과 일치. 4.14절의 모든 셀 세로 나열 차이는 해소됐다 |
+| 상세 버튼 | 오른쪽 꺾쇠가 있고 장식 SVG다. 최종 ko·en 버튼 높이는 데스크톱 32px, 모바일 44px다 | 579·623·634행과 일치. 1024px 줄바꿈 결함은 아래에서 고쳤다 |
+| 요약 격자 | 1280·1024px에서 3열, 1023px 이하에서 2열이며 실행 상태·가동 시간은 각각 전체 폭이다 | 552행과 일치. 글꼴·스크롤바 차이로 열 수가 다시 바뀌지 않았다 |
+
+390px 활성 세션 첫 줄은 ID 셀 x=41px, 상세 셀 x≈253.23px, 두 셀 y=1383px였다. 320px에서는 ID 셀 x=41px, 상세 셀 x≈187.23px, 두 셀 y≈1441.8px였다. 상세 버튼 너비는 ko 약 83.77px, en 약 106.53px이며 모바일 높이는 둘 다 44px다.
+
+종료 원인 전체의 색·아이콘은 DASH-020이 ko·en 6폭에서 확인했다. 이 사례는 마지막에 빈 목록을 마운트한다. 따라서 시각 대조용으로 정상 앱 DOM의 복사본에 실제 `closedTable`을 호출해 7개 원인 fixture를 넣고 1280·390·320px를 별도로 찍었다. 시험 단언이나 제품 코드를 우회해 통과시킨 결과가 아니다. 이 보조 캡처는 `causes.json`, `firefox-causes-all-ko-<폭>.png`이며, 390px 표 조각도 열어 보았다.
+
+| 종료 원인 | 배지 톤·아이콘 |
+| --- | --- |
+| `peer_eof`·`admin_terminated`·`server_shutdown` | 중립, 아이콘 없음 |
+| `connection_error` | 위험(`destructive`), 오류 아이콘 |
+| `dead_connection`·`close_timeout` | 경고(`warning`), 경고 아이콘 |
+| `future_cause` | 원문 유지, 중립, 아이콘 없음 |
+
+이 표시는 시안과 DESIGN 393~395·622·636행을 따른다. 보조 캡처 3장도 가로 넘침이 없었다.
+
+시안과 남은 차이는 4.15절과 같다. 개수 배지는 승인 문구를 기다리고, 활성 목록의 `closing` 배지는 개요 D6에 따라 표시하지 않는다. 바이트 열 이름·주소 레이블·카드 설명은 승인된 CPY 문구를 쓴다. 행 수·ID·시각·숫자는 fixture와 시안의 샘플 차이다. Linux와 Windows의 시스템 글꼴에 따른 획·줄바꿈 차이는 4.14절과 같이 구분했다. 아래 공통 버튼 결함을 고친 뒤 Firefox에서만 남는 제품 결함은 찾지 못했다.
+
+#### 고친 결함: 1024px 상세 버튼 줄바꿈
+
+- 수정 전 Firefox·Edge 모두 1024px ko 정상 화면에서 `[상세]`가 `상`·`세` 두 줄로 나뉘었다. 새 꺾쇠와 함께 좁은 표 셀에 들어갔고, 셀의 `overflow-wrap: anywhere`를 상속했다. 기존 높이 단언은 최솟값 이상만 검사해 이 화면도 통과했다.
+- DESIGN 470행은 버튼 문구를 한 줄로 정한다. 579·634행은 데스크톱 표 조작 높이를 `control-height-sm`으로 정한다. 따라서 글꼴 차이로 허용하지 않고 공통 결함으로 고쳤다. Firefox 고유 결함은 아니다.
+- `web/dashboard/app/styles/components.css`의 기존 `.data-table .button`에 `white-space: nowrap` 한 줄을 더했다. 다른 표 셀의 데이터 줄바꿈과 중단점은 바꾸지 않았다. `web/dashboard/tests/operations-scenarios.js` DASH-001의 실제 버튼 높이 검사를 `>= expectedHeight`에서 `=== expectedHeight`로 바꿨다. 기존 메타 정보와 사례를 재사용했다.
+- `cargo xtask tokens`로 `web/dashboard/login/styles/components.css` 생성 복사본도 맞췄다. `cargo xtask tokens`와 `cargo xtask tokens --check`는 모두 종료 0이며, 후자는 `tokens --check: 통과`를 출력했다.
+- 최종 Firefox 1024px ko 상세 버튼은 약 83.77×32px, Edge는 86×32px다. 두 브라우저에서 한 줄로 보이고 가로 넘침은 없다. Firefox ko·en 6폭의 DASH-001을 포함해 위 192회를 다시 통과했다. 모바일의 44px 높이는 유지됐다.
+- 수정 전 증거: `firefox-before-normal-ko-1024.png`, `edge-before-normal-ko-1024.png`. 수정 뒤 증거: `firefox-normal-ko-1024.png`, `edge-final-normal-ko-1024.png`.
+
+#### 실제 키 입력: 새 세션 ID 링크
+
+Firefox는 BiDi `input.performActions`, Edge는 CDP `Input.dispatchKeyEvent`의 실제 Tab·Enter를 보냈다. DOM 합성 `keydown`으로 대신하지 않았다. 실제 `/` 앱 진입 HTML과 라우터 시험 API fixture에 활성 세션 두 행을 제공했다. 실서버의 인증·세션 조회 시험은 아니다.
+
+| 폭(px) | Firefox·Edge에서 확인한 Tab 순서 |
+| --- | --- |
+| 1280 | 운영 현황 링크 → 언어 선택 → 로그아웃 → 새로고침 → sess_1 링크 → 첫 상세 → sess_2 링크 → 둘째 상세 |
+| 390 | 언어 선택 → 로그아웃 → 새로고침 → sess_1 링크 → 첫 상세 → sess_2 링크 → 둘째 상세 |
+
+- 두 브라우저 모두 각 ID 링크가 같은 행의 상세 링크보다 먼저 왔다. 모바일에서는 숨긴 운영 현황 메뉴만 순서에서 빠졌다.
+- ID 링크 포커스는 두 폭·두 브라우저 모두 `:focus-visible=true`, outline 2px, offset 2px, 색 `rgb(18,53,43)`이었다. `colors.ring` `#12352b`와 같다.
+- `sess_1` 링크에서 Enter를 누르면 `/#/sessions/sess_1`로 이동했다. 실제 라우터가 제목 `세션 sess_1`과 활성화된 세션 종료 버튼을 가진 SCR-002를 그렸다. 두 폭·두 브라우저 모두 같은 결과였다.
+- Edge에서 실행하지 못한 요청 단계는 없었다. 이전 `--headless --dump-dom` 한계와 달리, 이번에는 CDP로 캡처·실제 키 입력을 수행했다. Rust 실행기를 바꾸거나 Edge의 dump-dom 시험을 다시 실행하지 않았다.
+
+#### 증거와 미실행
+
+- `target/firefox-417/firefox.json`: 최종 Firefox 192회 결과, 정상 캡처 8장 측정, 키보드 결과. `firefox-before.json`은 수정 전 실행이다.
+- `edge-final.json`: 최종 Edge 1280·1024·390px 측정과 1280·390px 키보드 결과. `edge-before.json`은 수정 전 1024px 측정이다. `edge.json`은 최초 1280·390px 확인이다.
+- PNG: `firefox-normal-<언어>-<폭>.png`, `edge-final-normal-ko-<폭>.png`, `firefox-mock-ko-<폭>.png`, `*-link-focus-<폭>.png`. `firefox-ko-<폭>-table-<번호>.png`와 `firefox-causes-crop-<폭>.png`는 원래 크기로 읽은 조각이다. 모두 커밋하지 않는다.
+- Firefox·Edge와 임시 프로필을 정리했다. WSL 임시 프로필 `/tmp/firefox-417-ccz5n2aa`와 18716·18717 리스너가 없음을 확인했다. Edge CDP 브라우저를 닫고 임시 프로필도 지웠다. 임시 자동화 스크립트 6개는 삭제했다.
+- Safari(macOS 필요), 실기기(기기 없음), 스크린 리더·사람의 시안 나란히 비교는 이번에도 미실행이다. 200% 확대와 실제 관리 서버도 확인하지 않았다.
+- 전체 게이트와 커밋은 이 위임 범위에서 실행하지 않았다. 결과: 변경된 SCR-001 표·연결 카드와 관련 공통 컴포넌트의 Firefox 재확인, 새 링크의 Firefox·Edge 키보드·캡처 확인은 통과했다. 화면 호환성 전체나 사람 검토의 완료로 확대하지 않는다.
 
 ## 5. 중단 조건
 
