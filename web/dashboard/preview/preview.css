@@ -113,6 +113,19 @@ body {
   border-radius: var(--radius-md);
 }
 
+/* Navbar sample: one row like the app. A frame narrower than the bar scrolls inside the bar. */
+.sample > .navbar {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  contain: inline-size;
+}
+
+.sample > .navbar > * {
+  flex-shrink: 0;
+}
+
 /* Open dialog sample: a non-modal dialog placed in the frame, over a preview-only scrim. */
 .dialog-frame {
   position: relative;

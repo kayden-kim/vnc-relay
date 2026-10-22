@@ -170,7 +170,7 @@ export function mountOperations(root, deps = {}) {
 
     const navbar = createNavbar({
       brand: BRAND_NAME,
-      items: [{ label: t.operations, href: '/', current: true }],
+      items: [{ label: t.operations, href: '/', current: true, desktopOnly: true }],
       language,
       action: logout,
       label: t.navLabel,

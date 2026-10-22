@@ -34,7 +34,6 @@
   font-weight: var(--type-button-weight);
   line-height: var(--type-button-line);
   text-decoration: none;
-  overflow-wrap: anywhere;
   text-align: center;
   cursor: pointer;
 }
@@ -177,7 +176,6 @@
   font-weight: var(--type-label-weight);
   line-height: var(--type-label-line);
   max-width: 100%;
-  overflow-wrap: anywhere;
 }
 
 .badge-tone-success {
@@ -234,11 +232,6 @@
   font-size: var(--type-body-strong-size);
   font-weight: var(--type-body-strong-weight);
   line-height: var(--type-body-strong-line);
-  overflow-wrap: anywhere;
-}
-
-.alert-message {
-  overflow-wrap: anywhere;
 }
 
 .alert-tone-success {
@@ -325,7 +318,6 @@
   font-size: var(--type-heading-card-size);
   font-weight: var(--type-heading-card-weight);
   line-height: var(--type-heading-card-line);
-  overflow-wrap: anywhere;
 }
 
 .card-actions {
@@ -367,10 +359,8 @@
 }
 
 .stat-value {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: var(--space-xs);
+  display: block;
+  overflow-wrap: break-word;
   min-height: calc(var(--type-metric-size) * var(--type-metric-line));
   color: var(--color-foreground);
   font-family: var(--type-metric-family);
@@ -378,7 +368,6 @@
   font-weight: var(--type-metric-weight);
   line-height: var(--type-metric-line);
   font-feature-settings: var(--type-metric-feature);
-  overflow-wrap: anywhere;
 }
 
 .stat-unit {
@@ -387,6 +376,7 @@
   font-size: var(--type-label-size);
   font-weight: var(--type-label-weight);
   line-height: var(--type-label-line);
+  margin-inline-start: var(--space-xs);
 }
 
 .stat-value[data-tone="success"] {
@@ -461,7 +451,6 @@
   font-weight: var(--type-metric-weight);
   line-height: var(--type-metric-line);
   font-feature-settings: var(--type-metric-feature);
-  overflow-wrap: anywhere;
 }
 
 .gauge-max {
@@ -475,7 +464,6 @@
 /* Navbar */
 .navbar {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
   gap: var(--space-xs);
   min-height: var(--space-appbar-height);
@@ -545,7 +533,6 @@
   line-height: var(--type-button-line);
   text-decoration: none;
   max-width: 100%;
-  overflow-wrap: anywhere;
 }
 
 .navbar-item:is(:hover, .is-hover),
@@ -568,7 +555,6 @@
 
 .navbar-tools {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
   gap: var(--space-sm);
   margin-left: auto;
@@ -754,11 +740,6 @@
   font-size: var(--type-heading-card-size);
   font-weight: var(--type-heading-card-weight);
   line-height: var(--type-heading-card-line);
-  overflow-wrap: anywhere;
-}
-
-.dialog-description {
-  overflow-wrap: anywhere;
 }
 
 .dialog-actions {
