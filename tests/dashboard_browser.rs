@@ -387,9 +387,13 @@ struct BrowserSlot;
 impl BrowserSlot {
     /// Waits until a slot is free, then takes it.
     fn acquire() -> Self {
-        let mut running = BROWSERS_RUNNING.lock().unwrap_or_else(PoisonError::into_inner);
+        let mut running = BROWSERS_RUNNING
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
         while *running >= MAX_BROWSERS {
-            running = BROWSER_EXITED.wait(running).unwrap_or_else(PoisonError::into_inner);
+            running = BROWSER_EXITED
+                .wait(running)
+                .unwrap_or_else(PoisonError::into_inner);
         }
         *running += 1;
         BrowserSlot
@@ -398,7 +402,9 @@ impl BrowserSlot {
 
 impl Drop for BrowserSlot {
     fn drop(&mut self) {
-        *BROWSERS_RUNNING.lock().unwrap_or_else(PoisonError::into_inner) -= 1;
+        *BROWSERS_RUNNING
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner) -= 1;
         BROWSER_EXITED.notify_one();
     }
 }
