@@ -230,7 +230,7 @@ flowchart LR
 - 심볼릭 링크 대상 변경: 등록 뒤 링크 대상이 바뀌면 새 대상은 감시되지 않을 수 있다. 구현 판단(사용자 결정 없음). 확인이 필요하다.
 - Q·G 값: 구현 상수 Q 300ms, G 100ms다(`crates/adapters/src/file_watch.rs`). Windows 스모크(D 1s)에서 적용·거절·재시작 필요 7건의 감지에서 결과까지 414~434ms였다. Ubuntu는 측정하지 않았다.
 - 검증 지연 훅(§4.3, OPS-027): 멈추는 훅 대신 테스트 전용 동기 일회 훅 `ReloadService::arm_before_validation`을 쓴다. 채널로 멈추면 단일 태스크 `join!`에서 교착한다. 바이너리 시험은 없다. 구현 편차다.
-- 알림 차단 훅(§4.3, OPS-041): 어댑터 단위 시험 `allow_change_is_applied_by_poll_when_the_notify_is_blocked`(`SwitchFeed`)에만 있다. 실제 바이너리 시험은 없다.
+- 알림 차단(§4.3, OPS-041): 어댑터 시험 `allow_change_is_applied_by_poll_when_the_notify_is_blocked`(`SwitchFeed`, `run` 기반, 주입한 시계)가 주기 확인 감지(`poll`)와 적용을 확인한다. 읽기·검증·교체 시간은 주입하지 않는다. D 상한은 Q+G < 1초로만 확인한다. 실제 바이너리 시험은 없다(바이너리에는 알림 차단 훅이 없다).
 
 ## 대조 기록
 
@@ -261,3 +261,31 @@ flowchart LR
 | 자동 시험 Windows | `powershell -NoProfile -ExecutionPolicy Bypass -File D:/vr-tools/vr-win.ps1 -Only all` | `ALL PASSED (all)`. 시나리오 150건: 통과 21, 부분 31, 실패 0, 미실행 1(OPS-007, Unix 전용), 미연결 97. 오류 0건 |
 
 판정: 자동 시험 게이트 통과. 정정으로 OPS-041은 통과에서 부분으로 바뀌었다. 위 기록의 "통과로 바뀌었다" 목록에서 041을 뺀다. OPS-003·027·028·038은 비부분 시험이 확인한다. OPS-038은 `tests/reload.rs`의 `allow_list_modes_hold_at_start_and_at_reload`가 완전히 확인하며, OPS-025는 같은 시험에서 부분이다. 정정 뒤 부분은 OPS-025·026·040·041과 WS-022의 나머지 조항이다. 항목 14(Windows 디렉터리·편집기 핸들)는 사용자 결정 전이다.
+
+### 작업 5.2 정정 2
+
+- 정정 이유: 위 정정 블록은 OPS-041을 부분으로 내렸다. 이유는 `allow_change_is_applied_by_poll_when_the_notify_is_blocked`가 Dp 감지 시각을 확인하지 않았다는 것이었다. 이 시험을 `ReloadWatcher::run`으로 다시 썼다. 주입한 시계로 주기 확인을 실행하고, 알림 없이 바뀐 파일이 주기 확인 감지(`poll`)와 적용(`reload_applied`)으로 나오는지 확인한다. 그래서 OPS-041은 완전이다.
+- 범위: OPS-041 표식과 시험 구성, OPS-028 조합 시험의 확인 보강(`crates/adapters/src/file_watch.rs`). 운영 코드는 바꾸지 않았다(시험 코드만).
+- OPS-028 시작 조건: 어댑터 오류와 `watch_unavailable` 함수는 따로 시험한다. `src/serve.rs`의 `match` 분기 자체는 시험하지 않는다. `watch_registration_refused_at_start_is_a_startup_failure`(`src/serve.rs`)는 부분이며, `run`을 거치는 주입 지점이 없다.
+- 한계: 읽기·검증·교체 시간은 주입한 시계로 제어하지 않는다. D 상한은 Q+G < 1초로만 확인한다. 바이너리 시험은 없다.
+- 기준: 코드 커밋 `6c7a551`(시험)·`72db643`(헤더). 이 문서 커밋은 코드를 바꾸지 않는다.
+- 결과: 아래 표. 위 정정 블록의 수치(통과 22·21)는 기록으로 남긴다.
+
+| 확인 | 명령·방법 | 결과 |
+| --- | --- | --- |
+| 자동 시험 Ubuntu | `wsl -d Ubuntu -- bash /mnt/d/vr-tools/vr-full.sh` | `ALL PASSED`. 시나리오 150건: 통과 23, 부분 30, 실패 0, 미실행 0, 미연결 97. 오류 0건 |
+| 자동 시험 Windows | `powershell -NoProfile -ExecutionPolicy Bypass -File D:/vr-tools/vr-win.ps1 -Only all` | `ALL PASSED (all)`. 시나리오 150건: 통과 22, 부분 30, 실패 0, 미실행 1(OPS-007, Unix 전용), 미연결 97. 오류 0건 |
+
+판정: 자동 시험 게이트 통과. OPS-041은 완전이다. 위 정정 블록의 OPS-041 부분 판정은 이 정정으로 대체된다.
+
+#### 남은 조건 (정정 2 기준)
+
+| 시나리오 | 지금 시험하는 것 | 남은 조건 | 남은 작업 |
+| --- | --- | --- | --- |
+| OPS-025 (부분) | `tests/reload.rs` `allow_change_keeps_waiting_connections_and_applies_to_new_decisions`(OPS-040과 같은 시험). 대기 중 TCP 연결 유지. 새 TCP 허용·거절 확인. 새 WS·WSS는 거절만 확인 | 초기 교환을 마친 연결 유지, Mode II 대기 등록 매칭 유지, 활성 중계(TCP·WS·WSS) 유지. 허용 출발지의 새 WS·WSS 수락은 5.2에서 쓸 수 있으나 아직 쓰지 않았다 | 2.7·2.9·2.10 |
+| OPS-026 (부분) | `tests/reload.rs` `rejected_allow_candidates_keep_the_old_list`(OPS-040과 같은 시험), `tls_candidates_that_do_not_match_are_rejected_and_the_old_certificate_stays`. 허용 목록 후보 거절, 쌍이 맞지 않는 TLS 후보 거절 | 설정 파일 일시 소멸·읽기 불가와 TLS 파일 일시 소멸 뒤 기존 설정·인증서 유지의 바이너리 시험 없음. 기존 읽기 불가 시험은 모두 시작 실패다 | 작업 번호 없음. 시험 미작성. Windows 삭제 동작은 9절 항목 14에 따른다 |
+| OPS-040 (부분) | `tests/reload.rs` `rejected_allow_candidates_keep_the_old_list`(OPS-026과 같은 시험), `allow_change_keeps_waiting_connections_and_applies_to_new_decisions`(OPS-025와 같은 시험), `tests/serve.rs` `applies_item_boundaries_and_an_empty_list_at_accept`(OPS-038과 같은 시험), `tests/config_contract.rs` 허용 항목 시험, `allow_list.rs` 경계 단위 시험 | 바이너리 시험의 허용 항목은 IPv4 127.0.0.x뿐이다. IPv6 허용 항목과 범위 경계의 바이너리 accept 시험이 없다. 시작 실패는 설정 로더 시험과 허용 목록 단위 시험으로만 확인한다(프로세스 수준 없음) | 작업 번호 없음. 시험 미작성 |
+| OPS-041 (완전) | `crates/adapters/src/file_watch.rs` `allow_change_is_applied_by_poll_when_the_notify_is_blocked`(`run` 기반) | 없음. 한계: 읽기·검증·교체 시간은 주입하지 않고, D 상한은 Q+G < 1초로만 확인한다. 바이너리 시험 없음 | 없음 |
+| WS-022 (부분) | `tests/reload.rs` `removed_source_is_refused_at_upgrade_on_connections_opened_before_the_removal`. 업그레이드된 WS는 열린 채 남는다. 업그레이드 전에 열어 둔 HTTP·WSS는 `upgrade` 단계에서 403 `ip_not_allowed`. 새 접속은 거절 | 기존 중계가 제거 뒤에도 데이터를 계속 전달하는지 확인(Mode II 대기 등록과 양방향 중계가 필요하다) | 2.9·2.10 |
+
+§9 항목 14(Windows 디렉터리·편집기 핸들)는 사용자 결정 전이다.
