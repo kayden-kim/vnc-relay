@@ -12,6 +12,7 @@ const COPY = {
     refresh: '새로고침',
     signOut: '로그아웃',
     lastSuccess: '마지막 성공 갱신: {시각}',
+    loading: '조회 중',
     failed: '조회 실패',
     stale: '오래된 데이터',
     staleMessage: '조회에 실패했습니다. 아래 값은 마지막 성공 시각 {시각}의 이전 데이터입니다.',
@@ -45,6 +46,7 @@ const COPY = {
     refresh: 'Refresh',
     signOut: 'Sign out',
     lastSuccess: 'Last successful update: {time}',
+    loading: 'Loading',
     failed: 'Failed to load',
     stale: 'Stale data',
     staleMessage: 'Loading failed. The values below are from the last successful update at {time}.',
@@ -95,6 +97,13 @@ const TIME_IN = /\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} \S/;
 const TIME_ONLY = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} \S+$/;
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+// Waits until `ready()` holds or `ms` passes; the caller's check then reports the outcome either way.
+async function waitFor(ready, ms = 5000) {
+  const until = Date.now() + ms;
+  while (!ready() && Date.now() < until) await wait(20);
+}
+// The first load is over: cards are on screen and none still reads as loading.
+const settled = (root) => root.querySelectorAll('section.card').length > 0 && !root.textContent.includes(t.loading);
 const check = (label, ok) => {
   if (!ok) failures.push(label);
 };
@@ -219,6 +228,7 @@ function fakeApi(overrides = {}) {
     counts.set(key, n);
     calls.push({
       key,
+      at: performance.now(),
       poll: init.headers?.['X-Relay-Poll'] === '1',
       csrf: init.headers?.['X-CSRF-Token'] ?? null,
       raw: JSON.stringify(init),
@@ -269,7 +279,7 @@ async function caseDash001() {
       }),
   });
   const { root } = await mount(api);
-  await wait(300);
+  await waitFor(() => settled(root));
 
   check('DASH-001: page title is the operations overview', root.querySelector('.page-title')?.textContent.trim() === t.operations);
   check('DASH-001: document language follows the choice', document.documentElement.lang === lang);
@@ -340,7 +350,12 @@ async function caseDash002() {
       'GET /api/v1/closed-sessions': () => ok({ as_of: AS_OF, max_entries: 100, items: [] }),
     }),
   );
-  await wait(300);
+  await waitFor(
+    () =>
+      emptyOf(cardOf(root, t.waitingTitle)) === t.waitingEmpty &&
+      emptyOf(cardOf(root, t.activeTitle)) === t.activeEmpty &&
+      emptyOf(cardOf(root, t.closedTitle)) === t.closedEmpty,
+  );
   check('DASH-002: empty waiting list text', emptyOf(cardOf(root, t.waitingTitle)) === t.waitingEmpty);
   check('DASH-002: empty active list text', emptyOf(cardOf(root, t.activeTitle)) === t.activeEmpty);
   check('DASH-002: empty closed list text', emptyOf(cardOf(root, t.closedTitle)) === t.closedEmpty);
@@ -351,7 +366,7 @@ async function caseDash002() {
 // DASH-003: a failure with no earlier data shows only the error; a later failure keeps the old values as stale.
 async function caseDash003() {
   const first = await mount(fakeApi({ 'GET /api/v1/waiting': () => fail(500) }));
-  await wait(300);
+  await waitFor(() => settled(first.root));
   const failedCard = cardOf(first.root, t.waitingTitle);
   const failedAlert = alertOf(failedCard);
   check(
@@ -388,7 +403,7 @@ async function caseDash004() {
       'GET /api/v1/waiting': (n) => (n === 1 ? fail(500) : ok({ as_of: AS_OF, items: [waitingItem({ relay_id: 'relay-9' })] })),
     }),
   );
-  await wait(300);
+  await waitFor(() => settled(root));
   check('DASH-004: failure shown before the retry', alertOf(cardOf(root, t.waitingTitle))?.title === t.failed);
 
   root.querySelector('#operations-refresh').click();
@@ -420,7 +435,7 @@ async function caseDash005() {
     },
   });
   const first = await mount(slow);
-  await wait(300);
+  await waitFor(() => slow.count('GET /api/v1/waiting') === 1);
   first.root.querySelector('#operations-refresh').click();
   await wait(100);
   check('DASH-005 overlap: no second waiting query while one is in flight', slow.count('GET /api/v1/waiting') === 1);
@@ -458,7 +473,7 @@ async function caseDash008() {
       'GET /api/v1/summary': (n) => (n === 1 ? ok(summaryBody()) : fail(401)),
     }),
   );
-  await wait(300);
+  await waitFor(() => settled(shown.root));
   check('DASH-008 expiry: data shown before expiry', cardOf(shown.root, t.summaryTitle) !== null);
   await wait(1200);
   check('DASH-008 expiry: sent to the sign-in screen', same(shown.navigations, ['/login/']));
@@ -484,9 +499,9 @@ async function caseDash016() {
       ),
   });
   const { root } = await mount(api);
-  await wait(300);
+  await waitFor(() => statValue(root, t.serverState) === t.stateReady);
   check('DASH-016: state before the change', statValue(root, t.serverState) === t.stateReady);
-  await wait(1200);
+  await waitFor(() => statValue(root, t.serverState) === t.stateShutdownGrace);
   check('DASH-016: changed state shown after the next poll', statValue(root, t.serverState) === t.stateShutdownGrace);
   check(
     'DASH-016: changed counts shown',
@@ -510,7 +525,7 @@ async function caseDash016() {
 // DASH-019: sign-out success removes data and goes to sign-in; a lost or failed response goes to the unconfirmed notice.
 async function caseDash019() {
   const success = await mount(fakeApi());
-  await wait(300);
+  await waitFor(() => settled(success.root));
   const logout = success.root.querySelector('#operations-logout');
   logout.click();
   logout.click();
@@ -525,7 +540,7 @@ async function caseDash019() {
   check('DASH-019 success: no polling after sign-out', success.api.calls.length === seen);
 
   const rejected = await mount(fakeApi({ 'DELETE /api/v1/session': () => fail(500) }));
-  await wait(300);
+  await waitFor(() => settled(rejected.root));
   rejected.root.querySelector('#operations-logout').click();
   await wait(300);
   check(
@@ -540,7 +555,7 @@ async function caseDash019() {
       },
     }),
   );
-  await wait(300);
+  await waitFor(() => settled(lost.root));
   lost.root.querySelector('#operations-logout').click();
   await wait(300);
   check(
@@ -550,7 +565,7 @@ async function caseDash019() {
 
   // A refused sign-out (403 csrf_invalid) did not finish: no completion is shown and data is hidden (spec §5).
   const refused = await mount(fakeApi({ 'DELETE /api/v1/session': () => fail(403) }));
-  await wait(300);
+  await waitFor(() => settled(refused.root));
   refused.root.querySelector('#operations-logout').click();
   await wait(300);
   check(
@@ -559,7 +574,7 @@ async function caseDash019() {
   );
 
   const expired = await mount(fakeApi({ 'DELETE /api/v1/session': () => fail(401) }));
-  await wait(300);
+  await waitFor(() => settled(expired.root));
   expired.root.querySelector('#operations-logout').click();
   await wait(300);
   check('DASH-019 expired session: sent to the sign-in screen', same(expired.navigations, ['/login/']));
@@ -588,7 +603,7 @@ async function caseDash020() {
         }),
     }),
   );
-  await wait(300);
+  await waitFor(() => settled(root));
   const card = cardOf(root, t.closedTitle);
   const rows = dataRowsOf(card);
   check('DASH-020: four closed rows', rows.length === 4);
@@ -604,7 +619,7 @@ async function caseDash020() {
   const empty = await mount(
     fakeApi({ 'GET /api/v1/closed-sessions': () => ok({ as_of: AS_OF, max_entries: 100, items: [] }) }),
   );
-  await wait(300);
+  await waitFor(() => settled(empty.root));
   check('DASH-020: empty closed list text', emptyOf(cardOf(empty.root, t.closedTitle)) === t.closedEmpty);
   // Byte formats follow DESIGN.md and match in every language (format.js).
   check('DASH-020 format: 0 bytes', formatBytes(0) === '0.0 KiB');
@@ -640,7 +655,7 @@ async function caseDash021() {
         ),
     }),
   );
-  await wait(300);
+  await waitFor(() => settled(root));
   check('DASH-021: handshaking count shown', statValue(root, t.handshaking) === '2');
   check('DASH-021: Mode I target count shown', statValue(root, t.targetConnecting) === '3');
 
@@ -657,21 +672,22 @@ async function caseDash021() {
   checkLayout('DASH-021');
 }
 
+// Milliseconds from the first summary call to the second; NaN until there are two calls.
+const intervalOf = (calls) => (calls.length >= 2 ? calls[1].at - calls[0].at : NaN);
+
 // DASH-022: the poll interval is the configured P; no overlap; the default is 2 s when P is not set.
 async function caseDash022() {
   const custom = await mount(fakeApi({ 'GET /api/v1/session': () => session(3) }));
-  await wait(1500);
-  check('DASH-022 P=3: no poll before 3 s', custom.api.count('GET /api/v1/summary') === 1);
-  await wait(2000);
+  await waitFor(() => custom.api.count('GET /api/v1/summary') >= 2, 6000);
   const customCalls = custom.api.calls.filter((c) => c.key === 'GET /api/v1/summary');
-  check('DASH-022 P=3: one poll at 3 s', customCalls.length === 2 && customCalls[1].poll === true);
+  check('DASH-022 P=3: one poll after the first load', customCalls.length === 2 && customCalls[1].poll === true);
+  check('DASH-022 P=3: poll interval is 3 s', intervalOf(customCalls) >= 2950 && intervalOf(customCalls) < 3750);
 
   const dflt = await mount(fakeApi({ 'GET /api/v1/session': () => session(2) }));
-  await wait(1500);
-  check('DASH-022 P=2: no poll before 2 s', dflt.api.count('GET /api/v1/summary') === 1);
-  await wait(1000);
+  await waitFor(() => dflt.api.count('GET /api/v1/summary') >= 2, 6000);
   const dfltCalls = dflt.api.calls.filter((c) => c.key === 'GET /api/v1/summary');
-  check('DASH-022 P=2: one poll at 2 s', dfltCalls.length === 2 && dfltCalls[1].poll === true);
+  check('DASH-022 P=2: one poll after the first load', dfltCalls.length === 2 && dfltCalls[1].poll === true);
+  check('DASH-022 P=2: poll interval is 2 s', intervalOf(dfltCalls) >= 1950 && intervalOf(dfltCalls) < 2750);
   checkLayout('DASH-022');
 }
 
@@ -694,7 +710,7 @@ async function caseDash024() {
   for (const [preferred, expected] of cases) {
     const items = new Map();
     const { root } = await mount(fakeApi(), { storage: storageOf(items), preferred });
-    await wait(300);
+    await waitFor(() => root.textContent.includes('1.5 MiB'));
     const label = `DASH-024 ${preferred.join(',')}`;
     check(`${label}: document language`, document.documentElement.lang === expected);
     check(`${label}: language select`, root.querySelector('#operations-language')?.value === expected);
@@ -711,7 +727,7 @@ async function caseDash025() {
   const storage = storageOf(items);
   const api = fakeApi();
   const first = await mount(api, { storage, preferred: ['ko-KR'] });
-  await wait(300);
+  await waitFor(() => settled(first.root));
   check('DASH-025 start: browser preference gives Korean', document.documentElement.lang === 'ko');
   const select = first.root.querySelector('#operations-language');
   select.value = 'en';
@@ -722,7 +738,7 @@ async function caseDash025() {
   check('DASH-025 change: choice saved', items.get(STORAGE_KEY) === 'en');
 
   const again = await mount(api, { storage, preferred: ['ko-KR'] });
-  await wait(300);
+  await waitFor(() => settled(again.root));
   check('DASH-025 reload: saved choice beats browser preference', document.documentElement.lang === 'en');
   check('DASH-025 reload: select keeps English', again.root.querySelector('#operations-language')?.value === 'en');
 
