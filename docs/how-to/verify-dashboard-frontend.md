@@ -228,8 +228,9 @@
 ### 4.3 검토 기록 (작업 4.9 재작업, 2026-10-22)
 
 - 검토자: 에이전트 Login49(작업 위임: Main). 사람의 검토가 아니다. 사람 검토는 작업 4.12에서 한다.
-- 구현: 4.2절의 `aaca485` 위에서 로그인 화면을 구성 요소와 스타일 복사본으로 다시 만들었다. 복사본은 `cargo xtask tokens`가 쓰고, `tokens --check`가 원본과 같은지 확인한다. 이 기록은 구현과 같은 커밋에 들어간다. 커밋 해시는 `git log`로 확인한다.
+- 구현: 4.2절의 `aaca485` 위에서 로그인 화면을 구성 요소와 스타일 복사본으로 다시 만들었다. 복사본은 `cargo xtask tokens`가 쓰고, `tokens --check`가 원본과 같은지 확인한다. 이 기록은 구현과 같은 커밋 `f5310b9`에 들어 있다.
 - 환경: Windows 10.0.26200 x64, Chrome 155.0.8059.84, Rust 1.99.1. 게이트 1은 WSL Ubuntu 24.04, 게이트 2는 위의 Windows 환경에서 실행했다.
+- 작업 트리: 게이트를 돌릴 때 Reload52의 미커밋 파일이 있었다. `crates/adapters/src/file_watch.rs`, `crates/adapters/src/file_watch/feed.rs`, `crates/app/src/reload/service.rs`(수정), `tests/reload.rs`(추적되지 않음)다. 이 파일들은 커밋 `f5310b9`에 없다.
 - 명령과 결과:
   - `cargo xtask tokens` 뒤 `cargo xtask tokens --check`: `tokens --check: 통과`, 종료 코드 0.
   - 변조 시험: 복사본(`web/dashboard/login/components/alert.js`)과 원본(`web/dashboard/app/components/alert.js`)에 줄을 더했고, 복사 목록에 없는 파일(`web/dashboard/login/components/stray.js`)을 만들었다. 셋 모두 `실패 (1건)`과 종료 코드 1이었다. 되돌린 뒤 셋 모두 `통과`였다.
@@ -239,6 +240,7 @@
   - `vr-win.ps1 -Only check`: `ALL PASSED (check)`. 이 실행은 management 시험 수정 전에 돌았다. 수정 뒤 실행은 아래 게이트가 포함한다.
   - 게이트 1(WSL, `vr-full.sh`): `ALL PASSED`, 종료 코드 0. `시나리오 150건: 통과 18, 부분 35, 실패 0, 미실행 0, 미연결 97. 오류 0건`.
   - 게이트 2(Windows, `vr-win.ps1 -Only all`): `ALL PASSED (all)`, 종료 코드 0. `시나리오 150건: 통과 17, 부분 35, 실패 0, 미실행 1, 미연결 97. 오류 0건`. 미실행 1건은 OPS-007(`closes_and_logs_every_held_connection_when_stopping`)이다. 이 시험은 게이트 1(WSL)에서는 통과했고, 게이트 2의 Windows 실행 목록에는 없었다.
+  - 4.2절 기준선 대비 통과 +2, 부분 −2(두 게이트 모두)이다. 4.9 기준선 보고서는 보관하지 않아 늘어난 항목은 확인하지 않았다. OPS-024와 OPS-035의 통과는 미커밋 `tests/reload.rs`의 시험을 근거로 한다. 두 항목이 4.9 기준선에서 이미 통과였는지는 확인하지 않았다. 이 파일의 시험이 시나리오 수 변화에 섞였을 수 있다(추정).
 - 폭별 화면: 6폭(1280·1024·1023·768·390·320) × 7장(ko 5장, en 2장), 42장을 `target/dashboard-shots/<폭>/`에 다시 찍었다. 모든 장에서 `scrollWidth`와 `clientWidth`가 같았고, CSP 위반은 0건이었다. `<html lang>`은 화면 언어와 같았다. 콘솔 오류는 가로챈 401·500의 `Failed to load resource`뿐이었다.
 - 기준선과 비교: 4.9 장(`target/dashboard-shots-baseline/`)과 42장 모두 바이트가 달랐다. 화면을 구성 요소와 스타일로 바꾼 결과다. 1280 ko 입력 화면과 320 ko 처리 중 화면을 눈으로 보았다. 알림, 입력 칸, 버튼 배치가 깨지지 않았다. 나머지 40장은 눈으로 보지 않았다(수치로만 확인).
 - 실제 서버 스모크: 디버그 빌드 `vnc-relay serve`, 임시 설정 `target/login-smoke/relay.toml`(관리 `127.0.0.1:18701`, 상태 `127.0.0.1:18702`, 중계 진입점 없음), 계정 `alice`. 해시는 Bun의 argon2id로 `m=19456,t=2,p=1`에 만들어 계정 파일에 넣었다. 계정 파일 형식은 [CLI 계약 1.3·1.4절](../contracts/cli-v1.md)을 따랐다.

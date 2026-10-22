@@ -10,7 +10,7 @@ import { LANGUAGES, chooseLanguage, readSavedLanguage, saveLanguage } from './la
 
 const LOGIN_PATH = '/api/v1/session';
 const HOME_PATH = '/';
-// 구현 판단(사용자 결정 없음): 응답이 없으면 이 시간 뒤에 요청을 끊는다.
+// Implementation choice (no user decision): abort the request when no response comes within this time.
 const DEFAULT_TIMEOUT_MS = 10000;
 
 // Copy from dashboard.md §9.3. The CPY number is in each comment.
