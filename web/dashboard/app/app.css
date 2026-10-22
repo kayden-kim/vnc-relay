@@ -32,6 +32,10 @@
   min-width: 0;
 }
 
+.page-head-text > .button {
+  align-self: flex-start;
+}
+
 .page-title {
   margin: 0;
   font-family: var(--type-heading-page-family);
@@ -69,6 +73,14 @@
   grid-column: span 6;
 }
 
+.span-4 {
+  grid-column: span 4;
+}
+
+.span-8 {
+  grid-column: span 8;
+}
+
 .span-12 {
   grid-column: span 12;
 }
@@ -81,12 +93,25 @@
   .span-6 {
     grid-column: span 12;
   }
+
+  .span-4,
+  .span-8 {
+    grid-column: span 12;
+  }
 }
 
 @media (max-width: 767px) {
   .span-3,
   .span-6 {
     grid-column: span 12;
+  }
+
+  .page-actions {
+    width: 100%;
+  }
+
+  .page-actions .button {
+    flex: 1;
   }
 }
 
@@ -119,12 +144,69 @@
   gap: var(--space-md);
 }
 
-.session-facts .stat-value {
-  min-height: 0;
-  font-family: var(--type-body-strong-family);
-  font-size: var(--type-body-strong-size);
-  font-weight: var(--type-body-strong-weight);
-  line-height: var(--type-body-line);
+.fact-list {
+  margin: 0;
+}
+
+.fact {
+  display: grid;
+  grid-template-columns: var(--space-kv-label-col) minmax(0, 1fr);
+  gap: var(--space-md);
+  align-items: baseline;
+  padding-block: var(--space-sm);
+  border-bottom: var(--space-border-width) solid var(--color-border);
+}
+
+@media (max-width: 767px) {
+  .fact {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-xs);
+  }
+}
+
+.fact-label {
+  margin: 0;
+  color: var(--color-muted-foreground);
+  font-family: var(--type-label-family);
+  font-size: var(--type-label-size);
+  font-weight: var(--type-label-weight);
+  line-height: var(--type-label-line);
+}
+
+.fact-value {
+  margin: 0;
+  min-width: 0;
+  font-family: var(--type-body-numeric-family);
+  font-size: var(--type-body-numeric-size);
+  font-weight: var(--type-body-numeric-weight);
+  line-height: var(--type-body-numeric-line);
+  font-feature-settings: var(--type-body-numeric-feature);
+  overflow-wrap: anywhere;
+}
+
+.fact-address {
+  font-family: var(--type-data-family);
+  font-size: var(--type-data-size);
+  font-weight: var(--type-data-weight);
+  line-height: var(--type-data-line);
+  font-feature-settings: var(--type-data-feature);
+}
+
+.direction-mark {
+  display: inline-block;
+  width: var(--space-mark-size);
+  height: var(--space-mark-size);
+  margin-right: var(--space-xs);
+  border-radius: var(--radius-mark);
+  vertical-align: middle;
+}
+
+.direction-mark-1 {
+  background: var(--color-chart-1);
+}
+
+.direction-mark-2 {
+  background: var(--color-chart-2);
 }
 
 .gauge-wrap {
