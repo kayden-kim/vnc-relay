@@ -772,8 +772,9 @@ fn ipv6_items_decide_the_loopback_source_at_their_boundaries() {
             "{allow} refused ::1"
         );
     }
-    // Outside: a range and a prefix that both start just after `::1`.
-    for allow in [r#"["::2-::ff"]"#, r#"["::2/127"]"#] {
+    // Outside: a range and a prefix that start just after `::1`, and a single
+    // address that ends just before it.
+    for allow in [r#"["::2-::ff"]"#, r#"["::2/127"]"#, r#"["::/128"]"#] {
         applied += 1;
         write(&config, &v6(allow));
         wait_for_count(&log, applied, |line| event_is(line, "reload_applied"));
