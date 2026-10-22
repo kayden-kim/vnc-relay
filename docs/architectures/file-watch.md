@@ -248,3 +248,16 @@ flowchart LR
 | 수동 스모크 S1–S8 (Windows, 실제 바이너리) | 설정·인증서 변경, 감시 디렉터리 이름 바꾸기, 배타 잠금(약 7.6초) | 감지에서 결과까지 414~434ms(7건). 잠금 동안 5초 주기 확인마다 `reload_watch_failed`(`poll_error`) 2건, 복구 사건 없음, 잠금 해제 뒤 변경 적용. 디렉터리 이름 바꾸기는 `EPERM`이고 릴레이는 계속 실행. 산출물 `target/smoke-reload/`(커밋하지 않음) |
 
 판정: 통과. 항목 14(Windows 디렉터리·편집기 핸들)는 사용자 결정 전이다.
+
+### 작업 5.2 정정
+
+- 정정 이유: 기준 커밋 `c4c6cf6`에서 OPS-041 비부분 표식이 붙은 시험 `allow_change_is_applied_by_poll_when_the_notify_is_blocked`는 Dp 감지 시각을 확인하지 않았다. 부분 시험이므로 OPS-041은 통과가 아니다. 그 결과 위 표의 통과 수 23(Ubuntu)·22(Windows)는 1씩 많았다. 기준 커밋 `834769d`에서 표식을 고쳤다. 코드 동작은 바뀌지 않았다.
+- 범위: OPS-003·027·028·038·041의 표식과 시험 구성.
+- 결과: 아래 표. 위 기록의 표는 고치지 않았다(기록 보존).
+
+| 확인 | 명령·방법 | 결과 |
+| --- | --- | --- |
+| 자동 시험 Ubuntu | `wsl -d Ubuntu -- bash /mnt/d/vr-tools/vr-full.sh` | `ALL PASSED`. 시나리오 150건: 통과 22, 부분 31, 실패 0, 미실행 0, 미연결 97. 오류 0건 |
+| 자동 시험 Windows | `powershell -NoProfile -ExecutionPolicy Bypass -File D:/vr-tools/vr-win.ps1 -Only all` | `ALL PASSED (all)`. 시나리오 150건: 통과 21, 부분 31, 실패 0, 미실행 1(OPS-007, Unix 전용), 미연결 97. 오류 0건 |
+
+판정: 자동 시험 게이트 통과. 정정으로 OPS-041은 통과에서 부분으로 바뀌었다. 위 기록의 "통과로 바뀌었다" 목록에서 041을 뺀다. OPS-003·027·028·038은 비부분 시험이 확인한다. OPS-038은 `tests/reload.rs`의 `allow_list_modes_hold_at_start_and_at_reload`가 완전히 확인하며, OPS-025는 같은 시험에서 부분이다. 정정 뒤 부분은 OPS-025·026·040·041과 WS-022의 나머지 조항이다. 항목 14(Windows 디렉터리·편집기 핸들)는 사용자 결정 전이다.
