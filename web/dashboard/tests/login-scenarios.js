@@ -1,4 +1,4 @@
-// Scenario checks for the sign-in page (dashboard.md §7: DASH-017, 018, 024, 025, 027).
+// Scenario checks for the sign-in page (dashboard.md §7: DASH-017, 018, 019, 024, 025, 027).
 // One page load runs one case, ?case=dash-0xx, with fake services. The result goes to <main id="result">.
 import { mountLogin } from '../login/login.js';
 import { STORAGE_KEY } from '../login/language.js';
@@ -14,6 +14,7 @@ const COPY = {
     failed: '로그인할 수 없습니다. 계정명과 비밀번호를 확인한 뒤 다시 시도하십시오.',
     required: '로그인이 필요합니다. 다시 로그인하십시오.',
     requestFailed: '로그인 요청을 처리하지 못했습니다. 잠시 뒤 다시 시도하십시오.',
+    logoutUnconfirmed: '로그아웃이 끝났는지 확인하지 못했습니다. 이 화면의 관리 데이터는 숨겼습니다.',
     submit: '로그인',
     submitBusy: '로그인 중…',
   },
@@ -26,6 +27,7 @@ const COPY = {
     failed: 'Sign-in failed. Check the account name and password, then try again.',
     required: 'Sign-in is required. Sign in again.',
     requestFailed: 'The sign-in request could not be processed. Try again later.',
+    logoutUnconfirmed: 'Could not confirm that sign-out finished. Management data is hidden in this screen.',
     submit: 'Sign in',
     submitBusy: 'Signing in…',
   },
@@ -37,6 +39,7 @@ const NOTICE_TEXT_KEY = {
   checking: 'checking',
   failed: 'failed',
   'request-failed': 'requestFailed',
+  'logout-unconfirmed': 'logoutUnconfirmed',
 };
 
 const host = document.getElementById('host');
@@ -342,9 +345,43 @@ async function caseDash027() {
   checkLayout('DASH-027');
 }
 
+// DASH-019: a sign-out whose result is lost shows the unconfirmed notice (CPY-076) in the chosen language.
+async function caseDash019() {
+  const lang = new URLSearchParams(location.search).get('lang') === 'en' ? 'en' : 'ko';
+  const replaced = [];
+  const root = await mount({
+    storage: memoryStorage(),
+    preferredLanguages: [lang === 'en' ? 'en-US' : 'ko-KR'],
+    search: '?notice=logout-unconfirmed',
+    replaceUrl: (url) => replaced.push(url),
+  });
+  await tick();
+  check('DASH-019: document language follows the choice', document.documentElement.lang === lang);
+  checkNotice(root, 'DASH-019', 'logout-unconfirmed');
+  check(
+    'DASH-019: unconfirmed notice is a warning',
+    root.querySelector('[data-notice="logout-unconfirmed"]')?.dataset.tone === 'warning',
+  );
+  check('DASH-019: notice query removed by replacing the URL', replaced.length === 1 && replaced[0] === '/login/');
+  check('DASH-019: sign-in form is shown again', refs(root).form !== null);
+  // An unknown notice value shows CPY-075 and still removes the query.
+  const unknown = [];
+  const other = await mount({
+    storage: memoryStorage(),
+    preferredLanguages: [lang === 'en' ? 'en-US' : 'ko-KR'],
+    search: '?notice=unexpected',
+    replaceUrl: (url) => unknown.push(url),
+  });
+  await tick();
+  checkNotice(other, 'DASH-019 unknown notice', 'required');
+  check('DASH-019 unknown notice: query removed', unknown.length === 1 && unknown[0] === '/login/');
+  checkLayout('DASH-019');
+}
+
 const CASES = {
   'dash-017': caseDash017,
   'dash-018': caseDash018,
+  'dash-019': caseDash019,
   'dash-024': caseDash024,
   'dash-025': caseDash025,
   'dash-027': caseDash027,

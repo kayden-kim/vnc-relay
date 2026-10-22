@@ -10,6 +10,8 @@ import { LANGUAGES, chooseLanguage, readSavedLanguage, saveLanguage } from './la
 
 const LOGIN_PATH = '/api/v1/session';
 const HOME_PATH = '/';
+// Sign-in page path. The logout notice removes its query by replacing the URL with this path.
+const LOGIN_PAGE_PATH = '/login/';
 // Implementation choice (no user decision): abort the request when no response comes within this time.
 const DEFAULT_TIMEOUT_MS = 10000;
 
@@ -26,6 +28,7 @@ const STRINGS = {
     failed: '로그인할 수 없습니다. 계정명과 비밀번호를 확인한 뒤 다시 시도하십시오.', // CPY-074
     required: '로그인이 필요합니다. 다시 로그인하십시오.', // CPY-075
     requestFailed: '로그인 요청을 처리하지 못했습니다. 잠시 뒤 다시 시도하십시오.', // CPY-077
+    logoutUnconfirmed: '로그아웃이 끝났는지 확인하지 못했습니다. 이 화면의 관리 데이터는 숨겼습니다.', // CPY-076
     submit: '로그인', // CPY-012
     submitBusy: '로그인 중…', // CPY-013
   },
@@ -39,6 +42,7 @@ const STRINGS = {
     failed: 'Sign-in failed. Check the account name and password, then try again.',
     required: 'Sign-in is required. Sign in again.',
     requestFailed: 'The sign-in request could not be processed. Try again later.',
+    logoutUnconfirmed: 'Could not confirm that sign-out finished. Management data is hidden in this screen.',
     submit: 'Sign in',
     submitBusy: 'Signing in…',
   },
@@ -57,6 +61,7 @@ const NOTICES = {
   checking: { tone: 'info', copy: 'checking' },
   failed: { tone: 'destructive', copy: 'failed' },
   'request-failed': { tone: 'destructive', copy: 'requestFailed' },
+  'logout-unconfirmed': { tone: 'warning', copy: 'logoutUnconfirmed' },
 };
 
 /** Browser storage, or null when the browser blocks it. */
@@ -99,6 +104,8 @@ async function sendLogin(request, account, password, timeoutMs) {
  * @param {readonly string[]} [deps.preferredLanguages]
  * @param {(url: string) => void} [deps.navigate]
  * @param {number} [deps.timeoutMs]
+ * @param {string} [deps.search] the query string of the page URL. Default: the current page's.
+ * @param {(url: string) => void} [deps.replaceUrl] replaces the page URL without a history entry
  */
 export function mountLogin(root, deps = {}) {
   const doc = root.ownerDocument;
@@ -107,15 +114,23 @@ export function mountLogin(root, deps = {}) {
   const preferred = deps.preferredLanguages ?? globalThis.navigator?.languages ?? [];
   const navigate = deps.navigate ?? ((url) => globalThis.location.assign(url));
   const timeoutMs = deps.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const search = deps.search ?? globalThis.location?.search ?? '';
+  const replaceUrl = deps.replaceUrl ?? ((url) => globalThis.history.replaceState(null, '', url));
 
+  // The notice query comes from the logout result (CPY-076). Any other value keeps CPY-075.
+  const params = new URLSearchParams(search);
   const state = {
     lang: chooseLanguage(readSavedLanguage(storage), preferred),
-    // Starts with CPY-075: the page was opened without a session.
-    notice: 'required',
+    // CPY-075 by default: the page was opened without a session.
+    notice: params.get('notice') === 'logout-unconfirmed' ? 'logout-unconfirmed' : 'required',
     accountError: false,
     passwordError: false,
     busy: false,
   };
+  // Remove the notice query so that a reload does not show the notice again.
+  if (params.has('notice')) {
+    replaceUrl(LOGIN_PAGE_PATH);
+  }
 
   function el(tag, className, text) {
     const node = doc.createElement(tag);

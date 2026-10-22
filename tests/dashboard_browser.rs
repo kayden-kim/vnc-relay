@@ -91,6 +91,90 @@ fn login_shows_the_request_failed_notice_in_browser() {
     check_login_case("dash-027");
 }
 
+/// spec: dashboard.md:DASH-001 partial
+#[test]
+fn operations_shows_the_overview_in_browser() {
+    check_localized_case("/tests/operations.html", "dash-001");
+}
+
+/// spec: dashboard.md:DASH-002 partial
+#[test]
+fn operations_shows_empty_lists_as_empty_not_error_in_browser() {
+    check_localized_case("/tests/operations.html", "dash-002");
+}
+
+/// spec: dashboard.md:DASH-003 partial
+#[test]
+fn operations_shows_failure_and_keeps_stale_data_in_browser() {
+    check_localized_case("/tests/operations.html", "dash-003");
+}
+
+/// spec: dashboard.md:DASH-004 partial
+#[test]
+fn operations_refresh_recovers_after_failure_in_browser() {
+    check_localized_case("/tests/operations.html", "dash-004");
+}
+
+/// spec: dashboard.md:DASH-005 partial
+#[test]
+fn operations_limits_one_query_per_list_and_drops_late_responses_in_browser() {
+    check_localized_case("/tests/operations.html", "dash-005");
+}
+
+/// spec: dashboard.md:DASH-008 partial
+#[test]
+fn operations_sends_expired_session_to_sign_in_in_browser() {
+    check_localized_case("/tests/operations.html", "dash-008");
+}
+
+/// spec: dashboard.md:DASH-016 partial
+#[test]
+fn operations_shows_state_change_on_next_poll_in_browser() {
+    check_localized_case("/tests/operations.html", "dash-016");
+}
+
+/// spec: dashboard.md:DASH-019 partial
+#[test]
+fn login_shows_the_unconfirmed_sign_out_notice_in_browser() {
+    check_localized_case("/tests/login.html", "dash-019");
+}
+
+/// spec: dashboard.md:DASH-019 partial
+#[test]
+fn operations_sign_out_goes_to_sign_in_in_browser() {
+    check_localized_case("/tests/operations.html", "dash-019");
+}
+
+/// spec: dashboard.md:DASH-020 partial
+#[test]
+fn operations_shows_closed_session_causes_in_browser() {
+    check_localized_case("/tests/operations.html", "dash-020");
+}
+
+/// spec: dashboard.md:DASH-021 partial
+#[test]
+fn operations_shows_unknown_usage_as_unavailable_in_browser() {
+    check_localized_case("/tests/operations.html", "dash-021");
+}
+
+/// spec: dashboard.md:DASH-022 partial
+#[test]
+fn operations_polls_at_the_configured_interval_in_browser() {
+    check_localized_case("/tests/operations.html", "dash-022");
+}
+
+/// spec: dashboard.md:DASH-024 partial
+#[test]
+fn operations_follows_the_browser_language_in_browser() {
+    check_localized_case("/tests/operations.html", "dash-024");
+}
+
+/// spec: dashboard.md:DASH-025 partial
+#[test]
+fn operations_keeps_the_chosen_language_in_browser() {
+    check_localized_case("/tests/operations.html", "dash-025");
+}
+
 /// Runs one page at every width and language, then reports all failing runs at once.
 fn check_page(page: &str) {
     let mut runs = Vec::new();
@@ -108,6 +192,17 @@ fn check_login_case(case: &str) {
         .iter()
         .map(|width| (format!("/tests/login.html?case={case}"), *width))
         .collect();
+    check_runs(&runs);
+}
+
+/// Runs one scenario page, `{page}?case=…&lang=…`, in every language at every width.
+fn check_localized_case(page: &str, case: &str) {
+    let mut runs = Vec::new();
+    for lang in LANGS {
+        for width in WIDTHS {
+            runs.push((format!("{page}?case={case}&lang={lang}"), width));
+        }
+    }
     check_runs(&runs);
 }
 
