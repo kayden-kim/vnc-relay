@@ -227,6 +227,11 @@ async function caseDash007() {
   );
   check('DASH-007: gone before read keeps terminate off', !enabled(loaded.root));
   check('DASH-007: list link kept', backOf(loaded.root)?.getAttribute('href') === '/');
+  check(
+    'DASH-007: gone notice keeps the list action',
+    labelOf(noticeActionOf(loaded.root)) === t.back && noticeActionOf(loaded.root)?.getAttribute('href') === '/',
+  );
+  check('DASH-007: focus moves to the notice list action', document.activeElement === noticeActionOf(loaded.root));
   loaded.handle.dispose();
 
   const api = fakeApi({
@@ -240,6 +245,7 @@ async function caseDash007() {
   check('DASH-007: gone during refresh keeps terminate off', !enabled(root));
   check('DASH-007: gone during refresh sends no terminate', api.count(TERMINATE) === 0);
   check('DASH-007: list link kept after refresh', backOf(root)?.getAttribute('href') === '/');
+  check('DASH-007: focus moves to the notice list action after refresh', document.activeElement === noticeActionOf(root));
   checkLayout('DASH-007');
 }
 
@@ -265,6 +271,7 @@ async function caseDash011() {
   confirmOf(root).click();
   await waitFor(() => noticeOf(root) === t.notFound);
   check('DASH-011: gone after confirm shows not-found', noticeOf(root) === t.notFound);
+  check('DASH-011: focus moves to the notice list action', document.activeElement === noticeActionOf(root));
   check('DASH-011: terminate sent once', api.count(TERMINATE) === 1);
   check('DASH-011: no re-read after not-found', api.count(DETAIL) === 1);
   checkLayout('DASH-011');

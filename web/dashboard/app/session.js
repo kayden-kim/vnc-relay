@@ -53,7 +53,7 @@ export function mountSession(root, id, deps = {}) {
   // Each detail run and each terminate start takes a new generation. Older responses are dropped.
   let generation = 0;
   let page = null;
-  let focusBack = false;
+  let focusList = false;
 
   function copy() {
     return COPY[state.lang];
@@ -106,6 +106,11 @@ export function mountSession(root, id, deps = {}) {
     const recheck = createButton({ variant: 'outline', label: t.recheck, icon: 'refresh' });
     recheck.addEventListener('click', onRefresh);
 
+    // List action in the gone notice (CPY-010). Focus moves here when the session is gone (spec §6).
+    const listAction = el('a', 'button button-outline');
+    listAction.href = '/';
+    listAction.append(icon('back'), el('span', 'button-label', t.back));
+
     const terminate = createButton({ variant: 'destructive', label: t.terminate, icon: 'cancel' });
     terminate.id = 'session-terminate';
 
@@ -137,6 +142,7 @@ export function mountSession(root, id, deps = {}) {
       select,
       logout,
       back,
+      listAction,
       refresh,
       recheck,
       terminate,
@@ -358,11 +364,11 @@ export function mountSession(root, id, deps = {}) {
     void runQuery(true);
   }
 
-  // The session is gone (closed or not found). No data, no polling, no terminate. Focus moves to the back link.
+  // The session is gone (closed or not found). No data, no polling, no terminate. Focus moves to the list action in the notice.
   function markGone() {
     state.gone = true;
     retire();
-    focusBack = true;
+    focusList = true;
   }
 
   // The id was rejected (400). The invalid-id notice is shown and no further request is sent.
@@ -435,13 +441,13 @@ export function mountSession(root, id, deps = {}) {
     return state.outcome;
   }
 
-  // Alert for a notice kind. Failed, unknown, and rejected carry the re-check action (CPY-014).
+  // Gone carries the list action (spec §4). Failed, unknown, and rejected carry the re-check action (CPY-014).
   function noticeAlert(kind, t) {
     switch (kind) {
       case 'invalid':
         return createAlert({ tone: 'warning', title: t.invalidSessionId });
       case 'gone':
-        return createAlert({ tone: 'neutral', title: t.notFound });
+        return createAlert({ tone: 'neutral', title: t.notFound, action: page.listAction });
       case 'failed':
         return createAlert({ tone: 'destructive', title: t.terminateFailed, action: page.recheck });
       case 'unknown':
@@ -557,9 +563,9 @@ export function mountSession(root, id, deps = {}) {
     page.terminate.disabled = !canTerminate();
     page.terminate.querySelector('.button-label').textContent = state.busy ? t.terminating : t.terminate;
 
-    if (focusBack) {
-      focusBack = false;
-      page.back.focus();
+    if (focusList) {
+      focusList = false;
+      page.listAction.focus();
     }
   }
 
