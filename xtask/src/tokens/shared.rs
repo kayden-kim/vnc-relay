@@ -1,4 +1,4 @@
-//! Copies of the app components and styles that the sign-in page loads.
+//! Copies of the app components, styles, and language module that the sign-in page loads.
 //!
 //! `cargo xtask tokens` writes each copy under `web/dashboard/login/`, at the
 //! same relative path as its source under `web/dashboard/app/`. A copy is the
@@ -14,7 +14,7 @@ use crate::cargo;
 
 /// Files under `web/dashboard/app/` that the sign-in page loads. Each one is
 /// copied to the same relative path under `web/dashboard/login/`.
-const SHARED_FILES: [&str; 7] = [
+const SHARED_FILES: [&str; 8] = [
     "components/icons.js",
     "components/alert.js",
     "components/button.js",
@@ -22,6 +22,7 @@ const SHARED_FILES: [&str; 7] = [
     "components/language-select.js",
     "styles/base.css",
     "styles/components.css",
+    "language.js",
 ];
 
 /// Directories under `web/dashboard/login/` whose files all come from `SHARED_FILES`.

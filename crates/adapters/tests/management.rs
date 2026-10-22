@@ -772,13 +772,16 @@ async fn protected_files_are_served_with_a_session() {
         assert_eq!(reply.body, expected, "GET {url}");
     }
 
-    // The app index comes with task 4.10, so `/` has no file yet. A session
-    // does not make a missing file exist.
-    for url in ["/", "/app/missing.js"] {
-        let reply = plain_exchange(running.addr, &get(url, &[cookie.as_str()])).await;
-        assert_eq!(reply.status, 404, "GET {url}");
-        assert_eq!(error_code(&reply), "not_found", "GET {url}");
-    }
+    // The app index is served at `/`. A session does not make a missing file exist.
+    let index = dashboard_file("app/index.html");
+    let reply = plain_exchange(running.addr, &get("/", &[cookie.as_str()])).await;
+    assert_eq!(reply.status, 200, "GET /");
+    check_file_headers(&reply, "text/html; charset=utf-8", index.len());
+    assert_eq!(reply.body, index, "GET /");
+
+    let reply = plain_exchange(running.addr, &get("/app/missing.js", &[cookie.as_str()])).await;
+    assert_eq!(reply.status, 404, "GET /app/missing.js");
+    assert_eq!(error_code(&reply), "not_found", "GET /app/missing.js");
 }
 
 #[tokio::test]

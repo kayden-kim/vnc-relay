@@ -1,4 +1,5 @@
-// Language choice for the sign-in page: saved choice, then browser preferences, then English.
+// Generated file. Do not edit. Source: web/dashboard/app/language.js
+// Language choice for the dashboard pages: saved choice, then browser preferences, then English.
 // The choice stays in browser storage. It is never sent to the server or to the management API.
 
 export const LANGUAGES = ['ko', 'en'];

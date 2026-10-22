@@ -168,6 +168,56 @@ pub const ASSETS: &[Asset] = &[
         content_type: JS,
         body: include_bytes!("../../../web/dashboard/app/components/icons.js"),
     },
+    Asset {
+        path: "/",
+        content_type: HTML,
+        body: include_bytes!("../../../web/dashboard/app/index.html"),
+    },
+    Asset {
+        path: "/app/app.css",
+        content_type: CSS,
+        body: include_bytes!("../../../web/dashboard/app/app.css"),
+    },
+    Asset {
+        path: "/app/main.js",
+        content_type: JS,
+        body: include_bytes!("../../../web/dashboard/app/main.js"),
+    },
+    Asset {
+        path: "/app/operations.js",
+        content_type: JS,
+        body: include_bytes!("../../../web/dashboard/app/operations.js"),
+    },
+    Asset {
+        path: "/app/panels.js",
+        content_type: JS,
+        body: include_bytes!("../../../web/dashboard/app/panels.js"),
+    },
+    Asset {
+        path: "/app/api.js",
+        content_type: JS,
+        body: include_bytes!("../../../web/dashboard/app/api.js"),
+    },
+    Asset {
+        path: "/app/model.js",
+        content_type: JS,
+        body: include_bytes!("../../../web/dashboard/app/model.js"),
+    },
+    Asset {
+        path: "/app/format.js",
+        content_type: JS,
+        body: include_bytes!("../../../web/dashboard/app/format.js"),
+    },
+    Asset {
+        path: "/app/copy.js",
+        content_type: JS,
+        body: include_bytes!("../../../web/dashboard/app/copy.js"),
+    },
+    Asset {
+        path: "/app/language.js",
+        content_type: JS,
+        body: include_bytes!("../../../web/dashboard/app/language.js"),
+    },
 ];
 
 /// The file served at `path`. Only an exact match is served.

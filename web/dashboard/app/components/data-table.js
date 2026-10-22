@@ -60,7 +60,11 @@ export function createDataTable({
     columns.forEach((column, index) => {
       const td = document.createElement('td');
       td.setAttribute('data-label', column.label);
-      td.textContent = String(values[index] ?? '');
+      if (values[index] instanceof Node) {
+        td.append(values[index]);
+      } else {
+        td.textContent = String(values[index] ?? '');
+      }
       if (numeric.has(column.key)) td.className = 'data-table-num';
       tr.append(td);
     });
