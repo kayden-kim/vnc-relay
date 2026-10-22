@@ -96,7 +96,7 @@ impl ChangeQueue {
         }
     }
 
-    fn offer_failure(&self, detail: String) {
+    pub(super) fn offer_failure(&self, detail: String) {
         lock(&self.failures).push(detail);
         self.nudge();
     }

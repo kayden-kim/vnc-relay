@@ -945,6 +945,7 @@ mod tests {
         settings
     }
 
+    /// spec: operations.md:OPS-035 partial
     #[test]
     fn restart_required_key_is_reported_and_nothing_is_swapped() {
         let running = settings();
@@ -965,6 +966,7 @@ mod tests {
         assert!(Arc::ptr_eq(&before, &h.cell.current()));
     }
 
+    /// spec: operations.md:OPS-025 partial
     #[test]
     fn allow_list_change_is_applied_and_visible_through_cell() {
         let running = settings();
@@ -985,6 +987,7 @@ mod tests {
         );
     }
 
+    /// spec: operations.md:OPS-026 partial
     #[test]
     fn tls_build_failure_keeps_old_acceptor_and_emits_tls_file_invalid() {
         let running = with_wss(settings());
@@ -1016,6 +1019,7 @@ mod tests {
         assert!(h.sink.events().is_empty());
     }
 
+    /// spec: operations.md:OPS-027 partial
     #[test]
     fn stale_generation_discards_without_event_or_swap() {
         let running = settings();
@@ -1038,6 +1042,7 @@ mod tests {
         assert_eq!(outcome, ReloadOutcome::Applied);
     }
 
+    /// spec: operations.md:OPS-026 partial
     #[test]
     fn parse_error_emits_reload_rejected_with_diagnostic_code() {
         let mut h = harness(settings(), None);
