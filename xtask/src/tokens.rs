@@ -149,7 +149,7 @@ fn scalar_value(path: &str, value: &Value) -> Result<String, Error> {
 
 /// The generated file: one comment line with the source, then one `:root` block.
 fn render_css(tokens: &[Token]) -> String {
-    let mut out = format!("/* 생성 파일이다. 직접 고치지 않는다. 원본: {DESIGN_PATH} */\n");
+    let mut out = format!("/* Generated file. Do not edit. Source: {DESIGN_PATH} */\n");
     out.push_str(":root {\n");
     for token in tokens {
         out.push_str(&format!("  {}: {};\n", token.name, token.value));

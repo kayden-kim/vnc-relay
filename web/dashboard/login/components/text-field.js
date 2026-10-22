@@ -1,4 +1,4 @@
-// 생성 파일이다. 직접 고치지 않는다. 원본: web/dashboard/app/components/text-field.js
+// Generated file. Do not edit. Source: web/dashboard/app/components/text-field.js
 // Text field: label, native input, optional help text, and optional error text.
 import { icon } from './icons.js';
 

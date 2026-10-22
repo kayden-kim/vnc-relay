@@ -34,7 +34,7 @@ fn source_label(name: &str) -> String {
 
 /// The copy text: a header line naming the source, then the source text as is.
 fn render(source_label: &str, text: &str) -> String {
-    let note = format!("생성 파일이다. 직접 고치지 않는다. 원본: {source_label}");
+    let note = format!("Generated file. Do not edit. Source: {source_label}");
     let header = if source_label.ends_with(".css") {
         format!("/* {note} */")
     } else {

@@ -1,4 +1,4 @@
-// 생성 파일이다. 직접 고치지 않는다. 원본: web/dashboard/app/components/button.js
+// Generated file. Do not edit. Source: web/dashboard/app/components/button.js
 // Button: native <button> with a variant, optional icon, and busy/disabled states.
 import { icon } from './icons.js';
 

@@ -1,4 +1,4 @@
-// 생성 파일이다. 직접 고치지 않는다. 원본: web/dashboard/app/components/language-select.js
+// Generated file. Do not edit. Source: web/dashboard/app/components/language-select.js
 // Language select: visually hidden label, native select, globe icon, and chevron.
 import { icon } from './icons.js';
 

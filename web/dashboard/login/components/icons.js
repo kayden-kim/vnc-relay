@@ -1,4 +1,4 @@
-// 생성 파일이다. 직접 고치지 않는다. 원본: web/dashboard/app/components/icons.js
+// Generated file. Do not edit. Source: web/dashboard/app/components/icons.js
 // Inline SVG icons. Paths come from the dashboard mockup (viewBox 0 0 16 16).
 // Markup is a static string, parsed once into a cached template and cloned per use.
 

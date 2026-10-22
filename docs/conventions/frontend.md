@@ -137,7 +137,7 @@ web/dashboard/
 | `rounded.<이름>` | `--radius-<이름>` |
 | `typography.<단계>.fontFamily·fontSize·fontWeight·lineHeight·fontFeature` | `--type-<단계>-family·size·weight·line·feature` |
 
-- 출력은 `:root { … }` 블록 하나다. 한 줄에 한 속성을 쓴다. 순서는 원본 순서를 따른다. 첫 줄에 "생성 파일이다. 직접 고치지 않는다"는 주석과 원본 경로를 쓴다.
+- 출력은 `:root { … }` 블록 하나다. 한 줄에 한 속성을 쓴다. 순서는 원본 순서를 따른다. 첫 줄에 `Generated file. Do not edit. Source: <경로>` 형식의 주석을 쓴다.
 
 ### 2.2 화면 CSS 검사
 
@@ -154,7 +154,7 @@ web/dashboard/
 로그인 화면은 `app/`의 공통 컴포넌트와 스타일을 복사해 쓴다. 복사본은 손으로 만들지 않는다. 복사 방식과 복사 목록은 구현 판단이다(사용자 결정 없음).
 
 - 복사 목록은 `xtask/src/tokens/shared.rs`의 `SHARED_FILES`다. 현재 목록은 `components/icons.js`, `components/alert.js`, `components/button.js`, `components/text-field.js`, `components/language-select.js`, `styles/base.css`, `styles/components.css`다.
-- `cargo xtask tokens`가 `app/`의 원본을 `login/components/`와 `login/styles/`에 같은 내용으로 쓴다. 첫 줄 주석은 "생성 파일이다. 직접 고치지 않는다. 원본: <경로>"다. CSS는 `/* … */`, JavaScript는 `// …` 형식이다.
+- `cargo xtask tokens`가 `app/`의 원본을 `login/components/`와 `login/styles/`에 같은 내용으로 쓴다. 첫 줄 주석은 `Generated file. Do not edit. Source: <경로>`다. CSS는 `/* … */`, JavaScript는 `// …` 형식이다.
 - `cargo xtask tokens --check`는 복사본마다 생성 결과와 실제 파일을 비교한다. 다르면 차이를 알린다. 없거나 읽을 수 없으면 파일 경로와 함께 오류로 멈춘다. 복사 목록에 없는 파일이 `login/components/`나 `login/styles/`에 있으면 차이로 집계한다.
 - 복사본도 화면 CSS 검사(2.2절)와 제공 표 대조(1.2절)의 대상이다. 복사본은 원본과 같으므로 두 검사를 그대로 통과한다.
 - 원본을 고치면 `cargo xtask tokens`로 복사본을 다시 쓴다. 로그인 화면에만 다른 모양이 필요하면 복사본을 고치지 않고, 원본 컴포넌트에 옵션을 추가한 뒤 [xtask 모듈 설계](../architectures/xtask.md)와 컴포넌트 모듈 설계에 적는다.

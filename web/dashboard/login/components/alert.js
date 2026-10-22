@@ -1,4 +1,4 @@
-// 생성 파일이다. 직접 고치지 않는다. 원본: web/dashboard/app/components/alert.js
+// Generated file. Do not edit. Source: web/dashboard/app/components/alert.js
 // Alert: inline status message with a tone, an icon, a title, and optional text.
 import { icon } from './icons.js';
 
