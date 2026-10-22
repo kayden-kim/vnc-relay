@@ -3,6 +3,7 @@
 
 import { createAlert } from './components/alert.js';
 import { createBadge } from './components/badge.js';
+import { createCard } from './components/card.js';
 import { createDataTable } from './components/data-table.js';
 import { createGauge } from './components/gauge.js';
 import { createStat } from './components/stat.js';
@@ -154,7 +155,7 @@ function peerCell(t, item) {
   return cell;
 }
 
-// Link to the session detail screen (SCR-002). The target screen is not built yet.
+// Link to the session detail screen (SCR-002).
 function detailsLink(t, sessionId) {
   const link = el('a', 'button button-outline');
   link.href = `/#/sessions/${encodeURIComponent(sessionId)}`;
@@ -215,4 +216,46 @@ export function closedTable(t, items, emptyText) {
     emptyText,
     numericColumns: ['bytes'],
   });
+}
+
+// Card with a status badge slot and an alert slot (list and summary panels). Chrome is optional.
+export function panelCard({ title, span, chrome }) {
+  const slots = {
+    badgeSlot: el('div', 'card-status'),
+    alertSlot: el('div', 'card-alert'),
+    contentSlot: el('div', 'card-content'),
+    chromeKey: null,
+    contentKey: null,
+  };
+  let body = slots.contentSlot;
+  if (chrome) {
+    body = el('div', 'card-stack');
+    body.append(slots.alertSlot, slots.contentSlot);
+  }
+  const node = createCard({ title, actions: chrome ? slots.badgeSlot : undefined, body });
+  node.classList.add(span);
+  return { node, slots };
+}
+
+// Updates the badge and alert only when the view or the last success time changes.
+export function applyChrome(slots, query, view, t) {
+  const key = [view, query.lastSuccessAt].join('|');
+  if (slots.chromeKey === key) {
+    return;
+  }
+  slots.chromeKey = key;
+  const badge = statusBadge(t, view);
+  const alert = statusAlert(t, view, query.lastSuccessAt);
+  slots.badgeSlot.replaceChildren(...(badge ? [badge] : []));
+  slots.alertSlot.replaceChildren(...(alert ? [alert] : []));
+}
+
+// Replaces the content only when the key changes. Rebuilding only on change keeps focus steady.
+export function setContent(slots, key, build) {
+  if (slots.contentKey === key) {
+    return;
+  }
+  slots.contentKey = key;
+  const node = build();
+  slots.contentSlot.replaceChildren(...(node ? [node] : []));
 }

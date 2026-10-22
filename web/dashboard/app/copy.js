@@ -8,7 +8,7 @@ export const LANGUAGE_NAMES = { ko: '한국어', en: 'English' }; // CPY-002
 
 export const COPY = {
   ko: {
-    documentTitle: 'VNC Relay 운영 현황',
+    documentTitle: 'VNC Relay 운영 현황', // Implementation choice: document title, not in spec §9.3.
     navLabel: '주 메뉴', // Q3: tentative label, not yet in dashboard.md §9.3.1.
     operations: '운영 현황', // CPY-004
     signOut: '로그아웃', // CPY-007
@@ -54,14 +54,39 @@ export const COPY = {
       close_timeout: '정리 제한 시간 초과', // CPY-049
       server_shutdown: '서버 종료', // CPY-050
     },
-    directionViewerToTarget: 'Viewer->대상',
-    directionTargetToViewer: '대상->Viewer',
-    peerViewer: 'Viewer',
-    peerTarget: '대상',
-    dayUnit: '일',
+    directionViewerToTarget: 'Viewer->대상', // CPY-040·CPY-043 table headers (spec §9.3.2).
+    directionTargetToViewer: '대상->Viewer', // CPY-040·CPY-043 table headers (spec §9.3.2).
+    peerViewer: 'Viewer', // Implementation choice: peer role label, spec §3 gives no CPY id.
+    peerTarget: '대상', // Implementation choice: peer role label, spec §3 gives no CPY id.
+    dayUnit: '일', // Implementation choice: day unit in durations, spec §3 allows a language-dependent unit.
+    // SCR-002 session detail. CPY ids in comments. Keys marked "Implementation choice" are not in spec §9.3.
+    sessionScreen: '세션 상세', // CPY-005
+    sessionDocumentTitle: 'VNC Relay 세션 상세', // Implementation choice: document title, like documentTitle.
+    sessionTitle: '세션 {session_id}', // CPY-051
+    back: '목록으로', // CPY-010
+    cancel: '취소', // CPY-011
+    recheck: '상태 재조회', // CPY-014
+    sessionInfoTitle: '세션 정보', // Implementation choice: card title, the SCR-002 element name in spec §3.
+    stateLabel: '상태', // Implementation choice: row label for the session state.
+    modeLabel: '모드', // CPY-053
+    transportLabel: 'Viewer 전송 경로', // CPY-054
+    startedLabel: '시작 시각', // CPY-055
+    viewerAddressLabel: 'Viewer 주소', // CPY-056
+    targetAddressLabel: 'Server/대상 주소', // CPY-057
+    addressNote: '실제 소켓 상대 주소입니다.', // CPY-058
+    notFound: '현재 세션을 찾을 수 없음', // CPY-059
+    terminate: '세션 종료', // CPY-060
+    terminateTitle: '세션 종료 확인', // CPY-061
+    terminateBody: '세션 {session_id}의 연결을 끊습니다. Viewer와 Server 또는 Mode I 대상 사이의 중계가 멈춥니다. 끊긴 세션은 다시 이어지지 않습니다.', // CPY-062
+    terminateConfirm: '종료 확인', // CPY-063
+    terminating: '종료 요청 중…', // CPY-064
+    terminateFailed: '세션 종료에 실패했습니다. 상태를 다시 확인하십시오.', // CPY-065
+    terminateUnknown: '종료 결과를 확인할 수 없습니다. 세션이 끝났을 수 있습니다. 요청을 자동으로 다시 보내지 않습니다. 상태를 다시 확인하십시오.', // CPY-066
+    invalidSessionId: '잘못된 세션 식별자', // CPY-067
+    terminateRejected: '요청을 처리하지 못했습니다. 화면을 다시 확인한 뒤 종료를 다시 요청하십시오.', // CPY-068
   },
   en: {
-    documentTitle: 'VNC Relay Operations overview',
+    documentTitle: 'VNC Relay Operations overview', // Implementation choice: document title, not in spec §9.3.
     navLabel: 'Main menu', // Q3: tentative label, not yet in dashboard.md §9.3.1.
     operations: 'Operations overview', // CPY-004
     signOut: 'Sign out', // CPY-007
@@ -107,10 +132,35 @@ export const COPY = {
       close_timeout: 'Cleanup time limit exceeded', // CPY-049
       server_shutdown: 'Server shutdown', // CPY-050
     },
-    directionViewerToTarget: 'Viewer->target',
-    directionTargetToViewer: 'target->Viewer',
-    peerViewer: 'Viewer',
-    peerTarget: 'Target',
-    dayUnit: 'd',
+    directionViewerToTarget: 'Viewer->target', // CPY-040·CPY-043 table headers (spec §9.3.2).
+    directionTargetToViewer: 'target->Viewer', // CPY-040·CPY-043 table headers (spec §9.3.2).
+    peerViewer: 'Viewer', // Implementation choice: peer role label, spec §3 gives no CPY id.
+    peerTarget: 'Target', // Implementation choice: peer role label, spec §3 gives no CPY id.
+    dayUnit: 'd', // Implementation choice: day unit in durations, spec §3 allows a language-dependent unit.
+    // SCR-002 session detail. CPY ids in comments. Keys marked "Implementation choice" are not in spec §9.3.
+    sessionScreen: 'Session details', // CPY-005
+    sessionDocumentTitle: 'VNC Relay Session details', // Implementation choice: document title, like documentTitle.
+    sessionTitle: 'Session {session_id}', // CPY-051
+    back: 'Back to list', // CPY-010
+    cancel: 'Cancel', // CPY-011
+    recheck: 'Check status again', // CPY-014
+    sessionInfoTitle: 'Session information', // Implementation choice: card title, the SCR-002 element name in spec §3.
+    stateLabel: 'State', // Implementation choice: row label for the session state.
+    modeLabel: 'Mode', // CPY-053
+    transportLabel: 'Viewer transport', // CPY-054
+    startedLabel: 'Started at', // CPY-055
+    viewerAddressLabel: 'Viewer address', // CPY-056
+    targetAddressLabel: 'Server/target address', // CPY-057
+    addressNote: 'Actual socket peer address.', // CPY-058
+    notFound: 'The current session was not found', // CPY-059
+    terminate: 'Terminate session', // CPY-060
+    terminateTitle: 'Confirm session termination', // CPY-061
+    terminateBody: 'The connection for session {session_id} will close. The relay between the Viewer and the Server or Mode I target will stop. A closed session does not resume.', // CPY-062
+    terminateConfirm: 'Confirm termination', // CPY-063
+    terminating: 'Terminating…', // CPY-064
+    terminateFailed: 'Session termination failed. Check the status again.', // CPY-065
+    terminateUnknown: 'The termination result cannot be confirmed. The session may have ended. The request is not sent again automatically. Check the status again.', // CPY-066
+    invalidSessionId: 'Invalid session ID', // CPY-067
+    terminateRejected: 'The request was not processed. Check the screen, then request termination again.', // CPY-068
   },
 };

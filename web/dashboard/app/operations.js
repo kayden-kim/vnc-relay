@@ -3,113 +3,24 @@
 // A response that arrives after a sign-out or a 401 is dropped (epoch check).
 
 import { createButton } from './components/button.js';
-import { createCard } from './components/card.js';
-import { createLanguageSelect } from './components/language-select.js';
-import { createNavbar } from './components/navbar.js';
-import {
-  ApiError,
-  BOOTSTRAP_TIMEOUT_MS,
-  LOGOUT_TIMEOUT_MS,
-  QUERY_PATHS,
-  deleteSession,
-  getQuery,
-  getSession,
-} from './api.js';
-import { BRAND_NAME, COPY, LANGUAGE_LABEL, LANGUAGE_NAMES } from './copy.js';
+import { BOOTSTRAP_TIMEOUT_MS, QUERY_PATHS, getQuery, getSession, isUnauthorized } from './api.js';
+import { COPY } from './copy.js';
 import { fill, formatTime } from './format.js';
 import { LANGUAGES, chooseLanguage, readSavedLanguage, saveLanguage } from './language.js';
 import { parseClosed, parseSession, parseSessions, parseSummary, parseWaiting } from './model.js';
+import { clearTimer, contentKey, newQuery, viewOf } from './query.js';
 import {
   activeTable,
+  applyChrome,
   closedTable,
   el,
-  statusAlert,
-  statusBadge,
+  panelCard,
+  setContent,
   summaryGrid,
   usageGauge,
   waitingTable,
 } from './panels.js';
-
-const LOGIN_URL = '/login/';
-const LOGOUT_UNCONFIRMED_URL = '/login/?notice=logout-unconfirmed';
-
-function defaultStorage() {
-  try {
-    return globalThis.localStorage;
-  } catch {
-    return null;
-  }
-}
-
-function isUnauthorized(error) {
-  return error instanceof ApiError && error.kind === 'unauthorized';
-}
-
-function newQuery(path, parse) {
-  return { path, parse, inFlight: false, failed: false, data: null, lastSuccessAt: null, timer: null };
-}
-
-function clearTimer(query) {
-  if (query.timer !== null) {
-    clearTimeout(query.timer);
-    query.timer = null;
-  }
-}
-
-// View of a query for the screen: loading, refreshing, ok, stale, or failed.
-function viewOf(query) {
-  if (query.inFlight) {
-    return query.data ? 'refreshing' : 'loading';
-  }
-  if (query.failed) {
-    return query.data ? 'stale' : 'failed';
-  }
-  return query.data ? 'ok' : 'loading';
-}
-
-// Key that changes only when the rendered content must change. Rebuilding only on change keeps focus steady.
-function contentKey(query, view, lang) {
-  return [lang, query.data ? 'data' : view, JSON.stringify(query.data)].join('|');
-}
-
-function applyChrome(slots, query, view, t) {
-  const key = [view, query.lastSuccessAt].join('|');
-  if (slots.chromeKey === key) {
-    return;
-  }
-  slots.chromeKey = key;
-  const badge = statusBadge(t, view);
-  const alert = statusAlert(t, view, query.lastSuccessAt);
-  slots.badgeSlot.replaceChildren(...(badge ? [badge] : []));
-  slots.alertSlot.replaceChildren(...(alert ? [alert] : []));
-}
-
-function setContent(slots, key, build) {
-  if (slots.contentKey === key) {
-    return;
-  }
-  slots.contentKey = key;
-  const node = build();
-  slots.contentSlot.replaceChildren(...(node ? [node] : []));
-}
-
-function panelCard({ title, span, chrome }) {
-  const slots = {
-    badgeSlot: el('div', 'card-status'),
-    alertSlot: el('div', 'card-alert'),
-    contentSlot: el('div', 'card-content'),
-    chromeKey: null,
-    contentKey: null,
-  };
-  let body = slots.contentSlot;
-  if (chrome) {
-    body = el('div', 'card-stack');
-    body.append(slots.alertSlot, slots.contentSlot);
-  }
-  const node = createCard({ title, actions: chrome ? slots.badgeSlot : undefined, body });
-  node.classList.add(span);
-  return { node, slots };
-}
+import { LOGIN_URL, buildNavbar, defaultStorage, signOutUrl } from './shell.js';
 
 export function mountOperations(root, deps = {}) {
   const request = deps.request ?? ((path, init) => globalThis.fetch(path, init));
@@ -151,29 +62,12 @@ export function mountOperations(root, deps = {}) {
     const t = copy();
     root.replaceChildren();
 
-    const language = createLanguageSelect({
-      id: 'operations-language',
-      label: LANGUAGE_LABEL,
-      value: state.lang,
-      options: LANGUAGES.map((value) => ({ value, label: LANGUAGE_NAMES[value] })),
-      variant: 'navbar',
-    });
-    const select = language.querySelector('select');
-    for (const option of select.options) {
-      option.lang = option.value;
-    }
-    select.addEventListener('change', () => onLanguageChange(select.value));
-
-    const logout = createButton({ variant: 'navbar', label: t.signOut, icon: 'logout' });
-    logout.id = 'operations-logout';
-    logout.addEventListener('click', () => void signOut());
-
-    const navbar = createNavbar({
-      brand: BRAND_NAME,
-      items: [{ label: t.operations, href: '/', current: true, desktopOnly: true }],
-      language,
-      action: logout,
-      label: t.navLabel,
+    const { navbar, select, logout } = buildNavbar({
+      t,
+      lang: state.lang,
+      idPrefix: 'operations',
+      onLanguageChange,
+      onSignOut: signOut,
     });
 
     const refresh = createButton({ variant: 'outline', label: t.refresh, icon: 'refresh' });
@@ -286,6 +180,14 @@ export function mountOperations(root, deps = {}) {
     root.replaceChildren();
     page = null;
     navigate(url);
+  }
+
+  // Called by the router before another screen mounts. Drops late responses and stops polling.
+  function dispose() {
+    state.ended = true;
+    state.epoch += 1;
+    stopPolling();
+    page = null;
   }
 
   function schedule(key) {
@@ -408,19 +310,7 @@ export function mountOperations(root, deps = {}) {
     state.epoch += 1;
     stopPolling();
     renderAll();
-    let url = LOGIN_URL;
-    try {
-      let token = state.csrfToken;
-      if (token === null) {
-        token = parseSession(await getSession(request, { timeoutMs: LOGOUT_TIMEOUT_MS })).csrfToken;
-      }
-      await deleteSession(request, { csrfToken: token, timeoutMs: LOGOUT_TIMEOUT_MS });
-    } catch (error) {
-      if (!isUnauthorized(error)) {
-        url = LOGOUT_UNCONFIRMED_URL;
-      }
-    }
-    endSession(url);
+    endSession(await signOutUrl(request, state.csrfToken));
   }
 
   function onLanguageChange(lang) {
@@ -440,4 +330,5 @@ export function mountOperations(root, deps = {}) {
   buildPage();
   renderAll();
   void bootstrap();
+  return { dispose };
 }

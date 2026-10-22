@@ -75,6 +75,17 @@ export function createDialog({
   });
   // Escape fires 'cancel'; the browser closes the dialog itself.
   element.addEventListener('cancel', () => onCancel?.());
+  // Tab stays inside the modal. Without this, the browser moves focus out of the page after the last action.
+  element.addEventListener('keydown', (event) => {
+    if (event.key !== 'Tab') return;
+    if (event.shiftKey && document.activeElement === cancel) {
+      event.preventDefault();
+      confirm.focus();
+    } else if (!event.shiftKey && document.activeElement === confirm) {
+      event.preventDefault();
+      cancel.focus();
+    }
+  });
 
   return { element, show, hide };
 }

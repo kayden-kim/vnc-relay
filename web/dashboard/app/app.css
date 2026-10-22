@@ -103,10 +103,28 @@
   display: none;
 }
 
+.session-notice {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.session-notice:empty {
+  display: none;
+}
+
 .summary-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(var(--space-label-col), 1fr));
   gap: var(--space-md);
+}
+
+.session-facts .stat-value {
+  min-height: 0;
+  font-family: var(--type-body-strong-family);
+  font-size: var(--type-body-strong-size);
+  font-weight: var(--type-body-strong-weight);
+  line-height: var(--type-body-line);
 }
 
 .gauge-wrap {

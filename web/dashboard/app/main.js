@@ -1,4 +1,4 @@
-// Entry point for the operations overview page (SCR-001).
-import { mountOperations } from './operations.js';
+// Entry point of the dashboard. The router mounts the screen for the URL hash.
+import { mountRouter } from './router.js';
 
-mountOperations(document.getElementById('app-root'));
+mountRouter(document.getElementById('app-root'));
