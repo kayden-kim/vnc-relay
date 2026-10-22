@@ -451,6 +451,8 @@ GET /readyz ->  503 {"status":"not_ready","reason":"shutting_down"}
 | 같은 커밋 `834769d` | Windows 11 Pro 10.0.26200 x64, Rust 1.99.1 | `powershell -NoProfile -ExecutionPolicy Bypass -File D:/vr-tools/vr-win.ps1 -Only all` | 통과(`ALL PASSED (all)`). 시나리오 보고: 통과 21, 부분 31, 실패 0, 미실행 1(OPS-007: Unix 전용 `closes_and_logs_every_held_connection_when_stopping`), 미연결 97, 오류 0, 판정 통과 |
 | 커밋 `6c7a551`·`72db643`(작업 5.2 시험 정리, OPS-041 `run` 기반 시험, 생성 파일 헤더 영문화) | WSL2 Ubuntu 24.04.4, Rust 1.99.1 | `wsl -d Ubuntu -- bash /mnt/d/vr-tools/vr-full.sh` | 통과(`ALL PASSED`). 시나리오 보고: 통과 23, 부분 30, 실패 0, 미실행 0, 미연결 97, 오류 0, 판정 통과 |
 | 같은 커밋 `6c7a551`·`72db643` | Windows 11 Pro 10.0.26200 x64, Rust 1.99.1 | `powershell -NoProfile -ExecutionPolicy Bypass -File D:/vr-tools/vr-win.ps1 -Only all` | 통과(`ALL PASSED (all)`). 시나리오 보고: 통과 22, 부분 30, 실패 0, 미실행 1(OPS-007: Unix 전용 `closes_and_logs_every_held_connection_when_stopping`), 미연결 97, 오류 0, 판정 통과 |
+| 커밋 `307cfd8`(작업 5.2 최종 게이트. 코드는 `3eea38f`와 같고 뒤에 문서 커밋만 더해졌다). 게이트 실행 때 추적 파일 변경 없음 | Ubuntu 24.04.4(WSL2), Rust 1.99.1 | `wsl -d Ubuntu -- bash /mnt/d/vr-tools/vr-full.sh` | 통과(`ALL PASSED`). 시나리오 보고: 통과 24, 부분 29, 실패 0, 미실행 0, 미연결 97, 오류 0, 판정 통과. OPS-026 완전, OPS-040 부분(IPv6 출발지 환경 한계). 대조: [file-watch 작업 5.2 게이트 실행 기록](../architectures/file-watch.md#작업-52-게이트-실행-기록) |
+| 같은 커밋 `307cfd8` | Windows 11 Pro 10.0.26200 x64, Rust 1.99.1 | `powershell -NoProfile -ExecutionPolicy Bypass -File D:/vr-tools/vr-win.ps1 -Only all` | 통과(`ALL PASSED (all)`). 시나리오 보고: 통과 23, 부분 29, 실패 0, 미실행 1(OPS-007: Unix 전용 `closes_and_logs_every_held_connection_when_stopping`), 미연결 97, 오류 0, 판정 통과 |
 
 ## 6. 초안을 확정하기 전에 해결할 사항
 
