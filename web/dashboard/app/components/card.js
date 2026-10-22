@@ -5,18 +5,21 @@ import { createBadge } from './badge.js';
 let seq = 0;
 
 /**
- * @param {{title: string, headingLevel?: number, count?: number | string, actions?: Node,
+ * @param {{title: string, description?: string, headingLevel?: number, count?: number | string, actions?: Node,
  *   body?: Node | string, footer?: Node | string}} options
  * @returns {HTMLElement}
  */
 export function createCard({
-  title, headingLevel = 2, count, actions, body, footer,
+  title, description, headingLevel = 2, count, actions, body, footer,
 } = {}) {
   if (typeof title !== 'string' || title === '') {
     throw new TypeError('card title is required');
   }
   if (!Number.isInteger(headingLevel) || headingLevel < 1 || headingLevel > 6) {
     throw new TypeError(`invalid heading level: ${String(headingLevel)}`);
+  }
+  if (description !== undefined && typeof description !== 'string') {
+    throw new TypeError('card description must be a string');
   }
 
   const section = document.createElement('section');
@@ -45,6 +48,12 @@ export function createCard({
     wrap.className = 'card-actions';
     wrap.append(actions);
     head.append(wrap);
+  }
+  if (description !== undefined) {
+    const note = document.createElement('p');
+    note.className = 'card-description';
+    note.textContent = description;
+    head.append(note);
   }
   section.append(head);
 

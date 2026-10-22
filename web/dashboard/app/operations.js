@@ -78,8 +78,8 @@ export function mountOperations(root, deps = {}) {
     const header = pageHead({ title: t.operations, actions: [refresh] });
 
     const summary = panelCard({ title: t.summaryTitle, span: 'span-6', chrome: true });
-    const relay = panelCard({ title: t.relayTitle, span: 'span-3', chrome: false });
-    const admin = panelCard({ title: t.adminTitle, span: 'span-3', chrome: false });
+    const relay = panelCard({ title: t.relayTitle, description: t.relayNote, span: 'span-3', chrome: false });
+    const admin = panelCard({ title: t.adminTitle, description: t.adminNote, span: 'span-3', chrome: false });
     const waiting = panelCard({ title: t.waitingTitle, span: 'span-12', chrome: true });
     const active = panelCard({ title: t.activeTitle, span: 'span-12', chrome: true });
     const closed = panelCard({ title: t.closedTitle, span: 'span-12', chrome: true });
@@ -111,10 +111,10 @@ export function mountOperations(root, deps = {}) {
     const key = contentKey(query, view, state.lang);
     setContent(page.summary, key, () => summaryGrid(t, query.data, view));
     setContent(page.relay, key, () =>
-      usageGauge({ t, title: t.relayTitle, note: t.relayNote, usage: query.data?.relay ?? null, kind: view }),
+      usageGauge({ t, title: t.relayTitle, usage: query.data?.relay ?? null, kind: view }),
     );
     setContent(page.admin, key, () =>
-      usageGauge({ t, title: t.adminTitle, note: t.adminNote, usage: query.data?.admin ?? null, kind: view }),
+      usageGauge({ t, title: t.adminTitle, usage: query.data?.admin ?? null, kind: view }),
     );
   }
 

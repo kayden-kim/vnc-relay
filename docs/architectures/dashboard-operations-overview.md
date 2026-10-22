@@ -73,7 +73,7 @@ web/dashboard/app/
 - 페이지 머리말: 제목 "운영 현황"(CPY-004), 줄 "마지막 성공 갱신: {시각}"(CPY-015), [새로고침](CPY-008).
 - 상태 안내: 목록 상태 안내(조회 중·갱신 중·실패·오래된 데이터)는 각 목록 카드 맨 위에 둔다 (`operations.js`의 `applyChrome`). 머리말 아래 전체 폭 안내는 두지 않는다. 배치가 시안과 같은지는 스크린샷 비교(검증 기록 4.6)에서 확인한다 (구현 판단).
 - 서버 요약 카드(6열): 실행 상태, 가동 시간, 대기 연결 수, 활성 세션 수, 초기 교환 중, Mode I 대상 연결 중. 모바일은 실행 상태·가동 시간을 한 줄 전체 폭, 나머지는 2열.
-- 연결 카드 두 개(각 3열): 중계 연결, 관리 연결. 제목 아래 한 줄 설명(CPY-032, CPY-034). 값은 `createGauge`로 현재 수와 `상한 {n}`(CPY-079)을 보인다. 상한이 없으면 `상한 확인 불가`(CPY-080)다 (사용자 결정 2026-10-23(Q55)).
+- 연결 카드 두 개(각 3열): 중계 연결, 관리 연결. `panelCard`가 CPY-032·CPY-034를 `createCard({description})`에 넘긴다. 설명은 `.card-head`의 제목 아래 `p.card-description`에 둔다(DESIGN 527·638행). `usageGauge({t, title, usage, kind})`는 고리만 만들며 `note`를 받거나 본문에 붙이지 않는다. 값은 `createGauge`로 현재 수와 `상한 {n}`(CPY-079)을 보인다. 상한이 없으면 `상한 확인 불가`(CPY-080)다 (사용자 결정 2026-10-23(Q55)).
 - 목록 카드 세 개(전체 폭, 이 순서): 대기 연결(CPY-036), 활성 세션(CPY-039), 최근 종료 목록(CPY-042).
 
 ## 5. 조회 상태 모델
@@ -160,14 +160,17 @@ CSRF 토큰은 메모리에만 둔다. 저장소(localStorage, sessionStorage)�
 | `summary.counts.active` | 활성 세션 수 (CPY-028) | 숫자 |
 | `summary.counts.handshaking` + `_unavailable_reason` | 초기 교환 중 (CPY-029) | 숫자. `null`이면 확인 불가 (사유 필드는 읽지 않음, 14절 구현 판단) |
 | `summary.counts.target_connecting` + `_unavailable_reason` | Mode I 대상 연결 중 (CPY-030) | 숫자. `null`이면 확인 불가 (사유 필드는 읽지 않음, 14절 구현 판단) |
-| `summary.usage.relay_connections.current` / `limit` | 중계 연결 (CPY-031·032) | 게이지: 현재 수와 `상한 {n}`(CPY-079). `current`가 null이면 확인 불가, `limit`이 null이면 `상한 확인 불가`(CPY-080) (사용자 결정 2026-10-23(Q55)) |
-| `summary.usage.admin_connections.current` / `limit` | 관리 연결 (CPY-033·034) | 같음 |
-| `waiting.items[]`: `role`, `relay_id`, `connected_at`, `waited_ms` | 대기 연결 (CPY-036·037) | 역할은 표시 이름, 중계 ID 원문, 시각·기간 형식. 빈 목록 CPY-038 |
-| `sessions.items[]`: `session_id`, `mode`, `viewer_transport`, `started_at`, `bytes_viewer_to_target`, `bytes_target_to_viewer`, `viewer_address`, `target_address` | 활성 세션 (CPY-039·040) | 식별자는 `/#/sessions/{id}` 링크로 연결한다 (4.10은 링크만, 14절 D4). 상대 주소는 Viewer 주소 줄과 대상 주소 줄을 쌓아 원문으로. 빈 목록 CPY-041 |
-| `sessions.items[].state` | 없음 | 표시하지 않는다. 스펙 9.3.2절 CPY-040 표 머리글과 DESIGN 555행(7열)을 따른다 |
-| `closed-sessions.items[]`: `session_id`, `close_cause`, `ended_at`, `bytes_viewer_to_target`, `bytes_target_to_viewer` | 최근 종료 목록 (CPY-042·043) | `close_cause` 매핑 (CPY-045~050), 목록에 없는 값은 원문. 빈 목록 CPY-044. `max_entries`는 표시하지 않는다 (구현 판단, 스펙에 문구 없음) |
+| `summary.usage.relay_connections.current` / `limit` | 중계 연결 (CPY-031·032) | `panelCard.description`은 CPY-032. 게이지는 현재 수와 `상한 {n}`(CPY-079). `current`가 null이면 확인 불가, `limit`이 null이면 `상한 확인 불가`(CPY-080) (사용자 결정 2026-10-23(Q55)) |
+| `summary.usage.admin_connections.current` / `limit` | 관리 연결 (CPY-033·034) | `panelCard.description`은 CPY-034. 게이지 규칙은 중계 연결과 같다 |
+| `waiting.items[]`: `role`, `relay_id`, `connected_at`, `waited_ms` | 대기 연결 (CPY-036·037) | `relay_id`는 원문 `.session-id`와 `mobileHead: 'primary'`. 역할은 아이콘 없는 중립 배지와 `'secondary'`. 시각·기간 형식을 적용한다. 빈 목록 CPY-038 (DESIGN 395·473·554·608·626·636행) |
+| `sessions.items[]`: `session_id`, `mode`, `viewer_transport`, `started_at`, `bytes_viewer_to_target`, `bytes_target_to_viewer`, `viewer_address`, `target_address` | 활성 세션 (CPY-039·040) | 식별자는 `createLink`로 `/#/sessions/${encodeURIComponent(sessionId)}`에 연결한다. `.session-id`와 `mobileHead: 'primary'`를 쓴다. [상세]는 `'secondary'`다. 모드·전송 경로는 아이콘 없는 중립 배지다. 주소는 Viewer·대상 주소 줄의 `.fact-address` 값으로 보인다. 빈 목록 CPY-041 (DESIGN 395·473·555·608·626·636·644행) |
+| `sessions.items[].state` | 없음 | D6에 따라 `closing` 배지를 포함해 표시하지 않는다. 스펙 9.3.2절 CPY-040 표 머리글과 DESIGN 555행(7열)을 따른다 |
+| `closed-sessions.items[]`: `session_id`, `close_cause`, `ended_at`, `bytes_viewer_to_target`, `bytes_target_to_viewer` | 최근 종료 목록 (CPY-042·043) | 식별자는 원문 `.session-id`와 `mobileHead: 'primary'`. 종료 원인 배지는 `'secondary'`다. 원인은 CPY-045~050으로 매핑하며 목록 밖 값은 원문이다. `connection_error`는 destructive, `dead_connection`·`close_timeout`은 warning, 나머지는 neutral이다. 빈 목록 CPY-044. `max_entries`는 표시하지 않는다 (구현 판단, 스펙에 문구 없음; DESIGN 393~395·473·556·608·622·626·636행) |
 
 - 응답의 `as_of`는 화면에 쓰지 않는다. "마지막 성공 갱신"은 클라이언트가 응답을 적용한 시각이다 (구현 판단).
+- 방향별 바이트는 두 줄이다. 각 줄은 `.direction-mark.direction-mark-1` 또는 `.direction-mark.direction-mark-2`, 흐린 방향 이름, 값 순서다. 표식은 `aria-hidden="true"`인 장식이다. Viewer→대상은 `chart-1`, 대상→Viewer는 `chart-2`다(DESIGN 378·643행).
+- 활성 세션의 바이트 열 이름은 CPY-040을 쓴다. 시안 문구로 바꾸지 않는다. [상세] 링크는 `.button.button-outline`에 오른쪽 꺾쇠 아이콘을 붙인다. 표 안 최소 높이는 데스크톱 `spacing.control-height-sm`, 모바일 `spacing.control-height-touch`다(DESIGN 579·623·634행).
+- 역할·모드·전송 경로와 중립 종료 원인 배지는 아이콘이 없다. warning·destructive 종료 원인 배지는 상태 아이콘을 함께 쓴다(DESIGN 608·622~626·636행).
 
 ## 11. 정적 제공과 서버 변경
 
@@ -198,8 +201,9 @@ CSRF 토큰은 메모리에만 둔다. 저장소(localStorage, sessionStorage)�
 ## 13. 반응형 (SCR-001)
 
 - 중단점: `max-width: 1023.98px`에서 모바일 배치. 데스크톱은 `1024px` 이상의 12열 격자 (DESIGN 527행, 543~544행).
-- 목록 표는 하나의 DOM(`<table>`)을 두고 네이티브 `table`·`tr`·`th scope="col"`·`td` 요소를 쓴다. 명시적 `role` 속성은 붙이지 않는다. 셀마다 `data-label`을 붙이고, 모바일에서는 CSS로 카드처럼 배치하며 `::before { content: attr(data-label) }`로 머리글을 보인다. 머리글 행은 `clip-path`로 시각적으로만 숨기며 DOM에는 남는다 (구현 판단, 스크린 리더 확인은 3.6절).
-- `createDataTable`은 셀 값으로 DOM `Node`(세션 식별자 링크)를 받는다. 열 옵션 `role`은 만들지 않았다. 카드 배치는 셀마다 붙인 `data-label`과 CSS로 한다. 카드형 변형 컴포넌트는 새로 만들지 않는다 (구현 판단).
+- 목록 표는 하나의 DOM(`<table>`)을 쓴다. 네이티브 `table`에 `role="table"`, `thead`·`tbody`에 `role="rowgroup"`, 모든 `tr`에 `role="row"`, `th scope="col"`에 `role="columnheader"`, `td`에 `role="cell"`을 명시한다. 빈 행·빈 셀도 같다. 이는 구현 판단이 아니라 DESIGN 565행의 기준이다. 머리글 행은 화면에서만 숨기고 접근성 트리에는 남긴다.
+- `createDataTable`의 열 옵션 `mobileHead`가 첫 줄을 정한다. `primary`·`secondary` 셀은 `.data-table-head-primary`·`.data-table-head-secondary`로 모바일 격자의 첫 행(`grid-row: 1`)을 공유한다. 대기는 중계 ID·역할, 활성은 세션 링크·[상세], 종료는 세션 식별자·종료 원인 순서다(DESIGN 554~563행).
+- 첫 줄에는 `::before` 레이블을 붙이지 않는다. 나머지 셀은 `data-label`을 CSS 가상 요소로 보이는 레이블·값 쌍으로 만든다. 가상 요소의 대체 텍스트는 비워 중복 읽기를 막는다(DESIGN 563·566행). 셀 값으로 DOM `Node`를 받으며 모바일 전용 마크업은 만들지 않는다. API와 검증은 [공통 컴포넌트 3.1절](dashboard-components.md#31-공개-함수)을 따른다.
 - 최소 지원 폭 320px에서 가로 스크롤이 생기지 않는다 (DESIGN). 운영 화면의 320px 확인은 스크린샷 비교(검증 기록 4.6)에서 한다.
 
 ## 14. 결정 사항과 구현 판단
@@ -251,7 +255,7 @@ CSRF 토큰은 메모리에만 둔다. 저장소(localStorage, sessionStorage)�
 - 게이지 상한 표기는 `상한 {n}`(CPY-079)과 `상한 확인 불가`(CPY-080)를 쓴다. 사용자 결정 2026-10-23(Q55)로 스펙 9.3.2절에 더했다.
 - 사유 필드 `*_unavailable_reason`은 읽지 않는다. `null`만 확인 불가로 보인다. 계약 소비자 규칙과 결과가 같다 (구현 판단, 사용자 결정 없음).
 - `language.js`를 `app/`으로 옮기고 `SHARED_FILES`에 더했다 (7 → 8). `login/language.js`는 생성 복사본이다. 내용은 같고 머리글 한 줄만 붙는다. 로그인 코드 동작은 바뀌지 않는다. `frontend.md` 1.1절 트리와 2.3절 복사 목록, `xtask.md`, `code-map.md`를 같은 변경으로 고쳤다.
-- `createDataTable` 확장: 셀 값으로 DOM Node를 받고 셀마다 `data-label`을 붙인다. 열 옵션 `role`은 없다. 카드 배치는 CSS로 한다 (13절).
+- `createDataTable`의 `mobileHead` 옵션 이름과 두 값은 공통 API로 정했다. 첫 줄 배치·레이블 생략·명시적 표 역할은 DESIGN 554~566행을 따른다. 역할 생략은 구현 판단에서 제외한다(13절).
 
 ## 15. 열린 항목
 
@@ -262,6 +266,7 @@ CSRF 토큰은 메모리에만 둔다. 저장소(localStorage, sessionStorage)�
   - Q3 → 사용자 결정 2026-10-23(Q55): 스펙 9.3절에 CPY-078(주 메뉴/Main menu), CPY-079(상한 {n}/Limit {n}), CPY-080(상한 확인 불가/Limit unavailable), CPY-081(세션 정보/Session information), CPY-082(전송량/Transfer)를 더했다. 게이지 `12 / 200` 형식으로 바꾸지 않는다.
   - Q3 보충(4.11 복사 검토): 문서 제목 `VNC Relay 운영 현황`·`VNC Relay 세션 {id}`, 역할 표시 `Viewer`·`대상`, 상태 라벨 `상태`/`State`는 질문에서 뺐다. 문서 제목은 브랜드와 CPY-004 `운영 현황`·CPY-051 `세션 {session_id}`를 잇는다. SCR-001 목록의 피어 칸 역할 이름은 CPY-056·057 주소 이름으로 바꿨다. 상태 행은 삭제했다. 기간 단위 `일`/`d`는 DESIGN 491행 근거라 질문이 아니다.
 - 남은 확인 필요 항목: 역할·모드·전송 경로 표기와 스펙 "번역하지 않음"의 관계(14절 구현 판단, 대조 기록). 사용자 질문으로 아직 올리지 않았다.
+- SCR-001 목록 카드의 개수 배지는 CPY 승인 대기다. DESIGN 608·626·636·638행의 시각 기준만으로 문구를 새로 만들지 않는다. 승인 전에는 표시하지 않는다. D6의 `closing` 생략과 CPY-040 바이트 머리글은 유지한다.
 - 반영 완료(2026-10-22 Main 결정): D4 상세 링크는 `/#/sessions/{session_id}`로 두고 숨기지 않는다(14절). 검증 기록 4.6의 수정 필요 6건은 코드 수정을 마쳤다(4.6 기록).
 - 반영 완료(2026-10-22): `code-map.md`, `dashboard-components.md` 2절·3.1절, `architectures/README.md`, `frontend.md` 1.1·2.3절, `xtask.md`, `management-api-v1.md` 5절과 6절(`tests/dashboard_browser.rs` 추가). 5절 결과 열은 검증 기록 규칙(`docs/AGENTS.md` 검증 기록)에 따라 부분 행을 `미실행`으로 두고, 부분 내용은 실행 기록 열에 적는다.
 - 실서버 확인은 4.4 뒤에 한다. 그 전까지 관련 시나리오는 부분이다.
@@ -306,3 +311,10 @@ CSRF 토큰은 메모리에만 둔다. 저장소(localStorage, sessionStorage)�
 | SCR-002 대상 없음(gone) 카드 본문 | 스펙 §4 l.177: 종료 비활성, 목록으로 | 중립 알림 `현재 세션을 찾을 수 없음`(CPY-059)과 알림 조치 `목록으로`(CPY-010, 목록 링크). 정보 카드는 제목만 남고 본문이 비어 있다. 세션 종료 비활성. 전송량 카드와 머리말 새로고침 숨김. 포커스는 알림의 `목록으로` | 수정 완료 (스펙 §4 l.177·§6 l.211 기준). 빈 카드 본문은 시안 프레임과 같아 유지 | 검증 기록 4.7절 |
 | SCR-002 대상 없음 머리말 새로고침 | 시안 `scr002-gone`: 머리말 `새로고침` 있음 | 숨김. 스펙 §4 l.177이 대상 없음의 가능한 행동을 목록으로 이동뿐이라고 정한다 | 스펙 기준. 시안과 다름 | 검증 기록 4.7절 남은 차이 6 |
 | SCR-002 대상 없음 알림 제목·본문 | 시안: 제목 `대상 없음`, 본문 `현재 세션을 찾을 수 없다. 같은 중계 ID의 다른 세션으로 바꾸지 않는다.` | CPY-059 `현재 세션을 찾을 수 없음` 한 문장만 씀. 스펙 §9.3에 두 문구의 키가 없어 추가하지 않았다. 같은 중계 ID 규칙은 스펙 §5 l.200에 따라 화면 동작으로 지킨다 | 구현 판단. 시안과 다름 | 검증 기록 4.7절 남은 차이 7. 문구를 넣으려면 스펙 §9.3 키 추가가 먼저 필요하다 |
+| SCR-001 표 역할 (2026-10-23, 4.12) | 위 `표 role` 행의 당시 기록: 역할 속성 생략 | 네이티브 요소에 table·rowgroup·row·columnheader·cell을 명시한다. 빈 행·빈 셀도 포함한다 | DESIGN 565행으로 해소. 역할 생략은 구현 판단이 아니다 | 13절·공통 컴포넌트 3.1절 반영. 자동 역할 확인 통과. AT 검증은 미실행(검증 기록 4.15절) |
+| SCR-001 모바일 첫 줄 (2026-10-23, 4.12) | 모든 셀이 레이블·값 쌍 | `mobileHead`로 대기 중계 ID·역할, 활성 세션 링크·상세, 종료 세션·원인을 첫 줄에 둔다. 첫 줄 레이블은 없다 | DESIGN 554~566행으로 해소 | 1023·390·320 ko와 320 en 캡처·DOM 위치 확인 통과(검증 기록 4.15절) |
+| SCR-001 데이터·링크 (2026-10-23, 4.12) | 원문 일반 글씨, 상세 링크만 제공 | 대기·종료 ID는 `.session-id`, 주소는 `.fact-address`다. 활성 식별자는 `createLink`와 인코딩한 세션 URL을 쓴다 | DESIGN 473·644행으로 해소 | 10절 반영. 데이터 글꼴·주소 인코딩 시험과 Chrome 캡처 확인(검증 기록 4.15절) |
+| SCR-001 배지·방향 (2026-10-23, 4.12) | 역할·모드·전송 경로·종료 원인은 일반 글씨, 바이트에 방향 표식 없음 | 중립 분류 배지, 종료 원인별 warning·destructive·neutral 배지, 장식 방향 표식을 쓴다 | DESIGN 378·393~395·608·622~626·636·643행으로 해소 | 10절 반영. 톤·아이콘·장식 속성 시험과 Chrome 캡처 확인. 모바일 배지 늘어남도 수정(검증 기록 4.15절) |
+| SCR-001 상세 조작 (2026-10-23, 4.12) | 상세 링크에 아이콘 없음 | 오른쪽 꺾쇠와 표 안 최소 높이 sm·모바일 touch를 적용한다 | DESIGN 579·623·634행으로 해소 | 10절 반영. 아이콘·높이 시험과 Chrome 캡처 확인(검증 기록 4.15절) |
+| SCR-001 연결 카드 설명 (2026-10-23, 4.12) | `usageGauge`가 본문 아래 `note`를 붙임 | `panelCard.description`을 `createCard`에 넘긴다. 제목 아래 `p.card-description`으로 옮기고 `usageGauge.note`를 없앤다 | DESIGN 527·638행으로 해소 | 4·10절·공통 컴포넌트 3.1절 반영. DOM 순서 시험과 Chrome 캡처 확인(검증 기록 4.15절) |
+| SCR-001 시안과 스펙 경계 (2026-10-23, 4.12) | 시안의 개수 배지·closing·바이트 머리글과 스펙 문구의 차이 | 개수 배지는 CPY 승인 전 미표시. `closing`은 D6으로 생략. 바이트 머리글은 CPY-040 유지 | 개수 배지는 승인 대기. 나머지는 스펙 우선으로 해소 | 10·15절 반영. 남은 차이는 검증 기록 4.15절에 있다 |

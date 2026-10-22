@@ -49,12 +49,12 @@ flowchart LR
 | `app/components/text-field.js` `createTextField`, `setTextFieldError` | 레이블, 입력, 오류 문구를 묶은 `div`를 만든다. `setTextFieldError`는 만든 필드의 오류 문구를 바꾼다. 오류 아이콘은 `icons.js`로 만든다. | `icons.js` |
 | `app/components/badge.js` `createBadge` | 상태 배지를 만든다. | `icons.js` |
 | `app/components/alert.js` `createAlert` | 상태 안내 상자를 만든다. | `icons.js` |
-| `app/components/card.js` `createCard` | 제목이 있는 카드 `section`을 만든다. 개수는 배지로 보인다. | `badge.js` |
+| `app/components/card.js` `createCard` | 제목이 있는 카드 `section`을 만든다. 선택 설명은 카드 머리의 제목 아래에 둔다. `count`를 주면 배지로 보인다. | `badge.js` |
 | `app/components/stat.js` `createStat` | 값 하나와 이름을 묶은 지표를 만든다. 기본 값은 `metric` 글꼴을 쓴다. `badge`가 참이면 공통 배지로 만든다. | `badge.js` |
 | `app/components/gauge.js` `createGauge` | 원형 게이지를 `progressbar` 역할로 만든다. | 없음 |
 | `app/components/navbar.js` `createNavbar` | 상단 막대와 호출자가 준 레이블의 `nav`를 만든다. | `link.js`, `icons.js` |
 | `app/components/language-select.js` `createLanguageSelect` | 레이블이 있는 네이티브 `select`를 만든다. 지구본과 화살표 아이콘을 붙인다. | `icons.js` |
-| `app/components/data-table.js` `createDataTable` | 표 요소를 만든다. 각 셀에 열 이름을 `data-label`로 붙이고, 좁은 폭의 카드 배치는 CSS가 그 값을 읽어 맡는다. | 없음 |
+| `app/components/data-table.js` `createDataTable` | 명시적 표 역할을 가진 네이티브 표를 만든다. `mobileHead`로 모바일 첫 줄을 지정한다. 나머지 셀은 `data-label`을 레이블로 쓴다. | 없음 |
 | `app/components/link.js` `createLink` | 링크 `a`를 만든다. | `icons.js` |
 | `app/components/dialog.js` `createDialog` | 네이티브 `dialog`로 확인 대화상자를 만든다. | `button.js` |
 | `app/styles/base.css` | `color-scheme`, 본문 글꼴, 포커스 링, 화면 밖 글 클래스 | `tokens.css` |
@@ -88,21 +88,29 @@ flowchart LR
 | `setTextFieldError(field, error)` | `field`는 `createTextField`가 만든 `div`다. `error`가 있으면 오류 문구를 붙이고 `aria-invalid="true"`, `aria-describedby`를 오류 문구 id로 바꾼다. `error`가 빈 값이면 오류 문구를 지우고 `aria-invalid="false"`로 바꾼다. 도움말이 있으면 `aria-describedby`를 도움말 id로 되돌리고, 없으면 지운다. 로그인 화면이 필드를 다시 만들지 않고 오류만 바꾸려고 추가했다(4.9 재작업). | `undefined`. 요소를 새로 만들지 않고 같은 요소를 바꾼다. |
 | `createBadge({tone, label, icon})` | `icon` 기본값은 `tone`별 아이콘(`neutral`은 없음). `icon: false`로 끈다. | `HTMLSpanElement` |
 | `createAlert({tone, title, message})` | `warning`·`destructive`는 `role="alert"`, 나머지는 `role="status"` | `HTMLDivElement` |
-| `createCard({title, headingLevel, count, actions, body, footer})` | `title` 필수. `headingLevel` 기본 2(1~6의 정수). `count`는 `createBadge`로 붙인다. | `HTMLElement`(`section`). `aria-labelledby`로 제목과 묶는다. |
+| `createCard({title, headingLevel, description, count, actions, body, footer})` | `title` 필수. `headingLevel` 기본 2(1~6의 정수). `description`은 선택 문자열이다. 카드 머리(`.card-head`)의 제목 아래 `p.card-description`에 넣는다(DESIGN 527·638행). `count`는 `createBadge`로 붙인다. SCR-001 목록 개수 배지는 CPY 승인 전에는 쓰지 않는다. | `HTMLElement`(`section`). `aria-labelledby`로 제목과 묶는다. |
 | `createStat({label, value, unit, tone, badge})` | `label` 필수. 값은 문자열 또는 숫자다. `badge` 기본값은 `false`이며, 기본 값은 `metric` 글꼴과 `tnum`을 쓴다. `badge: true`이면 `createBadge`에 값과 `tone`을 넘긴다. 실행 상태와 확인 불가·조회 중 값에 쓴다(DESIGN.md Stat). | `HTMLDivElement` |
 | `createGauge({label, value, max, valueText, limitText, unknownText})` | `value`는 `0`~`max`. `label`과 `limitText`는 필수다. 알려진 값은 가운데에 `valueText`(없으면 값)를 크게 보이고, 아래 줄에 `limitText`(상한 줄)를 보인다. `value`가 `null`이면 알 수 없음이며 링을 그리지 않고 `unknownText`(필수)를 쓴다. 채움 길이는 `style.setProperty`로 쓴다. | `HTMLDivElement`. `role="progressbar"`, `aria-label`, `aria-valuemin`, `aria-valuemax`, `aria-valuenow`, `aria-valuetext`. 알려진 값의 `aria-valuetext`는 `valueText, limitText`다. |
 | `createNavbar({brand, items, language, action, label})` | `label`은 필수다(기본값 없음, 호출자가 준다). `items`는 `{label, href, current, desktopOnly}`. `desktopOnly` 항목은 1024px 미만에서 숨긴다. | `HTMLElement`(`header`). 안에 `nav`를 둔다. 현재 항목은 `aria-current="page"`. |
 | `createLanguageSelect({id, label, value, options, variant})` | `id`, `label`, `options`(`{value, label}` 배열, 빈 배열이면 `TypeError`)는 필수. `variant` 기본 `form`(`navbar`·`form`). | `HTMLDivElement`. 안에 `label`과 `select`. |
-| `createDataTable({caption, columns, rows, emptyText, numericColumns})` | `columns`는 `{key, label}`(문자열)의 배열이다. 비었거나 배열이 아니면 `TypeError`다. `rows`는 값 배열의 배열이다. 셀 값이 `Node`면 그대로 넣고, 그 밖의 값은 문자열로 쓴다. `numericColumns`의 각 항목은 `columns`의 `key`여야 한다(아니면 `TypeError`). | `HTMLTableElement`. 열 머리글은 `scope="col"`이고, 숫자 열은 `data-table-num` 클래스를 쓴다. 행이 없으면 `emptyText`를 한 행으로 쓴다. |
+| `createDataTable({caption, columns, rows, emptyText, numericColumns})` | `columns`는 `{key, label, mobileHead?}` 배열이다. `key`·`label`은 문자열이다. 배열이 아니거나 비었거나 열 값이 잘못되면 `TypeError`다. `mobileHead`는 생략 또는 `'primary'`·`'secondary'`만 허용한다. 다른 값이면 `TypeError`다. 생략한 열은 모바일에서 일반 레이블·값 쌍이다. `rows`는 값 배열의 배열이다. 셀 값이 `Node`면 그대로 넣고, 그 밖의 값은 문자열로 쓴다. `numericColumns`의 각 항목은 `columns`의 `key`여야 한다(아니면 `TypeError`). | `HTMLTableElement`. 열 머리글은 `scope="col"`이고, 숫자 열은 `data-table-num` 클래스를 쓴다. 행이 없으면 `emptyText`를 한 행으로 쓴다. 아래 표 역할과 모바일 첫 줄 규칙을 따른다. |
 | `createLink({href, label, icon})` | `icon`은 아이콘 이름 | `HTMLAnchorElement` |
 | `createDialog({title, description, confirmLabel, cancelLabel, destructive, onConfirm, onCancel})` | `title`, `confirmLabel`, `cancelLabel`은 필수. 확인 버튼은 `destructive`면 위험 스타일. 닫힌 대화상자는 CSS가 숨긴다(`display`는 `.dialog[open]`에만 준다). 미리보기는 열린 견본을 비모달 `open` 속성으로 프레임 안에 둔다(미리보기 전용). | `{element, show(), hide()}`. `show`는 `showModal()`을 부르고, 닫기와 취소는 네이티브 포커스 복귀를 쓴다. Tab과 Shift+Tab은 두 단추 사이에서 돌도록 keydown으로 처리한다(DASH-015, 7절). |
 
 모든 함수는 API 값을 `textContent`나 속성 값으로만 넣는다. `innerHTML`에는 정적 문자열만 넣는다.
 
+`createDataTable`의 표 의미와 모바일 첫 줄은 다음과 같이 연결한다([DESIGN 표의 카드 변환 규칙](../design/DESIGN.md#중단점과-모바일-배치), 554~566행).
+
+- 네이티브 `table`에는 `role="table"`, `thead`·`tbody`에는 `role="rowgroup"`을 붙인다. 머리글·본문·빈 행의 `tr`에는 `role="row"`, `th`에는 `role="columnheader"`, 일반·빈 셀의 `td`에는 `role="cell"`을 붙인다. CSS가 `display`를 바꿔도 역할을 생략하지 않는다.
+- `mobileHead: 'primary'` 셀에는 `.data-table-head-primary`, `'secondary'` 셀에는 `.data-table-head-secondary`를 붙인다. 두 셀은 모바일 격자의 첫 행(`grid-row: 1`)을 공유한다. 첫 줄 셀은 `::before` 레이블 없이 값만 보인다.
+- 일반 셀은 `data-label`과 CSS 가상 요소로 열 이름을 보인다. 가상 요소의 대체 텍스트는 비워 중복 읽기를 막는다(DESIGN 566행). 열 머리글은 화면에서만 숨기고 접근성 트리에는 남긴다.
+
+4.12 API 반영의 실행 검증과 캡처 결과는 별도 검증 기록에서 관리한다. 아래 날짜가 있는 대조 기록은 당시 결과다.
+
 ## 4. 처리 순서
 
 1. 호출자가 함수를 `import`하고 옵션 객체를 넘긴다.
-2. 함수가 옵션을 검사한다. 허용하지 않는 `tone`·`variant`·아이콘 이름, 빠진 필수 `label`이면 `TypeError`를 던진다. 이 오류는 개발 중 실수를 알리며 화면 오류로 바꾸지 않는다.
+2. 함수가 옵션을 검사한다. 허용하지 않는 `tone`·`variant`·아이콘 이름·열의 `mobileHead`, 빠진 필수 `label`이면 `TypeError`를 던진다. 이 오류는 개발 중 실수를 알리며 화면 오류로 바꾸지 않는다.
 3. 함수가 요소를 만든다. 아이콘은 `icon`의 캐시 템플릿에서 복제한다.
 4. 상태 속성과 클래스를 붙인다. 호출자는 반환된 요소를 DOM에 넣는다.
 5. 상태가 바뀌면 호출자가 같은 요소의 속성을 바꾼다. 모듈은 다시 만들지 않는다. 대화상자는 `show()`와 `hide()`로 열고 닫는다.
@@ -160,5 +168,6 @@ flowchart LR
 | 리뷰 수정 A–D(Q42, 2026-10-22) | 3.1 표와 CSS를 다시 대조: 게이지 `aria-valuetext`(gauge.js L71), 버튼 `navbar` 변형(button.js), 입력 상태(옵션 없음), 대화상자 `display`(components.css `.dialog[open]`) | 차이 4건을 고쳤다. A 게이지: 가운데에 현재 값, 아래 "상한" 줄. DESIGN.md 게이지 절을 따랐고 리뷰의 "비율" 표기는 쓰지 않았다(결정 요청 참고). B 상단 막대 로그아웃: `navbar` 변형, 항목 1개(`bc6248e`, `fc7c325`). C 입력: 비활성 견본을 포커스 견본으로 바꿈(`e1ba857`). D 대화상자: 닫힌 상태는 숨기고, 열린 견본은 프레임 안에 둠(`0741c3c`, 시험 `4e65789`). |
 | 로그인 복사본(4.9 재작업) | `cargo xtask tokens --check`, 복사본 변조·원본 변조·복사 목록 밖 파일 시험 | 통과. 깨끗한 상태는 통과. 복사본 변조, 원본 변조, 복사 목록 밖 파일 각각 `생성 결과와 다르다` 또는 `복사 목록에 없는 파일이다`로 실패하고 종료 코드 1이었다. 되돌린 뒤 다시 통과했다. |
 | 대화상자 Tab 순환(4.11, DASH-015) | 탐침: 열린 대화상자에서 `종료 확인`의 Tab이 어디로 가는지 확인. `session-scenarios.js`의 `DASH-015` 시험 두 건 | 차이 1건을 고쳤다. 네이티브 `showModal()`에서 Tab이 `body`로 빠졌다. `dialog.js` keydown으로 두 단추 사이를 돌게 했다. 시험은 합성 keydown이라 핸들러만 확인한다. 검증 기록 4.7절 |
+| SCR-001 표·카드 대조(4.12, 2026-10-23) | `mobileHead` 옵션·잘못된 값의 `TypeError`, 빈 행까지 명시한 표 역할, `description` 옵션을 구현·브라우저 DOM과 대조했다 | DESIGN 554~566·638행 반영. Chrome ko 1280·1023·390·320, en 1280·320에서 첫 줄 배치·설명 위치·넘침을 확인했다. 시험·명령 결과와 미실행 항목은 검증 기록 4.15절에 있다 |
 
 3.1 표에 없는 문자열 필수 옵션(`button`의 `label`, `badge`의 `label`, `link`의 `href`·`label`, `text-field`의 `id`·`label`, `alert`의 `title`)도 빈 값이면 `TypeError`를 던진다.

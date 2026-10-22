@@ -325,6 +325,16 @@
   line-height: var(--type-heading-card-line);
 }
 
+.card-description {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--color-muted-foreground);
+  font-family: var(--type-label-family);
+  font-size: var(--type-label-size);
+  font-weight: var(--type-label-weight);
+  line-height: var(--type-label-line);
+}
+
 .card-actions {
   display: flex;
   flex-wrap: wrap;
@@ -687,6 +697,10 @@
   white-space: nowrap;
 }
 
+.data-table .button {
+  min-height: var(--space-control-height-sm);
+}
+
 .data-table tbody tr.data-table-empty:is(:hover, .is-hover) td {
   background: transparent;
 }
@@ -932,6 +946,7 @@
     grid-column: 1 / -1;
     grid-template-columns: var(--space-label-col) minmax(0, 1fr);
     gap: var(--space-sm);
+    min-width: 0;
     padding: var(--space-xs) 0;
     border: 0;
     text-align: left;
@@ -940,6 +955,7 @@
 
   .data-table td::before {
     content: attr(data-label);
+    content: attr(data-label) / "";
     color: var(--color-muted-foreground);
     font-family: var(--type-label-family);
     font-size: var(--type-label-size);
@@ -950,6 +966,36 @@
   .data-table td.data-table-num {
     text-align: left;
     white-space: normal;
+  }
+
+  .data-table td > .badge {
+    justify-self: start;
+  }
+
+  .data-table .button {
+    min-height: var(--space-control-height-touch);
+  }
+
+  .data-table td.data-table-head-primary,
+  .data-table td.data-table-head-secondary {
+    grid-row: 1;
+    display: block;
+    padding: 0;
+  }
+
+  .data-table td.data-table-head-primary {
+    grid-column: 1;
+  }
+
+  .data-table td.data-table-head-secondary {
+    grid-column: 2;
+    text-align: right;
+    overflow-wrap: anywhere;
+  }
+
+  .data-table td.data-table-head-primary::before,
+  .data-table td.data-table-head-secondary::before {
+    content: none;
   }
 
   .data-table tr.data-table-empty {

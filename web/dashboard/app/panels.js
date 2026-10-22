@@ -6,6 +6,8 @@ import { createBadge } from './components/badge.js';
 import { createCard } from './components/card.js';
 import { createDataTable } from './components/data-table.js';
 import { createGauge } from './components/gauge.js';
+import { icon } from './components/icons.js';
+import { createLink } from './components/link.js';
 import { createStat } from './components/stat.js';
 import {
   fill,
@@ -116,8 +118,8 @@ function stateText(t, state) {
   return { text: state, tone: 'neutral' };
 }
 
-// Connection usage gauge with its description. `usage` is null until the first success.
-export function usageGauge({ t, title, note, usage, kind }) {
+// Connection usage gauge. `usage` is null until the first success.
+export function usageGauge({ t, title, usage, kind }) {
   let gauge;
   if (usage) {
     const limitText = fill(t.limit, { n: formatCount(usage.limit) });
@@ -141,21 +143,29 @@ export function usageGauge({ t, title, note, usage, kind }) {
     });
   }
   const block = el('div', 'gauge-wrap');
-  block.append(gauge, el('p', 'card-note', note));
+  block.append(gauge);
   return block;
 }
 
 function cellLine(label, value) {
   const line = el('div', 'cell-line');
-  line.append(el('span', 'cell-label', label), document.createTextNode(` ${value}`));
+  line.append(el('span', 'cell-label', label), document.createTextNode(' '), el('span', 'cell-value', value));
+  return line;
+}
+
+function directionLine(label, value, markClass) {
+  const line = cellLine(label, value);
+  const mark = el('span', `direction-mark ${markClass}`);
+  mark.setAttribute('aria-hidden', 'true');
+  line.querySelector('.cell-label').prepend(mark);
   return line;
 }
 
 function bytesCell(t, item) {
   const cell = el('div', 'cell-bytes');
   cell.append(
-    cellLine(t.directionViewerToTarget, formatBytes(item.bytesViewerToTarget)),
-    cellLine(t.directionTargetToViewer, formatBytes(item.bytesTargetToViewer)),
+    directionLine(t.directionViewerToTarget, formatBytes(item.bytesViewerToTarget), 'direction-mark-1'),
+    directionLine(t.directionTargetToViewer, formatBytes(item.bytesTargetToViewer), 'direction-mark-2'),
   );
   return cell;
 }
@@ -166,6 +176,7 @@ function peerCell(t, item) {
     cellLine(t.viewerAddressLabel, formatAddress(item.viewerAddress)),
     cellLine(t.targetAddressLabel, formatAddress(item.targetAddress)),
   );
+  for (const value of cell.querySelectorAll('.cell-value')) value.classList.add('fact-address');
   return cell;
 }
 
@@ -173,12 +184,17 @@ function peerCell(t, item) {
 function detailsLink(t, sessionId) {
   const link = el('a', 'button button-outline');
   link.href = `/#/sessions/${encodeURIComponent(sessionId)}`;
-  link.append(el('span', 'button-label', t.details));
+  link.append(icon('chevron-right'), el('span', 'button-label', t.details));
   return link;
 }
 
-function columns(labels, keys) {
-  return keys.map((key, index) => ({ key, label: labels[index] }));
+function columns(labels, keys, primary, secondary) {
+  return keys.map((key, index) => ({
+    key,
+    label: labels[index],
+    ...(key === primary ? { mobileHead: 'primary' } : {}),
+    ...(key === secondary ? { mobileHead: 'secondary' } : {}),
+  }));
 }
 
 function tableBlock(config) {
@@ -189,10 +205,10 @@ function tableBlock(config) {
 
 export function waitingTable(t, items, emptyText) {
   return tableBlock({
-    columns: columns(t.waitingColumns, WAITING_KEYS),
+    columns: columns(t.waitingColumns, WAITING_KEYS, 'relayId', 'role'),
     rows: items.map((item) => [
-      formatRole(item.role),
-      item.relayId,
+      createBadge({ label: formatRole(item.role) }),
+      el('span', 'session-id', item.relayId),
       formatTime(item.connectedAt),
       formatDuration(item.waitedMs, t.dayUnit),
     ]),
@@ -203,11 +219,11 @@ export function waitingTable(t, items, emptyText) {
 
 export function activeTable(t, items, emptyText) {
   return tableBlock({
-    columns: columns(t.activeColumns, ACTIVE_KEYS),
+    columns: columns(t.activeColumns, ACTIVE_KEYS, 'session', 'details'),
     rows: items.map((item) => [
-      item.sessionId,
-      formatMode(item.mode),
-      formatTransport(item.viewerTransport),
+      createLink({ href: `/#/sessions/${encodeURIComponent(item.sessionId)}`, label: item.sessionId }),
+      createBadge({ label: formatMode(item.mode) }),
+      createBadge({ label: formatTransport(item.viewerTransport) }),
       formatTime(item.startedAt),
       bytesCell(t, item),
       peerCell(t, item),
@@ -218,12 +234,20 @@ export function activeTable(t, items, emptyText) {
   });
 }
 
+function closeCauseBadge(t, cause) {
+  const tone = cause === 'connection_error'
+    ? 'destructive'
+    : ['dead_connection', 'close_timeout'].includes(cause) ? 'warning' : 'neutral';
+  const label = Object.hasOwn(t.closeCause, cause) ? t.closeCause[cause] : cause;
+  return createBadge({ tone, label });
+}
+
 export function closedTable(t, items, emptyText) {
   return tableBlock({
-    columns: columns(t.closedColumns, CLOSED_KEYS),
+    columns: columns(t.closedColumns, CLOSED_KEYS, 'session', 'cause'),
     rows: items.map((item) => [
-      item.sessionId,
-      Object.hasOwn(t.closeCause, item.closeCause) ? t.closeCause[item.closeCause] : item.closeCause,
+      el('span', 'session-id', item.sessionId),
+      closeCauseBadge(t, item.closeCause),
       formatTime(item.endedAt),
       bytesCell(t, item),
     ]),
@@ -246,7 +270,7 @@ export function pageHead({ back = null, title = '', actions = [] }) {
 }
 
 // Card with a status badge slot and an alert slot (list and summary panels). Chrome is optional. Footer is an optional action row.
-export function panelCard({ title, span, chrome, footer }) {
+export function panelCard({ title, description, span, chrome, footer }) {
   const slots = {
     badgeSlot: el('div', 'card-status'),
     alertSlot: el('div', 'card-alert'),
@@ -259,7 +283,7 @@ export function panelCard({ title, span, chrome, footer }) {
     body = el('div', 'card-stack');
     body.append(slots.alertSlot, slots.contentSlot);
   }
-  const node = createCard({ title, actions: chrome ? slots.badgeSlot : undefined, body, footer });
+  const node = createCard({ title, description, actions: chrome ? slots.badgeSlot : undefined, body, footer });
   node.classList.add(span);
   return { node, slots };
 }

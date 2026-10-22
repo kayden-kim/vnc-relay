@@ -106,8 +106,8 @@ const LANGUAGE_OPTIONS = [
   { value: "en", label: "English" },
 ];
 const TABLE_COLUMNS = [
-  { key: "session", label: t.colSession },
-  { key: "mode", label: t.colMode },
+  { key: "session", label: t.colSession, mobileHead: "primary" },
+  { key: "mode", label: t.colMode, mobileHead: "secondary" },
   { key: "bytes", label: t.colBytes },
 ];
 const TABLE_ROWS = [
@@ -270,6 +270,7 @@ function runChecks() {
   check("create-card", () => {
     const card = mount(createCard({
       title: t.cardTitle,
+      description: t.help,
       count: 2,
       actions: createButton({ variant: "outline", label: t.refresh, icon: "refresh" }),
       body: paragraph(t.cardBody),
@@ -278,6 +279,11 @@ function runChecks() {
     expect(card instanceof HTMLElement && card.tagName === "SECTION");
     const heading = document.getElementById(card.getAttribute("aria-labelledby") || "");
     expect(heading !== null && heading.tagName === "H2" && heading.textContent.includes(t.cardTitle));
+    const description = card.querySelector(".card-head .card-description");
+    expect(description instanceof HTMLParagraphElement && description.textContent === t.help);
+    expect(!!(heading.compareDocumentPosition(description) & Node.DOCUMENT_POSITION_FOLLOWING));
+    expect(throwsTypeError(() => createCard({ title: t.cardTitle, description: 1 })));
+    expect(createCard({ title: t.cardTitle }).querySelector(".card-description") === null);
     expect(card.textContent.includes(t.refresh) && card.textContent.includes(t.cardBody));
     expect(card.textContent.includes(t.cardFooter));
   });
@@ -385,6 +391,25 @@ function runChecks() {
       caption: t.tableCaption, columns: TABLE_COLUMNS, rows: TABLE_ROWS, emptyText: t.empty, numericColumns: ["bytes"],
     }));
     expect(table instanceof HTMLTableElement);
+    expect(table.getAttribute("role") === "table");
+    expect([...table.querySelectorAll("thead, tbody")].every((group) => group.getAttribute("role") === "rowgroup"));
+    expect([...table.querySelectorAll("tr")].every((row) => row.getAttribute("role") === "row"));
+    expect([...table.querySelectorAll("td")].every((cell) => cell.getAttribute("role") === "cell"));
+    for (const row of table.querySelectorAll("tbody tr")) {
+      const [primary, secondary, ordinary] = row.cells;
+      expect(primary.classList.contains("data-table-head-primary"));
+      expect(secondary.classList.contains("data-table-head-secondary"));
+      expect(!ordinary.classList.contains("data-table-head-primary") && !ordinary.classList.contains("data-table-head-secondary"));
+      if (window.innerWidth <= 1023) {
+        expect(getComputedStyle(row).display === "grid");
+        expect(getComputedStyle(primary).gridRowStart === "1" && getComputedStyle(secondary).gridRowStart === "1");
+        expect(Math.abs(primary.getBoundingClientRect().top - secondary.getBoundingClientRect().top) < 1);
+        for (const head of [primary, secondary]) {
+          expect(["none", "normal", '""'].includes(getComputedStyle(head, "::before").content));
+        }
+        expect(!["none", "normal", '""'].includes(getComputedStyle(ordinary, "::before").content));
+      }
+    }
     expect(table.caption !== null && table.caption.textContent.includes(t.tableCaption));
     expect(table.querySelectorAll("tbody tr").length === TABLE_ROWS.length);
   });
@@ -396,7 +421,8 @@ function runChecks() {
     const headers = Array.from(table.querySelectorAll("thead th"));
     expect(headers.length === TABLE_COLUMNS.length);
     expect(headers.every((th, index) =>
-      th.getAttribute("scope") === "col" && th.textContent.includes(TABLE_COLUMNS[index].label)));
+      th.getAttribute("scope") === "col" && th.getAttribute("role") === "columnheader"
+        && th.textContent.includes(TABLE_COLUMNS[index].label)));
   });
 
   check("data-table-empty", () => {
@@ -405,6 +431,20 @@ function runChecks() {
     }));
     const rows = table.querySelectorAll("tbody tr");
     expect(rows.length === 1 && rows[0].textContent.includes(t.empty));
+    expect(table.getAttribute("role") === "table");
+    expect([...table.querySelectorAll("thead, tbody")].every((group) => group.getAttribute("role") === "rowgroup"));
+    expect([...table.querySelectorAll("tr")].every((row) => row.getAttribute("role") === "row"));
+    expect([...table.querySelectorAll("th")].every((cell) => cell.getAttribute("role") === "columnheader"));
+    expect(rows[0].cells[0].getAttribute("role") === "cell");
+    expect(rows[0].cells[0].colSpan === TABLE_COLUMNS.length);
+  });
+
+  check("invalid-data-table-mobile-head", () => {
+    for (const mobileHead of ["tertiary", "", null, false, 1]) {
+      expect(throwsTypeError(() => createDataTable({
+        columns: [{ key: "session", label: t.colSession, mobileHead }],
+      })));
+    }
   });
 
   check("create-link", () => {

@@ -130,21 +130,16 @@
   text-align: center;
 }
 
-.card-note {
-  margin: 0;
-  color: var(--color-muted-foreground);
-  font-family: var(--type-body-family);
-  font-size: var(--type-body-size);
-  line-height: var(--type-body-line);
-}
-
 .table-scroll {
   max-width: 100%;
-  overflow-x: auto;
+  min-width: 0;
 }
 
 .cell-line {
-  display: block;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-xs);
   overflow-wrap: anywhere;
 }
 
