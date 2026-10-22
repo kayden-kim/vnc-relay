@@ -392,7 +392,7 @@
   - 전송량: 방향 표식 `chart-1`(Viewer→대상)·`chart-2`(대상→Viewer)를 10×10 정사각형으로 붙였다(DESIGN 378행, `aria-hidden`). 공유 `createStat`은 바꾸지 않았고 `session.js`의 지역 `directionStat`이 맡는다. SCR-001에는 영향이 없다.
   - 종료 아이콘 `cancel`(DESIGN 623행). 렌더 중 `textContent`가 아이콘을 지우던 결함을 `.button-label`로 고쳤다.
   - 복사 키: `documentTitle`, `sessionDocumentTitle`, `peerViewer`, `peerTarget`, `stateLabel`을 지웠다. `transferTitle`(DESIGN 465행)을 넣었다. `sessionInfoTitle`(DESIGN 529행)은 남겼다.
-  - 반응형: `.fact` 한 열 규칙은 단일 중단점 `max-width: 1023.98px`(DESIGN 543·546·557행) 안에 넣었다. 이전에는 `.fact`에 767px 별도 규칙이 있어 768–1023px에서 두 열이었다. 그 규칙을 지웠다. `.fact` 기본 규칙은 중단점 규칙 위로 옮겼다. 측정(`getComputedStyle`, `grid-template-columns`): 1023px 한 열(941px), 1024px 두 열(`160px 420.656px`), 1280 두 열, 390·320 한 열. 768–1023 구간은 캡처하지 않고 1023px 측정으로 확인했다. 같은 파일의 767px 구간(SCR-001 span·머리말 버튼 규칙)은 이번에 바꾸지 않았다.
+  - 반응형: `.fact` 한 열 규칙은 단일 중단점 `max-width: 1023.98px`(DESIGN 543·546·557행) 안에 넣었다. 이전에는 `.fact`에 767px 별도 규칙이 있어 768–1023px에서 두 열이었다. 그 규칙을 지웠다. `.fact` 기본 규칙은 중단점 규칙 위로 옮겼다. 측정(`getComputedStyle`, `grid-template-columns`): 1023px 한 열(941px), 1024px 두 열(`160px 420.656px`), 1280 두 열, 390·320 한 열. 768–1023 구간은 이 라운드에서 캡처하지 않고 1023px 측정으로 확인했다. 같은 파일의 767px 구간(SCR-001 span·머리말 버튼 규칙)은 이 라운드에서 바꾸지 않았다. 4.8절에서 옮겼다.
   - 대상 없음: 알림에 조치 `목록으로`(CPY-010, `a.button.button-outline`, 목록 링크)를 넣었다. 포커스는 이 조치로 옮긴다(스펙 §6 l.211). 대상 없음 상태에서 머리말 `새로고침`은 숨겼다(스펙 §4 l.177).
   - 시험: DASH-006·007·012·014 확인을 갱신하고 `factValue` 도우미를 넣었다. DASH-015 표식(`tests/dashboard_browser.rs`의 `/// spec: dashboard.md:DASH-015 partial`)을 `session_cancel_sends_no_request_and_restores_focus_in_browser`에 달았다. 이 시험은 합성 keydown이다.
   - `pageHead`·`panelCard`·`peerCell`은 SCR-001과 공유된다. 목록 시험 `operations_*`는 두 게이트에서 모두 통과했다. SCR-001 캡처는 다시 찍지 않았다.
@@ -436,6 +436,27 @@
   - Windows `vr-win.ps1 -Only all`: ALL PASSED (all), 종료 0. 시나리오 150건: 통과 23, 부분 49, 실패 0, 미실행 1(OPS-007, Unix 전용), 미연결 77, 오류 0건. dashboard_browser 31 passed, 0 failed(143.11초). 보고서 `D:\Workspace\vnc-relay\target\scenario-report.md`. 소요 238.19초.
   - DASH 27건(Windows 보고서): 통과 0, 부분 26, 미연결 1(DASH-023). 이전 미연결 2건 중 DASH-015는 표식으로 부분이 됐다. DASH-023은 이번 작업 대상이 아니다.
   - 1차 게이트(`5368dec`, 기록 유지): WSL 통과 24, 부분 48, 미연결 78. Windows 통과 23, 부분 48, 미실행 1, 미연결 78. dashboard_browser 31 passed(두 환경).
+
+### 4.8 검토 기록 (작업 4.10·4.11 중단점 통합)
+
+- 범위: 767px 블록을 지우고 그 규칙을 `(max-width: 1023.98px)` 블록 하나에 합쳤다. 배치 규칙(`.grid`, `.span-*`, `.fact-list`, `.fact`, `.page-actions`)은 `app/styles/components.css`로 옮겼다. `app.css`는 `components.css` 뒤에 로드되므로 배치 기본 규칙을 거기 두면 중단점 규칙을 덮는다. `app.css`에는 `@media`가 없다. 로그인 복사본(`login/styles/components.css`)은 `cargo xtask tokens`로 다시 만들었다.
+- 바뀐 동작(768–1023px만): 이전 HEAD에서 SCR-001 중계·관리 연결 카드(`span-3`)는 이 구간에서 반폭(`span-6`)이었다. 이제 전체 폭이다. `.page-actions`는 이 구간에서 전체 폭이 되고 `.button`은 `flex: 1`을 받는다. 1024px 이상과 390px 이하는 바뀌지 않았다.
+- 측정(목 응답, 헤드리스 Chrome, `getComputedStyle`). 카드 수는 격자 열 시작 위치의 수, `.fact` 수는 `grid-template-columns` 트랙 수다. 측정한 모든 폭에서 `scrollWidth`=`clientWidth`(가로 넘침 없음):
+
+| 화면 | 768 | 1023 | 1024 | 1280 | 390 |
+| --- | --- | --- | --- | --- | --- |
+| SCR-001 카드 열 | 1 | 1 | 3 | 3 | 1 |
+| SCR-002 카드 열 | 1 | 1 | 2 | 2 | 1 |
+| SCR-002 `.fact` 트랙 | 1 | 1 | 2 | 2 | 1 |
+
+- 로그인 390, 미리보기 390: `scrollWidth`=`clientWidth`=390, 가로 넘침 없음.
+- 스크린샷(`target/dashboard-shots/765/`, git 무시): SCR-001 1023·390, SCR-002 1023·390, 로그인 390, 미리보기 390을 한 장씩 봤다. 미리보기는 전체 15474px 중 첫 1600px만 찍었다(전체는 읽을 수 없을 만큼 작았다). 1023 화면은 카드가 한 열이고, 중계·관리 연결 카드와 세션 종료 단추가 전체 폭이며, `.fact`가 한 열이다. 390 화면은 모두 한 열이다. 로그인 카드는 전체 폭이다.
+- 콘솔: `scr1@768`에 `Failed to load resource: 404` 한 건이 있다. 첫 탐색의 `/favicon.ico`다(387행과 같다). 나머지 실행에는 없다.
+- 확인하지 않은 것: 200% 줌, 글자 크기 조정, 다크 모드, 실기기 390. `web/dashboard/preview/preview.css`의 `@media (min-width: 1024px)`(15·61행)는 미리보기 전용이라 바꾸지 않았다. DESIGN 546행은 값을 "1024px"로 쓰고, 코드는 `max-width: 1023.98px`를 쓴다. 정수 픽셀에서 같은 구간을 가른다.
+- 게이트(대상 HEAD `0ca9466`; 제품 코드를 바꾼 커밋이다. 기준 HEAD `a0907b1`, 이전 제품 코드 `98b2fc1`. 게이트는 커밋 뒤에 돌렸다. 이 기록 커밋은 문서만 바꾼다):
+  - WSL `vr-full.sh`: ALL PASSED, 종료 0(마지막 줄 `ALL PASSED`). `fmt`, clippy, 레이어 검사, `tokens --check`, 시나리오 보고서, `deny`가 모두 종료 0. 시나리오 150건: 통과 24, 부분 49, 실패 0, 미실행 0, 미연결 77, 오류 0건. dashboard_browser 31 passed, 0 failed(93.80초). dashboard_assets 2 passed.
+  - Windows `vr-win.ps1 -Only all`: ALL PASSED (all), 종료 0(마지막 줄 `ALL PASSED (all)`). 같은 항목과 라이선스 검사가 모두 종료 0. 시나리오 150건: 통과 23, 부분 49, 실패 0, 미실행 1(OPS-007, Unix 전용), 미연결 77, 오류 0건. dashboard_browser 31 passed, 0 failed(166.78초). dashboard_assets 2 passed.
+  - 시나리오 합계는 `98b2fc1`과 같다(통과·부분·미실행·미연결).
 
 ## 5. 중단 조건
 

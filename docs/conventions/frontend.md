@@ -121,7 +121,7 @@ web/dashboard/
 | 참조·생성 관계 | DESIGN.md YAML → `web/dashboard/login/tokens.css`, `web/dashboard/app/tokens.css`(같은 내용) → 화면 CSS가 `var(--…)`로 참조 → 시안의 토큰 블록(표식 사이, 사용자 결정 2026-10-22(Q32)) |
 | 생성 방법 | `cargo xtask tokens`가 원본을 읽어 `:root` 블록을 쓴다. 도구 형태와 커밋 방식은 사용자 결정 2026-10-22(Q32)다. 생성 파일은 저장소에 커밋한다 |
 | 대조 방법 | `cargo xtask tokens --check`가 생성 결과와 두 CSS 파일, 시안 표식 사이 줄을 비교한다. 차이가 있으면 파일과 줄 번호를 출력하고 종료 코드 1로 끝난다 |
-| 생성 대상 밖의 규칙 | 중단점과 미디어 쿼리는 [DESIGN.md 중단점 절](../design/DESIGN.md#중단점과-모바일-배치)을 따른다. 모션은 없다([DESIGN.md 모션 절](../design/DESIGN.md#모션)). 대비 기준은 [DESIGN.md 대비 기준](../design/DESIGN.md#대비-기준)을 따른다. 한글 글꼴 굵기는 400·700만 쓴다 |
+| 생성 대상 밖의 규칙 | 중단점과 미디어 쿼리는 [DESIGN.md 중단점 절](../design/DESIGN.md#중단점과-모바일-배치)을 따른다. 화면 배치 미디어 쿼리는 `web/dashboard/app/styles/components.css`에만 둔다(`app.css`에는 `@media`가 없다). 로그인 복사본은 2.3절의 복사 규칙을 따른다. 모션은 없다([DESIGN.md 모션 절](../design/DESIGN.md#모션)). 대비 기준은 [DESIGN.md 대비 기준](../design/DESIGN.md#대비-기준)을 따른다. 한글 글꼴 굵기는 400·700만 쓴다 |
 
 ### 2.1 원본 읽기와 이름 규칙
 

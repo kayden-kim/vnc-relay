@@ -58,7 +58,7 @@ flowchart LR
 | `app/components/link.js` `createLink` | 링크 `a`를 만든다. | `icons.js` |
 | `app/components/dialog.js` `createDialog` | 네이티브 `dialog`로 확인 대화상자를 만든다. | `button.js` |
 | `app/styles/base.css` | `color-scheme`, 본문 글꼴, 포커스 링, 화면 밖 글 클래스 | `tokens.css` |
-| `app/styles/components.css` | 조각별 클래스와 상태 선택자 | `tokens.css` |
+| `app/styles/components.css` | 조각별 클래스와 상태 선택자. 화면 배치 클래스(`.grid`, `.span-3`·`.span-4`·`.span-6`·`.span-8`·`.span-12`, `.fact-list`·`.fact`, `.page-actions`)와 단일 중단점 `max-width: 1023.98px` 블록. `app.css`에는 `@media`가 없다 | `tokens.css` |
 | `app/query.js` `newQuery`, `clearTimer`, `viewOf`, `contentKey` | 조회 상태(진행 중, 세대, 데이터, 오류)와 갱신 타이머를 DOM 없이 다룬다. 운영 현황과 세션 상세가 같이 쓴다. | 없음 |
 | `app/shell.js` `buildNavbar`, `signOutUrl`, `defaultStorage`, `LOGIN_URL` | 상단 막대(언어 선택, 로그아웃 단추)와 로그아웃 결과 판정을 만든다. 운영 현황과 세션 상세가 같이 쓴다. | `components/navbar.js`, `components/language-select.js`, `components/button.js`, `api.js`, `model.js`, `copy.js`, `language.js` |
 | `app/session.js` `mountSession` | SCR-002를 조립한다. 세션 확인, 상세 조회, 종료 확인 대화상자, 종료 결과 분류, 대상 소멸을 맡는다. | `components/alert.js`, `button.js`, `dialog.js`, `link.js`, `stat.js`, `api.js`, `copy.js`, `format.js`, `language.js`, `model.js`, `panels.js`, `query.js`, `shell.js` |
@@ -126,6 +126,7 @@ flowchart LR
 | --- | --- | --- | --- |
 | 조각의 형태 | 요소를 돌려주는 함수 | 빌드와 프레임워크가 없다. 요소를 직접 검사하기 쉽다. | 사용자 정의 요소(`customElements`). 생명주기와 공개 표면이 늘어난다. |
 | 스타일 위치 | `app/styles/` CSS 파일에 클래스로 둔다 | 미리보기와 화면이 같은 CSS를 직접 가져온다. | 조각마다 스타일 문자열을 넣는다. CSP가 막는다. |
+| 화면 배치 규칙 위치 | 배치 클래스와 중단점 블록을 `app/styles/components.css`에 같이 둔다. 중단점은 `max-width: 1023.98px` 하나다 | `app.css`는 `components.css` 뒤에 로드되므로(`app/index.html`) 배치 기본 규칙을 거기 두면 중단점 블록을 덮는다. 같은 파일에 두면 소스 순서로 재정의가 지켜진다. | `app.css`에 배치 규칙을 두는 것. 767px 별도 블록을 두는 것(중단점이 둘이 된다). |
 | 상태 미리보기 | `is-hover`·`is-focus` 클래스 | 호버와 포커스를 재현할 수 있고 복제 CSS가 없다. | 미리보기 전용 CSS 복사본. 두 곳을 맞춰야 한다. |
 | 좁은 폭의 표 | CSS로 카드처럼 배치하고 표 역할은 유지 | 역할과 읽기 순서를 그대로 쓴다. | 폭마다 다른 마크업. |
 | 대화상자 | 네이티브 `dialog`와 `showModal()`. Tab 순환만 직접 만든다 | 열기, Escape 닫기, 닫은 뒤 포커스 복귀를 브라우저가 한다. 탐침에서 Tab이 `body`로 빠져서 `dialog.js`의 keydown이 두 단추 사이를 돈다(DASH-015, 검증 기록 4.7절). | 포커스 가두기 전부를 직접 만드는 것. |
