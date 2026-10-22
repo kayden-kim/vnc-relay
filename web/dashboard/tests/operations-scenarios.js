@@ -31,6 +31,7 @@ const COPY = {
     adminTitle: '관리 연결',
     adminNote: '관리·상태 리스너의 연결 소켓 현재 수와 상한입니다.',
     unavailable: '확인 불가',
+    limit: '상한 {n}',
     waitingTitle: '대기 연결',
     waitingEmpty: '대기 없음',
     activeTitle: '활성 세션',
@@ -65,6 +66,7 @@ const COPY = {
     adminTitle: 'Management connections',
     adminNote: 'Current count and limit of management and status listener sockets.',
     unavailable: 'Unavailable',
+    limit: 'Limit {n}',
     waitingTitle: 'Waiting connections',
     waitingEmpty: 'No waiting connections',
     activeTitle: 'Active sessions',
@@ -306,10 +308,10 @@ async function caseDash001() {
 
   const relay = gaugeOf(root, t.relayTitle);
   check('DASH-001: relay usage current shown', gaugeValue(relay) === '3');
-  check('DASH-001: relay usage limit shown', /100/.test(gaugeMax(relay)));
+  check('DASH-001: relay usage limit shown (CPY-079)', gaugeMax(relay) === t.limit.replace('{n}', '100'));
   const admin = gaugeOf(root, t.adminTitle);
   check('DASH-001: admin usage current shown', gaugeValue(admin) === '1');
-  check('DASH-001: admin usage limit shown', /20/.test(gaugeMax(admin)));
+  check('DASH-001: admin usage limit shown (CPY-079)', gaugeMax(admin) === t.limit.replace('{n}', '20'));
 
   const waitingRows = dataRowsOf(cardOf(root, t.waitingTitle));
   check(
@@ -571,7 +573,7 @@ async function caseDash019() {
     same(lost.navigations, ['/login/?notice=logout-unconfirmed']),
   );
 
-  // A refused sign-out (403 csrf_invalid) did not finish: no completion is shown and data is hidden (spec §5).
+  // A refused sign-out (403 csrf_invalid) did not finish: no completion is shown and data is hidden (spec §4 SCR-003 sign-out row, Q54).
   const refused = await mount(fakeApi({ 'DELETE /api/v1/session': () => fail(403) }));
   await waitFor(() => settled(refused.root));
   refused.root.querySelector('#operations-logout').click();

@@ -8,7 +8,7 @@ export const LANGUAGE_NAMES = { ko: '한국어', en: 'English' }; // CPY-002
 
 export const COPY = {
   ko: {
-    navLabel: '주 메뉴', // Q3: tentative label, not yet in dashboard.md §9.3.1.
+    navLabel: '주 메뉴', // CPY-078
     operations: '운영 현황', // CPY-004
     signOut: '로그아웃', // CPY-007
     refresh: '새로고침', // CPY-008
@@ -21,8 +21,8 @@ export const COPY = {
     staleMessage: '조회에 실패했습니다. 아래 값은 마지막 성공 시각 {time}의 이전 데이터입니다.', // CPY-020
     failedMessage: '조회에 실패했습니다. 새로고침으로 다시 시도하십시오.', // CPY-021
     unavailable: '확인 불가', // CPY-035
-    limit: '상한 {n}', // Implementation choice: the limit text of a gauge.
-    limitUnknown: '상한 확인 불가', // Implementation choice: shown when the limit is not loaded yet.
+    limit: '상한 {n}', // CPY-079
+    limitUnknown: '상한 확인 불가', // CPY-080
     summaryTitle: '서버 요약', // CPY-022
     serverState: '실행 상태', // CPY-023
     stateReady: '준비됨', // CPY-024
@@ -56,14 +56,14 @@ export const COPY = {
     directionViewerToTarget: 'Viewer->대상', // CPY-040·CPY-043 table headers (spec §9.3.2).
     directionTargetToViewer: '대상->Viewer', // CPY-040·CPY-043 table headers (spec §9.3.2).
     dayUnit: '일', // DESIGN l.491 시간 길이 표시(D일 HH:MM:SS)의 단위.
-    // SCR-002 session detail. CPY ids in comments; keys with no CPY id cite DESIGN or are listed as Q3.
+    // SCR-002 session detail.
     sessionScreen: '세션 상세', // CPY-005
     sessionTitle: '세션 {session_id}', // CPY-051
     back: '목록으로', // CPY-010
     cancel: '취소', // CPY-011
     recheck: '상태 재조회', // CPY-014
-    sessionInfoTitle: '세션 정보', // DESIGN l.529 SCR-002 세션 정보 카드 제목. CPY id 없음(Q3).
-    transferTitle: '전송량', // DESIGN l.465 카드 제목. CPY id 없음(Q3).
+    sessionInfoTitle: '세션 정보', // CPY-081
+    transferTitle: '전송량', // CPY-082
     modeLabel: '모드', // CPY-053
     transportLabel: 'Viewer 전송 경로', // CPY-054
     startedLabel: '시작 시각', // CPY-055
@@ -82,7 +82,7 @@ export const COPY = {
     terminateRejected: '요청을 처리하지 못했습니다. 화면을 다시 확인한 뒤 종료를 다시 요청하십시오.', // CPY-068
   },
   en: {
-    navLabel: 'Main menu', // Q3: tentative label, not yet in dashboard.md §9.3.1.
+    navLabel: 'Main menu', // CPY-078
     operations: 'Operations overview', // CPY-004
     signOut: 'Sign out', // CPY-007
     refresh: 'Refresh', // CPY-008
@@ -95,8 +95,8 @@ export const COPY = {
     staleMessage: 'Loading failed. The values below are from the last successful update at {time}.', // CPY-020
     failedMessage: 'Loading failed. Use Refresh to try again.', // CPY-021
     unavailable: 'Unavailable', // CPY-035
-    limit: 'Limit {n}', // Implementation choice: the limit text of a gauge.
-    limitUnknown: 'Limit unavailable', // Implementation choice: shown when the limit is not loaded yet.
+    limit: 'Limit {n}', // CPY-079
+    limitUnknown: 'Limit unavailable', // CPY-080
     summaryTitle: 'Server summary', // CPY-022
     serverState: 'Server state', // CPY-023
     stateReady: 'Ready', // CPY-024
@@ -130,14 +130,14 @@ export const COPY = {
     directionViewerToTarget: 'Viewer->target', // CPY-040·CPY-043 table headers (spec §9.3.2).
     directionTargetToViewer: 'target->Viewer', // CPY-040·CPY-043 table headers (spec §9.3.2).
     dayUnit: 'd', // DESIGN l.491 duration unit ("Dd HH:MM:SS").
-    // SCR-002 session detail. CPY ids in comments; keys with no CPY id cite DESIGN or are listed as Q3.
+    // SCR-002 session detail.
     sessionScreen: 'Session details', // CPY-005
     sessionTitle: 'Session {session_id}', // CPY-051
     back: 'Back to list', // CPY-010
     cancel: 'Cancel', // CPY-011
     recheck: 'Check status again', // CPY-014
-    sessionInfoTitle: 'Session information', // DESIGN l.529 card title; no CPY id in spec §9.3.3 (Q3).
-    transferTitle: 'Transfer', // DESIGN l.465 card title (ko); English is not in spec §9.3.3 (Q3).
+    sessionInfoTitle: 'Session information', // CPY-081
+    transferTitle: 'Transfer', // CPY-082
     modeLabel: 'Mode', // CPY-053
     transportLabel: 'Viewer transport', // CPY-054
     startedLabel: 'Started at', // CPY-055
