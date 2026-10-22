@@ -8,8 +8,8 @@
 | --- | --- |
 | 대상 독자 | 대시보드 프런트엔드 구현자와 검토자 |
 | 검증 상태 | Draft |
-| 검증 환경·버전 | 작업 4.8(2026-10-22): Windows 10.0.26200 x64, PowerShell, Chrome 155.0.8059.84. Ubuntu 24.04.4 LTS x64(WSL2), Google Chrome 156.0.8078.47. rustc는 두 OS 모두 1.99.1(`rust-toolchain.toml`). 나머지 환경은 실행할 때 기록한다 |
-| 최종 검증일 | 2026-10-22. 3.1 1단계, 3.2 1단계, 3.3 1단계, 3.4 일부를 실행했다(4절). 작업 4.10 재실행(4.5절, 커밋 `3944dc2`): WSL·Windows 게이트 모두 `ALL PASSED`. 작업 4.11(4.7절, 커밋 `5368dec`): 3.3 1단계, 3.4 SCR-002 일부, 3.5 자동 확인 일부를 실행했다. 최종 HEAD 게이트는 WSL·Windows 모두 `ALL PASSED`. 작업 4.11 세션 시험 보강(4.9절, 커밋 `d0ef8d0`): 3.4 SCR-002 일부(DASH-016·019·022·024·025 시험)를 실행했다. 이 게이트도 WSL·Windows 모두 `ALL PASSED`. 작업 4.11 라우터 언어 시험(4.10절, 커밋 `a917eb1`): 3.4 일부(DASH-025 라우터 시험)를 실행했다. 최종 HEAD `48918d3`의 게이트도 WSL·Windows 모두 `ALL PASSED`. 3.5의 사람 확인, 3.6, 3.7은 미실행 |
+| 검증 환경·버전 | 작업 4.8(2026-10-22): Windows 10.0.26200 x64, PowerShell, Chrome 155.0.8059.84. Ubuntu 24.04.4 LTS x64(WSL2), Google Chrome 156.0.8078.47. 4.11·4.12절: Microsoft Edge 155.0.4283.62(Windows)도 사용했다. rustc는 두 OS 모두 1.99.1(`rust-toolchain.toml`). 나머지 환경은 실행할 때 기록한다 |
+| 최종 검증일 | 2026-10-22. 3.1 1단계, 3.2 1단계, 3.3 1단계, 3.4 일부를 실행했다(4절). 작업 4.10 재실행(4.5절, 커밋 `3944dc2`): WSL·Windows 게이트 모두 `ALL PASSED`. 작업 4.11(4.7절, 수정 `5cfe4c9`·`50ae0ba`, 게이트 대상 `50ae0ba`): 3.3 1단계, 3.4 SCR-002 일부, 3.5 자동 확인 일부를 실행했고 WSL·Windows 게이트 모두 `ALL PASSED`. 작업 4.11 세션 시험 보강(4.9절, 커밋 `d0ef8d0`): 3.4 SCR-002 일부(DASH-016·019·022·024·025 시험)를 실행했다. 이 게이트도 WSL·Windows 모두 `ALL PASSED`. 작업 4.11 라우터 언어 시험(4.10절, 커밋 `a917eb1`): 3.4 일부(DASH-025 라우터 시험)를 실행했다. 최종 HEAD `48918d3`의 게이트도 WSL·Windows 모두 `ALL PASSED`. 작업 4.12(4.12절, 수정 `91f3fc1`·`05f4989`·`3cf643d`, 게이트 대상 `3cf643d`): 3.3·3.4 일부를 실행했고 WSL·Windows 게이트 모두 `ALL PASSED`. 작업 4.13(4.13절, 수정 `f24ca68`·`6cc47a1`, 게이트 대상 `6cc47a1`): `fmt`, 토큰 대조, dashboard_browser 37건, dashboard_assets 2건을 실행했다. WSL·Windows 모두 `ALL PASSED`. 시나리오 150건: WSL 통과 24·부분 49·실패 0·미실행 0·미연결 77, Windows 통과 23·부분 49·실패 0·미실행 1(OPS-007)·미연결 77. 3.5의 사람 확인, 3.6, 3.7은 미실행 |
 | 관련 기준 문서 | [프런트엔드 컨벤션](../conventions/frontend.md), [디자인 기준](../design/DESIGN.md), [화면 스펙](../specs/dashboard.md), [관리 API 계약 1.11절](../contracts/management-api-v1.md) |
 
 ## 1. 대상과 영향
@@ -599,6 +599,33 @@
   - 스크린 리더: 사람이 읽는 순서·발음을 확인해야 하므로 미실행이다.
   - 사람의 시안 나란히 비교: 사람이 필요해 미실행이다. 에이전트의 PNG 대조는 이를 대신하지 않는다.
 - 결과: 최종 코드 `3cf643d`의 WSL·Windows 게이트를 모두 통과했다. 결정 1·3을 기준에 맞췄고, 결정 2·5는 구현 판단으로 기록했다. 로그인 새 배치의 캡처와 Edge 키보드 확인도 마쳤다. 결정 4와 위 사람 확인은 남아 있다. TODO 4.12는 `[ ]`다.
+
+### 4.13 검토 기록 (작업 4.13, 2026-10-22)
+
+- 검토자: 에이전트 Fix412b(작업 위임: Main). 사람의 검토가 아니다.
+- 기준 커밋: `c614c3c`. 검토 범위는 SCR-001 실행 상태 배지 시험과 공통 컴포넌트 미리보기 배치다.
+- 검토 결과:
+  - DASH-001에는 이미 `ready`의 성공 톤과 아이콘 검사가 있었다. DASH-021에 알 수 없는 서버 상태 `maintenance`를 원문 그대로 보여 주고 `.badge[data-tone="neutral"]`을 쓰는 검사를 추가했다. [DESIGN.md](../design/DESIGN.md) 391~395행은 `ready`를 성공, `shutdown_grace`를 경고, 알 수 없는 값을 중립으로 나타내라고 한다.
+  - `preview.css`의 두 데스크톱 미디어 쿼리를 모두 제거했다. `preview.js`의 견본 행은 공통 12열 `.grid`와 `.span-12`·`.span-6`·`.span-4`를 쓴다. 데스크톱 세 열 견본은 `span-4`로 배치하고, 다섯 개 견본은 첫 줄 3개와 다음 줄 2개로 흐른다. 1023.98px 이하에서는 공통 규칙이 한 열로 바꾼다. 페이지 여백은 폭에 따라 바꾸지 않고 `spacing.lg`(16px)를 쓴다. 모듈 설계의 미리보기 배치 표에 구현 판단을 기록했다. [DESIGN.md](../design/DESIGN.md) 546행과 프런트엔드 컨벤션 2.2절의 한 곳짜리 중단점 규칙을 따른다.
+- 미리보기 육안·측정 확인:
+  - 환경: Windows 10.0.26200 x64, Chrome 155.0.8059.84, 배율 1, 한국어·영어. `cargo xtask dashboard-serve --port 18126`은 `127.0.0.1`에만 바인드했다.
+  - 폭 1280: 첫 줄 열 수 3, 본문 여백 16px, `scrollWidth`와 `clientWidth` 모두 1265px.
+  - 폭 1024: 첫 줄 열 수 3, 본문 여백 16px, 두 너비 값 모두 1009px.
+  - 폭 1023: 첫 줄 열 수 1, 본문 여백 16px, 두 너비 값 모두 1008px.
+  - 폭 390: 첫 줄 열 수 1, 본문 여백 16px, 두 너비 값 모두 375px.
+  - 폭 320: 첫 줄 열 수 1, 본문 여백 16px, 두 너비 값 모두 305px.
+  - 모든 폭과 언어에서 미리보기 `data-result=pass`, CSP 위반 0건이었다. 세로 스크롤바 폭 15px을 뺀 뷰포트 안에서 가로 넘침은 없었다. 한국어 버튼·배지, 좁은 폭의 쌓인 견본, 영어 대화상자와 긴 문구를 캡처에서 확인했다. 한국어 첫 페이지의 `/favicon.ico` 404는 화면에 영향을 주지 않는 정적 서버 응답이었다. 캡처는 `target/dashboard-shots/preview-546/`에 두었고 커밋하지 않는다.
+- 명령별 검증:
+  - `cargo fmt --all`: 통과, 종료 코드 0.
+  - `cargo xtask tokens --check`: 통과, 종료 코드 0.
+  - `cargo test --test dashboard_browser`: 37 passed, 0 failed, 269.79초.
+  - `cargo test --test dashboard_assets`: 2 passed, 0 failed.
+- 코드·시험 커밋(기준 `c614c3c` 이후):
+  - `f24ca68` `test(dashboard): cover unknown server state badges`
+  - `6cc47a1` `fix(dashboard): share component preview grid layout`
+- 최종 게이트(최종 코드 HEAD `6cc47a1`, 기준 커밋 `c614c3c`; 이 기록 커밋은 문서만 바꾼다):
+  - WSL Ubuntu: `wsl -d Ubuntu -- bash /mnt/d/vr-tools/vr-full.sh`. 마지막 줄 `ALL PASSED`, 종료 0. `dashboard_browser` 37 passed, 0 failed(176.77초), `dashboard_assets` 2 passed. 시나리오 150건: 통과 24, 부분 49, 실패 0, 미실행 0, 미연결 77, 오류 0건.
+  - Windows: `powershell -NoProfile -ExecutionPolicy Bypass -File D:/vr-tools/vr-win.ps1 -Only all`. 마지막 줄 `ALL PASSED (all)`, 종료 0. `dashboard_browser` 37 passed, 0 failed(264.02초), `dashboard_assets` 2 passed. 시나리오 150건: 통과 23, 부분 49, 실패 0, 미실행 1(OPS-007, Unix 전용), 미연결 77, 오류 0건.
 
 ## 5. 중단 조건
 
