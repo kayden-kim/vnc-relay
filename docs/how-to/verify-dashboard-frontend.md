@@ -365,12 +365,13 @@
 - 1차 명령 결과(`5368dec`): `cargo fmt --all` 종료 0. `cargo xtask tokens --check` 통과. `vr-win.ps1 -Only check` ALL PASSED(check). `dashboard_assets` 2 통과. `dashboard_browser` 31 통과(바이트·레이아웃 수정 전). 수정 뒤 `session_`·`router_` 12 통과.
 - 수정 라운드 명령 결과: `vr-win.ps1 -Only all`과 `vr-full.sh`가 빌드, `fmt`, clippy, 레이어 검사, `tokens --check`, 전체 시험, 시나리오 보고서, `deny`를 모두 돌렸다. 결과는 아래 "최종 HEAD 게이트".
 - 상태 캡처(3.4): SCR-002 53장을 `target/dashboard-shots/scr/<폭>/<언어>-scr002-<상태>.png`에 찍었다(드라이버 `target/dashboard-shots/capture-scr2.mjs`, 목 응답, 커밋하지 않음). 정상·종료 확인은 1280·390·320 × ko·en 12장, 나머지 상태는 ko 1280·390·320과 en 1280·320(40장), 이전 데이터가 있는 조회 실패는 ko 1280 한 장이다. 기록은 `scr/scr002-capture.json`(53행, 조회 실패 종료 변경 전)과 `scr/scr002-capture-stale-failed.json`(변경 뒤 재캡처)이다. 53장 모두 `pass`, 가로 넘침 0, CSP 위반 0, `scrollWidth == clientWidth`. SCR-001과 SCR-003은 이 라운드에서 다시 찍지 않았다.
-- 재촬영 12장 측정(`dash-serve` 127.0.0.1:8765, 코드 `db08863`): 가로 넘침 0, 넘치는 요소 0, CSP 위반 0, 페이지 오류 0, `lang` 일치, 제목 `VNC Relay 세션 sess_1`/`VNC Relay Session sess_1`. `.fact` 열 수는 1280에서 2, 390·320에서 1. 방향 표식은 장마다 2개(10×10px, `rgb(98,182,200)`, `rgb(79,180,136)`). 종료 아이콘은 12장 모두 있고 라벨은 `세션 종료`/`Terminate session`이다.
-- 상태 판정(3.4, 육안): 53장을 모두 봤다. 시안과의 차이는 "남은 차이"에 적었다.
+- 재촬영 12장 측정(`dash-serve` 127.0.0.1:8765, 코드 `db08863`): 가로 넘침 0, 넘치는 요소 0, CSP 위반 0, 페이지 오류 0, `lang` 일치, 제목 `VNC Relay 세션 sess_1`/`VNC Relay Session sess_1`. 방향 표식은 장마다 2개(10×10px, `rgb(98,182,200)`, `rgb(79,180,136)`). 종료 아이콘은 12장 모두 있고 라벨은 `세션 종료`/`Terminate session`이다. `.fact` 열 수는 이 줄의 측정에 넣지 않았다. 당시 드라이버가 `.fact-list`를 재고 있었다. 열 수는 아래 `98b2fc1` 항목에서 `.fact` 행으로 다시 쟀다.
+- 이번 라운드 재촬영(`98b2fc1`, 드라이버 `capture-scr2.mjs`, `dash-serve` 127.0.0.1:8765): 대상 없음 5장(ko 1280·390·320, en 1280·320)과 정상 6장(ko·en 1280·390·320)을 다시 찍었다. 기록은 `scr/scr002-capture-gone.json`·`scr/scr002-capture-normal.json`이다. `scr/scr002-capture.json`의 대상 없음·정상 행은 이 라운드 전 값이다. 11장 모두 `pass`, 가로 넘침 0, 넘치는 요소 0, CSP 위반 0, `scrollWidth == clientWidth`. 대상 없음 장에는 `.fact`가 없고 새로고침 라벨이 없으며 조치는 `목록으로`(ko)·`Back to list`(en)다. 정상 장은 `.fact` 5행, 1280에서 두 열, 390·320에서 한 열, 방향 표식 2개다. 열 수는 `.fact` 행의 `grid-template-columns`로 쟀다(`.fact-list`를 재면 항상 1이다).
+- 상태 판정(3.4, 육안): 이번 라운드에 대상 없음 5장(ko 1280·390·320, en 1280·320)을 모두 봤고 정상 ko 1280도 봤다. 나머지 정상 장과 나머지 상태는 앞 라운드의 육안 판정이다. 이번 라운드에 바뀐 것은 `.fact` 중단점과 대상 없음 장뿐이다. 판정은 아래 표.
 
 | 상태 | 폭·언어 | 본 것 | 시안 차이와 판단 |
 | --- | --- | --- | --- |
-| 정상 | 1280·390·320 ko, 1280·320 en, 390 en | 정보 카드(8칸)와 전송량 카드(4칸)가 나란히 있고, 1023px 이하에서 한 열이 된다. 세션 종료는 정보 카드 바닥. 머리말에 `목록으로`와 `새로고침`. | 배치는 시안과 같다. id는 데이터 글꼴이다(시안 monospace, 남은 차이 1). 방향 라벨은 스펙 표기다(남은 차이 2). |
+| 정상 | 1280·390·320 ko, 1280·320 en, 390 en | 정보 카드(8칸)와 전송량 카드(4칸)가 나란히 있고, 1023.98px 이하에서 한 열이 된다. 세션 종료는 정보 카드 바닥. 머리말에 `목록으로`와 `새로고침`. | 배치는 시안과 같다. id는 데이터 글꼴이다(시안 monospace, 남은 차이 1). 방향 라벨은 스펙 표기다(남은 차이 2). |
 | 종료 확인 | 정상과 같은 12장 | 대화상자 가운데, 제목에 id, 영향 문장, 초점은 `취소`. 390·320에서 버튼이 세로로 쌓여 전폭이다. | 시안과 같다. 전체 페이지 캡처에서 어두운 덮개가 첫 뷰포트 높이(900px)까지만 칠해졌고 390·320의 아래 띠가 밝다. 고정 덮개가 뷰포트에만 맞은 캡처 방식 탓이다 [INFERENCE]. 페이지 결함이 아니다. |
 | 갱신 중 | ko 3폭, en 1280·320 | 이전 데이터 유지. 정보 카드 머리말에 `갱신 중`. 세션 종료 비활성. 새로고침은 누를 수 있으나 진행 중이면 요청을 보내지 않는다. | 스펙 §4 l.174의 가능한 행동에 종료가 없다. 일치. |
 | 조회 실패 | ko 3폭, en 1280·320 | 이전 데이터 없음. 정보 카드 안에 빨간 `조회 실패` 알림. 세션 종료 비활성. 재조회는 머리말 새로고침. 320 폭에서 알림 아이콘이 제목 위 줄로 내려간다. | 스펙 l.175 일치. 320 아이콘 줄바꿈은 공유 `.alert-body`의 최소 폭이 카드 안에서 좁아진 결과다. 읽을 수 있어 그대로 두었다(공유 컴포넌트, SCR-001과 로그인도 같은 규칙). |
@@ -379,19 +380,20 @@
 | 종료 실패 | ko 3폭, en 1280·320 | 빨간 `종료 실패` 알림과 조치 `상태 재조회`. 종료 버튼은 다시 켜져 있다. 390·320에서 조치가 메시지 아래 줄에 붙고 아이콘 열 기준으로 왼쪽 정렬된다. | 스펙 l.180 일치. 390 정렬은 허용(공유 `.alert > .button`). |
 | 종료 확인 불가 | ko 3폭, en 1280·320 | 경고 `종료 확인 불가`와 조치 `상태 재조회`. 종료 요청은 다시 보내지 않는다. | 스펙 l.180·CPY-066 일치. |
 | 요청 거절 | ko 3폭, en 1280·320 | 경고 `요청 거절`(CPY-068)과 조치 `상태 재조회`. | 스펙 l.180 일치. |
-| 대상 없음 | ko 3폭, en 1280·320 | 중립 알림 `현재 세션을 찾을 수 없음`(CPY-059), 조치 없음. 정보 카드는 제목만 남고 본문이 비어 있다. 전송량 카드와 머리말 새로고침 숨김. 종료 비활성. | 스펙 l.177 일치. 빈 카드 본문은 사람 판단 대상(열린 항목). |
+| 대상 없음 | ko 1280·390·320, en 1280·320 | 중립 알림 `현재 세션을 찾을 수 없음`(CPY-059), 조치 `목록으로`(CPY-010, 목록 링크). 알림 조치와 머리말 `목록으로`는 같은 곳으로 간다. 정보 카드는 제목만 남고 본문이 비어 있다. 세션 종료 비활성. 전송량 카드와 머리말 새로고침 숨김. 포커스는 알림의 `목록으로`로 간다. | 스펙 l.177 일치(가능한 행동은 목록으로 이동). 목업과 다른 점은 남은 차이 6·7. 빈 카드 본문은 목업 프레임과 같아서 유지했다. |
 | 잘못된 세션 식별자 | ko 3폭, en 1280·320 | 제목은 `세션`(CPY-005), 경고 `잘못된 세션 식별자`(CPY-067). 정보 카드 없음, 종료 없음, 목록 링크만. 요청을 보내지 않았다. | 스펙 l.178 일치. |
 
 - 공통 관찰: 알림 조치 `상태 재조회`가 390·320에서 메시지 아래 줄로 내려가 왼쪽 정렬된다. 허용했다.
 - 콘솔: `Failed to load resource: 404` 한 건이 캡처 실행의 첫 장에만 있다. 새 프로필의 첫 탐색에서 `/favicon.ico`가 404를 받는다(서버에서 `curl`로 404 확인) [INFERENCE]. 앱 오류가 아니다. 나머지 장에는 없다.
 - 고친 것(수정 라운드, 요청 항목 기준. 시안에서 DESIGN 위반으로 확인된 항목):
-  - 배치: 정보 카드는 `span-8`, 전송량 카드는 `span-4`다. 1023px 이하에서 한 열로 쌓인다(DESIGN 557행). 종료 버튼은 정보 카드 바닥(`card-foot`)에 있다.
+  - 배치: 정보 카드는 `span-8`, 전송량 카드는 `span-4`다. 1023.98px 이하에서 한 열로 쌓인다(DESIGN 557행). 종료 버튼은 정보 카드 바닥(`card-foot`)에 있다.
   - 정보 행: `dl.fact-list`·`.fact` 행으로 바꿨다. 모드와 전송 경로는 중립 배지(`createBadge`, 아이콘 없음, DESIGN 626행). 주소는 monospace `fact-address` 한 줄이다(CPY-056·057). CPY-058 주소 안내를 붙였다.
   - 상태 행(`stateLabel`, `active`)을 지웠다.
   - 전송량: 방향 표식 `chart-1`(Viewer→대상)·`chart-2`(대상→Viewer)를 10×10 정사각형으로 붙였다(DESIGN 378행, `aria-hidden`). 공유 `createStat`은 바꾸지 않았고 `session.js`의 지역 `directionStat`이 맡는다. SCR-001에는 영향이 없다.
   - 종료 아이콘 `cancel`(DESIGN 623행). 렌더 중 `textContent`가 아이콘을 지우던 결함을 `.button-label`로 고쳤다.
   - 복사 키: `documentTitle`, `sessionDocumentTitle`, `peerViewer`, `peerTarget`, `stateLabel`을 지웠다. `transferTitle`(DESIGN 465행)을 넣었다. `sessionInfoTitle`(DESIGN 529행)은 남겼다.
-  - 767px 이하 `.fact` 1열(판단: DESIGN 기준은 1023.98px). 라벨 폭 160px에서 값이 밀리지 않게 하려고 넣었다. 이 규칙이 없을 때 390·320에서 `.fact`가 2열이었다.
+  - 반응형: `.fact` 한 열 규칙은 단일 중단점 `max-width: 1023.98px`(DESIGN 543·546·557행) 안에 넣었다. 이전에는 `.fact`에 767px 별도 규칙이 있어 768–1023px에서 두 열이었다. 그 규칙을 지웠다. `.fact` 기본 규칙은 중단점 규칙 위로 옮겼다. 측정(`getComputedStyle`, `grid-template-columns`): 1023px 한 열(941px), 1024px 두 열(`160px 420.656px`), 1280 두 열, 390·320 한 열. 768–1023 구간은 캡처하지 않고 1023px 측정으로 확인했다. 같은 파일의 767px 구간(SCR-001 span·머리말 버튼 규칙)은 이번에 바꾸지 않았다.
+  - 대상 없음: 알림에 조치 `목록으로`(CPY-010, `a.button.button-outline`, 목록 링크)를 넣었다. 포커스는 이 조치로 옮긴다(스펙 §6 l.211). 대상 없음 상태에서 머리말 `새로고침`은 숨겼다(스펙 §4 l.177).
   - 시험: DASH-006·007·012·014 확인을 갱신하고 `factValue` 도우미를 넣었다. DASH-015 표식(`tests/dashboard_browser.rs`의 `/// spec: dashboard.md:DASH-015 partial`)을 `session_cancel_sends_no_request_and_restores_focus_in_browser`에 달았다. 이 시험은 합성 keydown이다.
   - `pageHead`·`panelCard`·`peerCell`은 SCR-001과 공유된다. 목록 시험 `operations_*`는 두 게이트에서 모두 통과했다. SCR-001 캡처는 다시 찍지 않았다.
 - 1차 라운드에서 고친 것(기록 유지): 바이트 행 누락(DASH-006, 스펙 117행, `createStat`), 요약 값 줄바꿈(`.session-facts .stat-value`), `세션 undefined`(`id` 저장), 대화상자 Tab 누출(DASH-015, `components/dialog.js`). 포커스 복귀 실패는 점검 아티팩트였다(`b.click()`은 포커스를 주지 않음).
@@ -401,6 +403,8 @@
   3. CPY-058 주소 안내: 스펙에 따라 표시한다. 시안에는 없다.
   4. 구현 판단 키(Q3): `navLabel`(잠정), `limit`·`limitUnknown`(게이지 상한), `sessionInfoTitle`, `transferTitle`(영문 문구는 스펙에 없음). `dayUnit`은 DESIGN 491행 근거로 남았다.
   5. 표 접근 이름은 비어 있다. 스펙에 규칙이 없어 열린 관찰로 둔다.
+  6. 대상 없음의 머리말 `새로고침`: 시안은 둔다. 스펙 §4 l.177은 대상 없음에서 가능한 행동을 목록으로 이동뿐이라고 정한다. 스펙을 따라 숨겼다. 시안과 다르다.
+  7. 대상 없음 알림 제목·본문: 시안은 `대상 없음`과 `현재 세션을 찾을 수 없다. 같은 중계 ID의 다른 세션으로 바꾸지 않는다.`를 쓴다. 구현은 CPY-059 `현재 세션을 찾을 수 없음` 한 문장만 쓴다. 스펙 §9.3에 이 두 문구의 키가 없어 추가하지 않았다. 같은 중계 ID 규칙은 스펙 §5 l.200에 있고 화면 동작으로는 지킨다.
   - 해소: 새로고침 이름(사용자 지시: 머리말 CPY-008, 알림 조치 CPY-014).
 - 접근성과 포커스(자동 대체, 청취 아님. 1차 관찰):
   - 포커스 표시: 포커스를 받을 수 있는 요소에 `outline: solid 2px`, `offset 2px`. 측정값만 적는다(상단 막대 rgb(255,255,255), 본문 rgb(18,53,43)). 토큰 `colors.ring`·`colors.navbar-ring`과 대조하지 않았고 대비 비율도 계산하지 않았다.
@@ -417,9 +421,13 @@
   - 스크린 리더(3.6), Firefox·Safari·Edge·실기기(3.7)는 미실행이다.
   - 실서버 목록·상세·종료. `docs/TODO.md` 250행에서 `/api/v1/summary`, `waiting`, `sessions`, `closed-sessions`가 404다. 이 시험은 목 응답이다.
   - 실서버에서 실패·사라짐을 일으키지 않았다. 상태 53장은 목 응답이다. 이전 데이터가 있는 조회 실패는 ko 1280 한 장만 찍었다.
-  - 시안 차이 6건의 해소와 사람 비교(4.12).
+  - 시안 차이 7건(남은 차이 1–7)의 해소와 사람 비교(4.12).
   - 4.6의 `.sr-only`(320 뷰포트 밖), 목업 `.app` 클립, 200% 줌, 글자 크기 조정, 다크 모드는 보지 않았다. 대비 비율은 계산하지 않았다.
-- 최종 HEAD 게이트(대상 HEAD `06753e3`; 제품·시험 코드를 바꾼 커밋이다. 이 기록 커밋은 문서만 바꾼다):
+- 최종 HEAD 게이트(라운드 시작 HEAD `9263dcc`, 대상 HEAD `98b2fc1`; 제품·시험 코드를 바꾼 커밋이다. 이 기록 커밋은 문서만 바꾼다):
+  - WSL `vr-full.sh`: ALL PASSED, 종료 0(마지막 줄 `ALL PASSED`, `WSL_EXIT=0`). 빌드, `fmt`, clippy, 레이어 검사, `tokens --check`, 전체 시험, 시나리오 보고서, `deny`가 모두 종료 0. 시나리오 150건: 통과 24, 부분 49, 실패 0, 미실행 0, 미연결 77, 오류 0건. dashboard_browser 31 passed, 0 failed(92.60초). dashboard_assets 2 passed. 보고서 `/home/kaydenkim/vnc-relay-target/scenario-report.md`.
+  - Windows `vr-win.ps1 -Only all`: ALL PASSED (all), 종료 0(마지막 줄 `ALL PASSED (all)`, `WIN_EXIT=0`). 같은 항목이 모두 종료 0. 시나리오 150건: 통과 23, 부분 49, 실패 0, 미실행 1(OPS-007, Unix 전용), 미연결 77, 오류 0건. dashboard_browser 31 passed, 0 failed(197.67초). dashboard_assets 2 passed. 보고서 `D:\Workspace\vnc-relay\target\scenario-report.md`.
+  - 시나리오 합계는 `06753e3`과 같다(통과·부분·미실행·미연결).
+- 이전 게이트(대상 HEAD `06753e3`; 기록 유지):
   - WSL `vr-full.sh`: ALL PASSED, 종료 0. 빌드, `fmt`, clippy, 레이어 검사, `tokens --check`, 전체 시험, 시나리오 보고서, `deny`가 모두 종료 0. 시나리오 150건: 통과 24, 부분 49, 실패 0, 미실행 0, 미연결 77, 오류 0건. dashboard_browser 31 passed, 0 failed(92.22초). dashboard_assets 2 passed. 보고서 `/home/kaydenkim/vnc-relay-target/scenario-report.md`.
   - Windows `vr-win.ps1 -Only all`: ALL PASSED (all), 종료 0. 같은 항목이 모두 종료 0. 시나리오 150건: 통과 23, 부분 49, 실패 0, 미실행 1(OPS-007, Unix 전용), 미연결 77, 오류 0건. dashboard_browser 31 passed, 0 failed(140.44초). dashboard_assets 2 passed. 보고서 `D:\Workspace\vnc-relay\target\scenario-report.md`.
   - 시나리오 합계는 `8975537`과 같다(통과·부분·미실행·미연결). DASH 세부 판정은 이번 기록에서 따로 대조하지 않았다.
