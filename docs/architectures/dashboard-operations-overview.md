@@ -5,7 +5,7 @@
 | 구조 시점 | Current |
 | 문서 상태 | Draft |
 | 구현 대조 | Partial — [대조 기록](#대조-기록) |
-| 코드 위치 | `web/dashboard/app/`의 `main.js`, `operations.js`(`mountOperations`, `endSession`, `signOut`, `applyChrome`), `model.js`, `api.js`(`getQuery`, `getSession`, `deleteSession`), `panels.js`(`statusAlert`, `statusBadge`, `usageGauge`, `closedTable`), `format.js`, `copy.js`, `language.js`, `app.css`. `crates/adapters/src/dashboard_assets.rs`(`ASSETS`), `crates/adapters/src/management_http.rs`(`static_answer`), `xtask/src/tokens/shared.rs`(`SHARED_FILES`) |
+| 코드 위치 | `web/dashboard/app/`의 `main.js`, `router.js`(`mountRouter`, `routeOf`), `operations.js`(`mountOperations`, `endSession`, `signOut`), `session.js`(`mountSession`), `shell.js`(`buildNavbar`, `signOutUrl`), `query.js`(`newQuery`), `model.js`, `api.js`(`getQuery`, `getSession`, `deleteSession`, `terminateSession`), `panels.js`(`statusAlert`, `statusBadge`, `usageGauge`, `closedTable`, `panelCard`, `applyChrome`, `setContent`), `format.js`, `copy.js`, `language.js`, `app.css`. `crates/adapters/src/dashboard_assets.rs`(`ASSETS`), `crates/adapters/src/management_http.rs`(`static_answer`), `xtask/src/tokens/shared.rs`(`SHARED_FILES`) |
 | 코드 지도 | [코드 지도](code-map.md) (`web/dashboard/` 행, `dashboard_assets.rs` 행, xtask 행), [컴포넌트 구조](dashboard-components.md) |
 | 관련 스펙 | [화면 스펙](../specs/dashboard.md) 3·4·5·6·9절; [디자인 기준](../design/DESIGN.md) 화면 구성(522~534행), 중단점, 표시 형식(489~492행); [프런트엔드 규약](../conventions/frontend.md) 1.1·1.2·1.3·3·4절; [시험 규약](../conventions/testing.md) 상태 규칙(23·99·100행) |
 | 관련 계약 | [관리 API 계약 v1](../contracts/management-api-v1.md) 1.3·1.4·1.5·1.6~1.12·2.2·2.3절 |
@@ -18,7 +18,7 @@
 - 4.10 구현 범위: SCR-001 전체, 앱 셸(진입점, 세션 확인, 언어 선택, 로그아웃). 해시 라우터는 4.10 코드에 없다 (대조 기록).
 - SCR-002는 TODO 배정대로 4.11에서 전체를 만든다(본문, 상세 조회, 종료 흐름). 4.10의 SCR-001 목록 링크는 계약 1.11절의 화면 URL `/#/sessions/{session_id}`를 그대로 쓴다.
 - 해시(`#/sessions/…`)는 서버로 가지 않는다. 서버는 `/`와 같은 응답을 준다: 세션이 있으면 200 HTML, 없으면 303 `/login/`. 404 JSON이 아니다.
-- 4.10은 SCR-002 경로를 처리하지 않는다. 임시 동작(구현 판단(사용자 결정 없음)): 해시가 무엇이든 SCR-001을 그대로 보인다. 임시 동작과 링크 처리 방식은 14절 확인 필요 항목이다.
+- 4.11에서 `router.js`가 `#/sessions/{session_id}`를 SCR-002(`session.js`)로, 그 밖의 해시를 SCR-001로 보낸다 (구현 판단(사용자 결정 없음)). 4.10의 임시 동작(해시가 무엇이든 SCR-001)은 없어졌다. 링크 처리 방식은 14절 D4에 적었다.
 - 이 문서가 정하지 않는 것: 관리 API 필드 의미(계약), 화면 문구(스펙 9절), 색과 간격 토큰(DESIGN.md).
 
 ## 2. 파일 배치
@@ -26,10 +26,14 @@
 ```text
 web/dashboard/app/
 ├── index.html        신규. 제공 경로 `/` (frontend.md 1.1절). `/app/index.html`은 제공하지 않는다.
-├── main.js           신규. 진입점. mountOperations(document.getElementById('app-root')) 호출
+├── main.js           신규. 진입점. mountRouter(document.getElementById('app-root')) 호출. 해시에 따라 화면을 고른다
+├── router.js        신규. 해시 라우터. `#/sessions/{id}`는 session.js, 그 밖의 해시는 operations.js. 화면을 바꿀 때 이전 화면을 `dispose`한다
 ├── operations.js     신규. SCR-001 조립과 흐름: 세션 확인, 조회 루프, 세대(generation) 번호, 로그아웃, 언어 상태
+├── session.js        신규. SCR-002 조립과 흐름: 세션 확인, 상세 조회, 종료 확인, 종료 결과 분류, 대상 소멸, 세대(generation) 번호
+├── shell.js          신규. 두 화면이 같이 쓰는 상단 막대(언어 선택, 로그아웃)와 로그아웃 결과 판정
+├── query.js          신규. 조회 상태(진행 중, 세대, 데이터, 오류)와 갱신 타이머. DOM을 쓰지 않는다
 ├── model.js          신규. 응답 검증(계약 1.5~1.10절 필드). 맞지 않으면 `invalid`
-├── panels.js         신규. 서버 요약 카드, 연결 카드, 목록 카드와 목록 상태 안내
+├── panels.js         신규. 서버 요약 카드, 연결 카드, 목록 카드와 목록 상태 안내. SCR-002와 같이 쓰는 카드 틀(`panelCard`)과 조회 칸 갱신(`applyChrome`, `setContent`)
 ├── api.js            신규. fetch 감싸기: 헤더, 시간 제한, 오류 분류
 ├── format.js         신규. 시각, 기간, 바이트, 숫자, 알 수 없는 값
 ├── copy.js           신규. 한국어·English 문구. 키는 CPY ID
@@ -106,7 +110,7 @@ Query = { data,          // 마지막 성공 응답의 값 (없을 수 있음)
 - 시간 제한: 조회 요청은 `query_timeout_secs`(세션 응답) 초과 시 중단하고 실패(kind `timeout`)로 처리한다 (계약 1.12절). 로그아웃은 조회가 아니므로 이 값을 쓰지 않는다 (7절).
 - 자동 조회에만 `X-Relay-Poll: 1` 헤더를 붙인다. 계약 1.4절에 따라 이 헤더는 GET에만 쓰며, 자동 조회만 유휴 만료를 연장하지 않는다. 사용자 행동(화면 진입, 새로고침, 로그아웃)은 유휴 만료를 연장한다.
 - 새로고침(CPY-008): 진행 중이 아닌 조회만 즉시 다시 보낸다. 보류 중인 타이머는 취소하고 다시 예약한다. 진행 중인 조회는 건드리지 않는다. 버튼은 로그아웃이 진행 중일 때만 `disabled`로 막는다. 조회가 진행 중일 때 `busy`로 표시하는 동작은 아직 없다 (차이, 대조 기록).
-- 세대 번호: 세션 상실(`endSession`)과 로그아웃(`signOut`) 때 올린다. 화면 전환 때는 올리지 않는다. 해시 라우터가 없어 화면 전환 경로가 없다. 언마운트 때 올리는 코드는 대조에서 확인하지 못했다 (대조 기록). 응답이 돌아왔을 때 세대가 다르면 버린다. 늦은 응답이 최신 값을 덮지 않는다 (DASH-005).
+- 세대 번호: 세션 상실(`endSession`)과 로그아웃(`signOut`) 때 올린다. 화면이 바뀔 때는 라우터가 이전 화면의 `dispose`를 부르고, `dispose`도 올린다 (4.11, `router.js`). 응답이 돌아왔을 때 세대가 다르면 버린다. 늦은 응답이 최신 값을 덮지 않는다 (DASH-005).
 - 세션 확인 실패(401이 아닌 오류): 페이지에 CPY-018·CPY-021 안내와 [새로고침]을 보여 주고, 새로고침으로 세션 확인을 다시 한다 (구현 판단).
 
 ## 7. 실패 처리
@@ -179,11 +183,14 @@ CSRF 토큰은 메모리에만 둔다. 저장소(localStorage, sessionStorage)�
 ## 12. 시험 설계
 
 - 브라우저 시험 페이지: `web/dashboard/tests/operations.html`과 `operations-scenarios.js`. 로그인 시험과 같은 방식으로 `?case=` 값에 따라 가짜 응답을 준다. 결과는 `data-result`에 쓴다.
+- 세션 상세 시험 페이지: `web/dashboard/tests/session.html`과 `session-scenarios.js`. 가짜 응답으로 사례를 돌리고, 결과는 `data-result`에 쓴다.
+- 라우터 시험 페이지: `web/dashboard/tests/router.html`과 `router-scenarios.js`. `app/router.js`의 `mountRouter`를 그대로 쓴다. 목록 페이지에서 상세 링크의 `href`를 확인하고, 같은 해시를 적용해 상세(SCR-002)가 열리고 목록으로 돌아오는지 본다(DASH-006, 14절 D4).
 - 시험 사례 (SCR-001 부분): dash-001, 002, 003, 004, 005, 008, 016, 019(로그아웃 성공, 확인 못함 CPY-076, 잠정 403 포함), 020, 021, 022, 024, 025.
+- 시험 사례 (SCR-002 부분, 4.11): dash-006, 007, 009, 010, 011, 012, 013, 014, 026. 모두 `partial`이다. DASH-006은 `session.html`(상세 값)과 `router.html`(목록에서 상세, 목록 복귀) 두 페이지로 시험한다. 실서버 확인은 하지 않았다.
 - 형식 시험 (`format.js`, 시험 페이지 사례): `0`, `256`(→ `0.3 KiB`), `1536`, `1048575`, `1572864`는 기대값과 같다. 2^53−1은 BigInt로 계산한 기대값과 같다. `JSON.parse('9007199254740993')`의 결과가 2^53임을 확인한다. 2^53 이상 2^70 바이트 미만 값은 BigInt 기대값과 표시 차이가 한 칸(0.1 MiB) 이내다 (9절). 2^70 이상은 시험하지 않는다 (구현 판단(사용자 결정 없음)).
 - `tests/dashboard_browser.rs`: 사례마다 `/// spec: dashboard.md:DASH-0xx` 마커를 붙인다. 마커 표기와 ` partial` 접미사는 `docs/conventions/testing.md` 7절을 따른다.
 - 로그인 쿼리 시험 (`tests/dashboard_browser.rs`, 14절 D3): `/login/?notice=logout-unconfirmed`이면 CPY-076 안내가 보이고, 이후 주소에서 쿼리가 사라지며(`replaceState`), 다시 불러오면 CPY-075 안내가 보인다. 알 수 없는 쿼리 값은 CPY-075 안내로 처리되고 쿼리가 지워진다.
-- 상세 링크 임시 동작 시험 (14절 D4): `/#/sessions/{id}`로 들어가면 SCR-001이 보이고, 4.10 범위에서는 상세 요청을 보내지 않는다.
+- 상세 링크 (14절 D4): 4.11에서 `router.js`가 `#/sessions/{session_id}`를 SCR-002로 보낸다. `router-scenarios.js`가 링크 `href`를 확인하고 같은 해시를 적용해 상세와 목록 복귀를 본다. 링크를 실제로 누르면 시험 페이지를 벗어나므로 쓰지 않는다. SCR-002 본문과 종료 흐름은 `session-scenarios.js` 사례로 시험한다.
 - 정적 시험 (`management.rs`): 세션이 없으면 `/`와 `/app/…` 경로는 303 `/login/`이다 (`static_paths_redirect_to_login_without_a_session`, `protected_files_redirect_to_login_without_a_session`). 세션이 있으면 `/`는 200 HTML과 정적 헤더다 (`protected_files_are_served_with_a_session`). Q43 결정에 따른다.
 - 수동 확인 (verify-dashboard-frontend.md 3.4~3.7, Q36): 폭별 스크린샷과 시안 대조(3.4), 키보드(3.5), 스크린 리더(3.6), Firefox·Safari와 390px 실기기(3.7).
 - 실서버 확인(MGT-026 값 일치, 세션 만료 Si/Sa 시점, `P` 설정 반영)은 4.4 완료 뒤로 미룬다. 해당 시나리오는 부분으로 둔다.
@@ -222,6 +229,7 @@ CSRF 토큰은 메모리에만 둔다. 저장소(localStorage, sessionStorage)�
   - 충돌: 해시는 서버로 가지 않는다. 서버 응답은 `/`와 같다 (1절). 4.10 코드에는 해시 라우터가 없어 SCR-002를 모른다. 링크를 누르면 SCR-001이 보이고 목록은 그대로 남는다. 상세 화면은 4.11까지 없다.
   - 임시 동작(알 수 없는 해시는 SCR-001)은 구현 판단이다. 링크는 숨기지 않고 텍스트로만 두지도 않는다. 계약 URL 연결(해시 라우터와 상세 화면)은 4.11로 미룬다.
   - 시험: 12절 상세 링크 임시 동작 시험.
+  - 4.11 반영: `#/sessions/{session_id}`는 SCR-002로 간다. 그 밖의 해시는 SCR-001로 간다. 4.10의 임시 동작 설명은 이 문장으로 대체된다. 라우터 시험은 12절의 DASH-006 사례(`router.html`)다.
 
 - **D5, D6 — 결정 목록에서 뺐다.**
   - D5: `docs/conventions/testing.md` 7절을 따른다 (12절).
@@ -239,7 +247,7 @@ CSRF 토큰은 메모리에만 둔다. 저장소(localStorage, sessionStorage)�
 - 404·400·JSON 불일치를 조회 실패로 처리한다.
 - 로그아웃 요청 시간 제한은 10초 상수다 (`login.js`의 `DEFAULT_TIMEOUT_MS`와 같은 값, 별도 상수). 계약 1.12절·2.2절에 로그아웃 값이 없다.
 - 로그인 쿼리 `notice=logout-unconfirmed`, 안내 종류 `logout-unconfirmed`(톤 warning), 알 수 없는 쿼리 값은 CPY-075로 처리하고 쿼리를 지운다. 로그인 원본 코드는 이 안내만 더한다 (D3 채택의 세부, 구현 판단).
-- 해시 처리: 코드에 해시 라우터가 없어 해시와 무관하게 SCR-001을 보인다 (구현 판단(사용자 결정 없음), 1절).
+- 해시 처리: `router.js`가 `#/sessions/{session_id}`는 SCR-002로, 그 밖의 해시는 SCR-001로 보낸다 (구현 판단(사용자 결정 없음), 1절).
 - 바이트: 정확히 중간인 값은 0에서 먼 쪽으로 반올림한다 (`halfExpand`).
 - 시각 조립 방식(`Date` 메서드, 시간대 약칭만 `formatToParts`)과 잘못된 시각 문자열의 실패 처리 (9절).
 - 역할, 모드, 전송 경로는 표시 이름으로 바꾸고 목록에 없는 값은 원문으로 둔다 (9절). 스펙 원문 표기와 같은지 확인 필요 (차이 후보). `max_entries`는 표시하지 않는다.
@@ -254,7 +262,8 @@ CSRF 토큰은 메모리에만 둔다. 저장소(localStorage, sessionStorage)�
 - 사용자 질문 (답 필요):
   - Q1: D1 (a)의 한계 수용. 2^53 이상 2^70 바이트 미만에서 표시가 한 칸(0.1 MiB) 이내로 어긋나는 것을 받아들이는가. 계약 6절 L562를 닫을지도 함께 정한다.
   - Q2: D2 잠정 (a) 승인과 403 뒤 관리 세션 잔존 감수. 아니면 (b) 또는 (c).
-  - Q3: 스펙 9.3절 문구 쌍에 아래를 더하는 것을 승인하는가 (스펙 개정 필요): 상단 막대 "주 메뉴"/"Main menu"(14절 navbar 항목), 게이지 `상한 {n}`/`Limit {n}`과 `상한 확인 불가`(9절 게이지 행, 10절). 승인하지 않으면 숫자만 쓰는 `12 / 200` 형식으로 바꾼다.
+  - Q3: 스펙 9.3절 문구 쌍에 아래를 더하는 것을 승인하는가 (스펙 개정 필요): 상단 막대 "주 메뉴"/"Main menu"(14절 navbar 항목), 게이지 `상한 {n}`/`Limit {n}`과 `상한 확인 불가`/`Limit unavailable`(9절 게이지 행, 10절), SCR-002 문서 제목 `VNC Relay 세션 상세`/`VNC Relay Session details`, 카드 제목 `세션 정보`/`Session information`, 상태 라벨 `상태`/`State`(9.3.3절에 짝 문구 없음, 구현 판단). 승인하지 않으면 숫자만 쓰는 `12 / 200` 형식으로 바꾼다.
+  - Q3 보충(4.11 복사 검토): 같은 방식으로 SCR-001 문서 제목 `VNC Relay 운영 현황`/`VNC Relay Operations overview`, 역할 표시 `Viewer`·`대상`/`Viewer`·`Target`, 기간 단위 `일`/`d`도 9.3절에 짝 문구가 없다. 구현 판단으로 표시했고, 같은 질문에 함께 답해 달라.
 - 반영 완료(2026-10-22 Main 결정): D4 상세 링크는 `/#/sessions/{session_id}`로 두고 숨기지 않는다(14절). 검증 기록 4.6의 수정 필요 6건은 코드 수정을 마쳤다(4.6 기록).
 - 반영 완료(2026-10-22): `code-map.md`, `dashboard-components.md` 2절·3.1절, `architectures/README.md`, `frontend.md` 1.1·2.3절, `xtask.md`, `management-api-v1.md` 5절과 6절(`tests/dashboard_browser.rs` 추가). 5절 결과 열은 검증 기록 규칙(`docs/AGENTS.md` 검증 기록)에 따라 부분 행을 `미실행`으로 두고, 부분 내용은 실행 기록 열에 적는다.
 - 실서버 확인은 4.4 뒤에 한다. 그 전까지 관련 시나리오는 부분이다.
@@ -266,6 +275,8 @@ CSRF 토큰은 메모리에만 둔다. 저장소(localStorage, sessionStorage)�
 | 2~14절 구조·책임·흐름·표시 규칙과 소스 | Windows 10.0.26200 x64, 코드 `3944dc2`, 문서 기준 `3fbbead` | 읽기 전용 감사. 절마다 파일과 심볼을 읽어 대조했다. 사람 검토가 아니다. | 코드와 다르던 설명을 고쳤다 (해시 라우터, 첫 조회 빈 행, 로그아웃 버튼 상태, 세대 번호 지점, 시각 실패 처리, 표 role, 게이지 문구). 판단이 필요한 차이는 아래 표에 남겼다. |
 | 시험 DASH-001·002·003·004·005·008·016·019·020·021·022·024·025 (SCR-001) | WSL `vr-full.sh`, Windows `vr-win.ps1 -Only all`, 기준 `3944dc2` | 시나리오 보고서와 `tests/dashboard_browser.rs` 마커 대조 | 13개 사례 모두 부분. 남은 조건은 12절과 검증 기록 4.1~4.5를 따른다. |
 | 스크린샷 비교 SCR-001 (1280·390·320px, ko·en, 상태 8종 48장) | Windows 10.0.26200 x64, Chrome 155.0.8059.84 헤드리스, 기준 `bd1032b` + 미커밋 수정 | `target/dashboard-shots/` (커밋하지 않음), 검증 기록 4.6 | 재촬영(2026-10-22, 수정 뒤): 가로 스크롤 0건, CSP 위반 0건. 수정 필요 6건은 수정을 마쳤다(검증 기록 4.6). 1280은 정상 상태와 빈 목록 문구만 판정했다. 사람 비교는 4.12 |
+| 시험 DASH-006·007·009~014·026 (SCR-002) | Windows 10.0.26200 x64, 작업 트리 | `tests/dashboard_browser.rs`의 `session_` 시험 9개와 `router_opens_session_detail_from_the_list_in_browser`(`session.html`·`router.html`, 목 응답) | 모두 부분. 실서버 확인은 4.4·4.5 뒤. 검증 기록 4.7 |
+| 스크린샷 비교 SCR-002 (상태 5종 × 6폭 × ko·en = 60장, 1280 ko 시안 대조) | Windows 10.0.26200 x64, Chrome 헤드리스 | `target/dashboard-shots/scr/`와 `target/dashboard-shots/compare/`(커밋하지 않음), 검증 기록 4.7 | 60장은 수정 전 촬영. 수정 뒤 ko 1280·390·320을 다시 찍었다. 가로 넘침 0, CSP 위반 0. 시안 차이 4건은 차이 표. 사람 비교는 4.12 |
 | 수동 확인 3.4(시안 대조)·3.5(키보드)·3.6(스크린 리더)·3.7(Firefox·Safari·390px 실기기) | — | 검증 기록 3절 | 미실행 |
 | 실서버 확인(MGT-026 값 일치, 세션 만료, `P` 설정 반영) | — | 4.4 뒤 | 미실행 |
 
@@ -286,3 +297,7 @@ CSRF 토큰은 메모리에만 둔다. 저장소(localStorage, sessionStorage)�
 | 표 role | 명시적 role 속성 | 네이티브 요소, role 속성 없음 | 구현 판단 | 13절 맞춤. 3.6절에서 AT 확인 |
 | 상단 막대 (390·320) | 목업: `운영 현황` 숨김, 56px 한 행, 활성 인디케이터 top 53 (DESIGN.md 550·641행) | 수정 뒤(2026-10-22): 390·320 ko·en 막대 56px 한 행, 언어 선택 top 6·높이 44, `운영 현황` 항목 미표시(인디케이터 없음). 1280은 인디케이터 top 53, 간격 7, 두 행 없음 | 수정 완료 (구현). 목업과 같은 배치 | 검증 기록 4.6 수정 필요 1–5 해소 |
 | 서버 요약 `Unavailable` 값 | 한 줄 표시 (스펙 6절, 필수 정보가 읽힘) | 수정 뒤: 1280·390·320 en 정상 상태에서 `Unavailable` 한 줄(320 en 스크린샷 확인, 완전 문자열 텍스트 확인). 원인은 `overflow-wrap: anywhere`가 값 줄의 최소 폭을 줄인 것이다 | 수정 완료 (구현). [INFERENCE] 스펙 6절 기준 | 검증 기록 4.6 수정 필요 6 해소 |
+| SCR-002 배치 | 스펙 99–109행 ASCII: `목록으로` 왼쪽 위, `세션 종료` 본문 아래 줄. 목업: 전송량을 정보 카드 옆 별도 카드로 둠 | 상단 `page-actions` 줄에 `목록으로`·`상태 재조회`·`세션 종료`, 전송량은 정보 카드 안 | 차이. `page-head`가 SCR-001과 공유되어 SCR-002만 바꾸기 어렵다 | 검증 기록 4.7절. 4.12에서 결정 |
+| SCR-002 모드 표시 | 목업: 배지 칩 | 평문 값 | 차이 | 검증 기록 4.7절. 4.12에서 결정 |
+| SCR-002 주소·전송량 표시 | 목업: monospace 주소, dt/dd 목록 | `.stat` 카드(`createStat`). 값 줄바꿈은 `.session-facts .stat-value`에서 따로 정함 | 차이 | 검증 기록 4.7절. 4.12에서 결정 |
+| SCR-002 상태 행 | 목업: 상태 행 없음 | `상태` 행에 `active` 표시 (`stateLabel`) | 구현 판단. `stateLabel`은 15절 Q3 | 15절 Q3 |
