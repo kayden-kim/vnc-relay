@@ -45,6 +45,7 @@ flowchart LR
     TOK -->|"호출"| META
     TOK -->|"호출"| TFM["tokens/front_matter.rs<br/>parse_document"]
     TOK -->|"호출"| TSC["tokens/screen_css.rs<br/>check"]
+    TOK -->|"호출"| TSH["tokens/shared.rs<br/>write, check"]
 ```
 
 | 요소(파일·심볼) | 역할 | 만들어지는 시점과 소유자 | 의존 대상 |
@@ -57,9 +58,10 @@ flowchart LR
 | `xtask/src/scenarios/test_run.rs` `run` | 테스트 빌드 JSON에서 실행파일과 대상 소스 파일을 짝짓고, `cargo test` 출력에서 테스트별 결과를 읽는다. | `scenarios` 실행마다 | `cargo` |
 | `xtask/src/scenarios/report.rs` `Report`, `Status` | 시나리오 상태 판정, 판정 사유, Markdown 보고서 작성 | `scenarios` 실행마다 | 없음 |
 | `xtask/src/layers.rs` `RULES`, `APPROVED`, `check` | 패키지별 허용 내부 crate·외부 crate 규칙, 같은 외부 crate의 버전 요구 일치 검사 | `layers` 실행마다 | `cargo` |
-| `xtask/src/tokens.rs` `run`, `tokens_from`, `render_css`, `write_outputs`, `check_outputs` | DESIGN.md 머리말의 `colors`·`spacing`·`rounded`·`typography`를 CSS 사용자 정의 속성 목록으로 바꾸고 `:root` 블록을 만든다. 기본 실행은 토큰 CSS 두 파일과 목업의 표식 사이 블록을 쓴다. `--check`는 같은 세 곳을 비교하고 화면 CSS 검사를 더한다. | 명령마다 | `tokens/front_matter.rs`, `tokens/screen_css.rs`, `cargo.rs`의 `metadata` |
+| `xtask/src/tokens.rs` `run`, `tokens_from`, `render_css`, `write_outputs`, `check_outputs` | DESIGN.md 머리말의 `colors`·`spacing`·`rounded`·`typography`를 CSS 사용자 정의 속성 목록으로 바꾸고 `:root` 블록을 만든다. 기본 실행은 토큰 CSS 두 파일, 목업의 표식 사이 블록, 로그인 공통 복사본(`tokens/shared.rs`)을 쓴다. `--check`는 같은 곳을 비교하고 화면 CSS 검사를 더한다. | 명령마다 | `tokens/front_matter.rs`, `tokens/screen_css.rs`, `tokens/shared.rs`, `cargo.rs`의 `metadata` |
 | `xtask/src/tokens/front_matter.rs` `parse_document`, `Value` | 머리말의 YAML 부분집합(들여쓰기 맵, 한 줄 스칼라)만 읽는다. 지원하지 않는 문법은 `DESIGN.md:줄번호:` 형식의 오류로 보고한다. | 명령마다 | 없음 |
 | `xtask/src/tokens/screen_css.rs` `check` | 토큰 CSS 파일을 뺀 `web/dashboard/` 아래 `.css`에서 `#` 색, `rgb(`·`hsl(`·`url(`·`@import`, `@media` 밖의 `px`·`em`·`rem`, `font-weight` 값, 정의되지 않은 `var(--…)`를 찾는다. | `--check` 실행마다 | 없음 |
+| `xtask/src/tokens/shared.rs` `SHARED_FILES`, `write`, `check` | `app/components/`와 `app/styles/`의 복사 목록 7개를 `login/`의 같은 상대 경로에 쓴다. 파일 첫 줄에 원본 경로를 밝히는 머리말을 붙인다. `--check`는 복사본을 원본과 비교하고, 복사 디렉터리에 목록에 없는 파일이 있으면 알린다. | 명령마다 | `tokens.rs`의 `first_difference`·`read_text`, `cargo.rs`의 `display_path` |
 | `xtask/src/dashboard_serve.rs` `run`, `serve`, `resolve`, `respond` | `127.0.0.1:포트`에 HTTP/1.1 정적 서버를 연다. `/`는 `/preview/index.html`로 302 보낸다. 모든 응답에 CSP(`default-src 'self'; frame-ancestors 'none'`)와 `X-Content-Type-Options: nosniff`, `Cache-Control: no-store`, `Referrer-Policy: no-referrer`를 붙인다. 정규화한 경로가 `web/dashboard/` 밖이면 404다. | 명령마다, 프로세스를 끝낼 때까지 | `std::net`만 쓴다. |
 
 ## 3. 데이터 모델
@@ -89,7 +91,7 @@ flowchart LR
 
 `cargo xtask layers`는 1단계 다음에 `layers::check`를 실행한다. 패키지마다 `RULES`의 허용 내부 crate와 외부 crate 규칙을 적용하고, 같은 외부 crate의 버전 요구가 패키지마다 다르면 위반으로 본다. `RULES`에 없는 패키지도 위반이다.
 
-`cargo xtask tokens`와 `cargo xtask tokens --check`는 앞부분이 같다. `cargo metadata`로 루트를 찾고, DESIGN.md 머리말을 `parse_document`로 읽어 `tokens_from`으로 토큰 목록을 만든다(`version`·`name`·`description`·`components`는 뺀다). `render_css`가 `:root` 블록을 만든다. 기본 실행(`write_outputs`)은 토큰 CSS 두 파일과 목업의 `DESIGN-TOKENS:START`·`END` 표식 사이 블록을 쓴다. `--check`(`check_outputs`)는 같은 세 곳을 비교하고 화면 CSS 검사를 더한다. 차이는 한 건씩 출력하고 `tokens --check: 실패 (N건)`, 종료 코드 1이다. 차이가 없으면 `통과`, 종료 코드 0이다.
+`cargo xtask tokens`와 `cargo xtask tokens --check`는 앞부분이 같다. `cargo metadata`로 루트를 찾고, DESIGN.md 머리말을 `parse_document`로 읽어 `tokens_from`으로 토큰 목록을 만든다(`version`·`name`·`description`·`components`는 뺀다). `render_css`가 `:root` 블록을 만든다. 기본 실행(`write_outputs`)은 토큰 CSS 두 파일과 목업의 `DESIGN-TOKENS:START`·`END` 표식 사이 블록을 쓴다. `shared::write`가 로그인 공통 복사본도 함께 쓴다. `--check`(`check_outputs`)는 같은 곳을 비교하고 화면 CSS 검사를 더한다. 복사본은 `shared::check`가 원본과 비교하고, 복사 디렉터리에서 목록에 없는 파일을 찾는다. 차이는 한 건씩 출력하고 `tokens --check: 실패 (N건)`, 종료 코드 1이다. 차이가 없으면 `통과`, 종료 코드 0이다.
 
 `cargo xtask dashboard-serve`는 `web/dashboard/`를 정하고 `127.0.0.1:포트`에 연결한 뒤 연결마다 `serve`를 실행한다. 요청 머리는 8KiB까지 읽고(`MAX_HEAD`), 읽기와 쓰기 제한 시간은 5초(`IO_TIMEOUT`)다.
 
@@ -111,6 +113,7 @@ flowchart LR
 | `xtask/src/tokens.rs` `tokens_from` | DESIGN.md 머리말 파싱 실패, 허용하지 않는 키, `typography` 항목의 필수 키 빠짐이면 중단, 오류 출력 후 종료 코드 1 | 없음 | 없음 |
 | `xtask/src/tokens.rs` `write_outputs` | 쓰기 실패면 중단, 종료 코드 1. 앞서 쓴 파일은 그대로 남는다. | 일부 파일만 갱신 | 없음 |
 | `xtask/src/tokens.rs` `check_outputs` | 비교할 파일을 읽지 못하면 중단, 종료 코드 1. 차이는 모두 출력하고 `실패 (N건)`으로 끝낸다. | 없음 | 없음 |
+| `xtask/src/tokens/shared.rs` `write`, `check` | 원본이나 복사본을 읽지 못하거나 복사본을 쓸 수 없으면 중단, 종료 코드 1. 오류 메시지에 파일 경로가 붙는다. `check`는 그 자리에서 멈추므로 뒤의 복사본과 목록에 없는 파일은 보고하지 않는다. | `write`는 앞서 쓴 복사본이 남는다. `check`는 없음 | 없음 |
 | `xtask/src/dashboard_serve.rs` `run` | `127.0.0.1:포트` 연결 실패면 중단, 종료 코드 1. 형식이 틀린 요청은 400, 없는 파일은 404로 답하고 서버는 계속 돈다. | 없음 | 없음 |
 
 ## 7. 설계 선택
@@ -127,6 +130,7 @@ flowchart LR
 | 토큰 머리말은 xtask 안의 YAML 부분집합 파서로 읽는다 | 승인 목록 밖 crate를 쓰지 않는다. DESIGN.md가 쓰는 문법(들여쓰기 맵, 한 줄 스칼라)만 읽으면 된다. | YAML crate(예: `serde_yaml`). `layers.rs` `APPROVED`와 PRD 승인 행을 함께 바꿔야 한다. | [PRD "구현 기술" 행](../requirements/PRD.md#확정-기준). 승인 없이 부분집합 파서를 택했다(작업 4.8 지시). 승인이 필요하면 이 행을 바꾼다. |
 | 미리보기 서버는 `std::net`만 쓴다 | `127.0.0.1` 전용 정적 파일 제공에 HTTP crate가 필요 없다. | `tiny_http`·`axum`. 승인 목록 밖이다. | 사용자 결정 2026-10-22(Q34): 로컬 전용, 바이너리에 넣지 않는다. |
 | 목업 토큰 블록도 `tokens`가 쓰고 `--check`가 비교한다 | 토큰 값이 목업과 어긋나는 것을 같은 명령에서 잡는다. | 목업 블록을 손으로 맞춘다. 어긋남을 놓칠 수 있다. | 사용자 결정 2026-10-22(Q32). |
+| 로그인 화면의 공통 컴포넌트와 스타일은 복사본으로 둔다 | `login/`은 세션 없이 받으므로 `/app/` 파일을 참조할 수 없다. 복사본은 `tokens`가 쓰고 `--check`가 원본과 비교한다. | `login/`이 `app/` 파일을 직접 가리킨다. 세션 없는 로그인 화면이 `/app/` 파일을 받지 못한다. 마크업과 스타일을 손으로 복제한다. | 구현 판단(사용자 결정 없음). 리뷰어 지시에 따른다. |
 
 ## 대조 기록
 

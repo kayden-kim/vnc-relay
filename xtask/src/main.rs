@@ -3,7 +3,7 @@
 //! - `cargo xtask scenarios [--require-all]`: scenario coverage report
 //!   (docs/conventions/testing.md section 7).
 //! - `cargo xtask layers`: layer dependency check (docs/architectures/code-map.md).
-//! - `cargo xtask tokens [--check]`: token CSS from DESIGN.md
+//! - `cargo xtask tokens [--check]`: token CSS from DESIGN.md, and the sign-in page's copies of app components and styles
 //!   (docs/conventions/frontend.md section 2).
 //! - `cargo xtask dashboard-serve [--port N]`: local preview server for `web/dashboard/`
 //!   (docs/architectures/xtask.md).

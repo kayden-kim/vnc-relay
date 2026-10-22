@@ -1,11 +1,14 @@
 //! `cargo xtask tokens [--check]`: makes the token CSS from DESIGN.md.
 //!
 //! Writes `web/dashboard/login/tokens.css`, `web/dashboard/app/tokens.css`, and
-//! the token block of the mockup between its markers. `--check` compares those
-//! files and runs the screen CSS check (docs/conventions/frontend.md section 2).
+//! the token block of the mockup between its markers. It also writes the copies
+//! of app components and styles that the sign-in page loads (see `shared`).
+//! `--check` compares those files and runs the screen CSS check
+//! (docs/conventions/frontend.md section 2).
 
 mod front_matter;
 mod screen_css;
+mod shared;
 
 use std::collections::BTreeSet;
 use std::ffi::OsStr;
@@ -163,6 +166,7 @@ fn write_outputs(root: &Path, css: &str) -> Result<(), Error> {
         }
         std::fs::write(&path, css)?;
     }
+    shared::write(root)?;
     let mockup_path = root.join(MOCKUP_PATH);
     let mockup = read_text(&mockup_path)?;
     let updated = replace_mockup_block(&mockup, css)?;
@@ -191,6 +195,7 @@ fn check_outputs(root: &Path, css: &str, tokens: &[Token]) -> Result<bool, Error
     let mut files = Vec::new();
     collect_screen_css(&root.join(DASHBOARD_DIR), root, &mut files)?;
     let defined: BTreeSet<String> = tokens.iter().map(|token| token.name.clone()).collect();
+    problems.extend(shared::check(root)?);
     problems.extend(screen_css::check(&files, &defined));
     for problem in &problems {
         writeln!(out, "{problem}")?;

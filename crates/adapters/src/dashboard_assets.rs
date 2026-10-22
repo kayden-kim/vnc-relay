@@ -54,6 +54,41 @@ pub const ASSETS: &[Asset] = &[
         body: include_bytes!("../../../web/dashboard/login/language.js"),
     },
     Asset {
+        path: "/login/styles/base.css",
+        content_type: CSS,
+        body: include_bytes!("../../../web/dashboard/login/styles/base.css"),
+    },
+    Asset {
+        path: "/login/styles/components.css",
+        content_type: CSS,
+        body: include_bytes!("../../../web/dashboard/login/styles/components.css"),
+    },
+    Asset {
+        path: "/login/components/icons.js",
+        content_type: JS,
+        body: include_bytes!("../../../web/dashboard/login/components/icons.js"),
+    },
+    Asset {
+        path: "/login/components/alert.js",
+        content_type: JS,
+        body: include_bytes!("../../../web/dashboard/login/components/alert.js"),
+    },
+    Asset {
+        path: "/login/components/button.js",
+        content_type: JS,
+        body: include_bytes!("../../../web/dashboard/login/components/button.js"),
+    },
+    Asset {
+        path: "/login/components/text-field.js",
+        content_type: JS,
+        body: include_bytes!("../../../web/dashboard/login/components/text-field.js"),
+    },
+    Asset {
+        path: "/login/components/language-select.js",
+        content_type: JS,
+        body: include_bytes!("../../../web/dashboard/login/components/language-select.js"),
+    },
+    Asset {
         path: "/app/tokens.css",
         content_type: CSS,
         body: include_bytes!("../../../web/dashboard/app/tokens.css"),

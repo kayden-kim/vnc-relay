@@ -109,27 +109,26 @@ function submit(root) {
 }
 
 function shownNotices(root) {
-  return [...root.querySelectorAll('[data-notice]')]
-    .filter((element) => !element.hidden)
-    .map((element) => element.dataset.notice);
+  return [...root.querySelectorAll('[data-notice]')].map((element) => element.dataset.notice);
 }
 
 function checkNotice(root, label, key) {
   const lang = document.documentElement.lang;
   const shown = shownNotices(root);
-  const text = root.querySelector(`[data-notice="${key}"] [data-text]`)?.textContent;
+  const text = root.querySelector(`[data-notice="${key}"] .alert-title`)?.textContent;
   check(`${label}: only the ${key} notice is shown`, shown.length === 1 && shown[0] === key);
   check(`${label}: ${key} notice text`, text === COPY[lang][NOTICE_TEXT_KEY[key]]);
 }
 
 function checkFieldError(root, field, copyKey, label) {
   const lang = document.documentElement.lang;
-  const element = root.querySelector(`[data-field-error="${field}"]`);
+  const input = refs(root)[field];
+  const element = input.closest('.text-field')?.querySelector('.text-field-error') ?? null;
   check(
     `${label}: ${field} error shown with copy`,
-    element !== null && !element.hidden && element.textContent.trim() === COPY[lang][copyKey],
+    element !== null && element.textContent.trim() === COPY[lang][copyKey],
   );
-  check(`${label}: ${field} input marked invalid`, refs(root)[field].getAttribute('aria-invalid') === 'true');
+  check(`${label}: ${field} input marked invalid`, input.getAttribute('aria-invalid') === 'true');
 }
 
 // No horizontal scroll at the current width. The harness runs each case at several widths.
@@ -228,7 +227,7 @@ async function caseDash024() {
     const label = `DASH-024 ${preferred.join(',')}`;
     check(`${label}: document language`, document.documentElement.lang === expected);
     check(`${label}: language select value`, refs(root).language.value === expected);
-    check(`${label}: initial notice copy`, root.querySelector('[data-notice="required"] [data-text]').textContent === COPY[expected].required);
+    check(`${label}: initial notice copy`, root.querySelector('[data-notice="required"] .alert-title').textContent === COPY[expected].required);
     check(`${label}: nothing is saved without a choice`, storage.items.size === 0);
   }
   checkLayout('DASH-024');

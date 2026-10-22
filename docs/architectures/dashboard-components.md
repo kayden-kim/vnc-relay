@@ -22,7 +22,7 @@
   - 미리보기와 테스트 페이지가 같은 조각을 쓴다(복제하지 않는다).
 - 맡지 않는 책임:
   - 관리 API 호출, 폴링, 세션 상태, 오류 분류: 화면 모듈(작업 4.10·4.11)이 맡는다.
-  - 로그인 화면 조립: 작업 4.9가 맡았다. 조립은 `web/dashboard/login/`에 있고 구성 요소를 가져오지 않는다(`login/`과 `app/`은 파일을 공유하지 않는다, 프런트엔드 컨벤션 1.1절).
+  - 로그인 화면 조립: 작업 4.9가 맡았다. 조립은 `web/dashboard/login/`에 있고, 구성 요소는 `cargo xtask tokens`가 만든 복사본(`login/components/`, `login/styles/`)을 가져온다. 복사본은 직접 고치지 않는다(`login/`과 `app/`은 파일을 공유하지 않는다, 프런트엔드 컨벤션 1.1절).
   - 토큰 값 정의: [DESIGN.md](../design/DESIGN.md) YAML과 `cargo xtask tokens`가 맡는다.
   - 정적 파일 제공: 작업 4.6이 맡는다. `cargo xtask dashboard-serve`는 로컬 미리보기 전용이다.
   - 언어 선택 저장과 문구 번역: 화면 모듈이 맡는다.
@@ -36,6 +36,7 @@
 flowchart LR
     PRV["preview/preview.js<br/>미리보기 페이지"] -->|"호출"| CMP["app/components/*.js<br/>create 함수"]
     TST["tests/components.js<br/>테스트 페이지"] -->|"호출"| CMP
+    LGN["login/login.js<br/>로그인 화면"] -->|"호출"| LCP["login/components/*.js<br/>app 복사본(생성 파일)"]
     CMP -->|"호출"| ICO["app/components/icons.js<br/>icon"]
     CMP -->|"클래스·속성 연결"| CSS["app/styles/base.css<br/>app/styles/components.css"]
     CSS -->|"토큰 참조"| TOK["app/tokens.css<br/>생성 파일"]
@@ -45,7 +46,7 @@ flowchart LR
 | --- | --- | --- |
 | `app/components/icons.js` `icon` | 이름으로 아이콘 SVG 하나를 만든다. 정적 SVG 문자열을 모듈 안 `<template>`에 한 번 넣고 `cloneNode`로 복제한다. | 없음 |
 | `app/components/button.js` `createButton` | 버튼 요소를 만든다. | `icons.js` |
-| `app/components/text-field.js` `createTextField` | 레이블, 입력, 오류 문구를 묶은 `div`를 만든다. 오류 아이콘은 `icons.js`로 만든다. | `icons.js` |
+| `app/components/text-field.js` `createTextField`, `setTextFieldError` | 레이블, 입력, 오류 문구를 묶은 `div`를 만든다. `setTextFieldError`는 만든 필드의 오류 문구를 바꾼다. 오류 아이콘은 `icons.js`로 만든다. | `icons.js` |
 | `app/components/badge.js` `createBadge` | 상태 배지를 만든다. | `icons.js` |
 | `app/components/alert.js` `createAlert` | 상태 안내 상자를 만든다. | `icons.js` |
 | `app/components/card.js` `createCard` | 제목이 있는 카드 `section`을 만든다. 개수는 배지로 보인다. | `badge.js` |
@@ -80,6 +81,7 @@ flowchart LR
 | `icon(name, {size})` | 아이콘 이름, 크기 | `SVGSVGElement`. `aria-hidden="true"`, `focusable="false"`. |
 | `createButton({variant, label, icon, disabled, busy, type})` | `variant` 기본 `primary`. `navbar`는 상단 막대 항목형 버튼이다(DESIGN.md 버튼 변형). `icon`은 아이콘 이름. `busy`는 진행 중 상태다. | `HTMLButtonElement`. `busy`이면 `disabled`와 `aria-busy="true"`를 붙인다. 문구는 호출자가 바꾼다. |
 | `createTextField({id, label, type, value, required, autocomplete, helpText, error})` | `type`은 `text` 또는 `password`. `error`가 있으면 오류 상태다. 비활성 옵션은 없다(DESIGN.md 입력 상태는 기본·포커스·오류). 포커스는 CSS의 `:focus-visible`과 미리보기 클래스 `is-focus`로 나타난다. | `HTMLDivElement`. 오류가 있으면 `aria-invalid="true"`, `aria-describedby`에 오류 문구 id를 쓴다. |
+| `setTextFieldError(field, error)` | `field`는 `createTextField`가 만든 `div`다. `error`가 있으면 오류 문구를 붙이고 `aria-invalid="true"`, `aria-describedby`를 오류 문구 id로 바꾼다. `error`가 빈 값이면 오류 문구를 지우고 `aria-invalid="false"`로 바꾼다. 도움말이 있으면 `aria-describedby`를 도움말 id로 되돌리고, 없으면 지운다. 로그인 화면이 필드를 다시 만들지 않고 오류만 바꾸려고 추가했다(4.9 재작업). | `undefined`. 요소를 새로 만들지 않고 같은 요소를 바꾼다. |
 | `createBadge({tone, label, icon})` | `icon` 기본값은 `tone`별 아이콘(`neutral`은 없음). `icon: false`로 끈다. | `HTMLSpanElement` |
 | `createAlert({tone, title, message})` | `warning`·`destructive`는 `role="alert"`, 나머지는 `role="status"` | `HTMLDivElement` |
 | `createCard({title, headingLevel, count, actions, body, footer})` | `title` 필수. `headingLevel` 기본 2(1~6의 정수). `count`는 `createBadge`로 붙인다. | `HTMLElement`(`section`). `aria-labelledby`로 제목과 묶는다. |
@@ -130,7 +132,8 @@ flowchart LR
 
 - (해결) 브라우저 시험(`tests/dashboard_browser.rs`)은 4.8에 넣었다. Windows와 WSL Ubuntu 모두에서 실행한다. Ubuntu에는 Google Chrome 안정판 .deb를 설치한다(사용자 결정 2026-10-22(Q41)). 브라우저가 없으면 시험은 실패한다(건너뛰지 않는다, 사용자 결정 2026-10-22(Q35)). 설치와 실행 기록은 [개발 환경 how-to](../how-to/set-up-and-verify.md#4-검증) 실행 기록 4에 있다.
 - 성능 예산(FE-TBD-016)은 화면이 생긴 뒤 정한다(사용자 결정 2026-10-22(Q39)).
-- 로그인(4.9)은 구성 요소를 가져오지 않으므로 이 문서에 API를 더하지 않았다. 운영 화면(4.10·4.11)이 조각을 더 요구하면 이 문서에 API를 추가한다.
+- 로그인(4.9)은 구성 요소의 생성 복사본을 가져온다. 로그인이 쓰려고 `setTextFieldError`를 추가했고 §3.1 표에 적었다. 운영 화면(4.10·4.11)이 조각을 더 요구하면 이 문서에 API를 추가한다.
+- 로그인 열린 질문: 새로고침 후 계정명 복원, 로그인 요청 제한 시간 10초, 시안과의 차이. 사용자 결정이 없어 구현 판단으로 남긴다(검증 기록 4.2절).
 
 ## 대조 기록
 
@@ -149,5 +152,6 @@ flowchart LR
 | 토큰 CSS 연결 | `cargo xtask tokens --check` | 통과(종료 코드 0) |
 | 브라우저 시험 | `cargo test --test dashboard_browser` | 통과(시험 2개 ok). 미리보기와 테스트 페이지를 6폭 × ko/en 12회 열어 `data-result=pass`, CSP 위반 0, 가로 스크롤 0 |
 | 리뷰 수정 A–D(Q42, 2026-10-22) | 3.1 표와 CSS를 다시 대조: 게이지 `aria-valuetext`(gauge.js L71), 버튼 `navbar` 변형(button.js), 입력 상태(옵션 없음), 대화상자 `display`(components.css `.dialog[open]`) | 차이 4건을 고쳤다. A 게이지: 가운데에 현재 값, 아래 "상한" 줄. DESIGN.md 게이지 절을 따랐고 리뷰의 "비율" 표기는 쓰지 않았다(결정 요청 참고). B 상단 막대 로그아웃: `navbar` 변형, 항목 1개(`bc6248e`, `fc7c325`). C 입력: 비활성 견본을 포커스 견본으로 바꿈(`e1ba857`). D 대화상자: 닫힌 상태는 숨기고, 열린 견본은 프레임 안에 둠(`0741c3c`, 시험 `4e65789`). |
+| 로그인 복사본(4.9 재작업) | `cargo xtask tokens --check`, 복사본 변조·원본 변조·복사 목록 밖 파일 시험 | 통과. 깨끗한 상태는 통과. 복사본 변조, 원본 변조, 복사 목록 밖 파일 각각 `생성 결과와 다르다` 또는 `복사 목록에 없는 파일이다`로 실패하고 종료 코드 1이었다. 되돌린 뒤 다시 통과했다. |
 
 3.1 표에 없는 문자열 필수 옵션(`button`의 `label`, `badge`의 `label`, `link`의 `href`·`label`, `text-field`의 `id`·`label`, `alert`의 `title`)도 빈 값이면 `TypeError`를 던진다.

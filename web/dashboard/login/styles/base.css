@@ -1,0 +1,54 @@
+/* 생성 파일이다. 직접 고치지 않는다. 원본: web/dashboard/app/styles/base.css */
+/* Base styles: colour scheme, body text, focus ring, and screen-reader-only text. */
+
+:root {
+  color-scheme: light;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-background);
+  color: var(--color-foreground);
+  font-family: var(--type-body-family);
+  font-size: var(--type-body-size);
+  font-weight: var(--type-body-weight);
+  line-height: var(--type-body-line);
+  word-break: keep-all;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+p,
+dl,
+dd,
+ul {
+  margin: 0;
+}
+
+/* Focus ring for keyboard focus; .is-focus is the preview's fixed state. */
+:is(:focus-visible, .is-focus) {
+  outline: var(--space-focus-ring-width) solid var(--color-ring);
+  outline-offset: var(--space-focus-ring-offset);
+}
+
+.sr-only {
+  position: absolute;
+  width: var(--space-border-width);
+  height: var(--space-border-width);
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

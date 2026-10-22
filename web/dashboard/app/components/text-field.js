@@ -47,15 +47,37 @@ export function createTextField({
   }
 
   if (error) {
-    const err = element('p', 'text-field-error');
-    err.id = `${id}-error`;
-    err.append(icon('alert', { size: 'sm' }), error);
-    root.append(err);
-    input.setAttribute('aria-invalid', 'true');
-    // With an error, the error message is the only description.
-    input.setAttribute('aria-describedby', err.id);
+    setTextFieldError(root, error);
   } else if (help) {
     input.setAttribute('aria-describedby', help.id);
   }
   return root;
+}
+
+/**
+ * Shows `error` under a field made by createTextField, or removes the error when `error`
+ * is empty. aria-invalid and aria-describedby follow the error.
+ * @param {HTMLDivElement} field
+ * @param {string | undefined} error
+ */
+export function setTextFieldError(field, error) {
+  const input = field.querySelector('.text-field-input');
+  field.querySelector('.text-field-error')?.remove();
+  if (error) {
+    const err = element('p', 'text-field-error');
+    err.id = `${input.id}-error`;
+    err.append(icon('alert', { size: 'sm' }), error);
+    field.append(err);
+    input.setAttribute('aria-invalid', 'true');
+    // With an error, the error message is the only description.
+    input.setAttribute('aria-describedby', err.id);
+    return;
+  }
+  input.setAttribute('aria-invalid', 'false');
+  const help = field.querySelector('.text-field-help');
+  if (help) {
+    input.setAttribute('aria-describedby', help.id);
+  } else {
+    input.removeAttribute('aria-describedby');
+  }
 }

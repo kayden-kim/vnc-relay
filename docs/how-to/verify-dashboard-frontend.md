@@ -39,7 +39,7 @@
 
 ### 3.1 토큰과 문서 확인
 
-1. 저장된 토큰 CSS를 DESIGN.md YAML에서 다시 만든 결과와 대조한다.
+1. 저장된 토큰 CSS를 DESIGN.md YAML에서 다시 만든 결과와 대조한다. 로그인 화면의 생성 복사본(`web/dashboard/login/components/`, `web/dashboard/login/styles/`)도 원본 `web/dashboard/app/`과 같은지 대조한다.
 
    영향: 없음. 파일을 쓰지 않는다.
 
@@ -171,12 +171,12 @@
 
 | 관찰 대상 | 성공 조건 | 확인 명령·방법 | 실제 결과 | 실행 증거 위치 |
 | --- | --- | --- | --- | --- |
-| 토큰 CSS와 저장된 파일 | 차이 0건, 종료 코드 0 | 3.1 1단계 | 통과. 작업 4.8(Windows): `tokens --check: 통과`, 종료 코드 0. DESIGN.md L6 값을 `#f4f6f6`으로 바꾸면 `실패 (3건)`과 종료 코드 1이 나왔고, 원래 값으로 되돌린 뒤 다시 통과했다 | 작업 4.8 보고의 명령 출력 |
+| 토큰 CSS와 저장된 파일 | 차이 0건, 종료 코드 0 | 3.1 1단계 | 통과. 작업 4.8(Windows): `tokens --check: 통과`, 종료 코드 0. DESIGN.md L6 값을 `#f4f6f6`으로 바꾸면 `실패 (3건)`과 종료 코드 1이 나왔고, 원래 값으로 되돌린 뒤 다시 통과했다. 작업 4.9 재작업(4.3절): 로그인 복사본 포함 `tokens --check: 통과`. 복사본·원본·복사 목록 밖 파일을 변조하면 `실패 (1건)`과 종료 코드 1이 나왔고, 되돌린 뒤 통과했다 | 작업 4.8 보고의 명령 출력 |
 | DESIGN.md 린트(선택) | 오류 0건, 경고·정보 수 기록 | 3.1 2단계 | 미실행 | 검증 기록의 출력 |
-| 제공 파일 표 | `dashboard_assets` 테스트 통과 | 3.2 1단계 | 통과. 2026-10-22 커밋 `df3b5b2`, Ubuntu 24.04(WSL2): `cargo test --test dashboard_assets` 시험 2개 통과. 같은 커밋의 Windows 전체 완료 검증도 이 시험을 포함해 통과했다 | 검증 기록의 테스트 출력 |
-| 브라우저 테스트 | 모든 테스트 페이지의 `data-result`가 `pass` | 3.3 1단계 | 통과. 작업 4.8(Windows): `cargo test --test dashboard_browser` 시험 2개 통과(2026-10-22 재실행, 19.19초). Chrome 155.0.8059.84. Ubuntu 24.04(WSL2), 커밋 `df3b5b2`: 시험 2개 통과(10.39초), Google Chrome 156.0.8078.47(`/usr/bin/google-chrome`) | 검증 기록의 테스트 출력과 브라우저 버전 |
-| 시나리오 보고서 | 자동 연결된 DASH 항목이 `통과` | 3.3 2단계 | 부분. 작업 4.9 뒤 WSL 보고서: dashboard.md 27건 중 통과 0, 부분 6, 미연결 21. 부분 6건은 DASH-014(4.9 이전 시험)와 4.9의 DASH-017·018·024·025·027(`tests/dashboard_browser.rs`의 `login_*_in_browser`)이다. Windows 결과는 4.2절 참고 | `<Cargo 대상 디렉터리>/scenario-report.md` |
-| 폭별 시각 대조 | 6개 폭에서 가로 스크롤 0건, 차이가 스펙·디자인 기준에 맞음 | 3.4 | 부분. 작업 4.8: 미리보기 6폭 × ko·en 12장(4.1절). 작업 4.9(2026-10-22): 로그인 화면 `/login/`을 6폭 × 7장으로 찍어 42장을 얻었다(`target/dashboard-shots/<폭>/{input-ko,invalid-ko,busy-ko,failed-ko,request-failed-ko,input-en,invalid-en}.png`). 6폭 모두 `scrollWidth`와 `clientWidth`가 같았고(320 포함), CSP 위반은 0건이었다. 콘솔 오류는 가로챈 401·500 응답의 "Failed to load resource"뿐이었다. 시안과의 차이는 4.2절. 사람 비교는 4.12에서 한다 |
+| 제공 파일 표 | `dashboard_assets` 테스트 통과 | 3.2 1단계 | 통과. 2026-10-22 커밋 `df3b5b2`, Ubuntu 24.04(WSL2): `cargo test --test dashboard_assets` 시험 2개 통과. 같은 커밋의 Windows 전체 완료 검증도 이 시험을 포함해 통과했다. 작업 4.9 재작업(4.3절): 시험 2개 통과(Windows) | 검증 기록의 테스트 출력 |
+| 브라우저 테스트 | 모든 테스트 페이지의 `data-result`가 `pass` | 3.3 1단계 | 통과. 작업 4.8(Windows): `cargo test --test dashboard_browser` 시험 2개 통과(2026-10-22 재실행, 19.19초). Chrome 155.0.8059.84. Ubuntu 24.04(WSL2), 커밋 `df3b5b2`: 시험 2개 통과(10.39초), Google Chrome 156.0.8078.47(`/usr/bin/google-chrome`). 작업 4.9 재작업(4.3절): 시험 7개 통과(Windows, 27.20초) | 검증 기록의 테스트 출력과 브라우저 버전 |
+| 시나리오 보고서 | 자동 연결된 DASH 항목이 `통과` | 3.3 2단계 | 부분. 작업 4.9 재작업(4.3절) 게이트 결과: 150건 중 WSL은 통과 18, 부분 35, 실패 0, 미실행 0, 미연결 97이다. Windows는 통과 17, 부분 35, 실패 0, 미실행 1, 미연결 97이다(미실행 1건은 OPS-007). 두 값 모두 4.2절 기준선(WSL 통과 16, Windows 통과 15)보다 통과가 2건 늘고 부분이 2건 줄었다. 어느 항목이 바뀌었는지는 확인하지 않았다. DASH 항목은 Windows 보고서 기준 27건 중 통과 0, 부분 6, 미연결 21이다. 부분 6건은 DASH-014(4.9 이전 시험)와 4.9의 DASH-017·018·024·025·027(`tests/dashboard_browser.rs`의 `login_*_in_browser`)이다 | `<Cargo 대상 디렉터리>/scenario-report.md` |
+| 폭별 시각 대조 | 6개 폭에서 가로 스크롤 0건, 차이가 스펙·디자인 기준에 맞음 | 3.4 | 부분. 작업 4.8: 미리보기 6폭 × ko·en 12장(4.1절). 작업 4.9(2026-10-22): 로그인 화면 `/login/`을 6폭 × 7장으로 찍어 42장을 얻었다(`target/dashboard-shots/<폭>/{input-ko,invalid-ko,busy-ko,failed-ko,request-failed-ko,input-en,invalid-en}.png`). 6폭 모두 `scrollWidth`와 `clientWidth`가 같았고(320 포함), CSP 위반은 0건이었다. 콘솔 오류는 가로챈 401·500 응답의 "Failed to load resource"뿐이었다. 시안과의 차이는 4.2절. 작업 4.9 재작업(4.3절)에서 같은 42장을 다시 찍었다. 6폭 모두 가로 스크롤 0건, CSP 위반 0건이었다. 4.9 기준선과는 42장 모두 바이트가 달랐다(화면을 구성 요소로 바꾼 결과). 사람 비교는 4.12에서 한다 |
 | 키보드 | 3.5의 4개 항목 통과 | 3.5 | 미실행 | 검토 기록 |
 | 스크린 리더 | 3.6의 항목 통과 | 3.6 | 미실행 | 검토 기록과 스크린 리더 이름·버전 |
 | 다른 브라우저·실기기 | 3.7 통과 또는 미실행 사유 기록 | 3.7 | 미실행 | 브라우저 버전과 검토 기록 |
@@ -224,6 +224,34 @@
   - 401, 500, 응답 없음 흐름의 시험은 가짜 응답으로 했다. 실제 서버 흐름은 스모크에서 401과 200만 확인했다.
   - 다른 브라우저와 실기기: 3.7에서 미실행이다.
   - 로그인 성공 뒤 404 JSON은 SCR-001이 없어서 생긴다. 작업 4.10 전까지 기대한 결과다.
+
+### 4.3 검토 기록 (작업 4.9 재작업, 2026-10-22)
+
+- 검토자: 에이전트 Login49(작업 위임: Main). 사람의 검토가 아니다. 사람 검토는 작업 4.12에서 한다.
+- 구현: 4.2절의 `aaca485` 위에서 로그인 화면을 구성 요소와 스타일 복사본으로 다시 만들었다. 복사본은 `cargo xtask tokens`가 쓰고, `tokens --check`가 원본과 같은지 확인한다. 이 기록은 구현과 같은 커밋에 들어간다. 커밋 해시는 `git log`로 확인한다.
+- 환경: Windows 10.0.26200 x64, Chrome 155.0.8059.84, Rust 1.99.1. 게이트 1은 WSL Ubuntu 24.04, 게이트 2는 위의 Windows 환경에서 실행했다.
+- 명령과 결과:
+  - `cargo xtask tokens` 뒤 `cargo xtask tokens --check`: `tokens --check: 통과`, 종료 코드 0.
+  - 변조 시험: 복사본(`web/dashboard/login/components/alert.js`)과 원본(`web/dashboard/app/components/alert.js`)에 줄을 더했고, 복사 목록에 없는 파일(`web/dashboard/login/components/stray.js`)을 만들었다. 셋 모두 `실패 (1건)`과 종료 코드 1이었다. 되돌린 뒤 셋 모두 `통과`였다.
+  - `cargo test --test dashboard_assets`: 시험 2개 통과.
+  - `cargo test --test dashboard_browser`: 시험 7개 통과(로그인 5개, 구성요소와 미리보기 2개), 27.20초.
+  - `cargo test -p vnc-relay-adapters --test management`: 시험 38개 통과. 시험 `static_paths_match_the_table_exactly`는 처음에 `/login/styles/base.css`의 404 기대값 때문에 실패했다. 이 경로는 이제 실제 파일이다. 시험 경로를 `/login/styles/missing.css`로 바꾸고 404 기대는 그대로 두었다.
+  - `vr-win.ps1 -Only check`: `ALL PASSED (check)`. 이 실행은 management 시험 수정 전에 돌았다. 수정 뒤 실행은 아래 게이트가 포함한다.
+  - 게이트 1(WSL, `vr-full.sh`): `ALL PASSED`, 종료 코드 0. `시나리오 150건: 통과 18, 부분 35, 실패 0, 미실행 0, 미연결 97. 오류 0건`.
+  - 게이트 2(Windows, `vr-win.ps1 -Only all`): `ALL PASSED (all)`, 종료 코드 0. `시나리오 150건: 통과 17, 부분 35, 실패 0, 미실행 1, 미연결 97. 오류 0건`. 미실행 1건은 OPS-007(`closes_and_logs_every_held_connection_when_stopping`)이다. 이 시험은 게이트 1(WSL)에서는 통과했고, 게이트 2의 Windows 실행 목록에는 없었다.
+- 폭별 화면: 6폭(1280·1024·1023·768·390·320) × 7장(ko 5장, en 2장), 42장을 `target/dashboard-shots/<폭>/`에 다시 찍었다. 모든 장에서 `scrollWidth`와 `clientWidth`가 같았고, CSP 위반은 0건이었다. `<html lang>`은 화면 언어와 같았다. 콘솔 오류는 가로챈 401·500의 `Failed to load resource`뿐이었다.
+- 기준선과 비교: 4.9 장(`target/dashboard-shots-baseline/`)과 42장 모두 바이트가 달랐다. 화면을 구성 요소와 스타일로 바꾼 결과다. 1280 ko 입력 화면과 320 ko 처리 중 화면을 눈으로 보았다. 알림, 입력 칸, 버튼 배치가 깨지지 않았다. 나머지 40장은 눈으로 보지 않았다(수치로만 확인).
+- 실제 서버 스모크: 디버그 빌드 `vnc-relay serve`, 임시 설정 `target/login-smoke/relay.toml`(관리 `127.0.0.1:18701`, 상태 `127.0.0.1:18702`, 중계 진입점 없음), 계정 `alice`. 해시는 Bun의 argon2id로 `m=19456,t=2,p=1`에 만들어 계정 파일에 넣었다. 계정 파일 형식은 [CLI 계약 1.3·1.4절](../contracts/cli-v1.md)을 따랐다.
+  - 처음 열기: CPY-075 알림, `<html lang>`=ko, 저장된 언어 없음.
+  - 잘못된 비밀번호: `POST /api/v1/session` 401. `failed` 알림(CPY-074), 비밀번호 칸 비움, 계정명 `alice` 유지, 포커스는 비밀번호 칸.
+  - 맞는 비밀번호: 200, `/`로 이동. 본문은 `not_found` JSON이다(SCR-001이 없어서 생긴다. 작업 4.10 전까지 기대 결과).
+  - 언어 `en`: 제목·버튼·`<html lang>`이 바뀌었다. 계정명 `alice`는 남았고, 저장 키 `vnc-relay.language`=en.
+  - 새로고침: `en` 유지, 계정명 비움.
+  - 서버 로그: `admin_login_failed`(`invalid_credentials`, `alice`)와 `admin_login_succeeded`(`alice`). 비밀번호 문자열은 없었다.
+  - 키 입력은 이 Chrome 창에 전달되지 않아 DOM 값 설정과 `input`·`change` 이벤트로 대신했다(4.2절과 같은 한계).
+  - 콘솔 오류: 401 한 건, 404 한 건. 404는 로그인 뒤 `/`의 JSON 404로 보이지만 URL은 확인하지 않았다(추정).
+- 구현 판단(사용자 결정 없음): 알림은 제목 한 줄짜리 알림 하나만 쓴다. 제목은 구성 요소 스타일대로 굵다. 로그인 요청 제한 시간은 10초다. 알림은 내용이 바뀔 때만 다시 만든다. 포커스 복원 장치는 두지 않는다. 입력 오류 표시는 `text-field.js`의 `setTextFieldError`를 쓴다.
+- 확인하지 못한 것: 키보드·스크린 리더·다른 브라우저·실기기(3.5~3.7 미실행). 시안과의 사람 비교(4.12). 새로고침 뒤 계정명 복원과 제한 시간 10초는 열린 질문이다(4.2절).
 
 ## 5. 중단 조건
 

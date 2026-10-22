@@ -815,7 +815,7 @@ async fn static_paths_match_the_table_exactly() {
     for path in [
         "/login/TOKENS.CSS",
         "/login/tokens.css/",
-        "/login/styles/base.css",
+        "/login/styles/missing.css",
     ] {
         let reply = plain_exchange(running.addr, &get(path, &[])).await;
         assert_eq!(reply.status, 404, "GET {path}");

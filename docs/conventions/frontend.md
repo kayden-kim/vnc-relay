@@ -47,8 +47,12 @@
 web/dashboard/
 ├── login/            인증 없이 제공한다 (SCR-003, 로그인 화면)
 │   ├── index.html    제공 경로 /login/
+│   ├── main.js
 │   ├── login.js
+│   ├── language.js
 │   ├── login.css
+│   ├── components/   app/components/의 복사본(로그인이 쓰는 것). 생성 산출물. 직접 고치지 않는다
+│   ├── styles/       app/styles/의 base.css·components.css 복사본. 생성 산출물. 직접 고치지 않는다
 │   └── tokens.css    생성 산출물. 직접 고치지 않는다
 ├── app/              관리 세션이 있어야 제공한다 (SCR-001·SCR-002)
 │   ├── index.html    제공 경로 /  (이 문서의 기본값, 사용자 결정 아님: /app/index.html은 제공하지 않는다)
@@ -71,7 +75,7 @@ web/dashboard/
 
 - 제공 표에 없는 파일은 제공하지 않는다. `preview/`와 `tests/`는 제공 표에 넣지 않는다.
 - `login/`에는 운영 데이터, 계정 정보, 설정 값을 넣지 않는다([계약 1.11절](../contracts/management-api-v1.md)).
-- `login/`과 `app/`은 파일을 공유하지 않는다. 로그인 화면은 세션이 없으므로 `/app/` 파일을 받을 수 없다. 같은 내용이 두 곳에 필요하면 생성 도구가 두 곳에 같은 내용으로 쓰고, 대조 명령이 두 파일의 같음을 확인한다.
+- `login/`과 `app/`은 파일을 공유하지 않는다. 로그인 화면은 세션이 없으므로 `/app/` 파일을 받을 수 없다. 같은 내용이 두 곳에 필요하면 생성 도구가 두 곳에 같은 내용으로 쓰고, 대조 명령이 두 파일의 같음을 확인한다. 로그인 화면이 쓰는 공통 컴포넌트와 스타일도 같은 방식이다(2.3절).
 - 파일 이름은 소문자와 하이픈(kebab-case)으로 쓴다. 허용 확장자는 `.html`, `.css`, `.js`다. 다른 형식이 필요하면 이 절을 먼저 고친다.
 
 ### 1.2 실행 파일 내장
@@ -144,6 +148,16 @@ web/dashboard/
 - 길이 리터럴(`px`, `em`, `rem`). 미디어 쿼리 조건에서만 쓴다. 조건의 값은 DESIGN.md 중단점 절을 따른다.
 - `font-weight`에 토큰 변수나 `inherit`이 아닌 값
 - 정의되지 않은 `var(--…)`
+
+### 2.3 로그인 화면의 공통 복사본
+
+로그인 화면은 `app/`의 공통 컴포넌트와 스타일을 복사해 쓴다. 복사본은 손으로 만들지 않는다. 복사 방식과 복사 목록은 구현 판단이다(사용자 결정 없음).
+
+- 복사 목록은 `xtask/src/tokens/shared.rs`의 `SHARED_FILES`다. 현재 목록은 `components/icons.js`, `components/alert.js`, `components/button.js`, `components/text-field.js`, `components/language-select.js`, `styles/base.css`, `styles/components.css`다.
+- `cargo xtask tokens`가 `app/`의 원본을 `login/components/`와 `login/styles/`에 같은 내용으로 쓴다. 첫 줄 주석은 "생성 파일이다. 직접 고치지 않는다. 원본: <경로>"다. CSS는 `/* … */`, JavaScript는 `// …` 형식이다.
+- `cargo xtask tokens --check`는 복사본마다 생성 결과와 실제 파일을 비교한다. 다르면 차이를 알린다. 없거나 읽을 수 없으면 파일 경로와 함께 오류로 멈춘다. 복사 목록에 없는 파일이 `login/components/`나 `login/styles/`에 있으면 차이로 집계한다.
+- 복사본도 화면 CSS 검사(2.2절)와 제공 표 대조(1.2절)의 대상이다. 복사본은 원본과 같으므로 두 검사를 그대로 통과한다.
+- 원본을 고치면 `cargo xtask tokens`로 복사본을 다시 쓴다. 로그인 화면에만 다른 모양이 필요하면 복사본을 고치지 않고, 원본 컴포넌트에 옵션을 추가한 뒤 [xtask 모듈 설계](../architectures/xtask.md)와 컴포넌트 모듈 설계에 적는다.
 
 ## 3. 컴포넌트와 콘텐츠
 

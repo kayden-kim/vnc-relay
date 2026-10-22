@@ -1,74 +1,16 @@
 <!doctype html>
 <html lang="ko">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>VNC Relay 관리자 로그인</title>
-  <link rel="stylesheet" href="./tokens.css">
-  <link rel="stylesheet" href="./login.css">
-</head>
-<body>
-  <div id="login-root" class="login-page">
-    <div class="login-top">
-      <div class="login-language">
-        <svg class="icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.25"/><path d="M1.75 8h12.5"/><path d="M8 1.75c1.8 1.7 2.7 3.8 2.7 6.25S9.8 12.55 8 14.25C6.2 12.55 5.3 10.45 5.3 8S6.2 3.45 8 1.75z"/></svg>
-        <label class="sr-only" for="login-language">언어 (Language)</label>
-        <select id="login-language" class="login-language-control" data-role="language">
-          <option value="ko" lang="ko">한국어</option>
-          <option value="en" lang="en">English</option>
-        </select>
-        <svg class="icon icon-sm" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4.5 6.25 8 9.75l3.5-3.5"/></svg>
-      </div>
-    </div>
-    <main class="login-main">
-      <div class="login-brand">
-        <span class="login-mark">
-          <svg class="icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.75 5.5h9.5"/><path d="M9.75 3l2.5 2.5-2.5 2.5"/><path d="M13.25 10.5h-9.5"/><path d="M6.25 8l-2.5 2.5 2.5 2.5"/></svg>
-        </span>
-        <span class="login-brand-text">VNC Relay</span>
-      </div>
-      <section class="login-card" aria-labelledby="login-title">
-        <h1 id="login-title" class="login-title" data-text="title">VNC Relay 관리자 로그인</h1>
-        <div class="login-notices" aria-live="polite">
-          <div class="login-notice login-notice-neutral" data-notice="required" hidden>
-            <svg class="icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.25"/><path d="M8 5v3.5M8 10.9h.01"/></svg>
-            <p class="login-notice-text" data-text="required">로그인이 필요합니다. 다시 로그인하십시오.</p>
-          </div>
-          <div class="login-notice login-notice-info" data-notice="checking" hidden>
-            <svg class="icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.25"/><path d="M8 4.75V8l2.25 1.5"/></svg>
-            <p class="login-notice-text" data-text="checking">로그인을 확인하는 중입니다.</p>
-          </div>
-          <div class="login-notice login-notice-destructive" data-notice="failed" hidden>
-            <svg class="icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 2.25l6.25 11H1.75z"/><path d="M8 6.5v3M8 11.25h.01"/></svg>
-            <p class="login-notice-text" data-text="failed">로그인할 수 없습니다. 계정명과 비밀번호를 확인한 뒤 다시 시도하십시오.</p>
-          </div>
-          <div class="login-notice login-notice-destructive" data-notice="request-failed" hidden>
-            <svg class="icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 2.25l6.25 11H1.75z"/><path d="M8 6.5v3M8 11.25h.01"/></svg>
-            <p class="login-notice-text" data-text="requestFailed">로그인 요청을 처리하지 못했습니다. 잠시 뒤 다시 시도하십시오.</p>
-          </div>
-        </div>
-        <form class="login-form" novalidate>
-          <div class="login-field">
-            <label class="login-label" for="login-account" data-text="accountLabel">계정명</label>
-            <input id="login-account" class="login-input" name="account" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" required aria-invalid="false" aria-describedby="login-account-error" data-role="account">
-            <p id="login-account-error" class="login-field-error" data-field-error="account" hidden>
-              <svg class="icon icon-sm" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.25"/><path d="M8 5v3.5M8 10.9h.01"/></svg>
-              <span data-text="accountRequired">계정명을 입력하십시오.</span>
-            </p>
-          </div>
-          <div class="login-field">
-            <label class="login-label" for="login-password" data-text="passwordLabel">비밀번호</label>
-            <input id="login-password" class="login-input" name="password" type="password" autocomplete="current-password" required aria-invalid="false" aria-describedby="login-password-error" data-role="password">
-            <p id="login-password-error" class="login-field-error" data-field-error="password" hidden>
-              <svg class="icon icon-sm" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.25"/><path d="M8 5v3.5M8 10.9h.01"/></svg>
-              <span data-text="passwordRequired">비밀번호를 입력하십시오.</span>
-            </p>
-          </div>
-          <button type="submit" class="login-submit" data-role="submit">로그인</button>
-        </form>
-      </section>
-    </main>
-  </div>
-  <script type="module" src="./main.js"></script>
-</body>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>VNC Relay 관리자 로그인</title>
+    <link rel="stylesheet" href="./tokens.css" />
+    <link rel="stylesheet" href="./styles/base.css" />
+    <link rel="stylesheet" href="./styles/components.css" />
+    <link rel="stylesheet" href="./login.css" />
+  </head>
+  <body>
+    <div id="login-root" class="login-page"></div>
+    <script type="module" src="./main.js"></script>
+  </body>
 </html>
