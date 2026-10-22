@@ -184,12 +184,14 @@
   overflow-wrap: anywhere;
 }
 
-.fact-address {
+.fact-address,
+.session-id {
   font-family: var(--type-data-family);
   font-size: var(--type-data-size);
   font-weight: var(--type-data-weight);
   line-height: var(--type-data-line);
   font-feature-settings: var(--type-data-feature);
+  overflow-wrap: anywhere;
 }
 
 .direction-mark {

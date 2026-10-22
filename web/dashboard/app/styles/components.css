@@ -234,6 +234,11 @@
   line-height: var(--type-body-strong-line);
 }
 
+.alert > .button {
+  flex: none;
+  align-self: center;
+}
+
 .alert-tone-success {
   background: var(--color-success-bg);
   border-color: var(--color-success-border);

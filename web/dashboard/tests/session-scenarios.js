@@ -107,6 +107,9 @@ function mount(api, id = SESSION_ID) {
 const titleOf = (root) => root.querySelector('.page-title')?.textContent.trim() ?? null;
 const noticeOf = (root) => root.querySelector('.session-notice .alert-title')?.textContent.trim() ?? null;
 const terminateOf = (root) => root.querySelector('#session-terminate');
+const refreshOf = (root) => root.querySelector('#session-refresh');
+const noticeActionOf = (root) => root.querySelector('.session-notice .alert > .button');
+const labelOf = (node) => node?.querySelector('.button-label')?.textContent.trim() ?? null;
 const enabled = (root) => terminateOf(root) !== null && !terminateOf(root).disabled;
 const dialogOf = (root) => root.querySelector('dialog.dialog');
 const confirmOf = (root) => dialogOf(root)?.querySelector('.dialog-actions button:last-child');
@@ -139,6 +142,11 @@ async function caseDash006() {
     'DASH-006: document title is the brand and the session title',
     document.title === `${BRAND_NAME} ${t.sessionTitle.replace('{session_id}', SESSION_ID)}`,
   );
+  check(
+    'DASH-006: session id sits in its own data span',
+    root.querySelector('.page-title .session-id')?.textContent === SESSION_ID,
+  );
+  check('DASH-006: header refresh uses CPY-008', labelOf(refreshOf(root)) === t.refresh);
   check('DASH-006: five fact rows, no state row', root.querySelectorAll('.fact').length === 5);
   check('DASH-006: mode label', factValue(root, t.modeLabel) === formatMode('mode1'));
   check('DASH-006: transport label', factValue(root, t.transportLabel) === formatTransport('wss'));
@@ -263,9 +271,10 @@ async function caseDash011() {
 }
 
 // DASH-012: a failed terminate is not treated as complete. The state is re-read and the action is available again.
+// The notice's re-check action runs the same read and keeps focus. A rejected terminate (403) is checked after it.
 async function caseDash012() {
   const api = fakeApi({ [TERMINATE]: () => fail(500, 'terminate_failed') });
-  const { root } = mount(api);
+  const { root, handle } = mount(api);
   await waitFor(() => enabled(root));
   terminateOf(root).click();
   confirmOf(root).click();
@@ -275,6 +284,30 @@ async function caseDash012() {
   check('DASH-012: state re-read after failure', api.count(DETAIL) === 2);
   check('DASH-012: session still shown', factValue(root, t.modeLabel) === formatMode('mode1'));
   check('DASH-012: action available again', enabled(root));
+  check('DASH-012: failed notice offers the re-check action', labelOf(noticeActionOf(root)) === t.recheck);
+  const action = noticeActionOf(root);
+  action.focus();
+  action.click();
+  await waitFor(() => api.count(DETAIL) === 3 && enabled(root));
+  check('DASH-012: re-check action reads the state', api.count(DETAIL) === 3);
+  check('DASH-012: focus stays on the re-check action', document.activeElement === action);
+  check('DASH-012: re-check sends no terminate', api.count(TERMINATE) === 1);
+  checkLayout('DASH-012');
+  handle.dispose();
+  await rejectedNotice();
+}
+
+// DASH-012 (rejected): a 403 terminate is not complete either. The notice names the rejection and offers the re-check action.
+async function rejectedNotice() {
+  const api = fakeApi({ [TERMINATE]: () => fail(403, 'forbidden') });
+  const { root } = mount(api);
+  await waitFor(() => enabled(root));
+  terminateOf(root).click();
+  confirmOf(root).click();
+  await waitFor(() => api.count(DETAIL) === 2 && enabled(root));
+  check('DASH-012: rejected shows the rejected notice', noticeOf(root) === t.terminateRejected);
+  check('DASH-012: rejected offers the re-check action', labelOf(noticeActionOf(root)) === t.recheck);
+  check('DASH-012: rejected sends terminate once', api.count(TERMINATE) === 1);
   checkLayout('DASH-012');
 }
 
@@ -292,6 +325,7 @@ async function caseDash013() {
   await waitFor(() => api.count(DETAIL) === 2 && enabled(root));
   await wait(200);
   check('DASH-013: unknown shows the unknown notice', noticeOf(root) === t.terminateUnknown);
+  check('DASH-013: unknown offers the re-check action', labelOf(noticeActionOf(root)) === t.recheck);
   check('DASH-013: terminate not resent', api.count(TERMINATE) === 1);
   check('DASH-013: state read after unknown', api.count(DETAIL) === 2);
   checkLayout('DASH-013');
@@ -310,6 +344,67 @@ async function caseDash026() {
   checkLayout('DASH-026');
 }
 
+// Capture-only cases: each one sets up a single screen state for the screenshot run and then ends. They make no DASH claim.
+const alertTitlesOf = (root) => [...root.querySelectorAll('.alert-title')].map((node) => node.textContent.trim());
+
+async function shotDialog() {
+  const { root } = mount(fakeApi());
+  await waitFor(() => enabled(root));
+  terminateOf(root).click();
+  await waitFor(() => dialogOf(root)?.open === true);
+}
+
+async function shotRefreshing() {
+  const api = fakeApi({ [DETAIL]: (n) => (n === 1 ? ok({ as_of: AS_OF, session: activeSession() }) : new Promise(() => {})) });
+  const { root } = mount(api);
+  await waitFor(() => enabled(root));
+  root.querySelector('#session-refresh').click();
+  await waitFor(() => root.textContent.includes(t.refreshing));
+}
+
+async function shotQueryFailed() {
+  const { root } = mount(fakeApi({ [DETAIL]: () => fail(500, 'internal_error') }));
+  await waitFor(() => alertTitlesOf(root).includes(t.failed));
+}
+
+async function shotStaleFailed() {
+  const api = fakeApi({ [DETAIL]: (n) => (n === 1 ? ok({ as_of: AS_OF, session: activeSession() }) : fail(500, 'internal_error')) });
+  const { root } = mount(api);
+  await waitFor(() => enabled(root));
+  root.querySelector('#session-refresh').click();
+  await waitFor(() => alertTitlesOf(root).includes(t.failed));
+  check('shot-stale-failed: terminate disabled while the query has failed', !enabled(root));
+}
+
+async function shotTerminating() {
+  const { root } = mount(fakeApi({ [TERMINATE]: () => new Promise(() => {}) }));
+  await waitFor(() => enabled(root));
+  terminateOf(root).click();
+  confirmOf(root).click();
+  await waitFor(() => root.textContent.includes(t.terminating));
+}
+
+async function shotOutcome(route, message) {
+  const api = fakeApi({ [TERMINATE]: route });
+  const { root } = mount(api);
+  await waitFor(() => enabled(root));
+  terminateOf(root).click();
+  confirmOf(root).click();
+  await waitFor(() => noticeOf(root) === message && enabled(root));
+}
+
+const shotFailed = () => shotOutcome(() => fail(500, 'terminate_failed'), t.terminateFailed);
+const shotRejected = () => shotOutcome(() => fail(403, 'forbidden'), t.terminateRejected);
+const shotUnknown = () =>
+  shotOutcome(() => {
+    throw new TypeError('connection lost');
+  }, t.terminateUnknown);
+
+async function shotGone() {
+  const { root } = mount(fakeApi({ [DETAIL]: () => fail(404, 'not_found') }));
+  await waitFor(() => noticeOf(root) === t.notFound);
+}
+
 const CASES = {
   'dash-006': caseDash006,
   'dash-007': caseDash007,
@@ -320,6 +415,15 @@ const CASES = {
   'dash-013': caseDash013,
   'dash-014': caseDash014,
   'dash-026': caseDash026,
+  'shot-dialog': shotDialog,
+  'shot-refreshing': shotRefreshing,
+  'shot-query-failed': shotQueryFailed,
+  'shot-stale-failed': shotStaleFailed,
+  'shot-terminating': shotTerminating,
+  'shot-failed': shotFailed,
+  'shot-unknown': shotUnknown,
+  'shot-rejected': shotRejected,
+  'shot-gone': shotGone,
 };
 
 const caseName = new URLSearchParams(location.search).get('case');

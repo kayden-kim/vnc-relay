@@ -1,5 +1,5 @@
 // Generated file. Do not edit. Source: web/dashboard/app/components/alert.js
-// Alert: inline status message with a tone, an icon, a title, and optional text.
+// Alert: inline status message with a tone, an icon, a title, optional text, and an optional action.
 import { icon } from './icons.js';
 
 const TONES = ['success', 'info', 'warning', 'destructive', 'neutral'];
@@ -21,10 +21,10 @@ function element(tag, className, text) {
 }
 
 /**
- * @param {{tone?: string, title: string, message?: string}} options
+ * @param {{tone?: string, title: string, message?: string, action?: HTMLElement}} options
  * @returns {HTMLDivElement}
  */
-export function createAlert({ tone = 'neutral', title, message } = {}) {
+export function createAlert({ tone = 'neutral', title, message, action } = {}) {
   if (!TONES.includes(tone)) {
     throw new TypeError(`unknown tone: ${String(tone)}`);
   }
@@ -43,5 +43,6 @@ export function createAlert({ tone = 'neutral', title, message } = {}) {
   if (message) body.append(element('p', 'alert-message', message));
 
   root.append(icon(ICONS[tone]), body);
+  if (action) root.append(action);
   return root;
 }

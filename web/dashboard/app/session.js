@@ -59,14 +59,27 @@ export function mountSession(root, id, deps = {}) {
     return COPY[state.lang];
   }
 
-  // Screen title: the session id, or the invalid-id title when the id was rejected.
-  function sessionHeading(t) {
+  // Screen title as plain text, used for the document title.
+  function sessionTitle(t) {
     return state.invalid ? t.sessionScreen : fill(t.sessionTitle, { session_id: state.id });
+  }
+
+  // Heading nodes. Only the session id sits in the data-style span; the invalid-id title stays plain text.
+  function headingNodes(t) {
+    if (state.invalid) {
+      return [document.createTextNode(t.sessionScreen)];
+    }
+    const [before, after] = t.sessionTitle.split('{session_id}');
+    return [
+      document.createTextNode(before),
+      el('span', 'session-id', state.id),
+      document.createTextNode(after),
+    ];
   }
 
   function applyDocumentLanguage() {
     document.documentElement.lang = state.lang;
-    document.title = `${BRAND_NAME} ${sessionHeading(copy())}`;
+    document.title = `${BRAND_NAME} ${sessionTitle(copy())}`;
   }
 
   function buildPage() {
@@ -85,9 +98,13 @@ export function mountSession(root, id, deps = {}) {
     back.href = '/';
     back.append(icon('back'), el('span', 'button-label', t.back));
 
-    const refresh = createButton({ variant: 'outline', label: t.recheck, icon: 'refresh' });
+    const refresh = createButton({ variant: 'outline', label: t.refresh, icon: 'refresh' });
     refresh.id = 'session-refresh';
     refresh.addEventListener('click', onRefresh);
+
+    // Re-check action in the failed, unknown, and rejected notices (CPY-014). It runs the same refresh.
+    const recheck = createButton({ variant: 'outline', label: t.recheck, icon: 'refresh' });
+    recheck.addEventListener('click', onRefresh);
 
     const terminate = createButton({ variant: 'destructive', label: t.terminate, icon: 'cancel' });
     terminate.id = 'session-terminate';
@@ -121,12 +138,14 @@ export function mountSession(root, id, deps = {}) {
       logout,
       back,
       refresh,
+      recheck,
       terminate,
       dialog,
       heading: header.heading,
       meta: header.meta,
       actions: header.actions,
       notice,
+      noticeKind: null,
       grid,
       infoNode: info.node,
       info: info.slots,
@@ -140,7 +159,7 @@ export function mountSession(root, id, deps = {}) {
   }
 
   function canTerminate() {
-    return canPoll() && !state.logoutBusy && !query.inFlight && query.data !== null;
+    return canPoll() && !state.logoutBusy && !query.inFlight && !query.failed && query.data !== null;
   }
 
   function schedule() {
@@ -405,23 +424,44 @@ export function mountSession(root, id, deps = {}) {
     page = null;
   }
 
-  function noticeAlert(t) {
+  // The notice kind for the state: an invalid id, a gone session, or the terminate outcome. Null shows no notice.
+  function noticeKind() {
     if (state.invalid) {
-      return createAlert({ tone: 'warning', title: t.invalidSessionId });
+      return 'invalid';
     }
     if (state.gone) {
-      return createAlert({ tone: 'neutral', title: t.notFound });
+      return 'gone';
     }
-    if (state.outcome === 'failed') {
-      return createAlert({ tone: 'destructive', title: t.terminateFailed });
+    return state.outcome;
+  }
+
+  // Alert for a notice kind. Failed, unknown, and rejected carry the re-check action (CPY-014).
+  function noticeAlert(kind, t) {
+    switch (kind) {
+      case 'invalid':
+        return createAlert({ tone: 'warning', title: t.invalidSessionId });
+      case 'gone':
+        return createAlert({ tone: 'neutral', title: t.notFound });
+      case 'failed':
+        return createAlert({ tone: 'destructive', title: t.terminateFailed, action: page.recheck });
+      case 'unknown':
+        return createAlert({ tone: 'warning', title: t.terminateUnknown, action: page.recheck });
+      case 'rejected':
+        return createAlert({ tone: 'warning', title: t.terminateRejected, action: page.recheck });
+      default:
+        return null;
     }
-    if (state.outcome === 'unknown') {
-      return createAlert({ tone: 'warning', title: t.terminateUnknown });
+  }
+
+  // Rebuilds the notice only when its kind changes. The alert and its re-check button stay in place across refreshes, so focus is kept.
+  function renderNotice(t) {
+    const kind = noticeKind();
+    if (kind !== page.noticeKind) {
+      page.noticeKind = kind;
+      const alert = noticeAlert(kind, t);
+      page.notice.replaceChildren(...(alert ? [alert] : []));
     }
-    if (state.outcome === 'rejected') {
-      return createAlert({ tone: 'warning', title: t.terminateRejected });
-    }
-    return null;
+    page.recheck.disabled = state.busy || state.logoutBusy;
   }
 
   // Facts of the session as a label and value list. Mode and transport are neutral badges. Addresses use the data style.
@@ -487,13 +527,12 @@ export function mountSession(root, id, deps = {}) {
     const showInfo = !state.invalid;
     const showTransfer = showInfo && !state.gone;
 
-    page.heading.textContent = sessionHeading(t);
+    page.heading.replaceChildren(...headingNodes(t));
     page.meta.textContent = fill(t.lastSuccess, {
       time: query.lastSuccessAt === null ? t.unavailable : formatTime(query.lastSuccessAt),
     });
 
-    const alert = noticeAlert(t);
-    page.notice.replaceChildren(...(alert ? [alert] : []));
+    renderNotice(t);
 
     if (showInfo) {
       // Gone has no badge or alert. The notice above the grid carries that state.
