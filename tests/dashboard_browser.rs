@@ -16,6 +16,7 @@ use std::net::{TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Condvar, Mutex, PoisonError};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -24,6 +25,9 @@ const CSP: &str = "default-src 'self'; frame-ancestors 'none'";
 const WIDTHS: [u32; 6] = [1280, 1024, 1023, 768, 390, 320];
 const LANGS: [&str; 2] = ["ko", "en"];
 const RUN_LIMIT: Duration = Duration::from_secs(60);
+/// Browsers that run at once. Each run's `RUN_LIMIT` clock includes Chromium's
+/// startup, which slows past the limit when every test starts its own browser.
+const MAX_BROWSERS: usize = 4;
 const IO_TIMEOUT: Duration = Duration::from_secs(5);
 const MAX_HEAD: usize = 8 * 1024;
 
@@ -374,6 +378,31 @@ fn dump_dom(browser: &Path, url: &str, width: u32) -> Result<String, String> {
     result
 }
 
+static BROWSERS_RUNNING: Mutex<usize> = Mutex::new(0);
+static BROWSER_EXITED: Condvar = Condvar::new();
+
+/// One of the `MAX_BROWSERS` slots, held until the browser has exited.
+struct BrowserSlot;
+
+impl BrowserSlot {
+    /// Waits until a slot is free, then takes it.
+    fn acquire() -> Self {
+        let mut running = BROWSERS_RUNNING.lock().unwrap_or_else(PoisonError::into_inner);
+        while *running >= MAX_BROWSERS {
+            running = BROWSER_EXITED.wait(running).unwrap_or_else(PoisonError::into_inner);
+        }
+        *running += 1;
+        BrowserSlot
+    }
+}
+
+impl Drop for BrowserSlot {
+    fn drop(&mut self) {
+        *BROWSERS_RUNNING.lock().unwrap_or_else(PoisonError::into_inner) -= 1;
+        BROWSER_EXITED.notify_one();
+    }
+}
+
 /// Starts the browser and waits up to `RUN_LIMIT`. The DOM goes to a file, not a
 /// pipe, so a full pipe cannot block the wait loop.
 fn run_chromium(
@@ -383,6 +412,7 @@ fn run_chromium(
     dir: &Path,
     dom_path: &Path,
 ) -> Result<String, String> {
+    let _slot = BrowserSlot::acquire();
     let dom_file = File::create(dom_path)
         .map_err(|error| format!("cannot create {}: {error}", dom_path.display()))?;
     let mut child = Command::new(browser)

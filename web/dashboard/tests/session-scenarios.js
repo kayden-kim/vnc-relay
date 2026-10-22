@@ -29,9 +29,10 @@ const TIME_ONLY = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} \S+$/;
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const delayed = (ms, response) => new Promise((resolve) => setTimeout(() => resolve(response), ms));
 // Waits until `ready()` holds or `ms` passes; the caller's check then reports the outcome either way.
+// Each step is one 20 ms timer, so the bound is page time. A wall-clock bound expired early when the
+// browser run was slowed by load, before the page's own poll timer had fired.
 async function waitFor(ready, ms = 5000) {
-  const until = Date.now() + ms;
-  while (!ready() && Date.now() < until) await wait(20);
+  for (let steps = Math.ceil(ms / 20); steps > 0 && !ready(); steps -= 1) await wait(20);
 }
 const check = (label, passed) => {
   if (!passed) failures.push(label);
