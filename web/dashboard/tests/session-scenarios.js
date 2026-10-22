@@ -2,7 +2,7 @@
 // One page load runs one case, ?case=dash-0xx&lang=ko|en, against a fake management API.
 // The result goes to <main id="result">. Wording comes from app/copy.js, which holds the spec §9.3 CPY table.
 import { mountSession } from '../app/session.js';
-import { COPY } from '../app/copy.js';
+import { BRAND_NAME, COPY } from '../app/copy.js';
 import { formatAddress, formatMode, formatTransport } from '../app/format.js';
 
 const host = document.getElementById('host');
@@ -117,6 +117,13 @@ const statValue = (root, label) => {
   return stat?.querySelector('.stat-value')?.textContent.trim() ?? null;
 };
 
+const factValue = (root, label) => {
+  const row = [...root.querySelectorAll('.fact')].find(
+    (node) => node.querySelector('.fact-label')?.textContent.trim() === label,
+  );
+  return row?.querySelector('.fact-value')?.textContent.trim() ?? null;
+};
+
 function checkLayout(label) {
   const page = document.documentElement;
   check(`${label}: no horizontal scroll`, page.scrollWidth <= page.clientWidth);
@@ -128,20 +135,28 @@ async function caseDash006() {
   const { root } = mount(api);
   await waitFor(() => enabled(root));
   check('DASH-006: title shows the session id', titleOf(root) === t.sessionTitle.replace('{session_id}', SESSION_ID));
-  check('DASH-006: state shown as received', statValue(root, t.stateLabel) === 'active');
-  check('DASH-006: mode label', statValue(root, t.modeLabel) === formatMode('mode1'));
-  check('DASH-006: transport label', statValue(root, t.transportLabel) === formatTransport('wss'));
-  check('DASH-006: started time', TIME_IN.test(statValue(root, t.startedLabel) ?? ''));
+  check(
+    'DASH-006: document title is the brand and the session title',
+    document.title === `${BRAND_NAME} ${t.sessionTitle.replace('{session_id}', SESSION_ID)}`,
+  );
+  check('DASH-006: five fact rows, no state row', root.querySelectorAll('.fact').length === 5);
+  check('DASH-006: mode label', factValue(root, t.modeLabel) === formatMode('mode1'));
+  check('DASH-006: transport label', factValue(root, t.transportLabel) === formatTransport('wss'));
+  check('DASH-006: started time', TIME_IN.test(factValue(root, t.startedLabel) ?? ''));
   check(
     'DASH-006: viewer address',
-    statValue(root, t.viewerAddressLabel) === formatAddress({ ip: '192.0.2.10', port: 51000 }),
+    factValue(root, t.viewerAddressLabel) === formatAddress({ ip: '192.0.2.10', port: 51000 }),
   );
   check(
     'DASH-006: target address',
-    statValue(root, t.targetAddressLabel) === formatAddress({ ip: '198.51.100.5', port: 5900 }),
+    factValue(root, t.targetAddressLabel) === formatAddress({ ip: '198.51.100.5', port: 5900 }),
   );
   check('DASH-006: viewer to target bytes in KiB', statValue(root, t.directionViewerToTarget) === '1.5 KiB');
   check('DASH-006: target to viewer bytes in MiB', statValue(root, t.directionTargetToViewer) === '1.0 MiB');
+  check(
+    'DASH-006: terminate sits in the info card footer',
+    terminateOf(root)?.parentElement?.classList.contains('card-foot') === true,
+  );
   check('DASH-006: no notice on a live session', noticeOf(root) === null);
   check('DASH-006: one detail read on load', api.count(DETAIL) === 1);
   checkLayout('DASH-006');
@@ -156,7 +171,7 @@ async function caseDash009() {
   terminateOf(root).click();
   await wait(50);
   check('DASH-009: confirm dialog opens', dialogOf(root)?.open === true);
-  // DASH-015: Tab and Shift+Tab stay between the two dialog actions. The keydown is synthetic; the real keyboard path was checked in the browser.
+  // DASH-015: Tab and Shift+Tab stay between the two dialog actions. The keydown is synthetic, so this checks the trap handler only; real key presses were checked by hand in a browser, not in this harness.
   confirmOf(root).focus();
   confirmOf(root).dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));
   check('DASH-015: Tab wraps from confirm to cancel', document.activeElement === cancelOf(root));
@@ -198,7 +213,10 @@ async function caseDash007() {
   const loaded = mount(loadApi);
   await waitFor(() => noticeOf(loaded.root) === t.notFound);
   check('DASH-007: gone before read shows not-found', noticeOf(loaded.root) === t.notFound);
-  check('DASH-007: gone before read hides the facts', loaded.root.querySelector('.summary-grid') === null);
+  check(
+    'DASH-007: gone before read hides the facts and bytes',
+    loaded.root.querySelector('.fact-list') === null && loaded.root.querySelector('.stat') === null,
+  );
   check('DASH-007: gone before read keeps terminate off', !enabled(loaded.root));
   check('DASH-007: list link kept', backOf(loaded.root)?.getAttribute('href') === '/');
   loaded.handle.dispose();
@@ -224,7 +242,8 @@ async function caseDash014() {
   await waitFor(() => navigations.length > 0);
   check('DASH-014: sent to sign-in', JSON.stringify(navigations) === JSON.stringify(['/login/']));
   check('DASH-014: only the session check was sent', api.calls.every((c) => c.key === 'GET /api/v1/session'));
-  check('DASH-014: no operational data shown', root.querySelector('.summary-grid') === null);
+  check('DASH-014: no operational data shown', root.querySelector('.fact-list') === null);
+  check('DASH-014: no bytes shown', root.querySelector('.stat') === null);
   check('DASH-014: no terminate action', !enabled(root));
   checkLayout('DASH-014');
 }
@@ -254,7 +273,7 @@ async function caseDash012() {
   check('DASH-012: failure shows the failed notice', noticeOf(root) === t.terminateFailed);
   check('DASH-012: terminate sent once', api.count(TERMINATE) === 1);
   check('DASH-012: state re-read after failure', api.count(DETAIL) === 2);
-  check('DASH-012: session still shown', statValue(root, t.stateLabel) === 'active');
+  check('DASH-012: session still shown', factValue(root, t.modeLabel) === formatMode('mode1'));
   check('DASH-012: action available again', enabled(root));
   checkLayout('DASH-012');
 }

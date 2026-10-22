@@ -194,6 +194,7 @@ fn session_gone_before_or_during_refresh_shows_not_found_in_browser() {
 }
 
 /// spec: dashboard.md:DASH-009 partial
+/// spec: dashboard.md:DASH-015 partial
 #[test]
 fn session_cancel_sends_no_request_and_restores_focus_in_browser() {
     check_localized_case("/tests/session.html", "dash-009");
