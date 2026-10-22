@@ -647,13 +647,14 @@ async function caseDash020() {
   checkLayout('DASH-020');
 }
 
-// DASH-021: a known zero is shown as 0; an unknown value is shown as unavailable, never as 0.
+// DASH-021: unknown state strings stay verbatim; known zero and unavailable usage stay distinct.
 async function caseDash021() {
   const { root } = await mount(
     fakeApi({
       'GET /api/v1/summary': () =>
         ok(
           summaryBody({
+            server: { state: 'maintenance', uptime_ms: 90061000 },
             counts: { waiting: 1, active: 1, handshaking: 2, target_connecting: 3 },
             usage: {
               relay_connections: { current: 0, limit: 100 },
@@ -664,6 +665,9 @@ async function caseDash021() {
     }),
   );
   await waitFor(() => settled(root));
+  check('DASH-021: unknown server state shown verbatim', statValue(root, t.serverState) === 'maintenance');
+  const serverStat = [...root.querySelectorAll('.stat')].find((node) => node.textContent.includes(t.serverState));
+  check('DASH-021: unknown server state uses a neutral badge', serverStat?.querySelector('.badge[data-tone="neutral"]')?.textContent.trim() === 'maintenance');
   check('DASH-021: handshaking count shown', statValue(root, t.handshaking) === '2');
   check('DASH-021: Mode I target count shown', statValue(root, t.targetConnecting) === '3');
 
