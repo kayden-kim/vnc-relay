@@ -160,7 +160,10 @@ const ok = (body) => json(200, body);
 const fail = (status) => json(status, { error: { code: status === 401 ? 'unauthenticated' : 'internal' } });
 
 function session(pollSecs = 2) {
-  return ok({ csrf_token: 'csrf-token-1', dashboard: { poll_secs: pollSecs, query_timeout_secs: 5 } });
+  return ok({
+    csrf_token: 'csrf-token-1',
+    dashboard: { poll_secs: pollSecs, query_timeout_secs: 5, terminate_timeout_secs: 10 },
+  });
 }
 
 function summaryBody(overrides = {}) {

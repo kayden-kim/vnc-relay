@@ -175,6 +175,66 @@ fn operations_keeps_the_chosen_language_in_browser() {
     check_localized_case("/tests/operations.html", "dash-025");
 }
 
+/// spec: dashboard.md:DASH-006 partial
+#[test]
+fn session_shows_the_facts_and_terminate_action_in_browser() {
+    check_localized_case("/tests/session.html", "dash-006");
+}
+
+/// spec: dashboard.md:DASH-006 partial
+#[test]
+fn router_opens_session_detail_from_the_list_in_browser() {
+    check_localized_case("/tests/router.html", "dash-006");
+}
+
+/// spec: dashboard.md:DASH-007 partial
+#[test]
+fn session_gone_before_or_during_refresh_shows_not_found_in_browser() {
+    check_localized_case("/tests/session.html", "dash-007");
+}
+
+/// spec: dashboard.md:DASH-009 partial
+#[test]
+fn session_cancel_sends_no_request_and_restores_focus_in_browser() {
+    check_localized_case("/tests/session.html", "dash-009");
+}
+
+/// spec: dashboard.md:DASH-010 partial
+#[test]
+fn session_blocks_duplicate_terminate_and_shows_not_found_in_browser() {
+    check_localized_case("/tests/session.html", "dash-010");
+}
+
+/// spec: dashboard.md:DASH-011 partial
+#[test]
+fn session_gone_before_or_after_confirm_shows_not_found_in_browser() {
+    check_localized_case("/tests/session.html", "dash-011");
+}
+
+/// spec: dashboard.md:DASH-012 partial
+#[test]
+fn session_failed_terminate_is_not_complete_in_browser() {
+    check_localized_case("/tests/session.html", "dash-012");
+}
+
+/// spec: dashboard.md:DASH-013 partial
+#[test]
+fn session_unknown_terminate_is_not_resent_in_browser() {
+    check_localized_case("/tests/session.html", "dash-013");
+}
+
+/// spec: dashboard.md:DASH-014 partial
+#[test]
+fn session_direct_entry_without_session_goes_to_sign_in_in_browser() {
+    check_localized_case("/tests/session.html", "dash-014");
+}
+
+/// spec: dashboard.md:DASH-026 partial
+#[test]
+fn session_invalid_id_sends_no_request_in_browser() {
+    check_localized_case("/tests/session.html", "dash-026");
+}
+
 /// Runs one page at every width and language, then reports all failing runs at once.
 fn check_page(page: &str) {
     let mut runs = Vec::new();
