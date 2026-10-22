@@ -552,6 +552,8 @@ X-CSRF-Token: <csrf-token>
 
 작업 4.3 결정 반영 실행 기록(커밋 `8c87e69` + 문서 변경 작업 트리): WSL `vr-full.sh` ALL PASSED(통과 14, 부분 24, 실패 0, 미실행 0, 미연결 110). Windows `vr-win.ps1 -Only all` ALL PASSED (all)(통과 13, 부분 24, 실패 0, 미실행 1 = OPS-007, 미연결 110). 앞선 기록보다 통과가 3건 늘었다. MGT-018·MGT-022(`8c87e69`)와 OPS-002(`b505c60`, 다른 작업의 `tests/serve.rs`)다. 환경과 명령은 [관리 로그인과 세션 설계](../architectures/management-session.md#대조-기록)의 결정 반영 기록을 따른다.
 
+작업 4.10 실행 기록(대상 HEAD `3b3a179`, 코드 `2f3b2a3`): WSL `vr-full.sh` ALL PASSED(통과 24, 부분 40, 실패 0, 미실행 0, 미연결 86). Windows `vr-win.ps1 -Only all` ALL PASSED (all)(통과 23, 부분 40, 실패 0, 미실행 1 = OPS-007, 미연결 86). 위 4.10 표 행의 결과 열은 부분 행을 `미실행`으로 둔다. 빠진 부분은 작업 4.4·4.11에서 채운다. 대조 기록: [대시보드 운영 현황 개요](../architectures/dashboard-operations-overview.md).
+
 ## 6. 초안을 확정하기 전에 해결할 사항
 
 - 이 계약의 이름·코드 선택은 2026-10-16에 사용자가 채택했다. 채택 범위는 `/api/v1/` 아래 경로 이름과 메서드, 필드 이름, 오류 코드 일곱 개, `X-Relay-Poll`·`X-CSRF-Token` 값 규칙, 종료 원인 값 이름, 화면 URL이다. 쿠키 이름 `relay_admin_session`과 헤더 이름은 공유 인터페이스 이름이다. 사용자가 앞서 확정한 값은 이 문서 앞부분에 따로 적었다.

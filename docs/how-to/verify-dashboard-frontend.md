@@ -346,6 +346,9 @@
 - 재촬영 결과(`capture.mjs`, 48장): `scrollWidth == clientWidth`가 48장 모두 참, 넘치는 요소 0, CSP 위반 0. 앱 막대 12건 모두 한 행 56px, 문서 가로 넘침 0. 미리보기 390·320 docScroll 390·320, 넘침 0.
 - 확인하지 못한 것(추가): 미리보기 320 전체 페이지 캡처는 16170px 세로라 육안 판독 불가. 측정치만 썼다. `LABEL.sr-only`(시각적으로 숨긴 중단 안내)가 320에서 뷰포트 밖 위치(right 366)에 있지만 넘침 계산에 들지 않는다. 키보드·스크린 리더·실기기는 여전히 3.5–3.7.
 - 결과: 수정 필요 6건 해소(측정과 육안 확인). 최종 HEAD 게이트 결과는 이 절 끝에 적는다.
+- 최종 HEAD 게이트(대상 HEAD `3b3a179`, 이 기록 커밋은 문서만 바꾼다):
+  - WSL `vr-full.sh`: ALL PASSED. 시나리오 150건 통과 24, 부분 40, 실패 0, 미실행 0, 미연결 86. dashboard_browser 21 passed. 소요 137.98초. 로그 WSL `~/gate-wsl-3b3a179.log`.
+  - Windows `vr-win.ps1 -Only all`: ALL PASSED (all). 시나리오 150건 통과 23, 부분 40, 실패 0, 미실행 1(OPS-007, Unix 전용), 미연결 86. dashboard_browser 21 passed. 소요 219.04초. 보고서 `D:\Workspace\vnc-relay\target\scenario-report.md`.
 
 ## 5. 중단 조건
 
