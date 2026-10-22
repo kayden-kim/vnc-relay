@@ -26,7 +26,8 @@ use vnc_relay_app::reload::{ChangeSource, WatchFailure};
 use crate::config_file;
 
 /// Quiet window Q before a candidate is read (file-watch.md §4 step 3 (a), §9 item 1).
-/// Implementation constant. Q + G + read + verify + swap must stay below the poll interval D.
+/// Implementation constant. Q + G + read + verify + swap must stay below the apply limit D
+/// (`settle_secs`). The poll interval Dp (`poll_secs`) sets detection, not this bound.
 const QUIET: Duration = Duration::from_millis(300);
 
 /// Gap G between the two stamp recordings (file-watch.md §4 step 3 (c), §9 item 1).
@@ -710,7 +711,7 @@ mod tests {
         })
     }
 
-    /// spec: operations.md:OPS-027
+    /// spec: operations.md:OPS-027 partial
     #[tokio::test]
     async fn notify_during_quiet_window_restarts_the_episode() {
         let Fixture {
@@ -791,7 +792,7 @@ mod tests {
         assert!(sink.names().is_empty());
     }
 
-    /// spec: operations.md:OPS-028
+    /// spec: operations.md:OPS-028 partial
     #[tokio::test]
     async fn poll_read_error_is_recorded_without_an_episode() {
         let Fixture {
@@ -813,7 +814,7 @@ mod tests {
         assert_eq!(cell.current().relay_allow.tcp_viewer, before);
     }
 
-    /// spec: operations.md:OPS-041
+    /// spec: operations.md:OPS-041 partial
     #[tokio::test]
     async fn allow_change_is_applied_by_poll_when_the_notify_is_blocked() {
         let Fixture {
@@ -857,7 +858,7 @@ mod tests {
         );
     }
 
-    /// spec: operations.md:OPS-028
+    /// spec: operations.md:OPS-028 partial
     #[test]
     fn refused_registration_at_start_is_an_error_not_a_silent_start() {
         let error = fixture_with_feed(CONFIG, Arc::new(AtomicBool::new(true)))
@@ -866,7 +867,7 @@ mod tests {
         assert_eq!(error.detail(), "registration refused");
     }
 
-    /// spec: operations.md:OPS-028
+    /// spec: operations.md:OPS-028 partial
     #[tokio::test]
     async fn notify_failure_is_recorded_on_every_tick_and_keeps_the_running_allow_list() {
         let refuse = Arc::new(AtomicBool::new(false));
@@ -909,7 +910,7 @@ mod tests {
         assert_eq!(sink.names().len(), 3);
     }
 
-    /// spec: operations.md:OPS-028
+    /// spec: operations.md:OPS-028 partial
     #[tokio::test]
     async fn poll_still_applies_a_change_while_notify_registration_is_refused() {
         let refuse = Arc::new(AtomicBool::new(false));
@@ -950,7 +951,7 @@ mod tests {
         assert_eq!(cell.current().relay_allow.tcp_viewer, allow);
     }
 
-    /// spec: operations.md:OPS-028
+    /// spec: operations.md:OPS-028 partial
     #[tokio::test]
     async fn change_seen_during_shutdown_is_not_applied() {
         let Fixture {
@@ -980,7 +981,7 @@ mod tests {
         assert_eq!(cell.current().relay_allow.tcp_viewer, before);
     }
 
-    /// spec: operations.md:OPS-027
+    /// spec: operations.md:OPS-027 partial
     #[tokio::test]
     async fn latest_valid_candidate_is_applied_when_a_newer_write_lands_in_the_quiet_window() {
         let Fixture {
@@ -1013,7 +1014,7 @@ mod tests {
         assert_eq!(cell.current().relay_allow.tcp_viewer, allow);
     }
 
-    /// spec: operations.md:OPS-027
+    /// spec: operations.md:OPS-027 partial
     #[tokio::test]
     async fn invalid_latest_candidate_keeps_the_running_allow_list_when_it_lands_in_the_gap() {
         let Fixture {
@@ -1068,7 +1069,7 @@ mod tests {
         }));
     }
 
-    /// spec: operations.md:OPS-027
+    /// spec: operations.md:OPS-027 partial
     #[tokio::test]
     async fn newer_valid_write_during_validation_discards_the_candidate_being_validated() {
         let Fixture {
@@ -1125,7 +1126,7 @@ mod tests {
         assert_eq!(cell.current().relay_allow.tcp_viewer, allow);
     }
 
-    /// spec: operations.md:OPS-027
+    /// spec: operations.md:OPS-027 partial
     #[tokio::test]
     async fn newer_invalid_write_during_validation_keeps_the_running_allow_list() {
         let Fixture {
@@ -1171,7 +1172,7 @@ mod tests {
         assert_eq!(cell.current().relay_allow.tcp_viewer, before);
     }
 
-    /// spec: operations.md:OPS-028
+    /// spec: operations.md:OPS-028 partial
     #[tokio::test]
     async fn stop_during_validation_discards_the_candidate_being_validated() {
         let Fixture {
@@ -1201,6 +1202,154 @@ mod tests {
         let (flow, ()) = tokio::join!(watcher.on_tick(&mut stop), driver);
         assert_eq!(flow, Flow::Continue);
         assert!(*stop.borrow());
+        assert_eq!(sink.names(), ["reload_change_detected"]);
+        assert_eq!(cell.current().relay_allow.tcp_viewer, before);
+    }
+
+    /// spec: operations.md:OPS-027
+    #[tokio::test]
+    async fn overtaken_candidate_is_never_applied_when_the_newest_write_is_valid_or_invalid() {
+        // Newest valid: a valid newer write lands while the first candidate is validated. The first
+        // candidate is discarded without an event or a swap, and only the newest candidate applies.
+        {
+            let Fixture {
+                mut watcher,
+                mut sleeps,
+                files,
+                sink,
+                config_path,
+                cell,
+                mut stop,
+                _stop_sender,
+            } = fixture_running(RELAY_CONFIG);
+            let newest = RELAY_CANDIDATE.replace("127.0.0.2", "127.0.0.3");
+            files.set(&config_path, RELAY_CANDIDATE.as_bytes());
+            arm_newer_write(&mut watcher, &files, &config_path, &newest);
+            let driver = async {
+                let quiet = next_sleep(&mut sleeps, QUIET).await;
+                let _ = quiet.send(());
+                let gap = next_sleep(&mut sleeps, GAP).await;
+                let _ = gap.send(());
+            };
+            let (flow, ()) = tokio::join!(watcher.on_tick(&mut stop), driver);
+            assert_eq!(flow, Flow::Continue);
+            assert_eq!(sink.names(), ["reload_change_detected"]);
+            // The newer write left a wake, which starts the episode for the newest candidate.
+            watcher.wake.recv().await.expect("wake sent");
+            let driver = async {
+                let quiet = next_sleep(&mut sleeps, QUIET).await;
+                let _ = quiet.send(());
+                let gap = next_sleep(&mut sleeps, GAP).await;
+                let _ = gap.send(());
+            };
+            let (flow, ()) = tokio::join!(watcher.on_wake(&mut stop), driver);
+            assert_eq!(flow, Flow::Continue);
+            assert_eq!(
+                sink.names(),
+                [
+                    "reload_change_detected",
+                    "reload_change_detected",
+                    "reload_applied",
+                ]
+            );
+            let allow = AllowList::new(vec![IpItem::Single(IpAddr::from([127, 0, 0, 3]))]);
+            assert_eq!(cell.current().relay_allow.tcp_viewer, allow);
+        }
+        // Newest invalid: an invalid newer write lands while the first candidate is validated. The
+        // first candidate is still never applied, and the running allow list stays in force.
+        {
+            let Fixture {
+                mut watcher,
+                mut sleeps,
+                files,
+                sink,
+                config_path,
+                cell,
+                mut stop,
+                _stop_sender,
+            } = fixture_running(RELAY_CONFIG);
+            let before = cell.current().relay_allow.tcp_viewer.clone();
+            files.set(&config_path, RELAY_CANDIDATE.as_bytes());
+            arm_newer_write(&mut watcher, &files, &config_path, INVALID_CONFIG);
+            let driver = async {
+                let quiet = next_sleep(&mut sleeps, QUIET).await;
+                let _ = quiet.send(());
+                let gap = next_sleep(&mut sleeps, GAP).await;
+                let _ = gap.send(());
+            };
+            let (flow, ()) = tokio::join!(watcher.on_tick(&mut stop), driver);
+            assert_eq!(flow, Flow::Continue);
+            assert_eq!(sink.names(), ["reload_change_detected"]);
+            watcher.wake.recv().await.expect("wake sent");
+            let driver = async {
+                let quiet = next_sleep(&mut sleeps, QUIET).await;
+                let _ = quiet.send(());
+                let gap = next_sleep(&mut sleeps, GAP).await;
+                let _ = gap.send(());
+            };
+            let (flow, ()) = tokio::join!(watcher.on_wake(&mut stop), driver);
+            assert_eq!(flow, Flow::Continue);
+            assert_eq!(
+                sink.names(),
+                [
+                    "reload_change_detected",
+                    "reload_change_detected",
+                    "reload_rejected",
+                ]
+            );
+            assert_eq!(cell.current().relay_allow.tcp_viewer, before);
+        }
+    }
+
+    /// spec: operations.md:OPS-028
+    #[tokio::test]
+    async fn watch_faults_at_start_running_and_shutdown_are_recorded_and_never_applied() {
+        // Start: a refused registration is an error, so no watcher starts without notify.
+        let refused = fixture_with_feed(CONFIG, Arc::new(AtomicBool::new(true)));
+        assert_eq!(
+            refused.err().expect("the start is refused").detail(),
+            "registration refused"
+        );
+        // Running: the failure is recorded on the tick and the running allow list stays in force.
+        let refuse = Arc::new(AtomicBool::new(false));
+        let Fixture {
+            mut watcher,
+            sink,
+            cell,
+            mut stop,
+            _stop_sender,
+            ..
+        } = fixture_with_feed(RELAY_CONFIG, Arc::clone(&refuse)).expect("watcher assembles");
+        let before = cell.current().relay_allow.tcp_viewer.clone();
+        refuse.store(true, Ordering::SeqCst);
+        watcher.queue.offer_failure("OS notify error".to_owned());
+        // The run loop consumes the wake before it calls the handler.
+        watcher.wake.recv().await.expect("wake sent");
+        assert_eq!(watcher.on_tick(&mut stop).await, Flow::Continue);
+        assert_eq!(sink.names(), ["reload_watch_failed", "reload_watch_failed"]);
+        assert_eq!(cell.current().relay_allow.tcp_viewer, before);
+        // Shutdown: a change seen while the quiet window is open is not applied.
+        let Fixture {
+            mut watcher,
+            mut sleeps,
+            files,
+            sink,
+            config_path,
+            cell,
+            mut stop,
+            _stop_sender: stop_sender,
+        } = fixture_running(RELAY_CONFIG);
+        let before = cell.current().relay_allow.tcp_viewer.clone();
+        files.set(&config_path, RELAY_CANDIDATE.as_bytes());
+        let driver = async {
+            let quiet = next_sleep(&mut sleeps, QUIET).await;
+            stop_sender
+                .send(true)
+                .expect("the watcher holds the stop receiver");
+            quiet
+        };
+        let (flow, _quiet) = tokio::join!(watcher.on_tick(&mut stop), driver);
+        assert_eq!(flow, Flow::Stop);
         assert_eq!(sink.names(), ["reload_change_detected"]);
         assert_eq!(cell.current().relay_allow.tcp_viewer, before);
     }

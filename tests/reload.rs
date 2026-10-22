@@ -863,6 +863,9 @@ fn restart_only_change_applies_at_the_next_start() {
     ));
 
     stop(first.child());
+    // The old accounts file is removed, so the second start succeeds only with the candidate path.
+    std::fs::remove_file(config.with_file_name("admin-accounts.toml"))
+        .unwrap_or_else(|error| panic!("remove old accounts file: {error}"));
     let mut second = Guard(Some(spawn(&config)));
     wait_listening(second.child(), moved);
     assert!(
@@ -879,6 +882,8 @@ fn restart_only_change_applies_at_the_next_start() {
         EXIT_LIMIT
     ));
     // The new admin limit is 1: a second management connection is refused at accept.
+    // connect returns once the kernel queues the socket. The sleep lets the relay accept _held,
+    // so the probe is counted after it; the connection_rejected wait below is the real check.
     std::thread::sleep(SETTLE);
     let admin = SocketAddr::from(([127, 0, 0, 1], moved.management));
     let _held = TcpStream::connect(admin).unwrap_or_else(|error| panic!("admin connect: {error}"));
@@ -893,31 +898,42 @@ fn restart_only_change_applies_at_the_next_start() {
 /// spec: operations.md:OPS-038
 /// spec: operations.md:OPS-025 partial
 #[test]
-fn all_source_allow_warns_at_reload_and_an_empty_list_refuses_everyone() {
+fn allow_list_modes_hold_at_start_and_at_reload() {
     let _lock = lock_ports();
     let ports = Ports::free();
-    let config = setup(
-        "allow-all-reload",
-        &config_text(ports, VIEWER_ONLY, CERT, KEY),
-    );
+    let config = setup("allow-modes", &config_text(ports, ANY, CERT, KEY));
     let log = log_of(&config);
     let mut guard = Guard(Some(spawn(&config)));
     wait_listening(guard.child(), ports);
-
-    write(&config, &config_text(ports, ANY, CERT, KEY));
-    let warning = wait_for_line(&log, |line| {
+    // All-source is accepted at start, with a startup warning.
+    let startup = wait_for_line(&log, |line| {
         event_is(line, "allow_all_source") && field(line, "listener") == Some("tcp_viewer")
     });
-    assert_eq!(field(&warning, "phase"), Some("reload"), "{warning}");
+    assert_eq!(field(&startup, "phase"), Some("startup"), "{startup}");
+    assert!(
+        !closed_within(&mut connect_from([127, 0, 0, 2], ports.tcp_viewer), SETTLE),
+        "0.0.0.0/0 refused 127.0.0.2 at start"
+    );
+
+    // Reload to a specific list, then back to all-source: the warning is recorded again at reload.
+    write(&config, &config_text(ports, VIEWER_ONLY, CERT, KEY));
+    wait_for_count(&log, 1, |line| event_is(line, "reload_applied"));
+    write(&config, &config_text(ports, ANY, CERT, KEY));
+    wait_for_line(&log, |line| {
+        event_is(line, "allow_all_source")
+            && field(line, "listener") == Some("tcp_viewer")
+            && field(line, "phase") == Some("reload")
+    });
+    wait_for_count(&log, 2, |line| event_is(line, "reload_applied"));
     let mut open = connect_from([127, 0, 0, 2], ports.tcp_viewer);
     assert!(
         !closed_within(&mut open, SETTLE),
-        "0.0.0.0/0 refused 127.0.0.2"
+        "0.0.0.0/0 refused 127.0.0.2 after the reload"
     );
 
+    // An empty list at reload refuses every source; the connection accepted under the old list stays.
     write(&config, &config_text(ports, NONE, CERT, KEY));
-    wait_for_count(&log, 2, |line| event_is(line, "reload_applied"));
-    // The connection accepted under the old list stays open.
+    wait_for_count(&log, 3, |line| event_is(line, "reload_applied"));
     assert!(
         !closed_within(&mut open, SETTLE),
         "existing connection was closed"
@@ -930,20 +946,32 @@ fn all_source_allow_warns_at_reload_and_an_empty_list_refuses_everyone() {
         &mut connect_from([127, 0, 0, 1], ports.tcp_viewer),
         EXIT_LIMIT
     ));
-}
 
-/// spec: operations.md:OPS-038
-#[test]
-fn missing_allow_list_fails_the_start() {
-    let _lock = lock_ports();
-    let ports = Ports::free();
+    // An empty list at start refuses every source.
+    let empty_ports = Ports::free();
+    let empty = setup(
+        "allow-empty-start",
+        &config_text(empty_ports, NONE, CERT, KEY),
+    );
+    let mut empty_guard = Guard(Some(spawn(&empty)));
+    wait_listening(empty_guard.child(), empty_ports);
+    assert!(closed_within(
+        &mut connect_from([127, 0, 0, 1], empty_ports.tcp_viewer),
+        EXIT_LIMIT
+    ));
+    assert!(closed_within(
+        &mut connect_from([127, 0, 0, 2], empty_ports.tcp_viewer),
+        EXIT_LIMIT
+    ));
+
+    // A missing list fails the start.
     let text =
         config_text(ports, VIEWER_ONLY, CERT, KEY).replace(&format!("allow = {VIEWER_ONLY}\n"), "");
-    let config = setup("allow-missing", &text);
+    let missing = setup("allow-missing", &text);
     let output = Command::new(BIN)
         .arg("serve")
         .arg("--config")
-        .arg(&config)
+        .arg(&missing)
         .stdin(Stdio::null())
         .output()
         .unwrap_or_else(|error| panic!("run {BIN}: {error}"));
@@ -954,24 +982,6 @@ fn missing_allow_list_fails_the_start() {
     );
     assert!(stderr.contains("config_missing_key"), "{stderr}");
     assert!(stderr.contains("relay.tcp_viewer.allow"), "{stderr}");
-}
-
-/// spec: operations.md:OPS-038
-#[test]
-fn empty_allow_list_refuses_every_source_at_start() {
-    let _lock = lock_ports();
-    let ports = Ports::free();
-    let config = setup("allow-empty-start", &config_text(ports, NONE, CERT, KEY));
-    let mut guard = Guard(Some(spawn(&config)));
-    wait_listening(guard.child(), ports);
-    assert!(closed_within(
-        &mut connect_from([127, 0, 0, 1], ports.tcp_viewer),
-        EXIT_LIMIT
-    ));
-    assert!(closed_within(
-        &mut connect_from([127, 0, 0, 2], ports.tcp_viewer),
-        EXIT_LIMIT
-    ));
 }
 
 /// spec: websocket.md:WS-022 partial

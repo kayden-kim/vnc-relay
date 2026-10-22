@@ -1033,7 +1033,7 @@ mod tests {
         assert!(h.sink.events().is_empty());
     }
 
-    /// spec: operations.md:OPS-027
+    /// spec: operations.md:OPS-027 partial
     #[test]
     fn stale_generation_discards_without_event_or_swap() {
         let running = settings();

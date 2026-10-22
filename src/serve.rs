@@ -589,7 +589,7 @@ mod tests {
         }
     }
 
-    /// spec: operations.md:OPS-028
+    /// spec: operations.md:OPS-028 partial
     #[test]
     fn watch_registration_refused_at_start_is_a_startup_failure() {
         let sink = RecordingSink::default();

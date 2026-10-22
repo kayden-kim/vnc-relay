@@ -667,7 +667,7 @@ listen = "127.0.0.1:5901"
     );
 }
 
-/// spec: operations.md:OPS-038
+/// spec: operations.md:OPS-038 partial
 #[test]
 fn requires_allow_list_only_for_enabled_entry_points() {
     let found = problems(&with_required(
@@ -700,7 +700,7 @@ fn requires_allow_list_only_for_enabled_entry_points() {
     );
 }
 
-/// spec: operations.md:OPS-038
+/// spec: operations.md:OPS-038 partial
 #[test]
 fn accepts_an_empty_allow_list() {
     let settings = parse_ok(&with_required(
@@ -710,7 +710,7 @@ fn accepts_an_empty_allow_list() {
     assert_eq!(settings.warnings(), []);
 }
 
-/// spec: operations.md:OPS-038
+/// spec: operations.md:OPS-038 partial
 #[test]
 fn accepts_items_covering_a_whole_family_with_warnings() {
     let settings = parse_ok(&with_required(
