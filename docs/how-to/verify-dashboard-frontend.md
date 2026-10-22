@@ -2,14 +2,14 @@
 
 대시보드 프런트엔드(`web/dashboard/`)가 [프런트엔드 컨벤션](../conventions/frontend.md)과 [디자인 기준](../design/DESIGN.md)을 지키는지 확인한다. 완료 상태는 4절의 모든 행이 실제 결과와 함께 "통과"로 기록된 상태다. 수동 검토를 하지 못한 행은 "미실행"과 이유를 적고, 완료로 표시하지 않는다.
 
-이 문서는 Draft다. 절차의 방법은 사용자 결정 2026-10-22(Q32)~(Q38)를 따른다. 작업 4.8에서 `cargo xtask tokens`, `cargo xtask dashboard-serve`, `tests/dashboard_browser.rs`를 구현했다. `tests/dashboard_assets.rs`는 아직 없다. 실행한 결과는 4절에 적는다.
+이 문서는 Draft다. 절차의 방법은 사용자 결정 2026-10-22(Q32)~(Q38)를 따른다. 작업 4.8에서 `cargo xtask tokens`, `cargo xtask dashboard-serve`, `tests/dashboard_browser.rs`를 구현했다. `tests/dashboard_assets.rs`는 작업 4.6에서 만들었다. 실행한 결과는 4절에 적는다.
 
 | 항목 | 값 |
 | --- | --- |
 | 대상 독자 | 대시보드 프런트엔드 구현자와 검토자 |
 | 검증 상태 | Draft |
-| 검증 환경·버전 | 작업 4.8(2026-10-22): Windows 10.0.26200 x64, PowerShell, Chrome 155.0.8059.84. rustc 버전은 기록하지 않았다. 나머지 환경은 실행할 때 기록한다 |
-| 최종 검증일 | 없음(Draft 작성일 2026-10-22). 작업 4.8에서 3.1·3.3·3.4 일부를 실행했다(4절) |
+| 검증 환경·버전 | 작업 4.8(2026-10-22): Windows 10.0.26200 x64, PowerShell, Chrome 155.0.8059.84. Ubuntu 24.04.4 LTS x64(WSL2), Google Chrome 156.0.8078.47. rustc는 두 OS 모두 1.99.1(`rust-toolchain.toml`). 나머지 환경은 실행할 때 기록한다 |
+| 최종 검증일 | 2026-10-22. 3.1 1단계, 3.2 1단계, 3.3 1단계, 3.4 일부를 실행했다(4절). 3.5~3.7은 미실행 |
 | 관련 기준 문서 | [프런트엔드 컨벤션](../conventions/frontend.md), [디자인 기준](../design/DESIGN.md), [화면 스펙](../specs/dashboard.md), [관리 API 계약 1.11절](../contracts/management-api-v1.md) |
 
 ## 1. 대상과 영향
@@ -28,7 +28,7 @@
 - [ ] (선택) Node.js와 고정 버전의 `@google/design.md`를 준비했다. 고정 버전은 검증 기록에 적는다(사용자 결정 2026-10-22(Q38)).
 - [ ] 수동 검토자와 스크린 리더 환경을 정했다.
 
-주의: `cargo test --test dashboard_assets`는 아직 저장소에 없다. 지금 실행하면 실패하며, 그 실패를 대시보드 결함으로 기록하지 않는다. `cargo xtask tokens`, `cargo xtask dashboard-serve`, `cargo test --test dashboard_browser`는 작업 4.8에서 구현했다.
+`cargo test --test dashboard_assets`는 작업 4.6에서, `cargo xtask tokens`, `cargo xtask dashboard-serve`, `cargo test --test dashboard_browser`는 작업 4.8에서 구현했다.
 
 ## 3. 절차
 
@@ -173,8 +173,8 @@
 | --- | --- | --- | --- | --- |
 | 토큰 CSS와 저장된 파일 | 차이 0건, 종료 코드 0 | 3.1 1단계 | 통과. 작업 4.8(Windows): `tokens --check: 통과`, 종료 코드 0. DESIGN.md L6 값을 `#f4f6f6`으로 바꾸면 `실패 (3건)`과 종료 코드 1이 나왔고, 원래 값으로 되돌린 뒤 다시 통과했다 | 작업 4.8 보고의 명령 출력 |
 | DESIGN.md 린트(선택) | 오류 0건, 경고·정보 수 기록 | 3.1 2단계 | 미실행 | 검증 기록의 출력 |
-| 제공 파일 표 | `dashboard_assets` 테스트 통과 | 3.2 1단계 | 미실행. `tests/dashboard_assets.rs`가 아직 없다(작업 4.8 범위 밖) | 검증 기록의 테스트 출력 |
-| 브라우저 테스트 | 모든 테스트 페이지의 `data-result`가 `pass` | 3.3 1단계 | 통과. 작업 4.8(Windows): `cargo test --test dashboard_browser` 시험 2개 통과(2026-10-22 재실행, 19.19초). Chrome 155.0.8059.84 | 검증 기록의 테스트 출력과 브라우저 버전 |
+| 제공 파일 표 | `dashboard_assets` 테스트 통과 | 3.2 1단계 | 통과. 2026-10-22 커밋 `df3b5b2`, Ubuntu 24.04(WSL2): `cargo test --test dashboard_assets` 시험 2개 통과. 같은 커밋의 Windows 전체 완료 검증도 이 시험을 포함해 통과했다 | 검증 기록의 테스트 출력 |
+| 브라우저 테스트 | 모든 테스트 페이지의 `data-result`가 `pass` | 3.3 1단계 | 통과. 작업 4.8(Windows): `cargo test --test dashboard_browser` 시험 2개 통과(2026-10-22 재실행, 19.19초). Chrome 155.0.8059.84. Ubuntu 24.04(WSL2), 커밋 `df3b5b2`: 시험 2개 통과(10.39초), Google Chrome 156.0.8078.47(`/usr/bin/google-chrome`) | 검증 기록의 테스트 출력과 브라우저 버전 |
 | 시나리오 보고서 | 자동 연결된 DASH 항목이 `통과` | 3.3 2단계 | 미실행. 작업 4.8의 미리보기 시험에는 DASH 표식을 붙이지 않았다 | `<Cargo 대상 디렉터리>/scenario-report.md` |
 | 폭별 시각 대조 | 6개 폭에서 가로 스크롤 0건, 차이가 스펙·디자인 기준에 맞음 | 3.4 | 부분. 작업 4.8(2026-10-22): 미리보기를 6폭 × ko·en 12회 열었다. 뷰포트 폭, 캡처 PNG 폭, 가로 스크롤 0, CSP 위반 0, 콘솔 오류 0, `data-result` pass를 모두 확인했다. 스크린샷은 `target/dashboard-shots/<폭>/preview-<ko|en>.png`이며 미리보기 전체 페이지다(화면 상태별 파일이 아님). SCR-001~003 화면은 아직 없다. 시안과의 사람 비교는 미실행(4.12). 검토 기록은 4.1절 |
 | 키보드 | 3.5의 4개 항목 통과 | 3.5 | 미실행 | 검토 기록 |

@@ -27,14 +27,24 @@ Windows 11 x64 또는 Ubuntu 24.04 LTS x64에서 고정된 Rust 툴체인으로 
 | C 컴파일러·어셈블러(aws-lc-sys 빌드) | MSVC `cl.exe`와 NASM. NASM이 없으면 환경 변수 `AWS_LC_SYS_PREBUILT_NASM=1`로 crate에 든 미리 만든 NASM 오브젝트를 쓴다([aws-lc-rs Windows 요구 사항](https://aws.github.io/aws-lc-rs/requirements/windows.html)). | `cc`(gcc). 추가 도구는 없다. |
 | 셸 | PowerShell | bash |
 | 실행파일 | `target\debug\vnc-relay.exe` | `target/debug/vnc-relay` |
-| 관리자 권한 | Build Tools 설치에 UAC 승인이 필요하다. | Rust 설치에는 필요 없다. `cc`가 없을 때 `apt` 설치에 `sudo`가 필요하다. |
+| 관리자 권한 | Build Tools 설치에 UAC 승인이 필요하다. | Rust 설치에는 필요 없다. `cc`가 없을 때 `apt` 설치와 Chrome 설치에 root 권한이 필요하다. WSL에서는 Windows에서 `wsl -d Ubuntu -u root`로 root 셸을 열 수 있다. |
 
 ## 2. 전제 조건
 
 - [ ] 운영체제가 Windows 11 x64 또는 Ubuntu 24.04 LTS x64다.
 - [ ] git이 설치되어 있고 저장소를 내려받았다.
 - [ ] 인터넷에 연결되어 있다. rustup과 Cargo가 툴체인과 crate를 내려받는다.
-- [ ] Chromium(Chrome 또는 Edge)이 설치되어 있다. Windows와 Ubuntu 모두 필수이며, 브라우저 테스트에 쓴다(사용자 결정 2026-10-22(Q35)). 실행 파일 경로는 환경 변수 `DASHBOARD_BROWSER`로 준다(이 문서의 기본값).
+- [ ] Chromium(Chrome 또는 Edge)이 설치되어 있다. Windows와 Ubuntu 모두 필수이며, 브라우저 테스트에 쓴다(사용자 결정 2026-10-22(Q35)). 실행 파일 경로는 환경 변수 `DASHBOARD_BROWSER`로 준다(이 문서의 기본값). Ubuntu에 없으면 Google Chrome 안정판 .deb를 설치한다(사용자 결정 2026-10-22(Q41)).
+
+  영향: 시스템에 `google-chrome-stable` 패키지와 Google 패키지 저장소 설정(`/etc/apt/sources.list.d/google-chrome.sources`)을 더한다. `sudo apt remove google-chrome-stable`로 패키지를 지울 수 있다.
+
+  ```shell
+  wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+  sudo apt install -y ./google-chrome-stable_current_amd64.deb
+  google-chrome --version
+  ```
+
+  기대 결과: 마지막 명령이 `Google Chrome 156.0.8078.47`처럼 버전을 출력한다.
 - [ ] Windows: 설치 승인(UAC)을 할 수 있는 사용자가 컴퓨터 앞에 있다.
 - [ ] WSL에서 Windows 드라이브(`/mnt/<드라이브>/`)의 작업 트리를 쓰면 `CARGO_TARGET_DIR`을 Linux 홈 아래로 정하는 것을 권장한다. 예: `export CARGO_TARGET_DIR="$HOME/vnc-relay-target"`. Windows 쪽 Cargo와 빌드 결과가 섞이지 않는다. 검증 기록은 이 설정으로 실행했다.
 
@@ -159,12 +169,15 @@ Windows 11 x64 또는 Ubuntu 24.04 LTS x64에서 고정된 Rust 툴체인으로 
 | Windows 빌드 | `vnc-relay 0.1.0` | 4단계(`AWS_LC_SYS_PREBUILT_NASM=1`, 실행파일 직접 실행) | 통과(2026-10-20). 처음 빌드는 1분 걸렸다. | 아래 실행 기록 3 |
 | Windows 전체 완료 검증 | 다섯 명령 종료 코드 0 | 6단계 | 통과(2026-10-20). 처음 실행에서 clippy가 Windows에서만 나는 경고 2건으로 실패했고, 고친 뒤 다섯 명령 모두 통과했다. 시나리오 148건: 통과 3, 부분 12, 미실행 1, 미연결 132, 오류 0, 판정 통과. `licenses ok` | 아래 실행 기록 3 |
 | Windows 도구 설치 | rustup 설치 | 2단계 | 미실행. 검증 환경에는 rustup이 이미 설치되어 있었다. `%USERPROFILE%\.cargo\bin`은 사용자 `PATH`에 없었다. | 아래 실행 기록 2 |
+| Ubuntu 브라우저 준비와 브라우저 테스트 | `google-chrome --version`이 버전 출력, 6단계 종료 코드 0 | 2절 Chrome 설치, 6단계 | 통과(2026-10-22). Google Chrome 156.0.8078.47. 설치 전에는 대시보드 브라우저 테스트 2건이 `Chromium is required for the dashboard browser tests`로 실패했다 | 아래 실행 기록 4 |
 
 실행 기록 1: 커밋 `b7d23ee`에서 실행했다. Windows 쪽 `git status`는 변경 없음이었다. 환경은 Ubuntu 24.04.4 LTS x86_64(WSL2), rustup 1.29.1, cargo 1.99.1, cargo-deny 0.20.2, `CARGO_TARGET_DIR=$HOME/vnc-relay-target`이다. 3·4·6단계의 명령은 모두 종료 코드 0이었다.
 
 실행 기록 2: 2026-10-20 Windows 11 x64에서 1단계 winget 명령을 처음 실행했다. UAC를 승인하지 않아 종료 코드는 1602였다. rustup은 `%USERPROFILE%\.cargo\bin`에 설치되어 있지만 사용자 PATH에 없다. 이 상태의 `cargo build`는 `` `link.exe` returned an unexpected error ``로 실패했다.
 
 실행 기록 3: 2026-10-20 같은 Windows 11 Pro 10.0.26200 x64에서 UAC를 승인해 1단계 설치를 마쳤다. 커밋 `e1cfc4f`에 Windows 경고 수정(`crates/adapters/src/net.rs` 테스트 모듈을 Linux 전용으로, `tests/serve.rs`의 `lifecycle_events`를 Unix 전용으로)을 더한 작업 트리에서 실행했다. PowerShell에서 `PATH`에 `%USERPROFILE%\.cargo\bin`을 더하고 `AWS_LC_SYS_PREBUILT_NASM=1`을 정했다. Cargo 대상 디렉터리는 저장소의 `target\`이다. 3·4·6단계의 명령은 모두 종료 코드 0이었다. 수정 전 clippy 오류는 `unused import: super::*`(`crates\adapters\src\net.rs`)와 `function lifecycle_events is never used`(`tests\serve.rs`)였다. 같은 작업 트리에서 Ubuntu 6단계도 다시 통과했다. 테스트별 결과는 [운영 정보 계약 실행 기록](../contracts/ops-info-v1.md#계약-테스트-실행-기록)에 있다.
+
+실행 기록 4: 2026-10-22 Ubuntu 24.04.4 LTS x86_64(WSL2, 커널 6.6.87.2-microsoft-standard-WSL2)에서 2절의 Chrome 설치 명령을 root로 실행했다. `sudo`는 암호를 요구해 Windows에서 `wsl -d Ubuntu -u root`로 실행했다. 설치 뒤 `command -v google-chrome`은 `/usr/bin/google-chrome`, `dpkg-query -W google-chrome-stable`은 `156.0.8078.47-1`이었다. 커밋 `df3b5b2`(작업 트리 변경 없음)에서 6단계를 다시 실행했다. 여섯 명령이 모두 종료 코드 0이었고 브라우저 테스트 2건이 통과했다. 시나리오 150건: 통과 16, 부분 23, 실패 0, 미실행 0, 미연결 111, 오류 0건. 같은 커밋의 Windows 6단계도 통과했다(통과 15, 부분 23, 미실행 1 = OPS-007, 미연결 111).
 
 ## 5. 중단 조건
 
