@@ -1,9 +1,11 @@
 // Scenario check for the hash router: the operations list opens a session detail and returns to the list
-// (dashboard.md DASH-006). The page mounts app/router.js, the same entry as app/main.js, and drives it with
-// hash changes. One page load runs one case, ?case=dash-006&lang=ko|en, against a fake management API.
+// (dashboard.md DASH-006), and a language chosen on one screen holds on the other (DASH-025). The page mounts
+// app/router.js, the same entry as app/main.js, and drives it with hash changes. One page load runs one case,
+// ?case=dash-006&lang=ko|en or ?case=dash-025, against a fake management API.
 // The result goes to <main id="result">. Wording comes from app/copy.js, which holds the spec §9.3 CPY table.
 import { mountRouter } from '../app/router.js';
 import { COPY } from '../app/copy.js';
+import { STORAGE_KEY } from '../app/language.js';
 
 const host = document.getElementById('host');
 const result = document.getElementById('result');
@@ -98,16 +100,28 @@ function fakeApi() {
     const key = `${init.method ?? 'GET'} ${path}`;
     const n = (counts.get(key) ?? 0) + 1;
     counts.set(key, n);
-    calls.push({ key });
+    calls.push({ key, text: `${path} ${JSON.stringify(init)}` });
     const route = DEFAULT_ROUTES[key];
     return Promise.resolve().then(() => (route ? route(n) : fail(404, 'not_found')));
   };
   return { request, calls, count: (key) => counts.get(key) ?? 0 };
 }
 
-const detailLinkOf = (root) =>
-  [...root.querySelectorAll('a')].find((link) => link.textContent.trim() === t.details) ?? null;
-const backOf = (root) => [...root.querySelectorAll('a')].find((link) => link.textContent.trim() === t.back) ?? null;
+// Browser storage stand-in that keeps the saved language in `items`.
+function storageOf(items) {
+  return {
+    getItem: (key) => items.get(key) ?? null,
+    setItem: (key, value) => items.set(key, String(value)),
+  };
+}
+
+// A language value in a request: a ko or en tag, or a lang or locale key.
+const LANGUAGE_VALUE = /(^|[^a-z])(ko|en)(-[a-z]{2})?([^a-z]|$)|lang|locale/i;
+
+const linkNamed = (root, text) =>
+  [...root.querySelectorAll('a')].find((link) => link.textContent.trim() === text) ?? null;
+const detailLinkOf = (root) => linkNamed(root, t.details);
+const backOf = (root) => linkNamed(root, t.back);
 const titleOf = (root) => root.querySelector('.page-title')?.textContent.trim() ?? null;
 const terminateOf = (root) => root.querySelector('#session-terminate');
 const enabled = (root) => terminateOf(root) !== null && !terminateOf(root).disabled;
@@ -155,8 +169,60 @@ async function caseDash006() {
   checkLayout('DASH-006');
 }
 
+// DASH-025: a language chosen on the list holds on the detail screen and after going back. No request carries it.
+async function caseDash025() {
+  const items = new Map();
+  const api = fakeApi();
+  const navigations = [];
+  mountRouter(host, {
+    request: api.request,
+    storage: storageOf(items),
+    preferredLanguages: ['ko-KR'],
+    navigate: (url) => navigations.push(url),
+  });
+
+  await waitFor(() => linkNamed(host, COPY.ko.details) !== null);
+  check('DASH-025 start: browser preference gives Korean', document.documentElement.lang === 'ko');
+  const listLanguage = host.querySelector('#operations-language');
+  listLanguage.value = 'en';
+  listLanguage.dispatchEvent(new Event('change'));
+  await waitFor(() => document.documentElement.lang === 'en');
+  check('DASH-025 list: copy changes to English', titleOf(host) === COPY.en.operations);
+  check('DASH-025 list: choice saved', items.get(STORAGE_KEY) === 'en');
+
+  // The row link is root-relative, so the hash change stands in for the click, as in DASH-006.
+  location.hash = DETAIL_HASH;
+  await waitFor(() => enabled(host));
+  check('DASH-025 detail: language kept', document.documentElement.lang === 'en');
+  check(
+    'DASH-025 detail: title in English',
+    titleOf(host) === COPY.en.sessionTitle.replace('{session_id}', SESSION_ID),
+  );
+  check(
+    'DASH-025 detail: language select shows English',
+    host.querySelector('#session-language')?.value === 'en',
+  );
+
+  location.hash = '';
+  await waitFor(() => linkNamed(host, COPY.en.details) !== null);
+  check('DASH-025 back: language kept on the list', document.documentElement.lang === 'en');
+  check('DASH-025 back: copy in English', titleOf(host) === COPY.en.operations);
+  check(
+    'DASH-025 back: language select shows English',
+    host.querySelector('#operations-language')?.value === 'en',
+  );
+
+  check(
+    'DASH-025: no request carries a language value',
+    api.calls.every((call) => !LANGUAGE_VALUE.test(call.text)),
+  );
+  check('DASH-025: router stayed on this page', navigations.length === 0);
+  checkLayout('DASH-025');
+}
+
 const CASES = {
   'dash-006': caseDash006,
+  'dash-025': caseDash025,
 };
 
 const caseName = new URLSearchParams(location.search).get('case');

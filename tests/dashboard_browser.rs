@@ -191,6 +191,12 @@ fn router_opens_session_detail_from_the_list_in_browser() {
     check_localized_case("/tests/router.html", "dash-006");
 }
 
+/// spec: dashboard.md:DASH-025 partial
+#[test]
+fn router_keeps_the_chosen_language_across_screens_in_browser() {
+    check_runs(&[("/tests/router.html?case=dash-025".to_owned(), 1280)]);
+}
+
 /// spec: dashboard.md:DASH-007 partial
 #[test]
 fn session_gone_before_or_during_refresh_shows_not_found_in_browser() {
