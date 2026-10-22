@@ -5,7 +5,7 @@
 //! operation log that every test configures as `relay.log`.
 
 use std::io::{ErrorKind, Read, Write};
-use std::net::{SocketAddr, TcpListener, TcpStream};
+use std::net::{Ipv6Addr, SocketAddr, TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
@@ -39,6 +39,9 @@ const NONE: &str = "[]";
 
 const CERT: &str = "server-chain.pem";
 const KEY: &str = "server-key-p256.pem";
+
+/// Config key of the WSS key file, named by rejected TLS candidates.
+const KEY_KEY: &str = "relay.wss_viewer.key_file";
 
 static PORTS_LOCK: Mutex<()> = Mutex::new(());
 
@@ -112,9 +115,20 @@ fn tls_file(name: &str) -> String {
         .to_string()
 }
 
+/// The path a config names for `name`: a fixture name, or a copy made by
+/// `copy_tls`, given as an absolute path.
+fn tls_path(name: &str) -> String {
+    if Path::new(name).is_absolute() {
+        name.to_owned()
+    } else {
+        tls_file(name)
+    }
+}
+
 /// The config of every entry point. `allow` is a TOML array used by every
-/// entry point, `cert` and `key` are fixture names for the WSS pair, and the
-/// timeouts are long enough that held connections stay open for the test.
+/// entry point, `cert` and `key` name the WSS pair (fixture names, or paths of
+/// scratch copies), and the timeouts are long enough that held connections stay
+/// open for the test.
 fn config_text(ports: Ports, allow: &str, cert: &str, key: &str) -> String {
     format!(
         r#"
@@ -166,8 +180,8 @@ output = "relay.log"
         tcp_server = ports.tcp_server,
         ws_viewer = ports.ws_viewer,
         wss_viewer = ports.wss_viewer,
-        cert_path = tls_file(cert),
-        key_path = tls_file(key),
+        cert_path = tls_path(cert),
+        key_path = tls_path(key),
     )
 }
 
@@ -198,14 +212,29 @@ fn write(path: &Path, text: &str) {
     }
 }
 
+/// A new directory with the account file. The caller writes the config.
+fn scratch(name: &str) -> PathBuf {
+    let dir = temp_dir(name);
+    write(&dir.join("admin-accounts.toml"), &accounts_text());
+    dir
+}
+
 /// Writes `config` and the account file into a new directory and returns the
 /// config path. The operation log is `relay.log` next to it.
 fn setup(name: &str, config: &str) -> PathBuf {
-    let dir = temp_dir(name);
-    write(&dir.join("admin-accounts.toml"), &accounts_text());
+    let dir = scratch(name);
     let config_path = dir.join("relay.toml");
     write(&config_path, config);
     config_path
+}
+
+/// Copies a fixture into `dir` as `file` and returns the copy's path, so a
+/// test can replace or remove it.
+fn copy_tls(dir: &Path, fixture: &str, file: &str) -> String {
+    let path = dir.join(file);
+    std::fs::copy(tls_file(fixture), &path)
+        .unwrap_or_else(|error| panic!("copy {fixture}: {error}"));
+    path.display().to_string()
 }
 
 fn log_of(config: &Path) -> PathBuf {
@@ -258,8 +287,14 @@ fn connects(port: u16) -> bool {
 /// Waits until every listener accepts a TCP connection. Fails early with the
 /// stderr of the child when it exits.
 fn wait_listening(child: &mut Child, ports: Ports) {
+    wait_until(child, || ports.all().into_iter().all(connects));
+}
+
+/// Waits until `ready` holds. Fails early with the stderr of the child when
+/// it exits.
+fn wait_until(child: &mut Child, ready: impl Fn() -> bool) {
     let deadline = Instant::now() + EXIT_LIMIT;
-    while !ports.all().into_iter().all(connects) {
+    while !ready() {
         if let Ok(Some(status)) = child.try_wait() {
             let mut stderr = String::new();
             if let Some(stream) = child.stderr.as_mut() {
@@ -567,14 +602,91 @@ fn allow_change_keeps_waiting_connections_and_applies_to_new_decisions() {
     ));
 }
 
-/// spec: operations.md:OPS-026 partial
+/// spec: operations.md:OPS-026
+#[test]
+fn rejected_candidates_keep_the_old_settings_certificate_and_connections() {
+    let _lock = lock_ports();
+    let ports = Ports::free();
+    let dir = scratch("candidates-rejected");
+    let cert = copy_tls(&dir, CERT, "cert.pem");
+    let key = copy_tls(&dir, KEY, "key.pem");
+    let config = dir.join("relay.toml");
+    write(&config, &config_text(ports, VIEWER_ONLY, &cert, &key));
+    let log = log_of(&config);
+    let mut guard = Guard(Some(spawn(&config)));
+    wait_listening(guard.child(), ports);
+    let old = leaf_of(CERT);
+    // Held under the running list and certificate before any candidate.
+    let mut waiting = connect_from([127, 0, 0, 1], ports.tcp_viewer);
+    let mut tls = tls_client(connect_from([127, 0, 0, 1], ports.wss_viewer));
+    handshake(&mut tls);
+
+    // Syntax error: the array is not closed.
+    write(&config, &config_text(ports, r#"["127.0.0.2""#, &cert, &key));
+    wait_for_count(&log, 1, |line| {
+        reason_is(line, "reload_rejected", "config_syntax_error")
+    });
+    // Bad item: `not-an-ip` is neither an address nor a range.
+    write(
+        &config,
+        &config_text(ports, r#"["127.0.0.2", "not-an-ip"]"#, &cert, &key),
+    );
+    wait_for_count(&log, 1, |line| {
+        reason_is(line, "reload_rejected", "config_ip_item_invalid")
+    });
+    // The valid list is back, so the next candidate fails on its TLS files only.
+    write(&config, &config_text(ports, VIEWER_ONLY, &cert, &key));
+
+    // One file of the pair replaced: the certificate of another key pair.
+    copy_tls(&dir, "ecdsa-p384-chain.pem", "cert.pem");
+    wait_for_count(&log, 1, |line| tls_rejected(line, KEY_KEY, "pair mismatch"));
+    // The old certificate is back; the key is replaced by another key.
+    copy_tls(&dir, CERT, "cert.pem");
+    copy_tls(&dir, "other-key-p256.pem", "key.pem");
+    wait_for_count(&log, 2, |line| tls_rejected(line, KEY_KEY, "pair mismatch"));
+
+    // The config file is gone for a while.
+    std::fs::remove_file(&config).unwrap_or_else(|error| panic!("remove config: {error}"));
+    wait_for_count(&log, 1, |line| {
+        reason_is(line, "reload_rejected", "config_file_unreadable")
+    });
+    // The config is back with a valid list, but the key pair still mismatches.
+    write(&config, &config_text(ports, RANGE, &cert, &key));
+    wait_for_count(&log, 3, |line| tls_rejected(line, KEY_KEY, "pair mismatch"));
+    // The key file is gone for a while.
+    std::fs::remove_file(dir.join("key.pem")).unwrap_or_else(|error| panic!("remove key: {error}"));
+    wait_for_count(&log, 1, |line| {
+        tls_rejected(line, KEY_KEY, "file unreadable")
+    });
+
+    // Nothing was applied: the old list, certificate and connections stay.
+    assert_eq!(logged(&log, |line| event_is(line, "reload_applied")), 0);
+    assert_eq!(wss_leaf(ports.wss_viewer), old, "old certificate replaced");
+    assert!(
+        !closed_within(&mut waiting, SETTLE),
+        "rejected candidates closed the waiting connection"
+    );
+    assert!(
+        !tls_closed_within(&mut tls, SETTLE),
+        "rejected candidates closed the open TLS connection"
+    );
+    assert!(closed_within(
+        &mut connect_from([127, 0, 0, 2], ports.tcp_viewer),
+        EXIT_LIMIT
+    ));
+    assert!(!closed_within(
+        &mut connect_from([127, 0, 0, 1], ports.tcp_viewer),
+        SETTLE
+    ));
+}
+
 /// spec: operations.md:OPS-040 partial
 #[test]
-fn rejected_allow_candidates_keep_the_old_list() {
+fn ip_item_candidates_with_reversed_mixed_or_bad_prefix_are_rejected() {
     let _lock = lock_ports();
     let ports = Ports::free();
     let config = setup(
-        "allow-rejected",
+        "ip-items-rejected",
         &config_text(ports, VIEWER_ONLY, CERT, KEY),
     );
     let log = log_of(&config);
@@ -583,36 +695,28 @@ fn rejected_allow_candidates_keep_the_old_list() {
     // Held under the running list before any candidate is written.
     let mut kept = connect_from([127, 0, 0, 1], ports.tcp_viewer);
 
-    // Syntax error: the array is not closed.
-    write(&config, &config_text(ports, r#"["127.0.0.2""#, CERT, KEY));
-    wait_for_count(&log, 1, |line| {
-        reason_is(line, "reload_rejected", "config_syntax_error")
-    });
-    // Bad item: `not-an-ip` is neither an IP address nor a range.
-    write(
-        &config,
-        &config_text(ports, r#"["127.0.0.2", "not-an-ip"]"#, CERT, KEY),
-    );
-    wait_for_count(&log, 1, |line| {
-        reason_is(line, "reload_rejected", "config_ip_item_invalid")
-    });
-
-    // Reversed range, mixed families, and a prefix length beyond 32.
+    // Reversed range, then a range of two families, then a prefix beyond 32.
     write(
         &config,
         &config_text(ports, r#"["127.0.0.3-127.0.0.2"]"#, CERT, KEY),
     );
-    wait_for_count(&log, 3, |line| event_is(line, "reload_rejected"));
+    wait_for_count(&log, 1, |line| {
+        reason_is(line, "reload_rejected", "config_ip_range_reversed")
+    });
     write(
         &config,
         &config_text(ports, r#"["127.0.0.2-::1"]"#, CERT, KEY),
     );
-    wait_for_count(&log, 4, |line| event_is(line, "reload_rejected"));
+    wait_for_count(&log, 1, |line| {
+        reason_is(line, "reload_rejected", "config_ip_range_family_mixed")
+    });
     write(
         &config,
         &config_text(ports, r#"["127.0.0.1/33"]"#, CERT, KEY),
     );
-    wait_for_count(&log, 5, |line| event_is(line, "reload_rejected"));
+    wait_for_count(&log, 1, |line| {
+        reason_is(line, "reload_rejected", "config_ip_item_invalid")
+    });
 
     // Nothing was applied, and the connection held under the old list stays open.
     assert_eq!(logged(&log, |line| event_is(line, "reload_applied")), 0);
@@ -626,35 +730,78 @@ fn rejected_allow_candidates_keep_the_old_list() {
     ));
 }
 
-/// spec: operations.md:OPS-026 partial
+/// spec: operations.md:OPS-040 partial
 #[test]
-fn tls_candidates_that_do_not_match_are_rejected_and_the_old_certificate_stays() {
+fn ipv6_items_decide_the_loopback_source_at_their_boundaries() {
     let _lock = lock_ports();
     let ports = Ports::free();
-    let config = setup("tls-rejected", &config_text(ports, VIEWER_ONLY, CERT, KEY));
+    // tcp_viewer listens on `[::1]` only, so every IPv6 decision is about `::1`.
+    let v6 = |allow: &str| {
+        config_text(ports, allow, CERT, KEY).replace(
+            &format!("\"127.0.0.1:{}\"", ports.tcp_viewer),
+            &format!("\"[::1]:{}\"", ports.tcp_viewer),
+        )
+    };
+    let config = setup("ipv6-items", &v6(r#"["::2"]"#));
     let log = log_of(&config);
     let mut guard = Guard(Some(spawn(&config)));
-    wait_listening(guard.child(), ports);
-    let old = leaf_of(CERT);
-
-    // The certificate of another key pair with the old key.
-    write(
-        &config,
-        &config_text(ports, VIEWER_ONLY, "ecdsa-p384-chain.pem", KEY),
-    );
-    wait_for_count(&log, 1, |line| {
-        reason_is(line, "reload_rejected", "tls_file_invalid")
-    });
-    // The old certificate with a key that does not match it.
-    write(
-        &config,
-        &config_text(ports, VIEWER_ONLY, CERT, "other-key-p256.pem"),
-    );
-    wait_for_count(&log, 2, |line| {
-        reason_is(line, "reload_rejected", "tls_file_invalid")
+    wait_until(guard.child(), || {
+        connects_v6(ports.tcp_viewer)
+            && [
+                ports.status,
+                ports.management,
+                ports.tcp_server,
+                ports.ws_viewer,
+                ports.wss_viewer,
+            ]
+            .into_iter()
+            .all(connects)
     });
 
-    assert_eq!(wss_leaf(ports.wss_viewer), old, "old certificate replaced");
+    // Only `::2` is listed, so `::1` is refused: it is just below the item.
+    assert!(closed_within(&mut connect_v6(ports.tcp_viewer), EXIT_LIMIT));
+    // Inside: the single address, the last address of `::/127`, and the first
+    // address of a range that starts at `::1`.
+    let mut applied = 0;
+    for allow in [r#"["::1"]"#, r#"["::/127"]"#, r#"["::1-::ff"]"#] {
+        applied += 1;
+        write(&config, &v6(allow));
+        wait_for_count(&log, applied, |line| event_is(line, "reload_applied"));
+        assert!(
+            !closed_within(&mut connect_v6(ports.tcp_viewer), SETTLE),
+            "{allow} refused ::1"
+        );
+    }
+    // Outside: a range and a prefix that both start just after `::1`.
+    for allow in [r#"["::2-::ff"]"#, r#"["::2/127"]"#] {
+        applied += 1;
+        write(&config, &v6(allow));
+        wait_for_count(&log, applied, |line| event_is(line, "reload_applied"));
+        assert!(
+            closed_within(&mut connect_v6(ports.tcp_viewer), EXIT_LIMIT),
+            "{allow} admitted ::1"
+        );
+    }
+}
+
+/// Whether a log line rejects a candidate for a TLS file at `config_key`
+/// with `detail`.
+fn tls_rejected(line: &str, config_key: &str, detail: &str) -> bool {
+    reason_is(line, "reload_rejected", "tls_file_invalid")
+        && field(line, "config_key") == Some(config_key)
+        && field(line, "detail") == Some(detail)
+}
+
+/// Connects to `[::1]:port`. The source address is `::1` too.
+fn connect_v6(port: u16) -> TcpStream {
+    TcpStream::connect(SocketAddr::from((Ipv6Addr::LOCALHOST, port)))
+        .unwrap_or_else(|error| panic!("connect [::1]:{port}: {error}"))
+}
+
+/// Whether `[::1]:port` accepts a TCP connection.
+fn connects_v6(port: u16) -> bool {
+    let addr = SocketAddr::from((Ipv6Addr::LOCALHOST, port));
+    TcpStream::connect_timeout(&addr, Duration::from_millis(200)).is_ok()
 }
 
 /// spec: operations.md:OPS-024

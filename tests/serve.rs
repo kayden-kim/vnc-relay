@@ -437,6 +437,50 @@ handshake_secs = 121
     }
 }
 
+/// spec: operations.md:OPS-040 partial
+#[test]
+fn rejects_reversed_mixed_and_bad_prefix_items_at_start_with_exit_code_3() {
+    let _lock = lock_ports();
+    let ports = Ports::free();
+    let config = valid_setup("ip-items-start", ports);
+    write(
+        &config,
+        &entry_config(
+            ports,
+            r#"["203.0.113.20-203.0.113.10", "192.0.2.1-2001:db8::1", "2001:db8::9-2001:db8::1", "192.0.2.1/33"]"#,
+            "[]",
+        ),
+    );
+    let run = serve(&config);
+    assert_eq!(run.code, Some(3), "{}", run.stderr);
+    let mut errors = run.errors();
+    errors.sort();
+    assert_eq!(
+        errors,
+        pairs(&[
+            ("config_ip_item_invalid", "relay.tcp_viewer.allow[3]"),
+            ("config_ip_range_family_mixed", "relay.tcp_viewer.allow[1]"),
+            ("config_ip_range_reversed", "relay.tcp_viewer.allow[0]"),
+            ("config_ip_range_reversed", "relay.tcp_viewer.allow[2]"),
+        ])
+    );
+    // One line per diagnostic on stdout; the lines name keys, never the
+    // rejected values.
+    assert!(
+        events(&run.stdout)
+            .iter()
+            .all(|event| *event == "startup_failed"),
+        "{}",
+        run.stdout
+    );
+    let mut logged = startup_failures(&run.stdout);
+    logged.sort();
+    assert_eq!(logged, errors);
+    for value in ["203.0.113.20", "2001:db8::9", "192.0.2.1/33"] {
+        assert!(!run.stdout.contains(value), "{value} in {}", run.stdout);
+    }
+}
+
 /// spec: operations.md:OPS-001
 #[test]
 fn rejects_toml_syntax_error_and_missing_config_file_with_exit_code_3() {
