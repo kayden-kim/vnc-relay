@@ -748,6 +748,10 @@
   line-height: var(--type-heading-card-line);
 }
 
+.dialog-description {
+  overflow-wrap: anywhere;
+}
+
 .dialog-actions {
   display: flex;
   flex-wrap: wrap;
