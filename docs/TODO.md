@@ -272,7 +272,7 @@ Mode I·II 초기 흐름을 추정 없이 설명할 수 있게 한다. 관찰은
   - 기준: [운영 스펙 3.3절](specs/operations.md#33-파일-변경-자동-감지와-부분-재로드), [설정 계약 1.8절](contracts/config-v1.md#18-재로드-구분)·[2.3절](contracts/config-v1.md#23-재로드-결과)
   - 완료 조건: OPS-003, OPS-024~028, OPS-035, OPS-038, OPS-040, OPS-041, WS-022
   - 선행: 2.1, 3.2, 5.1
-  - 현재: 구현했다([파일 감지 모듈 설계](architectures/file-watch.md)의 `ReloadWatcher`, `ReloadService`, `ReloadSnapshot`). 실제 바이너리 시험 9건(`tests/reload.rs`)과 어댑터·서비스 단위 시험이 있다. 완전: OPS-003·024·027·028·035·038·041. 부분: OPS-025·026·040과 WS-022. 부분 조건의 남은 것은 [파일 감지 모듈 설계 대조 기록](architectures/file-watch.md#대조-기록)에 있다. 남은 작업: 작업 2.7·2.9·2.10(OPS-025의 초기 교환·대기·활성 연결, WS-022의 중계 데이터 전달), 작업 번호 없이 시험을 쓰지 않은 항목(OPS-026 설정·TLS 파일 일시 소멸의 바이너리 시험, OPS-040 IPv6와 범위 경계의 바이너리 시험). Windows 관찰과 미결정 항목 14는 [파일 감지 모듈 설계 9절](architectures/file-watch.md#9-결정-기록과-미결정-사항)에 있다. 부분 조건이 남아 체크박스는 `[ ]`로 둔다.
+  - 현재: 구현했다([파일 감지 모듈 설계](architectures/file-watch.md)의 `ReloadWatcher`, `ReloadService`, `ReloadSnapshot`). 바이너리 시험 10건(`tests/reload.rs`)과 시작 시험 1건(`tests/serve.rs`의 역순·혼합·잘못된 표기 항목, 종료 코드 3), 어댑터·서비스 단위 시험이 있다. 완전: OPS-003·024·026·027·028·035·038·041. 부분: OPS-025·040과 WS-022. 부분 조건의 남은 것은 [파일 감지 모듈 설계 대조 기록](architectures/file-watch.md#대조-기록)에 있다. 남은 작업: 작업 2.7·2.9·2.10(OPS-025의 초기 교환·대기·활성 연결, WS-022의 중계 데이터 전달). OPS-040의 IPv6 출발지 조건은 환경 한계(이 머신의 루프백 IPv6 주소는 `::1`뿐)로 남는다. Windows 관찰과 미결정 항목 14는 [파일 감지 모듈 설계 9절](architectures/file-watch.md#9-결정-기록과-미결정-사항)에 있다. 부분 조건이 남아 체크박스는 `[ ]`로 둔다.
 - [ ] **5.3 정상 종료와 재시작**: 신규 접속 중지, 미완성 작업 정리, 종료 유예 G, 유예 중 관리 처리, 두 번째 종료 요청의 즉시 정리를 구현한다. Windows 콘솔 닫기·로그오프 신호 처리를 확인한다.
   - 기준: [운영 스펙 3.4절](specs/operations.md#34-정상-종료와-재시작), [CLI 계약 1.8절](contracts/cli-v1.md#18-수동-시작과-종료)
   - 완료 조건: OPS-007~010, OPS-013, OPS-042~043

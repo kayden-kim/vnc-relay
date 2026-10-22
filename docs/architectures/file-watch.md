@@ -289,3 +289,19 @@ flowchart LR
 | WS-022 (부분) | `tests/reload.rs` `removed_source_is_refused_at_upgrade_on_connections_opened_before_the_removal`. 업그레이드된 WS는 열린 채 남는다. 업그레이드 전에 열어 둔 HTTP·WSS는 `upgrade` 단계에서 403 `ip_not_allowed`. 새 접속은 거절 | 기존 중계가 제거 뒤에도 데이터를 계속 전달하는지 확인(Mode II 대기 등록과 양방향 중계가 필요하다) | 2.9·2.10 |
 
 §9 항목 14(Windows 디렉터리·편집기 핸들)는 사용자 결정 전이다.
+
+### 작업 5.2 정정 3
+
+- 정정 이유: 정정 2의 남은 조건 표는 OPS-026의 설정·TLS 파일 일시 소멸 바이너리 시험 부재와 OPS-040의 IPv6·범위 경계 바이너리 시험 부재를 적었다. 이 두 조건의 시험을 추가했다.
+- 범위: 시험 코드만 바꿨다(`tests/reload.rs`, `tests/serve.rs`). 운영 코드는 바꾸지 않았다. `tests/reload.rs`의 `rejected_allow_candidates_keep_the_old_list`와 `tls_candidates_that_do_not_match_are_rejected_and_the_old_certificate_stays`는 새 시험으로 대체하며 삭제했다. 정정 2의 해당 행은 기록으로 남긴다.
+- 기준: 시험 커밋 `dcebd1e`(OPS-026 비부분 시험과 OPS-040 IP 항목 시험), `3eea38f`(IPv6 `::/128` 바깥 경계). 이 문서 커밋은 코드를 바꾸지 않는다.
+- 판정: OPS-026은 비부분 시험이 확인하므로 완전이다. OPS-040은 IPv6 출발지 조건이 환경 한계로 남아 부분이다. OPS-025·WS-022의 남은 조건과 남은 작업은 정정 2와 같다.
+
+#### 남은 조건 (정정 3 기준)
+
+| 시나리오 | 지금 시험하는 것 | 남은 조건 | 남은 작업 |
+| --- | --- | --- | --- |
+| OPS-026 (완전) | `tests/reload.rs` `rejected_candidates_keep_the_old_settings_certificate_and_connections`(비부분). 구문 오류(`config_syntax_error`), 잘못된 IP 항목(`config_ip_item_invalid`), 한쪽 파일 교체로 쌍이 맞지 않는 인증서와 키(`tls_file_invalid`, `pair mismatch`), 설정 파일 삭제(`config_file_unreadable`), 키 불일치 설정 뒤 키 파일 삭제(`tls_file_invalid`, `file unreadable`)를 확인한다. `reload_applied`가 없고, 대기 TCP·열린 TLS 연결이 남고, 원래 인증서가 유지되고, 허용 목록은 이전 값 그대로다 | 없음 | 없음 |
+| OPS-040 (부분) | IPv4: `tests/serve.rs` `applies_item_boundaries_and_an_empty_list_at_accept`, `tests/reload.rs` `allow_change_keeps_waiting_connections_and_applies_to_new_decisions`(정정 2와 같다). 역순·혼합·잘못된 표기: `tests/reload.rs` `ip_item_candidates_with_reversed_mixed_or_bad_prefix_are_rejected`(재로드 거절), `tests/serve.rs` `rejects_reversed_mixed_and_bad_prefix_items_at_start_with_exit_code_3`(시작 실패, 종료 코드 3). `127.0.0.3-127.0.0.2`는 `config_ip_range_reversed`, `127.0.0.2-::1`은 `config_ip_range_family_mixed`, `127.0.0.1/33`은 `config_ip_item_invalid`. IPv6: `tests/reload.rs` `ipv6_items_decide_the_loopback_source_at_their_boundaries`가 `::1`을 출발지로 확인한다. 수락 `::1`, `::/127`, `::1-::ff`; 거절 `::2`, `::2-::ff`, `::2/127`, `::/128` | 환경 한계. 이 머신의 루프백 IPv6 주소는 `::1`뿐이라 `::1` 이외의 출발지로는 범위 안쪽·바깥쪽 경계를 확인할 수 없다(예: `::ff` 안쪽 수락, `::100` 바깥 거절). | 없음. 루프백 IPv6 주소가 여럿인 환경이면 `ipv6_items_decide_the_loopback_source_at_their_boundaries`를 확장한다 |
+
+단위 시험(OPS-040 판정 함수 `AllowList::permits`, `crates/domain/src/allow_list.rs`): `accepts_single_cidr_and_range_in_both_families`, `rejects_reversed_and_mixed_ranges`, `permits_the_boundaries_of_each_item_and_nothing_just_outside`. 설정 파싱(`crates/adapters/tests/config_contract.rs`): `accepts_single_cidr_and_range_items_of_both_families`, `rejects_bad_ip_items_with_their_own_codes`.
