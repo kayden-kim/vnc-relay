@@ -9,7 +9,7 @@
 | 대상 독자 | 대시보드 프런트엔드 구현자와 검토자 |
 | 검증 상태 | Draft |
 | 검증 환경·버전 | 작업 4.8(2026-10-22): Windows 10.0.26200 x64, PowerShell, Chrome 155.0.8059.84. Ubuntu 24.04.4 LTS x64(WSL2), Google Chrome 156.0.8078.47. rustc는 두 OS 모두 1.99.1(`rust-toolchain.toml`). 나머지 환경은 실행할 때 기록한다 |
-| 최종 검증일 | 2026-10-22. 3.1 1단계, 3.2 1단계, 3.3 1단계, 3.4 일부를 실행했다(4절). 작업 4.10 재실행(4.5절, 커밋 `3944dc2`): WSL·Windows 게이트 모두 `ALL PASSED`. 3.5~3.7은 미실행 |
+| 최종 검증일 | 2026-10-22. 3.1 1단계, 3.2 1단계, 3.3 1단계, 3.4 일부를 실행했다(4절). 작업 4.10 재실행(4.5절, 커밋 `3944dc2`): WSL·Windows 게이트 모두 `ALL PASSED`. 작업 4.11(4.7절, 커밋 `5368dec`): 3.3 1단계, 3.4 SCR-002 일부, 3.5 자동 확인 일부를 실행했다. 최종 HEAD 게이트는 WSL·Windows 모두 `ALL PASSED`. 3.5의 사람 확인, 3.6, 3.7은 미실행 |
 | 관련 기준 문서 | [프런트엔드 컨벤션](../conventions/frontend.md), [디자인 기준](../design/DESIGN.md), [화면 스펙](../specs/dashboard.md), [관리 API 계약 1.11절](../contracts/management-api-v1.md) |
 
 ## 1. 대상과 영향
@@ -174,10 +174,10 @@
 | 토큰 CSS와 저장된 파일 | 차이 0건, 종료 코드 0 | 3.1 1단계 | 통과. 작업 4.8(Windows): `tokens --check: 통과`, 종료 코드 0. DESIGN.md L6 값을 `#f4f6f6`으로 바꾸면 `실패 (3건)`과 종료 코드 1이 나왔고, 원래 값으로 되돌린 뒤 다시 통과했다. 작업 4.9 재작업(4.3절): 로그인 복사본 포함 `tokens --check: 통과`. 복사본·원본·복사 목록 밖 파일을 변조하면 `실패 (1건)`과 종료 코드 1이 나왔고, 되돌린 뒤 통과했다 | 작업 4.8 보고의 명령 출력 |
 | DESIGN.md 린트(선택) | 오류 0건, 경고·정보 수 기록 | 3.1 2단계 | 미실행 | 검증 기록의 출력 |
 | 제공 파일 표 | `dashboard_assets` 테스트 통과 | 3.2 1단계 | 통과. 2026-10-22 커밋 `df3b5b2`, Ubuntu 24.04(WSL2): `cargo test --test dashboard_assets` 시험 2개 통과. 같은 커밋의 Windows 전체 완료 검증도 이 시험을 포함해 통과했다. 작업 4.9 재작업(4.3절): 시험 2개 통과(Windows). 작업 4.10(4.4절): 시험 2개 통과(Windows, 작업 트리) | 검증 기록의 테스트 출력 |
-| 브라우저 테스트 | 모든 테스트 페이지의 `data-result`가 `pass` | 3.3 1단계 | 통과. 작업 4.8(Windows): `cargo test --test dashboard_browser` 시험 2개 통과(2026-10-22 재실행, 19.19초). Chrome 155.0.8059.84. Ubuntu 24.04(WSL2), 커밋 `df3b5b2`: 시험 2개 통과(10.39초), Google Chrome 156.0.8078.47(`/usr/bin/google-chrome`). 작업 4.9 재작업(4.3절): 시험 7개 통과(Windows, 27.20초). 작업 4.10(4.4절, Windows, 작업 트리): 시험 21개 통과(146.6초, 운영 화면 시험 포함). 작업 4.10 재실행(4.5절, 커밋 `3944dc2`): WSL 시험 21개 통과(61.78초), Windows 시험 21개 통과(97.16초). 기준 `61e03e9`의 WSL 실행은 시험 6개가 실패했다(4.5절) | 검증 기록의 테스트 출력과 브라우저 버전 |
-| 시나리오 보고서 | 자동 연결된 DASH 항목이 `통과` | 3.3 2단계 | 부분. 작업 4.10(4.4절, 작업 트리): 150건 중 통과 23, 부분 40, 실패 0, 미실행 1, 미연결 86. DASH 27건은 통과 0, 부분 17, 미연결 10이다. 미실행 1건은 OPS-007이다. 4.9 재작업 수치(WSL 통과 18, Windows 통과 17)보다 통과가 늘었다. 늘어난 항목은 확인하지 않았다. 작업 4.10 재실행(4.5절, 커밋 `3944dc2`): WSL 통과 24, 부분 40, 실패 0, 미실행 0, 미연결 86. Windows 통과 23, 부분 40, 실패 0, 미실행 1(OPS-007), 미연결 86. DASH 세부 수치는 이 재실행에서 세지 않았다. 최종 게이트 수치는 4.5절에 있다 | `<Cargo 대상 디렉터리>/scenario-report.md` |
-| 폭별 시각 대조 | 6개 폭에서 가로 스크롤 0건, 차이가 스펙·디자인 기준에 맞음 | 3.4 | 부분. 작업 4.8: 미리보기 6폭 × ko·en 12장(4.1절). 작업 4.9(2026-10-22): 로그인 화면 `/login/`을 6폭 × 7장으로 찍어 42장을 얻었다(`target/dashboard-shots/<폭>/{input-ko,invalid-ko,busy-ko,failed-ko,request-failed-ko,input-en,invalid-en}.png`). 6폭 모두 `scrollWidth`와 `clientWidth`가 같았고(320 포함), CSP 위반은 0건이었다. 콘솔 오류는 가로챈 401·500 응답의 "Failed to load resource"뿐이었다. 시안과의 차이는 4.2절. 작업 4.9 재작업(4.3절)에서 같은 42장을 다시 찍었다. 6폭 모두 가로 스크롤 0건, CSP 위반 0건이었다. 4.9 기준선과는 42장 모두 바이트가 달랐다(화면을 구성 요소로 바꾼 결과). 작업 4.10(4.4절): 실제 서버에서 `/login/`(ko 입력 화면)과 `/`(ko 운영 화면)를 6폭으로 찍었다. 가로 스크롤 0건. 320 폭의 상단 막대 언어 선택은 밑줄과 가까워 사람 확인이 필요하다. 사람 비교는 4.12에서 한다. 작업 4.10 화면 상태 대조(4.6절): SCR-001 목업 21장과 1280·390·320 × ko·en × 상태 8종 48장을 대조했다. 6폭·언어 모두 가로 스크롤 0건, CSP 위반 0건. 수정 필요 6건이 나왔다(상단 막대 5건, `Unavailable` 줄바꿈 1건). 1280은 정상 상태와 빈 목록 문구만 판정했다 |
-| 키보드 | 3.5의 4개 항목 통과 | 3.5 | 미실행 | 검토 기록 |
+| 브라우저 테스트 | 모든 테스트 페이지의 `data-result`가 `pass` | 3.3 1단계 | 통과. 작업 4.8(Windows): `cargo test --test dashboard_browser` 시험 2개 통과(2026-10-22 재실행, 19.19초). Chrome 155.0.8059.84. Ubuntu 24.04(WSL2), 커밋 `df3b5b2`: 시험 2개 통과(10.39초), Google Chrome 156.0.8078.47(`/usr/bin/google-chrome`). 작업 4.9 재작업(4.3절): 시험 7개 통과(Windows, 27.20초). 작업 4.10(4.4절, Windows, 작업 트리): 시험 21개 통과(146.6초, 운영 화면 시험 포함). 작업 4.10 재실행(4.5절, 커밋 `3944dc2`): WSL 시험 21개 통과(61.78초), Windows 시험 21개 통과(97.16초). 기준 `61e03e9`의 WSL 실행은 시험 6개가 실패했다(4.5절). 작업 4.11(4.7절, 커밋 `5368dec`): 시험 31개 통과(WSL 89.48초, Windows 148.88초, 최종 HEAD). 바이트·레이아웃 수정 전 실행과 수정 뒤 `session_`·`router_` 시험 12개 통과는 4.7절에 있다 | 검증 기록의 테스트 출력과 브라우저 버전 |
+| 시나리오 보고서 | 자동 연결된 DASH 항목이 `통과` | 3.3 2단계 | 부분. 작업 4.10(4.4절, 작업 트리): 150건 중 통과 23, 부분 40, 실패 0, 미실행 1, 미연결 86. DASH 27건은 통과 0, 부분 17, 미연결 10이다. 미실행 1건은 OPS-007이다. 4.9 재작업 수치(WSL 통과 18, Windows 통과 17)보다 통과가 늘었다. 늘어난 항목은 확인하지 않았다. 작업 4.10 재실행(4.5절, 커밋 `3944dc2`): WSL 통과 24, 부분 40, 실패 0, 미실행 0, 미연결 86. Windows 통과 23, 부분 40, 실패 0, 미실행 1(OPS-007), 미연결 86. DASH 세부 수치는 이 재실행에서 세지 않았다. 최종 게이트 수치는 4.5절에 있다. 작업 4.11(4.7절, 커밋 `5368dec`): DASH-006·007·009~014·026이 `partial`로 연결됐다. 최종 HEAD 수치는 4.7절에 있다 | `<Cargo 대상 디렉터리>/scenario-report.md` |
+| 폭별 시각 대조 | 6개 폭에서 가로 스크롤 0건, 차이가 스펙·디자인 기준에 맞음 | 3.4 | 부분. 작업 4.8: 미리보기 6폭 × ko·en 12장(4.1절). 작업 4.9(2026-10-22): 로그인 화면 `/login/`을 6폭 × 7장으로 찍어 42장을 얻었다(`target/dashboard-shots/<폭>/{input-ko,invalid-ko,busy-ko,failed-ko,request-failed-ko,input-en,invalid-en}.png`). 6폭 모두 `scrollWidth`와 `clientWidth`가 같았고(320 포함), CSP 위반은 0건이었다. 콘솔 오류는 가로챈 401·500 응답의 "Failed to load resource"뿐이었다. 시안과의 차이는 4.2절. 작업 4.9 재작업(4.3절)에서 같은 42장을 다시 찍었다. 6폭 모두 가로 스크롤 0건, CSP 위반 0건이었다. 4.9 기준선과는 42장 모두 바이트가 달랐다(화면을 구성 요소로 바꾼 결과). 작업 4.10(4.4절): 실제 서버에서 `/login/`(ko 입력 화면)과 `/`(ko 운영 화면)를 6폭으로 찍었다. 가로 스크롤 0건. 320 폭의 상단 막대 언어 선택은 밑줄과 가까워 사람 확인이 필요하다. 사람 비교는 4.12에서 한다. 작업 4.10 화면 상태 대조(4.6절): SCR-001 목업 21장과 1280·390·320 × ko·en × 상태 8종 48장을 대조했다. 6폭·언어 모두 가로 스크롤 0건, CSP 위반 0건. 수정 필요 6건이 나왔다(상단 막대 5건, `Unavailable` 줄바꿈 1건). 1280은 정상 상태와 빈 목록 문구만 판정했다. 작업 4.11(4.7절): SCR-002 상태 5종(SCR-001 목록, SCR-002 상세·대화상자·실패, SCR-003 로그인) × 6폭 × ko·en 60장을 찍었다. 가로 넘침 0, CSP 위반 0. 이 60장은 바이트·레이아웃 수정 전 촬영이다. 수정 뒤에는 ko 1280·390·320만 다시 찍었다. 시안 차이 4건은 4.7절과 개요 14절 차이 표에 있다. 사람 비교는 4.12에서 한다 |
+| 키보드 | 3.5의 4개 항목 통과 | 3.5 | 부분. 작업 4.11(4.7절, 작업 트리): SCR-002에서 Tab 순서, 포커스 링 두께(2px)·간격(2px), Enter로 취소 실행, 대화상자 Escape·취소 뒤 포커스 복귀(ko·en)를 자동으로 확인했다. 대화상자 Tab 순환을 고쳤고 합성 keydown으로만 시험했다. 로그인 화면 Tab 순서(3.5의 1번)와 실제 키 입력 전체는 확인하지 않았다. 4개 항목 전체 통과가 아니다 | 검토 기록 4.7절 |
 | 스크린 리더 | 3.6의 항목 통과 | 3.6 | 미실행 | 검토 기록과 스크린 리더 이름·버전 |
 | 다른 브라우저·실기기 | 3.7 통과 또는 미실행 사유 기록 | 3.7 | 미실행 | 브라우저 버전과 검토 기록 |
 
@@ -349,6 +349,58 @@
 - 최종 HEAD 게이트(대상 HEAD `3b3a179`, 이 기록 커밋은 문서만 바꾼다):
   - WSL `vr-full.sh`: ALL PASSED. 시나리오 150건 통과 24, 부분 40, 실패 0, 미실행 0, 미연결 86. dashboard_browser 21 passed. 소요 137.98초. 로그 WSL `~/gate-wsl-3b3a179.log`.
   - Windows `vr-win.ps1 -Only all`: ALL PASSED (all). 시나리오 150건 통과 23, 부분 40, 실패 0, 미실행 1(OPS-007, Unix 전용), 미연결 86. dashboard_browser 21 passed. 소요 219.04초. 보고서 `D:\Workspace\vnc-relay\target\scenario-report.md`.
+
+### 4.7 검토 기록 (작업 4.11 세션 상세, 2026-10-22)
+
+- 검토자: 에이전트 Dash411(작업 위임: Main). 사람의 검토가 아니다. 사람 검토는 작업 4.12에서 한다.
+- 구현: 세션 상세 `web/dashboard/app/session.js`, 해시 라우터 `router.js`, 공통 셸 `shell.js`, 조회 상태 `query.js`, 대화상자 Tab 순환 `components/dialog.js`. 시험 페이지는 `tests/session.html`(`session-scenarios.js`)과 `tests/router.html`(`router-scenarios.js`)이다.
+- 환경: Windows 10.0.26200 x64, PowerShell, Rust 1.99.1. 시험 브라우저는 헤드리스 Chrome이다. 버전은 이 기록에서 확인하지 않았다(4.8절: Chrome 155.0.8059.84).
+- 기준과 커밋: 기준 커밋 `7294d96`(4.10 기록). 구현 `172764a`, 시험 `9a35adf`, 문서 `5368dec`. 아래 명령과 상태 캡처는 커밋 전 작업 트리에서 얻었다. 최종 게이트는 `5368dec`에서 다시 돌렸다(기록 끝).
+- 명령과 결과:
+  - `cargo fmt --all`: 종료 코드 0.
+  - `cargo xtask tokens`, `cargo xtask tokens --check`: 통과.
+  - `vr-win.ps1 -Only check`: `ALL PASSED (check)`.
+  - `cargo test --test dashboard_assets`: 시험 2개 통과.
+  - `cargo test --test dashboard_browser`: 시험 31개 통과, 실패 0. 바이트·레이아웃 수정 전 실행이다.
+  - 수정 뒤 `cargo test --test dashboard_browser -- session_ router_`: 시험 12개 통과, 실패 0.
+- 상태 캡처(3.4): SCR-001 목록, SCR-002 상세·대화상자·실패, SCR-003 로그인 × ko·en × 6폭 = 60장. `target/dashboard-shots/scr/<폭>/<언어>-<상태>.png`, 보고서 `scr/report.json`. 가로 넘침 0, CSP 위반 0, 페이지 오류 0, 클릭 실패 0. 이 60장은 바이트·레이아웃 수정 전에 찍었다.
+- 시안 대조(3.4, 1280 ko): 목업 프레임 `scr002-normal`, `scr002-dialog`를 `target/dashboard-shots/compare/mock-scr002-*-1280.png`로 찍어 구현 캡처와 나란히 봤다. 차이 4건은 아래 "남은 차이"에 적었다.
+- 고친 것:
+  - 바이트 행 누락: DASH-006과 스펙 117행의 방향별 바이트(`Viewer->대상`, `대상->Viewer`)가 없었다. `createStat` 항목으로 넣었다.
+  - 요약 값 줄바꿈: 28px 지표 크기에서 값이 어색하게 줄바꿈됐다. `app.css`의 `.session-facts .stat-value`로 범위를 좁혀 고쳤다. SCR-001의 `.stat-value`는 바꾸지 않았다.
+  - `세션 undefined`: `session.js`가 상태에 세션 `id`를 저장하지 않아 제목과 종료 본문에 `undefined`가 나왔다. 저장하도록 고쳤다.
+  - 대화상자 Tab 누출(DASH-015): 탐침에서 `종료 확인`에 포커스가 있을 때 Tab이 `body`로 나갔다. `components/dialog.js`의 keydown이 Tab·Shift+Tab을 두 단추 사이에서 돌린다. 시험 `DASH-015: Tab wraps…`(`session-scenarios.js`)는 합성 keydown이라 핸들러만 확인한다. 수정 뒤 네이티브 Tab 키로는 다시 확인하지 않았다.
+  - 포커스 복귀의 처음 실패는 점검 아티팩트였다: `b.click()`은 포커스를 주지 않는다. `focus()`와 Enter로 다시 보니 Escape와 키보드 취소 뒤 포커스가 `세션 종료`로 돌아왔다(ko·en).
+- 수정 뒤 확인:
+  - ko 1280: `dash-006` `pass`, CSP 위반 0. 바이트 `Viewer->대상` 1.5 KiB, `대상->Viewer` 1.0 MiB. 캡처 `compare/impl-dash006-ko-1280.png`를 봤다. 값이 줄바꿈 없이 읽힌다.
+  - ko 390, ko 320: `pass`, 가로 넘침 0(측정). 캡처 `compare/impl-dash006-ko-390.png`, `impl-dash006-ko-320.png`는 측정만 했고 육안으로 보지 않았다.
+  - en은 따로 찍지 않았다. 바이트 표시는 언어와 무관하다(스펙 153–154행). 두 언어는 `session_`·`router_` 시험 12개 안에서 돈다.
+- 남은 차이(시안 1280 ko, 구현 판단, 해소하지 않음):
+  1. 배치: 시안은 전송량을 정보 카드 옆 별도 카드로 둔다. 스펙 99–109행 ASCII는 `목록으로`를 왼쪽 위, `세션 종료`를 본문 아래 줄에 둔다. 구현은 상단 `page-actions` 줄에 `목록으로`·`상태 재조회`·`세션 종료`를 둔다. `page-head`가 SCR-001과 공유되어 SCR-002만 바꿀 수 없다.
+  2. 모드: 시안은 배지 칩, 구현은 평문이다.
+  3. 주소와 전송량: 시안은 monospace 주소와 dt/dd 목록, 구현은 `.stat` 카드다.
+  4. 상태 행: 구현은 `상태`(`stateLabel`, 구현 판단, 개요 15절 Q3)에 `active`를 보인다. 시안에는 상태 행이 없다.
+- 접근성과 포커스(자동 대체, 청취 아님):
+  - 포커스 표시: 포커스를 받을 수 있는 모든 요소에 `outline: solid 2px`, `offset 2px`. 색은 측정값만 적는다(상단 막대 rgb(255,255,255), 본문 rgb(18,53,43)). 토큰 `colors.ring`·`colors.navbar-ring`과 대조하지 않았고 대비 비율도 계산하지 않았다.
+  - Tab 순서: 상단 막대(브랜드, 언어 선택, 로그아웃) → 페이지 동작 → 본문.
+  - 접근성 트리: `banner`, `main`, `navigation`(`주 메뉴`/`Main menu`), 이름 있는 영역, `progressbar`(`중계 연결`, `관리 연결`), 언어 `combobox`(`언어 (Language)`), `columnheader`. 표 자체의 접근 이름은 비어 있다. 스펙에 표 이름 규칙이 없어 열린 관찰로 둔다.
+- 복사 키(스펙 9.3절 대조):
+  - CPY 키 14개(`sessionScreen` 005, `sessionTitle` 051, `back` 010, `cancel` 011, `recheck` 014, `terminate` 060, `terminateTitle` 061, `terminateBody` 062, `terminateConfirm` 063, `terminating` 064, `terminateFailed` 065, `terminateUnknown` 066, `invalidSessionId` 067, `terminateRejected` 068)는 스펙 문구와 같다. `notFound`는 CPY-059(`현재 세션을 찾을 수 없음`)와 같다.
+  - 스펙에 없는 키: `directionViewerToTarget`·`directionTargetToViewer`는 CPY-040·043 표 머리글이라 스펙 근거가 있다. 구현 판단으로 표시한 키는 7개다: `documentTitle`, `sessionDocumentTitle`, `peerViewer`, `peerTarget`, `dayUnit`, `sessionInfoTitle`, `stateLabel`. `navLabel`은 Q3 잠정이다. 이 중 개요 15절 Q3에 없던 4개(`documentTitle`, `peerViewer`, `peerTarget`, `dayUnit`)를 Q3 보충으로 올렸다.
+- 바인딩: `cargo xtask dashboard-serve --port 8765`는 `127.0.0.1:8765`에서만 듣는다. `[::1]:8765`와 이 PC의 LAN 주소 3개는 연결이 거부됐다. 코드는 `xtask/src/dashboard_serve.rs`의 `TcpListener::bind(("127.0.0.1", port))`다.
+- 확인하지 못한 것:
+  - 3.5의 1번(로그인 화면 Tab 순서)과 실제 키 입력 전체. 이번에는 SCR-002만 자동으로 확인했다.
+  - 수정 뒤 네이티브 Tab 키로 대화상자 순환을 다시 확인하지 않았다.
+  - 스크린 리더(3.6), Firefox·Safari·Edge·실기기(3.7)는 미실행이다.
+  - 실서버 목록·상세·종료(4.4·4.5 뒤). 이 시험은 목 응답이다.
+  - 시안 차이 4건의 해소와 사람 비교(4.12). 표 접근 이름(열린 관찰).
+  - 4.6의 `.sr-only`(320 뷰포트 밖)와 목업 `.app` 클립, 200% 줌, 글자 크기 조정, 다크 모드는 이번에 보지 않았다.
+  - 60장 중 수정 뒤 다시 찍은 것은 ko 1280·390·320뿐이다.
+
+- 최종 HEAD 게이트(대상 HEAD `5368dec`, 이 기록 커밋은 문서만 바꾼다. 기준 게이트는 4.6절 `3b3a179`):
+  - WSL `vr-full.sh`: ALL PASSED, `WSL_EXIT=0`. 시나리오 150건 통과 24, 부분 48, 실패 0, 미실행 0, 미연결 78. dashboard_browser 31 passed, 0 failed(89.48초). 로그 파일은 없고 표준 출력만 남았다.
+  - Windows `vr-win.ps1 -Only all`: ALL PASSED (all), `WIN_EXIT=0`. 시나리오 150건 통과 23, 부분 48, 실패 0, 미실행 1(OPS-007, Unix 전용), 미연결 78. dashboard_browser 31 passed, 0 failed(148.88초). 보고서 `D:\Workspace\vnc-relay\target\scenario-report.md`.
+  - DASH 27건(Windows 보고서): 통과 0, 부분 25, 미연결 2. 미연결은 DASH-015와 DASH-023이다. DASH-015 탐침(`session-scenarios.js`의 `caseDash009`, 합성 keydown)은 `session_cancel_sends_no_request_and_restores_focus_in_browser`에서 돌지만, DASH-015 표식을 단 시험 함수가 없어 보고서에서 연결되지 않는다. DASH-023은 이번 작업 대상이 아니다.
 
 ## 5. 중단 조건
 
