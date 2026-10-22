@@ -9,7 +9,7 @@
 | 대상 독자 | 대시보드 프런트엔드 구현자와 검토자 |
 | 검증 상태 | Draft |
 | 검증 환경·버전 | 작업 4.8(2026-10-22): Windows 10.0.26200 x64, PowerShell, Chrome 155.0.8059.84. Ubuntu 24.04.4 LTS x64(WSL2), Google Chrome 156.0.8078.47. rustc는 두 OS 모두 1.99.1(`rust-toolchain.toml`). 나머지 환경은 실행할 때 기록한다 |
-| 최종 검증일 | 2026-10-22. 3.1 1단계, 3.2 1단계, 3.3 1단계, 3.4 일부를 실행했다(4절). 작업 4.10 재실행(4.5절, 커밋 `3944dc2`): WSL·Windows 게이트 모두 `ALL PASSED`. 작업 4.11(4.7절, 커밋 `5368dec`): 3.3 1단계, 3.4 SCR-002 일부, 3.5 자동 확인 일부를 실행했다. 최종 HEAD 게이트는 WSL·Windows 모두 `ALL PASSED`. 작업 4.11 세션 시험 보강(4.9절, 커밋 `d0ef8d0`): 3.4 SCR-002 일부(DASH-016·019·022·024·025 시험)를 실행했다. 이 게이트도 WSL·Windows 모두 `ALL PASSED`. 3.5의 사람 확인, 3.6, 3.7은 미실행 |
+| 최종 검증일 | 2026-10-22. 3.1 1단계, 3.2 1단계, 3.3 1단계, 3.4 일부를 실행했다(4절). 작업 4.10 재실행(4.5절, 커밋 `3944dc2`): WSL·Windows 게이트 모두 `ALL PASSED`. 작업 4.11(4.7절, 커밋 `5368dec`): 3.3 1단계, 3.4 SCR-002 일부, 3.5 자동 확인 일부를 실행했다. 최종 HEAD 게이트는 WSL·Windows 모두 `ALL PASSED`. 작업 4.11 세션 시험 보강(4.9절, 커밋 `d0ef8d0`): 3.4 SCR-002 일부(DASH-016·019·022·024·025 시험)를 실행했다. 이 게이트도 WSL·Windows 모두 `ALL PASSED`. 작업 4.11 라우터 언어 시험(4.10절, 커밋 `a917eb1`): 3.4 일부(DASH-025 라우터 시험)를 실행했다. 최종 HEAD `48918d3`의 게이트도 WSL·Windows 모두 `ALL PASSED`. 3.5의 사람 확인, 3.6, 3.7은 미실행 |
 | 관련 기준 문서 | [프런트엔드 컨벤션](../conventions/frontend.md), [디자인 기준](../design/DESIGN.md), [화면 스펙](../specs/dashboard.md), [관리 API 계약 1.11절](../contracts/management-api-v1.md) |
 
 ## 1. 대상과 영향
@@ -481,6 +481,24 @@
   - 게이트 실패 기록: `5e290d8`의 첫 게이트는 실패했다. Windows에서 부하가 걸릴 때 `browser did not exit within 60 s` 10건이 났고, WSL에서는 DASH-022 P=3 사례가 `waitFor`의 벽시계 예산 때문에 실패했다.
   - 수정(`aa0661f`): 브라우저 동시 실행을 4개로 제한했다(`tests/dashboard_browser.rs`의 `BrowserSlot`, `run_chromium` 첫 줄). 제한 시간 60초와 시험 단언은 바꾸지 않았다. `web/dashboard/tests/session-scenarios.js`의 `waitFor`는 `Date.now()` 대신 페이지 시간 단계(20 ms씩 `wait`)로 셌다. 정상 속도에서는 같은 의미다. `operations-scenarios.js`는 바꾸지 않았다.
   - `aa0661f`의 게이트는 `cargo fmt --check`만 실패했다(`BrowserSlot` 잠금 호출 줄바꿈). `d0ef8d0`이 그 줄바꿈만 고쳤고, 이 기록은 그 뒤 전체 재실행 결과다.
+
+### 4.10 검토 기록 (작업 4.11 라우터 언어 시험, 2026-10-22)
+
+- 검토자: 에이전트 Dash411(작업 위임: Main). 사람의 검토가 아니다. 사람 검토는 작업 4.12에서 한다.
+- 범위: 해시 라우터 목 응답 시험 `web/dashboard/tests/router-scenarios.js`에 사례 `dash-025`를 더했다. `tests/dashboard_browser.rs`에는 `router_keeps_the_chosen_language_across_screens_in_browser`(`/// spec: dashboard.md:DASH-025 partial`)를 더했다. 제품 코드(`web/dashboard/app/`)는 바꾸지 않았다. `docs/TODO.md`의 4.9~4.11 상태 3줄을 이 시험에 맞춰 고쳤다(커밋 `48918d3`).
+- 시험 내용:
+  - DASH-025 `router_keeps_the_chosen_language_across_screens_in_browser`(1280 px 한 폭): 실제 `mountRouter`에 가짜 저장소와 선호 언어 `ko-KR`을 주고 SCR-001에서 시작한다. 처음 문서 언어는 ko다. 목록의 언어 선택을 en으로 바꾸면 제목이 영어로 바뀌고 저장 키 `vnc-relay.language`에 `en`이 남는다. 행 링크 `#/sessions/sess_1`로 SCR-002에 들어가면 문서 언어와 제목, 언어 선택 값이 en이다. 해시를 비워 목록으로 돌아와도 같다. 모든 요청의 경로와 옵션 문자열에 언어 값(ko·en 태그, `lang`, `locale`)이 없다. 라우터는 외부 주소로 이동하지 않았다(`navigate` 0회). 마지막 상태에서 `checkLayout`으로 가로 넘침이 없는지 확인했다.
+  - 이 사례는 `check_localized_case`(언어 2 × 폭 6, 12회) 대신 `check_runs`로 1280 px 한 번만 돌린다.
+- 설계 판단:
+  - 사례는 화면 사이 이동만 본다. 로그인·새로고침·로그아웃 뒤의 언어 유지는 화면별 시험(`session-scenarios.js`, `operations-scenarios.js`, `login-scenarios.js`)에 남긴다.
+  - 저장소 `Map`은 한 사례 안에서 화면들이 공유하고, 사례 사이에는 공유하지 않는다.
+  - `fakeApi`의 `calls`는 `key`와 함께 경로와 옵션 문자열 `text`를 담는다(요청 검사에 쓴다). `api.count`는 그대로다. `detailLinkOf`·`backOf`는 `linkNamed`를 쓴다.
+- 확인하지 않은 것: 실서버에서 로그인 뒤 언어 유지(DASH-025, 4.4·4.5 뒤), 실서버 세션 조회, 키보드·스크린 리더(3.5·3.6), 사람 비교(4.12). 4.9절의 "SCR-001과 SCR-002 사이 이동 뒤의 언어 유지"는 목 응답으로 이 절에서 확인했다.
+- 게이트(대상 HEAD `48918d3`; 시험 코드 마지막 변경은 `a917eb1`이고 `48918d3`은 `docs/TODO.md`만 바꿨다. 게이트는 이 HEAD에서 돌렸다. 이 기록 커밋은 문서만 바꾼다):
+  - WSL `vr-full.sh`: ALL PASSED, 종료 0(마지막 줄 `ALL PASSED`). build, version, fmt, clippy, 레이어 검사, `tokens --check`, 시나리오 보고서, `deny`가 모두 종료 0. 시나리오 150건: 통과 24, 부분 49, 실패 0, 미실행 0, 미연결 77, 오류 0건. dashboard_browser 37 passed, 0 failed(105.81초). dashboard_assets 2 passed.
+  - Windows `vr-win.ps1 -Only all`: ALL PASSED (all), 종료 0(마지막 줄 `ALL PASSED (all)`). 같은 항목과 라이선스 검사가 모두 종료 0. 시나리오 150건: 통과 23, 부분 49, 실패 0, 미실행 1(OPS-007, Unix 전용), 미연결 77, 오류 0건. dashboard_browser 37 passed, 0 failed(198.24초). dashboard_assets 2 passed.
+  - 시나리오 합계는 `d0ef8d0` 기록(4.9절)과 같다. DASH-025는 이미 `partial`이라 합계가 바뀌지 않았고, `dashboard_browser` 시험 수만 36에서 37이 됐다.
+  - 실행 기록: 첫 WSL 실행은 기본 배포판 `docker-desktop`에서 돌아 `bash`를 찾지 못했고 종료 127로 끝났다. 게이트 본체는 돌지 않았다. `wsl -d Ubuntu`로 같은 HEAD에서 다시 돌렸다. Windows 실행은 같은 HEAD에서 한 번 끝났고 그 결과를 그대로 쓴다.
 
 ## 5. 중단 조건
 
