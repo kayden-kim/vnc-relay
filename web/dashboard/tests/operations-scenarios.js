@@ -424,7 +424,7 @@ async function caseDash001() {
     const expectedHeight = window.innerWidth <= 1023 ? 44 : 32;
     check(`DASH-001 active row ${index}: details uses the table control height`, !!details
       && parseFloat(getComputedStyle(details).minHeight) === expectedHeight
-      && details.getBoundingClientRect().height >= expectedHeight);
+      && details.getBoundingClientRect().height === expectedHeight);
     for (const [column, text] of [[1, 'Mode I'], [2, 'WSS']]) {
       const badge = row.cells[column].querySelector('.badge');
       check(`DASH-001 active row ${index} column ${column}: neutral badge without an icon`,

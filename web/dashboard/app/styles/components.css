@@ -699,6 +699,7 @@
 
 .data-table .button {
   min-height: var(--space-control-height-sm);
+  white-space: nowrap;
 }
 
 .data-table tbody tr.data-table-empty:is(:hover, .is-hover) td {
