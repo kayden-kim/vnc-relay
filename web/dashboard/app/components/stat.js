@@ -1,4 +1,6 @@
 // Stat: a label with one metric value and an optional unit.
+import { createBadge } from './badge.js';
+
 const TONES = ['success', 'info', 'warning', 'destructive', 'neutral'];
 
 function element(tag, className, text) {
@@ -29,8 +31,8 @@ export function createStat({ label, value, unit, tone, badge = false } = {}) {
   const valueEl = document.createElement('p');
   valueEl.className = 'stat-value';
   if (badge) {
-    // Placeholder values (unknown or loading) are badges, as the gauge's unknown value is.
-    valueEl.append(element('span', `badge badge-tone-${tone ?? 'neutral'}`, String(value)));
+    // Status values are badges: the server state and placeholders (unknown or loading).
+    valueEl.append(createBadge({ tone: tone ?? 'neutral', label: String(value) }));
   } else {
     valueEl.append(String(value));
   }

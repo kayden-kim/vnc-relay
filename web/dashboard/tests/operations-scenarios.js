@@ -290,6 +290,9 @@ async function caseDash001() {
   check('DASH-001: last success time shown in local time', isFilledTemplate(metaText(root), t.lastSuccess));
 
   check('DASH-001: server state shown as ready', statValue(root, t.serverState) === t.stateReady);
+  const serverStat = [...root.querySelectorAll('.stat')].find((node) => node.textContent.includes(t.serverState));
+  check('DASH-001: server state is a status badge', serverStat?.querySelector('.stat-value .badge')?.textContent.trim() === t.stateReady);
+  check('DASH-001: ready badge has a success tone and an icon', !!serverStat?.querySelector('.badge[data-tone="success"] svg'));
   check('DASH-001: uptime shown as days and HH:MM:SS', /^1\S* 01:01:01$/.test(statValue(root, t.uptime) ?? ''));
   check(
     'DASH-001: waiting and active counts shown',
@@ -506,6 +509,8 @@ async function caseDash016() {
   check('DASH-016: state before the change', statValue(root, t.serverState) === t.stateReady);
   await waitFor(() => statValue(root, t.serverState) === t.stateShutdownGrace);
   check('DASH-016: changed state shown after the next poll', statValue(root, t.serverState) === t.stateShutdownGrace);
+  const serverStat = [...root.querySelectorAll('.stat')].find((node) => node.textContent.includes(t.serverState));
+  check('DASH-016: shutdown grace badge has a warning tone and an icon', !!serverStat?.querySelector('.badge[data-tone="warning"] svg'));
   check(
     'DASH-016: changed counts shown',
     statValue(root, t.waitingCount) === '2' && statValue(root, t.activeCount) === '0',

@@ -69,7 +69,8 @@ export function summaryGrid(t, summary, kind) {
   const state = summary ? stateText(t, summary.serverState) : { text: placeholder, tone: 'neutral' };
   const grid = el('div', 'summary-grid');
   grid.append(
-    createStat({ label: t.serverState, value: state.text, tone: state.tone, badge: !summary }),
+    // The server state is a status badge in every state (DESIGN 391, 639).
+    createStat({ label: t.serverState, value: state.text, tone: state.tone, badge: true }),
     createStat({
       label: t.uptime,
       value: summary ? formatDuration(summary.uptimeMs, t.dayUnit) : placeholder,
