@@ -3,6 +3,8 @@
 //! executable. This table is the only list of served paths. The match test
 //! `tests/dashboard_assets.rs` checks it against `web/dashboard/`.
 
+/// `Content-Type` of an HTML page.
+const HTML: &str = "text/html; charset=utf-8";
 /// `Content-Type` of a stylesheet.
 const CSS: &str = "text/css; charset=utf-8";
 /// `Content-Type` of a module script.
@@ -25,6 +27,31 @@ pub const ASSETS: &[Asset] = &[
         path: "/login/tokens.css",
         content_type: CSS,
         body: include_bytes!("../../../web/dashboard/login/tokens.css"),
+    },
+    Asset {
+        path: "/login/",
+        content_type: HTML,
+        body: include_bytes!("../../../web/dashboard/login/index.html"),
+    },
+    Asset {
+        path: "/login/login.css",
+        content_type: CSS,
+        body: include_bytes!("../../../web/dashboard/login/login.css"),
+    },
+    Asset {
+        path: "/login/main.js",
+        content_type: JS,
+        body: include_bytes!("../../../web/dashboard/login/main.js"),
+    },
+    Asset {
+        path: "/login/login.js",
+        content_type: JS,
+        body: include_bytes!("../../../web/dashboard/login/login.js"),
+    },
+    Asset {
+        path: "/login/language.js",
+        content_type: JS,
+        body: include_bytes!("../../../web/dashboard/login/language.js"),
     },
     Asset {
         path: "/app/tokens.css",

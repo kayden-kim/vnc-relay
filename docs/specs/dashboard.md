@@ -9,10 +9,10 @@
 | 관련 시스템 스펙 | [관리 조회와 세션 종료](management.md) |
 | 용어 | [VNC Relay 용어집](../../GLOSSARY.md) |
 | 관련 계약 | [관리 API v1](../contracts/management-api-v1.md). Active(2026-10-16 채택)이며 경로·응답 본문·화면 URL은 이 계약이 기준이다. 관리 API는 JSON over HTTP이며 경로 접두사는 `/api/v1/`이다(사용자 확정). |
-| 관련 아키텍처 문서·ADR | 없음. 정적 HTML·JS 대시보드 선택은 별도 ADR 없이 [PRD 확정 기준](../requirements/PRD.md#확정-기준)으로 관리한다. 대시보드는 별도 빌드 단계 없는 정적 HTML·JS이며 실행파일에 넣어 관리 리스너가 제공한다. 프런트엔드 코드는 아직 없다. |
+| 관련 아키텍처 문서·ADR | 없음. 정적 HTML·JS 대시보드 선택은 별도 ADR 없이 [PRD 확정 기준](../requirements/PRD.md#확정-기준)으로 관리한다. 대시보드는 별도 빌드 단계 없는 정적 HTML·JS이며 실행파일에 넣어 관리 리스너가 제공한다. 프런트엔드 코드는 `web/dashboard/`에 있다(작업 4.8 구성 요소, 작업 4.9 로그인 화면). |
 | 디자인 원본·공통 시각 기준 | [운영 대시보드 디자인 기준](../design/DESIGN.md). Accepted(2026-10-20 사용자 채택). 색·간격·폰트·토큰·배치 기준은 디자인 기준이 정한다. |
 | HTML 시안 | [../design/mockups/dashboard.html](../design/mockups/dashboard.html). 채택된 디자인 기준의 토큰으로 만든 시안이며 사용자가 2026-10-20에 채택했다. 4절의 모든 화면 ID와 상태를 보여 준다. 영어 화면은 대표 화면 두 개(SCR-001 정상, SCR-003 입력)만 보여 준다. 시안과 이 문서의 문장이 다르면 문장을 따른다. |
-| 관련 컴포넌트 예시 | 없음. 실제 컴포넌트와 미리보기 환경이 없다. |
+| 관련 컴포넌트 예시 | 구성 요소는 `web/dashboard/app/components/`에 있다([대시보드 구성 요소 설계](../architectures/dashboard-components.md)). 미리보기 `web/dashboard/preview/`는 `cargo xtask dashboard-serve`로 연다(로컬 전용). 로그인 화면(SCR-003)은 `web/dashboard/login/`에 있다. `login/`과 `app/`은 파일을 공유하지 않으므로 구성 요소를 가져오지 않는다([프런트엔드 컨벤션 1.1절](../conventions/frontend.md)). |
 
 선택 기준·시나리오 소유·와이어프레임 판정은 [스펙 작성 규칙](AGENTS.md)을, HTML 시안 판정은 [디자인 문서 작성 규칙](../design/AGENTS.md#html-시안)을 따른다. 색·간격·글꼴 값은 디자인 기준을 연결한다. 시안 작성 순서는 [frontend-workflow 참고 문서](../../.agents/skills/frontend-workflow/references/frontend-workflow.md#화면별-html-시안-4단계)를 따른다.
 

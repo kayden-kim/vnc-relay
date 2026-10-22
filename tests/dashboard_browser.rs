@@ -61,31 +61,79 @@ fn dashboard_preview_pass_in_browser() {
     check_page("/preview/index.html");
 }
 
+/// spec: dashboard.md:DASH-017 partial
+#[test]
+fn login_signs_in_with_correct_credentials_in_browser() {
+    check_login_case("dash-017");
+}
+
+/// spec: dashboard.md:DASH-018 partial
+#[test]
+fn login_refuses_empty_and_wrong_input_in_browser() {
+    check_login_case("dash-018");
+}
+
+/// spec: dashboard.md:DASH-024 partial
+#[test]
+fn login_picks_the_language_from_browser_preferences_in_browser() {
+    check_login_case("dash-024");
+}
+
+/// spec: dashboard.md:DASH-025 partial
+#[test]
+fn login_keeps_the_chosen_language_and_account_name_in_browser() {
+    check_login_case("dash-025");
+}
+
+/// spec: dashboard.md:DASH-027 partial
+#[test]
+fn login_shows_the_request_failed_notice_in_browser() {
+    check_login_case("dash-027");
+}
+
 /// Runs one page at every width and language, then reports all failing runs at once.
 fn check_page(page: &str) {
+    let mut runs = Vec::new();
+    for lang in LANGS {
+        for width in WIDTHS {
+            runs.push((format!("{page}?lang={lang}"), width));
+        }
+    }
+    check_runs(&runs);
+}
+
+/// Runs one sign-in page scenario, `/tests/login.html?case=…`, at every width.
+fn check_login_case(case: &str) {
+    let runs: Vec<(String, u32)> = WIDTHS
+        .iter()
+        .map(|width| (format!("/tests/login.html?case={case}"), *width))
+        .collect();
+    check_runs(&runs);
+}
+
+/// Runs each (page path with query, width) pair in headless Chromium, then reports
+/// all failing runs at once.
+fn check_runs(runs: &[(String, u32)]) {
     let browser = match find_browser() {
         Ok(browser) => browser,
         Err(message) => panic!("{message}"),
     };
     let port = start_server();
     let mut failures = Vec::new();
-    let mut runs = 0_usize;
-    for lang in LANGS {
-        for width in WIDTHS {
-            runs += 1;
-            let url = format!("http://127.0.0.1:{port}{page}?lang={lang}");
-            let label = format!("{page} width={width} lang={lang}");
-            match dump_dom(&browser, &url, width) {
-                Ok(dom) if dom.contains("data-result=\"pass\"") => {}
-                Ok(dom) => failures.push(describe(&label, &dom)),
-                Err(message) => failures.push(format!("{label}: {message}")),
-            }
+    for (path, width) in runs {
+        let url = format!("http://127.0.0.1:{port}{path}");
+        let label = format!("{path} width={width}");
+        match dump_dom(&browser, &url, *width) {
+            Ok(dom) if dom.contains("data-result=\"pass\"") => {}
+            Ok(dom) => failures.push(describe(&label, &dom)),
+            Err(message) => failures.push(format!("{label}: {message}")),
         }
     }
     assert!(
         failures.is_empty(),
-        "{} of {runs} browser runs failed:\n{}",
+        "{} of {} browser runs failed:\n{}",
         failures.len(),
+        runs.len(),
         failures.join("\n")
     );
 }

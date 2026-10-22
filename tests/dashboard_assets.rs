@@ -7,9 +7,12 @@ use std::path::{Path, PathBuf};
 
 use vnc_relay_adapters::dashboard_assets::ASSETS;
 
-/// The `Content-Type` of a served file, by its extension. Any other extension
-/// is not served.
+/// The `Content-Type` of a served file, by its extension. A path ending in `/`
+/// serves its `index.html`. Any other extension is not served.
 fn content_type_of(path: &str) -> &'static str {
+    if path.ends_with('/') {
+        return "text/html; charset=utf-8";
+    }
     match Path::new(path).extension().and_then(|ext| ext.to_str()) {
         Some("html") => "text/html; charset=utf-8",
         Some("css") => "text/css; charset=utf-8",
@@ -39,7 +42,7 @@ fn files_under(dir: &Path) -> Vec<PathBuf> {
 
 /// The served path and the file on disk of every file under `login/` and
 /// `app/`. `app/index.html` serves `/`, `app/<rest>` serves `/app/<rest>`, and
-/// `login/<rest>` serves `/login/<rest>`.
+/// `login/index.html` serves `/login/`, and `login/<rest>` serves `/login/<rest>`.
 fn disk_files() -> Vec<(String, PathBuf)> {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("web/dashboard");
     let mut served = Vec::new();
@@ -56,6 +59,8 @@ fn disk_files() -> Vec<(String, PathBuf)> {
             content_type_of(&relative);
             let path = if relative == "app/index.html" {
                 "/".to_owned()
+            } else if relative == "login/index.html" {
+                "/login/".to_owned()
             } else if let Some(rest) = relative.strip_prefix("app/") {
                 format!("/app/{rest}")
             } else {

@@ -647,14 +647,23 @@ async fn static_paths_accept_only_get_and_head() {
 }
 
 #[tokio::test]
+async fn login_page_is_served_without_a_session() {
+    let running = start(None, ROOMY_LM).await;
+    let disk = dashboard_file("login/index.html");
+
+    let reply = plain_exchange(running.addr, &get("/login/", &[])).await;
+    assert_eq!(reply.status, 200);
+    check_file_headers(&reply, "text/html; charset=utf-8", disk.len());
+    assert_eq!(reply.body, disk);
+}
+
+#[tokio::test]
 async fn login_paths_without_a_file_are_not_found() {
     let running = start(None, ROOMY_LM).await;
 
-    for path in ["/login/", "/login/app.js"] {
-        let reply = plain_exchange(running.addr, &get(path, &[])).await;
-        assert_eq!(reply.status, 404, "GET {path}");
-        assert_eq!(error_code(&reply), "not_found", "GET {path}");
-    }
+    let reply = plain_exchange(running.addr, &get("/login/app.js", &[])).await;
+    assert_eq!(reply.status, 404, "GET /login/app.js");
+    assert_eq!(error_code(&reply), "not_found", "GET /login/app.js");
 }
 
 /// The bytes of the dashboard file `disk`, relative to `web/dashboard/`.
