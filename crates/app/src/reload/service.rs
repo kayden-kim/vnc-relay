@@ -64,6 +64,9 @@ pub struct ReloadService<A> {
     wss_hashes: Option<FileHashes>,
     /// Content hashes of the running management certificate and key (same rule as WSS).
     management_hashes: Option<FileHashes>,
+    /// Test seam (file-watch-v1 §4.3): runs once, right before the next candidate is validated.
+    /// Only tests arm it; the product never does.
+    before_validation: Option<Box<dyn FnOnce() + Send>>,
 }
 
 impl<A> ReloadService<A> {
@@ -90,6 +93,7 @@ impl<A> ReloadService<A> {
             candidate_paths: Vec::new(),
             wss_hashes,
             management_hashes,
+            before_validation: None,
         }
     }
 
@@ -103,6 +107,12 @@ impl<A> ReloadService<A> {
             }
         }
         paths
+    }
+
+    /// Test seam (file-watch-v1 §4.3): runs `action` once, right before the next candidate is
+    /// validated. Only tests arm it; the product never does.
+    pub fn arm_before_validation(&mut self, action: Box<dyn FnOnce() + Send>) {
+        self.before_validation = Some(action);
     }
 }
 
@@ -160,6 +170,10 @@ impl<A: Clone> ReloadService<A> {
         candidate: Settings,
         is_current: &dyn Fn() -> bool,
     ) -> ReloadOutcome {
+        if let Some(action) = self.before_validation.take() {
+            action();
+        }
+
         // Step 6: build the TLS acceptors of enabled listeners.
         let tls = match self.load_tls(&candidate) {
             Ok(tls) => tls,
@@ -1019,7 +1033,7 @@ mod tests {
         assert!(h.sink.events().is_empty());
     }
 
-    /// spec: operations.md:OPS-027 partial
+    /// spec: operations.md:OPS-027
     #[test]
     fn stale_generation_discards_without_event_or_swap() {
         let running = settings();

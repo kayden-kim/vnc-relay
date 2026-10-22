@@ -225,16 +225,7 @@ async fn listen_until_shutdown(
         Arc::clone(&log),
     ) {
         Ok(watcher) => watcher,
-        Err(error) => {
-            cli::report(
-                "error",
-                "watch_unavailable",
-                "",
-                &format!("파일 변경 감지를 준비할 수 없다({}).", error.detail()),
-            );
-            record_failure(log.as_ref(), "watch_unavailable", None, None, None);
-            return ExitCode::from(EXIT_RUNTIME);
-        }
+        Err(error) => return watch_unavailable(log.as_ref(), error.detail()),
     };
     let watch_task = tokio::spawn(watcher.run(stopped.clone()));
     let lifecycle = Arc::new(LifecycleService::new());
@@ -501,6 +492,19 @@ fn runtime_failure(log: &dyn EventSink, what: &str, error: &dyn Display) -> Exit
     ExitCode::from(EXIT_RUNTIME)
 }
 
+/// A watch that cannot register at start refuses the start (file-watch.md §6, OPS-028): one
+/// `watch_unavailable` diagnostic, one `startup_failed` line, exit code 1.
+fn watch_unavailable(log: &dyn EventSink, detail: &str) -> ExitCode {
+    cli::report(
+        "error",
+        "watch_unavailable",
+        "",
+        &format!("파일 변경 감지를 준비할 수 없다({detail})."),
+    );
+    record_failure(log, "watch_unavailable", None, None, None);
+    ExitCode::from(EXIT_RUNTIME)
+}
+
 /// First failed log write (ops-info-v1 §1.1). Later failures stay silent.
 fn report_log_write_failure(error: &io::Error) {
     cli::report(
@@ -565,5 +569,37 @@ impl ShutdownSignal {
             }
         })
         .await;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Mutex;
+    use vnc_relay_app::events::Event;
+
+    #[derive(Default)]
+    struct RecordingSink {
+        events: Mutex<Vec<Event>>,
+    }
+
+    impl EventSink for RecordingSink {
+        fn record(&self, event: &Event) {
+            self.events.lock().expect("sink lock").push(event.clone());
+        }
+    }
+
+    /// spec: operations.md:OPS-028
+    #[test]
+    fn watch_registration_refused_at_start_is_a_startup_failure() {
+        let sink = RecordingSink::default();
+        let code = watch_unavailable(&sink, "registration refused");
+        assert_eq!(code, ExitCode::from(EXIT_RUNTIME));
+        let events = sink.events.lock().expect("sink lock");
+        assert_eq!(events.len(), 1);
+        assert!(matches!(
+            &events[0],
+            Event::StartupFailed { reason, .. } if *reason == "watch_unavailable"
+        ));
     }
 }
