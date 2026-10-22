@@ -246,7 +246,7 @@ async function caseDash010() {
   await waitFor(() => noticeOf(root) === t.notFound);
   check('DASH-010: completed terminate shows not-found', noticeOf(root) === t.notFound);
   check('DASH-010: one terminate sent', api.count(TERMINATE) === 1);
-  check('DASH-010: action stays disabled after completion', !enabled(root));
+  check('DASH-010: terminate stays disabled after completion', terminateOf(root)?.disabled === true);
   check('DASH-010: no detail read after completion', api.count(DETAIL) === 1);
   check('DASH-010: back link remains', backOf(root) !== null);
   checkLayout('DASH-010');
@@ -262,7 +262,7 @@ async function caseDash007() {
     'DASH-007: gone before read hides the facts and bytes',
     loaded.root.querySelector('.fact-list') === null && loaded.root.querySelector('.stat') === null,
   );
-  check('DASH-007: gone before read keeps terminate off', !enabled(loaded.root));
+  check('DASH-007: gone before read keeps terminate disabled', terminateOf(loaded.root)?.disabled === true);
   check('DASH-007: list link kept', backOf(loaded.root)?.getAttribute('href') === '/');
   check(
     'DASH-007: gone notice keeps the list action',
@@ -279,7 +279,7 @@ async function caseDash007() {
   root.querySelector('#session-refresh').click();
   await waitFor(() => noticeOf(root) === t.notFound);
   check('DASH-007: gone during refresh shows not-found', noticeOf(root) === t.notFound);
-  check('DASH-007: gone during refresh keeps terminate off', !enabled(root));
+  check('DASH-007: gone during refresh keeps terminate disabled', terminateOf(root)?.disabled === true);
   check('DASH-007: gone during refresh sends no terminate', api.count(TERMINATE) === 0);
   check('DASH-007: list link kept after refresh', backOf(root)?.getAttribute('href') === '/');
   check('DASH-007: focus moves to the notice list action after refresh', document.activeElement === noticeActionOf(root));
@@ -308,6 +308,7 @@ async function caseDash011() {
   confirmOf(root).click();
   await waitFor(() => noticeOf(root) === t.notFound);
   check('DASH-011: gone after confirm shows not-found', noticeOf(root) === t.notFound);
+  check('DASH-011: terminate disabled after gone', terminateOf(root)?.disabled === true);
   check('DASH-011: focus moves to the notice list action', document.activeElement === noticeActionOf(root));
   check('DASH-011: terminate sent once', api.count(TERMINATE) === 1);
   check('DASH-011: no re-read after not-found', api.count(DETAIL) === 1);
@@ -423,7 +424,7 @@ async function caseDash016() {
   );
   await waitFor(() => noticeOf(gone.root) === t.notFound);
   check('DASH-016: gone on a poll shows not-found', noticeOf(gone.root) === t.notFound);
-  check('DASH-016: gone on a poll keeps terminate off', !enabled(gone.root));
+  check('DASH-016: gone on a poll keeps terminate disabled', terminateOf(gone.root)?.disabled === true);
   check('DASH-016: gone on a poll sends no terminate', gone.api.count(TERMINATE) === 0);
   checkLayout('DASH-016');
 }
