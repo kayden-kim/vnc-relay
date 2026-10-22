@@ -1,9 +1,10 @@
-// Scenario checks for the session detail screen (dashboard.md SCR-002: DASH-006, 009 to 013, 026).
+// Scenario checks for the session detail screen (dashboard.md SCR-002: DASH-006, 007, 009 to 014, 016, 019, 022, 024, 025, 026).
 // One page load runs one case, ?case=dash-0xx&lang=ko|en, against a fake management API.
 // The result goes to <main id="result">. Wording comes from app/copy.js, which holds the spec §9.3 CPY table.
 import { mountSession } from '../app/session.js';
 import { BRAND_NAME, COPY } from '../app/copy.js';
 import { formatAddress, formatMode, formatTransport } from '../app/format.js';
+import { STORAGE_KEY } from '../app/language.js';
 
 const host = document.getElementById('host');
 const result = document.getElementById('result');
@@ -23,6 +24,7 @@ const SESSION_ID = 'sess_1';
 const DETAIL = `GET /api/v1/sessions/${SESSION_ID}`;
 const TERMINATE = `POST /api/v1/sessions/${SESSION_ID}/terminate`;
 const TIME_IN = /\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} \S/;
+const TIME_ONLY = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} \S+$/;
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const delayed = (ms, response) => new Promise((resolve) => setTimeout(() => resolve(response), ms));
@@ -34,12 +36,21 @@ async function waitFor(ready, ms = 5000) {
 const check = (label, passed) => {
   if (!passed) failures.push(label);
 };
+const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
 // Fake management API. Routes are keyed "METHOD path" and receive their call number for that key.
 const json = (status, body) =>
   new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 const ok = (body) => json(200, body);
 const fail = (status, code) => json(status, { error: { code } });
+
+// The session check answers with the dashboard settings; the poll interval comes from poll_secs.
+function session(pollSecs = 60) {
+  return ok({
+    csrf_token: 'csrf-token-1',
+    dashboard: { poll_secs: pollSecs, query_timeout_secs: 5, terminate_timeout_secs: 10 },
+  });
+}
 
 const activeSession = (overrides = {}) => ({
   session_id: SESSION_ID,
@@ -67,11 +78,8 @@ const closedSession = (overrides = {}) => ({
 });
 
 const DEFAULT_ROUTES = {
-  'GET /api/v1/session': () =>
-    ok({
-      csrf_token: 'csrf-token-1',
-      dashboard: { poll_secs: 60, query_timeout_secs: 5, terminate_timeout_secs: 10 },
-    }),
+  'GET /api/v1/session': () => session(),
+  'DELETE /api/v1/session': () => new Response(null, { status: 204 }),
   [DETAIL]: () => ok({ as_of: AS_OF, session: activeSession() }),
   [TERMINATE]: () => ok({ as_of: AS_OF, result: 'terminated', closed_session: closedSession() }),
 };
@@ -84,21 +92,40 @@ function fakeApi(overrides = {}) {
     const key = `${init.method ?? 'GET'} ${path}`;
     const n = (counts.get(key) ?? 0) + 1;
     counts.set(key, n);
-    calls.push({ key });
+    calls.push({
+      key,
+      at: performance.now(),
+      poll: init.headers?.['X-Relay-Poll'] === '1',
+      csrf: init.headers?.['X-CSRF-Token'] ?? null,
+      raw: JSON.stringify(init),
+    });
     const route = routes[key];
     return Promise.resolve().then(() => (route ? route(n) : fail(404, 'not_found')));
   };
   return { request, calls, count: (key) => counts.get(key) ?? 0 };
 }
 
-function mount(api, id = SESSION_ID) {
+// Browser storage stand-in that keeps the saved language in `items`.
+function storageOf(items) {
+  return {
+    getItem: (key) => items.get(key) ?? null,
+    setItem: (key, value) => items.set(key, String(value)),
+  };
+}
+
+const intervalOf = (calls) => (calls.length >= 2 ? calls[1].at - calls[0].at : NaN);
+
+function mount(
+  api,
+  { id = SESSION_ID, storage = { getItem: () => null, setItem() {} }, preferred = [lang === 'en' ? 'en-US' : 'ko-KR'] } = {},
+) {
   const root = document.createElement('div');
   host.replaceChildren(root);
   const navigations = [];
   const handle = mountSession(root, id, {
     request: api.request,
-    storage: { getItem: () => null, setItem() {} },
-    preferredLanguages: [lang === 'en' ? 'en-US' : 'ko-KR'],
+    storage,
+    preferredLanguages: preferred,
     navigate: (url) => navigations.push(url),
   });
   return { root, navigations, api, handle };
@@ -126,6 +153,15 @@ const factValue = (root, label) => {
   );
   return row?.querySelector('.fact-value')?.textContent.trim() ?? null;
 };
+
+const metaOf = (root) => root.querySelector('.page-meta')?.textContent.trim() ?? '';
+
+// A template such as "Last successful update: {time}" matches when the placeholder holds a local time.
+function isFilledTemplate(text, template) {
+  const [before, after] = template.split(/\{[^}]+\}/);
+  if (!text.startsWith(before) || !text.endsWith(after)) return false;
+  return TIME_ONLY.test(text.slice(before.length, text.length - after.length));
+}
 
 function checkLayout(label) {
   const page = document.documentElement;
@@ -341,7 +377,7 @@ async function caseDash013() {
 // DASH-026: an invalid session id sends no request and shows the invalid-id notice.
 async function caseDash026() {
   const api = fakeApi();
-  const { root } = mount(api, 'bad id/../x');
+  const { root } = mount(api, { id: 'bad id/../x' });
   await wait(200);
   check('DASH-026: no request sent', api.calls.length === 0);
   check('DASH-026: invalid-id notice shown', noticeOf(root) === t.invalidSessionId);
@@ -349,6 +385,206 @@ async function caseDash026() {
   check('DASH-026: no terminate action', terminateOf(root) === null);
   check('DASH-026: back link present', backOf(root) !== null);
   checkLayout('DASH-026');
+}
+
+// DASH-016: a state change appears after the next poll, with the last success time; the screen offers no remote-screen or settings actions.
+async function caseDash016() {
+  const api = fakeApi({
+    'GET /api/v1/session': () => session(1),
+    [DETAIL]: (n) =>
+      ok({
+        as_of: AS_OF,
+        session: activeSession(n === 1 ? {} : { bytes_viewer_to_target: 4096, bytes_target_to_viewer: 2097152 }),
+      }),
+  });
+  const { root, handle } = mount(api);
+  await waitFor(() => statValue(root, t.directionViewerToTarget) === '1.5 KiB');
+  check('DASH-016: bytes before the change', statValue(root, t.directionViewerToTarget) === '1.5 KiB');
+  await waitFor(() => statValue(root, t.directionViewerToTarget) === '4.0 KiB');
+  check('DASH-016: changed viewer to target bytes shown after the next poll', statValue(root, t.directionViewerToTarget) === '4.0 KiB');
+  check('DASH-016: changed target to viewer bytes shown', statValue(root, t.directionTargetToViewer) === '2.0 MiB');
+  check('DASH-016: the change arrived through a poll', api.calls.filter((c) => c.key === DETAIL).at(-1)?.poll === true);
+  check('DASH-016: last success time shown', isFilledTemplate(metaOf(root), t.lastSuccess));
+  const actionLabels = [...root.querySelectorAll('button')]
+    .filter((button) => !button.closest('dialog'))
+    .map((button) => labelOf(button))
+    .sort();
+  check('DASH-016: only refresh, terminate and sign-out actions', same(actionLabels, [t.refresh, t.terminate, t.signOut].sort()));
+  check('DASH-016: no input fields for settings or remote screen', root.querySelectorAll('input, textarea, form').length === 0);
+  handle.dispose();
+
+  // The session is gone on a poll: the not-found notice replaces the detail and terminate stays off.
+  const gone = mount(
+    fakeApi({
+      'GET /api/v1/session': () => session(1),
+      [DETAIL]: (n) => (n === 1 ? ok({ as_of: AS_OF, session: activeSession() }) : fail(404, 'not_found')),
+    }),
+  );
+  await waitFor(() => noticeOf(gone.root) === t.notFound);
+  check('DASH-016: gone on a poll shows not-found', noticeOf(gone.root) === t.notFound);
+  check('DASH-016: gone on a poll keeps terminate off', !enabled(gone.root));
+  check('DASH-016: gone on a poll sends no terminate', gone.api.count(TERMINATE) === 0);
+  checkLayout('DASH-016');
+}
+
+// DASH-019: sign-out success removes the data, goes to sign-in and reads nothing more. A failed, lost, or refused response goes to the unconfirmed notice. Sign-out never terminates the relay session.
+async function caseDash019() {
+  const success = mount(fakeApi({ 'GET /api/v1/session': () => session(1) }));
+  await waitFor(() => enabled(success.root));
+  const logout = success.root.querySelector('#session-logout');
+  logout.click();
+  logout.click();
+  await wait(300);
+  const deletes = success.api.calls.filter((c) => c.key === 'DELETE /api/v1/session');
+  check('DASH-019 success: one sign-out request', deletes.length === 1);
+  check('DASH-019 success: request carries the CSRF token', deletes[0]?.csrf === 'csrf-token-1');
+  check('DASH-019 success: sent to the sign-in screen', same(success.navigations, ['/login/']));
+  check('DASH-019 success: data removed', success.root.childElementCount === 0);
+  const seen = success.api.calls.length;
+  await wait(1200);
+  check('DASH-019 success: no polling after sign-out', success.api.calls.length === seen);
+  check('DASH-019 success: relay session not terminated', success.api.count(TERMINATE) === 0);
+
+  const lost = () => {
+    throw new TypeError('network down');
+  };
+  const outcomes = [
+    ['failed response', () => fail(500, 'internal_error'), '/login/?notice=logout-unconfirmed'],
+    ['lost response', lost, '/login/?notice=logout-unconfirmed'],
+    ['refused (403)', () => fail(403, 'csrf_invalid'), '/login/?notice=logout-unconfirmed'],
+    ['expired session (401)', () => fail(401, 'unauthenticated'), '/login/'],
+  ];
+  for (const [name, route, target] of outcomes) {
+    const { root, navigations, api } = mount(fakeApi({ 'DELETE /api/v1/session': route }));
+    await waitFor(() => enabled(root));
+    root.querySelector('#session-logout').click();
+    await wait(300);
+    check(`DASH-019 ${name}: sent to ${target}`, same(navigations, [target]));
+    check(`DASH-019 ${name}: relay session not terminated`, api.count(TERMINATE) === 0);
+  }
+  checkLayout('DASH-019');
+}
+
+// DASH-022: the poll interval is the configured P (3 s here) or 2 s when P is not set. A read never starts while the previous one is in flight.
+async function caseDash022() {
+  const custom = mount(fakeApi({ 'GET /api/v1/session': () => session(3) }));
+  await waitFor(() => custom.api.count(DETAIL) >= 2, 6000);
+  const customCalls = custom.api.calls.filter((c) => c.key === DETAIL);
+  check('DASH-022 P=3: one poll after the first load', customCalls.length === 2 && customCalls[1].poll === true);
+  check('DASH-022 P=3: poll interval is 3 s', intervalOf(customCalls) >= 2950 && intervalOf(customCalls) < 3750);
+  custom.handle.dispose();
+
+  const dflt = mount(fakeApi({ 'GET /api/v1/session': () => session(2) }));
+  await waitFor(() => dflt.api.count(DETAIL) >= 2, 6000);
+  const dfltCalls = dflt.api.calls.filter((c) => c.key === DETAIL);
+  check('DASH-022 P=2: one poll after the first load', dfltCalls.length === 2 && dfltCalls[1].poll === true);
+  check('DASH-022 P=2: poll interval is 2 s', intervalOf(dfltCalls) >= 1950 && intervalOf(dfltCalls) < 2750);
+  dflt.handle.dispose();
+
+  // Each read takes 1.5 s, longer than P=1 s. A poll that started during a read would overlap it.
+  let inFlight = 0;
+  let maxInFlight = 0;
+  const slowRead = () => {
+    inFlight += 1;
+    maxInFlight = Math.max(maxInFlight, inFlight);
+    return new Promise((resolve) =>
+      setTimeout(() => {
+        inFlight -= 1;
+        resolve(ok({ as_of: AS_OF, session: activeSession() }));
+      }, 1500),
+    );
+  };
+  const slow = mount(fakeApi({ 'GET /api/v1/session': () => session(1), [DETAIL]: slowRead }));
+  await waitFor(() => slow.api.count(DETAIL) >= 2, 6000);
+  await waitFor(() => inFlight === 0 && slow.api.count(DETAIL) >= 2, 3000);
+  const slowCalls = slow.api.calls.filter((c) => c.key === DETAIL);
+  check('DASH-022 slow read: no read starts while one is in flight', maxInFlight === 1);
+  check('DASH-022 slow read: next read starts after the previous one ends', intervalOf(slowCalls) >= 2400);
+  slow.handle.dispose();
+  checkLayout('DASH-022');
+}
+
+// DASH-024: the first screen follows the browser language until the user chooses. Time and byte formats stay the same in both languages.
+async function caseDash024() {
+  const cases = [
+    [['ko-KR'], 'ko'],
+    [['en-US'], 'en'],
+    [['ja-JP'], 'en'],
+    [['ja-JP', 'ko'], 'ko'],
+  ];
+  for (const [preferred, expected] of cases) {
+    const items = new Map();
+    const copy = COPY[expected];
+    const { root, handle } = mount(fakeApi(), { storage: storageOf(items), preferred });
+    await waitFor(() => enabled(root));
+    const label = `DASH-024 ${preferred.join(',')}`;
+    check(`${label}: document language`, document.documentElement.lang === expected);
+    check(`${label}: language select`, root.querySelector('#session-language')?.value === expected);
+    check(`${label}: title in that language`, titleOf(root) === copy.sessionTitle.replace('{session_id}', SESSION_ID));
+    check(`${label}: refresh label in that language`, labelOf(refreshOf(root)) === copy.refresh);
+    check(`${label}: started time shown`, TIME_IN.test(factValue(root, copy.startedLabel) ?? ''));
+    check(
+      `${label}: byte format is the same`,
+      statValue(root, copy.directionViewerToTarget) === '1.5 KiB' && statValue(root, copy.directionTargetToViewer) === '1.0 MiB',
+    );
+    check(`${label}: nothing saved before a choice`, items.size === 0);
+    handle.dispose();
+  }
+  checkLayout('DASH-024');
+}
+
+// DASH-025: a chosen language applies at once, survives reload and sign-out, and beats the browser preference. Data and unknown values are not translated, and no request carries the language.
+async function caseDash025() {
+  const items = new Map();
+  const storage = storageOf(items);
+  const api = fakeApi();
+  const first = mount(api, { storage, preferred: ['ko-KR'] });
+  await waitFor(() => enabled(first.root));
+  check('DASH-025 start: browser preference gives Korean', document.documentElement.lang === 'ko');
+  const select = first.root.querySelector('#session-language');
+  const detailReads = api.count(DETAIL);
+  select.value = 'en';
+  select.dispatchEvent(new Event('change'));
+  await wait(300);
+  check('DASH-025 change: document language is English', document.documentElement.lang === 'en');
+  check(
+    'DASH-025 change: copy is English at once',
+    titleOf(first.root) === COPY.en.sessionTitle.replace('{session_id}', SESSION_ID),
+  );
+  check('DASH-025 change: no state read for the change', api.count(DETAIL) === detailReads);
+  check('DASH-025 change: choice saved', items.get(STORAGE_KEY) === 'en');
+  first.handle.dispose();
+
+  const again = mount(api, { storage, preferred: ['ko-KR'] });
+  await waitFor(() => enabled(again.root));
+  check('DASH-025 reload: saved choice beats browser preference', document.documentElement.lang === 'en');
+  check('DASH-025 reload: select keeps English', again.root.querySelector('#session-language')?.value === 'en');
+  check(
+    'DASH-025 reload: mode and transport are not translated',
+    factValue(again.root, COPY.en.modeLabel) === formatMode('mode1') &&
+      factValue(again.root, COPY.en.transportLabel) === formatTransport('wss'),
+  );
+  check('DASH-025 reload: session id is not translated', titleOf(again.root).includes(SESSION_ID));
+  again.root.querySelector('#session-logout').click();
+  await wait(300);
+  check('DASH-025 sign-out: sent to sign-in', same(again.navigations, ['/login/']));
+  check('DASH-025 sign-out: choice still saved', items.get(STORAGE_KEY) === 'en');
+  check('DASH-025: no request carries a language value', api.calls.every((c) => !/lang/i.test(`${c.key} ${c.raw}`)));
+
+  for (const language of ['ko', 'en']) {
+    const unknown = fakeApi({
+      [DETAIL]: () => ok({ as_of: AS_OF, session: activeSession({ mode: 'mode9', viewer_transport: 'quic' }) }),
+    });
+    const { root, handle } = mount(unknown, {
+      storage: storageOf(new Map([[STORAGE_KEY, language]])),
+      preferred: ['ko-KR'],
+    });
+    await waitFor(() => enabled(root));
+    check(`DASH-025 unknown ${language}: mode shown as received`, factValue(root, COPY[language].modeLabel) === 'mode9');
+    check(`DASH-025 unknown ${language}: transport shown as received`, factValue(root, COPY[language].transportLabel) === 'quic');
+    handle.dispose();
+  }
+  checkLayout('DASH-025');
 }
 
 // Capture-only cases: each one sets up a single screen state for the screenshot run and then ends. They make no DASH claim.
@@ -421,6 +657,11 @@ const CASES = {
   'dash-012': caseDash012,
   'dash-013': caseDash013,
   'dash-014': caseDash014,
+  'dash-016': caseDash016,
+  'dash-019': caseDash019,
+  'dash-022': caseDash022,
+  'dash-024': caseDash024,
+  'dash-025': caseDash025,
   'dash-026': caseDash026,
   'shot-dialog': shotDialog,
   'shot-refreshing': shotRefreshing,

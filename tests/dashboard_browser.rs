@@ -236,6 +236,36 @@ fn session_invalid_id_sends_no_request_in_browser() {
     check_localized_case("/tests/session.html", "dash-026");
 }
 
+/// spec: dashboard.md:DASH-016 partial
+#[test]
+fn session_shows_state_change_on_next_poll_in_browser() {
+    check_localized_case("/tests/session.html", "dash-016");
+}
+
+/// spec: dashboard.md:DASH-019 partial
+#[test]
+fn session_sign_out_removes_data_or_shows_unconfirmed_in_browser() {
+    check_localized_case("/tests/session.html", "dash-019");
+}
+
+/// spec: dashboard.md:DASH-022 partial
+#[test]
+fn session_polls_at_configured_interval_without_overlap_in_browser() {
+    check_localized_case("/tests/session.html", "dash-022");
+}
+
+/// spec: dashboard.md:DASH-024 partial
+#[test]
+fn session_follows_the_browser_language_in_browser() {
+    check_localized_case("/tests/session.html", "dash-024");
+}
+
+/// spec: dashboard.md:DASH-025 partial
+#[test]
+fn session_keeps_the_chosen_language_in_browser() {
+    check_localized_case("/tests/session.html", "dash-025");
+}
+
 /// Runs one page at every width and language, then reports all failing runs at once.
 fn check_page(page: &str) {
     let mut runs = Vec::new();
