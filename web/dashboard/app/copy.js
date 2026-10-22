@@ -8,7 +8,6 @@ export const LANGUAGE_NAMES = { ko: '한국어', en: 'English' }; // CPY-002
 
 export const COPY = {
   ko: {
-    documentTitle: 'VNC Relay 운영 현황', // Implementation choice: document title, not in spec §9.3.
     navLabel: '주 메뉴', // Q3: tentative label, not yet in dashboard.md §9.3.1.
     operations: '운영 현황', // CPY-004
     signOut: '로그아웃', // CPY-007
@@ -56,18 +55,15 @@ export const COPY = {
     },
     directionViewerToTarget: 'Viewer->대상', // CPY-040·CPY-043 table headers (spec §9.3.2).
     directionTargetToViewer: '대상->Viewer', // CPY-040·CPY-043 table headers (spec §9.3.2).
-    peerViewer: 'Viewer', // Implementation choice: peer role label, spec §3 gives no CPY id.
-    peerTarget: '대상', // Implementation choice: peer role label, spec §3 gives no CPY id.
-    dayUnit: '일', // Implementation choice: day unit in durations, spec §3 allows a language-dependent unit.
-    // SCR-002 session detail. CPY ids in comments. Keys marked "Implementation choice" are not in spec §9.3.
+    dayUnit: '일', // DESIGN l.491 시간 길이 표시(D일 HH:MM:SS)의 단위.
+    // SCR-002 session detail. CPY ids in comments; keys with no CPY id cite DESIGN or are listed as Q3.
     sessionScreen: '세션 상세', // CPY-005
-    sessionDocumentTitle: 'VNC Relay 세션 상세', // Implementation choice: document title, like documentTitle.
     sessionTitle: '세션 {session_id}', // CPY-051
     back: '목록으로', // CPY-010
     cancel: '취소', // CPY-011
     recheck: '상태 재조회', // CPY-014
-    sessionInfoTitle: '세션 정보', // Implementation choice: card title, the SCR-002 element name in spec §3.
-    stateLabel: '상태', // Implementation choice: row label for the session state.
+    sessionInfoTitle: '세션 정보', // DESIGN l.529 SCR-002 세션 정보 카드 제목. CPY id 없음(Q3).
+    transferTitle: '전송량', // DESIGN l.465 카드 제목. CPY id 없음(Q3).
     modeLabel: '모드', // CPY-053
     transportLabel: 'Viewer 전송 경로', // CPY-054
     startedLabel: '시작 시각', // CPY-055
@@ -86,7 +82,6 @@ export const COPY = {
     terminateRejected: '요청을 처리하지 못했습니다. 화면을 다시 확인한 뒤 종료를 다시 요청하십시오.', // CPY-068
   },
   en: {
-    documentTitle: 'VNC Relay Operations overview', // Implementation choice: document title, not in spec §9.3.
     navLabel: 'Main menu', // Q3: tentative label, not yet in dashboard.md §9.3.1.
     operations: 'Operations overview', // CPY-004
     signOut: 'Sign out', // CPY-007
@@ -134,18 +129,15 @@ export const COPY = {
     },
     directionViewerToTarget: 'Viewer->target', // CPY-040·CPY-043 table headers (spec §9.3.2).
     directionTargetToViewer: 'target->Viewer', // CPY-040·CPY-043 table headers (spec §9.3.2).
-    peerViewer: 'Viewer', // Implementation choice: peer role label, spec §3 gives no CPY id.
-    peerTarget: 'Target', // Implementation choice: peer role label, spec §3 gives no CPY id.
-    dayUnit: 'd', // Implementation choice: day unit in durations, spec §3 allows a language-dependent unit.
-    // SCR-002 session detail. CPY ids in comments. Keys marked "Implementation choice" are not in spec §9.3.
+    dayUnit: 'd', // DESIGN l.491 duration unit ("Dd HH:MM:SS").
+    // SCR-002 session detail. CPY ids in comments; keys with no CPY id cite DESIGN or are listed as Q3.
     sessionScreen: 'Session details', // CPY-005
-    sessionDocumentTitle: 'VNC Relay Session details', // Implementation choice: document title, like documentTitle.
     sessionTitle: 'Session {session_id}', // CPY-051
     back: 'Back to list', // CPY-010
     cancel: 'Cancel', // CPY-011
     recheck: 'Check status again', // CPY-014
-    sessionInfoTitle: 'Session information', // Implementation choice: card title, the SCR-002 element name in spec §3.
-    stateLabel: 'State', // Implementation choice: row label for the session state.
+    sessionInfoTitle: 'Session information', // DESIGN l.529 card title; no CPY id in spec §9.3.3 (Q3).
+    transferTitle: 'Transfer', // DESIGN l.465 card title (ko); English is not in spec §9.3.3 (Q3).
     modeLabel: 'Mode', // CPY-053
     transportLabel: 'Viewer transport', // CPY-054
     startedLabel: 'Started at', // CPY-055

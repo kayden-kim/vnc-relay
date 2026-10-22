@@ -149,8 +149,8 @@ function bytesCell(t, item) {
 function peerCell(t, item) {
   const cell = el('div', 'cell-peer');
   cell.append(
-    cellLine(t.peerViewer, formatAddress(item.viewerAddress)),
-    cellLine(t.peerTarget, formatAddress(item.targetAddress)),
+    cellLine(t.viewerAddressLabel, formatAddress(item.viewerAddress)),
+    cellLine(t.targetAddressLabel, formatAddress(item.targetAddress)),
   );
   return cell;
 }
@@ -218,8 +218,21 @@ export function closedTable(t, items, emptyText) {
   });
 }
 
-// Card with a status badge slot and an alert slot (list and summary panels). Chrome is optional.
-export function panelCard({ title, span, chrome }) {
+// Page head for SCR-001 and SCR-002. `back` (the SCR-002 ghost link) sits above the title. `actions` sit beside the title block.
+export function pageHead({ back = null, title = '', actions = [] }) {
+  const heading = el('h1', 'page-title', title);
+  const meta = el('p', 'page-meta');
+  const text = el('div', 'page-head-text');
+  text.append(...(back ? [back] : []), heading, meta);
+  const actionRow = el('div', 'page-actions');
+  actionRow.append(...actions);
+  const head = el('header', 'page-head');
+  head.append(text, actionRow);
+  return { head, heading, meta, actions: actionRow };
+}
+
+// Card with a status badge slot and an alert slot (list and summary panels). Chrome is optional. Footer is an optional action row.
+export function panelCard({ title, span, chrome, footer }) {
   const slots = {
     badgeSlot: el('div', 'card-status'),
     alertSlot: el('div', 'card-alert'),
@@ -232,7 +245,7 @@ export function panelCard({ title, span, chrome }) {
     body = el('div', 'card-stack');
     body.append(slots.alertSlot, slots.contentSlot);
   }
-  const node = createCard({ title, actions: chrome ? slots.badgeSlot : undefined, body });
+  const node = createCard({ title, actions: chrome ? slots.badgeSlot : undefined, body, footer });
   node.classList.add(span);
   return { node, slots };
 }

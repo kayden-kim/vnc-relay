@@ -3,9 +3,10 @@
 // A response that arrives after a sign-out, a 401, or a dispose is dropped (epoch check). A response from an older query run is dropped (generation check).
 
 import { createAlert } from './components/alert.js';
+import { createBadge } from './components/badge.js';
 import { createButton } from './components/button.js';
 import { createDialog } from './components/dialog.js';
-import { createLink } from './components/link.js';
+import { icon } from './components/icons.js';
 import { createStat } from './components/stat.js';
 import {
   ApiError,
@@ -16,11 +17,11 @@ import {
   sessionPath,
   terminateSession,
 } from './api.js';
-import { COPY } from './copy.js';
+import { BRAND_NAME, COPY } from './copy.js';
 import { fill, formatAddress, formatBytes, formatMode, formatTime, formatTransport } from './format.js';
 import { LANGUAGES, chooseLanguage, readSavedLanguage, saveLanguage } from './language.js';
 import { isSessionId, parseDetail, parseSession, parseTerminate } from './model.js';
-import { applyChrome, el, panelCard, setContent } from './panels.js';
+import { applyChrome, el, pageHead, panelCard, setContent } from './panels.js';
 import { clearTimer, contentKey, newQuery, viewOf } from './query.js';
 import { LOGIN_URL, buildNavbar, defaultStorage, signOutUrl } from './shell.js';
 
@@ -58,9 +59,14 @@ export function mountSession(root, id, deps = {}) {
     return COPY[state.lang];
   }
 
+  // Screen title: the session id, or the invalid-id title when the id was rejected.
+  function sessionHeading(t) {
+    return state.invalid ? t.sessionScreen : fill(t.sessionTitle, { session_id: state.id });
+  }
+
   function applyDocumentLanguage() {
     document.documentElement.lang = state.lang;
-    document.title = copy().sessionDocumentTitle;
+    document.title = `${BRAND_NAME} ${sessionHeading(copy())}`;
   }
 
   function buildPage() {
@@ -75,13 +81,15 @@ export function mountSession(root, id, deps = {}) {
       onSignOut: signOut,
     });
 
-    const back = createLink({ href: '/', label: t.back });
+    const back = el('a', 'button button-ghost');
+    back.href = '/';
+    back.append(icon('back'), el('span', 'button-label', t.back));
 
     const refresh = createButton({ variant: 'outline', label: t.recheck, icon: 'refresh' });
     refresh.id = 'session-refresh';
     refresh.addEventListener('click', onRefresh);
 
-    const terminate = createButton({ variant: 'destructive', label: t.terminate });
+    const terminate = createButton({ variant: 'destructive', label: t.terminate, icon: 'cancel' });
     terminate.id = 'session-terminate';
 
     const dialog = createDialog({
@@ -97,20 +105,15 @@ export function mountSession(root, id, deps = {}) {
     });
     terminate.addEventListener('click', () => dialog.show());
 
-    const heading = el('h1', 'page-title');
-    heading.tabIndex = -1;
-    const meta = el('p', 'page-meta');
-    const headText = el('div', 'page-head-text');
-    headText.append(heading, meta);
-    const actions = el('div', 'page-actions');
-    const head = el('header', 'page-head');
-    head.append(headText, actions);
+    const header = pageHead({ back, actions: [refresh] });
+    header.heading.tabIndex = -1;
 
     const notice = el('div', 'session-notice');
-    const info = panelCard({ title: t.sessionInfoTitle, span: 'span-12', chrome: true });
+    const info = panelCard({ title: t.sessionInfoTitle, span: 'span-8', chrome: true, footer: terminate });
+    const transfer = panelCard({ title: t.transferTitle, span: 'span-4', chrome: false });
     const grid = el('div', 'grid');
     const main = el('main', 'app-main');
-    main.append(head, notice, grid, dialog.element);
+    main.append(header.head, notice, grid, dialog.element);
     root.append(navbar, main);
 
     page = {
@@ -120,13 +123,15 @@ export function mountSession(root, id, deps = {}) {
       refresh,
       terminate,
       dialog,
-      heading,
-      meta,
-      actions,
+      heading: header.heading,
+      meta: header.meta,
+      actions: header.actions,
       notice,
       grid,
       infoNode: info.node,
       info: info.slots,
+      transferNode: transfer.node,
+      transfer: transfer.slots,
     };
   }
 
@@ -419,32 +424,58 @@ export function mountSession(root, id, deps = {}) {
     return null;
   }
 
-  // Facts of the session. Values are shown as received. Only labels and the address note are translated.
+  // Facts of the session as a label and value list. Mode and transport are neutral badges. Addresses use the data style.
   function factsBlock(t, session) {
-    const stats = el('div', 'summary-grid session-facts');
-    stats.append(
-      createStat({ label: t.stateLabel, value: session.state }),
-      createStat({ label: t.modeLabel, value: formatMode(session.mode) }),
-      createStat({ label: t.transportLabel, value: formatTransport(session.viewerTransport) }),
-      createStat({ label: t.startedLabel, value: formatTime(session.startedAt) }),
-      createStat({ label: t.viewerAddressLabel, value: formatAddress(session.viewerAddress) }),
-      createStat({ label: t.targetAddressLabel, value: formatAddress(session.targetAddress) }),
-      createStat({ label: t.directionViewerToTarget, value: formatBytes(session.bytesViewerToTarget) }),
-      createStat({ label: t.directionTargetToViewer, value: formatBytes(session.bytesTargetToViewer) }),
+    const list = el('dl', 'fact-list');
+    list.append(
+      factRow(t.modeLabel, createBadge({ tone: 'neutral', label: formatMode(session.mode) })),
+      factRow(t.transportLabel, createBadge({ tone: 'neutral', label: formatTransport(session.viewerTransport) })),
+      factRow(t.startedLabel, formatTime(session.startedAt)),
+      factRow(t.viewerAddressLabel, formatAddress(session.viewerAddress), 'fact-address'),
+      factRow(t.targetAddressLabel, formatAddress(session.targetAddress), 'fact-address'),
     );
     const block = el('div', 'card-stack');
-    block.append(stats, el('p', 'card-note', t.addressNote));
+    block.append(list, el('p', 'card-note', t.addressNote));
     return block;
   }
 
-  function actionNodes() {
-    if (state.invalid) {
-      return [page.back];
+  // One row of the facts list. `valueClass` marks the address values.
+  function factRow(label, value, valueClass = null) {
+    const row = el('div', 'fact');
+    const dd = el('dd', 'fact-value');
+    if (valueClass) {
+      dd.classList.add(valueClass);
     }
-    if (state.gone) {
-      return [page.back, page.terminate];
+    dd.append(value);
+    row.append(el('dt', 'fact-label', label), dd);
+    return row;
+  }
+
+  // Bytes per direction. Each value uses the metric style of the stat component. Each label leads with a decorative direction mark.
+  function directionStat(label, bytes, markClass) {
+    const stat = createStat({ label, value: formatBytes(bytes) });
+    const mark = el('span', `direction-mark ${markClass}`);
+    mark.setAttribute('aria-hidden', 'true');
+    stat.querySelector('.stat-label').prepend(mark);
+    return stat;
+  }
+
+  function bytesBlock(t, session) {
+    const block = el('div', 'card-stack');
+    block.append(
+      directionStat(t.directionViewerToTarget, session.bytesViewerToTarget, 'direction-mark-1'),
+      directionStat(t.directionTargetToViewer, session.bytesTargetToViewer, 'direction-mark-2'),
+    );
+    return block;
+  }
+
+  // Replaces children only when the list differs. Rebuilding nodes that already match would drop focus.
+  function setChildren(parent, nodes) {
+    const same =
+      parent.children.length === nodes.length && nodes.every((node, index) => parent.children[index] === node);
+    if (!same) {
+      parent.replaceChildren(...nodes);
     }
-    return [page.back, page.refresh, page.terminate];
   }
 
   function renderAll() {
@@ -453,9 +484,10 @@ export function mountSession(root, id, deps = {}) {
     }
     const t = copy();
     const view = viewOf(query);
-    const showInfo = !state.invalid && !state.gone;
+    const showInfo = !state.invalid;
+    const showTransfer = showInfo && !state.gone;
 
-    page.heading.textContent = state.invalid ? t.sessionScreen : fill(t.sessionTitle, { session_id: state.id });
+    page.heading.textContent = sessionHeading(t);
     page.meta.textContent = fill(t.lastSuccess, {
       time: query.lastSuccessAt === null ? t.unavailable : formatTime(query.lastSuccessAt),
     });
@@ -464,18 +496,27 @@ export function mountSession(root, id, deps = {}) {
     page.notice.replaceChildren(...(alert ? [alert] : []));
 
     if (showInfo) {
-      applyChrome(page.info, query, view, t);
+      // Gone has no badge or alert. The notice above the grid carries that state.
+      applyChrome(page.info, query, state.gone ? 'gone' : view, t);
       setContent(page.info, contentKey(query, view, state.lang), () =>
         query.data ? factsBlock(t, query.data.session) : null,
       );
     }
-    page.grid.replaceChildren(...(showInfo ? [page.infoNode] : []));
-
-    page.actions.replaceChildren(...actionNodes());
+    if (showTransfer) {
+      setContent(page.transfer, contentKey(query, view, state.lang), () =>
+        query.data ? bytesBlock(t, query.data.session) : null,
+      );
+    }
+    const cards = [
+      ...(showInfo ? [page.infoNode] : []),
+      ...(showTransfer ? [page.transferNode] : []),
+    ];
+    setChildren(page.grid, cards);
+    setChildren(page.actions, state.invalid || state.gone ? [] : [page.refresh]);
     page.logout.disabled = state.logoutBusy;
     page.refresh.disabled = state.busy || state.logoutBusy;
     page.terminate.disabled = !canTerminate();
-    page.terminate.textContent = state.busy ? t.terminating : t.terminate;
+    page.terminate.querySelector('.button-label').textContent = state.busy ? t.terminating : t.terminate;
 
     if (focusBack) {
       focusBack = false;

@@ -4,7 +4,7 @@
 
 import { createButton } from './components/button.js';
 import { BOOTSTRAP_TIMEOUT_MS, QUERY_PATHS, getQuery, getSession, isUnauthorized } from './api.js';
-import { COPY } from './copy.js';
+import { BRAND_NAME, COPY } from './copy.js';
 import { fill, formatTime } from './format.js';
 import { LANGUAGES, chooseLanguage, readSavedLanguage, saveLanguage } from './language.js';
 import { parseClosed, parseSession, parseSessions, parseSummary, parseWaiting } from './model.js';
@@ -15,6 +15,7 @@ import {
   closedTable,
   el,
   panelCard,
+  pageHead,
   setContent,
   summaryGrid,
   usageGauge,
@@ -55,7 +56,7 @@ export function mountOperations(root, deps = {}) {
 
   function applyDocumentLanguage() {
     document.documentElement.lang = state.lang;
-    document.title = copy().documentTitle;
+    document.title = `${BRAND_NAME} ${copy().operations}`;
   }
 
   function buildPage() {
@@ -74,13 +75,7 @@ export function mountOperations(root, deps = {}) {
     refresh.id = 'operations-refresh';
     refresh.addEventListener('click', onRefresh);
 
-    const meta = el('p', 'page-meta');
-    const headText = el('div', 'page-head-text');
-    headText.append(el('h1', 'page-title', t.operations), meta);
-    const headActions = el('div', 'page-actions');
-    headActions.append(refresh);
-    const head = el('header', 'page-head');
-    head.append(headText, headActions);
+    const header = pageHead({ title: t.operations, actions: [refresh] });
 
     const summary = panelCard({ title: t.summaryTitle, span: 'span-6', chrome: true });
     const relay = panelCard({ title: t.relayTitle, span: 'span-3', chrome: false });
@@ -92,14 +87,14 @@ export function mountOperations(root, deps = {}) {
     const grid = el('div', 'grid');
     grid.append(summary.node, relay.node, admin.node, waiting.node, active.node, closed.node);
     const main = el('main', 'app-main');
-    main.append(head, grid);
+    main.append(header.head, grid);
     root.append(navbar, main);
 
     page = {
       select,
       logout,
       refresh,
-      meta,
+      meta: header.meta,
       summary: summary.slots,
       relay: relay.slots,
       admin: admin.slots,

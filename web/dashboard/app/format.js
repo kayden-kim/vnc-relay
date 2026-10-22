@@ -59,7 +59,7 @@ export function formatTime(value) {
   return zone ? `${stamp} ${zone.value}` : stamp;
 }
 
-// Duration as HH:MM:SS, with a day prefix (for example "3일 01:02:03") when at least one day has passed.
+// Duration as HH:MM:SS, with a day prefix (DESIGN l.491: "3일 01:02:03", "3d 01:02:03") when at least one day has passed.
 export function formatDuration(ms, dayUnit) {
   const total = Math.floor(ms / 1000);
   const days = Math.floor(total / 86400);
