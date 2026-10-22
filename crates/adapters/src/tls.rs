@@ -2,14 +2,17 @@
 //! acceptor (docs/architectures/tls.md).
 
 use std::fmt;
+use std::fs;
 use std::path::Path;
 use std::sync::Arc;
 
 use rustls::crypto::aws_lc_rs;
 use rustls::{InconsistentKeys, ServerConfig};
-use rustls_pki_types::pem::{self, PemObject};
+use rustls_pki_types::pem::PemObject;
 use rustls_pki_types::{CertificateDer, PrivateKeyDer};
 use tokio_rustls::TlsAcceptor;
+use vnc_relay_app::reload::ports::{ReloadTlsStore, TlsBuildError};
+use vnc_relay_app::reload::snapshot::{ReloadCell, ReloadSnapshot};
 
 /// The two PEM files that make up the TLS identity of one listener.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -86,27 +89,38 @@ impl std::error::Error for TlsError {
 
 /// Builds the TLS acceptor of one listener from its certificate chain and private key files.
 ///
-/// The acceptor negotiates TLS 1.2 and TLS 1.3 with the aws-lc-rs provider.
-/// It requests no client certificate and selects no ALPN protocol.
-/// A client that offers only TLS 1.0 or TLS 1.1 fails the handshake.
+/// The certificate file is read and parsed before the key file is read, so the
+/// first broken file is the one reported. The acceptor negotiates TLS 1.2 and
+/// TLS 1.3 with the aws-lc-rs provider. It requests no client certificate and
+/// selects no ALPN protocol. A client that offers only TLS 1.0 or TLS 1.1 fails
+/// the handshake.
 pub fn load_acceptor(cert_file: &Path, key_file: &Path) -> Result<TlsAcceptor, TlsError> {
-    let chain = read_chain(cert_file)?;
-    let key = read_key(key_file)?;
-    let config = ServerConfig::builder_with_provider(Arc::new(aws_lc_rs::default_provider()))
-        .with_protocol_versions(&[&rustls::version::TLS12, &rustls::version::TLS13])
-        .map_err(TlsError::Config)?
-        .with_no_client_auth()
-        .with_single_cert(chain, key)
-        .map_err(classify_config)?;
-    Ok(TlsAcceptor::from(Arc::new(config)))
+    let chain = parse_chain(&read_file(cert_file, TlsFile::Cert)?)?;
+    let key = parse_key(&read_file(key_file, TlsFile::Key)?)?;
+    build_acceptor(chain, key)
 }
 
-/// Reads every certificate in the file. The first one must be the end-entity certificate.
-fn read_chain(path: &Path) -> Result<Vec<CertificateDer<'static>>, TlsError> {
-    let chain = CertificateDer::pem_file_iter(path)
-        .map_err(|err| pem_error(err, TlsFile::Cert))?
-        .map(|item| item.map_err(|err| pem_error(err, TlsFile::Cert)))
-        .collect::<Result<Vec<_>, _>>()?;
+/// Builds the TLS acceptor of one listener from the PEM bytes of its certificate
+/// chain and private key. It accepts the same input as `load_acceptor` and runs
+/// the same checks (file-watch.md §7).
+pub fn acceptor_from_pem(cert_pem: &[u8], key_pem: &[u8]) -> Result<TlsAcceptor, TlsError> {
+    let chain = parse_chain(cert_pem)?;
+    let key = parse_key(key_pem)?;
+    build_acceptor(chain, key)
+}
+
+/// Reads the whole file. Any read error means the file is unreadable.
+fn read_file(path: &Path, file: TlsFile) -> Result<Vec<u8>, TlsError> {
+    fs::read(path).map_err(|_| TlsError::Unreadable { file })
+}
+
+/// Parses every certificate in the PEM bytes. The first one must be the end-entity certificate.
+fn parse_chain(pem: &[u8]) -> Result<Vec<CertificateDer<'static>>, TlsError> {
+    let chain = CertificateDer::pem_slice_iter(pem)
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|_| TlsError::Malformed {
+            file: TlsFile::Cert,
+        })?;
     if chain.is_empty() {
         return Err(TlsError::Malformed {
             file: TlsFile::Cert,
@@ -115,16 +129,23 @@ fn read_chain(path: &Path) -> Result<Vec<CertificateDer<'static>>, TlsError> {
     Ok(chain)
 }
 
-/// Reads the first private key in the file.
-fn read_key(path: &Path) -> Result<PrivateKeyDer<'static>, TlsError> {
-    PrivateKeyDer::from_pem_file(path).map_err(|err| pem_error(err, TlsFile::Key))
+/// Parses the first private key in the PEM bytes.
+fn parse_key(pem: &[u8]) -> Result<PrivateKeyDer<'static>, TlsError> {
+    PrivateKeyDer::from_pem_slice(pem).map_err(|_| TlsError::Malformed { file: TlsFile::Key })
 }
 
-fn pem_error(err: pem::Error, file: TlsFile) -> TlsError {
-    match err {
-        pem::Error::Io(_) => TlsError::Unreadable { file },
-        _ => TlsError::Malformed { file },
-    }
+/// Builds the rustls configuration and the acceptor from a parsed chain and key.
+fn build_acceptor(
+    chain: Vec<CertificateDer<'static>>,
+    key: PrivateKeyDer<'static>,
+) -> Result<TlsAcceptor, TlsError> {
+    let config = ServerConfig::builder_with_provider(Arc::new(aws_lc_rs::default_provider()))
+        .with_protocol_versions(&[&rustls::version::TLS12, &rustls::version::TLS13])
+        .map_err(TlsError::Config)?
+        .with_no_client_auth()
+        .with_single_cert(chain, key)
+        .map_err(classify_config)?;
+    Ok(TlsAcceptor::from(Arc::new(config)))
 }
 
 /// Maps the errors of the key and certificate check to the file that caused them.
@@ -140,4 +161,80 @@ fn classify_config(err: rustls::Error) -> TlsError {
         }
         other => TlsError::Config(other),
     }
+}
+
+/// Maps a build failure to the detail of `TlsBuildError`. The detail names the
+/// part that failed and never a path or the file contents.
+fn build_detail(error: &TlsError) -> &'static str {
+    match error {
+        TlsError::Unreadable { file } | TlsError::Malformed { file } => match file {
+            TlsFile::Cert => "certificate format",
+            TlsFile::Key => "key format",
+        },
+        TlsError::KeyUnsupported => "key format",
+        TlsError::KeyMismatch => "pair mismatch",
+        TlsError::Config(_) => "invalid",
+    }
+}
+
+/// The rustls build of a reloaded TLS identity. It takes the verified PEM bytes
+/// (file-watch.md §7), so a reload never builds from paths.
+#[derive(Debug, Clone, Copy)]
+pub struct RustlsTlsStore;
+
+impl ReloadTlsStore<TlsAcceptor> for RustlsTlsStore {
+    fn build(&self, cert_pem: &[u8], key_pem: &[u8]) -> Result<TlsAcceptor, TlsBuildError> {
+        acceptor_from_pem(cert_pem, key_pem).map_err(|error| TlsBuildError {
+            detail: build_detail(&error),
+        })
+    }
+}
+
+/// Where a TLS listener takes its acceptor. Each connection reads the acceptor
+/// current at its handshake, so a reload applies to new handshakes only
+/// (file-watch.md §4).
+#[derive(Clone)]
+pub struct TlsSource {
+    cell: Arc<ReloadCell<TlsAcceptor>>,
+    pick: fn(&ReloadSnapshot<TlsAcceptor>) -> Option<&TlsAcceptor>,
+}
+
+impl TlsSource {
+    /// The WSS acceptor of the snapshot. It is `None` while WSS is disabled.
+    pub fn wss(cell: Arc<ReloadCell<TlsAcceptor>>) -> Self {
+        Self {
+            cell,
+            pick: pick_wss,
+        }
+    }
+
+    /// The management acceptor of the snapshot. It is `None` while management
+    /// TLS is not configured.
+    pub fn management(cell: Arc<ReloadCell<TlsAcceptor>>) -> Self {
+        Self {
+            cell,
+            pick: pick_management,
+        }
+    }
+
+    /// The acceptor current now. `None` means the snapshot holds none for this
+    /// listener, and the caller fails that connection.
+    pub fn acceptor(&self) -> Option<TlsAcceptor> {
+        let snapshot = self.cell.current();
+        (self.pick)(&snapshot).cloned()
+    }
+}
+
+impl fmt::Debug for TlsSource {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("TlsSource").finish_non_exhaustive()
+    }
+}
+
+fn pick_wss(snapshot: &ReloadSnapshot<TlsAcceptor>) -> Option<&TlsAcceptor> {
+    snapshot.wss_tls.as_ref()
+}
+
+fn pick_management(snapshot: &ReloadSnapshot<TlsAcceptor>) -> Option<&TlsAcceptor> {
+    snapshot.management_tls.as_ref()
 }

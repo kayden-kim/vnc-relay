@@ -25,13 +25,14 @@ use vnc_relay_adapters::accounts_file::{Argon2Hasher, Argon2Verifier};
 use vnc_relay_adapters::clock::SystemClock;
 use vnc_relay_adapters::crypto::SystemTokenSource;
 use vnc_relay_adapters::management_http::{DashboardHints, ManagementListener};
-use vnc_relay_adapters::net::AcceptPolicy;
+use vnc_relay_adapters::net::{AcceptPolicy, AllowSource};
 use vnc_relay_adapters::tls;
 use vnc_relay_adapters::websocket::{WsEntryPoint, WsPolicy};
 use vnc_relay_app::events::{AbortReason, ConnectionErrorKind, Event, RejectReason, Stage};
 use vnc_relay_app::management::login::dummy_hash;
 use vnc_relay_app::management::{AdminAuth, AdminPorts};
 use vnc_relay_app::ports::EventSink;
+use vnc_relay_app::reload::snapshot::{RelayAllow, ReloadCell, ReloadSnapshot};
 use vnc_relay_app::settings::KeepaliveSettings;
 use vnc_relay_domain::account::Argon2Params;
 use vnc_relay_domain::admin_session::AdminSessionPolicy;
@@ -176,16 +177,32 @@ async fn start_with_budget(
         .unwrap_or_else(|error| panic!("local address: {error}"));
     let events = Arc::new(Recorder::default());
     let (stop, stopped) = watch::channel(false);
+    let allow_list = AllowList::new(
+        allow
+            .iter()
+            .map(|text| IpItem::parse(text).unwrap_or_else(|_| panic!("allow item {text} parses")))
+            .collect(),
+    );
+    // The snapshot carries the list in the field of this entry point.
+    let relay_allow = RelayAllow {
+        ws_viewer: allow_list.clone(),
+        wss_viewer: allow_list,
+        ..RelayAllow::default()
+    };
+    let cell = Arc::new(ReloadCell::new(ReloadSnapshot::new(
+        relay_allow,
+        tls.clone(),
+        None,
+    )));
+    let tls_source = tls.as_ref().map(|_| tls::TlsSource::wss(Arc::clone(&cell)));
+    let allow_source = match entry {
+        EntryPoint::WsViewer => AllowSource::ws_viewer(Arc::clone(&cell)),
+        EntryPoint::WssViewer => AllowSource::wss_viewer(Arc::clone(&cell)),
+        _ => panic!("the WS helper takes WsViewer or WssViewer"),
+    };
     let policy = WsPolicy {
         accept: AcceptPolicy {
-            allow: AllowList::new(
-                allow
-                    .iter()
-                    .map(|text| {
-                        IpItem::parse(text).unwrap_or_else(|_| panic!("allow item {text} parses"))
-                    })
-                    .collect(),
-            ),
+            allow: allow_source,
             relay_budget: ConnectionBudget::new(places),
             handshake: HANDSHAKE,
             keepalive: KEEPALIVE,
@@ -197,7 +214,7 @@ async fn start_with_budget(
             .collect(),
     };
     let log: Arc<dyn EventSink> = events.clone();
-    tokio::spawn(WsEntryPoint::new(entry, listener, tls, policy).run(log, stopped));
+    tokio::spawn(WsEntryPoint::new(entry, listener, tls_source, policy).run(log, stopped));
     Running {
         addr,
         events,
@@ -924,6 +941,10 @@ async fn start_management(tls: Option<TlsAcceptor>) -> (SocketAddr, Arc<Recorder
         Duration::from_secs(5),
         Duration::from_secs(10),
     );
+    let tls = tls.map(|acceptor| {
+        let snapshot = ReloadSnapshot::new(RelayAllow::default(), None, Some(acceptor));
+        tls::TlsSource::management(Arc::new(ReloadCell::new(snapshot)))
+    });
     let listener = ManagementListener::new(listener, tls, budget, UPGRADE, auth, dashboard);
     tokio::spawn(listener.run(log));
     (addr, events)

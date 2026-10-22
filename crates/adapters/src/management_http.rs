@@ -22,7 +22,6 @@ use axum::response::{IntoResponse, Response};
 use axum::serve::IncomingStream;
 use serde_json::{Value, json};
 use tokio::net::TcpListener;
-use tokio_rustls::TlsAcceptor;
 use vnc_relay_app::management::AdminAuth;
 use vnc_relay_app::ports::EventSink;
 use vnc_relay_domain::budget::ConnectionBudget;
@@ -31,6 +30,7 @@ use vnc_relay_domain::peer_ip::PeerIp;
 use crate::admission::AdmittingListener;
 use crate::dashboard_assets::{Asset, find_asset};
 use crate::request_deadline::DeadlineListener;
+use crate::tls::TlsSource;
 use crate::tls_listener::TlsListener;
 
 mod session_api;
@@ -51,7 +51,7 @@ const CLEAR_SESSION_COOKIE_SECURE: &str =
 /// HTTP otherwise.
 pub struct ManagementListener {
     listener: TcpListener,
-    tls: Option<TlsAcceptor>,
+    tls: Option<TlsSource>,
     admin_budget: Arc<ConnectionBudget>,
     tls_upgrade: Duration,
     auth: Arc<AdminAuth>,
@@ -64,7 +64,7 @@ impl ManagementListener {
     /// holds the admin accounts and the admin sessions.
     pub fn new(
         listener: TcpListener,
-        tls: Option<TlsAcceptor>,
+        tls: Option<TlsSource>,
         admin_budget: Arc<ConnectionBudget>,
         tls_upgrade: Duration,
         auth: Arc<AdminAuth>,
@@ -100,8 +100,8 @@ impl ManagementListener {
         // `serve` ends only on a listener error. Both listeners retry or
         // refuse without error, so there is no error to handle here.
         match self.tls {
-            Some(acceptor) => {
-                let listener = TlsListener::new(admitting, acceptor, log, LISTENER);
+            Some(source) => {
+                let listener = TlsListener::new(admitting, source, log, LISTENER);
                 let listener = DeadlineListener::new(listener, self.tls_upgrade);
                 let _ = axum::serve(listener, router).await;
             }

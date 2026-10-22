@@ -4,6 +4,7 @@
 //! docs/architectures/connection-limits.md. The status listener first:
 //! docs/architectures/status-listener.md.
 
+use std::fmt;
 use std::future::Future;
 use std::io::{self, ErrorKind};
 use std::sync::Arc;
@@ -14,8 +15,10 @@ use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::watch;
 use tokio::task::JoinSet;
 use tokio::time::Instant;
+use tokio_rustls::TlsAcceptor;
 use vnc_relay_app::events::{AbortReason, ConnectionErrorKind, Event, RejectReason, Stage};
 use vnc_relay_app::ports::EventSink;
+use vnc_relay_app::reload::snapshot::{RelayAllow, ReloadCell};
 use vnc_relay_app::settings::{KeepaliveSettings, ListenerPlan};
 use vnc_relay_domain::allow_list::AllowList;
 use vnc_relay_domain::budget::{BudgetPermit, ConnectionBudget};
@@ -86,8 +89,8 @@ fn bind_cause(error: &io::Error) -> String {
 /// What a TCP entry point applies to each connection it accepts.
 #[derive(Debug, Clone)]
 pub struct AcceptPolicy {
-    /// Allow list of this entry point.
-    pub allow: AllowList,
+    /// Allow list of this entry point, read from the live snapshot at each check.
+    pub allow: AllowSource,
     /// L, shared by every relay entry point.
     pub relay_budget: Arc<ConnectionBudget>,
     /// H, counted from the accept: a TCP connection enters the initial
@@ -95,6 +98,69 @@ pub struct AcceptPolicy {
     pub handshake: Duration,
     /// K, set on every accepted relay socket.
     pub keepalive: KeepaliveSettings,
+}
+
+/// Where an entry point takes its allow list. Each check reads the list from
+/// the live snapshot, so a reload applies to new connections and to the
+/// pre-upgrade IP recheck (file-watch.md §4).
+#[derive(Clone)]
+pub struct AllowSource {
+    cell: Arc<ReloadCell<TlsAcceptor>>,
+    pick: fn(&RelayAllow) -> &AllowList,
+}
+
+impl AllowSource {
+    /// The `tcp_viewer` allow list of the snapshot.
+    pub fn tcp_viewer(cell: Arc<ReloadCell<TlsAcceptor>>) -> Self {
+        Self::new(cell, pick_tcp_viewer)
+    }
+
+    /// The `tcp_server` allow list of the snapshot.
+    pub fn tcp_server(cell: Arc<ReloadCell<TlsAcceptor>>) -> Self {
+        Self::new(cell, pick_tcp_server)
+    }
+
+    /// The `ws_viewer` allow list of the snapshot.
+    pub fn ws_viewer(cell: Arc<ReloadCell<TlsAcceptor>>) -> Self {
+        Self::new(cell, pick_ws_viewer)
+    }
+
+    /// The `wss_viewer` allow list of the snapshot.
+    pub fn wss_viewer(cell: Arc<ReloadCell<TlsAcceptor>>) -> Self {
+        Self::new(cell, pick_wss_viewer)
+    }
+
+    fn new(cell: Arc<ReloadCell<TlsAcceptor>>, pick: fn(&RelayAllow) -> &AllowList) -> Self {
+        Self { cell, pick }
+    }
+
+    /// Whether the allow list current now permits `peer_ip`.
+    pub fn permits(&self, peer_ip: PeerIp) -> bool {
+        let snapshot = self.cell.current();
+        (self.pick)(&snapshot.relay_allow).permits(peer_ip)
+    }
+}
+
+impl fmt::Debug for AllowSource {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("AllowSource").finish_non_exhaustive()
+    }
+}
+
+fn pick_tcp_viewer(relay: &RelayAllow) -> &AllowList {
+    &relay.tcp_viewer
+}
+
+fn pick_tcp_server(relay: &RelayAllow) -> &AllowList {
+    &relay.tcp_server
+}
+
+fn pick_ws_viewer(relay: &RelayAllow) -> &AllowList {
+    &relay.ws_viewer
+}
+
+fn pick_wss_viewer(relay: &RelayAllow) -> &AllowList {
+    &relay.wss_viewer
 }
 
 /// The TCP Viewer or TCP Server entry point: accepts connections, checks

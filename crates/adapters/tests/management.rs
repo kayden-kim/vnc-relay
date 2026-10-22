@@ -28,6 +28,7 @@ use vnc_relay_app::events::{Event, RejectReason, Stage};
 use vnc_relay_app::management::login::dummy_hash;
 use vnc_relay_app::management::{AdminAuth, AdminPorts};
 use vnc_relay_app::ports::{Clock, EventSink, HashError, PasswordHasher, PasswordVerifier};
+use vnc_relay_app::reload::snapshot::{RelayAllow, ReloadCell, ReloadSnapshot};
 use vnc_relay_domain::account::{Account, AccountName, Argon2Params, Password, PasswordHash};
 use vnc_relay_domain::admin_session::AdminSessionPolicy;
 use vnc_relay_domain::budget::ConnectionBudget;
@@ -186,6 +187,10 @@ async fn start_with_ports(
         Duration::from_secs(5),
         Duration::from_secs(10),
     );
+    let tls = tls.map(|acceptor| {
+        let snapshot = ReloadSnapshot::new(RelayAllow::default(), None, Some(acceptor));
+        tls::TlsSource::management(Arc::new(ReloadCell::new(snapshot)))
+    });
     let listener = ManagementListener::new(listener, tls, budget, upgrade, auth, dashboard);
     tokio::spawn(listener.run(log));
     Running { addr, events }

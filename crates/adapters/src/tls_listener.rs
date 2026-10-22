@@ -10,17 +10,18 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::task::{Context, Poll, ready};
 
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
-use tokio_rustls::TlsAcceptor;
 use tokio_rustls::server::{Accept, TlsStream};
 use vnc_relay_app::events::{Event, RejectReason, Stage};
 use vnc_relay_app::ports::EventSink;
 use vnc_relay_domain::peer_ip::PeerIp;
 
+use crate::tls::TlsSource;
+
 /// A listener whose connections run TLS. It takes each connection from
 /// `inner` unchanged and wraps it in a `TlsIo`.
 pub(crate) struct TlsListener<L> {
     inner: L,
-    acceptor: TlsAcceptor,
+    source: TlsSource,
     log: Arc<dyn EventSink>,
     /// `listener` value of the operation events.
     name: &'static str,
@@ -29,13 +30,13 @@ pub(crate) struct TlsListener<L> {
 impl<L> TlsListener<L> {
     pub(crate) fn new(
         inner: L,
-        acceptor: TlsAcceptor,
+        source: TlsSource,
         log: Arc<dyn EventSink>,
         name: &'static str,
     ) -> Self {
         Self {
             inner,
-            acceptor,
+            source,
             log,
             name,
         }
@@ -53,7 +54,7 @@ where
         let (stream, addr) = self.inner.accept().await;
         let io = TlsIo::handshaking(
             stream,
-            &self.acceptor,
+            &self.source,
             PeerIp::from(addr),
             Arc::clone(&self.log),
             self.name,
@@ -117,14 +118,21 @@ impl HandshakeFailure {
 
 impl<IO: AsyncRead + AsyncWrite + Unpin> TlsIo<IO> {
     /// A connection whose handshake has not started. The handshake runs in the
-    /// first read or write, as in `TlsListener::accept`.
+    /// first read or write, as in `TlsListener::accept`. The acceptor is taken
+    /// from `source` at this accept, so the connection uses the acceptor
+    /// current then. With no acceptor current, the connection starts failed.
     pub(crate) fn handshaking(
         io: IO,
-        acceptor: &TlsAcceptor,
+        source: &TlsSource,
         peer: PeerIp,
         log: Arc<dyn EventSink>,
         name: &'static str,
     ) -> Self {
+        let Some(acceptor) = source.acceptor() else {
+            // No acceptor is current for this listener. The connection takes
+            // the negotiation abort path, and no handshake starts.
+            return Self::Failed(HandshakeFailure::Negotiation);
+        };
         let capture: Capture = Arc::new(Mutex::new(Some(Vec::new())));
         Self::Handshaking(Handshake {
             accept: acceptor.accept(Recorded {

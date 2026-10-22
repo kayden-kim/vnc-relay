@@ -14,7 +14,6 @@ use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt, ReadBuf};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::watch;
 use tokio::time::Instant;
-use tokio_rustls::TlsAcceptor;
 use tokio_tungstenite::WebSocketStream;
 use tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode;
 use tokio_tungstenite::tungstenite::protocol::{CloseFrame, Role};
@@ -25,6 +24,7 @@ use vnc_relay_domain::entry_point::EntryPoint;
 use vnc_relay_domain::origin::Origin;
 
 use crate::net::{AcceptPolicy, Accepted, accept_connections};
+use crate::tls::TlsSource;
 use crate::tls_listener::{HandshakeFailure, TlsIo};
 use crate::upgrade::{HeadRead, Refusal, check, read_head, switching_protocols};
 
@@ -44,12 +44,12 @@ pub struct WsPolicy {
     pub origins: Vec<Origin>,
 }
 
-/// A WS or WSS viewer entry point. `tls` is the WSS acceptor and is `None`
-/// for WS.
+/// A WS or WSS viewer entry point. `tls` is the WSS acceptor source and is
+/// `None` for WS.
 pub struct WsEntryPoint {
     entry_point: EntryPoint,
     listener: TcpListener,
-    tls: Option<TlsAcceptor>,
+    tls: Option<TlsSource>,
     policy: WsPolicy,
 }
 
@@ -58,7 +58,7 @@ impl WsEntryPoint {
     pub fn new(
         entry_point: EntryPoint,
         listener: TcpListener,
-        tls: Option<TlsAcceptor>,
+        tls: Option<TlsSource>,
         policy: WsPolicy,
     ) -> Self {
         Self {
@@ -94,7 +94,7 @@ impl WsEntryPoint {
 
 /// What every connection of one entry point shares.
 struct WsShared {
-    tls: Option<TlsAcceptor>,
+    tls: Option<TlsSource>,
     log: Arc<dyn EventSink>,
     policy: WsPolicy,
 }
@@ -176,9 +176,9 @@ async fn connection(
     shared: Arc<WsShared>,
 ) {
     let mut wire = match &shared.tls {
-        Some(acceptor) => Wire::Tls(Box::new(TlsIo::handshaking(
+        Some(source) => Wire::Tls(Box::new(TlsIo::handshaking(
             stream,
-            acceptor,
+            source,
             conn.peer_ip,
             Arc::clone(&shared.log),
             conn.entry_point.name(),

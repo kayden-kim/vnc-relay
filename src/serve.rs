@@ -14,11 +14,12 @@ use tokio::task::JoinSet;
 use vnc_relay_adapters::accounts_file::{Argon2Hasher, Argon2Verifier, HashFloor};
 use vnc_relay_adapters::clock::SystemClock;
 use vnc_relay_adapters::crypto::SystemTokenSource;
+use vnc_relay_adapters::file_watch::{self, FsReloadFileStore, SystemReloadClock};
 use vnc_relay_adapters::management_http::{DashboardHints, ManagementListener};
-use vnc_relay_adapters::net::{AcceptPolicy, BindFailure, TcpEntryPoint};
+use vnc_relay_adapters::net::{AcceptPolicy, AllowSource, BindFailure, TcpEntryPoint};
 use vnc_relay_adapters::ops_log::JsonLinesEventSink;
 use vnc_relay_adapters::status_http::StatusListener;
-use vnc_relay_adapters::tls::{self, TlsError, TlsFile};
+use vnc_relay_adapters::tls::{self, TlsError, TlsFile, TlsSource};
 use vnc_relay_adapters::websocket::{WsEntryPoint, WsPolicy};
 use vnc_relay_adapters::{accounts_file, config_file, net};
 use vnc_relay_app::accounts::{self, ACCOUNTS_FILE_KEY, AccountsDiagnostic};
@@ -27,6 +28,8 @@ use vnc_relay_app::lifecycle::LifecycleService;
 use vnc_relay_app::management::login::dummy_hash;
 use vnc_relay_app::management::{AdminAuth, AdminPorts};
 use vnc_relay_app::ports::EventSink;
+use vnc_relay_app::reload::service::ReloadService;
+use vnc_relay_app::reload::snapshot::{RelayAllow, ReloadCell, ReloadSnapshot};
 use vnc_relay_app::settings::{LogOutput, Settings, TlsFiles};
 use vnc_relay_domain::admin_session::AdminSessionPolicy;
 use vnc_relay_domain::budget::ConnectionBudget;
@@ -89,7 +92,7 @@ pub fn run(config: &Path) -> ExitCode {
         });
     }
 
-    // Stage 2: account file. Stage 3 (file watch) comes with task 5.1.
+    // Stage 2: account file.
     let loaded = match accounts_file::load(&settings.admin.accounts_file, HashFloor::Reject) {
         Ok(loaded) => loaded,
         Err(diagnostics) => return accounts_failure(log.as_ref(), &diagnostics),
@@ -146,13 +149,14 @@ pub fn run(config: &Path) -> ExitCode {
             return runtime_failure(log.as_ref(), "비동기 런타임을 만들 수 없다", &error);
         }
     };
-    runtime.block_on(listen_until_shutdown(&settings, log, auth))
+    runtime.block_on(listen_until_shutdown(&settings, log, auth, config))
 }
 
 async fn listen_until_shutdown(
     settings: &Settings,
     log: Arc<dyn EventSink>,
     auth: Arc<AdminAuth>,
+    config: &Path,
 ) -> ExitCode {
     // Registered before binding so that a request during startup is not lost.
     let mut shutdown = match ShutdownSignal::register() {
@@ -164,7 +168,7 @@ async fn listen_until_shutdown(
 
     // TLS identity files of the enabled WSS entry point and of the management
     // listener are checked before any listener is bound (cli-v1 §1.8). Each
-    // acceptor goes to its task.
+    // acceptor goes into the reload snapshot below.
     let mut management_tls = None;
     let mut wss_tls = None;
     let mut tls_failed = false;
@@ -181,6 +185,58 @@ async fn listen_until_shutdown(
     if tls_failed {
         return ExitCode::from(EXIT_CONFIG);
     }
+
+    // Reload state (file-watch.md §5): the running values are the snapshot of
+    // this start. A failed watch start exits 1 before any listener is bound.
+    let wss_present = wss_tls.is_some();
+    let management_tls_on = management_tls.is_some();
+    let allow = |entry_point: EntryPoint| {
+        settings
+            .relay
+            .get(entry_point)
+            .allow
+            .clone()
+            .unwrap_or_default()
+    };
+    let cell = Arc::new(ReloadCell::new(ReloadSnapshot::new(
+        RelayAllow {
+            tcp_viewer: allow(EntryPoint::TcpViewer),
+            tcp_server: allow(EntryPoint::TcpServer),
+            ws_viewer: allow(EntryPoint::WsViewer),
+            wss_viewer: allow(EntryPoint::WssViewer),
+        },
+        wss_tls,
+        management_tls,
+    )));
+    let service = ReloadService::new(
+        settings.clone(),
+        Arc::clone(&cell),
+        Arc::new(FsReloadFileStore),
+        Arc::new(tls::RustlsTlsStore),
+        Arc::clone(&log),
+    );
+    let (stop, stopped) = watch::channel(false);
+    let watcher = match file_watch::start(
+        config,
+        service,
+        settings.reload.poll,
+        SystemReloadClock,
+        Arc::new(FsReloadFileStore),
+        Arc::clone(&log),
+    ) {
+        Ok(watcher) => watcher,
+        Err(error) => {
+            cli::report(
+                "error",
+                "watch_unavailable",
+                "",
+                &format!("파일 변경 감지를 준비할 수 없다({}).", error.detail()),
+            );
+            record_failure(log.as_ref(), "watch_unavailable", None, None, None);
+            return ExitCode::from(EXIT_RUNTIME);
+        }
+    };
+    let watch_task = tokio::spawn(watcher.run(stopped.clone()));
     let lifecycle = Arc::new(LifecycleService::new());
     // Lm, shared by the status listener and the management listener (4.2).
     let admin_budget = ConnectionBudget::new(settings.limits.admin_connections);
@@ -222,6 +278,9 @@ async fn listen_until_shutdown(
         drop(listeners);
         drop(management);
         stop_task(status_task).await;
+        // The file watch stops with the other tasks.
+        stop.send_replace(true);
+        let _ = watch_task.await;
         report_bind_failures(log.as_ref(), &failures);
         return ExitCode::from(EXIT_LISTENER);
     }
@@ -243,7 +302,7 @@ async fn listen_until_shutdown(
         );
         let listener = ManagementListener::new(
             bound.listener,
-            management_tls,
+            management_tls_on.then(|| TlsSource::management(Arc::clone(&cell))),
             Arc::clone(&admin_budget),
             settings.timeouts.tls_upgrade,
             auth,
@@ -255,21 +314,18 @@ async fn listen_until_shutdown(
     // The TCP and WebSocket entry points accept from here on. Every relay entry
     // point takes places from one L.
     let relay_budget = ConnectionBudget::new(settings.limits.relay_connections);
-    let (stop, stopped) = watch::channel(false);
     let mut entry_points = JoinSet::new();
     let mut idle = Vec::new();
     for bound in listeners {
         match bound.plan.entry_point {
             Some(entry_point @ (EntryPoint::TcpViewer | EntryPoint::TcpServer)) => {
                 let policy = AcceptPolicy {
-                    // An enabled entry point always has a list; an empty
-                    // list rejects every source.
-                    allow: settings
-                        .relay
-                        .get(entry_point)
-                        .allow
-                        .clone()
-                        .unwrap_or_default(),
+                    // Read from the reload snapshot for each new connection, so a
+                    // reload changes the list that new connections use.
+                    allow: match entry_point {
+                        EntryPoint::TcpViewer => AllowSource::tcp_viewer(Arc::clone(&cell)),
+                        _ => AllowSource::tcp_server(Arc::clone(&cell)),
+                    },
                     relay_budget: Arc::clone(&relay_budget),
                     handshake: settings.timeouts.handshake,
                     keepalive: settings.keepalive,
@@ -282,7 +338,7 @@ async fn listen_until_shutdown(
                 // The WSS acceptor was loaded before any bind (tls_checks). A
                 // WSS listener without it stays idle; it never runs as plaintext.
                 let tls = match entry_point {
-                    EntryPoint::WssViewer => wss_tls.take(),
+                    EntryPoint::WssViewer if wss_present => Some(TlsSource::wss(Arc::clone(&cell))),
                     _ => None,
                 };
                 if matches!(entry_point, EntryPoint::WssViewer) && tls.is_none() {
@@ -291,9 +347,11 @@ async fn listen_until_shutdown(
                 }
                 let policy = WsPolicy {
                     accept: AcceptPolicy {
-                        // An enabled entry point always has a list; an empty
-                        // list rejects every source.
-                        allow: entry_settings.allow.clone().unwrap_or_default(),
+                        // Read from the reload snapshot for each new connection.
+                        allow: match entry_point {
+                            EntryPoint::WssViewer => AllowSource::wss_viewer(Arc::clone(&cell)),
+                            _ => AllowSource::ws_viewer(Arc::clone(&cell)),
+                        },
                         relay_budget: Arc::clone(&relay_budget),
                         handshake: settings.timeouts.handshake,
                         keepalive: settings.keepalive,
@@ -317,6 +375,8 @@ async fn listen_until_shutdown(
     drop(idle);
     stop_task(management_task).await;
     stop_task(status_task).await;
+    // The file watch stops with the other tasks.
+    let _ = watch_task.await;
     log.record(&Event::ServerStopped);
     ExitCode::SUCCESS
 }
