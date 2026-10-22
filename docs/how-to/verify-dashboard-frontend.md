@@ -9,7 +9,7 @@
 | 대상 독자 | 대시보드 프런트엔드 구현자와 검토자 |
 | 검증 상태 | Draft |
 | 검증 환경·버전 | 작업 4.8(2026-10-22): Windows 10.0.26200 x64, PowerShell, Chrome 155.0.8059.84. Ubuntu 24.04.4 LTS x64(WSL2), Google Chrome 156.0.8078.47. rustc는 두 OS 모두 1.99.1(`rust-toolchain.toml`). 나머지 환경은 실행할 때 기록한다 |
-| 최종 검증일 | 2026-10-22. 3.1 1단계, 3.2 1단계, 3.3 1단계, 3.4 일부를 실행했다(4절). 작업 4.10 재실행(4.5절, 커밋 `3944dc2`): WSL·Windows 게이트 모두 `ALL PASSED`. 작업 4.11(4.7절, 커밋 `5368dec`): 3.3 1단계, 3.4 SCR-002 일부, 3.5 자동 확인 일부를 실행했다. 최종 HEAD 게이트는 WSL·Windows 모두 `ALL PASSED`. 3.5의 사람 확인, 3.6, 3.7은 미실행 |
+| 최종 검증일 | 2026-10-22. 3.1 1단계, 3.2 1단계, 3.3 1단계, 3.4 일부를 실행했다(4절). 작업 4.10 재실행(4.5절, 커밋 `3944dc2`): WSL·Windows 게이트 모두 `ALL PASSED`. 작업 4.11(4.7절, 커밋 `5368dec`): 3.3 1단계, 3.4 SCR-002 일부, 3.5 자동 확인 일부를 실행했다. 최종 HEAD 게이트는 WSL·Windows 모두 `ALL PASSED`. 작업 4.11 세션 시험 보강(4.9절, 커밋 `d0ef8d0`): 3.4 SCR-002 일부(DASH-016·019·022·024·025 시험)를 실행했다. 이 게이트도 WSL·Windows 모두 `ALL PASSED`. 3.5의 사람 확인, 3.6, 3.7은 미실행 |
 | 관련 기준 문서 | [프런트엔드 컨벤션](../conventions/frontend.md), [디자인 기준](../design/DESIGN.md), [화면 스펙](../specs/dashboard.md), [관리 API 계약 1.11절](../contracts/management-api-v1.md) |
 
 ## 1. 대상과 영향
@@ -474,6 +474,13 @@
   - SCR-002에는 상태 행이 없어서 DASH-016의 "상태 변화"는 바이트 값과 조회 결과(사라짐 포함)로 본다.
   - 로그아웃 `403` 처리는 잠정이다(개요 D2, 사용자 질문 Q2가 열려 있다). 시험은 잠정 처리를 확인하며, 사용자가 결정을 바꾸면 이 사례도 바꾼다.
 - 확인하지 않은 것: 실서버의 `poll_secs`와 폴링 간격, 실서버의 로그아웃 `403`, SCR-001과 SCR-002 사이 이동 뒤의 언어 유지, 키보드·스크린 리더(3.5·3.6), 사람 비교(4.12).
+- 게이트(대상 HEAD `d0ef8d0`; 제품 코드 마지막 변경은 `aa0661f`이고 `d0ef8d0`은 서식만 바꿨다. 게이트는 `d0ef8d0`과 같은 작업 트리에서 돌렸다. 이 기록 커밋은 문서만 바꾼다):
+  - WSL `vr-full.sh`: ALL PASSED, 종료 0(마지막 줄 `ALL PASSED`). fmt, build, version, clippy, 레이어 검사, `tokens --check`, 시나리오 보고서, `deny`가 모두 종료 0. 시나리오 150건: 통과 24, 부분 49, 실패 0, 미실행 0, 미연결 77, 오류 0건. dashboard_browser 36 passed, 0 failed(107.39초). dashboard_assets 2 passed.
+  - Windows `vr-win.ps1 -Only all`: ALL PASSED (all), 종료 0(마지막 줄 `ALL PASSED (all)`). 같은 항목과 라이선스 검사가 모두 종료 0. 시나리오 150건: 통과 23, 부분 49, 실패 0, 미실행 1(OPS-007, Unix 전용), 미연결 77, 오류 0건. dashboard_browser 36 passed, 0 failed(199.41초). dashboard_assets 2 passed.
+  - 시나리오 합계(통과·부분·미실행·미연결)는 `0ca9466` 기록과 같다.
+  - 게이트 실패 기록: `5e290d8`의 첫 게이트는 실패했다. Windows에서 부하가 걸릴 때 `browser did not exit within 60 s` 10건이 났고, WSL에서는 DASH-022 P=3 사례가 `waitFor`의 벽시계 예산 때문에 실패했다.
+  - 수정(`aa0661f`): 브라우저 동시 실행을 4개로 제한했다(`tests/dashboard_browser.rs`의 `BrowserSlot`, `run_chromium` 첫 줄). 제한 시간 60초와 시험 단언은 바꾸지 않았다. `web/dashboard/tests/session-scenarios.js`의 `waitFor`는 `Date.now()` 대신 페이지 시간 단계(20 ms씩 `wait`)로 셌다. 정상 속도에서는 같은 의미다. `operations-scenarios.js`는 바꾸지 않았다.
+  - `aa0661f`의 게이트는 `cargo fmt --check`만 실패했다(`BrowserSlot` 잠금 호출 줄바꿈). `d0ef8d0`이 그 줄바꿈만 고쳤고, 이 기록은 그 뒤 전체 재실행 결과다.
 
 ## 5. 중단 조건
 
