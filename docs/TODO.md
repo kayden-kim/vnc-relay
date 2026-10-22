@@ -67,7 +67,7 @@ flowchart LR
   - 기준: [디자인 기준 미결정 사항](design/DESIGN.md#미결정-사항), [컨벤션 작성 규칙](conventions/AGENTS.md), [frontend-workflow 6절](../.agents/skills/frontend-workflow/references/frontend-workflow.md#6-검증-환경과-통과-기준)
   - 완료 조건: DESIGN-TBD-005를 해소하고 [디자인 기준 검증 절](design/DESIGN.md#검증)에 how-to를 연결한다.
   - 선행: 0.4, 0.8
-  - 현재: [프런트엔드 컨벤션](conventions/frontend.md)을 채택했다. FE-TBD-001~015는 사용자 결정 2026-10-22(Q32~Q38)로 정했고 DESIGN-TBD-005를 해소했다. [대시보드 프런트엔드 검증 how-to](how-to/verify-dashboard-frontend.md)를 디자인 기준 검증 절에 연결했다. 성능 지표(FE-TBD-016)는 화면 구현 뒤 정한다(사용자 결정 2026-10-22(Q39)). `cargo xtask tokens`·`dashboard-serve`와 브라우저 시험은 아직 구현하지 않았다(작업 4.8 이후). WSL Ubuntu에는 Chromium이 아직 없다.
+  - 현재: [프런트엔드 컨벤션](conventions/frontend.md)을 채택했다. FE-TBD-001~015는 사용자 결정 2026-10-22(Q32~Q38)로 정했고 DESIGN-TBD-005를 해소했다. [대시보드 프런트엔드 검증 how-to](how-to/verify-dashboard-frontend.md)를 디자인 기준 검증 절에 연결했다. 성능 지표(FE-TBD-016)는 화면 구현 뒤 정한다(사용자 결정 2026-10-22(Q39)). `cargo xtask tokens`·`dashboard-serve`와 브라우저 시험은 작업 4.8에서 구현했다.
 
 ## 1. 호환 계약 확정
 
@@ -233,11 +233,11 @@ Mode I·II 초기 흐름을 추정 없이 설명할 수 있게 한다. 관찰은
   - 기준: [화면 스펙 9절](specs/dashboard.md#9-화면-문구), [화면 언어](specs/dashboard.md#화면-언어)
   - 완료 조건: 화면 스펙에서 DASH-TBD-003을 해소한다.
   - 현재: 화면 스펙 9절의 문구를 승인해 DASH-TBD-003을 해소했다(사용자 결정 2026-10-22(Q44~Q49)). 새 상태 행 세 개(SCR-002 잘못된 세션 식별자, SCR-003 로그인 요청 실패, SCR-003 로그아웃 결과 확인 필요)와 시나리오 DASH-026·DASH-027을 더했고(사용자 결정 2026-10-22(Q51)), 시안에 프레임 세 개를 더했다(사용자 결정 2026-10-22(Q52)).
-- [ ] **4.8 토큰 CSS와 공통 컴포넌트**: DESIGN.md YAML에서 토큰 CSS를 만든다. Components 절의 공통 컴포넌트와 미리보기를 구현한다. 새 컴포넌트의 책임과 API는 모듈 설계에 적는다.
+- [x] **4.8 토큰 CSS와 공통 컴포넌트**: DESIGN.md YAML에서 토큰 CSS를 만든다. Components 절의 공통 컴포넌트와 미리보기를 구현한다. 새 컴포넌트의 책임과 API는 모듈 설계에 적는다.
   - 기준: [디자인 기준](design/DESIGN.md), 0.9의 프런트엔드 컨벤션
   - 완료 조건: 프런트엔드 컨벤션이 정한 토큰 대조와 미리보기 확인을 통과한다.
   - 선행: 0.9
-  - 현재: `cargo xtask tokens`·`--check`, 공통 컴포넌트, 미리보기, `dashboard-serve`, 브라우저 시험을 구현했다. 미리보기 확인은 에이전트 검토로 갈음했다(사용자 결정 2026-10-22(Q42)). 사람의 시안 대조는 4.12에서 한다. WSL Ubuntu에 Chrome이 설치되어 Ubuntu 게이트가 통과하면 `[x]`로 바꾼다(사용자 결정 2026-10-22(Q41)).
+  - 현재: `cargo xtask tokens`·`--check`, 공통 컴포넌트, 미리보기, `dashboard-serve`, 브라우저 시험을 구현했다. 미리보기 확인은 에이전트 검토로 갈음했다(사용자 결정 2026-10-22(Q42)). 사람의 시안 대조는 4.12에서 한다. WSL Ubuntu에 Google Chrome 156.0.8078.47을 설치한 뒤(사용자 결정 2026-10-22(Q41)) 커밋 `df3b5b2`에서 두 OS의 전체 완료 검증이 통과했다([개발 환경 how-to 실행 기록 4](how-to/set-up-and-verify.md#4-검증)).
 - [ ] **4.9 화면 언어와 로그인 화면(SCR-003)**: 브라우저 선호 언어 자동 선택, 고른 언어 저장, 문서 언어 정보, 로그인 입력 검증과 실패 안내를 구현한다.
   - 기준: [화면 스펙 3절 SCR-003](specs/dashboard.md#scr-003-관리자-로그인), [화면 언어](specs/dashboard.md#화면-언어)
   - 완료 조건: DASH-017~018, DASH-024~025, DASH-027. `GET /login/`이 로그인 화면 HTML을 세션 없이 `200`으로 주는 정적 경로 계약 시험(사용자 결정 2026-10-22(Q43)).
