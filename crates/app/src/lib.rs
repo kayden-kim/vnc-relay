@@ -6,4 +6,5 @@ pub mod events;
 pub mod lifecycle;
 pub mod management;
 pub mod ports;
+pub mod reload;
 pub mod settings;

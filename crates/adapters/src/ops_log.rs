@@ -307,6 +307,39 @@ fn push_event_fields(fields: &mut Vec<(&'static str, Value)>, event: &Event) {
             }
             fields.push(("peer_ip", Value::from(peer_ip.to_string())));
         }
+        Event::ReloadChangeDetected { source } => {
+            fields.push(("source", Value::from(source.as_str())));
+        }
+        Event::ReloadApplied { applied } => {
+            let applied = applied.iter().map(|key| Value::from(*key)).collect();
+            fields.push(("applied", Value::Array(applied)));
+        }
+        Event::ReloadRejected {
+            reason,
+            config_key,
+            detail,
+        } => {
+            fields.push(("reason", Value::from(reason.as_str())));
+            if let Some(config_key) = config_key {
+                fields.push(("config_key", Value::from(config_key.as_str())));
+            }
+            if let Some(detail) = detail {
+                fields.push(("detail", Value::from(cut(detail, DETAIL_MAX_BYTES))));
+            }
+        }
+        Event::ReloadRestartRequired { config_keys } => {
+            let keys = config_keys
+                .iter()
+                .map(|key| Value::from(key.as_str()))
+                .collect();
+            fields.push(("config_keys", Value::Array(keys)));
+        }
+        Event::ReloadWatchFailed { reason, detail } => {
+            fields.push(("reason", Value::from(reason.as_str())));
+            if let Some(detail) = detail {
+                fields.push(("detail", Value::from(cut(detail, DETAIL_MAX_BYTES))));
+            }
+        }
         Event::ServerStopped => {}
     }
 }

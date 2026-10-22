@@ -11,6 +11,7 @@ use vnc_relay_domain::entry_point::EntryPoint;
 use vnc_relay_domain::login_limit::LimitScope;
 use vnc_relay_domain::peer_ip::PeerIp;
 
+use crate::reload::{ChangeSource, WatchFailure};
 use crate::settings::ConfigWarning;
 
 /// Value of `log_contract` in `server_starting` (ops-info-v1 §1.5).
@@ -291,6 +292,23 @@ pub enum Event {
         admin_account: Option<AccountName>,
         peer_ip: PeerIp,
     },
+    /// A change was detected in the config file or a TLS file (ops-info-v1 §1.5).
+    ReloadChangeDetected { source: ChangeSource },
+    /// Reload targets were applied; `applied` lists the changed config keys (ops-info-v1 §1.5).
+    ReloadApplied { applied: Vec<&'static str> },
+    /// A candidate was refused; the running values are kept (ops-info-v1 §1.5).
+    ReloadRejected {
+        reason: String,
+        config_key: Option<String>,
+        detail: Option<String>,
+    },
+    /// A key that cannot change at runtime differs. Values are never written (ops-info-v1 §1.5).
+    ReloadRestartRequired { config_keys: Vec<String> },
+    /// The config file or a TLS file cannot be watched (ops-info-v1 §1.5).
+    ReloadWatchFailed {
+        reason: WatchFailure,
+        detail: Option<String>,
+    },
     /// Last event: resources are released and the process ends.
     ServerStopped,
 }
@@ -309,6 +327,11 @@ impl Event {
             Self::AdminLoginSucceeded { .. } => "admin_login_succeeded",
             Self::AdminLoginFailed { .. } => "admin_login_failed",
             Self::AdminLoginLimited { .. } => "admin_login_limited",
+            Self::ReloadChangeDetected { .. } => "reload_change_detected",
+            Self::ReloadApplied { .. } => "reload_applied",
+            Self::ReloadRejected { .. } => "reload_rejected",
+            Self::ReloadRestartRequired { .. } => "reload_restart_required",
+            Self::ReloadWatchFailed { .. } => "reload_watch_failed",
             Self::ServerStopped => "server_stopped",
         }
     }
@@ -327,6 +350,9 @@ impl Event {
             Self::AdminLoginSucceeded { .. } => Level::Info,
             Self::AdminLoginFailed { .. } | Self::AdminLoginLimited { .. } => Level::Warn,
             Self::StartupFailed { .. } => Level::Error,
+            Self::ReloadChangeDetected { .. } | Self::ReloadApplied { .. } => Level::Info,
+            Self::ReloadRejected { .. } | Self::ReloadRestartRequired { .. } => Level::Warn,
+            Self::ReloadWatchFailed { .. } => Level::Error,
         }
     }
 }
