@@ -69,24 +69,37 @@ export function summaryGrid(t, summary, kind) {
   const state = summary ? stateText(t, summary.serverState) : { text: placeholder, tone: 'neutral' };
   const grid = el('div', 'summary-grid');
   grid.append(
-    createStat({ label: t.serverState, value: state.text, tone: state.tone }),
+    createStat({ label: t.serverState, value: state.text, tone: state.tone, badge: !summary }),
     createStat({
       label: t.uptime,
       value: summary ? formatDuration(summary.uptimeMs, t.dayUnit) : placeholder,
       tone: 'neutral',
+      badge: !summary,
     }),
     createStat({
       label: t.waitingCount,
       value: summary ? formatCount(summary.waiting) : placeholder,
       tone: 'neutral',
+      badge: !summary,
     }),
     createStat({
       label: t.activeCount,
       value: summary ? formatCount(summary.active) : placeholder,
       tone: 'neutral',
+      badge: !summary,
     }),
-    createStat({ label: t.handshaking, value: count(summary?.handshaking), tone: 'neutral' }),
-    createStat({ label: t.targetConnecting, value: count(summary?.targetConnecting), tone: 'neutral' }),
+    createStat({
+      label: t.handshaking,
+      value: count(summary?.handshaking),
+      tone: 'neutral',
+      badge: !summary || summary.handshaking === null,
+    }),
+    createStat({
+      label: t.targetConnecting,
+      value: count(summary?.targetConnecting),
+      tone: 'neutral',
+      badge: !summary || summary.targetConnecting === null,
+    }),
   );
   return grid;
 }

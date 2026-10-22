@@ -9,10 +9,10 @@ function element(tag, className, text) {
 }
 
 /**
- * @param {{label: string, value: string | number, unit?: string, tone?: string}} options
+ * @param {{label: string, value: string | number, unit?: string, tone?: string, badge?: boolean}} options
  * @returns {HTMLDivElement}
  */
-export function createStat({ label, value, unit, tone } = {}) {
+export function createStat({ label, value, unit, tone, badge = false } = {}) {
   if (typeof label !== 'string' || label === '') {
     throw new TypeError('stat label is required');
   }
@@ -28,7 +28,12 @@ export function createStat({ label, value, unit, tone } = {}) {
 
   const valueEl = document.createElement('p');
   valueEl.className = 'stat-value';
-  valueEl.append(String(value));
+  if (badge) {
+    // Placeholder values (unknown or loading) are badges, as the gauge's unknown value is.
+    valueEl.append(element('span', `badge badge-tone-${tone ?? 'neutral'}`, String(value)));
+  } else {
+    valueEl.append(String(value));
+  }
   if (tone !== undefined) valueEl.dataset.tone = tone;
   if (unit) valueEl.append(element('span', 'stat-unit', unit));
 
