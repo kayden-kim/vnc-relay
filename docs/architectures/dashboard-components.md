@@ -54,7 +54,7 @@ flowchart LR
 | `app/components/gauge.js` `createGauge` | 원형 게이지를 `progressbar` 역할로 만든다. | 없음 |
 | `app/components/navbar.js` `createNavbar` | 상단 막대와 호출자가 준 레이블의 `nav`를 만든다. | `link.js`, `icons.js` |
 | `app/components/language-select.js` `createLanguageSelect` | 레이블이 있는 네이티브 `select`를 만든다. 지구본과 화살표 아이콘을 붙인다. | `icons.js` |
-| `app/components/data-table.js` `createDataTable` | 표 요소를 만든다. 좁은 폭의 카드 배치는 CSS가 맡는다. | 없음 |
+| `app/components/data-table.js` `createDataTable` | 표 요소를 만든다. 각 셀에 열 이름을 `data-label`로 붙이고, 좁은 폭의 카드 배치는 CSS가 그 값을 읽어 맡는다. | 없음 |
 | `app/components/link.js` `createLink` | 링크 `a`를 만든다. | `icons.js` |
 | `app/components/dialog.js` `createDialog` | 네이티브 `dialog`로 확인 대화상자를 만든다. | `button.js` |
 | `app/styles/base.css` | `color-scheme`, 본문 글꼴, 포커스 링, 화면 밖 글 클래스 | `tokens.css` |
@@ -89,7 +89,7 @@ flowchart LR
 | `createGauge({label, value, max, valueText, limitText, unknownText})` | `value`는 `0`~`max`. `label`과 `limitText`는 필수다. 알려진 값은 가운데에 `valueText`(없으면 값)를 크게 보이고, 아래 줄에 `limitText`(상한 줄)를 보인다. `value`가 `null`이면 알 수 없음이며 링을 그리지 않고 `unknownText`(필수)를 쓴다. 채움 길이는 `style.setProperty`로 쓴다. | `HTMLDivElement`. `role="progressbar"`, `aria-label`, `aria-valuemin`, `aria-valuemax`, `aria-valuenow`, `aria-valuetext`. 알려진 값의 `aria-valuetext`는 `valueText, limitText`다. |
 | `createNavbar({brand, items, language, action, label})` | `label`은 필수다(기본값 없음, 호출자가 준다). `items`는 `{label, href, current, desktopOnly}`. `desktopOnly` 항목은 1024px 미만에서 숨긴다. | `HTMLElement`(`header`). 안에 `nav`를 둔다. 현재 항목은 `aria-current="page"`. |
 | `createLanguageSelect({id, label, value, options, variant})` | `id`, `label`, `options`(`{value, label}` 배열, 빈 배열이면 `TypeError`)는 필수. `variant` 기본 `form`(`navbar`·`form`). | `HTMLDivElement`. 안에 `label`과 `select`. |
-| `createDataTable({caption, columns, rows, emptyText, numericColumns})` | `columns`는 `{key, label}`. `rows`는 값 배열의 배열. | `HTMLTableElement`. 열 머리글은 `scope="col"`. 행이 없으면 `emptyText`를 한 행으로 쓴다. |
+| `createDataTable({caption, columns, rows, emptyText, numericColumns})` | `columns`는 `{key, label}`(문자열)의 배열이다. 비었거나 배열이 아니면 `TypeError`다. `rows`는 값 배열의 배열이다. 셀 값이 `Node`면 그대로 넣고, 그 밖의 값은 문자열로 쓴다. `numericColumns`의 각 항목은 `columns`의 `key`여야 한다(아니면 `TypeError`). | `HTMLTableElement`. 열 머리글은 `scope="col"`이고, 숫자 열은 `data-table-num` 클래스를 쓴다. 행이 없으면 `emptyText`를 한 행으로 쓴다. |
 | `createLink({href, label, icon})` | `icon`은 아이콘 이름 | `HTMLAnchorElement` |
 | `createDialog({title, description, confirmLabel, cancelLabel, destructive, onConfirm, onCancel})` | `title`, `confirmLabel`, `cancelLabel`은 필수. 확인 버튼은 `destructive`면 위험 스타일. 닫힌 대화상자는 CSS가 숨긴다(`display`는 `.dialog[open]`에만 준다). 미리보기는 열린 견본을 비모달 `open` 속성으로 프레임 안에 둔다(미리보기 전용). | `{element, show(), hide()}`. `show`는 `showModal()`을 부르고, 닫기와 취소는 네이티브 포커스 복귀를 쓴다. |
 
