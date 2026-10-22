@@ -16,8 +16,8 @@
 ## 1. 책임과 경계
 
 - 맡는 책임: PEM 인증서 체인과 개인키를 읽어 rustls 서버 설정을 만든다. TLS 1.2·1.3만 협상하도록 설정한다. 파일 오류를 `TlsError`로 알린다.
-- 맡지 않는 책임: 설정 파일 읽기와 설정 키 이름 붙이기([설정 로딩](config-loading.md)), 리스너 바인드와 접속 수락([`serve` 시작](serve-startup.md); WSS 진입점은 [WebSocket 진입점 설계](websocket-entry-point.md), 관리 리스너는 [관리 리스너 모듈 설계](management-listener.md)가 맡는다), TLS 협상 실패의 운영 로그 기록(리스너가 기록한다), 재로드 후보 검사와 인증서 교체(작업 5.x), 파일 변경 감시(작업 5.1).
-- 다른 모듈에 공개하는 기능: `tls::load_acceptor(cert_file, key_file)`, `TlsError`, `TlsError::code()`.
+- 맡지 않는 책임: 설정 파일 읽기와 설정 키 이름 붙이기([설정 로딩](config-loading.md)), 리스너 바인드와 접속 수락([`serve` 시작](serve-startup.md); WSS 진입점은 [WebSocket 진입점 설계](websocket-entry-point.md), 관리 리스너는 [관리 리스너 모듈 설계](management-listener.md)가 맡는다), TLS 협상 실패의 운영 로그 기록(리스너가 기록한다), 재로드 판정과 교체(작업 5.2, [파일 변경 감지 모듈 설계](file-watch.md)), 파일 변경 감시(작업 5.1).
+- 다른 모듈에 공개하는 기능: `tls::load_acceptor(cert_file, key_file)`, `tls::acceptor_from_pem(cert_pem, key_pem)`(재로드 후보), `tls::RustlsTlsStore`(`ReloadTlsStore` 구현), `TlsError`, `TlsError::code()`.
 
 ## 2. 내부 구조
 
@@ -67,9 +67,9 @@ flowchart LR
 
 ## 5. 상태와 초기화
 
-- 초기화·로딩 시점: 시작 4단계에서 런타임을 준비한 뒤, 리스너 바인드 전에 한 번 호출한다. 재로드는 작업 5.x에서 같은 함수로 후보를 만든다.
+- 초기화·로딩 시점: 시작 4단계에서 런타임을 준비한 뒤, 리스너 바인드 전에 한 번 호출한다. 재로드는 작업 5.2에서 `acceptor_from_pem`으로 후보를 만든다. 두 경로는 같은 `build_acceptor`를 쓴다.
 - 상태 소유자와 제거 시점: 성공한 `TlsAcceptor`(안에 `Arc<ServerConfig>`)는 `listen_until_shutdown`이 든다. WSS acceptor는 WSS 진입점을 만들 때 `WsEntryPoint::new`로 옮겨지고(작업 3.2), 그 뒤로는 WSS 진입점 태스크가 든다. 관리 리스너(작업 4.2)는 이 `TlsAcceptor`를 `ManagementListener`에 넘기고, 그 태스크가 든다.
-- 동시 실행과 순서: `load_acceptor`는 공유 상태가 없다. 시작 때 한 번만 호출한다. 재로드 중 교체의 원자성은 작업 5.x가 정한다.
+- 동시 실행과 순서: `load_acceptor`는 공유 상태가 없다. 시작 때 한 번만 호출한다. 재로드 중 교체의 원자성은 작업 5.2가 `ReloadCell` 한 번의 교체로 정했다.
 
 ## 6. 오류 처리
 
@@ -100,17 +100,13 @@ flowchart LR
 
 ## 8. 현재 코드와의 차이
 
-작업 3.1 구현분(PEM 읽기, 서버 설정 만들기, 시작 때 검사)과 작업 3.2 구현분(WSS 진입점에 acceptor 넘기기)은 2~6절과 같다. 아래는 아직 없는 부분이다.
-
-| 항목 | 현재 코드(파일·심볼) | 목표 설계 | 전환 계획 |
-| --- | --- | --- | --- |
-| 재로드 때 인증서 교체 | `crates/adapters/src/tls.rs` `acceptor_from_pem`(후보를 검증한 바이트로 수락기를 만든다), `RustlsTlsStore`(후보 검사). 교체 셀은 `crates/app/src/reload/snapshot.rs` `ReloadCell`이다. | 후보를 같은 함수로 만든 뒤 교체한다 | 작업 5.2 구현 |
+작업 3.1 구현분(PEM 읽기, 서버 설정 만들기, 시작 때 검사), 작업 3.2 구현분(WSS 진입점에 acceptor 넘기기), 작업 5.2 구현분(재로드 때 후보 만들기와 교체)은 2~6절과 같다.
 
 ## 9. 미결정 사항
 
 | 항목 | 영향 | 확정 위치 |
 | --- | --- | --- |
-| 재로드 때 인증서 교체 방식(새 `TlsAcceptor`를 원자적으로 바꾸는 방법) | 실행 중 인증서 교체와 연결 유지 | 구현 판단(사용자 결정 없음, 확인 필요): `ReloadCell`(`RwLock<Arc<…>>`) 하나를 한 번에 바꾼다. 새 핸드셰이크는 새 수락기를 쓰고, 열린 연결은 이전 인증서를 계속 쓴다(`tests/reload.rs` `new_tls_pair_is_used_by_new_handshakes_and_keeps_open_connections`). |
+| 재로드 때 인증서 교체 방식(새 `TlsAcceptor`를 원자적으로 바꾸는 방법) | 실행 중 인증서 교체와 연결 유지 | 구현 판단(사용자 결정 없음. 근거는 OPS-024와 [파일 변경 감지 모듈 설계](file-watch.md) 머리 문단): `ReloadCell`(`RwLock<Arc<…>>`) 하나를 한 번에 바꾼다. 새 핸드셰이크는 새 수락기를 쓰고, 열린 연결은 이전 인증서를 계속 쓴다(`tests/reload.rs` `new_tls_pair_is_used_by_new_handshakes_and_keeps_open_connections`). |
 | ALPN 값(WSS) | HTTP 종류 협상. 현재 코드는 ALPN을 고르지 않는다. | 해결: WSS도 ALPN을 설정하지 않는다(§7). 관리 HTTPS는 [관리 리스너 모듈 설계 9절](management-listener.md#9-미결정-사항) 4번(해결). 사용자 결정 2026-10-22(Q29) |
 | 개인키 메모리를 명시적으로 지우는 방법 | 현재 코드는 지우지 않는다. rustls가 드롭 때 하는 일에 기대고 있다. | 보안 검토 작업 |
 | OPS-002 조건 '리스너 바인드 뒤 내장 TLS 준비 실패'. 현재 시작 순서는 TLS 검사를 바인드 앞에 둔다([CLI 계약 1.8절](../contracts/cli-v1.md#18-수동-시작과-종료)). | TODO 3.1 완료 조건(OPS-002). 사용자 결정 2026-10-22(Q26)로 스펙 조건에서 '바인드 뒤'를 뺐다. 내장 TLS 준비 실패는 바인드 전에 시작을 중단한다. | 해결(사용자 결정 2026-10-22(Q26)) |
@@ -126,3 +122,4 @@ flowchart LR
 | OPS-002 조건(시작 중 TLS 준비 실패, 리스너 바인드 뒤)과 시작 순서 | 코드 대조(기준 커밋 `e701997`) | `src/serve.rs` `listen_until_shutdown`에서 `tls_checks`와 `tls::load_acceptor`가 `net::bind_one`·`net::bind`보다 먼저 실행된다. 스펙 조건은 이 순서에서 일어나지 않는다. `tests/serve.rs`의 `fails_with_exit_code_3_when_wss_key_does_not_match`·`fails_with_exit_code_3_when_management_certificate_is_missing`·`checks_tls_files_before_binding_a_taken_status_port`는 바인드 전 실패만 확인한다. | 부분 유지. TODO 3.1은 `[ ]`로 둔다. §9의 OPS-002 행 참조. |
 | 작업 3.1 검증(기준 커밋 `e701997`, 작업 트리 깨끗함) | Windows 11 Pro 10.0.26200, Rust 1.99.1(`x86_64-pc-windows-msvc`) | `powershell -NoProfile -ExecutionPolicy Bypass -File D:/vr-tools/vr-win.ps1 -Only all`. 판정 `통과`, 마지막 줄 `ALL PASSED (all)`. 시나리오 결과 `시나리오 148건: 통과 10, 부분 20, 실패 0, 미실행 1, 미연결 117. 오류 0건.` 미실행 1건은 기존 기록의 Unix 전용 시험(OPS-007)이다. | OPS-036·WS-013 통과. OPS-002는 부분 유지. |
 | 작업 3.1 검증(기준 커밋 `b505c60` + 작업 트리: 커밋 전 문서 변경 포함). OPS-002 스펙 조건(사용자 결정 2026-10-22(Q26))과 `tests/serve.rs` 비부분 표식 2건 | Ubuntu 24.04.4(WSL2)·Windows 11 Pro 10.0.26200, Rust 1.99.1 | `cargo fmt --all`(Windows), `wsl -d Ubuntu -- bash /mnt/d/vr-tools/vr-full.sh`, `powershell -NoProfile -ExecutionPolicy Bypass -File D:/vr-tools/vr-win.ps1 -Only all`. 판정 `통과`, 마지막 줄 `ALL PASSED`(Ubuntu)·`ALL PASSED (all)`(Windows). 시나리오 Ubuntu `시나리오 148건: 통과 12, 부분 26, 실패 0, 미실행 0, 미연결 110. 오류 0건.`, Windows `시나리오 148건: 통과 11, 부분 26, 실패 0, 미실행 1, 미연결 110. 오류 0건.`(미실행 1건은 Windows에서 건너뛰는 Unix 전용 시험). OPS-002는 두 OS에서 `통과`(`fails_with_exit_code_4_and_releases_listeners_when_a_port_is_taken`·`checks_tls_files_before_binding_a_taken_status_port`가 비부분 통과). OPS-036·WS-013도 두 OS에서 `통과`. | OPS-002·OPS-036·WS-013 통과(양 OS). TODO 3.1 완료 조건 충족. |
+| 작업 5.2 검증(기준 커밋 `c4c6cf6`) | Ubuntu 24.04.4(WSL2)·Windows 11 Pro 10.0.26200, Rust 1.99.1 | `wsl -d Ubuntu -- bash /mnt/d/vr-tools/vr-full.sh`, `powershell -NoProfile -ExecutionPolicy Bypass -File D:/vr-tools/vr-win.ps1 -Only all`. 판정 `통과`, 마지막 줄 `ALL PASSED`(Ubuntu)·`ALL PASSED (all)`(Windows). 시나리오 Ubuntu `시나리오 150건: 통과 23, 부분 30, 실패 0, 미실행 0, 미연결 97. 오류 0건.`, Windows `시나리오 150건: 통과 22, 부분 30, 실패 0, 미실행 1, 미연결 97. 오류 0건.`(미실행 1건은 OPS-007, Unix 전용) | OPS-024 통과 유지. OPS-026은 부분이다(작업 2.9·2.10 뒤에 검증한다). |

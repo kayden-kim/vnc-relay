@@ -135,4 +135,4 @@ flowchart LR
 
 | 항목 | 영향 | 확정 위치 |
 | --- | --- | --- |
-| 재로드 때 `tls_file_invalid` 검사 위치 | 시작 때 내용 검사는 작업 3.1에서 TLS 어댑터(`tls::load_acceptor`)가 한다([`serve` 시작 모듈 설계 4절](serve-startup.md)). 재로드 후보는 `RustlsTlsStore`가 `acceptor_from_pem`으로 검사한다. 실패하면 `reload_rejected`(`tls_file_invalid`)로 거절한다. 구현 판단(사용자 결정 없음). | 작업 5.2 구현 |
+| 재로드 때 `tls_file_invalid` 검사 위치 | 시작 때 내용 검사는 작업 3.1에서 TLS 어댑터(`tls::load_acceptor`)가 한다([`serve` 시작 모듈 설계 4절](serve-startup.md)). 재로드 후보는 `RustlsTlsStore`가 `acceptor_from_pem`으로 검사한다. 실패하면 `reload_rejected`(`tls_file_invalid`)로 거절한다. 구현 판단(사용자 결정 없음). | 작업 5.2에서 구현했다 |

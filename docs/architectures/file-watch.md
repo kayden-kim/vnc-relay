@@ -1,12 +1,12 @@
 # 파일 변경 감지 모듈 설계
 
-이 모듈은 설정 파일과 인증서·개인키 파일의 변경을 감지한다. 변경이 멈춘 뒤 파일 내용을 재로드 후보 하나로 읽는다. 후보는 작업 하나가 순서대로 처리하며, 가장 최신 후보만 적용한다. 적용할 때는 IP 허용 목록과 TLS 설정을 한 스냅샷으로 한 번에 바꾼다. 이 문서는 Target 초안이며 문서 상태는 Draft다. 작업 5.2에서 구현했고 구현 대조는 아직 하지 않았다. 사용자 결정 2026-10-22(Q50)으로 §9 항목 1~13과 15를 정했다. 항목 14(Windows 디렉터리·편집기 핸들)는 열려 있다.
+이 모듈은 설정 파일과 인증서·개인키 파일의 변경을 감지한다. 변경이 멈춘 뒤 파일 내용을 재로드 후보 하나로 읽는다. 후보는 작업 하나가 순서대로 처리하며, 가장 최신 후보만 적용한다. 적용할 때는 IP 허용 목록과 TLS 설정을 한 스냅샷으로 한 번에 바꾼다. 이 문서는 구조 시점 Current이며 문서 상태는 Draft다. 작업 5.2에서 구현했고 [대조 기록](#대조-기록)에 대조 결과를 적었다. 사용자 결정 2026-10-22(Q50)으로 §9 항목 1~13과 15를 정했다. 항목 14(Windows 디렉터리·편집기 핸들)는 열려 있다.
 
 | 항목 | 값 |
 | --- | --- |
-| 구조 시점 | Target |
+| 구조 시점 | Current |
 | 문서 상태 | Draft |
-| 구현 대조 | 미대조 |
+| 구현 대조 | Verified — [대조 기록](#대조-기록) (§9 항목 14와 §9.2의 Ubuntu 알림 항목 제외) |
 | 코드 위치 | `crates/adapters/src/file_watch.rs` `ReloadWatcher::run`·`attach`·`episode`, `crates/adapters/src/file_watch/feed.rs`, `crates/app/src/reload/service.rs` `ReloadService::handle_config`·`handle_unreadable`, `crates/app/src/reload/snapshot.rs` `ReloadSnapshot`·`ReloadCell` |
 | 코드 지도 | [코드 지도](code-map.md) |
 | 관련 스펙 | [운영 스펙 2절](../specs/operations.md#2-상태와-검증-매개변수)(D, Dp), [3.3절](../specs/operations.md#33-파일-변경-자동-감지와-부분-재로드), [7절](../specs/operations.md#7-수용-테스트)의 OPS-003, OPS-024~028, OPS-035, OPS-038, OPS-040, OPS-041 |
@@ -35,7 +35,7 @@
 
 ## 2. 내부 구조
 
-화살표 의미는 다음 네 가지다. 모든 화살표는 Target 설계이며 현재 코드에는 없다.
+화살표 의미는 다음 네 가지다. 그림은 Target 설계다. 구현과 다른 점은 §8에 적는다.
 
 - 실행 중 호출: 콜백이나 채널 신호로 다른 작업을 깨운다. 호출하는 쪽은 결과를 기다리지 않는다.
 - 데이터 전달: 재로드 후보나 값을 복사해 넘긴다. 넘긴 뒤 원본을 바꾸지 않는다.
@@ -113,13 +113,13 @@ flowchart LR
 - `reload_rejected`와 `reload_restart_required`는 서로 다른 사건이다. 재시작 필요는 검증 실패로 세지 않는다([운영 정보 계약 자동 재로드](../contracts/ops-info-v1.md#자동-재로드)).
 - 자동 재로드가 교체에 성공하지 않았으면 `reload_applied`를 쓰지 않는다.
 - `reload_watch_failed`는 묶음 없이 단독으로 쓴다.
-- 시작 때 감시 등록에 실패하면 `startup_failed`(`watch_unavailable`)를 쓴다. `reload_watch_failed`가 아니다.
+- 시작 때 감시 등록에 실패하면 `startup_failed`(`watch_unavailable`)를 쓰고 종료 코드 1로 끝낸다. `reload_watch_failed`가 아니다. 시험은 `src/serve.rs` 단위 시험 `watch_registration_refused_at_start_is_a_startup_failure`다.
 - 같은 원인의 사건이 여러 번 나오면 반복마다 기록한다(사용자 결정 2026-10-22(Q50), §9 항목 8). 묶음 안의 `reload_change_detected`는 한 번만 쓴다.
 
 ### 4.3 검증 순서 확인점
 
 - 알림 차단(OPS-041): 테스트 훅으로 알림 전달을 막는다. 변경은 Dp 안에 주기 확인으로 잡혀야 한다. 적용 또는 실패 결과는 마지막 변경을 감지한 뒤 D 안에 나와야 한다(최대 Dp + D).
-- 검증 지연(OPS-027): 검증 전에 멈추는 테스트 훅을 둔다. 훅이 멈춘 동안 새 변경을 넣는다. 이전 후보는 적용되지 않아야 하고, 최신 후보만 적용되어야 한다.
+- 검증 지연(OPS-027): 검증 직전에 실행하는 테스트 훅을 둔다. 훅은 `ReloadService::arm_before_validation`으로 등록하는 동기 일회 훅이다. 훅이 도는 동안 새 변경을 넣는다. 이전 후보는 적용되지 않아야 하고, 최신 후보만 적용되어야 한다.
 - 한쪽만 교체(OPS-026): 인증서만 바꾼 후보나 개인키만 바꾼 후보는 쌍 검사에서 `tls_file_invalid`로 거절되어야 한다. 두 파일이 함께 바뀐 새 후보는 적용되어야 한다.
 - 순서는 훅과 채널 신호로 맞춘다. `sleep`으로 순서를 맞추지 않는다. 시간은 주입한 시계로 제어한다(사용자 결정 2026-10-22(Q50), §9 항목 13).
 - 테스트 함수 위에 표식을 쓴다. 예: `/// spec: operations.md:OPS-041`. 시나리오 일부만 다루면 ` partial`을 붙인다. 새 시나리오 ID는 만들지 않는다.
@@ -169,13 +169,13 @@ flowchart LR
 
 | 항목 | 현재 코드(파일·심볼) | 목표 설계 | 전환 계획 |
 | --- | --- | --- | --- |
-| 파일 변경 감지 | `crates/adapters/src/file_watch.rs` `ReloadWatcher::run`, `attach`, `episode`. 알림 수신은 `file_watch/feed.rs`. | §2, §4의 `ReloadWatcher::run` | 작업 5.2 구현 |
-| 시작 단계 (3) 파일 변경 감지 준비 | `src/serve.rs`의 감시 시작. 실패하면 `watch_unavailable`을 쓴다. | §5 | 작업 5.2 구현. 정상 종료 중 중지는 작업 5.3 |
-| 재로드 판정과 적용 | `crates/app/src/reload/service.rs` `ReloadService::handle_config`(설정 파일 후보), `handle_unreadable`(읽을 수 없음·UTF-8 아님). 재시작 필요 비교는 `restart_required_keys`. | §4의 `ReloadService::on_change`(구현에서 두 함수로 나눔) | 작업 5.2 구현 |
-| 허용 목록 스냅샷 | `crates/app/src/reload/snapshot.rs` `ReloadSnapshot`, `ReloadCell`(`RwLock<Arc<…>>`). `crates/adapters/src/net.rs` `AllowSource`가 판정 때마다 셀에서 현재 값을 읽는다. | §3의 `ReloadSnapshot` | 작업 5.2 구현 |
-| TLS 교체 | `crates/adapters/src/tls.rs` `acceptor_from_pem`(검증한 바이트로 수락기 생성), `RustlsTlsStore`(후보 검사). 교체는 `ReloadCell`이 한다. | 검증한 바이트로 수락기를 만드는 함수와 스냅샷 값 | 작업 5.2 구현. [TLS 모듈 설계](tls.md) 8·9절 갱신 |
-| 설정 파싱 재사용 | 재로드 후보 파싱에 `config_file::parse`를 쓴다(`file_watch.rs`). | `parse`를 재로드 후보에도 쓴다 | 작업 5.2 구현 |
-| 재로드 사건 | `crates/app/src/events.rs` `ReloadChangeDetected`·`ReloadApplied`·`ReloadRejected`·`ReloadRestartRequired`·`ReloadWatchFailed`. 줄 형식은 `crates/adapters/src/ops_log.rs`. | §4.2, §6의 사건 | 작업 5.2 구현. `reload_watch_failed`의 자동 바이너리 시험은 없다(수동 스모크에서 관찰) |
+| 파일 변경 감지 | `crates/adapters/src/file_watch.rs` `ReloadWatcher::run`, `attach`, `episode`. 알림 수신은 `file_watch/feed.rs`. | §2, §4의 `ReloadWatcher::run` | 작업 5.2에서 구현했다 |
+| 시작 단계 (3) 파일 변경 감지 준비 | `src/serve.rs`의 감시 시작. 실패하면 `watch_unavailable`을 쓴다. | §5 | 작업 5.2에서 구현했다. 정상 종료 중 중지는 작업 5.3 |
+| 재로드 판정과 적용 | `crates/app/src/reload/service.rs` `ReloadService::handle_config`(설정 파일 후보), `handle_unreadable`(읽을 수 없음·UTF-8 아님). 재시작 필요 비교는 `restart_required_keys`. | §4의 `ReloadService::on_change`(구현에서 두 함수로 나눔) | 작업 5.2에서 구현했다 |
+| 허용 목록 스냅샷 | `crates/app/src/reload/snapshot.rs` `ReloadSnapshot`, `ReloadCell`(`RwLock<Arc<…>>`). `crates/adapters/src/net.rs` `AllowSource`가 판정 때마다 셀에서 현재 값을 읽는다. | §3의 `ReloadSnapshot` | 작업 5.2에서 구현했다 |
+| TLS 교체 | `crates/adapters/src/tls.rs` `acceptor_from_pem`(검증한 바이트로 수락기 생성), `RustlsTlsStore`(후보 검사). 교체는 `ReloadCell`이 한다. | 검증한 바이트로 수락기를 만드는 함수와 스냅샷 값 | 작업 5.2에서 구현했다. [TLS 모듈 설계](tls.md) 8·9절을 갱신했다 |
+| 설정 파싱 재사용 | 재로드 후보 파싱에 `config_file::parse`를 쓴다(`file_watch.rs`). | `parse`를 재로드 후보에도 쓴다 | 작업 5.2에서 구현했다 |
+| 재로드 사건 | `crates/app/src/events.rs` `ReloadChangeDetected`·`ReloadApplied`·`ReloadRejected`·`ReloadRestartRequired`·`ReloadWatchFailed`. 줄 형식은 `crates/adapters/src/ops_log.rs`. | §4.2, §6의 사건 | 작업 5.2에서 구현했다. `reload_watch_failed`의 자동 바이너리 시험은 없다(수동 스모크에서 관찰) |
 | 정상 종료 중 새 후보 중지 | `is_current`(`file_watch.rs`)가 교체 직전에 중지 신호와 세대를 본다. 종료 순서 전체는 없다. | §5 | 작업 5.3 |
 
 ## 9. 결정 기록과 미결정 사항
@@ -229,5 +229,22 @@ flowchart LR
 - 감시 장애 사건: 감시 장애가 이어지면 사건이 주기 확인마다 쌓여 로그 양이 커질 수 있다. [INFERENCE] 측정하지 않았다.
 - 심볼릭 링크 대상 변경: 등록 뒤 링크 대상이 바뀌면 새 대상은 감시되지 않을 수 있다. 구현 판단(사용자 결정 없음). 확인이 필요하다.
 - Q·G 값: 구현 상수 Q 300ms, G 100ms다(`crates/adapters/src/file_watch.rs`). Windows 스모크(D 1s)에서 적용·거절·재시작 필요 7건의 감지에서 결과까지 414~434ms였다. Ubuntu는 측정하지 않았다.
-- 검증 지연 훅(§4.3, OPS-027): 구현하지 않았다. OPS-027 단위 시험은 조용한 구간과 간격 중에 새 경로를 넣어 최신 후보만 적용되는지 확인한다(부분). 구현 편차다.
-- 알림 차단 훅(§4.3, OPS-041): 단위 시험(`SwitchFeed`)에만 있다. 실제 바이너리 시험은 없다.
+- 검증 지연 훅(§4.3, OPS-027): 멈추는 훅 대신 테스트 전용 동기 일회 훅 `ReloadService::arm_before_validation`을 쓴다. 채널로 멈추면 단일 태스크 `join!`에서 교착한다. 바이너리 시험은 없다. 구현 편차다.
+- 알림 차단 훅(§4.3, OPS-041): 어댑터 단위 시험 `allow_change_is_applied_by_poll_when_the_notify_is_blocked`(`SwitchFeed`)에만 있다. 실제 바이너리 시험은 없다.
+
+## 대조 기록
+
+### 작업 5.2
+
+- 범위: §4의 감지·판정·교체 순서, §5의 시작 감시 등록, §6의 실패 처리. 시나리오 OPS-003·027·028·038·041이 부분에서 통과로 바뀌었다(OPS-024는 원래 통과).
+- 방법: 자동 시험(`file_watch.rs`, `reload/service.rs`, `src/serve.rs`, `tests/reload.rs`, `tests/config_contract.rs`)과 실제 바이너리 수동 스모크(Windows).
+- 결과: 아래 표. 남은 부분은 OPS-025·026·040과 WS-022다(작업 2.7·2.9·2.10·5.3 뒤에 검증한다).
+- 환경: 기준 커밋 `c4c6cf6`(코드). Ubuntu 24.04.4(WSL2), Windows 11 Pro 10.0.26200, Rust 1.99.1.
+
+| 확인 | 명령·방법 | 결과 |
+| --- | --- | --- |
+| 자동 시험 Ubuntu | `wsl -d Ubuntu -- bash /mnt/d/vr-tools/vr-full.sh` | `ALL PASSED`. 시나리오 150건: 통과 23, 부분 30, 실패 0, 미실행 0, 미연결 97. 오류 0건 |
+| 자동 시험 Windows | `powershell -NoProfile -ExecutionPolicy Bypass -File D:/vr-tools/vr-win.ps1 -Only all` | `ALL PASSED (all)`. 시나리오 150건: 통과 22, 부분 30, 실패 0, 미실행 1(OPS-007, Unix 전용), 미연결 97. 오류 0건 |
+| 수동 스모크 S1–S8 (Windows, 실제 바이너리) | 설정·인증서 변경, 감시 디렉터리 이름 바꾸기, 배타 잠금(약 7.6초) | 감지에서 결과까지 414~434ms(7건). 잠금 동안 5초 주기 확인마다 `reload_watch_failed`(`poll_error`) 2건, 복구 사건 없음, 잠금 해제 뒤 변경 적용. 디렉터리 이름 바꾸기는 `EPERM`이고 릴레이는 계속 실행. 산출물 `target/smoke-reload/`(커밋하지 않음) |
+
+판정: 통과. 항목 14(Windows 디렉터리·편집기 핸들)는 사용자 결정 전이다.
