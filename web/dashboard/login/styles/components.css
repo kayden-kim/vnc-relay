@@ -756,8 +756,74 @@
   padding-top: var(--space-md);
 }
 
+.page-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: var(--space-xl);
+  align-items: start;
+}
+
+.span-3 {
+  grid-column: span 3;
+}
+
+.span-6 {
+  grid-column: span 6;
+}
+
+.span-4 {
+  grid-column: span 4;
+}
+
+.span-8 {
+  grid-column: span 8;
+}
+
+.span-12 {
+  grid-column: span 12;
+}
+
+.fact-list {
+  margin: 0;
+}
+
+.fact {
+  display: grid;
+  grid-template-columns: var(--space-kv-label-col) minmax(0, 1fr);
+  gap: var(--space-md);
+  align-items: baseline;
+  padding-block: var(--space-sm);
+  border-bottom: var(--space-border-width) solid var(--color-border);
+}
+
 /* Narrow screens: the single breakpoint at 1024px. */
 @media (max-width: 1023.98px) {
+  .span-3,
+  .span-4,
+  .span-6,
+  .span-8 {
+    grid-column: span 12;
+  }
+
+  .fact {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-xs);
+  }
+
+  .page-actions {
+    width: 100%;
+  }
+
+  .page-actions .button {
+    flex: 1;
+  }
+
   .card-head {
     padding: var(--space-md) var(--space-lg);
   }
