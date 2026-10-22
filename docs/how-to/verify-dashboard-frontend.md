@@ -458,6 +458,23 @@
   - Windows `vr-win.ps1 -Only all`: ALL PASSED (all), 종료 0(마지막 줄 `ALL PASSED (all)`). 같은 항목과 라이선스 검사가 모두 종료 0. 시나리오 150건: 통과 23, 부분 49, 실패 0, 미실행 1(OPS-007, Unix 전용), 미연결 77, 오류 0건. dashboard_browser 31 passed, 0 failed(166.78초). dashboard_assets 2 passed.
   - 시나리오 합계는 `98b2fc1`과 같다(통과·부분·미실행·미연결).
 
+### 4.9 검토 기록 (작업 4.11 세션 시험 보강, 2026-10-22)
+
+- 검토자: 에이전트 Dash411(작업 위임: Main). 사람의 검토가 아니다. 사람 검토는 작업 4.12에서 한다.
+- 범위: SCR-002 목 응답 시험 `web/dashboard/tests/session-scenarios.js`에 사례 5개(`dash-016`, `dash-019`, `dash-022`, `dash-024`, `dash-025`)를 더했다. `tests/dashboard_browser.rs`에는 `session_` 시험 5개를 더해 9개에서 14개가 됐다. 표식은 모두 `/// spec: dashboard.md:DASH-0xx partial`이다. 제품 코드(`web/dashboard/app/`)는 바꾸지 않았다.
+- 시험 내용:
+  - DASH-016 `session_shows_state_change_on_next_poll_in_browser`: 다음 조회에서 바이트 값이 바뀌어 보인다(1536→4096은 `4.0 KiB`, 1048575→2097152는 `2.0 MiB`). 마지막 상세 조회는 폴링 표시(`X-Relay-Poll`)를 보냈다. 머리말 `.page-meta`는 마지막 성공 시각 문구다. 바깥 단추는 새로고침·세션 종료·로그아웃뿐이고 입력 칸은 없다. 두 번째 마운트에서 조회가 `404`면 대상 없음 문구가 나오고 종료 단추가 꺼지며 종료 요청이 없다.
+  - DASH-019 `session_sign_out_removes_data_or_shows_unconfirmed_in_browser`: 로그아웃을 두 번 눌러도 DELETE는 한 번이고 CSRF 토큰은 `csrf-token-1`이다. 성공하면 `/login/`으로 가고 화면 내용을 비운다. 응답 유실·`500`·`403`은 `/login/?notice=logout-unconfirmed`로 간다. `401`은 `/login/`으로 간다. 어느 경우에도 종료 요청은 없다.
+  - DASH-022 `session_polls_at_configured_interval_without_overlap_in_browser`: 서버가 준 `poll_secs` 3이면 간격이 2950–3750 ms다. `poll_secs` 2이면 1950–2750 ms다. `poll_secs` 1로 1500 ms 걸리는 응답을 받아도 동시 조회는 최대 1개이고 간격은 2400 ms 이상이다.
+  - DASH-024 `session_follows_the_browser_language_in_browser`: 선호 언어 `ko-KR`은 ko, `en-US`는 en, `ja-JP`만 있으면 en, `ja-JP`·`ko`면 ko다. `lang`, 언어 선택 값, 제목, 새로고침 문구, 시작 시각 형식, 바이트 값(`1.5 KiB`·`1.0 MiB`)을 확인했다. 저장소에는 아무것도 쓰지 않았다.
+  - DASH-025 `session_keeps_the_chosen_language_in_browser`: 언어 선택을 바꾸면 상세를 다시 읽지 않고 바로 바뀐다. 저장한 값은 선호 언어 `ko-KR`보다 우선한다. 로그아웃 뒤에도 저장한 값이 남는다. 어떤 요청에도 언어 값이 없다. 알 수 없는 값 `mode9`·`quic`은 ko·en 모두 원문으로 보인다.
+- 설계 판단:
+  - 저장 키 `vnc-relay.language`(`language.js`의 `STORAGE_KEY`)는 SCR-001·SCR-003과 같다. 사례마다 가짜 저장소를 따로 둬서 한 사례의 선택이 다른 사례로 새지 않는다. 화면 사이 이동(해시 라우터)에서 언어가 이어지는지는 이 시험이 보지 않는다.
+  - DASH-024·025는 SCR-002 쪽만 여기서 `partial`이다. SCR-003 쪽은 `login_keeps_the_chosen_language_and_account_name_in_browser`(4.9 로그인)다.
+  - SCR-002에는 상태 행이 없어서 DASH-016의 "상태 변화"는 바이트 값과 조회 결과(사라짐 포함)로 본다.
+  - 로그아웃 `403` 처리는 잠정이다(개요 D2, 사용자 질문 Q2가 열려 있다). 시험은 잠정 처리를 확인하며, 사용자가 결정을 바꾸면 이 사례도 바꾼다.
+- 확인하지 않은 것: 실서버의 `poll_secs`와 폴링 간격, 실서버의 로그아웃 `403`, SCR-001과 SCR-002 사이 이동 뒤의 언어 유지, 키보드·스크린 리더(3.5·3.6), 사람 비교(4.12).
+
 ## 5. 중단 조건
 
 - `cargo xtask tokens --check`의 종료 코드가 0이 아니면 3.2 이후 단계를 실행하지 않는다.
