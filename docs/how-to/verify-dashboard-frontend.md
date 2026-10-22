@@ -338,6 +338,14 @@
 - 판정 범위: 1280은 정상 상태와 빈 목록 문구만 판정했다. 320은 상단 막대, 빈 목록 문구, 실패·이전 데이터 상태를 판정했다. 320의 조회 중·갱신 중은 수치만 확인했다. 나머지 육안 판정은 하지 않았다. en 비정상 상태는 목업이 없어 레이아웃 수치만 비교했다.
 - 확인하지 못한 것: 목업 `.app` 클립은 18px 좁다(1262/372/302px). 320 판정은 302px 기준이다. `--hide-scrollbars` 효과는 확인하지 않았다. DPR은 1로 고정했다. 200% 줌, 글자 크기 조정, 다크 모드(목업은 라이트만)는 확인하지 않았다. 키보드, 스크린 리더, Edge·Firefox·Safari, 실기기 터치는 3.5–3.7에서 한다. en 카드 제목 목업 `Admin connections`와 구현 `Management connections`는 스펙 9절 영문 문구를 확인하지 않았다. 실행 상태 pill 스타일과 구현 텍스트 색은 DESIGN 뱃지 규칙을 확인하지 않았다. 권한 없음 상태(DASH-008)는 찍지 않았다. favicon 404와 en 실패 harness의 `loadingLeft` 결과는 점검 아티팩트다. `Loading failed` 문자열이 `Loading`을 포함해 생긴 결과이며 앱 결함이 아니다.
 - 결과: 부분. 6개 조합 가로 스크롤 0건, CSP 위반 0건. 수정 필요 6건은 코드 수정 대상이다. 사람 비교는 4.12에서 한다.
+- 수정 기록(2026-10-22, 같은 작업 트리, 커밋 대상): 수정 필요 6건 모두 코드를 고쳤다. 아래 재촬영은 수정 뒤에 다시 찍은 것이다. 위 본문의 수정 필요 목록은 수정 전 기록으로 남긴다.
+  - 1–5(상단 막대): `operations.js`의 `운영 현황` 항목에 `desktopOnly: true`. `components.css`의 `.navbar`·`.navbar-tools`에서 `flex-wrap: wrap`을 뺐다. 재촬영: 390·320 ko·en 막대 56px 한 행, 언어 선택 top 6·높이 44, `운영 현황` 미표시(인디케이터 없음). 1280 인디케이터 top 53, 간격 7, 두 행 없음.
+  - 6(`Unavailable`): 원인은 요약 카드 확인 불가 값이 `.stat-value`(`overflow-wrap: anywhere`) 안에서 최소 폭이 줄어 중간에서 나뉜 것이다. `anywhere`를 뺐다. 재촬영: 1280·390·320 en 정상 상태에서 한 줄(320 en 스크린샷 육안 확인, 나머지는 완전 문자열 텍스트 확인).
+  - 추가로 드러난 결함 두 건을 고쳤다. (a) `anywhere`를 빼자 긴 숫자(미리보기 `stat-long-numbers`, `18,446,744,073,709,551,615`)가 flex 최소 폭 때문에 402px로 넘쳤다. `.stat-value`를 `display: block; overflow-wrap: break-word`로 바꿔 막았다(DESIGN 474행: 폭이 모자라면 줄바꿈). (b) 미리보기 navbar 샘플이 320에서 `nowrap` 최소 폭 295px로 늘어 docScroll 328이었다. `web/dashboard/preview/preview.css`에서 샘플 막대를 frame 안 가로 스크롤(`overflow-x: auto`, `contain: inline-size`)로 바꿨다. 1280에서도 샘플 폭이 frame 전체가 되는 부작용이 있다.
+  - 코드 파일: `web/dashboard/app/operations.js`, `web/dashboard/app/styles/components.css`, `web/dashboard/preview/preview.css`, `web/dashboard/login/styles/components.css`(`cargo xtask tokens` 재생성). 문서 파일은 검증 기록, 대조 기록(`dashboard-components.md`·`dashboard-operations-overview.md`), 계약 6절과 5절 실행 기록이다.
+- 재촬영 결과(`capture.mjs`, 48장): `scrollWidth == clientWidth`가 48장 모두 참, 넘치는 요소 0, CSP 위반 0. 앱 막대 12건 모두 한 행 56px, 문서 가로 넘침 0. 미리보기 390·320 docScroll 390·320, 넘침 0.
+- 확인하지 못한 것(추가): 미리보기 320 전체 페이지 캡처는 16170px 세로라 육안 판독 불가. 측정치만 썼다. `LABEL.sr-only`(시각적으로 숨긴 중단 안내)가 320에서 뷰포트 밖 위치(right 366)에 있지만 넘침 계산에 들지 않는다. 키보드·스크린 리더·실기기는 여전히 3.5–3.7.
+- 결과: 수정 필요 6건 해소(측정과 육안 확인). 최종 HEAD 게이트 결과는 이 절 끝에 적는다.
 
 ## 5. 중단 조건
 
