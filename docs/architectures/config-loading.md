@@ -1,6 +1,6 @@
 # 설정 로딩 모듈 설계
 
-설정 로딩은 TOML 설정 파일 하나를 읽어 [설정 계약](../contracts/config-v1.md)의 모든 검사를 한 번에 수행한다. 결과는 둘 중 하나다. 검증을 마친 유효 설정 `Settings`이거나, 발견한 모든 진단(`code`·`key`·`message`) 목록이다. TOML 해석과 키 검사는 adapters가, 항목 문법(IP 항목·Origin·Mode I 대상)은 domain이, 유효 설정 타입과 오류·경고 코드는 app이 맡는다. 시작(작업 2.2)과 재로드(작업 5.x)가 같은 함수를 부른다.
+설정 로딩은 TOML 설정 파일 하나를 읽어 [설정 계약](../contracts/config-v1.md)의 모든 검사를 한 번에 수행한다. 결과는 둘 중 하나다. 검증을 마친 유효 설정 `Settings`이거나, 발견한 모든 진단(`code`·`key`·`message`) 목록이다. TOML 해석과 키 검사는 adapters가, 항목 문법(IP 항목·Origin·Mode I 대상)은 domain이, 유효 설정 타입과 오류·경고 코드는 app이 맡는다. 시작(작업 2.2)과 재로드(작업 5.2)가 같은 함수를 부른다.
 
 | 항목 | 값 |
 | --- | --- |
@@ -28,7 +28,7 @@
   - 인증서·개인키 파일 내용 검사(`tls_file_invalid`). TLS 작업(3.1)이 맡는다.
   - 경고·진단의 출력. 진단 출력 형식은 `serve` 골격(작업 2.2), 경고 사건 기록은 운영 로그(작업 2.3)가 맡는다.
   - 상대 IP의 허용 판정(`AllowList::permits`), Mode I 최종 IP 판정, 요청 Origin 비교의 사용. 각각 작업 2.4, 2.8, 3.2에서 같은 domain 모듈에 더한다.
-  - 재로드 대상과 재시작 필요 값의 비교. 재로드 작업(5.x)이 `Settings`의 값 비교로 한다.
+  - 재로드 대상과 재시작 필요 값의 비교. 재로드 작업(5.2)이 `Settings`의 값 비교로 한다(`crates/app/src/reload/service.rs` `restart_required_keys`).
 - 다른 모듈에 공개하는 기능:
   - `vnc_relay_adapters::config_file::load(path) -> Result<Settings, Vec<ConfigDiagnostic>>`
   - `vnc_relay_adapters::config_file::parse(text, base_dir) -> Result<Settings, Vec<ConfigDiagnostic>>`
@@ -135,4 +135,4 @@ flowchart LR
 
 | 항목 | 영향 | 확정 위치 |
 | --- | --- | --- |
-| 재로드 때 `tls_file_invalid` 검사 위치 | 시작 때 내용 검사는 작업 3.1에서 TLS 어댑터(`tls::load_acceptor`)가 한다([`serve` 시작 모듈 설계 4절](serve-startup.md)). 재로드 후보의 내용 검사 방식은 정하지 않았다. | 작업 5.x |
+| 재로드 때 `tls_file_invalid` 검사 위치 | 시작 때 내용 검사는 작업 3.1에서 TLS 어댑터(`tls::load_acceptor`)가 한다([`serve` 시작 모듈 설계 4절](serve-startup.md)). 재로드 후보는 `RustlsTlsStore`가 `acceptor_from_pem`으로 검사한다. 실패하면 `reload_rejected`(`tls_file_invalid`)로 거절한다. 구현 판단(사용자 결정 없음). | 작업 5.2 구현 |

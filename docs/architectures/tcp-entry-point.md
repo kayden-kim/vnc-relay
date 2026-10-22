@@ -27,7 +27,7 @@ TCP Viewer·TCP Server 진입점이 접속을 수락하고, 데이터를 읽기 
   - 초기 교환 읽기·해석. 작업 2.7이 보류 대신 `RelayService::handle_connection`을 부른다. 그 전까지는 바이트를 보낸 뒤 닫은 연결을 H가 지날 때 정리한다.
   - L 예산·H·keepalive 값의 규칙. [연결 상한과 시간 제한 모듈 설계](connection-limits.md)가 맡는다. 끊긴 연결의 판정(`dead_connection`)은 작업 2.11이 맡는다.
   - WS·WSS 진입점. 작업 3.2가 같은 허용 판정과 `conn_id`를 쓴다. 101 응답까지의 TLS·업그레이드 처리는 [WebSocket 진입점 모듈 설계](websocket-entry-point.md)가 맡는다. 작업 3.2는 101 응답까지만 구현한다(사용자 결정 Q16). 101 뒤의 중계는 작업 2.7이 맡는다. 상태 리스너의 연결 수락은 [상태 리스너와 준비 상태 모듈 설계](status-listener.md)가, 관리 리스너의 연결 수락은 [관리 리스너 모듈 설계](management-listener.md)가 맡는다.
-  - 재로드 뒤 새 허용 목록 적용. 작업 5.2가 맡는다. 지금은 시작할 때의 목록을 끝까지 쓴다.
+  - 재로드 뒤 새 허용 목록 적용. 작업 5.2가 맡았다. 진입점은 판정 때마다 `AllowSource`(`crates/adapters/src/net.rs`)로 현재 스냅샷의 허용 목록을 읽는다.
   - 종료 유예 G와 신규 접속 중지 시점의 세부 규칙. 작업 5.3이 맡는다.
 - 다른 모듈에 공개하는 기능:
   - `vnc_relay_domain::allow_list::AllowList::permits`

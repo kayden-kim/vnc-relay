@@ -27,7 +27,7 @@
   - 종료 요청(Ctrl+C, Ubuntu의 SIGTERM, Windows의 Ctrl+Break)을 받으면 TCP·WS·WSS 진입점 작업에 종료를 알리고, 그 작업이 끝난 뒤 나머지 리스너를 닫고 종료 코드 0으로 끝내기.
 - 맡지 않는 책임:
   - `admin` 하위 명령의 실행. [관리자 계정 준비 CLI 모듈 설계](admin-accounts.md)가 맡는다.
-  - 파일 변경 감지 준비(시작 순서 3단계, `watch_unavailable`). 작업 5.1·5.2가 맡는다(사용자 결정 2026-10-20).
+  - 파일 변경 감지 준비(시작 순서 3단계, `watch_unavailable`). 작업 5.1·5.2가 맡았다(사용자 결정 2026-10-20). 구현은 `src/serve.rs`의 감시 시작 단계이며 세부는 [파일 변경 감지 모듈 설계](file-watch.md)가 맡는다.
   - 준비 상태, `server_ready`, 상태 리스너의 응답. [상태 리스너와 준비 상태 모듈 설계](status-listener.md)가 맡는다. 이 문서는 5·6단계에서 그 기능을 부르는 순서만 다룬다.
   - WS·WSS 진입점의 연결 수락은 작업 3.2가 붙였다([WebSocket 진입점 모듈 설계](websocket-entry-point.md)). 관리 리스너의 연결 수락은 작업 4.2가 붙였다([관리 리스너 모듈 설계](management-listener.md)). TCP 진입점의 수락은 작업 2.4가 붙였다([TCP 진입점 모듈 설계](tcp-entry-point.md)). 상태 리스너의 수락은 작업 2.6이 붙였다.
   - 종료 유예 G, 두 번째 종료 요청, 세션 정리. 작업 5.3이 맡는다.

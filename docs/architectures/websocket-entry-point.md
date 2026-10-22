@@ -29,7 +29,7 @@
   - TLS 설정 읽기, 인증서 적재, TLS 1.2 판정 규칙([TLS 모듈 설계](tls.md)).
   - L·H·U의 값과 예산 규칙([연결 상한과 시간 제한 모듈 설계](connection-limits.md)).
   - 평문 WS 시작 경고. 설정 검사가 `ConfigWarning::PlaintextWsEnabled`를 만들고 운영 로그가 쓴다([운영 로그 모듈 설계](ops-log.md)). 이 모듈은 쓰지 않는다.
-  - 허용 목록 재로드(작업 5.2), 종료 유예 503(작업 5.3).
+  - 허용 목록 재로드(작업 5.2). 이 모듈은 판정 때마다 `AllowSource`로 현재 목록을 읽는다. 종료 유예 503(작업 5.3).
 - 다른 모듈에 공개하는 기능:
   - `vnc_relay_adapters::websocket::{WsEntryPoint, WsPolicy}`: `serve`가 진입점을 만들고 띄운다.
   - `vnc_relay_domain::origin::Origin`: 허용 Origin 값과 비교([설정 계약 1.4절](../contracts/config-v1.md#14-origin-값-문법과-비교)).
@@ -162,7 +162,7 @@ flowchart LR
 | 구문 검사를 경로 검사보다 먼저 한다. | 계약 1.1절 3번의 가·나 항목이 구문을 경로보다 먼저 둔다. 깨진 요청 줄을 경로 404로 답하면 잘못된 응답이다. 경로를 먼저 보던 이전 구현은 검토 결함 2번으로 바뀌었다. | 경로 검사를 먼저 | 사용자 결정 2026-10-22(Q24). 9절 항목 3. |
 | `Wire::Tls`를 `Box`로 감싼다. | 두 전송 계층의 크기 차이로 `large_enum_variant` 경고를 피하고 `clippy -D warnings`를 통과한다. 비용은 WSS 연결마다 힙 할당 한 번이다. | 박싱 없이 둠(경고 발생) | 구현 판단(사용자 결정 없음). |
 | WSS 수락기는 WSS 진입점에서만 쓴다. 수락기가 없으면 진입점을 띄우지 않는다. | 협상 없이 평문으로 열리는 일을 구조로 막는다. | 수락기가 없을 때 평문으로 열기 | 계약 1.1절(WSS는 TLS 1.2 이상 뒤에 요청한다), WS-013. [TLS 모듈 설계](tls.md) |
-| 업그레이드 직전 IP 재검사는 수락 때와 같은 허용 목록을 쓴다. | 계약 1.1절 6번은 "그 순간의 유효한 목록"이라고 하지만 재로드(5.2)가 아직 없어 목록이 바뀌지 않는다. | 다른 목록을 쓰기 | 구현 판단(사용자 결정 없음). 재로드는 작업 5.2. |
+| 업그레이드 직전 IP 재검사는 수락 때와 같은 허용 목록(`AllowSource`)을 쓴다. 판정 때마다 셀에서 현재 값을 읽는다. | 계약 1.1절 6번은 "그 순간의 유효한 목록"이라고 한다. 재로드 뒤에도 같은 원천에서 그 순간의 값을 읽는다. | 다른 목록을 쓰기 | 구현 판단(사용자 결정 없음). 재로드 뒤 제거는 `tests/reload.rs` `removed_source_is_refused_at_upgrade_on_connections_opened_before_the_removal`이 확인한다(WS-022 부분). |
 | 거절 사건을 응답보다 먼저 쓴다. | 응답 쓰기가 실패해도 거절 사건이 남는다. | 응답 뒤에 쓰기 | 구현 판단. [TCP 진입점 모듈 설계 4절](tcp-entry-point.md#4-처리-순서)과 같은 방식. |
 | 거절 사건의 `origin`은 256바이트까지 쓰고 문자 경계에서 자른다. 자르기 전 원문은 `Refusal::OriginNotAllowed`에 남는다. | 운영 정보 계약 1.1절이 `origin`의 길이를 256바이트로 정했다. 상한 없이 쓰던 이전 구현은 이 계약과 어긋났다(검토 결함 4번). | 상한 없이 원문 쓰기, 정규화된 값만 쓰기 | 운영 정보 계약 1.1절 기준. 원문을 `Refusal`에 남기는 방식은 구현 판단(사용자 결정 없음). 9절 항목 9. |
 | 서브프로토콜은 `binary`만 받는다. 없으면 400이다. | Repeater 초기 교환은 바이너리 프레임으로 가정한다. 계약 1.2절이 서브프로토콜 응답을 정한다. | 서브프로토콜 없이 받기, 426으로 거절하기 | [WebSocket 계약 1.2절](../contracts/websocket-relay-v1.md#12-업그레이드-응답과-서브프로토콜), [6절](../contracts/websocket-relay-v1.md#6-초안을-확정하기-전에-해결할-사항)의 "서브프로토콜 거절 400" 항목. |
@@ -208,7 +208,7 @@ flowchart LR
 | 5. 머리 뒤 바이트 버림 | 클라이언트가 101 전에 보낸 바이트(선행 전송)를 버린다. 초기 교환을 시작하면 이 바이트가 필요할 수 있다. | 작업 2.7 |
 | 6. WSS 협상 실패 기록 | WS-013 실패는 `connection_aborted`(`tls_failed`)를 쓴다. 관리 리스너는 버전이 아닌 TLS 실패를 기록하지 않는다(사용자 결정 2026-10-21, Q13). 두 진입점의 기록 방식이 다르다. | 사용자 확인 |
 | 7. Close 4009의 운영 로그 열 | [WebSocket 계약 2.2절](../contracts/websocket-relay-v1.md#22-close-코드와-스펙-오류의-대응)의 4009 행은 운영 로그 열을 "해당 없음"으로 둔다. [운영 정보 계약 1.6절](../contracts/ops-info-v1.md)은 `handshake_timeout`을 `connection_aborted`에 쓴다고 한다. 코드는 운영 정보 계약을 따른다. | 계약 2.2절 보강 |
-| 8. WS-022, WS-024, WS-025 테스트 | WS-022의 "제거" 조건은 재로드(5.2) 전에는 만들 수 없다. WS-024의 기본 꺼짐과 시작 경고는 `tests/serve.rs`의 `plaintext_ws_listener_is_off_by_default_and_warns_at_start_when_enabled`가 확인한다(WS-024 전부). 재로드 때의 전체 허용 경고는 5.2 뒤다. WS-025는 2.7 뒤에 검증한다. WS-015와 WS-027은 WS와 WSS 모두 접속 테스트가 있다(검토 결함 5번). | 작업 5.2, 2.7 |
+| 8. WS-022, WS-024, WS-025 테스트 | WS-022의 업그레이드 시점 조건(제거된 출발지의 업그레이드 거절)은 `tests/reload.rs` `removed_source_is_refused_at_upgrade_on_connections_opened_before_the_removal`이 확인한다(작업 5.2, 부분). 중계 중 제거와 WS-025는 2.7 뒤에 검증한다. WS-024의 기본 꺼짐과 시작 경고는 `tests/serve.rs`의 `plaintext_ws_listener_is_off_by_default_and_warns_at_start_when_enabled`가 확인한다(WS-024 전부). 재로드 때의 전체 허용 경고는 `tests/reload.rs`의 `all_source_allow_warns_at_reload_and_an_empty_list_refuses_everyone`이 확인한다(OPS-038 부분). WS-015와 WS-027은 WS와 WSS 모두 접속 테스트가 있다(검토 결함 5번). | 작업 2.7(WS-022 나머지, WS-025). 작업 5.2는 WS-022 업그레이드 시점 부분을 마쳤다. |
 | 9. Origin 원문 길이 | 사건 줄의 `origin`은 운영 정보 계약 1.1절의 256바이트 상한을 따른다(검토 결함 4번). 자르기 전 원문은 `Refusal`에 남긴다. 원문을 `Refusal`에 남기는 방식은 구현 판단(사용자 결정 없음). | 운영 정보 계약 1.1절(채택됨), 구현 판단 |
 | 10. (해결) H의 시작점 | WS·WSS의 H는 101 응답부터 잰다. 계약이 WS·WSS의 H 시작점을 정한다(websocket-relay-v1 H 문단). 운영 스펙 2절 H 행도 같은 시작점을 적는다. | 사용자 결정 2026-10-22(Q22) |
 | 11. (해결) 101 뒤 보류 방식 | 작업 2.7 전까지 업그레이드한 모든 연결은 H가 지나면 Close 4009(`handshake_timeout`)로 끝난다. 상대가 보낸 프레임과 Close는 읽지 않는다. 대안 (1) 지금 방식 유지를 사용자 결정 2026-10-22(Q21)로 택했다. 대안 (2) H 없이 서버가 멈출 때까지 기다리기와 (3) 다른 방식은 택하지 않았다. TODO 3.2는 `[ ]`로 둔다. | 사용자 결정 2026-10-22(Q21) |
