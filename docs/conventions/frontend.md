@@ -12,7 +12,7 @@
 | 관련 계약 | [관리 API 계약 1.11절](../contracts/management-api-v1.md) (정적 경로·비인증 범위·응답 헤더) |
 | 관련 ADR | 없음 |
 | 적용 시작일 | 2026-10-22 |
-| 규칙 준수 확인 방법 | `cargo xtask tokens --check`, 제공 표 대조 테스트, 브라우저 테스트, [검증 how-to](../how-to/verify-dashboard-frontend.md)의 수동 검토. 제공 표 대조 테스트(`tests/dashboard_assets.rs`)는 작업 4.6에서 만든다(6절) |
+| 규칙 준수 확인 방법 | `cargo xtask tokens --check`, 제공 표 대조 테스트(`tests/dashboard_assets.rs`, 작업 4.6), 브라우저 테스트, [검증 how-to](../how-to/verify-dashboard-frontend.md)의 수동 검토(6절) |
 
 이 문서가 다루는 작업 0.9 항목은 다음과 같다.
 
@@ -208,7 +208,7 @@ web/dashboard/
 
 - 실행 환경: [개발 환경·검증 how-to](../how-to/set-up-and-verify.md)의 [전제 조건](../how-to/set-up-and-verify.md#2-전제-조건)이 정한 지원 환경(Windows 11 x64·PowerShell, Ubuntu 24.04 LTS x64·bash)과 고정 Rust 툴체인(1.99.1). Chromium(Chrome 또는 Edge)은 두 OS 모두에 필수다. 없거나 실행되지 않으면 브라우저 시험은 실패한다(사용자 결정 2026-10-22(Q35)). Chromium 실행 파일 경로는 환경 변수 `DASHBOARD_BROWSER`로 준다(이 문서의 기본값, 사용자 결정 아님). Node.js는 선택 항목인 DESIGN lint에만 필요하다(사용자 결정 2026-10-22(Q38)).
 - 실행 위치: 저장소 루트.
-- 명령 확인 근거: `xtask/src/main.rs`에 `tokens [--check]`와 `dashboard-serve`가 있다(작업 4.8). 브라우저 테스트는 `tests/dashboard_browser.rs`다. 제공 표 대조 테스트(`tests/dashboard_assets.rs`)는 아직 없으며 작업 4.6에서 추가한다.
+- 명령 확인 근거: `xtask/src/main.rs`에 `tokens [--check]`와 `dashboard-serve`가 있다(작업 4.8). 브라우저 테스트는 `tests/dashboard_browser.rs`(작업 4.8), 제공 표 대조 테스트는 `tests/dashboard_assets.rs`(작업 4.6)다.
 
 | 변경 범위 | 확인 명령·방법 | 통과 조건 | 절차와 증거 위치 |
 | --- | --- | --- | --- |

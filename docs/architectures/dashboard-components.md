@@ -128,7 +128,7 @@ flowchart LR
 
 ## 8. 미결정 사항
 
-- 브라우저 시험(`tests/dashboard_browser.rs`)은 4.8에 넣었다. Windows의 Chrome(없으면 Edge)으로 실행한다. WSL Ubuntu에는 Chromium이 없어 실행하지 않는다. 결정 요청: WSL에 Chromium을 설치해 같은 시험을 WSL에서도 돌릴지. 권장: 설치하지 않고 Windows 실행을 유지한다. 브라우저가 없으면 시험은 실패한다(건너뛰지 않는다).
+- (해결) 브라우저 시험(`tests/dashboard_browser.rs`)은 4.8에 넣었다. Windows와 WSL Ubuntu 모두에서 실행한다. Ubuntu에는 Google Chrome 안정판 .deb를 설치한다(사용자 결정 2026-10-22(Q41)). 브라우저가 없으면 시험은 실패한다(건너뛰지 않는다, 사용자 결정 2026-10-22(Q35)). 설치와 실행 기록은 [개발 환경 how-to](../how-to/set-up-and-verify.md#4-검증) 실행 기록 4에 있다.
 - 성능 예산(FE-TBD-016)은 화면이 생긴 뒤 정한다(사용자 결정 2026-10-22(Q39)).
 - 로그인(4.9)과 운영 화면(4.10·4.11)이 조각을 더 요구하면 이 문서에 API를 추가한다.
 
