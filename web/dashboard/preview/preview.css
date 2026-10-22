@@ -12,12 +12,6 @@ body {
   color: var(--color-foreground);
 }
 
-@media (min-width: 1024px) {
-  .preview-main {
-    padding: var(--space-2xl) var(--space-xl);
-  }
-}
-
 .preview-title {
   margin: 0 0 var(--space-sm);
   font-family: var(--type-heading-page-family);
@@ -48,28 +42,6 @@ body {
   font-size: var(--type-heading-card-size);
   font-weight: var(--type-heading-card-weight);
   line-height: var(--type-heading-card-line);
-}
-
-/* One column on mobile. Desktop rows use the column count in the class name. */
-.sample-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: var(--space-lg);
-  min-width: 0;
-}
-
-@media (min-width: 1024px) {
-  .sample-row-2 {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .sample-row-3 {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-
-  .sample-row-5 {
-    grid-template-columns: repeat(5, minmax(0, 1fr));
-  }
 }
 
 .sample {

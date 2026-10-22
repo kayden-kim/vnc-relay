@@ -399,7 +399,7 @@ function dialogOpenSample(options) {
   return frame;
 }
 
-// Rows of samples, in page order. A row of N samples gets class `sample-row-N`.
+// Rows share the app's 12-column grid. Five samples wrap after the third.
 function buildGroups() {
   return [
     group(t.button, [
@@ -606,9 +606,9 @@ function buildGroups() {
   ];
 }
 
-function renderSample(item, fill) {
+function renderSample(item, fill, span) {
   const section = document.createElement("section");
-  section.className = fill ? "sample sample-fill" : "sample";
+  section.className = `sample ${span}${fill ? " sample-fill" : ""}`;
   section.dataset.sample = item.id;
   const caption = document.createElement("h3");
   caption.id = `caption-${item.id}`;
@@ -630,10 +630,11 @@ function renderGroup(group, index) {
   section.append(heading);
   for (const samples of group.rows) {
     const row = document.createElement("div");
-    row.className = `sample-row sample-row-${samples.length}`;
+    row.className = "grid";
+    const span = samples.length === 1 ? "span-12" : samples.length === 2 ? "span-6" : "span-4";
     for (const item of samples) {
       try {
-        row.append(renderSample(item, group.fill));
+        row.append(renderSample(item, group.fill, span));
       } catch {
         // The failed sample is missing from the DOM, so the missing-sample check also fails.
         fail("render-error");
