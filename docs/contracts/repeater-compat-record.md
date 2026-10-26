@@ -2,8 +2,8 @@
 
 이 기록은 UltraVNC Server·Viewer·Repeater와 noVNC의 호환성 검증 결과를 남긴다. 관찰 허용 검토(1절), 검증 대상 고정(2절), 관찰 증거(3절)를 담는다. 증거 항목은 [Repeater 초기 교환 계약 6.2절](repeater-handshake-v1.md#62-기록할-증거)을 따른다.
 
-- 상태: 검증 대상 고정 완료(TODO 1.3). 관찰은 아직 하지 않았다(TODO 1.4). 사용자 결정 2026-10-22(Q19·Q20) 반영.
-- 작성일: 2026-10-21. 갱신일: 2026-10-22(사용자 결정 Q19·Q20 반영, 설치 스크립트 근거 추가).
+- 상태: 검증 대상 고정 완료(TODO 1.3). 관찰은 아직 하지 않았다(TODO 1.4). 사용자 결정 2026-10-22(Q19·Q20) 반영. 2026-10-27에 관찰 준비(설치 확인과 캡처 도구 설치)를 마쳤다(3.1절). 관찰 환경은 아직 정하지 않았다(보류 중인 결정 Q61).
+- 작성일: 2026-10-21. 갱신일: 2026-10-22(사용자 결정 Q19·Q20 반영, 설치 스크립트 근거 추가), 2026-10-27(설치 확인과 캡처 도구 설치 기록, 3.1절·5.1절).
 - 기준 커밋: `f01598a`(이 갱신 시작 시점 HEAD). 이 기록은 `docs(compat)` 커밋에 담는다.
 - 작업 트리: 다른 작업과 같은 트리를 썼다. 문서 작업이며 빌드와 테스트는 하지 않았다.
 - 환경: Windows 11 x64 호스트. 내려받기는 `curl.exe`, 해시 계산은 `certutil`, 버전 확인은 PowerShell 파일 버전 정보를 썼다.
@@ -81,8 +81,56 @@
 | 증거 | 상태 | 이유 |
 | --- | --- | --- |
 | 대상·환경·입력·원본·결과·해석 | 미실행 | 1.4를 시작하지 않았다. 선행 1.3은 2026-10-22에 고정을 마쳤다(2절) |
-| 설치 뒤 `vncviewer.exe` 파일 버전 확인 | 미실행 | TODO 1.4 하위 항목(1.3에서 옮김, 4절 4.3). 설치 스크립트 근거는 2.1절 |
+| 설치 뒤 `vncviewer.exe` 파일 버전 확인 | 확인(2026-10-27) | 1.8.3.0. Viewer 구성 요소가 설치됐다(3.1절) |
 | 승인 | 1절 결정(2026-10-21) | 6.1절 1단계 검토 결과 |
+
+### 3.1 관찰 준비: 설치 확인과 캡처 도구 (2026-10-27)
+
+이 절은 관찰 준비 기록이다. 6.2절의 관찰 증거가 아니다. 관찰 환경을 정하는 결정(보류 중인 결정 Q61)은 아직 없다.
+
+- 결정: 사용자 결정 2026-10-27(Q62). 이 PC(Windows 11 Pro x64, 빌드 26200)에 Wireshark·Npcap 설치를 허용한다. UltraVNC 1.8.3.0 업그레이드의 경위는 아래 표에 winget 로그로 확인한 사실만 적는다.
+- 기준 커밋: `e753c89`(이 갱신 시작 시점 HEAD). 문서 작업이며 빌드와 테스트는 하지 않았다.
+
+#### UltraVNC 1.8.3.0 설치
+
+| 항목 | 결과 |
+| --- | --- |
+| 이전 설치 | 1.8.2.4(설치일 20260807). 구성 요소 Server·Viewer·Repeater, 서비스 등록 작업은 선택하지 않음 |
+| 실행 시각 | 2026-10-24 20:31에 `winget upgrade UltraVNC`가 실행됐다(winget 로그 `WinGet-2026-10-24-20-31-19.273.log`). 메인 에이전트가 실행한 명령이 아니다. 같은 날 17:49에 메인 에이전트가 실행한 `winget upgrade --id uvncbvba.UltraVNC --exact --version 1.8.3.0 --silent`는 관리자 권한 요청 단계에서 끝났다(`ShellExecute installer failed: 2`). 2026-10-27에 다시 실행했을 때는 `사용 가능한 업그레이드를 찾을 수 없습니다.`로 끝났다 |
+| 설치 파일 | winget 로그에 `Installer hash verified`가 있다. 비교 기준은 winget 매니페스트 `uvncbvba.UltraVNC` 1.8.3.0의 SHA-256 `e9c22419ef3128a707b0d004a2c58e25459528c5c12d104dea56e5e662bd131e`이고, 2.1절 고정값과 같다. 매니페스트 주소도 2.1절의 받은 주소와 같다. winget이 설치 뒤 설치 파일을 지워 메인 에이전트가 직접 해시를 계산하지는 않았다 |
+| 설치 방식 | Inno Setup 6.6.1, 인수 `/SP- /SILENT /SUPPRESSMSGBOXES /NORESTART`. 설치 로그 `uvncbvba.UltraVNC.1.8.3.0-26-10-24-20-31-42.log` |
+| 구성 요소·작업 | 선택 구성 요소 `ultravnc_repeater,ultravnc_server,ultravnc_viewer`. 선택 작업 없음. 해제 작업 `installservice,startservice,desktopicon,associate,installdriver`. 설치 날짜 20261024. UltraVNC 서비스는 없다 |
+| 파일 버전 | `winvnc.exe` 1.8.3.0(제품명 `UltraVNC Server`), `vncviewer.exe` 1.8.3.0(제품명 `UltraVNC Viewer`), `repeater.exe` 1.6.0.0. 세 파일 모두 Authenticode 서명이 유효하다(서명자 `Open Source Developer Rudi De Vos`) |
+| 설치 파일 SHA-256 | `winvnc.exe` `9ebd1ec90ba1274d4a183f5bf6588374700052da907fa764a2ae7072e8ae19fe`, `vncviewer.exe` `18760910769dc497266d6ba7a28892925177d0208fe4433bf62f0b16061f3427`, `repeater.exe` `094139d80f1b08f5bb7cbd5222c4a40996cf1bb48154e4920396d2873314ce3b`(698,448바이트) |
+| 설정 파일 | `ultravnc.ini`가 업그레이드 전 사본과 바이트 단위로 같다 |
+| 방화벽 | 설치 프로그램이 같은 이름의 허용 규칙을 다시 추가해 UltraVNC 규칙이 8개에서 12개가 됐다. 12개 모두 이름별로 속성이 같다. `UltraVNC Server TCP/UDP`는 `winvnc.exe` 인바운드 허용, `UltraVNC Viewer TCP/UDP`는 `vncviewer.exe` 아웃바운드 허용이다. 프로필·원격 주소·로컬 포트는 모두 `Any`다. 허용 범위는 업그레이드 전과 같다 |
+| 새 버전 | 2026-10-27 `winget list`에서 1.8.3.1이 보인다. 고정 버전은 1.8.3.0이므로 올리지 않는다 |
+
+#### 설치 파일의 Repeater와 고정 Repeater
+
+| 파일 | 버전 | 크기 | SHA-256 |
+| --- | --- | --- | --- |
+| 설치 파일이 설치한 `C:\Program Files\uvnc bvba\UltraVNC\repeater.exe` | 1.6.0.0 | 698,448바이트 | `094139d80f1b08f5bb7cbd5222c4a40996cf1bb48154e4920396d2873314ce3b` |
+| 2.2절 `repeater_v160.zip` 안의 `repeater.exe` | 1.6.0.0 | 524,904바이트 | `c17655192a0bdac369178156227f6cf6bbfa638514996fd286279f3dee712ae0` |
+
+- 두 파일은 파일 버전이 같지만 다른 파일이다. 둘 다 Authenticode 서명이 유효하다.
+- `repeater_v160.zip`은 2026-10-27에 2.2절의 받은 주소에서 다시 받았다. 압축 파일의 SHA-256은 2.2절 고정값 `82d9e7f06266a291b4988e36f4d33e127d63adb93269f3b24c432718f35de1de`와 같다.
+- 관찰에는 2.2절 고정 파일을 쓴다(사용자 결정 2026-10-22(Q20)). 보관 위치는 `D:\vr-tools\uvnc\repeater_v160\repeater.exe`다. 저장소 밖에 둔다.
+- 시작 메뉴의 "UltraVNC Repeater" 바로 가기는 설치 파일의 `repeater.exe`를 연다. 관찰 기록에는 실행한 파일의 경로와 SHA-256을 함께 적어야 한다.
+- 고정 파일 경로에는 방화벽 규칙이 없다. 이 파일이 루프백이 아닌 주소에서 연결을 받으면 Windows 방화벽 확인 창이 뜰 수 있다(추정).
+
+#### 캡처 도구
+
+| 도구 | 버전 | 받은 곳·확인 | 설치 |
+| --- | --- | --- | --- |
+| Wireshark(`Wireshark.exe`·`dumpcap.exe`·`tshark.exe`) | 4.6.9 x64 | winget `WiresharkFoundation.Wireshark`. 설치 파일 `https://2.na.dl.wireshark.org/win64/all-versions/Wireshark-4.6.9-x64.msi`, 매니페스트 SHA-256 `1975dfc96581a9b674fda3f41ac1585963b4ba52ea9459f3b6d9cedfac3a7217`. winget이 해시를 확인했다 | 2026-10-27 `winget install --silent`, 종료 코드 0. 사용자가 관리자 권한 요청을 승인했다 |
+| Npcap 무료판 | 1.90 | `https://npcap.com/dist/npcap-1.90.exe`, 1,325,256바이트, SHA-256 `682b57e1c05ef375931975c9d6ded40888f4bfdf9f4b11571e654f962f1199b6`. 공식 페이지에서 해시 게시값은 찾지 못했다. Authenticode 서명이 유효하다(서명자 `Nmap Software LLC`) | 2026-10-27 사용자가 설치 창을 진행했다. 종료 코드 0. 무료판은 무인 설치를 지원하지 않는다 |
+
+- Npcap 설치 상태: `npcap` 서비스 실행 중. `AdminOnly = 0`, `WinPcapCompatible = 1`. 루프백 캡처 대상 `\Device\NPF_Loopback`(`Adapter for loopback traffic capture`)이 있다.
+- 공식 안내에 따르면 `loopback_support` 옵션은 Wireshark에 필요 없다. 이 설치에서도 켜지 않았다.
+- Npcap 무료 라이선스는 Nmap·Wireshark·Microsoft Defender for Identity와만 쓰면 설치 대수 제한이 없다. 그 밖의 용도는 5대까지다.
+- 설치 프로그램이 만든다고 공식 안내에 적힌 예약 작업 `npcapwatchdog`는 조회하지 못했다(`schtasks` 결과 `ERROR: Access is denied.`).
+- 루프백 캡처 시험(관리자 권한 없음): 임시 TCP 연결로 `ping-smoke`를 보내고 `pong:ping-smoke`를 받았다. `dumpcap -i \Device\NPF_Loopback`이 종료 코드 0으로 11개 패킷을 받고 0개를 버렸다. `tshark`로 두 데이터 바이트열(`70696e672d736d6f6b65`, `706f6e673a70696e672d736d6f6b65`)을 확인했다. 시험 파일은 지웠다.
 
 ## 4. 미해결 항목
 
@@ -90,10 +138,12 @@
 | --- | --- | --- | --- |
 | 4.1 | Repeater Ubuntu 24.04 빌드 버전 미확인 | 고정 범위 밖. RLY-TBD-001 해소에 영향 없음 | 없음. 사용자 결정 2026-10-22(Q19): Ubuntu `uvncrepeater` 관찰을 미루고 Windows Repeater만 고정한다. Ubuntu 쪽 검증은 2.6절 |
 | 4.2 | Repeater Windows 표기 1.4.0.0과 받은 파일 1.6.0.0 불일치 | 해소. 사용자 결정 2026-10-22(Q20): 받은 파일 1.6.0.0을 고정 대상으로 채택. 표기 차이의 원인은 확인하지 않음 | 없음 |
-| 4.3 | 설치 뒤 `vncviewer.exe` 파일 버전 미확인 | 1.4 하위 항목으로 옮김(3절). 설치 스크립트 근거로 Viewer 포함은 추정 단계 | TODO 1.4에서 설치 뒤 확인 |
+| 4.3 | 설치 뒤 `vncviewer.exe` 파일 버전 미확인 | 해소(2026-10-27). `vncviewer.exe` 1.8.3.0과 Viewer 구성 요소 설치를 확인했다(3.1절) | 없음 |
 | 4.4 | noVNC 기본 `Sec-WebSocket-Protocol` 값 미관찰 | WS-TBD-005 | 1.4에서 관찰한다 |
 | 4.5 | 저작권자·적용 연도 미정 | OPS-TBD-005, LICENSE 고지 | 보류 중인 결정 Q10 |
 | 4.6 | 관찰 증거 전부 미수집 | RLY-TBD-002·003, WS-025 | 1.4 실행 |
+| 4.7 | 설치 파일의 `repeater.exe`가 고정 `repeater_v160.zip`의 파일과 다름(둘 다 1.6.0.0) | 잘못된 파일로 관찰하면 증거가 고정 대상과 맞지 않는다 | 없음. Q20에 따라 고정 파일을 쓰고, 관찰 기록에 실행 파일 경로와 SHA-256을 적는다(3.1절) |
+| 4.8 | 관찰 환경 미정 | 1.4를 시작할 수 없다. 1절 범위는 "인터넷과 분리한 테스트 네트워크", 계약 6.1절 3·4단계는 별도 호스트·VM 배치다 | 보류 중인 결정 Q61: 이 PC 한 대의 루프백 관찰을 허용할지, 네트워크를 끊고 관찰할지, VM을 쓸지 정한다 |
 
 ## 5. 검증 명령과 결과
 
@@ -128,3 +178,37 @@ UltraVNC_1830_x64_Setup.exe | FileVersion=1.8.3.0 | ProductVersion=1.8.3.0 | Pro
 - 2026-10-22 갱신(읽기 전용): 공식 UltraVNC 1.8.3.0 항목 페이지를 읽었다. X64 설치 파일 해시 게시값은 2.1절과 같다. 설치 파일의 Viewer 포함 여부는 이 페이지에 적혀 있지 않다.
 - 2026-10-22 추가 확인(메인 에이전트가 실행, 이 기록의 작성자는 실행하지 않음): `UltraVNC_1830_x64_Setup.exe`를 같은 주소에서 다시 받아 SHA-256 `e9c22419ef3128a707b0d004a2c58e25459528c5c12d104dea56e5e662bd131e`와 일치했다. 설치 스크립트 `UltraVNC_installer_x64.iss`(main 브랜치)를 읽어 2.1절의 구성요소 정의를 확인했다.
 - 2026-10-22 추가 확인(메인 에이전트가 실행): `innoextract 1.9`로 설치 파일의 파일 목록을 읽으려 했으나 실패했다. 출력: `Unexpected setup loader revision: 2`, `Could not determine setup data version!`. 설치 프로그램은 실행하지 않았다. 설치 파일 안 파일 목록과 `vncviewer.exe` 버전은 아직 확인하지 않았다.
+
+### 5.1 2026-10-27 설치 확인 (메인 에이전트가 실행)
+
+```
+winget show --id WiresharkFoundation.Wireshark --exact
+설치 관리자 SHA256: 1975dfc96581a9b674fda3f41ac1585963b4ba52ea9459f3b6d9cedfac3a7217
+
+winget install --id WiresharkFoundation.Wireshark --exact --version 4.6.9 --silent
+설치 관리자 해시를 확인했습니다.
+설치 성공
+winget exit=0
+
+Start-Process npcap-1.90.exe -Wait -PassThru
+npcap installer exit=0
+
+dumpcap -D
+11. \Device\NPF_Loopback (Adapter for loopback traffic capture)
+
+winget upgrade --id uvncbvba.UltraVNC --exact --version 1.8.3.0 --silent
+사용 가능한 업그레이드를 찾을 수 없습니다.
+winget exit=-1978335189
+
+winget list --id uvncbvba.UltraVNC --exact
+UltraVNC uvncbvba.UltraVNC 1.8.3.0 1.8.3.1   winget
+
+PowerShell: Get-Item <파일>.VersionInfo
+winvnc.exe | FileVersion=1.8.3.0 | ProductName=UltraVNC Server
+vncviewer.exe | FileVersion=1.8.3.0 | ProductName=UltraVNC Viewer
+repeater.exe | FileVersion=1.6.0.0
+```
+
+- 설치 확인: 통과. 파일 버전, 구성 요소, 서명, 설정 파일 보존을 확인했다.
+- 캡처 도구: 통과. 관리자 권한 없이 루프백 캡처가 된다.
+- 관찰: 미실행. 관찰 환경 결정(4절 4.8)이 필요하다.
