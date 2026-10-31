@@ -2,8 +2,8 @@
 
 이 기록은 UltraVNC Server·Viewer·Repeater와 noVNC의 호환성 검증 결과를 남긴다. 관찰 허용 검토(1절), 검증 대상 고정(2절), 관찰 증거(3절)를 담는다. 증거 항목은 [Repeater 초기 교환 계약 6.2절](repeater-handshake-v1.md#62-기록할-증거)을 따른다.
 
-- 상태: 검증 대상 고정 완료(TODO 1.3). 관찰은 아직 하지 않았다(TODO 1.4). 사용자 결정 2026-10-22(Q19·Q20) 반영. 2026-10-27에 관찰 준비(설치 확인과 캡처 도구 설치)를 마쳤다(3.1절). 관찰은 1절 범위와 [관찰 절차 6.1절](repeater-handshake-v1.md#61-관찰-절차)(인터넷과 분리한 테스트 네트워크, 별도 호스트·VM, Repeater 구간 캡처)에 따라 한다. 그 환경은 아직 준비하지 않았다.
-- 작성일: 2026-10-21. 갱신일: 2026-10-22(사용자 결정 Q19·Q20 반영, 설치 스크립트 근거 추가), 2026-10-27(설치 확인과 캡처 도구 설치 기록, 3.1절·5.1절).
+- 상태: 검증 대상 고정 완료(TODO 1.3). 관찰은 아직 하지 않았다(TODO 1.4). 사용자 결정 2026-10-22(Q19·Q20) 반영. 2026-10-27에 관찰 준비(설치 확인과 캡처 도구 설치)를 마쳤다(3.1절). 2026-11-01에 [관찰 절차 6.1절](repeater-handshake-v1.md#61-관찰-절차) 3·4단계의 관찰 환경을 정하고 구성했다(3.2절, 사용자 결정 Q62~Q66).
+- 작성일: 2026-10-21. 갱신일: 2026-10-22(사용자 결정 Q19·Q20 반영, 설치 스크립트 근거 추가), 2026-10-27(설치 확인과 캡처 도구 설치 기록, 3.1절·5.1절), 2026-11-01(관찰 환경 결정과 구성, 1절·3.2절·4절).
 - 기준 커밋: `f01598a`(이 갱신 시작 시점 HEAD). 이 기록은 `docs(compat)` 커밋에 담는다.
 - 작업 트리: 다른 작업과 같은 트리를 썼다. 문서 작업이며 빌드와 테스트는 하지 않았다.
 - 환경: Windows 11 x64 호스트. 내려받기는 `curl.exe`, 해시 계산은 `certutil`, 버전 확인은 PowerShell 파일 버전 정보를 썼다.
@@ -17,6 +17,7 @@
 | 범위 | UltraVNC 트래픽의 패킷 관찰. 인터넷과 분리한 테스트 네트워크에서만 한다 |
 | 이유 | 제시되지 않았다 |
 | 제약 | UltraVNC·websockify·noVNC 소스 코드는 관찰·분석에 쓰지 않는다([관찰 절차 6.1절](repeater-handshake-v1.md#61-관찰-절차)) |
+| 6.1절 1단계 판정 | 사용자 결정 2026-11-01(Q65): 이 허용으로 6.1절 1단계를 마친 것으로 본다. 판정 주체는 프로젝트 소유자다. 법률 검토는 하지 않았다 |
 
 이 결정은 프로젝트 소유자의 허용이다. 법률 검토 결과가 아니다. [PRD 9절](../requirements/PRD.md#9-호환성-조사와-독립-구현-원칙)은 패킷 관찰과 역공학 절차의 허용 여부를 관할법·제품 약관·사용 권한에 따라 따로 검토한다고 정한다. 이 기록은 그 결과를 대신하지 않는다.
 
@@ -132,6 +133,97 @@
 - 설치 프로그램이 만든다고 공식 안내에 적힌 예약 작업 `npcapwatchdog`는 조회하지 못했다(`schtasks` 결과 `ERROR: Access is denied.`).
 - 루프백 캡처 시험(관리자 권한 없음): 임시 TCP 연결로 `ping-smoke`를 보내고 `pong:ping-smoke`를 받았다. `dumpcap -i \Device\NPF_Loopback`이 종료 코드 0으로 11개 패킷을 받고 0개를 버렸다. `tshark`로 두 데이터 바이트열(`70696e672d736d6f6b65`, `706f6e673a70696e672d736d6f6b65`)을 확인했다. 시험 파일은 지웠다. 이 시험은 캡처 도구의 동작 확인이다. 6.1절의 캡처 위치(Repeater 쪽 네트워크 구간)를 대신하지 않는다.
 
+### 3.2 관찰 환경 구성 (2026-11-01)
+
+이 절은 6.1절 3·4단계의 환경 기록이다. 6.2절의 "환경" 항목에 쓴다. 시나리오 관찰 증거가 아니다. 환경 준비와 시나리오 캡처는 따로 진행한다. 시나리오 캡처는 이 절의 스모크 확인을 마친 뒤 TODO 1.4의 다음 작업에서 시작한다.
+
+#### 결정
+
+| 결정 | 내용 |
+| --- | --- |
+| 사용자 결정 2026-11-01(Q62) | 이 PC(Windows 11 Pro x64, 빌드 26200)의 Hyper-V에 VM 세 대를 만들고 `Private` 가상 스위치로 묶는다. 캡처는 Repeater VM 안에서 한다. 호스트 루프백 방식과 캡처 전용 VM 방식은 쓰지 않는다 |
+| 사용자 결정 2026-11-01(Q63) | 게스트 OS는 Windows 11 Enterprise 90일 평가판이다 |
+| 사용자 결정 2026-11-01(Q64) | 6.1절 2단계에 Ubuntu Repeater 보류(Q19)를 명시한다. Ubuntu 24.04 LTS x64는 `vnc-relay` 비교 캡처에만 쓴다 |
+| 사용자 결정 2026-11-01(Q65) | 1절의 소유자 허용으로 6.1절 1단계를 마친 것으로 본다(1절 표). 법률 검토는 하지 않았다 |
+| 사용자 결정 2026-11-01(Q66) | Hyper-V 작업은 스크립트 단위로 묶고, 실행할 때마다 사용자가 관리자 권한 요청(UAC)을 승인한다. 계정 그룹은 바꾸지 않는다 |
+
+#### 구성
+
+| VM | 컴퓨터 이름 | IPv4 | IPv6 | 역할과 설치 |
+| --- | --- | --- | --- | --- |
+| `vr-viewer` | `VR-VIEWER` | `192.0.2.10/24` | `2001:db8:1::10/64` | UltraVNC 1.8.3.0 Viewer 구성 요소만 설치한다. noVNC 1.7.0 압축 파일을 둔다 |
+| `vr-repeater` | `VR-REPEATER` | `192.0.2.20/24` | `2001:db8:1::20/64` | 고정 `repeater.exe`(2.2절)를 `C:\vr\repeater\`에 둔다. Wireshark 4.6.9와 Npcap 1.90으로 캡처한다 |
+| `vr-server` | `VR-SERVER` | `192.0.2.30/24` | `2001:db8:1::30/64` | UltraVNC 1.8.3.0 Server 구성 요소만 설치한다 |
+
+- 네트워크: Hyper-V `Private` 스위치 `vr-lab`. 호스트 어댑터·게이트웨이·DNS·DHCP가 없다. 주소는 문서용 대역(`192.0.2.0/24`, `2001:db8::/32`)만 쓴다.
+- 이름 표기 시나리오: Repeater VM의 `hosts` 파일에 `vnc-server.test`(IPv4)와 `vnc-server6.test`(IPv6)를 Server VM 주소로 등록한다. `.test`는 시험용 예약 최상위 도메인이다.
+- VM 사양: 2세대, 2 vCPU, 동적 메모리(시작·최소 2 GB, 최대 4 GB), Secure Boot(`MicrosoftWindows` 템플릿), vTPM, 자동 체크포인트 끔. 처음에는 고정 메모리 4 GB로 정했다. 그러나 2026-11-01 구성 때 호스트의 사용 가능한 메모리가 약 1.5 GB였고, 세 번째 VM이 `0x800705AA`(시스템 리소스 부족)로 시작하지 못했다. 그래서 동적 메모리로 바꿨다.
+- 디스크: 평가판 ISO의 이미지를 기본 VHDX 한 개에 적용하고, VM마다 차등 VHDX를 만든다. 기본 VHDX는 읽기 전용으로 둔다. 무인 설정 파일(`unattend.xml`)이 컴퓨터 이름, 시험 전용 로컬 관리자 계정 `lab`, 자동 로그온을 정한다. UltraVNC Server와 Viewer는 로그온한 화면 세션에서 실행해야 하므로 자동 로그온을 켠다.
+- 저장 위치: VM과 디스크는 `D:\vr-lab\`, 캡처 원본은 `D:\vr-captures\`에 둔다. 둘 다 저장소 밖이다. C: 드라이브는 여유 공간이 6 GB뿐이라 쓰지 않는다.
+- 인증 정보: `lab` 계정 비밀번호는 이 환경에서만 쓰는 무작위 값이다. 실제 인증 정보가 아니다. 저장소 밖 `D:\vr-lab\secrets\lab-account.txt`에 둔다.
+- 파일 반입·반출: 호스트에서 PowerShell Direct(`New-PSSession -VMName`, `Copy-Item -ToSession`·`-FromSession`)를 쓴다. PowerShell Direct는 네트워크가 아닌 VMBus로 통신하므로 분리 상태를 깨지 않는다.
+- 회차 독립성: 구성과 스모크 확인을 마친 뒤 VM 세 대를 끄고 체크포인트 `baseline`을 만든다. 시나리오 회차마다 이 체크포인트로 되돌린다.
+- 구성 스크립트: `D:\vr-lab\scripts\`에 둔다. 실행 기록은 `D:\vr-lab\logs\`에 남는다.
+
+#### 게스트 이미지와 반입 파일
+
+| 파일 | 받은 곳 | 크기 | SHA-256 | 확인 |
+| --- | --- | --- | --- | --- |
+| `26300.9457.260913-1737.26h2_ge_release_svc_refresh_CLIENTENTERPRISEEVAL_OEMRET_x64FRE_en-us.iso`(저장 이름 `win11-enterprise-eval-en-us.iso`) | [Evaluation Center](https://www.microsoft.com/en-us/evalcenter/download-windows-11-enterprise)의 English (United States) Enterprise 64-bit 링크. 2026-11-01에 받았다 | 8,225,329,152바이트 | `bc3f24086ebadc94489066b5ad78089e2cf5c3491e90e790bb81a2b199c10e38` | Microsoft 게시값(KB5130867, "Enterprise Eval x64 Eval EN-US DVD9")과 같다 |
+| `UltraVNC_1830_x64_Setup.exe` | 2.1절 주소. 2026-11-01에 다시 받았다 | - | `e9c22419ef3128a707b0d004a2c58e25459528c5c12d104dea56e5e662bd131e` | 2.1절 고정값과 같다 |
+| `repeater_v160.zip` | 3.1절 보관본 사본 | - | `82d9e7f06266a291b4988e36f4d33e127d63adb93269f3b24c432718f35de1de` | 2.2절 고정값과 같다 |
+| `novnc-v1.7.0.zip` | 2.4절 주소. 2026-11-01에 다시 받았다 | - | `d55e9cce9a611294df33c7200f32f35108652de2d86a468bebcfc6f2a1c9a196` | 2.4절 고정값과 같다 |
+| `Wireshark-4.6.9-x64.msi` | 3.1절 주소. 2026-11-01에 다시 받았다 | - | `1975dfc96581a9b674fda3f41ac1585963b4ba52ea9459f3b6d9cedfac3a7217` | 3.1절 winget 매니페스트 값과 같다 |
+| `npcap-1.90.exe` | 3.1절 주소. 2026-11-01에 다시 받았다 | - | `682b57e1c05ef375931975c9d6ded40888f4bfdf9f4b11571e654f962f1199b6` | 3.1절 값과 같다 |
+| `vc_redist.x64.exe` 14.44.35211.0 | `https://aka.ms/vs/17/release/vc_redist.x64.exe`. Wireshark MSI가 런타임 없이 실행되지 않을 때만 설치한다 | - | `cc0ff0eb1dc3f5188ae6300faef32bf5beeba4bdd6e8e445a9184072096b713b` | 게시값을 찾지 않았다 |
+
+- 반입 파일은 `D:\vr-lab\installers\`에 둔다. 2026-11-01에 이 표의 다섯 개 고정 파일을 다시 받았고, SHA-256이 모두 기록값과 같았다.
+
+#### 구성 결과 (2026-11-01)
+
+| 항목 | 결과 |
+| --- | --- |
+| 게스트 OS | 세 VM 모두 `Microsoft Windows 11 Enterprise Evaluation`, 버전 10.0.26300. ISO의 이미지 1번(`Windows 11 Enterprise Evaluation`, 10.0.26300.9457, en-US)을 적용했다. 평가 기간은 첫 부팅(2026-11-01)부터 90일이다 |
+| VM | 세 VM 모두 2세대, 2 vCPU, 동적 메모리 2048~4096 MB, vTPM 켬, Secure Boot 켬. 네트워크 어댑터는 VM마다 한 개이고 `vr-lab`에만 연결된다 |
+| 주소 | 구성 표의 IPv4·IPv6 주소와 링크 로컬 주소만 있다. 기본 경로는 VM마다 0개다 |
+| `vr-viewer` | `C:\Program Files\uvnc\UltraVNC\vncviewer.exe` 1.8.3.0, SHA-256 `18760910769dc497266d6ba7a28892925177d0208fe4433bf62f0b16061f3427`. 3.1절 호스트 설치 파일과 같다. 설치 경로는 호스트(`uvnc bvba`)와 다르다. 설치 프로그램이 `UltraVNC Viewer TCP`·`UDP` 아웃바운드 허용 규칙을 만들었다. `C:\vr\installers\novnc-v1.7.0.zip`을 두었다(압축은 풀지 않았다) |
+| `vr-server` | `C:\Program Files\uvnc\UltraVNC\winvnc.exe` 1.8.3.0, SHA-256 `9ebd1ec90ba1274d4a183f5bf6588374700052da907fa764a2ae7072e8ae19fe`. 3.1절 호스트 설치 파일과 같다. 설치 프로그램이 `UltraVNC Server TCP`·`UDP` 인바운드 허용 규칙을 만들었다. 서비스는 등록하지 않았다 |
+| `vr-repeater` | `C:\vr\repeater\repeater.exe` 1.6.0.0, SHA-256 `c17655192a0bdac369178156227f6cf6bbfa638514996fd286279f3dee712ae0`(2.2절 고정 파일). 방화벽 규칙 `vr-lab repeater`는 이 파일의 인바운드를 `192.0.2.0/24`·`2001:db8:1::/64`에서만 허용한다. `hosts`에 `192.0.2.30 vnc-server.test`, `2001:db8:1::30 vnc-server6.test`가 한 번씩 있다 |
+| 캡처 도구 | `vr-repeater`에 Wireshark 4.6.9(MSI, `TShark (Wireshark) 4.6.9 (v4.6.9-0-g2d548b197c75)`)와 Npcap 1.90을 설치했다. Visual C++ 런타임은 따로 설치하지 않았다. Npcap은 사용자가 VM 콘솔에서 설치 창을 기본값으로 진행했다. 드라이버 설정은 `AdminOnly=0`, `WinPcapCompatible=1`, `LoopbackSupport=1`이다. 캡처 대상은 `\Device\NPF_{96B13FFE-E67F-48F3-B027-339FFAF761AA} (vr-lab)`다 |
+| 체크포인트 | 세 VM이 꺼진 상태에서 만든 `baseline`(Standard, VM 상태 `Off`)이 VM마다 한 개 있다. 세 VM은 꺼져 있다 |
+
+#### 스모크 확인 (2026-11-01)
+
+이 확인은 격리와 캡처 도구의 동작 확인이다. UltraVNC를 실행하지 않았으므로 6.2절의 관찰 증거가 아니다.
+
+| 확인 | 결과 |
+| --- | --- |
+| 스위치·어댑터 | `vr-lab`의 형식이 `Private`이다. VM 어댑터 세 개가 모두 `vr-lab`에 연결된다 |
+| 호스트 분리 | 호스트에 `192.0.2.0/24`·`2001:db8:1::/64` 주소가 없다. 호스트에서 `192.0.2.20` ping이 실패했다 |
+| 게스트 분리 | 세 VM 모두 기본 경로 0개. `1.1.1.1:443`과 `[2606:4700:4700::1111]:443` TCP 연결이 실패했다. `www.microsoft.com` DNS 조회가 시간 초과로 실패했다 |
+| VM 간 통신 | 세 VM이 서로 IPv4·IPv6 ping에 응답했다(VM마다 4/4) |
+| 캡처 | `vr-repeater`에서 `dumpcap`(종료 코드 0)으로 `vr-lab` 어댑터를 25초 캡처했다(패킷 17개). 그동안 `vr-viewer`가 TCP 15000번으로 `ping-smoke`(IPv4)와 `ping-smoke6`(IPv6)을 보내고 `pong:` 응답을 받았다. VM 안과 호스트로 옮긴 사본의 `tshark` 결과가 같았다: `192.0.2.10 70696e672d736d6f6b65`, `192.0.2.20 706f6e673a70696e672d736d6f6b65`, `2001:db8:1::10 70696e672d736d6f6b6536`, `2001:db8:1::20 706f6e673a70696e672d736d6f6b6536`. 사본의 SHA-256은 `1d15d6575192645ebb17aac861a2dd836a1ef61c535bd8100e6d9fe66d29852e`이다. 시험 파일과 임시 방화벽 규칙은 지웠다 |
+
+#### 구성 중 고친 문제
+
+- Hyper-V 통합 서비스 이름이 한국어로 표시되어 `Guest Service Interface` 이름으로 켜지 못했다. 파일 이동은 PowerShell Direct만 쓰므로 이 설정을 뺐다.
+- 고정 메모리 4 GB로는 세 번째 VM이 시작하지 못했다. 동적 메모리로 바꿨다(구성 절의 VM 사양).
+- UltraVNC 설치 경로를 `uvnc bvba`로 가정해 첫 확인이 실패했다. 실제 경로는 `C:\Program Files\uvnc\UltraVNC`였다. 경로를 검색해 확인하도록 고쳤다.
+- 다시 실행하면서 Repeater VM의 `hosts` 항목이 두 번 들어갔다. 중복을 지웠고, 스모크 게이트가 한 번씩만 있는지 확인한다.
+- 첫 `baseline` 직전에 `vr-repeater`가 다시 시작되어, 그 VM의 체크포인트가 실행 중 상태로 만들어졌다. 열려 있던 VM 콘솔 창에서 시작된 것으로 보인다(추정). 그 체크포인트를 지우고 꺼진 상태에서 다시 만들었다. 이제 체크포인트 스크립트는 세 VM이 모두 꺼져 있고 `baseline`의 상태가 `Off`인지 확인한다.
+
+#### 구성 스크립트
+
+스크립트는 저장소 밖 `D:\vr-lab\scripts\`에 있다. 모두 관리자 권한으로 실행한다(Q66).
+
+| 파일 | 역할 |
+| --- | --- |
+| `01-build.ps1`, `unattend-template.xml` | 스위치, 기본 디스크, 차등 디스크, VM 세 대, 게스트 네트워크와 소프트웨어를 구성한다. 다시 실행하면 이미 끝난 단계를 건너뛴다. 설치 파일 해시가 고정값과 다르면 실패로 끝낸다 |
+| `02-smoke.ps1` | 분리·통신·캡처 스모크를 실행한다. 조건이 하나라도 다르면 체크포인트를 만들지 않고 실패로 끝낸다. 통과하면 `03-baseline.ps1`을 부른다 |
+| `03-baseline.ps1` | VM을 끄고 `baseline`을 만든 뒤 상태를 확인한다 |
+| `install-npcap-then-smoke.ps1`, `npcap-ui.ps1`, `open-npcap-installer.ps1` | Npcap 설치 창을 VM 콘솔 세션에 띄우고, 설치를 확인한 뒤 스모크를 실행한다 |
+| `check-npcap.ps1`, `status.ps1` | 설치 흔적과 VM·체크포인트 상태를 조회한다 |
+
 ## 4. 미해결 항목
 
 | 번호 | 항목 | 영향 | 필요한 결정·작업 |
@@ -143,7 +235,8 @@
 | 4.5 | 저작권자·적용 연도 미정 | OPS-TBD-005, LICENSE 고지 | 보류 중인 결정 Q10 |
 | 4.6 | 관찰 증거 전부 미수집 | RLY-TBD-002·003, WS-025 | 1.4 실행 |
 | 4.7 | 설치 파일의 `repeater.exe`가 고정 `repeater_v160.zip`의 파일과 다름(둘 다 1.6.0.0) | 잘못된 파일로 관찰하면 증거가 고정 대상과 맞지 않는다 | 없음. Q20에 따라 고정 파일을 쓰고, 관찰 기록에 실행 파일 경로와 SHA-256을 적는다(3.1절) |
-| 4.8 | 6.1절 관찰 환경 미준비 | 1.4의 시나리오 관찰을 하지 않았다 | 1절 범위대로 인터넷과 분리한 테스트 네트워크에 Viewer·Server·Repeater 호스트(또는 VM)를 준비하고, Repeater 구간에서 캡처한다 |
+| 4.8 | 6.1절 관찰 환경 미준비 | 해소(2026-11-01). 3.2절 환경을 구성하고 스모크 확인과 `baseline` 체크포인트를 마쳤다 | 없음. 시나리오 관찰은 4.6(TODO 1.4)에서 한다 |
+| 4.9 | 게스트 Windows 평가판 기간 | 첫 부팅(2026-11-01)부터 90일이 지나면 VM이 정품 인증 경고를 띄우고 한 시간마다 종료된다(Evaluation Center 안내) | 기간 안에 1.4를 마친다. 넘기면 3.2절 스크립트로 VM을 다시 만든다 |
 
 ## 5. 검증 명령과 결과
 
@@ -212,3 +305,41 @@ repeater.exe | FileVersion=1.6.0.0
 - 설치 확인: 통과. 파일 버전, 구성 요소, 서명, 설정 파일 보존을 확인했다.
 - 캡처 도구: 통과. 관리자 권한 없이 캡처가 된다(루프백 시험, 준비 확인).
 - 관찰: 미실행. 6.1절 관찰 환경을 아직 준비하지 않았다(4절 4.8).
+
+### 5.2 2026-11-01 관찰 환경 구성 (메인 에이전트가 실행)
+
+관리자 권한이 필요한 단계는 사용자가 UAC를 승인해 실행했다(Q66). 스크립트별 결과 파일은 `D:\vr-lab\logs\`에 있다.
+
+```
+certutil -hashfile win11-enterprise-eval-en-us.iso SHA256
+bc3f24086ebadc94489066b5ad78089e2cf5c3491e90e790bb81a2b199c10e38
+
+01-build.ps1 → 01-summary.json
+gate: pass
+vr-viewer gen2 cpu2 dynamic=True startup=2048MB min=2048MB max=4096MB tpm=True secureboot=On (세 VM 같음)
+vncviewer.exe 1.8.3.0 18760910769dc497266d6ba7a28892925177d0208fe4433bf62f0b16061f3427 C:\Program Files\uvnc\UltraVNC\vncviewer.exe
+winvnc.exe 1.8.3.0 9ebd1ec90ba1274d4a183f5bf6588374700052da907fa764a2ae7072e8ae19fe C:\Program Files\uvnc\UltraVNC\winvnc.exe
+C:\vr\repeater\repeater.exe 1.6.0.0 c17655192a0bdac369178156227f6cf6bbfa638514996fd286279f3dee712ae0
+TShark (Wireshark) 4.6.9 (v4.6.9-0-g2d548b197c75).
+
+install-npcap-then-smoke.ps1 → install-npcap.log
+service: Running, Npcap 1.90, AdminOnly=0 WinPcapCompatible=1 LoopbackSupport=1
+
+02-smoke.ps1 → 02-smoke.json
+gate: pass
+switch: Private; vmAdapters: vr-repeater vr-lab, vr-server vr-lab, vr-viewer vr-lab; hostLabAddresses: (없음); hostPing: False
+vr-viewer routes=0 v4=fail v6=fail dns=fail(timeout) peers=4/4 True (세 VM 같음)
+192.0.2.20 sent=ping-smoke got=pong:ping-smoke
+2001:db8:1::20 sent=ping-smoke6 got=pong:ping-smoke6
+capture exit=0, Number of packets: 17
+
+03-baseline.ps1 → 03-baseline.json
+gate: pass
+vr-viewer baseline Standard vmstate=Off 2026-11-01T01:27:11
+vr-server baseline Standard vmstate=Off 2026-11-01T01:27:12
+vr-repeater baseline Standard vmstate=Off 2026-11-01T01:29:03
+```
+
+- 환경 구성: 통과. 3.2절 구성 결과와 같다.
+- 분리·통신·캡처 스모크: 통과. 실패 조건이 하나라도 있으면 체크포인트를 만들지 않는 게이트로 확인했다.
+- 관찰: 미실행. 시나리오 캡처는 TODO 1.4의 다음 작업이다.
