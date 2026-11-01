@@ -147,6 +147,14 @@ struct Running {
 
 impl Running {
     async fn start(secure: bool) -> Self {
+        Self::start_with_keepalive(secure, KEEPALIVE, LIMIT).await
+    }
+
+    async fn start_with_keepalive(
+        secure: bool,
+        keepalive: KeepaliveSettings,
+        wait_timeout: Duration,
+    ) -> Self {
         let listener = target().await;
         let server = target().await;
         let addr = listener
@@ -174,13 +182,13 @@ impl Running {
         let budget = ConnectionBudget::new(8);
         let waiting_budget = ConnectionBudget::new(8);
         let runtime = Arc::new(RelayRuntime::new(
-            TcpTargetConnector::new(KEEPALIVE),
+            TcpTargetConnector::new(keepalive),
             Arc::new(RelayIdKey::generate().unwrap_or_else(|error| panic!("relay key: {error:?}"))),
             Arc::new(SessionIdKey::from_bytes(&[0x61; 32])),
             Arc::clone(&budget),
             Arc::clone(&waiting_budget),
             RelayRuntimeConfig {
-                wait_timeout: Duration::from_secs(10),
+                wait_timeout,
                 connect_timeout: E,
                 close_timeout: E,
                 recent_closed: 32,
@@ -206,7 +214,7 @@ impl Running {
             allow,
             relay_budget: Arc::clone(&budget),
             handshake: Duration::from_secs(3),
-            keepalive: KEEPALIVE,
+            keepalive,
         };
         let ws = WsEntryPoint::new(
             if secure {
@@ -588,6 +596,42 @@ impl Client {
             Err(error) if self.secure && error.kind() == io::ErrorKind::UnexpectedEof => {}
             other => panic!("no data or frames after Close, transport EOF: {other:?}"),
         }
+    }
+
+    /// Reads raw frames without the automatic Pong of a WebSocket library.
+    async fn kw_eof(&mut self) -> usize {
+        timeout(Duration::from_secs(20), async {
+            let mut pings = 0;
+            loop {
+                let mut byte = [0; 1];
+                match self.wire.read(&mut byte).await {
+                    Ok(0) => return pings,
+                    Err(error)
+                        if error.kind() == io::ErrorKind::ConnectionReset
+                            || (self.secure && error.kind() == io::ErrorKind::UnexpectedEof) =>
+                    {
+                        return pings;
+                    }
+                    Err(error) => panic!("Kw transport: {error}"),
+                    Ok(_) => {
+                        assert_eq!(
+                            byte[0], 0x89,
+                            "only empty Ping; no Close on own Pong expiry"
+                        );
+                        assert_eq!(
+                            self.wire
+                                .read_u8()
+                                .await
+                                .unwrap_or_else(|error| panic!("empty Ping length: {error}")),
+                            0
+                        );
+                        pings += 1;
+                    }
+                }
+            }
+        })
+        .await
+        .unwrap_or_else(|error| panic!("Kw did not reclaim transport: {error}"))
     }
 }
 
@@ -1337,6 +1381,7 @@ async fn measured_pair(
             } else {
                 ViewerTransport::Ws
             },
+            KEEPALIVE,
         ),
         side: 0,
         meter: Arc::clone(&meter),
@@ -1712,4 +1757,131 @@ async fn raw_reader_accepts_fragmented_binary_messages_with_interleaved_control_
         .unwrap_or_else(|error| panic!("reader answered interleaved Ping: {error}"));
     assert_eq!(pong[..2], [0x8a, 0x81], "FIN Pong with one masked byte");
     assert_eq!(pong[6] ^ pong[2], b'p');
+}
+
+/// spec: websocket.md:WS-026
+#[tokio::test]
+async fn ws_and_wss_kw_keeps_idle_peers_and_drops_unresponsive_peers() {
+    for secure in [false, true] {
+        let keepalive = KeepaliveSettings {
+            ws_ping: Duration::from_secs(5),
+            ws_pong_timeout: Duration::from_secs(5),
+            ..KEEPALIVE
+        };
+        let running =
+            Running::start_with_keepalive(secure, keepalive, Duration::from_secs(60)).await;
+        // Exact timing is covered by paused-time unit tests. These socket
+        // windows allow two seconds early and ten seconds late; the latter
+        // exceeds the 3.3-second scheduling overruns observed in the WSL gate.
+        let silent_at = Instant::now();
+        let (mut silent, mut silent_tcp, silent_started) = running.pair(true, "8261").await;
+        let silent_task = tokio::spawn(async move {
+            let pings = silent.kw_eof().await;
+            let elapsed = silent_at.elapsed();
+            assert!(
+                (Duration::from_secs(8)..=Duration::from_secs(20)).contains(&elapsed),
+                "silent client Kw window: {elapsed:?}"
+            );
+            pings
+        });
+        let live_at = Instant::now();
+        let (mut live, mut live_tcp, live_started) = running.pair(true, "8262").await;
+        // Begin answering immediately, before setting up any later connection.
+        let live_task = tokio::spawn(async move {
+            for _ in 0..3 {
+                let frame = live.frame().await;
+                assert_eq!(frame.opcode, 9);
+                assert!(frame.payload.is_empty());
+                live.send(10, true, &frame.payload).await;
+            }
+            let elapsed = live_at.elapsed();
+            assert!(
+                (Duration::from_secs(13)..=Duration::from_secs(25)).contains(&elapsed),
+                "idle client's three-Ping window: {elapsed:?}"
+            );
+            live
+        });
+        let waiting_at = Instant::now();
+        let mut waiting = running.connect().await;
+        waiting.binary(&request("ID:8263")).await;
+        let waiting_task = tokio::spawn(async move {
+            let pings = waiting.kw_eof().await;
+            let elapsed = waiting_at.elapsed();
+            assert!(
+                (Duration::from_secs(8)..=Duration::from_secs(20)).contains(&elapsed),
+                "waiting client Kw window: {elapsed:?}"
+            );
+            pings
+        });
+        let registered = running
+            .events
+            .wait(|line| {
+                line["event"] == "waiting_registered"
+                    && line["conn_id"] != silent_started["viewer_conn_id"]
+                    && line["conn_id"] != live_started["viewer_conn_id"]
+            })
+            .await;
+        // No Ping header/payload may reach TCP, even on the dead session.
+        let mut byte = [0; 1];
+        assert_eq!(
+            timeout(Duration::from_secs(20), silent_tcp.read(&mut byte))
+                .await
+                .unwrap_or_else(|error| panic!("dead TCP reclaimed: {error}"))
+                .unwrap_or_else(|error| panic!("dead TCP EOF: {error}")),
+            0
+        );
+        let closed = running
+            .closed(&silent_started, "dead_connection", "viewer")
+            .await;
+        assert_eq!(closed["bytes_viewer_to_target"], 0);
+        assert_eq!(closed["bytes_target_to_viewer"], 0);
+        assert!(
+            silent_task
+                .await
+                .unwrap_or_else(|error| panic!("silent client: {error}"))
+                >= 1
+        );
+        assert!(
+            waiting_task
+                .await
+                .unwrap_or_else(|error| panic!("waiting client: {error}"))
+                >= 1
+        );
+        let removed = running
+            .events
+            .wait(|line| {
+                line["event"] == "waiting_removed" && line["conn_id"] == registered["conn_id"]
+            })
+            .await;
+        assert_eq!(removed["reason"], "dead_connection");
+        assert_eq!(removed["level"], "warn");
+        let mut live = timeout(Duration::from_secs(20), live_task)
+            .await
+            .unwrap_or_else(|error| panic!("idle Pong client: {error}"))
+            .unwrap_or_else(|error| panic!("idle Pong task: {error}"));
+        assert_eq!(
+            running
+                .runtime
+                .snapshot(running.clock.as_ref())
+                .active
+                .len(),
+            1
+        );
+        let mut byte = [0; 1];
+        assert!(
+            timeout(Duration::from_millis(10), live_tcp.read(&mut byte))
+                .await
+                .is_err(),
+            "server Ping bytes never appear in TCP"
+        );
+        live.binary(b"still alive").await;
+        assert_eq!(read_tcp(&mut live_tcp, 11).await, b"still alive");
+        bounded(live_tcp.write_all(b"idle survived"))
+            .await
+            .unwrap_or_else(|error| panic!("live reverse probe: {error}"));
+        assert_eq!(live.data(13).await, b"idle survived");
+        close_normally(&running, &mut live, &mut live_tcp, &live_started).await;
+        running.assert_empty();
+        running.finish().await;
+    }
 }

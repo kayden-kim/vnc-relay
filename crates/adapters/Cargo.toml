@@ -31,4 +31,4 @@ vnc-relay-domain.workspace = true
 windows-sys.workspace = true
 
 [dev-dependencies]
-tokio = { workspace = true, features = ["io-util"] }
+tokio = { workspace = true, features = ["io-util", "test-util"] }

@@ -291,7 +291,18 @@ async fn wait<C: TargetConnector>(
                 None => return Poll::Ready(None),
             };
             entry.waker = Some(cx.waker().clone());
-            if entry.filled < entry.connection.trailing.len() {
+            if let Poll::Ready(Err(error)) =
+                Pin::new(entry.connection.stream.as_mut()).poll_maintenance(cx)
+            {
+                reason = Some(RemovedReason::Removed(
+                    if RelayStreamError::is_dead_connection(&error) {
+                        WaitingRemovalReason::DeadConnection
+                    } else {
+                        WaitingRemovalReason::ConnectionError(RelayStreamError::classify(&error))
+                    },
+                ));
+            }
+            if reason.is_none() && entry.filled < entry.connection.trailing.len() {
                 let mut buffer = ReadBuf::new(&mut entry.connection.trailing[entry.filled..]);
                 match Pin::new(entry.connection.stream.as_mut()).poll_read(cx, &mut buffer) {
                     Poll::Ready(Ok(())) if buffer.filled().is_empty() => {
@@ -303,9 +314,13 @@ async fn wait<C: TargetConnector>(
                     }
                     Poll::Ready(Err(error)) => {
                         reason = Some(RemovedReason::Removed(
-                            WaitingRemovalReason::ConnectionError(RelayStreamError::classify(
-                                &error,
-                            )),
+                            if RelayStreamError::is_dead_connection(&error) {
+                                WaitingRemovalReason::DeadConnection
+                            } else {
+                                WaitingRemovalReason::ConnectionError(RelayStreamError::classify(
+                                    &error,
+                                ))
+                            },
                         ));
                     }
                     Poll::Pending => {}

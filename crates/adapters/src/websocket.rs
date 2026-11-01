@@ -240,6 +240,7 @@ async fn connection(
                 shared.policy.message_bytes,
                 shared.policy.buffer_bytes,
                 transport,
+                shared.policy.accept.keepalive,
             );
             let lifecycle = shared.runtime.lifecycle();
             let _handshaking = shared.runtime.track_handshaking();

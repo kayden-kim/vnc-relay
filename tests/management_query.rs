@@ -1413,7 +1413,7 @@ fn session_detail_fields_timestamp_and_integer_bytes() {
 fn empty_success_vs_failure_distinction() {
     let _lock = lock_ports();
     let server = RunningServer::start("mgt004", "", 5, 10, 5);
-    let (cookie, _) = server.login();
+    let (cookie, csrf) = server.login();
 
     // Empty success responses: 200 with empty items, never 404 or 500
     let w_rep = server.query(&cookie, "/api/v1/waiting");
@@ -1437,7 +1437,12 @@ fn empty_success_vs_failure_distinction() {
         Some("not_found")
     );
 
-    let rep_405 = server.send_http("POST", "/api/v1/summary", &[("Cookie", &cookie)], b"");
+    let rep_405 = server.send_http(
+        "POST",
+        "/api/v1/summary",
+        &[("Cookie", &cookie), ("X-CSRF-Token", &csrf)],
+        b"",
+    );
     assert_eq!(rep_405.status, 405);
     assert_eq!(rep_405.header("allow"), Some("GET"));
     assert_eq!(

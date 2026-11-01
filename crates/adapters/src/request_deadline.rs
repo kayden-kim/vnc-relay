@@ -4,6 +4,8 @@
 
 use std::io;
 use std::pin::Pin;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::task::{Context, Poll};
 use std::time::Duration;
 
@@ -43,6 +45,17 @@ where
     }
 }
 
+/// Connection-local exception to U for an accepted termination wait (Q92).
+/// Only the first actual response write resumes the idle timer.
+#[derive(Debug, Clone)]
+pub(crate) struct IdleControl(Arc<AtomicBool>);
+
+impl IdleControl {
+    pub(crate) fn pause_for_termination(&self) {
+        self.0.store(true, Ordering::Release);
+    }
+}
+
 /// One accepted connection with its timer. Before the first request head is
 /// complete, the timer is absolute: it ends `limit` after accept, so a TLS
 /// handshake or a head that never finishes is cut off. After that, every
@@ -55,6 +68,7 @@ pub(crate) struct Deadlined<IO> {
     head_done: bool,
     /// The last four bytes read while the head is still open.
     window: u32,
+    idle: IdleControl,
 }
 
 impl<IO> Deadlined<IO> {
@@ -65,6 +79,17 @@ impl<IO> Deadlined<IO> {
             timer: Box::pin(sleep_until(Instant::now() + limit)),
             head_done: false,
             window: 0,
+            idle: IdleControl(Arc::new(AtomicBool::new(false))),
+        }
+    }
+
+    pub(crate) fn idle_control(&self) -> IdleControl {
+        self.idle.clone()
+    }
+
+    fn resume_for_response(&mut self) {
+        if self.idle.0.swap(false, Ordering::AcqRel) {
+            self.restart();
         }
     }
 
@@ -89,7 +114,7 @@ impl<IO> Deadlined<IO> {
     }
 
     fn expired(&mut self, cx: &mut Context<'_>) -> bool {
-        self.timer.as_mut().poll(cx).is_ready()
+        !self.idle.0.load(Ordering::Acquire) && self.timer.as_mut().poll(cx).is_ready()
     }
 }
 
@@ -132,6 +157,7 @@ where
         cx: &mut Context<'_>,
         buf: &[u8],
     ) -> Poll<io::Result<usize>> {
+        self.resume_for_response();
         if self.expired(cx) {
             return Poll::Ready(Err(timed_out()));
         }
@@ -155,5 +181,55 @@ where
 
     fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         Pin::new(&mut self.io).poll_shutdown(cx)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::task::Waker;
+
+    use tokio::io::AsyncWriteExt;
+    use tokio::time::advance;
+
+    use super::*;
+
+    #[tokio::test(start_paused = true)]
+    async fn accepted_wait_pauses_only_its_connection_until_response_writes() {
+        let limit = Duration::from_secs(1);
+        let mut waiting = Deadlined::new(tokio::io::sink(), limit);
+        let mut ordinary = Deadlined::new(tokio::io::sink(), limit);
+        waiting.note_read(b"POST / HTTP/1.1\r\n\r\n");
+        ordinary.note_read(b"GET / HTTP/1.1\r\n\r\n");
+        let control = waiting.idle_control();
+        control.pause_for_termination();
+        advance(limit * 3).await;
+        let mut cx = Context::from_waker(Waker::noop());
+        assert!(!waiting.expired(&mut cx));
+        assert!(ordinary.expired(&mut cx));
+        // Completing a handler does not resume U. Only writing its response does.
+        assert!(control.0.load(Ordering::Acquire));
+        waiting
+            .write_all(b"HTTP/1.1 200 OK\r\n\r\n")
+            .await
+            .unwrap_or_else(|error| panic!("response writes with a fresh U: {error}"));
+        assert!(!control.0.load(Ordering::Acquire));
+        advance(limit - Duration::from_millis(1)).await;
+        assert!(!waiting.expired(&mut cx));
+        advance(Duration::from_millis(1)).await;
+        assert!(waiting.expired(&mut cx));
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn body_validation_and_unaccepted_requests_keep_the_usual_u() {
+        let limit = Duration::from_secs(1);
+        let mut io = Deadlined::new(tokio::io::sink(), limit);
+        io.note_read(b"POST / HTTP/1.1\r\nContent-Length: 1\r\n\r\n");
+        advance(limit).await;
+        let error = io
+            .write_all(b"response")
+            .await
+            .err()
+            .unwrap_or_else(|| panic!("ordinary U is not suspended"));
+        assert_eq!(error.kind(), io::ErrorKind::TimedOut);
     }
 }

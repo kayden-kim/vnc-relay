@@ -54,7 +54,9 @@ pub(super) async fn answer(
         || path == WAITING_PATH
         || path == SESSIONS_PATH
         || path == CLOSED_SESSIONS_PATH
-        || path.starts_with(SESSIONS_PREFIX);
+        || path
+            .strip_prefix(SESSIONS_PREFIX)
+            .is_some_and(|id| !id.contains('/'));
 
     if !is_query_path {
         return not_found();

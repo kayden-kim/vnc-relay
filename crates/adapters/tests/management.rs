@@ -22,14 +22,16 @@ use tokio_rustls::{TlsAcceptor, TlsConnector};
 use vnc_relay_adapters::accounts_file::{Argon2Hasher, Argon2Verifier};
 use vnc_relay_adapters::clock::SystemClock;
 use vnc_relay_adapters::crypto::SystemTokenSource;
-use vnc_relay_adapters::management_http::{DashboardHints, ManagementListener};
+use vnc_relay_adapters::management_http::{DashboardHints, ManagementListener, ManagementServices};
 use vnc_relay_adapters::tls;
 use vnc_relay_app::events::{Event, RejectReason, Stage};
 use vnc_relay_app::management::login::dummy_hash;
 use vnc_relay_app::management::query::ManagementQueryService;
+use vnc_relay_app::management::terminate::{ManagementTerminateService, TerminationTicket};
 use vnc_relay_app::management::{AdminAuth, AdminPorts};
 use vnc_relay_app::ports::{
-    Clock, EventSink, HashError, PasswordHasher, PasswordVerifier, RelayLifecycle, RelayStateSource,
+    Clock, EventSink, HashError, PasswordHasher, PasswordVerifier, RelayLifecycle,
+    RelaySessionControl, RelayStateSource,
 };
 use vnc_relay_app::relay::RelaySnapshot;
 use vnc_relay_app::reload::snapshot::{RelayAllow, ReloadCell, ReloadSnapshot};
@@ -197,7 +199,12 @@ async fn start_with_ports(
         Arc::new(EmptyRelaySource),
         relay_budget,
         Arc::clone(&budget),
+        Arc::clone(&clock),
+    ));
+    let terminate = Arc::new(ManagementTerminateService::new(
+        Arc::new(EmptyRelaySource),
         clock,
+        Arc::clone(&log),
     ));
     let dashboard = DashboardHints::new(
         Duration::from_secs(2),
@@ -208,12 +215,36 @@ async fn start_with_ports(
         let snapshot = ReloadSnapshot::new(RelayAllow::default(), None, Some(acceptor));
         tls::TlsSource::management(Arc::new(ReloadCell::new(snapshot)))
     });
-    let listener = ManagementListener::new(listener, tls, budget, upgrade, auth, dashboard, query);
+    let listener = ManagementListener::new(
+        listener,
+        tls,
+        budget,
+        upgrade,
+        dashboard,
+        ManagementServices {
+            auth,
+            query,
+            terminate,
+        },
+    );
     tokio::spawn(listener.run(log));
     Running { addr, events }
 }
 
 struct EmptyRelaySource;
+
+impl RelaySessionControl for EmptyRelaySource {
+    fn request_terminate(
+        &self,
+        _session_id: &str,
+        _account: AccountName,
+        _peer: PeerIp,
+        _clock: &dyn Clock,
+        _events: &dyn EventSink,
+    ) -> Option<TerminationTicket> {
+        None
+    }
+}
 
 impl RelayStateSource for EmptyRelaySource {
     fn snapshot(&self, clock: &dyn Clock) -> RelaySnapshot {
@@ -1242,8 +1273,8 @@ async fn limited_logins_refuse_alike_and_the_right_password_works_after_the_lock
     assert_eq!(limited_events(&running, LimitScope::Source), 1);
 }
 
-// Covers the expired session for the session view and for logout. The query (4.4)
-// and terminate (4.5) paths are not built yet, and relay sessions are not checked here.
+// Covers the expired session for the session view and logout only.
+// Query, termination and live relay sessions are checked in their own tests.
 /// spec: management.md:MGT-019 partial
 #[tokio::test]
 async fn expired_session_cookie_is_refused_by_the_view_and_by_logout() {
@@ -1381,8 +1412,7 @@ async fn logout_ends_only_its_own_session() {
     assert_eq!(kept.status, 200);
 }
 
-// Covers the CSRF check of logout. The terminate path (4.5) is not built yet, so the
-// check of a terminate request is not covered here.
+// Covers logout CSRF only. Termination CSRF is checked by its route tests.
 /// spec: management.md:MGT-014 partial
 #[tokio::test]
 async fn logout_without_the_csrf_token_is_refused_and_keeps_the_session() {
@@ -1781,4 +1811,173 @@ async fn a_login_with_a_valid_prior_cookie_ends_that_session() {
     assert_eq!(error_code(&refused), "unauthenticated");
     let kept = plain_exchange(running.addr, &get("/api/v1/session", &[new.as_str()])).await;
     assert_eq!(kept.status, 200);
+}
+
+#[tokio::test]
+async fn terminate_dispatch_checks_auth_csrf_path_method_then_poll_and_id() {
+    let running = start(None, ROOMY_LM).await;
+    let target = "/api/v1/sessions/unknown/terminate";
+    let login = plain_exchange(running.addr, &login_request(ACCOUNT, PASSWORD)).await;
+    let cookie = cookie_line(&login);
+    let csrf = csrf_line(&login);
+    for method in ["POST", "DELETE"] {
+        for path in [target, "/api/v1/unknown"] {
+            let unauthenticated = plain_exchange(running.addr, &request(method, path, &[])).await;
+            assert_eq!(unauthenticated.status, 401);
+            let missing =
+                plain_exchange(running.addr, &request(method, path, &[cookie.as_str()])).await;
+            assert_eq!(missing.status, 403);
+            assert_eq!(error_code(&missing), "csrf_invalid");
+            let repeated = plain_exchange(
+                running.addr,
+                &request(
+                    method,
+                    path,
+                    &[cookie.as_str(), csrf.as_str(), csrf.as_str()],
+                ),
+            )
+            .await;
+            assert_eq!(repeated.status, 403);
+        }
+    }
+    for method in ["GET", "HEAD", "PUT", "DELETE"] {
+        let reply = plain_exchange(
+            running.addr,
+            &request(
+                method,
+                target,
+                &[cookie.as_str(), csrf.as_str(), "X-Relay-Poll: invalid"],
+            ),
+        )
+        .await;
+        assert_eq!(reply.status, 405);
+        assert_eq!(reply.header("allow"), Some("POST"));
+    }
+    let unknown = plain_exchange(
+        running.addr,
+        &request("POST", "/api/v1/unknown", &[cookie.as_str(), csrf.as_str()]),
+    )
+    .await;
+    assert_eq!(unknown.status, 404);
+    let extra_segment = plain_exchange(
+        running.addr,
+        &request(
+            "POST",
+            "/api/v1/sessions/unknown/terminate/",
+            &[cookie.as_str(), csrf.as_str()],
+        ),
+    )
+    .await;
+    assert_eq!(extra_segment.status, 404);
+    let poll = plain_exchange(
+        running.addr,
+        &request(
+            "POST",
+            "/api/v1/sessions/!/terminate",
+            &[cookie.as_str(), csrf.as_str(), "X-Relay-Poll: 1"],
+        ),
+    )
+    .await;
+    assert_eq!(poll.status, 400);
+    assert!(
+        json_body(&poll)["error"]["message"]
+            .as_str()
+            .is_some_and(|message| message.contains("X-Relay-Poll"))
+    );
+    let invalid_id = plain_exchange(
+        running.addr,
+        &request(
+            "POST",
+            "/api/v1/sessions/!/terminate",
+            &[cookie.as_str(), csrf.as_str()],
+        ),
+    )
+    .await;
+    assert_eq!(invalid_id.status, 400);
+    assert!(
+        running
+            .events
+            .snapshot()
+            .iter()
+            .all(|event| !matches!(event, Event::AdminTerminate { .. }))
+    );
+}
+
+#[tokio::test]
+async fn terminate_rejects_all_actual_bodies_but_allows_empty_content_types_without_touching_auth()
+{
+    let clock = Arc::new(FakeClock::default());
+    let running = start_with_ports(
+        None,
+        ROOMY_LM,
+        UPGRADE,
+        session_policy(),
+        limit_policy(),
+        Arc::new(Argon2Verifier),
+        clock.clone(),
+    )
+    .await;
+    let login = plain_exchange(running.addr, &login_request(ACCOUNT, PASSWORD)).await;
+    let cookie = cookie_line(&login);
+    let csrf = csrf_line(&login);
+    clock.set(Duration::from_secs(599));
+    let path = "/api/v1/sessions/unknown/terminate";
+    for content_type in [
+        None,
+        Some("Content-Type: application/json"),
+        Some("Content-Type: text/plain"),
+    ] {
+        for chunked in [false, true] {
+            let mut headers = vec![cookie.as_str(), csrf.as_str()];
+            if let Some(content_type) = content_type {
+                headers.push(content_type);
+            }
+            headers.push(if chunked {
+                "Transfer-Encoding: chunked"
+            } else {
+                "Content-Length: 1"
+            });
+            let mut bytes = request("POST", path, &headers);
+            bytes.extend_from_slice(if chunked {
+                b"1\r\nx\r\n0\r\n\r\n"
+            } else {
+                b"x"
+            });
+            let reply = plain_exchange(running.addr, &bytes).await;
+            assert_eq!(
+                reply.status, 400,
+                "body {content_type:?}, chunked={chunked}"
+            );
+            assert_eq!(error_code(&reply), "invalid_request");
+        }
+    }
+    assert!(
+        running
+            .events
+            .snapshot()
+            .iter()
+            .all(|event| !matches!(event, Event::AdminTerminate { .. }))
+    );
+    for content_type in [
+        None,
+        Some("Content-Type: application/json"),
+        Some("Content-Type: text/plain"),
+    ] {
+        let mut headers = vec![cookie.as_str(), csrf.as_str(), "Content-Length: 0"];
+        if let Some(content_type) = content_type {
+            headers.push(content_type);
+        }
+        let reply = plain_exchange(running.addr, &request("POST", path, &headers)).await;
+        assert_eq!(
+            reply.status, 404,
+            "empty {content_type:?} is accepted then missing"
+        );
+        assert_eq!(error_code(&reply), "not_found");
+    }
+    clock.set(Duration::from_secs(600));
+    let expired = plain_exchange(running.addr, &get("/api/v1/session", &[cookie.as_str()])).await;
+    assert_eq!(
+        expired.status, 401,
+        "neither rejection nor missing target touches Si"
+    );
 }

@@ -522,7 +522,9 @@ fn push_event_fields(fields: &mut Vec<(&'static str, Value)>, event: &Event) {
                         fields.push(("side", Value::from(side.as_str())));
                     }
                 }
-                CloseCause::AdminTerminated | CloseCause::ServerShutdown => {}
+                CloseCause::AdminTerminated
+                | CloseCause::ServerShutdown
+                | CloseCause::InternalError => {}
             }
             if *close_cause == CloseCause::ConnectionError
                 && let Some(kind) = error_kind
@@ -545,6 +547,19 @@ fn push_event_fields(fields: &mut Vec<(&'static str, Value)>, event: &Event) {
         }
         Event::ShutdownForced { remaining_sessions } => {
             fields.push(("remaining_sessions", Value::from(*remaining_sessions)));
+        }
+        Event::AdminTerminate {
+            admin_account,
+            peer_ip,
+            session_id,
+            result,
+        } => {
+            fields.push(("admin_account", Value::from(admin_account.as_str())));
+            fields.push(("peer_ip", Value::from(peer_ip.to_string())));
+            fields.push(("result", Value::from(result.as_str())));
+            if let Some(id) = session_id {
+                fields.push(("session_id", Value::from(id.as_str())));
+            }
         }
         Event::AdminLoginSucceeded {
             admin_account,

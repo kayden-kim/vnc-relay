@@ -16,7 +16,7 @@ use vnc_relay_adapters::accounts_file::{Argon2Hasher, Argon2Verifier, HashFloor}
 use vnc_relay_adapters::clock::SystemClock;
 use vnc_relay_adapters::crypto::{CryptoError, RelayIdKey, SessionIdKey, SystemTokenSource};
 use vnc_relay_adapters::file_watch::{self, FsReloadFileStore, SystemReloadClock};
-use vnc_relay_adapters::management_http::{DashboardHints, ManagementListener};
+use vnc_relay_adapters::management_http::{DashboardHints, ManagementListener, ManagementServices};
 use vnc_relay_adapters::net::{AcceptPolicy, AllowSource, BindFailure, TcpEntryPoint};
 use vnc_relay_adapters::ops_log::JsonLinesEventSink;
 use vnc_relay_adapters::status_http::StatusListener;
@@ -29,8 +29,9 @@ use vnc_relay_app::events::{Event, Phase};
 use vnc_relay_app::lifecycle::LifecycleService;
 use vnc_relay_app::management::login::dummy_hash;
 use vnc_relay_app::management::query::ManagementQueryService;
+use vnc_relay_app::management::terminate::ManagementTerminateService;
 use vnc_relay_app::management::{AdminAuth, AdminPorts};
-use vnc_relay_app::ports::{Clock, EventSink, RelayStateSource};
+use vnc_relay_app::ports::{Clock, EventSink, RelaySessionControl, RelayStateSource};
 use vnc_relay_app::relay::{RelayRuntime, RelayRuntimeConfig, RelayService};
 use vnc_relay_app::reload::service::ReloadService;
 use vnc_relay_app::reload::snapshot::{RelayAllow, ReloadCell, ReloadSnapshot};
@@ -323,6 +324,11 @@ async fn listen_until_shutdown(
         Arc::clone(&admin_budget),
         Arc::clone(&clock),
     ));
+    let terminate_service = Arc::new(ManagementTerminateService::new(
+        Arc::clone(&runtime) as Arc<dyn RelaySessionControl>,
+        Arc::clone(&clock),
+        Arc::clone(&log),
+    ));
 
     // The management listener accepts from here on.
     let management_task = management.map(|bound| {
@@ -336,9 +342,12 @@ async fn listen_until_shutdown(
             management_tls_on.then(|| TlsSource::management(Arc::clone(&cell))),
             Arc::clone(&admin_budget),
             settings.timeouts.tls_upgrade,
-            auth,
             dashboard,
-            query_service,
+            ManagementServices {
+                auth,
+                query: query_service,
+                terminate: terminate_service,
+            },
         );
         tokio::spawn(listener.run(Arc::clone(&log)))
     });

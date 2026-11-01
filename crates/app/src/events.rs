@@ -306,6 +306,26 @@ impl LoginFailReason {
     }
 }
 
+/// Outcome of an authenticated administrator termination (ops-info-v1 §1.5).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AdminTerminateResult {
+    Terminated,
+    AlreadyClosed,
+    NotFound,
+    Failed,
+}
+
+impl AdminTerminateResult {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Terminated => "terminated",
+            Self::AlreadyClosed => "already_closed",
+            Self::NotFound => "not_found",
+            Self::Failed => "failed",
+        }
+    }
+}
+
 /// One operation log event. Each variant is one event of ops-info-v1 §1.5.
 /// Fields carry no secret, no raw relay ID, and no config value other than
 /// the ones the contract names (§1.11). Feature tasks add variants.
@@ -472,6 +492,13 @@ pub enum Event {
         relay_id_ref: Option<RelayIdRef>,
         admin_account: Option<AccountName>,
     },
+    /// Recorded after final cleanup, without leaking absent request IDs.
+    AdminTerminate {
+        admin_account: AccountName,
+        peer_ip: PeerIp,
+        session_id: Option<SessionId>,
+        result: AdminTerminateResult,
+    },
     /// The server entered shutdown grace (ops-info-v1 §1.5).
     ShutdownStarted {
         grace_secs: u64,
@@ -543,6 +570,7 @@ impl Event {
             Self::WaitingRemoved { .. } => "waiting_removed",
             Self::SessionStarted { .. } => "session_started",
             Self::SessionClosed { .. } => "session_closed",
+            Self::AdminTerminate { .. } => "admin_terminate",
             Self::ShutdownStarted { .. } => "shutdown_started",
             Self::ShutdownForced { .. } => "shutdown_forced",
             Self::AdminLoginSucceeded { .. } => "admin_login_succeeded",
@@ -584,9 +612,17 @@ impl Event {
                 CloseCause::ConnectionError
                 | CloseCause::DeadConnection
                 | CloseCause::CloseTimeout
-                | CloseCause::ServerShutdown => Level::Warn,
+                | CloseCause::ServerShutdown
+                | CloseCause::InternalError => Level::Warn,
             },
             Self::ShutdownStarted { .. } => Level::Info,
+            Self::AdminTerminate { result, .. } => {
+                if *result == AdminTerminateResult::Failed {
+                    Level::Error
+                } else {
+                    Level::Info
+                }
+            }
             Self::AdminLoginSucceeded { .. } => Level::Info,
             Self::AdminLoginFailed { .. } | Self::AdminLoginLimited { .. } => Level::Warn,
             Self::StartupFailed { .. } => Level::Error,

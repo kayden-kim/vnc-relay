@@ -91,9 +91,11 @@ where
 }
 
 fn io_error(error: std::io::Error) -> RelayError {
-    RelayError::Aborted(AbortReason::ConnectionError(RelayStreamError::classify(
-        &error,
-    )))
+    RelayError::Aborted(if RelayStreamError::is_dead_connection(&error) {
+        AbortReason::DeadConnection
+    } else {
+        AbortReason::ConnectionError(RelayStreamError::classify(&error))
+    })
 }
 
 #[cfg(test)]

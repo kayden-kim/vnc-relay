@@ -160,6 +160,15 @@ pub trait RelayStream: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Se
     /// already written; 0 for TCP.
     fn pending_write_len(&self) -> usize;
 
+    /// Drives transport liveness without consuming payload or bypassing B.
+    /// Idle maintenance registers a wake and stays Pending; TCP has no work.
+    fn poll_maintenance(
+        self: std::pin::Pin<&mut Self>,
+        _cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<std::io::Result<()>> {
+        std::task::Poll::Pending
+    }
+
     /// Drives one idempotent close action; terminal completion does not replace
     /// dropping the stream before its L permit (relay-session §6).
     fn poll_close(
@@ -179,6 +188,8 @@ pub type BoxRelayStream = Box<dyn RelayStream>;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RelayStreamError {
     Transport(crate::events::ConnectionErrorKind),
+    /// A transport liveness deadline expired, not an ordinary I/O failure.
+    DeadConnection,
 }
 
 impl RelayStreamError {
@@ -191,12 +202,21 @@ impl RelayStreamError {
     pub fn kind(self) -> crate::events::ConnectionErrorKind {
         match self {
             Self::Transport(kind) => kind,
+            Self::DeadConnection => crate::events::ConnectionErrorKind::IoError,
         }
     }
 
     /// Preserves the kind through the standard async I/O trait error channel.
     pub fn into_io_error(self) -> std::io::Error {
         std::io::Error::other(self)
+    }
+
+    /// Keeps a liveness verdict separate from the connection_error taxonomy.
+    pub fn is_dead_connection(error: &std::io::Error) -> bool {
+        error
+            .get_ref()
+            .and_then(|inner| inner.downcast_ref::<Self>())
+            == Some(&Self::DeadConnection)
     }
 
     /// Reads adapter-provided kinds; untyped socket errors are io_error.
@@ -212,7 +232,10 @@ impl RelayStreamError {
 
 impl fmt::Display for RelayStreamError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(self.kind().as_str())
+        match self {
+            Self::DeadConnection => f.write_str("dead_connection"),
+            Self::Transport(kind) => f.write_str(kind.as_str()),
+        }
     }
 }
 
@@ -269,6 +292,18 @@ pub trait RelayIdSource: Send + Sync {
 /// No runtime randomness, failure path, or issued-ID set (relay-session §3.3).
 pub trait SessionIdSource: Send + Sync {
     fn session_id(&self, counter: u128) -> vnc_relay_domain::session::SessionId;
+}
+
+/// Accepts a single-session cleanup command without borrowing relay streams.
+pub trait RelaySessionControl: Send + Sync {
+    fn request_terminate(
+        &self,
+        session_id: &str,
+        account: vnc_relay_domain::account::AccountName,
+        peer: vnc_relay_domain::peer_ip::PeerIp,
+        clock: &dyn Clock,
+        events: &dyn EventSink,
+    ) -> Option<crate::management::terminate::TerminationTicket>;
 }
 
 /// Provides a snapshot of relay runtime state for management queries.

@@ -8,6 +8,7 @@
 pub mod login;
 pub mod query;
 pub mod session;
+pub mod terminate;
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};

@@ -24,7 +24,7 @@ use crate::ports::{Clock, RelayCloseAction, RelayLifecycle, RelayStream, RelaySt
     clippy::too_many_arguments,
     reason = "the session owner supplies borrowed resources and immutable relay limits"
 )]
-pub(super) async fn run_session(
+pub(super) async fn run_session_controlled(
     viewer: &mut dyn RelayStream,
     other: &mut dyn RelayStream,
     viewer_trailing: Vec<u8>,
@@ -34,7 +34,8 @@ pub(super) async fn run_session(
     mut lifecycle: watch::Receiver<RelayLifecycle>,
     buffer_bytes: usize,
     close_timeout: Duration,
-    on_update: impl Fn(&Session),
+    mut admin_close: watch::Receiver<Option<Duration>>,
+    on_update: impl Fn(&Session, Option<ConnectionErrorKind>),
 ) -> Result<Option<ConnectionErrorKind>, SessionError> {
     let mut directions = [
         BufferedDirection::new(viewer_trailing, buffer_bytes),
@@ -49,6 +50,7 @@ pub(super) async fn run_session(
     let mut terminal = [false; 2];
     let mut terminal_deadline = None;
     let mut watch_closed = false;
+    let mut command_closed = false;
     let mut timer_now = Duration::ZERO;
     let mut next = 0;
     let mut operations = 0;
@@ -57,6 +59,12 @@ pub(super) async fn run_session(
     loop {
         let state = *lifecycle.borrow_and_update();
         let now = clock.monotonic().max(timer_now);
+        let admin_started = *admin_close.borrow_and_update();
+        if let Some(accepted_at) = admin_started
+            && session.begin_admin_close(accepted_at)?
+        {
+            on_update(session, error_kind);
+        }
         let grace_deadline = match state {
             RelayLifecycle::Grace { deadline } => Some(deadline),
             RelayLifecycle::Running | RelayLifecycle::Force => None,
@@ -64,13 +72,17 @@ pub(super) async fn run_session(
         let eof_deadline = session
             .first_eof()
             .map(|(_, at)| at.saturating_add(close_timeout));
-        if eof_deadline.is_some_and(|end| now >= end) && session.expire_close(now, close_timeout)? {
-            on_update(session);
+        let admin_deadline = admin_started.map(|at| at.saturating_add(close_timeout));
+        let cleanup_deadline = eof_deadline.or(admin_deadline);
+        if cleanup_deadline.is_some_and(|end| now >= end)
+            && session.expire_close(now, close_timeout)?
+        {
+            on_update(session, error_kind);
         }
 
         if state == RelayLifecycle::Force || grace_deadline.is_some_and(|end| now >= end) {
             if session.force_server_shutdown()? {
-                on_update(session);
+                on_update(session, error_kind);
             }
             // Force never waits for a close handshake or a blocked shutdown.
             close_once(
@@ -88,9 +100,9 @@ pub(super) async fn run_session(
             || directions.iter().all(|direction| direction.complete);
         if closing && terminal_deadline.is_none() {
             terminal_deadline =
-                Some(eof_deadline.unwrap_or_else(|| now.saturating_add(close_timeout)));
+                Some(cleanup_deadline.unwrap_or_else(|| now.saturating_add(close_timeout)));
         }
-        let close_deadline = eof_deadline.or(terminal_deadline);
+        let close_deadline = cleanup_deadline.or(terminal_deadline);
         let expired = close_deadline.is_some_and(|end| now >= end);
         if closing && (expired || terminal == [true; 2]) {
             if expired {
@@ -110,7 +122,7 @@ pub(super) async fn run_session(
                     || matches!(latest, RelayLifecycle::Grace { deadline } if clock.monotonic().max(timer_now) >= deadline)
                 {
                     if session.force_server_shutdown()? {
-                        on_update(session);
+                        on_update(session, error_kind);
                     }
                     close_once(
                         viewer,
@@ -134,6 +146,7 @@ pub(super) async fn run_session(
             // Both futures survive every Pending poll. Dropping `changed` only
             // after an event is cancellation-safe and cannot lose a transition.
             let mut changed = pin!(lifecycle.changed());
+            let mut command_changed = pin!(admin_close.changed());
             let mut timeout = pin!(async {
                 match deadline {
                     Some(end) => tokio::time::sleep(end.saturating_sub(now)).await,
@@ -141,11 +154,20 @@ pub(super) async fn run_session(
                 }
             });
             poll_fn(|cx| {
+                if !command_closed && command_changed.as_mut().poll(cx).is_ready() {
+                    return Poll::Ready(Wake::AdminCommand);
+                }
                 if !watch_closed && changed.as_mut().poll(cx).is_ready() {
                     return Poll::Ready(Wake::Lifecycle);
                 }
                 if timeout.as_mut().poll(cx).is_ready() {
                     return Poll::Ready(Wake::Deadline);
+                }
+                if is_ws
+                    && !closing
+                    && let Poll::Ready(Err(error)) = Pin::new(&mut *viewer).poll_maintenance(cx)
+                {
+                    return Poll::Ready(Wake::Direction(0, Step::input_error(&error)));
                 }
                 // Drive already-queued WS controls even when neither payload
                 // direction can touch the viewer. This never consumes input.
@@ -154,14 +176,25 @@ pub(super) async fn run_session(
                     && !terminal[0]
                     && let Poll::Ready(Err(error)) = Pin::new(&mut *viewer).poll_flush(cx)
                 {
-                    return Poll::Ready(Wake::Direction(
-                        1,
-                        Step::OutputError(RelayStreamError::classify(&error)),
-                    ));
+                    return Poll::Ready(Wake::Direction(1, Step::output_error(&error)));
                 }
                 for index in [next, 1 - next] {
                     if closing {
                         if terminal[index] {
+                            continue;
+                        }
+                        // An administrator stops new messages, not the tail of
+                        // a frame whose header already reached the WS peer.
+                        if index == 0
+                            && is_ws
+                            && session.close_cause() == Some(CloseCause::AdminTerminated)
+                            && viewer.pending_write_len() > 0
+                            && directions[1].start < directions[1].end
+                        {
+                            if let Poll::Ready(step) = directions[1].poll_started_frame(cx, viewer)
+                            {
+                                return Poll::Ready(Wake::Direction(1, step));
+                            }
                             continue;
                         }
                         let stream: &mut dyn RelayStream = if index == 0 {
@@ -169,10 +202,10 @@ pub(super) async fn run_session(
                         } else {
                             &mut *other
                         };
-                        if Pin::new(stream)
-                            .poll_close(cx, close_action(session, error_kind, is_ws))
-                            .is_ready()
-                        {
+                        let Some(action) = close_action(session, error_kind, is_ws) else {
+                            return Poll::Ready(Wake::Terminal(index));
+                        };
+                        if Pin::new(stream).poll_close(cx, action).is_ready() {
                             return Poll::Ready(Wake::Terminal(index));
                         }
                     } else {
@@ -203,6 +236,9 @@ pub(super) async fn run_session(
             .await
         };
         match event {
+            Wake::AdminCommand => {
+                command_closed = admin_close.has_changed().is_err();
+            }
             Wake::Lifecycle => {
                 watch_closed = lifecycle.has_changed().is_err();
             }
@@ -230,11 +266,11 @@ pub(super) async fn run_session(
                     Step::Read => {}
                     Step::Written(count) => {
                         session.record_write(direction, count as u64)?;
-                        on_update(session);
+                        on_update(session, error_kind);
                     }
                     Step::Eof => {
                         session.observe_eof(input, clock.monotonic().max(timer_now))?;
-                        on_update(session);
+                        on_update(session, error_kind);
                     }
                     Step::WriteClosed => {
                         if is_ws && index == 1 {
@@ -242,11 +278,21 @@ pub(super) async fn run_session(
                             terminal[0] = true;
                         }
                         session.complete_direction(direction)?;
-                        on_update(session);
+                        on_update(session, error_kind);
                     }
                     Step::CloseSent => {
                         ws_close_sent = true;
                         terminal[0] = true;
+                    }
+                    Step::InputDead | Step::OutputDead => {
+                        let side = if matches!(step, Step::InputDead) {
+                            input
+                        } else {
+                            output
+                        };
+                        if session.dead_connection(side)? {
+                            on_update(session, error_kind);
+                        }
                     }
                     Step::InputError(kind) | Step::OutputError(kind) => {
                         let side = if matches!(step, Step::InputError(_)) {
@@ -256,7 +302,7 @@ pub(super) async fn run_session(
                         };
                         if session.io_error(direction, side)? {
                             error_kind = Some(kind);
-                            on_update(session);
+                            on_update(session, error_kind);
                         }
                     }
                 }
@@ -323,9 +369,7 @@ impl BufferedDirection {
             return match Pin::new(output).poll_write(cx, &self.storage[self.start..self.end]) {
                 Poll::Pending => Poll::Pending,
                 Poll::Ready(Ok(0)) => Poll::Ready(Step::OutputError(ConnectionErrorKind::IoError)),
-                Poll::Ready(Err(error)) => {
-                    Poll::Ready(Step::OutputError(RelayStreamError::classify(&error)))
-                }
+                Poll::Ready(Err(error)) => Poll::Ready(Step::output_error(&error)),
                 Poll::Ready(Ok(count)) => {
                     self.start += count;
                     Poll::Ready(Step::Written(count))
@@ -335,9 +379,7 @@ impl BufferedDirection {
         if self.eof {
             return match Pin::new(output).poll_close(cx, RelayCloseAction::WriteHalf) {
                 Poll::Pending => Poll::Pending,
-                Poll::Ready(Err(error)) => {
-                    Poll::Ready(Step::OutputError(RelayStreamError::classify(&error)))
-                }
+                Poll::Ready(Err(error)) => Poll::Ready(Step::output_error(&error)),
                 Poll::Ready(Ok(())) => {
                     self.complete = true;
                     Poll::Ready(Step::WriteClosed)
@@ -349,9 +391,7 @@ impl BufferedDirection {
         let mut buffer = ReadBuf::new(&mut self.storage);
         match Pin::new(input).poll_read(cx, &mut buffer) {
             Poll::Pending => Poll::Pending,
-            Poll::Ready(Err(error)) => {
-                Poll::Ready(Step::InputError(RelayStreamError::classify(&error)))
-            }
+            Poll::Ready(Err(error)) => Poll::Ready(Step::input_error(&error)),
             Poll::Ready(Ok(())) => {
                 self.end = buffer.filled().len();
                 if self.end == 0 {
@@ -360,6 +400,27 @@ impl BufferedDirection {
                 } else {
                     Poll::Ready(Step::Read)
                 }
+            }
+        }
+    }
+
+    /// Writes only the remaining payload of an already-started WS frame.
+    /// The caller proves there is a frame and buffered data; no input is read.
+    fn poll_started_frame(&mut self, cx: &mut Context<'_>, ws: &mut dyn RelayStream) -> Poll<Step> {
+        let count = (self.end - self.start).min(ws.pending_write_len());
+        match Pin::new(ws).poll_write(cx, &self.storage[self.start..self.start + count]) {
+            Poll::Pending => Poll::Pending,
+            Poll::Ready(Ok(0)) => {
+                self.start = self.end;
+                Poll::Ready(Step::OutputError(ConnectionErrorKind::IoError))
+            }
+            Poll::Ready(Err(error)) => {
+                self.start = self.end;
+                Poll::Ready(Step::output_error(&error))
+            }
+            Poll::Ready(Ok(count)) => {
+                self.start += count;
+                Poll::Ready(Step::Written(count))
             }
         }
     }
@@ -378,20 +439,7 @@ impl BufferedDirection {
         // 1. Finish in-flight frame if any
         let pending = ws.pending_write_len();
         if pending > 0 && self.start < self.end {
-            let to_write = (self.end - self.start).min(pending);
-            return match Pin::new(ws)
-                .poll_write(cx, &self.storage[self.start..self.start + to_write])
-            {
-                Poll::Pending => Poll::Pending,
-                Poll::Ready(Ok(0)) => Poll::Ready(Step::OutputError(ConnectionErrorKind::IoError)),
-                Poll::Ready(Err(error)) => {
-                    Poll::Ready(Step::OutputError(RelayStreamError::classify(&error)))
-                }
-                Poll::Ready(Ok(count)) => {
-                    self.start += count;
-                    Poll::Ready(Step::Written(count))
-                }
-            };
+            return self.poll_started_frame(cx, ws);
         }
         // Discard any remaining buffered bytes, uncounted, and start no new message
         self.start = self.end;
@@ -404,9 +452,7 @@ impl BufferedDirection {
             }
             return match Pin::new(ws).poll_close(cx, RelayCloseAction::PeerEof) {
                 Poll::Pending => Poll::Pending,
-                Poll::Ready(Err(error)) => {
-                    Poll::Ready(Step::OutputError(RelayStreamError::classify(&error)))
-                }
+                Poll::Ready(Err(error)) => Poll::Ready(Step::output_error(&error)),
                 Poll::Ready(Ok(())) => Poll::Ready(Step::CloseSent),
             };
         }
@@ -416,9 +462,7 @@ impl BufferedDirection {
             let mut read_buf = ReadBuf::new(&mut self.storage);
             return match Pin::new(tcp).poll_read(cx, &mut read_buf) {
                 Poll::Pending => Poll::Pending,
-                Poll::Ready(Err(error)) => {
-                    Poll::Ready(Step::InputError(RelayStreamError::classify(&error)))
-                }
+                Poll::Ready(Err(error)) => Poll::Ready(Step::input_error(&error)),
                 Poll::Ready(Ok(())) => {
                     if read_buf.filled().is_empty() {
                         self.eof = true;
@@ -444,10 +488,31 @@ enum Step {
     CloseSent,
     InputError(ConnectionErrorKind),
     OutputError(ConnectionErrorKind),
+    InputDead,
+    OutputDead,
+}
+
+impl Step {
+    fn input_error(error: &std::io::Error) -> Self {
+        if RelayStreamError::is_dead_connection(error) {
+            Self::InputDead
+        } else {
+            Self::InputError(RelayStreamError::classify(error))
+        }
+    }
+
+    fn output_error(error: &std::io::Error) -> Self {
+        if RelayStreamError::is_dead_connection(error) {
+            Self::OutputDead
+        } else {
+            Self::OutputError(RelayStreamError::classify(error))
+        }
+    }
 }
 
 enum Wake {
     Lifecycle,
+    AdminCommand,
     Deadline,
     Direction(usize, Step),
     Terminal(usize),
@@ -457,14 +522,15 @@ fn close_action(
     session: &Session,
     error_kind: Option<ConnectionErrorKind>,
     is_ws: bool,
-) -> RelayCloseAction {
-    match session.close_cause() {
+) -> Option<RelayCloseAction> {
+    Some(match session.close_cause() {
         Some(CloseCause::ConnectionError) => {
             RelayCloseAction::StreamError(error_kind.unwrap_or(ConnectionErrorKind::IoError))
         }
         Some(CloseCause::DeadConnection) => RelayCloseAction::DeadConnection,
         Some(CloseCause::AdminTerminated) => RelayCloseAction::AdminTerminated,
         Some(CloseCause::ServerShutdown) => RelayCloseAction::ServerShutdown,
+        Some(CloseCause::InternalError) => return None,
         None | Some(CloseCause::PeerEof | CloseCause::CloseTimeout) => {
             if is_ws
                 && session
@@ -476,15 +542,16 @@ fn close_action(
                 RelayCloseAction::PeerEof
             }
         }
-    }
+    })
 }
 
 async fn close_once(
     viewer: &mut dyn RelayStream,
     other: &mut dyn RelayStream,
-    action: RelayCloseAction,
+    action: Option<RelayCloseAction>,
     ws_close_sent: &mut bool,
 ) {
+    let Some(action) = action else { return };
     poll_fn(|cx| {
         if !*ws_close_sent {
             let is_ws = viewer.transport().is_websocket();
@@ -512,6 +579,39 @@ mod tests {
     use vnc_relay_domain::session::{SessionId, SessionState, ViewerTransport};
 
     use super::*;
+
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "test helper preserves the uncommanded engine fixture"
+    )]
+    async fn run_session(
+        viewer: &mut dyn RelayStream,
+        other: &mut dyn RelayStream,
+        viewer_trailing: Vec<u8>,
+        other_trailing: Vec<u8>,
+        session: &mut Session,
+        clock: &dyn Clock,
+        lifecycle: watch::Receiver<RelayLifecycle>,
+        buffer_bytes: usize,
+        close_timeout: Duration,
+        on_update: impl Fn(&Session),
+    ) -> Result<Option<ConnectionErrorKind>, SessionError> {
+        let (_command, receiver) = watch::channel(None);
+        run_session_controlled(
+            viewer,
+            other,
+            viewer_trailing,
+            other_trailing,
+            session,
+            clock,
+            lifecycle,
+            buffer_bytes,
+            close_timeout,
+            receiver,
+            |session, _| on_update(session),
+        )
+        .await
+    }
 
     const E: Duration = Duration::from_secs(10);
 
@@ -576,6 +676,7 @@ mod tests {
         flush_error: Option<ConnectionErrorKind>,
         half: CloseBehavior,
         terminal: CloseBehavior,
+        require_frame_finished: bool,
         actions: Vec<RelayCloseAction>,
         half_closed: bool,
         waker: Option<Waker>,
@@ -609,6 +710,7 @@ mod tests {
                 flush_error: None,
                 half: CloseBehavior::Ready,
                 terminal: CloseBehavior::Ready,
+                require_frame_finished: false,
                 actions: Vec::new(),
                 half_closed: false,
                 waker: None,
@@ -773,6 +875,9 @@ mod tests {
             let mut state = self.0.lock().expect("stream state");
             state.waker = Some(cx.waker().clone());
             state.actions.push(action);
+            if state.require_frame_finished && state.pending_write > 0 {
+                return Poll::Pending;
+            }
             let behavior = if action == RelayCloseAction::WriteHalf {
                 if let Some((clock, by)) = state.jump_on_half.take() {
                     clock.jump(by);
@@ -2451,5 +2556,167 @@ mod tests {
         }
         assert_eq!(session.close_cause(), Some(CloseCause::CloseTimeout));
         assert_eq!(session.close_side(), Some(Side::Viewer));
+    }
+
+    /// Covers administrator cleanup at E-1 ms and exact E, including no new
+    /// payload reads and a cleanup-only transport error that does not fake failure.
+    /// spec: relay.md:RLY-020 partial
+    /// spec: management.md:MGT-009 partial
+    #[tokio::test(start_paused = true)]
+    async fn admin_cleanup_uses_acceptance_deadline_and_stops_payload_before_closing() {
+        for behavior in [
+            CloseBehavior::Ready,
+            CloseBehavior::Error,
+            CloseBehavior::Pending,
+        ] {
+            let clock = TestClock::new();
+            let mut session = model(Mode::Mode1);
+            let (_lifecycle, receiver) = watch::channel(RelayLifecycle::Running);
+            let (_command, command) = watch::channel(Some(Duration::ZERO));
+            let (mut viewer, viewer_control) = stream(b"must-not-read", false);
+            let (mut other, other_control) = stream(b"must-not-read-either", false);
+            viewer_control.change(|state| state.terminal = behavior);
+            other_control.change(|state| state.terminal = behavior);
+            {
+                let mut relay = pin!(run_session_controlled(
+                    &mut viewer,
+                    &mut other,
+                    Vec::new(),
+                    Vec::new(),
+                    &mut session,
+                    clock.as_ref(),
+                    receiver,
+                    8,
+                    E,
+                    command,
+                    |_, _| {},
+                ));
+                if matches!(behavior, CloseBehavior::Pending) {
+                    poll_fn(|cx| {
+                        assert!(relay.as_mut().poll(cx).is_pending());
+                        Poll::Ready(())
+                    })
+                    .await;
+                    advance(E - Duration::from_millis(1)).await;
+                    poll_fn(|cx| {
+                        assert!(relay.as_mut().poll(cx).is_pending());
+                        Poll::Ready(())
+                    })
+                    .await;
+                    advance(Duration::from_millis(1)).await;
+                }
+                assert_eq!(
+                    relay.await.unwrap_or_else(|e| panic!("admin cleanup: {e}")),
+                    None
+                );
+            }
+            let pending = matches!(behavior, CloseBehavior::Pending);
+            assert_eq!(
+                session.close_cause(),
+                Some(if pending {
+                    CloseCause::CloseTimeout
+                } else {
+                    CloseCause::AdminTerminated
+                })
+            );
+            assert_eq!(session.close_side(), None);
+            assert_eq!(session.bytes(Direction::ViewerToTarget), 0);
+            assert_eq!(session.bytes(Direction::TargetToViewer), 0);
+            assert_eq!(
+                viewer_control
+                    .0
+                    .lock()
+                    .unwrap_or_else(|e| panic!("viewer: {e}"))
+                    .read_calls,
+                0
+            );
+            assert_eq!(
+                other_control
+                    .0
+                    .lock()
+                    .unwrap_or_else(|e| panic!("other: {e}"))
+                    .read_calls,
+                0
+            );
+            assert!(
+                viewer_control
+                    .actions()
+                    .contains(&RelayCloseAction::AdminTerminated)
+            );
+            assert!(
+                other_control
+                    .actions()
+                    .contains(&RelayCloseAction::AdminTerminated)
+            );
+        }
+    }
+
+    /// The existing adapter maps AdminTerminated to Close 4005; here the
+    /// controlled transport refuses that close until the started frame drains.
+    /// spec: management.md:MGT-009 partial
+    /// spec: relay.md:RLY-020 partial
+    #[tokio::test(start_paused = true)]
+    async fn admin_finishes_only_started_ws_frame_before_terminal_close_without_waiting_for_e() {
+        let clock = TestClock::new();
+        let mut session = model(Mode::Mode1);
+        session
+            .record_write(Direction::TargetToViewer, 2)
+            .unwrap_or_else(|e| panic!("prior write: {e}"));
+        let (_lifecycle, receiver) = watch::channel(RelayLifecycle::Running);
+        let (_command, command) = watch::channel(Some(Duration::ZERO));
+        let (mut viewer, viewer_control) = stream(b"unread", false);
+        let (mut other, other_control) = stream(b"no-new-read", false);
+        viewer_control.change(|state| {
+            state.transport = ViewerTransport::Ws;
+            state.pending_write = 4;
+            state.output.extend_from_slice(b"he");
+            state.write_chunk = 1;
+            state.require_frame_finished = true;
+        });
+        run_session_controlled(
+            &mut viewer,
+            &mut other,
+            Vec::new(),
+            b"aderNEW".to_vec(),
+            &mut session,
+            clock.as_ref(),
+            receiver,
+            8,
+            E,
+            command,
+            |_, _| {},
+        )
+        .await
+        .unwrap_or_else(|e| panic!("admin frame cleanup: {e}"));
+        assert_eq!(viewer_control.output(), b"header");
+        assert_eq!(session.bytes(Direction::TargetToViewer), 6);
+        assert_eq!(session.bytes(Direction::ViewerToTarget), 0);
+        assert_eq!(session.close_cause(), Some(CloseCause::AdminTerminated));
+        assert_eq!(clock.monotonic(), Duration::ZERO);
+        assert_eq!(
+            viewer_control.actions(),
+            vec![RelayCloseAction::AdminTerminated]
+        );
+        assert!(
+            other_control
+                .actions()
+                .contains(&RelayCloseAction::AdminTerminated)
+        );
+        assert_eq!(
+            viewer_control
+                .0
+                .lock()
+                .unwrap_or_else(|e| panic!("{e}"))
+                .read_calls,
+            0
+        );
+        assert_eq!(
+            other_control
+                .0
+                .lock()
+                .unwrap_or_else(|e| panic!("{e}"))
+                .read_calls,
+            0
+        );
     }
 }

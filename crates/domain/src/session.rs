@@ -168,6 +168,8 @@ pub enum CloseCause {
     CloseTimeout,
     /// G expired or a second shutdown request forced cleanup.
     ServerShutdown,
+    /// The owner disappeared while the service was still running (Q94).
+    InternalError,
 }
 
 impl CloseCause {
@@ -180,6 +182,7 @@ impl CloseCause {
             Self::DeadConnection => "dead_connection",
             Self::CloseTimeout => "close_timeout",
             Self::ServerShutdown => "server_shutdown",
+            Self::InternalError => "internal_error",
         }
     }
 }
@@ -434,6 +437,30 @@ impl Session {
         Ok(true)
     }
 
+    /// Finalizes resources already reclaimed after the session owner vanished.
+    /// Keep a prior cause, including provisional EOF; otherwise Q94 chooses
+    /// internal_error while Running and server_shutdown during shutdown.
+    pub fn finish_after_owner_loss(
+        &mut self,
+        shutting_down: bool,
+        ended_at: SystemTime,
+        ended_mono: Duration,
+    ) -> Result<ClosedSession, SessionError> {
+        self.ensure_unfinished()?;
+        if self.close_cause.is_none() {
+            self.close_cause = Some(if let Some((side, _)) = self.first_eof {
+                self.close_side = Some(side);
+                CloseCause::PeerEof
+            } else if shutting_down {
+                CloseCause::ServerShutdown
+            } else {
+                CloseCause::InternalError
+            });
+        }
+        self.state = SessionState::Closing;
+        self.finish(ended_at, ended_mono)
+    }
+
     /// Confirms final socket/buffer/permit cleanup and produces the only summary.
     /// The caller must finish cleanup before calling. Cleanup-only errors do not
     /// enter `io_error` and cannot change a selected cause. Wall time is clamped
@@ -682,6 +709,7 @@ mod tests {
             (CloseCause::DeadConnection, "dead_connection"),
             (CloseCause::CloseTimeout, "close_timeout"),
             (CloseCause::ServerShutdown, "server_shutdown"),
+            (CloseCause::InternalError, "internal_error"),
         ] {
             assert_eq!(cause.as_str(), expected);
         }

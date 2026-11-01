@@ -125,6 +125,15 @@ mod tests {
             CloseCause::ServerShutdown => {
                 session.force_server_shutdown().unwrap();
             }
+            CloseCause::InternalError => {
+                return session
+                    .finish_after_owner_loss(
+                        false,
+                        SystemTime::UNIX_EPOCH + Duration::from_secs(ended_secs),
+                        Duration::from_secs(20),
+                    )
+                    .unwrap_or_else(|e| panic!("owner loss: {e}"));
+            }
         }
         session
             .finish(
@@ -269,7 +278,7 @@ mod tests {
     /// spec: management.md:MGT-023 partial
     #[test]
     fn retains_final_causes_metadata_times_and_directional_counters() {
-        let mut list = RecentClosedList::new(6);
+        let mut list = RecentClosedList::new(7);
         let causes = [
             CloseCause::PeerEof,
             CloseCause::ConnectionError,
@@ -277,11 +286,12 @@ mod tests {
             CloseCause::DeadConnection,
             CloseCause::CloseTimeout,
             CloseCause::ServerShutdown,
+            CloseCause::InternalError,
         ];
-        for (seed, cause) in (0..6u8).zip(causes) {
+        for (seed, cause) in (0..7u8).zip(causes) {
             let _ = list.push(closed(seed, 20, cause));
         }
-        assert_eq!(list.len(), 6);
+        assert_eq!(list.len(), 7);
         for (entry, cause) in list.iter().zip(causes.into_iter().rev()) {
             assert_eq!(entry.close_cause(), cause);
             assert_eq!(entry.mode(), Mode::Mode2);

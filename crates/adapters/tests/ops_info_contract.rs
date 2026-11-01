@@ -1179,6 +1179,7 @@ fn writes_session_close_cause_levels_and_canonical_optional_fields() {
                 false,
             ),
             (CloseCause::ServerShutdown, "server_shutdown", "warn", false),
+            (CloseCause::InternalError, "internal_error", "warn", false),
         ] {
             let side = if mode == Mode::Mode1 {
                 Side::Target
@@ -1387,5 +1388,49 @@ fn preserves_typed_websocket_error_kinds_in_all_connection_error_events() {
             assert!(!object.contains_key("admin_account"));
             assert!(!object.contains_key("relay_id"));
         }
+    }
+}
+
+/// spec: operations.md:OPS-011 partial
+#[test]
+fn administrator_termination_outcomes_use_contract_levels_and_omit_absent_identifiers() {
+    use vnc_relay_app::events::AdminTerminateResult;
+    use vnc_relay_domain::account::AccountName;
+
+    let account = AccountName::parse("alice").unwrap_or_else(|e| panic!("account: {e}"));
+    let peer = PeerIp::new(std::net::Ipv4Addr::LOCALHOST.into());
+    let id = SessionId::from_block([11; 16]);
+    for result in [
+        AdminTerminateResult::Terminated,
+        AdminTerminateResult::AlreadyClosed,
+        AdminTerminateResult::NotFound,
+        AdminTerminateResult::Failed,
+    ] {
+        let found = result != AdminTerminateResult::NotFound;
+        let event = Event::AdminTerminate {
+            admin_account: account.clone(),
+            peer_ip: peer,
+            session_id: found.then(|| id.clone()),
+            result,
+        };
+        let line = format_line(&event, UNIX_EPOCH);
+        let object = objects(&line).remove(0);
+        assert_eq!(text(&object, "event"), "admin_terminate");
+        assert_eq!(text(&object, "admin_account"), "alice");
+        assert_eq!(text(&object, "peer_ip"), "127.0.0.1");
+        assert_eq!(text(&object, "result"), result.as_str());
+        assert_eq!(
+            text(&object, "level"),
+            if result == AdminTerminateResult::Failed {
+                "error"
+            } else {
+                "info"
+            }
+        );
+        assert_eq!(object.contains_key("session_id"), found);
+        assert!(object.values().all(|value| !value.is_null()));
+        assert!(!object.contains_key("relay_id"));
+        assert!(!object.contains_key("csrf_token"));
+        assert!(!object.contains_key("cookie"));
     }
 }

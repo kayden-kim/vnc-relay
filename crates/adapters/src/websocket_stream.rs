@@ -5,6 +5,7 @@
 //! or whole-message buffering.
 
 pub mod frame;
+mod keepalive;
 #[cfg(test)]
 mod tests;
 
@@ -15,12 +16,14 @@ use std::task::{Context, Poll};
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 use vnc_relay_app::events::ConnectionErrorKind;
 use vnc_relay_app::ports::{RelayCloseAction, RelayStream, RelayStreamError};
+use vnc_relay_app::settings::KeepaliveSettings;
 use vnc_relay_domain::session::ViewerTransport;
 
 use self::frame::{
     ControlOp, DecodeState, FrameDecoder, MAX_NON_DATA_FRAMES_PER_POLL, OutboundDataFrame,
     PendingClose, PendingPong, encode_close, encode_data_header,
 };
+use self::keepalive::Keepalive;
 
 /// An adapter wrapping a stream with streaming RFC 6455 WebSocket framing,
 /// implementing the common `RelayStream` port.
@@ -40,6 +43,7 @@ pub struct WsRelayStream<S> {
     terminal_close: bool,
     raw_terminal_disposal: bool,
     transport_eof: bool,
+    keepalive: Keepalive,
 }
 
 impl<S> WsRelayStream<S> {
@@ -50,12 +54,14 @@ impl<S> WsRelayStream<S> {
     /// - `max_message_size`: M (maximum logical message length).
     /// - `budget_limit`: B (maximum holding budget per direction).
     /// - `transport`: `ViewerTransport::Ws` or `ViewerTransport::Wss`.
+    /// - `keepalive`: validated Kw durations (each 5..=300 seconds, config-v2).
     pub fn new(
         io: S,
         upgrade_suffix: Vec<u8>,
         max_message_size: usize,
         budget_limit: usize,
         transport: ViewerTransport,
+        keepalive: KeepaliveSettings,
     ) -> Self {
         let suffix = if upgrade_suffix.is_empty() {
             None
@@ -78,6 +84,7 @@ impl<S> WsRelayStream<S> {
             terminal_close: false,
             raw_terminal_disposal: false,
             transport_eof: false,
+            keepalive: Keepalive::new(keepalive),
         }
     }
 
@@ -125,7 +132,11 @@ impl<S> WsRelayStream<S> {
             .pending_close
             .as_ref()
             .map_or(0, |c| (c.len as usize).saturating_sub(c.written as usize));
-        header_held + pong_held + active_pong_held + close_held
+        let ping_held = self
+            .keepalive
+            .pending_ping
+            .map_or(0, |written| 2 - usize::from(written));
+        header_held + pong_held + active_pong_held + close_held + ping_held
     }
 
     /// Reads up to `buf.len()` bytes from `upgrade_suffix` first; once exhausted,
@@ -173,7 +184,12 @@ impl<S> WsRelayStream<S> {
     where
         S: AsyncWrite + Unpin,
     {
-        if self.outbound_frame.is_some() {
+        if self.outbound_frame.is_some()
+            || self
+                .keepalive
+                .pending_ping
+                .is_some_and(|written| written > 0)
+        {
             return Poll::Ready(Ok(()));
         }
         loop {
@@ -209,6 +225,59 @@ impl<S> WsRelayStream<S> {
             }
         }
         Poll::Ready(Ok(()))
+    }
+
+    /// Advances Kw without reading ahead of the app's bounded payload buffer.
+    fn poll_keepalive(&mut self, cx: &mut Context<'_>) -> Poll<io::Result<()>>
+    where
+        S: AsyncWrite + Unpin,
+    {
+        if self.keepalive.expired {
+            return Poll::Ready(Err(RelayStreamError::DeadConnection.into_io_error()));
+        }
+        let closing = self.close_sent || self.pending_close.is_some() || self.decoder.peer_closed;
+        if closing
+            && !self
+                .keepalive
+                .pending_ping
+                .is_some_and(|written| written > 0)
+        {
+            return Poll::Pending;
+        }
+        if !closing {
+            self.keepalive.poll(cx);
+            if self.keepalive.expired {
+                return Poll::Ready(Err(RelayStreamError::DeadConnection.into_io_error()));
+            }
+        }
+        if self.outbound_frame.is_some() {
+            return Poll::Pending;
+        }
+        match self.poll_flush_pending_pong(cx) {
+            Poll::Ready(Ok(())) => {}
+            result => return result,
+        }
+        if let Some(mut written) = self.keepalive.pending_ping {
+            while written < 2 {
+                match Pin::new(&mut self.io).poll_write(cx, &[0x89, 0][usize::from(written)..]) {
+                    Poll::Ready(Ok(0)) => return Poll::Ready(Err(io::ErrorKind::WriteZero.into())),
+                    Poll::Ready(Ok(count)) => {
+                        written += count as u8;
+                        self.keepalive.pending_ping = Some(written);
+                    }
+                    Poll::Ready(Err(error)) => return Poll::Ready(Err(error)),
+                    Poll::Pending => return Poll::Pending,
+                }
+            }
+            match Pin::new(&mut self.io).poll_flush(cx) {
+                Poll::Ready(Ok(())) => self.keepalive.sent(tokio::time::Instant::now()),
+                result => return result,
+            }
+            if !closing {
+                self.keepalive.poll(cx);
+            }
+        }
+        Poll::Pending
     }
 
     /// Flushes any pending Close control frame to the transport.
@@ -312,6 +381,9 @@ impl<S: AsyncRead + AsyncWrite + Unpin + Send> AsyncRead for WsRelayStream<S> {
     ) -> Poll<io::Result<()>> {
         let this = self.get_mut();
         let initial_filled = buf.filled().len();
+        if let Poll::Ready(Err(error)) = this.poll_keepalive(cx) {
+            return Poll::Ready(Err(error));
+        }
         if buf.remaining() == 0 {
             return Poll::Ready(Ok(()));
         }
@@ -456,6 +528,9 @@ impl<S: AsyncRead + AsyncWrite + Unpin + Send> AsyncRead for WsRelayStream<S> {
 
                     // Control frame is complete
                     let op = this.decoder.finish_control_frame()?;
+                    if op == Some(ControlOp::Pong) {
+                        this.keepalive.pong();
+                    }
 
                     if op == Some(ControlOp::Close) {
                         return Poll::Ready(Ok(()));
@@ -530,6 +605,16 @@ impl<S: AsyncRead + AsyncWrite + Unpin + Send> AsyncWrite for WsRelayStream<S> {
         buf: &[u8],
     ) -> Poll<io::Result<usize>> {
         let this = self.get_mut();
+        if let Poll::Ready(Err(error)) = this.poll_keepalive(cx) {
+            return Poll::Ready(Err(error));
+        }
+        if this
+            .keepalive
+            .pending_ping
+            .is_some_and(|written| written > 0)
+        {
+            return Poll::Pending;
+        }
 
         // Assert tx holding bounds
         debug_assert!(
@@ -633,6 +718,16 @@ impl<S: AsyncRead + AsyncWrite + Unpin + Send> AsyncWrite for WsRelayStream<S> {
 
     fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         let this = self.get_mut();
+        if let Poll::Ready(Err(error)) = this.poll_keepalive(cx) {
+            return Poll::Ready(Err(error));
+        }
+        if this
+            .keepalive
+            .pending_ping
+            .is_some_and(|written| written > 0)
+        {
+            return Poll::Pending;
+        }
         if this.outbound_frame.is_none() {
             match this.poll_flush_pending_pong(cx) {
                 Poll::Ready(Ok(())) => {}
@@ -663,12 +758,38 @@ impl<S: AsyncRead + AsyncWrite + Unpin + Send> RelayStream for WsRelayStream<S> 
         self.pending_write_len()
     }
 
+    fn poll_maintenance(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        self.get_mut().poll_keepalive(cx)
+    }
+
     fn poll_close(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
         action: RelayCloseAction,
     ) -> Poll<io::Result<()>> {
         let this = self.get_mut();
+        // Our own expired Pong deadline is an abnormal, code-less shutdown.
+        // 4006 remains reserved for a dead TCP endpoint on the other side.
+        if this.keepalive.expired {
+            return Pin::new(&mut this.io).poll_shutdown(cx);
+        }
+        // Finish any started Ping before a Close or another control frame.
+        if this
+            .keepalive
+            .pending_ping
+            .is_some_and(|written| written > 0)
+            && let Poll::Ready(Err(error)) = this.poll_keepalive(cx)
+        {
+            return Poll::Ready(Err(error));
+        }
+        if this
+            .keepalive
+            .pending_ping
+            .is_some_and(|written| written > 0)
+        {
+            return Poll::Pending;
+        }
+        this.keepalive.pending_ping = None;
 
         // Contract (Q83 / websocket-stream.md §5.1 / §9.4):
         // Close is only sent once pending_write_len() == 0; the caller must finish

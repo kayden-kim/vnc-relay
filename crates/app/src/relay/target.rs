@@ -2,10 +2,11 @@
 
 use std::future::{Future, poll_fn};
 use std::net::{IpAddr, SocketAddr};
-use std::pin::pin;
+use std::pin::{Pin, pin};
 use std::task::Poll;
 use std::time::Duration;
 
+use tokio::io::ReadBuf;
 use tokio::sync::watch;
 use vnc_relay_domain::handshake::{Mode, TargetAddress, TargetHost};
 
@@ -14,7 +15,9 @@ use super::{
     SessionPair, milliseconds,
 };
 use crate::events::{AbortReason, Event, RejectReason, Stage, TargetFailureReason};
-use crate::ports::{Clock, RelayCloseAction, RelayLifecycle, TargetConnector, TargetError};
+use crate::ports::{
+    Clock, RelayCloseAction, RelayLifecycle, RelayStreamError, TargetConnector, TargetError,
+};
 
 struct Connecting<'a, C>(&'a RelayRuntime<C>);
 
@@ -28,12 +31,13 @@ enum Failure {
     Rejected(RejectReason, Option<IpAddr>),
     Failed(TargetFailureReason, Option<IpAddr>),
     Shutdown,
+    Aborted(AbortReason),
 }
 
 pub(super) async fn dispatch<C: TargetConnector>(
     service: &RelayService,
     runtime: &RelayRuntime<C>,
-    viewer: OwnedConnection,
+    mut viewer: OwnedConnection,
     address: TargetAddress,
 ) -> Result<(), RelayDispatchError> {
     let started = service.clock.monotonic();
@@ -66,7 +70,48 @@ pub(super) async fn dispatch<C: TargetConnector>(
         return Err(RelayDispatchError::Aborted(AbortReason::ServerShutdown));
     }
     let connecting = Connecting(runtime);
-    let result = connect(service, runtime, &address, deadline).await;
+    // Kw also runs during DNS/connect. Payload read-ahead uses only the unused
+    // part of the same B and is handed to the active session without copying.
+    let mut filled = viewer.trailing.len();
+    let websocket = viewer.stream.transport().is_websocket();
+    if websocket {
+        viewer.trailing.resize(service.buffer_bytes, 0);
+    }
+    let result = {
+        let lifecycle = runtime.lifecycle();
+        let mut connecting = pin!(connect(service, runtime, &address, deadline));
+        poll_fn(|cx| {
+            if let Err(failure) = check(service.clock.as_ref(), deadline, &lifecycle) {
+                return Poll::Ready(Err(failure));
+            }
+            if websocket {
+                if let Poll::Ready(Err(error)) =
+                    Pin::new(viewer.stream.as_mut()).poll_maintenance(cx)
+                {
+                    return Poll::Ready(Err(Failure::Aborted(stream_abort(&error))));
+                }
+                if filled < viewer.trailing.len() {
+                    let mut buffer = ReadBuf::new(&mut viewer.trailing[filled..]);
+                    match Pin::new(viewer.stream.as_mut()).poll_read(cx, &mut buffer) {
+                        Poll::Ready(Err(error)) => {
+                            return Poll::Ready(Err(Failure::Aborted(stream_abort(&error))));
+                        }
+                        Poll::Ready(Ok(())) if buffer.filled().is_empty() => {
+                            return Poll::Ready(Err(Failure::Aborted(AbortReason::PeerEof)));
+                        }
+                        Poll::Ready(Ok(())) => {
+                            filled += buffer.filled().len();
+                            cx.waker().wake_by_ref();
+                        }
+                        Poll::Pending => {}
+                    }
+                }
+            }
+            connecting.as_mut().poll(cx)
+        })
+        .await
+    };
+    viewer.trailing.truncate(filled);
     drop(connecting);
     match result {
         Ok((stream, permit, target)) => {
@@ -100,6 +145,12 @@ pub(super) async fn dispatch<C: TargetConnector>(
                 Failure::Rejected(_, _) => RelayCloseAction::TargetConnectionLimit,
                 Failure::Failed(_, _) => RelayCloseAction::TargetConnectFailed,
                 Failure::Shutdown => RelayCloseAction::ServerShutdown,
+                Failure::Aborted(AbortReason::DeadConnection) => RelayCloseAction::DeadConnection,
+                Failure::Aborted(AbortReason::PeerEof) => RelayCloseAction::PeerEof,
+                Failure::Aborted(AbortReason::ConnectionError(kind)) => {
+                    RelayCloseAction::StreamError(*kind)
+                }
+                Failure::Aborted(_) => RelayCloseAction::ServerShutdown,
             };
             service.reject_connection(viewer, action, runtime).await;
             match failure {
@@ -138,8 +189,20 @@ pub(super) async fn dispatch<C: TargetConnector>(
                     );
                     Err(RelayDispatchError::Aborted(AbortReason::ServerShutdown))
                 }
+                Failure::Aborted(reason) => {
+                    service.aborted(context, Stage::TargetConnect, Mode::Mode1, reason);
+                    Err(RelayDispatchError::Aborted(reason))
+                }
             }
         }
+    }
+}
+
+fn stream_abort(error: &std::io::Error) -> AbortReason {
+    if RelayStreamError::is_dead_connection(error) {
+        AbortReason::DeadConnection
+    } else {
+        AbortReason::ConnectionError(RelayStreamError::classify(error))
     }
 }
 

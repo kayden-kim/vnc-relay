@@ -1,7 +1,5 @@
-//! The session routes of the management API: login, the session view and
-//! logout (management-api-v1 §1.2–§1.5). The checks run in the order of
-//! management-api-v1 §1.3. Other `/api/v1/` paths answer `404` for a valid
-//! session until tasks 4.4 and 4.5 add their routes.
+//! Session routes and the authenticated API boundary (management-api-v1 §1.3).
+//! Authentication and POST/DELETE CSRF precede path and method dispatch.
 
 use std::sync::Arc;
 
@@ -17,8 +15,8 @@ use vnc_relay_app::management::{AuthError, SessionView};
 use vnc_relay_domain::peer_ip::PeerIp;
 
 use super::{
-    DashboardHints, SESSION_COOKIE, Shared, clear_session_cookie, json_error, json_response,
-    method_not_allowed, session_cookie, unauthenticated, unauthorized,
+    DashboardHints, PeerAddr, SESSION_COOKIE, Shared, clear_session_cookie, json_error,
+    json_response, method_not_allowed, session_cookie, unauthenticated, unauthorized,
 };
 use crate::clock::timestamp;
 
@@ -39,20 +37,20 @@ const ACCOUNT_MESSAGE: &str =
 
 /// Answers one `/api/v1/` request. A login does not need a session. Every other
 /// request needs a valid session before its path and method are judged.
-pub(super) async fn answer(shared: &Shared, peer: PeerIp, parts: Parts, body: Body) -> Response {
+pub(super) async fn answer(shared: &Shared, peer: &PeerAddr, parts: Parts, body: Body) -> Response {
     if parts.uri.path() == SESSION_PATH && parts.method == Method::POST {
-        return login(shared, peer, &parts.headers, body).await;
+        return login(shared, peer.ip, &parts.headers, body).await;
     }
     let mut admin = match shared.auth.authorize(session_cookie(&parts.headers)) {
         Ok(admin) => admin,
         Err(error) => return refuse(error, shared.secure, &parts.headers),
     };
+    if matches!(parts.method, Method::POST | Method::DELETE)
+        && let Err(error) = shared.auth.check_csrf(&admin, csrf_header(&parts.headers))
+    {
+        return refuse(error, shared.secure, &parts.headers);
+    }
     if parts.uri.path() == SESSION_PATH {
-        if matches!(parts.method, Method::POST | Method::DELETE)
-            && let Err(error) = shared.auth.check_csrf(&admin, csrf_header(&parts.headers))
-        {
-            return refuse(error, shared.secure, &parts.headers);
-        }
         return match parts.method {
             Method::GET => get_session(shared, &mut admin, &parts.headers, body).await,
             Method::DELETE => delete_session(shared, &admin, &parts.headers, body).await,
@@ -61,6 +59,9 @@ pub(super) async fn answer(shared: &Shared, peer: PeerIp, parts: Parts, body: Bo
                 "이 경로는 GET, POST, DELETE 요청만 받는다.",
             ),
         };
+    }
+    if super::terminate_api::is_terminate_path(parts.uri.path()) {
+        return super::terminate_api::answer(shared, peer, &mut admin, parts, body).await;
     }
     super::query_api::answer(shared, &mut admin, parts, body).await
 }

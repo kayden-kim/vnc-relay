@@ -21,7 +21,7 @@ use tokio_rustls::{TlsAcceptor, TlsConnector};
 use vnc_relay_adapters::accounts_file::{Argon2Hasher, Argon2Verifier};
 use vnc_relay_adapters::clock::SystemClock;
 use vnc_relay_adapters::crypto::{RelayIdKey, SessionIdKey, SystemTokenSource};
-use vnc_relay_adapters::management_http::{DashboardHints, ManagementListener};
+use vnc_relay_adapters::management_http::{DashboardHints, ManagementListener, ManagementServices};
 use vnc_relay_adapters::net::{AcceptPolicy, AllowSource};
 use vnc_relay_adapters::target::TcpTargetConnector;
 use vnc_relay_adapters::tls;
@@ -29,8 +29,11 @@ use vnc_relay_adapters::websocket::{WsEntryPoint, WsPolicy};
 use vnc_relay_app::events::{AbortReason, ConnectionErrorKind, Event, RejectReason, Stage};
 use vnc_relay_app::management::login::dummy_hash;
 use vnc_relay_app::management::query::ManagementQueryService;
+use vnc_relay_app::management::terminate::{ManagementTerminateService, TerminationTicket};
 use vnc_relay_app::management::{AdminAuth, AdminPorts};
-use vnc_relay_app::ports::{Clock, EventSink, RelayLifecycle, RelayStateSource};
+use vnc_relay_app::ports::{
+    Clock, EventSink, RelayLifecycle, RelaySessionControl, RelayStateSource,
+};
 use vnc_relay_app::relay::{RelayRuntime, RelayRuntimeConfig, RelayService, RelaySnapshot};
 use vnc_relay_app::reload::snapshot::{RelayAllow, ReloadCell, ReloadSnapshot};
 use vnc_relay_app::settings::KeepaliveSettings;
@@ -1052,14 +1055,43 @@ async fn start_management(tls: Option<TlsAcceptor>) -> (SocketAddr, Arc<Recorder
         Arc::new(EmptyRelaySource),
         relay_budget,
         Arc::clone(&budget),
-        clock,
+        Arc::clone(&clock),
     ));
-    let listener = ManagementListener::new(listener, tls, budget, UPGRADE, auth, dashboard, query);
+    let terminate = Arc::new(ManagementTerminateService::new(
+        Arc::new(EmptyRelaySource),
+        clock,
+        Arc::clone(&log),
+    ));
+    let listener = ManagementListener::new(
+        listener,
+        tls,
+        budget,
+        UPGRADE,
+        dashboard,
+        ManagementServices {
+            auth,
+            query,
+            terminate,
+        },
+    );
     tokio::spawn(listener.run(log));
     (addr, events)
 }
 
 struct EmptyRelaySource;
+
+impl RelaySessionControl for EmptyRelaySource {
+    fn request_terminate(
+        &self,
+        _session_id: &str,
+        _account: vnc_relay_domain::account::AccountName,
+        _peer: vnc_relay_domain::peer_ip::PeerIp,
+        _clock: &dyn Clock,
+        _events: &dyn EventSink,
+    ) -> Option<TerminationTicket> {
+        None
+    }
+}
 
 impl RelayStateSource for EmptyRelaySource {
     fn snapshot(&self, clock: &dyn Clock) -> RelaySnapshot {

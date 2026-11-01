@@ -11,6 +11,7 @@ use std::task::Poll;
 use std::time::{Duration, SystemTime};
 
 use tokio::sync::watch;
+use vnc_relay_domain::account::AccountName;
 use vnc_relay_domain::budget::{BudgetPermit, ConnectionBudget};
 use vnc_relay_domain::conn_id::ConnId;
 use vnc_relay_domain::entry_point::EntryPoint;
@@ -25,10 +26,10 @@ use vnc_relay_domain::session::{
 };
 use vnc_relay_domain::target_policy::TargetPolicy;
 
-use crate::events::{AbortReason, Event, RejectReason, RelayIdRef, Stage};
+use crate::events::{AbortReason, AdminTerminateResult, Event, RejectReason, RelayIdRef, Stage};
 use crate::ports::{
     BoxRelayStream, Clock, EventSink, RelayCloseAction, RelayIdSource, RelayLifecycle,
-    RelayStateSource, RelayStream, SessionIdSource, TargetConnector,
+    RelaySessionControl, RelayStateSource, RelayStream, SessionIdSource, TargetConnector,
 };
 
 mod handshake;
@@ -396,6 +397,7 @@ struct RelayState {
     matching: WaitingTable,
     waiting: HashMap<RelayId, matching::WaitingConnection>,
     active: HashMap<SessionId, ActiveSessionSnapshot>,
+    controls: HashMap<SessionId, Arc<Mutex<SessionControl>>>,
     recent: RecentClosedList,
     recent_refs: HashMap<SessionId, RelayIdRef>,
     next_session: Option<u128>,
@@ -405,10 +407,7 @@ struct RelayState {
 
 impl RelayState {
     fn counted_active(&self) -> usize {
-        self.active
-            .values()
-            .filter(|entry| !entry.engine_completed)
-            .count()
+        self.active.len()
     }
 }
 
@@ -472,7 +471,6 @@ pub struct ActiveSessionSnapshot {
     pub relay_id_ref: Option<RelayIdRef>,
     pub bytes_viewer_to_target: u64,
     pub bytes_target_to_viewer: u64,
-    pub(crate) engine_completed: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -488,6 +486,21 @@ pub struct ClosedSessionSnapshot {
     pub close_cause: CloseCause,
     pub relay_id_ref: Option<RelayIdRef>,
     pub side: Option<vnc_relay_domain::session::Side>,
+}
+
+struct AdminClose {
+    account: AccountName,
+    peer: PeerIp,
+}
+
+/// The owner holds this lock only during a synchronous engine poll.
+/// HTTP clones its handle under the registry lock, then releases that lock.
+struct SessionControl {
+    command: watch::Sender<Option<Duration>>,
+    completion: watch::Sender<Option<Result<Arc<ClosedSessionSnapshot>, ()>>>,
+    admin: Option<AdminClose>,
+    closing: bool,
+    completed: bool,
 }
 
 impl From<&ClosedSession> for ClosedSessionSnapshot {
@@ -524,6 +537,7 @@ impl<C> RelayRuntime<C> {
             matching: WaitingTable::new(waiting_budget.limit() as usize, config.wait_timeout),
             waiting: HashMap::new(),
             active: HashMap::new(),
+            controls: HashMap::new(),
             recent: RecentClosedList::new(config.recent_closed),
             recent_refs: HashMap::new(),
             next_session: Some(0),
@@ -573,7 +587,6 @@ impl<C> RelayRuntime<C> {
         let mut active: Vec<_> = state
             .active
             .values()
-            .filter(|entry| !entry.engine_completed)
             .map(|entry| {
                 let mut entry = entry.clone();
                 entry.duration = now.saturating_sub(entry.started_mono);
@@ -628,6 +641,45 @@ impl<C> RelayRuntime<C> {
             });
         }
         self.lifecycle.send_replace(RelayLifecycle::Force);
+    }
+}
+
+impl<C: Send + Sync> RelaySessionControl for RelayRuntime<C> {
+    fn request_terminate(
+        &self,
+        session_id: &str,
+        account: AccountName,
+        peer: PeerIp,
+        clock: &dyn Clock,
+        events: &dyn EventSink,
+    ) -> Option<crate::management::terminate::TerminationTicket> {
+        let id = SessionId::parse(session_id).ok()?;
+        let control = self.lock().controls.get(&id).cloned()?;
+        let mut control = control
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if control.completed {
+            return None;
+        }
+        let mut state = self.lock();
+        let accepted_at = clock.monotonic();
+        if matches!(state.lifecycle, RelayLifecycle::Grace { deadline } if accepted_at >= deadline)
+        {
+            self.force_locked(&mut state, events);
+        }
+        let initiated = !control.closing && state.lifecycle != RelayLifecycle::Force;
+        if initiated {
+            control.closing = true;
+            control.admin = Some(AdminClose { account, peer });
+            if let Some(entry) = state.active.get_mut(&id) {
+                entry.state = SessionState::Closing;
+            }
+            control.command.send_replace(Some(accepted_at));
+        }
+        Some(crate::management::terminate::TerminationTicket {
+            initiated,
+            completion: control.completion.subscribe(),
+        })
     }
 }
 
@@ -718,16 +770,77 @@ struct ActiveGuard<'a, C> {
     runtime: &'a RelayRuntime<C>,
     session_id: SessionId,
     relay_id: Option<RelayId>,
+    control: Arc<Mutex<SessionControl>>,
+    clock: &'a dyn Clock,
+    events: &'a dyn EventSink,
+    model: Session,
+    error_kind: Mutex<Option<crate::events::ConnectionErrorKind>>,
 }
 
 impl<C> Drop for ActiveGuard<'_, C> {
     fn drop(&mut self) {
+        let mut control = self
+            .control
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if control.completed {
+            return;
+        }
         let mut state = self.runtime.lock();
         if let Some(id) = &self.relay_id {
             state.matching.begin_closing(id, &self.session_id);
             state.matching.release(id, &self.session_id);
         }
-        state.active.remove(&self.session_id);
+        if let Some(entry) = state.active.remove(&self.session_id) {
+            if let Some(accepted_at) = *control.command.borrow() {
+                let _ = self.model.begin_admin_close(accepted_at);
+            }
+            if let Ok(closed) = self.model.finish_after_owner_loss(
+                state.lifecycle != RelayLifecycle::Running,
+                self.clock.wall(),
+                self.clock.monotonic(),
+            ) {
+                self.events.record(&Event::SessionClosed {
+                    session_id: closed.id().clone(),
+                    mode: closed.mode(),
+                    viewer_transport: closed.viewer_transport(),
+                    started_at: closed.started_at(),
+                    duration_ms: milliseconds(closed.duration()),
+                    bytes_viewer_to_target: closed.bytes(Direction::ViewerToTarget),
+                    bytes_target_to_viewer: closed.bytes(Direction::TargetToViewer),
+                    close_cause: closed.close_cause(),
+                    side: closed.close_side(),
+                    error_kind: (*self
+                        .error_kind
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner))
+                    .filter(|_| closed.close_cause() == CloseCause::ConnectionError),
+                    relay_id_ref: entry.relay_id_ref.clone(),
+                    admin_account: control
+                        .admin
+                        .as_ref()
+                        .filter(|_| closed.close_cause() == CloseCause::AdminTerminated)
+                        .map(|admin| admin.account.clone()),
+                });
+                if let Some(reference) = entry.relay_id_ref {
+                    state.recent_refs.insert(closed.id().clone(), reference);
+                }
+                if let Some(evicted) = state.recent.push(closed) {
+                    state.recent_refs.remove(evicted.id());
+                }
+            }
+        }
+        state.controls.remove(&self.session_id);
+        if let Some(admin) = &control.admin {
+            self.events.record(&Event::AdminTerminate {
+                admin_account: admin.account.clone(),
+                peer_ip: admin.peer,
+                session_id: Some(self.session_id.clone()),
+                result: AdminTerminateResult::Failed,
+            });
+        }
+        control.completed = true;
+        control.completion.send_replace(Some(Err(())));
     }
 }
 
@@ -895,6 +1008,15 @@ impl RelayService {
             Mode::Mode1
         };
         let transport = pair.viewer.stream.transport();
+        let (command, admin_close) = watch::channel(None);
+        let (completion, _) = watch::channel(None);
+        let control = Arc::new(Mutex::new(SessionControl {
+            command,
+            completion,
+            admin: None,
+            closing: false,
+            completed: false,
+        }));
         let activation = {
             let mut state = runtime.lock();
             if state.lifecycle != RelayLifecycle::Running {
@@ -950,9 +1072,11 @@ impl RelayService {
                                 .map(|(_, reference, _)| reference.clone()),
                             bytes_viewer_to_target: 0,
                             bytes_target_to_viewer: 0,
-                            engine_completed: false,
                         },
                     );
+                    state
+                        .controls
+                        .insert(session.id().clone(), Arc::clone(&control));
                     self.events.record(&Event::SessionStarted {
                         session_id: session.id().clone(),
                         mode,
@@ -994,7 +1118,7 @@ impl RelayService {
                 Err(RelayDispatchError::SessionIdsExhausted)
             }
         };
-        let mut model = match activation {
+        let model = match activation {
             Ok(model) => model,
             Err(error) => {
                 let viewer = pair.viewer.context;
@@ -1078,28 +1202,41 @@ impl RelayService {
                 return Err(error);
             }
         };
-        let _active_guard = ActiveGuard {
+        let mut active_guard = ActiveGuard {
             runtime,
             session_id: model.id().clone(),
             relay_id: pair.relay.as_ref().map(|(id, _, _)| id.clone()),
+            control: Arc::clone(&control),
+            clock: self.clock.as_ref(),
+            events: self.events.as_ref(),
+            model,
+            error_kind: Mutex::new(None),
         };
         // Declare stream ownership after its registry guard: cancellation drops
         // streams and permits before releasing active ID occupancy.
         let mut pair = pair;
         let relay_id = pair.relay.as_ref().map(|(id, _, _)| id);
-        let session_id = model.id().clone();
+        let observed = Mutex::new(SessionState::Active);
         let result = {
-            let engine = session::run_session(
+            let engine = session::run_session_controlled(
                 pair.viewer.stream.as_mut(),
                 pair.other.stream.as_mut(),
                 std::mem::take(&mut pair.viewer.trailing),
                 std::mem::take(&mut pair.other.trailing),
-                &mut model,
+                &mut active_guard.model,
                 self.clock.as_ref(),
                 runtime.lifecycle(),
                 self.buffer_bytes,
                 runtime.config.close_timeout,
-                |session| {
+                admin_close,
+                |session, error_kind| {
+                    *observed
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner) = session.state();
+                    *active_guard
+                        .error_kind
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner) = error_kind;
                     let mut state = runtime.lock();
                     if let Some(snapshot) = state.active.get_mut(session.id()) {
                         snapshot.state = session.state();
@@ -1114,20 +1251,18 @@ impl RelayService {
                 },
             );
             let mut engine = pin!(engine);
-            let mut engine_done = false;
             poll_fn(|cx| {
-                if engine_done {
-                    return Poll::Pending;
-                }
                 runtime.force_if_due(self.clock.as_ref(), self.events.as_ref());
+                // Acceptance and natural transitions share this synchronous poll lock.
+                // No guard survives Pending, and registry callers release their lock first.
+                let mut control = control
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner);
                 let result = engine.as_mut().poll(cx);
-                if result.is_ready() {
-                    engine_done = true;
-                    let mut state = runtime.lock();
-                    if let Some(snapshot) = state.active.get_mut(&session_id) {
-                        snapshot.engine_completed = true;
-                    }
-                }
+                control.closing |= *observed
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    != SessionState::Active;
                 result
             })
             .await
@@ -1149,15 +1284,20 @@ impl RelayService {
         drop(other_stream);
         drop(viewer_permit);
         drop(other_permit);
-        let closed = model
+        let closed = active_guard
+            .model
             .finish(self.clock.wall(), self.clock.monotonic())
             .map_err(RelayDispatchError::Session)?;
+        let mut control = control
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let mut state = runtime.lock();
         if let Some((id, _, _)) = &relay {
             state.matching.begin_closing(id, closed.id());
             state.matching.release(id, closed.id());
         }
         state.active.remove(closed.id());
+        state.controls.remove(closed.id());
         let reference = relay.map(|(_, reference, _)| reference);
         self.events.record(&Event::SessionClosed {
             session_id: closed.id().clone(),
@@ -1171,14 +1311,32 @@ impl RelayService {
             side: closed.close_side(),
             error_kind,
             relay_id_ref: reference.clone(),
-            admin_account: None,
+            admin_account: control
+                .admin
+                .as_ref()
+                .filter(|_| closed.close_cause() == CloseCause::AdminTerminated)
+                .map(|admin| admin.account.clone()),
         });
+        let mut snapshot = ClosedSessionSnapshot::from(&closed);
+        snapshot.relay_id_ref = reference.clone();
         if let Some(reference) = reference {
             state.recent_refs.insert(closed.id().clone(), reference);
         }
         if let Some(evicted) = state.recent.push(closed) {
             state.recent_refs.remove(evicted.id());
         }
+        if let Some(admin) = &control.admin {
+            self.events.record(&Event::AdminTerminate {
+                admin_account: admin.account.clone(),
+                peer_ip: admin.peer,
+                session_id: Some(snapshot.session_id.clone()),
+                result: AdminTerminateResult::Terminated,
+            });
+        }
+        control.completed = true;
+        control
+            .completion
+            .send_replace(Some(Ok(Arc::new(snapshot))));
         Ok(())
     }
 }
@@ -1239,6 +1397,8 @@ mod tests {
         failure: Option<crate::events::ConnectionErrorKind>,
         block_close: bool,
         on_drop: Option<Arc<dyn Fn() + Send + Sync>>,
+        eof_signal: Option<Arc<std::sync::atomic::AtomicBool>>,
+        panic_after_eof: Option<Arc<std::sync::atomic::AtomicBool>>,
     }
 
     impl std::fmt::Debug for TestStream {
@@ -1265,10 +1425,25 @@ mod tests {
             cx: &mut Context<'_>,
             buffer: &mut ReadBuf<'_>,
         ) -> Poll<io::Result<()>> {
+            assert!(
+                !self
+                    .panic_after_eof
+                    .as_ref()
+                    .is_some_and(|flag| flag.load(Ordering::SeqCst)),
+                "controlled panic after peer EOF in the same engine poll"
+            );
             if let Some(kind) = self.failure.take() {
                 Poll::Ready(Err(RelayStreamError::new(kind).into_io_error()))
             } else {
-                Pin::new(&mut self.stream).poll_read(cx, buffer)
+                let before = buffer.filled().len();
+                let result = Pin::new(&mut self.stream).poll_read(cx, buffer);
+                if matches!(result, Poll::Ready(Ok(())))
+                    && buffer.filled().len() == before
+                    && let Some(flag) = &self.eof_signal
+                {
+                    flag.store(true, Ordering::SeqCst);
+                }
+                result
             }
         }
     }
@@ -1484,6 +1659,8 @@ mod tests {
                 failure: None,
                 block_close,
                 on_drop,
+                eof_signal: None,
+                panic_after_eof: None,
             };
             let mut bytes = vec![0; HANDSHAKE_REQUEST_LEN];
             bytes[..request.len()].copy_from_slice(request.as_bytes());
@@ -2123,6 +2300,8 @@ mod tests {
                         failure: None,
                         block_close: false,
                         on_drop: None,
+                        eof_signal: None,
+                        panic_after_eof: None,
                     }),
                 },
             ]);
@@ -2357,11 +2536,19 @@ mod tests {
         );
         assert_eq!(free_places(&harness.budget), 3);
         assert_eq!(free_places(&harness.waiting), 1);
-        assert!(
-            !harness
+        assert_eq!(
+            harness
                 .events()
                 .iter()
-                .any(|event| matches!(event, Event::SessionClosed { .. }))
+                .filter(|event| matches!(
+                    event,
+                    Event::SessionClosed {
+                        close_cause: CloseCause::InternalError,
+                        ..
+                    }
+                ))
+                .count(),
+            1,
         );
         let (prepared, _server, _) = harness.prepare(Role::Server, "ID:12", b"").await;
         let new_owner = harness.start(prepared);
@@ -2797,7 +2984,7 @@ mod tests {
     /// spec: operations.md:OPS-007 partial
     /// spec: operations.md:OPS-008 partial
     #[tokio::test(start_paused = true)]
-    async fn completion_one_tick_before_g_deadline_does_not_count_session_on_later_force() {
+    async fn cleanup_in_progress_is_counted_on_force_and_preserves_completed_engine_cause() {
         let harness = Harness::new(3, 1, 8, &[]);
         let harness_clone = harness.clone();
         let drop_fired = Arc::new(std::sync::atomic::AtomicBool::new(false));
@@ -2858,10 +3045,13 @@ mod tests {
             "close cause must stand as PeerEof"
         );
         assert!(
-            !events
-                .iter()
-                .any(|e| matches!(e, Event::ShutdownForced { remaining_sessions: n } if *n > 0)),
-            "completed session must not be counted in ShutdownForced"
+            events.iter().any(|e| matches!(
+                e,
+                Event::ShutdownForced {
+                    remaining_sessions: 1
+                }
+            )),
+            "the session remains active until streams, permits and registration are reclaimed"
         );
     }
 
@@ -2985,5 +3175,279 @@ mod tests {
         assert_eq!(snap.active.len(), 0);
         assert_eq!(snap.max_entries, 2);
         assert_eq!(snap.waiting[0].relay_id.as_str(), "1");
+    }
+
+    /// Owner cancellation is a real cleanup-confirmation failure, not a fake
+    /// transport error. The HTTP 500 branch is exercised separately at the service boundary.
+    /// spec: management.md:MGT-012 partial
+    /// spec: operations.md:OPS-011 partial
+    #[tokio::test(start_paused = true)]
+    async fn accepted_admin_owner_cancellation_releases_resources_and_reports_failure_after_closed()
+    {
+        let harness = Harness::new(4, 1, 8, &[]);
+        let (prepared, _server, _) = harness.prepare(Role::Server, "ID:97", b"").await;
+        let waiter = harness.start(prepared);
+        for _ in 0..100 {
+            if harness.snapshot().waiting.len() == 1 {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        assert_eq!(harness.snapshot().waiting.len(), 1);
+        let (prepared, _viewer, _) = harness.prepare(Role::Viewer, "ID:97", b"").await;
+        let owner = harness.start(prepared);
+        for _ in 0..100 {
+            if harness.snapshot().active.len() == 1 {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        let id = harness.snapshot().active[0].session_id.clone();
+        let account = AccountName::parse("alice").unwrap_or_else(|e| panic!("account: {e}"));
+        let peer = PeerIp::new(std::net::Ipv4Addr::LOCALHOST.into());
+        let mut ticket = harness
+            .runtime
+            .request_terminate(
+                id.as_str(),
+                account.clone(),
+                peer,
+                harness.clock.as_ref(),
+                harness.events.as_ref(),
+            )
+            .unwrap_or_else(|| panic!("active termination ticket"));
+        assert!(ticket.initiated);
+        owner.abort();
+        assert!(
+            owner
+                .await
+                .unwrap_or_else(|e| {
+                    assert!(e.is_cancelled());
+                    Err(RelayDispatchError::Aborted(AbortReason::ServerShutdown))
+                })
+                .is_err()
+        );
+        waiter
+            .await
+            .unwrap_or_else(|e| panic!("waiter: {e}"))
+            .unwrap_or_else(|e| panic!("handoff: {e}"));
+        ticket
+            .completion
+            .changed()
+            .await
+            .unwrap_or_else(|e| panic!("completion: {e}"));
+        assert!(matches!(&*ticket.completion.borrow(), Some(Err(()))));
+        assert!(harness.snapshot().active.is_empty());
+        assert_eq!(free_places(&harness.budget), 4);
+        assert!(
+            harness
+                .runtime
+                .lock()
+                .matching
+                .get(&RelayId::parse("97").unwrap_or_else(|e| panic!("relay id: {e}")))
+                .is_none()
+        );
+        let events = harness.events();
+        let closed: Vec<_> = events
+            .iter()
+            .enumerate()
+            .filter(|(_, event)| {
+                matches!(
+                    event, Event::SessionClosed { session_id, .. } if session_id == &id
+                )
+            })
+            .collect();
+        assert_eq!(closed.len(), 1);
+        assert!(matches!(closed[0].1, Event::SessionClosed {
+            close_cause: CloseCause::AdminTerminated, admin_account: Some(actual), ..
+        } if actual == &account));
+        let audit = events.iter().position(|event| matches!(event,
+            Event::AdminTerminate { session_id: Some(actual), result: AdminTerminateResult::Failed, .. }
+            if actual == &id)).unwrap_or_else(|| panic!("failed audit"));
+        assert!(closed[0].0 < audit);
+    }
+
+    async fn active_for_review(
+        harness: &Arc<Harness>,
+        id: &str,
+    ) -> (
+        tokio::task::JoinHandle<Result<(), RelayDispatchError>>,
+        tokio::task::JoinHandle<Result<(), RelayDispatchError>>,
+        DuplexStream,
+        DuplexStream,
+    ) {
+        let (prepared, server, _) = harness.prepare(Role::Server, id, b"").await;
+        let waiter = harness.start(prepared);
+        for _ in 0..100 {
+            if harness.snapshot().waiting.len() == 1 {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        assert_eq!(harness.snapshot().waiting.len(), 1);
+        let (prepared, viewer, _) = harness.prepare(Role::Viewer, id, b"").await;
+        let owner = harness.start(prepared);
+        for _ in 0..100 {
+            if harness.snapshot().active.len() == 1 {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        assert_eq!(harness.snapshot().active.len(), 1);
+        (owner, waiter, server, viewer)
+    }
+
+    /// spec: management.md:MGT-011 partial
+    #[tokio::test(start_paused = true)]
+    async fn acceptance_at_exact_g_deadline_reads_clock_under_registry_lock_and_joins_force() {
+        struct AcceptanceClock<'a>(&'a RelayRuntime<Connector>, Duration);
+        impl Clock for AcceptanceClock<'_> {
+            fn monotonic(&self) -> Duration {
+                assert!(
+                    self.0.state.try_lock().is_err(),
+                    "accept time must be read under registry lock"
+                );
+                self.1
+            }
+            fn wall(&self) -> SystemTime {
+                SystemTime::UNIX_EPOCH + self.1
+            }
+        }
+        let harness = Harness::new(4, 1, 8, &[]);
+        let (owner, waiter, _server, _viewer) = active_for_review(&harness, "ID:98").await;
+        let id = harness.snapshot().active[0].session_id.clone();
+        let deadline = harness.clock.monotonic() + Duration::from_secs(1);
+        // Do not wake the supervisor: acceptance itself must publish Force.
+        harness.runtime.lock().lifecycle = RelayLifecycle::Grace { deadline };
+        let clock = AcceptanceClock(&harness.runtime, deadline);
+        let ticket = harness
+            .runtime
+            .request_terminate(
+                id.as_str(),
+                AccountName::parse("alice").unwrap_or_else(|e| panic!("{e}")),
+                PeerIp::new(std::net::Ipv4Addr::LOCALHOST.into()),
+                &clock,
+                harness.events.as_ref(),
+            )
+            .unwrap_or_else(|| panic!("join ticket"));
+        assert!(!ticket.initiated);
+        assert_eq!(harness.runtime.lock().lifecycle, RelayLifecycle::Force);
+        owner
+            .await
+            .unwrap_or_else(|e| panic!("{e}"))
+            .unwrap_or_else(|e| panic!("{e}"));
+        waiter
+            .await
+            .unwrap_or_else(|e| panic!("{e}"))
+            .unwrap_or_else(|e| panic!("{e}"));
+        assert!(matches!(&*ticket.completion.borrow(), Some(Ok(closed))
+            if closed.close_cause == CloseCause::ServerShutdown));
+        assert!(!harness.events().iter().any(|event| matches!(
+            event,
+            Event::SessionClosed {
+                close_cause: CloseCause::AdminTerminated,
+                ..
+            }
+        )));
+    }
+
+    /// spec: operations.md:OPS-011 partial
+    #[tokio::test(start_paused = true)]
+    async fn owner_cancellation_uses_shutdown_cause_only_in_grace_or_force_and_retains_history() {
+        for lifecycle in [
+            RelayLifecycle::Running,
+            RelayLifecycle::Grace {
+                deadline: Duration::from_secs(60),
+            },
+            RelayLifecycle::Force,
+        ] {
+            let harness = Harness::new(4, 1, 8, &[]);
+            let (owner, waiter, _server, _viewer) = active_for_review(&harness, "ID:99").await;
+            harness.runtime.lock().lifecycle = lifecycle;
+            owner.abort();
+            match owner.await {
+                Err(error) => assert!(error.is_cancelled()),
+                Ok(_) => panic!("owner must be cancelled"),
+            }
+            waiter
+                .await
+                .unwrap_or_else(|e| panic!("{e}"))
+                .unwrap_or_else(|e| panic!("{e}"));
+            let expected = if lifecycle == RelayLifecycle::Running {
+                CloseCause::InternalError
+            } else {
+                CloseCause::ServerShutdown
+            };
+            let snapshot = harness.snapshot();
+            assert!(snapshot.active.is_empty());
+            assert_eq!(snapshot.recent_closed.len(), 1);
+            assert_eq!(snapshot.recent_closed[0].close_cause, expected);
+            assert_eq!(free_places(&harness.budget), 4);
+            let closed: Vec<_> = harness
+                .events()
+                .into_iter()
+                .filter(|event| matches!(event, Event::SessionClosed { .. }))
+                .collect();
+            assert_eq!(closed.len(), 1);
+            assert!(
+                matches!(&closed[0], Event::SessionClosed { close_cause, .. } if *close_cause == expected)
+            );
+            assert_eq!(closed[0].level(), crate::events::Level::Warn);
+        }
+    }
+
+    /// spec: relay.md:RLY-020 partial
+    /// spec: operations.md:OPS-011 partial
+    #[tokio::test(start_paused = true)]
+    async fn panic_after_eof_in_one_engine_poll_keeps_log_and_history_identical() {
+        let harness = Harness::new(4, 1, 8, &[]);
+        let eof = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let (mut prepared, _server, _) = harness.prepare(Role::Server, "ID:101", b"").await;
+        prepared.stream_mut().panic_after_eof = Some(Arc::clone(&eof));
+        let waiter = harness.start(prepared);
+        for _ in 0..100 {
+            if harness.snapshot().waiting.len() == 1 {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        assert_eq!(harness.snapshot().waiting.len(), 1);
+        let (mut prepared, mut viewer, _) = harness.prepare(Role::Viewer, "ID:101", b"").await;
+        prepared.stream_mut().eof_signal = Some(Arc::clone(&eof));
+        viewer
+            .shutdown()
+            .await
+            .unwrap_or_else(|e| panic!("viewer EOF: {e}"));
+        let owner = harness.start(prepared);
+        match owner.await {
+            Err(error) => assert!(error.is_panic()),
+            Ok(_) => panic!("controlled stream must panic"),
+        }
+        waiter
+            .await
+            .unwrap_or_else(|e| panic!("waiter: {e}"))
+            .unwrap_or_else(|e| panic!("handoff: {e}"));
+        assert!(eof.load(Ordering::SeqCst));
+        let snapshot = harness.snapshot();
+        assert!(snapshot.active.is_empty());
+        assert_eq!(snapshot.recent_closed.len(), 1);
+        let recent = &snapshot.recent_closed[0];
+        assert_eq!(recent.close_cause, CloseCause::PeerEof);
+        assert_eq!(recent.side, Some(vnc_relay_domain::session::Side::Viewer));
+        let events = harness.events();
+        let closed: Vec<_> = events
+            .iter()
+            .filter(|event| matches!(event, Event::SessionClosed { .. }))
+            .collect();
+        assert_eq!(closed.len(), 1);
+        assert!(matches!(closed[0], Event::SessionClosed {
+            session_id, close_cause, side, started_at, duration_ms,
+            bytes_viewer_to_target, bytes_target_to_viewer, error_kind, ..
+        } if session_id == &recent.session_id
+            && *close_cause == recent.close_cause && *side == recent.side
+            && *started_at == recent.started_at && *duration_ms == milliseconds(recent.duration)
+            && *bytes_viewer_to_target == recent.bytes_viewer_to_target
+            && *bytes_target_to_viewer == recent.bytes_target_to_viewer
+            && error_kind.is_none()));
+        assert_eq!(free_places(&harness.budget), 4);
     }
 }

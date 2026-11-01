@@ -1,9 +1,9 @@
 //! The management listener: HTTPS through the built-in TLS acceptor, or plain
 //! HTTP on loopback only (config-v2 §1.2 `[management]`, operations.md OPS-034).
-//! It answers the login and session routes (management-api-v1 §1.5) and serves
-//! the dashboard files (§1.11). Queries and termination come with tasks 4.4–4.5.
-//! Design: docs/architectures/management-listener.md and
-//! docs/architectures/management-session.md.
+//! It answers login, session, query and termination routes and serves the
+//! dashboard files (management-api-v1 §1.5–§1.11).
+//! Design: docs/architectures/management-listener.md,
+//! management-session.md and management-terminate.md.
 
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -24,18 +24,20 @@ use serde_json::{Value, json};
 use tokio::net::TcpListener;
 use vnc_relay_app::management::AdminAuth;
 use vnc_relay_app::management::query::ManagementQueryService;
+use vnc_relay_app::management::terminate::ManagementTerminateService;
 use vnc_relay_app::ports::EventSink;
 use vnc_relay_domain::budget::ConnectionBudget;
 use vnc_relay_domain::peer_ip::PeerIp;
 
 use crate::admission::AdmittingListener;
 use crate::dashboard_assets::{Asset, find_asset};
-use crate::request_deadline::DeadlineListener;
+use crate::request_deadline::{DeadlineListener, IdleControl};
 use crate::tls::TlsSource;
 use crate::tls_listener::TlsListener;
 
 mod query_api;
 mod session_api;
+mod terminate_api;
 
 /// `listener` of the management listener in operation events (ops-info-v1 §1.5).
 const LISTENER: &str = "management";
@@ -49,6 +51,13 @@ const CLEAR_SESSION_COOKIE: &str =
 const CLEAR_SESSION_COOKIE_SECURE: &str =
     "relay_admin_session=; Path=/; Max-Age=0; HttpOnly; SameSite=Strict; Secure";
 
+/// Required application services, shared by all management connections.
+pub struct ManagementServices {
+    pub auth: Arc<AdminAuth>,
+    pub query: Arc<ManagementQueryService>,
+    pub terminate: Arc<ManagementTerminateService>,
+}
+
 /// A management listener. Connections run TLS when `tls` is set and plain
 /// HTTP otherwise.
 pub struct ManagementListener {
@@ -56,32 +65,29 @@ pub struct ManagementListener {
     tls: Option<TlsSource>,
     admin_budget: Arc<ConnectionBudget>,
     tls_upgrade: Duration,
-    auth: Arc<AdminAuth>,
+    services: ManagementServices,
     dashboard: DashboardHints,
-    query: Arc<ManagementQueryService>,
 }
 
 impl ManagementListener {
     /// `admin_budget` is Lm, shared with the status listener. `tls_upgrade` is U:
-    /// the limit on the TLS handshake and on reading each request head. `auth`
-    /// holds the admin accounts and the admin sessions.
+    /// the limit on the TLS handshake and on reading each request head.
+    /// `services` uses the actual relay runtime for queries and termination.
     pub fn new(
         listener: TcpListener,
         tls: Option<TlsSource>,
         admin_budget: Arc<ConnectionBudget>,
         tls_upgrade: Duration,
-        auth: Arc<AdminAuth>,
         dashboard: DashboardHints,
-        query: Arc<ManagementQueryService>,
+        services: ManagementServices,
     ) -> Self {
         Self {
             listener,
             tls,
             admin_budget,
             tls_upgrade,
-            auth,
+            services,
             dashboard,
-            query,
         }
     }
 
@@ -95,9 +101,10 @@ impl ManagementListener {
         // reaches the login limit through `ConnectInfo`.
         let shared = Shared {
             secure,
-            auth: self.auth,
+            auth: self.services.auth,
+            query: self.services.query,
+            terminate: self.services.terminate,
             dashboard: self.dashboard,
-            query: self.query,
         };
         let router = Router::new()
             .fallback(answer)
@@ -123,15 +130,21 @@ impl ManagementListener {
 /// handlers. axum implements `Connected` for `TcpListener` only. The listener
 /// here is wrapped in `DeadlineListener`, so this type supplies the impl. It
 /// keeps the normalized peer IP (domain `PeerIp`, ops-info-v1 §1.10).
-#[derive(Debug, Clone, Copy)]
-struct PeerAddr(PeerIp);
+#[derive(Debug, Clone)]
+struct PeerAddr {
+    ip: PeerIp,
+    idle: IdleControl,
+}
 
 impl<L> Connected<IncomingStream<'_, DeadlineListener<L>>> for PeerAddr
 where
     L: axum::serve::Listener<Addr = SocketAddr>,
 {
     fn connect_info(stream: IncomingStream<'_, DeadlineListener<L>>) -> Self {
-        Self(PeerIp::from(*stream.remote_addr()))
+        Self {
+            ip: PeerIp::from(*stream.remote_addr()),
+            idle: stream.io().idle_control(),
+        }
     }
 }
 
@@ -161,8 +174,9 @@ struct Shared {
     /// `true` when the connection runs over TLS.
     secure: bool,
     auth: Arc<AdminAuth>,
-    dashboard: DashboardHints,
     query: Arc<ManagementQueryService>,
+    terminate: Arc<ManagementTerminateService>,
+    dashboard: DashboardHints,
 }
 
 /// Answers every request. `/api/v1/` goes to the session API, which judges the
@@ -176,7 +190,7 @@ async fn answer(
     let (parts, body) = request.into_parts();
     let path = parts.uri.path();
     if path.starts_with("/api/v1/") {
-        return session_api::answer(&shared, peer.0, parts, body).await;
+        return session_api::answer(&shared, &peer, parts, body).await;
     }
     if path == "/" || path.starts_with("/app/") || path.starts_with("/login/") {
         return static_answer(&shared, &parts);
