@@ -149,17 +149,17 @@ Mode I·II 초기 흐름을 추정 없이 설명할 수 있게 한다. 관찰은
   - 기준: [중계 스펙 3.2절](specs/relay.md#32-mode-i), [설정 계약 1.5절](contracts/config-v2.md#15-mode-i-대상-허용-항목-문법). 설계: [대상 연결·매칭·중계 수명 모듈 설계 4.1절](architectures/relay-session.md#41-작업-28-mode-i-대상-연결)(Draft, Target)
   - 완료 조건: RLY-006~009, OPS-023(대상 연결도 L에 셈)
   - 선행: 2.7
-  - 현재: 설계를 작성했다. domain 구현 중이다. 아직 완료하지 않았다.
+  - 현재: domain, app, adapters를 구현하고 시험했다. 커밋 `0cf18b6`에서 양 OS 게이트를 통과했다([중계 세션 설계 8절](architectures/relay-session.md#8-현재-코드와의-차이와-연결-순서)). TCP 진입점 및 시작 조립은 아직 연결하지 않았다. [중계 세션 설계 9절 1번](architectures/relay-session.md#1-시작-키-생성-실패의-공개-오류-코드)의 시작 키 실패 코드 사용자 결정을 기다린다. WS 인계는 [WebSocket 스트림 설계 9.1~9.3절](architectures/websocket-stream.md#9-미결정-사항)의 사용자 결정을 기다린다. 아직 완료하지 않았다.
 - [ ] **2.9 Mode II 매칭**: 대기 등록, 양쪽 접속 순서, 원자적 매칭, 대기 시간 W 만료, 대기 상한 Lw, 중복 ID 정책, 세션 식별자 발급을 구현한다. 프로세스 시작 때 `relay_id_ref` 키(`RelayIdKey`)를 만들도록 시작 순서에 넣고, 만들지 못할 때의 시작 실패 처리를 정한다(사용자 결정 2026-10-20).
   - 기준: [중계 스펙 3.3절](specs/relay.md#33-mode-ii). 설계: [대상 연결·매칭·중계 수명 모듈 설계 4.2절](architectures/relay-session.md#42-작업-29-mode-ii-등록과-원자적-매칭)(Draft, Target)
   - 완료 조건: RLY-010~016, OPS-005
   - 선행: 1.6, 2.7
-  - 현재: 설계를 작성했다. domain 구현 중이다. 아직 완료하지 않았다.
+  - 현재: domain, app, adapters를 구현하고 시험했다. `RelayIdKey`와 `SessionIdKey` 생성을 구현했으나 시작 실패 처리 결정이 남아 있다. 커밋 `0cf18b6`에서 양 OS 게이트를 통과했다([중계 세션 설계 8절](architectures/relay-session.md#8-현재-코드와의-차이와-연결-순서)). TCP 진입점 및 시작 조립은 아직 연결하지 않았으며, [중계 세션 설계 9절 1번](architectures/relay-session.md#1-시작-키-생성-실패의-공개-오류-코드)의 시작 키 실패 코드 사용자 결정을 기다린다. WS 인계는 [WebSocket 스트림 설계 9.1~9.3절](architectures/websocket-stream.md#9-미결정-사항)의 사용자 결정을 기다린다. 아직 완료하지 않았다.
 - [ ] **2.10 양방향 중계와 종료**: 바이트 순서·내용 보존, 버퍼 B에 맞춘 읽기 제어, 한쪽 EOF 뒤 정리 제한 시간 E, 연결 오류 격리, 종료 원인 기록, 방향별 전송량 집계를 구현한다.
   - 기준: [중계 스펙 3.4절](specs/relay.md#34-중계와-eof), [관리 스펙 2.1절](specs/management.md#21-전송량의-의미). 설계: [대상 연결·매칭·중계 수명 모듈 설계 4.3절](architectures/relay-session.md#43-작업-210-두-방향-중계)(Draft, Target)
   - 완료 조건: RLY-017~021, RLY-023(비허용 IP 거절 중 기존 세션 유지), MGT-005(일부), OPS-039(첫 프로세스의 대기·활성 세션 유지)
   - 선행: 2.8 또는 2.9
-  - 현재: 설계를 작성했다. domain 구현 중이다. 아직 완료하지 않았다.
+  - 현재: domain, app, adapters를 구현하고 시험했다. 커밋 `0cf18b6`에서 양 OS 게이트를 통과했다([중계 세션 설계 8절](architectures/relay-session.md#8-현재-코드와의-차이와-연결-순서)). TCP 진입점 및 시작 조립은 아직 연결하지 않았다. [중계 세션 설계 9절 1번](architectures/relay-session.md#1-시작-키-생성-실패의-공개-오류-코드)의 시작 키 실패 코드 사용자 결정을 기다린다. WS 인계는 [WebSocket 스트림 설계 9.1~9.3절](architectures/websocket-stream.md#9-미결정-사항)의 사용자 결정을 기다린다. 아직 완료하지 않았다.
 - [ ] **2.11 끊긴 연결 감지**: TCP keepalive로 응답 없는 대기 연결·활성 세션을 시간 K 안에 회수한다. 상대가 응답하는 유휴 연결은 유지한다.
   - 기준: [중계 스펙 2.1절](specs/relay.md#21-판정-가능한-규칙)의 RLY-R18·RLY-R19
   - 완료 조건: RLY-025~027
@@ -190,12 +190,12 @@ Mode I·II 초기 흐름을 추정 없이 설명할 수 있게 한다. 관찰은
   - 기준: [WebSocket 중계 계약 1.4절](contracts/websocket-relay-v1.md#14-데이터-메시지와-제어-프레임), [WebSocket 스펙 8절](specs/websocket.md#8-미결정-사항)의 WS-TBD-004. 설계: [WebSocket 스트림 어댑터 모듈 설계 3~5절](architectures/websocket-stream.md#3-내부-구조와-b-소유권)(Draft, Target)
   - 완료 조건: WS-007~011, WS-018~019. WS-TBD-004를 해소한다.
   - 선행: 2.7, 3.2
-  - 범위: 공통 초기 교환과 세션에 필요한 스트림 어댑터는 2.7 완료 전에 가져온다. M > B와 방향별 합계 B는 [설계 9.2절](architectures/websocket-stream.md#92-ws-tbd-004-m--b와-제어-진행)의 WS-TBD-004 결정과 시험이 필요하다. 9.1~9.3절은 사용자 결정 대기다. [9.5절의 Kw 정책](architectures/websocket-stream.md#95-kw의-여러-ping과-b-backpressure)은 3.4 범위이며 2.7을 막지 않는다.
+  - 범위: 공통 초기 교환과 세션에 필요한 스트림 어댑터는 2.7 완료 전에 가져온다. M > B와 방향별 합계 B는 [설계 9.2절](architectures/websocket-stream.md#92-ws-tbd-004-m-b와-제어-진행)의 WS-TBD-004 결정과 시험이 필요하다. 9.1~9.3절은 사용자 결정 대기다. [9.5절의 Kw 정책](architectures/websocket-stream.md#95-kw의-여러-ping과-b-backpressure)은 3.4 범위이며 2.7을 막지 않는다.
 - [ ] **3.4 WebSocket 종료와 끊긴 연결 감지**: close 코드, 종료 의미, 서버 ping 주기 Kw를 구현한다. 잘못된 프레임에 WebSocket 라이브러리가 자동으로 보내는 종료 코드가 계약과 같은지 확인한다.
   - 기준: [WebSocket 중계 계약 1.5·1.6·2.2절](contracts/websocket-relay-v1.md#15-close-코드). 설계: [WebSocket 스트림 어댑터 모듈 설계 6절](architectures/websocket-stream.md#6-제어-프레임kw종료-상태)(Draft, Target)
   - 완료 조건: WS-016~017, WS-026
   - 선행: 3.3
-  - 범위: 여러 Ping과 backpressure 중 Pong 기한은 [설계 9.5절](architectures/websocket-stream.md#95-kw의-여러-ping과-b-backpressure)의 미결정 사항이다. 3.4에서 확정하며 2.7 완료를 막지 않는다. M > B의 저장·스트리밍 상한은 [9.2절](architectures/websocket-stream.md#92-ws-tbd-004-m--b와-제어-진행)에 따라 3.3에서 다룬다. 이미 헤더를 쓴 프레임과 Close의 경합은 [9.4절 선택 A](architectures/websocket-stream.md#94-해결-수신-close와-이미-시작한-출력-프레임)로 해결했다(이 문서의 판단, 사용자 결정 없음).
+  - 범위: 여러 Ping과 backpressure 중 Pong 기한은 [설계 9.5절](architectures/websocket-stream.md#95-kw의-여러-ping과-b-backpressure)의 미결정 사항이다. 3.4에서 확정하며 2.7 완료를 막지 않는다. M > B의 저장·스트리밍 상한은 [9.2절](architectures/websocket-stream.md#92-ws-tbd-004-m-b와-제어-진행)에 따라 3.3에서 다룬다. 이미 헤더를 쓴 프레임과 Close의 경합은 [9.4절 선택 A](architectures/websocket-stream.md#94-해결-수신-close와-이미-시작한-출력-프레임)로 해결했다(이 문서의 판단, 사용자 결정 없음).
 - [ ] **3.5 전송·모드 조합 검증**: WS·WSS와 Mode I·II의 모든 조합, noVNC·websockify 없는 배포, 고정 버전 noVNC `repeaterID` 상호운용을 확인한다.
   - 기준: [WebSocket 스펙 6절](specs/websocket.md#6-전송모드-검증-조합)
   - 완료 조건: WS-001~006, WS-020, WS-025. AC-05·AC-16~17·AC-33 통과.
