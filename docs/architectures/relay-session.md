@@ -199,7 +199,7 @@ TCP half-close는 읽기 쪽 전체 소켓 drop이 아니다. 예를 들어 View
 
 ### 4.4 WS를 나중에 연결하는 경계
 
-2.10에서 구현한 전송 동작은 TCP다. WS 스트림 어댑터는 3.3의 일부지만, 2.7 완료가 WS·WSS의 실제 초기 교환→`dispatch` 연결을 요구하므로 앞당긴다(Q16·Q21, 결정 A). [WS 스트림 설계](websocket-stream.md#4-101부터-공통-서비스까지)의 실제 바이너리 스트리밍·M 검사·기본 Ping/Pong·Close 경계를 연결해야 한다. 단일 메시지용 임시 파서나 유효 요청 보류로 대신하지 않는다. 이 작업은 해당 문서의 [9.1절](websocket-stream.md#91-프레임-처리-구현의-선택)·[9.2절](websocket-stream.md#92-ws-tbd-004-m-b와-제어-진행)·[9.3절](websocket-stream.md#93-101-뒤-mode-i-대상-l-부족)의 사용자 결정 전까지 막혀 있다. Kw 전체 수용 기준과 9.5절은 3.4 범위이며 2.7 완료를 막지 않는다.
+2.10에서 구현한 전송 동작은 TCP다. WS 스트림 어댑터는 3.3의 일부지만, 2.7 완료가 WS·WSS의 실제 초기 교환→`dispatch` 연결을 요구하므로 앞당긴다(Q16·Q21, 결정 A). [WS 스트림 설계](websocket-stream.md#4-101부터-공통-서비스까지)의 실제 바이너리 스트리밍·M 검사·Close 경계를 연결해야 한다. 앞당기는 제어 범위는 [클라이언트 Ping에 Pong 응답](../contracts/websocket-relay-v1.md#14-데이터-메시지와-제어-프레임), 요청하지 않은 Pong 무시, 제어 페이로드를 데이터 스트림에서 제외하는 처리뿐이다. Kw 주기의 서버 Ping 송신과 Pong 기한은 3.4 범위다([WS 스트림 설계 9.5절](websocket-stream.md#95-kw의-여러-ping과-b-backpressure)). 단일 메시지용 임시 파서나 유효 요청 보류로 대신하지 않는다. 이 작업은 해당 문서의 [9.1절](websocket-stream.md#91-프레임-처리-구현의-선택)·[9.2절](websocket-stream.md#92-ws-tbd-004-m-b와-제어-진행)·[9.3절](websocket-stream.md#93-101-뒤-mode-i-대상-l-부족)의 사용자 결정 전까지 막혀 있다. Kw 전체 수용 기준과 9.5절은 3.4 범위이며 2.7 완료를 막지 않는다.
 
 - WS Viewer가 Close를 보내면 Close 앞의 데이터를 TCP로 소진하고 TCP 쓰기 방향을 닫는다. Close 수신 전에 헤더를 이미 쓴 출력 프레임의 잔여만 같은 E 안에서 마친 뒤 같은 유효 코드로 응답한다. 코드가 없으면 1000이다. 이 범위는 [WS 스트림 설계 9.4절의 선택 A](websocket-stream.md#94-해결-수신-close와-이미-시작한-출력-프레임)이며 **이 문서의 판단, 사용자 결정 없음**이다. 새 메시지는 시작하지 않는다. 이어 TCP EOF를 같은 E까지 기다린다. Close 뒤에 읽은 TCP 데이터는 버리고 전송량에 세지 않는다.
 - 반대로 TCP EOF이면 받은 데이터를 WS로 소진한 뒤 Close 1000을 보낸다. WS Close를 기다리는 E 동안 WS 데이터는 TCP로 전달할 수 있다. Close를 보낸 뒤에는 WS 데이터 메시지를 더 보내지 않는다.
