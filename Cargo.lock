@@ -1077,6 +1077,7 @@ dependencies = [
 name = "vnc-relay-app"
 version = "0.1.0"
 dependencies = [
+ "tokio",
  "vnc-relay-domain",
 ]
 

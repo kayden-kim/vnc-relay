@@ -13,6 +13,7 @@ pub mod net;
 pub mod ops_log;
 mod request_deadline;
 pub mod status_http;
+pub mod target;
 pub mod terminal;
 pub mod tls;
 mod tls_listener;

@@ -116,3 +116,189 @@ impl fmt::Display for RandomError {
 }
 
 impl std::error::Error for RandomError {}
+
+/// Lifecycle input shared by relay stages (cli-v1 §1.8).
+/// Initial exchange, target connection, and waiting stop at the first Grace.
+/// Active sessions may finish normally until its absolute monotonic deadline.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RelayLifecycle {
+    Running,
+    Grace { deadline: Duration },
+    Force,
+}
+
+/// Transport close intent; adapters map it without exposing transport libraries.
+/// See relay-session §3.2 and websocket-relay-v1 §1.4–1.6.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RelayCloseAction {
+    WriteHalf,
+    HandshakeInvalid,
+    HandshakeTimeout,
+    ModeDisabled,
+    RejectDuplicate,
+    WaitingExpired,
+    WaitingFull,
+    TargetConnectFailed,
+    TargetNotAllowed,
+    Reject,
+    PeerEof,
+    StreamError(crate::events::ConnectionErrorKind),
+    DeadConnection,
+    AdminTerminated,
+    ServerShutdown,
+}
+
+/// Bounded payload stream with explicit half-close and terminal-close intent.
+/// An empty payload message is not EOF. Successful writes count only payload
+/// accepted by the transport, not bytes copied into an unbounded queue.
+/// See relay spec RLY-003, RLY-019 and websocket-relay-v1 §1.4–1.6.
+pub trait RelayStream:
+    tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send
+{
+    /// The viewer transport metadata used in session views and events.
+    fn transport(&self) -> vnc_relay_domain::session::ViewerTransport;
+
+    /// Drives one idempotent close action; terminal completion does not replace
+    /// dropping the stream before its L permit (relay-session §6).
+    fn poll_close(
+        self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        action: RelayCloseAction,
+    ) -> std::task::Poll<std::io::Result<()>>;
+}
+
+/// One connection's type erasure, never a per-chunk allocation.
+/// See relay-session §3.2.
+pub type BoxRelayStream = Box<dyn RelayStream>;
+
+/// Typed transport failure carried inside the standard AsyncRead/AsyncWrite
+/// I/O error. Adapters retain WS protocol/text/size failures without exposing
+/// their library types (websocket-relay-v1 §2.2).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RelayStreamError {
+    Transport(crate::events::ConnectionErrorKind),
+}
+
+impl RelayStreamError {
+    /// Wraps one contract kind without payload, raw IDs, or library details.
+    pub fn new(kind: crate::events::ConnectionErrorKind) -> Self {
+        Self::Transport(kind)
+    }
+
+    /// The original contract kind, suitable for events and close actions.
+    pub fn kind(self) -> crate::events::ConnectionErrorKind {
+        match self {
+            Self::Transport(kind) => kind,
+        }
+    }
+
+    /// Preserves the kind through the standard async I/O trait error channel.
+    pub fn into_io_error(self) -> std::io::Error {
+        std::io::Error::other(self)
+    }
+
+    /// Reads adapter-provided kinds; untyped socket errors are io_error.
+    pub fn classify(error: &std::io::Error) -> crate::events::ConnectionErrorKind {
+        error
+            .get_ref()
+            .and_then(|inner| inner.downcast_ref::<Self>())
+            .map_or(crate::events::ConnectionErrorKind::IoError, |typed| typed.kind())
+    }
+}
+
+impl fmt::Display for RelayStreamError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.kind().as_str())
+    }
+}
+
+impl std::error::Error for RelayStreamError {}
+
+/// DNS and single-address connection failures (ops-info-v1 §1.6).
+/// The app owns the absolute resolve-plus-connect deadline C.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TargetError {
+    ResolveFailed,
+    ConnectRefused,
+    ConnectError,
+    /// K could not be applied. Terminal for the whole target request, but the
+    /// external reason remains connect_error (relay spec RLY-R18).
+    KeepaliveFailed,
+}
+
+impl fmt::Display for TargetError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Self::ResolveFailed => "resolve_failed",
+            Self::ConnectRefused => "connect_refused",
+            Self::ConnectError | Self::KeepaliveFailed => "connect_error",
+        })
+    }
+}
+
+impl std::error::Error for TargetError {}
+
+/// Resolves once and connects only to an already policy-checked socket address.
+/// Dropping a connect future closes its in-progress socket. A successful stream
+/// already has K configured; KeepaliveFailed aborts the request as connect_error.
+pub trait TargetConnector: Send + Sync {
+    type Stream: RelayStream + 'static;
+
+    fn resolve(
+        &self,
+        name: &str,
+    ) -> impl Future<Output = Result<Vec<std::net::IpAddr>, TargetError>> + Send;
+
+    fn connect(
+        &self,
+        address: std::net::SocketAddr,
+    ) -> impl Future<Output = Result<Self::Stream, TargetError>> + Send;
+}
+
+/// Computes a log-only keyed reference; never use it as a matching key.
+/// See ops-info-v1 §1.9.
+pub trait RelayIdSource: Send + Sync {
+    fn reference(
+        &self,
+        id: &vnc_relay_domain::relay_id::RelayId,
+    ) -> crate::events::RelayIdRef;
+}
+
+/// Applies the per-process keyed permutation to one never-reused counter.
+/// No runtime randomness, failure path, or issued-ID set (relay-session §3.3).
+pub trait SessionIdSource: Send + Sync {
+    fn session_id(&self, counter: u128) -> vnc_relay_domain::session::SessionId;
+}
+
+#[cfg(test)]
+mod relay_stream_tests {
+    use super::RelayStreamError;
+    use crate::events::ConnectionErrorKind;
+
+    /// spec: websocket.md:WS-019 partial
+    /// spec: websocket.md:WS-008 partial
+    /// spec: websocket.md:WS-010 partial
+    #[test]
+    fn preserves_typed_transport_error_kinds_in_the_io_error_channel() {
+        for kind in [
+            ConnectionErrorKind::IoError,
+            ConnectionErrorKind::TlsFailed,
+            ConnectionErrorKind::WsProtocolError,
+            ConnectionErrorKind::WsTextMessage,
+            ConnectionErrorKind::WsMessageTooLarge,
+        ] {
+            let error = RelayStreamError::new(kind).into_io_error();
+            assert_eq!(RelayStreamError::classify(&error), kind);
+            assert_eq!(error.to_string(), kind.as_str());
+        }
+    }
+
+    #[test]
+    fn classifies_untyped_socket_errors_without_exposing_their_details() {
+        let error = std::io::Error::new(std::io::ErrorKind::ConnectionReset, "private detail");
+        assert_eq!(
+            RelayStreamError::classify(&error),
+            ConnectionErrorKind::IoError
+        );
+    }
+}

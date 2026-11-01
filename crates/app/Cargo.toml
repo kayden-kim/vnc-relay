@@ -12,3 +12,7 @@ workspace = true
 
 [dependencies]
 vnc-relay-domain.workspace = true
+tokio = { workspace = true, features = ["time", "sync", "io-util"] }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt", "test-util"] }

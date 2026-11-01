@@ -10,9 +10,12 @@ use std::sync::{Mutex, PoisonError};
 use std::time::SystemTime;
 
 use serde_json::{Value, json};
-use vnc_relay_app::events::{Event, LOG_CONTRACT, Stage};
+use vnc_relay_app::events::{Event, LOG_CONTRACT, RejectReason, Stage};
 use vnc_relay_app::ports::EventSink;
 use vnc_relay_app::settings::{ConfigWarning, LogOutput};
+use vnc_relay_domain::handshake::Mode;
+use vnc_relay_domain::peer_ip::PeerIp;
+use vnc_relay_domain::session::CloseCause;
 
 use crate::clock::timestamp;
 
@@ -22,6 +25,9 @@ const DETAIL_MAX_BYTES: usize = 512;
 /// Longest logged `origin` in bytes (ops-info-v1 §1.1). The full value stays
 /// in the refusal itself.
 const ORIGIN_MAX_BYTES: usize = 256;
+
+/// Longest logged target name or literal IP (ops-info-v1 §1.1).
+const TARGET_HOST_MAX_BYTES: usize = 256;
 
 type FailureNotice = Box<dyn Fn(&io::Error) + Send + Sync>;
 
@@ -254,6 +260,22 @@ fn push_event_fields(fields: &mut Vec<(&'static str, Value)>, event: &Event) {
                 ));
             }
         }
+        Event::HandshakeRejected {
+            conn_id,
+            entry_point,
+            peer_ip,
+            reason,
+            mode,
+        } => {
+            fields.push(("conn_id", Value::from(conn_id.to_string())));
+            fields.push(("listener", Value::from(entry_point.name())));
+            fields.push(("stage", Value::from(Stage::InitialExchange.as_str())));
+            fields.push(("reason", Value::from(reason.as_str())));
+            fields.push(("peer_ip", Value::from(peer_ip.to_string())));
+            if let Some(mode) = mode {
+                fields.push(("mode", Value::from(mode.as_str())));
+            }
+        }
         Event::ConnectionAborted {
             conn_id,
             entry_point,
@@ -271,6 +293,211 @@ fn push_event_fields(fields: &mut Vec<(&'static str, Value)>, event: &Event) {
             if let Some(kind) = reason.error_kind() {
                 fields.push(("error_kind", Value::from(kind.as_str())));
             }
+        }
+        Event::TargetRejected {
+            conn_id,
+            entry_point,
+            peer_ip,
+            reason,
+            target_host,
+            target_port,
+            target_ip,
+        } => {
+            fields.push(("conn_id", Value::from(conn_id.to_string())));
+            fields.push(("listener", Value::from(entry_point.name())));
+            fields.push(("role", Value::from(entry_point.role().as_str())));
+            fields.push(("mode", Value::from(Mode::Mode1.as_str())));
+            fields.push(("peer_ip", Value::from(peer_ip.to_string())));
+            fields.push(("stage", Value::from(Stage::TargetConnect.as_str())));
+            fields.push(("reason", Value::from(reason.as_str())));
+            if let Some(limit) = reason.limit() {
+                fields.push(("limit", Value::from(limit)));
+            }
+            if *reason == RejectReason::TargetNotAllowed {
+                fields.push(("target_host", Value::from(cut(target_host, TARGET_HOST_MAX_BYTES))));
+                fields.push(("target_port", Value::from(*target_port)));
+                if let Some(ip) = target_ip {
+                    fields.push(("target_ip", Value::from(PeerIp::new(*ip).to_string())));
+                }
+            }
+        }
+        Event::RegistrationRejected {
+            conn_id,
+            entry_point,
+            peer_ip,
+            reason,
+            relay_id_ref,
+        } => {
+            fields.push(("conn_id", Value::from(conn_id.to_string())));
+            fields.push(("listener", Value::from(entry_point.name())));
+            fields.push(("role", Value::from(entry_point.role().as_str())));
+            fields.push(("mode", Value::from(Mode::Mode2.as_str())));
+            fields.push(("peer_ip", Value::from(peer_ip.to_string())));
+            fields.push(("stage", Value::from(Stage::Register.as_str())));
+            fields.push(("reason", Value::from(reason.as_str())));
+            if let Some(limit) = reason.limit() {
+                fields.push(("limit", Value::from(limit)));
+            }
+            if *reason == RejectReason::DuplicateId {
+                fields.push(("relay_id_ref", Value::from(relay_id_ref.as_str())));
+            }
+        }
+        Event::RelayAborted {
+            conn_id,
+            entry_point,
+            stage,
+            reason,
+            peer_ip,
+            elapsed_ms,
+            mode,
+        } => {
+            fields.push(("conn_id", Value::from(conn_id.to_string())));
+            fields.push(("listener", Value::from(entry_point.name())));
+            fields.push(("stage", Value::from(stage.as_str())));
+            fields.push(("reason", Value::from(reason.as_str())));
+            fields.push(("peer_ip", Value::from(peer_ip.to_string())));
+            fields.push(("elapsed_ms", Value::from(*elapsed_ms)));
+            fields.push(("role", Value::from(entry_point.role().as_str())));
+            fields.push(("mode", Value::from(mode.as_str())));
+            if let Some(kind) = reason.error_kind() {
+                fields.push(("error_kind", Value::from(kind.as_str())));
+            }
+        }
+        Event::TargetConnectFailed {
+            conn_id,
+            entry_point,
+            viewer_transport,
+            peer_ip,
+            target_host,
+            target_port,
+            target_ip,
+            elapsed_ms,
+            reason,
+        } => {
+            fields.push(("conn_id", Value::from(conn_id.to_string())));
+            fields.push(("listener", Value::from(entry_point.name())));
+            fields.push(("viewer_transport", Value::from(viewer_transport.as_str())));
+            fields.push(("reason", Value::from(reason.as_str())));
+            fields.push(("peer_ip", Value::from(peer_ip.to_string())));
+            fields.push(("target_host", Value::from(cut(target_host, TARGET_HOST_MAX_BYTES))));
+            fields.push(("target_port", Value::from(*target_port)));
+            fields.push(("elapsed_ms", Value::from(*elapsed_ms)));
+            if let Some(ip) = target_ip {
+                fields.push(("target_ip", Value::from(PeerIp::new(*ip).to_string())));
+            }
+        }
+        Event::WaitingRegistered {
+            conn_id,
+            entry_point,
+            peer_ip,
+            relay_id_ref,
+        } => {
+            fields.push(("conn_id", Value::from(conn_id.to_string())));
+            fields.push(("listener", Value::from(entry_point.name())));
+            fields.push(("role", Value::from(entry_point.role().as_str())));
+            fields.push(("mode", Value::from(Mode::Mode2.as_str())));
+            fields.push(("relay_id_ref", Value::from(relay_id_ref.as_str())));
+            fields.push(("peer_ip", Value::from(peer_ip.to_string())));
+        }
+        Event::WaitingExpired { conn_id, role, relay_id_ref, waited_ms } => {
+            fields.push(("conn_id", Value::from(conn_id.to_string())));
+            fields.push(("role", Value::from(role.as_str())));
+            fields.push(("relay_id_ref", Value::from(relay_id_ref.as_str())));
+            fields.push(("waited_ms", Value::from(*waited_ms)));
+        }
+        Event::WaitingRemoved { conn_id, role, relay_id_ref, waited_ms, reason } => {
+            fields.push(("conn_id", Value::from(conn_id.to_string())));
+            fields.push(("role", Value::from(role.as_str())));
+            fields.push(("relay_id_ref", Value::from(relay_id_ref.as_str())));
+            fields.push(("waited_ms", Value::from(*waited_ms)));
+            fields.push(("reason", Value::from(reason.as_str())));
+            if let Some(kind) = reason.error_kind() {
+                fields.push(("error_kind", Value::from(kind.as_str())));
+            }
+        }
+        Event::SessionStarted {
+            session_id, mode, viewer_transport, viewer_conn_id, viewer_peer_ip,
+            server_conn_id, server_peer_ip, relay_id_ref, waited_ms,
+            target_ip, target_port, target_host,
+        } => {
+            fields.push(("session_id", Value::from(session_id.as_str())));
+            fields.push(("mode", Value::from(mode.as_str())));
+            fields.push(("viewer_transport", Value::from(viewer_transport.as_str())));
+            fields.push(("viewer_conn_id", Value::from(viewer_conn_id.to_string())));
+            fields.push(("viewer_peer_ip", Value::from(viewer_peer_ip.to_string())));
+            match mode {
+                Mode::Mode1 => {
+                    if let Some(ip) = target_ip {
+                        fields.push(("target_ip", Value::from(PeerIp::new(*ip).to_string())));
+                    }
+                    if let Some(port) = target_port {
+                        fields.push(("target_port", Value::from(*port)));
+                    }
+                    if let Some(host) = target_host {
+                        fields.push(("target_host", Value::from(cut(host, TARGET_HOST_MAX_BYTES))));
+                    }
+                }
+                Mode::Mode2 => {
+                    if let Some(id) = server_conn_id {
+                        fields.push(("server_conn_id", Value::from(id.to_string())));
+                    }
+                    if let Some(ip) = server_peer_ip {
+                        fields.push(("server_peer_ip", Value::from(ip.to_string())));
+                    }
+                    if let Some(reference) = relay_id_ref {
+                        fields.push(("relay_id_ref", Value::from(reference.as_str())));
+                    }
+                    if let Some(waited) = waited_ms {
+                        fields.push(("waited_ms", Value::from(*waited)));
+                    }
+                }
+            }
+        }
+        Event::SessionClosed {
+            session_id, mode, viewer_transport, started_at, duration_ms,
+            bytes_viewer_to_target, bytes_target_to_viewer, close_cause,
+            side, error_kind, relay_id_ref, admin_account,
+        } => {
+            fields.push(("session_id", Value::from(session_id.as_str())));
+            fields.push(("mode", Value::from(mode.as_str())));
+            fields.push(("viewer_transport", Value::from(viewer_transport.as_str())));
+            fields.push(("started_at", Value::from(timestamp(*started_at))));
+            fields.push(("duration_ms", Value::from(*duration_ms)));
+            fields.push(("bytes_viewer_to_target", Value::from(*bytes_viewer_to_target)));
+            fields.push(("bytes_target_to_viewer", Value::from(*bytes_target_to_viewer)));
+            fields.push(("close_cause", Value::from(close_cause.as_str())));
+            if *mode == Mode::Mode2
+                && let Some(reference) = relay_id_ref
+            {
+                fields.push(("relay_id_ref", Value::from(reference.as_str())));
+            }
+            match close_cause {
+                CloseCause::PeerEof | CloseCause::ConnectionError
+                | CloseCause::DeadConnection | CloseCause::CloseTimeout => {
+                    if let Some(side) = side {
+                        fields.push(("side", Value::from(side.as_str())));
+                    }
+                }
+                CloseCause::AdminTerminated | CloseCause::ServerShutdown => {}
+            }
+            if *close_cause == CloseCause::ConnectionError
+                && let Some(kind) = error_kind
+            {
+                fields.push(("error_kind", Value::from(kind.as_str())));
+            }
+            if *close_cause == CloseCause::AdminTerminated
+                && let Some(account) = admin_account
+            {
+                fields.push(("admin_account", Value::from(account.as_str())));
+            }
+        }
+        Event::ShutdownStarted { grace_secs, active_sessions } => {
+            fields.push(("trigger", Value::from("requested")));
+            fields.push(("grace_secs", Value::from(*grace_secs)));
+            fields.push(("active_sessions", Value::from(*active_sessions)));
+        }
+        Event::ShutdownForced { remaining_sessions } => {
+            fields.push(("remaining_sessions", Value::from(*remaining_sessions)));
         }
         Event::AdminLoginSucceeded {
             admin_account,

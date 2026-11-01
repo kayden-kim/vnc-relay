@@ -1,15 +1,18 @@
 //! Operation log events (ops-info-v1 §1.5) and their `level` (§1.3).
 //! Design: docs/architectures/ops-log.md, docs/architectures/tcp-entry-point.md,
-//! docs/architectures/status-listener.md.
+//! docs/architectures/status-listener.md, docs/architectures/initial-exchange.md.
 
 use std::fmt;
-use std::net::SocketAddr;
+use std::net::{IpAddr, SocketAddr};
+use std::time::SystemTime;
 
 use vnc_relay_domain::account::AccountName;
 use vnc_relay_domain::conn_id::ConnId;
-use vnc_relay_domain::entry_point::EntryPoint;
+use vnc_relay_domain::entry_point::{EntryPoint, Role};
+use vnc_relay_domain::handshake::Mode;
 use vnc_relay_domain::login_limit::LimitScope;
 use vnc_relay_domain::peer_ip::PeerIp;
+use vnc_relay_domain::session::{CloseCause, SessionId, Side, ViewerTransport};
 
 use crate::reload::{ChangeSource, WatchFailure};
 use crate::settings::ConfigWarning;
@@ -59,6 +62,8 @@ pub enum Stage {
     InitialExchange,
     Tls,
     Upgrade,
+    Register,
+    TargetConnect,
 }
 
 impl Stage {
@@ -68,6 +73,8 @@ impl Stage {
             Self::InitialExchange => "initial_exchange",
             Self::Tls => "tls",
             Self::Upgrade => "upgrade",
+            Self::Register => "register",
+            Self::TargetConnect => "target_connect",
         }
     }
 }
@@ -95,6 +102,16 @@ pub enum RejectReason {
     /// The client offered subprotocols and none of them is `binary`
     /// (websocket-relay-v1 §1.2).
     SubprotocolNotSupported,
+    /// The initial request has an invalid format (repeater-handshake-v1 §2).
+    HandshakeInvalid,
+    /// The initial request selected a disabled mode (repeater-handshake-v1 §2).
+    ModeDisabled,
+    /// The target name, IP, or port is outside the allowed policy.
+    TargetNotAllowed,
+    /// Every waiting place Lw is held.
+    WaitingFull { limit: u32 },
+    /// This relay ID and role are already occupied.
+    DuplicateId,
 }
 
 impl RejectReason {
@@ -107,6 +124,11 @@ impl RejectReason {
             Self::InvalidUpgrade => "invalid_upgrade",
             Self::OriginNotAllowed => "origin_not_allowed",
             Self::SubprotocolNotSupported => "subprotocol_not_supported",
+            Self::HandshakeInvalid => "handshake_invalid",
+            Self::ModeDisabled => "mode_disabled",
+            Self::TargetNotAllowed => "target_not_allowed",
+            Self::WaitingFull { .. } => "waiting_full",
+            Self::DuplicateId => "duplicate_id",
         }
     }
 
@@ -117,10 +139,14 @@ impl RejectReason {
             | Self::TlsVersionUnsupported
             | Self::InvalidUpgrade
             | Self::OriginNotAllowed
-            | Self::SubprotocolNotSupported => None,
-            Self::RelayConnectionLimit { limit } | Self::AdminConnectionLimit { limit } => {
-                Some(limit)
-            }
+            | Self::SubprotocolNotSupported
+            | Self::HandshakeInvalid
+            | Self::ModeDisabled
+            | Self::TargetNotAllowed
+            | Self::DuplicateId => None,
+            Self::RelayConnectionLimit { limit }
+            | Self::AdminConnectionLimit { limit }
+            | Self::WaitingFull { limit } => Some(limit),
         }
     }
 }
@@ -138,6 +164,8 @@ pub enum AbortReason {
     ConnectionError(ConnectionErrorKind),
     /// The server is stopping and ends unfinished work.
     ServerShutdown,
+    /// A liveness check found an unresponsive connection.
+    DeadConnection,
 }
 
 impl AbortReason {
@@ -148,6 +176,7 @@ impl AbortReason {
             Self::PeerEof => "peer_eof",
             Self::ConnectionError(_) => "connection_error",
             Self::ServerShutdown => "server_shutdown",
+            Self::DeadConnection => "dead_connection",
         }
     }
 
@@ -158,6 +187,7 @@ impl AbortReason {
             Self::HandshakeTimeout
             | Self::PeerEof
             | Self::ServerShutdown
+            | Self::DeadConnection
             | Self::TlsUpgradeTimeout => None,
         }
     }
@@ -166,7 +196,10 @@ impl AbortReason {
     fn level(self) -> Level {
         match self {
             Self::PeerEof | Self::ServerShutdown => Level::Info,
-            Self::HandshakeTimeout | Self::TlsUpgradeTimeout | Self::ConnectionError(_) => {
+            Self::HandshakeTimeout
+            | Self::TlsUpgradeTimeout
+            | Self::ConnectionError(_)
+            | Self::DeadConnection => {
                 Level::Warn
             }
         }
@@ -182,6 +215,12 @@ pub enum ConnectionErrorKind {
     /// The TLS handshake failed in the negotiation, for example an alert
     /// from the client or no shared cipher suite.
     TlsFailed,
+    /// WebSocket frame order or control frame is invalid.
+    WsProtocolError,
+    /// A text data message is not relay binary payload.
+    WsTextMessage,
+    /// A logical WebSocket message exceeded M.
+    WsMessageTooLarge,
 }
 
 impl ConnectionErrorKind {
@@ -189,6 +228,66 @@ impl ConnectionErrorKind {
         match self {
             Self::IoError => "io_error",
             Self::TlsFailed => "tls_failed",
+            Self::WsProtocolError => "ws_protocol_error",
+            Self::WsTextMessage => "ws_text_message",
+            Self::WsMessageTooLarge => "ws_message_too_large",
+        }
+    }
+}
+
+/// Target connection failure codes (ops-info-v1 §1.5).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TargetFailureReason {
+    ResolveFailed,
+    ConnectRefused,
+    ConnectTimeout,
+    ConnectError,
+}
+
+impl TargetFailureReason {
+    /// Returns the contract `reason` value.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::ResolveFailed => "resolve_failed",
+            Self::ConnectRefused => "connect_refused",
+            Self::ConnectTimeout => "connect_timeout",
+            Self::ConnectError => "connect_error",
+        }
+    }
+}
+
+/// Removal reasons other than waiting expiry (ops-info-v1 §1.5).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WaitingRemovalReason {
+    PeerEof,
+    ConnectionError(ConnectionErrorKind),
+    DeadConnection,
+    ServerShutdown,
+}
+
+impl WaitingRemovalReason {
+    /// Returns the contract `reason` value.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::PeerEof => "peer_eof",
+            Self::ConnectionError(_) => "connection_error",
+            Self::DeadConnection => "dead_connection",
+            Self::ServerShutdown => "server_shutdown",
+        }
+    }
+
+    /// Only connection errors carry an `error_kind`.
+    pub fn error_kind(self) -> Option<ConnectionErrorKind> {
+        match self {
+            Self::ConnectionError(kind) => Some(kind),
+            Self::PeerEof | Self::DeadConnection | Self::ServerShutdown => None,
+        }
+    }
+
+    fn level(self) -> Level {
+        match self {
+            Self::PeerEof | Self::ServerShutdown => Level::Info,
+            Self::ConnectionError(_) | Self::DeadConnection => Level::Warn,
         }
     }
 }
@@ -261,6 +360,17 @@ pub enum Event {
         /// The raw Origin header value; present for `origin_not_allowed`.
         origin: Option<String>,
     },
+    /// The server refused an accepted connection during the initial exchange
+    /// (ops-info-v1 §1.5-1.6). The event name is `connection_rejected`, and
+    /// `stage` is always `initial_exchange`. No request or raw relay ID is held.
+    HandshakeRejected {
+        conn_id: ConnId,
+        entry_point: EntryPoint,
+        peer_ip: PeerIp,
+        reason: RejectReason,
+        /// The caller must set this for `ModeDisabled`; omit it when unknown.
+        mode: Option<Mode>,
+    },
     /// An accepted connection ended before it waited or joined a session.
     ConnectionAborted {
         conn_id: ConnId,
@@ -270,6 +380,107 @@ pub enum Event {
         peer_ip: PeerIp,
         elapsed_ms: u64,
     },
+    /// Mode I policy or target socket budget refusal (ops-info-v1 §1.6).
+    TargetRejected {
+        conn_id: ConnId,
+        entry_point: EntryPoint,
+        peer_ip: PeerIp,
+        reason: RejectReason,
+        target_host: String,
+        target_port: u16,
+        target_ip: Option<IpAddr>,
+    },
+    /// A Mode II registration refusal (ops-info-v1 §1.6).
+    RegistrationRejected {
+        conn_id: ConnId,
+        entry_point: EntryPoint,
+        peer_ip: PeerIp,
+        reason: RejectReason,
+        relay_id_ref: RelayIdRef,
+    },
+    /// An unfinished relay connection with a known mode (ops-info-v1 §1.5).
+    RelayAborted {
+        conn_id: ConnId,
+        entry_point: EntryPoint,
+        stage: Stage,
+        reason: AbortReason,
+        peer_ip: PeerIp,
+        elapsed_ms: u64,
+        mode: Mode,
+    },
+    /// Mode I DNS or target connection failure; never carries `error_kind`.
+    TargetConnectFailed {
+        conn_id: ConnId,
+        entry_point: EntryPoint,
+        viewer_transport: ViewerTransport,
+        peer_ip: PeerIp,
+        target_host: String,
+        target_port: u16,
+        target_ip: Option<IpAddr>,
+        elapsed_ms: u64,
+        reason: TargetFailureReason,
+    },
+    /// A Mode II connection entered the waiting table (ops-info-v1 §1.5).
+    WaitingRegistered {
+        conn_id: ConnId,
+        entry_point: EntryPoint,
+        peer_ip: PeerIp,
+        relay_id_ref: RelayIdRef,
+    },
+    /// W expired; no additional aborted or removed event is required.
+    WaitingExpired {
+        conn_id: ConnId,
+        role: Role,
+        relay_id_ref: RelayIdRef,
+        waited_ms: u64,
+    },
+    /// A waiting connection ended without matching or expiring.
+    WaitingRemoved {
+        conn_id: ConnId,
+        role: Role,
+        relay_id_ref: RelayIdRef,
+        waited_ms: u64,
+        reason: WaitingRemovalReason,
+    },
+    /// An active session was registered (ops-info-v1 §1.5).
+    /// Only fields belonging to `mode` are serialized.
+    SessionStarted {
+        session_id: SessionId,
+        mode: Mode,
+        viewer_transport: ViewerTransport,
+        viewer_conn_id: ConnId,
+        viewer_peer_ip: PeerIp,
+        server_conn_id: Option<ConnId>,
+        server_peer_ip: Option<PeerIp>,
+        relay_id_ref: Option<RelayIdRef>,
+        waited_ms: Option<u64>,
+        target_ip: Option<IpAddr>,
+        target_port: Option<u16>,
+        target_host: Option<String>,
+    },
+    /// Finalized session summary, after sockets and permits are released.
+    /// Cause-specific fields and the Mode II reference follow ops-info-v1 §1.6.
+    SessionClosed {
+        session_id: SessionId,
+        mode: Mode,
+        viewer_transport: ViewerTransport,
+        started_at: SystemTime,
+        duration_ms: u64,
+        bytes_viewer_to_target: u64,
+        bytes_target_to_viewer: u64,
+        close_cause: CloseCause,
+        side: Option<Side>,
+        error_kind: Option<ConnectionErrorKind>,
+        relay_id_ref: Option<RelayIdRef>,
+        admin_account: Option<AccountName>,
+    },
+    /// The server entered shutdown grace (ops-info-v1 §1.5).
+    ShutdownStarted {
+        grace_secs: u64,
+        active_sessions: usize,
+    },
+    /// Remaining sessions are about to be forcibly closed (ops-info-v1 §1.5).
+    ShutdownForced { remaining_sessions: usize },
     /// An administrator logged in and got a session (ops-info-v1 §1.5,
     /// management.md MGT-017). The login event carries no session ID.
     AdminLoginSucceeded {
@@ -322,8 +533,20 @@ impl Event {
             Self::ConfigWarning { warning, .. } => warning.code(),
             Self::StartupFailed { .. } => "startup_failed",
             Self::ConnectionAccepted { .. } => "connection_accepted",
-            Self::ConnectionRejected { .. } | Self::UpgradeRejected { .. } => "connection_rejected",
-            Self::ConnectionAborted { .. } => "connection_aborted",
+            Self::ConnectionRejected { .. }
+            | Self::UpgradeRejected { .. }
+            | Self::HandshakeRejected { .. }
+            | Self::TargetRejected { .. }
+            | Self::RegistrationRejected { .. } => "connection_rejected",
+            Self::ConnectionAborted { .. } | Self::RelayAborted { .. } => "connection_aborted",
+            Self::TargetConnectFailed { .. } => "target_connect_failed",
+            Self::WaitingRegistered { .. } => "waiting_registered",
+            Self::WaitingExpired { .. } => "waiting_expired",
+            Self::WaitingRemoved { .. } => "waiting_removed",
+            Self::SessionStarted { .. } => "session_started",
+            Self::SessionClosed { .. } => "session_closed",
+            Self::ShutdownStarted { .. } => "shutdown_started",
+            Self::ShutdownForced { .. } => "shutdown_forced",
             Self::AdminLoginSucceeded { .. } => "admin_login_succeeded",
             Self::AdminLoginFailed { .. } => "admin_login_failed",
             Self::AdminLoginLimited { .. } => "admin_login_limited",
@@ -342,11 +565,30 @@ impl Event {
             Self::ServerStarting
             | Self::ServerReady { .. }
             | Self::ServerStopped
-            | Self::ConnectionAccepted { .. } => Level::Info,
+            | Self::ConnectionAccepted { .. }
+            | Self::WaitingRegistered { .. }
+            | Self::WaitingExpired { .. }
+            | Self::SessionStarted { .. } => Level::Info,
             Self::ConfigWarning { .. }
             | Self::ConnectionRejected { .. }
-            | Self::UpgradeRejected { .. } => Level::Warn,
-            Self::ConnectionAborted { reason, .. } => reason.level(),
+            | Self::UpgradeRejected { .. }
+            | Self::HandshakeRejected { .. }
+            | Self::TargetRejected { .. }
+            | Self::RegistrationRejected { .. }
+            | Self::TargetConnectFailed { .. }
+            | Self::ShutdownForced { .. } => Level::Warn,
+            Self::ConnectionAborted { reason, .. } | Self::RelayAborted { reason, .. } => {
+                reason.level()
+            }
+            Self::WaitingRemoved { reason, .. } => reason.level(),
+            Self::SessionClosed { close_cause, .. } => match close_cause {
+                CloseCause::PeerEof | CloseCause::AdminTerminated => Level::Info,
+                CloseCause::ConnectionError
+                | CloseCause::DeadConnection
+                | CloseCause::CloseTimeout
+                | CloseCause::ServerShutdown => Level::Warn,
+            },
+            Self::ShutdownStarted { .. } => Level::Info,
             Self::AdminLoginSucceeded { .. } => Level::Info,
             Self::AdminLoginFailed { .. } | Self::AdminLoginLimited { .. } => Level::Warn,
             Self::StartupFailed { .. } => Level::Error,

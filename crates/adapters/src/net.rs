@@ -26,6 +26,97 @@ use vnc_relay_domain::conn_id::ConnId;
 use vnc_relay_domain::entry_point::EntryPoint;
 use vnc_relay_domain::peer_ip::PeerIp;
 
+/// TCP payload stream used after admission or an exact-address target connect.
+/// Terminal close intents shut down writes; the owner then drops the socket
+/// before returning its connection permit (relay-session.md §§3.2, 6).
+#[derive(Debug)]
+pub struct TcpRelayStream {
+    inner: TcpStream,
+}
+
+impl TcpRelayStream {
+    /// Wraps a socket whose entry point has already applied K.
+    pub fn new(stream: TcpStream) -> Self {
+        Self { inner: stream }
+    }
+
+    /// Applies K before exposing a newly connected target socket.
+    /// On failure the owned socket is dropped before returning the error.
+    pub fn with_keepalive(stream: TcpStream, keepalive: &KeepaliveSettings) -> io::Result<Self> {
+        set_keepalive(&stream, keepalive)?;
+        Ok(Self::new(stream))
+    }
+
+    /// Returns ownership of the socket, without splitting or cloning it.
+    pub fn into_inner(self) -> TcpStream {
+        self.inner
+    }
+}
+
+impl tokio::io::AsyncRead for TcpRelayStream {
+    fn poll_read(
+        self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        buffer: &mut tokio::io::ReadBuf<'_>,
+    ) -> std::task::Poll<io::Result<()>> {
+        tokio::io::AsyncRead::poll_read(std::pin::Pin::new(&mut self.get_mut().inner), cx, buffer)
+    }
+}
+
+impl tokio::io::AsyncWrite for TcpRelayStream {
+    fn poll_write(
+        self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        bytes: &[u8],
+    ) -> std::task::Poll<io::Result<usize>> {
+        tokio::io::AsyncWrite::poll_write(std::pin::Pin::new(&mut self.get_mut().inner), cx, bytes)
+    }
+
+    fn poll_write_vectored(
+        self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        buffers: &[io::IoSlice<'_>],
+    ) -> std::task::Poll<io::Result<usize>> {
+        tokio::io::AsyncWrite::poll_write_vectored(
+            std::pin::Pin::new(&mut self.get_mut().inner),
+            cx,
+            buffers,
+        )
+    }
+
+    fn is_write_vectored(&self) -> bool {
+        tokio::io::AsyncWrite::is_write_vectored(&self.inner)
+    }
+
+    fn poll_flush(
+        self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<io::Result<()>> {
+        tokio::io::AsyncWrite::poll_flush(std::pin::Pin::new(&mut self.get_mut().inner), cx)
+    }
+
+    fn poll_shutdown(
+        self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<io::Result<()>> {
+        tokio::io::AsyncWrite::poll_shutdown(std::pin::Pin::new(&mut self.get_mut().inner), cx)
+    }
+}
+
+impl vnc_relay_app::ports::RelayStream for TcpRelayStream {
+    fn transport(&self) -> vnc_relay_domain::session::ViewerTransport {
+        vnc_relay_domain::session::ViewerTransport::Tcp
+    }
+
+    fn poll_close(
+        self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        _action: vnc_relay_app::ports::RelayCloseAction,
+    ) -> std::task::Poll<io::Result<()>> {
+        tokio::io::AsyncWrite::poll_shutdown(self, cx)
+    }
+}
+
 /// Wait after a failed `accept`, so that a lasting error such as running
 /// out of file descriptors does not spin the accept loop.
 pub(crate) const ACCEPT_RETRY_DELAY: Duration = Duration::from_millis(100);

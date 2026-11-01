@@ -1,6 +1,7 @@
 //! Mode I target allow items (config-v2 §1.5).
 
 use std::fmt;
+use std::net::IpAddr;
 
 use crate::allow_list::{IpItem, IpItemError};
 use crate::origin::is_dns_name;
@@ -120,6 +121,26 @@ impl TargetPolicy {
         &self.items
     }
 
+    /// Checks only a DNS name and port, without resolving it (config-v2 §1.5).
+    /// A permitted name still needs a separate final-IP check.
+    pub fn permits_name(&self, name: &str, port: u16) -> bool {
+        let name = name.strip_suffix('.').unwrap_or(name);
+        self.items.iter().any(|item| {
+            matches!(&item.host, TargetHost::Name(allowed) if allowed.eq_ignore_ascii_case(name))
+                && (item.ports.start..=item.ports.end).contains(&port)
+        })
+    }
+
+    /// Checks the exact final IP and port (relay.md §3.2, config-v2 §1.5).
+    /// IPv4-mapped IPv6 is checked as IPv4; name items never allow an IP.
+    pub fn permits_ip(&self, ip: IpAddr, port: u16) -> bool {
+        let ip = ip.to_canonical();
+        self.items.iter().any(|item| {
+            matches!(&item.host, TargetHost::Ip(allowed) if allowed.contains(ip))
+                && (item.ports.start..=item.ports.end).contains(&port)
+        })
+    }
+
     pub fn whole_family_items(&self) -> impl Iterator<Item = &TargetItem> {
         self.items.iter().filter(|item| item.covers_whole_family())
     }
@@ -147,7 +168,7 @@ fn parse_ports(text: &str) -> Result<PortRange, TargetItemError> {
     Ok(PortRange { start, end })
 }
 
-fn parse_port(text: &str) -> Result<u16, TargetItemError> {
+pub(crate) fn parse_port(text: &str) -> Result<u16, TargetItemError> {
     if text.is_empty() || !text.bytes().all(|b| b.is_ascii_digit()) {
         return Err(TargetItemError::Port);
     }
@@ -233,5 +254,62 @@ mod tests {
         assert!(ok("[::/0]:1-65535").covers_whole_family());
         assert!(!ok("192.0.2.0/24:5900").covers_whole_family());
         assert!(!ok("pc1.example:5900").covers_whole_family());
+    }
+
+    /// spec: relay.md:RLY-007 partial
+    #[test]
+    fn permits_only_listed_ips_and_inclusive_ports() {
+        let policy = TargetPolicy::new(vec![
+            ok("192.0.2.20:5900"),
+            ok("198.51.100.0/30:5900-5905"),
+            ok("[2001:db8::1-2001:db8::9]:5900-5901"),
+        ]);
+        for (ip, port, permitted) in [
+            ("192.0.2.20", 5900, true),
+            ("192.0.2.20", 5899, false),
+            ("192.0.2.21", 5900, false),
+            ("198.51.100.0", 5900, true),
+            ("198.51.100.3", 5905, true),
+            ("198.51.100.4", 5900, false),
+            ("198.51.100.3", 5906, false),
+            ("2001:db8::1", 5900, true),
+            ("2001:db8::9", 5901, true),
+            ("2001:db8::a", 5900, false),
+        ] {
+            assert_eq!(
+                policy.permits_ip(ip.parse().unwrap(), port),
+                permitted,
+                "{ip}:{port}"
+            );
+        }
+        assert!(!TargetPolicy::default().permits_ip("192.0.2.20".parse().unwrap(), 5900));
+    }
+
+    /// spec: relay.md:RLY-008 partial
+    #[test]
+    fn checks_names_and_final_ips_independently() {
+        let policy = TargetPolicy::new(vec![ok("pc1.example:5900-5901"), ok("192.0.2.20:5900")]);
+        assert!(policy.permits_name("PC1.Example.", 5900));
+        assert!(policy.permits_name("pc1.example", 5901));
+        assert!(!policy.permits_name("x.pc1.example", 5900));
+        assert!(!policy.permits_name("pc1.example", 5902));
+        assert!(!policy.permits_name("192.0.2.20", 5900));
+        assert!(!TargetPolicy::default().permits_name("pc1.example", 5900));
+        assert!(policy.permits_ip("192.0.2.20".parse().unwrap(), 5900));
+        assert!(!policy.permits_ip("192.0.2.21".parse().unwrap(), 5900));
+        let name_only = TargetPolicy::new(vec![ok("pc1.example:5900")]);
+        assert!(!name_only.permits_ip("192.0.2.20".parse().unwrap(), 5900));
+    }
+
+    /// spec: relay.md:RLY-007 partial
+    /// spec: relay.md:RLY-008 partial
+    #[test]
+    fn canonicalizes_mapped_ipv6_before_ip_policy_checks() {
+        let mapped: IpAddr = "::ffff:192.0.2.20".parse().unwrap();
+        let ipv6_only = TargetPolicy::new(vec![ok("[::/0]:5900")]);
+        assert!(!ipv6_only.permits_ip(mapped, 5900));
+        let ipv4_only = TargetPolicy::new(vec![ok("192.0.2.20:5900")]);
+        assert!(ipv4_only.permits_ip(mapped, 5900));
+        assert!(!ipv4_only.permits_ip(mapped, 5901));
     }
 }
