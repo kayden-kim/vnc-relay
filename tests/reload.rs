@@ -33,6 +33,7 @@ const RELOAD_SETTLE_MS: u64 = 1_000;
 
 const VIEWER_ONLY: &str = r#"["127.0.0.1"]"#;
 const SECOND_ONLY: &str = r#"["127.0.0.2"]"#;
+const TWO_SOURCES: &str = r#"["127.0.0.1", "127.0.0.2"]"#;
 const RANGE: &str = r#"["127.0.0.2-127.0.0.3"]"#;
 const ANY: &str = r#"["0.0.0.0/0"]"#;
 const NONE: &str = "[]";
@@ -162,6 +163,9 @@ listen = "127.0.0.1:{wss_viewer}"
 allow = {allow}
 cert_file = '{cert_path}'
 key_file = '{key_path}'
+
+[mode2]
+enabled = true
 
 [timeouts]
 handshake_secs = 120
@@ -422,6 +426,153 @@ fn connect_from(source: [u8; 4], port: u16) -> TcpStream {
     stream
 }
 
+const GREETING: &[u8] = b"RFB 000.000\n";
+const HANDSHAKE_REQUEST_LEN: usize = 250;
+
+fn request(id: &str) -> [u8; HANDSHAKE_REQUEST_LEN] {
+    let text = format!("ID:{id}");
+    assert!(text.len() <= HANDSHAKE_REQUEST_LEN);
+    let mut bytes = [0; HANDSHAKE_REQUEST_LEN];
+    bytes[..text.len()].copy_from_slice(text.as_bytes());
+    bytes
+}
+
+trait Wire: Read + Write + Send {}
+impl<T: Read + Write + Send> Wire for T {}
+
+struct WebSocket {
+    wire: Box<dyn Wire>,
+}
+
+impl WebSocket {
+    fn upgrade(mut wire: Box<dyn Wire>) -> Self {
+        wire.write_all(&upgrade_request())
+            .unwrap_or_else(|error| panic!("send upgrade: {error}"));
+        wire.flush()
+            .unwrap_or_else(|error| panic!("flush upgrade: {error}"));
+        let head = read_head(&mut wire);
+        assert_eq!(status_of(&head), 101, "upgrade response: {head}");
+        Self { wire }
+    }
+
+    fn send_binary(&mut self, payload: &[u8]) {
+        assert!(payload.len() <= u16::MAX as usize);
+        let mut bytes = vec![0x82];
+        if payload.len() < 126 {
+            bytes.push(
+                0x80 | u8::try_from(payload.len())
+                    .unwrap_or_else(|error| panic!("short frame: {error}")),
+            );
+        } else {
+            bytes.push(0x80 | 126);
+            bytes.extend_from_slice(
+                &u16::try_from(payload.len())
+                    .unwrap_or_else(|error| panic!("frame length: {error}"))
+                    .to_be_bytes(),
+            );
+        }
+        let mask = [0x13, 0x57, 0x9b, 0xdf];
+        bytes.extend_from_slice(&mask);
+        bytes.extend(
+            payload
+                .iter()
+                .enumerate()
+                .map(|(i, byte)| byte ^ mask[i % 4]),
+        );
+        self.wire
+            .write_all(&bytes)
+            .unwrap_or_else(|error| panic!("send masked client frame: {error}"));
+        self.wire
+            .flush()
+            .unwrap_or_else(|error| panic!("flush client frame: {error}"));
+    }
+
+    fn frame(&mut self) -> (bool, u8, Vec<u8>) {
+        loop {
+            let mut head = [0; 2];
+            self.wire
+                .read_exact(&mut head)
+                .unwrap_or_else(|error| panic!("read server frame header: {error}"));
+            assert_eq!(head[0] & 0x70, 0, "no unnegotiated extensions");
+            assert_eq!(head[1] & 0x80, 0, "server frames are unmasked");
+            let fin = head[0] & 0x80 != 0;
+            let opcode = head[0] & 0x0f;
+            let len = match head[1] & 0x7f {
+                126 => {
+                    let mut bytes = [0; 2];
+                    self.wire
+                        .read_exact(&mut bytes)
+                        .unwrap_or_else(|error| panic!("frame length: {error}"));
+                    usize::from(u16::from_be_bytes(bytes))
+                }
+                127 => {
+                    let mut bytes = [0; 8];
+                    self.wire
+                        .read_exact(&mut bytes)
+                        .unwrap_or_else(|error| panic!("frame length: {error}"));
+                    usize::try_from(u64::from_be_bytes(bytes))
+                        .unwrap_or_else(|error| panic!("length fits usize: {error}"))
+                }
+                len => usize::from(len),
+            };
+            assert!(len <= 65536, "server frame remains within configured M");
+            let mut payload = vec![0; len];
+            self.wire
+                .read_exact(&mut payload)
+                .unwrap_or_else(|error| panic!("server frame payload: {error}"));
+            match opcode {
+                9 => {
+                    let mut bytes = vec![0x8a];
+                    bytes.push(
+                        0x80 | u8::try_from(payload.len())
+                            .unwrap_or_else(|error| panic!("pong len: {error}")),
+                    );
+                    let mask = [0x13, 0x57, 0x9b, 0xdf];
+                    bytes.extend_from_slice(&mask);
+                    bytes.extend(
+                        payload
+                            .iter()
+                            .enumerate()
+                            .map(|(i, byte)| byte ^ mask[i % 4]),
+                    );
+                    self.wire
+                        .write_all(&bytes)
+                        .unwrap_or_else(|error| panic!("send pong: {error}"));
+                    self.wire
+                        .flush()
+                        .unwrap_or_else(|error| panic!("flush pong: {error}"));
+                }
+                10 => {}
+                _ => return (fin, opcode, payload),
+            }
+        }
+    }
+
+    fn read_data(&mut self, len: usize) -> Vec<u8> {
+        let mut bytes = Vec::with_capacity(len);
+        let mut fragmented = false;
+        while bytes.len() < len || fragmented {
+            let (fin, opcode, payload) = self.frame();
+            match opcode {
+                2 => assert!(
+                    !fragmented,
+                    "binary frame cannot interrupt unfinished message"
+                ),
+                0 => assert!(
+                    fragmented,
+                    "continuation frame requires in-progress message"
+                ),
+                other => panic!("expected binary or continuation frame, got opcode {other}"),
+            }
+            fragmented = !fin;
+            bytes.extend_from_slice(&payload);
+            assert!(bytes.len() <= len, "no unexpected extra relayed data");
+        }
+        assert_eq!(bytes.len(), len, "exact relayed data length");
+        bytes
+    }
+}
+
 /// True when the server closes the connection (EOF or reset) within `wait`,
 /// false when the connection is still open after it.
 fn closed_within(stream: &mut TcpStream, wait: Duration) -> bool {
@@ -558,48 +709,280 @@ fn status_of(head: &str) -> u16 {
         .unwrap_or_else(|| panic!("no status in {head:?}"))
 }
 
-/// spec: operations.md:OPS-025 partial
+/// spec: operations.md:OPS-025
 /// spec: operations.md:OPS-040 partial
 #[test]
 fn allow_change_keeps_waiting_connections_and_applies_to_new_decisions() {
     let _lock = lock_ports();
     let ports = Ports::free();
-    let config = setup("allow-change", &config_text(ports, VIEWER_ONLY, CERT, KEY));
+    let config = setup("allow-change", &config_text(ports, TWO_SOURCES, CERT, KEY));
     let log = log_of(&config);
     let mut guard = Guard(Some(spawn(&config)));
     wait_listening(guard.child(), ports);
 
-    let accepted = |line: &str| is(line, "connection_accepted", "tcp_viewer", "127.0.0.1");
-    let before = logged(&log, accepted);
-    let mut waiting = connect_from([127, 0, 0, 1], ports.tcp_viewer);
-    wait_for_count(&log, before + 1, accepted);
+    let mut greeting = [0u8; 12];
 
+    // State 3: Active relays over TCP, WS, and WSS before the reload.
+    let mut tcp_v = connect_from([127, 0, 0, 1], ports.tcp_viewer);
+    tcp_v
+        .read_exact(&mut greeting)
+        .unwrap_or_else(|error| panic!("tcp greeting: {error}"));
+    assert_eq!(&greeting, GREETING);
+    tcp_v
+        .write_all(&request("2503"))
+        .unwrap_or_else(|error| panic!("tcp v req: {error}"));
+    tcp_v
+        .flush()
+        .unwrap_or_else(|error| panic!("tcp v flush: {error}"));
+
+    let mut tcp_s = connect_from([127, 0, 0, 2], ports.tcp_server);
+    tcp_s
+        .write_all(&request("2503"))
+        .unwrap_or_else(|error| panic!("tcp s req: {error}"));
+    tcp_s
+        .flush()
+        .unwrap_or_else(|error| panic!("tcp s flush: {error}"));
+    wait_for_count(&log, 1, |line| event_is(line, "session_started"));
+
+    tcp_v
+        .write_all(b"tcp-pre-v2s")
+        .unwrap_or_else(|error| panic!("tcp write: {error}"));
+    tcp_v
+        .flush()
+        .unwrap_or_else(|error| panic!("tcp flush: {error}"));
+    let mut buf = [0u8; 11];
+    tcp_s
+        .read_exact(&mut buf)
+        .unwrap_or_else(|error| panic!("tcp read: {error}"));
+    assert_eq!(&buf, b"tcp-pre-v2s");
+    tcp_s
+        .write_all(b"tcp-pre-s2v")
+        .unwrap_or_else(|error| panic!("tcp write: {error}"));
+    tcp_s
+        .flush()
+        .unwrap_or_else(|error| panic!("tcp flush: {error}"));
+    tcp_v
+        .read_exact(&mut buf)
+        .unwrap_or_else(|error| panic!("tcp read: {error}"));
+    assert_eq!(&buf, b"tcp-pre-s2v");
+
+    let mut ws_v = WebSocket::upgrade(Box::new(connect_from([127, 0, 0, 1], ports.ws_viewer)));
+    assert_eq!(ws_v.read_data(12), GREETING);
+    ws_v.send_binary(&request("2504"));
+
+    let mut ws_s = connect_from([127, 0, 0, 2], ports.tcp_server);
+    ws_s.write_all(&request("2504"))
+        .unwrap_or_else(|error| panic!("ws s req: {error}"));
+    ws_s.flush()
+        .unwrap_or_else(|error| panic!("ws s flush: {error}"));
+    wait_for_count(&log, 2, |line| event_is(line, "session_started"));
+
+    ws_v.send_binary(b"ws-pre-v2s");
+    let mut buf_ws = [0u8; 10];
+    ws_s.read_exact(&mut buf_ws)
+        .unwrap_or_else(|error| panic!("ws read: {error}"));
+    assert_eq!(&buf_ws, b"ws-pre-v2s");
+    ws_s.write_all(b"ws-pre-s2v")
+        .unwrap_or_else(|error| panic!("ws write: {error}"));
+    ws_s.flush()
+        .unwrap_or_else(|error| panic!("ws flush: {error}"));
+    assert_eq!(ws_v.read_data(10), b"ws-pre-s2v");
+
+    let mut wss_v = WebSocket::upgrade(Box::new(tls_client(connect_from(
+        [127, 0, 0, 1],
+        ports.wss_viewer,
+    ))));
+    assert_eq!(wss_v.read_data(12), GREETING);
+    wss_v.send_binary(&request("2505"));
+
+    let mut wss_s = connect_from([127, 0, 0, 2], ports.tcp_server);
+    wss_s
+        .write_all(&request("2505"))
+        .unwrap_or_else(|error| panic!("wss s req: {error}"));
+    wss_s
+        .flush()
+        .unwrap_or_else(|error| panic!("wss s flush: {error}"));
+    wait_for_count(&log, 3, |line| event_is(line, "session_started"));
+
+    wss_v.send_binary(b"wss-pre-v2s");
+    let mut buf_wss = [0u8; 11];
+    wss_s
+        .read_exact(&mut buf_wss)
+        .unwrap_or_else(|error| panic!("wss read: {error}"));
+    assert_eq!(&buf_wss, b"wss-pre-v2s");
+    wss_s
+        .write_all(b"wss-pre-s2v")
+        .unwrap_or_else(|error| panic!("wss write: {error}"));
+    wss_s
+        .flush()
+        .unwrap_or_else(|error| panic!("wss flush: {error}"));
+    assert_eq!(wss_v.read_data(11), b"wss-pre-s2v");
+
+    // State 2: Mode II waiting registration before reload.
+    let mut waiting_s = connect_from([127, 0, 0, 1], ports.tcp_server);
+    waiting_s
+        .write_all(&request("2502"))
+        .unwrap_or_else(|error| panic!("waiting write: {error}"));
+    waiting_s
+        .flush()
+        .unwrap_or_else(|error| panic!("waiting flush: {error}"));
+    wait_for_count(&log, 1, |line| event_is(line, "waiting_registered"));
+
+    // State 1: Connection mid initial exchange before reload.
+    let mut mid_v = connect_from([127, 0, 0, 1], ports.tcp_viewer);
+    mid_v
+        .read_exact(&mut greeting)
+        .unwrap_or_else(|error| panic!("mid greeting: {error}"));
+    assert_eq!(&greeting, GREETING);
+    let req2501 = request("2501");
+    mid_v
+        .write_all(&req2501[..50])
+        .unwrap_or_else(|error| panic!("mid partial write: {error}"));
+    mid_v
+        .flush()
+        .unwrap_or_else(|error| panic!("mid flush: {error}"));
+
+    // Reload: removes 127.0.0.1, keeps 127.0.0.2, adds 127.0.0.3.
     write(&config, &config_text(ports, RANGE, CERT, KEY));
     let applied = wait_for_line(&log, |line| event_is(line, "reload_applied"));
     assert!(applied.contains("relay.tcp_viewer.allow"), "{applied}");
+    assert!(applied.contains("relay.tcp_server.allow"), "{applied}");
     assert!(applied.contains("relay.ws_viewer.allow"), "{applied}");
+    assert!(applied.contains("relay.wss_viewer.allow"), "{applied}");
 
-    // The connection that the removed source holds stays open.
-    assert!(
-        !closed_within(&mut waiting, SETTLE),
-        "waiting connection was closed"
-    );
-    // New decisions use the new list: 127.0.0.1 and 127.0.0.4 are refused,
-    // 127.0.0.2 is accepted.
+    // State 3: Active relays keep forwarding exact bytes both ways after reload.
+    tcp_v
+        .write_all(b"tcp-post-v2s")
+        .unwrap_or_else(|error| panic!("tcp post write: {error}"));
+    tcp_v
+        .flush()
+        .unwrap_or_else(|error| panic!("tcp post flush: {error}"));
+    let mut buf_post_tcp = [0u8; 12];
+    tcp_s
+        .read_exact(&mut buf_post_tcp)
+        .unwrap_or_else(|error| panic!("tcp post read: {error}"));
+    assert_eq!(&buf_post_tcp, b"tcp-post-v2s");
+    tcp_s
+        .write_all(b"tcp-post-s2v")
+        .unwrap_or_else(|error| panic!("tcp post write: {error}"));
+    tcp_s
+        .flush()
+        .unwrap_or_else(|error| panic!("tcp post flush: {error}"));
+    tcp_v
+        .read_exact(&mut buf_post_tcp)
+        .unwrap_or_else(|error| panic!("tcp post read: {error}"));
+    assert_eq!(&buf_post_tcp, b"tcp-post-s2v");
+
+    ws_v.send_binary(b"ws-post-v2s");
+    let mut buf_post_ws = [0u8; 11];
+    ws_s.read_exact(&mut buf_post_ws)
+        .unwrap_or_else(|error| panic!("ws post read: {error}"));
+    assert_eq!(&buf_post_ws, b"ws-post-v2s");
+    ws_s.write_all(b"ws-post-s2v")
+        .unwrap_or_else(|error| panic!("ws post write: {error}"));
+    ws_s.flush()
+        .unwrap_or_else(|error| panic!("ws post flush: {error}"));
+    assert_eq!(ws_v.read_data(11), b"ws-post-s2v");
+
+    wss_v.send_binary(b"wss-post-v2s");
+    let mut buf_post_wss = [0u8; 12];
+    wss_s
+        .read_exact(&mut buf_post_wss)
+        .unwrap_or_else(|error| panic!("wss post read: {error}"));
+    assert_eq!(&buf_post_wss, b"wss-post-v2s");
+    wss_s
+        .write_all(b"wss-post-s2v")
+        .unwrap_or_else(|error| panic!("wss post write: {error}"));
+    wss_s
+        .flush()
+        .unwrap_or_else(|error| panic!("wss post flush: {error}"));
+    assert_eq!(wss_v.read_data(12), b"wss-post-s2v");
+
+    // State 2: Waiting registration matches counterpart arriving after reload.
+    let mut counterpart_s2 = connect_from([127, 0, 0, 2], ports.tcp_viewer);
+    counterpart_s2
+        .read_exact(&mut greeting)
+        .unwrap_or_else(|error| panic!("greeting: {error}"));
+    assert_eq!(&greeting, GREETING);
+    counterpart_s2
+        .write_all(&request("2502"))
+        .unwrap_or_else(|error| panic!("counterpart s2 write: {error}"));
+    counterpart_s2
+        .flush()
+        .unwrap_or_else(|error| panic!("counterpart s2 flush: {error}"));
+    wait_for_count(&log, 4, |line| event_is(line, "session_started"));
+
+    waiting_s
+        .write_all(b"s2-post-s2v")
+        .unwrap_or_else(|error| panic!("s2 write: {error}"));
+    waiting_s
+        .flush()
+        .unwrap_or_else(|error| panic!("s2 flush: {error}"));
+    let mut buf_s2 = [0u8; 11];
+    counterpart_s2
+        .read_exact(&mut buf_s2)
+        .unwrap_or_else(|error| panic!("s2 read: {error}"));
+    assert_eq!(&buf_s2, b"s2-post-s2v");
+    counterpart_s2
+        .write_all(b"s2-post-v2s")
+        .unwrap_or_else(|error| panic!("s2 write: {error}"));
+    counterpart_s2
+        .flush()
+        .unwrap_or_else(|error| panic!("s2 flush: {error}"));
+    waiting_s
+        .read_exact(&mut buf_s2)
+        .unwrap_or_else(|error| panic!("s2 read: {error}"));
+    assert_eq!(&buf_s2, b"s2-post-v2s");
+
+    // State 1: Connection mid initial exchange completes, registers, and matches.
+    mid_v
+        .write_all(&req2501[50..])
+        .unwrap_or_else(|error| panic!("mid complete write: {error}"));
+    mid_v
+        .flush()
+        .unwrap_or_else(|error| panic!("mid complete flush: {error}"));
+    wait_for_count(&log, 2, |line| event_is(line, "waiting_registered"));
+
+    let mut counterpart_s1 = connect_from([127, 0, 0, 2], ports.tcp_server);
+    counterpart_s1
+        .write_all(&request("2501"))
+        .unwrap_or_else(|error| panic!("counterpart s1 write: {error}"));
+    counterpart_s1
+        .flush()
+        .unwrap_or_else(|error| panic!("counterpart s1 flush: {error}"));
+    wait_for_count(&log, 5, |line| event_is(line, "session_started"));
+
+    mid_v
+        .write_all(b"s1-post-v2s")
+        .unwrap_or_else(|error| panic!("s1 write: {error}"));
+    mid_v
+        .flush()
+        .unwrap_or_else(|error| panic!("s1 flush: {error}"));
+    let mut buf_s1 = [0u8; 11];
+    counterpart_s1
+        .read_exact(&mut buf_s1)
+        .unwrap_or_else(|error| panic!("s1 read: {error}"));
+    assert_eq!(&buf_s1, b"s1-post-v2s");
+    counterpart_s1
+        .write_all(b"s1-post-s2v")
+        .unwrap_or_else(|error| panic!("s1 write: {error}"));
+    counterpart_s1
+        .flush()
+        .unwrap_or_else(|error| panic!("s1 flush: {error}"));
+    mid_v
+        .read_exact(&mut buf_s1)
+        .unwrap_or_else(|error| panic!("s1 read: {error}"));
+    assert_eq!(&buf_s1, b"s1-post-s2v");
+
+    // New decisions use the new list: 127.0.0.1 is refused on all entry points.
     assert!(closed_within(
         &mut connect_from([127, 0, 0, 1], ports.tcp_viewer),
         EXIT_LIMIT
     ));
-    let mut second = connect_from([127, 0, 0, 2], ports.tcp_viewer);
-    assert!(!closed_within(&mut second, SETTLE), "127.0.0.2 refused");
     assert!(closed_within(
-        &mut connect_from([127, 0, 0, 4], ports.tcp_viewer),
+        &mut connect_from([127, 0, 0, 1], ports.tcp_server),
         EXIT_LIMIT
     ));
-    wait_for_line(&log, |line| {
-        is(line, "connection_rejected", "tcp_viewer", "127.0.0.4")
-    });
-    // The WebSocket and WSS entry points follow the same list.
     assert!(closed_within(
         &mut connect_from([127, 0, 0, 1], ports.ws_viewer),
         EXIT_LIMIT
@@ -608,6 +991,87 @@ fn allow_change_keeps_waiting_connections_and_applies_to_new_decisions() {
         &mut connect_from([127, 0, 0, 1], ports.wss_viewer),
         EXIT_LIMIT
     ));
+
+    // Outside range 127.0.0.4 is refused.
+    assert!(closed_within(
+        &mut connect_from([127, 0, 0, 4], ports.tcp_viewer),
+        EXIT_LIMIT
+    ));
+    wait_for_line(&log, |line| {
+        is(line, "connection_rejected", "tcp_viewer", "127.0.0.4")
+    });
+
+    // Still-allowed source 127.0.0.2 is accepted.
+    let mut second = connect_from([127, 0, 0, 2], ports.tcp_viewer);
+    assert!(!closed_within(&mut second, SETTLE), "127.0.0.2 refused");
+
+    // Newly added source 127.0.0.3 is accepted on TCP, WS, and WSS.
+    let mut new_tcp_v = connect_from([127, 0, 0, 3], ports.tcp_viewer);
+    new_tcp_v
+        .read_exact(&mut greeting)
+        .unwrap_or_else(|error| panic!("new greeting: {error}"));
+    assert_eq!(&greeting, GREETING);
+
+    let mut new_tcp_s = connect_from([127, 0, 0, 3], ports.tcp_server);
+    assert!(!closed_within(&mut new_tcp_s, SETTLE));
+
+    new_tcp_v
+        .write_all(&request("2506"))
+        .unwrap_or_else(|error| panic!("new v write: {error}"));
+    new_tcp_v
+        .flush()
+        .unwrap_or_else(|error| panic!("new v flush: {error}"));
+    new_tcp_s
+        .write_all(&request("2506"))
+        .unwrap_or_else(|error| panic!("new s write: {error}"));
+    new_tcp_s
+        .flush()
+        .unwrap_or_else(|error| panic!("new s flush: {error}"));
+    wait_for_count(&log, 6, |line| event_is(line, "session_started"));
+
+    new_tcp_v
+        .write_all(b"new-v2s")
+        .unwrap_or_else(|error| panic!("new write: {error}"));
+    new_tcp_v
+        .flush()
+        .unwrap_or_else(|error| panic!("new flush: {error}"));
+    let mut buf_new = [0u8; 7];
+    new_tcp_s
+        .read_exact(&mut buf_new)
+        .unwrap_or_else(|error| panic!("new read: {error}"));
+    assert_eq!(&buf_new, b"new-v2s");
+    new_tcp_s
+        .write_all(b"new-s2v")
+        .unwrap_or_else(|error| panic!("new write: {error}"));
+    new_tcp_s
+        .flush()
+        .unwrap_or_else(|error| panic!("new flush: {error}"));
+    new_tcp_v
+        .read_exact(&mut buf_new)
+        .unwrap_or_else(|error| panic!("new read: {error}"));
+    assert_eq!(&buf_new, b"new-s2v");
+
+    let mut new_ws = WebSocket::upgrade(Box::new(connect_from([127, 0, 0, 3], ports.ws_viewer)));
+    assert_eq!(new_ws.read_data(12), GREETING);
+
+    let mut new_wss = WebSocket::upgrade(Box::new(tls_client(connect_from(
+        [127, 0, 0, 3],
+        ports.wss_viewer,
+    ))));
+    assert_eq!(new_wss.read_data(12), GREETING);
+
+    wait_for_line(&log, |line| {
+        is(line, "connection_accepted", "tcp_viewer", "127.0.0.3")
+    });
+    wait_for_line(&log, |line| {
+        is(line, "connection_accepted", "tcp_server", "127.0.0.3")
+    });
+    wait_for_line(&log, |line| {
+        is(line, "connection_accepted", "ws_viewer", "127.0.0.3")
+    });
+    wait_for_line(&log, |line| {
+        is(line, "connection_accepted", "wss_viewer", "127.0.0.3")
+    });
 }
 
 /// spec: operations.md:OPS-026
@@ -1140,7 +1604,7 @@ fn allow_list_modes_hold_at_start_and_at_reload() {
     assert!(stderr.contains("relay.tcp_viewer.allow"), "{stderr}");
 }
 
-/// spec: websocket.md:WS-022 partial
+/// spec: websocket.md:WS-022
 #[test]
 fn removed_source_is_refused_at_upgrade_on_connections_opened_before_the_removal() {
     let _lock = lock_ports();
@@ -1150,13 +1614,35 @@ fn removed_source_is_refused_at_upgrade_on_connections_opened_before_the_removal
     let mut guard = Guard(Some(spawn(&config)));
     wait_listening(guard.child(), ports);
 
-    // A connection that completes an upgrade before the removal.
-    let mut upgraded = connect_from([127, 0, 0, 2], ports.ws_viewer);
-    upgraded
-        .write_all(&upgrade_request())
-        .unwrap_or_else(|error| panic!("request: {error}"));
-    let head = read_head(&mut upgraded);
-    assert_eq!(status_of(&head), 101, "{head}");
+    // An already-relaying WS session from the source that will be removed (127.0.0.2).
+    let mut relaying_ws =
+        WebSocket::upgrade(Box::new(connect_from([127, 0, 0, 2], ports.ws_viewer)));
+    assert_eq!(relaying_ws.read_data(12), GREETING);
+    relaying_ws.send_binary(&request("2201"));
+
+    let mut relaying_server = connect_from([127, 0, 0, 2], ports.tcp_server);
+    relaying_server
+        .write_all(&request("2201"))
+        .unwrap_or_else(|error| panic!("server req: {error}"));
+    relaying_server
+        .flush()
+        .unwrap_or_else(|error| panic!("server flush: {error}"));
+    wait_for_line(&log, |line| event_is(line, "session_started"));
+
+    // Pre-removal data transfer in both directions.
+    relaying_ws.send_binary(b"pre-ws2server");
+    let mut buf = [0u8; 13];
+    relaying_server
+        .read_exact(&mut buf)
+        .unwrap_or_else(|error| panic!("server read: {error}"));
+    assert_eq!(&buf, b"pre-ws2server");
+    relaying_server
+        .write_all(b"pre-server2ws")
+        .unwrap_or_else(|error| panic!("server write: {error}"));
+    relaying_server
+        .flush()
+        .unwrap_or_else(|error| panic!("server flush: {error}"));
+    assert_eq!(relaying_ws.read_data(13), b"pre-server2ws");
 
     // A plain HTTP connection and a TLS connection that send nothing yet.
     let mut held_http = connect_from([127, 0, 0, 2], ports.ws_viewer);
@@ -1174,12 +1660,20 @@ fn removed_source_is_refused_at_upgrade_on_connections_opened_before_the_removal
     assert!(applied.contains("relay.ws_viewer.allow"), "{applied}");
     assert!(applied.contains("relay.wss_viewer.allow"), "{applied}");
 
-    // The upgraded connection stays open.
-    assert!(
-        !closed_within(&mut upgraded, SETTLE),
-        "upgraded connection was closed"
-    );
-
+    // The already-relaying WS session keeps forwarding data in both directions after removal.
+    relaying_ws.send_binary(b"post-ws2server");
+    let mut buf2 = [0u8; 14];
+    relaying_server
+        .read_exact(&mut buf2)
+        .unwrap_or_else(|error| panic!("server read: {error}"));
+    assert_eq!(&buf2, b"post-ws2server");
+    relaying_server
+        .write_all(b"post-server2ws")
+        .unwrap_or_else(|error| panic!("server write: {error}"));
+    relaying_server
+        .flush()
+        .unwrap_or_else(|error| panic!("server flush: {error}"));
+    assert_eq!(relaying_ws.read_data(14), b"post-server2ws");
     // Upgrades on the held connections are refused at the upgrade re-check.
     held_http
         .write_all(&upgrade_request())
