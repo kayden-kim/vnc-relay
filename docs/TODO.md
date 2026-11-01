@@ -94,10 +94,11 @@ Mode I·II 초기 흐름을 추정 없이 설명할 수 있게 한다. 관찰은
   - 완료 조건: 프로젝트 소유자가 채택해 계약이 Active가 된다. 중계 스펙 8절을 갱신하고, 필요하면 [WebSocket 중계 계약](contracts/websocket-relay-v1.md)의 close 코드 대응도 고친다.
   - 선행: 1.4
   - 현재: 2026-11-01에 프로젝트 소유자가 계약을 채택했다(Active, 사용자 결정 Q73). 1절은 관찰 증거로 다시 썼다. 오류 응답 바이트는 없고, Viewer 쪽 시작 바이트 12바이트만 있다. 2절 오류 코드 이름은 그대로 채택했다(Q72). 중계 ID는 숫자 1~247자리이고 바이트열이 정확히 같을 때만 같다(Q68·Q69). Mode I은 대괄호 IPv6를 받는다(Q70). 상한 I(`limits.initial_message_bytes`)를 지우고 [설정 계약](contracts/config-v2.md)을 2.0.0으로 올렸다(Q71). [중계 스펙 8절](specs/relay.md#8-미결정-사항)에서 RLY-TBD-002를 뺐고, [WebSocket 중계 계약](contracts/websocket-relay-v1.md)의 4008 뜻과 101 직후 시작 바이트를 고쳤다. 대상 버전과 다르게 처리하는 입력은 [계약 3.1절](contracts/repeater-handshake-v1.md#31-대상-버전-repeater와-다르게-처리하는-입력)에 있다.
-- [ ] **1.6 중복 ID 정책(RLY-TBD-003, 결정)**: 대상 버전에서 같은 역할 중복 중계 ID의 결과를 기록한다. 제안 정책(후발 거절)과 같으면 채택한다. 다르면 차이를 기록하고 프로젝트 소유자가 정책을 고른다.
+- [x] **1.6 중복 ID 정책(RLY-TBD-003, 결정)**: 대상 버전에서 같은 역할 중복 중계 ID의 결과를 기록한다. 제안 정책(후발 거절)과 같으면 채택한다. 다르면 차이를 기록하고 프로젝트 소유자가 정책을 고른다.
   - 기준: [미결정 항목의 해소 조건](contracts/repeater-handshake-v1.md#63-미결정-항목의-해소-조건), [중계 스펙 3.3절](specs/relay.md#33-mode-ii)
   - 완료 조건: 초기 교환 계약 2절, 중계 스펙 3.3절, PRD를 갱신한다.
   - 선행: 1.4
+  - 현재: 2026-11-01에 정했다. 대상 버전은 후발 연결을 등록하지 않지만 닫지도 않아 제안 정책과 달랐다([호환성 검증 기록 4.11](contracts/repeater-compat-record.md#4-미해결-항목)). 프로젝트 소유자가 후발 거절을 골랐다(사용자 결정 Q74). 뒤에 온 연결은 바로 닫고(TCP FIN, WS·WSS close 4004), 기존 연결과 활성 세션은 유지한다. 활성 세션 ID의 중복은 추가로 관찰하지 않는다(Q75). [초기 교환 계약 2절·3.1절](contracts/repeater-handshake-v1.md#2-오류), [중계 스펙 3.3절](specs/relay.md#33-mode-ii)·4절·RLY-015, PRD 확정 기준 표, [운영 정보 계약](contracts/ops-info-v1.md) 1.6절 근거 열을 갱신했다.
 - [ ] **1.7 관찰 결과를 다른 계약에 반영**: 중계 ID의 JSON 문자열 표현과 고정 버전 noVNC가 보내는 `Sec-WebSocket-Protocol` 값을 관찰 결과로 확정한다.
   - 기준: [관리 API 계약 6절](contracts/management-api-v1.md#6-초안을-확정하기-전에-해결할-사항), [WebSocket 중계 계약 6절](contracts/websocket-relay-v1.md#6-초안을-확정하기-전에-해결할-사항)
   - 완료 조건: 두 계약 6절의 해당 항목을 해소한다.

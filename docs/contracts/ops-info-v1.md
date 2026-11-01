@@ -204,7 +204,7 @@ VNC Relay가 운영자에게 내보내는 두 가지 정보의 교환 형식을 
 | `initial_exchange` | Repeater 초기 교환 | `handshake_invalid` | 초기 요청의 형식 오류. [Repeater 계약 2절](repeater-handshake-v1.md#2-오류)의 같은 이름 코드다. | RLY-004 |
 | `initial_exchange` | Repeater 초기 교환 | `mode_disabled` | 설정으로 끈 모드의 요청. `mode`를 쓴다. | RLY-022 |
 | `register` | 대기 등록 | `waiting_full` | 대기 상한 Lw에 도달함. `limit`을 쓴다. | OPS-005 |
-| `register` | 대기 등록 | `duplicate_id` | 같은 중계 ID와 같은 역할이 이미 대기 중이거나 활성 세션이 점유함. 후발 연결을 거절한다. `relay_id_ref`를 쓴다. | [중계 스펙 3.3절](../specs/relay.md#33-mode-ii)의 중복 정책 제안, RLY-TBD-003 |
+| `register` | 대기 등록 | `duplicate_id` | 같은 중계 ID와 같은 역할이 이미 대기 중이거나 활성 세션이 점유함. 후발 연결을 거절한다. `relay_id_ref`를 쓴다. | [중계 스펙 3.3절](../specs/relay.md#33-mode-ii) 4항(사용자 결정 2026-11-01(Q74)), RLY-015 |
 | `target_connect` | Mode I 대상 연결 준비 | `target_not_allowed` | 최종 대상 IP·포트가 허용 정책을 만족하지 못함. `target_host`, `target_ip?`, `target_port`를 쓴다. | RLY-007, RLY-008 |
 | `target_connect` | Mode I 대상 연결 준비 | `relay_connection_limit` | 대상 연결 소켓을 위한 L 예산이 없음. `limit`을 쓴다. | OPS-023 |
 
