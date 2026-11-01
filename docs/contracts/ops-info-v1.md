@@ -5,6 +5,7 @@ VNC Relay가 운영자에게 내보내는 두 가지 정보의 교환 형식을 
 | 항목 | 값 |
 | --- | --- |
 | 이름과 버전 | `ops-info` 1.3.0. 1.1.0은 `startup_failed`의 `reason`에 `runtime_unavailable`을 더했다. 1.2.0은 `reason`에 `log_file_unavailable`을 더하고, 로그 쓰기 실패 처리(1.1절)를 정하고, `startup_failed`를 진단마다 한 줄로 정했다(1.6절). 모두 사용자가 결정했다(2026-10-20). 2026-11-01에 `handshake_invalid`의 조건 문장을 [Repeater 초기 교환 계약](repeater-handshake-v1.md) 채택(사용자 결정 2026-11-01(Q71·Q72))에 맞춰 "초기 요청의 형식 오류"로 고쳤다. 버전은 올리지 않았다. 빠진 조건 중 "미지원 모드"는 채택한 계약 2절에서 형식 오류에 들어간다. "I 초과"와 그때의 `limit`은 초기 요청이 250바이트 고정이고 I의 최솟값이 256이었으므로 생길 수 없다. 그래서 같은 입력이 다른 `reason`을 받는 경우가 없어 3절의 의미 변경으로 보지 않았다(이 문서의 판단, 사용자 결정 없음). 이 사건은 커밋 `5e53570`에서 구현하고 계약 시험을 통과했다. 1.3.0은 `connection_aborted`의 `stage`에 `register`를 더하고, 초기 교환 뒤 대기 등록 완료 전에 서버 종료로 끝나는 Mode II 연결의 `stage`를 `register`로 정했다(사용자 결정 2026-11-01(Q81)). 또한 강제 정리 때 이미 정리를 시작한 세션의 `close_cause` 보존 규칙(1.6절)을 명시했다(사용자 결정 2026-11-01(Q82)). 모두 호환 변경이다. |
+| 변경 | 호환 변경(2026-11-02, 1.3.0 유지): 수락 소켓의 TCP keepalive 설정 실패를 `connection_error`·`io_error`로 기록하고 전송별 `stage`와 사건 순서를 정했다(사용자 결정 2026-11-02(Q85)). `admin_terminate.result`에 `already_closed`를 더했다(사용자 결정 2026-11-02(Q90)). 관리자 정리의 E 만료는 `close_timeout`이며 EOF가 없으면 `side`를 생략한다. 이때 계정은 `admin_terminate`로 추적한다(사용자 결정 2026-11-02(Q91)). 구현·시험 완료 여부는 5절과 TODO 2.11·4.5에서 따로 관리한다. |
 | 상태 | Active(2026-10-16 채택) |
 | 소유자 | vnc-relay 프로젝트 관리자 |
 | 만드는 쪽(Producer) | `vnc-relay` (`vnc-relay serve` 프로세스) |
@@ -168,11 +169,11 @@ VNC Relay가 운영자에게 내보내는 두 가지 정보의 교환 형식을 
 | `admin_login_succeeded` | `info` | 로그인에 성공해 관리 세션을 발급했을 때 | `admin_account`, `peer_ip` | MGT-017, OPS-029 |
 | `admin_login_failed` | `warn` | 로그인 요청을 거절했을 때 | `reason`: `invalid_credentials` 또는 `limited`. `peer_ip`. 선택: `admin_account`. `reason`이 `limited`이면 `scope`(`account` 또는 `source`)도 쓴다. | MGT-018, MGT-022 |
 | `admin_login_limited` | `warn` | 실패 횟수가 F를 넘어 제한을 시작했을 때. 제한 중 시도마다 기록하지 않는다(그 시도는 `admin_login_failed`다). | `scope`: `account` 또는 `source`. `peer_ip`(기준을 넘게 한 시도의 출발지). `lockout_secs`: 정수. 선택: `admin_account`. | MGT-022, MGT-R14 |
-| `admin_terminate` | `info`. `result`가 `failed`이면 `error` | 유효한 관리 세션과 CSRF 검증을 통과한 세션 종료 요청을 처리했을 때. 응답과 같은 시점이며 정리가 끝난 뒤다. | `admin_account`, `result`(`terminated`, `not_found`, `failed`), `peer_ip`. `result`가 `terminated` 또는 `failed`이면 `session_id`. | OPS-011, MGT-009, MGT-010, MGT-011, MGT-012 |
+| `admin_terminate` | `info`. `result`가 `failed`이면 `error` | 유효한 관리 세션과 CSRF 검증을 통과한 세션 종료 요청을 처리했을 때. 응답과 같은 시점이며 정리가 끝난 뒤다. | `admin_account`, `result`(`terminated`, `already_closed`, `not_found`, `failed`), `peer_ip`. `result`가 `not_found`가 아니면 `session_id`. | OPS-011, MGT-009, MGT-010, MGT-011, MGT-012 |
 
-`result`는 [관리 스펙 2절](../specs/management.md#2-조회-대상과-상태)의 종료 결과(종료 완료, 대상 없음, 종료 실패)에 대응한다. 유효한 관리 세션이 없는 요청은 관리 세션 없음으로 응답하며 이 사건을 기록하지 않는다. `result`가 `not_found`이면 `session_id`를 쓰지 않는다. 존재하지 않는 세션 식별자를 연결된 것처럼 기록하지 않기 위해서다.
+`result`는 [관리 API 계약 1.9절](management-api-v1.md#19-관리자-종료-post-apiv1sessionssession_idterminate)의 종료 결과에 대응한다. 이 요청이 종료를 시작하면 `terminated`, 이미 시작한 정리에 합류해 완료를 확인하면 `already_closed`, 대상이 없으면 `not_found`, 종료를 확인하지 못하면 `failed`다(사용자 결정 2026-11-02(Q90)). `already_closed`는 `info`이며 `session_id`를 포함한다. 유효한 관리 세션이 없는 요청은 관리 세션 없음으로 응답하며 이 사건을 기록하지 않는다. `result`가 `not_found`이면 `session_id`를 쓰지 않는다. 존재하지 않는 세션 식별자를 연결된 것처럼 기록하지 않기 위해서다.
 
-`close_cause`가 `admin_terminated`인 `session_closed`가 먼저 오고, 같은 요청의 `admin_terminate`가 뒤따른다. 두 줄 모두 같은 `admin_account`를 가진다.
+대상을 정리한 `session_closed`가 먼저 오고, 같은 요청의 `admin_terminate`가 뒤따른다. 이 요청이 종료를 시작했고 `close_cause`가 `admin_terminated`이면 두 줄은 같은 `admin_account`를 가진다. `already_closed`일 때 `session_closed`는 실제 최초 종료 원인을 유지한다. 합류 요청은 자신의 인증 계정으로 `admin_terminate(result=already_closed)`를 기록하며 `session_closed`를 추가로 만들지 않는다(사용자 결정 2026-11-02(Q90)). 관리자 정리의 E 만료 때 계정과 `side`는 1.6절을 따른다.
 
 ### 1.6 원인 코드
 
@@ -213,12 +214,14 @@ VNC Relay가 운영자에게 내보내는 두 가지 정보의 교환 형식을 
 `stage`는 `tls`, `upgrade`, `initial_exchange`, `register`, `target_connect` 중 하나다.
 `register`는 초기 교환을 마쳤으나 대기 등록이 완료되기 전에 서버 종료로 끝난 Mode II 연결이다. 이때 `reason`은 `server_shutdown`이다(사용자 결정 2026-11-01(Q81)). 매칭되었으나 아직 활성화되지 않은 상태에서 서버가 종료되면 이미 등록되어 있던 쪽은 `waiting_removed(reason=server_shutdown)`로, 도착하여 등록 중이던 쪽은 `connection_aborted(stage=register, reason=server_shutdown)`로 기록한다. Mode I의 대응 단계는 `target_connect`를 유지한다.
 
+수락한 TCP·WS·WSS 소켓의 TCP keepalive 설정이 실패하면 `reason=connection_error`, `error_kind=io_error`로 중단한다. `stage`는 현재 단계인 TCP의 `initial_exchange`, WS의 `upgrade`, WSS의 `tls`다. `conn_id`를 가진 중단 사건을 남기기 위해 `connection_accepted`를 먼저 기록하고 keepalive를 설정한다. 실패하면 `connection_aborted`를 기록한 뒤 소켓을 닫고 L 자리를 돌려준다(사용자 결정 2026-11-02(Q85)).
+
 | `reason` | 의미 | 근거 |
 | --- | --- | --- |
 | `handshake_timeout` | Repeater 초기 교환이 H 안에 끝나지 않음 | RLY-005, OPS-006 |
 | `tls_upgrade_timeout` | TLS 협상 또는 HTTP 업그레이드가 U 안에 끝나지 않음. U가 지난 뒤 상대가 닫은 경우도 이 사유다(사용자 결정 2026-10-22(Q28)). | OPS-006, WS-023 |
 | `peer_eof` | 상대가 초기 교환을 마치기 전에 연결을 닫음(미완료 단절). `stage`가 `initial_exchange`이면 [Repeater 계약 2절](repeater-handshake-v1.md#2-오류)의 `handshake_incomplete`다. | RLY-005 |
-| `connection_error` | 네트워크·프로토콜 오류. `error_kind`를 함께 쓴다. | WS-019 |
+| `connection_error` | 네트워크·프로토콜 오류 또는 수락 소켓의 TCP keepalive 설정 실패. `error_kind`를 함께 쓴다. | WS-019, 사용자 결정 2026-11-02(Q85) |
 | `dead_connection` | 응답하지 않는 상대를 TCP keepalive 또는 WebSocket ping으로 판정함 | RLY-026 |
 | `server_shutdown` | 정상 종료가 시작돼 미완성 작업을 종료함 | OPS-007 |
 
@@ -232,10 +235,10 @@ VNC Relay가 운영자에게 내보내는 두 가지 정보의 교환 형식을 
 | `connection_error` | `warn` | 오류가 난 쪽 | `error_kind`를 함께 쓴다. | RLY-020, WS-016, WS-017 |
 | `admin_terminated` | `info` | 없음 | `admin_account`가 필수다. | MGT-009, OPS-011 |
 | `dead_connection` | `warn` | 응답이 없는 쪽 | 없음 | RLY-026, WS-026 |
-| `close_timeout` | `warn` | 먼저 EOF를 낸 쪽 | 없음 | WS-017, RLY-019 |
+| `close_timeout` | `warn` | 먼저 EOF를 낸 쪽. EOF를 관찰하지 않았으면 생략 | 관리자 정리도 E가 만료되면 이 원인을 쓴다. `admin_account`는 생략하고 `admin_terminate`로 계정을 추적한다(사용자 결정 2026-11-02(Q91)). | WS-017, RLY-019, MGT-009, OPS-011 |
 | `server_shutdown` | `warn` | 없음 | 없음 | OPS-009, OPS-042 |
 
-한 세션의 `close_cause`는 정리를 시작하게 한 첫 원인이다. 그 뒤 생긴 정리 오류로 바꾸지 않는다. 단, 한쪽 EOF 뒤 E가 지나 정리하면 `close_cause`는 `close_timeout`이다. G 만료나 유예 중 두 번째 종료 요청으로 인한 강제 정리(`shutdown_forced`) 때도, 이미 정리를 시작한 세션(한쪽 EOF 관찰, I/O 오류, `dead_connection`, 관리자 종료 시작)은 최초 정리 시작 원인을 유지하며 `server_shutdown`으로 덮어쓰지 않는다. 아직 정리를 시작하지 않은 세션만 `close_cause=server_shutdown`이 된다(사용자 결정 2026-11-01(Q82)).
+한 세션의 `close_cause`는 정리를 시작하게 한 첫 원인이다. 그 뒤 생긴 정리 오류로 바꾸지 않는다. 단, 한쪽 EOF 뒤 또는 관리자 종료로 시작한 정리에서 E가 지나면 `close_cause`는 `close_timeout`이다. 관리자 정리에서 EOF를 관찰하지 않았으면 `side`를 생략한다. 이때 `session_closed`에는 `admin_account`를 넣지 않으며, 같은 `session_id`의 `admin_terminate`로 수행 계정을 추적한다(사용자 결정 2026-11-02(Q91)). G 만료나 유예 중 두 번째 종료 요청으로 인한 강제 정리(`shutdown_forced`) 때도, 이미 정리를 시작한 세션(한쪽 EOF 관찰, I/O 오류, `dead_connection`, 관리자 종료 시작)은 최초 정리 시작 원인을 유지하며 `server_shutdown`으로 덮어쓰지 않는다. 아직 정리를 시작하지 않은 세션만 `close_cause=server_shutdown`이 된다(사용자 결정 2026-11-01(Q82)).
 
 ### 1.7 `error_kind` 값
 
@@ -243,7 +246,7 @@ VNC Relay가 운영자에게 내보내는 두 가지 정보의 교환 형식을 
 
 | 값 | 의미 | 근거 |
 | --- | --- | --- |
-| `io_error` | 소켓 읽기·쓰기 오류, 연결 재설정 | RLY-020 |
+| `io_error` | 소켓 읽기·쓰기 오류, 연결 재설정, 소켓 옵션(TCP keepalive) 설정 실패 | RLY-020, 사용자 결정 2026-11-02(Q85) |
 | `tls_failed` | TLS 협상 실패(인증서 검증 실패 등). TLS 1.2 미만은 `connection_rejected`다. | WS-013 |
 | `ws_protocol_error` | 잘못된 프레임 순서, 유효하지 않은 제어 프레임 | WS-019 |
 | `ws_text_message` | 텍스트 데이터 메시지를 받음 | WS-008 |
@@ -336,7 +339,7 @@ Lm 상한에서 거절한 연결은 HTTP 응답을 받지 못하고 연결이 �
 - 소비자는 알 수 없는 필드를 무시해야 한다. 알 수 없는 `event` 줄은 버리지 않고 알 수 없는 사건으로 보존하거나 건너뛴다. 알 수 없는 `level`·`reason`·`close_cause`·`error_kind` 값도 오류로 처리하지 않는다.
 - 소비자는 `event`, `level`, 사건별 필수 필드로 분기해야 한다. `detail` 문자열로 분기하지 않는다.
 - 상태 도구는 HTTP 상태 코드로 생존·준비를 판정해야 한다. 200은 정상이고, 503은 준비 안 됨이다. 본문은 보조 정보다. 본문의 알 수 없는 `reason` 값을 오류로 처리하지 않는다.
-- 호환 변경: 사건 추가, 기존 사건에 선택 필드 추가, `reason`·`close_cause`·`error_kind`·`stage` 값 추가, 상태 응답 본문에 선택 필드 추가.
+- 호환 변경: 사건 추가, 기존 사건에 선택 필드 추가, `reason`·`close_cause`·`error_kind`·`stage`·`result` 값 추가, 상태 응답 본문에 선택 필드 추가. 수락 소켓의 keepalive 설정 실패 기록(Q85), `already_closed` 결과 추가(Q90), 관리자 E 만료의 `side`·계정 표기 명확화(Q91)는 호환 변경이다.
 - 호환성을 깨는 변경(Breaking change): 사건·필드 이름 변경이나 삭제, 필드 자료형·단위·의미 변경, 필수 필드 삭제, 기존 `reason`·`close_cause` 값의 삭제나 의미 변경, `ts` 형식 변경, 줄 구분·인코딩 변경, `level` 값의 의미 변경, 상태 엔드포인트의 경로·상태 코드·`/readyz` 준비 판정 의미 변경. 이런 변경은 새 major 버전(`ops-info` 2.0.0)과 함께 한다. 마이그레이션은 소비자를 새 형식에 먼저 맞춘 뒤 `vnc-relay`를 올리는 순서로 한다. 소비자는 `server_starting`의 `log_contract`로 버전을 구분한다. 롤백은 이전 버전의 `vnc-relay`를 다시 시작하는 것이다. 영속 상태가 없으므로(ADR-0003) 데이터 되돌림은 필요 없다. 마이그레이션·롤백 계획은 major 변경 때 별도로 작성한다.
 
 ## 4. 버전과 지원 단계
@@ -405,6 +408,8 @@ GET /readyz ->  503 {"status":"not_ready","reason":"shutting_down"}
 | Producer / 접속 거절 통합, 일부 생성 | TCP 수락·초기 교환과 이번에 추가한 대상·등록 로그 형식 밖의 접속 거절 통합 동작. WS 평문 진입점의 출발지 IP 거절(WSS는 위 행), 관리 TLS 버전 거절의 로그 줄 형식(`stage=tls`, `reason=tls_version_unsupported`, `listener=management`; 사건 값만 `management.rs`의 `tls10_and_tls11_hellos_are_refused_without_plaintext_fallback`에서 확인). ClientHello가 첫 TLS 레코드를 넘는 경우는 관리 리스너 설계 9절 열린 질문 10에 남는다. | 미실행 | 대상·등록 JSON 형식 시험은 위 행에 분리했다. 실제 거절·소켓 회수·WS 업그레이드 로그 통합의 나머지는 별도 확인 필요 |
 | Producer / `crates/adapters/tests/websocket.rs` `expired_untrusted_and_mismatched_certificates_fail_the_client_on_wss`(WSS 협상 실패 사건), `tls10_and_tls11_are_refused_and_tls12_and_tls13_succeed_on_wss_and_management`(WSS 버전 거절 사건) | WSS 진입점의 TLS 협상 실패 `connection_aborted`(`stage` = `tls`, `reason` = `connection_error`, `error_kind` = `tls_failed`)와 TLS 1.2 미만 거절 `connection_rejected`(`stage` = `tls`, `reason` = `tls_version_unsupported`)의 사건 값을 테스트가 받은 사건으로 확인했다. 줄 형식(필드 순서·`level`)은 확인하지 않았다. 스펙 [WS-013](../specs/websocket.md#7-수용-테스트), [OPS-036](../specs/operations.md#7-수용-테스트)(WSS 사건 값 부분) | 부분 | [실행 기록](#계약-테스트-실행-기록) |
 | Producer / 운영 로그 계약 테스트 `writes_target_rejections_failures_and_aborts_with_only_contract_fields` | 대상 연결 실패 4종(`resolve_failed`, `connect_refused`, `connect_timeout`, `connect_error`)의 필드·warn, 정책 거절과 사건 구분, 시도 전 `target_ip` 생략, K 설정 실패에 쓰는 `connect_error`의 `error_kind` 생략(1.5·1.7절). 실제 DNS·연결·K 설정은 이 시험 범위가 아니다. | 통과(로그 범위) | [실행 기록](#계약-테스트-실행-기록). 시나리오 표식은 `partial` |
+| Producer / 수락 소켓 keepalive 실패 계약·통합 시험, 구현 중 | `connection_accepted` 뒤 TCP·WS·WSS의 keepalive 설정 실패를 `connection_aborted(reason=connection_error, error_kind=io_error)`로 기록한다. `stage`는 각각 `initial_exchange`·`upgrade`·`tls`다. 중단 사건 뒤 소켓과 L 자리를 반환한다(사용자 결정 2026-11-02(Q85)). | 미실행 | TODO 2.11. 이번 결정의 실행 증거 없음 |
+| Producer / 관리자 종료 계약·통합 시험, 계획 | `admin_terminate(result=already_closed)`의 `info`·`session_id`, 실제 최초 원인의 `session_closed`가 먼저 오는 순서(Q90). 관리자 E 만료의 `close_timeout`, EOF가 없을 때 `side` 생략, `session_closed.admin_account` 생략과 감사 사건의 계정 추적(Q91). | 미실행 | TODO 4.5. 사용자 결정 2026-11-02(Q90), 사용자 결정 2026-11-02(Q91) |
 | Producer / 통합, 일부 생성 | 관리자 로그인 성공·실패·제한 사건. 스펙 [MGT-017](../specs/management.md#7-수용-테스트), [MGT-018](../specs/management.md#7-수용-테스트), [MGT-022](../specs/management.md#7-수용-테스트) | 미실행 | 구현: `ops_log.rs`(세 사건의 줄 형식), `login.rs`(사건 값 단위 시험). 시험: 로그인 성공 줄은 `tests/management_session.rs`의 `plain_loopback_login_opens_the_session_and_logs_success`가 확인한다. 실패·제한·제한 시작 줄 형식은 `ops_log.rs`의 `admin_login_lines_carry_only_their_own_fields`가 확인한다. |
 | Producer / 통합, 미생성 | 실행 중인 프로세스에서 시작 중·종료 유예 중 `/readyz` 503(유예 중 `/livez`는 200), `listener_failed`. 스펙 [OPS-013](../specs/operations.md#7-수용-테스트)(나머지), [OPS-043](../specs/operations.md#7-수용-테스트) | 미실행 | 종료 유예·리스너 실패 판정 미구현 |
 | Consumer / 수집 도구 계약 테스트, 위치 미정 | 알 수 없는 필드·사건·값 무시(3절), `level`·`event` 분기 | 미실행 | 소비자 테스트 위치 없음 |

@@ -79,7 +79,7 @@ flowchart LR
 | `ActiveSessionView` | `session_id: String`, `state: &'static str` (`active` \| `closing`), `mode: &'static str` (`mode1` \| `mode2`), `viewer_transport: &'static str` (`tcp` \| `ws` \| `wss`), `started_at: String`, `bytes_viewer_to_target: u64`, `bytes_target_to_viewer: u64`, `viewer_address: PeerAddressView`, `target_address: PeerAddressView` | `SessionsResponse.items` 및 상세 | `bytes_*`는 단조 증가하며 감소하거나 순환하지 않는다. `closing` 세션도 활성 세션에 포함된다. |
 | `ClosedSessionsResponse` | `as_of: String`, `max_entries: u64`, `items: Vec<ClosedSessionItemView>` | HTTP 직렬화 시 일시 생성 | `max_entries`는 설정된 R 값이다. `items`는 정리가 끝난 활성 세션만 담는다. |
 | `ClosedSessionItemView` | `session_id: String`, `mode: &'static str`, `viewer_transport: &'static str`, `started_at: String`, `ended_at: String`, `bytes_viewer_to_target: u64`, `bytes_target_to_viewer: u64`, `close_cause: &'static str` | `ClosedSessionsResponse.items` 배열 | 최대 R개 보관되며, 오래된 항목부터 선입선출(FIFO)로 제거된다. |
-| `PeerAddressView` | `ip: String`, `port: u16` | 세션 뷰 내부 | 프록시 전달 헤더를 무시하고 실제 소켓 상대 주소를 반영한다. IPv4 매핑 IPv6는 Q88 결정 전까지 계약 가정(소켓 원시값)을 따른다. |
+| `PeerAddressView` | `ip: String`, `port: u16` | 세션 뷰 내부 | 프록시 전달 헤더를 무시하고 실제 소켓 상대 주소를 반영한다. 목표 표기는 `IpAddr::to_canonical()`을 적용하며 IPv4 매핑 IPv6는 `a.b.c.d`로 쓴다(사용자 결정 2026-11-02(Q88)). 같은 작업에서 직렬화를 수정한다(9.1절). |
 
 ## 4. 처리 순서
 
@@ -144,7 +144,7 @@ flowchart LR
 | `ConnectionBudget`에 `current()` 관찰 메서드 추가 | 원자적 변수(`used`)를 읽어 L 및 Lm의 현재 사용량을 요약 응답에 정확히 전달한다. | 별도의 외부 카운터 유지 | 운영 스펙 2절, MGT-026, **이 문서의 판단, 사용자 결정 없음** |
 | 카운터 수치의 인메모리 확정 정수 반환과 dead branch 배제 | 단일 프로세스 인메모리 구조에서 `handshaking`과 `target_connecting` 및 L/Lm 사용량은 런타임이 정확한 정수를 보유하므로 항상 정수를 반환하고 사유는 `null`로 둔다. 읽기 실패 분기(dead branch)는 두지 않는다. | 임의의 실패 분기 유지 | 스펙 §2, 계약 §1.1, MGT-026, **이 문서의 판단, 사용자 결정 없음** |
 | ASCII 조건문 기반 `session_id` 검증 | 정규식 크레이트 의존성 없이 `len 1~64`, `is_ascii_alphanumeric()` 또는 `_`, `-` 검사로 O(N) 검증을 수행한다. | 별도 regex 크레이트 의존성 도입 | 계약 §1.8, **이 문서의 판단, 사용자 결정 없음** |
-| 상대 IP 주소의 계약 가정 준수(Q88 대기) | Q88 사용자 결정 전까지는 계약 §6 line 565의 가정대로 소켓 원시 주소 표현을 유지하며, Q88 결정 시 `to_canonical()`로 전환할 수 있도록 추상화한다. | 사전 단독 결정 | 계약 §6 line 565, **사용자 결정 대기(Q88)** |
+| 상대 IP 주소 정규화 | `PeerIp`·운영 로그와 같은 `IpAddr::to_canonical()` 규칙으로 IPv4 매핑 IPv6를 `a.b.c.d`로 쓴다. | 원시 소켓의 매핑 IPv6 표현 유지 | 관리 API 계약 1.1절, 사용자 결정 2026-11-02(Q88) |
 | GET 본문 검증 시 `media_type_allows` 적용 | 계약 §1.1 line 38 및 기존 `session_api.rs` 구현 기준에 따라 빈 본문은 통과하고 비-JSON 비어있지 않은 본문은 415로 거절한다. | 400 일괄 거절 | 계약 1.1절 line 38, **이 문서의 판단, 사용자 결정 없음** |
 
 ### 7.2 수용 테스트 계획 (시나리오별 대응)
@@ -171,18 +171,17 @@ flowchart LR
 
 ## 9. 미결정 사항과 계약 점검
 
-### 9.1 IPv4 매핑 IPv6 주소의 표기 방식 [사용자 결정 대기(Q88)]
-- **배경**: [관리 API 계약 6절](../contracts/management-api-v1.md#6-초안을-확정하기-전에-해결할-사항)에서는 "IPv4 매핑 IPv6 주소(`::ffff:a.b.c.d`)를 `ip`에 어떻게 표기할지 정하지 않았다. 소켓이 주는 값을 변환하지 않는 쪽을 가정한다."라고 기술하고 있다. 반면, 운영 로그와 출발지 IP 허용 목록을 다루는 `PeerIp`(`crates/domain/src/peer_ip.rs`)는 `ip.to_canonical()`을 사용하여 점분리 10진수 IPv4로 정규화한다. `ConnectionContext.peer_addr`와 `ActiveSessionSnapshot.peer`의 `ActivePeer`에 원시 소켓 주소가 보존되어 있어 어느 쪽이든 구현 가능하다.
-- **선택지**:
-  - **선택지 A (권장)**: `PeerIp`의 변환 규칙과 동일하게 `to_canonical()`을 적용하여 `a.b.c.d` 형태로 표기한다. 운영자가 설정 파일에 지정한 `allow` 대역 및 운영 로그의 `peer_ip`와 조회 화면의 IP 문자열이 완전히 일치하게 된다.
-  - **선택지 B (현재 계약 가정)**: 계약 6절의 현재 가정대로 소켓이 보고한 원시 표현인 `::ffff:a.b.c.d` 문자열 그대로 출력한다.
-- **권고 사유**: 선택지 A. 운영 로그의 주소 표현 및 allow list 판정과 일관성을 유지할 수 있으며 대시보드 화면에서도 운영자가 직관적으로 IPv4 주소를 식별할 수 있다. 사용자 결정 전까지는 계약 가정(선택지 B)을 유지하되 결정 즉시 선택지 A로 전환할 수 있도록 구조를 분리한다.
+### 9.1 (해결) IPv4 매핑 IPv6 주소의 표기 방식
+
+사용자 결정 2026-11-02(Q88)으로 정규 표기를 확정했다. 목표는 `IpAddr::to_canonical()`을 적용해 `::ffff:a.b.c.d`를 `a.b.c.d`로 쓰는 것이다. `PeerIp`와 운영 로그도 같은 규칙을 쓴다. 기준은 [관리 API 계약 1.1절](../contracts/management-api-v1.md#11-공통-규칙)의 `address.ip`다.
+
+같은 작업에서 `crates/adapters/src/management_http/query_api.rs`의 `format_ip`를 수정한다. 현재 구현 작업 중이며 이 결정 반영 문서는 코드 대조나 시험 통과를 주장하지 않는다.
 
 ---
 
 ### 9.2 (해결: 이 문서의 판단, 사용자 결정 없음) 조회 GET 경로에 비어있지 않은 본문이 포함된 경우의 오류 상태 코드(415)
-- **배경**: [관리 API 계약 1.1절](../contracts/management-api-v1.md#11-공통-규칙) line 38에서는 "본문이 있는 요청은 Content-Type: application/json을 보내야 한다. 다르면 415와 invalid_request로 거절한다."라고 명시하고 있으며, 기존 `crates/adapters/src/management_http/session_api.rs:236–238`(`media_type_allows`)도 비어있지 않은 비-JSON 본문에 대해 `415 invalid_request`를 반환한다. 반면 [관리 API 계약 2.1절](../contracts/management-api-v1.md#21-오류-본문과-상태-코드) 경로별 표(lines 370–371)는 가능한 오류에 415를 빠뜨리고 400만 적고 있다.
-- **해결**: [문서 작성 규칙](../../AGENTS.md) line 77에 따라, 이미 채택된 기준(계약 1.1절 line 38)과 기존 동작(`session_api.rs`)이 일치하므로 해석 A(`media_type_allows`로 검사해 `415 invalid_request` 반환)를 규칙으로 확정한다. 2.1절 표는 '가능한 오류'를 예시하는 과정에서 GET의 415를 누락한 불완전한 문서 기술이며, 1.9절 line 237은 본문이 본질적으로 없는 terminate에 한정된 규정이다. 2.1절 표의 명확화를 사용자에게 보고한다.
+- **배경**: [관리 API 계약 1.1절](../contracts/management-api-v1.md#11-공통-규칙)과 기존 `session_api.rs`의 `media_type_allows`는 비어있지 않은 비JSON 본문을 `415 invalid_request`로 거절한다. 2.1절 GET 경로 표에는 415가 빠져 있었다.
+- **해결**: 기존 공통 규칙과 동작을 유지한다. 같은 작업에서 계약 2.1절의 조회 GET 경로와 `GET /api/v1/session`에 415를 보완한다(T415). terminate는 1.9절의 특수 규칙에 따라 모든 본문을 400으로 거절한다(사용자 결정 2026-11-02(Q89)).
 
 ---
 
@@ -204,7 +203,7 @@ flowchart LR
   - `management_http/session_api.rs`의 인증 뒤 `query_api.rs`가 요약·대기·활성 목록·상세·최근 종료 조회를 처리한다. `summary_response`는 정수 카운터와 계약상 `null` 사유를 직렬화한다.
   - `relay.rs`의 `ActivePeer::Server`·`Target`이 활성 세션의 상대 주소를 보유한다. `target_address()`가 실제 주소를 반환하므로 빈 주소를 대신 만들어 넣지 않는다.
   - `RelayRuntime::track_handshaking`이 반환한 `HandshakingGuard`는 TCP의 `net.rs`에서 `handle_connection` 전에, WS·WSS의 `websocket.rs`에서 101 응답 flush 뒤에 획득한다. 연결 준비를 마치거나 중단하면 가드가 수를 돌려준다.
-- 판정: 모듈 설계 템플릿의 구현 전 차이 표를 제거하고 구조 시점을 `Current`로 바꿨다. `Verified`는 위 구조 대조 범위이며 모든 시나리오의 완료를 뜻하지 않는다. 문서 상태는 `Draft`로 유지한다. Q88과 아래 부분 증거는 남아 있다.
+- 판정: 모듈 설계 템플릿의 구현 전 차이 표를 제거하고 구조 시점을 `Current`로 바꿨다. `Verified`는 위 구조 대조 범위이며 모든 시나리오의 완료를 뜻하지 않는다. 문서 상태는 `Draft`로 유지한다. Q88은 사용자 결정 2026-11-02(Q88)으로 해결했으며 직렬화 수정은 같은 작업에서 진행한다. 아래 부분 증거는 남아 있다.
 - 검증 기록(모든 시각은 2026-11-01 UTC):
 
 | 명령 | 환경 | 결과 |
