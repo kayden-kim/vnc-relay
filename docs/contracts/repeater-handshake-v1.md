@@ -6,7 +6,7 @@ UltraVNC Viewer·Server와 외부 WebSocket 클라이언트가 VNC Relay에 접�
 
 | 항목 | 값 |
 | --- | --- |
-| 이름과 버전 | `repeater-handshake` 1.0.0. 2절 `duplicate_id`의 정책 확정(사용자 결정 2026-11-01(Q74))은 버전을 올리지 않았다. 채택 때 제안으로 둔 후발 거절을 그대로 정했으므로 처리가 바뀌는 요청이 없다. 1.2절의 빈 값·모드 검사 순서 명확화도 버전을 유지한다. 기존 “값을 더 검사하지 않고”와 Server의 `ID:` 필수 규칙을 풀어 쓴 것이며, 형식이나 허용 범위를 바꾸지 않는다(이 문서의 판단, 사용자 결정 없음). |
+| 이름과 버전 | `repeater-handshake` 1.0.0. 2절 `duplicate_id`의 정책 확정(사용자 결정 2026-11-01(Q74))은 버전을 올리지 않았다. 채택 때 제안으로 둔 후발 거절을 그대로 정했으므로 처리가 바뀌는 요청이 없다. 1.2절의 빈 값·모드 검사 순서 명확화도 버전을 유지한다. 기존 “값을 더 검사하지 않고”와 Server의 `ID:` 필수 규칙을 풀어 쓴 것이며, 형식이나 허용 범위를 바꾸지 않는다(사용자 결정 2026-11-01(Q80)). |
 | 상태 | Active(2026-11-01 채택) |
 | 소유자 | vnc-relay 프로젝트 관리자 |
 | 만드는 쪽(Producer) | 초기 요청: UltraVNC Viewer, UltraVNC Server, 외부 WebSocket 클라이언트(검증 대상은 noVNC 1.7.0의 `repeaterID` 옵션). 시작 바이트: `vnc-relay` |
@@ -52,7 +52,7 @@ UltraVNC Viewer·Server와 외부 WebSocket 클라이언트가 VNC Relay에 접�
 | 버전 문자열 | Viewer 쪽의 시작 바이트 `RFB 000.000\n` 하나다(1.1절 D). Server 쪽에는 없다. | M2-01 |
 | 시간 | 250바이트는 제한 시간 H 안에 다 와야 한다. TCP는 초기 교환에 들어간 때부터, WS·WSS는 `101` 응답을 보낸 때부터 잰다([설정 계약](config-v2.md)의 `handshake_secs`). | E-04 |
 
-검사 순서는 다음과 같다(이 문서의 판단, 사용자 결정 없음). Viewer는 빈 값도 먼저 모드를 판정한다. 빈 값은 `ID:`로 시작하지 않으므로 Mode I이다. 그 모드가 꺼졌으면 빈 값·본문을 더 검사하지 않고 `mode_disabled`로 거절한다. 모드가 켜졌을 때 빈 값·본문 문법을 검사한다. 따라서 빈 Viewer 값은 Mode I이 켜졌으면 `handshake_invalid`다. TCP Server는 모드 활성 검사보다 먼저 `ID:` 접두어를 검사한다. 빈 값과 비접두어 값은 항상 `handshake_invalid`다. `ID:`만 있는 값은 Mode II가 꺼졌으면 `mode_disabled`이고, 켜졌으면 빈 ID라 `handshake_invalid`다.
+검사 순서는 다음과 같다(사용자 결정 2026-11-01(Q80)). Viewer는 빈 값도 먼저 모드를 판정한다. 빈 값은 `ID:`로 시작하지 않으므로 Mode I이다. 그 모드가 꺼졌으면 빈 값·본문을 더 검사하지 않고 `mode_disabled`로 거절한다. 모드가 켜졌을 때 빈 값·본문 문법을 검사한다. 따라서 빈 Viewer 값은 Mode I이 켜졌으면 `handshake_invalid`다. TCP Server는 모드 활성 검사보다 먼저 `ID:` 접두어를 검사한다. 빈 값과 비접두어 값은 항상 `handshake_invalid`다. `ID:`만 있는 값은 Mode II가 꺼졌으면 `mode_disabled`이고, 켜졌으면 빈 ID라 `handshake_invalid`다.
 
 ### 1.3 Mode I 대상 문법
 

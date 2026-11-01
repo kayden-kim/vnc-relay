@@ -8,5 +8,6 @@ ADR(Architecture Decision Record, 기술 결정 기록)은 중요하고 되돌�
 | [ADR-0002](ADR-0002-source-ip-allowlist.md) | Accepted | 중계 접근 통제를 진입점별 출발지 IP 허용 목록으로 한다. |
 | [ADR-0003](ADR-0003-single-instance-memory-state.md) | Accepted | 단일 인스턴스로 운영하고 상태를 메모리에만 둔다. |
 | [ADR-0004](ADR-0004-tokio-rustls.md) | Accepted | 비동기 런타임은 tokio, TLS는 rustls를 쓴다. |
+| [ADR-0005](ADR-0005-in-house-ws-streaming-frame-codec.md) | Accepted | WebSocket 데이터 프레임 처리는 자체 스트리밍 상태 머신을 쓴다. |
 
 작성 규칙은 [AGENTS.md](AGENTS.md)를 따른다.

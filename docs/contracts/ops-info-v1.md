@@ -4,7 +4,7 @@ VNC Relay가 운영자에게 내보내는 두 가지 정보의 교환 형식을 
 
 | 항목 | 값 |
 | --- | --- |
-| 이름과 버전 | `ops-info` 1.2.0. 1.1.0은 `startup_failed`의 `reason`에 `runtime_unavailable`을 더했다. 1.2.0은 `reason`에 `log_file_unavailable`을 더하고, 로그 쓰기 실패 처리(1.1절)를 정하고, `startup_failed`를 진단마다 한 줄로 정했다(1.6절). 모두 사용자가 결정했다(2026-10-20). 2026-11-01에 `handshake_invalid`의 조건 문장을 [Repeater 초기 교환 계약](repeater-handshake-v1.md) 채택(사용자 결정 2026-11-01(Q71·Q72))에 맞춰 "초기 요청의 형식 오류"로 고쳤다. 버전은 올리지 않았다. 빠진 조건 중 "미지원 모드"는 채택한 계약 2절에서 형식 오류에 들어간다. "I 초과"와 그때의 `limit`은 초기 요청이 250바이트 고정이고 I의 최솟값이 256이었으므로 생길 수 없다. 그래서 같은 입력이 다른 `reason`을 받는 경우가 없어 3절의 의미 변경으로 보지 않았다(이 문서의 판단, 사용자 결정 없음). 이 사건은 커밋 `5e53570`에서 구현하고 계약 시험을 통과했다. 작업 2.7~2.10 독립 검토 수정에서, 초기 교환 뒤 등록 전에 종료되는 Mode II 연결의 `connection_aborted.stage`는 기존 `initial_exchange`임을 1.6절에 명시했다. 허용 값 추가·의미 변경이 아닌 기존 값의 적용 경계 설명이므로 버전을 올리지 않았다(이 문서의 판단, 사용자 결정 없음). |
+| 이름과 버전 | `ops-info` 1.3.0. 1.1.0은 `startup_failed`의 `reason`에 `runtime_unavailable`을 더했다. 1.2.0은 `reason`에 `log_file_unavailable`을 더하고, 로그 쓰기 실패 처리(1.1절)를 정하고, `startup_failed`를 진단마다 한 줄로 정했다(1.6절). 모두 사용자가 결정했다(2026-10-20). 2026-11-01에 `handshake_invalid`의 조건 문장을 [Repeater 초기 교환 계약](repeater-handshake-v1.md) 채택(사용자 결정 2026-11-01(Q71·Q72))에 맞춰 "초기 요청의 형식 오류"로 고쳤다. 버전은 올리지 않았다. 빠진 조건 중 "미지원 모드"는 채택한 계약 2절에서 형식 오류에 들어간다. "I 초과"와 그때의 `limit`은 초기 요청이 250바이트 고정이고 I의 최솟값이 256이었으므로 생길 수 없다. 그래서 같은 입력이 다른 `reason`을 받는 경우가 없어 3절의 의미 변경으로 보지 않았다(이 문서의 판단, 사용자 결정 없음). 이 사건은 커밋 `5e53570`에서 구현하고 계약 시험을 통과했다. 1.3.0은 `connection_aborted`의 `stage`에 `register`를 더하고, 초기 교환 뒤 대기 등록 완료 전에 서버 종료로 끝나는 Mode II 연결의 `stage`를 `register`로 정했다(사용자 결정 2026-11-01(Q81)). 또한 강제 정리 때 이미 정리를 시작한 세션의 `close_cause` 보존 규칙(1.6절)을 명시했다(사용자 결정 2026-11-01(Q82)). 모두 호환 변경이다. |
 | 상태 | Active(2026-10-16 채택) |
 | 소유자 | vnc-relay 프로젝트 관리자 |
 | 만드는 쪽(Producer) | `vnc-relay` (`vnc-relay serve` 프로세스) |
@@ -93,7 +93,7 @@ VNC Relay가 운영자에게 내보내는 두 가지 정보의 교환 형식을 
 
 | 사건 | `level` | 발생 시점 | 필드 | 스펙 근거 |
 | --- | --- | --- | --- | --- |
-| `server_starting` | `info` | 설정이 유효하고 로그 출력을 연 뒤 시작 중 상태로 들어갔을 때 | `log_contract`: 문자열. 값은 `ops-info/1.2.0`이다. | OPS-001, OPS-010 |
+| `server_starting` | `info` | 설정이 유효하고 로그 출력을 연 뒤 시작 중 상태로 들어갔을 때 | `log_contract`: 문자열. 값은 `ops-info/1.3.0`이다. | OPS-001, OPS-010 |
 | `server_ready` | `info` | 필수 리스너와 접근 경계가 모두 준비돼 준비됨 상태로 들어갔을 때 | `listeners`: 객체 배열. 각 객체는 `name`(`listener` 값)과 `listen`(바인딩 주소 문자열)을 가진다. | OPS-002, OPS-013, OPS-032 |
 | `startup_failed` | `error` | 시작 실패가 확정됐을 때. 자원을 회수한 뒤 프로세스가 끝난다. | `reason`(시작을 막은 오류 코드, 1.6절), `config_key?`, `listener?`, `detail?`. | OPS-001, OPS-002, OPS-028, OPS-034, OPS-038, OPS-039, OPS-040 |
 | `shutdown_started` | `info`. `trigger`가 `fatal_error`이면 `error` | 종료 유예 중 상태로 들어갔을 때. 이후 신규 중계 접속을 받지 않는다. | `trigger`: `requested` 또는 `fatal_error`. `grace_secs`: 정수(G). `active_sessions`: 정수. `detail?` | OPS-007, OPS-008 |
@@ -210,8 +210,8 @@ VNC Relay가 운영자에게 내보내는 두 가지 정보의 교환 형식을 
 
 #### `connection_aborted`의 `stage`와 `reason`
 
-`stage`는 `tls`, `upgrade`, `initial_exchange`, `target_connect` 중 하나다.
-초기 교환을 마친 뒤 대기 등록 전에 서버 종료로 끝나는 Mode II 연결은 `stage=initial_exchange`, `reason=server_shutdown`을 쓴다.
+`stage`는 `tls`, `upgrade`, `initial_exchange`, `register`, `target_connect` 중 하나다.
+`register`는 초기 교환을 마쳤으나 대기 등록이 완료되기 전에 서버 종료로 끝난 Mode II 연결이다. 이때 `reason`은 `server_shutdown`이다(사용자 결정 2026-11-01(Q81)). 매칭되었으나 아직 활성화되지 않은 상태에서 서버가 종료되면 이미 등록되어 있던 쪽은 `waiting_removed(reason=server_shutdown)`로, 도착하여 등록 중이던 쪽은 `connection_aborted(stage=register, reason=server_shutdown)`로 기록한다. Mode I의 대응 단계는 `target_connect`를 유지한다.
 
 | `reason` | 의미 | 근거 |
 | --- | --- | --- |
@@ -235,7 +235,7 @@ VNC Relay가 운영자에게 내보내는 두 가지 정보의 교환 형식을 
 | `close_timeout` | `warn` | 먼저 EOF를 낸 쪽 | 없음 | WS-017, RLY-019 |
 | `server_shutdown` | `warn` | 없음 | 없음 | OPS-009, OPS-042 |
 
-한 세션의 `close_cause`는 정리를 시작하게 한 첫 원인이다. 그 뒤 생긴 정리 오류로 바꾸지 않는다. 단, 한쪽 EOF 뒤 E가 지나 정리하면 `close_cause`는 `close_timeout`이다.
+한 세션의 `close_cause`는 정리를 시작하게 한 첫 원인이다. 그 뒤 생긴 정리 오류로 바꾸지 않는다. 단, 한쪽 EOF 뒤 E가 지나 정리하면 `close_cause`는 `close_timeout`이다. G 만료나 유예 중 두 번째 종료 요청으로 인한 강제 정리(`shutdown_forced`) 때도, 이미 정리를 시작한 세션(한쪽 EOF 관찰, I/O 오류, `dead_connection`, 관리자 종료 시작)은 최초 정리 시작 원인을 유지하며 `server_shutdown`으로 덮어쓰지 않는다. 아직 정리를 시작하지 않은 세션만 `close_cause=server_shutdown`이 된다(사용자 결정 2026-11-01(Q82)).
 
 ### 1.7 `error_kind` 값
 
@@ -473,4 +473,4 @@ GET /readyz ->  503 {"status":"not_ready","reason":"shutting_down"}
 - 상태 리스너를 다른 필수 리스너보다 먼저 여는 순서(1.12절)는 채택 범위다.
 - 중계 ID 키 있는 해시(1.9절)는 채택 범위다. 구현에서 쓸 수 있는 라이브러리는 이 계약이 정하지 않는다.
 - `subprotocol_not_supported`는 WebSocket 계약의 서브프로토콜 규칙에 의존한다. 스펙에 근거 시나리오가 없다.
-- `server_shutdown`(정상 종료 유예 만료나 유예 중 두 번째 종료 요청으로 강제 정리)은 [관리 스펙 2.3절](../specs/management.md#23-최근-종료-목록)의 종료 원인 목록에 포함된다. 최근 종료 목록은 프로세스 안에만 있으므로 이 값이 목록에서 실제로 조회되는지는 구현에서 확인해야 한다.
+- `server_shutdown`(정상 종료 유예 만료나 유예 중 두 번째 종료 요청으로 강제 정리 시 아직 정리를 시작하지 않은 세션에 기록)은 [관리 스펙 2.3절](../specs/management.md#23-최근-종료-목록)의 종료 원인 목록에 포함된다. 최근 종료 목록은 프로세스 안에만 있으므로 이 값이 목록에서 실제로 조회되는지는 구현에서 확인해야 한다.
