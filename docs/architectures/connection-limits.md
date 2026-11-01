@@ -7,7 +7,7 @@
 | 구조 시점 | Current |
 | 문서 상태 | Draft |
 | 구현 대조 | Verified — [대조 기록](#대조-기록) |
-| 코드 위치 | `crates/domain/src/budget.rs`, `crates/app/src/events.rs`(`RejectReason::RelayConnectionLimit`, `AbortReason`, `ConnectionErrorKind`), `crates/adapters/src/net.rs`(`AcceptPolicy`, `accept_connections`, `set_keepalive`, `hold`, `closed_before_data`), `crates/adapters/src/websocket.rs`(`WsPolicy`, `connection`, `hold_upgraded`), `crates/adapters/src/request_deadline.rs`(관리 U), `src/serve.rs`(L 예산 만들기) |
+| 코드 위치 | `crates/domain/src/budget.rs`, `crates/app/src/events.rs`(`RejectReason::RelayConnectionLimit`, `AbortReason`, `ConnectionErrorKind`), `crates/adapters/src/net.rs`(`AcceptPolicy`, `accept_connections`, `set_keepalive`, `TcpRelayStream`), `crates/app/src/relay.rs`(`RelayService::handle_connection`), `crates/app/src/relay/handshake.rs`(`exchange`, `read_request`), `crates/adapters/src/websocket.rs`(`WsPolicy`, `connection`), `crates/adapters/src/request_deadline.rs`(관리 U), `src/serve.rs`(L 예산 만들기) |
 | 코드 지도 | [코드 지도 2절](code-map.md#2-코드-위치와-구성요소) |
 | 관련 스펙 | [운영 스펙 2절](../specs/operations.md#2-상태와-검증-매개변수)의 L·Lm·Lw·H·K·U, [4.1절](../specs/operations.md#41-판정-가능한-규칙)의 OPS-R03·OPS-R20, OPS-004(일부), OPS-006(일부), OPS-033(일부), [중계 스펙](../specs/relay.md#7-수용-테스트) RLY-005(일부) |
 | 관련 계약 | [설정 계약 1.2절](../contracts/config-v2.md#12-키-표)(`[limits]`·`[timeouts]`·`[keepalive]`), [운영 정보 계약 1.6절](../contracts/ops-info-v1.md#16-원인-코드)(`relay_connection_limit`, `handshake_timeout`, `peer_eof`, `connection_error`)·[1.7절](../contracts/ops-info-v1.md#17-error_kind-값)(`io_error`) |
@@ -20,14 +20,14 @@
   - L: 모든 중계 진입점(TCP·WS·WSS)이 L 예산 하나를 함께 쓴다. TCP·WS·WSS 진입점은 출발지 IP 검사를 통과한 연결에서 자리를 잡는다. 자리가 없으면 `connection_rejected`(`stage` = `accept`, `reason` = `relay_connection_limit`, `limit`)를 기록하고 닫는다. 연결이 끝나면 자리를 돌려준다.
   - H: TCP 연결은 수락하자마자 초기 교환 상태에 들어간다. H가 지나면 닫고 `connection_aborted`(`handshake_timeout`)를 기록한다. WS·WSS의 H는 101 응답 뒤부터 잰다(사용자 결정 2026-10-22(Q22)). 그 H가 지나면 4009 닫기 코드로 닫고 `connection_aborted`(`handshake_timeout`)를 기록한다.
   - U: WS·WSS와 관리 리스너 연결의 요청 시간 제한. `[timeouts] tls_upgrade_secs`를 쓰고 수락부터 잰다. WS·WSS는 TLS 핸드셰이크(WSS)와 업그레이드 요청을 끝내야 한다. 관리 리스너는 TLS 핸드셰이크와 첫 요청 머리를 끝내야 한다(사용자 결정 Q12). 관리 리스너는 첫 요청 머리 뒤 읽기·쓰기마다 U를 다시 잰다(사용자 결정 2026-10-22(Q25), [관리 리스너 모듈 설계](management-listener.md) 9절 11번). 기한이 지나면 WS·WSS는 `connection_aborted`(`tls_upgrade_timeout`)를 기록하고 닫는다. 관리 리스너는 평문 응답 없이 닫고 기록하지 않는다.
-  - 보류 중 상대 종료 감지: 상대가 바이트를 보내기 전에 닫으면 `peer_eof`, 연결이 재설정되면 `connection_error`(`error_kind` = `io_error`)로 정리한다. 바이트를 소비하지 않는 `peek`로 확인한다(사용자 결정 2026-10-20).
+  - 초기 교환 중 상대 종료 감지: 상대가 바이트를 보내기 전에 닫으면 `peer_eof`, 연결이 재설정되면 `connection_error`(`error_kind` = `io_error`)로 정리한다. 초기 교환 읽기(`crates/app/src/relay/handshake.rs` `read_request`)가 이 구분을 한다(사용자 결정 2026-10-20).
   - K: 수락한 중계 소켓마다 TCP keepalive의 유휴 시간·탐색 간격·탐색 횟수를 설정한다.
 - 맡지 않는 책임:
   - Lm의 판정과 거절 기록. 수락 판정은 `admission.rs`의 `AdmittingListener`가 맡고, 상태·관리 리스너가 쓴다([상태 리스너와 준비 상태 모듈 설계](status-listener.md), [관리 리스너 모듈 설계](management-listener.md)). 관리 리스너는 작업 4.2에서 같은 Lm 예산을 쓴다.
   - Lw의 사용처. 작업 2.9(대기 등록)가 같은 `ConnectionBudget`으로 연결한다. 그 전까지 Lw 예산을 만들지 않는다.
   - Mode I 대상 소켓의 L 집계. 작업 2.8이 대상 연결 전에 같은 L 예산에서 자리를 잡는다(OPS-023).
   - 끊긴 연결의 판정과 회수(`dead_connection`). keepalive가 끊긴 연결을 운영체제 오류로 알리면 그 연결을 다루는 단계가 처리한다. 대기·활성 연결의 처리와 RLY-025~027 확인은 작업 2.11이 맡는다.
-  - 바이트를 보낸 뒤 닫은 연결의 즉시 감지. 작업 2.7 전에는 바이트를 읽지 않으므로 H가 지날 때 `handshake_timeout`으로 정리한다. 작업 2.7이 초기 교환을 읽으면서 `peer_eof`로 구분한다.
+  - 바이트를 보낸 뒤 닫은 연결의 판정과 초기 교환 읽기·해석. `RelayService::handle_connection`(app)이 맡는다. 이 문서는 그 단계의 H 시간과 자리 반환 규칙만 정한다.
 - 다른 모듈에 공개하는 기능:
   - `vnc_relay_domain::budget::{ConnectionBudget, BudgetPermit}`
   - `vnc_relay_app::events::{RejectReason::RelayConnectionLimit, AbortReason, ConnectionErrorKind}`
@@ -46,11 +46,11 @@ flowchart LR
     WSEP["adapters websocket.rs<br/>WsEntryPoint::run"] -->|"수락 반복 호출"| ACC
     ACC -->|"IP 통과 뒤 자리 잡기"| BUDGET["domain budget.rs<br/>ConnectionBudget::try_acquire"]
     ACC -->|"K"| KA["adapters net.rs<br/>set_keepalive"]
-    ACC -->|"BudgetPermit, TCP"| HOLD["adapters net.rs<br/>hold"]
+    ACC -->|"BudgetPermit, TCP"| TCPH["app relay.rs<br/>RelayService::handle_connection"]
     ACC -->|"BudgetPermit, WS·WSS"| UPG["adapters websocket.rs<br/>connection"]
-    HOLD -->|"H·종료·peek"| PEEK["adapters net.rs<br/>closed_before_data"]
-    UPG -->|"101 뒤 H"| HUP["adapters websocket.rs<br/>hold_upgraded"]
-    HOLD -->|"자리 반환 뒤 Event"| SINK["app ports.rs<br/>EventSink::record"]
+    TCPH -->|"H·종료·상대 종료 판정"| EXCH["app relay/handshake.rs<br/>exchange, read_request"]
+    UPG -->|"101 뒤 H"| HUP["app relay.rs<br/>RelayService::handle_connection"]
+    TCPH -->|"자리 반환 뒤 Event"| SINK["app ports.rs<br/>EventSink::record"]
     UPG -->|"자리 반환 뒤 Event"| SINK
     HUP -->|"자리 반환 뒤 Event"| SINK
 ```
@@ -63,10 +63,10 @@ flowchart LR
 | `crates/app/src/events.rs` `AbortReason`, `ConnectionErrorKind` | `handshake_timeout`·`peer_eof`·`connection_error`·`server_shutdown`과 `level`. `connection_error`만 `error_kind`를 가진다. | 연결이 끝날 때 | 없음 |
 | `crates/adapters/src/net.rs` `AcceptPolicy` | 진입점이 수락한 연결에 적용할 값: 허용 목록, L 예산, H, K | `serve`가 진입점마다 만든다 | domain, app |
 | `crates/adapters/src/net.rs` `set_keepalive` | socket2 `SockRef`로 `SO_KEEPALIVE`와 유휴 시간·탐색 간격·탐색 횟수를 설정한다. | 자리를 잡은 연결마다 | socket2 |
-| `crates/adapters/src/net.rs` `hold`, `closed_before_data` | 종료 알림, H 만료, 상대 종료 중 먼저 오는 것으로 연결을 끝낸다. 소켓을 닫고 자리를 돌려준 뒤 `connection_aborted`를 기록한다. | 허용한 연결마다 | tokio, app, domain |
+| `crates/app/src/relay.rs` `RelayService::handle_connection`, `crates/app/src/relay/handshake.rs` `exchange`, `read_request` | 허용한 TCP 연결의 초기 교환을 H 안에 읽는다. H 만료, 상대 종료, 서버 종료, 연결 재설정 중 먼저 오는 것으로 끝낸다. 실패하면 `RelayCloseAction`을 정해 소켓을 닫고, 자리를 버린 뒤 사건을 기록한다. | 허용한 TCP 연결마다, `TcpEntryPoint::run`의 serve 작업이 부른다 | tokio, app, domain |
 | `crates/adapters/src/net.rs` `accept_connections` | TCP·WS·WSS가 함께 쓰는 수락 반복. IP 검사 뒤 L 자리를 잡는다. 자리가 없으면 `connection_rejected`(`relay_connection_limit`)를 기록하고 닫는다. 있으면 K를 설정하고 `BudgetPermit`을 연결 작업에 넘긴다. | 진입점 `run`마다 하나 | tokio, socket2, app, domain |
 | `crates/adapters/src/websocket.rs` `WsPolicy` | WS·WSS 진입점에 적용할 값: `accept`(`AcceptPolicy`. H는 101 뒤부터 잰다), `upgrade`(U, `[timeouts] tls_upgrade_secs`), `origins`. | `serve`가 WS·WSS 진입점마다 만든다 | adapters |
-| `crates/adapters/src/websocket.rs` `connection`, `hold_upgraded` | `connection`은 U 안에서 WSS의 TLS 핸드셰이크와 업그레이드 요청을 끝낸다. 101 뒤 `hold_upgraded`가 H를 잰다. 자리는 연결 작업이 소유하고 소켓을 닫은 뒤 돌려준다. | 허용한 WS·WSS 연결마다 | tokio, tokio-rustls, tokio-tungstenite, app, domain |
+| `crates/adapters/src/websocket.rs` `connection` | `connection`은 U 안에서 WSS의 TLS 핸드셰이크와 업그레이드 요청을 끝낸다. 101 뒤 `WsRelayStream`을 만들어 `RelayService::handle_connection`에 넘기고, H는 `handle_connection`이 `exchange_at`부터 잰다. 자리는 연결 작업이 받아 `handle_connection`에 넘기고, 연결을 끝낸 뒤 돌려준다. | 허용한 WS·WSS 연결마다 | tokio, tokio-rustls, tokio-tungstenite, app, domain |
 
 ## 3. 데이터 모델
 
@@ -88,10 +88,10 @@ flowchart LR
 | 1 | `src/serve.rs` `listen_until_shutdown` | `ConnectionBudget::new(limits.relay_connections)`를 하나 만들고 TCP·WS·WSS 진입점마다 `AcceptPolicy` 또는 `WsPolicy`에 넣는다. | L 예산 | 2단계 |
 | 2 | `accept_connections`, `AllowList::permits` | 출발지 IP를 먼저 판정한다. 목록에 없으면 `ip_not_allowed`로 거절하고 자리를 잡지 않는다. | 없음 | 3단계 |
 | 3 | `ConnectionBudget::try_acquire` | 두 연결이 자리를 잡았으므로 세 번째는 `None`이다. `connection_rejected`(`relay_connection_limit`, `limit` = 2)를 기록하고 소켓을 닫는다. | 없음 | 운영 로그 |
-| 4 | `set_keepalive`, `hold` | 자리를 잡은 연결은 K를 설정하고 `connection_accepted`를 기록한 뒤 보류한다. | 보류 연결 | 5단계 |
-| 5 | `closed_before_data` | 상대가 아무것도 보내지 않고 닫으면 `peek`가 0을 준다. | 없음 | 6단계 |
-| 6 | `hold` | 소켓을 닫고 `BudgetPermit`을 버린 뒤 `connection_aborted`(`peer_eof`)를 기록한다. 줄을 본 클라이언트가 바로 다시 접속해도 자리가 있다. | 자리 하나 반환 | 운영 로그 |
-| 7 | 2~4와 같은 경로 | 다음 접속이 자리를 잡고 수락된다. | 보류 연결 | 운영 로그 |
+| 4 | `set_keepalive`, `TcpRelayStream`, `RelayService::handle_connection` | 자리를 잡은 연결은 K를 설정하고 `connection_accepted`를 기록한 뒤 소켓을 `TcpRelayStream`으로 감싸 `handle_connection`에 넘긴다. | 초기 교환 중인 연결 | 5단계 |
+| 5 | `handshake::exchange`, `read_request` | 상대가 아무 바이트도 보내지 않고 닫으면 읽기가 0바이트를 준다(`PeerEof`). | 없음 | 6단계 |
+| 6 | `RelayService::prepare` | 소켓을 닫고 `BudgetPermit`을 버린 뒤 `connection_aborted`(`peer_eof`)를 기록한다. 줄을 본 클라이언트가 바로 다시 접속해도 자리가 있다. | 자리 하나 반환 | 운영 로그 |
+| 7 | 2~4와 같은 경로 | 다음 접속이 자리를 잡고 수락된다. | 초기 교환 중인 연결 | 운영 로그 |
 
 H가 먼저 지나면 5~6단계 대신 `handshake_timeout`(`warn`)으로, 서버가 종료하면 `server_shutdown`(`info`)으로 같은 정리를 한다.
 
@@ -124,8 +124,8 @@ WS·WSS는 자리를 잡은 뒤 U 안에서 TLS 핸드셰이크(WSS)와 업그�
 | 출발지 IP를 L보다 먼저 판정한다. | 목록 밖 출발지는 자리를 쓰지 않고, L이 찼는지도 알 수 없다. 코드 지도 4절 1단계의 순서와 같다. | L을 먼저 확인. 목록 밖 출발지가 상한 상태를 알게 된다. | [운영 정보 계약 1.5절](../contracts/ops-info-v1.md#15-사건-목록) `connection_accepted` 조건 |
 | L·Lm·Lw를 같은 `ConnectionBudget` 타입으로 센다. 예산은 사용처가 생길 때 만든다(L은 2.5, WS·WSS의 L 사용은 3.2, Lm은 2.6, 관리 리스너의 Lm 사용은 4.2). | 세 상한의 규칙(상한까지 잡고, 끝나면 반환하고, 서로 독립)이 같다. 사용처가 없는 예산을 미리 만들지 않는다. | 상한마다 다른 타입, 2.5에서 Lm·Lw 예산까지 만들기 | 사용자 결정 2026-10-20 |
 | 자리 수는 `AtomicU32`의 비교·교환으로 센다. | 잠금 없이 상한을 지킨다. domain은 외부 crate를 쓰지 않는다. | `tokio::sync::Semaphore`. domain이 tokio에 의존하게 된다. | [코드 지도 레이어 표](code-map.md#레이어와-의존-방향) |
-| 작업 2.7 전의 보류 연결에도 H를 적용한다. | TCP 연결은 수락 직후 초기 교환 상태다. 보류를 서버 종료까지 두면 L 자리가 돌아오지 않는다. | 서버 종료까지 보류(작업 2.4의 방식) | 사용자 결정 2026-10-20 |
-| 보류 중 상대 종료는 `peek`로 확인한다. | 바이트를 소비하지 않아 작업 2.7의 초기 교환이 같은 바이트를 읽을 수 있다. 바이트가 오면 확인을 멈추므로 바쁜 반복이 없다. | H 만료까지 기다리기. 떠난 클라이언트의 자리가 H 동안 남는다. | 사용자 결정 2026-10-20 |
+| 초기 교환 중인 TCP 연결에도 H를 적용한다. | TCP 연결은 수락 직후 초기 교환 상태다. 시간 제한이 없으면 서버 종료 전까지 L 자리가 돌아오지 않는다. | 서버 종료까지 시간 제한 없이 두기(작업 2.4의 방식) | 사용자 결정 2026-10-20 |
+| 초기 교환 중 상대 종료는 읽기 결과로 확인한다. | 읽기가 0바이트를 주면 상대가 닫은 것이다. 확인 작업을 따로 두지 않는다. | `peek`로 따로 확인하기(확인 코드와 읽기 코드를 둘 다 두게 된다), H 만료까지 기다리기(떠난 클라이언트의 자리가 H 동안 남는다) | `crates/app/src/relay/handshake.rs` `read_request` |
 | keepalive 매개변수는 socket2로 설정한다. | tokio·std에는 유휴 시간·탐색 간격·탐색 횟수를 정하는 API가 없다. `unsafe`는 금지다. socket2는 tokio가 이미 쓰는 crate다(MIT OR Apache-2.0). | keepalive를 작업 2.11로 미루기 | 사용자 결정 2026-10-20, [PRD "구현 기술" 행](../requirements/PRD.md#확정-기준) |
 | 자리를 돌려준 뒤 사건을 기록한다. | 줄을 본 클라이언트가 바로 다시 접속할 때 자리가 있어야 한다. 시스템 테스트가 이 순서에 기댄다. | 기록 뒤 반환 | 없음 |
 | WS·WSS의 H는 101 응답 뒤부터 잰다. | U가 101 전 시간을 맡는다. 수락부터 H를 재면 U와 같은 구간을 두 번 잰다. | 수락부터 H 재기(U와 겹침) | 사용자 결정 2026-10-22(Q22) |
@@ -134,7 +134,7 @@ WS·WSS는 자리를 잡은 뒤 U 안에서 TLS 핸드셰이크(WSS)와 업그�
 
 ## 8. 현재 코드와의 차이
 
-없다. 2~4절의 파일·심볼이 현재 코드와 같다.
+TCP 경로는 2~4절과 같다. WS·WSS 행은 [WebSocket 진입점 모듈 설계](websocket-entry-point.md)의 상태를 따른다.
 
 ## 대조 기록
 

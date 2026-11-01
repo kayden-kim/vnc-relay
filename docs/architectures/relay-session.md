@@ -6,7 +6,7 @@
 | --- | --- |
 | 구조 시점 | Target |
 | 문서 상태 | Draft |
-| 구현 대조 | 부분 대조. domain·app·adapters의 대상 연결·매칭·중계와 단위·루프백 시험을 구현했다. TCP 진입점·시작 키·OS 종료 신호 조립은 아직 연결하지 않았다. 검증 범위는 8절 기록을 따른다. |
+| 구현 대조 | 부분 대조. domain·app·adapters의 대상 연결·매칭·중계와 단위·루프백 시험을 구현했다. TCP 진입점과 시작 키 조립은 연결했다. WS·WSS 진입점은 `638cf09`에서 연결했다. OS 종료 요청과 G 감독 작업은 `src/serve.rs`가 조립한다. 실행 기록은 8절을 따른다. |
 | 코드 위치 | `crates/domain/src/{matching,session,recent_closed,target_policy}.rs`, `crates/app/src/{ports,events,relay}.rs`와 `relay/{handshake,target,matching,session}.rs`, `crates/adapters/src/{target,crypto,ops_log}.rs`와 `net.rs`의 `TcpRelayStream`, `crates/adapters/tests/{tcp_target,ops_info_contract}.rs` |
 | 코드 지도 | [코드 지도](code-map.md#2-코드-위치와-구성요소) |
 | 관련 스펙 | [중계](../specs/relay.md): RLY-003·006~021·023·025~027. [운영](../specs/operations.md): OPS-005·007~009·023·039·042~043. [관리](../specs/management.md#2-조회-대상과-상태): MGT-005 일부 |
@@ -79,28 +79,29 @@ H 감시는 유효 요청 반환으로 끝난다. C·W·E에서 H를 다시 쓰�
 
 ### 3.2 전송 수명 인터페이스
 
-`RelayStream: AsyncRead + AsyncWrite + Unpin + Send`를 초기 교환부터 정리까지 쓴다. WS Close와 TCP half-close를 구별하기 위해 전송 종료 action을 추가한다. 초기 실패도 action을 먼저 실행한다. 이 초기 실패 인터페이스 확장은 사용자 요청이며, WS 어댑터 구현은 포함하지 않는다.
+`RelayStream: AsyncRead + AsyncWrite + Unpin + Send`를 초기 교환부터 정리까지 쓴다. WS Close와 TCP half-close를 종료 action으로 구분한다. 초기 실패도 action을 먼저 실행한다. `WsRelayStream`은 같은 포트를 구현한다.
 
 - `RelayStream`은 위 입출력 trait에 더해 전송 종류와 `poll_close(action)`을 제공한다. TCP·WS 라이브러리 타입을 반환하지 않는다. 별도 `poll_terminal`은 두지 않는다. EOF는 읽기 결과가 0일 때, 오류는 읽기·쓰기 오류를 받았을 때 관찰한다.
 - `poll_close`의 action은 TCP 쓰기 방향 종료, 계약 사유에 따른 전체 종료, 상대 정상 종료, 서버 종료를 구분한다. TCP 쓰기 종료는 `AsyncWrite::poll_shutdown`에 대응한다. 전체 종료 완료 뒤 래퍼를 drop해 소켓을 회수한다.
 - `AsyncRead`의 0바이트는 TCP 읽기 EOF 또는 WS 어댑터가 알려 준 Close다. 빈 WS 바이너리 메시지를 EOF로 바꾸면 안 된다. `RelayStreamError::new(kind).into_io_error()`가 표준 I/O 오류 안에 계약의 종류를 보존한다. app은 `RelayStreamError::classify(&error)`로 읽는다. 명시된 종류가 없는 소켓 오류만 `io_error`다. `ws_protocol_error`, `ws_text_message`, `ws_message_too_large`는 그대로 사건과 `StreamError(kind)` action에 전달한다.
 - `AsyncWrite`는 쓰기에 성공한 **페이로드** 길이만 반환한다. WS 어댑터는 무제한 내부 큐에 복사한 길이를 성공으로 알리면 안 된다. 아직 전송 계층에 쓰지 못한 데이터의 소유권은 방향 버퍼에 남긴다.
-- WS 어댑터가 저장한 미전달 페이로드도 같은 B에 포함해야 한다. 제어 프레임·TLS 프레이밍은 스트림과 카운터에 섞지 않는다. WS의 M>B·프레임 스트리밍·기본 제어 처리는 앞당기는 3.3 스트림 어댑터 범위다. Kw 전체 생존 판정은 3.4 범위다. 여기서 WS 구현이나 단일 메시지 전용 임시 래퍼를 만들지 않는다.
+- WS 어댑터가 저장한 미전달 페이로드도 같은 B에 포함한다. 제어 프레임·TLS 프레이밍은 스트림과 카운터에 섞지 않는다. 자체 프레임 코덱은 사용자 결정 2026-11-01(Q77)을 따른다. M>B 프레임의 스트리밍은 사용자 결정 2026-11-01(Q78)을 따른다. Kw 전체 생존 판정은 작업 3.4 범위다.
 
-초기 교환 실패는 `HandshakeInvalid`(WS 4008), `HandshakeTimeout`(4009), `ModeDisabled`(1008), `ServerShutdown`(1001) action으로 구별한다. 형식 있는 스트림 오류는 `StreamError(kind)`로 전달해 미래 WS 어댑터가 각각 1002·1003·1009를 선택할 수 있게 한다. TCP는 추가 오류 바이트 없이 FIN·소켓 정리만 수행한다. `handle_connection`은 실패 판정 뒤 절대 `close_started + E`까지 action을 진행하고 스트림, L permit 순서로 버린 뒤 사건을 기록한다. H는 요청 판정의 기한이며 Close 대기 때문에 다시 시작하지 않는다. 사용자 요청에 따라 초기 실패의 종료 교환에도 기존 E를 쓴다. 새 타이머 설정을 만들지 않고 WS 종료 상한과 같게 유지한다. Close 오류·E 만료는 원래 초기 실패의 사건 사유를 바꾸지 않는다.
+초기 교환 실패는 `HandshakeInvalid`(WS 4008), `HandshakeTimeout`(4009), `ModeDisabled`(1008), `ServerShutdown`(1001) action으로 구별한다. 형식 있는 스트림 오류는 `StreamError(kind)`로 전달한다. WS 어댑터는 종류에 따라 1002·1003·1009를 선택한다. TCP는 추가 오류 바이트 없이 FIN·소켓 정리만 수행한다. `handle_connection`은 실패 판정 뒤 절대 `close_started + E`까지 action을 진행한다. 이후 stream → L permit → 사건 순서로 정리한다. H는 요청 판정의 기한이다. Close 대기 때문에 H를 다시 시작하지 않는다. 초기 실패의 종료 교환에도 기존 E를 쓴다. Close 오류·E 만료는 원래 초기 실패의 사건 사유를 바꾸지 않는다.
 
 초기 실패와 활성화 전 두 연결의 Close 대기는 action 완료·절대 E·Grace의 절대 G·Force 중 먼저 온 경계에서 끝낸다. Grace 수신 때 E나 G를 다시 시작하지 않는다. 대기 중 수명 변경도 wake 원인이다. 경계 뒤에는 stream → permit → 사건 순서를 그대로 지킨다.
 
 TCP에서 시작하되 중계 엔진은 Viewer와 반대쪽 스트림 타입을 다르게 받을 수 있게 한다. 공유 대기 표에는 `Box<dyn RelayStream>`을 보관한다. `Unpin` 조건으로 poll할 때만 `Pin<&mut dyn RelayStream>`을 만든다. 이 연결당 한 번의 타입 소거는 미래의 TCP Server와 WS Viewer를 같은 표에서 매칭하기 위한 선택이다. 중계 청크마다 박싱하거나 복사하지 않는다.
 
-[WS 스트림 설계 5.4절](websocket-stream.md#54-필요한-공통-인터페이스-변경)이 필요한 공통 포트 확장을 정리한다. 다음 두 항목은 **Target이며 아직 구현하지 않았다**. 별도 WS 전용 스트림 trait나 소켓 소유 작업을 만들지 않는다. 제안과 이유는 **이 문서의 판단, 사용자 결정 없음**이다.
+[WS 스트림 설계 5.4절](websocket-stream.md#54-필요한-공통-인터페이스-변경)의 현재 포트와 소유 루프를 따른다. 별도 WS 전용 스트림 trait나 소켓 소유 작업은 없다. 아래 진행 방식은 **이 문서의 판단, 사용자 결정 없음**이다. 시작한 출력 프레임의 drain 범위는 사용자 결정 2026-11-01(Q83)을 따른다.
 
-| Target 확장 | 제안 형태와 의미 | 기존 포트와의 관계 |
+| 현재 경계 | 구현과 의미 | 소유자 |
 | --- | --- | --- |
-| 읽기·쓰기를 poll하지 않을 때 제어·타이머 진행 | `poll_maintenance(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<AbortReason>`. 정상일 때 Pending과 wake 등록을 유지한다. 오류일 때만 `ConnectionError(kind)` 또는 `DeadConnection`을 알린다. TCP 구현은 Pending이다. | H·C·W·활성·closing 소유 루프가 기존 절대 기한·종료 신호와 함께 poll해야 한다. Kw가 페이로드 읽기·쓰기 정지에도 진행할 경계다. |
-| 미완료 WS 출력 프레임의 경계 조회 | `pending_write_len(&self) -> usize`. TCP는 0이다. Close 수신 전에 헤더를 이미 쓴 프레임의 잔여만 app의 기존 미전달 범위로 같은 E 안에서 마친다. | 페이로드를 복사하는 병렬 쓰기 API나 별도 메시지 큐를 만들지 않는다. [WS 스트림 설계 9.4절의 선택 A](websocket-stream.md#94-해결-수신-close와-이미-시작한-출력-프레임)를 적용할 경계다. |
+| 활성 WS의 제어 출력 | 세션 소유자가 페이로드 방향 poll과 별도로 `viewer.poll_flush`를 poll한다. 이미 큐에 있는 Pong과 부분 제어 출력을 진행한다. 입력을 읽거나 B 뒤를 미리 읽지 않는다. `Pending`이어도 두 페이로드 방향을 계속 poll한다. | `relay/session.rs`의 `run_session`. 오류는 `RelayStreamError::classify`로 분류한 Viewer 출력 오류다. |
+| closing의 종료 출력·수신 정리 | `poll_close(action)`을 반복 poll한다. 같은 절대 E·G·Force 경계를 적용한다. | 기존 세션 소유자. 별도 제어 작업을 만들지 않는다. |
+| 미완료 WS 출력 프레임 | `pending_write_len(&self) -> usize`가 이미 시작한 프레임의 잔여 페이로드 길이를 반환한다. TCP는 0이다. app 버퍼의 같은 미전달 범위를 E 안에서 마친다. | `RelayStream`과 `WsRelayStream`. 병렬 쓰기 API나 별도 메시지 큐는 없다. |
 
-`poll_maintenance`는 삭제한 `poll_terminal`이나 out-of-band EOF 탐색이 아니다. B가 찬 데이터 페이로드를 건너뛰지 않는다. 페이로드 뒤 제어 프레임의 관찰 지연과 Kw 정책은 [WS 스트림 설계 9.5절](websocket-stream.md#95-kw의-여러-ping과-b-backpressure)의 3.4 범위다. 초기 실패 Close action과 `RelayStreamError`의 typed 읽기·쓰기 오류는 이미 구현했으므로 새 확장으로 다시 만들지 않는다.
+`poll_maintenance`는 현재 포트에 없다. 출력 flush는 B 뒤의 새 Ping을 관찰하지 않는다. B가 찬 데이터 뒤의 제어 프레임 관찰과 Kw 정책은 [WS 스트림 설계 9.5절](websocket-stream.md#95-kw의-여러-ping과-b-backpressure)과 작업 3.4의 열린 범위다. 현재 Pong 출력 진행을 Kw 완료로 확대하지 않는다.
 
 ### 3.3 공유 메모리 상태
 
@@ -148,7 +149,7 @@ C는 이름 해석과 모든 허용 후보의 연결 시도를 합친 절대 기
 
 DNS 후보는 반환 순서를 유지해 허용된 주소만 순차 시도한다. 한 시점에 대상 소켓은 하나다. 실패한 소켓을 닫은 뒤 다음 후보를 시도하며 같은 대상 L permit과 C를 유지한다. 재해석·자동 재접속은 하지 않는다. 기한 만료는 `connect_timeout`, 시도한 후보가 모두 연결 거절이면 `connect_refused`, 그 밖의 전부 실패는 `connect_error`다. 실패 사건의 `target_ip`는 마지막으로 시도한 IP다. 아직 시도하지 않았다면 생략한다. 금지 후보만 있으면 연결 실패가 아니라 정책 거절이다. 순차 시도는 자원 상한과 실패 원인을 단순하게 추적하기 위한 선택이다(**이 문서의 판단, 사용자 결정 없음**).
 
-대상 L이 부족하면 app은 사유를 명시하는 `RelayCloseAction::Reject(RelayRejectReason::RelayConnectionLimit)`를 사용한다(사용자 결정 2026-11-01(Q79)). TCP는 기존처럼 추가 바이트 없이 FIN·소켓 정리하며 동작을 바꾸지 않는다. WS·WSS는 101 성공 후 Mode I 대상 연결용 L이 부족할 때 close 4011(`relay_connection_limit`)로 닫는다. 운영 로그는 TCP와 같이 `connection_rejected(stage=target_connect, reason=relay_connection_limit, limit=L)`를 기록한다.
+대상 L이 부족하면 app은 사유를 이름에 담은 `RelayCloseAction::TargetConnectionLimit`를 사용한다(사용자 결정 2026-11-01(Q79)). 이 값이 이전의 사유 없는 `Reject`를 대체한다. TCP는 기존처럼 추가 바이트 없이 FIN·소켓 정리하며 동작을 바꾸지 않는다. WS·WSS는 101 성공 후 Mode I 대상 연결용 L이 부족할 때 close 4011(`relay_connection_limit`)로 닫는다. 운영 로그는 TCP와 같이 `connection_rejected(stage=target_connect, reason=relay_connection_limit, limit=L)`를 기록한다.
 
 ### 4.2 작업 2.9: Mode II 등록과 원자적 매칭
 
@@ -188,6 +189,7 @@ DNS 후보는 반환 순서를 유지해 허용된 주소만 순차 시도한다
 4. 한쪽 TCP 읽기 EOF를 관찰하면 첫 EOF 시각과 쪽을 저장하고 즉시 절대 `eof_at + E`를 만든다. 이미 읽은 데이터를 모두 쓴 뒤 상대의 쓰기 방향만 닫는다. 해당 drain·shutdown도 같은 E 안에서 끝내야 한다.
 5. 반대 방향은 계속 읽고 전달한다. 반대 EOF와 모든 미전달 데이터·쓰기 종료가 E 전에 끝나면 `peer_eof`로 정리한다. E가 지나면 남은 데이터를 보장하지 않고 `close_timeout`으로 정리한다. 읽기·쓰기·shutdown 직후에도 E를 확인한다. EOF마다 E를 새로 시작하지 않는다.
 6. I/O 오류는 그 세션만 정리한다. 다른 대기와 활성 항목을 순회해 닫지 않는다. 원인을 일으킨 쪽은 읽기이면 입력 끝점, 쓰기이면 출력 끝점이다. 정상 EOF와 달리 미전달 바이트의 완전한 도착은 보장하지 않는다.
+7. 활성 WS는 페이로드 진행과 별도로 `viewer.poll_flush`를 poll한다. `Pending`은 페이로드 진행을 막지 않는다. 오류는 Viewer 출력 쪽 `connection_error`로 처리한다. closing에서는 `poll_close`가 종료 진행을 맡는다.
 
 TCP half-close는 읽기 쪽 전체 소켓 drop이 아니다. 예를 들어 Viewer가 요청 뒤 쓰기를 닫아도 Server가 보낸 응답은 Viewer로 계속 전달한다(RLY-019). 데이터가 없다는 이유의 세션 유휴 타이머는 없다. K를 넘는 정상 유휴도 유지한다.
 
@@ -199,12 +201,16 @@ TCP half-close는 읽기 쪽 전체 소켓 drop이 아니다. 예를 들어 View
 
 ### 4.4 WS를 나중에 연결하는 경계
 
-2.10에서 구현한 전송 동작은 TCP다. WS 스트림 어댑터는 3.3의 일부지만, 2.7 완료가 WS·WSS의 실제 초기 교환→`dispatch` 연결을 요구하므로 앞당긴다(Q16·Q21, 결정 A). [WS 스트림 설계](websocket-stream.md#4-101부터-공통-서비스까지)의 실제 바이너리 스트리밍·M 검사·Close 경계를 연결해야 한다. 앞당기는 제어 범위는 [클라이언트 Ping에 Pong 응답](../contracts/websocket-relay-v1.md#14-데이터-메시지와-제어-프레임), 요청하지 않은 Pong 무시, 제어 페이로드를 데이터 스트림에서 제외하는 처리뿐이다. Kw 주기의 서버 Ping 송신과 Pong 기한은 3.4 범위다([WS 스트림 설계 9.5절](websocket-stream.md#95-kw의-여러-ping과-b-backpressure)). 단일 메시지용 임시 파서나 유효 요청 보류로 대신하지 않는다. 해당 문서의 [9.1절](websocket-stream.md#91-해결-프레임-처리-구현의-선택)(Q77)·[9.2절](websocket-stream.md#92-해결-ws-tbd-004-m-b와-제어-진행)(Q78)·[9.3절](websocket-stream.md#93-해결-101-뒤-mode-i-대상-l-부족)(Q79)이 사용자 결정으로 해소되어 차단이 풀렸으며, 현재 구현 단계다. Kw 전체 수용 기준과 9.5절은 3.4 범위이며 2.7 완료를 막지 않는다.
+WS·WSS는 `WsRelayStream`을 통해 같은 초기 교환→`dispatch`에 연결되어 있다. 자체 프레임 코덱은 사용자 결정 2026-11-01(Q77)을 따른다. M>B 스트리밍과 같은 방향 B 상한은 사용자 결정 2026-11-01(Q78)을 따른다. 현재 제어 처리는 클라이언트 Ping에 대한 Pong, 요청하지 않은 Pong 무시, 제어 페이로드 제외다. Kw 주기의 서버 Ping과 Pong 기한은 작업 3.4 범위다.
 
-- WS Viewer가 Close를 보내면 Close 앞의 데이터를 TCP로 소진하고 TCP 쓰기 방향을 닫는다. Close 수신 전에 헤더를 이미 쓴 출력 프레임의 잔여만 같은 E 안에서 마친 뒤 같은 유효 코드로 응답한다. 코드가 없으면 1000이다. 이 범위는 [WS 스트림 설계 9.4절](websocket-stream.md#94-해결-수신-close와-이미-시작한-출력-프레임)과 같은 사용자 결정 2026-11-01(Q83)이다. 새 메시지는 시작하지 않는다. 이어 TCP EOF를 같은 E까지 기다린다. Close 뒤에 읽은 TCP 데이터는 버리고 전송량에 세지 않는다.
-- 반대로 TCP EOF이면 받은 데이터를 WS로 소진한 뒤 Close 1000을 보낸다. WS Close를 기다리는 E 동안 WS 데이터는 TCP로 전달할 수 있다. Close를 보낸 뒤에는 WS 데이터 메시지를 더 보내지 않는다.
-- TCP 오류 4007, 반대 TCP 끊긴 연결 4006, 관리자 종료 4005, 서버 종료 1001의 close action을 구분한다. Close 응답을 기다리느라 L·등록을 무기한 점유하지 않는다.
-- 데이터·종료 매핑은 [WS 계약 1.4~1.6절](../contracts/websocket-relay-v1.md#14-데이터-메시지와-제어-프레임)을 따른다. 앞당긴 3.3의 인계·스트림 시험과 3.4의 Kw 시험을 구별한다. `AsyncWrite::shutdown` 하나로 WS 전체 종료와 TCP half-close를 같게 구현하지 않는다. 사용자 결정 2026-11-01(Q78)로 WS-TBD-004가 해소되었으며, 실제 WS 어댑터 연결 전까지 WS 지원 완료를 선언하지 않는다.
+- `Session::first_eof()`의 첫 쪽으로 Close 순서를 고정한다. Viewer가 먼저 Close를 보내면 `PeerEof`를 선택한다. 유효한 수신 코드만 응답한다. 코드가 없으면 1000이다. Close 앞의 데이터를 TCP로 소진한 뒤 TCP 쓰기 방향을 닫는다.
+- Viewer가 먼저 Close를 보냈다면 이미 시작한 출력 프레임의 잔여만 같은 E 안에서 마친다. 새 메시지는 시작하지 않는다. 이후 TCP 데이터는 버리고 전송량에 세지 않는다. TCP EOF도 같은 E까지 기다린다. 사용자 결정 2026-11-01(Q83)을 따른다.
+- TCP가 먼저 EOF를 내면 받은 데이터를 WS로 소진한 뒤 `WriteHalf`로 Close 1000을 보낸다. `WriteHalf`가 `Pending`인 동안 늦은 Viewer Close를 받아도 `PeerEof` 응답으로 바꾸지 않는다. 상대 Close 또는 같은 E까지 WS 데이터를 TCP로 전달할 수 있다. Close를 보낸 뒤 새 WS 데이터 메시지는 시작하지 않는다.
+- TCP 오류 4007, 반대 TCP 끊긴 연결 4006, 관리자 종료 4005, 서버 종료 1001의 action을 구분한다. Mode I 대상 L 부족은 `TargetConnectionLimit`로 4011을 보낸다(사용자 결정 2026-11-01(Q79)).
+- `Force` 또는 G 만료이면 먼저 `Session::force_server_shutdown()`을 적용한다. 이후 보존된 원인으로 action을 선택한다. typed 오류는 `StreamError(kind)`를 유지한다. Viewer 첫 EOF는 `PeerEof`를 유지한다. TCP 첫 EOF는 `WriteHalf`를 유지한다. 기존 정리 원인이 없을 때만 `ServerShutdown`(1001)을 선택한다. 사용자 결정 2026-11-01(Q82)을 따른다.
+- 강제 경계에서는 Close 교환이나 막힌 shutdown을 기다리지 않는다. action을 한 번 poll한 뒤 소유자에게 반환한다. 이미 보낸 Close는 다시 보내지 않는다. 반환하는 `error_kind`는 최종 원인이 `ConnectionError`일 때만 유지한다.
+- `run_session`은 Force에서도 최종 원인이 `ConnectionError`이면 기존 `error_kind`를 반환한다. `RelayService::run_pair`는 두 스트림과 L permit을 반환한 뒤 `SessionClosed`에 이 값을 넣는다. 다른 최종 원인에는 오류 종류를 붙이지 않는다. 최초 원인은 사용자 결정 2026-11-01(Q82)을 따른다. 필드는 [운영 정보 계약 1.6·1.7절](../contracts/ops-info-v1.md#16-원인-코드)을 따른다.
+- terminal disposal은 유효한 프레임과 거절한 프레임을 구별한다. 유효한 프레임은 decode하며 페이로드를 폐기한다. 상대 Close 또는 transport EOF 뒤 종료한다. 1002·1003·1009로 거절한 프레임은 원시 입력을 폐기한다. 그 안의 Close 모양 바이트를 응답으로 해석하지 않는다. 두 경로 모두 app의 절대 E·G·Force로 제한한다. 구체적인 내부 처리는 **이 문서의 판단, 사용자 결정 없음**이다. [WS 스트림 설계 5절](websocket-stream.md#5-기존-relaystream과의-대응)을 따른다.
 
 ## 5. 상태와 초기화
 
@@ -220,11 +226,11 @@ TCP half-close는 읽기 쪽 전체 소켓 drop이 아니다. 예를 들어 View
 
 첫 종료 요청은 리스너 수락 중지와 app 수명 전이를 먼저 확정한다. 같은 상태 잠금 아래 `ready → shutdown_grace`로 바꾸고 이후 등록·매칭·세션 활성화를 막는다. 대기·초기 교환·대상 연결 중인 작업은 즉시 취소·정리한다. 종료 직전에 연결 또는 매칭이 준비돼도 상태 잠금의 활성화 시점이 종료 뒤이면 세션을 만들지 않는다.
 
-이미 활성인 세션은 `shutdown_started` 시각부터 한 절대 G까지 정상 중계를 계속한다. 자발적으로 끝나면 실제 원인으로 정리한다. G=0, G 만료 또는 두 번째 종료 요청이면 남은 세션의 신규 읽기를 멈추고 `server_shutdown`으로 강제 정리한다. `shutdown_forced`는 남은 세션이 있을 때만 그 `session_closed`보다 먼저 기록한다.
+이미 활성인 세션은 `shutdown_started`부터 한 절대 G까지 정상 중계를 계속한다. 자발적으로 끝나면 실제 원인으로 정리한다. G=0, G 만료 또는 두 번째 종료 요청이면 신규 읽기를 멈춘다. 아직 정리를 시작하지 않은 세션만 `server_shutdown`으로 정리한다. EOF·오류·단절·관리자 종료를 먼저 관찰한 세션은 기존 원인을 유지한다(사용자 결정 2026-11-01(Q82)). `shutdown_forced`는 남은 세션이 있을 때만 그 `session_closed`보다 먼저 기록한다.
 
-기존 boolean stop 하나를 활성 소켓 즉시 종료에 재사용하면 유예가 사라진다. 수락·미완성 작업 중지와 활성 강제 종료를 구분한다. app에는 `Running`, `Grace { deadline }`, `Force` 수명 값을 전달한다. `src`가 OS 신호를 받고 app의 전이 함수를 호출한다. 서버 전체 종료 유예·두 번째 신호·관리 리스너 유지의 조립은 작업 5.3과 연결한다. 2.10은 이 제어 입력과 세션 정리 경계를 먼저 구현하며 5.3 완료를 주장하지 않는다.
+app 수명은 `Running`, `Grace { deadline }`, `Force`다. `src/serve.rs`가 OS 종료 요청을 받아 `request_shutdown`을 호출한다. 별도 `supervisor`가 `drive_shutdown`으로 G를 진행한다. `finish_relay_shutdown`은 모든 진입점 소유자가 끝날 때까지 이 감독 작업을 유지한다. 두 번째 요청은 `Force`를 요청한다. 모든 진입점을 join한 뒤에만 감독 작업을 abort하고 join한다. 소유 작업이 먼저 끝나면 G를 기다리지 않는다. 이 조립 방식은 **이 문서의 판단, 사용자 결정 없음**이다. [시작 설계 4절](serve-startup.md#4-처리-순서)을 따른다.
 
-유예 중 관리 조회·로그인·관리자 종료와 상태 조회는 계속 실행한다. 모든 중계 정리가 끝난 뒤 관리·상태·감지 작업을 거두고 `server_stopped`를 마지막에 쓴다. 강제 종료 시 `server_shutdown` 최근 종료 항목을 넣지만 프로세스 종료 전에 실제 HTTP 조회 기회가 생긴다고 보장하지 않는다(계약의 관찰 항목 유지).
+유예 중 관리 조회·로그인·관리자 종료와 상태 조회는 계속 실행한다. 모든 중계 정리가 끝난 뒤 관리·상태·감지 작업을 거두고 `server_stopped`를 마지막에 쓴다. 강제 정리의 최근 종료 항목도 Q82의 최초 원인을 유지한다. 프로세스 종료 전에 실제 HTTP 조회 기회가 생긴다고 보장하지 않는다.
 
 ## 6. 사건·오류·정리
 
@@ -249,14 +255,14 @@ Mode II가 초기 교환을 마쳤더라도 대기 등록이 완료되기 전에
 
 | 종료 원인 | level·추가 필드 | 최종 정리 의미 |
 | --- | --- | --- |
-| `peer_eof` | info, 먼저 EOF를 낸 `side` | 양방향 정상 소진·쓰기 종료 완료 |
+| `peer_eof` | info, 먼저 EOF를 낸 `side` | 일반 경로는 양방향 소진·쓰기 종료 완료. Force 경계에서는 먼저 관찰한 EOF를 보존하며 drain 완료를 보장하지 않음(Q82) |
 | `connection_error` | warn, 오류 쪽 `side`, `error_kind=io_error` 등 | 해당 연결 쌍만 종료 |
 | `dead_connection` | warn, 응답 없는 `side` | 2.11의 감지 결과를 받음. 유휴 자체를 이 원인으로 만들지 않음 |
 | `admin_terminated` | info, `admin_account`, side 없음 | 4.5에서 지정 세션만 종료, 완료 알림 뒤 API 응답 |
 | `close_timeout` | warn, EOF가 있으면 먼저 EOF를 낸 `side` | EOF 뒤 E 초과. 관리자 종료 E 초과도 같은 원인이며 4.5가 구현 |
 | `server_shutdown` | warn, side 없음 | G 만료·두 번째 종료 요청 뒤 아직 정리를 시작하지 않은 남은 세션 강제 정리(사용자 결정 2026-11-01(Q82)). 먼저 EOF를 관찰했거나 오류·단절·관리자 종료가 시작된 세션은 최초 원인 유지 |
 
-종료 원인은 [관리 API 1.10절](../contracts/management-api-v1.md#110-최근-종료-목록-get-apiv1closed-sessions)과 [운영 정보 계약 1.6절](../contracts/ops-info-v1.md#16-원인-코드)의 뜻이 참이 되도록 정한다. 한 세션의 `close_cause`는 정리를 시작하게 한 첫 원인이다. 양방향이 정상 종료하고 정리까지 끝나야 `peer_eof`다. 한쪽 EOF는 E 시작과 `closing` 전이의 근거일 뿐 최종 정상 종료를 확정하지 않는다. 그 뒤 반대 방향 I/O가 실패하면 `connection_error`와 실패한 끝점의 `side`를 쓴다. E가 만료하면 `close_timeout`이다. G 만료나 두 번째 종료 요청의 강제 정리는 아직 정리를 시작하지 않은 세션에만 `server_shutdown`을 기록하며, 이미 정리를 시작한 세션은 최초 원인을 유지한다(사용자 결정 2026-11-01(Q82)). 강제 정리는 즉시 소켓을 닫아 대기를 끝내지만 기록되는 원인은 최초 원인을 유지한다. 양방향 전송이 끝난 뒤 소켓만 닫는 과정의 오류는 이미 정한 원인을 바꾸지 않는다. 관리자 종료가 E를 넘으면 관리 API 1.9절대로 `close_timeout`으로 바꾸며 4.5가 구현한다.
+종료 원인은 [관리 API 1.10절](../contracts/management-api-v1.md#110-최근-종료-목록-get-apiv1closed-sessions)과 [운영 정보 계약 1.6절](../contracts/ops-info-v1.md#16-원인-코드)을 따른다. 한 세션의 `close_cause`는 정리를 시작하게 한 첫 원인이다. 일반 경로의 `peer_eof`는 양방향 소진·쓰기 종료 뒤 확정한다. 한쪽 EOF는 먼저 E와 `closing`을 시작한다. 이후 반대 방향 I/O가 실패하면 `connection_error`를 쓴다. E가 먼저 만료하면 `close_timeout`이다. 다만 G 만료나 두 번째 요청으로 즉시 정리할 때는 `force_server_shutdown()`이 먼저 관찰한 EOF를 `peer_eof`로 보존한다. 이는 양방향 drain 완료를 보장한다는 뜻이 아니다. 이미 정한 오류·단절·관리자 종료도 보존한다(사용자 결정 2026-11-01(Q82)). 원인이 전혀 없을 때만 `server_shutdown`을 선택한다. 양방향 전송이 끝난 뒤 소켓 정리 오류는 원인을 바꾸지 않는다. 관리자 종료의 E 만료는 관리 API 1.9절의 `close_timeout` 규칙을 따른다.
 
 ### 정리 순서와 정확히 한 번 반환
 
@@ -315,17 +321,40 @@ Mode II가 초기 교환을 마쳤더라도 대기 등록이 완료되기 전에
 
 ### WS 스트림 시험과의 연결
 
-[WS 스트림 설계 7절](websocket-stream.md#7-테스트-계획)이 다음 시험을 Target으로 소유한다. 아직 생성·실행 결과가 아니며 기존 TCP·메모리 스트림 시험으로 대신하지 않는다.
+다음은 현재 소스의 시험과 표식이다. 이 문서 개정에서 실행하지 않았다. [WS 스트림 설계 7절](websocket-stream.md#7-테스트-계획)과 같은 구현 경계를 가리킨다.
 
-| Target 시험 | 연결할 표식 | 이 문서와 만나는 경계 |
+| 기존 시험 위치·함수 | 실제 표식 | 이 문서와 만나는 경계 |
 | --- | --- | --- |
-| `websocket_stream/tests.rs`의 `preserves_initial_exchange_trailing_bytes_once_within_b`, `streams_a_single_frame_larger_than_b_without_a_message_buffer` | WS-018·RLY-003, WS-011·RLY-018 각각 `partial` | `PreparedConnection` 후속 데이터·업그레이드 잔여와 같은 방향 합계 B, M>B 스트리밍 |
-| 같은 파일의 `maps_initial_rejections_and_aborts_before_releasing_l`, `rejects_text_and_invalid_frames_with_typed_errors` | RLY-004·005·022, WS-008·019 각각 `partial` | 기존 초기 실패 action·typed 오류와 실제 WS Close, stream → permit → 사건 순서 |
-| 같은 파일의 `finishes_started_frames_before_replying_to_close_within_e`, `bounds_outbound_messages_and_counts_only_written_payload` | WS-017, WS-007 각각 `partial` | `pending_write_len`·같은 E·프레임 잔여만 완료·부분 페이로드 카운터 |
-| `tests/websocket_stream.rs`의 `ws_and_wss_forward_initial_trailing_data_once`, `ws_and_wss_follow_the_asymmetric_close_contract` | WS-018, WS-016·017 | WS·WSS 각각 초기 교환→dispatch→실제 TCP, 양쪽 종료 순서·폐기량·L·활성·ID 정리 |
-| `websocket_stream/tests.rs`의 `drives_kw_without_payload_io_and_bounds_pending_pings`, `tests/websocket_stream.rs`의 `ws_and_wss_kw_keeps_idle_peers_and_drops_unresponsive_peers` | WS-026 각각 `partial`·전체 | 3.4의 maintenance poll·Pong 기한·backpressure·다른 세션 유지. 9.5절 결정 뒤 검증 |
+| `crates/adapters/src/websocket_stream/tests.rs`의 `preserves_initial_exchange_trailing_bytes_once_within_b`, `streams_a_single_frame_larger_than_b_without_a_message_buffer` | `websocket.md:WS-018 partial`·`relay.md:RLY-003 partial`, `websocket.md:WS-011 partial`·`relay.md:RLY-018 partial` | 후속 데이터와 같은 B, M>B 프레임 스트리밍 |
+| 같은 파일의 `rejects_text_and_invalid_frames_with_typed_errors`, `finishes_started_frames_before_replying_to_close_within_e` | `websocket.md:WS-008 partial`·`websocket.md:WS-019 partial`, `websocket.md:WS-017 partial` | typed 오류와 시작한 출력 프레임의 잔여 |
+| 같은 파일의 `bounds_outbound_messages_and_counts_only_written_payload` | `websocket.md:WS-007 partial` | 실제 부분 페이로드 쓰기만 계산 |
+| `crates/adapters/tests/websocket_relay.rs`의 `ws_and_wss_forward_initial_trailing_data_once` | `websocket.md:WS-018`, `websocket.md:WS-003`~`websocket.md:WS-006`, `relay.md:RLY-003 partial` | WS·WSS 후속 데이터→실제 TCP 전달 |
+| 같은 파일의 `client_close_drains_to_tcp_and_echoes_only_the_code`, `tcp_eof_drains_then_forwards_client_data_after_close_1000` | 각각 `websocket.md:WS-016 partial`. 후자는 `relay.md:RLY-019 partial`도 있음 | 두 Close 순서·코드·drain·카운터 |
+| 같은 파일의 `mode_i_target_limit_after_101_closes_4011_and_preserves_existing_session` | `operations.md:OPS-023 partial` | 101 뒤 대상 L 부족과 기존 세션 보존(Q79) |
+| 같은 파일의 `single_and_fragmented_messages_accept_m_and_close_1009_at_m_plus_one` | `websocket.md:WS-010` | WS·WSS의 분할·비분할 M 수락. M+1 헤더와 본문을 함께 보내고 1009·추가 미전달·typed 사건·자원 반환 확인 |
 
-각 함수의 완전한 경로·표식과 greeting·HTTP suffix·H·마스크 경계 등의 나머지 시험은 연결한 WS 시험 계획을 따른다. 실제 화면·입력의 WS-001~006 수용 시험은 스트림 단위 시험과 별도다.
+### 기존 수명 회귀 시험
+
+아래 함수는 현재 소스에 있다. 표식 없음은 시나리오 표식이 없는 내부 회귀 시험이다. 실행 결과가 아니다.
+
+| 위치·함수 | 실제 표식 | 비교하는 경계 |
+| --- | --- | --- |
+| `crates/app/src/relay/session.rs`의 `drives_queued_and_partial_pongs_while_payload_writes_are_backpressured` | 없음 | B가 찬 상태의 큐·부분 Pong을 출력 wake만으로 진행. 추가 입력 읽기 없음 |
+| 같은 파일의 `classifies_control_flush_errors_as_viewer_output_errors` | 없음 | flush 실패의 typed 종류·Viewer 쪽·0 페이로드 카운터 |
+| 같은 파일의 `g_expiry_preserves_eof_and_never_waits_for_transport_close` | `operations.md:OPS-009 partial` | G=0·G 만료에서 첫 EOF 원인·쪽 보존 |
+| 같은 파일의 `force_preserves_an_error_whose_terminal_close_is_still_pending` | `operations.md:OPS-009 partial`, `operations.md:OPS-042 partial` | G·두 번째 요청이 막힌 종료를 끝내도 오류 종류·원인 보존 |
+| 같은 파일의 `force_before_first_close_poll_preserves_the_selected_websocket_action` | `websocket.md:WS-016 partial`, `operations.md:OPS-042 partial` | 첫 Close poll 전 Force의 `StreamError`·`PeerEof`·`WriteHalf`·`ServerShutdown` 선택 |
+| 같은 파일의 `force_published_by_expired_cleanup_keeps_the_typed_error_action` | `websocket.md:WS-008 partial`, `operations.md:OPS-042 partial` | E 경계 정리 중 새 Force가 생겨도 typed action 보존 |
+| 같은 파일의 `force_after_either_close_order_never_sends_a_second_websocket_close` | `websocket.md:WS-017 partial`, `operations.md:OPS-009 partial` | 두 Close 순서 뒤 Force의 중복 Close 방지 |
+| 같은 파일의 `late_client_close_cannot_replace_tcp_first_pending_write_half_with_an_echo` | `websocket.md:WS-016 partial` | Mode I·II의 TCP 첫 EOF를 늦은 Viewer Close가 바꾸지 않음 |
+| `crates/app/src/relay.rs`의 `forced_dispatch_records_retained_error_kind_only_after_streams_and_permits_are_released` | `operations.md:OPS-009 partial`, `operations.md:OPS-042 partial` | Force·G 뒤 `connection_error`의 종류·쪽 보존. 스트림과 permit 반환 뒤 사건 기록 |
+| `crates/adapters/src/websocket_stream/tests.rs`의 `terminal_close_completes_on_peer_close_without_transport_eof` | 없음 | 유효한 데이터 폐기 뒤 상대 Close로 종료 완료 |
+| 같은 파일의 `valid_terminal_disposal_yields_during_a_data_flood` | 없음 | 유효한 데이터 연속 수신 중 제한된 poll 뒤 yield |
+| 같은 파일의 `rejected_frame_disposal_waits_for_transport_eof_not_apparent_close_bytes` | 없음 | 거절한 페이로드 안의 Close 모양 바이트 무시 |
+
+### 계획된 Kw 시험
+
+Kw 시험은 위 기존 회귀 시험과 별도다. 작업 3.4가 서버 Ping·Pong 기한과 B 뒤 새 Ping 관찰 정책을 다룬다. [WS 스트림 설계 9.5절](websocket-stream.md#95-kw의-여러-ping과-b-backpressure)은 열린 범위다. `drives_kw_without_payload_io_and_bounds_pending_pings`와 `ws_and_wss_kw_keeps_idle_peers_and_drops_unresponsive_peers`는 계획 이름이다. 현재 함수나 실행 결과로 취급하지 않는다. 계획 표식은 `websocket.md:WS-026 partial`과 `websocket.md:WS-026`이다.
 
 ## 8. 현재 코드와의 차이와 연결 순서
 
@@ -333,22 +362,20 @@ Mode II가 초기 교환을 마쳤더라도 대기 등록이 완료되기 전에
 | --- | --- | --- |
 | domain·app 상태 | 기존 domain을 `RelayRuntime<C>`의 단일 `Mutex<RelayState>`와 연결했다. `dispatch`가 실제 대상 연결·등록·매칭·중계·최근 종료 기록까지 진행한다. 정확한 연결·세션 식별자를 확인하는 취소 guard가 등록 누수를 막는다. | 관리 API 직렬화·인증은 4.4, 관리자 종료 요청·응답은 4.5다. |
 | 예산 | 수락과 같은 L을 runtime에 주입한다. 대상 연결 전에 추가 L 하나를 얻고 실제 Lw permit을 등록에 붙인다. 소켓을 버린 뒤 L을 반환한다. Lw는 매칭 또는 대기 표 제거 전이에서 반환한다. | 예산 현재 사용량 관측 API는 4.4와 연결한다. |
-| 초기 교환 | 2.7의 `PreparedConnection`과 파서를 재사용했다. 수명 입력을 `RelayLifecycle`로 바꿨다. 실패 action을 E 안에서 진행한 뒤 stream → L → 사건 순서로 정리한다. | 진입점이 `peer_addr`·`accepted_wall`·공통 Clock·수명 수신자를 실제 수락 값으로 채워야 한다. |
-| 대상·전송 어댑터 | `TcpTargetConnector`가 해석·검사된 단일 주소 연결·K를 구현한다. `TcpRelayStream`은 읽기·쓰기와 half-close를 위임한다. 기존 TCP 진입점 함수와 `hold`는 바꾸지 않았다. | 다음 TCP 연결 작업이 `hold` 대신 초기 교환→dispatch를 호출한다. WS 어댑터는 구현하지 않았다. |
-| 포트·암호·사건 | `TargetConnector`, `RelayIdSource`, `SessionIdSource`, `RelayStream`과 typed 오류를 공개했다. 기존 ref 키와 독립 `SessionIdKey`의 6라운드 순열을 구현했다. 6절 사건 및 요청 종료 사건의 JSON·계약 시험을 추가했다. | 두 키의 시작 실패 wire 코드는 9절 1번이 미결정이다. 생성 API는 `Result`를 유지하고 시작 조립에는 넣지 않았다. |
-| 종료 제어 | 첫 요청은 `Grace { deadline }`, 두 번째 요청·G 만료는 공유 `Force`로 전이한다. 남은 활성이 있을 때만 `shutdown_forced`를 한 번 기록하며 강제 `session_closed`보다 앞선다. | 실행파일의 boolean stop·OS 신호·관리 리스너 유지는 바꾸지 않았다. 감독 작업이 `drive_shutdown`을 poll해야 연결 작업이 0개여도 G 전이가 진행한다. |
+| 초기 교환 | 2.7의 `PreparedConnection`과 파서를 재사용했다. 수명 입력을 `RelayLifecycle`로 바꿨다. 실패 action을 E 안에서 진행한 뒤 stream → L → 사건 순서로 정리한다. | WS·WSS 진입점도 `ConnectionContext`를 실제 수락 값으로 채운다(`638cf09`). TCP도 채웠다. |
+| 대상·전송 어댑터 | `TcpTargetConnector`가 해석·검사된 단일 주소 연결·K를 구현한다. `TcpRelayStream`은 읽기·쓰기와 half-close를 위임한다. TCP 진입점은 `hold` 대신 `handle_connection`→`dispatch`를 호출한다. | WS 어댑터 `WsRelayStream`은 `638cf09`에서 구현·연결했다. |
+| 포트·암호·사건 | `TargetConnector`, `RelayIdSource`, `SessionIdSource`, `RelayStream`과 typed 오류를 공개했다. 기존 ref 키와 독립 `SessionIdKey`의 6라운드 순열을 구현했다. 6절 사건 및 요청 종료 사건의 JSON·계약 시험을 추가했다. | 두 키의 시작 실패 wire 코드는 `runtime_unavailable`로 확정했다(Q76). 생성 API는 `Result`를 유지하고 `src/serve.rs`가 시작 때 호출한다. |
+| 종료 제어 | 첫 요청은 `Grace { deadline }`, 두 번째 요청·G 만료는 공유 `Force`로 전이한다. 남은 활성이 있을 때만 `shutdown_forced`를 한 번 기록한다. 기존 종료 원인과 typed action은 Q82에 따라 보존한다. | `src/serve.rs`가 OS 종료 요청·`drive_shutdown` 감독 작업을 연결한다. `finish_relay_shutdown`은 모든 진입점 소유자를 join한 뒤 감독 작업을 abort하고 join한다. 관리·상태·감지 정리와 `server_stopped`는 그 뒤다. |
 
-### TCP 보류를 끝내는 정확한 연결 단계
+### TCP 연결 경로와 WS·WSS 연결 경로
 
-연결 순서는 TCP가 먼저다. 시작 키 생성 실패 코드는 `runtime_unavailable`로 확정되었다(사용자 결정 2026-11-01(Q76)). WS·WSS는 앞당긴 3.3 스트림 어댑터와 공통 포트 확장을 준비하고 연결한다(사용자 결정 2026-11-01(Q77~Q79)). 같은 `handle_connection`→`dispatch`를 재사용한다. WS·WSS의 실제 인계와 시험 전에는 Q16·Q21·결정 A의 2.7 완료로 표시하지 않는다.
+TCP는 연결되어 있다. 시작 키 실패 코드는 `runtime_unavailable`로 확정되었다(사용자 결정 2026-11-01(Q76)). WS·WSS는 `638cf09`에서 공통 포트 확장(Q77~Q79)을 쓰는 3.3 스트림 어댑터를 같은 `handle_connection`→`dispatch`에 연결했다. WS·WSS의 시험 시나리오는 아직 남아 있으므로 2.7 완료로 표시하지 않는다.
 
-1. 2.7의 `handle_connection`과 이 문서 2.8·2.9·2.10의 실제 기능·정리 경계가 모두 존재하도록 한다. 유효 요청에 가짜 성공·보류·즉시 닫기 경로를 넣지 않는다.
-2. 시작 4단계의 런타임·종료 신호 준비 직후, TLS 파일 검사 전에 키 두 개를 준비한다. `listen_until_shutdown`에서 기존 `relay_budget`을 대상 연결과 진입점이 공유하게 하고 Lw·공유 서비스·수명 제어를 조립한다. `TcpEntryPoint::run` 또는 생성자에 `Arc<RelayService>`를 전달한다.
-3. `crates/adapters/src/net.rs::TcpEntryPoint::run`의 `accept_connections` serve closure를 바꾼다. `Accepted`의 실제 소켓 주소와 표시 시각을 포함해 공통 Clock 기준 `ConnectionContext`로 바꾼다. `TcpRelayStream`·permit·`runtime.lifecycle()`로 `handle_connection`을 await한다. `Ok(prepared)`이면 같은 연결 작업에서 즉시 `dispatch(prepared, &runtime).await`를 부른다. `Err`이면 초기 교환에서 완료한 정리를 중복 실행하지 않는다.
-4. `accept_connections`의 IP → L → K → conn_id → `connection_accepted` 순서는 유지한다. 소켓 상대 포트도 잃지 않게 수락 메타데이터를 확장한다. 수락 반복은 리스너 종료 뒤 연결 작업들을 끝까지 거둔다. 세션이 이 작업 모음을 벗어나 분리 실행되지 않게 한다.
-5. TCP `hold`·`closed_before_data`와 불필요해진 H 보류 전용 인수를 제거한다. 공유 수락 반복 자체와 WS의 `hold_upgraded`는 이번 TCP 변경 때문에 지우지 않는다. WS 연결 시점의 기존 미결정은 2.7·3.3 소유자가 갱신한다.
+TCP 경로(HEAD): `listen_until_shutdown`이 시작 키를 만든다(`generate_startup_keys`, 실패 시 `runtime_unavailable`, 종료 코드 1). `TcpEntryPoint::run`의 `accept_connections` serve closure가 `ConnectionContext`와 `runtime.lifecycle()`로 `RelayService::handle_connection`을 await한다. `Ok(prepared)`이면 같은 연결 작업에서 `dispatch(prepared, &runtime).await`를 부른다. `Err`이면 초기 교환에서 끝낸 정리를 다시 하지 않는다.
+`accept_connections`의 IP → L → K → conn_id → `connection_accepted` 순서는 유지한다. 수락 반복은 리스너 종료 뒤 연결 작업들을 끝까지 거둔다.
+TCP `hold`·`closed_before_data`는 제거했다. WS의 101 뒤 `hold_upgraded` 보류도 `638cf09`에서 제거했다. WS 연결 경로의 세부는 [WebSocket 진입점 모듈 설계](websocket-entry-point.md)가 다룬다.
 
-이 절의 진입점 연결은 다음 작업이다. 이번 변경은 app·adapters와 그 시험까지 구현했으며 `net.rs`에는 래퍼만 더했다. `src/serve.rs`, `tests/serve.rs`, WS 어댑터·업그레이드, TCP `run`·`hold`·수락 반복은 수정하지 않았다. 코드 지도·문서 목록·2.7 문서·TODO도 다른 세션 소유이므로 수정하지 않았다.
+WS·WSS 진입점 연결은 `638cf09`에서 끝냈다. TCP·WS·WSS 경로의 코드 위치는 `src/serve.rs`, `crates/adapters/src/net.rs`, `crates/adapters/src/websocket.rs`, `crates/app/src/relay.rs`다.
 
 ### 구현 형태와 설계 차이
 

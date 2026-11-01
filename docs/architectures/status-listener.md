@@ -25,7 +25,7 @@
   - `listener_failed`. 준비된 필수 리스너가 계속 운영할 수 없게 실패하는 경로가 아직 없다. TCP 진입점은 `accept` 오류 뒤 다시 수락한다([TCP 진입점 모듈 설계 6절](tcp-entry-point.md#6-오류-처리)). 그 실패를 판정하는 작업이 `Readiness`에 값을 더한다.
   - 종료 유예 G 동안의 응답 유지와 `shutdown_started`. 작업 5.3이 맡는다. 지금은 종료 요청을 받은 뒤 진입점 연결을 정리하는 동안만 `shutting_down`으로 답한다.
   - 관리 리스너의 Lm 집계는 작업 4.2가 붙였다. 상태 리스너와 같은 Lm 예산을 쓴다([관리 리스너 모듈 설계](management-listener.md)).
-  - WS·WSS 리스너의 연결 수락. 이 리스너들은 바인드만 하고 준비됨 판정에 포함한다. 수락은 작업 3.2가 붙인다([`serve` 시작 모듈 설계 1절](serve-startup.md#1-책임과-경계)). 관리 리스너의 연결 수락은 작업 4.2가 붙였다([관리 리스너 모듈 설계](management-listener.md)).
+  - WS·WSS 리스너의 연결 수락. `serve`가 만든 `WsEntryPoint`가 맡는다(`src/serve.rs`, 작업 3.2). 이 리스너들은 바인드해 준비됨 판정에 포함한다([`serve` 시작 모듈 설계 1절](serve-startup.md#1-책임과-경계)). 관리 리스너의 연결 수락은 작업 4.2가 붙였다([관리 리스너 모듈 설계](management-listener.md)).
   - 인증서 검사(작업 3.1)와 파일 변경 감지 준비(작업 5.1). 그 작업이 준비됨 전의 단계에 넣는다.
 - 다른 모듈에 공개하는 기능:
   - `vnc_relay_app::lifecycle::{Readiness, LifecycleService}`
@@ -108,7 +108,7 @@ flowchart LR
 | 준비 상태는 app의 `AtomicU8` 하나로 둔다. | 읽기만 많고, 바뀌는 곳은 `serve` 한 곳이다. app이 tokio에 의존하지 않는다. | `tokio::sync::watch` | [코드 지도 레이어 표](code-map.md#레이어와-의존-방향) |
 | `ConnectionRejected`의 리스너를 진입점 대신 리스너 이름 문자열로 둔다. | 상태·관리 리스너는 진입점이 아니다. `StartupFailed::listener`와 `ListenerPlan::name`이 같은 방식을 쓴다. | 리스너 enum을 새로 만든다. 같은 이름을 두 방식으로 갖게 된다. | 없음 |
 | 상태 리스너 작업은 종료 마지막에 멈추고(`abort`) 남은 상태 연결을 기다리지 않는다. | 진입점 연결을 정리하는 동안 `shutting_down`으로 답해야 한다. 응답 중인 상태 연결이 종료를 붙잡지 않는다. | axum 정상 종료(`with_graceful_shutdown`). 요청을 보내다 멈춘 연결이 종료를 끝없이 막을 수 있다. | 없음 |
-| `server_ready`의 `listeners`는 바인드한 모든 리스너다. 아직 수락하지 않는 WS·WSS 리스너도 넣는다. | 그 리스너들은 바인드돼 있어 운영체제가 연결을 대기열에 넣는다. 수락은 해당 작업이 붙인다. | 수락하는 리스너만 넣기. 작업이 진행되며 목록 의미가 바뀐다. | [운영 정보 계약 1.5절](../contracts/ops-info-v1.md#15-사건-목록) |
+| `server_ready`의 `listeners`는 바인드한 모든 리스너다. WS·WSS 리스너도 넣는다(작업 3.2 전에는 수락하지 않았고, 지금은 `WsEntryPoint`가 수락한다). | 그 리스너들은 바인드돼 있어 운영체제가 연결을 대기열에 넣는다. 수락은 해당 작업이 붙인다. | 수락하는 리스너만 넣기. 작업이 진행되며 목록 의미가 바뀐다. | [운영 정보 계약 1.5절](../contracts/ops-info-v1.md#15-사건-목록) |
 
 ## 8. 현재 코드와의 차이
 

@@ -196,7 +196,7 @@ Close를 보낸 뒤에는 데이터 메시지를 보내지 않는다([RFC 6455 5
 | 4006 | 끊긴 연결 감지. | [relay.md 4절](../specs/relay.md#4-오류와-복구) '끊긴 연결 감지' 행, [RLY-025](../specs/relay.md#7-수용-테스트), [RLY-026](../specs/relay.md#7-수용-테스트), [WS-026](../specs/websocket.md#7-수용-테스트) | `dead_connection` |
 | 4007 | 상대 연결 오류, 또는 EOF 뒤 데이터 소진 불가. | [relay.md 4절](../specs/relay.md#4-오류와-복구) '중계 I/O 오류' 행, [websocket.md 4절](../specs/websocket.md#4-오류와-종료) 'TCP 정상 EOF' 행, [RLY-020](../specs/relay.md#7-수용-테스트), [WS-016](../specs/websocket.md#7-수용-테스트) | `connection_error` |
 | 4008 | 초기 교환 오류. | [websocket.md 4절](../specs/websocket.md#4-오류와-종료) 'Repeater 초기 교환 오류·시간 초과' 행, [relay.md 4절](../specs/relay.md#4-오류와-복구) 첫 행, [RLY-004](../specs/relay.md#7-수용-테스트) | 해당 없음 |
-| 4009 | 초기 교환 시간 초과. | [relay.md 4절](../specs/relay.md#4-오류와-복구) '초기 교환 미완료·시간 초과' 행, [RLY-005](../specs/relay.md#7-수용-테스트), [OPS-006](../specs/operations.md#7-수용-테스트) | 해당 없음. 운영 로그는 `connection_aborted`(`handshake_timeout`, `stage` `initial_exchange`)다. 101 뒤 H가 지나 이 코드를 보내는 연결은 활성 세션이 아니다. WebSocket 중계 스트림 연동 완료 전까지 이 동작은 임시다(사용자 결정 2026-10-22(Q21)). |
+| 4009 | 초기 교환 시간 초과. | [relay.md 4절](../specs/relay.md#4-오류와-복구) '초기 교환 미완료·시간 초과' 행, [RLY-005](../specs/relay.md#7-수용-테스트), [OPS-006](../specs/operations.md#7-수용-테스트) | 해당 없음. 운영 로그는 `connection_aborted`(`handshake_timeout`, `stage` `initial_exchange`)다. 101 뒤 H가 지나 이 코드를 보내는 연결은 활성 세션이 아니다. |
 | 4010 | 대기 상한 도달. | [operations.md 5절](../specs/operations.md#5-오류와-복구) 'Lw 상한 도달' 행, [OPS-005](../specs/operations.md#7-수용-테스트) | 해당 없음 |
 | 4011 | 중계 연결 상한 도달. | [operations.md 5절](../specs/operations.md#5-오류와-복구) 'L 상한 도달' 행, [OPS-023](../specs/operations.md#7-수용-테스트) | 해당 없음 |
 

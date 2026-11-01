@@ -19,18 +19,18 @@
   - 명령행 해석: `serve --config <path>`(`--config=<path>` 포함, 한 번만), `--help`·`-h`, `--version`·`-V`. 그 밖의 하위 명령·옵션은 `usage_error`(종료 코드 2)다. `admin` 하위 명령의 해석은 `cli::parse`가 하고, 실행은 [관리자 계정 준비 CLI 모듈 설계](admin-accounts.md)가 맡는다.
   - 진단 출력: `error[<code>] key=<key>: <message>`, `warning[<code>] key=<key>: <message>`. 키가 없으면 ` key=`를 뺀다(1.5절).
   - 종료 코드 매핑: 사용법 2, 설정 3, 리스너 4, 계정 파일 5, 런타임 준비 1, 정상 종료 0.
-  - `serve` 시작 순서(1.8절): 설정 읽기·검증·로그 출력 열기 → 계정 파일 읽기·검증 → 비동기 런타임·종료 신호 처리기 준비 → 인증서·개인키 파일 검사 → 리스너 바인드. 같은 단계의 오류는 모두 모은다.
+  - `serve` 시작 순서(1.8절): 설정 읽기·검증·로그 출력 열기 → 계정 파일 읽기·검증 → 비동기 런타임·종료 신호 처리기 준비 → 시작 키 생성(실패 시 `runtime_unavailable`, 종료 코드 1) → 인증서·개인키 파일 검사 → 리스너 바인드. 같은 단계의 오류는 모두 모은다.
   - 단계마다 운영 로그 사건을 기록한다: `server_starting`, 설정 경고(`phase` = `startup`), 진단마다 `startup_failed`, 정상 종료 때 `server_stopped`. 필드 규칙은 [운영 로그 모듈 설계 4·6절](ops-log.md#4-처리-순서)이다.
   - 계정 파일 읽기와 형식·해시 문자열 검사(1.3·1.4절), 계정이 없을 때의 시작 거절, Ubuntu의 권한 경고(1.6절).
   - 리스너 바인드 실패 수집과 실패 때 이미 바인드한 리스너 닫기.
   - 인증서·개인키 파일 검사(`tls_file_invalid`, 종료 코드 3). 활성화된 WSS 진입점과 관리 리스너의 인증서·개인키 파일을 어떤 리스너도 바인드하기 전에 검사하고, 오류는 모두 모은다([CLI 계약 1.8절](../contracts/cli-v1.md#18-수동-시작과-종료), [설정 계약 2.1절](../contracts/config-v2.md#21-설정-오류와-준비-실패)).
   - 종료 요청(Ctrl+C, Ubuntu의 SIGTERM, Windows의 Ctrl+Break)을 받으면 TCP·WS·WSS 진입점 작업에 종료를 알리고, 그 작업이 끝난 뒤 나머지 리스너를 닫고 종료 코드 0으로 끝내기.
+  - 종료 유예 G와 두 번째 종료 요청의 조립. `finish_relay_shutdown`이 진입점 소유자와 G 감독 작업의 종료 순서를 지킨다. 세션 종료 원인은 [중계 수명 설계 5.2·6절](relay-session.md#52-정상-종료와-g)이 다룬다.
 - 맡지 않는 책임:
   - `admin` 하위 명령의 실행. [관리자 계정 준비 CLI 모듈 설계](admin-accounts.md)가 맡는다.
   - 파일 변경 감지 준비(시작 순서 3단계, `watch_unavailable`). 작업 5.1·5.2가 맡았다(사용자 결정 2026-10-20). 구현은 `src/serve.rs`의 감시 시작 단계이며 세부는 [파일 변경 감지 모듈 설계](file-watch.md)가 맡는다.
   - 준비 상태, `server_ready`, 상태 리스너의 응답. [상태 리스너와 준비 상태 모듈 설계](status-listener.md)가 맡는다. 이 문서는 5·6단계에서 그 기능을 부르는 순서만 다룬다.
   - WS·WSS 진입점의 연결 수락은 작업 3.2가 붙였다([WebSocket 진입점 모듈 설계](websocket-entry-point.md)). 관리 리스너의 연결 수락은 작업 4.2가 붙였다([관리 리스너 모듈 설계](management-listener.md)). TCP 진입점의 수락은 작업 2.4가 붙였다([TCP 진입점 모듈 설계](tcp-entry-point.md)). 상태 리스너의 수락은 작업 2.6이 붙였다.
-  - 종료 유예 G, 두 번째 종료 요청, 세션 정리. 작업 5.3이 맡는다.
   - 비밀번호 규칙(`Password`)은 [관리자 계정 준비 CLI 모듈 설계](admin-accounts.md)가 맡는다. 로그인 때 비밀번호 해시 검증은 작업 4.3이 맡는다.
 - 다른 모듈에 공개하는 기능:
   - `vnc_relay_domain::account::{Account, AccountName, AccountNameError, PasswordHash, PasswordHashError, Argon2Params, Argon2ParamsError}`
@@ -107,9 +107,21 @@ flowchart LR
 | 1 | `src/main.rs` `main`, `src/cli.rs` `parse` | 인수를 해석한다. 오류면 `error[usage_error]`와 사용법을 stderr에 쓰고 2로 끝난다. | `Command::Serve { config }` | 2단계 |
 | 2 | `src/serve.rs` `run`, `config_file::load`, `JsonLinesEventSink::open` | 설정을 읽고 검증한다. 진단이 있으면 모두 쓰고 표준 출력에 진단마다 `startup_failed`를 쓴 뒤 3으로 끝난다. 로그 출력을 연다. 열 수 없으면 `log_file_unavailable`로 3. 열면 `server_starting`과 설정 경고를 기록한다. | `Settings`, 로그 출력 | 3단계 |
 | 3 | `accounts_file::load`, `accounts::require_any` | `settings.admin.accounts_file`을 읽고 검증한다. 경고는 stderr에 쓴다. 진단이 있거나 계정이 없으면 모두 쓰고, 진단마다 `startup_failed`를 기록하고, 5로 끝난다. | `LoadedAccounts` | 4단계 |
-| 4 | `src/serve.rs` `run`, `ShutdownSignal::register`, `listen_until_shutdown`(TLS 검사) | tokio 다중 스레드 런타임을 만들고 종료 신호 처리기를 등록한다. 실패하면 `runtime_unavailable`로 1. 이어 활성화된 WSS 진입점과 관리 리스너의 인증서·개인키를 `tls::load_acceptor`로 검사한다(`tls_checks`). 검사 대상을 모두 확인한 뒤 실패가 하나라도 있으면, 실패한 파일마다 `error[tls_file_invalid] key=<키>`를 쓰고 `startup_failed`(`config_key`, `listener`)를 기록한 뒤 3으로 끝난다. 키는 `relay.wss_viewer.cert_file`·`relay.wss_viewer.key_file`·`management.cert_file`·`management.key_file` 가운데 하나이고, `listener`는 WSS 진입점 이름 또는 `management`다. 통과한 acceptor는 `listen_until_shutdown`이 가진다. | 런타임, 신호 처리기, 검사 통과 acceptor | 5단계 |
+| 4 | `src/serve.rs` `run`, `ShutdownSignal::register`, `listen_until_shutdown`(시작 키·TLS 검사) | tokio 다중 스레드 런타임을 만들고 종료 신호 처리기를 등록한다. 실패하면 `runtime_unavailable`로 1. 이어 시작 키(`generate_startup_keys`, `RelayIdKey`와 세션 식별자 키)를 만든다. 실패하면 `runtime_unavailable`로 1. 이어 활성화된 WSS 진입점과 관리 리스너의 인증서·개인키를 `tls::load_acceptor`로 검사한다(`tls_checks`). 검사 대상을 모두 확인한 뒤 실패가 하나라도 있으면, 실패한 파일마다 `error[tls_file_invalid] key=<키>`를 쓰고 `startup_failed`(`config_key`, `listener`)를 기록한 뒤 3으로 끝난다. 키는 `relay.wss_viewer.cert_file`·`relay.wss_viewer.key_file`·`management.cert_file`·`management.key_file` 가운데 하나이고, `listener`는 WSS 진입점 이름 또는 `management`다. 통과한 acceptor는 `listen_until_shutdown`이 가진다. | 런타임, 신호 처리기, 시작 키, 검사 통과 acceptor | 5단계 |
 | 5 | `Settings::status_listener`, `net::bind_one`, `Settings::management_listener`, `Settings::other_listeners`, `net::bind` | 상태 리스너를 먼저 바인드해 `StatusListener::run`을 띄운다. 그 뒤 관리 리스너를 바인드한다(작업 4.2). 그 뒤 나머지를 목록 순서대로 바인드한다([상태 리스너와 준비 상태 모듈 설계 4절](status-listener.md#4-처리-순서)). 두 번째 프로세스는 모든 주소가 사용 중이라 실패 목록을 받는다. 실패가 있으면 성공한 리스너를 닫고 상태 리스너 작업을 멈춘다. 실패한 리스너마다 `error[listener_bind_failed] key=<설정 키>`를 쓰고 `startup_failed`(`listener`, `config_key`, `detail`)를 기록한 뒤 4로 끝난다. 첫 프로세스의 소켓에는 손대지 않는다. | 바인드한 리스너, 상태 리스너 작업 | 6단계 |
-| 6 | `listen_until_shutdown`, `ShutdownSignal::wait` | 준비됨으로 바꾸고 `server_ready`를 기록한다. 관리 리스너를 `ManagementListener::new`로 감싸 `ManagementListener::run`을 띄운다(작업 4.2). `ConnectionBudget::new(limits.relay_connections)`로 L 예산을 만든다. TCP 진입점 리스너마다 `TcpEntryPoint::run`을, WS·WSS 진입점 리스너마다 `WsEntryPoint::run`을 띄우고(WSS는 `wss_tls.take()`로 받은 TLS 수락기를 넘긴다) 첫 종료 요청까지 기다린다([연결 상한과 시간 제한 모듈 설계 4절](connection-limits.md#4-처리-순서)). 받으면 종료 중으로 바꾸고, 종료를 알리고, 진입점 작업이 모두 끝나기를 기다린다([TCP 진입점 모듈 설계 4절](tcp-entry-point.md#4-처리-순서)). 그 뒤 나머지 리스너를 닫고, 관리 리스너 작업을 멈추고, 상태 리스너 작업을 멈춘 뒤 `server_stopped`를 기록하고 런타임을 끝낸다. | 준비 상태, L 예산 | 종료 코드 0 |
+| 6 | `listen_until_shutdown`, `ShutdownSignal::wait` | 준비됨으로 바꾸고 `server_ready`를 기록한다. 관리 리스너를 `ManagementListener::new`로 감싸 `ManagementListener::run`을 띄운다(작업 4.2). `ConnectionBudget::new(limits.relay_connections)`로 L 예산을 만든다. TCP 진입점마다 `TcpEntryPoint::run`을 띄운다. WS·WSS 진입점마다 `WsEntryPoint::run`을 띄운다. WSS에는 `wss_tls.take()`로 TLS 수락기를 넘긴다. `supervisor`는 `RelayService::drive_shutdown`을 실행한다. 첫 종료 요청 뒤의 정리는 아래 순서를 따른다. | 준비 상태, L 예산, 진입점·감독 작업 | 종료 코드 0 |
+
+### 4.1 종료 요청 뒤 소유자 정리
+
+`src/serve.rs`의 `finish_relay_shutdown`이 중계 소유자와 G 감독 작업을 정리한다. 아래 조립 방식은 **이 문서의 판단, 사용자 결정 없음**이다. Force에서도 먼저 관찰한 세션 종료 원인은 보존한다(사용자 결정 2026-11-01(Q82)).
+
+1. 첫 `ShutdownSignal::wait`가 끝나면 `lifecycle.begin_shutdown()`을 호출한다. `relay_service.request_shutdown(&runtime, settings.timeouts.shutdown_grace)`으로 절대 G를 시작한다. `stop.send_replace(true)`로 진입점 수락을 멈춘다.
+2. `finish_relay_shutdown`은 모든 `entry_points`의 완료와 두 번째 종료 요청을 함께 기다린다. 진입점은 자신이 가진 연결 소유자를 join한 뒤 반환한다. 소유자가 남아 있는 동안 `supervisor`를 취소하지 않는다. `drive_shutdown`이 G 만료를 계속 진행한다.
+3. 두 번째 종료 요청이면 `request_shutdown(&runtime, Duration::ZERO)`를 호출한다. 남은 중계 소유자에게 `Force`를 전달한다. 그 뒤에도 모든 진입점 소유자의 완료를 기다린다.
+4. 모든 진입점을 join한 뒤 `stop_task(Some(supervisor))`를 호출한다. 감독 작업을 abort하고 join한다. 처음부터 소유자가 없거나 먼저 모두 끝나면 G나 추가 종료 요청을 기다리지 않는다.
+5. `idle` 리스너를 버린다. 관리 작업을 abort하고 join한다. 상태 작업도 abort하고 join한다. 감지 작업 `watch_task`를 await한다. 마지막에 `server_stopped`를 기록한다.
+
+Force는 종료 교환 완료를 기다리는 새 유예가 아니다. 세션은 기존 원인에 맞는 Close action을 유지한 채 즉시 정리한다. typed 오류·첫 EOF·미완료 프레임의 경계는 [중계 수명 설계 4.4절](relay-session.md#44-ws를-나중에-연결하는-경계)을 따른다.
 
 ## 5. 상태와 초기화
 
@@ -127,7 +139,7 @@ flowchart LR
 | `JsonLinesEventSink::open` | `log_file_unavailable`, 표준 출력에 `startup_failed`, 종료 코드 3 | 없음 | 없음(설정 계약 2.1절) |
 | `accounts_file::load` | 파일이 없으면 `accounts_file_missing`, 읽을 수 없으면 `accounts_file_unreadable` 하나. 내용 오류는 모두 모은다. 종료 코드 5 | 없음 | OPS-001 |
 | `accounts::require_any` | `accounts_none`, 종료 코드 5 | 없음 | OPS-001 |
-| 런타임·신호 처리기 생성 | `runtime_unavailable`, 종료 코드 1 | 없음 | 없음 |
+| 런타임·신호 처리기·시작 키 생성 | `runtime_unavailable`, 종료 코드 1 | 없음 | 없음 |
 | `tls::load_acceptor`(검사마다) | `tls_file_invalid`, 실패한 파일마다 stderr 한 줄과 `startup_failed`. 모든 검사를 마친 뒤 종료 코드 3. 리스너는 바인드하지 않는다. | 없음 | OPS-002 |
 | `net::bind_one`, `net::bind` | 실패마다 `listener_bind_failed`, 성공한 리스너를 닫고 상태 리스너 작업을 멈춘 뒤 종료 코드 4 | 없음 | OPS-002, OPS-039 |
 
@@ -148,6 +160,17 @@ flowchart LR
 ## 8. 현재 코드와의 차이
 
 없다. 2·4절의 파일·심볼이 현재 코드와 같다.
+
+### 기존 종료 조립 회귀 시험
+
+아래 네 함수는 `src/serve.rs`에 있다. 모두 `#[tokio::test(start_paused = true)]`를 쓴다. 현재 소스의 표식과 비교 항목을 기록한다. 이번 문서 개정에서는 실행하지 않았다.
+
+| 기존 함수 | 실제 표식 | 비교하는 경계 |
+| --- | --- | --- |
+| `no_entry_point_owners_cancel_and_join_supervisor_without_waiting_for_g` | `operations.md:OPS-008 partial` | 소유자 0개이면 시각 진행 없이 감독 작업을 취소하고 join. Force 없음 |
+| `last_entry_point_owner_finishing_early_cancels_and_joins_supervisor` | `operations.md:OPS-008 partial` | 마지막 소유자가 G 전에 끝나면 그 시점에 감독 작업도 정리 |
+| `g_driver_remains_alive_until_entry_point_owners_finish_cleanup` | `operations.md:OPS-009 partial` | G 만료까지 감독 작업 유지. Force를 받은 소유자의 정리 완료까지 join |
+| `second_request_forces_owners_then_cancels_and_joins_supervisor` | `operations.md:OPS-042 partial` | 두 번째 요청으로 Force. 소유자 정리 뒤 감독 작업 취소·join |
 
 ## 대조 기록
 
