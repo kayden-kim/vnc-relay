@@ -1,8 +1,8 @@
 //! The WS and WSS viewer entry points (websocket-relay-v1 §1.1). Each
 //! connection passes the source IP check at accept. Then, within U counted
 //! from the accept, it runs the TLS handshake (WSS only) and the upgrade
-//! request. The 101 starts the hold of H, which the initial exchange (TODO
-//! 2.7) will replace. See docs/architectures/websocket-entry-point.md.
+//! request. After the 101 is flushed, the common relay service owns the
+//! initial exchange and session. See docs/architectures/websocket-entry-point.md.
 
 use std::io;
 use std::pin::Pin;
@@ -14,19 +14,20 @@ use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt, ReadBuf};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::watch;
 use tokio::time::Instant;
-use tokio_tungstenite::WebSocketStream;
-use tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode;
-use tokio_tungstenite::tungstenite::protocol::{CloseFrame, Role};
 use vnc_relay_app::events::{AbortReason, ConnectionErrorKind, Event, Stage};
-use vnc_relay_app::ports::EventSink;
+use vnc_relay_app::ports::{Clock, EventSink};
+use vnc_relay_app::relay::{ConnectionContext, RelayRuntime, RelayService};
 use vnc_relay_domain::budget::BudgetPermit;
 use vnc_relay_domain::entry_point::EntryPoint;
 use vnc_relay_domain::origin::Origin;
+use vnc_relay_domain::session::ViewerTransport;
 
 use crate::net::{AcceptPolicy, Accepted, accept_connections};
+use crate::target::TcpTargetConnector;
 use crate::tls::TlsSource;
 use crate::tls_listener::{HandshakeFailure, TlsIo};
 use crate::upgrade::{HeadRead, Refusal, check, read_head, switching_protocols};
+use crate::websocket_stream::WsRelayStream;
 
 /// What a WS or WSS entry point applies to each connection.
 #[derive(Debug, Clone)]
@@ -42,6 +43,10 @@ pub struct WsPolicy {
     /// Origins a browser may send, from `allowed_origins`. An empty list
     /// refuses every Origin.
     pub origins: Vec<Origin>,
+    /// M, the validated maximum logical WebSocket message length.
+    pub message_bytes: usize,
+    /// B, the validated relay buffer size per direction.
+    pub buffer_bytes: usize,
 }
 
 /// A WS or WSS viewer entry point. `tls` is the WSS acceptor source and is
@@ -51,6 +56,9 @@ pub struct WsEntryPoint {
     listener: TcpListener,
     tls: Option<TlsSource>,
     policy: WsPolicy,
+    service: Arc<RelayService>,
+    runtime: Arc<RelayRuntime<TcpTargetConnector>>,
+    clock: Arc<dyn Clock>,
 }
 
 impl WsEntryPoint {
@@ -60,12 +68,18 @@ impl WsEntryPoint {
         listener: TcpListener,
         tls: Option<TlsSource>,
         policy: WsPolicy,
+        service: Arc<RelayService>,
+        runtime: Arc<RelayRuntime<TcpTargetConnector>>,
+        clock: Arc<dyn Clock>,
     ) -> Self {
         Self {
             entry_point,
             listener,
             tls,
             policy,
+            service,
+            runtime,
+            clock,
         }
     }
 
@@ -77,6 +91,9 @@ impl WsEntryPoint {
             tls: self.tls,
             log: Arc::clone(&log),
             policy: self.policy,
+            service: self.service,
+            runtime: self.runtime,
+            clock: self.clock,
         });
         accept_connections(
             self.entry_point,
@@ -97,6 +114,9 @@ struct WsShared {
     tls: Option<TlsSource>,
     log: Arc<dyn EventSink>,
     policy: WsPolicy,
+    service: Arc<RelayService>,
+    runtime: Arc<RelayRuntime<TcpTargetConnector>>,
+    clock: Arc<dyn Clock>,
 }
 
 /// The socket of one connection: plain TCP for WS, TLS over TCP for WSS.
@@ -166,7 +186,7 @@ impl AsyncWrite for Wire {
 }
 
 /// Runs one accepted connection through the TLS handshake (WSS only), the
-/// upgrade request, and the hold after 101. The place of L goes back before
+/// upgrade request, and common relay pipeline. The place of L goes back before
 /// an abort line is logged.
 async fn connection(
     stream: TcpStream,
@@ -175,6 +195,7 @@ async fn connection(
     mut stop: watch::Receiver<bool>,
     shared: Arc<WsShared>,
 ) {
+    let accepted_at = shared.clock.monotonic().saturating_sub(conn.at.elapsed());
     let mut wire = match &shared.tls {
         Some(source) => Wire::Tls(Box::new(TlsIo::handshaking(
             stream,
@@ -196,8 +217,38 @@ async fn connection(
         done = upgrade(&mut wire, &conn, &shared) => Some(done),
     };
     let reason = match finished {
-        Some(Ok(Step::Switched)) => {
-            hold_upgraded(wire, permit, &conn, &shared, stop).await;
+        Some(Ok(Step::Switched {
+            suffix,
+            exchange_at,
+        })) => {
+            let context = ConnectionContext {
+                conn_id: conn.conn_id,
+                entry_point: conn.entry_point,
+                peer_ip: conn.peer_ip,
+                peer_addr: conn.peer_addr,
+                accepted_wall: conn.accepted_wall,
+                accepted_at,
+                exchange_at,
+            };
+            let transport = match conn.entry_point {
+                EntryPoint::WssViewer => ViewerTransport::Wss,
+                _ => ViewerTransport::Ws,
+            };
+            let stream = WsRelayStream::new(
+                wire,
+                suffix,
+                shared.policy.message_bytes,
+                shared.policy.buffer_bytes,
+                transport,
+            );
+            let lifecycle = shared.runtime.lifecycle();
+            if let Ok(prepared) = shared
+                .service
+                .handle_connection(stream, context, permit, lifecycle)
+                .await
+            {
+                let _ = shared.service.dispatch(prepared, &shared.runtime).await;
+            }
             return;
         }
         Some(Ok(Step::Refused)) => None,
@@ -216,8 +267,11 @@ async fn connection(
 
 /// How an upgrade attempt ended when no I/O error ended it first.
 enum Step {
-    /// The 101 was written. The connection goes on to the hold.
-    Switched,
+    /// The 101 was flushed. Preserve its completion time and any frame bytes.
+    Switched {
+        suffix: Vec<u8>,
+        exchange_at: Duration,
+    },
     /// A refusal was logged and answered. The connection is closed.
     Refused,
     /// The peer closed before the request head ended.
@@ -232,17 +286,18 @@ enum Step {
 /// to have passed.
 async fn upgrade(wire: &mut Wire, conn: &Accepted, shared: &WsShared) -> io::Result<Step> {
     let read = read_head(wire).await?;
-    let decision = match read {
-        HeadRead::Complete { head, .. } => {
-            check(&head, &shared.policy.origins).and_then(|upgrade| {
+    let (decision, suffix) = match read {
+        HeadRead::Complete { head, suffix } => {
+            let decision = check(&head, &shared.policy.origins).and_then(|upgrade| {
                 if shared.policy.accept.allow.permits(conn.peer_ip) {
                     Ok(upgrade)
                 } else {
                     Err(Refusal::IpNotAllowed)
                 }
-            })
+            });
+            (decision, suffix)
         }
-        HeadRead::TooLarge => Err(Refusal::Invalid),
+        HeadRead::TooLarge => (Err(Refusal::Invalid), Vec::new()),
         HeadRead::Eof if !expired(conn, shared) => return Ok(Step::PeerEof),
         HeadRead::Eof => return Ok(Step::TimedOut),
     };
@@ -259,7 +314,11 @@ async fn upgrade(wire: &mut Wire, conn: &Accepted, shared: &WsShared) -> io::Res
         None => {
             wire.write_all(&answer).await?;
             wire.flush().await?;
-            Ok(Step::Switched)
+            let exchange_at = shared.clock.monotonic();
+            Ok(Step::Switched {
+                suffix,
+                exchange_at,
+            })
         }
         Some(refusal) => {
             refuse(wire, conn, shared, &refusal, &answer).await;
@@ -291,38 +350,6 @@ async fn refuse(
     });
     let _ = wire.write_all(answer).await;
     let _ = wire.shutdown().await;
-}
-
-/// Holds an upgraded connection until H passes from the 101, the server
-/// stops, or the Close frame is sent. No frame is read yet, so no frame
-/// format is guessed.
-async fn hold_upgraded(
-    wire: Wire,
-    permit: BudgetPermit,
-    conn: &Accepted,
-    shared: &WsShared,
-    mut stop: watch::Receiver<bool>,
-) {
-    let until = Instant::now() + shared.policy.accept.handshake;
-    let mut ws = WebSocketStream::from_raw_socket(wire, Role::Server, None).await;
-    let (reason, code, text) = tokio::select! {
-        _ = stop.wait_for(|stopped| *stopped) => {
-            (AbortReason::ServerShutdown, CloseCode::Away, "server_shutdown")
-        }
-        () = tokio::time::sleep_until(until) => {
-            (AbortReason::HandshakeTimeout, CloseCode::from(4009), "handshake_timeout")
-        }
-    };
-    // A peer that already left makes the Close fail; the abort line is logged anyway.
-    let _ = ws
-        .close(Some(CloseFrame {
-            code,
-            reason: text.into(),
-        }))
-        .await;
-    drop(ws);
-    drop(permit);
-    log_abort(shared, conn, Stage::InitialExchange, reason);
 }
 
 /// The abort reason of an I/O error on the wire. A TLS version refusal has no

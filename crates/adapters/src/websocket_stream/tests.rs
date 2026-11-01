@@ -527,10 +527,11 @@ async fn close_mapping_for_every_relay_close_action() {
         let waker = noop_waker();
         let mut cx = Context::from_waker(&waker);
         let res = Pin::new(&mut ws).poll_close(&mut cx, action);
-        assert!(
-            res.is_ready(),
-            "action {action:?} should complete immediately"
+        let terminal = !matches!(
+            action,
+            RelayCloseAction::WriteHalf | RelayCloseAction::PeerEof
         );
+        assert_eq!(res.is_pending(), terminal, "action {action:?}");
 
         let expected_payload_len = 2 + expected_reason.len();
         let mut read_buf = vec![0u8; 2 + expected_payload_len];
@@ -547,6 +548,11 @@ async fn close_mapping_for_every_relay_close_action() {
             std::str::from_utf8(&read_buf[4..]).expect("utf8"),
             expected_reason,
             "action {action:?} reason mismatch"
+        );
+        client_io.shutdown().await.expect("client transport EOF");
+        assert!(
+            Pin::new(&mut ws).poll_close(&mut cx, action).is_ready(),
+            "the caller owns the wait bound"
         );
     }
 
@@ -658,10 +664,13 @@ async fn close_actions_are_idempotent() {
     let mut cx = Context::from_waker(&waker);
 
     let res1 = Pin::new(&mut ws).poll_close(&mut cx, RelayCloseAction::ServerShutdown);
-    assert!(res1.is_ready());
+    assert!(
+        res1.is_pending(),
+        "terminal disposal waits for transport EOF"
+    );
 
     let res2 = Pin::new(&mut ws).poll_close(&mut cx, RelayCloseAction::ServerShutdown);
-    assert!(res2.is_ready());
+    assert!(res2.is_pending(), "repeat polls never emit another Close");
     drop(ws);
 
     // Only one Close frame sent
@@ -673,6 +682,75 @@ async fn close_actions_are_idempotent() {
     // No second Close frame
     let n2 = client_io.read(&mut buf).await.expect("read 2");
     assert_eq!(n2, 0, "no duplicate close frame");
+}
+
+/// spec: websocket.md:WS-008 partial
+#[tokio::test]
+async fn terminal_close_discards_rejected_payload_before_releasing_the_transport() {
+    let (mut client_io, server_io) = duplex(1024);
+    let mut ws = WsRelayStream::new(
+        server_io,
+        Vec::new(),
+        64 * 1024,
+        16 * 1024,
+        ViewerTransport::Ws,
+    );
+    let frame = make_client_frame(
+        true,
+        (false, false, false),
+        1,
+        [1, 2, 3, 4],
+        b"rejected text payload remains unread in the socket",
+    );
+    client_io.write_all(&frame).await.expect("text frame");
+    let error = ws.read(&mut [0; 64]).await.expect_err("text is rejected");
+    assert_eq!(
+        RelayStreamError::classify(&error),
+        ConnectionErrorKind::WsTextMessage
+    );
+    let waker = noop_waker();
+    let mut cx = Context::from_waker(&waker);
+    let action = RelayCloseAction::StreamError(ConnectionErrorKind::WsTextMessage);
+    assert!(Pin::new(&mut ws).poll_close(&mut cx, action).is_pending());
+    let mut response = Vec::new();
+    client_io
+        .read_to_end(&mut response)
+        .await
+        .expect("Close precedes transport write EOF");
+    assert_eq!(response, [0x88, 2, 0x03, 0xeb]);
+    client_io.shutdown().await.expect("client transport EOF");
+    assert!(Pin::new(&mut ws).poll_close(&mut cx, action).is_ready());
+}
+
+/// spec: operations.md:OPS-009 partial
+#[tokio::test]
+async fn force_before_a_local_close_sends_1001_even_after_receiving_peer_close() {
+    for code in [None, Some(3001_u16)] {
+        let (mut client_io, server_io) = duplex(1024);
+        let payload = code.map_or_else(Vec::new, |code| code.to_be_bytes().to_vec());
+        let frame = make_client_frame(true, (false, false, false), 8, [1, 2, 3, 4], &payload);
+        let mut ws =
+            WsRelayStream::new(server_io, frame, 64 * 1024, 16 * 1024, ViewerTransport::Ws);
+        assert_eq!(ws.read(&mut [0; 1]).await.expect("peer Close"), 0);
+        let waker = noop_waker();
+        let mut cx = Context::from_waker(&waker);
+        assert!(
+            Pin::new(&mut ws)
+                .poll_close(&mut cx, RelayCloseAction::ServerShutdown)
+                .is_pending()
+        );
+        assert!(
+            Pin::new(&mut ws)
+                .poll_close(&mut cx, RelayCloseAction::PeerEof)
+                .is_pending()
+        );
+        drop(ws);
+        let mut bytes = Vec::new();
+        client_io.read_to_end(&mut bytes).await.expect("one Close");
+        let mut expected = vec![0x88, 17, 0x03, 0xe9];
+        expected.extend_from_slice(b"server_shutdown");
+        assert_eq!(bytes, expected, "Force sends exactly one Close 1001");
+    }
 }
 
 /// spec: websocket.md:WS-017 partial

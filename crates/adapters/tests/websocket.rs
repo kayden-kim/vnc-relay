@@ -1,10 +1,7 @@
-// Contract tests of the WS and WSS viewer entry points, upgrade step only
-// (docs/contracts/websocket-relay-v1.md §1.1–§1.3, §3; docs/specs/websocket.md §7).
-// After 101 the relay waits for the Repeater initial exchange (TODO 2.7), so
-// these tests stop at the reply to the upgrade request.
-//
-// Each test starts its own entry point on loopback. Connections that reached
-// 101 stay open until the test ends.
+// Real-loopback tests of the WS and WSS viewer entry points and their common
+// initial exchange (docs/contracts/websocket-relay-v1.md §1.1–§1.4, §3).
+// Successful upgrades receive the common service's binary greeting; refusal
+// cases still end before the relay pipeline.
 
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
@@ -16,22 +13,24 @@ use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, ServerName};
 use rustls::version::{TLS12, TLS13};
 use rustls::{CertificateError, ClientConfig, RootCertStore, SupportedProtocolVersion};
-use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpSocket, TcpStream};
 use tokio::sync::watch;
 use tokio::time::timeout;
 use tokio_rustls::{TlsAcceptor, TlsConnector};
 use vnc_relay_adapters::accounts_file::{Argon2Hasher, Argon2Verifier};
 use vnc_relay_adapters::clock::SystemClock;
-use vnc_relay_adapters::crypto::SystemTokenSource;
+use vnc_relay_adapters::crypto::{RelayIdKey, SessionIdKey, SystemTokenSource};
 use vnc_relay_adapters::management_http::{DashboardHints, ManagementListener};
 use vnc_relay_adapters::net::{AcceptPolicy, AllowSource};
+use vnc_relay_adapters::target::TcpTargetConnector;
 use vnc_relay_adapters::tls;
 use vnc_relay_adapters::websocket::{WsEntryPoint, WsPolicy};
 use vnc_relay_app::events::{AbortReason, ConnectionErrorKind, Event, RejectReason, Stage};
 use vnc_relay_app::management::login::dummy_hash;
 use vnc_relay_app::management::{AdminAuth, AdminPorts};
-use vnc_relay_app::ports::EventSink;
+use vnc_relay_app::ports::{Clock, EventSink};
+use vnc_relay_app::relay::{RelayRuntime, RelayRuntimeConfig, RelayService};
 use vnc_relay_app::reload::snapshot::{RelayAllow, ReloadCell, ReloadSnapshot};
 use vnc_relay_app::settings::KeepaliveSettings;
 use vnc_relay_domain::account::Argon2Params;
@@ -39,8 +38,10 @@ use vnc_relay_domain::admin_session::AdminSessionPolicy;
 use vnc_relay_domain::allow_list::{AllowList, IpItem};
 use vnc_relay_domain::budget::ConnectionBudget;
 use vnc_relay_domain::entry_point::EntryPoint;
+use vnc_relay_domain::handshake::{HandshakePolicy, VIEWER_GREETING};
 use vnc_relay_domain::login_limit::LoginLimitPolicy;
 use vnc_relay_domain::origin::Origin;
+use vnc_relay_domain::target_policy::TargetPolicy;
 
 /// Upper bound for one exchange. A hang fails the test instead of blocking it.
 const LIMIT: Duration = Duration::from_secs(10);
@@ -55,8 +56,12 @@ const UPGRADE: Duration = Duration::from_secs(10);
 /// A short U for tests that wait for the deadline to end a connection.
 const SHORT_UPGRADE: Duration = Duration::from_millis(300);
 
-/// H of the default configuration; only used for the hold after 101.
+/// H of the default configuration, counted from the completed 101 flush.
 const HANDSHAKE: Duration = Duration::from_secs(10);
+
+const MESSAGE_BYTES: usize = 64 * 1024;
+const BUFFER_BYTES: usize = 16 * 1024;
+const CLOSE: Duration = Duration::from_millis(300);
 
 const KEEPALIVE: KeepaliveSettings = KeepaliveSettings {
     tcp_idle: Duration::from_secs(60),
@@ -144,8 +149,23 @@ async fn wait_for(events: &Recorder, matches: impl Fn(&Event) -> bool) {
 struct Running {
     addr: SocketAddr,
     events: Arc<Recorder>,
-    /// Keeps the stop channel open. Dropping the sender would read as shutdown.
-    _stop: watch::Sender<bool>,
+    stop: watch::Sender<bool>,
+    service: Arc<RelayService>,
+    runtime: Arc<RelayRuntime<TcpTargetConnector>>,
+}
+
+impl Running {
+    fn shutdown(&self, grace: Duration) {
+        self.service.request_shutdown(&self.runtime, grace);
+        self.stop.send_replace(true);
+    }
+}
+
+impl Drop for Running {
+    fn drop(&mut self) {
+        self.service.request_shutdown(&self.runtime, Duration::ZERO);
+        self.stop.send_replace(true);
+    }
 }
 
 /// Starts a WS or WSS viewer entry point on loopback with the given policy
@@ -168,6 +188,18 @@ async fn start_with_budget(
     origins: &[&str],
     upgrade: Duration,
     places: u32,
+) -> Running {
+    start_with_handshake(entry, tls, allow, origins, upgrade, places, HANDSHAKE).await
+}
+
+async fn start_with_handshake(
+    entry: EntryPoint,
+    tls: Option<TlsAcceptor>,
+    allow: &[&str],
+    origins: &[&str],
+    upgrade: Duration,
+    places: u32,
+    handshake: Duration,
 ) -> Running {
     let listener = TcpListener::bind("127.0.0.1:0")
         .await
@@ -200,11 +232,12 @@ async fn start_with_budget(
         EntryPoint::WssViewer => AllowSource::wss_viewer(Arc::clone(&cell)),
         _ => panic!("the WS helper takes WsViewer or WssViewer"),
     };
+    let relay_budget = ConnectionBudget::new(places);
     let policy = WsPolicy {
         accept: AcceptPolicy {
             allow: allow_source,
-            relay_budget: ConnectionBudget::new(places),
-            handshake: HANDSHAKE,
+            relay_budget: Arc::clone(&relay_budget),
+            handshake,
             keepalive: KEEPALIVE,
         },
         upgrade,
@@ -212,13 +245,60 @@ async fn start_with_budget(
             .iter()
             .map(|text| Origin::parse(text).unwrap_or_else(|_| panic!("origin {text} parses")))
             .collect(),
+        message_bytes: MESSAGE_BYTES,
+        buffer_bytes: BUFFER_BYTES,
     };
     let log: Arc<dyn EventSink> = events.clone();
-    tokio::spawn(WsEntryPoint::new(entry, listener, tls_source, policy).run(log, stopped));
+    let clock: Arc<dyn Clock> = Arc::new(SystemClock::new());
+    let runtime = Arc::new(RelayRuntime::new(
+        TcpTargetConnector::new(KEEPALIVE),
+        Arc::new(
+            RelayIdKey::generate()
+                .unwrap_or_else(|error| panic!(concat!("relay key", ": {:?}"), error)),
+        ),
+        Arc::new(
+            SessionIdKey::generate()
+                .unwrap_or_else(|error| panic!(concat!("session key", ": {:?}"), error)),
+        ),
+        relay_budget,
+        ConnectionBudget::new(8),
+        RelayRuntimeConfig {
+            wait_timeout: HANDSHAKE,
+            connect_timeout: HANDSHAKE,
+            close_timeout: CLOSE,
+            recent_closed: 8,
+            target_policy: TargetPolicy::default(),
+        },
+    ));
+    let service = Arc::new(RelayService::new(
+        HandshakePolicy {
+            mode1_enabled: true,
+            mode2_enabled: true,
+        },
+        handshake,
+        BUFFER_BYTES,
+        CLOSE,
+        Arc::clone(&clock),
+        Arc::clone(&log),
+    ));
+    tokio::spawn(
+        WsEntryPoint::new(
+            entry,
+            listener,
+            tls_source,
+            policy,
+            Arc::clone(&service),
+            Arc::clone(&runtime),
+            clock,
+        )
+        .run(log, stopped),
+    );
     Running {
         addr,
         events,
-        _stop: stop,
+        stop,
+        service,
+        runtime,
     }
 }
 
@@ -271,7 +351,8 @@ fn has_line(head: &[u8], line: &str) -> bool {
 /// past LIMIT fails the test.
 async fn read_head<S: AsyncRead + Unpin>(stream: &mut S) -> Vec<u8> {
     let mut head = Vec::new();
-    let mut chunk = [0_u8; 1024];
+    // Do not consume frame bytes coalesced with the HTTP response.
+    let mut chunk = [0_u8; 1];
     let reading = async {
         while !head.windows(4).any(|window| window == b"\r\n\r\n") {
             match stream.read(&mut chunk).await {
@@ -286,6 +367,17 @@ async fn read_head<S: AsyncRead + Unpin>(stream: &mut S) -> Vec<u8> {
     head
 }
 
+/// Checks the very first server data message, including its frame boundary.
+async fn assert_greeting<S: AsyncRead + Unpin>(stream: &mut S) {
+    let mut frame = [0; 2 + VIEWER_GREETING.len()];
+    timeout(LIMIT, stream.read_exact(&mut frame))
+        .await
+        .unwrap_or_else(|error| panic!(concat!("greeting arrives", ": {:?}"), error))
+        .unwrap_or_else(|error| panic!("greeting reads: {error}"));
+    assert_eq!(&frame[..2], &[0x82, 12], "one final binary frame");
+    assert_eq!(&frame[2..], VIEWER_GREETING);
+}
+
 /// Sends a plain request and reads the reply head.
 async fn plain_head(addr: SocketAddr, request: &[u8]) -> Vec<u8> {
     let mut stream = TcpStream::connect(addr)
@@ -295,7 +387,11 @@ async fn plain_head(addr: SocketAddr, request: &[u8]) -> Vec<u8> {
         .write_all(request)
         .await
         .unwrap_or_else(|error| panic!("request is sent: {error}"));
-    read_head(&mut stream).await
+    let head = read_head(&mut stream).await;
+    if status_of(&head) == 101 {
+        assert_greeting(&mut stream).await;
+    }
+    head
 }
 
 /// Sends a request over TLS and reads the reply head.
@@ -322,7 +418,11 @@ async fn tls_head_with(
         .write_all(request)
         .await
         .unwrap_or_else(|error| panic!("request is sent: {error}"));
-    read_head(&mut stream).await
+    let head = read_head(&mut stream).await;
+    if status_of(&head) == 101 {
+        assert_greeting(&mut stream).await;
+    }
+    head
 }
 
 /// Sends `request` and returns what the server sends before it closes. The
@@ -1128,5 +1228,125 @@ async fn tls10_and_tls11_are_refused_and_tls12_and_tls13_succeed_on_wss_and_mana
             401,
             "management answers the unauthenticated request"
         );
+    }
+}
+
+async fn assert_initial_exchange_close<S: AsyncRead + AsyncWrite + Unpin>(
+    running: &Running,
+    mut stream: S,
+    shutdown: Option<Duration>,
+) {
+    stream
+        .write_all(&upgrade_request("/relay", &[]))
+        .await
+        .unwrap_or_else(|error| panic!(concat!("upgrade request", ": {:?}"), error));
+    assert_eq!(status_of(&read_head(&mut stream).await), 101);
+    assert_greeting(&mut stream).await;
+    if let Some(grace) = shutdown {
+        running.shutdown(grace);
+    }
+    let mut header = [0; 2];
+    timeout(LIMIT, stream.read_exact(&mut header))
+        .await
+        .unwrap_or_else(|error| panic!(concat!("close arrives", ": {:?}"), error))
+        .unwrap_or_else(|error| panic!("close header: {error}"));
+    assert_eq!(header[0], 0x88);
+    assert!(header[1] <= 125, "unmasked control frame");
+    let mut payload = vec![0; usize::from(header[1])];
+    timeout(LIMIT, stream.read_exact(&mut payload))
+        .await
+        .unwrap_or_else(|error| panic!(concat!("close payload arrives", ": {:?}"), error))
+        .unwrap_or_else(|error| panic!("close payload: {error}"));
+    let (code, reason, abort) = if shutdown.is_some() {
+        (1001_u16, "server_shutdown", AbortReason::ServerShutdown)
+    } else {
+        (4009_u16, "handshake_timeout", AbortReason::HandshakeTimeout)
+    };
+    assert_eq!(&payload[..2], &code.to_be_bytes());
+    assert_eq!(&payload[2..], reason.as_bytes());
+    wait_for(&running.events, |event| {
+        matches!(
+            event,
+            Event::ConnectionAborted {
+                stage: Stage::InitialExchange,
+                reason,
+                ..
+            } if *reason == abort
+        )
+    })
+    .await;
+}
+
+/// spec: relay.md:RLY-005 partial
+/// spec: operations.md:OPS-006 partial
+#[tokio::test]
+async fn initial_exchange_timeout_sends_4009_after_the_binary_greeting_on_ws_and_wss() {
+    for secure in [false, true] {
+        let running = start_with_handshake(
+            if secure {
+                EntryPoint::WssViewer
+            } else {
+                EntryPoint::WsViewer
+            },
+            secure.then(tls_acceptor),
+            &["127.0.0.1/32"],
+            &[],
+            UPGRADE,
+            8,
+            Duration::from_millis(300),
+        )
+        .await;
+        let tcp = TcpStream::connect(running.addr)
+            .await
+            .unwrap_or_else(|error| panic!(concat!("connect", ": {:?}"), error));
+        if secure {
+            let name = ServerName::try_from("localhost")
+                .unwrap_or_else(|error| panic!(concat!("server name", ": {:?}"), error));
+            let stream = connector(&[&TLS12, &TLS13])
+                .connect(name, tcp)
+                .await
+                .unwrap_or_else(|error| panic!(concat!("TLS handshake", ": {:?}"), error));
+            assert_initial_exchange_close(&running, stream, None).await;
+        } else {
+            assert_initial_exchange_close(&running, tcp, None).await;
+        }
+    }
+}
+
+/// spec: operations.md:OPS-007 partial
+#[tokio::test]
+async fn shutdown_during_initial_exchange_sends_1001_on_ws_and_wss() {
+    for (secure, grace) in [
+        (false, HANDSHAKE),
+        (true, HANDSHAKE),
+        (false, Duration::ZERO),
+        (true, Duration::ZERO),
+    ] {
+        let running = start(
+            if secure {
+                EntryPoint::WssViewer
+            } else {
+                EntryPoint::WsViewer
+            },
+            secure.then(tls_acceptor),
+            &["127.0.0.1/32"],
+            &[],
+            UPGRADE,
+        )
+        .await;
+        let tcp = TcpStream::connect(running.addr)
+            .await
+            .unwrap_or_else(|error| panic!(concat!("connect", ": {:?}"), error));
+        if secure {
+            let name = ServerName::try_from("localhost")
+                .unwrap_or_else(|error| panic!(concat!("server name", ": {:?}"), error));
+            let stream = connector(&[&TLS12, &TLS13])
+                .connect(name, tcp)
+                .await
+                .unwrap_or_else(|error| panic!(concat!("TLS handshake", ": {:?}"), error));
+            assert_initial_exchange_close(&running, stream, Some(grace)).await;
+        } else {
+            assert_initial_exchange_close(&running, tcp, Some(grace)).await;
+        }
     }
 }

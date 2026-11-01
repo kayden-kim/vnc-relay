@@ -35,6 +35,7 @@ pub struct WsRelayStream<S> {
     outbound_frame: Option<OutboundDataFrame>,
     pending_close: Option<PendingClose>,
     close_sent: bool,
+    terminal_close: bool,
 }
 
 impl<S> WsRelayStream<S> {
@@ -68,6 +69,7 @@ impl<S> WsRelayStream<S> {
             outbound_frame: None,
             pending_close: None,
             close_sent: false,
+            terminal_close: false,
         }
     }
 
@@ -206,6 +208,32 @@ impl<S> WsRelayStream<S> {
             self.close_sent = true;
         }
         Poll::Ready(Ok(()))
+    }
+    /// Avoids an abortive socket drop discarding the already-written Close
+    /// when a rejected frame still has unread payload. The app owns E/G/Force.
+    fn poll_terminal_disposal(&mut self, cx: &mut Context<'_>) -> Poll<io::Result<()>>
+    where
+        S: AsyncRead + AsyncWrite + Unpin,
+    {
+        match Pin::new(&mut self.io).poll_flush(cx) {
+            Poll::Ready(Ok(())) => {}
+            result => return result,
+        }
+        match Pin::new(&mut self.io).poll_shutdown(cx) {
+            Poll::Ready(Ok(())) => {}
+            result => return result,
+        }
+        let mut discard = [0; 1024];
+        for _ in 0..MAX_NON_DATA_FRAMES_PER_POLL {
+            let mut buffer = ReadBuf::new(&mut discard);
+            match Pin::new(&mut self.io).poll_read(cx, &mut buffer) {
+                Poll::Ready(Ok(())) if buffer.filled().is_empty() => return Poll::Ready(Ok(())),
+                Poll::Ready(Ok(())) => {}
+                result => return result,
+            }
+        }
+        cx.waker().wake_by_ref();
+        Poll::Pending
     }
 }
 
@@ -586,9 +614,13 @@ impl<S: AsyncRead + AsyncWrite + Unpin + Send> RelayStream for WsRelayStream<S> 
             return Poll::Pending;
         }
 
-        // Idempotent: if Close was already sent, just ensure flush/shutdown
+        // A completed Close is never replaced or emitted a second time.
         if this.close_sent {
-            return Pin::new(&mut this.io).poll_flush(cx);
+            return if this.terminal_close {
+                this.poll_terminal_disposal(cx)
+            } else {
+                Pin::new(&mut this.io).poll_flush(cx)
+            };
         }
 
         // Map action to Close code and fixed reason per websocket-stream.md §5.2
@@ -627,22 +659,16 @@ impl<S: AsyncRead + AsyncWrite + Unpin + Send> RelayStream for WsRelayStream<S> 
                 RelayCloseAction::StreamError(ConnectionErrorKind::TlsFailed) => None,
                 RelayCloseAction::DeadConnection => Some((4006, "dead_connection")),
                 RelayCloseAction::AdminTerminated => Some((4005, "admin_terminated")),
-                RelayCloseAction::ServerShutdown => {
-                    if this.decoder.received_close_code.is_some() {
-                        let code = match this.decoder.received_close_code {
-                            Some(c) if c != 1005 && c != 1006 && c != 1015 => c,
-                            _ => 1000,
-                        };
-                        Some((code, ""))
-                    } else {
-                        Some((1001, "server_shutdown"))
-                    }
-                }
+                RelayCloseAction::ServerShutdown => Some((1001, "server_shutdown")),
             };
 
             match close_spec {
                 Some((code, reason)) => {
                     this.pending_close = Some(encode_close(code, reason));
+                    this.terminal_close = !matches!(
+                        action,
+                        RelayCloseAction::WriteHalf | RelayCloseAction::PeerEof
+                    );
                 }
                 None => {
                     this.close_sent = true;
@@ -652,6 +678,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin + Send> RelayStream for WsRelayStream<S> 
         }
 
         match this.poll_flush_pending_close(cx) {
+            Poll::Ready(Ok(())) if this.terminal_close => this.poll_terminal_disposal(cx),
             Poll::Ready(Ok(())) => Pin::new(&mut this.io).poll_flush(cx),
             Poll::Ready(Err(e)) => Poll::Ready(Err(e)),
             Poll::Pending => Poll::Pending,

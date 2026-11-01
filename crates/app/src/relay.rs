@@ -324,6 +324,14 @@ impl RelayService {
         loop {
             let phase = *lifecycle.borrow_and_update();
             if phase == RelayLifecycle::Force {
+                // Force bounds disposal, not the best-effort first Close.
+                // Poll once without waiting so WS can still send 1001 when
+                // an initial exchange is stopped with G = 0.
+                poll_fn(|cx| {
+                    let _ = poll_close(cx);
+                    Poll::Ready(())
+                })
+                .await;
                 return;
             }
             let grace = match phase {

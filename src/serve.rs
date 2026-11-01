@@ -400,8 +400,18 @@ async fn listen_until_shutdown(
                     },
                     upgrade: settings.timeouts.tls_upgrade,
                     origins: entry_settings.allowed_origins.clone(),
+                    message_bytes: settings.limits.ws_message_bytes as usize,
+                    buffer_bytes: settings.limits.buffer_bytes as usize,
                 };
-                let entry = WsEntryPoint::new(entry_point, bound.listener, tls, policy);
+                let entry = WsEntryPoint::new(
+                    entry_point,
+                    bound.listener,
+                    tls,
+                    policy,
+                    Arc::clone(&relay_service),
+                    Arc::clone(&runtime),
+                    Arc::clone(&clock),
+                );
                 entry_points.spawn(entry.run(Arc::clone(&log), stopped.clone()));
             }
             _ => idle.push(bound),

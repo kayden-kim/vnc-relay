@@ -858,6 +858,53 @@ mod tests {
         }
     }
 
+    /// spec: operations.md:OPS-007 partial
+    #[tokio::test(start_paused = true)]
+    async fn force_polls_initial_shutdown_close_once_without_waiting_or_holding_l() {
+        for block_close in [false, true] {
+            let harness = Harness::new(8, ENABLED);
+            let (stream, mut peer) = duplex(4096);
+            let stream = TestStream {
+                stream,
+                actions: harness.close_actions.clone(),
+                budget: harness.budget.clone(),
+                block_close,
+                failure: None,
+            };
+            let context = ConnectionContext {
+                conn_id: ConnId::next(),
+                entry_point: EntryPoint::TcpServer,
+                peer_ip: PeerIp::new(IpAddr::V4(Ipv4Addr::LOCALHOST)),
+                peer_addr: std::net::SocketAddr::from((Ipv4Addr::LOCALHOST, 12345)),
+                accepted_wall: harness.clock.wall(),
+                accepted_at: harness.clock.monotonic(),
+                exchange_at: harness.clock.monotonic(),
+            };
+            harness.shutdown.send_replace(RelayLifecycle::Force);
+            let result = harness
+                .service
+                .handle_connection(
+                    stream,
+                    context,
+                    harness.budget.try_acquire().expect("L"),
+                    harness.shutdown.subscribe(),
+                )
+                .await;
+            assert_eq!(
+                result.unwrap_err(),
+                RelayError::Aborted(AbortReason::ServerShutdown)
+            );
+            assert_eq!(
+                *harness.close_actions.lock().expect("actions"),
+                [RelayCloseAction::ServerShutdown]
+            );
+            assert_eq!(harness.clock.monotonic(), Duration::ZERO);
+            assert!(harness.budget.try_acquire().is_some());
+            assert_eq!(peer.read(&mut [0; 1]).await.expect("stream dropped"), 0);
+            assert_abort(&harness, AbortReason::ServerShutdown);
+        }
+    }
+
     /// spec: relay.md:RLY-004 partial
     /// spec: operations.md:OPS-006 partial
     /// spec: operations.md:OPS-007 partial
