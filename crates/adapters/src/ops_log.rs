@@ -290,6 +290,7 @@ fn push_event_fields(fields: &mut Vec<(&'static str, Value)>, event: &Event) {
             fields.push(("reason", Value::from(reason.as_str())));
             fields.push(("peer_ip", Value::from(peer_ip.to_string())));
             fields.push(("elapsed_ms", Value::from(*elapsed_ms)));
+            fields.push(("role", Value::from(entry_point.role().as_str())));
             if let Some(kind) = reason.error_kind() {
                 fields.push(("error_kind", Value::from(kind.as_str())));
             }

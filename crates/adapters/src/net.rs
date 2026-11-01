@@ -17,7 +17,7 @@ use tokio::sync::watch;
 use tokio::task::JoinSet;
 use tokio::time::Instant;
 use tokio_rustls::TlsAcceptor;
-use vnc_relay_app::events::{Event, RejectReason, Stage};
+use vnc_relay_app::events::{AbortReason, ConnectionErrorKind, Event, RejectReason, Stage};
 use vnc_relay_app::ports::{Clock, EventSink};
 use vnc_relay_app::relay::{ConnectionContext, RelayRuntime, RelayService};
 use vnc_relay_app::reload::snapshot::{RelayAllow, ReloadCell};
@@ -360,11 +360,38 @@ pub(crate) async fn accept_connections<Serve, Fut>(
     listener: TcpListener,
     policy: AcceptPolicy,
     log: Arc<dyn EventSink>,
-    mut stop: watch::Receiver<bool>,
+    stop: watch::Receiver<bool>,
     serve: Serve,
 ) where
     Serve: Fn(TcpStream, Accepted, BudgetPermit, watch::Receiver<bool>) -> Fut,
     Fut: Future<Output = ()> + Send + 'static,
+{
+    accept_connections_with_keepalive(
+        entry_point,
+        listener,
+        policy,
+        log,
+        stop,
+        serve,
+        set_keepalive,
+    )
+    .await;
+}
+
+// The socket-option operation is an explicit parameter so tests can fail it
+// deterministically without relying on platform-specific option limits.
+async fn accept_connections_with_keepalive<Serve, Fut, Keepalive>(
+    entry_point: EntryPoint,
+    listener: TcpListener,
+    policy: AcceptPolicy,
+    log: Arc<dyn EventSink>,
+    mut stop: watch::Receiver<bool>,
+    serve: Serve,
+    keepalive: Keepalive,
+) where
+    Serve: Fn(TcpStream, Accepted, BudgetPermit, watch::Receiver<bool>) -> Fut,
+    Fut: Future<Output = ()> + Send + 'static,
+    Keepalive: Fn(&TcpStream, &KeepaliveSettings) -> io::Result<()>,
 {
     let mut held = JoinSet::new();
     loop {
@@ -398,9 +425,6 @@ pub(crate) async fn accept_connections<Serve, Fut>(
                 continue;
             }
         };
-        // A socket that cannot take the options is already broken; the
-        // serve step sees that as an error and ends the connection.
-        let _ = set_keepalive(&stream, &policy.keepalive);
         let conn = Accepted {
             conn_id: ConnId::next(),
             entry_point,
@@ -414,6 +438,24 @@ pub(crate) async fn accept_connections<Serve, Fut>(
             entry_point: conn.entry_point,
             peer_ip,
         });
+        if keepalive(&stream, &policy.keepalive).is_err() {
+            let stage = match entry_point {
+                EntryPoint::TcpViewer | EntryPoint::TcpServer => Stage::InitialExchange,
+                EntryPoint::WsViewer => Stage::Upgrade,
+                EntryPoint::WssViewer => Stage::Tls,
+            };
+            log.record(&Event::ConnectionAborted {
+                conn_id: conn.conn_id,
+                entry_point,
+                stage,
+                reason: AbortReason::ConnectionError(ConnectionErrorKind::IoError),
+                peer_ip,
+                elapsed_ms: u64::try_from(conn.at.elapsed().as_millis()).unwrap_or(u64::MAX),
+            });
+            drop(stream);
+            drop(permit);
+            continue;
+        }
         held.spawn(serve(stream, conn, permit, stop.clone()));
     }
     drop(listener);
@@ -485,5 +527,196 @@ mod tests {
             Duration::from_secs(11)
         );
         assert_eq!(got(socket.tcp_keepalive_retries()), 7);
+    }
+}
+
+#[cfg(test)]
+mod accept_tests {
+    use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use tokio::sync::mpsc;
+    use vnc_relay_app::reload::snapshot::ReloadSnapshot;
+    use vnc_relay_domain::allow_list::IpItem;
+
+    use crate::ops_log::format_line;
+
+    struct LogSender(mpsc::UnboundedSender<serde_json::Value>);
+
+    impl EventSink for LogSender {
+        fn record(&self, event: &Event) {
+            let line = format_line(event, SystemTime::UNIX_EPOCH);
+            let value = serde_json::from_str(&line)
+                .unwrap_or_else(|error| panic!("parse log line: {error}"));
+            self.0
+                .send(value)
+                .unwrap_or_else(|error| panic!("send log line: {error}"));
+        }
+    }
+
+    #[tokio::test]
+    async fn keepalive_failure_aborts_accepted_connections_and_releases_l() {
+        for (entry_point, stage) in [
+            (EntryPoint::TcpViewer, "initial_exchange"),
+            (EntryPoint::TcpServer, "initial_exchange"),
+            (EntryPoint::WsViewer, "upgrade"),
+            (EntryPoint::WssViewer, "tls"),
+        ] {
+            tokio::time::timeout(Duration::from_secs(5), check_failure(entry_point, stage))
+                .await
+                .unwrap_or_else(|error| panic!("{} timed out: {error}", entry_point.name()));
+        }
+    }
+
+    async fn check_failure(entry_point: EntryPoint, stage: &str) {
+        let listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .unwrap_or_else(|error| panic!("bind: {error}"));
+        let address = listener
+            .local_addr()
+            .unwrap_or_else(|error| panic!("listener address: {error}"));
+        let allow = AllowList::new(vec![
+            IpItem::parse("127.0.0.1").unwrap_or_else(|error| panic!("allow: {error:?}")),
+        ]);
+        let snapshot = ReloadSnapshot::new(
+            RelayAllow {
+                tcp_viewer: allow.clone(),
+                tcp_server: allow.clone(),
+                ws_viewer: allow.clone(),
+                wss_viewer: allow,
+            },
+            None,
+            None,
+        );
+        let cell = Arc::new(ReloadCell::new(snapshot));
+        let allow = match entry_point {
+            EntryPoint::TcpViewer => AllowSource::tcp_viewer(cell),
+            EntryPoint::TcpServer => AllowSource::tcp_server(cell),
+            EntryPoint::WsViewer => AllowSource::ws_viewer(cell),
+            EntryPoint::WssViewer => AllowSource::wss_viewer(cell),
+        };
+        let budget = ConnectionBudget::new(1);
+        let policy = AcceptPolicy {
+            allow,
+            relay_budget: Arc::clone(&budget),
+            handshake: Duration::from_secs(5),
+            keepalive: KeepaliveSettings {
+                tcp_idle: Duration::from_secs(60),
+                tcp_interval: Duration::from_secs(10),
+                tcp_probes: 3,
+                ws_ping: Duration::from_secs(30),
+                ws_pong_timeout: Duration::from_secs(30),
+            },
+        };
+        let (events, mut received) = mpsc::unbounded_channel();
+        let log: Arc<dyn EventSink> = Arc::new(LogSender(events));
+        let (stop, stopped) = watch::channel(false);
+        let attempts = Arc::new(AtomicUsize::new(0));
+        let attempts_in_accept = Arc::clone(&attempts);
+        let served = Arc::new(AtomicUsize::new(0));
+        let served_in_accept = Arc::clone(&served);
+        let task = tokio::spawn(accept_connections_with_keepalive(
+            entry_point,
+            listener,
+            policy,
+            log,
+            stopped,
+            move |mut stream, _conn, permit, mut stopped| {
+                served_in_accept.fetch_add(1, Ordering::SeqCst);
+                async move {
+                    stream
+                        .write_all(b"served")
+                        .await
+                        .unwrap_or_else(|error| panic!("write served: {error}"));
+                    stopped
+                        .wait_for(|stop| *stop)
+                        .await
+                        .unwrap_or_else(|error| panic!("wait for stop: {error}"));
+                    drop(stream);
+                    drop(permit);
+                }
+            },
+            move |stream, settings| {
+                if attempts_in_accept.fetch_add(1, Ordering::SeqCst) == 0 {
+                    Err(io::Error::other("injected socket option failure"))
+                } else {
+                    set_keepalive(stream, settings)
+                }
+            },
+        ));
+        let started = Instant::now();
+        let mut first = TcpStream::connect(address)
+            .await
+            .unwrap_or_else(|error| panic!("first connect: {error}"));
+        let accepted = received
+            .recv()
+            .await
+            .unwrap_or_else(|| panic!("accept log"));
+        let aborted = received.recv().await.unwrap_or_else(|| panic!("abort log"));
+        let elapsed_ms = aborted["elapsed_ms"]
+            .as_u64()
+            .unwrap_or_else(|| panic!("elapsed_ms must be an unsigned integer: {aborted}"));
+        assert!(u128::from(elapsed_ms) <= started.elapsed().as_millis());
+        let conn_id = accepted["conn_id"]
+            .as_str()
+            .unwrap_or_else(|| panic!("conn_id must be a string: {accepted}"));
+        assert!(!conn_id.is_empty());
+        assert_eq!(
+            accepted,
+            serde_json::json!({
+                "ts": "1970-01-01T00:00:00.000Z",
+                "level": "info", "event": "connection_accepted",
+                "conn_id": conn_id, "listener": entry_point.name(),
+                "role": entry_point.role().as_str(), "peer_ip": "127.0.0.1"
+            })
+        );
+        assert_eq!(
+            aborted,
+            serde_json::json!({
+                "ts": "1970-01-01T00:00:00.000Z",
+                "level": "warn", "event": "connection_aborted",
+                "conn_id": conn_id, "listener": entry_point.name(),
+                "stage": stage, "reason": "connection_error", "error_kind": "io_error",
+                "role": entry_point.role().as_str(), "peer_ip": "127.0.0.1",
+                "elapsed_ms": elapsed_ms
+            })
+        );
+        let mut byte = [0; 1];
+        match first.read(&mut byte).await {
+            Ok(0) => {}
+            Err(error) if error.kind() == ErrorKind::ConnectionReset => {}
+            other => panic!("failed socket must close without serving: {other:?}"),
+        }
+        assert_eq!(served.load(Ordering::SeqCst), 0);
+        assert_eq!(budget.current(), 0);
+
+        let mut second = TcpStream::connect(address)
+            .await
+            .unwrap_or_else(|error| panic!("second connect: {error}"));
+        let next = received
+            .recv()
+            .await
+            .unwrap_or_else(|| panic!("next accept log"));
+        assert_eq!(next["event"], "connection_accepted");
+        assert_eq!(next["listener"], entry_point.name());
+        assert_ne!(next["conn_id"], accepted["conn_id"]);
+        let mut payload = [0; 6];
+        second
+            .read_exact(&mut payload)
+            .await
+            .unwrap_or_else(|error| panic!("following connection must be served: {error}"));
+        assert_eq!(&payload, b"served");
+        assert_eq!(attempts.load(Ordering::SeqCst), 2);
+        assert_eq!(served.load(Ordering::SeqCst), 1);
+        assert_eq!(budget.current(), 1);
+        assert!(matches!(
+            received.try_recv(),
+            Err(mpsc::error::TryRecvError::Empty)
+        ));
+        stop.send(true)
+            .unwrap_or_else(|error| panic!("stop accept: {error}"));
+        task.await
+            .unwrap_or_else(|error| panic!("accept task: {error}"));
+        assert_eq!(budget.current(), 0);
     }
 }

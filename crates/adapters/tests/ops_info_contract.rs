@@ -261,6 +261,7 @@ fn writes_connection_events_with_their_contract_fields() {
             "listener",
             "peer_ip",
             "reason",
+            "role",
             "stage",
             "ts"
         ]
@@ -268,6 +269,7 @@ fn writes_connection_events_with_their_contract_fields() {
     assert_eq!(text(&lines[2], "conn_id"), conn_id.to_string());
     assert_eq!(text(&lines[2], "stage"), "initial_exchange");
     assert_eq!(text(&lines[2], "reason"), "server_shutdown");
+    assert_eq!(text(&lines[2], "role"), "server");
     assert_eq!(lines[2].get("elapsed_ms"), Some(&Value::from(1234)));
 }
 
