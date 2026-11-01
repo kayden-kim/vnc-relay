@@ -258,7 +258,7 @@
 - Repeater 대기 포트: 매 회차 `0.0.0.0:5901`, `0.0.0.0:5500`, `0.0.0.0:80`만 대기했다. IPv6 대기 포트는 없다. Viewer는 5901, Server는 5500으로 접속했다.
 - Repeater 기본 설정(첫 실행 뒤 `/settings.html`): `keepalive=False mode1=False mode2=True server_port=5901 viewer_port=5500 allow_on=True allow_con=(빈 값) refuse_on=False refuse_con=(빈 값) id_on=False id_con=(빈 값) web_port=80 ucom_on=False`. 필드 이름은 화면의 이름 그대로다.
 - Mode I 시나리오(M1-01~M1-06)는 `mode1=True`, `allow_on=False`로 바꿨다. M1-04는 `refuse_on=True`, `refuse_con=192.0.2.30`도 바꿨다. 나머지 시나리오는 기본 설정이다.
-- 회차 비교: `summarize.py`가 시나리오마다 `summary.md`를 만든다. TCP 스트림마다 방향별 바이트 총량, 앞 300바이트, FIN·RST 순서를 비교한다. 세그먼트 분할은 비교하지 않는다. 다음 차이는 같은 결과로 본다. Viewer가 보내는 250바이트 메시지의 NUL 뒤 바이트, RFB VNC 인증 챌린지 16바이트, 화면 갱신 데이터의 크기, 세그먼트 분할, 양쪽 FIN의 순서 경쟁.
+- 회차 비교: `summarize.py`가 시나리오마다 `summary.md`를 만든다. TCP 스트림마다 방향별 바이트 총량, 앞 300바이트, FIN·RST 순서를 비교한다. 세그먼트 분할은 비교하지 않는다. 다음 차이는 같은 결과로 본다. Viewer가 보내는 250바이트 메시지의 NUL 뒤 바이트, 보안 유형 선택 뒤 Server가 보내는 16바이트(회차마다 다름), 화면 갱신 데이터의 크기, TLS ClientHello의 크기, 세그먼트 분할, 양쪽 FIN의 순서 경쟁, Repeater가 FIN·RST로 닫은 뒤 상대의 FIN이 캡처에 남았는지 여부.
 - TCP keepalive 탐침: tshark가 `tcp.analysis.keep_alive`로 표시한 1바이트 세그먼트는 스트림 데이터에서 뺐다. `summary.md`에는 플래그 `KA`로 남긴다. winvnc 연결에서 약 10초마다, Edge 연결에서 약 45초마다 보였다. 이 탐침은 이미 확인된 바이트를 다시 보내는 것이며 상대에게 전달되지 않는다.
 - 확인 실행: 계획 p1~p5(형식 파악과 하네스 검증)와 p14(WebSocket, 하네스 결함 두 개, 3.4절)는 증거가 아니다. 증거 회차는 p10~p13, p15~p18이다.
 
@@ -283,7 +283,7 @@
 
 | 시나리오 | 입력 | 결과 |
 | --- | --- | --- |
-| M1-00 Mode I 꺼짐(기본 설정) | Viewer `-connect 192.0.2.30::5900 -proxy 192.0.2.20:5901`. 이 회차의 계획 파일은 뒤에 M1-00을 뺀 판으로 바뀌어 명령줄 원문이 남지 않았다. 와이어의 메시지로 입력을 확인한다 | 약 1.0초 뒤 Repeater가 `RFB 000.000\n`(12바이트)을 보낸다. Viewer는 같은 ms에 250바이트(`192.0.2.30:5900` + NUL + 정리되지 않은 바이트)를 보낸다. Repeater는 대상에 연결하지 않고, 더 보내지 않으며, 닫지도 않았다(40초 넘게 연결 유지). 웹 상태 페이지의 대기 목록에도 없다 |
+| M1-00 Mode I 꺼짐(기본 설정) | Viewer 하나를 Repeater Viewer 포트로 접속시켰다. 명령줄 원문은 남지 않았다. 계획 파일은 뒤에 M1-00을 뺀 판으로 바뀌었고, 첫 실행의 요약 `05-p10-mode1-part1.json`과 회차 파일에도 명령줄이 없다. [INFERENCE: 와이어의 메시지가 M1-01과 같으므로 M1-01과 같은 `-connect 192.0.2.30::5900 -proxy 192.0.2.20:5901`로 보인다] | 약 1.0초 뒤 Repeater가 `RFB 000.000\n`(12바이트)을 보낸다. Viewer는 같은 ms에 250바이트(`192.0.2.30:5900` + NUL + 정리되지 않은 바이트)를 보낸다. Repeater는 대상에 연결하지 않고, 더 보내지 않으며, 닫지도 않았다(40초 넘게 연결 유지). 웹 상태 페이지의 대기 목록에도 없다 |
 | M1-01 IP와 포트 | Viewer `-connect 192.0.2.30::5900 -proxy 192.0.2.20:5901`, Server `winvnc -run` | Viewer 메시지는 `192.0.2.30:5900` + NUL(오프셋 15) + 정리되지 않은 바이트, 모두 250바이트다. Repeater는 메시지를 받고 약 1ms 뒤 `192.0.2.30:5900`으로 연결한다. 250바이트 메시지는 Server에 전달하지 않는다. Server의 `RFB 003.008\n`부터 양방향으로 중계한다 |
 | M1-02 포트 생략 | Viewer `-connect 192.0.2.30 -proxy 192.0.2.20:5901`. 이어서 원시 클라이언트가 `192.0.2.30` + 패딩을 보냄 | Viewer는 포트를 붙여 `192.0.2.30:5900`을 보낸다. 원시 입력 `192.0.2.30`에도 Repeater는 `192.0.2.30:5900`으로 연결한다. Viewer 종료 뒤 Repeater는 Server에 FIN을 보내고 약 3ms 뒤 RST를 보냈다(두 회차 같음) |
 | M1-03 이름 | Viewer `-connect vnc-server.test::5900 -proxy 192.0.2.20:5901` | Viewer는 대문자로 바꾼 `VNC-SERVER.TEST:5900`을 보낸다(NUL은 오프셋 20). Repeater는 `hosts`로 이름을 풀어 약 115~165ms 뒤 `192.0.2.30:5900`으로 연결한다 |
@@ -331,7 +331,7 @@ Server 명령은 `winvnc -id:<ID> -connect 192.0.2.20::5500 -run`, Viewer 명령
 | S-02 초기 메시지와 후속 바이트를 함께 | Server는 250바이트 + `RFB 003.008\n`을 한 번에(262바이트), Viewer는 250바이트 + `V>combined`를 한 번에(260바이트) 보냄 | 매칭 순간 Viewer는 `RFB 003.008\n`을, Server는 `V>combined`를 첫 바이트로 받는다 |
 | S-03 매칭 전후 바이트 | Server 선접속 뒤 `S>before`, 약 5초 뒤 Viewer 접속, 매칭 뒤 양쪽 `after` 표식. 이어서 Viewer 선접속으로 같은 순서 | 매칭 전에 보낸 `S>before`·`V>before`가 매칭 순간 상대에게 먼저 전달되고, 그 뒤 매칭 뒤 바이트가 전달된다 |
 | S-04 매칭 전 `00` 1바이트 | 원시 쌍 네 개: Server가 등록 약 2초 뒤 단독 `00`, `00` 뒤 1초 간격 `S>b`, `00`과 `S>c`를 한 번에. 마지막은 Viewer 선접속 뒤 Viewer가 단독 `00` | 네 경우 모두 `00`이 매칭 순간 상대에게 전달된다. 순서도 보낸 순서와 같다 |
-| S-05 오래 대기한 뒤의 매칭 전 바이트 | Server 선접속 뒤 약 2초와 14초에 `S>early`, `S>late`를 보내고, 약 22~24초 뒤 Viewer 접속. Repeater 재시작 뒤 Viewer 선접속으로 같은 순서 | 두 경우 모두 매칭 순간 `S>earlyS>late`, `V>earlyV>late`가 한 세그먼트로 상대에게 전달되고, 그 뒤 매칭 뒤 바이트가 전달된다. run1의 첫 쌍은 하네스가 Repeater를 재시작하는 시점에 두 연결이 같은 ms에 RST로 끝났다. run2는 클라이언트가 먼저 닫아 FIN으로 끝났다. 이 차이는 하네스의 시간 차이다[INFERENCE: RST의 VM 시각 16:04:16.924가 재시작 직전 상태 수집의 호스트 시각 16:04:16.708 직후다. 호스트와 VM 시계 차이는 측정하지 않았다] |
+| S-05 오래 대기한 뒤의 매칭 전 바이트 | Server 선접속 뒤 약 2초와 14초에 `S>early`, `S>late`를 보내고, 약 22~24초 뒤 Viewer 접속. Repeater 재시작 뒤 Viewer 선접속으로 같은 순서 | 두 경우 모두 매칭 순간 `S>earlyS>late`, `V>earlyV>late`가 한 세그먼트로 상대에게 전달되고, 그 뒤 매칭 뒤 바이트가 전달된다. 첫 쌍의 종료는 회차마다 달랐다. run1은 Repeater가 두 연결에 같은 ms에 RST를 보냈고(캡처 기준 36.392초, 마지막 데이터 약 6.1초 뒤), run2는 Server 쪽 클라이언트가 먼저 FIN을 보냈다. [INFERENCE: run1의 RST는 하네스의 Repeater 재시작(프로세스 종료)과 겹친 것으로 보인다. RST의 VM 시각 16:04:16.924는 재시작 직전 상태 수집의 호스트 시각 16:04:16.708 직후다. 재시작 단계의 기록 시각 16:04:20.093은 재시작이 끝난 뒤의 시각이라 종료 시각이 아니다. 호스트와 VM 시계 차이는 측정하지 않았으므로 원인은 확정하지 않았다] |
 
 #### 종료·재접속 (p13)
 
@@ -354,7 +354,7 @@ Server 명령은 `winvnc -id:<ID> -connect 192.0.2.20::5500 -run`, Viewer 명령
 | --- | --- | --- |
 | W-01 noVNC → Repeater 직접(`ws://`) | `vnc.html?autoconnect=true&reconnect=false&repeaterID=1234&path=ws%3A%2F%2F192.0.2.20%3A5901%2F` | noVNC가 HTTP 업그레이드 요청(`GET / HTTP/1.1`, 510바이트)을 보낸다. Repeater는 이를 해석하지 않고, 접속 약 1.0초 뒤 `RFB 000.000\n`을 보낸다. noVNC는 0~42ms 안에 FIN으로 닫는다. Repeater는 닫지 않았다. 페이지 제목은 `noVNC`로 남았다. 같은 회차에서 p16의 `wss://` 시도도 평문 요청이 되어 결과가 같았다(아래 p14 설명) |
 | W-02 noVNC → WS 중계기 → Repeater | `path=ws%3A%2F%2F192.0.2.20%3A8081%2Fwebsockify` | 요청 헤더에 `Sec-WebSocket-Protocol`이 없다. 중계기는 서브프로토콜 없이 수락했다. noVNC는 먼저 보내지 않는다. 중계기가 TCP 연결 약 1.0초 뒤 `RFB 000.000\n`을 바이너리 메시지 하나로 전달하자, noVNC는 67~85ms 뒤 바이너리 메시지 하나로 250바이트(`ID:1234` + NUL 243개)를 보냈다. 약 1.0초 뒤 winvnc와 매칭되어 Server의 `RFB 003.008\n`이 전달됐다. noVNC는 보안 유형 목록 `03 11 75 01`에서 `01`(None)을 골랐고, ServerInit(이름 `vr-server ( 192.0.2.30 ) - application mode`)을 받은 뒤 SetPixelFormat·SetEncodings·FramebufferUpdateRequest를 보내고 화면 갱신 데이터를 받았다. 페이지 제목도 데스크톱 이름으로 바뀌었다. Edge 종료 뒤 Repeater가 Server에 FIN을 보냈다 |
-| W-01b noVNC → Repeater 직접(WSS) | `vnc.html?autoconnect=true&reconnect=false&repeaterID=1234&host=192.0.2.20&port=5901&encrypt=true&path=websockify` | noVNC가 TLS ClientHello(1729~1793바이트)를 보낸다. Repeater는 이를 해석하지 않고, 접속 약 1.0초 뒤 `RFB 000.000\n`을 보낸다. 브라우저는 2~18ms 안에 TLS 경고 7바이트(`15 03 01 00 02 02 46`)를 보내고 FIN으로 닫는다. 회차마다 같은 접속이 두 번 있었다. Repeater는 캡처가 끝날 때까지(약 70초) 이 연결을 닫지 않았다. 페이지 제목은 `noVNC`로 남았다 |
+| W-01b noVNC → Repeater 직접(WSS) | `vnc.html?autoconnect=true&reconnect=false&repeaterID=1234&host=192.0.2.20&port=5901&encrypt=true&path=websockify` | 각 회차에서 Viewer→Repeater 5901 TCP 연결이 두 개 관찰됐다. 두 연결 모두 같은 순서였다. 브라우저가 TLS ClientHello(1729~1793바이트)를 보낸다. Repeater는 접속 약 1.0초 뒤 평문 `RFB 000.000\n`을 보낸다. 브라우저는 2~18ms 안에 TLS 경고 레코드 7바이트(`15 03 01 00 02 02 46`, fatal `protocol_version`)를 보내고 FIN으로 닫는다. Repeater는 캡처가 끝날 때까지(약 70초) 이 연결을 닫지 않았다. 페이지 제목은 `noVNC`로 남았다. 연결이 두 개인 이유는 확인하지 않았다 |
 | W-03b noVNC → WSS 중계기 → Repeater | `host=192.0.2.20&port=8443&encrypt=true&path=websockify` | TLS 접속이 성립했다(중계기 로그 `scheme=https`). 요청 헤더에 `Sec-WebSocket-Protocol`이 없다. 이후 순서는 W-02와 같다. 중계기가 `RFB 000.000\n`을 전달하자 noVNC는 84~110ms 뒤 바이너리 메시지 하나로 250바이트(`ID:1234` + NUL 243개)를 보냈다. 매칭 뒤 보안 유형 `01`(None)을 고르고, ServerInit을 받은 뒤 SetPixelFormat·SetEncodings·FramebufferUpdateRequest를 보내고 화면 갱신 데이터를 받았다. 페이지 제목은 `vr-server ( 192.0.2.30 ) - application mode - noVNC`로 바뀌었다. Edge 종료 때 TCP RST가 났고, 약 21~31ms 뒤 Repeater가 Server에 FIN을 보냈다 |
 
 확인 실행 p14(증거 아님)에서 하네스 결함 두 개를 찾아 고친 뒤 p16을 실행했다.
@@ -375,7 +375,7 @@ Server 명령은 `winvnc -id:<ID> -connect 192.0.2.20::5500 -run`, Viewer 명령
 | C. Mode I Viewer 요청 | 방향은 B와 같다(`RFB 000.000\n` 다음에 Viewer가 보냄). 길이는 250바이트, 내용은 `<대상>:<포트>` + NUL + 채움이다. `ID:` 같은 접두어는 없다. Viewer는 명령줄의 `host::port`를 `host:port`로 바꾸고, 이름을 대문자로 바꾸며, 포트를 생략하면 `:5900`을 붙인다. Repeater는 포트 없는 입력에 5900을 쓰고, 이름은 Repeater 쪽에서 푼다. IPv6 대상은 세 가지 표기 모두 즉시 닫혔다. Repeater는 250바이트를 대상에 전달하지 않는다. Viewer 메시지 뒤에 Repeater가 만들어 보내는 응답 바이트는 없다. 대상 연결 뒤 Viewer가 받는 바이트는 대상 Server가 보낸 바이트다(E행) | M1-01~M1-06 |
 | D. 응답·오류 표시 | 오류를 알리는 바이트는 한 번도 없었다. Viewer 포트의 연결은 입력 내용과 관계없이 접속 약 1.0초 뒤 `RFB 000.000\n`(B행)을 받았다. 오류 경우(M1-04, M2-07, E-01, E-04)와 HTTP·TLS 입력(W-01, W-01b)도 같다. 이 12바이트는 어떤 입력에도 같으므로 결과를 알리지 않는다. 이 12바이트 말고 Repeater가 만들어 보낸 바이트는 없었다. 매칭이나 대상 연결 뒤에 오는 바이트는 상대가 보낸 바이트를 중계한 것이다(E행). 오류 결과는 연결 처리로만 드러났다. 연결 처리는 세 가지다. 빠른 FIN(메시지 도착 직후, Server 쪽 ID 거절은 접속 약 1.0초 뒤): 금지 대상, IPv6 대상, 숫자로 시작하지 않는 ID와 빈 ID, Server ID `999999999`. 지연 FIN: 초기 교환 시간 초과, Mode I 대상 연결 실패(약 21초). 닫지 않고 유지: 형식 오류, Mode I 꺼짐, 같은 역할 중복, 짝이 없는 대기(60초 넘게 관찰, 대기 시간 상한은 보이지 않음) | M1-00, M1-04~M1-06, M2-03~M2-05, M2-06b, M2-07, M2-09, M2-12, M2-13, E-01~E-04, W-01, W-01b |
 | E. RFB 스트림 시작과 후속 바이트 | 초기 교환의 경계는 250바이트 직후다. 250바이트를 넘게 보낸 바이트(같은 쓰기에 붙은 바이트 포함)는 매칭 순간 상대에게 첫 바이트로 전달된다. 매칭 전에 도착한 바이트는 도착 순서대로 매칭 순간 전달된다. 한쪽이 22초 넘게 기다린 뒤에도 같다. Mode II에서 Viewer가 처음 받는 RFB 바이트는 Server의 `RFB 003.008\n`이다. Mode I에서는 대상 Server의 `RFB 003.008\n`이다 | M1-01, M2-01, S-02~S-05, E-03 |
-| F. noVNC 요청 | noVNC 1.7.0은 `repeaterID`를 B와 같은 250바이트(`ID:<repeaterID>` + NUL 채움)로 보낸다. 먼저 보내지 않고, `RFB 000.000\n`을 받은 뒤 67~110ms 안에 바이너리 메시지 하나로 보낸다. WS와 WSS 모두 같다. 두 경우 모두 요청에 `Sec-WebSocket-Protocol` 헤더가 없다. 공식 Repeater는 WebSocket과 TLS를 처리하지 않으므로 noVNC가 직접 접속하면 연결되지 않는다. 페이지가 `http:`일 때 WSS로 접속하려면 `path`에 절대 URL을 쓰지 않고 `host`·`port`·`encrypt=true`·`path`를 따로 줘야 했다 | W-01, W-01b, W-02, W-03b |
+| F. noVNC 요청 | noVNC 1.7.0은 `repeaterID`를 B와 같은 250바이트(`ID:<repeaterID>` + NUL 채움)로 보낸다. 먼저 보내지 않고, `RFB 000.000\n`을 받은 뒤 67~110ms 안에 바이너리 메시지 하나로 보낸다. WS와 WSS 모두 같다. 두 경우 모두 요청에 `Sec-WebSocket-Protocol` 헤더가 없다. noVNC가 공식 Repeater의 Viewer 포트에 직접 접속하면 WS·WSS 모두 연결되지 않았다. Repeater는 HTTP 업그레이드 요청과 TLS ClientHello에 응답하지 않고 `RFB 000.000\n`만 보냈다. 페이지가 `http:`일 때 WSS로 접속하려면 `path`에 절대 URL을 쓰지 않고 `host`·`port`·`encrypt=true`·`path`를 따로 줘야 했다 | W-01, W-01b, W-02, W-03b |
 
 #### 논리 필드와 규칙
 
@@ -385,9 +385,9 @@ Server 명령은 `winvnc -id:<ID> -connect 192.0.2.20::5500 -run`, Viewer 명령
 | 역할 | 메시지에 역할 표시는 없다. 접속한 포트(Server 5500, Viewer 5901)로 구분된다. Server 포트로 온 메시지가 `ID:`로 시작하지 않으면(`XX:1234`, `1234`) 매칭도 거절도 없이 유지된다 | M2-01, E-01, M2-06b |
 | 길이·패딩·종료 문자 | 길이는 정확히 250바이트다. 나눠 보내도 되고, 250바이트가 다 오기 전에는 매칭하지 않는다. 첫 NUL이 값의 끝이다. NUL 뒤의 채움 내용은 결과에 영향이 없었다. NUL 없이 250바이트를 숫자로 채워도 매칭된다. 버전 문자열은 Viewer 쪽 `RFB 000.000\n` 하나다 | S-01, E-03, E-04, M2-01, M2-06b |
 | 초기 교환 시간 | 아무것도 보내지 않으면 접속 약 6.0초 뒤 FIN이 온다. 100바이트만 보내면 Server 쪽은 접속 약 6.0초 뒤, Viewer 쪽은 마지막 수신 약 5.0초 뒤 FIN이 온다. 메시지 도착 전 클라이언트가 닫으면 1~2ms 안에 Repeater도 FIN을 보낸다 | E-02, E-04 |
-| 중계 ID 비교 | 문자열 비교가 아니다. 관찰 결과는 다음과 같다. 앞자리 0은 무시된다(`0123`=`123`). 숫자 뒤의 문자는 무시된다(`12ab`=`12AB`, `56-78`=`56`, `12-34`·`12 34`는 `5912`로 표시). 100 미만 값은 5900을 더한 값과 같다(`12`=`5912`, `0`=`5900`, `99`=`5999`). `100`과 `6000`은 다르다. 숫자로 시작하지 않으면 거절된다(`ABCD`, `abcd`, `ab12`, 빈 ID). 같은 영문 ID끼리도 거절되므로 대소문자 비교는 성립하지 않는다. 서로 다른 20자리 값 한 쌍(`12345678901234567890`/`98765432109876543210`)이 매칭됐고, `2147483647`과 `2147483648`은 매칭되지 않았다. Server ID `999999999`는 거절되지만 `999999998`과 `99999999`는 매칭된다. [INFERENCE: ID의 앞부분 숫자를 수로 바꿔 비교하는 것처럼 보인다.] 큰 값의 변환 규칙과 `999999999` 거절의 이유는 확정하지 못했다(4.13) | M2-06, M2-06b, M2-07~M2-09, M2-12~M2-14 |
+| 중계 ID 비교 | 문자열 비교가 아니다(`0123`과 `123`이 매칭됨). 관찰한 쌍은 다음과 같다. 앞자리 0만 다른 쌍은 매칭됐다(`0123`/`123`, `789`/`0789`). 숫자 뒤에 다른 문자가 붙은 값은 앞 숫자와 같게 처리된 사례가 있다(`56-78`/`56` 매칭, `12-34`·`12 34` 쌍은 `5912`로 표시). `12ab`/`12AB`도 매칭됐지만, 이 쌍만으로는 대소문자를 무시한 것인지 뒤 문자를 무시한 것인지 구분되지 않는다. 관찰한 100 미만 값은 5900을 더한 값과 매칭됐다(`12`/`5912`, `0`/`5900`, `99`/`5999`). `100`/`6000`은 매칭되지 않았다. 영문자로 시작하는 ID와 빈 ID는 거절됐다(`ABCD`, `abcd`, `ab12`, `AB12`, `cd34`, 빈 ID). 같은 값끼리도 거절되므로 영문 ID의 대소문자 비교는 시험되지 않았다. 서로 다른 20자리 값 한 쌍(`12345678901234567890`/`98765432109876543210`)이 매칭됐고, `2147483647`/`2147483648`은 매칭되지 않았다. Server ID `999999999`는 거절되지만 `999999998`과 `99999999`는 매칭된다. [INFERENCE: ID의 앞부분 숫자를 수로 바꿔 비교하는 것처럼 보인다.] 변환 규칙, 큰 값의 처리, `999999999` 거절의 이유는 확정하지 못했다(4.13) | M2-06, M2-06b, M2-07~M2-09, M2-12~M2-14 |
 | 중계 ID 길이 | 1자리부터 247자리까지 받아들였다. 공개 문서 예시의 9자리 제한은 보이지 않았다. 다만 서로 다른 20자리 값 한 쌍이 매칭됐다(위 행) | M2-06, M2-06b, M2-13 |
-| 대상 주소·포트 | C행과 같다. 형식은 `<IPv4 또는 이름>:<포트>`이고 포트는 생략할 수 있다(기본 5900). IPv6는 표기와 관계없이 연결하지 않는다 | M1-01~M1-03, M1-06 |
+| 대상 주소·포트 | C행과 같다. 관찰한 형식은 `<IPv4 또는 이름>:<포트>`이고 포트는 생략할 수 있었다(기본 5900). IPv6는 원시 입력 세 가지(`2001:db8:1::30:5900`, `[2001:db8:1::30]:5900`, `vnc-server6.test:5900`)에서 Repeater가 대상 연결을 시도하지 않고 FIN으로 닫았다. Viewer는 IPv6 `-connect`로 Repeater 연결을 만들지 못했다. 두 결과의 원인은 확인하지 않았다 | M1-01~M1-03, M1-06 |
 | 같은 역할 중복 ID(RLY-TBD-003) | 먼저 등록한 연결이 유지되고 매칭된다. 뒤에 온 같은 역할 연결은 등록되지 않고, 닫히지도 않으며, 보낸 바이트는 전달되지 않는다. Server와 Viewer 모두 같다. 계약의 제안 정책(후발 거절)과 기존 유지라는 점은 같고, 후발 연결을 닫지 않는 점이 다르다 | M2-04, M2-05 |
 | 매칭과 종료 | 짝이 되는 메시지가 도착한 뒤 약 1.0~2.0초에 매칭된다. 매칭된 한쪽이 닫히면 약 1ms 안에 상대에게 FIN이 간다. FIN 약 3ms 뒤 RST가 뒤따른 경우도 있었다. Server의 `-autoreconnect`는 끊긴 뒤 약 2초에 다시 등록하고, 새 Viewer와 매칭된다 | M2-01, M2-02, T-01~T-03, M1-02 |
 
@@ -409,9 +409,9 @@ Server 명령은 `winvnc -id:<ID> -connect 192.0.2.20::5500 -run`, Viewer 명령
 | `shot-*.png` | VM 화면 캡처(찍은 회차만) |
 | `..\summary.md` | 시나리오별 방향별 바이트 덤프, 시각, 회차 비교(`summarize.py` 출력) |
 
-- 시각은 호스트 시각(2026-11-01)이다. 76회차 모두 첫 시도에서 유효했고, 도중에 꺼진 VM은 없었다.
+- 시각은 호스트 시각(2026-11-01)이다. 증거 76회차는 모두 첫 시도에서 유효했고, 도중에 꺼진 VM은 없었다.
 - 2026-11-01 기록 시점에 76개 `capture.pcapng`의 SHA-256을 다시 계산했다. 모두 `run.json`의 값과 같았다.
-- M1-00의 두 회차는 p10의 첫 실행(10:42~10:51)에서 얻었다. 그 뒤 계획 파일과 실행 요약 `05-p10-mode1.json`은 M1-00을 뺀 두 번째 실행의 것으로 바뀌었다.
+- M1-00의 두 회차는 p10의 첫 실행(10:42~10:54)에서 얻었다. 이 실행은 M1-01 run1의 두 시도가 무효(VM은 모두 실행 중, 캡처 파일 없음)가 되어 멈췄다. 이 두 시도는 증거가 아니다. 첫 실행의 요약은 `05-p10-mode1-part1.json`에 있다. 그 뒤 M1-00을 뺀 계획으로 p10을 다시 실행했고(11:04~12:03, `05-p10-mode1.json`), M1-01 회차는 같은 위치에 새로 기록됐다.
 - p16의 W-03과 W-01 두 번째 접속은 평문 접속이었다(3.4절). WSS 증거는 p18의 W-01b·W-03b다.
 
 | 계획 | 시나리오 | 회차 | 시작 | 끝 | 캡처 SHA-256 |
@@ -622,9 +622,16 @@ vr-repeater baseline Standard vmstate=Off 2026-11-01T01:29:03
 관리자 권한이 필요한 실행은 사용자가 UAC를 승인했다(Q66). p18은 승인 요청이 두 번 연속 승인되지 않아(시간 초과 또는 취소) 사용자에게 확인한 뒤 세 번째 요청에서 실행했다. 계획 파일은 `D:\vr-lab\plans\`, 실행 요약은 `D:\vr-lab\logs\05-<계획>.json`이다.
 
 ```
-06-observe-many.ps1 -Plans "<계획 파일>[,<계획 파일>...]"   (관리자 권한, 계획마다 05-observe.ps1 실행)
+호스트 응용 프로그램(전사 로그 D:\vr-lab\logs\05-<계획>.log의 원문, 관리자 권한 PowerShell 5.1):
+C:\WINDOWS\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -ExecutionPolicy Bypass -File D:\vr-lab\scripts\05-observe.ps1 -Plan D:\vr-lab\plans\p10-mode1.json
+C:\WINDOWS\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -ExecutionPolicy Bypass -File D:\vr-lab\scripts\06-observe-many.ps1 -Plans D:\vr-lab\plans\p10-mode1.json,D:\vr-lab\plans\p11-mode2.json,D:\vr-lab\plans\p12-errors-split.json,D:\vr-lab\plans\p13-termination.json
+C:\WINDOWS\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -ExecutionPolicy Bypass -File D:\vr-lab\scripts\06-observe-many.ps1 -Plans D:\vr-lab\plans\p14-websocket.json,D:\vr-lab\plans\p15-followup.json
+C:\WINDOWS\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -ExecutionPolicy Bypass -File D:\vr-lab\scripts\06-observe-many.ps1 -Plans D:\vr-lab\plans\p16-websocket.json
+C:\WINDOWS\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -ExecutionPolicy Bypass -File D:\vr-lab\scripts\06-observe-many.ps1 -Plans D:\vr-lab\plans\p17-followup2.json
+C:\WINDOWS\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -ExecutionPolicy Bypass -File D:\vr-lab\scripts\06-observe-many.ps1 -Plans D:\vr-lab\plans\p18-websocket-wss.json
+
+05-p10-mode1-part1.json (첫 실행): 2026-11-01T10:42:27 ~ 10:54:31, M1-00 runs=2 valid=2, M1-01 run1 두 시도 무효(캡처 없음)로 중단
 p10-mode1: 2026-11-01T11:04:27 ~ 2026-11-01T12:03:54 scenarios=6 runs=12 valid=12 attempt>1=0
-(M1-00: p10 첫 실행 10:42:27 ~ 10:51:45 runs=2 valid=2)
 p11-mode2: 2026-11-01T12:03:54 ~ 2026-11-01T13:11:06 scenarios=9 runs=18 valid=18 attempt>1=0
 p12-errors-split: 2026-11-01T13:11:06 ~ 2026-11-01T13:39:47 scenarios=7 runs=14 valid=14 attempt>1=0
 p13-termination: 2026-11-01T13:39:48 ~ 2026-11-01T14:01:04 scenarios=3 runs=6 valid=6 attempt>1=0
@@ -639,7 +646,7 @@ python D:\vr-lab\scripts\summarize.py D:\vr-captures\<계획>   → <시나리�
 STRUCTURE DIFFERS: M2-06, M2-07, M2-08, E-03, M2-12, M2-13, M2-14 (양쪽 FIN 순서)
                    M1-02, T-03 (run2에만 Repeater FIN·RST 뒤 Server FIN)
                    W-02, W-03b (화면 갱신 데이터 크기), W-01b (TLS ClientHello 크기)
-                   S-05 (run1 RST: 하네스 재시작 시점)
+                   S-05 (run1 RST, run2 FIN: 하네스 재시작과 겹친 것으로 추정, 3.4절)
 
 tshark -r D:\vr-captures\p11-mode2\M2-04-duplicate-server-id\run1\capture.pcapng -Y "tcp.len==1" -T fields -e frame.time_relative -e ip.src -e tcp.srcport -e tcp.dstport -e tcp.payload -e tcp.analysis.keep_alive
 (출력 발췌)
@@ -649,7 +656,7 @@ tshark -r D:\vr-captures\p11-mode2\M2-04-duplicate-server-id\run1\capture.pcapng
 (S-04 run1의 원시 클라이언트 `00`: 2.682744600 192.0.2.30 49673 5500 00 — keep_alive 표시 없음)
 ```
 
-- 시나리오 관찰: 통과. 6.1절 5단계의 여섯 묶음(Mode I, Mode II, 오류, 분할·후속 바이트, 종료·재접속, 외부 WebSocket)을 각각 2회 이상 캡처했다. 76회차 모두 첫 시도에서 유효했다.
-- 회차 비교: 통과. 구조 차이는 위 목록의 원인으로 모두 설명된다(3.3절의 무시할 차이와 3.4절 S-05 행).
+- 시나리오 관찰: 통과. 6.1절 5단계의 여섯 묶음(Mode I, Mode II, 오류, 분할·후속 바이트, 종료·재접속, 외부 WebSocket)을 각각 2회 이상 캡처했다. 증거 76회차는 모두 첫 시도에서 유효했다. 증거가 아닌 실패 시도는 p10 첫 실행의 M1-01 run1 두 시도다.
+- 회차 비교: 통과. 구조 차이가 있는 13개 시나리오 중 12개는 3.3절에 적은 무시할 차이(FIN 순서 경쟁, Repeater 종료 뒤 상대 FIN의 유무, 화면 갱신 데이터·TLS ClientHello 크기)다. S-05의 종료 방식 차이는 원인을 추정으로만 남겼다(3.4절). 초기 교환과 매칭 결과에는 회차 간 차이가 없었다.
 - 원본 무결성: 통과. 캡처 76개의 해시가 실행 요약의 값과 같다(3.6절).
 - keepalive 구분: 통과. winvnc의 10초 간격 1바이트는 tshark가 TCP keepalive로 표시했고, 원시 클라이언트가 보낸 `00`은 표시되지 않았다.
