@@ -21,6 +21,7 @@
 | [관리 리스너 모듈 설계](management-listener.md) | 관리 리스너가 관리 HTTPS와 루프백 평문 HTTP 접속을 어떻게 받고, Lm을 어떻게 세며, TLS 1.2 미만 거절을 어떻게 기록하고, 요청 경로 순서를 어떻게 처리하는가 | Current | Draft | Verified — [대조 기록](management-listener.md#대조-기록) |
 | [관리 로그인과 세션 모듈 설계](management-session.md) | 관리자 로그인이 계정과 비밀번호를 어떻게 검증하고, 실패를 계정별·출발지별로 어떻게 세어 로그인을 제한하며, 관리 세션과 CSRF 토큰을 어떻게 만들고 검사·연장·무효화하는가 | Current | Draft | Verified — [대조 기록](management-session.md#대조-기록) |
 | [관리 조회 API 모듈 설계](management-query.md) | 인증된 관리자에게 서버 요약·대기 연결·활성 세션·최근 종료 목록을 어떻게 제공하고, 중계 스트림 멈춤 없이 단일 기준 시점 스냅샷을 어떻게 구성하는가 | Target | Draft | 미대조 |
+| [관리자 종료 API 모듈 설계](management-terminate.md) | 인증된 관리자가 지정한 활성 세션만 종료하고, 중계 작업을 막지 않으며 정리 완료·경합 결과·계정명 사건을 어떻게 전달받는가 | Target | Draft | 미대조 |
 | [대시보드 공통 컴포넌트 모듈 설계](dashboard-components.md) | 대시보드 공통 조각(버튼·입력·배지·경고·카드·지표·게이지·상단 메뉴·언어 선택·데이터 표·링크·대화상자)과 아이콘을 어떤 DOM·옵션·상태 속성으로 만들고, 색과 크기를 토큰 CSS에서 가져오는가 | Current | Draft | Verified — [대조 기록](dashboard-components.md#대조-기록) |
 | [대시보드 운영 현황 앱 구조](dashboard-operations-overview.md) | 운영 현황 화면(SCR-001)의 파일 배치, 모듈 책임, 조회·갱신 흐름, 실패 처리, 로그아웃, 표시 형식을 어떻게 나누는가 | Current | Draft | Partial — [대조 기록](dashboard-operations-overview.md#대조-기록) |
 | [파일 변경 감지 모듈 설계](file-watch.md) | 설정 파일과 인증서·개인키 파일의 변경을 어떻게 감지하고, 안정된 후보를 어떻게 한 번에 검증해 교체하며, 실패와 재시작 필요를 어떻게 알리는가 | Target | Draft | 미대조 |

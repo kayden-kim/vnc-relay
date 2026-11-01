@@ -237,6 +237,7 @@ Mode I·II 초기 흐름을 추정 없이 설명할 수 있게 한다. 관찰은
   - 기준: [관리 API 계약 1.9절](contracts/management-api-v1.md#1-형식과-의미), [관리 스펙 3.2절](specs/management.md#32-관리자-종료), [운영 정보 계약 1.8절](contracts/ops-info-v1.md#18-관리자-계정명-기록-규칙)
   - 완료 조건: MGT-008~012, OPS-011
   - 선행: 4.4
+  - 현재: 설계 초안 [관리자 종료 API](architectures/management-terminate.md)(Draft, Target)를 작성했다. 구현은 Q89~Q92 결정을 기다린다.
 - [x] **4.6 정적 대시보드 제공**: 실행파일에 넣은 정적 파일을 관리 리스너가 제공한다. 인증 없이 받을 수 있는 파일은 로그인 화면에 필요한 파일뿐이다.
   - 기준: [관리 API 계약 1.11절](contracts/management-api-v1.md#111-정적-대시보드-경로와-비인증-접근-범위)
   - 완료 조건: [관리 API 계약 5절](contracts/management-api-v1.md#5-예제와-계약-테스트)의 정적 경로 계약 테스트, DASH-014(일부)
