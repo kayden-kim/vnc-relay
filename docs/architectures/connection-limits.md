@@ -111,7 +111,7 @@ WS·WSS는 자리를 잡은 뒤 U 안에서 TLS 핸드셰이크(WSS)와 업그�
 | H 만료 | 닫고 `handshake_timeout`(`warn`)을 기록한다. | 자리 반환 | OPS-006, RLY-005 |
 | 바이트 전 상대 종료 | `peer_eof`(`info`)를 기록한다. | 자리 반환 | RLY-005 |
 | `peek` 오류(연결 재설정 등) | `connection_error`(`warn`, `error_kind` = `io_error`)를 기록한다. | 자리 반환 | 없음 |
-| keepalive 설정 실패 | 기록하지 않고 연결을 계속 보류한다. 운영 정보 계약에 이 경우의 사건이 없다. 이미 연결된 소켓에서 설정이 실패하면 소켓이 깨진 경우이고, 그때는 `peek`가 오류를 알려 `connection_error`로 정리된다고 판단했다(관찰하지 않음). | 보류 | 없음 |
+| keepalive 설정 실패 | 현재 `crates/adapters/src/net.rs`의 공유 `accept_connections`는 TCP·WS·WSS 모두 `set_keepalive` 결과를 버리고 기록 없이 처리를 계속한다. 이는 [RLY-R18](../specs/relay.md#21-판정-가능한-규칙)·[전체 소켓 K 적용](../specs/relay.md#34-중계와-eof)과 충돌하며 [문서 기준](../AGENTS.md#연결-원칙)에 따라 스펙이 우선이다. 목표는 소켓 닫기→L 반환→로그이며 **이 문서의 판단, 사용자 결정 없음**이다(RLY-R18·[OPS-R06](../specs/operations.md#41-판정-가능한-규칙), [대상 소켓 선례](relay-session.md#41-작업-28-mode-i-대상-연결)). 로그 형식은 **사용자 결정 대기(Q85)**다. [운영 정보 계약](../contracts/ops-info-v1.md#16-원인-코드)의 stage 목록(213행)과 io_error 정의(246행: 읽기·쓰기·재설정)는 이 설정 실패를 다루지 않는다. | 현재: 연결 처리 계속. 목표: 자리 반환 | 없음 |
 | WS·WSS U 만료 | 닫고 `connection_aborted`(`tls_upgrade_timeout`, `warn`)를 기록한다. `stage`는 TLS 핸드셰이크 중이면 `tls`, 아니면 `upgrade`다. | 자리 반환 | 없음 |
 | 관리 리스너 U 만료 | 평문 응답 없이 닫는다. 기록하지 않는다(구현 판단, [관리 리스너 모듈 설계](management-listener.md) 6절). | 접속 없음, 자리 반환 | OPS-006(일부), OPS-033(일부) |
 | WS·WSS 업그레이드 거절(101 전) | `connection_rejected`(`stage` = `upgrade`, `reason` = `ip_not_allowed`·`invalid_upgrade`·`origin_not_allowed`·`subprotocol_not_supported` 중 하나)를 기록하고 응답한 뒤 닫는다. | 자리 반환 | 없음 |
