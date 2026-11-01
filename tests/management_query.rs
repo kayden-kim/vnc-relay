@@ -882,7 +882,7 @@ enabled = true
                 }
                 last_val = Some(json);
             }
-            // Polling interval between queries
+            // Bound query frequency while waiting for the requested state.
             std::thread::sleep(Duration::from_millis(10));
         }
         panic!("poll_json_until({path}) timed out after {timeout:?}; last response: {last_val:?}");
@@ -1151,12 +1151,11 @@ fn management_query_counts_match_lists_and_details() {
     );
 }
 
-// Closing state is not observed as active sessions transition immediately upon close.
-/// spec: management.md:MGT-002 partial
+/// spec: management.md:MGT-002
 #[test]
 fn inclusion_before_and_after_initial_exchange_mode1_connect_and_closing() {
     let _lock = lock_ports();
-    let server = RunningServer::start("mgt002", "", 5, 10, 5);
+    let server = RunningServer::start("mgt002", "[timeouts]\nclose_secs = 5", 5, 10, 5);
     let (cookie, _) = server.login();
 
     // 1. Raw socket connected, sending partial initial exchange (5 bytes)
@@ -1182,6 +1181,15 @@ fn inclusion_before_and_after_initial_exchange_mode1_connect_and_closing() {
         Some(0)
     );
     assert_eq!(summary.obj("counts").and_then(|c| c.num("active")), Some(0));
+    assert_eq!(
+        server
+            .query(&cookie, "/api/v1/sessions")
+            .json()
+            .arr("items")
+            .map(|items| items.len()),
+        Some(0),
+        "initial exchange must not create an active session"
+    );
     // 2. Mode I target connect: target listener accepts
     let target_listener =
         TcpListener::bind("127.0.0.1:0").unwrap_or_else(|e| panic!("bind target: {e:?}"));
@@ -1213,24 +1221,109 @@ fn inclusion_before_and_after_initial_exchange_mode1_connect_and_closing() {
     let items = some(sessions.arr("items"), "m1 sessions items");
     assert_eq!(items.len(), 1);
     assert_eq!(items[0].str("mode"), Some("mode1"));
-    let m1_sid = some(items[0].str("session_id"), "m1 session_id");
+    let m1_sid = some(items[0].str("session_id"), "m1 session_id").to_owned();
+    assert_eq!(
+        summary
+            .obj("counts")
+            .and_then(|counts| counts.num("active")),
+        Some(items.len() as i64)
+    );
 
-    // 3. Closing: drop target stream
-    drop(target_stream);
-    drop(m1_vwr);
-    let summary = server.poll_summary_until(&cookie, IO_LIMIT, |s| {
-        s.obj("counts").and_then(|c| c.num("active")) == Some(0)
+    // One EOF starts E, but the viewer keeps its write half open until explicitly closed.
+    target_stream
+        .shutdown(std::net::Shutdown::Write)
+        .unwrap_or_else(|error| panic!("half-close target: {error:?}"));
+    let detail_path = format!("/api/v1/sessions/{m1_sid}");
+    let closing_detail = server.poll_json_until(&cookie, &detail_path, IO_LIMIT, |detail| {
+        detail
+            .obj("session")
+            .and_then(|session| session.str("state"))
+            == Some("closing")
     });
     assert_eq!(
-        summary.obj("counts").and_then(|c| c.num("waiting")),
+        closing_detail
+            .obj("session")
+            .and_then(|session| session.str("session_id")),
+        Some(m1_sid.as_str())
+    );
+    let closing_sessions = server.poll_json_until(&cookie, "/api/v1/sessions", IO_LIMIT, |list| {
+        list.arr("items").is_some_and(|items| {
+            items.len() == 1
+                && items[0].str("session_id") == Some(m1_sid.as_str())
+                && items[0].str("state") == Some("closing")
+        })
+    });
+    let closing_items = some(closing_sessions.arr("items"), "closing sessions");
+    // Summary and list are separate API responses; held sockets keep the state stable.
+    let summary = server.poll_summary_until(&cookie, IO_LIMIT, |summary| {
+        summary
+            .obj("counts")
+            .and_then(|counts| counts.num("active"))
+            == Some(1)
+    });
+    assert_eq!(
+        summary
+            .obj("counts")
+            .and_then(|counts| counts.num("active")),
+        Some(closing_items.len() as i64),
+        "closing session remains counted until cleanup completes"
+    );
+    assert_eq!(
+        summary
+            .obj("counts")
+            .and_then(|counts| counts.num("waiting")),
         Some(0)
     );
-
-    let detail = server.query(&cookie, &format!("/api/v1/sessions/{m1_sid}"));
     assert_eq!(
-        detail.status, 404,
-        "closed session cannot be queried via active detail"
+        server
+            .query(&cookie, &detail_path)
+            .json()
+            .obj("session")
+            .and_then(|session| session.str("state")),
+        Some("closing"),
+        "closing window must span the list, summary, and detail observations"
     );
+
+    m1_vwr
+        .shutdown(std::net::Shutdown::Write)
+        .unwrap_or_else(|error| panic!("finish viewer half-close: {error:?}"));
+    drop(m1_vwr);
+    drop(target_stream);
+    let deadline = Instant::now() + IO_LIMIT;
+    loop {
+        let summary = server.query(&cookie, "/api/v1/summary").json();
+        let sessions = server.query(&cookie, "/api/v1/sessions").json();
+        let detail = server.query(&cookie, &detail_path);
+        let closed = server.query(&cookie, "/api/v1/closed-sessions").json();
+        if summary
+            .obj("counts")
+            .and_then(|counts| counts.num("active"))
+            == Some(0)
+            && sessions.arr("items").is_some_and(|items| items.is_empty())
+            && detail.status == 404
+            && closed.arr("items").is_some_and(|items| {
+                items
+                    .iter()
+                    .any(|session| session.str("session_id") == Some(m1_sid.as_str()))
+            })
+        {
+            assert_eq!(
+                detail
+                    .json()
+                    .obj("error")
+                    .and_then(|error| error.str("code")),
+                Some("not_found")
+            );
+            break;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "session {m1_sid} did not finish cleanup: summary={summary:?}, sessions={sessions:?}, detail_status={}, closed={closed:?}",
+            detail.status
+        );
+        // Bound query frequency while waiting for cleanup across the query endpoints.
+        std::thread::sleep(Duration::from_millis(10));
+    }
 }
 
 /// spec: management.md:MGT-003
