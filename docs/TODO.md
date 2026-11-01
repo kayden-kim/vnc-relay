@@ -164,8 +164,8 @@ Mode I·II 초기 흐름을 추정 없이 설명할 수 있게 한다. 관찰은
   - 기준: [중계 스펙 2.1절](specs/relay.md#21-판정-가능한-규칙)의 RLY-R18·RLY-R19
   - 완료 조건: RLY-025~027
   - 선행: 2.10
-  - 현재: RLY-027은 비부분 시험으로 두 OS에서 통과했다(커밋 `1a6f93e`). RLY-025·RLY-026은 WSL의 Linux netns와 nftables/iptables DROP으로 응답 없이 끊긴 네트워크를 만들어 시험한다. Windows는 부분 시험으로 유지한다(사용자 결정 2026-11-02(Q86)). 이 방법의 실행 증거는 아직 없다.
-  - 현재: 수락 소켓의 keepalive 설정 실패 처리는 사용자 결정 2026-11-02(Q85)로 확정했다. `connection_accepted` → K 설정 실패 → 전송별 현재 stage의 `connection_aborted(reason=connection_error, error_kind=io_error)` → 소켓 닫기·L 반환이 목표다([연결 상한과 시간 제한 설계 6절](architectures/connection-limits.md#6-오류-처리)). 구현 중이며 검증 완료는 아니다.
+  - 현재: RLY-027은 비부분 시험으로 두 OS에서 통과했다(커밋 `1a6f93e`). RLY-025·RLY-026은 WSL의 Linux netns와 nftables/iptables DROP으로 응답 없이 끊긴 네트워크를 만들어 시험한다. Windows는 부분 시험으로 유지한다(사용자 결정 2026-11-02(Q86)). WSL에는 사용자가 `nftables` 패키지를 설치하고, 시험은 `unshare --user --map-root-user --net` 안에서 root 없이 실행한다. Linux에서 필요한 도구가 없으면 시험은 건너뛰지 않고 실패한다(사용자 결정 2026-11-02(Q93)). 이 방법의 실행 증거는 아직 없다.
+  - 현재: 수락 소켓의 keepalive 설정 실패 처리는 사용자 결정 2026-11-02(Q85)로 확정하고 커밋 `5a38bfc`에서 구현했다. `connection_accepted` → K 설정 실패 → 전송별 현재 stage의 `connection_aborted(reason=connection_error, error_kind=io_error)` → 소켓 닫기·L 반환 순서다([연결 상한과 시간 제한 설계 6절](architectures/connection-limits.md#6-오류-처리)). 단위 시험 `net::accept_tests::keepalive_failure_aborts_accepted_connections_and_releases_l`이 Windows와 WSL에서 통과했다. 전체 완료 검증 기록은 아직 없다.
 - [x] **2.12 중계 사건 로그**: 접속 수락·거절, 대기 등록, 매칭, 대상 연결 실패, 세션 종료 사건을 기록한다.
   - 기준: [운영 정보 계약 1.5~1.7절](contracts/ops-info-v1.md#15-사건-목록)
   - 완료 조건: OPS-011(일부), OPS-012(일부). 운영 정보 계약 5절의 해당 계약 테스트.
@@ -234,7 +234,7 @@ Mode I·II 초기 흐름을 추정 없이 설명할 수 있게 한다. 관찰은
   - 현재: 설계 `bc7e762`와 구현·시험 `ec05fd1`, MGT-002 시험 보강 `b20b8dc`를 반영했다. 조회 API와 정수 집계, `ActivePeer`의 필수 상대 주소, `HandshakingGuard`를 구현했다. Windows·WSL 게이트와 남은 증거는 [관리 조회 API 대조 기록](architectures/management-query.md#대조-기록)에 있다.
   - 현재: MGT-001·002·003·006·015·021·024는 두 OS에서 전체 증거로 통과했다. MGT-002는 `b20b8dc`에서 E = 5초의 반닫기로 목록·상세의 `closing`과 활성 집계 포함, 정리 뒤 상세 404·최근 종료 포함을 확인했다. MGT-026은 Linux 정확한 수치 시험이 있는 WSL에서 통과, Windows에서는 부분이다.
   - 현재: MGT-004는 500 경로 미강제, MGT-005는 시스템 시험의 부분 쓰기 없음, MGT-007은 시계 단위 시험·재접속 시스템 시험이 각각 부분 표식, MGT-016은 블랙박스 상태 변동 시험만 확인해 부분이다. MGT-013·023은 종료 요청·관리자 종료 증거가 작업 4.5에 의존해 부분이다. OPS-033도 부분이며 전체 시나리오 증거가 남는다. 따라서 `[ ]`를 유지한다.
-  - 현재: IPv4 매핑 IPv6 표기는 `IpAddr::to_canonical()`으로 `a.b.c.d`를 쓰도록 확정했다(사용자 결정 2026-11-02(Q88)). 같은 작업에서 `query_api.rs`의 `format_ip`를 수정 중이며 시험 통과를 뜻하지 않는다. `server_shutdown` 항목의 외부 조회는 구현 점검 대상으로 남기며 전체 증거로 주장하지 않는다.
+  - 현재: IPv4 매핑 IPv6 표기는 `IpAddr::to_canonical()`으로 `a.b.c.d`를 쓰도록 확정했다(사용자 결정 2026-11-02(Q88)). 커밋 `35329fc`가 `query_api.rs`의 `format_ip`에 적용했고 단위 시험 3개가 Windows에서 통과했다. `server_shutdown` 항목의 외부 조회는 구현 점검 대상으로 남기며 전체 증거로 주장하지 않는다.
 - [ ] **4.5 관리자 종료 API**: 세션 식별자로 지정한 활성 세션 하나만 정리하고, 정리가 끝난 뒤 응답한다. 관리자 종료 사건 로그에 계정명을 기록한다.
   - 기준: [관리 API 계약 1.9절](contracts/management-api-v1.md#1-형식과-의미), [관리 스펙 3.2절](specs/management.md#32-관리자-종료), [운영 정보 계약 1.8절](contracts/ops-info-v1.md#18-관리자-계정명-기록-규칙)
   - 완료 조건: MGT-008~012, OPS-011, RLY-020(관리자 종료 부분)

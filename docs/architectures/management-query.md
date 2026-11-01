@@ -173,9 +173,9 @@ flowchart LR
 
 ### 9.1 (해결) IPv4 매핑 IPv6 주소의 표기 방식
 
-사용자 결정 2026-11-02(Q88)으로 정규 표기를 확정했다. 목표는 `IpAddr::to_canonical()`을 적용해 `::ffff:a.b.c.d`를 `a.b.c.d`로 쓰는 것이다. `PeerIp`와 운영 로그도 같은 규칙을 쓴다. 기준은 [관리 API 계약 1.1절](../contracts/management-api-v1.md#11-공통-규칙)의 `address.ip`다.
+사용자 결정 2026-11-02(Q88)으로 정규 표기를 확정했다. `IpAddr::to_canonical()`을 적용해 `::ffff:a.b.c.d`를 `a.b.c.d`로 쓴다. `PeerIp`와 운영 로그도 같은 규칙을 쓴다. 기준은 [관리 API 계약 1.1절](../contracts/management-api-v1.md#11-공통-규칙)의 `address.ip`다.
 
-같은 작업에서 `crates/adapters/src/management_http/query_api.rs`의 `format_ip`를 수정한다. 현재 구현 작업 중이며 이 결정 반영 문서는 코드 대조나 시험 통과를 주장하지 않는다.
+커밋 `35329fc`가 `crates/adapters/src/management_http/query_api.rs`의 `format_ip`에 이 규칙을 적용했다(Current). 단위 시험 3개(`formats_ipv4_mapped_ipv6_as_ipv4_without_changing_port`, `preserves_plain_ipv6_and_port`, `preserves_plain_ipv4_and_port`)가 Windows에서 통과했다. 두 OS의 전체 완료 검증 기록은 대조 기록에 따로 남긴다.
 
 ---
 

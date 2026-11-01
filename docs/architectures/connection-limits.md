@@ -88,7 +88,7 @@ flowchart LR
 | 1 | `src/serve.rs` `listen_until_shutdown` | `ConnectionBudget::new(limits.relay_connections)`를 하나 만들고 TCP·WS·WSS 진입점마다 `AcceptPolicy` 또는 `WsPolicy`에 넣는다. | L 예산 | 2단계 |
 | 2 | `accept_connections`, `AllowList::permits` | 출발지 IP를 먼저 판정한다. 목록에 없으면 `ip_not_allowed`로 거절하고 자리를 잡지 않는다. | 없음 | 3단계 |
 | 3 | `ConnectionBudget::try_acquire` | 두 연결이 자리를 잡았으므로 세 번째는 `None`이다. `connection_rejected`(`relay_connection_limit`, `limit` = 2)를 기록하고 소켓을 닫는다. | 없음 | 운영 로그 |
-| 4 | `set_keepalive`, `TcpRelayStream`, `RelayService::handle_connection` | 목표(Target): 자리를 잡은 연결은 `connection_accepted`를 먼저 기록한 뒤 K를 설정한다(사용자 결정 2026-11-02(Q85), TODO 2.11 구현 중). 성공하면 소켓을 `TcpRelayStream`으로 감싸 `handle_connection`에 넘긴다. 실패하면 6절의 중단 기록과 자원 반환을 따른다. | 성공: 초기 교환 중인 연결. 실패: 반환 | 성공: 5단계 |
+| 4 | `set_keepalive`, `TcpRelayStream`, `RelayService::handle_connection` | 자리를 잡은 연결은 `connection_accepted`를 먼저 기록한 뒤 K를 설정한다(사용자 결정 2026-11-02(Q85), 커밋 `5a38bfc`). 성공하면 소켓을 `TcpRelayStream`으로 감싸 `handle_connection`에 넘긴다. 실패하면 6절의 중단 기록과 자원 반환을 따른다. | 성공: 초기 교환 중인 연결. 실패: 반환 | 성공: 5단계 |
 | 5 | `handshake::exchange`, `read_request` | 상대가 아무 바이트도 보내지 않고 닫으면 읽기가 0바이트를 준다(`PeerEof`). | 없음 | 6단계 |
 | 6 | `RelayService::prepare` | 소켓을 닫고 `BudgetPermit`을 버린 뒤 `connection_aborted`(`peer_eof`)를 기록한다. 줄을 본 클라이언트가 바로 다시 접속해도 자리가 있다. | 자리 하나 반환 | 운영 로그 |
 | 7 | 2~4와 같은 경로 | 다음 접속이 자리를 잡고 수락된다. | 초기 교환 중인 연결 | 운영 로그 |
@@ -111,7 +111,7 @@ WS·WSS는 자리를 잡은 뒤 U 안에서 TLS 핸드셰이크(WSS)와 업그�
 | H 만료 | 닫고 `handshake_timeout`(`warn`)을 기록한다. | 자리 반환 | OPS-006, RLY-005 |
 | 바이트 전 상대 종료 | `peer_eof`(`info`)를 기록한다. | 자리 반환 | RLY-005 |
 | `peek` 오류(연결 재설정 등) | `connection_error`(`warn`, `error_kind` = `io_error`)를 기록한다. | 자리 반환 | 없음 |
-| keepalive 설정 실패 | 목표(Target): `connection_accepted` 기록 → `set_keepalive` 실패 → `connection_aborted(reason=connection_error, error_kind=io_error)` 기록 → 소켓 drop → L permit drop. `stage`는 TCP `initial_exchange`, WS `upgrade`, WSS `tls`다(사용자 결정 2026-11-02(Q85), [운영 정보 계약 1.6·1.7절](../contracts/ops-info-v1.md#16-원인-코드)). `crates/adapters/src/net.rs`의 공유 `accept_connections`를 같은 작업에서 수정 중이다. 기존 실패 무시 동작을 바꾸는 목표이며 구현 대조·시험 완료로 표시하지 않는다. | 목표: 소켓 닫힘, 자리 반환 | RLY-R18, TODO 2.11 |
+| keepalive 설정 실패 | `connection_accepted` 기록 → `set_keepalive` 실패 → `connection_aborted(reason=connection_error, error_kind=io_error)` 기록 → 소켓 drop → L permit drop. `stage`는 TCP `initial_exchange`, WS `upgrade`, WSS `tls`다(사용자 결정 2026-11-02(Q85), [운영 정보 계약 1.6·1.7절](../contracts/ops-info-v1.md#16-원인-코드)). 커밋 `5a38bfc`가 `crates/adapters/src/net.rs`의 공유 accept 루프(`accept_connections_with_keepalive`)에 구현했다. 단위 시험 `net::accept_tests::keepalive_failure_aborts_accepted_connections_and_releases_l`이 네 진입점의 사건 순서·필드, 소켓 닫힘, 다음 연결 수락, L 반환을 확인한다. 실패는 소켓 옵션 함수를 매개변수로 받아 주입한다. | 소켓 닫힘, 자리 반환 | RLY-R18, TODO 2.11 |
 | WS·WSS U 만료 | 닫고 `connection_aborted`(`tls_upgrade_timeout`, `warn`)를 기록한다. `stage`는 TLS 핸드셰이크 중이면 `tls`, 아니면 `upgrade`다. | 자리 반환 | 없음 |
 | 관리 리스너 U 만료 | 평문 응답 없이 닫는다. 기록하지 않는다(구현 판단, [관리 리스너 모듈 설계](management-listener.md) 6절). | 접속 없음, 자리 반환 | OPS-006(일부), OPS-033(일부) |
 | WS·WSS 업그레이드 거절(101 전) | `connection_rejected`(`stage` = `upgrade`, `reason` = `ip_not_allowed`·`invalid_upgrade`·`origin_not_allowed`·`subprotocol_not_supported` 중 하나)를 기록하고 응답한 뒤 닫는다. | 자리 반환 | 없음 |
