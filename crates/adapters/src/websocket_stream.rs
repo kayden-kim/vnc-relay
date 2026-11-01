@@ -19,7 +19,7 @@ use vnc_relay_domain::session::ViewerTransport;
 
 use self::frame::{
     ControlOp, DecodeState, FrameDecoder, MAX_NON_DATA_FRAMES_PER_POLL, OutboundDataFrame,
-    PendingClose, encode_close, encode_data_header,
+    PendingClose, PendingPong, encode_close, encode_data_header,
 };
 
 /// An adapter wrapping a stream with streaming RFC 6455 WebSocket framing,
@@ -33,9 +33,13 @@ pub struct WsRelayStream<S> {
     upgrade_suffix: Option<Vec<u8>>,
     suffix_pos: usize,
     outbound_frame: Option<OutboundDataFrame>,
+    active_pong: Option<PendingPong>,
+    pong_flush_pending: bool,
     pending_close: Option<PendingClose>,
     close_sent: bool,
     terminal_close: bool,
+    raw_terminal_disposal: bool,
+    transport_eof: bool,
 }
 
 impl<S> WsRelayStream<S> {
@@ -67,9 +71,13 @@ impl<S> WsRelayStream<S> {
             upgrade_suffix: suffix,
             suffix_pos: 0,
             outbound_frame: None,
+            active_pong: None,
+            pong_flush_pending: false,
             pending_close: None,
             close_sent: false,
             terminal_close: false,
+            raw_terminal_disposal: false,
+            transport_eof: false,
         }
     }
 
@@ -109,11 +117,15 @@ impl<S> WsRelayStream<S> {
             .pending_pong
             .as_ref()
             .map_or(0, |p| (p.len as usize).saturating_sub(p.written as usize));
+        let active_pong_held = self
+            .active_pong
+            .as_ref()
+            .map_or(0, |p| p.remaining_bytes().len());
         let close_held = self
             .pending_close
             .as_ref()
             .map_or(0, |c| (c.len as usize).saturating_sub(c.written as usize));
-        header_held + pong_held + close_held
+        header_held + pong_held + active_pong_held + close_held
     }
 
     /// Reads up to `buf.len()` bytes from `upgrade_suffix` first; once exhausted,
@@ -155,29 +167,46 @@ impl<S> WsRelayStream<S> {
         }
     }
 
-    /// Flushes any pending Pong control frame to the transport.
+    /// Drives Pong output without crossing an in-flight frame boundary.
+    /// The decoder owns only a replaceable, unsent Pong; active bytes stay here.
     fn poll_flush_pending_pong(&mut self, cx: &mut Context<'_>) -> Poll<io::Result<()>>
     where
         S: AsyncWrite + Unpin,
     {
-        if let Some(mut pong) = self.decoder.pending_pong {
+        if self.outbound_frame.is_some() {
+            return Poll::Ready(Ok(()));
+        }
+        loop {
+            if self.active_pong.is_none() && self.pending_close.is_none() && !self.close_sent {
+                self.active_pong = self.decoder.pending_pong.take();
+            }
+            let Some(pong) = self.active_pong.as_mut() else {
+                break;
+            };
             while !pong.is_finished() {
-                let rem = pong.remaining_bytes();
-                match Pin::new(&mut self.io).poll_write(cx, rem) {
+                match Pin::new(&mut self.io).poll_write(cx, pong.remaining_bytes()) {
                     Poll::Ready(Ok(0)) => {
                         return Poll::Ready(Err(io::Error::from(io::ErrorKind::WriteZero)));
                     }
-                    Poll::Ready(Ok(n)) => {
-                        pong.advance(n);
-                    }
-                    Poll::Ready(Err(e)) => return Poll::Ready(Err(e)),
+                    Poll::Ready(Ok(n)) => pong.advance(n),
+                    Poll::Ready(Err(error)) => return Poll::Ready(Err(error)),
                     Poll::Pending => {
-                        self.decoder.pending_pong = Some(pong);
+                        // No prefix is on the wire: this Pong can still coalesce.
+                        if pong.written == 0 {
+                            self.decoder.pending_pong = self.active_pong.take();
+                        }
                         return Poll::Pending;
                     }
                 }
             }
-            self.decoder.pending_pong = None;
+            self.active_pong = None;
+            self.pong_flush_pending = true;
+        }
+        if self.pong_flush_pending {
+            match Pin::new(&mut self.io).poll_flush(cx) {
+                Poll::Ready(Ok(())) => self.pong_flush_pending = false,
+                result => return result,
+            }
         }
         Poll::Ready(Ok(()))
     }
@@ -187,6 +216,15 @@ impl<S> WsRelayStream<S> {
     where
         S: AsyncWrite + Unpin,
     {
+        if self.outbound_frame.is_some() {
+            return Poll::Ready(Ok(()));
+        }
+        // An already-started Pong must finish before the Close header.
+        match self.poll_flush_pending_pong(cx) {
+            Poll::Ready(Ok(())) => {}
+            result => return result,
+        }
+        self.decoder.pending_pong = None;
         if let Some(mut close) = self.pending_close {
             while !close.is_finished() {
                 let rem = close.remaining_bytes();
@@ -209,15 +247,44 @@ impl<S> WsRelayStream<S> {
         }
         Poll::Ready(Ok(()))
     }
-    /// Avoids an abortive socket drop discarding the already-written Close
-    /// when a rejected frame still has unread payload. The app owns E/G/Force.
+    /// Finishes valid Close exchanges; rejected frames use bounded raw disposal.
+    /// The app owns the absolute E/G/Force bounds in either case.
     fn poll_terminal_disposal(&mut self, cx: &mut Context<'_>) -> Poll<io::Result<()>>
     where
-        S: AsyncRead + AsyncWrite + Unpin,
+        S: AsyncRead + AsyncWrite + Unpin + Send,
     {
         match Pin::new(&mut self.io).poll_flush(cx) {
             Poll::Ready(Ok(())) => {}
             result => return result,
+        }
+        if !self.raw_terminal_disposal {
+            let mut discard = [0; 1024];
+            for _ in 0..MAX_NON_DATA_FRAMES_PER_POLL {
+                if self.decoder.peer_closed || self.transport_eof {
+                    return Pin::new(&mut self.io).poll_shutdown(cx);
+                }
+                let mut buffer = ReadBuf::new(&mut discard);
+                match Pin::new(&mut *self).poll_read(cx, &mut buffer) {
+                    Poll::Ready(Ok(())) => {}
+                    Poll::Ready(Err(_)) if self.transport_eof => {
+                        return Pin::new(&mut self.io).poll_shutdown(cx);
+                    }
+                    Poll::Ready(Err(error))
+                        if matches!(
+                            RelayStreamError::classify(&error),
+                            ConnectionErrorKind::WsProtocolError
+                                | ConnectionErrorKind::WsTextMessage
+                                | ConnectionErrorKind::WsMessageTooLarge
+                        ) =>
+                    {
+                        self.raw_terminal_disposal = true;
+                        return self.poll_terminal_disposal(cx);
+                    }
+                    result => return result,
+                }
+            }
+            cx.waker().wake_by_ref();
+            return Poll::Pending;
         }
         match Pin::new(&mut self.io).poll_shutdown(cx) {
             Poll::Ready(Ok(())) => {}
@@ -259,6 +326,11 @@ impl<S: AsyncRead + AsyncWrite + Unpin + Send> AsyncRead for WsRelayStream<S> {
                 this.holding_rx_bytes(),
                 this.budget_limit
             );
+            // A write wake must retry control progress even on an idle read.
+            // Pending does not prevent independent inbound payload progress.
+            if let Poll::Ready(Err(error)) = this.poll_flush_pending_pong(cx) {
+                return Poll::Ready(Err(error));
+            }
 
             // 1. If peer already closed and no data remains, return EOF
             if this.decoder.peer_closed {
@@ -316,6 +388,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin + Send> AsyncRead for WsRelayStream<S> {
                     );
                     match read_res {
                         Poll::Ready(Ok(0)) => {
+                            this.transport_eof = true;
                             // Socket EOF mid-payload without a Close frame is an IoError
                             return Poll::Ready(Err(RelayStreamError::new(
                                 ConnectionErrorKind::IoError,
@@ -336,20 +409,23 @@ impl<S: AsyncRead + AsyncWrite + Unpin + Send> AsyncRead for WsRelayStream<S> {
                         }
                     }
                 }
-                DecodeState::ReadingControl {
-                    payload_len,
-                    payload_read,
-                    ..
-                } => {
+                DecodeState::ReadingControl { .. } => {
                     while !this.decoder.is_control_ready() {
                         let n = this.decoder.drain_leftover_to_control();
                         if n > 0 {
                             continue;
                         }
 
-                        let needed = (payload_len - payload_read) as usize;
+                        let needed = match this.decoder.state {
+                            DecodeState::ReadingControl {
+                                payload_len,
+                                payload_read,
+                                ..
+                            } => usize::from(payload_len - payload_read),
+                            _ => 0,
+                        };
                         let mut temp = [0u8; 125];
-                        let to_read = needed.min(125);
+                        let to_read = needed;
                         let read_res = Self::poll_read_source_raw(
                             &mut this.upgrade_suffix,
                             &mut this.suffix_pos,
@@ -359,6 +435,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin + Send> AsyncRead for WsRelayStream<S> {
                         );
                         match read_res {
                             Poll::Ready(Ok(0)) => {
+                                this.transport_eof = true;
                                 return Poll::Ready(Err(RelayStreamError::new(
                                     ConnectionErrorKind::IoError,
                                 )
@@ -379,11 +456,6 @@ impl<S: AsyncRead + AsyncWrite + Unpin + Send> AsyncRead for WsRelayStream<S> {
 
                     // Control frame is complete
                     let op = this.decoder.finish_control_frame()?;
-
-                    // If a Pong was queued, try to flush it immediately
-                    if this.decoder.pending_pong.is_some() {
-                        let _ = this.poll_flush_pending_pong(cx);
-                    }
 
                     if op == Some(ControlOp::Close) {
                         return Poll::Ready(Ok(()));
@@ -413,6 +485,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin + Send> AsyncRead for WsRelayStream<S> {
                         );
                         match read_res {
                             Poll::Ready(Ok(0)) => {
+                                this.transport_eof = true;
                                 if this.decoder.peer_closed {
                                     return Poll::Ready(Ok(()));
                                 }
@@ -469,23 +542,16 @@ impl<S: AsyncRead + AsyncWrite + Unpin + Send> AsyncWrite for WsRelayStream<S> {
         if buf.is_empty() {
             return Poll::Ready(Ok(0));
         }
+        if this.close_sent || this.pending_close.is_some() {
+            return Poll::Ready(Err(io::Error::from(io::ErrorKind::BrokenPipe)));
+        }
 
         // 1. If no outbound frame is currently in progress:
         if this.outbound_frame.is_none() {
-            // Control frames (pending Pong, Close) are emitted between data frames
-            if this.decoder.pending_pong.is_some() {
-                match this.poll_flush_pending_pong(cx) {
-                    Poll::Ready(Ok(())) => {}
-                    Poll::Ready(Err(e)) => return Poll::Ready(Err(e)),
-                    Poll::Pending => return Poll::Pending,
-                }
-            }
-            if this.pending_close.is_some() {
-                match this.poll_flush_pending_close(cx) {
-                    Poll::Ready(Ok(())) => {}
-                    Poll::Ready(Err(e)) => return Poll::Ready(Err(e)),
-                    Poll::Pending => return Poll::Pending,
-                }
+            match this.poll_flush_pending_pong(cx) {
+                Poll::Ready(Ok(())) => {}
+                Poll::Ready(Err(error)) => return Poll::Ready(Err(error)),
+                Poll::Pending => return Poll::Pending,
             }
 
             // Create new outbound binary frame
@@ -567,18 +633,16 @@ impl<S: AsyncRead + AsyncWrite + Unpin + Send> AsyncWrite for WsRelayStream<S> {
 
     fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         let this = self.get_mut();
-        if this.decoder.pending_pong.is_some() {
+        if this.outbound_frame.is_none() {
             match this.poll_flush_pending_pong(cx) {
                 Poll::Ready(Ok(())) => {}
-                Poll::Ready(Err(e)) => return Poll::Ready(Err(e)),
-                Poll::Pending => return Poll::Pending,
+                result => return result,
             }
-        }
-        if this.pending_close.is_some() {
-            match this.poll_flush_pending_close(cx) {
-                Poll::Ready(Ok(())) => {}
-                Poll::Ready(Err(e)) => return Poll::Ready(Err(e)),
-                Poll::Pending => return Poll::Pending,
+            if this.pending_close.is_some() {
+                match this.poll_flush_pending_close(cx) {
+                    Poll::Ready(Ok(())) => {}
+                    result => return result,
+                }
             }
         }
         Pin::new(&mut this.io).poll_flush(cx)
@@ -613,6 +677,8 @@ impl<S: AsyncRead + AsyncWrite + Unpin + Send> RelayStream for WsRelayStream<S> 
         if this.pending_write_len() > 0 {
             return Poll::Pending;
         }
+        // A header that has not reached the wire may be abandoned.
+        this.outbound_frame = None;
 
         // A completed Close is never replaced or emitted a second time.
         if this.close_sent {
@@ -622,6 +688,13 @@ impl<S: AsyncRead + AsyncWrite + Unpin + Send> RelayStream for WsRelayStream<S> 
                 Pin::new(&mut this.io).poll_flush(cx)
             };
         }
+        // A shutdown request cannot replace a Close already received from the
+        // peer; the existing asymmetric handshake retains its echo action.
+        let action = if action == RelayCloseAction::ServerShutdown && this.decoder.peer_closed {
+            RelayCloseAction::PeerEof
+        } else {
+            action
+        };
 
         // Map action to Close code and fixed reason per websocket-stream.md §5.2
         if this.pending_close.is_none() {
@@ -668,6 +741,14 @@ impl<S: AsyncRead + AsyncWrite + Unpin + Send> RelayStream for WsRelayStream<S> 
                     this.terminal_close = !matches!(
                         action,
                         RelayCloseAction::WriteHalf | RelayCloseAction::PeerEof
+                    );
+                    this.raw_terminal_disposal = matches!(
+                        action,
+                        RelayCloseAction::StreamError(
+                            ConnectionErrorKind::WsProtocolError
+                                | ConnectionErrorKind::WsTextMessage
+                                | ConnectionErrorKind::WsMessageTooLarge
+                        )
                     );
                 }
                 None => {

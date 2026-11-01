@@ -76,11 +76,13 @@ pub(super) async fn run_session(
             close_once(
                 viewer,
                 other,
-                RelayCloseAction::ServerShutdown,
+                close_action(session, error_kind, is_ws),
                 &mut ws_close_sent,
             )
             .await;
-            return Ok(None);
+            return Ok(
+                error_kind.filter(|_| session.close_cause() == Some(CloseCause::ConnectionError))
+            );
         }
         let closing = session.close_cause().is_some()
             || directions.iter().all(|direction| direction.complete);
@@ -97,7 +99,7 @@ pub(super) async fn run_session(
                 close_once(
                     viewer,
                     other,
-                    close_action(session, error_kind),
+                    close_action(session, error_kind, is_ws),
                     &mut ws_close_sent,
                 )
                 .await;
@@ -113,7 +115,7 @@ pub(super) async fn run_session(
                     close_once(
                         viewer,
                         other,
-                        RelayCloseAction::ServerShutdown,
+                        close_action(session, error_kind, is_ws),
                         &mut ws_close_sent,
                     )
                     .await;
@@ -145,6 +147,18 @@ pub(super) async fn run_session(
                 if timeout.as_mut().poll(cx).is_ready() {
                     return Poll::Ready(Wake::Deadline);
                 }
+                // Drive already-queued WS controls even when neither payload
+                // direction can touch the viewer. This never consumes input.
+                if is_ws
+                    && !closing
+                    && !terminal[0]
+                    && let Poll::Ready(Err(error)) = Pin::new(&mut *viewer).poll_flush(cx)
+                {
+                    return Poll::Ready(Wake::Direction(
+                        1,
+                        Step::OutputError(RelayStreamError::classify(&error)),
+                    ));
+                }
                 for index in [next, 1 - next] {
                     if closing {
                         if terminal[index] {
@@ -156,7 +170,7 @@ pub(super) async fn run_session(
                             &mut *other
                         };
                         if Pin::new(stream)
-                            .poll_close(cx, close_action(session, error_kind))
+                            .poll_close(cx, close_action(session, error_kind, is_ws))
                             .is_ready()
                         {
                             return Poll::Ready(Wake::Terminal(index));
@@ -164,7 +178,10 @@ pub(super) async fn run_session(
                     } else {
                         let step = if index == 0 {
                             directions[0].poll_step(cx, viewer, other)
-                        } else if is_ws && directions[0].eof {
+                        } else if is_ws
+                            && directions[0].eof
+                            && matches!(session.first_eof(), Some((Side::Viewer, _)))
+                        {
                             let tcp_write_closed = directions[0].complete;
                             directions[1].poll_step_ws_closing(
                                 cx,
@@ -436,7 +453,11 @@ enum Wake {
     Terminal(usize),
 }
 
-fn close_action(session: &Session, error_kind: Option<ConnectionErrorKind>) -> RelayCloseAction {
+fn close_action(
+    session: &Session,
+    error_kind: Option<ConnectionErrorKind>,
+    is_ws: bool,
+) -> RelayCloseAction {
     match session.close_cause() {
         Some(CloseCause::ConnectionError) => {
             RelayCloseAction::StreamError(error_kind.unwrap_or(ConnectionErrorKind::IoError))
@@ -444,7 +465,17 @@ fn close_action(session: &Session, error_kind: Option<ConnectionErrorKind>) -> R
         Some(CloseCause::DeadConnection) => RelayCloseAction::DeadConnection,
         Some(CloseCause::AdminTerminated) => RelayCloseAction::AdminTerminated,
         Some(CloseCause::ServerShutdown) => RelayCloseAction::ServerShutdown,
-        None | Some(CloseCause::PeerEof | CloseCause::CloseTimeout) => RelayCloseAction::PeerEof,
+        None | Some(CloseCause::PeerEof | CloseCause::CloseTimeout) => {
+            if is_ws
+                && session
+                    .first_eof()
+                    .is_some_and(|(side, _)| side != Side::Viewer)
+            {
+                RelayCloseAction::WriteHalf
+            } else {
+                RelayCloseAction::PeerEof
+            }
+        }
     }
 }
 
@@ -539,6 +570,10 @@ mod tests {
         write_blocked: bool,
         write_zero: bool,
         error_after: Option<usize>,
+        pending_pong: VecDeque<u8>,
+        control_output: Vec<u8>,
+        control_allowance: usize,
+        flush_error: Option<ConnectionErrorKind>,
         half: CloseBehavior,
         terminal: CloseBehavior,
         actions: Vec<RelayCloseAction>,
@@ -568,6 +603,10 @@ mod tests {
                 write_blocked: false,
                 write_zero: false,
                 error_after: None,
+                pending_pong: VecDeque::new(),
+                control_output: Vec::new(),
+                control_allowance: usize::MAX,
+                flush_error: None,
                 half: CloseBehavior::Ready,
                 terminal: CloseBehavior::Ready,
                 actions: Vec::new(),
@@ -688,8 +727,28 @@ mod tests {
             Poll::Ready(Ok(count))
         }
 
-        fn poll_flush(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<io::Result<()>> {
-            Poll::Ready(Ok(()))
+        fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+            let mut state = self.0.lock().expect("stream state");
+            if let Some(kind) = state.flush_error {
+                return Poll::Ready(Err(stream_failure(Some(kind))));
+            }
+            // Match the WS adapter: controls never interrupt a data frame.
+            if state.pending_write != 0 {
+                return Poll::Ready(Ok(()));
+            }
+            while state.control_allowance > 0 {
+                let Some(byte) = state.pending_pong.pop_front() else {
+                    break;
+                };
+                state.control_output.push(byte);
+                state.control_allowance -= 1;
+            }
+            if state.pending_pong.is_empty() {
+                Poll::Ready(Ok(()))
+            } else {
+                state.waker = Some(cx.waker().clone());
+                Poll::Pending
+            }
         }
 
         fn poll_shutdown(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<io::Result<()>> {
@@ -768,6 +827,110 @@ mod tests {
             .finish(clock.wall(), clock.monotonic())
             .expect("caller finishes after cleanup")
             .close_cause()
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn drives_queued_and_partial_pongs_while_payload_writes_are_backpressured() {
+        for frame_in_flight in [false, true] {
+            let clock = TestClock::new();
+            let mut session = model(Mode::Mode1);
+            let (_sender, receiver) = watch::channel(RelayLifecycle::Running);
+            let (mut viewer, viewer_control) = stream(b"full", false);
+            let (mut other, other_control) = stream(&[], false);
+            viewer_control.change(|state| {
+                state.transport = ViewerTransport::Ws;
+                state.pending_pong.extend(b"\x8a\x01p");
+                state.pending_write = if frame_in_flight { 4 } else { 0 };
+                state.control_allowance = if frame_in_flight { 3 } else { 1 };
+            });
+            other_control.change(|state| state.write_blocked = true);
+            {
+                let mut relay = pin!(run_session(
+                    &mut viewer,
+                    &mut other,
+                    Vec::new(),
+                    if frame_in_flight {
+                        b"data".to_vec()
+                    } else {
+                        Vec::new()
+                    },
+                    &mut session,
+                    clock.as_ref(),
+                    receiver,
+                    4,
+                    E,
+                    |_| {}
+                ));
+                pump(&mut relay).await;
+                {
+                    let state = viewer_control.0.lock().expect("viewer");
+                    assert_eq!(state.read_total, 4, "one full B is held for TCP");
+                    assert_eq!(state.read_calls, 1, "control output never reads past B");
+                    assert_eq!(state.pending_write, 0, "reverse frame is finished");
+                    assert_eq!(
+                        state.control_output,
+                        if frame_in_flight {
+                            b"\x8a\x01p".as_slice()
+                        } else {
+                            b"\x8a".as_slice()
+                        }
+                    );
+                }
+                // Only control-write readiness changes; no more TCP payload
+                // arrives and the TCP payload write remains blocked.
+                viewer_control.change(|state| state.control_allowance = 3);
+                pump(&mut relay).await;
+                let state = viewer_control.0.lock().expect("viewer");
+                assert_eq!(state.control_output, b"\x8a\x01p");
+                assert!(state.pending_pong.is_empty());
+                assert_eq!(state.read_calls, 1);
+                assert!(other_control.output().is_empty());
+            }
+            assert_eq!(session.close_cause(), None);
+            assert_eq!(session.first_eof(), None);
+            assert_eq!(session.bytes(Direction::ViewerToTarget), 0);
+            assert_eq!(
+                session.bytes(Direction::TargetToViewer),
+                if frame_in_flight { 4 } else { 0 }
+            );
+            assert_eq!(clock.monotonic(), Duration::ZERO);
+        }
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn classifies_control_flush_errors_as_viewer_output_errors() {
+        for kind in [
+            ConnectionErrorKind::IoError,
+            ConnectionErrorKind::WsProtocolError,
+        ] {
+            let clock = TestClock::new();
+            let mut session = model(Mode::Mode1);
+            let (_sender, receiver) = watch::channel(RelayLifecycle::Running);
+            let (mut viewer, viewer_control) = stream(&[], false);
+            let (mut other, _) = stream(&[], false);
+            viewer_control.change(|state| {
+                state.transport = ViewerTransport::Ws;
+                state.flush_error = Some(kind);
+            });
+            let result = run_session(
+                &mut viewer,
+                &mut other,
+                Vec::new(),
+                Vec::new(),
+                &mut session,
+                clock.as_ref(),
+                receiver,
+                4,
+                E,
+                |_| {},
+            )
+            .await
+            .expect("session cleanup");
+            assert_eq!(result, Some(kind));
+            assert_eq!(session.close_cause(), Some(CloseCause::ConnectionError));
+            assert_eq!(session.close_side(), Some(Side::Viewer));
+            assert_eq!(session.bytes(Direction::TargetToViewer), 0);
+        }
     }
 
     /// spec: relay.md:RLY-003 partial
@@ -1351,54 +1514,75 @@ mod tests {
             assert!(
                 viewer_control
                     .actions()
-                    .contains(&RelayCloseAction::ServerShutdown)
+                    .contains(&RelayCloseAction::PeerEof)
             );
-            assert!(
-                other_control
-                    .actions()
-                    .contains(&RelayCloseAction::ServerShutdown)
-            );
+            assert!(other_control.actions().contains(&RelayCloseAction::PeerEof));
         }
     }
 
     /// spec: operations.md:OPS-009 partial
+    /// spec: operations.md:OPS-042 partial
     #[tokio::test(start_paused = true)]
     async fn force_preserves_an_error_whose_terminal_close_is_still_pending() {
-        let clock = TestClock::new();
-        let mut session = model(Mode::Mode1);
-        let (sender, receiver) = watch::channel(RelayLifecycle::Running);
-        let (mut viewer, viewer_control) = stream(&[], false);
-        let (mut other, other_control) = stream(&[], false);
-        viewer_control.change(|state| {
-            state.read_error = true;
-            state.terminal = CloseBehavior::Pending;
-        });
-        other_control.change(|state| state.terminal = CloseBehavior::Pending);
-        {
-            let mut relay = pin!(run_session(
-                &mut viewer,
-                &mut other,
-                Vec::new(),
-                Vec::new(),
-                &mut session,
-                clock.as_ref(),
-                receiver,
-                4,
-                E,
-                |_| {}
-            ));
-            pump(&mut relay).await;
-            sender.send_replace(RelayLifecycle::Force);
-            assert_eq!(relay.await.expect("second shutdown request"), None);
+        for second_request in [false, true] {
+            for kind in [
+                ConnectionErrorKind::IoError,
+                ConnectionErrorKind::WsProtocolError,
+                ConnectionErrorKind::WsTextMessage,
+                ConnectionErrorKind::WsMessageTooLarge,
+            ] {
+                let clock = TestClock::new();
+                let mut session = model(Mode::Mode1);
+                let (sender, receiver) = watch::channel(RelayLifecycle::Running);
+                let (mut viewer, viewer_control) = stream(&[], false);
+                let (mut other, other_control) = stream(&[], false);
+                viewer_control.change(|state| {
+                    state.read_error = true;
+                    state.typed_error = Some(kind);
+                    state.terminal = CloseBehavior::Pending;
+                });
+                other_control.change(|state| state.terminal = CloseBehavior::Pending);
+                let grace = Duration::from_secs(3);
+                {
+                    let mut relay = pin!(run_session(
+                        &mut viewer,
+                        &mut other,
+                        Vec::new(),
+                        Vec::new(),
+                        &mut session,
+                        clock.as_ref(),
+                        receiver,
+                        4,
+                        E,
+                        |_| {}
+                    ));
+                    pump(&mut relay).await;
+                    if second_request {
+                        sender.send_replace(RelayLifecycle::Force);
+                    } else {
+                        sender.send_replace(RelayLifecycle::Grace { deadline: grace });
+                        pump(&mut relay).await;
+                        advance(grace).await;
+                    }
+                    assert_eq!(relay.await.expect("Force or G bounds cleanup"), Some(kind));
+                }
+                assert_eq!(session.close_cause(), Some(CloseCause::ConnectionError));
+                assert_eq!(session.close_side(), Some(Side::Viewer));
+                assert_eq!(
+                    clock.monotonic(),
+                    if second_request {
+                        Duration::ZERO
+                    } else {
+                        grace
+                    }
+                );
+                assert!(
+                    other_control
+                        .actions()
+                        .contains(&RelayCloseAction::StreamError(kind))
+                );
+            }
         }
-        assert_eq!(session.close_cause(), Some(CloseCause::ConnectionError));
-        assert_eq!(session.close_side(), Some(Side::Viewer));
-        assert_eq!(clock.monotonic(), Duration::ZERO);
-        assert!(
-            other_control
-                .actions()
-                .contains(&RelayCloseAction::ServerShutdown)
-        );
     }
 
     #[tokio::test(start_paused = true)]
@@ -1443,16 +1627,16 @@ mod tests {
                 assert_eq!(viewer_control.0.lock().expect("state").read_calls, 0);
                 assert!(other_control.output().is_empty());
             }
-            assert!(
-                viewer_control
-                    .actions()
-                    .contains(&RelayCloseAction::ServerShutdown)
-            );
-            assert!(
-                other_control
-                    .actions()
-                    .contains(&RelayCloseAction::ServerShutdown)
-            );
+            assert!(viewer_control.actions().contains(&if force_in_close {
+                RelayCloseAction::PeerEof
+            } else {
+                RelayCloseAction::ServerShutdown
+            }));
+            assert!(other_control.actions().contains(&if force_in_close {
+                RelayCloseAction::PeerEof
+            } else {
+                RelayCloseAction::ServerShutdown
+            }));
         }
     }
 
@@ -1935,13 +2119,210 @@ mod tests {
                 relay.await.expect("Force ends the wait immediately");
             }
             assert_eq!(viewer_control.actions(), [close]);
-            assert!(
-                other_control
-                    .actions()
-                    .contains(&RelayCloseAction::ServerShutdown)
-            );
+            assert!(other_control.actions().contains(&if client_first {
+                RelayCloseAction::PeerEof
+            } else {
+                RelayCloseAction::WriteHalf
+            }));
             assert_eq!(clock.monotonic(), Duration::ZERO);
             assert_eq!(finish(&mut session, &clock), CloseCause::PeerEof);
+        }
+    }
+
+    /// spec: websocket.md:WS-016 partial
+    /// spec: operations.md:OPS-042 partial
+    #[tokio::test(start_paused = true)]
+    async fn force_before_first_close_poll_preserves_the_selected_websocket_action() {
+        for (kind, eof_side, expected_action) in [
+            (None, None, RelayCloseAction::ServerShutdown),
+            (None, Some(Side::Viewer), RelayCloseAction::PeerEof),
+            (None, Some(Side::Target), RelayCloseAction::WriteHalf),
+            (
+                Some(ConnectionErrorKind::WsProtocolError),
+                None,
+                RelayCloseAction::StreamError(ConnectionErrorKind::WsProtocolError),
+            ),
+            (
+                Some(ConnectionErrorKind::WsTextMessage),
+                None,
+                RelayCloseAction::StreamError(ConnectionErrorKind::WsTextMessage),
+            ),
+            (
+                Some(ConnectionErrorKind::WsMessageTooLarge),
+                None,
+                RelayCloseAction::StreamError(ConnectionErrorKind::WsMessageTooLarge),
+            ),
+        ] {
+            let clock = TestClock::new();
+            let mut session = model(Mode::Mode1);
+            let fresh = kind.is_none() && eof_side.is_none();
+            let (sender, receiver) = watch::channel(if fresh {
+                RelayLifecycle::Force
+            } else {
+                RelayLifecycle::Running
+            });
+            let (mut viewer, viewer_control) = stream(&[], eof_side == Some(Side::Viewer));
+            let (mut other, other_control) = stream(&[], eof_side == Some(Side::Target));
+            viewer_control.change(|state| {
+                state.transport = ViewerTransport::Ws;
+                state.read_error = kind.is_some();
+                state.typed_error = kind;
+                state.half = CloseBehavior::Pending;
+                state.terminal = CloseBehavior::Pending;
+            });
+            other_control.change(|state| {
+                state.half = CloseBehavior::Pending;
+                state.terminal = CloseBehavior::Pending;
+            });
+            let outcome = run_session(
+                &mut viewer,
+                &mut other,
+                Vec::new(),
+                Vec::new(),
+                &mut session,
+                clock.as_ref(),
+                receiver,
+                32,
+                E,
+                |_| {
+                    assert!(viewer_control.actions().is_empty());
+                    assert!(other_control.actions().is_empty());
+                    sender.send_replace(RelayLifecycle::Force);
+                },
+            )
+            .await
+            .expect("Force does not wait for a first close poll");
+            assert_eq!(outcome, kind);
+            assert_eq!(viewer_control.actions(), [expected_action]);
+            assert_eq!(other_control.actions(), [expected_action]);
+            assert_eq!(clock.monotonic(), Duration::ZERO);
+            assert_eq!(
+                session.close_cause(),
+                Some(if kind.is_some() {
+                    CloseCause::ConnectionError
+                } else if fresh {
+                    CloseCause::ServerShutdown
+                } else {
+                    CloseCause::PeerEof
+                })
+            );
+            assert_eq!(
+                session.close_side(),
+                if kind.is_some() {
+                    Some(Side::Viewer)
+                } else {
+                    eof_side
+                }
+            );
+        }
+    }
+
+    /// spec: websocket.md:WS-008 partial
+    /// spec: operations.md:OPS-042 partial
+    #[tokio::test(start_paused = true)]
+    async fn force_published_by_expired_cleanup_keeps_the_typed_error_action() {
+        let clock = TestClock::new();
+        let mut session = model(Mode::Mode1);
+        let (sender, receiver) = watch::channel(RelayLifecycle::Running);
+        let (mut viewer, viewer_control) = stream(&[], false);
+        let (mut other, other_control) = stream(&[], false);
+        let kind = ConnectionErrorKind::WsTextMessage;
+        viewer_control.change(|state| {
+            state.transport = ViewerTransport::Ws;
+            state.read_error = true;
+            state.typed_error = Some(kind);
+            state.terminal = CloseBehavior::Pending;
+        });
+        other_control.change(|state| state.terminal = CloseBehavior::Pending);
+        {
+            let mut relay = pin!(run_session(
+                &mut viewer,
+                &mut other,
+                Vec::new(),
+                Vec::new(),
+                &mut session,
+                clock.as_ref(),
+                receiver,
+                32,
+                E,
+                |_| {}
+            ));
+            pump(&mut relay).await;
+            viewer_control.change(|state| state.force_on_terminal = Some(sender.clone()));
+            advance(E).await;
+            assert_eq!(
+                relay.await.expect("expired cleanup rechecks Force"),
+                Some(kind)
+            );
+        }
+        assert_eq!(*sender.borrow(), RelayLifecycle::Force);
+        assert_eq!(session.close_cause(), Some(CloseCause::ConnectionError));
+        assert_eq!(session.close_side(), Some(Side::Viewer));
+        assert_eq!(clock.monotonic(), E);
+        for control in [viewer_control, other_control] {
+            assert!(
+                control
+                    .actions()
+                    .iter()
+                    .all(|action| *action == RelayCloseAction::StreamError(kind))
+            );
+        }
+    }
+
+    /// spec: websocket.md:WS-016 partial
+    #[tokio::test(start_paused = true)]
+    async fn late_client_close_cannot_replace_tcp_first_pending_write_half_with_an_echo() {
+        for (mode, tcp_side) in [(Mode::Mode1, Side::Target), (Mode::Mode2, Side::Server)] {
+            let clock = TestClock::new();
+            let mut session = model(mode);
+            let (_sender, receiver) = watch::channel(RelayLifecycle::Running);
+            let (mut viewer, viewer_control) = stream(&[], false);
+            let (mut other, _) = stream(b"before-fin", true);
+            viewer_control.change(|state| {
+                state.transport = ViewerTransport::Ws;
+                state.half = CloseBehavior::Pending;
+            });
+            {
+                let mut relay = pin!(run_session(
+                    &mut viewer,
+                    &mut other,
+                    Vec::new(),
+                    Vec::new(),
+                    &mut session,
+                    clock.as_ref(),
+                    receiver,
+                    32,
+                    E,
+                    |_| {}
+                ));
+                pump(&mut relay).await;
+                assert_eq!(viewer_control.output(), b"before-fin");
+                assert!(!viewer_control.actions().is_empty());
+                advance(E / 2).await;
+                viewer_control.feed(&[], true);
+                pump(&mut relay).await;
+                assert!(
+                    viewer_control
+                        .actions()
+                        .iter()
+                        .all(|action| *action == RelayCloseAction::WriteHalf)
+                );
+                viewer_control.change(|state| state.half = CloseBehavior::Ready);
+                assert_eq!(
+                    relay.await.expect("the original TCP-first close completes"),
+                    None
+                );
+            }
+            assert!(
+                viewer_control
+                    .actions()
+                    .iter()
+                    .all(|action| *action == RelayCloseAction::WriteHalf)
+            );
+            assert_eq!(session.first_eof(), Some((tcp_side, Duration::ZERO)));
+            assert_eq!(clock.monotonic(), E / 2);
+            assert_eq!(finish(&mut session, &clock), CloseCause::PeerEof);
+            assert_eq!(session.close_side(), Some(tcp_side));
         }
     }
 

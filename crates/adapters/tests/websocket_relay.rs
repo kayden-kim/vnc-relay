@@ -994,19 +994,18 @@ async fn single_and_fragmented_messages_accept_m_and_close_1009_at_m_plus_one() 
             };
             let (_, received) = tokio::join!(send, read_tcp(&mut peer, M));
             assert_eq!(received, payload, "M is accepted, regardless of fragments");
-            let forwarded_prefix = if fragmented {
+            if fragmented {
                 client.send(2, false, &payload).await;
                 assert_eq!(read_tcp(&mut peer, M).await, payload);
-                // The continuation would make one logical message M+1.
-                masked_header(0, true, 1)
+                // The final continuation's complete header and payload share
+                // one write and make the logical message M+1.
+                client.send(0, true, b"x").await;
             } else {
-                masked_header(2, true, M + 1)
-            };
-            // An oversized declared length is enough; do not race a rejected
-            // peer's TCP close by trying to write the rejected frame payload.
-            bounded(client.wire.write_all(&forwarded_prefix))
-                .await
-                .unwrap_or_else(|error| panic!(concat!("oversize header", ": {:?}"), error));
+                let mut oversized = payload.clone();
+                oversized.push(0);
+                // Submit the rejected header and all M+1 bytes together.
+                client.binary(&oversized).await;
+            }
             client.expect_close(1009, "").await;
             client.terminal_eof().await;
             assert!(

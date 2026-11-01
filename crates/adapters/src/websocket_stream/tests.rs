@@ -722,9 +722,9 @@ async fn terminal_close_discards_rejected_payload_before_releasing_the_transport
     assert!(Pin::new(&mut ws).poll_close(&mut cx, action).is_ready());
 }
 
-/// spec: operations.md:OPS-009 partial
+/// spec: operations.md:OPS-042 partial
 #[tokio::test]
-async fn force_before_a_local_close_sends_1001_even_after_receiving_peer_close() {
+async fn shutdown_after_received_close_preserves_the_peer_code() {
     for code in [None, Some(3001_u16)] {
         let (mut client_io, server_io) = duplex(1024);
         let payload = code.map_or_else(Vec::new, |code| code.to_be_bytes().to_vec());
@@ -737,19 +737,19 @@ async fn force_before_a_local_close_sends_1001_even_after_receiving_peer_close()
         assert!(
             Pin::new(&mut ws)
                 .poll_close(&mut cx, RelayCloseAction::ServerShutdown)
-                .is_pending()
+                .is_ready()
         );
         assert!(
             Pin::new(&mut ws)
                 .poll_close(&mut cx, RelayCloseAction::PeerEof)
-                .is_pending()
+                .is_ready()
         );
         drop(ws);
         let mut bytes = Vec::new();
         client_io.read_to_end(&mut bytes).await.expect("one Close");
-        let mut expected = vec![0x88, 17, 0x03, 0xe9];
-        expected.extend_from_slice(b"server_shutdown");
-        assert_eq!(bytes, expected, "Force sends exactly one Close 1001");
+        let expected_code = code.unwrap_or(1000).to_be_bytes();
+        let expected = [0x88, 2, expected_code[0], expected_code[1]];
+        assert_eq!(bytes, expected, "Force preserves the peer Close echo");
     }
 }
 
@@ -825,4 +825,545 @@ async fn finishes_started_frames_before_replying_to_close_within_e() {
     assert_eq!(client_close[0], 0x88);
     assert_eq!(client_close[1], 2);
     assert_eq!(u16::from_be_bytes([client_close[2], client_close[3]]), 1000);
+}
+
+#[derive(Default)]
+struct WriteGate {
+    allowance: usize,
+    waker: Option<Waker>,
+    error: Option<std::io::ErrorKind>,
+}
+
+struct ControlledIo {
+    inner: tokio::io::DuplexStream,
+    gate: std::sync::Arc<std::sync::Mutex<WriteGate>>,
+    read_chunk: usize,
+}
+
+impl ControlledIo {
+    fn new(
+        inner: tokio::io::DuplexStream,
+        allowance: usize,
+    ) -> (Self, std::sync::Arc<std::sync::Mutex<WriteGate>>) {
+        let gate = std::sync::Arc::new(std::sync::Mutex::new(WriteGate {
+            allowance,
+            ..WriteGate::default()
+        }));
+        (
+            Self {
+                inner,
+                gate: gate.clone(),
+                read_chunk: usize::MAX,
+            },
+            gate,
+        )
+    }
+}
+
+fn grant_writes(gate: &std::sync::Mutex<WriteGate>, allowance: usize) {
+    let wake = {
+        let mut state = gate.lock().expect("gate");
+        state.allowance = allowance;
+        state.waker.take()
+    };
+    if let Some(waker) = wake {
+        waker.wake();
+    }
+}
+
+impl AsyncRead for ControlledIo {
+    fn poll_read(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut ReadBuf<'_>,
+    ) -> Poll<std::io::Result<()>> {
+        let this = self.get_mut();
+        let want = buf.remaining().min(this.read_chunk);
+        let mut limited = ReadBuf::new(buf.initialize_unfilled_to(want));
+        match Pin::new(&mut this.inner).poll_read(cx, &mut limited) {
+            Poll::Ready(Ok(())) => {
+                let count = limited.filled().len();
+                buf.advance(count);
+                Poll::Ready(Ok(()))
+            }
+            result => result,
+        }
+    }
+}
+
+impl AsyncWrite for ControlledIo {
+    fn poll_write(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+    ) -> Poll<std::io::Result<usize>> {
+        let this = self.get_mut();
+        let mut gate = this.gate.lock().expect("gate");
+        if let Some(error) = gate.error {
+            return if error == std::io::ErrorKind::WriteZero {
+                Poll::Ready(Ok(0))
+            } else {
+                Poll::Ready(Err(error.into()))
+            };
+        }
+        if gate.allowance == 0 {
+            gate.waker = Some(cx.waker().clone());
+            return Poll::Pending;
+        }
+        let count = buf.len().min(gate.allowance);
+        match Pin::new(&mut this.inner).poll_write(cx, &buf[..count]) {
+            Poll::Ready(Ok(written)) => {
+                gate.allowance -= written;
+                Poll::Ready(Ok(written))
+            }
+            result => result,
+        }
+    }
+
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+        Pin::new(&mut self.get_mut().inner).poll_flush(cx)
+    }
+
+    fn poll_shutdown(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+        Pin::new(&mut self.get_mut().inner).poll_shutdown(cx)
+    }
+}
+
+fn poll_idle_read<S: AsyncRead + AsyncWrite + Unpin + Send>(
+    ws: &mut WsRelayStream<S>,
+    cx: &mut Context<'_>,
+) -> Poll<std::io::Result<()>> {
+    Pin::new(ws).poll_read(cx, &mut ReadBuf::new(&mut [0; 32]))
+}
+
+/// spec: websocket.md:WS-009 partial
+#[tokio::test]
+async fn reads_only_the_remaining_control_payload_before_the_next_frame() {
+    for read_chunk in [1, 2, 125] {
+        let (mut peer, io) = duplex(4096);
+        let ping = make_client_frame(true, (false, false, false), 9, [1, 2, 3, 4], b"0123456789");
+        let (mut io, _) = ControlledIo::new(io, usize::MAX);
+        io.read_chunk = read_chunk;
+        let mut ws = WsRelayStream::new(io, ping[..14].to_vec(), 65536, 16384, ViewerTransport::Ws);
+        peer.write_all(&ping[14..]).await.expect("Ping remainder");
+        peer.write_all(&client_binary_frame(b"next"))
+            .await
+            .expect("next frame");
+        let waker = noop_waker();
+        let mut cx = Context::from_waker(&waker);
+        let mut payload = Vec::new();
+        while payload.len() < 4 {
+            let mut bytes = [0; 4];
+            let mut buf = ReadBuf::new(&mut bytes);
+            assert!(matches!(
+                Pin::new(&mut ws).poll_read(&mut cx, &mut buf),
+                Poll::Ready(Ok(()))
+            ));
+            assert!(!buf.filled().is_empty());
+            payload.extend_from_slice(buf.filled());
+        }
+        assert_eq!(payload, b"next");
+        let mut pong = [0; 12];
+        peer.read_exact(&mut pong).await.expect("Pong");
+        assert_eq!(&pong, b"\x8a\x0a0123456789");
+    }
+}
+
+/// spec: websocket.md:WS-009 partial
+#[tokio::test]
+async fn emits_pong_only_after_partial_data_headers_and_payloads_finish() {
+    for allowance in [1, 7] {
+        let (mut peer, io) = duplex(4096);
+        let (io, gate) = ControlledIo::new(io, allowance);
+        let mut ws = WsRelayStream::new(io, Vec::new(), 65536, 16384, ViewerTransport::Ws);
+        let waker = noop_waker();
+        let mut cx = Context::from_waker(&waker);
+        let payload = b"0123456789abcdefghij";
+        let written = match Pin::new(&mut ws).poll_write(&mut cx, payload) {
+            Poll::Ready(Ok(count)) => count,
+            Poll::Pending => 0,
+            other => panic!("unexpected write: {other:?}"),
+        };
+        peer.write_all(&make_client_frame(
+            true,
+            (false, false, false),
+            9,
+            [0; 4],
+            b"p",
+        ))
+        .await
+        .expect("Ping");
+        assert!(poll_idle_read(&mut ws, &mut cx).is_pending());
+        grant_writes(&gate, 4096);
+        assert!(matches!(
+            Pin::new(&mut ws).poll_flush(&mut cx),
+            Poll::Ready(Ok(()))
+        ));
+        assert!(poll_idle_read(&mut ws, &mut cx).is_pending());
+        assert!(
+            matches!(Pin::new(&mut ws).poll_write(&mut cx, &payload[written..]), Poll::Ready(Ok(count)) if count == payload.len() - written)
+        );
+        assert!(poll_idle_read(&mut ws, &mut cx).is_pending());
+        drop(ws);
+        let mut wire = Vec::new();
+        peer.read_to_end(&mut wire).await.expect("wire");
+        let mut expected = b"\x82\x140123456789abcdefghij".to_vec();
+        expected.extend_from_slice(b"\x8a\x01p");
+        assert_eq!(wire, expected);
+    }
+}
+
+/// spec: websocket.md:WS-009 partial
+#[tokio::test]
+async fn preserves_an_active_pong_and_coalesces_only_unsent_pongs() {
+    for allowance in [0, 1] {
+        let (mut peer, io) = duplex(4096);
+        let (io, gate) = ControlledIo::new(io, allowance);
+        let mut ws = WsRelayStream::new(io, Vec::new(), 65536, 16384, ViewerTransport::Ws);
+        let waker = noop_waker();
+        let mut cx = Context::from_waker(&waker);
+        for payload in [b"first".as_slice(), b"latest"] {
+            peer.write_all(&make_client_frame(
+                true,
+                (false, false, false),
+                9,
+                [0; 4],
+                payload,
+            ))
+            .await
+            .expect("Ping");
+            assert!(poll_idle_read(&mut ws, &mut cx).is_pending());
+        }
+        grant_writes(&gate, 4096);
+        assert!(poll_idle_read(&mut ws, &mut cx).is_pending());
+        drop(ws);
+        let mut wire = Vec::new();
+        peer.read_to_end(&mut wire).await.expect("Pongs");
+        let expected = if allowance == 0 {
+            b"\x8a\x06latest".as_slice()
+        } else {
+            b"\x8a\x05first\x8a\x06latest".as_slice()
+        };
+        assert_eq!(wire, expected);
+    }
+}
+
+#[tokio::test]
+async fn finishes_active_controls_before_normal_and_terminal_close() {
+    for terminal in [false, true] {
+        for pong_first in [false, true] {
+            let (mut peer, io) = duplex(4096);
+            let (io, gate) = ControlledIo::new(io, 1);
+            let mut ws = WsRelayStream::new(io, Vec::new(), 65536, 16384, ViewerTransport::Ws);
+            let waker = noop_waker();
+            let mut cx = Context::from_waker(&waker);
+            let action = if terminal {
+                RelayCloseAction::ServerShutdown
+            } else {
+                RelayCloseAction::WriteHalf
+            };
+            if !pong_first {
+                assert!(Pin::new(&mut ws).poll_close(&mut cx, action).is_pending());
+            }
+            peer.write_all(&make_client_frame(
+                true,
+                (false, false, false),
+                9,
+                [0; 4],
+                b"p",
+            ))
+            .await
+            .expect("Ping");
+            assert!(poll_idle_read(&mut ws, &mut cx).is_pending());
+            assert!(Pin::new(&mut ws).poll_close(&mut cx, action).is_pending());
+            grant_writes(&gate, 4096);
+            assert!(matches!(
+                Pin::new(&mut ws).poll_flush(&mut cx),
+                Poll::Ready(Ok(()))
+            ));
+            let close = Pin::new(&mut ws).poll_close(&mut cx, action);
+            assert_eq!(
+                close.is_pending(),
+                terminal,
+                "terminal disposal waits for EOF"
+            );
+            if terminal {
+                peer.shutdown().await.expect("transport EOF");
+                assert!(matches!(
+                    Pin::new(&mut ws).poll_close(&mut cx, action),
+                    Poll::Ready(Ok(()))
+                ));
+            }
+            drop(ws);
+            let mut wire = Vec::new();
+            peer.read_to_end(&mut wire).await.expect("controls");
+            let mut expected = if pong_first {
+                b"\x8a\x01p".to_vec()
+            } else {
+                Vec::new()
+            };
+            if terminal {
+                expected.extend_from_slice(b"\x88\x11\x03\xe9server_shutdown");
+            } else {
+                expected.extend_from_slice(b"\x88\x02\x03\xe8");
+            }
+            assert_eq!(wire, expected);
+        }
+    }
+}
+
+#[derive(Default)]
+struct WakeCount(std::sync::atomic::AtomicUsize);
+
+impl std::task::Wake for WakeCount {
+    fn wake(self: std::sync::Arc<Self>) {
+        self.0.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    }
+}
+
+/// spec: websocket.md:WS-009 partial
+#[tokio::test]
+async fn retries_an_idle_pong_on_write_wake_without_application_writes() {
+    let (mut peer, io) = duplex(4096);
+    let (io, gate) = ControlledIo::new(io, 0);
+    let mut ws = WsRelayStream::new(io, Vec::new(), 65536, 16384, ViewerTransport::Ws);
+    let wakes = std::sync::Arc::new(WakeCount::default());
+    let waker = Waker::from(wakes.clone());
+    let mut cx = Context::from_waker(&waker);
+    peer.write_all(&make_client_frame(
+        true,
+        (false, false, false),
+        9,
+        [0; 4],
+        b"p",
+    ))
+    .await
+    .expect("Ping");
+    assert!(poll_idle_read(&mut ws, &mut cx).is_pending());
+    grant_writes(&gate, 4096);
+    assert!(wakes.0.load(std::sync::atomic::Ordering::Relaxed) > 0);
+    assert!(poll_idle_read(&mut ws, &mut cx).is_pending());
+    let mut pong = [0; 3];
+    peer.read_exact(&mut pong)
+        .await
+        .expect("Pong without inbound activity");
+    assert_eq!(&pong, b"\x8a\x01p");
+}
+
+#[tokio::test]
+async fn propagates_pong_write_errors_from_reads() {
+    for kind in [
+        std::io::ErrorKind::WriteZero,
+        std::io::ErrorKind::BrokenPipe,
+    ] {
+        let (mut peer, io) = duplex(4096);
+        let (io, gate) = ControlledIo::new(io, 4096);
+        gate.lock().expect("gate").error = Some(kind);
+        let mut ws = WsRelayStream::new(io, Vec::new(), 65536, 16384, ViewerTransport::Ws);
+        peer.write_all(&make_client_frame(
+            true,
+            (false, false, false),
+            9,
+            [0; 4],
+            b"",
+        ))
+        .await
+        .expect("Ping");
+        let waker = noop_waker();
+        let mut cx = Context::from_waker(&waker);
+        assert!(
+            matches!(poll_idle_read(&mut ws, &mut cx), Poll::Ready(Err(error)) if error.kind() == kind)
+        );
+    }
+}
+
+#[tokio::test]
+async fn flushes_idle_pongs_through_a_buffered_transport() {
+    let (mut peer, io) = duplex(4096);
+    let mut ws = WsRelayStream::new(
+        tokio::io::BufWriter::new(io),
+        Vec::new(),
+        65536,
+        16384,
+        ViewerTransport::Ws,
+    );
+    peer.write_all(&make_client_frame(
+        true,
+        (false, false, false),
+        9,
+        [0; 4],
+        b"",
+    ))
+    .await
+    .expect("Ping");
+    let waker = noop_waker();
+    let mut cx = Context::from_waker(&waker);
+    assert!(poll_idle_read(&mut ws, &mut cx).is_pending());
+    let mut pong = [0; 2];
+    assert!(matches!(
+        Pin::new(&mut peer).poll_read(&mut cx, &mut ReadBuf::new(&mut pong)),
+        Poll::Ready(Ok(()))
+    ));
+    assert_eq!(&pong, b"\x8a\x00");
+}
+
+#[tokio::test]
+async fn rejects_new_data_after_sending_close() {
+    let (_peer, io) = duplex(4096);
+    let mut ws = WsRelayStream::new(io, Vec::new(), 65536, 16384, ViewerTransport::Ws);
+    let waker = noop_waker();
+    let mut cx = Context::from_waker(&waker);
+    assert!(matches!(
+        Pin::new(&mut ws).poll_close(&mut cx, RelayCloseAction::WriteHalf),
+        Poll::Ready(Ok(()))
+    ));
+    assert!(
+        matches!(Pin::new(&mut ws).poll_write(&mut cx, b"forbidden"), Poll::Ready(Err(error)) if error.kind() == std::io::ErrorKind::BrokenPipe)
+    );
+}
+
+#[tokio::test]
+async fn terminal_close_completes_on_peer_close_without_transport_eof() {
+    for action in [
+        RelayCloseAction::AdminTerminated,
+        RelayCloseAction::DeadConnection,
+        RelayCloseAction::StreamError(ConnectionErrorKind::IoError),
+        RelayCloseAction::ServerShutdown,
+    ] {
+        let (mut peer, io) = duplex(4096);
+        let mut ws = WsRelayStream::new(io, Vec::new(), 65536, 16384, ViewerTransport::Ws);
+        let waker = noop_waker();
+        let mut cx = Context::from_waker(&waker);
+        assert!(Pin::new(&mut ws).poll_close(&mut cx, action).is_pending());
+        // Discard well-formed payloads without forwarding them, then recognize
+        // the valid Close reply while the peer still keeps TCP writes open.
+        peer.write_all(&client_binary_frame(b"discarded after terminal close"))
+            .await
+            .expect("discarded data");
+        peer.write_all(&make_client_frame(
+            true,
+            (false, false, false),
+            8,
+            [0; 4],
+            &[3, 232],
+        ))
+        .await
+        .expect("Close reply");
+        assert!(matches!(
+            Pin::new(&mut ws).poll_close(&mut cx, action),
+            Poll::Ready(Ok(()))
+        ));
+        let mut wire = Vec::new();
+        peer.read_to_end(&mut wire)
+            .await
+            .expect("server closes TCP first");
+        assert_eq!(wire.first(), Some(&0x88));
+        assert_eq!(wire.len(), 2 + usize::from(wire[1]));
+        assert!(ws.decoder.peer_closed);
+    }
+}
+
+#[tokio::test]
+async fn valid_terminal_disposal_yields_during_a_data_flood() {
+    let (mut peer, io) = duplex(65536);
+    let mut ws = WsRelayStream::new(io, Vec::new(), 65536, 16384, ViewerTransport::Ws);
+    let waker = noop_waker();
+    let mut cx = Context::from_waker(&waker);
+    let frame = client_binary_frame(&vec![7; 1024]);
+    for _ in 0..40 {
+        peer.write_all(&frame).await.expect("flood data");
+    }
+    assert!(
+        Pin::new(&mut ws)
+            .poll_close(&mut cx, RelayCloseAction::AdminTerminated)
+            .is_pending()
+    );
+    assert!(!ws.transport_eof);
+    assert!(!ws.decoder.peer_closed);
+    peer.write_all(&make_client_frame(
+        true,
+        (false, false, false),
+        8,
+        [0; 4],
+        &[3, 232],
+    ))
+    .await
+    .expect("Close reply after flood");
+    let mut completed = false;
+    for _ in 0..8 {
+        if matches!(
+            Pin::new(&mut ws).poll_close(&mut cx, RelayCloseAction::AdminTerminated),
+            Poll::Ready(Ok(()))
+        ) {
+            completed = true;
+            break;
+        }
+    }
+    assert!(
+        completed,
+        "bounded disposal eventually reaches the Close reply"
+    );
+}
+
+#[tokio::test]
+async fn rejected_frame_disposal_waits_for_transport_eof_not_apparent_close_bytes() {
+    let (mut peer, io) = duplex(4096);
+    let mut ws = WsRelayStream::new(io, Vec::new(), 65536, 16384, ViewerTransport::Ws);
+    let apparent_close = make_client_frame(true, (false, false, false), 8, [0; 4], &[3, 232]);
+    peer.write_all(&make_client_frame(
+        true,
+        (false, false, false),
+        1,
+        [0; 4],
+        &apparent_close,
+    ))
+    .await
+    .expect("rejected text containing apparent Close");
+    let error = ws.read(&mut [0; 1]).await.expect_err("text");
+    assert_eq!(
+        RelayStreamError::classify(&error),
+        ConnectionErrorKind::WsTextMessage
+    );
+    let waker = noop_waker();
+    let mut cx = Context::from_waker(&waker);
+    let action = RelayCloseAction::StreamError(ConnectionErrorKind::WsTextMessage);
+    assert!(Pin::new(&mut ws).poll_close(&mut cx, action).is_pending());
+    assert!(!ws.decoder.peer_closed);
+    peer.shutdown().await.expect("transport EOF");
+    assert!(matches!(
+        Pin::new(&mut ws).poll_close(&mut cx, action),
+        Poll::Ready(Ok(()))
+    ));
+}
+
+/// spec: operations.md:OPS-042 partial
+#[tokio::test]
+async fn shutdown_does_not_replace_an_echo_with_a_partial_header() {
+    let (mut peer, io) = duplex(4096);
+    let (io, gate) = ControlledIo::new(io, 1);
+    let close = make_client_frame(
+        true,
+        (false, false, false),
+        8,
+        [0; 4],
+        &3001_u16.to_be_bytes(),
+    );
+    let mut ws = WsRelayStream::new(io, close, 65536, 16384, ViewerTransport::Ws);
+    assert_eq!(ws.read(&mut [0; 1]).await.expect("peer Close"), 0);
+    let waker = noop_waker();
+    let mut cx = Context::from_waker(&waker);
+    assert!(
+        Pin::new(&mut ws)
+            .poll_close(&mut cx, RelayCloseAction::PeerEof)
+            .is_pending()
+    );
+    grant_writes(&gate, 4096);
+    assert!(matches!(
+        Pin::new(&mut ws).poll_close(&mut cx, RelayCloseAction::ServerShutdown),
+        Poll::Ready(Ok(()))
+    ));
+    drop(ws);
+    let mut wire = Vec::new();
+    peer.read_to_end(&mut wire).await.expect("one echo");
+    assert_eq!(wire, [0x88, 2, 0x0b, 0xb9]);
 }

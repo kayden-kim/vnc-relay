@@ -73,4 +73,4 @@ vnc-relay-domain.workspace = true
 # check the public HTTPS management listener with a TLS client.
 [dev-dependencies]
 rustls = { workspace = true }
-tokio = { workspace = true, features = ["net", "rt"] }
+tokio = { workspace = true, features = ["macros", "net", "rt", "test-util"] }

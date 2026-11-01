@@ -72,7 +72,7 @@ impl PendingPong {
 /// A pending Close control frame to be sent to the peer.
 #[derive(Debug, Clone, Copy)]
 pub struct PendingClose {
-    pub buf: [u8; 32],
+    pub buf: [u8; 127],
     pub len: u8,
     pub written: u8,
 }
@@ -164,18 +164,28 @@ pub fn encode_pong(payload: &[u8]) -> PendingPong {
     }
 }
 
-/// Formats an unmasked server Close frame with status code and reason string.
+/// Formats an unmasked server Close frame, truncating the reason at a UTF-8
+/// boundary to fit the RFC 6455 control payload limit of 125 bytes.
 pub fn encode_close(code: u16, reason: &str) -> PendingClose {
     let reason_bytes = reason.as_bytes();
-    let reason_len = reason_bytes.len().min(123);
+    let mut reason_len = reason_bytes.len().min(123);
+    while !reason.is_char_boundary(reason_len) {
+        reason_len -= 1;
+    }
     let payload_len = 2 + reason_len;
-    let mut buf = [0u8; 32];
+    let mut buf = [0u8; 127];
     buf[0] = 0x88; // FIN = 1, opcode = Close (8)
     buf[1] = payload_len as u8;
     let code_bytes = code.to_be_bytes();
     buf[2] = code_bytes[0];
     buf[3] = code_bytes[1];
-    buf[4..4 + reason_len].copy_from_slice(&reason_bytes[..reason_len]);
+    for (dst, src) in buf
+        .iter_mut()
+        .skip(4)
+        .zip(reason_bytes.iter().take(reason_len))
+    {
+        *dst = *src;
+    }
     PendingClose {
         buf,
         len: (2 + payload_len) as u8,
@@ -400,7 +410,10 @@ impl FrameDecoder {
     /// into `leftover_buf`. Returns `Ok(true)` if a header was parsed, `Ok(false)`
     /// if more header bytes are needed.
     pub fn try_parse_header(&mut self) -> io::Result<bool> {
-        let mut cursor = Cursor::new(&self.header_buf[..self.header_len]);
+        let header_bytes = self.header_buf.get(..self.header_len).ok_or_else(|| {
+            RelayStreamError::new(ConnectionErrorKind::WsProtocolError).into_io_error()
+        })?;
+        let mut cursor = Cursor::new(header_bytes);
         let parsed = FrameHeader::parse(&mut cursor).map_err(|_| {
             RelayStreamError::new(ConnectionErrorKind::WsProtocolError).into_io_error()
         })?;
@@ -416,6 +429,20 @@ impl FrameDecoder {
                 return Ok(false);
             }
         };
+
+        // RFC 6455 §5.2 requires the shortest length encoding and a zero high
+        // bit for the 64-bit form. Inspect the raw header before clearing it or
+        // interpreting a malformed length as a logical message size violation.
+        let invalid_length = match header_bytes {
+            [_, marker, hi, lo, ..] if marker & 0x7f == 126 => u16::from_be_bytes([*hi, *lo]) < 126,
+            [_, marker, a, b, c, d, e, f, g, h, ..] if marker & 0x7f == 127 => {
+                a & 0x80 != 0 || u64::from_be_bytes([*a, *b, *c, *d, *e, *f, *g, *h]) < 65536
+            }
+            _ => false,
+        };
+        if invalid_length {
+            return Err(RelayStreamError::new(ConnectionErrorKind::WsProtocolError).into_io_error());
+        }
 
         let consumed = cursor.position() as usize;
         let leftover = self.header_len - consumed;
@@ -606,5 +633,175 @@ impl FrameDecoder {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{DecodeState, FrameDecoder, encode_close};
+    use vnc_relay_app::events::ConnectionErrorKind;
+    use vnc_relay_app::ports::RelayStreamError;
+
+    fn masked_header(opcode: u8, marker: u8, extended: &[u8]) -> Vec<u8> {
+        let mut header = vec![opcode, 0x80 | marker];
+        header.extend_from_slice(extended);
+        header.extend_from_slice(&[0x12, 0x34, 0x56, 0x78]);
+        header
+    }
+
+    fn assert_incomplete(decoder: &mut FrameDecoder, expected_len: usize) {
+        assert!(!decoder.try_parse_header().expect("incomplete header"));
+        assert_eq!(decoder.header_len, expected_len);
+        assert_eq!(decoder.current_message_len, 0);
+        assert!(matches!(decoder.state, DecodeState::AwaitingHeader));
+    }
+
+    /// spec: websocket.md:WS-019 partial
+    #[test]
+    fn rejects_noncanonical_lengths_at_every_header_split() {
+        let encodings = [
+            (126, 0_u16.to_be_bytes().to_vec()),
+            (126, 1_u16.to_be_bytes().to_vec()),
+            (126, 125_u16.to_be_bytes().to_vec()),
+            (127, 0_u64.to_be_bytes().to_vec()),
+            (127, 125_u64.to_be_bytes().to_vec()),
+            (127, 126_u64.to_be_bytes().to_vec()),
+            (127, 65535_u64.to_be_bytes().to_vec()),
+            (127, (1_u64 << 63).to_be_bytes().to_vec()),
+            (127, ((1_u64 << 63) | 65536).to_be_bytes().to_vec()),
+            (127, u64::MAX.to_be_bytes().to_vec()),
+        ];
+        for opcode in [0x82, 0x88, 0x89, 0x8a] {
+            for (marker, extended) in &encodings {
+                let header = masked_header(opcode, *marker, extended);
+                for split in 0..=header.len() {
+                    // M = 0 also proves malformed lengths take precedence over
+                    // the otherwise applicable WsMessageTooLarge classification.
+                    let mut decoder = FrameDecoder::new(0);
+                    assert_eq!(decoder.append_header_bytes(&header[..split]), split);
+                    if split < header.len() {
+                        assert_incomplete(&mut decoder, split);
+                        assert_eq!(
+                            decoder.append_header_bytes(&header[split..]),
+                            header.len() - split
+                        );
+                    }
+                    let error = decoder.try_parse_header().expect_err("invalid length");
+                    assert_eq!(
+                        RelayStreamError::classify(&error),
+                        ConnectionErrorKind::WsProtocolError,
+                        "opcode={opcode:#x}, marker={marker}, split={split}"
+                    );
+                    assert_eq!(decoder.header_len, header.len());
+                    assert_eq!(decoder.current_message_len, 0);
+                    assert!(matches!(decoder.state, DecodeState::AwaitingHeader));
+                }
+                let mut decoder = FrameDecoder::new(0);
+                for (offset, byte) in header.iter().enumerate() {
+                    assert_eq!(decoder.append_header_bytes(&[*byte]), 1);
+                    if offset + 1 < header.len() {
+                        assert_incomplete(&mut decoder, offset + 1);
+                    } else {
+                        let error = decoder.try_parse_header().expect_err("invalid length");
+                        assert_eq!(
+                            RelayStreamError::classify(&error),
+                            ConnectionErrorKind::WsProtocolError
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    /// spec: websocket.md:WS-010 partial
+    #[test]
+    fn accepts_canonical_length_boundaries_and_distinguishes_m_plus_one() {
+        let encodings = [
+            (125_usize, 125, Vec::new()),
+            (126, 126, 126_u16.to_be_bytes().to_vec()),
+            (65535, 126, 65535_u16.to_be_bytes().to_vec()),
+            (65536, 127, 65536_u64.to_be_bytes().to_vec()),
+            (65537, 127, 65537_u64.to_be_bytes().to_vec()),
+        ];
+        for (payload_len, marker, extended) in encodings {
+            let header = masked_header(0x82, marker, &extended);
+            for split in 0..=header.len() {
+                for max_message_size in [payload_len, payload_len - 1] {
+                    let mut decoder = FrameDecoder::new(max_message_size);
+                    assert_eq!(decoder.append_header_bytes(&header[..split]), split);
+                    if split < header.len() {
+                        assert_incomplete(&mut decoder, split);
+                        assert_eq!(
+                            decoder.append_header_bytes(&header[split..]),
+                            header.len() - split
+                        );
+                    }
+                    let result = decoder.try_parse_header();
+                    if max_message_size < payload_len {
+                        let error = result.expect_err("canonical M+1 header");
+                        assert_eq!(
+                            RelayStreamError::classify(&error),
+                            ConnectionErrorKind::WsMessageTooLarge
+                        );
+                    } else {
+                        assert!(result.expect("canonical header"));
+                        assert_eq!(decoder.current_message_len, payload_len);
+                        match decoder.state {
+                            DecodeState::ReadingPayload {
+                                frame_payload_len,
+                                frame_payload_read,
+                                ..
+                            } => {
+                                assert_eq!(frame_payload_len, payload_len as u64);
+                                assert_eq!(frame_payload_read, 0);
+                            }
+                            state => panic!("expected payload state, got {state:?}"),
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn encodes_close_reason_beyond_the_old_28_byte_limit() {
+        let reason = "x".repeat(29);
+        let close = encode_close(1000, &reason);
+        let bytes = close.remaining_bytes();
+        assert_eq!(bytes.len(), 33);
+        assert_eq!(&bytes[..4], &[0x88, 31, 0x03, 0xe8]);
+        assert_eq!(&bytes[4..], reason.as_bytes());
+        assert_eq!(close.written, 0);
+    }
+
+    #[test]
+    fn encodes_maximum_close_payload_and_truncates_on_utf8_boundaries() {
+        let reasons = [
+            ("x".repeat(123), "x".repeat(123)),
+            ("x".repeat(124), "x".repeat(123)),
+            ("界".repeat(41), "界".repeat(41)),
+            ("界".repeat(42), "界".repeat(41)),
+            (format!("{}界", "x".repeat(122)), "x".repeat(122)),
+            (format!("{}é", "x".repeat(122)), "x".repeat(122)),
+            ("😀".repeat(31), "😀".repeat(30)),
+        ];
+        for (reason, expected) in reasons {
+            let mut close = encode_close(1000, &reason);
+            let bytes = close.remaining_bytes();
+            assert_eq!(bytes.len(), 4 + expected.len());
+            assert!(bytes.len() <= 127);
+            assert_eq!(bytes[0], 0x88);
+            assert_eq!(bytes[1] as usize, 2 + expected.len());
+            assert_eq!(&bytes[2..4], &1000_u16.to_be_bytes());
+            assert_eq!(
+                std::str::from_utf8(&bytes[4..]).expect("UTF-8 Close reason"),
+                expected
+            );
+            close.advance(1);
+            assert_eq!(close.remaining_bytes().len(), 3 + expected.len());
+            close.advance(usize::from(close.len));
+            assert!(close.is_finished());
+            assert!(close.remaining_bytes().is_empty());
+        }
     }
 }

@@ -423,22 +423,38 @@ async fn listen_until_shutdown(
     relay_service.request_shutdown(&runtime, settings.timeouts.shutdown_grace);
     stop.send_replace(true);
 
-    tokio::select! {
-        _ = async {
-            while entry_points.join_next().await.is_some() {}
-        } => {}
-        _ = shutdown.wait() => {
-            relay_service.request_shutdown(&runtime, Duration::ZERO);
-            while entry_points.join_next().await.is_some() {}
-        }
-    }
-    let _ = supervisor.await;
+    finish_relay_shutdown(&mut entry_points, supervisor, shutdown.wait(), || {
+        relay_service.request_shutdown(&runtime, Duration::ZERO)
+    })
+    .await;
     drop(idle);
     stop_task(management_task).await;
     stop_task(status_task).await;
     let _ = watch_task.await;
     log.record(&Event::ServerStopped);
     ExitCode::SUCCESS
+}
+
+/// Keeps the G driver alive until all entry-point owners release their work.
+/// With no owners left, neither G nor another signal should delay process exit.
+async fn finish_relay_shutdown(
+    entry_points: &mut JoinSet<()>,
+    supervisor: tokio::task::JoinHandle<()>,
+    second_request: impl Future<Output = ()>,
+    force: impl FnOnce(),
+) {
+    tokio::select! {
+        _ = async {
+            while entry_points.join_next().await.is_some() {}
+        } => {}
+        _ = second_request => {
+            force();
+            while entry_points.join_next().await.is_some() {}
+        }
+    }
+    // Entry points join their connection owners before returning. Their last
+    // completion makes the independent G deadline unnecessary.
+    stop_task(Some(supervisor)).await;
 }
 
 fn generate_startup_keys() -> Result<(RelayIdKey, SessionIdKey), CryptoError> {
@@ -461,8 +477,7 @@ where
 fn startup_keys_failure(log: &dyn EventSink, error: &dyn Display) -> ExitCode {
     runtime_failure(log, "운영체제 난수원으로 시작 키를 만들 수 없다", error)
 }
-/// Stops an admin listener task and waits until its listener is closed.
-/// Admin connections still open close when the runtime ends.
+/// Cancels a background task and joins it before releasing its resources.
 async fn stop_task(task: Option<tokio::task::JoinHandle<()>>) {
     if let Some(task) = task {
         task.abort();
@@ -665,6 +680,7 @@ impl ShutdownSignal {
 mod tests {
     use super::*;
     use std::sync::Mutex;
+    use std::sync::atomic::{AtomicBool, Ordering};
     use vnc_relay_app::events::Event;
 
     #[derive(Default)]
@@ -676,6 +692,113 @@ mod tests {
         fn record(&self, event: &Event) {
             self.events.lock().expect("sink lock").push(event.clone());
         }
+    }
+
+    struct SupervisorDrop(Arc<AtomicBool>);
+
+    impl Drop for SupervisorDrop {
+        fn drop(&mut self) {
+            self.0.store(true, Ordering::SeqCst);
+        }
+    }
+
+    fn shutdown_driver(
+        grace: Duration,
+        force: watch::Sender<bool>,
+    ) -> (tokio::task::JoinHandle<()>, Arc<AtomicBool>) {
+        let stopped = Arc::new(AtomicBool::new(false));
+        let guard = SupervisorDrop(Arc::clone(&stopped));
+        let task = tokio::spawn(async move {
+            let _guard = guard;
+            tokio::time::sleep(grace).await;
+            force.send_replace(true);
+        });
+        (task, stopped)
+    }
+
+    /// spec: operations.md:OPS-008 partial
+    #[tokio::test(start_paused = true)]
+    async fn no_entry_point_owners_cancel_and_join_supervisor_without_waiting_for_g() {
+        let start = tokio::time::Instant::now();
+        let (force, forced) = watch::channel(false);
+        let (supervisor, stopped) = shutdown_driver(Duration::from_secs(90), force);
+        let mut owners = JoinSet::new();
+        finish_relay_shutdown(&mut owners, supervisor, std::future::pending(), || {
+            panic!("no second request")
+        })
+        .await;
+        assert_eq!(start.elapsed(), Duration::ZERO);
+        assert!(stopped.load(Ordering::SeqCst), "supervisor was joined");
+        assert!(!*forced.borrow(), "G was not needed");
+    }
+
+    /// spec: operations.md:OPS-008 partial
+    #[tokio::test(start_paused = true)]
+    async fn last_entry_point_owner_finishing_early_cancels_and_joins_supervisor() {
+        let start = tokio::time::Instant::now();
+        let (force, forced) = watch::channel(false);
+        let (supervisor, stopped) = shutdown_driver(Duration::from_secs(90), force);
+        let mut owners = JoinSet::new();
+        owners.spawn(async {});
+        owners.spawn(async {
+            tokio::time::sleep(Duration::from_secs(1)).await;
+        });
+        finish_relay_shutdown(&mut owners, supervisor, std::future::pending(), || {
+            panic!("no second request")
+        })
+        .await;
+        assert_eq!(start.elapsed(), Duration::from_secs(1));
+        assert!(stopped.load(Ordering::SeqCst), "supervisor was joined");
+        assert!(!*forced.borrow(), "last owner finished before G");
+    }
+
+    /// spec: operations.md:OPS-009 partial
+    #[tokio::test(start_paused = true)]
+    async fn g_driver_remains_alive_until_entry_point_owners_finish_cleanup() {
+        let start = tokio::time::Instant::now();
+        let (force, mut forced) = watch::channel(false);
+        let (supervisor, stopped) = shutdown_driver(Duration::from_secs(3), force);
+        let mut owners = JoinSet::new();
+        owners.spawn(async {});
+        owners.spawn(async move {
+            forced.wait_for(|forced| *forced).await.expect("G driver");
+            tokio::time::sleep(Duration::from_secs(1)).await;
+        });
+        finish_relay_shutdown(&mut owners, supervisor, std::future::pending(), || {
+            panic!("no second request")
+        })
+        .await;
+        assert_eq!(start.elapsed(), Duration::from_secs(4));
+        assert!(stopped.load(Ordering::SeqCst), "supervisor was joined");
+        assert!(owners.is_empty(), "forced owners completed cleanup");
+    }
+
+    /// spec: operations.md:OPS-042 partial
+    #[tokio::test(start_paused = true)]
+    async fn second_request_forces_owners_then_cancels_and_joins_supervisor() {
+        let start = tokio::time::Instant::now();
+        let (force, mut forced) = watch::channel(false);
+        let (supervisor, stopped) = shutdown_driver(Duration::from_secs(90), force.clone());
+        let mut owners = JoinSet::new();
+        owners.spawn(async move {
+            forced
+                .wait_for(|forced| *forced)
+                .await
+                .expect("second request");
+            tokio::time::sleep(Duration::from_secs(1)).await;
+        });
+        finish_relay_shutdown(
+            &mut owners,
+            supervisor,
+            tokio::time::sleep(Duration::from_secs(1)),
+            || {
+                force.send_replace(true);
+            },
+        )
+        .await;
+        assert_eq!(start.elapsed(), Duration::from_secs(2));
+        assert!(stopped.load(Ordering::SeqCst), "supervisor was joined");
+        assert!(owners.is_empty(), "forced owners completed cleanup");
     }
 
     /// spec: operations.md:OPS-028 partial

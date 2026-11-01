@@ -738,8 +738,8 @@ impl RelayService {
         }
     }
 
-    /// Drives the G deadline even when no connection tasks remain.
-    /// The process supervisor polls this future; app never spawns a task.
+    /// Drives the G deadline while entry-point owners still need forced cleanup.
+    /// The process supervisor cancels and joins this task once those owners end.
     pub async fn drive_shutdown<C>(&self, runtime: &RelayRuntime<C>) {
         let mut lifecycle = runtime.lifecycle();
         if lifecycle
@@ -1154,10 +1154,17 @@ mod tests {
         }
     }
 
+    type OnSessionClosed = Box<dyn Fn(&Event) + Send + Sync>;
+
     #[derive(Default)]
-    struct Recorder(Mutex<Vec<Event>>);
+    struct Recorder(Mutex<Vec<Event>>, Mutex<Option<OnSessionClosed>>);
     impl EventSink for Recorder {
         fn record(&self, event: &Event) {
+            if matches!(event, Event::SessionClosed { .. })
+                && let Some(observe) = self.1.lock().expect("closed observer").as_ref()
+            {
+                observe(event);
+            }
             self.0.lock().expect("events").push(event.clone());
         }
     }
@@ -1806,6 +1813,115 @@ mod tests {
                 CloseCause::ServerShutdown
             );
             assert_eq!(free_places(&harness.budget), 3);
+        }
+    }
+
+    /// spec: operations.md:OPS-009 partial
+    /// spec: operations.md:OPS-042 partial
+    #[tokio::test(start_paused = true)]
+    async fn forced_dispatch_records_retained_error_kind_only_after_streams_and_permits_are_released()
+     {
+        use crate::events::ConnectionErrorKind;
+        use vnc_relay_domain::session::Side;
+
+        for second_request in [false, true] {
+            for kind in [
+                ConnectionErrorKind::IoError,
+                ConnectionErrorKind::WsProtocolError,
+                ConnectionErrorKind::WsTextMessage,
+                ConnectionErrorKind::WsMessageTooLarge,
+            ] {
+                let harness = Harness::new(3, 1, 8, &[]);
+                let dropped = Arc::new(AtomicU64::new(0));
+                let closed = Arc::new(AtomicU64::new(0));
+                let on_drop: Arc<dyn Fn() + Send + Sync> = {
+                    let dropped = Arc::clone(&dropped);
+                    let budget = Arc::clone(&harness.budget);
+                    Arc::new(move || {
+                        assert_eq!(free_places(&budget), 1, "both permits outlive both streams");
+                        dropped.fetch_add(1, Ordering::SeqCst);
+                    })
+                };
+                *harness.events.1.lock().expect("closed observer") = Some({
+                    let dropped = Arc::clone(&dropped);
+                    let closed = Arc::clone(&closed);
+                    let budget = Arc::clone(&harness.budget);
+                    Box::new(move |event| {
+                        assert_eq!(dropped.load(Ordering::SeqCst), 2);
+                        assert_eq!(
+                            free_places(&budget),
+                            3,
+                            "SessionClosed follows permit release"
+                        );
+                        assert!(matches!(
+                            event,
+                            Event::SessionClosed {
+                                close_cause: CloseCause::ConnectionError,
+                                side: Some(Side::Viewer),
+                                error_kind: Some(actual),
+                                ..
+                            } if *actual == kind
+                        ));
+                        closed.fetch_add(1, Ordering::SeqCst);
+                    })
+                });
+                let (prepared, _server, server_actions) = harness
+                    .prepare_with_options(
+                        Role::Server,
+                        "ID:41",
+                        b"",
+                        true,
+                        Some(Arc::clone(&on_drop)),
+                    )
+                    .await;
+                let waiter = harness.start(prepared);
+                settle().await;
+                let (mut prepared, _viewer, viewer_actions) = harness
+                    .prepare_with_options(Role::Viewer, "ID:41", b"", true, Some(on_drop))
+                    .await;
+                prepared.stream_mut().failure = Some(kind);
+                let owner = harness.start(prepared);
+                settle().await;
+                assert_eq!(harness.snapshot().active.len(), 1);
+                assert!(
+                    viewer_actions
+                        .lock()
+                        .expect("actions")
+                        .contains(&RelayCloseAction::StreamError(kind))
+                );
+                assert_eq!(dropped.load(Ordering::SeqCst), 0);
+                assert_eq!(closed.load(Ordering::SeqCst), 0);
+                assert_eq!(free_places(&harness.budget), 1);
+
+                harness
+                    .service
+                    .request_shutdown(&harness.runtime, Duration::from_secs(1));
+                if second_request {
+                    harness
+                        .service
+                        .request_shutdown(&harness.runtime, Duration::ZERO);
+                } else {
+                    tokio::time::advance(Duration::from_secs(1)).await;
+                }
+                waiter.await.expect("waiter").expect("handoff");
+                owner.await.expect("owner").expect("forced error cleanup");
+                assert_eq!(closed.load(Ordering::SeqCst), 1);
+                assert!(
+                    server_actions
+                        .lock()
+                        .expect("actions")
+                        .contains(&RelayCloseAction::StreamError(kind))
+                );
+                assert!(harness.snapshot().active.is_empty());
+                assert_eq!(
+                    harness
+                        .events()
+                        .iter()
+                        .filter(|event| matches!(event, Event::SessionClosed { .. }))
+                        .count(),
+                    1
+                );
+            }
         }
     }
 
