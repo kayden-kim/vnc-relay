@@ -95,7 +95,10 @@ pub(super) async fn dispatch<C: TargetConnector>(
                 Failure::Rejected(RejectReason::TargetNotAllowed, _) => {
                     RelayCloseAction::TargetNotAllowed
                 }
-                Failure::Rejected(_, _) => RelayCloseAction::Reject,
+                Failure::Rejected(RejectReason::RelayConnectionLimit { .. }, _) => {
+                    RelayCloseAction::TargetConnectionLimit
+                }
+                Failure::Rejected(_, _) => RelayCloseAction::TargetConnectionLimit,
                 Failure::Failed(_, _) => RelayCloseAction::TargetConnectFailed,
                 Failure::Shutdown => RelayCloseAction::ServerShutdown,
             };

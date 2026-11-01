@@ -146,7 +146,7 @@ async fn every_terminal_close_action_shuts_down_the_socket_before_owner_drop() {
         RelayCloseAction::WaitingFull,
         RelayCloseAction::TargetConnectFailed,
         RelayCloseAction::TargetNotAllowed,
-        RelayCloseAction::Reject,
+        RelayCloseAction::TargetConnectionLimit,
         RelayCloseAction::PeerEof,
         RelayCloseAction::StreamError(ConnectionErrorKind::IoError),
         RelayCloseAction::StreamError(ConnectionErrorKind::TlsFailed),

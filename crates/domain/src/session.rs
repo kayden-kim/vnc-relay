@@ -106,6 +106,11 @@ impl ViewerTransport {
             Self::Wss => "wss",
         }
     }
+
+    /// Whether this is a WebSocket transport (`ws` or `wss`).
+    pub fn is_websocket(self) -> bool {
+        matches!(self, Self::Ws | Self::Wss)
+    }
 }
 
 /// Payload direction, independent of the non-viewer endpoint's mode.
@@ -386,11 +391,18 @@ impl Session {
     }
 
     /// Forces shutdown after G or a second request for any unfinished session.
-    /// Overrides all pending causes, but never changes a finalized summary.
+    /// Sets `ServerShutdown` only when no cleanup has started; an existing first cause
+    /// (EOF observed, I/O error, dead connection, admin close) is preserved.
     pub fn force_server_shutdown(&mut self) -> Result<bool, SessionError> {
-        if self.state == SessionState::Finished
-            || self.close_cause == Some(CloseCause::ServerShutdown)
-        {
+        if self.state == SessionState::Finished {
+            return Ok(false);
+        }
+        if self.close_cause.is_some() {
+            return Ok(false);
+        }
+        if self.first_eof.is_some() {
+            self.close_cause = Some(CloseCause::PeerEof);
+            self.close_side = self.first_eof.map(|(side, _)| side);
             return Ok(false);
         }
         self.state = SessionState::Closing;
@@ -850,25 +862,32 @@ mod tests {
 
     /// spec: operations.md:OPS-009 partial
     #[test]
-    fn forces_server_shutdown_over_every_unfinished_cause() {
+    fn forces_server_shutdown_only_when_no_cleanup_has_started() {
         for trigger in 0..7 {
             let mut session = session(Mode::Mode1);
-            match trigger {
-                0 => {}
+            let (expected_cause, expected_side) = match trigger {
+                0 => (CloseCause::ServerShutdown, None),
                 1 => {
                     session
                         .observe_eof(Side::Viewer, Duration::from_secs(12))
                         .unwrap();
+                    (CloseCause::PeerEof, Some(Side::Viewer))
                 }
-                2 => normal_complete(&mut session, Side::Target, Side::Viewer),
+                2 => {
+                    normal_complete(&mut session, Side::Target, Side::Viewer);
+                    (CloseCause::PeerEof, Some(Side::Target))
+                }
                 3 => {
                     session.io_error(FORWARD, Side::Target).unwrap();
+                    (CloseCause::ConnectionError, Some(Side::Target))
                 }
                 4 => {
                     session.dead_connection(Side::Target).unwrap();
+                    (CloseCause::DeadConnection, Some(Side::Target))
                 }
                 5 => {
                     session.begin_admin_close(Duration::from_secs(12)).unwrap();
+                    (CloseCause::AdminTerminated, None)
                 }
                 6 => {
                     session
@@ -877,19 +896,21 @@ mod tests {
                     session
                         .expire_close(Duration::from_secs(12), Duration::ZERO)
                         .unwrap();
+                    (CloseCause::CloseTimeout, Some(Side::Target))
                 }
                 _ => unreachable!(),
-            }
-            assert!(session.force_server_shutdown().unwrap());
+            };
+            let forced = session.force_server_shutdown().unwrap();
+            assert_eq!(forced, trigger == 0);
             assert!(!session.force_server_shutdown().unwrap());
             assert!(!session.io_error(FORWARD, Side::Viewer).unwrap());
             assert!(!session.begin_admin_close(Duration::from_secs(20)).unwrap());
-            assert!(!session.expire_close(Duration::MAX, Duration::ZERO).unwrap());
+            assert!(!session.expire_close(Duration::ZERO, Duration::MAX).unwrap());
             let closed = finish(&mut session);
-            assert_eq!(closed.close_cause(), CloseCause::ServerShutdown);
-            assert_eq!(closed.close_side(), None);
+            assert_eq!(closed.close_cause(), expected_cause);
+            assert_eq!(closed.close_side(), expected_side);
             assert!(!session.force_server_shutdown().unwrap());
-            assert_eq!(session.close_cause(), Some(CloseCause::ServerShutdown));
+            assert_eq!(session.close_cause(), Some(expected_cause));
         }
     }
 

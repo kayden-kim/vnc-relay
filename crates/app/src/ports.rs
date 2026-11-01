@@ -140,7 +140,7 @@ pub enum RelayCloseAction {
     WaitingFull,
     TargetConnectFailed,
     TargetNotAllowed,
-    Reject,
+    TargetConnectionLimit,
     PeerEof,
     StreamError(crate::events::ConnectionErrorKind),
     DeadConnection,
@@ -155,6 +155,10 @@ pub enum RelayCloseAction {
 pub trait RelayStream: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send {
     /// The viewer transport metadata used in session views and events.
     fn transport(&self) -> vnc_relay_domain::session::ViewerTransport;
+
+    /// The remaining payload length of an outbound frame whose header is
+    /// already written; 0 for TCP.
+    fn pending_write_len(&self) -> usize;
 
     /// Drives one idempotent close action; terminal completion does not replace
     /// dropping the stream before its L permit (relay-session §6).

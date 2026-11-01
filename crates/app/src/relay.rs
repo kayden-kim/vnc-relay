@@ -257,7 +257,9 @@ impl RelayService {
                     RelayError::Aborted(AbortReason::DeadConnection) => {
                         RelayCloseAction::DeadConnection
                     }
-                    RelayError::Aborted(AbortReason::TlsUpgradeTimeout) => RelayCloseAction::Reject,
+                    RelayError::Aborted(AbortReason::TlsUpgradeTimeout) => {
+                        RelayCloseAction::HandshakeTimeout
+                    }
                 };
                 self.close_stream(&mut resources.stream, action, self.close_timeout, shutdown)
                     .await;
@@ -987,7 +989,7 @@ impl RelayService {
                         if let Some(context) = incoming {
                             self.aborted(
                                 context,
-                                Stage::InitialExchange,
+                                Stage::Register,
                                 mode,
                                 AbortReason::ServerShutdown,
                             );
@@ -1209,6 +1211,9 @@ mod tests {
     impl RelayStream for TestStream {
         fn transport(&self) -> ViewerTransport {
             ViewerTransport::Tcp
+        }
+        fn pending_write_len(&self) -> usize {
+            0
         }
         fn poll_close(
             mut self: Pin<&mut Self>,
@@ -2449,7 +2454,7 @@ mod tests {
     /// spec: relay.md:RLY-020 partial
     /// spec: operations.md:OPS-007 partial
     #[tokio::test(start_paused = true)]
-    async fn shutdown_during_preactivation_records_waiting_removed_for_predecessor_and_initial_exchange_for_incoming_in_both_roles()
+    async fn shutdown_during_preactivation_records_waiting_removed_for_predecessor_and_register_for_incoming_in_both_roles()
      {
         use crate::events::WaitingRemovalReason;
         use vnc_relay_domain::matching::WaitingEntry;
@@ -2532,7 +2537,7 @@ mod tests {
             assert!(matches!(
                 aborted.unwrap(),
                 Event::RelayAborted {
-                    stage: Stage::InitialExchange,
+                    stage: Stage::Register,
                     reason: AbortReason::ServerShutdown,
                     ..
                 }
@@ -2541,10 +2546,10 @@ mod tests {
             assert!(!events.iter().any(|e| matches!(
                 e,
                 Event::RelayAborted {
-                    stage: Stage::Register,
+                    stage: Stage::InitialExchange,
                     ..
                 } | Event::ConnectionAborted {
-                    stage: Stage::Register,
+                    stage: Stage::InitialExchange,
                     ..
                 }
             )));

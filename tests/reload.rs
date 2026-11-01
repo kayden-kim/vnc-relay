@@ -425,18 +425,26 @@ fn connect_from(source: [u8; 4], port: u16) -> TcpStream {
 /// True when the server closes the connection (EOF or reset) within `wait`,
 /// false when the connection is still open after it.
 fn closed_within(stream: &mut TcpStream, wait: Duration) -> bool {
-    stream
-        .set_read_timeout(Some(wait))
-        .unwrap_or_else(|error| panic!("read timeout: {error}"));
-    let mut buf = [0; 64];
-    match stream.read(&mut buf) {
-        Ok(0) => true,
-        Ok(n) => panic!("the server sent {n} bytes"),
-        Err(error) => match error.kind() {
-            ErrorKind::ConnectionReset | ErrorKind::ConnectionAborted => true,
-            ErrorKind::WouldBlock | ErrorKind::TimedOut => false,
-            _ => panic!("read: {error}"),
-        },
+    let deadline = Instant::now() + wait;
+    loop {
+        let now = Instant::now();
+        if now >= deadline {
+            return false;
+        }
+        let remaining = deadline - now;
+        stream
+            .set_read_timeout(Some(remaining.min(Duration::from_millis(100))))
+            .unwrap_or_else(|error| panic!("read timeout: {error}"));
+        let mut buf = [0; 64];
+        match stream.read(&mut buf) {
+            Ok(0) => return true,
+            Ok(_) => continue,
+            Err(error) => match error.kind() {
+                ErrorKind::ConnectionReset | ErrorKind::ConnectionAborted => return true,
+                ErrorKind::WouldBlock | ErrorKind::TimedOut => continue,
+                _ => panic!("read: {error}"),
+            },
+        }
     }
 }
 

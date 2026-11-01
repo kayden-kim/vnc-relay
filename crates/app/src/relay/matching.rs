@@ -247,7 +247,7 @@ pub(super) async fn dispatch<C: TargetConnector>(
                 .await;
             service.aborted(
                 context,
-                Stage::InitialExchange,
+                Stage::Register,
                 Mode::Mode2,
                 AbortReason::ServerShutdown,
             );

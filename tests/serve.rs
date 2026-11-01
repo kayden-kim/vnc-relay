@@ -1149,18 +1149,26 @@ fn connect_from(source: [u8; 4], port: u16) -> TcpStream {
 /// True when the server closes the connection (EOF or reset) within
 /// `wait`, false when the connection is still open after it.
 fn closed_within(stream: &mut TcpStream, wait: Duration) -> bool {
-    stream
-        .set_read_timeout(Some(wait))
-        .unwrap_or_else(|error| panic!("read timeout: {error}"));
-    let mut buf = [0; 64];
-    match stream.read(&mut buf) {
-        Ok(0) => true,
-        Ok(n) => panic!("the server sent {n} bytes"),
-        Err(error) => match error.kind() {
-            ErrorKind::ConnectionReset | ErrorKind::ConnectionAborted => true,
-            ErrorKind::WouldBlock | ErrorKind::TimedOut => false,
-            _ => panic!("read: {error}"),
-        },
+    let deadline = Instant::now() + wait;
+    loop {
+        let now = Instant::now();
+        if now >= deadline {
+            return false;
+        }
+        let remaining = deadline - now;
+        stream
+            .set_read_timeout(Some(remaining.min(Duration::from_millis(100))))
+            .unwrap_or_else(|error| panic!("read timeout: {error}"));
+        let mut buf = [0; 64];
+        match stream.read(&mut buf) {
+            Ok(0) => return true,
+            Ok(_) => continue,
+            Err(error) => match error.kind() {
+                ErrorKind::ConnectionReset | ErrorKind::ConnectionAborted => return true,
+                ErrorKind::WouldBlock | ErrorKind::TimedOut => continue,
+                _ => panic!("read: {error}"),
+            },
+        }
     }
 }
 
@@ -1481,7 +1489,9 @@ fn refuses_relay_connections_beyond_l_and_accepts_again_after_a_release() {
     wait_listening(guard.child(), ports);
 
     // Both entry points take places from the one L.
-    let viewer = connect_from([127, 0, 0, 2], ports.tcp_viewer);
+    let mut viewer = connect_from([127, 0, 0, 2], ports.tcp_viewer);
+    let mut greeting = [0u8; 12];
+    viewer.read_exact(&mut greeting).expect("viewer greeting");
     let accepted = wait_for_line(&log, |line| {
         is(line, "connection_accepted", "tcp_viewer", "127.0.0.2")
     });
@@ -1546,6 +1556,10 @@ fn tells_a_peer_close_from_an_initial_exchange_that_outlives_h() {
     // Bytes that never finish an initial exchange: H closes the connection.
     let started = Instant::now();
     let mut slow = connect_from([127, 0, 0, 2], ports.tcp_viewer);
+    let mut greeting = [0u8; 12];
+    slow.read_exact(&mut greeting).expect("viewer greeting");
+    assert_eq!(&greeting, b"RFB 000.000\n");
+
     slow.write_all(b"partial")
         .unwrap_or_else(|error| panic!("write: {error}"));
     assert!(closed_within(&mut slow, EXIT_LIMIT), "kept past H");
@@ -1565,6 +1579,21 @@ fn tells_a_peer_close_from_an_initial_exchange_that_outlives_h() {
     assert!(elapsed >= 1000, "{timed_out}");
     assert!(!read_log(&log).contains("partial"));
 
+    // Server also times out after H on partial bytes (no greeting sent).
+    let mut slow_server = connect_from([127, 0, 0, 3], ports.tcp_server);
+    slow_server
+        .write_all(b"partial-server")
+        .unwrap_or_else(|error| panic!("write: {error}"));
+    assert!(
+        closed_within(&mut slow_server, EXIT_LIMIT),
+        "server kept past H"
+    );
+    let server_timed_out = wait_for_line(&log, |line| {
+        is(line, "connection_aborted", "tcp_server", "127.0.0.3")
+            && field(line, "reason") == Some("handshake_timeout")
+    });
+    assert_eq!(field(&server_timed_out, "stage"), Some("initial_exchange"));
+
     // A peer that closes before sending anything is a peer_eof.
     let quitter = connect_from([127, 0, 0, 3], ports.tcp_server);
     wait_for_line(&log, |line| {
@@ -1573,8 +1602,8 @@ fn tells_a_peer_close_from_an_initial_exchange_that_outlives_h() {
     drop(quitter);
     let closed = wait_for_line(&log, |line| {
         is(line, "connection_aborted", "tcp_server", "127.0.0.3")
+            && field(line, "reason") == Some("peer_eof")
     });
-    assert_eq!(field(&closed, "reason"), Some("peer_eof"));
     assert_eq!(field(&closed, "level"), Some("info"));
 }
 
@@ -1782,6 +1811,9 @@ fn refuses_management_connections_beyond_lm_and_keeps_lm_and_l_apart() {
     // A full Lm does not stop relay connections. The management connection
     // takes no place of L: both places of L are still free.
     let mut viewer = connect_from([127, 0, 0, 2], ports.tcp_viewer);
+    let mut greeting = [0u8; 12];
+    viewer.read_exact(&mut greeting).expect("viewer greeting");
+    assert_eq!(&greeting, b"RFB 000.000\n");
     wait_for_line(&log, |line| {
         is(line, "connection_accepted", "tcp_viewer", "127.0.0.2")
     });
@@ -1809,4 +1841,321 @@ fn refuses_management_connections_beyond_lm_and_keeps_lm_and_l_apart() {
     assert_eq!(answer.0, 303);
     assert!(!closed_within(&mut viewer, Duration::from_millis(100)));
     assert!(!closed_within(&mut server, Duration::from_millis(100)));
+}
+
+fn make_request(value: &[u8]) -> [u8; 250] {
+    let mut req = [0u8; 250];
+    req[..value.len()].copy_from_slice(value);
+    req
+}
+
+/// spec: relay.md:RLY-010 partial
+/// spec: relay.md:RLY-011 partial
+/// spec: relay.md:RLY-003 partial
+/// spec: relay.md:RLY-017 partial
+/// spec: relay.md:RLY-019 partial
+#[test]
+fn mode2_relays_bytes_in_both_orders_with_trailing_data() {
+    let _lock = lock_ports();
+    let ports = Ports::free();
+    let config = valid_setup("mode2-process", ports);
+    write(
+        &config,
+        &(entry_config(ports, r#"["127.0.0.1"]"#, r#"["127.0.0.1"]"#)
+            + "\n[mode1]\nenabled = false\n[mode2]\nenabled = true\n"),
+    );
+    let log = config.with_file_name("relay.log");
+    let mut guard = Guard(Some(spawn(&config)));
+    wait_listening(guard.child(), ports);
+
+    // Order 1: Server first, then Viewer.
+    {
+        let mut server =
+            TcpStream::connect(("127.0.0.1", ports.tcp_server)).expect("connect server");
+        server
+            .set_read_timeout(Some(EXIT_LIMIT))
+            .expect("set timeout");
+        let mut server_payload = Vec::new();
+        server_payload.extend_from_slice(&make_request(b"ID:1001"));
+        server_payload.extend_from_slice(b"server-trailing-bytes");
+        server.write_all(&server_payload).expect("write server req");
+
+        wait_for_line(&log, |line| {
+            field(line, "event") == Some("waiting_registered")
+        });
+
+        let mut viewer =
+            TcpStream::connect(("127.0.0.1", ports.tcp_viewer)).expect("connect viewer");
+        viewer
+            .set_read_timeout(Some(EXIT_LIMIT))
+            .expect("set timeout");
+        let mut greeting = [0u8; 12];
+        viewer.read_exact(&mut greeting).expect("viewer greeting");
+        assert_eq!(&greeting, b"RFB 000.000\n");
+
+        let mut viewer_payload = Vec::new();
+        viewer_payload.extend_from_slice(&make_request(b"ID:1001"));
+        viewer_payload.extend_from_slice(b"viewer-trailing-bytes");
+        viewer.write_all(&viewer_payload).expect("write viewer req");
+
+        wait_for_line(&log, |line| field(line, "event") == Some("session_started"));
+
+        // Trailing bytes arrive at opposite ends
+        let mut v_buf = [0u8; 21];
+        viewer.read_exact(&mut v_buf).expect("read server trailing");
+        assert_eq!(&v_buf, b"server-trailing-bytes");
+
+        let mut s_buf = [0u8; 21];
+        server.read_exact(&mut s_buf).expect("read viewer trailing");
+        assert_eq!(&s_buf, b"viewer-trailing-bytes");
+
+        // Subsequent bytes forward in order
+        viewer.write_all(b"viewer-data-2").expect("viewer write 2");
+        let mut s_buf2 = [0u8; 13];
+        server.read_exact(&mut s_buf2).expect("server read 2");
+        assert_eq!(&s_buf2, b"viewer-data-2");
+
+        server.write_all(b"server-data-2").expect("server write 2");
+        let mut v_buf2 = [0u8; 13];
+        viewer.read_exact(&mut v_buf2).expect("viewer read 2");
+        assert_eq!(&v_buf2, b"server-data-2");
+
+        // Half-close and shutdown
+        viewer
+            .shutdown(std::net::Shutdown::Write)
+            .expect("v shutdown write");
+        let mut eof_check = [0u8; 1];
+        assert_eq!(server.read(&mut eof_check).expect("s read eof"), 0);
+
+        server
+            .shutdown(std::net::Shutdown::Write)
+            .expect("s shutdown write");
+        assert_eq!(viewer.read(&mut eof_check).expect("v read eof"), 0);
+
+        wait_for_line(&log, |line| {
+            field(line, "event") == Some("session_closed")
+                && field(line, "close_cause") == Some("peer_eof")
+        });
+    }
+
+    // Order 2: Viewer first, then Server.
+    {
+        let mut viewer =
+            TcpStream::connect(("127.0.0.1", ports.tcp_viewer)).expect("connect viewer");
+        viewer
+            .set_read_timeout(Some(EXIT_LIMIT))
+            .expect("set timeout");
+        let mut greeting = [0u8; 12];
+        viewer.read_exact(&mut greeting).expect("viewer greeting");
+        assert_eq!(&greeting, b"RFB 000.000\n");
+
+        let mut viewer_payload = Vec::new();
+        viewer_payload.extend_from_slice(&make_request(b"ID:2002"));
+        viewer_payload.extend_from_slice(b"v-first-trailing");
+        viewer.write_all(&viewer_payload).expect("write viewer req");
+
+        wait_for_line(&log, |line| {
+            field(line, "event") == Some("waiting_registered")
+        });
+
+        let mut server =
+            TcpStream::connect(("127.0.0.1", ports.tcp_server)).expect("connect server");
+        server
+            .set_read_timeout(Some(EXIT_LIMIT))
+            .expect("set timeout");
+        let mut server_payload = Vec::new();
+        server_payload.extend_from_slice(&make_request(b"ID:2002"));
+        server_payload.extend_from_slice(b"s-second-trailing");
+        server.write_all(&server_payload).expect("write server req");
+
+        let mut v_buf = [0u8; 17];
+        viewer
+            .read_exact(&mut v_buf)
+            .expect("viewer read s trailing");
+        assert_eq!(&v_buf, b"s-second-trailing");
+
+        let mut s_buf = [0u8; 16];
+        server
+            .read_exact(&mut s_buf)
+            .expect("server read v trailing");
+        assert_eq!(&s_buf, b"v-first-trailing");
+
+        server
+            .shutdown(std::net::Shutdown::Write)
+            .expect("s shutdown");
+        let mut eof_check = [0u8; 1];
+        assert_eq!(viewer.read(&mut eof_check).expect("v eof"), 0);
+
+        viewer
+            .shutdown(std::net::Shutdown::Write)
+            .expect("v shutdown");
+        assert_eq!(server.read(&mut eof_check).expect("s eof"), 0);
+
+        wait_for_line(&log, |line| {
+            field(line, "event") == Some("session_closed")
+                && field(line, "close_cause") == Some("peer_eof")
+        });
+    }
+}
+
+/// spec: relay.md:RLY-006 partial
+/// spec: relay.md:RLY-007 partial
+#[test]
+fn mode1_relays_to_allowed_target_and_refuses_denied_target() {
+    let _lock = lock_ports();
+    let ports = Ports::free();
+    let target_listener = TcpListener::bind("127.0.0.1:0").expect("target listener");
+    let target_port = target_listener.local_addr().unwrap().port();
+
+    let config = valid_setup("mode1-process", ports);
+    write(
+        &config,
+        &(entry_config(ports, r#"["127.0.0.1"]"#, r#"["127.0.0.1"]"#)
+            + &format!(
+                "\n[mode1]\nenabled = true\nallow_targets = [\"127.0.0.1:{target_port}\"]\n"
+            )),
+    );
+    let log = config.with_file_name("relay.log");
+    let mut guard = Guard(Some(spawn(&config)));
+    wait_listening(guard.child(), ports);
+
+    // 1. Allowed target
+    let mut viewer = TcpStream::connect(("127.0.0.1", ports.tcp_viewer)).expect("connect viewer");
+    viewer
+        .set_read_timeout(Some(EXIT_LIMIT))
+        .expect("set timeout");
+    let mut greeting = [0u8; 12];
+    viewer.read_exact(&mut greeting).expect("viewer greeting");
+    assert_eq!(&greeting, b"RFB 000.000\n");
+
+    let req_target = format!("127.0.0.1:{target_port}");
+    let mut req_payload = Vec::new();
+    req_payload.extend_from_slice(&make_request(req_target.as_bytes()));
+    req_payload.extend_from_slice(b"viewer-to-target-payload");
+    viewer.write_all(&req_payload).expect("write viewer req");
+
+    let (mut target_stream, _) = target_listener.accept().expect("target accept");
+    target_stream
+        .set_read_timeout(Some(EXIT_LIMIT))
+        .expect("set timeout");
+
+    let mut t_buf = [0u8; 24];
+    target_stream.read_exact(&mut t_buf).expect("target read");
+    assert_eq!(&t_buf, b"viewer-to-target-payload");
+
+    target_stream
+        .write_all(b"target-reply-payload")
+        .expect("target write");
+    let mut v_buf = [0u8; 20];
+    viewer.read_exact(&mut v_buf).expect("viewer read reply");
+    assert_eq!(&v_buf, b"target-reply-payload");
+
+    viewer
+        .shutdown(std::net::Shutdown::Write)
+        .expect("v shutdown");
+    let mut eof = [0u8; 1];
+    assert_eq!(target_stream.read(&mut eof).expect("target eof"), 0);
+
+    target_stream
+        .shutdown(std::net::Shutdown::Write)
+        .expect("t shutdown");
+    assert_eq!(viewer.read(&mut eof).expect("viewer eof"), 0);
+
+    wait_for_line(&log, |line| {
+        field(line, "event") == Some("session_closed") && field(line, "mode") == Some("mode1")
+    });
+
+    // 2. Denied target
+    let mut denied_viewer =
+        TcpStream::connect(("127.0.0.1", ports.tcp_viewer)).expect("connect denied");
+    denied_viewer
+        .set_read_timeout(Some(EXIT_LIMIT))
+        .expect("set timeout");
+    denied_viewer
+        .read_exact(&mut greeting)
+        .expect("viewer greeting");
+    denied_viewer
+        .write_all(&make_request(b"127.0.0.1:5999"))
+        .expect("write denied req");
+
+    assert!(
+        closed_within(&mut denied_viewer, EXIT_LIMIT),
+        "denied closed"
+    );
+    let rejected = wait_for_line(&log, |line| {
+        field(line, "event") == Some("connection_rejected")
+            && field(line, "reason") == Some("target_not_allowed")
+    });
+    assert_eq!(field(&rejected, "stage"), Some("target_connect"));
+}
+
+/// spec: relay.md:RLY-004 partial
+#[test]
+fn invalid_handshake_request_closes_connection_and_logs_rejected() {
+    let _lock = lock_ports();
+    let ports = Ports::free();
+    let config = valid_setup("invalid-handshake", ports);
+    write(
+        &config,
+        &(entry_config(ports, r#"["127.0.0.1"]"#, r#"["127.0.0.1"]"#)
+            + "\n[mode1]\nenabled = true\nallow_targets = [\"127.0.0.1:5900\"]\n[mode2]\nenabled = true\n"),
+    );
+    let log = config.with_file_name("relay.log");
+    let mut guard = Guard(Some(spawn(&config)));
+    wait_listening(guard.child(), ports);
+
+    let mut viewer = TcpStream::connect(("127.0.0.1", ports.tcp_viewer)).expect("connect viewer");
+    viewer
+        .set_read_timeout(Some(EXIT_LIMIT))
+        .expect("set timeout");
+    let mut greeting = [0u8; 12];
+    viewer.read_exact(&mut greeting).expect("viewer greeting");
+    assert_eq!(&greeting, b"RFB 000.000\n");
+
+    viewer
+        .write_all(&make_request(b"INVALID_PROTOCOL_BYTES"))
+        .expect("write invalid");
+    assert!(closed_within(&mut viewer, EXIT_LIMIT), "invalid closed");
+
+    let rejected = wait_for_line(&log, |line| {
+        field(line, "event") == Some("connection_rejected")
+            && field(line, "reason") == Some("handshake_invalid")
+    });
+    assert_eq!(field(&rejected, "stage"), Some("initial_exchange"));
+}
+
+/// spec: relay.md:RLY-022 partial
+#[test]
+fn disabled_mode_rejects_connection_with_mode_disabled() {
+    let _lock = lock_ports();
+    let ports = Ports::free();
+    let config = valid_setup("disabled-mode", ports);
+    write(
+        &config,
+        &(entry_config(ports, r#"["127.0.0.1"]"#, r#"["127.0.0.1"]"#)
+            + "\n[mode1]\nenabled = false\n[mode2]\nenabled = true\n"),
+    );
+    let log = config.with_file_name("relay.log");
+    let mut guard = Guard(Some(spawn(&config)));
+    wait_listening(guard.child(), ports);
+
+    let mut viewer = TcpStream::connect(("127.0.0.1", ports.tcp_viewer)).expect("connect viewer");
+    viewer
+        .set_read_timeout(Some(EXIT_LIMIT))
+        .expect("set timeout");
+    let mut greeting = [0u8; 12];
+    viewer.read_exact(&mut greeting).expect("viewer greeting");
+    assert_eq!(&greeting, b"RFB 000.000\n");
+
+    // Mode I request while Mode I is disabled
+    viewer
+        .write_all(&make_request(b"127.0.0.1:5900"))
+        .expect("write mode1");
+    assert!(closed_within(&mut viewer, EXIT_LIMIT), "disabled closed");
+
+    let rejected = wait_for_line(&log, |line| {
+        field(line, "event") == Some("connection_rejected")
+            && field(line, "reason") == Some("mode_disabled")
+    });
+    assert_eq!(field(&rejected, "stage"), Some("initial_exchange"));
 }

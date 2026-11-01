@@ -65,6 +65,7 @@ where
 {
     if entry_point.role() == Role::Viewer {
         stream.write_all(VIEWER_GREETING).await.map_err(io_error)?;
+        stream.flush().await.map_err(io_error)?;
     }
     let mut parser = HandshakeParser::new();
     let mut remaining = HANDSHAKE_REQUEST_LEN;
@@ -284,6 +285,9 @@ mod tests {
     impl<S: AsyncRead + AsyncWrite + Unpin + Send> RelayStream for TestStream<S> {
         fn transport(&self) -> ViewerTransport {
             ViewerTransport::Tcp
+        }
+        fn pending_write_len(&self) -> usize {
+            0
         }
         fn poll_close(
             mut self: Pin<&mut Self>,
@@ -634,6 +638,9 @@ mod tests {
     impl RelayStream for TrackedStream {
         fn transport(&self) -> ViewerTransport {
             ViewerTransport::Tcp
+        }
+        fn pending_write_len(&self) -> usize {
+            0
         }
         fn poll_close(
             mut self: Pin<&mut Self>,

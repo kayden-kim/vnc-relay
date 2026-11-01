@@ -7,8 +7,9 @@
 use std::fmt;
 use std::future::Future;
 use std::io::{self, ErrorKind};
+use std::net::SocketAddr;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 
 use socket2::{SockRef, TcpKeepalive};
 use tokio::net::{TcpListener, TcpStream};
@@ -16,8 +17,9 @@ use tokio::sync::watch;
 use tokio::task::JoinSet;
 use tokio::time::Instant;
 use tokio_rustls::TlsAcceptor;
-use vnc_relay_app::events::{AbortReason, ConnectionErrorKind, Event, RejectReason, Stage};
-use vnc_relay_app::ports::EventSink;
+use vnc_relay_app::events::{Event, RejectReason, Stage};
+use vnc_relay_app::ports::{Clock, EventSink};
+use vnc_relay_app::relay::{ConnectionContext, RelayRuntime, RelayService};
 use vnc_relay_app::reload::snapshot::{RelayAllow, ReloadCell};
 use vnc_relay_app::settings::{KeepaliveSettings, ListenerPlan};
 use vnc_relay_domain::allow_list::AllowList;
@@ -26,6 +28,7 @@ use vnc_relay_domain::conn_id::ConnId;
 use vnc_relay_domain::entry_point::EntryPoint;
 use vnc_relay_domain::peer_ip::PeerIp;
 
+use crate::target::TcpTargetConnector;
 /// TCP payload stream used after admission or an exact-address target connect.
 /// Terminal close intents shut down writes; the owner then drops the socket
 /// before returning its connection permit (relay-session.md §§3.2, 6).
@@ -106,6 +109,10 @@ impl tokio::io::AsyncWrite for TcpRelayStream {
 impl vnc_relay_app::ports::RelayStream for TcpRelayStream {
     fn transport(&self) -> vnc_relay_domain::session::ViewerTransport {
         vnc_relay_domain::session::ViewerTransport::Tcp
+    }
+
+    fn pending_write_len(&self) -> usize {
+        0
     }
 
     fn poll_close(
@@ -261,6 +268,9 @@ pub struct TcpEntryPoint {
     entry_point: EntryPoint,
     listener: TcpListener,
     policy: AcceptPolicy,
+    service: Arc<RelayService>,
+    runtime: Arc<RelayRuntime<TcpTargetConnector>>,
+    clock: Arc<dyn Clock>,
 }
 
 /// An accepted connection while it waits for the next stage.
@@ -269,14 +279,26 @@ pub(crate) struct Accepted {
     pub(crate) entry_point: EntryPoint,
     pub(crate) peer_ip: PeerIp,
     pub(crate) at: Instant,
+    pub(crate) peer_addr: SocketAddr,
+    pub(crate) accepted_wall: SystemTime,
 }
 
 impl TcpEntryPoint {
-    pub fn new(entry_point: EntryPoint, listener: TcpListener, policy: AcceptPolicy) -> Self {
+    pub fn new(
+        entry_point: EntryPoint,
+        listener: TcpListener,
+        policy: AcceptPolicy,
+        service: Arc<RelayService>,
+        runtime: Arc<RelayRuntime<TcpTargetConnector>>,
+        clock: Arc<dyn Clock>,
+    ) -> Self {
         Self {
             entry_point,
             listener,
             policy,
+            service,
+            runtime,
+            clock,
         }
     }
 
@@ -284,16 +306,41 @@ impl TcpEntryPoint {
     /// Then it closes the listener and returns once every accepted
     /// connection is closed and logged.
     pub async fn run(self, log: Arc<dyn EventSink>, stop: watch::Receiver<bool>) {
-        let handshake = self.policy.handshake;
-        let hold_log = Arc::clone(&log);
+        let service = self.service;
+        let runtime = self.runtime;
+        let clock = self.clock;
         accept_connections(
             self.entry_point,
             self.listener,
             self.policy,
             log,
             stop,
-            move |stream, conn, permit, stop| {
-                hold(stream, conn, permit, handshake, Arc::clone(&hold_log), stop)
+            move |stream, conn, permit, _stop| {
+                let service = Arc::clone(&service);
+                let runtime = Arc::clone(&runtime);
+                let clock = Arc::clone(&clock);
+                let elapsed = conn.at.elapsed();
+                let accepted_at = clock.monotonic().saturating_sub(elapsed);
+                let exchange_at = clock.monotonic();
+                let context = ConnectionContext {
+                    conn_id: conn.conn_id,
+                    entry_point: conn.entry_point,
+                    peer_ip: conn.peer_ip,
+                    peer_addr: conn.peer_addr,
+                    accepted_wall: conn.accepted_wall,
+                    accepted_at,
+                    exchange_at,
+                };
+                async move {
+                    let stream = TcpRelayStream::new(stream);
+                    let lifecycle = runtime.lifecycle();
+                    if let Ok(prepared) = service
+                        .handle_connection(stream, context, permit, lifecycle)
+                        .await
+                    {
+                        let _ = service.dispatch(prepared, &runtime).await;
+                    }
+                }
             },
         )
         .await;
@@ -357,6 +404,8 @@ pub(crate) async fn accept_connections<Serve, Fut>(
             entry_point,
             peer_ip,
             at: Instant::now(),
+            peer_addr: addr,
+            accepted_wall: SystemTime::now(),
         };
         log.record(&Event::ConnectionAccepted {
             conn_id: conn.conn_id,
@@ -391,50 +440,6 @@ fn set_keepalive(stream: &TcpStream, keepalive: &KeepaliveSettings) -> io::Resul
         .with_interval(keepalive.tcp_interval)
         .with_retries(keepalive.tcp_probes);
     SockRef::from(stream).set_tcp_keepalive(&params)
-}
-
-/// Keeps an accepted connection unread until H passes, the peer closes it
-/// first, or the server stops. The initial exchange (task 2.7) takes this
-/// place once the handshake contract is adopted; until then no byte is
-/// read, so no format is guessed (user decision 2026-10-20). The place of
-/// L goes back before the line is logged, so a client that sees the line
-/// can connect again at once.
-async fn hold(
-    stream: TcpStream,
-    conn: Accepted,
-    permit: BudgetPermit,
-    handshake: Duration,
-    log: Arc<dyn EventSink>,
-    mut stop: watch::Receiver<bool>,
-) {
-    let reason = tokio::select! {
-        // An error means the sender is gone, which also ends the server.
-        _ = stop.wait_for(|stop| *stop) => AbortReason::ServerShutdown,
-        () = tokio::time::sleep_until(conn.at + handshake) => AbortReason::HandshakeTimeout,
-        reason = closed_before_data(&stream) => reason,
-    };
-    drop(stream);
-    drop(permit);
-    log.record(&Event::ConnectionAborted {
-        conn_id: conn.conn_id,
-        entry_point: conn.entry_point,
-        stage: Stage::InitialExchange,
-        reason,
-        peer_ip: conn.peer_ip,
-        elapsed_ms: u64::try_from(conn.at.elapsed().as_millis()).unwrap_or(u64::MAX),
-    });
-}
-
-/// Resolves when the peer closes or breaks the connection before it sends
-/// a byte. `peek` leaves bytes in the socket for the initial exchange. Once
-/// a byte waits, this never resolves: only H or the stop ends the hold.
-async fn closed_before_data(stream: &TcpStream) -> AbortReason {
-    let mut byte = [0; 1];
-    match stream.peek(&mut byte).await {
-        Ok(0) => AbortReason::PeerEof,
-        Ok(_) => std::future::pending().await,
-        Err(_) => AbortReason::ConnectionError(ConnectionErrorKind::IoError),
-    }
 }
 
 // Reading the options back needs getters that socket2 offers on Linux but

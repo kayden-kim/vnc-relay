@@ -1065,6 +1065,24 @@ fn writes_waiting_events_without_raw_ids_or_unrelated_optional_fields() {
         assert_relay_fields(&event, expected);
         assert!(!format_line(&event, UNIX_EPOCH).contains(std::str::from_utf8(raw).unwrap()));
     }
+    assert_relay_fields(
+        &Event::RelayAborted {
+            conn_id,
+            entry_point: EntryPoint::TcpServer,
+            stage: Stage::Register,
+            reason: AbortReason::ServerShutdown,
+            peer_ip: relay_peer(),
+            elapsed_ms: 12,
+            mode: Mode::Mode2,
+        },
+        json!({
+            "event": "connection_aborted", "level": "info",
+            "conn_id": conn_id.to_string(), "listener": "tcp_server",
+            "role": "server", "mode": "mode2", "peer_ip": "198.51.100.21",
+            "stage": "register", "reason": "server_shutdown",
+            "elapsed_ms": 12
+        }),
+    );
 }
 
 /// spec: relay.md:RLY-006 partial

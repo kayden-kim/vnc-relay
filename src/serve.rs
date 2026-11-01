@@ -8,17 +8,19 @@ use std::path::Path;
 use std::process::ExitCode;
 use std::sync::Arc;
 use std::task::Poll;
+use std::time::Duration;
 
 use tokio::sync::watch;
 use tokio::task::JoinSet;
 use vnc_relay_adapters::accounts_file::{Argon2Hasher, Argon2Verifier, HashFloor};
 use vnc_relay_adapters::clock::SystemClock;
-use vnc_relay_adapters::crypto::SystemTokenSource;
+use vnc_relay_adapters::crypto::{CryptoError, RelayIdKey, SessionIdKey, SystemTokenSource};
 use vnc_relay_adapters::file_watch::{self, FsReloadFileStore, SystemReloadClock};
 use vnc_relay_adapters::management_http::{DashboardHints, ManagementListener};
 use vnc_relay_adapters::net::{AcceptPolicy, AllowSource, BindFailure, TcpEntryPoint};
 use vnc_relay_adapters::ops_log::JsonLinesEventSink;
 use vnc_relay_adapters::status_http::StatusListener;
+use vnc_relay_adapters::target::TcpTargetConnector;
 use vnc_relay_adapters::tls::{self, TlsError, TlsFile, TlsSource};
 use vnc_relay_adapters::websocket::{WsEntryPoint, WsPolicy};
 use vnc_relay_adapters::{accounts_file, config_file, net};
@@ -27,13 +29,15 @@ use vnc_relay_app::events::{Event, Phase};
 use vnc_relay_app::lifecycle::LifecycleService;
 use vnc_relay_app::management::login::dummy_hash;
 use vnc_relay_app::management::{AdminAuth, AdminPorts};
-use vnc_relay_app::ports::EventSink;
+use vnc_relay_app::ports::{Clock, EventSink};
+use vnc_relay_app::relay::{RelayRuntime, RelayRuntimeConfig, RelayService};
 use vnc_relay_app::reload::service::ReloadService;
 use vnc_relay_app::reload::snapshot::{RelayAllow, ReloadCell, ReloadSnapshot};
 use vnc_relay_app::settings::{LogOutput, Settings, TlsFiles};
 use vnc_relay_domain::admin_session::AdminSessionPolicy;
 use vnc_relay_domain::budget::ConnectionBudget;
 use vnc_relay_domain::entry_point::EntryPoint;
+use vnc_relay_domain::handshake::HandshakePolicy;
 use vnc_relay_domain::login_limit::LoginLimitPolicy;
 
 use crate::cli::{self, EXIT_ACCOUNTS, EXIT_CONFIG, EXIT_LISTENER, EXIT_RUNTIME};
@@ -120,13 +124,14 @@ pub fn run(config: &Path) -> ExitCode {
     };
     let session = settings.management.session;
     let limit = settings.management.login_limit;
+    let clock: Arc<dyn Clock> = Arc::new(SystemClock::new());
     let auth = Arc::new(AdminAuth::new(
         loaded.accounts,
         dummy,
         AdminPorts {
             verifier: Arc::new(Argon2Verifier),
             tokens: Arc::new(SystemTokenSource),
-            clock: Arc::new(SystemClock::new()),
+            clock: Arc::clone(&clock),
             events: Arc::clone(&log),
         },
         AdminSessionPolicy::new(session.idle, session.max_lifetime),
@@ -149,7 +154,7 @@ pub fn run(config: &Path) -> ExitCode {
             return runtime_failure(log.as_ref(), "비동기 런타임을 만들 수 없다", &error);
         }
     };
-    runtime.block_on(listen_until_shutdown(&settings, log, auth, config))
+    runtime.block_on(listen_until_shutdown(&settings, log, auth, config, clock))
 }
 
 async fn listen_until_shutdown(
@@ -157,12 +162,20 @@ async fn listen_until_shutdown(
     log: Arc<dyn EventSink>,
     auth: Arc<AdminAuth>,
     config: &Path,
+    clock: Arc<dyn Clock>,
 ) -> ExitCode {
     // Registered before binding so that a request during startup is not lost.
     let mut shutdown = match ShutdownSignal::register() {
         Ok(shutdown) => shutdown,
         Err(error) => {
             return runtime_failure(log.as_ref(), "종료 신호 처리기를 준비할 수 없다", &error);
+        }
+    };
+
+    let (relay_key, session_key) = match generate_startup_keys() {
+        Ok(keys) => keys,
+        Err(error) => {
+            return startup_keys_failure(log.as_ref(), &error);
         }
     };
 
@@ -305,14 +318,48 @@ async fn listen_until_shutdown(
     // The TCP and WebSocket entry points accept from here on. Every relay entry
     // point takes places from one L.
     let relay_budget = ConnectionBudget::new(settings.limits.relay_connections);
+    let waiting_budget = ConnectionBudget::new(settings.limits.waiting);
+    let connector = TcpTargetConnector::new(settings.keepalive);
+    let runtime = Arc::new(RelayRuntime::new(
+        connector,
+        Arc::new(relay_key),
+        Arc::new(session_key),
+        Arc::clone(&relay_budget),
+        waiting_budget,
+        RelayRuntimeConfig {
+            wait_timeout: settings.timeouts.wait,
+            connect_timeout: settings.timeouts.connect,
+            close_timeout: settings.timeouts.close,
+            recent_closed: settings.recent_closed.max_entries as usize,
+            target_policy: settings.mode1.allow_targets.clone().unwrap_or_default(),
+        },
+    ));
+    let relay_service = Arc::new(RelayService::new(
+        HandshakePolicy {
+            mode1_enabled: settings.mode1.enabled,
+            mode2_enabled: settings.mode2.enabled,
+        },
+        settings.timeouts.handshake,
+        settings.limits.buffer_bytes as usize,
+        settings.timeouts.close,
+        Arc::clone(&clock),
+        Arc::clone(&log),
+    ));
+
+    let supervisor = {
+        let service = Arc::clone(&relay_service);
+        let runtime = Arc::clone(&runtime);
+        tokio::spawn(async move {
+            service.drive_shutdown(&runtime).await;
+        })
+    };
+
     let mut entry_points = JoinSet::new();
     let mut idle = Vec::new();
     for bound in listeners {
         match bound.plan.entry_point {
             Some(entry_point @ (EntryPoint::TcpViewer | EntryPoint::TcpServer)) => {
                 let policy = AcceptPolicy {
-                    // Read from the reload snapshot for each new connection, so a
-                    // reload changes the list that new connections use.
                     allow: match entry_point {
                         EntryPoint::TcpViewer => AllowSource::tcp_viewer(Arc::clone(&cell)),
                         _ => AllowSource::tcp_server(Arc::clone(&cell)),
@@ -321,13 +368,18 @@ async fn listen_until_shutdown(
                     handshake: settings.timeouts.handshake,
                     keepalive: settings.keepalive,
                 };
-                let entry = TcpEntryPoint::new(entry_point, bound.listener, policy);
+                let entry = TcpEntryPoint::new(
+                    entry_point,
+                    bound.listener,
+                    policy,
+                    Arc::clone(&relay_service),
+                    Arc::clone(&runtime),
+                    Arc::clone(&clock),
+                );
                 entry_points.spawn(entry.run(Arc::clone(&log), stopped.clone()));
             }
             Some(entry_point @ (EntryPoint::WsViewer | EntryPoint::WssViewer)) => {
                 let entry_settings = settings.relay.get(entry_point);
-                // The WSS acceptor was loaded before any bind (tls_checks). A
-                // WSS listener without it stays idle; it never runs as plaintext.
                 let tls = match entry_point {
                     EntryPoint::WssViewer if wss_present => Some(TlsSource::wss(Arc::clone(&cell))),
                     _ => None,
@@ -338,7 +390,6 @@ async fn listen_until_shutdown(
                 }
                 let policy = WsPolicy {
                     accept: AcceptPolicy {
-                        // Read from the reload snapshot for each new connection.
                         allow: match entry_point {
                             EntryPoint::WssViewer => AllowSource::wss_viewer(Arc::clone(&cell)),
                             _ => AllowSource::ws_viewer(Arc::clone(&cell)),
@@ -358,20 +409,48 @@ async fn listen_until_shutdown(
     }
 
     shutdown.wait().await;
-    // `/readyz` answers `shutting_down` while entry points close their
-    // listeners and log every open connection before the last event.
     lifecycle.begin_shutdown();
+    relay_service.request_shutdown(&runtime, settings.timeouts.shutdown_grace);
     stop.send_replace(true);
-    while entry_points.join_next().await.is_some() {}
+
+    tokio::select! {
+        _ = async {
+            while entry_points.join_next().await.is_some() {}
+        } => {}
+        _ = shutdown.wait() => {
+            relay_service.request_shutdown(&runtime, Duration::ZERO);
+            while entry_points.join_next().await.is_some() {}
+        }
+    }
+    let _ = supervisor.await;
     drop(idle);
     stop_task(management_task).await;
     stop_task(status_task).await;
-    // The file watch stops with the other tasks.
     let _ = watch_task.await;
     log.record(&Event::ServerStopped);
     ExitCode::SUCCESS
 }
 
+fn generate_startup_keys() -> Result<(RelayIdKey, SessionIdKey), CryptoError> {
+    generate_startup_keys_with(RelayIdKey::generate, SessionIdKey::generate)
+}
+
+fn generate_startup_keys_with<F, G>(
+    relay_gen: F,
+    session_gen: G,
+) -> Result<(RelayIdKey, SessionIdKey), CryptoError>
+where
+    F: FnOnce() -> Result<RelayIdKey, CryptoError>,
+    G: FnOnce() -> Result<SessionIdKey, CryptoError>,
+{
+    let relay = relay_gen()?;
+    let session = session_gen()?;
+    Ok((relay, session))
+}
+
+fn startup_keys_failure(log: &dyn EventSink, error: &dyn Display) -> ExitCode {
+    runtime_failure(log, "운영체제 난수원으로 시작 키를 만들 수 없다", error)
+}
 /// Stops an admin listener task and waits until its listener is closed.
 /// Admin connections still open close when the runtime ends.
 async fn stop_task(task: Option<tokio::task::JoinHandle<()>>) {
@@ -601,5 +680,23 @@ mod tests {
             &events[0],
             Event::StartupFailed { reason, .. } if *reason == "watch_unavailable"
         ));
+    }
+
+    #[test]
+    fn startup_key_generation_failure_is_a_startup_failure() {
+        let sink = RecordingSink::default();
+        let error = CryptoError;
+        let code = startup_keys_failure(&sink, &error);
+        assert_eq!(code, ExitCode::from(EXIT_RUNTIME));
+        let events = sink.events.lock().expect("sink lock");
+        assert_eq!(events.len(), 1);
+        assert!(matches!(
+            &events[0],
+            Event::StartupFailed { reason, detail, .. }
+                if *reason == "runtime_unavailable" && detail.as_deref() == Some("운영체제 난수를 읽을 수 없다.")
+        ));
+
+        let err = generate_startup_keys_with(|| Err(CryptoError), SessionIdKey::generate);
+        assert!(matches!(err, Err(CryptoError)));
     }
 }
