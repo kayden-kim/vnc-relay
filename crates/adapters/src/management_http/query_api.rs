@@ -31,9 +31,9 @@ const MEDIA_TYPE_MESSAGE: &str = "요청 본문은 application/json이어야 한
 const NOT_FOUND_SESSION_MESSAGE: &str = "지정한 세션을 찾을 수 없습니다.";
 const INVALID_SESSION_ID_MESSAGE: &str = "세션 식별자 형식이 올바르지 않습니다.";
 
-/// Formats the raw socket IP (contract §6 assumption; Q88 is pending).
+/// Formats the canonical socket IP, using the same rule as `PeerIp`.
 fn format_ip(addr: &SocketAddr) -> String {
-    addr.ip().to_string()
+    addr.ip().to_canonical().to_string()
 }
 
 fn format_address(addr: &SocketAddr) -> serde_json::Value {
@@ -220,4 +220,45 @@ fn closed_sessions_response(view: &ClosedSessionsView) -> Response {
         "items": items,
     });
     json_response(StatusCode::OK, &body)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn formats_ipv4_mapped_ipv6_as_ipv4_without_changing_port() {
+        let addr: SocketAddr = "[::ffff:192.0.2.1]:5901"
+            .parse()
+            .unwrap_or_else(|e| panic!("parse address: {e}"));
+
+        assert_eq!(
+            format_address(&addr),
+            json!({"ip": "192.0.2.1", "port": 5901})
+        );
+    }
+
+    #[test]
+    fn preserves_plain_ipv6_and_port() {
+        let addr: SocketAddr = "[2001:db8::5]:5902"
+            .parse()
+            .unwrap_or_else(|e| panic!("parse address: {e}"));
+
+        assert_eq!(
+            format_address(&addr),
+            json!({"ip": "2001:db8::5", "port": 5902})
+        );
+    }
+
+    #[test]
+    fn preserves_plain_ipv4_and_port() {
+        let addr: SocketAddr = "192.0.2.5:5903"
+            .parse()
+            .unwrap_or_else(|e| panic!("parse address: {e}"));
+
+        assert_eq!(
+            format_address(&addr),
+            json!({"ip": "192.0.2.5", "port": 5903})
+        );
+    }
 }
