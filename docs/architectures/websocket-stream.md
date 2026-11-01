@@ -5,11 +5,11 @@
 | 항목 | 값 |
 | --- | --- |
 | 상태 | Draft |
-| 구조 범위 | Current: §1.1·§3~§6·§8의 스트림·종료 구현. §7은 현재 회귀 시험과 계획을 구분한다. Target: §9.5 Kw(작업 3.4) |
+| 구조 범위 | Current: §1.1·§3~§6·§8의 스트림·종료 구현과 §9.5 Kw(작업 3.4). §7은 현재 시험 범위를 구분한다. |
 | 적용 작업 | 2.7 완료 전에 가져오는 3.3의 스트림 어댑터. 3.4의 Kw·종료 처리와 연결할 경계도 설계 |
 | 기준 | [WebSocket 계약 1.4~1.6절](../contracts/websocket-relay-v1.md#14-데이터-메시지와-제어-프레임), [초기 교환 설계](initial-exchange.md), [세션 설계 3.2절](relay-session.md#32-전송-수명-인터페이스) |
-| 결정 수준 | 9.1~9.3절은 사용자 결정 2026-11-01(Q77, Q78, Q79)로 해결했다. 9.4절은 사용자 결정 2026-11-01(Q83)로 확정했다. 9.5절은 사용자 결정 2026-11-02(Q84)으로 선택 A를 확정했다. 구현은 TODO 3.4의 미완료 범위이며 2.7을 막지 않는다. 채택된 계약을 바르게 반영함 |
-| 구현 대조 | `638cf09`에서 WS·WSS 진입점을 연결했다. 이후 결함 수정은 현재 작업 트리의 `websocket_stream.rs`, `frame.rs`, `relay/session.rs`, `serve.rs`와 대조했다. Kw(작업 3.4)는 미구현이다. 시험 범위는 §7이다. |
+| 결정 수준 | 9.1~9.3절은 사용자 결정 2026-11-01(Q77, Q78, Q79)로 해결했다. 9.4절은 사용자 결정 2026-11-01(Q83)로 확정했다. 9.5절은 사용자 결정 2026-11-02(Q84)으로 선택 A를 확정했다. 채택된 계약을 바르게 반영함 |
+| 구현 대조 | `638cf09`에서 WS·WSS 진입점을 연결했다. 현재 작업 트리의 `websocket_stream.rs`, `frame.rs`, `keepalive.rs`, `relay/handshake.rs`, `relay/matching.rs`, `relay/target.rs`, `relay/session.rs`가 스트림·종료·Kw를 맡는다. 시험 범위는 §7이다. |
 
 별도 문서로 둔다. [기존 진입점 설계](websocket-entry-point.md)는 HTTP·TLS 검사와 101까지를 설명한다. 이 문서는 101 뒤의 프레임·B·종료 수명을 맡는다. `Current`와 `Target`을 섞지 않기 위한 선택이다(**이 문서의 판단, 사용자 결정 없음**).
 
@@ -23,7 +23,7 @@
 | --- | --- |
 | [`Cargo.lock`](../../Cargo.lock), [`Cargo.toml`](../../Cargo.toml) | 잠금 버전은 `tokio-tungstenite 0.30.0`, `tungstenite 0.30.0`이다. 직접 의존은 기본 기능을 끄고 `handshake`를 켠 `tokio-tungstenite`다. |
 | [`crates/adapters/src/websocket.rs`](../../crates/adapters/src/websocket.rs)의 `upgrade` | `upgrade::read_head`로 head와 뒤따른 원시 바이트(`suffix`)를 받는다. `switching_protocols`의 101을 `write_all`·`flush`한 뒤 `Step::Switched { suffix, exchange_at }`를 반환한다. 라이브러리의 HTTP 수락 함수가 101을 보내는 구조가 아니다. |
-| 같은 파일의 `WsPolicy`, `connection` | `WsPolicy`에는 `accept`, `upgrade`, `origins`, `message_bytes`(M), `buffer_bytes`(B)가 있다. `connection`은 `suffix`를 `WsRelayStream::new`에 넘기고 `RelayService::handle_connection`과 `dispatch`로 보낸다. `hold_upgraded`는 제거되었다. Kw는 아직 주입하지 않는다. |
+| 같은 파일의 `WsPolicy`, `connection` | `WsPolicy`에는 `accept`, `upgrade`, `origins`, `message_bytes`(M), `buffer_bytes`(B)가 있다. `connection`은 `suffix`와 `accept.keepalive`를 `WsRelayStream::new`에 넘기고 `RelayService::handle_connection`과 `dispatch`로 보낸다. |
 | [`crates/adapters/src/upgrade.rs`](../../crates/adapters/src/upgrade.rs)의 `read_head` | 청크 단위로 읽고 HTTP head 상한을 둔다. `\r\n\r\n` 뒤 바이트는 버리지 않고 `HeadRead::Complete { head, suffix }`의 `suffix`로 돌려준다. |
 | 같은 파일의 `check`, `switching_protocols` | `tungstenite::handshake::derive_accept_key`를 쓴다. `binary` 서브프로토콜을 선택할 수 있다. 확장을 수락하지 않는다. |
 | [`crates/app/src/relay/handshake.rs`](../../crates/app/src/relay/handshake.rs)의 `read_request` | Viewer일 때 `VIEWER_GREETING`을 한 번 `write_all`한다. 별도 `flush`는 없다. 요청을 나눠 읽고 250바이트 뒤의 데이터를 반환한다. |
@@ -80,6 +80,7 @@ WS·WSS의 H는 101 응답 전송 완료 뒤 `ConnectionContext.exchange_at`에�
 | --- | --- |
 | `crates/adapters/src/websocket_stream.rs`의 `WsRelayStream<S>` | `Wire` 또는 같은 tokio I/O를 소유. 기존 `RelayStream` 구현. WS·WSS 전송 종류, 선행 바이트, 읽기·쓰기·Close 상태 유지 |
 | `crates/adapters/src/websocket_stream/frame.rs` | 헤더 검사, 프레임 길이·마스크 오프셋, 분할 상태, 논리 M 누적. 소켓·app 사건·세션 등록을 소유하지 않음 |
+| `crates/adapters/src/websocket_stream/keepalive.rs`의 `Keepalive` | 고정 Ping 시각, 미완료 Ping 한 개, Pong 기한 FIFO와 tokio 타이머를 소유. 사건·세션 등록은 소유하지 않음 |
 | 기존 `upgrade.rs` | HTTP head와 함께 읽은 후속 바이트를 분리해 반환. HTTP 검사와 101 형식은 유지 |
 | 기존 `websocket.rs` | 101 완료 시각을 문맥에 넣고 스트림·L permit을 공통 서비스에 이동. 프레임에서 Repeater 요청을 직접 파싱하지 않음 |
 | 기존 app의 `RelayService`, `PreparedConnection`, 세션 방향 버퍼 | H·C·W·E·G, 요청 판정, 등록·매칭, 전송량, 사건, permit의 최종 소유자 |
@@ -94,7 +95,7 @@ B는 WS 메시지 하나에 따로 주는 메모리가 아니다. 아래 미전�
 - TCP → WS: `app 방향 버퍼의 미전달 페이로드 ≤ B`. 어댑터에는 별도 데이터 메시지 큐를 두지 않는다.
 - 초기 교환의 후속 데이터도 같은 app 버퍼다. `PreparedConnection`에서 대기·세션으로 이동하며 복제하지 않는다.
 - 고정 길이 요청 파서와 프레임 헤더·제어 상태는 프로토콜 상태다. 제어 페이로드는 슬롯마다 125바이트 이하이고 슬롯 수가 고정이다. 임의의 제어·데이터 큐는 금지한다.
-- 송신 제어 슬롯은 `decoder.pending_pong`, `active_pong`, `pending_close`다. 각 슬롯은 고정 크기다. `holding_tx_bytes()`는 미송신 Pong, 진행 중 Pong, Close와 데이터 헤더의 남은 바이트를 합친다. 페이로드를 담는 추가 B 크기 큐는 없다. 슬롯 배치는 **이 문서의 판단, 사용자 결정 없음**이다.
+- 송신 제어 슬롯은 `decoder.pending_pong`, `active_pong`, `keepalive.pending_ping`, `pending_close`다. 각 슬롯은 고정 크기다. `holding_tx_bytes()`는 미송신 Pong, 진행 중 Pong·Ping, Close와 데이터 헤더의 남은 바이트를 합친다. 페이로드를 담는 추가 B 크기 큐는 없다. 슬롯 배치는 **이 문서의 판단, 사용자 결정 없음**이다.
 - 업그레이드 후속 바이트는 아직 마스크·프레임 해석 전이다. 그 안의 페이로드를 숨기지 않도록 **원시 바이트 길이 전체를 보수적으로 B에 포함**한다. HTTP head는 검사 뒤 버린다.
 
 현재 `read_head`의 마지막 읽기는 1024바이트다. 따라서 head 뒤에 남는 원시 바이트는 최대 1023바이트다. 이 상한은 코드의 읽기 길이에서 도출한 값이다. B의 최솟값보다 작다.
@@ -126,14 +127,14 @@ M 초과는 프레임 헤더만으로도 알 수 있다. 이때 해당 프레임
 1. 현재 U·출발지 IP·HTTP·Origin 검사 순서를 유지한다. `read_head`는 HTTP head뿐 아니라 후속 원시 바이트도 보존한다.
 2. U 안에서 101 응답을 모두 쓰고 `flush`한다. 완료 직후 공통 `Clock::monotonic()`을 한 번 읽는다. 이것이 `ConnectionContext.exchange_at`이다.
 3. `conn_id`, 실제 상대 IP·포트, `accepted_wall`, `accepted_at`은 수락 때의 값을 보존한다. 101 완료 시각을 수락 시각으로 덮어쓰지 않는다.
-4. `WsRelayStream<Wire>`에 선행 바이트와 검증된 M·B·전송 종류를 준다. 이미 보낸 101을 라이브러리 수락 함수로 다시 보내지 않는다.
+4. `WsRelayStream<Wire>`에 선행 바이트와 검증된 M·B·전송 종류·`KeepaliveSettings`를 준다. 이미 보낸 101을 라이브러리 수락 함수로 다시 보내지 않는다.
 5. `handle_connection(stream, context, permit, shutdown)`을 호출한다. `shutdown`은 기존 `watch::Receiver<RelayLifecycle>`이다. `Running`, `Grace { deadline }`, `Force`를 다른 bool 수명으로 바꾸지 않는다.
 6. 시작 바이트는 **공통 서비스만** 쓴다. 어댑터는 최초 12바이트를 FIN이 있는 바이너리 프레임 하나에 담는다. 부분 소켓 쓰기로 나뉘어도 프레임·메시지 수는 하나다. 진입점에서 별도로 greeting을 보내지 않는다.
 7. greeting의 전송·필요한 `flush`와 요청 읽기에 같은 절대 `exchange_at + H`를 쓴다. 현재 공통 코드에는 greeting 뒤 `flush`가 없으므로, 하위 전송의 버퍼를 비워야 하는 구현이면 이 `flush`도 같은 H 안에 추가해야 한다. 청크·프레임·메시지마다 H를 다시 주지 않는다.
 8. 성공한 `PreparedConnection`은 즉시 기존 `RelayService::dispatch`에 이동한다. Mode I·II의 C·W·매칭·중계는 app이 맡는다. 실패는 5절의 close action과 사건으로 끝낸다.
 9. `hold_upgraded`는 `638cf09`에서 제거되었다. WS·WSS는 공통 서비스(`handle_connection` → `dispatch`)에 연결되어 있다. 2.7 완료 표시는 이 문서가 정하지 않는다.
 
-`WsPolicy`의 `message_bytes`와 `buffer_bytes`가 M·B를 전달한다. Kw 설정은 아직 이 경계에 주입하지 않는다. 작업 3.4가 §9.5의 정책과 진행 경계를 함께 다룬다. WS·WSS는 같은 어댑터를 쓴다. TLS는 기존 `Wire::Tls`가 맡는다.
+`WsPolicy`의 `message_bytes`와 `buffer_bytes`가 M·B를 전달한다. `accept.keepalive`가 Kw의 Ping 주기와 Pong 제한을 전달한다. WS·WSS는 같은 어댑터를 쓴다. TLS는 기존 `Wire::Tls`가 맡는다.
 
 ## 5. 기존 `RelayStream`과의 대응
 
@@ -200,7 +201,7 @@ Force의 action은 [세션 설계 5.2절](relay-session.md#52-정상-종료와-g
 | 첫 text 프레임 | `WsTextMessage` → `ws_text_message` | `ConnectionAborted`, `connection_error`, 1003. 텍스트를 TCP에 전달하지 않음 |
 | 논리 M 초과 | `WsMessageTooLarge` → `ws_message_too_large` | `ConnectionAborted`, `connection_error`, 1009 |
 | Close 없는 소켓 EOF·읽기/쓰기 오류 | `IoError` → `io_error` | `ConnectionAborted`, `connection_error`. 정상 WS 읽기 EOF로 위장하지 않음 |
-| WS Pong 기한 만료 | `AbortReason::DeadConnection` | `ConnectionAborted`, `dead_connection`. Close 없이 소켓 종료. 이 사유를 전달할 진행 경계는 5.4절에서 추가 필요 |
+| WS Pong 기한 만료 | `RelayStreamError::DeadConnection` → `AbortReason::DeadConnection` | `ConnectionAborted`, `dead_connection`. Close 없이 소켓 종료 |
 | 서버 종료 | `AbortReason::ServerShutdown` | `ConnectionAborted`, `server_shutdown`, 1001 |
 
 사건 필드는 [운영 정보 계약 1.5~1.7절](../contracts/ops-info-v1.md#15-사건-목록)이 기준이다. 어댑터는 사건을 직접 기록하지 않는다. app이 최초 원인 하나를 선택한다. 초기 실패는 E 안에서 action 진행 → 스트림 drop → L permit drop → 사건 한 번 순서다. Close 실패가 원래 사유를 바꾸지 않는다.
@@ -213,13 +214,13 @@ Force의 action은 [세션 설계 5.2절](relay-session.md#52-정상-종료와-g
 
 | 경계 | 현재 구현과 남은 범위 |
 | --- | --- |
-| app이 페이로드 읽기·쓰기를 poll하지 않을 때 대기 제어 출력 진행 | `run_session`의 활성 소유 루프가 WS Viewer의 `poll_flush(cx)`를 별도로 poll한다. `Pending`이어도 양방향 중계를 계속 poll한다. 오류는 `RelayStreamError::classify`로 분류한다. Viewer 출력 오류로 기존 정리 경로에 전달한다. |
+| app이 페이로드 읽기·쓰기를 poll하지 않을 때 대기 제어 출력 진행 | `run_session_controlled`의 활성 소유 루프가 WS Viewer의 `poll_flush(cx)`를 별도로 poll한다. `Pending`이어도 양방향 중계를 계속 poll한다. 오류는 `RelayStreamError::classify`로 분류한다. Viewer 출력 오류로 기존 정리 경로에 전달한다. |
 | 미완료 WS 출력 프레임의 경계 | `pending_write_len()`이 이미 헤더를 전송하기 시작한 프레임의 잔여 페이로드 길이를 알린다. app의 기존 미전달 범위로 같은 E 안에서 마친다. 사용자 결정 2026-11-01(Q83)의 범위다. |
 | WS Close 뒤의 반대 방향 처리 | `first_eof()`로 먼저 종료한 쪽을 보존한다. drain·TCP 쓰기 종료·Close 응답·반대 방향 폐기를 구분한다. [세션 설계 4.4절](relay-session.md#44-ws를-나중에-연결하는-경계)이 흐름을 설명한다. |
-| Kw의 주기·기한과 새 제어 입력 | `poll_maintenance`는 아직 제안이다. H·C·W·활성·closing 전체의 Kw 진행 경계는 작업 3.4에서 검토한다. 현재 `poll_flush`가 이를 모두 구현했다고 보지 않는다. |
+| Kw의 주기·기한과 새 제어 입력 | `RelayStream::poll_maintenance`가 입력을 소비하지 않고 Ping·Pong 출력과 기한을 진행한다. 할 일이 없으면 타이머 wake를 등록하고 `Pending`을 반환한다. TCP의 기본 구현도 `Pending`이다. H의 읽기·쓰기, C의 연결 소유 루프, W의 대기 소유 루프, 활성 중계 소유 루프가 Kw를 진행한다. |
 | 대상 L 부족 action | `RelayCloseAction::TargetConnectionLimit`로 4011을 선택한다. 사용자 결정 2026-11-01(Q79)다. |
 
-현재 제어 진행 poll인 `poll_flush`는 입력을 소비하지 않는다. B가 찬 데이터 페이로드를 건너뛰지 않는다. 이미 관찰한 Ping의 Pong만 페이로드 방향과 독립적으로 진행한다. 정리 중에는 `poll_close`가 출력을 진행한다. 새 Ping이 B 뒤에 가려지는 한계에서도 §9.5의 고정 주기·Pong 기한을 유지한다(사용자 결정 2026-11-02(Q84)). `DeadConnection` 전달을 포함한 새 유지보수 포트와 전체 진행 경계는 TODO 3.4에서 구현한다.
+`poll_maintenance`와 `poll_flush`는 입력을 소비하지 않는다. B가 찬 데이터 페이로드를 건너뛰지 않는다. C·W는 남은 B 범위에서만 `poll_read`로 제어 입력과 데이터를 읽는다. C의 후속 데이터도 같은 연결의 `trailing`에 남겨 활성 세션으로 넘긴다. 이미 관찰한 Ping의 Pong과 서버 Ping은 안전한 프레임 경계에서 진행한다. B 뒤에 가려진 Pong도 §9.5의 절대 기한을 따른다(사용자 결정 2026-11-02(Q84)).
 
 ## 6. 제어 프레임·Kw·종료 상태
 
@@ -238,9 +239,9 @@ Force의 action은 [세션 설계 5.2절](relay-session.md#52-정상-종료와-g
 - 1002·1003·1009로 거절한 입력은 프레임 해석을 신뢰할 수 없다. 이때는 Close를 flush하고 쓰기를 닫는다. 이어 원시 입력을 EOF까지 제한된 횟수로 버린다. 거절한 페이로드 안의 Close 같은 바이트를 응답으로 오인하지 않는다. 유효한 terminal 정리 중 프레임 검사에 실패해도 이 원시 폐기 경로로 전환한다.
 - 두 폐기 경로 모두 poll당 처리를 제한한다. E·G·Force의 절대 상한은 app이 유지한다. 별도 WS 유예 시간은 없다. 어댑터 drop 뒤 소켓을 가진 배경 작업도 남기지 않는다. 상태 슬롯, 재시도와 폐기 경로의 구현 배치는 **이 문서의 판단, 사용자 결정 없음**이다.
 
-Kw는 빈 Ping의 주기와 Pong 기한을 각각 가진다. 일반 데이터 수신은 Pong 응답이 아니다. 대기 중인 Ping이 없을 때 받은 Pong은 생존 판정을 갱신하지 않는다. Pong 기한 초과에는 Close 없이 TCP를 닫는다. 1006은 상대의 관찰 값이지 송신 코드가 아니다([계약 1.4~1.6절](../contracts/websocket-relay-v1.md#14-데이터-메시지와-제어-프레임)). 사용자 결정 2026-11-02(Q84)으로 고정 Ping 주기를 유지하고 전송한 빈 Ping마다 기한을 FIFO에 보관한다. Pong을 받으면 가장 오래된 대기 기한을 지운다. 상한은 `ceil(pong_timeout / ping_interval) + 1`이다(9.5절). 구현은 TODO 3.4의 미완료 범위이며 2.7 완료를 막지 않는다.
+Kw는 빈 Ping의 주기와 Pong 기한을 각각 가진다. 일반 데이터 수신은 Pong 응답이 아니다. 대기 중인 Ping이 없을 때 받은 Pong은 생존 판정을 갱신하지 않는다. Pong 기한 초과에는 Close 없이 TCP를 닫는다. 1006은 상대의 관찰 값이지 송신 코드가 아니다([계약 1.4~1.6절](../contracts/websocket-relay-v1.md#14-데이터-메시지와-제어-프레임)). 사용자 결정 2026-11-02(Q84)으로 고정 Ping 주기를 유지하고 전송한 빈 Ping마다 기한을 FIFO에 보관한다. Pong을 받으면 가장 오래된 대기 기한을 지운다. 상한은 `ceil(pong_timeout / ping_interval) + 1`이다(9.5절).
 
-B가 찬 데이터 프레임 뒤의 새 Ping·Pong·Close는 아직 읽을 수 없다. 같은 TCP 바이트열에서 그 뒤 제어만 골라 읽을 수는 없다. `poll_flush`도 이 한계를 바꾸지 않는다. 이미 대기한 Pong의 출력 진행과 새 Ping의 수신을 구별한다. 사용자 결정 2026-11-02(Q84)에 따라 backpressure 중에도 Pong 기한을 멈추지 않는다. 가려진 Pong을 기한 안에 관찰하지 못하면 종료될 수 있다. 진행 경계 구현은 TODO 3.4이며 2.7의 WS 스트림 인계와 별도 범위다.
+B가 찬 데이터 프레임 뒤의 새 Ping·Pong·Close는 아직 읽을 수 없다. 같은 TCP 바이트열에서 그 뒤 제어만 골라 읽을 수는 없다. 유지보수 poll도 이 한계를 바꾸지 않는다. 이미 대기한 제어 출력 진행과 새 제어 입력의 수신을 구별한다. 사용자 결정 2026-11-02(Q84)에 따라 backpressure 중에도 Pong 기한을 멈추지 않는다. 가려진 Pong을 기한 안에 관찰하지 못하면 종료될 수 있다.
 
 2.7 인계에는 실제 바이너리 스트리밍, M 검사, text·프로토콜 오류, 기본 Ping/Pong·Close 경계가 필요하다. Kw 전체 수용 기준은 3.4가 소유한다. 2.7 때문에 Kw를 가짜 성공 처리하거나 3.4가 진행할 수 없는 읽기 전용 래퍼를 만들지 않는다.
 
@@ -295,7 +296,7 @@ B가 찬 데이터 프레임 뒤의 새 Ping·Pong·Close는 아직 읽을 수 �
 
 소유 루프의 `drives_queued_and_partial_pongs_while_payload_writes_are_backpressured`와 `classifies_control_flush_errors_as_viewer_output_errors`는 `crates/app/src/relay/session.rs`에 있다. 둘 다 표식 없는 내부 시험이다. [세션 설계 7절](relay-session.md#7-설계-선택과-테스트-계획)이 Force·`first_eof`·사건 순서의 회귀 시험도 정리한다.
 
-작업 3.4의 Kw 시험은 아직 계획이다. `drives_kw_without_payload_io_and_bounds_pending_pings`와 `ws_and_wss_kw_keeps_idle_peers_and_drops_unresponsive_peers`는 현재 시험으로 세지 않는다. §9.5의 사용자 결정 2026-11-02(Q84)에 따라 빈 Ping의 고정 주기, FIFO의 기한·상한·오래된 대기 제거와 B 뒤의 새 제어 입력을 검증해야 한다. `WS-026` 표식도 실제 시험을 만들 때 범위에 맞춰 정한다.
+현재 Kw 시험은 `keepalive.rs`의 `fixed_ticks_bound_fifo_and_pong_removes_only_oldest`, `prompt_pongs_keep_idle_connections_alive_and_wrap_the_bounded_fifo`, `maximum_configured_fifo_expires_before_it_can_grow_past_its_bound`와 `tests.rs`의 `kw_` 시험 네 개다. 정지 시각으로 FIFO 상한·오래된 기한 제거·기한 만료·B 뒤 Pong·부분 출력과 Ping·Close의 순서를 확인한다. `crates/adapters/tests/websocket_scenarios.rs::ws_and_wss_kw_keeps_idle_peers_and_drops_unresponsive_peers`는 실제 WS·WSS에서 응답 없는 활성·대기 Viewer의 제거와 `dead_connection`, 응답하는 유휴 Viewer 유지, TCP에 제어 바이트가 섞이지 않음과 자원 반환을 확인한다. 이 시험은 `websocket.md:WS-026` 전체 표식을 쓴다.
 
 실제 화면·입력과 모드별 WS·WSS 조합은 [WS-001~006](../specs/websocket.md#6-전송모드-검증-조합)의 별도 수용 시험이다. 이 문서의 스트림 단위 시험으로 대신하지 않는다. 외부 상호운용 도구의 소스는 읽지 않는다.
 
@@ -307,14 +308,14 @@ B가 찬 데이터 프레임 뒤의 새 Ping·Pong·Close는 아직 읽을 수 �
 | `hold_upgraded` 보류 (해결, 638cf09) | `connection`이 `WsRelayStream`을 만들어 공통 `handle_connection` → `dispatch`로 넘긴다 |
 | M·B 미주입 (해결, 638cf09) | `WsPolicy`의 `message_bytes`·`buffer_bytes`가 `WsRelayStream::new`에 주입된다 |
 | 초기 실패 action·형식 있는 I/O 오류 포트 존재 | 그대로 사용. WS 코드만 어댑터에서 변환. 사건은 app 한 곳 |
-| TCP 세션 중심의 app 흐름 | 현재 `run_session`은 `first_eof()`로 종료 순서를 보존한다. 독립 `poll_flush`가 이미 대기한 제어 출력을 진행한다. WS Close의 drain·폐기·E 경계도 같은 소유자가 처리한다. |
+| TCP 세션 중심의 app 흐름 | 현재 `run_session_controlled`는 `first_eof()`로 종료 순서를 보존한다. 독립 `poll_flush`가 이미 대기한 제어 출력을 진행한다. WS Close의 drain·폐기·E 경계도 같은 소유자가 처리한다. |
 | Q21의 2.7 보류 (해결, 638cf09) | 보류는 제거되었다. Q21 문구와 TODO 3.2의 `현재:`는 바꾸지 않는다 |
 
-`relay-session.md`는 현재 `poll_flush` 제어 진행, `first_eof`와 Force의 action 보존을 설명한다. `serve-startup.md`는 마지막 진입점 소유자가 끝난 뒤 감독 작업을 취소하고 합류하는 수명을 설명한다. §9.5 Kw 정책은 사용자 결정 2026-11-02(Q84)으로 확정했으나 구현은 TODO 3.4에 남는다. 이 문서가 그 작업의 완료 여부를 바꾸지는 않는다.
+`relay-session.md`는 제어 진행, `first_eof`와 Force의 action 보존을 설명한다. `serve-startup.md`는 마지막 진입점 소유자가 끝난 뒤 감독 작업을 취소하고 합류하는 수명을 설명한다. §9.5 Kw는 사용자 결정 2026-11-02(Q84)에 따라 어댑터와 공통 소유 루프에 연결한다. 이 문서의 시험 범위와 TODO 완료 판정은 구분한다.
 
 ## 9. 미결정 사항
 
-9.1~9.3절은 사용자 결정 2026-11-01(Q77, Q78, Q79)로 해결했다. 9.4절은 사용자 결정 2026-11-01(Q83)로 확정했다. 9.5절도 사용자 결정 2026-11-02(Q84)으로 해결했다. Kw 구현은 TODO 3.4의 미완료 범위이며 2.7 완료를 막지 않는다.
+9.1~9.3절은 사용자 결정 2026-11-01(Q77, Q78, Q79)로 해결했다. 9.4절은 사용자 결정 2026-11-01(Q83)로 확정했다. 9.5절도 사용자 결정 2026-11-02(Q84)으로 해결했다.
 
 <a id="91-프레임-처리-구현의-선택"></a>
 
@@ -346,7 +347,7 @@ B가 찬 데이터 프레임 뒤의 새 Ping·Pong·Close는 아직 읽을 수 �
 
 ### 9.5 Kw의 여러 Ping과 B backpressure
 
-사용자 결정 2026-11-02(Q84)으로 선택 A를 확정했다. 고정 Ping 주기를 유지한다. 전송한 빈 Ping마다 Pong 기한 하나를 FIFO에 넣고, Pong을 받으면 가장 오래된 대기 기한을 지운다. FIFO 상한은 `ceil(pong_timeout / ping_interval) + 1`이다. 구현은 TODO 3.4에 남으며 2.7 완료를 막지 않는다.
+사용자 결정 2026-11-02(Q84)으로 선택 A를 확정했다. 고정 Ping 주기를 유지한다. 전송한 빈 Ping마다 Pong 기한 하나를 FIFO에 넣고, Pong을 받으면 가장 오래된 대기 기한을 지운다. FIFO 상한은 `ceil(pong_timeout / ping_interval) + 1`이다. 현재 `Keepalive`가 이 상태를 소유한다.
 
 | 선택 | 장점 | 비용·충돌 |
 | --- | --- | --- |
@@ -356,13 +357,22 @@ B가 찬 데이터 프레임 뒤의 새 Ping·Pong·Close는 아직 읽을 수 �
 
 선택 A는 [데이터·제어 계약](../contracts/websocket-relay-v1.md#14-데이터-메시지와-제어-프레임)의 빈 Ping·각 Pong 기한과 [설정 계약](../contracts/config-v2.md)의 범위를 유지한다. FIFO는 응답의 실제 신원을 증명하지 않는다. RFC가 허용하는 Pong 합치기와도 구별한다. backpressure 동안에도 기한을 멈추지 않으므로 B 뒤에 가려진 Pong을 기한 안에 관찰하지 못하면 종료될 수 있다(사용자 결정 2026-11-02(Q84)). 유예·식별자·새 기본값을 도입하지 않는다. 위 표는 검토한 대안의 기록이다.
 
+`Keepalive`는 검증된 설정 범위의 최대 크기인 61칸 고정 배열을 쓴다. 실제 FIFO 인덱스는 해당 연결의 계산한 상한 안에서만 돈다. Ping마다 메모리를 할당하지 않는다. 스트림당 tokio `Sleep` 하나가 다음 Ping 또는 가장 오래된 Pong 기한의 wake를 등록한다. 일반 데이터나 Pong이 Ping 기준 시각을 옮기지 않는다. 타이머 poll에서 기한 만료와 다음 Ping이 겹치면 만료를 먼저 판정한다.
+
+미완료 데이터 프레임·Pong·Ping의 바이트 사이에 다른 제어 프레임을 끼워 넣지 않는다. 서버 Ping은 빈 프레임 두 바이트를 모두 쓰고 하부 전송을 flush한 시각부터 Pong 제한을 잰다. 출력이 막힌 동안에는 미완료 Ping 한 개만 보존한다. 지나간 주기의 Ping을 한꺼번에 쌓아 보내지 않고, 원래 고정 기준의 다음 시각으로 진행한다. 이 내부 저장·poll 방식은 **이 문서의 판단, 사용자 결정 없음**이다.
+
+자기 WS의 Pong 제한 초과는 `RelayStreamError::DeadConnection`으로 공통 소유자에게 전달한다. H·C에서는 `connection_aborted(reason=dead_connection)`, Mode II 대기에서는 `waiting_removed(reason=dead_connection)`, 활성 세션에서는 `session_closed(close_cause=dead_connection, side=viewer)`로 기록한다. 어댑터의 만료 상태는 Close 없이 자기 TCP를 닫게 한다. 반대 TCP가 끊긴 연결일 때 살아 있는 WS에 보내는 4006은 그대로 유지한다. 이는 [WebSocket 계약 1.6·2.2절](../contracts/websocket-relay-v1.md#16-종료-의미)을 따른 것이며 새 사용자 결정이 아니다.
+
 ## 대조·실행 기록
 
 - 초안 조사 대상: 커밋 `4478c9744e96e631e2224b6efe5ef7af4b4ccc37` 위의 작업 트리였다. 아래 API 조사와 문서 검사 수치는 당시 기록이다. 현재 구현 범위는 문서 앞부분과 §7에서 구분한다.
 - 환경: Windows 11 x64. 소스·공식 버전 문서를 읽어 대조했다. 외부 API 자료는 조회 당시 값이다.
 - 확인 방법: 잠금 버전의 `Stream`·프레임·메시지·헤더 API와 소스를 읽었다. Cargo 소스와 공개 버전 소스를 교차 확인했다. 유지 상태·크기·라이선스는 crates.io·저장소 API에서 읽었다.
-- 초안 조사의 Rust 빌드·동작 시험: **미실행**이었다. 현재 스트림과 회귀 시험은 §7에 있다. 이번 문서 갱신에서는 소스와 표식을 읽었으며 시험을 다시 실행하지 않았다.
-- 초안 당시 문서 검사: **통과**. 당시 `check_ws_changed_docs()`로 이 문서와 `architectures/code-map.md`, `TODO.md`를 검사했다. 로컬 링크 383개, 앵커 216개, 표 22개의 오류가 0개였다. 이 수치는 이번 개정의 검사 결과가 아니다. 이번 개정은 허용된 설계 문서 세 개만 수정했다. 코드와 시험 표식을 읽어 대조했다.
+- 초안 조사의 Rust 빌드·동작 시험: **미실행**이었다. 아래 `4e4a271` 기록과 Kw 작업 트리 기록은 별도 실행이다.
+- 초안 당시 문서 검사: **통과**. 당시 `check_ws_changed_docs()`로 이 문서와 `architectures/code-map.md`, `TODO.md`를 검사했다. 로컬 링크 383개, 앵커 216개, 표 22개의 오류가 0개였다. 이 수치는 Kw 작업 트리의 문서 검사 결과가 아니다.
 - 게이트 실행(커밋 `4e4a271`, 2026-11-02): Windows 11 x64의 `vr-win.ps1 -Only all`과 WSL2 Ubuntu 24.04 LTS의 `vr-full.sh`가 모두 종료 코드 0, `ALL PASSED`로 끝났다. 시나리오 150건의 판정은 통과다.
-- WS 행 결과: WS-007~012, WS-016, WS-017, WS-019, WS-021은 두 OS에서 비부분으로 통과했다. WS-026은 미연결이다.
+- `4e4a271`의 WS 행 결과: WS-007~012, WS-016, WS-017, WS-019, WS-021은 두 OS에서 비부분으로 통과했다. 당시 WS-026은 미연결이었다.
 - 세부 실행 기록은 [세션 설계 8절](relay-session.md#8-현재-코드와의-차이와-연결-순서)에 있다.
+- Kw 작업 트리(기준 `5a38bfc`, 2026-11-02): `cargo test -p vnc-relay-app -p vnc-relay-adapters`가 Windows와 WSL에서 모두 종료 코드 0으로 끝났다. 공동 검증의 대상 디렉터리는 각각 `D:/vr-target-term`, `$HOME/vnc-relay-target-term`이다. Kw 단위 시험 일곱 개, 실제 WS-026, 기존 `websocket` 18건·`websocket_relay` 12건·`websocket_scenarios` 10건이 모두 통과했다. 따라서 WS-016·WS-017의 기존 종료 회귀 범위도 유지한다.
+- Kw 반복 시험: `cargo test -p vnc-relay-adapters --test websocket_scenarios ws_and_wss_kw_keeps_idle_peers_and_drops_unresponsive_peers -- --exact`를 Windows(`D:/vr-target-kw`)에서 3회, WSL(`$HOME/vnc-relay-target-kw`)에서 1회 실행했다. 모두 종료 코드 0이며 매회 `1 passed; 0 failed`였다. 시험의 시간 기준을 연결별 접속 직전으로 옮긴 뒤 다시 3회·1회 실행했다. 유휴 클라이언트는 연결 직후부터 Pong에 응답한다. 실제 소켓의 시간 창은 무응답 8~20초, 세 번의 Ping에 응답한 유휴 연결 13~25초다. 정확한 기한·주기는 정지 시각 시험이 확인한다. 수정 뒤 시험 시간은 Windows 30.10·30.09·30.10초, WSL 30.24초였다.
+- 변경한 Rust 파일의 `rustfmt --check --edition 2024 --config skip_children=true`는 종료 코드 0이었다. 공동 검증의 `cargo clippy --workspace --all-targets -- -D warnings`도 두 OS에서 종료 코드 0이었다. 전체 완료 게이트와 계약 §5의 실행 기록은 이 작업에서 수정하지 않았다.

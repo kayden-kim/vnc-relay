@@ -101,7 +101,7 @@ flowchart LR
 | 8 | `static_answer` 4단계, `dashboard_assets.rs` `find_asset` | 표에서 요청 경로와 정확히 같은 항목을 찾는다. 있으면 `200`: GET은 본문, HEAD는 본문 없이 같은 `Content-Length`. 헤더는 파일 응답 규칙(`Content-Type`, `Cache-Control`, 보안 헤더)을 따른다. 없으면 `404` `not_found` 본문(9절 13번). 세션이 있는 `/`도 항목이 없으면 `404`다(9절 12번). | 없음 | 응답 |
 | 9 | `management_http.rs` `answer` 4단계 | 나머지 경로는 메서드와 관계없이 `303`, `Location: /login/`, 본문 없음. 계약 1.11절 표는 존재하는 그 밖의 경로에 `404`를, 없는 경로에 `303`을 준다. 이 리스너에는 존재하는 그 밖의 경로가 없어 모두 `303`이다. | 없음 | 응답 |
 
-목표(Target, TODO 4.5): 5단계에서 검증·수락된 terminate 요청이 정리 완료를 기다리는 동안만 연결의 U를 멈춘다. 응답 쓰기부터 U를 다시 잰다. 인증·CSRF·경로·본문 검사와 그 밖의 요청에는 기존 U를 적용한다. 이 Q25 예외는 사용자 결정 2026-11-02(Q92)이며 아직 구현하지 않았다. 기준은 [설정 계약 1.2절](../contracts/config-v2.md#12-키-표)과 [종료 설계 4.2절](management-terminate.md#42-중계-소유자의-정리와-알림)이다.
+Q25 예외(Current, TODO 4.5): 5단계에서 검증·수락된 terminate 요청이 정리 완료를 기다리는 동안만 연결의 U를 멈춘다. `terminate_api`가 수락 뒤 `IdleControl::pause_for_termination`을 부르고, `Deadlined::resume_for_response`가 첫 응답 쓰기에서 U를 다시 잰다(`crates/adapters/src/request_deadline.rs`). 인증·CSRF·경로·본문 검사와 그 밖의 요청에는 기존 U를 적용한다. 이 예외는 사용자 결정 2026-11-02(Q92)다. 기준은 [설정 계약 1.2절](../contracts/config-v2.md#12-키-표)과 [종료 설계 4.2절](management-terminate.md#42-중계-소유자의-정리와-알림)이다.
 
 관리 응답은 모두 `Cache-Control: no-store`를 가진다. 정적 보안 헤더(`X-Content-Type-Options`·`Referrer-Policy`·`Content-Security-Policy`, 1.11절)는 정적 파일 응답(200)에만 붙인다. CSP는 계약 1.1.0부터 필수다(사용자 결정 2026-10-22(Q37)). 303과 404 응답에는 보안 헤더를 붙이지 않는다. 작업 4.6이 구현했다.
 

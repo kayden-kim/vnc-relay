@@ -164,7 +164,7 @@ flowchart LR
 | MGT-015 | FR-06 / MGT-R10 | 통합 | `crates/adapters/tests/management.rs` | `X-Forwarded-For`, `Forwarded` 헤더를 주입해도 실제 소켓 피어 주소가 응답 주소에 표시됨을 검증 계획 |
 | MGT-016 | FR-06 / MGT-R01 | 단위/통합 | `crates/adapters/tests/management.rs` | 쿼리 응답 생성 중 세션이 추가/종료되어도 단일 응답 내부의 `as_of`와 목록/카운트의 일관성 보장 검증 계획 |
 | MGT-021 | FR-06·7절 / MGT-R11 | 통합 | `crates/adapters/tests/management.rs` | 세션 쿠키 없이 4개 조회 엔드포인트 직접 호출 시 `401 unauthenticated` 반환 및 보호 정보 차단 검증 계획 |
-| MGT-023 | FR-06 / MGT-R15 | 통합 | `crates/adapters/tests/management.rs` | 정상 EOF, 연결 오류, 관리자 종료로 끝난 세션의 최근 종료 목록 조회 및 종료 원인 6종 구별 표시, 최근 종료된 세션 식별자로 상세 조회 시 `404 not_found` 반환 검증 계획 (종료 요청 검증은 작업 4.5 몫) |
+| MGT-023 | FR-06 / MGT-R15 | 통합 | `crates/adapters/tests/management.rs` | 정상 EOF, 연결 오류, 관리자 종료로 끝난 세션의 최근 종료 목록 조회 및 `internal_error`(사용자 결정 2026-11-02(Q94))를 포함한 종료 원인 7종 구별 표시, 최근 종료된 세션 식별자로 상세 조회 시 `404 not_found` 반환 검증 계획 (종료 요청 검증은 작업 4.5 몫) |
 | MGT-024 | FR-06 / MGT-R15 | 단위/통합 | `crates/domain/src/recent_closed.rs`, `crates/adapters/tests/management.rs` | 최근 종료 목록이 R개 초과 시 FIFO 삭제 검증 및 프로세스 재시작 시 메모리 목록 초기화 검증 계획 |
 | MGT-026 | FR-06 / MGT-R17 | 통합 | `crates/adapters/tests/management.rs` | 초기 교환 n개, Mode I 대상 연결 m개, L 도달 상태에서 요약의 `counts` 및 `usage` 일치 검증 계획 |
 | OPS-033 | OPS-R18 / OPS-033 | 통합 | `tests/serve.rs` | 관리·상태 연결(Lm)이 L과 분리되어 집계되며 상한 도달 시 `admin_connection_limit` 격리 검증 계획 |

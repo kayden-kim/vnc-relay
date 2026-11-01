@@ -1,13 +1,13 @@
 # 관리자 종료 API 모듈 설계
 
-인증된 관리자가 `session_id`로 지정한 활성 세션 하나를 종료하고, 실제 자원 정리가 끝난 뒤 결과를 받는 구조를 설계한다. HTTP 요청은 종료 의사만 전달한다. 스트림과 연결 예산을 소유한 기존 중계 작업이 정리하고 완료를 알린다. 이 문서는 작업 4.5의 설계안이며 코드나 시험 결과가 아니다. 9절의 Q89~Q92는 2026-11-02 사용자 결정으로 해결했다. 구조 시점 Target과 문서 상태 Draft는 유지한다.
+인증된 관리자가 `session_id`로 지정한 활성 세션 하나를 종료하고, 실제 자원 정리가 끝난 뒤 결과를 받는 구조다. HTTP 요청은 종료 의사만 전달한다. 스트림과 연결 예산을 소유한 기존 중계 작업이 정리하고 완료를 알린다. 작업 4.5의 제품 경로와 시험을 구현했다. 실제 실행 결과는 8절에서 구분한다. Q89~Q92는 사용자 결정 2026-11-02로 해결했다.
 
 | 항목 | 값 |
 | --- | --- |
-| 구조 시점 | Target |
-| 문서 상태 | Draft |
-| 구현 대조 | 미대조. 기존 코드 조사와 구현 전 차이는 8절에 기록한다. |
-| 코드 위치 | 계획: `crates/app/src/management/terminate.rs`, `crates/adapters/src/management_http/terminate_api.rs`; 확장: `crates/app/src/ports.rs`, `crates/app/src/relay.rs`, `crates/app/src/relay/session.rs`, `crates/app/src/events.rs`, `crates/adapters/src/ops_log.rs`, `src/serve.rs` |
+| 구조 시점 | Current — 제품 경로와 단위·시스템 시험으로 확인한 범위. 남은 입증은 8절 |
+| 문서 상태 | Active — 작업 4.5 사용자 지시와 Q89~Q92 적용 |
+| 구현 대조 | Verified — `5a38bfc` 이후 작업 트리의 작업 4.5 변경. 2026-11-02 Windows·WSL 실행 범위는 8절 |
+| 코드 위치 | `crates/app/src/management/terminate.rs`, `crates/adapters/src/management_http/terminate_api.rs`, `crates/app/src/ports.rs`, `crates/app/src/relay.rs`, `crates/app/src/relay/session.rs`, `crates/app/src/events.rs`, `crates/adapters/src/ops_log.rs`, `crates/adapters/src/request_deadline.rs`, `src/serve.rs` |
 | 코드 지도 | [코드 지도](code-map.md#2-코드-위치와-구성요소) |
 | 관련 스펙 | [관리 3.2·4·7절](../specs/management.md#32-관리자-종료) MGT-008~012, MGT-013·014·023; [운영](../specs/operations.md#7-수용-테스트) OPS-011·043; [중계](../specs/relay.md#7-수용-테스트) RLY-020 |
 | 관련 계약 | [관리 API 1.9절](../contracts/management-api-v1.md#19-관리자-종료-post-apiv1sessionssession_idterminate), 1.1~1.4·2.1·6절; [운영 정보 1.8절](../contracts/ops-info-v1.md#18-관리자-계정명-기록-규칙) |
@@ -18,7 +18,7 @@
 - 맡는 책임: 종료 요청 검증, 세션 식별자에 한정한 종료 명령, 기존 정리에 합류, 완료 알림 대기, 결과·요약 응답, 관리자 계정명을 포함한 사건 기록이다.
 - 맡지 않는 책임: 로그인과 CSRF 토큰 발급은 [관리 세션](management-session.md), 조회 뷰는 [관리 조회](management-query.md), 스트림 소유·E·G·종료 원인은 [중계 수명](relay-session.md)이 맡는다. UI 확인·응답 유실 뒤 재조회는 화면과 계약의 Consumer 규칙이다.
 - 문서 분리 이유: 조회는 상태를 복사하지만 종료는 상태 변경·비동기 완료·요청 경합을 다룬다. [아키텍처 작성 규칙](AGENTS.md#작성-규칙)의 “한 문서는 하나의 구조 질문에 답한다”는 원칙에 따라 `management-query.md`를 늘리지 않고 별도 모듈 설계를 둔다.
-- 계획 공개 기능: 응용 `ManagementTerminateService::terminate`, 포트 `RelaySessionControl::request_terminate`, 런타임의 세션별 종료 요청 수락. 이름과 내부 형태는 아래 설계안이며 아직 공개 API가 아니다.
+- 공개 기능: 응용 `ManagementTerminateService::request_terminate`·`complete`, 포트 `RelaySessionControl::request_terminate`, 런타임의 세션별 종료 요청 수락이다.
 
 ## 2. 내부 구조
 
@@ -31,7 +31,7 @@ flowchart LR
     API -->|"유휴 연장"| AUTH
     API -->|"검증된 요청"| SVC["ManagementTerminateService"]
     SVC -->|"session_id·계정·요청 출발지"| PORT["RelaySessionControl"]
-    PORT -->|"짧은 상태 잠금·깨우기"| OWNER["run_pair / run_session"]
+    PORT -->|"세션별 제어 잠금·깨우기"| OWNER["run_pair / run_session_controlled"]
     OWNER -->|"스트림·예산·등록 정리 뒤 완료"| WAIT["세션별 완료 상태"]
     WAIT -->|"최종 요약 또는 확인 실패"| SVC
     SVC -->|"응답용 뷰"| API
@@ -42,22 +42,22 @@ flowchart LR
 | --- | --- | --- | --- |
 | `management_http/session_api.rs` `answer` | 로그인 이외 요청의 인증과 POST·DELETE CSRF를 경로·메서드보다 먼저 검사한다. | 관리 요청마다 호출 | `AdminAuth`, 조회·종료 어댑터 |
 | `management_http/terminate_api.rs` | 인증·CSRF 뒤 경로·메서드·폴링 헤더·형식·본문을 검사하고 응답을 직렬화한다. | 요청마다 호출 | 응용 종료 서비스, 기존 쿠키·오류 응답 헬퍼 |
-| `management/terminate.rs` `ManagementTerminateService` | 검증된 계정으로 종료 포트를 호출하고 알림을 비동기로 기다린다. | `serve`가 시작 때 생성 | `RelaySessionControl`, `Clock`, `EventSink` |
+| `management/terminate.rs` `ManagementTerminateService` | 동기로 명령을 수락한 뒤 `complete`에서 완료를 기다린다. 대상 없음과 정리 합류를 감사한다. | `serve`가 시작 때 생성 | `RelaySessionControl`, `Clock`, `EventSink` |
 | `ports.rs` `RelaySessionControl` | 제네릭 런타임을 HTTP에서 직접 다루지 않는 종료 경계 | `RelayRuntime<C>`가 구현 | 세션 식별자, 계정명, 완료 수신 핸들 |
-| `relay.rs`의 활성 등록·`run_pair` | 명령·완료 상태를 활성 세션과 함께 소유하고 실제 회수를 확인한다. | 세션 활성화부터 정리 완료까지 | `Session`, `RelayStream`, 예산, 매칭 표 |
-| `relay/session.rs` `run_session` | 기존 lifecycle·시한·양방향 작업과 함께 관리자 명령을 poll한다. | 기존 세션 소유 작업 | `begin_admin_close`, E, G |
+| `relay.rs`의 활성 등록·`SessionControl`·`run_pair` | 세션당 명령·완료 상태를 소유한다. 동기 엔진 poll과 명령 수락을 직렬화하고 실제 회수를 확인한다. | 세션 활성화부터 정리 완료까지 | `Session`, `RelayStream`, 예산, 매칭 표 |
+| `relay/session.rs` `run_session_controlled` | 기존 lifecycle·시한·양방향 작업과 함께 관리자 명령을 poll한다. | 기존 세션 소유 작업 | `begin_admin_close`, E, G |
 | `events.rs`·`ops_log.rs` | `admin_terminate` 사건과 관리자 계정명 직렬화 | 요청 처리 결과 확정 때 | 운영 정보 계약 |
 
 ## 3. 데이터 모델
 
 외부 요청·응답은 [관리 API 1.9·1.10절](../contracts/management-api-v1.md#19-관리자-종료-post-apiv1sessionssession_idterminate)을 따른다. 최근 종료 목록을 다시 검색해서 응답을 만들지 않는다.
 
-| 이름(계획) | 필드·형태 | 저장 위치 | 제약과 항상 지켜야 할 조건 |
+| 이름 | 필드·형태 | 저장 위치 | 제약과 항상 지켜야 할 조건 |
 | --- | --- | --- | --- |
-| `ActiveEntry` | 현재 `ActiveSessionSnapshot`과 비공개 종료 제어·완료 상태 | `RelayState.active`의 같은 세션 항목 | 공개 조회 스냅샷에는 채널·계정·요청자를 복사하지 않는다. |
-| `TerminateRequest` | 인증으로 얻은 `AccountName`, 실제 `PeerIp`, 수락 단조 시각 | 세션 소유자가 받는 단일 미처리 명령 슬롯 | 입력 계정명·`relay_id`를 받지 않는다. 새 종료를 시작하는 명령은 하나뿐이다. |
-| `TerminationTicket` | 잠금 아래 확정한 종료 시작 또는 기존 정리 합류 결과, 같은 세션의 완료 수신 핸들 | 요청 처리 수명 | 자연 종료·Force·관리자 요청을 같은 전이 순서로 판정한다. 소유자의 뒤늦은 명령 수신 시점으로 결과를 뒤집지 않는다(7.1절). |
-| `CompletionState` | 미완료 또는 `Result<Arc<ClosedSessionSnapshot>, CleanupUnconfirmed>` | 세션별 `watch` 등 보존형 완료 상태 | 알림 전에 완료돼도 결과를 읽을 수 있어야 한다. `Notify`만 쓰고 상태를 따로 확인하지 않는 방식은 피한다. |
+| `ActiveSessionSnapshot`·`SessionControl` | 조회 메타데이터와 비공개 제어 상태를 서로 다른 표에 둠 | `RelayState.active`·`controls`, 같은 `SessionId` 키 | 공개 스냅샷에는 채널·계정·요청자를 복사하지 않는다. 두 표는 같은 등록 전이에서 추가·제거한다. |
+| `AdminClose` | 인증된 `AccountName`, 실제 `PeerIp` | `SessionControl.admin`의 단일 최초 요청 | 수락 시각은 단일 `watch<Option<Duration>>` 명령에 보존한다. 입력 계정명·중계 ID를 받지 않는다. |
+| `TerminationTicket`·`AcceptedTermination` | 새 종료 여부, 완료 수신자, 응용 서비스가 보존하는 인증·대상 문맥 | 요청 처리 수명 | 새 종료 여부는 최초 수락 때 확정한다. 소유자의 뒤늦은 명령 수신 시점으로 뒤집지 않는다. |
+| 완료 상태 | `watch<Option<Result<Arc<ClosedSessionSnapshot>, ()>>>` | 세션별 `SessionControl.completion` | 알림 전에 완료돼도 결과를 읽는다. 성공 요약은 R=0·목록 축출과 무관하게 보유한다. |
 | `TerminateView` | `as_of`, `result`, `closed_session` | 응답 생성 때 | 성공의 요약은 필수·non-null이다. R=0·목록 축출·동시 다른 종료에도 요약을 잃지 않는다. |
 
 `closed_session`에는 `session_id`, `mode`, `viewer_transport`, `started_at`, `ended_at`, 두 방향 최종 바이트 정수, 실제 `close_cause`만 넣는다. 시각은 UTC 밀리초 3자리이고 `ended_at >= started_at`이다. 주소·관리자 계정·CSRF·원시 데이터·중계 ID를 넣지 않는다. `as_of`는 응답을 만드는 시점이다. 이는 계약 1.1.1·1.9·1.10절에 따른 **이 문서의 판단**이다.
@@ -68,7 +68,7 @@ flowchart LR
 
 [관리 API 1.3절](../contracts/management-api-v1.md#13-요청-처리-순서)을 그대로 따른다. 로그인 예외를 제외하면 인증(401) → POST·DELETE의 CSRF(403) → 경로·메서드·`X-Relay-Poll`·`session_id` 형식·본문(404·405·400) → 처리 순서다. terminate의 본문은 `Content-Type`과 관계없이 400이며 415 규칙보다 우선한다(사용자 결정 2026-11-02(Q89)). 앞 단계에서 거절하면 뒤 단계는 하지 않는다.
 
-| 순서 | 코드 위치(계획) | 조건·계산 | 바뀌는 상태 | 결과를 쓰는 곳 |
+| 순서 | 코드 위치 | 조건·계산 | 바뀌는 상태 | 결과를 쓰는 곳 |
 | --- | --- | --- | --- | --- |
 | 1 | `session_api::answer` | `AdminAuth::authorize` 실패는 경로·메서드보다 먼저 401. 기존 쿠키 삭제·`WWW-Authenticate` 규칙 재사용 | 중계 변화 없음 | 응답 또는 인증된 요청 |
 | 2 | `session_api::answer`, `AdminAuth::check_csrf` | 모든 POST·DELETE에 기존 단일 헤더 읽기와 상수 시간 토큰 비교 사용. 없거나 중복·불일치면 경로·메서드를 보기 전에 403. 계정은 `AuthorizedAdmin`에서 얻음 | 관리 세션·중계 유지 | 다음 검사 |
@@ -76,7 +76,7 @@ flowchart LR
 | 4 | 폴링 헤더 검사 | POST의 `X-Relay-Poll`은 값에 관계없이 400 | 없음 | 다음 검사 |
 | 5 | 형식 검사 | 기존 ASCII 길이 1~64·영숫자·`_`·`-` 검사 재사용. 형식 오류는 400. 형식은 맞으나 내부 정규 ID로 해석되지 않는 값은 조회 결과 404 | 없음 | 다음 검사 |
 | 6 | 본문 검사 | 본문은 없어야 함. 실제 본문이 있으면 `Content-Type`과 관계없이 400 `invalid_request`. 공통 415 규칙보다 우선함(사용자 결정 2026-11-02(Q89), 계약 1.9절) | 없음 | 다음 검사 또는 오류 |
-| 7 | 종료 포트 | `session_id`로만 활성 등록을 조회하고 완료 수신자를 먼저 확보. 잠금 아래 수락을 선형화하고 그 시각부터 E를 잼. 이미 제거됐다면 최근 종료 목록에 있어도 404. `closing`이면 기존 완료를 기다림 | 새 종료 또는 기존 정리 합류 | `TerminationTicket` |
+| 7 | 종료 포트 | 활성 표에서 제어 핸들을 복제하고 상태 잠금을 놓는다. 세션별 제어 잠금으로 소유자의 동기 poll과 수락을 직렬화한다. 수락 시각부터 E를 재며, `closing`이면 완료를 기다린다. 이미 제거됐거나 완료했으면 최근 목록에 있어도 404다. | 새 종료 또는 기존 정리 합류 | `TerminationTicket` |
 | 8 | `AdminAuth::touch` | 검증·수락된 사용자 행동 요청만 기존 Sa를 넘지 않게 Si 연장. 수락 시 인증·계정을 확정하고 대기 뒤 재검증하지 않음(계약 1.3절 5단계). 거절 요청은 연장하지 않음 | 관리 세션 유휴 기한 | 비동기 완료 대기 |
 
 본문 검사는 선언된 길이만 믿지 않고 chunked 본문도 확인한다. 빈 본문의 `Content-Type`은 요구하지 않는다. 본문을 끝없이 모으지 않으며 기존 관리 I/O의 U 경계를 사용한다. 본문 오류·미완료 요청에서는 종료 명령을 보내지 않는다. 본문 검증이 끝나기 전에는 U를 멈추지 않는다(사용자 결정 2026-11-02(Q89), 사용자 결정 2026-11-02(Q92)).
@@ -84,10 +84,10 @@ flowchart LR
 ### 4.2 중계 소유자의 정리와 알림
 
 1. 세션 소유자는 관리자 명령 채널을 기존 lifecycle·시한과 함께 poll한다. 아무 데이터도 오지 않는 유휴 세션도 명령으로 깨어나야 한다. 채널 종료 자체를 관리자 종료로 해석하지 않는다.
-2. 활성 등록 잠금 아래 확정한 전이 순서대로 `Session::begin_admin_close(accepted_at)`를 적용한다. 새 종료를 수락한 시점의 계정을 최초 수행 계정으로 보존하고 `closing`을 공개한다. 자연 EOF·오류·Force·다른 관리자 정리가 먼저 시작됐다면 기존 정리에 합류하며 원인·계정·E를 바꾸지 않는다. 소유자의 자연 종료 게시도 같은 순서로 직렬화하고, 나중에 관찰한 사건이 이미 수락한 관리자 종료를 앞서지 않게 한다(7.1절).
-3. 관리자 종료를 선택한 뒤 새 애플리케이션 데이터를 읽거나 쓰기 시작하지 않는다. TCP는 양 끝점을 닫고 WS·WSS는 `RelayCloseAction::AdminTerminated`의 기존 Close 매핑을 사용한다. 이미 전송을 시작한 WS 프레임의 마무리 등 전송 규칙은 기존 어댑터를 따른다. 미전달 데이터의 완전 도착은 보장하지 않는다(중계 스펙 3.4절).
+2. 세션별 제어 잠금으로 확정한 순서대로 `Session::begin_admin_close(accepted_at)`를 적용한다. 새 종료를 수락한 계정을 보존하고 조회 상태에 `closing`을 공개한다. 자연 EOF·오류·Force·다른 관리자 정리가 먼저면 기존 정리에 합류하며 원인·계정·E를 바꾸지 않는다. 소유자의 한 번의 동기 poll도 같은 제어 잠금을 잡으므로, 늦게 관찰한 자연 사건이 이미 수락한 관리자 종료를 앞서지 않는다. 제어 잠금 뒤 활성 표 잠금을 잡으며, 활성 표에서 핸들을 찾을 때는 표 잠금을 놓은 뒤 제어 잠금을 잡는다. 잠금을 든 채 `await`하지 않는다.
+3. 관리자 종료를 선택한 뒤 새 애플리케이션 데이터를 읽거나 새 메시지를 쓰기 시작하지 않는다. 이미 시작한 WS 프레임만 기존 방향 버퍼에서 `pending_write_len()` 이하로 마무리한다. 그 성공한 부분 쓰기는 최종 카운터에 더한다. 새 TCP 읽기는 하지 않으며 수락 시각의 E를 유지한다. 프레임 뒤 `RelayCloseAction::AdminTerminated`로 Close 4005를 진행한다. TCP는 양 끝점을 닫는다. 미전달 데이터의 완전 도착은 보장하지 않는다(중계 스펙 3.4절, 중계 수명 Q83).
 4. 처음 정리를 시작한 시각으로 절대 E를 유지한다. 관리자 정리도 매 시한 검사에서 `expire_close`를 적용한다. E와 같은 시각이면 만료다. 후속 종료 요청으로 E를 다시 시작하지 않는다. E 만료 시 끝나지 않은 정리 교환을 기다리지 않고 로컬 스트림·버퍼를 회수한다. 회수가 확인되면 `close_timeout` 요약을 가진 `terminated`가 가능하며, E 만료 자체를 500으로 바꾸지 않는다(계약 1.9절 253행).
-   합류 요청도 같은 절대 정리 시한을 공유하므로 남은 E만 기다린다. E+5는 Consumer의 응답 대기 여유이며 서버의 정리 기한을 늘리는 값이 아니다. 검증·수락된 종료 요청이 완료를 기다리는 동안만 관리 연결의 U를 멈춘다. 응답 쓰기부터 U를 다시 잰다. 그 밖의 요청과 검증 단계는 기존 U를 유지한다(사용자 결정 2026-11-02(Q92), [설정 계약 1.2절](../contracts/config-v2.md#12-키-표)의 Q25 예외). 이 예외는 TODO 4.5에서 구현할 목표다.
+   합류 요청도 같은 절대 정리 시한을 공유하므로 남은 E만 기다린다. E+5는 Consumer의 응답 대기 여유이며 서버 기한을 늘리지 않는다. 검증·수락된 완료 대기 동안만 연결별 U를 멈춘다. `request_deadline.rs`의 연결별 제어가 첫 응답 쓰기에서 U를 다시 잰다. 검증과 그 밖의 요청은 기존 U를 유지한다(사용자 결정 2026-11-02(Q92)).
 5. 기존 순서대로 두 스트림을 버린 뒤 L permit을 돌려준다. `Session::finish`로 최종 요약을 만든다. 같은 상태 잠금 아래 활성 제거·Mode II 점유 해제·최근 종료 추가를 끝내고 `session_closed`를 정확히 한 번 기록한다. 소유자 취소나 `finish` 실패 경로도 활성 등록을 제거하면 이 사건을 생략하지 않는다.
 6. 성공 시에만 공유 완료 상태에 응답용 최종 요약을 게시한다. 확인 실패는 `terminate_failed`로 전달하되 `session_closed`와 구분한다. 종료 가드는 식별자·시작 시각·실제 전송 카운터·최초 정리 원인·계정을 보존하고, 제거 전에 실제 회수와 사건 기록을 한 번 수행한다. 정리 실패를 새 원인으로 만들지 않는다. 관리자 정리가 먼저면 `admin_terminated`, 자연 정리가 먼저면 그 최초 원인을 쓴다. 단, 관리자 정리의 E가 만료되면 `close_timeout`이며 EOF를 관찰하지 않았으면 `side`를 생략한다. 이 `session_closed`에는 `admin_account`를 넣지 않고 `admin_terminate`로 계정을 추적한다(사용자 결정 2026-11-02(Q91)). `engine_completed`만으로 완료 응답하거나 조회에서 정리 중 항목을 먼저 숨기지 않는다. R=0에서도 성공 완료 핸들은 요약을 보유한다.
 7. 요청 처리자는 락 없이 완료 수신자를 `await`한다. 성공은 200, 확인 실패는 500 `terminate_failed`다. 기다리는 동안 소켓 펌프를 직접 poll하거나 바쁜 반복·동기 대기를 하지 않는다. HTTP가 소유자 작업을 취소하거나 같은 세션을 별도 작업으로 다시 정리하지 않는다.
@@ -112,7 +112,7 @@ flowchart LR
 - 수명: 활성화 때 종료 제어·완료 상태와 최종 사건에 필요한 자료를 함께 만들고 원래 세션 소유자가 완료 발신자를 가진다. 자연 종료도 동일 알림을 보내야 `already_closed` 대기가 끝난다. 소유자가 중간에 사라지면 가드가 자원 회수·활성 제거·최초 원인의 `session_closed` 기록 뒤 확인 실패를 게시하며 영원히 Pending을 남기지 않는다.
 - 취소 안전성: 요청자의 연결 해제·응답 유실은 이미 수락한 종료를 되돌리지 않는다. 소유자가 최초 명령과 감사 문맥을 보존한다. 합류 요청은 살아 있는 수신 처리자가 감사하며, 취소된 합류자의 문맥을 별도 보관하지 않는다. 인증·계정은 수락 때 확정하고 완료 시 재검증하지 않는다. 이는 **이 문서의 판단, 사용자 결정 없음**이다(7.1절).
 - 종료 유예: Running뿐 아니라 Grace에서도 로그인·조회·종료를 처리한다(운영 스펙 3.4절). G 만료나 두 번째 신호를 E만큼 늦추지 않는다. Force와 명령도 같은 상태 잠금 아래 직렬화하고 이미 만료된 Force를 먼저 반영한다. 관리자가 먼저 정리를 시작했다면 원인을 보존하고, Force가 먼저 시작했다면 관리자는 기존 정리에 합류한다. 이는 Q82와 수락 선형화에 따른 **이 문서의 판단, 사용자 결정 없음**이다(7.1절).
-- 잠금: 활성 검색·명령 수락·완료 수신자 확보만 짧은 상태 전이로 묶는다. 상태 락이나 인증 락을 든 채 정리 알림·네트워크·타이머를 기다리지 않는다.
+- 잠금: 활성 표에서 제어 핸들을 복제한 뒤 표 잠금을 놓는다. 세션별 제어 잠금은 명령 수락과 엔진의 한 번의 동기 poll을 직렬화한다. 이 잠금 안의 짧은 활성 표 갱신은 허용한다. 어떤 잠금도 정리 알림·네트워크·타이머의 `await`를 넘기지 않는다.
 
 ## 6. 오류 처리
 
@@ -139,15 +139,15 @@ flowchart LR
 | 실제 종료 요약을 완료 핸들로 전달 — 이 문서의 판단 | R=0에서도 필수 `closed_session` 제공 | 최근 종료 목록 재검색·임시 성공 요약 | 관리 API 247행·1.10절 |
 | 일반 정수 카운터와 기존 ID·CSRF 헬퍼 재사용 — 이 문서의 판단 | 별도 집계·다른 식별자 문법을 만들지 않음 | 별도 종료용 ID·로그인 토큰 비교 | 관리 API 1.4·1.8·1.9절 |
 | E 초과는 강제 회수 뒤 성공 가능 — 이 문서의 판단 | `close_timeout`이어도 `terminated`라는 계약을 그대로 적용 | E 만료를 무조건 `terminate_failed`로 매핑 | 관리 API 253·257행 |
-| 요청 수락 선형화·E 시작 — 이 문서의 판단, 사용자 결정 없음 | 활성 등록 잠금 아래 자연 종료·관리자 요청·Force를 직렬화하고 수락 시각부터 E를 잰다. 최초 계정·결과를 한 번 확정하며 깨우기 지연으로 E를 늘리지 않는다. | 소유자가 명령을 관찰할 때 다시 판정·E 시작 | 관리 API 1.9절의 도착 시 활성·closing·부재 구분과 E 한도, 중계 수명 6절의 전이 직렬화 |
+| 수락 선형화·E 시작 — 이 문서의 판단, 사용자 결정 없음 | 세션별 제어 잠금으로 자연 종료·관리자 요청·Force의 모델 적용 순서를 직렬화한다. 최초 계정·결과는 한 번 확정하며 수락 시각부터 E를 잰다. 전체 활성 표 잠금은 짧은 조회·갱신에만 쓴다. | 소유자가 명령을 관찰할 때 결과를 다시 판정하거나 E를 시작 | 관리 API 1.9절의 active·closing·부재 구분과 E 한도, 중계 수명 6절의 전이 직렬화 |
 | 확인 실패와 수명 사건 분리 — 이 문서의 판단, 사용자 결정 없음 | 실제 회수·최종 요약 확인이 기준이다. transport close 오류만으로 실패시키지 않되 확인 실패는 500. 활성 제거 시 최초 원인의 `session_closed`를 반드시 한 번 낸다. | 모든 poll_close Err를 실패 처리하거나 실패 경로의 종료 사건을 생략 | 관리 API 1.9·2.1절, 운영 정보 1.5절의 시작·종료 짝(160행)·1.6절의 최초 원인 |
 | 요청 연결 해제 뒤 최초 명령·감사 보존 — 이 문서의 판단, 사용자 결정 없음 | 소유자는 정리와 최초 요청 감사를 계속한다. 합류자는 살아 있는 수신 처리자가 감사하고 취소된 합류자의 문맥은 별도 보관하지 않는다. | 수락된 모든 합류자 문맥을 완료까지 별도 보존 | 관리 API 1.9절 Consumer의 응답 유실·자동 재전송 금지·재조회, 운영 정보 1.5절의 처리 결과 시점 감사 |
 | 수락 때 인증·계정 확정 — 이 문서의 판단, 사용자 결정 없음 | 대기 중 만료·로그아웃으로 이미 수락한 동작·응답·감사 계정을 바꾸지 않는다. 완료 시 인증을 반복하지 않는다. | 완료 때 재검증하여 401로 대체 | 관리 API 1.3절 5단계의 처리·사용자 행동 유휴 연장, 1.4.1절 로그아웃의 중계 독립 |
 | Force와 관리자 종료의 최초 원인 보존 — 이 문서의 판단, 사용자 결정 없음 | 같은 전이 순서에서 만료된 Force를 먼저 반영하되 이미 수락·시작한 관리자 원인은 보존한다. 관리자는 먼저 시작한 Force 정리에 합류한다. | 늦게 처리한 Force로 관리자 원인을 덮어씀 | 운영 정보 1.6절 238행 Q82, 위 요청 수락 선형화 |
 
-### 7.2 계획 시험
+### 7.2 시험 범위
 
-다음은 실행하지 않은 시험 계획이다. `/// spec: <spec file>:<ID>`를 실제 행 전체를 확인한 시험에만 붙인다. 범위가 남으면 `partial`을 유지한다. 기존 부분 시험을 단순히 비부분 표식으로 바꾸지 않는다.
+`tests/management_terminate.rs`는 실제 프로세스·HTTP·TCP·WS·WSS를 사용한다. 소유자 취소·정확한 E 경계는 응용 단위 시험이 보충한다. 표의 계획 범위 중 실행으로 입증한 부분만 8절에 적는다. 전체 행을 입증하지 못한 표식은 `partial`을 유지한다.
 
 | 시나리오 | 계획 위치·수준 | 입력·관찰·판정 범위 |
 | --- | --- | --- |
@@ -162,25 +162,29 @@ flowchart LR
 | OPS-043 | 종료 유예 시스템·소유자 단위 | Grace 중 로그인·요약·관리자 종료·readyz를 함께 확인. G<E·두 번째 신호·Force 경합은 원인 보존과 시한 불연장 확인 |
 | 계약 순서·경계(시나리오를 억지로 연결하지 않음) | 어댑터 단위·계약 | 잘못된 POST·DELETE 경로+CSRF 없음은 403, 비변경 메서드는 CSRF 생략 뒤 404/405. 폴링 헤더 오류가 ID·본문보다 먼저임을 확인. ID 오류+본문, JSON/비JSON/chunked 본문은 모두 400(Q89), 빈 본문, R=0·축출, 늦은 수신자·소유자 소멸. E>U여도 검증·수락된 완료 대기 연결은 유지하고 응답 쓰기부터 U 재개(Q92), 대기 중 관리 만료·로그아웃 |
 
-## 8. 현재 코드와의 차이
+## 8. 현재 구조와 검증 범위
 
-기존 코드 조사 기준은 `ec05fd1` 소스다. 아래는 구현 계획이며 `Verified`나 시험 통과 기록이 아니다.
+`5a38bfc` 이후 작업 트리에서 작업 4.5의 제품 경로와 시험을 대조했다. 2026-11-02 Windows와 WSL Ubuntu에서 아래 범위를 실행했다. 같은 작업 트리에는 WS keepalive의 공유 포트·진입 단계 변경도 포함한다. 계약의 실행 기록과 TODO 완료 판정은 별도로 관리한다.
 
-| 항목 | 현재 코드 | 목표 설계 | 전환 계획 |
-| --- | --- | --- | --- |
-| HTTP 진입 | `crates/adapters/src/management_http/session_api.rs` `answer`는 인증 뒤 세션 이외를 `query_api::answer`로 전달 | 계약 1.3절의 인증→CSRF→경로·메서드 순서로 종료 어댑터 분기 | Q89~Q92 결정에 따라 기존 조회 경로를 유지하며 추가(TODO 4.5) |
-| 관리자 상태 전이 | `crates/domain/src/session.rs`의 `Session::begin_admin_close`·`expire_close`는 존재 | 외부 명령으로 실제 호출, 절대 E 적용 | 기존 도메인 동작 재사용 |
-| 명령·알림 | `run_session`에는 lifecycle만 있고 세션별 종료·완료 알림 없음 | 세션당 명령 슬롯과 완료 상태 | `ports.rs`·`relay.rs`·`relay/session.rs` 연결 |
-| 완료 시점 | `crates/app/src/relay.rs` `run_pair`는 엔진 종료만으로 `engine_completed` 설정, `RelayRuntime::snapshot`은 이 항목을 제외 | 소켓·permit·활성·매칭 정리 뒤 완료 게시 | 종료 처리 중 조회와 API 응답 기준을 함께 정리 |
-| 오류 확인 | `crates/app/src/relay/session.rs` `run_session`은 `poll_close`의 Ready 결과를 성공·오류 구분 없이 소비 | 실제 회수·최종 요약 확인 기준으로 결과 전달, 실패에도 최초 원인의 종료 사건 | 7.1절 판단에 따라 결과·가드의 최종 사건 자료 전달 추가 |
-| 관리자 E | 같은 `run_session`의 `expire_close` 호출은 EOF 시한에만 연결 | 관리자 시작 시각의 E에도 적용 | 관리자 명령과 시한 처리 확장 |
-| 회수 순서 | `crates/app/src/relay.rs` `run_pair`는 스트림→permit→모델 finish→등록 제거·사건·최근 종료 순서 | 성공은 그 뒤 완료 요약 게시, 실패도 활성 제거 시 종료 사건 후 확인 실패 게시 | 기존 순서 보존, 조기 오류·가드 취소에서도 시작·종료 사건의 짝 보장 |
-| 계정·감사 | 같은 `run_pair`의 `session_closed.admin_account`는 항상 None. `crates/app/src/events.rs` `Event`에 `admin_terminate` 없음 | 최초 계정 전달, 계약 사건 출력 | `events.rs`·`ops_log.rs`·완료 경로 확장 |
-| 관리 U | `request_deadline.rs`는 첫 요청 머리 뒤 I/O가 없는 동안 U를 잰다 | 검증·수락된 terminate의 완료 대기만 일시 중지, 응답 쓰기부터 다시 잼 | 사용자 결정 2026-11-02(Q92), TODO 4.5에서 연결별 제어 추가 |
+| 항목 | 현재 코드와 확인할 내용 |
+| --- | --- |
+| 진입·검증 | `session_api::answer`가 전체 POST·DELETE CSRF를 먼저 검사한다. `terminate_api`가 정확한 경로·메서드·폴링 헤더·ID·실제 본문을 순서대로 검사한다. |
+| 수락·완료 | `RelaySessionControl`이 세션별 제어 핸들을 반환한다. `run_session_controlled`는 무데이터 유휴 세션도 명령으로 깨운다. `run_pair`는 스트림·L·등록 정리와 `session_closed` 뒤 실제 요약을 게시한다. |
+| 취소·실패 | `ActiveGuard`가 실제 `Session` 모델을 소유한다. 소유자 취소 때 스트림·permit 반환 뒤 대기 중 관리자 명령을 먼저 적용하고 `Session::finish_after_owner_loss`를 한 번 호출한다. 같은 `ClosedSession`으로 `session_closed`와 최근 목록을 만든다. 원인·side·시각·카운터를 별도 제어 복사본에서 가져오지 않는다. typed `error_kind`는 모델 갱신 콜백이 즉시 보존하고 최종 원인이 `connection_error`일 때만 쓴다. 등록·점유 제거와 종료 사건 뒤 실패 완료를 게시한다. 최초 원인은 유지한다. 원인이 없으면 Running은 `internal_error`, Grace·Force는 `server_shutdown`이다(사용자 결정 2026-11-02(Q94)). `internal_error`는 운영 정보 계약 1.3절에 따라 `warn`이다. panic 되감기가 스트림을 버리므로 WS Close를 보내지 못한다(구현 한계, 이 문서의 판단, 사용자 결정 없음, [WebSocket 계약 2.2절](../contracts/websocket-relay-v1.md#22-close-코드와-스펙-오류의-대응)). 최초 관리자 문맥은 HTTP 취소와 무관하게 런타임이 감사한다. |
+| 활성 가시성 | 조기 `engine_completed` 제외를 제거했다. 스트림·permit·등록 회수 전까지 `closing`이 활성 수에 남는다. Force도 이 실제 정리 중 세션을 센다. |
+| E·감사 | 활성 표 잠금 아래 읽은 단일 수락 시각으로 먼저 G 만료를 판정한다. G와 같거나 늦으면 Force를 적용한 뒤 기존 정리에 합류한다. 새 관리자 종료만 그 시각부터 E를 잰다. E 만료는 `close_timeout`, EOF 없으면 `side` 없음, 종료 사건 계정 없음이다. 계정은 `admin_terminate`로 추적한다. |
+| U | `request_deadline.rs`의 연결별 제어를 통해 수락된 완료 대기만 멈춘다. 응답 쓰기가 U를 다시 시작한다. 검증 단계·다른 연결은 멈추지 않는다. |
+| 시스템 시험 | `tests/management_terminate.rs` 7개는 Windows 3회와 WSL 1회 모두 통과했다. 같은 실행의 `management_query`는 Windows 16개·WSL 17개, `management_session`은 각 3개 모두 통과했다. MGT-008·009·010·011·014·023은 전체 표식이다. MGT-012·013, OPS-011, RLY-020은 아래 남은 범위 때문에 부분 표식이다. |
+| 단위·회귀 | 최종 리뷰 보정 뒤 양 OS의 `cargo clippy --workspace --all-targets -- -D warnings`와 `cargo test -p vnc-relay-app -p vnc-relay-adapters`가 통과했다(응용 각 122개, 어댑터 단위 Windows 99개·WSL 100개와 모든 통합 시험). 같은 엔진 poll에서 EOF 뒤 panic이 나도 로그와 최근 목록의 최종 요약이 같고 종료 사건이 한 번인 회귀 시험을 포함한다. 변경한 domain 시험 89개도 Windows에서 통과했다. `management_terminate` 7개는 최종 보정 뒤 Windows·WSL 각 1회 다시 통과했다. 변경 파일 rustfmt를 적용했고 최종 변경 `relay.rs`의 rustfmt check도 통과했다. |
+| 남은 입증 | 실제 네트워크 입력만으로 `500 terminate_failed`를 결정적으로 만들 수 없었다. 제품용 실패 훅은 넣지 않았다. 실제 소유자 취소의 실패 완료·자원 반환·사건 순서, 서비스의 실패 완료·채널 소멸, 어댑터의 500 직렬화는 각각 단위 시험으로 통과했다. HTTP 500 종단 간 경로와 Consumer 화면의 결과 불명·재조회 동작은 미입증이다. OPS-011 전체 운영 사건 행과 RLY-020의 EOF·연결 오류 전체 범위도 새 관리자 종료 시험의 full 표식으로 대신하지 않는다. |
+
+실행 중 시험의 세 가지 문제를 바로잡았다. 관리 어댑터의 유휴 만료 시험을 실제 정책 Si=600초에 맞췄다. Windows의 비동기 listener에서 받은 Mode I 시험 소켓을 blocking으로 바꿨다. 기존 조회 시험은 CSRF 없는 POST에 405를 기대했으므로, 올바른 CSRF를 넣어 인증→CSRF→메서드 순서를 유지했다. 이 보정 후 위 최종 반복 시험이 통과했다.
+
+Windows Cargo 실행에는 `CARGO_TARGET_DIR=D:/vr-target-term`, `AWS_LC_SYS_PREBUILT_NASM=1`, `TEMP=TMP=D:/vr-tools/tmp`를 사용했다. WSL은 `CARGO_TARGET_DIR=$HOME/vnc-relay-target-term`을 사용했다. 관리 시스템 시험 명령은 양쪽 모두 `cargo test --test management_terminate --test management_query --test management_session`이다.
 
 ## 9. 미결정 사항
 
-Q89~Q92는 모두 해결했다. 아래 표는 확정한 목표 설계이며 구현·시험 완료를 뜻하지 않는다. 검증 순서는 계약 1.3절을 따른다. 수락 선형화·실패 판정·취소·인증 수명·Force 경합은 7.1절의 **이 문서의 판단, 사용자 결정 없음**으로 유지한다.
+Q89~Q92는 모두 해결했다. 아래 표는 결정 근거다. 구현·시험 범위는 8절을 따른다. 검증 순서는 계약 1.3절을 따른다. 수락 선형화·실패 판정·취소·인증 수명·Force 경합은 7.1절의 **이 문서의 판단, 사용자 결정 없음**으로 유지한다.
 
 | 항목 | 문서 근거와 결정 | 선택 | 영향·확정 위치 |
 | --- | --- | --- | --- |
