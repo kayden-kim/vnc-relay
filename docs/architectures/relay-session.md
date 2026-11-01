@@ -110,7 +110,7 @@ TCP에서 시작하되 중계 엔진은 Viewer와 반대쪽 스트림 타입을 
 | `RelayState` | app 공유 잠금 안의 대기 표·점유 표·활성 표·최근 종료 목록·128비트 발급 카운터·수명 단계 | 한 전이에서 관련 항목을 함께 변경한다. 발급 ID 집합은 없다. 잠금 안에서 비동기 대기·DNS·소켓 쓰기를 하지 않는다. |
 | 대기 항목 | `RelayId`, 역할, `conn_id`, 수락 시각, `registered_at`, `deadline = registered_at + W`, `relay_id_ref`, 스트림·후속 데이터·L permit·Lw permit | ID 원문은 비교·인증된 관리 조회에만 쓴다. 로그는 ref만 쓴다. |
 | `Claimed` 점유 | ID, 역할 순서의 두 연결 식별자, 선행 대기 메타데이터, 매칭 시각 | 두 연결 식별자가 인계의 소유권을 구별한다. 활성화 때 세션 식별자를 이동한다. 인계 중에도 ID를 점유하며 조회의 대기·활성 목록에는 노출하지 않는다. |
-| 활성 항목 | `Session`, 두 끝점 메타데이터, 연결 소유자, 종료 요청·완료 알림 | `active`와 `closing` 모두 활성 수에 포함한다. Mode II의 양 역할을 함께 점유한다. |
+| 활성 항목 | `ActiveSessionSnapshot`의 `Session` 메타데이터, `viewer: ConnectionContext`, `peer: ActivePeer`, 연결 소유자, 종료 요청·완료 알림 | `peer`는 Mode II의 `ActivePeer::Server(ConnectionContext)` 또는 Mode I의 `ActivePeer::Target(SocketAddr)` 중 하나다. `active`와 `closing` 모두 활성 수에 포함한다. Mode II의 양 역할을 함께 점유한다. |
 | 방향 버퍼 | 원본 연결의 후속 데이터와 읽기 작업 공간, 미전달 범위의 시작·끝 인덱스 | 원본 연결마다 미전달 페이로드와 그 저장 공간은 B 이내다. 두 방향 합계는 최대 2B다. |
 | `SessionId` | 계약의 `ses_` + 소문자 영문·숫자 26자 | 중계 ID·연결 식별자와 별도다. 프로세스 안에서 한 번 발급한 값을 다시 쓰지 않는다. |
 | 최근 종료 항목 | 계약 1.10절의 시작·종료 시각, 최종 두 카운터, 종료 원인과 식별자·모드·전송 | 정리된 활성 세션만 넣는다. 대기 만료·연결 실패는 넣지 않는다. R=0이면 보관하지 않는다. |
@@ -123,9 +123,11 @@ TCP에서 시작하되 중계 엔진은 Viewer와 반대쪽 스트림 타입을 
 
 구성은 고정한다. 입력 카운터를 big-endian 64비트 `L`, `R`로 나눈다. 각 라운드 `i = 0..5`에서 `F = HMAC-SHA-256(key, b"vnc-relay/session-id/v1" || [i] || R.to_be_bytes())`의 앞 8바이트를 big-endian 정수로 읽는다. `(L, R) = (R, L XOR F)`로 바꾼다. 최종 `L || R`을 인코딩한다. 라운드별 입력을 구별하고, 기존 HMAC 구현을 재사용한다. 각 라운드는 역변환이 있으므로 충돌이 없다. 키·카운터·라운드 입력은 로그에 넣지 않는다. 키는 시작 때만 생성한다. adapters의 향후 구현 시험에서 고정 벡터·역변환·서로 다른 카운터의 결과를 확인한다. 이번 domain 구현에는 암호 코드나 키를 넣지 않는다.
 
-조회용 `snapshot()`은 같은 잠금 안에서 기준 시각을 한 번 잡고 대기·활성·최근 종료와 집계를 복사한다. HTTP 인증·직렬화는 작업 4.4가 맡는다. `connected_at`은 수락 시각이고, `waited_ms`는 등록 단조 시각부터 잰다. 활성 주소는 실제 상대 IP·포트 또는 실제 연결한 대상 IP·포트다. 표시 시각은 벽시계, 경과 시간은 기존 `Clock::monotonic()`을 쓴다. 시스템 시각이 뒤로 가면 `ended_at`은 `started_at`보다 작지 않게 한다. 예산 현재 사용량 조회 API는 아직 `ConnectionBudget`에 없으므로 4.4에서 같은 예산의 관측 API를 더한다. 별도 추정 카운터를 기준값으로 만들지 않는다.
+조회용 `snapshot()`은 같은 잠금 안에서 기준 시각을 한 번 잡고 대기·활성·최근 종료와 집계를 복사한다. HTTP 인증·직렬화는 작업 4.4의 [관리 조회 API](management-query.md)가 맡는다(`ec05fd1`). `connected_at`은 수락 시각이고, `waited_ms`는 등록 단조 시각부터 잰다. `ActivePeer::target_address()`는 Mode II의 실제 Server 상대 주소 또는 Mode I에서 실제 연결한 대상 주소를 반환한다. 표시 시각은 벽시계, 경과 시간은 기존 `Clock::monotonic()`을 쓴다. 시스템 시각이 뒤로 가면 `ended_at`은 `started_at`보다 작지 않게 한다. 예산 현재 사용량은 `ConnectionBudget::current()`로 같은 예산에서 읽는다. 별도 추정 카운터를 기준값으로 만들지 않는다.
 
 조회 스냅샷은 대기를 `connected_at`, 활성을 `started_at` 오름차순으로 정렬한다. 최근 종료는 `ended_at` 내림차순이다. 같은 시각의 순서는 정하지 않는다. ID 원문은 대기 항목에만, 상대 주소는 활성 항목에만 내보낸다. 내부 점유 표를 API 응답으로 직접 직렬화하지 않는다.
+
+현재 초기 교환 중 수는 `crates/app/src/relay.rs`의 `RelayRuntime::track_handshaking()`과 `HandshakingGuard`로 센다. 이 메서드는 `RelayState.handshaking`을 늘리고 가드를 반환한다. 가드는 버려질 때 수를 줄인다. TCP의 `crates/adapters/src/net.rs` `TcpEntryPoint::run`은 `handle_connection` 직전에 가드를 만든다. WS·WSS의 `crates/adapters/src/websocket.rs` `connection`은 101 응답을 flush한 뒤 같은 가드를 만든다. 두 경로 모두 `handle_connection`이 끝나면 성공·실패와 관계없이 가드를 버린다. 성공 경로도 `dispatch` 전에 초기 교환 집계에서 빠진다. 연결 작업이 취소되어 가드가 버려질 때도 수를 줄인다. `RelayRuntime::snapshot`은 같은 상태 잠금 아래 이 수를 `RelaySnapshot.handshaking`에 복사한다.
 
 ## 4. 처리 순서
 
@@ -135,7 +137,7 @@ TCP에서 시작하되 중계 엔진은 Viewer와 반대쪽 스트림 타입을 
 
 | 순서 | 위치·처리 | 상태·결과 |
 | --- | --- | --- |
-| 1 | `dispatch`가 `Mode1(TargetAddress)`를 선택한다. 종료 중인지 확인한다. | 초기 교환 중 집계에서 제외. 대상 연결 중 집계로 옮긴다. 아직 세션 식별자 없음 |
+| 1 | 진입점이 `HandshakingGuard`를 버린 뒤 `dispatch`가 `Mode1(TargetAddress)`를 선택한다. 종료 중인지 확인한다. | 초기 교환 중 집계는 이미 끝났다. 대상 연결 중 집계를 시작한다. 아직 세션 식별자 없음 |
 | 2 | `relay/target.rs`가 `started = clock.monotonic()`, 절대 기한 `started + C`를 한 번 만든다. | IP 리터럴이면 해석을 생략하되 같은 C를 사용 |
 | 3 | DNS 요청이면 `TargetPolicy::permits_name`으로 정규화된 이름·포트를 검사한다. 거절이면 DNS와 연결을 하지 않는다. 허용이면 `resolve`를 기다린다. | DNS 실패·빈 결과는 `resolve_failed`. 결과는 IPv4·IPv6 모두 포함 |
 | 4 | 각 IP를 canonical IPv4로 바꾼다. `permits_ip`가 단일 IP·포트를 검사한다. | 금지 주소는 시도하지 않는다. 허용 주소가 없으면 `target_not_allowed`. 이름 허용만으로 IP를 허용하지 않음 |

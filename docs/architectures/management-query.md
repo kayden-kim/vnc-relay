@@ -1,12 +1,12 @@
 # 관리 조회 API 모듈 설계
 
-관리 리스너(`[management] listen`)에서 인증된 관리자에게 서버 요약, 대기 연결 목록, 활성 세션 목록·상세, 최근 종료 목록을 제공하는 조회 API의 구조와 데이터 흐름을 정의한다. 한 응답 안의 단일 기준 시점(`as_of`) 일관성을 보장하며, 중계 스트림을 멈추거나 데이터를 소비하지 않고 마이크로초 단위의 짧은 메모리 락으로 스냅샷을 구성한다.
+관리 리스너(`[management] listen`)에서 인증된 관리자에게 서버 요약, 대기 연결 목록, 활성 세션 목록·상세, 최근 종료 목록을 제공하는 조회 API의 구조와 데이터 흐름을 정의한다. 중계 상태는 메모리 락 안에서 복사하고, 인증·HTTP 직렬화·소켓 I/O는 그 락 밖에서 처리한다.
 
 | 항목 | 값 |
 | --- | --- |
-| 구조 시점 | Target |
+| 구조 시점 | Current |
 | 문서 상태 | Draft |
-| 구현 대조 | 미대조 |
+| 구현 대조 | Verified — 커밋 `ec05fd1`의 조회 API 구조. 범위와 남은 검증은 [대조 기록](#대조-기록) |
 | 코드 위치 | `crates/app/src/management/query.rs`, `crates/adapters/src/management_http/query_api.rs`, `crates/domain/src/budget.rs` |
 | 코드 지도 | [코드 지도 2절](code-map.md#2-코드-위치와-구성요소) |
 | 관련 스펙 | [관리 스펙](../specs/management.md) MGT-001~007, MGT-013, MGT-015, MGT-016, MGT-021, MGT-023~024, MGT-026, [운영 스펙](../specs/operations.md) OPS-033 |
@@ -46,16 +46,16 @@ flowchart LR
     QA -->|"1 세션 검증·유휴 연장"| AUTH["app::management<br/>AdminAuth"]
     QA -->|"2 스냅샷·통계 조회"| QS["app::management::query<br/>ManagementQueryService"]
     QS -->|"3 단조·벽시계 읽기"| CLK["app::ports<br/>Clock"]
-    QS -->|"4 상태 락(단 1회)"| RT["app::relay<br/>RelayRuntime"]
+    QS -->|"4 포트를 통한 스냅샷 조회"| RS["app::ports<br/>RelayStateSource"]
+    RS -->|"구현: 상태 락 1회 복사"| RT["app::relay<br/>RelayRuntime"]
     QS -->|"5 L 사용량 읽기"| RB["domain::budget<br/>ConnectionBudget (L)"]
     QS -->|"6 Lm 사용량 읽기"| AB["domain::budget<br/>ConnectionBudget (Lm)"]
-    QS -->|"7 실행 상태 읽기"| LC["app::lifecycle<br/>LifecycleService"]
     QA -->|"8 계약 JSON 직렬화"| RES["HTTP Response"]
 ```
 
 | 요소(파일·심볼) | 역할 | 만들어지는 시점과 소유자 | 의존 대상 |
 | --- | --- | --- | --- |
-| `crates/app/src/management/query.rs` `ManagementQueryService` | 서버 요약, 대기 목록, 활성 세션, 최근 종료 목록의 일관된 응용 뷰를 생성한다. | 시작 시 `src/serve.rs`가 생성하고 `ManagementListener`에 전달한다. | `RelayStateSource`, `ConnectionBudget`, `Clock`, `LifecycleService` |
+| `crates/app/src/management/query.rs` `ManagementQueryService` | 서버 요약, 대기 목록, 활성 세션, 최근 종료 목록의 응용 뷰를 생성한다. | 시작 시 `src/serve.rs`가 생성하고 `ManagementListener`에 전달한다. | `RelayStateSource`, `ConnectionBudget`, `Clock` |
 | `crates/adapters/src/management_http/query_api.rs` `answer` | `/api/v1/summary`, `/waiting`, `/sessions`, `/closed-sessions` 요청을 분기하고 JSON 응답을 구성한다. | `management_http.rs`의 `answer`가 `/api/v1/` 요청 중 세션 경로 이외를 전달한다. | `ManagementQueryService`, `AdminAuth`, `serde_json`, `axum` |
 | `crates/domain/src/budget.rs` `ConnectionBudget::current` | L 및 Lm의 현재 점유 카운트(`used`)를 원자적으로 읽는다. **(신규 추가)** | 시작 시 `src/serve.rs`가 예산 생성 시 소유한다. | `AtomicU32` |
 | `crates/app/src/ports.rs` `RelayStateSource` | 중계 런타임 상태 스냅샷을 조회하기 위한 포트 trait이다. **(신규 추가)** | `ManagementQueryService`가 주입받아 사용하며 `RelayRuntime`이 구현한다. | `Clock`, `RelaySnapshot` |
@@ -63,6 +63,7 @@ flowchart LR
 | `crates/app/src/relay.rs` `RelayRuntime::track_handshaking` | `pub fn track_handshaking<'a>(&'a self) -> HandshakingGuard<'a, C>` 형태로 `handshaking` 카운터를 1 증가시키고 소멸 시 1 감소시키는 RAII 가드를 반환한다. **(신규 추가)** | TCP(`net.rs`) 및 WS·WSS(`websocket.rs`) 연결 준비 진입점에서 호출한다. | `std::sync::Mutex<RelayState>` |
 | `crates/app/src/relay.rs` `HandshakingGuard` | 초기 교환 진행 중인 연결 수를 세기 위한 RAII 카운터 가드다. **(신규 추가)** | TCP는 `net.rs`의 `handle_connection` 진입 전, WS·WSS는 `websocket.rs`의 101 응답 flush 직후 생성되고 연결 준비 종료 시 소멸한다. | `RelayRuntime::track_handshaking` |
 | `crates/app/src/relay.rs` `ActivePeer` | 활성 세션의 원격 피어(`Server(ConnectionContext)` 또는 `Target(SocketAddr)`)를 나타내는 enum이다. 대상 주소(`target_address`)가 항상 유효함을 타입 수준에서 보장한다. **(신규 추가)** | `SessionPair` 및 `ActiveSessionSnapshot` 생성 시 소유한다. | `ConnectionContext`, `SocketAddr` |
+
 ## 3. 데이터 모델
 
 외부 교환 형식은 [관리 API 계약 1.6~1.8·1.10절](../contracts/management-api-v1.md#16-서버-요약-get-apiv1summary)을 준수하며, 아래는 내부 응용 및 어댑터 모델이다.
@@ -91,7 +92,7 @@ flowchart LR
 | 3 | `management_http/query_api.rs` | 요청 메서드가 `GET`인지 검사. `GET`이 아니면 `405`(`Allow: GET`, `code: "invalid_request"`, message: "이 경로는 GET 요청만 받는다.") | 없음 | 405 응답 또는 다음 단계 |
 | 4 | `management_http/query_api.rs` | `session_api.rs`의 `poll_flag` 헬퍼로 `X-Relay-Poll` 헤더 검증. 부재(`Some(false)`) 시 `AdminAuth::touch` 호출. `1`(`Some(true)`)이면 `touch` 건너뜀. 그 외(`None`)는 `400 invalid_request` | 유휴 기한 연장 여부 결정 | 다음 단계 또는 400 |
 | 5 | `management_http/query_api.rs` | 본문 검사: 빈 본문은 통과. 본문이 있는 경우의 거절(415/400)은 9.2절 계약 불일치를 따름 | 없음 | 다음 단계 또는 415/400 |
-| 6 | `ManagementQueryService::snapshot` | `clock.monotonic()`과 `clock.wall()`을 동시 샘플링하고, `RelayRuntime::snapshot`으로 메모리 락을 1회 획득해 복제 | 없음 | `QuerySnapshot` |
+| 6 | `ManagementQueryService::capture_snapshot` | `RelayStateSource::snapshot`으로 중계 상태를 복사한 뒤 `Clock::wall`과 `Clock::monotonic`을 읽는다. 런타임 구현은 `RelayRuntime::snapshot`에서 상태 락을 한 번 획득한다. | 없음 | `RelaySnapshot`과 표시·경과 시각 |
 | 7 | `ManagementQueryService` | 경로에 따라 DTO 조립: <br/>- 요약: L/Lm 예산 읽기 및 라이프사이클 전이 상태 확인<br/>- 대기: `waited_ms` 단조 계산 및 접속 시각 변환<br/>- 세션: 상세의 경우 ASCII 조건문으로 `session_id` 검증 후 활성 목록 검색<br/>- 최근종료: FIFO 정렬된 완료 목록 변환 | 없음 | 계약 DTO 객체 |
 | 8 | `management_http/query_api.rs` | JSON 직렬화 및 공통 헤더(`Cache-Control: no-store`) 부착 | 없음 | `200 OK` HTTP Response |
 
@@ -112,7 +113,7 @@ flowchart LR
 - 동시 실행과 락 불변식:
   - 중계 펌프 루프(`pump`)는 소켓 쓰기 성공 시 `on_update`를 통해 세션 바이트 카운터를 `RelayState`에 갱신할 때 `runtime.lock()`을 획득한다(`crates/app/src/relay.rs:1038–1050`).
   - `RelayRuntime::snapshot`은 이 락을 메모리 복사에만 사용하며 소켓 I/O나 비동기 `.await`를 일절 수행하지 않는다.
-  - 따라서 조회가 데이터 쓰기를 지연시키는 시간은 메모리 복사 1회 분량(마이크로초 수준)에 불과하며, 중계 스트림을 멈추거나 데이터를 소비하지 않는다(스펙 §5).
+  - 조회는 메타데이터 복사 동안 펌프의 같은 락 획득을 지연시킬 수 있다. 락 안에서는 중계 바이트를 읽거나 쓰지 않는다. 소요 시간을 측정한 기록은 없으며, MGT-016의 블랙박스 시험만으로 내부 일관성 전체를 입증하지 않는다.
 
 ## 6. 오류 처리
 
@@ -136,7 +137,7 @@ flowchart LR
 
 | 선택 | 이유 | 검토한 다른 방법 | 근거 |
 | --- | --- | --- | --- |
-| `RelayRuntime::snapshot`의 단일 락 복제 방식 | `std::sync::Mutex<RelayState>`를 짧게 획득하여 메타데이터만 복제하므로, 펌프의 쓰기 지연을 마이크로초 단위로 한정하고 스트림 멈춤을 방지한다. | 채널 메시지 전달 방식, RCU 잠금 구조 | 스펙 §5 "조회가 중계 스트림을 멈추거나 데이터를 소비해서는 안 된다", **이 문서의 판단, 사용자 결정 없음** |
+| `RelayRuntime::snapshot`의 단일 락 복제 방식 | `std::sync::Mutex<RelayState>` 안에서는 메타데이터만 복사하고 소켓 I/O는 하지 않는다. | 채널 메시지 전달 방식, RCU 잠금 구조 | 스펙 §5 "조회가 중계 스트림을 멈추거나 데이터를 소비해서는 안 된다", **이 문서의 판단, 사용자 결정 없음** |
 | 인증 우선 검증 순서 준수 | 계약 §2.1 line 355("경로·메서드가 틀려도 인증이 먼저다") 및 `session_api.rs`의 기존 순서와 동일하게 세션 인증(401)을 경로(404)·메서드(405)보다 먼저 수행한다. | 라우터 수준의 경로 분기 우선 | 계약 §2.1 line 355, **이 문서의 판단, 사용자 결정 없음** |
 | 단조 시간(`Instant`) 기반 경과 시간 산출 | NTP 시각 동기화나 윤초로 시스템 벽시계가 뒤로 이동해도 경과 시간이 음수가 되지 않도록 보장한다(MGT-007). | 벽시계(`SystemTime`) 단순 차감 | 관리 스펙 2.1절, MGT-007, **이 문서의 판단, 사용자 결정 없음** |
 | `RelayRuntime`에 `handshaking` RAII 가드 도입 | 초기 교환 진행 중인 연결을 정확히 세어 `counts.handshaking`에 반영하고, 종료 시점에 자동으로 감소시킨다. | L 예산에서 대기/활성 수를 빼서 추정하는 방식 | 관리 스펙 2절, MGT-026, **이 문서의 판단, 사용자 결정 없음** |
@@ -168,21 +169,10 @@ flowchart LR
 | MGT-026 | FR-06 / MGT-R17 | 통합 | `crates/adapters/tests/management.rs` | 초기 교환 n개, Mode I 대상 연결 m개, L 도달 상태에서 요약의 `counts` 및 `usage` 일치 검증 계획 |
 | OPS-033 | OPS-R18 / OPS-033 | 통합 | `tests/serve.rs` | 관리·상태 연결(Lm)이 L과 분리되어 집계되며 상한 도달 시 `admin_connection_limit` 격리 검증 계획 |
 
-## 8. 현재 코드와의 차이
-
-| 항목 | 현재 코드(파일·심볼) | 목표 설계 | 전환 계획 |
-| --- | --- | --- | --- |
-| L/Lm 예산의 현재 점유량 조회 | `crates/domain/src/budget.rs` `ConnectionBudget`에 `limit()`만 존재 | `pub fn current(&self) -> u32` 메서드를 추가하여 `used.load(Ordering::Acquire)` 값을 반환 | 도메인 `budget.rs`에 메서드 추가 |
-| 초기 교환 중 연결 수 카운터 | `crates/app/src/relay.rs`에 handshaking 카운터 없음 | `RelayRuntime`에 `handshaking: usize` 카운터와 `pub fn track_handshaking<'a>(&'a self) -> HandshakingGuard<'a, C>`를 둔다. TCP는 `net.rs`의 `handle_connection` 전, WS·WSS는 `websocket.rs`의 101 응답 flush 직후 가드를 획득 | `RelayState` 및 `RelayRuntime`에 필드 및 메서드 추가 |
-| 스냅샷 포트 trait | `crates/app/src/ports.rs`에 스냅샷 포트 없음 | `pub trait RelayStateSource: Send + Sync { fn snapshot(&self, clock: &dyn Clock) -> RelaySnapshot; }`를 정의하고 `RelayRuntime`이 구현 | `ports.rs`에 trait 추가 |
-| 관리 조회 서비스 | `crates/app/src/management/`에 `login.rs`, `session.rs`만 존재 | `crates/app/src/management/query.rs` `ManagementQueryService` 구현 | 사용 사례 모듈 추가 |
-| 관리 HTTP 조회 라우팅 | `crates/adapters/src/management_http/session_api.rs`가 세션 이외 경로에 `404` 반환 | `crates/adapters/src/management_http/query_api.rs`를 구현하고 인증 우선 순서로 `/summary`, `/waiting`, `/sessions`, `/closed-sessions` 처리 (`session_api.rs`의 `poll_flag`, `media_type_allows` 재사용) | 어댑터 라우터 연동 |
-| 관리 리스너 의존 주입 | `src/serve.rs`에서 `ManagementListener` 생성 시 런타임/쿼리 서비스 미주입 | `ManagementListener`에 `query_service` 또는 `runtime`과 `relay_budget`을 주입하여 기동 | `serve.rs` 조립 갱신 |
-
 ## 9. 미결정 사항과 계약 점검
 
 ### 9.1 IPv4 매핑 IPv6 주소의 표기 방식 [사용자 결정 대기(Q88)]
-- **배경**: [관리 API 계약 6절 line 565](../contracts/management-api-v1.md#6-초안을-확정하기-전에-해결할-사항)에서는 "IPv4 매핑 IPv6 주소(`::ffff:a.b.c.d`)를 `ip`에 어떻게 표기할지 정하지 않았다. 소켓이 주는 값을 변환하지 않는 쪽을 가정한다."라고 기술하고 있다. 반면, 운영 로그와 출발지 IP 허용 목록을 다루는 `PeerIp`(`crates/domain/src/peer_ip.rs`)는 `ip.to_canonical()`을 사용하여 `::ffff:a.b.c.d`를 점분리 10진수 IPv4 `a.b.c.d`로 자동 정규화한다. `ConnectionContext.peer_addr`, 서버 컨텍스트, `ActiveSessionSnapshot.target`에 원시 `SocketAddr`이 보존되어 있으므로 어느 쪽이든 구현 가능하다.
+- **배경**: [관리 API 계약 6절](../contracts/management-api-v1.md#6-초안을-확정하기-전에-해결할-사항)에서는 "IPv4 매핑 IPv6 주소(`::ffff:a.b.c.d`)를 `ip`에 어떻게 표기할지 정하지 않았다. 소켓이 주는 값을 변환하지 않는 쪽을 가정한다."라고 기술하고 있다. 반면, 운영 로그와 출발지 IP 허용 목록을 다루는 `PeerIp`(`crates/domain/src/peer_ip.rs`)는 `ip.to_canonical()`을 사용하여 점분리 10진수 IPv4로 정규화한다. `ConnectionContext.peer_addr`와 `ActiveSessionSnapshot.peer`의 `ActivePeer`에 원시 소켓 주소가 보존되어 있어 어느 쪽이든 구현 가능하다.
 - **선택지**:
   - **선택지 A (권장)**: `PeerIp`의 변환 규칙과 동일하게 `to_canonical()`을 적용하여 `a.b.c.d` 형태로 표기한다. 운영자가 설정 파일에 지정한 `allow` 대역 및 운영 로그의 `peer_ip`와 조회 화면의 IP 문자열이 완전히 일치하게 된다.
   - **선택지 B (현재 계약 가정)**: 계약 6절의 현재 가정대로 소켓이 보고한 원시 표현인 `::ffff:a.b.c.d` 문자열 그대로 출력한다.
@@ -202,3 +192,42 @@ flowchart LR
 - `src/serve.rs:421–435`의 실제 종료 순서에 따르면, 종료 신호를 받은 후 `finish_relay_shutdown`이 중계 진입점 작업들을 합류시킬 때까지 관리 리스너 작업(`management_task`)은 취소되지 않고 계속 동작한다.
 - 따라서 정상 종료 유예(G) 만료 또는 유예 중 두 번째 신호에 의해 세션들이 강제 정리된 시점부터 관리 리스너가 실제로 종료되기 전까지의 짧은 구간 동안, 또는 멈춘 시간(paused clock)을 사용하는 시스템 테스트 하네스에서 `GET /api/v1/closed-sessions`를 호출하면 `server_shutdown` 항목이 정상적으로 관찰될 수 있다.
 - 시스템 시험 계획에서 두 번째 신호 후 유예 구간 동안의 조회를 검증 항목으로 구성한다.
+
+## 대조 기록
+
+### 작업 4.4 구현 대조와 실행 기록
+
+- 대상: 설계 커밋 `bc7e762`, 구현·시험 커밋 `ec05fd1`. 이 기록은 문서만 바꾸며 계약 규칙이나 코드를 바꾸지 않는다.
+- 대조 방법: 코드의 심볼과 호출 흐름을 읽고 설계와 비교했다. 실행 결과는 사용자가 확인한 아래 두 환경의 게이트와 시나리오 보고서를 기록했다. 이 문서 작업에서 게이트를 다시 실행하지 않았다.
+- 대조 범위:
+  - `crates/app/src/management/query.rs`의 `ManagementQueryService`가 `ports.rs`의 `RelayStateSource`, L·Lm `ConnectionBudget`, `Clock`을 주입받는다. `src/serve.rs`가 이를 조립해 `ManagementListener`에 넘긴다.
+  - `management_http/session_api.rs`의 인증 뒤 `query_api.rs`가 요약·대기·활성 목록·상세·최근 종료 조회를 처리한다. `summary_response`는 정수 카운터와 계약상 `null` 사유를 직렬화한다.
+  - `relay.rs`의 `ActivePeer::Server`·`Target`이 활성 세션의 상대 주소를 보유한다. `target_address()`가 실제 주소를 반환하므로 빈 주소를 대신 만들어 넣지 않는다.
+  - `RelayRuntime::track_handshaking`이 반환한 `HandshakingGuard`는 TCP의 `net.rs`에서 `handle_connection` 전에, WS·WSS의 `websocket.rs`에서 101 응답 flush 뒤에 획득한다. 연결 준비를 마치거나 중단하면 가드가 수를 돌려준다.
+- 판정: 모듈 설계 템플릿의 구현 전 차이 표를 제거하고 구조 시점을 `Current`로 바꿨다. `Verified`는 위 구조 대조 범위이며 모든 시나리오의 완료를 뜻하지 않는다. 문서 상태는 `Draft`로 유지한다. Q88과 아래 부분 증거는 남아 있다.
+- 검증 기록(모든 시각은 2026-11-01 UTC):
+
+| 명령 | 환경 | 결과 |
+| --- | --- | --- |
+| `vr-win.ps1 -Only all` | Windows, `ec05fd1` | 18:19:56Z 보고서: `ALL PASSED (all)`. 150건: 통과 69, 부분 64, 실패 0, 미실행 0, 미연결 17, 오류 0. `management.md` 27건: 통과 8, 부분 15, 실패 0, 미실행 0, 미연결 4. |
+| `vr-full.sh` | WSL, `ec05fd1` | 18:25:46Z 첫 실행: `tests/reload.rs`의 `new_tls_pair_is_used_by_new_handshakes_and_keeps_open_connections`(OPS-024) 1건 실패. 감지 뒤 `reload_applied`까지 3357 ms로 D = 1000 ms를 넘었다. |
+| 같은 OPS-024 시험 단독 실행 5회 | WSL, `ec05fd1` | 5회 모두 통과. 단독 실행의 정확한 명령·시각은 제공되지 않았다. |
+| `vr-full.sh` 재실행 | WSL, `ec05fd1` | 18:33:21Z 보고서: `ALL PASSED`. 150건: 통과 73, 부분 60, 실패 0, 미실행 0, 미연결 17, 오류 0. |
+
+전체 게이트 부하에서 OPS-024의 D 초과가 한 번 관찰됐다. 원인은 확정하지 않았다. `ec05fd1`은 재로드·TLS 교체 경로를 바꾸지 않는다. 단독 5회와 전체 재실행이 통과했더라도 첫 실패를 없던 결과로 보지 않는다.
+
+| 시나리오 | 두 보고서의 상태 | 확인한 범위와 남은 증거 |
+| --- | --- | --- |
+| MGT-001·003·006·015·021·024 | 통과 | 요약·목록·상세, 필드와 전송 방식, 실제 상대 주소, 비인증 거절, 최근 종료 목록의 상한·재시작을 확인했다. |
+| MGT-026 | WSL 통과, Windows 부분 | Linux 전용 정확한 수치 시험은 통과했다. Windows는 이 전체 증거를 갖추지 못했다. |
+| MGT-002 | 부분 | 초기 교환·대상 연결 구간은 확인했으나 `closing` 상태를 관찰하지 못했다. |
+| MGT-004 | 부분 | 빈 성공과 오류 응답을 확인했으나 `500 internal` 경로를 강제로 만들지 않았다. |
+| MGT-005 | 부분 | 방향별 전송량은 확인했으나 시스템 시험에서 부분 쓰기를 만들지 않았다. |
+| MGT-007 | 부분 | 벽시계 역행은 단위 시험, 재접속은 시스템 시험으로 확인했다. 두 시험은 각각 부분 표식이며 전체 통과로 합치지 않는다. |
+| MGT-013·023 | 부분 | 조회 응답의 비밀 미노출과 EOF·연결 오류의 최근 종료 기록을 확인했다. 종료 요청·관리자 종료 증거는 작업 4.5가 필요하다. |
+| MGT-016 | 부분 | 블랙박스 상태 변동 시험만 있으며 내부 기준 시점 일관성 전체의 증거는 아니다. |
+| OPS-033 | 부분 | 관리·상태 연결의 집계와 중계 상한 분리 일부를 확인했다. 전체 시나리오 증거는 남는다. |
+
+- 시험 위치: `tests/management_query.rs`, 단위 시험 `crates/app/src/management/query.rs`, `crates/app/src/relay.rs`, `crates/domain/src/budget.rs`. 시나리오 상태는 시험 표식과 보고서의 판정을 따른다.
+- 남은 범위: 작업 4.4는 위 부분 증거 때문에 완료로 표시하지 않는다. IPv4 매핑 IPv6 주소 표기는 Q88 결정 전까지 계약의 원시 소켓 주소 가정을 유지한다.
+
