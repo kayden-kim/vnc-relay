@@ -47,6 +47,7 @@ const COPY = {
     causeDead: '끊긴 연결 감지',
     causeTimeout: '정리 제한 시간 초과',
     causeShutdown: '서버 종료',
+    causeInternalError: '내부 오류',
     bytesHeader: 'Viewer->대상 / 대상->Viewer',
     details: '상세',
   },
@@ -87,6 +88,7 @@ const COPY = {
     causeDead: 'Dead connection detected',
     causeTimeout: 'Cleanup time limit exceeded',
     causeShutdown: 'Server shutdown',
+    causeInternalError: 'Internal error',
     bytesHeader: 'Viewer->target / target->Viewer',
     details: 'Details',
   },
@@ -761,6 +763,7 @@ async function caseDash020() {
             closedItem({ session_id: 'sess_6', close_cause: 'dead_connection' }),
             closedItem({ session_id: 'sess_7', close_cause: 'close_timeout' }),
             closedItem({ session_id: 'sess_8', close_cause: 'server_shutdown' }),
+            closedItem({ session_id: 'sess_9', close_cause: 'internal_error' }),
           ],
         }),
     }),
@@ -768,7 +771,7 @@ async function caseDash020() {
   await waitFor(() => settled(root));
   const card = cardOf(root, t.closedTitle);
   const rows = dataRowsOf(card);
-  check('DASH-020: all known causes and an unknown cause have rows', rows.length === 7);
+  check('DASH-020: all known causes and an unknown cause have rows', rows.length === 8);
   check('DASH-020: normal EOF cause shown', rows[0]?.textContent.includes(t.causePeerEof));
   check('DASH-020: administrator termination shown', rows[1]?.textContent.includes(t.causeAdmin));
   check('DASH-020: connection error shown', rows[2]?.textContent.includes(t.causeConnectionError));
@@ -781,6 +784,7 @@ async function caseDash020() {
     [4, t.causeDead, 'warning', 'warning'],
     [5, t.causeTimeout, 'warning', 'warning'],
     [6, t.causeShutdown, 'neutral', null],
+    [7, t.causeInternalError, 'destructive', 'alert'],
   ]) {
     const badge = rows[index]?.cells[1].querySelector('.badge');
     const svg = badge?.querySelector('svg');

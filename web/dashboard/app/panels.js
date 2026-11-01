@@ -235,7 +235,7 @@ export function activeTable(t, items, emptyText) {
 }
 
 function closeCauseBadge(t, cause) {
-  const tone = cause === 'connection_error'
+  const tone = cause === 'connection_error' || cause === 'internal_error'
     ? 'destructive'
     : ['dead_connection', 'close_timeout'].includes(cause) ? 'warning' : 'neutral';
   const label = Object.hasOwn(t.closeCause, cause) ? t.closeCause[cause] : cause;

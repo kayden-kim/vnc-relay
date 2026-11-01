@@ -52,6 +52,7 @@ export const COPY = {
       dead_connection: '끊긴 연결 감지', // CPY-048
       close_timeout: '정리 제한 시간 초과', // CPY-049
       server_shutdown: '서버 종료', // CPY-050
+      internal_error: '내부 오류', // CPY-083
     },
     directionViewerToTarget: 'Viewer->대상', // CPY-040·CPY-043 table headers (spec §9.3.2).
     directionTargetToViewer: '대상->Viewer', // CPY-040·CPY-043 table headers (spec §9.3.2).
@@ -126,6 +127,7 @@ export const COPY = {
       dead_connection: 'Dead connection detected', // CPY-048
       close_timeout: 'Cleanup time limit exceeded', // CPY-049
       server_shutdown: 'Server shutdown', // CPY-050
+      internal_error: 'Internal error', // CPY-083
     },
     directionViewerToTarget: 'Viewer->target', // CPY-040·CPY-043 table headers (spec §9.3.2).
     directionTargetToViewer: 'target->Viewer', // CPY-040·CPY-043 table headers (spec §9.3.2).

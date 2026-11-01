@@ -1028,6 +1028,22 @@ Firefox는 BiDi `input.performActions`, Edge는 CDP `Input.dispatchKeyEvent`의 
 - 전체 게이트와 커밋은 이 위임 범위에서 실행하지 않았다. 결과: 변경된 SCR-001 표·연결 카드와 관련 공통 컴포넌트의 Firefox 재확인, 새 링크의 Firefox·Edge 키보드·캡처 확인은 통과했다. 화면 호환성 전체나 사람 검토의 완료로 확대하지 않는다.
 - Main 통합: 수정은 `997167c`, 이 절의 기록은 `0650ae5`로 커밋했다. 게이트 대상 `0650ae5`에서 Windows `vr-win.ps1 -Only all`은 `ALL PASSED (all)`, 스크립트 종료 코드 0, 시나리오 통과 23·부분 49·실패 0·미실행 1·미연결 77이었다. WSL `vr-full.sh`는 `ALL PASSED`, dashboard_browser 37건 통과(117.88초), dashboard_assets 2건 통과, 시나리오 통과 24·부분 49·실패 0·미실행 0·미연결 77이었다. Chrome에서도 DASH-001의 정확한 버튼 높이 단언이 6폭·두 언어에서 통과했다.
 
+### 4.18 Q94 내부 오류 종료 원인 표시 검증 (2026-11-02)
+
+- 대상: 기준 커밋 `0eeac5f` 이후 작업 트리의 `internal_error` 문구·배지·DASH-020 시험과 관련 기준 문서 변경이다. 같은 작업 트리에서 Rust의 Q94 구현도 함께 반영 중이었다. 이 절은 대시보드 검증 결과만 기록한다.
+- 기준: [화면 스펙 CPY-083](../specs/dashboard.md#932-scr-001-운영-현황), [디자인 기준의 상태 색](../design/DESIGN.md#상태-색), [관리 API 1.10절](../contracts/management-api-v1.md#110-최근-종료-목록-get-apiv1closed-sessions). 내부 오류 문구는 한국어 `내부 오류`, 영어 `Internal error`다. 배지는 기존 위험 톤과 오류 아이콘을 재사용한다. 새 토큰·컴포넌트는 없다.
+- 환경: Windows 10.0.26200 x64, PowerShell. 실행 전에 `$env:Path = "$env:USERPROFILE\.cargo\bin;$env:Path"`, `$env:AWS_LC_SYS_PREBUILT_NASM = "1"`, `$env:CARGO_TARGET_DIR = "D:/vr-target-docs"`를 설정했다. 브라우저 버전은 이번 기록에서 확인하지 않았다.
+
+| 명령 | 실제 결과 |
+| --- | --- |
+| `cargo xtask tokens --check` | 통과, 종료 코드 0. `tokens --check: 통과` |
+| `cargo test --test dashboard_assets` | 통과, 종료 코드 0. 2 passed, 0 failed |
+| `cargo test --test dashboard_browser` | 통과, 재시도 종료 코드 0. 37 passed, 0 failed, 200.58초. `operations_shows_closed_session_causes_in_browser`가 두 언어의 `internal_error` 문구·위험 톤·오류 아이콘을 포함해 통과했다 |
+| `python D:/vr-tools/tmp/doc_check.py` | 통과, 알려진 오류 4건과 새 오류 0건. 누락된 루트 `README.md`는 별도로 표시됐다 |
+
+- 브라우저 명령의 첫 실행은 다른 작업에서 추가 중이던 `CloseCause::InternalError`를 `crates/app/src/relay/session.rs:531`의 match가 아직 처리하지 못해 E0004, 종료 코드 101로 끝났다. 담당 작업이 해당 분기를 반영한 뒤 같은 명령을 한 번 재시도했다. 위 표는 재시도 결과다.
+- `cargo xtask scenarios`는 전체 작업공간을 검사하므로 통합 담당자의 최종 게이트로 남겼다. 이번 범위에서 실행하지 않았다. 수동 시안 대조·스크린 리더·Firefox·Safari 확인도 실행하지 않았다. 이 기록은 대시보드 전체 수동 검토의 완료를 뜻하지 않는다.
+
 ## 5. 중단 조건
 
 - `cargo xtask tokens --check`의 종료 코드가 0이 아니면 3.2 이후 단계를 실행하지 않는다.
