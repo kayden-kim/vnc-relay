@@ -391,7 +391,7 @@ components:
 | 성공 | `colors.success`·`success-bg`·`success-border` | 서버 실행 상태 `ready`(준비됨) | 평소 값은 배지를 붙이지 않는다. 서버 실행 상태만 배지로 보인다 |
 | 정보 | `colors.info`·`info-bg`·`info-border` | 최초 로딩·갱신 중·종료 요청 중 | 진행 중임을 나타낸다. 참고 이미지의 청록 계열이다 |
 | 경고 | `colors.warning`·`warning-bg`·`warning-border` | 서버 실행 상태 `shutdown_grace`(종료 유예 중), 세션 상태 `closing`(종료 중), 오래된 성공 데이터, 종료 결과 불명, 종료 원인 `dead_connection`·`close_timeout` | 주의가 필요하지만 실패는 아니다 |
-| 위험 | `colors.destructive`·`destructive-bg`·`destructive-border` | 조회 실패, 종료 실패, 로그인 실패 안내, 종료 원인 `connection_error` | 실패를 뜻한다. 빈 목록과 구분한다 |
+| 위험 | `colors.destructive`·`destructive-bg`·`destructive-border` | 조회 실패, 종료 실패, 로그인 실패 안내, 종료 원인 `connection_error`·`internal_error` | 실패를 뜻한다. 빈 목록과 구분한다. `internal_error`의 위험 톤은 이 문서의 판단이다(사용자 결정 없음) |
 | 중립 | `colors.neutral`·`neutral-bg`·`neutral-border` | 활성 세션 모드·전송 경로·역할, 확인 불가 값, 대상 없음, 권한 없음, 종료 원인 `peer_eof`·`admin_terminated`·`server_shutdown`, 목록에 없는 알 수 없는 값 | 알 수 없는 값은 받은 그대로 보여주고 오류 색을 쓰지 않는다([관리 API 계약](../contracts/management-api-v1.md) 3절) |
 
 세션 상태 `active`는 배지 없이 표시한다. 정상 상태를 모두 강조하면 예외가 보이지 않기 때문이다. 이 매핑은 시각 표현만 정한다. 상태의 의미는 스펙과 계약이 정한다.

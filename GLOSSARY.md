@@ -144,7 +144,7 @@ _Avoid_: 세션 강제 종료, 강제 종료(세션을 가리킬 때), 세션 �
 서버가 내려갈 때 아직 정리를 시작하지 않은 활성 세션을 강제로 정리해 끝난 종료 원인이다. 강제 정리 전에 이미 정리를 시작한 세션은 최초 원인을 유지한다. 서버 프로세스를 끝내는 일 자체인 정상 종료와 구분한다.
 
 **종료 원인(close_cause)**:
-정리가 끝난 활성 세션이 왜 끝났는지를 구분한 값이다. 정상 EOF(`peer_eof`), 연결 오류(`connection_error`), 관리자 종료(`admin_terminated`), 끊긴 연결 감지(`dead_connection`), 정리 제한 시간 초과(`close_timeout`), 서버 종료(`server_shutdown`) 중 하나다.
+정리가 끝난 활성 세션이 왜 끝났는지를 구분한 값이다. 정상 EOF(`peer_eof`), 연결 오류(`connection_error`), 관리자 종료(`admin_terminated`), 끊긴 연결 감지(`dead_connection`), 정리 제한 시간 초과(`close_timeout`), 서버 종료(`server_shutdown`), 내부 오류(`internal_error`) 중 하나다.
 _Avoid_: 종료 사유, 종료 이유
 
 **최근 종료 목록(recent_closed)**:

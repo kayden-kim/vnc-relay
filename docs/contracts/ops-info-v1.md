@@ -6,6 +6,7 @@ VNC Relay가 운영자에게 내보내는 두 가지 정보의 교환 형식을 
 | --- | --- |
 | 이름과 버전 | `ops-info` 1.3.0. 1.1.0은 `startup_failed`의 `reason`에 `runtime_unavailable`을 더했다. 1.2.0은 `reason`에 `log_file_unavailable`을 더하고, 로그 쓰기 실패 처리(1.1절)를 정하고, `startup_failed`를 진단마다 한 줄로 정했다(1.6절). 모두 사용자가 결정했다(2026-10-20). 2026-11-01에 `handshake_invalid`의 조건 문장을 [Repeater 초기 교환 계약](repeater-handshake-v1.md) 채택(사용자 결정 2026-11-01(Q71·Q72))에 맞춰 "초기 요청의 형식 오류"로 고쳤다. 버전은 올리지 않았다. 빠진 조건 중 "미지원 모드"는 채택한 계약 2절에서 형식 오류에 들어간다. "I 초과"와 그때의 `limit`은 초기 요청이 250바이트 고정이고 I의 최솟값이 256이었으므로 생길 수 없다. 그래서 같은 입력이 다른 `reason`을 받는 경우가 없어 3절의 의미 변경으로 보지 않았다(이 문서의 판단, 사용자 결정 없음). 이 사건은 커밋 `5e53570`에서 구현하고 계약 시험을 통과했다. 1.3.0은 `connection_aborted`의 `stage`에 `register`를 더하고, 초기 교환 뒤 대기 등록 완료 전에 서버 종료로 끝나는 Mode II 연결의 `stage`를 `register`로 정했다(사용자 결정 2026-11-01(Q81)). 또한 강제 정리 때 이미 정리를 시작한 세션의 `close_cause` 보존 규칙(1.6절)을 명시했다(사용자 결정 2026-11-01(Q82)). 모두 호환 변경이다. |
 | 변경 | 호환 변경(2026-11-02, 1.3.0 유지): 수락 소켓의 TCP keepalive 설정 실패를 `connection_error`·`io_error`로 기록하고 전송별 `stage`와 사건 순서를 정했다(사용자 결정 2026-11-02(Q85)). `admin_terminate.result`에 `already_closed`를 더했다(사용자 결정 2026-11-02(Q90)). 관리자 정리의 E 만료는 `close_timeout`이며 EOF가 없으면 `side`를 생략한다. 이때 계정은 `admin_terminate`로 추적한다(사용자 결정 2026-11-02(Q91)). 구현·시험 완료 여부는 5절과 TODO 2.11·4.5에서 따로 관리한다. |
+| 호환 값 추가 | 2026-11-02, 1.3.0 유지: `session_closed.close_cause`에 `internal_error`를 더했다(사용자 결정 2026-11-02(Q94)). `level`은 서비스가 계속되는 비정상 종료 원인에 해당하므로 1.3절의 `warn`을 따른다. 기존 원인 값은 유지하며 3절의 허용 값 추가 규칙을 따른다. |
 | 상태 | Active(2026-10-16 채택) |
 | 소유자 | vnc-relay 프로젝트 관리자 |
 | 만드는 쪽(Producer) | `vnc-relay` (`vnc-relay serve` 프로세스) |
@@ -227,7 +228,7 @@ VNC Relay가 운영자에게 내보내는 두 가지 정보의 교환 형식을 
 
 #### `session_closed`의 `close_cause`와 `level`
 
-`close_cause`의 값 이름과 의미는 [관리 API 계약 1.10절](management-api-v1.md#110-최근-종료-목록-get-apiv1closed-sessions)이 정한다([관리 스펙 2.3절](../specs/management.md#23-최근-종료-목록)의 종료 원인과 같은 뜻이다). 이 표는 로그에서 값마다 쓰는 `level`·`side`와 추가 필드만 정한다. [WebSocket 계약 2.2절](websocket-relay-v1.md#22-close-코드와-스펙-오류의-대응)이 같은 값을 close 코드에 대응시킨다.
+`close_cause`의 값 이름과 의미는 [관리 API 계약 1.10절](management-api-v1.md#110-최근-종료-목록-get-apiv1closed-sessions)이 정한다([관리 스펙 2.3절](../specs/management.md#23-최근-종료-목록)의 종료 원인과 같은 뜻이다). 이 표는 로그에서 값마다 쓰는 `level`·`side`와 추가 필드만 정한다. [WebSocket 계약 2.2절](websocket-relay-v1.md#22-close-코드와-스펙-오류의-대응)이 close 코드를 정한다. `internal_error` 경로에서는 panic 되감기가 스트림을 버리므로 WebSocket Close를 보내지 못한다([WebSocket 계약 2.2절 끝](websocket-relay-v1.md#22-close-코드와-스펙-오류의-대응), 이 문서의 판단, 사용자 결정 없음).
 
 | `close_cause` | `level` | `side` | 추가 규칙 | 근거 |
 | --- | --- | --- | --- | --- |
@@ -236,9 +237,12 @@ VNC Relay가 운영자에게 내보내는 두 가지 정보의 교환 형식을 
 | `admin_terminated` | `info` | 없음 | `admin_account`가 필수다. | MGT-009, OPS-011 |
 | `dead_connection` | `warn` | 응답이 없는 쪽 | 없음 | RLY-026, WS-026 |
 | `close_timeout` | `warn` | 먼저 EOF를 낸 쪽. EOF를 관찰하지 않았으면 생략 | 관리자 정리도 E가 만료되면 이 원인을 쓴다. `admin_account`는 생략하고 `admin_terminate`로 계정을 추적한다(사용자 결정 2026-11-02(Q91)). | WS-017, RLY-019, MGT-009, OPS-011 |
-| `server_shutdown` | `warn` | 없음 | 없음 | OPS-009, OPS-042 |
+| `server_shutdown` | `warn` | 없음 | 정상 종료의 강제 정리 또는 Grace·Force 중 소유 작업 취소 때 기존 원인이 없는 세션에만 쓴다. Running 중 소유 작업의 버그 종료는 제외한다. | OPS-009, OPS-042, 사용자 결정 2026-11-02(Q94) |
+| `internal_error` | `warn`(1.3절의 서비스가 계속되는 비정상 종료 원인) | 없음 | 없음 | 사용자 결정 2026-11-02(Q94) |
 
 한 세션의 `close_cause`는 정리를 시작하게 한 첫 원인이다. 그 뒤 생긴 정리 오류로 바꾸지 않는다. 단, 한쪽 EOF 뒤 또는 관리자 종료로 시작한 정리에서 E가 지나면 `close_cause`는 `close_timeout`이다. 관리자 정리에서 EOF를 관찰하지 않았으면 `side`를 생략한다. 이때 `session_closed`에는 `admin_account`를 넣지 않으며, 같은 `session_id`의 `admin_terminate`로 수행 계정을 추적한다(사용자 결정 2026-11-02(Q91)). G 만료나 유예 중 두 번째 종료 요청으로 인한 강제 정리(`shutdown_forced`) 때도, 이미 정리를 시작한 세션(한쪽 EOF 관찰, I/O 오류, `dead_connection`, 관리자 종료 시작)은 최초 정리 시작 원인을 유지하며 `server_shutdown`으로 덮어쓰지 않는다. 아직 정리를 시작하지 않은 세션만 `close_cause=server_shutdown`이 된다(사용자 결정 2026-11-01(Q82)).
+
+서버가 Running일 때 세션 소유 작업이 panic 등 버그로 끝났고 기존 종료 원인이 없으면 `internal_error`를 쓴다. 정상 종료 중(Grace·Force)에 소유 작업이 취소되면 기존 원인이 없는 경우 `server_shutdown`을 쓴다. 어느 경우에도 기존 원인은 덮어쓰지 않는다(사용자 결정 2026-11-02(Q94)).
 
 ### 1.7 `error_kind` 값
 
@@ -339,7 +343,7 @@ Lm 상한에서 거절한 연결은 HTTP 응답을 받지 못하고 연결이 �
 - 소비자는 알 수 없는 필드를 무시해야 한다. 알 수 없는 `event` 줄은 버리지 않고 알 수 없는 사건으로 보존하거나 건너뛴다. 알 수 없는 `level`·`reason`·`close_cause`·`error_kind` 값도 오류로 처리하지 않는다.
 - 소비자는 `event`, `level`, 사건별 필수 필드로 분기해야 한다. `detail` 문자열로 분기하지 않는다.
 - 상태 도구는 HTTP 상태 코드로 생존·준비를 판정해야 한다. 200은 정상이고, 503은 준비 안 됨이다. 본문은 보조 정보다. 본문의 알 수 없는 `reason` 값을 오류로 처리하지 않는다.
-- 호환 변경: 사건 추가, 기존 사건에 선택 필드 추가, `reason`·`close_cause`·`error_kind`·`stage`·`result` 값 추가, 상태 응답 본문에 선택 필드 추가. 수락 소켓의 keepalive 설정 실패 기록(Q85), `already_closed` 결과 추가(Q90), 관리자 E 만료의 `side`·계정 표기 명확화(Q91)는 호환 변경이다.
+- 호환 변경: 사건 추가, 기존 사건에 선택 필드 추가, `reason`·`close_cause`·`error_kind`·`stage`·`result` 값 추가, 상태 응답 본문에 선택 필드 추가. 수락 소켓의 keepalive 설정 실패 기록(Q85), `already_closed` 결과 추가(Q90), 관리자 E 만료의 `side`·계정 표기 명확화(Q91), `close_cause`의 `internal_error` 추가(Q94)는 호환 변경이다.
 - 호환성을 깨는 변경(Breaking change): 사건·필드 이름 변경이나 삭제, 필드 자료형·단위·의미 변경, 필수 필드 삭제, 기존 `reason`·`close_cause` 값의 삭제나 의미 변경, `ts` 형식 변경, 줄 구분·인코딩 변경, `level` 값의 의미 변경, 상태 엔드포인트의 경로·상태 코드·`/readyz` 준비 판정 의미 변경. 이런 변경은 새 major 버전(`ops-info` 2.0.0)과 함께 한다. 마이그레이션은 소비자를 새 형식에 먼저 맞춘 뒤 `vnc-relay`를 올리는 순서로 한다. 소비자는 `server_starting`의 `log_contract`로 버전을 구분한다. 롤백은 이전 버전의 `vnc-relay`를 다시 시작하는 것이다. 영속 상태가 없으므로(ADR-0003) 데이터 되돌림은 필요 없다. 마이그레이션·롤백 계획은 major 변경 때 별도로 작성한다.
 
 ## 4. 버전과 지원 단계
