@@ -6,7 +6,7 @@ UltraVNC Viewer·Server와 외부 WebSocket 클라이언트가 VNC Relay에 접�
 
 | 항목 | 값 |
 | --- | --- |
-| 이름과 버전 | `repeater-handshake` 1.0.0. 2절 `duplicate_id`의 정책 확정(사용자 결정 2026-11-01(Q74))은 버전을 올리지 않았다. 채택 때 제안으로 둔 후발 거절을 그대로 정했으므로 처리가 바뀌는 요청이 없다. |
+| 이름과 버전 | `repeater-handshake` 1.0.0. 2절 `duplicate_id`의 정책 확정(사용자 결정 2026-11-01(Q74))은 버전을 올리지 않았다. 채택 때 제안으로 둔 후발 거절을 그대로 정했으므로 처리가 바뀌는 요청이 없다. 1.2절의 빈 값·모드 검사 순서 명확화도 버전을 유지한다. 기존 “값을 더 검사하지 않고”와 Server의 `ID:` 필수 규칙을 풀어 쓴 것이며, 형식이나 허용 범위를 바꾸지 않는다(이 문서의 판단, 사용자 결정 없음). |
 | 상태 | Active(2026-11-01 채택) |
 | 소유자 | vnc-relay 프로젝트 관리자 |
 | 만드는 쪽(Producer) | 초기 요청: UltraVNC Viewer, UltraVNC Server, 외부 WebSocket 클라이언트(검증 대상은 noVNC 1.7.0의 `repeaterID` 옵션). 시작 바이트: `vnc-relay` |
@@ -44,13 +44,15 @@ UltraVNC Viewer·Server와 외부 WebSocket 클라이언트가 VNC Relay에 접�
 | 규칙 | 내용 | 근거 |
 | --- | --- | --- |
 | 길이 | 정확히 250바이트다. TCP 청크와 WebSocket 메시지의 경계와 관계없이 250바이트를 모은 뒤 해석한다. 250바이트가 다 오기 전에는 해석·대기 등록·대상 연결을 하지 않는다. 250바이트를 넘게 받은 바이트는 1.1절 E의 후속 바이트다. | S-01, E-02, E-03, E-04 |
-| 값과 채움 | 값은 첫 NUL(`00`) 앞까지다. NUL이 없으면 250바이트 전체가 값이다. 첫 NUL 뒤의 채움 바이트는 내용과 관계없이 무시한다. 빈 값은 `handshake_invalid`다. | M1-01, M2-01, M2-06b, T-03 |
+| 값과 채움 | 값은 첫 NUL(`00`) 앞까지다. NUL이 없으면 250바이트 전체가 값이다. 첫 NUL 뒤의 채움 바이트는 내용과 관계없이 무시한다. 본문 문법 검사에서 빈 값은 `handshake_invalid`다. 모드 검사와의 선후는 표 아래 검사 순서를 따른다. | M1-01, M2-01, M2-06b, T-03 |
 | 모드 판정 | Viewer 진입점(TCP Viewer·WS·WSS): 값이 `ID:`(대문자, `49 44 3A`)로 시작하면 Mode II, 아니면 Mode I이다. TCP Server 진입점: 값이 `ID:`로 시작해야 한다. 아니면 `handshake_invalid`다. | M1-01, M2-01, E-01 |
 | 꺼진 모드 | 판정한 모드가 설정에서 꺼져 있으면 값을 더 검사하지 않고 `mode_disabled`로 거절한다. | [RLY-R17](../specs/relay.md#21-판정-가능한-규칙) |
 | 역할 | 진입점이 정한다. TCP Server 진입점은 Server, Viewer 진입점은 Viewer다. 요청 안에는 역할 표시가 없다. | M2-01 |
 | 중계 ID | `ID:` 뒤의 값이다. ASCII 숫자(`0`~`9`) 1~247자리이고, 247자리는 250바이트에 들어가는 최대 길이다. 숫자가 아닌 바이트가 하나라도 있거나 숫자가 없으면 `handshake_invalid`다. 두 ID는 바이트열이 정확히 같을 때만 같다. 앞자리 0, 수 값, 대소문자로 서로 다른 ID를 합치지 않는다(`0123`과 `123`은 다른 ID). 사용자 결정 2026-11-01(Q68·Q69). | [기록 3.5절](repeater-compat-record.md#35-계약-1절-항목별-해석) "중계 ID 비교"·"중계 ID 길이" 행 |
 | 버전 문자열 | Viewer 쪽의 시작 바이트 `RFB 000.000\n` 하나다(1.1절 D). Server 쪽에는 없다. | M2-01 |
 | 시간 | 250바이트는 제한 시간 H 안에 다 와야 한다. TCP는 초기 교환에 들어간 때부터, WS·WSS는 `101` 응답을 보낸 때부터 잰다([설정 계약](config-v2.md)의 `handshake_secs`). | E-04 |
+
+검사 순서는 다음과 같다(이 문서의 판단, 사용자 결정 없음). Viewer는 빈 값도 먼저 모드를 판정한다. 빈 값은 `ID:`로 시작하지 않으므로 Mode I이다. 그 모드가 꺼졌으면 빈 값·본문을 더 검사하지 않고 `mode_disabled`로 거절한다. 모드가 켜졌을 때 빈 값·본문 문법을 검사한다. 따라서 빈 Viewer 값은 Mode I이 켜졌으면 `handshake_invalid`다. TCP Server는 모드 활성 검사보다 먼저 `ID:` 접두어를 검사한다. 빈 값과 비접두어 값은 항상 `handshake_invalid`다. `ID:`만 있는 값은 Mode II가 꺼졌으면 `mode_disabled`이고, 켜졌으면 빈 ID라 `handshake_invalid`다.
 
 ### 1.3 Mode I 대상 문법
 
@@ -152,7 +154,7 @@ TCP 진입점은 오류를 알리는 바이트를 보내지 않고 정상 종료
 
 | 주체·테스트 위치 | 확인할 계약 규칙 | 결과 | 실행 기록 |
 | --- | --- | --- | --- |
-| Consumer: `vnc-relay` 초기 요청 해석 단위 테스트 / 미생성 | 1.2·1.3절: 250바이트 경계, 첫 NUL과 채움, 모드 판정, 중계 ID의 문자·길이와 정확 일치, 대상 문법(IPv4·이름·대괄호 IPv6·포트 생략·앞자리 0), IPv4-mapped 변환, 오류 코드 | 미실행 | 구현·테스트 파일 없음(작업 2.7) |
+| Consumer: `crates/domain/src/handshake.rs` 단위 시험(`parses_the_same_request_at_every_split_boundary`, `rejects_empty_values_invalid_ids_and_invalid_targets`, `rejects_disabled_modes_before_validating_their_payloads`, `ignores_padding_after_the_first_nul_and_accepts_no_nul_requests`, `parses_targets_with_the_existing_address_and_name_rules` 등 8개), `crates/domain/src/relay_id.rs` 단위 시험(`keeps_leading_zeroes_and_accepts_one_to_247_digits` 등 2개) | 1.2·1.3절: 250바이트 경계, 첫 NUL과 채움, 모드·빈 값 검사 순서, 중계 ID 문자·길이·정확 일치, 대상 문법, IPv4-mapped 변환, 오류 코드. 실제 I/O는 범위 밖이다. | 통과(단위 범위) | [초기 교환 설계의 실행 기록](../architectures/initial-exchange.md#실행-기록). Windows PowerShell에서 `cargo test -p vnc-relay-domain`, 단위 시험 47개 통과(신규 10개 포함). |
 | Producer: UltraVNC Viewer·Server → Consumer: `vnc-relay` TCP 진입점 / 미생성 | 시작 바이트 전송, 유효한 초기 요청 수락과 분할·병합 해석: [RLY-001](../specs/relay.md#7-수용-테스트), [RLY-002](../specs/relay.md#7-수용-테스트), [RLY-003](../specs/relay.md#7-수용-테스트) | 미실행 | 구현·테스트 파일 없음(작업 2.7) |
 | Producer: 잘못된 초기 요청 생성기 → Consumer: `vnc-relay` / 미생성 | 형식 오류·미완료 단절·시간 초과·꺼진 모드: [RLY-004](../specs/relay.md#7-수용-테스트), [RLY-005](../specs/relay.md#7-수용-테스트), [RLY-022](../specs/relay.md#7-수용-테스트) | 미실행 | 구현·테스트 파일 없음(작업 2.7) |
 | Producer: UltraVNC Server·Viewer(Mode II) → Consumer: `vnc-relay` / 미생성 | 두 접속 순서의 매칭, 다른 ID·앞자리 0만 다른 ID, 중복 ID: [RLY-010](../specs/relay.md#7-수용-테스트), [RLY-011](../specs/relay.md#7-수용-테스트), [RLY-012](../specs/relay.md#7-수용-테스트), [RLY-013](../specs/relay.md#7-수용-테스트), [RLY-015](../specs/relay.md#7-수용-테스트) | 미실행 | 구현·테스트 파일 없음 |

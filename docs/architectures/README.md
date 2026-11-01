@@ -11,7 +11,10 @@
 | [운영 로그 모듈 설계](ops-log.md) | 운영 로그 사건을 어떤 타입으로 만들고, 어떤 형식으로 어디에 쓰며, 쓰기 실패와 비밀 값을 어떻게 다루는가 | Current | Draft | Verified — [대조 기록](ops-log.md#대조-기록) |
 | [TCP 진입점 모듈 설계](tcp-entry-point.md) | TCP Viewer·Server 진입점이 접속을 어떻게 받고, 데이터를 읽기 전에 출발지 IP를 어떻게 판정하며, 허용·거절·종료를 어떻게 기록하는가 | Current | Draft | Verified — [대조 기록](tcp-entry-point.md#대조-기록) |
 | [WebSocket 진입점 모듈 설계](websocket-entry-point.md) | WS·WSS Viewer 진입점이 접속을 어떻게 받고, WSS 협상과 제한 시간 U를 어떻게 적용하며, 업그레이드 요청을 어떤 순서로 검사해 101로 답하거나 거절하고, 101 뒤를 어떻게 임시로 보류하는가 | Current | Draft | 미대조 |
+| [WebSocket 스트림 어댑터 모듈 설계](websocket-stream.md) | 101 뒤 바이너리 페이로드를 공통 RelayStream으로 옮기고, M·B·초기 교환·Close·Kw 진행을 어떻게 연결하는가 | Target | Draft | 미대조. 잠금 API·공통 포트 조사. [대조·실행 기록](websocket-stream.md#대조실행-기록) |
 | [연결 상한과 시간 제한 모듈 설계](connection-limits.md) | 연결 상한 L·Lm·Lw를 어떻게 세고, TCP 진입점이 수락한 연결에 초기 교환 시간 H와 TCP keepalive를 어떻게 적용하는가 | Current | Draft | Verified — [대조 기록](connection-limits.md#대조-기록) |
+| [초기 교환 처리 모듈 설계](initial-exchange.md) | 250바이트 요청과 Viewer 시작 바이트를 어떻게 처리하고, H·오류 사건·후속 바이트·B·L 자리를 어떻게 이어 관리하는가 | Target | Draft | 부분 대조. domain·공통 app 처리·사건·JSON 구현. 진입점 인계는 미구현. [실행 기록](initial-exchange.md#실행-기록) |
+| [대상 연결·매칭·중계 수명 모듈 설계](relay-session.md) | 유효한 PreparedConnection을 어떻게 대상 연결 또는 상대 매칭에 넘기고, B·C·W·E·G와 연결 예산을 지키며 세션 정리까지 이어 가는가 | Target | Draft | 미대조 |
 | [상태 리스너와 준비 상태 모듈 설계](status-listener.md) | 상태 리스너가 `/livez`·`/readyz`에 어떻게 답하고, 준비 상태를 언제 바꾸며, 상태 연결을 Lm으로 어떻게 세는가 | Current | Draft | Verified — [대조 기록](status-listener.md#대조-기록) |
 | [관리자 계정 준비 CLI 모듈 설계](admin-accounts.md) | `vnc-relay admin add|passwd|remove|list`가 관리자 계정 파일을 어떻게 읽고 잠금 파일로 보호해 원자적으로 바꾸며, 비밀번호를 어떻게 입력받고 해시하는가 | Current | Draft | Verified — [대조 기록](admin-accounts.md#대조-기록) |
 | [내장 TLS 모듈 설계](tls.md) | PEM 인증서·개인키를 읽어 TLS 1.2·1.3 서버 설정을 만들고, 시작 때 WSS·관리 TLS 파일을 어떻게 검사하는가 | Current | Draft | Verified — [대조 기록](tls.md#대조-기록) |
