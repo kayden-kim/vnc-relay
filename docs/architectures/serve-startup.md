@@ -10,7 +10,7 @@
 | 코드 위치 | `src/main.rs`, `src/cli.rs`, `src/serve.rs`, `crates/domain/src/account.rs`, `crates/app/src/accounts.rs`, `crates/app/src/settings.rs`(`ListenerPlan`, `Settings::status_listener`, `Settings::management_listener`, `Settings::other_listeners`), `crates/adapters/src/accounts_file.rs`, `crates/adapters/src/management_http.rs`, `crates/adapters/src/net.rs`, `crates/adapters/src/websocket.rs`(`WsEntryPoint`), `crates/adapters/src/tls.rs`, `crates/adapters/src/toml_text.rs` |
 | 코드 지도 | [코드 지도 2절](code-map.md#2-코드-위치와-구성요소) |
 | 관련 스펙 | [운영 스펙 3.1절](../specs/operations.md#31-설정-검증과-시작), OPS-001, OPS-002(일부), OPS-039(일부) |
-| 관련 계약 | [CLI 계약](../contracts/cli-v1.md) 1.1·1.3·1.4·1.5·1.8·2절, [설정 계약 2.1절](../contracts/config-v1.md#21-설정-오류와-준비-실패), [운영 정보 계약](../contracts/ops-info-v1.md) 1.5·1.6절(시작·종료 사건)·[1.12절](../contracts/ops-info-v1.md#112-상태-리스너와-엔드포인트)(상태 리스너를 먼저 연다) |
+| 관련 계약 | [CLI 계약](../contracts/cli-v1.md) 1.1·1.3·1.4·1.5·1.8·2절, [설정 계약 2.1절](../contracts/config-v2.md#21-설정-오류와-준비-실패), [운영 정보 계약](../contracts/ops-info-v1.md) 1.5·1.6절(시작·종료 사건)·[1.12절](../contracts/ops-info-v1.md#112-상태-리스너와-엔드포인트)(상태 리스너를 먼저 연다) |
 | 관련 ADR | [ADR-0003 단일 인스턴스·메모리 상태](../decisions/ADR-0003-single-instance-memory-state.md) |
 
 ## 1. 책임과 경계
@@ -23,7 +23,7 @@
   - 단계마다 운영 로그 사건을 기록한다: `server_starting`, 설정 경고(`phase` = `startup`), 진단마다 `startup_failed`, 정상 종료 때 `server_stopped`. 필드 규칙은 [운영 로그 모듈 설계 4·6절](ops-log.md#4-처리-순서)이다.
   - 계정 파일 읽기와 형식·해시 문자열 검사(1.3·1.4절), 계정이 없을 때의 시작 거절, Ubuntu의 권한 경고(1.6절).
   - 리스너 바인드 실패 수집과 실패 때 이미 바인드한 리스너 닫기.
-  - 인증서·개인키 파일 검사(`tls_file_invalid`, 종료 코드 3). 활성화된 WSS 진입점과 관리 리스너의 인증서·개인키 파일을 어떤 리스너도 바인드하기 전에 검사하고, 오류는 모두 모은다([CLI 계약 1.8절](../contracts/cli-v1.md#18-수동-시작과-종료), [설정 계약 2.1절](../contracts/config-v1.md#21-설정-오류와-준비-실패)).
+  - 인증서·개인키 파일 검사(`tls_file_invalid`, 종료 코드 3). 활성화된 WSS 진입점과 관리 리스너의 인증서·개인키 파일을 어떤 리스너도 바인드하기 전에 검사하고, 오류는 모두 모은다([CLI 계약 1.8절](../contracts/cli-v1.md#18-수동-시작과-종료), [설정 계약 2.1절](../contracts/config-v2.md#21-설정-오류와-준비-실패)).
   - 종료 요청(Ctrl+C, Ubuntu의 SIGTERM, Windows의 Ctrl+Break)을 받으면 TCP·WS·WSS 진입점 작업에 종료를 알리고, 그 작업이 끝난 뒤 나머지 리스너를 닫고 종료 코드 0으로 끝내기.
 - 맡지 않는 책임:
   - `admin` 하위 명령의 실행. [관리자 계정 준비 CLI 모듈 설계](admin-accounts.md)가 맡는다.
@@ -92,7 +92,7 @@ flowchart LR
 | `Command` | `Help`, `Version`, `Serve { config: PathBuf }` | 메모리 | `Help`·`Version`은 다른 인수가 없을 때만 만든다. |
 | `AccountName` | `String` | `Account` | 1~32자, `a-z0-9._-` |
 | `PasswordHash` | 원문 PHC 문자열, `Argon2Params` | `Account` | 1.4절 형식을 통과한 값만 담는다. 원문은 로그인 때의 검증(작업 4.3)에 쓴다. `Debug`·오류 메시지에 원문을 넣지 않는다. |
-| `Argon2Params` | `memory_kib`, `iterations`, `parallelism`: `u32` | `PasswordHash` | 승인 범위: 19456~1048576, 2~10, 1~16([설정 계약 1.2절](../contracts/config-v1.md#12-키-표)) |
+| `Argon2Params` | `memory_kib`, `iterations`, `parallelism`: `u32` | `PasswordHash` | 승인 범위: 19456~1048576, 2~10, 1~16([설정 계약 1.2절](../contracts/config-v2.md#12-키-표)) |
 | `AccountsDiagnostic` | `error: AccountsError`, `key: String`, `message: String` | 반환 값 | `key` 규칙은 [CLI 계약 1.3절](../contracts/cli-v1.md#13-계정-파일-형식). 빈 문자열이면 출력에서 ` key=`를 뺀다. 메시지에 해시·파일 내용을 넣지 않는다. |
 | `LoadedAccounts` | `accounts: Vec<Account>`, `warnings: Vec<AccountsWarning>` | 반환 값 | 파일 순서를 유지한다. |
 | `ListenerPlan` | `name: &'static str`(운영 정보 계약의 `listener` 값), `key: &'static str`(설정 키), `addr: SocketAddr`, `entry_point: Option<EntryPoint>`(상태·관리 리스너는 `None`) | 메모리 | 같은 주소가 두 번 나오지 않는다(설정 검사 `config_listen_conflict`가 보장). |

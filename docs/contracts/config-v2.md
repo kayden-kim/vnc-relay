@@ -1,12 +1,12 @@
-# 설정 파일 v1 계약
+# 설정 파일 v2 계약
 
 운영자가 쓰는 TOML 설정 파일의 키, 자료형, 기본값, 유효 범위, 항목 문법, 재로드 구분을 정한다. `vnc-relay serve`는 이 계약에 맞지 않는 파일로 시작하지 않으며, 실행 중에도 이 계약에 맞지 않는 재로드 후보를 적용하지 않는다. 이 문서는 파일 형식만 정한다. 시작·재로드의 외부 동작은 [운영 스펙](../specs/operations.md)이 정하고, 관리자 계정 파일과 하위 명령은 [CLI·계정 파일 계약](cli-v1.md)이 정한다.
 
-이 계약은 2026-10-16에 사용자가 채택했다(상태 Active). 승인 표의 기본값·유효 범위, 추가로 승인한 값, 이 문서에서 정한 키 이름·테이블 구조·형식·오류 코드가 모두 채택 범위다. 6절에 "구현에서 확인"·"관찰로 확인 필요"로 남긴 항목은 채택으로 해소되지 않았다. 설정 로더의 계약 테스트 결과는 5절에 있다. 아직 기능이 없는 규칙의 테스트는 미실행이다.
+이 계약은 2026-10-16에 사용자가 채택했다(상태 Active). 승인 표의 기본값·유효 범위, 추가로 승인한 값, 이 문서에서 정한 키 이름·테이블 구조·형식·오류 코드가 모두 채택 범위다. 2026-11-01에 `limits.initial_message_bytes`(I)를 지워 2.0.0으로 올렸다(사용자 결정 2026-11-01(Q71)). v1 파일을 옮기는 방법은 [3.1절](#31-v1-파일을-v2로-옮기기)에 있다. 6절에 "구현에서 확인"·"관찰로 확인 필요"로 남긴 항목은 채택으로 해소되지 않았다. 설정 로더의 계약 테스트 결과는 5절에 있다. 아직 기능이 없는 규칙의 테스트는 미실행이다.
 
 | 항목 | 값 |
 | --- | --- |
-| 이름과 버전 | `vnc-relay-config` 1.2.0. 1.1.0은 오류 코드 `log_file_unavailable`을 더했다(호환 변경, 사용자 결정 2026-10-20). 1.2.0은 U를 관리 리스너의 TLS 협상과 첫 요청 머리 읽기에도 쓰게 했다(호환 변경, 사용자 결정 2026-10-21). 첫 요청 머리가 끝난 뒤의 U 유휴 제한은 사용자 결정 2026-10-22(Q25)다. H의 WS·WSS 시작점(101 응답)은 사용자 결정 2026-10-22(Q22)로 명확히 했다. 이 두 명확화는 버전을 올리지 않았다. 1.8절 규칙 1의 감시 대상을 켜진 항목으로 명확히 한 것도 사용자 결정 2026-10-22(Q50)에 따른 명확화이며 버전을 올리지 않았다. |
+| 이름과 버전 | `vnc-relay-config` 2.0.0. 2.0.0은 `limits.initial_message_bytes`(I)와 관계 I ≤ B를 지웠다(호환성을 깨는 변경, 사용자 결정 2026-11-01(Q71)). 초기 요청이 250바이트 고정이어서([Repeater 초기 교환 계약 1.2절](repeater-handshake-v1.md#12-초기-요청-250바이트)) I로 정할 값이 없기 때문이다. 이전 이력: 1.1.0은 오류 코드 `log_file_unavailable`을 더했다(호환 변경, 사용자 결정 2026-10-20). 1.2.0은 U를 관리 리스너의 TLS 협상과 첫 요청 머리 읽기에도 쓰게 했다(호환 변경, 사용자 결정 2026-10-21). 첫 요청 머리가 끝난 뒤의 U 유휴 제한은 사용자 결정 2026-10-22(Q25)다. H의 WS·WSS 시작점(101 응답)은 사용자 결정 2026-10-22(Q22)로 명확히 했다. 이 두 명확화는 버전을 올리지 않았다. 1.8절 규칙 1의 감시 대상을 켜진 항목으로 명확히 한 것도 사용자 결정 2026-10-22(Q50)에 따른 명확화이며 버전을 올리지 않았다. |
 | 상태 | Active(2026-10-16 채택) |
 | 소유자 | vnc-relay 프로젝트 관리자 |
 | 만드는 쪽(Producer) | 운영자(설정 파일 작성자) |
@@ -15,12 +15,12 @@
 | 스키마 기준 파일 | 없음. 이 문서의 Markdown 표가 형식의 기준이다. |
 | 기준 스펙 | [설정·프로세스 수명·운영 보안 스펙](../specs/operations.md) |
 | 관련 요구사항 | [PRD](../requirements/PRD.md) FR-02·FR-05·FR-06·FR-07, [7절 보안 및 신뢰 경계](../requirements/PRD.md#7-보안-및-신뢰-경계) |
-| 호환성 범위 | 설정 파일 v1. Windows 11 x64·Ubuntu 24.04 LTS x64의 `vnc-relay` 1.x. 파일 안에 형식 버전 키는 없다. |
+| 호환성 범위 | 설정 파일 v2(`vnc-relay-config` 2.0.0). Windows 11 x64·Ubuntu 24.04 LTS x64의 `vnc-relay` 1.x. 파일 안에 형식 버전 키는 없다. v1 파일과의 차이와 옮기는 방법은 3.1절에 있다. |
 | 관련 테스트 | [운영 스펙 수용 테스트](../specs/operations.md#7-수용-테스트) OPS-001~006·OPS-016·OPS-023~027·OPS-031·OPS-034~042, [WS·WSS 스펙](../specs/websocket.md#7-수용-테스트) WS-015·WS-022·WS-024·WS-027, [중계 스펙](../specs/relay.md#7-수용-테스트) RLY-007·RLY-008·RLY-022~027. 계약 테스트는 5절에 연결한다. 설정 로더와 `serve` 시작 실패 표시는 구현·통과했다. 재로드 자동 적용(작업 5.2)은 구현했고, 그 시험 가운데 OPS-025·026·040과 WS-022의 나머지 조항은 부분이다. 나머지는 미실행이다. |
 
 용어는 [VNC Relay 용어집](../../GLOSSARY.md)을 따른다. 테스트·검증 기호 L~Dp 등은 [운영 스펙 2절](../specs/operations.md#2-상태와-검증-매개변수)의 기호이며, 이 계약이 각 기호를 키에 연결한다.
 
-관련 문서: [CLI·계정 파일 계약](cli-v1.md)(`[admin]` 테이블 사용, 종료 코드), [관리 API 계약](management-api-v1.md)(`[dashboard]`·`[recent_closed]`·`[management]`의 값 전달), [WebSocket 중계 계약](websocket-relay-v1.md)(`allowed_origins`·WS 키 사용), [Repeater 초기 교환 계약](repeater-handshake-v1.md)(`initial_message_bytes`·`handshake_secs` 사용), [운영 정보 계약](ops-info-v1.md)(경고·재로드 사건 이름, `[log]`·`[status]`), [ADR-0001 내장 TLS](../decisions/ADR-0001-built-in-tls.md), [ADR-0002 출발지 IP 허용 목록](../decisions/ADR-0002-source-ip-allowlist.md), [ADR-0004 tokio·rustls](../decisions/ADR-0004-tokio-rustls.md).
+관련 문서: [CLI·계정 파일 계약](cli-v1.md)(`[admin]` 테이블 사용, 종료 코드), [관리 API 계약](management-api-v1.md)(`[dashboard]`·`[recent_closed]`·`[management]`의 값 전달), [WebSocket 중계 계약](websocket-relay-v1.md)(`allowed_origins`·WS 키 사용), [Repeater 초기 교환 계약](repeater-handshake-v1.md)(`handshake_secs`·`[mode1]`·`[mode2]` 사용), [운영 정보 계약](ops-info-v1.md)(경고·재로드 사건 이름, `[log]`·`[status]`), [ADR-0001 내장 TLS](../decisions/ADR-0001-built-in-tls.md), [ADR-0002 출발지 IP 허용 목록](../decisions/ADR-0002-source-ip-allowlist.md), [ADR-0004 tokio·rustls](../decisions/ADR-0004-tokio-rustls.md).
 
 ## 1. 형식과 의미
 
@@ -102,7 +102,6 @@
 | `relay_connections`(L) | 정수 | 아님 | 1000 | 2~65535 | 중계 측 연결 소켓 상한. 집계 범위는 [운영 스펙 2절](../specs/operations.md#2-상태와-검증-매개변수)의 L이다. |
 | `admin_connections`(Lm) | 정수 | 아님 | 64 | 1~1024 | 관리·상태 리스너 연결 소켓 상한. L과 독립이다. |
 | `waiting`(Lw) | 정수 | 아님 | 200 | 1~`relay_connections` | Mode II 대기 연결 상한. L도 함께 적용한다. |
-| `initial_message_bytes`(I) | 정수(바이트) | 아님 | 4096 (4 KiB) | 256~65536 (256 B~64 KiB) | Repeater 초기 메시지 크기 상한. |
 | `buffer_bytes`(B) | 정수(바이트) | 아님 | 131072 (128 KiB) | 16384~4194304 (16 KiB~4 MiB) | 연결당 중계 버퍼 상한. |
 | `ws_message_bytes`(M) | 정수(바이트) | 아님 | 1048576 (1 MiB) | 65536~16777216 (64 KiB~16 MiB) | WebSocket 논리 메시지 크기 상한. 프레임 분할 전후에 같은 제한이다. |
 
@@ -247,7 +246,6 @@ IPv4 또는 IPv6 한 체계의 전체 주소를 덮는 항목은 허용하며 �
 | --- | --- | --- |
 | Lw ≤ L | `limits.waiting` ≤ `limits.relay_connections` | `config_value_out_of_range`(범위의 상한이 L이다) |
 | Si ≤ Sa | `management.session.idle_secs` ≤ `management.session.max_lifetime_secs` | `config_relation_violated` |
-| I ≤ B | `limits.initial_message_bytes` ≤ `limits.buffer_bytes` | `config_relation_violated` |
 | 평문 관리 리스너는 루프백만 | `management.cert_file`·`key_file`이 모두 없으면 `management.listen`의 IP가 루프백(`127.0.0.0/8` 또는 `::1`)이어야 한다. `0.0.0.0`·`::`는 루프백이 아니다. | `config_plaintext_management_not_loopback` |
 | 관리 TLS 파일 쌍 | `management.cert_file`과 `management.key_file`은 둘 다 쓰거나 둘 다 생략한다. | `config_tls_pair_incomplete` |
 | WSS 파일 필수 | `relay.wss_viewer.enabled = true`이면 `cert_file`·`key_file`이 모두 있어야 한다. | `config_missing_key` |
@@ -354,15 +352,25 @@ TLS 1.2 미만은 거절한다. 허용 암호 스위트는 선택한 rustls 암�
 
 - 서버는 알 수 없는 테이블·키를 `config_unknown_key` 오류로 거절해야 한다. 허용 형식 밖의 값(예: 허용하지 않는 Origin 스킴)은 해당 값의 오류 코드(`config_origin_invalid` 등)로 거절해야 한다. 무시하거나 경고만 하지 않는다.
 - 호환 변경(minor 올림): 기본값이 있고 생략해도 기존 동작이 같은 새 선택 키 추가, 유효 범위 넓힘, 오류 메시지 문구 변경. 새 키를 쓴 파일은 그 키를 모르는 이전 서버가 거절한다. 그래서 새 키를 쓰려면 서버를 먼저 올린다.
-- 호환성을 깨는 변경(새 major 버전): 키 이름·자료형·단위 변경이나 삭제, 필수 키 추가, 기본값 변경, 유효 범위 좁힘, 재로드 구분 변경, 항목 문법 변경, 보안 검사 완화. 새 major는 `vnc-relay-config` 2.0.0으로 올리고 마이그레이션(v1 파일을 v2로 바꾸는 방법)과 롤백(v2 파일을 v1로 되돌리는 방법) 계획을 함께 작성한다. 지금은 v1만 있어 계획이 없다.
+- 호환성을 깨는 변경(새 major 버전): 키 이름·자료형·단위 변경이나 삭제, 필수 키 추가, 기본값 변경, 유효 범위 좁힘, 재로드 구분 변경, 항목 문법 변경, 보안 검사 완화. major를 올리고 마이그레이션(이전 파일을 새 형식으로 바꾸는 방법)과 롤백(새 형식 파일을 이전 서버로 되돌리는 방법) 계획을 함께 작성한다. 2.0.0의 계획은 3.1절에 있다.
 - 모든 값의 의미는 키 표에 있다. 키 순서와 주석은 의미가 없다.
+
+### 3.1 v1 파일을 v2로 옮기기
+
+| 항목 | 내용 |
+| --- | --- |
+| 바뀐 점 | `limits.initial_message_bytes`(I) 키와 관계 I ≤ B를 지웠다. 다른 키·기본값·유효 범위·문법·재로드 구분은 1.2.0과 같다. |
+| v2 서버가 v1 파일을 읽을 때 | `initial_message_bytes`가 없는 파일은 그대로 읽는다. 있으면 `config_unknown_key`로 시작하지 않는다. 실행 중 재로드 후보이면 `reload_rejected`로 거절한다. |
+| 마이그레이션 | 1. `[limits]`에서 `initial_message_bytes` 줄을 지운다. 2. 서버를 새 버전으로 재시작한다. 고친 파일은 v1 서버도 읽으므로 이 순서에서는 시작 실패가 없다. 지운 값이 4096이 아니었다면, 실행 중인 v1 서버는 그 변경을 `reload_restart_required`로 거절한다. 다음 재시작에서 해소된다. |
+| 롤백 | v2 파일은 v1 서버(1.2.0)도 그대로 읽는다. v1에서 I는 선택 키이므로 생략하면 기본값 4096을 쓴다. 서버만 이전 버전으로 되돌린다. |
+| 지원 기간 | 두지 않는다. v2 서버는 v1에만 있는 키를 받지 않고, 이 문서가 v1을 대체한다. 근거는 키를 지금 지우기로 한 사용자 결정 2026-11-01(Q71)이다. 결정 당시 저장소에는 릴리스 태그가 없었고, 중계 기능(초기 교환 해석·매칭·중계)도 구현되지 않았다([중계 스펙](../specs/relay.md) 머리 표). |
 
 ## 4. 버전과 지원 단계
 
 | 상태 | 조건 | 지원 종료·대체 |
 | --- | --- | --- |
 | Draft | 채택 전 상태. 이 계약은 2026-10-16에 채택해 Draft를 지났다. | 해당 없음 |
-| Active | 현재. 사용자 채택(2026-10-16). 구현과 양 OS의 계약 테스트 통과·검증 기록은 5절 표가 관리하며, 통과하기 전에는 지원 완료로 표시하지 않는다. | v2가 Active가 된 뒤 Deprecated로 바꾼다. |
+| Active | 현재. 사용자 채택(2026-10-16). 2.0.0은 사용자 결정 2026-11-01(Q71). 구현과 양 OS의 계약 테스트 통과·검증 기록은 5절 표가 관리하며, 통과하기 전에는 지원 완료로 표시하지 않는다. | v3가 Active가 된 뒤 Deprecated로 바꾼다. v1(1.0.0~1.2.0)은 3.1절 "지원 기간" 행대로 이 버전으로 바로 대체했다. |
 | Deprecated | 대체 계약이 Active이다. | 지원 종료 날짜는 대체 계약에서 정한다. |
 | Retired | 지원 종료. | 새 구현의 근거로 쓰지 않는다. |
 
@@ -437,7 +445,7 @@ output = "stdout"
 | --- | --- | --- | --- |
 | Consumer·계약 테스트 파일 `reports_every_problem_in_one_pass`, `rejects_syntax_errors_and_duplicate_keys_with_one_diagnostic`, `rejects_missing_unreadable_and_non_utf8_files`, `rejects_non_table_values_in_place_of_tables` | 구문 오류, 알 수 없는 키, 자료형 오류, 필수 키 누락(1.1·1.7절)을 모두 모아 진단으로 돌려준다. [OPS-001](../specs/operations.md#7-수용-테스트)의 설정 검증 부분 | 통과 | [실행 기록](#계약-테스트-실행-기록) |
 | Consumer·`tests/serve.rs` `rejects_invalid_config_with_exit_code_3_and_every_cause`, `rejects_toml_syntax_error_and_missing_config_file_with_exit_code_3` | 위 진단이 시작 실패(종료 코드 3)와 비밀 없는 원인 표시(`error[<code>] key=<key>: <message>`)로 이어진다. stdout에는 진단마다 운영 로그 `startup_failed` 줄이 있고 설정 값은 없다. [OPS-001](../specs/operations.md#7-수용-테스트) | 통과 | [운영 정보 계약 실행 기록](ops-info-v1.md#계약-테스트-실행-기록) |
-| Consumer·계약 테스트 파일 `accepts_minimal_example_and_fills_every_default`, `checks_every_numeric_key_at_its_bounds`, `checks_relations_between_values` | 승인 수치의 기본값, 최소·최대와 그 바깥(1.2절). Lw ≤ L, Si ≤ Sa, I ≤ B(1.6절). 수치가 각 기능에 주는 효과는 [OPS-004~006](../specs/operations.md#7-수용-테스트)·[OPS-023](../specs/operations.md#7-수용-테스트)를 다루는 작업에서 확인한다. | 통과 | [실행 기록](#계약-테스트-실행-기록) |
+| Consumer·계약 테스트 파일 `accepts_minimal_example_and_fills_every_default`, `checks_every_numeric_key_at_its_bounds`, `checks_relations_between_values` | 승인 수치의 기본값, 최소·최대와 그 바깥(1.2절). Lw ≤ L, Si ≤ Sa(1.6절). 지운 키 `initial_message_bytes`는 `config_unknown_key`(3.1절). 수치가 각 기능에 주는 효과는 [OPS-004~006](../specs/operations.md#7-수용-테스트)·[OPS-023](../specs/operations.md#7-수용-테스트)를 다루는 작업에서 확인한다. | 통과 | [실행 기록](#계약-테스트-실행-기록) |
 | Consumer·계약 테스트 파일 `applies_default_ports_only_to_tcp_entry_points`, `rejects_listen_conflicts_after_default_ports` | 기본 포트: 주소만 쓴 `tcp_viewer`는 5901, `tcp_server`는 5500, IPv6는 대괄호 필수. `ws_viewer`·`wss_viewer`·관리·상태 `listen`의 포트 생략은 `config_listen_invalid`. 충돌 검사는 기본 포트를 붙인 뒤 적용(1.2·1.6절). [OPS-001](../specs/operations.md#7-수용-테스트) | 통과 | [실행 기록](#계약-테스트-실행-기록) |
 | Consumer·`crates/domain/src/allow_list.rs` 단위 테스트, 계약 테스트 파일 `accepts_single_cidr_and_range_items_of_both_families`, `rejects_bad_ip_items_with_their_own_codes`, `requires_allow_list_only_for_enabled_entry_points`, `accepts_an_empty_allow_list`, `accepts_items_covering_a_whole_family_with_warnings` | IP 항목: 단일·CIDR·범위 해석, 역순 범위·체계 혼합·표기 오류의 코드, 목록 누락은 오류, 빈 목록은 받음, 전체 허용 항목의 경고 대상 계산(1.3·2절). [OPS-038](../specs/operations.md#7-수용-테스트), [OPS-040](../specs/operations.md#7-수용-테스트)의 설정 검증 부분 | 통과 | [실행 기록](#계약-테스트-실행-기록) |
 | Consumer·TCP 진입점 통합 테스트(미생성, 작업 2.4) | 경계 주소의 허용·거절, 빈 목록의 모든 출발지 거절, 진입점별 목록, 전체 허용 경고 기록(1.3·2절). [OPS-037](../specs/operations.md#7-수용-테스트), [OPS-038](../specs/operations.md#7-수용-테스트), [OPS-040](../specs/operations.md#7-수용-테스트) | 미실행 | TCP 진입점 미구현 |
@@ -464,6 +472,7 @@ output = "stdout"
 | 커밋 `e1cfc4f`에 Windows 경고 수정(`crates/adapters/src/net.rs`·`tests/serve.rs`의 `cfg`)을 더한 작업 트리 | Windows 11 Pro 10.0.26200 x64, Rust 1.99.1(`x86_64-pc-windows-msvc`), Visual Studio Build Tools 2022 17.14.37806.7, `AWS_LC_SYS_PREBUILT_NASM=1` | 같음 | 통과. `config_contract` 21건과 adapters 단위 5건 모두 통과. 테스트의 Windows 경로 분기(`cfg!(windows)`: `C:\relay`, `D:\logs\relay.log`)를 실행했다. 시나리오 보고는 [운영 정보 계약 실행 기록](ops-info-v1.md#계약-테스트-실행-기록)에 있다. |
 | 커밋 `e701997`(작업 3.1 검증. 이 커밋들은 설정 계약 시험을 바꾸지 않았다). 작업 트리 깨끗함 | Ubuntu 24.04.4(WSL2), Rust 1.99.1 · Windows 11 Pro 10.0.26200 x64, Rust 1.99.1(`x86_64-pc-windows-msvc`) | `wsl -d Ubuntu -- bash /mnt/d/vr-tools/vr-full.sh` · `powershell -NoProfile -ExecutionPolicy Bypass -File D:/vr-tools/vr-win.ps1 -Only all` | Ubuntu `ALL PASSED`, Windows `ALL PASSED (all)`. 두 실행 모두 전체 `cargo test --workspace`를 포함하며 통과했다. 시나리오 보고는 [운영 정보 계약 실행 기록](ops-info-v1.md#계약-테스트-실행-기록)에 있다. |
 | 커밋 `307cfd8`(작업 5.2 최종 게이트. 코드는 `3eea38f`와 같고 뒤에 문서 커밋만 더해졌다). 게이트 실행 때 추적 파일 변경 없음 | Ubuntu 24.04.4(WSL2), Rust 1.99.1 · Windows 11 Pro 10.0.26200 x64, Rust 1.99.1(`x86_64-pc-windows-msvc`) | `wsl -d Ubuntu -- bash /mnt/d/vr-tools/vr-full.sh` · `powershell -NoProfile -ExecutionPolicy Bypass -File D:/vr-tools/vr-win.ps1 -Only all` | Ubuntu `ALL PASSED`, Windows `ALL PASSED (all)`. 두 실행 모두 전체 `cargo test --workspace`를 포함하며 통과했다. 시나리오 보고는 [운영 정보 계약 실행 기록](ops-info-v1.md#계약-테스트-실행-기록)에 있다. 대조는 [file-watch 작업 5.2 게이트 실행 기록](../architectures/file-watch.md#작업-52-게이트-실행-기록)에 있다. |
+| 커밋 `553b549`에 작업 1.5 변경(2.0.0: `limits.initial_message_bytes`와 관계 I ≤ B 제거, 파일 이름 `config-v2.md`)을 더한 작업 트리 | Ubuntu 24.04.4(WSL2), Rust 1.99.1 · Windows 11 Pro 10.0.26200 x64, Rust 1.99.1(`x86_64-pc-windows-msvc`) | `wsl -d Ubuntu -- bash /mnt/d/vr-tools/vr-full.sh` · `powershell -NoProfile -ExecutionPolicy Bypass -File D:/vr-tools/vr-win.ps1 -Only all` | Ubuntu `ALL PASSED`, Windows `ALL PASSED (all)`. 두 실행 모두 `config_contract` 21건이 통과했다. `checks_relations_between_values`는 `initial_message_bytes`를 쓴 파일이 `config_unknown_key`로 거절되는 것을 확인한다(3.1절). 시나리오 보고 판정은 두 OS 모두 `통과`(150건, 실패 0)다. |
 
 ## 6. 초안을 확정하기 전에 해결할 사항
 

@@ -18,8 +18,8 @@ disallowed-methods = [
     { path = "std::fs::read", reason = "app does file I/O only through port traits" },
     { path = "std::fs::read_to_string", reason = "app does file I/O only through port traits" },
     { path = "std::fs::write", reason = "app does file I/O only through port traits" },
-    { path = "std::env::var", reason = "settings come only from the config file (config-v1 §1.1)" },
-    { path = "std::env::var_os", reason = "settings come only from the config file (config-v1 §1.1)" },
+    { path = "std::env::var", reason = "settings come only from the config file (config-v2 §1.1)" },
+    { path = "std::env::var_os", reason = "settings come only from the config file (config-v2 §1.1)" },
     { path = "std::time::SystemTime::now", reason = "app reads time through the Clock port" },
     { path = "std::time::Instant::now", reason = "app reads time through the Clock port" },
 ]

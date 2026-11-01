@@ -10,7 +10,7 @@
 | 코드 위치 | `crates/domain/src/peer_ip.rs`, `crates/app/src/events.rs`, `crates/app/src/ports.rs`, `crates/adapters/src/ops_log.rs`, `crates/adapters/src/crypto.rs`, `src/serve.rs`(사건 기록 위치) |
 | 코드 지도 | [코드 지도 2절](code-map.md#2-코드-위치와-구성요소) |
 | 관련 스펙 | [운영 스펙 3.5절](../specs/operations.md#35-운영-정보), OPS-012(일부) |
-| 관련 계약 | [운영 정보 계약](../contracts/ops-info-v1.md) 1.1~1.5·1.9~1.11절, [설정 계약 1.2절](../contracts/config-v1.md#12-키-표)(`log.output`)·[2.1절](../contracts/config-v1.md#21-설정-오류와-준비-실패)(`log_file_unavailable`)·[2.2절](../contracts/config-v1.md#22-경고), [CLI 계약 1.8절](../contracts/cli-v1.md#18-수동-시작과-종료)(시작 순서) |
+| 관련 계약 | [운영 정보 계약](../contracts/ops-info-v1.md) 1.1~1.5·1.9~1.11절, [설정 계약 1.2절](../contracts/config-v2.md#12-키-표)(`log.output`)·[2.1절](../contracts/config-v2.md#21-설정-오류와-준비-실패)(`log_file_unavailable`)·[2.2절](../contracts/config-v2.md#22-경고), [CLI 계약 1.8절](../contracts/cli-v1.md#18-수동-시작과-종료)(시작 순서) |
 | 관련 ADR | 없음 |
 
 ## 1. 책임과 경계

@@ -32,7 +32,7 @@ impl EntryPoint {
     }
 
     /// Port used when a TCP entry point's `listen` gives only an address
-    /// (config-v1 §1.2). WS and WSS entry points have no default port.
+    /// (config-v2 §1.2). WS and WSS entry points have no default port.
     pub fn default_port(self) -> Option<u16> {
         match self {
             Self::TcpViewer => Some(5901),

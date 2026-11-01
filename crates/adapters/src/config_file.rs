@@ -1,4 +1,4 @@
-//! Config file loader (config-v1 §1 and §2.1).
+//! Config file loader (config-v2 §1 and §2.1).
 //! Design: docs/architectures/config-loading.md.
 
 mod listen;
@@ -107,7 +107,7 @@ fn parse_table(text: &str) -> Result<toml::Table, Vec<ConfigDiagnostic>> {
     })
 }
 
-/// Position only; the message must not quote file content (config-v1 §2.1).
+/// Position only; the message must not quote file content (config-v2 §2.1).
 fn syntax_message(text: &str, error: &toml::de::Error) -> String {
     match error_position(text, error) {
         Some((line, column)) => format!("TOML 구문 오류 또는 중복 키다({line}행 {column}열)."),
@@ -225,7 +225,7 @@ fn read_entry_point(
             (Field::Absent, Field::Absent)
         }
     };
-    // Disabled entry points skip the required-key check (config-v1 §1.2).
+    // Disabled entry points skip the required-key check (config-v2 §1.2).
     let (listen, allow, tls) = if enabled == Some(true) {
         let condition = format!("relay.{}.enabled = true", entry_point.name());
         let listen = required(&table, "listen", listen, &condition, d);
@@ -389,7 +389,6 @@ fn read_limits(root: &mut Section<'_>, d: &mut Diagnostics) -> Option<LimitSetti
     let relay_connections = count(&mut limits, "relay_connections", 1000, 2..=65_535, d);
     let admin_connections = count(&mut limits, "admin_connections", 64, 1..=1024, d);
     let waiting = count(&mut limits, "waiting", 200, 1..=65_535, d);
-    let initial_message_bytes = count(&mut limits, "initial_message_bytes", 4096, 256..=65_536, d);
     let buffer_bytes = count(&mut limits, "buffer_bytes", 131_072, 16_384..=4_194_304, d);
     let ws_message_bytes = count(
         &mut limits,
@@ -408,21 +407,11 @@ fn read_limits(root: &mut Section<'_>, d: &mut Diagnostics) -> Option<LimitSetti
             i64::from(relay_connections),
         );
     }
-    if let (Some(initial), Some(buffer)) = (initial_message_bytes, buffer_bytes)
-        && initial > buffer
-    {
-        d.push(
-            ConfigError::RelationViolated,
-            limits.key_path("initial_message_bytes"),
-            "`limits.initial_message_bytes`는 `limits.buffer_bytes` 이하여야 한다.",
-        );
-    }
     limits.finish(d);
     Some(LimitSettings {
         relay_connections: relay_connections?,
         admin_connections: admin_connections?,
         waiting: waiting?,
-        initial_message_bytes: initial_message_bytes?,
         buffer_bytes: buffer_bytes?,
         ws_message_bytes: ws_message_bytes?,
     })

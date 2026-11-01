@@ -49,7 +49,7 @@ const LIMIT: Duration = Duration::from_secs(10);
 /// far below U, so this bound tells "closed at once" from "waited for U".
 const PROMPT: Duration = Duration::from_secs(2);
 
-/// U of the default configuration (config-v1 §1.2, `tls_upgrade_secs` = 10).
+/// U of the default configuration (config-v2 §1.2, `tls_upgrade_secs` = 10).
 const UPGRADE: Duration = Duration::from_secs(10);
 
 /// A short U for tests that wait for the deadline to end a connection.

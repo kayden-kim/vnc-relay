@@ -6,7 +6,7 @@
 | 결정일 | 2026-10-16 |
 | 결정자 | 프로젝트 소유자(사용자) |
 | 관련 요구사항 | [PRD 확정 기준 "TCP 중계 접근"·"WS·WSS 중계 접근"·"출발지 IP 허용 목록 규칙"](../requirements/PRD.md#확정-기준), [FR-01](../requirements/PRD.md#fr-01-tcp-접속과-프로토콜-처리), [FR-05](../requirements/PRD.md#fr-05-wswss-프록시), [7절 보안 및 신뢰 경계](../requirements/PRD.md#7-보안-및-신뢰-경계) |
-| 관련 스펙·계약 | [중계와 매칭 스펙](../specs/relay.md), [WS·WSS 전송 스펙](../specs/websocket.md), [설정·운영 스펙](../specs/operations.md#4-보안과-신뢰-경계), [설정 계약](../contracts/config-v1.md), [Repeater 초기 교환 계약](../contracts/repeater-handshake-v1.md), [WebSocket 중계 계약](../contracts/websocket-relay-v1.md), [운영 정보 계약](../contracts/ops-info-v1.md) |
+| 관련 스펙·계약 | [중계와 매칭 스펙](../specs/relay.md), [WS·WSS 전송 스펙](../specs/websocket.md), [설정·운영 스펙](../specs/operations.md#4-보안과-신뢰-경계), [설정 계약](../contracts/config-v2.md), [Repeater 초기 교환 계약](../contracts/repeater-handshake-v1.md), [WebSocket 중계 계약](../contracts/websocket-relay-v1.md), [운영 정보 계약](../contracts/ops-info-v1.md) |
 | 관련 아키텍처 문서 | 없음(구현 전) |
 | 이 ADR이 대체하는 이전 ADR | 없음 |
 | 이 ADR을 대체한 새 ADR | 없음 |
@@ -15,7 +15,7 @@
 
 중계 접근 통제는 TCP Viewer, TCP Server, WS Viewer, WSS Viewer 진입점마다 둔 출발지 IP 허용 목록 하나로 한다. 판정에는 소켓의 실제 상대 주소만 쓴다. UltraVNC Repeater의 초기 교환에 인증 필드를 추가하지 않는다. 중계 ID는 인증 수단이 아니다.
 
-항목 형식과 목록 오류 처리는 [PRD](../requirements/PRD.md#확정-기준)와 [설정 계약](../contracts/config-v1.md)이 정한다. 이 ADR은 그 형식을 다시 쓰지 않는다.
+항목 형식과 목록 오류 처리는 [PRD](../requirements/PRD.md#확정-기준)와 [설정 계약](../contracts/config-v2.md)이 정한다. 이 ADR은 그 형식을 다시 쓰지 않는다.
 
 ## 2. 배경
 
@@ -73,8 +73,8 @@ Repeater 중계는 Viewer와 Server가 같은 ID를 대면 연결된다. ID를 �
 
 - 설정 계약: `allow` 키와 항목 형식 오류 처리를 확정한다.
 - 운영 정보 계약: 전체 허용 경고와 거절 사건의 로그 이름을 정한다.
-- 설정 계약: Origin 값 문법과 정규화(WS-TBD-003)를 정한다([설정 계약 1.4절](../contracts/config-v1.md#14-origin-값-문법과-비교)). WebSocket 중계 계약은 그 규칙을 인용한다.
-- 호환 관찰 후 초기 교환에 확장 여지가 있는지 기록한다(RLY-TBD-002). 형식은 [Repeater 초기 교환 계약](../contracts/repeater-handshake-v1.md)이 관찰 뒤에 정한다.
+- 설정 계약: Origin 값 문법과 정규화(WS-TBD-003)를 정한다([설정 계약 1.4절](../contracts/config-v2.md#14-origin-값-문법과-비교)). WebSocket 중계 계약은 그 규칙을 인용한다.
+- 호환 관찰 후 초기 교환에 확장 여지가 있는지 기록한다(RLY-TBD-002). 형식은 [Repeater 초기 교환 계약](../contracts/repeater-handshake-v1.md)이 관찰 뒤에 정한다. 2026-11-01 결과: 초기 요청은 250바이트 고정이고, 값 뒤의 채움 바이트는 해석하지 않는다. UltraVNC Viewer 1.8.3.0의 채움 바이트는 정리되지 않은 값이었다([호환성 검증 기록 3.5절](../contracts/repeater-compat-record.md#35-계약-1절-항목별-해석)). 그래서 기존 클라이언트가 인증 필드를 실을 자리는 없고, 이 결정의 전제가 그대로 유지된다. 형식은 [계약 1.2절](../contracts/repeater-handshake-v1.md#12-초기-요청-250바이트)에 있다.
 
 ## 7. 검증
 

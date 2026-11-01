@@ -4,7 +4,7 @@ VNC Relay가 운영자에게 내보내는 두 가지 정보의 교환 형식을 
 
 | 항목 | 값 |
 | --- | --- |
-| 이름과 버전 | `ops-info` 1.2.0. 1.1.0은 `startup_failed`의 `reason`에 `runtime_unavailable`을 더했다. 1.2.0은 `reason`에 `log_file_unavailable`을 더하고, 로그 쓰기 실패 처리(1.1절)를 정하고, `startup_failed`를 진단마다 한 줄로 정했다(1.6절). 모두 사용자가 결정했다(2026-10-20). |
+| 이름과 버전 | `ops-info` 1.2.0. 1.1.0은 `startup_failed`의 `reason`에 `runtime_unavailable`을 더했다. 1.2.0은 `reason`에 `log_file_unavailable`을 더하고, 로그 쓰기 실패 처리(1.1절)를 정하고, `startup_failed`를 진단마다 한 줄로 정했다(1.6절). 모두 사용자가 결정했다(2026-10-20). `handshake_invalid`의 뜻을 [Repeater 초기 교환 계약](repeater-handshake-v1.md) 채택에 맞춰 형식 오류로 좁힌 것(사용자 결정 2026-11-01(Q71·Q72))은 버전을 올리지 않았다. 이 사건은 아직 구현하지 않았다. |
 | 상태 | Active(2026-10-16 채택) |
 | 소유자 | vnc-relay 프로젝트 관리자 |
 | 만드는 쪽(Producer) | `vnc-relay` (`vnc-relay serve` 프로세스) |
@@ -16,7 +16,7 @@ VNC Relay가 운영자에게 내보내는 두 가지 정보의 교환 형식을 
 | 호환성 범위 | 이 계약의 1.x 형식을 따르는 `vnc-relay` 구현과 소비자. 작업 2.3이 공통 규칙(1.1~1.4절), 시작 단계 사건(`server_starting`·`startup_failed`·`server_stopped`), 설정 경고 4종, `relay_id_ref` 계산(1.9절), `peer_ip` 표기(1.10절)를 구현했다. 작업 2.4·2.5가 TCP 진입점의 접속 사건과 그 `stage`·`reason` 일부를 구현했다. 작업 2.6이 `server_ready`, 상태 리스너의 `/livez`·`/readyz`(1.12·2절), `admin_connection_limit`을 구현했다. 그 밖의 사건과 `listener_failed`는 구현 전이다. |
 | 관련 테스트 | [운영 스펙 7절](../specs/operations.md#7-수용-테스트)의 OPS-011·OPS-012·OPS-013·OPS-032를 중심으로 5절 표에 연결한다. 계약 테스트는 `crates/adapters/tests/ops_info_contract.rs`와 `tests/serve.rs`에 있다. |
 
-관련 문서: [설정 계약](config-v1.md)(`[log]`·`[status]` 키, 경고 코드, 오류 코드, 재로드 결과 코드), [관리 API 계약](management-api-v1.md)(`session_id`·`close_cause`·바이트 필드 이름), [CLI·계정 파일 계약](cli-v1.md)(시작 실패 오류 코드), [WebSocket 중계 계약](websocket-relay-v1.md)(close 코드와 종료 원인 대응), [Repeater 초기 교환 계약](repeater-handshake-v1.md)(초기 교환 오류 코드), [ADR-0002 출발지 IP 허용 목록](../decisions/ADR-0002-source-ip-allowlist.md), [ADR-0003 단일 인스턴스·메모리 상태](../decisions/ADR-0003-single-instance-memory-state.md).
+관련 문서: [설정 계약](config-v2.md)(`[log]`·`[status]` 키, 경고 코드, 오류 코드, 재로드 결과 코드), [관리 API 계약](management-api-v1.md)(`session_id`·`close_cause`·바이트 필드 이름), [CLI·계정 파일 계약](cli-v1.md)(시작 실패 오류 코드), [WebSocket 중계 계약](websocket-relay-v1.md)(close 코드와 종료 원인 대응), [Repeater 초기 교환 계약](repeater-handshake-v1.md)(초기 교환 오류 코드), [ADR-0002 출발지 IP 허용 목록](../decisions/ADR-0002-source-ip-allowlist.md), [ADR-0003 단일 인스턴스·메모리 상태](../decisions/ADR-0003-single-instance-memory-state.md).
 
 ## 1. 형식과 의미
 
@@ -77,7 +77,7 @@ VNC Relay가 운영자에게 내보내는 두 가지 정보의 교환 형식을 
 | `error_kind` | 문자열 | 연결 오류의 세부 종류. 1.7절의 값. |
 | `side` | 문자열 | 원인을 처음 낸 쪽. `viewer`, `server`, `target`(Mode I 대상) 중 하나. |
 | `admin_account` | 문자열 | 관리자 계정명. 1.8절의 규칙을 따른다. |
-| `config_key` | 문자열 | 문제가 있는 설정 키. [설정 계약 2.1절](config-v1.md#21-설정-오류와-준비-실패)의 진단 `key`와 같은 값이다(점으로 이은 전체 경로, 목록 항목은 0부터 센 `[i]` 첨자. 예: `relay.tcp_viewer.allow[2]`). 키 이름만 쓰고 값은 쓰지 않는다. |
+| `config_key` | 문자열 | 문제가 있는 설정 키. [설정 계약 2.1절](config-v2.md#21-설정-오류와-준비-실패)의 진단 `key`와 같은 값이다(점으로 이은 전체 경로, 목록 항목은 0부터 센 `[i]` 첨자. 예: `relay.tcp_viewer.allow[2]`). 키 이름만 쓰고 값은 쓰지 않는다. |
 | `detail` | 문자열 | 사람이 읽는 짧은 설명. 비밀과 설정 값을 넣지 않는다. 수집 도구는 이 필드로 분기하지 않는다. |
 | `elapsed_ms`, `waited_ms`, `duration_ms` | 정수 | 밀리초. 단조 시계로 잰 경과 시간이다. 음수가 되지 않는다. |
 | `limit` | 정수 | 거절 원인이 된 상한의 설정값. |
@@ -104,7 +104,7 @@ VNC Relay가 운영자에게 내보내는 두 가지 정보의 교환 형식을 
 
 #### 설정 경고
 
-사건 이름은 [설정 계약 2.2절](config-v1.md#22-경고)의 경고 코드와 같다. 발생 조건과 전체 허용 항목의 판정 범위는 그 절과 [1.3절](config-v1.md#13-ip-항목-문법)이 정한다. 이 계약은 필드만 정한다. `item`은 항목 표기만 담으며 비밀이 아니다.
+사건 이름은 [설정 계약 2.2절](config-v2.md#22-경고)의 경고 코드와 같다. 발생 조건과 전체 허용 항목의 판정 범위는 그 절과 [1.3절](config-v2.md#13-ip-항목-문법)이 정한다. 이 계약은 필드만 정한다. `item`은 항목 표기만 담으며 비밀이 아니다.
 
 | 사건 | `level` | 필드 | 스펙 근거 |
 | --- | --- | --- | --- |
@@ -120,7 +120,7 @@ VNC Relay가 운영자에게 내보내는 두 가지 정보의 교환 형식을 
 | 사건 | `level` | 발생 시점 | 필드 | 스펙 근거 |
 | --- | --- | --- | --- | --- |
 | `reload_change_detected` | `info` | 설정·인증서·개인키 파일의 변경을 처음 감지했을 때 | `source`: `os_notify`(OS 파일 알림) 또는 `poll`(주기 확인). 처음 감지한 쪽이다. | OPS-024, OPS-041 |
-| `reload_applied` | `info` | 후보를 검증하고 재로드 대상 값을 원자적으로 교체했을 때 | `applied`: 문자열 배열. 값은 [설정 계약 1.8절](config-v1.md#18-재로드-구분)의 재로드 대상 키(`relay.tcp_viewer.allow`, `relay.tcp_server.allow`, `relay.ws_viewer.allow`, `relay.wss_viewer.allow`, `relay.wss_viewer.cert_file`, `relay.wss_viewer.key_file`, `management.cert_file`, `management.key_file`) 중에서 경로 값이나 파일 내용이 실제 바뀐 것이다. | OPS-024, OPS-025, OPS-035, OPS-040 |
+| `reload_applied` | `info` | 후보를 검증하고 재로드 대상 값을 원자적으로 교체했을 때 | `applied`: 문자열 배열. 값은 [설정 계약 1.8절](config-v2.md#18-재로드-구분)의 재로드 대상 키(`relay.tcp_viewer.allow`, `relay.tcp_server.allow`, `relay.ws_viewer.allow`, `relay.wss_viewer.allow`, `relay.wss_viewer.cert_file`, `relay.wss_viewer.key_file`, `management.cert_file`, `management.key_file`) 중에서 경로 값이나 파일 내용이 실제 바뀐 것이다. | OPS-024, OPS-025, OPS-035, OPS-040 |
 | `reload_rejected` | `warn` | 후보 검증에 실패해 후보 전체를 거절했을 때. 기존 설정과 연결은 그대로다. | `reason`(설정 오류 코드, 1.6절), `config_key?`, `detail?`. | OPS-026, OPS-027, OPS-040 |
 | `reload_restart_required` | `warn` | 재로드 대상이 아닌 값이 실행 중 값과 달라 후보 전체를 거절했을 때. 차이가 남은 동안 이후 변경에도 기록한다. | `config_keys`: 문자열 배열. 다른 값을 가진 설정 키의 경로. 값은 쓰지 않는다. | OPS-003, OPS-035 |
 | `reload_watch_failed` | `error` | 실행 중 파일 변경 감지(OS 알림 또는 주기 확인)에 장애가 생겼을 때. 이전 유효 설정으로 계속 운영한다. | `reason`: `notify_error` 또는 `poll_error`. `detail?` | OPS-028 |
@@ -132,7 +132,7 @@ VNC Relay가 운영자에게 내보내는 두 가지 정보의 교환 형식을 
 | 사건 | `level` | 발생 시점 | 필드 | 스펙 근거 |
 | --- | --- | --- | --- | --- |
 | `connection_accepted` | `info` | 중계 리스너가 접속을 수락하고 출발지 IP 검사와 L 검사를 통과했을 때 | `conn_id`, `listener`(진입점), `role`, `peer_ip` | RLY-001, OPS-037, WS-021 |
-| `connection_rejected` | `warn` | 서버가 정책·제한·형식 때문에 접속을 거절했을 때 | `listener`, `stage`, `reason`, `peer_ip`. 선택: `conn_id`, `role`, `mode`, `relay_id_ref`, `limit`, `origin`, `target_host`, `target_ip`, `target_port`. 값 목록은 1.6절. | RLY-004, RLY-007, RLY-008, RLY-022, RLY-023, OPS-004, OPS-005, OPS-006, OPS-023, OPS-036, OPS-037, WS-012, WS-014, WS-015, WS-022, WS-023, WS-027 |
+| `connection_rejected` | `warn` | 서버가 정책·제한·형식 때문에 접속을 거절했을 때 | `listener`, `stage`, `reason`, `peer_ip`. 선택: `conn_id`, `role`, `mode`, `relay_id_ref`, `limit`, `origin`, `target_host`, `target_ip`, `target_port`. 값 목록은 1.6절. | RLY-004, RLY-007, RLY-008, RLY-022, RLY-023, OPS-004, OPS-005, OPS-023, OPS-036, OPS-037, WS-012, WS-014, WS-015, WS-022, WS-023, WS-027 |
 | `connection_aborted` | `warn`. `reason`이 `peer_eof` 또는 `server_shutdown`이면 `info` | 수락한 연결이 대기 등록이나 세션 시작 전에 끝났을 때. 서버가 정책으로 거절한 경우는 제외한다. | `conn_id`, `listener`, `stage`, `reason`, `peer_ip`, `elapsed_ms`. 선택: `role`, `mode`, `error_kind`. 값 목록은 1.6절. | RLY-005, OPS-006, OPS-007, WS-019, WS-023 |
 
 `conn_id`는 `connection_accepted`를 기록한 연결에만 있다. 접속 수락 단계에서 거절한 연결(`stage`가 `accept`)은 수락 사건이 없으므로 `conn_id`도 없다.
@@ -184,8 +184,8 @@ VNC Relay가 운영자에게 내보내는 두 가지 정보의 교환 형식을 
 
 | 사건 | `reason` 값의 출처 |
 | --- | --- |
-| `startup_failed` | [설정 계약 2.1절](config-v1.md#21-설정-오류와-준비-실패)의 `config_*`·`tls_file_invalid`·`log_file_unavailable`, [CLI 계약 2.2절](cli-v1.md#22-오류-코드)의 `accounts_*`·`listener_bind_failed`·`watch_unavailable`·`runtime_unavailable` |
-| `reload_rejected` | [설정 계약 2.1절](config-v1.md#21-설정-오류와-준비-실패)의 `config_*`·`tls_file_invalid` |
+| `startup_failed` | [설정 계약 2.1절](config-v2.md#21-설정-오류와-준비-실패)의 `config_*`·`tls_file_invalid`·`log_file_unavailable`, [CLI 계약 2.2절](cli-v1.md#22-오류-코드)의 `accounts_*`·`listener_bind_failed`·`watch_unavailable`·`runtime_unavailable` |
+| `reload_rejected` | [설정 계약 2.1절](config-v2.md#21-설정-오류와-준비-실패)의 `config_*`·`tls_file_invalid` |
 
 `startup_failed`는 진단 하나에 한 줄을 쓴다. stderr의 오류 줄([CLI 계약 1.5절](cli-v1.md#15-입력과-출력-규칙))과 1:1로 대응한다. 같은 오류 코드의 진단이 여럿이면 줄도 여럿이며, 줄마다 그 진단의 `config_key`·`listener`를 쓴다(사용자 결정 2026-10-20). 종료 코드는 [CLI 계약 2.1절](cli-v1.md#21-종료-코드)이 정한다. 인증서·개인키 한쪽만 바뀐 후보와 참조 파일을 읽을 수 없는 후보는 `reload_rejected`의 `tls_file_invalid`다.
 
@@ -201,7 +201,7 @@ VNC Relay가 운영자에게 내보내는 두 가지 정보의 교환 형식을 
 | `upgrade` | WebSocket 업그레이드 직전 | `origin_not_allowed` | Origin 헤더 값이 허용 값과 정확히 일치하지 않음. `origin`에 헤더 값을 쓴다. | WS-015, WS-027 |
 | `upgrade` | WebSocket 업그레이드 직전 | `invalid_upgrade` | 업그레이드 경로가 아니거나 업그레이드 요청이 잘못됨. 관리 API 경로 요청도 여기에 속한다. | WS-012 |
 | `upgrade` | WebSocket 업그레이드 직전 | `subprotocol_not_supported` | 서브프로토콜이 지원 값(`binary`)이 아닌 값만 제시됨 | [WS·WSS 스펙 4절](../specs/websocket.md#4-오류와-종료)에 코드 없음. WebSocket 계약이 정함 |
-| `initial_exchange` | Repeater 초기 교환 | `handshake_invalid` | 형식 오류, 미지원 모드, 초기 메시지가 I를 넘음. I 초과이면 `limit`을 쓴다. [Repeater 계약 2절](repeater-handshake-v1.md#2-오류)의 같은 이름 코드다. | RLY-004, OPS-006 |
+| `initial_exchange` | Repeater 초기 교환 | `handshake_invalid` | 초기 요청의 형식 오류. [Repeater 계약 2절](repeater-handshake-v1.md#2-오류)의 같은 이름 코드다. | RLY-004 |
 | `initial_exchange` | Repeater 초기 교환 | `mode_disabled` | 설정으로 끈 모드의 요청. `mode`를 쓴다. | RLY-022 |
 | `register` | 대기 등록 | `waiting_full` | 대기 상한 Lw에 도달함. `limit`을 쓴다. | OPS-005 |
 | `register` | 대기 등록 | `duplicate_id` | 같은 중계 ID와 같은 역할이 이미 대기 중이거나 활성 세션이 점유함. 후발 연결을 거절한다. `relay_id_ref`를 쓴다. | [중계 스펙 3.3절](../specs/relay.md#33-mode-ii)의 중복 정책 제안, RLY-TBD-003 |
@@ -265,7 +265,7 @@ VNC Relay가 운영자에게 내보내는 두 가지 정보의 교환 형식을 
   3. 결과의 앞 8바이트를 소문자 16진수 16자로 쓴다.
 - 같은 프로세스에서 같은 중계 ID는 같은 `relay_id_ref`를 가진다. 그래서 대기 등록·만료·매칭·중복 거절을 연결해서 볼 수 있다.
 - 프로세스를 재시작하면 키가 바뀌어 값도 달라진다. 재시작 전 로그와 연결하지 않는다. 재시작은 새 프로세스 수명이고 이전 중계 ID 매칭을 복원하지 않는다는 스펙과 맞다([운영 스펙 3.4절](../specs/operations.md#34-정상-종료와-재시작), [ADR-0003](../decisions/ADR-0003-single-instance-memory-state.md)).
-- 키 없는 해시를 쓰지 않는 이유: 중계 ID의 길이와 문자 범위는 호환 계약이 정하므로(RLY-TBD-002) 짧을 수 있다. 짧은 ID는 해시만으로 되돌릴 수 있다. 키 있는 해시는 로그만으로 되돌릴 수 없다.
+- 키 없는 해시를 쓰지 않는 이유: 중계 ID는 숫자 1~247자리라([Repeater 초기 교환 계약 1.2절](repeater-handshake-v1.md#12-초기-요청-250바이트)) 짧을 수 있다. 짧은 ID는 해시만으로 되돌릴 수 있다. 키 있는 해시는 로그만으로 되돌릴 수 없다.
 - `relay_id_ref`는 짝을 찾는 용도이며 중계 ID의 식별자가 아니다. 서로 다른 ID가 같은 값을 가질 가능성은 매우 작지만 0은 아니다. 수집 도구는 이 값을 접속 권한 증거로 쓰지 않는다.
 - 운영자가 원문 ID가 필요하면 대시보드의 대기 연결 목록을 쓴다.
 
@@ -296,7 +296,7 @@ VNC Relay가 운영자에게 내보내는 두 가지 정보의 교환 형식을 
 
 ### 1.12 상태 리스너와 엔드포인트
 
-상태 리스너는 관리 리스너와 다른 리스너다. 설정 키는 `[status] listen`이다. 필수 키이며 기본 포트는 없다([설정 계약 1.2절](config-v1.md#12-키-표)). 루프백을 쓰기를 권장하며 루프백이 아니면 경고 `status_listen_not_loopback`을 기록한다. 상태 리스너는 평문 HTTP다. 상태 연결은 관리 연결과 함께 Lm에서 센다. Lm에 도달하면 새 연결을 거절하고, 이때 `connection_rejected`(`admin_connection_limit`)를 기록한다.
+상태 리스너는 관리 리스너와 다른 리스너다. 설정 키는 `[status] listen`이다. 필수 키이며 기본 포트는 없다([설정 계약 1.2절](config-v2.md#12-키-표)). 루프백을 쓰기를 권장하며 루프백이 아니면 경고 `status_listen_not_loopback`을 기록한다. 상태 리스너는 평문 HTTP다. 상태 연결은 관리 연결과 함께 Lm에서 센다. Lm에 도달하면 새 연결을 거절하고, 이때 `connection_rejected`(`admin_connection_limit`)를 기록한다.
 
 | 항목 | 값 |
 | --- | --- |
@@ -434,7 +434,7 @@ GET /readyz ->  503 {"status":"not_ready","reason":"shutting_down"}
 | 같은 작업 트리 | Windows 11 Pro 10.0.26200 x64, Rust 1.99.1(`x86_64-pc-windows-msvc`), Visual Studio Build Tools 2022 17.14.37806.7, `AWS_LC_SYS_PREBUILT_NASM=1` | `cargo xtask scenarios`(내부에서 `cargo test --workspace --no-fail-fast` 실행) | 통과. 운영 정보 계약 테스트 13건, `tests/serve.rs` 15건(Unix 전용 테스트 제외), adapters 단위 6건, app 단위 9건, domain 단위 27건, `config_contract` 21건, `accounts_contract` 11건, xtask 단위 12건 모두 통과. 시나리오 보고: 통과 3, 부분 16, 미실행 1(OPS-007: Unix 전용 `closes_and_logs_every_held_connection_when_stopping`), 미연결 128, 오류 0, 판정 통과 |
 | 커밋 `3fa396a`(Q9 서버 수준 테스트와 문서) | Ubuntu 24.04.4(WSL2), Rust 1.99.1, `CARGO_TARGET_DIR=~/vnc-relay-target` | `cargo xtask scenarios`(내부에서 `cargo test --workspace --no-fail-fast` 실행) | 통과. 테스트 전체 모두 통과. 시나리오 보고: 통과 4, 부분 19, 미연결 125, 오류 0, 판정 통과 |
 | 같은 커밋 `3fa396a` | Windows 11 Pro 10.0.26200 x64, Rust 1.99.1(`x86_64-pc-windows-msvc`), Visual Studio Build Tools 2022 17.14.37806.7, `AWS_LC_SYS_PREBUILT_NASM=1` | `cargo xtask scenarios`(내부에서 `cargo test --workspace --no-fail-fast` 실행) | 통과. 테스트 전체 모두 통과(Unix 전용 테스트 제외). 시나리오 보고: 통과 3, 부분 19, 미실행 1(OPS-007: Unix 전용 `closes_and_logs_every_held_connection_when_stopping`), 미연결 125, 오류 0, 판정 통과 |
-| 커밋 `c1c24d2`(작업 3.2 업그레이드 단계, 검토 결함 5건 수정 뒤). 작업 트리에 `docs/contracts/config-v1.md`의 커밋 안 된 변경 1개가 있었으나 이 작업과 무관하다 | Ubuntu 24.04.4(WSL2), Rust 1.99.1, `CARGO_TARGET_DIR=~/vnc-relay-target` | `wsl -d Ubuntu -- bash /mnt/d/vr-tools/vr-full.sh`(빌드, `fmt`, `clippy`, `layers`, `cargo xtask scenarios`, `licenses`, `deny`) | 통과(`ALL PASSED`). 테스트 223건 모두 통과, 실패 0. `tests/websocket.rs` 14건 통과. 시나리오 보고: 통과 9, 부분 22, 미실행 0, 미연결 117, 오류 0, 판정 통과 |
+| 커밋 `c1c24d2`(작업 3.2 업그레이드 단계, 검토 결함 5건 수정 뒤). 작업 트리에 `docs/contracts/config-v2.md`의 커밋 안 된 변경 1개가 있었으나 이 작업과 무관하다 | Ubuntu 24.04.4(WSL2), Rust 1.99.1, `CARGO_TARGET_DIR=~/vnc-relay-target` | `wsl -d Ubuntu -- bash /mnt/d/vr-tools/vr-full.sh`(빌드, `fmt`, `clippy`, `layers`, `cargo xtask scenarios`, `licenses`, `deny`) | 통과(`ALL PASSED`). 테스트 223건 모두 통과, 실패 0. `tests/websocket.rs` 14건 통과. 시나리오 보고: 통과 9, 부분 22, 미실행 0, 미연결 117, 오류 0, 판정 통과 |
 | 같은 커밋 `c1c24d2`, 같은 작업 트리 | Windows 11 Pro 10.0.26200 x64, Rust 1.99.1(`x86_64-pc-windows-msvc`), Visual Studio Build Tools 2022 17.14.37806.7, `AWS_LC_SYS_PREBUILT_NASM=1` | `powershell -NoProfile -ExecutionPolicy Bypass -File D:/vr-tools/vr-win.ps1 -Only all` | 통과(`ALL PASSED (all)`). 테스트 207건 모두 통과, 실패 0. `tests/websocket.rs` 14건 통과. 시나리오 보고: 통과 8, 부분 22, 미실행 1(OPS-007: Unix 전용 `closes_and_logs_every_held_connection_when_stopping`), 미연결 117, 오류 0, 판정 통과 |
 | 커밋 `e701997`(작업 3.1 검증. 코드 커밋 `89a1001`·`e701997`, 작업 트리 깨끗함) | Ubuntu 24.04.4(WSL2), Rust 1.99.1 | `wsl -d Ubuntu -- bash /mnt/d/vr-tools/vr-full.sh` | 통과(`ALL PASSED`). 새 WSS 사건 값 시험 2건 포함 전체 테스트 통과. 시나리오 보고: 통과 11, 부분 20, 실패 0, 미실행 0, 미연결 117, 오류 0, 판정 통과 |
 | 같은 커밋 `e701997`, 작업 트리 깨끗함 | Windows 11 Pro 10.0.26200 x64, Rust 1.99.1(`x86_64-pc-windows-msvc`), 이전 Windows 기록과 같은 환경 | `powershell -NoProfile -ExecutionPolicy Bypass -File D:/vr-tools/vr-win.ps1 -Only all` | 통과(`ALL PASSED (all)`). 시나리오 보고: 통과 10, 부분 20, 실패 0, 미실행 1(OPS-007: Unix 전용 `closes_and_logs_every_held_connection_when_stopping`), 미연결 117, 오류 0, 판정 통과 |

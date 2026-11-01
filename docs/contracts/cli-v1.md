@@ -1,6 +1,6 @@
 # CLI와 관리자 계정 파일 v1 계약
 
-`vnc-relay` 실행파일의 하위 명령·옵션·종료 코드·출력 규칙과, `vnc-relay admin` 명령이 쓰고 `vnc-relay serve`가 읽는 관리자 계정 파일 형식을 정한다. 서버 실행과 관리자 계정 준비는 같은 실행파일의 서로 다른 하위 명령이다. 외부 동작은 [운영 스펙](../specs/operations.md)이 정하고, 설정 파일 키는 [설정 파일 계약](config-v1.md)이 정한다.
+`vnc-relay` 실행파일의 하위 명령·옵션·종료 코드·출력 규칙과, `vnc-relay admin` 명령이 쓰고 `vnc-relay serve`가 읽는 관리자 계정 파일 형식을 정한다. 서버 실행과 관리자 계정 준비는 같은 실행파일의 서로 다른 하위 명령이다. 외부 동작은 [운영 스펙](../specs/operations.md)이 정하고, 설정 파일 키는 [설정 파일 계약](config-v2.md)이 정한다.
 
 이 계약은 2026-10-16에 사용자가 채택했다(상태 Active). 하위 명령·옵션, 비밀번호 숨김 입력, 해시 형식, 계정 이름·비밀번호 규칙, 계정 파일 형식, 오류·경고 코드, 종료 코드가 모두 채택 범위다. 해시는 Argon2id이고 승인된 범위는 설정 계약이 정한다. 같은 날 사용자가 종료 코드를 확정했다. 설정 오류는 3, 인증서·개인키 파일 오류는 3, 리스너 바인드 실패는 4, 계정 파일 오류(파일 없음·계정 없음 포함)는 5다. 정상 종료 유예 중 두 번째 종료 요청의 처리도 확정했다. 6절에 관찰·구현에서 확인한다고 남긴 항목은 채택으로 해소되지 않았다. 지금 실행할 수 있는 명령은 `serve`(시작·종료 골격), `admin add|passwd|remove|list`, `--help`·`--version`이다.
 
@@ -18,9 +18,9 @@
 | 호환성 범위 | Windows 11 x64·Ubuntu 24.04 LTS x64의 `vnc-relay` 1.x. Windows Server는 제외한다. 계정 파일 `version = 1`. |
 | 관련 테스트 | [운영 스펙 수용 테스트](../specs/operations.md#7-수용-테스트) OPS-001~002·OPS-007~010·OPS-019·OPS-029~031·OPS-039·OPS-042. 계약 테스트는 5절에 연결한다. `serve` 시작·종료 골격과 계정 파일 읽기는 Ubuntu와 Windows에서 통과했다. Windows에서는 Unix 신호·권한 테스트를 실행하지 않았다. `admin` 명령은 Ubuntu에서 통과했다. Windows에서는 터미널이 없는 테스트만 자동으로 실행했다. 종료 유예는 미실행이다. |
 
-용어는 [VNC Relay 용어집](../../GLOSSARY.md)을 따른다. 설정 파일 키는 [설정 파일 계약](config-v1.md)을 따른다. 이 문서에서 "계정"은 관리자 계정이다.
+용어는 [VNC Relay 용어집](../../GLOSSARY.md)을 따른다. 설정 파일 키는 [설정 파일 계약](config-v2.md)을 따른다. 이 문서에서 "계정"은 관리자 계정이다.
 
-관련 문서: [설정 파일 계약](config-v1.md)(`[admin]` 테이블, 설정 오류 코드), [운영 정보 계약](ops-info-v1.md)(`serve`가 쓰는 로그, 시작 실패 사건), [관리 API 계약](management-api-v1.md)(로그인이 쓰는 계정명 규칙), [ADR-0003 단일 인스턴스·메모리 상태](../decisions/ADR-0003-single-instance-memory-state.md).
+관련 문서: [설정 파일 계약](config-v2.md)(`[admin]` 테이블, 설정 오류 코드), [운영 정보 계약](ops-info-v1.md)(`serve`가 쓰는 로그, 시작 실패 사건), [관리 API 계약](management-api-v1.md)(로그인이 쓰는 계정명 규칙), [ADR-0003 단일 인스턴스·메모리 상태](../decisions/ADR-0003-single-instance-memory-state.md).
 
 ## 1. 형식과 의미
 
@@ -45,7 +45,7 @@
 
 - 계정 이름은 위치 인수 하나다. 비밀번호를 명령행 인수·URL·환경 변수로 받지 않는다. 이 실행파일은 설정을 위해 환경 변수를 읽지 않는다.
 - `admin` 명령은 설정 파일에서 `[admin]` 테이블(`accounts_file`, `argon2`)만 읽고 검사한다. 구문은 전체를 검사한다. 다른 테이블의 키·값은 검사하지 않는다. 설정 파일을 끝까지 쓰기 전에도 계정을 준비할 수 있게 하기 위해서다.
-- `accounts_file`의 상대 경로는 설정 파일이 있는 디렉터리를 기준으로 푼다([설정 파일 계약 1.1절](config-v1.md#11-파일-규칙)).
+- `accounts_file`의 상대 경로는 설정 파일이 있는 디렉터리를 기준으로 푼다([설정 파일 계약 1.1절](config-v2.md#11-파일-규칙)).
 
 ### 1.2 계정 이름과 비밀번호 규칙
 
@@ -85,7 +85,7 @@ $argon2id$v=19$m=<memory_kib>,t=<iterations>,p=<parallelism>$<솔트>$<해시>
 | 부분 | 규칙 |
 | --- | --- |
 | 알고리즘·버전 | `argon2id`, `v=19`만 받는다. |
-| `m`·`t`·`p` | 이 순서의 십진수. 메모리(KiB)·반복·병렬이다. 범위는 승인값이며 [설정 파일 계약 1.2절](config-v1.md#12-키-표)의 `admin.argon2.memory_kib`·`iterations`·`parallelism`과 같다. 하한 미만은 `serve`에서 `accounts_hash_below_minimum`이다. `admin` 명령은 하한 미만 해시를 오류·경고 없이 받는다. 그 계정의 해시를 `admin passwd`로 다시 만들 수 있어야 하기 때문이다(사용자 결정 2026-10-20). 상한 초과는 승인 범위 밖의 해시 문자열이므로 `accounts_file_invalid`다. `admin`은 상한 초과가 있으면 다른 매개변수가 하한 미만이어도 `accounts_file_invalid`로 거절한다. 같은 해시를 `serve`는 하한 미만(`accounts_hash_below_minimum`)으로 보고한다. 다른 매개변수(`keyid`·`data`)가 있으면 `accounts_file_invalid`다. |
+| `m`·`t`·`p` | 이 순서의 십진수. 메모리(KiB)·반복·병렬이다. 범위는 승인값이며 [설정 파일 계약 1.2절](config-v2.md#12-키-표)의 `admin.argon2.memory_kib`·`iterations`·`parallelism`과 같다. 하한 미만은 `serve`에서 `accounts_hash_below_minimum`이다. `admin` 명령은 하한 미만 해시를 오류·경고 없이 받는다. 그 계정의 해시를 `admin passwd`로 다시 만들 수 있어야 하기 때문이다(사용자 결정 2026-10-20). 상한 초과는 승인 범위 밖의 해시 문자열이므로 `accounts_file_invalid`다. `admin`은 상한 초과가 있으면 다른 매개변수가 하한 미만이어도 `accounts_file_invalid`로 거절한다. 같은 해시를 `serve`는 하한 미만(`accounts_hash_below_minimum`)으로 보고한다. 다른 매개변수(`keyid`·`data`)가 있으면 `accounts_file_invalid`다. |
 | 솔트 | 운영체제 난수원으로 만든 16바이트. 읽을 때는 16바이트 이상을 받는다. |
 | 해시 | 32바이트. 솔트·해시의 인코딩은 패딩 없는 표준 Base64다. |
 
@@ -181,7 +181,7 @@ error[listener_bind_failed] key=relay.tcp_viewer.listen: 0.0.0.0:15901에 바인
 | `0` | 성공 | 명령이 끝났다. `serve`는 정상 종료 요청의 정리가 끝났다(유예 만료·두 번째 종료 요청으로 강제 정리한 경우 포함). `--help`·`--version`·`admin list`(계정 0개 포함)도 해당한다. |
 | `1` | 실행 중 오류 | 명령을 실행하는 중에 실패했다. 입력 취소, 비밀번호 검사 실패, 계정 중복·없음, 변경 감지 준비 불가, 비동기 런타임·종료 신호 처리기 준비 불가, 서버가 계속 운영할 수 없는 실패, 정리 실패가 해당한다. |
 | `2` | 사용법 오류 | 알 수 없는 하위 명령·옵션, `--config` 누락·중복, 인수 개수 오류, 계정 이름 규칙 위반, 터미널이 아닌 입력. 사용법은 `usage_error`일 때만 stderr에 쓴다(사용자 결정 2026-10-20). |
-| `3` | 설정 오류 | 설정 파일의 읽기·구문·키·값 오류 전체, 인증서·개인키 파일 오류(경로·형식 오류, 인증서와 개인키가 맞지 않음), 로그 파일을 열 수 없음. 시작 실패 포함. 코드는 [설정 파일 계약 2.1절](config-v1.md#21-설정-오류와-준비-실패)의 `config_*`·`tls_file_invalid`·`log_file_unavailable`이다. |
+| `3` | 설정 오류 | 설정 파일의 읽기·구문·키·값 오류 전체, 인증서·개인키 파일 오류(경로·형식 오류, 인증서와 개인키가 맞지 않음), 로그 파일을 열 수 없음. 시작 실패 포함. 코드는 [설정 파일 계약 2.1절](config-v2.md#21-설정-오류와-준비-실패)의 `config_*`·`tls_file_invalid`·`log_file_unavailable`이다. |
 | `4` | 리스너 준비 실패 | 리스너 바인드 실패(이미 사용 중인 주소 포함). |
 | `5` | 계정 파일 오류 | 계정 파일을 읽을 수 없거나 형식·해시 하한이 맞지 않거나, 파일이 없거나(`serve`), 계정이 하나도 없거나, 잠금·저장에 실패했다. |
 
@@ -207,11 +207,11 @@ error[listener_bind_failed] key=relay.tcp_viewer.listen: 0.0.0.0:15901에 바인
 | `accounts_file_locked` | 다른 `admin` 명령이 계정 파일을 고치는 중이다(1.6절). | 5 | OPS-030 |
 | `accounts_file_write_failed` | 잠금 파일 만들기, 임시 파일 쓰기·검증, 교체에 실패했다. 기존 계정 파일은 그대로다. | 5 | OPS-030 |
 | `listener_bind_failed` | 리스너 주소에 바인드하지 못했다. 이미 사용 중인 경우를 포함한다. `key`는 해당 `listen` 키다. | 4 | OPS-002, OPS-039 |
-| `tls_file_invalid` | 인증서·개인키 경로·형식 오류. 의미는 [설정 파일 계약 2.1절](config-v1.md#21-설정-오류와-준비-실패)이 정한다. 시작 때 4단계에서 보고하지만 종료 코드는 설정 오류와 같다. | 3 | OPS-002 |
-| `log_file_unavailable` | `serve`: `log.output`의 로그 파일을 열 수 없다. 의미는 [설정 파일 계약 2.1절](config-v1.md#21-설정-오류와-준비-실패)이 정한다. `key`는 `log.output`이다. | 3 | 없음 |
-| `config_*` | 설정 오류. 이름은 [설정 파일 계약](config-v1.md#21-설정-오류와-준비-실패)을 따른다. | 3 | OPS-001 |
+| `tls_file_invalid` | 인증서·개인키 경로·형식 오류. 의미는 [설정 파일 계약 2.1절](config-v2.md#21-설정-오류와-준비-실패)이 정한다. 시작 때 4단계에서 보고하지만 종료 코드는 설정 오류와 같다. | 3 | OPS-002 |
+| `log_file_unavailable` | `serve`: `log.output`의 로그 파일을 열 수 없다. 의미는 [설정 파일 계약 2.1절](config-v2.md#21-설정-오류와-준비-실패)이 정한다. `key`는 `log.output`이다. | 3 | 없음 |
+| `config_*` | 설정 오류. 이름은 [설정 파일 계약](config-v2.md#21-설정-오류와-준비-실패)을 따른다. | 3 | OPS-001 |
 
-경고(종료 코드에 영향 없음): `accounts_file_permissive`, `last_account_removed`, `accounts_file_cleanup_failed`(`admin`: 계정 파일을 교체한 뒤 디렉터리 반영이나 잠금 파일 삭제에 실패했다. 교체가 실패한 뒤 잠금 파일 삭제에 실패해도 오류와 함께 나온다. 1.6절), `log_write_failed`(`serve`: 운영 로그 줄을 쓰지 못했다. 처음 한 번만 쓴다. `key`는 `log.output`이다. [운영 정보 계약 1.1절](ops-info-v1.md#11-로그-일반-규칙)). 설정 경고는 [설정 파일 계약 2.2절](config-v1.md#22-경고)을 따른다.
+경고(종료 코드에 영향 없음): `accounts_file_permissive`, `last_account_removed`, `accounts_file_cleanup_failed`(`admin`: 계정 파일을 교체한 뒤 디렉터리 반영이나 잠금 파일 삭제에 실패했다. 교체가 실패한 뒤 잠금 파일 삭제에 실패해도 오류와 함께 나온다. 1.6절), `log_write_failed`(`serve`: 운영 로그 줄을 쓰지 못했다. 처음 한 번만 쓴다. `key`는 `log.output`이다. [운영 정보 계약 1.1절](ops-info-v1.md#11-로그-일반-규칙)). 설정 경고는 [설정 파일 계약 2.2절](config-v2.md#22-경고)을 따른다.
 
 ## 3. 호환성 규칙
 

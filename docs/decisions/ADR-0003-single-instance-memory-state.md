@@ -6,7 +6,7 @@
 | 결정일 | 2026-10-16 |
 | 결정자 | 프로젝트 소유자(사용자) |
 | 관련 요구사항 | [PRD 확정 기준 "관리 세션 보관"·"최근 종료 목록"·"인스턴스"](../requirements/PRD.md#확정-기준), [FR-03](../requirements/PRD.md#fr-03-mode-ii--id-기반-연결-매칭), [FR-06](../requirements/PRD.md#fr-06-관리-api와-대시보드), [FR-07](../requirements/PRD.md#fr-07-설정과-프로세스-수명), [FR-08](../requirements/PRD.md#fr-08-운영-정보), [4.2 제외 범위](../requirements/PRD.md#42-제외), [8절](../requirements/PRD.md#8-비기능-요구사항) |
-| 관련 스펙·계약 | [중계와 매칭 스펙](../specs/relay.md), [관리 스펙](../specs/management.md), [설정·운영 스펙](../specs/operations.md), [설정 계약](../contracts/config-v1.md), [관리 API 계약](../contracts/management-api-v1.md), [운영 정보 계약](../contracts/ops-info-v1.md), [CLI 계약](../contracts/cli-v1.md) |
+| 관련 스펙·계약 | [중계와 매칭 스펙](../specs/relay.md), [관리 스펙](../specs/management.md), [설정·운영 스펙](../specs/operations.md), [설정 계약](../contracts/config-v2.md), [관리 API 계약](../contracts/management-api-v1.md), [운영 정보 계약](../contracts/ops-info-v1.md), [CLI 계약](../contracts/cli-v1.md) |
 | 관련 아키텍처 문서 | 없음(구현 전) |
 | 이 ADR이 대체하는 이전 ADR | 없음 |
 | 이 ADR을 대체한 새 ADR | 없음 |

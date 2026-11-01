@@ -104,7 +104,7 @@ flowchart LR
 | `crates/domain/src/allow_list.rs` | 출발지 IP 허용 목록 | 단일 IP·CIDR·범위 항목 해석과 허용 판정(`AllowList::permits`), 전체 허용 항목 판별 | 설정 파일 읽기 | `peer_ip` | [설정 로딩 모듈 설계](config-loading.md)(항목 해석), [TCP 진입점 모듈 설계](tcp-entry-point.md)(허용 판정) |
 | `crates/domain/src/conn_id.rs` | 연결 식별자 | 프로세스 안에서 유일한 `conn_id`(`c1`, `c2`, …) 발급 | 사건 기록 | 없음 | [TCP 진입점 모듈 설계](tcp-entry-point.md) |
 | `crates/domain/src/target_policy.rs` | 대상 허용 정책 | Mode I 대상 항목 해석, 최종 연결 IP·포트 허용 판정 | 주소 해석, 연결 | `allow_list` | [설정 로딩 모듈 설계](config-loading.md)(항목 해석). 허용 판정은 작업 2.8에서 더한다. |
-| `crates/domain/src/origin.rs` | Origin 비교 | Origin 정규화와 정확 일치 비교([설정 계약 1.4절](../contracts/config-v1.md#14-origin-값-문법과-비교)) | HTTP 헤더 읽기 | 없음 | [설정 로딩 모듈 설계](config-loading.md) |
+| `crates/domain/src/origin.rs` | Origin 비교 | Origin 정규화와 정확 일치 비교([설정 계약 1.4절](../contracts/config-v2.md#14-origin-값-문법과-비교)) | HTTP 헤더 읽기 | 없음 | [설정 로딩 모듈 설계](config-loading.md) |
 | `crates/domain/src/peer_ip.rs` | 상대 IP | 소켓 상대 IP 값. IPv4-mapped IPv6를 IPv4로 바꾸고, 포트·영역 식별자 없이 표기한다([운영 정보 계약 1.10절](../contracts/ops-info-v1.md#110-상대-주소-표기)). | 소켓 읽기, 허용 판정 | 없음 | [운영 로그 모듈 설계](ops-log.md) |
 | `crates/domain/src/budget.rs` | 연결 예산 | 상한 하나 아래에서 자리를 잡고 돌려주는 `ConnectionBudget`·`BudgetPermit`. 중계 측 연결 L, 관리·상태 연결 Lm, 대기 Mode II 연결 Lw가 같은 타입을 쓴다. 지금은 TCP·WS·WSS 진입점이 L 하나를 같이 쓰고(작업 2.5, 3.2), 상태 리스너와 관리 리스너가 Lm 하나를 같이 쓴다(작업 2.6, 4.2). | 소켓 수락 | 없음 | [연결 상한과 시간 제한 모듈 설계](connection-limits.md) |
 | `crates/domain/src/account.rs` | 관리자 계정 규칙 | 계정 이름 규칙과 비밀번호 규칙(`Password`), Argon2id 해시 문자열 형식과 승인 매개변수 범위([CLI 계약 1.2·1.4절](../contracts/cli-v1.md#12-계정-이름과-비밀번호-규칙)). | 해시 계산, 파일 | 없음 | [`serve` 시작 모듈 설계](serve-startup.md), [관리자 계정 준비 CLI 모듈 설계](admin-accounts.md)(`Password`) |

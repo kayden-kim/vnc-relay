@@ -1,4 +1,4 @@
-//! Contract tests of the config loader (docs/contracts/config-v1.md §5).
+//! Contract tests of the config loader (docs/contracts/config-v2.md §5).
 
 use std::net::SocketAddr;
 use std::path::PathBuf;
@@ -149,7 +149,6 @@ listen = "127.0.0.1:18081"
             relay_connections: 1000,
             admin_connections: 64,
             waiting: 200,
-            initial_message_bytes: 4096,
             buffer_bytes: 131_072,
             ws_message_bytes: 1_048_576,
         },
@@ -388,7 +387,7 @@ fn load_resolves_relative_paths_against_the_config_directory() {
 #[test]
 fn checks_every_numeric_key_at_its_bounds() {
     type Getter = fn(&Settings) -> u64;
-    let cases: [(&str, &str, i64, i64, u64, Getter); 31] = [
+    let cases: [(&str, &str, i64, i64, u64, Getter); 30] = [
         (
             "admin.argon2",
             "memory_kib",
@@ -411,9 +410,6 @@ fn checks_every_numeric_key_at_its_bounds() {
         }),
         ("limits", "waiting", 1, 1000, 200, |s| {
             s.limits.waiting.into()
-        }),
-        ("limits", "initial_message_bytes", 256, 65_536, 4096, |s| {
-            s.limits.initial_message_bytes.into()
         }),
         ("limits", "buffer_bytes", 16_384, 4_194_304, 131_072, |s| {
             s.limits.buffer_bytes.into()
@@ -549,23 +545,24 @@ fn checks_every_numeric_key_at_its_bounds() {
 #[test]
 fn checks_relations_between_values() {
     let at_limit = with_required(
-        "[limits]\nrelay_connections = 300\nwaiting = 300\ninitial_message_bytes = 16384\nbuffer_bytes = 16384\n\
+        "[limits]\nrelay_connections = 300\nwaiting = 300\nbuffer_bytes = 16384\n\
          [management.session]\nidle_secs = 3600\nmax_lifetime_secs = 3600\n",
     );
     let settings = parse_ok(&at_limit);
     assert_eq!(settings.limits.waiting, 300);
-    assert_eq!(settings.limits.initial_message_bytes, 16_384);
     assert_eq!(settings.management.session.idle, secs(3600));
 
+    // `initial_message_bytes` was removed in 2.0.0, so a v1 file that still
+    // sets it is refused like any unknown key (config-v2 §3.1).
     let over = with_required(
-        "[limits]\nrelay_connections = 300\nwaiting = 301\ninitial_message_bytes = 32768\nbuffer_bytes = 16384\n\
+        "[limits]\nrelay_connections = 300\nwaiting = 301\ninitial_message_bytes = 4096\nbuffer_bytes = 16384\n\
          [management.session]\nidle_secs = 3601\nmax_lifetime_secs = 3600\n",
     );
     assert_eq!(
         problems(&over),
         [
             problem("config_value_out_of_range", "limits.waiting"),
-            problem("config_relation_violated", "limits.initial_message_bytes"),
+            problem("config_unknown_key", "limits.initial_message_bytes"),
             problem("config_relation_violated", "management.session.idle_secs"),
         ]
     );

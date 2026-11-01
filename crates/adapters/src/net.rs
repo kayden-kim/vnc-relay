@@ -293,7 +293,7 @@ fn admit(policy: &AcceptPolicy, peer_ip: PeerIp) -> Result<BudgetPermit, RejectR
 }
 
 /// Sets TCP keepalive with the idle time, probe interval, and probe count
-/// of K (config-v1 §1.2 `[keepalive]`).
+/// of K (config-v2 §1.2 `[keepalive]`).
 fn set_keepalive(stream: &TcpStream, keepalive: &KeepaliveSettings) -> io::Result<()> {
     let params = TcpKeepalive::new()
         .with_time(keepalive.tcp_idle)

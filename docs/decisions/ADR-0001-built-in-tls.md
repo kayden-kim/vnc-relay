@@ -6,7 +6,7 @@
 | 결정일 | 2026-10-16 |
 | 결정자 | 프로젝트 소유자(사용자) |
 | 관련 요구사항 | [PRD 확정 기준 "TLS 종료"](../requirements/PRD.md#확정-기준), [FR-05](../requirements/PRD.md#fr-05-wswss-프록시), [FR-07](../requirements/PRD.md#fr-07-설정과-프로세스-수명), [7절 보안 및 신뢰 경계](../requirements/PRD.md#7-보안-및-신뢰-경계) |
-| 관련 스펙·계약 | [WS·WSS 전송 스펙](../specs/websocket.md), [설정·운영 스펙](../specs/operations.md#4-보안과-신뢰-경계), [관리 스펙](../specs/management.md), [설정 계약](../contracts/config-v1.md), [관리 API 계약](../contracts/management-api-v1.md), [WebSocket 중계 계약](../contracts/websocket-relay-v1.md) |
+| 관련 스펙·계약 | [WS·WSS 전송 스펙](../specs/websocket.md), [설정·운영 스펙](../specs/operations.md#4-보안과-신뢰-경계), [관리 스펙](../specs/management.md), [설정 계약](../contracts/config-v2.md), [관리 API 계약](../contracts/management-api-v1.md), [WebSocket 중계 계약](../contracts/websocket-relay-v1.md) |
 | 관련 아키텍처 문서 | 없음(구현 전) |
 | 이 ADR이 대체하는 이전 ADR | 없음 |
 | 이 ADR을 대체한 새 ADR | 없음 |
@@ -66,7 +66,7 @@ WSS와 관리 HTTPS는 인터넷에서 접근할 수 있다. 일반적인 웹 �
 
 ### 후속 작업
 
-- 설정 계약: `cert_file`·`key_file` 키와 재로드 대상은 [설정 계약](../contracts/config-v1.md)이 채택(2026-10-16)해 정했다.
+- 설정 계약: `cert_file`·`key_file` 키와 재로드 대상은 [설정 계약](../contracts/config-v2.md)이 채택(2026-10-16)해 정했다.
 - 수동 운영 안내: 인증서 교체 절차를 쓴다(OPS-031 대상).
 - 허용 암호 스위트는 선택한 rustls 암호 모듈의 rustls 기본 목록으로 정했고 설정 키는 없다(2026-10-16). 암호 모듈 선택은 OPS-TBD-009에서 관리한다.
 

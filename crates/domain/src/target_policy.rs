@@ -1,4 +1,4 @@
-//! Mode I target allow items (config-v1 §1.5).
+//! Mode I target allow items (config-v2 §1.5).
 
 use std::fmt;
 

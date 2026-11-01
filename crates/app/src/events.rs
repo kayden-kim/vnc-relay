@@ -216,7 +216,7 @@ impl LoginFailReason {
 pub enum Event {
     /// First event of the start: the config is valid and the log is open.
     ServerStarting,
-    /// A config warning (config-v1 §2.2). The event name is the warning code.
+    /// A config warning (config-v2 §2.2). The event name is the warning code.
     ConfigWarning {
         warning: ConfigWarning,
         phase: Phase,

@@ -10,7 +10,7 @@
 | 코드 위치 | `crates/adapters/src/file_watch.rs` `ReloadWatcher::run`·`attach`·`episode`, `crates/adapters/src/file_watch/feed.rs`, `crates/app/src/reload/service.rs` `ReloadService::handle_config`·`handle_unreadable`, `crates/app/src/reload/snapshot.rs` `ReloadSnapshot`·`ReloadCell` |
 | 코드 지도 | [코드 지도](code-map.md) |
 | 관련 스펙 | [운영 스펙 2절](../specs/operations.md#2-상태와-검증-매개변수)(D, Dp), [3.3절](../specs/operations.md#33-파일-변경-자동-감지와-부분-재로드), [7절](../specs/operations.md#7-수용-테스트)의 OPS-003, OPS-024~028, OPS-035, OPS-038, OPS-040, OPS-041 |
-| 관련 계약 | [설정 계약 1.2절](../contracts/config-v1.md#12-키-표), [1.8절](../contracts/config-v1.md#18-재로드-구분), [2.1절](../contracts/config-v1.md#21-설정-오류와-준비-실패), [운영 정보 계약 자동 재로드](../contracts/ops-info-v1.md#자동-재로드), [CLI·계정 파일 계약 1.8절](../contracts/cli-v1.md#18-수동-시작과-종료) |
+| 관련 계약 | [설정 계약 1.2절](../contracts/config-v2.md#12-키-표), [1.8절](../contracts/config-v2.md#18-재로드-구분), [2.1절](../contracts/config-v2.md#21-설정-오류와-준비-실패), [운영 정보 계약 자동 재로드](../contracts/ops-info-v1.md#자동-재로드), [CLI·계정 파일 계약 1.8절](../contracts/cli-v1.md#18-수동-시작과-종료) |
 | 관련 ADR | 없음 |
 
 ## 1. 책임과 경계
@@ -96,7 +96,7 @@ flowchart LR
 
 ### 4.1 시간 기준
 
-- 알림으로 잡은 변경: 감지부터 안정화, 검증, 교체, 결과 기록까지 D 안에 끝나야 한다. D는 마지막 변경을 감지한 뒤부터 잰다. 이 기준은 [설정 계약 1.2절](../contracts/config-v1.md#12-키-표)의 D 행과 같다(사용자 결정 2026-10-22(Q50), §9 항목 2).
+- 알림으로 잡은 변경: 감지부터 안정화, 검증, 교체, 결과 기록까지 D 안에 끝나야 한다. D는 마지막 변경을 감지한 뒤부터 잰다. 이 기준은 [설정 계약 1.2절](../contracts/config-v2.md#12-키-표)의 D 행과 같다(사용자 결정 2026-10-22(Q50), §9 항목 2).
 - 놓친 변경: 주기 확인이 Dp 안에 감지한다. 그 뒤 D 안에 결과가 나온다. 최대 지연은 Dp + D다([운영 스펙 3.3절](../specs/operations.md#33-파일-변경-자동-감지와-부분-재로드)).
 - 연속 변경: 변경마다 D를 새로 잰다. 파일이 계속 바뀌면 결과가 나오지 않는다. 상한은 두지 않는다(사용자 결정 2026-10-22(Q50), §9 항목 15). 위험은 §9.2에 적는다.
 - 조용한 구간 Q, 간격 G, 읽기, 검증, 교체의 합은 D보다 충분히 짧아야 한다. D의 최소값은 1초다. Q와 G는 구현 상수다. 구체 값은 이 문서에 없고 구현에서 정한다(사용자 결정 2026-10-22(Q50), §9 항목 1).
@@ -142,7 +142,7 @@ flowchart LR
 | 알림 채널 넘침, OS 알림 큐 넘침 | 놓친 알림으로 본다. 전체 재확인을 즉시 한다. 사건은 쓰지 않는다(설계 제안). 장애로 볼지는 사용자 결정이 없다. 구현 때 정한다(구현 판단(사용자 결정 없음)). | 전체 재확인 대기 | OPS-041(알림 없이 감지되는 경로) |
 | 설정 구문·값 오류, IP 항목 오류 (`ReloadService::on_change`) | `reload_rejected`를 쓴다. `reason`, `config_key?`, `detail?`를 싣는다. 기존 설정과 연결을 유지한다. | 처리 내용 해시 갱신. 다음 변경에서 다시 검증한다. | OPS-026, OPS-040 |
 | 인증서·개인키 쌍 불일치, 키 형식 오류, 파일 없음·읽기 불가 (`ReloadService::on_change`) | `reload_rejected`를 쓴다. `reason`은 `tls_file_invalid`다. 기존 인증서를 유지한다. | 처리 내용 해시 갱신. 파일이 생기면 새 알림으로 새 후보가 온다. | OPS-026 |
-| 설정 파일 일시 소멸 (`ReloadWatcher::run` 안정화 창) | 후보를 거절한다. 코드는 `config_file_unreadable`이다([설정 계약 2.1절](../contracts/config-v1.md#21-설정-오류와-준비-실패): "일시 소멸 포함, 후보 거절"). | 처리 내용 해시 갱신. 파일이 다시 생기면 새 알림으로 새 후보가 온다. | OPS-026 |
+| 설정 파일 일시 소멸 (`ReloadWatcher::run` 안정화 창) | 후보를 거절한다. 코드는 `config_file_unreadable`이다([설정 계약 2.1절](../contracts/config-v2.md#21-설정-오류와-준비-실패): "일시 소멸 포함, 후보 거절"). | 처리 내용 해시 갱신. 파일이 다시 생기면 새 알림으로 새 후보가 온다. | OPS-026 |
 | 재시작 필요 차이 (`ReloadService::on_change`) | 교체하지 않는다. `reload_restart_required`를 쓴다. | 실행 중 값 유지. 차이가 파일에 남으면 이후 후보도 같은 결과를 낸다. | OPS-003, OPS-035 |
 | 교체 직전 세대가 낡았거나 종료가 시작됨 (`ReloadService::on_change`) | 후보를 버린다. 적용하지 않고, 결과 사건을 쓰지 않는다(§9 항목 10, 사용자 결정 2026-10-22(Q50)). | 처리 내용 해시를 갱신하지 않는다. 다음 변경 알림이 새 후보를 만든다. | OPS-027, OPS-028 |
 | 교체 뒤 경고 기록 (`ReloadService::on_change`) | 전체 허용 항목이 적용된 경우에만 `allow_all_source`를 쓴다. 거절된 후보에는 쓰지 않는다. | 없음 | OPS-038, [운영 스펙 3.3절](../specs/operations.md#33-파일-변경-자동-감지와-부분-재로드) 규칙 4 |
@@ -313,7 +313,7 @@ flowchart LR
 - Windows: 11 Pro 10.0.26200 x64, Rust 1.99.1(`x86_64-pc-windows-msvc`), `powershell -NoProfile -ExecutionPolicy Bypass -File D:/vr-tools/vr-win.ps1 -Only all`. 결과 `ALL PASSED (all)`(통과). 시나리오 150건: 통과 23, 부분 29, 실패 0, 미실행 1, 미연결 97, 오류 0. 미실행 1건은 OPS-007(Unix 전용 `closes_and_logs_every_held_connection_when_stopping`)이다.
 - 판정(정정 3 기준): OPS-026 완전. OPS-040 부분(IPv6 출발지 환경 한계). OPS-025·WS-022는 정정 2와 같다.
 - OPS-040 IPv6 근거: 경계 판정은 단위 시험 `permits_the_boundaries_of_each_item_and_nothing_just_outside`(`crates/domain/src/allow_list.rs`, `AllowList::permits`)가 확인한다. 실제 접속 시험은 출발지 `::1`만 확인한다.
-- 실행 기록 표: [운영 정보 계약 실행 기록](../contracts/ops-info-v1.md#계약-테스트-실행-기록), [설정 계약 실행 기록](../contracts/config-v1.md#계약-테스트-실행-기록).
+- 실행 기록 표: [운영 정보 계약 실행 기록](../contracts/ops-info-v1.md#계약-테스트-실행-기록), [설정 계약 실행 기록](../contracts/config-v2.md#계약-테스트-실행-기록).
 
 ### 사용자 결정 반영 (2026-10-23)
 

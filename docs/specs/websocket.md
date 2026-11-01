@@ -8,7 +8,7 @@
 | 관련 요구사항 | [PRD](../requirements/PRD.md) FR-05, 7절 보안 경계, AC-05~08 |
 | 용어 | [VNC Relay 용어집](../../GLOSSARY.md) |
 | 관련 스펙 | [중계와 매칭](relay.md), [설정·운영](operations.md) |
-| 관련 계약 | [WebSocket 중계 v1](../contracts/websocket-relay-v1.md), [설정 파일 v1](../contracts/config-v1.md). 모두 Active(2026-10-16 채택)이며 URL·서브프로토콜·HTTP 상태·종료 코드의 이름·번호와 Origin 정규화는 이 계약이 기준이다. |
+| 관련 계약 | [WebSocket 중계 v1](../contracts/websocket-relay-v1.md), [설정 파일 v2](../contracts/config-v2.md). 모두 Active(2026-10-16 채택)이며 URL·서브프로토콜·HTTP 상태·종료 코드의 이름·번호와 Origin 정규화는 이 계약이 기준이다. |
 | 관련 아키텍처 문서·ADR | [ADR-0001 내장 TLS](../decisions/ADR-0001-built-in-tls.md), [ADR-0002 출발지 IP 허용 목록](../decisions/ADR-0002-source-ip-allowlist.md), [ADR-0004 tokio·rustls](../decisions/ADR-0004-tokio-rustls.md). 아키텍처 문서는 없고 구현 구조는 미확정이다. |
 
 ## 1. 범위와 적용 상태
@@ -41,14 +41,14 @@ VNC Relay가 WSS 리스너·인증서를 직접 관리한다. TLS 보호 구간�
 
 IP 목록과 인증서 재로드는 [운영 스펙](operations.md#33-파일-변경-자동-감지와-부분-재로드)에 따른다. 업그레이드 허용을 완료한 연결은 IP 제거 뒤에도 유지한다. 업그레이드 전의 HTTP·TLS 연결은 업그레이드 직전에 그 시점의 유효 목록으로 다시 검사한다. 재로드 뒤의 새 업그레이드에도 재로드 후 유효한 목록을 적용한다.
 
-Origin 정책: Origin 헤더가 있으면 설정된 허용 값과 일치할 때만 업그레이드한다. 허용 값은 `scheme://host[:port]` 형식이며 정확 일치로 비교한다. 와일드카드는 없다. 스킴·호스트·포트 중 하나라도 다르면 거절한다. 하위 도메인은 다른 호스트다. 기본 포트 생략 표기를 같은 값으로 보는 것과 같은 정규화 세부는 [설정 계약 1.4절](../contracts/config-v1.md#14-origin-값-문법과-비교)이 정하고, 비교 결과에 따른 처리는 [WebSocket 계약 1.3절](../contracts/websocket-relay-v1.md#13-origin-비교)이 정한다. Origin 헤더가 없으면 출발지 IP 검사만 한다. 이때도 출발지 IP가 허용돼야 한다. Origin은 사용자 인증 수단이 아니다.
+Origin 정책: Origin 헤더가 있으면 설정된 허용 값과 일치할 때만 업그레이드한다. 허용 값은 `scheme://host[:port]` 형식이며 정확 일치로 비교한다. 와일드카드는 없다. 스킴·호스트·포트 중 하나라도 다르면 거절한다. 하위 도메인은 다른 호스트다. 기본 포트 생략 표기를 같은 값으로 보는 것과 같은 정규화 세부는 [설정 계약 1.4절](../contracts/config-v2.md#14-origin-값-문법과-비교)이 정하고, 비교 결과에 따른 처리는 [WebSocket 계약 1.3절](../contracts/websocket-relay-v1.md#13-origin-비교)이 정한다. Origin 헤더가 없으면 출발지 IP 검사만 한다. 이때도 출발지 IP가 허용돼야 한다. Origin은 사용자 인증 수단이 아니다.
 
 ## 3. 정상 흐름과 규칙
 
 1. WSS는 TLS가 성립한 뒤 HTTP 업그레이드를 진행한다. WS는 TLS 없이 업그레이드를 진행한다.
 2. 관리 API와 구별되는 업그레이드 진입점에서 접속 수락 시와 업그레이드 직전에 실제 출발지 IP를 검사하고, 업그레이드 시 Origin 정책을 확인한다.
 3. WebSocket 연결 뒤 바이너리 메시지의 페이로드를 연속된 Viewer 바이트 스트림으로 취급한다.
-4. [중계 스펙](relay.md#3-정상-흐름)의 초기 교환으로 대상 주소 또는 ID를 얻는다. Repeater 계약 밖의 별도 선택 단계를 만들지 않는다.
+4. `101` 응답 직후 Viewer 쪽 시작 바이트를 보내고, [중계 스펙](relay.md#3-정상-흐름)의 초기 교환으로 대상 주소 또는 ID를 얻는다. 형식은 [Repeater 초기 교환 계약](../contracts/repeater-handshake-v1.md)을 따른다. Repeater 계약 밖의 별도 선택 단계를 만들지 않는다.
 5. 상대 TCP 스트림은 바이너리 메시지로 전달한다. 출력 메시지 크기나 경계가 입력과 같을 필요는 없다.
 
 | 규칙 ID | PRD 근거 | 동작 |
@@ -69,7 +69,7 @@ Origin 정책: Origin 헤더가 있으면 설정된 허용 값과 일치할 때�
 
 메시지 크기 제한 M은 프레임별 크기가 아니라 한 논리 메시지에 적용한다. 스트리밍 중 제한 초과를 확인할 때까지 일부 바이너리 데이터가 이미 전달될 수 있다. 초과 확인 뒤 추가 데이터 전달을 중지한다. 실패한 메시지 전체를 원자적으로 취소하는 보장은 하지 않는다.
 
-끊긴 연결은 두 단계로 감지한다. WS·WSS의 하부 TCP 소켓에는 TCP keepalive(K)를 적용한다. WebSocket 계층에는 ping·pong(Kw)을 적용한다. 기본값과 유효 범위는 [설정 계약](../contracts/config-v1.md)이 정한다. pong에 응답하는 연결은 데이터가 없다는 이유만으로 끊지 않는다.
+끊긴 연결은 두 단계로 감지한다. WS·WSS의 하부 TCP 소켓에는 TCP keepalive(K)를 적용한다. WebSocket 계층에는 ping·pong(Kw)을 적용한다. 기본값과 유효 범위는 [설정 계약](../contracts/config-v2.md)이 정한다. pong에 응답하는 연결은 데이터가 없다는 이유만으로 끊지 않는다.
 
 ## 4. 오류와 종료
 
@@ -156,7 +156,7 @@ WS-007 이후의 공통 중계 테스트는 WS·WSS 각각에 적용한다. TLS 
 
 | ID | 항목 | 영향과 제약 | 확정 위치 |
 | --- | --- | --- | --- |
-| WS-TBD-004 | M·업그레이드/TLS 제한·종료 제한 | M·U·E의 기본값과 유효 범위는 사용자 승인으로 확정(설정 계약이 기준). 남은 것은 B와 M의 관계(M이 B보다 클 때의 메시지 처리)와 프레임 분할 우회·종료 중 자원 점유 검증(WS-010·WS-017) | [설정 파일 v1](../contracts/config-v1.md) 6절 |
+| WS-TBD-004 | M·업그레이드/TLS 제한·종료 제한 | M·U·E의 기본값과 유효 범위는 사용자 승인으로 확정(설정 계약이 기준). 남은 것은 B와 M의 관계(M이 B보다 클 때의 메시지 처리)와 프레임 분할 우회·종료 중 자원 점유 검증(WS-010·WS-017) | [설정 파일 v2](../contracts/config-v2.md) 6절 |
 | WS-TBD-005 | noVNC 검증 버전 고정·기록 방식 | 고정 버전과 기록이 없으면 WS-025 결과를 특정 버전의 증거로 볼 수 없다. 고정 버전 noVNC가 실제로 보내는 `Sec-WebSocket-Protocol` 값(기본 서브프로토콜)도 같은 관찰로 확인한다. 공개 문서 설명만으로 단정하지 않으며 결과가 계약과 다르면 계약을 고친다 | [호환성 검증 기록](../contracts/repeater-compat-record.md)에 noVNC 1.7.0 고정(해시·주소·날짜). 서브프로토콜 관찰(2026-11-01): WS·WSS 모두 `Sec-WebSocket-Protocol` 헤더를 보내지 않았다(기록 3.4절 W-02·W-03b). 계약 반영은 TODO 1.7. [WebSocket 중계 v1](../contracts/websocket-relay-v1.md) 6절 |
 
-WS-TBD-001은 결번이며 재사용하지 않는다. WS-TBD-002는 [WebSocket 중계 v1](../contracts/websocket-relay-v1.md) 채택(2026-10-16)으로 결정되어 4절과 계약에 반영했으며 재사용하지 않는다. WS-TBD-003은 [설정 파일 v1](../contracts/config-v1.md) 1.4절의 정규화 규칙 채택으로 결정되어 2절과 계약에 반영했으며 재사용하지 않는다. WS-TBD-006은 결정되어 1절에 반영했으며 재사용하지 않는다.
+WS-TBD-001은 결번이며 재사용하지 않는다. WS-TBD-002는 [WebSocket 중계 v1](../contracts/websocket-relay-v1.md) 채택(2026-10-16)으로 결정되어 4절과 계약에 반영했으며 재사용하지 않는다. WS-TBD-003은 [설정 파일 v2](../contracts/config-v2.md) 1.4절의 정규화 규칙 채택으로 결정되어 2절과 계약에 반영했으며 재사용하지 않는다. WS-TBD-006은 결정되어 1절에 반영했으며 재사용하지 않는다.

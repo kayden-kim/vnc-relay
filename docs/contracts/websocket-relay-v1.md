@@ -6,7 +6,7 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 이름과 버전 | `websocket-relay` 1.0.0. H 시작점과 검사 순서의 명확화(사용자 결정 2026-10-22(Q22), 2026-10-22(Q24))는 버전을 올리지 않았다. |
+| 이름과 버전 | `websocket-relay` 1.0.0. H 시작점과 검사 순서의 명확화(사용자 결정 2026-10-22(Q22), 2026-10-22(Q24))는 버전을 올리지 않았다. 4008의 뜻과 101 직후 시작 바이트를 [Repeater 초기 교환 계약](repeater-handshake-v1.md) 채택(사용자 결정 2026-11-01(Q71~Q73))에 맞춘 것도 버전을 올리지 않았다. 두 동작은 아직 구현하지 않았다. |
 | 상태 | Active(2026-10-16 채택) |
 | 소유자 | vnc-relay 프로젝트 관리자 |
 | 만드는 쪽(Producer) | 외부 WebSocket 클라이언트(요청·바이너리 메시지·Close 송신), `vnc-relay` WS·WSS 리스너(응답·바이너리 메시지·ping·Close 송신). 방향마다 만드는 쪽이 다르며, 각 절에 방향을 적는다. |
@@ -18,7 +18,7 @@
 | 호환성 범위 | WS(`ws://`)와 WSS(`wss://`) Viewer 진입점. 서버 쪽은 Mode I·II 모두. 클라이언트는 RFC 6455 클라이언트이며, 검증 대상은 고정 버전 noVNC의 `repeaterID` 옵션이다([WS-025](../specs/websocket.md#7-수용-테스트)). WS·WSS Server 역접속은 범위 밖이다. |
 | 관련 테스트 | [WS-001~027](../specs/websocket.md#7-수용-테스트). 연결은 2절과 5절에 있다. |
 
-관련 문서: [Repeater 초기 교환 계약](repeater-handshake-v1.md), [설정 계약](config-v1.md)(키 이름·값 범위, Origin 값 문법과 정규화), [관리 API 계약](management-api-v1.md)(관리자 종료·종료 원인 `close_cause`), [운영 정보 계약](ops-info-v1.md)(종료 원인·로그), [ADR-0001 내장 TLS](../decisions/ADR-0001-built-in-tls.md), [ADR-0002 출발지 IP 허용 목록](../decisions/ADR-0002-source-ip-allowlist.md).
+관련 문서: [Repeater 초기 교환 계약](repeater-handshake-v1.md), [설정 계약](config-v2.md)(키 이름·값 범위, Origin 값 문법과 정규화), [관리 API 계약](management-api-v1.md)(관리자 종료·종료 원인 `close_cause`), [운영 정보 계약](ops-info-v1.md)(종료 원인·로그), [ADR-0001 내장 TLS](../decisions/ADR-0001-built-in-tls.md), [ADR-0002 출발지 IP 허용 목록](../decisions/ADR-0002-source-ip-allowlist.md).
 
 ## 1. 형식과 의미
 
@@ -57,7 +57,7 @@
 6. 업그레이드 직전 출발지 IP 재검사. 그 순간의 유효한 목록을 쓴다.
 7. 모두 통과하면 `101`을 보낸다.
 
-TLS 협상과 업그레이드 단계에는 제한 시간 U(`tls_upgrade_secs`)가 적용된다. `101` 전에 U가 지나면 HTTP 응답 없이 연결을 닫는다. 출발지 IP 허용 목록 값의 형식은 [설정 계약](config-v1.md)이 정한다.
+TLS 협상과 업그레이드 단계에는 제한 시간 U(`tls_upgrade_secs`)가 적용된다. `101` 전에 U가 지나면 HTTP 응답 없이 연결을 닫는다. 출발지 IP 허용 목록 값의 형식은 [설정 계약](config-v2.md)이 정한다.
 
 H(`handshake_secs`)는 초기 교환 제한 시간이다. WS·WSS에서는 `101` 응답을 보낸 뒤부터 잰다. 101 전의 시간은 U가 맡는다(사용자 결정 2026-10-22(Q22)).
 
@@ -81,7 +81,7 @@ noVNC 호환: noVNC `RFB()`의 `wsProtocols` 옵션 기본값은 빈 배열이�
 
 ### 1.3 Origin 비교
 
-허용 값(`allowed_origins`)의 문법과 `Origin` 값의 정규화·비교 규칙은 [설정 계약 1.4절](config-v1.md#14-origin-값-문법과-비교)이 정한다. 이 계약은 비교 결과에 따른 업그레이드 처리만 정한다. 정규화 규칙은 설정 계약과 함께 채택했다. Origin은 사용자 인증 수단이 아니다.
+허용 값(`allowed_origins`)의 문법과 `Origin` 값의 정규화·비교 규칙은 [설정 계약 1.4절](config-v2.md#14-origin-값-문법과-비교)이 정한다. 이 계약은 비교 결과에 따른 업그레이드 처리만 정한다. 정규화 규칙은 설정 계약과 함께 채택했다. Origin은 사용자 인증 수단이 아니다.
 
 | 비교 결과 | 처리 |
 | --- | --- |
@@ -99,17 +99,18 @@ noVNC 호환: noVNC `RFB()`의 `wsProtocols` 옵션 기본값은 빈 배열이�
 | 요소 | 방향 | 규칙 |
 | --- | --- | --- |
 | 바이너리 메시지 | 양방향 | 페이로드를 연속된 바이트 스트림으로 취급한다. 여러 메시지의 내용과 순서를 보존한다. 메시지·프레임 경계는 RFB 또는 Repeater 메시지의 경계가 아니다([WS-R02](../specs/websocket.md#3-정상-흐름과-규칙), [WS-R03](../specs/websocket.md#3-정상-흐름과-규칙), [WS-007](../specs/websocket.md#7-수용-테스트), [WS-018](../specs/websocket.md#7-수용-테스트)). 분할(연속 프레임)을 허용한다. 길이 0인 메시지는 허용하며 스트림에 바이트를 더하지 않는다. |
+| 시작 바이트 | 서버 → 클라이언트 | `101` 응답 직후 [Repeater 초기 교환 계약 1.1절](repeater-handshake-v1.md#11-메시지)의 시작 바이트 12바이트(`RFB 000.000\n`)를 바이너리 메시지 하나로 보낸다. 서버가 보내는 첫 데이터 메시지다. 클라이언트는 이것을 받은 뒤 초기 요청을 보낸다. |
 | 텍스트 메시지 | 클라이언트 → 서버 | 지원하지 않는다. 첫 프레임이 텍스트이면 즉시 종료 코드 1003으로 닫는다. 텍스트는 TCP에 전달하지 않는다([WS-R04](../specs/websocket.md#3-정상-흐름과-규칙), [WS-008](../specs/websocket.md#7-수용-테스트)). 서버도 텍스트 메시지를 보내지 않는다. |
-| 메시지 크기 M | 클라이언트 → 서버 | 프레임이 아니라 분할을 합친 논리 메시지 하나에 적용한다. 설정 키 `limits.ws_message_bytes`([설정 계약](config-v1.md)). 크기 M은 허용하고 M+1부터 거절한다. 초과를 확인하면 종료 코드 1009로 닫고 추가 전달을 멈춘다. 스트리밍하므로 초과를 확인하기 전에 앞부분이 TCP에 이미 전달될 수 있다. 실패한 메시지를 원자적으로 취소하지 않는다([WS-R06](../specs/websocket.md#3-정상-흐름과-규칙), [WS-010](../specs/websocket.md#7-수용-테스트)). |
+| 메시지 크기 M | 클라이언트 → 서버 | 프레임이 아니라 분할을 합친 논리 메시지 하나에 적용한다. 설정 키 `limits.ws_message_bytes`([설정 계약](config-v2.md)). 크기 M은 허용하고 M+1부터 거절한다. 초과를 확인하면 종료 코드 1009로 닫고 추가 전달을 멈춘다. 스트리밍하므로 초과를 확인하기 전에 앞부분이 TCP에 이미 전달될 수 있다. 실패한 메시지를 원자적으로 취소하지 않는다([WS-R06](../specs/websocket.md#3-정상-흐름과-규칙), [WS-010](../specs/websocket.md#7-수용-테스트)). |
 | 서버가 보내는 메시지 크기 | 서버 → 클라이언트 | 한 메시지는 M 이하로 나눠 보낸다. 입력 TCP 읽기 경계와 같을 필요는 없다. |
-| ping | 서버 → 클라이언트 | 연결 성립 후 `keepalive.ws_ping_secs`마다 보낸다([설정 계약](config-v1.md)). 페이로드는 비워 두며 중계 ID나 세션 정보를 담지 않는다. |
+| ping | 서버 → 클라이언트 | 연결 성립 후 `keepalive.ws_ping_secs`마다 보낸다([설정 계약](config-v2.md)). 페이로드는 비워 두며 중계 ID나 세션 정보를 담지 않는다. |
 | pong | 클라이언트 → 서버 | ping 하나마다 `keepalive.ws_pong_timeout_secs` 안에 pong이 와야 한다. 이 시간 안에 pong이 없으면 끊긴 연결로 처리한다. 데이터 메시지는 pong을 대신하지 않는다. 데이터가 없어도 pong에 응답하는 연결은 유지한다([WS-R13](../specs/websocket.md#3-정상-흐름과-규칙), [WS-026](../specs/websocket.md#7-수용-테스트)). |
 | 클라이언트의 ping | 클라이언트 → 서버 | 서버는 pong으로 응답한다([RFC 6455 5.5.2절](https://www.rfc-editor.org/rfc/rfc6455#section-5.5.2)). 이미 Close를 받은 뒤에는 응답하지 않는다. |
 | 요청하지 않은 pong | 클라이언트 → 서버 | 허용하며 무시한다. |
 | ping·pong·Close 페이로드 | 양방향 | 어떤 제어 프레임의 페이로드도 TCP 중계 스트림에 넣지 않는다([WS-R05](../specs/websocket.md#3-정상-흐름과-규칙), [WS-009](../specs/websocket.md#7-수용-테스트)). |
 | 잘못된 프레임·순서 | 클라이언트 → 서버 | 마스크 없는 클라이언트 프레임, 협상하지 않은 확장 비트, 알 수 없는 opcode, 연속 프레임 순서 위반, 분할되거나 125바이트를 넘는 제어 프레임, 유효하지 않은 Close 본문. 종료 코드 1002로 닫는다([WS-019](../specs/websocket.md#7-수용-테스트)). |
 
-WS·WSS 하부 TCP 소켓에는 TCP keepalive(K)도 적용한다. 값은 이 계약이 아니라 [설정 계약](config-v1.md)과 [운영 스펙 2절](../specs/operations.md#2-상태와-검증-매개변수)이 정한다.
+WS·WSS 하부 TCP 소켓에는 TCP keepalive(K)도 적용한다. 값은 이 계약이 아니라 [설정 계약](config-v2.md)과 [운영 스펙 2절](../specs/operations.md#2-상태와-검증-매개변수)이 정한다.
 
 ### 1.5 close 코드
 
@@ -131,7 +132,7 @@ WS·WSS 하부 TCP 소켓에는 TCP keepalive(K)도 적용한다. 값은 이 계
 | 4005 | 관리자 종료 | `admin_terminated` | 관리자가 세션을 종료함. |
 | 4006 | 끊긴 연결 감지 | `dead_connection` | 세션의 반대쪽(상대 TCP)이 끊긴 연결로 판정됨. 살아 있는 WS 쪽에 보낸다. |
 | 4007 | 상대 연결 오류 | `peer_closed` | 상대 TCP가 오류(재설정 등)로 끝났거나, EOF 뒤 남은 데이터를 보낼 수 없음. |
-| 4008 | 초기 교환 오류 | `handshake_invalid` | 초기 교환의 형식 오류, 미지원 모드, 상한 I 초과. |
+| 4008 | 초기 교환 오류 | `handshake_invalid` | 초기 요청의 형식 오류([Repeater 초기 교환 계약 2절](repeater-handshake-v1.md#2-오류)). |
 | 4009 | 초기 교환 시간 초과 | `handshake_timeout` | 초기 교환이 H 안에 끝나지 않음. |
 | 4010 | 대기 상한 도달 | `waiting_full` | 대기 연결 상한 Lw 때문에 새 대기 등록을 거절. |
 
@@ -139,7 +140,7 @@ reason 문자열은 UTF-8의 고정 식별자만 쓴다. Close 본문은 코드 
 
 ### 1.6 종료 의미
 
-WebSocket에는 TCP 같은 독립적인 양방향 half-close가 없다. 그래서 WS·WSS가 포함된 세션은 한쪽 EOF 뒤 반대 방향을 정리 제한 시간 E(`timeouts.close_secs`, [설정 계약](config-v1.md)) 이상 유지하지 않는다([websocket.md 4절](../specs/websocket.md#4-오류와-종료)). 아래는 이 의미를 사건별로 고정한 것이다. 이 세부는 스펙이 계약에서 정하도록 남긴 항목이다.
+WebSocket에는 TCP 같은 독립적인 양방향 half-close가 없다. 그래서 WS·WSS가 포함된 세션은 한쪽 EOF 뒤 반대 방향을 정리 제한 시간 E(`timeouts.close_secs`, [설정 계약](config-v2.md)) 이상 유지하지 않는다([websocket.md 4절](../specs/websocket.md#4-오류와-종료)). 아래는 이 의미를 사건별로 고정한 것이다. 이 세부는 스펙이 계약에서 정하도록 남긴 항목이다.
 
 | 사건 | 서버 동작 | 보장 범위 |
 | --- | --- | --- |
@@ -253,7 +254,7 @@ Close 예: 대기 시간이 W를 넘으면 서버는 코드 `4001`과 reason `wa
 
 | 대상 | 환경 | 명령 | 결과 |
 | --- | --- | --- | --- |
-| 커밋 `c1c24d2`(작업 3.2 업그레이드 단계, 검토 결함 5건 수정 뒤). 작업 트리에 `docs/contracts/config-v1.md`의 커밋 안 된 변경 1개가 있었으나 이 작업과 무관하다 | Ubuntu 24.04.4(WSL2), Rust 1.99.1, `CARGO_TARGET_DIR=~/vnc-relay-target` | `wsl -d Ubuntu -- bash /mnt/d/vr-tools/vr-full.sh` | 통과(`ALL PASSED`). `tests/websocket.rs` 14건과 `src/upgrade.rs` 단위 테스트 4건(`header_names_must_be_tokens`, `control_characters_in_the_head_are_refused`, `syntax_is_checked_before_the_path`, `wrong_version_is_refused_before_a_bad_key`) 모두 통과. 시나리오 보고: 통과 9, 부분 22, 미실행 0, 미연결 117, 오류 0, 판정 통과 |
+| 커밋 `c1c24d2`(작업 3.2 업그레이드 단계, 검토 결함 5건 수정 뒤). 작업 트리에 `docs/contracts/config-v2.md`의 커밋 안 된 변경 1개가 있었으나 이 작업과 무관하다 | Ubuntu 24.04.4(WSL2), Rust 1.99.1, `CARGO_TARGET_DIR=~/vnc-relay-target` | `wsl -d Ubuntu -- bash /mnt/d/vr-tools/vr-full.sh` | 통과(`ALL PASSED`). `tests/websocket.rs` 14건과 `src/upgrade.rs` 단위 테스트 4건(`header_names_must_be_tokens`, `control_characters_in_the_head_are_refused`, `syntax_is_checked_before_the_path`, `wrong_version_is_refused_before_a_bad_key`) 모두 통과. 시나리오 보고: 통과 9, 부분 22, 미실행 0, 미연결 117, 오류 0, 판정 통과 |
 | 같은 커밋 `c1c24d2`, 같은 작업 트리 | Windows 11 Pro 10.0.26200 x64, Rust 1.99.1(`x86_64-pc-windows-msvc`), Visual Studio Build Tools 2022 17.14.37806.7, `AWS_LC_SYS_PREBUILT_NASM=1` | `powershell -NoProfile -ExecutionPolicy Bypass -File D:/vr-tools/vr-win.ps1 -Only all` | 통과(`ALL PASSED (all)`). `tests/websocket.rs` 14건과 `src/upgrade.rs` 단위 테스트 4건 모두 통과. 시나리오 보고: 통과 8, 부분 22, 미실행 1(OPS-007: Unix 전용 `closes_and_logs_every_held_connection_when_stopping`), 미연결 117, 오류 0, 판정 통과 |
 | 커밋 `e701997`(작업 3.1 검증. 코드 커밋 `89a1001`·`e701997`, 작업 트리 깨끗함) | Ubuntu 24.04.4(WSL2), Rust 1.99.1 | `wsl -d Ubuntu -- bash /mnt/d/vr-tools/vr-full.sh` | 통과(`ALL PASSED`). `tests/websocket.rs` 16건 모두 통과(새 시험 2건 포함). 시나리오 보고: 통과 11, 부분 20, 실패 0, 미실행 0, 미연결 117, 오류 0, 판정 통과 |
 | 같은 커밋 `e701997`, 작업 트리 깨끗함 | Windows 11 Pro 10.0.26200 x64, Rust 1.99.1(`x86_64-pc-windows-msvc`), 이전 Windows 기록과 같은 환경 | `powershell -NoProfile -ExecutionPolicy Bypass -File D:/vr-tools/vr-win.ps1 -Only all` | 통과(`ALL PASSED (all)`). 시나리오 보고: 통과 10, 부분 20, 실패 0, 미실행 1(OPS-007: Unix 전용 `closes_and_logs_every_held_connection_when_stopping`), 미연결 117, 오류 0, 판정 통과 |
@@ -261,8 +262,7 @@ Close 예: 대기 시간이 W를 넘으면 서버는 코드 `4001`과 reason `wa
 ## 6. 초안을 확정하기 전에 해결할 사항
 
 - 이 계약의 이름·코드 선택은 2026-10-16에 사용자가 채택했다. 해당하는 것: 업그레이드 경로 처리의 세부(쿼리 무시, 끝 슬래시 불일치), HTTP 상태(특히 서브프로토콜 거절 400, 종료 유예 503, 상한 L 도달 시 연결 종료), 검사 순서, 확장 비수락, close 코드 번호·이름·reason, 1.6절 종료 의미, 서버 메시지 크기 M 이하.
-- 채택으로 WS-TBD-002(HTTP 상태·종료 코드)와 WS-TBD-003(Origin 정규화)을 해소했다. WS-TBD-003의 기준은 [설정 계약 1.4절](config-v1.md#14-origin-값-문법과-비교)이며 이 계약은 그 규칙을 인용하므로 따로 맞출 값이 없다.
-- WS-TBD-004: M·U·E의 기본값과 유효 범위는 사용자가 승인한 값이며 [설정 계약](config-v1.md)이 기준이다. 이 계약은 키 이름만 인용하고 수치를 반복하지 않는다. 프레임 분할 우회와 종료 중 자원 점유는 WS-010·WS-017로 검증한다.
+- 채택으로 WS-TBD-002(HTTP 상태·종료 코드)와 WS-TBD-003(Origin 정규화)을 해소했다. WS-TBD-003의 기준은 [설정 계약 1.4절](config-v2.md#14-origin-값-문법과-비교)이며 이 계약은 그 규칙을 인용하므로 따로 맞출 값이 없다.
+- WS-TBD-004: M·U·E의 기본값과 유효 범위는 사용자가 승인한 값이며 [설정 계약](config-v2.md)이 기준이다. 이 계약은 키 이름만 인용하고 수치를 반복하지 않는다. 프레임 분할 우회와 종료 중 자원 점유는 WS-010·WS-017로 검증한다.
 - WS-TBD-005와 noVNC 기본 서브프로토콜: 고정 버전 noVNC가 실제로 보내는 `Sec-WebSocket-Protocol` 값은 관찰로 확인해야 한다. noVNC의 `wsProtocols` 기본값이 빈 배열이라는 공개 문서 설명만으로는 단정할 수 없다. 관찰 절차는 [Repeater 초기 교환 계약 6절](repeater-handshake-v1.md#6-초안을-확정하기-전에-해결할-사항)을 따른다.
-- 초기 교환 바이트는 [Repeater 초기 교환 계약](repeater-handshake-v1.md)이 관찰 후에 확정한다. 그 전에는 2.2절의 4008·4009 외 초기 교환 응답 바이트가 없다고 가정한다.
 - 1.4절 잘못된 프레임의 종료는 WebSocket 구현이 자동으로 1002를 보내는 경우가 많다. 구현 선택 시 위 규칙과 같게 맞출 수 있는지 확인한다.

@@ -1,5 +1,5 @@
-//! Effective settings: config values after every check of config-v1 §1, plus
-//! the config error and warning codes of config-v1 §2.
+//! Effective settings: config values after every check of config-v2 §1, plus
+//! the config error and warning codes of config-v2 §2.
 
 use std::fmt;
 use std::net::SocketAddr;
@@ -14,7 +14,7 @@ use vnc_relay_domain::target_policy::{TargetItem, TargetPolicy};
 
 /// Validated settings. Omitted keys hold their defaults. Equality compares
 /// values only, so notation, comments, key order, and explicit defaults do not
-/// matter (config-v1 §1.8 rule 2).
+/// matter (config-v2 §1.8 rule 2).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Settings {
     pub admin: AdminSettings,
@@ -110,13 +110,12 @@ pub struct Mode2Settings {
     pub enabled: bool,
 }
 
-/// `[limits]`: L, Lm, Lw, I, B, M.
+/// `[limits]`: L, Lm, Lw, B, M.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct LimitSettings {
     pub relay_connections: u32,
     pub admin_connections: u32,
     pub waiting: u32,
-    pub initial_message_bytes: u32,
     pub buffer_bytes: u32,
     pub ws_message_bytes: u32,
 }
@@ -205,7 +204,7 @@ pub struct ReloadSettings {
 }
 
 impl Settings {
-    /// Warnings of config-v1 §2.2 for these settings, in a fixed order. The
+    /// Warnings of config-v2 §2.2 for these settings, in a fixed order. The
     /// caller records them with its own `phase`. Only `allow_all_source` is
     /// also a reload warning; a reload caller keeps that kind only.
     pub fn warnings(&self) -> Vec<ConfigWarning> {
@@ -305,7 +304,7 @@ fn listen_key(entry_point: EntryPoint) -> &'static str {
     }
 }
 
-/// Config error codes (config-v1 §2.1) that the config loader reports.
+/// Config error codes (config-v2 §2.1) that the config loader reports.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ConfigError {
     FileUnreadable,
@@ -358,7 +357,7 @@ impl fmt::Display for ConfigError {
 
 impl std::error::Error for ConfigError {}
 
-/// One diagnostic of config-v1 §2.1. `key` is the full dotted path with `[i]`
+/// One diagnostic of config-v2 §2.1. `key` is the full dotted path with `[i]`
 /// for array elements, or empty for file-level errors. `message` has no
 /// secret and no file content.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -368,7 +367,7 @@ pub struct ConfigDiagnostic {
     pub message: String,
 }
 
-/// Warnings of config-v1 §2.2. Field values follow ops-info-v1 §1.5.
+/// Warnings of config-v2 §2.2. Field values follow ops-info-v1 §1.5.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ConfigWarning {
     PlaintextWsEnabled {

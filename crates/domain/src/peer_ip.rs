@@ -1,5 +1,5 @@
 //! Peer IP of a connection as the operation log and the source IP allow
-//! list see it (ops-info-v1 §1.10, config-v1 §1.3).
+//! list see it (ops-info-v1 §1.10, config-v2 §1.3).
 
 use std::fmt;
 use std::net::{IpAddr, SocketAddr};
