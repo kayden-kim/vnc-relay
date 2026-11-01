@@ -164,8 +164,9 @@ Mode I·II 초기 흐름을 추정 없이 설명할 수 있게 한다. 관찰은
   - 기준: [중계 스펙 2.1절](specs/relay.md#21-판정-가능한-규칙)의 RLY-R18·RLY-R19
   - 완료 조건: RLY-025~027
   - 선행: 2.10
-  - 현재: RLY-027은 비부분 시험으로 두 OS에서 통과했다(커밋 `1a6f93e`). RLY-025·RLY-026은 WSL의 Linux netns와 nftables/iptables DROP으로 응답 없이 끊긴 네트워크를 만들어 시험한다. Windows는 부분 시험으로 유지한다(사용자 결정 2026-11-02(Q86)). WSL에는 사용자가 `nftables` 패키지를 설치하고, 시험은 `unshare --user --map-root-user --net` 안에서 root 없이 실행한다. Linux에서 필요한 도구가 없으면 시험은 건너뛰지 않고 실패한다(사용자 결정 2026-11-02(Q93)). 이 방법의 실행 증거는 아직 없다.
-  - 현재: 수락 소켓의 keepalive 설정 실패 처리는 사용자 결정 2026-11-02(Q85)로 확정하고 커밋 `5a38bfc`에서 구현했다. `connection_accepted` → K 설정 실패 → 전송별 현재 stage의 `connection_aborted(reason=connection_error, error_kind=io_error)` → 소켓 닫기·L 반환 순서다([연결 상한과 시간 제한 설계 6절](architectures/connection-limits.md#6-오류-처리)). 단위 시험 `net::accept_tests::keepalive_failure_aborts_accepted_connections_and_releases_l`이 Windows와 WSL에서 통과했다. 전체 완료 검증 기록은 아직 없다.
+  - 현재: RLY-027은 비부분 시험으로 두 OS에서 통과했다(커밋 `1a6f93e`). RLY-025·RLY-026은 WSL의 Linux netns와 nftables DROP으로 응답 없이 끊긴 네트워크를 만들어 시험한다. Windows는 부분 시험으로 유지한다(사용자 결정 2026-11-02(Q86)). WSL에는 사용자가 `nftables` 패키지를 설치하고, 시험은 `unshare --user --map-root-user --net` 안에서 root 없이 실행한다. Linux에서 필요한 도구가 없으면 시험은 건너뛰지 않고 실패한다(사용자 결정 2026-11-02(Q93)). 준비 절차는 [개발 환경 how-to의 WSL 끊긴 연결 감지 시험 준비](how-to/set-up-and-verify.md#wsl-끊긴-연결-감지-시험-준비)에 있다.
+  - 현재: 커밋 `59fc535`가 Linux 전용 시험 `tests/relay_dead_peer_linux.rs`(RLY-025·026 전체 표식)를 더했다. 실제 keepalive 만료가 `dead_connection`으로 기록되도록 Linux 소켓의 `ETIMEDOUT`·`EHOSTUNREACH`·`ENETUNREACH`를 `DeadConnection`으로 분류한다([연결 상한과 시간 제한 설계](architectures/connection-limits.md), 이 문서의 구현 판단). 같은 커밋의 WSL 게이트에서 이 시험 2건은 `nft`가 없어 실패했다. 따라서 RLY-025·026은 WSL에서 실패, Windows에서 부분이며 `[ ]`를 유지한다. 사용자가 WSL에 `nftables`를 설치한 뒤 시험과 게이트를 다시 실행해야 한다.
+  - 현재: 수락 소켓의 keepalive 설정 실패 처리는 사용자 결정 2026-11-02(Q85)로 확정하고 커밋 `5a38bfc`에서 구현했다. `connection_accepted` → K 설정 실패 → 전송별 현재 stage의 `connection_aborted(reason=connection_error, error_kind=io_error)` → 소켓 닫기·L 반환 순서다([연결 상한과 시간 제한 설계 6절](architectures/connection-limits.md#6-오류-처리)). 단위 시험 `net::accept_tests::keepalive_failure_aborts_accepted_connections_and_releases_l`이 커밋 `59fc535`의 두 OS 게이트에서 통과했다.
 - [x] **2.12 중계 사건 로그**: 접속 수락·거절, 대기 등록, 매칭, 대상 연결 실패, 세션 종료 사건을 기록한다.
   - 기준: [운영 정보 계약 1.5~1.7절](contracts/ops-info-v1.md#15-사건-목록)
   - 완료 조건: OPS-011(일부), OPS-012(일부). 운영 정보 계약 5절의 해당 계약 테스트.
@@ -196,12 +197,12 @@ Mode I·II 초기 흐름을 추정 없이 설명할 수 있게 한다. 관찰은
   - 선행: 2.7, 3.2
   - 범위: 공통 초기 교환과 세션에 필요한 스트림 어댑터는 2.7 완료 전에 가져온다. 9.1~9.3절은 사용자 결정 2026-11-01(Q77~Q79)로 해결했다. [9.5절의 Kw 정책](architectures/websocket-stream.md#95-kw의-여러-ping과-b-backpressure)은 3.4 범위다.
   - 현재: 완료 조건을 모두 채웠다. WS-007~011·WS-018~019는 실제 WS·WSS 소켓을 쓰는 비부분 시험으로 두 OS에서 통과했다(커밋 `4e4a271`). WS-TBD-004는 사용자 결정 2026-11-01(Q78)로 해소했다. M이 B보다 커도 프레임 안에서 스트리밍하며 방향당 보관 바이트는 B 이하다([설계 9.2절](architectures/websocket-stream.md#92-ws-tbd-004-m-b와-제어-진행)).
-- [ ] **3.4 WebSocket 종료와 끊긴 연결 감지**: close 코드, 종료 의미, 서버 ping 주기 Kw를 구현한다. 잘못된 프레임에 WebSocket 라이브러리가 자동으로 보내는 종료 코드가 계약과 같은지 확인한다.
-  - 기준: [WebSocket 중계 계약 1.5·1.6·2.2절](contracts/websocket-relay-v1.md#15-close-코드). 설계: [WebSocket 스트림 어댑터 모듈 설계 6절](architectures/websocket-stream.md#6-제어-프레임kw종료-상태)(Draft, Target)
+- [x] **3.4 WebSocket 종료와 끊긴 연결 감지**: close 코드, 종료 의미, 서버 ping 주기 Kw를 구현한다. 잘못된 프레임에 WebSocket 라이브러리가 자동으로 보내는 종료 코드가 계약과 같은지 확인한다.
+  - 기준: [WebSocket 중계 계약 1.5·1.6·2.2절](contracts/websocket-relay-v1.md#15-close-코드). 설계: [WebSocket 스트림 어댑터 모듈 설계 6절](architectures/websocket-stream.md#6-제어-프레임kw종료-상태)(Draft, Current)
   - 완료 조건: WS-016~017, WS-026
   - 선행: 3.3
   - 범위: 여러 Ping과 backpressure 중 Pong 기한은 [설계 9.5절](architectures/websocket-stream.md#95-kw의-여러-ping과-b-backpressure)의 선택 A로 확정했다(사용자 결정 2026-11-02(Q84)). 고정 Ping 주기와 빈 Ping별 기한 FIFO를 쓰며 상한은 `ceil(pong_timeout / ping_interval) + 1`이다. Pong은 가장 오래된 대기 기한을 지운다. M > B의 저장·스트리밍 상한은 [9.2절](architectures/websocket-stream.md#92-ws-tbd-004-m-b와-제어-진행)에 따라 3.3에서 다룬다. 이미 헤더를 쓴 프레임과 Close의 경합은 [9.4절 선택 A](architectures/websocket-stream.md#94-해결-수신-close와-이미-시작한-출력-프레임)로 해결했다(사용자 결정 2026-11-01(Q83)).
-  - 현재: WS-016·WS-017은 비부분 시험으로 두 OS에서 통과했다(커밋 `4e4a271`). WS-026은 미연결이다. Kw 정책은 사용자 결정 2026-11-02(Q84)으로 확정했으나 서버 ping 주기와 Pong 기한 관리는 아직 미구현이다.
+  - 현재: 완료 조건을 모두 채웠다. WS-016·WS-017·WS-026은 비부분 시험으로 커밋 `59fc535`의 두 OS 게이트에서 통과했다. Kw는 고정 주기 빈 Ping, Ping별 기한 FIFO, 상한 `ceil(pong_timeout / ping_interval) + 1`로 구현했다(`crates/adapters/src/websocket_stream/keepalive.rs`). 자기 Pong 기한 만료는 Close 없이 TCP를 닫고, 반대쪽이 끊긴 연결이면 살아 있는 WS 쪽에 4006을 보낸다. 같은 커밋의 WSL 게이트는 이 작업과 무관한 RLY-025·026 netns 시험 2건이 `nft` 없음으로 실패해 `FAILED: scenarios`였다(작업 2.11, 사용자 결정 2026-11-02(Q93)). 실행 기록은 [WebSocket 스트림 설계 대조·실행 기록](architectures/websocket-stream.md#대조실행-기록)과 [WebSocket 계약 실행 기록](contracts/websocket-relay-v1.md#계약-테스트-실행-기록)에 있다.
 - [ ] **3.5 전송·모드 조합 검증**: WS·WSS와 Mode I·II의 모든 조합, noVNC·websockify 없는 배포, 고정 버전 noVNC `repeaterID` 상호운용을 확인한다.
   - 기준: [WebSocket 스펙 6절](specs/websocket.md#6-전송모드-검증-조합)
   - 완료 조건: WS-001~006, WS-020, WS-025. AC-05·AC-16~17·AC-33 통과.
@@ -225,7 +226,8 @@ Mode I·II 초기 흐름을 추정 없이 설명할 수 있게 한다. 관찰은
 - [ ] **4.3 로그인과 관리 세션**: 로그인·로그아웃·세션 정보, 관리 세션 쿠키, CSRF 토큰, 유휴 만료 Si·절대 수명 Sa, 자동 폴링 표시, 로그인 실패 제한, 재시작 무효를 구현한다. 관리 API 계약 6절에 남은 브라우저 기본 인증 창과 로그인 CSRF 방어를 확인한다. 로그인 응답 시간 판정은 구조 시험으로 정했다(사용자 결정 2026-10-22(Q31)).
   - 기준: [관리 API 계약 1.4·1.5절](contracts/management-api-v1.md#14-관리-세션), [관리 스펙 3.0절](specs/management.md#30-관리자-로그인과-세션), [관리 API 계약 6절](contracts/management-api-v1.md#6-초안을-확정하기-전에-해결할-사항)
   - 완료 조건: MGT-014, MGT-017~020, MGT-022, MGT-025, MGT-027, OPS-029. 조회·종료 경로가 필요한 시나리오는 4.4·4.5에서 마무리한다.
-  - 현재: 설계 문서(Draft), 도메인·응용·어댑터 코드와 시험을 구현했다. 완료 조건 중 MGT-018·022는 시험이 완결됐다(`8c87e69`). 나머지 MGT-014·017·019·020·025·027·OPS-029는 부분 구현·부분 시험이며, 조회·종료 경로가 필요한 부분은 4.4·4.5가 마무리한다. 구현 대조는 커밋 `a143539` 기준으로 마쳤다([대조 기록](architectures/management-session.md#대조-기록)). 4.3 구현 선택은 사용자 결정 2026-10-22(Q25·Q30·Q31)로 관리 로그인과 세션 설계 6·7·9절에 반영했다. 남은 미결정은 9절이다.
+  - 현재: 설계 문서(Draft), 도메인·응용·어댑터 코드와 시험을 구현했다. 완료 조건 중 MGT-018·022는 시험이 완결됐다(`8c87e69`). MGT-017·019·020·025·027·OPS-029는 부분 구현·부분 시험이며, 조회·종료 경로가 필요한 부분은 4.4·4.5가 마무리한다. 구현 대조는 커밋 `a143539` 기준으로 마쳤다([대조 기록](architectures/management-session.md#대조-기록)). 4.3 구현 선택은 사용자 결정 2026-10-22(Q25·Q30·Q31)로 관리 로그인과 세션 설계 6·7·9절에 반영했다. 남은 미결정은 9절이다.
+  - 현재: MGT-014는 작업 4.5의 종료 요청 CSRF 시험(`tests/management_terminate.rs`, 비부분)으로 커밋 `59fc535`의 두 OS 게이트에서 통과했다. 나머지 MGT-017·019·020·025·027·OPS-029는 부분이다.
   - 선행: 4.1, 4.2
 - [ ] **4.4 조회 API**: 서버 요약, 대기 연결 목록, 활성 세션 목록·상세, 최근 종료 목록(최대 개수 R), 폴링 주기 전달을 구현한다. 한 응답 안의 기준 시점 일관성을 지킨다. IPv4 매핑 IPv6 주소의 표기와 `server_shutdown` 항목이 조회되는지 확인한다.
   - 기준: [관리 API 계약 1.6~1.8·1.10·1.12절](contracts/management-api-v1.md#1-형식과-의미), [관리 스펙 2절](specs/management.md#2-조회-대상과-상태)
@@ -233,13 +235,14 @@ Mode I·II 초기 흐름을 추정 없이 설명할 수 있게 한다. 관찰은
   - 선행: 2.10, 3.3, 4.3
   - 현재: 설계 `bc7e762`와 구현·시험 `ec05fd1`, MGT-002 시험 보강 `b20b8dc`를 반영했다. 조회 API와 정수 집계, `ActivePeer`의 필수 상대 주소, `HandshakingGuard`를 구현했다. Windows·WSL 게이트와 남은 증거는 [관리 조회 API 대조 기록](architectures/management-query.md#대조-기록)에 있다.
   - 현재: MGT-001·002·003·006·015·021·024는 두 OS에서 전체 증거로 통과했다. MGT-002는 `b20b8dc`에서 E = 5초의 반닫기로 목록·상세의 `closing`과 활성 집계 포함, 정리 뒤 상세 404·최근 종료 포함을 확인했다. MGT-026은 Linux 정확한 수치 시험이 있는 WSL에서 통과, Windows에서는 부분이다.
-  - 현재: MGT-004는 500 경로 미강제, MGT-005는 시스템 시험의 부분 쓰기 없음, MGT-007은 시계 단위 시험·재접속 시스템 시험이 각각 부분 표식, MGT-016은 블랙박스 상태 변동 시험만 확인해 부분이다. MGT-013·023은 종료 요청·관리자 종료 증거가 작업 4.5에 의존해 부분이다. OPS-033도 부분이며 전체 시나리오 증거가 남는다. 따라서 `[ ]`를 유지한다.
-  - 현재: IPv4 매핑 IPv6 표기는 `IpAddr::to_canonical()`으로 `a.b.c.d`를 쓰도록 확정했다(사용자 결정 2026-11-02(Q88)). 커밋 `35329fc`가 `query_api.rs`의 `format_ip`에 적용했고 단위 시험 3개가 Windows에서 통과했다. `server_shutdown` 항목의 외부 조회는 구현 점검 대상으로 남기며 전체 증거로 주장하지 않는다.
+  - 현재: MGT-004는 500 경로 미강제, MGT-005는 시스템 시험의 부분 쓰기 없음, MGT-007은 시계 단위 시험·재접속 시스템 시험이 각각 부분 표식, MGT-016은 블랙박스 상태 변동 시험만 확인해 부분이다. MGT-023은 작업 4.5의 관리자 종료 시험(비부분)으로 커밋 `59fc535`의 두 OS 게이트에서 통과했다. MGT-013은 `500 terminate_failed` 본문의 종단 간 확인이 없어 부분이다. OPS-033도 부분이며 전체 시나리오 증거가 남는다. 따라서 `[ ]`를 유지한다.
+  - 현재: IPv4 매핑 IPv6 표기는 `IpAddr::to_canonical()`으로 `a.b.c.d`를 쓰도록 확정했다(사용자 결정 2026-11-02(Q88)). 커밋 `35329fc`가 `query_api.rs`의 `format_ip`에 적용했고 단위 시험 3개가 커밋 `59fc535`의 두 OS 게이트에서 통과했다. `server_shutdown` 항목의 외부 조회는 구현 점검 대상으로 남기며 전체 증거로 주장하지 않는다.
 - [ ] **4.5 관리자 종료 API**: 세션 식별자로 지정한 활성 세션 하나만 정리하고, 정리가 끝난 뒤 응답한다. 관리자 종료 사건 로그에 계정명을 기록한다.
   - 기준: [관리 API 계약 1.9절](contracts/management-api-v1.md#1-형식과-의미), [관리 스펙 3.2절](specs/management.md#32-관리자-종료), [운영 정보 계약 1.8절](contracts/ops-info-v1.md#18-관리자-계정명-기록-규칙)
   - 완료 조건: MGT-008~012, OPS-011, RLY-020(관리자 종료 부분)
   - 선행: 4.4
-  - 현재: 설계 초안 [관리자 종료 API](architectures/management-terminate.md)(Draft, Target)에 본문은 항상 400(사용자 결정 2026-11-02(Q89)), 감사 `already_closed`(사용자 결정 2026-11-02(Q90)), 관리자 E 초과의 `close_timeout`·side·계정 규칙(사용자 결정 2026-11-02(Q91)), 검증·수락된 완료 대기 중 U 중지(사용자 결정 2026-11-02(Q92))를 반영했다. 결정은 끝났으며 구현·시험 완료는 아니다. RLY-020의 관리자 종료 부분은 2.10에서 이 작업으로 옮겼다(사용자 결정 2026-11-02(Q87)).
+  - 현재: 설계 [관리자 종료 API](architectures/management-terminate.md)(Active, Current)에 본문은 항상 400(사용자 결정 2026-11-02(Q89)), 감사 `already_closed`(사용자 결정 2026-11-02(Q90)), 관리자 E 초과의 `close_timeout`·side·계정 규칙(사용자 결정 2026-11-02(Q91)), 검증·수락된 완료 대기 중 U 중지(사용자 결정 2026-11-02(Q92))를 반영했다. RLY-020의 관리자 종료 부분은 2.10에서 이 작업으로 옮겼다(사용자 결정 2026-11-02(Q87)).
+  - 현재: 커밋 `7c706c6`에서 구현하고 `59fc535`의 두 OS 게이트로 확인했다. MGT-008·009·010·011은 비부분 시험(`tests/management_terminate.rs`)으로 두 OS에서 통과했다. MGT-012는 응답 유실 시스템 시험과 500 직렬화·실패 완료 단위 시험이 부분이다. 실제 네트워크 입력만으로 HTTP 500 종단 간 경로를 결정적으로 만들 수 없었고, 제품용 실패 훅은 넣지 않았다. OPS-011과 RLY-020의 관리자 종료 부분도 부분 표식이다. 따라서 `[ ]`를 유지한다. 세션 소유 작업이 panic으로 끝나면 `internal_error`를 기록한다(사용자 결정 2026-11-02(Q94)). 이때 WS Close를 보내지 못하는 것은 구현 한계다([WebSocket 계약 2.2절](contracts/websocket-relay-v1.md#22-close-코드와-스펙-오류의-대응)).
 - [x] **4.6 정적 대시보드 제공**: 실행파일에 넣은 정적 파일을 관리 리스너가 제공한다. 인증 없이 받을 수 있는 파일은 로그인 화면에 필요한 파일뿐이다.
   - 기준: [관리 API 계약 1.11절](contracts/management-api-v1.md#111-정적-대시보드-경로와-비인증-접근-범위)
   - 완료 조건: [관리 API 계약 5절](contracts/management-api-v1.md#5-예제와-계약-테스트)의 정적 경로 계약 테스트, DASH-014(일부)

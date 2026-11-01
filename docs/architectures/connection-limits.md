@@ -146,6 +146,7 @@ TCP 경로는 2~4절과 같다. WS·WSS 행은 [WebSocket 진입점 모듈 설�
 | 작업 4.2 변경(기준 커밋 `ead7be0` + 작업 트리): 관리 리스너의 Lm 사용 | Ubuntu 24.04.4(WSL2)·Windows 11 Pro 10.0.26200, Rust 1.99.1 | 2·4절과 `crates/domain/src/budget.rs` 사용처를 대조했다. `tests/serve.rs`의 `refuses_management_connections_beyond_lm_and_keeps_lm_and_l_apart`가 두 환경에서 통과했다. | 통과 |
 | 작업 3.2 변경(기준 커밋 `c1c24d2`, 코드 = HEAD `0f63227`): WS·WSS의 L·U·H(101 뒤), 관리 U | Ubuntu 24.04(WSL2), Rust 1.99.1 | 1~4절과 `crates/adapters/src/net.rs`·`websocket.rs`·`request_deadline.rs`를 대조했다. 전체 검증 기록(Main 전달, 재실행 안 함): `vr-full.sh`, `시나리오 148건: 통과 9, 부분 22, 실패 0, 미실행 0, 미연결 117. 오류 0건.`, 마지막 줄 `ALL PASSED`. | 통과 |
 | Windows 실행(기준 커밋 `c1c24d2`, 코드 = HEAD `0f63227`) | Windows 10.0.26200, Rust 1.99.1 | 전체 검증 기록(Main 전달, 재실행 안 함): `vr-win.ps1 -Only all`, `통과 8, 부분 22, 실패 0, 미실행 1, 미연결 117`, 마지막 줄 `ALL PASSED`. 미실행 1건은 [TCP 진입점 모듈 설계](tcp-entry-point.md) §9의 종료 정리 테스트로 보인다([INFERENCE]). | 통과 |
+| 작업 2.11 변경(커밋 `59fc535`): Linux 소켓 단절 오류의 `dead_connection` 분류, 수락 소켓 keepalive 설정 실패(Q85) | Windows 11 Pro 10.0.26200 x64·Ubuntu 24.04 LTS(WSL2), Rust 1.99.1 | 1·6절과 `crates/adapters/src/net.rs`의 `classify_socket_error`·`accept_connections_with_keepalive`, `websocket_stream.rs`의 하부 소켓 호출을 대조했다. 전체 게이트: Windows `ALL PASSED (all)`(통과 77, 부분 61, 미연결 12). WSL `FAILED: scenarios`(통과 81, 부분 55, 실패 2, 미연결 12). 실패 2건은 `nft`가 없어 실패한 RLY-025·026 netns 시험이다(사용자 결정 2026-11-02(Q93)). 분류 단위 시험 2건과 Q85의 `keepalive_failure_aborts_accepted_connections_and_releases_l`은 두 OS에서 통과했다. 분류 단위 시험은 Linux 전용이라 Windows에서는 0건이다. | 부분(실제 DROP 시험 미통과) |
 
 ## 9. 미결정 사항
 

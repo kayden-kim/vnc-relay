@@ -182,6 +182,8 @@ flowchart LR
 
 Windows Cargo 실행에는 `CARGO_TARGET_DIR=D:/vr-target-term`, `AWS_LC_SYS_PREBUILT_NASM=1`, `TEMP=TMP=D:/vr-tools/tmp`를 사용했다. WSL은 `CARGO_TARGET_DIR=$HOME/vnc-relay-target-term`을 사용했다. 관리 시스템 시험 명령은 양쪽 모두 `cargo test --test management_terminate --test management_query --test management_session`이다.
 
+전체 게이트(커밋 `59fc535`): Windows `vr-win.ps1 -Only all`은 2026-11-01T23:41:53Z 보고서에서 `ALL PASSED (all)`이다(통과 77, 부분 61, 실패 0, 미연결 12). WSL `vr-full.sh`는 23:51:07Z 보고서에서 `FAILED: scenarios`다(통과 81, 부분 55, 실패 2, 미연결 12). 실패 2건은 이 작업과 무관한 RLY-025·026 netns 시험이며, WSL에 `nft`가 없어 실패했다(사용자 결정 2026-11-02(Q93)). `tests/management_terminate.rs` 7건과 관련 단위 시험은 두 OS에서 모두 통과했다. 두 OS의 판정은 MGT-008·009·010·011·014·023 통과, MGT-012·013·OPS-011·RLY-020 부분이다. 계약 실행 기록은 [관리 API 5절](../contracts/management-api-v1.md#5-예제와-계약-테스트)과 [운영 정보 계약 실행 기록](../contracts/ops-info-v1.md#계약-테스트-실행-기록)에 있다.
+
 ## 9. 미결정 사항
 
 Q89~Q92는 모두 해결했다. 아래 표는 결정 근거다. 구현·시험 범위는 8절을 따른다. 검증 순서는 계약 1.3절을 따른다. 수락 선형화·실패 판정·취소·인증 수명·Force 경합은 7.1절의 **이 문서의 판단, 사용자 결정 없음**으로 유지한다.

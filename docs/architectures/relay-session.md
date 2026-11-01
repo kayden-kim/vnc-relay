@@ -465,6 +465,15 @@ WS 스트림 설계 연결 개정에서는 이 파일만 문서 검사했다(`fu
 | Windows 11 Pro 10.0.26200 x64 | `powershell -NoProfile -ExecutionPolicy Bypass -File D:/vr-tools/vr-win.ps1 -Only all` | 통과(`ALL PASSED (all)`). 시나리오 보고 2026-11-01T16:31:19Z: 통과 63, 부분 60, 실패 0, 미실행 0, 미연결 27, 오류 0 | RLY-027 통과 |
 | Ubuntu 24.04 LTS x64(WSL2) | `wsl -d Ubuntu -- bash /mnt/d/vr-tools/vr-full.sh` | 통과(`ALL PASSED`). 시나리오 보고 16:36:35Z: 통과 66, 부분 57, 실패 0, 미실행 0, 미연결 27, 오류 0 | RLY-027 통과. `+ 미커밋 변경`은 CRLF 때문에 나타남 |
 
+### 전체 게이트 실행 기록 (커밋 59fc535)
+
+커밋 `59fc535`에서 두 OS의 전체 게이트를 실행했다. 이번 라운드의 커밋은 `768d1af`(Q94 `internal_error` 기준 문서), `7c706c6`(관리자 종료·Kw·`internal_error` 구현), `cd60aad`(대시보드 문구), `538a4ec`(설계 문서), `59fc535`(Linux 소켓 단절 오류의 `dead_connection` 분류와 netns 시험)다. 추가된 시험은 RLY-025·026의 Linux 전용 netns 시험(`tests/relay_dead_peer_linux.rs`)과 소유 작업 panic 경로의 회귀 시험(`relay::tests::panic_after_eof_in_one_engine_poll_keeps_log_and_history_identical`)이다.
+
+| 환경 | 명령 | 결과 | 비고 |
+| --- | --- | --- | --- |
+| Windows 11 Pro 10.0.26200 x64 | `powershell -NoProfile -ExecutionPolicy Bypass -File D:/vr-tools/vr-win.ps1 -Only all` | 통과(`ALL PASSED (all)`). 시나리오 보고 2026-11-01T23:41:53Z: 통과 77, 부분 61, 실패 0, 미실행 0, 미연결 12, 오류 0 | netns 시험은 Linux 전용이라 0건이다. RLY-025·026은 부분(사용자 결정 2026-11-02(Q86)), RLY-027 통과 |
+| Ubuntu 24.04 LTS x64(WSL2) | `wsl -d Ubuntu -- bash /mnt/d/vr-tools/vr-full.sh` | 실패(`FAILED: scenarios`). 시나리오 보고 23:51:07Z: 통과 81, 부분 55, 실패 2, 미실행 0, 미연결 12, 오류 0 | 실패 2건은 RLY-025·026이다. WSL에 `nft`가 없어 netns 시험 2건이 누락 도구를 밝히고 실패했다(사용자 결정 2026-11-02(Q93)). 다른 시험은 모두 통과했다. `+ 미커밋 변경`은 CRLF 때문에 나타남 |
+
 ## 9. 미결정 사항
 
 <a id="1-시작-키-생성-실패의-공개-오류-코드"></a>
