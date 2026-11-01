@@ -6,7 +6,7 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 이름과 버전 | `websocket-relay` 1.0.0. H 시작점과 검사 순서의 명확화(사용자 결정 2026-10-22(Q22), 2026-10-22(Q24))는 버전을 올리지 않았다. 2026-11-01에 [Repeater 초기 교환 계약](repeater-handshake-v1.md) 채택(사용자 결정 2026-11-01(Q71~Q73))에 맞춰 4008의 조건 문장과 101 직후 시작 바이트를 고쳤다. 이것도 버전을 올리지 않았다. 근거는 다음과 같다(이 문서의 판단, 사용자 결정 없음). 4008에서 빠진 조건 중 "미지원 모드"는 채택한 계약 2절에서 형식 오류에 들어가고, "상한 I 초과"는 초기 요청이 250바이트 고정이고 I의 최솟값이 256이었으므로 생길 수 없다. 그래서 같은 입력이 다른 close 코드를 받는 경우가 없어 3절의 "기존 close 코드의 뜻 변경"으로 보지 않았다. 시작 바이트는 이 계약이 아니라 Repeater 초기 교환 계약이 정하는 바이트이고, 이 계약은 채택 전까지 4008·4009 외 응답 바이트가 없다고 임시로 가정했을 뿐이다. 두 동작은 아직 구현하지 않았다. |
+| 이름과 버전 | `websocket-relay` 1.0.0. H 시작점과 검사 순서의 명확화(사용자 결정 2026-10-22(Q22), 2026-10-22(Q24))는 버전을 올리지 않았다. 2026-11-01에 [Repeater 초기 교환 계약](repeater-handshake-v1.md) 채택(사용자 결정 2026-11-01(Q71~Q73))에 맞춰 4008의 조건 문장과 101 직후 시작 바이트를 고쳤다. 이것도 버전을 올리지 않았다. 근거는 다음과 같다(이 문서의 판단, 사용자 결정 없음). 4008에서 빠진 조건 중 "미지원 모드"는 채택한 계약 2절에서 형식 오류에 들어가고, "상한 I 초과"는 초기 요청이 250바이트 고정이고 I의 최솟값이 256이었으므로 생길 수 없다. 그래서 같은 입력이 다른 close 코드를 받는 경우가 없어 3절의 "기존 close 코드의 뜻 변경"으로 보지 않았다. 시작 바이트는 이 계약이 아니라 Repeater 초기 교환 계약이 정하는 바이트이고, 이 계약은 채택 전까지 4008·4009 외 응답 바이트가 없다고 임시로 가정했을 뿐이다. 두 동작은 아직 구현하지 않았다. 같은 날 1.2절 noVNC 문단의 추정을 관찰 결과로 바꿨다(TODO 1.7). 관찰 결과가 1.2절 표의 "헤더 없음" 행과 같아 서브프로토콜 규칙이 바뀌지 않으므로 버전을 올리지 않았다(이 문서의 판단, 사용자 결정 없음). |
 | 상태 | Active(2026-10-16 채택) |
 | 소유자 | vnc-relay 프로젝트 관리자 |
 | 만드는 쪽(Producer) | 외부 WebSocket 클라이언트(요청·바이너리 메시지·Close 송신), `vnc-relay` WS·WSS 리스너(응답·바이너리 메시지·ping·Close 송신). 방향마다 만드는 쪽이 다르며, 각 절에 방향을 적는다. |
@@ -75,7 +75,7 @@ H(`handshake_secs`)는 초기 교환 제한 시간이다. WS·WSS에서는 `101`
 
 [RFC 6455 4.2.2절](https://www.rfc-editor.org/rfc/rfc6455#section-4.2.2)은 서버가 응답에 클라이언트가 제시하지 않은 서브프로토콜을 넣지 못하게 한다. 위 규칙은 그에 맞다.
 
-noVNC 호환: noVNC `RFB()`의 `wsProtocols` 옵션 기본값은 빈 배열이다([noVNC API](https://novnc.com/noVNC/docs/API.html)). 그래서 기본 설정의 noVNC는 서브프로토콜 없이 접속할 것으로 **추정**한다. 고정 버전 noVNC가 실제로 어떤 헤더를 보내는지는 WS-025 관찰로 확인해야 한다. 결과가 이 표와 다르면 이 절을 고친다.
+noVNC 호환: 고정 버전 noVNC 1.7.0([호환성 검증 기록](repeater-compat-record.md) 2.4절)은 WS와 WSS 모두 요청에 `Sec-WebSocket-Protocol` 헤더를 넣지 않았다(같은 기록 3.4절 W-02·W-03b, 2026-11-01 관찰). 위 표의 "헤더 없음" 행에 해당하므로 서버는 응답에 이 헤더를 넣지 않고 수락한다. 이 결과는 noVNC 1.7.0의 `vnc.html`을 `wsProtocols` 설정 없이 쓴 경우에 한정한다. 다른 버전이나 다른 설정의 noVNC는 관찰하지 않았다.
 
 응답 본문은 중계 ID, 허용 목록, 내부 정보를 담지 않는다.
 
@@ -245,7 +245,7 @@ Close 예: 대기 시간이 W를 넘으면 서버는 코드 `4001`과 reason `wa
 | Consumer: `vnc-relay` WS·WSS 리스너 / `crates/adapters/tests/websocket.rs` `disallowed_source_is_closed_before_tls_or_http_even_with_session_hints`, `disallowed_source_on_wss_is_closed_before_tls_and_holds_no_relay_place`, `stalled_upgrade_request_is_closed_at_u_without_a_reply`, `stalled_tls_handshake_on_wss_is_closed_at_u_without_a_reply`, `head_completed_after_u_gets_no_answer` | 1.1절 출발지 IP 검사 순서와 제한 시간 U 뒤 연결 종료: [WS-014](../specs/websocket.md#7-수용-테스트), [WS-023](../specs/websocket.md#7-수용-테스트)(WSS), [WS-022](../specs/websocket.md#7-수용-테스트)(테스트 없음), [OPS-006](../specs/operations.md#7-수용-테스트)(일부) | 부분 | [실행 기록](#계약-테스트-실행-기록) |
 | Consumer: `vnc-relay` WSS 리스너 / `crates/adapters/tests/websocket.rs` `expired_untrusted_and_mismatched_certificates_fail_the_client_on_wss`, `tls10_and_tls11_are_refused_and_tls12_and_tls13_succeed_on_wss_and_management` | 2.1절 TLS 협상 실패 행: 만료·신뢰되지 않음·호스트 불일치 인증서는 검증 클라이언트가 협상을 거절한다. TLS 1.0·1.1 접속은 HTTP 응답 없이 닫히고, TLS 1.2 이상은 협상이 성립한다. 평문으로 전환하지 않는다. [WS-013](../specs/websocket.md#7-수용-테스트), [OPS-036](../specs/operations.md#7-수용-테스트)(WSS) | 통과 | [실행 기록](#계약-테스트-실행-기록) |
 | Consumer: `vnc-relay` WS·WSS 리스너 / `crates/adapters/tests/websocket.rs` `origin_must_equal_the_allowed_value`, `origin_must_equal_the_allowed_value_on_wss`, `allowed_source_with_disallowed_origin_is_refused_with_403`, `allowed_source_with_disallowed_origin_is_refused_with_403_on_wss`, `allowed_client_without_origin_or_session_gets_switching_protocols` | 1.3절 Origin 비교: [WS-015](../specs/websocket.md#7-수용-테스트), [WS-027](../specs/websocket.md#7-수용-테스트)(WS·WSS), [WS-021](../specs/websocket.md#7-수용-테스트)(일부) | 부분 | [실행 기록](#계약-테스트-실행-기록) |
-| Producer: 고정 버전 noVNC / Consumer: `vnc-relay` / 미생성 | 1.2절 서브프로토콜(noVNC 기본값 포함), 초기 교환 연동: [WS-025](../specs/websocket.md#7-수용-테스트) | 미실행 | noVNC 버전 미고정(WS-TBD-005), 구현 없음 |
+| Producer: 고정 버전 noVNC / Consumer: `vnc-relay` / 미생성 | 1.2절 서브프로토콜(noVNC 기본값 포함), 초기 교환 연동: [WS-025](../specs/websocket.md#7-수용-테스트) | 미실행 | noVNC 1.7.0 고정([호환성 검증 기록](repeater-compat-record.md) 2.4절), 구현 없음 |
 | Producer: 테스트용 WebSocket 클라이언트 / Consumer: `vnc-relay` / 미생성 | 1.4절 바이너리·분할·ping·pong·텍스트·M 경계: [WS-007](../specs/websocket.md#7-수용-테스트), [WS-008](../specs/websocket.md#7-수용-테스트), [WS-009](../specs/websocket.md#7-수용-테스트), [WS-010](../specs/websocket.md#7-수용-테스트), [WS-018](../specs/websocket.md#7-수용-테스트), [WS-019](../specs/websocket.md#7-수용-테스트), [WS-026](../specs/websocket.md#7-수용-테스트) | 미실행 | 구현·테스트 파일 없음 |
 | Producer: `vnc-relay` / Consumer: 테스트용 WebSocket 클라이언트 / 미생성 | 1.5절 close 코드와 reason: 2.2절의 시나리오 | 미실행 | 구현·테스트 파일 없음 |
 | Producer·Consumer: 테스트용 클라이언트와 TCP 상대 / 미생성 | 1.6절 종료 의미: [WS-016](../specs/websocket.md#7-수용-테스트), [WS-017](../specs/websocket.md#7-수용-테스트), [OPS-042](../specs/operations.md#7-수용-테스트) | 미실행 | 구현·테스트 파일 없음 |
@@ -264,5 +264,5 @@ Close 예: 대기 시간이 W를 넘으면 서버는 코드 `4001`과 reason `wa
 - 이 계약의 이름·코드 선택은 2026-10-16에 사용자가 채택했다. 해당하는 것: 업그레이드 경로 처리의 세부(쿼리 무시, 끝 슬래시 불일치), HTTP 상태(특히 서브프로토콜 거절 400, 종료 유예 503, 상한 L 도달 시 연결 종료), 검사 순서, 확장 비수락, close 코드 번호·이름·reason, 1.6절 종료 의미, 서버 메시지 크기 M 이하.
 - 채택으로 WS-TBD-002(HTTP 상태·종료 코드)와 WS-TBD-003(Origin 정규화)을 해소했다. WS-TBD-003의 기준은 [설정 계약 1.4절](config-v2.md#14-origin-값-문법과-비교)이며 이 계약은 그 규칙을 인용하므로 따로 맞출 값이 없다.
 - WS-TBD-004: M·U·E의 기본값과 유효 범위는 사용자가 승인한 값이며 [설정 계약](config-v2.md)이 기준이다. 이 계약은 키 이름만 인용하고 수치를 반복하지 않는다. 프레임 분할 우회와 종료 중 자원 점유는 WS-010·WS-017로 검증한다.
-- WS-TBD-005와 noVNC 기본 서브프로토콜: 고정 버전 noVNC가 실제로 보내는 `Sec-WebSocket-Protocol` 값은 관찰로 확인해야 한다. noVNC의 `wsProtocols` 기본값이 빈 배열이라는 공개 문서 설명만으로는 단정할 수 없다. 관찰 절차는 [Repeater 초기 교환 계약 6절](repeater-handshake-v1.md#6-초안을-확정하기-전에-해결할-사항)을 따른다.
+- (해결) WS-TBD-005와 noVNC 기본 서브프로토콜: noVNC 1.7.0을 [호환성 검증 기록](repeater-compat-record.md) 2.4절에 고정했다(버전·해시·받은 주소·날짜). 2026-11-01 관찰에서 이 버전은 WS·WSS 모두 `Sec-WebSocket-Protocol` 헤더를 보내지 않았다(같은 기록 3.4절 W-02·W-03b, 3.5절 F행). 1.2절 규칙과 같아 규칙은 그대로 두고, 1.2절 noVNC 문단을 관찰 사실로 고쳤다(TODO 1.7).
 - 1.4절 잘못된 프레임의 종료는 WebSocket 구현이 자동으로 1002를 보내는 경우가 많다. 구현 선택 시 위 규칙과 같게 맞출 수 있는지 확인한다.

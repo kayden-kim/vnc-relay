@@ -99,10 +99,11 @@ Mode I·II 초기 흐름을 추정 없이 설명할 수 있게 한다. 관찰은
   - 완료 조건: 초기 교환 계약 2절, 중계 스펙 3.3절, PRD를 갱신한다.
   - 선행: 1.4
   - 현재: 2026-11-01에 정했다. 대상 버전은 후발 연결을 등록하지 않지만 닫지도 않아 제안 정책과 달랐다([호환성 검증 기록 4.11](contracts/repeater-compat-record.md#4-미해결-항목)). 프로젝트 소유자가 후발 거절을 골랐다(사용자 결정 Q74). 뒤에 온 연결은 바로 닫고(TCP FIN, WS·WSS close 4004), 기존 연결과 활성 세션은 유지한다. 활성 세션 ID의 중복은 추가로 관찰하지 않는다(Q75). [초기 교환 계약 2절·3.1절](contracts/repeater-handshake-v1.md#2-오류), [중계 스펙 3.3절](specs/relay.md#33-mode-ii)·4절·RLY-015, PRD 확정 기준 표, [운영 정보 계약](contracts/ops-info-v1.md) 1.6절 근거 열을 갱신했다.
-- [ ] **1.7 관찰 결과를 다른 계약에 반영**: 중계 ID의 JSON 문자열 표현과 고정 버전 noVNC가 보내는 `Sec-WebSocket-Protocol` 값을 관찰 결과로 확정한다.
+- [x] **1.7 관찰 결과를 다른 계약에 반영**: 중계 ID의 JSON 문자열 표현과 고정 버전 noVNC가 보내는 `Sec-WebSocket-Protocol` 값을 관찰 결과로 확정한다.
   - 기준: [관리 API 계약 6절](contracts/management-api-v1.md#6-초안을-확정하기-전에-해결할-사항), [WebSocket 중계 계약 6절](contracts/websocket-relay-v1.md#6-초안을-확정하기-전에-해결할-사항)
   - 완료 조건: 두 계약 6절의 해당 항목을 해소한다.
   - 선행: 1.4
+  - 현재: 2026-11-01에 마쳤다. 중계 ID는 [초기 교환 계약 1.2절](contracts/repeater-handshake-v1.md#12-초기-요청-250바이트)대로 ASCII 숫자 1~247자라 JSON 문자열로 그대로 나타낼 수 있다(Q68·Q69). [관리 API 계약](contracts/management-api-v1.md) 1.7절 `relay_id`에 값 범위와 수 변환 금지를 적고 6절 항목을 닫았다. noVNC 1.7.0은 WS·WSS 모두 `Sec-WebSocket-Protocol` 헤더를 보내지 않았다([호환성 검증 기록](contracts/repeater-compat-record.md) 3.4절 W-02·W-03b). [WebSocket 중계 계약](contracts/websocket-relay-v1.md) 1.2절 규칙과 같아 규칙은 그대로 두고, 1.2절의 추정 문단을 관찰 사실로 고쳐 6절 항목을 닫았다. [WebSocket 스펙 8절](specs/websocket.md#8-미결정-사항)에서 WS-TBD-005를 뺐다. 두 계약 모두 규칙이 바뀌지 않아 버전을 올리지 않았다.
 
 ## 2. TCP Repeater
 

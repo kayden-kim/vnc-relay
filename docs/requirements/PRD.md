@@ -14,7 +14,7 @@
 | 사용자 확정 | Rust 독립 구현(tokio·rustls), TCP·WS·WSS, Mode I·II, Windows 11 x64·Ubuntu 24.04 LTS x64(Windows Server 제외), 실행파일 하나의 하위 명령 CLI, TOML 설정 파일, 내장 TLS(TLS 1.2 미만 거절), 공개 관리 HTTPS·내장 로그인·조회·활성 세션 종료(단일 관리자 역할, 여러 계정 준비), 관리 API(JSON over HTTP, `/api/v1/`), 관리 세션 쿠키 속성(HttpOnly·SameSite=Strict, HTTPS에서 Secure, 평문 루프백은 Secure 제외), Argon2id 비밀번호 해시, 진입점별 출발지 IP 허용 목록(단일 IP·CIDR·범위), WS·WSS 진입점은 Viewer만 제공, Origin 정확 일치, 최근 종료 목록, 방향별 전송량 집계 기준과 시각·단위 표현(API는 UTC ISO 8601·바이트 정수, 대시보드는 현지 시각·KiB/MiB), 관리자 종료의 정리 후 완료 응답과 종료 중 세션의 활성 수 포함, 서버 메모리 관리 세션(재시작 시 무효), TCP 한쪽 종료 처리, 상태 리스너 분리, 단일 인스턴스 운영, TCP keepalive·WebSocket ping 기반 끊긴 연결 감지, 연결 수·상한 사용량 표시, 폴링 주기 설정 가능(기본 2초), 정적 HTML·JS 대시보드, 대시보드 디자인 기준과 HTML 시안(2026-10-20 채택), 데스크톱·모바일 폭과 최신 Chrome·Edge·Firefox·Safari 지원, 대시보드 한국어·영어 문구(브라우저 언어 자동 선택, 직접 선택은 브라우저에 저장), 최신 안정판 고정 검증, 활성 100세션 목표, MIT, 로컬 CLI 관리자 계정 준비, JSON Lines 로그(출력만 제공, 보관·접근은 운영자 책임), 실행파일·설정 예시 배포, 인증서/IP 자동 부분 재로드(OS 파일 알림과 주기 확인)·새 접속 적용, 종료 유예 중 관리 처리와 두 번째 종료 요청의 즉시 강제 정리, TCP 진입점 기본 포트(UltraVNC Repeater 기준), noVNC 제외(외부 검증 도구로만 사용) |
 | 구현 원칙 | 기존 UltraVNC·websockify 소스의 복사·번역·포팅 없이 통신 규칙을 독립 구현 |
 | 세부 제안 | 없음. 중복 ID 후발 거절은 사용자 결정 2026-11-01(Q74)로 확정 기준 표에 옮겼다 |
-| 미확정 | `vnc-relay`의 실제 검증 환경(대상 버전의 통신 관찰은 2026-11-01에 마쳤다. [호환성 검증 기록](../contracts/repeater-compat-record.md) 3절), 처리량·지연·CPU·메모리 목표, 파일 감지의 플랫폼별 세부, Windows 콘솔 닫기 처리·주소 재사용 같은 OS 동작의 관찰 확인, 검증용 noVNC 버전 기록 방식(WS-TBD-005) |
+| 미확정 | `vnc-relay`의 실제 검증 환경(대상 버전의 통신 관찰은 2026-11-01에 마쳤다. [호환성 검증 기록](../contracts/repeater-compat-record.md) 3절), 처리량·지연·CPU·메모리 목표, 파일 감지의 플랫폼별 세부, Windows 콘솔 닫기 처리·주소 재사용 같은 OS 동작의 관찰 확인 |
 
 이하 요구사항은 별도 표시가 없으면 제안된 제품 기준이다. 확정 기준 표의 항목과 그 내용을 옮긴 문장은 사용자 확정 사항이다. 미확정 사항을 이미 합의된 조건이나 검증된 사실로 취급하지 않는다.
 
@@ -280,7 +280,7 @@ UltraVNC Server와 Viewer 사이의 TCP 연결을 중계하면서, WS 또는 WSS
 - 연결 종료·재접속과 대상 버전별 차이.
 - WebSocket으로 같은 스트림을 제공할 때 외부 클라이언트가 지켜야 할 계약.
 
-2026-11-01 상태: 앞의 다섯 항목은 [호환성 검증 기록 3절](../contracts/repeater-compat-record.md#3-관찰-증거-todo-14)의 관찰로 확정해 [Repeater 초기 교환 계약](../contracts/repeater-handshake-v1.md)에 반영했다. 같은 역할 중복 ID의 정책은 관찰 결과를 보고 사용자 결정 2026-11-01(Q74·Q75)로 정했다(후발 거절). 외부 WebSocket 클라이언트의 계약은 [WebSocket 중계 계약](../contracts/websocket-relay-v1.md)이 정한다. 그중 noVNC 서브프로토콜 헤더의 반영은 남았다.
+2026-11-01 상태: 앞의 다섯 항목은 [호환성 검증 기록 3절](../contracts/repeater-compat-record.md#3-관찰-증거-todo-14)의 관찰로 확정해 [Repeater 초기 교환 계약](../contracts/repeater-handshake-v1.md)에 반영했다. 같은 역할 중복 ID의 정책은 관찰 결과를 보고 사용자 결정 2026-11-01(Q74·Q75)로 정했다(후발 거절). 외부 WebSocket 클라이언트의 계약은 [WebSocket 중계 계약](../contracts/websocket-relay-v1.md)이 정한다. 고정 버전 noVNC 1.7.0이 `Sec-WebSocket-Protocol` 헤더를 보내지 않는다는 관찰 결과도 같은 날 그 계약 1.2절에 반영했다.
 
 ## 10. 검증 및 수용 기준
 
