@@ -140,26 +140,26 @@ Mode I·II 초기 흐름을 추정 없이 설명할 수 있게 한다. 관찰은
 
 초기 교환 계약은 1.5에서 채택했다(2026-11-01). 초기 교환 바이트 형식은 그 계약 1절만 따르고 추정해 구현하지 않는다.
 
-- [ ] **2.7 초기 교환 처리**: 채택된 계약대로 초기 교환 요청을 해석한다. Viewer 쪽 시작 바이트, 250바이트 초기 요청의 분할·병합 수신, 후속 바이트 보존, 시간 H, 비활성 모드 거절을 구현한다.
+- [x] **2.7 초기 교환 처리**: 채택된 계약대로 초기 교환 요청을 해석한다. Viewer 쪽 시작 바이트, 250바이트 초기 요청의 분할·병합 수신, 후속 바이트 보존, 시간 H, 비활성 모드 거절을 구현한다.
   - 기준: [중계 스펙 3.1절](specs/relay.md#31-초기-교환), [Repeater 초기 교환 계약](contracts/repeater-handshake-v1.md)
   - 완료 조건: RLY-001~005, RLY-022, OPS-006(일부)
   - 선행: 1.5, 2.5
-  - 현재: app 초기 교환은 구현했다. 유효 요청은 `PreparedConnection`으로 반환한다. TCP 진입점 인계는 2.8~2.10 구현 뒤로 둔다(D). WS·WSS도 Q16·Q21에 따라 2.7 완료 전에 연결한다(A). D·A는 이 문서의 판단이며 사용자 결정은 없다([초기 교환 설계 9절](architectures/initial-exchange.md#9-미결정-사항), [인계 순서](architectures/relay-session.md#8-현재-코드와의-차이와-연결-순서)). 완료하려면 3.3의 일부인 WS 스트림 어댑터도 필요하다. [WebSocket 스트림 설계 9.1~9.3절](architectures/websocket-stream.md#9-미결정-사항)의 사용자 결정을 기다린다. 그 결정에 의존하는 구현은 진행하지 않는다.
+  - 현재: 완료 조건을 모두 채웠다. RLY-001~005·RLY-022는 실행파일과 실제 TCP 진입점을 쓰는 비부분 시험으로 두 OS에서 통과했다. OPS-006은 이 작업 몫인 H 부분을 부분 시험으로 확인한다. WS·WSS 진입점도 같은 공통 서비스에 연결했다(`638cf09`). 커밋 `4e4a271`에서 Windows·WSL 전체 완료 검증을 통과했다([중계 세션 설계 8절](architectures/relay-session.md#8-현재-코드와의-차이와-연결-순서)).
 - [ ] **2.8 Mode I**: 대상 주소를 해석하고 실제 연결할 IP·포트에 대상 허용 정책을 적용한다. 주소 해석 실패·연결 거절·시간 C 초과를 구분한다.
   - 기준: [중계 스펙 3.2절](specs/relay.md#32-mode-i), [설정 계약 1.5절](contracts/config-v2.md#15-mode-i-대상-허용-항목-문법). 설계: [대상 연결·매칭·중계 수명 모듈 설계 4.1절](architectures/relay-session.md#41-작업-28-mode-i-대상-연결)(Draft, Target)
   - 완료 조건: RLY-006~009, OPS-023(대상 연결도 L에 셈)
   - 선행: 2.7
-  - 현재: domain, app, adapters를 구현하고 시험했다. 커밋 `0cf18b6`에서 양 OS 게이트를 통과했다([중계 세션 설계 8절](architectures/relay-session.md#8-현재-코드와의-차이와-연결-순서)). TCP 진입점 및 시작 조립은 아직 연결하지 않았다. [중계 세션 설계 9절 1번](architectures/relay-session.md#1-시작-키-생성-실패의-공개-오류-코드)의 시작 키 실패 코드 사용자 결정을 기다린다. WS 인계는 [WebSocket 스트림 설계 9.1~9.3절](architectures/websocket-stream.md#9-미결정-사항)의 사용자 결정을 기다린다. 아직 완료하지 않았다.
+  - 현재: TCP·WS·WSS 진입점과 시작 조립에 연결했다(`68a427b`·`638cf09`). RLY-007·RLY-008은 비부분 시험으로 두 OS에서 통과했다. RLY-009·OPS-023의 비부분 시험은 Linux 전용이며 WSL 검증에서 통과했다. Windows에는 주소 해석 실패와 응답 없는 연결 시도를 결정적으로 만들 수단이 없어 부분 시험만 실행한다. 남은 것은 RLY-006(실제 UltraVNC Server·Viewer의 화면과 입력)이다. 작업 2.13의 수동 확인에서 한다.
 - [ ] **2.9 Mode II 매칭**: 대기 등록, 양쪽 접속 순서, 원자적 매칭, 대기 시간 W 만료, 대기 상한 Lw, 중복 ID 정책, 세션 식별자 발급을 구현한다. 프로세스 시작 때 `relay_id_ref` 키(`RelayIdKey`)를 만들도록 시작 순서에 넣고, 만들지 못할 때의 시작 실패 처리를 정한다(사용자 결정 2026-10-20).
   - 기준: [중계 스펙 3.3절](specs/relay.md#33-mode-ii). 설계: [대상 연결·매칭·중계 수명 모듈 설계 4.2절](architectures/relay-session.md#42-작업-29-mode-ii-등록과-원자적-매칭)(Draft, Target)
   - 완료 조건: RLY-010~016, OPS-005
   - 선행: 1.6, 2.7
-  - 현재: domain, app, adapters를 구현하고 시험했다. `RelayIdKey`와 `SessionIdKey` 생성을 구현했으나 시작 실패 처리 결정이 남아 있다. 커밋 `0cf18b6`에서 양 OS 게이트를 통과했다([중계 세션 설계 8절](architectures/relay-session.md#8-현재-코드와의-차이와-연결-순서)). TCP 진입점 및 시작 조립은 아직 연결하지 않았으며, [중계 세션 설계 9절 1번](architectures/relay-session.md#1-시작-키-생성-실패의-공개-오류-코드)의 시작 키 실패 코드 사용자 결정을 기다린다. WS 인계는 [WebSocket 스트림 설계 9.1~9.3절](architectures/websocket-stream.md#9-미결정-사항)의 사용자 결정을 기다린다. 아직 완료하지 않았다.
+  - 현재: 시작 키(`RelayIdKey`, 세션 식별자 키) 생성 실패는 `runtime_unavailable`, 종료 코드 1이다(사용자 결정 2026-11-01(Q76), `68a427b`). RLY-012~016·OPS-005는 비부분 시험으로 두 OS에서 통과했다(커밋 `4e4a271`). 남은 것은 RLY-010·RLY-011의 실제 화면과 입력 확인이다. 작업 2.13에서 한다.
 - [ ] **2.10 양방향 중계와 종료**: 바이트 순서·내용 보존, 버퍼 B에 맞춘 읽기 제어, 한쪽 EOF 뒤 정리 제한 시간 E, 연결 오류 격리, 종료 원인 기록, 방향별 전송량 집계를 구현한다.
   - 기준: [중계 스펙 3.4절](specs/relay.md#34-중계와-eof), [관리 스펙 2.1절](specs/management.md#21-전송량의-의미). 설계: [대상 연결·매칭·중계 수명 모듈 설계 4.3절](architectures/relay-session.md#43-작업-210-두-방향-중계)(Draft, Target)
   - 완료 조건: RLY-017~021, RLY-023(비허용 IP 거절 중 기존 세션 유지), MGT-005(일부), OPS-039(첫 프로세스의 대기·활성 세션 유지)
   - 선행: 2.8 또는 2.9
-  - 현재: domain, app, adapters를 구현하고 시험했다. 커밋 `0cf18b6`에서 양 OS 게이트를 통과했다([중계 세션 설계 8절](architectures/relay-session.md#8-현재-코드와의-차이와-연결-순서)). TCP 진입점 및 시작 조립은 아직 연결하지 않았다. [중계 세션 설계 9절 1번](architectures/relay-session.md#1-시작-키-생성-실패의-공개-오류-코드)의 시작 키 실패 코드 사용자 결정을 기다린다. WS 인계는 [WebSocket 스트림 설계 9.1~9.3절](architectures/websocket-stream.md#9-미결정-사항)의 사용자 결정을 기다린다. 아직 완료하지 않았다.
+  - 현재: RLY-017~019·RLY-021·RLY-023·OPS-039는 비부분 시험으로 두 OS에서 통과했다(커밋 `4e4a271`). MGT-005는 완료 조건대로 방향별 전송량 집계 부분만 시험한다. RLY-020은 EOF와 연결 오류 부분만 시험했다. 관리자 종료 부분은 작업 4.5(관리자 종료 API)가 있어야 시험할 수 있다.
 - [ ] **2.11 끊긴 연결 감지**: TCP keepalive로 응답 없는 대기 연결·활성 세션을 시간 K 안에 회수한다. 상대가 응답하는 유휴 연결은 유지한다.
   - 기준: [중계 스펙 2.1절](specs/relay.md#21-판정-가능한-규칙)의 RLY-R18·RLY-R19
   - 완료 조건: RLY-025~027
@@ -185,17 +185,19 @@ Mode I·II 초기 흐름을 추정 없이 설명할 수 있게 한다. 관찰은
   - 기준: [WebSocket 중계 계약 1.1~1.3·2.1절](contracts/websocket-relay-v1.md#11-업그레이드-요청), [WebSocket 스펙 3절](specs/websocket.md#3-정상-흐름과-규칙), [설정 계약 1.4절](contracts/config-v2.md#14-origin-값-문법과-비교)
   - 완료 조건: WS-012, WS-014~015, WS-021, WS-023~024, WS-027, OPS-006, OPS-016, OPS-037
   - 선행: 2.4, 3.1
-  - 현재: 업그레이드 응답(101)까지 먼저 구현했다. 101 뒤 중계는 작업 2.7 뒤에 연결한다(사용자 결정 2026-10-21). 지금의 101 뒤 보류(프레임을 읽지 않고 H 뒤 Close 4009)는 작업 2.7 전까지 쓰는 임시 동작이다(사용자 결정 2026-10-22(Q21)). OPS-016의 "공개 접속은 WSS만 허용" 부분은 나중에 정한다(사용자 결정 2026-10-22(Q27)). 완료 조건을 모두 채우기 전까지 `[ ]`로 둔다.
-- [ ] **3.3 바이너리 메시지 중계**: 바이너리 메시지를 중계 스트림으로 바꾼다. 텍스트 메시지 거절, ping·pong, 분할 프레임, 메시지 크기 M, 버퍼 B를 처리한다. M이 B보다 클 때의 처리를 확인해 기록한다.
+  - 현재: 101 뒤 보류(사용자 결정 2026-10-22(Q21))는 `638cf09`에서 없애고 공통 초기 교환·중계에 연결했다. WS-012·WS-014·WS-015·WS-021·WS-023·WS-024·WS-027은 비부분 시험으로 통과했다. OPS-006·OPS-037은 부분 시험만 있다. OPS-016의 "공개 접속은 WSS만 허용" 부분은 나중에 정한다(사용자 결정 2026-10-22(Q27)). 완료 조건을 모두 채우기 전까지 `[ ]`로 둔다.
+- [x] **3.3 바이너리 메시지 중계**: 바이너리 메시지를 중계 스트림으로 바꾼다. 텍스트 메시지 거절, ping·pong, 분할 프레임, 메시지 크기 M, 버퍼 B를 처리한다. M이 B보다 클 때의 처리를 확인해 기록한다.
   - 기준: [WebSocket 중계 계약 1.4절](contracts/websocket-relay-v1.md#14-데이터-메시지와-제어-프레임), [WebSocket 스펙 8절](specs/websocket.md#8-미결정-사항)의 WS-TBD-004. 설계: [WebSocket 스트림 어댑터 모듈 설계 3~5절](architectures/websocket-stream.md#3-내부-구조와-b-소유권)(Draft, Target)
   - 완료 조건: WS-007~011, WS-018~019. WS-TBD-004를 해소한다.
   - 선행: 2.7, 3.2
-  - 범위: 공통 초기 교환과 세션에 필요한 스트림 어댑터는 2.7 완료 전에 가져온다. M > B와 방향별 합계 B는 [설계 9.2절](architectures/websocket-stream.md#92-ws-tbd-004-m-b와-제어-진행)의 WS-TBD-004 결정과 시험이 필요하다. 9.1~9.3절은 사용자 결정 대기다. [9.5절의 Kw 정책](architectures/websocket-stream.md#95-kw의-여러-ping과-b-backpressure)은 3.4 범위이며 2.7을 막지 않는다.
+  - 범위: 공통 초기 교환과 세션에 필요한 스트림 어댑터는 2.7 완료 전에 가져온다. 9.1~9.3절은 사용자 결정 2026-11-01(Q77~Q79)로 해결했다. [9.5절의 Kw 정책](architectures/websocket-stream.md#95-kw의-여러-ping과-b-backpressure)은 3.4 범위다.
+  - 현재: 완료 조건을 모두 채웠다. WS-007~011·WS-018~019는 실제 WS·WSS 소켓을 쓰는 비부분 시험으로 두 OS에서 통과했다(커밋 `4e4a271`). WS-TBD-004는 사용자 결정 2026-11-01(Q78)로 해소했다. M이 B보다 커도 프레임 안에서 스트리밍하며 방향당 보관 바이트는 B 이하다([설계 9.2절](architectures/websocket-stream.md#92-ws-tbd-004-m-b와-제어-진행)).
 - [ ] **3.4 WebSocket 종료와 끊긴 연결 감지**: close 코드, 종료 의미, 서버 ping 주기 Kw를 구현한다. 잘못된 프레임에 WebSocket 라이브러리가 자동으로 보내는 종료 코드가 계약과 같은지 확인한다.
   - 기준: [WebSocket 중계 계약 1.5·1.6·2.2절](contracts/websocket-relay-v1.md#15-close-코드). 설계: [WebSocket 스트림 어댑터 모듈 설계 6절](architectures/websocket-stream.md#6-제어-프레임kw종료-상태)(Draft, Target)
   - 완료 조건: WS-016~017, WS-026
   - 선행: 3.3
-  - 범위: 여러 Ping과 backpressure 중 Pong 기한은 [설계 9.5절](architectures/websocket-stream.md#95-kw의-여러-ping과-b-backpressure)의 미결정 사항이다. 3.4에서 확정하며 2.7 완료를 막지 않는다. M > B의 저장·스트리밍 상한은 [9.2절](architectures/websocket-stream.md#92-ws-tbd-004-m-b와-제어-진행)에 따라 3.3에서 다룬다. 이미 헤더를 쓴 프레임과 Close의 경합은 [9.4절 선택 A](architectures/websocket-stream.md#94-해결-수신-close와-이미-시작한-출력-프레임)로 해결했다(이 문서의 판단, 사용자 결정 없음).
+  - 범위: 여러 Ping과 backpressure 중 Pong 기한은 [설계 9.5절](architectures/websocket-stream.md#95-kw의-여러-ping과-b-backpressure)의 미결정 사항이다. 3.4에서 확정하며 2.7 완료를 막지 않는다. M > B의 저장·스트리밍 상한은 [9.2절](architectures/websocket-stream.md#92-ws-tbd-004-m-b와-제어-진행)에 따라 3.3에서 다룬다. 이미 헤더를 쓴 프레임과 Close의 경합은 [9.4절 선택 A](architectures/websocket-stream.md#94-해결-수신-close와-이미-시작한-출력-프레임)로 해결했다(사용자 결정 2026-11-01(Q83)).
+  - 현재: WS-016·WS-017은 비부분 시험으로 두 OS에서 통과했다(커밋 `4e4a271`). WS-026은 미연결이다. 서버 ping 주기 Kw를 아직 구현하지 않았고 [설계 9.5절](architectures/websocket-stream.md#95-kw의-여러-ping과-b-backpressure)의 사용자 결정이 필요하다.
 - [ ] **3.5 전송·모드 조합 검증**: WS·WSS와 Mode I·II의 모든 조합, noVNC·websockify 없는 배포, 고정 버전 noVNC `repeaterID` 상호운용을 확인한다.
   - 기준: [WebSocket 스펙 6절](specs/websocket.md#6-전송모드-검증-조합)
   - 완료 조건: WS-001~006, WS-020, WS-025. AC-05·AC-16~17·AC-33 통과.
