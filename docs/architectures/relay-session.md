@@ -472,7 +472,7 @@ WS 스트림 설계 연결 개정에서는 이 파일만 문서 검사했다(`fu
 | 환경 | 명령 | 결과 | 비고 |
 | --- | --- | --- | --- |
 | Windows 11 Pro 10.0.26200 x64 | `powershell -NoProfile -ExecutionPolicy Bypass -File D:/vr-tools/vr-win.ps1 -Only all` | 통과(`ALL PASSED (all)`). 시나리오 보고 2026-11-01T23:41:53Z: 통과 77, 부분 61, 실패 0, 미실행 0, 미연결 12, 오류 0 | netns 시험은 Linux 전용이라 0건이다. RLY-025·026은 부분(사용자 결정 2026-11-02(Q86)), RLY-027 통과 |
-| Ubuntu 24.04 LTS x64(WSL2) | `wsl -d Ubuntu -- bash /mnt/d/vr-tools/vr-full.sh` | 실패(`FAILED: scenarios`). 시나리오 보고 23:51:07Z: 통과 81, 부분 55, 실패 2, 미실행 0, 미연결 12, 오류 0 | 실패 2건은 RLY-025·026이다. WSL에 `nft`가 없어 netns 시험 2건이 누락 도구를 밝히고 실패했다(사용자 결정 2026-11-02(Q93)). 다른 시험은 모두 통과했다. `+ 미커밋 변경`은 CRLF 때문에 나타남 |
+| Ubuntu 24.04 LTS x64(WSL2) | `wsl -d Ubuntu -- bash /mnt/d/vr-tools/vr-full.sh` | 실패(`FAILED: scenarios`). 시나리오 보고 23:51:07Z: 통과 81, 부분 55, 실패 2, 미실행 0, 미연결 12, 오류 0 | 실패 2건은 RLY-025·026이다. WSL에 `nft`가 없어 netns 시험 2건이 누락 도구를 밝히고 실패했다(사용자 결정 2026-11-02(Q93)). 실패한 시험은 이 2건뿐이며, 부분·미연결 시나리오는 왼쪽 수치와 같다. `+ 미커밋 변경`은 CRLF 때문에 나타남 |
 
 ## 9. 미결정 사항
 
@@ -494,4 +494,4 @@ WS 스트림 설계 연결 개정에서는 이 파일만 문서 검사했다(`fu
 | 5. DNS 후보 | 선택 A. 반환 순서의 허용 후보를 순차 시도하고 C·대상 소켓 한 개를 유지한다. 실패 집계와 마지막 `target_ip`로 원인을 추적한다. | 4.1·6절, [RLY-009](../specs/relay.md#7-수용-테스트) |
 | 6. 겹친 종료 원인 | ops-info §1.6 규칙을 문자 그대로 따른다(사용자 결정 2026-11-01(Q82)). 한 세션의 `close_cause`는 정리를 시작하게 한 첫 원인이다. 강제 정리 시점에 이미 정리를 시작한 세션은 최초 원인을 유지하고, 아직 정리를 시작하지 않은 세션만 `server_shutdown`을 기록한다. | 6절, [ops-info-v1 1.6절](../contracts/ops-info-v1.md#16-원인-코드), [관리 API 1.10절](../contracts/management-api-v1.md#110-최근-종료-목록-get-apiv1closed-sessions), [CLI 1.8절](../contracts/cli-v1.md#18-수동-시작과-종료) |
 
-중복 정책(Q74), 중계 ID 정확 일치, C의 해석+연결 범위, W·Lw, TCP half-close, 강제 정리 때의 종료 원인(Q82), 세션 ID의 외부 형식은 다시 질문하지 않는다. WS의 M>B는 Q78로 정했다. Kw의 여러 Ping과 backpressure 중 Pong 기한은 [TODO 3.4](../TODO.md#3-wswss-진입점)의 책임이다.
+중복 정책(Q74), 중계 ID 정확 일치, C의 해석+연결 범위, W·Lw, TCP half-close, 강제 정리 때의 종료 원인(Q82), 세션 ID의 외부 형식은 다시 질문하지 않는다. WS의 M>B는 Q78로 정했다. Kw의 여러 Ping과 backpressure 중 Pong 기한은 사용자 결정 2026-11-02(Q84)로 정했고 [TODO 3.4](../TODO.md#3-wswss-진입점)에서 구현했다([WebSocket 스트림 설계 9.5절](websocket-stream.md#95-kw의-여러-ping과-b-backpressure)).
