@@ -1,8 +1,8 @@
 //! Initial exchange, target connection, matching, and relay lifetime ownership.
 //! See docs/architectures/relay-session.md.
 
-use std::fmt;
 use std::collections::HashMap;
+use std::fmt;
 use std::future::poll_fn;
 use std::net::SocketAddr;
 use std::pin::{Pin, pin};
@@ -102,7 +102,15 @@ impl<S> PreparedConnection<S> {
 
     /// Moves all connection resources without reacquiring or releasing L.
     /// The returned prefix must precede reads from the stream (relay spec §3.1).
-    pub fn into_parts(self) -> (S, ConnectionContext, HandshakeRequest, Vec<u8>, BudgetPermit) {
+    pub fn into_parts(
+        self,
+    ) -> (
+        S,
+        ConnectionContext,
+        HandshakeRequest,
+        Vec<u8>,
+        BudgetPermit,
+    ) {
         (
             self.stream,
             self.context,
@@ -232,16 +240,27 @@ impl RelayService {
             }
             Err(error) => {
                 let action = match error {
-                    RelayError::Rejected(HandshakeError::ModeDisabled(_)) => RelayCloseAction::ModeDisabled,
+                    RelayError::Rejected(HandshakeError::ModeDisabled(_)) => {
+                        RelayCloseAction::ModeDisabled
+                    }
                     RelayError::Rejected(_) => RelayCloseAction::HandshakeInvalid,
-                    RelayError::Aborted(AbortReason::HandshakeTimeout) => RelayCloseAction::HandshakeTimeout,
+                    RelayError::Aborted(AbortReason::HandshakeTimeout) => {
+                        RelayCloseAction::HandshakeTimeout
+                    }
                     RelayError::Aborted(AbortReason::PeerEof) => RelayCloseAction::PeerEof,
-                    RelayError::Aborted(AbortReason::ConnectionError(kind)) => RelayCloseAction::StreamError(kind),
-                    RelayError::Aborted(AbortReason::ServerShutdown) => RelayCloseAction::ServerShutdown,
-                    RelayError::Aborted(AbortReason::DeadConnection) => RelayCloseAction::DeadConnection,
+                    RelayError::Aborted(AbortReason::ConnectionError(kind)) => {
+                        RelayCloseAction::StreamError(kind)
+                    }
+                    RelayError::Aborted(AbortReason::ServerShutdown) => {
+                        RelayCloseAction::ServerShutdown
+                    }
+                    RelayError::Aborted(AbortReason::DeadConnection) => {
+                        RelayCloseAction::DeadConnection
+                    }
                     RelayError::Aborted(AbortReason::TlsUpgradeTimeout) => RelayCloseAction::Reject,
                 };
-                self.close_stream(&mut resources.stream, action, self.close_timeout, shutdown).await;
+                self.close_stream(&mut resources.stream, action, self.close_timeout, shutdown)
+                    .await;
                 drop(resources);
                 match error {
                     RelayError::Rejected(error) => {
@@ -287,7 +306,8 @@ impl RelayService {
     ) {
         self.close_bounded(timeout, lifecycle, |cx| {
             Pin::new(&mut *stream).poll_close(cx, action).map(|_| ())
-        }).await;
+        })
+        .await;
     }
 
     async fn close_bounded(
@@ -310,7 +330,9 @@ impl RelayService {
             };
             let mut grace_timer = pin!(async {
                 match grace {
-                    Some(end) => tokio::time::sleep(end.saturating_sub(self.clock.monotonic())).await,
+                    Some(end) => {
+                        tokio::time::sleep(end.saturating_sub(self.clock.monotonic())).await
+                    }
                     None => std::future::pending::<()>().await,
                 }
             });
@@ -329,7 +351,8 @@ impl RelayService {
                     return Poll::Ready(true);
                 }
                 poll_close(cx).map(|()| true)
-            }).await;
+            })
+            .await;
             if complete {
                 return;
             }
@@ -371,7 +394,10 @@ struct RelayState {
 
 impl RelayState {
     fn counted_active(&self) -> usize {
-        self.active.values().filter(|entry| !entry.engine_completed).count()
+        self.active
+            .values()
+            .filter(|entry| !entry.engine_completed)
+            .count()
     }
 }
 
@@ -486,27 +512,38 @@ impl<C> RelayRuntime<C> {
     }
 
     fn lock(&self) -> MutexGuard<'_, RelayState> {
-        self.state.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+        self.state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
     /// Takes one registry lock and reads the supplied shared clock once.
     pub fn snapshot(&self, clock: &dyn Clock) -> RelaySnapshot {
         let state = self.lock();
         let now = clock.monotonic();
-        let mut waiting: Vec<_> = state.waiting.iter().map(|(id, entry)| WaitingSnapshot {
-            relay_id: id.clone(),
-            relay_id_ref: entry.reference.clone(),
-            context: entry.connection.context,
-            registered_at: entry.metadata.registered_at,
-            deadline: entry.metadata.deadline,
-            waited: now.saturating_sub(entry.metadata.registered_at),
-        }).collect();
+        let mut waiting: Vec<_> = state
+            .waiting
+            .iter()
+            .map(|(id, entry)| WaitingSnapshot {
+                relay_id: id.clone(),
+                relay_id_ref: entry.reference.clone(),
+                context: entry.connection.context,
+                registered_at: entry.metadata.registered_at,
+                deadline: entry.metadata.deadline,
+                waited: now.saturating_sub(entry.metadata.registered_at),
+            })
+            .collect();
         waiting.sort_by_key(|entry| entry.context.accepted_wall);
-        let mut active: Vec<_> = state.active.values().filter(|entry| !entry.engine_completed).map(|entry| {
-            let mut entry = entry.clone();
-            entry.duration = now.saturating_sub(entry.started_mono);
-            entry
-        }).collect();
+        let mut active: Vec<_> = state
+            .active
+            .values()
+            .filter(|entry| !entry.engine_completed)
+            .map(|entry| {
+                let mut entry = entry.clone();
+                entry.duration = now.saturating_sub(entry.started_mono);
+                entry
+            })
+            .collect();
         active.sort_by_key(|entry| entry.started_at);
         RelaySnapshot {
             lifecycle: state.lifecycle,
@@ -514,17 +551,22 @@ impl<C> RelayRuntime<C> {
             target_connecting: state.connecting,
             waiting,
             active,
-            recent_closed: state.recent.iter().map(|closed| {
-                let mut snapshot = ClosedSessionSnapshot::from(closed);
-                snapshot.relay_id_ref = state.recent_refs.get(closed.id()).cloned();
-                snapshot
-            }).collect(),
+            recent_closed: state
+                .recent
+                .iter()
+                .map(|closed| {
+                    let mut snapshot = ClosedSessionSnapshot::from(closed);
+                    snapshot.relay_id_ref = state.recent_refs.get(closed.id()).cloned();
+                    snapshot
+                })
+                .collect(),
         }
     }
 
     fn force_if_due(&self, clock: &dyn Clock, events: &dyn EventSink) {
         let mut state = self.lock();
-        if matches!(state.lifecycle, RelayLifecycle::Grace { deadline } if clock.monotonic() >= deadline) {
+        if matches!(state.lifecycle, RelayLifecycle::Grace { deadline } if clock.monotonic() >= deadline)
+        {
             self.force_locked(&mut state, events);
         }
     }
@@ -580,14 +622,36 @@ struct OwnedConnection {
 }
 
 impl OwnedConnection {
-    fn from_prepared<S: RelayStream + 'static>(prepared: PreparedConnection<S>) -> (Self, HandshakeRequest) {
+    fn from_prepared<S: RelayStream + 'static>(
+        prepared: PreparedConnection<S>,
+    ) -> (Self, HandshakeRequest) {
         let (stream, context, request, trailing, permit) = prepared.into_parts();
-        (Self { stream: Box::new(stream), trailing, permit, context }, request)
+        (
+            Self {
+                stream: Box::new(stream),
+                trailing,
+                permit,
+                context,
+            },
+            request,
+        )
     }
 
     fn into_endpoint(self) -> (RelayEndpoint, ConnectionContext) {
-        let Self { stream, trailing, permit, context } = self;
-        (RelayEndpoint { stream, trailing, permit }, context)
+        let Self {
+            stream,
+            trailing,
+            permit,
+            context,
+        } = self;
+        (
+            RelayEndpoint {
+                stream,
+                trailing,
+                permit,
+            },
+            context,
+        )
     }
 }
 
@@ -636,7 +700,9 @@ impl RelayService {
     {
         let (connection, request) = OwnedConnection::from_prepared(prepared);
         match request {
-            HandshakeRequest::Mode1(address) => target::dispatch(self, runtime, connection, address).await,
+            HandshakeRequest::Mode1(address) => {
+                target::dispatch(self, runtime, connection, address).await
+            }
             HandshakeRequest::Mode2(id) => matching::dispatch(self, runtime, connection, id).await,
         }
     }
@@ -666,7 +732,11 @@ impl RelayService {
     /// The process supervisor polls this future; app never spawns a task.
     pub async fn drive_shutdown<C>(&self, runtime: &RelayRuntime<C>) {
         let mut lifecycle = runtime.lifecycle();
-        if lifecycle.wait_for(|phase| *phase != RelayLifecycle::Running).await.is_err() {
+        if lifecycle
+            .wait_for(|phase| *phase != RelayLifecycle::Running)
+            .await
+            .is_err()
+        {
             return;
         }
         loop {
@@ -677,7 +747,9 @@ impl RelayService {
                 RelayLifecycle::Running => continue,
             };
             let mut changed = pin!(lifecycle.changed());
-            let mut timer = pin!(tokio::time::sleep(deadline.saturating_sub(self.clock.monotonic())));
+            let mut timer = pin!(tokio::time::sleep(
+                deadline.saturating_sub(self.clock.monotonic())
+            ));
             let expired = poll_fn(|cx| {
                 if self.clock.monotonic() >= deadline || timer.as_mut().poll(cx).is_ready() {
                     Poll::Ready(true)
@@ -686,7 +758,8 @@ impl RelayService {
                 } else {
                     Poll::Pending
                 }
-            }).await;
+            })
+            .await;
             if expired {
                 let mut state = runtime.lock();
                 runtime.force_locked(&mut state, self.events.as_ref());
@@ -714,8 +787,12 @@ impl RelayService {
         runtime: &RelayRuntime<C>,
     ) {
         self.close_stream(
-            connection.stream.as_mut(), action, runtime.config.close_timeout, runtime.lifecycle(),
-        ).await;
+            connection.stream.as_mut(),
+            action,
+            runtime.config.close_timeout,
+            runtime.lifecycle(),
+        )
+        .await;
         drop(connection);
     }
 
@@ -729,13 +806,22 @@ impl RelayService {
         let mut completed = [false; 2];
         self.close_bounded(timeout, lifecycle, |cx| {
             if !completed[0] {
-                completed[0] = Pin::new(pair.viewer.stream.as_mut()).poll_close(cx, action).is_ready();
+                completed[0] = Pin::new(pair.viewer.stream.as_mut())
+                    .poll_close(cx, action)
+                    .is_ready();
             }
             if !completed[1] {
-                completed[1] = Pin::new(pair.other.stream.as_mut()).poll_close(cx, action).is_ready();
+                completed[1] = Pin::new(pair.other.stream.as_mut())
+                    .poll_close(cx, action)
+                    .is_ready();
             }
-            if completed == [true; 2] { Poll::Ready(()) } else { Poll::Pending }
-        }).await;
+            if completed == [true; 2] {
+                Poll::Ready(())
+            } else {
+                Poll::Pending
+            }
+        })
+        .await;
     }
 
     async fn run_pair<C: TargetConnector>(
@@ -743,7 +829,11 @@ impl RelayService {
         runtime: &RelayRuntime<C>,
         mut pair: SessionPair,
     ) -> Result<(), RelayDispatchError> {
-        let mode = if pair.relay.is_some() { Mode::Mode2 } else { Mode::Mode1 };
+        let mode = if pair.relay.is_some() {
+            Mode::Mode2
+        } else {
+            Mode::Mode1
+        };
         let transport = pair.viewer.stream.transport();
         let activation = {
             let mut state = runtime.lock();
@@ -764,48 +854,67 @@ impl RelayService {
                     ));
                 }
                 let id = runtime.session_ids.session_id(counter);
-                if let Some((relay_id, _, claim)) = pair.relay.as_ref().filter(|(_, _, claim)| self.clock.monotonic() >= claim.waiter.deadline) {
+                if let Some((relay_id, _, claim)) = pair
+                    .relay
+                    .as_ref()
+                    .filter(|(_, _, claim)| self.clock.monotonic() >= claim.waiter.deadline)
+                {
                     state.matching.cancel_claim(relay_id, claim);
                     Err(RelayDispatchError::WaitingExpired)
                 } else {
-                if let Some((relay_id, _, claim)) = &pair.relay {
-                    state.matching.activate(relay_id, claim, id.clone())
-                        .map_err(RelayDispatchError::Matching)?;
-                }
-                state.next_session = counter.checked_add(1);
-                let started_mono = self.clock.monotonic();
-                let session = Session::new(id.clone(), mode, transport, self.clock.wall(), started_mono);
-                state.active.insert(id.clone(), ActiveSessionSnapshot {
-                    session_id: id,
-                    mode,
-                    viewer_transport: transport,
-                    started_at: session.started_at(),
-                    started_mono,
-                    duration: Duration::ZERO,
-                    state: SessionState::Active,
-                    viewer: pair.viewer.context,
-                    server: pair.server_context,
-                    target: pair.target,
-                    relay_id_ref: pair.relay.as_ref().map(|(_, reference, _)| reference.clone()),
-                    bytes_viewer_to_target: 0,
-                    bytes_target_to_viewer: 0,
-                    engine_completed: false,
-                });
-                self.events.record(&Event::SessionStarted {
-                    session_id: session.id().clone(),
-                    mode,
-                    viewer_transport: transport,
-                    viewer_conn_id: pair.viewer.context.conn_id,
-                    viewer_peer_ip: pair.viewer.context.peer_ip,
-                    server_conn_id: pair.server_context.map(|context| context.conn_id),
-                    server_peer_ip: pair.server_context.map(|context| context.peer_ip),
-                    relay_id_ref: pair.relay.as_ref().map(|(_, reference, _)| reference.clone()),
-                    waited_ms: pair.relay.as_ref().map(|(_, _, claim)| milliseconds(claim.waited())),
-                    target_ip: pair.target.map(|address| address.ip()),
-                    target_port: pair.target.map(|address| address.port()),
-                    target_host: pair.target_host.take(),
-                });
-                Ok(session)
+                    if let Some((relay_id, _, claim)) = &pair.relay {
+                        state
+                            .matching
+                            .activate(relay_id, claim, id.clone())
+                            .map_err(RelayDispatchError::Matching)?;
+                    }
+                    state.next_session = counter.checked_add(1);
+                    let started_mono = self.clock.monotonic();
+                    let session =
+                        Session::new(id.clone(), mode, transport, self.clock.wall(), started_mono);
+                    state.active.insert(
+                        id.clone(),
+                        ActiveSessionSnapshot {
+                            session_id: id,
+                            mode,
+                            viewer_transport: transport,
+                            started_at: session.started_at(),
+                            started_mono,
+                            duration: Duration::ZERO,
+                            state: SessionState::Active,
+                            viewer: pair.viewer.context,
+                            server: pair.server_context,
+                            target: pair.target,
+                            relay_id_ref: pair
+                                .relay
+                                .as_ref()
+                                .map(|(_, reference, _)| reference.clone()),
+                            bytes_viewer_to_target: 0,
+                            bytes_target_to_viewer: 0,
+                            engine_completed: false,
+                        },
+                    );
+                    self.events.record(&Event::SessionStarted {
+                        session_id: session.id().clone(),
+                        mode,
+                        viewer_transport: transport,
+                        viewer_conn_id: pair.viewer.context.conn_id,
+                        viewer_peer_ip: pair.viewer.context.peer_ip,
+                        server_conn_id: pair.server_context.map(|context| context.conn_id),
+                        server_peer_ip: pair.server_context.map(|context| context.peer_ip),
+                        relay_id_ref: pair
+                            .relay
+                            .as_ref()
+                            .map(|(_, reference, _)| reference.clone()),
+                        waited_ms: pair
+                            .relay
+                            .as_ref()
+                            .map(|(_, _, claim)| milliseconds(claim.waited())),
+                        target_ip: pair.target.map(|address| address.ip()),
+                        target_port: pair.target.map(|address| address.port()),
+                        target_host: pair.target_host.take(),
+                    });
+                    Ok(session)
                 }
             } else {
                 if let Some((id, _, claim)) = &pair.relay {
@@ -819,17 +928,34 @@ impl RelayService {
             Err(error) => {
                 let viewer = pair.viewer.context;
                 let server = pair.server_context;
-                let predecessor = pair.relay.as_ref().map(|(_, reference, claim)| (reference.clone(), claim.waiter));
+                let predecessor = pair
+                    .relay
+                    .as_ref()
+                    .map(|(_, reference, claim)| (reference.clone(), claim.waiter));
                 let expired = if matches!(error, RelayDispatchError::WaitingExpired) {
-                    pair.relay.as_ref().map(|(_, reference, claim)| (reference.clone(), claim.waiter))
+                    pair.relay
+                        .as_ref()
+                        .map(|(_, reference, claim)| (reference.clone(), claim.waiter))
                 } else {
                     None
                 };
                 if expired.is_some() {
-                    self.close_pair(&mut pair, RelayCloseAction::WaitingExpired, runtime.config.close_timeout, runtime.lifecycle()).await;
+                    self.close_pair(
+                        &mut pair,
+                        RelayCloseAction::WaitingExpired,
+                        runtime.config.close_timeout,
+                        runtime.lifecycle(),
+                    )
+                    .await;
                 }
                 if matches!(error, RelayDispatchError::Aborted(_)) {
-                    self.close_pair(&mut pair, RelayCloseAction::ServerShutdown, runtime.config.close_timeout, runtime.lifecycle()).await;
+                    self.close_pair(
+                        &mut pair,
+                        RelayCloseAction::ServerShutdown,
+                        runtime.config.close_timeout,
+                        runtime.lifecycle(),
+                    )
+                    .await;
                 }
                 drop(pair);
                 if let Some((reference, waiter)) = expired {
@@ -837,7 +963,9 @@ impl RelayService {
                         conn_id: waiter.conn_id,
                         role: waiter.role,
                         relay_id_ref: reference,
-                        waited_ms: milliseconds(self.clock.monotonic().saturating_sub(waiter.registered_at)),
+                        waited_ms: milliseconds(
+                            self.clock.monotonic().saturating_sub(waiter.registered_at),
+                        ),
                     });
                 }
                 if matches!(error, RelayDispatchError::Aborted(_)) {
@@ -847,14 +975,30 @@ impl RelayService {
                             role: waiter.role,
                             relay_id_ref: reference,
                             reason: crate::events::WaitingRemovalReason::ServerShutdown,
-                            waited_ms: milliseconds(self.clock.monotonic().saturating_sub(waiter.registered_at)),
+                            waited_ms: milliseconds(
+                                self.clock.monotonic().saturating_sub(waiter.registered_at),
+                            ),
                         });
-                        let incoming = if viewer.conn_id == waiter.conn_id { server } else { Some(viewer) };
+                        let incoming = if viewer.conn_id == waiter.conn_id {
+                            server
+                        } else {
+                            Some(viewer)
+                        };
                         if let Some(context) = incoming {
-                            self.aborted(context, Stage::InitialExchange, mode, AbortReason::ServerShutdown);
+                            self.aborted(
+                                context,
+                                Stage::InitialExchange,
+                                mode,
+                                AbortReason::ServerShutdown,
+                            );
                         }
                     } else {
-                        self.aborted(viewer, Stage::TargetConnect, mode, AbortReason::ServerShutdown);
+                        self.aborted(
+                            viewer,
+                            Stage::TargetConnect,
+                            mode,
+                            AbortReason::ServerShutdown,
+                        );
                     }
                 }
                 return Err(error);
@@ -911,18 +1055,29 @@ impl RelayService {
                     }
                 }
                 result
-            }).await
+            })
+            .await
         };
         let error_kind = result.map_err(RelayDispatchError::Session)?;
         let relay = pair.relay.take();
         // Both sockets must be gone before either L place is released.
-        let OwnedConnection { stream: viewer_stream, permit: viewer_permit, .. } = pair.viewer;
-        let RelayEndpoint { stream: other_stream, permit: other_permit, .. } = pair.other;
+        let OwnedConnection {
+            stream: viewer_stream,
+            permit: viewer_permit,
+            ..
+        } = pair.viewer;
+        let RelayEndpoint {
+            stream: other_stream,
+            permit: other_permit,
+            ..
+        } = pair.other;
         drop(viewer_stream);
         drop(other_stream);
         drop(viewer_permit);
         drop(other_permit);
-        let closed = model.finish(self.clock.wall(), self.clock.monotonic()).map_err(RelayDispatchError::Session)?;
+        let closed = model
+            .finish(self.clock.wall(), self.clock.monotonic())
+            .map_err(RelayDispatchError::Session)?;
         let mut state = runtime.lock();
         if let Some((id, _, _)) = &relay {
             state.matching.begin_closing(id, closed.id());
@@ -965,7 +1120,9 @@ mod tests {
     use std::sync::atomic::{AtomicU64, Ordering};
     use std::task::Context;
 
-    use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, DuplexStream, ReadBuf, duplex};
+    use tokio::io::{
+        AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, DuplexStream, ReadBuf, duplex,
+    };
     use tokio::time::Instant;
     use vnc_relay_domain::entry_point::Role;
     use vnc_relay_domain::handshake::HANDSHAKE_REQUEST_LEN;
@@ -1022,7 +1179,11 @@ mod tests {
     }
 
     impl AsyncRead for TestStream {
-        fn poll_read(mut self: Pin<&mut Self>, cx: &mut Context<'_>, buffer: &mut ReadBuf<'_>) -> Poll<io::Result<()>> {
+        fn poll_read(
+            mut self: Pin<&mut Self>,
+            cx: &mut Context<'_>,
+            buffer: &mut ReadBuf<'_>,
+        ) -> Poll<io::Result<()>> {
             if let Some(kind) = self.failure.take() {
                 Poll::Ready(Err(RelayStreamError::new(kind).into_io_error()))
             } else {
@@ -1031,7 +1192,11 @@ mod tests {
         }
     }
     impl AsyncWrite for TestStream {
-        fn poll_write(mut self: Pin<&mut Self>, cx: &mut Context<'_>, bytes: &[u8]) -> Poll<io::Result<usize>> {
+        fn poll_write(
+            mut self: Pin<&mut Self>,
+            cx: &mut Context<'_>,
+            bytes: &[u8],
+        ) -> Poll<io::Result<usize>> {
             Pin::new(&mut self.stream).poll_write(cx, bytes)
         }
         fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
@@ -1042,8 +1207,14 @@ mod tests {
         }
     }
     impl RelayStream for TestStream {
-        fn transport(&self) -> ViewerTransport { ViewerTransport::Tcp }
-        fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>, action: RelayCloseAction) -> Poll<io::Result<()>> {
+        fn transport(&self) -> ViewerTransport {
+            ViewerTransport::Tcp
+        }
+        fn poll_close(
+            mut self: Pin<&mut Self>,
+            cx: &mut Context<'_>,
+            action: RelayCloseAction,
+        ) -> Poll<io::Result<()>> {
             self.actions.lock().expect("actions").push(action);
             if self.block_close {
                 return Poll::Pending;
@@ -1107,7 +1278,10 @@ mod tests {
 
     impl Harness {
         fn new(l: u32, lw: u32, b: usize, policy: &[&str]) -> Arc<Self> {
-            let clock = Arc::new(TestClock { epoch: Instant::now(), offset: AtomicU64::new(0) });
+            let clock = Arc::new(TestClock {
+                epoch: Instant::now(),
+                offset: AtomicU64::new(0),
+            });
             let events = Arc::new(Recorder::default());
             let budget = ConnectionBudget::new(l);
             let waiting = ConnectionBudget::new(lw);
@@ -1120,16 +1294,38 @@ mod tests {
             };
             Arc::new(Self {
                 service: RelayService::new(
-                    HandshakePolicy { mode1_enabled: true, mode2_enabled: true },
-                    Duration::from_secs(10), b, Duration::from_secs(2), clock.clone(), events.clone(),
+                    HandshakePolicy {
+                        mode1_enabled: true,
+                        mode2_enabled: true,
+                    },
+                    Duration::from_secs(10),
+                    b,
+                    Duration::from_secs(2),
+                    clock.clone(),
+                    events.clone(),
                 ),
-                runtime: RelayRuntime::new(connector, Arc::new(Sources), Arc::new(Sources), budget.clone(), waiting.clone(), RelayRuntimeConfig {
-                    wait_timeout: Duration::from_secs(5),
-                    connect_timeout: Duration::from_secs(4),
-                    close_timeout: Duration::from_secs(2),
-                    recent_closed: 2,
-                    target_policy: TargetPolicy::new(policy.iter().map(|item| vnc_relay_domain::target_policy::TargetItem::parse(item).expect("policy")).collect()),
-                }),
+                runtime: RelayRuntime::new(
+                    connector,
+                    Arc::new(Sources),
+                    Arc::new(Sources),
+                    budget.clone(),
+                    waiting.clone(),
+                    RelayRuntimeConfig {
+                        wait_timeout: Duration::from_secs(5),
+                        connect_timeout: Duration::from_secs(4),
+                        close_timeout: Duration::from_secs(2),
+                        recent_closed: 2,
+                        target_policy: TargetPolicy::new(
+                            policy
+                                .iter()
+                                .map(|item| {
+                                    vnc_relay_domain::target_policy::TargetItem::parse(item)
+                                        .expect("policy")
+                                })
+                                .collect(),
+                        ),
+                    },
+                ),
                 clock,
                 events,
                 budget,
@@ -1137,7 +1333,10 @@ mod tests {
             })
         }
         fn new_with_recent(l: u32, lw: u32, b: usize, recent_closed: usize) -> Arc<Self> {
-            let clock = Arc::new(TestClock { epoch: Instant::now(), offset: AtomicU64::new(0) });
+            let clock = Arc::new(TestClock {
+                epoch: Instant::now(),
+                offset: AtomicU64::new(0),
+            });
             let events = Arc::new(Recorder::default());
             let budget = ConnectionBudget::new(l);
             let waiting = ConnectionBudget::new(lw);
@@ -1150,16 +1349,30 @@ mod tests {
             };
             Arc::new(Self {
                 service: RelayService::new(
-                    HandshakePolicy { mode1_enabled: true, mode2_enabled: true },
-                    Duration::from_secs(10), b, Duration::from_secs(2), clock.clone(), events.clone(),
+                    HandshakePolicy {
+                        mode1_enabled: true,
+                        mode2_enabled: true,
+                    },
+                    Duration::from_secs(10),
+                    b,
+                    Duration::from_secs(2),
+                    clock.clone(),
+                    events.clone(),
                 ),
-                runtime: RelayRuntime::new(connector, Arc::new(Sources), Arc::new(Sources), budget.clone(), waiting.clone(), RelayRuntimeConfig {
-                    wait_timeout: Duration::from_secs(5),
-                    connect_timeout: Duration::from_secs(4),
-                    close_timeout: Duration::from_secs(2),
-                    recent_closed,
-                    target_policy: TargetPolicy::new(vec![]),
-                }),
+                runtime: RelayRuntime::new(
+                    connector,
+                    Arc::new(Sources),
+                    Arc::new(Sources),
+                    budget.clone(),
+                    waiting.clone(),
+                    RelayRuntimeConfig {
+                        wait_timeout: Duration::from_secs(5),
+                        connect_timeout: Duration::from_secs(4),
+                        close_timeout: Duration::from_secs(2),
+                        recent_closed,
+                        target_policy: TargetPolicy::new(vec![]),
+                    },
+                ),
                 clock,
                 events,
                 budget,
@@ -1174,25 +1387,50 @@ mod tests {
             trailing: &[u8],
             block_close: bool,
             on_drop: Option<Arc<dyn Fn() + Send + Sync>>,
-        ) -> (PreparedConnection<TestStream>, DuplexStream, Arc<Mutex<Vec<RelayCloseAction>>>) {
+        ) -> (
+            PreparedConnection<TestStream>,
+            DuplexStream,
+            Arc<Mutex<Vec<RelayCloseAction>>>,
+        ) {
             let (stream, mut peer) = duplex(4096);
             let actions = Arc::new(Mutex::new(Vec::new()));
-            let stream = TestStream { stream, actions: actions.clone(), failure: None, block_close, on_drop };
+            let stream = TestStream {
+                stream,
+                actions: actions.clone(),
+                failure: None,
+                block_close,
+                on_drop,
+            };
             let mut bytes = vec![0; HANDSHAKE_REQUEST_LEN];
             bytes[..request.len()].copy_from_slice(request.as_bytes());
             bytes.extend_from_slice(trailing);
             peer.write_all(&bytes).await.expect("request");
-            let peer_addr = "192.0.2.2:12345".parse::<SocketAddr>().expect("fixture address");
+            let peer_addr = "192.0.2.2:12345"
+                .parse::<SocketAddr>()
+                .expect("fixture address");
             let context = ConnectionContext {
                 conn_id: ConnId::next(),
-                entry_point: if role == Role::Viewer { EntryPoint::TcpViewer } else { EntryPoint::TcpServer },
+                entry_point: if role == Role::Viewer {
+                    EntryPoint::TcpViewer
+                } else {
+                    EntryPoint::TcpServer
+                },
                 peer_ip: PeerIp::new(peer_addr.ip()),
                 peer_addr,
                 accepted_wall: self.clock.wall(),
                 accepted_at: self.clock.monotonic(),
                 exchange_at: self.clock.monotonic(),
             };
-            let prepared = self.service.handle_connection(stream, context, self.budget.try_acquire().expect("L"), self.runtime.lifecycle()).await.expect("prepared");
+            let prepared = self
+                .service
+                .handle_connection(
+                    stream,
+                    context,
+                    self.budget.try_acquire().expect("L"),
+                    self.runtime.lifecycle(),
+                )
+                .await
+                .expect("prepared");
             if role == Role::Viewer {
                 let mut greeting = [0; 12];
                 peer.read_exact(&mut greeting).await.expect("greeting");
@@ -1201,23 +1439,43 @@ mod tests {
             (prepared, peer, actions)
         }
 
-
-        async fn prepare(&self, role: Role, request: &str, trailing: &[u8]) -> (PreparedConnection<TestStream>, DuplexStream, Arc<Mutex<Vec<RelayCloseAction>>>) {
-            self.prepare_with_options(role, request, trailing, false, None).await
+        async fn prepare(
+            &self,
+            role: Role,
+            request: &str,
+            trailing: &[u8],
+        ) -> (
+            PreparedConnection<TestStream>,
+            DuplexStream,
+            Arc<Mutex<Vec<RelayCloseAction>>>,
+        ) {
+            self.prepare_with_options(role, request, trailing, false, None)
+                .await
         }
 
-        fn start(self: &Arc<Self>, prepared: PreparedConnection<TestStream>) -> tokio::task::JoinHandle<Result<(), RelayDispatchError>> {
+        fn start(
+            self: &Arc<Self>,
+            prepared: PreparedConnection<TestStream>,
+        ) -> tokio::task::JoinHandle<Result<(), RelayDispatchError>> {
             let harness = self.clone();
             tokio::spawn(async move { harness.service.dispatch(prepared, &harness.runtime).await })
         }
 
-        fn events(&self) -> Vec<Event> { self.events.0.lock().expect("events").clone() }
-        fn snapshot(&self) -> RelaySnapshot { self.runtime.snapshot(self.clock.as_ref()) }
-        fn stop(&self) { self.service.request_shutdown(&self.runtime, Duration::ZERO); }
+        fn events(&self) -> Vec<Event> {
+            self.events.0.lock().expect("events").clone()
+        }
+        fn snapshot(&self) -> RelaySnapshot {
+            self.runtime.snapshot(self.clock.as_ref())
+        }
+        fn stop(&self) {
+            self.service.request_shutdown(&self.runtime, Duration::ZERO);
+        }
     }
 
     async fn settle() {
-        for _ in 0..8 { tokio::task::yield_now().await; }
+        for _ in 0..8 {
+            tokio::task::yield_now().await;
+        }
     }
 
     fn free_places(budget: &Arc<ConnectionBudget>) -> usize {
@@ -1234,23 +1492,34 @@ mod tests {
     async fn matches_both_arrival_orders_and_finishes_once_with_exact_counters() {
         for first in [Role::Viewer, Role::Server] {
             let harness = Harness::new(2, 1, 16, &[]);
-            let second = if first == Role::Viewer { Role::Server } else { Role::Viewer };
+            let second = if first == Role::Viewer {
+                Role::Server
+            } else {
+                Role::Viewer
+            };
             let (prepared, mut first_peer, _) = harness.prepare(first, "ID:0123", b"first").await;
             let first_task = harness.start(prepared);
             settle().await;
             assert_eq!(harness.snapshot().waiting.len(), 1);
             assert_eq!(free_places(&harness.waiting), 0);
-            let (prepared, mut second_peer, _) = harness.prepare(second, "ID:0123", b"second").await;
+            let (prepared, mut second_peer, _) =
+                harness.prepare(second, "ID:0123", b"second").await;
             let second_task = harness.start(prepared);
             settle().await;
             assert_eq!(harness.snapshot().active.len(), 1);
             assert!(harness.snapshot().waiting.is_empty());
             assert_eq!(free_places(&harness.waiting), 1);
             let mut received = [0; 6];
-            first_peer.read_exact(&mut received).await.expect("second prefix");
+            first_peer
+                .read_exact(&mut received)
+                .await
+                .expect("second prefix");
             assert_eq!(&received, b"second");
             let mut received = [0; 5];
-            second_peer.read_exact(&mut received).await.expect("first prefix");
+            second_peer
+                .read_exact(&mut received)
+                .await
+                .expect("first prefix");
             assert_eq!(&received, b"first");
             first_peer.shutdown().await.expect("first eof");
             second_peer.shutdown().await.expect("second eof");
@@ -1260,12 +1529,32 @@ mod tests {
             assert!(snapshot.active.is_empty());
             assert_eq!(snapshot.recent_closed.len(), 1);
             let closed = &snapshot.recent_closed[0];
-            assert_eq!(closed.bytes_viewer_to_target, if first == Role::Viewer { 5 } else { 6 });
-            assert_eq!(closed.bytes_target_to_viewer, if first == Role::Viewer { 6 } else { 5 });
+            assert_eq!(
+                closed.bytes_viewer_to_target,
+                if first == Role::Viewer { 5 } else { 6 }
+            );
+            assert_eq!(
+                closed.bytes_target_to_viewer,
+                if first == Role::Viewer { 6 } else { 5 }
+            );
             assert_eq!(closed.close_cause, CloseCause::PeerEof);
             assert_eq!(free_places(&harness.budget), 2);
-            assert_eq!(harness.events().iter().filter(|event| matches!(event, Event::SessionStarted { .. })).count(), 1);
-            assert_eq!(harness.events().iter().filter(|event| matches!(event, Event::SessionClosed { .. })).count(), 1);
+            assert_eq!(
+                harness
+                    .events()
+                    .iter()
+                    .filter(|event| matches!(event, Event::SessionStarted { .. }))
+                    .count(),
+                1
+            );
+            assert_eq!(
+                harness
+                    .events()
+                    .iter()
+                    .filter(|event| matches!(event, Event::SessionClosed { .. }))
+                    .count(),
+                1
+            );
         }
     }
 
@@ -1288,7 +1577,14 @@ mod tests {
         let task = harness.start(prepared);
         settle().await;
         let id = RelayId::parse("1").expect("id");
-        assert!(harness.runtime.lock().matching.remove_waiting(&id, old_conn).is_none());
+        assert!(
+            harness
+                .runtime
+                .lock()
+                .matching
+                .remove_waiting(&id, old_conn)
+                .is_none()
+        );
         assert_eq!(harness.snapshot().waiting.len(), 1);
         harness.stop();
         task.await.expect("task").expect("shutdown waiting");
@@ -1304,15 +1600,31 @@ mod tests {
             let (prepared, mut peer, actions) = harness.prepare(Role::Server, "ID:7", b"").await;
             let task = harness.start(prepared);
             settle().await;
-            if eof { peer.shutdown().await.expect("eof"); }
-            else { tokio::time::advance(Duration::from_secs(5)).await; }
+            if eof {
+                peer.shutdown().await.expect("eof");
+            } else {
+                tokio::time::advance(Duration::from_secs(5)).await;
+            }
             task.await.expect("task").expect("wait end");
             assert!(harness.snapshot().waiting.is_empty());
             assert_eq!(free_places(&harness.budget), 2);
             assert_eq!(free_places(&harness.waiting), 1);
             let events = harness.events();
-            assert_eq!(events.iter().filter(|event| matches!(event, Event::WaitingExpired { .. } | Event::WaitingRemoved { .. })).count(), 1);
-            assert!(actions.lock().expect("actions").contains(&if eof { RelayCloseAction::PeerEof } else { RelayCloseAction::WaitingExpired }));
+            assert_eq!(
+                events
+                    .iter()
+                    .filter(|event| matches!(
+                        event,
+                        Event::WaitingExpired { .. } | Event::WaitingRemoved { .. }
+                    ))
+                    .count(),
+                1
+            );
+            assert!(actions.lock().expect("actions").contains(&if eof {
+                RelayCloseAction::PeerEof
+            } else {
+                RelayCloseAction::WaitingExpired
+            }));
         }
     }
 
@@ -1326,8 +1638,16 @@ mod tests {
         let waiter = harness.start(prepared);
         settle().await;
         let (duplicate, _peer, actions) = harness.prepare(Role::Server, "ID:3", b"").await;
-        assert!(matches!(harness.service.dispatch(duplicate, &harness.runtime).await, Err(RelayDispatchError::Rejected(RejectReason::DuplicateId))));
-        assert!(actions.lock().expect("actions").contains(&RelayCloseAction::RejectDuplicate));
+        assert!(matches!(
+            harness.service.dispatch(duplicate, &harness.runtime).await,
+            Err(RelayDispatchError::Rejected(RejectReason::DuplicateId))
+        ));
+        assert!(
+            actions
+                .lock()
+                .expect("actions")
+                .contains(&RelayCloseAction::RejectDuplicate)
+        );
         let (prepared, _viewer, _) = harness.prepare(Role::Viewer, "ID:3", b"").await;
         let owner = harness.start(prepared);
         settle().await;
@@ -1338,8 +1658,16 @@ mod tests {
                 assert_eq!(harness.snapshot().active[0].state, SessionState::Closing);
             }
             let (duplicate, _peer, actions) = harness.prepare(Role::Viewer, "ID:3", b"").await;
-            assert!(matches!(harness.service.dispatch(duplicate, &harness.runtime).await, Err(RelayDispatchError::Rejected(RejectReason::DuplicateId))));
-            assert!(actions.lock().expect("actions").contains(&RelayCloseAction::RejectDuplicate));
+            assert!(matches!(
+                harness.service.dispatch(duplicate, &harness.runtime).await,
+                Err(RelayDispatchError::Rejected(RejectReason::DuplicateId))
+            ));
+            assert!(
+                actions
+                    .lock()
+                    .expect("actions")
+                    .contains(&RelayCloseAction::RejectDuplicate)
+            );
             assert_eq!(harness.snapshot().active.len(), 1);
         }
         assert_eq!(free_places(&harness.waiting), 1);
@@ -1357,8 +1685,18 @@ mod tests {
         let waiter = harness.start(prepared);
         settle().await;
         let (prepared, _other, actions) = harness.prepare(Role::Viewer, "ID:1", b"").await;
-        assert!(matches!(harness.service.dispatch(prepared, &harness.runtime).await, Err(RelayDispatchError::Rejected(RejectReason::WaitingFull { limit: 1 }))));
-        assert!(actions.lock().expect("actions").contains(&RelayCloseAction::WaitingFull));
+        assert!(matches!(
+            harness.service.dispatch(prepared, &harness.runtime).await,
+            Err(RelayDispatchError::Rejected(RejectReason::WaitingFull {
+                limit: 1
+            }))
+        ));
+        assert!(
+            actions
+                .lock()
+                .expect("actions")
+                .contains(&RelayCloseAction::WaitingFull)
+        );
         assert_eq!(harness.snapshot().waiting[0].relay_id.as_str(), "01");
         let (prepared, _viewer, _) = harness.prepare(Role::Viewer, "ID:01", b"").await;
         let owner = harness.start(prepared);
@@ -1385,12 +1723,18 @@ mod tests {
         let (prepared, mut viewer, _) = harness.prepare(Role::Viewer, "ID:5", b"").await;
         let owner = harness.start(prepared);
         let mut bytes = [0; 6];
-        viewer.read_exact(&mut bytes).await.expect("ordered payload");
+        viewer
+            .read_exact(&mut bytes)
+            .await
+            .expect("ordered payload");
         assert_eq!(&bytes, b"123456");
         viewer.shutdown().await.expect("eof");
         waiter.await.expect("waiter").expect("handoff");
         owner.await.expect("owner").expect("session");
-        assert_eq!(harness.snapshot().recent_closed[0].bytes_target_to_viewer, 6);
+        assert_eq!(
+            harness.snapshot().recent_closed[0].bytes_target_to_viewer,
+            6
+        );
     }
 
     /// spec: operations.md:OPS-007 partial
@@ -1406,23 +1750,48 @@ mod tests {
             let (prepared, mut viewer, _) = harness.prepare(Role::Viewer, "ID:4", b"").await;
             let owner = harness.start(prepared);
             settle().await;
-            harness.service.request_shutdown(&harness.runtime, Duration::from_secs(3));
+            harness
+                .service
+                .request_shutdown(&harness.runtime, Duration::from_secs(3));
             server.write_all(b"ok").await.expect("during G");
             let mut bytes = [0; 2];
             viewer.read_exact(&mut bytes).await.expect("G still relays");
             assert_eq!(&bytes, b"ok");
-            assert!(matches!(*harness.runtime.lifecycle().borrow(), RelayLifecycle::Grace { .. }));
-            if second_request { harness.service.request_shutdown(&harness.runtime, Duration::from_secs(90)); }
-            else { tokio::time::advance(Duration::from_secs(3)).await; }
+            assert!(matches!(
+                *harness.runtime.lifecycle().borrow(),
+                RelayLifecycle::Grace { .. }
+            ));
+            if second_request {
+                harness
+                    .service
+                    .request_shutdown(&harness.runtime, Duration::from_secs(90));
+            } else {
+                tokio::time::advance(Duration::from_secs(3)).await;
+            }
             waiter.await.expect("waiter").expect("handoff");
             owner.await.expect("owner").expect("force");
             assert_eq!(*harness.runtime.lifecycle().borrow(), RelayLifecycle::Force);
             let events = harness.events();
-            let forced = events.iter().position(|event| matches!(event, Event::ShutdownForced { .. })).expect("forced");
-            let closed = events.iter().position(|event| matches!(event, Event::SessionClosed { .. })).expect("closed");
+            let forced = events
+                .iter()
+                .position(|event| matches!(event, Event::ShutdownForced { .. }))
+                .expect("forced");
+            let closed = events
+                .iter()
+                .position(|event| matches!(event, Event::SessionClosed { .. }))
+                .expect("closed");
             assert!(forced < closed);
-            assert_eq!(events.iter().filter(|event| matches!(event, Event::ShutdownForced { .. })).count(), 1);
-            assert_eq!(harness.snapshot().recent_closed[0].close_cause, CloseCause::ServerShutdown);
+            assert_eq!(
+                events
+                    .iter()
+                    .filter(|event| matches!(event, Event::ShutdownForced { .. }))
+                    .count(),
+                1
+            );
+            assert_eq!(
+                harness.snapshot().recent_closed[0].close_cause,
+                CloseCause::ServerShutdown
+            );
             assert_eq!(free_places(&harness.budget), 3);
         }
     }
@@ -1436,19 +1805,59 @@ mod tests {
         use crate::events::TargetFailureReason;
         for (policy, resolved, failure, expected) in [
             (vec![], Ok(vec![]), None, "target_not_allowed"),
-            (vec!["host.example:5900"], Err(TargetError::ResolveFailed), None, "resolve_failed"),
-            (vec!["host.example:5900"], Ok(vec![]), None, "resolve_failed"),
-            (vec!["host.example:5900"], Ok(vec!["192.0.2.10".parse().expect("ip")]), None, "target_not_allowed"),
-            (vec!["host.example:5900", "192.0.2.10:5900"], Ok(vec!["192.0.2.10".parse().expect("ip")]), Some(TargetError::ConnectRefused), "connect_refused"),
-            (vec!["host.example:5900", "192.0.2.10:5900"], Ok(vec!["192.0.2.10".parse().expect("ip")]), Some(TargetError::ConnectError), "connect_error"),
+            (
+                vec!["host.example:5900"],
+                Err(TargetError::ResolveFailed),
+                None,
+                "resolve_failed",
+            ),
+            (
+                vec!["host.example:5900"],
+                Ok(vec![]),
+                None,
+                "resolve_failed",
+            ),
+            (
+                vec!["host.example:5900"],
+                Ok(vec!["192.0.2.10".parse().expect("ip")]),
+                None,
+                "target_not_allowed",
+            ),
+            (
+                vec!["host.example:5900", "192.0.2.10:5900"],
+                Ok(vec!["192.0.2.10".parse().expect("ip")]),
+                Some(TargetError::ConnectRefused),
+                "connect_refused",
+            ),
+            (
+                vec!["host.example:5900", "192.0.2.10:5900"],
+                Ok(vec!["192.0.2.10".parse().expect("ip")]),
+                Some(TargetError::ConnectError),
+                "connect_error",
+            ),
         ] {
             let harness = Harness::new(2, 1, 8, &policy);
             *harness.runtime.connector.resolved.lock().expect("resolve") = resolved;
             if let Some(error) = failure {
-                harness.runtime.connector.attempts.lock().expect("attempts").push_back(Attempt { delay: Duration::ZERO, result: Err(error) });
+                harness
+                    .runtime
+                    .connector
+                    .attempts
+                    .lock()
+                    .expect("attempts")
+                    .push_back(Attempt {
+                        delay: Duration::ZERO,
+                        result: Err(error),
+                    });
             }
-            let (prepared, _peer, actions) = harness.prepare(Role::Viewer, "host.example:5900", b"").await;
-            let result = harness.service.dispatch(prepared, &harness.runtime).await.expect_err("failure");
+            let (prepared, _peer, actions) = harness
+                .prepare(Role::Viewer, "host.example:5900", b"")
+                .await;
+            let result = harness
+                .service
+                .dispatch(prepared, &harness.runtime)
+                .await
+                .expect_err("failure");
             assert_eq!(result.to_string(), expected);
             assert_eq!(free_places(&harness.budget), 2);
             assert!(harness.snapshot().active.is_empty());
@@ -1456,16 +1865,34 @@ mod tests {
             let events = harness.events();
             assert_eq!(events.len(), 1);
             if expected == "target_not_allowed" {
-                assert!(matches!(events[0], Event::TargetRejected { reason: RejectReason::TargetNotAllowed, .. }));
-                assert!(actions.lock().expect("actions").contains(&RelayCloseAction::TargetNotAllowed));
+                assert!(matches!(
+                    events[0],
+                    Event::TargetRejected {
+                        reason: RejectReason::TargetNotAllowed,
+                        ..
+                    }
+                ));
+                assert!(
+                    actions
+                        .lock()
+                        .expect("actions")
+                        .contains(&RelayCloseAction::TargetNotAllowed)
+                );
             } else {
                 let expected = match expected {
                     "resolve_failed" => TargetFailureReason::ResolveFailed,
                     "connect_refused" => TargetFailureReason::ConnectRefused,
                     _ => TargetFailureReason::ConnectError,
                 };
-                assert!(matches!(events[0], Event::TargetConnectFailed { reason, .. } if reason == expected));
-                assert!(actions.lock().expect("actions").contains(&RelayCloseAction::TargetConnectFailed));
+                assert!(
+                    matches!(events[0], Event::TargetConnectFailed { reason, .. } if reason == expected)
+                );
+                assert!(
+                    actions
+                        .lock()
+                        .expect("actions")
+                        .contains(&RelayCloseAction::TargetConnectFailed)
+                );
             }
         }
     }
@@ -1484,27 +1911,60 @@ mod tests {
         ]);
         let (stream, mut target_peer) = duplex(4096);
         let target_actions = Arc::new(Mutex::new(Vec::new()));
-        harness.runtime.connector.attempts.lock().expect("attempts").extend([
-            Attempt { delay: Duration::ZERO, result: Err(TargetError::ConnectRefused) },
-            Attempt { delay: Duration::ZERO, result: Ok(TestStream { stream, actions: target_actions, failure: None, block_close: false, on_drop: None }) },
-        ]);
-        let (prepared, mut viewer, _) = harness.prepare(Role::Viewer, "host.example:5900", b"request").await;
+        harness
+            .runtime
+            .connector
+            .attempts
+            .lock()
+            .expect("attempts")
+            .extend([
+                Attempt {
+                    delay: Duration::ZERO,
+                    result: Err(TargetError::ConnectRefused),
+                },
+                Attempt {
+                    delay: Duration::ZERO,
+                    result: Ok(TestStream {
+                        stream,
+                        actions: target_actions,
+                        failure: None,
+                        block_close: false,
+                        on_drop: None,
+                    }),
+                },
+            ]);
+        let (prepared, mut viewer, _) = harness
+            .prepare(Role::Viewer, "host.example:5900", b"request")
+            .await;
         viewer.shutdown().await.expect("viewer eof");
         target_peer.write_all(b"reply").await.expect("reply");
         target_peer.shutdown().await.expect("target eof");
-        harness.service.dispatch(prepared, &harness.runtime).await.expect("session");
+        harness
+            .service
+            .dispatch(prepared, &harness.runtime)
+            .await
+            .expect("session");
         let mut request = [0; 7];
         target_peer.read_exact(&mut request).await.expect("request");
         assert_eq!(&request, b"request");
         let mut reply = [0; 5];
         viewer.read_exact(&mut reply).await.expect("reply");
         assert_eq!(&reply, b"reply");
-        assert_eq!(*harness.runtime.connector.calls.lock().expect("calls"), [
-            "192.0.2.10:5900".parse::<SocketAddr>().expect("first"),
-            "192.0.2.11:5900".parse::<SocketAddr>().expect("second"),
-        ]);
-        assert_eq!(harness.snapshot().recent_closed[0].bytes_viewer_to_target, 7);
-        assert_eq!(harness.snapshot().recent_closed[0].bytes_target_to_viewer, 5);
+        assert_eq!(
+            *harness.runtime.connector.calls.lock().expect("calls"),
+            [
+                "192.0.2.10:5900".parse::<SocketAddr>().expect("first"),
+                "192.0.2.11:5900".parse::<SocketAddr>().expect("second"),
+            ]
+        );
+        assert_eq!(
+            harness.snapshot().recent_closed[0].bytes_viewer_to_target,
+            7
+        );
+        assert_eq!(
+            harness.snapshot().recent_closed[0].bytes_target_to_viewer,
+            5
+        );
         assert_eq!(free_places(&harness.budget), 2);
     }
 
@@ -1514,21 +1974,68 @@ mod tests {
     async fn c_includes_dns_and_all_attempts_and_target_l_exhaustion_never_connects() {
         use crate::events::TargetFailureReason;
         let harness = Harness::new(2, 1, 8, &["host.example:5900", "192.0.2.10:5900"]);
-        *harness.runtime.connector.resolved.lock().expect("resolve") = Ok(vec!["192.0.2.10".parse().expect("ip")]);
-        *harness.runtime.connector.resolve_delay.lock().expect("delay") = Duration::from_secs(3);
-        harness.runtime.connector.attempts.lock().expect("attempts").push_back(Attempt {
-            delay: Duration::from_secs(2), result: Err(TargetError::ConnectRefused),
-        });
-        let (prepared, _peer, _) = harness.prepare(Role::Viewer, "host.example:5900", b"").await;
-        assert!(matches!(harness.service.dispatch(prepared, &harness.runtime).await, Err(RelayDispatchError::Target(TargetFailureReason::ConnectTimeout))));
-        assert!(matches!(harness.events()[0], Event::TargetConnectFailed { elapsed_ms: 4000, .. }));
+        *harness.runtime.connector.resolved.lock().expect("resolve") =
+            Ok(vec!["192.0.2.10".parse().expect("ip")]);
+        *harness
+            .runtime
+            .connector
+            .resolve_delay
+            .lock()
+            .expect("delay") = Duration::from_secs(3);
+        harness
+            .runtime
+            .connector
+            .attempts
+            .lock()
+            .expect("attempts")
+            .push_back(Attempt {
+                delay: Duration::from_secs(2),
+                result: Err(TargetError::ConnectRefused),
+            });
+        let (prepared, _peer, _) = harness
+            .prepare(Role::Viewer, "host.example:5900", b"")
+            .await;
+        assert!(matches!(
+            harness.service.dispatch(prepared, &harness.runtime).await,
+            Err(RelayDispatchError::Target(
+                TargetFailureReason::ConnectTimeout
+            ))
+        ));
+        assert!(matches!(
+            harness.events()[0],
+            Event::TargetConnectFailed {
+                elapsed_ms: 4000,
+                ..
+            }
+        ));
         assert_eq!(free_places(&harness.budget), 2);
 
         let harness = Harness::new(1, 1, 8, &["192.0.2.10:5900"]);
         let (prepared, _peer, _) = harness.prepare(Role::Viewer, "192.0.2.10:5900", b"").await;
-        assert!(matches!(harness.service.dispatch(prepared, &harness.runtime).await, Err(RelayDispatchError::Rejected(RejectReason::RelayConnectionLimit { limit: 1 }))));
-        assert!(harness.runtime.connector.calls.lock().expect("calls").is_empty());
-        assert!(harness.runtime.connector.names.lock().expect("names").is_empty());
+        assert!(matches!(
+            harness.service.dispatch(prepared, &harness.runtime).await,
+            Err(RelayDispatchError::Rejected(
+                RejectReason::RelayConnectionLimit { limit: 1 }
+            ))
+        ));
+        assert!(
+            harness
+                .runtime
+                .connector
+                .calls
+                .lock()
+                .expect("calls")
+                .is_empty()
+        );
+        assert!(
+            harness
+                .runtime
+                .connector
+                .names
+                .lock()
+                .expect("names")
+                .is_empty()
+        );
         assert_eq!(free_places(&harness.budget), 1);
     }
 
@@ -1540,7 +2047,11 @@ mod tests {
         let (prepared, _old_peer, _) = harness.prepare(Role::Server, "ID:8", b"").await;
         let old_conn = prepared.context().conn_id;
         let mut old = Box::pin(harness.service.dispatch(prepared, &harness.runtime));
-        poll_fn(|cx| { assert!(old.as_mut().poll(cx).is_pending()); Poll::Ready(()) }).await;
+        poll_fn(|cx| {
+            assert!(old.as_mut().poll(cx).is_pending());
+            Poll::Ready(())
+        })
+        .await;
         // Move the application clock to exactly W without polling the old owner.
         harness.clock.offset.fetch_add(5000, Ordering::Relaxed);
         let (prepared, _new_peer, _) = harness.prepare(Role::Viewer, "ID:8", b"").await;
@@ -1550,8 +2061,15 @@ mod tests {
         assert_eq!(harness.snapshot().waiting[0].context.conn_id, new_conn);
         old.await.expect("old handoff end");
         assert_eq!(harness.snapshot().waiting[0].context.conn_id, new_conn);
-        assert!(harness.events().iter().any(|event| matches!(event, Event::WaitingExpired { conn_id, .. } if *conn_id == old_conn)));
-        assert!(!harness.events().iter().any(|event| matches!(event, Event::SessionStarted { .. })));
+        assert!(harness.events().iter().any(
+            |event| matches!(event, Event::WaitingExpired { conn_id, .. } if *conn_id == old_conn)
+        ));
+        assert!(
+            !harness
+                .events()
+                .iter()
+                .any(|event| matches!(event, Event::SessionStarted { .. }))
+        );
         harness.stop();
         new_owner.await.expect("new task").expect("shutdown");
     }
@@ -1567,15 +2085,23 @@ mod tests {
         let connecting = harness.start(prepared);
         settle().await;
         assert_eq!(harness.snapshot().target_connecting, 1);
-        harness.service.request_shutdown(&harness.runtime, Duration::from_secs(10));
+        harness
+            .service
+            .request_shutdown(&harness.runtime, Duration::from_secs(10));
         waiter.await.expect("waiter").expect("removed");
-        assert!(matches!(connecting.await.expect("connecting"), Err(RelayDispatchError::Aborted(AbortReason::ServerShutdown))));
+        assert!(matches!(
+            connecting.await.expect("connecting"),
+            Err(RelayDispatchError::Aborted(AbortReason::ServerShutdown))
+        ));
         assert_eq!(harness.snapshot().target_connecting, 0);
         assert!(harness.snapshot().waiting.is_empty());
         assert!(harness.snapshot().active.is_empty());
         assert_eq!(harness.runtime.lock().next_session, Some(0));
         assert_eq!(free_places(&harness.budget), 4);
-        assert!(!harness.events().iter().any(|event| matches!(event, Event::ShutdownForced { .. } | Event::SessionStarted { .. })));
+        assert!(!harness.events().iter().any(|event| matches!(
+            event,
+            Event::ShutdownForced { .. } | Event::SessionStarted { .. }
+        )));
     }
 
     /// spec: relay.md:RLY-020 partial
@@ -1593,8 +2119,21 @@ mod tests {
         failed.await.expect("failed task").expect("removed");
         assert_eq!(harness.snapshot().waiting.len(), 1);
         assert_eq!(harness.snapshot().waiting[0].relay_id.as_str(), "10");
-        assert!(actions.lock().expect("actions").contains(&RelayCloseAction::StreamError(ConnectionErrorKind::WsProtocolError)));
-        assert!(harness.events().iter().any(|event| matches!(event, Event::WaitingRemoved { reason: WaitingRemovalReason::ConnectionError(ConnectionErrorKind::WsProtocolError), .. })));
+        assert!(
+            actions
+                .lock()
+                .expect("actions")
+                .contains(&RelayCloseAction::StreamError(
+                    ConnectionErrorKind::WsProtocolError
+                ))
+        );
+        assert!(harness.events().iter().any(|event| matches!(
+            event,
+            Event::WaitingRemoved {
+                reason: WaitingRemovalReason::ConnectionError(ConnectionErrorKind::WsProtocolError),
+                ..
+            }
+        )));
         harness.stop();
         healthy.await.expect("healthy").expect("removed");
     }
@@ -1615,10 +2154,22 @@ mod tests {
         assert!(owner.await.expect_err("cancelled").is_cancelled());
         waiter.await.expect("waiter").expect("handoff");
         assert!(harness.snapshot().active.is_empty());
-        assert!(harness.runtime.lock().matching.get(&RelayId::parse("12").expect("id")).is_none());
+        assert!(
+            harness
+                .runtime
+                .lock()
+                .matching
+                .get(&RelayId::parse("12").expect("id"))
+                .is_none()
+        );
         assert_eq!(free_places(&harness.budget), 3);
         assert_eq!(free_places(&harness.waiting), 1);
-        assert!(!harness.events().iter().any(|event| matches!(event, Event::SessionClosed { .. })));
+        assert!(
+            !harness
+                .events()
+                .iter()
+                .any(|event| matches!(event, Event::SessionClosed { .. }))
+        );
         let (prepared, _server, _) = harness.prepare(Role::Server, "ID:12", b"").await;
         let new_owner = harness.start(prepared);
         settle().await;
@@ -1640,7 +2191,10 @@ mod tests {
         let owner = harness.start(prepared);
         settle().await;
         assert_eq!(harness.runtime.lock().next_session, None);
-        assert_eq!(harness.snapshot().active[0].session_id, SessionId::from_block(u128::MAX.to_be_bytes()));
+        assert_eq!(
+            harness.snapshot().active[0].session_id,
+            SessionId::from_block(u128::MAX.to_be_bytes())
+        );
         server.shutdown().await.expect("server eof");
         viewer.shutdown().await.expect("viewer eof");
         waiter.await.expect("waiter").expect("handoff");
@@ -1649,22 +2203,46 @@ mod tests {
         let waiter = harness.start(prepared);
         settle().await;
         let (prepared, _viewer, _) = harness.prepare(Role::Viewer, "ID:13", b"").await;
-        assert!(matches!(harness.service.dispatch(prepared, &harness.runtime).await, Err(RelayDispatchError::SessionIdsExhausted)));
+        assert!(matches!(
+            harness.service.dispatch(prepared, &harness.runtime).await,
+            Err(RelayDispatchError::SessionIdsExhausted)
+        ));
         waiter.await.expect("waiter").expect("handoff");
         assert!(harness.snapshot().active.is_empty());
-        assert!(harness.runtime.lock().matching.get(&RelayId::parse("13").expect("id")).is_none());
+        assert!(
+            harness
+                .runtime
+                .lock()
+                .matching
+                .get(&RelayId::parse("13").expect("id"))
+                .is_none()
+        );
         assert_eq!(free_places(&harness.budget), 3);
-        assert_eq!(harness.events().iter().filter(|event| matches!(event, Event::SessionStarted { .. })).count(), 1);
+        assert_eq!(
+            harness
+                .events()
+                .iter()
+                .filter(|event| matches!(event, Event::SessionStarted { .. }))
+                .count(),
+            1
+        );
     }
 
     /// spec: operations.md:OPS-008 partial
     #[tokio::test(start_paused = true)]
     async fn empty_shutdown_supervisor_reaches_force_without_a_forced_event() {
         let harness = Harness::new(2, 1, 8, &[]);
-        harness.service.request_shutdown(&harness.runtime, Duration::from_secs(3));
+        harness
+            .service
+            .request_shutdown(&harness.runtime, Duration::from_secs(3));
         harness.service.drive_shutdown(&harness.runtime).await;
         assert_eq!(*harness.runtime.lifecycle().borrow(), RelayLifecycle::Force);
-        assert!(!harness.events().iter().any(|event| matches!(event, Event::ShutdownForced { .. })));
+        assert!(
+            !harness
+                .events()
+                .iter()
+                .any(|event| matches!(event, Event::ShutdownForced { .. }))
+        );
     }
 
     /// spec: relay.md:RLY-018 partial
@@ -1702,19 +2280,37 @@ mod tests {
         }
         let mut harness = Harness::new(3, 1, 8, &[]);
         let clock = harness.clock.clone();
-        Arc::get_mut(&mut harness).expect("unique harness").runtime.session_ids = Arc::new(JumpSource(clock));
+        Arc::get_mut(&mut harness)
+            .expect("unique harness")
+            .runtime
+            .session_ids = Arc::new(JumpSource(clock));
         let (prepared, _server, _) = harness.prepare(Role::Server, "ID:15", b"").await;
         let waiter = harness.start(prepared);
         settle().await;
         let (prepared, _viewer, _) = harness.prepare(Role::Viewer, "ID:15", b"").await;
-        assert!(matches!(harness.service.dispatch(prepared, &harness.runtime).await, Err(RelayDispatchError::WaitingExpired)));
+        assert!(matches!(
+            harness.service.dispatch(prepared, &harness.runtime).await,
+            Err(RelayDispatchError::WaitingExpired)
+        ));
         waiter.await.expect("waiter").expect("handoff");
         assert_eq!(harness.runtime.lock().next_session, Some(0));
         assert!(harness.snapshot().active.is_empty());
         assert_eq!(free_places(&harness.budget), 3);
         assert_eq!(free_places(&harness.waiting), 1);
-        assert!(!harness.events().iter().any(|event| matches!(event, Event::SessionStarted { .. })));
-        assert_eq!(harness.events().iter().filter(|event| matches!(event, Event::WaitingExpired { .. })).count(), 1);
+        assert!(
+            !harness
+                .events()
+                .iter()
+                .any(|event| matches!(event, Event::SessionStarted { .. }))
+        );
+        assert_eq!(
+            harness
+                .events()
+                .iter()
+                .filter(|event| matches!(event, Event::WaitingExpired { .. }))
+                .count(),
+            1
+        );
     }
 
     /// spec: relay.md:RLY-009 partial
@@ -1730,16 +2326,35 @@ mod tests {
             let second_ip = "192.0.2.11".parse().expect("second IP");
             *harness.runtime.connector.resolved.lock().expect("resolve") =
                 Ok(vec![first_ip, second_ip]);
-            harness.runtime.connector.attempts.lock().expect("attempts").extend([
-                Attempt { delay: Duration::ZERO, result: Err(first_error) },
-                Attempt { delay: Duration::ZERO, result: Err(TargetError::ConnectRefused) },
-            ]);
-            let (prepared, _peer, _) = harness.prepare(Role::Viewer, "host.example:5900", b"").await;
+            harness
+                .runtime
+                .connector
+                .attempts
+                .lock()
+                .expect("attempts")
+                .extend([
+                    Attempt {
+                        delay: Duration::ZERO,
+                        result: Err(first_error),
+                    },
+                    Attempt {
+                        delay: Duration::ZERO,
+                        result: Err(TargetError::ConnectRefused),
+                    },
+                ]);
+            let (prepared, _peer, _) = harness
+                .prepare(Role::Viewer, "host.example:5900", b"")
+                .await;
             assert!(matches!(
                 harness.service.dispatch(prepared, &harness.runtime).await,
-                Err(RelayDispatchError::Target(crate::events::TargetFailureReason::ConnectError))
+                Err(RelayDispatchError::Target(
+                    crate::events::TargetFailureReason::ConnectError
+                ))
             ));
-            assert_eq!(harness.runtime.connector.calls.lock().expect("calls").len(), expected_attempts);
+            assert_eq!(
+                harness.runtime.connector.calls.lock().expect("calls").len(),
+                expected_attempts
+            );
             assert!(harness.snapshot().active.is_empty());
             assert_eq!(harness.runtime.lock().next_session, Some(0));
             assert_eq!(free_places(&harness.budget), 2);
@@ -1762,8 +2377,12 @@ mod tests {
         use vnc_relay_domain::matching::WaitingEntry;
         for second_shutdown in [false, true] {
             let harness = Harness::new(3, 1, 8, &[]);
-            let (first_prep, _first_peer, first_actions) = harness.prepare_with_options(Role::Server, "ID:50", b"", true, None).await;
-            let (second_prep, _second_peer, second_actions) = harness.prepare_with_options(Role::Viewer, "ID:50", b"", true, None).await;
+            let (first_prep, _first_peer, first_actions) = harness
+                .prepare_with_options(Role::Server, "ID:50", b"", true, None)
+                .await;
+            let (second_prep, _second_peer, second_actions) = harness
+                .prepare_with_options(Role::Viewer, "ID:50", b"", true, None)
+                .await;
 
             let (first_conn, _) = OwnedConnection::from_prepared(first_prep);
             let (second_conn, _) = OwnedConnection::from_prepared(second_prep);
@@ -1785,23 +2404,39 @@ mod tests {
                 server_context: Some(server_context),
                 target: None,
                 target_host: None,
-                relay: Some((RelayId::parse("50").expect("id"), RelayIdRef::from_hash_prefix([1; 8]), claim)),
+                relay: Some((
+                    RelayId::parse("50").expect("id"),
+                    RelayIdRef::from_hash_prefix([1; 8]),
+                    claim,
+                )),
             };
 
-            harness.service.request_shutdown(&harness.runtime, Duration::from_secs(3));
+            harness
+                .service
+                .request_shutdown(&harness.runtime, Duration::from_secs(3));
             let task = {
                 let harness = harness.clone();
-                tokio::spawn(async move {
-                    harness.service.run_pair(&harness.runtime, pair).await
-                })
+                tokio::spawn(async move { harness.service.run_pair(&harness.runtime, pair).await })
             };
             settle().await;
-            assert!(first_actions.lock().expect("actions").contains(&RelayCloseAction::ServerShutdown));
-            assert!(second_actions.lock().expect("actions").contains(&RelayCloseAction::ServerShutdown));
+            assert!(
+                first_actions
+                    .lock()
+                    .expect("actions")
+                    .contains(&RelayCloseAction::ServerShutdown)
+            );
+            assert!(
+                second_actions
+                    .lock()
+                    .expect("actions")
+                    .contains(&RelayCloseAction::ServerShutdown)
+            );
             assert_eq!(free_places(&harness.budget), 1);
 
             if second_shutdown {
-                harness.service.request_shutdown(&harness.runtime, Duration::ZERO);
+                harness
+                    .service
+                    .request_shutdown(&harness.runtime, Duration::ZERO);
                 assert!(task.await.expect("task").is_err());
             } else {
                 tokio::time::advance(Duration::from_secs(3)).await;
@@ -1814,11 +2449,16 @@ mod tests {
     /// spec: relay.md:RLY-020 partial
     /// spec: operations.md:OPS-007 partial
     #[tokio::test(start_paused = true)]
-    async fn shutdown_during_preactivation_records_waiting_removed_for_predecessor_and_initial_exchange_for_incoming_in_both_roles() {
-        use vnc_relay_domain::matching::WaitingEntry;
+    async fn shutdown_during_preactivation_records_waiting_removed_for_predecessor_and_initial_exchange_for_incoming_in_both_roles()
+     {
         use crate::events::WaitingRemovalReason;
+        use vnc_relay_domain::matching::WaitingEntry;
         for first_role in [Role::Server, Role::Viewer] {
-            let second_role = if first_role == Role::Server { Role::Viewer } else { Role::Server };
+            let second_role = if first_role == Role::Server {
+                Role::Viewer
+            } else {
+                Role::Server
+            };
             let harness = Harness::new(3, 1, 8, &[]);
             let (first_prep, _first_peer, _) = harness.prepare(first_role, "ID:55", b"").await;
             let (second_prep, _second_peer, _) = harness.prepare(second_role, "ID:55", b"").await;
@@ -1831,8 +2471,16 @@ mod tests {
                 (second_conn, first_conn)
             };
             let (server_endpoint, server_context) = server.into_endpoint();
-            let pred_conn_id = if first_role == Role::Viewer { viewer.context.conn_id } else { server_context.conn_id };
-            let incoming_conn_id = if first_role == Role::Viewer { server_context.conn_id } else { viewer.context.conn_id };
+            let pred_conn_id = if first_role == Role::Viewer {
+                viewer.context.conn_id
+            } else {
+                server_context.conn_id
+            };
+            let incoming_conn_id = if first_role == Role::Viewer {
+                server_context.conn_id
+            } else {
+                viewer.context.conn_id
+            };
 
             let claim = MatchClaim {
                 viewer_conn_id: viewer.context.conn_id,
@@ -1851,23 +2499,55 @@ mod tests {
                 server_context: Some(server_context),
                 target: None,
                 target_host: None,
-                relay: Some((RelayId::parse("55").expect("id"), RelayIdRef::from_hash_prefix([5; 8]), claim)),
+                relay: Some((
+                    RelayId::parse("55").expect("id"),
+                    RelayIdRef::from_hash_prefix([5; 8]),
+                    claim,
+                )),
             };
 
-            harness.service.request_shutdown(&harness.runtime, Duration::from_secs(3));
+            harness
+                .service
+                .request_shutdown(&harness.runtime, Duration::from_secs(3));
             let result = harness.service.run_pair(&harness.runtime, pair).await;
-            assert!(matches!(result, Err(RelayDispatchError::Aborted(AbortReason::ServerShutdown))));
+            assert!(matches!(
+                result,
+                Err(RelayDispatchError::Aborted(AbortReason::ServerShutdown))
+            ));
 
             let events = harness.events();
-            let waiting_removed = events.iter().find(|e| matches!(e, Event::WaitingRemoved { conn_id, .. } if *conn_id == pred_conn_id));
-            assert!(waiting_removed.is_some(), "predecessor must receive WaitingRemoved");
-            assert!(matches!(waiting_removed.unwrap(), Event::WaitingRemoved { reason: WaitingRemovalReason::ServerShutdown, role, .. } if *role == first_role));
+            let waiting_removed = events.iter().find(
+                |e| matches!(e, Event::WaitingRemoved { conn_id, .. } if *conn_id == pred_conn_id),
+            );
+            assert!(
+                waiting_removed.is_some(),
+                "predecessor must receive WaitingRemoved"
+            );
+            assert!(
+                matches!(waiting_removed.unwrap(), Event::WaitingRemoved { reason: WaitingRemovalReason::ServerShutdown, role, .. } if *role == first_role)
+            );
 
             let aborted = events.iter().find(|e| matches!(e, Event::RelayAborted { conn_id, .. } if *conn_id == incoming_conn_id));
             assert!(aborted.is_some(), "incoming must receive RelayAborted");
-            assert!(matches!(aborted.unwrap(), Event::RelayAborted { stage: Stage::InitialExchange, reason: AbortReason::ServerShutdown, .. }));
+            assert!(matches!(
+                aborted.unwrap(),
+                Event::RelayAborted {
+                    stage: Stage::InitialExchange,
+                    reason: AbortReason::ServerShutdown,
+                    ..
+                }
+            ));
 
-            assert!(!events.iter().any(|e| matches!(e, Event::RelayAborted { stage: Stage::Register, .. } | Event::ConnectionAborted { stage: Stage::Register, .. })));
+            assert!(!events.iter().any(|e| matches!(
+                e,
+                Event::RelayAborted {
+                    stage: Stage::Register,
+                    ..
+                } | Event::ConnectionAborted {
+                    stage: Stage::Register,
+                    ..
+                }
+            )));
             assert_eq!(free_places(&harness.budget), 3);
         }
     }
@@ -1885,7 +2565,9 @@ mod tests {
         settle().await;
         assert_eq!(harness.snapshot().active.len(), 1);
 
-        harness.service.request_shutdown(&harness.runtime, Duration::from_secs(3));
+        harness
+            .service
+            .request_shutdown(&harness.runtime, Duration::from_secs(3));
         harness.clock.offset.fetch_add(3000, Ordering::Relaxed);
         viewer.shutdown().await.expect("viewer shutdown");
         server.shutdown().await.expect("server shutdown");
@@ -1893,11 +2575,32 @@ mod tests {
         owner.await.expect("owner").expect("forced session");
 
         let events = harness.events();
-        let forced_idx = events.iter().position(|e| matches!(e, Event::ShutdownForced { remaining_sessions: 1 }));
-        let closed_idx = events.iter().position(|e| matches!(e, Event::SessionClosed { close_cause: CloseCause::ServerShutdown, .. }));
+        let forced_idx = events.iter().position(|e| {
+            matches!(
+                e,
+                Event::ShutdownForced {
+                    remaining_sessions: 1
+                }
+            )
+        });
+        let closed_idx = events.iter().position(|e| {
+            matches!(
+                e,
+                Event::SessionClosed {
+                    close_cause: CloseCause::ServerShutdown,
+                    ..
+                }
+            )
+        });
         assert!(forced_idx.is_some(), "ShutdownForced must be recorded");
-        assert!(closed_idx.is_some(), "SessionClosed with ServerShutdown must be recorded");
-        assert!(forced_idx.unwrap() < closed_idx.unwrap(), "ShutdownForced must precede SessionClosed");
+        assert!(
+            closed_idx.is_some(),
+            "SessionClosed with ServerShutdown must be recorded"
+        );
+        assert!(
+            forced_idx.unwrap() < closed_idx.unwrap(),
+            "ShutdownForced must precede SessionClosed"
+        );
     }
 
     /// spec: operations.md:OPS-007 partial
@@ -1910,11 +2613,23 @@ mod tests {
         let drop_fired_clone = drop_fired.clone();
         let on_drop = Arc::new(move || {
             drop_fired_clone.store(true, Ordering::SeqCst);
-            assert!(harness_clone.runtime.lock().matching.get(&RelayId::parse("71").expect("id")).is_some(), "ID must still be held during stream drop");
-            harness_clone.service.request_shutdown(&harness_clone.runtime, Duration::ZERO);
+            assert!(
+                harness_clone
+                    .runtime
+                    .lock()
+                    .matching
+                    .get(&RelayId::parse("71").expect("id"))
+                    .is_some(),
+                "ID must still be held during stream drop"
+            );
+            harness_clone
+                .service
+                .request_shutdown(&harness_clone.runtime, Duration::ZERO);
         });
 
-        let (prepared, mut server, _) = harness.prepare_with_options(Role::Server, "ID:71", b"", false, Some(on_drop)).await;
+        let (prepared, mut server, _) = harness
+            .prepare_with_options(Role::Server, "ID:71", b"", false, Some(on_drop))
+            .await;
         let waiter = harness.start(prepared);
         settle().await;
         let (prepared, mut viewer, _) = harness.prepare(Role::Viewer, "ID:71", b"").await;
@@ -1922,7 +2637,9 @@ mod tests {
         settle().await;
         assert_eq!(harness.snapshot().active.len(), 1);
 
-        harness.service.request_shutdown(&harness.runtime, Duration::from_secs(3));
+        harness
+            .service
+            .request_shutdown(&harness.runtime, Duration::from_secs(3));
         harness.clock.offset.fetch_add(2999, Ordering::Relaxed);
 
         server.shutdown().await.expect("server shutdown");
@@ -1930,11 +2647,31 @@ mod tests {
         waiter.await.expect("waiter").expect("handoff");
         owner.await.expect("owner").expect("completed session");
 
-        assert!(drop_fired.load(Ordering::SeqCst), "on_drop hook must fire during stream drop");
+        assert!(
+            drop_fired.load(Ordering::SeqCst),
+            "on_drop hook must fire during stream drop"
+        );
         let events = harness.events();
-        let closed = events.iter().find(|e| matches!(e, Event::SessionClosed { .. })).expect("SessionClosed");
-        assert!(matches!(closed, Event::SessionClosed { close_cause: CloseCause::PeerEof, .. }), "close cause must stand as PeerEof");
-        assert!(!events.iter().any(|e| matches!(e, Event::ShutdownForced { remaining_sessions: n } if *n > 0)), "completed session must not be counted in ShutdownForced");
+        let closed = events
+            .iter()
+            .find(|e| matches!(e, Event::SessionClosed { .. }))
+            .expect("SessionClosed");
+        assert!(
+            matches!(
+                closed,
+                Event::SessionClosed {
+                    close_cause: CloseCause::PeerEof,
+                    ..
+                }
+            ),
+            "close cause must stand as PeerEof"
+        );
+        assert!(
+            !events
+                .iter()
+                .any(|e| matches!(e, Event::ShutdownForced { remaining_sessions: n } if *n > 0)),
+            "completed session must not be counted in ShutdownForced"
+        );
     }
 
     /// spec: management.md:MGT-005 partial
@@ -1965,9 +2702,18 @@ mod tests {
 
         let state = harness.runtime.lock();
         assert_eq!(state.recent_refs.len(), 2);
-        assert!(!state.recent_refs.contains_key(&session_ids[0]), "evicted session ref must be removed");
-        assert!(state.recent_refs.contains_key(&session_ids[1]), "retained session 2 ref must exist");
-        assert!(state.recent_refs.contains_key(&session_ids[2]), "retained session 3 ref must exist");
+        assert!(
+            !state.recent_refs.contains_key(&session_ids[0]),
+            "evicted session ref must be removed"
+        );
+        assert!(
+            state.recent_refs.contains_key(&session_ids[1]),
+            "retained session 2 ref must exist"
+        );
+        assert!(
+            state.recent_refs.contains_key(&session_ids[2]),
+            "retained session 3 ref must exist"
+        );
     }
 
     /// spec: management.md:MGT-005 partial
@@ -1986,8 +2732,14 @@ mod tests {
         owner.await.expect("owner").expect("session");
 
         let snap = harness.snapshot();
-        assert!(snap.recent_closed.is_empty(), "R=0 must keep zero recent_closed");
+        assert!(
+            snap.recent_closed.is_empty(),
+            "R=0 must keep zero recent_closed"
+        );
         let state = harness.runtime.lock();
-        assert!(state.recent_refs.is_empty(), "R=0 must never retain recent_refs");
+        assert!(
+            state.recent_refs.is_empty(),
+            "R=0 must never retain recent_refs"
+        );
     }
 }

@@ -20,7 +20,10 @@ use crate::ports::{Clock, RelayCloseAction, RelayLifecycle, RelayStream, RelaySt
 /// the transport boundary for future WS adapters; this is not a WS engine.
 /// The returned kind belongs only to a selected connection-error outcome;
 /// protocol-specific failures retain their kind without changing domain state.
-#[expect(clippy::too_many_arguments, reason = "the session owner supplies borrowed resources and immutable relay limits")]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the session owner supplies borrowed resources and immutable relay limits"
+)]
 pub(super) async fn run_session(
     viewer: &mut dyn RelayStream,
     other: &mut dyn RelayStream,
@@ -68,15 +71,14 @@ pub(super) async fn run_session(
         let eof_deadline = session
             .first_eof()
             .map(|(_, at)| at.saturating_add(close_timeout));
-        if eof_deadline.is_some_and(|end| now >= end)
-            && session.expire_close(now, close_timeout)?
-        {
+        if eof_deadline.is_some_and(|end| now >= end) && session.expire_close(now, close_timeout)? {
             on_update(session);
         }
         let closing = session.close_cause().is_some()
             || directions.iter().all(|direction| direction.complete);
         if closing && terminal_deadline.is_none() {
-            terminal_deadline = Some(eof_deadline.unwrap_or_else(|| now.saturating_add(close_timeout)));
+            terminal_deadline =
+                Some(eof_deadline.unwrap_or_else(|| now.saturating_add(close_timeout)));
         }
         let close_deadline = eof_deadline.or(terminal_deadline);
         let expired = close_deadline.is_some_and(|end| now >= end);
@@ -97,7 +99,9 @@ pub(super) async fn run_session(
                     close_once(viewer, other, RelayCloseAction::ServerShutdown).await;
                 }
             }
-            return Ok(error_kind.filter(|_| session.close_cause() == Some(CloseCause::ConnectionError)));
+            return Ok(
+                error_kind.filter(|_| session.close_cause() == Some(CloseCause::ConnectionError))
+            );
         }
 
         let deadline = match (close_deadline, grace_deadline) {
@@ -126,8 +130,15 @@ pub(super) async fn run_session(
                         if terminal[index] {
                             continue;
                         }
-                        let stream: &mut dyn RelayStream = if index == 0 { &mut *viewer } else { &mut *other };
-                        if Pin::new(stream).poll_close(cx, close_action(session, error_kind)).is_ready() {
+                        let stream: &mut dyn RelayStream = if index == 0 {
+                            &mut *viewer
+                        } else {
+                            &mut *other
+                        };
+                        if Pin::new(stream)
+                            .poll_close(cx, close_action(session, error_kind))
+                            .is_ready()
+                        {
                             return Poll::Ready(Wake::Terminal(index));
                         }
                     } else {
@@ -157,7 +168,11 @@ pub(super) async fn run_session(
             Wake::Terminal(index) => terminal[index] = true,
             Wake::Direction(index, step) => {
                 next = 1 - index;
-                let direction = if index == 0 { Direction::ViewerToTarget } else { Direction::TargetToViewer };
+                let direction = if index == 0 {
+                    Direction::ViewerToTarget
+                } else {
+                    Direction::TargetToViewer
+                };
                 let input = if index == 0 { Side::Viewer } else { other_side };
                 let output = if index == 0 { other_side } else { Side::Viewer };
                 match step {
@@ -175,7 +190,11 @@ pub(super) async fn run_session(
                         on_update(session);
                     }
                     Step::InputError(kind) | Step::OutputError(kind) => {
-                        let side = if matches!(step, Step::InputError(_)) { input } else { output };
+                        let side = if matches!(step, Step::InputError(_)) {
+                            input
+                        } else {
+                            output
+                        };
                         if session.io_error(direction, side)? {
                             error_kind = Some(kind);
                             on_update(session);
@@ -198,7 +217,8 @@ pub(super) async fn run_session(
                     cx.waker().wake_by_ref();
                     Poll::Pending
                 }
-            }).await;
+            })
+            .await;
         }
     }
 }
@@ -222,7 +242,13 @@ impl BufferedDirection {
         }
         trailing.reserve_exact(buffer_bytes - end);
         trailing.resize(buffer_bytes, 0);
-        Self { storage: trailing, start: 0, end, eof: false, complete: false }
+        Self {
+            storage: trailing,
+            start: 0,
+            end,
+            eof: false,
+            complete: false,
+        }
     }
 
     fn poll_step(
@@ -238,7 +264,9 @@ impl BufferedDirection {
             return match Pin::new(output).poll_write(cx, &self.storage[self.start..self.end]) {
                 Poll::Pending => Poll::Pending,
                 Poll::Ready(Ok(0)) => Poll::Ready(Step::OutputError(ConnectionErrorKind::IoError)),
-                Poll::Ready(Err(error)) => Poll::Ready(Step::OutputError(RelayStreamError::classify(&error))),
+                Poll::Ready(Err(error)) => {
+                    Poll::Ready(Step::OutputError(RelayStreamError::classify(&error)))
+                }
                 Poll::Ready(Ok(count)) => {
                     self.start += count;
                     Poll::Ready(Step::Written(count))
@@ -248,7 +276,9 @@ impl BufferedDirection {
         if self.eof {
             return match Pin::new(output).poll_close(cx, RelayCloseAction::WriteHalf) {
                 Poll::Pending => Poll::Pending,
-                Poll::Ready(Err(error)) => Poll::Ready(Step::OutputError(RelayStreamError::classify(&error))),
+                Poll::Ready(Err(error)) => {
+                    Poll::Ready(Step::OutputError(RelayStreamError::classify(&error)))
+                }
                 Poll::Ready(Ok(())) => {
                     self.complete = true;
                     Poll::Ready(Step::WriteClosed)
@@ -260,7 +290,9 @@ impl BufferedDirection {
         let mut buffer = ReadBuf::new(&mut self.storage);
         match Pin::new(input).poll_read(cx, &mut buffer) {
             Poll::Pending => Poll::Pending,
-            Poll::Ready(Err(error)) => Poll::Ready(Step::InputError(RelayStreamError::classify(&error))),
+            Poll::Ready(Err(error)) => {
+                Poll::Ready(Step::InputError(RelayStreamError::classify(&error)))
+            }
             Poll::Ready(Ok(())) => {
                 self.end = buffer.filled().len();
                 if self.end == 0 {
@@ -293,7 +325,9 @@ enum Wake {
 
 fn close_action(session: &Session, error_kind: Option<ConnectionErrorKind>) -> RelayCloseAction {
     match session.close_cause() {
-        Some(CloseCause::ConnectionError) => RelayCloseAction::StreamError(error_kind.unwrap_or(ConnectionErrorKind::IoError)),
+        Some(CloseCause::ConnectionError) => {
+            RelayCloseAction::StreamError(error_kind.unwrap_or(ConnectionErrorKind::IoError))
+        }
         Some(CloseCause::DeadConnection) => RelayCloseAction::DeadConnection,
         Some(CloseCause::AdminTerminated) => RelayCloseAction::AdminTerminated,
         Some(CloseCause::ServerShutdown) => RelayCloseAction::ServerShutdown,
@@ -301,12 +335,17 @@ fn close_action(session: &Session, error_kind: Option<ConnectionErrorKind>) -> R
     }
 }
 
-async fn close_once(viewer: &mut dyn RelayStream, other: &mut dyn RelayStream, action: RelayCloseAction) {
+async fn close_once(
+    viewer: &mut dyn RelayStream,
+    other: &mut dyn RelayStream,
+    action: RelayCloseAction,
+) {
     poll_fn(|cx| {
         let _ = Pin::new(&mut *viewer).poll_close(cx, action);
         let _ = Pin::new(&mut *other).poll_close(cx, action);
         Poll::Ready(())
-    }).await;
+    })
+    .await;
 }
 
 #[cfg(test)]
@@ -333,11 +372,17 @@ mod tests {
 
     impl TestClock {
         fn new() -> Arc<Self> {
-            Arc::new(Self { epoch: Instant::now(), offset_ms: AtomicU64::new(0) })
+            Arc::new(Self {
+                epoch: Instant::now(),
+                offset_ms: AtomicU64::new(0),
+            })
         }
 
         fn jump(&self, by: Duration) {
-            self.offset_ms.fetch_add(by.as_millis().try_into().expect("test duration"), Ordering::Relaxed);
+            self.offset_ms.fetch_add(
+                by.as_millis().try_into().expect("test duration"),
+                Ordering::Relaxed,
+            );
         }
     }
 
@@ -454,7 +499,11 @@ mod tests {
     }
 
     impl AsyncRead for TestStream {
-        fn poll_read(self: Pin<&mut Self>, cx: &mut Context<'_>, buffer: &mut ReadBuf<'_>) -> Poll<io::Result<()>> {
+        fn poll_read(
+            self: Pin<&mut Self>,
+            cx: &mut Context<'_>,
+            buffer: &mut ReadBuf<'_>,
+        ) -> Poll<io::Result<()>> {
             let mut state = self.0.lock().expect("stream state");
             state.waker = Some(cx.waker().clone());
             state.read_calls += 1;
@@ -462,7 +511,10 @@ mod tests {
             if state.read_error {
                 return Poll::Ready(Err(stream_failure(state.typed_error)));
             }
-            let count = buffer.remaining().min(state.read_chunk).min(state.input.len());
+            let count = buffer
+                .remaining()
+                .min(state.read_chunk)
+                .min(state.input.len());
             if count > 0 {
                 for _ in 0..count {
                     buffer.put_slice(&[state.input.pop_front().expect("counted input")]);
@@ -473,24 +525,37 @@ mod tests {
                 }
                 return Poll::Ready(Ok(()));
             }
-            if state.eof { Poll::Ready(Ok(())) } else { Poll::Pending }
+            if state.eof {
+                Poll::Ready(Ok(()))
+            } else {
+                Poll::Pending
+            }
         }
     }
 
     impl AsyncWrite for TestStream {
-        fn poll_write(self: Pin<&mut Self>, cx: &mut Context<'_>, bytes: &[u8]) -> Poll<io::Result<usize>> {
+        fn poll_write(
+            self: Pin<&mut Self>,
+            cx: &mut Context<'_>,
+            bytes: &[u8],
+        ) -> Poll<io::Result<usize>> {
             let mut state = self.0.lock().expect("stream state");
             state.waker = Some(cx.waker().clone());
             if state.write_blocked {
                 return Poll::Pending;
             }
-            if state.error_after.is_some_and(|limit| state.output.len() >= limit) {
+            if state
+                .error_after
+                .is_some_and(|limit| state.output.len() >= limit)
+            {
                 return Poll::Ready(Err(stream_failure(state.typed_error)));
             }
             if state.write_zero {
                 return Poll::Ready(Ok(0));
             }
-            let remaining = state.error_after.map_or(usize::MAX, |limit| limit - state.output.len());
+            let remaining = state
+                .error_after
+                .map_or(usize::MAX, |limit| limit - state.output.len());
             let count = bytes.len().min(state.write_chunk).min(remaining);
             state.output.extend_from_slice(&bytes[..count]);
             if let Some((clock, by)) = state.jump_on_write.take() {
@@ -513,7 +578,11 @@ mod tests {
             ViewerTransport::Tcp
         }
 
-        fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>, action: RelayCloseAction) -> Poll<io::Result<()>> {
+        fn poll_close(
+            self: Pin<&mut Self>,
+            cx: &mut Context<'_>,
+            action: RelayCloseAction,
+        ) -> Poll<io::Result<()>> {
             let mut state = self.0.lock().expect("stream state");
             state.waker = Some(cx.waker().clone());
             state.actions.push(action);
@@ -540,20 +609,37 @@ mod tests {
     }
 
     fn model(mode: Mode) -> Session {
-        Session::new(SessionId::from_block([0; 16]), mode, ViewerTransport::Tcp, SystemTime::UNIX_EPOCH, Duration::ZERO)
+        Session::new(
+            SessionId::from_block([0; 16]),
+            mode,
+            ViewerTransport::Tcp,
+            SystemTime::UNIX_EPOCH,
+            Duration::ZERO,
+        )
     }
 
-    async fn pump(future: &mut Pin<&mut impl Future<Output = Result<Option<ConnectionErrorKind>, SessionError>>>) {
+    async fn pump(
+        future: &mut Pin<
+            &mut impl Future<Output = Result<Option<ConnectionErrorKind>, SessionError>>,
+        >,
+    ) {
         for _ in 0..16 {
             poll_fn(|cx| {
-                assert!(future.as_mut().poll(cx).is_pending(), "session must remain open");
+                assert!(
+                    future.as_mut().poll(cx).is_pending(),
+                    "session must remain open"
+                );
                 Poll::Ready(())
-            }).await;
+            })
+            .await;
         }
     }
 
     fn finish(session: &mut Session, clock: &TestClock) -> CloseCause {
-        session.finish(clock.wall(), clock.monotonic()).expect("caller finishes after cleanup").close_cause()
+        session
+            .finish(clock.wall(), clock.monotonic())
+            .expect("caller finishes after cleanup")
+            .close_cause()
     }
 
     /// spec: relay.md:RLY-003 partial
@@ -566,15 +652,38 @@ mod tests {
             let (_sender, receiver) = watch::channel(RelayLifecycle::Running);
             let (mut viewer, viewer_control) = stream(b"viewer-stream", true);
             let (mut other, other_control) = stream(b"other-stream", true);
-            viewer_control.change(|state| { state.write_chunk = 2; state.read_chunk = 3; });
-            other_control.change(|state| { state.write_chunk = 3; state.read_chunk = 2; });
-            run_session(&mut viewer, &mut other, b"viewer-first".to_vec(), b"other-first".to_vec(), &mut session, clock.as_ref(), receiver, 16, E, |_| {}).await.expect("relay");
+            viewer_control.change(|state| {
+                state.write_chunk = 2;
+                state.read_chunk = 3;
+            });
+            other_control.change(|state| {
+                state.write_chunk = 3;
+                state.read_chunk = 2;
+            });
+            run_session(
+                &mut viewer,
+                &mut other,
+                b"viewer-first".to_vec(),
+                b"other-first".to_vec(),
+                &mut session,
+                clock.as_ref(),
+                receiver,
+                16,
+                E,
+                |_| {},
+            )
+            .await
+            .expect("relay");
             assert_eq!(other_control.output(), b"viewer-firstviewer-stream");
             assert_eq!(viewer_control.output(), b"other-firstother-stream");
             assert_eq!(session.bytes(Direction::ViewerToTarget), 25);
             assert_eq!(session.bytes(Direction::TargetToViewer), 23);
             assert_eq!(session.state(), SessionState::Closing);
-            assert_eq!(session.close_cause(), None, "EOF is provisional until ownership cleanup");
+            assert_eq!(
+                session.close_cause(),
+                None,
+                "EOF is provisional until ownership cleanup"
+            );
             drop((viewer, other));
             assert_eq!(finish(&mut session, &clock), CloseCause::PeerEof);
         }
@@ -592,12 +701,31 @@ mod tests {
         let (mut other, other_control) = stream(b"reverse", false);
         other_control.change(|state| state.write_blocked = true);
         {
-            let mut relay = pin!(run_session(&mut viewer, &mut other, Vec::new(), Vec::new(), &mut session, clock.as_ref(), receiver, 8, E, |_| {}));
+            let mut relay = pin!(run_session(
+                &mut viewer,
+                &mut other,
+                Vec::new(),
+                Vec::new(),
+                &mut session,
+                clock.as_ref(),
+                receiver,
+                8,
+                E,
+                |_| {}
+            ));
             pump(&mut relay).await;
-            assert_eq!(viewer_control.output(), b"reverse", "blocked forward writes cannot block reverse");
+            assert_eq!(
+                viewer_control.output(),
+                b"reverse",
+                "blocked forward writes cannot block reverse"
+            );
             assert_eq!(viewer_control.0.lock().expect("state").read_total, 8);
             assert_eq!(viewer_control.0.lock().expect("state").max_read, 8);
-            other_control.change(|state| { state.write_blocked = false; state.write_chunk = 1; state.eof = true; });
+            other_control.change(|state| {
+                state.write_blocked = false;
+                state.write_chunk = 1;
+                state.eof = true;
+            });
             relay.await.expect("relay");
         }
         assert_eq!(other_control.output(), payload);
@@ -630,23 +758,78 @@ mod tests {
             let (_sender, receiver) = watch::channel(RelayLifecycle::Running);
             let (mut viewer, viewer_control) = stream(b"later-viewer", false);
             let (mut other, other_control) = stream(b"later-target", false);
-            let failed = if failed_direction == 0 { &other_control } else { &viewer_control };
-            failed.change(|state| { state.write_chunk = 2; state.error_after = Some(3); });
+            let failed = if failed_direction == 0 {
+                &other_control
+            } else {
+                &viewer_control
+            };
+            failed.change(|state| {
+                state.write_chunk = 2;
+                state.error_after = Some(3);
+            });
             let updates = Mutex::new(Vec::new());
-            run_session(&mut viewer, &mut other, b"viewer-trailing".to_vec(), b"target-trailing".to_vec(), &mut session, clock.as_ref(), receiver, 16, E, |value| {
-                updates.lock().expect("updates").push((value.bytes(Direction::ViewerToTarget), value.bytes(Direction::TargetToViewer), value.close_cause()));
-            }).await.expect("relay failure is a model transition");
-            let direction = if failed_direction == 0 { Direction::ViewerToTarget } else { Direction::TargetToViewer };
+            run_session(
+                &mut viewer,
+                &mut other,
+                b"viewer-trailing".to_vec(),
+                b"target-trailing".to_vec(),
+                &mut session,
+                clock.as_ref(),
+                receiver,
+                16,
+                E,
+                |value| {
+                    updates.lock().expect("updates").push((
+                        value.bytes(Direction::ViewerToTarget),
+                        value.bytes(Direction::TargetToViewer),
+                        value.close_cause(),
+                    ));
+                },
+            )
+            .await
+            .expect("relay failure is a model transition");
+            let direction = if failed_direction == 0 {
+                Direction::ViewerToTarget
+            } else {
+                Direction::TargetToViewer
+            };
             assert_eq!(session.bytes(direction), 3);
             assert_eq!(session.close_cause(), Some(CloseCause::ConnectionError));
-            assert_eq!(session.close_side(), Some(if failed_direction == 0 { Side::Target } else { Side::Viewer }));
+            assert_eq!(
+                session.close_side(),
+                Some(if failed_direction == 0 {
+                    Side::Target
+                } else {
+                    Side::Viewer
+                })
+            );
             let updates = updates.lock().expect("updates");
-            let selected: Vec<_> = updates.iter().map(|value| if failed_direction == 0 { value.0 } else { value.1 }).collect();
-            assert!(selected.contains(&2) && selected.contains(&3), "every partial write is published");
+            let selected: Vec<_> = updates
+                .iter()
+                .map(|value| {
+                    if failed_direction == 0 {
+                        value.0
+                    } else {
+                        value.1
+                    }
+                })
+                .collect();
+            assert!(
+                selected.contains(&2) && selected.contains(&3),
+                "every partial write is published"
+            );
             assert!(selected.windows(2).all(|values| values[0] <= values[1]));
             assert_eq!(failed.output().len(), 3);
-            assert!(viewer_control.actions().contains(&RelayCloseAction::StreamError(ConnectionErrorKind::IoError)));
-            assert!(other_control.actions().contains(&RelayCloseAction::StreamError(ConnectionErrorKind::IoError)));
+            assert!(
+                viewer_control
+                    .actions()
+                    .contains(&RelayCloseAction::StreamError(ConnectionErrorKind::IoError))
+            );
+            assert!(
+                other_control
+                    .actions()
+                    .contains(&RelayCloseAction::StreamError(ConnectionErrorKind::IoError))
+            );
         }
     }
 
@@ -658,7 +841,20 @@ mod tests {
         let (mut viewer, _) = stream(&[], false);
         let (mut other, other_control) = stream(&[], false);
         other_control.change(|state| state.write_zero = true);
-        run_session(&mut viewer, &mut other, b"x".to_vec(), Vec::new(), &mut session, clock.as_ref(), receiver, 4, E, |_| {}).await.expect("relay");
+        run_session(
+            &mut viewer,
+            &mut other,
+            b"x".to_vec(),
+            Vec::new(),
+            &mut session,
+            clock.as_ref(),
+            receiver,
+            4,
+            E,
+            |_| {},
+        )
+        .await
+        .expect("relay");
         assert_eq!(session.close_side(), Some(Side::Server));
         assert_eq!(session.bytes(Direction::ViewerToTarget), 0);
         assert_eq!(finish(&mut session, &clock), CloseCause::ConnectionError);
@@ -671,20 +867,48 @@ mod tests {
             let clock = TestClock::new();
             let mut session = model(Mode::Mode2);
             let (_sender, receiver) = watch::channel(RelayLifecycle::Running);
-            let (mut viewer, viewer_control) = stream(if first == 0 { b"request" } else { b"" }, first == 0);
-            let (mut other, other_control) = stream(if first == 1 { b"request" } else { b"" }, first == 1);
+            let (mut viewer, viewer_control) =
+                stream(if first == 0 { b"request" } else { b"" }, first == 0);
+            let (mut other, other_control) =
+                stream(if first == 1 { b"request" } else { b"" }, first == 1);
             {
-                let mut relay = pin!(run_session(&mut viewer, &mut other, Vec::new(), Vec::new(), &mut session, clock.as_ref(), receiver, 8, E, |_| {}));
+                let mut relay = pin!(run_session(
+                    &mut viewer,
+                    &mut other,
+                    Vec::new(),
+                    Vec::new(),
+                    &mut session,
+                    clock.as_ref(),
+                    receiver,
+                    8,
+                    E,
+                    |_| {}
+                ));
                 pump(&mut relay).await;
-                let responder = if first == 0 { &other_control } else { &viewer_control };
+                let responder = if first == 0 {
+                    &other_control
+                } else {
+                    &viewer_control
+                };
                 assert_eq!(responder.output(), b"request");
                 assert!(responder.0.lock().expect("state").half_closed);
-                assert_eq!(viewer_control.actions().iter().filter(|&&action| action != RelayCloseAction::WriteHalf).count(), 0);
+                assert_eq!(
+                    viewer_control
+                        .actions()
+                        .iter()
+                        .filter(|&&action| action != RelayCloseAction::WriteHalf)
+                        .count(),
+                    0
+                );
                 advance(E - Duration::from_millis(1)).await;
                 responder.feed(b"late-response", true);
                 relay.await.expect("reply drains before E");
             }
-            let requester = if first == 0 { &viewer_control } else { &other_control };
+            let requester = if first == 0 {
+                &viewer_control
+            } else {
+                &other_control
+            };
             assert_eq!(requester.output(), b"late-response");
             assert_eq!(finish(&mut session, &clock), CloseCause::PeerEof);
         }
@@ -706,7 +930,18 @@ mod tests {
                 viewer_control.change(|state| state.terminal = CloseBehavior::Pending);
             }
             {
-                let mut relay = pin!(run_session(&mut viewer, &mut other, Vec::new(), Vec::new(), &mut session, clock.as_ref(), receiver, 4, E, |_| {}));
+                let mut relay = pin!(run_session(
+                    &mut viewer,
+                    &mut other,
+                    Vec::new(),
+                    Vec::new(),
+                    &mut session,
+                    clock.as_ref(),
+                    receiver,
+                    4,
+                    E,
+                    |_| {}
+                ));
                 pump(&mut relay).await;
                 advance(E).await;
                 relay.await.expect("E bounds all cleanup stages");
@@ -727,7 +962,18 @@ mod tests {
             let (mut viewer, viewer_control) = stream(&[], true);
             let (mut other, other_control) = stream(&[], false);
             {
-                let mut relay = pin!(run_session(&mut viewer, &mut other, Vec::new(), Vec::new(), &mut session, clock.as_ref(), receiver, 8, E, |_| {}));
+                let mut relay = pin!(run_session(
+                    &mut viewer,
+                    &mut other,
+                    Vec::new(),
+                    Vec::new(),
+                    &mut session,
+                    clock.as_ref(),
+                    receiver,
+                    8,
+                    E,
+                    |_| {}
+                ));
                 pump(&mut relay).await;
                 if jump_during_write {
                     viewer_control.change(|state| state.jump_on_write = Some((clock.clone(), E)));
@@ -739,8 +985,18 @@ mod tests {
                 relay.await.expect("post-operation deadline");
             }
             assert_eq!(session.close_cause(), Some(CloseCause::CloseTimeout));
-            assert_eq!(viewer_control.output(), if jump_during_write { &b"reply"[..] } else { &b""[..] });
-            assert_eq!(session.bytes(Direction::TargetToViewer), if jump_during_write { 5 } else { 0 });
+            assert_eq!(
+                viewer_control.output(),
+                if jump_during_write {
+                    &b"reply"[..]
+                } else {
+                    &b""[..]
+                }
+            );
+            assert_eq!(
+                session.bytes(Direction::TargetToViewer),
+                if jump_during_write { 5 } else { 0 }
+            );
         }
     }
 
@@ -753,7 +1009,18 @@ mod tests {
         let (mut other, other_control) = stream(b"answer", true);
         other_control.change(|state| state.write_blocked = true);
         {
-            let mut relay = pin!(run_session(&mut viewer, &mut other, b"full".to_vec(), Vec::new(), &mut session, clock.as_ref(), receiver, 4, E, |_| {}));
+            let mut relay = pin!(run_session(
+                &mut viewer,
+                &mut other,
+                b"full".to_vec(),
+                Vec::new(),
+                &mut session,
+                clock.as_ref(),
+                receiver,
+                4,
+                E,
+                |_| {}
+            ));
             pump(&mut relay).await;
             assert_eq!(viewer_control.0.lock().expect("state").read_calls, 0);
             assert_eq!(viewer_control.output(), b"answer");
@@ -772,7 +1039,18 @@ mod tests {
         let (mut other, other_control) = stream(&[], false);
         viewer_control.change(|state| state.terminal = CloseBehavior::Pending);
         {
-            let mut relay = pin!(run_session(&mut viewer, &mut other, Vec::new(), Vec::new(), &mut session, clock.as_ref(), receiver, 4, E, |_| {}));
+            let mut relay = pin!(run_session(
+                &mut viewer,
+                &mut other,
+                Vec::new(),
+                Vec::new(),
+                &mut session,
+                clock.as_ref(),
+                receiver,
+                4,
+                E,
+                |_| {}
+            ));
             pump(&mut relay).await;
             advance(E - Duration::from_secs(1)).await;
             other_control.feed(&[], true);
@@ -795,7 +1073,18 @@ mod tests {
             let (mut viewer, viewer_control) = stream(&[], true);
             let (mut other, other_control) = stream(&[], false);
             {
-                let mut relay = pin!(run_session(&mut viewer, &mut other, Vec::new(), Vec::new(), &mut session, clock.as_ref(), receiver, 4, E, |_| {}));
+                let mut relay = pin!(run_session(
+                    &mut viewer,
+                    &mut other,
+                    Vec::new(),
+                    Vec::new(),
+                    &mut session,
+                    clock.as_ref(),
+                    receiver,
+                    4,
+                    E,
+                    |_| {}
+                ));
                 pump(&mut relay).await;
                 if shutdown_error {
                     viewer_control.change(|state| state.half = CloseBehavior::Error);
@@ -803,11 +1092,25 @@ mod tests {
                 } else {
                     other_control.change(|state| state.read_error = true);
                 }
-                assert_eq!(relay.await.expect("failed direction"), Some(ConnectionErrorKind::IoError));
+                assert_eq!(
+                    relay.await.expect("failed direction"),
+                    Some(ConnectionErrorKind::IoError)
+                );
             }
             assert_eq!(session.close_cause(), Some(CloseCause::ConnectionError));
-            assert_eq!(session.close_side(), Some(if shutdown_error { Side::Viewer } else { Side::Server }));
-            assert!(viewer_control.actions().contains(&RelayCloseAction::StreamError(ConnectionErrorKind::IoError)));
+            assert_eq!(
+                session.close_side(),
+                Some(if shutdown_error {
+                    Side::Viewer
+                } else {
+                    Side::Server
+                })
+            );
+            assert!(
+                viewer_control
+                    .actions()
+                    .contains(&RelayCloseAction::StreamError(ConnectionErrorKind::IoError))
+            );
         }
     }
 
@@ -820,7 +1123,23 @@ mod tests {
         let (mut other, other_control) = stream(b"t", true);
         viewer_control.change(|state| state.terminal = CloseBehavior::Error);
         other_control.change(|state| state.terminal = CloseBehavior::Error);
-        assert_eq!(run_session(&mut viewer, &mut other, Vec::new(), Vec::new(), &mut session, clock.as_ref(), receiver, 4, E, |_| {}).await.expect("cleanup errors are not transfer errors"), None);
+        assert_eq!(
+            run_session(
+                &mut viewer,
+                &mut other,
+                Vec::new(),
+                Vec::new(),
+                &mut session,
+                clock.as_ref(),
+                receiver,
+                4,
+                E,
+                |_| {}
+            )
+            .await
+            .expect("cleanup errors are not transfer errors"),
+            None
+        );
         assert_eq!(session.close_cause(), None);
         drop((viewer, other));
         assert_eq!(finish(&mut session, &clock), CloseCause::PeerEof);
@@ -835,9 +1154,22 @@ mod tests {
         let (mut viewer, viewer_control) = stream(&[], false);
         let (mut other, other_control) = stream(&[], false);
         {
-            let mut relay = pin!(run_session(&mut viewer, &mut other, Vec::new(), Vec::new(), &mut session, clock.as_ref(), receiver, 4, E, |_| {}));
+            let mut relay = pin!(run_session(
+                &mut viewer,
+                &mut other,
+                Vec::new(),
+                Vec::new(),
+                &mut session,
+                clock.as_ref(),
+                receiver,
+                4,
+                E,
+                |_| {}
+            ));
             pump(&mut relay).await;
-            sender.send_replace(RelayLifecycle::Grace { deadline: Duration::from_secs(20) });
+            sender.send_replace(RelayLifecycle::Grace {
+                deadline: Duration::from_secs(20),
+            });
             viewer_control.feed(b"during-grace", false);
             other_control.feed(b"reply", false);
             pump(&mut relay).await;
@@ -865,7 +1197,18 @@ mod tests {
             other_control.change(|state| state.terminal = CloseBehavior::Pending);
             let updates = Mutex::new(Vec::new());
             {
-                let mut relay = pin!(run_session(&mut viewer, &mut other, Vec::new(), Vec::new(), &mut session, clock.as_ref(), receiver, 4, E, |value| updates.lock().expect("updates").push(value.close_cause())));
+                let mut relay = pin!(run_session(
+                    &mut viewer,
+                    &mut other,
+                    Vec::new(),
+                    Vec::new(),
+                    &mut session,
+                    clock.as_ref(),
+                    receiver,
+                    4,
+                    E,
+                    |value| updates.lock().expect("updates").push(value.close_cause())
+                ));
                 pump(&mut relay).await;
                 sender.send_replace(RelayLifecycle::Grace { deadline: grace });
                 if !grace.is_zero() {
@@ -877,9 +1220,20 @@ mod tests {
             assert_eq!(clock.monotonic(), grace);
             assert_eq!(session.close_cause(), Some(CloseCause::ServerShutdown));
             assert_eq!(session.close_side(), None);
-            assert_eq!(updates.lock().expect("updates").last(), Some(&Some(CloseCause::ServerShutdown)));
-            assert!(viewer_control.actions().contains(&RelayCloseAction::ServerShutdown));
-            assert!(other_control.actions().contains(&RelayCloseAction::ServerShutdown));
+            assert_eq!(
+                updates.lock().expect("updates").last(),
+                Some(&Some(CloseCause::ServerShutdown))
+            );
+            assert!(
+                viewer_control
+                    .actions()
+                    .contains(&RelayCloseAction::ServerShutdown)
+            );
+            assert!(
+                other_control
+                    .actions()
+                    .contains(&RelayCloseAction::ServerShutdown)
+            );
         }
     }
 
@@ -891,17 +1245,35 @@ mod tests {
         let (sender, receiver) = watch::channel(RelayLifecycle::Running);
         let (mut viewer, viewer_control) = stream(&[], false);
         let (mut other, other_control) = stream(&[], false);
-        viewer_control.change(|state| { state.read_error = true; state.terminal = CloseBehavior::Pending; });
+        viewer_control.change(|state| {
+            state.read_error = true;
+            state.terminal = CloseBehavior::Pending;
+        });
         other_control.change(|state| state.terminal = CloseBehavior::Pending);
         {
-            let mut relay = pin!(run_session(&mut viewer, &mut other, Vec::new(), Vec::new(), &mut session, clock.as_ref(), receiver, 4, E, |_| {}));
+            let mut relay = pin!(run_session(
+                &mut viewer,
+                &mut other,
+                Vec::new(),
+                Vec::new(),
+                &mut session,
+                clock.as_ref(),
+                receiver,
+                4,
+                E,
+                |_| {}
+            ));
             pump(&mut relay).await;
             sender.send_replace(RelayLifecycle::Force);
             assert_eq!(relay.await.expect("second shutdown request"), None);
         }
         assert_eq!(session.close_cause(), Some(CloseCause::ServerShutdown));
         assert_eq!(clock.monotonic(), Duration::ZERO);
-        assert!(other_control.actions().contains(&RelayCloseAction::ServerShutdown));
+        assert!(
+            other_control
+                .actions()
+                .contains(&RelayCloseAction::ServerShutdown)
+        );
     }
 
     #[tokio::test(start_paused = true)]
@@ -909,21 +1281,48 @@ mod tests {
         for force_in_close in [false, true] {
             let clock = TestClock::new();
             let mut session = model(Mode::Mode1);
-            let state = if force_in_close { RelayLifecycle::Running } else { RelayLifecycle::Grace { deadline: Duration::ZERO } };
+            let state = if force_in_close {
+                RelayLifecycle::Running
+            } else {
+                RelayLifecycle::Grace {
+                    deadline: Duration::ZERO,
+                }
+            };
             let (sender, receiver) = watch::channel(state);
             let (mut viewer, viewer_control) = stream(b"unread", force_in_close);
             let (mut other, other_control) = stream(&[], force_in_close);
             if force_in_close {
                 viewer_control.change(|state| state.force_on_terminal = Some(sender.clone()));
             }
-            run_session(&mut viewer, &mut other, Vec::new(), Vec::new(), &mut session, clock.as_ref(), receiver, 8, E, |_| {}).await.expect("force");
+            run_session(
+                &mut viewer,
+                &mut other,
+                Vec::new(),
+                Vec::new(),
+                &mut session,
+                clock.as_ref(),
+                receiver,
+                8,
+                E,
+                |_| {},
+            )
+            .await
+            .expect("force");
             assert_eq!(session.close_cause(), Some(CloseCause::ServerShutdown));
             if !force_in_close {
                 assert_eq!(viewer_control.0.lock().expect("state").read_calls, 0);
                 assert!(other_control.output().is_empty());
             }
-            assert!(viewer_control.actions().contains(&RelayCloseAction::ServerShutdown));
-            assert!(other_control.actions().contains(&RelayCloseAction::ServerShutdown));
+            assert!(
+                viewer_control
+                    .actions()
+                    .contains(&RelayCloseAction::ServerShutdown)
+            );
+            assert!(
+                other_control
+                    .actions()
+                    .contains(&RelayCloseAction::ServerShutdown)
+            );
         }
     }
 
@@ -934,11 +1333,28 @@ mod tests {
         let (_sender, receiver) = watch::channel(RelayLifecycle::Running);
         let (mut viewer, viewer_control) = stream(&[], false);
         let (mut other, other_control) = stream(&[], false);
-        viewer_control.change(|state| { state.read_error = true; state.terminal = CloseBehavior::Pending; });
+        viewer_control.change(|state| {
+            state.read_error = true;
+            state.terminal = CloseBehavior::Pending;
+        });
         other_control.change(|state| state.terminal = CloseBehavior::Pending);
         {
-            let mut relay = pin!(run_session(&mut viewer, &mut other, Vec::new(), Vec::new(), &mut session, clock.as_ref(), receiver, 4, E, |_| {}));
-            assert_eq!(relay.as_mut().await.expect("bounded error cleanup"), Some(ConnectionErrorKind::IoError));
+            let mut relay = pin!(run_session(
+                &mut viewer,
+                &mut other,
+                Vec::new(),
+                Vec::new(),
+                &mut session,
+                clock.as_ref(),
+                receiver,
+                4,
+                E,
+                |_| {}
+            ));
+            assert_eq!(
+                relay.as_mut().await.expect("bounded error cleanup"),
+                Some(ConnectionErrorKind::IoError)
+            );
         }
         assert_eq!(clock.monotonic(), E);
         assert_eq!(session.close_cause(), Some(CloseCause::ConnectionError));
@@ -959,8 +1375,30 @@ mod tests {
         let (mut second_viewer, second_viewer_control) = stream(b"before", false);
         let (mut second_other, second_other_control) = stream(b"reply-before", false);
         {
-            let mut first = pin!(run_session(&mut first_viewer, &mut first_other, Vec::new(), Vec::new(), &mut first_model, clock.as_ref(), first_receiver, 8, E, |_| {}));
-            let mut second = pin!(run_session(&mut second_viewer, &mut second_other, Vec::new(), Vec::new(), &mut second_model, clock.as_ref(), second_receiver, 8, E, |_| {}));
+            let mut first = pin!(run_session(
+                &mut first_viewer,
+                &mut first_other,
+                Vec::new(),
+                Vec::new(),
+                &mut first_model,
+                clock.as_ref(),
+                first_receiver,
+                8,
+                E,
+                |_| {}
+            ));
+            let mut second = pin!(run_session(
+                &mut second_viewer,
+                &mut second_other,
+                Vec::new(),
+                Vec::new(),
+                &mut second_model,
+                clock.as_ref(),
+                second_receiver,
+                8,
+                E,
+                |_| {}
+            ));
             pump(&mut first).await;
             pump(&mut second).await;
             first_control.change(|state| state.read_error = true);
@@ -987,7 +1425,18 @@ mod tests {
         let (mut viewer, viewer_control) = stream(&[], false);
         let (mut other, other_control) = stream(&[], false);
         {
-            let mut relay = pin!(run_session(&mut viewer, &mut other, Vec::new(), Vec::new(), &mut session, clock.as_ref(), receiver, 4, E, |_| {}));
+            let mut relay = pin!(run_session(
+                &mut viewer,
+                &mut other,
+                Vec::new(),
+                Vec::new(),
+                &mut session,
+                clock.as_ref(),
+                receiver,
+                4,
+                E,
+                |_| {}
+            ));
             pump(&mut relay).await;
             // Closing the notification channel is not a forced shutdown.
             drop(sender);
@@ -1009,14 +1458,37 @@ mod tests {
     async fn preserves_an_external_dead_connection_verdict_without_inventing_a_timer() {
         let clock = TestClock::new();
         let mut session = model(Mode::Mode2);
-        session.dead_connection(Side::Server).expect("external verdict");
+        session
+            .dead_connection(Side::Server)
+            .expect("external verdict");
         let (_sender, receiver) = watch::channel(RelayLifecycle::Running);
         let (mut viewer, viewer_control) = stream(b"not-relayed", false);
         let (mut other, other_control) = stream(&[], false);
-        run_session(&mut viewer, &mut other, Vec::new(), Vec::new(), &mut session, clock.as_ref(), receiver, 16, E, |_| {}).await.expect("cleanup");
+        run_session(
+            &mut viewer,
+            &mut other,
+            Vec::new(),
+            Vec::new(),
+            &mut session,
+            clock.as_ref(),
+            receiver,
+            16,
+            E,
+            |_| {},
+        )
+        .await
+        .expect("cleanup");
         assert_eq!(session.close_cause(), Some(CloseCause::DeadConnection));
-        assert!(viewer_control.actions().contains(&RelayCloseAction::DeadConnection));
-        assert!(other_control.actions().contains(&RelayCloseAction::DeadConnection));
+        assert!(
+            viewer_control
+                .actions()
+                .contains(&RelayCloseAction::DeadConnection)
+        );
+        assert!(
+            other_control
+                .actions()
+                .contains(&RelayCloseAction::DeadConnection)
+        );
         assert_eq!(viewer_control.0.lock().expect("state").read_calls, 0);
         assert!(other_control.output().is_empty());
     }
@@ -1026,14 +1498,40 @@ mod tests {
     async fn publishes_saturating_counters_without_resetting_prior_progress() {
         let clock = TestClock::new();
         let mut session = model(Mode::Mode1);
-        session.record_write(Direction::ViewerToTarget, u64::MAX - 1).expect("prior progress");
+        session
+            .record_write(Direction::ViewerToTarget, u64::MAX - 1)
+            .expect("prior progress");
         let (_sender, receiver) = watch::channel(RelayLifecycle::Running);
         let (mut viewer, _) = stream(&[], true);
         let (mut other, _) = stream(&[], true);
         let updates = Mutex::new(Vec::new());
-        run_session(&mut viewer, &mut other, b"payload".to_vec(), Vec::new(), &mut session, clock.as_ref(), receiver, 8, E, |value| updates.lock().expect("updates").push(value.bytes(Direction::ViewerToTarget))).await.expect("relay");
+        run_session(
+            &mut viewer,
+            &mut other,
+            b"payload".to_vec(),
+            Vec::new(),
+            &mut session,
+            clock.as_ref(),
+            receiver,
+            8,
+            E,
+            |value| {
+                updates
+                    .lock()
+                    .expect("updates")
+                    .push(value.bytes(Direction::ViewerToTarget))
+            },
+        )
+        .await
+        .expect("relay");
         assert_eq!(session.bytes(Direction::ViewerToTarget), u64::MAX);
-        assert!(updates.lock().expect("updates").iter().all(|&bytes| bytes == u64::MAX));
+        assert!(
+            updates
+                .lock()
+                .expect("updates")
+                .iter()
+                .all(|&bytes| bytes == u64::MAX)
+        );
     }
 
     fn stream_failure(kind: Option<ConnectionErrorKind>) -> io::Error {
@@ -1048,7 +1546,11 @@ mod tests {
     /// spec: websocket.md:WS-010 partial
     #[tokio::test(start_paused = true)]
     async fn retains_typed_stream_errors_for_the_caller_and_close_actions() {
-        for kind in [ConnectionErrorKind::WsProtocolError, ConnectionErrorKind::WsTextMessage, ConnectionErrorKind::WsMessageTooLarge] {
+        for kind in [
+            ConnectionErrorKind::WsProtocolError,
+            ConnectionErrorKind::WsTextMessage,
+            ConnectionErrorKind::WsMessageTooLarge,
+        ] {
             for write_error in [false, true] {
                 let clock = TestClock::new();
                 let mut session = model(Mode::Mode1);
@@ -1063,13 +1565,38 @@ mod tests {
                         state.read_error = true;
                     }
                 });
-                let reverse_trailing = if write_error { b"payload".to_vec() } else { Vec::new() };
-                let outcome = run_session(&mut viewer, &mut other, Vec::new(), reverse_trailing, &mut session, clock.as_ref(), receiver, 8, E, |_| {}).await.expect("typed error");
+                let reverse_trailing = if write_error {
+                    b"payload".to_vec()
+                } else {
+                    Vec::new()
+                };
+                let outcome = run_session(
+                    &mut viewer,
+                    &mut other,
+                    Vec::new(),
+                    reverse_trailing,
+                    &mut session,
+                    clock.as_ref(),
+                    receiver,
+                    8,
+                    E,
+                    |_| {},
+                )
+                .await
+                .expect("typed error");
                 assert_eq!(outcome, Some(kind));
                 assert_eq!(session.close_cause(), Some(CloseCause::ConnectionError));
                 assert_eq!(session.close_side(), Some(Side::Viewer));
-                assert!(viewer_control.actions().contains(&RelayCloseAction::StreamError(kind)));
-                assert!(other_control.actions().contains(&RelayCloseAction::StreamError(kind)));
+                assert!(
+                    viewer_control
+                        .actions()
+                        .contains(&RelayCloseAction::StreamError(kind))
+                );
+                assert!(
+                    other_control
+                        .actions()
+                        .contains(&RelayCloseAction::StreamError(kind))
+                );
                 assert_eq!(session.bytes(Direction::TargetToViewer), 0);
             }
         }
@@ -1083,7 +1610,18 @@ mod tests {
         let (mut viewer, viewer_control) = stream(&[], true);
         let (mut other, other_control) = stream(&[], false);
         {
-            let mut relay = pin!(run_session(&mut viewer, &mut other, Vec::new(), Vec::new(), &mut session, clock.as_ref(), receiver, 8, E, |_| {}));
+            let mut relay = pin!(run_session(
+                &mut viewer,
+                &mut other,
+                Vec::new(),
+                Vec::new(),
+                &mut session,
+                clock.as_ref(),
+                receiver,
+                8,
+                E,
+                |_| {}
+            ));
             pump(&mut relay).await;
             other_control.change(|state| state.jump_on_read = Some((clock.clone(), E)));
             other_control.feed(b"too-late", false);
@@ -1104,7 +1642,18 @@ mod tests {
         let (mut other, _) = stream(&[], false);
         viewer_control.change(|state| state.write_blocked = true);
         {
-            let mut relay = pin!(run_session(&mut viewer, &mut other, Vec::new(), b"pending".to_vec(), &mut session, clock.as_ref(), receiver, 8, E, |_| {}));
+            let mut relay = pin!(run_session(
+                &mut viewer,
+                &mut other,
+                Vec::new(),
+                b"pending".to_vec(),
+                &mut session,
+                clock.as_ref(),
+                receiver,
+                8,
+                E,
+                |_| {}
+            ));
             pump(&mut relay).await;
             advance(E).await;
             relay.await.expect("drain is bounded by first EOF");
@@ -1125,7 +1674,18 @@ mod tests {
         let (mut other, other_control) = stream(&[], false);
         other_control.change(|state| state.terminal = CloseBehavior::Pending);
         {
-            let mut relay = pin!(run_session(&mut viewer, &mut other, Vec::new(), Vec::new(), &mut session, clock.as_ref(), receiver, 4, E, |_| {}));
+            let mut relay = pin!(run_session(
+                &mut viewer,
+                &mut other,
+                Vec::new(),
+                Vec::new(),
+                &mut session,
+                clock.as_ref(),
+                receiver,
+                4,
+                E,
+                |_| {}
+            ));
             pump(&mut relay).await;
             advance(E).await;
             relay.await.expect("G precedence");
@@ -1134,4 +1694,3 @@ mod tests {
         assert_eq!(session.close_side(), None);
     }
 }
-

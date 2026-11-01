@@ -199,9 +199,7 @@ impl AbortReason {
             Self::HandshakeTimeout
             | Self::TlsUpgradeTimeout
             | Self::ConnectionError(_)
-            | Self::DeadConnection => {
-                Level::Warn
-            }
+            | Self::DeadConnection => Level::Warn,
         }
     }
 }

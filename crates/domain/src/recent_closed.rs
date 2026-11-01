@@ -90,13 +90,23 @@ mod tests {
         session.record_write(Direction::TargetToViewer, 19).unwrap();
         match cause {
             CloseCause::PeerEof => {
-                session.observe_eof(Side::Server, Duration::from_secs(12)).unwrap();
-                session.observe_eof(Side::Viewer, Duration::from_secs(13)).unwrap();
-                session.complete_direction(Direction::ViewerToTarget).unwrap();
-                session.complete_direction(Direction::TargetToViewer).unwrap();
+                session
+                    .observe_eof(Side::Server, Duration::from_secs(12))
+                    .unwrap();
+                session
+                    .observe_eof(Side::Viewer, Duration::from_secs(13))
+                    .unwrap();
+                session
+                    .complete_direction(Direction::ViewerToTarget)
+                    .unwrap();
+                session
+                    .complete_direction(Direction::TargetToViewer)
+                    .unwrap();
             }
             CloseCause::ConnectionError => {
-                session.io_error(Direction::TargetToViewer, Side::Server).unwrap();
+                session
+                    .io_error(Direction::TargetToViewer, Side::Server)
+                    .unwrap();
             }
             CloseCause::AdminTerminated => {
                 session.begin_admin_close(Duration::from_secs(12)).unwrap();
@@ -105,8 +115,12 @@ mod tests {
                 session.dead_connection(Side::Viewer).unwrap();
             }
             CloseCause::CloseTimeout => {
-                session.observe_eof(Side::Viewer, Duration::from_secs(12)).unwrap();
-                session.expire_close(Duration::from_secs(17), Duration::from_secs(5)).unwrap();
+                session
+                    .observe_eof(Side::Viewer, Duration::from_secs(12))
+                    .unwrap();
+                session
+                    .expire_close(Duration::from_secs(17), Duration::from_secs(5))
+                    .unwrap();
             }
             CloseCause::ServerShutdown => {
                 session.force_server_shutdown().unwrap();
@@ -165,13 +179,17 @@ mod tests {
             let _ = list.push(closed(seed, time, CloseCause::ServerShutdown));
         }
         assert_eq!(
-            list.iter().map(|entry| entry.id().clone()).collect::<Vec<_>>(),
+            list.iter()
+                .map(|entry| entry.id().clone())
+                .collect::<Vec<_>>(),
             [2, 5, 3].map(|seed| SessionId::from_block([seed; 16]))
         );
         assert_eq!(list.len(), 3);
         let _ = list.push(closed(6, 25, CloseCause::ServerShutdown));
         assert_eq!(
-            list.iter().map(|entry| entry.id().clone()).collect::<Vec<_>>(),
+            list.iter()
+                .map(|entry| entry.id().clone())
+                .collect::<Vec<_>>(),
             [2, 6, 5].map(|seed| SessionId::from_block([seed; 16]))
         );
     }
@@ -205,7 +223,10 @@ mod tests {
     fn out_of_order_insertion_returns_rejected_or_displaced_summary() {
         let mut list = RecentClosedList::new(3);
         for (seed, time) in [(1, 10), (2, 30), (3, 20)] {
-            assert_eq!(list.push(closed(seed, time, CloseCause::ServerShutdown)), None);
+            assert_eq!(
+                list.push(closed(seed, time, CloseCause::ServerShutdown)),
+                None
+            );
         }
         assert_eq!(
             list.push(closed(4, 5, CloseCause::ConnectionError)),
@@ -220,7 +241,9 @@ mod tests {
             Some(closed(3, 20, CloseCause::ServerShutdown))
         );
         assert_eq!(
-            list.iter().map(|entry| entry.id().clone()).collect::<Vec<_>>(),
+            list.iter()
+                .map(|entry| entry.id().clone())
+                .collect::<Vec<_>>(),
             [2, 6, 5].map(|seed| SessionId::from_block([seed; 16]))
         );
     }
@@ -230,10 +253,15 @@ mod tests {
     fn insertion_without_eviction_returns_none() {
         let mut list = RecentClosedList::new(4);
         for (seed, time) in [(1, 20), (2, 10), (3, 30), (4, 20)] {
-            assert_eq!(list.push(closed(seed, time, CloseCause::ServerShutdown)), None);
+            assert_eq!(
+                list.push(closed(seed, time, CloseCause::ServerShutdown)),
+                None
+            );
         }
         assert_eq!(
-            list.iter().map(|entry| entry.id().clone()).collect::<Vec<_>>(),
+            list.iter()
+                .map(|entry| entry.id().clone())
+                .collect::<Vec<_>>(),
             [3, 4, 1, 2].map(|seed| SessionId::from_block([seed; 16]))
         );
     }
@@ -258,8 +286,14 @@ mod tests {
             assert_eq!(entry.close_cause(), cause);
             assert_eq!(entry.mode(), Mode::Mode2);
             assert_eq!(entry.viewer_transport(), ViewerTransport::Ws);
-            assert_eq!(entry.started_at(), SystemTime::UNIX_EPOCH + Duration::from_secs(1));
-            assert_eq!(entry.ended_at(), SystemTime::UNIX_EPOCH + Duration::from_secs(20));
+            assert_eq!(
+                entry.started_at(),
+                SystemTime::UNIX_EPOCH + Duration::from_secs(1)
+            );
+            assert_eq!(
+                entry.ended_at(),
+                SystemTime::UNIX_EPOCH + Duration::from_secs(20)
+            );
             assert_eq!(entry.duration(), Duration::from_secs(10));
             assert_eq!(entry.bytes(Direction::ViewerToTarget), 7);
             assert_eq!(entry.bytes(Direction::TargetToViewer), 19);

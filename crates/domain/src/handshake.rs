@@ -443,7 +443,13 @@ mod tests {
                 RelayId::parse(&id).unwrap_or_else(|error| panic!("{error}"))
             ))
         );
-        let name = ["a".repeat(63), "b".repeat(63), "c".repeat(63), "d".repeat(58)].join(".");
+        let name = [
+            "a".repeat(63),
+            "b".repeat(63),
+            "c".repeat(63),
+            "d".repeat(58),
+        ]
+        .join(".");
         assert_eq!(name.len(), HANDSHAKE_REQUEST_LEN);
         assert_eq!(
             parse(name.as_bytes(), EntryPoint::TcpViewer, ENABLED),
@@ -471,7 +477,9 @@ mod tests {
             ("localhost", TargetHost::Name("localhost".into()), 5900),
             (
                 "[2001:0DB8:0000:0000:0000:0000:0000:0030]",
-                TargetHost::Ip(IpAddr::V6(Ipv6Addr::new(0x2001, 0xdb8, 0, 0, 0, 0, 0, 0x30))),
+                TargetHost::Ip(IpAddr::V6(Ipv6Addr::new(
+                    0x2001, 0xdb8, 0, 0, 0, 0, 0, 0x30,
+                ))),
                 5900,
             ),
             (

@@ -13,8 +13,8 @@ use vnc_relay_adapters::crypto::RelayIdKey;
 use vnc_relay_adapters::ops_log::{JsonLinesEventSink, format_line};
 use vnc_relay_adapters::status_http::StatusListener;
 use vnc_relay_app::events::{
-    AbortReason, ConnectionErrorKind, Event, Phase, RejectReason, Stage,
-    TargetFailureReason, WaitingRemovalReason,
+    AbortReason, ConnectionErrorKind, Event, Phase, RejectReason, Stage, TargetFailureReason,
+    WaitingRemovalReason,
 };
 use vnc_relay_app::lifecycle::LifecycleService;
 use vnc_relay_app::ports::EventSink;
@@ -864,23 +864,36 @@ fn writes_target_rejections_failures_and_aborts_with_only_contract_fields() {
         if target_ip.is_some() {
             expected["target_ip"] = json!("192.0.2.80");
         }
-        assert_relay_fields(&Event::TargetRejected {
-            conn_id, entry_point: EntryPoint::TcpViewer, peer_ip: relay_peer(),
-            reason: RejectReason::TargetNotAllowed,
-            target_host: "host.example".to_owned(), target_port: 5900, target_ip,
-        }, expected);
+        assert_relay_fields(
+            &Event::TargetRejected {
+                conn_id,
+                entry_point: EntryPoint::TcpViewer,
+                peer_ip: relay_peer(),
+                reason: RejectReason::TargetNotAllowed,
+                target_host: "host.example".to_owned(),
+                target_port: 5900,
+                target_ip,
+            },
+            expected,
+        );
     }
-    assert_relay_fields(&Event::TargetRejected {
-        conn_id, entry_point: EntryPoint::TcpViewer, peer_ip: relay_peer(),
-        reason: RejectReason::RelayConnectionLimit { limit: 12 },
-        target_host: "not-logged.example".to_owned(), target_port: 5900,
-        target_ip: Some(ip),
-    }, json!({
-        "event": "connection_rejected", "level": "warn",
-        "conn_id": conn_id.to_string(), "listener": "tcp_viewer",
-        "role": "viewer", "mode": "mode1", "peer_ip": "198.51.100.21",
-        "stage": "target_connect", "reason": "relay_connection_limit", "limit": 12
-    }));
+    assert_relay_fields(
+        &Event::TargetRejected {
+            conn_id,
+            entry_point: EntryPoint::TcpViewer,
+            peer_ip: relay_peer(),
+            reason: RejectReason::RelayConnectionLimit { limit: 12 },
+            target_host: "not-logged.example".to_owned(),
+            target_port: 5900,
+            target_ip: Some(ip),
+        },
+        json!({
+            "event": "connection_rejected", "level": "warn",
+            "conn_id": conn_id.to_string(), "listener": "tcp_viewer",
+            "role": "viewer", "mode": "mode1", "peer_ip": "198.51.100.21",
+            "stage": "target_connect", "reason": "relay_connection_limit", "limit": 12
+        }),
+    );
     for (reason, code) in [
         (TargetFailureReason::ResolveFailed, "resolve_failed"),
         (TargetFailureReason::ConnectRefused, "connect_refused"),
@@ -900,20 +913,32 @@ fn writes_target_rejections_failures_and_aborts_with_only_contract_fields() {
             }
             // ConnectError also covers K setup failure: no error_kind,
             // mode, role, or session_id belongs to this event.
-            assert_relay_fields(&Event::TargetConnectFailed {
-                conn_id, entry_point: EntryPoint::TcpViewer,
-                viewer_transport: ViewerTransport::Tcp, peer_ip: relay_peer(),
-                target_host: "host.example".to_owned(), target_port: 5900,
-                target_ip, elapsed_ms: 123, reason,
-            }, expected);
+            assert_relay_fields(
+                &Event::TargetConnectFailed {
+                    conn_id,
+                    entry_point: EntryPoint::TcpViewer,
+                    viewer_transport: ViewerTransport::Tcp,
+                    peer_ip: relay_peer(),
+                    target_host: "host.example".to_owned(),
+                    target_port: 5900,
+                    target_ip,
+                    elapsed_ms: 123,
+                    reason,
+                },
+                expected,
+            );
         }
     }
     for (reason, code, level, kind) in [
         (AbortReason::ServerShutdown, "server_shutdown", "info", None),
         (AbortReason::PeerEof, "peer_eof", "info", None),
         (AbortReason::DeadConnection, "dead_connection", "warn", None),
-        (AbortReason::ConnectionError(ConnectionErrorKind::IoError),
-            "connection_error", "warn", Some("io_error")),
+        (
+            AbortReason::ConnectionError(ConnectionErrorKind::IoError),
+            "connection_error",
+            "warn",
+            Some("io_error"),
+        ),
     ] {
         let mut expected = json!({
             "event": "connection_aborted", "level": level,
@@ -925,11 +950,18 @@ fn writes_target_rejections_failures_and_aborts_with_only_contract_fields() {
         if let Some(kind) = kind {
             expected["error_kind"] = json!(kind);
         }
-        assert_relay_fields(&Event::RelayAborted {
-            conn_id, entry_point: EntryPoint::TcpViewer,
-            stage: Stage::TargetConnect, reason, peer_ip: relay_peer(),
-            elapsed_ms: 456, mode: Mode::Mode1,
-        }, expected);
+        assert_relay_fields(
+            &Event::RelayAborted {
+                conn_id,
+                entry_point: EntryPoint::TcpViewer,
+                stage: Stage::TargetConnect,
+                reason,
+                peer_ip: relay_peer(),
+                elapsed_ms: 456,
+                mode: Mode::Mode1,
+            },
+            expected,
+        );
     }
 }
 
@@ -942,32 +974,60 @@ fn writes_waiting_events_without_raw_ids_or_unrelated_optional_fields() {
     let raw = b"raw-private-relay-id-987654321";
     let reference = key.reference(raw);
     let conn_id = ConnId::next();
-    assert_relay_fields(&Event::WaitingRegistered {
-        conn_id, entry_point: EntryPoint::TcpServer, peer_ip: relay_peer(),
-        relay_id_ref: reference.clone(),
-    }, json!({
-        "event": "waiting_registered", "level": "info",
-        "conn_id": conn_id.to_string(), "listener": "tcp_server",
-        "role": "server", "mode": "mode2",
-        "relay_id_ref": reference.as_str(), "peer_ip": "198.51.100.21"
-    }));
-    assert_relay_fields(&Event::WaitingExpired {
-        conn_id, role: Role::Server, relay_id_ref: reference.clone(), waited_ms: 3000,
-    }, json!({
-        "event": "waiting_expired", "level": "info",
-        "conn_id": conn_id.to_string(), "role": "server",
-        "relay_id_ref": reference.as_str(), "waited_ms": 3000
-    }));
+    assert_relay_fields(
+        &Event::WaitingRegistered {
+            conn_id,
+            entry_point: EntryPoint::TcpServer,
+            peer_ip: relay_peer(),
+            relay_id_ref: reference.clone(),
+        },
+        json!({
+            "event": "waiting_registered", "level": "info",
+            "conn_id": conn_id.to_string(), "listener": "tcp_server",
+            "role": "server", "mode": "mode2",
+            "relay_id_ref": reference.as_str(), "peer_ip": "198.51.100.21"
+        }),
+    );
+    assert_relay_fields(
+        &Event::WaitingExpired {
+            conn_id,
+            role: Role::Server,
+            relay_id_ref: reference.clone(),
+            waited_ms: 3000,
+        },
+        json!({
+            "event": "waiting_expired", "level": "info",
+            "conn_id": conn_id.to_string(), "role": "server",
+            "relay_id_ref": reference.as_str(), "waited_ms": 3000
+        }),
+    );
     for (reason, code, level, kind) in [
         (WaitingRemovalReason::PeerEof, "peer_eof", "info", None),
-        (WaitingRemovalReason::ServerShutdown, "server_shutdown", "info", None),
-        (WaitingRemovalReason::DeadConnection, "dead_connection", "warn", None),
-        (WaitingRemovalReason::ConnectionError(ConnectionErrorKind::IoError),
-            "connection_error", "warn", Some("io_error")),
+        (
+            WaitingRemovalReason::ServerShutdown,
+            "server_shutdown",
+            "info",
+            None,
+        ),
+        (
+            WaitingRemovalReason::DeadConnection,
+            "dead_connection",
+            "warn",
+            None,
+        ),
+        (
+            WaitingRemovalReason::ConnectionError(ConnectionErrorKind::IoError),
+            "connection_error",
+            "warn",
+            Some("io_error"),
+        ),
     ] {
         let event = Event::WaitingRemoved {
-            conn_id, role: Role::Server, relay_id_ref: reference.clone(),
-            waited_ms: 17, reason,
+            conn_id,
+            role: Role::Server,
+            relay_id_ref: reference.clone(),
+            waited_ms: 17,
+            reason,
         };
         let mut expected = json!({
             "event": "waiting_removed", "level": level,
@@ -980,10 +1040,16 @@ fn writes_waiting_events_without_raw_ids_or_unrelated_optional_fields() {
         assert_relay_fields(&event, expected);
         assert!(!format_line(&event, UNIX_EPOCH).contains(std::str::from_utf8(raw).unwrap()));
     }
-    for reason in [RejectReason::DuplicateId, RejectReason::WaitingFull { limit: 8 }] {
+    for reason in [
+        RejectReason::DuplicateId,
+        RejectReason::WaitingFull { limit: 8 },
+    ] {
         let event = Event::RegistrationRejected {
-            conn_id, entry_point: EntryPoint::TcpServer, peer_ip: relay_peer(),
-            reason, relay_id_ref: reference.clone(),
+            conn_id,
+            entry_point: EntryPoint::TcpServer,
+            peer_ip: relay_peer(),
+            reason,
+            relay_id_ref: reference.clone(),
         };
         let mut expected = json!({
             "event": "connection_rejected", "level": "warn",
@@ -1022,12 +1088,18 @@ fn writes_session_start_fields_conditionally_by_mode_and_transport() {
             for host in [None, Some("host.example".to_owned())] {
                 // Populating both sets proves that irrelevant fields are omitted.
                 let event = Event::SessionStarted {
-                    session_id: session_id.clone(), mode, viewer_transport: transport,
-                    viewer_conn_id: viewer, viewer_peer_ip: relay_peer(),
-                    server_conn_id: Some(server), server_peer_ip: Some(relay_peer()),
-                    relay_id_ref: Some(reference.clone()), waited_ms: Some(0),
+                    session_id: session_id.clone(),
+                    mode,
+                    viewer_transport: transport,
+                    viewer_conn_id: viewer,
+                    viewer_peer_ip: relay_peer(),
+                    server_conn_id: Some(server),
+                    server_peer_ip: Some(relay_peer()),
+                    relay_id_ref: Some(reference.clone()),
+                    waited_ms: Some(0),
                     target_ip: Some("::ffff:192.0.2.80".parse().unwrap()),
-                    target_port: Some(5900), target_host: host.clone(),
+                    target_port: Some(5900),
+                    target_host: host.clone(),
                 };
                 let mut expected = json!({
                     "event": "session_started", "level": "info",
@@ -1051,7 +1123,9 @@ fn writes_session_start_fields_conditionally_by_mode_and_transport() {
                     }
                 }
                 assert_relay_fields(&event, expected);
-                assert!(!format_line(&event, UNIX_EPOCH).contains(std::str::from_utf8(raw).unwrap()));
+                assert!(
+                    !format_line(&event, UNIX_EPOCH).contains(std::str::from_utf8(raw).unwrap())
+                );
             }
         }
     }
@@ -1070,20 +1144,40 @@ fn writes_session_close_cause_levels_and_canonical_optional_fields() {
     for mode in [Mode::Mode1, Mode::Mode2] {
         for (cause, code, level, needs_side) in [
             (CloseCause::PeerEof, "peer_eof", "info", true),
-            (CloseCause::ConnectionError, "connection_error", "warn", true),
+            (
+                CloseCause::ConnectionError,
+                "connection_error",
+                "warn",
+                true,
+            ),
             (CloseCause::DeadConnection, "dead_connection", "warn", true),
             (CloseCause::CloseTimeout, "close_timeout", "warn", true),
-            (CloseCause::AdminTerminated, "admin_terminated", "info", false),
+            (
+                CloseCause::AdminTerminated,
+                "admin_terminated",
+                "info",
+                false,
+            ),
             (CloseCause::ServerShutdown, "server_shutdown", "warn", false),
         ] {
-            let side = if mode == Mode::Mode1 { Side::Target } else { Side::Server };
+            let side = if mode == Mode::Mode1 {
+                Side::Target
+            } else {
+                Side::Server
+            };
             let event = Event::SessionClosed {
-                session_id: id.clone(), mode, viewer_transport: ViewerTransport::Tcp,
+                session_id: id.clone(),
+                mode,
+                viewer_transport: ViewerTransport::Tcp,
                 started_at: UNIX_EPOCH + Duration::from_millis(1234),
-                duration_ms: 987, bytes_viewer_to_target: u64::MAX,
-                bytes_target_to_viewer: 42, close_cause: cause, side: Some(side),
+                duration_ms: 987,
+                bytes_viewer_to_target: u64::MAX,
+                bytes_target_to_viewer: 42,
+                close_cause: cause,
+                side: Some(side),
                 error_kind: Some(ConnectionErrorKind::IoError),
-                relay_id_ref: Some(reference.clone()), admin_account: Some(account.clone()),
+                relay_id_ref: Some(reference.clone()),
+                admin_account: Some(account.clone()),
             };
             let mut expected = json!({
                 "event": "session_closed", "level": level,
@@ -1109,17 +1203,28 @@ fn writes_session_close_cause_levels_and_canonical_optional_fields() {
         }
     }
     // An administrator's E expiry has no preceding EOF and therefore no side.
-    assert_relay_fields(&Event::SessionClosed {
-        session_id: id.clone(), mode: Mode::Mode1, viewer_transport: ViewerTransport::Tcp,
-        started_at: UNIX_EPOCH, duration_ms: 0, bytes_viewer_to_target: 0,
-        bytes_target_to_viewer: 0, close_cause: CloseCause::CloseTimeout,
-        side: None, error_kind: None, relay_id_ref: None, admin_account: None,
-    }, json!({
-        "event": "session_closed", "level": "warn", "session_id": id.as_str(),
-        "mode": "mode1", "viewer_transport": "tcp", "started_at": "1970-01-01T00:00:00.000Z",
-        "duration_ms": 0, "bytes_viewer_to_target": 0, "bytes_target_to_viewer": 0,
-        "close_cause": "close_timeout"
-    }));
+    assert_relay_fields(
+        &Event::SessionClosed {
+            session_id: id.clone(),
+            mode: Mode::Mode1,
+            viewer_transport: ViewerTransport::Tcp,
+            started_at: UNIX_EPOCH,
+            duration_ms: 0,
+            bytes_viewer_to_target: 0,
+            bytes_target_to_viewer: 0,
+            close_cause: CloseCause::CloseTimeout,
+            side: None,
+            error_kind: None,
+            relay_id_ref: None,
+            admin_account: None,
+        },
+        json!({
+            "event": "session_closed", "level": "warn", "session_id": id.as_str(),
+            "mode": "mode1", "viewer_transport": "tcp", "started_at": "1970-01-01T00:00:00.000Z",
+            "duration_ms": 0, "bytes_viewer_to_target": 0, "bytes_target_to_viewer": 0,
+            "close_cause": "close_timeout"
+        }),
+    );
 }
 
 #[test]
@@ -1128,21 +1233,38 @@ fn cuts_target_host_on_utf8_boundaries_in_every_target_event() {
     let conn_id = ConnId::next();
     let events = [
         Event::TargetRejected {
-            conn_id, entry_point: EntryPoint::TcpViewer, peer_ip: relay_peer(),
-            reason: RejectReason::TargetNotAllowed, target_host: host.clone(),
-            target_port: 5900, target_ip: None,
+            conn_id,
+            entry_point: EntryPoint::TcpViewer,
+            peer_ip: relay_peer(),
+            reason: RejectReason::TargetNotAllowed,
+            target_host: host.clone(),
+            target_port: 5900,
+            target_ip: None,
         },
         Event::TargetConnectFailed {
-            conn_id, entry_point: EntryPoint::TcpViewer, viewer_transport: ViewerTransport::Tcp,
-            peer_ip: relay_peer(), target_host: host.clone(), target_port: 5900,
-            target_ip: None, elapsed_ms: 0, reason: TargetFailureReason::ConnectError,
+            conn_id,
+            entry_point: EntryPoint::TcpViewer,
+            viewer_transport: ViewerTransport::Tcp,
+            peer_ip: relay_peer(),
+            target_host: host.clone(),
+            target_port: 5900,
+            target_ip: None,
+            elapsed_ms: 0,
+            reason: TargetFailureReason::ConnectError,
         },
         Event::SessionStarted {
-            session_id: SessionId::from_block([0; 16]), mode: Mode::Mode1,
-            viewer_transport: ViewerTransport::Tcp, viewer_conn_id: conn_id,
-            viewer_peer_ip: relay_peer(), server_conn_id: None, server_peer_ip: None,
-            relay_id_ref: None, waited_ms: None, target_ip: Some("192.0.2.80".parse().unwrap()),
-            target_port: Some(5900), target_host: Some(host),
+            session_id: SessionId::from_block([0; 16]),
+            mode: Mode::Mode1,
+            viewer_transport: ViewerTransport::Tcp,
+            viewer_conn_id: conn_id,
+            viewer_peer_ip: relay_peer(),
+            server_conn_id: None,
+            server_peer_ip: None,
+            relay_id_ref: None,
+            waited_ms: None,
+            target_ip: Some("192.0.2.80".parse().unwrap()),
+            target_port: Some(5900),
+            target_host: Some(host),
         },
     ];
     for event in events {
@@ -1159,15 +1281,24 @@ fn cuts_target_host_on_utf8_boundaries_in_every_target_event() {
 /// spec: operations.md:OPS-042 partial
 #[test]
 fn writes_requested_shutdown_fields_without_unrelated_optional_fields() {
-    assert_relay_fields(&Event::ShutdownStarted {
-        grace_secs: 10, active_sessions: 2,
-    }, json!({
-        "event": "shutdown_started", "level": "info", "trigger": "requested",
-        "grace_secs": 10, "active_sessions": 2
-    }));
-    assert_relay_fields(&Event::ShutdownForced { remaining_sessions: 2 }, json!({
-        "event": "shutdown_forced", "level": "warn", "remaining_sessions": 2
-    }));
+    assert_relay_fields(
+        &Event::ShutdownStarted {
+            grace_secs: 10,
+            active_sessions: 2,
+        },
+        json!({
+            "event": "shutdown_started", "level": "info", "trigger": "requested",
+            "grace_secs": 10, "active_sessions": 2
+        }),
+    );
+    assert_relay_fields(
+        &Event::ShutdownForced {
+            remaining_sessions: 2,
+        },
+        json!({
+            "event": "shutdown_forced", "level": "warn", "remaining_sessions": 2
+        }),
+    );
 }
 
 /// spec: websocket.md:WS-019 partial
@@ -1177,11 +1308,16 @@ fn writes_requested_shutdown_fields_without_unrelated_optional_fields() {
 fn preserves_typed_websocket_error_kinds_in_all_connection_error_events() {
     let conn_id = ConnId::next();
     let session_id = SessionId::from_block([3; 16]);
-    let reference = RelayIdKey::generate().unwrap().reference(b"private-ws-relay-id");
+    let reference = RelayIdKey::generate()
+        .unwrap()
+        .reference(b"private-ws-relay-id");
     for (kind, code) in [
         (ConnectionErrorKind::WsProtocolError, "ws_protocol_error"),
         (ConnectionErrorKind::WsTextMessage, "ws_text_message"),
-        (ConnectionErrorKind::WsMessageTooLarge, "ws_message_too_large"),
+        (
+            ConnectionErrorKind::WsMessageTooLarge,
+            "ws_message_too_large",
+        ),
     ] {
         let events = [
             Event::ConnectionAborted {

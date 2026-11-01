@@ -314,7 +314,10 @@ fn push_event_fields(fields: &mut Vec<(&'static str, Value)>, event: &Event) {
                 fields.push(("limit", Value::from(limit)));
             }
             if *reason == RejectReason::TargetNotAllowed {
-                fields.push(("target_host", Value::from(cut(target_host, TARGET_HOST_MAX_BYTES))));
+                fields.push((
+                    "target_host",
+                    Value::from(cut(target_host, TARGET_HOST_MAX_BYTES)),
+                ));
                 fields.push(("target_port", Value::from(*target_port)));
                 if let Some(ip) = target_ip {
                     fields.push(("target_ip", Value::from(PeerIp::new(*ip).to_string())));
@@ -379,7 +382,10 @@ fn push_event_fields(fields: &mut Vec<(&'static str, Value)>, event: &Event) {
             fields.push(("viewer_transport", Value::from(viewer_transport.as_str())));
             fields.push(("reason", Value::from(reason.as_str())));
             fields.push(("peer_ip", Value::from(peer_ip.to_string())));
-            fields.push(("target_host", Value::from(cut(target_host, TARGET_HOST_MAX_BYTES))));
+            fields.push((
+                "target_host",
+                Value::from(cut(target_host, TARGET_HOST_MAX_BYTES)),
+            ));
             fields.push(("target_port", Value::from(*target_port)));
             fields.push(("elapsed_ms", Value::from(*elapsed_ms)));
             if let Some(ip) = target_ip {
@@ -399,13 +405,24 @@ fn push_event_fields(fields: &mut Vec<(&'static str, Value)>, event: &Event) {
             fields.push(("relay_id_ref", Value::from(relay_id_ref.as_str())));
             fields.push(("peer_ip", Value::from(peer_ip.to_string())));
         }
-        Event::WaitingExpired { conn_id, role, relay_id_ref, waited_ms } => {
+        Event::WaitingExpired {
+            conn_id,
+            role,
+            relay_id_ref,
+            waited_ms,
+        } => {
             fields.push(("conn_id", Value::from(conn_id.to_string())));
             fields.push(("role", Value::from(role.as_str())));
             fields.push(("relay_id_ref", Value::from(relay_id_ref.as_str())));
             fields.push(("waited_ms", Value::from(*waited_ms)));
         }
-        Event::WaitingRemoved { conn_id, role, relay_id_ref, waited_ms, reason } => {
+        Event::WaitingRemoved {
+            conn_id,
+            role,
+            relay_id_ref,
+            waited_ms,
+            reason,
+        } => {
             fields.push(("conn_id", Value::from(conn_id.to_string())));
             fields.push(("role", Value::from(role.as_str())));
             fields.push(("relay_id_ref", Value::from(relay_id_ref.as_str())));
@@ -416,9 +433,18 @@ fn push_event_fields(fields: &mut Vec<(&'static str, Value)>, event: &Event) {
             }
         }
         Event::SessionStarted {
-            session_id, mode, viewer_transport, viewer_conn_id, viewer_peer_ip,
-            server_conn_id, server_peer_ip, relay_id_ref, waited_ms,
-            target_ip, target_port, target_host,
+            session_id,
+            mode,
+            viewer_transport,
+            viewer_conn_id,
+            viewer_peer_ip,
+            server_conn_id,
+            server_peer_ip,
+            relay_id_ref,
+            waited_ms,
+            target_ip,
+            target_port,
+            target_host,
         } => {
             fields.push(("session_id", Value::from(session_id.as_str())));
             fields.push(("mode", Value::from(mode.as_str())));
@@ -454,17 +480,32 @@ fn push_event_fields(fields: &mut Vec<(&'static str, Value)>, event: &Event) {
             }
         }
         Event::SessionClosed {
-            session_id, mode, viewer_transport, started_at, duration_ms,
-            bytes_viewer_to_target, bytes_target_to_viewer, close_cause,
-            side, error_kind, relay_id_ref, admin_account,
+            session_id,
+            mode,
+            viewer_transport,
+            started_at,
+            duration_ms,
+            bytes_viewer_to_target,
+            bytes_target_to_viewer,
+            close_cause,
+            side,
+            error_kind,
+            relay_id_ref,
+            admin_account,
         } => {
             fields.push(("session_id", Value::from(session_id.as_str())));
             fields.push(("mode", Value::from(mode.as_str())));
             fields.push(("viewer_transport", Value::from(viewer_transport.as_str())));
             fields.push(("started_at", Value::from(timestamp(*started_at))));
             fields.push(("duration_ms", Value::from(*duration_ms)));
-            fields.push(("bytes_viewer_to_target", Value::from(*bytes_viewer_to_target)));
-            fields.push(("bytes_target_to_viewer", Value::from(*bytes_target_to_viewer)));
+            fields.push((
+                "bytes_viewer_to_target",
+                Value::from(*bytes_viewer_to_target),
+            ));
+            fields.push((
+                "bytes_target_to_viewer",
+                Value::from(*bytes_target_to_viewer),
+            ));
             fields.push(("close_cause", Value::from(close_cause.as_str())));
             if *mode == Mode::Mode2
                 && let Some(reference) = relay_id_ref
@@ -472,8 +513,10 @@ fn push_event_fields(fields: &mut Vec<(&'static str, Value)>, event: &Event) {
                 fields.push(("relay_id_ref", Value::from(reference.as_str())));
             }
             match close_cause {
-                CloseCause::PeerEof | CloseCause::ConnectionError
-                | CloseCause::DeadConnection | CloseCause::CloseTimeout => {
+                CloseCause::PeerEof
+                | CloseCause::ConnectionError
+                | CloseCause::DeadConnection
+                | CloseCause::CloseTimeout => {
                     if let Some(side) = side {
                         fields.push(("side", Value::from(side.as_str())));
                     }
@@ -491,7 +534,10 @@ fn push_event_fields(fields: &mut Vec<(&'static str, Value)>, event: &Event) {
                 fields.push(("admin_account", Value::from(account.as_str())));
             }
         }
-        Event::ShutdownStarted { grace_secs, active_sessions } => {
+        Event::ShutdownStarted {
+            grace_secs,
+            active_sessions,
+        } => {
             fields.push(("trigger", Value::from("requested")));
             fields.push(("grace_secs", Value::from(*grace_secs)));
             fields.push(("active_sessions", Value::from(*active_sessions)));

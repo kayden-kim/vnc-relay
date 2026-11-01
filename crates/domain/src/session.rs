@@ -577,7 +577,9 @@ mod tests {
 
     fn normal_complete(session: &mut Session, first: Side, second: Side) {
         session.observe_eof(first, Duration::from_secs(12)).unwrap();
-        session.observe_eof(second, Duration::from_secs(13)).unwrap();
+        session
+            .observe_eof(second, Duration::from_secs(13))
+            .unwrap();
         session.complete_direction(FORWARD).unwrap();
         session.complete_direction(REVERSE).unwrap();
     }
@@ -600,10 +602,16 @@ mod tests {
         }
         let mut low = [0; 16];
         low[15] = 1;
-        assert_eq!(SessionId::from_block(low).as_str(), "ses_aaaaaaaaaaaaaaaaaaaaaaaaae");
+        assert_eq!(
+            SessionId::from_block(low).as_str(),
+            "ses_aaaaaaaaaaaaaaaaaaaaaaaaae"
+        );
         let mut high = [0; 16];
         high[0] = 128;
-        assert_eq!(SessionId::from_block(high).as_str(), "ses_qaaaaaaaaaaaaaaaaaaaaaaaaa");
+        assert_eq!(
+            SessionId::from_block(high).as_str(),
+            "ses_qaaaaaaaaaaaaaaaaaaaaaaaaa"
+        );
     }
 
     #[test]
@@ -645,7 +653,11 @@ mod tests {
             "ses_aaaaaaaaaaaaaaaaaaaaaaaaaa\n",
             " ses_aaaaaaaaaaaaaaaaaaaaaaaaaa",
         ] {
-            assert_eq!(SessionId::parse(text), Err(SessionError::InvalidId), "{text:?}");
+            assert_eq!(
+                SessionId::parse(text),
+                Err(SessionError::InvalidId),
+                "{text:?}"
+            );
         }
     }
 
@@ -681,21 +693,46 @@ mod tests {
             for (first, second) in [(Side::Viewer, other), (other, Side::Viewer)] {
                 let mut session = session(mode);
                 assert_eq!(session.state(), SessionState::Active);
-                assert_eq!(session.complete_direction(FORWARD), Err(SessionError::DirectionNotEof));
-                assert_eq!(session.finish(SystemTime::UNIX_EPOCH, Duration::ZERO), Err(SessionError::NotClosing));
+                assert_eq!(
+                    session.complete_direction(FORWARD),
+                    Err(SessionError::DirectionNotEof)
+                );
+                assert_eq!(
+                    session.finish(SystemTime::UNIX_EPOCH, Duration::ZERO),
+                    Err(SessionError::NotClosing)
+                );
                 session.observe_eof(first, Duration::from_secs(12)).unwrap();
                 assert_eq!(session.state(), SessionState::Closing);
                 assert_eq!(session.close_cause(), None);
-                let first_direction = if first == Side::Viewer { FORWARD } else { REVERSE };
+                let first_direction = if first == Side::Viewer {
+                    FORWARD
+                } else {
+                    REVERSE
+                };
                 session.record_write(first_direction, 3).unwrap();
                 session.complete_direction(first_direction).unwrap();
                 session.complete_direction(first_direction).unwrap();
-                assert_eq!(session.record_write(first_direction, 1), Err(SessionError::DirectionFinished));
-                assert_eq!(session.finish(SystemTime::UNIX_EPOCH, Duration::ZERO), Err(SessionError::IncompleteDirections));
-                let second_direction = if second == Side::Viewer { FORWARD } else { REVERSE };
+                assert_eq!(
+                    session.record_write(first_direction, 1),
+                    Err(SessionError::DirectionFinished)
+                );
+                assert_eq!(
+                    session.finish(SystemTime::UNIX_EPOCH, Duration::ZERO),
+                    Err(SessionError::IncompleteDirections)
+                );
+                let second_direction = if second == Side::Viewer {
+                    FORWARD
+                } else {
+                    REVERSE
+                };
                 session.record_write(second_direction, 9).unwrap();
-                session.observe_eof(second, Duration::from_secs(13)).unwrap();
-                assert_eq!(session.finish(SystemTime::UNIX_EPOCH, Duration::ZERO), Err(SessionError::IncompleteDirections));
+                session
+                    .observe_eof(second, Duration::from_secs(13))
+                    .unwrap();
+                assert_eq!(
+                    session.finish(SystemTime::UNIX_EPOCH, Duration::ZERO),
+                    Err(SessionError::IncompleteDirections)
+                );
                 session.complete_direction(second_direction).unwrap();
                 assert_eq!(session.close_cause(), None);
                 let closed = finish(&mut session);
@@ -713,18 +750,43 @@ mod tests {
     fn uses_first_eof_deadline_including_drain_and_final_cleanup() {
         for both_completed in [false, true] {
             let mut session = session(Mode::Mode2);
-            session.observe_eof(Side::Server, Duration::from_secs(12)).unwrap();
-            session.observe_eof(Side::Server, Duration::from_secs(14)).unwrap();
-            session.observe_eof(Side::Viewer, Duration::from_secs(15)).unwrap();
-            assert_eq!(session.first_eof(), Some((Side::Server, Duration::from_secs(12))));
+            session
+                .observe_eof(Side::Server, Duration::from_secs(12))
+                .unwrap();
+            session
+                .observe_eof(Side::Server, Duration::from_secs(14))
+                .unwrap();
+            session
+                .observe_eof(Side::Viewer, Duration::from_secs(15))
+                .unwrap();
+            assert_eq!(
+                session.first_eof(),
+                Some((Side::Server, Duration::from_secs(12)))
+            );
             if both_completed {
                 session.complete_direction(FORWARD).unwrap();
                 session.complete_direction(REVERSE).unwrap();
             }
-            assert!(!session.expire_close(Duration::from_secs(11), Duration::ZERO).unwrap());
-            assert!(!session.expire_close(Duration::from_secs(16), Duration::from_secs(5)).unwrap());
-            assert!(session.expire_close(Duration::from_secs(17), Duration::from_secs(5)).unwrap());
-            assert!(!session.expire_close(Duration::from_secs(18), Duration::from_secs(5)).unwrap());
+            assert!(
+                !session
+                    .expire_close(Duration::from_secs(11), Duration::ZERO)
+                    .unwrap()
+            );
+            assert!(
+                !session
+                    .expire_close(Duration::from_secs(16), Duration::from_secs(5))
+                    .unwrap()
+            );
+            assert!(
+                session
+                    .expire_close(Duration::from_secs(17), Duration::from_secs(5))
+                    .unwrap()
+            );
+            assert!(
+                !session
+                    .expire_close(Duration::from_secs(18), Duration::from_secs(5))
+                    .unwrap()
+            );
             let closed = finish(&mut session);
             assert_eq!(closed.close_cause(), CloseCause::CloseTimeout);
             assert_eq!(closed.close_side(), Some(Side::Server));
@@ -744,7 +806,9 @@ mod tests {
                     for eof_first in [false, true] {
                         let mut session = session(mode);
                         if eof_first {
-                            session.observe_eof(Side::Viewer, Duration::from_secs(12)).unwrap();
+                            session
+                                .observe_eof(Side::Viewer, Duration::from_secs(12))
+                                .unwrap();
                         }
                         session.record_write(direction, 4).unwrap();
                         assert!(session.io_error(direction, failing_side).unwrap());
@@ -765,12 +829,17 @@ mod tests {
     #[test]
     fn ignores_errors_from_completed_directions_but_not_still_open_directions() {
         let mut session = session(Mode::Mode2);
-        session.observe_eof(Side::Viewer, Duration::from_secs(12)).unwrap();
+        session
+            .observe_eof(Side::Viewer, Duration::from_secs(12))
+            .unwrap();
         session.complete_direction(FORWARD).unwrap();
         assert!(!session.io_error(FORWARD, Side::Server).unwrap());
         assert_eq!(session.close_cause(), None);
         assert!(session.io_error(REVERSE, Side::Viewer).unwrap());
-        assert_eq!(finish(&mut session).close_cause(), CloseCause::ConnectionError);
+        assert_eq!(
+            finish(&mut session).close_cause(),
+            CloseCause::ConnectionError
+        );
 
         let mut session = self::session(Mode::Mode2);
         normal_complete(&mut session, Side::Viewer, Side::Server);
@@ -787,7 +856,9 @@ mod tests {
             match trigger {
                 0 => {}
                 1 => {
-                    session.observe_eof(Side::Viewer, Duration::from_secs(12)).unwrap();
+                    session
+                        .observe_eof(Side::Viewer, Duration::from_secs(12))
+                        .unwrap();
                 }
                 2 => normal_complete(&mut session, Side::Target, Side::Viewer),
                 3 => {
@@ -800,8 +871,12 @@ mod tests {
                     session.begin_admin_close(Duration::from_secs(12)).unwrap();
                 }
                 6 => {
-                    session.observe_eof(Side::Target, Duration::from_secs(12)).unwrap();
-                    session.expire_close(Duration::from_secs(12), Duration::ZERO).unwrap();
+                    session
+                        .observe_eof(Side::Target, Duration::from_secs(12))
+                        .unwrap();
+                    session
+                        .expire_close(Duration::from_secs(12), Duration::ZERO)
+                        .unwrap();
                 }
                 _ => unreachable!(),
             }
@@ -826,18 +901,37 @@ mod tests {
             let mut session = session(Mode::Mode2);
             assert!(session.begin_admin_close(Duration::from_secs(12)).unwrap());
             assert!(!session.begin_admin_close(Duration::from_secs(20)).unwrap());
-            session.observe_eof(Side::Viewer, Duration::from_secs(14)).unwrap();
+            session
+                .observe_eof(Side::Viewer, Duration::from_secs(14))
+                .unwrap();
             assert!(!session.io_error(REVERSE, Side::Server).unwrap());
-            assert!(!session.expire_close(Duration::from_secs(16), Duration::from_secs(5)).unwrap());
+            assert!(
+                !session
+                    .expire_close(Duration::from_secs(16), Duration::from_secs(5))
+                    .unwrap()
+            );
             if expires {
-                assert!(session.expire_close(Duration::from_secs(17), Duration::from_secs(5)).unwrap());
+                assert!(
+                    session
+                        .expire_close(Duration::from_secs(17), Duration::from_secs(5))
+                        .unwrap()
+                );
             }
             let closed = finish(&mut session);
-            assert_eq!(closed.close_cause(), if expires { CloseCause::CloseTimeout } else { CloseCause::AdminTerminated });
+            assert_eq!(
+                closed.close_cause(),
+                if expires {
+                    CloseCause::CloseTimeout
+                } else {
+                    CloseCause::AdminTerminated
+                }
+            );
             assert_eq!(closed.close_side(), None);
         }
         let mut session = session(Mode::Mode2);
-        session.observe_eof(Side::Server, Duration::from_secs(12)).unwrap();
+        session
+            .observe_eof(Side::Server, Duration::from_secs(12))
+            .unwrap();
         assert!(!session.begin_admin_close(Duration::from_secs(13)).unwrap());
         assert_eq!(session.close_cause(), None);
     }
@@ -908,7 +1002,9 @@ mod tests {
         let mut old = session(Mode::Mode1);
         old.record_write(FORWARD, 99).unwrap();
         old.force_server_shutdown().unwrap();
-        let closed = old.finish(SystemTime::UNIX_EPOCH, Duration::from_secs(17)).unwrap();
+        let closed = old
+            .finish(SystemTime::UNIX_EPOCH, Duration::from_secs(17))
+            .unwrap();
         assert_eq!(closed.ended_at(), closed.started_at());
         assert_eq!(closed.duration(), Duration::from_secs(7));
         assert_eq!(closed.id(), old.id());
@@ -930,9 +1026,17 @@ mod tests {
         assert_eq!(fresh.duration(Duration::from_secs(39)), Duration::ZERO);
         assert_eq!(fresh.started_at(), SystemTime::UNIX_EPOCH);
         fresh.force_server_shutdown().unwrap();
-        let closed = fresh.finish(SystemTime::UNIX_EPOCH + Duration::from_secs(9), Duration::from_secs(39)).unwrap();
+        let closed = fresh
+            .finish(
+                SystemTime::UNIX_EPOCH + Duration::from_secs(9),
+                Duration::from_secs(39),
+            )
+            .unwrap();
         assert_eq!(closed.duration(), Duration::ZERO);
-        assert_eq!(closed.ended_at(), SystemTime::UNIX_EPOCH + Duration::from_secs(9));
+        assert_eq!(
+            closed.ended_at(),
+            SystemTime::UNIX_EPOCH + Duration::from_secs(9)
+        );
         assert_eq!(closed.mode(), Mode::Mode2);
         assert_eq!(closed.viewer_transport(), ViewerTransport::Wss);
     }
@@ -946,15 +1050,39 @@ mod tests {
         assert_eq!(closed.close_cause(), CloseCause::PeerEof);
         assert_eq!(session.close_cause(), Some(CloseCause::PeerEof));
         assert_eq!(session.close_side(), Some(Side::Viewer));
-        assert_eq!(session.finish(SystemTime::UNIX_EPOCH, Duration::ZERO), Err(SessionError::Finished));
-        assert_eq!(session.record_write(FORWARD, 1), Err(SessionError::Finished));
-        assert_eq!(session.observe_eof(Side::Viewer, Duration::ZERO), Err(SessionError::Finished));
-        assert_eq!(session.complete_direction(FORWARD), Err(SessionError::Finished));
-        assert_eq!(session.io_error(FORWARD, Side::Viewer), Err(SessionError::Finished));
-        assert_eq!(session.dead_connection(Side::Viewer), Err(SessionError::Finished));
-        assert_eq!(session.begin_admin_close(Duration::ZERO), Err(SessionError::Finished));
+        assert_eq!(
+            session.finish(SystemTime::UNIX_EPOCH, Duration::ZERO),
+            Err(SessionError::Finished)
+        );
+        assert_eq!(
+            session.record_write(FORWARD, 1),
+            Err(SessionError::Finished)
+        );
+        assert_eq!(
+            session.observe_eof(Side::Viewer, Duration::ZERO),
+            Err(SessionError::Finished)
+        );
+        assert_eq!(
+            session.complete_direction(FORWARD),
+            Err(SessionError::Finished)
+        );
+        assert_eq!(
+            session.io_error(FORWARD, Side::Viewer),
+            Err(SessionError::Finished)
+        );
+        assert_eq!(
+            session.dead_connection(Side::Viewer),
+            Err(SessionError::Finished)
+        );
+        assert_eq!(
+            session.begin_admin_close(Duration::ZERO),
+            Err(SessionError::Finished)
+        );
         assert_eq!(session.force_server_shutdown(), Ok(false));
-        assert_eq!(session.expire_close(Duration::MAX, Duration::ZERO), Err(SessionError::Finished));
+        assert_eq!(
+            session.expire_close(Duration::MAX, Duration::ZERO),
+            Err(SessionError::Finished)
+        );
         assert!(session.direction_completed(FORWARD));
         assert!(session.direction_completed(REVERSE));
     }

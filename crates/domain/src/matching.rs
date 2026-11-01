@@ -50,8 +50,7 @@ impl MatchClaim {
     }
 
     fn same_connections(&self, other: &Self) -> bool {
-        self.viewer_conn_id == other.viewer_conn_id
-            && self.server_conn_id == other.server_conn_id
+        self.viewer_conn_id == other.viewer_conn_id && self.server_conn_id == other.server_conn_id
     }
 }
 
@@ -478,7 +477,13 @@ mod tests {
         let ids = [id("0123"), id("123"), id(&long_a), id(&long_b)];
         let mut waiters = Vec::new();
         for id in &ids {
-            waiters.push(register(&mut table, id, Role::Server, ConnId::next(), at(1)));
+            waiters.push(register(
+                &mut table,
+                id,
+                Role::Server,
+                ConnId::next(),
+                at(1),
+            ));
         }
         assert_eq!(table.waiting_count(), 4);
         for (id, waiter) in ids.iter().zip(&waiters) {
@@ -713,7 +718,10 @@ mod tests {
         assert!(!table.cancel_claim(&id, &old_claim));
         assert!(!table.release(&id, &old_session));
         assert_eq!(table.get(&id), Some(&IdOccupancy::Claimed(fresh_claim)));
-        assert_eq!(table.activate(&id, &fresh_claim, fresh_session.clone()), Ok(()));
+        assert_eq!(
+            table.activate(&id, &fresh_claim, fresh_session.clone()),
+            Ok(())
+        );
         assert!(!table.begin_closing(&id, &old_session));
         assert!(!table.release(&id, &old_session));
         assert_eq!(
@@ -784,8 +792,7 @@ mod tests {
         assert_eq!(table.waiting_count(), 1);
         assert_eq!(table.connections.len(), 1);
         let second = ConnId::next();
-        let ArrivalOutcome::Claimed(claim) =
-            table.arrive(&first_id, Role::Server, second, at(2))
+        let ArrivalOutcome::Claimed(claim) = table.arrive(&first_id, Role::Server, second, at(2))
         else {
             panic!("a different connection must match");
         };
@@ -802,7 +809,10 @@ mod tests {
             assert_eq!(table.connections.len(), 2);
             assert_eq!(table.get(&other_id), None);
             match phase {
-                0 => assert_eq!(table.activate(&first_id, &claim, session_id.clone()), Ok(())),
+                0 => assert_eq!(
+                    table.activate(&first_id, &claim, session_id.clone()),
+                    Ok(())
+                ),
                 1 => assert!(table.begin_closing(&first_id, &session_id)),
                 _ => {}
             }

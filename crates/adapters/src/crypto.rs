@@ -183,7 +183,10 @@ mod tests {
         let key = RelayIdKey::from_bytes(&[42; KEY_BYTES]);
         let plain = RelayId::parse("1234").unwrap_or_else(|error| panic!("{error}"));
         let leading_zero = RelayId::parse("01234").unwrap_or_else(|error| panic!("{error}"));
-        assert_eq!(RelayIdSource::reference(&key, &plain), key.reference(b"1234"));
+        assert_eq!(
+            RelayIdSource::reference(&key, &plain),
+            key.reference(b"1234")
+        );
         assert_eq!(
             RelayIdSource::reference(&key, &leading_zero),
             key.reference(b"01234")

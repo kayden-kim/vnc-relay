@@ -9,7 +9,10 @@ use std::time::Duration;
 use tokio::sync::watch;
 use vnc_relay_domain::handshake::{Mode, TargetAddress, TargetHost};
 
-use super::{OwnedConnection, RelayDispatchError, RelayEndpoint, RelayRuntime, RelayService, SessionPair, milliseconds};
+use super::{
+    OwnedConnection, RelayDispatchError, RelayEndpoint, RelayRuntime, RelayService, SessionPair,
+    milliseconds,
+};
 use crate::events::{AbortReason, Event, RejectReason, Stage, TargetFailureReason};
 use crate::ports::{Clock, RelayCloseAction, RelayLifecycle, TargetConnector, TargetError};
 
@@ -51,8 +54,15 @@ pub(super) async fn dispatch<C: TargetConnector>(
         }
     };
     if !admitted {
-        service.reject_connection(viewer, RelayCloseAction::ServerShutdown, runtime).await;
-        service.aborted(context, Stage::TargetConnect, Mode::Mode1, AbortReason::ServerShutdown);
+        service
+            .reject_connection(viewer, RelayCloseAction::ServerShutdown, runtime)
+            .await;
+        service.aborted(
+            context,
+            Stage::TargetConnect,
+            Mode::Mode1,
+            AbortReason::ServerShutdown,
+        );
         return Err(RelayDispatchError::Aborted(AbortReason::ServerShutdown));
     }
     let connecting = Connecting(runtime);
@@ -65,19 +75,26 @@ pub(super) async fn dispatch<C: TargetConnector>(
                 trailing: Vec::new(),
                 permit,
             };
-            service.run_pair(runtime, SessionPair {
-                viewer,
-                other,
-                server_context: None,
-                target: Some(target),
-                target_host: Some(host),
-                relay: None,
-            }).await
+            service
+                .run_pair(
+                    runtime,
+                    SessionPair {
+                        viewer,
+                        other,
+                        server_context: None,
+                        target: Some(target),
+                        target_host: Some(host),
+                        relay: None,
+                    },
+                )
+                .await
         }
         Err(failure) => {
             let elapsed_ms = milliseconds(service.clock.monotonic().saturating_sub(started));
             let action = match &failure {
-                Failure::Rejected(RejectReason::TargetNotAllowed, _) => RelayCloseAction::TargetNotAllowed,
+                Failure::Rejected(RejectReason::TargetNotAllowed, _) => {
+                    RelayCloseAction::TargetNotAllowed
+                }
                 Failure::Rejected(_, _) => RelayCloseAction::Reject,
                 Failure::Failed(_, _) => RelayCloseAction::TargetConnectFailed,
                 Failure::Shutdown => RelayCloseAction::ServerShutdown,
@@ -111,7 +128,12 @@ pub(super) async fn dispatch<C: TargetConnector>(
                     Err(RelayDispatchError::Target(reason))
                 }
                 Failure::Shutdown => {
-                    service.aborted(context, Stage::TargetConnect, Mode::Mode1, AbortReason::ServerShutdown);
+                    service.aborted(
+                        context,
+                        Stage::TargetConnect,
+                        Mode::Mode1,
+                        AbortReason::ServerShutdown,
+                    );
                     Err(RelayDispatchError::Aborted(AbortReason::ServerShutdown))
                 }
             }
@@ -124,15 +146,33 @@ async fn connect<C: TargetConnector>(
     runtime: &RelayRuntime<C>,
     address: &TargetAddress,
     deadline: Duration,
-) -> Result<(C::Stream, vnc_relay_domain::budget::BudgetPermit, SocketAddr), Failure> {
+) -> Result<
+    (
+        C::Stream,
+        vnc_relay_domain::budget::BudgetPermit,
+        SocketAddr,
+    ),
+    Failure,
+> {
     let resolved;
     let candidates: &[IpAddr] = match &address.host {
         TargetHost::Ip(ip) => std::slice::from_ref(ip),
         TargetHost::Name(name) => {
-            if !runtime.config.target_policy.permits_name(name, address.port) {
+            if !runtime
+                .config
+                .target_policy
+                .permits_name(name, address.port)
+            {
                 return Err(Failure::Rejected(RejectReason::TargetNotAllowed, None));
             }
-            resolved = match bounded(runtime.connector.resolve(name), service.clock.as_ref(), deadline, runtime.lifecycle()).await {
+            resolved = match bounded(
+                runtime.connector.resolve(name),
+                service.clock.as_ref(),
+                deadline,
+                runtime.lifecycle(),
+            )
+            .await
+            {
                 Ok(Ok(ips)) if !ips.is_empty() => ips,
                 Ok(_) => return Err(Failure::Failed(TargetFailureReason::ResolveFailed, None)),
                 Err(failure) => return Err(failure),
@@ -153,12 +193,22 @@ async fn connect<C: TargetConnector>(
         check(service.clock.as_ref(), deadline, &runtime.lifecycle())?;
         if permit.is_none() {
             permit = Some(runtime.relay_budget.try_acquire().ok_or(Failure::Rejected(
-                RejectReason::RelayConnectionLimit { limit: runtime.relay_budget.limit() }, None,
+                RejectReason::RelayConnectionLimit {
+                    limit: runtime.relay_budget.limit(),
+                },
+                None,
             ))?);
         }
         last_ip = Some(ip);
         let target = SocketAddr::new(ip, address.port);
-        match bounded(runtime.connector.connect(target), service.clock.as_ref(), deadline, runtime.lifecycle()).await {
+        match bounded(
+            runtime.connector.connect(target),
+            service.clock.as_ref(),
+            deadline,
+            runtime.lifecycle(),
+        )
+        .await
+        {
             Ok(Ok(stream)) => {
                 // bounded checks C and shutdown after the connector resolves.
                 // The target is not activated until run_pair's shared-lock gate.
@@ -176,13 +226,27 @@ async fn connect<C: TargetConnector>(
         }
     }
     if last_ip.is_none() {
-        Err(Failure::Rejected(RejectReason::TargetNotAllowed, last_checked))
+        Err(Failure::Rejected(
+            RejectReason::TargetNotAllowed,
+            last_checked,
+        ))
     } else {
-        Err(Failure::Failed(if all_refused { TargetFailureReason::ConnectRefused } else { TargetFailureReason::ConnectError }, last_ip))
+        Err(Failure::Failed(
+            if all_refused {
+                TargetFailureReason::ConnectRefused
+            } else {
+                TargetFailureReason::ConnectError
+            },
+            last_ip,
+        ))
     }
 }
 
-fn check(clock: &dyn Clock, deadline: Duration, lifecycle: &watch::Receiver<RelayLifecycle>) -> Result<(), Failure> {
+fn check(
+    clock: &dyn Clock,
+    deadline: Duration,
+    lifecycle: &watch::Receiver<RelayLifecycle>,
+) -> Result<(), Failure> {
     if *lifecycle.borrow() != RelayLifecycle::Running {
         Err(Failure::Shutdown)
     } else if clock.monotonic() >= deadline {
@@ -199,14 +263,19 @@ async fn bounded<T>(
     mut lifecycle: watch::Receiver<RelayLifecycle>,
 ) -> Result<T, Failure> {
     let mut stopped = pin!(lifecycle.wait_for(|phase| *phase != RelayLifecycle::Running));
-    let mut timer = pin!(tokio::time::sleep(deadline.saturating_sub(clock.monotonic())));
+    let mut timer = pin!(tokio::time::sleep(
+        deadline.saturating_sub(clock.monotonic())
+    ));
     let mut future = pin!(future);
     poll_fn(|cx| {
         if stopped.as_mut().poll(cx).is_ready() {
             return Poll::Ready(Err(Failure::Shutdown));
         }
         if clock.monotonic() >= deadline || timer.as_mut().poll(cx).is_ready() {
-            return Poll::Ready(Err(Failure::Failed(TargetFailureReason::ConnectTimeout, None)));
+            return Poll::Ready(Err(Failure::Failed(
+                TargetFailureReason::ConnectTimeout,
+                None,
+            )));
         }
         match future.as_mut().poll(cx) {
             Poll::Ready(value) => {
@@ -215,12 +284,16 @@ async fn bounded<T>(
                     Poll::Ready(Err(Failure::Shutdown))
                 } else if clock.monotonic() >= deadline || timer.as_mut().poll(cx).is_ready() {
                     drop(value);
-                    Poll::Ready(Err(Failure::Failed(TargetFailureReason::ConnectTimeout, None)))
+                    Poll::Ready(Err(Failure::Failed(
+                        TargetFailureReason::ConnectTimeout,
+                        None,
+                    )))
                 } else {
                     Poll::Ready(Ok(value))
                 }
             }
             Poll::Pending => Poll::Pending,
         }
-    }).await
+    })
+    .await
 }

@@ -152,9 +152,7 @@ pub enum RelayCloseAction {
 /// An empty payload message is not EOF. Successful writes count only payload
 /// accepted by the transport, not bytes copied into an unbounded queue.
 /// See relay spec RLY-003, RLY-019 and websocket-relay-v1 §1.4–1.6.
-pub trait RelayStream:
-    tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send
-{
+pub trait RelayStream: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send {
     /// The viewer transport metadata used in session views and events.
     fn transport(&self) -> vnc_relay_domain::session::ViewerTransport;
 
@@ -202,7 +200,9 @@ impl RelayStreamError {
         error
             .get_ref()
             .and_then(|inner| inner.downcast_ref::<Self>())
-            .map_or(crate::events::ConnectionErrorKind::IoError, |typed| typed.kind())
+            .map_or(crate::events::ConnectionErrorKind::IoError, |typed| {
+                typed.kind()
+            })
     }
 }
 
@@ -258,10 +258,7 @@ pub trait TargetConnector: Send + Sync {
 /// Computes a log-only keyed reference; never use it as a matching key.
 /// See ops-info-v1 §1.9.
 pub trait RelayIdSource: Send + Sync {
-    fn reference(
-        &self,
-        id: &vnc_relay_domain::relay_id::RelayId,
-    ) -> crate::events::RelayIdRef;
+    fn reference(&self, id: &vnc_relay_domain::relay_id::RelayId) -> crate::events::RelayIdRef;
 }
 
 /// Applies the per-process keyed permutation to one never-reused counter.
