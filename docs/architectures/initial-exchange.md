@@ -245,6 +245,15 @@ WS·WSS는 A에 따라 2.7 완료 전에 연결한다. `crates/adapters/tests/we
 
 이번 문서 정리의 검사 대상은 기준 커밋 `4478c9744e96e631e2224b6efe5ef7af4b4ccc37` 위의 미커밋 문서 네 개다. `initial-exchange.md`, 아키텍처 `README.md`, `code-map.md`, `docs/TODO.md`를 고쳤다. Windows에서 Python inline 검사(`functions.eval`, `pathlib`·정규식)를 실행했다. `relay-session.md`의 제목 집합 25개가 유지되는지 확인한 뒤 저장소의 Markdown 89개를 검사했다. 상대 링크 2425개, 앵커 1572개, 표 544개에서 새 오류는 0개다. 고지된 기존 링크 오류 2개와 표 오류 2개는 제외했다. 고지된 `DESIGN.md:698`은 fenced code 안이므로 표 검사에서 제외됐다. 코드 구간의 역슬래시를 잘못 센 검사기 오탐 두 건은 검사기를 고쳐 제거했다. 외부 URL의 네트워크 응답, Rust·Cargo·전체 게이트는 검사하지 않았다. 이 문서 변경으로 구현 완료나 시나리오 통과를 추가로 주장하지 않는다.
 
+### 전체 게이트 실행 기록 (커밋 0cf18b6)
+
+작업 2.7~2.10 구현과 독립 리뷰 반영 후 커밋 `0cf18b6`에서 두 OS의 전체 게이트를 실행했다.
+
+| 환경 | 명령 | 결과 |
+| --- | --- | --- |
+| Windows 11 Pro 10.0.26200 x64, Rust 1.99.1 | `powershell -NoProfile -ExecutionPolicy Bypass -File D:/vr-tools/vr-win.ps1 -Only all` | 통과(`ALL PASSED (all)`). 시나리오 150건: 통과 23, 부분 87, 실패 0, 미실행 0, 미연결 40. 판정 통과. |
+| Ubuntu 24.04.4(WSL2), Rust 1.99.1 | `wsl -d Ubuntu -- bash /mnt/d/vr-tools/vr-full.sh` | 통과(`ALL PASSED`). 시나리오 150건: 통과 24, 부분 86, 실패 0, 미실행 0, 미연결 40. 판정 통과. |
+
 ## 9. 미결정 사항
 
 아래 세 항목은 모두 해결했다. 선택과 내부 연결 순서는 이 문서의 판단이며 사용자 결정은 없다. 표는 검토한 대안을 남긴다. 계약이 정하지 않은 임시 제품 동작은 추가하지 않는다.

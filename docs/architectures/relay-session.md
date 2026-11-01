@@ -403,6 +403,15 @@ WS 스트림 설계 연결 개정에서는 이 파일만 문서 검사했다(`fu
 4. `RecentClosedList::push`가 축출된 요약(또는 용량 초과로 미보관된 요약)을 반환하게 하여 $O(R^2)$ retain 대신 $O(1)$ remove를 수행하도록 개선하고 용량 및 R=0 일관성 시험을 추가했다.
 위 표의 세 명령(cargo test 358건, clippy, xtask layers)을 모두 통과했다.
 
+### 전체 게이트 실행 기록 (커밋 0cf18b6)
+
+독립 리뷰 반영 후 커밋 `0cf18b6`(rustfmt 서식 보정 포함)에서 두 OS의 전체 게이트를 실행했다.
+
+| 환경 | 명령 | 결과 | 비고 |
+| --- | --- | --- | --- |
+| Windows 11 Pro 10.0.26200 x64, Rust 1.99.1 | `powershell -NoProfile -ExecutionPolicy Bypass -File D:/vr-tools/vr-win.ps1 -Only all` | 통과(`ALL PASSED (all)`). 시나리오 150건: 통과 23, 부분 87, 실패 0, 미실행 0, 미연결 40. 오류 0건, 판정 통과 | build, fmt, clippy, layers, tokens, tests, scenarios, licenses, deny 전체 통과 |
+| Ubuntu 24.04.4(WSL2), Rust 1.99.1 | `wsl -d Ubuntu -- bash /mnt/d/vr-tools/vr-full.sh` | 통과(`ALL PASSED`). 시나리오 150건: 통과 24, 부분 86, 실패 0, 미실행 0, 미연결 40. 오류 0건, 판정 통과 | Linux 전용 소켓·계정 권한 시험 포함 전체 통과 |
+
 ## 9. 미결정 사항
 
 ### 1. 시작 키 생성 실패의 공개 오류 코드
