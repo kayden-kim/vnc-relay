@@ -24,6 +24,7 @@ use self::frame::{
     PendingClose, PendingPong, encode_close, encode_data_header,
 };
 use self::keepalive::Keepalive;
+use crate::net::classify_socket_error;
 
 /// An adapter wrapping a stream with streaming RFC 6455 WebSocket framing,
 /// implementing the common `RelayStream` port.
@@ -171,7 +172,10 @@ impl<S> WsRelayStream<S> {
         }
 
         let mut read_buf = ReadBuf::new(buf);
-        match Pin::new(io).poll_read(cx, &mut read_buf) {
+        match Pin::new(io)
+            .poll_read(cx, &mut read_buf)
+            .map_err(classify_socket_error)
+        {
             Poll::Ready(Ok(())) => Poll::Ready(Ok(read_buf.filled().len())),
             Poll::Ready(Err(e)) => Poll::Ready(Err(e)),
             Poll::Pending => Poll::Pending,
@@ -200,7 +204,10 @@ impl<S> WsRelayStream<S> {
                 break;
             };
             while !pong.is_finished() {
-                match Pin::new(&mut self.io).poll_write(cx, pong.remaining_bytes()) {
+                match Pin::new(&mut self.io)
+                    .poll_write(cx, pong.remaining_bytes())
+                    .map_err(classify_socket_error)
+                {
                     Poll::Ready(Ok(0)) => {
                         return Poll::Ready(Err(io::Error::from(io::ErrorKind::WriteZero)));
                     }
@@ -219,7 +226,10 @@ impl<S> WsRelayStream<S> {
             self.pong_flush_pending = true;
         }
         if self.pong_flush_pending {
-            match Pin::new(&mut self.io).poll_flush(cx) {
+            match Pin::new(&mut self.io)
+                .poll_flush(cx)
+                .map_err(classify_socket_error)
+            {
                 Poll::Ready(Ok(())) => self.pong_flush_pending = false,
                 result => return result,
             }
@@ -259,7 +269,10 @@ impl<S> WsRelayStream<S> {
         }
         if let Some(mut written) = self.keepalive.pending_ping {
             while written < 2 {
-                match Pin::new(&mut self.io).poll_write(cx, &[0x89, 0][usize::from(written)..]) {
+                match Pin::new(&mut self.io)
+                    .poll_write(cx, &[0x89, 0][usize::from(written)..])
+                    .map_err(classify_socket_error)
+                {
                     Poll::Ready(Ok(0)) => return Poll::Ready(Err(io::ErrorKind::WriteZero.into())),
                     Poll::Ready(Ok(count)) => {
                         written += count as u8;
@@ -269,7 +282,10 @@ impl<S> WsRelayStream<S> {
                     Poll::Pending => return Poll::Pending,
                 }
             }
-            match Pin::new(&mut self.io).poll_flush(cx) {
+            match Pin::new(&mut self.io)
+                .poll_flush(cx)
+                .map_err(classify_socket_error)
+            {
                 Poll::Ready(Ok(())) => self.keepalive.sent(tokio::time::Instant::now()),
                 result => return result,
             }
@@ -297,7 +313,10 @@ impl<S> WsRelayStream<S> {
         if let Some(mut close) = self.pending_close {
             while !close.is_finished() {
                 let rem = close.remaining_bytes();
-                match Pin::new(&mut self.io).poll_write(cx, rem) {
+                match Pin::new(&mut self.io)
+                    .poll_write(cx, rem)
+                    .map_err(classify_socket_error)
+                {
                     Poll::Ready(Ok(0)) => {
                         return Poll::Ready(Err(io::Error::from(io::ErrorKind::WriteZero)));
                     }
@@ -322,7 +341,10 @@ impl<S> WsRelayStream<S> {
     where
         S: AsyncRead + AsyncWrite + Unpin + Send,
     {
-        match Pin::new(&mut self.io).poll_flush(cx) {
+        match Pin::new(&mut self.io)
+            .poll_flush(cx)
+            .map_err(classify_socket_error)
+        {
             Poll::Ready(Ok(())) => {}
             result => return result,
         }
@@ -330,13 +352,17 @@ impl<S> WsRelayStream<S> {
             let mut discard = [0; 1024];
             for _ in 0..MAX_NON_DATA_FRAMES_PER_POLL {
                 if self.decoder.peer_closed || self.transport_eof {
-                    return Pin::new(&mut self.io).poll_shutdown(cx);
+                    return Pin::new(&mut self.io)
+                        .poll_shutdown(cx)
+                        .map_err(classify_socket_error);
                 }
                 let mut buffer = ReadBuf::new(&mut discard);
                 match Pin::new(&mut *self).poll_read(cx, &mut buffer) {
                     Poll::Ready(Ok(())) => {}
                     Poll::Ready(Err(_)) if self.transport_eof => {
-                        return Pin::new(&mut self.io).poll_shutdown(cx);
+                        return Pin::new(&mut self.io)
+                            .poll_shutdown(cx)
+                            .map_err(classify_socket_error);
                     }
                     Poll::Ready(Err(error))
                         if matches!(
@@ -355,14 +381,20 @@ impl<S> WsRelayStream<S> {
             cx.waker().wake_by_ref();
             return Poll::Pending;
         }
-        match Pin::new(&mut self.io).poll_shutdown(cx) {
+        match Pin::new(&mut self.io)
+            .poll_shutdown(cx)
+            .map_err(classify_socket_error)
+        {
             Poll::Ready(Ok(())) => {}
             result => return result,
         }
         let mut discard = [0; 1024];
         for _ in 0..MAX_NON_DATA_FRAMES_PER_POLL {
             let mut buffer = ReadBuf::new(&mut discard);
-            match Pin::new(&mut self.io).poll_read(cx, &mut buffer) {
+            match Pin::new(&mut self.io)
+                .poll_read(cx, &mut buffer)
+                .map_err(classify_socket_error)
+            {
                 Poll::Ready(Ok(())) if buffer.filled().is_empty() => return Poll::Ready(Ok(())),
                 Poll::Ready(Ok(())) => {}
                 result => return result,
@@ -660,7 +692,10 @@ impl<S: AsyncRead + AsyncWrite + Unpin + Send> AsyncWrite for WsRelayStream<S> {
         // 2a. Finish header if needed
         while !frame.is_header_finished() {
             let rem = frame.remaining_header();
-            match Pin::new(&mut this.io).poll_write(cx, rem) {
+            match Pin::new(&mut this.io)
+                .poll_write(cx, rem)
+                .map_err(classify_socket_error)
+            {
                 Poll::Ready(Ok(0)) => {
                     this.outbound_frame = Some(frame);
                     return Poll::Ready(Err(io::Error::from(io::ErrorKind::WriteZero)));
@@ -691,7 +726,10 @@ impl<S: AsyncRead + AsyncWrite + Unpin + Send> AsyncWrite for WsRelayStream<S> {
             return Poll::Ready(Ok(0));
         }
 
-        match Pin::new(&mut this.io).poll_write(cx, &buf[..to_write]) {
+        match Pin::new(&mut this.io)
+            .poll_write(cx, &buf[..to_write])
+            .map_err(classify_socket_error)
+        {
             Poll::Ready(Ok(0)) => {
                 this.outbound_frame = Some(frame);
                 Poll::Ready(Err(io::Error::from(io::ErrorKind::WriteZero)))
@@ -740,12 +778,16 @@ impl<S: AsyncRead + AsyncWrite + Unpin + Send> AsyncWrite for WsRelayStream<S> {
                 }
             }
         }
-        Pin::new(&mut this.io).poll_flush(cx)
+        Pin::new(&mut this.io)
+            .poll_flush(cx)
+            .map_err(classify_socket_error)
     }
 
     fn poll_shutdown(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         let this = self.get_mut();
-        Pin::new(&mut this.io).poll_shutdown(cx)
+        Pin::new(&mut this.io)
+            .poll_shutdown(cx)
+            .map_err(classify_socket_error)
     }
 }
 
@@ -771,7 +813,9 @@ impl<S: AsyncRead + AsyncWrite + Unpin + Send> RelayStream for WsRelayStream<S> 
         // Our own expired Pong deadline is an abnormal, code-less shutdown.
         // 4006 remains reserved for a dead TCP endpoint on the other side.
         if this.keepalive.expired {
-            return Pin::new(&mut this.io).poll_shutdown(cx);
+            return Pin::new(&mut this.io)
+                .poll_shutdown(cx)
+                .map_err(classify_socket_error);
         }
         // Finish any started Ping before a Close or another control frame.
         if this
@@ -806,7 +850,9 @@ impl<S: AsyncRead + AsyncWrite + Unpin + Send> RelayStream for WsRelayStream<S> 
             return if this.terminal_close {
                 this.poll_terminal_disposal(cx)
             } else {
-                Pin::new(&mut this.io).poll_flush(cx)
+                Pin::new(&mut this.io)
+                    .poll_flush(cx)
+                    .map_err(classify_socket_error)
             };
         }
         // A shutdown request cannot replace a Close already received from the
@@ -874,14 +920,18 @@ impl<S: AsyncRead + AsyncWrite + Unpin + Send> RelayStream for WsRelayStream<S> 
                 }
                 None => {
                     this.close_sent = true;
-                    return Pin::new(&mut this.io).poll_shutdown(cx);
+                    return Pin::new(&mut this.io)
+                        .poll_shutdown(cx)
+                        .map_err(classify_socket_error);
                 }
             }
         }
 
         match this.poll_flush_pending_close(cx) {
             Poll::Ready(Ok(())) if this.terminal_close => this.poll_terminal_disposal(cx),
-            Poll::Ready(Ok(())) => Pin::new(&mut this.io).poll_flush(cx),
+            Poll::Ready(Ok(())) => Pin::new(&mut this.io)
+                .poll_flush(cx)
+                .map_err(classify_socket_error),
             Poll::Ready(Err(e)) => Poll::Ready(Err(e)),
             Poll::Pending => Poll::Pending,
         }

@@ -56,6 +56,63 @@ impl TcpRelayStream {
     }
 }
 
+/// Socket ETIMEDOUT, EHOSTUNREACH, or ENETUNREACH means keepalive or retransmission
+/// gave up on an unresponsive peer. Application H/C/W timers never pass through this mapper.
+/// Windows remains unclassified until its socket failure is observed (Q86).
+pub(crate) fn classify_socket_error(error: io::Error) -> io::Error {
+    if cfg!(target_os = "linux")
+        && matches!(
+            error.kind(),
+            ErrorKind::TimedOut | ErrorKind::HostUnreachable | ErrorKind::NetworkUnreachable
+        )
+    {
+        vnc_relay_app::ports::RelayStreamError::DeadConnection.into_io_error()
+    } else {
+        error
+    }
+}
+
+#[cfg(all(test, target_os = "linux"))]
+mod socket_error_tests {
+    use super::classify_socket_error;
+    use std::io;
+    use std::task::Poll;
+    use vnc_relay_app::events::ConnectionErrorKind;
+    use vnc_relay_app::ports::RelayStreamError;
+
+    #[test]
+    fn classifies_only_linux_socket_timeouts_as_dead_connections() {
+        for kind in [
+            io::ErrorKind::TimedOut,
+            io::ErrorKind::HostUnreachable,
+            io::ErrorKind::NetworkUnreachable,
+            io::ErrorKind::ConnectionReset,
+            io::ErrorKind::BrokenPipe,
+        ] {
+            // Inject the same poll result produced by the underlying TCP socket.
+            let result: Poll<io::Result<()>> = Poll::Ready(Err(io::Error::from(kind)));
+            let error = match result.map_err(classify_socket_error) {
+                Poll::Ready(Err(error)) => error,
+                other => panic!("injected socket error disappeared: {other:?}"),
+            };
+            let is_dead = matches!(
+                kind,
+                io::ErrorKind::TimedOut
+                    | io::ErrorKind::HostUnreachable
+                    | io::ErrorKind::NetworkUnreachable
+            );
+            assert_eq!(RelayStreamError::is_dead_connection(&error), is_dead);
+            assert_eq!(
+                RelayStreamError::classify(&error),
+                ConnectionErrorKind::IoError
+            );
+            if !is_dead {
+                assert_eq!(error.kind(), kind);
+            }
+        }
+    }
+}
+
 impl tokio::io::AsyncRead for TcpRelayStream {
     fn poll_read(
         self: std::pin::Pin<&mut Self>,
@@ -63,6 +120,7 @@ impl tokio::io::AsyncRead for TcpRelayStream {
         buffer: &mut tokio::io::ReadBuf<'_>,
     ) -> std::task::Poll<io::Result<()>> {
         tokio::io::AsyncRead::poll_read(std::pin::Pin::new(&mut self.get_mut().inner), cx, buffer)
+            .map_err(classify_socket_error)
     }
 }
 
@@ -73,6 +131,7 @@ impl tokio::io::AsyncWrite for TcpRelayStream {
         bytes: &[u8],
     ) -> std::task::Poll<io::Result<usize>> {
         tokio::io::AsyncWrite::poll_write(std::pin::Pin::new(&mut self.get_mut().inner), cx, bytes)
+            .map_err(classify_socket_error)
     }
 
     fn poll_write_vectored(
@@ -85,6 +144,7 @@ impl tokio::io::AsyncWrite for TcpRelayStream {
             cx,
             buffers,
         )
+        .map_err(classify_socket_error)
     }
 
     fn is_write_vectored(&self) -> bool {
@@ -96,6 +156,7 @@ impl tokio::io::AsyncWrite for TcpRelayStream {
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<io::Result<()>> {
         tokio::io::AsyncWrite::poll_flush(std::pin::Pin::new(&mut self.get_mut().inner), cx)
+            .map_err(classify_socket_error)
     }
 
     fn poll_shutdown(
@@ -103,6 +164,7 @@ impl tokio::io::AsyncWrite for TcpRelayStream {
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<io::Result<()>> {
         tokio::io::AsyncWrite::poll_shutdown(std::pin::Pin::new(&mut self.get_mut().inner), cx)
+            .map_err(classify_socket_error)
     }
 }
 

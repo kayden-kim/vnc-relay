@@ -21,7 +21,7 @@
   - H: TCP 연결은 수락하자마자 초기 교환 상태에 들어간다. H가 지나면 닫고 `connection_aborted`(`handshake_timeout`)를 기록한다. WS·WSS의 H는 101 응답 뒤부터 잰다(사용자 결정 2026-10-22(Q22)). 그 H가 지나면 4009 닫기 코드로 닫고 `connection_aborted`(`handshake_timeout`)를 기록한다.
   - U: WS·WSS와 관리 리스너 연결의 요청 시간 제한. `[timeouts] tls_upgrade_secs`를 쓰고 수락부터 잰다. WS·WSS는 TLS 핸드셰이크(WSS)와 업그레이드 요청을 끝내야 한다. 관리 리스너는 TLS 핸드셰이크와 첫 요청 머리를 끝내야 한다(사용자 결정 Q12). 관리 리스너는 첫 요청 머리 뒤 읽기·쓰기마다 U를 다시 잰다(사용자 결정 2026-10-22(Q25), [관리 리스너 모듈 설계](management-listener.md) 9절 11번). 기한이 지나면 WS·WSS는 `connection_aborted`(`tls_upgrade_timeout`)를 기록하고 닫는다. 관리 리스너는 평문 응답 없이 닫고 기록하지 않는다. 예외: 검증·수락된 관리자 종료 요청의 정리 완료 대기 중에만 U를 멈추고 응답 쓰기부터 다시 잰다(사용자 결정 2026-11-02(Q92), [관리 리스너 모듈 설계](management-listener.md)의 Q25 예외).
   - 초기 교환 중 상대 종료 감지: 상대가 바이트를 보내기 전에 닫으면 `peer_eof`, 연결이 재설정되면 `connection_error`(`error_kind` = `io_error`)로 정리한다. 초기 교환 읽기(`crates/app/src/relay/handshake.rs` `read_request`)가 이 구분을 한다(사용자 결정 2026-10-20).
-  - K: 수락한 중계 소켓마다 TCP keepalive의 유휴 시간·탐색 간격·탐색 횟수를 설정한다.
+  - K: 수락한 중계 소켓마다 TCP keepalive의 유휴 시간·탐색 간격·탐색 횟수를 설정한다. Linux 소켓 I/O의 `ETIMEDOUT`(`io::ErrorKind::TimedOut`)과 앞선 ICMP 도달 불능에 따른 포기 오류 `EHOSTUNREACH`(`io::ErrorKind::HostUnreachable`)·`ENETUNREACH`(`io::ErrorKind::NetworkUnreachable`)는 keepalive 또는 재전송 포기로 판정한 응답 없는 상대다. `net::classify_socket_error`는 이를 `RelayStreamError::DeadConnection`으로 바꾼다. ICMP 사례는 Linux 커널 소스 분석에 근거하며 실행으로 직접 관찰한 것은 아니다. 이는 이 문서의 구현 판단이며 사용자 결정은 아니다. `TcpRelayStream`은 수락·Mode I 대상 소켓에, `WsRelayStream`은 WS·WSS의 하부 전송 I/O에 같은 판정을 쓴다. app의 H·C·W 타이머에는 적용하지 않는다. Windows 오류 코드는 관찰하지 않았으므로 추정해 추가하지 않는다.
 - 맡지 않는 책임:
   - Lm의 판정과 거절 기록. 수락 판정은 `admission.rs`의 `AdmittingListener`가 맡고, 상태·관리 리스너가 쓴다([상태 리스너와 준비 상태 모듈 설계](status-listener.md), [관리 리스너 모듈 설계](management-listener.md)). 관리 리스너는 작업 4.2에서 같은 Lm 예산을 쓴다.
   - Lw의 사용처. 작업 2.9(대기 등록)가 같은 `ConnectionBudget`으로 연결한다. 그 전까지 Lw 예산을 만들지 않는다.
@@ -112,6 +112,7 @@ WS·WSS는 자리를 잡은 뒤 U 안에서 TLS 핸드셰이크(WSS)와 업그�
 | 바이트 전 상대 종료 | `peer_eof`(`info`)를 기록한다. | 자리 반환 | RLY-005 |
 | `peek` 오류(연결 재설정 등) | `connection_error`(`warn`, `error_kind` = `io_error`)를 기록한다. | 자리 반환 | 없음 |
 | keepalive 설정 실패 | `connection_accepted` 기록 → `set_keepalive` 실패 → `connection_aborted(reason=connection_error, error_kind=io_error)` 기록 → 소켓 drop → L permit drop. `stage`는 TCP `initial_exchange`, WS `upgrade`, WSS `tls`다(사용자 결정 2026-11-02(Q85), [운영 정보 계약 1.6·1.7절](../contracts/ops-info-v1.md#16-원인-코드)). 커밋 `5a38bfc`가 `crates/adapters/src/net.rs`의 공유 accept 루프(`accept_connections_with_keepalive`)에 구현했다. 단위 시험 `net::accept_tests::keepalive_failure_aborts_accepted_connections_and_releases_l`이 네 진입점의 사건 순서·필드, 소켓 닫힘, 다음 연결 수락, L 반환을 확인한다. 실패는 소켓 옵션 함수를 매개변수로 받아 주입한다. | 소켓 닫힘, 자리 반환 | RLY-R18, TODO 2.11 |
+| Linux 중계 소켓의 `ETIMEDOUT`·`EHOSTUNREACH`·`ENETUNREACH` | keepalive 또는 재전송 포기는 응답 없는 상대이므로 `dead_connection`으로 분류한다(앞선 ICMP 도달 불능에 따른 포기 오류 포함, 커널 소스 분석 근거, 실행 관찰 아님, 이 문서의 구현 판단). 대기는 `waiting_removed.reason`, 활성 세션은 `session_closed.close_cause`와 응답 없는 `side`로 기록한다. 다른 소켓 I/O 오류는 기존 `connection_error`·`io_error`를 유지한다. WS·WSS도 `WsRelayStream`의 하부 전송 오류에 같은 함수를 쓴다. H·C·W의 app 타이머는 이 경로를 지나지 않는다. | 소켓·등록 제거, L 반환 | RLY-025·026 |
 | WS·WSS U 만료 | 닫고 `connection_aborted`(`tls_upgrade_timeout`, `warn`)를 기록한다. `stage`는 TLS 핸드셰이크 중이면 `tls`, 아니면 `upgrade`다. | 자리 반환 | 없음 |
 | 관리 리스너 U 만료 | 평문 응답 없이 닫는다. 기록하지 않는다(구현 판단, [관리 리스너 모듈 설계](management-listener.md) 6절). | 접속 없음, 자리 반환 | OPS-006(일부), OPS-033(일부) |
 | WS·WSS 업그레이드 거절(101 전) | `connection_rejected`(`stage` = `upgrade`, `reason` = `ip_not_allowed`·`invalid_upgrade`·`origin_not_allowed`·`subprotocol_not_supported` 중 하나)를 기록하고 응답한 뒤 닫는다. | 자리 반환 | 없음 |
@@ -150,5 +151,5 @@ TCP 경로는 2~4절과 같다. WS·WSS 행은 [WebSocket 진입점 모듈 설�
 
 | 항목 | 영향 | 확정 위치 |
 | --- | --- | --- |
-| Windows의 keepalive 값 | 설정한 유휴 시간·탐색 간격·탐색 횟수를 Windows에서 읽어 확인하지 않았다. socket2가 그 값을 읽는 함수를 Linux에서만 준다. RLY-027 시험은 K 최솟값으로 두 OS에서 유휴 세션이 유지됨을 확인했다(`1a6f93e`). 끊긴 연결 감지(RLY-025·026)의 동작 확인은 남았다. | 작업 2.11(끊긴 연결 감지)에서 동작으로 확인 |
+| Windows의 keepalive 값과 단절 오류 | 설정한 유휴 시간·탐색 간격·탐색 횟수를 Windows에서 읽어 확인하지 않았다. socket2가 그 값을 읽는 함수를 Linux에서만 준다. RLY-027은 K 최솟값으로 두 OS에서 유휴 세션이 유지됨을 확인했다(`1a6f93e`). Windows의 실제 keepalive 실패 오류 코드는 아직 관찰하지 않았다. Linux의 `ETIMEDOUT` 분류를 Windows 오류로 추정해 넓히지 않는다. | 사용자 결정 2026-11-02(Q86): Linux netns DROP 시험, Windows 기존 부분 시험 유지 |
 | WS H 시작점(101 뒤) (해결) | 101 뒤부터 H를 잰다. 수락부터 재면 U와 기한이 겹친다. | 사용자 결정 2026-10-22(Q22) |

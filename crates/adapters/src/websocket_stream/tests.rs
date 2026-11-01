@@ -1695,3 +1695,87 @@ async fn kw_finishes_a_started_ping_before_echoing_a_received_close() {
         .unwrap_or_else(|error| panic!("Ping before Close: {error}"));
     assert_eq!(&wire, b"\x89\x00\x88\x02\x03\xe8");
 }
+
+#[cfg(target_os = "linux")]
+#[tokio::test]
+async fn classifies_underlying_ws_and_wss_socket_timeouts_without_changing_other_errors() {
+    struct FailedSocket(std::io::ErrorKind);
+
+    impl AsyncRead for FailedSocket {
+        fn poll_read(
+            self: Pin<&mut Self>,
+            _: &mut Context<'_>,
+            _: &mut ReadBuf<'_>,
+        ) -> Poll<std::io::Result<()>> {
+            Poll::Ready(Err(self.0.into()))
+        }
+    }
+
+    impl AsyncWrite for FailedSocket {
+        fn poll_write(
+            self: Pin<&mut Self>,
+            _: &mut Context<'_>,
+            _: &[u8],
+        ) -> Poll<std::io::Result<usize>> {
+            Poll::Ready(Err(self.0.into()))
+        }
+        fn poll_flush(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+            Poll::Ready(Err(self.0.into()))
+        }
+        fn poll_shutdown(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+            Poll::Ready(Err(self.0.into()))
+        }
+    }
+
+    fn assert_failure<T: std::fmt::Debug>(
+        result: Poll<std::io::Result<T>>,
+        kind: std::io::ErrorKind,
+    ) {
+        let error = match result {
+            Poll::Ready(Err(error)) => error,
+            other => panic!("injected transport error disappeared: {other:?}"),
+        };
+        let is_dead = matches!(
+            kind,
+            std::io::ErrorKind::TimedOut
+                | std::io::ErrorKind::HostUnreachable
+                | std::io::ErrorKind::NetworkUnreachable
+        );
+        assert_eq!(RelayStreamError::is_dead_connection(&error), is_dead);
+        assert_eq!(
+            RelayStreamError::classify(&error),
+            ConnectionErrorKind::IoError
+        );
+        if !is_dead {
+            assert_eq!(error.kind(), kind);
+        }
+    }
+
+    for transport in [ViewerTransport::Ws, ViewerTransport::Wss] {
+        for kind in [
+            std::io::ErrorKind::TimedOut,
+            std::io::ErrorKind::HostUnreachable,
+            std::io::ErrorKind::NetworkUnreachable,
+            std::io::ErrorKind::ConnectionReset,
+            std::io::ErrorKind::BrokenPipe,
+        ] {
+            let mut ws = WsRelayStream::new(
+                FailedSocket(kind),
+                Vec::new(),
+                65536,
+                16384,
+                transport,
+                KEEPALIVE,
+            );
+            let mut cx = Context::from_waker(Waker::noop());
+            let mut bytes = [0; 1];
+            assert_failure(
+                Pin::new(&mut ws).poll_read(&mut cx, &mut ReadBuf::new(&mut bytes)),
+                kind,
+            );
+            assert_failure(Pin::new(&mut ws).poll_write(&mut cx, b"x"), kind);
+            assert_failure(Pin::new(&mut ws).poll_flush(&mut cx), kind);
+            assert_failure(Pin::new(&mut ws).poll_shutdown(&mut cx), kind);
+        }
+    }
+}

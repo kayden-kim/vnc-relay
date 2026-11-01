@@ -103,6 +103,44 @@ Windows 11 x64 또는 Ubuntu 24.04 LTS x64에서 고정된 Rust 툴체인으로 
 
    Windows에서 명령을 찾지 못하면 `%USERPROFILE%\.cargo\bin`이 `PATH`에 없는 것이다. 검증 환경도 그랬다. 그 PowerShell에서 `$env:Path = "$env:USERPROFILE\.cargo\bin;$env:Path"`를 먼저 실행한다. 사용자 `PATH`에 영구로 더할 수도 있다.
 
+#### WSL 끊긴 연결 감지 시험 준비
+
+Linux 전용 `tests/relay_dead_peer_linux.rs`는 사용자·네트워크 네임스페이스 안에서 루프백 패킷을 `nft`로 버린다. 호스트의 방화벽과 네트워크 설정은 바꾸지 않는다. Windows에서는 기존 부분 시험을 유지한다(사용자 결정 2026-11-02(Q86)).
+
+1. WSL Ubuntu에서 사용자가 `nftables`를 설치한다(사용자 결정 2026-11-02(Q93)).
+
+   ```shell
+   sudo apt-get install -y nftables
+   ```
+
+   영향: WSL 배포판에 `nftables` 패키지를 설치한다. 시험 자체에는 `sudo`를 쓰지 않는다.
+
+2. WSL Ubuntu에서 필수 도구를 확인한다.
+
+   ```shell
+   command -v unshare
+   command -v ip
+   command -v nft
+   ```
+
+   기대 결과: 각 명령이 도구 경로를 출력하고 종료 코드 0으로 끝난다.
+
+3. 권한 없는 사용자로 네임스페이스를 만들 수 있는지 확인한다.
+
+   ```shell
+   unshare -rn true
+   ```
+
+   기대 결과: 출력 없이 종료 코드 0으로 끝난다. 시험은 `unshare --user --map-root-user --net`으로 자신을 다시 실행한다. 필수 도구나 사용자 네임스페이스가 없으면 누락 조건을 밝히고 실패한다. 조용히 건너뛰지 않는다(사용자 결정 2026-11-02(Q93)).
+
+4. 저장소 루트에서 Linux 전용 시험을 실행한다.
+
+   ```shell
+   cargo test --test relay_dead_peer_linux -- --nocapture
+   ```
+
+   기대 결과: 대기 Server와 활성 세션의 Viewer·Server·Mode I 대상에 실제 DROP을 적용한 시험 2건이 통과한다. K는 설정 최솟값인 11초다. Linux 타이머·스케줄링 오차는 최대 5초로 제한한다(DROP 직전 시각 기준 최대 16초). DROP 직전 시각과 정리 사건의 로그 `ts`를 비교하므로, 로그를 읽는 작업이 늦게 실행되어도 판정을 바꾸지 않는다. 이 오차를 K 설정값에 더하지는 않는다.
+
 ### 3.2 빌드
 
 3. 저장소 루트에서 고정 툴체인을 확인한다.
