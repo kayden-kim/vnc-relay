@@ -198,7 +198,7 @@ flowchart LR
 ### 작업 4.4 구현 대조와 실행 기록
 
 - 대상: 설계 커밋 `bc7e762`, 구현·시험 커밋 `ec05fd1`. 이 기록은 문서만 바꾸며 계약 규칙이나 코드를 바꾸지 않는다.
-- 대조 방법: 코드의 심볼과 호출 흐름을 읽고 설계와 비교했다. 실행 결과는 사용자가 확인한 아래 두 환경의 게이트와 시나리오 보고서를 기록했다. 이 문서 작업에서 게이트를 다시 실행하지 않았다.
+- 대조 방법: 코드의 심볼과 호출 흐름을 읽고 설계와 비교했다. 시험 작업자가 작업 트리에서 두 환경의 게이트를 실행했고, 조정 에이전트가 보고서 수치를 확인했다. 보고서는 Windows의 `target/scenario-report.md`와 WSL 보고서 사본 `D:/vr-tools/tmp/wsl-scenario-report.md`다. 이 문서 작업에서 게이트를 다시 실행하지 않았다.
 - 대조 범위:
   - `crates/app/src/management/query.rs`의 `ManagementQueryService`가 `ports.rs`의 `RelayStateSource`, L·Lm `ConnectionBudget`, `Clock`을 주입받는다. `src/serve.rs`가 이를 조립해 `ManagementListener`에 넘긴다.
   - `management_http/session_api.rs`의 인증 뒤 `query_api.rs`가 요약·대기·활성 목록·상세·최근 종료 조회를 처리한다. `summary_response`는 정수 카운터와 계약상 `null` 사유를 직렬화한다.
@@ -211,8 +211,10 @@ flowchart LR
 | --- | --- | --- |
 | `vr-win.ps1 -Only all` | Windows, `ec05fd1` | 18:19:56Z 보고서: `ALL PASSED (all)`. 150건: 통과 69, 부분 64, 실패 0, 미실행 0, 미연결 17, 오류 0. `management.md` 27건: 통과 8, 부분 15, 실패 0, 미실행 0, 미연결 4. |
 | `vr-full.sh` | WSL, `ec05fd1` | 18:25:46Z 첫 실행: `tests/reload.rs`의 `new_tls_pair_is_used_by_new_handshakes_and_keeps_open_connections`(OPS-024) 1건 실패. 감지 뒤 `reload_applied`까지 3357 ms로 D = 1000 ms를 넘었다. |
-| 같은 OPS-024 시험 단독 실행 5회 | WSL, `ec05fd1` | 5회 모두 통과. 단독 실행의 정확한 명령·시각은 제공되지 않았다. |
+| `cargo test --test reload new_tls_pair_is_used_by_new_handshakes_and_keeps_open_connections` | WSL, `CARGO_TARGET_DIR=$HOME/vnc-relay-target`, `ec05fd1` 소스 | 반복문으로 5회 실행했다. 매회 약 1.4초가 걸렸고 모두 통과했다. |
 | `vr-full.sh` 재실행 | WSL, `ec05fd1` | 18:33:21Z 보고서: `ALL PASSED`. 150건: 통과 73, 부분 60, 실패 0, 미실행 0, 미연결 17, 오류 0. |
+
+- WSL 보고서 머리의 `ec05fd1 + 미커밋 변경`은 보고서 생성기(`xtask/src/scenarios/report.rs`의 `commit`, 270~287행)가 작업 트리 전체의 `git status --porcelain` 출력이 비어 있지 않으면 붙이는 표시다. WSL은 `core.autocrlf`가 미설정이며 `.agents/`, 루트 `AGENTS.md`, `docs/`의 55개 경로가 수정으로 표시됐지만 `git diff --ignore-cr-at-eol` 출력은 비어 있었다. 이 경로들은 줄바꿈만 달랐다. `crates/`, `src/`, `tests/`, `xtask/`, `Cargo.*` 경로에는 차이가 없으므로 WSL 게이트가 시험한 소스는 `ec05fd1`이다.
 
 전체 게이트 부하에서 OPS-024의 D 초과가 한 번 관찰됐다. 원인은 확정하지 않았다. `ec05fd1`은 재로드·TLS 교체 경로를 바꾸지 않는다. 단독 5회와 전체 재실행이 통과했더라도 첫 실패를 없던 결과로 보지 않는다.
 
