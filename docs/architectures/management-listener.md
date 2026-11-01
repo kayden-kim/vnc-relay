@@ -194,7 +194,7 @@ flowchart LR
 
 ### 작업 4.2
 
-- 대조 범위: 커밋 `ea024fc`(작업 4.2, 관리 TLS 핸드셰이크와 요청 머리 읽기에 U 적용) + 작업 트리 변경(이 문서, `docs/TODO.md`, `docs/contracts/config-v2.md`, `docs/architectures/code-map.md`).
+- 대조 범위: 커밋 `ea024fc`(작업 4.2, 관리 TLS 핸드셰이크와 요청 머리 읽기에 U 적용) + 작업 트리 변경(이 문서, `docs/TODO.md`, `docs/contracts/config-v1.md`, `docs/architectures/code-map.md`).
 - 대조 방법: 2절 요소 표의 파일·심볼을 grep으로 찾았다. `request_deadline.rs`의 `DeadlineListener`·`Deadlined`를 읽어 U 적용 순서를 4절 표와 맞췄다. 접속 수락부터 첫 요청 머리 끝까지는 절대 제한이고, 그 뒤에는 읽기·쓰기마다 다시 잰다. `management_http.rs` `answer`(3·4절 순서), `tls_listener.rs` `TlsIo::poll_handshake`·`offers_no_tls12`(버전 판정), `src/serve.rs` `listen_until_shutdown`·`stop_task`(바인드·준비됨·종료 순서)를 읽어 4절 표와 맞췄다. U 규칙은 `crates/adapters/tests/management.rs`의 `stalled_tls_handshake_is_closed_after_u_without_an_answer`, `stalled_request_frees_its_lm_place_after_u`, `idle_connection_after_a_reply_is_closed_after_u`로 시험했다. 세 시험은 U를 300 ms로 줄인 설정(`SHORT_UPGRADE`)을 쓴다.
 - 환경: Windows 11 Pro 10.0.26200 x64, WSL2 Ubuntu 24.04(`VERSION_ID="24.04"`), rustc·cargo 1.99.1, `Cargo.lock`의 axum 0.8.9, rustls 0.23.46, tokio-rustls 0.26.6.
 
