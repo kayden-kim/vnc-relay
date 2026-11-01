@@ -157,6 +157,6 @@ WS-007 이후의 공통 중계 테스트는 WS·WSS 각각에 적용한다. TLS 
 | ID | 항목 | 영향과 제약 | 확정 위치 |
 | --- | --- | --- | --- |
 | WS-TBD-004 | M·업그레이드/TLS 제한·종료 제한 | M·U·E의 기본값과 유효 범위는 사용자 승인으로 확정(설정 계약이 기준). 남은 것은 B와 M의 관계(M이 B보다 클 때의 메시지 처리)와 프레임 분할 우회·종료 중 자원 점유 검증(WS-010·WS-017) | [설정 파일 v1](../contracts/config-v1.md) 6절 |
-| WS-TBD-005 | noVNC 검증 버전 고정·기록 방식 | 고정 버전과 기록이 없으면 WS-025 결과를 특정 버전의 증거로 볼 수 없다. 고정 버전 noVNC가 실제로 보내는 `Sec-WebSocket-Protocol` 값(기본 서브프로토콜)도 같은 관찰로 확인한다. 공개 문서 설명만으로 단정하지 않으며 결과가 계약과 다르면 계약을 고친다 | [호환성 검증 기록](../contracts/repeater-compat-record.md)에 noVNC 1.7.0 고정(해시·주소·날짜). 서브프로토콜 관찰은 미실행. [WebSocket 중계 v1](../contracts/websocket-relay-v1.md) 6절 |
+| WS-TBD-005 | noVNC 검증 버전 고정·기록 방식 | 고정 버전과 기록이 없으면 WS-025 결과를 특정 버전의 증거로 볼 수 없다. 고정 버전 noVNC가 실제로 보내는 `Sec-WebSocket-Protocol` 값(기본 서브프로토콜)도 같은 관찰로 확인한다. 공개 문서 설명만으로 단정하지 않으며 결과가 계약과 다르면 계약을 고친다 | [호환성 검증 기록](../contracts/repeater-compat-record.md)에 noVNC 1.7.0 고정(해시·주소·날짜). 서브프로토콜 관찰(2026-11-01): WS·WSS 모두 `Sec-WebSocket-Protocol` 헤더를 보내지 않았다(기록 3.4절 W-02·W-03b). 계약 반영은 TODO 1.7. [WebSocket 중계 v1](../contracts/websocket-relay-v1.md) 6절 |
 
 WS-TBD-001은 결번이며 재사용하지 않는다. WS-TBD-002는 [WebSocket 중계 v1](../contracts/websocket-relay-v1.md) 채택(2026-10-16)으로 결정되어 4절과 계약에 반영했으며 재사용하지 않는다. WS-TBD-003은 [설정 파일 v1](../contracts/config-v1.md) 1.4절의 정규화 규칙 채택으로 결정되어 2절과 계약에 반영했으며 재사용하지 않는다. WS-TBD-006은 결정되어 1절에 반영했으며 재사용하지 않는다.

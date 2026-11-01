@@ -83,12 +83,12 @@ Mode I·II 초기 흐름을 추정 없이 설명할 수 있게 한다. 관찰은
   - 기준: [미결정 항목의 해소 조건](contracts/repeater-handshake-v1.md#63-미결정-항목의-해소-조건)
   - 완료 조건: 호환성 검증 기록을 작성한다. PRD "호환 버전" 행, [중계 스펙 8절](specs/relay.md#8-미결정-사항), [WebSocket 스펙 8절](specs/websocket.md#8-미결정-사항)을 갱신한다.
   - 선행: 1.2
-- [ ] **1.4 통제된 환경에서 관찰**: 인터넷과 분리한 테스트 네트워크에서 관찰 절차 5단계의 시나리오(Mode I, Mode II, 오류, 분할·후속 바이트, 종료·재접속, 외부 WebSocket)를 각각 2회 이상 실행하고 캡처한다.
+- [x] **1.4 통제된 환경에서 관찰**: 인터넷과 분리한 테스트 네트워크에서 관찰 절차 5단계의 시나리오(Mode I, Mode II, 오류, 분할·후속 바이트, 종료·재접속, 외부 WebSocket)를 각각 2회 이상 실행하고 캡처한다.
   - 기준: [관찰 절차](contracts/repeater-handshake-v1.md#61-관찰-절차)
   - 완료 조건: 기록할 증거 표의 모든 항목을 기록한다.
   - 선행: 1.1, 1.3
   - 설치 뒤 `vncviewer.exe`의 파일 버전을 확인하고 [호환성 검증 기록](contracts/repeater-compat-record.md) 3절에 적는다. 설치 파일에 `UltraVNC_Viewer` 구성 요소가 들었는지도 이때 확인한다. 설치 파일 안의 `repeater.exe`는 관찰만 하고 고정하지 않는다.
-  - 현재: 관찰 준비를 마쳤다([호환성 검증 기록 3.1절](contracts/repeater-compat-record.md#31-관찰-준비-설치-확인과-캡처-도구-2026-10-27)). UltraVNC 1.8.3.0 설치 뒤 `vncviewer.exe` 1.8.3.0과 Viewer 구성 요소를 확인했다. 설치 파일의 `repeater.exe`는 1.6.0.0이지만 고정 `repeater_v160.zip`의 파일과 다르다. Wireshark 4.6.9와 Npcap 1.90을 설치했고(사용자 결정 2026-10-27(Q61)), 루프백 시험으로 캡처 도구가 동작하는 것을 확인했다. 2026-11-01에 관찰 환경을 구성했다([3.2절](contracts/repeater-compat-record.md#32-관찰-환경-구성-2026-11-01), 사용자 결정 Q62~Q66). Hyper-V `Private` 스위치에 Viewer·Repeater·Server VM(Windows 11 Enterprise 평가판)을 두고, Repeater VM에서 캡처한다. 분리·통신·캡처 스모크를 통과했고 체크포인트 `baseline`을 만들었다. 남은 일은 시나리오 관찰과 증거 기록이다. 그래서 `[ ]`로 둔다. 평가판의 라이선스 상태와 만료일은 아직 확인하지 않았다(호환성 검증 기록 4절 4.9).
+  - 현재: 2026-11-01에 관찰을 마쳤다. 여섯 시나리오 묶음을 각각 2회 이상, 모두 76회차를 캡처했고 모든 회차가 첫 시도에서 유효했다. 6.2절의 증거(대상·환경·입력·원본·결과·해석·승인)는 [호환성 검증 기록 3절](contracts/repeater-compat-record.md#3-관찰-증거-todo-14)에 있다. 계약 1절 항목별 해석은 3.5절, 캡처 해시와 보관 위치는 3.6절이다. 게스트 Windows는 평가판 알림 모드로 썼다(사용자 결정 2026-11-01(Q67)). 관찰에서 나온 결정 사항은 기록 4절 4.10~4.13에 있다. ID 비교 규칙(4.10)은 1.5, 같은 역할 중복 ID(4.11)는 1.6, noVNC `Sec-WebSocket-Protocol` 미전송(4.4)은 1.7의 입력이다.
 - [ ] **1.5 초기 교환 계약 채택(RLY-TBD-002, 결정)**: 계약 1절 표의 "관찰로 확정할 항목"에 증거를 연결하고 증거 기반 표로 바꾼다. 오류 응답 바이트(메시지D)가 있는지 확인한다. 2절 오류 코드 이름을 정한다.
   - 기준: [Repeater 초기 교환 계약](contracts/repeater-handshake-v1.md), [중계 스펙 8절](specs/relay.md#8-미결정-사항)
   - 완료 조건: 프로젝트 소유자가 채택해 계약이 Active가 된다. 중계 스펙 8절을 갱신하고, 필요하면 [WebSocket 중계 계약](contracts/websocket-relay-v1.md)의 close 코드 대응도 고친다.

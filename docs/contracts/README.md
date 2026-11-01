@@ -13,6 +13,6 @@
 
 ## 호환성 검증 기록
 
-[Repeater·UltraVNC·noVNC 호환성 검증 기록](repeater-compat-record.md)은 관찰 허용 검토 결과, 검증 대상 버전과 배포본 해시, 관찰 증거를 남긴다. 관찰 증거는 아직 없다(미실행).
+[Repeater·UltraVNC·noVNC 호환성 검증 기록](repeater-compat-record.md)은 관찰 허용 검토 결과, 검증 대상 버전과 배포본 해시, 관찰 증거를 남긴다. 관찰 증거는 2026-11-01에 기록했다(TODO 1.4).
 
 작성 규칙은 [AGENTS.md](AGENTS.md)를 따른다.
