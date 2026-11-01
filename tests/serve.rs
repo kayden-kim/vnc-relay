@@ -954,8 +954,19 @@ fn second_instance_fails_with_exit_code_4_and_leaves_the_first_running() {
         assert_eq!(run.code, Some(0), "{}", run.stderr);
         assert_eq!(
             lifecycle_events(&run.stdout),
-            ["server_starting", "server_ready", "server_stopped"]
+            [
+                "server_starting",
+                "server_ready",
+                "shutdown_started",
+                "server_stopped"
+            ]
         );
+        let shutdown = run
+            .stdout
+            .lines()
+            .find(|line| field(line, "event") == Some("shutdown_started"))
+            .unwrap_or_else(|| panic!("no shutdown_started: {}", run.stdout));
+        assert_eq!(field(shutdown, "trigger"), Some("requested"));
         assert_released(ports);
     }
 }
@@ -975,7 +986,12 @@ fn stops_with_exit_code_0_on_interrupt_and_terminate() {
         assert_eq!(run.code, Some(0), "SIG{signal}: {}", run.stderr);
         assert_eq!(
             lifecycle_events(&run.stdout),
-            ["server_starting", "server_ready", "server_stopped"]
+            [
+                "server_starting",
+                "server_ready",
+                "shutdown_started",
+                "server_stopped"
+            ]
         );
         assert_eq!(run.stderr, "");
         assert_released(ports);
@@ -1043,6 +1059,7 @@ fn writes_the_log_to_the_configured_file_from_start_to_stop() {
             "server_starting",
             "allow_all_source",
             "server_ready",
+            "shutdown_started",
             "server_stopped"
         ]
     );
@@ -1053,6 +1070,12 @@ fn writes_the_log_to_the_configured_file_from_start_to_stop() {
     assert_eq!(field(lines[1], "listener"), Some("tcp_viewer"));
     assert_eq!(field(lines[1], "item"), Some("0.0.0.0/0"));
     assert_eq!(field(lines[1], "phase"), Some("startup"));
+    let shutdown = lines
+        .iter()
+        .copied()
+        .find(|line| field(line, "event") == Some("shutdown_started"))
+        .unwrap_or_else(|| panic!("no shutdown_started: {log}"));
+    assert_eq!(field(shutdown, "trigger"), Some("requested"));
 }
 
 #[test]
