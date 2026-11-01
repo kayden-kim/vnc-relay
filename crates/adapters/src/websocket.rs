@@ -233,14 +233,15 @@ enum Step {
 async fn upgrade(wire: &mut Wire, conn: &Accepted, shared: &WsShared) -> io::Result<Step> {
     let read = read_head(wire).await?;
     let decision = match read {
-        HeadRead::Complete(head) => check(&head, &shared.policy.origins).and_then(|upgrade| {
-            // websocket-relay-v1 §1.1: the source IP is checked again before the 101.
-            if shared.policy.accept.allow.permits(conn.peer_ip) {
-                Ok(upgrade)
-            } else {
-                Err(Refusal::IpNotAllowed)
-            }
-        }),
+        HeadRead::Complete { head, .. } => {
+            check(&head, &shared.policy.origins).and_then(|upgrade| {
+                if shared.policy.accept.allow.permits(conn.peer_ip) {
+                    Ok(upgrade)
+                } else {
+                    Err(Refusal::IpNotAllowed)
+                }
+            })
+        }
         HeadRead::TooLarge => Err(Refusal::Invalid),
         HeadRead::Eof if !expired(conn, shared) => return Ok(Step::PeerEof),
         HeadRead::Eof => return Ok(Step::TimedOut),

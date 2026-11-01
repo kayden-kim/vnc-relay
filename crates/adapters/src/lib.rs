@@ -20,3 +20,4 @@ mod tls_listener;
 mod toml_text;
 mod upgrade;
 pub mod websocket;
+pub mod websocket_stream;

@@ -25,8 +25,9 @@ const RELAY_PATH: &str = "/relay";
 /// Result of reading one request head.
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) enum HeadRead {
-    /// The head up to and including its blank line. Bytes after it are dropped.
-    Complete(Vec<u8>),
+    /// The head up to and including its blank line, and raw bytes that followed it
+    /// (at most 1023 bytes).
+    Complete { head: Vec<u8>, suffix: Vec<u8> },
     /// The peer closed the connection before the head ended.
     Eof,
     /// The head did not end within `HEAD_LIMIT` bytes.
@@ -50,8 +51,8 @@ where
             if end > HEAD_LIMIT {
                 return Ok(HeadRead::TooLarge);
             }
-            buf.truncate(end);
-            return Ok(HeadRead::Complete(buf));
+            let suffix = buf.split_off(end);
+            return Ok(HeadRead::Complete { head: buf, suffix });
         }
         if buf.len() >= HEAD_LIMIT {
             return Ok(HeadRead::TooLarge);
@@ -546,14 +547,16 @@ mod tests {
         assert_eq!(Refusal::IpNotAllowed.reason().as_str(), "ip_not_allowed");
     }
 
+    /// spec: websocket.md:WS-018 partial
     #[tokio::test]
-    async fn read_head_keeps_the_head_and_drops_what_follows() {
+    async fn preserves_bytes_after_the_http_head() {
         let mut bytes: &[u8] = b"GET /relay HTTP/1.1\r\nHost: a\r\n\r\nextra";
         assert_eq!(
             read_head(&mut bytes).await.ok(),
-            Some(HeadRead::Complete(
-                b"GET /relay HTTP/1.1\r\nHost: a\r\n\r\n".to_vec()
-            ))
+            Some(HeadRead::Complete {
+                head: b"GET /relay HTTP/1.1\r\nHost: a\r\n\r\n".to_vec(),
+                suffix: b"extra".to_vec(),
+            })
         );
     }
 
