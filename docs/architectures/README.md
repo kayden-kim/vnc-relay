@@ -16,7 +16,7 @@
 | [초기 교환 처리 모듈 설계](initial-exchange.md) | 250바이트 요청과 Viewer 시작 바이트를 어떻게 처리하고, H·오류 사건·후속 바이트·B·L 자리를 어떻게 이어 관리하는가 | Target | Draft | 부분 대조. domain·공통 app 처리·사건·JSON 구현. 진입점 인계는 미구현. [실행 기록](initial-exchange.md#실행-기록) |
 | [대상 연결·매칭·중계 수명 모듈 설계](relay-session.md) | 유효한 PreparedConnection을 어떻게 대상 연결 또는 상대 매칭에 넘기고, B·C·W·E·G와 연결 예산을 지키며 세션 정리까지 이어 가는가 | Target | Draft | 미대조 |
 | [상태 리스너와 준비 상태 모듈 설계](status-listener.md) | 상태 리스너가 `/livez`·`/readyz`에 어떻게 답하고, 준비 상태를 언제 바꾸며, 상태 연결을 Lm으로 어떻게 세는가 | Current | Draft | Verified — [대조 기록](status-listener.md#대조-기록) |
-| [관리자 계정 준비 CLI 모듈 설계](admin-accounts.md) | `vnc-relay admin add|passwd|remove|list`가 관리자 계정 파일을 어떻게 읽고 잠금 파일로 보호해 원자적으로 바꾸며, 비밀번호를 어떻게 입력받고 해시하는가 | Current | Draft | Verified — [대조 기록](admin-accounts.md#대조-기록) |
+| [관리자 계정 준비 CLI 모듈 설계](admin-accounts.md) | `vnc-relay admin add\|passwd\|remove\|list`가 관리자 계정 파일을 어떻게 읽고 잠금 파일로 보호해 원자적으로 바꾸며, 비밀번호를 어떻게 입력받고 해시하는가 | Current | Draft | Verified — [대조 기록](admin-accounts.md#대조-기록) |
 | [내장 TLS 모듈 설계](tls.md) | PEM 인증서·개인키를 읽어 TLS 1.2·1.3 서버 설정을 만들고, 시작 때 WSS·관리 TLS 파일을 어떻게 검사하는가 | Current | Draft | Verified — [대조 기록](tls.md#대조-기록) |
 | [관리 리스너 모듈 설계](management-listener.md) | 관리 리스너가 관리 HTTPS와 루프백 평문 HTTP 접속을 어떻게 받고, Lm을 어떻게 세며, TLS 1.2 미만 거절을 어떻게 기록하고, 요청 경로 순서를 어떻게 처리하는가 | Current | Draft | Verified — [대조 기록](management-listener.md#대조-기록) |
 | [관리 로그인과 세션 모듈 설계](management-session.md) | 관리자 로그인이 계정과 비밀번호를 어떻게 검증하고, 실패를 계정별·출발지별로 어떻게 세어 로그인을 제한하며, 관리 세션과 CSRF 토큰을 어떻게 만들고 검사·연장·무효화하는가 | Current | Draft | Verified — [대조 기록](management-session.md#대조-기록) |

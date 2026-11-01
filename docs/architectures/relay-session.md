@@ -439,6 +439,17 @@ WS 스트림 설계 연결 개정에서는 이 파일만 문서 검사했다(`fu
 | Windows 11 Pro 10.0.26200 x64, Rust 1.99.1 | `powershell -NoProfile -ExecutionPolicy Bypass -File D:/vr-tools/vr-win.ps1 -Only all` | 통과(`ALL PASSED (all)`). 시나리오 150건: 통과 23, 부분 87, 실패 0, 미실행 0, 미연결 40. 오류 0건, 판정 통과 | build, fmt, clippy, layers, tokens, tests, scenarios, licenses, deny 전체 통과 |
 | Ubuntu 24.04.4(WSL2), Rust 1.99.1 | `wsl -d Ubuntu -- bash /mnt/d/vr-tools/vr-full.sh` | 통과(`ALL PASSED`). 시나리오 150건: 통과 24, 부분 86, 실패 0, 미실행 0, 미연결 40. 오류 0건, 판정 통과 | Linux 전용 소켓·계정 권한 시험 포함 전체 통과 |
 
+### 전체 게이트 실행 기록 (커밋 4e4a271)
+
+커밋 `4e4a271`(2026-11-02)에서 [개발 환경 how-to](../how-to/set-up-and-verify.md) §3.4의 여섯 명령을 실행했다. 이번 라운드의 커밋은 `68a427b`(TCP 진입점 연결), `4391b14`(WS 코덱), `638cf09`(WS·WSS 연결), `f43c44a`(리뷰 반영), `0376e08`(설계 문서), `4a76049`(중계 수락 시험), `b2c0cac`(WS 수락 시험), `4e4a271`(`tests/serve.rs` 기대 수정)이다.
+
+| 환경 | 명령 | 결과 | 비고 |
+| --- | --- | --- | --- |
+| Windows 11 x64 | `powershell -NoProfile -ExecutionPolicy Bypass -File D:/vr-tools/vr-win.ps1 -Only all` | 통과(`ALL PASSED (all)`). 모든 단계 종료 코드 0. 시나리오 150건: 통과 60, 부분 62, 실패 0, 미실행 0, 미연결 28, 오류 0. 판정 통과. | RLY-009·OPS-023은 Linux 전용 시험이라 이 OS에서 부분이다. |
+| Ubuntu 24.04 LTS x64, WSL2 | `wsl -d Ubuntu -- bash /mnt/d/vr-tools/vr-full.sh` | 통과(`ALL PASSED`). 모든 단계 종료 코드 0. 시나리오 150건: 통과 63, 부분 59, 실패 0, 미실행 0, 미연결 28, 오류 0. 판정 통과. | 보고서의 `+ 미커밋 변경`은 CRLF 차이 때문이다(§3.4 7단계). WSL에서만 통과한 것은 RLY-009·OPS-023(Linux 전용 전체 시험)과 OPS-030(Unix 전용 `admin` 시험)이다. |
+
+이전 WSL 게이트는 `b2c0cac`에서 실패했다. `tests/serve.rs`의 세 시험이 신호 종료 때 `shutdown_started`가 없어야 한다고 기대했다. `68a427b` 이후 제품은 운영 정보 계약 1.5절에 따라 이 사건을 기록한다. `4e4a271`은 시험 기대만 고쳤고 제품 코드는 바꾸지 않았다.
+
 ## 9. 미결정 사항
 
 <a id="1-시작-키-생성-실패의-공개-오류-코드"></a>

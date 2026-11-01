@@ -254,6 +254,16 @@ WS·WSS는 A에 따라 `638cf09`에서 연결했다. `crates/adapters/tests/webs
 | Windows 11 Pro 10.0.26200 x64, Rust 1.99.1 | `powershell -NoProfile -ExecutionPolicy Bypass -File D:/vr-tools/vr-win.ps1 -Only all` | 통과(`ALL PASSED (all)`). 시나리오 150건: 통과 23, 부분 87, 실패 0, 미실행 0, 미연결 40. 판정 통과. |
 | Ubuntu 24.04.4(WSL2), Rust 1.99.1 | `wsl -d Ubuntu -- bash /mnt/d/vr-tools/vr-full.sh` | 통과(`ALL PASSED`). 시나리오 150건: 통과 24, 부분 86, 실패 0, 미실행 0, 미연결 40. 판정 통과. |
 
+### 전체 게이트 실행 기록 (커밋 4e4a271)
+
+커밋 `4e4a271`(2026-11-02)에서 [개발 환경 how-to](../how-to/set-up-and-verify.md) §3.4의 여섯 명령을 실행했다. 이 기록은 RLY-001~005·RLY-022와 WS 초기 교환 시험을 포함한다.
+
+| 환경 | 명령 | 결과 | 비고 |
+| --- | --- | --- | --- |
+| Windows 11 x64 | `powershell -NoProfile -ExecutionPolicy Bypass -File D:/vr-tools/vr-win.ps1 -Only all` | 통과(`ALL PASSED (all)`). 시나리오 150건: 통과 60, 부분 62, 실패 0, 미실행 0, 미연결 28, 오류 0. 판정 통과. | RLY-001~005·RLY-022는 비부분으로 통과했다. |
+| Ubuntu 24.04 LTS x64, WSL2 | `wsl -d Ubuntu -- bash /mnt/d/vr-tools/vr-full.sh` | 통과(`ALL PASSED`). 시나리오 150건: 통과 63, 부분 59, 실패 0, 미실행 0, 미연결 28, 오류 0. 판정 통과. | 같은 시나리오가 비부분으로 통과했다. WS 초기 교환의 H 시험(`initial_exchange_timeout_sends_4009_after_the_binary_greeting_on_ws_and_wss`)과 종료 시험(`shutdown_during_initial_exchange_sends_1001_on_ws_and_wss`)은 `crates/adapters/tests/websocket.rs`에 있고 게이트에 포함됐다. |
+
+
 ## 9. 미결정 사항
 
 아래 세 항목은 모두 해결했다. 1·2번의 선택과 내부 연결 순서는 이 문서의 판단이며 사용자 결정은 없다. 3번은 사용자 결정 2026-11-01(Q80)이다. 표는 검토한 대안을 남긴다. 계약이 정하지 않은 임시 제품 동작은 추가하지 않는다.
