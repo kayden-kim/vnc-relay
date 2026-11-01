@@ -28,6 +28,11 @@ impl ConnectionBudget {
         self.limit
     }
 
+    /// The current number of held permits.
+    pub fn current(&self) -> u32 {
+        self.used.load(Ordering::Acquire)
+    }
+
     /// Takes one place, or `None` when all `limit` places are held. Takes
     /// never exceed the limit, even when tasks take places at once.
     pub fn try_acquire(self: &Arc<Self>) -> Option<BudgetPermit> {
@@ -115,5 +120,30 @@ mod tests {
         drop(held);
         let again: Vec<_> = (0..100).filter_map(|_| budget.try_acquire()).collect();
         assert_eq!(again.len(), 100);
+    }
+
+    /// spec: management.md:MGT-026 partial
+    /// spec: operations.md:OPS-033 partial
+    #[test]
+    fn reports_current_held_places() {
+        let budget = ConnectionBudget::new(3);
+        assert_eq!(budget.current(), 0);
+        assert_eq!(budget.limit(), 3);
+
+        let p1 = budget.try_acquire();
+        assert_eq!(budget.current(), 1);
+
+        let p2 = budget.try_acquire();
+        assert_eq!(budget.current(), 2);
+
+        let p3 = budget.try_acquire();
+        assert_eq!(budget.current(), 3);
+
+        drop(p2);
+        assert_eq!(budget.current(), 2);
+
+        drop(p1);
+        drop(p3);
+        assert_eq!(budget.current(), 0);
     }
 }

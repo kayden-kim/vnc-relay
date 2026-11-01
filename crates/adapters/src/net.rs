@@ -334,10 +334,12 @@ impl TcpEntryPoint {
                 async move {
                     let stream = TcpRelayStream::new(stream);
                     let lifecycle = runtime.lifecycle();
-                    if let Ok(prepared) = service
+                    let _handshaking = runtime.track_handshaking();
+                    let prepared = service
                         .handle_connection(stream, context, permit, lifecycle)
-                        .await
-                    {
+                        .await;
+                    drop(_handshaking);
+                    if let Ok(prepared) = prepared {
                         let _ = service.dispatch(prepared, &runtime).await;
                     }
                 }

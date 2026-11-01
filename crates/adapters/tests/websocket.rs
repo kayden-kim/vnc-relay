@@ -28,9 +28,10 @@ use vnc_relay_adapters::tls;
 use vnc_relay_adapters::websocket::{WsEntryPoint, WsPolicy};
 use vnc_relay_app::events::{AbortReason, ConnectionErrorKind, Event, RejectReason, Stage};
 use vnc_relay_app::management::login::dummy_hash;
+use vnc_relay_app::management::query::ManagementQueryService;
 use vnc_relay_app::management::{AdminAuth, AdminPorts};
-use vnc_relay_app::ports::{Clock, EventSink};
-use vnc_relay_app::relay::{RelayRuntime, RelayRuntimeConfig, RelayService};
+use vnc_relay_app::ports::{Clock, EventSink, RelayLifecycle, RelayStateSource};
+use vnc_relay_app::relay::{RelayRuntime, RelayRuntimeConfig, RelayService, RelaySnapshot};
 use vnc_relay_app::reload::snapshot::{RelayAllow, ReloadCell, ReloadSnapshot};
 use vnc_relay_app::settings::KeepaliveSettings;
 use vnc_relay_domain::account::Argon2Params;
@@ -1024,13 +1025,14 @@ async fn start_management(tls: Option<TlsAcceptor>) -> (SocketAddr, Arc<Recorder
     };
     let dummy = dummy_hash(&Argon2Hasher, params)
         .unwrap_or_else(|error| panic!("dummy hash is made: {error}"));
+    let clock: Arc<dyn Clock> = Arc::new(SystemClock::new());
     let auth = Arc::new(AdminAuth::new(
         Vec::new(),
         dummy,
         AdminPorts {
             verifier: Arc::new(Argon2Verifier),
             tokens: Arc::new(SystemTokenSource),
-            clock: Arc::new(SystemClock::new()),
+            clock: Arc::clone(&clock),
             events: Arc::clone(&log),
         },
         AdminSessionPolicy::new(Duration::from_secs(600), Duration::from_secs(3600)),
@@ -1045,9 +1047,33 @@ async fn start_management(tls: Option<TlsAcceptor>) -> (SocketAddr, Arc<Recorder
         let snapshot = ReloadSnapshot::new(RelayAllow::default(), None, Some(acceptor));
         tls::TlsSource::management(Arc::new(ReloadCell::new(snapshot)))
     });
-    let listener = ManagementListener::new(listener, tls, budget, UPGRADE, auth, dashboard);
+    let relay_budget = ConnectionBudget::new(10);
+    let query = Arc::new(ManagementQueryService::new(
+        Arc::new(EmptyRelaySource),
+        relay_budget,
+        Arc::clone(&budget),
+        clock,
+    ));
+    let listener = ManagementListener::new(listener, tls, budget, UPGRADE, auth, dashboard, query);
     tokio::spawn(listener.run(log));
     (addr, events)
+}
+
+struct EmptyRelaySource;
+
+impl RelayStateSource for EmptyRelaySource {
+    fn snapshot(&self, clock: &dyn Clock) -> RelaySnapshot {
+        RelaySnapshot {
+            lifecycle: RelayLifecycle::Running,
+            observed_at: clock.monotonic(),
+            handshaking: 0,
+            target_connecting: 0,
+            max_entries: 0,
+            waiting: Vec::new(),
+            active: Vec::new(),
+            recent_closed: Vec::new(),
+        }
+    }
 }
 
 /// The lowest `width` big-endian bytes of `value`.

@@ -12,7 +12,8 @@ use vnc_relay_domain::matching::{ArrivalOutcome, MatchClaim, MatchingError, Wait
 use vnc_relay_domain::relay_id::RelayId;
 
 use super::{
-    OwnedConnection, RelayDispatchError, RelayRuntime, RelayService, SessionPair, milliseconds,
+    ActivePeer, OwnedConnection, RelayDispatchError, RelayRuntime, RelayService, SessionPair,
+    milliseconds,
 };
 use crate::events::{AbortReason, Event, RejectReason, RelayIdRef, Stage, WaitingRemovalReason};
 use crate::ports::{RelayCloseAction, RelayLifecycle, RelayStreamError, TargetConnector};
@@ -207,8 +208,7 @@ pub(super) async fn dispatch<C: TargetConnector>(
                     SessionPair {
                         viewer,
                         other: server,
-                        server_context: Some(server_context),
-                        target: None,
+                        peer: ActivePeer::Server(server_context),
                         target_host: None,
                         relay: Some((id.clone(), reference, claim)),
                     },

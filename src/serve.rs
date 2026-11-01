@@ -28,8 +28,9 @@ use vnc_relay_app::accounts::{self, ACCOUNTS_FILE_KEY, AccountsDiagnostic};
 use vnc_relay_app::events::{Event, Phase};
 use vnc_relay_app::lifecycle::LifecycleService;
 use vnc_relay_app::management::login::dummy_hash;
+use vnc_relay_app::management::query::ManagementQueryService;
 use vnc_relay_app::management::{AdminAuth, AdminPorts};
-use vnc_relay_app::ports::{Clock, EventSink};
+use vnc_relay_app::ports::{Clock, EventSink, RelayStateSource};
 use vnc_relay_app::relay::{RelayRuntime, RelayRuntimeConfig, RelayService};
 use vnc_relay_app::reload::service::ReloadService;
 use vnc_relay_app::reload::snapshot::{RelayAllow, ReloadCell, ReloadSnapshot};
@@ -297,24 +298,6 @@ async fn listen_until_shutdown(
         .collect();
     log.record(&Event::ServerReady { listeners: ready });
 
-    // The management listener accepts from here on.
-    let management_task = management.map(|bound| {
-        let dashboard = DashboardHints::new(
-            settings.dashboard.poll,
-            settings.dashboard.query_timeout,
-            settings.timeouts.close,
-        );
-        let listener = ManagementListener::new(
-            bound.listener,
-            management_tls_on.then(|| TlsSource::management(Arc::clone(&cell))),
-            Arc::clone(&admin_budget),
-            settings.timeouts.tls_upgrade,
-            auth,
-            dashboard,
-        );
-        tokio::spawn(listener.run(Arc::clone(&log)))
-    });
-
     // The TCP and WebSocket entry points accept from here on. Every relay entry
     // point takes places from one L.
     let relay_budget = ConnectionBudget::new(settings.limits.relay_connections);
@@ -334,6 +317,31 @@ async fn listen_until_shutdown(
             target_policy: settings.mode1.allow_targets.clone().unwrap_or_default(),
         },
     ));
+    let query_service = Arc::new(ManagementQueryService::new(
+        Arc::clone(&runtime) as Arc<dyn RelayStateSource>,
+        Arc::clone(&relay_budget),
+        Arc::clone(&admin_budget),
+        Arc::clone(&clock),
+    ));
+
+    // The management listener accepts from here on.
+    let management_task = management.map(|bound| {
+        let dashboard = DashboardHints::new(
+            settings.dashboard.poll,
+            settings.dashboard.query_timeout,
+            settings.timeouts.close,
+        );
+        let listener = ManagementListener::new(
+            bound.listener,
+            management_tls_on.then(|| TlsSource::management(Arc::clone(&cell))),
+            Arc::clone(&admin_budget),
+            settings.timeouts.tls_upgrade,
+            auth,
+            dashboard,
+            query_service,
+        );
+        tokio::spawn(listener.run(Arc::clone(&log)))
+    });
     let relay_service = Arc::new(RelayService::new(
         HandshakePolicy {
             mode1_enabled: settings.mode1.enabled,

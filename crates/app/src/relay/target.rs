@@ -10,8 +10,8 @@ use tokio::sync::watch;
 use vnc_relay_domain::handshake::{Mode, TargetAddress, TargetHost};
 
 use super::{
-    OwnedConnection, RelayDispatchError, RelayEndpoint, RelayRuntime, RelayService, SessionPair,
-    milliseconds,
+    ActivePeer, OwnedConnection, RelayDispatchError, RelayEndpoint, RelayRuntime, RelayService,
+    SessionPair, milliseconds,
 };
 use crate::events::{AbortReason, Event, RejectReason, Stage, TargetFailureReason};
 use crate::ports::{Clock, RelayCloseAction, RelayLifecycle, TargetConnector, TargetError};
@@ -81,8 +81,7 @@ pub(super) async fn dispatch<C: TargetConnector>(
                     SessionPair {
                         viewer,
                         other,
-                        server_context: None,
-                        target: Some(target),
+                        peer: ActivePeer::Target(target),
                         target_host: Some(host),
                         relay: None,
                     },

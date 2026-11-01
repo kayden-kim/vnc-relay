@@ -27,8 +27,8 @@ use vnc_relay_domain::target_policy::TargetPolicy;
 
 use crate::events::{AbortReason, Event, RejectReason, RelayIdRef, Stage};
 use crate::ports::{
-    BoxRelayStream, Clock, EventSink, RelayCloseAction, RelayIdSource, RelayLifecycle, RelayStream,
-    SessionIdSource, TargetConnector,
+    BoxRelayStream, Clock, EventSink, RelayCloseAction, RelayIdSource, RelayLifecycle,
+    RelayStateSource, RelayStream, SessionIdSource, TargetConnector,
 };
 
 mod handshake;
@@ -400,6 +400,7 @@ struct RelayState {
     recent_refs: HashMap<SessionId, RelayIdRef>,
     next_session: Option<u128>,
     connecting: usize,
+    handshaking: usize,
 }
 
 impl RelayState {
@@ -416,7 +417,9 @@ impl RelayState {
 pub struct RelaySnapshot {
     pub lifecycle: RelayLifecycle,
     pub observed_at: Duration,
+    pub handshaking: usize,
     pub target_connecting: usize,
+    pub max_entries: usize,
     pub waiting: Vec<WaitingSnapshot>,
     pub active: Vec<ActiveSessionSnapshot>,
     pub recent_closed: Vec<ClosedSessionSnapshot>,
@@ -432,6 +435,29 @@ pub struct WaitingSnapshot {
     pub waited: Duration,
 }
 
+/// The remote peer endpoint for an active session, preserving target address invariants.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ActivePeer {
+    Server(ConnectionContext),
+    Target(SocketAddr),
+}
+
+impl ActivePeer {
+    pub fn target_address(&self) -> SocketAddr {
+        match self {
+            Self::Server(context) => context.peer_addr,
+            Self::Target(addr) => *addr,
+        }
+    }
+
+    pub fn server(&self) -> Option<&ConnectionContext> {
+        match self {
+            Self::Server(context) => Some(context),
+            Self::Target(_) => None,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct ActiveSessionSnapshot {
     pub session_id: SessionId,
@@ -442,8 +468,7 @@ pub struct ActiveSessionSnapshot {
     pub duration: Duration,
     pub state: SessionState,
     pub viewer: ConnectionContext,
-    pub server: Option<ConnectionContext>,
-    pub target: Option<SocketAddr>,
+    pub peer: ActivePeer,
     pub relay_id_ref: Option<RelayIdRef>,
     pub bytes_viewer_to_target: u64,
     pub bytes_target_to_viewer: u64,
@@ -503,6 +528,7 @@ impl<C> RelayRuntime<C> {
             recent_refs: HashMap::new(),
             next_session: Some(0),
             connecting: 0,
+            handshaking: 0,
         };
         Self {
             connector,
@@ -558,7 +584,9 @@ impl<C> RelayRuntime<C> {
         RelaySnapshot {
             lifecycle: state.lifecycle,
             observed_at: now,
+            handshaking: state.handshaking,
             target_connecting: state.connecting,
+            max_entries: self.config.recent_closed,
             waiting,
             active,
             recent_closed: state
@@ -571,6 +599,13 @@ impl<C> RelayRuntime<C> {
                 })
                 .collect(),
         }
+    }
+
+    /// Increments the handshaking counter and returns an RAII guard that
+    /// decrements it on every exit path.
+    pub fn track_handshaking<'a>(&'a self) -> HandshakingGuard<'a, C> {
+        self.lock().handshaking += 1;
+        HandshakingGuard(self)
     }
 
     fn force_if_due(&self, clock: &dyn Clock, events: &dyn EventSink) {
@@ -674,8 +709,7 @@ struct RelayEndpoint {
 struct SessionPair {
     viewer: OwnedConnection,
     other: RelayEndpoint,
-    server_context: Option<ConnectionContext>,
-    target: Option<SocketAddr>,
+    peer: ActivePeer,
     target_host: Option<String>,
     relay: Option<(RelayId, RelayIdRef, MatchClaim)>,
 }
@@ -694,6 +728,22 @@ impl<C> Drop for ActiveGuard<'_, C> {
             state.matching.release(id, &self.session_id);
         }
         state.active.remove(&self.session_id);
+    }
+}
+
+/// An RAII guard that decrements the runtime's handshaking count on drop.
+pub struct HandshakingGuard<'a, C>(&'a RelayRuntime<C>);
+
+impl<'a, C> Drop for HandshakingGuard<'a, C> {
+    fn drop(&mut self) {
+        let mut state = self.0.lock();
+        state.handshaking = state.handshaking.saturating_sub(1);
+    }
+}
+
+impl<C: Send + Sync> RelayStateSource for RelayRuntime<C> {
+    fn snapshot(&self, clock: &dyn Clock) -> RelaySnapshot {
+        self.snapshot(clock)
     }
 }
 
@@ -893,8 +943,7 @@ impl RelayService {
                             duration: Duration::ZERO,
                             state: SessionState::Active,
                             viewer: pair.viewer.context,
-                            server: pair.server_context,
-                            target: pair.target,
+                            peer: pair.peer.clone(),
                             relay_id_ref: pair
                                 .relay
                                 .as_ref()
@@ -910,8 +959,14 @@ impl RelayService {
                         viewer_transport: transport,
                         viewer_conn_id: pair.viewer.context.conn_id,
                         viewer_peer_ip: pair.viewer.context.peer_ip,
-                        server_conn_id: pair.server_context.map(|context| context.conn_id),
-                        server_peer_ip: pair.server_context.map(|context| context.peer_ip),
+                        server_conn_id: match &pair.peer {
+                            ActivePeer::Server(context) => Some(context.conn_id),
+                            ActivePeer::Target(_) => None,
+                        },
+                        server_peer_ip: match &pair.peer {
+                            ActivePeer::Server(context) => Some(context.peer_ip),
+                            ActivePeer::Target(_) => None,
+                        },
                         relay_id_ref: pair
                             .relay
                             .as_ref()
@@ -920,8 +975,14 @@ impl RelayService {
                             .relay
                             .as_ref()
                             .map(|(_, _, claim)| milliseconds(claim.waited())),
-                        target_ip: pair.target.map(|address| address.ip()),
-                        target_port: pair.target.map(|address| address.port()),
+                        target_ip: match &pair.peer {
+                            ActivePeer::Target(addr) => Some(addr.ip()),
+                            ActivePeer::Server(_) => None,
+                        },
+                        target_port: match &pair.peer {
+                            ActivePeer::Target(addr) => Some(addr.port()),
+                            ActivePeer::Server(_) => None,
+                        },
                         target_host: pair.target_host.take(),
                     });
                     Ok(session)
@@ -937,7 +998,10 @@ impl RelayService {
             Ok(model) => model,
             Err(error) => {
                 let viewer = pair.viewer.context;
-                let server = pair.server_context;
+                let server = match &pair.peer {
+                    ActivePeer::Server(context) => Some(*context),
+                    ActivePeer::Target(_) => None,
+                };
                 let predecessor = pair
                     .relay
                     .as_ref()
@@ -2530,8 +2594,7 @@ mod tests {
             let pair = SessionPair {
                 viewer: second_conn,
                 other: server_endpoint,
-                server_context: Some(server_context),
-                target: None,
+                peer: ActivePeer::Server(server_context),
                 target_host: None,
                 relay: Some((
                     RelayId::parse("50").expect("id"),
@@ -2625,8 +2688,7 @@ mod tests {
             let pair = SessionPair {
                 viewer,
                 other: server_endpoint,
-                server_context: Some(server_context),
-                target: None,
+                peer: ActivePeer::Server(server_context),
                 target_host: None,
                 relay: Some((
                     RelayId::parse("55").expect("id"),
@@ -2870,5 +2932,58 @@ mod tests {
             state.recent_refs.is_empty(),
             "R=0 must never retain recent_refs"
         );
+    }
+
+    /// spec: management.md:MGT-026 partial
+    #[test]
+    fn handshaking_guard_increments_and_decrements_on_every_exit_path() {
+        let harness = Harness::new(4, 1, 8, &[]);
+        assert_eq!(harness.snapshot().handshaking, 0);
+
+        // 1. Normal drop
+        {
+            let guard = harness.runtime.track_handshaking();
+            assert_eq!(harness.snapshot().handshaking, 1);
+            drop(guard);
+        }
+        assert_eq!(harness.snapshot().handshaking, 0);
+
+        // 2. Early return / error drop
+        let early_return = || -> Result<(), ()> {
+            let _guard = harness.runtime.track_handshaking();
+            assert_eq!(harness.snapshot().handshaking, 1);
+            Err(())
+        };
+        assert!(early_return().is_err());
+        assert_eq!(harness.snapshot().handshaking, 0);
+
+        // 3. Unwind / panic drop
+        let panic_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _guard = harness.runtime.track_handshaking();
+            assert_eq!(harness.snapshot().handshaking, 1);
+            panic!("test exit path");
+        }));
+        assert!(panic_result.is_err());
+        assert_eq!(harness.snapshot().handshaking, 0);
+    }
+
+    /// spec: management.md:MGT-016 partial
+    /// spec: management.md:MGT-026 partial
+    #[tokio::test(start_paused = true)]
+    async fn snapshot_copy_is_consistent_under_one_lock() {
+        let harness = Harness::new(4, 1, 8, &["192.0.2.10:5900"]);
+        let (prepared, _server, _) = harness.prepare(Role::Server, "ID:1", b"").await;
+        let _waiter = harness.start(prepared);
+        settle().await;
+
+        let _guard = harness.runtime.track_handshaking();
+        let snap = harness.snapshot();
+
+        assert_eq!(snap.handshaking, 1);
+        assert_eq!(snap.target_connecting, 0);
+        assert_eq!(snap.waiting.len(), 1);
+        assert_eq!(snap.active.len(), 0);
+        assert_eq!(snap.max_entries, 2);
+        assert_eq!(snap.waiting[0].relay_id.as_str(), "1");
     }
 }

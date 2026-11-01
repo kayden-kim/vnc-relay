@@ -18,7 +18,7 @@ use vnc_relay_domain::peer_ip::PeerIp;
 
 use super::{
     DashboardHints, SESSION_COOKIE, Shared, clear_session_cookie, json_error, json_response,
-    method_not_allowed, not_found, session_cookie, unauthenticated, unauthorized,
+    method_not_allowed, session_cookie, unauthenticated, unauthorized,
 };
 use crate::clock::timestamp;
 
@@ -47,22 +47,22 @@ pub(super) async fn answer(shared: &Shared, peer: PeerIp, parts: Parts, body: Bo
         Ok(admin) => admin,
         Err(error) => return refuse(error, shared.secure, &parts.headers),
     };
-    if matches!(parts.method, Method::POST | Method::DELETE)
-        && let Err(error) = shared.auth.check_csrf(&admin, csrf_header(&parts.headers))
-    {
-        return refuse(error, shared.secure, &parts.headers);
+    if parts.uri.path() == SESSION_PATH {
+        if matches!(parts.method, Method::POST | Method::DELETE)
+            && let Err(error) = shared.auth.check_csrf(&admin, csrf_header(&parts.headers))
+        {
+            return refuse(error, shared.secure, &parts.headers);
+        }
+        return match parts.method {
+            Method::GET => get_session(shared, &mut admin, &parts.headers, body).await,
+            Method::DELETE => delete_session(shared, &admin, &parts.headers, body).await,
+            _ => method_not_allowed(
+                "GET, POST, DELETE",
+                "이 경로는 GET, POST, DELETE 요청만 받는다.",
+            ),
+        };
     }
-    if parts.uri.path() != SESSION_PATH {
-        return not_found();
-    }
-    match parts.method {
-        Method::GET => get_session(shared, &mut admin, &parts.headers, body).await,
-        Method::DELETE => delete_session(shared, &admin, &parts.headers, body).await,
-        _ => method_not_allowed(
-            "GET, POST, DELETE",
-            "이 경로는 GET, POST, DELETE 요청만 받는다.",
-        ),
-    }
+    super::query_api::answer(shared, &mut admin, parts, body).await
 }
 
 /// `POST /api/v1/session`: checks the body, then runs the login on a blocking
@@ -233,7 +233,7 @@ fn is_json(headers: &HeaderMap) -> bool {
 /// `false` when the request has a body that is not `application/json`
 /// (management-api-v1 §1.1). An empty body always passes. A JSON body is
 /// ignored after this check (구현 판단(사용자 결정 없음)).
-async fn media_type_allows(body: Body, headers: &HeaderMap) -> bool {
+pub(super) async fn media_type_allows(body: Body, headers: &HeaderMap) -> bool {
     axum::body::to_bytes(body, 0).await.is_ok() || is_json(headers)
 }
 
@@ -251,7 +251,7 @@ fn csrf_header(headers: &HeaderMap) -> Option<&str> {
 /// `X-Relay-Poll` (management-api-v1 §1.4.2). Absent gives `Some(false)`, the
 /// value `1` gives `Some(true)`, and anything else gives `None`. The caller
 /// refuses `None`.
-fn poll_flag(headers: &HeaderMap) -> Option<bool> {
+pub(super) fn poll_flag(headers: &HeaderMap) -> Option<bool> {
     let mut values = headers.get_all("x-relay-poll").iter();
     let Some(value) = values.next() else {
         return Some(false);

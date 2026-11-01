@@ -242,11 +242,13 @@ async fn connection(
                 transport,
             );
             let lifecycle = shared.runtime.lifecycle();
-            if let Ok(prepared) = shared
+            let _handshaking = shared.runtime.track_handshaking();
+            let prepared = shared
                 .service
                 .handle_connection(stream, context, permit, lifecycle)
-                .await
-            {
+                .await;
+            drop(_handshaking);
+            if let Ok(prepared) = prepared {
                 let _ = shared.service.dispatch(prepared, &shared.runtime).await;
             }
             return;

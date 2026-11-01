@@ -334,7 +334,8 @@ mod delayed_cleanup {
                 assert_eq!(snapshot.active[0].session_id, new_id);
                 assert_eq!(
                     snapshot.active[0]
-                        .server
+                        .peer
+                        .server()
                         .unwrap_or_else(|| panic!("new Server metadata"))
                         .conn_id,
                     new_conn

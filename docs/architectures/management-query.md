@@ -55,12 +55,14 @@ flowchart LR
 
 | 요소(파일·심볼) | 역할 | 만들어지는 시점과 소유자 | 의존 대상 |
 | --- | --- | --- | --- |
-| `crates/app/src/management/query.rs` `ManagementQueryService` | 서버 요약, 대기 목록, 활성 세션, 최근 종료 목록의 일관된 응용 뷰를 생성한다. | 시작 시 `src/serve.rs`가 생성하고 `ManagementListener`에 전달한다. | `RelayRuntime`, `ConnectionBudget`, `Clock`, `LifecycleService` |
+| `crates/app/src/management/query.rs` `ManagementQueryService` | 서버 요약, 대기 목록, 활성 세션, 최근 종료 목록의 일관된 응용 뷰를 생성한다. | 시작 시 `src/serve.rs`가 생성하고 `ManagementListener`에 전달한다. | `RelayStateSource`, `ConnectionBudget`, `Clock`, `LifecycleService` |
 | `crates/adapters/src/management_http/query_api.rs` `answer` | `/api/v1/summary`, `/waiting`, `/sessions`, `/closed-sessions` 요청을 분기하고 JSON 응답을 구성한다. | `management_http.rs`의 `answer`가 `/api/v1/` 요청 중 세션 경로 이외를 전달한다. | `ManagementQueryService`, `AdminAuth`, `serde_json`, `axum` |
 | `crates/domain/src/budget.rs` `ConnectionBudget::current` | L 및 Lm의 현재 점유 카운트(`used`)를 원자적으로 읽는다. **(신규 추가)** | 시작 시 `src/serve.rs`가 예산 생성 시 소유한다. | `AtomicU32` |
-| `crates/app/src/relay.rs` `RelayRuntime::snapshot` | `std::sync::Mutex<RelayState>`를 단 1회 획득하여 대기·활성·최근종료 목록과 카운터를 복제한다. **(기존 메서드 확장: handshaking 카운터 및 max_entries(R) 노출)** | 시작 시 `src/serve.rs`가 생성하여 공유한다. | `Clock`, `RelayState` |
-| `crates/app/src/relay.rs` `HandshakingGuard` | 초기 교환 진행 중인 연결 수를 세기 위한 RAII 카운터 가드다. **(신규 추가)** | `handle_connection` 진입 시 생성되고 완료 시 소멸한다. | `RelayRuntime` (또는 `RelayService`) |
-
+| `crates/app/src/ports.rs` `RelayStateSource` | 중계 런타임 상태 스냅샷을 조회하기 위한 포트 trait이다. **(신규 추가)** | `ManagementQueryService`가 주입받아 사용하며 `RelayRuntime`이 구현한다. | `Clock`, `RelaySnapshot` |
+| `crates/app/src/relay.rs` `RelayRuntime::snapshot` | `std::sync::Mutex<RelayState>`를 단 1회 획득하여 대기·활성·최근종료 목록과 카운터를 복제하며, `RelayStateSource`를 구현한다. **(기존 메서드 확장: handshaking 카운터 및 max_entries(R) 노출)** | 시작 시 `src/serve.rs`가 생성하여 공유한다. | `Clock`, `RelayState` |
+| `crates/app/src/relay.rs` `RelayRuntime::track_handshaking` | `pub fn track_handshaking<'a>(&'a self) -> HandshakingGuard<'a, C>` 형태로 `handshaking` 카운터를 1 증가시키고 소멸 시 1 감소시키는 RAII 가드를 반환한다. **(신규 추가)** | TCP(`net.rs`) 및 WS·WSS(`websocket.rs`) 연결 준비 진입점에서 호출한다. | `std::sync::Mutex<RelayState>` |
+| `crates/app/src/relay.rs` `HandshakingGuard` | 초기 교환 진행 중인 연결 수를 세기 위한 RAII 카운터 가드다. **(신규 추가)** | TCP는 `net.rs`의 `handle_connection` 진입 전, WS·WSS는 `websocket.rs`의 101 응답 flush 직후 생성되고 연결 준비 종료 시 소멸한다. | `RelayRuntime::track_handshaking` |
+| `crates/app/src/relay.rs` `ActivePeer` | 활성 세션의 원격 피어(`Server(ConnectionContext)` 또는 `Target(SocketAddr)`)를 나타내는 enum이다. 대상 주소(`target_address`)가 항상 유효함을 타입 수준에서 보장한다. **(신규 추가)** | `SessionPair` 및 `ActiveSessionSnapshot` 생성 시 소유한다. | `ConnectionContext`, `SocketAddr` |
 ## 3. 데이터 모델
 
 외부 교환 형식은 [관리 API 계약 1.6~1.8·1.10절](../contracts/management-api-v1.md#16-서버-요약-get-apiv1summary)을 준수하며, 아래는 내부 응용 및 어댑터 모델이다.
@@ -69,9 +71,9 @@ flowchart LR
 | --- | --- | --- | --- |
 | `SummaryResponse` | `as_of: String`, `server: ServerStateView`, `counts: CountsView`, `usage: UsageView` | HTTP 직렬화 시 일시 생성 | `as_of`는 UTC ISO 8601(`Z`). `counts.waiting`과 `counts.active`는 동일 시점 목록 길이와 일치해야 한다. |
 | `ServerStateView` | `state: &'static str` (`ready` \| `shutdown_grace`), `uptime_ms: u64` | `SummaryResponse` 내부 | `uptime_ms`는 음수가 될 수 없으며 단조 시간 차이로 계산한다. |
-| `CountsView` | `waiting: u64`, `active: u64`, `handshaking: Option<u64>`, `handshaking_unavailable_reason: Option<&'static str>`, `target_connecting: Option<u64>`, `target_connecting_unavailable_reason: Option<&'static str>` | `SummaryResponse` 내부 | 본 구현은 인메모리 카운터로 항상 정확한 정수를 제공하므로 수치는 `Some`이고 사유는 `None`이다. |
+| `CountsView` | `waiting: u64`, `active: u64`, `handshaking: u64`, `target_connecting: u64` | `SummaryResponse` 내부 | 본 구현은 인메모리 카운터로 항상 정확한 정수를 제공하므로 `Option` 없이 정수로 노출하고, 어댑터 직렬화 시 계약 요구에 따라 `null` 사유를 추가한다. |
 | `UsageView` | `relay_connections: ResourceUsageView`, `admin_connections: ResourceUsageView` | `SummaryResponse` 내부 | L과 Lm의 사용량은 서로 독립적으로 산출된다. |
-| `ResourceUsageView` | `current: Option<u64>`, `current_unavailable_reason: Option<&'static str>`, `limit: u64` | `UsageView` 내부 | 상한에 도달하면 `current == limit`이다. 본 구현은 `AtomicU32`에서 직접 읽으므로 `current`는 항상 `Some`이고 사유는 `None`이다. (계약의 `read_failed`는 실패 경로가 존재할 때의 규정임) |
+| `ResourceUsageView` | `current: u64`, `limit: u64` | `UsageView` 내부 | 상한에 도달하면 `current == limit`이다. 본 구현은 `AtomicU32`에서 직접 읽으므로 `Option` 없이 정수로 노출하고, 어댑터 직렬화 시 계약 요구에 따라 `null` 사유를 추가한다. |
 | `WaitingItemView` | `role: &'static str` (`viewer` \| `server`), `relay_id: String`, `connected_at: String`, `waited_ms: u64` | `WaitingResponse.items` 배열 | `relay_id`는 1~247자의 숫자 원문 문자열을 보존한다. `waited_ms`는 `as_of`까지의 단조 시간 경과다. |
 | `ActiveSessionView` | `session_id: String`, `state: &'static str` (`active` \| `closing`), `mode: &'static str` (`mode1` \| `mode2`), `viewer_transport: &'static str` (`tcp` \| `ws` \| `wss`), `started_at: String`, `bytes_viewer_to_target: u64`, `bytes_target_to_viewer: u64`, `viewer_address: PeerAddressView`, `target_address: PeerAddressView` | `SessionsResponse.items` 및 상세 | `bytes_*`는 단조 증가하며 감소하거나 순환하지 않는다. `closing` 세션도 활성 세션에 포함된다. |
 | `ClosedSessionsResponse` | `as_of: String`, `max_entries: u64`, `items: Vec<ClosedSessionItemView>` | HTTP 직렬화 시 일시 생성 | `max_entries`는 설정된 R 값이다. `items`는 정리가 끝난 활성 세션만 담는다. |
@@ -171,8 +173,8 @@ flowchart LR
 | 항목 | 현재 코드(파일·심볼) | 목표 설계 | 전환 계획 |
 | --- | --- | --- | --- |
 | L/Lm 예산의 현재 점유량 조회 | `crates/domain/src/budget.rs` `ConnectionBudget`에 `limit()`만 존재 | `pub fn current(&self) -> u32` 메서드를 추가하여 `used.load(Ordering::Acquire)` 값을 반환 | 도메인 `budget.rs`에 메서드 추가 |
-| 초기 교환 중 연결 수 카운터 | `crates/app/src/relay.rs`에 handshaking 카운터 없음 | `RelayRuntime`에 `handshaking: usize` 카운터를 두고 `handle_connection` 진입/퇴출 시 가드로 증감 | `RelayState` 또는 `RelayRuntime`에 필드 및 가드 추가 |
-| 스냅샷 내 handshaking 수치 및 R | `crates/app/src/relay.rs` `RelaySnapshot`에 `target_connecting`과 `recent_closed`만 있음 | `pub handshaking: usize` 필드를 추가하고, 설정된 R 값인 `max_entries`를 스냅샷 또는 런타임에서 노출 | `RelaySnapshot` 구조체 확장 |
+| 초기 교환 중 연결 수 카운터 | `crates/app/src/relay.rs`에 handshaking 카운터 없음 | `RelayRuntime`에 `handshaking: usize` 카운터와 `pub fn track_handshaking<'a>(&'a self) -> HandshakingGuard<'a, C>`를 둔다. TCP는 `net.rs`의 `handle_connection` 전, WS·WSS는 `websocket.rs`의 101 응답 flush 직후 가드를 획득 | `RelayState` 및 `RelayRuntime`에 필드 및 메서드 추가 |
+| 스냅샷 포트 trait | `crates/app/src/ports.rs`에 스냅샷 포트 없음 | `pub trait RelayStateSource: Send + Sync { fn snapshot(&self, clock: &dyn Clock) -> RelaySnapshot; }`를 정의하고 `RelayRuntime`이 구현 | `ports.rs`에 trait 추가 |
 | 관리 조회 서비스 | `crates/app/src/management/`에 `login.rs`, `session.rs`만 존재 | `crates/app/src/management/query.rs` `ManagementQueryService` 구현 | 사용 사례 모듈 추가 |
 | 관리 HTTP 조회 라우팅 | `crates/adapters/src/management_http/session_api.rs`가 세션 이외 경로에 `404` 반환 | `crates/adapters/src/management_http/query_api.rs`를 구현하고 인증 우선 순서로 `/summary`, `/waiting`, `/sessions`, `/closed-sessions` 처리 (`session_api.rs`의 `poll_flag`, `media_type_allows` 재사용) | 어댑터 라우터 연동 |
 | 관리 리스너 의존 주입 | `src/serve.rs`에서 `ManagementListener` 생성 시 런타임/쿼리 서비스 미주입 | `ManagementListener`에 `query_service` 또는 `runtime`과 `relay_budget`을 주입하여 기동 | `serve.rs` 조립 갱신 |

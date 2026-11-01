@@ -26,8 +26,12 @@ use vnc_relay_adapters::management_http::{DashboardHints, ManagementListener};
 use vnc_relay_adapters::tls;
 use vnc_relay_app::events::{Event, RejectReason, Stage};
 use vnc_relay_app::management::login::dummy_hash;
+use vnc_relay_app::management::query::ManagementQueryService;
 use vnc_relay_app::management::{AdminAuth, AdminPorts};
-use vnc_relay_app::ports::{Clock, EventSink, HashError, PasswordHasher, PasswordVerifier};
+use vnc_relay_app::ports::{
+    Clock, EventSink, HashError, PasswordHasher, PasswordVerifier, RelayLifecycle, RelayStateSource,
+};
+use vnc_relay_app::relay::RelaySnapshot;
 use vnc_relay_app::reload::snapshot::{RelayAllow, ReloadCell, ReloadSnapshot};
 use vnc_relay_domain::account::{Account, AccountName, Argon2Params, Password, PasswordHash};
 use vnc_relay_domain::admin_session::AdminSessionPolicy;
@@ -181,7 +185,20 @@ async fn start_with_ports(
     let events = Arc::new(Recorder::default());
     let log: Arc<dyn EventSink> = events.clone();
     let budget = ConnectionBudget::new(admin_connections);
-    let auth = admin_auth(Arc::clone(&log), session, limit, verifier, clock);
+    let auth = admin_auth(
+        Arc::clone(&log),
+        session,
+        limit,
+        verifier,
+        Arc::clone(&clock),
+    );
+    let relay_budget = ConnectionBudget::new(10);
+    let query = Arc::new(ManagementQueryService::new(
+        Arc::new(EmptyRelaySource),
+        relay_budget,
+        Arc::clone(&budget),
+        clock,
+    ));
     let dashboard = DashboardHints::new(
         Duration::from_secs(2),
         Duration::from_secs(5),
@@ -191,9 +208,26 @@ async fn start_with_ports(
         let snapshot = ReloadSnapshot::new(RelayAllow::default(), None, Some(acceptor));
         tls::TlsSource::management(Arc::new(ReloadCell::new(snapshot)))
     });
-    let listener = ManagementListener::new(listener, tls, budget, upgrade, auth, dashboard);
+    let listener = ManagementListener::new(listener, tls, budget, upgrade, auth, dashboard, query);
     tokio::spawn(listener.run(log));
     Running { addr, events }
+}
+
+struct EmptyRelaySource;
+
+impl RelayStateSource for EmptyRelaySource {
+    fn snapshot(&self, clock: &dyn Clock) -> RelaySnapshot {
+        RelaySnapshot {
+            lifecycle: RelayLifecycle::Running,
+            observed_at: clock.monotonic(),
+            handshaking: 0,
+            target_connecting: 0,
+            max_entries: 0,
+            waiting: Vec::new(),
+            active: Vec::new(),
+            recent_closed: Vec::new(),
+        }
+    }
 }
 
 /// Session times that the login tests never reach by accident.

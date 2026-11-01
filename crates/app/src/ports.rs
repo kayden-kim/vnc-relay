@@ -271,6 +271,11 @@ pub trait SessionIdSource: Send + Sync {
     fn session_id(&self, counter: u128) -> vnc_relay_domain::session::SessionId;
 }
 
+/// Provides a snapshot of relay runtime state for management queries.
+pub trait RelayStateSource: Send + Sync {
+    fn snapshot(&self, clock: &dyn Clock) -> crate::relay::RelaySnapshot;
+}
+
 #[cfg(test)]
 mod relay_stream_tests {
     use super::RelayStreamError;

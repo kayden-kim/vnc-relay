@@ -23,6 +23,7 @@ use axum::serve::IncomingStream;
 use serde_json::{Value, json};
 use tokio::net::TcpListener;
 use vnc_relay_app::management::AdminAuth;
+use vnc_relay_app::management::query::ManagementQueryService;
 use vnc_relay_app::ports::EventSink;
 use vnc_relay_domain::budget::ConnectionBudget;
 use vnc_relay_domain::peer_ip::PeerIp;
@@ -33,6 +34,7 @@ use crate::request_deadline::DeadlineListener;
 use crate::tls::TlsSource;
 use crate::tls_listener::TlsListener;
 
+mod query_api;
 mod session_api;
 
 /// `listener` of the management listener in operation events (ops-info-v1 §1.5).
@@ -56,6 +58,7 @@ pub struct ManagementListener {
     tls_upgrade: Duration,
     auth: Arc<AdminAuth>,
     dashboard: DashboardHints,
+    query: Arc<ManagementQueryService>,
 }
 
 impl ManagementListener {
@@ -69,6 +72,7 @@ impl ManagementListener {
         tls_upgrade: Duration,
         auth: Arc<AdminAuth>,
         dashboard: DashboardHints,
+        query: Arc<ManagementQueryService>,
     ) -> Self {
         Self {
             listener,
@@ -77,6 +81,7 @@ impl ManagementListener {
             tls_upgrade,
             auth,
             dashboard,
+            query,
         }
     }
 
@@ -92,6 +97,7 @@ impl ManagementListener {
             secure,
             auth: self.auth,
             dashboard: self.dashboard,
+            query: self.query,
         };
         let router = Router::new()
             .fallback(answer)
@@ -156,6 +162,7 @@ struct Shared {
     secure: bool,
     auth: Arc<AdminAuth>,
     dashboard: DashboardHints,
+    query: Arc<ManagementQueryService>,
 }
 
 /// Answers every request. `/api/v1/` goes to the session API, which judges the

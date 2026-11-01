@@ -6,6 +6,7 @@
 //! access. The password check and the event writes run outside the lock.
 
 pub mod login;
+pub mod query;
 pub mod session;
 
 use std::collections::HashMap;
