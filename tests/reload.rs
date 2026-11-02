@@ -28,8 +28,8 @@ const EXIT_LIMIT: Duration = Duration::from_secs(20);
 /// How long a connection must stay open to count as still open.
 const SETTLE: Duration = Duration::from_millis(500);
 
-/// D of the test configs (`settle_secs = 1` in `config_text`), in milliseconds.
-const RELOAD_SETTLE_MS: u64 = 1_000;
+/// D of the test configs (`settle_secs = 1` in `config_text`).
+const RELOAD_SETTLE: Duration = Duration::from_secs(1);
 
 const VIEWER_ONLY: &str = r#"["127.0.0.1"]"#;
 const SECOND_ONLY: &str = r#"["127.0.0.2"]"#;
@@ -325,22 +325,6 @@ fn event_is(line: &str, event: &str) -> bool {
     field(line, "event") == Some(event)
 }
 
-/// Milliseconds from the `ts` of `from` to the `ts` of `to`, within one day.
-fn millis_between(from: &str, to: &str) -> u64 {
-    const DAY_MS: u64 = 86_400_000;
-    let of_day = |line: &str| {
-        let ts = field(line, "ts").unwrap_or_else(|| panic!("no ts in {line}"));
-        // `YYYY-MM-DDTHH:MM:SS.mmmZ`, always UTC with milliseconds.
-        let part = |range: std::ops::Range<usize>| -> u64 {
-            ts[range]
-                .parse()
-                .unwrap_or_else(|error| panic!("ts {ts}: {error}"))
-        };
-        ((part(11..13) * 60 + part(14..16)) * 60 + part(17..19)) * 1000 + part(20..23)
-    };
-    (of_day(to) + DAY_MS - of_day(from)) % DAY_MS
-}
-
 /// Whether a log line is `event` with `reason`.
 fn reason_is(line: &str, event: &str, reason: &str) -> bool {
     event_is(line, event) && field(line, "reason") == Some(reason)
@@ -386,6 +370,28 @@ fn wait_for_line(log: &Path, wanted: impl Fn(&str) -> bool) -> String {
         if let Some(line) = text.lines().find(|line| wanted(line)) {
             return line.to_owned();
         }
+        assert!(
+            Instant::now() < deadline,
+            "line not logged in {EXIT_LIMIT:?}: {text}"
+        );
+        std::thread::sleep(Duration::from_millis(20));
+    }
+}
+
+/// Waits until the log has a line that `wanted` accepts and returns an instant
+/// before which the line was not written: the start of the last read that did
+/// not have it, or `since` if the first read had it. The log writes each line
+/// with one unbuffered write, so a read that starts after the write sees it.
+fn line_written_after(log: &Path, since: Instant, wanted: impl Fn(&str) -> bool) -> Instant {
+    let deadline = Instant::now() + EXIT_LIMIT;
+    let mut written_after = since;
+    loop {
+        let read_at = Instant::now();
+        let text = std::fs::read_to_string(log).unwrap_or_default();
+        if text.lines().any(&wanted) {
+            return written_after;
+        }
+        written_after = read_at;
         assert!(
             Instant::now() < deadline,
             "line not logged in {EXIT_LIMIT:?}: {text}"
@@ -1294,6 +1300,7 @@ fn new_tls_pair_is_used_by_new_handshakes_and_keeps_open_connections() {
     let mut open = tls_client(connect_from([127, 0, 0, 1], ports.wss_viewer));
     assert_eq!(handshake(&mut open), old);
 
+    let before_write = Instant::now();
     write(
         &config,
         &config_text(
@@ -1303,14 +1310,21 @@ fn new_tls_pair_is_used_by_new_handshakes_and_keeps_open_connections() {
             "ecdsa-p384-key.pem",
         ),
     );
-    let detected = wait_for_line(&log, |line| event_is(line, "reload_change_detected"));
+    let detected_after = line_written_after(&log, before_write, |line| {
+        event_is(line, "reload_change_detected")
+    });
     let applied = wait_for_line(&log, |line| event_is(line, "reload_applied"));
+    let applied_by = Instant::now();
     assert!(applied.contains("relay.wss_viewer.cert_file"), "{applied}");
-    // D is measured from the detection to the result.
-    let elapsed = millis_between(&detected, &applied);
+    // D is measured from the detection to the result. The log `ts` is wall-clock
+    // time, and WSL2 steps that clock by seconds during a run, so the interval
+    // uses the monotonic clock. It is never shorter than the logged interval:
+    // the detection line was written after `detected_after`, and the result
+    // line before `applied_by`.
+    let elapsed = applied_by.duration_since(detected_after);
     assert!(
-        elapsed <= RELOAD_SETTLE_MS,
-        "result {elapsed} ms after the detection, D is {RELOAD_SETTLE_MS} ms: {applied}"
+        elapsed <= RELOAD_SETTLE,
+        "result within {elapsed:?} of the detection, D is {RELOAD_SETTLE:?}: {applied}"
     );
 
     assert_eq!(
