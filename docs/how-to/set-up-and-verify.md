@@ -115,6 +115,12 @@ Linux 전용 `tests/relay_dead_peer_linux.rs`는 사용자·네트워크 네임�
 
    영향: WSL 배포판에 `nftables` 패키지를 설치한다. 시험 자체에는 `sudo`를 쓰지 않는다.
 
+   WSL의 `sudo` 암호를 입력할 수 없으면 Windows PowerShell에서 root로 설치할 수 있다. 검증 환경은 사용자 요청(2026-11-02)으로 이 방법을 써서 `nftables v1.0.9`를 설치했다.
+
+   ```powershell
+   wsl -d Ubuntu -u root -- bash -lc 'DEBIAN_FRONTEND=noninteractive apt-get install -y nftables'
+   ```
+
 2. WSL Ubuntu에서 필수 도구를 확인한다.
 
    ```shell
@@ -139,7 +145,9 @@ Linux 전용 `tests/relay_dead_peer_linux.rs`는 사용자·네트워크 네임�
    cargo test --test relay_dead_peer_linux -- --nocapture
    ```
 
-   기대 결과: 대기 Server와 활성 세션의 Viewer·Server·Mode I 대상에 실제 DROP을 적용한 시험 2건이 통과한다. K는 설정 최솟값인 11초다. Linux 타이머·스케줄링 오차는 최대 5초로 제한한다(DROP 직전 시각 기준 최대 16초). DROP 직전 시각과 정리 사건의 로그 `ts`를 비교하므로, 로그를 읽는 작업이 늦게 실행되어도 판정을 바꾸지 않는다. 이 오차를 K 설정값에 더하지는 않는다.
+   기대 결과: 대기 Server와 활성 세션의 Viewer·Server·Mode I 대상에 실제 DROP을 적용한 시험 2건이 통과한다. 한 번 실행에 약 47초 걸린다. K는 설정 최솟값인 11초다. Linux 타이머·스케줄링 오차는 최대 5초로 제한한다(DROP 직전 시각 기준 최대 16초). 이 오차를 K 설정값에 더하지는 않는다.
+
+   시험은 DROP 직전 시각과 정리 사건 줄을 읽은 시각을 단조 시계(`Instant`)로 비교한다. 로그 `ts`는 벽시계라서 쓰지 않는다. WSL2는 실행 중에 벽시계를 몇 초씩 앞으로 보정한다. 검증 환경에서는 40초 동안 +2.933초 보정이 한 번 일어났다. 로그 `ts`로 재면 실제로 11초 안에 끝난 정리가 14초 이상으로 계산된다. 로그를 읽는 지연(10ms 주기 확인)은 측정값을 늘리기만 하므로 상한 판정을 느슨하게 하지 않는다. 마지막 활동 이후 9초 이상이라는 하한 판정은 그 지연만큼 느슨해진다.
 
 ### 3.2 빌드
 

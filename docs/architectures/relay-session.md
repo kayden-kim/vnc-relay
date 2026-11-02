@@ -320,7 +320,7 @@ Mode II가 초기 교환을 마쳤더라도 대기 등록이 완료되기 전에
 | `tests/serve.rs`의 기존 두 번째 프로세스 시작 시험 확장 | `/// spec: operations.md:OPS-039` | 첫 프로세스 대기·활성 상태에서 두 번째 시작 실패·바인드 회수, 첫 프로세스 대기 매칭과 활성 전송 계속 |
 | `tests/serve.rs` `stops_incomplete_work_before_grace_and_drains_active_sessions` | `/// spec: operations.md:OPS-007 partial`, `/// spec: operations.md:OPS-008 partial`, `/// spec: operations.md:OPS-009 partial`를 별도 줄 | 초기 교환·DNS·connect·대기 취소, 종료/활성화 경합, G 안 자연 종료·G=0·G 만료. 5.3의 실제 전체 신호 조립 뒤 full로 변경 |
 | `tests/serve.rs`의 두 번째 종료 요청·유예 중 관리 시험 | `/// spec: operations.md:OPS-042 partial`, `/// spec: operations.md:OPS-043 partial`를 별도 줄 | 제어 입력에서 즉시 Force, 관리자 종료·조회가 가능한 서비스 수명. 5.3·4.4·4.5 완성 뒤 실제 프로세스 시험으로 full |
-| `tests/relay_dead_peer_linux.rs` `removes_unresponsive_waiting_server_and_reuses_id_and_l`·`removes_unresponsive_active_peers_without_harming_other_sessions`(작업 2.11, 검증 목표 Target) | 각각 `/// spec: relay.md:RLY-025`, `/// spec: relay.md:RLY-026` | Linux의 권한 없는 `unshare --user --map-root-user --net` 안에서 `lo`를 켠다. `nft` input/output DROP으로 응답 없는 대기 Server, 활성 Mode II Viewer·Server와 Mode I Viewer·대상을 각각 만든다. K=11초와 Linux 타이머·스케줄링 오차 최대 5초(상한 16초) 안의 정리 사건을 로그 `ts`로 비교한다. 반대쪽 EOF·L 반환·동일 대기 ID 재등록·다른 세션 양방향 전송도 확인한다. 실패시킬 연결에는 초기 교환 뒤 데이터를 보내지 않아 미확인 데이터의 재전송과 keepalive를 섞지 않는다. 하한은 그 연결의 마지막 초기 교환·대상 연결 시각으로 비교한다. 규칙의 패킷 카운터로 실제 DROP을 확인한다. 필수 도구·사용자 네임스페이스가 없으면 실패한다. 실행 통과 전에는 Current로 표시하지 않는다. Windows는 기존 부분 시험을 유지한다(사용자 결정 2026-11-02(Q86·Q93), [준비 절차](../how-to/set-up-and-verify.md#wsl-끊긴-연결-감지-시험-준비)). |
+| `tests/relay_dead_peer_linux.rs` `removes_unresponsive_waiting_server_and_reuses_id_and_l`·`removes_unresponsive_active_peers_without_harming_other_sessions`(작업 2.11, Current) | 각각 `/// spec: relay.md:RLY-025`, `/// spec: relay.md:RLY-026` | Linux의 권한 없는 `unshare --user --map-root-user --net` 안에서 `lo`를 켠다. `nft` input/output DROP으로 응답 없는 대기 Server, 활성 Mode II Viewer·Server와 Mode I Viewer·대상을 각각 만든다. K=11초와 Linux 타이머·스케줄링 오차 최대 5초(상한 16초) 안에 정리 사건이 나오는지 확인한다. 시간은 DROP 직전과 사건 줄을 읽은 순간의 단조 시계(`Instant`) 차이로 잰다. 로그 `ts`는 벽시계라서 WSL2의 벽시계 보정(40초 동안 +2.933초 관찰)에 흔들리므로 시간 판정에 쓰지 않는다(이 문서의 판단, 사용자 결정 없음). 반대쪽 EOF·L 반환·동일 대기 ID 재등록·다른 세션 양방향 전송도 확인한다. 대기 시험은 설정 최솟값 L=2에서 정상 대기 Server 하나로 자리를 채운다. 그래서 교체 Server는 끊긴 연결이 돌려준 자리에만 들어갈 수 있다. 실패시킬 연결에는 초기 교환 뒤 데이터를 보내지 않아 미확인 데이터의 재전송과 keepalive를 섞지 않는다. 하한은 그 연결의 마지막 초기 교환·대상 연결 시각으로 비교한다. 규칙의 패킷 카운터로 실제 DROP을 확인한다. 필수 도구·사용자 네임스페이스가 없으면 실패한다. 커밋 `bf27d30`의 WSL 게이트에서 통과했다. Windows는 기존 부분 시험을 유지한다(사용자 결정 2026-11-02(Q86·Q93), [준비 절차](../how-to/set-up-and-verify.md#wsl-끊긴-연결-감지-시험-준비)). |
 | `tests/relay_log_scenarios.rs` `idle_active_sessions_survive_longer_than_k_and_transfer_data` | `/// spec: relay.md:RLY-027` | Mode I·II에서 살아 있는 유휴 연결을 K보다 오래 유지하고 양방향 데이터를 보낸다. 두 OS에서 통과했다(`1a6f93e`). |
 
 추가 내부 시험은 시나리오가 없으면 표식을 붙이지 않는다. 두 시작 키 생성 실패 전 리스너 0개, 키 미노출·프로세스별 ref 변경, 세션 ID 정규 인코딩·순열 역변환·카운터 비순환, 취소 중 permit 반환 순서, R=0·R 초과 제거, 벽시계 역행과 단조 경과, 종료 원인 우선순위를 확인한다. `crates/adapters/tests/ops_info_contract.rs`는 6절 모든 사건의 필수·선택 필드, level, ref·ID 원문 비노출을 비교한다. 작업 2.12는 사건 종단 간 수집·추적을 완성한다. 이 설계만으로 OPS-011·012 전체 완료를 주장하지 않는다.
@@ -473,6 +473,18 @@ WS 스트림 설계 연결 개정에서는 이 파일만 문서 검사했다(`fu
 | --- | --- | --- | --- |
 | Windows 11 Pro 10.0.26200 x64 | `powershell -NoProfile -ExecutionPolicy Bypass -File D:/vr-tools/vr-win.ps1 -Only all` | 통과(`ALL PASSED (all)`). 시나리오 보고 2026-11-01T23:41:53Z: 통과 77, 부분 61, 실패 0, 미실행 0, 미연결 12, 오류 0 | netns 시험은 Linux 전용이라 0건이다. RLY-025·026은 부분(사용자 결정 2026-11-02(Q86)), RLY-027 통과 |
 | Ubuntu 24.04 LTS x64(WSL2) | `wsl -d Ubuntu -- bash /mnt/d/vr-tools/vr-full.sh` | 실패(`FAILED: scenarios`). 시나리오 보고 23:51:07Z: 통과 81, 부분 55, 실패 2, 미실행 0, 미연결 12, 오류 0 | 실패 2건은 RLY-025·026이다. WSL에 `nft`가 없어 netns 시험 2건이 누락 도구를 밝히고 실패했다(사용자 결정 2026-11-02(Q93)). 실패한 시험은 이 2건뿐이며, 부분·미연결 시나리오는 왼쪽 수치와 같다. `+ 미커밋 변경`은 CRLF 때문에 나타남 |
+
+### 전체 게이트 실행 기록 (커밋 bf27d30)
+
+커밋 `bf27d30`에서 두 OS의 전체 게이트를 실행했다. WSL에는 사용자 요청(2026-11-02)으로 `nftables v1.0.9`를 설치했다. 이 커밋은 netns 시험의 결함 두 가지를 고쳤고 제품 코드는 바꾸지 않았다.
+
+- 대기 시험이 설정 최솟값보다 작은 L=1로 시작해 설정 검사(`config_value_out_of_range`)에서 실패했다. L=2와 정상 대기 Server 하나로 바꿨다.
+- 시간 판정에 벽시계인 로그 `ts`를 썼다. 그래서 반복 실행 약 12회 중 1회가 상한 16초를 넘었다. 같은 keepalive 값과 DROP 규칙으로 커널만 측정한 Python 탐침은 매번 11.0~11.2초에 연결 시간 초과로 끝났다. 벽시계로 14.077초가 나온 사례를 단조 시계로 재면 11.141초였다. 단조 시계 판정으로 바꾼 뒤 연속 3회 통과했다.
+
+| 환경 | 명령 | 결과 | 비고 |
+| --- | --- | --- | --- |
+| Windows 11 Pro 10.0.26200 x64 | `powershell -NoProfile -ExecutionPolicy Bypass -File D:/vr-tools/vr-win.ps1 -Only all` | 통과(`ALL PASSED (all)`). 시나리오 보고 2026-11-02T15:30:51Z: 통과 77, 부분 61, 실패 0, 미실행 0, 미연결 12, 오류 0 | netns 시험은 Linux 전용이라 0건이다. RLY-025·026은 부분(사용자 결정 2026-11-02(Q86)), RLY-027 통과. 첫 실행은 D: 드라이브 공간 부족(`no space on device`)으로 `build` 단계에서 실패했다. 사용자 승인으로 시험 임시 폴더와 별도 빌드 폴더를 지운 뒤 다시 실행했다. `+ 미커밋 변경`은 실행 중 고친 문서 때문이며 코드는 `bf27d30`과 같다 |
+| Ubuntu 24.04 LTS x64(WSL2) | `wsl -d Ubuntu -- bash /mnt/d/vr-tools/vr-full.sh` | 통과(`ALL PASSED`). 시나리오 보고 2026-11-02T07:42:23Z: 통과 83, 부분 55, 실패 0, 미실행 0, 미연결 12, 오류 0 | RLY-025·026·027 통과. `+ 미커밋 변경`은 CRLF 때문에 나타남 |
 
 ## 9. 미결정 사항
 

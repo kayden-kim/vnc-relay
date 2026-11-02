@@ -160,12 +160,12 @@ Mode I·II 초기 흐름을 추정 없이 설명할 수 있게 한다. 관찰은
   - 완료 조건: RLY-017~019, RLY-020(EOF·연결 오류 부분), RLY-021, RLY-023(비허용 IP 거절 중 기존 세션 유지), MGT-005(일부), OPS-039(첫 프로세스의 대기·활성 세션 유지)
   - 선행: 2.8 또는 2.9
   - 현재: RLY-017~019·RLY-021·RLY-023·OPS-039는 비부분 시험으로 두 OS에서 통과했다(커밋 `4e4a271`). MGT-005는 완료 조건대로 방향별 전송량 집계 부분만 시험한다. RLY-020은 EOF와 연결 오류 부분을 시험했다. 관리자 종료 부분은 4.5로 옮기고 2.10을 닫는다(사용자 결정 2026-11-02(Q87)).
-- [ ] **2.11 끊긴 연결 감지**: TCP keepalive로 응답 없는 대기 연결·활성 세션을 시간 K 안에 회수한다. 상대가 응답하는 유휴 연결은 유지한다.
+- [x] **2.11 끊긴 연결 감지**: TCP keepalive로 응답 없는 대기 연결·활성 세션을 시간 K 안에 회수한다. 상대가 응답하는 유휴 연결은 유지한다.
   - 기준: [중계 스펙 2.1절](specs/relay.md#21-판정-가능한-규칙)의 RLY-R18·RLY-R19
   - 완료 조건: RLY-025~027
   - 선행: 2.10
-  - 현재: RLY-027은 비부분 시험으로 두 OS에서 통과했다(커밋 `1a6f93e`). RLY-025·RLY-026은 WSL의 Linux netns와 nftables DROP으로 응답 없이 끊긴 네트워크를 만들어 시험한다. Windows는 부분 시험으로 유지한다(사용자 결정 2026-11-02(Q86)). WSL에는 사용자가 `nftables` 패키지를 설치하고, 시험은 `unshare --user --map-root-user --net` 안에서 root 없이 실행한다. Linux에서 필요한 도구가 없으면 시험은 건너뛰지 않고 실패한다(사용자 결정 2026-11-02(Q93)). 준비 절차는 [개발 환경 how-to의 WSL 끊긴 연결 감지 시험 준비](how-to/set-up-and-verify.md#wsl-끊긴-연결-감지-시험-준비)에 있다.
-  - 현재: 커밋 `59fc535`가 Linux 전용 시험 `tests/relay_dead_peer_linux.rs`(RLY-025·026 전체 표식)를 더했다. 실제 keepalive 만료가 `dead_connection`으로 기록되도록 Linux 소켓의 `ETIMEDOUT`·`EHOSTUNREACH`·`ENETUNREACH`를 `DeadConnection`으로 분류한다([연결 상한과 시간 제한 설계](architectures/connection-limits.md), 이 문서의 구현 판단). 같은 커밋의 WSL 게이트에서 이 시험 2건은 `nft`가 없어 실패했다. 따라서 RLY-025·026은 WSL에서 실패, Windows에서 부분이며 `[ ]`를 유지한다. 사용자가 WSL에 `nftables`를 설치한 뒤 시험과 게이트를 다시 실행해야 한다.
+  - 현재: RLY-027은 비부분 시험으로 두 OS에서 통과했다(커밋 `1a6f93e`). RLY-025·RLY-026은 WSL의 Linux netns와 nftables DROP으로 응답 없이 끊긴 네트워크를 만들어 시험한다. Windows는 부분 시험으로 유지한다(사용자 결정 2026-11-02(Q86)). 시험은 `unshare --user --map-root-user --net` 안에서 root 없이 실행한다. Linux에서 필요한 도구가 없으면 시험은 건너뛰지 않고 실패한다(사용자 결정 2026-11-02(Q93)). 준비 절차는 [개발 환경 how-to의 WSL 끊긴 연결 감지 시험 준비](how-to/set-up-and-verify.md#wsl-끊긴-연결-감지-시험-준비)에 있다.
+  - 현재: 커밋 `59fc535`가 Linux 전용 시험 `tests/relay_dead_peer_linux.rs`(RLY-025·026 전체 표식)를 더했다. 실제 keepalive 만료가 `dead_connection`으로 기록되도록 Linux 소켓의 `ETIMEDOUT`·`EHOSTUNREACH`·`ENETUNREACH`를 `DeadConnection`으로 분류한다([연결 상한과 시간 제한 설계](architectures/connection-limits.md), 이 문서의 구현 판단). 사용자 요청(2026-11-02)으로 WSL에 `nftables`를 설치했다. 커밋 `bf27d30`이 시험의 L 최솟값 위반과 벽시계 시간 판정을 고쳤고, 같은 커밋의 WSL 게이트에서 RLY-025·026이 통과했다. Windows는 부분이다(사용자 결정 2026-11-02(Q86)). 실행 기록은 [대상 연결·매칭·중계 수명 모듈 설계](architectures/relay-session.md#전체-게이트-실행-기록-커밋-bf27d30)와 [운영 정보 계약 실행 기록](contracts/ops-info-v1.md#계약-테스트-실행-기록)에 있다.
   - 현재: 수락 소켓의 keepalive 설정 실패 처리는 사용자 결정 2026-11-02(Q85)로 확정하고 커밋 `5a38bfc`에서 구현했다. `connection_accepted` → K 설정 실패 → 전송별 현재 stage의 `connection_aborted(reason=connection_error, error_kind=io_error)` → 소켓 닫기·L 반환 순서다([연결 상한과 시간 제한 설계 6절](architectures/connection-limits.md#6-오류-처리)). 단위 시험 `net::accept_tests::keepalive_failure_aborts_accepted_connections_and_releases_l`이 커밋 `59fc535`의 두 OS 게이트에서 통과했다.
 - [x] **2.12 중계 사건 로그**: 접속 수락·거절, 대기 등록, 매칭, 대상 연결 실패, 세션 종료 사건을 기록한다.
   - 기준: [운영 정보 계약 1.5~1.7절](contracts/ops-info-v1.md#15-사건-목록)
