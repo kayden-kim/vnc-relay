@@ -7,7 +7,7 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 use std::process::{Child, Command, Output, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant};
 
 const BIN: &str = env!("CARGO_BIN_EXE_vnc-relay");
 const CHILD_TEST: &str = "VNC_RELAY_DEAD_PEER_NETNS_TEST";
@@ -73,50 +73,32 @@ fn required_field(line: &str, key: &str) -> String {
         .to_owned()
 }
 
-fn request(stream: &mut TcpStream, text: &str) -> u64 {
+fn request(stream: &mut TcpStream, text: &str) -> Instant {
     assert!(text.len() <= 250);
     let mut bytes = [0; 250];
     bytes[..text.len()].copy_from_slice(text.as_bytes());
-    let last_activity = utc_millis();
+    let last_activity = Instant::now();
     stream
         .write_all(&bytes)
         .unwrap_or_else(|error| panic!("write initial request: {error}"));
     last_activity
 }
 
-const DAY_MILLIS: u64 = 86_400_000;
-
-fn utc_millis() -> u64 {
-    (SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_else(|error| panic!("system clock before Unix epoch: {error}"))
-        .as_millis()
-        % u128::from(DAY_MILLIS)) as u64
-}
-
-fn assert_detection_time(event: &str, drop_base: u64, last_activity: u64) {
-    let ts = required_field(event, "ts");
-    let component = |range: std::ops::Range<usize>| -> u64 {
-        ts.get(range)
-            .unwrap_or_else(|| panic!("invalid log timestamp: {ts}"))
-            .parse()
-            .unwrap_or_else(|error| panic!("invalid log timestamp {ts}: {error}"))
-    };
-    let ended = component(11..13) * 3_600_000
-        + component(14..16) * 60_000
-        + component(17..19) * 1000
-        + component(20..23);
-    let elapsed = (ended + DAY_MILLIS - drop_base) % DAY_MILLIS;
+// Intervals use the monotonic clock, measured when the test observes the log line. The log `ts`
+// is wall-clock time, and WSL2 steps the wall clock by seconds during a run (+2.9 s observed), so
+// differences between `ts` values are not reliable intervals.
+fn assert_detection_time(event: &str, observed: Instant, began: Instant, last_activity: Instant) {
+    let elapsed = observed.duration_since(began);
     assert!(
-        elapsed <= (K + TIMER_MARGIN).as_millis() as u64,
-        "logged cleanup exceeded K plus timer margin ({elapsed} ms): {event}"
+        elapsed <= K + TIMER_MARGIN,
+        "cleanup observed after K plus timer margin ({elapsed:?}): {event}"
     );
     // The initial request/target connect is the last real activity on the failed
     // connection; no test payload is sent before DROP. Allow 1 s timer rounding.
-    let since_activity = (ended + DAY_MILLIS - last_activity) % DAY_MILLIS;
+    let since_activity = observed.duration_since(last_activity);
     assert!(
-        since_activity >= 9000,
-        "cleanup preceded TCP idle detection ({since_activity} ms): {event}"
+        since_activity >= Duration::from_secs(9),
+        "cleanup preceded TCP idle detection ({since_activity:?}): {event}"
     );
 }
 
@@ -289,7 +271,7 @@ output = "events.jsonl"
         (stream, required_field(&event, "conn_id"))
     }
 
-    fn waiting_server(&self, id: &str) -> (TcpStream, String, String, u64) {
+    fn waiting_server(&self, id: &str) -> (TcpStream, String, String, Instant) {
         let (mut stream, conn_id) = self.connect(false);
         let last_activity = request(&mut stream, &format!("ID:{id}"));
         let event = self.wait(0, Instant::now() + IO_LIMIT, |line| {
@@ -334,7 +316,7 @@ output = "events.jsonl"
         let (mut viewer, viewer_id) = self.connect(true);
         let viewer_activity = request(&mut viewer, &format!("127.0.0.1:{port}"));
         let deadline = Instant::now() + IO_LIMIT;
-        let peer_activity = utc_millis();
+        let peer_activity = Instant::now();
         let peer = loop {
             match listener.accept() {
                 Ok((peer, _)) => break peer,
@@ -386,8 +368,8 @@ struct Session {
     viewer: TcpStream,
     peer: TcpStream,
     id: String,
-    viewer_activity: u64,
-    peer_activity: u64,
+    viewer_activity: Instant,
+    peer_activity: Instant,
 }
 
 impl Session {
@@ -494,7 +476,10 @@ fn removes_unresponsive_waiting_server_and_reuses_id_and_l() {
     in_namespace(
         "removes_unresponsive_waiting_server_and_reuses_id_and_l",
         || {
-            let relay = Relay::start(1);
+            // L has a minimum of 2. A healthy waiting server under another ID holds the other
+            // place, so the replacement fits only if the dead server's place came back.
+            let relay = Relay::start(2);
+            let (_healthy, healthy_id, _, _) = relay.waiting_server("25999");
             let (dead, conn_id, relay_id_ref, last_activity) = relay.waiting_server("25001");
             relay.assert_at_limit();
             let port = dead
@@ -502,12 +487,12 @@ fn removes_unresponsive_waiting_server_and_reuses_id_and_l() {
                 .unwrap_or_else(|error| panic!("dead peer address: {error}"))
                 .port();
             let began = Instant::now();
-            let drop_base = utc_millis();
             let drop = PacketDrop::install(port);
             let removed = relay.wait(0, began + K + TIMER_MARGIN + IO_LIMIT, |line| {
                 matches(line, "event", "waiting_removed") && matches(line, "conn_id", &conn_id)
             });
-            assert_detection_time(&removed, drop_base, last_activity);
+            let observed = Instant::now();
+            assert_detection_time(&removed, observed, began, last_activity);
             assert!(matches(&removed, "reason", "dead_connection"), "{removed}");
             assert!(matches(&removed, "level", "warn"), "{removed}");
             assert!(
@@ -521,6 +506,13 @@ fn removes_unresponsive_waiting_server_and_reuses_id_and_l() {
             relay.assert_at_limit();
             // `dead` is still alive here: the test never closes the failed peer to trigger cleanup.
             assert!(dead.peer_addr().is_ok());
+            assert!(
+                !relay.lines().iter().any(|line| {
+                    matches(line, "event", "waiting_removed")
+                        && matches(line, "conn_id", &healthy_id)
+                }),
+                "the healthy waiting server must stay registered"
+            );
         },
     );
 }
@@ -556,15 +548,16 @@ fn removes_unresponsive_active_peers_without_harming_other_sessions() {
                     .unwrap_or_else(|error| panic!("dead peer address: {error}"))
                     .port();
                 let began = Instant::now();
-                let drop_base = utc_millis();
                 let drop = PacketDrop::install(port);
                 let closed = relay.wait(0, began + K + TIMER_MARGIN + IO_LIMIT, |line| {
                     matches(line, "event", "session_closed")
                         && matches(line, "session_id", &failed.id)
                 });
+                let observed = Instant::now();
                 assert_detection_time(
                     &closed,
-                    drop_base,
+                    observed,
+                    began,
                     if dead_viewer {
                         failed.viewer_activity
                     } else {
