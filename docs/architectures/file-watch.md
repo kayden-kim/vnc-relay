@@ -334,3 +334,17 @@ flowchart LR
   - Ubuntu 24.04 WSL2, `wsl -d Ubuntu -- bash /mnt/d/vr-tools/vr-full.sh`: `ALL PASSED`. 시나리오 보고 16:36:35Z: 통과 66, 부분 57, 실패 0, 미실행 0, 미연결 27, 오류 0, 판정 통과. `+ 미커밋 변경`은 CRLF 때문에 나타난다.
   - websocket.md: 통과 24, 부분 0, 미연결 3(WS-020·WS-025·WS-026).
 - 판정: OPS-025·WS-022는 완전이다. 작업 5.2의 완료 조건을 모두 충족했다. OPS-040은 남은 조건이 없지만 보고서에서는 설계상 부분으로 남는다(사용자 결정 2026-10-23(Q58)).
+
+### OPS-024 시험의 시간 측정 수정
+
+- 이유: WSL 전체 게이트(2026-11-01T18:25:46Z, 커밋 `ec05fd1`)에서 OPS-024 시험이 한 번 실패했다. 감지 뒤 `reload_applied`까지 3357ms로, D = 1000ms를 넘었다([관리 API 계약 5절](../contracts/management-api-v1.md#5-예제와-계약-테스트)). 시험은 두 사건 줄의 로그 `ts` 차이로 D를 쟀는데, `ts`는 벽시계 시각이다. WSL2는 실행 중에 벽시계를 몇 초씩 앞으로 보정한다. 검증 환경에서는 40초 동안 +2.933초 보정이 한 번 일어났다. 감지부터 결과까지는 보통 414~434ms다(§9.1의 Windows 스모크). 3357ms는 이 시간에 약 2.9초 보정을 더한 값과 맞다. 실패한 실행에서 시계 보정을 직접 관찰하지는 않았다([INFERENCE]).
+- 변경: 시험 코드만 바꿨다(`tests/reload.rs`, 커밋 `fd8c097`). 운영 코드는 바꾸지 않았다.
+  - `new_tls_pair_is_used_by_new_handshakes_and_keeps_open_connections`는 시험 쪽 단조 시계(`Instant`)로 D를 잰다.
+  - 시작점은 `reload_change_detected` 줄이 아직 없던 마지막 로그 읽기의 시작 시각이다. 끝점은 `reload_applied` 줄을 읽은 뒤의 시각이다.
+  - 운영 로그는 줄마다 버퍼 없는 쓰기 한 번으로 기록한다(`crates/adapters/src/ops_log.rs`). 그래서 이 간격은 기록된 감지→결과 간격보다 짧지 않다. 더 길어지는 차이는 로그 확인 주기(20ms) 정도다.
+  - 로그 `ts` 차이를 계산하던 `millis_between`은 지웠다. 이 측정 방식은 이 문서의 판단이며 사용자 결정은 없다.
+- 확인: WSL에서 이 시험을 단독으로 5회 실행해 모두 통과했다. 그 뒤 clippy 지적으로 클로저 표기만 고쳤고, `tests/reload.rs` 전체 10건이 WSL과 Windows에서 각각 통과했다.
+- 게이트: 커밋 `fd8c097`.
+  - Windows 11 Pro 10.0.26200 x64, `powershell -NoProfile -ExecutionPolicy Bypass -File D:/vr-tools/vr-win.ps1 -Only all`: `ALL PASSED (all)`. 시나리오 보고 2026-11-02T15:50:17Z(대상 커밋 `fd8c097`, 미커밋 변경 없음): 통과 77, 부분 61, 실패 0, 미실행 0, 미연결 12, 오류 0.
+  - Ubuntu 24.04 WSL2, `wsl -d Ubuntu -- bash /mnt/d/vr-tools/vr-full.sh`: `ALL PASSED`. 시나리오 보고 2026-11-02T15:43:31Z: 통과 83, 부분 55, 실패 0, 미실행 0, 미연결 12, 오류 0. `+ 미커밋 변경`은 CRLF 때문에 나타난다.
+- 판정: OPS-024는 두 OS에서 통과다. 바뀐 것은 시험의 측정 방법뿐이다. 판정 기준(D = 1초)은 그대로다.
