@@ -1,12 +1,12 @@
 # 초기 교환 처리 모듈 설계
 
-이 문서는 초기 요청을 모으고 해석한 뒤 다음 중계 단계에 넘기는 구조를 설명한다. 예를 들어 Viewer가 `ID:0123`을 보내면 Mode II 요청과 중계 ID `0123`을 얻는다. 요청 뒤의 바이트는 상대에게 보낼 데이터로 남긴다. 작업 2.7의 공통 app·domain 처리는 구현했다. TCP·WS·WSS 진입점이 이 처리를 `handle_connection`으로 호출한다(`638cf09`).
+이 문서는 초기 요청을 모으고 해석한 뒤 다음 중계 단계에 넘기는 현재 구조를 설명한다. 예를 들어 Viewer가 `ID:0123`을 보내면 Mode II 요청과 중계 ID `0123`을 얻는다. 요청 뒤의 바이트는 상대에게 보낼 데이터로 남긴다. TCP·WS·WSS 진입점은 공통 `handle_connection`을 호출한 뒤 유효 요청을 `dispatch`에 넘긴다.
 
 | 항목 | 값 |
 | --- | --- |
-| 구조 시점 | Target |
+| 구조 시점 | Current |
 | 문서 상태 | Draft |
-| 구현 대조 | 부분 대조 — [2026-11-04 코드 차이](#8-현재-코드와-목표의-차이), [실행 기록](#실행-기록). 본문의 이전 API 설명 때문에 Target을 유지한다. |
+| 구현 대조 | Verified — [2026-11-04 대조 기록](#8-현재-코드와-목표의-차이). 경로·API·책임·인계와 현재 시험 소스를 대조했다. |
 | 코드 위치 | `crates/domain/src/handshake.rs`, `crates/domain/src/relay_id.rs`, `crates/app/src/relay.rs`, `crates/app/src/relay/handshake.rs`, `crates/app/src/events.rs`, `crates/adapters/src/ops_log.rs`, `crates/adapters/src/net.rs`, `crates/adapters/src/websocket.rs` |
 | 코드 지도 | [코드 지도](code-map.md#2-코드-위치와-구성요소) |
 | 관련 스펙 | [중계 스펙 2~4절·7절](../specs/relay.md#2-상태와-경계): RLY-001~005, RLY-022. [운영 스펙 2절·OPS-006](../specs/operations.md#2-상태와-검증-매개변수): TCP H 부분 |
@@ -15,26 +15,28 @@
 
 채택된 계약의 형식과 오류 이름은 바꾸지 않는다. 아래의 내부 API와 자료 배치는 이 문서의 판단이며 사용자 결정은 없다. 9절의 세 항목은 모두 해결했다. 1번은 D, 2번은 A를 적용한다. 두 선택도 이 문서의 판단이며 사용자 결정은 없다.
 
-현재 구현은 3절의 domain API, 4~6절의 공통 app 처리와 초기 교환 거절 사건·JSON 출력이다. 유효 요청은 `PreparedConnection`으로 반환한다. TCP 진입점은 `TcpEntryPoint::run`(`crates/adapters/src/net.rs`)에서, WS·WSS 진입점은 `connection`(`crates/adapters/src/websocket.rs`)에서 `handle_connection`을 부르고, 유효 요청을 `dispatch`에 넘긴다. WS·WSS 실제 중계 검증(WS-018 `partial` 등)이 끝나기 전에는 TODO 2.7을 완료로 바꾸지 않는다.
+현재 구현은 3절의 domain API, 4~6절의 공통 app 처리와 초기 교환 거절 사건·JSON 출력이다. 유효 요청은 `PreparedConnection`으로 반환한다. TCP 진입점은 `TcpEntryPoint::run`에서, WS·WSS 진입점은 `connection`에서 `handle_connection`을 부르고, 유효 요청을 `dispatch`에 넘긴다. 실제 상대에 후속 바이트를 전달하는 시험은 7절에 적는다. 구조 대조와 TODO 완료 판정은 구분한다.
 
 ## 1. 책임과 경계
 
 - domain은 초기 요청의 길이·값·모드·대상 문법·중계 ID를 판정한다. 소켓과 시계를 알지 못한다.
 - app의 `RelayService::handle_connection`은 Viewer 시작 바이트, 요청 읽기, H, 종료 알림, 오류 기록, 소유권 이전을 다룬다.
 - adapters는 TCP 수락, 출발지 IP 검사, L 확보, TCP keepalive를 유지한다. 허용 판정 전에 시작 바이트를 보내거나 요청을 읽지 않는다.
-- Mode I 주소 해석·정책·대상 연결은 작업 2.8이다. Mode II 등록·매칭·W·Lw는 작업 2.9다. 양방향 중계·EOF 뒤 E·전송량은 작업 2.10이다.
-- 2.7은 대상 연결 포트나 대기 연결 표를 미리 만들지 않는다. TCP·WS·WSS 연결 작업은 `handle_connection`의 반환값을 `RelayService::dispatch`에 넘긴다(`crates/adapters/src/net.rs` `TcpEntryPoint::run`, `crates/adapters/src/websocket.rs` `connection`). 연결 순서는 [대상 연결·매칭·중계 수명 설계 8절](relay-session.md#8-현재-코드와의-차이와-연결-순서)을 따른다.
+- Mode I 주소 해석·정책·대상 연결은 `relay/target.rs`가 맡는다. Mode II 등록·매칭·W·Lw는 `relay/matching.rs`가 맡는다. 양방향 중계·EOF 뒤 E·전송량은 `relay/session.rs`가 맡는다.
+- 초기 교환은 대상 연결이나 대기 등록을 만들지 않는다. TCP·WS·WSS 연결 작업이 반환값을 `RelayService::dispatch`에 넘긴다. 후속 단계의 책임과 연결 순서는 [대상 연결·매칭·중계 수명 설계 8절](relay-session.md#8-현재-코드와의-차이와-연결-순서)을 따른다.
 - WS·WSS는 Q16을 유지하며 101 뒤 중계를 `WsRelayStream`으로 `handle_connection`·`dispatch`에 연결했다(`638cf09`). Q21의 101 뒤 보류는 제거했다. 바이너리 메시지와 스트림 사이의 변환, B 계산에 필요한 3.3 범위를 앞당겼다. domain API는 전송 방식과 무관하게 네 진입점의 역할을 받는다.
 - 업무 용어는 [용어집](../../GLOSSARY.md#중계-방식과-세션)을 따른다. 새 업무 용어를 정하지 않는다.
 
 ## 2. 내부 구조
 
-아래 그림은 목표 구조만 보인다. 화살표는 실행 중 호출 또는 값 전달이다. 컴파일 의존은 `src` → adapters → app → domain이다. `EventSink`·`Clock` 구현은 `src/serve.rs`가 app에 넣는다.
+아래 그림은 현재 초기 교환 경로다. 화살표는 실행 중 호출 또는 값 전달이다. 컴파일 의존은 `src` → adapters → app → domain이다. `EventSink`·`Clock` 구현은 `src/serve.rs`가 app에 넣는다.
 
 ```mermaid
 flowchart LR
     START["src/serve.rs<br/>listen_until_shutdown"] -->|"공유 서비스 주입"| TCP["adapters/net.rs<br/>TcpEntryPoint::run"]
     TCP -->|"수락·IP·L·K·수락 사건"| ACCEPT["accept_connections"]
+    START -->|"공유 서비스 주입"| WS["adapters/websocket.rs<br/>connection"]
+    WS -->|"101 뒤 스트림·문맥·permit·종료 알림"| SERVICE
     ACCEPT -->|"스트림·문맥·BudgetPermit·종료 알림"| SERVICE["app/relay.rs<br/>RelayService::handle_connection"]
     SERVICE -->|"시작 바이트·읽기·H"| READ["app/relay/handshake.rs"]
     READ -->|"받은 바이트"| PARSE["domain/handshake.rs<br/>HandshakeParser"]
@@ -43,7 +45,7 @@ flowchart LR
     SERVICE -->|"단조 시각"| CLOCK["app/ports.rs<br/>Clock"]
 ```
 
-| 계획 파일·심볼 | 책임 | 생성·소유 |
+| 파일·심볼 | 책임 | 생성·소유 |
 | --- | --- | --- |
 | `crates/domain/src/handshake.rs` `HandshakeParser` | 250바이트 누적과 완료 판정. 완료 전에는 의미를 해석하지 않는다. | 연결마다 하나. app의 요청 읽기 작업이 소유한다. |
 | 같은 파일의 `HandshakeRequest`, `HandshakeError`, `Mode`, `TargetAddress`, `TargetHost` | 해석 결과와 형식 오류. `TargetHost`는 `handshake` 모듈 안의 이름이다. `target_policy::TargetHost`와는 다른 타입이다. | 요청 완료 때 하나. 다음 단계로 이동한다. |
@@ -52,17 +54,17 @@ flowchart LR
 | `crates/app/src/relay/handshake.rs` | 시작 바이트 쓰기, 제한된 읽기, 기한·단절 구분 | `handle_connection`이 호출한다. |
 | `crates/app/src/events.rs`, `crates/adapters/src/ops_log.rs` | 초기 교환 거절 사건 타입과 JSON Lines 필드 | 기존 사건 처리 방식을 확장한다. |
 | `crates/adapters/src/net.rs` `TcpEntryPoint::run` | 허용 연결마다 `TcpRelayStream`으로 감싼 소켓을 `handle_connection`에 넘기고, 유효 요청은 `dispatch`로 잇는다. | 기존 `accept_connections`의 `JoinSet`이 연결 작업을 관리한다. |
-| `src/serve.rs` `listen_until_shutdown` | 모드 설정·H·B·`EventSink`·`Clock`으로 서비스를 조립하고 진입점에 공유 | 프로세스 실행마다 하나 |
+| `src/serve.rs` `listen_until_shutdown` | 모드 설정·H·B·E·`EventSink`·`Clock`으로 서비스를 조립하고 진입점에 공유 | 프로세스 실행마다 하나 |
 
-`crates/app/src/relay.rs`와 `relay/`를 함께 쓴다. `relay/mod.rs`는 만들지 않는다. app은 tokio의 시간·동기화·입출력 trait만 쓴다. app의 `Cargo.toml`에는 필요한 tokio 기능만 추가한다. 소켓 타입은 adapters에 남긴다. 형식·레이어·이름은 [Rust 컨벤션](../conventions/rust.md#2-규칙)을 따른다.
+`crates/app/src/relay.rs`와 `relay/`를 함께 쓴다. `relay/mod.rs`는 없다. app은 tokio의 시간·동기화·공통 입출력 trait만 쓴다. 소켓 타입은 adapters에 남긴다. 형식·레이어·이름은 [Rust 컨벤션](../conventions/rust.md#2-규칙)을 따른다.
 
-app은 tokio의 시간·동기화·공통 입출력 trait만 쓴다. `crates/app/clippy.toml`은 `tokio::net`·`tokio::fs`·`tokio::process`·`tokio::signal`의 입출력 타입·함수를 금지한다. 이 금지 목록을 추가했으므로 [코드 지도 7절](code-map.md#7-확인하지-못한-부분)의 “app의 tokio 입출력 금지 목록” 행을 지웠다.
+`crates/app/clippy.toml`은 `tokio::net`·`tokio::fs`·`tokio::process`·`tokio::signal`의 입출력 타입·함수를 금지한다.
 
 tokio 금지 항목에는 `allow-invalid = true`를 둔다. 플랫폼 전용 경로와 꺼진 기능의 경로는 현재 빌드에서 존재하지 않을 수 있기 때문이다. 해당 경로가 빌드에 나타나면 금지는 그대로 적용된다. 금지 목록 검사를 위해 app에 OS 입출력 기능을 켜지는 않는다.
 
 ## 3. domain API와 데이터 모델
 
-아래 domain API를 구현했다. 공개 상수는 `HANDSHAKE_REQUEST_LEN = 250`과 `VIEWER_GREETING: &[u8; 12]`다. app 서비스는 Viewer 스트림에 시작 바이트를 보낸다. TCP 진입점은 서비스를 호출한다. WS·WSS 진입점에서는 아직 서비스를 호출하지 않는다.
+아래 domain API를 구현했다. 공개 상수는 `HANDSHAKE_REQUEST_LEN = 250`과 `VIEWER_GREETING: &[u8; 12]`다. app 서비스는 Viewer 스트림에 시작 바이트를 쓰고 flush한다. TCP·WS·WSS 진입점 모두 이 서비스를 호출한다.
 
 | API | 입력·출력 | 보장 |
 | --- | --- | --- |
@@ -83,13 +85,13 @@ tokio 금지 항목에는 `allow-invalid = true`를 둔다. 플랫폼 전용 경
 
 ### 기존 파서 재사용
 
-| 문법 | 현재 코드 | 제안 |
+| 문법 | 재사용 코드 | 현재 적용 |
 | --- | --- | --- |
 | 단일 IPv4 | `allow_list::parse_address`의 `Ipv4Addr` 해석 | 숫자와 점만 있는 호스트는 이 함수로 해석한다. 실패를 DNS 이름으로 되돌리지 않는다. 앞자리 0을 받지 않는다. |
 | DNS 이름 | `origin::is_dns_name`, `target_policy::TargetItem::parse`의 끝 점 제거·소문자화 | 같은 검증 함수를 부른다. 끝 점 제거와 소문자화도 기존 방식대로 한다. 라벨과 전체 길이 규칙을 다시 작성하지 않는다. |
 | 대괄호 IPv6 | `allow_list::parse_address`, `origin::is_valid_host`의 `Ipv6Addr` 해석 | 대괄호를 제거한 뒤 같은 표준 `Ipv6Addr` 파서를 쓴다. `%`는 거절한다. 단일 주소만 받는다. |
 | IPv4-mapped IPv6 | `PeerIp::new`가 쓰는 `IpAddr::to_canonical` | 대상 주소에도 같은 표준 변환을 쓴다. `PeerIp` 타입을 대상 값으로 쓰지는 않는다. |
-| 요청 포트 | `target_policy::parse_port`는 설정용이다. 앞자리 0도 받는다. | 십진수·범위 판정은 기존 방식을 따른다. 요청에서는 그 앞에 앞자리 0 거절을 추가한다. 설정 포트 문법은 바꾸지 않는다. |
+| 요청 포트 | `target_policy::parse_port`는 설정용이다. 앞자리 0도 받는다. | 요청은 십진수·범위를 검사하며 앞자리 0을 거절한다. 설정 포트 문법은 바꾸지 않는다. |
 
 `IpItem::parse`나 `TargetItem::parse`를 요청 전체에 적용하지 않는다. 그 함수들은 CIDR·주소 범위·포트 범위를 받는다. 요청은 단일 호스트와 단일 포트만 받는다. `target_policy::TargetHost::Ip(IpItem)`도 요청 결과에 재사용하지 않는다.
 
@@ -110,21 +112,21 @@ tokio 금지 항목에는 `allow-invalid = true`를 둔다. 플랫폼 전용 경
 
 | 순서 | 코드 위치·처리 | 전달 값·결과 |
 | --- | --- | --- |
-| 1 | `src/serve.rs`가 `RelayService`를 조립한다. | `mode1.enabled`, `mode2.enabled`, `timeouts.handshake`, `limits.buffer_bytes`, 공유 `EventSink`·`Clock` |
+| 1 | `src/serve.rs`가 `RelayService`를 조립한다. | `mode1.enabled`, `mode2.enabled`, H·B·E, 공유 `EventSink`·`Clock` |
 | 2 | `net.rs`의 `accept_connections`가 IP → L → K → `conn_id` → `connection_accepted` 순서를 유지한다. | 소켓과 기존 `BudgetPermit` 하나 |
-| 3 | TCP 연결 작업이 `ConnectionContext`와 스트림을 `handle_connection`에 넘긴다. | `conn_id`, `entry_point`, `peer_ip`, 수락 시각, 초기 교환 진입 시각, 종료 알림 |
-| 4 | app이 H의 절대 기한을 만든다. Viewer면 즉시 `RFB 000.000\n`을 한 번 쓴다. Server에는 쓰지 않는다. | 시작 바이트 쓰기도 같은 H 안에 둔다. 쓰기가 끝난 뒤 H를 다시 시작하지 않는다. |
+| 3 | TCP·WS·WSS 연결 작업이 `ConnectionContext`와 스트림을 `handle_connection`에 넘긴다. | 실제 상대 주소·수락 시각·초기 교환 진입 시각과 종료 알림 |
+| 4 | app이 H의 절대 기한을 만든다. Viewer면 즉시 `RFB 000.000\n`을 한 번 쓰고 flush한다. Server에는 쓰지 않는다. | 쓰기·flush도 같은 H 안에 둔다. 이후 H를 다시 시작하지 않는다. |
 | 5 | 요청을 읽어 `feed`에 넣는다. 매번 소비 길이와 완료 여부를 확인한다. | 250바이트 미만이면 같은 기한으로 계속 읽는다. |
 | 6 | 250바이트가 H 안에 모였으면 `finish`를 부른다. | 잘못된 값·꺼진 모드는 6절로 간다. 유효 요청이면 H 감시를 끝낸다. |
 | 7 | 결과·스트림·후속 데이터·문맥·`BudgetPermit`을 `PreparedConnection<S>`로 묶는다. | `handle_connection`은 유효 요청을 호출자에게 반환한다. 임시 보류·닫기·가짜 인계를 하지 않는다. TCP·WS·WSS 호출자가 `dispatch`를 실행한다([연결 순서](relay-session.md#8-현재-코드와의-차이와-연결-순서)). |
 
-`ConnectionContext`의 시각은 공유 `Clock::monotonic()`이 주는 `Duration`이다. 수락 시각은 adapters가 수락 처리에서 잡는다. TCP의 초기 교환 진입 시각은 IP·L 검사 통과 직후다. 현재 `Accepted.at`은 이 위치에서 `Instant::now()`로 채운다. 이 의미를 유지한다. WS·WSS의 초기 교환 시각은 101 응답 완료 직후로 잡는다. `elapsed_ms`는 H의 시작점이 아니라 수락 시각부터 계산한다.
+`ConnectionContext`의 단조 시각은 공유 `Clock::monotonic()`이 주는 `Duration`이다. 수락 시각은 adapters가 수락 처리에서 잡는다. TCP의 초기 교환 진입 시각은 IP·L 검사 통과 직후다. `Accepted.at`은 이 위치에서 `Instant::now()`로 채운다. WS·WSS의 초기 교환 시각은 101 응답 완료 직후다. `elapsed_ms`는 H의 시작점이 아니라 수락 시각부터 계산한다.
 
-app은 기존 `Clock` 포트를 재사용한다. `tokio::time::sleep`에는 남은 시간을 넘긴다. 읽기나 쓰기가 깨어난 직후에도 단조 시각을 확인한다. 타이머 분기만 믿고 H가 지난 요청을 수락하지 않는다. 청크마다 기한을 늘리지 않는다. 정확히 기한에 이르렀으면 만료로 처리하는 안을 제안한다(이 문서의 판단, 사용자 결정 없음). H 전에 관찰한 EOF는 `peer_eof`다. H 만료를 먼저 관찰했다면 `handshake_timeout`이다.
+app은 기존 `Clock` 포트를 재사용한다. `tokio::time::sleep`에는 남은 시간을 넘긴다. 읽기나 쓰기가 깨어난 직후에도 단조 시각을 확인한다. 타이머 분기만 믿고 H가 지난 요청을 수락하지 않는다. 청크마다 기한을 늘리지 않는다. `now >= deadline`이면 만료다(**이 문서의 판단, 사용자 결정 없음**). H 전에 관찰한 EOF는 `peer_eof`다. H 만료를 먼저 관찰했다면 `handshake_timeout`이다.
 
-이 구조를 구현할 때 `Accepted`의 시각과 WS·WSS의 U 계산도 같은 기준으로 연결해야 한다. U의 시작·범위는 바꾸지 않는다. `Clock`과 tokio 타이머는 같은 시간 흐름으로 시험한다. app 단위 시험에는 제어 가능한 `Clock`과 tokio의 정지 시각 기능을 함께 쓴다. 실제 소켓과 대기는 adapters·시스템 시험에만 둔다.
+수락 시각과 WS·WSS의 U·H 계산은 공통 단조 시계 기준으로 연결된다. U의 시작·범위는 바꾸지 않는다. app 단위 시험은 제어 가능한 `Clock`과 tokio 정지 시각을 함께 쓴다. 실제 소켓과 대기는 adapters·시스템 시험에 둔다.
 
-`handle_connection(stream, context, permit, shutdown)`은 `Result<PreparedConnection<S>, RelayError>`를 내는 future를 반환한다. `S`는 `AsyncRead + AsyncWrite + Unpin + Send`다. `ConnectionContext`는 `conn_id`, `entry_point`, `peer_ip`, `accepted_at`, `exchange_at`을 가진다. 시각은 공유 `Clock`의 단조 시각이다. 현재 `RelayService::new`는 `HandshakePolicy`, H, B, `Arc<dyn Clock>`, `Arc<dyn EventSink>`를 받는다. `RelayError`는 거절과 중단을 구분한다. 실패하면 스트림과 permit을 버린 뒤 한 사건만 기록한다. 유효 요청에서는 사건을 추가하지 않고 소유권을 호출자에게 돌려준다. TCP는 [세션 수명 설계 8절](relay-session.md#8-현재-코드와의-차이와-연결-순서)의 순서대로 `handle_connection` → `dispatch`로 연결했다. WS·WSS도 `638cf09`에서 같은 순서로 연결했다. `hold`와 `closed_before_data`는 제거했다.
+`handle_connection(stream, context, permit, shutdown)`은 `Result<PreparedConnection<S>, RelayError>`를 내는 future를 반환한다. `S: RelayStream`이다. 종료 입력은 `watch::Receiver<RelayLifecycle>`이다. `ConnectionContext`는 `conn_id`, `entry_point`, `peer_ip`, `peer_addr`, `accepted_wall`, `accepted_at`, `exchange_at`을 가진다. `accepted_wall`은 표시용 벽시계다. 나머지 두 시각은 공유 `Clock`의 단조 시각이다. `RelayService::new(modes, H, B, E, clock, events)`로 만든다. 실패하면 E 안에서 close action을 진행하고 stream → permit → 사건 순서로 정리한다. 유효 요청은 소유권을 호출자에게 돌려준다. TCP·WS·WSS는 같은 연결 작업에서 `dispatch(prepared, &runtime)`을 실행한다.
 
 ## 5. 후속 바이트와 B
 
@@ -135,9 +137,9 @@ app은 기존 `Clock` 포트를 재사용한다. `tokio::time::sleep`에는 남�
 - 후속 데이터 버퍼와 다음 단계의 읽기 대기 데이터는 같은 연결의 B를 나눠 쓴다. 후속 데이터가 `n`바이트면 새로 읽을 수 있는 양은 최대 `B - n`바이트다. B가 차면 상대에게 보낼 때까지 읽기를 멈춘다.
 - 새 단계는 버퍼를 복제하지 않고 이동받는다. 저장한 후속 데이터를 먼저 소진한다. 그 뒤에만 소켓에서 읽은 데이터를 전달한다. 소진한 길이를 갱신해 같은 데이터를 다시 보내지 않는다.
 - 초기 요청 고정 공간은 프로토콜 해석용이다. B는 초기 요청 뒤의 중계 데이터에 적용한다. 아직 읽지 않은 OS 소켓 버퍼를 app 버퍼로 미리 복사하지 않는다.
-- 2.7은 후속 데이터가 실제 상대에게 도착했다고 주장하지 않는다. 내부 보존은 시험할 수 있다. 실제 첫 바이트·한 번 전달은 2.8·2.9·2.10이 이어진 뒤 시험한다.
+- 후속 데이터의 실제 전달은 `tests/relay_entry_scenarios.rs`와 `crates/adapters/tests/websocket_relay.rs`가 확인한다. 내부 보존 시험과 종단 간 전달 시험을 구분한다.
 
-WS·WSS를 연결하는 선택은 추가 조건을 가진다. 바이너리 메시지 안에서 250바이트 경계를 나눠야 한다. 메시지의 나머지도 B에 포함한다. 메시지 전체를 먼저 할당하는 방식은 M이 B보다 클 때 B를 지킬 수 없다. 이 문제는 [TODO 3.3](../TODO.md#3-wswss-진입점)과 WS-TBD-004의 범위다. 2.7에서 WS를 연결한다면 이를 우회하는 임시 해석기를 만들지 않는다.
+WS·WSS는 바이너리 메시지 안의 250바이트 경계를 나누고 메시지의 나머지도 B에 포함한다. `WsRelayStream`은 프레임을 호출자의 남은 버퍼 길이까지만 읽는다. M>B여도 메시지 전체를 먼저 할당하지 않는다. [WS 스트림 설계](websocket-stream.md)가 프레임·메시지·B의 관계를 설명한다.
 
 app의 일반 tokio 기능은 `time`, `sync`, `io-util`뿐이다. `macros`, `rt`, `test-util`은 개발 의존에서만 켠다. `test-util`은 정지 시각 시험에 필요하다([Tokio 1.54.0 시간 문서](https://docs.rs/tokio/1.54.0/tokio/time/fn.pause.html)). 제품 코드에서는 `tokio::select!`를 쓰지 않는다. `std::future::poll_fn`으로 종료 알림·H·입출력 순서를 기다린다. 완료 직전에도 종료·H를 다시 확인한다. 이 구조는 이 문서의 판단이며 사용자 결정은 없다. app의 clippy 금지 목록은 tokio의 소켓·파일·프로세스·신호 타입과 함수도 막는다.
 
@@ -150,78 +152,54 @@ app의 일반 tokio 기능은 `time`, `sync`, `io-util`뿐이다. `macros`, `rt`
 | 모드 비활성 | 위와 같은 거절 사건, `reason = mode_disabled`, 판정한 `mode` 필수 | TCP FIN. 오류 바이트 없음 |
 | 250바이트 전 정상 EOF | `connection_aborted`, `stage = initial_exchange`, `reason = peer_eof`, `elapsed_ms`, `info` | 상대가 이미 닫았다. 계약의 `handshake_incomplete`에 대응한다. |
 | H 만료 | 같은 중단 사건, `reason = handshake_timeout`, `warn` | TCP FIN |
-| 시작 바이트 쓰기·요청 읽기 오류 | 같은 중단 사건, `reason = connection_error`, `error_kind = io_error`, `warn` | 해당 연결만 정리 |
+| 시작 바이트 쓰기·flush·요청 읽기 오류 | 같은 중단 사건. typed 오류는 `connection_error`와 원래 `error_kind`를 보존한다. 응답 없는 연결은 `dead_connection`이다. | 해당 연결만 정리 |
 | 서버 종료 알림 | 같은 중단 사건, `reason = server_shutdown`, `info` | 미완성 연결 정리 |
 | 유효 요청 | 새 성공 사건을 만들지 않는다. | 다음 단계의 등록·연결·세션 사건은 각 작업이 만든다. |
 
 기존 `Event::ConnectionRejected`에는 `conn_id`·`mode`가 없다. 수락 뒤 거절을 나타내는 `Event::HandshakeRejected`를 별도로 구현했다. 이 사건은 `conn_id`, `entry_point`, `peer_ip`, `reason`, `mode: Option<Mode>`를 받는다. JSON 사건 이름은 `connection_rejected`이고 `stage`는 항상 `initial_exchange`다. `RejectReason::HandshakeInvalid`·`ModeDisabled`를 추가했다. `ModeDisabled`일 때 `Some(Mode)`를 주는 책임은 호출자에게 있다. 모드를 확정하지 못했으면 생략한다. `AbortReason::PeerEof`와 `HandshakeTimeout`은 그대로 쓴다. `handshake_incomplete`라는 새 로그 사유는 만들지 않았다. 실제 연결에서는 `relay.rs`의 `handle_connection` 실패 경로가 이 사건을 쓴다.
 
-초기 요청·채움·후속 데이터·ID 원문은 기록하지 않는다. 2.7은 `relay_id_ref` 키를 만들지 않는다. 그 시작 순서와 생성 실패는 [TODO 2.9](../TODO.md#2-b-중계-기능)가 맡는다.
+초기 요청·채움·후속 데이터·ID 원문은 기록하지 않는다. 초기 교환은 `relay_id_ref`를 계산하지 않는다. `src/serve.rs`가 시작 키를 만들고 `RelayRuntime`에 주입한다. ref 계산은 Mode II 등록 단계의 책임이다.
 
-거절·중단은 스트림과 후속 데이터를 버리고 L 자리를 돌려준 뒤 사건을 쓴다(이 문서의 판단, 사용자 결정 없음). 사건 처리기가 자원 해제보다 먼저 실행되지 않게 한다. 연결 하나에 거절·중단을 중복 기록하지 않는다. `AsyncWrite::shutdown`을 기다리지 않으므로 닫기 대기가 H를 넘지 않는다. 읽지 않은 수신 데이터 때문에 OS가 RST를 보낼 수 있다는 계약의 주의도 유지한다.
+거절·중단은 E 안에서 close action을 진행한다. 절대 E·Grace의 G·Force 중 먼저 온 경계에서 기다림을 끝낸다. 이후 스트림과 후속 데이터를 버리고 L 자리를 돌려준 뒤 사건 하나를 쓴다(**이 문서의 판단, 사용자 결정 없음**). E는 H와 별도다. 닫기를 기다리면서 H를 다시 시작하지 않는다. 읽지 않은 수신 데이터 때문에 OS가 RST를 보낼 수 있다는 계약의 주의도 유지한다.
 
-`PreparedConnection<S>`는 스트림과 `BudgetPermit`을 함께 소유한다. 단계가 바뀌어도 L을 다시 잡거나 일찍 돌려주지 않는다. 실패·취소 때는 스트림을 먼저 닫고 그 뒤 permit을 버린다. 수락 반복은 종료 알림을 보낸 뒤 모든 연결 작업을 거둔다. `server_stopped`는 그 뒤에 기록한다. 2.7은 Lw·대기 등록·활성 등록을 만들지 않으므로 이들의 해제 경로도 만들지 않는다.
+`PreparedConnection<S>`는 스트림과 `BudgetPermit`을 함께 소유한다. 단계가 바뀌어도 L을 다시 잡거나 일찍 돌려주지 않는다. 실패·취소 때는 스트림을 먼저 버리고 그 뒤 permit을 버린다. 수락 반복은 종료 알림을 보낸 뒤 연결 작업을 거둔다. `server_stopped`는 그 뒤에 기록한다. 초기 교환은 Lw·대기·활성 등록을 소유하지 않는다.
 
 서비스 호출 시 스트림과 permit을 비공개 자원 묶음으로 옮긴다. 반환된 future가 아직 실행되지 않았거나 도중에 버려져도 스트림을 먼저 버린다. 이를 위해 `handle_connection`은 future를 반환하는 일반 함수로 쓴다. 호출자는 기존 비동기 함수처럼 `.await`한다. 자원 묶음에는 별도 할당이 없다.
 
-WS·WSS를 연결한다면 형식 오류는 close 4008(`handshake_invalid`), H는 4009(`handshake_timeout`), 비활성 모드는 1008(`mode_disabled`)다. 시작 바이트는 101 뒤 첫 바이너리 메시지 하나다. Close 전송 실패가 L 반환을 막아서는 안 된다. Close 정리의 E는 [WebSocket 계약 1.6절](../contracts/websocket-relay-v1.md#16-종료-의미)을 따른다. 이 문장은 2.7 연결 여부의 결정을 대신하지 않는다.
+WS·WSS의 형식 오류는 Close 4008(`handshake_invalid`), H는 4009(`handshake_timeout`), 비활성 모드는 1008(`mode_disabled`)다. 시작 바이트는 101 뒤 첫 바이너리 메시지 하나다. Close 전송 실패가 L 반환을 막지 않는다. Close 정리의 E는 [WebSocket 계약 1.6절](../contracts/websocket-relay-v1.md#16-종료-의미)을 따른다.
 
-## 7. 테스트 계획
+<a id="7-테스트-계획"></a>
 
-domain 단위 시험 10개, app 단위 시험 8개와 운영 로그 계약 시험 1개를 구현했다. adapters·시스템 시험의 미구현 행은 아래 계획으로 남는다. `partial`은 [테스트 컨벤션](../conventions/testing.md#2-규칙)의 실제 표식 접미사다. 내부 값·로그만 확인하는 시험을 시스템 시나리오 전체로 표시하지 않는다. 실행 결과는 [8절](#실행-기록)에 적는다.
+## 7. 현재 시험
 
-| 시나리오 | 계획 테스트 파일·함수 | 표식·확인 범위 | 남은 범위 |
-| --- | --- | --- | --- |
-| RLY-001 | `crates/adapters/tests/handshake.rs` `accepts_viewer_and_server_requests_with_the_entry_point_role` | `/// spec: relay.md:RLY-001`. 두 진입점의 실제 연결과 app 인계를 확인한다. Viewer의 시작 바이트 1회와 Server의 시작 바이트 없음도 확인한다. | 2.8~2.10 구현 뒤 실제 TCP `handle_connection` → `dispatch` 인계 필요([8절 연결 순서](relay-session.md#8-현재-코드와의-차이와-연결-순서)) |
-| RLY-001 | `crates/app/src/relay/handshake.rs` `sends_the_viewer_greeting_once_and_sends_none_to_the_server` | `/// spec: relay.md:RLY-001 partial`. 메모리 스트림에서 역할별 시작 바이트와 유효 요청 반환을 확인한다. | 실제 TCP 수락·인계는 위 행 |
-| RLY-002 | `crates/domain/src/handshake.rs` `parses_the_same_request_at_every_split_boundary` | `/// spec: relay.md:RLY-002 partial`. 0~250의 모든 분할 지점, 1바이트씩 수신, 한 번에 수신을 같은 요청과 비교한다. | 실제 TCP 읽기 경로는 다음 행 |
-| RLY-002 | `crates/adapters/tests/handshake.rs` `parses_split_and_coalesced_tcp_requests_identically` | `/// spec: relay.md:RLY-002`. 실제 TCP와 app 인계 결과를 비교한다. 테스트 생성기의 쓰기 경계를 읽기 경계로 가정하지 않는다. | D에 따른 실제 TCP 인계 뒤 실행 |
-| RLY-002 | `crates/app/src/relay/handshake.rs` `parses_split_and_coalesced_requests_identically` | `/// spec: relay.md:RLY-002 partial`. 메모리 스트림의 여러 분할과 모아 보낸 입력을 비교한다. | 실제 TCP 읽기 경로는 위 행 |
-| RLY-003 | `crates/app/src/relay/handshake.rs` `preserves_trailing_bytes_and_counts_them_against_b` | `/// spec: relay.md:RLY-003 partial`. 요청 뒤 바이트의 순서·중복 없음·B 잔여량·단계 간 이동을 확인한다. | 상대 스트림의 첫 바이트로 실제 도착하는 결과는 2.8 또는 2.9와 2.10 필요 |
-| RLY-003 | `tests/relay.rs` `delivers_coalesced_trailing_bytes_once_before_later_stream_bytes` | 2.10에서 추가할 완전 시험. `/// spec: relay.md:RLY-003`. 후속 데이터와 나중 데이터가 실제 상대에 한 번씩 도착함을 비교한다. | 2.7에 미리 성공 시험이나 가짜 중계를 만들지 않음 |
-| RLY-004 | `crates/domain/src/handshake.rs` `rejects_empty_values_invalid_ids_and_invalid_targets` | `/// spec: relay.md:RLY-004 partial`. 빈 값·비숫자 ID·빈 ID·Server의 비접두어·대상 문법 오류를 코드로 비교한다. | 종료와 사건은 다음 행 |
-| RLY-004 | `crates/adapters/tests/handshake.rs` `rejects_invalid_requests_without_registration_and_logs_the_reason` | `/// spec: relay.md:RLY-004`. 연결 종료·초기 교환 거절 사건·L 반환을 확인한다. 대상 연결이나 대기 인계를 하지 않았음도 확인한다. | D에 따른 실제 TCP 인계 필요. 2.7에 등록·연결 기능이 없다는 사실만으로 시험을 통과시키지 않음 |
-| RLY-004·RLY-022 | `crates/app/src/relay/handshake.rs` `rejects_invalid_and_disabled_requests_without_preparing_a_connection` | 두 시나리오의 `partial` 표식. 거절 결과·단일 사건·종료·L 회수를 확인한다. | 실제 진입점 인계와 이후 단계 없음은 adapters 시험에서 확인 |
-| RLY-005 | `tests/serve.rs` `tells_a_peer_close_from_an_initial_exchange_that_outlives_h` | 기존 표식은 `partial`이다. 2.7에서 0바이트·1바이트·249바이트 뒤 EOF, 멈춘 입력의 H, 재접속으로 L 회수를 확인하도록 확장한다. RLY-005 기대를 모두 확인한 뒤에만 `partial`을 뺀다. | 기존 시험은 바이트 전 EOF와 H만 확인함 |
-| RLY-022 | `crates/domain/src/handshake.rs` `rejects_disabled_modes_before_validating_their_payloads` | `/// spec: relay.md:RLY-022 partial`. 두 모드·역할, 활성 값 조합, 비활성 모드의 틀린 본문도 확인한다. | 실제 종료·등록 전 거절은 다음 행 |
-| RLY-022 | `crates/adapters/tests/handshake.rs` `refuses_disabled_modes_before_any_target_or_waiting_handoff` | `/// spec: relay.md:RLY-022`. 유효한 Mode I·II 요청의 종료, `mode_disabled`와 `mode`, 인계 없음, L 반환을 확인한다. | D에 따른 실제 TCP 인계 뒤 실행 |
-| OPS-006 일부 | `tests/serve.rs` `tells_a_peer_close_from_an_initial_exchange_that_outlives_h` | `/// spec: operations.md:OPS-006 partial` 유지. TCP H 원인·자원 회수를 확인한다. | U는 기존 별도 시험 범위다. WS H는 A에 따라 `638cf09`에서 연결했다. 별도 검증은 남아 있다 |
-| RLY-005·OPS-006 일부 | `crates/app/src/relay/handshake.rs` `distinguishes_peer_eof_from_the_absolute_h_timeout` | 두 시나리오의 `partial` 표식. 0·1·249바이트 뒤 EOF와 입력 정지 H를 구분한다. | 실제 TCP 진입점과 종료 작업 회수는 시스템 시험에서 확인 |
+아래 표는 현재 시험 소스와 표식이다. 실행 결과는 [실행 기록](#실행-기록)과 구분한다. `partial`은 [테스트 컨벤션](../conventions/testing.md#2-규칙)의 실제 표식 접미사다.
 
-기존 시스템 시험을 확장할 때는 TCP Viewer의 12바이트 시작 바이트를 먼저 읽는다. 그 바이트를 읽지 않은 채 기존 `closed_within` 판정을 재사용하면 데이터 도착과 연결 종료를 혼동할 수 있다. 기존 `tests/serve.rs`의 RLY-005 `partial` 시험은 이번 변경에서 고치지 않았다. 신규 domain·로그 시험도 진입점에서의 수명 검증을 대신하지 않는다.
+| 범위 | 현재 시험 파일·함수 | 표식·확인 범위 |
+| --- | --- | --- |
+| 역할·분할·후속 데이터 | `tests/relay_entry_scenarios.rs` `accepts_both_tcp_roles_and_preserves_split_and_merged_requests_with_prefixes_once` | RLY-001·002·003 전체 표식. 실제 TCP 양 역할의 요청과 후속 데이터가 상대에게 한 번 도착함을 확인 |
+| 잘못된 요청 | 같은 파일의 `rejects_every_malformed_initial_value_without_registration_or_target_socket` | RLY-004 전체 표식. 종료·사건·L 반환과 등록·대상 연결 없음 |
+| EOF와 H | 같은 파일의 `incomplete_disconnect_and_h_timeout_have_distinct_causes_and_return_l_for_each_role` | RLY-005 전체 표식. 양 역할의 미완성 EOF와 H를 구분 |
+| 꺼진 모드 | 같은 파일의 `disabled_modes_reject_before_waiting_registration_or_target_connect` | RLY-022 전체 표식. 모드 비활성은 등록·대상 연결 전에 거절 |
+| domain 값 | `crates/domain/src/handshake.rs`, `crates/domain/src/relay_id.rs` | RLY-001~004·022의 부분 표식. 모든 분할 위치, NUL·채움, 대상 문법, 정확 ID와 앞자리 0 |
+| H·소유권·실패 종료 | `crates/app/src/relay/handshake.rs` | RLY-001~005·022, OPS-006 등의 부분 표식. 절대 H, typed 오류, E 뒤 회수와 stream → permit → 사건 순서 |
+| WS·WSS 실제 인계 | `crates/adapters/tests/websocket_relay.rs` `ws_and_wss_forward_initial_trailing_data_once` | WS-018·003~006 전체 표식, RLY-003 부분 표식. 양 접속 순서와 후속 데이터 전달 |
+| WS·WSS 초기 실패 | 같은 파일의 `invalid_initial_requests_close_4008_and_log_the_rejection`, `incomplete_initial_exchange_closes_4009_and_logs_h_timeout`, `disabled_modes_close_1008_before_registration_or_target_connect` | RLY-004·005·022와 OPS-006 부분 표식. Close·사건·예산 회수 |
+| 사건 계약 | `crates/adapters/tests/ops_info_contract.rs` `writes_initial_exchange_rejections_with_conn_id_and_disabled_mode` | 필드·이름·level·원문 비노출. 실제 진입점 수명 시험을 대신하지 않음 |
 
-등록·대상 연결 전 인계 여부는 `handle_connection`의 해석 결과와 인계 경계를 관찰한다. 시험에서 실제 기능 대신 성공을 반환하는 중계 구현을 제품 코드에 넣지 않는다.
+`does_not_restart_h_on_partial_reads_or_greeting_writes`는 느린 쓰기·읽기에도 H가 연장되지 않음을 확인한다. `drops_the_stream_before_l_when_preparation_is_cancelled`는 future를 첫 실행 전이나 읽기 대기 중에 버려도 스트림을 먼저 회수하는지 확인한다. 둘 다 `crates/app/src/relay/handshake.rs`의 내부 회귀 시험이다.
 
-추가 단위·계약 시험은 다음과 같다.
-
-- `crates/domain/src/relay_id.rs` `keeps_leading_zeroes_and_accepts_one_to_247_digits`: 1·247자리, `0123`과 `123`, 248자리 직접 생성 거절, 비ASCII·공백·기호를 확인한다.
-- `crates/domain/src/handshake.rs` `ignores_padding_after_the_first_nul_and_accepts_no_nul_requests`: 임의 채움과 NUL 없는 250바이트를 확인한다. 최대 길이 `ID:` + 247자리도 포함한다.
-- 같은 파일의 `parses_targets_with_the_existing_address_and_name_rules`: IPv4·대문자 DNS·끝 점·대괄호 IPv6·mapped IPv6·포트 생략·1·65535와 잘못된 0·65536·앞자리 0을 확인한다.
-- `crates/app/src/relay/handshake.rs` `does_not_restart_h_on_partial_reads_or_greeting_writes`: 느린 쓰기·읽기에도 기한이 연장되지 않음을 확인한다. H 직전·정확히 H·H 뒤에 준비된 마지막 바이트를 포함한다.
-- 같은 파일의 `releases_the_stream_and_permit_before_logging_an_abort`: EOF·시간 초과·I/O 오류·서버 종료의 단일 기록과 L 회수를 확인한다.
-- 같은 파일의 `drops_the_stream_before_l_when_preparation_is_cancelled`: future를 첫 실행 전과 읽기 대기 중에 버린다. 두 경우 모두 스트림을 먼저 버리고 L을 돌려주는지 확인한다.
-- `crates/adapters/tests/repeater_handshake_contract.rs` `follows_the_adopted_request_and_greeting_examples`: 계약 5절 예제와 250바이트·ID·대상 문법을 확인한다. 구현 때 계약 5절의 미생성 행을 실제 파일·함수와 실행 기록으로 바꾼다.
-- `crates/adapters/tests/ops_info_contract.rs` `writes_initial_exchange_rejections_with_conn_id_and_disabled_mode`: 필드·이름·`level`·원문 비노출을 확인한다.
-
-기존 OPS-006 시험은 그대로 추적한다. `crates/adapters/tests/websocket.rs`의 `stalled_upgrade_request_is_closed_at_u_without_a_reply`, `stalled_tls_handshake_on_wss_is_closed_at_u_without_a_reply`, `head_completed_after_u_gets_no_answer`는 U 시험이다. `crates/adapters/tests/management.rs`의 `stalled_tls_handshake_is_closed_after_u_without_an_answer`, `idle_connection_after_a_reply_is_closed_after_u`도 U 시험이다. 이들의 `partial`을 2.7 완료만으로 지우지 않는다.
-
-WS·WSS는 A에 따라 `638cf09`에서 연결했다. `crates/adapters/tests/websocket.rs`에 `sends_the_greeting_as_the_first_binary_message_after_101`, `times_out_an_incomplete_request_from_the_101_deadline`, `preserves_a_request_split_across_binary_messages`를 추가한다. 마지막 시험은 `/// spec: websocket.md:WS-018 partial`이다. 필요한 바이너리 스트림 변환과 B 계산은 3.3에서 앞당긴다. 실제 중계 도착 결과까지 확인하기 전에는 WS-018의 `partial`을 빼지 않는다.
+U는 별도 시험 범위다. `crates/adapters/tests/websocket.rs`의 HTTP·TLS 지연 시험과 `crates/adapters/tests/management.rs`의 TLS·유휴 시험이 맡는다. H 시험의 존재만으로 OPS-006 전체를 확인했다고 보지 않는다.
 
 ## 8. 현재 코드와 목표의 차이
 
-| 항목 | 읽어서 확인한 현재 코드 | 목표 변경 |
-| --- | --- | --- |
-| TCP 초기 교환 | `net.rs`의 `TcpEntryPoint::run`은 `handle_connection` → `dispatch`를 부른다. `hold`와 `closed_before_data`는 없다. | TCP는 연결 상태를 유지한다. WS·WSS도 `638cf09`에서 같은 순서로 연결했다. |
-| 소스 위치 | TCP 구현은 `crates/adapters/src/net.rs`에 있다. `crates/adapters/src/net/` 디렉터리는 없다. | 이 작업만을 위해 디렉터리로 나누지 않는다. |
-| app·domain | domain 해석기와 ID, app의 `RelayService`·`PreparedConnection`과 단위 시험을 구현했다. tokio 의존과 OS 입출력 금지 목록도 추가했다. | TCP 인계는 `TcpEntryPoint::run`에 연결했다. WS·WSS 인계는 `connection`에 연결했다(`638cf09`). |
-| 시작 바이트 | app 서비스는 Viewer에 한 번 쓴다. Server에는 쓰지 않는다. TCP 진입점은 서비스를 호출하므로 실제 TCP 연결에 보낸다. | TCP는 시스템 시험으로 확인한다. WS·WSS도 101 뒤 첫 바이너리 메시지를 시스템 시험으로 확인한다(검증 남음). |
-| 거절 사건 | `HandshakeRejected`, 두 `RejectReason` 값, JSON 출력과 계약 시험을 구현했다. app의 실패 경로는 자원을 회수한 뒤 사건 하나를 쓴다. | TCP·WS·WSS 진입점의 초기 교환 호출은 연결했다(`638cf09`). 전체 수명 검증은 남아 있다. |
-| WS 101 뒤 | 이전에는 `hold_upgraded`가 프레임을 읽지 않고 H 뒤 close 4009를 보냈다. 이 보류는 제거했다. 현재는 `WsRelayStream`을 `handle_connection`·`dispatch`에 넘긴다(`638cf09`). | 완료(`638cf09`). 바이너리 스트림 변환과 B 계산이 선행 조건이었다. |
-| 업그레이드 잔여 바이트 | `upgrade.rs`의 `read_head`는 `HeadRead::Complete`에 머리 뒤 바이트(`suffix`)를 담아 돌려준다. | 구현 완료(`638cf09`). 잔여 바이트는 `WsRelayStream`이 WebSocket 해석기에 넘긴다. HTTP 바이트를 초기 요청으로 직접 넘기지 않는다. |
-| 2026-11-04 API 대조 | HEAD `ad5cfb2`: `handle_connection`의 S는 `RelayStream`이고 종료 입력은 `watch::Receiver<RelayLifecycle>`이다. `RelayService::new`는 E도 받는다. `ConnectionContext`는 `peer_addr`·`accepted_wall`도 보존한다. 실패 때는 E 안의 close action 뒤 stream → permit → 사건 순서다. | 본문의 단순 AsyncRead/AsyncWrite 경계·생성자 인수·비동기 종료를 기다리지 않는다는 설명을 실제 API에 맞춰야 한다. |
-| 2026-11-04 인계·시험 대조 | TCP와 WS·WSS가 모두 공통 서비스와 dispatch를 호출한다. `tests/relay_entry_scenarios.rs`와 `crates/adapters/tests/websocket_relay.rs`에 실제 인계 시험이 있다. | §3의 WS 미호출 문장과 §7의 미생성 handshake.rs·relay.rs 계획을 정리해야 한다. 이 변경은 본문을 다시 쓰지 않으므로 Current로 바꾸지 않는다. **이 문서의 판단, 사용자 결정 없음** |
+### 2026-11-04 대조 기록
 
-이번 작업 트리의 domain·공통 app 처리·사건·JSON을 구현했다. TCP 진입점은 `handle_connection` → `dispatch`에 연결돼 있고, WS·WSS 인계는 `638cf09`에서 연결했다. 새 시나리오 표식은 모두 `partial`이다. 9절 1·2번은 해결했고, RLY-003의 실제 도착 결과와 WS 검증은 남아 있다. TODO 2.7 전체 완료를 뜻하지 않는다. 임시 보류·닫기·가짜 인계 정책은 추가하지 않았다.
+- 기준: HEAD `e9221c6`과 이 문서 개정 작업 트리다.
+- 방법: domain 해석기, 공통 서비스, TCP·WS·WSS 호출자, 종료 경로와 시험 소스를 읽었다. [코드 지도 검사](code-map.md#2-코드-위치와-구성요소)의 경로·심볼·호출 연결 검사와 사람의 책임 검토를 함께 쓴다.
+- 결과: 본문의 API·생성자·문맥·E 정리 순서와 실제 코드가 일치한다. 세 진입점 모두 `handle_connection` → `dispatch`에 연결되어 있다. 이전의 미생성 시험 계획은 7절의 실제 시험 위치로 바꿨다.
+- 남은 한계: 이 대조는 외부 VNC 제품의 화면·입력 시험을 새로 실행한 기록이 아니다. 초기 교환 모듈은 후속 대상 연결·매칭·G 감독을 소유하지 않는다.
+- 구조 판정: `Current`·`Verified`. **이 문서의 판단, 사용자 결정 없음**. 아래 실행 기록은 당시 기준과 결과를 그대로 보존한다.
+- 이번 검증: WSL `cargo test --test code_map`은 `4 passed; 0 failed`다. 이 시험은 코드 지도의 참조·호출 연결을 검사한다. 모듈 본문은 위 수동 대조로 확인했다. `python D:/vr-tools/tmp/doc_check.py`는 기존 오류 4건만 보고했다(`other=0`). 제품 동작 시험은 이번 문서 개정에서 다시 실행하지 않았다.
 
 ### 실행 기록
 
@@ -272,7 +250,7 @@ WS·WSS는 A에 따라 `638cf09`에서 연결했다. `crates/adapters/tests/webs
 
 ### 1. (해결) 유효한 TCP 요청 뒤의 임시 수명
 
-옵션 D로 정했다(이 문서의 판단, 사용자 결정 없음). `handle_connection`은 유효 요청을 `PreparedConnection`으로 반환한다. 2.8·2.9·2.10이 모두 존재한 뒤 TCP 진입점을 `handle_connection` → `RelayService::dispatch`에 연결한다. 정확한 순서는 [세션 수명 설계 8절](relay-session.md#8-현재-코드와의-차이와-연결-순서)을 따른다. 아래 표는 검토한 대안이다.
+옵션 D로 정했다(**이 문서의 판단, 사용자 결정 없음**). `handle_connection`은 유효 요청을 `PreparedConnection`으로 반환한다. 대상 연결·매칭·중계를 준비한 뒤 TCP 진입점을 `handle_connection` → `RelayService::dispatch`에 연결했다. 순서는 [세션 수명 설계 8절](relay-session.md#8-현재-코드와의-차이와-연결-순서)을 따른다. 아래 표는 당시 검토한 대안이다.
 
 | 선택지 | 장점 | 단점·영향 |
 | --- | --- | --- |
@@ -281,7 +259,7 @@ WS·WSS는 A에 따라 `638cf09`에서 연결했다. `crates/adapters/tests/webs
 | C. 유효 요청도 즉시 닫는다. | 보류 자원이 없다. | 최종 흐름과 다르다. 올바른 거절·중단 원인이 계약에 없으므로 새 임시 정책이 필요하다. |
 | D. 2.8·2.9·2.10을 모두 구현한 뒤 TCP 진입점을 연결하고 2.7을 완료한다. | 계약에 없는 임시 동작을 만들지 않는다. | app 초기 교환을 먼저 구현해도 2.7 전체 완료는 후속 세 작업과 실제 인계까지 기다려야 한다. |
 
-**적용: D.** TCP 진입점은 `hold`를 제거하고 `handle_connection` → `dispatch`로 바꿨다. 유효 요청을 해석한 뒤의 임시 보류·닫기·가짜 인계는 만들지 않는다. WS·WSS의 실제 연결·검증 전에는 TODO 2.7을 완료로 바꾸지 않는다.
+**적용: D.** TCP 진입점은 `hold`를 제거하고 `handle_connection` → `dispatch`로 바꿨다. 유효 요청을 해석한 뒤의 임시 보류·닫기·가짜 인계는 없다. WS·WSS도 같은 경로에 연결되어 있으며 현재 시험은 7절에 적었다.
 
 다른 선택은 계약에 없는 제품 동작을 만든다. A는 W 없는 무기한 보류다. B는 이미 유효한 요청에 `handshake_timeout`을 붙인다. C는 정의되지 않은 닫기 원인을 요구한다. 이를 피하려고 실제 대상 연결·매칭·중계가 모두 준비된 뒤 연결한다. `waiting_registered`·`session_started`를 가짜로 기록하지 않는다.
 
@@ -296,7 +274,7 @@ WS·WSS는 A에 따라 `638cf09`에서 연결했다. `crates/adapters/tests/webs
 | A. 2.7에서 WS·WSS도 공통 초기 교환에 연결한다. | Q16·Q21의 임시 동작 종료 시점과 기존 코드 지도를 따른다. 101 직후 시작 바이트를 적용한다. | 바이너리 스트림 변환이 필요하다. 분할·제어 프레임·M·B가 연관되므로 3.3의 책임 일부가 앞당겨진다. |
 | B. 2.7은 TCP만 연결한다. WS·WSS는 3.3에서 연결한다. | 바이너리 스트림·M·B를 한 작업에서 다룬다. 불완전한 변환기를 만들지 않는다. | Q16·Q21과 TODO 3.2의 현재 계획을 바꾸는 승인이 필요하다. 그때까지 101 뒤 시작 바이트와 유효 요청 처리는 계약과 다르다. |
 
-**적용: A.** Q21의 101 뒤 보류는 `638cf09`에서 제거했다(해결). 연결에는 바이너리 메시지 ↔ 스트림 어댑터와 같은 B 안의 페이로드 계산이 필요하다. 필요한 3.3 범위를 앞당겼다. M > B의 WS-TBD-004와 스트리밍 프레임 코덱은 사용자 결정 2026-11-01(Q77, Q78)로 해소되어 차단이 풀렸다. 단일 메시지만 읽는 임시 해석기는 만들지 않는다. TODO 3.2의 “현재:”와 WebSocket 진입점의 Q21 문구는 그대로 둔다. WS-018은 실제 중계 도착 결과까지 확인하기 전에는 `partial`이다.
+**적용: A.** Q21의 101 뒤 보류는 `638cf09`에서 제거했다. 바이너리 메시지 ↔ 스트림 어댑터와 같은 B 안의 페이로드 계산을 위해 3.3 범위를 앞당겼다. M>B의 WS-TBD-004와 스트리밍 코덱은 사용자 결정 2026-11-01(Q77, Q78)로 해소했다. 단일 메시지만 읽는 임시 해석기는 없다. TODO 3.2의 “현재:”와 WebSocket 진입점 Q21은 당시 결정 기록이다. 현재 WS-018 전체 표식은 실제 중계 도착을 확인하는 `ws_and_wss_forward_initial_trailing_data_once`에 있다. 단위 시험의 부분 표식은 유지한다.
 
 근거: [TODO 3.2의 현재·3.3 완료 조건 WS-018](../TODO.md#3-wswss-진입점), [WebSocket 진입점 9절 항목 1·5·11](websocket-entry-point.md#9-미결정-사항), [코드 지도 3절 WS·WSS 행](code-map.md#3-진입점), [WebSocket 계약 1.4절](../contracts/websocket-relay-v1.md#14-데이터-메시지와-제어-프레임), [Repeater 계약 1.4절](../contracts/repeater-handshake-v1.md#14-형식과-무관한-제품-제약).
 
