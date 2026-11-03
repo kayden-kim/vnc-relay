@@ -1,19 +1,24 @@
 //! Acceptance tests for relay logging, secret exclusion, and keepalive duration.
 //! Covers:
-//! - OPS-011 (partial): Operations log format and identifier correlation across lifecycle events
+//! - OPS-011 (full): JSON Lines, lifecycle identifier correlation and administrator termination audit
 //! - OPS-012 (partial): Operations log and status endpoint secret and raw ID non-exposure
 //! - RLY-027 (full): Active idle session preservation over K and post-idle transfer
 
 use std::io::{Read, Write};
-use std::net::{SocketAddr, TcpListener, TcpStream};
+use std::net::{Shutdown, SocketAddr, TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Mutex, PoisonError};
 use std::time::{Duration, Instant};
 
+use vnc_relay_adapters::accounts_file::Argon2Hasher;
+use vnc_relay_app::ports::PasswordHasher;
+use vnc_relay_domain::account::{Argon2Params, Password};
+
 const BIN: &str = env!("CARGO_BIN_EXE_vnc-relay");
 const LIMIT: Duration = Duration::from_secs(20);
+const ADMIN_PASSWORD: &str = "operations-log-admin-password";
 static SERIAL: AtomicU64 = AtomicU64::new(0);
 static PORTS: Mutex<()> = Mutex::new(());
 
@@ -404,6 +409,20 @@ fn http_get(port: u16, path: &str) -> String {
     }
 }
 
+fn read_management_reply(mut stream: TcpStream) -> (u16, String, JsonValue) {
+    let mut raw = String::new();
+    stream
+        .read_to_string(&mut raw)
+        .unwrap_or_else(|error| panic!("read management response: {error}"));
+    let (head, body) = raw
+        .split_once("\r\n\r\n")
+        .unwrap_or_else(|| panic!("management response has headers: {raw}"));
+    let status = some(head.split_whitespace().nth(1), "HTTP status")
+        .parse::<u16>()
+        .unwrap_or_else(|error| panic!("management HTTP status: {error}"));
+    (status, head.to_owned(), parse_json_object_line(body))
+}
+
 struct TargetServer {
     listener: TcpListener,
     port: u16,
@@ -447,6 +466,7 @@ struct RunningRelay {
     child: Child,
     dir: PathBuf,
     status: u16,
+    management: u16,
     viewer: u16,
     server: u16,
     ws_viewer: Option<u16>,
@@ -477,12 +497,26 @@ impl RunningRelay {
             panic!("create dir {}: {e:?}", dir.display());
         }
         let accounts = dir.join("accounts.toml");
-        if let Err(e) = std::fs::write(
+        let password = Password::parse(ADMIN_PASSWORD.to_owned())
+            .unwrap_or_else(|error| panic!("admin password: {error:?}"));
+        let hash = Argon2Hasher
+            .hash(
+                &password,
+                Argon2Params {
+                    memory_kib: 19_456,
+                    iterations: 2,
+                    parallelism: 1,
+                },
+            )
+            .unwrap_or_else(|error| panic!("admin password hash: {error}"));
+        std::fs::write(
             &accounts,
-            "version = 1\n[[account]]\nname = \"alice\"\npassword_hash = \"$argon2id$v=19$m=19456,t=2,p=1$AAAAAAAAAAAAAAAAAAAAAA$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\"\n",
-        ) {
-            panic!("write accounts: {e:?}");
-        }
+            format!(
+                "version = 1\n[[account]]\nname = \"alice\"\npassword_hash = \"{}\"\n",
+                hash.as_str()
+            ),
+        )
+        .unwrap_or_else(|error| panic!("write accounts: {error}"));
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
@@ -565,6 +599,7 @@ output = "events.jsonl"
             child,
             dir,
             status: ports[1],
+            management: ports[0],
             viewer: ports[2],
             server: ports[3],
             ws_viewer: if with_ws { Some(ports[4]) } else { None },
@@ -587,7 +622,7 @@ output = "events.jsonl"
                 "server did not become ready: {status:?}; {}",
                 std::fs::read_to_string(running.dir.join("stderr")).unwrap_or_default()
             );
-            std::thread::yield_now();
+            std::thread::sleep(Duration::from_millis(10));
         }
     }
 
@@ -610,8 +645,39 @@ output = "events.jsonl"
                 Instant::now() < deadline,
                 "timed out waiting for event; lines: {lines:#?}"
             );
-            std::thread::yield_now();
+            std::thread::sleep(Duration::from_millis(10));
         }
+    }
+
+    fn management_begin(
+        &self,
+        method: &str,
+        path: &str,
+        headers: &[&str],
+        body: &str,
+    ) -> TcpStream {
+        let mut stream = TcpStream::connect(("127.0.0.1", self.management))
+            .unwrap_or_else(|error| panic!("connect management: {error}"));
+        stream
+            .set_read_timeout(Some(LIMIT))
+            .unwrap_or_else(|error| panic!("management read timeout: {error}"));
+        stream
+            .set_write_timeout(Some(LIMIT))
+            .unwrap_or_else(|error| panic!("management write timeout: {error}"));
+        let mut request = format!(
+            "{method} {path} HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\nContent-Length: {}\r\n",
+            body.len()
+        );
+        for header in headers {
+            request.push_str(header);
+            request.push_str("\r\n");
+        }
+        request.push_str("\r\n");
+        request.push_str(body);
+        stream
+            .write_all(request.as_bytes())
+            .unwrap_or_else(|error| panic!("send management request: {error}"));
+        stream
     }
 
     fn connect_viewer(&self) -> (TcpStream, String) {
@@ -680,7 +746,7 @@ impl Drop for RunningRelay {
     }
 }
 
-/// spec: operations.md:OPS-011 partial
+/// spec: operations.md:OPS-011
 #[test]
 fn operations_log_records_contract_events_and_correlates_identifiers() {
     let _lock = lock_ports();
@@ -882,11 +948,64 @@ fn operations_log_records_contract_events_and_correlates_identifiers() {
         "relay_id_ref must be identical for same relay ID within process"
     );
 
-    drop(viewer_s2);
-    drop(server_s2);
-    relay.wait_for_line_after(after_s2, |l| {
-        field_matches(l, "event", "session_closed")
-            && field_matches(l, "session_id", &s2_session_id)
+    // Close the reused-ID session through real authenticated management HTTP.
+    let login_body = format!(r#"{{"account":"alice","password":"{ADMIN_PASSWORD}"}}"#);
+    let (status, headers, login) = read_management_reply(relay.management_begin(
+        "POST",
+        "/api/v1/session",
+        &["Content-Type: application/json"],
+        &login_body,
+    ));
+    assert_eq!(status, 200, "administrator login: {login:?}");
+    assert_eq!(login.str("account"), Some("alice"));
+    let set_cookie = some(
+        headers.lines().find_map(|line| {
+            let (name, value) = line.split_once(':')?;
+            name.eq_ignore_ascii_case("set-cookie")
+                .then_some(value.trim())
+        }),
+        "login Set-Cookie",
+    );
+    let cookie = format!(
+        "Cookie: {}",
+        some(set_cookie.split(';').next(), "cookie pair")
+    );
+    let csrf = format!(
+        "X-CSRF-Token: {}",
+        some(login.str("csrf_token"), "login CSRF")
+    );
+    let pending = relay.management_begin(
+        "POST",
+        &format!("/api/v1/sessions/{s2_session_id}/terminate"),
+        &[&cookie, &csrf],
+        "",
+    );
+    for endpoint in [&mut viewer_s2, &mut server_s2] {
+        let mut unexpected = [0; 1];
+        assert_eq!(
+            endpoint
+                .read(&mut unexpected)
+                .unwrap_or_else(|error| panic!("administrator closes relay endpoint: {error}")),
+            0
+        );
+        endpoint
+            .shutdown(Shutdown::Write)
+            .unwrap_or_else(|error| panic!("acknowledge administrator close: {error}"));
+    }
+    let (status, _, terminated) = read_management_reply(pending);
+    assert_eq!(status, 200, "administrator termination: {terminated:?}");
+    assert_eq!(terminated.str("result"), Some("terminated"));
+    relay.wait_for_line_after(after_s2, |line| {
+        field_matches(line, "event", "session_closed")
+            && field_matches(line, "session_id", &s2_session_id)
+            && field_matches(line, "close_cause", "admin_terminated")
+            && field_matches(line, "admin_account", "alice")
+    });
+    relay.wait_for_line_after(after_s2, |line| {
+        field_matches(line, "event", "admin_terminate")
+            && field_matches(line, "session_id", &s2_session_id)
+            && field_matches(line, "admin_account", "alice")
+            && field_matches(line, "result", "terminated")
     });
 
     // 11. Assert all lines in log file:
@@ -895,7 +1014,7 @@ fn operations_log_records_contract_events_and_correlates_identifiers() {
     // - contract-required fields per event condition
     let objects = parse_log_objects(&relay.dir);
 
-    for obj in &objects {
+    for (index, obj) in objects.iter().enumerate() {
         let ts = some(obj.str("ts"), "ts");
         assert_timestamp(ts);
         let level = some(obj.str("level"), "level");
@@ -904,6 +1023,24 @@ fn operations_log_records_contract_events_and_correlates_identifiers() {
             "invalid level: {level}"
         );
         let event = some(obj.str("event"), "event");
+
+        if let Some(conn_id) = obj.str("conn_id")
+            && event != "connection_accepted"
+        {
+            let accepted = some(
+                objects[..index].iter().find(|prior| {
+                    prior.str("event") == Some("connection_accepted")
+                        && prior.str("conn_id") == Some(conn_id)
+                }),
+                "earlier acceptance of lifecycle conn_id",
+            );
+            for field in ["listener", "role"] {
+                if let Some(value) = obj.str(field) {
+                    assert_eq!(accepted.str(field), Some(value), "{event}: {field}");
+                }
+            }
+            assert!(some(accepted.str("ts"), "accept ts") <= ts);
+        }
 
         match event {
             "connection_accepted" => {
@@ -1005,6 +1142,25 @@ fn operations_log_records_contract_events_and_correlates_identifiers() {
                 let r_ref = some(obj.str("relay_id_ref"), "started relay_id_ref");
                 assert!(is_16_hex(r_ref));
                 assert!(some(obj.num("waited_ms"), "waited_ms") >= 0);
+                for (field, role) in [("viewer_conn_id", "viewer"), ("server_conn_id", "server")] {
+                    let conn_id = some(obj.str(field), field);
+                    let accepted = some(
+                        objects[..index].iter().find(|prior| {
+                            prior.str("event") == Some("connection_accepted")
+                                && prior.str("conn_id") == Some(conn_id)
+                        }),
+                        "session endpoint acceptance",
+                    );
+                    assert_eq!(accepted.str("role"), Some(role));
+                }
+                let waiter = some(
+                    objects[..index].iter().find(|prior| {
+                        prior.str("event") == Some("waiting_registered")
+                            && prior.str("conn_id") == obj.str("server_conn_id")
+                    }),
+                    "matched server's waiting registration",
+                );
+                assert_eq!(waiter.str("relay_id_ref"), obj.str("relay_id_ref"));
             }
             "session_closed" => {
                 assert_eq!(level, "info"); // peer_eof is info
@@ -1016,11 +1172,52 @@ fn operations_log_records_contract_events_and_correlates_identifiers() {
                 assert!(some(obj.num("duration_ms"), "duration_ms") >= 0);
                 assert!(some(obj.num("bytes_viewer_to_target"), "bytes_v2t") >= 0);
                 assert!(some(obj.num("bytes_target_to_viewer"), "bytes_t2v") >= 0);
-                assert_eq!(obj.str("close_cause"), Some("peer_eof"));
-                let side = some(obj.str("side"), "session_closed side");
-                assert!(side == "viewer" || side == "server", "invalid side: {side}");
+                let started = some(
+                    objects[..index].iter().find(|prior| {
+                        prior.str("event") == Some("session_started")
+                            && prior.str("session_id") == Some(sid)
+                    }),
+                    "closed session's start event",
+                );
+                for field in ["mode", "viewer_transport", "relay_id_ref"] {
+                    assert_eq!(obj.str(field), started.str(field), "{sid}: {field}");
+                }
+                assert!(some(started.str("ts"), "session start ts") <= ts);
+                assert!(some(obj.str("started_at"), "started_at") <= ts);
+                if sid == s2_session_id {
+                    assert_eq!(obj.str("close_cause"), Some("admin_terminated"));
+                    assert_eq!(obj.str("admin_account"), Some("alice"));
+                    assert!(!obj.has_key("side"));
+                } else {
+                    assert_eq!(sid, s1_session_id);
+                    assert_eq!(obj.str("close_cause"), Some("peer_eof"));
+                    let side = some(obj.str("side"), "session_closed side");
+                    assert!(side == "viewer" || side == "server", "invalid side: {side}");
+                    assert!(!obj.has_key("admin_account"));
+                }
                 let r_ref = some(obj.str("relay_id_ref"), "closed relay_id_ref");
                 assert!(is_16_hex(r_ref));
+            }
+            "admin_login_succeeded" => {
+                assert_eq!(level, "info");
+                assert_eq!(obj.str("admin_account"), Some("alice"));
+                assert_eq!(obj.str("peer_ip"), Some("127.0.0.1"));
+            }
+            "admin_terminate" => {
+                assert_eq!(level, "info");
+                assert_eq!(obj.str("admin_account"), Some("alice"));
+                assert_eq!(obj.str("peer_ip"), Some("127.0.0.1"));
+                assert_eq!(obj.str("session_id"), Some(s2_session_id.as_str()));
+                assert_eq!(obj.str("result"), Some("terminated"));
+                let closed = some(
+                    objects[..index].iter().find(|prior| {
+                        prior.str("event") == Some("session_closed")
+                            && prior.str("session_id") == obj.str("session_id")
+                    }),
+                    "cleanup before administrator audit",
+                );
+                assert_eq!(closed.str("admin_account"), obj.str("admin_account"));
+                assert!(some(closed.str("ts"), "closure ts") <= ts);
             }
             _ => {}
         }

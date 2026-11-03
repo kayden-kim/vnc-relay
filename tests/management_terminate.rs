@@ -1,8 +1,7 @@
 //! Real-process terminate coverage. No failure injection or test-only product paths.
-//! MGT-012/013 and OPS-011 remain partial: a real cleanup-confirmation 500 cannot
-//! be forced deterministically through the supported network API. Consumer UI
-//! handling of lost responses is outside these producer tests. RLY-020 markers
-//! explicitly cover only its administrator-termination branch.
+//! Binary HTTP, transport and audit paths supplement the in-process failure
+//! coverage in adapters/tests/management.rs. The history test covers all three
+//! RLY-020 close causes together with list/count consistency and permit recovery.
 
 use std::fs;
 use std::io::{self, Read, Write};
@@ -1465,13 +1464,62 @@ fn assert_safe(reply: &Reply, admin: &Admin) {
 }
 
 /// spec: management.md:MGT-023
+/// spec: relay.md:RLY-020
 #[test]
 fn completion_mgt023_eof_connection_error_and_admin_history_have_final_fields_and_old_ids_404() {
     let _ports = PORTS.lock().unwrap_or_else(PoisonError::into_inner);
     let server = Server::start(4, 3, 2);
     let admin = server.login("alice");
+    let assert_reclaimed = |sid: &str, cause: &str| {
+        server.counts(&admin, 0, 0);
+        let state = server.query(&admin, "/api/v1/summary").json();
+        for count in ["waiting", "active", "handshaking", "target_connecting"] {
+            assert_eq!(
+                state.get("counts").get(count).number(),
+                0,
+                "{cause}: {count}"
+            );
+        }
+        assert_eq!(
+            state
+                .get("usage")
+                .get("relay_connections")
+                .get("current")
+                .number(),
+            0,
+            "{cause}: session sockets release all L permits"
+        );
+        for path in ["/api/v1/waiting", "/api/v1/sessions"] {
+            let reply = server.query(&admin, path);
+            assert_eq!(reply.status, 200);
+            assert!(
+                reply.json().get("items").items().is_empty(),
+                "{cause}: {path}"
+            );
+        }
+        let records = server.logs(|records| {
+            records.iter().any(|record| {
+                record.get("event").text() == "session_closed"
+                    && record.get("session_id").text() == sid
+            })
+        });
+        let closures: Vec<_> = records
+            .iter()
+            .filter(|record| {
+                record.get("event").text() == "session_closed"
+                    && record.get("session_id").text() == sid
+            })
+            .collect();
+        assert_eq!(
+            closures.len(),
+            1,
+            "{cause}: one closure per reclaimed session"
+        );
+        assert_eq!(closures[0].get("close_cause").text(), cause);
+    };
     let mut eof = server.pair(&admin, "tcp", "mode2", "23001");
     eof.transfer();
+    server.counts(&admin, 1, 2);
     must(eof.target.shutdown(Shutdown::Write));
     if let Viewer::Tcp(viewer) = &eof.viewer {
         must(viewer.shutdown(Shutdown::Write));
@@ -1479,8 +1527,10 @@ fn completion_mgt023_eof_connection_error_and_admin_history_have_final_fields_an
     server.poll(&admin, "/api/v1/closed-sessions", |v| {
         v.get("items").items().len() == 1
     });
+    assert_reclaimed(&eof.sid, "peer_eof");
     let mut error = server.pair(&admin, "ws", "mode2", "23002");
     error.transfer();
+    server.counts(&admin, 1, 2);
     // A text data frame deterministically triggers a real protocol I/O error;
     // unlike an OS-dependent TCP reset, it cannot silently become normal EOF.
     error.viewer.websocket().send(1, b"forbidden-text");
@@ -1490,8 +1540,10 @@ fn completion_mgt023_eof_connection_error_and_admin_history_have_final_fields_an
     server.poll(&admin, "/api/v1/closed-sessions", |v| {
         v.get("items").items().len() == 2
     });
+    assert_reclaimed(&error_sid, "connection_error");
     let mut terminated = server.pair(&admin, "wss", "mode1", "23003");
     terminated.transfer();
+    server.counts(&admin, 1, 2);
     let pending = server.terminate_begin(&admin, &terminated.sid);
     terminated.viewer.acknowledge_admin_close();
     summary(
@@ -1503,6 +1555,7 @@ fn completion_mgt023_eof_connection_error_and_admin_history_have_final_fields_an
         "wss",
         1,
     );
+    assert_reclaimed(&terminated.sid, "admin_terminated");
     let history = server.query(&admin, "/api/v1/closed-sessions").json();
     assert_eq!(history.get("items").items().len(), 3);
     for (sid, cause, mode, transport) in [
