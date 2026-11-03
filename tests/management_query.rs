@@ -3,11 +3,11 @@
 //! - MGT-001 (full): counts match lists and details
 //! - MGT-002 (full): inclusion before/after initial exchange, target connect, closing
 //! - MGT-003 (full): detail fields, UTC ISO 8601 ms format, integer bytes
-//! - MGT-004 (partial): empty success vs failure distinction (500 internal cannot be forced black-box)
+//! - MGT-004 (full): empty success vs real query-path 400/404 errors (Q95)
 //! - MGT-005 (full): per-direction bytes and partial writes
 //! - MGT-006 (full): same stream over TCP, WS, WSS gives identical counters
 //! - MGT-007 (partial): reconnect gives new session id and resets counters; restart gives fresh state (clock correction is unit tested)
-//! - MGT-013 (full): no secrets or raw payload in query or error bodies
+//! - MGT-013 (partial): query/error body privacy; full HTTP failure coverage lives in adapters/tests/management.rs
 //! - MGT-015 (full): forwarded headers ignored and real socket address used
 //! - MGT-016 (partial): counts equal list lengths under churn as far as black-box allows
 //! - MGT-021 (full): unauthenticated queries rejected on all routes with 401
@@ -1408,7 +1408,7 @@ fn session_detail_fields_timestamp_and_integer_bytes() {
     );
 }
 
-/// spec: management.md:MGT-004 partial
+/// spec: management.md:MGT-004
 #[test]
 fn empty_success_vs_failure_distinction() {
     let _lock = lock_ports();
@@ -1768,7 +1768,8 @@ fn reconnect_gives_new_session_id_and_restarts_counters() {
     assert!(uptime >= 0);
 }
 
-// Admin terminate failure requires TODO 4.5 and is not exercised here.
+// Query-body and relay_id omission coverage; the adapters test also covers auth
+// failures, termination failure, response headers and the actual credential hash.
 /// spec: management.md:MGT-013 partial
 #[test]
 fn no_secrets_or_raw_payload_in_query_or_error_bodies() {

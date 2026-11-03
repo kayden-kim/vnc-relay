@@ -6,6 +6,7 @@
 
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -28,7 +29,7 @@ use vnc_relay_adapters::management_http::{DashboardHints, ManagementListener, Ma
 use vnc_relay_adapters::net::{AcceptPolicy, AllowSource, TcpEntryPoint};
 use vnc_relay_adapters::target::TcpTargetConnector;
 use vnc_relay_adapters::tls;
-use vnc_relay_app::events::{Event, RejectReason, Stage};
+use vnc_relay_app::events::{AdminTerminateResult, Event, Level, RejectReason, Stage};
 use vnc_relay_app::management::login::dummy_hash;
 use vnc_relay_app::management::query::ManagementQueryService;
 use vnc_relay_app::management::terminate::{ManagementTerminateService, TerminationTicket};
@@ -261,6 +262,14 @@ struct RunningRelay {
 
 impl RunningRelay {
     async fn start(session: AdminSessionPolicy) -> Self {
+        Self::start_with_control(session, false, Arc::new(Argon2Verifier)).await
+    }
+
+    async fn start_with_control(
+        session: AdminSessionPolicy,
+        fail_first: bool,
+        verifier: Arc<dyn PasswordVerifier>,
+    ) -> Self {
         let clock: Arc<dyn Clock> = Arc::new(SystemClock::new());
         let events = Arc::new(Recorder::default());
         let log: Arc<dyn EventSink> = events.clone();
@@ -291,7 +300,7 @@ impl RunningRelay {
             Arc::clone(&log),
             session,
             limit_policy(),
-            Arc::new(Argon2Verifier),
+            verifier,
             Arc::clone(&clock),
         );
         let query = Arc::new(ManagementQueryService::new(
@@ -301,7 +310,10 @@ impl RunningRelay {
             Arc::clone(&clock),
         ));
         let terminate = Arc::new(ManagementTerminateService::new(
-            runtime.clone(),
+            Arc::new(FailFirstTermination {
+                runtime: runtime.clone(),
+                fail_next: AtomicBool::new(fail_first),
+            }),
             Arc::clone(&clock),
             Arc::clone(&log),
         ));
@@ -495,6 +507,55 @@ impl RelayPair {
         assert_eq!(body["result"], "terminated");
         assert_eq!(body["closed_session"]["session_id"], self.session_id);
         assert_eq!(body["closed_session"]["close_cause"], "admin_terminated");
+    }
+}
+
+/// Only the first accepted control request loses its completion. Query state
+/// and all later termination requests still use the real relay runtime.
+struct FailFirstTermination {
+    runtime: Arc<RelayRuntime<TcpTargetConnector>>,
+    fail_next: AtomicBool,
+}
+
+impl RelaySessionControl for FailFirstTermination {
+    fn request_terminate(
+        &self,
+        session_id: &str,
+        account: AccountName,
+        peer: PeerIp,
+        clock: &dyn Clock,
+        events: &dyn EventSink,
+    ) -> Option<TerminationTicket> {
+        if self.fail_next.swap(false, Ordering::SeqCst) {
+            assert!(
+                self.runtime
+                    .snapshot(clock)
+                    .active
+                    .iter()
+                    .any(|session| session.session_id.as_str() == session_id),
+                "the failing control targets a real active session"
+            );
+            let (sender, completion) = watch::channel(None);
+            drop(sender);
+            // A joining request owns its failure audit in the real service.
+            return Some(TerminationTicket {
+                initiated: false,
+                completion,
+            });
+        }
+        self.runtime
+            .request_terminate(session_id, account, peer, clock, events)
+    }
+}
+
+/// Retains the actual account hash verified during login, not a synthetic PHC.
+#[derive(Default)]
+struct HashRecordingVerifier(Mutex<String>);
+
+impl PasswordVerifier for HashRecordingVerifier {
+    fn verify(&self, typed: &str, hash: &PasswordHash) -> Result<bool, HashError> {
+        *self.0.lock().unwrap_or_else(PoisonError::into_inner) = hash.as_str().to_owned();
+        Argon2Verifier.verify(typed, hash)
     }
 }
 
@@ -2259,4 +2320,352 @@ async fn terminate_rejects_all_actual_bodies_but_allows_empty_content_types_with
         expired.status, 401,
         "neither rejection nor missing target touches Si"
     );
+}
+
+async fn acknowledge_pair_close(pair: &mut RelayPair) {
+    async fn acknowledge(stream: &mut TcpStream) {
+        let mut remaining = Vec::new();
+        stream
+            .read_to_end(&mut remaining)
+            .await
+            .unwrap_or_else(|error| panic!("relay sends terminal EOF: {error}"));
+        assert!(
+            remaining.is_empty(),
+            "all test payload was already received"
+        );
+        stream
+            .shutdown()
+            .await
+            .unwrap_or_else(|error| panic!("relay peer acknowledges close: {error}"));
+    }
+    timeout(LIMIT, async {
+        tokio::join!(acknowledge(&mut pair.viewer), acknowledge(&mut pair.server));
+    })
+    .await
+    .unwrap_or_else(|error| panic!("both relay peers close in time: {error}"));
+}
+
+/// spec: management.md:MGT-012
+#[tokio::test]
+async fn completion_mgt012_failed_control_and_lost_response_never_invent_completion() {
+    let relay =
+        RunningRelay::start_with_control(session_policy(), true, Arc::new(Argon2Verifier)).await;
+    let running = &relay.management;
+    let mut pair = relay.pair().await;
+    let login = plain_exchange(running.addr, &login_request(ACCOUNT, PASSWORD)).await;
+    assert_eq!(login.status, 200);
+    let cookie = cookie_line(&login);
+    let csrf = csrf_line(&login);
+    let path = format!("/api/v1/sessions/{}/terminate", pair.session_id);
+    let command = request("POST", &path, &[&cookie, &csrf]);
+
+    // The fake loses only the completion channel. The real listener, auth,
+    // terminate service, error serializer, query source and event sink run.
+    let failed = plain_exchange(running.addr, &command).await;
+    assert_eq!(failed.status, 500);
+    assert_eq!(error_code(&failed), "terminate_failed");
+    assert_eq!(failed.header("cache-control"), Some("no-store"));
+    let body = json_body(&failed);
+    assert!(body.get("closed_session").is_none());
+    assert!(body.get("result").is_none());
+    let audit = wait_for(&running.events, |event| {
+        matches!(event, Event::AdminTerminate {
+            admin_account, peer_ip, session_id: Some(id), result: AdminTerminateResult::Failed
+        } if admin_account.as_str() == ACCOUNT && *peer_ip == loopback()
+            && id.as_str() == pair.session_id)
+    })
+    .await;
+    assert_eq!(audit.level(), Level::Error);
+    let detail = plain_exchange(
+        running.addr,
+        &get(&format!("/api/v1/sessions/{}", pair.session_id), &[&cookie]),
+    )
+    .await;
+    assert_eq!(detail.status, 200);
+    assert_eq!(json_body(&detail)["session"]["state"], "active");
+    let closed = plain_exchange(running.addr, &get("/api/v1/closed-sessions", &[&cookie])).await;
+    assert_eq!(closed.status, 200);
+    assert_eq!(json_body(&closed)["items"], json!([]));
+    assert!(
+        running.events.snapshot().iter().all(|event| !matches!(
+            event,
+            Event::SessionClosed { .. }
+                | Event::AdminTerminate {
+                    result: AdminTerminateResult::Terminated | AdminTerminateResult::AlreadyClosed,
+                    ..
+                }
+        )),
+        "failed completion neither closes nor audits success"
+    );
+    pair.assert_bidirectional().await;
+
+    // The second request delegates to the real runtime. Drop HTTP before any
+    // response read, while relay peers still prevent completion. Their EOF
+    // acknowledgements below release cleanup without an HTTP consumer.
+    let mut lost = TcpStream::connect(running.addr)
+        .await
+        .unwrap_or_else(|error| panic!("lost-response client connects: {error}"));
+    lost.write_all(&command)
+        .await
+        .unwrap_or_else(|error| panic!("lost-response request is sent: {error}"));
+    // Observe relay-side EOF before disconnecting HTTP: write_all alone does
+    // not prove the listener accepted the command on every operating system.
+    let mut unexpected = [0; 1];
+    let eof = timeout(LIMIT, pair.viewer.read(&mut unexpected))
+        .await
+        .unwrap_or_else(|error| panic!("accepted termination closes relay write side: {error}"))
+        .unwrap_or_else(|error| panic!("relay termination EOF: {error}"));
+    assert_eq!(
+        eof, 0,
+        "the relay accepted termination without an HTTP read"
+    );
+    lost.shutdown()
+        .await
+        .unwrap_or_else(|error| panic!("lost-response client closes write side: {error}"));
+    drop(lost);
+    acknowledge_pair_close(&mut pair).await;
+    wait_for(&running.events, |event| {
+        matches!(event, Event::AdminTerminate {
+            admin_account, peer_ip, session_id: Some(id), result: AdminTerminateResult::Terminated
+        } if admin_account.as_str() == ACCOUNT && *peer_ip == loopback()
+            && id.as_str() == pair.session_id)
+    })
+    .await;
+    let active = plain_exchange(running.addr, &get("/api/v1/sessions", &[&cookie])).await;
+    assert_eq!(active.status, 200);
+    assert_eq!(json_body(&active)["items"], json!([]));
+    let detail = plain_exchange(
+        running.addr,
+        &get(&format!("/api/v1/sessions/{}", pair.session_id), &[&cookie]),
+    )
+    .await;
+    assert_eq!(detail.status, 404);
+    assert_eq!(error_code(&detail), "not_found");
+    let closed = plain_exchange(running.addr, &get("/api/v1/closed-sessions", &[&cookie])).await;
+    assert_eq!(closed.status, 200);
+    let body = json_body(&closed);
+    assert_eq!(body["items"].as_array().map(Vec::len), Some(1));
+    assert_eq!(body["items"][0]["session_id"], pair.session_id);
+    assert_eq!(body["items"][0]["close_cause"], "admin_terminated");
+    let events = running.events.snapshot();
+    let closures: Vec<_> = events
+        .iter()
+        .enumerate()
+        .filter(|(_, event)| matches!(event, Event::SessionClosed { .. }))
+        .collect();
+    assert_eq!(closures.len(), 1);
+    assert!(matches!(closures[0].1, Event::SessionClosed {
+        session_id, admin_account: Some(account), close_cause, ..
+    } if session_id.as_str() == pair.session_id && account.as_str() == ACCOUNT
+        && *close_cause == vnc_relay_domain::session::CloseCause::AdminTerminated));
+    let successes: Vec<_> = events
+        .iter()
+        .enumerate()
+        .filter(|(_, event)| {
+            matches!(
+                event,
+                Event::AdminTerminate {
+                    result: AdminTerminateResult::Terminated | AdminTerminateResult::AlreadyClosed,
+                    ..
+                }
+            )
+        })
+        .collect();
+    assert_eq!(
+        successes.len(),
+        1,
+        "only confirmed cleanup is audited successful"
+    );
+    assert!(
+        closures[0].0 < successes[0].0,
+        "cleanup precedes success audit"
+    );
+}
+
+/// spec: management.md:MGT-013
+#[tokio::test]
+async fn completion_mgt013_query_auth_and_failed_termination_responses_keep_secrets_private() {
+    const PAYLOAD: &[u8] = b"MGT013_UNIQUE_RAW_RFB_PAYLOAD_95_738291";
+    let verifier = Arc::new(HashRecordingVerifier::default());
+    let relay = RunningRelay::start_with_control(session_policy(), true, verifier.clone()).await;
+    let running = &relay.management;
+    let mut pair = relay.pair().await;
+    timeout(LIMIT, async {
+        pair.viewer
+            .write_all(PAYLOAD)
+            .await
+            .unwrap_or_else(|error| panic!("secret payload sent: {error}"));
+        let mut received = vec![0; PAYLOAD.len()];
+        pair.server
+            .read_exact(&mut received)
+            .await
+            .unwrap_or_else(|error| panic!("secret payload relayed: {error}"));
+        assert_eq!(received, PAYLOAD);
+    })
+    .await
+    .unwrap_or_else(|error| panic!("secret payload crosses real relay: {error}"));
+    let login = plain_exchange(running.addr, &login_request(ACCOUNT, PASSWORD)).await;
+    assert_eq!(login.status, 200);
+    let hash = verifier
+        .0
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .clone();
+    assert!(
+        hash.starts_with("$argon2id$"),
+        "the actual password hash is known"
+    );
+    let cookie = cookie_line(&login);
+    let csrf = csrf_line(&login);
+    let session_token = cookie
+        .strip_prefix("Cookie: relay_admin_session=")
+        .unwrap_or_else(|| panic!("known session cookie token"));
+    let csrf_token = csrf
+        .strip_prefix("X-CSRF-Token: ")
+        .unwrap_or_else(|| panic!("known CSRF token"));
+    assert_eq!(session_token.len(), 64);
+    assert_eq!(csrf_token.len(), 64);
+    let detail_path = format!("/api/v1/sessions/{}", pair.session_id);
+    let terminate_path = format!("{detail_path}/terminate");
+    let session = plain_exchange(running.addr, &get("/api/v1/session", &[&cookie])).await;
+    assert_eq!(session.status, 200);
+    assert_eq!(json_body(&session)["csrf_token"], csrf_token);
+    let mut responses = vec![("login", login), ("session", session)];
+    for path in [
+        "/api/v1/summary",
+        "/api/v1/waiting",
+        "/api/v1/sessions",
+        detail_path.as_str(),
+        "/api/v1/closed-sessions",
+    ] {
+        let reply = plain_exchange(running.addr, &get(path, &[&cookie])).await;
+        assert_eq!(reply.status, 200, "{path}");
+        responses.push(("query", reply));
+    }
+    for (label, wire, status, code) in [
+        (
+            "login_failed",
+            login_request(ACCOUNT, OTHER_PASSWORD),
+            401,
+            "login_failed",
+        ),
+        (
+            "unauthenticated",
+            get("/api/v1/summary", &[]),
+            401,
+            "unauthenticated",
+        ),
+        (
+            "csrf_invalid",
+            request("POST", &terminate_path, &[&cookie]),
+            403,
+            "csrf_invalid",
+        ),
+        (
+            "invalid_request",
+            get("/api/v1/summary", &[&cookie, "X-Relay-Poll: invalid"]),
+            400,
+            "invalid_request",
+        ),
+        (
+            "not_found",
+            get("/api/v1/not-a-query", &[&cookie]),
+            404,
+            "not_found",
+        ),
+        (
+            "missing_detail",
+            get(
+                "/api/v1/sessions/ses_aaaaaaaaaaaaaaaaaaaaaaaaaa",
+                &[&cookie],
+            ),
+            404,
+            "not_found",
+        ),
+        (
+            "method",
+            request("POST", "/api/v1/summary", &[&cookie, &csrf]),
+            405,
+            "invalid_request",
+        ),
+        (
+            "terminate_failed",
+            request("POST", &terminate_path, &[&cookie, &csrf]),
+            500,
+            "terminate_failed",
+        ),
+    ] {
+        let reply = plain_exchange(running.addr, &wire).await;
+        assert_eq!(reply.status, status, "{label}");
+        assert_eq!(error_code(&reply), code, "{label}");
+        responses.push((label, reply));
+    }
+    pair.assert_bidirectional().await;
+
+    // Also inspect a populated closure result, not only the initially empty list.
+    let command = request("POST", &terminate_path, &[&cookie, &csrf]);
+    let (terminated, ()) = tokio::join!(
+        plain_exchange(running.addr, &command),
+        acknowledge_pair_close(&mut pair)
+    );
+    assert_eq!(terminated.status, 200);
+    responses.push(("terminated", terminated));
+    let closed = plain_exchange(running.addr, &get("/api/v1/closed-sessions", &[&cookie])).await;
+    assert_eq!(closed.status, 200);
+    assert_eq!(
+        json_body(&closed)["items"][0]["session_id"],
+        pair.session_id
+    );
+    responses.push(("closed_query", closed));
+
+    for (label, reply) in responses {
+        assert_eq!(reply.header("cache-control"), Some("no-store"), "{label}");
+        let mut body = json_body(&reply);
+        // Only these two session views may contain csrf_token, exactly at this
+        // field. The cookie token is legal only in the login Set-Cookie header.
+        if matches!(label, "login" | "session") {
+            let object = body
+                .as_object_mut()
+                .unwrap_or_else(|| panic!("session object"));
+            assert_eq!(object.remove("csrf_token"), Some(json!(csrf_token)));
+        }
+        let body_bytes = serde_json::to_vec(&body)
+            .unwrap_or_else(|error| panic!("response remains JSON: {error}"));
+        let forbidden = [
+            PAYLOAD,
+            PASSWORD.as_bytes(),
+            OTHER_PASSWORD.as_bytes(),
+            hash.as_bytes(),
+            b"$argon2id$",
+            session_token.as_bytes(),
+            csrf_token.as_bytes(),
+        ];
+        for secret in forbidden {
+            assert!(
+                !body_bytes
+                    .windows(secret.len())
+                    .any(|window| window == secret),
+                "{label}: response body discloses a secret"
+            );
+        }
+        for (name, value) in &reply.headers {
+            for secret in forbidden {
+                if label == "login" && name == "set-cookie" && secret == session_token.as_bytes() {
+                    assert_eq!(value.split(';').next(), Some(&cookie["Cookie: ".len()..]));
+                    continue;
+                }
+                assert!(
+                    !name
+                        .as_bytes()
+                        .windows(secret.len())
+                        .any(|window| window == secret)
+                        && !value
+                            .as_bytes()
+                            .windows(secret.len())
+                            .any(|window| window == secret),
+                    "{label}: response header discloses a secret"
+                );
+            }
+        }
+    }
 }
