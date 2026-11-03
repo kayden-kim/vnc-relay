@@ -1298,31 +1298,73 @@ fn checks_each_tcp_entry_point_against_its_own_allow_list() {
 }
 
 /// spec: websocket.md:WS-024
-/// spec: operations.md:OPS-016 partial
+/// spec: operations.md:OPS-016
 #[test]
 fn plaintext_ws_listener_is_off_by_default_and_warns_at_start_when_enabled() {
     let _lock = lock_ports();
-    // Hold the WS port while the other ports are chosen, so that they differ.
-    let holder =
-        TcpListener::bind("127.0.0.1:0").unwrap_or_else(|error| panic!("free port: {error}"));
-    let ws_port = holder
-        .local_addr()
-        .unwrap_or_else(|error| panic!("local addr: {error}"))
-        .port();
+    // Hold the WS and WSS ports while the other ports are chosen, so that they differ.
+    let hold = || {
+        let holder =
+            TcpListener::bind("127.0.0.1:0").unwrap_or_else(|error| panic!("free port: {error}"));
+        let port = holder
+            .local_addr()
+            .unwrap_or_else(|error| panic!("local addr: {error}"))
+            .port();
+        (holder, port)
+    };
+    let (ws_holder, ws_port) = hold();
+    let (wss_holder, wss_port) = hold();
     let ports = Ports::free();
-    drop(holder);
+    drop(ws_holder);
+    drop(wss_holder);
     let ws_listen = format!("127.0.0.1:{ws_port}");
     let log_section = "\n[log]\noutput = \"relay.log\"\n";
 
-    // Default: no WS section. No WS listener opens and no WS warning is logged.
-    let config = setup_with("ws-default", &(config_text(ports) + log_section));
+    // Default: no WS section, but WSS and HTTPS management are on. No WS
+    // listener opens and no WS warning is logged.
+    let wss_section = format!(
+        "\n[relay.wss_viewer]\nenabled = true\nlisten = '127.0.0.1:{wss_port}'\nallow = ['127.0.0.1']\ncert_file = '{}'\nkey_file = '{}'\n",
+        tls_file("server-chain.pem"),
+        tls_file("server-key-p256.pem")
+    );
+    let config = setup_with(
+        "ws-default",
+        &(management_config(ports, "server-chain.pem", "server-key-p256.pem")
+            + &wss_section
+            + log_section),
+    );
     let log = config.with_file_name("relay.log");
     let mut guard = Guard(Some(spawn(&config)));
     wait_listening(guard.child(), ports);
     wait_for_line(&log, |line| field(line, "event") == Some("server_ready"));
     assert!(!connects(ws_port), "a default start opens no WS listener");
+    assert!(connects(wss_port), "the WSS listener is open");
+    // No other entry point turns a plaintext WebSocket request into a relay
+    // connection: the TLS listeners do not speak plaintext, and the TCP entry
+    // points read it as a broken Repeater request.
+    for (name, port) in [
+        ("wss_viewer", wss_port),
+        ("management", ports.management),
+        ("tcp_viewer", ports.tcp_viewer),
+        ("tcp_server", ports.tcp_server),
+    ] {
+        let reply = plaintext_upgrade(port);
+        assert!(
+            !reply.starts_with(b"HTTP/1.1 101"),
+            "{name} upgraded a plaintext WebSocket request: {}",
+            String::from_utf8_lossy(&reply)
+        );
+        assert!(
+            !reply.starts_with(b"HTTP/"),
+            "{name} answered the plaintext request over HTTP: {}",
+            String::from_utf8_lossy(&reply)
+        );
+    }
     let text = read_log(&log);
-    assert!(!events(&text).contains(&"plaintext_ws_enabled"), "{text}");
+    let order = events(&text);
+    assert!(!order.contains(&"plaintext_ws_enabled"), "{text}");
+    assert!(!order.contains(&"waiting_registered"), "{text}");
+    assert!(!order.contains(&"session_started"), "{text}");
     drop(guard);
 
     // Enabled: the WS listener opens, and the warning comes before server_ready.
@@ -1337,9 +1379,13 @@ fn plaintext_ws_listener_is_off_by_default_and_warns_at_start_when_enabled() {
     let mut guard = Guard(Some(spawn(&config)));
     wait_listening(guard.child(), ports);
     wait_for_line(&log, |line| field(line, "event") == Some("server_ready"));
+    // The same request upgrades on the enabled WS listener, so the refusals
+    // above come from the listeners and not from the request.
+    let upgraded = plaintext_upgrade(ws_port);
     assert!(
-        connects(ws_port),
-        "the enabled WS listener accepts TCP on {ws_listen}"
+        upgraded.starts_with(b"HTTP/1.1 101"),
+        "the enabled WS listener on {ws_listen} upgrades: {}",
+        String::from_utf8_lossy(&upgraded)
     );
     let text = read_log(&log);
     let order = events(&text);
@@ -1359,6 +1405,35 @@ fn plaintext_ws_listener_is_off_by_default_and_warns_at_start_when_enabled() {
     assert_eq!(field(warning, "listener"), Some("ws_viewer"));
     assert_eq!(field(warning, "listen"), Some(ws_listen.as_str()));
     drop(guard);
+}
+
+/// Sends a plaintext WebSocket upgrade request to `port` and returns the bytes
+/// the server sent before it closed the connection or stayed quiet for two
+/// seconds. The request is longer than the 250-byte Repeater request, so a
+/// TCP entry point judges it at once.
+fn plaintext_upgrade(port: u16) -> Vec<u8> {
+    let mut stream = TcpStream::connect(("127.0.0.1", port))
+        .unwrap_or_else(|error| panic!("connect {port}: {error}"));
+    stream
+        .set_read_timeout(Some(Duration::from_secs(2)))
+        .unwrap_or_else(|error| panic!("read timeout: {error}"));
+    let request = format!(
+        "GET /relay HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\nX-Padding: {}\r\n\r\n",
+        "a".repeat(200)
+    );
+    let mut reply = Vec::new();
+    // A server that closes first may reset the write. That is no upgrade either.
+    if stream.write_all(request.as_bytes()).is_err() {
+        return reply;
+    }
+    let mut buffer = [0_u8; 4096];
+    while reply.len() < 65536 {
+        match stream.read(&mut buffer) {
+            Ok(0) | Err(_) => break,
+            Ok(read) => reply.extend_from_slice(&buffer[..read]),
+        }
+    }
+    reply
 }
 
 /// spec: operations.md:OPS-040 partial
