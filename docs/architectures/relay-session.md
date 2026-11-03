@@ -6,7 +6,7 @@
 | --- | --- |
 | 구조 시점 | Target |
 | 문서 상태 | Draft |
-| 구현 대조 | 부분 대조. domain·app·adapters의 대상 연결·매칭·중계와 단위·루프백 시험을 구현했다. TCP 진입점과 시작 키 조립은 연결했다. WS·WSS 진입점은 `638cf09`에서 연결했다. OS 종료 요청과 G 감독 작업은 `src/serve.rs`가 조립한다. 실행 기록은 8절을 따른다. |
+| 구현 대조 | 부분 대조 — [2026-11-04 코드 차이](#8-현재-코드와의-차이와-연결-순서). 대상 연결·매칭·중계·OS 종료·G 감독은 구현되어 있다. 본문의 API·시험 계획 차이 때문에 Target을 유지한다. |
 | 코드 위치 | `crates/domain/src/{matching,session,recent_closed,target_policy}.rs`, `crates/app/src/{ports,events,relay}.rs`와 `relay/{handshake,target,matching,session}.rs`, `crates/adapters/src/{target,crypto,ops_log}.rs`와 `net.rs`의 `TcpRelayStream`, `crates/adapters/tests/{tcp_target,ops_info_contract}.rs` |
 | 코드 지도 | [코드 지도](code-map.md#2-코드-위치와-구성요소) |
 | 관련 스펙 | [중계](../specs/relay.md): RLY-003·006~021·023·025~027. [운영](../specs/operations.md): OPS-005·007~009·023·039·042~043. [관리](../specs/management.md#2-조회-대상과-상태): MGT-005 일부 |
@@ -372,6 +372,8 @@ Kw 시험은 위 기존 회귀 시험과 별도다. 작업 3.4가 서버 Ping·P
 | 대상·전송 어댑터 | `TcpTargetConnector`가 해석·검사된 단일 주소 연결·K를 구현한다. `TcpRelayStream`은 읽기·쓰기와 half-close를 위임한다. TCP 진입점은 `hold` 대신 `handle_connection`→`dispatch`를 호출한다. | WS 어댑터 `WsRelayStream`은 `638cf09`에서 구현·연결했다. |
 | 포트·암호·사건 | `TargetConnector`, `RelayIdSource`, `SessionIdSource`, `RelayStream`과 typed 오류를 공개했다. 기존 ref 키와 독립 `SessionIdKey`의 6라운드 순열을 구현했다. 6절 사건 및 요청 종료 사건의 JSON·계약 시험을 추가했다. | 두 키의 시작 실패 wire 코드는 `runtime_unavailable`로 확정했다(Q76). 생성 API는 `Result`를 유지하고 `src/serve.rs`가 시작 때 호출한다. |
 | 종료 제어 | 첫 요청은 `Grace { deadline }`, 두 번째 요청·G 만료는 공유 `Force`로 전이한다. 남은 활성이 있을 때만 `shutdown_forced`를 한 번 기록한다. 기존 종료 원인과 typed action은 Q82에 따라 보존한다. | `src/serve.rs`가 OS 종료 요청·`drive_shutdown` 감독 작업을 연결한다. `finish_relay_shutdown`은 모든 진입점 소유자를 join한 뒤 감독 작업을 abort하고 join한다. 관리·상태·감지 정리와 `server_stopped`는 그 뒤다. |
+| 2026-11-04 API·소유자 대조 | HEAD `ad5cfb2`: RelayService는 H/B/E와 초기 교환을, RelayRuntime은 연결 포트·공유 상태·L/Lw를 소유한다. 종료는 RelayService::request_shutdown·drive_shutdown과 serve::finish_relay_shutdown이 연결한다. LifecycleService는 준비 상태만 맡는다. | §5.1의 공유 서비스 단일 소유 설명과 실제 두 객체 분리를 맞춰야 한다. G·두 번째 신호 조립 자체를 미구현으로 표시하지 않는다. |
+| 2026-11-04 관리·Kw 대조 | RelaySessionControl과 관리 조회·종료 API는 연결되어 있다. RelayStream::poll_maintenance가 실제 포트에 있으며 초기 교환·C·W·활성 소유 루프가 호출한다. SessionIdKey와 Kw 시험도 있다. | §3.2의 poll_maintenance 부재, §4.4와 계획된 Kw 시험의 미구현 설명, 위 표의 미연결 관리·예산 설명을 정리해야 한다. 본문 수정은 이번 범위가 아니므로 Current로 바꾸지 않는다. **이 문서의 판단, 사용자 결정 없음** |
 
 ### TCP 연결 경로와 WS·WSS 연결 경로
 

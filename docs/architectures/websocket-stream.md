@@ -4,12 +4,13 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 상태 | Draft |
-| 구조 범위 | Current: §1.1·§3~§6·§8의 스트림·종료 구현과 §9.5 Kw(작업 3.4). §7은 현재 시험 범위를 구분한다. |
+| 구조 시점 | Target |
+| 문서 상태 | Draft |
+| 구조 범위 | 스트림·종료·Kw 구현은 존재한다. 본문에 실제 코드와 다른 API 설명이 남아 있어 문서 전체를 Current로 표시하지 않는다. |
 | 적용 작업 | 2.7 완료 전에 가져오는 3.3의 스트림 어댑터. 3.4의 Kw·종료 처리와 연결할 경계도 설계 |
 | 기준 | [WebSocket 계약 1.4~1.6절](../contracts/websocket-relay-v1.md#14-데이터-메시지와-제어-프레임), [초기 교환 설계](initial-exchange.md), [세션 설계 3.2절](relay-session.md#32-전송-수명-인터페이스) |
 | 결정 수준 | 9.1~9.3절은 사용자 결정 2026-11-01(Q77, Q78, Q79)로 해결했다. 9.4절은 사용자 결정 2026-11-01(Q83)로 확정했다. 9.5절은 사용자 결정 2026-11-02(Q84)으로 선택 A를 확정했다. 채택된 계약을 바르게 반영함 |
-| 구현 대조 | `638cf09`에서 WS·WSS 진입점을 연결했다. 현재 작업 트리의 `websocket_stream.rs`, `frame.rs`, `keepalive.rs`, `relay/handshake.rs`, `relay/matching.rs`, `relay/target.rs`, `relay/session.rs`가 스트림·종료·Kw를 맡는다. 시험 범위는 §7이다. |
+| 구현 대조 | 부분 대조 — [2026-11-04 코드 차이](#8-현재와-목표의-차이). `websocket_stream.rs`·`frame.rs`·`keepalive.rs`와 공통 app 소유 루프를 대조했다. 시험 범위는 §7이다. |
 
 별도 문서로 둔다. [기존 진입점 설계](websocket-entry-point.md)는 HTTP·TLS 검사와 101까지를 설명한다. 이 문서는 101 뒤의 프레임·B·종료 수명을 맡는다. `Current`와 `Target`을 섞지 않기 위한 선택이다(**이 문서의 판단, 사용자 결정 없음**).
 
@@ -310,6 +311,9 @@ B가 찬 데이터 프레임 뒤의 새 Ping·Pong·Close는 아직 읽을 수 �
 | 초기 실패 action·형식 있는 I/O 오류 포트 존재 | 그대로 사용. WS 코드만 어댑터에서 변환. 사건은 app 한 곳 |
 | TCP 세션 중심의 app 흐름 | 현재 `run_session_controlled`는 `first_eof()`로 종료 순서를 보존한다. 독립 `poll_flush`가 이미 대기한 제어 출력을 진행한다. WS Close의 drain·폐기·E 경계도 같은 소유자가 처리한다. |
 | Q21의 2.7 보류 (해결, 638cf09) | 보류는 제거되었다. Q21 문구와 TODO 3.2의 `현재:`는 바꾸지 않는다 |
+| 2026-11-04 헤더·출력 대조 | HEAD `ad5cfb2`의 frame.rs는 FrameHeader::parse로 입력 헤더를 해석한다. 출력은 encode_data_header·encode_pong·encode_close가 고정 배열에 직접 쓴다. 본문의 FrameHeader::format 재사용 설명과 다르다. |
+| 2026-11-04 전송·Kw 대조 | WsRelayStream의 생성자는 KeepaliveSettings를 받는다. 실제 poll_maintenance와 H/C/W/활성 소유 루프 연결이 있다. 내부 오류의 소유자 유실 경로는 스트림 drop 때문에 WS Close를 보내지 못한다. 본문의 향후 연결 표현과 구현 상태를 구분해야 한다. |
+| 문서 상태 판단 | 위 차이를 본문에 반영하기 전에는 Target을 유지한다. 경로·핵심 책임은 [현재 코드 지도](code-map.md#2-코드-위치와-구성요소)를 따른다. **이 문서의 판단, 사용자 결정 없음** |
 
 `relay-session.md`는 제어 진행, `first_eof`와 Force의 action 보존을 설명한다. `serve-startup.md`는 마지막 진입점 소유자가 끝난 뒤 감독 작업을 취소하고 합류하는 수명을 설명한다. §9.5 Kw는 사용자 결정 2026-11-02(Q84)에 따라 어댑터와 공통 소유 루프에 연결한다. 이 문서의 시험 범위와 TODO 완료 판정은 구분한다.
 

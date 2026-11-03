@@ -6,8 +6,8 @@
 | --- | --- |
 | 구조 시점 | Target |
 | 문서 상태 | Draft |
-| 구현 대조 | 부분 대조. domain·공통 app 처리·사건·JSON을 구현했다. 실행 범위는 [8절 기록](#실행-기록)을 따른다. |
-| 코드 위치 | 구현: `crates/domain/src/handshake.rs`, `crates/domain/src/relay_id.rs`, `crates/app/src/relay.rs`, `crates/app/src/relay/handshake.rs`, `crates/app/src/events.rs`, `crates/adapters/src/ops_log.rs`, `crates/adapters/src/net.rs`(TCP 호출). 계획: WS·WSS 진입점 인계 |
+| 구현 대조 | 부분 대조 — [2026-11-04 코드 차이](#8-현재-코드와-목표의-차이), [실행 기록](#실행-기록). 본문의 이전 API 설명 때문에 Target을 유지한다. |
+| 코드 위치 | `crates/domain/src/handshake.rs`, `crates/domain/src/relay_id.rs`, `crates/app/src/relay.rs`, `crates/app/src/relay/handshake.rs`, `crates/app/src/events.rs`, `crates/adapters/src/ops_log.rs`, `crates/adapters/src/net.rs`, `crates/adapters/src/websocket.rs` |
 | 코드 지도 | [코드 지도](code-map.md#2-코드-위치와-구성요소) |
 | 관련 스펙 | [중계 스펙 2~4절·7절](../specs/relay.md#2-상태와-경계): RLY-001~005, RLY-022. [운영 스펙 2절·OPS-006](../specs/operations.md#2-상태와-검증-매개변수): TCP H 부분 |
 | 관련 계약 | [Repeater 초기 교환 1~3절](../contracts/repeater-handshake-v1.md#1-형식과-의미), [운영 정보 1.5~1.7절](../contracts/ops-info-v1.md#15-사건-목록), [설정 1.2~1.5절](../contracts/config-v2.md#12-키-표), [WebSocket 1.4~1.5절](../contracts/websocket-relay-v1.md#14-데이터-메시지와-제어-프레임) |
@@ -218,6 +218,8 @@ WS·WSS는 A에 따라 `638cf09`에서 연결했다. `crates/adapters/tests/webs
 | 거절 사건 | `HandshakeRejected`, 두 `RejectReason` 값, JSON 출력과 계약 시험을 구현했다. app의 실패 경로는 자원을 회수한 뒤 사건 하나를 쓴다. | TCP·WS·WSS 진입점의 초기 교환 호출은 연결했다(`638cf09`). 전체 수명 검증은 남아 있다. |
 | WS 101 뒤 | 이전에는 `hold_upgraded`가 프레임을 읽지 않고 H 뒤 close 4009를 보냈다. 이 보류는 제거했다. 현재는 `WsRelayStream`을 `handle_connection`·`dispatch`에 넘긴다(`638cf09`). | 완료(`638cf09`). 바이너리 스트림 변환과 B 계산이 선행 조건이었다. |
 | 업그레이드 잔여 바이트 | `upgrade.rs`의 `read_head`는 `HeadRead::Complete`에 머리 뒤 바이트(`suffix`)를 담아 돌려준다. | 구현 완료(`638cf09`). 잔여 바이트는 `WsRelayStream`이 WebSocket 해석기에 넘긴다. HTTP 바이트를 초기 요청으로 직접 넘기지 않는다. |
+| 2026-11-04 API 대조 | HEAD `ad5cfb2`: `handle_connection`의 S는 `RelayStream`이고 종료 입력은 `watch::Receiver<RelayLifecycle>`이다. `RelayService::new`는 E도 받는다. `ConnectionContext`는 `peer_addr`·`accepted_wall`도 보존한다. 실패 때는 E 안의 close action 뒤 stream → permit → 사건 순서다. | 본문의 단순 AsyncRead/AsyncWrite 경계·생성자 인수·비동기 종료를 기다리지 않는다는 설명을 실제 API에 맞춰야 한다. |
+| 2026-11-04 인계·시험 대조 | TCP와 WS·WSS가 모두 공통 서비스와 dispatch를 호출한다. `tests/relay_entry_scenarios.rs`와 `crates/adapters/tests/websocket_relay.rs`에 실제 인계 시험이 있다. | §3의 WS 미호출 문장과 §7의 미생성 handshake.rs·relay.rs 계획을 정리해야 한다. 이 변경은 본문을 다시 쓰지 않으므로 Current로 바꾸지 않는다. **이 문서의 판단, 사용자 결정 없음** |
 
 이번 작업 트리의 domain·공통 app 처리·사건·JSON을 구현했다. TCP 진입점은 `handle_connection` → `dispatch`에 연결돼 있고, WS·WSS 인계는 `638cf09`에서 연결했다. 새 시나리오 표식은 모두 `partial`이다. 9절 1·2번은 해결했고, RLY-003의 실제 도착 결과와 WS 검증은 남아 있다. TODO 2.7 전체 완료를 뜻하지 않는다. 임시 보류·닫기·가짜 인계 정책은 추가하지 않았다.
 
