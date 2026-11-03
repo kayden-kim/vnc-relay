@@ -14,7 +14,7 @@
 //! - MGT-023 (partial): EOF and connection error causes in closed-sessions, detail of closed gives 404 (admin-terminate requires 4.5)
 //! - MGT-024 (full): R overflow drops oldest in FIFO, restart clears in-memory list
 //! - MGT-026 (full on Linux, partial portable): counts and usage match at L limit with pending connections
-//! - OPS-033 (partial): query-visible L and Lm usage and mutual isolation under relay saturation
+//! - OPS-033 (full): login, queries and termination at L; bidirectional relay at shared management/status Lm
 //! - Contract rules: error order, 405 Allow GET, X-Relay-Poll 1 idle preservation, Cache-Control: no-store, session_id grammar
 
 use std::fs;
@@ -2265,15 +2265,170 @@ fn counts_and_usage_match_at_limit_portable() {
     assert!(relay_usage.is_null("current_unavailable_reason"));
 }
 
-/// spec: operations.md:OPS-033 partial
+/// spec: operations.md:OPS-033
 #[test]
-fn relay_exhaustion_does_not_block_management_and_admin_connections_are_visible() {
-    let _lock = lock_ports();
-    let server = RunningServer::start("ops033", "", 5, 2, 5);
-    let (cookie, _) = server.login();
+fn exhausted_relay_and_admin_budgets_leave_the_other_service_operational() {
+    fn wait_event(log: &Path, after: usize, predicate: impl Fn(&JsonValue) -> bool) -> JsonValue {
+        let deadline = Instant::now() + IO_LIMIT;
+        loop {
+            let text =
+                fs::read_to_string(log).unwrap_or_else(|e| panic!("read {}: {e:?}", log.display()));
+            for line in text[after..].split_inclusive('\n') {
+                if line.ends_with('\n') {
+                    let event = parse_json(line);
+                    if predicate(&event) {
+                        return event;
+                    }
+                }
+            }
+            assert!(Instant::now() < deadline, "event not observed in {text}");
+            std::thread::sleep(Duration::from_millis(10));
+        }
+    }
 
-    // After wait_ready, poll the management summary until usage.relay_connections.current == 0
-    // before saturating L. Do not sleep.
+    fn log_position(log: &Path) -> usize {
+        fs::read_to_string(log)
+            .unwrap_or_else(|e| panic!("read {}: {e:?}", log.display()))
+            .len()
+    }
+
+    fn assert_closed(stream: &mut TcpStream) {
+        let mut byte = [0];
+        match stream.read(&mut byte) {
+            Ok(0) => {}
+            Err(e)
+                if matches!(
+                    e.kind(),
+                    std::io::ErrorKind::ConnectionReset | std::io::ErrorKind::ConnectionAborted
+                ) => {}
+            result => panic!("expected connection refusal without response, got {result:?}"),
+        }
+    }
+
+    fn idle_connection(port: u16) -> TcpStream {
+        // A just-completed HTTP request may still be releasing its Lm permit.
+        // Retry only connections actually closed by the server, not a fixed delay.
+        let deadline = Instant::now() + IO_LIMIT;
+        loop {
+            let stream =
+                TcpStream::connect_timeout(&SocketAddr::from(([127, 0, 0, 1], port)), IO_LIMIT)
+                    .unwrap_or_else(|e| panic!("connect idle socket: {e:?}"));
+            stream
+                .set_read_timeout(Some(Duration::from_millis(20)))
+                .unwrap_or_else(|e| panic!("idle read timeout: {e:?}"));
+            let mut byte = [0];
+            match stream.peek(&mut byte) {
+                Err(e)
+                    if matches!(
+                        e.kind(),
+                        std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut
+                    ) =>
+                {
+                    stream
+                        .set_read_timeout(Some(IO_LIMIT))
+                        .unwrap_or_else(|e| panic!("restore read timeout: {e:?}"));
+                    stream
+                        .set_write_timeout(Some(IO_LIMIT))
+                        .unwrap_or_else(|e| panic!("idle write timeout: {e:?}"));
+                    return stream;
+                }
+                Ok(0) => {}
+                Err(e)
+                    if matches!(
+                        e.kind(),
+                        std::io::ErrorKind::ConnectionReset | std::io::ErrorKind::ConnectionAborted
+                    ) => {}
+                result => panic!("unexpected idle socket response: {result:?}"),
+            }
+            assert!(Instant::now() < deadline, "Lm permit was not released");
+            std::thread::sleep(Duration::from_millis(10));
+        }
+    }
+
+    fn finish_held_request(stream: &mut TcpStream, request: &str) -> Reply {
+        stream
+            .write_all(request.as_bytes())
+            .unwrap_or_else(|e| panic!("write held request: {e:?}"));
+        let mut response = String::new();
+        stream
+            .read_to_string(&mut response)
+            .unwrap_or_else(|e| panic!("read held response: {e:?}"));
+        parse_http_reply(&response)
+    }
+
+    let _lock = lock_ports();
+    // L=2 is the contract minimum and fits exactly one active Mode II pair.
+    // Lm=2 lets one idle management and one idle status socket fill the shared pool.
+    let server = RunningServer::start(
+        "ops033",
+        "[log]\noutput = \"relay.log\"\n[timeouts]\nclose_secs = 1\ntls_upgrade_secs = 120",
+        5,
+        2,
+        2,
+    );
+    let log = server.dir.join("relay.log");
+    let (initial_cookie, _) = server.login();
+    server.poll_summary_until(&initial_cookie, IO_LIMIT, |summary| {
+        summary
+            .obj("usage")
+            .and_then(|u| u.obj("relay_connections"))
+            .and_then(|r| r.num("current"))
+            == Some(0)
+    });
+
+    let mut target = server.connect_tcp_server();
+    target
+        .write_all(&make_mode2_request("33001"))
+        .unwrap_or_else(|e| panic!("first server request: {e:?}"));
+    let mut viewer = server.connect_tcp_viewer();
+    viewer
+        .write_all(&make_mode2_request("33001"))
+        .unwrap_or_else(|e| panic!("first viewer request: {e:?}"));
+    let started = wait_event(&log, 0, |e| e.str("event") == Some("session_started"));
+    let sid = some(started.str("session_id"), "first session_id");
+
+    // Both real relay sockets consume L; the next socket is refused at accept.
+    let before_refusal = log_position(&log);
+    let mut refused = server.connect_tcp_server();
+    assert_closed(&mut refused);
+    let rejected = wait_event(&log, before_refusal, |e| {
+        e.str("event") == Some("connection_rejected")
+            && e.str("listener") == Some("tcp_server")
+            && e.str("reason") == Some("relay_connection_limit")
+    });
+    assert_eq!(rejected.str("stage"), Some("accept"));
+    assert_eq!(rejected.num("limit"), Some(2));
+
+    // Login itself must succeed after saturation, not merely reuse an old cookie.
+    let (cookie, csrf) = server.login();
+    let reply = server.query(&cookie, "/api/v1/summary");
+    assert_eq!(reply.status, 200);
+    let summary = reply.json();
+    let usage = some(summary.obj("usage"), "usage");
+    let relay = some(usage.obj("relay_connections"), "relay_connections");
+    assert_eq!(relay.num("current"), Some(2));
+    assert_eq!(relay.num("limit"), Some(2));
+    let admin = some(usage.obj("admin_connections"), "admin_connections");
+    assert!(some(admin.num("current"), "admin current") >= 1);
+    assert_eq!(admin.num("limit"), Some(2));
+    let reply = server.query(&cookie, "/api/v1/sessions");
+    assert_eq!(reply.status, 200);
+    let sessions = reply.json();
+    let items = some(sessions.arr("items"), "sessions items");
+    assert_eq!(items.len(), 1);
+    assert_eq!(items[0].str("session_id"), Some(sid));
+    assert_eq!(items[0].str("state"), Some("active"));
+    let reply = server.send_http(
+        "POST",
+        &format!("/api/v1/sessions/{sid}/terminate"),
+        &[("Cookie", &cookie), ("X-CSRF-Token", &csrf)],
+        b"",
+    );
+    assert_eq!(reply.status, 200, "terminate: {}", reply.body);
+    assert_eq!(reply.json().str("result"), Some("terminated"));
+    assert_closed(&mut target);
+    assert_closed(&mut viewer);
+    drop((target, viewer, refused));
     server.poll_summary_until(&cookie, IO_LIMIT, |summary| {
         summary
             .obj("usage")
@@ -2282,38 +2437,95 @@ fn relay_exhaustion_does_not_block_management_and_admin_connections_are_visible(
             == Some(0)
     });
 
-    // 1. Saturate relay limit L=2 with connections
-    let addr = SocketAddr::from(([127, 0, 0, 1], server.tcp_viewer_port));
-    let mut h1 = TcpStream::connect(addr).unwrap_or_else(|e| panic!("{e:?}"));
-    let mut g1 = [0u8; 12];
-    h1.read_exact(&mut g1).unwrap_or_else(|e| panic!("{e:?}"));
-    h1.write_all(b"ID:91").unwrap_or_else(|e| panic!("{e:?}"));
-
-    let mut h2 = TcpStream::connect(addr).unwrap_or_else(|e| panic!("{e:?}"));
-    let mut g2 = [0u8; 12];
-    h2.read_exact(&mut g2).unwrap_or_else(|e| panic!("{e:?}"));
-    h2.write_all(b"ID:92").unwrap_or_else(|e| panic!("{e:?}"));
-
+    let mut status_holder = idle_connection(server.status_port);
     server.poll_summary_until(&cookie, IO_LIMIT, |summary| {
         summary
             .obj("usage")
-            .and_then(|u| u.obj("relay_connections"))
-            .and_then(|r| r.num("current"))
+            .and_then(|u| u.obj("admin_connections"))
+            .and_then(|a| a.num("current"))
             == Some(2)
     });
+    let mut management_holder = idle_connection(server.management_port);
+    let before_admin_refusals = log_position(&log);
+    for (port, listener) in [
+        (server.management_port, "management"),
+        (server.status_port, "status"),
+    ] {
+        let mut refused =
+            TcpStream::connect_timeout(&SocketAddr::from(([127, 0, 0, 1], port)), IO_LIMIT)
+                .unwrap_or_else(|e| panic!("connect excess {listener}: {e:?}"));
+        refused
+            .set_read_timeout(Some(IO_LIMIT))
+            .unwrap_or_else(|e| panic!("refusal timeout: {e:?}"));
+        assert_closed(&mut refused);
+        let rejected = wait_event(&log, before_admin_refusals, |e| {
+            e.str("event") == Some("connection_rejected")
+                && e.str("listener") == Some(listener)
+                && e.str("reason") == Some("admin_connection_limit")
+        });
+        assert_eq!(rejected.str("stage"), Some("accept"));
+        assert_eq!(rejected.num("limit"), Some(2));
+    }
 
-    // 2. While relay budget L is completely exhausted, management login and query MUST succeed!
-    let (cookie2, _) = server.login();
-    let summary = server.query(&cookie2, "/api/v1/summary").json();
-    let usage = some(summary.obj("usage"), "usage");
-    let relay_u = some(usage.obj("relay_connections"), "relay_connections");
-    let admin_u = some(usage.obj("admin_connections"), "admin_connections");
+    // No management/status permit is released before a whole relay exchange.
+    let before_new_pair = log_position(&log);
+    let mut target = server.connect_tcp_server();
+    target
+        .write_all(&make_mode2_request("33002"))
+        .unwrap_or_else(|e| panic!("second server request: {e:?}"));
+    let mut viewer = server.connect_tcp_viewer();
+    viewer
+        .write_all(&make_mode2_request("33002"))
+        .unwrap_or_else(|e| panic!("second viewer request: {e:?}"));
+    for listener in ["tcp_server", "tcp_viewer"] {
+        wait_event(&log, before_new_pair, |e| {
+            e.str("event") == Some("connection_accepted") && e.str("listener") == Some(listener)
+        });
+    }
+    viewer
+        .write_all(b"viewer-to-target")
+        .unwrap_or_else(|e| panic!("viewer payload: {e:?}"));
+    let mut received = [0; 16];
+    target
+        .read_exact(&mut received)
+        .unwrap_or_else(|e| panic!("target payload: {e:?}"));
+    assert_eq!(&received, b"viewer-to-target");
+    target
+        .write_all(b"target-to-viewer")
+        .unwrap_or_else(|e| panic!("target response: {e:?}"));
+    viewer
+        .read_exact(&mut received)
+        .unwrap_or_else(|e| panic!("viewer response: {e:?}"));
+    assert_eq!(&received, b"target-to-viewer");
 
-    assert_eq!(relay_u.num("current"), Some(2));
-    assert_eq!(relay_u.num("limit"), Some(2));
-    let admin_curr = some(admin_u.num("current"), "admin curr");
-    assert!(admin_curr >= 1, "management connection is counted in Lm");
-    assert_eq!(admin_u.num("limit"), Some(5));
+    // Successful requests on the original sockets also prove neither idle
+    // holder was itself refused while establishing Lm saturation.
+    let reply = finish_held_request(
+        &mut status_holder,
+        "GET /readyz HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n",
+    );
+    assert_eq!(reply.status, 200);
+    drop(status_holder);
+    let reply = finish_held_request(
+        &mut management_holder,
+        &format!(
+            "GET /api/v1/summary HTTP/1.1\r\nHost: localhost\r\nCookie: {cookie}\r\nConnection: close\r\n\r\n"
+        ),
+    );
+    assert_eq!(reply.status, 200);
+    assert_eq!(
+        reply
+            .json()
+            .obj("usage")
+            .and_then(|u| u.obj("relay_connections"))
+            .and_then(|r| r.num("current")),
+        Some(2)
+    );
+    drop(management_holder);
+    let (recovered_cookie, _) = server.login();
+    let reply = server.query(&recovered_cookie, "/api/v1/sessions");
+    assert_eq!(reply.status, 200);
+    assert_eq!(reply.json().arr("items").map(<[_]>::len), Some(1));
 }
 
 #[test]
