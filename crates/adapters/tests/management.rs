@@ -1594,9 +1594,19 @@ async fn idle_polling_and_absolute_activity_expiry_leave_existing_relays_alive()
         let mut last_success = Instant::now();
         let mut successes = 0;
         let mut active_past_idle = false;
-        for _ in 0..500 {
+        // The dashboard polls the query paths, so every request kind takes a turn.
+        // Only the session view reports the deadlines.
+        let paths = [
+            "/api/v1/session",
+            "/api/v1/summary",
+            "/api/v1/waiting",
+            "/api/v1/sessions",
+            "/api/v1/closed-sessions",
+        ];
+        for round in 0..500 {
             tokio::time::sleep(Duration::from_millis(10)).await;
-            let reply = plain_exchange(running.addr, &get("/api/v1/session", &headers)).await;
+            let path = paths[round % paths.len()];
+            let reply = plain_exchange(running.addr, &get(path, &headers)).await;
             assert!(
                 last_success.elapsed() < idle,
                 "requests stay frequent enough to avoid an idle gap"
@@ -1605,9 +1615,12 @@ async fn idle_polling_and_absolute_activity_expiry_leave_existing_relays_alive()
                 refused = Some(reply);
                 break;
             }
-            assert_eq!(reply.status, 200, "authenticated request before expiry");
+            assert_eq!(reply.status, 200, "{path} succeeds before expiry");
             successes += 1;
             last_success = Instant::now();
+            if path != "/api/v1/session" {
+                continue;
+            }
             let view = json_body(&reply);
             assert_eq!(view["absolute_expires_at"], initial["absolute_expires_at"]);
             if automatic {
