@@ -17,12 +17,16 @@ use rustls::{ClientConfig, RootCertStore, SupportedProtocolVersion};
 use serde_json::{Value, json};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
+use tokio::sync::watch;
+use tokio::task::JoinHandle;
 use tokio::time::timeout;
 use tokio_rustls::{TlsAcceptor, TlsConnector};
 use vnc_relay_adapters::accounts_file::{Argon2Hasher, Argon2Verifier};
 use vnc_relay_adapters::clock::SystemClock;
-use vnc_relay_adapters::crypto::SystemTokenSource;
+use vnc_relay_adapters::crypto::{RelayIdKey, SessionIdKey, SystemTokenSource};
 use vnc_relay_adapters::management_http::{DashboardHints, ManagementListener, ManagementServices};
+use vnc_relay_adapters::net::{AcceptPolicy, AllowSource, TcpEntryPoint};
+use vnc_relay_adapters::target::TcpTargetConnector;
 use vnc_relay_adapters::tls;
 use vnc_relay_app::events::{Event, RejectReason, Stage};
 use vnc_relay_app::management::login::dummy_hash;
@@ -33,13 +37,18 @@ use vnc_relay_app::ports::{
     Clock, EventSink, HashError, PasswordHasher, PasswordVerifier, RelayLifecycle,
     RelaySessionControl, RelayStateSource,
 };
-use vnc_relay_app::relay::RelaySnapshot;
+use vnc_relay_app::relay::{RelayRuntime, RelayRuntimeConfig, RelayService, RelaySnapshot};
 use vnc_relay_app::reload::snapshot::{RelayAllow, ReloadCell, ReloadSnapshot};
+use vnc_relay_app::settings::KeepaliveSettings;
 use vnc_relay_domain::account::{Account, AccountName, Argon2Params, Password, PasswordHash};
 use vnc_relay_domain::admin_session::AdminSessionPolicy;
+use vnc_relay_domain::allow_list::{AllowList, IpItem};
 use vnc_relay_domain::budget::ConnectionBudget;
+use vnc_relay_domain::entry_point::EntryPoint;
+use vnc_relay_domain::handshake::{HANDSHAKE_REQUEST_LEN, HandshakePolicy, VIEWER_GREETING};
 use vnc_relay_domain::login_limit::{LimitScope, LoginLimitPolicy};
 use vnc_relay_domain::peer_ip::PeerIp;
+use vnc_relay_domain::target_policy::TargetPolicy;
 
 /// Upper bound for one exchange. A hang fails the test instead of blocking it.
 const LIMIT: Duration = Duration::from_secs(10);
@@ -178,12 +187,6 @@ async fn start_with_ports(
     verifier: Arc<dyn PasswordVerifier>,
     clock: Arc<dyn Clock>,
 ) -> Running {
-    let listener = TcpListener::bind("127.0.0.1:0")
-        .await
-        .unwrap_or_else(|error| panic!("loopback bind: {error}"));
-    let addr = listener
-        .local_addr()
-        .unwrap_or_else(|error| panic!("loopback address: {error}"));
     let events = Arc::new(Recorder::default());
     let log: Arc<dyn EventSink> = events.clone();
     let budget = ConnectionBudget::new(admin_connections);
@@ -206,6 +209,33 @@ async fn start_with_ports(
         clock,
         Arc::clone(&log),
     ));
+    start_services(
+        tls,
+        budget,
+        upgrade,
+        ManagementServices {
+            auth,
+            query,
+            terminate,
+        },
+        events,
+    )
+    .await
+}
+
+async fn start_services(
+    tls: Option<TlsAcceptor>,
+    budget: Arc<ConnectionBudget>,
+    upgrade: Duration,
+    services: ManagementServices,
+    events: Arc<Recorder>,
+) -> Running {
+    let listener = TcpListener::bind("127.0.0.1:0")
+        .await
+        .unwrap_or_else(|error| panic!("loopback bind: {error}"));
+    let addr = listener
+        .local_addr()
+        .unwrap_or_else(|error| panic!("loopback address: {error}"));
     let dashboard = DashboardHints::new(
         Duration::from_secs(2),
         Duration::from_secs(5),
@@ -215,20 +245,257 @@ async fn start_with_ports(
         let snapshot = ReloadSnapshot::new(RelayAllow::default(), None, Some(acceptor));
         tls::TlsSource::management(Arc::new(ReloadCell::new(snapshot)))
     });
-    let listener = ManagementListener::new(
-        listener,
-        tls,
-        budget,
-        upgrade,
-        dashboard,
-        ManagementServices {
-            auth,
-            query,
-            terminate,
-        },
-    );
-    tokio::spawn(listener.run(log));
+    let listener = ManagementListener::new(listener, tls, budget, upgrade, dashboard, services);
+    tokio::spawn(listener.run(events.clone()));
     Running { addr, events }
+}
+
+/// The same runtime backs TCP relay traffic, operational queries and termination.
+struct RunningRelay {
+    management: Running,
+    viewer: SocketAddr,
+    server: SocketAddr,
+    stop: watch::Sender<bool>,
+    tasks: Vec<JoinHandle<()>>,
+}
+
+impl RunningRelay {
+    async fn start(session: AdminSessionPolicy) -> Self {
+        let clock: Arc<dyn Clock> = Arc::new(SystemClock::new());
+        let events = Arc::new(Recorder::default());
+        let log: Arc<dyn EventSink> = events.clone();
+        let relay_budget = ConnectionBudget::new(10);
+        let admin_budget = ConnectionBudget::new(ROOMY_LM);
+        let keepalive = KeepaliveSettings {
+            tcp_idle: Duration::from_secs(60),
+            tcp_interval: Duration::from_secs(10),
+            tcp_probes: 6,
+            ws_ping: Duration::from_secs(30),
+            ws_pong_timeout: Duration::from_secs(30),
+        };
+        let runtime = Arc::new(RelayRuntime::new(
+            TcpTargetConnector::new(keepalive),
+            Arc::new(RelayIdKey::generate().unwrap_or_else(|error| panic!("relay key: {error:?}"))),
+            Arc::new(SessionIdKey::from_bytes(&[0x59; 32])),
+            Arc::clone(&relay_budget),
+            ConnectionBudget::new(10),
+            RelayRuntimeConfig {
+                wait_timeout: LIMIT,
+                connect_timeout: LIMIT,
+                close_timeout: Duration::from_secs(1),
+                recent_closed: 16,
+                target_policy: TargetPolicy::new(Vec::new()),
+            },
+        ));
+        let auth = admin_auth(
+            Arc::clone(&log),
+            session,
+            limit_policy(),
+            Arc::new(Argon2Verifier),
+            Arc::clone(&clock),
+        );
+        let query = Arc::new(ManagementQueryService::new(
+            runtime.clone(),
+            Arc::clone(&relay_budget),
+            Arc::clone(&admin_budget),
+            Arc::clone(&clock),
+        ));
+        let terminate = Arc::new(ManagementTerminateService::new(
+            runtime.clone(),
+            Arc::clone(&clock),
+            Arc::clone(&log),
+        ));
+        let management = start_services(
+            None,
+            admin_budget,
+            UPGRADE,
+            ManagementServices {
+                auth,
+                query,
+                terminate,
+            },
+            events,
+        )
+        .await;
+        let service = Arc::new(RelayService::new(
+            HandshakePolicy {
+                mode1_enabled: false,
+                mode2_enabled: true,
+            },
+            LIMIT,
+            16_384,
+            Duration::from_secs(1),
+            Arc::clone(&clock),
+            Arc::clone(&log),
+        ));
+        let allow = AllowList::new(vec![
+            IpItem::parse("127.0.0.1").unwrap_or_else(|error| panic!("loopback allow: {error:?}")),
+        ]);
+        let cell = Arc::new(ReloadCell::new(ReloadSnapshot::new(
+            RelayAllow {
+                tcp_viewer: allow.clone(),
+                tcp_server: allow,
+                ..RelayAllow::default()
+            },
+            None,
+            None,
+        )));
+        let mut addresses = Vec::new();
+        let mut tasks = Vec::new();
+        let (stop, stopped) = watch::channel(false);
+        for (kind, allow) in [
+            (
+                EntryPoint::TcpViewer,
+                AllowSource::tcp_viewer(Arc::clone(&cell)),
+            ),
+            (EntryPoint::TcpServer, AllowSource::tcp_server(cell)),
+        ] {
+            let listener = TcpListener::bind("127.0.0.1:0")
+                .await
+                .unwrap_or_else(|error| panic!("relay bind: {error}"));
+            addresses.push(
+                listener
+                    .local_addr()
+                    .unwrap_or_else(|error| panic!("relay address: {error}")),
+            );
+            let entry = TcpEntryPoint::new(
+                kind,
+                listener,
+                AcceptPolicy {
+                    allow,
+                    relay_budget: Arc::clone(&relay_budget),
+                    handshake: LIMIT,
+                    keepalive,
+                },
+                Arc::clone(&service),
+                Arc::clone(&runtime),
+                Arc::clone(&clock),
+            );
+            tasks.push(tokio::spawn(entry.run(Arc::clone(&log), stopped.clone())));
+        }
+        Self {
+            management,
+            viewer: addresses[0],
+            server: addresses[1],
+            stop,
+            tasks,
+        }
+    }
+
+    async fn pair(&self) -> RelayPair {
+        timeout(LIMIT, async {
+            let mut viewer = TcpStream::connect(self.viewer)
+                .await
+                .unwrap_or_else(|error| panic!("viewer connect: {error}"));
+            let mut greeting = [0; VIEWER_GREETING.len()];
+            viewer
+                .read_exact(&mut greeting)
+                .await
+                .unwrap_or_else(|error| panic!("viewer greeting: {error}"));
+            assert_eq!(&greeting, VIEWER_GREETING);
+            let mut initial = [0; HANDSHAKE_REQUEST_LEN];
+            initial[..6].copy_from_slice(b"ID:123");
+            viewer
+                .write_all(&initial)
+                .await
+                .unwrap_or_else(|error| panic!("viewer handshake: {error}"));
+            wait_for(&self.management.events, |event| {
+                matches!(event, Event::WaitingRegistered { .. })
+            })
+            .await;
+            let mut server = TcpStream::connect(self.server)
+                .await
+                .unwrap_or_else(|error| panic!("server connect: {error}"));
+            server
+                .write_all(&initial)
+                .await
+                .unwrap_or_else(|error| panic!("server handshake: {error}"));
+            let started = wait_for(&self.management.events, |event| {
+                matches!(event, Event::SessionStarted { .. })
+            })
+            .await;
+            let Event::SessionStarted { session_id, .. } = started else {
+                panic!("session-start event identifies the real relay");
+            };
+            let mut pair = RelayPair {
+                viewer,
+                server,
+                session_id: session_id.to_string(),
+            };
+            pair.assert_bidirectional().await;
+            pair
+        })
+        .await
+        .unwrap_or_else(|error| panic!("relay pair starts in time: {error}"))
+    }
+}
+
+impl Drop for RunningRelay {
+    fn drop(&mut self) {
+        self.stop.send_replace(true);
+        for task in &self.tasks {
+            task.abort();
+        }
+    }
+}
+
+struct RelayPair {
+    viewer: TcpStream,
+    server: TcpStream,
+    session_id: String,
+}
+
+impl RelayPair {
+    async fn assert_bidirectional(&mut self) {
+        timeout(LIMIT, async {
+            async fn transfer(source: &mut TcpStream, destination: &mut TcpStream, bytes: &[u8]) {
+                source
+                    .write_all(bytes)
+                    .await
+                    .unwrap_or_else(|error| panic!("relay payload sent: {error}"));
+                let mut received = vec![0; bytes.len()];
+                destination
+                    .read_exact(&mut received)
+                    .await
+                    .unwrap_or_else(|error| panic!("relay payload received: {error}"));
+                assert_eq!(received, bytes);
+            }
+            transfer(&mut self.viewer, &mut self.server, b"viewer-to-server").await;
+            transfer(&mut self.server, &mut self.viewer, b"server-to-viewer").await;
+        })
+        .await
+        .unwrap_or_else(|error| panic!("relay carries both directions in time: {error}"));
+    }
+
+    async fn assert_listed_and_terminate(&self, running: &Running) {
+        let login = plain_exchange(running.addr, &login_request(ACCOUNT, PASSWORD)).await;
+        assert_eq!(login.status, 200);
+        let cookie = cookie_line(&login);
+        let csrf = csrf_line(&login);
+        let listed = plain_exchange(running.addr, &get("/api/v1/sessions", &[&cookie])).await;
+        assert_eq!(listed.status, 200);
+        let body = json_body(&listed);
+        let items = body["items"]
+            .as_array()
+            .unwrap_or_else(|| panic!("sessions is an array: {body}"));
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0]["session_id"], self.session_id);
+        assert_eq!(items[0]["state"], "active");
+        let terminated = plain_exchange(
+            running.addr,
+            &request(
+                "POST",
+                &format!("/api/v1/sessions/{}/terminate", self.session_id),
+                &[&cookie, &csrf],
+            ),
+        )
+        .await;
+        assert_eq!(terminated.status, 200);
+        let body = json_body(&terminated);
+        assert_eq!(body["result"], "terminated");
+        assert_eq!(body["closed_session"]["session_id"], self.session_id);
+        assert_eq!(body["closed_session"]["close_cause"], "admin_terminated");
+    }
 }
 
 struct EmptyRelaySource;
@@ -1106,48 +1373,39 @@ fn check_session_cookie(login: &Reply, secure: bool) {
     );
 }
 
-// Covers the login and the session view over HTTPS. The operational queries
-// (4.4) are not built yet, so the session view stands in for them here.
-/// spec: management.md:MGT-017 partial
+/// spec: management.md:MGT-017
 #[tokio::test]
-async fn https_login_sets_a_secure_cookie_and_opens_the_session_view() {
-    let running = start(Some(tls_acceptor()), ROOMY_LM).await;
+async fn https_and_plain_loopback_logins_set_transport_cookies_and_allow_queries() {
+    for secure in [true, false] {
+        let running = start(secure.then(tls_acceptor), ROOMY_LM).await;
+        let exchange = async |bytes: &[u8]| {
+            if secure {
+                https_exchange(running.addr, &[&TLS13], bytes).await
+            } else {
+                plain_exchange(running.addr, bytes).await
+            }
+        };
+        let login = exchange(&login_request(ACCOUNT, PASSWORD)).await;
+        assert_eq!(login.status, 200);
+        check_session_cookie(&login, secure);
+        let view = json_body(&login);
+        assert_eq!(view["account"], ACCOUNT);
+        assert_eq!(view["dashboard"]["poll_secs"], 2);
+        assert_eq!(view["dashboard"]["query_timeout_secs"], 5);
+        assert_eq!(view["dashboard"]["terminate_timeout_secs"], 15);
 
-    let login = https_exchange(running.addr, &[&TLS13], &login_request(ACCOUNT, PASSWORD)).await;
-    assert_eq!(login.status, 200);
-    check_session_cookie(&login, true);
-    let view = json_body(&login);
-    assert_eq!(view["account"], ACCOUNT);
-    assert_eq!(view["dashboard"]["poll_secs"], 2);
-    assert_eq!(view["dashboard"]["query_timeout_secs"], 5);
-    assert_eq!(view["dashboard"]["terminate_timeout_secs"], 15);
-
-    let cookie = cookie_line(&login);
-    let reply = https_exchange(
-        running.addr,
-        &[&TLS13],
-        &get("/api/v1/session", &[cookie.as_str()]),
-    )
-    .await;
-    assert_eq!(reply.status, 200);
-    assert_eq!(json_body(&reply)["account"], ACCOUNT);
-}
-
-// Covers the login and the session view over plain loopback HTTP. The operational
-// queries (4.4) are not built yet, so the session view stands in for them here.
-/// spec: management.md:MGT-017 partial
-#[tokio::test]
-async fn plain_http_login_sets_a_cookie_without_secure() {
-    let running = start(None, ROOMY_LM).await;
-
-    let login = plain_exchange(running.addr, &login_request(ACCOUNT, PASSWORD)).await;
-    assert_eq!(login.status, 200);
-    check_session_cookie(&login, false);
-
-    let cookie = cookie_line(&login);
-    let reply = plain_exchange(running.addr, &get("/api/v1/session", &[cookie.as_str()])).await;
-    assert_eq!(reply.status, 200);
-    assert_eq!(json_body(&reply)["account"], ACCOUNT);
+        let cookie = cookie_line(&login);
+        let reply = exchange(&get("/api/v1/session", &[&cookie])).await;
+        assert_eq!(reply.status, 200);
+        assert_eq!(json_body(&reply)["account"], ACCOUNT);
+        let summary = exchange(&get("/api/v1/summary", &[&cookie])).await;
+        assert_eq!(summary.status, 200);
+        assert_eq!(json_body(&summary)["server"]["state"], "ready");
+        assert_eq!(json_body(&summary)["counts"]["active"], 0);
+        let sessions = exchange(&get("/api/v1/sessions", &[&cookie])).await;
+        assert_eq!(sessions.status, 200);
+        assert_eq!(json_body(&sessions)["items"], json!([]));
+    }
 }
 
 // Covers the refusal of a wrong password and of an unknown account (MGT-018). The
@@ -1273,100 +1531,108 @@ async fn limited_logins_refuse_alike_and_the_right_password_works_after_the_lock
     assert_eq!(limited_events(&running, LimitScope::Source), 1);
 }
 
-// Covers the expired session for the session view and logout only.
-// Query, termination and live relay sessions are checked in their own tests.
-/// spec: management.md:MGT-019 partial
-#[tokio::test]
-async fn expired_session_cookie_is_refused_by_the_view_and_by_logout() {
-    let session = AdminSessionPolicy::new(Duration::from_millis(300), Duration::from_secs(3600));
-    let running = start_with(None, ROOMY_LM, UPGRADE, session, limit_policy()).await;
+fn assert_unauthenticated(reply: &Reply) {
+    assert_eq!(reply.status, 401);
+    assert_eq!(error_code(reply), "unauthenticated");
+    assert_eq!(
+        reply.header("www-authenticate"),
+        Some(r#"Session realm="vnc-relay""#)
+    );
+    assert_eq!(reply.header("set-cookie"), Some(CLEARED_COOKIE));
+}
 
+/// spec: management.md:MGT-019
+#[tokio::test]
+async fn expired_admin_cookie_cannot_query_or_terminate_and_the_relay_survives() {
+    let session = AdminSessionPolicy::new(Duration::from_millis(300), Duration::from_secs(3600));
+    let relay = RunningRelay::start(session).await;
+    let mut pair = relay.pair().await;
+    let running = &relay.management;
     let login = plain_exchange(running.addr, &login_request(ACCOUNT, PASSWORD)).await;
     assert_eq!(login.status, 200);
     let cookie = cookie_line(&login);
     let csrf = csrf_line(&login);
     tokio::time::sleep(Duration::from_millis(500)).await;
 
-    let view = plain_exchange(running.addr, &get("/api/v1/session", &[cookie.as_str()])).await;
-    assert_eq!(view.status, 401);
-    assert_eq!(error_code(&view), "unauthenticated");
-    assert_eq!(view.header("set-cookie"), Some(CLEARED_COOKIE));
-
-    let logout = plain_exchange(
-        running.addr,
-        &request(
-            "DELETE",
-            "/api/v1/session",
-            &[cookie.as_str(), csrf.as_str()],
+    for bytes in [
+        get("/api/v1/session", &[&cookie]),
+        get("/api/v1/summary", &[&cookie]),
+        get("/api/v1/sessions", &[&cookie]),
+        request(
+            "POST",
+            &format!("/api/v1/sessions/{}/terminate", pair.session_id),
+            &[&cookie, &csrf],
         ),
-    )
-    .await;
-    assert_eq!(logout.status, 401);
-    assert_eq!(error_code(&logout), "unauthenticated");
-}
-
-// Covers the idle deadline: automatic polls (X-Relay-Poll: 1) do not extend it. Relay
-// sessions are not checked here.
-/// spec: management.md:MGT-025 partial
-#[tokio::test]
-async fn automatic_polls_do_not_extend_the_idle_deadline() {
-    let idle = Duration::from_millis(500);
-    let session = AdminSessionPolicy::new(idle, Duration::from_secs(3600));
-    let running = start_with(None, ROOMY_LM, UPGRADE, session, limit_policy()).await;
-
-    let started = Instant::now();
-    let login = plain_exchange(running.addr, &login_request(ACCOUNT, PASSWORD)).await;
-    let cookie = cookie_line(&login);
-    let mut refused = None;
-    for _ in 0..50 {
-        tokio::time::sleep(Duration::from_millis(100)).await;
-        let poll = plain_exchange(
-            running.addr,
-            &get("/api/v1/session", &[cookie.as_str(), "X-Relay-Poll: 1"]),
-        )
-        .await;
-        if poll.status == 401 {
-            refused = Some(poll);
-            break;
-        }
-        assert_eq!(poll.status, 200, "poll before the idle deadline");
+        request("DELETE", "/api/v1/session", &[&cookie, &csrf]),
+    ] {
+        let reply = plain_exchange(running.addr, &bytes).await;
+        assert_unauthenticated(&reply);
     }
-    let refused = refused.unwrap_or_else(|| panic!("polls do not extend the idle deadline"));
-    assert_eq!(error_code(&refused), "unauthenticated");
-    assert!(
-        started.elapsed() >= idle,
-        "refused only after the idle time"
-    );
+    pair.assert_bidirectional().await;
+    pair.assert_listed_and_terminate(running).await;
 }
 
-// Covers the absolute deadline: user actions extend the idle deadline, but the
-// absolute deadline still ends the session. Relay sessions are not checked here.
-/// spec: management.md:MGT-025 partial
+/// spec: management.md:MGT-025
 #[tokio::test]
-async fn user_actions_keep_the_session_until_the_absolute_deadline() {
+async fn idle_polling_and_absolute_activity_expiry_leave_existing_relays_alive() {
+    let idle = Duration::from_millis(400);
     let max_lifetime = Duration::from_millis(1200);
-    let session = AdminSessionPolicy::new(Duration::from_millis(400), max_lifetime);
-    let running = start_with(None, ROOMY_LM, UPGRADE, session, limit_policy()).await;
-
-    let started = Instant::now();
-    let login = plain_exchange(running.addr, &login_request(ACCOUNT, PASSWORD)).await;
-    let cookie = cookie_line(&login);
-    let mut refused = None;
-    for _ in 0..40 {
-        tokio::time::sleep(Duration::from_millis(150)).await;
-        let view = plain_exchange(running.addr, &get("/api/v1/session", &[cookie.as_str()])).await;
-        if view.status == 401 {
-            refused = Some(view);
-            break;
+    for automatic in [true, false] {
+        let relay = RunningRelay::start(AdminSessionPolicy::new(idle, max_lifetime)).await;
+        let mut pair = relay.pair().await;
+        let running = &relay.management;
+        let started = Instant::now();
+        let login = plain_exchange(running.addr, &login_request(ACCOUNT, PASSWORD)).await;
+        assert_eq!(login.status, 200);
+        let initial = json_body(&login);
+        let cookie = cookie_line(&login);
+        let mut headers = vec![cookie.as_str()];
+        if automatic {
+            headers.push("X-Relay-Poll: 1");
         }
-        assert_eq!(view.status, 200, "user action before the absolute deadline");
+        let mut refused = None;
+        let mut last_success = Instant::now();
+        let mut successes = 0;
+        let mut active_past_idle = false;
+        for _ in 0..500 {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+            let reply = plain_exchange(running.addr, &get("/api/v1/session", &headers)).await;
+            assert!(
+                last_success.elapsed() < idle,
+                "requests stay frequent enough to avoid an idle gap"
+            );
+            if reply.status == 401 {
+                refused = Some(reply);
+                break;
+            }
+            assert_eq!(reply.status, 200, "authenticated request before expiry");
+            successes += 1;
+            last_success = Instant::now();
+            let view = json_body(&reply);
+            assert_eq!(view["absolute_expires_at"], initial["absolute_expires_at"]);
+            if automatic {
+                assert_eq!(view["idle_expires_at"], initial["idle_expires_at"]);
+            } else if started.elapsed() > idle {
+                active_past_idle = true;
+                assert_ne!(view["idle_expires_at"], initial["idle_expires_at"]);
+            }
+        }
+        let refused = refused.unwrap_or_else(|| panic!("the admin session expires in time"));
+        assert_unauthenticated(&refused);
+        assert!(successes > 1, "several requests succeeded before expiry");
+        if automatic {
+            assert!(started.elapsed() >= idle, "polls expire after Si");
+            assert!(started.elapsed() < max_lifetime, "polls expire before Sa");
+        } else {
+            assert!(active_past_idle, "user actions extend the idle deadline");
+            assert!(
+                started.elapsed() >= max_lifetime,
+                "activity still expires at Sa"
+            );
+        }
+        pair.assert_bidirectional().await;
+        pair.assert_listed_and_terminate(running).await;
     }
-    let refused = refused.unwrap_or_else(|| panic!("the absolute deadline ends the session"));
-    assert_eq!(error_code(&refused), "unauthenticated");
-    assert!(
-        started.elapsed() >= max_lifetime,
-        "refused only after the absolute lifetime"
-    );
 }
 
 // Covers the logout of one admin session. The relay sessions that stay open need a
