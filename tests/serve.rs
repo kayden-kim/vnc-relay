@@ -630,31 +630,11 @@ fn public_https_refuses_plaintext_and_answers_login_less_requests_with_401() {
 /// `method path` over TLS to the loopback `port`. The client trusts only the
 /// test root CA. Returns the status code and the body.
 fn https_request(port: u16, method: &str, path: &str) -> (u16, String) {
-    let mut roots = RootCertStore::empty();
-    let certs = CertificateDer::pem_file_iter(tls_file("root-ca.pem"))
-        .unwrap_or_else(|error| panic!("root CA opens: {error}"));
-    for cert in certs {
-        let cert = cert.unwrap_or_else(|error| panic!("root CA is PEM: {error}"));
-        roots
-            .add(cert)
-            .unwrap_or_else(|error| panic!("root CA is a certificate: {error}"));
-    }
-    let config = ClientConfig::builder_with_provider(Arc::new(
-        rustls::crypto::aws_lc_rs::default_provider(),
-    ))
-    .with_protocol_versions(&[&TLS13, &TLS12])
-    .unwrap_or_else(|error| panic!("client protocol versions: {error}"))
-    .with_root_certificates(roots)
-    .with_no_client_auth();
-    let name = ServerName::try_from("localhost")
-        .unwrap_or_else(|error| panic!("server name is valid: {error}"));
-    let connection = ClientConnection::new(Arc::new(config), name)
-        .unwrap_or_else(|error| panic!("client connection: {error}"));
     let tcp = TcpStream::connect(("127.0.0.1", port))
         .unwrap_or_else(|error| panic!("connect {port}: {error}"));
     tcp.set_read_timeout(Some(EXIT_LIMIT))
         .unwrap_or_else(|error| panic!("read timeout: {error}"));
-    let mut stream = StreamOwned::new(connection, tcp);
+    let mut stream = tls_peer(tcp);
     let request =
         format!("{method} {path} HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n");
     stream
@@ -676,6 +656,31 @@ fn https_request(port: u16, method: &str, path: &str) -> (u16, String) {
         .and_then(|code| code.parse().ok())
         .unwrap_or_else(|| panic!("no status line: {raw:?}"));
     (status, body.to_owned())
+}
+
+/// Wraps a bounded socket in a TLS client that trusts only the test root.
+fn tls_peer(tcp: TcpStream) -> StreamOwned<ClientConnection, TcpStream> {
+    let mut roots = RootCertStore::empty();
+    let certs = CertificateDer::pem_file_iter(tls_file("root-ca.pem"))
+        .unwrap_or_else(|error| panic!("root CA opens: {error}"));
+    for cert in certs {
+        let cert = cert.unwrap_or_else(|error| panic!("root CA is PEM: {error}"));
+        roots
+            .add(cert)
+            .unwrap_or_else(|error| panic!("root CA is a certificate: {error}"));
+    }
+    let config = ClientConfig::builder_with_provider(Arc::new(
+        rustls::crypto::aws_lc_rs::default_provider(),
+    ))
+    .with_protocol_versions(&[&TLS13, &TLS12])
+    .unwrap_or_else(|error| panic!("client protocol versions: {error}"))
+    .with_root_certificates(roots)
+    .with_no_client_auth();
+    let name = ServerName::try_from("localhost")
+        .unwrap_or_else(|error| panic!("server name is valid: {error}"));
+    let connection = ClientConnection::new(Arc::new(config), name)
+        .unwrap_or_else(|error| panic!("client connection: {error}"));
+    StreamOwned::new(connection, tcp)
 }
 
 /// Plain HTTP sent to the TLS port. The server must not answer it as HTTP. It
@@ -1147,6 +1152,7 @@ fn entry_config(ports: Ports, viewer_allow: &str, server_allow: &str) -> String 
 fn connect_from(source: [u8; 4], port: u16) -> TcpStream {
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_io()
+        .enable_time()
         .build()
         .unwrap_or_else(|error| panic!("runtime: {error}"));
     runtime.block_on(async {
@@ -1155,16 +1161,25 @@ fn connect_from(source: [u8; 4], port: u16) -> TcpStream {
         socket
             .bind(SocketAddr::from((source, 0)))
             .unwrap_or_else(|error| panic!("bind {source:?}: {error}"));
-        let stream = socket
-            .connect(SocketAddr::from(([127, 0, 0, 1], port)))
-            .await
-            .unwrap_or_else(|error| panic!("connect {port}: {error}"));
+        let stream = tokio::time::timeout(
+            EXIT_LIMIT,
+            socket.connect(SocketAddr::from(([127, 0, 0, 1], port))),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("connect {port} timed out: {error}"))
+        .unwrap_or_else(|error| panic!("connect {port}: {error}"));
         let stream = stream
             .into_std()
             .unwrap_or_else(|error| panic!("into std: {error}"));
         stream
             .set_nonblocking(false)
             .unwrap_or_else(|error| panic!("blocking: {error}"));
+        stream
+            .set_read_timeout(Some(EXIT_LIMIT))
+            .unwrap_or_else(|error| panic!("read timeout: {error}"));
+        stream
+            .set_write_timeout(Some(EXIT_LIMIT))
+            .unwrap_or_else(|error| panic!("write timeout: {error}"));
         stream
     })
 }
@@ -2256,4 +2271,318 @@ fn disabled_mode_rejects_connection_with_mode_disabled() {
             && field(line, "reason") == Some("mode_disabled")
     });
     assert_eq!(field(&rejected, "stage"), Some("initial_exchange"));
+}
+
+/// Reserves the WS ports while selecting the other four listener ports.
+fn four_entry_ports() -> (Ports, u16, u16) {
+    let holders: Vec<TcpListener> = (0..2)
+        .map(|_| TcpListener::bind("127.0.0.1:0").unwrap_or_else(|e| panic!("free port: {e}")))
+        .collect();
+    let port = |i: usize| {
+        holders[i]
+            .local_addr()
+            .unwrap_or_else(|e| panic!("local addr: {e}"))
+            .port()
+    };
+    (Ports::free(), port(0), port(1))
+}
+
+fn four_entry_config(ports: Ports, ws: u16, wss: u16, separate_lists: bool) -> String {
+    let allow = |last: u8| {
+        if separate_lists {
+            format!(r#"["127.0.0.{last}"]"#)
+        } else {
+            r#"["127.0.0.0/8"]"#.to_owned()
+        }
+    };
+    entry_config(ports, &allow(2), &allow(3))
+        + &format!(
+            "\n[relay.ws_viewer]\nenabled = true\nlisten = '127.0.0.1:{ws}'\nallow = {}\n\
+             \n[relay.wss_viewer]\nenabled = true\nlisten = '127.0.0.1:{wss}'\nallow = {}\ncert_file = '{}'\nkey_file = '{}'\n\
+             \n[mode2]\nenabled = true\n",
+            allow(4),
+            allow(5),
+            tls_file("server-chain.pem"),
+            tls_file("server-key-p256.pem")
+        )
+}
+
+trait TestPeer: Read + Write {}
+impl<T: Read + Write> TestPeer for T {}
+
+fn relay_peer(source: u8, port: u16, secure: bool) -> Box<dyn TestPeer> {
+    let tcp = connect_from([127, 0, 0, source], port);
+    if secure {
+        Box::new(tls_peer(tcp))
+    } else {
+        Box::new(tcp)
+    }
+}
+
+fn upgrade_peer(peer: &mut dyn TestPeer) {
+    peer.write_all(
+        b"GET /relay HTTP/1.1\r\nHost: localhost\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n",
+    )
+    .unwrap_or_else(|e| panic!("upgrade request: {e}"));
+    peer.flush()
+        .unwrap_or_else(|e| panic!("flush request: {e}"));
+    let mut head = Vec::new();
+    while !head.ends_with(b"\r\n\r\n") {
+        assert!(head.len() < 16384, "oversized upgrade response");
+        let mut byte = [0];
+        peer.read_exact(&mut byte)
+            .unwrap_or_else(|e| panic!("upgrade response: {e}"));
+        head.push(byte[0]);
+    }
+    assert!(
+        head.starts_with(b"HTTP/1.1 101 "),
+        "upgrade: {}",
+        String::from_utf8_lossy(&head)
+    );
+    assert!(String::from_utf8_lossy(&head).lines().any(|line| {
+        line.eq_ignore_ascii_case("Sec-WebSocket-Accept: s3pPLMBiTxaQ9kYGzzhZRbK+xOo=")
+    }));
+}
+
+fn assert_peer_greeting(peer: &mut dyn TestPeer, websocket: bool) {
+    if websocket {
+        let mut header = [0; 2];
+        peer.read_exact(&mut header)
+            .unwrap_or_else(|e| panic!("binary greeting header: {e}"));
+        assert_eq!(header, [0x82, 12]);
+    }
+    let mut greeting = [0; 12];
+    peer.read_exact(&mut greeting)
+        .unwrap_or_else(|e| panic!("relay greeting: {e}"));
+    assert_eq!(&greeting, b"RFB 000.000\n");
+}
+
+/// EOF or reset must carry no application response. TLS may omit close_notify.
+fn assert_peer_closed_without_data(peer: &mut dyn TestPeer) {
+    let mut byte = [0];
+    match peer.read(&mut byte) {
+        Ok(0) => {}
+        Err(error)
+            if matches!(
+                error.kind(),
+                ErrorKind::ConnectionReset
+                    | ErrorKind::ConnectionAborted
+                    | ErrorKind::UnexpectedEof
+            ) => {}
+        other => panic!("expected bounded closure without data, got {other:?}"),
+    }
+}
+
+/// spec: operations.md:OPS-037
+#[test]
+fn every_relay_entry_point_accepts_only_its_own_source_ip() {
+    let _lock = lock_ports();
+    let (ports, ws, wss) = four_entry_ports();
+    let config = setup_with("four-entry-allow", &four_entry_config(ports, ws, wss, true));
+    let log = config.with_file_name("relay.log");
+    let _guard = Guard(Some(spawn(&config)));
+    wait_for_line(&log, |line| field(line, "event") == Some("server_ready"));
+
+    // Every source appears in exactly one list. Check all 16 pairs, not just
+    // WS versus WSS or Viewer versus Server.
+    for (listener, port, own_source, websocket, secure) in [
+        ("tcp_viewer", ports.tcp_viewer, 2, false, false),
+        ("tcp_server", ports.tcp_server, 3, false, false),
+        ("ws_viewer", ws, 4, true, false),
+        ("wss_viewer", wss, 5, true, true),
+    ] {
+        for source in 2..=5 {
+            let ip = format!("127.0.0.{source}");
+            if source != own_source {
+                // No request or ClientHello: refusal precedes data and TLS.
+                let mut peer = connect_from([127, 0, 0, source], port);
+                assert_peer_closed_without_data(&mut peer);
+                let rejected =
+                    wait_for_line(&log, |line| is(line, "connection_rejected", listener, &ip));
+                assert_eq!(field(&rejected, "stage"), Some("accept"));
+                assert_eq!(field(&rejected, "reason"), Some("ip_not_allowed"));
+                assert_eq!(field(&rejected, "level"), Some("warn"));
+                assert_eq!(field(&rejected, "conn_id"), None);
+                assert!(
+                    !read_log(&log)
+                        .lines()
+                        .any(|line| { is(line, "connection_accepted", listener, &ip) })
+                );
+                continue;
+            }
+            let mut peer = relay_peer(source, port, secure);
+            if websocket {
+                upgrade_peer(peer.as_mut());
+            }
+            if listener == "tcp_server" {
+                peer.write_all(&make_request(b"ID:3701"))
+                    .unwrap_or_else(|e| panic!("server initial request: {e}"));
+                peer.flush().unwrap_or_else(|e| panic!("flush server: {e}"));
+            } else {
+                assert_peer_greeting(peer.as_mut(), websocket);
+            }
+            let accepted =
+                wait_for_line(&log, |line| is(line, "connection_accepted", listener, &ip));
+            assert_eq!(field(&accepted, "level"), Some("info"));
+            assert_eq!(
+                field(&accepted, "role"),
+                Some(if listener == "tcp_server" {
+                    "server"
+                } else {
+                    "viewer"
+                })
+            );
+            let conn_id = field(&accepted, "conn_id")
+                .unwrap_or_else(|| panic!("accepted conn_id missing: {accepted}"));
+            if listener == "tcp_server" {
+                wait_for_line(&log, |line| {
+                    field(line, "event") == Some("waiting_registered")
+                        && field(line, "conn_id") == Some(conn_id)
+                });
+            }
+        }
+    }
+}
+
+/// spec: operations.md:OPS-006
+#[test]
+fn initial_tls_and_upgrade_deadlines_have_distinct_causes_and_release_capacity() {
+    let _lock = lock_ports();
+    let (ports, ws, wss) = four_entry_ports();
+    let config = setup_with(
+        "stage-deadlines",
+        &(four_entry_config(ports, ws, wss, false)
+            + "\n[limits]\nrelay_connections = 2\nwaiting = 2\n\
+               \n[timeouts]\nhandshake_secs = 1\ntls_upgrade_secs = 2\nclose_secs = 1\n"),
+    );
+    let log = config.with_file_name("relay.log");
+    let _guard = Guard(Some(spawn(&config)));
+    wait_for_line(&log, |line| field(line, "event") == Some("server_ready"));
+
+    for ((listener, port, stage, secure, websocket), source) in [
+        (
+            "tcp_viewer",
+            ports.tcp_viewer,
+            "initial_exchange",
+            false,
+            false,
+        ),
+        (
+            "tcp_server",
+            ports.tcp_server,
+            "initial_exchange",
+            false,
+            false,
+        ),
+        ("ws_viewer", ws, "initial_exchange", false, true),
+        ("wss_viewer", wss, "initial_exchange", true, true),
+        ("ws_viewer", ws, "upgrade", false, true),
+        ("wss_viewer", wss, "tls", false, true),
+        ("wss_viewer", wss, "upgrade", true, true),
+    ]
+    .into_iter()
+    .zip(10..17)
+    {
+        let mut started = Instant::now();
+        let mut peer = relay_peer(source, port, secure);
+        let initial = stage == "initial_exchange";
+        if initial {
+            if websocket {
+                // Spend more than H before 101, but less than U. H must start
+                // at 101 rather than borrowing the accept-time U deadline.
+                let pre_upgrade = Instant::now();
+                while pre_upgrade.elapsed() < Duration::from_millis(1200) {
+                    std::thread::sleep(Duration::from_millis(10));
+                }
+                started = Instant::now();
+                upgrade_peer(peer.as_mut());
+            }
+            if listener != "tcp_server" {
+                assert_peer_greeting(peer.as_mut(), websocket);
+            }
+        } else if stage == "upgrade" {
+            peer.write_all(b"GET /relay HTTP/1.1\r\nHost: localhost\r\n")
+                .unwrap_or_else(|e| panic!("incomplete upgrade: {e}"));
+            peer.flush()
+                .unwrap_or_else(|e| panic!("flush partial: {e}"));
+        }
+        let ip = format!("127.0.0.{source}");
+        let accepted = wait_for_line(&log, |line| is(line, "connection_accepted", listener, &ip));
+        let conn_id =
+            field(&accepted, "conn_id").unwrap_or_else(|| panic!("conn_id missing: {accepted}"));
+        if initial && websocket {
+            let mut header = [0; 2];
+            peer.read_exact(&mut header)
+                .unwrap_or_else(|e| panic!("H Close header: {e}"));
+            assert_eq!(header, [0x88, 19]);
+            let mut body = [0; 19];
+            peer.read_exact(&mut body)
+                .unwrap_or_else(|e| panic!("H Close body: {e}"));
+            assert_eq!(&body[..2], &4009_u16.to_be_bytes());
+            assert_eq!(&body[2..], b"handshake_timeout");
+        } else {
+            assert_peer_closed_without_data(peer.as_mut());
+        }
+        let minimum = Duration::from_secs(if initial { 1 } else { 2 });
+        assert!(
+            started.elapsed() >= minimum,
+            "{listener}/{stage} closed early: {:?}",
+            started.elapsed()
+        );
+        assert!(
+            started.elapsed() < minimum * 2,
+            "{listener}/{stage} closed late"
+        );
+        if initial && websocket {
+            // Do not close the client to make reclamation happen. Even without
+            // a Close reply, the server must finish cleanup within E.
+            assert_peer_closed_without_data(peer.as_mut());
+        }
+        let aborted = wait_for_line(&log, |line| {
+            field(line, "event") == Some("connection_aborted")
+                && field(line, "conn_id") == Some(conn_id)
+        });
+        assert_eq!(field(&aborted, "listener"), Some(listener));
+        assert_eq!(field(&aborted, "stage"), Some(stage));
+        assert_eq!(
+            field(&aborted, "reason"),
+            Some(if initial {
+                "handshake_timeout"
+            } else {
+                "tls_upgrade_timeout"
+            })
+        );
+        assert_eq!(field(&aborted, "level"), Some("warn"));
+        assert!(aborted.contains("\"elapsed_ms\":"), "{aborted}");
+
+        // L=2. Both slots must be available, not merely the one that was free
+        // during the stalled exchange. Keep both probes alive until observed.
+        let mut probes = Vec::new();
+        for source in [3, 4] {
+            let mut probe = connect_from([127, 0, 0, source], ports.tcp_viewer);
+            assert_peer_greeting(&mut probe, false);
+            probes.push(probe);
+        }
+        let ids: Vec<String> = [3, 4]
+            .map(|source| {
+                let ip = format!("127.0.0.{source}");
+                let text = read_log(&log);
+                let accepted = text
+                    .lines()
+                    .rfind(|line| is(line, "connection_accepted", "tcp_viewer", &ip))
+                    .unwrap_or_else(|| panic!("missing capacity probe: {text}"));
+                field(accepted, "conn_id")
+                    .unwrap_or_else(|| panic!("probe conn_id missing: {accepted}"))
+                    .to_owned()
+            })
+            .into();
+        drop(probes);
+        for id in ids {
+            wait_for_line(&log, |line| {
+                field(line, "event") == Some("connection_aborted")
+                    && field(line, "conn_id") == Some(id.as_str())
+            });
+        }
+        drop(peer);
+    }
 }
