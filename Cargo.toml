@@ -32,7 +32,8 @@ vnc-relay-domain = { path = "crates/domain" }
 
 # Lint policy: docs/conventions/rust.md section 2.
 [workspace.lints.rust]
-# Only crates/adapters/src/terminal/windows_console.rs allows `unsafe` (docs/conventions/rust.md section 2).
+# Only crates/adapters/src/terminal/windows_console.rs and the pseudo-console
+# module of tests/windows_console.rs allow `unsafe` (docs/conventions/rust.md section 2).
 unsafe_code = "deny"
 
 [workspace.lints.clippy]
