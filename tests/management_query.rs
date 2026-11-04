@@ -13,7 +13,7 @@
 //! - MGT-021 (full): unauthenticated queries rejected on all routes with 401
 //! - MGT-023 (partial): EOF and connection error causes in closed-sessions, detail of closed gives 404 (admin-terminate requires 4.5)
 //! - MGT-024 (full): R overflow drops oldest in FIFO, restart clears in-memory list
-//! - MGT-026 (full on Linux, partial portable): counts and usage match at L limit with pending connections
+//! - MGT-026 (full on Linux and Windows, partial portable): counts and usage match at L limit with pending connections
 //! - OPS-033 (full): login, queries and termination at L; bidirectional relay at shared management/status Lm
 //! - Contract rules: error order, 405 Allow GET, X-Relay-Poll 1 idle preservation, Cache-Control: no-store, session_id grammar
 
@@ -2216,6 +2216,103 @@ fn counts_and_usage_match_at_limit_with_pending_connections_linux() {
     assert_eq!(admin_usage.num("current"), Some(1));
     assert_eq!(admin_usage.num("limit"), Some(5));
     assert!(admin_usage.is_null("current_unavailable_reason"));
+}
+
+#[cfg(windows)]
+/// spec: management.md:MGT-026
+#[test]
+fn counts_and_usage_match_at_limit_with_pending_connections_windows() {
+    fn at_limit(summary: &JsonValue) -> bool {
+        let counts = summary.obj("counts");
+        let relay = summary
+            .obj("usage")
+            .and_then(|u| u.obj("relay_connections"));
+        counts.and_then(|c| c.num("handshaking")) == Some(2)
+            && counts.and_then(|c| c.num("target_connecting")) == Some(1)
+            && relay.and_then(|r| r.num("current")) == Some(4)
+    }
+
+    fn relay_current(summary: &JsonValue) -> Option<i64> {
+        summary
+            .obj("usage")
+            .and_then(|u| u.obj("relay_connections"))
+            .and_then(|r| r.num("current"))
+    }
+
+    let _lock = lock_ports();
+    // Same budget as the Linux test: one Mode I viewer and its target socket,
+    // plus two connections in the initial exchange, fill L = 4.
+    let server = RunningServer::start("mgt026_windows", "", 5, 4, 5);
+    let (cookie, _) = server.login();
+    server.poll_summary_until(&cookie, IO_LIMIT, |summary| {
+        relay_current(summary) == Some(0)
+    });
+
+    let addr = SocketAddr::from(([127, 0, 0, 1], server.tcp_viewer_port));
+    let mut h1 = TcpStream::connect(addr).unwrap_or_else(|e| panic!("{e:?}"));
+    let mut g1 = [0u8; 12];
+    h1.read_exact(&mut g1).unwrap_or_else(|e| panic!("{e:?}"));
+    h1.write_all(b"ID:10").unwrap_or_else(|e| panic!("{e:?}"));
+    let mut h2 = TcpStream::connect(addr).unwrap_or_else(|e| panic!("{e:?}"));
+    let mut g2 = [0u8; 12];
+    h2.read_exact(&mut g2).unwrap_or_else(|e| panic!("{e:?}"));
+    h2.write_all(b"ID:20").unwrap_or_else(|e| panic!("{e:?}"));
+    server.poll_summary_until(&cookie, IO_LIMIT, |summary| {
+        relay_current(summary) == Some(2)
+    });
+
+    // Windows refuses a connect to a closed loopback port only after about
+    // 2 s of SYN retries (2.0 s measured on 2026-11-04), so the relay's target
+    // connect stays pending for that window. A window missed under load is
+    // retried with a new Mode I connection; each judgement is one response.
+    let closed_target = TcpListener::bind("127.0.0.1:0")
+        .and_then(|listener| listener.local_addr())
+        .unwrap_or_else(|e| panic!("reserve a closed port: {e:?}"));
+    let mut observed = None;
+    for _ in 0..5 {
+        let mut viewer = server.connect_tcp_viewer();
+        viewer
+            .write_all(&make_mode1_request(&closed_target.to_string()))
+            .unwrap_or_else(|e| panic!("{e:?}"));
+        let window_end = Instant::now() + Duration::from_millis(1500);
+        while observed.is_none() && Instant::now() < window_end {
+            let reply = server.query(&cookie, "/api/v1/summary");
+            if reply.status == 200 {
+                let summary = reply.json();
+                if at_limit(&summary) {
+                    observed = Some(summary);
+                }
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        drop(viewer);
+        if observed.is_some() {
+            break;
+        }
+        server.poll_summary_until(&cookie, IO_LIMIT, |summary| {
+            relay_current(summary) == Some(2)
+        });
+    }
+    let summary = some(observed, "summary while the target connect is pending");
+
+    let counts = some(summary.obj("counts"), "counts");
+    let usage = some(summary.obj("usage"), "usage");
+    let relay_usage = some(usage.obj("relay_connections"), "relay_connections");
+    let admin_usage = some(usage.obj("admin_connections"), "admin_connections");
+
+    assert_eq!(counts.num("handshaking"), Some(2));
+    assert_eq!(counts.num("target_connecting"), Some(1));
+    assert_eq!(counts.num("waiting"), Some(0));
+    assert_eq!(counts.num("active"), Some(0));
+
+    assert_eq!(relay_usage.num("current"), Some(4));
+    assert_eq!(relay_usage.num("limit"), Some(4));
+    assert!(relay_usage.is_null("current_unavailable_reason"));
+
+    assert_eq!(admin_usage.num("current"), Some(1));
+    assert_eq!(admin_usage.num("limit"), Some(5));
+    assert!(admin_usage.is_null("current_unavailable_reason"));
+    drop((h1, h2));
 }
 
 /// spec: management.md:MGT-026 partial
