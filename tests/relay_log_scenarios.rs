@@ -1027,6 +1027,8 @@ fn operations_log_records_contract_events_and_correlates_identifiers() {
         if let Some(conn_id) = obj.str("conn_id")
             && event != "connection_accepted"
         {
+            // Line order proves the acceptance came first. `ts` is the wall
+            // clock at record time; a clock correction may step it back.
             let accepted = some(
                 objects[..index].iter().find(|prior| {
                     prior.str("event") == Some("connection_accepted")
@@ -1039,7 +1041,6 @@ fn operations_log_records_contract_events_and_correlates_identifiers() {
                     assert_eq!(accepted.str(field), Some(value), "{event}: {field}");
                 }
             }
-            assert!(some(accepted.str("ts"), "accept ts") <= ts);
         }
 
         match event {
@@ -1182,8 +1183,6 @@ fn operations_log_records_contract_events_and_correlates_identifiers() {
                 for field in ["mode", "viewer_transport", "relay_id_ref"] {
                     assert_eq!(obj.str(field), started.str(field), "{sid}: {field}");
                 }
-                assert!(some(started.str("ts"), "session start ts") <= ts);
-                assert!(some(obj.str("started_at"), "started_at") <= ts);
                 if sid == s2_session_id {
                     assert_eq!(obj.str("close_cause"), Some("admin_terminated"));
                     assert_eq!(obj.str("admin_account"), Some("alice"));
@@ -1217,7 +1216,6 @@ fn operations_log_records_contract_events_and_correlates_identifiers() {
                     "cleanup before administrator audit",
                 );
                 assert_eq!(closed.str("admin_account"), obj.str("admin_account"));
-                assert!(some(closed.str("ts"), "closure ts") <= ts);
             }
             _ => {}
         }
