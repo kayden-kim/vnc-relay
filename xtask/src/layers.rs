@@ -61,7 +61,9 @@ const RULES: &[Rule] = &[
     Rule {
         package: "vnc-relay",
         internal: &["vnc-relay-domain", "vnc-relay-app", "vnc-relay-adapters"],
-        external: External::Only(&["clap", "rustls", "tokio"]),
+        // rustls and windows-sys are dev-dependencies; windows-sys serves only
+        // the Windows pseudo-console test (code map section 1, Q103).
+        external: External::Only(&["clap", "rustls", "tokio", "windows-sys"]),
     },
     Rule {
         package: "xtask",
