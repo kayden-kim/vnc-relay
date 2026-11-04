@@ -22,6 +22,7 @@
   - 줄 섞임 방지: 한 줄을 다 만든 뒤 잠금을 잡고 한 번에 쓴다.
   - 쓰기 실패: 그 줄을 버리고 서비스를 계속한다. 처음 실패할 때만 실행파일 조립 쪽에 알려 stderr에 `warning[log_write_failed]` 한 줄을 쓰게 한다(사용자 결정 2026-10-20).
   - 로그 파일 열기 실패: `log_file_unavailable`(종료 코드 3, 사용자 결정 2026-10-20).
+  - 로그 파일 다시 열기: 이름 변경·삭제·생성 알림과 Dp마다 같은 경로를 이어 쓰기로 연다. 파일이 없으면 만든다. 쓰기와 같은 잠금 안에서 핸들을 바꾼다. 실패하면 이전 핸들을 유지한다(사용자 결정 2026-11-04(Q104·Q109·Q110)).
   - 작업 2.3의 사건: `server_starting`, 설정 경고 4종(`phase`는 `startup`), `startup_failed`(진단 하나에 한 줄), `server_stopped`.
   - `relay_id_ref` 계산(1.9절): 운영체제 난수로 만든 32바이트 키, HMAC-SHA-256 결과의 앞 8바이트를 소문자 16진수 16자로 쓴다.
   - `peer_ip` 표기(1.10절): IPv4-mapped IPv6 주소는 IPv4로 바꾼다. IPv6는 RFC 5952 소문자 축약형이다. 포트와 영역 식별자는 쓰지 않는다.
@@ -31,7 +32,6 @@
   - `shutdown_started`·`shutdown_forced`. 종료 유예를 만드는 작업 5.3이 맡는다.
   - `server_ready`를 기록하는 시점. 준비 상태를 바꾸는 [상태 리스너와 준비 상태 모듈 설계](status-listener.md)가 맡는다. 이 모듈은 줄 형식만 맡는다.
   - 프로세스 시작 때 `RelayIdKey`를 만드는 일과 그 실패 처리, `relay_id_ref`를 실제 사건에 넣는 일. 중계 ID를 처음 다루는 작업 2.9가 맡는다(사용자 결정 2026-10-20).
-  - 로그 파일 교체 뒤 다시 열기. [CLI 계약 6절](../contracts/cli-v1.md#6-초안을-확정하기-전에-해결할-사항)의 관찰 항목이다.
   - `accounts_file_permissive` 경고. 운영 정보 계약의 사건이 아니며 stderr에만 쓴다([`serve` 시작 모듈 설계](serve-startup.md)).
 - 다른 모듈에 공개하는 기능:
   - `vnc_relay_domain::peer_ip::PeerIp`
@@ -61,6 +61,7 @@ flowchart LR
 | `crates/app/src/events.rs` `Level`, `Phase`, `RelayIdRef`, `LOG_CONTRACT` | `level` 값, `phase` 값(`startup`·`reload`), 중계 ID 참조 값(16진수 16자만 만든다), `server_starting`의 `log_contract` 값 | 값 타입 | 없음 |
 | `crates/app/src/ports.rs` `EventSink` | 사건 기록 포트. `record(&self, &Event)`. 실패를 돌려주지 않는다. 기록 실패가 사용 사례의 흐름을 바꾸지 않게 하기 위해서다. | trait | `events` |
 | `crates/adapters/src/ops_log.rs` `JsonLinesEventSink` | `EventSink` 구현. 출력(표준 출력 또는 이어 쓰기 파일)을 잠금 안에 두고 한 줄을 `write_all` 한 번으로 쓴다. 첫 쓰기 실패 때 생성할 때 받은 알림 함수를 한 번 부른다. | `serve::run`이 설정 검증 뒤 만든다. 프로세스가 끝날 때까지 | app, serde_json |
+| `JsonLinesEventSink::reopen`, `file_path` | 파일 경로를 감지기에 제공한다. 같은 출력 잠금 안에서 다시 열고 핸들을 바꾼다. 실패 연속 구간의 첫 실패만 이전 파일에 `log_reopen_failed`로 쓴다. 첫 실패 알림 함수는 stderr 진단을 조립 쪽에 맡긴다. | 파일 출력 싱크의 수명 | app 사건 |
 | `crates/adapters/src/ops_log.rs` `format_line` | 사건과 시각으로 한 줄(LF 포함)을 만든다. 필드 순서는 `ts`, `level`, `event`, 사건 필드다. 문자열 길이 제한을 적용한다. | 호출마다 | app, serde_json |
 | `crates/adapters/src/ops_log.rs` `LogFileError` | 로그 파일을 열 수 없는 이유. `code()`는 `log_file_unavailable`이다. 원인 문장에 경로를 넣지 않는다. | `JsonLinesEventSink::open`이 만든다 | 없음 |
 | `crates/adapters/src/crypto.rs` `RelayIdKey`, `CryptoError` | 1.9절 키와 HMAC-SHA-256 계산. `Debug`는 키를 가린다. 키를 저장하거나 기록하지 않는다. | 프로세스 시작 때 한 번. 시작 순서에 넣는 일은 작업 2.9다. | aws-lc-rs, app |
@@ -97,11 +98,20 @@ flowchart LR
 
 `format_line`은 `Event::name()`·`level()`과 사건 필드로 `serde_json::Value` 목록을 만들고, 키와 값을 차례로 직렬화해 `{...}\n`을 만든다. serde_json이 문자열 안의 줄바꿈과 제어 문자를 이스케이프하므로 줄은 LF 하나로 끝난다.
 
+### 4.1 로그 파일 교체
+
+`file_watch`는 로그 경로의 생성·삭제·이름 변경 알림을 별도 신호로 보낸다. `ReloadWatcher::run`은 재로드 후보 처리와 독립된 `reopen_log` 작업을 함께 실행한다. 이 작업은 알림을 받으면 곧바로, 그리고 Dp마다 `JsonLinesEventSink::reopen`을 부른다. 재로드 안정화가 오래 걸려도 로그의 Dp 시도는 계속된다. 표준 출력 싱크는 이 작업을 만들지 않는다.
+
+`reopen`은 줄 쓰기와 같은 잠금을 잡고 같은 경로를 이어 쓰기로 연다. 성공하면 핸들을 바꾸고 실패 연속 구간을 끝낸다. 성공 사건은 쓰지 않는다. 실패하면 핸들을 그대로 둔다. 실패 연속 구간의 첫 실패만 이전 파일에 `log_reopen_failed`(`warn`, `reason=log_file_unavailable`, `config_key=log.output`, 경로 없는 원인 문장 `detail`)를 쓴다. 잠금을 푼 뒤 알림 함수가 `warning[log_reopen_failed] key=log.output: <message>`를 stderr에 쓴다. 실패 사건 자체를 쓰지 못하면 기존 쓰기 실패 규칙을 따른다.
+
+로그 파일을 열 수 있는데 로그 디렉터리 알림 등록만 실패하면 시작을 계속한다. `reload_watch_failed`(`notify_error`)를 쓰고 Dp마다 다시 열기와 감시 등록을 시도한다. 설정·TLS 감시 준비 실패는 기존처럼 시작 실패다(사용자 결정 2026-11-04(Q111)).
+
 ## 5. 상태와 초기화
 
 - 초기화 시점: `JsonLinesEventSink`는 설정 검증 뒤, 계정 파일을 읽기 전에 만든다. 그 전의 `startup_failed`는 표준 출력용 싱크(`JsonLinesEventSink::stdout`)로 쓴다.
 - 상태 소유자와 제거 시점: `serve::run`이 싱크를 소유한다. TCP 진입점 작업과 연결 작업에는 `Arc<dyn EventSink>`로 넘긴다. 파일은 프로세스가 끝날 때 닫힌다.
 - 동시 실행과 순서: 여러 작업이 동시에 `record`를 부를 수 있다. 줄은 잠금 안에서 한 번에 쓰므로 섞이지 않는다. 같은 연결의 사건은 그 연결 작업이 차례로 부르므로 발생 순서대로 남는다.
+- 파일 출력은 원래 경로와 출력 잠금 안의 실패 연속 구간 표시를 보관한다. 다시 열기는 같은 잠금으로 직렬화한다. 줄을 이전 파일과 새 파일에 나누거나 두 번 쓰지 않는다.
 - `RelayIdKey`는 프로세스마다 한 번 만든다. 재시작하면 키가 바뀐다(1.9절).
 
 ## 6. 오류 처리
@@ -110,6 +120,7 @@ flowchart LR
 | --- | --- | --- | --- |
 | 로그 파일 열기 | `log_file_unavailable`. stderr 진단과 표준 출력의 `startup_failed`. 종료 코드 3. 원인은 운영체제 오류 종류로 고른다: 상위 디렉터리 없음 "상위 디렉터리가 없다.", 권한 없음 "권한이 없다.", 디렉터리 "디렉터리다.", 그 밖은 운영체제 오류 문장 | 없음 | 없음(설정 계약 2.1절) |
 | 줄 쓰기 | 그 줄을 버린다. 처음 실패할 때만 알림 함수를 부른다. `serve`는 stderr에 `warning[log_write_failed] key=log.output`을 쓴다. | 다음 줄은 다시 쓰기를 시도한다 | 없음(운영 정보 계약 1.1절) |
+| 실행 중 파일 다시 열기 | 이전 핸들을 유지한다. 실패 연속 구간의 첫 실패만 stderr 경고와 이전 파일의 `log_reopen_failed`를 남긴다. 성공하면 표시를 지운다. | 이전 파일 핸들, 실패 연속 구간 표시 | OPS-045 |
 | 난수 키 생성 | `CryptoError`. 작업 2.9가 시작 실패 처리를 정한다. | 없음 | 없음 |
 
 `startup_failed`의 `detail`에는 아래만 넣는다. 설정 값을 쓰지 않는 1.11절 규칙 때문이다.
@@ -120,6 +131,15 @@ flowchart LR
 | `log_file_unavailable` | 원인 문장(예: "상위 디렉터리가 없다."). 경로는 넣지 않는다. |
 | `listener_bind_failed` | 원인 문장(예: "이미 사용 중이다."). 주소는 넣지 않는다. |
 | `runtime_unavailable` | 운영체제 오류 문장 |
+
+### 6.1 로그 다시 열기 시험
+
+| 위치·시험 함수 | 확인 범위 |
+| --- | --- |
+| `crates/adapters/src/file_watch/reopen_tests.rs` `reopens_on_notifications_and_poll_and_reports_each_failure_streak_once` | 주입한 알림·시계의 Dp, 실패 연속 구간 첫 사건·알림, 복구와 새 실패 |
+| 같은 파일 `log_directory_registration_failure_keeps_poll_and_retries` | Q111 시작 지속과 Dp 등록 재시도 |
+| `tests/log_reopen.rs` `renamed_log_is_recreated_without_lost_or_duplicate_lines` | 실제 바이너리의 알림 재열기와 접속 사건 유실·중복 없음 |
+| `tests/log_reopen.rs`와 `tests/windows_console.rs`의 `log_reopen_failure_warns_once_keeps_old_file_and_recovers` | 공통 본문 `tests/common/log_reopen.rs`를 실행한다. Linux는 실제 stderr, Windows는 기존 ConPTY가 받은 콘솔 진단을 확인한다. 실패 경고 형식·경로 비노출·이전 파일 기록·복구 뒤 새 파일 기록·정상 종료를 확인한다. 알림과 Dp 중 어느 쪽이 먼저 시도해도 같은 실패·복구 결과로 판정한다. |
 
 ## 7. 설계 선택
 
@@ -135,6 +155,8 @@ flowchart LR
 | `ts`의 날짜 계산을 직접 한다(1970년 기준 일수 → 그레고리력). | PRD 목록에 날짜 crate가 없다. 계산은 짧고 단위 테스트로 경계(윤년·세기)를 확인할 수 있다. | 날짜 crate 추가. PRD 행 변경이 필요하다. | [PRD "구현 기술" 행](../requirements/PRD.md#확정-기준) |
 | 종료 유예 진입 때 `shutdown_started`를 쓴다. 강제 정리할 활성 세션이 있으면 `shutdown_forced`를 먼저 쓰고 각 `session_closed`를 쓴다. 모든 작업 회수 뒤 `server_stopped`를 마지막에 쓴다. | G=0·G 만료·두 번째 요청·Windows 콘솔 창 닫기에도 같은 사건 순서와 남은 세션 조건을 적용한다. | 세션이 없어도 `shutdown_forced`를 쓰는 방법. 실제 강제 정리가 있었던 것처럼 보인다. | [운영 정보 계약 1.5절](../contracts/ops-info-v1.md#15-사건-목록), 사용자 결정 2026-11-04(Q102) |
 | 길이 제한은 JSON 이스케이프 전 값의 UTF-8 바이트 수에 적용한다. | 계약 1.1절은 필드 값의 길이를 정한다. 이스케이프 뒤 길이로 자르면 이스케이프 문자 중간에서 잘릴 수 있다. | 이스케이프 뒤 바이트 수. 줄 길이 상한은 정확하지만 자르는 위치 계산이 복잡하다. | [운영 정보 계약 1.1절](../contracts/ops-info-v1.md#11-로그-일반-규칙) |
+| 다시 열기는 adapters의 구체 싱크 기능으로 둔다. `EventSink` 포트에는 넣지 않는다. | 파일 핸들 관리는 운영 사건의 의미가 아니라 출력 구현의 책임이다. | app 포트에 파일 기능을 넣는 방법 | 이 문서의 판단, 사용자 결정 없음 |
+| 로그 알림과 Dp 작업을 재로드 후보 작업과 독립적으로 진행한다. | 연속 설정 변경으로 안정화가 끝나지 않아도 Dp 재열기를 계속해야 한다. | 재로드 루프의 주기 확인에서만 다시 여는 방법 | 이 문서의 판단, 사용자 결정 없음 |
 
 ## 8. 현재 코드와의 차이
 
@@ -152,5 +174,4 @@ flowchart LR
 
 | 항목 | 영향 | 확정 위치 |
 | --- | --- | --- |
-| 로그 파일 교체 뒤 다시 열기 | 운영자가 파일 이름을 바꾸면 서버는 옛 파일에 계속 쓴다. | [CLI 계약 6절](../contracts/cli-v1.md#6-초안을-확정하기-전에-해결할-사항) 관찰 항목 |
 | `RelayIdKey` 생성 실패의 시작 처리 | 오류 코드와 종료 코드가 없다. | 작업 2.9 |

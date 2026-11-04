@@ -4,6 +4,12 @@
 #[path = "common/shutdown.rs"]
 mod shutdown;
 
+#[path = "common/distribution.rs"]
+mod distribution;
+
+#[path = "common/log_reopen.rs"]
+mod log_reopen;
+
 use std::path::Path;
 use std::time::{Duration, Instant};
 
@@ -842,4 +848,78 @@ fn cli_prepared_admins_have_hidden_salted_credentials_and_equal_relay_rights() {
         assert!(!transcript.contains(secret), "secret in serve transcript");
         assert!(!log.contains(secret), "secret in serve log");
     }
+}
+
+impl distribution::DistributionProcess for pseudo_console::ConsoleProcess {
+    fn start(config: &Path) -> Self {
+        Self::serve(config, false)
+    }
+
+    fn request_stop(&mut self) {
+        self.send(&[0x03]);
+    }
+
+    fn try_wait(&mut self) -> Option<i32> {
+        self.try_wait()
+    }
+}
+
+/// spec: operations.md:OPS-019
+/// spec: operations.md:OPS-031 partial
+#[test]
+fn example_cli_account_relay_reload_and_graceful_stop() {
+    distribution::exercise_example::<pseudo_console::ConsoleProcess>(|config, password| {
+        use std::ffi::OsStr;
+
+        let mut terminal = pseudo_console::ConsoleProcess::spawn(
+            &[
+                OsStr::new("admin"),
+                OsStr::new("add"),
+                OsStr::new("opsadmin"),
+                OsStr::new("--config"),
+                config.as_os_str(),
+            ],
+            false,
+        );
+        for prompt in ["비밀번호:", "비밀번호 확인:"] {
+            terminal.wait_for(prompt);
+            terminal.helper("hidden");
+            terminal.send(format!("{password}\r").as_bytes());
+        }
+        let transcript = wait_success(&mut terminal);
+        assert!(
+            !transcript.contains(password),
+            "typed credential in distribution ConPTY transcript"
+        );
+        assert!(
+            !transcript.contains("$argon2"),
+            "stored hash in distribution ConPTY transcript"
+        );
+    });
+}
+
+impl log_reopen::LogProcess for pseudo_console::ConsoleProcess {
+    fn start(config: &Path) -> Self {
+        Self::serve(config, false)
+    }
+    fn output(&self) -> String {
+        self.text()
+    }
+    fn request_stop(&mut self) {
+        self.send(&[0x03]);
+    }
+    fn try_wait(&mut self) -> Option<i32> {
+        self.try_wait()
+    }
+    fn finish_output(&mut self) -> String {
+        self.finish_output()
+    }
+}
+
+/// Checks actual console stderr, old-handle writes, recovery and Ctrl+C exit.
+/// Notification suppression and subsequent failure streaks are adapter coverage.
+/// spec: operations.md:OPS-045 partial
+#[test]
+fn log_reopen_failure_warns_once_keeps_old_file_and_recovers() {
+    log_reopen::exercise_failure_and_recovery::<pseudo_console::ConsoleProcess>();
 }

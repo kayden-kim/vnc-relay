@@ -9,9 +9,9 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
-use notify::event::{AccessKind, AccessMode, EventKind};
+use notify::event::{AccessKind, AccessMode, EventKind, ModifyKind};
 use notify::{RecursiveMode, Watcher};
-use tokio::sync::mpsc;
+use tokio::sync::{Notify, mpsc};
 
 use super::ReloadWatchError;
 
@@ -27,6 +27,8 @@ pub(super) struct ChangeQueue {
     failures: Mutex<Vec<String>>,
     targets: Mutex<Vec<WatchTarget>>,
     wake: mpsc::Sender<()>,
+    log_targets: Mutex<Vec<WatchTarget>>,
+    pub(super) log_changed: Notify,
 }
 
 impl ChangeQueue {
@@ -39,6 +41,8 @@ impl ChangeQueue {
             failures: Mutex::new(Vec::new()),
             targets: Mutex::new(Vec::new()),
             wake,
+            log_targets: Mutex::new(Vec::new()),
+            log_changed: Notify::new(),
         };
         (Arc::new(queue), receiver)
     }
@@ -63,12 +67,27 @@ impl ChangeQueue {
         *lock(&self.targets) = targets;
     }
 
+    pub(super) fn set_log_targets(&self, targets: Vec<WatchTarget>) {
+        *lock(&self.log_targets) = targets;
+    }
+
     /// Handles one OS event (file-watch.md §4 step 1).
     pub(super) fn offer_event(&self, event: &notify::Event) {
         if event.need_rescan() {
             self.overflow.store(true, Ordering::SeqCst);
+            self.log_changed.notify_one();
             self.nudge();
             return;
+        }
+        if matches!(
+            event.kind,
+            EventKind::Create(_) | EventKind::Remove(_) | EventKind::Modify(ModifyKind::Name(_))
+        ) && event.paths.iter().any(|path| {
+            lock(&self.log_targets)
+                .iter()
+                .any(|target| target.matches(path))
+        }) {
+            self.log_changed.notify_one();
         }
         // Reads made by this process show up as Access events. Only a close after a write is a
         // change, so ignoring the rest keeps the watcher's own reads from starting an episode.

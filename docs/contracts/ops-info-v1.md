@@ -132,6 +132,8 @@ VNC Relay가 운영자에게 내보내는 두 가지 정보의 교환 형식을 
 
 `reload_rejected`와 `reload_restart_required`는 서로 다른 사건이다. 재시작 필요는 검증 실패로 세지 않는다. 자동 재로드가 성공하지 않았는데 `reload_applied`를 쓰지 않는다. 시작 전에 감지 준비가 불가능하면 `reload_watch_failed`가 아니라 `startup_failed`(`watch_unavailable`)다.
 
+로그 파일은 열 수 있지만 로그 디렉터리의 알림 등록만 실패하면 예외다. `reload_watch_failed`(`notify_error`)를 쓰고 시작을 계속한다. Dp마다 로그 파일을 다시 열고 알림 등록도 다시 시도한다. 설정·TLS 파일 감시 준비 실패에는 이 예외를 적용하지 않는다(사용자 결정 2026-11-04(Q111)).
+
 #### 로그 출력
 
 | 사건 | `level` | 발생 시점 | 필드 | 스펙 근거 |
@@ -428,7 +430,7 @@ GET /readyz ->  503 {"status":"not_ready","reason":"shutting_down"}
 | Producer / 통합, 일부 생성 | 관리자 로그인 성공·실패·제한 사건. 스펙 [MGT-017](../specs/management.md#7-수용-테스트), [MGT-018](../specs/management.md#7-수용-테스트), [MGT-022](../specs/management.md#7-수용-테스트) | 미실행 | 구현: `ops_log.rs`(세 사건의 줄 형식), `login.rs`(사건 값 단위 시험). 시험: 로그인 성공 줄은 `tests/management_session.rs`의 `plain_loopback_login_opens_the_session_and_logs_success`가 확인한다. 실패·제한·제한 시작 줄 형식은 `ops_log.rs`의 `admin_login_lines_carry_only_their_own_fields`가 확인한다. |
 | Producer / 상태 리스너 및 셧다운 통합 시험, 어댑터 계약 시험 | 실행 중인 프로세스에서 시작 중 및 종료 유예 중 `/readyz` 503(유예 중 `/livez`는 200), 종료 유예 중 관리 조회·종료 정상 처리. 스펙 [OPS-013](../specs/operations.md#7-수용-테스트)(전부, 사용자 결정 2026-11-04(Q108)), [OPS-043](../specs/operations.md#7-수용-테스트) | 통과 | OPS-013은 `crates/adapters/tests/ops_info_contract.rs`의 `answers_liveness_and_readiness_in_each_state_with_only_the_contract_fields`(비부분)가 시작 중 `/readyz` 503·`/livez` 200과 상태별 필드를 확인한다. OPS-043은 `tests/unix_shutdown.rs`와 `tests/windows_console.rs`의 `management_works_during_grace`가 유예 중 `/readyz` 503·`/livez` 200, summary `state="shutdown_grace"`, 관리자 세션 발급·조회·종료를 실제 프로세스에서 확인한다(두 OS 통과, 커밋 `de693ad`). |
 | Producer / 통합, 미생성 | 실행 중인 프로세스에서 준비된 필수 리스너가 실패할 때의 `/readyz` 503(`reason="listener_failed"`) 및 `shutdown_started`(`trigger="fatal_error"`) 연계. [1.12절](#112-상태-리스너와-엔드포인트), 스펙 [OPS-002](../specs/operations.md#7-수용-테스트), [OPS-013](../specs/operations.md#7-수용-테스트) | 미실행 | 실행 중인 프로세스에서 `listener_failed`를 발생시키고 검증하는 비부분 시험이 없다(`grep -r listener_failed` 결과 없음. status-listener.md 1절·9절: `accept` 오류 후 재수락하며 치명적 실패 경로 판정 미구현). |
-| Producer / 통합, 미생성 | 로그 파일 다시 열기(1.1절): 이름 변경 뒤 알림·Dp 주기의 다시 열기, 줄이 두 파일에 겹치거나 빠지지 않음, 다시 열기 실패 시 이전 파일 유지와 한 번만 쓰는 `warning[log_reopen_failed]`·`log_reopen_failed`, 복구 뒤 다시 열기. 스펙 [OPS-045](../specs/operations.md#7-수용-테스트) | 미실행 | 작업 5.6에서 구현한다 |
+| Producer / `tests/log_reopen.rs` `renamed_log_is_recreated_without_lost_or_duplicate_lines`; `tests/log_reopen.rs`와 `tests/windows_console.rs`의 `log_reopen_failure_warns_once_keeps_old_file_and_recovers`(공통 본문 `tests/common/log_reopen.rs`); `crates/adapters/src/file_watch/reopen_tests.rs` `reopens_on_notifications_and_poll_and_reports_each_failure_streak_once`, `log_directory_registration_failure_keeps_poll_and_retries` | 로그 파일 다시 열기(1.1절): 이름 변경 뒤 알림·Dp 주기의 다시 열기, 줄이 두 파일에 겹치거나 빠지지 않음, 다시 열기 실패 시 이전 파일 유지와 한 번만 쓰는 `warning[log_reopen_failed]`·`log_reopen_failed`, 복구 뒤 다시 열기와 정상 종료. 로그 디렉터리 등록 실패만으로 시작을 멈추지 않음(Q111). 스펙 [OPS-045](../specs/operations.md#7-수용-테스트) | 미실행 | 두 OS의 자동 시험 위치. 실행 결과는 전체 검증 뒤 기록한다. |
 | Consumer / 수집 도구 계약 테스트, 위치 미정 | 알 수 없는 필드·사건·값 무시(3절), `level`·`event` 분기 | 미실행 | 소비자 테스트 위치 없음 |
 | Consumer / 상태 도구 계약 테스트, 위치 미정 | HTTP 상태 코드로 판정, 알 수 없는 `reason` 무시(3절) | 미실행 | 소비자 테스트 위치 없음 |
 

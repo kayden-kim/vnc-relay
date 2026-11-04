@@ -4,7 +4,7 @@
 use std::fmt;
 use std::fs::{File, OpenOptions};
 use std::io::{self, ErrorKind, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, PoisonError};
 use std::time::SystemTime;
@@ -30,6 +30,7 @@ const ORIGIN_MAX_BYTES: usize = 256;
 const TARGET_HOST_MAX_BYTES: usize = 256;
 
 type FailureNotice = Box<dyn Fn(&io::Error) + Send + Sync>;
+type ReopenNotice = Box<dyn Fn(&LogFileError) + Send + Sync>;
 
 /// `EventSink` that writes JSON Lines. A line is built first and written
 /// with one `write_all` under a lock, so lines from many tasks never mix.
@@ -38,11 +39,13 @@ pub struct JsonLinesEventSink {
     output: Mutex<Output>,
     failed: AtomicBool,
     on_first_failure: FailureNotice,
+    path: Option<PathBuf>,
+    on_reopen_failure: Option<ReopenNotice>,
 }
 
 enum Output {
     Stdout,
-    File(File),
+    File { handle: File, reopen_failed: bool },
 }
 
 impl Output {
@@ -53,7 +56,7 @@ impl Output {
                 stdout.write_all(line)?;
                 stdout.flush()
             }
-            Self::File(file) => file.write_all(line),
+            Self::File { handle, .. } => handle.write_all(line),
         }
     }
 }
@@ -61,7 +64,7 @@ impl Output {
 impl JsonLinesEventSink {
     /// Writes to stdout. The start uses it before the log output is known.
     pub fn stdout(on_first_failure: impl Fn(&io::Error) + Send + Sync + 'static) -> Self {
-        Self::with_output(Output::Stdout, on_first_failure)
+        Self::with_output(Output::Stdout, None, on_first_failure, None)
     }
 
     /// Opens the configured output. A file is appended to and created when
@@ -69,22 +72,87 @@ impl JsonLinesEventSink {
     pub fn open(
         output: &LogOutput,
         on_first_failure: impl Fn(&io::Error) + Send + Sync + 'static,
+        on_reopen_failure: impl Fn(&LogFileError) + Send + Sync + 'static,
     ) -> Result<Self, LogFileError> {
-        let output = match output {
-            LogOutput::Stdout => Output::Stdout,
-            LogOutput::File(path) => Output::File(open_append(path)?),
+        let (output, path) = match output {
+            LogOutput::Stdout => (Output::Stdout, None),
+            LogOutput::File(path) => (
+                Output::File {
+                    handle: open_append(path)?,
+                    reopen_failed: false,
+                },
+                Some(path.clone()),
+            ),
         };
-        Ok(Self::with_output(output, on_first_failure))
+        Ok(Self::with_output(
+            output,
+            path,
+            on_first_failure,
+            Some(Box::new(on_reopen_failure)),
+        ))
     }
 
     fn with_output(
         output: Output,
+        path: Option<PathBuf>,
         on_first_failure: impl Fn(&io::Error) + Send + Sync + 'static,
+        on_reopen_failure: Option<ReopenNotice>,
     ) -> Self {
         Self {
             output: Mutex::new(output),
             failed: AtomicBool::new(false),
             on_first_failure: Box::new(on_first_failure),
+            path,
+            on_reopen_failure,
+        }
+    }
+
+    /// Original configured file path. Stdout has no reopen target.
+    pub fn file_path(&self) -> Option<&Path> {
+        self.path.as_deref()
+    }
+
+    /// Reopens under the line-writing lock. A failure keeps the old handle and
+    /// reports only the first failure until a successful reopen ends the streak.
+    pub fn reopen(&self) {
+        let Some(path) = self.file_path() else { return };
+        let mut output = self.output.lock().unwrap_or_else(PoisonError::into_inner);
+        let Output::File {
+            handle,
+            reopen_failed,
+        } = &mut *output
+        else {
+            return;
+        };
+        match open_append(path) {
+            Ok(file) => {
+                *handle = file;
+                *reopen_failed = false;
+            }
+            Err(error) if !*reopen_failed => {
+                *reopen_failed = true;
+                let line = format_line(
+                    &Event::LogReopenFailed {
+                        detail: error.cause().to_owned(),
+                    },
+                    SystemTime::now(),
+                );
+                let written = output.write_line(line.as_bytes());
+                drop(output);
+                self.report_write_result(written);
+                if let Some(notice) = &self.on_reopen_failure {
+                    notice(&error);
+                }
+            }
+            Err(_) => {}
+        }
+    }
+
+    fn report_write_result(&self, result: io::Result<()>) {
+        if let Err(error) = result
+            && !self.failed.swap(true, Ordering::Relaxed)
+        {
+            (self.on_first_failure)(&error);
         }
     }
 }
@@ -97,11 +165,7 @@ impl EventSink for JsonLinesEventSink {
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .write_line(line.as_bytes());
-        if let Err(error) = result
-            && !self.failed.swap(true, Ordering::Relaxed)
-        {
-            (self.on_first_failure)(&error);
-        }
+        self.report_write_result(result);
     }
 }
 
@@ -216,6 +280,11 @@ fn push_event_fields(fields: &mut Vec<(&'static str, Value)>, event: &Event) {
             if let Some(detail) = detail {
                 fields.push(("detail", Value::from(cut(detail, DETAIL_MAX_BYTES))));
             }
+        }
+        Event::LogReopenFailed { detail } => {
+            fields.push(("reason", Value::from("log_file_unavailable")));
+            fields.push(("config_key", Value::from("log.output")));
+            fields.push(("detail", Value::from(cut(detail, DETAIL_MAX_BYTES))));
         }
         Event::ConnectionAccepted {
             conn_id,

@@ -136,6 +136,7 @@ flowchart LR
 | `crates/adapters/src/terminal.rs`; `crates/adapters/src/terminal/windows_console.rs` | 터미널 | 숨김 입력·확인·Ctrl+C, Windows 콘솔 모드 저장·복구 | 비밀번호 규칙 | rpassword·tokio signal·windows-sys | [계정 준비](admin-accounts.md) |
 | `src/main.rs` `main`; `src/cli.rs` `parse`; `src/admin.rs` `run` | CLI 조립 | 명령·옵션·진단·종료 코드, admin 포트 주입 | 계정 규칙 | clap·app·adapters | [시작](serve-startup.md), [계정 준비](admin-accounts.md) |
 | `src/serve.rs` `run` `listen_until_shutdown` `generate_startup_keys` `ShutdownRequest` `begin_relay_shutdown` `finish_relay_shutdown` | 서버 조립 | 설정·로그·계정·키·TLS·감지·리스너 준비, L/Lm/Lw·중계·관리·재로드 주입, 첫 신호·G 감독·두 번째 신호·Windows 콘솔 닫기·작업 회수 | 매칭·바이트 전달 | 제품 crate·tokio | [시작](serve-startup.md), [파일 감지](file-watch.md), [중계 수명](relay-session.md) |
+| `crates/adapters/src/file_watch.rs` `reopen_log`; `crates/adapters/src/ops_log.rs` `JsonLinesEventSink::reopen` `file_path` | 로그 파일 교체 | 재로드와 분리한 로그 알림·Dp 재열기, 같은 줄 쓰기 잠금의 핸들 교체, 실패 연속 구간 첫 경고·사건 | 로그 보관·압축·삭제 | notify·tokio·app 사건 | [운영 로그](ops-log.md), [파일 감지](file-watch.md) |
 
 ### 2.4 개발 도구와 정적 대시보드
 
@@ -178,6 +179,8 @@ flowchart LR
 | `crates/adapters/tests/relay_delayed_cleanup_scenarios.rs`; `crates/adapters/tests/relay_stream_scenarios.rs`; `crates/adapters/tests/tcp_target.rs` | 각각 relay.md RLY-016, RLY-017~019·021, RLY-009·019 |
 | `crates/adapters/tests/tls.rs`; `crates/adapters/tests/websocket.rs` | TLS: operations.md OPS-036, websocket.md WS-013. WS 진입점: websocket.md 업그레이드·Origin·IP·TLS, operations.md U·종료·TLS·허용 목록, relay.md RLY-005 |
 | `crates/adapters/tests/websocket_relay.rs`; `crates/adapters/tests/websocket_scenarios.rs` | websocket.md: 실제 중계·M/B·제어·Close·Kw·인증 경계. relay.md: 초기 교환·중계·half-close·E·모드. operations.md: OPS-006·023 |
+| `tests/log_reopen.rs`; `tests/common/log_reopen.rs`; `tests/windows_console.rs`; `crates/adapters/src/file_watch/reopen_tests.rs` | operations.md OPS-045: 실제 바이너리의 회전 전후 줄 보존·첫 실패 진단·복구·정상 종료, 주입한 알림·시계의 Dp·실패 연속 구간 |
+| `examples/relay.toml`; `tests/distribution.rs`; `tests/common/distribution.rs`; `tests/windows_console.rs` | operations.md OPS-019·OPS-031: 실제 설정 로더의 비밀 없는 예시, Linux PTY·Windows ConPTY의 계정 준비→시작→중계→재로드→종료 |
 
 ## 3. 진입점
 
@@ -235,6 +238,7 @@ WS·WSS는 1단계에서 `websocket.rs`의 101 완료 후 `WsRelayStream`을 넘
 - 첫 종료 신호는 준비 상태를 종료 중으로 바꾸고 RelayService에 G를 넘긴다. 수락을 멈추고 초기 교환·대기·대상 연결을 정리한다. 기존 활성은 Grace 안에서 계속 진행한다. 감독 작업이 G를 진행하며 두 번째 신호는 Force를 요청한다.
 - `finish_relay_shutdown`은 모든 진입점 소유자가 끝날 때까지 감독 작업을 유지한다. 그 뒤 관리·상태·감지 작업을 거두고 `server_stopped`를 쓴다.
 - 설정은 `config_file`이 읽는다. 객체 연결은 `src/serve.rs`와 `src/admin.rs`의 인수·Arc로 한다. DI 프레임워크는 없다.
+- 파일 로그의 원래 경로는 재로드 후보와 분리해 감시한다. 생성·삭제·이름 변경 알림과 독립 Dp 작업이 `JsonLinesEventSink::reopen`으로 핸들을 교체한다. 같은 출력 잠금이 줄 경계를 보존한다. 실패하면 이전 핸들에 계속 쓰고 실패 연속 구간의 첫 실패만 알린다.
 
 ## 6. 처음 읽을 코드
 

@@ -197,7 +197,7 @@ error[listener_bind_failed] key=relay.tcp_viewer.listen: 0.0.0.0:15901에 바인
 | `password_invalid` | 비밀번호가 1.2절 규칙을 어겼다. | 1 | OPS-030 |
 | `password_mismatch` | 두 번 입력한 비밀번호가 다르다. | 1 | OPS-030 |
 | `input_canceled` | 입력 취소(Ctrl+C·EOF)·삭제 확인 거절. 계정 파일은 그대로다. | 1 | OPS-030 |
-| `watch_unavailable` | `serve`: 파일 변경 감지를 준비할 수 없다. 묵시적으로 끄고 시작하지 않는다. | 1 | OPS-028 |
+| `watch_unavailable` | `serve`: 파일 변경 감지를 준비할 수 없다. 묵시적으로 끄고 시작하지 않는다. 로그 디렉터리 알림 등록만 실패한 경우는 해당하지 않는다(사용자 결정 2026-11-04(Q111)). | 1 | OPS-028 |
 | `runtime_unavailable` | `serve`: 비동기 런타임이나 종료 신호 처리기를 준비할 수 없거나, 운영체제 난수원으로 시작 키(RelayIdKey·SessionIdKey)를 만들 수 없다(사용자 결정 2026-11-01(Q76)). `admin`: 입력 취소(Ctrl+C) 감지기를 준비할 수 없거나, 운영체제 난수원·해시 계산 메모리를 쓸 수 없다(사용자 결정 2026-10-20). 비밀번호·확인 입력을 읽는 스레드를 만들 수 없거나 그 스레드가 결과 없이 끝난 경우도 이 코드다. Windows에서 숨김 입력 전에 콘솔 입력 모드를 읽지 못하거나 입력 뒤에 되돌리지 못한 경우도 이 코드다(구현 판단, 6절). 이때 계정 파일은 바뀌지 않는다. 운영체제 자원(스레드·이벤트 대기 핸들) 부족 같은 실행 환경 문제다. 키는 없다. | 1 | 없음 |
 | `accounts_file_missing` | `serve`: 계정 파일이 없다. | 5 | OPS-001 |
 | `accounts_file_unreadable` | 계정 파일이 있으나 읽을 수 없다(권한·입출력 오류). | 5 | OPS-030 |
@@ -282,7 +282,7 @@ error[account_name_invalid]: 계정 이름은 소문자 영문·숫자·점·밑
 | Consumer·`tests/serve.rs` `fails_with_exit_code_3_when_the_log_file_cannot_be_opened`, `warns_once_when_log_writes_fail_and_keeps_running`, `writes_the_log_to_the_configured_file_from_start_to_stop` | 시작 순서 1단계의 로그 출력 열기: 열 수 없으면 `error[log_file_unavailable] key=log.output`과 종료 코드 3, 실패 줄은 stdout에 쓴다. `log.output`이 파일이면 stdout은 비어 있다. 로그 쓰기 실패는 `warning[log_write_failed]`를 한 번만 쓰고 계속 실행한다(1.5·1.8·2절). | 통과 | [운영 정보 계약 실행 기록](ops-info-v1.md#계약-테스트-실행-기록) |
 | Consumer·`tests/unix_shutdown.rs`와 `tests/windows_console.rs`의 `stop_unfinished_work`·`active_session_finishes_in_grace`·`grace_expiry_cleans_session`·`restart_has_fresh_state`·`second_request_forces_cleanup`. Windows는 `ctrl_c_stops_gracefully_with_exit_code_zero`·`ctrl_break_stops_gracefully_with_exit_code_zero`·`console_close_forces_cleanup`도 확인한다. | 유예 안 자발 종료·유예 만료, 유예 중 두 번째 종료 요청의 즉시 강제 정리, Windows의 Ctrl+C·Ctrl+Break, Windows 콘솔 창 닫기의 즉시 강제 정리(1.8절). [OPS-007](../specs/operations.md#7-수용-테스트)~[OPS-010](../specs/operations.md#7-수용-테스트), [OPS-042](../specs/operations.md#7-수용-테스트), [OPS-044](../specs/operations.md#7-수용-테스트). [OPS-019](../specs/operations.md#7-수용-테스트)는 두 OS의 종료 부분만 이 행에 해당한다. OPS-019 전체는 작업 5.6에서 판정한다. | 통과 | 공통 시나리오 본문은 `tests/common/shutdown.rs`다. 콘솔 창 닫기는 `ShutdownSignal::wait`가 `ShutdownRequest::ConsoleClosed`로 돌려주고, `begin_relay_shutdown`이 G로 유예를 시작한 뒤 곧바로 `Duration::ZERO`로 강제 정리를 요청한다(사용자 결정 2026-11-04(Q102)). 커밋 `de693ad` 게이트에서 Linux(SIGTERM)와 Windows(ConPTY 신호·창 닫기) 모두 통과했다. 창 닫기 시 5초 이내 프로세스 종료를 단언한다. |
 | Consumer·`serve` 통합 테스트(미생성) | 실행 중 계정 파일 변경이 서버에 반영되지 않고 재시작 뒤 반영(1.7절). [OPS-003](../specs/operations.md#7-수용-테스트), [OPS-029](../specs/operations.md#7-수용-테스트) | 미실행 | 테스트 파일 없음 |
-| Producer·배포 검토(미생성) | 배포 문서·예시에 실제 비밀값·기본 비밀번호가 없다. [OPS-031](../specs/operations.md#7-수용-테스트) | 미실행 | 예시 파일·구현 없음 |
+| Producer·`tests/distribution.rs` `repository_example_loads_without_secrets`, `example_cli_account_relay_reload_and_graceful_stop`(Linux), `tests/windows_console.rs`의 같은 실행파일 시험(Windows), [수동 운영 안내](../how-to/operate-relay.md) 두 OS 실행 기록 | 배포 예시에 실제 비밀값·기본 비밀번호가 없다. 실제 터미널의 숨김 입력으로 `admin add`를 실행한 뒤 예시 복사본으로 시작·중계·재로드·정상 종료한다. 자동 시험은 debug 실행파일의 부분 증거다. release 묶음과 안내 전체는 두 OS 수동 기록으로 판정한다. [OPS-031](../specs/operations.md#7-수용-테스트) | 미실행 | 부모 작업에서 자동·수동 실행 기록을 연결한다. |
 
 ### 계약 테스트 실행 기록
 

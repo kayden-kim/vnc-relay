@@ -1,0 +1,57 @@
+# Local Mode II example. Relative paths start at this file's directory.
+# Create the account file with the admin CLI before starting the server.
+[admin]
+accounts_file = "admin-accounts.toml"
+
+# Accept only local TCP Viewer connections. Change both listen and allow deliberately.
+[relay.tcp_viewer]
+enabled = true
+listen = "127.0.0.1:5901"
+allow = ["127.0.0.1"]
+
+# Accept only local TCP Server connections.
+[relay.tcp_server]
+enabled = true
+listen = "127.0.0.1:5500"
+allow = ["127.0.0.1"]
+
+# Plaintext WebSocket is off. Use it only on protected networks.
+[relay.ws_viewer]
+enabled = false
+
+# For public WebSocket access, enable WSS and provide your own certificate files.
+[relay.wss_viewer]
+enabled = false
+# listen = "127.0.0.1:15903"
+# allow = ["127.0.0.1"]
+# allowed_origins = ["https://viewer.example"]
+# cert_file = "certs/relay.pem"
+# key_file = "certs/relay.key"
+
+# Mode I target connections are off.
+[mode1]
+enabled = false
+
+# Match a Viewer and a Server with the same relay ID.
+[mode2]
+enabled = true
+
+# Plaintext management is allowed only on loopback; login is still required.
+[management]
+listen = "127.0.0.1:18080"
+# For HTTPS, provide both files. Public management must use HTTPS.
+# cert_file = "certs/admin.pem"
+# key_file = "certs/admin.key"
+
+# Unauthenticated health endpoints are separate from management.
+[status]
+listen = "127.0.0.1:18081"
+
+# Append one JSON event per line. The parent directory must already exist.
+[log]
+output = "relay.log"
+
+# Default reload bounds: D = 5 seconds, Dp = 30 seconds.
+[reload]
+settle_secs = 5
+poll_secs = 30

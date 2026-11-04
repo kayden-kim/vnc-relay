@@ -65,31 +65,35 @@ pub fn run(config: &Path) -> ExitCode {
             return ExitCode::from(EXIT_CONFIG);
         }
     };
-    let log: Arc<dyn EventSink> =
-        match JsonLinesEventSink::open(&settings.log.output, report_log_write_failure) {
-            Ok(log) => Arc::new(log),
-            Err(error) => {
-                let path = match &settings.log.output {
-                    LogOutput::File(path) => path.display().to_string(),
-                    LogOutput::Stdout => String::new(),
-                };
-                cli::report(
-                    "error",
-                    error.code(),
-                    LOG_OUTPUT_KEY,
-                    &format!("로그 파일을 열 수 없다({path}). {}", error.cause()),
-                );
-                let stdout = JsonLinesEventSink::stdout(report_log_write_failure);
-                record_failure(
-                    &stdout,
-                    error.code(),
-                    Some(LOG_OUTPUT_KEY.to_owned()),
-                    None,
-                    Some(error.cause().to_owned()),
-                );
-                return ExitCode::from(EXIT_CONFIG);
-            }
-        };
+    let output = match JsonLinesEventSink::open(
+        &settings.log.output,
+        report_log_write_failure,
+        report_log_reopen_failure,
+    ) {
+        Ok(log) => Arc::new(log),
+        Err(error) => {
+            let path = match &settings.log.output {
+                LogOutput::File(path) => path.display().to_string(),
+                LogOutput::Stdout => String::new(),
+            };
+            cli::report(
+                "error",
+                error.code(),
+                LOG_OUTPUT_KEY,
+                &format!("로그 파일을 열 수 없다({path}). {}", error.cause()),
+            );
+            let stdout = JsonLinesEventSink::stdout(report_log_write_failure);
+            record_failure(
+                &stdout,
+                error.code(),
+                Some(LOG_OUTPUT_KEY.to_owned()),
+                None,
+                Some(error.cause().to_owned()),
+            );
+            return ExitCode::from(EXIT_CONFIG);
+        }
+    };
+    let log: Arc<dyn EventSink> = output.clone();
     log.record(&Event::ServerStarting);
     for warning in settings.warnings() {
         log.record(&Event::ConfigWarning {
@@ -156,16 +160,19 @@ pub fn run(config: &Path) -> ExitCode {
             return runtime_failure(log.as_ref(), "비동기 런타임을 만들 수 없다", &error);
         }
     };
-    runtime.block_on(listen_until_shutdown(&settings, log, auth, config, clock))
+    runtime.block_on(listen_until_shutdown(
+        &settings, output, auth, config, clock,
+    ))
 }
 
 async fn listen_until_shutdown(
     settings: &Settings,
-    log: Arc<dyn EventSink>,
+    output: Arc<JsonLinesEventSink>,
     auth: Arc<AdminAuth>,
     config: &Path,
     clock: Arc<dyn Clock>,
 ) -> ExitCode {
+    let log: Arc<dyn EventSink> = output.clone();
     // Registered before binding so that a request during startup is not lost.
     let mut shutdown = match ShutdownSignal::register() {
         Ok(shutdown) => shutdown,
@@ -238,6 +245,7 @@ async fn listen_until_shutdown(
         SystemReloadClock,
         Arc::new(FsReloadFileStore),
         Arc::clone(&log),
+        output,
     ) {
         Ok(watcher) => watcher,
         Err(error) => return watch_unavailable(log.as_ref(), error.detail()),
@@ -661,6 +669,15 @@ fn report_log_write_failure(error: &io::Error) {
         "log_write_failed",
         LOG_OUTPUT_KEY,
         &format!("운영 로그를 쓸 수 없다({error}). 이후 실패는 알리지 않는다."),
+    );
+}
+
+fn report_log_reopen_failure(error: &vnc_relay_adapters::ops_log::LogFileError) {
+    cli::report(
+        "warning",
+        "log_reopen_failed",
+        LOG_OUTPUT_KEY,
+        &error.to_string(),
     );
 }
 

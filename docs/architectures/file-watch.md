@@ -21,6 +21,7 @@
   - 재로드 후보를 순서대로 처리하고, 최신 후보만 적용한다.
   - 감시 시작 실패, 실행 중 감시 장애, 재로드 결과를 운영 사건으로 알린다.
   - 적용할 때 허용 목록과 TLS 설정을 한 스냅샷으로 교체한다.
+  - 파일 로그의 이름 변경·삭제·생성 알림과 Dp마다 같은 로그 경로를 다시 열게 한다. 로그 경로는 재로드 후보나 내용 해시에 넣지 않는다(사용자 결정 2026-11-04(Q104·Q109·Q110)).
 - 맡지 않는 책임:
   - 설정 구문과 값 검증: [설정 읽기 설계](config-loading.md)의 `parse`를 쓴다.
   - TLS 쌍 검사와 수락기(acceptor) 만들기: [TLS 모듈 설계](tls.md).
@@ -62,6 +63,8 @@ flowchart LR
 | `crates/adapters/src/file_watch.rs` 내부 `WatchSet`·`ProcessedState` | 감시 경로 목록과 처리한 마지막 내용 해시 | `ReloadWatcher`가 소유한다. 시작 때 실행 중 유효 설정으로 채운다. | 실행 중 유효 설정의 경로 값 |
 | `crates/app/src/reload/` `ReloadService::on_change` | 파싱, 검증, 재시작 필요 비교, 교체, 사건 기록 | 시작 단계 (3)에서 만든다. 실행 중 `Settings`와 `ReloadSnapshot` 셀을 든다. | 설정 파싱 포트, TLS 수락기 포트, 사건 기록 포트 |
 | `ReloadSnapshot` 셀 (app `reload/` 안, 위치는 구현 때 정한다) | 허용 목록 네 개와 TLS 수락기 값을 담은 공유 상태 | `ReloadService`가 쓰고, 리스너가 읽는다. | 없음 |
+| `ChangeQueue::set_log_targets`, `log_changed` | 로그 경로 알림을 재로드 세대와 분리한다. 생성·삭제·이름 변경만 별도 `Notify`로 알린다. | `ReloadWatcher`와 OS 콜백이 공유한다 | tokio |
+| `file_watch.rs` `reopen_log` | 로그 알림과 독립 Dp 타이머에서 `JsonLinesEventSink::reopen`을 부른다. 재로드 안정화 중에도 계속 진행한다. | `ReloadWatcher::run`이 함께 실행한다. 종료 때 함께 끝난다. | 운영 로그 싱크, 주입한 시계 |
 
 ## 3. 데이터 모델
 
@@ -76,6 +79,7 @@ flowchart LR
 | `ReloadCandidate` | 세대 번호, 설정 파일 내용(UTF-8 텍스트), 참조 파일 내용(바이트) | 메모리 | 검증한 바이트를 그대로 교체에 쓴다. 파일을 다시 열지 않는다. 결과가 나오면 버린다. |
 | `ReloadOutcome` | 적용(`applied` 키 목록), 거절(`reason`, `config_key?`, `detail?`), 재시작 필요(`config_keys`), 감시 장애(`reason`, `detail?`) | 사건 기록으로만 넘긴다 | 필드 이름과 값은 [운영 정보 계약 자동 재로드](../contracts/ops-info-v1.md#자동-재로드)가 정한다. |
 | `ReloadSnapshot` | 허용 목록 네 개(`relay.tcp_viewer.allow`, `relay.tcp_server.allow`, `relay.ws_viewer.allow`, `relay.wss_viewer.allow`)와 TLS 수락기 값(WSS 뷰어, HTTPS 관리 리스너) | 공유 셀 하나. 타입은 `std::sync::RwLock<Arc<ReloadSnapshot>>` 설계 | 읽는 쪽은 `Arc`를 복사해 쓴다. 쓰는 쪽은 새 값을 다 만든 뒤 한 번만 바꾼다. 잠금이 중독되면 `PoisonError::into_inner`로 값을 꺼낸다. 새 크레이트를 쓰지 않는다. |
+| 로그 감시 대상 | 원래 로그 경로의 `WatchTarget`과 별도 `Notify` | `ChangeQueue` | 로그 디렉터리가 설정 디렉터리와 같아도 등록은 한 번이다. 다른 디렉터리면 함께 등록한다. 내용 수정·쓰기 종료·읽기 알림은 무시한다. 로그 자체의 쓰기가 재열기나 재로드를 반복시키지 않게 한다. 로그 신호는 `generation`·`processed`를 바꾸지 않는다. |
 
 ## 4. 처리 순서
 
@@ -93,6 +97,8 @@ flowchart LR
 | 8 | `crates/app/src/reload/` `ReloadService::on_change`의 최종 확인 | 세대 번호가 같고, 정상 종료가 시작되지 않았는지 본다. | 아니면 후보를 버린다. | 결과 사건을 쓰지 않는다(§9 항목 10). |
 | 9 | `ReloadService::on_change`의 교체 | 바뀐 값만 담은 새 `ReloadSnapshot`을 만든다. 완성한 뒤 셀에 한 번 쓴다. 전체 허용 항목이 적용되면 경고를 쓴다. 재로드 대상 값이 바뀌지 않았으면 교체하지 않는다(사용자 결정 2026-10-22(Q50), §9 항목 7). | 새 접속과 새 TLS 핸드셰이크부터 새 값을 쓴다. 기존 연결은 옛 값을 유지한다. | `reload_applied`(`applied`에 실제로 바뀐 키만). 경고 `allow_all_source`. 교체하지 않으면 결과 사건을 쓰지 않는다. |
 | 10 | `ReloadWatcher::run` | 결과가 나온 후보의 내용 해시를 `ProcessedState`에 넣는다. 감시 집합을 다시 계산한다(§9 항목 9). 묶음을 닫는다. | 다음 변경을 기다린다. | 없음 |
+
+로그 경로의 알림은 위 재로드 순서에 들어가지 않는다. 콜백은 생성·삭제·이름 변경만 `log_changed`에 알린다. 별도 `reopen_log` 작업이 알림과 Dp를 기다린다. 알림을 놓쳐도 내용 해시와 무관하게 Dp마다 항상 다시 연다. 알림을 모으는 `Notify`는 동시에 쌓인 알림을 합친다. 다시 열 때 생기는 파일 생성 알림은 한 번 더 시도할 수 있지만, 이어 쓰기 열기는 기존 파일에 생성 알림을 만들지 않으므로 반복되지 않는다.
 
 ### 4.1 시간 기준
 
@@ -114,6 +120,7 @@ flowchart LR
 - 자동 재로드가 교체에 성공하지 않았으면 `reload_applied`를 쓰지 않는다.
 - `reload_watch_failed`는 묶음 없이 단독으로 쓴다.
 - 시작 때 감시 등록에 실패하면 `startup_failed`(`watch_unavailable`)를 쓰고 종료 코드 1로 끝낸다. `reload_watch_failed`가 아니다. 시험은 `src/serve.rs` 단위 시험 `watch_registration_refused_at_start_is_a_startup_failure`다.
+- 로그 파일은 열 수 있지만 로그 디렉터리 알림 등록만 실패하면 `reload_watch_failed`(`notify_error`)를 쓰고 시작을 계속한다. 설정·TLS 등록 성공 뒤 로그 디렉터리를 추가하므로 두 실패를 구분한다. Dp마다 로그 다시 열기와 알림 등록을 시도한다(사용자 결정 2026-11-04(Q111)).
 - 같은 원인의 사건이 여러 번 나오면 반복마다 기록한다(사용자 결정 2026-10-22(Q50), §9 항목 8). 묶음 안의 `reload_change_detected`는 한 번만 쓴다.
 
 ### 4.3 검증 순서 확인점
@@ -139,6 +146,7 @@ flowchart LR
 | 시작 때 감시 등록 실패 (`file_watch.rs` `ReloadWatcher::run`) | 시작을 멈춘다. 종료 코드 1, `watch_unavailable`을 낸다. 로그에 `startup_failed`를 쓴다. 얻은 자원을 푼다. [CLI·계정 파일 계약 2.2절](../contracts/cli-v1.md#22-오류-코드). | 없음 | OPS-028 |
 | 실행 중 OS 알림 장애 (`ReloadWatcher::run`) | `reload_watch_failed`(`notify_error`)를 쓴다. 실행 중 유효 설정은 그대로 둔다. 주기 확인이 계속 감지하므로 자동 재로드도 계속된다. 이것은 §9 항목 4의 결정이다(사용자 결정 2026-10-22(Q50)). 주기 확인 때마다 알림 등록을 다시 시도한다. 복구 사건은 쓰지 않는다(§9 항목 5). | 알림 감시 장애 표시 | OPS-028 |
 | 실행 중 주기 확인 입출력 오류 (`ReloadWatcher::run`) | `reload_watch_failed`(`poll_error`)를 쓴다. 실행 중 유효 설정은 그대로 둔다. 알림 감시가 살아 있으면 자동 재로드는 계속된다. 둘 다 실패하면 자동 적용을 멈춘다(§9 항목 4). 오류가 이어지면 주기 확인마다 기록한다(§9 항목 8). | 주기 확인 장애 표시 | OPS-028 |
+| 시작 때 로그 디렉터리의 알림 등록만 실패 | `reload_watch_failed`(`notify_error`)를 쓰고 시작을 계속한다. 설정·TLS 감시 등록 실패와 구분한다. Dp마다 알림 등록과 로그 다시 열기를 시도한다(사용자 결정 2026-11-04(Q111)). | 로그 알림 장애 표시, 이전 핸들 | OPS-045 |
 | 알림 채널 넘침, OS 알림 큐 넘침 | 놓친 알림으로 본다. 전체 재확인을 즉시 한다. 사건은 쓰지 않는다(설계 제안). 장애로 볼지는 사용자 결정이 없다. 구현 때 정한다(구현 판단(사용자 결정 없음)). | 전체 재확인 대기 | OPS-041(알림 없이 감지되는 경로) |
 | 설정 구문·값 오류, IP 항목 오류 (`ReloadService::on_change`) | `reload_rejected`를 쓴다. `reason`, `config_key?`, `detail?`를 싣는다. 기존 설정과 연결을 유지한다. | 처리 내용 해시 갱신. 다음 변경에서 다시 검증한다. | OPS-026, OPS-040 |
 | 인증서·개인키 쌍 불일치, 키 형식 오류, 파일 없음·읽기 불가 (`ReloadService::on_change`) | `reload_rejected`를 쓴다. `reason`은 `tls_file_invalid`다. 기존 인증서를 유지한다. | 처리 내용 해시 갱신. 파일이 생기면 새 알림으로 새 후보가 온다. | OPS-026 |
@@ -164,6 +172,7 @@ flowchart LR
 | 파일 알림은 notify 크레이트를 쓴다. | PRD 1절 구현 기술 표에 "파일 감지 notify"가 있다. 2026-10-20 라이선스 검토 뒤 승인되었다. | 플랫폼 API를 직접 호출 | [PRD 1절](../requirements/PRD.md). |
 | 한 변경 묶음에 `reload_change_detected`를 한 번만 쓴다. | 운영 정보 계약은 변경을 "처음 감지했을 때" 기록한다고 쓴다. 연속 저장에서 같은 사건이 반복되지 않게 한다. | 알림마다 쓰기 | 운영 정보 계약 자동 재로드 행. 묶음 단위 해석은 설계 제안이다. |
 | 시간 기준(D, Dp, Q, G)을 재는 시계를 주입한다. 테스트는 주입한 시계로 시간을 바꾼다. | 실제 시간에 기대면 테스트가 느리고 흔들린다. sleep으로 순서를 맞추지 않는다(§4.3). | `tokio` 일시 정지 시계(테스트 기능 설정이 필요하며 이미 있는지 확인하지 않았다) | 사용자 결정 2026-10-22(Q50), §9 항목 13. |
+| 로그 알림 신호와 Dp 작업을 재로드와 분리한다. 생성·삭제·이름 변경만 받는다. | 로그 쓰기 알림으로 재로드 묶음이나 재열기 반복이 생기지 않아야 한다. 긴 안정화도 로그 Dp를 막지 않아야 한다. | 로그를 내용 해시 집합에 넣는 방법 | 이 문서의 판단, 사용자 결정 없음 |
 
 ## 8. 현재 코드와의 차이
 

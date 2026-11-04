@@ -545,6 +545,8 @@ pub enum Event {
         reason: WatchFailure,
         detail: Option<String>,
     },
+    /// The configured log path could not be reopened. First failure of a streak.
+    LogReopenFailed { detail: String },
     /// Last event: resources are released and the process ends.
     ServerStopped,
 }
@@ -581,6 +583,7 @@ impl Event {
             Self::ReloadRejected { .. } => "reload_rejected",
             Self::ReloadRestartRequired { .. } => "reload_restart_required",
             Self::ReloadWatchFailed { .. } => "reload_watch_failed",
+            Self::LogReopenFailed { .. } => "log_reopen_failed",
             Self::ServerStopped => "server_stopped",
         }
     }
@@ -627,7 +630,9 @@ impl Event {
             Self::AdminLoginFailed { .. } | Self::AdminLoginLimited { .. } => Level::Warn,
             Self::StartupFailed { .. } => Level::Error,
             Self::ReloadChangeDetected { .. } | Self::ReloadApplied { .. } => Level::Info,
-            Self::ReloadRejected { .. } | Self::ReloadRestartRequired { .. } => Level::Warn,
+            Self::ReloadRejected { .. }
+            | Self::ReloadRestartRequired { .. }
+            | Self::LogReopenFailed { .. } => Level::Warn,
             Self::ReloadWatchFailed { .. } => Level::Error,
         }
     }

@@ -39,9 +39,11 @@ fn temp_dir(name: &str) -> PathBuf {
 }
 
 fn file_sink(path: &std::path::Path) -> JsonLinesEventSink {
-    JsonLinesEventSink::open(&LogOutput::File(path.to_owned()), |error| {
-        panic!("log write failed: {error}")
-    })
+    JsonLinesEventSink::open(
+        &LogOutput::File(path.to_owned()),
+        |error| panic!("log write failed: {error}"),
+        |error| panic!("log reopen failed: {error}"),
+    )
     .unwrap_or_else(|error| panic!("open {}: {error}", path.display()))
 }
 
@@ -745,7 +747,8 @@ fn reports_log_file_unavailable_without_the_path() {
     let dir = temp_dir("unavailable");
     let cases = [dir.join("missing-dir").join("relay.log"), dir.clone()];
     for path in cases {
-        let Err(error) = JsonLinesEventSink::open(&LogOutput::File(path.clone()), |_| {}) else {
+        let Err(error) = JsonLinesEventSink::open(&LogOutput::File(path.clone()), |_| {}, |_| {})
+        else {
             panic!("opened {}", path.display());
         };
         assert_eq!(error.code(), "log_file_unavailable");
@@ -798,9 +801,13 @@ fn drops_lines_and_notifies_only_the_first_write_failure() {
 
     let notices = Arc::new(AtomicUsize::new(0));
     let counter = Arc::clone(&notices);
-    let log = JsonLinesEventSink::open(&LogOutput::File("/dev/full".into()), move |_| {
-        counter.fetch_add(1, Ordering::Relaxed);
-    })
+    let log = JsonLinesEventSink::open(
+        &LogOutput::File("/dev/full".into()),
+        move |_| {
+            counter.fetch_add(1, Ordering::Relaxed);
+        },
+        |error| panic!("log reopen failed: {error}"),
+    )
     .unwrap_or_else(|error| panic!("open /dev/full: {error}"));
     for _ in 0..3 {
         log.record(&Event::ServerStopped);

@@ -24,6 +24,7 @@ use vnc_relay_app::reload::service::{ReloadOutcome, ReloadService};
 use vnc_relay_app::reload::{ChangeSource, WatchFailure};
 
 use crate::config_file;
+use crate::ops_log::JsonLinesEventSink;
 
 /// Quiet window Q before a candidate is read (file-watch.md §4 step 3 (a), §9 item 1).
 /// Implementation constant. Q + G + read + verify + swap must stay below the apply limit D
@@ -92,11 +93,14 @@ pub fn start<A: Clone, C: ReloadClock>(
     clock: C,
     files: Arc<dyn ReloadFileStore>,
     log: Arc<dyn EventSink>,
+    output: Arc<JsonLinesEventSink>,
 ) -> Result<ReloadWatcher<A, C>, ReloadWatchError> {
-    assemble(config_path, service, poll, clock, files, log, |queue| {
+    let mut watcher = assemble(config_path, service, poll, clock, files, log, |queue| {
         let feed: Box<dyn ChangeFeed> = Box::new(NotifyFeed::new(queue)?);
         Ok(feed)
-    })
+    })?;
+    watcher.attach_log(output);
+    Ok(watcher)
 }
 
 /// Builds the watcher around `make_feed`, so tests can replace the OS backend.
@@ -130,6 +134,7 @@ fn assemble<A: Clone, C: ReloadClock>(
         processed: BTreeMap::new(),
         notify_failed: false,
         seen_generation: 0,
+        log_output: None,
     };
     watcher.attach()?;
     Ok(watcher)
@@ -147,6 +152,7 @@ pub struct ReloadWatcher<A, C> {
     clock: Arc<C>,
     files: Arc<dyn ReloadFileStore>,
     log: Arc<dyn EventSink>,
+    log_output: Option<Arc<JsonLinesEventSink>>,
     /// Files watched now: the config file plus the service's TLS paths (file-watch.md §9 item 9).
     watched: Vec<PathBuf>,
     /// Content hash per watched file at the last processed state. `None` means the file is missing
@@ -276,7 +282,27 @@ impl<A: Clone, C: ReloadClock> ReloadWatcher<A, C> {
     fn sync_notify(&mut self) -> Result<(), ReloadWatchError> {
         let plan = watch_plan(&self.watched)?;
         self.queue.set_targets(plan.targets);
-        self.feed.watch_dirs(&plan.dirs)
+        // `assemble` first registers config/TLS alone; `attach_log` then adds
+        // optional log directories without making their failure fatal (Q111).
+        self.sync_log_notify(plan.dirs)
+    }
+
+    fn attach_log(&mut self, output: Arc<JsonLinesEventSink>) {
+        if output.file_path().is_none() {
+            return;
+        }
+        self.log_output = Some(output);
+        self.resync_notify();
+    }
+
+    fn sync_log_notify(&mut self, mut dirs: BTreeSet<PathBuf>) -> Result<(), ReloadWatchError> {
+        let Some(path) = self.log_output.as_ref().and_then(|log| log.file_path()) else {
+            return self.feed.watch_dirs(&dirs);
+        };
+        let plan = watch_plan(&[path.to_path_buf()])?;
+        self.queue.set_log_targets(plan.targets);
+        dirs.extend(plan.dirs);
+        self.feed.watch_dirs(&dirs)
     }
 
     /// Re-registers the watches. A failure is reported again on every attempt (file-watch.md §6, §9 item 8).
@@ -468,7 +494,23 @@ impl<A: Clone, C: ReloadClock> ReloadWatcher<A, C> {
 
 impl<A: Clone, C: ReloadClock> ReloadWatcher<A, C> {
     /// Runs the watcher until `stop` becomes true or its sender is dropped (file-watch.md §4, §5).
-    pub async fn run(mut self, mut stop: watch::Receiver<bool>) {
+    pub async fn run(mut self, stop: watch::Receiver<bool>) {
+        let Some(output) = self.log_output.take() else {
+            self.run_reload(stop).await;
+            return;
+        };
+        // Keep the output available to notification registration refreshes.
+        self.log_output = Some(output.clone());
+        let queue = Arc::clone(&self.queue);
+        let clock = Arc::clone(&self.clock);
+        let poll = self.poll;
+        tokio::select! {
+            () = self.run_reload(stop.clone()) => {},
+            () = reopen_log(output, queue, clock, poll, stop) => {},
+        }
+    }
+
+    async fn run_reload(mut self, mut stop: watch::Receiver<bool>) {
         let clock = Arc::clone(&self.clock);
         let mut tick = pin!(clock.sleep(self.poll));
         loop {
@@ -502,6 +544,37 @@ impl<A: Clone, C: ReloadClock> ReloadWatcher<A, C> {
         }
     }
 }
+
+/// Independent timer: long-running reload episodes cannot delay log reopen.
+async fn reopen_log<C: ReloadClock>(
+    output: Arc<JsonLinesEventSink>,
+    queue: Arc<ChangeQueue>,
+    clock: Arc<C>,
+    poll: Duration,
+    mut stop: watch::Receiver<bool>,
+) {
+    let mut tick = pin!(clock.sleep(poll));
+    loop {
+        if *stop.borrow() {
+            return;
+        }
+        tokio::select! {
+            () = queue.log_changed.notified() => output.reopen(),
+            () = tick.as_mut() => {
+                output.reopen();
+                tick.set(clock.sleep(poll));
+            },
+            changed = stop.changed() => {
+                if changed.is_err() || *stop.borrow() {
+                    return;
+                }
+            },
+        }
+    }
+}
+
+#[cfg(test)]
+mod reopen_tests;
 
 #[cfg(test)]
 mod tests {
