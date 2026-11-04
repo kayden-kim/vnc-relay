@@ -237,9 +237,7 @@ app 수명은 `Running`, `Grace { deadline }`, `Force`다. `src/serve.rs`가 OS 
 
 유예 중 관리 조회·로그인·관리자 종료와 상태 조회는 계속 실행한다. 모든 중계 정리가 끝난 뒤 관리·상태·감지 작업을 거두고 `server_stopped`를 마지막에 쓴다. 강제 정리의 최근 종료 항목도 Q82의 최초 원인을 유지한다. 프로세스 종료 전에 실제 HTTP 조회 기회가 생긴다고 보장하지 않는다.
 
-### 계획된 작업 (Target)
-
-G·두 번째 종료 요청의 제어와 감독은 현재 코드다. Windows는 Ctrl+C·Ctrl+Break를, Unix는 SIGINT·SIGTERM을 받는다. Windows 콘솔 창 닫기 처리는 현재 `shutdown_signal`에 없다. 목표 동작은 사용자 결정 2026-11-04(Q102)다. 창 닫기를 받으면 첫 종료 요청(Grace)과 두 번째 종료 요청(Force)을 곧바로 이어서 내고, OS가 기본 5초 뒤 프로세스를 끝내기 전에 정리와 `server_stopped` 기록을 마친다([운영 스펙 3.4절](../specs/operations.md#34-정상-종료와-재시작), OPS-044). 로그오프·시스템 종료는 대화형 콘솔 프로그램이 신호를 받지 못하므로 처리하지 않는다. 이 OS 신호 연결은 [TODO 5.3](../TODO.md#5-운영배포-검증)의 남은 범위다. 위 Current 그림에는 넣지 않는다.
+Windows의 `ShutdownSignal::wait`는 Ctrl+C·Ctrl+Break를 `ShutdownRequest::Requested`로, 콘솔 창 닫기를 `ConsoleClosed`로 반환한다. Unix는 SIGINT·SIGTERM을 `Requested`로 반환한다. `begin_relay_shutdown`은 모든 요청에 설정한 G로 첫 `request_shutdown`을 호출한다. `ConsoleClosed`이면 같은 호출 안에서 `Duration::ZERO`로 한 번 더 요청한다. 그러므로 Grace의 `shutdown_started`를 기록한 뒤 G 없이 Force로 진행한다. 남은 활성 세션이 있을 때만 `shutdown_forced`를 기록한다. 이 신호 분류와 조립 함수 분리는 **이 문서의 판단, 사용자 결정 없음**이다. 외부 동작의 근거는 사용자 결정 2026-11-04(Q102)와 [운영 스펙 3.4절](../specs/operations.md#34-정상-종료와-재시작), OPS-044다. 정리와 `server_stopped` 기록은 OS의 기본 5초 제한 안에 마쳐야 한다. 로그오프·시스템 종료는 대화형 콘솔 프로그램이 신호를 받지 못하므로 처리하지 않는다.
 
 
 ## 6. 사건·오류·정리

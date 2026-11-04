@@ -135,7 +135,7 @@ flowchart LR
 | `crates/adapters/src/ops_log.rs` `JsonLinesEventSink` `format_line`; `crates/adapters/src/clock.rs` `SystemClock` `timestamp`; `crates/adapters/src/crypto.rs` `RelayIdKey` `SessionIdKey` `SystemTokenSource` | 운영 기반 | 사건 JSON Lines, UTC와 단조 시각, ID HMAC·세션 ID 순열·토큰 난수. 초기·대상·대기·최종 세션 사건을 모두 직렬화한다. | 사건 의미·매칭 정책 | app 포트·serde_json·aws-lc-rs | [운영 로그](ops-log.md), [중계 수명](relay-session.md) |
 | `crates/adapters/src/terminal.rs`; `crates/adapters/src/terminal/windows_console.rs` | 터미널 | 숨김 입력·확인·Ctrl+C, Windows 콘솔 모드 저장·복구 | 비밀번호 규칙 | rpassword·tokio signal·windows-sys | [계정 준비](admin-accounts.md) |
 | `src/main.rs` `main`; `src/cli.rs` `parse`; `src/admin.rs` `run` | CLI 조립 | 명령·옵션·진단·종료 코드, admin 포트 주입 | 계정 규칙 | clap·app·adapters | [시작](serve-startup.md), [계정 준비](admin-accounts.md) |
-| `src/serve.rs` `run` `listen_until_shutdown` `generate_startup_keys` `finish_relay_shutdown` | 서버 조립 | 설정·로그·계정·키·TLS·감지·리스너 준비, L/Lm/Lw·중계·관리·재로드 주입, 첫 신호·G 감독·두 번째 신호·작업 회수 | 매칭·바이트 전달 | 제품 crate·tokio | [시작](serve-startup.md), [파일 감지](file-watch.md), [중계 수명](relay-session.md) |
+| `src/serve.rs` `run` `listen_until_shutdown` `generate_startup_keys` `ShutdownRequest` `begin_relay_shutdown` `finish_relay_shutdown` | 서버 조립 | 설정·로그·계정·키·TLS·감지·리스너 준비, L/Lm/Lw·중계·관리·재로드 주입, 첫 신호·G 감독·두 번째 신호·Windows 콘솔 닫기·작업 회수 | 매칭·바이트 전달 | 제품 crate·tokio | [시작](serve-startup.md), [파일 감지](file-watch.md), [중계 수명](relay-session.md) |
 
 ### 2.4 개발 도구와 정적 대시보드
 
@@ -162,6 +162,7 @@ flowchart LR
 | `tests/dependency_notices.rs` `distribution_notices_match_locked_dependencies_and_license_texts` | operations.md: OPS-021 partial. 오프라인 고지 대조만 확인하며 프로젝트 LICENSE는 확인하지 않는다. |
 | `tests/admin.rs` | operations.md: OPS-029·030 |
 | `tests/serve.rs` | operations.md: 시작·종료·L/H·상태·관리 보안·IP·중복 시작. relay.md: 초기 교환·Mode I/II·중계·half-close·IP. websocket.md: WS-024 |
+| `tests/unix_shutdown.rs`; `tests/windows_console.rs`; `tests/common/shutdown.rs` `ServerProcess` | operations.md: OPS-007~010·042·043(양 OS), OPS-044(Windows). Windows는 MGT-027·OPS-029와 Ctrl+C·Ctrl+Break도 확인한다. 공통 본문에는 표식이 없다. |
 | `tests/dashboard_browser.rs` | dashboard.md: DASH-001~022·024~027 |
 | `tests/management_query.rs` | management.md: MGT-001~007·013·015·016·021·023·024·026. operations.md: OPS-033 |
 | `tests/management_session.rs` | management.md: MGT-017·020·027. operations.md: OPS-029 |
@@ -188,7 +189,7 @@ flowchart LR
 | 관리 HTTP | `crates/adapters/src/management_http.rs` `answer` | 관리 요청 | `session_api` → `query_api` 또는 `session_api` → `terminate_api` 또는 `static_answer` |
 | 상태 HTTP | `crates/adapters/src/status_http.rs` `StatusListener::run` | 상태 요청 | `LifecycleService::readiness` |
 | 파일 변경 | `crates/adapters/src/file_watch.rs` `ReloadWatcher::run` | OS 알림·주기 확인 | `ReloadService::handle_config` 또는 `ReloadService::handle_unreadable` |
-| 종료 신호 | `src/serve.rs` `ShutdownSignal::wait` | Ctrl+C·SIGTERM(Ubuntu)·Ctrl+Break(Windows) | `LifecycleService::begin_shutdown` · `RelayService::request_shutdown` · `finish_relay_shutdown` |
+| 종료 신호 | `src/serve.rs` `ShutdownSignal::wait` | Ctrl+C·SIGTERM(Ubuntu)·Ctrl+Break·콘솔 창 닫기(Windows) | `LifecycleService::begin_shutdown` · `begin_relay_shutdown` · `finish_relay_shutdown` |
 | H 기한 | `crates/app/src/relay.rs` `RelayService::handle_connection` | 초기 교환 | `exchange` |
 | C 기한 | `crates/app/src/relay/target.rs` `dispatch` | Mode I 대상 연결 | `connect` |
 | W 기한 | `crates/app/src/relay/matching.rs` `dispatch` | Mode II 대기 등록 | `wait` |

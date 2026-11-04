@@ -435,14 +435,21 @@ async fn listen_until_shutdown(
         }
     }
 
-    shutdown.wait().await;
+    let first_request = shutdown.wait().await;
     lifecycle.begin_shutdown();
-    relay_service.request_shutdown(&runtime, settings.timeouts.shutdown_grace);
+    begin_relay_shutdown(first_request, settings.timeouts.shutdown_grace, |grace| {
+        relay_service.request_shutdown(&runtime, grace)
+    });
     stop.send_replace(true);
 
-    finish_relay_shutdown(&mut entry_points, supervisor, shutdown.wait(), || {
-        relay_service.request_shutdown(&runtime, Duration::ZERO)
-    })
+    finish_relay_shutdown(
+        &mut entry_points,
+        supervisor,
+        async {
+            shutdown.wait().await;
+        },
+        || relay_service.request_shutdown(&runtime, Duration::ZERO),
+    )
     .await;
     drop(idle);
     stop_task(management_task).await;
@@ -450,6 +457,27 @@ async fn listen_until_shutdown(
     let _ = watch_task.await;
     log.record(&Event::ServerStopped);
     ExitCode::SUCCESS
+}
+
+/// A closed Windows console requests Grace and Force in the same turn (Q102).
+#[derive(Clone, Copy)]
+enum ShutdownRequest {
+    Requested,
+    #[cfg(any(windows, test))]
+    ConsoleClosed,
+}
+
+fn begin_relay_shutdown(
+    request: ShutdownRequest,
+    grace: Duration,
+    mut request_shutdown: impl FnMut(Duration),
+) {
+    request_shutdown(grace);
+    match request {
+        ShutdownRequest::Requested => {}
+        #[cfg(any(windows, test))]
+        ShutdownRequest::ConsoleClosed => request_shutdown(Duration::ZERO),
+    }
 }
 
 /// Keeps the G driver alive until all entry-point owners release their work.
@@ -653,23 +681,24 @@ impl ShutdownSignal {
         })
     }
 
-    async fn wait(&mut self) {
+    async fn wait(&mut self) -> ShutdownRequest {
         std::future::poll_fn(|cx| {
             if self.interrupt.poll_recv(cx).is_ready() || self.terminate.poll_recv(cx).is_ready() {
-                Poll::Ready(())
+                Poll::Ready(ShutdownRequest::Requested)
             } else {
                 Poll::Pending
             }
         })
-        .await;
+        .await
     }
 }
 
-/// Shutdown requests of cli-v1 §1.8: Ctrl+C and Ctrl+Break.
+/// Shutdown requests of cli-v1 §1.8: Ctrl+C, Ctrl+Break, and console close.
 #[cfg(windows)]
 struct ShutdownSignal {
     ctrl_c: tokio::signal::windows::CtrlC,
     ctrl_break: tokio::signal::windows::CtrlBreak,
+    ctrl_close: tokio::signal::windows::CtrlClose,
 }
 
 #[cfg(windows)]
@@ -678,18 +707,24 @@ impl ShutdownSignal {
         Ok(Self {
             ctrl_c: tokio::signal::windows::ctrl_c()?,
             ctrl_break: tokio::signal::windows::ctrl_break()?,
+            ctrl_close: tokio::signal::windows::ctrl_close()?,
         })
     }
 
-    async fn wait(&mut self) {
+    async fn wait(&mut self) -> ShutdownRequest {
         std::future::poll_fn(|cx| {
-            if self.ctrl_c.poll_recv(cx).is_ready() || self.ctrl_break.poll_recv(cx).is_ready() {
-                Poll::Ready(())
+            // Close takes priority if an ordinary request is also pending.
+            if self.ctrl_close.poll_recv(cx).is_ready() {
+                Poll::Ready(ShutdownRequest::ConsoleClosed)
+            } else if self.ctrl_c.poll_recv(cx).is_ready()
+                || self.ctrl_break.poll_recv(cx).is_ready()
+            {
+                Poll::Ready(ShutdownRequest::Requested)
             } else {
                 Poll::Pending
             }
         })
-        .await;
+        .await
     }
 }
 
@@ -731,6 +766,39 @@ mod tests {
             force.send_replace(true);
         });
         (task, stopped)
+    }
+
+    #[test]
+    fn ordinary_shutdown_request_starts_the_configured_grace_once() {
+        let mut requests = Vec::new();
+        begin_relay_shutdown(
+            ShutdownRequest::Requested,
+            Duration::from_secs(90),
+            |grace| {
+                requests.push(grace);
+            },
+        );
+        assert_eq!(requests, [Duration::from_secs(90)]);
+    }
+
+    #[test]
+    fn console_close_starts_grace_then_immediately_requests_force() {
+        let mut requests = Vec::new();
+        begin_relay_shutdown(
+            ShutdownRequest::ConsoleClosed,
+            Duration::from_secs(90),
+            |grace| requests.push(grace),
+        );
+        assert_eq!(requests, [Duration::from_secs(90), Duration::ZERO]);
+    }
+
+    #[test]
+    fn console_close_with_zero_grace_still_preserves_both_requests() {
+        let mut requests = Vec::new();
+        begin_relay_shutdown(ShutdownRequest::ConsoleClosed, Duration::ZERO, |grace| {
+            requests.push(grace);
+        });
+        assert_eq!(requests, [Duration::ZERO, Duration::ZERO]);
     }
 
     /// spec: operations.md:OPS-008 partial

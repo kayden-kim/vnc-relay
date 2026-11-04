@@ -75,3 +75,6 @@ vnc-relay-domain.workspace = true
 [dev-dependencies]
 rustls = { workspace = true }
 tokio = { workspace = true, features = ["macros", "net", "rt", "test-util"] }
+
+[target.'cfg(windows)'.dev-dependencies]
+windows-sys = { workspace = true, features = ["Win32_System_Pipes", "Win32_System_Threading"] }

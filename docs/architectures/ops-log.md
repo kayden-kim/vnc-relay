@@ -133,7 +133,7 @@ flowchart LR
 | 쓰기 실패 알림은 adapters가 직접 stderr에 쓰지 않고 생성할 때 받은 함수로 실행파일 조립에 넘긴다. | 명령행 출력은 실행파일 조립 crate만 쓴다. | adapters가 stderr에 쓴다. 출력 규칙을 어긴다. | [rust.md 2절](../conventions/rust.md) "출력" 행 |
 | 시각은 `record`가 부를 때의 `SystemTime`이다. `format_line`은 시각을 인수로 받는다. | 기록은 사건 직후에 한다. 형식 테스트가 고정 시각을 쓸 수 있다. | `Clock` 포트. 지금은 시각을 바꿔 넣을 사용 사례 테스트가 없다. | [테스트 컨벤션 2절](../conventions/testing.md) |
 | `ts`의 날짜 계산을 직접 한다(1970년 기준 일수 → 그레고리력). | PRD 목록에 날짜 crate가 없다. 계산은 짧고 단위 테스트로 경계(윤년·세기)를 확인할 수 있다. | 날짜 crate 추가. PRD 행 변경이 필요하다. | [PRD "구현 기술" 행](../requirements/PRD.md#확정-기준) |
-| 종료 요청 때 `shutdown_started` 없이 `server_stopped`만 쓴다. | 종료 유예가 아직 없다. `shutdown_started`의 `grace_secs`를 쓰면 하지 않는 유예를 알리게 된다. | 지금 `shutdown_started`를 쓴다. | 작업 5.3 |
+| 종료 유예 진입 때 `shutdown_started`를 쓴다. 강제 정리할 활성 세션이 있으면 `shutdown_forced`를 먼저 쓰고 각 `session_closed`를 쓴다. 모든 작업 회수 뒤 `server_stopped`를 마지막에 쓴다. | G=0·G 만료·두 번째 요청·Windows 콘솔 창 닫기에도 같은 사건 순서와 남은 세션 조건을 적용한다. | 세션이 없어도 `shutdown_forced`를 쓰는 방법. 실제 강제 정리가 있었던 것처럼 보인다. | [운영 정보 계약 1.5절](../contracts/ops-info-v1.md#15-사건-목록), 사용자 결정 2026-11-04(Q102) |
 | 길이 제한은 JSON 이스케이프 전 값의 UTF-8 바이트 수에 적용한다. | 계약 1.1절은 필드 값의 길이를 정한다. 이스케이프 뒤 길이로 자르면 이스케이프 문자 중간에서 잘릴 수 있다. | 이스케이프 뒤 바이트 수. 줄 길이 상한은 정확하지만 자르는 위치 계산이 복잡하다. | [운영 정보 계약 1.1절](../contracts/ops-info-v1.md#11-로그-일반-규칙) |
 
 ## 8. 현재 코드와의 차이

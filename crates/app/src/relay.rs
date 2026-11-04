@@ -2608,6 +2608,87 @@ mod tests {
         );
     }
 
+    #[tokio::test(start_paused = true)]
+    async fn zero_grace_without_active_sessions_has_no_forced_event() {
+        let harness = Harness::new(2, 1, 8, &[]);
+        harness
+            .service
+            .request_shutdown(&harness.runtime, Duration::ZERO);
+        harness
+            .service
+            .request_shutdown(&harness.runtime, Duration::ZERO);
+        assert_eq!(*harness.runtime.lifecycle().borrow(), RelayLifecycle::Force);
+        let events = harness.events();
+        assert_eq!(
+            events
+                .iter()
+                .filter(|event| matches!(event, Event::ShutdownStarted { .. }))
+                .count(),
+            1,
+        );
+        assert!(
+            !events
+                .iter()
+                .any(|event| matches!(event, Event::ShutdownForced { .. }))
+        );
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn zero_grace_with_active_session_records_force_once_before_close() {
+        let harness = Harness::new(3, 1, 8, &[]);
+        let (prepared, _server, _) = harness.prepare(Role::Server, "ID:4", b"").await;
+        let waiter = harness.start(prepared);
+        settle().await;
+        let (prepared, _viewer, _) = harness.prepare(Role::Viewer, "ID:4", b"").await;
+        let owner = harness.start(prepared);
+        settle().await;
+        assert_eq!(harness.snapshot().active.len(), 1);
+        harness
+            .service
+            .request_shutdown(&harness.runtime, Duration::ZERO);
+        harness
+            .service
+            .request_shutdown(&harness.runtime, Duration::ZERO);
+        waiter
+            .await
+            .unwrap_or_else(|error| panic!("waiter: {error}"))
+            .unwrap_or_else(|error| panic!("handoff: {error:?}"));
+        owner
+            .await
+            .unwrap_or_else(|error| panic!("owner: {error}"))
+            .unwrap_or_else(|error| panic!("force: {error:?}"));
+        let events = harness.events();
+        let forced = events
+            .iter()
+            .position(|event| {
+                matches!(
+                    event,
+                    Event::ShutdownForced {
+                        remaining_sessions: 1
+                    }
+                )
+            })
+            .unwrap_or_else(|| panic!("one active session forced"));
+        let closed = events
+            .iter()
+            .position(|event| matches!(event, Event::SessionClosed { .. }))
+            .unwrap_or_else(|| panic!("forced session closed"));
+        assert!(forced < closed);
+        assert_eq!(
+            events
+                .iter()
+                .filter(|event| matches!(event, Event::ShutdownForced { .. }))
+                .count(),
+            1
+        );
+        assert_eq!(
+            harness.snapshot().recent_closed[0].close_cause,
+            CloseCause::ServerShutdown
+        );
+        assert!(harness.snapshot().active.is_empty());
+        assert_eq!(free_places(&harness.budget), 3);
+    }
+
     /// spec: operations.md:OPS-008 partial
     #[tokio::test(start_paused = true)]
     async fn empty_shutdown_supervisor_reaches_force_without_a_forced_event() {

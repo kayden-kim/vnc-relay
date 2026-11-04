@@ -581,15 +581,7 @@ fn restart_ends_the_admin_session_and_login_works_again() {
     restart_session_scenario(Server::stop_normally);
 }
 
-// Normal Windows console-control delivery belongs to TODO 5.3. This path
-// deliberately proves only invalidation across a forced process restart.
-/// spec: management.md:MGT-027 partial
-#[cfg(not(unix))]
-#[test]
-fn forced_restart_ends_the_admin_session_and_login_works_again() {
-    restart_session_scenario(Server::stop);
-}
-
+#[cfg(unix)]
 fn restart_session_scenario(stop: fn(Server) -> String) {
     let _guard = lock_ports();
     let dir = setup_dir("restart");
