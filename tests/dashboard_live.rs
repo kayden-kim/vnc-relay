@@ -173,3 +173,40 @@ fn dashboard_026_malformed_ids_send_no_query_and_differ_from_not_found() {
 fn dashboard_027_injected_login_failures_block_duplicates_and_allow_retry() {
     run(login::login_transport_failures_are_distinct_and_block_duplicates);
 }
+
+#[test]
+fn dashboard_proxy_preserves_an_idle_browser_preconnection() {
+    run(|| {
+        use std::io::Write;
+        use std::time::Duration;
+
+        let server = live::Server::start("proxy-preconnect", None);
+        let accepted = server.proxy.accepted_count();
+        let mut stream = live::connect(server.proxy.port);
+        live::wait_for(
+            "accepted proxy worker reaches request read",
+            live::LIMIT,
+            || server.proxy.accepted_count() > accepted,
+        );
+        // The worker has acknowledged entry into its request-read path.
+        // Windows used to inherit nonblocking mode and close it with 10035.
+        std::thread::sleep(Duration::from_millis(100));
+        live::must(
+            stream
+                .write_all(b"GET /login/ HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n"),
+        );
+        let reply = live::read_reply(stream);
+        assert_eq!(reply.status, 200);
+        assert!(reply.body.contains("login-root"));
+        live::wait_for("preconnected HTTP exchange completes", live::LIMIT, || {
+            server.proxy.traffic().iter().any(|item| {
+                item.path == "/login/"
+                    && item.forwarded
+                    && !item.injected
+                    && item.status == Some(200)
+                    && item.completed.is_some()
+                    && item.error.is_none()
+            })
+        });
+    });
+}

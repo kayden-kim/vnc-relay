@@ -3,7 +3,7 @@
 
 use std::io::{self, Read, Write};
 use std::net::{TcpListener, TcpStream};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
@@ -30,6 +30,12 @@ pub struct Traffic {
     pub forwarded: bool,
     pub injected: bool,
     pub status: Option<u16>,
+    pub stage: &'static str,
+    pub error: Option<(io::ErrorKind, Option<i32>)>,
+    pub accepted_at: Instant,
+    pub upstream_connected_at: Option<Instant>,
+    pub upstream_written_at: Option<Instant>,
+    pub upstream_response_at: Option<Instant>,
 }
 
 struct Rule {
@@ -44,6 +50,8 @@ struct Shared {
     rules: Mutex<Vec<Rule>>,
     traffic: Mutex<Vec<Traffic>>,
     stop: AtomicBool,
+    accepted: AtomicUsize,
+    request_errors: Mutex<Vec<(io::ErrorKind, Option<i32>)>>,
 }
 
 pub struct Proxy {
@@ -134,6 +142,42 @@ impl Proxy {
             .clone()
     }
 
+    /// Accepted sockets whose workers have reached the request-read boundary.
+    pub fn accepted_count(&self) -> usize {
+        self.shared.accepted.load(Ordering::Acquire)
+    }
+
+    pub fn diagnostics(&self) -> serde_json::Value {
+        let traffic = self.traffic();
+        let origin = traffic
+            .first()
+            .map_or_else(Instant::now, |item| item.accepted_at);
+        let records: Vec<_> = traffic.iter().skip(traffic.len().saturating_sub(80)).map(|item| serde_json::json!({
+            "method": item.method,
+            "path": item.path.split('?').next().unwrap_or(""),
+            "at_ms": item.at.saturating_duration_since(origin).as_millis(),
+            "request_read_ms": item.at.saturating_duration_since(item.accepted_at).as_millis(),
+            "stage": item.stage,
+            "forwarded": item.forwarded,
+            "injected": item.injected,
+            "status": item.status,
+            "completed": item.completed.is_some(),
+            "upstream_connect_ms": item.upstream_connected_at.map(|at| at.saturating_duration_since(item.at).as_millis()),
+            "upstream_write_ms": item.upstream_written_at.map(|at| at.saturating_duration_since(item.at).as_millis()),
+            "upstream_response_ms": item.upstream_response_at.map(|at| at.saturating_duration_since(item.at).as_millis()),
+            "error": item.error.map(|(kind, os)| format!("{kind:?}/{os:?}")),
+        })).collect();
+        let errors: Vec<_> = self
+            .shared
+            .request_errors
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .iter()
+            .map(|(kind, os)| format!("{kind:?}/{os:?}"))
+            .collect();
+        serde_json::json!({"traffic":records,"pre_request_errors":errors})
+    }
+
     pub fn count(&self, method: &str, path: &str) -> usize {
         self.traffic()
             .iter()
@@ -199,10 +243,24 @@ fn pause(duration: Duration, state: &Shared) -> bool {
 }
 
 fn exchange(mut downstream: TcpStream, upstream: u16, state: &Shared) {
-    let _ = downstream.set_read_timeout(Some(LIMIT));
-    let _ = downstream.set_write_timeout(Some(LIMIT));
-    let Ok(bytes) = request_bytes(&mut downstream) else {
-        return; // Browser preconnects may close without sending HTTP.
+    // Windows accepted sockets inherit the listener's nonblocking mode.
+    // Chromium may preconnect before sending its request; an immediate
+    // WouldBlock must not be mistaken for a closed/failed HTTP connection.
+    must(downstream.set_nonblocking(false));
+    must(downstream.set_read_timeout(Some(LIMIT)));
+    must(downstream.set_write_timeout(Some(LIMIT)));
+    let accepted_at = Instant::now();
+    state.accepted.fetch_add(1, Ordering::Release);
+    let bytes = match request_bytes(&mut downstream) {
+        Ok(bytes) => bytes,
+        Err(error) => {
+            state
+                .request_errors
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .push((error.kind(), error.raw_os_error()));
+            return;
+        }
     };
     let Some(head_end) = bytes.windows(4).position(|part| part == b"\r\n\r\n") else {
         return;
@@ -238,6 +296,12 @@ fn exchange(mut downstream: TcpStream, upstream: u16, state: &Shared) {
             forwarded: false,
             injected: fault.is_some(),
             status: None,
+            stage: "request_read",
+            error: None,
+            accepted_at,
+            upstream_connected_at: None,
+            upstream_written_at: None,
+            upstream_response_at: None,
         });
         index
     };
@@ -252,9 +316,11 @@ fn exchange(mut downstream: TcpStream, upstream: u16, state: &Shared) {
     );
     let mut traffic = state.traffic.lock().unwrap_or_else(PoisonError::into_inner);
     traffic[index].completed = Some(Instant::now());
-    // A browser timeout/navigation may close the downstream first. This is
-    // expected transport evidence, not an injected or real server HTTP status.
-    let _ = result;
+    if let Err(error) = result {
+        traffic[index].error = Some((error.kind(), error.raw_os_error()));
+    } else {
+        traffic[index].stage = "complete";
+    }
 }
 
 fn forward(
@@ -282,7 +348,13 @@ fn forward(
         Some(Fault::DelayBefore(delay)) if !pause(*delay, state) => return Ok(()),
         _ => {}
     }
+    state.traffic.lock().unwrap_or_else(PoisonError::into_inner)[index].stage = "upstream_connect";
     let mut stream = connect(upstream);
+    {
+        let mut traffic = state.traffic.lock().unwrap_or_else(PoisonError::into_inner);
+        traffic[index].upstream_connected_at = Some(Instant::now());
+        traffic[index].stage = "upstream_write";
+    }
     let head = String::from_utf8_lossy(&bytes[..head_end]);
     let mut request = String::new();
     for line in head.lines() {
@@ -298,7 +370,17 @@ fn forward(
     stream.write_all(request.as_bytes())?;
     stream.write_all(&bytes[head_end + 4..])?;
     state.traffic.lock().unwrap_or_else(PoisonError::into_inner)[index].forwarded = true;
+    {
+        let mut traffic = state.traffic.lock().unwrap_or_else(PoisonError::into_inner);
+        traffic[index].upstream_written_at = Some(Instant::now());
+        traffic[index].stage = "upstream_read";
+    }
     let response = response_bytes(&mut stream, bytes.starts_with(b"HEAD "))?;
+    {
+        let mut traffic = state.traffic.lock().unwrap_or_else(PoisonError::into_inner);
+        traffic[index].upstream_response_at = Some(Instant::now());
+        traffic[index].stage = "downstream_write";
+    }
     let status = response
         .split(|byte| *byte == b' ')
         .nth(1)

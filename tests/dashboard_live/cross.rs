@@ -33,7 +33,10 @@ fn login(browser: &mut Browser, server: &Server) {
     browser.fill("#login-account", "alice");
     browser.fill("#login-password", PASSWORD);
     browser.click("#login-submit");
-    browser.wait("document.querySelector('#operations-refresh') !== null");
+    browser.wait_with_server(
+        "document.querySelector('#operations-refresh') !== null",
+        server,
+    );
 }
 
 fn settled(browser: &mut Browser) {
@@ -860,10 +863,13 @@ pub fn browser_preferences_select_language_on_all_screens() {
         browser.fill("#login-account", "alice");
         browser.fill("#login-password", PASSWORD);
         browser.click("#login-submit");
-        browser.wait(&format!(
-            "document.querySelector('table') && document.body.textContent.includes({})",
-            script_string(&pair.sid)
-        ));
+        browser.wait_with_server(
+            &format!(
+                "document.querySelector('table') && document.body.textContent.includes({})",
+                script_string(&pair.sid)
+            ),
+            &server,
+        );
         assert_language(
             &mut browser,
             chosen,

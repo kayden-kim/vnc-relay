@@ -290,6 +290,47 @@ enabled = true
         format!("http://127.0.0.1:{}{path}", self.proxy.port)
     }
 
+    pub fn diagnostics(&self) -> Value {
+        let events = fs::read_to_string(self.dir.join("events.jsonl")).unwrap_or_default();
+        let mut sanitized = Vec::new();
+        for line in events.lines() {
+            if let Ok(event) = serde_json::from_str::<Value>(line) {
+                let mut record = serde_json::Map::new();
+                for key in ["event", "level", "reason", "listener", "stage", "code"] {
+                    if let Some(value) = event[key].as_str()
+                        && value.len() <= 64
+                        && value
+                            .bytes()
+                            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
+                    {
+                        record.insert(key.to_owned(), json!(value));
+                    }
+                }
+                if !record.is_empty() {
+                    sanitized.push(Value::Object(record));
+                }
+            }
+        }
+        if sanitized.len() > 80 {
+            sanitized.drain(..sanitized.len() - 80);
+        }
+        let stderr = fs::read_to_string(self.dir.join("stderr.txt")).unwrap_or_default();
+        let codes: Vec<_> = stderr
+            .lines()
+            .filter_map(|line| {
+                line.strip_prefix("error[")
+                    .and_then(|line| line.split_once(']'))
+                    .map(|(code, _)| code)
+                    .filter(|code| {
+                        code.bytes()
+                            .all(|byte| byte.is_ascii_lowercase() || byte == b'_')
+                    })
+            })
+            .collect();
+        json!({"proxy":self.proxy.diagnostics(),"backend_events":sanitized,
+            "stderr_bytes":stderr.len(),"stderr_error_codes":codes})
+    }
+
     pub fn request(
         &self,
         method: &str,

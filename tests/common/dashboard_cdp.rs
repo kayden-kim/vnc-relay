@@ -18,6 +18,7 @@ pub struct Browser {
     dir: PathBuf,
     socket: WebSocket<TcpStream>,
     next_id: u64,
+    network: Vec<Value>,
 }
 
 fn executable() -> PathBuf {
@@ -143,6 +144,7 @@ impl Browser {
             dir,
             socket,
             next_id: 0,
+            network: Vec::new(),
         };
         browser.command("Page.enable", json!({}));
         browser.command("Runtime.enable", json!({}));
@@ -188,6 +190,32 @@ impl Browser {
                 Message::Text(text) => {
                     let message: Value = must(serde_json::from_str(text.as_str()));
                     if message["id"].as_u64() != Some(id) {
+                        if let Some(event) = message["method"].as_str() {
+                            let params = &message["params"];
+                            let record = match event {
+                                "Network.loadingFailed" => Some(json!({
+                                    "event":event,"request":params["requestId"],
+                                    "error":params["errorText"],"canceled":params["canceled"],
+                                    "blocked":params["blockedReason"],
+                                })),
+                                "Network.responseReceived" => Some(json!({
+                                    "event":event,"request":params["requestId"],
+                                    "status":params["response"]["status"],
+                                })),
+                                "Network.requestWillBeSent" => Some(json!({
+                                    "event":event,"request":params["requestId"],
+                                    "method":params["request"]["method"],
+                                    "body_bytes":params["request"]["postData"].as_str().map(str::len),
+                                })),
+                                _ => None,
+                            };
+                            if let Some(record) = record {
+                                if self.network.len() >= 200 {
+                                    self.network.remove(0);
+                                }
+                                self.network.push(record);
+                            }
+                        }
                         continue;
                     }
                     let error = message["error"]["message"].as_str().unwrap_or("");
@@ -336,13 +364,37 @@ impl Browser {
             .to_owned()
     }
 
+    pub fn wait_with_server(&mut self, expression: &str, server: &Server) {
+        let deadline = Instant::now() + LIMIT;
+        loop {
+            if self.eval(expression).as_bool() == Some(true) {
+                return;
+            }
+            let login_failed = self
+                .eval(
+                    "!!document.querySelector('[data-notice=request-failed],[data-notice=failed]')",
+                )
+                .as_bool()
+                == Some(true);
+            if login_failed || Instant::now() >= deadline {
+                panic!(
+                    "normal browser login/navigation failed; predicate={expression}; network={}; server={}",
+                    json!(self.network),
+                    server.diagnostics()
+                );
+            }
+            thread::sleep(Duration::from_millis(20));
+        }
+    }
+
     pub fn login(&mut self, server: &Server) {
         self.navigate(&server.url("/login/"));
         self.fill("#login-account", "alice");
         self.fill("#login-password", PASSWORD);
         self.click("#login-submit");
-        self.wait(
+        self.wait_with_server(
             "location.pathname === '/' && document.querySelector('#operations-refresh') !== null",
+            server,
         );
         self.wait("!document.body.innerText.includes('Loading') && !document.body.innerText.includes('조회 중')");
     }
