@@ -1140,6 +1140,8 @@ Windows에서 `cargo fmt --all`과 `cargo build`가 종료 0이었다. 새 debug
 
 검토에서 첫 로딩 관찰과 고정 3초 지연 만료 사이의 시험 경합을 찾았다. 초기 응답 세 개를 `Fault::Hold`로 보관하고 로딩·배지 없음 검사를 마친 뒤 해제하도록 바꿨다. Windows의 `cargo test --test dashboard_live dashboard_005_real_delays_do_not_overlap_or_overwrite_routes -- --nocapture`는 통과했다(1 passed·0 failed, 12.40초). 제품 코드 변경은 없었다.
 
+`5a5fa10`의 Windows 전체 게이트는 실서버 시험 26건이 모두 통과했지만 기존 브라우저 시험의 DASH-025 한 건이 실패했다(36 passed·1 failed). URL이 `lang=en`인 6개 폭에서만 실패했다. 이 사례는 처음 한국어 화면을 만들지만 `settled()`가 URL의 영어 `Loading`으로 대기 상태를 찾았다. 한국어 `조회 중`을 알아보지 못해 응답 전 배지를 검사했다. `settled(root, copy=t)`에 실제 렌더 언어를 넘기도록 시험만 고쳤다. 수정 뒤 `cargo test --test dashboard_browser operations_keeps_the_chosen_language_in_browser -- --nocapture`는 통과했다(1 passed·0 failed, 10.74초). 해당 첫 게이트의 시나리오 집계는 통과 132·부분 14·실패 1·미실행 0·미연결 6·오류 0이었다. 실패 보고서는 저장소 밖 `D:/vr-tools/tmp/win-scenario-report-5a5fa10-failed.md`에 보존했다.
+
 변경 뒤 두 OS 전체 게이트는 아직 실행 전이다. 작업 4.12의 Safari·실제 모바일 기기·스크린 리더·사람의 시안 대조는 이번 스모크로 완료되지 않는다.
 
 ## 5. 중단 조건

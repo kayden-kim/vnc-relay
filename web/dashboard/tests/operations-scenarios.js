@@ -120,7 +120,7 @@ async function waitFor(ready, ms = 5000) {
   while (!ready() && Date.now() < until) await wait(20);
 }
 // The first load is over: cards are on screen and none still reads as loading.
-const settled = (root) => root.querySelectorAll('section.card').length > 0 && !root.textContent.includes(t.loading);
+const settled = (root, copy = t) => root.querySelectorAll('section.card').length > 0 && !root.textContent.includes(copy.loading);
 const check = (label, ok) => {
   if (!ok) failures.push(label);
 };
@@ -990,7 +990,7 @@ async function caseDash025() {
     ] }),
   });
   const first = await mount(api, { storage, preferred: ['ko-KR'] });
-  await waitFor(() => settled(first.root));
+  await waitFor(() => settled(first.root, COPY.ko));
   check('DASH-025 start: browser preference gives Korean', document.documentElement.lang === 'ko');
   for (const [title, count] of [[COPY.ko.waitingTitle, 0], [COPY.ko.activeTitle, 1], [COPY.ko.closedTitle, 2]]) {
     checkListCount('DASH-025 Korean before change', cardOf(first.root, title), count, 'ko');
@@ -1007,7 +1007,7 @@ async function caseDash025() {
   }
 
   const again = await mount(api, { storage, preferred: ['ko-KR'] });
-  await waitFor(() => settled(again.root));
+  await waitFor(() => settled(again.root, COPY.en));
   check('DASH-025 reload: saved choice beats browser preference', document.documentElement.lang === 'en');
   check('DASH-025 reload: select keeps English', again.root.querySelector('#operations-language')?.value === 'en');
 
