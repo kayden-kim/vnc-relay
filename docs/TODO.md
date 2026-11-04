@@ -186,12 +186,13 @@ Mode I·II 초기 흐름을 추정 없이 설명할 수 있게 한다. 관찰은
   - 기준: [ADR-0001](decisions/ADR-0001-built-in-tls.md), [ADR-0004](decisions/ADR-0004-tokio-rustls.md), [설정 계약 1.9절](contracts/config-v2.md#19-인증서개인키-파일-형식)
   - 완료 조건: OPS-036, WS-013, OPS-002
   - 선행: 0.2, 2.2
-- [ ] **3.2 WebSocket 업그레이드**: WS·WSS Viewer 진입점, 업그레이드 경로·헤더 검사 순서, 서브프로토콜, Origin 정확 일치, 업그레이드 직전 IP 재검사, 업그레이드·TLS 시간 U를 구현한다. 평문 WS는 설정으로 켰을 때만 열고 시작 경고를 기록한다.
+- [x] **3.2 WebSocket 업그레이드**: WS·WSS Viewer 진입점, 업그레이드 경로·헤더 검사 순서, 서브프로토콜, Origin 정확 일치, 업그레이드 직전 IP 재검사, 업그레이드·TLS 시간 U를 구현한다. 평문 WS는 설정으로 켰을 때만 열고 시작 경고를 기록한다.
   - 기준: [WebSocket 중계 계약 1.1~1.3·2.1절](contracts/websocket-relay-v1.md#11-업그레이드-요청), [WebSocket 스펙 3절](specs/websocket.md#3-정상-흐름과-규칙), [설정 계약 1.4절](contracts/config-v2.md#14-origin-값-문법과-비교)
   - 완료 조건: WS-012, WS-014~015, WS-021, WS-023~024, WS-027, OPS-006, OPS-016, OPS-037
   - 선행: 2.4, 3.1
   - 현재: 101 뒤 보류(사용자 결정 2026-10-22(Q21))는 `638cf09`에서 없애고 공통 초기 교환·중계에 연결했다. WS-012·WS-014·WS-015·WS-021·WS-023·WS-024·WS-027은 비부분 시험으로 통과했다. OPS-006·OPS-037은 부분 시험만 있다. OPS-016의 "공개 접속은 WSS만 허용" 부분은 나중에 정한다(사용자 결정 2026-10-22(Q27)). 완료 조건을 모두 채우기 전까지 `[ ]`로 둔다.
   - 현재: OPS-016은 사용자 결정 2026-11-04(Q96)으로 정했다. 제품은 기본 비활성·명시적 켜기·시작 경고만 지키고, 공개 접속을 WSS로만 두는 것은 운영자 책임으로 수동 운영 안내(작업 5.6)에 적는다. `tests/serve.rs`의 `plaintext_ws_listener_is_off_by_default_and_warns_at_start_when_enabled`가 WSS·관리 HTTPS·TCP 진입점의 평문 업그레이드 거절까지 확인하는 비부분 시험이 됐다(커밋 `ad5cfb2`). OPS-006·OPS-037이 부분이라 `[ ]`를 유지한다.
+  - 현재: 완료 조건을 모두 채웠다. 커밋 `534d4f7`에서 `tests/serve.rs`에 실행파일 시험 두 개를 더했다. `initial_tls_and_upgrade_deadlines_have_distinct_causes_and_release_capacity`는 OPS-006 전체(TCP·WS·WSS의 H, WSS TLS와 WS·WSS 업그레이드의 U, 원인 구분, L 자리 회수)를 확인한다. `every_relay_entry_point_accepts_only_its_own_source_ip`는 OPS-037 전체(네 진입점과 출발지 `127.0.0.2`~`127.0.0.5`의 16쌍)를 확인한다. 같은 커밋의 두 OS 게이트(Windows `ALL PASSED (all)` 통과 107·부분 39·실패 0, Ubuntu `ALL PASSED` 통과 111·부분 34·실패 0)에서 두 시나리오가 통과했다. 기록: [운영 정보 계약 실행 기록](contracts/ops-info-v1.md#계약-테스트-실행-기록), [WebSocket 진입점 대조 기록](architectures/websocket-entry-point.md). 제품 코드는 바꾸지 않았다.
 - [x] **3.3 바이너리 메시지 중계**: 바이너리 메시지를 중계 스트림으로 바꾼다. 텍스트 메시지 거절, ping·pong, 분할 프레임, 메시지 크기 M, 버퍼 B를 처리한다. M이 B보다 클 때의 처리를 확인해 기록한다.
   - 기준: [WebSocket 중계 계약 1.4절](contracts/websocket-relay-v1.md#14-데이터-메시지와-제어-프레임), [WebSocket 스펙 8절](specs/websocket.md#8-미결정-사항)의 WS-TBD-004. 설계: [WebSocket 스트림 어댑터 모듈 설계 3~5절](architectures/websocket-stream.md#3-내부-구조와-b-소유권)(Draft, Target)
   - 완료 조건: WS-007~011, WS-018~019. WS-TBD-004를 해소한다.

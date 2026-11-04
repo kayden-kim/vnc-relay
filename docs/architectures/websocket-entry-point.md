@@ -2,7 +2,7 @@
 
 이 문서는 WS·WSS Viewer 진입점이 접속을 받은 뒤의 흐름을 다룬다. 접속을 받고, 허용 판정과 L을 거치고, TLS(WSS)를 협상하고, 업그레이드 요청을 검사하고, 101 응답을 보내는 데까지가 범위다. 101 뒤 연결은 WS 스트림 어댑터와 공통 서비스가 맡는다. 접수 반복은 TCP 진입점과 같은 함수(`accept_connections`)를 쓴다. TLS 협상 세부는 [TLS 모듈 설계](tls.md), L·H·U의 값과 규칙은 [연결 상한과 시간 제한 모듈 설계](connection-limits.md)가 맡는다.
 
-**현재 동작:** 101 뒤 연결은 `connection`이 `WsRelayStream`으로 감싸 공통 서비스(`handle_connection` → `dispatch`)에 넘긴다(`638cf09`). H는 101 응답 전송 완료 시각(`ConnectionContext.exchange_at`)부터 잰다. 머리 뒤 바이트는 `suffix`로 보존한다. 보류 방식(Q21)은 제거되었다. 작업 3.2는 101까지만 구현했으므로 완료 표시를 하지 않는다.
+**현재 동작:** 101 뒤 연결은 `connection`이 `WsRelayStream`으로 감싸 공통 서비스(`handle_connection` → `dispatch`)에 넘긴다(`638cf09`). H는 101 응답 전송 완료 시각(`ConnectionContext.exchange_at`)부터 잰다. 머리 뒤 바이트는 `suffix`로 보존한다. 보류 방식(Q21)은 제거되었다. 작업 3.2는 남은 OPS-006·OPS-037 실행파일 시험을 더해 커밋 `534d4f7`의 두 OS 게이트에서 완료 조건을 모두 채웠다(2026-11-05).
 
 | 항목 | 값 |
 | --- | --- |
@@ -183,6 +183,7 @@ flowchart LR
 | 같은 커밋 `c1c24d2`, 같은 작업 트리 | Windows 11(10.0.26200), Rust 1.99.1(`x86_64-pc-windows-msvc`), Visual Studio Build Tools 2022 17.14.37806.7 | `powershell -NoProfile -ExecutionPolicy Bypass -File D:/vr-tools/vr-win.ps1 -Only all`을 실행했다. | 불일치 0건. `ALL PASSED (all)`. 테스트 207건 통과, 실패 0. 시나리오 148건: 통과 8, 부분 22, 실패 0, 미실행 1, 미연결 117. 미실행 1건은 OPS-007(Unix 전용 `closes_and_logs_every_held_connection_when_stopping`)이다. 오류 0건. |
 | 커밋 `c4c7a15`(작업 트리 변경: 이 문서, `connection-limits.md`, `management-listener.md`, `docs/specs/dashboard.md`의 문서만). 결함 1 후속 수정 뒤 | Ubuntu 24.04.4(WSL2)와 Windows 11(10.0.26200), Rust 1.99.1 | `connection`의 select를 코드와 대조했다. `wsl -d Ubuntu -- bash /mnt/d/vr-tools/vr-full.sh`와 `powershell -NoProfile -ExecutionPolicy Bypass -File D:/vr-tools/vr-win.ps1 -Only all`을 실행했다. | 불일치 0건. Ubuntu `ALL PASSED`, 시나리오 148건: 통과 11, 부분 20, 실패 0, 미실행 0, 미연결 117. Windows `ALL PASSED (all)`, 통과 10, 부분 20, 실패 0, 미실행 1(OPS-007), 미연결 117. 두 환경 모두 `licenses ok`. |
 | 커밋 `e1f1ea7`(작업 트리 변경: 이 문서만). 쓰기 직전 U 재확인 뒤 | Ubuntu 24.04.4(WSL2)와 Windows 11(10.0.26200), Rust 1.99.1 | `upgrade`·`expired`·`refuse`를 코드와 대조했다. `wsl -d Ubuntu -- bash /mnt/d/vr-tools/vr-full.sh`와 `powershell -NoProfile -ExecutionPolicy Bypass -File D:/vr-tools/vr-win.ps1 -Only all`을 실행했다. | 불일치 0건. Ubuntu `ALL PASSED`, 시나리오 148건: 통과 11, 부분 20, 실패 0, 미실행 0, 미연결 117. Windows `ALL PASSED (all)`, 통과 10, 부분 20, 실패 0, 미실행 1(OPS-007), 미연결 117. 두 환경 모두 `licenses ok`. |
+| 작업 3.2 완료 대조(커밋 `534d4f7`, 작업 트리 깨끗함) | Windows 11 Pro 10.0.26200 x64·Ubuntu 24.04.4(WSL2), Rust 1.99.1 | 4절의 U·H 적용 순서와 `connection`·`upgrade`의 원인 구분을 `tests/serve.rs` `initial_tls_and_upgrade_deadlines_have_distinct_causes_and_release_capacity`(OPS-006)와 대조했다. 이 시험은 실제 실행파일에서 WSS TLS의 U(`tls`), WS·WSS 업그레이드의 U(`upgrade`), 101 뒤 H(Close 4009)를 연결 ID로 구분하고 L 자리 회수를 확인한다. 업그레이드 전에 H보다 오래 기다려도 H가 101부터 시작함을 확인한다. 진입점별 허용 목록은 `every_relay_entry_point_accepts_only_its_own_source_ip`(OPS-037)로 확인했다. 두 OS 게이트: Windows `ALL PASSED (all)`, Ubuntu `ALL PASSED`. | 불일치 0건. 통과 |
 
 ### 검토 결함 기록
 
