@@ -20467,7 +20467,9 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "rustls",
+ "serde_json",
  "tokio",
+ "tokio-tungstenite",
  "vnc-relay-adapters",
  "vnc-relay-app",
  "vnc-relay-domain",

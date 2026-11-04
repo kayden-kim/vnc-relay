@@ -3,8 +3,7 @@
 
 use std::sync::atomic::{AtomicU8, Ordering};
 
-/// What `/readyz` reports. The state only moves forward: starting, then
-/// ready, then shutting down. A shutdown may also begin while starting.
+/// What `/readyz` reports. The first shutdown cause remains until process exit.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Readiness {
     /// The config is valid and the required listeners are being prepared.
@@ -13,6 +12,8 @@ pub enum Readiness {
     Ready,
     /// A shutdown began; no new relay connection is taken.
     ShuttingDown,
+    /// A required listener failed; fatal grace and cleanup retain this reason.
+    ListenerFailed,
 }
 
 impl Readiness {
@@ -23,6 +24,7 @@ impl Readiness {
             Self::Starting => Some("starting"),
             Self::Ready => None,
             Self::ShuttingDown => Some("shutting_down"),
+            Self::ListenerFailed => Some("listener_failed"),
         }
     }
 
@@ -30,6 +32,7 @@ impl Readiness {
         match value {
             STARTING => Self::Starting,
             READY => Self::Ready,
+            LISTENER_FAILED => Self::ListenerFailed,
             _ => Self::ShuttingDown,
         }
     }
@@ -38,6 +41,7 @@ impl Readiness {
 const STARTING: u8 = 0;
 const READY: u8 = 1;
 const SHUTTING_DOWN: u8 = 2;
+const LISTENER_FAILED: u8 = 3;
 
 /// The readiness of one server process, shared by the start sequence and
 /// the status listener.
@@ -73,9 +77,23 @@ impl LifecycleService {
             .compare_exchange(STARTING, READY, Ordering::AcqRel, Ordering::Acquire);
     }
 
-    /// Moves to shutting down from any state.
+    /// Begins requested shutdown without replacing an earlier fatal cause.
     pub fn begin_shutdown(&self) {
-        self.state.store(SHUTTING_DOWN, Ordering::Release);
+        self.begin_stop(SHUTTING_DOWN);
+    }
+
+    /// Begins fatal shutdown unless requested shutdown already started.
+    /// See ops-info-v1 §1.12.
+    pub fn listener_failed(&self) {
+        self.begin_stop(LISTENER_FAILED);
+    }
+
+    fn begin_stop(&self, stop: u8) {
+        let _ = self
+            .state
+            .try_update(Ordering::AcqRel, Ordering::Acquire, |state| {
+                matches!(state, STARTING | READY).then_some(stop)
+            });
     }
 }
 

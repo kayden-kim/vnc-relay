@@ -26,7 +26,9 @@ use vnc_relay_domain::session::{
 };
 use vnc_relay_domain::target_policy::TargetPolicy;
 
-use crate::events::{AbortReason, AdminTerminateResult, Event, RejectReason, RelayIdRef, Stage};
+use crate::events::{
+    AbortReason, AdminTerminateResult, Event, RejectReason, RelayIdRef, ShutdownTrigger, Stage,
+};
 use crate::ports::{
     BoxRelayStream, Clock, EventSink, RelayCloseAction, RelayIdSource, RelayLifecycle,
     RelaySessionControl, RelayStateSource, RelayStream, SessionIdSource, TargetConnector,
@@ -882,12 +884,33 @@ impl RelayService {
 
     /// First request stops admission; another request forces existing sessions.
     pub fn request_shutdown<C>(&self, runtime: &RelayRuntime<C>, grace: Duration) {
+        self.begin_shutdown(runtime, grace, ShutdownTrigger::Requested);
+    }
+
+    /// Starts fatal grace once. A failure during an existing shutdown is not
+    /// a second shutdown request and must not shorten G (ops-info-v1 §1.12).
+    pub fn request_fatal_shutdown<C>(
+        &self,
+        runtime: &RelayRuntime<C>,
+        grace: Duration,
+        detail: String,
+    ) {
+        self.begin_shutdown(runtime, grace, ShutdownTrigger::FatalError { detail });
+    }
+
+    fn begin_shutdown<C>(
+        &self,
+        runtime: &RelayRuntime<C>,
+        grace: Duration,
+        trigger: ShutdownTrigger,
+    ) {
         let mut state = runtime.lock();
         match state.lifecycle {
             RelayLifecycle::Running => {
                 let deadline = self.clock.monotonic().saturating_add(grace);
                 state.lifecycle = RelayLifecycle::Grace { deadline };
                 self.events.record(&Event::ShutdownStarted {
+                    trigger,
                     grace_secs: grace.as_secs(),
                     active_sessions: state.counted_active(),
                 });
@@ -896,7 +919,11 @@ impl RelayService {
                     runtime.force_locked(&mut state, self.events.as_ref());
                 }
             }
-            RelayLifecycle::Grace { .. } => runtime.force_locked(&mut state, self.events.as_ref()),
+            RelayLifecycle::Grace { .. } => {
+                if matches!(trigger, ShutdownTrigger::Requested) {
+                    runtime.force_locked(&mut state, self.events.as_ref());
+                }
+            }
             RelayLifecycle::Force => {}
         }
     }

@@ -607,10 +607,19 @@ fn push_event_fields(fields: &mut Vec<(&'static str, Value)>, event: &Event) {
             }
         }
         Event::ShutdownStarted {
+            trigger,
             grace_secs,
             active_sessions,
         } => {
-            fields.push(("trigger", Value::from("requested")));
+            match trigger {
+                vnc_relay_app::events::ShutdownTrigger::Requested => {
+                    fields.push(("trigger", Value::from("requested")));
+                }
+                vnc_relay_app::events::ShutdownTrigger::FatalError { detail } => {
+                    fields.push(("trigger", Value::from("fatal_error")));
+                    fields.push(("detail", Value::from(detail.as_str())));
+                }
+            }
             fields.push(("grace_secs", Value::from(*grace_secs)));
             fields.push(("active_sessions", Value::from(*active_sessions)));
         }

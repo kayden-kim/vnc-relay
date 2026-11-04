@@ -30,6 +30,8 @@ app은 tokio의 `time`, `sync`, `io-util`만 제품 코드에서 쓴다. `std::f
 
 공개 입구는 `RelayService::dispatch(prepared, runtime)`이다. 대상 연결 또는 실제 대기·매칭·중계 수명을 끝까지 실행한다. 초기 교환은 `handle_connection(...) -> Result<PreparedConnection<S>, RelayError>`를 반환한다. 해석 완료를 세션 시작으로 취급하지 않는다.
 
+정상 종료 입력은 `RelayService::request_shutdown`이다. 첫 입력은 G를 시작하고 다음 입력은 Force다. 필수 리스너 장애 입력은 `request_fatal_shutdown`이다. Running에서만 `ShutdownTrigger::FatalError`로 G를 시작한다. 이미 Grace·Force이면 원인과 기한을 유지한다. 리스너 장애가 두 번째 OS 요청처럼 유예를 줄이지 않도록 두 입력을 구분한다. 실제 상태 HTTP의 장애 원인은 `LifecycleService`가 유지한다([상태 리스너 설계](status-listener.md), 사용자 결정 2026-11-05(Q114)).
+
 ## 2. 내부 구조
 
 다음 그림은 현재 구조다. 실선 화살표는 실행 중 호출·소유권 전달 또는 상태 접근이다. 점선은 구현체를 포트에 주입하는 관계다. 컴파일 의존은 `src` → adapters → app → domain이다.

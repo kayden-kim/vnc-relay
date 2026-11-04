@@ -31,6 +31,7 @@ use vnc_relay_domain::peer_ip::PeerIp;
 
 use crate::admission::AdmittingListener;
 use crate::dashboard_assets::{Asset, find_asset};
+use crate::listener::Listener;
 use crate::request_deadline::{DeadlineListener, IdleControl};
 use crate::tls::TlsSource;
 use crate::tls_listener::TlsListener;
@@ -60,8 +61,8 @@ pub struct ManagementServices {
 
 /// A management listener. Connections run TLS when `tls` is set and plain
 /// HTTP otherwise.
-pub struct ManagementListener {
-    listener: TcpListener,
+pub struct ManagementListener<L = TcpListener> {
+    listener: L,
     tls: Option<TlsSource>,
     admin_budget: Arc<ConnectionBudget>,
     tls_upgrade: Duration,
@@ -69,12 +70,12 @@ pub struct ManagementListener {
     dashboard: DashboardHints,
 }
 
-impl ManagementListener {
+impl<L: Listener> ManagementListener<L> {
     /// `admin_budget` is Lm, shared with the status listener. `tls_upgrade` is U:
     /// the limit on the TLS handshake and on reading each request head.
     /// `services` uses the actual relay runtime for queries and termination.
     pub fn new(
-        listener: TcpListener,
+        listener: L,
         tls: Option<TlsSource>,
         admin_budget: Arc<ConnectionBudget>,
         tls_upgrade: Duration,
@@ -110,8 +111,8 @@ impl ManagementListener {
             .fallback(answer)
             .with_state(shared)
             .into_make_service_with_connect_info::<PeerAddr>();
-        // `serve` ends only on a listener error. Both listeners retry or
-        // refuse without error, so there is no error to handle here.
+        // Fatal accepts report to the supervisor; existing HTTP connections
+        // remain usable until relay cleanup ends and the owner aborts this task.
         match self.tls {
             Some(source) => {
                 let listener = TlsListener::new(admitting, source, log, LISTENER);

@@ -16,6 +16,7 @@ use vnc_relay_adapters::accounts_file::{Argon2Hasher, Argon2Verifier, HashFloor}
 use vnc_relay_adapters::clock::SystemClock;
 use vnc_relay_adapters::crypto::{CryptoError, RelayIdKey, SessionIdKey, SystemTokenSource};
 use vnc_relay_adapters::file_watch::{self, FsReloadFileStore, SystemReloadClock};
+use vnc_relay_adapters::listener::{ListenerFailure, SupervisedListener};
 use vnc_relay_adapters::management_http::{DashboardHints, ManagementListener, ManagementServices};
 use vnc_relay_adapters::net::{AcceptPolicy, AllowSource, BindFailure, TcpEntryPoint};
 use vnc_relay_adapters::ops_log::JsonLinesEventSink;
@@ -252,6 +253,7 @@ async fn listen_until_shutdown(
     };
     let watch_task = tokio::spawn(watcher.run(stopped.clone()));
     let lifecycle = Arc::new(LifecycleService::new());
+    let (listener_failures, mut failed_listener) = watch::channel(None);
     // Lm, shared by the status listener and the management listener (4.2).
     let admin_budget = ConnectionBudget::new(settings.limits.admin_connections);
     let status_plan = settings.status_listener();
@@ -263,7 +265,7 @@ async fn listen_until_shutdown(
     let status_task = match net::bind_one(status_plan).await {
         Ok(bound) => {
             let status = StatusListener::new(
-                bound.listener,
+                SupervisedListener::new(bound.listener, bound.plan.name, listener_failures.clone()),
                 Arc::clone(&admin_budget),
                 Arc::clone(&lifecycle),
             );
@@ -346,7 +348,7 @@ async fn listen_until_shutdown(
             settings.timeouts.close,
         );
         let listener = ManagementListener::new(
-            bound.listener,
+            SupervisedListener::new(bound.listener, bound.plan.name, listener_failures.clone()),
             management_tls_on.then(|| TlsSource::management(Arc::clone(&cell))),
             Arc::clone(&admin_budget),
             settings.timeouts.tls_upgrade,
@@ -395,7 +397,11 @@ async fn listen_until_shutdown(
                 };
                 let entry = TcpEntryPoint::new(
                     entry_point,
-                    bound.listener,
+                    SupervisedListener::new(
+                        bound.listener,
+                        bound.plan.name,
+                        listener_failures.clone(),
+                    ),
                     policy,
                     Arc::clone(&relay_service),
                     Arc::clone(&runtime),
@@ -430,7 +436,11 @@ async fn listen_until_shutdown(
                 };
                 let entry = WsEntryPoint::new(
                     entry_point,
-                    bound.listener,
+                    SupervisedListener::new(
+                        bound.listener,
+                        bound.plan.name,
+                        listener_failures.clone(),
+                    ),
                     tls,
                     policy,
                     Arc::clone(&relay_service),
@@ -443,11 +453,22 @@ async fn listen_until_shutdown(
         }
     }
 
-    let first_request = shutdown.wait().await;
-    lifecycle.begin_shutdown();
-    begin_relay_shutdown(first_request, settings.timeouts.shutdown_grace, |grace| {
-        relay_service.request_shutdown(&runtime, grace)
-    });
+    let first_request = wait_for_shutdown(shutdown.wait(), &mut failed_listener).await;
+    if let ShutdownRequest::ListenerFailed(failure) = first_request {
+        let key = if matches!(failure.listener, "status" | "management") {
+            format!("{}.listen", failure.listener)
+        } else {
+            format!("relay.{}.listen", failure.listener)
+        };
+        cli::report("error", "listener_failed", &key, &failure.detail());
+    }
+    let exit = begin_process_shutdown(
+        first_request,
+        &lifecycle,
+        &relay_service,
+        &runtime,
+        settings.timeouts.shutdown_grace,
+    );
     stop.send_replace(true);
 
     finish_relay_shutdown(
@@ -464,17 +485,65 @@ async fn listen_until_shutdown(
     stop_task(status_task).await;
     let _ = watch_task.await;
     log.record(&Event::ServerStopped);
-    ExitCode::SUCCESS
+    exit
 }
 
 /// A closed Windows console requests Grace and Force in the same turn (Q102).
 #[derive(Clone, Copy)]
 enum ShutdownRequest {
     Requested,
+    ListenerFailed(ListenerFailure),
     #[cfg(any(windows, test))]
     ConsoleClosed,
 }
 
+async fn wait_for_shutdown(
+    requested: impl Future<Output = ShutdownRequest>,
+    failed: &mut watch::Receiver<Option<ListenerFailure>>,
+) -> ShutdownRequest {
+    tokio::select! {
+        biased;
+        request = requested => request,
+        failure = async {
+            let failure = {
+                match failed.wait_for(Option::is_some).await {
+                    Ok(value) => *value,
+                    Err(_) => None,
+                }
+            };
+            match failure {
+                Some(failure) => Some(failure),
+                None => std::future::pending().await,
+            }
+        } => match failure {
+            Some(failure) => ShutdownRequest::ListenerFailed(failure),
+            None => std::future::pending().await,
+        },
+    }
+}
+
+fn begin_process_shutdown<C>(
+    request: ShutdownRequest,
+    lifecycle: &LifecycleService,
+    service: &RelayService,
+    runtime: &RelayRuntime<C>,
+    grace: Duration,
+) -> ExitCode {
+    match request {
+        ShutdownRequest::ListenerFailed(failure) => {
+            lifecycle.listener_failed();
+            service.request_fatal_shutdown(runtime, grace, failure.detail());
+            ExitCode::from(EXIT_RUNTIME)
+        }
+        requested => {
+            lifecycle.begin_shutdown();
+            begin_relay_shutdown(requested, grace, |grace| {
+                service.request_shutdown(runtime, grace)
+            });
+            ExitCode::SUCCESS
+        }
+    }
+}
 fn begin_relay_shutdown(
     request: ShutdownRequest,
     grace: Duration,
@@ -482,7 +551,7 @@ fn begin_relay_shutdown(
 ) {
     request_shutdown(grace);
     match request {
-        ShutdownRequest::Requested => {}
+        ShutdownRequest::Requested | ShutdownRequest::ListenerFailed(_) => {}
         #[cfg(any(windows, test))]
         ShutdownRequest::ConsoleClosed => request_shutdown(Duration::ZERO),
     }
@@ -935,3 +1004,7 @@ mod tests {
         assert!(matches!(err, Err(CryptoError)));
     }
 }
+
+#[cfg(test)]
+#[path = "serve/listener_tests.rs"]
+mod listener_tests;

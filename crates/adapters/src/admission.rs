@@ -10,27 +10,28 @@ use std::sync::Arc;
 use std::task::{Context, Poll};
 
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
-use tokio::net::{TcpListener, TcpStream};
+use tokio::net::TcpStream;
 use vnc_relay_app::events::{Event, RejectReason, Stage};
 use vnc_relay_app::ports::EventSink;
 use vnc_relay_domain::budget::{BudgetPermit, ConnectionBudget};
 use vnc_relay_domain::peer_ip::PeerIp;
 
+use crate::listener::{Listener, is_fatal_accept_error};
 use crate::net::ACCEPT_RETRY_DELAY;
 
 /// Takes a place of Lm right after each accept. A connection without a
 /// place is logged and closed before any byte is read (ops-info-v1 §2).
-pub(crate) struct AdmittingListener {
-    listener: TcpListener,
+pub(crate) struct AdmittingListener<L> {
+    listener: L,
     budget: Arc<ConnectionBudget>,
     log: Arc<dyn EventSink>,
     /// `listener` value of the operation events: `status` or `management`.
     name: &'static str,
 }
 
-impl AdmittingListener {
+impl<L: Listener> AdmittingListener<L> {
     pub(crate) fn new(
-        listener: TcpListener,
+        listener: L,
         budget: Arc<ConnectionBudget>,
         log: Arc<dyn EventSink>,
         name: &'static str,
@@ -44,7 +45,7 @@ impl AdmittingListener {
     }
 }
 
-impl axum::serve::Listener for AdmittingListener {
+impl<L: Listener> axum::serve::Listener for AdmittingListener<L> {
     type Io = Admitted;
     type Addr = SocketAddr;
 
@@ -52,8 +53,12 @@ impl axum::serve::Listener for AdmittingListener {
         loop {
             let (stream, addr) = match self.listener.accept().await {
                 Ok(accepted) => accepted,
-                Err(_) => {
-                    // ops-info-v1 has no event for a failed accept.
+                Err(error) => {
+                    if is_fatal_accept_error(&error) {
+                        // Axum's infallible accept port cannot return an error.
+                        // The supervisor owns shutdown and aborts this task last.
+                        return std::future::pending().await;
+                    }
                     tokio::time::sleep(ACCEPT_RETRY_DELAY).await;
                     continue;
                 }

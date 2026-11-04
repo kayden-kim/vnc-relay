@@ -326,9 +326,9 @@ fn pick_wss_viewer(relay: &RelayAllow) -> &AllowList {
 /// The TCP Viewer or TCP Server entry point: accepts connections, checks
 /// each source IP against the entry point's allow list before reading any
 /// byte (relay spec §3.1 step 1, RLY-R16), then takes a place of L.
-pub struct TcpEntryPoint {
+pub struct TcpEntryPoint<L = TcpListener> {
     entry_point: EntryPoint,
-    listener: TcpListener,
+    listener: L,
     policy: AcceptPolicy,
     service: Arc<RelayService>,
     runtime: Arc<RelayRuntime<TcpTargetConnector>>,
@@ -345,10 +345,10 @@ pub(crate) struct Accepted {
     pub(crate) accepted_wall: SystemTime,
 }
 
-impl TcpEntryPoint {
+impl<L: crate::listener::Listener> TcpEntryPoint<L> {
     pub fn new(
         entry_point: EntryPoint,
-        listener: TcpListener,
+        listener: L,
         policy: AcceptPolicy,
         service: Arc<RelayService>,
         runtime: Arc<RelayRuntime<TcpTargetConnector>>,
@@ -417,9 +417,9 @@ impl TcpEntryPoint {
 /// admitted connection runs `serve` with its place of L. When `stop` holds
 /// true, the listener closes and the function returns after every served
 /// connection has ended.
-pub(crate) async fn accept_connections<Serve, Fut>(
+pub(crate) async fn accept_connections<L: crate::listener::Listener, Serve, Fut>(
     entry_point: EntryPoint,
-    listener: TcpListener,
+    listener: L,
     policy: AcceptPolicy,
     log: Arc<dyn EventSink>,
     stop: watch::Receiver<bool>,
@@ -442,9 +442,9 @@ pub(crate) async fn accept_connections<Serve, Fut>(
 
 // The socket-option operation is an explicit parameter so tests can fail it
 // deterministically without relying on platform-specific option limits.
-async fn accept_connections_with_keepalive<Serve, Fut, Keepalive>(
+async fn accept_connections_with_keepalive<L: crate::listener::Listener, Serve, Fut, Keepalive>(
     entry_point: EntryPoint,
-    listener: TcpListener,
+    mut listener: L,
     policy: AcceptPolicy,
     log: Arc<dyn EventSink>,
     mut stop: watch::Receiver<bool>,
@@ -465,8 +465,10 @@ async fn accept_connections_with_keepalive<Serve, Fut, Keepalive>(
         };
         let (stream, addr) = match accepted {
             Ok(accepted) => accepted,
-            Err(_) => {
-                // ops-info-v1 has no event for a failed accept.
+            Err(error) => {
+                if crate::listener::is_fatal_accept_error(&error) {
+                    break;
+                }
                 tokio::time::sleep(ACCEPT_RETRY_DELAY).await;
                 continue;
             }

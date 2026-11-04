@@ -22,6 +22,7 @@ use vnc_relay_domain::entry_point::EntryPoint;
 use vnc_relay_domain::origin::Origin;
 use vnc_relay_domain::session::ViewerTransport;
 
+use crate::listener::Listener;
 use crate::net::{AcceptPolicy, Accepted, accept_connections};
 use crate::target::TcpTargetConnector;
 use crate::tls::TlsSource;
@@ -51,9 +52,9 @@ pub struct WsPolicy {
 
 /// A WS or WSS viewer entry point. `tls` is the WSS acceptor source and is
 /// `None` for WS.
-pub struct WsEntryPoint {
+pub struct WsEntryPoint<L = TcpListener> {
     entry_point: EntryPoint,
-    listener: TcpListener,
+    listener: L,
     tls: Option<TlsSource>,
     policy: WsPolicy,
     service: Arc<RelayService>,
@@ -61,11 +62,11 @@ pub struct WsEntryPoint {
     clock: Arc<dyn Clock>,
 }
 
-impl WsEntryPoint {
+impl<L: Listener> WsEntryPoint<L> {
     /// Wraps a bound listener of a WS or WSS viewer entry point.
     pub fn new(
         entry_point: EntryPoint,
-        listener: TcpListener,
+        listener: L,
         tls: Option<TlsSource>,
         policy: WsPolicy,
         service: Arc<RelayService>,

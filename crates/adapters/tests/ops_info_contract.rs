@@ -1311,6 +1311,7 @@ fn cuts_target_host_on_utf8_boundaries_in_every_target_event() {
 fn writes_requested_shutdown_fields_without_unrelated_optional_fields() {
     assert_relay_fields(
         &Event::ShutdownStarted {
+            trigger: vnc_relay_app::events::ShutdownTrigger::Requested,
             grace_secs: 10,
             active_sessions: 2,
         },

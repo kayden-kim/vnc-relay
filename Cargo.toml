@@ -74,7 +74,9 @@ vnc-relay-domain.workspace = true
 # check the public HTTPS management listener with a TLS client.
 [dev-dependencies]
 rustls = { workspace = true }
+serde_json.workspace = true
 tokio = { workspace = true, features = ["macros", "net", "rt", "test-util"] }
+tokio-tungstenite.workspace = true
 
 [target.'cfg(windows)'.dev-dependencies]
 windows-sys = { workspace = true, features = ["Win32_System_Pipes", "Win32_System_Threading"] }

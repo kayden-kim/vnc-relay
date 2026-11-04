@@ -62,7 +62,7 @@ flowchart LR
 | domain | `crates/domain` (`vnc-relay-domain`) | 초기 교환·매칭·세션·주소·예산·계정 규칙. 입출력·시계·난수 결과는 값으로 받는다. | 없음. 외부 crate도 쓰지 않는다. | 컴파일과 `cargo xtask layers` |
 | app | `crates/app` (`vnc-relay-app`) | 중계·관리·재로드·준비 상태·계정 준비 사용 사례. 외부 기능은 포트로 정의한다. | domain. tokio의 동기화·시간·입출력 trait | 컴파일, `cargo xtask layers`, `crates/app/clippy.toml`의 입출력 금지 목록과 `cargo clippy` |
 | adapters | `crates/adapters` (`vnc-relay-adapters`) | TCP·TLS·WS·HTTP·파일·운영 로그·난수·터미널. app 포트를 구현한다. | domain, app, [PRD 승인 라이브러리](../requirements/PRD.md#확정-기준) | `cargo xtask layers`, [라이선스 검사](../how-to/check-dependency-licenses.md) |
-| 실행파일 조립 | 루트 crate `vnc-relay`의 `src/` | CLI·종료 코드·런타임·OS 신호·객체 연결. 업무 규칙은 두지 않는다. | domain, app, adapters, clap, tokio. rustls는 개발 의존성이다. windows-sys는 Windows 전용 개발 의존성이다. `tests/windows_console.rs`의 의사 콘솔(ConPTY) 시험만 쓴다(사용자 결정 2026-11-04(Q103), [Rust 컨벤션 2절](../conventions/rust.md#2-규칙) "unsafe" 행). | 코드 리뷰, 컴파일, `cargo xtask layers` |
+| 실행파일 조립 | 루트 crate `vnc-relay`의 `src/` | CLI·종료 코드·런타임·OS 신호·객체 연결. 업무 규칙은 두지 않는다. | domain, app, adapters, clap, tokio. rustls는 개발 의존성이다. serde_json·tokio-tungstenite는 실서버 대시보드 시험의 CDP 통신에 쓴다(Q112). windows-sys는 Windows 전용 개발 의존성이며 ConPTY 시험만 쓴다(Q103, [Rust 컨벤션 2절](../conventions/rust.md#2-규칙) "unsafe" 행). | 코드 리뷰, 컴파일, `cargo xtask layers` |
 | 개발 도구 | `xtask/` | 시나리오 보고·레이어 검사·배포 고지 생성과 대조·토큰 생성과 대조·로컬 미리보기 | 제품 crate에 의존하지 않는다. | `cargo xtask layers` |
 | 정적 대시보드 | `web/dashboard/` | HTML·CSS·JS 화면·공통 컴포넌트·생성 복사본·미리보기·브라우저 시험 페이지 | 관리 API만 HTTP로 호출한다. JS 외부 의존성이 없다. | [프런트엔드 컨벤션](../conventions/frontend.md), [대시보드 검증](../how-to/verify-dashboard-frontend.md), `cargo xtask tokens --check` |
 
@@ -105,11 +105,11 @@ flowchart LR
 | --- | --- | --- | --- | --- | --- |
 | `crates/app/src/lib.rs` | 모듈 공개 | 사용 사례 모듈을 공개한다. | 구현체 주입 | 하위 모듈 | 이 지도 |
 | `crates/app/src/ports.rs` `TargetConnector` `RelayIdSource` `SessionIdSource` `RelayStream` `RelayStateSource` `RelaySessionControl` | 외부 기능 경계 | DNS·단일 IP 연결, ID 계산, 전송·종료·maintenance, 상태 조회·관리자 종료를 정의한다. 계정·입력·해시·시계·토큰·사건 포트도 정의한다. | 포트 구현·HTTP | domain·tokio trait | [중계 수명](relay-session.md), [관리 조회](management-query.md), [관리자 종료](management-terminate.md) |
-| `crates/app/src/settings.rs` `Settings`; `crates/app/src/events.rs` `Event` | 설정·사건 | 유효 설정·리스너 계획·진단과 중계·관리·재로드·종료 사건 값을 정의한다. | TOML·JSON 출력 | domain | [설정](config-loading.md), [운영 로그](ops-log.md) |
+| `crates/app/src/settings.rs` `Settings`; `crates/app/src/events.rs` `Event` `ShutdownTrigger` | 설정·사건 | 유효 설정·리스너 계획·진단과 중계·관리·재로드·종료 사건 값, 요청·치명 오류의 종료 원인을 정의한다. | TOML·JSON 출력 | domain | [설정](config-loading.md), [운영 로그](ops-log.md) |
 | `crates/app/src/relay.rs` `RelayService::handle_connection` `RelayService::dispatch` `PreparedConnection` `RelayRuntime` `RelayState` `run_pair` | 중계 소유권 | 초기 교환을 준비하고 Mode I·II로 분기한다. 공유 상태·활성 등록·정리 guard·최종 사건을 소유한다. B·L은 복제하지 않고 이동한다. | 수락·DNS 구현·프레임 | domain·ports·tokio | [초기 교환](initial-exchange.md), [중계 수명](relay-session.md) |
 | `crates/app/src/relay.rs` `RelayRuntime::snapshot` `RelaySnapshot` `ActivePeer` `HandshakingGuard` | 관리 상태·제어 | 상태 잠금 한 번으로 메타데이터를 복사한다. 실제 peer 주소·초기 교환 수를 보존한다. RelaySessionControl 구현은 세션 소유자에게 종료를 전달한다. | HTTP·스트림 읽기 | Clock·domain·제어 알림 | [관리 조회](management-query.md), [관리자 종료](management-terminate.md) |
 | `crates/app/src/relay/handshake.rs` `exchange`; `crates/app/src/relay/target.rs` `dispatch`; `crates/app/src/relay/matching.rs` `dispatch`; `crates/app/src/relay/session.rs` `run_session_controlled` | 처리 단계 | 각각 시작 바이트·H, 정책·C·대상 L, 대기·W·Lw·원자적 매칭, 두 방향 중계·E·관리자 종료·Kw 진행을 맡는다. | OS 소켓·신호·작업 생성 | RelayRuntime·RelayStream·domain | [중계 수명](relay-session.md), [WS 스트림](websocket-stream.md) |
-| `crates/app/src/relay.rs` `RelayService::request_shutdown` `RelayService::drive_shutdown`; `crates/app/src/lifecycle.rs` `LifecycleService` | 수명 | RelayService는 Running→Grace→Force와 G 감독을 맡는다. LifecycleService는 시작·준비·종료 중 상태를 제공한다. | OS 신호 수신 | 공유 상태·시계·watch | [중계 수명](relay-session.md), [상태 리스너](status-listener.md) |
+| `crates/app/src/relay.rs` `RelayService::request_shutdown` `RelayService::request_fatal_shutdown` `RelayService::drive_shutdown`; `crates/app/src/lifecycle.rs` `LifecycleService` `Readiness` | 수명 | RelayService는 최초 종료 원인을 유지하며 Running→Grace→Force와 G 감독을 맡는다. LifecycleService는 시작·준비·종료 중·필수 리스너 실패 상태를 제공한다. | OS 신호 수신·소켓 오류 분류 | 공유 상태·시계·watch | [중계 수명](relay-session.md), [상태 리스너](status-listener.md) |
 | `crates/app/src/management.rs` `AdminAuth`; `crates/app/src/management/login.rs`; `crates/app/src/management/session.rs` | 관리 인증 | 로그인·실패 제한·세션 검사·CSRF·로그아웃·감사 사건 | HTTP·쿠키 형식 | domain·ports | [관리 세션](management-session.md) |
 | `crates/app/src/management/query.rs` `ManagementQueryService`; `crates/app/src/management/terminate.rs` `ManagementTerminateService` | 관리 사용 사례 | 조회 뷰 조립과 활성 상세 검사. 지정 세션 종료 수락·완료 대기·합류 요청 감사 | HTTP·JSON·스트림 소유 | RelayStateSource·RelaySessionControl·Clock | [관리 조회](management-query.md), [관리자 종료](management-terminate.md) |
 | `crates/app/src/reload.rs` `ChangeSource` `WatchFailure`; `crates/app/src/reload/ports.rs` `ReloadFileStore` `ReloadTlsStore` `ReloadClock` | 재로드 경계 | 변경 원인·실패 값과 파일·TLS 후보·대기 포트를 정의한다. | OS 알림 | domain·settings | [파일 감지](file-watch.md) |
@@ -122,6 +122,7 @@ flowchart LR
 | --- | --- | --- | --- | --- | --- |
 | `crates/adapters/src/lib.rs` | 모듈 공개 | 외부 연결 구현을 공개하고 HTTP 보조 모듈은 비공개로 둔다. | 업무 규칙 | 하위 모듈 | 이 지도 |
 | `crates/adapters/src/net.rs` `TcpEntryPoint` `TcpRelayStream` `accept_connections` `AllowSource`; `crates/adapters/src/target.rs` `TcpTargetConnector` | TCP | 바인드·공유 수락·IP·L·K, 공통 초기 교환→dispatch 호출, Linux 소켓 오류 분류, DNS와 단일 주소 연결 | 매칭·대상 정책 | app·domain·tokio·socket2 | [TCP 진입점](tcp-entry-point.md), [중계 수명](relay-session.md) |
+| `crates/adapters/src/listener.rs` `Listener` `SupervisedListener` `ListenerFailure` `is_fatal_accept_error` | 리스너 감독 | 취소 가능한 수락 포트, OS별 복구 불가 오류 분류, 최초 장애의 감독 채널 전달 | 재시도 횟수·G·프로세스 종료 판정 | tokio·std 소켓 오류 | [상태 리스너](status-listener.md), [TCP 진입점](tcp-entry-point.md) |
 | `crates/adapters/src/websocket.rs` `WsEntryPoint`; `crates/adapters/src/upgrade.rs` `read_head` | WS·WSS 진입점 | 공유 수락, WSS 협상, U·HTTP·Origin 검사, 101 전송·flush, suffix 보존 뒤 공통 서비스 인계 | Repeater 해석·중계 정책 | app·TLS·tokio-tungstenite 헤더 도구 | [WS 진입점](websocket-entry-point.md) |
 | `crates/adapters/src/websocket_stream.rs` `WsRelayStream`; `crates/adapters/src/websocket_stream/frame.rs` `FrameDecoder`; `crates/adapters/src/websocket_stream/keepalive.rs` `Keepalive` | WS 스트림 | 페이로드 청크·마스크·분할·논리 M·같은 방향 B·제어 프레임·Close와 고정 Ping·Pong 기한 FIFO | H·C·W·E·G 판정·사건 | RelayStream·tokio·헤더 도구 | [WS 스트림](websocket-stream.md) |
 | `crates/adapters/src/websocket_stream/tests.rs` | WS 내부 시험 | 메모리 스트림·부분 쓰기·M/B·제어·Close·Kw 회귀 시험 | 실제 외부 Viewer | 테스트 전용 tokio | [WS 스트림 7절](websocket-stream.md#7-테스트-계획) |
@@ -135,7 +136,7 @@ flowchart LR
 | `crates/adapters/src/ops_log.rs` `JsonLinesEventSink` `format_line`; `crates/adapters/src/clock.rs` `SystemClock` `timestamp`; `crates/adapters/src/crypto.rs` `RelayIdKey` `SessionIdKey` `SystemTokenSource` | 운영 기반 | 사건 JSON Lines, UTC와 단조 시각, ID HMAC·세션 ID 순열·토큰 난수. 초기·대상·대기·최종 세션 사건을 모두 직렬화한다. | 사건 의미·매칭 정책 | app 포트·serde_json·aws-lc-rs | [운영 로그](ops-log.md), [중계 수명](relay-session.md) |
 | `crates/adapters/src/terminal.rs`; `crates/adapters/src/terminal/windows_console.rs` | 터미널 | 숨김 입력·확인·Ctrl+C, Windows 콘솔 모드 저장·복구 | 비밀번호 규칙 | rpassword·tokio signal·windows-sys | [계정 준비](admin-accounts.md) |
 | `src/main.rs` `main`; `src/cli.rs` `parse`; `src/admin.rs` `run` | CLI 조립 | 명령·옵션·진단·종료 코드, admin 포트 주입 | 계정 규칙 | clap·app·adapters | [시작](serve-startup.md), [계정 준비](admin-accounts.md) |
-| `src/serve.rs` `run` `listen_until_shutdown` `generate_startup_keys` `ShutdownRequest` `begin_relay_shutdown` `finish_relay_shutdown` | 서버 조립 | 설정·로그·계정·키·TLS·감지·리스너 준비, L/Lm/Lw·중계·관리·재로드 주입, 첫 신호·G 감독·두 번째 신호·Windows 콘솔 닫기·작업 회수 | 매칭·바이트 전달 | 제품 crate·tokio | [시작](serve-startup.md), [파일 감지](file-watch.md), [중계 수명](relay-session.md) |
+| `src/serve.rs` `run` `listen_until_shutdown` `generate_startup_keys` `ShutdownRequest` `wait_for_shutdown` `begin_process_shutdown` `begin_relay_shutdown` `finish_relay_shutdown` | 서버 조립 | 설정·로그·계정·키·TLS·감지·리스너 준비와 서비스 주입. 첫 OS 요청·리스너 장애의 원인을 선택하고 G·두 번째 신호·Windows 콘솔 닫기·작업 회수·종료 코드를 연결한다. | 매칭·바이트 전달·OS 오류 분류 | 제품 crate·tokio | [시작](serve-startup.md), [파일 감지](file-watch.md), [중계 수명](relay-session.md) |
 | `crates/adapters/src/file_watch.rs` `reopen_log`; `crates/adapters/src/ops_log.rs` `JsonLinesEventSink::reopen` `file_path` | 로그 파일 교체 | 재로드와 분리한 로그 알림·Dp 재열기, 같은 줄 쓰기 잠금의 핸들 교체, 실패 연속 구간 첫 경고·사건 | 로그 보관·압축·삭제 | notify·tokio·app 사건 | [운영 로그](ops-log.md), [파일 감지](file-watch.md) |
 
 ### 2.4 개발 도구와 정적 대시보드
@@ -164,7 +165,10 @@ flowchart LR
 | `tests/admin.rs` | operations.md: OPS-029·030 |
 | `tests/serve.rs` | operations.md: 시작·종료·L/H·상태·관리 보안·IP·중복 시작. `initial_tls_and_upgrade_deadlines_have_distinct_causes_and_release_capacity`는 OPS-006 전체(H·TLS·업그레이드 U·원인·회수)를, `every_relay_entry_point_accepts_only_its_own_source_ip`는 OPS-037 전체(네 진입점과 네 출발지 IP의 16쌍)를 실제 실행파일로 확인한다. relay.md: 초기 교환·Mode I/II·중계·half-close·IP. websocket.md: WS-024 |
 | `tests/unix_shutdown.rs`; `tests/windows_console.rs`; `tests/common/shutdown.rs` `ServerProcess` | operations.md: OPS-007~010·042·043(양 OS), OPS-044(Windows). Windows는 MGT-027·OPS-029와 Ctrl+C·Ctrl+Break도 확인한다. 공통 본문에는 표식이 없다. |
-| `tests/dashboard_browser.rs` | dashboard.md: DASH-001~022·024~027 |
+| `tests/dashboard_browser.rs` | dashboard.md: 컴포넌트·목 응답을 쓰는 DASH-001~022·024~027 부분 증거 |
+| `tests/dashboard_live.rs`; `tests/dashboard_live/login.rs`; `tests/dashboard_live/overview.rs`; `tests/dashboard_live/detail.rs`; `tests/dashboard_live/cross.rs` | dashboard.md: 실제 로그인·중계·관리 조회·상세·종료·언어·폴링·Si 만료의 DASH-001~014·016~022·024~027. 표식은 최상위 Rust 테스트 함수에만 둔다. |
+| `tests/common/dashboard_live.rs` `Server` `Pair`; `tests/common/dashboard_cdp.rs` `Browser`; `tests/common/dashboard_proxy.rs` `Proxy` `Fault` `Traffic` | 실서버·중계 소켓·CDP 브라우저·전달 프록시의 시험 자원 소유자. 일반 데이터는 실서버에서 받고, 프록시가 주입한 지연·실패·유실은 별도로 기록한다. 공통 모듈에는 표식이 없다. |
+| `src/serve/listener_tests.rs` `listener_failures_retry_then_drive_fatal_grace_cleanup_and_preserve_requested_races`; `crates/adapters/src/listener.rs` | operations.md OPS-046: 실제 감독 함수·TCP 중계·상태 HTTP에 수락 포트를 연결한 시험, 일시 오류 재시도·치명 오류·최초 종료 원인·G 정리. 어댑터 내부 시험은 실제 OS 수락 오류와 분류를 확인한다. |
 | `tests/management_query.rs` | management.md: MGT-001~007·013·015·016·021·023·024·026. operations.md: OPS-033 |
 | `tests/management_session.rs` | management.md: MGT-017·020·027. operations.md: OPS-029 |
 | `tests/management_terminate.rs` | management.md: MGT-008~014·023. relay.md: RLY-020. operations.md: OPS-011 |
@@ -192,7 +196,8 @@ flowchart LR
 | 관리 HTTP | `crates/adapters/src/management_http.rs` `answer` | 관리 요청 | `session_api` → `query_api` 또는 `session_api` → `terminate_api` 또는 `static_answer` |
 | 상태 HTTP | `crates/adapters/src/status_http.rs` `StatusListener::run` | 상태 요청 | `LifecycleService::readiness` |
 | 파일 변경 | `crates/adapters/src/file_watch.rs` `ReloadWatcher::run` | OS 알림·주기 확인 | `ReloadService::handle_config` 또는 `ReloadService::handle_unreadable` |
-| 종료 신호 | `src/serve.rs` `ShutdownSignal::wait` | Ctrl+C·SIGTERM(Ubuntu)·Ctrl+Break·콘솔 창 닫기(Windows) | `LifecycleService::begin_shutdown` · `begin_relay_shutdown` · `finish_relay_shutdown` |
+| 종료 신호 | `src/serve.rs` `ShutdownSignal::wait` | Ctrl+C·SIGTERM(Ubuntu)·Ctrl+Break·콘솔 창 닫기(Windows) | `wait_for_shutdown` → `begin_process_shutdown` → `begin_relay_shutdown` → `finish_relay_shutdown` |
+| 필수 리스너 장애 | `crates/adapters/src/listener.rs` `SupervisedListener`; `src/serve.rs` `wait_for_shutdown` | 복구 불가 `accept` 오류의 최초 보고 | `wait_for_shutdown` → `begin_process_shutdown` → `LifecycleService::listener_failed` 또는 `wait_for_shutdown` → `begin_process_shutdown` → `RelayService::request_fatal_shutdown` |
 | H 기한 | `crates/app/src/relay.rs` `RelayService::handle_connection` | 초기 교환 | `exchange` |
 | C 기한 | `crates/app/src/relay/target.rs` `dispatch` | Mode I 대상 연결 | `connect` |
 | W 기한 | `crates/app/src/relay/matching.rs` `dispatch` | Mode II 대기 등록 | `wait` |

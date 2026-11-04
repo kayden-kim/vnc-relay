@@ -77,6 +77,7 @@ flowchart LR
 | `Event::ConfigWarning` | `warning: ConfigWarning`, `phase: Phase` | 사건 이름은 경고 코드. `plaintext_ws_enabled`: `listener`, `listen`. `allow_all_source`: `listener`, `item`, `phase`. `allow_all_target`: `item`, `phase`. `status_listen_not_loopback`: `listen` | `item`은 항목의 표준 표기다([설정 로딩 모듈 설계](config-loading.md) 7절). |
 | `Event::StartupFailed` | `reason: &'static str`, `config_key: Option<String>`, `listener: Option<&'static str>`, `detail: Option<String>` | 같은 이름 | 진단 하나에 한 줄이다(계약 1.6절). `detail`에 설정 값·경로·파일 내용을 넣지 않는다(6절). |
 | `Event::ServerStopped` | 없음 | 없음 | 마지막 줄이다. |
+| `Event::ShutdownStarted`, `ShutdownTrigger` | `Requested` 또는 `FatalError { detail }`, G, 활성 수 | `trigger`, `grace_secs`, `active_sessions`, 장애 때만 `detail` | 정상은 `info`, 장애는 `error`다. `RelayService`가 최초 종료 원인을 기록하고 재요청은 새 시작 사건을 만들지 않는다. 사용자 결정 2026-11-05(Q114). |
 | `Event::HandshakeRejected` | `conn_id: ConnId`, `entry_point: EntryPoint`, `peer_ip: PeerIp`, `reason: RejectReason`, `mode: Option<Mode>` | 사건 이름 `connection_rejected`. `conn_id`, `listener`, `stage`, `reason`, `peer_ip`, 선택 `mode` | `stage`는 항상 `initial_exchange`다. 사유는 `handshake_invalid`·`mode_disabled`다. 후자는 호출자가 `Some(Mode)`를 준다. `level`은 `warn`이다. domain의 `handshake::Mode`를 쓴다. 초기 요청·ID 원문은 보관하지 않는다. 사건·JSON·계약 시험을 구현했다. 실제 연결에서는 `relay.rs`의 `handle_connection` 실패 경로가 기록한다. [초기 교환 설계 6절](initial-exchange.md#6-사건오류자원-회수) |
 | `Level` | `Info`, `Warn`, `Error` | `level` | v1에 다른 값이 없다. |
 | `RelayIdRef` | 소문자 16진수 16자 `String` | `relay_id_ref` | HMAC 결과 앞 8바이트로만 만든다. 원문 중계 ID로 만드는 생성자가 없다. |

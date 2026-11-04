@@ -16,22 +16,23 @@ use vnc_relay_app::ports::EventSink;
 use vnc_relay_domain::budget::ConnectionBudget;
 
 use crate::admission::AdmittingListener;
+use crate::listener::Listener;
 
 /// `listener` of the status listener in operation events (ops-info-v1 §1.5).
 const LISTENER: &str = "status";
 
 /// The status listener. It answers from the first moment it runs, so a
 /// query during the start sees `starting`.
-pub struct StatusListener {
-    listener: TcpListener,
+pub struct StatusListener<L = TcpListener> {
+    listener: L,
     admin_budget: Arc<ConnectionBudget>,
     lifecycle: Arc<LifecycleService>,
 }
 
-impl StatusListener {
+impl<L: Listener> StatusListener<L> {
     /// `admin_budget` is Lm, shared with the management listener.
     pub fn new(
-        listener: TcpListener,
+        listener: L,
         admin_budget: Arc<ConnectionBudget>,
         lifecycle: Arc<LifecycleService>,
     ) -> Self {
@@ -48,8 +49,8 @@ impl StatusListener {
         // One fallback judges method and path itself: a `get` route would
         // also take HEAD, and the stock 404 and 405 have no contract body.
         let router = Router::new().fallback(answer).with_state(self.lifecycle);
-        // `serve` ends only on a listener error, and `AdmittingListener`
-        // retries every accept error, so there is no error to handle.
+        // Fatal accepts report to the process supervisor and stop accepting.
+        // Existing HTTP connections stay alive until the owner aborts the task.
         let _ = axum::serve(listener, router).await;
     }
 }

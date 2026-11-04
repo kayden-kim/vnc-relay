@@ -38,6 +38,13 @@ impl Level {
     }
 }
 
+/// The first shutdown cause (ops-info-v1 §1.5). Later signals do not replace it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ShutdownTrigger {
+    Requested,
+    FatalError { detail: String },
+}
+
 /// `phase` values of ops-info-v1 §1.4.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Phase {
@@ -501,6 +508,7 @@ pub enum Event {
     },
     /// The server entered shutdown grace (ops-info-v1 §1.5).
     ShutdownStarted {
+        trigger: ShutdownTrigger,
         grace_secs: u64,
         active_sessions: usize,
     },
@@ -618,7 +626,10 @@ impl Event {
                 | CloseCause::ServerShutdown
                 | CloseCause::InternalError => Level::Warn,
             },
-            Self::ShutdownStarted { .. } => Level::Info,
+            Self::ShutdownStarted { trigger, .. } => match trigger {
+                ShutdownTrigger::Requested => Level::Info,
+                ShutdownTrigger::FatalError { .. } => Level::Error,
+            },
             Self::AdminTerminate { result, .. } => {
                 if *result == AdminTerminateResult::Failed {
                     Level::Error

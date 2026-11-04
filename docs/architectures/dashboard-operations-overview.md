@@ -181,9 +181,22 @@ CSRF 토큰은 메모리에만 둔다. 저장소(localStorage, sessionStorage)�
 - `crates/adapters/src/management_http.rs` `static_answer`: 로직은 바꾸지 않는다. `/`가 표에 있으면 세션이 있을 때 200을 준다. 세션이 없으면 303 `/login/` (계약 1.11절).
 - `tests/dashboard_assets.rs`의 `asset_table_lists_exactly_the_dashboard_files`가 빠진 파일을 잡는다.
 - `xtask/src/tokens/shared.rs`: `language.js`를 `SHARED_FILES`에 더했다 (7 → 8). 원본은 `app/language.js`이고 `login/language.js`는 `cargo xtask tokens`가 만든 복사본이다 (머리글 한 줄 추가, 내용 동일).
-- 응답 헤더: `Content-Security-Policy: default-src 'self'; frame-ancestors 'none'`, `Cache-Control: no-store`(보호 응답), `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer` (계약 1.11절, frontend.md 1.2절). `/` 응답 헤더는 `management.rs`의 `protected_files_are_served_with_a_session`이 세션이 있을 때 `check_file_headers`로 확인한다 (계약 5절). 실서버 확인은 4.4 뒤에 한다.
+- 응답 헤더: `Content-Security-Policy: default-src 'self'; frame-ancestors 'none'`, `Cache-Control: no-store`(보호 응답), `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer` (계약 1.11절, frontend.md 1.2절). `/` 응답 헤더는 `management.rs`의 `protected_files_are_served_with_a_session`이 세션이 있을 때 `check_file_headers`로 확인한다 (계약 5절). 실제 브라우저 흐름은 12절의 별도 실서버 시험으로 확인한다.
 
 ## 12. 시험 설계
+
+### 실서버 브라우저 시험 (2026-11-05)
+
+- 사용자 결정 2026-11-05(Q112): 시험 전용 작은 CDP(Chrome DevTools Protocol) 클라이언트가 `--remote-debugging-port`로 Chrome·Edge를 조작한다. 승인된 `tokio-tungstenite`와 `serde_json`을 루트 개발 의존성으로 재사용한다. 외부 브라우저 드라이버와 새 crate는 추가하지 않는다.
+- `tests/common/dashboard_live.rs`는 실제 계정 해시·설정·`vnc-relay serve`·TCP 중계 연결을 준비한다. `tests/common/dashboard_cdp.rs`는 탐색·입력·클릭·DOM 관찰을 맡는다. `tests/common/dashboard_proxy.rs`는 전달과 장애 주입을 맡는다. `tests/dashboard_live.rs`의 25개 함수가 각각 한 행 전체의 표식을 소유한다. 화면별 본문은 `tests/dashboard_live/{login,overview,detail,cross}.rs`에 둔다. 공통 모듈과 하위 본문에는 표식을 붙이지 않는다.
+- 사용자 결정 2026-11-05(Q113): 시험 쪽 TCP 프록시가 실제 관리 리스너로 전달한다. 일반 데이터와 쿠키는 서버 원본이다. 지연·응답 유실·연결 종료·계약 모양 500만 시험 쪽에서 주입한다. 요청 시각·동시 처리 수·실제 전달 수·주입 수를 따로 기록한다. 주입 오류를 실제 서버의 500 증거로 쓰지 않는다.
+- DASH-008은 `Si=300s`를 실제로 기다린다. 독립 쿠키의 운영 현황·상세 브라우저를 동시에 관찰한다. 각 쿠키의 마지막 수동 요청 시각부터 300초 이전에는 실제 401이 없어야 한다. 297초 뒤에도 정상 자동 폴링과 보호된 DOM을 확인한다. 그 뒤 첫 실제 401, 보호 데이터 제거, 로그인 이동과 폴링 중단을 확인한다. 단순히 301초 잠든 뒤 401이 있는지만 검사하지 않는다. CDP 명령마다 제한 시간을 두되 브라우저 전체에 60초 기한을 두지 않는다.
+- `P` 기본값·설정값은 서로 다른 실제 프로세스에서 관찰한다. 긴 응답과 늦은 응답은 프록시의 실제 전송 지연으로 만든다. 시험 페이지의 fetch 교체는 실서버 증거로 세지 않는다.
+- 기존 dump-dom 시험은 빠른 컴포넌트·형식 부분 증거로 유지한다. DASH-015의 수동 접근성·DASH-023의 네 브라우저 호환성은 별도다. 새 시험은 실행 전까지 통과로 기록하지 않는다.
+- DASH-001·021의 확인 불가 값은 실제 조회 전달 실패로 만든다. 정상 서버의 정수 필드를 null로 위조하지 않는다. DASH-025의 미래 enum 값은 생산자가 낼 수 없는 입력이다. 일반 데이터·탐색은 실제 서버로 확인하고, 미래 값만 실제 브라우저에서 제품 파서·표 컴포넌트에 별도 Consumer 계약 입력으로 준다. 두 언어의 원문 값 보존과 번역된 머리글·행동을 확인한다. 이 입력은 API 응답이나 프록시 본문이 아니다.
+- 한 시험 바이너리 안의 행은 직렬로 실행한다. 서로 다른 행의 브라우저 부하가 폴링 시각 관찰을 흔들지 않게 하기 위해서다. DASH-008의 운영 현황·상세 브라우저 두 개는 같은 행에서 동시에 실행한다.
+- 원시 조회의 관찰 계정은 `bob`, 브라우저 계정은 `alice`다. 역할을 분리하기 위한 시험 구성이다. 같은 계정의 독립 세션을 금지하는 제품 정책은 아니다. 전달 프록시는 `Content-Length`·chunked·본문 없는 상태의 HTTP 프레이밍으로 응답 완료를 판정한다. 완전한 응답을 읽은 뒤 TCP FIN을 추가로 기다리거나, 후속 연결 reset 때문에 그 응답을 폐기하지 않는다.
+
 
 - 브라우저 시험 페이지: `web/dashboard/tests/operations.html`과 `operations-scenarios.js`. 로그인 시험과 같은 방식으로 `?case=` 값에 따라 가짜 응답을 준다. 결과는 `data-result`에 쓴다.
 - 세션 상세 시험 페이지: `web/dashboard/tests/session.html`과 `session-scenarios.js`. 가짜 응답으로 사례를 돌리고, 결과는 `data-result`에 쓴다.
@@ -196,7 +209,7 @@ CSRF 토큰은 메모리에만 둔다. 저장소(localStorage, sessionStorage)�
 - 상세 링크 (14절 D4): 4.11에서 `router.js`가 `#/sessions/{session_id}`를 SCR-002로 보낸다. `router-scenarios.js`가 링크 `href`를 확인하고 같은 해시를 적용해 상세와 목록 복귀를 본다. 링크를 실제로 누르면 시험 페이지를 벗어나므로 쓰지 않는다. SCR-002 본문과 종료 흐름은 `session-scenarios.js` 사례로 시험한다.
 - 정적 시험 (`management.rs`): 세션이 없으면 `/`와 `/app/…` 경로는 303 `/login/`이다 (`static_paths_redirect_to_login_without_a_session`, `protected_files_redirect_to_login_without_a_session`). 세션이 있으면 `/`는 200 HTML과 정적 헤더다 (`protected_files_are_served_with_a_session`). Q43 결정에 따른다.
 - 수동 확인 (verify-dashboard-frontend.md 3.4~3.7, Q36): 폭별 스크린샷과 시안 대조(3.4), 키보드(3.5), 스크린 리더(3.6), Firefox·Safari와 390px 실기기(3.7).
-- 실서버 확인(MGT-026 값 일치, 세션 만료 Si/Sa 시점, `P` 설정 반영)은 4.4 완료 뒤로 미룬다. 해당 시나리오는 부분으로 둔다.
+- 실서버 값·Si 만료·`P` 설정 확인은 위 CDP 시험이 맡는다. 기존 목 시험의 부분 표식은 유지한다. 새 비부분 표식의 실행 여부는 실제 게이트 결과와 분리한다.
 
 ## 13. 반응형 (SCR-001)
 
@@ -269,7 +282,7 @@ CSRF 토큰은 메모리에만 둔다. 저장소(localStorage, sessionStorage)�
 - SCR-001 목록 카드의 개수 배지는 CPY 승인 대기다. DESIGN 608·626·636·638행의 시각 기준만으로 문구를 새로 만들지 않는다. 승인 전에는 표시하지 않는다. D6의 `closing` 생략과 CPY-040 바이트 머리글은 유지한다.
 - 반영 완료(2026-10-22 Main 결정): D4 상세 링크는 `/#/sessions/{session_id}`로 두고 숨기지 않는다(14절). 검증 기록 4.6의 수정 필요 6건은 코드 수정을 마쳤다(4.6 기록).
 - 반영 완료(2026-10-22): `code-map.md`, `dashboard-components.md` 2절·3.1절, `architectures/README.md`, `frontend.md` 1.1·2.3절, `xtask.md`, `management-api-v1.md` 5절과 6절(`tests/dashboard_browser.rs` 추가). 5절 결과 열은 검증 기록 규칙(`docs/AGENTS.md` 검증 기록)에 따라 부분 행을 `미실행`으로 두고, 부분 내용은 실행 기록 열에 적는다.
-- 실서버 확인은 4.4 뒤에 한다. 그 전까지 관련 시나리오는 부분이다.
+- 실서버 시험 설계·본문은 12절에 추가했다(2026-11-05). 실행 결과와 DASH-015·023의 수동 결과는 별도로 기록한다.
 
 ## 대조 기록
 

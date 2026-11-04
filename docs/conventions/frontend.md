@@ -223,14 +223,14 @@ web/dashboard/
 
 - 실행 환경: [개발 환경·검증 how-to](../how-to/set-up-and-verify.md)의 [전제 조건](../how-to/set-up-and-verify.md#2-전제-조건)이 정한 지원 환경(Windows 11 x64·PowerShell, Ubuntu 24.04 LTS x64·bash)과 고정 Rust 툴체인(1.99.1). Chromium(Chrome 또는 Edge)은 두 OS 모두에 필수다. 없거나 실행되지 않으면 브라우저 시험은 실패한다(사용자 결정 2026-10-22(Q35)). Chromium 실행 파일 경로는 환경 변수 `DASHBOARD_BROWSER`로 준다(이 문서의 기본값, 사용자 결정 아님). Node.js는 선택 항목인 DESIGN lint에만 필요하다(사용자 결정 2026-10-22(Q38)).
 - 실행 위치: 저장소 루트.
-- 명령 확인 근거: `xtask/src/main.rs`에 `tokens [--check]`와 `dashboard-serve`가 있다(작업 4.8). 브라우저 테스트는 `tests/dashboard_browser.rs`(작업 4.8), 제공 표 대조 테스트는 `tests/dashboard_assets.rs`(작업 4.6)다.
+- 명령 확인 근거: `xtask/src/main.rs`에 `tokens [--check]`와 `dashboard-serve`가 있다. `tests/dashboard_browser.rs`는 컴포넌트·목 응답 시험을 맡는다. 실서버 화면 시험은 CDP(Chromium의 원격 조작 프로토콜)로 헤드리스 브라우저를 조작한다(사용자 결정 2026-11-05(Q112)). 승인된 `tokio-tungstenite`를 개발 의존성으로 재사용하며 새 crate나 외부 드라이버는 추가하지 않는다. 제공 표 대조는 `tests/dashboard_assets.rs`가 맡는다.
 
 | 변경 범위 | 확인 명령·방법 | 통과 조건 | 절차와 증거 위치 |
 | --- | --- | --- | --- |
 | 디자인 토큰·문서 | `cargo xtask tokens --check`. 선택: DESIGN.md lint(`@google/design.md`, 고정 버전. 사용자 결정 2026-10-22(Q38)) | 종료 코드 0. 차이 0건, 금지 항목 0건. lint 오류 0건. 경고 수는 기록한다 | [검증 how-to 3.1절](../how-to/verify-dashboard-frontend.md) |
 | 정적 파일과 내장 | 제공 표 대조 테스트(`tests/dashboard_assets.rs`) | 실제 파일과 표가 일치한다. 금지 경로가 없다 | [검증 how-to 3.2절](../how-to/verify-dashboard-frontend.md) |
 | 컴포넌트·스타일 | 브라우저 테스트(`tests/dashboard_browser.rs`, 사용자 결정 2026-10-22(Q35))와 화면 CSS 검사(2.2절) | 테스트 페이지의 `data-result`가 `pass`다 | [검증 how-to 3.3절](../how-to/verify-dashboard-frontend.md) |
-| 사용자 동작 | 브라우저 테스트와 `cargo xtask scenarios` | DASH 시나리오가 통과 또는 부분으로 보고된다. 부분은 Chromium 한 곳만 검증한 경우다 | [테스트 컨벤션 7절](testing.md#7-테스트와-스펙-시나리오-연결), `target/scenario-report.md` |
+| 사용자 동작 | 브라우저 테스트와 `cargo xtask scenarios` | 시나리오의 모든 기대 결과를 확인해야 비부분 표식을 붙인다. 실서버 시험은 실제 로그인·조회·중계·종료 경로를 연결한다. 실패·지연·응답 유실은 시험용 전달 프록시로 만든다(사용자 결정 2026-11-05(Q113)). 일반 데이터는 실서버 응답을 쓰며, 주입한 오류 응답을 제품에서 발생한 오류로 보고하지 않는다. 브라우저별 호환성과 사람의 접근성 확인은 DASH-015·DASH-023의 별도 확인 범위다 | [테스트 컨벤션 7절](testing.md#7-테스트와-스펙-시나리오-연결), `target/scenario-report.md` |
 | 시각 결과·접근성 | 폭별 스크린샷, 시안과 나란히 대조, 키보드·스크린 리더 수동 확인 | 스펙과 DESIGN.md 기준을 만족한다. 검토자가 기록한다 | [검증 how-to 3.4~3.7절](../how-to/verify-dashboard-frontend.md) |
 | 전체 완료 | [개발 환경·검증 how-to 3.4절](../how-to/set-up-and-verify.md)의 명령과 위 명령 | 모든 필수 검사가 종료 코드 0이다 | [개발 환경·검증 how-to](../how-to/set-up-and-verify.md) |
 
@@ -250,7 +250,7 @@ web/dashboard/
 | FE-TBD-002 | 생성 산출물을 저장소에 커밋할지 | 빌드, 토큰 파일 | 사용자 결정 2026-10-22(Q32): 커밋한다 | 이 문서 2절 |
 | FE-TBD-003 | 실행 파일 내장 방법 | 관리 리스너, `Cargo.toml` | 사용자 결정 2026-10-22(Q33): `include_bytes!` 표와 대조 테스트 | 이 문서 1.2절 |
 | FE-TBD-004 | 미리보기 위치와 실행 방법 | `preview/`, `xtask/` | 사용자 결정 2026-10-22(Q34): `web/dashboard/preview/`와 `cargo xtask dashboard-serve`(로컬 전용) | 이 문서 3절, [xtask 모듈 설계](../architectures/xtask.md) |
-| FE-TBD-005 | 브라우저 테스트 방식과 보고서 연결 | `tests/`, 테스트 컨벤션, `xtask/` | 사용자 결정 2026-10-22(Q35): Rust 통합 시험이 Chromium을 `--headless --dump-dom`으로 실행하고 `data-result`를 읽는다. `/// spec:` 표식은 Rust 시험에 둔다. 스캐너는 바꾸지 않는다 | 이 문서 6절, [테스트 컨벤션 7절](testing.md#7-테스트와-스펙-시나리오-연결) |
+| FE-TBD-005 | 브라우저 테스트 방식과 보고서 연결 | `tests/`, 개발 의존성, 시나리오 보고 | 컴포넌트·목 응답 시험은 `--headless --dump-dom`과 `data-result`를 유지한다(Q35). 실서버 시험은 직접 만든 CDP 클라이언트로 조작한다(사용자 결정 2026-11-05(Q112)). 시험용 전달 프록시로 실패·지연·유실을 만들고 Si 만료는 실제 300초를 기다린다(Q113). `/// spec:` 표식은 Rust 시험에 두며 스캐너는 바꾸지 않는다 | 이 문서 6절, [테스트 컨벤션 7절](testing.md#7-테스트와-스펙-시나리오-연결) |
 | FE-TBD-006 | Chromium 필요 여부와 없을 때 처리 | 검증 환경, 검증 how-to | 사용자 결정 2026-10-22(Q35): Chrome 또는 Edge를 두 OS 모두 필수로 둔다. 없으면 시험이 실패한다 | 이 문서 6절, [개발 환경 how-to 2절](../how-to/set-up-and-verify.md) |
 | FE-TBD-007 | 키보드·포커스·스크린 리더 확인의 자동화 범위 | 접근성 검증 | 사용자 결정 2026-10-22(Q36): 1차는 수동 체크리스트다. 해당 시나리오는 부분으로 본다 | 이 문서 4절 |
 | FE-TBD-008 | 시각 비교 방법 | 스크린샷 검증 | 사용자 결정 2026-10-22(Q36): 스크린샷을 `target/`에 두고 사람이 시안과 비교한다. 자동 픽셀 비교는 쓰지 않는다 | 이 문서 3절 |

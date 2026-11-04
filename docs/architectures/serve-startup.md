@@ -26,6 +26,7 @@
   - 인증서·개인키 파일 검사(`tls_file_invalid`, 종료 코드 3). 활성화된 WSS 진입점과 관리 리스너의 인증서·개인키 파일을 어떤 리스너도 바인드하기 전에 검사하고, 오류는 모두 모은다([CLI 계약 1.8절](../contracts/cli-v1.md#18-수동-시작과-종료), [설정 계약 2.1절](../contracts/config-v2.md#21-설정-오류와-준비-실패)).
   - 종료 요청(Ctrl+C, Ubuntu의 SIGTERM, Windows의 Ctrl+Break)을 받으면 TCP·WS·WSS 진입점 작업에 종료를 알리고, 그 작업이 끝난 뒤 나머지 리스너를 닫고 종료 코드 0으로 끝내기.
   - 종료 유예 G와 두 번째 종료 요청의 조립. `finish_relay_shutdown`이 진입점 소유자와 G 감독 작업의 종료 순서를 지킨다. 세션 종료 원인은 [중계 수명 설계 5.2·6절](relay-session.md#52-정상-종료와-g)이 다룬다.
+  - 필수 리스너의 복구 불가능 수락 오류 감독. `SupervisedListener`의 최초 장애 채널과 OS 종료 요청을 `wait_for_shutdown`에서 함께 기다린다. 같은 turn에 둘 다 준비됐으면 요청을 우선한다. `begin_process_shutdown`이 준비 상태·중계 종료를 함께 시작한다. 장애가 먼저이면 `listener_failed`, `request_fatal_shutdown`, 종료 코드 1이다. G와 소유자 정리는 그대로다. 사용자 결정 2026-11-05(Q114).
 - 맡지 않는 책임:
   - `admin` 하위 명령의 실행. [관리자 계정 준비 CLI 모듈 설계](admin-accounts.md)가 맡는다.
   - 파일 변경 감지 준비(시작 순서 3단계, `watch_unavailable`). 작업 5.1·5.2가 맡았다(사용자 결정 2026-10-20). 구현은 `src/serve.rs`의 감시 시작 단계이며 세부는 [파일 변경 감지 모듈 설계](file-watch.md)가 맡는다.
@@ -69,6 +70,8 @@ flowchart LR
 | `src/cli.rs` `report`, `report_usage`, `HELP`, `EXIT_*` | 진단 한 줄을 stderr에 쓴다(`report`). 사용법 오류 줄과 사용법 문장을 stderr에 쓴다(`report_usage`). 도움말 문장과 종료 코드 상수를 둔다. | 호출마다 | 없음 |
 | `src/serve.rs` `run`, `listen_until_shutdown` | 시작 순서 실행, 단계별 진단 출력과 종료 코드 결정, 운영 로그 사건 기록. 바인드 뒤 L 예산을 하나 만들고, TCP 진입점마다 허용 목록·L 예산·H·keepalive 값을 `AcceptPolicy`로, WS·WSS 진입점마다 `WsPolicy`(U 포함)를 넘겨 작업을 띄운다. WSS 진입점에는 `wss_tls.take()`로 받은 TLS 수락기를 넘긴다. 그 뒤 종료 요청을 기다린다(`listen_until_shutdown`). | `serve` 실행마다 | adapters, app, domain, tokio, `cli` |
 | `src/serve.rs` `ShutdownSignal::register`, `ShutdownSignal::wait` | 종료 요청 처리기. Ubuntu는 SIGINT·SIGTERM, Windows는 Ctrl+C·Ctrl+Break다. 바인드 전에 등록해 시작 중의 요청도 놓치지 않는다. `wait`가 첫 요청을 기다린다. | 4단계 처음 | tokio |
+| `crates/adapters/src/listener.rs` `Listener`, `SupervisedListener`, `ListenerFailure` | TCP 수락 포트와 최초 장애 보고. `serve`는 모든 필수 리스너를 이 래퍼로 감싼다. 분류는 [운영 정보 계약 1.12절](../contracts/ops-info-v1.md#112-상태-리스너와-엔드포인트)을 따른다. | 바인드 직후, 감독 채널은 프로세스마다 하나 | tokio, std |
+| `src/serve.rs` `wait_for_shutdown`, `begin_process_shutdown` | 최초 종료 원인을 선택한다. 정상 요청은 기존 동작이다. 장애는 상태를 바꾸고 `shutdown_started(fatal_error,error)`를 시작한다. | 준비 뒤 감독 단계 | adapters, app |
 | `src/serve.rs` `tls_checks`, `tls_failure` | 활성화된 WSS 진입점과 관리 리스너의 TLS 파일 설정을 검사 목록으로 모은다. 파일 오류 한 건을 stderr 한 줄과 `startup_failed`로 쓴다. | 4단계 | adapters `tls.rs` |
 | `crates/domain/src/account.rs` `AccountName` | 1~32자, `a-z0-9._-`만 받는 계정 이름 값 타입 | 계정 파일을 읽을 때 | 없음 |
 | `crates/domain/src/account.rs` `PasswordHash`, `PasswordHashError`, `Argon2Params`, `Argon2ParamsError` | PHC 문자열 해석(1.4절): 알고리즘·버전·`m,t,p` 순서·솔트 16바이트 이상·해시 32바이트·패딩 없는 표준 Base64. 승인 범위 상수(`MEMORY_KIB` 등)와 범위 판정(하한 미만이 상한 초과보다 먼저다). `Debug`는 해시 문자열을 `"<redacted>"`로 가린다. | 계정 파일을 읽을 때 | 없음 |
@@ -115,7 +118,7 @@ flowchart LR
 
 `src/serve.rs`의 `finish_relay_shutdown`이 중계 소유자와 G 감독 작업을 정리한다. 아래 조립 방식은 **이 문서의 판단, 사용자 결정 없음**이다. Force에서도 먼저 관찰한 세션 종료 원인은 보존한다(사용자 결정 2026-11-01(Q82)).
 
-1. 첫 `ShutdownSignal::wait`가 끝나면 `lifecycle.begin_shutdown()`을 호출한다. `relay_service.request_shutdown(&runtime, settings.timeouts.shutdown_grace)`으로 절대 G를 시작한다. `stop.send_replace(true)`로 진입점 수락을 멈춘다.
+1. `wait_for_shutdown`이 OS 요청 또는 최초 리스너 장애를 고른다. `begin_process_shutdown`은 정상 요청이면 `begin_shutdown`·`request_shutdown`, 장애이면 `listener_failed`·`request_fatal_shutdown`을 호출한다. 두 경로 모두 설정 G를 쓴다. `stop.send_replace(true)`로 진입점 수락을 멈춘다.
 2. `finish_relay_shutdown`은 모든 `entry_points`의 완료와 두 번째 종료 요청을 함께 기다린다. 진입점은 자신이 가진 연결 소유자를 join한 뒤 반환한다. 소유자가 남아 있는 동안 `supervisor`를 취소하지 않는다. `drive_shutdown`이 G 만료를 계속 진행한다.
 3. 두 번째 종료 요청이면 `request_shutdown(&runtime, Duration::ZERO)`를 호출한다. 남은 중계 소유자에게 `Force`를 전달한다. 그 뒤에도 모든 진입점 소유자의 완료를 기다린다.
 4. 모든 진입점을 join한 뒤 `stop_task(Some(supervisor))`를 호출한다. 감독 작업을 abort하고 join한다. 처음부터 소유자가 없거나 먼저 모두 끝나면 G나 추가 종료 요청을 기다리지 않는다.
@@ -142,6 +145,7 @@ Force는 종료 교환 완료를 기다리는 새 유예가 아니다. 세션은
 | 런타임·신호 처리기·시작 키 생성 | `runtime_unavailable`, 종료 코드 1 | 없음 | 없음 |
 | `tls::load_acceptor`(검사마다) | `tls_file_invalid`, 실패한 파일마다 stderr 한 줄과 `startup_failed`. 모든 검사를 마친 뒤 종료 코드 3. 리스너는 바인드하지 않는다. | 없음 | OPS-002 |
 | `net::bind_one`, `net::bind` | 실패마다 `listener_bind_failed`, 성공한 리스너를 닫고 상태 리스너 작업을 멈춘 뒤 종료 코드 4 | 없음 | OPS-002, OPS-039 |
+| 실행 중 필수 리스너의 복구 불가능 수락 오류 | `listener_failed` 진단, `shutdown_started(fatal_error,error)`, 기존 G·정리 뒤 종료 코드 1. 시작 실패 사건은 없다. | 장애 준비 상태 유지 | OPS-046 |
 
 ## 7. 설계 선택
 

@@ -91,7 +91,7 @@ flowchart LR
 
 | 순서 | 코드 위치 | 조건·계산 | 바뀌는 상태 | 결과를 쓰는 곳 |
 | --- | --- | --- | --- | --- |
-| 1 | `admission.rs` `AdmittingListener::accept` | TCP 수락 뒤 Lm 자리를 잡는다. 수락 오류는 `ACCEPT_RETRY_DELAY` 뒤 다시 수락한다. | Lm 사용량 +1 | 자리 없음: `connection_rejected`(`stage` = `accept`, `admin_connection_limit`), 연결 닫음 |
+| 1 | `admission.rs` `AdmittingListener::accept` | TCP 수락 뒤 Lm 자리를 잡는다. 일시 수락 오류는 기존 지연 뒤 재시도한다. 복구 불가능 오류는 `SupervisedListener`가 감독자에게 보고하고 수락을 멈춘다. | Lm 사용량 +1 | 자리 없음: `connection_rejected`(`stage=accept`, `admin_connection_limit`), 연결 닫음 |
 | 2 | `tls_listener.rs` `TlsListener::accept` | 평문이면 이 단계를 건너뛴다(`tls` = `None`일 때 `serve`가 `TlsListener`를 만들지 않는다). HTTPS면 `TlsIo::Handshaking`을 만든다. 핸드셰이크는 하지 않는다. | `TlsIo` 상태 `Handshaking` | 없음 |
 | 3 | `tls_listener.rs` `TlsIo::poll_handshake` | `poll_read`·`poll_write`·`poll_flush`가 먼저 부른다. 핸드셰이크를 진행한다. 성공하면 `Established`로 바꾸고 캡처를 `None`으로 바꾼다. 실패하면 캡처한 ClientHello 바이트(레코드 한 개 분)로 버전을 판정한다. `supported_versions`가 있으면 그 목록에 TLS 1.2 이상이 없을 때, 없으면 `legacy_version`이 TLS 1.2 미만일 때 버전 거절이다. 버전 거절이면 기록을 먼저 쓴다. 그다음 `Failed`로 바꾸고 `io::Error`를 돌려준다. | `TlsIo` 상태 `Established` 또는 `Failed` | 버전 거절: `connection_rejected`(`listener` = `management`, `stage` = `tls`, `reason` = `tls_version_unsupported`). 그 밖의 실패: 기록 없음(사용자 결정 Q13). |
 | 4 | `request_deadline.rs` `Deadlined::poll_read`·`poll_write`·`poll_flush` | 읽기·쓰기 전에 타이머를 먼저 본다. 기한이 지났으면 `TimedOut`을 돌려준다. 첫 요청 머리가 끝나기 전에는 절대 기한(수락 + U)이다. 끝난 뒤 바이트가 오가면 U를 다시 건다. 2·3단계의 TLS 핸드셰이크도 이 안에서 진행된다. | 타이머, `head_done`, `window` | 기한이 지나면 axum이 접속을 닫는다(6절). 머리가 끝나면 axum이 요청을 5단계(`answer`)로 넘긴다. |
@@ -122,7 +122,7 @@ Q25 예외(Current, TODO 4.5): 5단계에서 검증·수락된 terminate 요청�
 | TLS 핸드셰이크가 U 안에 끝나지 않음 | 수락 때부터 U가 지나면 읽기·쓰기가 `TimedOut`으로 끝나고 axum이 접속을 닫는다. 평문 응답을 보내지 않는다. 기록하지 않는다(구현 판단: `connection_aborted`는 `conn_id`가 필요하다). | 접속 없음. Lm 자리는 돌아간다. | OPS-006(일부), OPS-033(일부) |
 | 첫 요청 머리가 U 안에 끝나지 않음 | 같은 방법으로 닫는다. 기록하지 않는다(구현 판단). | 접속 없음. Lm 자리는 돌아간다. | OPS-006(일부), OPS-033(일부) |
 | 첫 요청 뒤 읽기·쓰기가 U 동안 없음(keep-alive 유휴) | 같은 방법으로 닫는다(사용자 결정 2026-10-22(Q25)). 기록하지 않는다(구현 판단, 9절 11번). | 접속 없음. Lm 자리는 돌아간다. | OPS-006(일부) |
-| 수락 오류 | `ACCEPT_RETRY_DELAY` 뒤 다시 수락한다. 기록하지 않는다(ops-info-v1은 수락 실패 사건이 없다). | 없음 | 없음 |
+| 수락 오류 | 일시 오류는 기존 `ACCEPT_RETRY_DELAY` 뒤 재시도한다. 복구 불가능 오류는 감독자에게 보고하고 axum 수락을 대기시킨다. 기존 연결은 중계 G·정리 뒤 HTTP 작업을 멈출 때까지 남는다. OS 분류는 [운영 정보 계약 1.12절](../contracts/ops-info-v1.md#112-상태-리스너와-엔드포인트)을 따른다. | 장애 종료 | OPS-046 |
 | 관리 요청의 읽기 오류 | axum이 접속을 닫는다. 기록하지 않는다(`connection_aborted`는 `conn_id`가 필요하다). | 접속 없음 | 구현 판단(Q13은 TLS 실패만 다룬다) |
 | 보호 정적 경로(`/`, `/app/`)에 세션이 없거나 만료됨 | `303`, `Location: /login/`, 본문 없음. 쿠키를 지우지 않는다. 유휴 기한을 늘리지 않는다(계약 1.4.2절). | 없음 | DASH-014(일부) |
 

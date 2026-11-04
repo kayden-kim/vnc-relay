@@ -9,6 +9,7 @@ VNC Relay가 운영자에게 내보내는 두 가지 정보의 교환 형식을 
 | 호환 값 추가 | 2026-11-02, 1.3.0 유지: `session_closed.close_cause`에 `internal_error`를 더했다(사용자 결정 2026-11-02(Q94)). `level`은 서비스가 계속되는 비정상 종료 원인에 해당하므로 1.3절의 `warn`을 따른다. 기존 원인 값은 유지하며 3절의 허용 값 추가 규칙을 따른다. |
 | 호환 조건 추가 | 2026-11-04, 1.3.0 유지: Windows 콘솔 창 닫기도 종료 요청이다. `shutdown_started`(`trigger` = `requested`) 뒤 G를 기다리지 않고 남은 세션이 있으면 `shutdown_forced`를 쓴다(사용자 결정 2026-11-04(Q102)). 새 사건·필드·값은 없다. |
 | 호환 사건 추가 | 2026-11-04, 1.3.0 유지: 로그 파일을 다시 열지 못했을 때의 `log_reopen_failed`를 더했다(1.1절 "파일 다시 열기", 사용자 결정 2026-11-04(Q104·Q109·Q110)). 3절의 사건 추가 규칙을 따른다. |
+| 장애 조건 확정 | 2026-11-05, 1.3.0 유지: 필수 리스너의 복구 불가능 수락 오류·감독 경계와 장애 종료 동안 `listener_failed` 보존을 1.12절에 정했다. 기존 `fatal_error`·`detail` 형식은 유지한다. 사용자 결정 2026-11-05(Q114). |
 | 상태 | Active(2026-10-16 채택) |
 | 소유자 | vnc-relay 프로젝트 관리자 |
 | 만드는 쪽(Producer) | `vnc-relay` (`vnc-relay serve` 프로세스) |
@@ -17,7 +18,7 @@ VNC Relay가 운영자에게 내보내는 두 가지 정보의 교환 형식을 
 | 스키마 기준 파일 | 없음. 1절의 Markdown 표가 형식의 기준이다. |
 | 기준 스펙 | [운영 스펙 3.5절](../specs/operations.md#35-운영-정보), [4절](../specs/operations.md#4-보안과-신뢰-경계), [5절](../specs/operations.md#5-오류와-복구), [중계 스펙](../specs/relay.md), [WS·WSS 스펙](../specs/websocket.md), [관리 스펙](../specs/management.md) |
 | 관련 요구사항 | [PRD](../requirements/PRD.md) FR-08, FR-07, 7절 보안, AC-23, AC-25 |
-| 호환성 범위 | 이 계약의 1.x 형식을 따르는 `vnc-relay` 구현과 소비자. 작업 2.3이 공통 규칙(1.1~1.4절), 시작 단계 사건(`server_starting`·`startup_failed`·`server_stopped`), 설정 경고 4종, `relay_id_ref` 계산(1.9절), `peer_ip` 표기(1.10절)를 구현했다. 작업 2.4·2.5가 TCP 진입점의 접속 사건과 그 `stage`·`reason` 일부를 구현했다. 작업 2.6이 `server_ready`, 상태 리스너의 `/livez`·`/readyz`(1.12·2절), `admin_connection_limit`을 구현했다. 그 밖의 사건과 `listener_failed`는 구현 전이다. |
+| 호환성 범위 | 이 계약의 1.x 형식을 따르는 `vnc-relay` 구현과 소비자. 사건별 구현·시험 범위와 실행 결과는 5절에서 관리한다. |
 | 관련 테스트 | [운영 스펙 7절](../specs/operations.md#7-수용-테스트)의 OPS-011·OPS-012·OPS-013·OPS-032를 중심으로 5절 표에 연결한다. 계약 테스트는 `crates/adapters/tests/ops_info_contract.rs`와 `tests/serve.rs`에 있다. |
 
 관련 문서: [설정 계약](config-v2.md)(`[log]`·`[status]` 키, 경고 코드, 오류 코드, 재로드 결과 코드), [관리 API 계약](management-api-v1.md)(`session_id`·`close_cause`·바이트 필드 이름), [CLI·계정 파일 계약](cli-v1.md)(시작 실패 오류 코드), [WebSocket 중계 계약](websocket-relay-v1.md)(close 코드와 종료 원인 대응), [Repeater 초기 교환 계약](repeater-handshake-v1.md)(초기 교환 오류 코드), [ADR-0002 출발지 IP 허용 목록](../decisions/ADR-0002-source-ip-allowlist.md), [ADR-0003 단일 인스턴스·메모리 상태](../decisions/ADR-0003-single-instance-memory-state.md).
@@ -335,6 +336,21 @@ VNC Relay가 운영자에게 내보내는 두 가지 정보의 교환 형식을 
 
 상태 리스너는 설정 검증이 끝난 뒤, 다른 필수 리스너를 준비하기 전에 연다. 그래야 시작 중 상태 조회가 `starting`으로 구분된다. 상태 리스너 바인딩에 실패하면 `startup_failed`(`listener_bind_failed`, `listener`가 `status`)다. 설정 검증 중이거나 프로세스가 없을 때의 조회는 연결 거절로 보인다. 도구는 이를 준비 안 됨으로 취급한다.
 
+#### 실행 중 필수 리스너 장애
+
+사용자 결정 2026-11-05(Q114). 상태·관리·설정으로 켠 TCP·WS·WSS는 모두 필수다. 아래 복구 불가능 코드만 장애 종료를 시작한다. 나머지 오류와 원시 OS 코드가 없는 오류는 재시도한다.
+
+| OS | 복구 불가능한 수락 오류 | 재시도하는 오류 |
+| --- | --- | --- |
+| Linux x64 | `EBADF=9`, `EINVAL=22`(수신 상태 아님), `ENOTSOCK=88` | `EINTR=4`, `EAGAIN=11`, `ENFILE=23`, `EMFILE=24`, `ENOMEM=12`, `ENOBUFS=105`, 접속 중단·네트워크 오류와 나머지 코드. `EOPNOTSUPP=95`도 새 연결의 보류된 네트워크 오류일 수 있어 재시도한다. |
+| Windows x64 | `WSAEBADF=10009`, `WSAEINVAL=10022`, `WSAENOTSOCK=10038`, `WSAEOPNOTSUPP=10045`, `WSANOTINITIALISED=10093` | `WSAEINTR=10004`, `WSAEWOULDBLOCK=10035`, `WSAEMFILE=10024`, `WSAENOBUFS=10055`, `WSAENETDOWN=10050`, 접속 재설정·자원 부족과 나머지 코드. 개별 비동기 작업 취소 `ERROR_OPERATION_ABORTED=995`도 재시도한다. |
+
+근거: [Linux accept(2)의 Error handling·ERRORS](https://man7.org/linux/man-pages/man2/accept.2.html), [Microsoft accept 오류 표](https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-accept), [Winsock 오류 코드](https://learn.microsoft.com/en-us/windows/win32/winsock/windows-sockets-error-codes-2). 닫혔거나 잘못된 소켓·수신 상태 소실·Winsock 수명 소실은 같은 소켓으로 복구할 수 없다. 안전한 Rust가 인수·플래그를 고정하므로 Linux `EINVAL`은 수신 상태 소실로 판정한다. 알려지지 않은 오류를 추측해 치명 오류로 넓히지 않는다.
+
+일시 오류는 기존 100밀리초 뒤 재시도한다. 임계값은 없다. 복구 불가능 오류는 리스너 이름과 원시 OS 코드를 감독자에게 전달한다. 장애가 먼저 종료를 시작하면 준비 상태를 `listener_failed`로 바꾸고 `shutdown_started(trigger=fatal_error)`를 `error`로 한 번 기록한다. `detail`에는 리스너 이름과 원시 OS 코드만 넣는다. G와 정리는 정상 종료와 같다. `server_stopped`가 마지막이며 종료 코드는 [CLI 계약 2.1절](cli-v1.md#21-종료-코드)의 1이다.
+
+살아 있는 상태 HTTP는 장애 종료의 유예·정리 동안 `/readyz` 503 `listener_failed`와 `/livez` 200을 유지한다. 상태 소켓 자체 장애의 응답은 보장하지 않는다. 관찰용 대기는 없다. 활성 세션이 없으면 곧바로 끝낸다. 정상 종료가 먼저 시작되면 뒤늦은 장애는 최초 원인·유예를 바꾸지 않는다.
+
 ## 2. 오류
 
 상태 엔드포인트의 응답 코드다. 로그 사건의 원인 코드는 1.6절과 1.7절에 있다.
@@ -343,7 +359,7 @@ VNC Relay가 운영자에게 내보내는 두 가지 정보의 교환 형식을 
 | --- | --- | --- |
 | `starting` | 준비 전. `/readyz`가 503과 `{"status":"not_ready","reason":"starting"}`를 응답한다. 설정 검증 뒤 시작 중 상태에서 쓴다. 필수 리스너가 모두 준비되면 200이 된다. | OPS-013, OPS-002 |
 | `shutting_down` | 종료 유예 중 또는 종료 정리 중. `/readyz`가 503과 `{"status":"not_ready","reason":"shutting_down"}`를 응답한다. 신규 중계 접속을 받지 않는다. | OPS-013, OPS-007, OPS-043 |
-| `listener_failed` | 준비된 필수 리스너가 계속 운영할 수 없게 실패함. `/readyz`가 503과 `{"status":"not_ready","reason":"listener_failed"}`를 응답한다. 이 상태는 곧 `shutdown_started`(`fatal_error`)로 이어진다. | OPS-002, OPS-013 |
+| `listener_failed` | 필수 리스너의 복구 불가능 수락 오류. 살아 있는 상태 HTTP는 503 `{"status":"not_ready","reason":"listener_failed"}`를 답한다. 감독자가 즉시 `shutdown_started(trigger=fatal_error, level=error)`를 시작한다. 장애 종료의 유예·정리 동안 이 원인을 유지한다. | OPS-046 |
 | `not_found` | 정의하지 않은 경로. 404와 `{"error":{"code":"not_found","message":"<사람용 문장>"}}`. 관리 API의 오류 본문과 같은 모양이다. | OPS-032 |
 | `method_not_allowed` | `GET`이 아닌 메서드. 405와 `Allow: GET` 헤더, `{"error":{"code":"method_not_allowed","message":"<사람용 문장>"}}`. | OPS-032 |
 
@@ -430,7 +446,7 @@ GET /readyz ->  503 {"status":"not_ready","reason":"shutting_down"}
 | Producer / `tests/relay_dead_peer_linux.rs`의 `removes_unresponsive_waiting_server_and_reuses_id_and_l`·`removes_unresponsive_active_peers_without_harming_other_sessions`(Linux 전용), 단위 `net.rs`의 `socket_error_tests::classifies_only_linux_socket_timeouts_as_dead_connections`, `websocket_stream/tests.rs`의 `classifies_underlying_ws_and_wss_socket_timeouts_without_changing_other_errors` | 응답 없는 대기 연결의 `waiting_removed(reason=dead_connection)`, 활성 세션의 `session_closed(close_cause=dead_connection, side)`. Linux 소켓의 `ETIMEDOUT`·`EHOSTUNREACH`·`ENETUNREACH`를 `dead_connection`으로 분류한다([연결 상한 설계](../architectures/connection-limits.md)의 구현 판단). 스펙 [RLY-025](../specs/relay.md#7-수용-테스트), [RLY-026](../specs/relay.md#7-수용-테스트) | 통과(Windows는 부분) | 커밋 `bf27d30`의 WSL 게이트에서 두 시스템 시험과 단위 시험 2건이 통과했다. 실제 DROP으로 만든 끊긴 연결이 `dead_connection`으로 기록됐다. 같은 조건의 커널 탐침은 `ETIMEDOUT`(`Connection timed out`)을 받았다. `EHOSTUNREACH`·`ENETUNREACH`는 실제 오류로 관찰하지 않았다. Windows는 Linux 전용 시험이 빠져 부분이다(사용자 결정 2026-11-02(Q86)). 이전 커밋 `59fc535`의 WSL 게이트는 `nft`가 없어 실패했다(사용자 결정 2026-11-02(Q93)). |
 | Producer / 통합, 일부 생성 | 관리자 로그인 성공·실패·제한 사건. 스펙 [MGT-017](../specs/management.md#7-수용-테스트), [MGT-018](../specs/management.md#7-수용-테스트), [MGT-022](../specs/management.md#7-수용-테스트) | 미실행 | 구현: `ops_log.rs`(세 사건의 줄 형식), `login.rs`(사건 값 단위 시험). 시험: 로그인 성공 줄은 `tests/management_session.rs`의 `plain_loopback_login_opens_the_session_and_logs_success`가 확인한다. 실패·제한·제한 시작 줄 형식은 `ops_log.rs`의 `admin_login_lines_carry_only_their_own_fields`가 확인한다. |
 | Producer / 상태 리스너 및 셧다운 통합 시험, 어댑터 계약 시험 | 실행 중인 프로세스에서 시작 중 및 종료 유예 중 `/readyz` 503(유예 중 `/livez`는 200), 종료 유예 중 관리 조회·종료 정상 처리. 스펙 [OPS-013](../specs/operations.md#7-수용-테스트)(전부, 사용자 결정 2026-11-04(Q108)), [OPS-043](../specs/operations.md#7-수용-테스트) | 통과 | OPS-013은 `crates/adapters/tests/ops_info_contract.rs`의 `answers_liveness_and_readiness_in_each_state_with_only_the_contract_fields`(비부분)가 시작 중 `/readyz` 503·`/livez` 200과 상태별 필드를 확인한다. OPS-043은 `tests/unix_shutdown.rs`와 `tests/windows_console.rs`의 `management_works_during_grace`가 유예 중 `/readyz` 503·`/livez` 200, summary `state="shutdown_grace"`, 관리자 세션 발급·조회·종료를 실제 프로세스에서 확인한다(두 OS 통과, 커밋 `de693ad`). |
-| Producer / 통합, 미생성 | 실행 중인 프로세스에서 준비된 필수 리스너가 실패할 때의 `/readyz` 503(`reason="listener_failed"`) 및 `shutdown_started`(`trigger="fatal_error"`) 연계. [1.12절](#112-상태-리스너와-엔드포인트), 스펙 [OPS-002](../specs/operations.md#7-수용-테스트), [OPS-013](../specs/operations.md#7-수용-테스트) | 미실행 | 실행 중인 프로세스에서 `listener_failed`를 발생시키고 검증하는 비부분 시험이 없다(`grep -r listener_failed` 결과 없음. status-listener.md 1절·9절: `accept` 오류 후 재수락하며 치명적 실패 경로 판정 미구현). |
+| Producer / `src/serve/listener_tests.rs` `listener_failures_retry_then_drive_fatal_grace_cleanup_and_preserve_requested_races`, `crates/adapters/src/listener.rs` 단위 시험 | [OPS-046](../specs/operations.md#7-수용-테스트): 실제 TCP 진입점·상태 HTTP와 `serve` 감독 함수, 시험용 수락 포트의 오류 주입. 일시 오류 뒤 정상 중계·HTTP, 활성 세션이 있는 장애 G의 503 `listener_failed`·200 생존 응답·실제 바이트 중계, 강제 정리 사건 순서·자원 반환·종료 코드 1, 세션 없는 TCP·상태 장애의 즉시 정리, 정상 종료 우선 경합. OS 분류 표와 실제 비수신 소켓의 수락 오류도 시험한다. | 미실행 | Q114 작업 트리. 통합 뒤 부모가 두 OS에서 실행한다. 이미 실행 중인 제품 소켓을 안전한 Rust로 손상시키는 바이너리 재현은 아니다. 실제 OS 시험은 비수신 소켓의 오류 표면이다. |
 | Producer / `tests/log_reopen.rs` `renamed_log_is_recreated_without_lost_or_duplicate_lines`; `tests/log_reopen.rs`와 `tests/windows_console.rs`의 `log_reopen_failure_warns_once_keeps_old_file_and_recovers`(공통 본문 `tests/common/log_reopen.rs`); `crates/adapters/src/file_watch/reopen_tests.rs` `reopens_on_notifications_and_poll_and_reports_each_failure_streak_once`, `log_directory_registration_failure_keeps_poll_and_retries` | 로그 파일 다시 열기(1.1절): 이름 변경 뒤 알림·Dp 주기의 다시 열기, 줄이 두 파일에 겹치거나 빠지지 않음, 다시 열기 실패 시 이전 파일 유지와 한 번만 쓰는 `warning[log_reopen_failed]`·`log_reopen_failed`, 복구 뒤 다시 열기와 정상 종료. 로그 디렉터리 등록 실패만으로 시작을 멈추지 않음(Q111). 스펙 [OPS-045](../specs/operations.md#7-수용-테스트) | 통과 | 커밋 `1c7c7a9`의 두 OS 게이트에서 모두 통과. 비부분 시험은 어댑터 시험 `reopens_on_notifications_and_poll_and_reports_each_failure_streak_once`이고, 바이너리 시험은 실제 stderr·파일 회전의 부분 증거다. release 실행파일의 이름 바꾸기 회전도 두 OS 수동 실행에서 확인했다([CLI 계약 실행 기록](cli-v1.md#계약-테스트-실행-기록)). [실행 기록](#계약-테스트-실행-기록) |
 | Consumer / 수집 도구 계약 테스트, 위치 미정 | 알 수 없는 필드·사건·값 무시(3절), `level`·`event` 분기 | 미실행 | 소비자 테스트 위치 없음 |
 | Consumer / 상태 도구 계약 테스트, 위치 미정 | HTTP 상태 코드로 판정, 알 수 없는 `reason` 무시(3절) | 미실행 | 소비자 테스트 위치 없음 |

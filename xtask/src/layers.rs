@@ -61,9 +61,16 @@ const RULES: &[Rule] = &[
     Rule {
         package: "vnc-relay",
         internal: &["vnc-relay-domain", "vnc-relay-app", "vnc-relay-adapters"],
-        // rustls and windows-sys are dev-dependencies; windows-sys serves only
-        // the Windows pseudo-console test (code map section 1, Q103).
-        external: External::Only(&["clap", "rustls", "tokio", "windows-sys"]),
+        // Browser CDP reuses the approved JSON and WebSocket crates only in
+        // tests (Q112). rustls and windows-sys are also dev-dependencies.
+        external: External::Only(&[
+            "clap",
+            "rustls",
+            "serde_json",
+            "tokio",
+            "tokio-tungstenite",
+            "windows-sys",
+        ]),
     },
     Rule {
         package: "xtask",

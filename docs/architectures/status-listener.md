@@ -1,6 +1,6 @@
 # 상태 리스너와 준비 상태 모듈 설계
 
-상태 리스너(`[status] listen`)가 `/livez`·`/readyz`에 답하는 구조와, 그 답의 근거인 준비 상태(시작 중·준비됨·종료 중)를 다룬다. 상태 리스너는 다른 필수 리스너보다 먼저 열고, 상태 연결을 관리·상태 연결 상한 Lm으로 센다. 모든 필수 리스너가 준비되면 준비됨으로 바꾸고 `server_ready`를 기록한다(사용자 결정 2026-10-20, 작업 2.3에서 옮김).
+상태 리스너(`[status] listen`)가 `/livez`·`/readyz`에 답하는 구조와 준비 상태를 다룬다. 준비 상태는 시작 중·준비됨·정상 종료 중·리스너 장애다. 상태 리스너는 다른 필수 리스너보다 먼저 열고, 관리·상태 연결 상한 Lm으로 센다. 모든 필수 리스너가 준비되면 준비됨으로 바꾸고 `server_ready`를 기록한다. 장애 종료는 사용자 결정 2026-11-05(Q114)를 따른다.
 
 | 항목 | 값 |
 | --- | --- |
@@ -16,14 +16,14 @@
 ## 1. 책임과 경계
 
 - 맡는 책임:
-  - 준비 상태: 프로세스는 시작 중(`starting`)으로 시작한다. 필수 리스너가 모두 바인드되면 준비됨이 된다. 종료 요청을 받으면 종료 중(`shutting_down`)이 된다. 상태는 앞으로만 간다. 시작 중에 종료가 시작되면 준비됨으로 돌아가지 않는다.
+  - 준비 상태: 시작 중에서 전체 바인드 후 준비됨이 된다. 정상 종료는 `shutting_down`이다. 복구 불가능 수락 오류가 먼저 종료를 시작하면 `listener_failed`다. 장애 종료의 유예·정리 동안 이 값을 유지한다. 사용자 결정 2026-11-05(Q114).
   - 상태 리스너를 다른 필수 리스너보다 먼저 바인드하고 바로 응답한다(1.12절). 다른 리스너를 바인드하는 동안 `/readyz`는 503 `starting`이다.
   - 응답(1.12·2절): `GET /livez`는 상태와 관계없이 200 `{"status":"alive"}`. `GET /readyz`는 준비됨이면 200 `{"status":"ready"}`, 아니면 503 `{"status":"not_ready","reason":"<code>"}`. 정의하지 않은 경로는 404 `not_found`, 정의한 경로의 `GET`이 아닌 메서드는 405 `method_not_allowed`와 `Allow: GET`. 모든 응답은 `Content-Type: application/json`과 `Cache-Control: no-store`를 가진다. 인증 헤더·쿠키·쿼리 문자열·본문은 무시한다.
   - Lm: 수락은 `admission.rs`의 `AdmittingListener`(`name` = `status`)가 맡는다. 상태 연결은 수락 직후 Lm 예산의 자리를 잡는다. 자리가 없으면 `connection_rejected`(`listener` = `status`, `stage` = `accept`, `reason` = `admin_connection_limit`, `limit`)를 기록하고 HTTP 응답 없이 닫는다. 연결이 끝나면 자리를 돌려준다. L과는 다른 예산이다.
   - 준비됨으로 바뀔 때 `server_ready`(`listeners`: 바인드한 모든 리스너의 `name`·`listen`)를 기록한다. 설정 경고 뒤, 접속 사건 앞이다.
 - 맡지 않는 책임:
-  - `listener_failed`. 준비된 필수 리스너가 계속 운영할 수 없게 실패하는 경로가 아직 없다. TCP 진입점은 `accept` 오류 뒤 다시 수락한다([TCP 진입점 모듈 설계 6절](tcp-entry-point.md#6-오류-처리)). 그 실패를 판정하는 작업이 `Readiness`에 값을 더한다.
-  - 종료 유예 G 동안의 응답 유지와 `shutdown_started`. 작업 5.3이 맡는다. 지금은 종료 요청을 받은 뒤 진입점 연결을 정리하는 동안만 `shutting_down`으로 답한다.
+  - 오류 분류는 `adapters::listener`가 맡는다. OS 코드의 기준은 [운영 정보 계약 1.12절](../contracts/ops-info-v1.md#112-상태-리스너와-엔드포인트)이다. `SupervisedListener`가 최초 장애를 watch 채널에 전달한다. `serve` 감독자가 최초 종료 원인을 고른다.
+  - G와 정리는 `RelayService`가 맡는다. 상태·관리 HTTP는 중계 소유 작업을 모두 회수한 뒤 멈춘다. 상태 소켓 자체 장애의 응답은 보장하지 않는다.
   - 관리 리스너의 Lm 집계는 작업 4.2가 붙였다. 상태 리스너와 같은 Lm 예산을 쓴다([관리 리스너 모듈 설계](management-listener.md)).
   - WS·WSS 리스너의 연결 수락. `serve`가 만든 `WsEntryPoint`가 맡는다(`src/serve.rs`, 작업 3.2). 이 리스너들은 바인드해 준비됨 판정에 포함한다([`serve` 시작 모듈 설계 1절](serve-startup.md#1-책임과-경계)). 관리 리스너의 연결 수락은 작업 4.2가 붙였다([관리 리스너 모듈 설계](management-listener.md)).
   - 인증서 검사(작업 3.1)와 파일 변경 감지 준비(작업 5.1). 그 작업이 준비됨 전의 단계에 넣는다.
@@ -51,8 +51,9 @@ flowchart LR
 
 | 요소(파일·심볼) | 역할 | 만들어지는 시점과 소유자 | 의존 대상 |
 | --- | --- | --- | --- |
-| `crates/app/src/lifecycle.rs` `Readiness` | 준비 상태 세 가지와 `/readyz`의 `reason` 값(`not_ready_reason`) | 값 타입 | 없음 |
-| `crates/app/src/lifecycle.rs` `LifecycleService` | 프로세스 하나의 준비 상태. `mark_ready`는 시작 중일 때만 준비됨으로 바꾼다. `begin_shutdown`은 어느 상태에서나 종료 중으로 바꾼다. | `serve`가 리스너를 바인드하기 전에 하나 만들고 `Arc`로 상태 리스너와 나눈다 | std 원자 변수 |
+| `crates/app/src/lifecycle.rs` `Readiness` | 준비 상태와 `/readyz`의 `reason`. 장애 종료는 `ListenerFailed`다. | 값 타입 | 없음 |
+| `crates/app/src/lifecycle.rs` `LifecycleService` | `mark_ready`는 시작 중에만 전환한다. `begin_shutdown`과 `listener_failed`는 최초 종료 원인을 유지한다. | `serve`가 바인드 전에 만들고 상태 HTTP와 공유 | std 원자 변수 |
+| `crates/adapters/src/listener.rs` `Listener`, `SupervisedListener`, `ListenerFailure`, `is_fatal_accept_error` | 모든 리스너의 수락 포트·OS 오류 분류·최초 장애 채널. `TcpListener`는 실제 소켓 포트다. | `serve`가 바인드한 각 소켓을 감싼다 | std, tokio |
 | `crates/app/src/events.rs` `Event::ServerReady`, `RejectReason::AdminConnectionLimit` | `server_ready`의 `listeners`, `admin_connection_limit`과 `limit` | 사건이 생길 때 | 없음 |
 | `crates/adapters/src/net.rs` `bind_one` | 계획 하나를 바인드한다. `bind`도 계획마다 이 함수를 쓴다. | 4단계 | tokio, app |
 | `crates/adapters/src/status_http.rs` `StatusListener` | 상태 리스너 하나. axum으로 HTTP/1.1을 처리한다. 수락은 `admission.rs`의 `AdmittingListener`가 맡아 Lm 자리를 잡고, 응답은 1.12·2절 표를 따른다. | `serve`가 상태 리스너를 바인드한 직후 띄운다. 종료 끝에 `serve`가 작업을 멈춘다. | axum, serde_json, tokio, app, domain |
@@ -62,7 +63,7 @@ flowchart LR
 
 | 이름 | 필드·형태 | 저장 위치 | 제약과 항상 지켜야 할 조건 |
 | --- | --- | --- | --- |
-| `Readiness` | `Starting`, `Ready`, `ShuttingDown` | `LifecycleService` 안의 `AtomicU8` | `Starting → Ready → ShuttingDown` 또는 `Starting → ShuttingDown`. 되돌아가지 않는다. |
+| `Readiness` | `Starting`, `Ready`, `ShuttingDown`, `ListenerFailed` | `LifecycleService`의 `AtomicU8` | 최초 종료 원인을 유지한다. 종료 상태에서 준비됨으로 돌아가지 않는다. |
 | `Event::ServerReady` | `listeners: Vec<(&'static str, SocketAddr)>` | 반환 값 | 바인드 순서(상태, 관리, 켠 진입점)다. 줄에는 `listeners` 배열의 객체마다 `listen`(주소 문자열)과 `name`을 쓴다. |
 | `Event::ConnectionRejected` | `listener: &'static str`, `stage`, `reason`, `peer_ip` | 반환 값 | `listener`는 운영 정보 계약의 리스너 이름이다. TCP 진입점은 진입점 이름, 상태 리스너는 `status`다. `StartupFailed::listener`와 같은 방식이다. |
 | 상태 응답 본문 | `{"status":"alive"}`, `{"status":"ready"}`, `{"status":"not_ready","reason":…}`, `{"error":{"code":…,"message":…}}` | HTTP 응답 | 이 밖의 필드를 넣지 않는다. `message`는 한국어 한 문장이다. |
@@ -95,7 +96,7 @@ flowchart LR
 | 상태 리스너 바인드 실패 | 나머지 리스너도 바인드해 실패를 모두 모은다. 실패마다 `listener_bind_failed`(`listener` = `status`)이고 종료 코드 4다. | 없음 | OPS-002, OPS-039 |
 | 다른 리스너 바인드 실패 | 상태 리스너 작업을 멈추고 모든 리스너를 닫은 뒤 종료 코드 4다. 그 사이의 `/readyz`는 503 `starting`이다. | 없음 | OPS-002 |
 | Lm 고갈 | `admin_connection_limit`으로 거절하고 HTTP 응답 없이 닫는다. 중계 연결과 L은 영향이 없다. | 없음 | OPS-033 |
-| 상태 리스너 `accept` 실패 | 100밀리초 기다린 뒤 다시 수락한다. 기록하지 않는다. TCP 진입점과 같은 방식이다. | 리스너 유지 | 없음 |
+| 상태 리스너 `accept` 실패 | 일시 오류는 100밀리초 뒤 재시도. 복구 불가능 오류는 `SupervisedListener`가 감독자에게 보고한다. axum 수락은 대기하고 감독자가 HTTP 작업을 마지막에 중단한다. | 장애 종료 | OPS-046 |
 | HTTP 해석 오류 | hyper가 400으로 답하거나 연결을 닫는다. 운영 정보 계약에 이 경우의 사건이 없어 기록하지 않는다. | 자리 반환 | 없음 |
 
 ## 7. 설계 선택
@@ -108,6 +109,7 @@ flowchart LR
 | 준비 상태는 app의 `AtomicU8` 하나로 둔다. | 읽기만 많고, 바뀌는 곳은 `serve` 한 곳이다. app이 tokio에 의존하지 않는다. | `tokio::sync::watch` | [코드 지도 레이어 표](code-map.md#레이어와-의존-방향) |
 | `ConnectionRejected`의 리스너를 진입점 대신 리스너 이름 문자열로 둔다. | 상태·관리 리스너는 진입점이 아니다. `StartupFailed::listener`와 `ListenerPlan::name`이 같은 방식을 쓴다. | 리스너 enum을 새로 만든다. 같은 이름을 두 방식으로 갖게 된다. | 없음 |
 | 상태 리스너 작업은 종료 마지막에 멈추고(`abort`) 남은 상태 연결을 기다리지 않는다. | 진입점 연결을 정리하는 동안 `shutting_down`으로 답해야 한다. 응답 중인 상태 연결이 종료를 붙잡지 않는다. | axum 정상 종료(`with_graceful_shutdown`). 요청을 보내다 멈춘 연결이 종료를 끝없이 막을 수 있다. | 없음 |
+| 수락 포트 `listener::Listener`와 `SupervisedListener` 공유 | 모든 리스너가 같은 분류·최초 장애 채널을 쓴다. 시험은 포트에서 오류를 주입하며 제품 훅은 없다. | 별도 오류 정책 | 사용자 결정 2026-11-05(Q114) |
 | `server_ready`의 `listeners`는 바인드한 모든 리스너다. WS·WSS 리스너도 넣는다(작업 3.2 전에는 수락하지 않았고, 지금은 `WsEntryPoint`가 수락한다). | 그 리스너들은 바인드돼 있어 운영체제가 연결을 대기열에 넣는다. 수락은 해당 작업이 붙인다. | 수락하는 리스너만 넣기. 작업이 진행되며 목록 의미가 바뀐다. | [운영 정보 계약 1.5절](../contracts/ops-info-v1.md#15-사건-목록) |
 
 ## 8. 현재 코드와의 차이
@@ -121,10 +123,10 @@ flowchart LR
 | 작업 2.6 변경(기준 커밋 `b1f2ad5` + 작업 트리) | Ubuntu 24.04.4(WSL2), Rust 1.99.1 | 1~4절의 파일·심볼과 실제 코드를 대조했다. 준비 상태 전이는 `crates/app/src/lifecycle.rs` 단위 테스트 2건, 상태별 응답·헤더·405·404·`server_ready`·`admin_connection_limit` 줄은 `crates/adapters/tests/ops_info_contract.rs`, 준비됨 뒤 응답과 Lm·L 독립은 `tests/serve.rs`의 `answers_status_queries_without_login_once_ready`·`refuses_status_connections_beyond_lm_and_keeps_lm_and_l_apart`로 확인했다([운영 정보 계약의 계약 테스트 실행 기록](../contracts/ops-info-v1.md#계약-테스트-실행-기록)). 실행 중인 프로세스에서 `starting`·`shutting_down` 응답은 관찰하지 않았다. 그 구간이 밀리초 단위라 시스템 테스트가 맞출 수 없다. | 통과 |
 | Windows 실행(기준 커밋 `e1cfc4f` + Windows 경고 수정) | Windows 11 Pro 10.0.26200, Rust 1.99.1(`x86_64-pc-windows-msvc`) | 같은 단위·계약 테스트와 `tests/serve.rs`의 `answers_status_queries_without_login_once_ready`·`refuses_status_connections_beyond_lm_and_keeps_lm_and_l_apart`가 통과했다. | 통과 |
 | 작업 4.2 변경(기준 커밋 `ead7be0` + 작업 트리): 관리 리스너와 Lm 공유, 수락을 `admission.rs`로 옮김 | Ubuntu 24.04.4(WSL2)·Windows 11 Pro 10.0.26200, Rust 1.99.1 | 1·2·4절과 `crates/adapters/src/admission.rs`·`status_http.rs`를 대조했다. `tests/serve.rs`의 `answers_status_queries_without_login_once_ready`·`refuses_status_connections_beyond_lm_and_keeps_lm_and_l_apart`·`refuses_management_connections_beyond_lm_and_keeps_lm_and_l_apart`가 두 환경에서 통과했다. | 통과 |
+| Q114 작업 트리(기준 `3110800`): OS 분류·필수 리스너 감독·장애 준비 상태·치명 종료 사건 | Windows 11 x64·Ubuntu 24.04 LTS x64 | `src/serve/listener_tests.rs`의 OPS-046, `listener.rs`의 OS 분류·실제 비수신 소켓 오류·Linux 바인드 후 shutdown 오류 시험. 제품 바이너리의 외부 소켓 손상 재현과 구분한다. | 미실행 — 통합 뒤 부모 실행 |
 
 ## 9. 미결정 사항
 
 | 항목 | 영향 | 확정 위치 |
 | --- | --- | --- |
 | 상태 연결의 요청 대기 시간 | hyper에 시간 제한을 주지 않았다. 요청을 보내지 않는 연결이 Lm 자리를 계속 잡을 수 있다. 계약에 값이 없다. | [관리 리스너 모듈 설계 9절](management-listener.md#9-미결정-사항) Q3(사용자 결정) |
-| `listener_failed` | 판정할 실패 경로가 없다. | 리스너 실패를 판정하는 작업 |
