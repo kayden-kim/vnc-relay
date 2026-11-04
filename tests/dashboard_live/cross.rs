@@ -1,9 +1,12 @@
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use std::time::{Duration, Instant};
 
 use serde_json::{Value, json};
 
 use super::live::{Browser, Fault, LIMIT, PASSWORD, Server, must, wait_for};
+use super::overview::assert_list_counts;
 
 const OVERVIEW_PATHS: [&str; 4] = [
     "/api/v1/summary",
@@ -186,6 +189,7 @@ pub fn failed_reads_distinguish_empty_and_stale() {
         assert!(text_at(&mut browser, ".page-meta").contains("Unavailable"));
         if !detail {
             assert_eq!(browser.eval("document.querySelector('.summary-grid .stat-value')?.textContent === 'Unavailable'"), json!(true));
+            assert_list_counts(&mut browser, [None, None, None], "en");
             assert_eq!(
                 browser.eval("document.querySelectorAll('table').length"),
                 json!(0)
@@ -201,6 +205,9 @@ pub fn failed_reads_distinguish_empty_and_stale() {
         browser.click(refresh_selector(detail));
         browser.wait("document.body.textContent.includes('2.0 KiB') && document.body.textContent.includes('4.0 KiB')");
         settled(&mut browser);
+        if !detail {
+            assert_list_counts(&mut browser, [Some(0), Some(1), Some(0)], "en");
+        }
         let success = text_at(&mut browser, ".page-meta");
         inject_failures(&server, &paths);
         browser.click(refresh_selector(detail));
@@ -214,6 +221,9 @@ pub fn failed_reads_distinguish_empty_and_stale() {
         assert!(stale.contains("Last successful"));
         assert_eq!(text_at(&mut browser, ".page-meta"), success);
         assert_injected_failures(&server, &paths);
+        if !detail {
+            assert_list_counts(&mut browser, [Some(0), Some(1), Some(0)], "en");
+        }
     }
 }
 
@@ -245,6 +255,9 @@ pub fn explicit_refresh_recovers_only_on_success() {
             "failure changed success timestamp"
         );
         assert_injected_failures(&server, &paths);
+        if !detail {
+            assert_list_counts(&mut browser, [Some(0), Some(1), Some(0)], "en");
+        }
         pair.transfer(8192, 16384);
         server.proxy.clear();
         for path in &paths {
@@ -262,6 +275,9 @@ pub fn explicit_refresh_recovers_only_on_success() {
             success,
             "request start changed success timestamp"
         );
+        if !detail {
+            assert_list_counts(&mut browser, [Some(0), Some(1), Some(0)], "en");
+        }
         browser.wait("document.body.textContent.includes('8.0 KiB') && document.body.textContent.includes('16.0 KiB')");
         settled(&mut browser);
         assert_ne!(text_at(&mut browser, ".page-meta"), success);
@@ -321,8 +337,36 @@ pub fn delayed_queries_do_not_overlap_or_overwrite_routes() {
     let mut second = server.pair(&admin, "II", "63006");
     second.transfer(8192, 16384);
     let mut browser = Browser::start("cross-delay", &["en-US"]);
+    let release_initial = Arc::new(AtomicBool::new(false));
+    for path in OVERVIEW_PATHS.into_iter().skip(1) {
+        server
+            .proxy
+            .once("GET", path, Fault::Hold(Arc::clone(&release_initial)));
+    }
     login(&mut browser, &server);
+    wait_for(
+        "all initial list responses held after upstream completion",
+        LIMIT,
+        || {
+            let traffic = server.proxy.traffic();
+            OVERVIEW_PATHS.into_iter().skip(1).all(|path| {
+                traffic.iter().any(|item| {
+                    item.path == path
+                        && item.forwarded
+                        && item.upstream_response_at.is_some()
+                        && item.stage == "response_held"
+                        && item.completed.is_none()
+                })
+            })
+        },
+    );
+    browser.wait(
+        "[...document.querySelectorAll('.grid > .card')].slice(3).length === 3 && [...document.querySelectorAll('.grid > .card')].slice(3).every(card => card.querySelector('.card-status')?.textContent.includes('Loading'))",
+    );
+    assert_list_counts(&mut browser, [None, None, None], "en");
+    release_initial.store(true, Ordering::Release);
     settled(&mut browser);
+    assert_list_counts(&mut browser, [Some(0), Some(2), Some(0)], "en");
     let began = Instant::now();
     for path in OVERVIEW_PATHS {
         server.proxy.once("GET", path, Fault::Delay(DELAY));
@@ -331,6 +375,7 @@ pub fn delayed_queries_do_not_overlap_or_overwrite_routes() {
     for path in OVERVIEW_PATHS {
         wait_delayed(&server, path, began);
     }
+    assert_list_counts(&mut browser, [Some(0), Some(2), Some(0)], "en");
     let counts: Vec<_> = OVERVIEW_PATHS
         .iter()
         .map(|path| server.proxy.count("GET", path))
@@ -658,6 +703,10 @@ pub fn relay_changes_appear_on_next_poll() {
                 script_string(&format!("/#/sessions/{id}")), script_string(&id)
             ));
         }
+        if !detail {
+            settled(&mut browser);
+            assert_list_counts(&mut browser, [Some(0), Some(0), Some(1)], "en");
+        }
         assert_no_editing(&mut browser);
     }
 }
@@ -948,6 +997,8 @@ pub fn saved_language_survives_all_screens() {
             script_string(&pair.sid)
         ));
         let overview = overview_data(&mut browser, &pair.sid);
+        settled(&mut browser);
+        assert_list_counts(&mut browser, [Some(0), Some(1), Some(0)], chosen);
         assert_formats(&overview);
         assert_language(
             &mut browser,
@@ -970,8 +1021,10 @@ pub fn saved_language_survives_all_screens() {
             },
         );
         assert_eq!(overview_data(&mut browser, &pair.sid), overview);
+        assert_list_counts(&mut browser, [Some(0), Some(1), Some(0)], opposite);
         select_language(&mut browser, chosen);
         assert_eq!(overview_data(&mut browser, &pair.sid), overview);
+        assert_list_counts(&mut browser, [Some(0), Some(1), Some(0)], chosen);
         browser.reload();
         browser.wait(&format!(
             "document.querySelector('table') && document.body.textContent.includes({})",
@@ -987,6 +1040,8 @@ pub fn saved_language_survives_all_screens() {
             },
         );
         assert_eq!(overview_data(&mut browser, &pair.sid), overview);
+        settled(&mut browser);
+        assert_list_counts(&mut browser, [Some(0), Some(1), Some(0)], chosen);
         open_detail(&mut browser, &pair.sid);
         let detail = detail_data(&mut browser);
         assert_language(

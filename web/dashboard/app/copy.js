@@ -23,6 +23,8 @@ export const COPY = {
     unavailable: '확인 불가', // CPY-035
     limit: '상한 {n}', // CPY-079
     limitUnknown: '상한 확인 불가', // CPY-080
+    listCount: '{n}건', // CPY-084
+    listCountOne: '1건', // CPY-085
     summaryTitle: '서버 요약', // CPY-022
     serverState: '실행 상태', // CPY-023
     stateReady: '준비됨', // CPY-024
@@ -98,6 +100,8 @@ export const COPY = {
     unavailable: 'Unavailable', // CPY-035
     limit: 'Limit {n}', // CPY-079
     limitUnknown: 'Limit unavailable', // CPY-080
+    listCount: '{n} items', // CPY-084
+    listCountOne: '1 item', // CPY-085
     summaryTitle: 'Server summary', // CPY-022
     serverState: 'Server state', // CPY-023
     stateReady: 'Ready', // CPY-024

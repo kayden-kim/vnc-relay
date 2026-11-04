@@ -1110,6 +1110,38 @@ Windows의 실제 debug 실행파일을 루프백에서 시작했다. CLI `admin
 
 최종 문서 검사 `python D:/vr-tools/tmp/doc_check.py`는 새 오류 0건(`errors_total=2 known=2 other=0`)이었다. 기존 오류는 `dashboard-operations-overview.md:73`의 CPY-008 링크와 `tls.md:126`의 표 열 수다. 이전에 알려진 이 문서의 표·링크 오류 2건은 이번 변경에서 해소했다. 루트 `README.md` 없음은 검사기가 별도로 표시한 기존 상태다.
 
+### 4.20 목록 개수 배지 Q115 (2026-11-05)
+
+- 대상: `7f2b684` 뒤 작업 트리. [화면 스펙 CPY-084·085](../specs/dashboard.md#932-scr-001-운영-현황)와 [운영 현황 앱 4·5절](../architectures/dashboard-operations-overview.md#4-화면-골격-scr-001)을 먼저 갱신했다. 문구는 사용자 결정 2026-11-05(Q115)을 따른다.
+- `copy.js`가 한국어 `{n}건`과 영어 단수·복수를 제공한다. `operations.js`는 각 목록의 표시 중인 성공 응답 항목 수를 `panels.js`에 넘긴다. `applyListCount`가 기존 neutral·아이콘 없는 배지를 갱신한다. 새 CSS·토큰·공통 컴포넌트 API는 없다.
+- `operations-scenarios.js`와 실서버 시험의 기존 DASH-001~004·020·025 본문을 보강했다. 0·1·여러 항목, 목록과 요약의 불일치, 독립 갱신, 첫 성공 전·실패와 오래된 성공 데이터, 언어 변경을 확인한다. 전체 행 표식의 소유자는 바꾸지 않았다.
+- 채택 시안의 영어 정상 상태 세 배지를 `3 items`·`3 items`·`7 items`로 맞췄다. 구조 편집으로 해당 span 세 곳만 바꿨다. 시안의 초기 조회·최초 실패에는 배지가 없고, 빈 목록은 0건, 갱신·오래된 데이터는 이전 개수를 유지함을 확인했다. 영어 시안도 열어 캡처했다.
+
+#### 실제 서버·브라우저 스모크
+
+Windows에서 `cargo fmt --all`과 `cargo build`가 종료 0이었다. 새 debug 실행파일과 별도 루프백 설정을 썼다. 실제 CLI 숨긴 입력으로 시험 계정을 추가했고 종료 코드는 0이었다. 에이전트가 실제 로그인 화면을 조작해 운영 현황으로 들어갔다.
+
+| 실제 중계 상태 | 대기·활성·최근 종료 개수 배지 |
+| --- | --- |
+| 빈 서버, English | `0 items`·`0 items`·`0 items` |
+| 대기 1개·활성 1개 | `1 item`·`1 item`·`0 items` |
+| 대기 2개·활성 2개 | `2 items`·`2 items`·`0 items` |
+| 활성 하나를 실제 EOF로 종료 | `2 items`·`1 item`·`1 item` |
+| 같은 상태에서 한국어 선택 | `2건`·`1건`·`1건` |
+| 나머지 활성도 실제 EOF로 종료, English | `2 items`·`0 items`·`2 items` |
+
+각 활성 Mode II 연결에서 실제 5바이트를 전달했다. 1280px의 빈 목록·한국어 정상 화면과 320px의 한국어·영어 배지를 캡처했다. 두 폭에서 가로 넘침이 없었다. 긴 영어 최근 종료 제목은 320px에서 배지가 다음 줄로 자연스럽게 내려갔다. 겹침과 잘림은 없었다. 배지 클래스는 `badge-tone-neutral`, 아이콘은 0개였고 브라우저 오류는 없었다.
+
+스모크 도구의 첫 대기는 셀렉터가 세 요소와 일치한 상태에서 끝났다. 이후 실제 DOM·배치·캡처로 배지를 확인했다. 중립 톤을 검사할 때 처음 쓴 `badge-neutral` 클래스명도 잘못된 예상이었다. 제품 클래스는 `badge-tone-neutral`이다. 둘 다 제품 결함으로 세지 않는다.
+
+브라우저와 중계 소켓을 닫았다. Ctrl+C 뒤 로그는 `shutdown_started(trigger=requested, active_sessions=0)` 다음 `server_stopped`로 끝났다. 다만 도구의 감독 프로세스 상태는 종료 512였다. 이 스모크를 정상 종료 코드 0의 증거로 쓰지 않는다. 임시 계정·설정 디렉터리를 지웠다. 식별자·계정·비밀번호를 뺀 사건 증거는 저장소 밖 `D:/vr-tools/tmp/dashboard-q115-smoke-events.json`에 남겼다.
+
+#### 전체 검증과 남은 범위
+
+검토에서 첫 로딩 관찰과 고정 3초 지연 만료 사이의 시험 경합을 찾았다. 초기 응답 세 개를 `Fault::Hold`로 보관하고 로딩·배지 없음 검사를 마친 뒤 해제하도록 바꿨다. Windows의 `cargo test --test dashboard_live dashboard_005_real_delays_do_not_overlap_or_overwrite_routes -- --nocapture`는 통과했다(1 passed·0 failed, 12.40초). 제품 코드 변경은 없었다.
+
+변경 뒤 두 OS 전체 게이트는 아직 실행 전이다. 작업 4.12의 Safari·실제 모바일 기기·스크린 리더·사람의 시안 대조는 이번 스모크로 완료되지 않는다.
+
 ## 5. 중단 조건
 
 - `cargo xtask tokens --check`의 종료 코드가 0이 아니면 3.2 이후 단계를 실행하지 않는다.

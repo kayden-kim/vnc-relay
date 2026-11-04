@@ -64,6 +64,37 @@ fn ready(browser: &mut Browser) {
     );
 }
 
+pub(super) fn assert_list_counts(
+    browser: &mut Browser,
+    counts: [Option<usize>; 3],
+    language: &str,
+) {
+    let counts = json!(counts);
+    let language = json!(language);
+    assert_eq!(
+        browser.eval(&format!(
+            r#"(() => {{
+            const counts = {counts};
+            const language = {language};
+            const cards = [...document.querySelectorAll('.grid > .card')];
+            return cards.length === 6 &&
+              cards.slice(0, 3).every(card => !card.querySelector('.card-title .badge')) &&
+              cards.slice(3).every((card, index) => {{
+                const count = counts[index];
+                const badges = card.querySelectorAll('.card-title > .badge');
+                if (count === null) return badges.length === 0;
+                const label = language === 'ko' ? `${{count}}건` : count === 1 ? '1 item' : `${{count}} items`;
+                return badges.length === 1 && badges[0].textContent === label &&
+                  badges[0].dataset.tone === 'neutral' && !badges[0].querySelector('svg') &&
+                  card.querySelectorAll('tbody tr:not(.data-table-empty)').length === count;
+              }});
+            }})()"#,
+        )),
+        json!(true),
+        "each list title must describe only its own displayed snapshot in the current language",
+    );
+}
+
 fn assert_clean(browser: &mut Browser) {
     assert_eq!(
         browser.eval(
@@ -193,6 +224,14 @@ pub fn overview_known_data() {
             "state": "준비됨", "uptime": true, "waiting": "2", "active": "2"}),
     );
     assert_clean(&mut browser);
+    assert_list_counts(&mut browser, [Some(2), Some(2), Some(0)], "ko");
+    browser.eval(
+        "(() => { const select = document.querySelector('select'); select.value = 'en'; select.dispatchEvent(new Event('change', {bubbles:true})); })()",
+    );
+    assert_list_counts(&mut browser, [Some(2), Some(2), Some(0)], "en");
+    browser.eval(
+        "(() => { const select = document.querySelector('select'); select.value = 'ko'; select.dispatchEvent(new Event('change', {bubbles:true})); })()",
+    );
     assert_eq!(server.proxy.injected_count("GET", "/api/v1/summary"), 0);
     drop((waiting_viewer, waiting_server, mode_one, mode_two));
     assert_unavailable_summary(&server, &mut browser);
@@ -214,6 +253,7 @@ pub fn overview_empty_lists() {
         json!(["대기 없음", "활성 없음"]),
     );
     assert_clean(&mut browser);
+    assert_list_counts(&mut browser, [Some(0), Some(0), Some(0)], "ko");
     assert!(server.proxy.traffic().iter().all(|entry| !entry.injected));
 }
 
@@ -351,6 +391,7 @@ pub fn overview_recent_closed() {
         json!("최근 종료 없음"),
     );
     assert_clean(&mut browser);
+    assert_list_counts(&mut browser, [Some(0), Some(0), Some(0)], "ko");
 
     let mut eof = server.pair(&admin, "II", "42001");
     eof.transfer(KIB_BYTES, MIB_BYTES);
@@ -422,6 +463,7 @@ pub fn overview_recent_closed() {
         "all three actual close causes retain local timestamps and directional bytes without historical actions",
     );
     assert_clean(&mut browser);
+    assert_list_counts(&mut browser, [Some(0), Some(0), Some(3)], "ko");
     assert!(server.proxy.traffic().iter().all(|entry| !entry.injected));
 }
 

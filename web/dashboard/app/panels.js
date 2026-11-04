@@ -277,6 +277,8 @@ export function panelCard({ title, description, span, chrome, footer }) {
     contentSlot: el('div', 'card-content'),
     chromeKey: null,
     contentKey: null,
+    titleSlot: null,
+    countBadge: null,
   };
   let body = slots.contentSlot;
   if (chrome) {
@@ -284,8 +286,25 @@ export function panelCard({ title, description, span, chrome, footer }) {
     body.append(slots.alertSlot, slots.contentSlot);
   }
   const node = createCard({ title, description, actions: chrome ? slots.badgeSlot : undefined, body, footer });
+  slots.titleSlot = node.querySelector('.card-title');
   node.classList.add(span);
   return { node, slots };
+}
+
+// Counts belong to the same successful list snapshot as the rows, not the summary.
+export function applyListCount(slots, count, t) {
+  if (count === null) {
+    slots.countBadge?.remove();
+    slots.countBadge = null;
+    return;
+  }
+  const label = count === 1 ? t.listCountOne : fill(t.listCount, { n: formatCount(count) });
+  if (!slots.countBadge) {
+    slots.countBadge = createBadge({ tone: 'neutral', label });
+    slots.titleSlot.append(slots.countBadge);
+  } else if (slots.countBadge.textContent !== label) {
+    slots.countBadge.textContent = label;
+  }
 }
 
 // Updates the badge and alert only when the view or the last success time changes.

@@ -14,6 +14,7 @@ use super::{LIMIT, connect, must};
 pub enum Fault {
     Delay(Duration),
     DelayBefore(Duration),
+    Hold(Arc<AtomicBool>),
     DropResponse,
     Close,
     Error500(&'static str),
@@ -390,6 +391,23 @@ fn forward(
     match fault {
         Some(Fault::DropResponse) => return Ok(()),
         Some(Fault::Delay(delay)) if !pause(*delay, state) => return Ok(()),
+        Some(Fault::Hold(released)) => {
+            state.traffic.lock().unwrap_or_else(PoisonError::into_inner)[index].stage =
+                "response_held";
+            let deadline = Instant::now() + LIMIT;
+            while !released.load(Ordering::Acquire) {
+                if state.stop.load(Ordering::Acquire) {
+                    return Ok(());
+                }
+                if Instant::now() >= deadline {
+                    return Err(io::Error::new(
+                        io::ErrorKind::TimedOut,
+                        "test proxy response hold was not released",
+                    ));
+                }
+                thread::sleep(Duration::from_millis(20));
+            }
+        }
         _ => {}
     }
     downstream.write_all(&response)

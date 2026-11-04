@@ -12,6 +12,7 @@ import { clearTimer, contentKey, newQuery, viewOf } from './query.js';
 import {
   activeTable,
   applyChrome,
+  applyListCount,
   closedTable,
   el,
   panelCard,
@@ -124,6 +125,7 @@ export function mountOperations(root, deps = {}) {
     const view = viewOf(query);
     const slots = page[key];
     applyChrome(slots, query, view, t);
+    applyListCount(slots, query.data ? query.data.items.length : null, t);
     setContent(slots, contentKey(query, view, state.lang), () => {
       if (query.data) {
         return build(query.data.items, emptyText);

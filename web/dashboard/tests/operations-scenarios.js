@@ -160,6 +160,19 @@ function alertOf(card) {
 const dataRowsOf = (card) => [...(card?.querySelectorAll('tbody tr:not(.data-table-empty)') ?? [])];
 const emptyOf = (card) => card?.querySelector('.data-table-empty')?.textContent.trim() ?? null;
 
+function checkListCount(label, card, count, language = lang) {
+  const badges = card?.querySelectorAll('.card-title > .badge') ?? [];
+  if (count === null) {
+    check(`${label}: unknown list count has no badge`, badges.length === 0);
+    return;
+  }
+  const expected = language === 'ko' ? `${count}건` : count === 1 ? '1 item' : `${count} items`;
+  check(`${label}: title count matches the displayed snapshot`, badges.length === 1
+    && badges[0].textContent === expected && dataRowsOf(card).length === count);
+  check(`${label}: count badge is neutral without an icon`, badges[0]?.dataset.tone === 'neutral'
+    && badges[0]?.querySelector('svg') === null);
+}
+
 function checkTableRoles(label, card) {
   const table = card?.querySelector('table');
   check(`${label}: native table has an explicit table role`, table instanceof HTMLTableElement && table.getAttribute('role') === 'table');
@@ -460,7 +473,7 @@ async function caseDash001() {
     const card = cardOf(root, title);
     checkTableRoles(`DASH-001 ${title}`, card);
     checkHeadCells(`DASH-001 ${title}`, rows, primary, secondary);
-    check(`DASH-001 ${title}: title has no count badge`, card?.querySelector('.card-title .badge') === null);
+    checkListCount(`DASH-001 ${title}`, card, rows.length);
   }
   for (const [title, rows, bytesIndex] of [[t.activeTitle, activeRows, 4], [t.closedTitle, closedRows, 3]]) {
     check(`DASH-001 ${title}: byte column keeps CPY-040/043 copy`, cardOf(root, title)?.querySelectorAll('th')[bytesIndex]?.textContent === t.bytesHeader);
@@ -478,6 +491,10 @@ async function caseDash001() {
   check(
     'DASH-001: list cards show no status badge',
     [t.waitingTitle, t.activeTitle, t.closedTitle].every((title) => badgeOf(cardOf(root, title)) === null),
+  );
+  check(
+    'DASH-001: summary and gauge titles have no list count badge',
+    [t.summaryTitle, t.relayTitle, t.adminTitle].every((title) => cardOf(root, title)?.querySelector('.card-title .badge') === null),
   );
   // API session IDs are restricted to URL-safe characters; exercise escaping at the table's DOM API boundary.
   const encodedTable = activeTable(PANEL_COPY[lang], [{
@@ -518,6 +535,7 @@ async function caseDash002() {
   check('DASH-002: empty lists show no error alert', root.querySelectorAll('.card-alert .alert').length === 0);
   for (const title of [t.waitingTitle, t.activeTitle, t.closedTitle]) {
     checkTableRoles(`DASH-002 ${title}`, cardOf(root, title));
+    checkListCount(`DASH-002 ${title}`, cardOf(root, title), 0);
   }
   checkLayout('DASH-002');
 }
@@ -534,11 +552,23 @@ async function caseDash003() {
   );
   check('DASH-003 initial: no rows and no empty text', dataRowsOf(failedCard).length === 0 && emptyOf(failedCard) === null);
   check('DASH-003 initial: no stale badge', badgeOf(failedCard) === null);
+  checkListCount('DASH-003 initial', failedCard, null);
+  checkListCount('DASH-003 independent active success', cardOf(first.root, t.activeTitle), 1);
+  checkListCount('DASH-003 independent closed success', cardOf(first.root, t.closedTitle), 1);
 
   const stale = await mount(
     fakeApi({
       'GET /api/v1/session': () => session(1),
-      'GET /api/v1/waiting': (n) => (n === 1 ? ok({ as_of: AS_OF, items: [waitingItem()] }) : fail(500)),
+      'GET /api/v1/waiting': (n) => n === 1
+        ? ok({ as_of: AS_OF, items: [waitingItem()] })
+        : wait(250).then(() => fail(500)),
+      'GET /api/v1/sessions': (n) => ok({ as_of: AS_OF, items: [
+        activeItem(), activeItem({ session_id: 'sess_2' }),
+        ...(n === 1 ? [] : [activeItem({ session_id: 'sess_3' })]),
+      ] }),
+      'GET /api/v1/closed-sessions': (n) => n === 1
+        ? ok({ as_of: AS_OF, max_entries: 100, items: [] })
+        : fail(500),
     }),
   );
   await wait(1500);
@@ -551,6 +581,12 @@ async function caseDash003() {
     'DASH-003 stale: previous rows kept',
     dataRowsOf(staleCard).some((row) => row.textContent.includes('relay-7')),
   );
+  checkListCount('DASH-003 stale waiting', staleCard, 1);
+  checkListCount('DASH-003 independently updated active', cardOf(stale.root, t.activeTitle), 3);
+  checkListCount('DASH-003 stale successful empty', cardOf(stale.root, t.closedTitle), 0);
+  stale.root.querySelector('#operations-refresh').click();
+  await waitFor(() => badgeOf(cardOf(stale.root, t.waitingTitle)) !== t.stale);
+  checkListCount('DASH-003 retained while refreshing', cardOf(stale.root, t.waitingTitle), 1);
   checkLayout('DASH-003');
 }
 
@@ -571,6 +607,7 @@ async function caseDash004() {
   check('DASH-004: refreshed value restored', dataRowsOf(card).some((row) => row.textContent.includes('relay-9')));
   check('DASH-004: failure alert removed after success', alertOf(card) === null);
   check('DASH-004: no stale or failure badge left', badgeOf(card) === null);
+  checkListCount('DASH-004 successful retry', card, 1);
   const waitingCalls = api.calls.filter((c) => c.key === 'GET /api/v1/waiting');
   check('DASH-004: explicit refresh sends no poll header', waitingCalls.at(-1)?.poll === false);
   checkLayout('DASH-004');
@@ -595,6 +632,9 @@ async function caseDash005() {
   });
   const first = await mount(slow);
   await waitFor(() => slow.count('GET /api/v1/waiting') === 1);
+  checkListCount('DASH-005 initial loading', cardOf(first.root, t.waitingTitle), null);
+  await waitFor(() => dataRowsOf(cardOf(first.root, t.activeTitle)).length === 1);
+  checkListCount('DASH-005 independent completed active', cardOf(first.root, t.activeTitle), 1);
   first.root.querySelector('#operations-refresh').click();
   await wait(100);
   check('DASH-005 overlap: no second waiting query while one is in flight', slow.count('GET /api/v1/waiting') === 1);
@@ -943,10 +983,18 @@ async function caseDash024() {
 async function caseDash025() {
   const items = new Map();
   const storage = storageOf(items);
-  const api = fakeApi();
+  const api = fakeApi({
+    'GET /api/v1/waiting': () => ok({ as_of: AS_OF, items: [] }),
+    'GET /api/v1/closed-sessions': () => ok({ as_of: AS_OF, max_entries: 100, items: [
+      closedItem(), closedItem({ session_id: 'sess_closed_2' }),
+    ] }),
+  });
   const first = await mount(api, { storage, preferred: ['ko-KR'] });
   await waitFor(() => settled(first.root));
   check('DASH-025 start: browser preference gives Korean', document.documentElement.lang === 'ko');
+  for (const [title, count] of [[COPY.ko.waitingTitle, 0], [COPY.ko.activeTitle, 1], [COPY.ko.closedTitle, 2]]) {
+    checkListCount('DASH-025 Korean before change', cardOf(first.root, title), count, 'ko');
+  }
   const select = first.root.querySelector('#operations-language');
   select.value = 'en';
   select.dispatchEvent(new Event('change'));
@@ -954,6 +1002,9 @@ async function caseDash025() {
   check('DASH-025 change: document language is English', document.documentElement.lang === 'en');
   check('DASH-025 change: copy is English at once', first.root.textContent.includes(COPY.en.operations));
   check('DASH-025 change: choice saved', items.get(STORAGE_KEY) === 'en');
+  for (const [title, count] of [[COPY.en.waitingTitle, 0], [COPY.en.activeTitle, 1], [COPY.en.closedTitle, 2]]) {
+    checkListCount('DASH-025 English after change', cardOf(first.root, title), count, 'en');
+  }
 
   const again = await mount(api, { storage, preferred: ['ko-KR'] });
   await waitFor(() => settled(again.root));
