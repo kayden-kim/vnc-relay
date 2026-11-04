@@ -227,14 +227,41 @@ flowchart LR
 | MGT-001·003·006·015·021·024 | 통과 | 요약·목록·상세, 필드와 전송 방식, 실제 상대 주소, 비인증 거절, 최근 종료 목록의 상한·재시작을 확인했다. |
 | MGT-026 | WSL 통과, Windows 부분 | Linux 전용 정확한 수치 시험은 통과했다. Windows는 이 전체 증거를 갖추지 못했다. |
 | MGT-002 | 통과 | `b20b8dc`에서 E = 5초의 반닫기로 목록·상세의 `state == "closing"`과 `counts.active` 포함을 확인했다. 상대가 닫힌 뒤 상세 404와 최근 종료 목록 포함도 확인했다. `ec05fd1`에서는 초기 교환·대상 연결 구간만 확인하고 `closing` 미관찰로 부분이었다. |
-| MGT-004 | 통과 | 사용자 결정 2026-11-04(Q95)로 조회 오류를 실제 조회 경로의 400·404로 판정한다. `tests/management_query.rs`의 `empty_success_vs_failure_distinction`(비부분, 커밋 `bb44c4f`)이 빈 목록의 `200`·`items: []`와 404 `not_found`·400 `invalid_request`(405·415 포함)를 서로 다른 결과로 확인한다. 조회 처리에는 500 경로가 없다(6절 9행). |
+| MGT-004 | 부분 | 빈 성공과 오류 응답을 확인했으나 `500 internal` 경로를 강제로 만들지 않았다. |
 | MGT-005 | 부분 | 방향별 전송량은 확인했으나 시스템 시험에서 부분 쓰기를 만들지 않았다. |
 | MGT-007 | 부분 | 벽시계 역행은 단위 시험, 재접속은 시스템 시험으로 확인했다. 두 시험은 각각 부분 표식이며 전체 통과로 합치지 않는다. |
-| MGT-013 | 통과 | `crates/adapters/tests/management.rs`의 `completion_mgt013_query_auth_and_failed_termination_responses_keep_secrets_private`(비부분, 커밋 `bb44c4f`)가 실제 중계 바이트, 실제 계정 해시, 조회 경로 5종, 401·403·400·404·405 오류, 실패하는 가짜 중계 제어 포트로 만든 `500 terminate_failed`의 본문과 헤더를 모두 검사한다. 원시 스트림·비밀번호·해시·쿠키 토큰·CSRF 토큰이 없고, 쿠키 토큰은 로그인 `Set-Cookie`에만, CSRF 토큰은 계약이 정한 로그인·세션 정보 필드에만 있다(사용자 결정 2026-11-04(Q95)). |
+| MGT-013 | 부분 | 조회 응답의 비밀 미노출을 확인했다. 작업 4.5의 `completion_q89_auth_csrf_validation_order_and_chunked_body_are_state_preserving`은 종료 요청의 400 본문과 성공 응답에 비밀이 없음을 확인하고, 401·403·404·405는 상태와 오류 코드만 확인한다. `500 terminate_failed` 본문은 실제 네트워크 입력만으로 만들 수 없어 단위 시험으로만 확인했다. |
 | MGT-023 | 통과 | 작업 4.5의 `completion_mgt023_eof_connection_error_and_admin_history_have_final_fields_and_old_ids_404`가 정상 EOF·연결 오류·관리자 종료의 최근 종료 기록과 이전 식별자의 상세 404를 확인했다. 커밋 `59fc535`의 두 OS 게이트에서 통과했다. |
 | MGT-016 | 부분 | 블랙박스 상태 변동 시험만 있으며 내부 기준 시점 일관성 전체의 증거는 아니다. |
 | OPS-033 | 부분 | 관리·상태 연결의 집계와 중계 상한 분리 일부를 확인했다. 전체 시나리오 증거는 남는다. |
 
 - 시험 위치: `tests/management_query.rs`, 단위 시험 `crates/app/src/management/query.rs`, `crates/app/src/relay.rs`, `crates/domain/src/budget.rs`. 시나리오 상태는 시험 표식과 보고서의 판정을 따른다.
 - 남은 범위: 작업 4.4는 위 부분 증거 때문에 완료로 표시하지 않는다. IPv4 매핑 IPv6 주소 표기는 Q88 결정 전까지 계약의 원시 소켓 주소 가정을 유지한다.
+
+### 작업 4.4 완료 대조(2026-11-04)
+
+결론: 작업 4.4의 완료 조건 시나리오는 모두 두 OS에서 비부분 시험으로 통과한다. 커밋 `b0c25f9`의 두 OS 게이트가 통과했다. 그 게이트에서 Windows만 부분이던 MGT-026은 커밋 `0196cab`의 Windows 시험으로 채웠다. 다른 OS의 자동화 불가 예외(사용자 결정 2026-11-04(Q99))는 쓰지 않는다.
+
+- 판정 기준: 사용자 결정 2026-11-04(Q95·Q100·Q101). Q95는 실제 네트워크로 만들 수 없는 실패 경로에 시험용 포트 구현을 쓰도록 정했다. Q100은 L·Lm 사용량을 집계 일관성에서 뺐다. Q101은 MGT-007의 재시작을 새 런타임·리스너로 대신하도록 인정했다.
+- 시험 커밋: `bb44c4f`(MGT-004·012·013), `e9221c6`(OPS-033), `fb8a362`(MGT-005·007·016, `server_shutdown` 조회), `b0c25f9`(로그 순서 단언 보정), `0196cab`(MGT-026 Windows).
+
+| 명령 | 환경 | 결과 |
+| --- | --- | --- |
+| `vr-full.sh` | WSL, `082f5f1` | 실패(`FAILED: scenarios`). `tests/relay_log_scenarios.rs`의 `operations_log_records_contract_events_and_correlates_identifiers`가 수락 사건의 `ts`가 이후 사건의 `ts`보다 늦다는 단언에서 실패했다. `ts`는 기록 때의 벽시계이고, 수락 기록은 연결 작업을 만들기 전에 남는다(`crates/adapters/src/net.rs`). 그래서 벽시계 보정으로 판단했다 [INFERENCE: 실패 실행의 로그 파일은 남지 않았다]. 계약은 `ts`의 단조성을 약속하지 않으므로 `b0c25f9`에서 벽시계 비교 단언 4개를 지우고 줄 순서로 판정했다. 이 시험은 WSL에서 3회 통과했다. |
+| `vr-full.sh` | WSL, `b0c25f9` | 2026-11-04T12:01:00Z 보고서: `ALL PASSED`. 151건: 통과 100, 부분 40, 실패 0, 미실행 0, 미연결 11, 오류 0. `management.md` 27건 모두 통과. 머리의 `+ 미커밋 변경`은 줄바꿈 차이다. |
+| `vr-win.ps1 -Only all` | Windows, `b0c25f9` | 2026-11-04T12:08:11Z 보고서: `ALL PASSED (all)`. 151건: 통과 92, 부분 48, 실패 0, 미실행 0, 미연결 11, 오류 0. `management.md` 27건: 통과 25, 부분 2(MGT-026·MGT-027). |
+
+| 시나리오 | 판정 | 증거 |
+| --- | --- | --- |
+| MGT-001·002·003·006·015·021·023·024 | 통과 | 위 `b20b8dc` 기록과 작업 4.5의 MGT-023 시험이 두 OS에서 다시 통과했다. |
+| MGT-004 | 통과 | `tests/management_query.rs`의 `empty_success_vs_failure_distinction`(비부분, `bb44c4f`)이 빈 목록의 `200`·`items: []`와 404 `not_found`·400 `invalid_request`(405·415 포함)를 서로 다른 결과로 확인한다. 조회 처리에는 500 경로가 없다(6절 9행, Q95). |
+| MGT-005 | 통과 | `crates/adapters/tests/management.rs`의 `completion_mgt005_partial_success_and_write_failure_count_only_delivered_bytes`(비부분). 공개 `RelayStream` 포트로 2·3바이트 부분 쓰기와 5바이트 성공 뒤 쓰기 실패를 넣고, 활성 상세와 최근 종료 목록의 방향별 카운터가 실제로 쓴 바이트와 같은 정수인지 확인한다(Q95). |
+| MGT-007 | 통과 | `completion_mgt007_reconnect_fresh_runtime_and_wall_steps_keep_counters_separate`(비부분). 같은 중계 ID 재접속의 새 카운터, 벽시계 역행·전진 중 0 이상·단조 증가하는 경과 시간, 새 런타임·리스너로 대신한 재시작 뒤 빈 목록과 새 식별자를 한 함수에서 확인한다(Q101). |
+| MGT-013 | 통과 | `completion_mgt013_query_auth_and_failed_termination_responses_keep_secrets_private`(비부분, `bb44c4f`). 조회 경로 5종, 401·403·400·404·405, 가짜 중계 제어 포트로 만든 `500 terminate_failed`의 본문과 헤더에 비밀·원시 스트림이 없다(Q95). |
+| MGT-016 | 통과 | `completion_mgt016_counts_lists_and_as_of_follow_one_capture_while_usage_is_sampled`(비부분). 상태 복사 직후 실제 종료·실제 수락을 일으켜도 각 응답의 집계·목록이 그 응답의 복사본과 같고 `as_of`가 하나다. L 사용량이 집계보다 앞서는 응답은 Q100이 허용한 동작으로 확인한다. |
+| MGT-026 | 통과(두 OS) | Linux: `tests/management_query.rs`의 `counts_and_usage_match_at_limit_with_pending_connections_linux`(비부분). listen 백로그를 가득 채운 대상(`Backlog::saturated`)에 Mode I 대상 연결을 보류시킨다. Windows: `counts_and_usage_match_at_limit_with_pending_connections_windows`(비부분, `0196cab`). Windows는 가득 찬 백로그와 닫힌 루프백 포트 모두에 약 2초 동안 연결을 재시도한 뒤 거절한다(2026-11-04 측정 2.016 s·2.039 s). 시험은 그 창 안의 요약 응답 하나로 판정하고, 창을 놓치면 새 Mode I 연결로 최대 5번 다시 한다. Windows에서 3회 단독 실행과 시험 파일 전체 2회 실행이 통과했다. |
+| OPS-033 | 통과 | `tests/management_query.rs`의 `exhausted_relay_and_admin_budgets_leave_the_other_service_operational`(비부분, `e9221c6`). |
+
+- `server_shutdown` 항목 조회: `completion_mgt023_shutdown_history_is_queryable_and_preserves_prior_eof_cause`(MGT-023 부분 표식)가 실제 Grace → Force 뒤 최근 종료 목록 API에서 `server_shutdown` 항목과, 이미 EOF 정리를 시작한 세션의 `peer_eof` 유지(사용자 결정 2026-11-01(Q82))를 확인했다. 두 OS 게이트에서 통과했다.
+- 남은 한계: MGT-005·007·016·012·013의 시험용 포트는 실제 관리 HTTP·인증·직렬화·`RelayRuntime`을 쓰지만, 부분 쓰기·시각 보정·실패 완료는 실제 OS 입력이 아니다(Q95·Q101).
 

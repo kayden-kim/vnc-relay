@@ -184,6 +184,16 @@ Windows Cargo 실행에는 `CARGO_TARGET_DIR=D:/vr-target-term`, `AWS_LC_SYS_PRE
 
 전체 게이트(커밋 `59fc535`): Windows `vr-win.ps1 -Only all`은 2026-11-01T23:41:53Z 보고서에서 `ALL PASSED (all)`이다(통과 77, 부분 61, 실패 0, 미연결 12). WSL `vr-full.sh`는 23:51:07Z 보고서에서 `FAILED: scenarios`다(통과 81, 부분 55, 실패 2, 미연결 12). 실패 2건은 이 작업과 무관한 RLY-025·026 netns 시험이며, WSL에 `nft`가 없어 실패했다(사용자 결정 2026-11-02(Q93)). `tests/management_terminate.rs` 7건과 관련 단위 시험은 두 OS에서 모두 통과했다. 두 OS의 판정은 MGT-008·009·010·011·014·023 통과, MGT-012·013·OPS-011·RLY-020 부분이다. 계약 실행 기록은 [관리 API 5절](../contracts/management-api-v1.md#5-예제와-계약-테스트)과 [운영 정보 계약 실행 기록](../contracts/ops-info-v1.md#계약-테스트-실행-기록)에 있다.
 
+작업 4.5 완료 대조(2026-11-04): 위 표의 "남은 입증"을 아래 시험으로 채웠다. 커밋 `b0c25f9`의 두 OS 게이트(WSL 2026-11-04T12:01:00Z `ALL PASSED`, Windows 12:08:11Z `ALL PASSED (all)`)에서 MGT-008~012, OPS-011, RLY-020이 모두 두 OS에서 통과했다. 작업 4.5의 완료 조건을 모두 충족했다.
+
+| 시나리오 | 비부분 증거 | 커밋 |
+| --- | --- | --- |
+| MGT-012 | `crates/adapters/tests/management.rs`의 `completion_mgt012_failed_control_and_lost_response_never_invent_completion`. 실패하는 가짜 중계 제어 포트를 실제 관리 HTTP·인증·직렬화에 연결해 HTTP 500 종단 간 경로와 응답 유실 뒤 소유자 정리를 한 함수에서 확인한다(사용자 결정 2026-11-04(Q95)). 제품 코드에 실패 훅은 없다. | `bb44c4f` |
+| OPS-011 | `tests/relay_log_scenarios.rs`의 `operations_log_records_contract_events_and_correlates_identifiers`. 실행파일의 수락·거절·대기·매칭·연결 실패·종료와 관리자 종료 사건을 한 실행에서 확인한다. 순서는 로그 줄 순서로 판정한다(`b0c25f9`). | `b5c1a78`, `b0c25f9` |
+| RLY-020 | `tests/management_terminate.rs`의 `completion_mgt023_eof_connection_error_and_admin_history_have_final_fields_and_old_ids_404`. EOF·연결 오류·관리자 종료를 한 함수에서 확인한다. | `b5c1a78` |
+
+Consumer 화면의 결과 불명·재조회 동작은 이 작업의 범위가 아니며 화면 시나리오 DASH-012·DASH-013(작업 4.11)이 맡는다.
+
 ## 9. 미결정 사항
 
 Q89~Q92는 모두 해결했다. 아래 표는 결정 근거다. 구현·시험 범위는 8절을 따른다. 검증 순서는 계약 1.3절을 따른다. 수락 선형화·실패 판정·취소·인증 수명·Force 경합은 7.1절의 **이 문서의 판단, 사용자 결정 없음**으로 유지한다.
@@ -195,4 +205,4 @@ Q89~Q92는 모두 해결했다. 아래 표는 결정 근거다. 구현·시험 �
 | (해결) Q91: 관리자 E 초과의 원인·side·계정 | `close_cause=close_timeout`. EOF가 없으면 `side` 생략. `session_closed.admin_account`는 생략하며 계정은 `admin_terminate`로 추적한다. | A | 사용자 결정 2026-11-02(Q91), 관리 API 1.9절·운영 정보 1.6절 |
 | (해결) Q92: 관리 연결 U와 E 대기 | 검증·수락된 terminate의 완료 대기 중에만 U를 멈추고 응답 쓰기부터 다시 잰다. Q25의 예외다. | A | 사용자 결정 2026-11-02(Q92), 설정 계약 1.2절·관리 리스너 설계 4절·E>U 시험(TODO 4.5) |
 
-관리 API 6절의 Q88 주소 표기는 사용자 결정 2026-11-02(Q88)으로 해결했다. 조회 직렬화 수정은 같은 작업의 TODO 4.4 범위다. 로그인 CSRF 브라우저 관찰·기본 인증 창 관찰은 열린 항목으로 남긴다. 종료 응답에는 주소가 없고 로그인 구현도 바꾸지 않으므로 이 작업에서 새 선택을 하지 않는다. `server_shutdown` 종료 항목의 외부 조회 가시성은 Force 경합 시험과 연계하되 관찰 전에는 입증했다고 쓰지 않는다.
+관리 API 6절의 Q88 주소 표기는 사용자 결정 2026-11-02(Q88)으로 해결했다. 로그인 CSRF 브라우저 관찰과 기본 인증 창 관찰은 2026-11-04에 Safari를 빼고 해결했다([관리 로그인과 세션 대조 기록](management-session.md#작업-43-증거-보강과-브라우저-관찰2026-11-04)). 종료 응답에는 주소가 없고 로그인 구현도 바꾸지 않으므로 이 작업에서 새 선택을 하지 않는다. `server_shutdown` 종료 항목의 외부 조회는 2026-11-04에 실제 Grace → Force 시험으로 확인했다([관리 조회 대조 기록](management-query.md#작업-44-완료-대조2026-11-04)).

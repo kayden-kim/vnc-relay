@@ -296,3 +296,29 @@ flowchart LR
 - 9절 라는 계약 1.5절·2.1절이 정한 동작으로 닫았다. 7절 계정 이름 행의 표시도 "계약이 정한다"로 고쳤다.
 - 남은 미결정: 9절 자(브라우저 기본 인증 창 관찰)와 차(이 문서 범위 밖)다.
 - 코드는 바꾸지 않았다. 문서만 바뀌었으므로 검증 명령은 다시 실행하지 않았다. 직전 검증 기록은 위 `작업 4.3 결정 반영(2026-10-22)` 절의 표다.
+
+### 작업 4.3 증거 보강과 브라우저 관찰(2026-11-04)
+
+결론: 작업 4.3은 아직 완료가 아니다. 커밋 `b0c25f9`의 두 OS 게이트는 통과했다. 완료 조건 시나리오 중 MGT-027·OPS-029는 Linux에서만 비부분 시험이 있고 Windows는 부분이다. 두 시나리오의 Windows 시험은 의사 콘솔(ConPTY)로 실행파일을 띄워 만들 수 있으므로 자동화 불가 예외(사용자 결정 2026-11-04(Q99))에 해당하지 않는다. 작업 5.3이 Windows 콘솔 시험 파일(사용자 결정 2026-11-04(Q103))에서 두 시험을 만든 뒤 4.3을 닫는다.
+
+- 시험 커밋: `c0d3b59`(MGT-017·019·020·025·027·OPS-029 비부분 시험), `34cefe5`(MGT-025 폴링을 조회 경로로 돌림), `bb44c4f`(가짜 중계 제어 포트로 500 경로 시험, Q95), `b0c25f9`(로그 순서 단언 보정, [관리 조회 대조 기록](management-query.md#작업-44-완료-대조2026-11-04)). 이 절은 문서만 바꾼다.
+- 브라우저 관찰: 9절 자와 [관리 API 계약 6절](../contracts/management-api-v1.md#6-초안을-확정하기-전에-해결할-사항)의 기본 인증 창·로그인 CSRF 항목을 Chrome 156.0.8078.76·Edge 156.0.4314.58(Windows)과 Firefox 159.0(WSL)에서 확인했다. Safari는 macOS가 없어 관찰하지 않았다. 작업 4.12가 Safari를 다시 다룬다.
+
+| 명령 | 환경 | 결과 |
+| --- | --- | --- |
+| `wsl -d Ubuntu -- bash /mnt/d/vr-tools/vr-full.sh` | WSL2 Ubuntu 24.04.4, Rust 1.99.1, `b0c25f9` | 2026-11-04T12:01:00Z 보고서: `ALL PASSED`. 151건: 통과 100, 부분 40, 실패 0, 미실행 0, 미연결 11, 오류 0. |
+| `powershell -NoProfile -ExecutionPolicy Bypass -File D:/vr-tools/vr-win.ps1 -Only all` | Windows 11 Pro 10.0.26200 x64, Rust 1.99.1, `b0c25f9` | 2026-11-04T12:08:11Z 보고서: `ALL PASSED (all)`. 151건: 통과 92, 부분 48, 실패 0, 미실행 0, 미연결 11, 오류 0. |
+
+| 시나리오 | 판정 | 비부분 증거와 남은 증거 |
+| --- | --- | --- |
+| MGT-014 | 통과(두 OS) | `tests/management_terminate.rs`의 `completion_q89_auth_csrf_validation_order_and_chunked_body_are_state_preserving` |
+| MGT-017 | 통과(두 OS) | `crates/adapters/tests/management.rs`의 `https_and_plain_loopback_logins_set_transport_cookies_and_allow_queries` |
+| MGT-018 | 통과(두 OS) | `wrong_password_and_unknown_account_get_the_same_refusal`(`8c87e69`) |
+| MGT-019 | 통과(두 OS) | `expired_admin_cookie_cannot_query_or_terminate_and_the_relay_survives` |
+| MGT-020 | 통과(두 OS) | `tests/management_session.rs`의 `logout_refuses_the_old_cookie_but_keeps_other_admin_and_relay_sessions` |
+| MGT-022 | 통과(두 OS) | `limited_logins_refuse_alike_and_the_right_password_works_after_the_locks`(`8c87e69`) |
+| MGT-025 | 통과(두 OS) | `idle_polling_and_absolute_activity_expiry_leave_existing_relays_alive` |
+| MGT-027 | WSL 통과, Windows 부분 | WSL: `tests/management_session.rs`의 `restart_ends_the_admin_session_and_login_works_again`(`#[cfg(unix)]`, 정상 종료 신호 뒤 재시작). Windows: `forced_restart_ends_the_admin_session_and_login_works_again`(부분, 강제 종료 뒤 재시작). 남은 증거: Windows 콘솔 정상 종료 요청(Ctrl+C) 뒤 재시작. Rust에서 콘솔 API를 부르려면 `unsafe`가 필요하고, 시험 파일 하나의 예외는 Q103으로 작업 5.3에 허용됐다. |
+| OPS-029 | WSL 통과, Windows 부분 | WSL: `tests/management_session.rs`의 `cli_prepared_admins_have_hidden_salted_credentials_and_equal_relay_rights`(`#[cfg(target_os = "linux")]`, PTY로 숨김 비밀번호 입력). Windows: 계정 파일·해시·로그인 단위·통합 시험이 부분으로 통과한다. 남은 증거: ConPTY로 `admin add`의 숨김 입력을 넣는 같은 범위의 시험. 작업 5.3의 Windows 콘솔 시험 파일에서 만든다. |
+
+- 남은 미결정: 9절 차(이 문서 범위 밖)만 남는다. 9절 자는 Safari를 빼고 해결됐다.
