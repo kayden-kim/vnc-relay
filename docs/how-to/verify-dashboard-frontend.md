@@ -1112,7 +1112,7 @@ Windows의 실제 debug 실행파일을 루프백에서 시작했다. CLI `admin
 
 ### 4.20 목록 개수 배지 Q115 (2026-11-05)
 
-- 대상: `7f2b684` 뒤 작업 트리. [화면 스펙 CPY-084·085](../specs/dashboard.md#932-scr-001-운영-현황)와 [운영 현황 앱 4·5절](../architectures/dashboard-operations-overview.md#4-화면-골격-scr-001)을 먼저 갱신했다. 문구는 사용자 결정 2026-11-05(Q115)을 따른다.
+- 대상: `5a5fa10`의 개수 배지와 `177040d`의 시험 대기 문구 수정. [화면 스펙 CPY-084·085](../specs/dashboard.md#932-scr-001-운영-현황)와 [운영 현황 앱 4·5절](../architectures/dashboard-operations-overview.md#4-화면-골격-scr-001)을 먼저 갱신했다. 문구는 사용자 결정 2026-11-05(Q115)을 따른다.
 - `copy.js`가 한국어 `{n}건`과 영어 단수·복수를 제공한다. `operations.js`는 각 목록의 표시 중인 성공 응답 항목 수를 `panels.js`에 넘긴다. `applyListCount`가 기존 neutral·아이콘 없는 배지를 갱신한다. 새 CSS·토큰·공통 컴포넌트 API는 없다.
 - `operations-scenarios.js`와 실서버 시험의 기존 DASH-001~004·020·025 본문을 보강했다. 0·1·여러 항목, 목록과 요약의 불일치, 독립 갱신, 첫 성공 전·실패와 오래된 성공 데이터, 언어 변경을 확인한다. 전체 행 표식의 소유자는 바꾸지 않았다.
 - 채택 시안의 영어 정상 상태 세 배지를 `3 items`·`3 items`·`7 items`로 맞췄다. 구조 편집으로 해당 span 세 곳만 바꿨다. 시안의 초기 조회·최초 실패에는 배지가 없고, 빈 목록은 0건, 갱신·오래된 데이터는 이전 개수를 유지함을 확인했다. 영어 시안도 열어 캡처했다.
@@ -1142,7 +1142,18 @@ Windows에서 `cargo fmt --all`과 `cargo build`가 종료 0이었다. 새 debug
 
 `5a5fa10`의 Windows 전체 게이트는 실서버 시험 26건이 모두 통과했지만 기존 브라우저 시험의 DASH-025 한 건이 실패했다(36 passed·1 failed). URL이 `lang=en`인 6개 폭에서만 실패했다. 이 사례는 처음 한국어 화면을 만들지만 `settled()`가 URL의 영어 `Loading`으로 대기 상태를 찾았다. 한국어 `조회 중`을 알아보지 못해 응답 전 배지를 검사했다. `settled(root, copy=t)`에 실제 렌더 언어를 넘기도록 시험만 고쳤다. 수정 뒤 `cargo test --test dashboard_browser operations_keeps_the_chosen_language_in_browser -- --nocapture`는 통과했다(1 passed·0 failed, 10.74초). 해당 첫 게이트의 시나리오 집계는 통과 132·부분 14·실패 1·미실행 0·미연결 6·오류 0이었다. 실패 보고서는 저장소 밖 `D:/vr-tools/tmp/win-scenario-report-5a5fa10-failed.md`에 보존했다.
 
-변경 뒤 두 OS 전체 게이트는 아직 실행 전이다. 작업 4.12의 Safari·실제 모바일 기기·스크린 리더·사람의 시안 대조는 이번 스모크로 완료되지 않는다.
+최종 두 OS 게이트는 `177040d`에서 순서대로 실행했다. 실행 중 코드·문서를 수정하지 않았다. 환경과 target 경로는 4.19절과 같다. Rust는 두 OS 모두 1.99.1이다.
+
+| 환경·보고 시각(UTC) | 명령 | 실제 결과 |
+| --- | --- | --- |
+| Windows 11 Pro x64, `2026-11-04T22:43:00Z` | `powershell -NoProfile -ExecutionPolicy Bypass -File D:/vr-tools/vr-win.ps1 -Only all` | `ALL PASSED (all)`, 모든 단계 종료 0. 브라우저 37/37(186.30초), 실서버 26/26(503.63초), 코드 지도 4/4 통과. 시나리오 153개 중 통과 133·부분 14·실패 0·미실행 0·미연결 6·오류 0 |
+| Ubuntu 24.04.4 LTS x64(WSL2), `2026-11-04T22:59:38Z` | `wsl -d Ubuntu -- bash /mnt/d/vr-tools/vr-full.sh` | `ALL PASSED`, 모든 단계 종료 0. 브라우저 37/37(112.48초), 실서버 26/26(489.85초), 코드 지도 4/4 통과. 시나리오 153개 중 통과 137·부분 9·실패 0·미실행 1(Windows 전용 OPS-044)·미연결 6·오류 0 |
+
+WSL 보고서는 `177040d + 미커밋 변경`으로 표시됐다. 실행 뒤 원인을 확인했다. WSL의 `core.autocrlf`는 false였다. `wsl -d Ubuntu --exec git -C /mnt/d/Workspace/vnc-relay -c core.autocrlf=true diff --exit-code -- . ":(exclude)docs/**"`는 종료 0이었다. 줄바꿈을 정규화하면 Rust·시험·웹 소스를 포함한 문서 밖의 변경은 없다. `git diff --ignore-cr-at-eol --stat`에는 게이트 뒤 검증 기록을 고친 문서 5개만 나왔다. 따라서 실제 코드 차이가 아니라 CRLF 판정 차이로 확인했고 WSL 게이트를 다시 실행하지 않았다. 처음 비교 명령은 WSL 기본 셸의 괄호 해석으로 실패했으며, 위 `--exec` 명령이 실제 확인 결과다.
+
+두 OS 모두 DASH-001~014·016~022·024~027은 통과했다. DASH-015는 부분이고 DASH-023은 미연결이다. 작업 4.12의 Safari·실제 모바일 기기·스크린 리더·사람의 시안 대조는 이 결과로 완료되지 않는다.
+
+최종 문서 검사 `python D:/vr-tools/tmp/doc_check.py`는 새 오류 0건(`errors_total=2 known=2 other=0`)이었다. 기존 CPY-008 링크와 TLS 표 열 수 오류, 누락된 루트 `README.md` 표시는 4.19절과 같다.
 
 ## 5. 중단 조건
 
