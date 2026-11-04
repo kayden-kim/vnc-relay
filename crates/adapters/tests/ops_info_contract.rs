@@ -613,7 +613,7 @@ fn assert_error_reply(reply: &Reply, status: u16, code: &str) {
     );
 }
 
-/// spec: operations.md:OPS-013 partial
+/// spec: operations.md:OPS-013
 /// spec: operations.md:OPS-032 partial
 #[test]
 fn answers_liveness_and_readiness_in_each_state_with_only_the_contract_fields() {

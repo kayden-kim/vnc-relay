@@ -8,6 +8,7 @@ VNC Relay가 운영자에게 내보내는 두 가지 정보의 교환 형식을 
 | 변경 | 호환 변경(2026-11-02, 1.3.0 유지): 수락 소켓의 TCP keepalive 설정 실패를 `connection_error`·`io_error`로 기록하고 전송별 `stage`와 사건 순서를 정했다(사용자 결정 2026-11-02(Q85)). `admin_terminate.result`에 `already_closed`를 더했다(사용자 결정 2026-11-02(Q90)). 관리자 정리의 E 만료는 `close_timeout`이며 EOF가 없으면 `side`를 생략한다. 이때 계정은 `admin_terminate`로 추적한다(사용자 결정 2026-11-02(Q91)). 구현·시험 완료 여부는 5절과 TODO 2.11·4.5에서 따로 관리한다. |
 | 호환 값 추가 | 2026-11-02, 1.3.0 유지: `session_closed.close_cause`에 `internal_error`를 더했다(사용자 결정 2026-11-02(Q94)). `level`은 서비스가 계속되는 비정상 종료 원인에 해당하므로 1.3절의 `warn`을 따른다. 기존 원인 값은 유지하며 3절의 허용 값 추가 규칙을 따른다. |
 | 호환 조건 추가 | 2026-11-04, 1.3.0 유지: Windows 콘솔 창 닫기도 종료 요청이다. `shutdown_started`(`trigger` = `requested`) 뒤 G를 기다리지 않고 남은 세션이 있으면 `shutdown_forced`를 쓴다(사용자 결정 2026-11-04(Q102)). 새 사건·필드·값은 없다. |
+| 호환 사건 추가 | 2026-11-04, 1.3.0 유지: 로그 파일을 다시 열지 못했을 때의 `log_reopen_failed`를 더했다(1.1절 "파일 다시 열기", 사용자 결정 2026-11-04(Q104·Q109·Q110)). 3절의 사건 추가 규칙을 따른다. |
 | 상태 | Active(2026-10-16 채택) |
 | 소유자 | vnc-relay 프로젝트 관리자 |
 | 만드는 쪽(Producer) | `vnc-relay` (`vnc-relay serve` 프로세스) |
@@ -41,6 +42,7 @@ VNC Relay가 운영자에게 내보내는 두 가지 정보의 교환 형식을 
 | 문자열 길이 | `detail`은 512바이트, `origin`·`target_host`는 256바이트까지 쓴다. 넘는 부분은 잘라낸다. |
 | 출력 위치 | 설정(`[log] output`)이 정한다. 설정을 읽기 전에 생긴 사건(설정 파일 오류로 인한 `startup_failed`)과 로그 파일을 열지 못한 사건(`log_file_unavailable`의 `startup_failed`)은 표준 출력에 쓴다. |
 | 출력 실패 | 줄을 쓰지 못하면 그 줄을 버리고 서비스를 계속한다. 처음 실패할 때만 stderr에 `warning[log_write_failed] key=log.output: <message>`를 한 줄 쓴다([CLI 계약 1.5절](cli-v1.md#15-입력과-출력-규칙)의 형식). 이후 실패는 알리지 않는다(사용자 결정 2026-10-20). |
+| 파일 다시 열기 | 출력 위치가 파일이면 같은 경로를 다시 열어 그 경로의 파일에 이어 쓴다. 파일이 없으면 만든다. 경로의 이름 변경·삭제·생성 알림을 받으면 곧바로, 그리고 `reload.poll_secs`(Dp)마다 항상 다시 연다. 다시 열기 전에 쓴 줄은 이전 파일에, 다시 연 뒤의 줄은 새 파일에 있다. 한 줄이 두 파일에 나뉘거나 겹치지 않는다. 다시 열기에 성공하면 사건을 쓰지 않는다(이 문서의 판단, 사용자 결정 없음: 주기마다 다시 열므로 성공을 기록하면 같은 줄이 Dp마다 쌓인다). 다시 열기에 실패하면 이전 파일에 계속 쓰고, 다음 알림·주기에 다시 시도한다. 실패가 시작될 때만 stderr에 `warning[log_reopen_failed] key=log.output: <message>`를 한 줄 쓰고 `log_reopen_failed` 사건을 이전 파일에 쓴다. 다시 열기에 성공한 뒤 다시 실패하면 새 실패로 보고 한 번 더 알린다(사용자 결정 2026-11-04(Q104·Q109·Q110)). 표준 출력이면 다시 열지 않는다. |
 
 ### 1.2 공통 필드
 
@@ -129,6 +131,12 @@ VNC Relay가 운영자에게 내보내는 두 가지 정보의 교환 형식을 
 | `reload_watch_failed` | `error` | 실행 중 파일 변경 감지(OS 알림 또는 주기 확인)에 장애가 생겼을 때. 이전 유효 설정으로 계속 운영한다. | `reason`: `notify_error` 또는 `poll_error`. `detail?` | OPS-028 |
 
 `reload_rejected`와 `reload_restart_required`는 서로 다른 사건이다. 재시작 필요는 검증 실패로 세지 않는다. 자동 재로드가 성공하지 않았는데 `reload_applied`를 쓰지 않는다. 시작 전에 감지 준비가 불가능하면 `reload_watch_failed`가 아니라 `startup_failed`(`watch_unavailable`)다.
+
+#### 로그 출력
+
+| 사건 | `level` | 발생 시점 | 필드 | 스펙 근거 |
+| --- | --- | --- | --- | --- |
+| `log_reopen_failed` | `warn` | 로그 파일 다시 열기(1.1절)가 실패하기 시작했을 때. 이전 파일에 쓴다. 실패가 이어지는 동안은 다시 쓰지 않는다. | `reason`: 항상 `log_file_unavailable`. `config_key`: 항상 `log.output`. `detail?`: 원인 문장(상위 디렉터리 없음·권한 없음·디렉터리임·운영체제 오류 문장). 경로 값은 쓰지 않는다. | OPS-045 |
 
 #### 접속 수락·거절·중단
 
@@ -418,6 +426,7 @@ GET /readyz ->  503 {"status":"not_ready","reason":"shutting_down"}
 | Producer / `tests/relay_dead_peer_linux.rs`의 `removes_unresponsive_waiting_server_and_reuses_id_and_l`·`removes_unresponsive_active_peers_without_harming_other_sessions`(Linux 전용), 단위 `net.rs`의 `socket_error_tests::classifies_only_linux_socket_timeouts_as_dead_connections`, `websocket_stream/tests.rs`의 `classifies_underlying_ws_and_wss_socket_timeouts_without_changing_other_errors` | 응답 없는 대기 연결의 `waiting_removed(reason=dead_connection)`, 활성 세션의 `session_closed(close_cause=dead_connection, side)`. Linux 소켓의 `ETIMEDOUT`·`EHOSTUNREACH`·`ENETUNREACH`를 `dead_connection`으로 분류한다([연결 상한 설계](../architectures/connection-limits.md)의 구현 판단). 스펙 [RLY-025](../specs/relay.md#7-수용-테스트), [RLY-026](../specs/relay.md#7-수용-테스트) | 통과(Windows는 부분) | 커밋 `bf27d30`의 WSL 게이트에서 두 시스템 시험과 단위 시험 2건이 통과했다. 실제 DROP으로 만든 끊긴 연결이 `dead_connection`으로 기록됐다. 같은 조건의 커널 탐침은 `ETIMEDOUT`(`Connection timed out`)을 받았다. `EHOSTUNREACH`·`ENETUNREACH`는 실제 오류로 관찰하지 않았다. Windows는 Linux 전용 시험이 빠져 부분이다(사용자 결정 2026-11-02(Q86)). 이전 커밋 `59fc535`의 WSL 게이트는 `nft`가 없어 실패했다(사용자 결정 2026-11-02(Q93)). |
 | Producer / 통합, 일부 생성 | 관리자 로그인 성공·실패·제한 사건. 스펙 [MGT-017](../specs/management.md#7-수용-테스트), [MGT-018](../specs/management.md#7-수용-테스트), [MGT-022](../specs/management.md#7-수용-테스트) | 미실행 | 구현: `ops_log.rs`(세 사건의 줄 형식), `login.rs`(사건 값 단위 시험). 시험: 로그인 성공 줄은 `tests/management_session.rs`의 `plain_loopback_login_opens_the_session_and_logs_success`가 확인한다. 실패·제한·제한 시작 줄 형식은 `ops_log.rs`의 `admin_login_lines_carry_only_their_own_fields`가 확인한다. |
 | Producer / 통합, 미생성 | 실행 중인 프로세스에서 시작 중·종료 유예 중 `/readyz` 503(유예 중 `/livez`는 200), `listener_failed`. 스펙 [OPS-013](../specs/operations.md#7-수용-테스트)(나머지), [OPS-043](../specs/operations.md#7-수용-테스트) | 미실행 | 종료 유예·리스너 실패 판정 미구현 |
+| Producer / 통합, 미생성 | 로그 파일 다시 열기(1.1절): 이름 변경 뒤 알림·Dp 주기의 다시 열기, 줄이 두 파일에 겹치거나 빠지지 않음, 다시 열기 실패 시 이전 파일 유지와 한 번만 쓰는 `warning[log_reopen_failed]`·`log_reopen_failed`, 복구 뒤 다시 열기. 스펙 [OPS-045](../specs/operations.md#7-수용-테스트) | 미실행 | 작업 5.6에서 구현한다 |
 | Consumer / 수집 도구 계약 테스트, 위치 미정 | 알 수 없는 필드·사건·값 무시(3절), `level`·`event` 분기 | 미실행 | 소비자 테스트 위치 없음 |
 | Consumer / 상태 도구 계약 테스트, 위치 미정 | HTTP 상태 코드로 판정, 알 수 없는 `reason` 무시(3절) | 미실행 | 소비자 테스트 위치 없음 |
 
