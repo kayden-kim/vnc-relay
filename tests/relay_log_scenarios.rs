@@ -441,14 +441,30 @@ impl TargetServer {
         Self { listener, port }
     }
 
+    /// Waits at most `LIMIT`; a rejected target request fails the test instead of hanging the run.
     fn accept(&self) -> TcpStream {
-        if let Err(e) = self.listener.set_nonblocking(false) {
+        if let Err(e) = self.listener.set_nonblocking(true) {
             panic!("target nonblocking: {e:?}");
         }
-        let (stream, _) = match self.listener.accept() {
-            Ok(pair) => pair,
-            Err(e) => panic!("accept target stream: {e:?}"),
+        let deadline = Instant::now() + LIMIT;
+        let stream = loop {
+            match self.listener.accept() {
+                Ok((stream, _)) => break stream,
+                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                    assert!(
+                        Instant::now() < deadline,
+                        "target port {} received no connection",
+                        self.port
+                    );
+                    std::thread::sleep(Duration::from_millis(10));
+                }
+                Err(e) => panic!("accept target stream: {e:?}"),
+            }
         };
+        // Windows accepted sockets inherit the listener's non-blocking mode.
+        if let Err(e) = stream.set_nonblocking(false) {
+            panic!("target stream blocking: {e:?}");
+        }
         if let Err(e) = stream.set_read_timeout(Some(LIMIT)) {
             panic!("target read timeout: {e:?}");
         }
@@ -558,7 +574,7 @@ allow = ["127.0.0.1"]
 {ws_table}
 [mode1]
 enabled = true
-allow_targets = ["127.0.0.1:5000-65535"]
+allow_targets = ["127.0.0.1:1024-65535"]
 [mode2]
 enabled = true
 [limits]
