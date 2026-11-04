@@ -326,7 +326,7 @@ Mode I·II 초기 흐름을 추정 없이 설명할 수 있게 한다. 관찰은
   - 기준: [운영 스펙 6절](specs/operations.md#6-비기능호환성출처-수용-조건), [PRD 12절](requirements/PRD.md#12-미확정-결정과-주요-위험)
   - 완료 조건: OPS-021. OPS-TBD-005를 해소한다.
   - 선행: 0.3
-  - 현재: 저작권자와 적용 연도는 나중에 정한다(사용자 결정 2026-11-04(Q97)). 검토 기록·의존성 고지·대시보드 JS 의존성 확인을 먼저 진행한다.
+  - 현재: 출처 검토, 두 배포 대상의 의존성 고지 전문(`THIRD-PARTY-NOTICES.txt`, `cargo xtask notices --check`), 대시보드 외부 JS 의존성 없음 확인을 [라이선스 검사 기록](how-to/check-dependency-licenses.md#41-출처-검토-기록-2026-11-04)에 남겼다. 오프라인 고지 대조 시험(`tests/dependency_notices.rs`)은 OPS-021 `partial`이다. 저작권자와 적용 연도는 나중에 정한다(사용자 결정 2026-11-04(Q97)). MIT LICENSE를 쓰고 검토하기 전까지 완료로 표시하지 않는다.
 - [ ] **5.8 구조 대조**: 코드 지도·모듈 설계와 실제 코드의 책임 위치를 대조하고 코드 지도를 `Current`로 바꾼다.
   - 기준: [아키텍처 작성 규칙](architectures/AGENTS.md)
   - 완료 조건: OPS-022

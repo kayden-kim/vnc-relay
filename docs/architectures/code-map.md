@@ -63,7 +63,7 @@ flowchart LR
 | app | `crates/app` (`vnc-relay-app`) | 중계·관리·재로드·준비 상태·계정 준비 사용 사례. 외부 기능은 포트로 정의한다. | domain. tokio의 동기화·시간·입출력 trait | 컴파일, `cargo xtask layers`, `crates/app/clippy.toml`의 입출력 금지 목록과 `cargo clippy` |
 | adapters | `crates/adapters` (`vnc-relay-adapters`) | TCP·TLS·WS·HTTP·파일·운영 로그·난수·터미널. app 포트를 구현한다. | domain, app, [PRD 승인 라이브러리](../requirements/PRD.md#확정-기준) | `cargo xtask layers`, [라이선스 검사](../how-to/check-dependency-licenses.md) |
 | 실행파일 조립 | 루트 crate `vnc-relay`의 `src/` | CLI·종료 코드·런타임·OS 신호·객체 연결. 업무 규칙은 두지 않는다. | domain, app, adapters, clap, tokio. rustls는 개발 의존성이다. | 코드 리뷰, 컴파일, `cargo xtask layers` |
-| 개발 도구 | `xtask/` | 시나리오 보고·레이어 검사·토큰 생성과 대조·로컬 미리보기 | 제품 crate에 의존하지 않는다. | `cargo xtask layers` |
+| 개발 도구 | `xtask/` | 시나리오 보고·레이어 검사·배포 고지 생성과 대조·토큰 생성과 대조·로컬 미리보기 | 제품 crate에 의존하지 않는다. | `cargo xtask layers` |
 | 정적 대시보드 | `web/dashboard/` | HTML·CSS·JS 화면·공통 컴포넌트·생성 복사본·미리보기·브라우저 시험 페이지 | 관리 API만 HTTP로 호출한다. JS 외부 의존성이 없다. | [프런트엔드 컨벤션](../conventions/frontend.md), [대시보드 검증](../how-to/verify-dashboard-frontend.md), `cargo xtask tokens --check` |
 
 ```mermaid
@@ -144,6 +144,7 @@ flowchart LR
 | `xtask/src/main.rs` `main`; `xtask/src/cargo.rs` `metadata`; `xtask/src/layers.rs` `check` | 도구 진입·의존 검사 | 하위 명령 선택, Cargo 메타데이터, 허용 crate·버전 요구 검사 | 제품 실행 | std·serde_json | [xtask](xtask.md) |
 | `xtask/src/scenarios.rs` `run` `locate`; `xtask/src/scenarios/spec.rs` `parse`; `xtask/src/scenarios/markers.rs` `scan`; `xtask/src/scenarios/test_run.rs` `run`; `xtask/src/scenarios/report.rs` `Report` | 시나리오 보고 | 수용 표·표식·Cargo 테스트 결과 연결과 부분·미연결·실패 판정 | 책임 문장 의미 판정 | Cargo 출력·std | [xtask](xtask.md) |
 | `xtask/src/tokens.rs` `run`; `xtask/src/tokens/front_matter.rs` `parse_document`; `xtask/src/tokens/screen_css.rs` `check`; `xtask/src/tokens/shared.rs` `write` `check`; `xtask/src/dashboard_serve.rs` `run` | 대시보드 도구 | 토큰 생성·CSS 검사·로그인 공통 복사본 대조·루프백 미리보기 | 제품 HTTP 제공 | std | [xtask](xtask.md) |
+| `xtask/src/notices.rs` `run` `render` `collect_texts` | 배포 의존성 고지 | 두 대상의 일반·빌드 의존성 합집합과 고지 전문 생성·대조 | 허용 라이선스 판정·프로젝트 MIT 고지 확정 | Cargo 출력·std·serde_json | [xtask](xtask.md), [라이선스 검사](../how-to/check-dependency-licenses.md) |
 | `web/dashboard/app/index.html`; `web/dashboard/app/main.js`; `web/dashboard/app/router.js`; `web/dashboard/app/shell.js`; `web/dashboard/app/operations.js`; `web/dashboard/app/session.js` | 화면·라우팅 | 부팅·셸·운영 현황·세션 상세·화면 전환 | 서버 규칙 | 공통 JS·관리 API | [대시보드 컴포넌트](dashboard-components.md) |
 | `web/dashboard/app/api.js`; `web/dashboard/app/query.js`; `web/dashboard/app/model.js`; `web/dashboard/app/panels.js`; `web/dashboard/app/format.js`; `web/dashboard/app/copy.js`; `web/dashboard/app/language.js` | 화면 공통 상태 | API 통신·폴링·조회 모델·패널·표시·문구·언어 | 중계 상태 소유 | 관리 API·브라우저 | [대시보드 컴포넌트](dashboard-components.md) |
 | `web/dashboard/app/components/`; `web/dashboard/app/styles/`; `web/dashboard/app/app.css`; `web/dashboard/app/tokens.css` | 공통 표시 | 컴포넌트·공통 스타일·화면 스타일·생성 토큰 | 서버 권한 | 브라우저 | [프런트엔드 컨벤션](../conventions/frontend.md) |
@@ -158,6 +159,7 @@ flowchart LR
 | --- | --- |
 | `tests/cli.rs`; `tests/dashboard_assets.rs`; `crates/adapters/tests/accounts_contract.rs` | 표식 없음. CLI·정적 파일 표·계정 계약 내부 검사 |
 | `tests/code_map.rs` `code_map_paths_and_symbols_resolve_to_current_code` | operations.md: OPS-022. §2 경로·정의와 §3·§4 파일 단위 연결 근거 |
+| `tests/dependency_notices.rs` `distribution_notices_match_locked_dependencies_and_license_texts` | operations.md: OPS-021 partial. 오프라인 고지 대조만 확인하며 프로젝트 LICENSE는 확인하지 않는다. |
 | `tests/admin.rs` | operations.md: OPS-029·030 |
 | `tests/serve.rs` | operations.md: 시작·종료·L/H·상태·관리 보안·IP·중복 시작. relay.md: 초기 교환·Mode I/II·중계·half-close·IP. websocket.md: WS-024 |
 | `tests/dashboard_browser.rs` | dashboard.md: DASH-001~022·024~027 |
