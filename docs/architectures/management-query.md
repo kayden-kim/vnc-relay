@@ -19,7 +19,7 @@
   - 인증 우선 검증: 유효한 관리 세션 쿠키를 검증한다. 경로·메서드·형식 검사보다 인증이 항상 우선하며([관리 API 계약 2.1절](../contracts/management-api-v1.md#21-오류-본문과-상태-코드) line 355: "경로·메서드가 틀려도 인증이 먼저다"), 인증 실패 시 즉시 `401 unauthenticated`를 반환한다.
   - 조회 경로 라우팅: 인증 통과 후 네 가지 조회 엔드포인트(`GET /api/v1/summary`, `GET /api/v1/waiting`, `GET /api/v1/sessions`, `GET /api/v1/sessions/{session_id}`, `GET /api/v1/closed-sessions`)를 처리한다. 조회 경로는 오직 `GET` 요청만 허용하며, 다른 메서드는 `405`(`Allow: GET`, `code: "invalid_request"`)로 거절한다.
   - 세션 인증 및 유휴 갱신 연계: `X-Relay-Poll` 헤더는 오직 `GET` 요청에서 값 `1`만 유효하며, 다른 값이나 다른 메서드에 포함되면 `400 invalid_request`를 반환한다. 오직 헤더가 없을 때만 사용자 행동으로 간주하여 관리 세션 유휴 만료 시각을 연장한다(`AdminAuth::touch`). 자동 폴링 요청(`X-Relay-Poll: 1`)은 유휴 만료를 연장하지 않는다.
-  - 스냅샷 일관성 보장(MGT-016): 한 번의 요청 처리 안에서 단일 기준 시점(`as_of_mono`, `as_of_wall`)을 포착하고, `RelayRuntime`의 `std::sync::Mutex<RelayState>`를 단 한 번만 짧게 획득해 대기·활성·최근 종료 상태를 복사한다.
+  - 스냅샷 일관성 보장(MGT-016): 한 번의 요청 처리 안에서 `RelayRuntime`의 `std::sync::Mutex<RelayState>`를 단 한 번만 짧게 획득해 대기·활성·최근 종료 상태를 복사하고, 바로 뒤에 기준 시점(`as_of_wall`, `as_of_mono`)을 읽는다. 집계와 목록은 이 한 번의 복사에서 만든다. 서버 요약의 L·Lm 사용량은 잠금 밖에서 `ConnectionBudget::current()`로 따로 읽으므로, 연결이 바뀌는 동안 같은 응답의 집계와 잠깐 어긋날 수 있다. 이는 스펙 2.2절이 허용한 동작이다(사용자 결정 2026-11-04(Q100)).
   - 활성 세션 상태 및 포함 범위: `closing` 상태인 세션도 정리가 완료되기 전까지는 활성 세션 목록에 포함되고 `counts.active`에 집계된다(스펙 §2, §3.2).
   - 식별자 기준 상세 조회: 세션 상세 조회는 오직 `session_id`로만 대상을 찾으며, 동일한 중계 ID(`relay_id`)를 가진 다른 세션으로 대체하지 않는다(MGT-R02, MGT-R07).
   - 세션 식별자 형식 검증: `GET /api/v1/sessions/{session_id}` 요청 시 정규식 크레이트 없이 ASCII 조건문(`len 1~64`, 영문 대소문자·숫자·밑줄·하이픈)으로 검증한다. 잘못된 형식이면 즉시 `400 invalid_request`를 반환하고, 형식은 올바르나 활성 세션 표에 없으면(최근 종료 목록에 있는 경우 포함) `404 not_found`를 반환한다(스펙 §2.3, MGT-023).
@@ -129,7 +129,7 @@ flowchart LR
 | 6. GET 요청에 비어있지 않으나 JSON이 아닌 본문 포함 시 | `415 invalid_request` (`code`: `invalid_request`, `message`: "요청 본문은 application/json이어야 한다.") | 상태 변경 없음 | 계약 1.1절 line 38 |
 | 7. 정상적인 빈 목록(대기 0건, 활성 0건 등) | `200 OK`와 `items: []` 반환. `500 internal`이나 오류로 대신하지 않음 | 상태 변경 없음 | MGT-004 |
 | 8. 리소스 메트릭 읽기 실패 분기 | 아토믹 변수 및 인메모리 카운터로 읽기 실패 분기(dead branch)가 없으며 항상 정수 반환. (계약의 `read_failed`는 실패 경로가 존재할 때의 규정임) | 상태 변경 없음 | 스펙 §2, 계약 §1.1 |
-| 9. 스냅샷 생성 중 예상치 못한 내부 실패 | `500 internal` (`code`: `internal`, `message`: "내부 오류가 발생했습니다.") | 중계 영향 없음 | MGT-004, DASH-003 |
+| 9. 스냅샷 생성 중 내부 실패 | 경로 없음. `RelayStateSource::snapshot`은 실패를 돌려주지 않으므로 조회 처리(`query_api.rs`)에는 `500` 응답이 없다. 계약 2.1절의 `500 internal`은 실패 경로가 있는 처리(로그인·세션 경로의 `session_api.rs`)에만 해당한다. MGT-004의 "조회 오류"는 실제 조회 경로의 `400 invalid_request`·`404 not_found`로 판정한다(사용자 결정 2026-11-04(Q95)) | 상태 변경 없음 | MGT-004, DASH-003 |
 
 ## 7. 설계 선택과 테스트 계획
 
@@ -156,18 +156,18 @@ flowchart LR
 | MGT-001 | FR-06 / MGT-R01 | 통합 | `crates/adapters/tests/management.rs` | 대기 연결 n개, 활성 세션 m개 상태에서 요약 집계와 각 목록 API의 항목 수 및 내용 일치 검증 계획 |
 | MGT-002 | FR-06 / MGT-R01 | 통합 | `crates/adapters/tests/management.rs` | 초기 교환 중, Mode I 대상 연결 중, 종료 정리 중의 각 상태가 대기·활성 집계에 올바른 시점에 반영되는지 검증 계획 |
 | MGT-003 | FR-06 / MGT-R02 | 통합 | `crates/adapters/tests/management.rs` | 활성 세션 식별자로 상세 조회 시 모드·전송경로·주소·바이트수 확인, 시작 시각 UTC ISO 8601 및 바이트 정수 검증 계획 |
-| MGT-004 | FR-06 / MGT-R03 | 단위/통합 | `crates/adapters/tests/management.rs` | 대기/활성 목록이 비었을 때 `200 OK` 빈 배열 반환과, 핸들러 실패 시의 `500 internal` 분리 검증 계획 |
-| MGT-005 | FR-06 / MGT-R04 | 단위/통합 | `crates/app/src/relay/session.rs`, `crates/adapters/tests/management.rs` | Viewer→Target, Target→Viewer 양방향 데이터 및 부분 쓰기 발생 시 정확한 바이트 누적과 조회 검증 계획 |
+| MGT-004 | FR-06 / MGT-R03 | 단위/통합 | `tests/management_query.rs` | 대기·활성 목록이 비었을 때의 `200 OK` 빈 배열과 실제 조회 오류(`400 invalid_request`·`404 not_found`)를 서로 다른 결과로 확인한다(사용자 결정 2026-11-04(Q95)) |
+| MGT-005 | FR-06 / MGT-R04 | 단위/통합 | `crates/app/src/relay/session.rs`, `crates/adapters/tests/management.rs` | 실제 관리 HTTP와 실제 `RelayRuntime`·`RelayService`에 공개 `RelayStream` 포트로 부분 쓰기(2·3바이트)와 부분 성공 뒤 쓰기 실패를 넣는다. 방향별로 다른 크기의 데이터를 보내 활성 상세와 최근 종료 목록의 카운터가 실제로 쓴 바이트와 같고 정수인지 확인한다(`completion_mgt005_partial_success_and_write_failure_count_only_delivered_bytes`) |
 | MGT-006 | FR-06 / MGT-R04 | 통합 | `crates/adapters/tests/management.rs` | TCP, WS, WSS 각각의 전송 경로에서 프로토콜 프레이밍 제외 후 순수 RFB 페이로드 카운터 집계 검증 계획 |
-| MGT-007 | FR-06 / MGT-R04 | 단위/통합 | `crates/app/src/management/query.rs` | 가짜 시계를 이용해 벽시계 보정(과거 이동)을 시뮬레이션해도 경과 시간이 0 이상 유지됨을 검증 계획 |
-| MGT-013 | FR-06·FR-08 / MGT-R08 | 통합 | `crates/adapters/tests/management.rs` | 요약·대기·세션·종료세션 응답 및 400/401/404/500 오류 본문에 계정 비밀번호, 해시, 원시 스트림 미포함 검증 계획 |
+| MGT-007 | FR-06 / MGT-R04 | 단위/통합 | `crates/app/src/management/query.rs`, `crates/adapters/tests/management.rs` | 실제 관리 HTTP와 실제 런타임에 조절 가능한 `Clock` 포트를 넣는다. 같은 중계 ID 재접속의 새 세션 카운터 분리, 벽시계 역행·전진 중 경과 시간의 0 이상·단조 증가, 새 런타임·리스너로 대신한 재시작(사용자 결정 2026-11-04(Q101)) 뒤 빈 목록과 새 식별자를 한 함수에서 확인한다(`completion_mgt007_reconnect_fresh_runtime_and_wall_steps_keep_counters_separate`) |
+| MGT-013 | FR-06·FR-08 / MGT-R08 | 통합 | `crates/adapters/tests/management.rs` | 조회 응답과 400·401·403·404·405 오류, 실패하는 가짜 중계 제어 포트로 만든 `500 terminate_failed` 본문에 비밀번호·해시·세션 토큰·원시 스트림이 없음을 확인한다(사용자 결정 2026-11-04(Q95)) |
 | MGT-015 | FR-06 / MGT-R10 | 통합 | `crates/adapters/tests/management.rs` | `X-Forwarded-For`, `Forwarded` 헤더를 주입해도 실제 소켓 피어 주소가 응답 주소에 표시됨을 검증 계획 |
-| MGT-016 | FR-06 / MGT-R01 | 단위/통합 | `crates/adapters/tests/management.rs` | 쿼리 응답 생성 중 세션이 추가/종료되어도 단일 응답 내부의 `as_of`와 목록/카운트의 일관성 보장 검증 계획 |
+| MGT-016 | FR-06 / MGT-R01 | 단위/통합 | `crates/adapters/tests/management.rs` | 상태 복사 직후 실제 종료와 실제 연결 수락을 일으켜, 각 응답의 집계·목록이 그 응답이 복사한 상태와 같고 `as_of`가 하나인지 확인한다. L 사용량이 같은 응답의 집계보다 앞설 수 있음(사용자 결정 2026-11-04(Q100))과 다음 응답에서 맞는 것도 확인한다(`completion_mgt016_counts_lists_and_as_of_follow_one_capture_while_usage_is_sampled`) |
 | MGT-021 | FR-06·7절 / MGT-R11 | 통합 | `crates/adapters/tests/management.rs` | 세션 쿠키 없이 4개 조회 엔드포인트 직접 호출 시 `401 unauthenticated` 반환 및 보호 정보 차단 검증 계획 |
 | MGT-023 | FR-06 / MGT-R15 | 통합 | `crates/adapters/tests/management.rs` | 정상 EOF, 연결 오류, 관리자 종료로 끝난 세션의 최근 종료 목록 조회 및 `internal_error`(사용자 결정 2026-11-02(Q94))를 포함한 종료 원인 7종 구별 표시, 최근 종료된 세션 식별자로 상세 조회 시 `404 not_found` 반환 검증 계획 (종료 요청 검증은 작업 4.5 몫) |
 | MGT-024 | FR-06 / MGT-R15 | 단위/통합 | `crates/domain/src/recent_closed.rs`, `crates/adapters/tests/management.rs` | 최근 종료 목록이 R개 초과 시 FIFO 삭제 검증 및 프로세스 재시작 시 메모리 목록 초기화 검증 계획 |
 | MGT-026 | FR-06 / MGT-R17 | 통합 | `crates/adapters/tests/management.rs` | 초기 교환 n개, Mode I 대상 연결 m개, L 도달 상태에서 요약의 `counts` 및 `usage` 일치 검증 계획 |
-| OPS-033 | OPS-R18 / OPS-033 | 통합 | `tests/serve.rs` | 관리·상태 연결(Lm)이 L과 분리되어 집계되며 상한 도달 시 `admin_connection_limit` 격리 검증 계획 |
+| OPS-033 | OPS-R18 / OPS-033 | 통합 | `tests/management_query.rs` | L=2를 실제 중계 연결로 채운 상태에서 로그인·조회·관리자 종료가 되고, Lm=2를 관리·상태 연결로 채운 상태에서 새 중계 연결이 수락·매칭·양방향 전달되는지 한 함수에서 확인한다(`exhausted_relay_and_admin_budgets_leave_the_other_service_operational`, 커밋 `e9221c6`) |
 
 ## 9. 미결정 사항과 계약 점검
 
@@ -227,10 +227,10 @@ flowchart LR
 | MGT-001·003·006·015·021·024 | 통과 | 요약·목록·상세, 필드와 전송 방식, 실제 상대 주소, 비인증 거절, 최근 종료 목록의 상한·재시작을 확인했다. |
 | MGT-026 | WSL 통과, Windows 부분 | Linux 전용 정확한 수치 시험은 통과했다. Windows는 이 전체 증거를 갖추지 못했다. |
 | MGT-002 | 통과 | `b20b8dc`에서 E = 5초의 반닫기로 목록·상세의 `state == "closing"`과 `counts.active` 포함을 확인했다. 상대가 닫힌 뒤 상세 404와 최근 종료 목록 포함도 확인했다. `ec05fd1`에서는 초기 교환·대상 연결 구간만 확인하고 `closing` 미관찰로 부분이었다. |
-| MGT-004 | 부분 | 빈 성공과 오류 응답을 확인했으나 `500 internal` 경로를 강제로 만들지 않았다. |
+| MGT-004 | 통과 | 사용자 결정 2026-11-04(Q95)로 조회 오류를 실제 조회 경로의 400·404로 판정한다. `tests/management_query.rs`의 `empty_success_vs_failure_distinction`(비부분, 커밋 `bb44c4f`)이 빈 목록의 `200`·`items: []`와 404 `not_found`·400 `invalid_request`(405·415 포함)를 서로 다른 결과로 확인한다. 조회 처리에는 500 경로가 없다(6절 9행). |
 | MGT-005 | 부분 | 방향별 전송량은 확인했으나 시스템 시험에서 부분 쓰기를 만들지 않았다. |
 | MGT-007 | 부분 | 벽시계 역행은 단위 시험, 재접속은 시스템 시험으로 확인했다. 두 시험은 각각 부분 표식이며 전체 통과로 합치지 않는다. |
-| MGT-013 | 부분 | 조회 응답의 비밀 미노출을 확인했다. 작업 4.5의 `completion_q89_auth_csrf_validation_order_and_chunked_body_are_state_preserving`은 종료 요청의 400 본문과 성공 응답에 비밀이 없음을 확인하고, 401·403·404·405는 상태와 오류 코드만 확인한다. `500 terminate_failed` 본문은 실제 네트워크 입력만으로 만들 수 없어 단위 시험으로만 확인했다. |
+| MGT-013 | 통과 | `crates/adapters/tests/management.rs`의 `completion_mgt013_query_auth_and_failed_termination_responses_keep_secrets_private`(비부분, 커밋 `bb44c4f`)가 실제 중계 바이트, 실제 계정 해시, 조회 경로 5종, 401·403·400·404·405 오류, 실패하는 가짜 중계 제어 포트로 만든 `500 terminate_failed`의 본문과 헤더를 모두 검사한다. 원시 스트림·비밀번호·해시·쿠키 토큰·CSRF 토큰이 없고, 쿠키 토큰은 로그인 `Set-Cookie`에만, CSRF 토큰은 계약이 정한 로그인·세션 정보 필드에만 있다(사용자 결정 2026-11-04(Q95)). |
 | MGT-023 | 통과 | 작업 4.5의 `completion_mgt023_eof_connection_error_and_admin_history_have_final_fields_and_old_ids_404`가 정상 EOF·연결 오류·관리자 종료의 최근 종료 기록과 이전 식별자의 상세 404를 확인했다. 커밋 `59fc535`의 두 OS 게이트에서 통과했다. |
 | MGT-016 | 부분 | 블랙박스 상태 변동 시험만 있으며 내부 기준 시점 일관성 전체의 증거는 아니다. |
 | OPS-033 | 부분 | 관리·상태 연결의 집계와 중계 상한 분리 일부를 확인했다. 전체 시나리오 증거는 남는다. |

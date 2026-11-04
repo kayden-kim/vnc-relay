@@ -239,7 +239,7 @@ app 수명은 `Running`, `Grace { deadline }`, `Force`다. `src/serve.rs`가 OS 
 
 ### 계획된 작업 (Target)
 
-G·두 번째 종료 요청의 제어와 감독은 현재 코드다. Windows는 Ctrl+C·Ctrl+Break를, Unix는 SIGINT·SIGTERM을 받는다. Windows 콘솔 close·logoff 처리는 현재 `shutdown_signal`에 없다. 이 OS 신호 연결은 [TODO 5.3](../TODO.md#5-운영배포-검증)의 남은 범위다. 위 Current 그림에는 넣지 않는다.
+G·두 번째 종료 요청의 제어와 감독은 현재 코드다. Windows는 Ctrl+C·Ctrl+Break를, Unix는 SIGINT·SIGTERM을 받는다. Windows 콘솔 창 닫기 처리는 현재 `shutdown_signal`에 없다. 목표 동작은 사용자 결정 2026-11-04(Q102)다. 창 닫기를 받으면 첫 종료 요청(Grace)과 두 번째 종료 요청(Force)을 곧바로 이어서 내고, OS가 기본 5초 뒤 프로세스를 끝내기 전에 정리와 `server_stopped` 기록을 마친다([운영 스펙 3.4절](../specs/operations.md#34-정상-종료와-재시작), OPS-044). 로그오프·시스템 종료는 대화형 콘솔 프로그램이 신호를 받지 못하므로 처리하지 않는다. 이 OS 신호 연결은 [TODO 5.3](../TODO.md#5-운영배포-검증)의 남은 범위다. 위 Current 그림에는 넣지 않는다.
 
 
 ## 6. 사건·오류·정리

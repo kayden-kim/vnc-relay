@@ -155,7 +155,7 @@ flowchart LR
 | MGT-009 | `tests/management_terminate.rs`, `relay.rs` 단위 | TCP·WS·WSS, Mode I·II의 여러 활성 세션 중 하나 종료. 소켓·L·등록 회수 뒤 응답, `closing` 포함, 나머지 전송 유지, `closed_session` 최종 값·R=0 |
 | MGT-010 | `tests/management_terminate.rs` | 같은 중계 ID로 새 세션을 만든 뒤 옛 `session_id`로 종료. 404, 새 세션의 데이터·수명 유지 |
 | MGT-011 | `relay.rs` 제어 가능한 단위, 시스템 | 자연 종료 전·중·후, 두 관리자 동시 요청, 응답 뒤 반복. `terminated` 하나·합류 `already_closed`·완료 후 404를 구분, 최초 원인·계정·E 불변 |
-| MGT-012 | `relay.rs`·`management/terminate.rs` 단위, HTTP 응답 유실 시스템 | 실제 소유자 취소·완료 채널 소멸·모델 종료 실패로 확인 실패를 유도. 500·성공 요약 없음. 활성 제거 시 최초 원인의 `session_closed` 1회와 시작 사건의 짝 확인. 수락 뒤 HTTP 연결을 끊어도 소유자는 정리·최초 요청 감사 지속. Consumer 재조회 규칙은 별도 화면 시험까지 포함해야 full |
+| MGT-012 | `relay.rs`·`management/terminate.rs` 단위, 어댑터 통합(실패하는 가짜 중계 제어 포트), HTTP 응답 유실 시스템 | 실제 소유자 취소·완료 채널 소멸·모델 종료 실패로 확인 실패를 유도. 500·성공 요약 없음. 활성 제거 시 최초 원인의 `session_closed` 1회와 시작 사건의 짝 확인. 수락 뒤 HTTP 연결을 끊어도 소유자는 정리·최초 요청 감사 지속. 어댑터 통합 시험이 실제 관리 HTTP·인증·직렬화로 500과 응답 유실을 한 함수에서 확인한다(사용자 결정 2026-11-04(Q95)). Consumer의 결과 불명 표시·재조회는 화면 시나리오 DASH-012·DASH-013이 맡는다 |
 | OPS-011 | `crates/adapters/tests/ops_info_contract.rs`, `tests/management_terminate.rs` | 실제 수행 계정·실제 peer·level·결과·식별자 생략과 한 줄 JSON. 성공·terminate_failed 모두 활성 제거 시 `session_closed` 1회가 감사보다 먼저임을 확인. `already_closed`의 info·session_id(Q90), 관리자 E 만료의 close_timeout·EOF 없으면 side 생략·종료 사건 계정 생략과 감사 계정 추적(Q91). 이미 있는 중계 사건 증거와 합쳐 전체 행을 판단 |
 | RLY-020 관리자 종료 부분 | `relay/session.rs` 단위·시스템 | `duplex`와 제어 가능한 `poll_close`·멈춘 시계로 E 직전·동일 시각·오류·계속 Pending을 관찰. 한 세션 회수·활성 수·원인 확인. EOF·연결 오류의 기존 증거도 유지 |
 | MGT-013·014·023 | 어댑터·시스템 | 종료 실패의 비밀 비노출, CSRF 거절의 상태 유지, 관리자 종료의 최근 종료 기록·옛 ID 상세/종료 404를 보충 |
