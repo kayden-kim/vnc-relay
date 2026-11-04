@@ -479,6 +479,30 @@ WS 스트림 설계 연결 개정에서는 이 파일만 문서 검사했다(`fu
 | Windows 11 Pro 10.0.26200 x64 | `powershell -NoProfile -ExecutionPolicy Bypass -File D:/vr-tools/vr-win.ps1 -Only all` | 통과(`ALL PASSED (all)`). 시나리오 보고 2026-11-02T15:30:51Z: 통과 77, 부분 61, 실패 0, 미실행 0, 미연결 12, 오류 0 | netns 시험은 Linux 전용이라 0건이다. RLY-025·026은 부분(사용자 결정 2026-11-02(Q86)), RLY-027 통과. 첫 실행은 D: 드라이브 공간 부족(`no space on device`)으로 `build` 단계에서 실패했다. 사용자 승인으로 시험 임시 폴더와 별도 빌드 폴더를 지운 뒤 다시 실행했다. `+ 미커밋 변경`은 실행 중 고친 문서 때문이며 코드는 `bf27d30`과 같다 |
 | Ubuntu 24.04 LTS x64(WSL2) | `wsl -d Ubuntu -- bash /mnt/d/vr-tools/vr-full.sh` | 통과(`ALL PASSED`). 시나리오 보고 2026-11-02T07:42:23Z: 통과 83, 부분 55, 실패 0, 미실행 0, 미연결 12, 오류 0 | RLY-025·026·027 통과. `+ 미커밋 변경`은 CRLF 때문에 나타남 |
 
+### 작업 5.3 완료 대조(2026-11-04)
+
+결론: 작업 5.3("정상 종료와 재시작")은 완료했다. 커밋 `de693ad`의 두 OS 게이트에서 작업 5.3의 완료 조건 시나리오(OPS-007~010, OPS-013, OPS-042~044)가 모두 통과했다.
+
+- 구현: Windows 콘솔 창 닫기는 `ShutdownSignal::wait`가 `ShutdownRequest::ConsoleClosed`로 돌려준다. `begin_relay_shutdown`이 G로 유예를 시작해 `shutdown_started`를 쓴 뒤, 같은 차례에 `Duration::ZERO`로 강제 정리를 요청한다(커밋 `976550f`, 사용자 결정 2026-11-04(Q102)).
+- 공통 시험 본문: `tests/common/shutdown.rs`를 구현하여 실제 프로세스 수명, 신호 전달, 종료 순서를 공유한다. `assert_final_log`가 `server_starting` 시작, `server_stopped` 끝, `shutdown_started < shutdown_forced`, 그리고 `shutdown_forced` 뒤에 `server_shutdown` 원인의 `session_closed`가 기록되는 순서를 단언한다.
+- OS별 바이너리 시험: WSL은 `tests/unix_shutdown.rs`(SIGTERM), Windows는 `tests/windows_console.rs`(의사 콘솔 ConPTY, `#[expect(unsafe_code)]` 허용, 사용자 결정 2026-11-04(Q103))로 구축했다.
+- 게이트 결과:
+  - WSL `vr-full.sh` (2026-11-04T13:31:32Z 보고서): `ALL PASSED`. 152건 중 통과 107, 부분 35, 실패 0, 미실행 1(OPS-044), 미연결 9, 오류 0. `operations.md` 44건 중 통과 31, 부분 6, 미실행 1, 미연결 6.
+  - Windows `vr-win.ps1 -Only all` (2026-11-04T13:39:13Z 보고서): `ALL PASSED (all)`. 152건 중 통과 103, 부분 40, 실패 0, 미실행 0, 미연결 9, 오류 0. `operations.md` 44건 중 통과 30, 부분 8, 미연결 6.
+
+| 시나리오 | 판정 | WSL(Linux) 시험 | Windows 시험 |
+| --- | --- | --- | --- |
+| OPS-007 | 통과(두 OS) | `tests/unix_shutdown.rs`<br>`stop_unfinished_work` | `tests/windows_console.rs`<br>`stop_unfinished_work` |
+| OPS-008 | 통과(두 OS) | `tests/unix_shutdown.rs`<br>`active_session_finishes_in_grace` | `tests/windows_console.rs`<br>`active_session_finishes_in_grace` |
+| OPS-009 | 통과(두 OS) | `tests/unix_shutdown.rs`<br>`grace_expiry_cleans_session` (G=3 및 G=0) | `tests/windows_console.rs`<br>`grace_expiry_cleans_session` (G=3 및 G=0) |
+| OPS-010 | 통과(두 OS) | `tests/unix_shutdown.rs`<br>`restart_has_fresh_state` | `tests/windows_console.rs`<br>`restart_has_fresh_state` |
+| OPS-013 | 통과(두 OS) | `crates/adapters/tests/ops_info_contract.rs`<br>`answers_liveness_and_readiness_in_each_state_with_only_the_contract_fields`<br>(보강: `tests/unix_shutdown.rs` `management_works_during_grace`) | `crates/adapters/tests/ops_info_contract.rs`<br>`answers_liveness_and_readiness_in_each_state_with_only_the_contract_fields`<br>(보강: `tests/windows_console.rs` `management_works_during_grace`) |
+| OPS-042 | 통과(두 OS) | `tests/unix_shutdown.rs`<br>`second_request_forces_cleanup` | `tests/windows_console.rs`<br>`second_request_forces_cleanup` |
+| OPS-043 | 통과(두 OS) | `tests/unix_shutdown.rs`<br>`management_works_during_grace` | `tests/windows_console.rs`<br>`management_works_during_grace` |
+| OPS-044 | 통과(Windows 전용) | 해당 없음(Windows 전용 스펙) | `tests/windows_console.rs`<br>`console_close_forces_cleanup` (5초 이내 프로세스 종료) |
+
+- 추가 검증: Windows 정상 종료 신호인 Ctrl+C(`ctrl_c_stops_gracefully_with_exit_code_zero`)와 Ctrl+Break(`ctrl_break_stops_gracefully_with_exit_code_zero`)의 종료 코드 0 정상 종료도 `tests/windows_console.rs`에서 통과했다.
+
 ## 9. 미결정 사항
 
 <a id="1-시작-키-생성-실패의-공개-오류-코드"></a>

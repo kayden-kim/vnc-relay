@@ -224,11 +224,12 @@ Mode I·II 초기 흐름을 추정 없이 설명할 수 있게 한다. 관찰은
   - 완료 조건: OPS-014, OPS-034, OPS-033(일부: 관리 연결), OPS-004(일부: 관리 연결을 L에 세지 않음)
   - 선행: 2.5, 3.1
   - 현재: OPS-014·OPS-034는 비부분 시험으로 통과했다(커밋 `856c100`, 두 OS). OPS-033·OPS-004는 완료 조건대로 관리 연결 부분만 시험한다.
-- [ ] **4.3 로그인과 관리 세션**: 로그인·로그아웃·세션 정보, 관리 세션 쿠키, CSRF 토큰, 유휴 만료 Si·절대 수명 Sa, 자동 폴링 표시, 로그인 실패 제한, 재시작 무효를 구현한다. 관리 API 계약 6절에 남은 브라우저 기본 인증 창과 로그인 CSRF 방어를 확인한다. 로그인 응답 시간 판정은 구조 시험으로 정했다(사용자 결정 2026-10-22(Q31)).
+- [x] **4.3 로그인과 관리 세션**: 로그인·로그아웃·세션 정보, 관리 세션 쿠키, CSRF 토큰, 유휴 만료 Si·절대 수명 Sa, 자동 폴링 표시, 로그인 실패 제한, 재시작 무효를 구현한다. 관리 API 계약 6절에 남은 브라우저 기본 인증 창과 로그인 CSRF 방어를 확인한다. 로그인 응답 시간 판정은 구조 시험으로 정했다(사용자 결정 2026-10-22(Q31)).
   - 기준: [관리 API 계약 1.4·1.5절](contracts/management-api-v1.md#14-관리-세션), [관리 스펙 3.0절](specs/management.md#30-관리자-로그인과-세션), [관리 API 계약 6절](contracts/management-api-v1.md#6-초안을-확정하기-전에-해결할-사항)
   - 완료 조건: MGT-014, MGT-017~020, MGT-022, MGT-025, MGT-027, OPS-029. 조회·종료 경로가 필요한 시나리오는 4.4·4.5에서 마무리한다.
   - 현재: 설계 문서(Draft), 도메인·응용·어댑터 코드와 시험을 구현했다. 완료 조건 중 MGT-018·022는 시험이 완결됐다(`8c87e69`). MGT-017·019·020·025·027·OPS-029는 부분 구현·부분 시험이며, 조회·종료 경로가 필요한 부분은 4.4·4.5가 마무리한다. 구현 대조는 커밋 `a143539` 기준으로 마쳤다([대조 기록](architectures/management-session.md#대조-기록)). 4.3 구현 선택은 사용자 결정 2026-10-22(Q25·Q30·Q31)로 관리 로그인과 세션 설계 6·7·9절에 반영했다. 남은 미결정은 9절이다.
   - 현재: 2026-11-04에 MGT-017·019·020·025·027·OPS-029의 비부분 시험을 추가했다(`c0d3b59`, `34cefe5`). 커밋 `b0c25f9`의 두 OS 게이트에서 MGT-014·017·018·019·020·022·025는 두 OS 통과다. 브라우저 기본 인증 창과 로그인 CSRF 방어는 Chrome·Edge·Firefox에서 확인했다(Safari 제외, 4.12에서 확인). 남은 것: MGT-027(Windows 콘솔 정상 종료 뒤 재시작)과 OPS-029(Windows 숨김 입력)의 Windows 비부분 시험이다. ConPTY로 자동화할 수 있으므로 Q99 예외로 판정하지 않는다. 작업 5.3의 Windows 콘솔 시험 파일(사용자 결정 2026-11-04(Q103))에서 만든 뒤 닫는다([대조 기록](architectures/management-session.md#작업-43-증거-보강과-브라우저-관찰2026-11-04)).
+  - 현재: 작업 5.3의 Windows 콘솔 시험(커밋 `976550f`, `tests/windows_console.rs`)에서 MGT-027(`graceful_restart_ends_the_admin_session_and_login_works_again`, ConPTY Ctrl+C 정상 종료 뒤 재시작)과 OPS-029(`cli_prepared_admins_have_hidden_salted_credentials_and_equal_relay_rights`, ConPTY 숨김 입력)의 Windows 비부분 시험을 통과시켰다. 커밋 `de693ad`의 두 OS 게이트(WSL `ALL PASSED`, Windows `ALL PASSED (all)`)에서 4.3의 모든 완료 조건 시나리오(MGT-014, MGT-017~020, MGT-022, MGT-025, MGT-027, OPS-029)가 두 OS에서 비부분 시험으로 통과해 완료했다([관리 로그인과 세션 완료 대조](architectures/management-session.md#작업-43-완료-대조2026-11-04)).
   - 선행: 4.1, 4.2
 - [x] **4.4 조회 API**: 서버 요약, 대기 연결 목록, 활성 세션 목록·상세, 최근 종료 목록(최대 개수 R), 폴링 주기 전달을 구현한다. 한 응답 안의 기준 시점 일관성을 지킨다. IPv4 매핑 IPv6 주소의 표기와 `server_shutdown` 항목이 조회되는지 확인한다.
   - 기준: [관리 API 계약 1.6~1.8·1.10·1.12절](contracts/management-api-v1.md#1-형식과-의미), [관리 스펙 2절](specs/management.md#2-조회-대상과-상태)
@@ -305,12 +306,13 @@ Mode I·II 초기 흐름을 추정 없이 설명할 수 있게 한다. 관찰은
   - 완료 조건: OPS-003, OPS-024~028, OPS-035, OPS-038, OPS-040, OPS-041, WS-022
   - 선행: 2.1, 3.2, 5.1
   - 현재: 구현했다([파일 감지 모듈 설계](architectures/file-watch.md)의 `ReloadWatcher`, `ReloadService`, `ReloadSnapshot`). 바이너리 시험 10건(`tests/reload.rs`)과 시작 시험 1건(`tests/serve.rs`의 역순·혼합·잘못된 표기 항목, 종료 코드 3), 어댑터·서비스 단위 시험이 있다. 완전: OPS-003·024·026·027·028·035·038·041. 부분: OPS-040. OPS-025·WS-022는 비부분 시험으로 두 OS에서 통과했다(커밋 `59991f2`, 게이트 `1a6f93e`). OPS-040은 IPv6 경계 조건을 단위 시험 증거로 판정해 남은 조건이 없다(사용자 결정 2026-10-23(Q58)). 모든 조건을 혼자 실행하는 비부분 시험이 없어 보고서에서는 부분으로 남는다. Windows 핸들(9절 항목 14)은 한계로 문서화했다(사용자 결정 2026-10-23(Q57)). 검증 기록은 [파일 감지 모듈 설계 대조 기록](architectures/file-watch.md#대조-기록)에 있다.
-- [ ] **5.3 정상 종료와 재시작**: 신규 접속 중지, 미완성 작업 정리, 종료 유예 G, 유예 중 관리 처리, 두 번째 종료 요청의 즉시 정리를 구현한다. Windows 콘솔 창 닫기를 G 없이 즉시 강제 정리하는 종료 요청으로 처리한다(사용자 결정 2026-11-04(Q102)).
+- [x] **5.3 정상 종료와 재시작**: 신규 접속 중지, 미완성 작업 정리, 종료 유예 G, 유예 중 관리 처리, 두 번째 종료 요청의 즉시 정리를 구현한다. Windows 콘솔 창 닫기를 G 없이 즉시 강제 정리하는 종료 요청으로 처리한다(사용자 결정 2026-11-04(Q102)).
   - 기준: [운영 스펙 3.4절](specs/operations.md#34-정상-종료와-재시작), [CLI 계약 1.8절](contracts/cli-v1.md#18-수동-시작과-종료)
   - 완료 조건: OPS-007~010, OPS-013, OPS-042~044
   - 선행: 2.6, 2.10, 4.5
   - 현재: MGT-027의 Windows 정상 종료 시험은 이 작업에서 Windows Ctrl+C·Ctrl+Break 시험과 함께 만든다. 지금 Windows에는 강제 종료 시험(`forced_restart_ends_the_admin_session_and_login_works_again`, 부분)만 있다.
   - 현재: 2026-11-04 관찰에서 콘솔 창을 닫으면 지금 코드는 10 ms 안에 `0xC000013A`로 끝나고 종료 기록을 남기지 않았다([CLI 계약 실행 기록](contracts/cli-v1.md#계약-테스트-실행-기록)). 로그오프·시스템 종료는 대화형 콘솔 프로그램이 신호를 받지 못하므로 강제 종료로 문서화했다(사용자 결정 2026-11-04(Q102)).
+  - 현재: Windows 콘솔 창 닫기를 `ShutdownRequest::ConsoleClosed`로 받아 `begin_relay_shutdown`이 Grace 뒤 즉시 Force를 요청하도록 구현했다(커밋 `976550f`, 사용자 결정 2026-11-04(Q102)). 공통 시나리오 본문 `tests/common/shutdown.rs`를 바탕으로 WSL(`tests/unix_shutdown.rs`, SIGTERM)과 Windows(`tests/windows_console.rs`, ConPTY Ctrl+C·Ctrl+Break·창 닫기)에 실제 바이너리 시험을 구축했다. OPS-013은 어댑터 계약 시험 `answers_liveness_and_readiness_in_each_state_with_only_the_contract_fields`(비부분)와 `management_works_during_grace`(부분)로 판정했다(사용자 결정 2026-11-04(Q108)). 커밋 `de693ad` 게이트에서 WSL(`ALL PASSED`, 152건 중 통과 107, 부분 35, 실패 0, 미실행 1=OPS-044, 미연결 9; `operations.md` 44건 중 통과 31)과 Windows(`ALL PASSED (all)`, 152건 중 통과 103, 부분 40, 실패 0, 미실행 0, 미연결 9; `operations.md` 44건 중 통과 30) 모두 통과했고, 완료 조건 시나리오(OPS-007~010, OPS-013, OPS-042~044)가 모두 통과해 완료했다(OPS-044는 Windows 전용 스펙). 계약 테스트 실행 기록은 [CLI 계약 실행 기록](contracts/cli-v1.md#계약-테스트-실행-기록), [운영 정보 계약 실행 기록](contracts/ops-info-v1.md#계약-테스트-실행-기록), [관리 API 계약 실행 기록](contracts/management-api-v1.md#5-예제와-계약-테스트)에 있다.
 - [ ] **5.4 성능 측정**: 두 OS에서 활성 100세션을 측정한다.
   - 기준: [PRD 8절](requirements/PRD.md#8-비기능-요구사항), [운영 스펙 6절](specs/operations.md#6-비기능호환성출처-수용-조건)
   - 완료 조건: OPS-017~018.
