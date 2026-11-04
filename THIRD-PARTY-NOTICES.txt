@@ -20471,6 +20471,7 @@ dependencies = [
  "vnc-relay-adapters",
  "vnc-relay-app",
  "vnc-relay-domain",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
