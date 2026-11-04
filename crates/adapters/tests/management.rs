@@ -4,10 +4,13 @@
 // Fixtures under tests/fixtures/tls are shared with tls.rs. Each test starts its
 // own listener on loopback. Connections that hold Lm stay open until the test ends.
 
+use std::io;
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
+use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
+use std::task::{Context, Poll};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use rustls::crypto::aws_lc_rs;
@@ -26,7 +29,7 @@ use vnc_relay_adapters::accounts_file::{Argon2Hasher, Argon2Verifier};
 use vnc_relay_adapters::clock::SystemClock;
 use vnc_relay_adapters::crypto::{RelayIdKey, SessionIdKey, SystemTokenSource};
 use vnc_relay_adapters::management_http::{DashboardHints, ManagementListener, ManagementServices};
-use vnc_relay_adapters::net::{AcceptPolicy, AllowSource, TcpEntryPoint};
+use vnc_relay_adapters::net::{AcceptPolicy, AllowSource, TcpEntryPoint, TcpRelayStream};
 use vnc_relay_adapters::target::TcpTargetConnector;
 use vnc_relay_adapters::tls;
 use vnc_relay_app::events::{AdminTerminateResult, Event, Level, RejectReason, Stage};
@@ -35,20 +38,24 @@ use vnc_relay_app::management::query::ManagementQueryService;
 use vnc_relay_app::management::terminate::{ManagementTerminateService, TerminationTicket};
 use vnc_relay_app::management::{AdminAuth, AdminPorts};
 use vnc_relay_app::ports::{
-    Clock, EventSink, HashError, PasswordHasher, PasswordVerifier, RelayLifecycle,
-    RelaySessionControl, RelayStateSource,
+    Clock, EventSink, HashError, PasswordHasher, PasswordVerifier, RelayCloseAction,
+    RelayLifecycle, RelaySessionControl, RelayStateSource, RelayStream,
 };
-use vnc_relay_app::relay::{RelayRuntime, RelayRuntimeConfig, RelayService, RelaySnapshot};
+use vnc_relay_app::relay::{
+    ConnectionContext, RelayRuntime, RelayRuntimeConfig, RelayService, RelaySnapshot,
+};
 use vnc_relay_app::reload::snapshot::{RelayAllow, ReloadCell, ReloadSnapshot};
 use vnc_relay_app::settings::KeepaliveSettings;
 use vnc_relay_domain::account::{Account, AccountName, Argon2Params, Password, PasswordHash};
 use vnc_relay_domain::admin_session::AdminSessionPolicy;
 use vnc_relay_domain::allow_list::{AllowList, IpItem};
 use vnc_relay_domain::budget::ConnectionBudget;
+use vnc_relay_domain::conn_id::ConnId;
 use vnc_relay_domain::entry_point::EntryPoint;
 use vnc_relay_domain::handshake::{HANDSHAKE_REQUEST_LEN, HandshakePolicy, VIEWER_GREETING};
 use vnc_relay_domain::login_limit::{LimitScope, LoginLimitPolicy};
 use vnc_relay_domain::peer_ip::PeerIp;
+use vnc_relay_domain::session::ViewerTransport;
 use vnc_relay_domain::target_policy::TargetPolicy;
 
 /// Upper bound for one exchange. A hang fails the test instead of blocking it.
@@ -135,6 +142,13 @@ async fn wait_for(events: &Recorder, matches: impl Fn(&Event) -> bool) -> Event 
 struct Running {
     addr: SocketAddr,
     events: Arc<Recorder>,
+    task: JoinHandle<()>,
+}
+
+impl Drop for Running {
+    fn drop(&mut self) {
+        self.task.abort();
+    }
 }
 
 /// Starts a management listener on loopback with the given Lm and U of 10 s.
@@ -247,8 +261,8 @@ async fn start_services(
         tls::TlsSource::management(Arc::new(ReloadCell::new(snapshot)))
     });
     let listener = ManagementListener::new(listener, tls, budget, upgrade, dashboard, services);
-    tokio::spawn(listener.run(events.clone()));
-    Running { addr, events }
+    let task = tokio::spawn(listener.run(events.clone()));
+    Running { addr, events, task }
 }
 
 /// The same runtime backs TCP relay traffic, operational queries and termination.
@@ -258,6 +272,11 @@ struct RunningRelay {
     server: SocketAddr,
     stop: watch::Sender<bool>,
     tasks: Vec<JoinHandle<()>>,
+    runtime: Arc<RelayRuntime<TcpTargetConnector>>,
+    service: Arc<RelayService>,
+    budget: Arc<ConnectionBudget>,
+    clock: Arc<dyn Clock>,
+    source: Arc<ObservedRelaySource>,
 }
 
 impl RunningRelay {
@@ -270,7 +289,15 @@ impl RunningRelay {
         fail_first: bool,
         verifier: Arc<dyn PasswordVerifier>,
     ) -> Self {
-        let clock: Arc<dyn Clock> = Arc::new(SystemClock::new());
+        Self::start_with_clock(session, fail_first, verifier, Arc::new(SystemClock::new())).await
+    }
+
+    async fn start_with_clock(
+        session: AdminSessionPolicy,
+        fail_first: bool,
+        verifier: Arc<dyn PasswordVerifier>,
+        clock: Arc<dyn Clock>,
+    ) -> Self {
         let events = Arc::new(Recorder::default());
         let log: Arc<dyn EventSink> = events.clone();
         let relay_budget = ConnectionBudget::new(10);
@@ -285,7 +312,9 @@ impl RunningRelay {
         let runtime = Arc::new(RelayRuntime::new(
             TcpTargetConnector::new(keepalive),
             Arc::new(RelayIdKey::generate().unwrap_or_else(|error| panic!("relay key: {error:?}"))),
-            Arc::new(SessionIdKey::from_bytes(&[0x59; 32])),
+            Arc::new(
+                SessionIdKey::generate().unwrap_or_else(|error| panic!("session key: {error:?}")),
+            ),
             Arc::clone(&relay_budget),
             ConnectionBudget::new(10),
             RelayRuntimeConfig {
@@ -303,8 +332,13 @@ impl RunningRelay {
             verifier,
             Arc::clone(&clock),
         );
+        let source = Arc::new(ObservedRelaySource {
+            runtime: runtime.clone(),
+            after_snapshot: Mutex::new(None),
+            last: Mutex::new(None),
+        });
         let query = Arc::new(ManagementQueryService::new(
-            runtime.clone(),
+            source.clone(),
             Arc::clone(&relay_budget),
             Arc::clone(&admin_budget),
             Arc::clone(&clock),
@@ -391,10 +425,36 @@ impl RunningRelay {
             server: addresses[1],
             stop,
             tasks,
+            runtime,
+            service,
+            budget: relay_budget,
+            clock,
+            source,
         }
     }
 
     async fn pair(&self) -> RelayPair {
+        self.pair_with_payload(true).await
+    }
+
+    async fn pair_with_payload(&self, exchange_payload: bool) -> RelayPair {
+        self.pair_with_id("123", exchange_payload).await
+    }
+
+    async fn pair_with_id(&self, id: &str, exchange_payload: bool) -> RelayPair {
+        let old_ids: Vec<_> = self
+            .management
+            .events
+            .snapshot()
+            .into_iter()
+            .filter_map(|event| {
+                if let Event::SessionStarted { session_id, .. } = event {
+                    Some(session_id)
+                } else {
+                    None
+                }
+            })
+            .collect();
         timeout(LIMIT, async {
             let mut viewer = TcpStream::connect(self.viewer)
                 .await
@@ -406,7 +466,9 @@ impl RunningRelay {
                 .unwrap_or_else(|error| panic!("viewer greeting: {error}"));
             assert_eq!(&greeting, VIEWER_GREETING);
             let mut initial = [0; HANDSHAKE_REQUEST_LEN];
-            initial[..6].copy_from_slice(b"ID:123");
+            let request = format!("ID:{id}");
+            assert!(request.len() <= HANDSHAKE_REQUEST_LEN, "test relay ID fits handshake");
+            initial[..request.len()].copy_from_slice(request.as_bytes());
             viewer
                 .write_all(&initial)
                 .await
@@ -423,7 +485,7 @@ impl RunningRelay {
                 .await
                 .unwrap_or_else(|error| panic!("server handshake: {error}"));
             let started = wait_for(&self.management.events, |event| {
-                matches!(event, Event::SessionStarted { .. })
+                matches!(event, Event::SessionStarted { session_id, .. } if !old_ids.contains(session_id))
             })
             .await;
             let Event::SessionStarted { session_id, .. } = started else {
@@ -434,7 +496,9 @@ impl RunningRelay {
                 server,
                 session_id: session_id.to_string(),
             };
-            pair.assert_bidirectional().await;
+            if exchange_payload {
+                pair.assert_bidirectional().await;
+            }
             pair
         })
         .await
@@ -2668,4 +2732,1006 @@ async fn completion_mgt013_query_auth_and_failed_termination_responses_keep_secr
             }
         }
     }
+}
+
+struct ObservedRelaySource {
+    runtime: Arc<RelayRuntime<TcpTargetConnector>>,
+    after_snapshot: Mutex<Option<Box<dyn FnOnce() + Send>>>,
+    last: Mutex<Option<RelaySnapshot>>,
+}
+
+impl RelayStateSource for ObservedRelaySource {
+    fn snapshot(&self, clock: &dyn Clock) -> RelaySnapshot {
+        let snapshot = self.runtime.snapshot(clock);
+        *self.last.lock().unwrap_or_else(PoisonError::into_inner) = Some(snapshot.clone());
+        let hook = self
+            .after_snapshot
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .take();
+        if let Some(hook) = hook {
+            hook();
+        }
+        snapshot
+    }
+}
+
+struct SteppingClock(Mutex<(Duration, SystemTime)>);
+
+impl SteppingClock {
+    fn new() -> Self {
+        Self(Mutex::new((
+            Duration::ZERO,
+            UNIX_EPOCH + Duration::from_secs(1_700_000_000),
+        )))
+    }
+
+    fn set(&self, mono_millis: u64, wall_offset_secs: i64) {
+        let base = UNIX_EPOCH + Duration::from_secs(1_700_000_000);
+        let wall = if wall_offset_secs >= 0 {
+            base + Duration::from_secs(wall_offset_secs.unsigned_abs())
+        } else {
+            base - Duration::from_secs(wall_offset_secs.unsigned_abs())
+        };
+        *self.0.lock().unwrap_or_else(PoisonError::into_inner) =
+            (Duration::from_millis(mono_millis), wall);
+    }
+}
+
+impl Clock for SteppingClock {
+    fn monotonic(&self) -> Duration {
+        self.0.lock().unwrap_or_else(PoisonError::into_inner).0
+    }
+
+    fn wall(&self) -> SystemTime {
+        self.0.lock().unwrap_or_else(PoisonError::into_inner).1
+    }
+}
+
+struct PartialWrites {
+    enabled: AtomicBool,
+    chunk: usize,
+    fail_after: std::sync::atomic::AtomicUsize,
+    bytes: std::sync::atomic::AtomicUsize,
+    calls: std::sync::atomic::AtomicUsize,
+    failures: std::sync::atomic::AtomicUsize,
+}
+
+impl PartialWrites {
+    fn new(chunk: usize) -> Arc<Self> {
+        Arc::new(Self {
+            enabled: AtomicBool::new(false),
+            chunk,
+            fail_after: std::sync::atomic::AtomicUsize::new(usize::MAX),
+            bytes: std::sync::atomic::AtomicUsize::new(0),
+            calls: std::sync::atomic::AtomicUsize::new(0),
+            failures: std::sync::atomic::AtomicUsize::new(0),
+        })
+    }
+}
+
+/// Only payload write completions are controlled; the socket, handshake,
+/// session owner, forwarding engine and management HTTP stack remain real.
+struct PartialTcpStream {
+    inner: TcpRelayStream,
+    writes: Arc<PartialWrites>,
+}
+
+impl AsyncRead for PartialTcpStream {
+    fn poll_read(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buffer: &mut tokio::io::ReadBuf<'_>,
+    ) -> Poll<io::Result<()>> {
+        Pin::new(&mut self.inner).poll_read(cx, buffer)
+    }
+}
+
+impl AsyncWrite for PartialTcpStream {
+    fn poll_write(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        bytes: &[u8],
+    ) -> Poll<io::Result<usize>> {
+        if !self.writes.enabled.load(Ordering::SeqCst) {
+            return Pin::new(&mut self.inner).poll_write(cx, bytes);
+        }
+        let written = self.writes.bytes.load(Ordering::SeqCst);
+        let remaining = self
+            .writes
+            .fail_after
+            .load(Ordering::SeqCst)
+            .saturating_sub(written);
+        if remaining == 0 {
+            self.writes.failures.fetch_add(1, Ordering::SeqCst);
+            return Poll::Ready(Err(io::Error::from(io::ErrorKind::BrokenPipe)));
+        }
+        let count = bytes.len().min(self.writes.chunk).min(remaining);
+        match Pin::new(&mut self.inner).poll_write(cx, &bytes[..count]) {
+            Poll::Ready(Ok(count)) => {
+                self.writes.bytes.fetch_add(count, Ordering::SeqCst);
+                self.writes.calls.fetch_add(1, Ordering::SeqCst);
+                Poll::Ready(Ok(count))
+            }
+            other => other,
+        }
+    }
+
+    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        Pin::new(&mut self.inner).poll_flush(cx)
+    }
+
+    fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        Pin::new(&mut self.inner).poll_shutdown(cx)
+    }
+}
+
+impl RelayStream for PartialTcpStream {
+    fn transport(&self) -> ViewerTransport {
+        ViewerTransport::Tcp
+    }
+
+    fn pending_write_len(&self) -> usize {
+        0
+    }
+
+    fn poll_close(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        action: RelayCloseAction,
+    ) -> Poll<io::Result<()>> {
+        Pin::new(&mut self.inner).poll_close(cx, action)
+    }
+}
+
+impl RunningRelay {
+    async fn partial_connection(
+        &self,
+        entry_point: EntryPoint,
+        writes: Arc<PartialWrites>,
+    ) -> (TcpStream, JoinHandle<()>) {
+        let listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .unwrap_or_else(|error| panic!("partial stream bind: {error}"));
+        let address = listener
+            .local_addr()
+            .unwrap_or_else(|error| panic!("partial address: {error}"));
+        let (client, accepted) = tokio::join!(TcpStream::connect(address), listener.accept());
+        let mut client = client.unwrap_or_else(|error| panic!("partial client: {error}"));
+        let (socket, peer_addr) =
+            accepted.unwrap_or_else(|error| panic!("partial accept: {error}"));
+        let context = ConnectionContext {
+            conn_id: ConnId::next(),
+            entry_point,
+            peer_ip: PeerIp::from(peer_addr),
+            peer_addr,
+            accepted_wall: self.clock.wall(),
+            accepted_at: self.clock.monotonic(),
+            exchange_at: self.clock.monotonic(),
+        };
+        let permit = self
+            .budget
+            .try_acquire()
+            .unwrap_or_else(|| panic!("partial stream L permit"));
+        let prepare = self.service.handle_connection(
+            PartialTcpStream {
+                inner: TcpRelayStream::new(socket),
+                writes: writes.clone(),
+            },
+            context,
+            permit,
+            self.runtime.lifecycle(),
+        );
+        let handshake = async {
+            if entry_point == EntryPoint::TcpViewer {
+                let mut greeting = [0; VIEWER_GREETING.len()];
+                client
+                    .read_exact(&mut greeting)
+                    .await
+                    .unwrap_or_else(|error| panic!("partial greeting: {error}"));
+                assert_eq!(&greeting, VIEWER_GREETING);
+            }
+            let mut initial = [0; HANDSHAKE_REQUEST_LEN];
+            initial[..6].copy_from_slice(b"ID:505");
+            client
+                .write_all(&initial)
+                .await
+                .unwrap_or_else(|error| panic!("partial initial request: {error}"));
+        };
+        let (prepared, ()) = timeout(LIMIT, async { tokio::join!(prepare, handshake) })
+            .await
+            .unwrap_or_else(|error| panic!("partial stream preparation deadline: {error}"));
+        let prepared = prepared.unwrap_or_else(|error| panic!("real stream preparation: {error}"));
+        writes.enabled.store(true, Ordering::SeqCst);
+        let service = self.service.clone();
+        let runtime = self.runtime.clone();
+        let task = tokio::spawn(async move {
+            service
+                .dispatch(prepared, &runtime)
+                .await
+                .unwrap_or_else(|error| panic!("real partial-stream dispatch: {error}"));
+        });
+        (client, task)
+    }
+}
+
+async fn authenticated_query(running: &Running, cookie: &str, path: &str) -> Value {
+    let reply = plain_exchange(running.addr, &get(path, &[cookie])).await;
+    assert_eq!(reply.status, 200, "{path}");
+    assert_eq!(reply.header("cache-control"), Some("no-store"));
+    assert_eq!(
+        reply
+            .body
+            .windows(b"\"as_of\"".len())
+            .filter(|window| *window == b"\"as_of\"")
+            .count(),
+        1,
+        "{path}: one response-level reference time"
+    );
+    json_body(&reply)
+}
+
+/// spec: management.md:MGT-005
+#[tokio::test]
+async fn completion_mgt005_partial_success_and_write_failure_count_only_delivered_bytes() {
+    let relay = RunningRelay::start(session_policy()).await;
+    let running = &relay.management;
+    let login = plain_exchange(running.addr, &login_request(ACCOUNT, PASSWORD)).await;
+    assert_eq!(login.status, 200);
+    let cookie = cookie_line(&login);
+    let viewer_writes = PartialWrites::new(2);
+    let server_writes = PartialWrites::new(3);
+    let (mut viewer, viewer_task) = relay
+        .partial_connection(EntryPoint::TcpViewer, viewer_writes.clone())
+        .await;
+    wait_for(&running.events, |event| {
+        matches!(event, Event::WaitingRegistered { .. })
+    })
+    .await;
+    let (mut server, server_task) = relay
+        .partial_connection(EntryPoint::TcpServer, server_writes.clone())
+        .await;
+    let started = wait_for(&running.events, |event| {
+        matches!(event, Event::SessionStarted { .. })
+    })
+    .await;
+    let Event::SessionStarted { session_id, .. } = started else {
+        panic!("real session started");
+    };
+    let forward = b"seventeen-bytes!!!";
+    let reverse = b"a-different-reverse-payload-29";
+    timeout(LIMIT, async {
+        viewer
+            .write_all(forward)
+            .await
+            .unwrap_or_else(|error| panic!("forward send: {error}"));
+        let mut received = vec![0; forward.len()];
+        server
+            .read_exact(&mut received)
+            .await
+            .unwrap_or_else(|error| panic!("forward delivery: {error}"));
+        assert_eq!(received, forward);
+        server
+            .write_all(reverse)
+            .await
+            .unwrap_or_else(|error| panic!("reverse send: {error}"));
+        let mut received = vec![0; reverse.len()];
+        viewer
+            .read_exact(&mut received)
+            .await
+            .unwrap_or_else(|error| panic!("reverse delivery: {error}"));
+        assert_eq!(received, reverse);
+    })
+    .await
+    .unwrap_or_else(|error| panic!("partial payload deadline: {error}"));
+    let detail =
+        authenticated_query(running, &cookie, &format!("/api/v1/sessions/{session_id}")).await;
+    assert_eq!(
+        detail["session"]["bytes_viewer_to_target"].as_u64(),
+        Some(forward.len() as u64)
+    );
+    assert_eq!(
+        detail["session"]["bytes_target_to_viewer"].as_u64(),
+        Some(reverse.len() as u64)
+    );
+    assert!(server_writes.calls.load(Ordering::SeqCst) > 1);
+    assert!(viewer_writes.calls.load(Ordering::SeqCst) > 1);
+    assert_eq!(server_writes.bytes.load(Ordering::SeqCst), forward.len());
+    assert_eq!(viewer_writes.bytes.load(Ordering::SeqCst), reverse.len());
+
+    // The next write delivers only five of thirteen bytes before BrokenPipe.
+    server_writes
+        .fail_after
+        .store(forward.len() + 5, Ordering::SeqCst);
+    viewer
+        .write_all(b"thirteen-more")
+        .await
+        .unwrap_or_else(|error| panic!("failing payload send: {error}"));
+    let mut final_bytes = Vec::new();
+    timeout(LIMIT, server.read_to_end(&mut final_bytes))
+        .await
+        .unwrap_or_else(|error| panic!("failed transport closes: {error}"))
+        .unwrap_or_else(|error| panic!("read partial accepted prefix: {error}"));
+    assert_eq!(final_bytes, b"thirt");
+    server
+        .shutdown()
+        .await
+        .unwrap_or_else(|error| panic!("server EOF: {error}"));
+    viewer
+        .shutdown()
+        .await
+        .unwrap_or_else(|error| panic!("viewer EOF: {error}"));
+    wait_for(
+        &running.events,
+        |event| matches!(event, Event::SessionClosed { session_id: id, .. } if id == &session_id),
+    )
+    .await;
+    for task in [viewer_task, server_task] {
+        timeout(LIMIT, task)
+            .await
+            .unwrap_or_else(|error| panic!("dispatch deadline: {error}"))
+            .unwrap_or_else(|error| panic!("dispatch joins: {error}"));
+    }
+    assert!(server_writes.failures.load(Ordering::SeqCst) > 0);
+    let closed = authenticated_query(running, &cookie, "/api/v1/closed-sessions").await;
+    assert_eq!(closed["items"].as_array().map(Vec::len), Some(1));
+    let item = &closed["items"][0];
+    assert_eq!(item["session_id"], session_id.to_string());
+    assert_eq!(item["close_cause"], "connection_error");
+    assert_eq!(
+        item["bytes_viewer_to_target"].as_u64(),
+        Some(server_writes.bytes.load(Ordering::SeqCst) as u64)
+    );
+    assert_eq!(
+        item["bytes_viewer_to_target"].as_u64(),
+        Some((forward.len() + 5) as u64)
+    );
+    assert_eq!(
+        item["bytes_target_to_viewer"].as_u64(),
+        Some(viewer_writes.bytes.load(Ordering::SeqCst) as u64)
+    );
+    assert_eq!(
+        item["bytes_target_to_viewer"].as_u64(),
+        Some(reverse.len() as u64)
+    );
+}
+
+async fn terminate_pair(running: &Running, login: &Reply, pair: &mut RelayPair) -> Value {
+    let cookie = cookie_line(login);
+    let csrf = csrf_line(login);
+    let command = request(
+        "POST",
+        &format!("/api/v1/sessions/{}/terminate", pair.session_id),
+        &[&cookie, &csrf],
+    );
+    let (reply, ()) = tokio::join!(
+        plain_exchange(running.addr, &command),
+        acknowledge_pair_close(pair)
+    );
+    assert_eq!(reply.status, 200);
+    let body = json_body(&reply);
+    assert_eq!(body["result"], "terminated");
+    assert_eq!(body["closed_session"]["session_id"], pair.session_id);
+    body
+}
+
+/// A fresh runtime/listener represents a process lifecycle boundary here; only
+/// the public Clock port is controlled. Actual process startup is not injected.
+/// spec: management.md:MGT-007
+#[tokio::test]
+async fn completion_mgt007_reconnect_fresh_runtime_and_wall_steps_keep_counters_separate() {
+    let clock = Arc::new(SteppingClock::new());
+    let relay = RunningRelay::start_with_clock(
+        session_policy(),
+        false,
+        Arc::new(Argon2Verifier),
+        clock.clone(),
+    )
+    .await;
+    let running = &relay.management;
+    let login = plain_exchange(running.addr, &login_request(ACCOUNT, PASSWORD)).await;
+    assert_eq!(login.status, 200);
+    let cookie = cookie_line(&login);
+    let mut first = relay.pair_with_payload(false).await;
+    let first_id = first.session_id.clone();
+    let detail =
+        authenticated_query(running, &cookie, &format!("/api/v1/sessions/{first_id}")).await;
+    for direction in ["bytes_viewer_to_target", "bytes_target_to_viewer"] {
+        assert_eq!(detail["session"][direction].as_u64(), Some(0));
+    }
+    first.assert_bidirectional().await;
+    let first_closed = terminate_pair(running, &login, &mut first).await;
+    assert_eq!(
+        first_closed["closed_session"]["bytes_viewer_to_target"].as_u64(),
+        Some(b"viewer-to-server".len() as u64)
+    );
+    assert_eq!(
+        first_closed["closed_session"]["bytes_target_to_viewer"].as_u64(),
+        Some(b"server-to-viewer".len() as u64)
+    );
+
+    // Reusing exactly the same Mode II ID never reuses a session counter.
+    let mut second = relay.pair_with_payload(false).await;
+    let second_id = second.session_id.clone();
+    assert_ne!(first_id, second_id);
+    let detail =
+        authenticated_query(running, &cookie, &format!("/api/v1/sessions/{second_id}")).await;
+    for direction in ["bytes_viewer_to_target", "bytes_target_to_viewer"] {
+        assert_eq!(detail["session"][direction].as_u64(), Some(0));
+    }
+    let history = authenticated_query(running, &cookie, "/api/v1/closed-sessions").await;
+    assert_eq!(history["items"].as_array().map(Vec::len), Some(1));
+    assert_eq!(history["items"][0], first_closed["closed_session"]);
+
+    // Keep a real unmatched socket so API elapsed time is observable as
+    // waited_ms. Active duration_ms is an ops event, not an API session field.
+    let mut waiting = TcpStream::connect(relay.viewer)
+        .await
+        .unwrap_or_else(|error| panic!("clock-step waiter connects: {error}"));
+    let mut greeting = [0; VIEWER_GREETING.len()];
+    waiting
+        .read_exact(&mut greeting)
+        .await
+        .unwrap_or_else(|error| panic!("clock waiter greeting: {error}"));
+    let mut initial = [0; HANDSHAKE_REQUEST_LEN];
+    initial[..6].copy_from_slice(b"ID:789");
+    waiting
+        .write_all(&initial)
+        .await
+        .unwrap_or_else(|error| panic!("clock waiter handshake: {error}"));
+    timeout(LIMIT, async {
+        loop {
+            if relay.runtime.snapshot(clock.as_ref()).waiting.len() == 1 {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .unwrap_or_else(|error| panic!("clock waiter is registered: {error}"));
+    let mut last_uptime = 0;
+    let mut last_waited = 0;
+    let mut previous_as_of = String::new();
+    for (mono_millis, wall_seconds) in [(1000, -3600), (2000, 7200), (3000, -7200)] {
+        clock.set(mono_millis, wall_seconds);
+        let summary = authenticated_query(running, &cookie, "/api/v1/summary").await;
+        let uptime = summary["server"]["uptime_ms"]
+            .as_u64()
+            .unwrap_or_else(|| panic!("integer uptime"));
+        assert_eq!(uptime, mono_millis);
+        assert!(uptime >= last_uptime);
+        last_uptime = uptime;
+        let waiting = authenticated_query(running, &cookie, "/api/v1/waiting").await;
+        assert_eq!(waiting["items"].as_array().map(Vec::len), Some(1));
+        let waited = waiting["items"][0]["waited_ms"]
+            .as_u64()
+            .unwrap_or_else(|| panic!("integer elapsed time"));
+        assert_eq!(waited, mono_millis);
+        assert!(waited >= last_waited);
+        last_waited = waited;
+        let active = relay.runtime.snapshot(clock.as_ref());
+        let session = active
+            .active
+            .iter()
+            .find(|session| session.session_id.as_str() == second_id)
+            .unwrap_or_else(|| panic!("clock-stepped session remains active"));
+        assert_eq!(session.duration.as_millis(), u128::from(mono_millis));
+        let as_of = summary["as_of"]
+            .as_str()
+            .unwrap_or_else(|| panic!("UTC as_of"))
+            .to_owned();
+        assert_eq!(waiting["as_of"], as_of);
+        if mono_millis == 2000 {
+            assert!(as_of > previous_as_of, "forward wall step is visible");
+        } else if mono_millis == 3000 {
+            assert!(
+                as_of < previous_as_of,
+                "backward wall step does not alter elapsed time"
+            );
+        }
+        previous_as_of = as_of;
+        let detail =
+            authenticated_query(running, &cookie, &format!("/api/v1/sessions/{second_id}")).await;
+        assert_eq!(
+            detail["session"]["bytes_viewer_to_target"].as_u64(),
+            Some(0)
+        );
+        assert_eq!(
+            detail["session"]["bytes_target_to_viewer"].as_u64(),
+            Some(0)
+        );
+    }
+    let closed = terminate_pair(running, &login, &mut second).await;
+    assert!(
+        closed["closed_session"]["ended_at"].as_str()
+            >= closed["closed_session"]["started_at"].as_str()
+    );
+    let duration = wait_for(&running.events, |event| {
+        matches!(event,
+            Event::SessionClosed { session_id, .. } if session_id.as_str() == second_id
+        )
+    })
+    .await;
+    assert!(matches!(
+        duration,
+        Event::SessionClosed {
+            duration_ms: 3000,
+            ..
+        }
+    ));
+    drop(waiting);
+    timeout(LIMIT, async {
+        loop {
+            if relay.runtime.snapshot(clock.as_ref()).waiting.is_empty() {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .unwrap_or_else(|error| panic!("clock waiter releases before restart: {error}"));
+    drop(first);
+    drop(second);
+    drop(relay);
+
+    // No runtime, auth state, history or keyed session-ID source is reused.
+    let restarted = RunningRelay::start(session_policy()).await;
+    let running = &restarted.management;
+    let refused = plain_exchange(running.addr, &get("/api/v1/sessions", &[&cookie])).await;
+    assert_eq!(refused.status, 401);
+    let login = plain_exchange(running.addr, &login_request(ACCOUNT, PASSWORD)).await;
+    assert_eq!(login.status, 200);
+    let cookie = cookie_line(&login);
+    for path in [
+        "/api/v1/waiting",
+        "/api/v1/sessions",
+        "/api/v1/closed-sessions",
+    ] {
+        let response = authenticated_query(running, &cookie, path).await;
+        assert_eq!(response["items"], json!([]), "{path}: restart clears state");
+    }
+    let summary = authenticated_query(running, &cookie, "/api/v1/summary").await;
+    assert_eq!(summary["counts"]["active"].as_u64(), Some(0));
+    assert_eq!(
+        summary["usage"]["relay_connections"]["current"].as_u64(),
+        Some(0)
+    );
+    let mut fresh = restarted.pair_with_payload(false).await;
+    assert_ne!(fresh.session_id, first_id);
+    assert_ne!(fresh.session_id, second_id);
+    let detail = authenticated_query(
+        running,
+        &cookie,
+        &format!("/api/v1/sessions/{}", fresh.session_id),
+    )
+    .await;
+    for direction in ["bytes_viewer_to_target", "bytes_target_to_viewer"] {
+        assert_eq!(detail["session"][direction].as_u64(), Some(0));
+    }
+    terminate_pair(running, &login, &mut fresh).await;
+}
+
+/// Counts and list items follow each response's captured registry and one as_of.
+/// Summary usage is a separately sampled resource gauge and may lead counts
+/// during admission (management.md §2.2, management-api-v1 §1.1; Q100).
+/// spec: management.md:MGT-016
+#[tokio::test]
+async fn completion_mgt016_counts_lists_and_as_of_follow_one_capture_while_usage_is_sampled() {
+    let clock = Arc::new(SteppingClock::new());
+    let relay = RunningRelay::start_with_clock(
+        session_policy(),
+        false,
+        Arc::new(Argon2Verifier),
+        clock.clone(),
+    )
+    .await;
+    let running = &relay.management;
+    let login = plain_exchange(running.addr, &login_request(ACCOUNT, PASSWORD)).await;
+    assert_eq!(login.status, 200);
+    let cookie = cookie_line(&login);
+    let mut pair = relay.pair().await;
+    let runtime = relay.runtime.clone();
+    let clock_for_hook = clock.clone();
+    let events = running.events.clone();
+    let id = pair.session_id.clone();
+    *relay
+        .source
+        .after_snapshot
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner) = Some(Box::new(move || {
+        let ticket = runtime.request_terminate(
+            &id,
+            AccountName::parse(ACCOUNT)
+                .unwrap_or_else(|error| panic!("snapshot initiator: {error}")),
+            loopback(),
+            clock_for_hook.as_ref(),
+            events.as_ref(),
+        );
+        assert!(
+            ticket.is_some(),
+            "real termination starts strictly after capture"
+        );
+    }));
+    let sessions = authenticated_query(running, &cookie, "/api/v1/sessions").await;
+    let captured = relay
+        .source
+        .last
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .clone()
+        .unwrap_or_else(|| panic!("query captured a runtime snapshot"));
+    assert_eq!(captured.active.len(), 1);
+    assert_eq!(
+        sessions["items"].as_array().map(Vec::len),
+        Some(captured.active.len())
+    );
+    assert_eq!(sessions["items"][0]["session_id"], pair.session_id);
+    assert_eq!(
+        sessions["items"][0]["state"], "active",
+        "the response retains pre-mutation state"
+    );
+    timeout(LIMIT, async {
+        loop {
+            let now = relay.runtime.snapshot(clock.as_ref());
+            if now.active.is_empty()
+                || now.active.first().is_some_and(|session| {
+                    session.state == vnc_relay_domain::session::SessionState::Closing
+                })
+            {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .unwrap_or_else(|error| panic!("real session leaves active state: {error}"));
+    let next = authenticated_query(running, &cookie, "/api/v1/sessions").await;
+    let items = next["items"]
+        .as_array()
+        .unwrap_or_else(|| panic!("next session items"));
+    assert!(
+        items.is_empty() || items[0]["state"] == "closing",
+        "mutation is visible on the next capture"
+    );
+    assert_eq!(
+        sessions["as_of"], next["as_of"],
+        "one controlled wall time per response"
+    );
+    acknowledge_pair_close(&mut pair).await;
+    wait_for(&running.events, |event| {
+        matches!(event, Event::SessionClosed { .. })
+    })
+    .await;
+
+    // After the empty registry is copied, admit a real TCP viewer and withhold
+    // its handshake. The source returns the old snapshot; summary reads new L.
+    let held_socket = Arc::new(Mutex::new(None));
+    let held_for_hook = held_socket.clone();
+    let service = relay.service.clone();
+    let budget = relay.budget.clone();
+    let runtime = relay.runtime.clone();
+    let clock_for_hook = clock.clone();
+    *relay
+        .source
+        .after_snapshot
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner) = Some(Box::new(move || {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0")
+            .unwrap_or_else(|error| panic!("post-snapshot listener: {error}"));
+        let mut socket = std::net::TcpStream::connect(
+            listener
+                .local_addr()
+                .unwrap_or_else(|error| panic!("snapshot listener address: {error}")),
+        )
+        .unwrap_or_else(|error| panic!("post-snapshot real TCP admission: {error}"));
+        let (accepted, peer_addr) = listener
+            .accept()
+            .unwrap_or_else(|error| panic!("post-snapshot accept: {error}"));
+        accepted
+            .set_nonblocking(true)
+            .unwrap_or_else(|error| panic!("snapshot accepted socket mode: {error}"));
+        socket
+            .set_read_timeout(Some(LIMIT))
+            .unwrap_or_else(|error| panic!("snapshot socket timeout: {error}"));
+        // A separate current-thread reactor lets the synchronous snapshot port
+        // advance real socket preparation without adding Tokio feature flags.
+        let worker = std::thread::spawn(move || {
+            let reactor = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .unwrap_or_else(|error| panic!("snapshot admission reactor: {error}"));
+            reactor.block_on(async {
+                let stream = TcpStream::from_std(accepted)
+                    .unwrap_or_else(|error| panic!("snapshot Tokio socket: {error}"));
+                let _handshaking = runtime.track_handshaking();
+                let permit = budget
+                    .try_acquire()
+                    .unwrap_or_else(|| panic!("snapshot admission L permit"));
+                let context = ConnectionContext {
+                    conn_id: ConnId::next(),
+                    entry_point: EntryPoint::TcpViewer,
+                    peer_ip: PeerIp::from(peer_addr),
+                    peer_addr,
+                    accepted_wall: clock_for_hook.wall(),
+                    accepted_at: clock_for_hook.monotonic(),
+                    exchange_at: clock_for_hook.monotonic(),
+                };
+                let result = service
+                    .handle_connection(
+                        TcpRelayStream::new(stream),
+                        context,
+                        permit,
+                        runtime.lifecycle(),
+                    )
+                    .await;
+                assert!(
+                    result.is_err(),
+                    "withheld handshake ends when its real peer drops"
+                );
+            });
+        });
+        let mut greeting = [0; VIEWER_GREETING.len()];
+        std::io::Read::read_exact(&mut socket, &mut greeting)
+            .unwrap_or_else(|error| panic!("real post-snapshot viewer greeting: {error}"));
+        assert_eq!(&greeting, VIEWER_GREETING);
+        *held_for_hook.lock().unwrap_or_else(PoisonError::into_inner) = Some((socket, worker));
+    }));
+    let summary = authenticated_query(running, &cookie, "/api/v1/summary").await;
+    let captured = relay
+        .source
+        .last
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .clone()
+        .unwrap_or_else(|| panic!("summary captured registry"));
+    assert_eq!(captured.active.len(), 0);
+    assert_eq!(captured.handshaking, 0);
+    assert_eq!(summary["counts"]["active"].as_u64(), Some(0));
+    assert_eq!(summary["counts"]["handshaking"].as_u64(), Some(0));
+    assert_eq!(
+        summary["usage"]["relay_connections"]["current"].as_u64(),
+        Some(1),
+        "Q100: separately sampled L usage may lead the response's captured counts"
+    );
+    assert_eq!(relay.runtime.snapshot(clock.as_ref()).handshaking, 1);
+    let next = authenticated_query(running, &cookie, "/api/v1/summary").await;
+    assert_eq!(next["counts"]["handshaking"].as_u64(), Some(1));
+    assert_eq!(
+        next["usage"]["relay_connections"]["current"].as_u64(),
+        Some(1)
+    );
+    assert_eq!(
+        next["counts"]["handshaking"], next["usage"]["relay_connections"]["current"],
+        "after admission stabilizes, the next capture and resource gauge agree"
+    );
+    assert_eq!(
+        summary["as_of"], next["as_of"],
+        "one controlled reference time per response"
+    );
+    let (socket, worker) = held_socket
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .take()
+        .unwrap_or_else(|| panic!("post-snapshot admission is retained"));
+    drop(socket);
+    worker
+        .join()
+        .unwrap_or_else(|error| panic!("post-snapshot admission joins: {error:?}"));
+    timeout(LIMIT, async {
+        loop {
+            if relay.runtime.snapshot(clock.as_ref()).handshaking == 0
+                && relay.budget.current() == 0
+            {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .unwrap_or_else(|error| panic!("post-snapshot socket releases: {error}"));
+
+    // During concurrent real registration/removal, compare each response only
+    // to its own capture; different requests need not describe the same state.
+    let churn = async {
+        for index in 0..8 {
+            let mut socket = TcpStream::connect(relay.viewer)
+                .await
+                .unwrap_or_else(|error| panic!("churn viewer: {error}"));
+            let mut greeting = [0; VIEWER_GREETING.len()];
+            socket
+                .read_exact(&mut greeting)
+                .await
+                .unwrap_or_else(|error| panic!("churn greeting: {error}"));
+            let id = format!("ID:9{index:02}");
+            let mut initial = [0; HANDSHAKE_REQUEST_LEN];
+            initial[..id.len()].copy_from_slice(id.as_bytes());
+            socket
+                .write_all(&initial)
+                .await
+                .unwrap_or_else(|error| panic!("churn handshake: {error}"));
+            timeout(LIMIT, async {
+                loop {
+                    if !relay.runtime.snapshot(clock.as_ref()).waiting.is_empty() {
+                        break;
+                    }
+                    tokio::time::sleep(Duration::from_millis(10)).await;
+                }
+            })
+            .await
+            .unwrap_or_else(|error| panic!("churn registration: {error}"));
+            drop(socket);
+            timeout(LIMIT, async {
+                loop {
+                    if relay.runtime.snapshot(clock.as_ref()).waiting.is_empty() {
+                        break;
+                    }
+                    tokio::time::sleep(Duration::from_millis(10)).await;
+                }
+            })
+            .await
+            .unwrap_or_else(|error| panic!("churn removal: {error}"));
+        }
+    };
+    let queries = async {
+        for _ in 0..12 {
+            for path in ["/api/v1/summary", "/api/v1/waiting", "/api/v1/sessions"] {
+                let response = authenticated_query(running, &cookie, path).await;
+                let captured = relay
+                    .source
+                    .last
+                    .lock()
+                    .unwrap_or_else(PoisonError::into_inner)
+                    .clone()
+                    .unwrap_or_else(|| panic!("concurrent query snapshot"));
+                match path {
+                    "/api/v1/summary" => {
+                        assert_eq!(
+                            response["counts"]["waiting"].as_u64(),
+                            Some(captured.waiting.len() as u64)
+                        );
+                        assert_eq!(
+                            response["counts"]["active"].as_u64(),
+                            Some(captured.active.len() as u64)
+                        );
+                        assert_eq!(
+                            response["counts"]["handshaking"].as_u64(),
+                            Some(captured.handshaking as u64)
+                        );
+                        assert_eq!(
+                            response["counts"]["target_connecting"].as_u64(),
+                            Some(captured.target_connecting as u64)
+                        );
+                    }
+                    "/api/v1/waiting" => assert_eq!(
+                        response["items"].as_array().map(Vec::len),
+                        Some(captured.waiting.len())
+                    ),
+                    "/api/v1/sessions" => assert_eq!(
+                        response["items"].as_array().map(Vec::len),
+                        Some(captured.active.len())
+                    ),
+                    _ => unreachable!(),
+                }
+                assert_eq!(response["as_of"], sessions["as_of"]);
+            }
+        }
+    };
+    timeout(LIMIT, async {
+        tokio::join!(churn, queries);
+    })
+    .await
+    .unwrap_or_else(|error| panic!("concurrent snapshot exercise: {error}"));
+}
+
+/// spec: management.md:MGT-023 partial
+#[tokio::test]
+async fn completion_mgt023_shutdown_history_is_queryable_and_preserves_prior_eof_cause() {
+    let relay = RunningRelay::start(session_policy()).await;
+    let running = &relay.management;
+    let login = plain_exchange(running.addr, &login_request(ACCOUNT, PASSWORD)).await;
+    assert_eq!(login.status, 200);
+    let cookie = cookie_line(&login);
+    let mut forced = relay.pair_with_id("82301", true).await;
+    let mut prior_eof = relay.pair_with_id("82302", true).await;
+    let service = relay.service.clone();
+    let runtime = relay.runtime.clone();
+    let supervisor = tokio::spawn(async move {
+        service.drive_shutdown(&runtime).await;
+    });
+
+    // Production's first request enters Grace while management HTTP remains
+    // available; existing sessions can still carry payload during this phase.
+    relay
+        .service
+        .request_shutdown(&relay.runtime, Duration::from_secs(60));
+    let summary = authenticated_query(running, &cookie, "/api/v1/summary").await;
+    assert_eq!(summary["server"]["state"], "shutdown_grace");
+    assert_eq!(summary["counts"]["active"].as_u64(), Some(2));
+    assert_eq!(
+        summary["usage"]["relay_connections"]["current"].as_u64(),
+        Some(4)
+    );
+    forced.assert_bidirectional().await;
+
+    // Observe relay-propagated EOF before Force, while the opposite write half
+    // stays open. This proves cleanup already has its first cause (Q82).
+    prior_eof
+        .viewer
+        .shutdown()
+        .await
+        .unwrap_or_else(|error| panic!("prior EOF write half closes: {error}"));
+    let mut unexpected = [0; 1];
+    let eof = timeout(LIMIT, prior_eof.server.read(&mut unexpected))
+        .await
+        .unwrap_or_else(|error| panic!("relay propagates prior EOF: {error}"))
+        .unwrap_or_else(|error| panic!("read propagated prior EOF: {error}"));
+    assert_eq!(eof, 0);
+    let detail = authenticated_query(
+        running,
+        &cookie,
+        &format!("/api/v1/sessions/{}", prior_eof.session_id),
+    )
+    .await;
+    assert_eq!(detail["session"]["state"], "closing");
+
+    // Like serve.rs's second shutdown request, Force cleans up both owners
+    // without shutting down the independently owned management listener.
+    relay
+        .service
+        .request_shutdown(&relay.runtime, Duration::ZERO);
+    timeout(LIMIT, supervisor)
+        .await
+        .unwrap_or_else(|error| panic!("shutdown supervisor completes: {error}"))
+        .unwrap_or_else(|error| panic!("shutdown supervisor joins: {error}"));
+    for id in [&forced.session_id, &prior_eof.session_id] {
+        wait_for(&running.events, |event| {
+            matches!(event, Event::SessionClosed { session_id, .. } if session_id.as_str() == id)
+        }).await;
+    }
+    let history = authenticated_query(running, &cookie, "/api/v1/closed-sessions").await;
+    let items = history["items"]
+        .as_array()
+        .unwrap_or_else(|| panic!("shutdown history items"));
+    assert_eq!(items.len(), 2);
+    for (id, cause, transfers) in [
+        (&forced.session_id, "server_shutdown", 2_u64),
+        (&prior_eof.session_id, "peer_eof", 1_u64),
+    ] {
+        let item = items
+            .iter()
+            .find(|item| item["session_id"].as_str() == Some(id.as_str()))
+            .unwrap_or_else(|| panic!("shutdown history contains session {id}"));
+        assert_eq!(item["close_cause"], cause);
+        assert_eq!(item["mode"], "mode2");
+        assert_eq!(item["viewer_transport"], "tcp");
+        assert_eq!(
+            item["bytes_viewer_to_target"].as_u64(),
+            Some(transfers * b"viewer-to-server".len() as u64),
+            "{cause}: integer final forward counter"
+        );
+        assert_eq!(
+            item["bytes_target_to_viewer"].as_u64(),
+            Some(transfers * b"server-to-viewer".len() as u64),
+            "{cause}: integer final reverse counter"
+        );
+        assert!(item["ended_at"].as_str() >= item["started_at"].as_str());
+        let detail = plain_exchange(
+            running.addr,
+            &get(&format!("/api/v1/sessions/{id}"), &[&cookie]),
+        )
+        .await;
+        assert_eq!(detail.status, 404);
+        assert_eq!(error_code(&detail), "not_found");
+    }
+    let summary = authenticated_query(running, &cookie, "/api/v1/summary").await;
+    assert_eq!(summary["server"]["state"], "shutdown_grace");
+    assert_eq!(summary["counts"]["active"].as_u64(), Some(0));
+    assert_eq!(
+        summary["usage"]["relay_connections"]["current"].as_u64(),
+        Some(0)
+    );
+    let sessions = authenticated_query(running, &cookie, "/api/v1/sessions").await;
+    assert_eq!(sessions["items"], json!([]));
+    let waiting = authenticated_query(running, &cookie, "/api/v1/waiting").await;
+    assert_eq!(waiting["items"], json!([]));
 }
