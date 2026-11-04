@@ -192,26 +192,28 @@ CSRF 토큰은 메모리에만 둔다. 저장소(localStorage, sessionStorage)�
 - 사용자 결정 2026-11-05(Q113): 시험 쪽 TCP 프록시가 실제 관리 리스너로 전달한다. 일반 데이터와 쿠키는 서버 원본이다. 지연·응답 유실·연결 종료·계약 모양 500만 시험 쪽에서 주입한다. 요청 시각·동시 처리 수·실제 전달 수·주입 수를 따로 기록한다. 주입 오류를 실제 서버의 500 증거로 쓰지 않는다.
 - DASH-008은 `Si=300s`를 실제로 기다린다. 독립 쿠키의 운영 현황·상세 브라우저를 동시에 관찰한다. 각 쿠키의 마지막 수동 요청 시각부터 300초 이전에는 실제 401이 없어야 한다. 297초 뒤에도 정상 자동 폴링과 보호된 DOM을 확인한다. 그 뒤 첫 실제 401, 보호 데이터 제거, 로그인 이동과 폴링 중단을 확인한다. 단순히 301초 잠든 뒤 401이 있는지만 검사하지 않는다. CDP 명령마다 제한 시간을 두되 브라우저 전체에 60초 기한을 두지 않는다.
 - `P` 기본값·설정값은 서로 다른 실제 프로세스에서 관찰한다. 긴 응답과 늦은 응답은 프록시의 실제 전송 지연으로 만든다. 시험 페이지의 fetch 교체는 실서버 증거로 세지 않는다.
-- 기존 dump-dom 시험은 빠른 컴포넌트·형식 부분 증거로 유지한다. DASH-015의 수동 접근성·DASH-023의 네 브라우저 호환성은 별도다. 새 시험은 실행 전까지 통과로 기록하지 않는다.
+- 기존 dump-dom 시험은 빠른 컴포넌트·형식 부분 증거로 유지한다. 실서버 비부분 25개 행은 커밋 `9cdebc6`의 Windows·WSL 전체 게이트에서 통과했다(대조 기록). DASH-015의 수동 접근성·DASH-023의 네 브라우저 호환성은 별도다.
 - DASH-001·021의 확인 불가 값은 실제 조회 전달 실패로 만든다. 정상 서버의 정수 필드를 null로 위조하지 않는다. DASH-025의 미래 enum 값은 생산자가 낼 수 없는 입력이다. 일반 데이터·탐색은 실제 서버로 확인하고, 미래 값만 실제 브라우저에서 제품 파서·표 컴포넌트에 별도 Consumer 계약 입력으로 준다. 두 언어의 원문 값 보존과 번역된 머리글·행동을 확인한다. 이 입력은 API 응답이나 프록시 본문이 아니다.
 - 한 시험 바이너리 안의 행은 직렬로 실행한다. 서로 다른 행의 브라우저 부하가 폴링 시각 관찰을 흔들지 않게 하기 위해서다. DASH-008의 운영 현황·상세 브라우저 두 개는 같은 행에서 동시에 실행한다.
 - 원시 조회의 관찰 계정은 `bob`, 브라우저 계정은 `alice`다. 역할을 분리하기 위한 시험 구성이다. 같은 계정의 독립 세션을 금지하는 제품 정책은 아니다. 전달 프록시는 `Content-Length`·chunked·본문 없는 상태의 HTTP 프레이밍으로 응답 완료를 판정한다. 완전한 응답을 읽은 뒤 TCP FIN을 추가로 기다리거나, 후속 연결 reset 때문에 그 응답을 폐기하지 않는다.
 - 프록시 accept 루프만 비차단이다. 수락한 소켓은 제한 시간이 있는 차단 모드로 명시적으로 바꾼다. Windows는 accept된 소켓에 비차단 모드를 상속한다. 이를 그대로 두면 브라우저 사전 연결에서 요청 도착 전 `WouldBlock`(10035)을 읽고 소켓을 닫는다. 실제 조사에서 POST가 프록시·서버에 도달하지 않고 Chromium이 `ERR_SOCKET_NOT_CONNECTED`를 기록했다. 이 수정은 재시도나 시간 제한 증가가 아니다.
 - 실패 진단은 프록시 전송 단계·상태·소요 시간·OS 오류, CDP 네트워크 실패·응답 상태, 서버 사건의 열거 값만 남긴다. 요청·응답 본문, 쿠키·비밀번호·토큰·헤더 값은 출력하지 않는다.
 
+### 기존 목 응답 시험과 과거 부분 증거
+
 
 - 브라우저 시험 페이지: `web/dashboard/tests/operations.html`과 `operations-scenarios.js`. 로그인 시험과 같은 방식으로 `?case=` 값에 따라 가짜 응답을 준다. 결과는 `data-result`에 쓴다.
 - 세션 상세 시험 페이지: `web/dashboard/tests/session.html`과 `session-scenarios.js`. 가짜 응답으로 사례를 돌리고, 결과는 `data-result`에 쓴다.
 - 라우터 시험 페이지: `web/dashboard/tests/router.html`과 `router-scenarios.js`. `app/router.js`의 `mountRouter`를 그대로 쓴다. 목록 페이지에서 상세 링크의 `href`를 확인하고, 같은 해시를 적용해 상세(SCR-002)가 열리고 목록으로 돌아오는지 본다(DASH-006, 14절 D4).
 - 시험 사례 (SCR-001 부분): dash-001, 002, 003, 004, 005, 008, 016, 019(로그아웃 성공, 확인 못함 CPY-076, 403 포함), 020, 021, 022, 024, 025.
-- 시험 사례 (SCR-002 부분, 4.11): dash-006, 007, 009, 010, 011, 012, 013, 014, 016, 019, 022, 024, 025, 026. 모두 `partial`이다. DASH-006은 `session.html`(상세 값)과 `router.html`(목록에서 상세, 목록 복귀) 두 페이지로 시험한다. DASH-024·025는 SCR-002 부분만 여기서 시험한다. SCR-003 부분은 로그인 시험(TODO 4.9)이다. 실서버 확인은 하지 않았다.
+- 시험 사례 (SCR-002 목 시험, 4.11): dash-006, 007, 009, 010, 011, 012, 013, 014, 016, 019, 022, 024, 025, 026. 이 목 시험의 표식은 모두 `partial`로 유지한다. DASH-006은 `session.html`(상세 값)과 `router.html`(목록에서 상세, 목록 복귀) 두 페이지로 시험한다. DASH-024·025는 SCR-002 부분만 여기서 시험한다. SCR-003 부분은 로그인 목 시험(TODO 4.9)이다. 이 페이지의 목 응답 결과를 실서버 증거로 세지 않는다.
 - 형식 시험 (`format.js`, 시험 페이지 사례): `0`, `256`(→ `0.3 KiB`), `1536`, `1048575`, `1572864`는 기대값과 같다. 2^53−1은 BigInt로 계산한 기대값과 같다. `JSON.parse('9007199254740993')`의 결과가 2^53임을 확인한다. 2^53 이상 2^70 바이트 미만 값은 BigInt 기대값과 표시 차이가 한 칸(0.1 MiB) 이내다 (9절). 2^70 이상은 시험하지 않는다 (구현 판단(사용자 결정 없음)).
 - `tests/dashboard_browser.rs`: 사례마다 `/// spec: dashboard.md:DASH-0xx` 마커를 붙인다. 마커 표기와 ` partial` 접미사는 `docs/conventions/testing.md` 7절을 따른다.
 - 로그인 쿼리 시험 (`tests/dashboard_browser.rs`, 14절 D3): `/login/?notice=logout-unconfirmed`이면 CPY-076 안내가 보이고, 이후 주소에서 쿼리가 사라지며(`replaceState`), 다시 불러오면 CPY-075 안내가 보인다. 알 수 없는 쿼리 값은 CPY-075 안내로 처리되고 쿼리가 지워진다.
 - 상세 링크 (14절 D4): 4.11에서 `router.js`가 `#/sessions/{session_id}`를 SCR-002로 보낸다. `router-scenarios.js`가 링크 `href`를 확인하고 같은 해시를 적용해 상세와 목록 복귀를 본다. 링크를 실제로 누르면 시험 페이지를 벗어나므로 쓰지 않는다. SCR-002 본문과 종료 흐름은 `session-scenarios.js` 사례로 시험한다.
 - 정적 시험 (`management.rs`): 세션이 없으면 `/`와 `/app/…` 경로는 303 `/login/`이다 (`static_paths_redirect_to_login_without_a_session`, `protected_files_redirect_to_login_without_a_session`). 세션이 있으면 `/`는 200 HTML과 정적 헤더다 (`protected_files_are_served_with_a_session`). Q43 결정에 따른다.
 - 수동 확인 (verify-dashboard-frontend.md 3.4~3.7, Q36): 폭별 스크린샷과 시안 대조(3.4), 키보드(3.5), 스크린 리더(3.6), Firefox·Safari와 390px 실기기(3.7).
-- 실서버 값·Si 만료·`P` 설정 확인은 위 CDP 시험이 맡는다. 기존 목 시험의 부분 표식은 유지한다. 새 비부분 표식의 실행 여부는 실제 게이트 결과와 분리한다.
+- 실서버 값·실제 Si=300초 만료·`P` 설정 확인은 위 CDP 시험이 맡는다. `9cdebc6`의 두 OS 게이트에서 모두 통과했다. 기존 목 시험의 부분 표식과 과거 실행 기록은 유지한다.
 
 ## 13. 반응형 (SCR-001)
 
@@ -284,7 +286,7 @@ CSRF 토큰은 메모리에만 둔다. 저장소(localStorage, sessionStorage)�
 - SCR-001 목록 카드의 개수 배지는 CPY 승인 대기다. DESIGN 608·626·636·638행의 시각 기준만으로 문구를 새로 만들지 않는다. 승인 전에는 표시하지 않는다. D6의 `closing` 생략과 CPY-040 바이트 머리글은 유지한다.
 - 반영 완료(2026-10-22 Main 결정): D4 상세 링크는 `/#/sessions/{session_id}`로 두고 숨기지 않는다(14절). 검증 기록 4.6의 수정 필요 6건은 코드 수정을 마쳤다(4.6 기록).
 - 반영 완료(2026-10-22): `code-map.md`, `dashboard-components.md` 2절·3.1절, `architectures/README.md`, `frontend.md` 1.1·2.3절, `xtask.md`, `management-api-v1.md` 5절과 6절(`tests/dashboard_browser.rs` 추가). 5절 결과 열은 검증 기록 규칙(`docs/AGENTS.md` 검증 기록)에 따라 부분 행을 `미실행`으로 두고, 부분 내용은 실행 기록 열에 적는다.
-- 실서버 시험 설계·본문은 12절에 추가했다(2026-11-05). 실행 결과와 DASH-015·023의 수동 결과는 별도로 기록한다.
+- 실서버 시험 설계·본문은 12절에 추가했다(2026-11-05). `9cdebc6`의 두 OS 전체 게이트에서 DASH-001~014·016~022·024~027이 통과했다. DASH-015·023의 수동 결과는 별도다.
 
 ## 대조 기록
 
@@ -296,7 +298,11 @@ CSRF 토큰은 메모리에만 둔다. 저장소(localStorage, sessionStorage)�
 | 시험 DASH-006·007·009~014·016·019·022·024·025·026 (SCR-002) | Windows 10.0.26200 x64, 작업 트리 | `tests/dashboard_browser.rs`의 `session_` 시험 14개와 `router_opens_session_detail_from_the_list_in_browser`(`session.html`·`router.html`, 목 응답) | 모두 부분. DASH-015는 표식만 달았다(4.12). 실서버 확인은 4.4·4.5 뒤. 검증 기록 4.7, 4.9 |
 | 스크린샷 비교 SCR-002 (상태 53장: 정상·종료 확인 × 1280·390·320 × ko·en 12장, 나머지 상태 41장) | Windows 10.0.26200 x64, Chrome 헤드리스 | `target/dashboard-shots/scr/`(커밋하지 않음, 기록 `scr/scr002-capture.json`·`scr/scr002-capture-stale-failed.json`·`scr/scr002-capture-gone.json`·`scr/scr002-capture-normal.json`), 검증 기록 4.7 | 53장 모두 가로 넘침 0, CSP 위반 0. `98b2fc1`에서 대상 없음 5장과 정상 6장을 다시 찍었다(모두 `pass`). 상태 판정은 4.7절 표. 사람 비교는 4.12 |
 | 수동 확인 3.4(시안 대조)·3.5(키보드)·3.6(스크린 리더)·3.7(Firefox·Safari·390px 실기기) | — | 검증 기록 3절 | 미실행 |
-| 실서버 확인(MGT-026 값 일치, 세션 만료, `P` 설정 반영) | — | 4.4 뒤 | 미실행 |
+| 실서버 CDP: DASH-001~014·016~022·024~027의 전체 기대 결과 | Windows·WSL, 커밋 `9cdebc6` | Windows `vr-win.ps1 -Only all`, WSL `vr-full.sh`. 각 게이트의 `tests/dashboard_live.rs` 26개(25개 비부분 행과 프록시 회귀 1개) | 통과. Windows 502.32초, WSL 491.04초. 독립 쿠키별 실제 300초 만료·만료 전 데이터 유지와 첫 401 시각, 두 실제 서버의 설정 P/기본 P, 실제 pending 연결 수·L/Lm를 확인했다. DASH-025의 미래 enum은 별도 Consumer 입력이며 500은 명시적 프록시 주입이다. |
+| 프록시 사전 연결 회귀와 기존 목 시험 | 같은 두 OS 게이트, `9cdebc6` | `dashboard_proxy_preserves_an_idle_browser_preconnection`은 worker 진입 확인 뒤 HTTP 전송을 늦추고 실제 관리 200·본문·전달 완료를 확인한다. `tests/dashboard_browser.rs`는 기존 37개를 실행한다 | 모두 통과. 목 시험 37개는 Windows 187.56초, WSL 111.99초다. 목 시험의 기존 부분 표식은 바꾸지 않는다. 네 브라우저·수동 접근성을 대신하지 않는다. |
+
+최종 게이트 출처: Windows 시나리오 보고서 생성 시각은 `2026-11-04T21:30:23Z`, 대상은 `9cdebc6`다. WSL은 `2026-11-04T21:47:19Z`, 대상 표기는 `9cdebc6 + 미커밋 변경`이다. 두 게이트 실행 중 저장소를 편집하지 않았다. WSL의 미커밋 표기 원인은 이번에 감사하지 않았으며 깨끗한 작업 트리였다고 주장하지 않는다. 두 게이트의 각 단계 종료 코드는 모두 0이고 Windows는 `ALL PASSED (all)`, WSL은 `ALL PASSED`다. 두 DASH 보고서는 모두 통과 25·부분 1(DASH-015)·실패 0·미실행 0·미연결 1(DASH-023)이다. 전체 집계와 명령은 [관리 API 계약 실행 기록](../contracts/management-api-v1.md#5-예제와-계약-테스트)과 [검증 how-to](../how-to/verify-dashboard-frontend.md)를 따른다.
+
 
 ### 차이
 
