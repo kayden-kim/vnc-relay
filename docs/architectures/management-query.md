@@ -250,6 +250,7 @@ flowchart LR
 | `vr-full.sh` | WSL, `082f5f1` | 실패(`FAILED: scenarios`). `tests/relay_log_scenarios.rs`의 `operations_log_records_contract_events_and_correlates_identifiers`가 수락 사건의 `ts`가 이후 사건의 `ts`보다 늦다는 단언에서 실패했다. `ts`는 기록 때의 벽시계이고, 수락 기록은 연결 작업을 만들기 전에 남는다(`crates/adapters/src/net.rs`). 그래서 벽시계 보정으로 판단했다 [INFERENCE: 실패 실행의 로그 파일은 남지 않았다]. 계약은 `ts`의 단조성을 약속하지 않으므로 `b0c25f9`에서 벽시계 비교 단언 4개를 지우고 줄 순서로 판정했다. 이 시험은 WSL에서 3회 통과했다. |
 | `vr-full.sh` | WSL, `b0c25f9` | 2026-11-04T12:01:00Z 보고서: `ALL PASSED`. 151건: 통과 100, 부분 40, 실패 0, 미실행 0, 미연결 11, 오류 0. `management.md` 27건 모두 통과. 머리의 `+ 미커밋 변경`은 줄바꿈 차이다. |
 | `vr-win.ps1 -Only all` | Windows, `b0c25f9` | 2026-11-04T12:08:11Z 보고서: `ALL PASSED (all)`. 151건: 통과 92, 부분 48, 실패 0, 미실행 0, 미연결 11, 오류 0. `management.md` 27건: 통과 25, 부분 2(MGT-026·MGT-027). |
+| `vr-win.ps1 -Only all` | Windows, `a70df88`(`0196cab`의 MGT-026 Windows 시험과 문서 기록 포함) | 2026-11-04T12:25:35Z 보고서: `ALL PASSED (all)`. 151건: 통과 93, 부분 47, 실패 0, 미실행 0, 미연결 11, 오류 0. `management.md` 27건: 통과 26, 부분 1(MGT-027, 작업 4.3 범위). MGT-026은 `counts_and_usage_match_at_limit_with_pending_connections_windows`로 통과했다. |
 
 | 시나리오 | 판정 | 증거 |
 | --- | --- | --- |

@@ -573,6 +573,8 @@ WSL 첫 전체 게이트(2026-11-01T18:25:46Z)는 `tests/reload.rs`의 `new_tls_
 
 작업 4.3·4.4·4.5 증거 보강 실행 기록(2026-11-04, 커밋 `b0c25f9`. 앞선 커밋 `c0d3b59`·`34cefe5`·`bb44c4f`·`b5c1a78`·`e9221c6`·`fb8a362`를 포함한다): WSL `vr-full.sh`의 12:01:00Z 보고서는 `ALL PASSED`다. 151건 중 통과 100, 부분 40, 실패 0, 미실행 0, 미연결 11, 오류 0이며 `management.md` 27건이 모두 통과다. Windows `vr-win.ps1 -Only all`의 12:08:11Z 보고서는 `ALL PASSED (all)`이다. 151건 중 통과 92, 부분 48, 실패 0, 미실행 0, 미연결 11, 오류 0이며 `management.md`는 통과 25, 부분 2(MGT-026·MGT-027)다. 같은 날 앞선 WSL 게이트(커밋 `082f5f1`)는 로그 시험의 벽시계 `ts` 비교 단언 때문에 실패했고, `b0c25f9`가 줄 순서 판정으로 고쳤다. MGT-026의 Windows 비부분 시험은 커밋 `0196cab`에서 추가했다. MGT-027의 Windows 정상 종료 시험은 작업 5.3에서 만든다. 대조 기록: [관리 조회 API](../architectures/management-query.md#작업-44-완료-대조2026-11-04), [관리 로그인과 세션](../architectures/management-session.md#작업-43-증거-보강과-브라우저-관찰2026-11-04), [관리자 종료 8절](../architectures/management-terminate.md#8-현재-구조와-검증-범위).
 
+작업 4.4 MGT-026 Windows 실행 기록(커밋 `a70df88`. 시험 커밋 `0196cab` 포함, 작업 트리 깨끗함): Windows `vr-win.ps1 -Only all`의 2026-11-04T12:25:35Z 보고서는 `ALL PASSED (all)`이다. 151건 중 통과 93, 부분 47, 실패 0, 미실행 0, 미연결 11, 오류 0이다. `management.md` 27건은 통과 26, 부분 1(MGT-027)이다. MGT-026은 `counts_and_usage_match_at_limit_with_pending_connections_windows`(비부분)로 통과했다. WSL은 이 시험을 컴파일하지 않으므로(`#[cfg(windows)]`) `b0c25f9` 게이트 결과를 그대로 쓴다.
+
 
 ## 6. 초안을 확정하기 전에 해결할 사항
 
