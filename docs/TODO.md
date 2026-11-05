@@ -205,10 +205,11 @@ Mode I·II 초기 흐름을 추정 없이 설명할 수 있게 한다. 관찰은
   - 선행: 3.3
   - 범위: 여러 Ping과 backpressure 중 Pong 기한은 [설계 9.5절](architectures/websocket-stream.md#95-kw의-여러-ping과-b-backpressure)의 선택 A로 확정했다(사용자 결정 2026-11-02(Q84)). 고정 Ping 주기와 빈 Ping별 기한 FIFO를 쓰며 상한은 `ceil(pong_timeout / ping_interval) + 1`이다. Pong은 가장 오래된 대기 기한을 지운다. M > B의 저장·스트리밍 상한은 [9.2절](architectures/websocket-stream.md#92-ws-tbd-004-m-b와-제어-진행)에 따라 3.3에서 다룬다. 이미 헤더를 쓴 프레임과 Close의 경합은 [9.4절 선택 A](architectures/websocket-stream.md#94-해결-수신-close와-이미-시작한-출력-프레임)로 해결했다(사용자 결정 2026-11-01(Q83)).
   - 현재: 완료 조건을 모두 채웠다. WS-016·WS-017·WS-026은 비부분 시험으로 커밋 `59fc535`의 두 OS 게이트에서 통과했다. Kw는 고정 주기 빈 Ping, Ping별 기한 FIFO, 상한 `ceil(pong_timeout / ping_interval) + 1`로 구현했다(`crates/adapters/src/websocket_stream/keepalive.rs`). 자기 Pong 기한 만료는 Close 없이 TCP를 닫고, 반대쪽이 끊긴 연결이면 살아 있는 WS 쪽에 4006을 보낸다. 같은 커밋의 WSL 게이트는 이 작업과 무관한 RLY-025·026 netns 시험 2건이 `nft` 없음으로 실패해 `FAILED: scenarios`였다(작업 2.11, 사용자 결정 2026-11-02(Q93)). 실행 기록은 [WebSocket 스트림 설계 대조·실행 기록](architectures/websocket-stream.md#대조실행-기록)과 [WebSocket 계약 실행 기록](contracts/websocket-relay-v1.md#계약-테스트-실행-기록)에 있다.
-- [ ] **3.5 전송·모드 조합 검증**: WS·WSS와 Mode I·II의 모든 조합, noVNC·websockify 없는 배포, 고정 버전 noVNC `repeaterID` 상호운용을 확인한다.
+- [x] **3.5 전송·모드 조합 검증**: WS·WSS와 Mode I·II의 모든 조합, noVNC·websockify 없는 배포, 고정 버전 noVNC `repeaterID` 상호운용을 확인한다.
   - 기준: [WebSocket 스펙 6절](specs/websocket.md#6-전송모드-검증-조합)
   - 완료 조건: WS-001~006, WS-020, WS-025. AC-05·AC-16~17·AC-33 통과.
   - 선행: 1.3, 2.8, 2.9, 3.4
+  - 현재: 완료 조건을 모두 채웠다. 커밋 `f62f11d`의 두 OS 전체 게이트(Windows `ALL PASSED (all)`, Ubuntu `ALL PASSED`)에서 WS-001~024·026·027이 통과했다. WS-020은 `tests/websocket_browser.rs`가 Chromium 내장 WebSocket으로 실제 실행파일의 WS·WSS × Mode I·II 4조합을 확인한다. WS-025는 고정 noVNC 1.7.0 압축 파일이 필요해 `#[ignore]`이고, 게이트에서는 `미실행`이다. 두 OS에서 `--include-ignored`로 실행해 WS·WSS × Server 선접속·후접속 4조합 모두 통과했다. 시험 쪽 TCP Server는 최소 RFB 3.8 서버이며 실제 UltraVNC Server와의 조합은 2.13·5.5에서 확인한다. 이에 따라 AC-05(WS-001~022)·AC-16(WS-023~024)·AC-17(WS-025)·AC-33(WS-027)이 통과다. 공통 CDP 클라이언트는 `tests/common/cdp.rs`로 분리해 대시보드 실서버 시험과 함께 쓴다(Q112의 승인 의존성만 사용). 기록은 [WebSocket 중계 계약 실행 기록](contracts/websocket-relay-v1.md#계약-테스트-실행-기록)과 [WebSocket 진입점 설계 대조 기록](architectures/websocket-entry-point.md#대조-기록)에 있다.
 
 ## 4. 관리 기능
 
