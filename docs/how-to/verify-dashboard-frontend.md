@@ -1060,7 +1060,7 @@ Firefox는 BiDi `input.performActions`, Edge는 CDP `Input.dispatchKeyEvent`의 
 #### 시험 구성과 증거의 경계
 
 - `tests/dashboard_live.rs`의 25개 함수가 DASH-001~014·016~022·024~027의 전체 행 표식을 소유한다. 별도 회귀 시험 1개가 먼저 연결한 뒤 요청을 늦게 보내는 프록시 동작을 확인한다. 공통 fixture와 화면별 하위 모듈에는 시나리오 표식이 없다.
-- `tests/common/dashboard_live.rs`는 실제 계정 해시·설정·`vnc-relay serve`와 중계 연결을 준비한다. `dashboard_cdp.rs`는 승인된 `tokio-tungstenite`로 CDP(Chrome DevTools Protocol, 브라우저 조작 통신)를 사용한다. 새 crate·외부 WebDriver·제품 시험 훅은 추가하지 않았다(Q112).
+- `tests/common/dashboard_live.rs`는 실제 계정 해시·설정·`vnc-relay serve`와 중계 연결을 준비한다. `tests/common/cdp.rs`는 승인된 `tokio-tungstenite`로 CDP(Chrome DevTools Protocol, 브라우저 조작 통신)를 사용하고, `dashboard_cdp.rs`는 그 위에 대시보드 입력·로그인 동작을 더한다. 새 crate·외부 WebDriver·제품 시험 훅은 추가하지 않았다(Q112).
 - 일반 로그인·조회·중계 상태·관리자 종료 응답은 실제 실행파일에서 얻는다. `dashboard_proxy.rs`의 지연·응답 유실·연결 종료·계약 모양 500은 시험 쪽 주입이다. 주입한 500을 제품 내부 오류의 증거로 세지 않는다(Q113).
 - 확인 불가 값은 실제 조회 전달 실패로 만든다. DASH-025의 미래 enum 값은 현재 Producer가 만들 수 없어 제품 파서·표 컴포넌트에 별도 Consumer 계약 입력으로 준다. 이를 실서버 원본 응답이라고 주장하지 않는다.
 - DASH-008은 두 독립 쿠키의 운영 현황·상세 화면에서 실제 Si=300초를 기다린다. 쿠키별 마지막 수동 요청을 기준으로 300초 전 실제 401이 없음을 확인한다. 297초 뒤의 정상 자동 폴링·보호된 DOM과 첫 401의 시각, 로그인 이동·데이터 제거·폴링 중단을 함께 확인한다. 자동 폴링은 Si를 연장하지 않는다.

@@ -89,6 +89,7 @@ cargo xtask scenarios --require-all
 - 커버리지·결과 보고 명령: `cargo xtask scenarios`. `docs/specs/`의 스펙(`README.md`·`AGENTS.md` 제외)에서 "수용 테스트" 절 표의 시나리오 ID를 모은다. `xtask`를 뺀 작업 공간 패키지의 `src/`·`tests/` 아래 `.rs` 파일에서 표식을 모은다. `cargo test --workspace --no-fail-fast`를 실행해 테스트별 결과를 대조한다. 동작 방식은 [xtask 모듈 설계](../architectures/xtask.md)에 있다.
 - 표식을 둘 수 없는 곳: 여러 통합 테스트가 함께 쓰는 `tests/common/` 같은 하위 모듈은 속한 테스트 대상을 정할 수 없다. 이런 파일의 표식은 `오류`가 된다. 표식은 테스트 함수가 있는 파일에 둔다.
 - 대시보드 브라우저 테스트: `tests/` 아래 Rust 통합 테스트가 Chromium을 헤드리스로 실행한다. 컴포넌트·목 응답 시험은 페이지의 `data-result`를 읽는다(Q35). 실서버 시험은 직접 만든 CDP 클라이언트로 실제 화면을 조작한다(사용자 결정 2026-11-05(Q112)). 실패·지연·응답 유실은 시험용 전달 프록시로 만들며, 관리 세션 Si 만료는 실제 300초를 기다린다(Q113). 표식은 Rust 테스트 함수에 두며 스캐너는 바꾸지 않는다. Chromium이 없으면 `#[ignore]` 없이 실패한다. Chromium(Chrome 또는 Edge)은 Windows와 Ubuntu 모두 필요하다. 상세 기준은 [프런트엔드 컨벤션](frontend.md)이 정한다.
+- WebSocket 브라우저 테스트: `tests/websocket_browser.rs`가 대시보드 실서버 시험과 같은 CDP 클라이언트(`tests/common/cdp.rs`)로 Chromium을 조작한다. WS-020은 Chromium 내장 WebSocket을 외부 독립 클라이언트로 쓰며, Chromium이 없으면 `#[ignore]` 없이 실패한다. 제품이 업그레이드에 쓰는 `tokio-tungstenite`의 클라이언트는 독립 도구로 세지 않는다. WS-025는 고정한 noVNC 압축 파일이 필요하므로 `#[ignore]`를 붙인다. 이 시험은 `VNC_RELAY_NOVNC_ZIP`의 SHA-256을 확인한 뒤 임시 디렉터리에 풀고, 시험 쪽 정적 HTTP 서버와 최소 RFB 3.8 서버를 상대로 쓴다. 실행 방법은 [noVNC 상호운용 시험 준비](../how-to/set-up-and-verify.md#novnc-상호운용-시험-준비)에 있다(이 문서의 판단, 사용자 결정 없음).
 - 보고서·CI 결과 위치: Cargo 대상 디렉터리의 `scenario-report.md`(4절). 표준 출력에는 상태별 수, 보고서 경로, 판정을 쓴다. CI는 없다. 로컬 실행 기록은 작업의 완료 보고와, 절차를 바꾼 경우 [개발 환경·검증 how-to](../how-to/set-up-and-verify.md#4-검증)의 검증 표에 남긴다.
 - 통과 조건: 5절의 성공 조건과 같다.
 

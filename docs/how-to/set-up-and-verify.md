@@ -149,6 +149,34 @@ Linux 전용 `tests/relay_dead_peer_linux.rs`는 사용자·네트워크 네임�
 
    시험은 DROP 직전 시각과 정리 사건 줄을 읽은 시각을 단조 시계(`Instant`)로 비교한다. 로그 `ts`는 벽시계라서 쓰지 않는다. WSL2는 실행 중에 벽시계를 몇 초씩 앞으로 보정한다. 검증 환경에서는 40초 동안 +2.933초 보정이 한 번 일어났다. 로그 `ts`로 재면 실제로 11초 안에 끝난 정리가 14초 이상으로 계산된다. 로그를 읽는 지연(10ms 주기 확인)은 측정값을 늘리기만 하므로 상한 판정을 느슨하게 하지 않는다. 마지막 활동 이후 9초 이상이라는 하한 판정은 그 지연만큼 느슨해진다.
 
+#### noVNC 상호운용 시험 준비
+
+`tests/websocket_browser.rs`의 WS-025 시험은 고정한 noVNC 1.7.0 압축 파일이 있어야 실행할 수 있다. 그래서 [테스트 컨벤션](../conventions/testing.md)에 따라 `#[ignore]`를 붙였고, 6단계의 기본 실행에서는 `미실행`으로 보고된다. 같은 파일의 WS-020 시험은 noVNC가 필요 없으며 6단계에서 함께 실행된다. noVNC는 시험 중에만 임시 디렉터리에 풀고, 저장소와 배포물에 넣지 않는다.
+
+1. 고정한 압축 파일 `novnc-v1.7.0.zip`을 준비한다. 받은 주소와 SHA-256은 [호환성 검증 기록 2.4절](../contracts/repeater-compat-record.md)에 있다. 검증 환경은 `D:\vr-lab\installers\novnc-v1.7.0.zip`(WSL에서는 `/mnt/d/vr-lab/installers/novnc-v1.7.0.zip`)을 썼다.
+2. 압축을 풀 도구를 확인한다. Windows는 기본 제공 `%SystemRoot%\System32\tar.exe`를, Ubuntu는 `python3 -m zipfile`을 쓴다.
+
+   ```shell
+   python3 --version
+   ```
+
+   기대 결과: Ubuntu에서 Python 3 버전이 출력된다. Windows에서는 이 단계를 건너뛴다.
+
+3. 저장소 루트에서 압축 파일 경로를 환경 변수 `VNC_RELAY_NOVNC_ZIP`에 주고 무시된 시험만 실행한다.
+
+   ```shell
+   VNC_RELAY_NOVNC_ZIP=/mnt/d/vr-lab/installers/novnc-v1.7.0.zip cargo test --test websocket_browser -- --ignored
+   ```
+
+   ```powershell
+   $env:VNC_RELAY_NOVNC_ZIP = 'D:\vr-lab\installers\novnc-v1.7.0.zip'
+   cargo test --test websocket_browser -- --ignored
+   ```
+
+   기대 결과: 시험 1건이 통과한다. 시험은 압축 파일의 SHA-256이 고정값과 다르거나, 환경 변수가 없거나, 압축을 풀 수 없으면 실패한다. 조용히 건너뛰지 않는다.
+
+4. 실행 결과를 [WebSocket 중계 계약 5절](../contracts/websocket-relay-v1.md#5-예제와-계약-테스트)의 실행 기록에 남긴다. 대상 커밋, OS, 명령, 결과를 적는다.
+
 ### 3.2 빌드
 
 3. 저장소 루트에서 고정 툴체인을 확인한다.
