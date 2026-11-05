@@ -18,7 +18,7 @@ use crate::reload::{ChangeSource, WatchFailure};
 use crate::settings::ConfigWarning;
 
 /// Value of `log_contract` in `server_starting` (ops-info-v1 §1.5).
-pub const LOG_CONTRACT: &str = "ops-info/1.2.0";
+pub const LOG_CONTRACT: &str = "ops-info/1.3.0";
 
 /// `level` values of ops-info-v1 §1.3. v1 has no other value.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

@@ -73,7 +73,7 @@ flowchart LR
 
 | 이름 | 필드·형태 | 줄의 필드 | 제약과 항상 지켜야 할 조건 |
 | --- | --- | --- | --- |
-| `Event::ServerStarting` | 없음 | `log_contract`(`LOG_CONTRACT` = `ops-info/1.2.0`) | 시작 단계의 첫 사건이다. |
+| `Event::ServerStarting` | 없음 | `log_contract`(`LOG_CONTRACT` = `ops-info/1.3.0`) | 시작 단계의 첫 사건이다. |
 | `Event::ConfigWarning` | `warning: ConfigWarning`, `phase: Phase` | 사건 이름은 경고 코드. `plaintext_ws_enabled`: `listener`, `listen`. `allow_all_source`: `listener`, `item`, `phase`. `allow_all_target`: `item`, `phase`. `status_listen_not_loopback`: `listen` | `item`은 항목의 표준 표기다([설정 로딩 모듈 설계](config-loading.md) 7절). |
 | `Event::StartupFailed` | `reason: &'static str`, `config_key: Option<String>`, `listener: Option<&'static str>`, `detail: Option<String>` | 같은 이름 | 진단 하나에 한 줄이다(계약 1.6절). `detail`에 설정 값·경로·파일 내용을 넣지 않는다(6절). |
 | `Event::ServerStopped` | 없음 | 없음 | 마지막 줄이다. |

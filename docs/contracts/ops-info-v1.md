@@ -389,7 +389,7 @@ Lm 상한에서 거절한 연결은 HTTP 응답을 받지 못하고 연결이 �
 로그 줄(실제로는 줄바꿈 없이 한 줄씩 쓴다).
 
 ```jsonl
-{"ts":"2026-10-16T01:00:00.000Z","level":"info","event":"server_starting","log_contract":"ops-info/1.2.0"}
+{"ts":"2026-10-16T01:00:00.000Z","level":"info","event":"server_starting","log_contract":"ops-info/1.3.0"}
 {"ts":"2026-10-16T01:00:00.010Z","level":"warn","event":"plaintext_ws_enabled","listener":"ws_viewer","listen":"127.0.0.1:8080"}
 {"ts":"2026-10-16T01:00:00.011Z","level":"warn","event":"allow_all_source","listener":"tcp_viewer","item":"0.0.0.0/0","phase":"startup"}
 {"ts":"2026-10-16T01:00:00.120Z","level":"info","event":"server_ready","listeners":[{"name":"tcp_viewer","listen":"0.0.0.0:5900"},{"name":"status","listen":"127.0.0.1:9000"}]}

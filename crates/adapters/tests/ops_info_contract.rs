@@ -146,7 +146,7 @@ fn writes_one_json_object_per_line_with_common_fields_first() {
             ("info", "server_stopped"),
         ]
     );
-    assert_eq!(text(&lines[0], "log_contract"), "ops-info/1.2.0");
+    assert_eq!(text(&lines[0], "log_contract"), "ops-info/1.3.0");
     assert_eq!(text(&lines[1], "listener"), "tcp_viewer");
     assert_eq!(text(&lines[1], "item"), "0.0.0.0/0");
     assert_eq!(text(&lines[1], "phase"), "startup");
