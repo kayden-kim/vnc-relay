@@ -7,9 +7,9 @@
 | 항목 | 값 |
 | --- | --- |
 | 대상 독자 | 절차를 실행하는 사람(Q116에 따라 에이전트 자동 실행 포함)과 판정 캡처를 검토할 프로젝트 소유자 |
-| 검증 상태 | 부분 실행(2026-11-05). 3.2~3.4절 각 1회와 22~24·26단계를 확인했다. 26단계는 별도 회차가 아니라 `m2s-b` 정상 종료 뒤의 `m2v-a` 회차로 확인했다. 25단계는 중단했고, 27~31·34단계와 3.6절은 미실행이다. 결과는 [4.1절](#41-2026-11-05-실행-기록) |
+| 검증 상태 | 실행(2026-11-05·06, Windows VNC Relay). 3절의 22~31·34단계를 모두 실행했고 모두 성공 조건과 맞았다(4.1·4.2절). 32단계 자동 증거 대조는 4.3절이다. 남은 것: 프로젝트 소유자의 캡처 검토, AC-08(OPS-017 미확정), Ubuntu VNC Relay 실행 |
 | 검증 환경·버전 | Hyper-V VM 3대(`vr-lab` `Private` 스위치, 게이트웨이 없음), 게스트 Windows 11 Enterprise Evaluation 10.0.26300, UltraVNC Server·Viewer 1.8.3.0, VNC Relay 커밋 `ceb6a7c` Windows debug 빌드. Ubuntu VNC Relay는 미실행 |
-| 최종 검증일 | 2026-11-05(부분). 작성일 2026-11-02 |
+| 최종 검증일 | 2026-11-06. 작성일 2026-11-02 |
 | 관련 기준 문서 | [TODO 2.13](../TODO.md#2-tcp-repeater), [PRD 10절](../requirements/PRD.md#10-검증-및-수용-기준), [중계 스펙 7절](../specs/relay.md#7-수용-테스트), [초기 교환 계약](../contracts/repeater-handshake-v1.md), [설정 계약](../contracts/config-v2.md), [CLI 계약](../contracts/cli-v1.md), [운영 정보 계약](../contracts/ops-info-v1.md), [호환성 검증 기록](../contracts/repeater-compat-record.md) |
 
 ## 1. 대상과 영향
@@ -412,7 +412,7 @@ AC-18:   미실행. 수동 범위 밖이며 자동 증거 대조 미실행
 AC-26:   미실행. 31단계 미실행
 
 확인 필요 항목과 미실행 이유: 25단계 작업이 VM 호출에서 멈췄고, 이어진 관리자 권한 요청을 사용자가 취소해 남은 단계를 멈췄다
-중단 시각·직전 단계·오류: 20:42 KST, 25단계 시작. 21:17에 PowerShell Direct 세션을 만들지 못한 오류(Session 인수가 null)로 끝났다. VM 상태는 확인하지 못했다
+중단 시각·직전 단계·오류: 20:42 KST, 25단계 시작. 21:17에 PowerShell Direct 세션을 만들지 못한 오류(Session 인수가 null)로 끝났다. 2026-11-06 05:34에 확인했을 때 세 VM이 모두 Off였다. 언제, 왜 꺼졌는지는 확인하지 못했다
 복구 결과 / 증거 반출 위치 / 임시 파일 제거 여부: VM 쪽 복구 미실행(serve·방화벽 규칙 그룹·시험 비밀번호·계정 파일이 남아 있을 수 있음. 다음 실행 전에 baseline으로 되돌린다) / 위 증거 위치 / 호스트의 시험용 비밀번호 파일 제거
 ```
 
@@ -430,6 +430,60 @@ AC-26:   미실행. 31단계 미실행
 판정에서 뺀 회차도 기록한다. 3~5줄(`m1r1`)은 입력 스크립트 오류로 문자열을 보내지 못한 진단 회차다. 6~11줄(`m1-a`·`m1-b`)은 자동화가 Viewer 인증 창의 비밀번호 칸을 먼저 누른 회차다. 두 회차 모두 `session_closed` `connection_error`(`side=viewer`)로 끝났다. 칸을 누르지 않고 입력한 `m1-c`는 통과했다. 원인은 분석하지 않았다. 15~19줄(`m2s-a`)은 자동화가 인증 없음 확인 창을 닫아 Viewer가 연결을 거부한 회차다. 세션은 `close_timeout`으로 끝났다.
 
 운영 로그 사본 `vr-repeater-relay.jsonl.lines-1-39.jsonl`은 VM의 `relay.jsonl` 파일을 직접 반출한 것이 아니다. 각 작업 출력에 남긴 1~39줄을 모은 것이다.
+
+### 4.2 2026-11-06 실행 기록
+
+결론: 남은 수동 단계 25·27~31·34단계를 모두 실행했고 모두 성공 조건과 맞았다. 4.1절과 합치면 RLY-006·RLY-010·RLY-011은 각각 독립 2회 통과했다. 이 결과는 Windows VNC Relay 기준이며, Ubuntu VNC Relay 실행은 미실행이다. 판정 캡처는 Q116에 따라 프로젝트 소유자가 검토해야 한다. 자동 증거 대조(32단계)는 [4.3절](#43-자동-증거-대조-32단계)에 있다.
+
+```text
+실행일·시각·시간대: 2026-11-06 05:34~05:49 KST(UTC+9). 로그 ts는 UTC 2026-11-05 20:38~20:48
+실행자: 에이전트 자동 실행(Q116). 캡처 검토: 프로젝트 소유자(검토 전)
+대상 커밋·실행파일: 4.1절과 같은 ceb6a7c Windows debug 빌드(SHA-256 cc70349a…9f28)
+VM 준비: 세 VM을 baseline으로 되돌린 뒤 05:35:29에 부팅했다. 파일 버전·해시·IP·게이트웨이 없음·방화벽 규칙은 4.1절과 같았다
+VNC 인증 설정: 2절의 같은 화면에서 VNC Password만 바꾸었다. Enter 키 저장 한 번으로 passwd 줄이 baseline 값에서 바뀌었다. View-Only Password는 바꾸지 않았다
+설정 사본: relay-27·28·29v·29s·30v·30s.toml. 원본에서 allow 한 줄과 log.output만 바꾸었고, 각 사본은 자기 로그 파일에 썼다
+증거 위치: 저장소 밖 D:\vr-captures\manual-2.13\run-20261106\ (SHA256SUMS.txt 포함). 운영 로그는 VM의 파일을 직접 반출했다(vr-repeater-relay*.jsonl, serve-stderr-*.txt, serve-exit-*.txt)
+복구 결과 / 임시 파일 제거: VNC Relay 프로세스 종료(매 회차 server_stopped가 마지막 줄), 방화벽 규칙 그룹 vnc-relay-manual-2.13 제거(남은 규칙 0개), Viewer·Server 종료, 세 VM 종료. VM 안 비밀 파일 0개를 확인했다. 호스트의 시험용 비밀번호 파일을 지웠다. 계정 파일은 반출하지 않았다
+```
+
+| 회차 | 단계·ID | 결과 | 로그 파일:줄과 식별자 | 화면·입력 증거 |
+| --- | --- | --- | --- | --- |
+| `r25` | 25단계 | 통과 | `relay.jsonl` 3~9줄. Viewer A `c1` `waiting_registered`(`relay_id_ref` `3bb6e14cba08770c`) → 같은 ID의 Viewer B `c2`는 `connection_rejected` `stage=register` `reason=duplicate_id`, `c2`의 `waiting_registered` 없음 → B 종료 뒤 Server `c3`가 A와 매칭(`ses_fg7mku5lbwj6pwldcagudgpdh4`, `waited_ms` 22846, A가 처음부터 대기를 유지함) → `peer_eof` | `viewer-r25-dup.png`(B에 `Connection failed - End of Stream`), `vr-server-form-r25.log`(문자열 `dupidfirst`) |
+| `m1-d` | 34단계, RLY-006 2회차 | 통과 | 10~12줄. `c4`, `mode1` 대상 `192.0.2.30:5900`, `ses_v6vmhwacvqfajc233ajelt7pzm`, `peer_eof` | `vr-viewer-viewer-m1-d-*.png`, `vr-server-form-m1-d.log`(문자열 `modeonerepeat`) |
+| `m2s-c` | 34단계, RLY-010 2회차 | 통과 | 13~17줄. Server `c5` 대기 → Viewer `c6` → `ses_ehv4vvp6nx5v76nfa5p53b7ms4` → `peer_eof` | `vr-viewer-viewer-m2s-c-*.png`(인증 없음 확인 창 포함), `vr-server-form-m2s-c.log`(문자열 `serverfirstrepeat`) |
+| `m2v-b` | 34단계, RLY-011 2회차. 26단계 2회차 | 통과 | 18~22줄. Viewer `c7` 대기가 먼저 → Server `c8` → `ses_e2t3sr25flg37mqlhhjjqzhxba` → `peer_eof`. `m2s-c`가 17줄에서 정상 종료한 뒤 두 끝점을 모두 새로 실행했고, 같은 `relay_id_ref`로 새 `session_id`를 받았다 | `vr-viewer-viewer-m2v-b-*.png`, `vr-server-form-m2v-b.log`(문자열 `viewerfirstrepeat`) |
+| `k31` | 31단계 | 통과 | 23~25줄. Mode I `ses_2r3xe55gse7jazv7gyt4k3y27u`. 입력 없음 05:43:05.008~05:45:23.303(138초, K = 60 + 10 × 6 = 120초). 그 사이 사건 없음. 유휴 뒤 클릭·문자열 전달 후 `peer_eof`(`duration_ms` 167686) | `viewer-k31-idle-start.png`, `vr-viewer-viewer-k31-in-*.png`, `vr-server-form-k31.log`(05:45:26 클릭, 문자열 `afteridle`) |
+| `27` | 27단계 | 통과 | `relay-27.jsonl` 3줄 `connection_rejected` `listener=tcp_viewer` `stage=accept` `reason=ip_not_allowed` `peer_ip=192.0.2.10`. 이 접속의 `connection_accepted`·대기·세션 없음. 같은 프로세스에서 Server 등록은 허용(4~6줄) | `viewer-r27.png`(`Proxy Connection failed - Error reading Protocol Version`) |
+| `28` | 28단계 | 통과 | `relay-28.jsonl` 3~5줄 `listener=tcp_server` `ip_not_allowed`(Server가 3번 다시 접속). 같은 프로세스에서 Viewer 등록은 허용(6~8줄) | 로그 |
+| `29v`·`29s` | 29단계 | 통과 | 종료 코드 3, stderr `error[config_missing_key] key=relay.tcp_viewer.allow`(29v)·`key=relay.tcp_server.allow`(29s). 로그 파일이 생기지 않아 `server_ready`가 없다 | `vr-repeater-serve-stderr-29*.txt`, `vr-repeater-serve-exit-29*.txt` |
+| `30v`·`30s` | 30단계 | 통과 | `relay-30v.jsonl` 2줄 `allow_all_source` `level=warn` `listener=tcp_viewer` `item=0.0.0.0/0` `phase=startup`, 4~5줄 Viewer 수락·대기. `relay-30s.jsonl`은 같은 경고의 `listener=tcp_server`와 Server 수락·대기(2·4~5줄) | 로그 |
+
+31단계 관찰: 화면에 시계 등 바뀌는 영역이 있어 유휴 동안 RFB 화면 갱신 바이트가 오갔을 수 있다. VNC Relay 로그는 시간별 바이트를 남기지 않으므로 애플리케이션 데이터가 없었는지는 판정하지 않는다. 이 부분은 RLY-027 자동 증거로 확인한다.
+
+이 실행에서 계약과 다른 점을 하나 찾았다. `server_starting`의 `log_contract`가 `ops-info/1.2.0`이었다. [운영 정보 계약 1.5절](../contracts/ops-info-v1.md#15-사건-목록)은 `ops-info/1.3.0`을 요구한다. 계약은 사용자 결정 2026-11-01(Q81)로 1.3.0이 되었지만 상수 `LOG_CONTRACT`와 시험의 기대값이 1.2.0으로 남아 있었다. 코드와 시험을 1.3.0으로 고쳤다. 위 회차의 실행파일은 고치기 전 빌드다.
+
+### 4.3 자동 증거 대조 (32단계)
+
+두 OS의 전체 게이트를 `log_contract` 수정을 넣은 같은 작업 트리에서 실행했다. 두 게이트 모두 판정 `통과`였다.
+
+- Windows 11 Pro 10.0.26200: `powershell -NoProfile -ExecutionPolicy Bypass -File D:/vr-tools/vr-win.ps1 -Only all`, 마지막 줄 `ALL PASSED (all)`. 결과는 `시나리오 153건: 통과 134, 부분 14, 실패 0, 미실행 1, 미연결 4. 오류 0건.`
+- Ubuntu 24.04.4(WSL2): `wsl -d Ubuntu -- bash /mnt/d/vr-tools/vr-full.sh`, 마지막 줄 `ALL PASSED`. 결과는 `시나리오 153건: 통과 138, 부분 9, 실패 0, 미실행 2, 미연결 4. 오류 0건.`
+
+| ID | 수동 증거(4.1·4.2절) | 자동 증거(Windows / Linux 보고서) | 결과(TCP 부분) |
+| --- | --- | --- | --- |
+| RLY-006 | 통과, 독립 2회(`m1-c`·`m1-d`) | 부분 / 부분. 실제 화면·입력은 시험 코드로 확인하지 않는다 | 통과(Windows VNC Relay). 소유자 캡처 검토 전. Ubuntu VNC Relay 미실행 |
+| RLY-010 | 통과, 독립 2회(`m2s-b`·`m2s-c`) | 부분 / 부분. 같은 이유 | 통과(같은 조건) |
+| RLY-011 | 통과, 독립 2회(`m2v-a`·`m2v-b`) | 부분 / 부분. 같은 이유 | 통과(같은 조건) |
+| AC-01 | RLY-006, 22~23단계 통과 | RLY-007·008 통과 / 통과. RLY-009 부분 / 통과 | 통과. RLY-009의 Windows 부분은 TODO 2.8에서 받아들인 OS별 범위다 |
+| AC-02 | RLY-010·011 각 2회 통과 | 위와 같음 | 통과 |
+| AC-03 | 24·25단계 통과 | RLY-012~014 통과 / 통과 | 통과 |
+| AC-04 | 25·26단계 통과 | RLY-015·016 통과 / 통과 | 통과 |
+| AC-06 | 수동 범위 밖 | RLY-002·003·017 통과 / 통과 | 통과 |
+| AC-07 | 11·16·21·24단계 종료 로그 | RLY-004·005·014·019·020, OPS-006 통과 / 통과. RLY-009 부분 / 통과 | 통과. OS 범위는 AC-01과 같다 |
+| AC-08 | 수동 범위 밖 | RLY-018·021, OPS-005 통과 / 통과. OPS-004 부분 / 부분. OPS-017 미연결 / 미연결 | 미실행. OPS-017의 판정 구간이 미확정이고 시험이 없다 |
+| AC-15 | 27~30단계 통과 | RLY-023·024, OPS-037·038 통과 / 통과 | 통과 |
+| AC-18 | 수동 범위 밖 | OPS-033 통과 / 통과 | 통과 |
+| AC-26 | 31단계 통과 | RLY-027 통과 / 통과. RLY-025·026 부분 / 통과 | 통과. RLY-025·026의 Windows 부분은 사용자 결정 2026-11-02(Q86)의 범위다 |
 
 ## 5. 중단 조건
 
