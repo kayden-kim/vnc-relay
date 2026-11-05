@@ -1,13 +1,15 @@
 # 실제 UltraVNC로 TCP 중계를 수동 확인하는 방법
 
-프로젝트 소유자가 고정 버전 UltraVNC Server·Viewer로 Mode I·II의 화면과 입력을 확인한다. 이 문서는 TODO 2.13의 절차와 빈 결과 양식이다. 자동 시험으로 확인할 부분도 구분한다. 절차를 작성했거나 화면이 보였다는 이유만으로 TODO 2.13을 완료 처리하지 않는다.
+프로젝트 소유자가 고정 버전 UltraVNC Server·Viewer로 Mode I·II의 화면과 입력을 확인한다. 이 문서는 TODO 2.13의 절차와 결과 양식이다. 자동 시험으로 확인할 부분도 구분한다. 절차를 작성했거나 화면이 보였다는 이유만으로 TODO 2.13을 완료 처리하지 않는다.
+
+실행 주체는 사용자 결정 2026-11-05(Q116)로 바뀌었다. 에이전트가 VM 안의 실제 Viewer·Server를 UI 자동화로 실행·조작하고, 프로젝트 소유자는 판정 캡처를 검토한다. 이 결정은 사용자 결정 2026-11-02(Q87)의 "사용자가 수동 확인을 수행한다"를 대신한다. 절차와 판정 기준은 그대로다.
 
 | 항목 | 값 |
 | --- | --- |
-| 대상 독자 | 수동 확인을 실행하고 증거를 돌려줄 프로젝트 소유자 |
-| 검증 상태 | Draft. 이 절차는 실행하지 않았다 |
-| 검증 환경·버전 | 계획: 분리된 테스트 네트워크, UltraVNC Server·Viewer 1.8.3.0. 실제 환경은 실행할 때 기록 |
-| 최종 검증일 | 없음. 작성일 2026-11-02 |
+| 대상 독자 | 절차를 실행하는 사람(Q116에 따라 에이전트 자동 실행 포함)과 판정 캡처를 검토할 프로젝트 소유자 |
+| 검증 상태 | 부분 실행(2026-11-05). 3.2~3.4절 각 1회와 22~24단계를 실행했다. 25단계는 중단했고, 26·31·34단계와 3.6절은 미실행이다. 결과는 [4.1절](#41-2026-11-05-실행-기록) |
+| 검증 환경·버전 | Hyper-V VM 3대(`vr-lab` `Private` 스위치, 게이트웨이 없음), 게스트 Windows 11 Enterprise Evaluation 10.0.26300, UltraVNC Server·Viewer 1.8.3.0, VNC Relay 커밋 `ceb6a7c` Windows debug 빌드. Ubuntu VNC Relay는 미실행 |
+| 최종 검증일 | 2026-11-05(부분). 작성일 2026-11-02 |
 | 관련 기준 문서 | [TODO 2.13](../TODO.md#2-tcp-repeater), [PRD 10절](../requirements/PRD.md#10-검증-및-수용-기준), [중계 스펙 7절](../specs/relay.md#7-수용-테스트), [초기 교환 계약](../contracts/repeater-handshake-v1.md), [설정 계약](../contracts/config-v2.md), [CLI 계약](../contracts/cli-v1.md), [운영 정보 계약](../contracts/ops-info-v1.md), [호환성 검증 기록](../contracts/repeater-compat-record.md) |
 
 ## 1. 대상과 영향
@@ -38,7 +40,7 @@
 - [ ] 공식 `repeater.exe`가 같은 포트를 점유하지 않는다. 이번 시험에서 중계하는 프로그램은 `vnc-relay`다.
 - [ ] 방화벽이 위 방향·IP·TCP 포트만 허용한다. 기존 `vr-lab repeater` 규칙은 `repeater.exe`용이므로 `vnc-relay.exe`에 자동 적용된다고 보지 않는다. 광범위한 기존 UltraVNC 허용 규칙도 확인한다. 방화벽을 통째로 끄지 않는다.
 - [ ] Server와 Viewer를 로그온한 데스크톱 세션에서 실행할 수 있다. Server는 시험용 VNC 인증을 사용하고 마우스·키보드 입력을 허용한다. 실제 인증 정보는 쓰지 않는다.
-- [ ] Server의 VNC 인증·입력 허용 설정 방법과 현재 UI 필드명은 **확인 필요**다. 실행자가 제품 사용자 문서와 실제 1.8.3.0 화면을 대조해 기록한다. 이 문서는 UI 이름이나 비밀번호 옵션을 추측하지 않는다.
+- [ ] Server의 VNC 인증·입력 허용 설정 방법과 현재 UI 필드명을 실행자가 실제 1.8.3.0 화면과 대조해 기록한다. 이 문서는 UI 이름이나 비밀번호 옵션을 추측하지 않는다. 2026-11-05 실행에서 확인한 화면은 다음과 같다. Server 트레이 아이콘 메뉴 `Settings` → 창 `UltraVNC Server - Settings - Config file: C:\ProgramData\UltraVNC\ultravnc.ini` → `Security` 탭 `Authentication`의 `VNC Password` 옆 `CHANGE` → 창 `UltraVNC Server - Change Password`의 `Enter a new password`·`Confirm the new password` → `SAVE`. 마우스로 `SAVE`를 누른 회차는 두 칸이 채워져 있어도 `Password can not be empty.` 경고가 났고, Enter 키로 저장한 회차는 `passwd` 줄이 바뀌었다. 같은 순서의 `View-Only Password` 저장은 Enter 키로도 같은 경고가 나서 baseline 값을 그대로 두었다. 저장 뒤 `ultravnc.ini`에는 `InputsEnabled=1`이 있었다. 입력 허용 UI(`Input/FT` 탭)는 열어 보지 않았다.
 - [ ] Windows 11 x64 또는 Ubuntu 24.04 LTS x64용 VNC Relay 실행파일이 있다. Windows·Ubuntu의 증거는 각각 기록한다. Ubuntu 비교 실행은 별도 분리 호스트/VM의 역할을 같은 주소·정책으로 구성한 뒤 한다. 실행 환경이 없으면 그 OS는 미실행으로 남긴다.
 - [ ] 설정·계정·로그를 둘 시험 전용 디렉터리 `C:\vr\manual-ultravnc\`를 마련했다. 기존 파일이 없는지 확인했다. 계정 파일은 실행 계정과 관리자만 읽고 쓸 수 있게 제한한다. Ubuntu에서는 이에 대응하는 저장소 밖 디렉터리와 계정 파일 권한 `0600`을 쓴다.
 - [ ] 기존 설정·Server 설정·방화벽 규칙을 기록해 복구할 수 있다. VM의 기존 `baseline`으로 되돌리면 그 뒤 만든 파일을 잃을 수 있으므로 증거 반출을 먼저 한다.
@@ -175,6 +177,8 @@
 ### 3.3 Mode II: Server 먼저 접속
 
 Mode I Server를 종료한 뒤 시작한다. 두 Server 프로세스를 겹쳐 실행하지 않는다. 아래 입력은 [관찰 기록](../contracts/repeater-compat-record.md#34-시나리오별-입력과-결과)의 Mode II 명령이다. UI를 쓰면 필요한 값은 Server 쪽 VNC Relay 주소 `192.0.2.20:5500`, Viewer 쪽 주소 `192.0.2.20:5901`, 양쪽 값 `ID:1234`다. 실제 UI 필드명은 **확인 필요**이며 실행자가 기록한다. 중계 ID만으로는 인증이 되지 않는다.
+
+2026-11-05 실행에서 `winvnc -id:1234 -connect 192.0.2.20::5500 -run`으로 역접속한 Server는 VNC 인증을 요구하지 않았다. Viewer는 `UltraVNC Viewer` `Security` 창에 "The server has been configured without authentication. Can it be trusted?"를 띄웠다. `Do you trust it and connect without authentication`을 고른 뒤 화면이 열렸다. 이 창을 닫은 회차에서는 `You refused a untrusted server.`가 나왔다. 이것은 UltraVNC Server·Viewer 사이의 RFB 보안 협상이며, VNC Relay는 매칭 뒤 바이트를 그대로 전달한다. 역접속에서 인증을 요구하게 하는 Server 설정은 확인하지 않았다. 아래 13·18단계의 "인증 뒤"는 이 실행에서 "인증 없음 확인 창을 신뢰로 통과한 뒤"였다. Mode I(3.2절)에서는 `UltraVNC Viewer - Authentication` 창에 시험용 VNC 비밀번호를 넣어 인증했다.
 
 12. Server VM에서 시험 ID로 역접속한다.
 
@@ -368,6 +372,63 @@ AC-26:
 중단 시각·직전 단계·오류:
 복구 결과 / 증거 반출 위치 / 임시 파일 제거 여부:
 ```
+
+### 4.1 2026-11-05 실행 기록
+
+결론: 실제 UltraVNC Server·Viewer 1.8.3.0이 VNC Relay를 거쳐 Mode I, Mode II(Server 먼저), Mode II(Viewer 먼저)에서 화면·마우스·키보드 동작을 각 1회 보였다. 22~24단계도 성공 조건과 맞았다. 25단계는 중단했고 26·27~31·34단계는 실행하지 않았다. 따라서 RLY-006·RLY-010·RLY-011과 아래 AC 중 어느 것도 완료로 보지 않는다.
+
+실행 방법은 사용자 결정 2026-11-05(Q116)를 따랐다. 호스트의 관리자 PowerShell이 PowerShell Direct로 각 VM에 명령을 보냈다. Server VM에는 시험 창(분홍 단추와 하늘색 입력 칸, 클릭·초점·입력을 파일에 기록)을 띄웠다. Viewer VM의 스크립트는 Viewer 화면에서 분홍 단추를 찾아 누르고, 입력 칸을 눌러 회차 문자열을 입력했다. 판정은 Server 시험 창 기록, 두 VM의 캡처, VNC Relay 운영 로그를 함께 대조했다. 이 스크립트는 저장소 밖 시험 도구이며 제품 코드가 아니다(이 문서의 판단, 사용자 결정 없음).
+
+```text
+실행일·시각·시간대: 2026-11-05 20:31~20:42 KST(UTC+9). 로그 ts는 UTC 11:31~11:42
+실행자: 에이전트 자동 실행(Q116). 캡처 검토: 프로젝트 소유자(검토 전)
+대상 커밋: ceb6a7c
+미커밋 변경 범위: 없음
+VNC Relay --version / 실행파일 경로·SHA-256: vnc-relay 0.1.0 / vr-repeater C:\vr\manual-ultravnc\vnc-relay.exe(Windows debug 빌드) / cc70349a18142684fa0a3a09db1ca58702021455ede98316512a6cc734c79f28
+Viewer 파일 버전·경로·SHA-256: 1.8.3.0 / C:\Program Files\uvnc\UltraVNC\vncviewer.exe / 고정 기록과 같음
+Server 파일 버전·경로·SHA-256: 1.8.3.0 / C:\Program Files\uvnc\UltraVNC\winvnc.exe / 고정 기록과 같음
+VNC Relay 호스트 OS·빌드 / Viewer OS / Server OS: 세 VM 모두 Windows 11 Enterprise Evaluation 10.0.26300(평가 기간 만료 상태). Ubuntu VNC Relay 미실행
+격리 네트워크·방화벽 확인: vr-lab 스위치 Private, 세 VM 게이트웨이 없음. vr-repeater에 규칙 그룹 vnc-relay-manual-2.13(5901←192.0.2.10, 5500←192.0.2.30) 추가. Server의 기존 규칙 UltraVNC Server TCP는 원격 주소 Any였고 그대로 두었다
+설정 사본 위치 / L·Lm·Lw·B·H·W·C·E·K: 3.1절 4단계 relay.toml 그대로 / 기본값
+VNC 인증·입력 허용의 실제 설정 방법(UI를 썼으면 필드명): 2절 전제 조건에 기록. Mode II 역접속은 인증 없음 확인 창을 거쳤다(3.3절 앞 설명)
+수동 회차별 시작·종료 시각 / 명령(비밀 제외): 아래 회차 표
+프로세스별 relay_id_ref·session_id·conn_id와 사건 로그 파일:줄: 아래 회차 표. 줄 번호는 relay.jsonl 기준
+화면·마우스·키보드 증거 위치: 저장소 밖 D:\vr-captures\manual-2.13\run-20261105\ (SHA256SUMS.txt 포함)
+자동 시험 명령·OS·보고서 위치·대상 커밋: 이번 기록에서 다시 대조하지 않음
+
+ID       결과(통과/실패/미실행, 부분이면 범위) / 관찰 / 증거
+RLY-006: 부분. m1-c 1회 통과. 34단계 반복 미실행
+RLY-010: 부분. m2s-b 1회 통과. 34단계 반복 미실행
+RLY-011: 부분. m2v-a 1회 통과. 34단계 반복 미실행
+AC-01:   부분. RLY-006 1회와 22~23단계 통과. 자동 증거 대조 미실행
+AC-02:   부분. 두 접속 순서 각 1회 통과. 34단계 반복 미실행
+AC-03:   부분. 24단계 통과. 25단계 중단. 자동 증거 대조 미실행
+AC-04:   부분. 같은 ID 1234가 회차마다 새 session_id를 받음(26단계에 해당하는 관찰). 25단계 중단, 별도 26단계 회차 미실행
+AC-06:   미실행. 수동 범위 밖이며 자동 증거 대조 미실행
+AC-07:   부분. 11·16·21·24단계의 종료 로그 확인. 자동 증거 대조 미실행
+AC-08:   미실행. 수동 범위 밖이며 자동 증거 대조 미실행
+AC-15:   미실행. 27~30단계 미실행
+AC-18:   미실행. 수동 범위 밖이며 자동 증거 대조 미실행
+AC-26:   미실행. 31단계 미실행
+
+확인 필요 항목과 미실행 이유: 25단계 작업이 VM 호출에서 멈췄고, 이어진 관리자 권한 요청을 사용자가 취소해 남은 단계를 멈췄다
+중단 시각·직전 단계·오류: 20:42 KST, 25단계 시작. 21:17에 PowerShell Direct 세션을 만들지 못한 오류(Session 인수가 null)로 끝났다. VM 상태는 확인하지 못했다
+복구 결과 / 증거 반출 위치 / 임시 파일 제거 여부: VM 쪽 복구 미실행(serve·방화벽 규칙 그룹·시험 비밀번호·계정 파일이 남아 있을 수 있음. 다음 실행 전에 baseline으로 되돌린다) / 위 증거 위치 / 호스트의 시험용 비밀번호 파일 제거
+```
+
+| 회차 | 단계·ID | 결과 | 로그 줄과 식별자 | 화면·입력 증거 |
+| --- | --- | --- | --- | --- |
+| `m1-c` | 7~11단계, RLY-006 | 통과 | 12~14줄. `c4`, `session_started` `mode1` 대상 `192.0.2.30:5900`, `ses_zctebxpeaasu4o6hbnq3xb7c3i`, `session_closed` `peer_eof` | `vr-viewer-viewer-m1-c-*.png`, `vr-server-m1-c-console.png`, `vr-server-form-m1-c.log`(클릭 1회, 입력 칸 초점, 문자열 `mode1c`) |
+| `m2s-b` | 12~16단계, RLY-010 | 통과 | 20~24줄. Server `c7` `waiting_registered`(`relay_id_ref` `f87efe0db4756c86`) → Viewer `c8` → `ses_bkf2gcetupdljslb6mdefydnfq` → `peer_eof` | `vr-viewer-viewer-m2s-b-*.png`(인증 없음 확인 창 포함), `vr-server-form-m2s-b.log`(문자열 `mode2serverb`) |
+| `m2v-a` | 17~21단계, RLY-011 | 통과 | 25~29줄. Viewer `c9` `waiting_registered`가 먼저 → Server `c10` → `ses_4l2eg6fyqfutso6nphug6zxdii` → `peer_eof` | `vr-viewer-viewer-m2v-a-*.png`, `vr-server-form-m2v-a.log`(문자열 `mode2viewera`) |
+| 22단계 | 금지 포트 `192.0.2.30::5999` | 통과 | 30~31줄. `connection_rejected` `target_not_allowed` | `vr-repeater-rej-22-23.pcapng`: VNC Relay에서 대상 포트로 나간 패킷 0건 |
+| 23단계 | 금지 IP `192.0.2.10::5900` | 통과 | 32~33줄. `target_not_allowed` | 같은 캡처 |
+| 24단계 | Server `ID:1234`, Viewer `ID:5678` | 통과 | 34~39줄. 서로 다른 `relay_id_ref`(`f87efe0db4756c86`·`76282a50fa7822cb`)로 각각 대기, 매칭 없음. Viewer 종료 → `waiting_removed` `connection_error`, Server `-kill` → `waiting_removed` `peer_eof` | `viewer-r24.png`, `vr-server-r24-console.png` |
+| 25단계 | 중복 ID | 중단 | 사건 없음 | 없음 |
+
+판정에서 뺀 회차도 기록한다. 3~5줄(`m1r1`)은 입력 스크립트 오류로 문자열을 보내지 못한 진단 회차다. 6~11줄(`m1-a`·`m1-b`)은 자동화가 Viewer 인증 창의 비밀번호 칸을 먼저 누른 회차다. 두 회차 모두 `session_closed` `connection_error`(`side=viewer`)로 끝났다. 칸을 누르지 않고 입력한 `m1-c`는 통과했다. 원인은 분석하지 않았다. 15~19줄(`m2s-a`)은 자동화가 인증 없음 확인 창을 닫아 Viewer가 연결을 거부한 회차다. 세션은 `close_timeout`으로 끝났다.
+
+운영 로그 사본 `vr-repeater-relay.jsonl.lines-1-39.jsonl`은 VM의 `relay.jsonl` 파일을 직접 반출한 것이 아니다. 각 작업 출력에 남긴 1~39줄을 모은 것이다.
 
 ## 5. 중단 조건
 
