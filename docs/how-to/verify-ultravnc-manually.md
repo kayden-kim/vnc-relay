@@ -7,7 +7,7 @@
 | 항목 | 값 |
 | --- | --- |
 | 대상 독자 | 절차를 실행하는 사람(Q116에 따라 에이전트 자동 실행 포함)과 판정 캡처를 검토할 프로젝트 소유자 |
-| 검증 상태 | 실행(2026-11-05·06, Windows VNC Relay). 3절의 22~31·34단계를 모두 실행했고 모두 성공 조건과 맞았다(4.1·4.2절). 32단계 자동 증거 대조는 4.3절이다. 남은 것: 프로젝트 소유자의 캡처 검토, AC-08(OPS-017 미확정), Ubuntu VNC Relay 실행 |
+| 검증 상태 | 실행(2026-11-05·06, Windows VNC Relay). 3절의 22~31·34단계를 모두 실행했고 모두 성공 조건과 맞았다(4.1·4.2절). 32단계 자동 증거 대조는 4.3절이다. 남은 것: 프로젝트 소유자의 캡처 검토(Q116), AC-08(OPS-017 미연결). Ubuntu VNC Relay는 분리 실행 환경이 없어 2절 규칙대로 미실행으로 남긴다 |
 | 검증 환경·버전 | Hyper-V VM 3대(`vr-lab` `Private` 스위치, 게이트웨이 없음), 게스트 Windows 11 Enterprise Evaluation 10.0.26300, UltraVNC Server·Viewer 1.8.3.0, VNC Relay 커밋 `ceb6a7c` Windows debug 빌드. Ubuntu VNC Relay는 미실행 |
 | 최종 검증일 | 2026-11-06. 작성일 2026-11-02 |
 | 관련 기준 문서 | [TODO 2.13](../TODO.md#2-tcp-repeater), [PRD 10절](../requirements/PRD.md#10-검증-및-수용-기준), [중계 스펙 7절](../specs/relay.md#7-수용-테스트), [초기 교환 계약](../contracts/repeater-handshake-v1.md), [설정 계약](../contracts/config-v2.md), [CLI 계약](../contracts/cli-v1.md), [운영 정보 계약](../contracts/ops-info-v1.md), [호환성 검증 기록](../contracts/repeater-compat-record.md) |
@@ -433,16 +433,16 @@ AC-26:   미실행. 31단계 미실행
 
 ### 4.2 2026-11-06 실행 기록
 
-결론: 남은 수동 단계 25·27~31·34단계를 모두 실행했고 모두 성공 조건과 맞았다. 4.1절과 합치면 RLY-006·RLY-010·RLY-011은 각각 독립 2회 통과했다. 이 결과는 Windows VNC Relay 기준이며, Ubuntu VNC Relay 실행은 미실행이다. 판정 캡처는 Q116에 따라 프로젝트 소유자가 검토해야 한다. 자동 증거 대조(32단계)는 [4.3절](#43-자동-증거-대조-32단계)에 있다.
+결론: 남은 수동 단계 25·27~31·34단계를 모두 실행했고 모두 성공 조건과 맞았다. 4.1절과 합치면 RLY-006·RLY-010·RLY-011은 각각 독립 2회 통과했다(Windows VNC Relay). Ubuntu VNC Relay는 분리 실행 환경이 없어 2절 규칙대로 미실행이다. 판정 캡처는 Q116에 따라 프로젝트 소유자가 검토해야 하며 아직 검토 전이다. 자동 증거 대조(32단계)는 [4.3절](#43-자동-증거-대조-32단계)에 있다.
 
 ```text
 실행일·시각·시간대: 2026-11-06 05:34~05:49 KST(UTC+9). 로그 ts는 UTC 2026-11-05 20:38~20:48
 실행자: 에이전트 자동 실행(Q116). 캡처 검토: 프로젝트 소유자(검토 전)
 대상 커밋·실행파일: 4.1절과 같은 ceb6a7c Windows debug 빌드(SHA-256 cc70349a…9f28)
-VM 준비: 세 VM을 baseline으로 되돌린 뒤 05:35:29에 부팅했다. 파일 버전·해시·IP·게이트웨이 없음·방화벽 규칙은 4.1절과 같았다
+VM 준비: 세 VM을 baseline으로 되돌린 뒤 05:35:29에 부팅했다. 파일 버전·해시·IP·게이트웨이 없음·방화벽 규칙은 4.1절과 같았다. 게스트 OS 조회값은 10.0.26300(build 26300)이지만 바탕 화면 워터마크에는 Build 26100이 보였다. 이 기록은 조회값을 따른다
 VNC 인증 설정: 2절의 같은 화면에서 VNC Password만 바꾸었다. Enter 키 저장 한 번으로 passwd 줄이 baseline 값에서 바뀌었다. View-Only Password는 바꾸지 않았다
 설정 사본: relay-27·28·29v·29s·30v·30s.toml. 원본에서 allow 한 줄과 log.output만 바꾸었고, 각 사본은 자기 로그 파일에 썼다
-증거 위치: 저장소 밖 D:\vr-captures\manual-2.13\run-20261106\ (SHA256SUMS.txt 포함). 운영 로그는 VM의 파일을 직접 반출했다(vr-repeater-relay*.jsonl, serve-stderr-*.txt, serve-exit-*.txt)
+증거 위치: 저장소 밖 D:\vr-captures\manual-2.13\run-20261106\. 파일 77개이고 SHA256SUMS.txt에 77행이 있다. 같은 캡처를 VM에서 바로 받은 사본과 Fetch 사본이 함께 있어 서로 다른 내용은 60개다(예: viewer-r25-dup.png와 vr-viewer-viewer-r25-dup.png). 운영 로그는 VM의 파일을 직접 반출했다(vr-repeater-relay*.jsonl, serve-stderr-*.txt, serve-exit-*.txt). 정상 종료 회차의 serve-exit는 exit=0, stderr는 비어 있다
 복구 결과 / 임시 파일 제거: VNC Relay 프로세스 종료(매 회차 server_stopped가 마지막 줄), 방화벽 규칙 그룹 vnc-relay-manual-2.13 제거(남은 규칙 0개), Viewer·Server 종료, 세 VM 종료. VM 안 비밀 파일 0개를 확인했다. 호스트의 시험용 비밀번호 파일을 지웠다. 계정 파일은 반출하지 않았다
 ```
 
@@ -454,7 +454,7 @@ VNC 인증 설정: 2절의 같은 화면에서 VNC Password만 바꾸었다. Ent
 | `m2v-b` | 34단계, RLY-011 2회차. 26단계 2회차 | 통과 | 18~22줄. Viewer `c7` 대기가 먼저 → Server `c8` → `ses_e2t3sr25flg37mqlhhjjqzhxba` → `peer_eof`. `m2s-c`가 17줄에서 정상 종료한 뒤 두 끝점을 모두 새로 실행했고, 같은 `relay_id_ref`로 새 `session_id`를 받았다 | `vr-viewer-viewer-m2v-b-*.png`, `vr-server-form-m2v-b.log`(문자열 `viewerfirstrepeat`) |
 | `k31` | 31단계 | 통과 | 23~25줄. Mode I `ses_2r3xe55gse7jazv7gyt4k3y27u`. 입력 없음 05:43:05.008~05:45:23.303(138초, K = 60 + 10 × 6 = 120초). 그 사이 사건 없음. 유휴 뒤 클릭·문자열 전달 후 `peer_eof`(`duration_ms` 167686) | `viewer-k31-idle-start.png`, `vr-viewer-viewer-k31-in-*.png`, `vr-server-form-k31.log`(05:45:26 클릭, 문자열 `afteridle`) |
 | `27` | 27단계 | 통과 | `relay-27.jsonl` 3줄 `connection_rejected` `listener=tcp_viewer` `stage=accept` `reason=ip_not_allowed` `peer_ip=192.0.2.10`. 이 접속의 `connection_accepted`·대기·세션 없음. 같은 프로세스에서 Server 등록은 허용(4~6줄) | `viewer-r27.png`(`Proxy Connection failed - Error reading Protocol Version`) |
-| `28` | 28단계 | 통과 | `relay-28.jsonl` 3~5줄 `listener=tcp_server` `ip_not_allowed`(Server가 3번 다시 접속). 같은 프로세스에서 Viewer 등록은 허용(6~8줄) | 로그 |
+| `28` | 28단계 | 통과 | `relay-28.jsonl` 3~5줄 `listener=tcp_server` `ip_not_allowed`(Server가 3번 다시 접속). 같은 프로세스에서 Viewer 등록은 허용(6~7줄). 8줄의 Viewer `waiting_removed` `connection_error`는 자동화가 Viewer 프로세스를 강제 종료한 결과이며 28단계 판정과 무관하다 | 로그 |
 | `29v`·`29s` | 29단계 | 통과 | 종료 코드 3, stderr `error[config_missing_key] key=relay.tcp_viewer.allow`(29v)·`key=relay.tcp_server.allow`(29s). 로그 파일이 생기지 않아 `server_ready`가 없다 | `vr-repeater-serve-stderr-29*.txt`, `vr-repeater-serve-exit-29*.txt` |
 | `30v`·`30s` | 30단계 | 통과 | `relay-30v.jsonl` 2줄 `allow_all_source` `level=warn` `listener=tcp_viewer` `item=0.0.0.0/0` `phase=startup`, 4~5줄 Viewer 수락·대기. `relay-30s.jsonl`은 같은 경고의 `listener=tcp_server`와 Server 수락·대기(2·4~5줄) | 로그 |
 
@@ -464,7 +464,7 @@ VNC 인증 설정: 2절의 같은 화면에서 VNC Password만 바꾸었다. Ent
 
 ### 4.3 자동 증거 대조 (32단계)
 
-두 OS의 전체 게이트를 `log_contract` 수정을 넣은 같은 작업 트리에서 실행했다. 두 게이트 모두 판정 `통과`였다.
+두 OS의 전체 게이트를 `log_contract` 수정을 넣은 작업 트리에서 실행했다. 그 코드는 커밋 `13129d1`과 같다(게이트 뒤 문서만 따로 커밋했다). 수동 회차의 실행파일(`ceb6a7c`)과 자동 증거의 기준 커밋은 다르다. 두 커밋 사이의 코드 차이는 `log_contract` 문자열뿐이다. 두 게이트 모두 판정 `통과`였다. 게이트 전체 판정과 아래 ID별 판정은 따로 본다.
 
 - Windows 11 Pro 10.0.26200: `powershell -NoProfile -ExecutionPolicy Bypass -File D:/vr-tools/vr-win.ps1 -Only all`, 마지막 줄 `ALL PASSED (all)`. 결과는 `시나리오 153건: 통과 134, 부분 14, 실패 0, 미실행 1, 미연결 4. 오류 0건.`
 - Ubuntu 24.04.4(WSL2): `wsl -d Ubuntu -- bash /mnt/d/vr-tools/vr-full.sh`, 마지막 줄 `ALL PASSED`. 결과는 `시나리오 153건: 통과 138, 부분 9, 실패 0, 미실행 2, 미연결 4. 오류 0건.`
