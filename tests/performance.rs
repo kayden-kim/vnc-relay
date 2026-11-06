@@ -22,9 +22,12 @@ use tokio::task::JoinHandle;
 
 const BIN: &str = env!("CARGO_BIN_EXE_vnc-relay");
 const B: usize = 131_072;
-/// Q119·Q123: lifecycle rounds, and the round from which RSS growth is judged.
+/// Q119·Q123·Q127: lifecycle rounds, and the last round of the reference RSS peak.
 const ROUNDS: usize = 15;
 const RSS_FROM_ROUND: usize = 10;
+/// Q125: sessions and traffic time of the warm-up before round 1, the peak of the slow load.
+const WARM_UP_SESSIONS: usize = 100;
+const WARM_UP_TRAFFIC: Duration = Duration::from_secs(10);
 /// Q121: socket buffer size of every test client connected to the relay.
 const CLIENT_SOCKET_BUFFER: u32 = 64 * 1024;
 const M: usize = 1_048_576;
@@ -105,7 +108,7 @@ struct Relay {
     ports: [u16; 6],
 }
 impl Relay {
-    async fn start(test: &str, transport: Transport) -> Self {
+    async fn start(test: &str, transport: Transport, env: &[(&str, &str)]) -> Self {
         let holders: Vec<_> = (0..6)
             .map(|_| must(PortReservation::bind("127.0.0.1:0")))
             .collect();
@@ -182,6 +185,7 @@ output = 'relay.log'
                 .args(["serve", "--config"])
                 .arg(dir.join("relay.toml"))
                 .stdin(Stdio::null())
+                .envs(env.iter().copied())
                 .stdout(Stdio::from(must(std::fs::File::create(
                     dir.join("stdout.log"),
                 ))))
@@ -987,7 +991,7 @@ async fn measures_throughput_latency_cpu_and_rss() {
     let baseline = direct.finish().await;
     let mut all_pass = true;
     for transport in Transport::ALL {
-        let mut relay = Relay::start("ops018", transport).await;
+        let mut relay = Relay::start("ops018", transport, &[]).await;
         let traffic = Traffic::start(pairs(&relay, transport, 100).await, 0, epoch);
         relay.wait_logs(|e| log_state(e)["active"] == 100).await;
         tokio::time::sleep(Duration::from_secs(10)).await;
@@ -1116,6 +1120,43 @@ async fn lifecycle(relay: &Relay, transport: Transport, id: usize) -> TestResult
     // Drop both endpoints only after both directions have been verified.
     Ok(())
 }
+/// Runs the lifecycles of `ids` at once and records their errors.
+async fn run_lifecycles(
+    relay: &Relay,
+    transport: Transport,
+    ids: impl Iterator<Item = usize>,
+    errors: &mut Vec<String>,
+) {
+    // JoinSet requires owned relay state; scoped futures keep the process owner here.
+    let mut pending: Vec<_> = ids
+        .map(|id| Box::pin(lifecycle(relay, transport, id)))
+        .collect();
+    must(
+        tokio::time::timeout(
+            DEADLINE,
+            std::future::poll_fn(|cx| {
+                let mut index = 0;
+                while index < pending.len() {
+                    match pending[index].as_mut().poll(cx) {
+                        Poll::Pending => index += 1,
+                        Poll::Ready(result) => {
+                            if let Err(e) = result {
+                                errors.push(e.to_string());
+                            }
+                            drop(pending.swap_remove(index));
+                        }
+                    }
+                }
+                if pending.is_empty() {
+                    Poll::Ready(())
+                } else {
+                    Poll::Pending
+                }
+            }),
+        )
+        .await,
+    );
+}
 
 /// spec: operations.md:OPS-017
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
@@ -1125,7 +1166,7 @@ async fn bounds_slow_receivers_and_lifecycle_residue() {
     let epoch = Instant::now();
     let mut all_pass = true;
     for transport in Transport::ALL {
-        let mut relay = Relay::start("ops017", transport).await;
+        let mut relay = Relay::start("ops017", transport, &[]).await;
         tokio::time::sleep(Duration::from_secs(5)).await;
         let idle = sample(relay.child.id(), epoch).await;
         let traffic = Traffic::start(pairs(&relay, transport, 100).await, 50, epoch);
@@ -1196,47 +1237,36 @@ async fn bounds_slow_receivers_and_lifecycle_residue() {
                 traffic_result["data_errors"] == 0,
             ),
         ];
-        let mut rounds = Vec::new();
+        // Q124: the lifecycle rounds run on a fresh server, so buffers freed by
+        // the slow-receiver load do not move their RSS. Q118 judges that load.
+        // Q126: glibc reads MALLOC_ARENA_MAX and Windows ignores it. One arena
+        // removes per-thread arena fragmentation from the residue judgment.
+        drop(relay);
+        let mut relay =
+            Relay::start("ops017-lifecycle", transport, &[("MALLOC_ARENA_MAX", "1")]).await;
+        tokio::time::sleep(Duration::from_secs(5)).await;
+        let lifecycle_idle = sample(relay.child.id(), epoch).await;
         let mut lifecycle_errors = Vec::new();
+        // Q125: worker threads gain per-thread OS handles on their first socket
+        // work. The slow load reached that limit within seconds; the same 100
+        // sessions with traffic do it before round 1 on this server.
+        let warm_up = Traffic::start(pairs(&relay, transport, WARM_UP_SESSIONS).await, 0, epoch);
+        relay
+            .wait_logs(|e| log_state(e)["active"] == WARM_UP_SESSIONS)
+            .await;
+        tokio::time::sleep(WARM_UP_TRAFFIC).await;
+        let warm_up = warm_up.finish().await;
+        if warm_up["data_errors"] != 0 {
+            lifecycle_errors.push(format!("warm-up: {}", warm_up["task_errors"]));
+        }
+        relay.quiescent(WARM_UP_SESSIONS).await;
+        let mut rounds = Vec::new();
         for round in 1..=ROUNDS {
             for batch in 0..20 {
-                let mut futures = Vec::new();
-                for offset in 0..50 {
-                    futures.push(lifecycle(
-                        &relay,
-                        transport,
-                        10_000 + round * 1000 + batch * 50 + offset,
-                    ));
-                }
-                // JoinSet requires owned relay state; scoped futures keep the process owner here.
-                let mut pending: Vec<_> = futures.into_iter().map(Box::pin).collect();
-                must(
-                    tokio::time::timeout(
-                        DEADLINE,
-                        std::future::poll_fn(|cx| {
-                            let mut index = 0;
-                            while index < pending.len() {
-                                match pending[index].as_mut().poll(cx) {
-                                    Poll::Pending => index += 1,
-                                    Poll::Ready(result) => {
-                                        if let Err(e) = result {
-                                            lifecycle_errors.push(e.to_string());
-                                        }
-                                        drop(pending.swap_remove(index));
-                                    }
-                                }
-                            }
-                            if pending.is_empty() {
-                                Poll::Ready(())
-                            } else {
-                                Poll::Pending
-                            }
-                        }),
-                    )
-                    .await,
-                );
+                let first = 10_000 + round * 1000 + batch * 50;
+                run_lifecycles(&relay, transport, first..first + 50, &mut lifecycle_errors).await;
             }
-            let state = relay.quiescent(100 + round * 1000).await;
+            let state = relay.quiescent(WARM_UP_SESSIONS + round * 1000).await;
             tokio::time::sleep(Duration::from_secs(5)).await;
             let metrics = sample(relay.child.id(), epoch).await;
             // Q122: round 1 warms reusable OS resources; later rounds must equal it.
@@ -1254,15 +1284,24 @@ async fn bounds_slow_receivers_and_lifecycle_residue() {
             }
             rounds.push(json!({"round":round,"metrics":metrics.json(),"log_state":state}));
         }
-        // Q123: the allocator grows in steps before it levels off; judge the tail.
-        let rss_of = |round: usize| {
-            rounds[round - 1]["metrics"]["rss_bytes"]
-                .as_u64()
+        // Q127: the Windows heap keeps or returns a block of several MB at
+        // random rounds. Only a new peak after round RSS_FROM_ROUND counts.
+        let peak = |range: std::ops::RangeInclusive<usize>| {
+            range
+                .map(|round| {
+                    rounds[round - 1]["metrics"]["rss_bytes"]
+                        .as_u64()
+                        .unwrap_or_default()
+                })
+                .max()
                 .unwrap_or_default()
         };
-        let growth = rss_of(ROUNDS) as i64 - rss_of(RSS_FROM_ROUND) as i64;
+        let growth = peak(RSS_FROM_ROUND + 1..=ROUNDS) as i64 - peak(1..=RSS_FROM_ROUND) as i64;
         criteria.push(criterion(
-            &format!("round_{ROUNDS}_minus_round_{RSS_FROM_ROUND}_rss_bytes"),
+            &format!(
+                "max_rss_rounds_{}_{ROUNDS}_minus_max_rounds_1_{RSS_FROM_ROUND}_bytes",
+                RSS_FROM_ROUND + 1
+            ),
             json!(growth),
             json!(2 * 1024 * 1024),
             growth <= 2 * 1024 * 1024,
@@ -1276,6 +1315,7 @@ async fn bounds_slow_receivers_and_lifecycle_residue() {
         let mut result = metadata("OPS-017", transport);
         result["duration_seconds"] = json!(60);
         result["idle_baseline"] = idle.json();
+        result["lifecycle_idle_baseline"] = lifecycle_idle.json();
         result["samples"] = json!(samples.iter().map(|s| s.json()).collect::<Vec<_>>());
         result["normal_window"] = json!(normal_window);
         result["traffic"] = traffic_result;
