@@ -1247,9 +1247,9 @@ async fn bounds_slow_receivers_and_lifecycle_residue() {
         tokio::time::sleep(Duration::from_secs(5)).await;
         let lifecycle_idle = sample(relay.child.id(), epoch).await;
         let mut lifecycle_errors = Vec::new();
-        // Q125: worker threads gain per-thread OS handles on their first socket
-        // work. The slow load reached that limit within seconds; the same 100
-        // sessions with traffic do it before round 1 on this server.
+        // Q125: on Windows only Thread and Event handles grew, up to one pair per
+        // logical core, without new threads. The slow load reached that plateau
+        // within seconds; the same 100 sessions with traffic do it before round 1.
         let warm_up = Traffic::start(pairs(&relay, transport, WARM_UP_SESSIONS).await, 0, epoch);
         relay
             .wait_logs(|e| log_state(e)["active"] == WARM_UP_SESSIONS)
@@ -1257,7 +1257,10 @@ async fn bounds_slow_receivers_and_lifecycle_residue() {
         tokio::time::sleep(WARM_UP_TRAFFIC).await;
         let warm_up = warm_up.finish().await;
         if warm_up["data_errors"] != 0 {
-            lifecycle_errors.push(format!("warm-up: {}", warm_up["task_errors"]));
+            lifecycle_errors.push(format!(
+                "warm-up: data_errors {} task_errors {}",
+                warm_up["data_errors"], warm_up["task_errors"]
+            ));
         }
         relay.quiescent(WARM_UP_SESSIONS).await;
         let mut rounds = Vec::new();
@@ -1284,8 +1287,8 @@ async fn bounds_slow_receivers_and_lifecycle_residue() {
             }
             rounds.push(json!({"round":round,"metrics":metrics.json(),"log_state":state}));
         }
-        // Q127: the Windows heap keeps or returns a block of several MB at
-        // random rounds. Only a new peak after round RSS_FROM_ROUND counts.
+        // Q127: Windows private memory rises or falls by several MB at random
+        // rounds. Only a new peak after round RSS_FROM_ROUND counts.
         let peak = |range: std::ops::RangeInclusive<usize>| {
             range
                 .map(|round| {
