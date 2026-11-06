@@ -6,7 +6,7 @@ UltraVNC Viewer·Server와 외부 WebSocket 클라이언트가 VNC Relay에 접�
 
 | 항목 | 값 |
 | --- | --- |
-| 이름과 버전 | `repeater-handshake` 1.0.0. 2절 `duplicate_id`의 정책 확정(사용자 결정 2026-11-01(Q74))은 버전을 올리지 않았다. 채택 때 제안으로 둔 후발 거절을 그대로 정했으므로 처리가 바뀌는 요청이 없다. 1.2절의 빈 값·모드 검사 순서 명확화도 버전을 유지한다. 기존 “값을 더 검사하지 않고”와 Server의 `ID:` 필수 규칙을 풀어 쓴 것이며, 형식이나 허용 범위를 바꾸지 않는다(사용자 결정 2026-11-01(Q80)). |
+| 이름과 버전 | `repeater-handshake` 1.0.0. 2절 `duplicate_id`의 정책 확정(사용자 결정 2026-11-01(Q74))은 버전을 올리지 않았다. 채택 때 제안으로 둔 후발 거절을 그대로 정했으므로 처리가 바뀌는 요청이 없다. 1.2절의 빈 값·모드 검사 순서 명확화도 버전을 유지한다. 기존 “값을 더 검사하지 않고”와 Server의 `ID:` 필수 규칙을 풀어 쓴 것이며, 형식이나 허용 범위를 바꾸지 않는다(사용자 결정 2026-11-01(Q80)). 3.1절에 비교 캡처로 찾은 두 행(대상 연결 시간, 정상 EOF 뒤 종료)을 더한 것도 버전을 유지한다. 두 동작은 이미 [중계 스펙](../specs/relay.md) 3.2·3.4절과 설정 계약이 정한 것이며, 처리가 바뀌는 요청이 없다(이 문서의 판단, 사용자 결정 없음). |
 | 상태 | Active(2026-11-01 채택) |
 | 소유자 | vnc-relay 프로젝트 관리자 |
 | 만드는 쪽(Producer) | 초기 요청: UltraVNC Viewer, UltraVNC Server, 외부 WebSocket 클라이언트(검증 대상은 noVNC 1.7.0의 `repeaterID` 옵션). 시작 바이트: `vnc-relay` |
@@ -15,7 +15,7 @@ UltraVNC Viewer·Server와 외부 WebSocket 클라이언트가 VNC Relay에 접�
 | 스키마 기준 파일 | 없음. 1절의 표가 형식의 기준이다. |
 | 기준 스펙 | [TCP 중계와 연결 매칭](../specs/relay.md), [WS·WSS 전송](../specs/websocket.md) |
 | 관련 요구사항 | [PRD](../requirements/PRD.md) FR-01·FR-02·FR-03·FR-05, 9절·9.1절 |
-| 호환성 범위 | 관찰 대상 버전: UltraVNC Server·Viewer 1.8.3.0, UltraVNC Repeater(Windows) 1.6.0.0, noVNC 1.7.0([호환성 검증 기록](repeater-compat-record.md) 2절). 이 버전과의 호환 지원은 `vnc-relay` 구현 뒤 5절의 계약 테스트와 같은 시나리오의 비교를 통과한 뒤에 주장한다. 대상 버전 Repeater와 일부러 다르게 처리하는 입력은 [3.1절](#31-대상-버전-repeater와-다르게-처리하는-입력)에 있다. |
+| 호환성 범위 | 관찰 대상 버전: UltraVNC Server·Viewer 1.8.3.0, UltraVNC Repeater(Windows) 1.6.0.0, noVNC 1.7.0([호환성 검증 기록](repeater-compat-record.md) 2절). 이 버전과의 호환 지원은 `vnc-relay` 구현 뒤 5절의 계약 테스트와 같은 시나리오의 비교를 통과한 뒤에 주장한다. 대상 버전 Repeater와 일부러 다르게 처리하는 입력은 [3.1절](#31-대상-버전-repeater와-다르게-처리하는-입력)에 있다. Windows VNC Relay의 비교 캡처는 2026-11-07에 마쳤다([기록 7절](repeater-compat-record.md#7-계약-64-비교-캡처-q133)). Ubuntu VNC Relay의 비교 캡처는 미실행이다(사용자 결정 2026-11-06(Q133)). |
 | 관련 테스트 | [RLY-001~005, RLY-010~015, RLY-022](../specs/relay.md#7-수용-테스트), [WS-003~006, WS-018, WS-025](../specs/websocket.md#7-수용-테스트). 계약 테스트는 5절을 따른다. |
 
 관련 계약: [WebSocket 중계](websocket-relay-v1.md)(WS·WSS 쪽 전송 규칙과 종료 코드), [운영 정보](ops-info-v1.md)(로그에서 중계 ID 노출 방식과 오류 코드의 로그 이름), [설정](config-v2.md)(`handshake_secs`·`mode1`·`mode2`·`allow_targets` 키). 관련 결정: [ADR-0002 출발지 IP 허용 목록](../decisions/ADR-0002-source-ip-allowlist.md).
@@ -110,7 +110,7 @@ TCP 진입점은 오류를 알리는 바이트를 보내지 않고 정상 종료
 
 ### 3.1 대상 버전 Repeater와 다르게 처리하는 입력
 
-아래 입력은 대상 버전 Repeater 1.6.0.0과 결과가 다르다. 양쪽에 숫자로만 된 같은 ID를 넣는 Mode II와 IPv4·이름 대상을 쓰는 Mode I에서도 시작 바이트 시점, Repeater가 거절한 큰 숫자 ID(`999999999`), 대기·초기 교환 시간 제한은 다르다. 그 밖의 차이는 Repeater가 서로 다른 ID를 매칭하던 경우(앞자리 0, 5900 차이, 20자리 ID 쌍), 숫자 뒤에 다른 바이트가 붙은 ID, 오류 입력, IPv6 대상, 같은 역할 중복 ID, WebSocket·TLS 접속에서 생긴다.
+아래 입력은 대상 버전 Repeater 1.6.0.0과 결과가 다르다. 양쪽에 숫자로만 된 같은 ID를 넣는 Mode II와 IPv4·이름 대상을 쓰는 Mode I에서도 시작 바이트 시점, Repeater가 거절한 큰 숫자 ID(`999999999`), 대기·초기 교환·대상 연결 시간 제한, 활성 세션의 정상 EOF 뒤 종료 순서는 다르다. 그 밖의 차이는 Repeater가 서로 다른 ID를 매칭하던 경우(앞자리 0, 5900 차이, 20자리 ID 쌍), 숫자 뒤에 다른 바이트가 붙은 ID, 오류 입력, IPv6 대상, 같은 역할 중복 ID, WebSocket·TLS 접속에서 생긴다.
 
 | 입력 | Repeater 1.6.0.0(관찰) | `vnc-relay` | 근거 |
 | --- | --- | --- | --- |
@@ -121,6 +121,8 @@ TCP 진입점은 오류를 알리는 바이트를 보내지 않고 정상 종료
 | 형식이 틀린 요청(TCP Server 진입점의 `XX:1234`·`1234`처럼 `ID:`로 시작하지 않는 값), 꺼진 모드의 요청 | 연결을 닫지 않고 둔다(E-01, M2-06b, M1-00). 숫자로 시작하지 않는 ID(`ID:abcd`)와 빈 ID는 바로 닫는다. | 모두 닫는다(`handshake_invalid`, `mode_disabled`). | [relay.md 4절](../specs/relay.md#4-오류와-복구) |
 | 짝이 없는 대기 | 60초 넘게 유지했고 대기 시간 상한은 보이지 않았다. | W가 지나면 닫는다(`wait_timeout`). | [설정 계약](config-v2.md)의 `wait_secs` |
 | 초기 교환 시간 | 접속 약 6초 뒤(Viewer 쪽은 마지막 수신 약 5초 뒤) 닫는다. | H가 지나면 닫는다(`handshake_timeout`). | `handshake_secs`, E-04 |
+| Mode I 대상이 연결 요청(SYN)에 응답하지 않음 | SYN을 1·2·4·8초 간격으로 다시 보내고, 첫 SYN 약 21초 뒤 Viewer에 FIN을 보낸다. 오류 바이트는 없다(M1-05). | C가 지나면 대상 연결을 포기하고 Viewer 연결을 닫는다(`target_connect_failed`, `reason=connect_timeout`). 오류 바이트는 없다. 기본값 C=10초에서 첫 SYN 약 10초 뒤 FIN을 보냈다. | [설정 계약](config-v2.md)의 `connect_secs`, [relay.md 3.2절](../specs/relay.md#32-mode-i), 기록 7.4절 |
+| 활성 세션의 한쪽이 정상 종료(FIN)를 보냄 | Server FIN 1ms 안에 Server와 Viewer 양쪽 연결에 FIN을 보낸다(T-02). | 받은 데이터를 모두 전달한 뒤 상대 연결의 쓰기 방향만 닫는다(FIN). FIN을 보낸 쪽으로 가는 반대 방향은 E까지 계속 전달한다. 반대 방향도 끝나거나 E가 지나면 정리한다(E 만료는 `close_cause=close_timeout`). T-02에서는 Viewer가 연결을 닫지 않아 Server 쪽 FIN이 E(기본 10초) 뒤에 나갔다. | [relay.md 3.4절](../specs/relay.md#34-중계와-eof), [설정 계약](config-v2.md)의 `close_secs`, 기록 7.4절 |
 | IPv6 대상(대괄호 IPv6, 이름의 IPv6 결과) | 대상에 연결하지 않고 닫는다. | 허용 정책을 만족하면 연결한다. 호환 지원이 아닌 확장이다. | Q70, M1-06 |
 | 같은 역할 중복 ID | 대기 중인 ID: 먼저 온 연결을 유지하고, 뒤에 온 연결은 등록하지 않으며 닫지도 않는다. 활성 세션이 쓰는 ID: 관찰하지 않았다(사용자 결정 2026-11-01(Q75)). | 대기 중이거나 활성 세션이 쓰는 ID 모두 뒤에 온 연결을 바로 닫는다(`duplicate_id`). 먼저 온 연결과 활성 세션은 유지한다. | Q74·Q75, 기록 3.5절 |
 | WebSocket·TLS 접속 | Viewer 포트에서 처리하지 않는다. | WS·WSS Viewer 진입점에서 처리한다. | [WS·WSS 스펙](../specs/websocket.md) |
@@ -171,7 +173,7 @@ TCP 진입점은 오류를 알리는 바이트를 보내지 않고 정상 종료
 2026-11-01에 1~6단계를 마쳤다([호환성 검증 기록 3절](repeater-compat-record.md#3-관찰-증거-todo-14)). 새 버전을 지원 범위에 더하거나 `vnc-relay` 구현 뒤 비교할 때도 이 순서를 따른다. 앞 단계가 끝나기 전에 다음 단계를 시작하지 않는다.
 
 1. 사용 권한과 법적 허용 여부를 확인한다. 패킷 관찰의 허용 여부는 관할법·제품 약관·사용 권한에 따라 별도로 검토한다([PRD 9절](../requirements/PRD.md#9-호환성-조사와-독립-구현-원칙)). 검토 결과를 증거 기록에 남긴다. 검토 전에는 관찰하지 않는다. 프로젝트 소유자는 2026-10-21에 관찰을 허용했고, 사용자 결정 2026-11-01(Q65)로 이 허용을 1단계 완료로 본다([호환성 검증 기록 1절](repeater-compat-record.md#1-관찰-허용-검토-todo-11)). 이 판정은 프로젝트 절차상의 판정이다. 법률 판단이 아니며, 법적으로 허용된다는 뜻이 아니다.
-2. 대상 버전을 고정한다. UltraVNC 공식 배포처([다운로드](https://uvnc.com/downloads/ultravnc.html))의 최신 안정판 Server·Viewer·Repeater와 noVNC의 버전을 각각 기록하고 고정한다. 대상 OS는 Windows 11 x64와 Ubuntu 24.04 LTS x64다. 공식 Repeater 관찰은 Windows Repeater만 한다. Ubuntu `uvncrepeater`는 사용자 결정 2026-10-22(Q19)로 보류했다. Ubuntu 24.04 LTS x64는 `vnc-relay` 구현 뒤 같은 시나리오의 비교 캡처에 쓴다(사용자 결정 2026-11-01(Q64)).
+2. 대상 버전을 고정한다. UltraVNC 공식 배포처([다운로드](https://uvnc.com/downloads/ultravnc.html))의 최신 안정판 Server·Viewer·Repeater와 noVNC의 버전을 각각 기록하고 고정한다. 대상 OS는 Windows 11 x64와 Ubuntu 24.04 LTS x64다. 공식 Repeater 관찰은 Windows Repeater만 한다. Ubuntu `uvncrepeater`는 사용자 결정 2026-10-22(Q19)로 보류했다. Ubuntu 24.04 LTS x64는 `vnc-relay` 구현 뒤 같은 시나리오의 비교 캡처에 쓴다(사용자 결정 2026-11-01(Q64)). 다만 이 PC에는 Ubuntu VM이 없어 Ubuntu 비교 캡처는 미실행으로 기록한다. Windows VNC Relay 비교 캡처만 3.2절의 Windows VM에서 실행한다(사용자 결정 2026-11-06(Q133)).
 3. 통제된 환경을 만든다. 인터넷과 분리한 테스트 네트워크에서 Viewer·Server·Repeater를 각각 별도 호스트 또는 가상 머신에 둔다. 주소는 문서용 IP 대역만 쓴다. 실제 비밀번호·인증 정보는 쓰지 않는다.
 4. 패킷 캡처 도구를 Repeater 쪽 네트워크 구간에 둔다. 관찰 대상은 공식 Repeater와 공식 Viewer·Server의 통신이다. 같은 시나리오를 `vnc-relay` 구현 뒤에도 캡처해 비교한다.
 5. 아래 시나리오를 실행한다. 시나리오마다 독립 실행을 2회 이상 해 결과가 같은지 확인한다(횟수는 제안).
@@ -207,4 +209,4 @@ RLY-TBD-001은 2026-10-22에 해소되어 이 절에서 뺐다. 근거는 [호�
 
 ### 6.4 그 밖의 해결할 사항
 
-- `vnc-relay` 구현 뒤 6.1절 4단계의 비교 캡처를 한다. 3.1절에 없는 차이가 나오면 이 계약이나 구현을 고친다.
+- 해소(2026-11-07): 6.1절 4단계의 비교 캡처를 Windows VM에서 마쳤다(사용자 결정 2026-11-06(Q133), [기록 7절](repeater-compat-record.md#7-계약-64-비교-캡처-q133)). 1.4의 증거 계획 8개(시나리오 37개)를 VNC Relay로 다시 실행했다. 3.1절에 없던 차이 두 가지(Mode I 대상 연결 시간, 활성 세션의 정상 EOF 뒤 종료)는 스펙과 설정 계약이 정한 동작이므로 구현이 아니라 3.1절을 고쳤다. 이 실행은 회차마다 새로 부팅하는 Q67의 절차를 따르지 않았다. 사용자 결정 2026-11-07(Q134)에 따라 이 비교 캡처에 한해 부팅마다 한 시간 안에 끝내고 도중에 꺼진 VM이 없음을 Q67 충족으로 본다. Ubuntu VNC Relay의 비교 캡처는 미실행이다(Q133).

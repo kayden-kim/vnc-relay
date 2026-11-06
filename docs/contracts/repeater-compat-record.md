@@ -1,10 +1,10 @@
 # 호환성 검증 기록
 
-이 기록은 UltraVNC Server·Viewer·Repeater와 noVNC의 호환성 검증 결과를 남긴다. 관찰 허용 검토(1절), 검증 대상 고정(2절), 관찰 증거(3절), 모드·전송 조합 검증(6절)을 담는다. 증거 항목은 [Repeater 초기 교환 계약 6.2절](repeater-handshake-v1.md#62-기록할-증거)을 따른다.
+이 기록은 UltraVNC Server·Viewer·Repeater와 noVNC의 호환성 검증 결과를 남긴다. 관찰 허용 검토(1절), 검증 대상 고정(2절), 관찰 증거(3절), 모드·전송 조합 검증(6절), 계약 6.4절의 비교 캡처(7절)를 담는다. 증거 항목은 [Repeater 초기 교환 계약 6.2절](repeater-handshake-v1.md#62-기록할-증거)을 따른다.
 
-- 상태: 검증 대상 고정 완료(TODO 1.3). 관찰 완료(TODO 1.4): 2026-11-01에 [관찰 절차 6.1절](repeater-handshake-v1.md#61-관찰-절차) 5단계의 여섯 시나리오 묶음을 각각 2회 이상 캡처하고 6.2절의 증거를 3절에 기록했다. 사용자 결정 2026-10-22(Q19·Q20), 2026-11-01(Q62~Q67) 반영. 계약 1절 반영과 채택(TODO 1.5)은 2026-11-01에 마쳤다(사용자 결정 Q68~Q73). 중복 ID 정책(TODO 1.6)은 2026-11-01에 정했다(사용자 결정 Q74·Q75). 다른 계약 반영(TODO 1.7)도 2026-11-01에 마쳤다. 모드·전송 조합 검증(TODO 5.5)은 2026-11-06에 마쳤다(6절, 사용자 결정 Q128~Q131).
-- 작성일: 2026-10-21. 갱신일: 2026-10-22(사용자 결정 Q19·Q20 반영, 설치 스크립트 근거 추가), 2026-10-27(설치 확인과 캡처 도구 설치 기록, 3.1절·5.1절), 2026-11-01(관찰 환경 결정과 구성, 1절·3.2절·4절), 2026-11-01(시나리오 관찰과 해석, 3절·3.3~3.6절·4절·5.3절, 사용자 결정 Q67), 2026-11-01(계약 채택에 따른 4.6·4.10·4.13 갱신, 사용자 결정 Q68~Q73), 2026-11-01(중복 ID 정책 결정에 따른 4.6·4.11 갱신, 사용자 결정 Q74·Q75), 2026-11-01(다른 계약 반영에 따른 4.4·4.6 갱신, TODO 1.7), 2026-11-06(모드·전송 조합 검증, 2.6절·6절, 사용자 결정 Q128~Q131).
-- 기준 커밋: `ff6bbb5`(시나리오 관찰 기록 시작 시점 HEAD). 6절은 커밋 `70ff541`의 Windows release 빌드로 실행했다. 이 기록은 `docs(compat)` 커밋에 담는다.
+- 상태: 검증 대상 고정 완료(TODO 1.3). 관찰 완료(TODO 1.4): 2026-11-01에 [관찰 절차 6.1절](repeater-handshake-v1.md#61-관찰-절차) 5단계의 여섯 시나리오 묶음을 각각 2회 이상 캡처하고 6.2절의 증거를 3절에 기록했다. 사용자 결정 2026-10-22(Q19·Q20), 2026-11-01(Q62~Q67) 반영. 계약 1절 반영과 채택(TODO 1.5)은 2026-11-01에 마쳤다(사용자 결정 Q68~Q73). 중복 ID 정책(TODO 1.6)은 2026-11-01에 정했다(사용자 결정 Q74·Q75). 다른 계약 반영(TODO 1.7)도 2026-11-01에 마쳤다. 모드·전송 조합 검증(TODO 5.5)은 2026-11-06에 마쳤다(6절, 사용자 결정 Q128~Q131). 계약 6.4절의 Windows 비교 캡처는 2026-11-07에 마쳤다(7절, 사용자 결정 Q133·Q134). Ubuntu 비교 캡처는 미실행이다.
+- 작성일: 2026-10-21. 갱신일: 2026-10-22(사용자 결정 Q19·Q20 반영, 설치 스크립트 근거 추가), 2026-10-27(설치 확인과 캡처 도구 설치 기록, 3.1절·5.1절), 2026-11-01(관찰 환경 결정과 구성, 1절·3.2절·4절), 2026-11-01(시나리오 관찰과 해석, 3절·3.3~3.6절·4절·5.3절, 사용자 결정 Q67), 2026-11-01(계약 채택에 따른 4.6·4.10·4.13 갱신, 사용자 결정 Q68~Q73), 2026-11-01(중복 ID 정책 결정에 따른 4.6·4.11 갱신, 사용자 결정 Q74·Q75), 2026-11-01(다른 계약 반영에 따른 4.4·4.6 갱신, TODO 1.7), 2026-11-06(모드·전송 조합 검증, 2.6절·6절, 사용자 결정 Q128~Q131), 2026-11-07(계약 6.4절 비교 캡처, 7절, 사용자 결정 Q133·Q134).
+- 기준 커밋: `ff6bbb5`(시나리오 관찰 기록 시작 시점 HEAD). 6절과 7절은 커밋 `70ff541`의 Windows release 빌드로 실행했다. 7절 실행 때 HEAD는 `c8d1eea`였고, `70ff541` 이후 제품 코드 변경은 없었다. 이 기록은 `docs(compat)` 커밋에 담는다.
 - 작업 트리: 1~5절은 다른 작업과 같은 트리를 쓴 문서 작업이며 빌드와 테스트는 하지 않았다. 6절의 실행 때 작업 트리는 깨끗했다.
 - 환경: Windows 11 x64 호스트. 내려받기는 `curl.exe`, 해시 계산은 `certutil`, 버전 확인은 PowerShell 파일 버전 정보를 썼다.
 
@@ -775,3 +775,114 @@ powershell -NoProfile -ExecutionPolicy Bypass -File D:\vr-tools\tmp\compat-5.5\e
 - 실행파일 일치: 통과. 빌드 산출물, 반입 묶음, VM의 실행파일 해시가 같았다.
 - 정리: 통과. 시험용 VNC 비밀번호 파일은 호스트와 VM에서 지웠다. VM 체크포인트 `baseline`은 바꾸지 않았다.
 - 무효 회차: 6회. 6.5절에 원인과 수정을 적었다.
+
+## 7. 계약 6.4 비교 캡처 (Q133)
+
+3.3절의 증거 계획 8개(시나리오 37개)를 Repeater 1.6.0.0 대신 VNC Relay로 다시 실행했다. 각 캡처를 3.4절의 Repeater run1 캡처와 비교했다. 37회차가 모두 첫 시도에서 유효했다. 차이는 대부분 [계약 3.1절](repeater-handshake-v1.md#31-대상-버전-repeater와-다르게-처리하는-입력)의 행, 3.3절의 무시할 차이, 3.5절의 형식과 무관한 관찰로 설명된다. 3.1절에 없던 차이는 두 가지였다. Mode I 대상 연결 시간(M1-05)과 활성 세션의 정상 EOF 뒤 종료(T-02)다. 두 동작은 [중계 스펙](../specs/relay.md)과 [설정 계약](config-v2.md)이 정한 그대로다. 그래서 구현은 바꾸지 않고 계약 3.1절에 두 행을 더했다(7.4절).
+
+### 7.1 결정과 범위
+
+| 항목 | 내용 |
+| --- | --- |
+| 실행 결정 | 사용자 결정 2026-11-06(Q133): 3.2절의 Windows VM에서 지금 실행한다. 이 PC에는 Ubuntu VM이 없으므로 Ubuntu VNC Relay의 비교 캡처는 미실행으로 기록한다. 사용자 결정 2026-11-01(Q64)의 Ubuntu 비교 캡처 범위를 좁힌 결정이다 |
+| 입력 | 3.3절의 증거 계획 `p10-mode1`·`p11-mode2`·`p12-errors-split`·`p13-termination`·`p15-followup`·`p17-followup2`·`p16-websocket`·`p18-websocket-wss`를 바꾸지 않고 썼다(`D:\vr-lab\plans\`). 단계, 명령, 원시 바이트, 캡처 시간이 1.4와 같다. 확인 실행 계획은 쓰지 않았다 |
+| Repeater 단계의 대응 | 계획의 Repeater 시작·재시작 단계는 VNC Relay 시작·재시작으로 바꿨다. VNC Relay에는 Repeater의 웹 상태 페이지가 없다. 그래서 상태 수집은 프로세스와 TCP 상태만 기록했고, 웹 요청은 보내지 않았다 |
+| 회차 수 | 이 문서의 판단, 사용자 결정 없음. 시나리오마다 1회다. 계약 6.1절 5단계의 회차 수는 제안이다. Repeater 쪽 재현성은 3.4절의 2회로 이미 확인했다. VNC Relay 쪽 차이는 모두 운영 로그의 사건과 설정값으로 원인을 확인했다 |
+| 부팅 단위와 Q67 | Q67은 회차마다 `baseline`에서 새로 부팅하라고 정한다. 이 실행은 회차마다 새로 부팅하지 않았다. 세 VM을 계획마다 한 번 부팅했고, 게스트 준비 단계가 있는 WebSocket 시나리오는 시나리오마다 부팅했다. 37회차에 부팅은 11번이었다. 부팅마다 회차는 한 시간 안에 끝났다. 회차 기록의 VM 가동 시간은 최장 24분 10초였고, 37회차 모두 세 VM이 `Running`이었다. 사용자 결정 2026-11-07(Q134): 이 비교 캡처에 한해 "부팅마다 한 시간 안에 끝내고, 도중에 꺼진 VM이 없음"으로 Q67을 충족한 것으로 본다 |
+| 진입점 | 이 문서의 판단, 사용자 결정 없음. TCP 진입점만 켰다. 1.4의 입력과 연결 구조를 그대로 재현하기 위해서다. W-01·W-01b의 입력은 TCP 5901로 가고, W-02·W-03·W-03b의 시험용 브리지는 `127.0.0.1:5901`로 넘긴다. VNC Relay 자체의 WS·WSS 진입점은 6절에서 검증했다 |
+| 비교 방법 | `D:\vr-lab\scripts\summarize.py`의 함수로 Repeater run1과 VNC Relay run1의 TCP 스트림을 같은 방식으로 요약해 비교했다. 3.3절의 무시할 차이를 적용했다. 남은 차이는 VNC Relay 운영 로그의 사건으로 원인을 확인했다 |
+
+### 7.2 환경과 버전
+
+| 항목 | 값 |
+| --- | --- |
+| 실행 시각 | 2026-11-06 22:07:39 ~ 2026-11-07 00:09:07 KST(UTC+9). 운영 로그 `ts`는 UTC다 |
+| VM | 3.2절 구성과 `baseline` 체크포인트. Viewer·Server·noVNC·Edge와 게스트 OS는 `baseline`의 것을 그대로 썼다. 하네스가 마지막에 세 VM을 `baseline`으로 되돌렸다. 하네스 요약 `observe-relay.json`에 오류는 없다 |
+| VNC Relay | 커밋 `70ff541`의 Windows release 빌드, `vnc-relay 0.1.0`, SHA-256 `d94e4dd34a297cfdd008bf3e856c30deb2c5366dc6d844e6502aa3aaf097b5fc`(6.2절과 같은 파일). 부팅마다 `vr-repeater`의 `C:\vr\relay\vnc-relay.exe`에 반입하고 해시가 같은지 확인했다 |
+| VNC Relay 설정 | 회차마다 `relay.toml`을 새로 썼다. `tcp_viewer` `0.0.0.0:5901`은 192.0.2.10과 브리지용 127.0.0.1을 허용했다. `tcp_server` `0.0.0.0:5500`은 192.0.2.30만 허용했다. 포트와 주소 범위는 Repeater와 같다. Mode II는 켰다. Mode I은 p10에서만 켰다. 허용 대상은 `192.0.2.30:5900`, `192.0.2.30:5999`, `vnc-server.test:5900`, `[2001:db8:1::30]:5900`, `vnc-server6.test:5900`이다. M1-04에서는 Repeater의 `refuse_con=192.0.2.30`에 맞춰 빈 목록으로 두었다. 관리 리스너는 127.0.0.1:18080, 상태 리스너는 127.0.0.1:18081이다. 시간 설정은 기본값이다(H·C·E 10초). 관리자 계정 파일은 6절과 같이 자리표시자 해시만 담았고, 로그인하지 않았다 |
+| 방화벽 | `vr-repeater`에 프로그램 규칙 `vr-lab vnc-relay`를 두었다. 원격 주소는 192.0.2.0/24와 2001:db8:1::/64로 한정했다. 이 규칙은 `baseline` 복원으로 사라졌다 |
+| 캡처 | 3.3절과 같다. `vr-repeater`의 `dumpcap`이 `vr-lab` 어댑터에서 계획의 캡처 시간 동안 기록했다 |
+| 종료 | 회차마다 VNC Relay 프로세스를 강제로 끝냈다. 그래서 종료 기록 파일은 모두 `exit=-1`이다. 표준 오류 파일은 모두 비어 있다 |
+
+### 7.3 시나리오별 결과
+
+"Repeater와의 차이"는 3.4절 run1과 비교한 결과다. "같음"은 3.3절의 무시할 차이를 빼면 연결, 방향별 바이트, 닫는 방식이 같다는 뜻이다. 시작 바이트를 보내는 시점은 모든 회차에서 VNC Relay가 약 1초 빨랐다(계약 3.1절 첫 행). 이 열에는 따로 적지 않았다.
+
+| 시나리오 | VNC Relay 결과(운영 로그) | Repeater와의 차이 | 근거 |
+| --- | --- | --- | --- |
+| M1-01 | `session_started`(대상 `192.0.2.30:5900`) | 같음. 대상 연결도 약 1초 빠르다 | 3.1절 시작 바이트 |
+| M1-02 | Viewer와 원시 입력 모두 포트 5900으로 `session_started` | 닫은 뒤 상대 FIN이 남은 차이만 있다 | 3.3절 |
+| M1-03 | `VNC-SERVER.TEST:5900`을 `vnc-server.test`로 해석해 `session_started` | 같음 | |
+| M1-04 | `connection_rejected` `target_not_allowed`. 같은 ms에 Viewer에 FIN, 대상 연결 없음 | 같음 | |
+| M1-05 | `target_connect_failed` `reason=connect_timeout` `elapsed_ms=10001` | Viewer FIN이 첫 SYN 21초 뒤에서 약 10초 뒤로 바뀌었다 | 새 차이(7.4절) |
+| M1-06 | 접두어 없는 `2001:db8:1::30:5900`은 `handshake_invalid`. 대괄호 IPv6와 `vnc-server6.test`는 IPv6 SYN을 보냈지만 응답이 없어 `connect_timeout`. Viewer 프로세스는 1.4처럼 연결하지 않았다 | Repeater는 원시 입력 세 가지를 모두 바로 닫았고 IPv6 연결을 시도하지 않았다 | 3.1절 IPv6 대상. Server VM이 IPv6 SYN에 답하지 않은 이유는 확인하지 않았다[INFERENCE: winvnc가 IPv6에서 대기하지 않았거나 게스트 방화벽이 버렸다] |
+| M2-01·M2-02 | `waiting_registered` 뒤 `session_started` | 같음 | |
+| M2-03 | 두 연결 모두 대기 | 같음 | |
+| M2-04·M2-05 | 뒤에 온 같은 역할 연결을 `duplicate_id`로 닫았다(FIN·RST). 먼저 온 연결은 매칭됐다 | Repeater는 뒤에 온 연결을 닫지 않았다 | 3.1절 중복 ID |
+| M2-06 | `1`·`123456789`·`1234567890`·20자리·247자리 다섯 쌍이 매칭됐다. 빈 ID 두 연결과 접두어 없는 Server는 `handshake_invalid`, 접두어 없는 Viewer는 `mode_disabled`로 닫혔다 | 앞 세 쌍은 같다. Repeater는 10자리 세션 중 웹 요청에 끝나 나머지를 관찰하지 못했다(3.4절). 나머지는 M2-06b와 같다 | 3.1절 형식이 틀린 요청 |
+| M2-07 | 다섯 쌍 열 연결이 모두 `handshake_invalid` | Repeater는 `12-34`·`12 34`·`12`+0xE9+`34` 쌍을 매칭했다 | 3.1절 숫자 뒤 바이트 |
+| M2-08 | `0456` 쌍만 매칭됐다. 나머지 네 연결은 대기하다 클라이언트가 닫았다(`waiting_removed` `peer_eof`) | Repeater는 세 쌍 모두 매칭했다 | 3.1절 앞자리 0 |
+| M2-09 | 네 연결 모두 `handshake_invalid` | 같음 | |
+| E-01 | Server `XX:1234`는 `handshake_invalid`, Viewer `A`×250은 `mode_disabled`로 바로 닫혔다 | Repeater는 두 연결을 닫지 않았다 | 3.1절 형식이 틀린 요청·꺼진 모드 |
+| E-02 | 짧게 보내고 닫은 두 연결은 `connection_aborted` `peer_eof`. 이어진 쌍은 매칭됐다 | 같음 | |
+| E-03 | 두 쌍이 매칭되고 바이트가 전달됐다 | FIN 순서만 다르다 | 3.3절 |
+| E-04 | 네 연결 모두 `connection_aborted` `handshake_timeout`(H 10초) | Repeater는 약 6초 뒤 닫았다 | 3.1절 초기 교환 시간 |
+| S-01~S-03 | 매칭과 바이트 전달 | 같음 | |
+| T-01 | Viewer RST 뒤 Server에 FIN(`connection_error`, `side=viewer`) | 같음 | |
+| T-02 | Server FIN 0.87ms 뒤 Viewer에 FIN. Server 쪽 FIN은 10.025초 뒤(`session_closed` `close_cause=close_timeout` `side=server`) | Repeater는 0.75ms 안에 양쪽에 FIN을 보냈다 | 새 차이(7.4절) |
+| T-03 | Viewer 종료 뒤 Server에 FIN. Server가 다시 등록했고 다시 실행한 Viewer와 매칭됐다 | Repeater의 FIN 뒤 RST만 다르다 | 3.3절 |
+| M2-06b | 20자리·247자리 쌍이 매칭됐다. 빈 ID 두 연결과 접두어 없는 Server는 `handshake_invalid`, 접두어 없는 Viewer는 `mode_disabled` | Repeater는 접두어 없는 쌍을 닫지 않았다 | 3.1절 형식이 틀린 요청 |
+| M2-11 | 두 번 모두 매칭되고 정상 종료됐다 | Repeater B는 웹 요청에 끝났다(3.4절). VNC Relay에는 웹 상태 페이지가 없어 같은 입력이 없다. 나머지는 FIN 순서만 다르다 | 3.3절, 4.12 |
+| M2-12 | `12ab`·`12AB`·`56-78`은 `handshake_invalid`. `56`은 대기하다 클라이언트가 닫았다. `999999999` 쌍은 매칭됐다 | Repeater는 앞 두 쌍을 매칭하고 `999999999` Server를 닫았다 | 3.1절 숫자 뒤 바이트·`999999999` |
+| S-04 | 네 쌍 매칭 | 같음 | |
+| S-05 | 두 쌍이 매칭되고 매칭 전 바이트가 전달됐다 | 종료 순서만 다르다. Repeater run1의 RST는 하네스의 Repeater 재시작과 겹쳤다 | 3.3절 |
+| M2-13 | 서로 다른 20자리 쌍과 `2147483647`/`2147483648`은 매칭되지 않았다. `999999998`·`99999999` 쌍과 Viewer 먼저 `999999999` 쌍은 매칭됐다 | Repeater는 20자리 쌍을 매칭했고 `999999999` Server를 닫았다 | 3.1절 20자리·`999999999` |
+| M2-14 | 네 쌍 여덟 연결이 모두 매칭되지 않고 대기하다 클라이언트가 닫았다 | Repeater는 `100`/`6000`을 뺀 세 쌍을 매칭했다 | 3.1절 5900 차이 |
+| W-01 | noVNC의 평문 HTTP 업그레이드 요청 두 건을 `mode_disabled`로 바로 닫았다. Server는 대기했다 | Repeater는 닫지 않았다 | 3.1절 꺼진 모드·WebSocket·TLS |
+| W-02 | 브리지를 거친 noVNC가 매칭됐다. 페이지 제목은 `vr-server ( 192.0.2.30 ) - application mode - noVNC`였다 | 화면 갱신 바이트 수만 다르다 | 3.3절 |
+| W-03 | Server만 대기했다. noVNC는 1.4와 같이 평문으로 WSS 브리지에 접속해 실패했다 | 같음 | 3.4절 |
+| W-01b | TLS ClientHello 두 건을 `mode_disabled`로 닫았다(FIN·RST) | Repeater는 닫지 않았다 | 3.1절 꺼진 모드·WebSocket·TLS |
+| W-03b | WSS 브리지를 거친 noVNC가 매칭됐다. 페이지 제목은 W-02와 같다 | 화면 갱신과 TLS 레코드 크기만 다르다 | 3.3절 |
+
+### 7.4 새 차이와 계약 반영
+
+두 차이 모두 VNC Relay의 시간 제한 설정에서 나온다. 스펙에 정한 동작이므로 구현은 바꾸지 않았다. 계약 3.1절에 행을 더했고 계약 버전은 1.0.0으로 유지했다(이 문서의 판단, 사용자 결정 없음).
+
+| 시나리오 | Repeater 1.6.0.0 | VNC Relay | 스펙 근거 |
+| --- | --- | --- | --- |
+| M1-05 응답 없는 Mode I 대상 | 첫 SYN 뒤 1·2·4·8초 간격으로 SYN을 다시 보냈다. 첫 SYN 21.0초 뒤 Viewer에 FIN을 보냈다(run1·run2 같음) | 첫 SYN 뒤 1·2·4초 간격으로 다시 보냈다. 첫 SYN 약 10.0초 뒤 Viewer에 FIN을 보냈다. 로그는 `target_connect_failed` `reason=connect_timeout` `elapsed_ms=10001`이다 | [relay.md 3.2절](../specs/relay.md#32-mode-i), 설정 계약 `connect_secs`(C, 기본 10초, 1~120초) |
+| T-02 활성 세션의 Server 정상 종료 | Server FIN 0.75ms 뒤 Viewer와 Server 양쪽에 FIN을 보냈다 | Server FIN 0.87ms 뒤 Viewer에 FIN을 보냈다. Viewer 방향 쓰기만 닫은 것이다. Viewer가 연결을 닫지 않아 Server 쪽 FIN은 E가 지난 10.025초 뒤에 나갔다. 로그는 `session_closed` `close_cause=close_timeout` `side=server`다 | [relay.md 3.4절](../specs/relay.md#34-중계와-eof), 설정 계약 `close_secs`(E, 기본 10초) |
+
+### 7.5 무효 실행과 하네스 수정
+
+첫 실행(2026-11-06 20:51~22:07 KST)의 23회차(M1-01~T-02)는 모두 무효다. 판정에 쓰지 않았다. 캡처는 정상이었지만 하네스가 VNC Relay 운영 로그를 읽지 못했다. 원인은 VNC Relay가 실행 중일 때 `ReadAllText`로 로그 파일을 연 것이다. 오류는 "The process cannot access the file … because it is being used by another process"였다. 고친 하네스는 캡처가 끝나면 VNC Relay를 먼저 멈추고, 로그를 읽기 공유 모드로 연다. 첫 실행의 원본은 `D:\vr-captures\compare-6.4-attempt1\`에 남겼다.
+
+관리자 권한 실행은 사용자가 UAC를 승인해 진행했다(Q66). 첫 실행 전 요청 한 번과 고친 실행 전 요청 두 번은 승인되지 않은 채 시간이 지나 취소됐다. 그다음 요청을 승인받아 실행했다.
+
+### 7.6 원본과 명령
+
+원본은 저장소 밖 두 폴더에 있다. `SHA256SUMS.txt`는 `<해시> *<상대 경로>` 형식이다. 목록의 모든 항목을 .NET SHA-256으로 다시 계산해 일치를 확인했다.
+
+| 실행 | 폴더 | 파일 | `SHA256SUMS.txt` SHA-256 |
+| --- | --- | --- | --- |
+| 비교 캡처(유효) | `D:\vr-captures\compare-6.4\` | 436개(캡처 37개, 운영 로그 사본 37개 447줄, `harness\` 6개 포함) | `e2d38ea3f153cd5b57ca6eac31a5d9be820e29c768d8fa17572fa995565b192a` |
+| 첫 실행(무효) | `D:\vr-captures\compare-6.4-attempt1\` | 70개(`run.json` 23개 포함) | `17a4a0dbfa5a996478fe481ab9c4853df03baa2efa6ff03f282a054cd20c413f` |
+
+회차 폴더는 `<계획>\<시나리오>\run1\`이다. 캡처 `capture.pcapng`, 회차 기록 `run.json`, 설정 `relay.toml`, 운영 로그 사본 `guest-relay-<회차>.jsonl`, 표준 오류·종료 기록, 원시 클라이언트 기록, 화면 캡처가 있다. 비교 결과는 `<계획>\<시나리오>\compare.md`다. 운영 로그 사본에는 하네스가 Windows PowerShell 5.1 `Set-Content -Encoding UTF8`로 저장할 때 붙인 UTF-8 BOM이 있다. VM 안의 원본 파일은 `baseline` 복원으로 사라졌다.
+
+하네스는 `harness\`에 복사해 두었다. `observe-relay.ps1`은 `D:\vr-lab\scripts\05-observe.ps1`을 바탕으로 만들었다. `lab-common.ps1`과 계획 파일은 그대로 썼다. `restart.ps1`은 첫 실행을 멈추고 고친 하네스를 다시 실행한 스크립트다. `compare.py`는 비교 결과를, `events.py`는 운영 로그 요약을 만든다. 하네스 기록 `observe-relay.log`에는 두 실행이 함께 있다. 1~252행이 첫 실행, 253행이 `restart.ps1`의 기록이고, 254행부터가 유효 실행이다.
+
+```
+관리자 권한 PowerShell 5.1:
+powershell -NoProfile -ExecutionPolicy Bypass -File D:\vr-tools\tmp\compare-6.4\restart.ps1
+  → 인수 없이 observe-relay.ps1 실행. 기본값은 계획 8개(p10, p11, p12, p13, p15, p17, p16, p18 순서), 회차 1이다
+python D:\vr-tools\tmp\compare-6.4\compare.py p10-mode1 p11-mode2 p12-errors-split p13-termination p15-followup p17-followup2 p16-websocket p18-websocket-wss
+
+observe-relay.log 254~360행: valid=True 37개, valid=False 0개
+observe-relay.json: started 2026-11-06T22:07:39, finished 2026-11-07T00:09:07, 오류 없음
+```
+
+- 비교 캡처: 통과. 37회차가 모두 유효했다. 모든 차이를 계약 3.1절의 행, 3.3절의 무시할 차이, 3.5절의 형식과 무관한 관찰로 설명했다. 새로 찾은 두 차이는 3.1절에 더했다.
+- 실행파일 일치: 통과. 37회차 모두 같은 VNC Relay 해시였다.
+- Q67: 충족(Q134 예외). 회차마다 새로 부팅하지는 않았다(7.1절). 사용자 결정 2026-11-07(Q134)에 따라 이 비교 캡처에 한해 부팅마다 한 시간 안에 끝내고 도중에 꺼진 VM이 없음을 Q67 충족으로 본다.
+- Ubuntu 비교 캡처: 미실행(Q133).
