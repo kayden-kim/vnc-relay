@@ -7,7 +7,7 @@
 | 대상 독자 | 개발·검증 담당자 |
 | 검증 상태 | Draft. 실제 실행 기록은 4절에 별도로 남긴다. |
 | 검증 환경·버전 | Windows 11 x64·WSL2 Ubuntu 24.04 LTS x64, 저장소의 Rust 도구 체인 |
-| 최종 검증일 | 2026-11-06. 두 OS에서 정식 측정을 실행했다. OPS-018은 통과, OPS-017은 RSS 잔여 기준 실패다(4절). |
+| 최종 검증일 | 2026-11-06. 커밋 `811491e`의 정식 측정에서 두 OS·세 전송 모두 OPS-017·OPS-018 통과(4절). |
 | 관련 기준 문서 | [운영 스펙 6절](../specs/operations.md#6-비기능호환성출처-수용-조건), [운영 정보 계약 1.5절](../contracts/ops-info-v1.md#15-사건-목록), [WebSocket 바이트 스트림 계약](../contracts/websocket-relay-v1.md#14-데이터-메시지와-제어-프레임), [설정 계약](../contracts/config-v2.md) |
 
 ## 1. 대상과 영향
@@ -143,6 +143,9 @@ JSON에는 OS·아키텍처·전송·L/Lw/B/M, 실제 요청 기간, 원시 자�
 | 진단, WSL2 Ubuntu. `tcp_mem` = 190395 253863 380790페이지 | `D:/vr-tools/tmp/perf-diag/drain.py`(100세션 양방향 무제한 쓰기, 30초 정지 뒤 수신 재개)와 `nstat` | 클라이언트 버퍼 자동 조정: 소켓 메모리 최대 381,593페이지로 상한 초과, `TcpExtTCPRcvQDrop` 5,262, `TcpExtTCPTimeouts` 3,243, 멈춘 흐름 78개. Q120 규모(50세션)와 클라이언트 64 KiB: 최대 233,317페이지, 멈춘 흐름 0. 이 결과로 Q121을 정했다. | 대화 기록. 결과 파일 없음 |
 | 정식, 커밋 `e75eb25`. Windows 11 Pro 10.0.26200, AMD Ryzen 7 5700X 8코어 16스레드, RAM 31.9 GB, Rust 1.99.1 | `cargo test --release --test performance -- --ignored --test-threads=1`, 기본 600초. 종료 코드 101(OPS-017 실패) | OPS-018 세 전송 통과: 늘어난 p99 TCP 740 µs, WS 1,590 µs, WSS 2,730 µs. CPU 0.37·0.50·0.67코어. 최대 RSS 41.5·42.4·47.2 MB. OPS-017: TCP·WSS 통과, WS 실패. WS는 15라운드 RSS − 10라운드 RSS가 7,221,248 B로 2 MiB를 넘었다. 작업 집합이 라운드마다 약 14.5 MB와 22.4 MB 두 수준을 오갔다. 나머지 기준(오버헤드, 정상 흐름 100, 소진 오류 0, 핸들 212 고정, 수명 오류 0)은 세 전송 모두 통과했다. | `target/perf-windows-formal-e75eb25/` |
 | 정식, 커밋 `e75eb25`. WSL2 Ubuntu 24.04, 같은 하드웨어, `CLK_TCK=100` | WSL 3.2절 절차, 600초. OPS-017 종료 코드 101 | OPS-018 세 전송 통과: 늘어난 p99 TCP 210 µs, WS 750 µs, WSS 420 µs. CPU 0.13·0.21·0.26코어. 최대 RSS 34.4·35.3·37.3 MB. OPS-017: TCP 통과, WS·WSS 실패. 15라운드 RSS − 10라운드 RSS가 WS 3,932,160 B, WSS 2,359,296 B였다. 라운드별 증가 폭은 줄었지만 끝까지 0이 되지 않았다. 나머지 기준은 세 전송 모두 통과했다(fd 20 고정). | `~/vnc-relay-target/perf-ubuntu-formal-e75eb25/` |
+| 진단, 작업 트리(`d0b8637` + Q124 수명 서버 분리). 두 OS | `bounds_slow_receivers_and_lifecycle_residue`를 여러 번 실행. Windows는 `D:/vr-tools/tmp/perf-diag/handle_types.py`(종류별 핸들 수)와 `regions.py`(1 MiB 이상 개인 커밋 영역)를 함께 실행. Ubuntu는 같은 시험을 `MALLOC_ARENA_MAX=1`로도 실행 | Windows 핸들 증가는 Thread·Event 핸들 16쌍이었고 File(소켓) 핸들은 매번 30으로 돌아왔다. 100세션과 트래픽이 있으면 몇 초 안에 상한에 도달했다(Q125). Windows RSS의 약 8 MB 두 수준은 힙의 7~10 MB 개인 커밋 영역이 생겼다 사라지는 것과 맞았다. 표본 10개 최솟값으로는 없어지지 않았다(Q127). Ubuntu 기본 할당기의 수명 RSS는 15라운드 동안 계속 늘었고(WSS 41.3→67.8 MB), 단일 arena에서는 라운드 10→15 증가가 0~1.4 MB였다(Q126). | `target/perf-win-ops017-q124*/`, `perf-win-ops017-q126/`, `perf-win-ops017-q125b/`, `~/vnc-relay-target/perf-ubuntu-ops017-q124/`, `perf-ubuntu-ops017-arena1/` |
+| 정식, 커밋 `811491e`. Windows 11 Pro 10.0.26200, AMD Ryzen 7 5700X 8코어 16스레드, RAM 31.9 GB, Rust 1.99.1 | `cargo test --release --test performance -- --ignored --test-threads=1`, 600초. 종료 코드 0(2건 통과, 2,972초) | OPS-018 세 전송 통과: 늘어난 p99 TCP 770 µs, WS 1,600 µs, WSS 2,710 µs. CPU 0.35·0.58·0.66코어. 최대 RSS 41.5·42.4·46.9 MB. RSS 증가율 1.004·1.003·1.009. OPS-017 세 전송 통과: 오버헤드 27,553,792·28,688,384·36,569,088 B(한계 39,321,600 B), 정상 흐름 100, 소진 오류 0, 핸들 1~15라운드 212 고정, 최고점 증가 45,056·0·253,952 B, 수명 오류 0. | `target/perf-windows-formal-811491e/` |
+| 정식, 커밋 `811491e`. WSL2 Ubuntu 24.04, 같은 하드웨어, `CLK_TCK=100` | WSL 3.2절 절차, 600초. OPS-018·OPS-017 각각 종료 코드 0 | OPS-018 세 전송 통과: 늘어난 p99 TCP 310 µs, WS 750 µs, WSS 460 µs. CPU 0.13·0.20·0.24코어. 최대 RSS 34.6·35.3·37.4 MB. RSS 증가율 1.000·1.000·1.007. OPS-017 세 전송 통과: 오버헤드 27,525,120·28,442,624·33,423,360 B, 정상 흐름 100, 소진 오류 0, fd 1~15라운드 20 고정, 최고점 증가 0·0·0 B, 수명 오류 0. | `~/vnc-relay-target/perf-ubuntu-formal-811491e/` |
 
 ## 5. 중단 조건
 
