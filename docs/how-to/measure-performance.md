@@ -7,7 +7,7 @@
 | 대상 독자 | 개발·검증 담당자 |
 | 검증 상태 | Draft. 실제 실행 기록은 4절에 별도로 남긴다. |
 | 검증 환경·버전 | Windows 11 x64·WSL2 Ubuntu 24.04 LTS x64, 저장소의 Rust 도구 체인 |
-| 최종 검증일 | 없음. 4절의 실제 기록으로 판단한다. |
+| 최종 검증일 | 2026-11-06. 두 OS에서 정식 측정을 실행했다. OPS-018은 통과, OPS-017은 RSS 잔여 기준 실패다(4절). |
 | 관련 기준 문서 | [운영 스펙 6절](../specs/operations.md#6-비기능호환성출처-수용-조건), [운영 정보 계약 1.5절](../contracts/ops-info-v1.md#15-사건-목록), [WebSocket 바이트 스트림 계약](../contracts/websocket-relay-v1.md#14-데이터-메시지와-제어-프레임), [설정 계약](../contracts/config-v2.md) |
 
 ## 1. 대상과 영향
@@ -138,6 +138,11 @@ JSON에는 OS·아키텍처·전송·L/Lw/B/M, 실제 요청 기간, 원시 자�
 
 | 대상·환경·하드웨어 | 명령·측정 기간 | 실제 결과 | 실행 증거 위치 |
 | --- | --- | --- | --- |
+| 스모크, 작업 트리(`1f4fe57` + 측정 도구, `TCP_NODELAY` 전). WSL2 Ubuntu 24.04, 커널 6.6.87.2-microsoft-standard-WSL2 | `measures_throughput_latency_cpu_and_rss`, 20초. 판정 불가 길이 | WS·WSS의 늘어난 p99가 34,040 µs·33,970 µs로 10 ms를 넘었다. WS 머리 묶기만 적용해도 34,040 µs·33,750 µs였다. 원인은 중계 소켓의 Nagle이었다. | `~/vnc-relay-target/perf-ubuntu-smoke-complete/`, `perf-ubuntu-vectored/` |
+| 스모크, 작업 트리(`TCP_NODELAY` 뒤). WSL2 Ubuntu 같음, Windows 11 Pro 10.0.26200 | 같은 시험, 20초. 판정 불가 길이 | 늘어난 p99: Ubuntu TCP 230 µs, WS 690 µs, WSS 340 µs. Windows TCP 600 µs, WS 1,250 µs, WSS 2,500 µs. Windows WSS CPU는 1.27코어에서 0.75코어로 줄었다. 데이터 오류 0. | `~/vnc-relay-target/perf-ubuntu-nodelay/`, `target/perf-win-nodelay-vectored/` |
+| 진단, WSL2 Ubuntu. `tcp_mem` = 190395 253863 380790페이지 | `D:/vr-tools/tmp/perf-diag/drain.py`(100세션 양방향 무제한 쓰기, 30초 정지 뒤 수신 재개)와 `nstat` | 클라이언트 버퍼 자동 조정: 소켓 메모리 최대 381,593페이지로 상한 초과, `TcpExtTCPRcvQDrop` 5,262, `TcpExtTCPTimeouts` 3,243, 멈춘 흐름 78개. Q120 규모(50세션)와 클라이언트 64 KiB: 최대 233,317페이지, 멈춘 흐름 0. 이 결과로 Q121을 정했다. | 대화 기록. 결과 파일 없음 |
+| 정식, 커밋 `e75eb25`. Windows 11 Pro 10.0.26200, AMD Ryzen 7 5700X 8코어 16스레드, RAM 31.9 GB, Rust 1.99.1 | `cargo test --release --test performance -- --ignored --test-threads=1`, 기본 600초. 종료 코드 101(OPS-017 실패) | OPS-018 세 전송 통과: 늘어난 p99 TCP 740 µs, WS 1,590 µs, WSS 2,730 µs. CPU 0.37·0.50·0.67코어. 최대 RSS 41.5·42.4·47.2 MB. OPS-017: TCP·WSS 통과, WS 실패. WS는 15라운드 RSS − 10라운드 RSS가 7,221,248 B로 2 MiB를 넘었다. 작업 집합이 라운드마다 약 14.5 MB와 22.4 MB 두 수준을 오갔다. 나머지 기준(오버헤드, 정상 흐름 100, 소진 오류 0, 핸들 212 고정, 수명 오류 0)은 세 전송 모두 통과했다. | `target/perf-windows-formal-e75eb25/` |
+| 정식, 커밋 `e75eb25`. WSL2 Ubuntu 24.04, 같은 하드웨어, `CLK_TCK=100` | WSL 3.2절 절차, 600초. OPS-017 종료 코드 101 | OPS-018 세 전송 통과: 늘어난 p99 TCP 210 µs, WS 750 µs, WSS 420 µs. CPU 0.13·0.21·0.26코어. 최대 RSS 34.4·35.3·37.3 MB. OPS-017: TCP 통과, WS·WSS 실패. 15라운드 RSS − 10라운드 RSS가 WS 3,932,160 B, WSS 2,359,296 B였다. 라운드별 증가 폭은 줄었지만 끝까지 0이 되지 않았다. 나머지 기준은 세 전송 모두 통과했다(fd 20 고정). | `~/vnc-relay-target/perf-ubuntu-formal-e75eb25/` |
 
 ## 5. 중단 조건
 
