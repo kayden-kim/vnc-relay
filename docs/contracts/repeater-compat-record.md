@@ -1,11 +1,11 @@
 # 호환성 검증 기록
 
-이 기록은 UltraVNC Server·Viewer·Repeater와 noVNC의 호환성 검증 결과를 남긴다. 관찰 허용 검토(1절), 검증 대상 고정(2절), 관찰 증거(3절)를 담는다. 증거 항목은 [Repeater 초기 교환 계약 6.2절](repeater-handshake-v1.md#62-기록할-증거)을 따른다.
+이 기록은 UltraVNC Server·Viewer·Repeater와 noVNC의 호환성 검증 결과를 남긴다. 관찰 허용 검토(1절), 검증 대상 고정(2절), 관찰 증거(3절), 모드·전송 조합 검증(6절)을 담는다. 증거 항목은 [Repeater 초기 교환 계약 6.2절](repeater-handshake-v1.md#62-기록할-증거)을 따른다.
 
-- 상태: 검증 대상 고정 완료(TODO 1.3). 관찰 완료(TODO 1.4): 2026-11-01에 [관찰 절차 6.1절](repeater-handshake-v1.md#61-관찰-절차) 5단계의 여섯 시나리오 묶음을 각각 2회 이상 캡처하고 6.2절의 증거를 3절에 기록했다. 사용자 결정 2026-10-22(Q19·Q20), 2026-11-01(Q62~Q67) 반영. 계약 1절 반영과 채택(TODO 1.5)은 2026-11-01에 마쳤다(사용자 결정 Q68~Q73). 중복 ID 정책(TODO 1.6)은 2026-11-01에 정했다(사용자 결정 Q74·Q75). 다른 계약 반영(TODO 1.7)도 2026-11-01에 마쳤다.
-- 작성일: 2026-10-21. 갱신일: 2026-10-22(사용자 결정 Q19·Q20 반영, 설치 스크립트 근거 추가), 2026-10-27(설치 확인과 캡처 도구 설치 기록, 3.1절·5.1절), 2026-11-01(관찰 환경 결정과 구성, 1절·3.2절·4절), 2026-11-01(시나리오 관찰과 해석, 3절·3.3~3.6절·4절·5.3절, 사용자 결정 Q67), 2026-11-01(계약 채택에 따른 4.6·4.10·4.13 갱신, 사용자 결정 Q68~Q73), 2026-11-01(중복 ID 정책 결정에 따른 4.6·4.11 갱신, 사용자 결정 Q74·Q75), 2026-11-01(다른 계약 반영에 따른 4.4·4.6 갱신, TODO 1.7).
-- 기준 커밋: `ff6bbb5`(시나리오 관찰 기록 시작 시점 HEAD). 이 기록은 `docs(compat)` 커밋에 담는다.
-- 작업 트리: 다른 작업과 같은 트리를 썼다. 문서 작업이며 빌드와 테스트는 하지 않았다.
+- 상태: 검증 대상 고정 완료(TODO 1.3). 관찰 완료(TODO 1.4): 2026-11-01에 [관찰 절차 6.1절](repeater-handshake-v1.md#61-관찰-절차) 5단계의 여섯 시나리오 묶음을 각각 2회 이상 캡처하고 6.2절의 증거를 3절에 기록했다. 사용자 결정 2026-10-22(Q19·Q20), 2026-11-01(Q62~Q67) 반영. 계약 1절 반영과 채택(TODO 1.5)은 2026-11-01에 마쳤다(사용자 결정 Q68~Q73). 중복 ID 정책(TODO 1.6)은 2026-11-01에 정했다(사용자 결정 Q74·Q75). 다른 계약 반영(TODO 1.7)도 2026-11-01에 마쳤다. 모드·전송 조합 검증(TODO 5.5)은 2026-11-06에 마쳤다(6절, 사용자 결정 Q128~Q131).
+- 작성일: 2026-10-21. 갱신일: 2026-10-22(사용자 결정 Q19·Q20 반영, 설치 스크립트 근거 추가), 2026-10-27(설치 확인과 캡처 도구 설치 기록, 3.1절·5.1절), 2026-11-01(관찰 환경 결정과 구성, 1절·3.2절·4절), 2026-11-01(시나리오 관찰과 해석, 3절·3.3~3.6절·4절·5.3절, 사용자 결정 Q67), 2026-11-01(계약 채택에 따른 4.6·4.10·4.13 갱신, 사용자 결정 Q68~Q73), 2026-11-01(중복 ID 정책 결정에 따른 4.6·4.11 갱신, 사용자 결정 Q74·Q75), 2026-11-01(다른 계약 반영에 따른 4.4·4.6 갱신, TODO 1.7), 2026-11-06(모드·전송 조합 검증, 2.6절·6절, 사용자 결정 Q128~Q131).
+- 기준 커밋: `ff6bbb5`(시나리오 관찰 기록 시작 시점 HEAD). 6절은 커밋 `70ff541`의 Windows release 빌드로 실행했다. 이 기록은 `docs(compat)` 커밋에 담는다.
+- 작업 트리: 1~5절은 다른 작업과 같은 트리를 쓴 문서 작업이며 빌드와 테스트는 하지 않았다. 6절의 실행 때 작업 트리는 깨끗했다.
 - 환경: Windows 11 x64 호스트. 내려받기는 `curl.exe`, 해시 계산은 `certutil`, 버전 확인은 PowerShell 파일 버전 정보를 썼다.
 
 ## 1. 관찰 허용 검토 (TODO 1.1)
@@ -73,7 +73,7 @@
 
 - 결정: 사용자 결정 2026-10-22(Q19). Ubuntu 서버·클라이언트 검증은 2.3절의 Ubuntu Repeater 항목과 따로 기록한다.
 - 범위: PRD의 '서버 플랫폼' 행은 Windows 11 x64·Ubuntu 24.04 LTS x64 양쪽에서 실행·종료·호환성을 검증하라고 정한다. 이 절은 Ubuntu 쪽 증거를 모은다.
-- 상태: 미실행. 실행 증거는 3절에 적는다.
+- 상태: 실제 UltraVNC와 Ubuntu VNC Relay의 조합은 미실행이다. 분리 실행 환경이 없다. 사용자 결정 2026-11-06(Q129)에 따라 Ubuntu 쪽 호환성 증거는 Ubuntu 자동 시험으로 인정한다. 그 증거는 [6.6절](#66-ubuntu-2404-증거)에 있다.
 
 ## 3. 관찰 증거 (TODO 1.4)
 
@@ -660,3 +660,118 @@ tshark -r D:\vr-captures\p11-mode2\M2-04-duplicate-server-id\run1\capture.pcapng
 - 회차 비교: 통과. 구조 차이가 있는 13개 시나리오 중 12개는 3.3절에 적은 무시할 차이(FIN 순서 경쟁, Repeater 종료 뒤 상대 FIN의 유무, 화면 갱신 데이터·TLS ClientHello 크기)다. S-05의 종료 방식 차이는 원인을 추정으로만 남겼다(3.4절). 초기 교환과 매칭 결과에는 회차 간 차이가 없었다.
 - 원본 무결성: 통과. 캡처 76개의 해시가 실행 요약의 값과 같다(3.6절).
 - keepalive 구분: 통과. winvnc의 10초 간격 1바이트는 tshark가 TCP keepalive로 표시했고, 원시 클라이언트가 보낸 `00`은 표시되지 않았다.
+
+## 6. 모드·전송 조합 검증 (TODO 5.5)
+
+2절의 고정 버전으로 모든 모드·전송 조합을 검증했다. 실제 UltraVNC Server 1.8.3.0을 상대로 아홉 조합이 모두 통과했다. TCP Mode I, TCP Mode II(Server 먼저·Viewer 먼저), WS·WSS Mode I, noVNC 1.7.0의 WS·WSS Mode II(Server 먼저·noVNC 먼저)다. 이로써 [WebSocket 스펙 6절](../specs/websocket.md#6-전송모드-검증-조합) 표의 여덟 행을 모두 실제 Server로 확인했다. 이 실행에서 [계약 3.1절](repeater-handshake-v1.md#31-대상-버전-repeater와-다르게-처리하는-입력)에 없는 차이는 나오지 않았다(6.4절).
+
+### 6.1 결정과 범위
+
+| 항목 | 내용 |
+| --- | --- |
+| 실행 환경 | 사용자 결정 2026-11-06(Q128): 3.2절의 Hyper-V VM 3대에서 현재 커밋으로 다시 실행한다. 에이전트가 VM 안의 Viewer·Server·브라우저를 자동으로 조작하고, 프로젝트 소유자가 판정 캡처를 검토한다(사용자 결정 2026-11-05(Q116)의 방식) |
+| 캡처 검토 | 프로젝트 소유자가 판정 캡처를 검토했고 문제가 없었다. 첫 실행(TCP·noVNC 일곱 조합)은 사용자 결정 2026-11-06(Q130), 두 번째 실행(WS·WSS Mode I)은 사용자 결정 2026-11-06(Q131)이다 |
+| Ubuntu | 사용자 결정 2026-11-06(Q129): Ubuntu VNC Relay와 실제 UltraVNC의 조합은 미실행으로 기록한다. Ubuntu 자동 시험을 Ubuntu 쪽 증거로 인정한다(6.6절) |
+| WS·WSS Mode I | 이 문서의 판단, 사용자 결정 없음. WebSocket으로 Mode I 요청을 보내는 고정 버전 클라이언트는 없다. noVNC 1.7.0은 항상 `ID:<repeaterID>` 형식의 초기 요청을 보내고(3.4절 W-02·W-03b), UltraVNC Viewer는 WebSocket을 쓰지 않는다. 그래서 UltraVNC Viewer 1.8.3.0을 Viewer VM 안의 시험용 바이트 중계 스크립트 `tcp2ws.ps1`에 접속시켰다. 이 스크립트는 이 프로젝트가 만든 시험 도구이며 websockify가 아니다. TCP로 받은 바이트를 바꾸지 않고 WebSocket 이진 메시지로 VNC Relay에 보내고, 반대 방향도 그대로 옮긴다. 초기 요청은 Viewer 자신이 보낸다. Origin 헤더는 보내지 않는다(WS-021). 이 방식의 캡처를 프로젝트 소유자가 검토했다(Q131) |
+| WSS 인증서 | 이 문서의 판단, 사용자 결정 없음. 저장소의 시험용 인증서(`crates/adapters/tests/fixtures/tls/server-chain.pem`·`server-key-p256.pem`)를 썼다. Edge는 `--ignore-certificate-errors`로 실행했고, `tcp2ws.ps1`은 인증서 검사를 껐다. 3.4절 W-03b와 같은 방법이다. 인증서 신뢰는 이 검증의 대상이 아니다 |
+| 판정 기준 | 회차마다 세 가지가 모두 맞으면 통과다. Server 시험 창 기록에 클릭 1회와 회차 문자열 전체가 있다. Viewer 화면 캡처에 Server 화면과 입력 결과가 보인다. VNC Relay 로그에 해당 전송의 `session_started`가 있다 |
+
+### 6.2 환경과 버전
+
+| 항목 | 값 |
+| --- | --- |
+| 실행 시각 | 2026-11-06 KST(UTC+9). 첫 실행 19:14~19:34(VM 시작 19:14:16, 회차 19:17~19:33, 로그 `ts`는 UTC 10:16~10:33). 두 번째 실행 19:42~19:46(VM 시작 19:42:05, 회차 19:44~19:45, 로그 `ts`는 UTC 10:44~10:45) |
+| VM | 3.2절 구성. 두 실행 모두 세 VM을 `baseline`으로 되돌린 뒤 부팅했고, Server의 시험용 VNC Password를 새로 정했다. `vr-lab` `Private` 스위치, 세 VM 모두 기본 게이트웨이 없음. 게스트 OS는 Windows 11 Enterprise Evaluation 10.0.26300(build 26300). 실행마다 한 시간 안에 끝내고 VM을 껐다(Q67) |
+| Viewer | `vr-viewer`(192.0.2.10) `C:\Program Files\uvnc\UltraVNC\vncviewer.exe` 1.8.3.0, SHA-256 `18760910769dc497266d6ba7a28892925177d0208fe4433bf62f0b16061f3427` |
+| Server | `vr-server`(192.0.2.30) `C:\Program Files\uvnc\UltraVNC\winvnc.exe` 1.8.3.0, SHA-256 `9ebd1ec90ba1274d4a183f5bf6588374700052da907fa764a2ae7072e8ae19fe`. 시험용 VNC Password만 바꾸었다. `AuthRequired=1`, `ReverseAuthRequired=1`, `InputsEnabled=1` |
+| noVNC | 1.7.0. `vr-viewer`에서 `novnc-v1.7.0.zip`(SHA-256 `d55e9cce9a611294df33c7200f32f35108652de2d86a468bebcfc6f2a1c9a196`, 2.4절 값과 같음)을 풀고 `ws-lab.ps1 -Mode static`으로 `http://127.0.0.1:8000/`에서 제공했다 |
+| 브라우저 | `vr-viewer`의 Microsoft Edge 152.0.4191.66, `--headless=new`. DevTools 프로토콜로 화면 캡처·클릭·키 입력을 보냈다 |
+| 바이트 중계 스크립트 | `vr-viewer`의 `C:\vr\ui\tcp2ws.ps1`. 127.0.0.1:5998(WS)·5999(WSS)에서 받고 `ws://192.0.2.20:8081/relay`·`wss://192.0.2.20:8443/relay`로 보낸다. Windows PowerShell 5.1과 .NET `ClientWebSocket`을 쓴다. VM 실행 전에 호스트 루프백에서 같은 스크립트로 Mode I 초기 교환과 에코를 WS·WSS 모두 확인했다 |
+| noVNC 주소 | `http://127.0.0.1:8000/vnc.html?autoconnect=true&reconnect=false&repeaterID=1234&host=192.0.2.20&port=<8081 또는 8443>&encrypt=<false 또는 true>&path=relay` |
+| VNC Relay | 커밋 `70ff541`의 Windows release 빌드(`cargo build --release --bin vnc-relay`), `vnc-relay 0.1.0`, SHA-256 `d94e4dd34a297cfdd008bf3e856c30deb2c5366dc6d844e6502aa3aaf097b5fc`. 빌드 산출물, 반입 묶음, `vr-repeater`의 `C:\vr\compat-5.5\vnc-relay.exe` 세 파일의 해시가 같았다. 미커밋 변경은 없었다 |
+| VNC Relay 설정 | `vr-repeater`(192.0.2.20) `C:\vr\compat-5.5\relay.toml`, SHA-256 `20fa0505e23e5452c687328caa3a6bb02e3a0f68b0d33b9aab141e510b4d0e9e`. 리스너는 `tcp_viewer` 192.0.2.20:5901, `tcp_server` 192.0.2.20:5500, `ws_viewer` 192.0.2.20:8081, `wss_viewer` 192.0.2.20:8443, 관리 127.0.0.1:18080, 상태 127.0.0.1:18081이다. Viewer 진입점은 192.0.2.10만, Server 진입점은 192.0.2.30만 허용했다. WS·WSS `allowed_origins`는 `http://127.0.0.1:8000`이다. Mode I 허용 대상은 `192.0.2.30:5900` 하나다 |
+| 방화벽 | `vr-repeater`에 `vnc-relay-compat-5.5` 그룹 규칙 4개를 두었다. 포트 5901·8081·8443은 192.0.2.10에서, 5500은 192.0.2.30에서만 받는다. 프로그램은 `vnc-relay.exe`로 한정했다. 실행 뒤 지웠다 |
+
+### 6.3 조합별 결과
+
+판정 회차는 조합마다 1회다. 같은 Server·Viewer와 같은 판정 기준으로 TCP 세 조합은 작업 2.13에서도 독립 2회씩 통과했다([실제 UltraVNC 수동 확인 how-to](../how-to/verify-ultravnc-manually.md) 4절). Mode II ID는 양쪽 모두 `1234`다.
+
+| 조합 | 실행 | Server 시험 창 기록 | VNC Relay 로그 | 결과 |
+| --- | --- | --- | --- | --- |
+| TCP Mode I (`tcp-m1`, RLY-006) | Server `winvnc -run`. Viewer `vncviewer -connect 192.0.2.30::5900 -proxy 192.0.2.20:5901`. VNC 인증 창에 시험용 비밀번호를 넣었다 | 클릭 1회, `tcpmodeone` | `session_started` `mode1` `viewer_transport=tcp` `target_port=5900`, `session_closed` `peer_eof` | 통과 |
+| TCP Mode II, Server 먼저 (`tcp-m2s-b`, RLY-010) | Server `winvnc -id:1234 -connect 192.0.2.20::5500 -run`, 약 10초 뒤 Viewer `vncviewer -proxy 192.0.2.20:5901 ID:1234`. Viewer의 인증 없음 확인 창에서 연결을 골랐다 | 클릭 1회, `tcpserverfirst` | `waiting_registered`(Server) 뒤 `session_started` `mode2` `tcp` `waited_ms=10410`, `peer_eof` | 통과 |
+| TCP Mode II, Viewer 먼저 (`tcp-m2v-b`, RLY-011) | 같은 명령을 Viewer, 약 8초 뒤 Server 순서로 실행했다 | 클릭 1회, `tcpviewerfirst` | `waiting_registered`(Viewer) 뒤 `session_started` `mode2` `tcp` `waited_ms=7967`, `peer_eof` | 통과 |
+| WS Mode I (`ws-m1`, WS-001) | Server `winvnc -run`. Viewer `vncviewer -connect 192.0.2.30::5900 -proxy 127.0.0.1:5998` → `tcp2ws.ps1` → `ws_viewer`. VNC 인증 창에 시험용 비밀번호를 넣었다 | 클릭 1회, `wsmodeone` | `session_started` `mode1` `viewer_transport=ws` `target_port=5900`, `session_closed` `peer_eof` | 통과 |
+| WSS Mode I (`wss-m1`, WS-002) | 같은 방법으로 `-proxy 127.0.0.1:5999` → `wss_viewer` | 클릭 1회, `wssmodeone` | `session_started` `mode1` `viewer_transport=wss` `target_port=5900`, `session_closed` `peer_eof` | 통과 |
+| WS Mode II, Server 먼저 (`ws-s-b`, WS-003·WS-025) | Server 명령 뒤 Edge로 noVNC 주소(`port=8081`, `encrypt=false`)를 열었다 | 클릭 1회, `wsserverfirst` | `session_started` `mode2` `viewer_transport=ws` `waited_ms=10427` | 통과. noVNC 상태 `Connected (unencrypted) to vr-server ( 192.0.2.30 ) - application mode` |
+| WS Mode II, noVNC 먼저 (`ws-v-b`, WS-004·WS-025) | noVNC 주소를 연 뒤 약 5초 뒤 Server 명령 | 클릭 1회, `wsnovncfirst` | `waiting_registered`(`ws_viewer`) 뒤 `session_started` `ws` `waited_ms=5119` | 통과. 상태 `Connected (unencrypted) …` |
+| WSS Mode II, Server 먼저 (`wss-s-b`, WS-005·WS-025) | Server 명령 뒤 noVNC 주소(`port=8443`, `encrypt=true`) | 클릭 1회, `wssserverfirst` | `session_started` `viewer_transport=wss` `waited_ms=10038` | 통과. 상태 `Connected (encrypted) …` |
+| WSS Mode II, noVNC 먼저 (`wss-v-b`, WS-006·WS-025) | noVNC 주소를 연 뒤 약 5초 뒤 Server 명령 | 클릭 1회, `wssnovncfirst` | `waiting_registered`(`wss_viewer`) 뒤 `session_started` `wss` `waited_ms=5021` | 통과. 상태 `Connected (encrypted) …` |
+
+- TCP와 WS·WSS Mode I 회차의 세션은 Viewer 창을 닫아 끝냈다. `session_closed`는 `close_cause=peer_eof`, `side=viewer`였다. `tcp2ws.ps1` 기록에서는 Viewer 쪽 TCP 종료 뒤 VNC Relay가 Close(1000)로 답했다.
+- WS Mode I 회차에서 `tcp2ws.ps1`이 옮긴 바이트는 Viewer 쪽 1,536, Server 쪽 833,658이다. WSS Mode I은 1,506과 947,084다.
+- noVNC 회차의 세션은 하네스가 Edge 프로세스를 강제로 끝내서 닫았다. 그래서 `session_closed`는 `close_cause=connection_error`, `error_kind=io_error`, `side=viewer`였다. 3.4절 W-03b에서 Edge를 끝냈을 때 RST가 관찰된 것과 맞다. noVNC가 정상 Close를 보내는 종료는 이 실행에서 확인하지 않았다.
+- noVNC는 Server의 VNC 인증 없이 연결됐다. 역접속 Server가 None 보안 유형을 제시했다[INFERENCE: 3.4절 W-02에서 noVNC가 고른 유형과 2.13의 "인증 없음" 확인 창에 근거한다. 이 실행에서는 RFB 바이트를 캡처하지 않았다].
+- 두 실행 모두 끝낼 때 Ctrl+C로 VNC Relay를 멈췄다. 로그는 `shutdown_started` `trigger=requested` `active_sessions=0` 뒤 `server_stopped`였고, 종료 코드는 0, 표준 오류는 비어 있었다.
+
+### 6.4 Repeater 1.6.0.0과의 차이
+
+이 실행에서 확인한 차이는 모두 [계약 3.1절](repeater-handshake-v1.md#31-대상-버전-repeater와-다르게-처리하는-입력)에 있다. 3.1절에 없는 새 차이는 나오지 않았다.
+
+| 계약 3.1절 행 | 이 실행의 확인 |
+| --- | --- |
+| WebSocket·TLS 접속 | 확인했다. Repeater 1.6.0.0에는 WebSocket 대기 포트가 없다(3.4절 W-01). `vnc-relay`는 WS·WSS 접속을 `ws_viewer`·`wss_viewer`에서 받아 Mode I·II 모두 실제 Server와 중계했다(6.3절) |
+| 같은 역할 중복 ID | 무효 회차(6.5절)에서 우연히 확인했다. ID `1234`의 Viewer가 대기 중일 때 같은 ID의 Viewer가 TCP·WS·WSS로 오자 `connection_rejected` `stage=register` `reason=duplicate_id`로 바로 닫혔다. 먼저 온 대기 연결은 유지됐다. UltraVNC Viewer는 `UltraVNC Viewer - Information` 창을, noVNC는 `Failed to connect to server`를 보였다. Repeater 1.6.0.0은 뒤에 온 연결을 닫지 않고 둔다 |
+| 시작 바이트의 시점 | 실제 Viewer·Server·noVNC가 아홉 조합 모두에서 초기 교환을 마치고 세션에 들어갔다. 바이트 시점은 캡처하지 않았다 |
+| ID 비교, Server ID `999999999`, 형식이 틀린 요청, 짝이 없는 대기 시간, 초기 교환 시간, IPv6 대상 | 이 실행의 입력에 없다. 양쪽에 같은 숫자 ID와 IPv4 대상만 썼다. 이 차이들의 증거는 계약 3.1절의 근거와 자동 시험이다 |
+
+### 6.5 무효 회차와 하네스 수정
+
+아래 첫 시도 6회는 하네스의 정리 문제로 무효다. 판정에 쓰지 않았다. 원본은 6.7절 폴더에 함께 남겼다.
+
+| 회차 | 무슨 일이 있었나 |
+| --- | --- |
+| `tcp-m2s` | 정리 단계의 `winvnc -kill`이 Mode I용 winvnc를 15초 안에 끝내지 못했다. 새 `-connect` 명령은 이미 실행 중인 winvnc로 넘어갔고, Server는 5500으로 접속하지 않았다(로그에 `tcp_server` 수락 없음). Viewer(c2)만 ID `1234`로 대기했다. Mode I 회차 Server 화면에는 두 번째 `winvnc -run`이 띄운 "already running" 창이 있었다[INFERENCE: 이 창이 `-kill` 실패의 원인이다] |
+| `tcp-m2v` | c2가 남아 있어 새 Viewer가 `duplicate_id`로 거절됐다 |
+| `ws-s`, `ws-v`, `wss-s`, `wss-v` | 같은 이유로 noVNC의 WS·WSS 접속이 등록 단계에서 `duplicate_id`로 거절됐다. 업그레이드와 TLS는 성공해 `connection_accepted`가 `ws_viewer`·`wss_viewer`에 남았다 |
+
+고친 방법: 회차마다 시작 전에 Viewer·Edge·winvnc를 모두 끝낸다. `-kill` 뒤에도 남은 winvnc는 프로세스를 강제로 끝낸다. 정리 뒤 c2는 `waiting_removed` `reason=connection_error`(`waited_ms=595724`)로 사라졌다. 그 뒤 Mode II 2회와 noVNC 4회를 다시 실행했다(이름 끝 `-b`).
+
+### 6.6 Ubuntu 24.04 증거
+
+사용자 결정 2026-11-06(Q129)에 따라 아래 자동 시험을 Ubuntu 쪽 호환성 증거로 인정한다. 실제 UltraVNC와 Ubuntu VNC Relay의 조합은 미실행이다.
+
+| 시험 | 환경 | 결과 |
+| --- | --- | --- |
+| WS-025 `tests/websocket_browser.rs` `novnc_repeater_id_completes_rfb_through_ws_and_wss_in_both_server_orders` | WSL2 Ubuntu 24.04, 커밋 `70ff541`, noVNC 1.7.0 zip 해시 일치, `--include-ignored` | 통과(2 passed, 42.07초, WS-020 포함). 시험의 TCP Server는 최소 RFB 3.8 서버이며 UltraVNC가 아니다 |
+| 전체 게이트 `vr-full.sh` | WSL2 Ubuntu 24.04, 커밋 `70ff541` | `ALL PASSED`. WS-001~006·WS-020과 TCP Mode I·II 시나리오 통과 |
+
+같은 WS-025 시험은 Windows에서도 통과했다(2 passed, 42.57초). 실행 기록은 [WebSocket 중계 계약의 실행 기록](websocket-relay-v1.md#계약-테스트-실행-기록)에 있다.
+
+### 6.7 원본과 명령
+
+원본은 저장소 밖 두 폴더에 있다. `SHA256SUMS.txt`는 `<해시> *<파일 이름>` 형식이며, 목록의 모든 항목을 .NET SHA-256으로 다시 계산해 일치를 확인했다.
+
+| 실행 | 폴더 | 파일 | `SHA256SUMS.txt` SHA-256 | VNC Relay 운영 로그 |
+| --- | --- | --- | --- | --- |
+| 첫 실행 | `D:\vr-captures\compat-5.5\run-20261106\` | 95개(실행 준비 기록 `host-prep.json`·`host-prep.log` 포함) | `49e59c46069adce5326aa13cde8cfbad252895505e0e8f00c7d991b194f56404` | `vr-repeater-relay.jsonl` 51줄, `f0476fa2ab76e28ab50a6f9e7eab26c8e50456f3743918147da676616f45bbd6` |
+| 두 번째 실행 | `D:\vr-captures\compat-5.5\run-20261106-ws-mode1\` | 26개(`prep.json`·`prep.log` 포함) | `d332217102560ff00fd7804b2da4021e069da9be7c7efb83e48d0e30a77f1268` | `vr-repeater-relay.jsonl` 11줄, `f55c968ab7db46faedeffee61e12f7d731a9b97576f31e4dac305c5626d05e3b` |
+
+판정 캡처는 회차마다 `vr-viewer-viewer-<회차>-after-keys.png` 또는 `vr-viewer-novnc-<회차>-after-keys.png`, `vr-server-<회차>-console.png`, `vr-server-form-<회차>.log`다. WS·WSS Mode I 회차에는 `vr-viewer-tcp2ws-<회차>.log`도 있다.
+
+하네스는 저장소 밖 `D:\vr-tools\tmp\compat-5.5\`에 있다. 작업 2.13의 하네스를 복사해 경로만 바꾸었다. noVNC 회차용 `guest\novnc-drive.ps1`(Edge DevTools 프로토콜로 캡처·클릭·키 입력)과 WS·WSS Mode I 회차용 `guest\tcp2ws.ps1`을 더했다. 관리자 권한 실행은 사용자가 실행마다 UAC를 한 번씩, 모두 두 번 승인했다(Q66).
+
+```
+관리자 권한 PowerShell 5.1:
+powershell -NoProfile -ExecutionPolicy Bypass -File D:\vr-tools\tmp\compat-5.5\elevate.ps1 -Script D:\vr-tools\tmp\compat-5.5\worker.ps1
+작업 파일(D:\vr-tools\tmp\compat-5.5\q\): 첫 실행 0001-prep, 0002-fw-tray, 0003-settings, 0004-pwset-serve, 0005-tcp, 0006-novnc, 0007-rerun, 0008-finish. 두 번째 실행 0101-prep, 0102-setup, 0103-mode1-ws, 0104-finish
+
+0004·0102 serve: server_ready listeners=status 127.0.0.1:18081, management 127.0.0.1:18080, tcp_viewer 192.0.2.20:5901, tcp_server 192.0.2.20:5500, ws_viewer 192.0.2.20:8081, wss_viewer 192.0.2.20:8443
+0008·0104 finish: shutdown_started trigger=requested active_sessions=0 → server_stopped, serve-exit-main.txt exit=0, serve-stderr-main.txt 비어 있음
+0008·0104 finish: VM 안의 비밀 파일 없음, 방화벽 규칙 0개, vr-repeater·vr-server·vr-viewer state=Off
+```
+
+- 조합 검증: 통과. 6.3절의 아홉 조합이 판정 기준을 모두 만족했다. 프로젝트 소유자가 판정 캡처를 검토했고 문제가 없었다(Q130·Q131).
+- 실행파일 일치: 통과. 빌드 산출물, 반입 묶음, VM의 실행파일 해시가 같았다.
+- 정리: 통과. 시험용 VNC 비밀번호 파일은 호스트와 VM에서 지웠다. VM 체크포인트 `baseline`은 바꾸지 않았다.
+- 무효 회차: 6회. 6.5절에 원인과 수정을 적었다.
