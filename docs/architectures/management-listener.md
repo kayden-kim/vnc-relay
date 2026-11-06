@@ -85,7 +85,7 @@ flowchart LR
 | `Deadlined<IO>` | `io: IO`, `limit: Duration`(U), `timer: Pin<Box<Sleep>>`, `head_done: bool`, `window: u32`(마지막 4바이트) | 접속 하나 | `head_done`은 `\r\n\r\n`을 읽으면 참이 되고 되돌아가지 않는다. `window`는 머리 끝을 찾는 데만 쓴다. 기한이 지나면 읽기·쓰기가 `TimedOut`을 돌려준다. |
 | 관리 응답 본문 | `{"error":{"code":"unauthenticated","message":…}}`, `{"error":{"code":"not_found","message":…}}` | HTTP 응답 | 2.1절 형식만 쓴다. `message`는 요청 입력값을 담지 않는다. |
 | 지우기 쿠키 | `relay_admin_session=; Path=/; Max-Age=0; HttpOnly; SameSite=Strict` (HTTPS면 `; Secure` 추가) | `Set-Cookie` 헤더 | 1.4.1절 속성과 맞춘다. 값은 비운다. |
-| `Asset` | `path: &'static str`(제공 경로, 예: `/app/tokens.css`), `content_type: &'static str`, `body: &'static [u8]`(`include_bytes!`) | 실행 파일의 상수(`ASSETS`) | 경로는 `/login/`·`/app/`로 시작하거나 `/`(`app/index.html`에 대응)다. 확장자는 `.html`·`.css`·`.js`만 쓴다. `preview/`·`tests/` 경로는 넣지 않는다. 대조 시험(`tests/dashboard_assets.rs`)이 표와 `web/dashboard/` 파일 목록을 비교한다. |
+| `Asset` | `path: &'static str`(제공 경로, 예: `/app/tokens.css`), `content_type: &'static str`, `body: &'static [u8]`(`include_bytes!`) | 실행 파일의 상수(`ASSETS`) | 경로는 `/login/`·`/app/`로 시작하거나 `/`(`app/index.html`에 대응)다. 확장자는 `.html`·`.css`·`.js`·`.woff2`(글꼴, `font/woff2`)만 쓴다. `preview/`·`tests/` 경로는 넣지 않는다. 대조 시험(`tests/dashboard_assets.rs`)이 표와 `web/dashboard/` 파일 목록을 비교한다. |
 
 ## 4. 처리 순서
 

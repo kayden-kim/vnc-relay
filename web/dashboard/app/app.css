@@ -42,6 +42,7 @@
   font-size: var(--type-heading-page-size);
   font-weight: var(--type-heading-page-weight);
   line-height: var(--type-heading-page-line);
+  letter-spacing: var(--type-heading-page-tracking);
 }
 
 .page-meta {
@@ -50,6 +51,7 @@
   font-family: var(--type-body-family);
   font-size: var(--type-body-size);
   line-height: var(--type-body-line);
+  letter-spacing: var(--type-body-tracking);
 }
 
 .card-stack {
@@ -82,6 +84,7 @@
   font-size: var(--type-label-size);
   font-weight: var(--type-label-weight);
   line-height: var(--type-label-line);
+  letter-spacing: var(--type-label-tracking);
 }
 
 .fact-value {
@@ -91,6 +94,7 @@
   font-size: var(--type-body-numeric-size);
   font-weight: var(--type-body-numeric-weight);
   line-height: var(--type-body-numeric-line);
+  letter-spacing: var(--type-body-numeric-tracking);
   font-feature-settings: var(--type-body-numeric-feature);
   overflow-wrap: anywhere;
 }
@@ -101,6 +105,7 @@
   font-size: var(--type-data-size);
   font-weight: var(--type-data-weight);
   line-height: var(--type-data-line);
+  letter-spacing: var(--type-data-tracking);
   font-feature-settings: var(--type-data-feature);
   overflow-wrap: anywhere;
 }
@@ -148,6 +153,7 @@
   font-family: var(--type-label-family);
   font-size: var(--type-label-size);
   line-height: var(--type-label-line);
+  letter-spacing: var(--type-label-tracking);
 }
 
 .cell-bytes,

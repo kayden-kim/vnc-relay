@@ -2,10 +2,11 @@
 //!
 //! Writes `web/dashboard/login/tokens.css`, `web/dashboard/app/tokens.css`, and
 //! the token block of the mockup between its markers. It also writes the copies
-//! of app components and styles that the sign-in page loads (see `shared`).
-//! `--check` compares those files and runs the screen CSS check
-//! (docs/conventions/frontend.md section 2).
+//! of app components and styles that the sign-in page loads (see `shared`) and
+//! the copies of the font files (see `fonts`). `--check` compares those files
+//! and runs the screen CSS check (docs/conventions/frontend.md section 2).
 
+pub(crate) mod fonts;
 mod front_matter;
 mod screen_css;
 mod shared;
@@ -31,15 +32,22 @@ const MOCKUP_START: &str = "/* DESIGN-TOKENS:START */";
 const MOCKUP_END: &str = "/* DESIGN-TOKENS:END */";
 /// Top-level keys that are read from DESIGN.md but never exported to CSS.
 const IGNORED_KEYS: [&str; 4] = ["version", "name", "description", "components"];
-const TYPE_KEYS: [(&str, &str); 5] = [
+const TYPE_KEYS: [(&str, &str); 6] = [
     ("fontFamily", "family"),
     ("fontSize", "size"),
     ("fontWeight", "weight"),
     ("lineHeight", "line"),
+    ("letterSpacing", "tracking"),
     ("fontFeature", "feature"),
 ];
 /// Keys every typography step must have. `fontFeature` is optional.
-const REQUIRED_TYPE_KEYS: [&str; 4] = ["fontFamily", "fontSize", "fontWeight", "lineHeight"];
+const REQUIRED_TYPE_KEYS: [&str; 5] = [
+    "fontFamily",
+    "fontSize",
+    "fontWeight",
+    "lineHeight",
+    "letterSpacing",
+];
 
 /// One custom property, with its name (including `--`) and verbatim value.
 pub struct Token {
@@ -52,11 +60,12 @@ pub fn run(check: bool) -> Result<bool, Error> {
     let root = cargo::metadata()?.root;
     let design = read_text(&root.join(DESIGN_PATH))?;
     let tokens = tokens_from(&design)?;
-    let css = render_css(&tokens);
+    let css = render_css(&tokens, fonts::TOKEN_FILE_BASE);
+    let mockup_css = render_css(&tokens, fonts::MOCKUP_BASE);
     if check {
-        check_outputs(&root, &css, &tokens)
+        check_outputs(&root, &css, &mockup_css, &tokens)
     } else {
-        write_outputs(&root, &css)?;
+        write_outputs(&root, &css, &mockup_css)?;
         Ok(true)
     }
 }
@@ -147,18 +156,20 @@ fn scalar_value(path: &str, value: &Value) -> Result<String, Error> {
     Ok(text.clone())
 }
 
-/// The generated file: one comment line with the source, then one `:root` block.
-fn render_css(tokens: &[Token]) -> String {
+/// The generated file: one comment line with the source, one `:root` block,
+/// then the `@font-face` rules. `font_base` is the font directory in `url()`.
+fn render_css(tokens: &[Token], font_base: &str) -> String {
     let mut out = format!("/* Generated file. Do not edit. Source: {DESIGN_PATH} */\n");
     out.push_str(":root {\n");
     for token in tokens {
         out.push_str(&format!("  {}: {};\n", token.name, token.value));
     }
     out.push_str("}\n");
+    out.push_str(&fonts::font_faces(font_base));
     out
 }
 
-fn write_outputs(root: &Path, css: &str) -> Result<(), Error> {
+fn write_outputs(root: &Path, css: &str, mockup_css: &str) -> Result<(), Error> {
     for relative in OUTPUT_PATHS {
         let path = root.join(relative);
         if let Some(parent) = path.parent() {
@@ -167,18 +178,25 @@ fn write_outputs(root: &Path, css: &str) -> Result<(), Error> {
         std::fs::write(&path, css)?;
     }
     shared::write(root)?;
+    fonts::write(root)?;
     let mockup_path = root.join(MOCKUP_PATH);
     let mockup = read_text(&mockup_path)?;
-    let updated = replace_mockup_block(&mockup, css)?;
+    let updated = replace_mockup_block(&mockup, mockup_css)?;
     if updated != mockup {
         std::fs::write(&mockup_path, updated)?;
     }
     Ok(())
 }
 
-/// Compares the generated CSS with both token files, the mockup block, and the
-/// screen CSS rules. Every difference is printed. Returns `Ok(false)` if any exists.
-fn check_outputs(root: &Path, css: &str, tokens: &[Token]) -> Result<bool, Error> {
+/// Compares the generated CSS with both token files and the mockup block, the
+/// copies with their sources, and runs the screen CSS rules. Every difference
+/// is printed. Returns `Ok(false)` if any exists.
+fn check_outputs(
+    root: &Path,
+    css: &str,
+    mockup_css: &str,
+    tokens: &[Token],
+) -> Result<bool, Error> {
     let mut out = std::io::stdout().lock();
     let mut problems: Vec<String> = Vec::new();
     for relative in OUTPUT_PATHS {
@@ -189,13 +207,14 @@ fn check_outputs(root: &Path, css: &str, tokens: &[Token]) -> Result<bool, Error
     }
     let mockup = read_text(&root.join(MOCKUP_PATH))?;
     let block = mockup_block(&mockup)?;
-    if let Some(message) = first_difference(MOCKUP_PATH, css, &block) {
+    if let Some(message) = first_difference(MOCKUP_PATH, mockup_css, &block) {
         problems.push(message);
     }
     let mut files = Vec::new();
     collect_screen_css(&root.join(DASHBOARD_DIR), root, &mut files)?;
     let defined: BTreeSet<String> = tokens.iter().map(|token| token.name.clone()).collect();
     problems.extend(shared::check(root)?);
+    problems.extend(fonts::check(root)?);
     problems.extend(screen_css::check(&files, &defined));
     for problem in &problems {
         writeln!(out, "{problem}")?;

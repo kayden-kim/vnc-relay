@@ -9,6 +9,8 @@ const HTML: &str = "text/html; charset=utf-8";
 const CSS: &str = "text/css; charset=utf-8";
 /// `Content-Type` of a module script.
 const JS: &str = "text/javascript; charset=utf-8";
+/// `Content-Type` of a font file.
+const WOFF2: &str = "font/woff2";
 
 /// A file that the management listener serves.
 pub struct Asset {
@@ -89,9 +91,29 @@ pub const ASSETS: &[Asset] = &[
         body: include_bytes!("../../../web/dashboard/login/components/language-select.js"),
     },
     Asset {
+        path: "/login/fonts/Pretendard-Regular.subset.woff2",
+        content_type: WOFF2,
+        body: include_bytes!("../../../web/dashboard/login/fonts/Pretendard-Regular.subset.woff2"),
+    },
+    Asset {
+        path: "/login/fonts/Pretendard-Bold.subset.woff2",
+        content_type: WOFF2,
+        body: include_bytes!("../../../web/dashboard/login/fonts/Pretendard-Bold.subset.woff2"),
+    },
+    Asset {
         path: "/app/tokens.css",
         content_type: CSS,
         body: include_bytes!("../../../web/dashboard/app/tokens.css"),
+    },
+    Asset {
+        path: "/app/fonts/Pretendard-Regular.subset.woff2",
+        content_type: WOFF2,
+        body: include_bytes!("../../../web/dashboard/app/fonts/Pretendard-Regular.subset.woff2"),
+    },
+    Asset {
+        path: "/app/fonts/Pretendard-Bold.subset.woff2",
+        content_type: WOFF2,
+        body: include_bytes!("../../../web/dashboard/app/fonts/Pretendard-Bold.subset.woff2"),
     },
     Asset {
         path: "/app/styles/base.css",

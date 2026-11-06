@@ -8,6 +8,7 @@ use std::process::Stdio;
 
 use serde_json::Value;
 
+use crate::tokens::fonts;
 use crate::{Error, cargo};
 
 const TARGETS: [&str; 2] = ["x86_64-pc-windows-msvc", "x86_64-unknown-linux-gnu"];
@@ -237,12 +238,14 @@ fn render(root: &Path) -> Result<String, Error> {
          Ship this entire file with either target's executable.\n\
          Scope: union of normal + build dependencies of package vnc-relay,\n\
          default product features; excludes dev-only dependencies and xtask.\n\
+         Also covers the dashboard font files built into the executable.\n\
          Build tools and unused nested notices may be included conservatively.\n\
          License expressions are upstream metadata, not a new license grant.\n\
          All collected copyright/license/NOTICE texts are retained below.\n\
          The project's own MIT LICENSE is separate and is not supplied here.\n\n",
     );
     writeln!(text, "Targets: {}", TARGETS.join(", ")).map_err(format_error)?;
+    writeln!(text, "Bundled font: {}", fonts::NOTICE_TITLE).map_err(format_error)?;
     writeln!(text, "Third-party crates: {}\n", packages.len()).map_err(format_error)?;
     for package in &packages {
         writeln!(
@@ -286,6 +289,19 @@ fn render(root: &Path) -> Result<String, Error> {
                 text.push('\n');
             }
         }
+    }
+    writeln!(
+        text,
+        "\n================================================================\n{}\n================================================================\n\n--- {} ---",
+        fonts::NOTICE_TITLE,
+        fonts::LICENSE_PATH
+    )
+    .map_err(format_error)?;
+    text.push_str(&normalized(&std::fs::read_to_string(
+        root.join(fonts::LICENSE_PATH),
+    )?));
+    if !text.ends_with('\n') {
+        text.push('\n');
     }
     // Keep the complete input, not an unstable std hasher or a new hash crate.
     // Any lockfile change therefore invalidates --check, even for a dev dep.

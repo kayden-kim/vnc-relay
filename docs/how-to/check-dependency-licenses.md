@@ -26,6 +26,8 @@ Rust 의존성이 승인된 라이선스 허용 목록을 지키는지 검사하
 | Apache-2.0 | 라이선스 전문을 넣는다. 의존성에 `NOTICE` 파일이 있으면 그 내용도 넣는다. |
 | CC0-1.0, Unlicense, MIT-0 | 고지 의무가 없다. |
 
+대시보드 글꼴 Pretendard 1.3.9는 Rust crate가 아니어서 `cargo deny` 검사 대상이 아니다. 라이선스는 SIL Open Font License 1.1(OFL-1.1)이고 위 허용 목록에 없다. 사용자가 이 글꼴 파일을 OFL 전문과 함께 실행파일에 넣는 것을 승인했다(사용자 결정 2026-11-07(Q139)). 이 승인은 이 글꼴에만 적용하며 crate 허용 목록을 넓히지 않는다. OFL-1.1은 저작권 고지와 라이선스 전문을 함께 배포하도록 요구한다. 글꼴 파일을 고쳐 배포하면 예약 글꼴 이름 `Pretendard`를 쓸 수 없으므로 배포본 파일을 바꾸지 않고 넣는다([프런트엔드 컨벤션 2.4절](../conventions/frontend.md#24-글꼴-파일)).
+
 ## 2. 전제 조건
 
 - [ ] Rust 툴체인을 설치했다. 버전은 저장소 루트의 `rust-toolchain.toml`이 정한다.
@@ -67,7 +69,7 @@ Rust 의존성이 승인된 라이선스 허용 목록을 지키는지 검사하
 
 ### 3.1 배포 고지 생성과 대조
 
-루트 [`THIRD-PARTY-NOTICES.txt`](../../THIRD-PARTY-NOTICES.txt)는 두 대상의 일반·빌드 의존성 합집합이다. 각 crate의 이름·버전·라이선스 식과 고지 전문을 담는다. Windows·Linux 배포물에는 같은 파일 전체를 넣는다. 프로젝트의 실제 MIT LICENSE는 별도로 넣어야 한다. 아직 결정되지 않은 저작권자·연도를 이 파일에 대신 넣지 않는다.
+루트 [`THIRD-PARTY-NOTICES.txt`](../../THIRD-PARTY-NOTICES.txt)는 두 대상의 일반·빌드 의존성 합집합이다. 각 crate의 이름·버전·라이선스 식과 고지 전문을 담는다. crate 고지 뒤에는 실행파일에 넣는 글꼴의 `web/dashboard/fonts/LICENSE.txt` 전문을 담는다. Windows·Linux 배포물에는 같은 파일 전체를 넣는다. 프로젝트의 실제 MIT LICENSE는 별도로 넣어야 한다. 아직 결정되지 않은 저작권자·연도를 이 파일에 대신 넣지 않는다.
 
 생성기는 기존 `xtask`의 std·serde_json만 쓴다. 새 crate와 추가 설치 도구를 쓰지 않기 위한 선택이다. cargo-about·cargo-license 추가 설치, Python 스크립트, 수동 목록 편집보다 기존 Rust 실행 환경을 재사용하기 쉽다. **이 문서의 판단, 사용자 결정 없음**이다. 코드 위치와 처리 순서는 [xtask 설계](../architectures/xtask.md)에 있다.
 

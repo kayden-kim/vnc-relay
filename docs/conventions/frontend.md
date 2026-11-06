@@ -45,6 +45,7 @@
 
 ```text
 web/dashboard/
+├── fonts/            글꼴 원본(Pretendard 부분 글자 woff2 두 개와 라이선스 전문 LICENSE.txt). 제공하지 않는다
 ├── login/            인증 없이 제공한다 (SCR-003, 로그인 화면)
 │   ├── index.html    제공 경로 /login/
 │   ├── main.js
@@ -52,6 +53,7 @@ web/dashboard/
 │   ├── language.js   app/language.js의 복사본(로그인이 쓰는 것). 생성 산출물. 직접 고치지 않는다
 │   ├── login.css
 │   ├── components/   app/components/의 복사본(로그인이 쓰는 것). 생성 산출물. 직접 고치지 않는다
+│   ├── fonts/        fonts/의 woff2 복사본. 생성 산출물. 직접 고치지 않는다
 │   ├── styles/       app/styles/의 base.css·components.css 복사본. 생성 산출물. 직접 고치지 않는다
 │   └── tokens.css    생성 산출물. 직접 고치지 않는다
 ├── app/              관리 세션이 있어야 제공한다 (SCR-001·SCR-002)
@@ -59,6 +61,7 @@ web/dashboard/
 │   ├── main.js
 │   ├── language.js
 │   ├── components/   공통 컴포넌트 ES 모듈
+│   ├── fonts/        fonts/의 woff2 복사본. 생성 산출물. 직접 고치지 않는다
 │   ├── styles/       화면 CSS
 │   └── tokens.css    생성 산출물. 직접 고치지 않는다
 ├── preview/          개발용 미리보기. 실행 파일에 넣지 않는다
@@ -85,7 +88,7 @@ web/dashboard/
 
 - 제공 파일은 `include_bytes!`로 실행 파일에 넣는다. 파일이 없으면 빌드가 실패한다.
 - 제공 경로, 원본 파일, `Content-Type`을 한 Rust 파일의 표에 적는다. 표에 없는 파일은 넣지 않는다.
-- `Content-Type`은 확장자로 정한다: `text/html; charset=utf-8`, `text/css; charset=utf-8`, `text/javascript; charset=utf-8`.
+- `Content-Type`은 확장자로 정한다: `text/html; charset=utf-8`, `text/css; charset=utf-8`, `text/javascript; charset=utf-8`, `font/woff2`.
 - 표 대조 테스트는 `login/`과 `app/`을 걸어 실제 파일 목록과 표를 비교한다. 표에 없는 파일이나 표에만 있는 항목이 있으면 실패한다. 제공 표에 `preview/`나 `tests/` 경로가 있어도 실패한다.
 - 정적 응답에는 계약 1.11절의 헤더를 붙인다. `Cache-Control: no-store`는 계약이 보호된 정적 응답에 붙인다고 정했다. `Content-Security-Policy: default-src 'self'; frame-ancestors 'none'`은 필수다(사용자 결정 2026-10-22(Q37)). `X-Content-Type-Options: nosniff`와 `Referrer-Policy: no-referrer`는 계약에서 권장이다. 로그인 화면 응답에도 `Cache-Control: no-store`를 붙인다(이 문서의 기본값, 사용자 결정 아님).
 - 내장 방법은 `include_bytes!` 표와 대조 테스트다(사용자 결정 2026-10-22(Q33)). `build.rs`와 외부 crate는 쓰지 않는다.
@@ -118,15 +121,15 @@ web/dashboard/
 | 토큰 관리 항목 | 프로젝트 기준 |
 | --- | --- |
 | 원본 참조 | [DESIGN.md](../design/DESIGN.md) 첫 `---`부터 둘째 `---`까지의 YAML 머리말. 본문의 표는 원본이 아니다 |
-| 참조·생성 관계 | DESIGN.md YAML → `web/dashboard/login/tokens.css`, `web/dashboard/app/tokens.css`(같은 내용) → 화면 CSS가 `var(--…)`로 참조 → 시안의 토큰 블록(표식 사이, 사용자 결정 2026-10-22(Q32)) |
-| 생성 방법 | `cargo xtask tokens`가 원본을 읽어 `:root` 블록을 쓴다. 도구 형태와 커밋 방식은 사용자 결정 2026-10-22(Q32)다. 생성 파일은 저장소에 커밋한다 |
-| 대조 방법 | `cargo xtask tokens --check`가 생성 결과와 두 CSS 파일, 시안 표식 사이 줄을 비교한다. 차이가 있으면 파일과 줄 번호를 출력하고 종료 코드 1로 끝난다 |
-| 생성 대상 밖의 규칙 | 중단점과 미디어 쿼리는 [DESIGN.md 중단점 절](../design/DESIGN.md#중단점과-모바일-배치)을 따른다. 화면 배치 미디어 쿼리는 `web/dashboard/app/styles/components.css`에만 둔다(`app.css`에는 `@media`가 없다). 로그인 복사본은 2.3절의 복사 규칙을 따른다. 모션은 없다([DESIGN.md 모션 절](../design/DESIGN.md#모션)). 대비 기준은 [DESIGN.md 대비 기준](../design/DESIGN.md#대비-기준)을 따른다. 한글 글꼴 굵기는 400·700만 쓴다 |
+| 참조·생성 관계 | DESIGN.md YAML → `web/dashboard/login/tokens.css`, `web/dashboard/app/tokens.css`(같은 내용) → 화면 CSS가 `var(--…)`로 참조 → 시안의 토큰 블록(표식 사이, 사용자 결정 2026-10-22(Q32)). 글꼴 원본 `web/dashboard/fonts/` → `app/fonts/`, `login/fonts/`(같은 바이트) |
+| 생성 방법 | `cargo xtask tokens`가 원본을 읽어 `:root` 블록과 Pretendard `@font-face` 규칙을 쓰고 글꼴 파일을 복사한다. 도구 형태와 커밋 방식은 사용자 결정 2026-10-22(Q32)다. 생성 파일은 저장소에 커밋한다 |
+| 대조 방법 | `cargo xtask tokens --check`가 생성 결과와 두 CSS 파일, 시안 표식 사이 줄, 글꼴 복사본의 바이트를 비교한다. 차이가 있으면 파일과 줄 번호를 출력하고 종료 코드 1로 끝난다 |
+| 생성 대상 밖의 규칙 | 중단점과 미디어 쿼리는 [DESIGN.md 중단점 절](../design/DESIGN.md#중단점과-모바일-배치)을 따른다. 화면 배치 미디어 쿼리는 `web/dashboard/app/styles/components.css`에만 둔다(`app.css`에는 `@media`가 없다). 로그인 복사본은 2.3절의 복사 규칙을 따른다. 모션은 없다([DESIGN.md 모션 절](../design/DESIGN.md#모션)). 대비 기준은 [DESIGN.md 대비 기준](../design/DESIGN.md#대비-기준)을 따른다. 글꼴 굵기는 400·700만 쓴다. 글꼴 단계를 쓰는 규칙은 `font-family`와 `letter-spacing`을 함께 그 단계 변수로 정한다([DESIGN.md Typography](../design/DESIGN.md#typography)) |
 
 ### 2.1 원본 읽기와 이름 규칙
 
 - 허용 키는 `colors`, `typography`, `spacing`, `rounded`다. `version`, `name`, `description`과 `components`는 CSS로 내보내지 않는다. `components`는 원본 참조용이다(사용자 결정 2026-10-22(Q32)).
-- `typography`의 단계 아래에는 `fontFamily`, `fontSize`, `fontWeight`, `lineHeight`, `fontFeature`만 쓴다. 현재 원본에는 `letterSpacing`이 없다.
+- `typography`의 단계 아래에는 `fontFamily`, `fontSize`, `fontWeight`, `lineHeight`, `letterSpacing`, `fontFeature`만 쓴다. `fontFeature` 말고는 모든 단계에 있어야 한다. `letterSpacing`은 사용자 지시(2026-11-07)로 더했다.
 - 허용하지 않는 키, 중복된 키, 해석할 수 없는 줄이 있으면 생성과 대조를 멈추고 종료 코드 1로 끝난다.
 - 값은 YAML 값을 그대로 쓰고, 바깥 따옴표만 벗긴다. 값 안의 따옴표(`'tnum'`, 글꼴 이름)는 그대로 둔다. `#`으로 시작하는 색 값은 따옴표로 감싸야 한다. YAML에서 `#`은 주석 시작이다. 현재 원본은 이 규칙을 따른다(예: `overlay: "#0d1a1580"`).
 - 이름은 DESIGN.md의 [CSS 사용자 정의 속성 이름 규칙](../design/DESIGN.md#css-사용자-정의-속성-이름-규칙)을 따른다.
@@ -136,9 +139,10 @@ web/dashboard/
 | `colors.<이름>` | `--color-<이름>` |
 | `spacing.<이름>` | `--space-<이름>` |
 | `rounded.<이름>` | `--radius-<이름>` |
-| `typography.<단계>.fontFamily·fontSize·fontWeight·lineHeight·fontFeature` | `--type-<단계>-family·size·weight·line·feature` |
+| `typography.<단계>.fontFamily·fontSize·fontWeight·lineHeight·letterSpacing·fontFeature` | `--type-<단계>-family·size·weight·line·tracking·feature` |
 
-- 출력은 `:root { … }` 블록 하나다. 한 줄에 한 속성을 쓴다. 순서는 원본 순서를 따른다. 첫 줄에 `Generated file. Do not edit. Source: <경로>` 형식의 주석을 쓴다.
+- 출력은 `:root { … }` 블록 하나와 그 뒤의 `@font-face` 규칙들이다. 한 줄에 한 속성을 쓴다. 속성 순서는 원본 순서를 따른다. 첫 줄에 `Generated file. Do not edit. Source: <경로>` 형식의 주석을 쓴다.
+- `@font-face`는 2.4절의 글꼴 파일마다 하나다. 글꼴 이름 `Pretendard`, 굵기, `font-display: swap`, `src: url("<기준>/<파일>") format("woff2")`를 쓴다. 기준은 두 토큰 파일에서 `fonts`(토큰 파일 옆의 `fonts/`)이고, 시안에서 `../../../web/dashboard/fonts`(글꼴 원본)다. 그래서 시안 블록은 이 기준만 토큰 파일과 다르다.
 
 ### 2.2 화면 CSS 검사
 
@@ -150,6 +154,8 @@ web/dashboard/
 - `font-weight`에 토큰 변수나 `inherit`이 아닌 값
 - 정의되지 않은 `var(--…)`
 
+`url(`이 필요한 `@font-face`는 생성 토큰 파일에만 있다. 화면 CSS에는 계속 `url(`을 쓰지 않는다.
+
 ### 2.3 로그인 화면의 공통 복사본
 
 로그인 화면은 `app/`의 공통 컴포넌트와 스타일을 복사해 쓴다. 복사본은 손으로 만들지 않는다. 복사 방식과 복사 목록은 구현 판단이다(사용자 결정 없음).
@@ -159,6 +165,16 @@ web/dashboard/
 - `cargo xtask tokens --check`는 복사본마다 생성 결과와 실제 파일을 비교한다. 다르면 차이를 알린다. 없거나 읽을 수 없으면 파일 경로와 함께 오류로 멈춘다. 복사 목록에 없는 파일이 `login/components/`나 `login/styles/`에 있으면 차이로 집계한다.
 - 복사본도 화면 CSS 검사(2.2절)와 제공 표 대조(1.2절)의 대상이다. 복사본은 원본과 같으므로 두 검사를 그대로 통과한다.
 - 원본을 고치면 `cargo xtask tokens`로 복사본을 다시 쓴다. 로그인 화면에만 다른 모양이 필요하면 복사본을 고치지 않고, 원본 컴포넌트에 옵션을 추가한 뒤 [xtask 모듈 설계](../architectures/xtask.md)와 컴포넌트 모듈 설계에 적는다.
+
+### 2.4 글꼴 파일
+
+글꼴 원본은 `web/dashboard/fonts/`의 `Pretendard-Regular.subset.woff2`(400), `Pretendard-Bold.subset.woff2`(700), `LICENSE.txt`(SIL Open Font License 1.1 전문)다. Pretendard 1.3.9 배포본(`dist/web/static/woff2-subset/`, `dist/LICENSE.txt`)을 바꾸지 않고 넣었다(사용자 결정 2026-11-07(Q139)). 파일 목록과 굵기는 `xtask/src/tokens/fonts.rs`의 `FONT_FACES`다.
+
+- `cargo xtask tokens`는 woff2 원본을 `app/fonts/`와 `login/fonts/`에 바이트 그대로 복사한다. 머리 주석은 붙이지 않는다. 로그인 화면은 인증 없이 받아야 하므로 `app/`과 따로 둔다(1.1절).
+- `cargo xtask tokens --check`는 복사본의 바이트가 원본과 다르거나, 두 `fonts/` 폴더에 목록 밖 파일이 있으면 차이로 집계한다.
+- `web/dashboard/fonts/`는 제공하지 않는다. 시안은 이 원본을 상대 경로로 읽는다.
+- `cargo xtask notices`는 `LICENSE.txt` 전문을 배포 고지 `THIRD-PARTY-NOTICES.txt`에 넣는다([라이선스 검사 how-to](../how-to/check-dependency-licenses.md)).
+- 글꼴을 바꾸려면 원본과 `FONT_FACES`를 같은 변경에서 고치고 `cargo xtask tokens`와 `cargo xtask notices`를 다시 실행한다.
 
 ## 3. 컴포넌트와 콘텐츠
 

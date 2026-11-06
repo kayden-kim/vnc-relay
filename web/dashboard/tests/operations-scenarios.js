@@ -227,7 +227,7 @@ function checkDataValue(label, node, expected) {
   check(`${label}: data value text`, node?.textContent === expected);
   check(
     `${label}: data typography`,
-    !!node && getComputedStyle(node).fontFamily.includes('monospace') && getComputedStyle(node).fontSize === '13px',
+    !!node && getComputedStyle(node).fontFamily.includes('monospace') && getComputedStyle(node).fontSize === '12px',
   );
 }
 

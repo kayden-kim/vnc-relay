@@ -196,6 +196,7 @@ fn content_type(path: &Path) -> Option<&'static str> {
         "css" => Some("text/css; charset=utf-8"),
         "js" => Some("text/javascript; charset=utf-8"),
         "svg" => Some("image/svg+xml"),
+        "woff2" => Some("font/woff2"),
         _ => None,
     }
 }

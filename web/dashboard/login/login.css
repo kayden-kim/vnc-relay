@@ -52,6 +52,7 @@
   font-size: var(--type-heading-page-size);
   font-weight: var(--type-heading-page-weight);
   line-height: var(--type-heading-page-line);
+  letter-spacing: var(--type-heading-page-tracking);
 }
 
 .login-notices:not(:empty) {

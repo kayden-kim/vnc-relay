@@ -1,7 +1,7 @@
 ---
 version: alpha
 name: "VNC Relay 운영 대시보드"
-description: "참고 이미지(밝은 회녹색 바탕 위 흰 카드 격자, 청록·녹색 차트 색)와 shadcn/ui의 의미 토큰·컴포넌트 형태를 따른 운영 도구용 라이트 테마 디자인 기준(Accepted, 2026-10-20 사용자 채택). 메뉴는 녹색 기운만 남긴 검정에 가까운 상단 막대에 둔다. 화면 문구는 한국어·영어다. 한글 시스템 글꼴 굵기는 400·700만 쓴다."
+description: "참고 이미지(밝은 회녹색 바탕 위 흰 카드 격자, 청록·녹색 차트 색)와 shadcn/ui의 의미 토큰·컴포넌트 형태를 따른 운영 도구용 라이트 테마 디자인 기준(Accepted, 2026-10-20 사용자 채택). 메뉴는 녹색 기운만 남긴 검정에 가까운 상단 막대에 둔다. 화면 문구는 한국어·영어다. 글꼴은 실행파일에 넣은 Pretendard이고 굵기는 400·700만 쓴다."
 colors:
   background: "#f4f6f5"
   foreground: "#0d1a15"
@@ -47,62 +47,79 @@ colors:
   shadow: "#0d1a1514"
 typography:
   heading-page:
-    fontFamily: "'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans KR', system-ui, -apple-system, 'Segoe UI', sans-serif"
+    fontFamily: "Pretendard, 'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans KR', system-ui, -apple-system, 'Segoe UI', sans-serif"
     fontSize: 24px
     fontWeight: 700
-    lineHeight: 1.25
+    lineHeight: 1.5
+    letterSpacing: -0.03em
   heading-card:
-    fontFamily: "'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans KR', system-ui, -apple-system, 'Segoe UI', sans-serif"
+    fontFamily: "Pretendard, 'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans KR', system-ui, -apple-system, 'Segoe UI', sans-serif"
     fontSize: 16px
     fontWeight: 700
-    lineHeight: 1.4
+    lineHeight: 1.5
+    letterSpacing: -0.03em
   body:
-    fontFamily: "'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans KR', system-ui, -apple-system, 'Segoe UI', sans-serif"
+    fontFamily: "Pretendard, 'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans KR', system-ui, -apple-system, 'Segoe UI', sans-serif"
     fontSize: 14px
     fontWeight: 400
     lineHeight: 1.5
+    letterSpacing: -0.03em
   body-strong:
-    fontFamily: "'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans KR', system-ui, -apple-system, 'Segoe UI', sans-serif"
+    fontFamily: "Pretendard, 'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans KR', system-ui, -apple-system, 'Segoe UI', sans-serif"
     fontSize: 14px
     fontWeight: 700
     lineHeight: 1.5
+    letterSpacing: -0.03em
   body-numeric:
-    fontFamily: "'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans KR', system-ui, -apple-system, 'Segoe UI', sans-serif"
+    fontFamily: "Pretendard, 'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans KR', system-ui, -apple-system, 'Segoe UI', sans-serif"
     fontSize: 14px
     fontWeight: 400
     lineHeight: 1.5
+    letterSpacing: -0.03em
     fontFeature: "'tnum'"
   label:
-    fontFamily: "'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans KR', system-ui, -apple-system, 'Segoe UI', sans-serif"
+    fontFamily: "Pretendard, 'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans KR', system-ui, -apple-system, 'Segoe UI', sans-serif"
     fontSize: 12px
     fontWeight: 400
-    lineHeight: 1.4
+    lineHeight: 1.5
+    letterSpacing: -0.03em
+  badge:
+    fontFamily: "Pretendard, 'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans KR', system-ui, -apple-system, 'Segoe UI', sans-serif"
+    fontSize: 12px
+    fontWeight: 400
+    lineHeight: normal
+    letterSpacing: -0.03em
   button:
-    fontFamily: "'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans KR', system-ui, -apple-system, 'Segoe UI', sans-serif"
+    fontFamily: "Pretendard, 'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans KR', system-ui, -apple-system, 'Segoe UI', sans-serif"
     fontSize: 14px
     fontWeight: 400
-    lineHeight: 1.2
+    lineHeight: normal
+    letterSpacing: -0.03em
   button-strong:
-    fontFamily: "'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans KR', system-ui, -apple-system, 'Segoe UI', sans-serif"
+    fontFamily: "Pretendard, 'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans KR', system-ui, -apple-system, 'Segoe UI', sans-serif"
     fontSize: 14px
     fontWeight: 700
-    lineHeight: 1.2
+    lineHeight: normal
+    letterSpacing: -0.03em
   input:
-    fontFamily: "'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans KR', system-ui, -apple-system, 'Segoe UI', sans-serif"
+    fontFamily: "Pretendard, 'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans KR', system-ui, -apple-system, 'Segoe UI', sans-serif"
     fontSize: 16px
     fontWeight: 400
-    lineHeight: 1.5
+    lineHeight: normal
+    letterSpacing: -0.03em
   data:
     fontFamily: "ui-monospace, 'SF Mono', 'Cascadia Mono', Consolas, 'Liberation Mono', monospace"
-    fontSize: 13px
+    fontSize: 12px
     fontWeight: 400
-    lineHeight: 1.4
+    lineHeight: 1.5
+    letterSpacing: 0
     fontFeature: "'tnum'"
   metric:
-    fontFamily: "'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans KR', system-ui, -apple-system, 'Segoe UI', sans-serif"
+    fontFamily: "Pretendard, 'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans KR', system-ui, -apple-system, 'Segoe UI', sans-serif"
     fontSize: 28px
     fontWeight: 700
-    lineHeight: 1.15
+    lineHeight: 1.5
+    letterSpacing: -0.03em
     fontFeature: "'tnum'"
 spacing:
   xs: 4px
@@ -226,31 +243,31 @@ components:
   badge-success:
     backgroundColor: "{colors.success-bg}"
     textColor: "{colors.success}"
-    typography: "{typography.label}"
+    typography: "{typography.badge}"
     rounded: "{rounded.sm}"
     padding: "{spacing.xs}"
   badge-info:
     backgroundColor: "{colors.info-bg}"
     textColor: "{colors.info}"
-    typography: "{typography.label}"
+    typography: "{typography.badge}"
     rounded: "{rounded.sm}"
     padding: "{spacing.xs}"
   badge-warning:
     backgroundColor: "{colors.warning-bg}"
     textColor: "{colors.warning}"
-    typography: "{typography.label}"
+    typography: "{typography.badge}"
     rounded: "{rounded.sm}"
     padding: "{spacing.xs}"
   badge-destructive:
     backgroundColor: "{colors.destructive-bg}"
     textColor: "{colors.destructive}"
-    typography: "{typography.label}"
+    typography: "{typography.badge}"
     rounded: "{rounded.sm}"
     padding: "{spacing.xs}"
   badge-neutral:
     backgroundColor: "{colors.neutral-bg}"
     textColor: "{colors.neutral}"
-    typography: "{typography.label}"
+    typography: "{typography.badge}"
     rounded: "{rounded.sm}"
     padding: "{spacing.xs}"
   alert-info:
@@ -337,7 +354,7 @@ components:
 대시보드는 별도 빌드 단계 없는 정적 HTML·JS다([화면 스펙 1절](../specs/dashboard.md#1-범위와-사용자)). 따라서 다음을 지켜야 한다.
 
 - 글꼴·스타일·스크립트·아이콘을 외부에서 불러오지 않는다. CDN, 웹 글꼴 서비스, `@import url(...)`, 아이콘 글꼴, shadcn/ui·Tailwind CSS 패키지를 쓰지 않는다.
-- 모든 CSS와 이미지는 실행파일에 포함한 정적 파일이어야 한다.
+- 모든 CSS·이미지·글꼴 파일은 실행파일에 포함한 정적 파일이어야 한다. 글꼴 파일은 Pretendard 부분 글자 woff2 두 개뿐이다(사용자 결정 2026-11-07(Q139), [Typography](#typography)).
 - 아이콘은 직접 그린 인라인 SVG를 쓴다. 아이콘만으로 뜻을 전하지 않는다.
 - 토큰은 CSS 사용자 정의 속성(`--*`)으로 한 곳에서 정의한다. 아래 [이름 규칙](#css-사용자-정의-속성-이름-규칙)을 따른다.
 
@@ -352,7 +369,7 @@ components:
 | `colors.<이름>` | `--color-<이름>` | `colors.muted-foreground` → `--color-muted-foreground` |
 | `spacing.<이름>` | `--space-<이름>` | `spacing.control-height` → `--space-control-height` |
 | `rounded.<이름>` | `--radius-<이름>` | `rounded.xl` → `--radius-xl` |
-| `typography.<단계>.fontFamily·fontSize·fontWeight·lineHeight·fontFeature` | `--type-<단계>-family·size·weight·line·feature` | `typography.body.fontSize` → `--type-body-size` |
+| `typography.<단계>.fontFamily·fontSize·fontWeight·lineHeight·letterSpacing·fontFeature` | `--type-<단계>-family·size·weight·line·tracking·feature` | `typography.body.letterSpacing` → `--type-body-tracking` |
 
 값을 CSS에서 직접 쓰지 않고 `var(--…)`로 참조한다. 이 규칙은 YAML에서 CSS를 기계적으로 만들 수 있게 한다. 생성 방법과 대조는 [프런트엔드 컨벤션 2절](../conventions/frontend.md#2-토큰-적용과-재사용)에서 정한다(사용자 결정 2026-10-22(Q32)). 폭 토큰(`spacing.label-col`·`kv-label-col`·`alert-text-min`·`index-min`·`login-max`·`dialog-max`)은 레이아웃 폭을 정한다. 미디어 쿼리 조건은 사용자 정의 속성을 쓸 수 없어 예외다([중단점과 모바일 배치](#중단점과-모바일-배치)).
 
@@ -457,26 +474,31 @@ components:
 
 ## Typography
 
-글꼴 값의 원본은 YAML이다. 본문 글꼴은 사용자 기기에 있는 시스템 글꼴이다. 외부 글꼴은 쓰지 않는다.
+글꼴 값의 원본은 YAML이다. 글꼴은 실행파일에 넣은 Pretendard이고, 값(고정 폭)만 시스템 고정 폭 글꼴이다. 아래 규칙은 사용자 지시(2026-11-07)와 그 세부 결정 Q139~Q142를 따른다.
 
 | 역할 | 토큰 | 적용 대상 | 콘텐츠 처리 |
 | --- | --- | --- | --- |
-| 페이지 제목 | `typography.heading-page` | 화면 이름(운영 현황, 세션 상세의 "세션 …", 관리자 로그인 카드 제목). 24px 굵기 700 | 좁은 화면에서 줄바꿈한다. 말줄임으로 정보를 숨기지 않는다 |
-| 카드 제목 | `typography.heading-card` | 카드 제목(서버 요약, 중계 연결, 관리 연결, 대기 연결, 활성 세션, 최근 종료 목록, 세션 정보, 전송량), 대화상자 제목. 16px 굵기 700 | 같음 |
-| 본문 | `typography.body` | 설명, 오류·안내 문장. 14px 굵기 400 | 한글은 단어 단위로 줄바꿈한다(`word-break: keep-all`) |
-| 강조 본문 | `typography.body-strong` | 안내 제목, 상단 막대 브랜드 이름, 시안 틀의 화면 식별자. 14px 굵기 700 | 같음 |
-| 숫자 본문 | `typography.body-numeric` | 표 안의 개수, 시각, 전송량, 시간 길이. 14px 굵기 400 | 자릿수가 맞는 숫자(`tnum`). 숫자 열은 오른쪽 정렬한다 |
-| 레이블·보조 글씨 | `typography.label` | 열 머리글, 요약 레이블, 모바일 카드의 레이블, 입력 레이블, 배지 글씨, 카드 설명. 12px 굵기 400 | 12px 아래로 줄이지 않는다. 필요 시 `colors.muted-foreground`와 함께 쓴다 |
-| 버튼 | `typography.button` | outline·ghost 버튼, 상단 막대 항목, 언어 선택. 14px 굵기 400 | 한 줄. 좁은 폭에서 줄바꿈이 필요하면 버튼을 전체 폭으로 만든다 |
-| 강조 버튼 | `typography.button-strong` | 주요 버튼과 위험 버튼. 14px 굵기 700 | 같음 |
-| 입력 | `typography.input` | 계정명·비밀번호 입력. 16px 굵기 400 | 모든 폭에서 16px 이상이다. 모바일 브라우저가 입력 때 화면을 확대하지 않게 한다 |
-| 값(고정 폭) | `typography.data` | 세션 식별자, 중계 ID, 상대 주소. 13px 굵기 400 | 긴 값은 `overflow-wrap: anywhere`로 줄바꿈한다. 값을 잘라 표시하지 않는다 |
-| 요약 숫자 | `typography.metric` | 서버 요약의 개수·시간 길이, 사용량 고리 가운데 현재 값, 세션 상세의 전송량. 28px 굵기 700 | 자릿수가 맞는 숫자. 폭이 모자라면 줄바꿈한다 |
+| 페이지 제목 | `typography.heading-page` | 화면 이름(운영 현황, 세션 상세의 "세션 …", 관리자 로그인 카드 제목). 24px 굵기 700, 행간 150% | 좁은 화면에서 줄바꿈한다. 말줄임으로 정보를 숨기지 않는다 |
+| 카드 제목 | `typography.heading-card` | 카드 제목(서버 요약, 중계 연결, 관리 연결, 대기 연결, 활성 세션, 최근 종료 목록, 세션 정보, 전송량), 대화상자 제목. 16px 굵기 700, 행간 150% | 같음 |
+| 본문 | `typography.body` | 설명, 오류·안내 문장. 14px 굵기 400, 행간 150% | 한글은 단어 단위로 줄바꿈한다(`word-break: keep-all`) |
+| 강조 본문 | `typography.body-strong` | 안내 제목, 상단 막대 브랜드 이름, 시안 틀의 화면 식별자. 14px 굵기 700, 행간 150% | 같음 |
+| 숫자 본문 | `typography.body-numeric` | 표 안의 개수, 시각, 전송량, 시간 길이. 14px 굵기 400, 행간 150% | 자릿수가 맞는 숫자(`tnum`). 숫자 열은 오른쪽 정렬한다 |
+| 레이블·보조 글씨 | `typography.label` | 열 머리글, 요약 레이블, 모바일 카드의 레이블, 입력 레이블, 카드 설명. 12px 굵기 400, 행간 150% | 12px 아래로 줄이지 않는다. 필요 시 `colors.muted-foreground`와 함께 쓴다 |
+| 배지 | `typography.badge` | 배지 글씨. 12px 굵기 400, 행간 `normal` | 한 줄이다 |
+| 버튼 | `typography.button` | outline·ghost 버튼, 상단 막대 항목, 언어 선택. 14px 굵기 400, 행간 `normal` | 한 줄. 좁은 폭에서 줄바꿈이 필요하면 버튼을 전체 폭으로 만든다 |
+| 강조 버튼 | `typography.button-strong` | 주요 버튼과 위험 버튼. 14px 굵기 700, 행간 `normal` | 같음 |
+| 입력 | `typography.input` | 계정명·비밀번호 입력. 16px 굵기 400, 행간 `normal` | 모든 폭에서 16px 이상이다. 모바일 브라우저가 입력 때 화면을 확대하지 않게 한다 |
+| 값(고정 폭) | `typography.data` | 세션 식별자, 중계 ID, 상대 주소. 12px 굵기 400, 행간 150%, 자간 0 | 긴 값은 `overflow-wrap: anywhere`로 줄바꿈한다. 값을 잘라 표시하지 않는다 |
+| 요약 숫자 | `typography.metric` | 서버 요약의 개수·시간 길이, 사용량 고리 가운데 현재 값, 세션 상세의 전송량. 28px 굵기 700, 행간 150% | 자릿수가 맞는 숫자. 폭이 모자라면 줄바꿈한다 |
 
-- 한글 시스템 글꼴과 굵기: 한글 글꼴을 우선하는 글꼴 스택(`'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans KR', system-ui, -apple-system, 'Segoe UI', sans-serif`)을 쓴다. Windows 기본 글꼴인 맑은 고딕(Malgun Gothic)은 400(Regular)과 700(Bold) 굵기만 지원하며 500(Medium)이나 600(SemiBold)은 400으로 렌더링되어 위계가 사라진다. 따라서 shadcn/ui가 쓰는 500·600 대신 400과 700 두 가지만 쓴다.
+- 글꼴: Pretendard 1.3.9의 부분 글자 woff2 두 개(Regular 400, Bold 700)를 실행파일에 넣는다(사용자 결정 2026-11-07(Q139)). 부분 글자 파일은 KS X 1001 한글 2,350자와 라틴 문자를 담는다. 이 밖의 글자는 그 글자만 다음 글꼴로 보인다. 글꼴 스택은 `Pretendard, 'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans KR', system-ui, -apple-system, 'Segoe UI', sans-serif`다.
+- 굵기: 400(Regular)과 700(Bold)만 쓴다. 파일을 두 개로 줄이고, 대체 글꼴인 맑은 고딕(Malgun Gothic)에서도 위계를 지키기 위해서다. 맑은 고딕은 400과 700만 지원하며 500(Medium)이나 600(SemiBold)은 400으로 렌더링되어 위계가 사라진다. 이 이유는 **이 문서의 판단, 사용자 결정 없음**이다.
+- 크기: 모든 글꼴 크기는 짝수 px이고 12px 이상이어야 한다(사용자 지시 2026-11-07). 값 글꼴은 13px에서 12px로 바꿨다(사용자 결정 2026-11-07(Q141)).
+- 자간: Pretendard를 쓰는 모든 단계는 -3%(`-0.03em`)다. 값(고정 폭) 단계는 0이다. 고정 폭 글꼴의 글자 폭과 자릿수 정렬을 지키기 위해서다(사용자 결정 2026-11-07(Q142)). 글꼴 단계를 쓰는 CSS 규칙은 `font-family`와 함께 `letter-spacing`도 그 단계 값으로 정해야 한다. 자간은 상속되므로 생략하면 부모의 값이 남는다.
+- 행간: 두 줄 이상이 될 수 있는 역할은 150%(`1.5`)다. 한 줄로 고정된 역할(배지, 버튼, 강조 버튼, 입력, 버튼 글꼴을 쓰는 상단 막대 항목과 언어 선택)은 `normal`(글꼴의 기본 행간)이다. CSS는 실제 줄 수를 알 수 없으므로 역할별로 정한다(사용자 결정 2026-11-07(Q140)).
 - 시각 위계: 굵기(400 대 700), 크기, 색(`foreground` 대 `muted-foreground`)의 조합으로 위계를 드러낸다. 상대 굵기(`bolder`)를 쓰지 않고 명시적 700 토큰을 쓴다.
-- 글꼴 자산과 사용 권한: 별도 파일이 없다. 사용자 기기의 시스템 글꼴을 쓴다.
-- 글꼴 로딩과 대체: 로딩 단계가 없다. 위 순서대로 대체하며 마지막은 일반 계열(`sans-serif`)이다. 데이터 고정 폭 글꼴은 `ui-monospace, 'SF Mono', 'Cascadia Mono', Consolas, 'Liberation Mono', monospace`를 쓴다.
+- 글꼴 자산과 사용 권한: Pretendard는 SIL Open Font License 1.1이다. 원본 파일과 라이선스 전문은 `web/dashboard/fonts/`에 둔다. 라이선스 전문은 배포 고지 `THIRD-PARTY-NOTICES.txt`에도 넣는다. 처리 방법은 [프런트엔드 컨벤션 2절](../conventions/frontend.md#2-토큰-적용과-재사용)을 따른다.
+- 글꼴 로딩과 대체: `@font-face`는 `font-display: swap`을 쓴다. 글꼴 파일을 받기 전이나 받지 못했을 때는 위 스택의 다음 글꼴로 보인다. 데이터 고정 폭 글꼴은 `ui-monospace, 'SF Mono', 'Cascadia Mono', Consolas, 'Liberation Mono', monospace`를 쓴다.
 - UI 문구 규칙: 화면 문구는 [화면 스펙](../specs/dashboard.md)이 정한다. 문구 확정은 [화면 스펙 9절](../specs/dashboard.md#9-화면-문구)이 관리한다(사용자 결정 2026-10-22(Q49)). 이 문서는 문구를 정하지 않는다.
 - 화면 언어: 한국어와 영어 두 가지다. 언어 선택 규칙은 [화면 스펙의 화면 언어](../specs/dashboard.md#화면-언어)를 따른다. 두 언어가 같은 글꼴 스택과 토큰을 쓴다. 문서 루트의 `lang` 속성을 고른 언어(`ko`·`en`)로 바꾼다. 영어 문구가 한국어보다 길 수 있으므로 버튼·레이블·카드 제목에 고정 폭을 두지 않는다. 언어 이름은 각 언어로 쓴다("한국어", "English").
 
@@ -633,7 +655,7 @@ shadcn/ui처럼 경계선과 얕은 그림자로 층을 나눈다.
 | --- | --- | --- | --- | --- |
 | Button | `button-primary`(로그인), `button-outline`(새로고침·상세·상태 재조회·취소·안내 안 버튼), `button-ghost`(목록으로), `button-destructive`(세션 종료·종료 확인), 상단 막대 항목형(로그아웃) | 기본·hover(`*-hover` 토큰)·focus-visible·disabled(투명도를 낮추지 않고 `colors.muted-foreground` 글씨와 `colors.muted` 바탕, 경계 `colors.border`)·진행 중(레이블을 진행 중 문구로 바꾸고 disabled). 주요·위험 버튼은 `typography.button-strong`, 나머지는 `typography.button` | 높이 `spacing.control-height`(표 안 [상세]는 `spacing.control-height-sm`, 모바일 `spacing.control-height-touch`), 가로 안쪽 `spacing.lg`, 아이콘과 글씨 사이 `spacing.sm`. outline은 `colors.border` 경계와 `colors.card` 바탕이다. 한 영역의 주요 버튼은 하나다 | DASH-003·DASH-009~013·DASH-017~019 |
 | Input | 텍스트·비밀번호 | 기본·focus-visible·오류 | 높이 `spacing.control-height`(모바일 `spacing.control-height-touch`), `typography.input`, `colors.input` 경계. 오류일 때 경계를 `colors.destructive`로 바꾸고 오류 문장을 입력 아래에 쓴다 | DASH-018 |
-| Badge | `badge-success`·`badge-info`·`badge-warning`·`badge-destructive`·`badge-neutral` | 정적 | `typography.label`, `rounded.sm`, 가로 안쪽 `spacing.sm`·세로 `spacing.xs`. 상태 배지는 아이콘 + 글씨, 중립·개수 배지는 글씨만 | DASH-001·DASH-003·DASH-020 |
+| Badge | `badge-success`·`badge-info`·`badge-warning`·`badge-destructive`·`badge-neutral` | 정적 | `typography.badge`, `rounded.sm`, 가로 안쪽 `spacing.sm`·세로 `spacing.xs`. 상태 배지는 아이콘 + 글씨, 중립·개수 배지는 글씨만 | DASH-001·DASH-003·DASH-020 |
 | Alert | `alert-info`·`alert-warning`·`alert-destructive`·`alert-neutral` | 정적 | `<상태>-bg` 바탕, `<상태>-border` 경계, `rounded.lg`, 안쪽 `spacing.md`(세로)·`spacing.lg`(가로). 왼쪽 아이콘(`<상태>` 색), 제목 `typography.body-strong`(`<상태>` 색), 설명 `typography.body`(`foreground`), 오른쪽에 outline 버튼 | DASH-003·DASH-007·DASH-008·DASH-012·DASH-013 |
 | Card | 없음 | 정적 | [Elevation & Depth](#elevation--depth)의 카드. 제목 줄은 `typography.heading-card`와 개수 배지, 아래 `colors.border` 구분선. 설명이 있으면 제목 아래 `typography.label`·`colors.muted-foreground`. 바닥 행동 줄은 위 `colors.border` 구분선 | DASH-002 |
 | Stat | 서버 요약 값 | 정적 | 레이블 `typography.label`+`colors.muted-foreground`, 값 `typography.metric`. 실행 상태는 배지, 확인 불가·조회 중은 배지로 쓴다 | DASH-001·DASH-021 |
@@ -664,11 +686,11 @@ shadcn/ui처럼 경계선과 얕은 그림자로 층을 나눈다.
 | 차트 색 | 방향 표식, 사용량 고리 | 글씨 색, 상태 의미를 혼자 전하는 색, 스펙에 없는 그래프 | 흰 바탕에서 글씨 대비 4.5:1을 못 넘는다. 그래프는 새 데이터가 필요하다 |
 | 사용량 고리 | 현재·상한 값을 글씨로 함께 쓴다 | 값 없이 고리만 쓰기, 비율에 따라 색 바꾸기 | 스펙에 임계값 규칙이 없다. 값을 확인하려면 글씨가 필요하다 |
 | 카드 | `border` 경계와 얕은 그림자 | 굵은 테두리, 진한 그림자, 표 행 줄무늬 | shadcn/ui의 평평한 카드 형태다 |
-| 글꼴·자산 | 시스템 글꼴, 인라인 SVG | 웹 글꼴 서비스, CDN, 아이콘 글꼴, shadcn/ui·Tailwind 패키지 | 정적 파일만 쓴다 |
+| 글꼴·자산 | 실행파일에 넣은 Pretendard woff2와 시스템 대체 글꼴, 인라인 SVG | 웹 글꼴 서비스, CDN, 아이콘 글꼴, shadcn/ui·Tailwind 패키지 | 정적 파일만 쓴다 |
 | 색 값 | `var(--color-…)` | 화면 CSS에 직접 쓴 `#rrggbb` | 토큰 원본이 둘이 된다 |
 | 참고 이미지 | 카드 격자·고리·범례 표식 같은 시각 방향 | 검색·알림·위젯 편집·시계열 차트, 이미지 자산 복제 | 스펙에 없는 화면 요소는 새 동작을 만든다 |
 | 아이콘 기호 | 직접 그린 인라인 SVG 선 아이콘과 글씨 레이블 함께 쓰기 | 유니코드 문자 기호(◆ ▲ ● ■ ⓘ ⚠), 외부 아이콘 글꼴, CDN | 문자 기호는 플랫폼·글꼴별 정렬·굵기·이모지 치환 차이가 크다. 외부 글꼴은 정적 파일 원칙을 위반한다 |
-| 한글 글꼴 굵기 | 400(Regular)과 700(Bold)만 쓴다 | 500 또는 600 굵기 지정, `bolder` 임시 방편 | 맑은 고딕에서 500·600이 400으로 렌더링되어 위계가 사라진다 |
+| 글꼴 굵기 | 400(Regular)과 700(Bold)만 쓴다 | 500 또는 600 굵기 지정, `bolder` 임시 방편 | 글꼴 파일이 두 굵기뿐이다. 대체 글꼴인 맑은 고딕에서 500·600이 400으로 렌더링되어 위계가 사라진다 |
 
 ### 예외
 
@@ -698,6 +720,7 @@ shadcn/ui처럼 경계선과 얕은 그림자로 층을 나눈다.
 | 추가 시안 3개. 사용자 결정 2026-10-22(Q52) | [dashboard.html](mockups/dashboard.html)에 SCR-002 잘못된 세션 식별자(CPY-067), SCR-003 로그인 요청 실패(CPY-077), SCR-003 로그아웃 결과 확인 필요(CPY-076) 프레임을 더했다. 프레임 수는 26개(SCR-001 8개, SCR-002 11개, SCR-003 7개. 영어 프레임 2개 포함)다. 새 CSS와 인라인 스타일은 없다 | 2026-10-22. Windows, 관리형 Chromium 헤드리스, 저장소 루트를 로컬 HTTP 서버(127.0.0.1)로 열었다. 폭 1280·390·320px. 새 프레임 3개의 가로 넘침과 프레임 밖 요소를 스크립트로 측정했다. 콘솔 오류·경고와 실패한 요청을 기록했다. 파일 전체의 요소 ID 중복과 내부 `#` 링크를 스크립트로 확인했다. 토큰 블록 검사는 `cargo xtask tokens --check`로 했다. 삽입은 스크립트로 했다. 구현 판단(사용자 결정 없음) | 통과(새 프레임 3개 한정): 세 폭 모두 페이지 가로 스크롤 0px, 프레임 안 가로 넘침 0px, 프레임 밖 요소 0건. 콘솔 오류·경고 0건, 실패한 요청과 4xx·5xx 응답 0건. 파일 전체 기준 요소 ID 중복 0건, 내부 `#` 링크 81건 모두 대상 있음. 새 프레임 3개는 색인에서 각 한 번 연결된다. 토큰 검사 통과. 미실행: 새 프레임의 대비·글꼴 렌더링 측정(2026-10-20 행의 방법)과 육안 검토. 스크린샷 9장은 `target/mockup-shots/`에 저장했고 아직 검토하지 않았다 | 로컬 실행. 스크린샷 파일 9장
 | 추가 시안 3개의 나머지 폭. 사용자 결정 2026-10-22(Q52) | 위 행의 새 프레임 3개(`scr002-bad-id`, `scr003-request-failed`, `scr003-logout-unknown`) | 2026-10-22. Windows, 관리형 Chromium 헤드리스, 로컬 HTTP 서버(127.0.0.1). 폭 1024·1023·768px. 페이지 가로 넘침, 프레임 안에서 `overflow-x`가 `visible`이 아닌 요소의 넘침, 페이지 오류를 스크립트로 측정했다. 에이전트가 1280px `scr002-bad-id`, 390px `scr003-request-failed`, 768px `scr002-bad-id` 스크린샷을 기존 SCR-002 대상 없음 프레임과 비교해 보았다 | 통과: 세 폭 모두 페이지 가로 스크롤 0px, 페이지 오류 0건. 프레임 안 넘침은 1023·768px에서 `span.brand-name` 하나(69px)만 나왔다. 이 요소는 좁은 폭에서 화면에서만 감춘 브랜드 이름이며, 기존 `scr002-gone`·`scr002-normal` 프레임도 같은 값을 낸다. 실제 넘침이 아니다. 육안 비교에서 배치·문구 차이를 찾지 못했다. 검토자는 에이전트이며 사용자 검토가 아니다. 미실행: 대비·글꼴 렌더링 측정. 새 프레임은 기존 안내 클래스(`a-destructive`·`a-warning`)를 그대로 쓴다 | 로컬 실행. 스크린샷 9장 추가(`target/mockup-shots/<프레임>-<폭>.png`, 모두 18장) |
 | Q115 목록 개수 배지 | SCR-001의 세 목록 제목, CPY-084·085 | 2026-11-05. 실제 Windows 서버·관리형 브라우저, 1280·320px, ko·en. 실제 Mode II 연결과 EOF로 개수를 바꾸고 캡처·DOM을 확인했다. 영어 시안의 배지 세 곳도 맞췄다. `177040d`의 두 OS 전체 게이트 실행 | 통과(확인 범위 한정). 0·1·여러 항목과 언어 변경이 일치했다. 아이콘 없는 중립 배지를 재사용했다. 가로 넘침 없음. 320px의 긴 영어 제목은 배지가 다음 줄로 내려가며 겹치지 않았다. 새 토큰·CSS 없음. 수동 접근성·Safari·실기기 검증은 아님 | [검증 4.20절](../how-to/verify-dashboard-frontend.md#420-목록-개수-배지-q115-2026-11-05) |
+| Pretendard 글꼴·자간·행간. 사용자 지시 2026-11-07, 사용자 결정 2026-11-07(Q139~Q142) | [Typography](#typography)의 모든 단계, 미리보기·로그인·시안, 비교 페이지 26개 프레임 × 6개 폭 | 2026-11-07. Windows, Chrome 157.0.8103.38(Playwright 1.64.1). `cargo xtask tokens --check`, `document.fonts`·`getComputedStyle` 측정(1280·320px), 두 OS 전체 게이트, 비교 페이지 재촬영 | 통과(확인 범위 한정). 400·700 글꼴이 세 페이지와 비교 페이지 156쌍의 두 쪽에서 모두 로드됐다. 계산된 크기·행간·자간이 위 표와 같다. 값 글꼴은 12px·자간 0이다. 가로 넘침 0. 사람의 시안 비교, Firefox·Edge·WebKit 재확인, 대비 재측정은 미실행이다. 색 토큰은 바뀌지 않았다 | [검증 4.23절](../how-to/verify-dashboard-frontend.md#423-pretendard-글꼴과-자간행간-q139q142-2026-11-07) |
 
 ### 미결정 사항
 

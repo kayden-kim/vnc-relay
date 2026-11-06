@@ -17,6 +17,7 @@ fn content_type_of(path: &str) -> &'static str {
         Some("html") => "text/html; charset=utf-8",
         Some("css") => "text/css; charset=utf-8",
         Some("js") => "text/javascript; charset=utf-8",
+        Some("woff2") => "font/woff2",
         _ => panic!("{path} has an extension that is not served"),
     }
 }

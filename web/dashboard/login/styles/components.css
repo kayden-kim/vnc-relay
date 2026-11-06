@@ -34,6 +34,7 @@
   font-size: var(--type-button-size);
   font-weight: var(--type-button-weight);
   line-height: var(--type-button-line);
+  letter-spacing: var(--type-button-tracking);
   text-decoration: none;
   text-align: center;
   cursor: pointer;
@@ -45,6 +46,7 @@
   font-size: var(--type-button-strong-size);
   font-weight: var(--type-button-strong-weight);
   line-height: var(--type-button-strong-line);
+  letter-spacing: var(--type-button-strong-tracking);
 }
 
 .button-primary {
@@ -126,6 +128,7 @@
   font-size: var(--type-label-size);
   font-weight: var(--type-label-weight);
   line-height: var(--type-label-line);
+  letter-spacing: var(--type-label-tracking);
 }
 
 .text-field-input {
@@ -140,6 +143,7 @@
   font-size: var(--type-input-size);
   font-weight: var(--type-input-weight);
   line-height: var(--type-input-line);
+  letter-spacing: var(--type-input-tracking);
 }
 
 .text-field-input[aria-invalid="true"] {
@@ -152,6 +156,7 @@
   font-size: var(--type-label-size);
   font-weight: var(--type-label-weight);
   line-height: var(--type-label-line);
+  letter-spacing: var(--type-label-tracking);
 }
 
 .text-field-error {
@@ -163,6 +168,7 @@
   font-size: var(--type-label-size);
   font-weight: var(--type-label-weight);
   line-height: var(--type-label-line);
+  letter-spacing: var(--type-label-tracking);
 }
 
 /* Badge */
@@ -172,10 +178,11 @@
   gap: var(--space-xs);
   padding: var(--space-xs) var(--space-sm);
   border-radius: var(--radius-sm);
-  font-family: var(--type-label-family);
-  font-size: var(--type-label-size);
-  font-weight: var(--type-label-weight);
-  line-height: var(--type-label-line);
+  font-family: var(--type-badge-family);
+  font-size: var(--type-badge-size);
+  font-weight: var(--type-badge-weight);
+  line-height: var(--type-badge-line);
+  letter-spacing: var(--type-badge-tracking);
   max-width: 100%;
 }
 
@@ -233,6 +240,7 @@
   font-size: var(--type-body-strong-size);
   font-weight: var(--type-body-strong-weight);
   line-height: var(--type-body-strong-line);
+  letter-spacing: var(--type-body-strong-tracking);
 }
 
 .alert > .button {
@@ -324,6 +332,7 @@
   font-size: var(--type-heading-card-size);
   font-weight: var(--type-heading-card-weight);
   line-height: var(--type-heading-card-line);
+  letter-spacing: var(--type-heading-card-tracking);
 }
 
 .card-description {
@@ -334,6 +343,7 @@
   font-size: var(--type-label-size);
   font-weight: var(--type-label-weight);
   line-height: var(--type-label-line);
+  letter-spacing: var(--type-label-tracking);
 }
 
 .card-actions {
@@ -372,6 +382,7 @@
   font-size: var(--type-label-size);
   font-weight: var(--type-label-weight);
   line-height: var(--type-label-line);
+  letter-spacing: var(--type-label-tracking);
 }
 
 .stat-value {
@@ -383,6 +394,7 @@
   font-size: var(--type-metric-size);
   font-weight: var(--type-metric-weight);
   line-height: var(--type-metric-line);
+  letter-spacing: var(--type-metric-tracking);
   font-feature-settings: var(--type-metric-feature);
 }
 
@@ -392,6 +404,7 @@
   font-size: var(--type-label-size);
   font-weight: var(--type-label-weight);
   line-height: var(--type-label-line);
+  letter-spacing: var(--type-label-tracking);
   margin-inline-start: var(--space-xs);
 }
 
@@ -466,6 +479,7 @@
   font-size: var(--type-metric-size);
   font-weight: var(--type-metric-weight);
   line-height: var(--type-metric-line);
+  letter-spacing: var(--type-metric-tracking);
   font-feature-settings: var(--type-metric-feature);
 }
 
@@ -475,6 +489,7 @@
   font-size: var(--type-label-size);
   font-weight: var(--type-label-weight);
   line-height: var(--type-label-line);
+  letter-spacing: var(--type-label-tracking);
 }
 
 /* Navbar */
@@ -523,6 +538,7 @@
   font-size: var(--type-body-strong-size);
   font-weight: var(--type-body-strong-weight);
   line-height: var(--type-body-strong-line);
+  letter-spacing: var(--type-body-strong-tracking);
   white-space: nowrap;
 }
 
@@ -547,6 +563,7 @@
   font-size: var(--type-button-size);
   font-weight: var(--type-button-weight);
   line-height: var(--type-button-line);
+  letter-spacing: var(--type-button-tracking);
   text-decoration: none;
   max-width: 100%;
 }
@@ -608,6 +625,7 @@
   font-size: var(--type-button-size);
   font-weight: var(--type-button-weight);
   line-height: var(--type-button-line);
+  letter-spacing: var(--type-button-tracking);
   cursor: pointer;
 }
 
@@ -658,6 +676,7 @@
   font-size: var(--type-label-size);
   font-weight: var(--type-label-weight);
   line-height: var(--type-label-line);
+  letter-spacing: var(--type-label-tracking);
   text-align: left;
 }
 
@@ -669,6 +688,7 @@
   font-size: var(--type-label-size);
   font-weight: var(--type-label-weight);
   line-height: var(--type-label-line);
+  letter-spacing: var(--type-label-tracking);
   text-align: left;
   white-space: nowrap;
 }
@@ -681,6 +701,7 @@
   font-size: var(--type-body-numeric-size);
   font-weight: var(--type-body-numeric-weight);
   line-height: var(--type-body-numeric-line);
+  letter-spacing: var(--type-body-numeric-tracking);
   font-feature-settings: var(--type-body-numeric-feature);
   overflow-wrap: anywhere;
 }
@@ -723,6 +744,7 @@
   font-size: var(--type-data-size);
   font-weight: var(--type-data-weight);
   line-height: var(--type-data-line);
+  letter-spacing: var(--type-data-tracking);
   font-feature-settings: var(--type-data-feature);
   text-decoration: underline;
   overflow-wrap: anywhere;
@@ -761,6 +783,7 @@
   font-size: var(--type-heading-card-size);
   font-weight: var(--type-heading-card-weight);
   line-height: var(--type-heading-card-line);
+  letter-spacing: var(--type-heading-card-tracking);
 }
 
 .dialog-description {
@@ -963,6 +986,7 @@
     font-size: var(--type-label-size);
     font-weight: var(--type-label-weight);
     line-height: var(--type-label-line);
+    letter-spacing: var(--type-label-tracking);
   }
 
   .data-table td.data-table-num {

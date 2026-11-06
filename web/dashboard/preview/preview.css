@@ -18,6 +18,7 @@ body {
   font-size: var(--type-heading-page-size);
   font-weight: var(--type-heading-page-weight);
   line-height: var(--type-heading-page-line);
+  letter-spacing: var(--type-heading-page-tracking);
 }
 
 .preview-intro {
@@ -27,6 +28,7 @@ body {
   font-size: var(--type-body-size);
   font-weight: var(--type-body-weight);
   line-height: var(--type-body-line);
+  letter-spacing: var(--type-body-tracking);
 }
 
 .sample-group {
@@ -42,6 +44,7 @@ body {
   font-size: var(--type-heading-card-size);
   font-weight: var(--type-heading-card-weight);
   line-height: var(--type-heading-card-line);
+  letter-spacing: var(--type-heading-card-tracking);
 }
 
 .sample {
@@ -73,6 +76,7 @@ body {
   font-size: var(--type-label-size);
   font-weight: var(--type-label-weight);
   line-height: var(--type-label-line);
+  letter-spacing: var(--type-label-tracking);
 }
 
 /* Navbar-style language select sits on the dark navbar colour. */

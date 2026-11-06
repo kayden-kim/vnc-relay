@@ -22,6 +22,7 @@ body {
   font-size: var(--type-body-size);
   font-weight: var(--type-body-weight);
   line-height: var(--type-body-line);
+  letter-spacing: var(--type-body-tracking);
   word-break: keep-all;
 }
 
