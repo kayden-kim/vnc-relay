@@ -1,7 +1,7 @@
 //! Acceptance tests for relay logging, secret exclusion, and keepalive duration.
 //! Covers:
 //! - OPS-011 (full): JSON Lines, lifecycle identifier correlation and administrator termination audit
-//! - OPS-012 (partial): Operations log and status endpoint secret and raw ID non-exposure
+//! - OPS-012 (full): No relay, administrator, or reload secret and no raw ID in the operations log, stderr, or status answers
 //! - RLY-027 (full): Active idle session preservation over K and post-idle transfer
 
 use std::io::{Read, Write};
@@ -478,6 +478,12 @@ impl TargetServer {
     }
 }
 
+/// Paths of the certificate and key that the WSS listener reads.
+struct WssFiles<'a> {
+    cert: &'a Path,
+    key: &'a Path,
+}
+
 struct RunningRelay {
     child: Child,
     dir: PathBuf,
@@ -489,8 +495,15 @@ struct RunningRelay {
 }
 
 impl RunningRelay {
-    fn start(name: &str, extra_config: &str, wait_secs: u64, places: u32, with_ws: bool) -> Self {
-        let port_count = if with_ws { 5 } else { 4 };
+    /// Starts the TCP pair, and the WS and WSS viewer listeners when `wss` is given.
+    fn start(
+        name: &str,
+        extra_config: &str,
+        wait_secs: u64,
+        places: u32,
+        wss: Option<WssFiles>,
+    ) -> Self {
+        let port_count = if wss.is_some() { 6 } else { 4 };
         let holders: Vec<_> = (0..port_count)
             .map(|_| match TcpListener::bind("127.0.0.1:0") {
                 Ok(l) => l,
@@ -542,19 +555,28 @@ impl RunningRelay {
                 panic!("set accounts perm: {e:?}");
             }
         }
-        let ws_table = if with_ws {
-            format!(
+        let web_tables = match &wss {
+            // Literal strings: Windows path separators need no escapes.
+            Some(files) => format!(
                 r#"
 [relay.ws_viewer]
 enabled = true
 listen = "127.0.0.1:{}"
 allow = ["127.0.0.1"]
 allowed_origins = ["http://127.0.0.1"]
+[relay.wss_viewer]
+enabled = true
+listen = "127.0.0.1:{}"
+allow = ["127.0.0.1"]
+cert_file = '{}'
+key_file = '{}'
 "#,
-                ports[4]
-            )
-        } else {
-            String::new()
+                ports[4],
+                ports[5],
+                files.cert.display(),
+                files.key.display()
+            ),
+            None => String::new(),
         };
         let config = format!(
             r#"[admin]
@@ -571,7 +593,7 @@ allow = ["127.0.0.1"]
 enabled = true
 listen = "127.0.0.1:{}"
 allow = ["127.0.0.1"]
-{ws_table}
+{web_tables}
 [mode1]
 enabled = true
 allow_targets = ["127.0.0.1:1024-65535"]
@@ -618,7 +640,7 @@ output = "events.jsonl"
             management: ports[0],
             viewer: ports[2],
             server: ports[3],
-            ws_viewer: if with_ws { Some(ports[4]) } else { None },
+            ws_viewer: wss.is_some().then(|| ports[4]),
         };
         let deadline = Instant::now() + LIMIT;
         loop {
@@ -766,7 +788,7 @@ impl Drop for RunningRelay {
 #[test]
 fn operations_log_records_contract_events_and_correlates_identifiers() {
     let _lock = lock_ports();
-    let relay = RunningRelay::start("ops011", "", 10, 10, false);
+    let relay = RunningRelay::start("ops011", "", 10, 10, None);
 
     // 1. connection_rejected at accept (from forbidden source address 127.0.0.3)
     let after_reject_accept = relay.lines().len();
@@ -1238,11 +1260,44 @@ fn operations_log_records_contract_events_and_correlates_identifiers() {
     }
 }
 
-/// spec: operations.md:OPS-012 partial
+/// Feeds each secret kind of ops-info-v1.md 1.11 into one running process:
+/// relay streams and initial requests, upgrade headers, administrator logins with
+/// a wrong password and an unknown account, the right password, the session
+/// cookie and CSRF token on a query, a termination and a logout, and WSS key
+/// files that reload rejects. None of them may reach the operations log, stderr,
+/// or the `/livez`·`/readyz` answers.
+/// spec: operations.md:OPS-012
 #[test]
 fn operations_log_and_status_endpoints_never_expose_secrets_or_raw_identifiers() {
     let _lock = lock_ports();
-    let relay = RunningRelay::start("ops012", "", 10, 10, true);
+    let tls_dir = std::env::temp_dir().join(format!(
+        "vnc-relay-log-{}-{}-ops012-tls",
+        std::process::id(),
+        SERIAL.fetch_add(1, Ordering::Relaxed)
+    ));
+    std::fs::create_dir_all(&tls_dir).unwrap_or_else(|error| panic!("create TLS dir: {error}"));
+    let fixture = |name: &str| {
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("crates/adapters/tests/fixtures/tls")
+            .join(name)
+    };
+    let copy = |name: &str, to: &Path| {
+        std::fs::copy(fixture(name), to).unwrap_or_else(|error| panic!("copy {name}: {error}"));
+    };
+    let cert_path = tls_dir.join("cert.pem");
+    let key_path = tls_dir.join("key.pem");
+    copy("server-chain.pem", &cert_path);
+    copy("server-key-p256.pem", &key_path);
+    let mut relay = RunningRelay::start(
+        "ops012",
+        "[reload]\nsettle_secs = 1\npoll_secs = 5\n",
+        10,
+        10,
+        Some(WssFiles {
+            cert: &cert_path,
+            key: &key_path,
+        }),
+    );
 
     let raw_relay_id = "99887766554433221100998877665544";
     let vnc_challenge_marker = "SECRET_VNC_CHALLENGE_KEY_ABCDEF1234567890";
@@ -1381,7 +1436,115 @@ fn operations_log_and_status_endpoints_never_expose_secrets_or_raw_identifiers()
             || field_matches(l, "event", "connection_rejected")
     });
 
-    // 5. Query status endpoints (/livez, /readyz)
+    // 5. Administrator logins, a query, a termination and a logout. One wrong
+    // password per account stays under the failure limit, so the right one works.
+    let wrong_password = "SECRET_WRONG_ADMIN_PASSWORD_7Q8R9S";
+    let unknown_password = "SECRET_UNKNOWN_ACCOUNT_PASSWORD_1T2U3V";
+    for (account, password) in [("alice", wrong_password), ("mallory", unknown_password)] {
+        let after = relay.lines().len();
+        let body = format!(r#"{{"account":"{account}","password":"{password}"}}"#);
+        let (status, _, refused) = read_management_reply(relay.management_begin(
+            "POST",
+            "/api/v1/session",
+            &["Content-Type: application/json"],
+            &body,
+        ));
+        assert_eq!(status, 401, "refused login: {refused:?}");
+        relay.wait_for_line_after(after, |l| field_matches(l, "event", "admin_login_failed"));
+    }
+    let login_body = format!(r#"{{"account":"alice","password":"{ADMIN_PASSWORD}"}}"#);
+    let (status, headers, login) = read_management_reply(relay.management_begin(
+        "POST",
+        "/api/v1/session",
+        &["Content-Type: application/json"],
+        &login_body,
+    ));
+    assert_eq!(status, 200, "administrator login: {login:?}");
+    let set_cookie = some(
+        headers.lines().find_map(|line| {
+            let (name, value) = line.split_once(':')?;
+            name.eq_ignore_ascii_case("set-cookie")
+                .then_some(value.trim())
+        }),
+        "login Set-Cookie",
+    );
+    let cookie_pair = some(set_cookie.split(';').next(), "cookie pair");
+    let session_token = some(
+        cookie_pair.split_once('=').map(|(_, value)| value),
+        "cookie value",
+    )
+    .to_owned();
+    let csrf_token = some(login.str("csrf_token"), "login CSRF").to_owned();
+    let cookie = format!("Cookie: {cookie_pair}");
+    let csrf = format!("X-CSRF-Token: {csrf_token}");
+    let (status, _, session) =
+        read_management_reply(relay.management_begin("GET", "/api/v1/session", &[&cookie], ""));
+    assert_eq!(status, 200, "session query: {session:?}");
+
+    let after_pair = relay.lines().len();
+    let (mut term_server, _) = relay.connect_server();
+    if let Err(e) = term_server.write_all(&make_mode2_request("4242")) {
+        panic!("write mode2 server to terminate: {e:?}");
+    }
+    let (mut term_viewer, _) = relay.connect_viewer();
+    if let Err(e) = term_viewer.write_all(&make_mode2_request("4242")) {
+        panic!("write mode2 viewer to terminate: {e:?}");
+    }
+    let started =
+        relay.wait_for_line_after(after_pair, |l| field_matches(l, "event", "session_started"));
+    let session_id = some(extract_field(&started, "session_id"), "session_id").to_owned();
+    let pending = relay.management_begin(
+        "POST",
+        &format!("/api/v1/sessions/{session_id}/terminate"),
+        &[&cookie, &csrf],
+        "",
+    );
+    for endpoint in [&mut term_viewer, &mut term_server] {
+        let mut unexpected = [0; 1];
+        assert_eq!(
+            endpoint
+                .read(&mut unexpected)
+                .unwrap_or_else(|error| panic!("administrator closes relay endpoint: {error}")),
+            0
+        );
+        endpoint
+            .shutdown(Shutdown::Write)
+            .unwrap_or_else(|error| panic!("acknowledge administrator close: {error}"));
+    }
+    let (status, _, terminated) = read_management_reply(pending);
+    assert_eq!(status, 200, "administrator termination: {terminated:?}");
+    assert_eq!(terminated.str("result"), Some("terminated"));
+    relay.wait_for_line_after(after_pair, |l| field_matches(l, "event", "admin_terminate"));
+
+    let mut logout = relay.management_begin("DELETE", "/api/v1/session", &[&cookie, &csrf], "");
+    let mut logout_reply = String::new();
+    logout
+        .read_to_string(&mut logout_reply)
+        .unwrap_or_else(|error| panic!("read logout reply: {error}"));
+    assert!(
+        logout_reply.starts_with("HTTP/1.1 204"),
+        "logout: {logout_reply}"
+    );
+
+    // 6. WSS key candidates that reload rejects: a valid key of another pair, then
+    // a key file whose body is a marker. Only fixed details may be logged.
+    let tls_rejected = |l: &str| {
+        field_matches(l, "event", "reload_rejected")
+            && field_matches(l, "reason", "tls_file_invalid")
+    };
+    let after_mismatch = relay.lines().len();
+    copy("other-key-p256.pem", &key_path);
+    relay.wait_for_line_after(after_mismatch, tls_rejected);
+    let key_marker = "SECRETTLSKEYMARKERQ7W8E9R0T1Y2U3I4";
+    let after_marker = relay.lines().len();
+    std::fs::write(
+        &key_path,
+        format!("-----BEGIN PRIVATE KEY-----\n{key_marker}\n-----END PRIVATE KEY-----\n"),
+    )
+    .unwrap_or_else(|error| panic!("write marker key: {error}"));
+    relay.wait_for_line_after(after_marker, tls_rejected);
+
+    // 7. Query status endpoints (/livez, /readyz)
     let livez_resp = http_get(relay.status, "/livez");
     assert!(
         livez_resp.contains("\"status\":\"alive\""),
@@ -1393,13 +1556,55 @@ fn operations_log_and_status_endpoints_never_expose_secrets_or_raw_identifiers()
         "readyz: {readyz_resp}"
     );
 
-    // 6. Assert non-exposure of all secret tokens and raw relay ID
+    // 8. The same config at the next start: the marker key fails the start with
+    // `tls_file_invalid` (exit code 3) before any bind.
+    let _ = relay.child.kill();
+    let _ = relay.child.wait();
+    let failed_start = Command::new(BIN)
+        .args(["serve", "--config"])
+        .arg(relay.dir.join("relay.toml"))
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .output()
+        .unwrap_or_else(|error| panic!("run the failing start: {error}"));
+    let failed_stderr = String::from_utf8_lossy(&failed_start.stderr).into_owned();
+    assert_eq!(
+        failed_start.status.code(),
+        Some(3),
+        "start with the marker key: {failed_stderr}"
+    );
+    assert!(
+        failed_stderr.contains("tls_file_invalid"),
+        "{failed_stderr}"
+    );
+
+    // 9. Assert non-exposure of all secret tokens and raw relay ID
     let log_content = match std::fs::read_to_string(relay.dir.join("events.jsonl")) {
         Ok(c) => c,
         Err(e) => panic!("read events.jsonl: {e:?}"),
     };
+    assert!(
+        log_content
+            .lines()
+            .any(|l| field_matches(l, "event", "startup_failed")
+                && field_matches(l, "reason", "tls_file_invalid")),
+        "no startup_failed line for the marker key"
+    );
+    let stderr_content = std::fs::read_to_string(relay.dir.join("stderr"))
+        .unwrap_or_else(|error| panic!("read stderr: {error}"))
+        + &failed_stderr;
+    let accounts = std::fs::read_to_string(relay.dir.join("accounts.toml"))
+        .unwrap_or_else(|error| panic!("read accounts: {error}"));
+    let password_hash = some(
+        accounts
+            .lines()
+            .find(|line| line.starts_with("password_hash"))
+            .and_then(|line| line.split('"').nth(1)),
+        "password_hash",
+    );
 
-    let forbidden_strings = [
+    let mut forbidden_strings: Vec<String> = [
         raw_relay_id,
         vnc_challenge_marker,
         vnc_response_marker,
@@ -1409,12 +1614,37 @@ fn operations_log_and_status_endpoints_never_expose_secrets_or_raw_identifiers()
         secret_cookie,
         secret_auth,
         secret_forwarded_for,
-    ];
+        ADMIN_PASSWORD,
+        wrong_password,
+        unknown_password,
+        session_token.as_str(),
+        csrf_token.as_str(),
+        password_hash,
+        "$argon2id$",
+        key_marker,
+    ]
+    .map(str::to_owned)
+    .into();
+    // Base64 lines of both key files. Short last lines could match by chance.
+    for name in ["server-key-p256.pem", "other-key-p256.pem"] {
+        let text = std::fs::read_to_string(fixture(name))
+            .unwrap_or_else(|error| panic!("read {name}: {error}"));
+        forbidden_strings.extend(
+            text.lines()
+                .map(str::trim)
+                .filter(|line| !line.starts_with("-----") && line.len() >= 16)
+                .map(str::to_owned),
+        );
+    }
 
-    for forbidden in forbidden_strings {
+    for forbidden in &forbidden_strings {
         assert!(
-            !log_content.contains(forbidden),
+            !log_content.contains(forbidden.as_str()),
             "log leaked secret or raw identifier: '{forbidden}'"
+        );
+        assert!(
+            !stderr_content.contains(forbidden.as_str()),
+            "stderr leaked secret or raw identifier: '{forbidden}'"
         );
         assert!(
             !livez_resp.contains(forbidden),
@@ -1426,7 +1656,7 @@ fn operations_log_and_status_endpoints_never_expose_secrets_or_raw_identifiers()
         );
     }
 
-    // 7. Verify all relay_id_ref fields in log are 16 lowercase hex characters
+    // 10. Verify all relay_id_ref fields in log are 16 lowercase hex characters
     let objects = parse_log_objects(&relay.dir);
     let mut ref_count = 0;
     for obj in &objects {
@@ -1439,6 +1669,8 @@ fn operations_log_and_status_endpoints_never_expose_secrets_or_raw_identifiers()
         }
     }
     assert!(ref_count > 0, "expected at least one relay_id_ref in log");
+    drop(relay);
+    let _ = std::fs::remove_dir_all(&tls_dir);
 }
 
 /// spec: relay.md:RLY-027
@@ -1456,7 +1688,7 @@ tcp_idle_secs = 10
 tcp_interval_secs = 1
 tcp_probes = 1
 "#;
-    let relay = RunningRelay::start("rly027", keepalive_config, 30, 10, false);
+    let relay = RunningRelay::start("rly027", keepalive_config, 30, 10, None);
 
     // 1. Establish Mode I active session
     let target_server = TargetServer::bind();
