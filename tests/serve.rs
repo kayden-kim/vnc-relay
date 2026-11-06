@@ -1586,7 +1586,7 @@ fn checks_an_ipv4_peer_of_a_dual_stack_listener_against_ipv4_items() {
     assert!(!closed_within(&mut viewer, Duration::from_millis(100)));
 }
 
-/// spec: operations.md:OPS-004 partial
+/// spec: operations.md:OPS-004
 #[test]
 fn refuses_relay_connections_beyond_l_and_accepts_again_after_a_release() {
     let _lock = lock_ports();
@@ -1600,6 +1600,12 @@ fn refuses_relay_connections_beyond_l_and_accepts_again_after_a_release() {
     let log = config.with_file_name("relay.log");
     let mut guard = Guard(Some(spawn(&config)));
     wait_listening(guard.child(), ports);
+
+    // Idle status and management connections are held for the whole test.
+    // They take places of Lm only, so both places of L stay free for relay
+    // connections.
+    let mut status_holder = connect_from([127, 0, 0, 5], ports.status);
+    let mut management_holder = connect_from([127, 0, 0, 5], ports.management);
 
     // Both entry points take places from the one L.
     let mut viewer = connect_from([127, 0, 0, 2], ports.tcp_viewer);
@@ -1629,6 +1635,24 @@ fn refuses_relay_connections_beyond_l_and_accepts_again_after_a_release() {
     });
     assert_eq!(field(&rejected, "reason"), Some("ip_not_allowed"));
     assert!(!closed_within(&mut server, Duration::from_millis(100)));
+
+    // With L full, status and management requests are still answered.
+    assert_eq!(
+        http_get(ports.status, "/readyz"),
+        Some((200, r#"{"status":"ready"}"#.to_owned()))
+    );
+    assert_eq!(
+        http_get(ports.management, "/").map(|answer| answer.0),
+        Some(303)
+    );
+    assert!(!closed_within(
+        &mut status_holder,
+        Duration::from_millis(100)
+    ));
+    assert!(!closed_within(
+        &mut management_holder,
+        Duration::from_millis(100)
+    ));
 
     // The client leaves; the server notices, gives the place back, and
     // takes the next connection.

@@ -9,5 +9,6 @@ how-to는 특정 개발·운영 작업을 안전하게 완료하기 위한 절�
 | [대시보드 프런트엔드를 검증하는 방법](verify-dashboard-frontend.md) | 대시보드 토큰·제공 파일·브라우저 테스트와 수동 시각·접근성 검토 | 미실행(Draft). 실행 환경은 실행할 때 기록 | 없음(Draft 2026-10-22) |
 | [실제 UltraVNC로 TCP 중계를 수동 확인하는 방법](verify-ultravnc-manually.md) | TODO 2.13의 Mode I·II 화면·입력 확인 절차(Q116에 따라 에이전트 자동 실행, 사용자 캡처 검토)와 AC별 수동·자동 증거 기록 | Draft. Windows VNC Relay로 실행(Ubuntu VNC Relay는 분리 실행 환경이 없어 미실행). 고정 UltraVNC Server·Viewer 1.8.3.0, Hyper-V 분리 VM 3대 | 2026-11-06 |
 | [실행파일을 묶고 수동 운영하는 방법](operate-relay.md) | 두 OS의 release 빌드·묶음, 계정 준비·시작·중계·재로드·종료, 인증서 교체·로그 회전 | 미실행(Draft). Windows 11 x64·Ubuntu 24.04 LTS x64 | 없음(Draft 2026-11-04) |
+| [중계 성능과 잔여 자원을 측정하는 방법](measure-performance.md) | OPS-017·OPS-018과 AC-08의 루프백 부하·지연·CPU·RSS·핸들/fd 측정, 원시 JSON 보존 | Draft. Windows 11 x64·WSL2 Ubuntu 24.04 LTS x64. 스모크와 정식 측정은 본문 4절에서 구분 | 없음(Draft 2026-11-06) |
 
 작성 규칙은 [AGENTS.md](AGENTS.md)를 따른다.
