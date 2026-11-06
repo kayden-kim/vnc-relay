@@ -12,11 +12,13 @@ function requireText(value, name) {
 
 /**
  * @param {{title: string, description?: string, confirmLabel: string, cancelLabel: string,
- *   destructive?: boolean, onConfirm?: () => void, onCancel?: () => void}} options
+ *   destructive?: boolean, onConfirm?: () => void, onCancel?: () => void,
+ *   returnFocus?: HTMLElement}} options
+ *   `returnFocus` is the element that opens the dialog. Cancel and Escape move focus back to it.
  * @returns {{element: HTMLDialogElement, show: () => void, hide: () => void}}
  */
 export function createDialog({
-  title, description, confirmLabel, cancelLabel, destructive = false, onConfirm, onCancel,
+  title, description, confirmLabel, cancelLabel, destructive = false, onConfirm, onCancel, returnFocus,
 } = {}) {
   requireText(title, 'dialog title');
   requireText(confirmLabel, 'dialog confirm label');
@@ -57,16 +59,33 @@ export function createDialog({
   actions.append(cancel, confirm);
   element.append(actions);
 
-  // close() restores focus to the element that opened the dialog.
+  // The browser returns focus to the element focused when the dialog opened. A mouse click in WebKit
+  // (Safari) does not focus the button, so that element can be the page body. Cancel and Escape
+  // therefore move focus to `returnFocus`. Confirm and hide() leave focus to the caller.
+  const restoreFocus = () => {
+    if (returnFocus?.isConnected && !returnFocus.disabled) returnFocus.focus();
+  };
+  // close() restores the browser's choice synchronously, so the cancel button can move focus right after it.
+  // Escape closes the dialog after the 'cancel' event, so that path waits for the 'close' event.
+  let restoreOnClose = false;
   const show = () => {
-    if (!element.open) element.showModal();
+    if (!element.open) {
+      restoreOnClose = false;
+      element.showModal();
+    }
   };
   const hide = () => {
     if (element.open) element.close();
   };
+  element.addEventListener('close', () => {
+    if (!restoreOnClose) return;
+    restoreOnClose = false;
+    restoreFocus();
+  });
 
   cancel.addEventListener('click', () => {
     hide();
+    restoreFocus();
     onCancel?.();
   });
   confirm.addEventListener('click', () => {
@@ -74,7 +93,10 @@ export function createDialog({
     hide();
   });
   // Escape fires 'cancel'; the browser closes the dialog itself.
-  element.addEventListener('cancel', () => onCancel?.());
+  element.addEventListener('cancel', () => {
+    restoreOnClose = true;
+    onCancel?.();
+  });
   // Tab stays inside the modal. Without this, the browser moves focus out of the page after the last action.
   element.addEventListener('keydown', (event) => {
     if (event.key !== 'Tab') return;

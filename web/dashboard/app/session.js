@@ -120,6 +120,7 @@ export function mountSession(root, id, deps = {}) {
       confirmLabel: t.terminateConfirm,
       cancelLabel: t.cancel,
       destructive: true,
+      returnFocus: terminate,
       onConfirm: () => {
         queueMicrotask(() => page?.heading.focus());
         void terminateSessionNow();

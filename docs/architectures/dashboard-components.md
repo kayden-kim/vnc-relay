@@ -95,7 +95,7 @@ flowchart LR
 | `createLanguageSelect({id, label, value, options, variant})` | `id`, `label`, `options`(`{value, label}` 배열, 빈 배열이면 `TypeError`)는 필수. `variant` 기본 `form`(`navbar`·`form`). | `HTMLDivElement`. 안에 `label`과 `select`. |
 | `createDataTable({caption, columns, rows, emptyText, numericColumns})` | `columns`는 `{key, label, mobileHead?}` 배열이다. `key`·`label`은 문자열이다. 배열이 아니거나 비었거나 열 값이 잘못되면 `TypeError`다. `mobileHead`는 생략 또는 `'primary'`·`'secondary'`만 허용한다. 다른 값이면 `TypeError`다. 생략한 열은 모바일에서 일반 레이블·값 쌍이다. `rows`는 값 배열의 배열이다. 셀 값이 `Node`면 그대로 넣고, 그 밖의 값은 문자열로 쓴다. `numericColumns`의 각 항목은 `columns`의 `key`여야 한다(아니면 `TypeError`). | `HTMLTableElement`. 열 머리글은 `scope="col"`이고, 숫자 열은 `data-table-num` 클래스를 쓴다. 행이 없으면 `emptyText`를 한 행으로 쓴다. 아래 표 역할과 모바일 첫 줄 규칙을 따른다. |
 | `createLink({href, label, icon})` | `icon`은 아이콘 이름 | `HTMLAnchorElement` |
-| `createDialog({title, description, confirmLabel, cancelLabel, destructive, onConfirm, onCancel})` | `title`, `confirmLabel`, `cancelLabel`은 필수. 확인 버튼은 `destructive`면 위험 스타일. 닫힌 대화상자는 CSS가 숨긴다(`display`는 `.dialog[open]`에만 준다). 미리보기는 열린 견본을 비모달 `open` 속성으로 프레임 안에 둔다(미리보기 전용). | `{element, show(), hide()}`. `show`는 `showModal()`을 부르고, 닫기와 취소는 네이티브 포커스 복귀를 쓴다. Tab과 Shift+Tab은 두 단추 사이에서 돌도록 keydown으로 처리한다(DASH-015, 7절). |
+| `createDialog({title, description, confirmLabel, cancelLabel, destructive, onConfirm, onCancel, returnFocus})` | `title`, `confirmLabel`, `cancelLabel`은 필수. 확인 버튼은 `destructive`면 위험 스타일. `returnFocus`는 대화상자를 여는 요소이며 선택 옵션이다. 닫힌 대화상자는 CSS가 숨긴다(`display`는 `.dialog[open]`에만 준다). 미리보기는 열린 견본을 비모달 `open` 속성으로 프레임 안에 둔다(미리보기 전용). | `{element, show(), hide()}`. `show`는 `showModal()`을 부른다. 취소 단추는 `close()` 직후 `returnFocus`로 포커스를 옮긴다. Escape는 브라우저가 닫으므로 `close` 이벤트에서 옮긴다. 요소가 문서에 없거나 비활성이면 옮기지 않는다. 확인과 `hide()`는 포커스를 호출한 쪽에 맡긴다. Tab과 Shift+Tab은 두 단추 사이에서 돌도록 keydown으로 처리한다(DASH-015, 7절). |
 
 모든 함수는 API 값을 `textContent`나 속성 값으로만 넣는다. `innerHTML`에는 정적 문자열만 넣는다.
 
@@ -138,7 +138,7 @@ flowchart LR
 | 미리보기 배치 | 구현 판단(사용자 결정 없음). `preview.js`의 `renderGroup`은 공유 `.grid`와 견본의 `.span-12`·`.span-6`·`.span-4`를 쓴다. 견본 1개는 전체 폭, 2개는 2열, 3개 이상은 3열로 둔다. 5개 견본은 3개와 2개로 나눈다. `preview.css`에는 미디어 쿼리가 없고 본문 여백은 모든 폭에서 `spacing.lg`다 | DESIGN.md의 단일 중단점을 공유한다. 12열 격자에서 같은 폭의 5열은 만들 수 없으므로 견본을 빠뜨리지 않고 다음 줄로 보낸다. 공유 컴포넌트 CSS에 페이지 본문 여백 클래스는 없다. | 미리보기 전용 중단점·5열 스타일을 유지하거나 제품 CSS에 미리보기 전용 규칙을 더하는 것. |
 | 상태 미리보기 | `is-hover`·`is-focus` 클래스 | 호버와 포커스를 재현할 수 있고 복제 CSS가 없다. | 미리보기 전용 CSS 복사본. 두 곳을 맞춰야 한다. |
 | 좁은 폭의 표 | CSS로 카드처럼 배치하고 표 역할은 유지 | 역할과 읽기 순서를 그대로 쓴다. | 폭마다 다른 마크업. |
-| 대화상자 | 네이티브 `dialog`와 `showModal()`. Tab 순환만 직접 만든다 | 열기, Escape 닫기, 닫은 뒤 포커스 복귀를 브라우저가 한다. 탐침에서 Tab이 `body`로 빠져서 `dialog.js`의 keydown이 두 단추 사이를 돈다(DASH-015, 검증 기록 4.7절). | 포커스 가두기 전부를 직접 만드는 것. |
+| 대화상자 | 네이티브 `dialog`와 `showModal()`. Tab 순환과 취소 뒤 포커스 복귀만 직접 만든다 | 열기와 Escape 닫기를 브라우저가 한다. 탐침에서 Tab이 `body`로 빠져서 `dialog.js`의 keydown이 두 단추 사이를 돈다(DASH-015, 검증 기록 4.7절). 브라우저는 닫을 때 열 당시 포커스가 있던 요소로 돌린다. WebKit은 마우스로 누른 단추에 포커스를 주지 않아 그 요소가 `body`일 수 있다. 그래서 취소·Escape 뒤에는 `returnFocus`로 직접 돌린다. 취소 단추는 `close` 이벤트를 기다리지 않는다. 가상 시간으로 실행한 Chromium 시험에서 이 이벤트가 시험의 100ms 대기 안에 오지 않았기 때문이다(DASH-009, 검증 기록 4.21절). | 포커스 가두기 전부를 직접 만드는 것. |
 | 언어 선택 | 네이티브 `select` | 키보드 동작과 스크린 리더 이름을 브라우저가 맡는다. | 직접 만든 목록 상자. |
 | 아이콘 | 인라인 SVG와 `<template>` 복제 | 외부 파일 요청이 없고 CSP를 지킨다. | 외부 스프라이트 `<use href>`. 외부 파일 요청이 생긴다. |
 

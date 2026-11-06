@@ -228,6 +228,16 @@ async function caseDash009() {
   check('DASH-009: cancel sends no request', api.count(TERMINATE) === 0);
   check('DASH-009: focus returns to terminate', document.activeElement === terminateOf(root));
   check('DASH-009: terminate stays available', enabled(root));
+  // A mouse click in WebKit (Safari) does not focus the button, so the dialog opens with no focused opener.
+  // Cancel must still return focus to the terminate button (spec §6), not leave it on the page body.
+  document.activeElement?.blur();
+  terminateOf(root).click();
+  await wait(50);
+  cancelOf(root).click();
+  await wait(100);
+  check('DASH-009: cancel without a focused opener closes the dialog', dialogOf(root)?.open === false);
+  check('DASH-009: focus returns to terminate without a focused opener', document.activeElement === terminateOf(root));
+  check('DASH-009: cancel without a focused opener sends no request', api.count(TERMINATE) === 0);
   checkLayout('DASH-009');
 }
 
