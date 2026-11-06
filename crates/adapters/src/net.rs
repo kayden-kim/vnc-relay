@@ -540,14 +540,17 @@ fn admit(policy: &AcceptPolicy, peer_ip: PeerIp) -> Result<BudgetPermit, RejectR
         })
 }
 
-/// Sets TCP keepalive with the idle time, probe interval, and probe count
-/// of K (config-v2 §1.2 `[keepalive]`).
+/// Sets the socket options of a relay connection: TCP keepalive with the idle
+/// time, probe interval, and probe count of K (config-v2 §1.2 `[keepalive]`),
+/// and `TCP_NODELAY`. A relay forwards each read as it arrives; with Nagle on,
+/// a small write followed by a larger one waits for the peer's delayed ACK.
 fn set_keepalive(stream: &TcpStream, keepalive: &KeepaliveSettings) -> io::Result<()> {
     let params = TcpKeepalive::new()
         .with_time(keepalive.tcp_idle)
         .with_interval(keepalive.tcp_interval)
         .with_retries(keepalive.tcp_probes);
-    SockRef::from(stream).set_tcp_keepalive(&params)
+    SockRef::from(stream).set_tcp_keepalive(&params)?;
+    stream.set_nodelay(true)
 }
 
 // Reading the options back needs getters that socket2 offers on Linux but
@@ -557,7 +560,7 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    async fn sets_keepalive_idle_interval_and_probes_from_the_settings() {
+    async fn sets_keepalive_from_the_settings_and_turns_nagle_off() {
         let listener = TcpListener::bind("127.0.0.1:0")
             .await
             .unwrap_or_else(|error| panic!("bind: {error}"));
@@ -591,6 +594,7 @@ mod tests {
             Duration::from_secs(11)
         );
         assert_eq!(got(socket.tcp_keepalive_retries()), 7);
+        assert!(got(server.nodelay()));
     }
 }
 

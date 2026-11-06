@@ -689,11 +689,20 @@ impl<S: AsyncRead + AsyncWrite + Unpin + Send> AsyncWrite for WsRelayStream<S> {
             None => return Poll::Ready(Ok(0)),
         };
 
-        // 2a. Finish header if needed
+        // 2a. Finish the header. The first payload bytes go in the same
+        // vectored write call, so header and payload reach the socket together
+        // (and one TLS record on WSS) instead of as a lone small header write.
+        // That lone write waits under Nagle for the peer's delayed ACK before
+        // the payload can follow.
         while !frame.is_header_finished() {
-            let rem = frame.remaining_header();
+            let header_len = frame.remaining_header().len();
+            let payload = &buf[..buf.len().min(frame.remaining_payload_len())];
+            let parts = [
+                io::IoSlice::new(frame.remaining_header()),
+                io::IoSlice::new(payload),
+            ];
             match Pin::new(&mut this.io)
-                .poll_write(cx, rem)
+                .poll_write_vectored(cx, &parts)
                 .map_err(classify_socket_error)
             {
                 Poll::Ready(Ok(0)) => {
@@ -702,6 +711,14 @@ impl<S: AsyncRead + AsyncWrite + Unpin + Send> AsyncWrite for WsRelayStream<S> {
                 }
                 Poll::Ready(Ok(n)) => {
                     frame.advance_header(n);
+                    let sent = n.saturating_sub(header_len);
+                    if sent > 0 {
+                        frame.advance_payload(sent);
+                        if !frame.is_finished() {
+                            this.outbound_frame = Some(frame);
+                        }
+                        return Poll::Ready(Ok(sent));
+                    }
                 }
                 Poll::Ready(Err(e)) => {
                     this.outbound_frame = Some(frame);

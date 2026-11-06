@@ -150,7 +150,7 @@ H 감시는 유효 요청 반환으로 끝난다. C·W·E에서 H를 다시 쓰�
 
 C는 이름 해석과 모든 허용 후보의 연결 시도를 합친 절대 기한이다. 각 await 뒤에도 `now >= deadline`을 확인한다. 단계·후보마다 다시 C를 주지 않는다. K 설정은 활성 등록 전에 끝낸다. K 설정 실패면 활성화하지 않는다. 대상 소켓을 닫고 대상 L 자리를 돌려준 뒤 Viewer도 실패 경로로 정리한다. `target_connect_failed`의 `reason=connect_error`를 기록하고 `error_kind`는 넣지 않는다. RLY-R18이 대상에도 K를 요구하므로 적용되지 않은 세션을 성공으로 만들지 않는다. 기존 catch-all 원인을 재사용하므로 새 계약 값은 필요 없다. 이는 **이 문서의 판단, 사용자 결정 없음**이다.
 
-포트 내부의 `TargetError::KeepaliveFailed`는 일반 `ConnectError`와 구별한다. K 실패 뒤 다음 DNS 후보를 시도해 세션을 만들면 이 실패 경로의 “세션 없음” 조건을 놓칠 수 있기 때문이다. 이 값이면 app은 후보 순회를 끝내고 대상 permit을 반환한다. 외부 사건과 `Display` 값은 기존 `connect_error`이며 새 wire 코드를 만들지 않는다. 일반 연결 오류는 나머지 후보를 계속 시도한 뒤 집계한다. 이 내부 구별은 **이 문서의 판단, 사용자 결정 없음**이다. `target_k_failure_is_terminal_but_other_candidate_errors_are_aggregated`가 두 경로와 L 반환·마지막 IP를 비교한다.
+포트 내부의 `TargetError::KeepaliveFailed`는 일반 `ConnectError`와 구별한다. K 실패 뒤 다음 DNS 후보를 시도해 세션을 만들면 이 실패 경로의 “세션 없음” 조건을 놓칠 수 있기 때문이다. 같은 함수(`set_keepalive`)가 함께 켜는 `TCP_NODELAY`의 실패도 이 값이다(2026-11-06). 이 값이면 app은 후보 순회를 끝내고 대상 permit을 반환한다. 외부 사건과 `Display` 값은 기존 `connect_error`이며 새 wire 코드를 만들지 않는다. 일반 연결 오류는 나머지 후보를 계속 시도한 뒤 집계한다. 이 내부 구별은 **이 문서의 판단, 사용자 결정 없음**이다. `target_k_failure_is_terminal_but_other_candidate_errors_are_aggregated`가 두 경로와 L 반환·마지막 IP를 비교한다.
 
 DNS 후보는 반환 순서를 유지해 허용된 주소만 순차 시도한다. 한 시점에 대상 소켓은 하나다. 실패한 소켓을 닫은 뒤 다음 후보를 시도하며 같은 대상 L permit과 C를 유지한다. 재해석·자동 재접속은 하지 않는다. 기한 만료는 `connect_timeout`, 시도한 후보가 모두 연결 거절이면 `connect_refused`, 그 밖의 전부 실패는 `connect_error`다. 실패 사건의 `target_ip`는 마지막으로 시도한 IP다. 아직 시도하지 않았다면 생략한다. 금지 후보만 있으면 연결 실패가 아니라 정책 거절이다. 순차 시도는 자원 상한과 실패 원인을 단순하게 추적하기 위한 선택이다(**이 문서의 판단, 사용자 결정 없음**).
 

@@ -381,6 +381,26 @@ impl<IO: AsyncRead + AsyncWrite + Unpin> AsyncWrite for TlsIo<IO> {
         }
     }
 
+    fn poll_write_vectored(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        bufs: &[io::IoSlice<'_>],
+    ) -> Poll<io::Result<usize>> {
+        let this = self.get_mut();
+        ready!(this.poll_handshake(cx))?;
+        match this {
+            Self::Established(stream) => Pin::new(stream).poll_write_vectored(cx, bufs),
+            Self::Handshaking(_) | Self::Failed(_) => Poll::Ready(Err(not_connected())),
+        }
+    }
+
+    fn is_write_vectored(&self) -> bool {
+        match self {
+            Self::Established(stream) => stream.is_write_vectored(),
+            Self::Handshaking(_) | Self::Failed(_) => false,
+        }
+    }
+
     fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         let this = self.get_mut();
         ready!(this.poll_handshake(cx))?;
