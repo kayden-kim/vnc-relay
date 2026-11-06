@@ -8,8 +8,8 @@
 | --- | --- |
 | 대상 독자 | 대시보드 프런트엔드 구현자와 검토자 |
 | 검증 상태 | Draft |
-| 검증 환경·버전 | 작업 4.8(2026-10-22): Windows 10.0.26200 x64, PowerShell, Chrome 155.0.8059.84. Ubuntu 24.04.4 LTS x64(WSL2), Google Chrome 156.0.8078.47. 4.11·4.12절: Microsoft Edge 155.0.4283.62(Windows)도 사용했다. 4.14절: Firefox 158.0.1(WSL Ubuntu)도 사용했다. rustc는 두 OS 모두 1.99.1(`rust-toolchain.toml`). 나머지 환경은 실행할 때 기록한다 |
-| 최종 검증일 | 2026-10-22. 3.1 1단계, 3.2 1단계, 3.3 1단계, 3.4 일부를 실행했다(4절). 작업 4.10 재실행(4.5절, 커밋 `3944dc2`): WSL·Windows 게이트 모두 `ALL PASSED`. 작업 4.11(4.7절, 커밋 `5368dec`): 3.3 1단계, 3.4 SCR-002 일부, 3.5 자동 확인 일부를 실행했다. 최종 HEAD 게이트는 WSL·Windows 모두 `ALL PASSED`. 같은 절의 후속 게이트 대상 `8975537`·`06753e3`·`98b2fc1`도 WSL·Windows 모두 `ALL PASSED`. 작업 4.10·4.11 중단점 통합(4.8절, 수정·게이트 대상 `0ca9466`): WSL·Windows 게이트 모두 `ALL PASSED`. 작업 4.11 세션 시험 보강(4.9절, 커밋 `d0ef8d0`): 3.4 SCR-002 일부(DASH-016·019·022·024·025 시험)를 실행했다. 이 게이트도 WSL·Windows 모두 `ALL PASSED`. 작업 4.11 라우터 언어 시험(4.10절, 커밋 `a917eb1`): 3.4 일부(DASH-025 라우터 시험)를 실행했다. 최종 HEAD `48918d3`의 게이트도 WSL·Windows 모두 `ALL PASSED`. 작업 4.12 검토(4.11절, 수정 `5cfe4c9`·`50ae0ba`, 게이트 대상 `50ae0ba`): WSL·Windows 게이트 모두 `ALL PASSED`. 작업 4.12(4.12절, 수정 `91f3fc1`·`05f4989`·`3cf643d`, 게이트 대상 `3cf643d`): 3.3·3.4 일부를 실행했고 WSL·Windows 게이트 모두 `ALL PASSED`. 작업 4.12 후속 검토(4.13절, 수정 `f24ca68`·`6cc47a1`, 게이트 대상 `6cc47a1`): `fmt`, 토큰 대조, dashboard_browser 37건, dashboard_assets 2건을 실행했다. WSL·Windows 모두 `ALL PASSED`. 시나리오 150건: WSL 통과 24·부분 49·실패 0·미실행 0·미연결 77, Windows 통과 23·부분 49·실패 0·미실행 1(OPS-007)·미연결 77. 3.5의 사람 확인, 3.6, 3.7은 미실행. 작업 4.12 Firefox(4.14절, 2026-10-23, 기준 `154d3ec`와 요약 격자 수정 작업 트리): 37개 사례의 403회 탐색 통과, 80장 가로 넘침·CSP 위반 0건, 실제 키 입력으로 3.5 확인. 기존 모바일 표 배치 차이, Safari·실기기·스크린 리더·사람 비교는 남음. 작업 4.12 SCR-001 표 대조(4.15절, 기준 `849b0ba`와 표·연결 카드 수정 작업 트리): 토큰 대조·dashboard_assets 2건 통과, Chrome 정상 6장과 시안 대조, 가로 넘침·CSP 위반 0건. 모바일 표 첫 줄·링크·배지·설명 위치를 수정했다. 개수 배지 문구 승인과 변경 뒤 다른 브라우저·사람 확인은 남음. 사용자 결정 반영과 통합 확인(4.16절, 2026-10-23, 게이트 대상 `eecaa5b`): WSL·Windows 모두 `ALL PASSED`, 시나리오 수는 4.13절과 같다. 표 수정 뒤 Firefox·Edge 재확인(4.17절, 2026-10-23, 기준 `8f3c20f`와 표 버튼 줄바꿈 수정 작업 트리): Firefox 192회 통과, 정상 8장 가로 넘침·CSP 위반 0건. Firefox·Edge의 새 세션 링크 Tab 순서·Enter 이동 통과. 1024px 표 버튼 줄바꿈을 고쳤다(`997167c`). 게이트 대상 `0650ae5`: WSL·Windows 모두 `ALL PASSED`, 시나리오 수는 4.13절과 같다 |
+| 검증 환경·버전 | 작업 4.8(2026-10-22): Windows 10.0.26200 x64, PowerShell, Chrome 155.0.8059.84. Ubuntu 24.04.4 LTS x64(WSL2), Google Chrome 156.0.8078.47. 4.11·4.12절: Microsoft Edge 155.0.4283.62(Windows)도 사용했다. 4.14절: Firefox 158.0.1(WSL Ubuntu)도 사용했다. 4.21절: Playwright 1.64.1(Python 3.14.6)의 WebKit 27.2(Playwright 빌드 v2370, Windows)를 Safari 대체로 사용했다(Q135). rustc는 두 OS 모두 1.99.1(`rust-toolchain.toml`). 나머지 환경은 실행할 때 기록한다 |
+| 최종 검증일 | 2026-10-22. 3.1 1단계, 3.2 1단계, 3.3 1단계, 3.4 일부를 실행했다(4절). 작업 4.10 재실행(4.5절, 커밋 `3944dc2`): WSL·Windows 게이트 모두 `ALL PASSED`. 작업 4.11(4.7절, 커밋 `5368dec`): 3.3 1단계, 3.4 SCR-002 일부, 3.5 자동 확인 일부를 실행했다. 최종 HEAD 게이트는 WSL·Windows 모두 `ALL PASSED`. 같은 절의 후속 게이트 대상 `8975537`·`06753e3`·`98b2fc1`도 WSL·Windows 모두 `ALL PASSED`. 작업 4.10·4.11 중단점 통합(4.8절, 수정·게이트 대상 `0ca9466`): WSL·Windows 게이트 모두 `ALL PASSED`. 작업 4.11 세션 시험 보강(4.9절, 커밋 `d0ef8d0`): 3.4 SCR-002 일부(DASH-016·019·022·024·025 시험)를 실행했다. 이 게이트도 WSL·Windows 모두 `ALL PASSED`. 작업 4.11 라우터 언어 시험(4.10절, 커밋 `a917eb1`): 3.4 일부(DASH-025 라우터 시험)를 실행했다. 최종 HEAD `48918d3`의 게이트도 WSL·Windows 모두 `ALL PASSED`. 작업 4.12 검토(4.11절, 수정 `5cfe4c9`·`50ae0ba`, 게이트 대상 `50ae0ba`): WSL·Windows 게이트 모두 `ALL PASSED`. 작업 4.12(4.12절, 수정 `91f3fc1`·`05f4989`·`3cf643d`, 게이트 대상 `3cf643d`): 3.3·3.4 일부를 실행했고 WSL·Windows 게이트 모두 `ALL PASSED`. 작업 4.12 후속 검토(4.13절, 수정 `f24ca68`·`6cc47a1`, 게이트 대상 `6cc47a1`): `fmt`, 토큰 대조, dashboard_browser 37건, dashboard_assets 2건을 실행했다. WSL·Windows 모두 `ALL PASSED`. 시나리오 150건: WSL 통과 24·부분 49·실패 0·미실행 0·미연결 77, Windows 통과 23·부분 49·실패 0·미실행 1(OPS-007)·미연결 77. 3.5의 사람 확인, 3.6, 3.7은 미실행. 작업 4.12 Firefox(4.14절, 2026-10-23, 기준 `154d3ec`와 요약 격자 수정 작업 트리): 37개 사례의 403회 탐색 통과, 80장 가로 넘침·CSP 위반 0건, 실제 키 입력으로 3.5 확인. 기존 모바일 표 배치 차이, Safari·실기기·스크린 리더·사람 비교는 남음. 작업 4.12 SCR-001 표 대조(4.15절, 기준 `849b0ba`와 표·연결 카드 수정 작업 트리): 토큰 대조·dashboard_assets 2건 통과, Chrome 정상 6장과 시안 대조, 가로 넘침·CSP 위반 0건. 모바일 표 첫 줄·링크·배지·설명 위치를 수정했다. 개수 배지 문구 승인과 변경 뒤 다른 브라우저·사람 확인은 남음. 사용자 결정 반영과 통합 확인(4.16절, 2026-10-23, 게이트 대상 `eecaa5b`): WSL·Windows 모두 `ALL PASSED`, 시나리오 수는 4.13절과 같다. 표 수정 뒤 Firefox·Edge 재확인(4.17절, 2026-10-23, 기준 `8f3c20f`와 표 버튼 줄바꿈 수정 작업 트리): Firefox 192회 통과, 정상 8장 가로 넘침·CSP 위반 0건. Firefox·Edge의 새 세션 링크 Tab 순서·Enter 이동 통과. 1024px 표 버튼 줄바꿈을 고쳤다(`997167c`). 게이트 대상 `0650ae5`: WSL·Windows 모두 `ALL PASSED`, 시나리오 수는 4.13절과 같다. WebKit 대체 확인(4.21절, 2026-11-07, Q135, 기준 `e71dcee`와 대화상자 포커스 수정 작업 트리): 시험 페이지 396회의 CSP 검사 외 실패 0건, 실서버 6회 통과. 마우스 취소 뒤 포커스 복귀를 고쳤다. WSL·Windows 모두 `ALL PASSED`, 시나리오 153건(WSL 통과 140·부분 7, Windows 통과 136·부분 12, 두 OS 실패 0) |
 | 관련 기준 문서 | [프런트엔드 컨벤션](../conventions/frontend.md), [디자인 기준](../design/DESIGN.md), [화면 스펙](../specs/dashboard.md), [관리 API 계약 1.11절](../contracts/management-api-v1.md) |
 
 ## 1. 대상과 영향
@@ -24,7 +24,8 @@
 - [ ] 검증할 커밋을 정했고, `git status --short` 결과를 검증 기록에 적었다.
 - [ ] 고정 Rust 툴체인 1.99.1을 쓴다(`rust-toolchain.toml`).
 - [ ] Chromium(Chrome 또는 Edge)은 두 OS 모두 필수다. 실행 파일 경로를 환경 변수 `DASHBOARD_BROWSER`에 넣을 수 있다. 넣지 않으면 표준 설치 경로와 PATH에서 Chrome, 다음 Edge를 찾는다. 찾지 못하면 브라우저 시험은 실패한다(사용자 결정 2026-10-22(Q35)). 환경 변수 이름은 이 문서의 기본값이다.
-- [ ] Firefox·Safari 수동 검토에 쓸 버전을 정했다. 실제 버전은 검증 기록에 적는다(사용자 결정 2026-10-22(Q36)).
+- [ ] Firefox 수동 검토에 쓸 버전을 정했다. 실제 버전은 검증 기록에 적는다(사용자 결정 2026-10-22(Q36)).
+- [ ] Safari 대체 확인에 쓸 Playwright와 WebKit을 저장소 밖에 준비했다. 두 버전은 검증 기록에 적는다(사용자 결정 2026-11-07(Q135)).
 - [ ] (선택) Node.js와 고정 버전의 `@google/design.md`를 준비했다. 고정 버전은 검증 기록에 적는다(사용자 결정 2026-10-22(Q38)).
 - [ ] 수동 검토자와 스크린 리더 환경을 정했다.
 
@@ -162,13 +163,21 @@
 
 ### 3.7 다른 브라우저와 실기기 확인 (수동)
 
-1. Firefox와 Safari에서 3.4의 2단계와 3.5 전체를 실행한다. 실행한 브라우저의 이름과 버전을 적는다. 실행할 수 없는 브라우저는 "미실행"과 이유를 적는다(사용자 결정 2026-10-22(Q36)).
+1. Firefox에서 3.4의 2단계와 3.5 전체를 실행한다. 브라우저 이름과 버전을 적는다(사용자 결정 2026-10-22(Q36)).
 
    영향: 없음.
 
    기대 결과: 결과가 Chromium과 같다. 차이가 있으면 검증 기록에 적는다.
 
-2. 실제 모바일 기기에서 390px 폭 화면을 확인한다. 릴리스 전 한 번 실행한다(사용자 결정 2026-10-22(Q36)).
+2. Safari 대신 Playwright WebKit으로 자동 확인한다(사용자 결정 2026-11-07(Q135)). Playwright는 저장소 밖 Python 가상 환경에 설치한다. 프로젝트 의존성에 넣지 않는다. 다음 두 가지를 실행한다.
+   - `cargo xtask dashboard-serve`의 시험 페이지에서 `tests/dashboard_browser.rs`와 같은 사례를 6폭과 `lang=ko`·`lang=en`으로 연다. `data-result`, `data-failures`, CSP 위반 상세, 가로 넘침을 모은다.
+   - 루프백의 실제 `vnc-relay serve`와 실제 TCP 중계 세션으로 SCR-003 로그인 → SCR-001 → SCR-002 → 종료 취소·확인 → 로그아웃을 1280·390·320px, ko·en으로 실행한다. 필수 요소가 화면 안에 있고 가려지지 않는지 `elementFromPoint`로 확인한다.
+
+   영향: 시험 계정·설정·운영 로그를 저장소 밖 임시 폴더에 만든다. 끝나면 실행 파일 복사본과 계정 파일을 지운다.
+
+   기대 결과: 결과가 Chromium과 같다. 결과는 "WebKit 대체 확인"으로 적고 Safari 통과로 적지 않는다. 엔진 차이와 도구가 만든 현상(예: 스크린샷이 넣는 `<style>`)은 나누어 적는다.
+
+3. 실제 모바일 기기에서 390px 폭 화면을 확인한다. 릴리스 전 한 번 실행한다(사용자 결정 2026-10-22(Q36)).
 
    영향: 없음.
 
@@ -188,7 +197,7 @@
 | 폭별 시각 대조 | 6개 폭에서 가로 스크롤 0건, 차이가 스펙·디자인 기준에 맞음 | 3.4 | 부분. 작업 4.8: 미리보기 6폭 × ko·en 12장(4.1절). 작업 4.9(2026-10-22): 로그인 화면 `/login/`을 6폭 × 7장으로 찍어 42장을 얻었다(`target/dashboard-shots/<폭>/{input-ko,invalid-ko,busy-ko,failed-ko,request-failed-ko,input-en,invalid-en}.png`). 6폭 모두 `scrollWidth`와 `clientWidth`가 같았고(320 포함), CSP 위반은 0건이었다. 콘솔 오류는 가로챈 401·500 응답의 "Failed to load resource"뿐이었다. 시안과의 차이는 4.2절. 작업 4.9 재작업(4.3절)에서 같은 42장을 다시 찍었다. 6폭 모두 가로 스크롤 0건, CSP 위반 0건이었다. 4.9 기준선과는 42장 모두 바이트가 달랐다(화면을 구성 요소로 바꾼 결과). 작업 4.10(4.4절): 실제 서버에서 `/login/`(ko 입력 화면)과 `/`(ko 운영 화면)를 6폭으로 찍었다. 가로 스크롤 0건. 320 폭의 상단 막대 언어 선택은 밑줄과 가까워 사람 확인이 필요하다. 사람 비교는 4.12에서 한다. 작업 4.10 화면 상태 대조(4.6절): SCR-001 목업 21장과 1280·390·320 × ko·en × 상태 8종 48장을 대조했다. 6폭·언어 모두 가로 스크롤 0건, CSP 위반 0건. 수정 필요 6건이 나왔다(상단 막대 5건, `Unavailable` 줄바꿈 1건). 1280은 정상 상태와 빈 목록 문구만 판정했다. 작업 4.11(4.7절): SCR-002 상태 5종(SCR-001 목록, SCR-002 상세·대화상자·실패, SCR-003 로그인) × 6폭 × ko·en 60장을 찍었다. 가로 넘침 0, CSP 위반 0. 이 60장은 바이트·레이아웃 수정 전 촬영이다. 수정 뒤에는 ko 1280·390·320만 다시 찍었다. 시안 차이 4건은 4.7절과 개요 14절 차이 표에 있다. 사람 비교는 4.12에서 한다 | 검토 기록 4.1~4.7절 |
 | 키보드 | 3.5의 4개 항목 통과 | 3.5 | 부분. 작업 4.11(4.7절, 작업 트리): SCR-002에서 Tab 순서, 포커스 링 두께(2px)·간격(2px), Enter로 취소 실행, 대화상자 Escape·취소 뒤 포커스 복귀(ko·en)를 자동으로 확인했다. 대화상자 Tab 순환을 고쳤고 합성 keydown으로만 시험했다. 로그인 화면 Tab 순서(3.5의 1번)와 실제 키 입력 전체는 확인하지 않았다. 4개 항목 전체 통과가 아니다 | 검토 기록 4.7절 |
 | 스크린 리더 | 3.6의 항목 통과 | 3.6 | 미실행 | 검토 기록과 스크린 리더 이름·버전 |
-| 다른 브라우저·실기기 | 3.7 통과 또는 미실행 사유 기록 | 3.7 | 부분. Firefox 158.0.1(WSL Ubuntu)에서 3.4 2단계와 3.5를 실행했다. 403회 시나리오 탐색 통과, 캡처 80장 가로 넘침·CSP 위반 0건. 요약 격자 결함을 고쳤고, Chromium과 같은 기존 모바일 표 배치 차이는 남았다(4.14절). Safari는 macOS가 필요해 미실행. 실제 모바일 기기는 기기가 없어 미실행. Edge 155.0.4283.62의 캡처·키보드 기록은 4.11·4.12절. 표 수정 뒤 재확인(4.17절, 2026-10-23): Firefox 192회 통과, 정상 8장·Edge 정상 3장 가로 넘침·CSP 위반 0건. 두 브라우저에서 세션 ID 링크의 Tab 순서·포커스 링·Enter 상세 이동을 확인했다. 4.14절의 모바일 표 배치 차이는 수정 뒤 해소됐다. Safari·실기기 미실행 사유는 그대로다 | 4.14·4.17절과 `target/firefox-412/`, `target/firefox-417/` |
+| 다른 브라우저·실기기 | 3.7 통과 또는 미실행 사유 기록 | 3.7 | 부분. Firefox 158.0.1(WSL Ubuntu)에서 3.4 2단계와 3.5를 실행했다. 403회 시나리오 탐색 통과, 캡처 80장 가로 넘침·CSP 위반 0건. 요약 격자 결함을 고쳤고, Chromium과 같은 기존 모바일 표 배치 차이는 남았다(4.14절). Safari는 macOS가 필요해 미실행. 실제 모바일 기기는 기기가 없어 미실행. Edge 155.0.4283.62의 캡처·키보드 기록은 4.11·4.12절. 표 수정 뒤 재확인(4.17절, 2026-10-23): Firefox 192회 통과, 정상 8장·Edge 정상 3장 가로 넘침·CSP 위반 0건. 두 브라우저에서 세션 ID 링크의 Tab 순서·포커스 링·Enter 상세 이동을 확인했다. 4.14절의 모바일 표 배치 차이는 수정 뒤 해소됐다. Safari·실기기 미실행 사유는 그대로다. WebKit 대체 확인(4.21절, 2026-11-07, Q135): 시험 페이지 396회 중 CSP 검사 외 실패 0건, 실서버 6회 통과. 마우스 취소 뒤 포커스 복귀 결함을 고쳤다. 엔진 고유 CSP 보고와 Tab 링크 건너뜀은 4.21절에 나누어 적었다. 실기기 미실행 사유는 그대로다 | 4.14·4.17·4.21절과 `target/firefox-412/`, `target/firefox-417/`, `target/webkit-q135/` |
 
 ### 4.1 검토 기록 (작업 4.8, 2026-10-22)
 
@@ -1154,6 +1163,71 @@ WSL 보고서는 `177040d + 미커밋 변경`으로 표시됐다. 실행 뒤 원
 두 OS 모두 DASH-001~014·016~022·024~027은 통과했다. DASH-015는 부분이고 DASH-023은 미연결이다. 작업 4.12의 Safari·실제 모바일 기기·스크린 리더·사람의 시안 대조는 이 결과로 완료되지 않는다.
 
 최종 문서 검사 `python D:/vr-tools/tmp/doc_check.py`는 새 오류 0건(`errors_total=2 known=2 other=0`)이었다. 기존 CPY-008 링크와 TLS 표 열 수 오류, 누락된 루트 `README.md` 표시는 4.19절과 같다.
+
+### 4.21 WebKit 대체 확인 (작업 4.12, Q135, 2026-11-07)
+
+- 기록자: 에이전트 Main. 사람의 검토가 아니다. TODO 4.12는 `[ ]`로 둔다.
+- 기준: 사용자 결정 2026-11-07(Q135). Safari 확인을 Playwright WebKit 자동 확인으로 대신한다. 아래 결과는 Safari 통과가 아니라 WebKit 대체 확인이다.
+- 기준 커밋: `e71dcee`. 시작할 때 `git status --short` 출력은 비어 있었다. 최종 실행 대상은 이 커밋과 아래 포커스 복귀 수정 작업 트리다.
+- 환경: Windows 10.0.26200 x64. 저장소 밖 Python 3.14.6 가상 환경 `D:/vr-tools/webkit-q135/venv`에 Playwright 1.64.1(Apache-2.0)과 argon2-cffi 25.1.0을 설치했다. WebKit 27.2(Playwright 빌드 v2370)는 `PLAYWRIGHT_BROWSERS_PATH=D:/vr-tools/webkit-q135/browsers`에 내려받았다. 사용자 에이전트 문자열은 `Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.2 Safari/605.1.15`다. 저장소의 의존성은 바꾸지 않았다.
+
+#### 확인 방법
+
+- 시험 페이지: `cargo xtask dashboard-serve --port 18737`에서 `tests/dashboard_browser.rs`와 같은 사례를 열었다. `components.html`, `operations.html` 13개 사례, `session.html` 14개 사례, `router.html` 2개 사례는 ko·en × 6폭으로, `login.html` 6개 사례는 6폭으로 열었다. 모두 396회다. `data-result`가 `pass` 또는 `fail`이 될 때까지 기다렸다. `data-failures`, `securitypolicyviolation` 이벤트 상세, 페이지 오류, `scrollWidth <= clientWidth`를 모았다.
+- 실서버: debug 실행 파일의 복사본을 루프백 설정(관리 HTTP 18741, 상태 18742, TCP Viewer 18743, TCP Server 18744, Mode II 켬)으로 시작했다. `admin add`는 실제 터미널이 필요하다. 그래서 계정 파일은 argon2-cffi로 만든 Argon2id 해시(`m=19456,t=2,p=1`, 무작위 비밀번호)로 썼다. 실행마다 원시 TCP로 250바이트 초기 요청을 보내 활성 Mode II 세션 1개와 대기 연결 1개를 만들었다.
+- 실서버 화면 조작: 1280·390·320px × ko·en(브라우저 선호 언어 `ko-KR`·`en-US`)의 6회에서 마우스로 로그인 → SCR-001 → 행의 [상세] → [세션 종료] → [취소] → [세션 종료] → [종료 확인] → 목록 → 로그아웃을 실행했다. 각 단계의 필수 요소는 중심점의 `elementFromPoint`가 그 요소인지로 가림 여부를 판정했다.
+- 실제 키 입력: ko 1280·390px에서 Playwright `keyboard.press`로 Tab·Alt+Tab·Enter·Escape를 보냈다. DOM 합성 이벤트가 아니다.
+
+#### 결과
+
+| 확인 | 결과 |
+| --- | --- |
+| 시험 페이지 396회 | `no CSP violations` 외의 실패 0건, 페이지 오류 0건, 가로 넘침 0건. CSP 검사 실패는 아래 엔진 보고 때문이다 |
+| 실서버 6회 | 모든 단계를 마쳤다. 가림·화면 밖·크기 0 판정 0건, 가로 넘침 0건. 취소 뒤 세션이 유지되고(상세 200) 포커스가 [세션 종료]로 돌아왔다. 확인 뒤 상세는 404였고 목록에서 사라졌다. 로그아웃 뒤 보호 요소와 세션 식별자가 없었다 |
+| 실제 키 입력 | Enter로 상세에 들어갔다. Tab으로 [세션 종료]에 닿았고 Enter로 대화상자를 열었다(포커스는 대화상자 안). Tab은 취소와 종료 확인 사이를 돌았다. Escape 뒤 포커스는 [세션 종료]로 돌아왔고 세션은 유지됐다. 링크의 Tab 이동은 아래 차이 4번이다 |
+| 링크 포커스 링 | 스크립트로 포커스를 준 세션 ID 링크의 outline은 `solid 2px`였다 |
+
+#### 고친 결함: 마우스로 취소한 뒤 포커스
+
+- 증상: WebKit에서 마우스로 [세션 종료]를 눌러 대화상자를 열고 [취소]를 누르면 포커스가 `body`에 남았다. 화면 스펙 6절(닫으면 호출 버튼으로 돌린다)과 DASH-009(포커스 복귀)에 어긋난다.
+- 원인: `dialog.js`는 포커스 복원을 브라우저에 맡겼다. 브라우저는 열 때 포커스가 있던 요소로 돌린다. WebKit은 마우스로 누른 단추에 포커스를 주지 않으므로 그 요소가 `body`였다. Chromium 시험은 클릭 전에 `focus()`를 불러 이 경로를 지나지 않았다.
+- 수정: `createDialog`에 `returnFocus` 옵션을 더했다. 취소 단추는 `close()` 직후 그 요소로 포커스를 옮긴다. Escape는 브라우저가 닫으므로 `close` 이벤트에서 옮긴다. 확인과 `hide()`는 기존 동작(제목 또는 목록 이동 행동으로 이동)을 유지한다. `session.js`는 [세션 종료]를 넘긴다. 설계는 [대시보드 컴포넌트 설계](../architectures/dashboard-components.md)의 `createDialog` 행과 대화상자 선택 행에 반영했다.
+- 첫 수정판의 실패: 첫 수정판은 취소 단추도 `close` 이벤트에서 포커스를 옮겼다. 이 판의 Windows 게이트에서 `session_cancel_sends_no_request_and_restores_focus_in_browser`가 12회 모두 실패했다. Rust 실행기와 같은 인자(`--headless --virtual-time-budget=10000 --dump-dom`)로 Chrome 157.0.8103.38을 실행해 원인을 찾았다. 시험의 `wait(100)`이 끝날 때까지 `close` 이벤트가 오지 않았다(발생 0회). 포커스는 닫힌 대화상자의 [취소]에 남았다. Playwright로 연 같은 Chrome은 통과했다. 취소 단추 경로를 동기 처리로 바꾼 뒤 Rust 실행기 방식에서 ko·en, 1280·320px가 통과했다.
+- 회귀 시험: `session-scenarios.js`의 DASH-009에 포커스가 없는 상태로 열고 취소하는 검사 3개를 더했다. 수정 전 WebKit에서 `DASH-009: focus returns to terminate without a focused opener`가 실패했다. 최종 수정 뒤 WebKit 12회와 Chrome에서 통과했다. 두 OS 결과는 아래 게이트에 적는다.
+
+#### 엔진·도구 차이 (제품 결함 아님)
+
+1. `<select>`의 CSP 보고: WebKit 27.2는 `<select>`가 하나만 있어도 `style-src-attr` 위반을 보고했다. 저장소 밖 최소 페이지(`default-src 'self'`)에서 정적 `<select>`와 스크립트가 만든 `<select>`는 각 1건이었다. `<input>`·`<button>`과 빈 페이지는 0건이었다. 제품 코드에는 `style` 속성이 없다. 시험 페이지의 940건과 실서버 보고는 모두 `language-select.js`의 `createElement('select')` 줄에서 나왔다. 언어 선택의 모양은 깨지지 않았다. 그래서 FE-TBD-010 위반으로 보지 않았다. 이 문서의 판단, 사용자 결정 없음. 같은 페이지의 Chromium·Firefox 기록(4.14·4.17절)은 0건이었다.
+2. 스크린샷의 `<style>`: Playwright 스크린샷을 찍을 때마다 `style-src-elem` 위반이 1건씩 생겼다. 스크린샷 전후 비교로 확인했다. 결과에서는 이 항목을 도구 표시로 나누었다.
+3. 대기 조건의 `eval`: Playwright의 문자열 대기 조건은 페이지 CSP(`unsafe-eval` 없음)에 막혔다. 함수 형태로 바꿨고, 첫 실행 결과는 버렸다.
+4. Tab과 링크: 이 WebKit 빌드에서 Tab과 Alt+Tab(Option+Tab 대응)은 링크를 건너뛰었다. 포커스는 언어 선택 → 로그아웃 → 새로고침 → `body`만 돌았다. Safari도 기본 설정에서는 Tab이 링크를 건너뛴다 [INFERENCE: macOS에서 확인하지 않았다]. 링크의 키보드 도달은 확인하지 못했다. 스크립트로 링크에 포커스를 준 뒤의 Enter 이동만 확인했다. 제품은 표준 `a` 링크를 쓰고, Chromium·Firefox에서 Tab 도달을 확인했다(4.17절).
+5. 첫 수정판의 측정 시점: 첫 수정판에서는 취소 직후 측정하면 `close` 이벤트 전이라 포커스가 `DIALOG`로 보였다. 최종 수정판에서는 6회 모두 취소 직후 바로 [세션 종료]였고, 그때 버튼은 비활성이 아니었다.
+
+#### 관리 API 계약 6절의 Safari 항목
+
+- 기본 인증 창: `Session` 401(실서버 `/api/v1/summary`)과 `Basic` 401(로컬 대조 서버) 모두 탐색이 끝나고 JSON 본문을 보였다. 이 자동화 환경은 `Basic`에도 인증 요구로 반응하지 않으므로 대조가 성립하지 않는다. 판정하지 못했다.
+- 로그인 CSRF: 공격 페이지 `http://localhost:18747`이 기록용 전달 프록시(`127.0.0.1:18745`에서 관리 리스너로 전달)에 로그인을 시도했다. JSON `fetch`는 사전 요청 `OPTIONS`(401, CORS 헤더 없음) 뒤 `TypeError`로 막혔다. `no-cors` `text/plain` 요청은 불투명 응답을 받았고 서버 응답은 415였다. `text/plain` 폼 POST도 415였고 `Set-Cookie`가 없었다. 공격 뒤 쿠키는 0개였다. 운영 로그의 `admin_login_succeeded`는 정상 로그인 1건뿐이었다.
+- 로그인 뒤 다른 사이트 요청: 서버는 `Set-Cookie`에 `Path=/; HttpOnly; SameSite=Strict`를 보냈다. 이 WebKit 빌드는 쿠키를 `sameSite=None`으로 저장했다. 다른 사이트의 `no-cors` GET 2건(`/api/v1/summary`, `/api/v1/session`)에 쿠키를 실었고 서버는 200으로 답했다. 공격 페이지는 불투명 응답만 받았다. Chrome·Edge·Firefox 결과와 다르다. Windows용 WebKit 빌드의 쿠키 처리 한계로 추정한다 [INFERENCE: 실제 Safari에서 확인하지 않았다]. 같은 조건에서 쿠키가 실린 다른 사이트의 종료 요청은 `X-CSRF-Token`이 없어 403이었고 세션은 유지됐다. `text/plain` POST는 415였다. 상태를 바꾸는 요청은 SameSite와 별개로 막혔다.
+- 따라서 계약 6절 두 항목의 "Safari 제외" 표시는 바꾸지 않는다. WebKit 대체 확인으로는 Safari의 인증 창과 SameSite 동작을 증명하지 못했다. 이 문서의 판단, 사용자 결정 없음.
+
+#### 증거와 정리
+
+- 증거: `target/webkit-q135/`에 `results-a.json`(396회), `results-b.json`(실서버 6회), `results-auth.json`, `relay-auth-run.jsonl`, `shots/`의 PNG 36장을 두었다(FE-TBD-008). `results-a.json`, `results-b.json`, PNG는 최종 수정판으로 다시 실행한 것이다. `results-auth.json`과 `relay-auth-run.jsonl`은 첫 수정판에서 실행했다. 인증·CSRF 경로는 `dialog.js`를 쓰지 않는다. `SHA256SUMS.txt`는 40개 파일, 1,692,192바이트를 담는다. 이 목록 파일의 SHA-256은 `e5e8062782d2e19b5e33eb6c3bde8f8716a6ba23d72d3db2aebc37df94853d90`이다. 스크린샷에는 루프백 시험 서버의 세션 식별자가 보인다. 이 파일은 공유하지 않는다.
+- 도구: 저장소 밖 `D:/vr-tools/webkit-q135/`에 `check.py`, `check_auth.py`, `repro/`(최소 페이지)와 가상 환경을 둔다. 같은 폴더의 `out/`이 원본 결과이며 `target/webkit-q135/`의 파일과 해시가 같다.
+- 미리보기 서버와 시험 서버를 멈췄다. 실행 파일 복사본, 계정 파일, 설정 파일을 지웠다. 첫 실행(대기 조건 `eval` 실패)의 오류 스크린샷 6장도 지웠다.
+- 미실행: 실제 Safari, 실제 모바일 기기, 스크린 리더, 사람의 시안 비교. 이 기록으로 작업 4.12를 완료하지 않는다.
+
+#### 게이트
+
+- 첫 수정판: Windows `vr-win.ps1 -Only all`은 `FAILED (all): scenarios`로 끝났다. `dashboard_browser`의 DASH-009 시험과 `dashboard_live`의 `dashboard_001_real_overview_data_and_unavailable_values`가 실패했다. 앞의 실패는 위 "첫 수정판의 실패"다. 뒤의 시험은 단독으로 다시 실행해 통과했다(3.56초). 그 게이트가 도는 동안 WebKit 인증 확인을 세 번 실행했으므로 부하가 원인일 수 있다 [INFERENCE: 실패 출력은 남지 않았다].
+- 최종: 대상은 `e71dcee`와 이 절의 작업 트리(`dialog.js`, `session.js`, `session-scenarios.js`, 문서)다. 두 게이트를 다른 작업 없이 차례로 실행했다. 게이트 뒤에는 이 절의 기록만 고쳤다.
+
+| 환경 | 결과 | 시나리오 153건 | 보고서 생성 시각(UTC) |
+| --- | --- | --- | --- |
+| Windows | `ALL PASSED (all)` | 통과 136·부분 12·실패 0·미실행 3·미연결 2 | 2026-11-06T17:55:19Z |
+| WSL | `ALL PASSED` | 통과 140·부분 7·실패 0·미실행 4·미연결 2 | 2026-11-06T18:12:59Z |
+
+두 OS 모두 DASH-009는 통과했다(Chromium 시험과 실서버 시험). DASH-015는 부분이고 DASH-023은 미연결이다. WebKit 대체 확인은 저장소 밖 도구로 실행했으므로 시나리오 보고서에 연결하지 않았다.
 
 ## 5. 중단 조건
 
