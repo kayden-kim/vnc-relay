@@ -253,6 +253,43 @@ Linux 전용 `tests/relay_dead_peer_linux.rs`는 사용자·네트워크 네임�
 
 실행 기록 4: 2026-10-22 Ubuntu 24.04.4 LTS x86_64(WSL2, 커널 6.6.87.2-microsoft-standard-WSL2)에서 Chrome을 설치했다. `sudo`가 암호를 요구해 2절의 `sudo apt install` 명령은 실행하지 않았다. 대신 Windows에서 root 셸로 같은 .deb를 설치했다: `wsl -d Ubuntu -u root -- bash -lc 'cd /tmp && wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb && DEBIAN_FRONTEND=noninteractive apt-get install -y -q ./google-chrome-stable_current_amd64.deb'`. 받은 .deb 파일은 설치 뒤 지웠다. 설치 뒤 `command -v google-chrome`은 `/usr/bin/google-chrome`, `dpkg-query -W google-chrome-stable`은 `156.0.8078.47-1`이었다. 커밋 `df3b5b2`(작업 트리 변경 없음)에서 6단계를 다시 실행했다. 여섯 명령이 모두 종료 코드 0이었고 브라우저 테스트 2건이 통과했다. 시나리오 150건: 통과 16, 부분 23, 실패 0, 미실행 0, 미연결 111, 오류 0건. 같은 커밋의 Windows 6단계도 통과했다(통과 15, 부분 23, 미실행 1 = OPS-007, 미연결 111).
 
+### 4.1 작업 5.9 판정표
+
+결론: 두 OS 보고서의 `오류`와 `실패`는 0건이다. 보고서에 `통과`가 아닌 상태로 남은 17개 시나리오 가운데 16개는 아래 근거로 통과로 판정한다. OPS-021은 MIT LICENSE의 저작권자·적용 연도(사용자 결정 2026-11-04(Q97))가 정해지지 않아 통과로 판정하지 않는다. 그래서 AC-12와 작업 5.9는 아직 완료가 아니다.
+
+이 절의 위치와 형식은 이 문서의 판단, 사용자 결정 없음이다. 판정 규칙은 [TODO 5.9](../TODO.md#5-운영배포-검증)의 완료 조건, [테스트 컨벤션 5절](../conventions/testing.md#5-검증-명령과-통과-기준)(사용자 결정 2026-11-06(Q132)), 사용자 결정 2026-11-04(Q99)를 따른다. 보고서 도구는 바꾸지 않았다.
+
+기준 보고서는 커밋 `ee0314f`의 두 OS 전체 게이트(2026-11-07)다.
+
+| 확인 대상 | 기준 | 환경 | 결과 | 증거 |
+| --- | --- | --- | --- | --- |
+| Windows 시나리오 보고서 | `오류`·`실패` 0건 | Windows 11 Pro 10.0.26200 x64, Rust 1.99.1 | 통과. `ALL PASSED (all)`. 153건: 통과 137, 부분 11, 실패 0, 미실행 3, 미연결 2, 오류 0 | `target/scenario-report.md`(2026-11-07T09:31:01Z) |
+| Ubuntu 시나리오 보고서 | `오류`·`실패` 0건 | Ubuntu 24.04.4 LTS x64(WSL2), Rust 1.99.1 | 통과. `ALL PASSED`. 153건: 통과 140, 부분 7, 실패 0, 미실행 4, 미연결 2, 오류 0. 머리글의 `+ 미커밋 변경`은 줄 끝 차이뿐이다(`git -c core.autocrlf=true diff --exit-code` 종료 코드 0) | `~/vnc-relay-target/scenario-report.md`(2026-11-07T09:48:43Z) |
+
+보고서에 `통과`가 아닌 상태로 남은 시나리오의 판정은 다음과 같다. 보고서 열은 Windows / Ubuntu 순서다.
+
+| 시나리오 | 보고서 | 판정 | 근거 |
+| --- | --- | --- | --- |
+| DASH-015 | 부분 / 부분 | 통과 | 네 엔진의 실제 키 입력·로그인 Tab 순서·긴 값 확인([대시보드 검증 4.26절](verify-dashboard-frontend.md#426-작업-412-완료-판정-q144q146-2026-11-07), 사용자 결정 2026-11-07(Q145)). 저장소 시험 `session_cancel_sends_no_request_and_restores_focus_in_browser`는 부분 연결이다 |
+| DASH-023 | 미연결 / 미연결 | 통과 | Chrome·Edge·Firefox 마우스 흐름 18회(Q146), Safari는 WebKit 대체 6회(Q135)([같은 절](verify-dashboard-frontend.md#426-작업-412-완료-판정-q144q146-2026-11-07)). Firefox의 페이지 오류는 모으지 않았다 |
+| OPS-017 | 미실행 / 미실행 | 통과 | 무시된 시험의 실행 기록. 커밋 `509ca52`의 두 OS 정식 측정에서 세 전송 모두 통과했다(Q148 기준)([성능 측정 4절](measure-performance.md#4-검증-기록)) |
+| OPS-018 | 미실행 / 미실행 | 통과 | 같은 정식 측정에서 두 OS·세 전송 모두 통과했다([성능 측정 4절](measure-performance.md#4-검증-기록)) |
+| OPS-020 | 미연결 / 미연결 | 통과 | Windows VNC Relay와 실제 UltraVNC 1.8.3.0·noVNC 1.7.0의 아홉 조합 통과(Q128·Q130·Q131)([호환성 기록 6.3절](../contracts/repeater-compat-record.md#63-조합별-결과)). Ubuntu는 자동 시험을 증거로 인정했다(Q129)([6.6절](../contracts/repeater-compat-record.md#66-ubuntu-2404-증거)). 실제 UltraVNC와 Ubuntu VNC Relay의 조합은 미실행이다 |
+| OPS-021 | 부분 / 부분 | **미판정(통과 아님)** | 출처·의존성 고지·대시보드 JS 의존성 검토는 마쳤다([라이선스 검사 4.1절](check-dependency-licenses.md#41-출처-검토-기록-2026-11-04)). 실제 MIT 저작권자·적용 연도로 LICENSE를 쓰는 일이 사용자 결정(Q97)을 기다린다 |
+| OPS-023 | 부분 / 통과 | 통과 | Q99. Ubuntu에서 비부분 시험 `counts_connecting_and_connected_target_sockets_but_not_management_tls`가 통과했다. Windows는 큐가 찬 `listen()`이 WSAECONNREFUSED로 거절하므로 연결 중 소켓을 만들 수 없다(`tests/relay_target_scenarios.rs` 927~929행). Windows 부분 시험 `target_budget_denial_preserves_sessions_and_excludes_management_tls`는 통과했다([중계 수명 설계 7절 현재 시험](../architectures/relay-session.md#현재-시험)) |
+| OPS-031 | 부분 / 부분 | 통과 | 두 OS release 묶음의 수동 기록과 자동 시험을 함께 검토했다(Q107)([운영 how-to 4절](operate-relay.md#4-검증)). LICENSE 미완료는 그 기록에 따로 표시했다 |
+| OPS-040 | 부분 / 부분 | 통과 | 모든 조건을 부분 시험들이 나누어 확인한다. IPv6 경계는 단위 시험으로 인정했다(Q58)([파일 감지 설계](../architectures/file-watch.md#사용자-결정-반영-2026-10-23)) |
+| OPS-044 | 통과 / 미실행 | 통과 | Windows 전용 시나리오다. Windows에서 비부분 시험 `console_close_forces_cleanup`이 통과했다([작업 5.3 완료 대조](../architectures/relay-session.md#작업-53-완료-대조2026-11-04)) |
+| RLY-006 | 부분 / 부분 | 통과 | Windows VNC Relay와 실제 UltraVNC의 독립 2회 수동 통과, 소유자 캡처 검토(Q116)([수동 확인 4.1](verify-ultravnc-manually.md#41-2026-11-05-실행-기록)·[4.2](verify-ultravnc-manually.md#42-2026-11-06-실행-기록)·[4.3절](verify-ultravnc-manually.md#43-자동-증거-대조-32단계)). Ubuntu VNC Relay의 실제 UltraVNC 확인은 미실행이다. Ubuntu 쪽은 Q129처럼 자동 시험을 증거로 본다. 이 확장은 이 문서의 판단, 사용자 결정 없음이다 |
+| RLY-009 | 부분 / 통과 | 통과 | Q99. Ubuntu에서 비부분 시험이 통과했다. Windows 이유는 OPS-023과 같다(C 시간 초과에 연결 중 소켓이 필요하다). Windows 부분 시험 `connection_refusal_is_reported_and_releases_both_socket_places`는 통과했다 |
+| RLY-010 | 부분 / 부분 | 통과 | RLY-006과 같은 근거(Mode II, Server 먼저 독립 2회) |
+| RLY-011 | 부분 / 부분 | 통과 | RLY-006과 같은 근거(Mode II, Viewer 먼저 독립 2회) |
+| RLY-025 | 부분 / 통과 | 통과 | Q86·Q99. Ubuntu의 netns·nftables 비부분 시험이 통과했다. Windows에는 응답 없이 끊긴 네트워크를 root 없이 만들 수단이 없다([중계 수명 설계 bf27d30 기록](../architectures/relay-session.md#전체-게이트-실행-기록-커밋-bf27d30)) |
+| RLY-026 | 부분 / 통과 | 통과 | RLY-025와 같은 근거 |
+| WS-025 | 미실행 / 미실행 | 통과 | 무시된 시험의 실행 기록. 커밋 `d4c5678`에서 두 OS 모두 `--include-ignored`로 통과했다([WebSocket 계약 실행 기록](../contracts/websocket-relay-v1.md#계약-테스트-실행-기록)). 실제 VM의 noVNC 확인도 통과했다([호환성 기록 6.3절](../contracts/repeater-compat-record.md#63-조합별-결과)) |
+
+남은 일: Q97이 정해지면 LICENSE를 쓰고 OPS-021을 다시 판정한다. 그 뒤 PRD AC-01~36 충족과 스펙·계약의 상태 문장 갱신을 확인해 작업 5.9를 닫는다.
+
 ## 5. 중단 조건
 
 - 1단계 Build Tools 설치가 1602로 끝나면 이후 단계를 진행하지 않는다. UAC를 승인할 수 있을 때 다시 실행한다.
