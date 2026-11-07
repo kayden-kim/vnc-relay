@@ -52,7 +52,7 @@ fn wait<P: LogProcess>(process: &mut P, mut ready: impl FnMut(&P) -> bool) {
 }
 // ConPTY may encode new rows as cursor positions instead of LF and emits an
 // OSC window title. Preserve printable diagnostic text and terminal row breaks.
-fn plain(text: &str) -> String {
+pub fn plain(text: &str) -> String {
     let mut chars = text.chars();
     let mut out = String::new();
     while let Some(c) = chars.next() {

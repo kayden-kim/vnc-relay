@@ -565,11 +565,17 @@ fn console_close_forces_cleanup() {
 }
 
 fn wait_success(process: &mut pseudo_console::ConsoleProcess) -> String {
+    let (code, transcript) = wait_exit(process);
+    assert_eq!(code, 0, "console child failed: {transcript}");
+    transcript
+}
+
+/// Exit code and full transcript of a console child.
+fn wait_exit(process: &mut pseudo_console::ConsoleProcess) -> (i32, String) {
     let deadline = Instant::now() + LIMIT;
     loop {
         if let Some(code) = process.try_wait() {
-            assert_eq!(code, 0, "console child failed: {}", process.text());
-            return process.finish_output();
+            return (code, process.finish_output());
         }
         assert!(
             Instant::now() < deadline,
@@ -847,6 +853,168 @@ fn cli_prepared_admins_have_hidden_salted_credentials_and_equal_relay_rights() {
     for secret in [ALICE_PASSWORD, BOB_PASSWORD, "$argon2id$"] {
         assert!(!transcript.contains(secret), "secret in serve transcript");
         assert!(!log.contains(secret), "secret in serve log");
+    }
+}
+
+/// Makes a file read-only until dropped, so a failed assertion still lets the
+/// fixture directory be removed.
+struct ReadOnlyFile(std::path::PathBuf);
+
+impl ReadOnlyFile {
+    fn new(path: &Path) -> Self {
+        let mut permissions = std::fs::metadata(path)
+            .unwrap_or_else(|e| panic!("stat {}: {e}", path.display()))
+            .permissions();
+        permissions.set_readonly(true);
+        std::fs::set_permissions(path, permissions)
+            .unwrap_or_else(|e| panic!("set {} read-only: {e}", path.display()));
+        Self(path.to_path_buf())
+    }
+}
+
+impl Drop for ReadOnlyFile {
+    #[allow(
+        clippy::permissions_set_readonly_false,
+        reason = "clears only the read-only attribute of a test temp file on Windows"
+    )]
+    fn drop(&mut self) {
+        if let Ok(mut permissions) = std::fs::metadata(&self.0).map(|meta| meta.permissions()) {
+            permissions.set_readonly(false);
+            let _ = std::fs::set_permissions(&self.0, permissions);
+        }
+    }
+}
+
+/// The Windows console run of OPS-030, the same four failures as the Linux PTY
+/// test in `tests/admin.rs`: Ctrl+C at the first prompt, a short password, two
+/// different passwords, and a valid password twice with a read-only account
+/// file (the replacement is refused). Each run ends with its contract code and
+/// exit code, leaves the account file and the directory as they were, and
+/// prints no typed password, Argon2id marker, salt, or digest.
+/// spec: operations.md:OPS-030
+#[test]
+fn every_failed_preparation_keeps_the_account_file_and_prints_no_secret() {
+    use std::ffi::OsStr;
+    use std::fs;
+
+    const NEW_PROMPT: &str = "새 비밀번호:";
+    const CONFIRM_PROMPT: &str = "비밀번호 확인:";
+    let typed = [
+        "correct horse battery",
+        "correct horse batterz",
+        "too short",
+    ];
+    let fixture = shutdown::Fixture::new("windows-admin-failures", 1);
+    let accounts_path = fixture.config.with_file_name("admin-accounts.toml");
+    let original = fs::read(&accounts_path).unwrap_or_else(|e| panic!("read accounts: {e}"));
+    let stored = String::from_utf8_lossy(&original).into_owned();
+    let hash = stored
+        .split('"')
+        .find(|part| part.starts_with("$argon2id$"))
+        .unwrap_or_else(|| panic!("no hash in {stored}"))
+        .to_owned();
+    let hash_parts: Vec<&str> = hash.split('$').collect();
+    assert_eq!(hash_parts.len(), 6, "{hash}");
+    let secrets: Vec<&str> = typed
+        .iter()
+        .copied()
+        .chain(["$argon2id", hash_parts[4], hash_parts[5]])
+        .collect();
+    let dir = accounts_path
+        .parent()
+        .unwrap_or_else(|| panic!("no parent of {}", accounts_path.display()));
+    let listing = || {
+        let mut names: Vec<String> = fs::read_dir(dir)
+            .unwrap_or_else(|e| panic!("read {}: {e}", dir.display()))
+            .map(|entry| {
+                entry
+                    .unwrap_or_else(|e| panic!("read entry: {e}"))
+                    .file_name()
+                    .to_string_lossy()
+                    .into_owned()
+            })
+            .collect();
+        names.sort();
+        names
+    };
+    let files = listing();
+
+    // Each step is a prompt and the bytes typed after it. Each step waits for
+    // its prompt and for hidden input before typing, so a typed password never
+    // meets an echoing console.
+    type Step<'a> = (&'a str, &'a [u8]);
+    let cases: [(&str, &[Step], &str, i32); 4] = [
+        ("Ctrl+C", &[(NEW_PROMPT, b"\x03")], "input_canceled", 1),
+        (
+            "short",
+            &[(NEW_PROMPT, b"too short\r")],
+            "password_invalid",
+            1,
+        ),
+        (
+            "mismatch",
+            &[
+                (NEW_PROMPT, b"correct horse battery\r"),
+                (CONFIRM_PROMPT, b"correct horse batterz\r"),
+            ],
+            "password_mismatch",
+            1,
+        ),
+        (
+            "save",
+            &[
+                (NEW_PROMPT, b"correct horse battery\r"),
+                (CONFIRM_PROMPT, b"correct horse battery\r"),
+            ],
+            "accounts_file_write_failed",
+            5,
+        ),
+    ];
+    for (case, steps, code, exit) in cases {
+        let blocked =
+            (code == "accounts_file_write_failed").then(|| ReadOnlyFile::new(&accounts_path));
+        let mut terminal = pseudo_console::ConsoleProcess::spawn(
+            &[
+                OsStr::new("admin"),
+                OsStr::new("passwd"),
+                OsStr::new("alice"),
+                OsStr::new("--config"),
+                fixture.config.as_os_str(),
+            ],
+            false,
+        );
+        for (prompt, input) in steps {
+            terminal.wait_for(prompt);
+            terminal.helper("hidden");
+            terminal.send(input);
+        }
+        let (status, raw) = wait_exit(&mut terminal);
+        drop(blocked);
+        // ConPTY writes mode resets at the cursor on exit, sometimes inside the
+        // diagnostic line; compare the visible text.
+        let transcript = log_reopen::plain(&raw);
+        assert_eq!(status, exit, "{case}: {transcript}");
+        assert_eq!(
+            transcript.matches("error[").count(),
+            1,
+            "{case}: {transcript}"
+        );
+        assert!(
+            transcript.contains(&format!("error[{code}]")),
+            "{case}: {transcript}"
+        );
+        for secret in &secrets {
+            assert!(
+                !transcript.contains(secret),
+                "{case}: secret in ConPTY transcript: {transcript}"
+            );
+        }
+        assert_eq!(
+            fs::read(&accounts_path).unwrap_or_else(|e| panic!("read accounts: {e}")),
+            original,
+            "{case}: account file changed"
+        );
+        assert_eq!(listing(), files, "{case}: files left behind");
     }
 }
 
