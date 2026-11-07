@@ -6,7 +6,7 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 이름과 버전 | `websocket-relay` 1.1.0. 1.1.0은 새 close 코드 4011 `relay_connection_limit`을 더하고(사용자 결정 2026-11-01(Q79)), 클라이언트 Close 수신 시 전송 중 프레임 마무리 규칙(1.6절 1행, 사용자 결정 2026-11-01(Q83))과 강제 정리 시 1001 발송 및 종료 원인 보존 규칙(1.5·1.6·2.2절, 사용자 결정 2026-11-01(Q82))을 명시했다. 3절에 따른 호환 변경이다. 명확화(2026-11-07, 1.1.0 유지): 1011을 예약 코드로 적었다. 현재 구현은 1011을 보내지 않는다(사용자 결정 2026-11-07(Q152)). 클라이언트가 보는 동작은 바뀌지 않는다. 1.0.0 이력: H 시작점과 검사 순서의 명확화(사용자 결정 2026-10-22(Q22), 2026-10-22(Q24)), Repeater 초기 교환 계약 채택에 따른 4008 문장·시작 바이트 반영(사용자 결정 2026-11-01(Q71~Q73)), noVNC 1.7.0 관찰 결과 반영(2026-11-01). |
+| 이름과 버전 | `websocket-relay` 1.1.0. 1.1.0은 새 close 코드 4011 `relay_connection_limit`을 더하고(사용자 결정 2026-11-01(Q79)), 클라이언트 Close 수신 시 전송 중 프레임 마무리 규칙(1.6절 1행, 사용자 결정 2026-11-01(Q83))과 강제 정리 시 1001 발송 및 종료 원인 보존 규칙(1.5·1.6·2.2절, 사용자 결정 2026-11-01(Q82))을 명시했다. 3절에 따른 호환 변경이다. 명확화(2026-11-07, 1.1.0 유지): 1011을 예약 코드로 적었다. 현재 구현은 1011을 보내지 않는다(사용자 결정 2026-11-07(Q152)). 요청 머리의 16 KiB 상한과 HTTP 400 경계를 명시했다(사용자 결정 2026-11-07(Q156)). 종료 시 새 접속은 TCP에서 거절하고 101 전 연결은 HTTP 응답 없이 닫는다(사용자 결정 2026-11-07(Q160)). 기존 구현은 503을 보내지 않았으므로 클라이언트가 보는 동작은 바뀌지 않는다. 1.0.0 이력: H 시작점과 검사 순서의 명확화(사용자 결정 2026-10-22(Q22), 2026-10-22(Q24)), Repeater 초기 교환 계약 채택에 따른 4008 문장·시작 바이트 반영(사용자 결정 2026-11-01(Q71~Q73)), noVNC 1.7.0 관찰 결과 반영(2026-11-01). |
 | 상태 | Active(2026-10-16 채택) |
 | 소유자 | vnc-relay 프로젝트 관리자 |
 | 만드는 쪽(Producer) | 외부 WebSocket 클라이언트(요청·바이너리 메시지·Close 송신), `vnc-relay` WS·WSS 리스너(응답·바이너리 메시지·ping·Close 송신). 방향마다 만드는 쪽이 다르며, 각 절에 방향을 적는다. |
@@ -28,6 +28,7 @@
 
 | 요소 | 값·규칙 | 어긋날 때 |
 | --- | --- | --- |
+| 요청 머리 크기 | 요청 줄·헤더·끝 빈 줄을 합쳐 최대 16 KiB(16,384바이트)다. 머리 끝 위치가 정확히 16,384바이트이면 허용한다. 그 안에서 끝나지 않으면 요청 구문 단계(가)에서 거절한다(사용자 결정 2026-11-07(Q156)). | HTTP 400 |
 | 업그레이드 경로 | 요청 대상의 경로가 정확히 `/relay`여야 한다. 대소문자를 구분한다. 끝 슬래시(`/relay/`)·퍼센트 인코딩·점 세그먼트(`/./relay`)를 같은 경로로 보지 않는다. 쿼리 문자열은 해석하지 않으며 대상이나 ID 선택에 쓰지 않는다. | HTTP 404 |
 | `/api/` 요청 | 관리 API 경로(`/api/` 이하)는 WS·WSS 리스너에서 처리하지 않는다. 다른 경로와 같이 404다. 관리 리스너는 별도다([WS-R08](../specs/websocket.md#3-정상-흐름과-규칙), [WS-012](../specs/websocket.md#7-수용-테스트)). | HTTP 404 |
 | 메서드 | `GET`만 허용한다. | HTTP 405, `Allow: GET` |
@@ -47,7 +48,7 @@
 1. 접속 수락 직후: 출발지 IP 허용 목록. 실패하면 TLS·HTTP 처리 전에 연결을 닫는다. HTTP 응답은 없다.
 2. WSS: TLS 협상. 실패하면 연결이 성립하지 않는다.
 3. 요청 구문, 경로, 메서드, 업그레이드 헤더와 버전, 키. 이 단계 안의 순서는 다음과 같다(사용자 결정 2026-10-22(Q24)).
-   - 가. 요청 구문. HTTP 400이다.
+   - 가. 요청 구문과 요청 머리 크기. 머리가 16,384바이트 안에서 끝나지 않으면 HTTP 400이다(사용자 결정 2026-11-07(Q156)). 다른 구문 오류도 HTTP 400이다.
    - 나. 경로(404), 메서드(405), HTTP 버전(400).
    - 다. `Host`, `Upgrade`, `Connection` 헤더(400).
    - 라. `Sec-WebSocket-Version`(426).
@@ -167,12 +168,12 @@ Close를 보낸 뒤에는 데이터 메시지를 보내지 않는다([RFC 6455 5
 | 연결 종료(HTTP 응답 없음) | 접속 수락 시 출발지 IP가 허용 목록에 없음. WSS는 TLS 협상 전에 닫는다. 쿠키·전달 헤더로 우회할 수 없다. | [WS-014](../specs/websocket.md#7-수용-테스트), [WS-023](../specs/websocket.md#7-수용-테스트), [websocket.md 4절](../specs/websocket.md#4-오류와-종료) 넷째 행 |
 | 연결 종료(HTTP 응답 없음) | 중계 연결 상한 L 도달 시 새 접속. TLS·업그레이드 제한 시간 U 초과. | [OPS-004](../specs/operations.md#7-수용-테스트), [OPS-006](../specs/operations.md#7-수용-테스트) |
 | TLS 협상 실패(HTTP 응답 없음) | 인증서 검증 실패, TLS 1.2 미만. 평문 WS로 전환하지 않는다. | [WS-013](../specs/websocket.md#7-수용-테스트), [OPS-036](../specs/operations.md#7-수용-테스트), [websocket.md 4절](../specs/websocket.md#4-오류와-종료) 첫·둘째 행 |
-| `HTTP 400` | 요청 구문 오류, HTTP/1.0, 필수 헤더 누락·잘못된 값, `Origin` 중복, 허용되지 않는 서브프로토콜. 중계 등록·대상 연결 없음. | [WS-012](../specs/websocket.md#7-수용-테스트), [websocket.md 4절](../specs/websocket.md#4-오류와-종료) 셋째 행 |
+| `HTTP 400` | 요청 구문 오류, 요청 머리가 16,384바이트 안에서 끝나지 않음, HTTP/1.0, 필수 헤더 누락·잘못된 값, `Origin` 중복, 허용되지 않는 서브프로토콜. 중계 등록·대상 연결 없음. | [WS-012](../specs/websocket.md#7-수용-테스트), [websocket.md 4절](../specs/websocket.md#4-오류와-종료) 셋째 행 |
 | `HTTP 404` | 경로가 `/relay`가 아님. `/api/` 요청 포함. | [WS-012](../specs/websocket.md#7-수용-테스트) |
 | `HTTP 405` | `GET`이 아닌 메서드. `Allow: GET`. | [WS-012](../specs/websocket.md#7-수용-테스트) |
 | `HTTP 426` | `Sec-WebSocket-Version`이 13이 아님. `Sec-WebSocket-Version: 13`을 함께 보낸다. | [WS-012](../specs/websocket.md#7-수용-테스트) |
 | `HTTP 403` | `Origin`이 허용 값과 불일치, 또는 업그레이드 직전 출발지 IP 재검사 실패. 신규 중계 세션 없음. | [WS-015](../specs/websocket.md#7-수용-테스트), [WS-022](../specs/websocket.md#7-수용-테스트), [WS-027](../specs/websocket.md#7-수용-테스트), [websocket.md 4절](../specs/websocket.md#4-오류와-종료) 다섯째 행 |
-| `HTTP 503` | 서버가 종료 유예 중이라 새 업그레이드를 받지 않음. | [OPS-007](../specs/operations.md#7-수용-테스트) |
+| 종료 시 TCP 접속 거절 또는 연결 종료(HTTP 응답 없음) | 종료 신호를 받으면 WS·WSS 리스너를 닫는다. 새 접속은 TCP에서 거절되며 HTTP 503은 보내지 않는다. 수락된 연결이 101 전에 종료 신호를 받으면 응답 없이 닫고 `connection_aborted`(`reason` = `server_shutdown`)를 기록한다. `stage`는 WS에서 `upgrade`다. WSS는 TLS 협상 완료 전이면 `tls`, 완료 뒤면 `upgrade`다(사용자 결정 2026-11-07(Q160)). | [OPS-007](../specs/operations.md#7-수용-테스트) |
 | `HTTP 500` | 서버 내부 오류. | [operations.md 5절](../specs/operations.md#5-오류와-복구) 단일 세션 오류 행 |
 
 ### 2.2 close 코드와 스펙 오류의 대응
@@ -246,6 +247,7 @@ Close 예: 대기 시간이 W를 넘으면 서버는 코드 `4001`과 reason `wa
 | 주체·테스트 위치 | 확인할 계약 규칙 | 결과 | 실행 기록 |
 | --- | --- | --- | --- |
 | Consumer: `vnc-relay` WS·WSS 리스너 / `crates/adapters/src/upgrade.rs` 단위 테스트 `header_names_must_be_tokens`·`control_characters_in_the_head_are_refused`·`syntax_is_checked_before_the_path`·`wrong_version_is_refused_before_a_bad_key`, `crates/adapters/tests/websocket.rs` `management_paths_and_malformed_upgrades_are_refused_without_upgrade` | 1.1절 경로·메서드·헤더 검사 순서, 2.1절 HTTP 상태: [WS-012](../specs/websocket.md#7-수용-테스트)(일부) | 부분 | [실행 기록](#계약-테스트-실행-기록) |
+| Consumer: `vnc-relay` WS 리스너 / `crates/adapters/tests/websocket.rs` `request_head_accepts_16384_bytes_and_refuses_16385_bytes` | 1.1절 요청 머리 상한: 끝 빈 줄을 포함해 16,384바이트이면 101, 16,385바이트이면 400 뒤 연결 종료. 업그레이드하지 않음. [WS-012](../specs/websocket.md#7-수용-테스트)(일부) | 통과(경계 규칙, WS-012 일부) | 2026-11-07, Q153~Q158·Q160 반영 작업 트리. Windows 11 x64: `powershell -NoProfile -ExecutionPolicy Bypass -File D:/vr-tools/tmp/perf-diag/cargo.ps1 test -p vnc-relay-adapters --test websocket request_head_accepts_16384_bytes_and_refuses_16385_bytes`, 1 passed, 0 failed, 18 filtered out, 시험 0.04초. WSL Ubuntu: 저장소 루트에서 `CARGO_TARGET_DIR=~/vnc-relay-target cargo test -p vnc-relay-adapters --test websocket request_head_accepts_16384_bytes_and_refuses_16385_bytes`, 1 passed, 0 failed, 18 filtered out, 시험 0.04초. 두 명령 모두 종료 코드 0. |
 | Consumer: `vnc-relay` WS·WSS 리스너 / `crates/adapters/tests/websocket.rs` `disallowed_source_is_closed_before_tls_or_http_even_with_session_hints`, `disallowed_source_on_wss_is_closed_before_tls_and_holds_no_relay_place`, `stalled_upgrade_request_is_closed_at_u_without_a_reply`, `stalled_tls_handshake_on_wss_is_closed_at_u_without_a_reply`, `head_completed_after_u_gets_no_answer`; `tests/serve.rs` `initial_tls_and_upgrade_deadlines_have_distinct_causes_and_release_capacity`, `every_relay_entry_point_accepts_only_its_own_source_ip` | 1.1절 출발지 IP 검사 순서와 제한 시간 U 뒤 연결 종료: [WS-014](../specs/websocket.md#7-수용-테스트), [WS-023](../specs/websocket.md#7-수용-테스트)(WSS), [WS-022](../specs/websocket.md#7-수용-테스트)(`tests/reload.rs` `removed_source_is_refused_at_upgrade_on_connections_opened_before_the_removal`). 실행파일 시험은 [OPS-006](../specs/operations.md#7-수용-테스트)(비부분)의 H·TLS·업그레이드 시간 제한, Close 4009와 원인·자원 회수를 확인한다. 다른 실행파일 시험은 네 진입점의 독립된 허용 목록을 모두 확인한다([OPS-037](../specs/operations.md#7-수용-테스트), 비부분). | 통과 | 커밋 `534d4f7`의 두 OS 게이트에서 WS-014·WS-022·WS-023·OPS-006·OPS-037이 모두 통과했다. [실행 기록](#계약-테스트-실행-기록) |
 | Consumer: `vnc-relay` WSS 리스너 / `crates/adapters/tests/websocket.rs` `expired_untrusted_and_mismatched_certificates_fail_the_client_on_wss`, `tls10_and_tls11_are_refused_and_tls12_and_tls13_succeed_on_wss_and_management` | 2.1절 TLS 협상 실패 행: 만료·신뢰되지 않음·호스트 불일치 인증서는 검증 클라이언트가 협상을 거절한다. TLS 1.0·1.1 접속은 HTTP 응답 없이 닫히고, TLS 1.2 이상은 협상이 성립한다. 평문으로 전환하지 않는다. [WS-013](../specs/websocket.md#7-수용-테스트), [OPS-036](../specs/operations.md#7-수용-테스트)(WSS) | 통과 | [실행 기록](#계약-테스트-실행-기록) |
 | Consumer: `vnc-relay` WS·WSS 리스너 / `crates/adapters/tests/websocket.rs` `origin_must_equal_the_allowed_value`, `origin_must_equal_the_allowed_value_on_wss`, `allowed_source_with_disallowed_origin_is_refused_with_403`, `allowed_source_with_disallowed_origin_is_refused_with_403_on_wss`, `allowed_client_without_origin_or_session_gets_switching_protocols` | 1.3절 Origin 비교: [WS-015](../specs/websocket.md#7-수용-테스트), [WS-027](../specs/websocket.md#7-수용-테스트)(WS·WSS), [WS-021](../specs/websocket.md#7-수용-테스트)(일부) | 부분 | [실행 기록](#계약-테스트-실행-기록) |

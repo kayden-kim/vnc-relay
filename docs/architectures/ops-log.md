@@ -1,6 +1,6 @@
 # 운영 로그 모듈 설계
 
-운영 로그 사건을 JSON Lines로 표준 출력이나 로그 파일에 쓰는 구조를 다룬다. 사건의 종류와 `level`은 app이, 줄 형식과 출력은 adapters가 맡는다. 작업 2.3은 [운영 정보 계약](../contracts/ops-info-v1.md)의 공통 규칙(1.1~1.4절), 중계 ID 참조 값(1.9절), 상대 주소 표기(1.10절), 로그에 넣지 않는 값(1.11절)을 구현한다. 사건은 시작·준비·종료 단계 사건과 설정 경고만 만든다. 접속·대기·세션·재로드·관리자 사건은 각 기능 작업이 같은 사건 타입에 더한다.
+운영 로그 사건을 JSON Lines로 표준 출력이나 로그 파일에 쓰는 구조를 다룬다. 사건의 종류와 `level`은 app이, 줄 형식과 출력은 adapters가 맡는다. [운영 정보 계약](../contracts/ops-info-v1.md)의 공통 규칙(1.1~1.4절), 중계 ID 참조 값(1.9절), 상대 주소 표기(1.10절), 로그에 넣지 않는 값(1.11절)을 구현한다. app의 `Event`는 시작·준비·종료·설정 경고와 접속·대기·세션·재로드·관리자 사건을 정의한다.
 
 | 항목 | 값 |
 | --- | --- |
@@ -28,10 +28,10 @@
   - `peer_ip` 표기(1.10절): IPv4-mapped IPv6 주소는 IPv4로 바꾼다. IPv6는 RFC 5952 소문자 축약형이다. 포트와 영역 식별자는 쓰지 않는다.
   - 로그에 넣지 않는 값(1.11절)을 타입으로 막는다. 사건 필드에 원시 바이트·비밀 타입을 받지 않는다. 중계 ID는 `RelayIdRef`로만 사건에 들어간다.
 - 맡지 않는 책임:
-  - 대기·매칭·세션·재로드·관리자 사건. 각 기능 작업이 `Event`에 변형을 더한다. 접속 수락·거절·중단 사건은 작업 2.4가 더했다([TCP 진입점 모듈 설계](tcp-entry-point.md)). 작업 2.5가 `relay_connection_limit`(`limit` 필드)과 `handshake_timeout`·`peer_eof`·`connection_error`(`error_kind` 필드)를 더했다([연결 상한과 시간 제한 모듈 설계](connection-limits.md)). 작업 2.6이 `server_ready`(`listeners` 필드)와 `admin_connection_limit`을 더했다([상태 리스너와 준비 상태 모듈 설계](status-listener.md)). 그 사건의 나머지 `stage`·`reason` 값도 그 값을 만드는 작업이 더한다.
-  - `shutdown_started`·`shutdown_forced`. 종료 유예를 만드는 작업 5.3이 맡는다.
+  - 대기·매칭·세션·재로드·관리자 사건을 만드는 시점. 각 기능이 `crates/app/src/events.rs`의 `Event`를 기록한다. 접속 수락·거절·중단 사건은 작업 2.4가 더했다([TCP 진입점 모듈 설계](tcp-entry-point.md)). 작업 2.5가 `relay_connection_limit`(`limit` 필드)과 `handshake_timeout`·`peer_eof`·`connection_error`(`error_kind` 필드)를 더했다([연결 상한과 시간 제한 모듈 설계](connection-limits.md)). 작업 2.6이 `server_ready`(`listeners` 필드)와 `admin_connection_limit`을 더했다([상태 리스너와 준비 상태 모듈 설계](status-listener.md)). 이 모듈은 각 사건의 줄 형식과 출력을 맡는다.
+  - `shutdown_started`·`shutdown_forced`를 기록하는 시점. `serve`의 `begin_relay_shutdown`과 `RelayService`가 맡는다([중계 수명 설계 5.2절](relay-session.md#52-정상-종료와-g), 작업 5.3 완료).
   - `server_ready`를 기록하는 시점. 준비 상태를 바꾸는 [상태 리스너와 준비 상태 모듈 설계](status-listener.md)가 맡는다. 이 모듈은 줄 형식만 맡는다.
-  - 프로세스 시작 때 `RelayIdKey`를 만드는 일과 그 실패 처리, `relay_id_ref`를 실제 사건에 넣는 일. 중계 ID를 처음 다루는 작업 2.9가 맡는다(사용자 결정 2026-10-20).
+  - 프로세스 시작 때 `RelayIdKey`를 만드는 일과 그 실패 처리, `relay_id_ref`를 실제 사건에 넣는 일. 작업 2.9에서 구현했다. 키 생성 실패는 리스너 바인드 전에 `runtime_unavailable`(종료 코드 1)로 끝난다(사용자 결정 2026-11-01(Q76), [중계 수명 설계 5.1절](relay-session.md#51-프로세스-시작과-키)).
   - `accounts_file_permissive` 경고. 운영 정보 계약의 사건이 아니며 stderr에만 쓴다([`serve` 시작 모듈 설계](serve-startup.md)).
 - 다른 모듈에 공개하는 기능:
   - `vnc_relay_domain::peer_ip::PeerIp`
@@ -176,4 +176,4 @@ flowchart LR
 
 | 항목 | 영향 | 확정 위치 |
 | --- | --- | --- |
-| `RelayIdKey` 생성 실패의 시작 처리 | 오류 코드와 종료 코드가 없다. | 작업 2.9 |
+| (해결) `RelayIdKey` 생성 실패의 시작 처리 | 리스너 바인드 전에 멈추고 확보한 자원을 회수한다. `runtime_unavailable`(종료 코드 1)로 끝낸다. | TODO 2.9 완료, 사용자 결정 2026-11-01(Q76), [중계 수명 설계 5.1절](relay-session.md#51-프로세스-시작과-키) |

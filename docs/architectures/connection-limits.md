@@ -24,9 +24,9 @@
   - K: 수락한 중계 소켓마다 TCP keepalive의 유휴 시간·탐색 간격·탐색 횟수를 설정한다. Linux 소켓 I/O의 `ETIMEDOUT`(`io::ErrorKind::TimedOut`)과 앞선 ICMP 도달 불능에 따른 포기 오류 `EHOSTUNREACH`(`io::ErrorKind::HostUnreachable`)·`ENETUNREACH`(`io::ErrorKind::NetworkUnreachable`)는 keepalive 또는 재전송 포기로 판정한 응답 없는 상대다. `net::classify_socket_error`는 이를 `RelayStreamError::DeadConnection`으로 바꾼다. ICMP 사례는 Linux 커널 소스 분석에 근거하며 실행으로 직접 관찰한 것은 아니다. 이는 이 문서의 구현 판단이며 사용자 결정은 아니다. `TcpRelayStream`은 수락·Mode I 대상 소켓에, `WsRelayStream`은 WS·WSS의 하부 전송 I/O에 같은 판정을 쓴다. app의 H·C·W 타이머에는 적용하지 않는다. Windows 오류 코드는 관찰하지 않았으므로 추정해 추가하지 않는다.
 - 맡지 않는 책임:
   - Lm의 판정과 거절 기록. 수락 판정은 `admission.rs`의 `AdmittingListener`가 맡고, 상태·관리 리스너가 쓴다([상태 리스너와 준비 상태 모듈 설계](status-listener.md), [관리 리스너 모듈 설계](management-listener.md)). 관리 리스너는 작업 4.2에서 같은 Lm 예산을 쓴다.
-  - Lw의 사용처. 작업 2.9(대기 등록)가 같은 `ConnectionBudget`으로 연결한다. 그 전까지 Lw 예산을 만들지 않는다.
+  - Lw의 사용처. 작업 2.9에서 대기 등록에 연결했다. `crates/app/src/relay/matching.rs`가 `runtime.waiting_budget.try_acquire()`로 같은 `ConnectionBudget`의 자리를 잡는다.
   - Mode I 대상 소켓의 L 집계. 작업 2.8이 대상 연결 전에 같은 L 예산에서 자리를 잡는다(OPS-023).
-  - 끊긴 연결의 판정과 회수(`dead_connection`). keepalive가 끊긴 연결을 운영체제 오류로 알리면 그 연결을 다루는 단계가 처리한다. 대기·활성 연결의 처리와 RLY-025~027 확인은 작업 2.11이 맡는다.
+  - 끊긴 연결의 판정과 회수(`dead_connection`). keepalive가 끊긴 연결을 운영체제 오류로 알리면 그 연결을 다루는 단계가 처리한다. 대기·활성 연결의 처리와 RLY-025~027은 작업 2.11에서 구현·검증했다. OS별 증거 범위는 [작업 5.9 판정표](../how-to/set-up-and-verify.md#41-작업-59-판정표)를 따른다.
   - 바이트를 보낸 뒤 닫은 연결의 판정과 초기 교환 읽기·해석. `RelayService::handle_connection`(app)이 맡는다. 이 문서는 그 단계의 H 시간과 자리 반환 규칙만 정한다.
 - 다른 모듈에 공개하는 기능:
   - `vnc_relay_domain::budget::{ConnectionBudget, BudgetPermit}`

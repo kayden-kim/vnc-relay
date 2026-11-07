@@ -179,13 +179,13 @@ flowchart LR
 | 항목 | 현재 코드(파일·심볼) | 목표 설계 | 전환 계획 |
 | --- | --- | --- | --- |
 | 파일 변경 감지 | `crates/adapters/src/file_watch.rs` `ReloadWatcher::run`, `attach`, `episode`. 알림 수신은 `file_watch/feed.rs`. | §2, §4의 `ReloadWatcher::run` | 작업 5.2에서 구현했다 |
-| 시작 단계 (3) 파일 변경 감지 준비 | `src/serve.rs`의 감시 시작. 실패하면 `watch_unavailable`을 쓴다. | §5 | 작업 5.2에서 구현했다. 정상 종료 중 중지는 작업 5.3 |
+| 시작 단계 (3) 파일 변경 감지 준비 | `src/serve.rs`의 감시 시작. 실패하면 `watch_unavailable`을 쓴다. | §5 | 작업 5.2에서 준비를, 작업 5.3에서 정상 종료 중 중지를 구현했다. |
 | 재로드 판정과 적용 | `crates/app/src/reload/service.rs` `ReloadService::handle_config`(설정 파일 후보), `handle_unreadable`(읽을 수 없음·UTF-8 아님). 재시작 필요 비교는 `restart_required_keys`. | §4의 `ReloadService::on_change`(구현에서 두 함수로 나눔) | 작업 5.2에서 구현했다 |
 | 허용 목록 스냅샷 | `crates/app/src/reload/snapshot.rs` `ReloadSnapshot`, `ReloadCell`(`RwLock<Arc<…>>`). `crates/adapters/src/net.rs` `AllowSource`가 판정 때마다 셀에서 현재 값을 읽는다. | §3의 `ReloadSnapshot` | 작업 5.2에서 구현했다 |
 | TLS 교체 | `crates/adapters/src/tls.rs` `acceptor_from_pem`(검증한 바이트로 수락기 생성), `RustlsTlsStore`(후보 검사). 교체는 `ReloadCell`이 한다. | 검증한 바이트로 수락기를 만드는 함수와 스냅샷 값 | 작업 5.2에서 구현했다. [TLS 모듈 설계](tls.md) 8·9절을 갱신했다 |
 | 설정 파싱 재사용 | 재로드 후보 파싱에 `config_file::parse`를 쓴다(`file_watch.rs`). | `parse`를 재로드 후보에도 쓴다 | 작업 5.2에서 구현했다 |
 | 재로드 사건 | `crates/app/src/events.rs` `ReloadChangeDetected`·`ReloadApplied`·`ReloadRejected`·`ReloadRestartRequired`·`ReloadWatchFailed`. 줄 형식은 `crates/adapters/src/ops_log.rs`. | §4.2, §6의 사건 | 작업 5.2에서 구현했다. `reload_watch_failed`의 자동 바이너리 시험은 없다(수동 스모크에서 관찰) |
-| 정상 종료 중 새 후보 중지 | `is_current`(`file_watch.rs`)가 교체 직전에 중지 신호와 세대를 본다. 종료 순서 전체는 없다. | §5 | 작업 5.3 |
+| 정상 종료 중 새 후보 중지 | `is_current`(`file_watch.rs`)가 교체 직전에 중지 신호와 세대를 본다. `src/serve.rs`의 `listen_until_shutdown`은 종료 상태 전이 뒤 중지 신호를 보내고, 중계 정리 뒤 감시 작업을 join한다. | §5 | 작업 5.3에서 구현했다. |
 
 ## 9. 결정 기록과 미결정 사항
 

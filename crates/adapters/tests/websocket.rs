@@ -799,6 +799,32 @@ async fn ws_and_wss_check_only_their_own_allow_lists() {
 
 /// spec: websocket.md:WS-012 partial
 #[tokio::test]
+async fn request_head_accepts_16384_bytes_and_refuses_16385_bytes() {
+    let running = start(EntryPoint::WsViewer, None, &["127.0.0.1/32"], &[], UPGRADE).await;
+    let empty_padding_len = upgrade_request("/relay", &["X-Padding: "]).len();
+    for head_bytes in [16_384, 16_385] {
+        let padding = format!("X-Padding: {}", "x".repeat(head_bytes - empty_padding_len));
+        let request = upgrade_request("/relay", &[&padding]);
+        assert_eq!(request.len(), head_bytes, "includes the ending blank line");
+
+        if head_bytes == 16_384 {
+            let head = plain_head(running.addr, &request).await;
+            assert!(head.starts_with(b"HTTP/1.1 101 "));
+            assert_eq!(status_of(&head), 101, "the exact limit upgrades");
+        } else {
+            let reply = refused(running.addr, &request).await;
+            assert_eq!(status_of(&reply), 400, "one extra byte is refused");
+            assert_eq!(
+                reply,
+                b"HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+                "the connection closes after the refusal with no upgrade or frame"
+            );
+        }
+    }
+}
+
+/// spec: websocket.md:WS-012 partial
+#[tokio::test]
 async fn management_paths_and_malformed_upgrades_are_refused_without_upgrade() {
     let running = start(
         EntryPoint::WsViewer,

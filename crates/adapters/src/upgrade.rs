@@ -13,9 +13,9 @@ use vnc_relay_domain::origin::Origin;
 /// Size of each read while the request head is collected.
 const READ_CHUNK: usize = 1024;
 
-/// Largest request head accepted, in bytes, blank line included. A head
-/// that does not end within this size is refused with 400. The contract is
-/// silent on a limit; this value is an implementation choice.
+/// Largest request head accepted, in bytes, blank line included
+/// (websocket-relay-v1 §1.1, user decision 2026-11-07(Q156)).
+/// A head that does not end within this size is refused with 400.
 pub(crate) const HEAD_LIMIT: usize = 16 * 1024;
 
 /// The only path of the relay endpoint (websocket-relay-v1 §1.1). A query

@@ -28,7 +28,7 @@ TCP Viewer·TCP Server 진입점이 접속을 수락하고, 데이터를 읽기 
   - L 예산·H·keepalive 값의 규칙. [연결 상한과 시간 제한 모듈 설계](connection-limits.md)가 맡는다. 끊긴 연결의 판정(`dead_connection`)은 작업 2.11이 맡는다.
   - WS·WSS 진입점. 작업 3.2가 같은 허용 판정과 `conn_id`를 쓴다. 101 응답까지의 TLS·업그레이드 처리는 [WebSocket 진입점 모듈 설계](websocket-entry-point.md)가 맡는다. 작업 3.2는 101 응답까지의 처리를 맡았고(사용자 결정 Q16), 101 뒤의 중계는 [WS 스트림 어댑터 설계](websocket-stream.md)와 공통 서비스가 맡는다. 상태 리스너의 연결 수락은 [상태 리스너와 준비 상태 모듈 설계](status-listener.md)가, 관리 리스너의 연결 수락은 [관리 리스너 모듈 설계](management-listener.md)가 맡는다.
   - 재로드 뒤 새 허용 목록 적용. 작업 5.2가 맡았다. 진입점은 판정 때마다 `AllowSource`(`crates/adapters/src/net.rs`)로 현재 스냅샷의 허용 목록을 읽는다.
-  - 종료 유예 G와 신규 접속 중지 시점의 세부 규칙. 작업 5.3이 맡는다.
+  - 종료 유예 G와 신규 접속 중지 시점의 세부 규칙. 작업 5.3에서 구현했다. [중계 수명 설계 5.2절](relay-session.md#52-정상-종료와-g)이 설명한다.
 - 다른 모듈에 공개하는 기능:
   - `vnc_relay_domain::allow_list::AllowList::permits`
   - `vnc_relay_domain::entry_point::{Role, EntryPoint::role}`
@@ -147,4 +147,4 @@ TCP 경로는 2~4절과 같다. `hold`와 `closed_before_data`는 제거했다(`
 
 | 항목 | 영향 | 확정 위치 |
 | --- | --- | --- |
-| Windows의 이중 스택 리스너와 종료 때 보류 연결 정리 | 이중 스택 테스트는 Linux 전용이다. Windows는 `[::]` 리스너가 기본으로 IPv6만 받는다. 종료 정리 테스트는 Unix 신호로 종료를 요청하므로 Windows에서 실행하지 않았다. | 작업 5.3(Windows 종료 신호 처리 확인) |
+| Windows의 이중 스택 리스너 검증 범위 | 이중 스택의 IPv4 상대 주소 시험(`tests/serve.rs`의 `checks_an_ipv4_peer_of_a_dual_stack_listener_against_ipv4_items`)은 Linux 전용이다. Windows의 같은 경로는 검증하지 않았다. 종료 때 미완성 연결 정리는 별개다. Windows의 `tests/windows_console.rs` `stop_unfinished_work`가 확인하며, Ctrl+C·Ctrl+Break 정상 종료 시험도 있다. | 종료 정리는 TODO 5.3 완료, 게이트 `de693ad`([완료 대조](relay-session.md#작업-53-완료-대조2026-11-04)). Windows 이중 스택 시험 부재는 별도 검증 범위다. |

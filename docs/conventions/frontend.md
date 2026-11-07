@@ -90,7 +90,7 @@ web/dashboard/
 - 제공 경로, 원본 파일, `Content-Type`을 한 Rust 파일의 표에 적는다. 표에 없는 파일은 넣지 않는다.
 - `Content-Type`은 확장자로 정한다: `text/html; charset=utf-8`, `text/css; charset=utf-8`, `text/javascript; charset=utf-8`, `font/woff2`.
 - 표 대조 테스트는 `login/`과 `app/`을 걸어 실제 파일 목록과 표를 비교한다. 표에 없는 파일이나 표에만 있는 항목이 있으면 실패한다. 제공 표에 `preview/`나 `tests/` 경로가 있어도 실패한다.
-- 정적 응답에는 계약 1.11절의 헤더를 붙인다. `Cache-Control: no-store`는 계약이 보호된 정적 응답에 붙인다고 정했다. `Content-Security-Policy: default-src 'self'; frame-ancestors 'none'`은 필수다(사용자 결정 2026-10-22(Q37)). `X-Content-Type-Options: nosniff`와 `Referrer-Policy: no-referrer`는 계약에서 권장이다. 로그인 화면 응답에도 `Cache-Control: no-store`를 붙인다(이 문서의 기본값, 사용자 결정 아님).
+- 정적 응답에는 계약 1.11절의 헤더를 붙인다. `Cache-Control: no-store`는 보호된 정적 응답과 로그인 화면 응답 모두에 붙인다(사용자 결정 2026-11-07(Q155)). `Content-Security-Policy: default-src 'self'; frame-ancestors 'none'`은 필수다(사용자 결정 2026-10-22(Q37)). `X-Content-Type-Options: nosniff`와 `Referrer-Policy: no-referrer`는 계약에서 권장이다.
 - 내장 방법은 `include_bytes!` 표와 대조 테스트다(사용자 결정 2026-10-22(Q33)). `build.rs`와 외부 crate는 쓰지 않는다.
 
 ### 1.3 HTML·CSS·JavaScript 작성 규칙

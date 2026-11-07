@@ -30,7 +30,7 @@
   - TLS 설정 읽기, 인증서 적재, TLS 1.2 판정 규칙([TLS 모듈 설계](tls.md)).
   - L·H·U의 값과 예산 규칙([연결 상한과 시간 제한 모듈 설계](connection-limits.md)).
   - 평문 WS 시작 경고. 설정 검사가 `ConfigWarning::PlaintextWsEnabled`를 만들고 운영 로그가 쓴다([운영 로그 모듈 설계](ops-log.md)). 이 모듈은 쓰지 않는다.
-  - 허용 목록 재로드(작업 5.2). 이 모듈은 판정 때마다 `AllowSource`로 현재 목록을 읽는다. 종료 유예 503(작업 5.3).
+  - 허용 목록 재로드(작업 5.2). 이 모듈은 판정 때마다 `AllowSource`로 현재 목록을 읽는다.
 - 다른 모듈에 공개하는 기능:
   - `vnc_relay_adapters::websocket::{WsEntryPoint, WsPolicy}`: `serve`가 진입점을 만들고 띄운다.
   - `vnc_relay_domain::origin::Origin`: 허용 Origin 값과 비교([설정 계약 1.4절](../contracts/config-v2.md#14-origin-값-문법과-비교)).
@@ -125,7 +125,7 @@ flowchart LR
 - 소유자: `WsEntryPoint`가 리스너, TLS 수락기(`Option`), `WsPolicy`를 소유한다. `run`이 만든 공유 상태(로그, 정책, TLS 수락기)를 연결 작업마다 넘긴다.
 - 연결 상태: 연결 작업 하나가 `Wire`, 자리(`BudgetPermit`), 수락 정보(`conn_id`, `peer_ip`, 수락 시각)를 가진다. 자리는 연결 작업이 끝날 때 돌려준다. 101 뒤에도 H가 끝날 때까지 자리를 쥔다.
 - 동시 실행: 진입점마다 접수 반복 하나가 돈다. 연결마다 작업 하나가 돈다. 한 연결의 사건은 그 작업이 순서대로 쓴다. `connection_accepted`는 같은 연결의 다른 사건보다 먼저 나온다.
-- 멈춤: 멈춤 신호를 받으면 새 접수를 멈추고 리스너를 닫는다. 업그레이드 전 연결은 응답 없이 닫고 `connection_aborted`(`server_shutdown`)를 쓴다. 101 뒤 연결은 Close 1001을 보낸다. 종료 유예 503은 아직 없다(9절).
+- 멈춤: 멈춤 신호를 받으면 새 접수를 멈추고 리스너를 닫는다. 새 접속은 TCP에서 거절되며 HTTP 503은 보내지 않는다. 101 전 연결은 응답 없이 닫고 `connection_aborted`(`reason` = `server_shutdown`)를 쓴다. `Wire::stage`에 따라 WS는 `upgrade`, WSS는 TLS 협상 완료 전 `tls`, 완료 뒤 `upgrade`다(사용자 결정 2026-11-07(Q160)). 101 뒤 연결의 Close 1001 조건은 [WebSocket 계약 1.6절](../contracts/websocket-relay-v1.md#16-종료-의미)을 따른다.
 - `ConnId`는 TCP 진입점과 같은 프로세스 전역 카운터다([TCP 진입점 모듈 설계 5절](tcp-entry-point.md#5-상태와-초기화)).
 
 ## 6. 오류 처리
@@ -205,14 +205,14 @@ flowchart LR
 | 항목 | 영향 | 확정 위치 |
 | --- | --- | --- |
 | 1. (해결, 638cf09) 101 뒤 프레임 읽기와 초기 교환 | 이전 상태: 상대 종료(EOF)를 H가 지나기 전에는 알 수 없었고 101 뒤 바이트 처리 규칙이 없었다. 공통 서비스 입력으로 넘기며 해소되었다. | 638cf09 wiring |
-| 2. 101 전 서버 멈춤 응답 | 계약 2.1절은 종료 유예 503을 말한다. 지금은 응답 없이 닫는다. 종료 유예(OPS-007)는 아직 없다. | 작업 5.3 |
+| 2. (해결) 101 전 서버 멈춤 응답 | 종료 신호를 받으면 WS·WSS 리스너를 닫아 새 접속을 TCP에서 거절한다. HTTP 503은 보내지 않는다. 101 전 연결은 응답 없이 닫고 `connection_aborted`(`reason` = `server_shutdown`)를 쓴다. `stage`는 WS에서 `upgrade`, WSS에서 TLS 협상 완료 전 `tls`, 완료 뒤 `upgrade`다(`connection`, `Wire::stage`). | 사용자 결정 2026-11-07(Q160), WebSocket 계약 2.1절 |
 | 3. (해결) 검사 순서 | 구문, 경로, 메서드, HTTP 버전, 헤더, 버전, 키 순서는 계약 1.1절 3번의 가~마 항목을 따른다. 두 결함이 함께 있는 요청은 순서에 따라 응답 코드가 바뀐다(예: 경로 오류와 구문 오류, 버전 오류와 키 오류). | 사용자 결정 2026-10-22(Q24) |
-| 4. 머리 상한 16 KiB | 계약이 상한을 정하지 않았다. 상한을 바꾸면 큰 머리를 보내는 클라이언트의 동작이 바뀐다. | 계약 1.1절 보강 또는 사용자 확인 |
+| 4. (해결) 머리 상한 16 KiB | 요청 줄·헤더·끝 빈 줄을 포함해 최대 16,384바이트다. 끝 위치가 정확히 16,384바이트이면 허용한다. 그 안에서 끝나지 않으면 요청 구문 단계(가)에서 HTTP 400으로 거절한다. 기존 구현을 유지한다. | 사용자 결정 2026-11-07(Q156), WebSocket 계약 1.1절 |
 | 5. (해결, 638cf09) 머리 뒤 바이트 버림 | 이전 상태: 머리 뒤 바이트를 버렸다. `suffix`를 보존해 공통 서비스에 넘긴다. | 638cf09 wiring |
-| 6. WSS 협상 실패 기록 | WS-013 실패는 `connection_aborted`(`tls_failed`)를 쓴다. 관리 리스너는 버전이 아닌 TLS 실패를 기록하지 않는다(사용자 결정 2026-10-21, Q13). 두 진입점의 기록 방식이 다르다. | 사용자 확인 |
-| 7. Close 4009의 운영 로그 열 | [WebSocket 계약 2.2절](../contracts/websocket-relay-v1.md#22-close-코드와-스펙-오류의-대응)의 4009 행은 운영 로그 열을 "해당 없음"으로 둔다. [운영 정보 계약 1.6절](../contracts/ops-info-v1.md)은 `handshake_timeout`을 `connection_aborted`에 쓴다고 한다. 코드는 운영 정보 계약을 따른다. | 계약 2.2절 보강 |
-| 8. WS-022, WS-024, WS-025 테스트 | WS-022의 업그레이드 시점 조건(제거된 출발지의 업그레이드 거절)은 `tests/reload.rs` `removed_source_is_refused_at_upgrade_on_connections_opened_before_the_removal`이 확인한다(작업 5.2, 부분). 중계 중 제거와 WS-025는 2.7 뒤에 검증한다. WS-024의 기본 꺼짐과 시작 경고는 `tests/serve.rs`의 `plaintext_ws_listener_is_off_by_default_and_warns_at_start_when_enabled`가 확인한다(WS-024 전부). 재로드 때의 전체 허용 경고는 `tests/reload.rs`의 `all_source_allow_warns_at_reload_and_an_empty_list_refuses_everyone`이 확인한다(OPS-038 완전. 같은 시험의 OPS-025 조항은 부분이다). WS-015와 WS-027은 WS와 WSS 모두 접속 테스트가 있다(검토 결함 5번). | 작업 2.7(WS-022 나머지, WS-025). 작업 5.2는 WS-022 업그레이드 시점 부분을 마쳤다. |
+| 6. (해결) WSS 협상 실패 기록 | WSS의 모든 TLS 협상 실패는 `connection_aborted`(`tls_failed`)로 기록한다. 관리 리스너는 사용자 결정 2026-10-21(Q13)에 따라 TLS 버전 거절만 기록한다. 진입점별로 정한 기록 범위의 차이를 유지한다. | 사용자 결정 2026-11-07(Q157), 사용자 결정 2026-10-21(Q13) |
+| 7. (해결) Close 4009의 종료 원인과 운영 로그 | [WebSocket 계약 2.2절](../contracts/websocket-relay-v1.md#22-close-코드와-스펙-오류의-대응)의 4009 행은 종료 원인 열의 "해당 없음"과 운영 로그 `connection_aborted`(`handshake_timeout`, `stage` `initial_exchange`)를 구분한다. 활성 세션 전의 종료이므로 최근 종료 목록에는 오르지 않는다. | WebSocket 계약 2.2절 4009 행 |
+| 8. (해결) WS-022, WS-024, WS-025 테스트 | WS-022와 OPS-025는 `tests/reload.rs`의 비부분 시험으로 두 OS에서 통과했다([파일 감지 설계의 남은 조건 해소 기록](file-watch.md#작업-52-남은-조건-해소-ops-025ws-022), 게이트 `1a6f93e`). WS-024는 `tests/serve.rs`의 `plaintext_ws_listener_is_off_by_default_and_warns_at_start_when_enabled`가 전부 확인한다. WS-025는 무시된 시험을 `--include-ignored`로 실행해 두 OS에서 통과했다. 기본 보고서에는 미실행으로 남는다([작업 5.9 판정표](../how-to/set-up-and-verify.md#41-작업-59-판정표)). WS-015와 WS-027은 WS와 WSS 모두 접속 테스트가 있다(검토 결함 5번). | TODO 2.7·3.5·5.2 완료, WS-025 실행 커밋 `d4c5678` |
 | 9. Origin 원문 길이 | 사건 줄의 `origin`은 운영 정보 계약 1.1절의 256바이트 상한을 따른다(검토 결함 4번). 자르기 전 원문은 `Refusal`에 남긴다. 원문을 `Refusal`에 남기는 방식은 구현 판단(사용자 결정 없음). | 운영 정보 계약 1.1절(채택됨), 구현 판단 |
 | 10. (해결) H의 시작점 | WS·WSS의 H는 101 응답부터 잰다. 계약이 WS·WSS의 H 시작점을 정한다(websocket-relay-v1 H 문단). 운영 스펙 2절 H 행도 같은 시작점을 적는다. | 사용자 결정 2026-10-22(Q22) |
-| 11. (해결) 101 뒤 보류 방식 | 이전 상태: 작업 2.7 전까지 업그레이드한 모든 연결은 H가 지나면 Close 4009(`handshake_timeout`)로 끝났다. 상대가 보낸 프레임과 Close는 읽지 않았다. 대안 (1) 지금 방식 유지를 사용자 결정 2026-10-22(Q21)로 택했다. 대안 (2) H 없이 서버가 멈출 때까지 기다리기와 (3) 다른 방식은 택하지 않았다. 보류는 `638cf09`에서 제거되었다. TODO 3.2는 `[ ]`로 둔다. | 사용자 결정 2026-10-22(Q21) 기록, `638cf09`에서 제거 |
+| 11. (해결) 101 뒤 보류 방식 | 작업 2.7 전에는 프레임과 Close를 읽지 않고 H 뒤 Close 4009(`handshake_timeout`)로 끝냈다. 사용자 결정 2026-10-22(Q21)은 이 임시 방식을 유지했다. `638cf09`에서 보류를 없애고 공통 중계에 연결했다. TODO 3.2도 완료했다. | 사용자 결정 2026-10-22(Q21), `638cf09`, TODO 3.2 완료 |
 | 12. (해결) U 뒤에 끝난 머리 읽기 | U가 지난 뒤 머리 읽기가 끝나면(상대 닫힘 포함) 응답 없이 `tls_upgrade_timeout`으로 기록한다. U 전에 상대가 닫은 경우만 `peer_eof`다. U 뒤 상대 닫힘도 `tls_upgrade_timeout`으로 기록한다. | 사용자 결정 2026-10-22(Q28) |

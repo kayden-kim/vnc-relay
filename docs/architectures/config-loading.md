@@ -27,7 +27,7 @@
 - 맡지 않는 책임:
   - 인증서·개인키 파일 내용 검사(`tls_file_invalid`). TLS 작업(3.1)이 맡는다.
   - 경고·진단의 출력. 진단 출력 형식은 `serve` 골격(작업 2.2), 경고 사건 기록은 운영 로그(작업 2.3)가 맡는다.
-  - 상대 IP의 허용 판정(`AllowList::permits`), Mode I 최종 IP 판정, 요청 Origin 비교의 사용. 각각 작업 2.4, 2.8, 3.2에서 같은 domain 모듈에 더한다.
+  - 상대 IP의 허용 판정(`AllowList::permits`), Mode I 최종 IP 판정(`TargetPolicy::permits_ip`), 요청 Origin 비교의 사용. 각각 작업 2.4·2.8·3.2에서 구현했다. domain의 `allow_list`·`target_policy`·`origin` 모듈을 쓴다.
   - 재로드 대상과 재시작 필요 값의 비교. 재로드 작업(5.2)이 `Settings`의 값 비교로 한다(`crates/app/src/reload/service.rs` `restart_required_keys`).
 - 다른 모듈에 공개하는 기능:
   - `vnc_relay_adapters::config_file::load(path) -> Result<Settings, Vec<ConfigDiagnostic>>`
