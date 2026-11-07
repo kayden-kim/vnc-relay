@@ -42,7 +42,7 @@
 | 적용할 컨벤션 | [컨벤션 목록](conventions/README.md) — [Rust 코드 컨벤션](conventions/rust.md)(Active, 2026-10-20), [테스트 컨벤션](conventions/testing.md)(Active, 2026-10-20), [프런트엔드 컨벤션](conventions/frontend.md)(Active, 2026-10-22, 사용자 결정 2026-10-22(Q32~Q39)). 디자인 시스템은 [디자인 목록](design/README.md)의 [운영 대시보드 디자인 시스템](design/DESIGN.md)(Accepted, 2026-10-20)과 채택된 [대시보드 HTML 시안](design/mockups/dashboard.html) |
 | 개발 환경 준비와 실행 방법 | [개발 환경을 준비하고 변경을 검증하는 방법](how-to/set-up-and-verify.md) — Draft. 빌드와 전체 완료 검증은 Ubuntu와 Windows에서 확인했다. rustup 설치 단계는 두 OS 모두 미실행이다 |
 | 실행파일 배포와 수동 운영 | [실행파일을 묶고 수동 운영하는 방법](how-to/operate-relay.md) — Draft. Windows 11 x64·Ubuntu 24.04 LTS x64의 release 묶음과 계정·재로드·종료 절차. 두 OS 수동 기록 전에는 검증 완료로 표시하지 않는다 |
-| 버전 규칙과 릴리스 | [릴리스 묶음을 만들고 배포하는 방법](how-to/release.md) — Draft. `연.월.순서` 버전, `cargo xtask package`, GitHub Actions 검사, 태그로 GitHub Release 내기 |
+| 버전 규칙과 릴리스 | [릴리스 묶음을 만들고 배포하는 방법](how-to/release.md) — Verified(2026-11-08). `연.월.순서` 버전, `cargo xtask package`, GitHub Actions 검사, 태그로 GitHub Release 내기. 첫 Release는 `v2026.11.0` |
 | 변경 범위별 테스트와 전체 완료 검증 | [개발 환경·검증 how-to 3.3·3.4절](how-to/set-up-and-verify.md#33-변경-범위별-검증). 시나리오 표식과 보고 명령은 [테스트 컨벤션](conventions/testing.md)이 정한다. 의존성을 바꾸면 [의존성 라이선스 검사](how-to/check-dependency-licenses.md)를 실행한다. [스펙 문서 검증 기록](specs/README.md#문서-검증-기록)은 문서 구조 확인만 포함 |
 | 구현 작업 순서와 완료 조건 | [구현 작업 목록](TODO.md) — 기준 문서가 아니다. 작업마다 기준 문서를 링크한다 |
 
