@@ -67,7 +67,7 @@ flowchart LR
   - 기준: [디자인 기준 미결정 사항](design/DESIGN.md#미결정-사항), [컨벤션 작성 규칙](conventions/AGENTS.md), [frontend-workflow 6절](../.agents/skills/frontend-workflow/references/frontend-workflow.md#6-검증-환경과-통과-기준)
   - 완료 조건: DESIGN-TBD-005를 해소하고 [디자인 기준 검증 절](design/DESIGN.md#검증)에 how-to를 연결한다.
   - 선행: 0.4, 0.8
-  - 현재: [프런트엔드 컨벤션](conventions/frontend.md)을 채택했다. FE-TBD-001~015는 사용자 결정 2026-10-22(Q32~Q38)로 정했고 DESIGN-TBD-005를 해소했다. [대시보드 프런트엔드 검증 how-to](how-to/verify-dashboard-frontend.md)를 디자인 기준 검증 절에 연결했다. 성능 지표(FE-TBD-016)는 화면 구현 뒤 정한다(사용자 결정 2026-10-22(Q39)). `cargo xtask tokens`·`dashboard-serve`와 브라우저 시험은 작업 4.8에서 구현했다.
+  - 현재: [프런트엔드 컨벤션](conventions/frontend.md)을 채택했다. FE-TBD-001~015는 사용자 결정 2026-10-22(Q32~Q38)로 정했고 DESIGN-TBD-005를 해소했다. [대시보드 프런트엔드 검증 how-to](how-to/verify-dashboard-frontend.md)를 디자인 기준 검증 절에 연결했다. 성능 지표(FE-TBD-016)는 Q39로 화면 구현 뒤까지 보류했다가 지표 없이 닫았다(사용자 결정 2026-11-07(Q159)). `cargo xtask tokens`·`dashboard-serve`와 브라우저 시험은 작업 4.8에서 구현했다.
 
 ## 1. 호환 계약 확정
 
