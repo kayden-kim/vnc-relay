@@ -1071,7 +1071,9 @@ pub fn saved_language_survives_all_screens() {
         select_language(&mut browser, chosen);
         assert_eq!(detail_data(&mut browser), detail);
         browser.reload();
+        // The first-load view also draws `.fact-list`, with loading badges (Q143).
         browser.wait("document.querySelector('.fact-list') !== null");
+        settled(&mut browser);
         assert_language(
             &mut browser,
             chosen,
