@@ -15,6 +15,7 @@ pub struct Workspace {
 
 pub struct Package {
     pub name: String,
+    pub version: String,
     pub dir: PathBuf,
     pub targets: Vec<Target>,
     pub dependencies: Vec<Dependency>,
@@ -103,6 +104,7 @@ fn package(value: &Value) -> Result<Package, Error> {
         .collect::<Result<_, Error>>()?;
     Ok(Package {
         name: text(value, "name")?.to_owned(),
+        version: text(value, "version")?.to_owned(),
         dir: dir.to_path_buf(),
         targets,
         dependencies,

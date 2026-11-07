@@ -39,44 +39,36 @@ Windows 11 x64와 Ubuntu 24.04 LTS x64에서 release 실행파일을 만들고 �
 
 ### 3.1 release 빌드와 묶음
 
-각 OS에서 그 OS용 실행파일을 만든다. 다른 OS의 실행파일을 복사해 쓰지 않는다.
+각 OS에서 그 OS용 묶음을 만든다. 다른 OS의 실행파일을 복사해 쓰지 않는다. 묶음은 `cargo xtask package`로 만든다(사용자 결정 2026-11-08(Q161)). 태그로 낸 묶음은 [GitHub Release](https://github.com/kayden-kim/vnc-relay/releases)에서 내려받을 수 있다. 버전 규칙과 Release 절차는 [릴리스 how-to](release.md)에 있다.
 
-1. 저장소 루트에서 release 빌드를 실행한다.
-
-   ```shell
-   cargo build --release --locked
-   ```
-
-   Windows에서 NASM이 없으면 먼저 `$env:AWS_LC_SYS_PREBUILT_NASM = "1"`을 실행한다. `CARGO_TARGET_DIR`을 정했으면 아래 `target/release` 대신 그 경로의 `release`를 쓴다.
-
-   기대 결과: 종료 코드 0이다. Windows는 `target/release/vnc-relay.exe`, Ubuntu는 `target/release/vnc-relay`가 생긴다.
-
-2. 배포 고지를 대조한다.
+1. 저장소 루트에서 묶음을 만든다. 이 명령은 release 빌드(`cargo build --release --locked`), 배포 고지 대조(`cargo xtask notices --check`), 파일 복사, 압축, SHA-256 파일 쓰기를 차례로 한다.
 
    ```shell
-   cargo xtask notices --check
+   cargo xtask package
    ```
 
-   기대 결과: `notices --check: 통과 (THIRD-PARTY-NOTICES.txt)`다. 실패하면 [라이선스 검사 안내](check-dependency-licenses.md#31-배포-고지-생성과-대조)를 따른다.
+   Windows에서 NASM이 없으면 먼저 `$env:AWS_LC_SYS_PREBUILT_NASM = "1"`을 실행한다.
 
-3. 빈 묶음 디렉터리에 아래 파일을 복사한다.
+   기대 결과: 종료 코드 0이다. 마지막 두 줄은 `package: target/package/vnc-relay-<버전>-<os>-x64.<확장자>`와 `sha256: <64자리 16진수>`다. Windows는 `windows`·`zip`, Ubuntu는 `linux`·`tar.gz`다. `CARGO_TARGET_DIR`을 정했으면 `target` 대신 그 경로다. 고지 대조가 실패하면 `notices --check: 실패`가 나오고 묶음을 만들지 않는다. 이때는 [라이선스 검사 안내](check-dependency-licenses.md#31-배포-고지-생성과-대조)를 따른다.
+
+2. 묶음 안의 `vnc-relay-<버전>-<os>-x64/` 디렉터리에 아래 파일이 있는지 확인한다.
 
    | 원본 | 묶음 안 위치 |
    | --- | --- |
    | 해당 OS의 release 실행파일 | `vnc-relay.exe` 또는 `vnc-relay` |
    | `examples/relay.toml` | `relay.toml` |
-   | `docs/how-to/operate-relay.md` | `docs/how-to/operate-relay.md` |
-   | 저장소의 `docs/` 디렉터리와 `GLOSSARY.md` | 같은 상대 위치. 안내의 기준 링크를 오프라인에서도 읽으려면 함께 넣기를 권장한다. |
+   | `README.md` | `README.md`(사용자 결정 2026-11-08(Q164)) |
+   | 저장소의 `docs/` 디렉터리와 `GLOSSARY.md` | 같은 상대 위치. 이 안내 `docs/how-to/operate-relay.md`와 기준 문서 링크를 오프라인에서도 읽는다. |
    | `THIRD-PARTY-NOTICES.txt` | `THIRD-PARTY-NOTICES.txt` 전체 |
    | `LICENSE` | 루트 `LICENSE` 전체(MIT) |
 
    루트 [`LICENSE`](../../LICENSE)는 MIT 전문과 `Copyright (c) 2026 vnc-relay contributors`를 담는다(사용자 결정 2026-11-07(Q97)). 배포 묶음에 이 파일을 반드시 넣는다. `THIRD-PARTY-NOTICES.txt`는 프로젝트 자체 MIT LICENSE를 대신하지 않는다. 검토 결과는 [라이선스 검사 4.2절](check-dependency-licenses.md#42-프로젝트-license-검토-기록2026-11-07)에 있다.
 
-   개인키·계정 파일·실제 비밀번호·운영 로그는 배포 묶음에 넣지 않는다.
+   개인키·계정 파일·실제 비밀번호·운영 로그는 배포 묶음에 넣지 않는다. `cargo xtask package`는 위 표의 파일만 복사한다.
 
-4. 묶음을 운영 디렉터리에 푼다.
+3. 묶음을 운영 디렉터리에 풀고, 함께 받은 `.sha256` 파일로 해시를 확인한다. Ubuntu는 `sha256sum -c vnc-relay-<버전>-linux-x64.tar.gz.sha256`, Windows는 `Get-FileHash <묶음 파일>`의 값과 `.sha256` 파일의 첫 낱말을 비교한다.
 
-   기대 결과: 실행파일과 `relay.toml`이 같은 디렉터리에 있다. 이후 명령은 이 디렉터리에서 실행한다.
+   기대 결과: 해시가 같다. 실행파일과 `relay.toml`이 같은 디렉터리에 있다. 이후 명령은 이 디렉터리에서 실행한다.
 
 ### 3.2 설정과 계정 준비
 

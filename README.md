@@ -2,7 +2,7 @@
 
 `vnc-relay`는 UltraVNC Repeater와 호환되는 VNC 중계 서버다. TCP 중계와 WS·WSS ↔ TCP 중계, 웹 관리 대시보드를 실행파일 하나로 제공한다. Rust로 독립 구현했다.
 
-- 버전: 0.1.0
+- 버전: 2026.11.0. 버전은 `연.월.순서`다([릴리스 how-to](docs/how-to/release.md)).
 - 지원 OS: Windows 11 x64, Ubuntu 24.04 LTS x64. Windows Server와 다른 OS·아키텍처는 검증 범위가 아니다.
 - 라이선스: [MIT](LICENSE)
 
@@ -23,14 +23,16 @@ noVNC 클라이언트는 포함하지 않는다. noVNC는 외부 클라이언트
 
 아래 절차는 루프백 주소에서 TCP Mode II만 켜는 [예시 설정](examples/relay.toml)을 쓴다. 공개 배치에 그대로 쓰지 않는다. 전체 절차와 공개 배치 주의 사항은 [실행파일을 묶고 수동 운영하는 방법](docs/how-to/operate-relay.md)에 있다.
 
-1. 빌드 도구를 준비한다. Windows는 Visual Studio Build Tools 2022의 C++ 빌드 도구, Ubuntu는 `cc`(gcc)가 필요하다. Rust 툴체인은 `rust-toolchain.toml`(Rust 1.99.1)이 정한다. 자세한 내용은 [개발 환경 준비](docs/how-to/set-up-and-verify.md)를 따른다.
-2. 저장소 루트에서 release 빌드를 만든다. Windows에서 NASM이 없으면 먼저 PowerShell에서 `$env:AWS_LC_SYS_PREBUILT_NASM = "1"`을 실행한다.
+1. OS에 맞는 배포 묶음을 준비한다. [GitHub Releases](https://github.com/kayden-kim/vnc-relay/releases)에서 내려받거나, 저장소에서 직접 만든다. 직접 만들려면 빌드 도구가 필요하다. Windows는 Visual Studio Build Tools 2022의 C++ 빌드 도구, Ubuntu는 `cc`(gcc)를 쓴다. Rust 툴체인은 `rust-toolchain.toml`(Rust 1.99.1)이 정한다. 자세한 내용은 [개발 환경 준비](docs/how-to/set-up-and-verify.md)를 따른다.
+2. 직접 만들 때는 저장소 루트에서 묶음을 만든다. Windows에서 NASM이 없으면 먼저 PowerShell에서 `$env:AWS_LC_SYS_PREBUILT_NASM = "1"`을 실행한다.
 
    ```shell
-   cargo build --release --locked
+   cargo xtask package
    ```
 
-3. 빈 운영 디렉터리에 실행파일(`target/release/vnc-relay` 또는 `vnc-relay.exe`)과 `examples/relay.toml`을 복사한다. 아래 명령은 그 디렉터리에서 실행한다.
+   결과는 `target/package/`의 `vnc-relay-<버전>-windows-x64.zip` 또는 `vnc-relay-<버전>-linux-x64.tar.gz`와 SHA-256 파일이다.
+
+3. 묶음을 풀고, 생긴 `vnc-relay-<버전>-<os>-x64/` 디렉터리로 이동한다. 실행파일과 `relay.toml`이 이 디렉터리에 있다. 아래 명령은 이 디렉터리에서 실행한다.
 4. 관리자 계정을 만든다. 비밀번호는 숨김 입력으로 두 번 묻는다. 기본 계정은 없고, 계정이 없으면 서버가 시작하지 않는다.
 
    ```shell

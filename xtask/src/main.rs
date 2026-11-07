@@ -9,11 +9,13 @@
 //!   (docs/architectures/xtask.md).
 //! - `cargo xtask notices [--check]`: distribution dependency notices
 //!   (docs/how-to/check-dependency-licenses.md).
+//! - `cargo xtask package`: release bundle for the host OS (docs/how-to/release.md).
 
 mod cargo;
 mod dashboard_serve;
 mod layers;
 mod notices;
+mod package;
 mod scenarios;
 mod tokens;
 
@@ -21,7 +23,7 @@ use std::fmt;
 use std::io::Write;
 use std::process::ExitCode;
 
-const USAGE: &str = "usage: cargo xtask scenarios [--require-all] | cargo xtask layers | cargo xtask tokens [--check] | cargo xtask dashboard-serve [--port N] | cargo xtask notices [--check]";
+const USAGE: &str = "usage: cargo xtask scenarios [--require-all] | cargo xtask layers | cargo xtask tokens [--check] | cargo xtask dashboard-serve [--port N] | cargo xtask notices [--check] | cargo xtask package";
 
 /// Exit code for a usage error, same as the product CLI (cli-v1 §2.1).
 const EXIT_USAGE: u8 = 2;
@@ -45,6 +47,7 @@ fn main() -> ExitCode {
         ["tokens", "--check"] => tokens::run(true),
         ["notices"] => notices::run(false),
         ["notices", "--check"] => notices::run(true),
+        ["package"] => package::run(),
         ["dashboard-serve"] => dashboard_serve::run(DEFAULT_DASHBOARD_PORT),
         ["dashboard-serve", "--port", port] => match port.parse::<u16>() {
             Ok(port) => dashboard_serve::run(port),

@@ -252,6 +252,7 @@ mod tests {
     fn package(dir: &str, targets: &[(&str, &str)]) -> Package {
         Package {
             name: "p".to_owned(),
+            version: "0.0.0".to_owned(),
             dir: PathBuf::from(dir),
             targets: targets
                 .iter()

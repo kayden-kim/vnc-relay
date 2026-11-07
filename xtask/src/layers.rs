@@ -154,6 +154,7 @@ mod tests {
     fn package(name: &str, dependencies: &[(&str, &str)]) -> Package {
         Package {
             name: name.to_owned(),
+            version: "0.0.0".to_owned(),
             dir: PathBuf::new(),
             targets: Vec::new(),
             dependencies: dependencies

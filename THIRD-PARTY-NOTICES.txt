@@ -20565,7 +20565,7 @@ checksum = "8ecb6da28b8a351d773b68d5825ac39017e680750f980f3a1a85cd8dd28a47c1"
 
 [[package]]
 name = "vnc-relay"
-version = "0.1.0"
+version = "2026.11.0"
 dependencies = [
  "clap",
  "rustls",
@@ -20580,7 +20580,7 @@ dependencies = [
 
 [[package]]
 name = "vnc-relay-adapters"
-version = "0.1.0"
+version = "2026.11.0"
 dependencies = [
  "argon2",
  "aws-lc-rs",
@@ -20602,7 +20602,7 @@ dependencies = [
 
 [[package]]
 name = "vnc-relay-app"
-version = "0.1.0"
+version = "2026.11.0"
 dependencies = [
  "tokio",
  "vnc-relay-domain",
@@ -20610,7 +20610,7 @@ dependencies = [
 
 [[package]]
 name = "vnc-relay-domain"
-version = "0.1.0"
+version = "2026.11.0"
 
 [[package]]
 name = "walkdir"

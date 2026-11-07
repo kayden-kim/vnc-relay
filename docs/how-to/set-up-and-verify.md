@@ -194,7 +194,7 @@ Linux 전용 `tests/relay_dead_peer_linux.rs`는 사용자·네트워크 네임�
    cargo run --quiet -- --version
    ```
 
-   기대 결과: 빌드가 `Finished`로 끝나고 `vnc-relay 0.1.0`이 출력된다.
+   기대 결과: 빌드가 `Finished`로 끝나고 `vnc-relay <버전>`이 출력된다. `<버전>`은 루트 `Cargo.toml`의 `[workspace.package] version`이다(2026-11-08부터 `2026.11.0`, [버전 규칙](release.md#11-버전-규칙)).
 
 ### 3.3 변경 범위별 검증
 
@@ -206,6 +206,7 @@ Linux 전용 `tests/relay_dead_peer_linux.rs`는 사용자·네트워크 네임�
    | 시나리오 테스트(표식 추가·변경), 스펙 수용 테스트 표 | `cargo xtask scenarios` | 종료 코드 0, 보고서에 `오류`·`실패` 없음([테스트 컨벤션 5절](../conventions/testing.md#5-검증-명령과-통과-기준)) |
    | `Cargo.toml` 의존성, crate 추가 | `cargo xtask layers`, `cargo deny check licenses`([의존성 라이선스 검사](check-dependency-licenses.md)) | `레이어 검사: 통과`, `licenses ok` |
    | `docs/design/DESIGN.md` YAML, `web/dashboard/` | `cargo xtask tokens --check`, 브라우저 테스트는 `cargo xtask scenarios`가 함께 실행한다([대시보드 프런트엔드 검증 how-to](verify-dashboard-frontend.md)) | `tokens --check: 통과`, 종료 코드 0 |
+   | 배포 묶음(`xtask/src/package.rs`), GitHub Actions 워크플로(`.github/workflows/`), 작업 공간 버전 | `cargo xtask package`, `cargo test --package xtask`. 워크플로를 바꾸면 push 뒤 `ci` 실행 결과를 확인한다([릴리스 how-to](release.md)) | 종료 코드 0, `package:`·`sha256:` 줄, `ci` 결론 `success` |
    | 문서만 | 이 절차의 명령은 필요 없다. 문서 유형별 작성 규칙과 링크를 확인한다. | — |
 
    한 crate만 빠르게 확인할 때는 `cargo test --package <패키지 이름>`을 쓸 수 있다. 완료 보고 전에는 6단계를 실행해야 한다.
@@ -307,7 +308,7 @@ PRD 10절의 AC-01~37을 같은 기준으로 대조했다. 각 AC 행이 링크�
 ## 6. 롤백 또는 복구
 
 1. 빌드 결과가 꼬였다고 의심되면 `cargo clean`으로 Cargo 대상 디렉터리를 지운다. 소스는 바뀌지 않는다.
-2. 4단계를 다시 실행해 `vnc-relay 0.1.0`이 나오는지 확인한다.
+2. 4단계를 다시 실행해 `vnc-relay <버전>`이 나오는지 확인한다.
 
 ## 7. 해결되지 않을 때 전달할 대상
 
