@@ -1279,6 +1279,25 @@ WSL 보고서는 `177040d + 미커밋 변경`으로 표시됐다. 실행 뒤 원
 - 육안: `scr002-normal` 390px 쌍을 열어 두 쪽 모두 Pretendard로 그려진 것을 확인했다.
 - 미실행: Firefox·Edge·WebKit에서의 글꼴 재확인. Chrome 외 브라우저는 이 변경에서 다시 보지 않았다.
 
+### 4.24 조회 중 표시 통일 (작업 4.12 사용자 지적, 2026-11-07)
+
+결론: SCR-001의 "조회 중"(CPY-016)을 모든 자리에서 같은 정보 배지(시계 아이콘 + 글씨)로 바꿨다. 사용자는 4.22절 비교 페이지를 검토하고 "조회 중" 표시가 자리마다 다르다고 지적했다(2026-11-07). 그 밖의 비교 결과는 받아들였다. 기준은 [DESIGN 상태 색](../design/DESIGN.md#상태-색)의 정보 행(최초 로딩)이다. 새 문구·토큰·CSS는 없다.
+
+- 바꾸기 전: 카드 머리는 정보 배지였다. 서버 요약 값과 사용량 고리 가운데는 아이콘 없는 중립(회색) 배지였다. 목록 표의 빈 행은 바탕 없는 글씨였다.
+- 바꾼 뒤: 네 자리 모두 `createBadge({tone: 'info'})`의 같은 배지다. "확인 불가"(CPY-035)는 중립 배지 그대로다.
+- 공통 컴포넌트: `createGauge`에 `unknownTone` 옵션(기본 `neutral`)을 더하고 배지를 `createBadge`로 만든다. `createDataTable`의 `emptyText`는 문자열 또는 `Node`를 받는다. API는 [공통 컴포넌트 3.1절](../architectures/dashboard-components.md#31-공개-함수)에 적었다.
+
+| 확인 대상 | 기준 문서·범위 | 환경·명령·방법 | 실제 결과 | 실행·검토 증거 |
+| --- | --- | --- | --- | --- |
+| 조회 중 표시 시험 | DESIGN 상태 색. SCR-001 첫 조회 중의 카드 머리·요약 값 6개·고리 2개·대기 목록 빈 행. 공통 컴포넌트의 고리 톤과 빈 행 `Node` | `operations-scenarios.js` DASH-005 사례에 `checkLoadingMarks`를 더했다. 첫 요약 응답도 늦춰 요약과 고리가 조회 중일 때 확인한다. `components.js`의 `gauge-unknown`·`invalid-gauge-options`·`data-table-empty`를 보강했다. 두 OS 게이트 안의 `tests/dashboard_browser.rs`로 실행 | 37개 브라우저 시험 통과(두 OS) | 게이트 출력 |
+| 비교 페이지 재촬영 | 4.22절과 같은 26개 프레임 × 6개 폭 | 4.22절과 같은 도구와 환경, `cargo xtask dashboard-serve --port 18737` | 156쌍 모두 캡처. 두 쪽 모두 400·700 `loaded`. 구현 쪽 가로 넘침·페이지 오류·응답 없는 API 요청·CSP 콘솔 오류 0. `scr001-loading` 1280·320px 구현 화면을 열어 조회 중 표시 15곳(카드 머리 4, 요약 값 6, 고리 2, 목록 빈 행 3)이 모두 같은 정보 배지인 것을 육안으로 확인했다 | `target/mockup-compare-q138/index.html` |
+| 두 OS 전체 게이트 | [개발 환경 how-to](set-up-and-verify.md) 완료 검증 | Windows `vr-win.ps1 -Only all`, WSL `vr-full.sh`. 기준 `11fb3fb`에 이 변경을 더한 작업 트리 | Windows `ALL PASSED (all)`, 시나리오 153건 중 통과 136·부분 12·실패 0·미실행 3·미연결 2. WSL `ALL PASSED`, 통과 140·부분 7·실패 0·미실행 4·미연결 2 | 게이트 출력 마지막 줄 |
+| 문서 링크·앵커 | 저장소 문서 | `python D:/vr-tools/tmp/doc_check.py` | `errors_total=0 known=0 other=0` | 명령 출력 |
+
+- 증거: `target/mockup-compare-q138/SHA256SUMS.txt`는 314개 파일을 담는다. 이 목록 파일의 SHA-256은 `e4a5c564be5b3c86a388cc6d25c0905720e8366b499a785ae3a5b973aa28d4f3`이다. 도구 `compare.py`는 4.23절과 같다(`7ba5144a…c63e`).
+- 남은 차이: SCR-002 첫 조회 중 화면은 구현이 빈 카드를, 시안이 항목 이름과 "조회 중" 배지를 보인다. 이 변경에서는 바꾸지 않았다. 사용자 판단을 기다린다.
+- 미실행: 사람의 재비교 판정, Firefox·Edge·WebKit 재확인.
+
 ## 5. 중단 조건
 
 - `cargo xtask tokens --check`의 종료 코드가 0이 아니면 3.2 이후 단계를 실행하지 않는다.

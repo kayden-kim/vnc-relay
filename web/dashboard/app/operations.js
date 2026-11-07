@@ -18,6 +18,7 @@ import {
   panelCard,
   pageHead,
   setContent,
+  statusBadge,
   summaryGrid,
   usageGauge,
   waitingTable,
@@ -119,7 +120,8 @@ export function mountOperations(root, deps = {}) {
     );
   }
 
-  // Renders a list card. Before the first success it shows a loading row; after a failure with no data it shows no table.
+  // Renders a list card. Before the first success it shows a loading row with the same info badge as the card head;
+  // after a failure with no data it shows no table.
   function renderList(key, t, emptyText, build) {
     const query = queries[key];
     const view = viewOf(query);
@@ -131,7 +133,7 @@ export function mountOperations(root, deps = {}) {
         return build(query.data.items, emptyText);
       }
       if (view === 'loading') {
-        return build([], t.loading);
+        return build([], statusBadge(t, 'loading'));
       }
       return null;
     });

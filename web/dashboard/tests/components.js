@@ -321,6 +321,15 @@ function runChecks() {
     expect(gauge.hasAttribute("aria-valuenow") === false);
     expect(gauge.getAttribute("aria-valuetext") === t.gaugeUnknown);
     expect(gauge.textContent.includes(t.gaugeUnknown));
+    const badge = gauge.querySelector(".gauge-center > .badge");
+    expect(badge?.dataset.tone === "neutral" && badge.querySelector("svg") === null);
+    // While the first query runs the caller passes the info tone: the badge gets the clock icon like status badges.
+    const loading = createGauge({
+      label: t.gauge, value: null, max: 100, limitText: t.gaugeLimit, unknownText: t.gaugeUnknown, unknownTone: "info",
+    });
+    const loadingBadge = loading.querySelector(".gauge-center > .badge");
+    expect(loadingBadge?.dataset.tone === "info" && loadingBadge.querySelector("svg") !== null);
+    expect(loading.getAttribute("aria-valuetext") === t.gaugeUnknown);
   });
 
   check("invalid-gauge-options", () => {
@@ -328,6 +337,9 @@ function runChecks() {
     expect(throwsTypeError(() => createGauge({ label: t.gauge, value: 50, max: 100 })));
     // unknownText is required when value is null.
     expect(throwsTypeError(() => createGauge({ label: t.gauge, value: null, max: 100, limitText: t.gaugeLimit })));
+    expect(throwsTypeError(() => createGauge({
+      label: t.gauge, value: null, max: 100, limitText: t.gaugeLimit, unknownText: t.gaugeUnknown, unknownTone: "loud",
+    })));
   });
 
   check("create-navbar", () => {
@@ -437,6 +449,11 @@ function runChecks() {
     expect([...table.querySelectorAll("th")].every((cell) => cell.getAttribute("role") === "columnheader"));
     expect(rows[0].cells[0].getAttribute("role") === "cell");
     expect(rows[0].cells[0].colSpan === TABLE_COLUMNS.length);
+    // A Node such as a status badge goes into the empty cell as is.
+    const mark = document.createElement("span");
+    mark.textContent = t.empty;
+    const withNode = createDataTable({ caption: t.tableCaption, columns: TABLE_COLUMNS, rows: [], emptyText: mark });
+    expect(withNode.querySelector("tbody tr.data-table-empty td")?.firstChild === mark);
   });
 
   check("invalid-data-table-mobile-head", () => {

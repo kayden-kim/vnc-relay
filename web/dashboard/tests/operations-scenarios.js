@@ -173,6 +173,21 @@ function checkListCount(label, card, count, language = lang) {
     && badges[0]?.querySelector('svg') === null);
 }
 
+// Every "조회 중" mark is the same info badge with the clock icon: card head, summary values, gauge, list row.
+function checkLoadingMarks(label, root) {
+  const isInfoBadge = (node) => node?.dataset.tone === 'info' && node.querySelector('svg') !== null
+    && node.textContent.trim() === t.loading;
+  const marks = [...root.querySelectorAll('.badge')].filter((node) => node.textContent.trim() === t.loading);
+  check(`${label}: every loading mark is an info badge with an icon`, marks.length > 0 && marks.every(isInfoBadge));
+  const summaryValues = [...(cardOf(root, t.summaryTitle)?.querySelectorAll('.stat-value') ?? [])];
+  check(`${label}: summary values show the loading badge`, summaryValues.length === 6
+    && summaryValues.every((value) => isInfoBadge(value.querySelector('.badge'))));
+  const gauges = [gaugeOf(root, t.relayTitle), gaugeOf(root, t.adminTitle)];
+  check(`${label}: gauges show the loading badge`, gauges.every((gauge) => isInfoBadge(gauge?.querySelector('.badge'))));
+  const row = cardOf(root, t.waitingTitle)?.querySelector('.data-table-empty');
+  check(`${label}: loading list row shows the loading badge`, isInfoBadge(row?.querySelector('.badge')));
+}
+
 function checkTableRoles(label, card) {
   const table = card?.querySelector('table');
   check(`${label}: native table has an explicit table role`, table instanceof HTMLTableElement && table.getAttribute('role') === 'table');
@@ -619,6 +634,11 @@ async function caseDash005() {
   let peak = 0;
   const slow = fakeApi({
     'GET /api/v1/session': () => session(1),
+    // The first summary is slow too, so the summary and gauges are still loading when the marks are checked.
+    'GET /api/v1/summary': async (n) => {
+      if (n === 1) await wait(2500);
+      return ok(summaryBody());
+    },
     'GET /api/v1/waiting': async (n) => {
       inFlight += 1;
       peak = Math.max(peak, inFlight);
@@ -633,6 +653,7 @@ async function caseDash005() {
   const first = await mount(slow);
   await waitFor(() => slow.count('GET /api/v1/waiting') === 1);
   checkListCount('DASH-005 initial loading', cardOf(first.root, t.waitingTitle), null);
+  checkLoadingMarks('DASH-005 initial loading', first.root);
   await waitFor(() => dataRowsOf(cardOf(first.root, t.activeTitle)).length === 1);
   checkListCount('DASH-005 independent completed active', cardOf(first.root, t.activeTitle), 1);
   first.root.querySelector('#operations-refresh').click();

@@ -1,5 +1,7 @@
 // Gauge: circular usage meter exposed as a progressbar.
 // Geometry matches --space-gauge-size (120) and --space-gauge-stroke (12).
+import { createBadge } from './badge.js';
+
 const SIZE = 120;
 const STROKE = 12;
 const RADIUS = (SIZE - STROKE) / 2;
@@ -36,12 +38,13 @@ function ring(value, max) {
 
 /**
  * @param {{label: string, value?: number | null, max: number, valueText?: string,
- *   limitText: string, unknownText?: string}} options
- *   value null means unknown: no ring; unknownText is then required and shown in a badge.
+ *   limitText: string, unknownText?: string, unknownTone?: string}} options
+ *   value null means unknown: no ring; unknownText is then required and shown in a badge
+ *   of unknownTone (default neutral; info while the first query runs).
  * @returns {HTMLDivElement}
  */
 export function createGauge({
-  label, value = null, max, valueText, limitText, unknownText,
+  label, value = null, max, valueText, limitText, unknownText, unknownTone = 'neutral',
 } = {}) {
   if (typeof label !== 'string' || label === '') {
     throw new TypeError('gauge label is required');
@@ -80,11 +83,7 @@ export function createGauge({
     metric.textContent = text;
     center.append(metric);
   } else {
-    // Badge markup is built here, not imported, to keep gauge.js dependency-free.
-    const badge = document.createElement('span');
-    badge.className = 'badge badge-tone-neutral';
-    badge.textContent = text;
-    center.append(badge);
+    center.append(createBadge({ tone: unknownTone, label: text }));
   }
 
   const limit = document.createElement('span');

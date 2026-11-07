@@ -64,11 +64,14 @@ export function statusAlert(t, kind, lastSuccessAt) {
   return null;
 }
 
-// Summary stats. Unknown values (null) show "확인 불가". Before the first success they show the query state.
+// Summary stats. Unknown values (null) show "확인 불가" in a neutral badge. Before the first success they show
+// "조회 중" in the info badge, the same mark as the card's status badge (DESIGN 상태 색).
 export function summaryGrid(t, summary, kind) {
-  const placeholder = kind === 'loading' ? t.loading : t.unavailable;
+  const loading = kind === 'loading';
+  const placeholder = loading ? t.loading : t.unavailable;
+  const placeholderTone = loading ? 'info' : 'neutral';
   const count = (value) => (summary && value !== null ? formatCount(value) : placeholder);
-  const state = summary ? stateText(t, summary.serverState) : { text: placeholder, tone: 'neutral' };
+  const state = summary ? stateText(t, summary.serverState) : { text: placeholder, tone: placeholderTone };
   const grid = el('div', 'summary-grid');
   grid.append(
     // The server state is a status badge in every state (DESIGN 391, 639).
@@ -76,31 +79,31 @@ export function summaryGrid(t, summary, kind) {
     createStat({
       label: t.uptime,
       value: summary ? formatDuration(summary.uptimeMs, t.dayUnit) : placeholder,
-      tone: 'neutral',
+      tone: summary ? 'neutral' : placeholderTone,
       badge: !summary,
     }),
     createStat({
       label: t.waitingCount,
       value: summary ? formatCount(summary.waiting) : placeholder,
-      tone: 'neutral',
+      tone: summary ? 'neutral' : placeholderTone,
       badge: !summary,
     }),
     createStat({
       label: t.activeCount,
       value: summary ? formatCount(summary.active) : placeholder,
-      tone: 'neutral',
+      tone: summary ? 'neutral' : placeholderTone,
       badge: !summary,
     }),
     createStat({
       label: t.handshaking,
       value: count(summary?.handshaking),
-      tone: 'neutral',
+      tone: summary ? 'neutral' : placeholderTone,
       badge: !summary || summary.handshaking === null,
     }),
     createStat({
       label: t.targetConnecting,
       value: count(summary?.targetConnecting),
-      tone: 'neutral',
+      tone: summary ? 'neutral' : placeholderTone,
       badge: !summary || summary.targetConnecting === null,
     }),
   );
@@ -140,6 +143,7 @@ export function usageGauge({ t, title, usage, kind }) {
       max: 1,
       limitText: t.limitUnknown,
       unknownText: kind === 'loading' ? t.loading : t.unavailable,
+      unknownTone: kind === 'loading' ? 'info' : 'neutral',
     });
   }
   const block = el('div', 'gauge-wrap');

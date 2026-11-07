@@ -1,21 +1,22 @@
 // Data table: native table with an optional caption, column headers, rows, and an empty row.
 // On narrow screens CSS turns each row into a card, reading the data-label attributes.
 
-function emptyRow(span, text) {
+// `content` is the empty-list text, or a Node such as a status badge.
+function emptyRow(span, content) {
   const tr = document.createElement('tr');
   tr.setAttribute('role', 'row');
   tr.className = 'data-table-empty';
   const td = document.createElement('td');
   td.setAttribute('role', 'cell');
   td.colSpan = span;
-  td.textContent = text;
+  td.append(content);
   tr.append(td);
   return tr;
 }
 
 /**
  * @param {{caption?: string, columns: Array<{key: string, label: string, mobileHead?: 'primary' | 'secondary'}>,
- *   rows?: Array<Array<unknown>>, emptyText?: string, numericColumns?: string[]}} options
+ *   rows?: Array<Array<unknown>>, emptyText?: string | Node, numericColumns?: string[]}} options
  * @returns {HTMLTableElement}
  */
 export function createDataTable({
