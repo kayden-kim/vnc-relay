@@ -145,7 +145,7 @@ flowchart LR
 | 로그인 화면의 공통 컴포넌트와 스타일은 복사본으로 둔다 | `login/`은 세션 없이 받으므로 `/app/` 파일을 참조할 수 없다. 복사본은 `tokens`가 쓰고 `--check`가 원본과 비교한다. | `login/`이 `app/` 파일을 직접 가리킨다. 세션 없는 로그인 화면이 `/app/` 파일을 받지 못한다. 마크업과 스타일을 손으로 복제한다. | 구현 판단(사용자 결정 없음). 리뷰어 지시에 따른다. |
 | 글꼴 원본은 제공하지 않는 `web/dashboard/fonts/`에 두고, `tokens`가 `app/fonts/`·`login/fonts/`에 바이트 그대로 복사한다 | `app/`과 `login/`은 파일을 공유하지 않는다. 원본 폴더에 둔 `LICENSE.txt`는 제공 표 대조 범위(`login/`·`app/`) 밖이라 제공되지 않는다. `@font-face`는 생성 토큰 파일에 있어 화면 CSS의 `url(` 금지를 바꾸지 않는다. | `app/fonts/`를 원본으로 두고 로그인만 복사. `LICENSE.txt`가 제공 경로 아래에 놓이거나 원본 위치가 둘로 갈린다. 화면 CSS에 `@font-face` 작성. `url(` 금지에 예외가 생긴다. | **이 문서의 판단, 사용자 결정 없음**. 글꼴 내장은 사용자 결정 2026-11-07(Q139) |
 | 고지 생성은 기존 xtask의 std·serde_json만 사용 | Rust만 준비된 두 OS에서 같은 절차를 쓴다. `Cargo.lock` 원문을 넣어 해시 crate 없이 입력 변화도 감지한다. | cargo-about·cargo-license 추가 설치, Python 스크립트, 고지 수동 편집. 도구·설치 경로가 늘거나 갱신 누락을 잡기 어렵다. | **이 문서의 판단, 사용자 결정 없음**. [OPS-021](../specs/operations.md#7-수용-테스트)의 고지 의무를 구현한다. |
-| 루트 통합 시험이 오프라인 `notices --check`를 실행 | xtask 시험은 시나리오 스캐너에서 제외된다. 루트 `tests/dependency_notices.rs`의 OPS-021 `partial`만 연결한다. Cargo가 실행파일 위치를 정하므로 `CARGO_TARGET_DIR` 값에 의존하지 않는다. | xtask 시험에 표식 추가. 기존 스캐너가 읽지 않는다. | **이 문서의 판단, 사용자 결정 없음**. 프로젝트 MIT LICENSE가 없으므로 전체 표식은 쓰지 않는다. |
+| 루트 통합 시험이 오프라인 `notices --check`를 실행 | xtask 시험은 시나리오 스캐너에서 제외된다. 루트 `tests/dependency_notices.rs`의 OPS-021 `partial`만 연결한다. Cargo가 실행파일 위치를 정하므로 `CARGO_TARGET_DIR` 값에 의존하지 않는다. | xtask 시험에 표식 추가. 기존 스캐너가 읽지 않는다. | **이 문서의 판단, 사용자 결정 없음**. 시험은 의존성 고지만 대조하므로 전체 표식은 쓰지 않는다. 프로젝트 MIT LICENSE는 [라이선스 검사 4.2절](../how-to/check-dependency-licenses.md#42-프로젝트-license-검토-기록2026-11-07)에서 수동 검토한다. |
 
 ## 대조 기록
 

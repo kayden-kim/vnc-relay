@@ -1,5 +1,5 @@
-//! OPS-021's dependency notices only. The project's MIT LICENSE remains a
-//! separate release prerequisite. xtask itself is excluded by the scanner.
+//! OPS-021's dependency notices only. The project's MIT LICENSE is the root
+//! LICENSE, manually reviewed in check-dependency-licenses.md section 4.2. xtask itself is excluded by the scanner.
 
 use std::process::Command;
 

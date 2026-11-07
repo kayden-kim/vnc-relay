@@ -255,7 +255,7 @@ Linux 전용 `tests/relay_dead_peer_linux.rs`는 사용자·네트워크 네임�
 
 ### 4.1 작업 5.9 판정표
 
-결론: 두 OS 보고서의 `오류`와 `실패`는 0건이다. 보고서에 `통과`가 아닌 상태로 남은 17개 시나리오 가운데 16개는 아래 근거로 통과로 판정한다. OPS-021은 MIT LICENSE의 저작권자·적용 연도(사용자 결정 2026-11-04(Q97))가 정해지지 않아 통과로 판정하지 않는다. 그래서 AC-12와 작업 5.9는 아직 완료가 아니다.
+결론: 두 OS 보고서의 `오류`와 `실패`는 0건이다. 보고서에 `통과`가 아닌 상태로 남은 17개 시나리오 모두 아래 근거로 통과로 판정한다. OPS-021은 사용자 결정 2026-11-07(Q97)에 따른 루트 LICENSE 작성·검토까지 마쳤다. 전체 153개 시나리오를 통과로 판정했고, AC-01~37을 모두 충족했다. 작업 5.9는 완료다.
 
 이 절의 위치와 형식은 이 문서의 판단, 사용자 결정 없음이다. 판정 규칙은 [TODO 5.9](../TODO.md#5-운영배포-검증)의 완료 조건, [테스트 컨벤션 5절](../conventions/testing.md#5-검증-명령과-통과-기준)(사용자 결정 2026-11-06(Q132)), 사용자 결정 2026-11-04(Q99)를 따른다. 보고서 도구는 바꾸지 않았다.
 
@@ -279,9 +279,9 @@ Linux 전용 `tests/relay_dead_peer_linux.rs`는 사용자·네트워크 네임�
 | OPS-017 | 미실행 / 미실행 | 통과 | 무시된 시험의 실행 기록. 커밋 `509ca52`의 두 OS 정식 측정에서 세 전송 모두 통과했다(Q148 기준)([성능 측정 4절](measure-performance.md#4-검증-기록)) |
 | OPS-018 | 미실행 / 미실행 | 통과 | 같은 정식 측정에서 두 OS·세 전송 모두 통과했다([성능 측정 4절](measure-performance.md#4-검증-기록)) |
 | OPS-020 | 미연결 / 미연결 | 통과 | Windows VNC Relay와 실제 UltraVNC 1.8.3.0·noVNC 1.7.0의 아홉 조합 통과(Q128·Q130·Q131)([호환성 기록 6.3절](../contracts/repeater-compat-record.md#63-조합별-결과)). Ubuntu는 자동 시험을 증거로 인정했다(Q129)([6.6절](../contracts/repeater-compat-record.md#66-ubuntu-2404-증거)). 실제 UltraVNC와 Ubuntu VNC Relay의 조합은 미실행이다 |
-| OPS-021 | 부분 / 부분 | **미판정(통과 아님)** | 출처·의존성 고지·대시보드 JS 의존성 검토는 마쳤다([라이선스 검사 4.1절](check-dependency-licenses.md#41-출처-검토-기록-2026-11-04)). 실제 MIT 저작권자·적용 연도로 LICENSE를 쓰는 일이 사용자 결정(Q97)을 기다린다 |
+| OPS-021 | 부분 / 부분 | 통과 | 기존 부분 시험 `tests/dependency_notices.rs`가 위 두 OS 보고서에서 통과했다. 출처·의존성 고지·대시보드 JS 의존성 검토([라이선스 검사 4.1절](check-dependency-licenses.md#41-출처-검토-기록-2026-11-04))와 루트 MIT LICENSE 작성·수동 검토([4.2절](check-dependency-licenses.md#42-프로젝트-license-검토-기록2026-11-07))를 합쳐 판정했다. 실제 저작권자·연도는 사용자 결정 2026-11-07(Q97)과 일치한다 |
 | OPS-023 | 부분 / 통과 | 통과 | Q99. Ubuntu에서 비부분 시험 `counts_connecting_and_connected_target_sockets_but_not_management_tls`가 통과했다. Windows는 큐가 찬 `listen()`이 WSAECONNREFUSED로 거절하므로 연결 중 소켓을 만들 수 없다(`tests/relay_target_scenarios.rs` 927~929행). Windows 부분 시험 `target_budget_denial_preserves_sessions_and_excludes_management_tls`는 통과했다([중계 수명 설계 7절 현재 시험](../architectures/relay-session.md#현재-시험)) |
-| OPS-031 | 부분 / 부분 | 통과 | 두 OS release 묶음의 수동 기록과 자동 시험을 함께 검토했다(Q107)([운영 how-to 4절](operate-relay.md#4-검증)). LICENSE 미완료는 그 기록에 따로 표시했다 |
+| OPS-031 | 부분 / 부분 | 통과 | 두 OS release 묶음의 수동 기록과 자동 시험을 함께 검토했다(Q107)([운영 how-to 4절](operate-relay.md#4-검증)). 2026-11-05 묶음의 LICENSE 누락은 당시 기록으로 보존한다. 루트 LICENSE 작성·검토는 마쳤고(사용자 결정 2026-11-07(Q97)), 앞으로 만드는 묶음에는 포함한다. 기존 묶음을 다시 검증한 것은 아니다 |
 | OPS-040 | 부분 / 부분 | 통과 | 모든 조건을 부분 시험들이 나누어 확인한다. IPv6 경계는 단위 시험으로 인정했다(Q58)([파일 감지 설계](../architectures/file-watch.md#사용자-결정-반영-2026-10-23)) |
 | OPS-044 | 통과 / 미실행 | 통과 | Windows 전용 시나리오다. Windows에서 비부분 시험 `console_close_forces_cleanup`이 통과했다([작업 5.3 완료 대조](../architectures/relay-session.md#작업-53-완료-대조2026-11-04)) |
 | RLY-006 | 부분 / 부분 | 통과 | Windows VNC Relay와 실제 UltraVNC의 독립 2회 수동 통과, 소유자 캡처 검토(Q116)([수동 확인 4.1](verify-ultravnc-manually.md#41-2026-11-05-실행-기록)·[4.2](verify-ultravnc-manually.md#42-2026-11-06-실행-기록)·[4.3절](verify-ultravnc-manually.md#43-자동-증거-대조-32단계)). Ubuntu VNC Relay의 실제 UltraVNC 확인은 미실행이다. Ubuntu 쪽은 Q129처럼 자동 시험을 증거로 본다. 이 확장은 이 문서의 판단, 사용자 결정 없음이다 |
@@ -292,9 +292,9 @@ Linux 전용 `tests/relay_dead_peer_linux.rs`는 사용자·네트워크 네임�
 | RLY-026 | 부분 / 통과 | 통과 | RLY-025와 같은 근거 |
 | WS-025 | 미실행 / 미실행 | 통과 | 무시된 시험의 실행 기록. 커밋 `d4c5678`에서 두 OS 모두 `--include-ignored`로 통과했다([WebSocket 계약 실행 기록](../contracts/websocket-relay-v1.md#계약-테스트-실행-기록)). 실제 VM의 noVNC 확인도 통과했다([호환성 기록 6.3절](../contracts/repeater-compat-record.md#63-조합별-결과)) |
 
-PRD 10절의 AC-01~37을 같은 기준으로 대조했다. 각 AC 행이 링크한 시나리오 ID를 두 보고서와 위 표에 맞춰 보았다. AC-12를 뺀 36개는 연결된 시나리오가 모두 두 보고서에서 통과이거나 위 표에서 통과다. AC-12의 시나리오는 OPS-021 하나이므로 AC-12는 충족되지 않았다.
+PRD 10절의 AC-01~37을 같은 기준으로 대조했다. 각 AC 행이 링크한 시나리오 ID를 두 보고서와 위 표에 맞춰 보았다. 37개 모두 연결된 시나리오가 두 보고서에서 통과이거나 위 표에서 통과다. AC-12는 OPS-021의 부분 시험과 출처·LICENSE 검토 기록을 합쳐 충족으로 판정했다.
 
-남은 일: Q97이 정해지면 LICENSE를 쓰고 OPS-021과 AC-12를 다시 판정한 뒤 작업 5.9를 닫는다. 스펙·계약의 상태 문장은 사용자 결정 2026-11-07(Q150~Q152)에 따라 갱신했고, 계약 시험 표에 남았던 규칙은 새 시험 두 개와 Q152로 닫았다([TODO 5.9](../TODO.md#5-운영배포-검증)).
+남은 일은 없다. Q97의 저작권자·적용 연도 확정과 LICENSE 작성·검토로 OPS-021·AC-12를 통과로 판정해 작업 5.9를 닫았다. 스펙·계약의 상태 문장은 사용자 결정 2026-11-07(Q150~Q152)에 따라 갱신했고, 계약 시험 표에 남았던 규칙은 새 시험 두 개와 Q152로 닫았다([TODO 5.9](../TODO.md#5-운영배포-검증)).
 
 ## 5. 중단 조건
 

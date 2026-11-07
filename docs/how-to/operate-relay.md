@@ -68,9 +68,9 @@ Windows 11 x64와 Ubuntu 24.04 LTS x64에서 release 실행파일을 만들고 �
    | `docs/how-to/operate-relay.md` | `docs/how-to/operate-relay.md` |
    | 저장소의 `docs/` 디렉터리와 `GLOSSARY.md` | 같은 상대 위치. 안내의 기준 링크를 오프라인에서도 읽으려면 함께 넣기를 권장한다. |
    | `THIRD-PARTY-NOTICES.txt` | `THIRD-PARTY-NOTICES.txt` 전체 |
-   | `LICENSE` | `LICENSE` — 아래 미완료 조건을 먼저 확인한다. |
+   | `LICENSE` | 루트 `LICENSE` 전체(MIT) |
 
-   **현재 루트 `LICENSE`는 없다.** 저작권자·적용 연도는 Q97 대기이며 TODO 5.7이 미완료다. 이를 임의로 채우지 않는다. `THIRD-PARTY-NOTICES.txt`는 프로젝트 자체 MIT LICENSE를 대신하지 않는다. LICENSE가 확정되기 전 묶음은 내부 검증용이다. 배포 준비 완료로 표시하지 않는다.
+   루트 [`LICENSE`](../../LICENSE)는 MIT 전문과 `Copyright (c) 2026 vnc-relay contributors`를 담는다(사용자 결정 2026-11-07(Q97)). 배포 묶음에 이 파일을 반드시 넣는다. `THIRD-PARTY-NOTICES.txt`는 프로젝트 자체 MIT LICENSE를 대신하지 않는다. 검토 결과는 [라이선스 검사 4.2절](check-dependency-licenses.md#42-프로젝트-license-검토-기록2026-11-07)에 있다.
 
    개인키·계정 파일·실제 비밀번호·운영 로그는 배포 묶음에 넣지 않는다.
 
@@ -297,6 +297,8 @@ Windows 로그오프·시스템 종료는 강제 종료다. 대화형 콘솔 프
 | 인증서 교체 | 새 전체 TLS 연결에 새 인증서, 이전 연결 유지 | TLS 배치에서 3.6절 | 해당 없음. 예시는 TLS를 끈다. 자동 증거는 OPS-024 | 해당 없음 |
 | 로그 회전 | 원래 경로 재생성, 새 사건 기록 | 3.7절 | Windows·Ubuntu 통과 | [CLI 계약 실행 기록](../contracts/cli-v1.md#계약-테스트-실행-기록) |
 | 종료 | 정상 종료 코드 0, `server_stopped` | 3.8절 | Windows·Ubuntu 통과 | 같음 |
+
+2026-11-07 갱신: 위 2026-11-05·커밋 `1c7c7a9` 묶음의 `LICENSE 없음(Q97 대기)`는 당시 기록으로 보존한다. 루트 `LICENSE` 작성·검토는 마쳤다(사용자 결정 2026-11-07(Q97), [검토 기록](check-dependency-licenses.md#42-프로젝트-license-검토-기록2026-11-07)). 앞으로 만드는 두 OS 배포 묶음에는 3.1절에 따라 루트 `LICENSE`를 포함한다. 과거 묶음을 다시 만들거나 LICENSE 포함을 재확인했다는 뜻은 아니다.
 
 자동 증거는 `tests/distribution.rs`와 `tests/windows_console.rs`에 있다. 공통 본문은 예시를 복사하고 포트·경로만 바꾼다. 각 OS의 실제 CLI 계정 준비 뒤 시작·양방향 중계·IP 재로드·정상 종료를 확인한다. `cargo test`는 debug 실행파일을 빌드한다. release 실행파일과 안내 전체의 증거는 두 OS 수동 기록으로 보완한다(사용자 결정 2026-11-04(Q107)). 이 시험 분리와 OPS-019의 OS별 비부분 표식은 **이 문서의 판단, 사용자 결정 없음**이다. OPS-031 자동 표식은 부분이다.
 

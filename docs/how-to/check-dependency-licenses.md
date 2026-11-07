@@ -1,13 +1,13 @@
 # 의존성 라이선스를 검사하는 방법
 
-Rust 의존성이 승인된 라이선스 허용 목록을 지키는지 검사하고, 실행파일과 함께 보낼 고지를 만든다. `cargo deny`의 허용 판정과 배포 고지의 최신 상태는 별도 검사다. 독립 구현의 출처 검토는 [4.1절](#41-출처-검토-기록-2026-11-04)에 기록한다. 프로젝트 자체 MIT LICENSE는 저작권자·연도 결정 대기이며 이 문서의 의존성 고지가 대신하지 않는다(사용자 결정 2026-11-04(Q97)).
+Rust 의존성이 승인된 라이선스 허용 목록을 지키는지 검사하고, 실행파일과 함께 보낼 고지를 만든다. `cargo deny`의 허용 판정과 배포 고지의 최신 상태는 별도 검사다. 독립 구현의 출처 검토는 [4.1절](#41-출처-검토-기록-2026-11-04)에 기록한다. 프로젝트 자체 MIT 고지는 루트 [`LICENSE`](../../LICENSE)에 있다. 저작권 고지는 `Copyright (c) 2026 vnc-relay contributors`다(사용자 결정 2026-11-07(Q97)). 이 파일은 `THIRD-PARTY-NOTICES.txt`와 별도로 배포한다. 검토 기록은 [4.2절](#42-프로젝트-license-검토-기록2026-11-07)에 있다.
 
 | 항목 | 값 |
 | --- | --- |
 | 대상 독자 | 의존성을 추가·갱신하는 개발자, 배포를 준비하는 프로젝트 관리자 |
 | 검증 상태 | Verified |
 | 검증 환경·버전 | Ubuntu 24.04.4 LTS x86_64(WSL2)와 Windows 11 Pro 10.0.26200, Rust 1.99.1, cargo-deny 0.20.2 |
-| 최종 검증일 | 2026-11-04 |
+| 최종 검증일 | 2026-11-07 |
 | 관련 기준 문서 | [PRD 확정 기준](../requirements/PRD.md#확정-기준) "구현 기술"·"라이선스" 행, [OPS-021](../specs/operations.md#7-수용-테스트), 허용 목록 [`deny.toml`](../../deny.toml) |
 
 ## 1. 대상과 영향
@@ -69,7 +69,7 @@ Rust 의존성이 승인된 라이선스 허용 목록을 지키는지 검사하
 
 ### 3.1 배포 고지 생성과 대조
 
-루트 [`THIRD-PARTY-NOTICES.txt`](../../THIRD-PARTY-NOTICES.txt)는 두 대상의 일반·빌드 의존성 합집합이다. 각 crate의 이름·버전·라이선스 식과 고지 전문을 담는다. crate 고지 뒤에는 실행파일에 넣는 글꼴의 `web/dashboard/fonts/LICENSE.txt` 전문을 담는다. Windows·Linux 배포물에는 같은 파일 전체를 넣는다. 프로젝트의 실제 MIT LICENSE는 별도로 넣어야 한다. 아직 결정되지 않은 저작권자·연도를 이 파일에 대신 넣지 않는다.
+루트 [`THIRD-PARTY-NOTICES.txt`](../../THIRD-PARTY-NOTICES.txt)는 두 대상의 일반·빌드 의존성 합집합이다. 각 crate의 이름·버전·라이선스 식과 고지 전문을 담는다. crate 고지 뒤에는 실행파일에 넣는 글꼴의 `web/dashboard/fonts/LICENSE.txt` 전문을 담는다. Windows·Linux 배포물에는 같은 파일 전체와 루트 [`LICENSE`](../../LICENSE)를 별도로 넣는다. `LICENSE`는 MIT 전문과 `Copyright (c) 2026 vnc-relay contributors`를 담는다(사용자 결정 2026-11-07(Q97)). 의존성 고지는 프로젝트 자체 MIT 고지를 대신하지 않는다.
 
 생성기는 기존 `xtask`의 std·serde_json만 쓴다. 새 crate와 추가 설치 도구를 쓰지 않기 위한 선택이다. cargo-about·cargo-license 추가 설치, Python 스크립트, 수동 목록 편집보다 기존 Rust 실행 환경을 재사용하기 쉽다. **이 문서의 판단, 사용자 결정 없음**이다. 코드 위치와 처리 순서는 [xtask 설계](../architectures/xtask.md)에 있다.
 
@@ -212,7 +212,23 @@ ring 0.17.14는 rustls-webpki의 `alloc` 기능이 `ring?/alloc`으로 켜는 �
 
 재검토 때는 PowerShell의 `Get-ChildItem src,crates,web/dashboard,xtask -Recurse -File | Select-String -Pattern 'copyright|spdx|license|websockify|ultravnc|novnc'`로 같은 범위를 검색할 수 있다. 현재 기록은 저장소 검색 도구와 전체 파일 목록으로 확인했다. 이 PowerShell 명령은 이번에 별도로 실행하지 않았다. 외부 세 프로젝트의 원본 소스 비교를 재검토 절차로 추가하지 않는다.
 
-### 4.2 배포 의존성·암호 모듈 검토 (2026-11-04)
+### 4.2 프로젝트 LICENSE 검토 기록(2026-11-07)
+
+프로젝트 MIT LICENSE의 작성·검토를 마쳤다. 저작권자·적용 연도를 나중에 정하기로 했던 사용자 결정 2026-11-04(Q97)는 사용자 결정 2026-11-07(Q97)로 해소했다. 저작권자는 `vnc-relay contributors`, 적용 연도는 `2026`이다. 아래 2026-11-04 기록의 LICENSE 미완료 상태는 당시 결과이며, 현재 판정은 이 절을 따른다.
+
+대상은 루트 `LICENSE`를 추가한 작업 트리다. `Cargo.toml`의 라이선스 값과 `xtask/src/notices.rs`의 고지 분리 문구는 바꾸지 않았다. LICENSE 전문은 소스 문자열 시험을 새로 만들지 않고 사람이 대조했다.
+
+| 확인 대상 | 기준 | 환경 | 결과 | 증거 |
+| --- | --- | --- | --- | --- |
+| LICENSE 전문 | 표준 MIT License 전문과 일치. 저작권 행만 실제 값으로 채운다 | Windows 11, 2026-11-07. 파일·표준 전문 수동 대조 | 통과. 줄바꿈을 제외한 허가·고지 유지 조건·면책 문구가 같다. 저작권 행만 프로젝트 값이다 | 루트 [`LICENSE`](../../LICENSE), [OSI MIT](https://opensource.org/license/mit), [SPDX `MIT` 전문](https://spdx.org/licenses/MIT.html) |
+| 저작권 고지 | `Copyright (c) 2026 vnc-relay contributors` | 같음 | 통과. `LICENSE` 3행이 사용자 결정 2026-11-07(Q97)과 같다 | [`LICENSE`](../../LICENSE), 사용자 결정 2026-11-07(Q97) |
+| 패키지 라이선스 | `license = "MIT"` | 같음 | 통과. 루트 LICENSE와 패키지 메타데이터가 일치한다 | [`Cargo.toml`](../../Cargo.toml) `[workspace.package]` |
+| LICENSE 추가 뒤 의존성 고지 대조 | `cargo run --offline --locked --quiet -p xtask -- notices --check` 성공 | Windows 11, 2026-11-07 | 통과 (`THIRD-PARTY-NOTICES.txt`). 루트 LICENSE는 의존성 고지에 섞이지 않는다 | LICENSE를 추가한 작업 트리의 실행 출력 `notices --check: 통과 (THIRD-PARTY-NOTICES.txt)`. 스캐너는 workspace crate를 제외한다 |
+| 고지 머리말 | 프로젝트 자체 MIT LICENSE를 별도 파일로 안내한다 | Windows 11, 2026-11-07. 소스 수동 대조 | 통과. 루트 LICENSE를 별도로 배포하는 절차와 일치한다 | [`xtask/src/notices.rs`](../../xtask/src/notices.rs) `render`의 `The project's own MIT LICENSE is separate and is not supplied here.` |
+
+OPS-021은 두 OS에서 통과한 기존 부분 시험 `tests/dependency_notices.rs`, 4.1절의 출처 검토, 아래 의존성·암호 모듈 검토와 이 절의 LICENSE 검토를 합쳐 판정한다. 전체 수용 판정은 [개발 환경·검증 4.1절](set-up-and-verify.md#41-작업-59-판정표)에 있다. 앞으로 만드는 배포 묶음에는 `LICENSE`와 의존성 고지 전체를 넣어야 한다. 기존 배포 아카이브를 다시 만들거나 확인했다는 뜻은 아니다.
+
+### 4.3 배포 의존성·암호 모듈 검토 (2026-11-04)
 
 현재 고지에는 외부 crate 110개가 있다. 두 대상의 일반·빌드 의존성 합집합이며 Windows 전용 `windows-sys`·Linux 전용 `inotify`·빌드 도구도 포함한다. PRD 승인 기술 중 현재 쓰는 tokio·rustls·tokio-rustls·rustls-pki-types·axum·tokio-tungstenite·toml·serde_json·argon2·rpassword·notify·clap과 암호 모듈 aws-lc-rs·aws-lc-sys가 들어간다. serde는 현재 직접 쓰지 않고 toml 등에서 `serde_core`를 쓴다. 승인된 기술을 아직 직접 의존하지 않는 경우와 배포 고지 누락을 구분한다. 과거 채택 묶음 검사는 이 절 위의 실행 기록 1에 남아 있다.
 
@@ -227,7 +243,9 @@ ring 0.17.14는 rustls-webpki의 `alloc` 기능이 `ring?/alloc`으로 켜는 �
 
 남은 OPS-021 차단 항목은 Q97의 실제 MIT 저작권자·적용 연도 결정과 LICENSE 작성·검토다. 이번 검토 범위에서 그 밖의 미완료 항목은 발견하지 않았다. 실제 배포 묶음에는 이 고지 전체가 포함되었는지 배포 단계에서 다시 확인해야 한다. 아직 생성되지 않은 배포 아카이브를 검증했다고 주장하지 않는다.
 
-### 4.3 실행 기록 (2026-11-04)
+<a id="43-실행-기록-2026-11-04"></a>
+
+### 4.4 실행 기록 (2026-11-04)
 
 대상은 4.1절의 기준 커밋에 이번 `xtask/src/notices.rs`·명령 분기·루트 시험·고지 파일·문서 변경을 더한 작업 트리다. Cargo.toml·Cargo.lock·제품 Rust·대시보드 파일은 이 작업에서 바꾸지 않았다. WSL은 `CARGO_TARGET_DIR=$HOME/vnc-relay-target`, Windows는 Cargo의 기본 대상 디렉터리를 썼다. Windows는 기존 빌드 조건인 `AWS_LC_SYS_PREBUILT_NASM=1`을 썼다.
 
