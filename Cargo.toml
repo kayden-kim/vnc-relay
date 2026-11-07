@@ -32,8 +32,9 @@ vnc-relay-domain = { path = "crates/domain" }
 
 # Lint policy: docs/conventions/rust.md section 2.
 [workspace.lints.rust]
-# Only crates/adapters/src/terminal/windows_console.rs and the pseudo-console
-# module of tests/windows_console.rs allow `unsafe` (docs/conventions/rust.md section 2).
+# Only crates/adapters/src/terminal/windows_console.rs, the pseudo-console module of
+# tests/windows_console.rs, and the Windows handle-snapshot module of
+# tests/performance.rs allow `unsafe` (docs/conventions/rust.md section 2).
 unsafe_code = "deny"
 
 [workspace.lints.clippy]
@@ -79,4 +80,4 @@ tokio = { workspace = true, features = ["macros", "net", "rt", "test-util"] }
 tokio-tungstenite.workspace = true
 
 [target.'cfg(windows)'.dev-dependencies]
-windows-sys = { workspace = true, features = ["Win32_System_Pipes", "Win32_System_Threading"] }
+windows-sys = { workspace = true, features = ["Wdk_System_Threading", "Win32_System_Pipes", "Win32_System_Threading"] }

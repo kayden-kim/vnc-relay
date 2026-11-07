@@ -30,6 +30,10 @@ const WARM_UP_SESSIONS: usize = 100;
 const WARM_UP_TRAFFIC: Duration = Duration::from_secs(10);
 /// Q121: socket buffer size of every test client connected to the relay.
 const CLIENT_SOCKET_BUFFER: u32 = 64 * 1024;
+/// Q148: Event handles a Windows relay may add after round 1, per worker thread.
+/// Winsock keeps an Event per thread on two first-use paths (MSAFD thread setup and
+/// `closesocket` waiting for readers); the relay runtime has one worker per logical core.
+const EVENTS_PER_WORKER: u64 = 2;
 const M: usize = 1_048_576;
 const CHUNK: usize = 4096;
 const RATE: u64 = 125_000;
@@ -581,10 +585,12 @@ struct Sample {
     cpu: f64,
     rss: u64,
     handles: u64,
+    /// Windows only: Event handles among `handles` (Q148).
+    events: Option<u64>,
 }
 impl Sample {
     fn json(self) -> Value {
-        json!({"wall_seconds":self.wall,"cpu_seconds":self.cpu,"rss_bytes":self.rss,"handles_or_fds":self.handles})
+        json!({"wall_seconds":self.wall,"cpu_seconds":self.cpu,"rss_bytes":self.rss,"handles_or_fds":self.handles,"event_handles":self.events})
     }
 }
 async fn sample(pid: u32, epoch: Instant) -> Sample {
@@ -592,15 +598,138 @@ async fn sample(pid: u32, epoch: Instant) -> Sample {
 }
 #[cfg(windows)]
 fn process_sample(pid: u32, epoch: Instant) -> Sample {
-    let output = must(Command::new("powershell.exe").args(["-NoProfile", "-NonInteractive", "-Command", &format!("$p=Get-Process -Id {pid}; [Console]::WriteLine(('{{0}},{{1}},{{2}}' -f $p.WorkingSet64,$p.TotalProcessorTime.Ticks,$p.HandleCount))")]).output());
+    let output = must(Command::new("powershell.exe").args(["-NoProfile", "-NonInteractive", "-Command", &format!("$p=Get-Process -Id {pid}; [Console]::WriteLine(('{{0}},{{1}}' -f $p.WorkingSet64,$p.TotalProcessorTime.Ticks))")]).output());
     assert!(output.status.success(), "Get-Process: {:?}", output);
     let text = must(String::from_utf8(output.stdout));
     let fields: Vec<u64> = text.trim().split(',').map(|f| must(f.parse())).collect();
+    let handles = handle_snapshot::counts(pid);
     Sample {
         wall: epoch.elapsed().as_secs_f64(),
         cpu: fields[1] as f64 / 10_000_000.0,
         rss: fields[0],
-        handles: fields[2],
+        handles: handles.total,
+        events: Some(handles.events),
+    }
+}
+
+// Q149 confines every Win32 call and unsafe operation of this test to this module.
+#[cfg(windows)]
+#[expect(
+    unsafe_code,
+    reason = "Q149 permits only this module to read the relay's handle snapshot by object type"
+)]
+mod handle_snapshot {
+    use std::io;
+    use std::mem::size_of;
+    use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle};
+    use std::ptr;
+
+    use windows_sys::Wdk::System::Threading::{
+        NtQueryInformationProcess, ProcessHandleInformation,
+    };
+    use windows_sys::Win32::Foundation::{HANDLE, STATUS_INFO_LENGTH_MISMATCH};
+    use windows_sys::Win32::System::Threading::{
+        CreateEventW, GetCurrentProcess, OpenProcess, PROCESS_QUERY_INFORMATION,
+    };
+
+    pub struct Counts {
+        pub total: u64,
+        pub events: u64,
+    }
+
+    /// PROCESS_HANDLE_TABLE_ENTRY_INFO, one entry of the ProcessHandleInformation snapshot.
+    #[repr(C)]
+    #[derive(Clone, Copy)]
+    struct Entry {
+        handle: HANDLE,
+        handle_count: usize,
+        pointer_count: usize,
+        granted_access: u32,
+        object_type_index: u32,
+        handle_attributes: u32,
+        reserved: u32,
+    }
+
+    /// All handles of `pid`, and those whose object type is Event.
+    pub fn counts(pid: u32) -> Counts {
+        // SAFETY: plain call with no pointer arguments; a null result is checked below.
+        let raw = unsafe { OpenProcess(PROCESS_QUERY_INFORMATION, 0, pid) };
+        assert!(
+            !raw.is_null(),
+            "OpenProcess({pid}): {}",
+            io::Error::last_os_error()
+        );
+        // SAFETY: OpenProcess succeeded and returned a handle this function now owns.
+        let process = unsafe { OwnedHandle::from_raw_handle(raw) };
+        let event = event_type_index();
+        let entries = snapshot(process.as_raw_handle());
+        Counts {
+            total: entries.len() as u64,
+            events: entries
+                .iter()
+                .filter(|entry| entry.object_type_index == event)
+                .count() as u64,
+        }
+    }
+
+    /// The object type number of Event, read from an Event this process creates.
+    /// Type numbers are shared by every process of one boot.
+    fn event_type_index() -> u32 {
+        // SAFETY: no security attributes and no name; a null result is checked below.
+        let raw = unsafe { CreateEventW(ptr::null(), 1, 0, ptr::null()) };
+        assert!(
+            !raw.is_null(),
+            "CreateEventW: {}",
+            io::Error::last_os_error()
+        );
+        // SAFETY: CreateEventW succeeded and returned a handle this function now owns.
+        let event = unsafe { OwnedHandle::from_raw_handle(raw) };
+        // SAFETY: GetCurrentProcess returns a pseudo handle that needs no closing.
+        let own = snapshot(unsafe { GetCurrentProcess() });
+        own.iter()
+            .find(|entry| entry.handle == event.as_raw_handle())
+            .map(|entry| entry.object_type_index)
+            .unwrap_or_else(|| panic!("the test's own Event is missing from its handle snapshot"))
+    }
+
+    /// PROCESS_HANDLE_SNAPSHOT_INFORMATION: two pointer-sized header fields
+    /// (NumberOfHandles, Reserved) followed by the entries.
+    fn snapshot(process: HANDLE) -> Vec<Entry> {
+        let mut words = vec![0usize; 8192];
+        loop {
+            let bytes = u32::try_from(words.len() * size_of::<usize>())
+                .unwrap_or_else(|error| panic!("snapshot buffer size: {error}"));
+            let mut needed = 0u32;
+            // SAFETY: the buffer is writable for `bytes` bytes, pointer-aligned, and
+            // outlives the call; `needed` is a valid output location.
+            let status = unsafe {
+                NtQueryInformationProcess(
+                    process,
+                    ProcessHandleInformation,
+                    words.as_mut_ptr().cast(),
+                    bytes,
+                    &mut needed,
+                )
+            };
+            if status == STATUS_INFO_LENGTH_MISMATCH {
+                let grown = (needed as usize).div_ceil(size_of::<usize>()) + 1024;
+                words.resize(grown.max(words.len() * 2), 0);
+                continue;
+            }
+            assert!(status >= 0, "NtQueryInformationProcess: 0x{status:08x}");
+            let count = words[0];
+            let end = 2 * size_of::<usize>() + count * size_of::<Entry>();
+            assert!(
+                end <= words.len() * size_of::<usize>(),
+                "handle snapshot of {count} entries overruns its buffer"
+            );
+            // SAFETY: the call succeeded, so `count` initialized entries follow the
+            // two header words inside the buffer (bounds checked above); Entry has
+            // pointer alignment, the same as the buffer.
+            let entries =
+                unsafe { std::slice::from_raw_parts(words.as_ptr().add(2).cast::<Entry>(), count) };
+            return entries.to_vec();
+        }
     }
 }
 #[cfg(target_os = "linux")]
@@ -633,6 +762,7 @@ fn process_sample(pid: u32, epoch: Instant) -> Sample {
         cpu,
         rss,
         handles: must(std::fs::read_dir(root.join("fd"))).count() as u64,
+        events: None,
     }
 }
 
@@ -959,6 +1089,39 @@ async fn direct_pairs() -> Vec<(Peer, Peer)> {
 fn criterion(name: &str, measured: Value, limit: Value, pass: bool) -> Value {
     json!({"name":name,"measured":measured,"limit":limit,"pass":pass})
 }
+/// Q122·Q148: a later round keeps round 1's handles. On Windows, Event handles may
+/// rise by EVENTS_PER_WORKER per worker thread; every other handle, and every Linux
+/// fd, must equal round 1.
+fn round_handle_criteria(round: usize, now: Sample, first: Sample) -> Vec<Value> {
+    match (now.events, first.events) {
+        (Some(events), Some(first_events)) => {
+            let workers = must(std::thread::available_parallelism()).get() as u64;
+            let limit = first_events + EVENTS_PER_WORKER * workers;
+            let others = now.handles - events;
+            let first_others = first.handles - first_events;
+            vec![
+                criterion(
+                    &format!("round_{round}_non_event_handles"),
+                    json!(others),
+                    json!(first_others),
+                    others == first_others,
+                ),
+                criterion(
+                    &format!("round_{round}_event_handles"),
+                    json!(events),
+                    json!(limit),
+                    events <= limit,
+                ),
+            ]
+        }
+        _ => vec![criterion(
+            &format!("round_{round}_handles_or_fds"),
+            json!(now.handles),
+            json!(first.handles),
+            now.handles == first.handles,
+        )],
+    }
+}
 fn passed(criteria: &[Value]) -> bool {
     criteria.iter().all(|c| c["pass"] == true)
 }
@@ -1264,6 +1427,7 @@ async fn bounds_slow_receivers_and_lifecycle_residue() {
         }
         relay.quiescent(WARM_UP_SESSIONS).await;
         let mut rounds = Vec::new();
+        let mut first_round: Option<Sample> = None;
         for round in 1..=ROUNDS {
             for batch in 0..20 {
                 let first = 10_000 + round * 1000 + batch * 50;
@@ -1273,17 +1437,9 @@ async fn bounds_slow_receivers_and_lifecycle_residue() {
             tokio::time::sleep(Duration::from_secs(5)).await;
             let metrics = sample(relay.child.id(), epoch).await;
             // Q122: round 1 warms reusable OS resources; later rounds must equal it.
-            let reference = rounds
-                .first()
-                .and_then(|first: &Value| first["metrics"]["handles_or_fds"].as_u64())
-                .unwrap_or(metrics.handles);
+            let reference = *first_round.get_or_insert(metrics);
             if round > 1 {
-                criteria.push(criterion(
-                    &format!("round_{round}_handles_or_fds"),
-                    json!(metrics.handles),
-                    json!(reference),
-                    metrics.handles == reference,
-                ));
+                criteria.extend(round_handle_criteria(round, metrics, reference));
             }
             rounds.push(json!({"round":round,"metrics":metrics.json(),"log_state":state}));
         }
