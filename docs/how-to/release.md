@@ -94,14 +94,15 @@ Windows 11 x64와 Ubuntu 24.04 LTS x64용 배포 묶음을 만들고, 버전 태
 | 2 | `cargo install cargo-deny --version 0.20.2 --locked` | 도구 설치 문제 |
 | 3 | `cargo fmt --all --check` | 서식 위반 |
 | 4 | `cargo clippy --workspace --all-targets --locked -- -D warnings` | 경고·컴파일 오류 |
-| 5 | `cargo xtask layers` | 레이어 위반 |
-| 6 | `cargo xtask tokens --check` | 토큰·복사본 불일치 |
-| 7 | `cargo deny check licenses` | 허용 목록 밖 라이선스 |
-| 8 | `cargo xtask package` | 버전 형식, 빌드, 고지 대조, 압축 |
+| 5 | `cargo test --package xtask --locked` | 개발 도구 단위 시험 실패(버전 형식, SHA-256 등) |
+| 6 | `cargo xtask layers` | 레이어 위반 |
+| 7 | `cargo xtask tokens --check` | 토큰·복사본 불일치 |
+| 8 | `cargo deny check licenses` | 허용 목록 밖 라이선스 |
+| 9 | `cargo xtask package` | 버전 형식, 빌드, 고지 대조, 압축 |
 
 통과하면 실행 결과의 Artifacts에 `package-Windows`와 `package-Linux`가 생긴다. Artifacts는 GitHub의 보관 기간이 지나면 지워진다. 오래 둘 묶음은 3.3절의 Release로 낸다.
 
-`cargo xtask scenarios`(전체 시험)는 실행하지 않는다. 브라우저·`nftables`·성능 시험의 실행 환경이 로컬 게이트와 다르기 때문이다(사용자 결정 2026-11-08(Q162)).
+`cargo xtask scenarios`(전체 시험)는 실행하지 않는다. 브라우저·`nftables`·성능 시험의 실행 환경이 로컬 게이트와 다르기 때문이다(사용자 결정 2026-11-08(Q162)). xtask 단위 시험은 실행 환경을 타지 않아 함께 실행한다(이 문서의 판단, 사용자 결정 없음).
 
 ### 3.3 버전을 올리고 Release 내기
 

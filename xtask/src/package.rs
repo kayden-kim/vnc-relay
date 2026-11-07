@@ -77,20 +77,22 @@ pub fn run() -> Result<bool, Error> {
     if stage.exists() {
         fs::remove_dir_all(&stage)?;
     }
-    fs::create_dir_all(&stage)?;
-    fs::copy(
-        workspace
+    make_dir(&stage)?;
+    copy_file(
+        &workspace
             .target_dir
             .join("release")
             .join(platform.executable),
-        stage.join(platform.executable),
+        &stage.join(platform.executable),
+        EXECUTABLE_MODE,
     )?;
-    fs::copy(
-        root.join("examples").join("relay.toml"),
-        stage.join("relay.toml"),
+    copy_file(
+        &root.join("examples").join("relay.toml"),
+        &stage.join("relay.toml"),
+        DATA_MODE,
     )?;
     for file in ROOT_FILES {
-        fs::copy(root.join(file), stage.join(file))?;
+        copy_file(&root.join(file), &stage.join(file), DATA_MODE)?;
     }
     copy_dir(&root.join("docs"), &stage.join("docs"))?;
 
@@ -157,16 +159,44 @@ fn archive_command(archive: &str, dir: &str) -> Command {
 }
 
 fn copy_dir(from: &Path, to: &Path) -> Result<(), Error> {
-    fs::create_dir_all(to)?;
+    make_dir(to)?;
     for entry in fs::read_dir(from)? {
         let entry = entry?;
         let target = to.join(entry.file_name());
         if entry.file_type()?.is_dir() {
             copy_dir(&entry.path(), &target)?;
         } else {
-            fs::copy(entry.path(), target)?;
+            copy_file(&entry.path(), &target, DATA_MODE)?;
         }
     }
+    Ok(())
+}
+
+/// Unix modes in the bundle. The source modes are not kept: WSL shows every file
+/// on a Windows drive (`/mnt/d`) as 0777.
+const EXECUTABLE_MODE: u32 = 0o755;
+const DATA_MODE: u32 = 0o644;
+
+fn make_dir(path: &Path) -> Result<(), Error> {
+    fs::create_dir_all(path)?;
+    set_mode(path, EXECUTABLE_MODE)
+}
+
+fn copy_file(from: &Path, to: &Path, mode: u32) -> Result<(), Error> {
+    fs::copy(from, to)?;
+    set_mode(to, mode)
+}
+
+#[cfg(unix)]
+fn set_mode(path: &Path, mode: u32) -> Result<(), Error> {
+    use std::os::unix::fs::PermissionsExt as _;
+    fs::set_permissions(path, fs::Permissions::from_mode(mode))?;
+    Ok(())
+}
+
+/// Windows files have no Unix mode; zip entries get the archiver's defaults.
+#[cfg(not(unix))]
+fn set_mode(_path: &Path, _mode: u32) -> Result<(), Error> {
     Ok(())
 }
 

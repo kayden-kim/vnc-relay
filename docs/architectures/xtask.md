@@ -113,7 +113,7 @@ flowchart LR
 
 고지 파일이 없거나 crate를 메타데이터에 연결하지 못하면 종료 코드 1로 중단한다. 읽기·쓰기 오류와 패키지 안 심볼릭 링크도 오류다. `--check`는 저장소를 바꾸지 않는다. 생성 도중 실패하면 기존 고지 파일을 덮어쓰지 않는다. 마지막 파일 쓰기 자체의 오류는 파일을 일부 바꿀 수 있으므로 다시 생성한다.
 
-`cargo xtask package`는 다음 순서로 진행한다. ① `cargo metadata`로 루트·대상 디렉터리·`vnc-relay` 버전을 읽고 `check_version`으로 형식을 검사한다. ② `cargo fetch --locked`로 두 대상의 의존성 소스를 받는다. `notices --check`가 오프라인으로 두 대상의 고지 파일을 읽기 때문이다. ③ `cargo build --release --locked --package vnc-relay`. ④ `notices::run(true)`. 대조가 실패하면 묶음을 만들지 않고 종료 코드 1이다. ⑤ `<대상 디렉터리>/package/vnc-relay-<버전>-<os>-x64/`를 지우고 다시 만든 뒤 실행파일, `examples/relay.toml`(`relay.toml`로), `README.md`·`LICENSE`·`THIRD-PARTY-NOTICES.txt`·`GLOSSARY.md`, `docs/` 전체를 복사한다. ⑥ 같은 이름의 묶음 파일을 지우고 `package/`에서 OS `tar`로 디렉터리 하나를 압축한다. ⑦ 묶음 바이트의 SHA-256을 `<묶음>.sha256`에 `sha256sum` 형식으로 쓰고, 표준 출력에 `package: <경로>`와 `sha256: <값>`을 쓴다.
+`cargo xtask package`는 다음 순서로 진행한다. ① `cargo metadata`로 루트·대상 디렉터리·`vnc-relay` 버전을 읽고 `check_version`으로 형식을 검사한다. ② `cargo fetch --locked`로 두 대상의 의존성 소스를 받는다. `notices --check`가 오프라인으로 두 대상의 고지 파일을 읽기 때문이다. ③ `cargo build --release --locked --package vnc-relay`. ④ `notices::run(true)`. 대조가 실패하면 묶음을 만들지 않고 종료 코드 1이다. ⑤ `<대상 디렉터리>/package/vnc-relay-<버전>-<os>-x64/`를 지우고 다시 만든 뒤 실행파일, `examples/relay.toml`(`relay.toml`로), `README.md`·`LICENSE`·`THIRD-PARTY-NOTICES.txt`·`GLOSSARY.md`, `docs/` 전체를 복사한다. Unix에서는 원본 권한과 관계없이 디렉터리·실행파일을 `0755`, 나머지 파일을 `0644`로 맞춘다. WSL에서 Windows 드라이브(`/mnt/d`)의 파일은 모두 `0777`로 보이기 때문이다. ⑥ 같은 이름의 묶음 파일을 지우고 `package/`에서 OS `tar`로 디렉터리 하나를 압축한다. ⑦ 묶음 바이트의 SHA-256을 `<묶음>.sha256`에 `sha256sum` 형식으로 쓰고, 표준 출력에 `package: <경로>`와 `sha256: <값>`을 쓴다. 경로는 저장소 안이면 상대 경로, 밖이면 절대 경로다.
 
 ## 5. 상태와 초기화
 
