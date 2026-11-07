@@ -1378,7 +1378,7 @@ Playwright가 내려받은 Firefox 157은 설치된 최신 Firefox가 아니라�
 
 - 증거: `target/q412-close/`에 엔진별 `results-b.json`과 `shots/`의 PNG(Chrome·Edge·WebKit 36장, Firefox 40장)를 두었다(FE-TBD-008). `SHA256SUMS.txt`는 152개 파일, 8,200,172바이트를 담는다. 이 목록 파일의 SHA-256은 `a1040e81abba16f3dac98de7c6cd1c0a1026dde54103ff742bf5797a2ce1a015`이다. 스크린샷에는 루프백 시험 서버의 세션 식별자가 보인다. 이 파일은 공유하지 않는다.
 - 도구: 저장소 밖 `D:/vr-tools/q412-close/`의 `check.py`(SHA-256 `a0a3c91bad355ea6c17e942032440618bf2dbe13c706f3c2201c03c758d9381c`)와 `ff_bidi.ts`(SHA-256 `2f480270aa18ae28b82af15dcd261d07702be38d9ecf17000918051eb16815c0`)다. 가상 환경과 WebKit은 4.21절의 `D:/vr-tools/webkit-q135/`를 썼다.
-- 게이트: 이 절은 외부 브라우저 확인만 실행했다. 대상 제품 내용의 두 OS 전체 게이트는 4.25절이다.
+- 게이트: 이 절은 외부 브라우저 확인만 실행했다. 대상 제품 내용의 두 OS 전체 게이트는 4.25절이다. 작업 4.13의 첫 Windows 게이트(`4513b0a`)에서 `dashboard_025_saved_language_survives_real_navigation_and_preserves_values`가 다시 불러오기 뒤 상세 값 비교(`tests/dashboard_live/cross.rs` 1080행)에서 실패했다. 이 시험은 `.fact-list`가 생기기만 기다렸다. 4.25절(Q143) 뒤에는 첫 조회 중 화면도 `.fact-list`를 그리므로, 값이 "조회 중" 배지일 때 읽을 수 있다 [INFERENCE: 실패 메시지의 값은 남지 않았다]. 다시 불러오기 뒤 `settled`로 조회 완료를 기다리게 고쳤다(`cce6c50`). 제품 코드는 바꾸지 않았다. 단독 3회 통과 뒤 `cce6c50`의 두 OS 전체 게이트가 통과했다(Windows 통과 137·부분 11, WSL 통과 140·부분 7, 두 OS 실패 0).
 - 미실행: 실제 Safari, 최신 안정판 Chrome 158·Edge 157·Firefox 159.0.1(Q146), 실제 모바일 기기와 스크린 리더(Q136·Q137).
 
 ## 5. 중단 조건
