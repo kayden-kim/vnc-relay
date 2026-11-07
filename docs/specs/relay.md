@@ -4,17 +4,17 @@ Viewer와 Server가 VNC Relay에 접속했을 때 관찰하는 연결 수명, �
 
 | 항목 | 값 |
 | --- | --- |
-| 상태 | Draft |
+| 상태 | Active(2026-11-07 채택, 사용자 결정 2026-11-07(Q150)) |
 | 관련 요구사항 | [PRD](../requirements/PRD.md) FR-01·FR-02·FR-03·FR-04·7절 보안, AC-01~04·AC-06~08 |
 | 용어 | [VNC Relay 용어집](../../GLOSSARY.md) |
 | 관련 스펙 | [WS·WSS](websocket.md), [관리 기능](management.md), [설정·운영](operations.md) |
 | 관련 계약 | [Repeater 초기 교환 v1](../contracts/repeater-handshake-v1.md). Active(2026-11-01 채택)이며 초기 요청 형식, Mode I 대상 문법, 중계 ID 비교, 오류 표시의 기준이다. |
-| 관련 아키텍처 문서·ADR | [TCP 진입점 모듈 설계](../architectures/tcp-entry-point.md)(3.1절 1항의 출발지 IP 검사), [연결 상한과 시간 제한 모듈 설계](../architectures/connection-limits.md)(초기 교환 시간 H와 TCP keepalive 설정), [코드 지도](../architectures/code-map.md), [ADR-0002 출발지 IP 허용 목록](../decisions/ADR-0002-source-ip-allowlist.md), [ADR-0003 단일 인스턴스·메모리 상태](../decisions/ADR-0003-single-instance-memory-state.md). 구현 코드는 TCP 진입점의 수락, 출발지 IP 검사, 연결 상한 L, 초기 교환 시간 H, TCP keepalive 설정뿐이다. 초기 교환 해석·매칭·중계는 구현하지 않았다. |
+| 관련 아키텍처 문서·ADR | [코드 지도](../architectures/code-map.md), [TCP 진입점 모듈 설계](../architectures/tcp-entry-point.md), [초기 교환 모듈 설계](../architectures/initial-exchange.md), [중계 세션 수명 모듈 설계](../architectures/relay-session.md), [연결 상한과 시간 제한 모듈 설계](../architectures/connection-limits.md), [ADR-0002 출발지 IP 허용 목록](../decisions/ADR-0002-source-ip-allowlist.md), [ADR-0003 단일 인스턴스·메모리 상태](../decisions/ADR-0003-single-instance-memory-state.md). 초기 교환·Mode I 대상 연결·Mode II 매칭·양방향 중계·종료를 구현했다. 지원 판정은 [작업 5.9 판정표](../how-to/set-up-and-verify.md#41-작업-59-판정표)를 따른다. |
 
 ## 1. 범위와 적용 상태
 
 - TCP와 Mode I·II 모두 사용자 확정 범위다. 두 모드 및 TCP·WS·WSS Viewer의 지원 조합을 구현·검증한다.
-- 아래 종료 세부 정책은 Draft다. 중복 ID 정책은 사용자 결정 2026-11-01(Q74)로 정했다(3.3절 4항). 모드 지원 확정과 통신 바이트 형식의 검증 여부는 구분한다.
+- 아래 종료 세부 정책도 채택했다(사용자 결정 2026-11-07(Q150)). 중복 ID 정책은 사용자 결정 2026-11-01(Q74)로 정했다(3.3절 4항). 모드 지원 확정과 통신 바이트 형식의 검증 여부는 구분한다.
 - 외부 주체는 TCP Viewer, TCP Server, Mode I 대상과 운영자다. WS·WSS에서 들어온 논리적 Viewer에도 채택된 중계 규칙을 동일하게 적용한다.
 - TLS·WebSocket 프레임 처리는 WS·WSS 스펙이 소유한다. 관리 API와 프로세스 종료는 관련 스펙이 소유한다.
 - RFB 화면·인증·입력 내용을 해석하거나 변환하지 않는다. 원격 화면·입력 검증은 실제 끝점의 호환성 테스트에서 수행한다.

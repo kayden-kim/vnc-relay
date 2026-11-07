@@ -4,9 +4,9 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 구조 시점 | Current — 제품 경로와 단위·시스템 시험으로 확인한 범위. 남은 입증은 8절 |
+| 구조 시점 | Current |
 | 문서 상태 | Active — 작업 4.5 사용자 지시와 Q89~Q92 적용 |
-| 구현 대조 | Verified — `5a38bfc` 이후 작업 트리의 작업 4.5 변경. 2026-11-02 Windows·WSL 실행 범위는 8절 |
+| 구현 대조 | Verified — 작업 4.5 완료 대조(2026-11-04, 커밋 `b0c25f9`의 두 OS 게이트). 범위와 실행 기록은 8절 |
 | 코드 위치 | `crates/app/src/management/terminate.rs`, `crates/adapters/src/management_http/terminate_api.rs`, `crates/app/src/ports.rs`, `crates/app/src/relay.rs`, `crates/app/src/relay/session.rs`, `crates/app/src/events.rs`, `crates/adapters/src/ops_log.rs`, `crates/adapters/src/request_deadline.rs`, `src/serve.rs` |
 | 코드 지도 | [코드 지도](code-map.md#2-코드-위치와-구성요소) |
 | 관련 스펙 | [관리 3.2·4·7절](../specs/management.md#32-관리자-종료) MGT-008~012, MGT-013·014·023; [운영](../specs/operations.md#7-수용-테스트) OPS-011·043; [중계](../specs/relay.md#7-수용-테스트) RLY-020 |

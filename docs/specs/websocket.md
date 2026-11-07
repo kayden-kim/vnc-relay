@@ -4,16 +4,16 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 상태 | Draft |
+| 상태 | Active(2026-11-07 채택, 사용자 결정 2026-11-07(Q150)) |
 | 관련 요구사항 | [PRD](../requirements/PRD.md) FR-05, 7절 보안 경계, AC-05~08 |
 | 용어 | [VNC Relay 용어집](../../GLOSSARY.md) |
 | 관련 스펙 | [중계와 매칭](relay.md), [설정·운영](operations.md) |
 | 관련 계약 | [WebSocket 중계 v1](../contracts/websocket-relay-v1.md), [설정 파일 v2](../contracts/config-v2.md). 모두 Active(2026-10-16 채택)이며 URL·서브프로토콜·HTTP 상태·종료 코드의 이름·번호와 Origin 정규화는 이 계약이 기준이다. |
-| 관련 아키텍처 문서·ADR | [ADR-0001 내장 TLS](../decisions/ADR-0001-built-in-tls.md), [ADR-0002 출발지 IP 허용 목록](../decisions/ADR-0002-source-ip-allowlist.md), [ADR-0004 tokio·rustls](../decisions/ADR-0004-tokio-rustls.md). 아키텍처 문서는 없고 구현 구조는 미확정이다. |
+| 관련 아키텍처 문서·ADR | [코드 지도](../architectures/code-map.md), [WS·WSS 진입점 모듈 설계](../architectures/websocket-entry-point.md), [WS 스트림 모듈 설계](../architectures/websocket-stream.md), [TLS 모듈 설계](../architectures/tls.md), [ADR-0001 내장 TLS](../decisions/ADR-0001-built-in-tls.md), [ADR-0002 출발지 IP 허용 목록](../decisions/ADR-0002-source-ip-allowlist.md), [ADR-0004 tokio·rustls](../decisions/ADR-0004-tokio-rustls.md), [ADR-0005 자체 WS 스트리밍 프레임 코덱](../decisions/ADR-0005-in-house-ws-streaming-frame-codec.md). |
 
 ## 1. 범위와 적용 상태
 
-- WS(`ws://`)·WSS(`wss://`) 지원은 사용자 확정 사항이다. 그 밖의 세부 동작은 Draft 제안이다.
+- WS(`ws://`)·WSS(`wss://`) 지원은 사용자 확정 사항이다. 세부 동작도 채택했다(사용자 결정 2026-11-07(Q150)).
 - WS·WSS 진입점은 Viewer만 제공한다. Server는 TCP 역접속만 사용한다. 이 스펙은 WS·WSS Server 역접속을 정의하지 않는다. 이 결정은 사용자 확정 사항이다.
 - Mode I·II 모두 확정 범위다. WS·WSS 각각에서 두 모드와 Mode II 양 접속 순서를 검증한다.
 - 평문 WS 리스너는 기본 비활성이다. 설정에서 명시적으로 켠 경우에만 연다(WS-R12, WS-024). 테스트에서는 WS 리스너를 켜고 검증한다.
@@ -153,7 +153,7 @@ WS-007 이후의 공통 중계 테스트는 WS·WSS 각각에 적용한다. TLS 
 
 ## 8. 미결정 사항
 
-확정 책임은 프로젝트 요구사항·운영 결정 담당자에게 있다. 외부 URL·HTTP 상태·종료 코드는 Active 계약이 기준이지만 구현·테스트가 없으므로 동작한다고 안내하지 않는다.
+확정 책임은 프로젝트 요구사항·운영 결정 담당자에게 있다. 외부 URL·HTTP 상태·종료 코드는 Active 계약이 기준이다. 구현과 테스트의 지원 판정은 [작업 5.9 판정표](../how-to/set-up-and-verify.md#41-작업-59-판정표)를 따른다.
 
 현재 남은 미결정 사항은 없다.
 WS-TBD-001은 결번이며 재사용하지 않는다. WS-TBD-002는 [WebSocket 중계 v1](../contracts/websocket-relay-v1.md) 채택(2026-10-16)으로 결정되어 4절과 계약에 반영했으며 재사용하지 않는다. WS-TBD-003은 [설정 파일 v2](../contracts/config-v2.md) 1.4절의 정규화 규칙 채택으로 결정되어 2절과 계약에 반영했으며 재사용하지 않는다. WS-TBD-006은 결정되어 1절에 반영했으며 재사용하지 않는다. WS-TBD-005는 2026-11-01에 해소되어 이 표에서 뺐다. noVNC 1.7.0을 [호환성 검증 기록](../contracts/repeater-compat-record.md) 2.4절에 고정했고(버전·해시·받은 주소·날짜), 같은 기록 3.4절에 WS·WSS 관찰 결과를 남겼다. 이 버전은 `Sec-WebSocket-Protocol` 헤더를 보내지 않았고, 이는 [WebSocket 중계 v1](../contracts/websocket-relay-v1.md) 1.2절 규칙과 같다. 재사용하지 않는다.

@@ -17,7 +17,7 @@
 | 기준 스펙 | [관리 조회와 세션 종료](../specs/management.md), [운영 대시보드 화면](../specs/dashboard.md). L·Lm·E·P 등 매개변수 정의는 [운영 스펙 2절](../specs/operations.md#2-상태와-검증-매개변수)을 따른다. |
 | 관련 요구사항 | [PRD](../requirements/PRD.md) FR-06, FR-08(비밀 비노출), 7절 보안 경계, AC-09·AC-10·AC-19~AC-21 |
 | 호환성 범위 | 경로 접두사 `/api/v1/`. 같은 릴리스의 서버와 내장 대시보드. HTTPS 관리 리스너와 평문 HTTP 루프백 관리 리스너. |
-| 관련 테스트 | [관리 스펙 7절](../specs/management.md#7-수용-테스트) MGT-001~MGT-027, [화면 스펙 7절](../specs/dashboard.md#7-수용-테스트) DASH-001~DASH-023, [운영 스펙 7절](../specs/operations.md#7-수용-테스트) OPS-043. 계약 테스트는 작업 4.2·4.3의 `crates/adapters/tests/management.rs`와 작업 4.3의 `tests/management_session.rs`다(5절). |
+| 관련 테스트 | [관리 스펙 7절](../specs/management.md#7-수용-테스트) MGT-001~MGT-027, [화면 스펙 7절](../specs/dashboard.md#7-수용-테스트) DASH-001~DASH-027, [운영 스펙 7절](../specs/operations.md#7-수용-테스트) OPS-043. 계약 테스트는 5절에 연결한다. `ee0314f`의 두 OS 전체 게이트가 통과했다. 현재 지원 판정과 브라우저별 수동 확인 범위는 [작업 5.9 판정표](../how-to/set-up-and-verify.md#41-작업-59-판정표)를 따른다. |
 
 관련 문서: [설정 계약](config-v2.md)(`[dashboard]`·`[limits]`·`[recent_closed]`·`[timeouts]`·`[management]` 키와 기본값·범위), [CLI·계정 파일 계약](cli-v1.md)(계정명 규칙), [운영 정보 계약](ops-info-v1.md)(`session_id`·종료 사건 로그, 상태 리스너), [WebSocket 중계 계약](websocket-relay-v1.md)(관리자 종료의 Close 4005), [ADR-0001 내장 TLS](../decisions/ADR-0001-built-in-tls.md), [ADR-0003 단일 인스턴스·메모리 상태](../decisions/ADR-0003-single-instance-memory-state.md).
 
@@ -523,7 +523,7 @@ X-CSRF-Token: <csrf-token>
 {"error": {"code": "not_found", "message": "지정한 세션을 찾을 수 없습니다."}}
 ```
 
-계약 테스트 위치는 `crates/adapters/tests/management.rs`, `tests/management_session.rs`, `tests/management_query.rs`, `tests/management_terminate.rs`, `tests/dashboard_assets.rs`, `tests/serve.rs`, `tests/dashboard_browser.rs`와 각 행에 적은 단위 시험이다. 위치가 비어 있는 행은 해당 작업에서 채운다. 아래 표는 Producer와 Consumer가 만들 계약 테스트가 확인할 규칙을 기존 스펙 시나리오에 연결한다. 이 표는 테스트가 있다는 증거가 아니다. 결과와 증거는 [검증 기록](../AGENTS.md#검증-기록)을 따른다. 스펙과 같은 테스트는 해당 시나리오의 기록을 연결한다.
+계약 테스트 위치는 `crates/adapters/tests/management.rs`, `tests/management_session.rs`, `tests/management_query.rs`, `tests/management_terminate.rs`, `tests/dashboard_assets.rs`, `tests/serve.rs`, `tests/dashboard_browser.rs`, `tests/dashboard_live.rs`와 각 행에 적은 단위 시험이다. 아래 표는 Producer와 Consumer 시험의 확인 범위와 현재 결과를 적는다. 결과와 증거는 [검증 기록](../AGENTS.md#검증-기록)을 따른다. 과거 실행 기록의 미실행·미생성 표기는 당시 상태이며 현재 결과를 대신하지 않는다.
 
 | 주체·테스트 위치 | 확인할 계약 규칙 | 결과 | 실행 기록 |
 | --- | --- | --- | --- |
@@ -598,5 +598,5 @@ WSL 첫 전체 게이트(2026-11-01T18:25:46Z)는 `tests/reload.rs`의 `new_tls_
 - (해결) 로그인 응답 시간으로 계정 존재 여부를 알 수 없는지는 구조 시험으로 판정한다. 사용자 결정 2026-10-22(Q31)로 해결했다. 모든 로그인 시도가 비밀번호 검증을 정확히 한 번 하는지를 `CountingVerifier`로 센다. 자동 시간 측정은 하지 않는다. 계정 해시와 더미 해시의 Argon2 매개변수가 같은지는 확인하지 않았다 [INFERENCE: 다를 수 있다].
 - 계정명의 허용 문자와 길이는 [CLI 계약 1.2절](cli-v1.md#12-계정-이름과-비밀번호-규칙)이 정한다. 로그인 본문 한도 16 KiB와 종료 대기 여유 5초도 채택 범위다.
 - 스펙 시나리오가 직접 다루지 않는 오류가 있다. 형식이 잘못된 요청(`invalid_request` 중 본문·필드 오류), 알 수 없는 경로와 허용되지 않는 메서드(`404`·`405`)다. 이 계약은 가장 가까운 시나리오(DASH-018·MGT-013·MGT-025)와 화면 스펙 5절에 연결했다. 대응 시나리오는 스펙에 없으며 사용자가 추가하지 않기로 했다(2026-10-16). 계약 본문의 해당 응답 정의는 유지한다.
-- 종료 원인 `close_cause`의 값은 일곱 개다. 사용자 결정 2026-11-02(Q94)으로 추가한 `internal_error`를 포함하며 [관리 스펙 2.3절](../specs/management.md#23-최근-종료-목록)·PRD FR-06의 종료 원인 목록과 같다. 프로세스가 끝나면 목록도 사라지므로 `server_shutdown` 항목이 실제로 조회되는지는 구현에서 확인해야 한다.
-- 계약 테스트는 `crates/adapters/tests/management.rs`(작업 4.2·4.3·4.6), `tests/dashboard_assets.rs`(작업 4.6), `tests/dashboard_browser.rs`(작업 4.9·4.10·4.11), `tests/serve.rs`의 `refuses_public_plaintext_and_answers_login_less_queries_with_401_on_loopback`, 단위 시험(`crates/app/src/management/login.rs`·`session.rs`·`query.rs`·`terminate.rs`, `crates/adapters/src/management_http/terminate_api.rs`), `tests/management_session.rs`(작업 4.3), `tests/management_query.rs`(작업 4.4), `tests/management_terminate.rs`(작업 4.5)다. CI 실행 기록은 없다. 나머지 테스트 파일이 생기면 5절 표의 테스트 위치와 결과를 채운다.
+- 종료 원인 `close_cause`의 값은 일곱 개다. 사용자 결정 2026-11-02(Q94)으로 추가한 `internal_error`를 포함하며 [관리 스펙 2.3절](../specs/management.md#23-최근-종료-목록)·PRD FR-06의 종료 원인 목록과 같다. `server_shutdown` 항목의 실제 API 조회는 `crates/adapters/tests/management.rs`의 `completion_mgt023_shutdown_history_is_queryable_and_preserves_prior_eof_cause`가 확인했다. Grace → Force 뒤 관리 리스너를 유지해 `GET /api/v1/closed-sessions`에서 해당 원인과 기존 `peer_eof` 보존을 확인했으며 두 OS에서 통과했다(5절). 프로세스가 끝난 뒤에는 목록도 사라진다.
+- 계약 테스트는 `crates/adapters/tests/management.rs`, `tests/dashboard_assets.rs`, `tests/dashboard_browser.rs`, `tests/dashboard_live.rs`, `tests/serve.rs`의 `refuses_public_plaintext_and_answers_login_less_queries_with_401_on_loopback`, 단위 시험(`crates/app/src/management/login.rs`·`session.rs`·`query.rs`·`terminate.rs`, `crates/adapters/src/management_http/terminate_api.rs`), `tests/management_session.rs`, `tests/management_query.rs`, `tests/management_terminate.rs`다. 현재 결과는 5절 표와 `ee0314f`의 [작업 5.9 판정표](../how-to/set-up-and-verify.md#41-작업-59-판정표)를 따른다. CI 실행 기록은 없다.

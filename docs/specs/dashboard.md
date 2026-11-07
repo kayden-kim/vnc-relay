@@ -4,12 +4,12 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 상태 | Draft |
+| 상태 | Active(2026-11-07 채택, 사용자 결정 2026-11-07(Q150)) |
 | 관련 요구사항 | [PRD](../requirements/PRD.md) FR-06, AC-09·AC-10·AC-36 |
 | 관련 시스템 스펙 | [관리 조회와 세션 종료](management.md) |
 | 용어 | [VNC Relay 용어집](../../GLOSSARY.md) |
 | 관련 계약 | [관리 API v1](../contracts/management-api-v1.md). Active(2026-10-16 채택)이며 경로·응답 본문·화면 URL은 이 계약이 기준이다. 관리 API는 JSON over HTTP이며 경로 접두사는 `/api/v1/`이다(사용자 확정). |
-| 관련 아키텍처 문서·ADR | 없음. 정적 HTML·JS 대시보드 선택은 별도 ADR 없이 [PRD 확정 기준](../requirements/PRD.md#확정-기준)으로 관리한다. 대시보드는 별도 빌드 단계 없는 정적 HTML·JS이며 실행파일에 넣어 관리 리스너가 제공한다. 프런트엔드 코드는 `web/dashboard/`에 있다(작업 4.8 구성 요소, 작업 4.9 로그인 화면). |
+| 관련 아키텍처 문서·ADR | [코드 지도](../architectures/code-map.md), [대시보드 구성 요소 설계](../architectures/dashboard-components.md), [대시보드 운영 화면 설계](../architectures/dashboard-operations-overview.md), [관리 리스너 모듈 설계](../architectures/management-listener.md). 정적 HTML·JS 대시보드 선택은 별도 ADR 없이 [PRD 확정 기준](../requirements/PRD.md#확정-기준)으로 관리한다. 대시보드는 별도 빌드 단계 없는 정적 HTML·JS이며 실행파일에 넣어 관리 리스너가 제공한다. 프런트엔드 코드는 `web/dashboard/`에 있다. |
 | 디자인 원본·공통 시각 기준 | [운영 대시보드 디자인 기준](../design/DESIGN.md). Accepted(2026-10-20 사용자 채택). 색·간격·폰트·토큰·배치 기준은 디자인 기준이 정한다. |
 | HTML 시안 | [../design/mockups/dashboard.html](../design/mockups/dashboard.html). 채택된 디자인 기준의 토큰으로 만든 시안이며 사용자가 2026-10-20에 채택했다. 4절의 모든 화면 ID와 상태를 보여 준다. 영어 화면은 대표 화면 두 개(SCR-001 정상, SCR-003 입력)만 보여 준다. 시안과 이 문서의 문장이 다르면 문장을 따른다. |
 | 관련 컴포넌트 예시 | 구성 요소는 `web/dashboard/app/components/`에 있다([대시보드 구성 요소 설계](../architectures/dashboard-components.md)). 미리보기 `web/dashboard/preview/`는 `cargo xtask dashboard-serve`로 연다(로컬 전용). 로그인 화면(SCR-003)은 `web/dashboard/login/`에 있다. `login/`과 `app/`은 파일을 공유하지 않으므로 구성 요소를 가져오지 않는다([프런트엔드 컨벤션 1.1절](../conventions/frontend.md)). |
@@ -21,7 +21,7 @@
 - 로그인한 관리자가 요약·대기 목록·활성 목록·세션 상세·최근 종료 목록을 보고 현재 세션을 확인한 뒤 종료한다.
 - 내장 관리자 로그인과 조회·관리자 종료는 사용자 확정 범위다. 권한은 서버가 검증하며 중계 IP 허용 정책과 분리한다.
 - 로그인·운영 현황·상세 화면과 조건별 이동을 별도 화면 스펙으로 관리한다.
-- 화면 배치와 세션의 구체적 표현은 Draft다. 폴링 주기 P는 설정 가능하며 기본값 2초로 확정이다([4.1절](#41-폴링)). 내장 로그인 선택 자체는 미확정으로 되돌리지 않는다.
+- 화면 배치와 세션의 구체적 표현도 채택했다(사용자 결정 2026-11-07(Q150)). 폴링 주기 P는 설정 가능하며 기본값 2초로 확정이다([4.1절](#41-폴링)). 내장 로그인 선택 자체는 미확정으로 되돌리지 않는다.
 - 원격 화면 표시·키보드 입력 전송·noVNC·설정 편집·장기 이력 검색을 제공하지 않는다.
 - 대시보드는 별도 빌드 단계 없는 정적 HTML·JS로 만들고 실행파일에 넣어 관리 리스너가 제공한다. Node 빌드 체인과 JS 프레임워크 의존성을 추가하지 않는다.
 - 지원 화면 폭은 데스크톱과 모바일 폭이고, 지원 브라우저는 최신 Chrome·Edge·Firefox·Safari다. 두 폭 모두에서 필수 정보와 상세 이동·종료·취소·로그아웃 행동을 쓸 수 있어야 한다([6절](#6-화면-크기와-접근성)).

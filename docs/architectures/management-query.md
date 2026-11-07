@@ -6,7 +6,7 @@
 | --- | --- |
 | 구조 시점 | Current |
 | 문서 상태 | Draft |
-| 구현 대조 | Verified — 커밋 `ec05fd1`의 조회 API 구조. 범위와 남은 검증은 [대조 기록](#대조-기록) |
+| 구현 대조 | Verified — 커밋 `ec05fd1`의 조회 API 구조와 [작업 4.4 완료 대조](#작업-44-완료-대조2026-11-04)(2026-11-04, 커밋 `b0c25f9`·`0196cab`) |
 | 코드 위치 | `crates/app/src/management/query.rs`, `crates/adapters/src/management_http/query_api.rs`, `crates/domain/src/budget.rs` |
 | 코드 지도 | [코드 지도 2절](code-map.md#2-코드-위치와-구성요소) |
 | 관련 스펙 | [관리 스펙](../specs/management.md) MGT-001~007, MGT-013, MGT-015, MGT-016, MGT-021, MGT-023~024, MGT-026, [운영 스펙](../specs/operations.md) OPS-033 |

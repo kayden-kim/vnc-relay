@@ -4,12 +4,12 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 상태 | Draft |
+| 상태 | Active(2026-11-07 채택, 사용자 결정 2026-11-07(Q150)) |
 | 관련 요구사항 | [PRD](../requirements/PRD.md) FR-06·FR-07·FR-08, 7절 보안, 8절 비기능, 9절 독립 구현, AC-07·AC-08·AC-11~14, AC-32·AC-34·AC-35 |
 | 용어 | [VNC Relay 용어집](../../GLOSSARY.md) |
 | 관련 스펙 | [중계와 매칭](relay.md), [WS·WSS](websocket.md), [관리 기능](management.md), [화면](dashboard.md) |
-| 관련 계약 | [설정 파일 v2](../contracts/config-v2.md), [CLI와 관리자 계정 파일 v1](../contracts/cli-v1.md), [운영 로그와 상태 엔드포인트 v1](../contracts/ops-info-v1.md). 세 계약 모두 Active(2026-10-16 채택)이며 이름·형식·종료 코드는 각 계약이 기준이다. 설정 로더, `serve` 시작 골격, 운영 로그의 공통 형식과 시작 단계 사건, 중계 사건(`connection_accepted`·`connection_rejected`·`connection_aborted`·`target_connect_failed`·`waiting_registered`·`waiting_expired`·`waiting_removed`·`session_started`·`session_closed`·`shutdown_started`·`shutdown_forced`), TCP 진입점의 출발지 IP 검사, TCP 진입점의 연결 상한 L·초기 교환 시간 H·TCP keepalive 설정, 대상 연결 상한 L, Lw, WS·WSS 초기 교환 시간 H, 종료 유예 G, 관리자 계정 준비 CLI(`admin add\|passwd\|remove\|list`), 상태 리스너의 `/livez`·`/readyz`와 Lm·준비 상태, 내장 TLS 파일 검사와 acceptor, 관리 리스너(HTTPS와 루프백 평문 HTTP, 관리 연결 Lm, 세션 없는 API 요청 거절)만 구현했고 나머지 구현·계약 테스트가 없어 지원 완료로 표시하지 않는다. |
-| 관련 아키텍처 문서·ADR | [코드 지도](../architectures/code-map.md), [설정 로딩 모듈 설계](../architectures/config-loading.md)(3.1절의 설정 검증), [`serve` 시작 모듈 설계](../architectures/serve-startup.md)(3.1절의 시작 순서), [관리자 계정 준비 CLI 모듈 설계](../architectures/admin-accounts.md)(3.2절의 계정 준비), [운영 로그 모듈 설계](../architectures/ops-log.md)(3.5절의 운영 로그), [TCP 진입점 모듈 설계](../architectures/tcp-entry-point.md)(4절의 TCP 진입점 출발지 IP 경계), [연결 상한과 시간 제한 모듈 설계](../architectures/connection-limits.md)(2절의 L·Lm·Lw·H·K), [상태 리스너와 준비 상태 모듈 설계](../architectures/status-listener.md)(2절의 준비 상태와 3.5절의 상태 엔드포인트), [ADR-0001 내장 TLS](../decisions/ADR-0001-built-in-tls.md), [ADR-0002 출발지 IP 허용 목록](../decisions/ADR-0002-source-ip-allowlist.md), [ADR-0003 단일 인스턴스·메모리 상태](../decisions/ADR-0003-single-instance-memory-state.md), [ADR-0004 tokio·rustls](../decisions/ADR-0004-tokio-rustls.md). 설정 로딩, `serve` 시작, 운영 로그, TCP 진입점, 연결 상한과 시간 제한, 상태 리스너 밖의 구현 구조는 코드 지도의 계획(Target)이다. 관리자 계정 준비 CLI는 계획이 아니라 구현과 대조한 현재(Current) 구조다. |
+| 관련 계약 | [설정 파일 v2](../contracts/config-v2.md), [CLI와 관리자 계정 파일 v1](../contracts/cli-v1.md), [운영 로그와 상태 엔드포인트 v1](../contracts/ops-info-v1.md). 세 계약 모두 Active(2026-10-16 채택)이며 이름·형식·종료 코드는 각 계약이 기준이다. 구현은 마쳤다. 지원 판정은 [작업 5.9 판정표](../how-to/set-up-and-verify.md#41-작업-59-판정표)를 따른다. OPS-021은 MIT LICENSE의 저작권자·적용 연도에 대한 사용자 결정(Q97)을 기다리므로 통과로 판정하지 않는다. |
+| 관련 아키텍처 문서·ADR | [코드 지도](../architectures/code-map.md), [설정 로딩 모듈 설계](../architectures/config-loading.md), [`serve` 시작 모듈 설계](../architectures/serve-startup.md), [관리자 계정 준비 CLI 모듈 설계](../architectures/admin-accounts.md), [운영 로그 모듈 설계](../architectures/ops-log.md), [파일 변경 감지 모듈 설계](../architectures/file-watch.md), [TCP 진입점 모듈 설계](../architectures/tcp-entry-point.md), [연결 상한과 시간 제한 모듈 설계](../architectures/connection-limits.md), [상태 리스너와 준비 상태 모듈 설계](../architectures/status-listener.md), [TLS 모듈 설계](../architectures/tls.md), [중계 세션 수명 모듈 설계](../architectures/relay-session.md), [ADR-0001 내장 TLS](../decisions/ADR-0001-built-in-tls.md), [ADR-0002 출발지 IP 허용 목록](../decisions/ADR-0002-source-ip-allowlist.md), [ADR-0003 단일 인스턴스·메모리 상태](../decisions/ADR-0003-single-instance-memory-state.md), [ADR-0004 tokio·rustls](../decisions/ADR-0004-tokio-rustls.md). 코드 지도는 현재(Current) 구조이며 구현 대조를 마쳤다(Verified). |
 
 ## 1. 범위와 적용 상태
 
@@ -20,9 +20,9 @@
 - 단일 인스턴스 운영과 끊긴 연결 감지(TCP keepalive·WebSocket ping)는 사용자 확정 사항이다. 프로세스 사이에 대기·세션·카운터 상태를 공유하지 않는다. 이미 사용 중인 리스너 주소로 두 번째 프로세스를 시작하면 시작 실패다. 상대가 살아 있는 유휴 연결은 끊지 않는다.
 - 검증 대상 OS는 Windows 11 x64와 Ubuntu 24.04 LTS x64다. Windows Server는 검증 대상이 아니다. 실제 실행 증거가 없으면 지원 완료로 표시하지 않는다. 이 항목은 사용자 확정 사항이다.
 - VNC Relay는 로그를 표준 출력 또는 지정한 파일로 출력만 한다. 로그 파일 교체·보관 기간·접근 권한은 운영자 책임이며, 수동 운영 안내에 권장 사항을 적는다. 이 항목은 사용자 확정 사항이다.
-- 그 밖의 수명 세부 정책은 Draft다.
+- 수명 세부 정책도 채택했다(사용자 결정 2026-11-07(Q150)).
 - 이 문서는 하위 명령 이름·파일 확장자·환경 변수 이름·설정 키 이름을 임의로 정하지 않는다. 이 이름은 [설정 계약](../contracts/config-v2.md)과 [CLI 계약](../contracts/cli-v1.md)이 정한다(둘 다 Active, 2026-10-16 채택). 기본 포트도 이 문서가 정하지 않으며 설정 계약이 기준이다. tokio·rustls 외 Rust 라이브러리는 [PRD 1절 "구현 기술" 행](../requirements/PRD.md#확정-기준)이 단일 기준이다. 그 라이브러리는 2026-10-20 의존성 라이선스 검토 뒤 확정했다. 이 문서는 라이브러리 이름을 정하지 않는다.
-- 변경 범위는 시작 검증, 제한, 종료, 운영 정보, 접근 경계, 성능·호환성·출처의 수용 판정이다. 설치·빌드 절차는 실제 구현 설정이 생긴 뒤 how-to에서 관리한다.
+- 변경 범위는 시작 검증, 제한, 종료, 운영 정보, 접근 경계, 성능·호환성·출처의 수용 판정이다. 설치·빌드 절차는 [개발 환경·검증 how-to](../how-to/set-up-and-verify.md)에서 관리한다.
 - 신규 중계 프로토콜·세션 영속화·자동 재접속·전체 설정 재로드·웹 설정 편집·OS 서비스 등록·컨테이너 배포는 추가하지 않는다.
 
 ## 2. 상태와 검증 매개변수

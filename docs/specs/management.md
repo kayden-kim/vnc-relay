@@ -4,12 +4,12 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 상태 | Draft |
+| 상태 | Active(2026-11-07 채택, 사용자 결정 2026-11-07(Q150)) |
 | 관련 요구사항 | [PRD](../requirements/PRD.md) FR-06·FR-08, 7절 보안 경계, AC-09·AC-10 |
 | 용어 | [VNC Relay 용어집](../../GLOSSARY.md) |
 | 관련 스펙 | [중계와 매칭](relay.md), [대시보드 화면](dashboard.md), [설정·운영](operations.md) |
 | 관련 계약 | [관리 API v1](../contracts/management-api-v1.md), [운영 로그와 상태 엔드포인트 v1](../contracts/ops-info-v1.md). 두 계약 모두 Active(2026-10-16 채택)이며 경로·메서드·오류 본문·로그인 교환·로그 필드 이름은 이 계약이 기준이다. 관리 API는 JSON over HTTP이며 경로 접두사는 `/api/v1/`이다(사용자 확정). |
-| 관련 아키텍처 문서·ADR | [ADR-0003 단일 인스턴스·메모리 상태](../decisions/ADR-0003-single-instance-memory-state.md). 아키텍처 문서는 없고 구현 구조는 미확정이다. 대시보드는 별도 빌드 단계 없는 정적 HTML·JS이며 실행파일에 넣어 관리 리스너가 제공한다([대시보드 화면](dashboard.md)). |
+| 관련 아키텍처 문서·ADR | [코드 지도](../architectures/code-map.md), [관리 리스너 모듈 설계](../architectures/management-listener.md), [관리 세션 모듈 설계](../architectures/management-session.md), [관리 조회 모듈 설계](../architectures/management-query.md), [관리자 종료 모듈 설계](../architectures/management-terminate.md), [ADR-0003 단일 인스턴스·메모리 상태](../decisions/ADR-0003-single-instance-memory-state.md). 대시보드는 별도 빌드 단계 없는 정적 HTML·JS이며 실행파일에 넣어 관리 리스너가 제공한다([대시보드 화면](dashboard.md)). |
 
 ## 1. 범위와 적용 상태
 
