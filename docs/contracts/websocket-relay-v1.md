@@ -276,6 +276,8 @@ Close 예: 대기 시간이 W를 넘으면 서버는 코드 `4001`과 reason `wa
 | 커밋 `70ff541`, 깨끗한 작업 트리 | Windows 11 Pro 10.0.26200 x64, `VNC_RELAY_NOVNC_ZIP=D:\vr-lab\installers\novnc-v1.7.0.zip`(SHA-256 고정값과 일치) | `cargo test --test websocket_browser -- --include-ignored` | 통과(2 passed, 42.57초). WS-020과 WS-025 모두 통과 |
 | 같은 커밋 `70ff541` | Ubuntu 24.04 LTS(WSL2), `CARGO_TARGET_DIR=$HOME/vnc-relay-target`, `VNC_RELAY_NOVNC_ZIP=/mnt/d/vr-lab/installers/novnc-v1.7.0.zip`(SHA-256 고정값과 일치) | `cargo test --test websocket_browser -- --include-ignored` | 통과(2 passed, 42.07초). WS-020과 WS-025 모두 통과. [호환성 검증 기록](repeater-compat-record.md) 6.6절의 Ubuntu 증거다(사용자 결정 2026-11-06(Q129)) |
 | 커밋 `70ff541`의 Windows release 실행파일(SHA-256 `d94e4dd3…b5fc`) | Hyper-V VM 3대, UltraVNC Server·Viewer 1.8.3.0, noVNC 1.7.0, Edge 152.0.4191.66 | 에이전트가 VM 안의 Viewer·브라우저를 UI 자동 조작으로 실행(사용자 결정 2026-11-05(Q116)의 방식, [호환성 검증 기록](repeater-compat-record.md) 6절) | 통과. 실제 Server를 상대로 WS·WSS Mode I(UltraVNC Viewer와 시험용 바이트 중계 스크립트)과 WS·WSS Mode II(noVNC, Server 먼저·noVNC 먼저)의 화면·입력을 확인했다. 프로젝트 소유자가 캡처를 검토했다(Q130·Q131) |
+| 커밋 `d4c5678`(작업 5.9 판정 준비, `70ff541` 뒤 제품 변경은 대시보드 자산뿐), 깨끗한 작업 트리 | Windows 11 Pro 10.0.26200 x64, `VNC_RELAY_NOVNC_ZIP=D:\vr-lab\installers\novnc-v1.7.0.zip` | `cargo test --test websocket_browser -- --include-ignored` | 통과(2 passed, 42.43초). WS-020과 WS-025 모두 통과 |
+| 같은 커밋 `d4c5678` | Ubuntu 24.04 LTS(WSL2), `CARGO_TARGET_DIR=$HOME/vnc-relay-target`, `VNC_RELAY_NOVNC_ZIP=/mnt/d/vr-lab/installers/novnc-v1.7.0.zip` | `cargo test --test websocket_browser -- --include-ignored` | 통과(2 passed, 42.31초). WS-020과 WS-025 모두 통과 |
 
 ## 6. 초안을 확정하기 전에 해결할 사항
 
