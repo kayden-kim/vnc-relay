@@ -141,11 +141,15 @@ struct Server {
 impl Server {
     fn start(dir: &Path, ports: [u16; 4]) -> Self {
         let config = write_config(dir, ports);
+        Self::start_config(&config, ports)
+    }
+
+    fn start_config(config: &Path, ports: [u16; 4]) -> Self {
         let mut command = Command::new(BIN);
         command
             .arg("serve")
             .arg("--config")
-            .arg(&config)
+            .arg(config)
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
@@ -615,6 +619,76 @@ fn restart_session_scenario(stop: fn(Server) -> String) {
     assert_listed(ports[0], &new_pair, &relay.sid);
     relay.terminate(ports[0], &new_pair, field(&again.body, "csrf_token"));
     stop(second);
+    let _ = fs::remove_dir_all(&dir);
+}
+
+/// spec: operations.md:OPS-003 partial
+#[test]
+fn account_file_content_changes_apply_only_after_restart() {
+    use vnc_relay_adapters::accounts_file::{self, AccountsFile, HashFloor};
+    use vnc_relay_app::ports::AccountStore;
+
+    let _guard = lock_ports();
+    let dir = setup_dir("account-content-restart");
+    let ports = free_ports();
+    let config = write_config(&dir, ports);
+    let mut config_text =
+        fs::read_to_string(&config).unwrap_or_else(|e| panic!("read config: {e}"));
+    config_text.push_str("\n[reload]\nsettle_secs = 1\npoll_secs = 5\n");
+    write(&config, &config_text);
+
+    let accounts_path = dir.join("admin-accounts.toml");
+    let save_accounts = |credentials: &[(&str, &str)]| {
+        let mut text = String::from("version = 1\n");
+        for (account, password) in credentials {
+            text.push_str(&format!(
+                "\n[[account]]\nname = \"{account}\"\npassword_hash = \"{}\"\n",
+                hash(password)
+            ));
+        }
+        let accounts = accounts_file::parse(&text, HashFloor::Reject)
+            .unwrap_or_else(|e| panic!("parse prepared accounts: {e:?}"));
+        AccountsFile::new(accounts_path.clone())
+            .update(&mut |_| Ok(accounts.clone()), &mut |warning| {
+                panic!("save accounts warning: {warning:?}");
+            })
+            .unwrap_or_else(|e| panic!("save prepared accounts: {e:?}"));
+    };
+    let new_password = "changed-horse-battery";
+    save_accounts(&[(ALICE, ALICE_PASSWORD)]);
+    let first = Server::start_config(&config, ports);
+    assert_eq!(login(ports[0], ALICE, ALICE_PASSWORD).status, 200);
+
+    // Replace the same file atomically, as `admin` does, without changing the config.
+    save_accounts(&[(ALICE, new_password), (BOB, BOB_PASSWORD)]);
+    // Outlast the poll interval (5 s), settle bound (1 s), and a 1 s margin.
+    std::thread::sleep(Duration::from_secs(7));
+    let unchanged = login(ports[0], ALICE, ALICE_PASSWORD);
+    assert_eq!(unchanged.status, 200, "{}", unchanged.body);
+    assert_eq!(field(&unchanged.body, "account"), ALICE);
+    for (account, password) in [(ALICE, new_password), (BOB, BOB_PASSWORD)] {
+        let rejected = login(ports[0], account, password);
+        assert_eq!(rejected.status, 401, "{account}: {}", rejected.body);
+        assert_eq!(field(&rejected.body, "code"), "login_failed");
+    }
+    let log = first.stop();
+    assert!(
+        !log.contains("\"event\":\"reload_applied\""),
+        "account file content triggered a reload: {log}"
+    );
+
+    let second = Server::start_config(&config, ports);
+    for (account, password) in [(ALICE, new_password), (BOB, BOB_PASSWORD)] {
+        let accepted = login(ports[0], account, password);
+        assert_eq!(accepted.status, 200, "{account}: {}", accepted.body);
+        assert_eq!(field(&accepted.body, "account"), account);
+        let cookie = cookie_pair(&accepted);
+        assert_eq!(query(ports[0], &cookie, "/api/v1/summary").status, 200);
+    }
+    let old_password = login(ports[0], ALICE, ALICE_PASSWORD);
+    assert_eq!(old_password.status, 401, "{}", old_password.body);
+    assert_eq!(field(&old_password.body, "code"), "login_failed");
+    second.stop();
     let _ = fs::remove_dir_all(&dir);
 }
 

@@ -192,7 +192,7 @@ Force의 action은 [세션 설계 5.2절](relay-session.md#52-정상-종료와-g
 
 `encode_close`는 최대 127바이트의 고정 배열을 쓴다. 코드 뒤 reason은 최대 123바이트다. 잘라야 하면 UTF-8 문자 경계에서 자른다. 이 저장 방식은 **이 문서의 판단, 사용자 결정 없음**이다.
 
-1011 `internal_error`는 계약에 있다. 현재 내부 오류는 Running 중 세션 소유자 유실을 `ActiveGuard`와 `Session::finish_after_owner_loss`가 정리하는 경로다. panic 되감기로 스트림을 버리므로 WS Close를 보내지 못한다. `RelayCloseAction`에는 내부 오류 값이 없다. 다른 action이나 I/O 오류를 1011로 바꾸지 않는다. 이는 현재 구현 한계이며 **이 문서의 판단, 사용자 결정 없음**이다.
+1011 `internal_error`는 계약의 예약 코드이며 현재 구현은 보내지 않는다(사용자 결정 2026-11-07(Q152)). 현재 내부 오류는 Running 중 세션 소유자 유실을 `ActiveGuard`와 `Session::finish_after_owner_loss`가 정리하는 경로다. panic 되감기로 스트림을 버리므로 WS Close를 보내지 못한다. `RelayCloseAction`에는 내부 오류 값이 없다. 다른 action이나 I/O 오류를 1011로 바꾸지 않는다.
 
 ### 5.3 형식 있는 오류와 사건
 

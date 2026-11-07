@@ -660,6 +660,13 @@ fn https_request(port: u16, method: &str, path: &str) -> (u16, String) {
 
 /// Wraps a bounded socket in a TLS client that trusts only the test root.
 fn tls_peer(tcp: TcpStream) -> StreamOwned<ClientConnection, TcpStream> {
+    tls_peer_with_versions(tcp, &[&TLS13, &TLS12])
+}
+
+fn tls_peer_with_versions(
+    tcp: TcpStream,
+    versions: &[&'static rustls::SupportedProtocolVersion],
+) -> StreamOwned<ClientConnection, TcpStream> {
     let mut roots = RootCertStore::empty();
     let certs = CertificateDer::pem_file_iter(tls_file("root-ca.pem"))
         .unwrap_or_else(|error| panic!("root CA opens: {error}"));
@@ -672,7 +679,7 @@ fn tls_peer(tcp: TcpStream) -> StreamOwned<ClientConnection, TcpStream> {
     let config = ClientConfig::builder_with_provider(Arc::new(
         rustls::crypto::aws_lc_rs::default_provider(),
     ))
-    .with_protocol_versions(&[&TLS13, &TLS12])
+    .with_protocol_versions(versions)
     .unwrap_or_else(|error| panic!("client protocol versions: {error}"))
     .with_root_certificates(roots)
     .with_no_client_auth();
@@ -822,6 +829,125 @@ fn management_config(ports: Ports, cert: &str, key: &str) -> String {
         ),
         1,
     )
+}
+
+/// Minimal legacy ClientHello, matching the management adapter test helper.
+/// TLS 1.0 and 1.1 offer one cipher suite and no extensions.
+fn legacy_client_hello(version: [u8; 2]) -> Vec<u8> {
+    let mut body = Vec::new();
+    body.extend_from_slice(&version);
+    body.extend_from_slice(&[0x5A; 32]); // random
+    body.push(0); // empty session ID
+    body.extend_from_slice(&[0x00, 0x02, 0x00, 0x2F]); // TLS_RSA_WITH_AES_128_CBC_SHA
+    body.extend_from_slice(&[0x01, 0x00]); // null compression
+    body.extend_from_slice(&[0x00, 0x00]); // no extensions
+    let mut handshake = vec![0x01]; // ClientHello
+    handshake.extend_from_slice(&body.len().to_be_bytes()[std::mem::size_of::<usize>() - 3..]);
+    handshake.extend_from_slice(&body);
+    let mut record = vec![0x16, 0x03, 0x01]; // handshake record
+    record.extend_from_slice(&handshake.len().to_be_bytes()[std::mem::size_of::<usize>() - 2..]);
+    record.extend_from_slice(&handshake);
+    record
+}
+
+/// spec: operations.md:OPS-036 partial
+#[test]
+fn management_legacy_tls_rejections_have_exact_json_fields_and_keep_tls12_available() {
+    let _lock = lock_ports();
+    let ports = Ports::free();
+    let config = setup_with(
+        "management-legacy-tls-log",
+        &(management_config(ports, "server-chain.pem", "server-key-p256.pem")
+            + "\n[log]\noutput = 'relay.log'\n"),
+    );
+    let log = config.with_file_name("relay.log");
+    let mut guard = Guard(Some(spawn(&config)));
+    wait_listening(guard.child(), ports);
+    wait_for_line(&log, |line| field(line, "event") == Some("server_ready"));
+
+    // Distinct peer IPs correlate each rejection without adding a conn_id,
+    // which management connections must not have (ops-info-v1 §1.5).
+    for (source, version) in [(2, [0x03, 0x01]), (3, [0x03, 0x02])] {
+        let mut stream = connect_from([127, 0, 0, source], ports.management);
+        stream
+            .write_all(&legacy_client_hello(version))
+            .unwrap_or_else(|error| panic!("send TLS {version:02x?} hello: {error}"));
+        assert!(
+            closed_within(&mut stream, EXIT_LIMIT),
+            "TLS {version:02x?} connection stayed open"
+        );
+        let ip = format!("127.0.0.{source}");
+        wait_for_line(&log, |line| {
+            is(line, "connection_rejected", "management", &ip)
+        });
+    }
+
+    let tcp = connect_from([127, 0, 0, 4], ports.management);
+    let mut tls12 = tls_peer_with_versions(tcp, &[&TLS12]);
+    while tls12.conn.is_handshaking() {
+        tls12
+            .conn
+            .complete_io(&mut tls12.sock)
+            .unwrap_or_else(|error| panic!("TLS 1.2 still negotiates after rejections: {error}"));
+    }
+    assert_eq!(
+        tls12.conn.protocol_version(),
+        Some(rustls::ProtocolVersion::TLSv1_2)
+    );
+    drop(tls12);
+    // Stop the producer before counting, so a delayed duplicate cannot escape
+    // the final JSON Lines assertions.
+    drop(guard);
+    let text = read_log(&log);
+    assert!(text.ends_with('\n'), "incomplete JSON line: {text}");
+    assert!(!text.contains('\r'), "log must use LF on both OSes: {text}");
+    let objects: Vec<serde_json::Value> = text
+        .lines()
+        .map(|line| {
+            serde_json::from_str(line)
+                .unwrap_or_else(|error| panic!("invalid JSON log line {line:?}: {error}"))
+        })
+        .collect();
+    for ip in ["127.0.0.2", "127.0.0.3"] {
+        let rejections: Vec<_> = objects
+            .iter()
+            .filter(|object| object["event"] == "connection_rejected" && object["peer_ip"] == ip)
+            .collect();
+        assert_eq!(rejections.len(), 1, "{ip}: {text}");
+        let object = rejections[0]
+            .as_object()
+            .unwrap_or_else(|| panic!("log line is not an object: {}", rejections[0]));
+        let mut keys: Vec<_> = object.keys().map(String::as_str).collect();
+        keys.sort_unstable();
+        assert_eq!(
+            keys,
+            [
+                "event", "level", "listener", "peer_ip", "reason", "stage", "ts"
+            ],
+            "{ip}: {object:?}"
+        );
+        assert_eq!(object["level"], "warn");
+        assert_eq!(object["event"], "connection_rejected");
+        assert_eq!(object["stage"], "tls");
+        assert_eq!(object["reason"], "tls_version_unsupported");
+        assert_eq!(object["listener"], "management");
+        assert_eq!(object["peer_ip"], ip);
+        let ts = object["ts"]
+            .as_str()
+            .unwrap_or_else(|| panic!("ts is not a string: {object:?}"));
+        // Same UTC millisecond shape as ops_info_contract::assert_timestamp.
+        assert_eq!(ts.len(), 24, "{ts}");
+        for (index, byte) in ts.bytes().enumerate() {
+            match index {
+                4 | 7 => assert_eq!(byte, b'-', "{ts}"),
+                10 => assert_eq!(byte, b'T', "{ts}"),
+                13 | 16 => assert_eq!(byte, b':', "{ts}"),
+                19 => assert_eq!(byte, b'.', "{ts}"),
+                23 => assert_eq!(byte, b'Z', "{ts}"),
+                _ => assert!(byte.is_ascii_digit(), "{ts}"),
+            }
+        }
+    }
 }
 
 /// `config` with the management listener on the public address `0.0.0.0`.

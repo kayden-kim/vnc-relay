@@ -164,7 +164,7 @@ flowchart LR
 | `tests/code_map.rs` `code_map_paths_and_symbols_resolve_to_current_code` | operations.md: OPS-022. §2 경로·정의와 §3·§4 파일 단위 연결 근거 |
 | `tests/dependency_notices.rs` `distribution_notices_match_locked_dependencies_and_license_texts` | operations.md: OPS-021 partial. 오프라인 고지 대조만 확인하며 프로젝트 LICENSE는 확인하지 않는다. |
 | `tests/admin.rs` | operations.md: OPS-029·030 |
-| `tests/serve.rs` | operations.md: 시작·종료·L/H·상태·관리 보안·IP·중복 시작. `initial_tls_and_upgrade_deadlines_have_distinct_causes_and_release_capacity`는 OPS-006 전체(H·TLS·업그레이드 U·원인·회수)를, `every_relay_entry_point_accepts_only_its_own_source_ip`는 OPS-037 전체(네 진입점과 네 출발지 IP의 16쌍)를 실제 실행파일로 확인한다. relay.md: 초기 교환·Mode I/II·중계·half-close·IP. websocket.md: WS-024 |
+| `tests/serve.rs` | operations.md: 시작·종료·L/H·상태·관리 보안·IP·중복 시작. `initial_tls_and_upgrade_deadlines_have_distinct_causes_and_release_capacity`는 OPS-006 전체(H·TLS·업그레이드 U·원인·회수)를, `every_relay_entry_point_accepts_only_its_own_source_ip`는 OPS-037 전체(네 진입점과 네 출발지 IP의 16쌍)를 실제 실행파일로 확인한다. `management_legacy_tls_rejections_have_exact_json_fields_and_keep_tls12_available`은 OPS-036의 관리 HTTPS 부분과 거절 로그 줄 형식을 확인한다. relay.md: 초기 교환·Mode I/II·중계·half-close·IP. websocket.md: WS-024 |
 | `tests/unix_shutdown.rs`; `tests/windows_console.rs`; `tests/common/shutdown.rs` `ServerProcess` | operations.md: OPS-007~010·042·043(양 OS), OPS-044(Windows). Windows는 MGT-027·OPS-029·OPS-030과 Ctrl+C·Ctrl+Break도 확인한다. OPS-030 시험은 ConPTY 출력에서 제어 순서를 뺀 화면 문자로 비교한다(`tests/common/log_reopen.rs` `plain`). 공통 본문에는 표식이 없다. |
 | `tests/dashboard_browser.rs` | dashboard.md: 컴포넌트·목 응답을 쓰는 DASH-001~022·024~027 부분 증거 |
 | `tests/dashboard_live.rs`; `tests/dashboard_live/login.rs`; `tests/dashboard_live/overview.rs`; `tests/dashboard_live/detail.rs`; `tests/dashboard_live/cross.rs` | dashboard.md: 실제 로그인·중계·관리 조회·상세·종료·언어·폴링·Si 만료의 DASH-001~014·016~022·024~027. 표식은 최상위 Rust 테스트 함수에만 둔다. |
@@ -172,7 +172,7 @@ flowchart LR
 | `tests/websocket_browser.rs` `browser_websocket_relays_mode_i_and_ii_over_ws_and_wss_without_novnc_or_websockify` `novnc_repeater_id_completes_rfb_through_ws_and_wss_in_both_server_orders` | websocket.md: WS-020(Chromium 내장 WebSocket과 실제 실행파일의 WS·WSS Mode I·II), WS-025(고정 noVNC 1.7.0 `repeaterID`와 시험 쪽 최소 RFB 서버, `#[ignore]`). 시험 쪽 정적 HTTP 서버가 빈 페이지와 noVNC 파일을 제공한다. |
 | `src/serve/listener_tests.rs` `listener_failures_retry_then_drive_fatal_grace_cleanup_and_preserve_requested_races`; `crates/adapters/src/listener.rs` | operations.md OPS-046: 실제 감독 함수·TCP 중계·상태 HTTP에 수락 포트를 연결한 시험, 일시 오류 재시도·치명 오류·최초 종료 원인·G 정리. 어댑터 내부 시험은 실제 OS 수락 오류와 분류를 확인한다. |
 | `tests/management_query.rs` | management.md: MGT-001~007·013·015·016·021·023·024·026. operations.md: OPS-033 |
-| `tests/management_session.rs` | management.md: MGT-017·020·027. operations.md: OPS-029 |
+| `tests/management_session.rs` | management.md: MGT-017·020·027. operations.md: OPS-029, OPS-003 부분(계정 파일 내용 변경의 재시작 뒤 반영) |
 | `tests/management_terminate.rs` | management.md: MGT-008~014·023. relay.md: RLY-020. operations.md: OPS-011 |
 | `tests/relay_entry_scenarios.rs` | relay.md: RLY-001~005·022·023. operations.md: OPS-039 |
 | `tests/relay_target_scenarios.rs` | relay.md: RLY-007~009. operations.md: OPS-023 |
