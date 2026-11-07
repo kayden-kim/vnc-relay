@@ -259,7 +259,7 @@ Linux 전용 `tests/relay_dead_peer_linux.rs`는 사용자·네트워크 네임�
 
 이 절의 위치와 형식은 이 문서의 판단, 사용자 결정 없음이다. 판정 규칙은 [TODO 5.9](../TODO.md#5-운영배포-검증)의 완료 조건, [테스트 컨벤션 5절](../conventions/testing.md#5-검증-명령과-통과-기준)(사용자 결정 2026-11-06(Q132)), 사용자 결정 2026-11-04(Q99)를 따른다. 보고서 도구는 바꾸지 않았다.
 
-기준 보고서는 커밋 `ee0314f`의 두 OS 전체 게이트(2026-11-07)다. 커밋 `0c0ba5e`는 계약 시험 두 개(OPS-003·OPS-036 부분 표식)를 더했다. 그 커밋의 두 OS 게이트도 같은 상태 수로 통과했고 두 시험이 통과했다. 그래서 아래 판정은 바뀌지 않는다.
+기준 보고서는 커밋 `ee0314f`의 두 OS 전체 게이트(2026-11-07)다. 커밋 `0c0ba5e`는 계약 시험 두 개(OPS-003·OPS-036 부분 표식)를, 커밋 `84f4086`은 WS 요청 머리 상한 경계 시험(WS-012 부분 표식)을 더했다. 두 커밋의 두 OS 게이트도 같은 상태 수로 통과했고 새 시험이 통과했다. 그래서 아래 판정은 바뀌지 않는다.
 
 | 확인 대상 | 기준 | 환경 | 결과 | 증거 |
 | --- | --- | --- | --- | --- |
@@ -267,6 +267,8 @@ Linux 전용 `tests/relay_dead_peer_linux.rs`는 사용자·네트워크 네임�
 | Ubuntu 시나리오 보고서 | `오류`·`실패` 0건 | Ubuntu 24.04.4 LTS x64(WSL2), Rust 1.99.1 | 통과. `ALL PASSED`. 153건: 통과 140, 부분 7, 실패 0, 미실행 4, 미연결 2, 오류 0. 머리글의 `+ 미커밋 변경`은 줄 끝 차이뿐이다(`git -c core.autocrlf=true diff --exit-code` 종료 코드 0) | `~/vnc-relay-target/scenario-report.md`(`ee0314f`, 2026-11-07T09:48:43Z) |
 | Windows 재실행 | 같음 | 같음 | 통과. `ALL PASSED (all)`. 상태 수는 위와 같다. `account_file_content_changes_apply_only_after_restart`·`management_legacy_tls_rejections_have_exact_json_fields_and_keep_tls12_available` 통과 | `target/scenario-report.md`(`0c0ba5e`, 2026-11-07T12:46:13Z) |
 | Ubuntu 재실행 | 같음 | 같음 | 통과. `ALL PASSED`. 상태 수와 두 시험 결과는 위와 같다. `+ 미커밋 변경`은 줄 끝 차이뿐이다(문서 밖 `git -c core.autocrlf=true diff --exit-code` 종료 코드 0) | `~/vnc-relay-target/scenario-report.md`(`0c0ba5e`, 2026-11-07T13:03:45Z) |
+| Windows 재실행 | 같음 | 같음 | 통과. `ALL PASSED (all)`. 상태 수는 위와 같다. `request_head_accepts_16384_bytes_and_refuses_16385_bytes` 통과 | `target/scenario-report.md`(`84f4086`, 2026-11-07T13:56:07Z) |
+| Ubuntu 재실행 | 같음 | 같음 | 통과. `ALL PASSED`. 상태 수와 새 시험 결과는 위와 같다. `+ 미커밋 변경`은 줄 끝 차이뿐이다(`git -c core.autocrlf=true diff --exit-code` 종료 코드 0) | `~/vnc-relay-target/scenario-report.md`(`84f4086`, 2026-11-07T14:13:58Z) |
 
 보고서에 `통과`가 아닌 상태로 남은 시나리오의 판정은 다음과 같다. 보고서 열은 Windows / Ubuntu 순서다.
 
