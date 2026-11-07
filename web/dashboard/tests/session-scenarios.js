@@ -155,6 +155,23 @@ const factValue = (root, label) => {
   return row?.querySelector('.fact-value')?.textContent.trim() ?? null;
 };
 
+// Before the first success every fact and byte value is the info loading badge of the card head (DESIGN 상태 색, Q143).
+function checkLoadingMarks(label, root) {
+  const isInfoBadge = (node) => node?.dataset.tone === 'info' && node.querySelector('svg') !== null
+    && node.textContent.trim() === t.loading;
+  const facts = [...root.querySelectorAll('.fact')];
+  check(`${label}: five fact labels shown while loading`, facts.length === 5);
+  check(`${label}: every fact value is the loading badge`,
+    facts.every((row) => isInfoBadge(row.querySelector('.fact-value > .badge'))));
+  const stats = [...root.querySelectorAll('.stat')];
+  check(`${label}: both byte directions shown while loading`, stats.length === 2
+    && [t.directionViewerToTarget, t.directionTargetToViewer].every((name) => stats.some((s) => s.textContent.includes(name))));
+  check(`${label}: every byte value is the loading badge`,
+    stats.every((stat) => isInfoBadge(stat.querySelector('.stat-value > .badge'))));
+  const marks = [...root.querySelectorAll('.badge')].filter((node) => node.textContent.trim() === t.loading);
+  check(`${label}: every loading mark is the same info badge`, marks.length === 8 && marks.every(isInfoBadge));
+}
+
 const metaOf = (root) => root.querySelector('.page-meta')?.textContent.trim() ?? '';
 
 // A template such as "Last successful update: {time}" matches when the placeholder holds a local time.
@@ -507,6 +524,8 @@ async function caseDash022() {
     );
   };
   const slow = mount(fakeApi({ 'GET /api/v1/session': () => session(1), [DETAIL]: slowRead }));
+  await waitFor(() => inFlight === 1 && slow.api.count(DETAIL) === 1);
+  checkLoadingMarks('DASH-022 slow first read', slow.root);
   await waitFor(() => slow.api.count(DETAIL) >= 2, 6000);
   await waitFor(() => inFlight === 0 && slow.api.count(DETAIL) >= 2, 3000);
   const slowCalls = slow.api.calls.filter((c) => c.key === DETAIL);

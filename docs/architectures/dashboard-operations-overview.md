@@ -103,6 +103,7 @@ Query = { data,          // 마지막 성공 응답의 값 (없을 수 있음)
 - 오래된 데이터와 조회 실패 안내는 `createAlert`, 조회 중·갱신 중 표시는 `createBadge`로 그린다 (`panels.js`의 `statusAlert`·`statusBadge`).
 - 톤: 조회 중·갱신 중은 info, 오래된 데이터는 warning, 조회 실패는 destructive로 한다는 설계다. 실제 톤은 스크린샷 비교에서 확인한다 (검증 기록 4.6).
 - "조회 중"은 카드 머리 배지, 서버 요약 값(`summaryGrid`), 사용량 고리 가운데(`usageGauge`가 `createGauge`에 `unknownTone: 'info'`를 넘긴다), 목록 빈 행 모두에서 같은 info 배지다. "확인 불가"는 neutral 배지다([DESIGN 상태 색](../design/DESIGN.md#상태-색), 사용자 지적 2026-11-07을 반영한 판단).
+- SCR-002의 첫 조회 중(`viewOf`가 `loading`이고 사라진 세션이 아님)에는 `session.js`의 `loadingFactsBlock`이 사실 다섯 줄의 이름과 `statusBadge(t, 'loading')` 값을 그린다. `bytesBlock(t, null)`은 두 방향 이름과 방향 표식, info 배지 값을 그린다. 첫 조회 실패와 사라진 세션은 값을 그리지 않는다. 정보 카드의 내용 키는 사라진 세션을 `gone`으로 구분해 조회 중 내용을 지운다(사용자 결정 2026-11-07(Q143)).
 - 페이지 머리말의 "마지막 성공 갱신"은 네 조회의 `lastSuccessAt` 중 가장 최근 값이다 (구현 판단).
 - 개수 배지도 같은 `data`를 따른다. 첫 성공 전에는 숨긴다. 성공한 빈 목록은 0건/0 items다. 갱신 중·실패 때 이전 표를 유지하면 그 개수도 유지한다. 첫 조회 실패를 0건으로 바꾸지 않는다.
 

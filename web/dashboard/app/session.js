@@ -21,7 +21,7 @@ import { BRAND_NAME, COPY } from './copy.js';
 import { fill, formatAddress, formatBytes, formatMode, formatTime, formatTransport } from './format.js';
 import { LANGUAGES, chooseLanguage, readSavedLanguage, saveLanguage } from './language.js';
 import { isSessionId, parseDetail, parseSession, parseTerminate } from './model.js';
-import { applyChrome, el, pageHead, panelCard, setContent } from './panels.js';
+import { applyChrome, el, pageHead, panelCard, setContent, statusBadge } from './panels.js';
 import { clearTimer, contentKey, newQuery, viewOf } from './query.js';
 import { LOGIN_URL, buildNavbar, defaultStorage, signOutUrl } from './shell.js';
 
@@ -486,6 +486,19 @@ export function mountSession(root, id, deps = {}) {
     return block;
   }
 
+  // Before the first success: the same fact labels, each value the loading badge of the card head (DESIGN 상태 색, Q143).
+  function loadingFactsBlock(t) {
+    const list = el('dl', 'fact-list');
+    list.append(
+      ...[t.modeLabel, t.transportLabel, t.startedLabel, t.viewerAddressLabel, t.targetAddressLabel].map((label) =>
+        factRow(label, statusBadge(t, 'loading')),
+      ),
+    );
+    const block = el('div', 'card-stack');
+    block.append(list);
+    return block;
+  }
+
   // One row of the facts list. `valueClass` marks the address values.
   function factRow(label, value, valueClass = null) {
     const row = el('div', 'fact');
@@ -498,20 +511,24 @@ export function mountSession(root, id, deps = {}) {
     return row;
   }
 
-  // Bytes per direction. Each value uses the metric style of the stat component. Each label leads with a decorative direction mark.
-  function directionStat(label, bytes, markClass) {
-    const stat = createStat({ label, value: formatBytes(bytes) });
+  // Bytes per direction. `value` holds the createStat value options: the metric style for bytes, or the loading badge.
+  // Each label leads with a decorative direction mark.
+  function directionStat(label, markClass, value) {
+    const stat = createStat({ label, ...value });
     const mark = el('span', `direction-mark ${markClass}`);
     mark.setAttribute('aria-hidden', 'true');
     stat.querySelector('.stat-label').prepend(mark);
     return stat;
   }
 
+  // `session` null means the first query is still running: both values show the loading badge.
   function bytesBlock(t, session) {
+    const value = (bytes) =>
+      session ? { value: formatBytes(bytes) } : { value: t.loading, tone: 'info', badge: true };
     const block = el('div', 'card-stack');
     block.append(
-      directionStat(t.directionViewerToTarget, session.bytesViewerToTarget, 'direction-mark-1'),
-      directionStat(t.directionTargetToViewer, session.bytesTargetToViewer, 'direction-mark-2'),
+      directionStat(t.directionViewerToTarget, 'direction-mark-1', value(session?.bytesViewerToTarget)),
+      directionStat(t.directionTargetToViewer, 'direction-mark-2', value(session?.bytesTargetToViewer)),
     );
     return block;
   }
@@ -541,17 +558,21 @@ export function mountSession(root, id, deps = {}) {
 
     renderNotice(t);
 
+    // Before the first success both cards show their labels with loading badges. Gone and failed show no values.
+    const loading = !state.gone && view === 'loading';
     if (showInfo) {
       // Gone has no badge or alert. The notice above the grid carries that state.
       applyChrome(page.info, query, state.gone ? 'gone' : view, t);
-      setContent(page.info, contentKey(query, view, state.lang), () =>
-        query.data ? factsBlock(t, query.data.session) : null,
-      );
+      setContent(page.info, contentKey(query, state.gone ? 'gone' : view, state.lang), () => {
+        if (query.data) return factsBlock(t, query.data.session);
+        return loading ? loadingFactsBlock(t) : null;
+      });
     }
     if (showTransfer) {
-      setContent(page.transfer, contentKey(query, view, state.lang), () =>
-        query.data ? bytesBlock(t, query.data.session) : null,
-      );
+      setContent(page.transfer, contentKey(query, view, state.lang), () => {
+        if (query.data) return bytesBlock(t, query.data.session);
+        return loading ? bytesBlock(t, null) : null;
+      });
     }
     const cards = [
       ...(showInfo ? [page.infoNode] : []),
