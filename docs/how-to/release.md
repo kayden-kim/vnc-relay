@@ -170,6 +170,8 @@ Windows 11 x64와 Ubuntu 24.04 LTS x64용 배포 묶음을 만들고, 버전 태
 
 같은 커밋 `7859b5d`의 전체 완료 검증은 두 OS에서 통과했다. Windows `vr-win.ps1 -Only all`은 `ALL PASSED (all)`, 시나리오 153건 중 통과 137·부분 11·실패 0·미실행 3·미연결 2·오류 0이다(보고 2026-11-07T20:08:44Z). WSL `vr-full.sh`는 `ALL PASSED`, 통과 140·부분 7·실패 0·미실행 4·미연결 2·오류 0이다(보고 2026-11-07T20:26:57Z). WSL 보고의 `+ 미커밋 변경`은 줄 끝 차이뿐이다(`git -c core.autocrlf=true diff --exit-code` 종료 코드 0).
 
+커밋 `aa15af8`에서 묶음 파일 권한을 정규화하고 CI에 `cargo test --package xtask --locked`를 더했다. WSL에서 `/mnt/d` 작업 트리로 만든 tar.gz는 이전에 모든 파일이 `-rwxr-xr-x`였다. 바꾼 뒤에는 파일 94개가 `-rw-r--r--`, 실행파일 `vnc-relay`만 `-rwxr-xr-x`, 디렉터리 14개가 `drwxr-xr-x`였고 `sha256sum -c`는 `OK`였다. 같은 커밋의 [실행 42411305345](https://github.com/kayden-kim/vnc-relay/actions/runs/42411305345)에서 두 OS `check`가 성공했고, 두 OS 모두 xtask 단위 시험 16건이 통과했다. 기록 커밋 `e7eed86`의 실행 42411172978도 성공했다. 전체 완료 검증은 `7859b5d` 기준이다. `aa15af8`은 `xtask/src/package.rs`·워크플로·문서만 바꿨으므로 [개발 환경·검증 how-to 3.3절](set-up-and-verify.md#33-변경-범위별-검증)의 해당 행 명령으로 확인했다.
+
 확인 중 관찰한 도구 차이를 적는다. 검증 PC의 Git Bash에 있는 `sha256sum 0.8.0`은 `-c`에서 CR 바이트가 든 파일을 자기가 쓴 해시 파일로도 `FAILED`로 보고했다. 직접 계산한 값은 맞았다. GNU coreutils `sha256sum`(Ubuntu)은 같은 파일을 `OK`로 판정했다. 이 PC의 Windows PowerShell 5.1은 `PSModulePath` 앞에 PowerShell 7 경로가 있어 `Get-FileHash`를 찾지 못했다. Windows에서는 PowerShell 7의 `Get-FileHash`나 `certutil -hashfile <파일> SHA256`으로 확인하기를 권장한다.
 
 ## 5. 중단 조건
