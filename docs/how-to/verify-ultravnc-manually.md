@@ -10,7 +10,7 @@
 | 검증 상태 | 실행 완료(2026-11-05·06, Windows VNC Relay). 3절의 22~31·34단계를 모두 실행했고 모두 성공 조건과 맞았다(4.1·4.2절). 32단계 자동 증거 대조는 4.3절이다. 프로젝트 소유자가 2026-11-06에 판정 캡처를 검토했고 문제가 없었다. AC-08은 작업 5.4로 옮겼다(사용자 결정 2026-11-06(Q117)). Ubuntu VNC Relay는 분리 실행 환경이 없어 2절 규칙대로 미실행으로 남긴다 |
 | 검증 환경·버전 | Hyper-V VM 3대(`vr-lab` `Private` 스위치, 게이트웨이 없음), 게스트 Windows 11 Enterprise Evaluation 10.0.26300, UltraVNC Server·Viewer 1.8.3.0, VNC Relay 커밋 `ceb6a7c` Windows debug 빌드. Ubuntu VNC Relay는 미실행 |
 | 최종 검증일 | 2026-11-06. 작성일 2026-11-02 |
-| 관련 기준 문서 | [TODO 2.13](../TODO.md#2-tcp-repeater), [PRD 10절](../requirements/PRD.md#10-검증-및-수용-기준), [중계 스펙 7절](../specs/relay.md#7-수용-테스트), [초기 교환 계약](../contracts/repeater-handshake-v1.md), [설정 계약](../contracts/config-v2.md), [CLI 계약](../contracts/cli-v1.md), [운영 정보 계약](../contracts/ops-info-v1.md), [호환성 검증 기록](../contracts/repeater-compat-record.md) |
+| 관련 기준 문서 | [TODO 2.13](../TODO.md#2-tcp-repeater), [PRD 10절](../requirements/PRD.md#10-검증-및-수용-기준), [중계 스펙 7절](../specs/relay.md#7-수용-테스트), [초기 교환 계약](../contracts/repeater-handshake-v1.md), [설정 계약](../contracts/config-v3.md), [CLI 계약](../contracts/cli-v1.md), [운영 정보 계약](../contracts/ops-info-v1.md), [호환성 검증 기록](../contracts/repeater-compat-record.md) |
 
 ## 1. 대상과 영향
 
@@ -124,7 +124,7 @@
    output = "relay.jsonl"
    ```
 
-   기대 결과: Mode I·II와 TCP 진입점만 켠 설정 파일이 생긴다. 수치형 상한·시간은 [설정 계약 1.2절](../contracts/config-v2.md#12-키-표)의 기본값이다. 관리·상태 포트는 같은 계약 5절의 시험 예시이며 제품 기본 포트가 아니다. 상대 경로인 계정·로그 파일은 설정 파일 디렉터리에서 찾는다. Mode I만 시험하면 `mode2.enabled`를 `false`로, Mode II만 시험하면 `mode1.enabled`를 `false`로 바꾼 별도 사본을 쓸 수 있다. 본 절차는 두 모드를 켠 원본을 쓴다.
+   기대 결과: Mode I·II와 TCP 진입점만 켠 설정 파일이 생긴다. 수치형 상한·시간은 [설정 계약 1.2절](../contracts/config-v3.md#12-키-표)의 기본값이다. 관리·상태 포트는 같은 계약 5절의 시험 예시이며 제품 기본 포트가 아니다. 상대 경로인 계정·로그 파일은 설정 파일 디렉터리에서 찾는다. Mode I만 시험하면 `mode2.enabled`를 `false`로, Mode II만 시험하면 `mode1.enabled`를 `false`로 바꾼 별도 사본을 쓸 수 있다. 본 절차는 두 모드를 켠 원본을 쓴다.
 
 5. 대화형 터미널에서 시험용 관리자 계정을 만든다. TCP 중계에 관리자 로그인을 쓰지는 않지만 `serve` 시작에는 계정이 하나 이상 필요하다.
 

@@ -68,7 +68,7 @@ impl JsonLinesEventSink {
     }
 
     /// Opens the configured output. A file is appended to and created when
-    /// it is missing (config-v2 §1.2 `log.output`).
+    /// it is missing (config-v3 §1.2 `log.output`).
     pub fn open(
         output: &LogOutput,
         on_first_failure: impl Fn(&io::Error) + Send + Sync + 'static,
@@ -185,7 +185,7 @@ fn open_append(path: &Path) -> Result<File, LogFileError> {
 }
 
 /// The log file cannot be opened for appending (`log_file_unavailable`,
-/// config-v2 §2.1). The cause names no path: the path is a config value.
+/// config-v3 §2.1). The cause names no path: the path is a config value.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LogFileError {
     cause: String,

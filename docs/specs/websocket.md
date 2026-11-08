@@ -8,7 +8,7 @@
 | 관련 요구사항 | [PRD](../requirements/PRD.md) FR-05, 7절 보안 경계, AC-05~08 |
 | 용어 | [VNC Relay 용어집](../../GLOSSARY.md) |
 | 관련 스펙 | [중계와 매칭](relay.md), [설정·운영](operations.md) |
-| 관련 계약 | [WebSocket 중계 v1](../contracts/websocket-relay-v1.md), [설정 파일 v2](../contracts/config-v2.md). 모두 Active(2026-10-16 채택)이며 URL·서브프로토콜·HTTP 상태·종료 코드의 이름·번호와 Origin 정규화는 이 계약이 기준이다. |
+| 관련 계약 | [WebSocket 중계 v1](../contracts/websocket-relay-v1.md), [설정 파일 v3](../contracts/config-v3.md). 모두 Active(2026-10-16 채택)이며 URL·서브프로토콜·HTTP 상태·종료 코드의 이름·번호와 Origin 정규화는 이 계약이 기준이다. |
 | 관련 아키텍처 문서·ADR | [코드 지도](../architectures/code-map.md), [WS·WSS 진입점 모듈 설계](../architectures/websocket-entry-point.md), [WS 스트림 모듈 설계](../architectures/websocket-stream.md), [TLS 모듈 설계](../architectures/tls.md), [ADR-0001 내장 TLS](../decisions/ADR-0001-built-in-tls.md), [ADR-0002 출발지 IP 허용 목록](../decisions/ADR-0002-source-ip-allowlist.md), [ADR-0004 tokio·rustls](../decisions/ADR-0004-tokio-rustls.md), [ADR-0005 자체 WS 스트리밍 프레임 코덱](../decisions/ADR-0005-in-house-ws-streaming-frame-codec.md). |
 
 ## 1. 범위와 적용 상태
@@ -41,7 +41,7 @@ VNC Relay가 WSS 리스너·인증서를 직접 관리한다. TLS 보호 구간�
 
 IP 목록과 인증서 재로드는 [운영 스펙](operations.md#33-파일-변경-자동-감지와-부분-재로드)에 따른다. 업그레이드 허용을 완료한 연결은 IP 제거 뒤에도 유지한다. 업그레이드 전의 HTTP·TLS 연결은 업그레이드 직전에 그 시점의 유효 목록으로 다시 검사한다. 재로드 뒤의 새 업그레이드에도 재로드 후 유효한 목록을 적용한다.
 
-Origin 정책: Origin 헤더가 있으면 설정된 허용 값과 일치할 때만 업그레이드한다. 허용 값은 `scheme://host[:port]` 형식이며 정확 일치로 비교한다. 와일드카드는 없다. 스킴·호스트·포트 중 하나라도 다르면 거절한다. 하위 도메인은 다른 호스트다. 기본 포트 생략 표기를 같은 값으로 보는 것과 같은 정규화 세부는 [설정 계약 1.4절](../contracts/config-v2.md#14-origin-값-문법과-비교)이 정하고, 비교 결과에 따른 처리는 [WebSocket 계약 1.3절](../contracts/websocket-relay-v1.md#13-origin-비교)이 정한다. Origin 헤더가 없으면 출발지 IP 검사만 한다. 이때도 출발지 IP가 허용돼야 한다. Origin은 사용자 인증 수단이 아니다.
+Origin 정책: Origin 헤더가 있으면 설정된 허용 값과 일치할 때만 업그레이드한다. 허용 값은 `scheme://host[:port]` 형식이며 정확 일치로 비교한다. 와일드카드는 없다. 스킴·호스트·포트 중 하나라도 다르면 거절한다. 하위 도메인은 다른 호스트다. 기본 포트 생략 표기를 같은 값으로 보는 것과 같은 정규화 세부는 [설정 계약 1.4절](../contracts/config-v3.md#14-origin-값-문법과-비교)이 정하고, 비교 결과에 따른 처리는 [WebSocket 계약 1.3절](../contracts/websocket-relay-v1.md#13-origin-비교)이 정한다. Origin 헤더가 없으면 출발지 IP 검사만 한다. 이때도 출발지 IP가 허용돼야 한다. Origin은 사용자 인증 수단이 아니다.
 
 ## 3. 정상 흐름과 규칙
 
@@ -69,7 +69,7 @@ Origin 정책: Origin 헤더가 있으면 설정된 허용 값과 일치할 때�
 
 메시지 크기 제한 M은 프레임별 크기가 아니라 한 논리 메시지에 적용한다. B와 M 사이에는 대소 제약이 없다(사용자 결정 2026-11-01(Q78)). 프레임 안에서 스트리밍하며 방향당 미전달 보관 바이트는 B 이하다. B보다 큰 유효 프레임도 수락해 스트리밍하며 전체를 저장하지 않는다. 스트리밍 중 제한 초과를 확인할 때까지 일부 바이너리 데이터가 이미 전달될 수 있다. 초과 확인 뒤 추가 데이터 전달을 중지하고 종료 코드 1009로 닫는다. 실패한 메시지 전체를 원자적으로 취소하는 보장은 하지 않는다.
 
-끊긴 연결은 두 단계로 감지한다. WS·WSS의 하부 TCP 소켓에는 TCP keepalive(K)를 적용한다. WebSocket 계층에는 ping·pong(Kw)을 적용한다. 기본값과 유효 범위는 [설정 계약](../contracts/config-v2.md)이 정한다. pong에 응답하는 연결은 데이터가 없다는 이유만으로 끊지 않는다.
+끊긴 연결은 두 단계로 감지한다. WS·WSS의 하부 TCP 소켓에는 TCP keepalive(K)를 적용한다. WebSocket 계층에는 ping·pong(Kw)을 적용한다. 기본값과 유효 범위는 [설정 계약](../contracts/config-v3.md)이 정한다. pong에 응답하는 연결은 데이터가 없다는 이유만으로 끊지 않는다.
 
 ## 4. 오류와 종료
 
@@ -156,5 +156,5 @@ WS-007 이후의 공통 중계 테스트는 WS·WSS 각각에 적용한다. TLS 
 확정 책임은 프로젝트 요구사항·운영 결정 담당자에게 있다. 외부 URL·HTTP 상태·종료 코드는 Active 계약이 기준이다. 구현과 테스트의 지원 판정은 [작업 5.9 판정표](../how-to/set-up-and-verify.md#41-작업-59-판정표)를 따른다.
 
 현재 남은 미결정 사항은 없다.
-WS-TBD-001은 결번이며 재사용하지 않는다. WS-TBD-002는 [WebSocket 중계 v1](../contracts/websocket-relay-v1.md) 채택(2026-10-16)으로 결정되어 4절과 계약에 반영했으며 재사용하지 않는다. WS-TBD-003은 [설정 파일 v2](../contracts/config-v2.md) 1.4절의 정규화 규칙 채택으로 결정되어 2절과 계약에 반영했으며 재사용하지 않는다. WS-TBD-006은 결정되어 1절에 반영했으며 재사용하지 않는다. WS-TBD-005는 2026-11-01에 해소되어 이 표에서 뺐다. noVNC 1.7.0을 [호환성 검증 기록](../contracts/repeater-compat-record.md) 2.4절에 고정했고(버전·해시·받은 주소·날짜), 같은 기록 3.4절에 WS·WSS 관찰 결과를 남겼다. 이 버전은 `Sec-WebSocket-Protocol` 헤더를 보내지 않았고, 이는 [WebSocket 중계 v1](../contracts/websocket-relay-v1.md) 1.2절 규칙과 같다. 재사용하지 않는다.
+WS-TBD-001은 결번이며 재사용하지 않는다. WS-TBD-002는 [WebSocket 중계 v1](../contracts/websocket-relay-v1.md) 채택(2026-10-16)으로 결정되어 4절과 계약에 반영했으며 재사용하지 않는다. WS-TBD-003은 [설정 파일 v3](../contracts/config-v3.md) 1.4절의 정규화 규칙 채택으로 결정되어 2절과 계약에 반영했으며 재사용하지 않는다. WS-TBD-006은 결정되어 1절에 반영했으며 재사용하지 않는다. WS-TBD-005는 2026-11-01에 해소되어 이 표에서 뺐다. noVNC 1.7.0을 [호환성 검증 기록](../contracts/repeater-compat-record.md) 2.4절에 고정했고(버전·해시·받은 주소·날짜), 같은 기록 3.4절에 WS·WSS 관찰 결과를 남겼다. 이 버전은 `Sec-WebSocket-Protocol` 헤더를 보내지 않았고, 이는 [WebSocket 중계 v1](../contracts/websocket-relay-v1.md) 1.2절 규칙과 같다. 재사용하지 않는다.
 WS-TBD-004는 사용자 결정 2026-11-01(Q78)로 해소되어 이 절에서 뺐다. B와 M 사이에 크기 제약은 없다. 프레임 안에서 스트리밍하며 방향당 미전달 보관 바이트는 B 이하다. M은 분할 프레임을 합친 논리 메시지에 적용되며 M+1부터 1009로 닫고 추가 전달을 멈춘다. B보다 큰 유효 프레임도 수락해 스트리밍하며 전체를 저장하지 않는다. 재사용하지 않는다.

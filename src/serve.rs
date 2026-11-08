@@ -45,7 +45,7 @@ use vnc_relay_domain::login_limit::LoginLimitPolicy;
 
 use crate::cli::{self, EXIT_ACCOUNTS, EXIT_CONFIG, EXIT_LISTENER, EXIT_RUNTIME};
 
-/// Config key of the log output (config-v2 §1.2).
+/// Config key of the log output (config-v3 §1.2).
 const LOG_OUTPUT_KEY: &str = "log.output";
 
 /// Runs the server until the first shutdown request. Each failing stage

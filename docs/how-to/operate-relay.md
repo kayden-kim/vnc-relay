@@ -8,7 +8,7 @@ Windows 11 x64와 Ubuntu 24.04 LTS x64에서 release 실행파일을 만들고 �
 | 검증 상태 | Draft — 두 OS 수동 실행 기록 전이다. 자동 시험만으로 안내 전체를 검증했다고 표시하지 않는다. |
 | 검증 환경·버전 | Windows 11 x64의 PowerShell, Ubuntu 24.04 LTS x64의 bash. Rust 버전은 `rust-toolchain.toml`을 따른다. 실제 OS·Rust·실행파일 버전은 실행 기록에 적는다. |
 | 최종 검증일 | 없음(Draft 2026-11-04) |
-| 관련 기준 문서 | [운영 스펙](../specs/operations.md), [설정 계약](../contracts/config-v2.md), [CLI 계약](../contracts/cli-v1.md), [운영 정보 계약](../contracts/ops-info-v1.md), [ADR-0001](../decisions/ADR-0001-built-in-tls.md) |
+| 관련 기준 문서 | [운영 스펙](../specs/operations.md), [설정 계약](../contracts/config-v3.md), [CLI 계약](../contracts/cli-v1.md), [운영 정보 계약](../contracts/ops-info-v1.md), [ADR-0001](../decisions/ADR-0001-built-in-tls.md) |
 
 ## 1. 대상과 영향
 
@@ -209,7 +209,7 @@ Windows 11 x64와 Ubuntu 24.04 LTS x64에서 release 실행파일을 만들고 �
 
 ### 3.6 인증서 교체
 
-TLS를 켠 배치에만 적용한다. TLS 1.2 이상이 필요하다. 지원 PEM 체인·키 형식은 [설정 계약 1.9절](../contracts/config-v2.md#19-인증서개인키-파일-형식)을 따른다. 비밀키 내용은 로그·명령행에 넣지 않는다.
+TLS를 켠 배치에만 적용한다. TLS 1.2 이상이 필요하다. 지원 PEM 체인·키 형식은 [설정 계약 1.9절](../contracts/config-v3.md#19-인증서개인키-파일-형식)을 따른다. 비밀키 내용은 로그·명령행에 넣지 않는다.
 
 1. 새 인증서 체인과 일치하는 개인키를 보호된 새 파일 두 개에 저장한다.
 

@@ -1677,7 +1677,7 @@ fn operations_log_and_status_endpoints_never_expose_secrets_or_raw_identifiers()
 #[test]
 fn idle_active_sessions_survive_longer_than_k_and_transfer_data() {
     let _lock = lock_ports();
-    // Minimum keepalive values allowed by config-v2.md:
+    // Minimum keepalive values allowed by config-v3.md:
     // tcp_idle_secs = 10 (range 10..=3600)
     // tcp_interval_secs = 1 (range 1..=300)
     // tcp_probes = 1 (range 1..=20)

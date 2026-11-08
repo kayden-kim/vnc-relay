@@ -1,4 +1,4 @@
-//! Config file loader (config-v2 §1 and §2.1).
+//! Config file loader (config-v3 §1 and §2.1).
 //! Design: docs/architectures/config-loading.md.
 
 mod listen;
@@ -107,7 +107,7 @@ fn parse_table(text: &str) -> Result<toml::Table, Vec<ConfigDiagnostic>> {
     })
 }
 
-/// Position only; the message must not quote file content (config-v2 §2.1).
+/// Position only; the message must not quote file content (config-v3 §2.1).
 fn syntax_message(text: &str, error: &toml::de::Error) -> String {
     match error_position(text, error) {
         Some((line, column)) => format!("TOML 구문 오류 또는 중복 키다({line}행 {column}열)."),
@@ -225,7 +225,7 @@ fn read_entry_point(
             (Field::Absent, Field::Absent)
         }
     };
-    // Disabled entry points skip the required-key check (config-v2 §1.2).
+    // Disabled entry points skip the required-key check (config-v3 §1.2).
     let (listen, allow, tls) = if enabled == Some(true) {
         let condition = format!("relay.{}.enabled = true", entry_point.name());
         let listen = required(&table, "listen", listen, &condition, d);

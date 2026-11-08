@@ -67,7 +67,7 @@ Windows PowerShell에서는 `./vnc-relay`를 `.\vnc-relay.exe`로, `curl`을 `cu
 | `vnc-relay admin list --config <path>` | 계정 이름을 나열한다. |
 | `vnc-relay --help`, `vnc-relay --version` | 사용법이나 버전을 출력한다. |
 
-계정 변경은 서버를 다시 시작해야 적용된다. 옵션·종료 코드·입력 규칙은 [CLI 계약](docs/contracts/cli-v1.md)이 정한다. 설정 키와 기본값은 [설정 계약](docs/contracts/config-v2.md)이 정한다.
+계정 변경은 서버를 다시 시작해야 적용된다. 옵션·종료 코드·입력 규칙은 [CLI 계약](docs/contracts/cli-v1.md)이 정한다. 설정 키와 기본값은 [설정 계약](docs/contracts/config-v3.md)이 정한다.
 
 ## 개발
 

@@ -130,7 +130,7 @@ impl fmt::Display for Argon2ParamsError {
 impl std::error::Error for Argon2ParamsError {}
 
 impl Argon2Params {
-    /// Approved ranges, shared with `[admin.argon2]` (config-v2 §1.2).
+    /// Approved ranges, shared with `[admin.argon2]` (config-v3 §1.2).
     pub const MEMORY_KIB: RangeInclusive<u32> = 19_456..=1_048_576;
     pub const ITERATIONS: RangeInclusive<u32> = 2..=10;
     pub const PARALLELISM: RangeInclusive<u32> = 1..=16;

@@ -14,7 +14,7 @@ use crate::reload::ports::{ReloadFileStore, ReloadTlsStore, TlsBuildError};
 use crate::reload::snapshot::{RelayAllow, ReloadCell, ReloadSnapshot};
 use crate::settings::{ConfigDiagnostic, ConfigError, ConfigWarning, Settings, TlsFiles};
 
-/// Entry points in config order (config-v2 §1.8).
+/// Entry points in config order (config-v3 §1.8).
 const ENTRY_POINTS: [EntryPoint; 4] = [
     EntryPoint::TcpViewer,
     EntryPoint::TcpServer,
@@ -355,7 +355,7 @@ impl<A: Clone> ReloadService<A> {
     }
 }
 
-/// The two TLS listeners that can reload (config-v2 §1.9).
+/// The two TLS listeners that can reload (config-v3 §1.9).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum TlsSlot {
     Wss,
@@ -500,7 +500,7 @@ fn relay_allow_of(settings: &Settings) -> RelayAllow {
     }
 }
 
-/// Config key of an allow list (config-v2 §1.8).
+/// Config key of an allow list (config-v3 §1.8).
 fn allow_key(entry_point: EntryPoint) -> &'static str {
     match entry_point {
         EntryPoint::TcpViewer => "relay.tcp_viewer.allow",
@@ -517,7 +517,7 @@ fn push_if(keys: &mut Vec<String>, differs: bool, key: &str) {
 }
 
 /// Config keys whose candidate value differs from the running value, excluding reload
-/// targets (config-v2 §1.8, file-watch-v1 §4 step 7).
+/// targets (config-v3 §1.8, file-watch-v1 §4 step 7).
 ///
 /// The management certificate is checked by presence only: HTTP and HTTPS switch need a
 /// restart. Changes to a WSS listener's TLS presence follow `relay.wss_viewer.enabled`.

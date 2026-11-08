@@ -1,5 +1,5 @@
 //! The management listener: HTTPS through the built-in TLS acceptor, or plain
-//! HTTP on loopback only (config-v2 §1.2 `[management]`, operations.md OPS-034).
+//! HTTP on loopback only (config-v3 §1.2 `[management]`, operations.md OPS-034).
 //! It answers login, session, query and termination routes and serves the
 //! dashboard files (management-api-v1 §1.5–§1.11).
 //! Design: docs/architectures/management-listener.md,

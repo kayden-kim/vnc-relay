@@ -24,6 +24,7 @@ flowchart LR
   P2B --> P3["3. WS·WSS 진입점"]
   P3 --> P4["4. 관리 기능"]
   P4 --> P5["5. 운영·배포 검증"]
+  P5 --> P6["6. 설정 보기·동적 설정 편집"]
 ```
 
 1단계와 2-A는 함께 진행할 수 있다. 2-A는 Repeater 초기 교환 계약에 의존하지 않는다. 4.1(관리자 계정 준비 CLI), 4.7(화면 문구), 4.8(토큰 CSS와 공통 컴포넌트)도 앞 단계와 함께 진행할 수 있다.
@@ -37,7 +38,7 @@ flowchart LR
   - 완료 조건: Windows 11 x64와 Ubuntu 24.04 LTS x64에서 빌드하고 `vnc-relay --version`을 실행한다.
 - [x] **0.2 rustls 암호 모듈 선택(OPS-TBD-009, 결정)**: aws-lc-rs와 ring을 두 OS에서 빌드하고 라이선스를 확인한 뒤 고른다. TLS 어댑터 crate(tokio-rustls 등)도 함께 정한다.
   - 기준: [운영 스펙 8절](specs/operations.md#8-미결정-사항), [ADR-0004 후속 작업](decisions/ADR-0004-tokio-rustls.md#후속-작업)
-  - 완료 조건: 운영 스펙에서 OPS-TBD-009를 해소하고 [설정 계약 1.9절](contracts/config-v2.md#19-인증서개인키-파일-형식)과 PRD를 갱신한다. [ADR 작성 조건](decisions/AGENTS.md)을 만족하면 ADR을 쓴다.
+  - 완료 조건: 운영 스펙에서 OPS-TBD-009를 해소하고 [설정 계약 1.9절](contracts/config-v3.md#19-인증서개인키-파일-형식)과 PRD를 갱신한다. [ADR 작성 조건](decisions/AGENTS.md)을 만족하면 ADR을 쓴다.
   - 선행: 0.1
 - [x] **0.3 조건부 채택 라이브러리 검토**: axum, tokio-tungstenite, toml·serde, argon2, notify, clap, tracing의 라이선스와 고지 의무를 확인한다.
   - 기준: [PRD 확정 기준](requirements/PRD.md#확정-기준)의 "구현 기술" 행, [OPS-021](specs/operations.md#7-수용-테스트)
@@ -93,7 +94,7 @@ Mode I·II 초기 흐름을 추정 없이 설명할 수 있게 한다. 관찰은
   - 기준: [Repeater 초기 교환 계약](contracts/repeater-handshake-v1.md), [중계 스펙 8절](specs/relay.md#8-미결정-사항)
   - 완료 조건: 프로젝트 소유자가 채택해 계약이 Active가 된다. 중계 스펙 8절을 갱신하고, 필요하면 [WebSocket 중계 계약](contracts/websocket-relay-v1.md)의 close 코드 대응도 고친다.
   - 선행: 1.4
-  - 현재: 2026-11-01에 프로젝트 소유자가 계약을 채택했다(Active, 사용자 결정 Q73). 1절은 관찰 증거로 다시 썼다. 오류 응답 바이트는 없고, Viewer 쪽 시작 바이트 12바이트만 있다. 2절 오류 코드 이름은 그대로 채택했다(Q72). 중계 ID는 숫자 1~247자리이고 바이트열이 정확히 같을 때만 같다(Q68·Q69). Mode I은 대괄호 IPv6를 받는다(Q70). 상한 I(`limits.initial_message_bytes`)를 지우고 [설정 계약](contracts/config-v2.md)을 2.0.0으로 올렸다(Q71). [중계 스펙 8절](specs/relay.md#8-미결정-사항)에서 RLY-TBD-002를 뺐고, [WebSocket 중계 계약](contracts/websocket-relay-v1.md)의 4008 뜻과 101 직후 시작 바이트를 고쳤다. 대상 버전과 다르게 처리하는 입력은 [계약 3.1절](contracts/repeater-handshake-v1.md#31-대상-버전-repeater와-다르게-처리하는-입력)에 있다.
+  - 현재: 2026-11-01에 프로젝트 소유자가 계약을 채택했다(Active, 사용자 결정 Q73). 1절은 관찰 증거로 다시 썼다. 오류 응답 바이트는 없고, Viewer 쪽 시작 바이트 12바이트만 있다. 2절 오류 코드 이름은 그대로 채택했다(Q72). 중계 ID는 숫자 1~247자리이고 바이트열이 정확히 같을 때만 같다(Q68·Q69). Mode I은 대괄호 IPv6를 받는다(Q70). 상한 I(`limits.initial_message_bytes`)를 지우고 [설정 계약](contracts/config-v3.md)을 2.0.0으로 올렸다(Q71). [중계 스펙 8절](specs/relay.md#8-미결정-사항)에서 RLY-TBD-002를 뺐고, [WebSocket 중계 계약](contracts/websocket-relay-v1.md)의 4008 뜻과 101 직후 시작 바이트를 고쳤다. 대상 버전과 다르게 처리하는 입력은 [계약 3.1절](contracts/repeater-handshake-v1.md#31-대상-버전-repeater와-다르게-처리하는-입력)에 있다.
 - [x] **1.6 중복 ID 정책(RLY-TBD-003, 결정)**: 대상 버전에서 같은 역할 중복 중계 ID의 결과를 기록한다. 제안 정책(후발 거절)과 같으면 채택한다. 다르면 차이를 기록하고 프로젝트 소유자가 정책을 고른다.
   - 기준: [미결정 항목의 해소 조건](contracts/repeater-handshake-v1.md#63-미결정-항목의-해소-조건), [중계 스펙 3.3절](specs/relay.md#33-mode-ii)
   - 완료 조건: 초기 교환 계약 2절, 중계 스펙 3.3절, PRD를 갱신한다.
@@ -112,8 +113,8 @@ Mode I·II 초기 흐름을 추정 없이 설명할 수 있게 한다. 관찰은
 ### 2-A. 공통 실행 기반
 
 - [x] **2.1 설정 로더**: TOML 설정 파일을 읽고 검증해 유효 설정을 만든다. 키 표, IP 항목·Origin·Mode I 대상 문법, 값 관계 검사, 필수 키, 진단 수집을 구현한다.
-  - 기준: [설정 계약 1·2절](contracts/config-v2.md#1-형식과-의미), [운영 스펙 3.1절](specs/operations.md#31-설정-검증과-시작)
-  - 완료 조건: OPS-001(일부), OPS-038(일부), OPS-040(일부). [설정 계약 5절](contracts/config-v2.md#5-예제와-계약-테스트)의 설정 로더 계약 테스트.
+  - 기준: [설정 계약 1·2절](contracts/config-v3.md#1-형식과-의미), [운영 스펙 3.1절](specs/operations.md#31-설정-검증과-시작)
+  - 완료 조건: OPS-001(일부), OPS-038(일부), OPS-040(일부). [설정 계약 5절](contracts/config-v3.md#5-예제와-계약-테스트)의 설정 로더 계약 테스트.
   - 선행: 0.1, 0.5
 - [x] **2.2 `serve` 시작과 CLI 골격**: 하위 명령 처리, 사용법 오류, 오류 출력 형식, 종료 코드를 구현한다. 시작 순서(설정 검증, 관리자 계정 파일 읽기, 리스너 열기)와 준비 실패 때 자원 회수를 구현한다.
   - 기준: [CLI 계약 1.1·1.5·1.7·1.8·2절](contracts/cli-v1.md#1-형식과-의미), [운영 스펙 3.1절](specs/operations.md#31-설정-검증과-시작)
@@ -128,7 +129,7 @@ Mode I·II 초기 흐름을 추정 없이 설명할 수 있게 한다. 관찰은
   - 완료 조건: RLY-023(일부: 기존 세션 유지는 2.10에서 확인), RLY-024, OPS-037(일부), OPS-038(일부)
   - 선행: 2.2, 2.3
 - [x] **2.5 연결 상한과 시간 제한**: L·Lm·Lw를 따로 세는 연결 예산을 만들고 TCP 진입점에 L을 적용한다. 초기 교환 시간 H와 TCP keepalive를 적용한다. Lm은 2.6·4.2, Lw는 2.9, Mode I 대상 연결의 L 집계는 2.8이 같은 예산으로 연결한다(사용자 결정 2026-10-20).
-  - 기준: [운영 스펙 2절](specs/operations.md#2-상태와-검증-매개변수)과 [4.1절](specs/operations.md#41-판정-가능한-규칙)의 OPS-R03·OPS-R20, [설정 계약 1.2절](contracts/config-v2.md#12-키-표), [연결 상한과 시간 제한 모듈 설계](architectures/connection-limits.md)
+  - 기준: [운영 스펙 2절](specs/operations.md#2-상태와-검증-매개변수)과 [4.1절](specs/operations.md#41-판정-가능한-규칙)의 OPS-R03·OPS-R20, [설정 계약 1.2절](contracts/config-v3.md#12-키-표), [연결 상한과 시간 제한 모듈 설계](architectures/connection-limits.md)
   - 완료 조건: OPS-004(일부: 관리·상태 연결을 L에 세지 않는지는 2.6에서 확인), OPS-033(일부: 예산 독립성 단위 테스트), OPS-006(일부: TCP 초기 교환의 H), RLY-005(일부: 바이트 전 상대 종료와 H)
   - 선행: 2.4
 - [x] **2.6 상태 리스너**: `/livez`·`/readyz`를 관리 리스너와 다른 리스너에서 인증 없이 응답한다. 다른 필수 리스너보다 먼저 연다. 연결은 Lm으로 센다. 준비됨 상태에 들어갈 때 `server_ready` 사건을 기록한다(작업 2.3에서 옮김, 사용자 결정 2026-10-20).
@@ -146,7 +147,7 @@ Mode I·II 초기 흐름을 추정 없이 설명할 수 있게 한다. 관찰은
   - 선행: 1.5, 2.5
   - 현재: 완료 조건을 모두 채웠다. RLY-001~005·RLY-022는 실행파일과 실제 TCP 진입점을 쓰는 비부분 시험으로 두 OS에서 통과했다. OPS-006은 이 작업 몫인 H 부분을 부분 시험으로 확인한다. WS·WSS 진입점도 같은 공통 서비스에 연결했다(`638cf09`). 커밋 `4e4a271`에서 Windows·WSL 전체 완료 검증을 통과했다([중계 세션 설계 8절](architectures/relay-session.md#8-현재-코드와의-차이와-연결-순서)).
 - [x] **2.8 Mode I**: 대상 주소를 해석하고 실제 연결할 IP·포트에 대상 허용 정책을 적용한다. 주소 해석 실패·연결 거절·시간 C 초과를 구분한다.
-  - 기준: [중계 스펙 3.2절](specs/relay.md#32-mode-i), [설정 계약 1.5절](contracts/config-v2.md#15-mode-i-대상-허용-항목-문법). 설계: [대상 연결·매칭·중계 수명 모듈 설계 4.1절](architectures/relay-session.md#41-작업-28-mode-i-대상-연결)(Draft, Target)
+  - 기준: [중계 스펙 3.2절](specs/relay.md#32-mode-i), [설정 계약 1.5절](contracts/config-v3.md#15-mode-i-대상-허용-항목-문법). 설계: [대상 연결·매칭·중계 수명 모듈 설계 4.1절](architectures/relay-session.md#41-작업-28-mode-i-대상-연결)(Draft, Target)
   - 완료 조건: RLY-007~009, OPS-023(대상 연결도 L에 셈)
   - 선행: 2.7
   - 현재: TCP·WS·WSS 진입점과 시작 조립에 연결했다(`68a427b`·`638cf09`). RLY-007·RLY-008은 비부분 시험으로 두 OS에서 통과했다. RLY-009·OPS-023의 비부분 시험은 Linux 전용이며 WSL 검증에서 통과했다. Windows에는 주소 해석 실패와 응답 없는 연결 시도를 결정적으로 만들 수단이 없어 부분 시험만 실행한다. 앞서 받아들인 OS별 검증 범위를 유지한다. RLY-006(실제 UltraVNC Server·Viewer의 화면과 입력)은 2.13으로 옮기고 2.8을 닫는다(사용자 결정 2026-11-02(Q87)).
@@ -183,11 +184,11 @@ Mode I·II 초기 흐름을 추정 없이 설명할 수 있게 한다. 관찰은
 단계 완료 조건은 WS·WSS 각각 AC-05·AC-16~17·AC-33과 WebSocket 관련 경계·종료 검증 통과다.
 
 - [x] **3.1 내장 TLS**: rustls로 TLS를 종료한다. PEM 인증서·개인키를 읽고 TLS 1.2 미만 협상은 거절한다. 지원하는 개인키 종류(RSA·ECDSA 등)를 확인해 설정 계약 1.9절에 적는다. WSS와 관리 HTTPS가 함께 쓴다.
-  - 기준: [ADR-0001](decisions/ADR-0001-built-in-tls.md), [ADR-0004](decisions/ADR-0004-tokio-rustls.md), [설정 계약 1.9절](contracts/config-v2.md#19-인증서개인키-파일-형식)
+  - 기준: [ADR-0001](decisions/ADR-0001-built-in-tls.md), [ADR-0004](decisions/ADR-0004-tokio-rustls.md), [설정 계약 1.9절](contracts/config-v3.md#19-인증서개인키-파일-형식)
   - 완료 조건: OPS-036, WS-013, OPS-002
   - 선행: 0.2, 2.2
 - [x] **3.2 WebSocket 업그레이드**: WS·WSS Viewer 진입점, 업그레이드 경로·헤더 검사 순서, 서브프로토콜, Origin 정확 일치, 업그레이드 직전 IP 재검사, 업그레이드·TLS 시간 U를 구현한다. 평문 WS는 설정으로 켰을 때만 열고 시작 경고를 기록한다.
-  - 기준: [WebSocket 중계 계약 1.1~1.3·2.1절](contracts/websocket-relay-v1.md#11-업그레이드-요청), [WebSocket 스펙 3절](specs/websocket.md#3-정상-흐름과-규칙), [설정 계약 1.4절](contracts/config-v2.md#14-origin-값-문법과-비교)
+  - 기준: [WebSocket 중계 계약 1.1~1.3·2.1절](contracts/websocket-relay-v1.md#11-업그레이드-요청), [WebSocket 스펙 3절](specs/websocket.md#3-정상-흐름과-규칙), [설정 계약 1.4절](contracts/config-v3.md#14-origin-값-문법과-비교)
   - 완료 조건: WS-012, WS-014~015, WS-021, WS-023~024, WS-027, OPS-006, OPS-016, OPS-037
   - 선행: 2.4, 3.1
   - 현재: 101 뒤 보류(사용자 결정 2026-10-22(Q21))는 `638cf09`에서 없애고 공통 초기 교환·중계에 연결했다. WS-012·WS-014·WS-015·WS-021·WS-023·WS-024·WS-027은 비부분 시험으로 통과했다. 그때 OPS-006·OPS-037은 부분 시험만 있었다. OPS-016의 "공개 접속은 WSS만 허용" 부분은 나중에 정하기로 했다(사용자 결정 2026-10-22(Q27)).
@@ -310,7 +311,7 @@ Mode I·II 초기 흐름을 추정 없이 설명할 수 있게 한다. 관찰은
   - 완료 조건: 운영 스펙에서 OPS-TBD-007을 해소한다.
   - 현재: [파일 감지 모듈 설계](architectures/file-watch.md) 9.1절의 권장안을 모두 채택해 OPS-TBD-007을 해소했다(사용자 결정 2026-10-22(Q50)). Windows 디렉터리·편집기 핸들(9절 항목 14)은 5.2의 Windows 관찰 뒤 한계로 문서화했다(사용자 결정 2026-10-23(Q57)).
 - [x] **5.2 자동 부분 재로드**: 설정 파일과 인증서·개인키 파일의 변경을 OS 알림과 주기 확인(Dp)으로 감지한다. 안정된 뒤 D 안에 재로드 후보를 검증해 원자적으로 적용한다. 재시작 필요 비교, 최신 후보만 적용, 감지 장애 처리, 재로드 사건 로그를 구현한다.
-  - 기준: [운영 스펙 3.3절](specs/operations.md#33-파일-변경-자동-감지와-부분-재로드), [설정 계약 1.8절](contracts/config-v2.md#18-재로드-구분)·[2.3절](contracts/config-v2.md#23-재로드-결과)
+  - 기준: [운영 스펙 3.3절](specs/operations.md#33-파일-변경-자동-감지와-부분-재로드), [설정 계약 1.8절](contracts/config-v3.md#18-재로드-구분)·[2.3절](contracts/config-v3.md#23-재로드-결과)
   - 완료 조건: OPS-003, OPS-024~028, OPS-035, OPS-038, OPS-040, OPS-041, WS-022
   - 선행: 2.1, 3.2, 5.1
   - 현재: 구현했다([파일 감지 모듈 설계](architectures/file-watch.md)의 `ReloadWatcher`, `ReloadService`, `ReloadSnapshot`). 바이너리 시험 10건(`tests/reload.rs`)과 시작 시험 1건(`tests/serve.rs`의 역순·혼합·잘못된 표기 항목, 종료 코드 3), 어댑터·서비스 단위 시험이 있다. 완전: OPS-003·024·026·027·028·035·038·041. 부분: OPS-040. OPS-025·WS-022는 비부분 시험으로 두 OS에서 통과했다(커밋 `59991f2`, 게이트 `1a6f93e`). OPS-040은 IPv6 경계 조건을 단위 시험 증거로 판정해 남은 조건이 없다(사용자 결정 2026-10-23(Q58)). 모든 조건을 혼자 실행하는 비부분 시험이 없어 보고서에서는 부분으로 남는다. Windows 핸들(9절 항목 14)은 한계로 문서화했다(사용자 결정 2026-10-23(Q57)). 검증 기록은 [파일 감지 모듈 설계 대조 기록](architectures/file-watch.md#대조-기록)에 있다.
@@ -333,7 +334,7 @@ Mode I·II 초기 흐름을 추정 없이 설명할 수 있게 한다. 관찰은
   - 선행: 1.2, 2.13, 3.5
   - 현재: 2026-11-06에 커밋 `70ff541`의 Windows release 빌드로 Hyper-V VM 3대에서 실행했다(사용자 결정 2026-11-06(Q128)). 실제 UltraVNC Server 1.8.3.0을 상대로 아홉 조합이 모두 통과했다. TCP Mode I·Mode II 두 접속 순서는 UltraVNC Viewer 1.8.3.0, WS·WSS Mode II 두 접속 순서는 noVNC 1.7.0(Edge headless), WS·WSS Mode I은 UltraVNC Viewer와 시험용 바이트 중계 스크립트를 썼다. 프로젝트 소유자가 판정 캡처를 검토했고 문제가 없었다(Q130·Q131). Repeater 1.6.0.0과의 차이는 계약 3.1절 밖에서 나오지 않았다. Ubuntu VNC Relay와 실제 UltraVNC의 조합은 미실행이고, Ubuntu 자동 시험을 Ubuntu 쪽 증거로 인정했다(Q129). OPS-020은 시험 코드에 연결하지 않은 수동 기록이므로 시나리오 보고서에서는 `미연결`로 남는다. 기록은 [호환성 검증 기록 6절](contracts/repeater-compat-record.md#6-모드전송-조합-검증-todo-55)에 있다. 계약 6.4절의 비교 캡처도 2026-11-07에 Windows VM에서 마쳤다(사용자 결정 2026-11-06(Q133)). 1.4의 시나리오 37개를 VNC Relay로 다시 실행했고, 3.1절에 없던 차이 두 가지(Mode I 대상 연결 시간, 정상 EOF 뒤 종료)를 계약 3.1절에 더했다. 구현은 바꾸지 않았다. 회차마다 새로 부팅하는 Q67의 절차는 따르지 않았지만, 사용자 결정 2026-11-07(Q134)에 따라 이 비교 캡처는 Q67 충족으로 본다. Ubuntu 비교 캡처는 미실행이다. 기록은 [호환성 검증 기록 7절](contracts/repeater-compat-record.md#7-계약-64-비교-캡처-q133)에 있다.
 - [x] **5.6 배포 산출물**: 두 OS용 실행파일, 비밀 없는 설정 예시, 수동 운영 안내를 만든다. 안내에는 계정 준비·시작·재로드·종료, 인증서 교체 절차, 로그 보관·접근 권장 사항을 넣는다. 인터넷에 공개하는 WebSocket 진입점은 WSS로 두고 평문 WS는 보호된 네트워크에서만 켜라는 권장 사항도 넣는다(사용자 결정 2026-11-04(Q96)). 로그 파일을 교체할 때 서버가 파일을 다시 여는지 확인한다.
-  - 기준: [PRD 확정 기준](requirements/PRD.md#확정-기준)의 "배포 산출물" 행, [ADR-0001 후속 작업](decisions/ADR-0001-built-in-tls.md#후속-작업), [설정 계약 6절](contracts/config-v2.md#6-초안을-확정하기-전에-해결할-사항)
+  - 기준: [PRD 확정 기준](requirements/PRD.md#확정-기준)의 "배포 산출물" 행, [ADR-0001 후속 작업](decisions/ADR-0001-built-in-tls.md#후속-작업), [설정 계약 6절](contracts/config-v3.md#6-초안을-확정하기-전에-해결할-사항)
   - 완료 조건: OPS-019, OPS-031, OPS-045(로그 파일 다시 열기, 사용자 결정 2026-11-04(Q104·Q109·Q110))
   - 선행: 4.1, 5.2, 5.3
   - 현재: 2026-11-04 조사에서 운영 로그는 시작할 때 파일을 한 번 열고 그 핸들에 계속 썼다(`crates/adapters/src/ops_log.rs` `JsonLinesEventSink::open`). 그때 배포 산출물·설정 예시 파일·운영 안내는 없었다. 사용자 결정 2026-11-04: 운영자가 로그 파일을 교체(회전)하면 서버가 경로를 감시해 새 파일을 자동으로 다시 연다(Q104). 이 동작은 스펙·계약·설계에 먼저 적은 뒤 구현한다. 배포 산출물은 how-to의 수동 빌드·묶음 절차로 만든다(Q105). 설정 예시는 저장소 파일로 두고, 시험이 실제 설정 로더로 읽어 통과하는지와 비밀·기본 비밀번호가 없는지 확인한다(Q106). OPS-019·OPS-031 증거는 자동 시험(설정 예시, 릴리스 실행파일의 시작·중계·종료)과 두 OS의 안내 절차 수동 실행 기록을 함께 쓴다(Q107).
@@ -359,3 +360,52 @@ Mode I·II 초기 흐름을 추정 없이 설명할 수 있게 한다. 관찰은
   - 완료 조건: 두 OS에서 `cargo xtask package`가 통과하고, 푼 실행파일의 `--version`이 `Cargo.toml` 버전과 같다. `main` push의 `ci`가 두 OS에서 통과한다. 태그로 Release를 내는 단계는 사용자가 요청할 때 실행한다.
   - 선행: 5.6, 5.7
   - 현재: 커밋 `7859b5d`에서 구현했다. 두 OS 로컬 묶음과 GitHub Actions [실행 42408213998](https://github.com/kayden-kim/vnc-relay/actions/runs/42408213998)의 두 OS `check`가 통과했고, 푼 실행파일은 `vnc-relay 2026.11.0`을 출력했다. 같은 커밋의 두 OS 전체 완료 검증도 통과했다. 프로젝트 소유자 요청으로 2026-11-08에 첫 Release [`v2026.11.0`](https://github.com/kayden-kim/vnc-relay/releases/tag/v2026.11.0)을 냈다([실행 42413077369](https://github.com/kayden-kim/vnc-relay/actions/runs/42413077369)). 증거는 [릴리스 how-to 4절](how-to/release.md#4-검증)에 있다.
+
+## 6. 설정 보기와 동적 설정 편집
+
+사용자 지시 2026-11-08과 사용자 결정 2026-11-08(Q167~Q173)의 추가 범위다. 이전 단계의 완료 표시는 이 범위의 구현·검증 완료를 뜻하지 않는다. 새 이름·시안·문구를 채택한 뒤 구현한다.
+
+- [ ] **6.1 시안·문구·이름 채택(결정)**: 설정 보기(SCR-004)·동적 설정 편집(SCR-005)의 데스크톱·모바일 시안, 한국어·영어 문구, 경로·필드·오류 코드·사건·설정 키·화면 ID의 이름을 사용자에게 채택받는다. Q167~Q173과 채택 대기 세부 설계를 구분한다.
+  - 기준: [PRD 12절](requirements/PRD.md#12-미확정-결정과-주요-위험), [화면 스펙](specs/dashboard.md), [디자인 기준](design/DESIGN.md), [HTML 시안](design/mockups/dashboard.html), [관리 API 계약 6절](contracts/management-api-v1.md#6-초안을-확정하기-전에-해결할-사항), [ADR-0006](decisions/ADR-0006-config-edit-through-file.md)
+  - 완료 조건: 사용자 채택 근거를 기준 문서에 남기고 해당 이름·문구·시안의 승인 대기를 해소한다. 이미 확정한 Q167~Q173을 다시 묻지 않는다.
+  - 현재: 사용자 결정은 기준 문서에 반영한다. 새 이름·문구·시안과 세부 설계는 채택 대기다. 이 채택이 구현의 선행 조건이다.
+- [ ] **6.2 재로드 대상 확대**: 접근 정책·연결 상한·시간 제한·연결 유지 묶음의 실행 값을 한 번에 교체하도록 재로드 대상을 27개 키로 넓힌다. 묶음마다 정한 새 요청·연결·타이머·소켓의 적용 시점을 연결한다. 상한 하향 때 기존 연결은 유지한다. E 변경 뒤 세션 정보의 종료 대기 시간도 갱신한다.
+  - 기준: [PRD 확정 기준](requirements/PRD.md#확정-기준)의 재로드 범위, [설정 계약 1.8절](contracts/config-v3.md#18-재로드-구분), [운영 스펙 3.3절](specs/operations.md#33-파일-변경-자동-감지와-부분-재로드), [중계 스펙](specs/relay.md), [WS·WSS 스펙](specs/websocket.md)
+  - 완료 조건: OPS-047~059·OPS-063~064와 확대된 AC-13을 구현·시험한다. 재시작 필요 비교·전체 거절·전체 교체와 기존 연결 유지의 회귀 시험을 갱신한다.
+  - 선행: 6.1, 6.8의 목표 설계
+  - 현재: 기존 구현은 인증서·개인키와 출발지 IP 허용 목록을 교체한다. 추가 19개 키의 실행 값 교체와 시험은 구현 전이다.
+- [ ] **6.3 설정 보기 API**: 인증한 관리자가 모든 실행 중 유효 설정, 파일 반영 상태, 마지막 재로드 결과와 편집 가능 여부를 조회하게 한다. 인증서·개인키는 경로만 제공한다. 설정 보기는 편집 기능을 켜지 않아도 제공한다.
+  - 기준: [PRD FR-06·FR-07](requirements/PRD.md#fr-06-관리-api와-대시보드), [관리 API 계약](contracts/management-api-v1.md), [관리 스펙](specs/management.md)
+  - 완료 조건: MGT-028~029·MGT-042와 AC-38의 API 부분을 구현·시험한다. 새 경로의 인증·유휴 만료 연장과 비밀 비노출도 확인한다.
+  - 선행: 6.1, 6.8의 목표 설계
+  - 현재: API 형식과 시나리오를 기준 문서에 추가한다. 조회 API와 계약 시험은 구현 전이다.
+- [ ] **6.4 편집 API와 파일 쓰기**: `management.config_edit`를 읽고 기본 꺼짐·재시작 필요를 적용한다. 편집 대상 23개 키를 같은 설정 파일에 기록하고 같은 요청 안에서 재로드 규칙으로 적용한다. `toml_edit` 0.25를 더해 주석·공백·키 순서·다른 값을 보존한다. 충돌·후보 검증·파일 쓰기 실패와 변경 없음 처리를 구현한다.
+  - 기준: [PRD FR-07](requirements/PRD.md#fr-07-설정과-프로세스-수명), [관리 API 계약](contracts/management-api-v1.md), [설정 계약 v3](contracts/config-v3.md), [관리 스펙](specs/management.md), [ADR-0006](decisions/ADR-0006-config-edit-through-file.md), [의존성 라이선스 검사](how-to/check-dependency-licenses.md)
+  - 완료 조건: MGT-030~041·MGT-043~045, OPS-060~062와 AC-39~41의 API·파일 부분을 구현·시험한다. 두 OS의 파일 쓰기·교체 실패 때 원본·실행 값 유지를 확인한다. 라이선스 검사 기록과 의존성 고지를 갱신한다.
+  - 선행: 6.1~6.3, 6.8의 목표 설계
+  - 현재: Q167·Q173으로 같은 파일·서식 보존·toml_edit 추가를 채택했다. 의존성 추가·파일 쓰기·API·라이선스 재검사는 구현 전이다.
+- [ ] **6.5 설정 편집 운영 사건**: 편집 성공·거절과 재로드 원인을 기록한다. 계정명·키를 남기고 값은 남기지 않는다. 같은 편집은 재로드 적용 뒤 편집 성공 순서로 한 번씩 기록한다.
+  - 기준: [PRD FR-08](requirements/PRD.md#fr-08-운영-정보), [운영 정보 계약](contracts/ops-info-v1.md), [운영 스펙](specs/operations.md), [관리 스펙](specs/management.md)
+  - 완료 조건: OPS-058~061, MGT-030~031·MGT-033~036·MGT-038과 AC-42를 구현·시험한다. `config_edited`·`config_edit_rejected`와 `reload_applied.trigger`의 계약 시험을 더한다.
+  - 선행: 6.1, 6.4
+  - 현재: 사건·필드 이름은 채택 대기다. 사건 출력과 비노출·순서 시험은 구현 전이다.
+- [ ] **6.6 설정 보기·동적 설정 편집 화면**: 설정 내비게이션, SCR-004·SCR-005, 변경 확인과 상태·입력 오류·복구를 정적 HTML·JS로 구현한다. 보기 화면은 자동 폴링하지 않는다. 결과 불명 때 편집 요청을 자동으로 다시 보내지 않는다.
+  - 기준: [PRD FR-06](requirements/PRD.md#fr-06-관리-api와-대시보드), [화면 스펙](specs/dashboard.md), [디자인 기준](design/DESIGN.md), [HTML 시안](design/mockups/dashboard.html), [프런트엔드 컨벤션](conventions/frontend.md)
+  - 완료 조건: DASH-028~053과 AC-38~43의 화면 부분을 구현·시험한다. 기존 DASH-016의 설정 내비게이션 기대 결과를 반영한다. 두 폭·두 언어·키보드·브라우저를 확인하고 채택된 시안과 대조한다.
+  - 선행: 6.1, 6.3~6.5, 6.8의 목표 설계
+  - 현재: 이번 범위는 화면 시안까지다. 제품 Rust·JS와 화면 시험은 구현 전이며 시안·문구의 사용자 채택을 기다린다.
+- [ ] **6.7 수동 운영 안내 갱신**: `operate-relay.md`에 편집 기능 켜기와 재시작, 설정 보기·편집, 파일 상태별 복구를 더한다. Windows·Ubuntu에서 서비스 계정에 줄 설정 파일 쓰기·교체와 같은 디렉터리의 임시 파일 생성 권한을 안내한다. 확대 재로드의 적용 시점과 v2→v3 전환·롤백도 연결한다.
+  - 기준: [PRD 7절](requirements/PRD.md#7-보안-및-신뢰-경계), [운영 스펙](specs/operations.md), [설정 계약 v3](contracts/config-v3.md), [관리 API 계약](contracts/management-api-v1.md), [수동 운영 안내](how-to/operate-relay.md)
+  - 완료 조건: 두 OS에서 안내한 권한으로 편집·파일 교체가 되고, 권한 부족 때 이전 파일·실행 값을 유지함을 확인한다. 인증서 경로는 편집하지 않고 같은 경로의 파일 교체를 안내한다.
+  - 선행: 6.1, 6.4~6.6
+  - 현재: 이번 문서·시안 작업은 how-to를 고치지 않는다. 편집 켜기와 OS별 쓰기 권한 안내·실행 증거는 남아 있다.
+- [ ] **6.8 코드 지도·모듈 설계 갱신**: 구현 전에 확대된 실행 값 묶음·조회·파일 편집·재로드 직렬화·로그·화면 경로를 목표 설계에 기록한다. 구현할 때 실제 경로·심볼·흐름과 맞춘다.
+  - 기준: [아키텍처 작성 규칙](architectures/AGENTS.md), [PRD FR-06~08](requirements/PRD.md#6-기능-요구사항), [ADR-0006](decisions/ADR-0006-config-edit-through-file.md), [코드 지도](architectures/code-map.md), [파일 감지 설계](architectures/file-watch.md), [연결 상한과 시간 제한 설계](architectures/connection-limits.md), [관리 조회 설계](architectures/management-query.md), [운영 현황 앱 구조](architectures/dashboard-operations-overview.md)
+  - 완료 조건: 목표 설계가 관련 스펙·계약을 연결한다. 구현 뒤 구성요소별 책임·호출·실행 값 적용 경계와 코드 지도 대조 시험을 현재 코드에 맞춘다.
+  - 선행: 6.1. 목표 설계는 6.2~6.6의 선행 조건이며 현재 코드 대조는 각 구현 변경과 함께 한다.
+  - 현재: 코드 지도·모듈 설계는 기존 구현을 설명한다. 새 범위의 목표 설계와 실제 코드 대조는 이번 문서·시안 작업 범위 밖이다.
+- [ ] **6.9 두 OS 전체 게이트와 새 범위 수용 판정**: 통합 뒤 Windows 11 x64·Ubuntu 24.04 LTS x64의 전체 게이트를 실행한다. 계약 시험·시나리오 보고서·화면 대조와 라이선스 증거로 새 범위를 판정한다.
+  - 기준: [PRD 10절](requirements/PRD.md#10-검증-및-수용-기준), [개발 환경·검증 how-to](how-to/set-up-and-verify.md), [대시보드 검증 how-to](how-to/verify-dashboard-frontend.md), [검증 기록](AGENTS.md#검증-기록)
+  - 완료 조건: 기존 수용 기준의 회귀와 확대된 AC-13·새 AC-38~43을 확인한다. 두 OS의 실패·메타 정보 오류는 0건이며 부분·미실행·미연결은 시나리오별 근거로 판정한다. 새 시나리오를 이전 5.9 판정으로 대체하지 않는다.
+  - 선행: 6.1~6.8
+  - 현재: 미실행(구현 전). 이번 단계에서는 Rust·JS를 고치지 않으며 빌드·테스트·린트를 실행하지 않는다.

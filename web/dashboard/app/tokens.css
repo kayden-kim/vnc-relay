@@ -93,6 +93,11 @@
   --type-input-weight: 400;
   --type-input-line: normal;
   --type-input-tracking: -0.03em;
+  --type-input-data-family: ui-monospace, 'SF Mono', 'Cascadia Mono', Consolas, 'Liberation Mono', monospace;
+  --type-input-data-size: 16px;
+  --type-input-data-weight: 400;
+  --type-input-data-line: 1.5;
+  --type-input-data-tracking: 0;
   --type-data-family: ui-monospace, 'SF Mono', 'Cascadia Mono', Consolas, 'Liberation Mono', monospace;
   --type-data-size: 12px;
   --type-data-weight: 400;

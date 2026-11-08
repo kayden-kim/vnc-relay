@@ -1,4 +1,4 @@
-//! Mode I target allow items (config-v2 §1.5).
+//! Mode I target allow items (config-v3 §1.5).
 
 use std::fmt;
 use std::net::IpAddr;
@@ -121,7 +121,7 @@ impl TargetPolicy {
         &self.items
     }
 
-    /// Checks only a DNS name and port, without resolving it (config-v2 §1.5).
+    /// Checks only a DNS name and port, without resolving it (config-v3 §1.5).
     /// A permitted name still needs a separate final-IP check.
     pub fn permits_name(&self, name: &str, port: u16) -> bool {
         let name = name.strip_suffix('.').unwrap_or(name);
@@ -131,7 +131,7 @@ impl TargetPolicy {
         })
     }
 
-    /// Checks the exact final IP and port (relay.md §3.2, config-v2 §1.5).
+    /// Checks the exact final IP and port (relay.md §3.2, config-v3 §1.5).
     /// IPv4-mapped IPv6 is checked as IPv4; name items never allow an IP.
     pub fn permits_ip(&self, ip: IpAddr, port: u16) -> bool {
         let ip = ip.to_canonical();

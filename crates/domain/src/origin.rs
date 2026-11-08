@@ -1,4 +1,4 @@
-//! Origin values and their comparison (config-v2 §1.4).
+//! Origin values and their comparison (config-v3 §1.4).
 
 use std::fmt;
 use std::net::{Ipv4Addr, Ipv6Addr};
@@ -35,7 +35,7 @@ pub struct Origin {
     port: u16,
 }
 
-/// The text is not `scheme://host[:port]` as config-v2 §1.4 defines.
+/// The text is not `scheme://host[:port]` as config-v3 §1.4 defines.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct OriginError;
 

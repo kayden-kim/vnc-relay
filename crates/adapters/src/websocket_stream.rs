@@ -55,7 +55,7 @@ impl<S> WsRelayStream<S> {
     /// - `max_message_size`: M (maximum logical message length).
     /// - `budget_limit`: B (maximum holding budget per direction).
     /// - `transport`: `ViewerTransport::Ws` or `ViewerTransport::Wss`.
-    /// - `keepalive`: validated Kw durations (each 5..=300 seconds, config-v2).
+    /// - `keepalive`: validated Kw durations (each 5..=300 seconds, config-v3).
     pub fn new(
         io: S,
         upgrade_suffix: Vec<u8>,

@@ -1,4 +1,4 @@
-//! Contract tests of the config loader (docs/contracts/config-v2.md §5).
+//! Contract tests of the config loader (docs/contracts/config-v3.md §5).
 
 use std::net::SocketAddr;
 use std::path::PathBuf;
@@ -553,7 +553,7 @@ fn checks_relations_between_values() {
     assert_eq!(settings.management.session.idle, secs(3600));
 
     // `initial_message_bytes` was removed in 2.0.0, so a v1 file that still
-    // sets it is refused like any unknown key (config-v2 §3.1).
+    // sets it is refused like any unknown key (config-v3 §3.1).
     let over = with_required(
         "[limits]\nrelay_connections = 300\nwaiting = 301\ninitial_message_bytes = 4096\nbuffer_bytes = 16384\n\
          [management.session]\nidle_secs = 3601\nmax_lifetime_secs = 3600\n",

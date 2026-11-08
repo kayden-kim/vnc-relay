@@ -9,5 +9,6 @@ ADR(Architecture Decision Record, 기술 결정 기록)은 중요하고 되돌�
 | [ADR-0003](ADR-0003-single-instance-memory-state.md) | Accepted | 단일 인스턴스로 운영하고 상태를 메모리에만 둔다. |
 | [ADR-0004](ADR-0004-tokio-rustls.md) | Accepted | 비동기 런타임은 tokio, TLS는 rustls를 쓴다. |
 | [ADR-0005](ADR-0005-in-house-ws-streaming-frame-codec.md) | Accepted | WebSocket 데이터 프레임 처리는 자체 스트리밍 상태 머신을 쓴다. |
+| [ADR-0006](ADR-0006-config-edit-through-file.md) | Accepted(Q167·Q173 범위, 직접 교체 세부 설계는 Proposed) | 대시보드 편집을 같은 설정 파일에 서식을 보존해 기록하고 같은 재로드 규칙으로 적용한다. |
 
 작성 규칙은 [AGENTS.md](AGENTS.md)를 따른다.

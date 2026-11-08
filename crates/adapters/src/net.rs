@@ -541,7 +541,7 @@ fn admit(policy: &AcceptPolicy, peer_ip: PeerIp) -> Result<BudgetPermit, RejectR
 }
 
 /// Sets the socket options of a relay connection: TCP keepalive with the idle
-/// time, probe interval, and probe count of K (config-v2 §1.2 `[keepalive]`),
+/// time, probe interval, and probe count of K (config-v3 §1.2 `[keepalive]`),
 /// and `TCP_NODELAY`. A relay forwards each read as it arrives; with Nagle on,
 /// a small write followed by a larger one waits for the peer's delayed ACK.
 fn set_keepalive(stream: &TcpStream, keepalive: &KeepaliveSettings) -> io::Result<()> {

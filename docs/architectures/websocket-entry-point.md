@@ -12,7 +12,7 @@
 | 코드 위치 | `crates/adapters/src/websocket.rs`(`WsPolicy`, `WsEntryPoint`, 연결 처리, 101 뒤 전달), `crates/adapters/src/upgrade.rs`(머리 읽기, 검사, 101 응답, 거절 응답), `crates/adapters/src/net.rs`(`accept_connections`, `AcceptPolicy`), `crates/adapters/src/tls_listener.rs`(`TlsIo`), `crates/adapters/src/websocket_stream.rs`(`WsRelayStream`), `crates/domain/src/origin.rs`(`Origin`), `src/serve.rs`(WS·WSS 진입점 시작) |
 | 코드 지도 | [코드 지도 2절](code-map.md#2-코드-위치와-구성요소), [3절](code-map.md#3-진입점) |
 | 관련 스펙 | [WebSocket 스펙 7절](../specs/websocket.md#7-수용-테스트)의 WS-012(일부), WS-013(일부), WS-014, WS-015(WS·WSS), WS-021(일부), WS-022(일부), WS-023(WSS), WS-027(WS·WSS); [운영 스펙 7절](../specs/operations.md#7-수용-테스트)의 OPS-006(일부), OPS-037(WS·WSS, 일부) |
-| 관련 계약 | [WebSocket 중계 v1 1.1절](../contracts/websocket-relay-v1.md#11-업그레이드-요청), [1.2절](../contracts/websocket-relay-v1.md#12-업그레이드-응답과-서브프로토콜), [1.3절](../contracts/websocket-relay-v1.md#13-origin-비교), [1.5절](../contracts/websocket-relay-v1.md#15-close-코드), [2.1절](../contracts/websocket-relay-v1.md#21-http-단계의-거절), [설정 계약 1.4절](../contracts/config-v2.md#14-origin-값-문법과-비교), [운영 정보 계약 1.5·1.6절](../contracts/ops-info-v1.md) |
+| 관련 계약 | [WebSocket 중계 v1 1.1절](../contracts/websocket-relay-v1.md#11-업그레이드-요청), [1.2절](../contracts/websocket-relay-v1.md#12-업그레이드-응답과-서브프로토콜), [1.3절](../contracts/websocket-relay-v1.md#13-origin-비교), [1.5절](../contracts/websocket-relay-v1.md#15-close-코드), [2.1절](../contracts/websocket-relay-v1.md#21-http-단계의-거절), [설정 계약 1.4절](../contracts/config-v3.md#14-origin-값-문법과-비교), [운영 정보 계약 1.5·1.6절](../contracts/ops-info-v1.md) |
 | 관련 ADR | [ADR-0001 내장 TLS](../decisions/ADR-0001-built-in-tls.md), [ADR-0002 출발지 IP 허용 목록](../decisions/ADR-0002-source-ip-allowlist.md) |
 
 ## 1. 책임과 경계
@@ -33,7 +33,7 @@
   - 허용 목록 재로드(작업 5.2). 이 모듈은 판정 때마다 `AllowSource`로 현재 목록을 읽는다.
 - 다른 모듈에 공개하는 기능:
   - `vnc_relay_adapters::websocket::{WsEntryPoint, WsPolicy}`: `serve`가 진입점을 만들고 띄운다.
-  - `vnc_relay_domain::origin::Origin`: 허용 Origin 값과 비교([설정 계약 1.4절](../contracts/config-v2.md#14-origin-값-문법과-비교)).
+  - `vnc_relay_domain::origin::Origin`: 허용 Origin 값과 비교([설정 계약 1.4절](../contracts/config-v3.md#14-origin-값-문법과-비교)).
 
 ## 2. 내부 구조
 
@@ -66,7 +66,7 @@ flowchart LR
 | `websocket_stream.rs` `WsRelayStream` | 101 뒤 연결의 전송 스트림이다. `connection`이 `suffix`, M, B, 전송 종류를 넘겨 만든다. | 101 뒤 연결마다 한 번. | 공통 서비스 |
 | `websocket.rs` `io_reason`, `log_abort` | 전송 I/O 오류를 `AbortReason`과 `ConnectionErrorKind`로 바꿔 `connection_aborted`를 쓴다. `VersionUnsupported`면 줄을 더 쓰지 않는다. TLS 계층이 이미 기록했다. | `connection`이 쓴다. | `app` |
 | `tls_listener.rs` `TlsIo` | WSS 협상을 한다. 첫 읽기·쓰기에서 협상이 돈다. TLS 1.2 미만은 `connection_rejected`(`stage` = `tls`, `reason` = `tls_version_unsupported`)를 스스로 쓰고 `HandshakeFailure::VersionUnsupported`를 준다. | WSS 연결마다. | [TLS 모듈 설계](tls.md) |
-| `domain/src/origin.rs` `Origin` | `Origin` 값의 문법과 정확 일치 비교다([설정 계약 1.4절](../contracts/config-v2.md#14-origin-값-문법과-비교)). | 설정 읽기와 `check`가 쓴다. | — |
+| `domain/src/origin.rs` `Origin` | `Origin` 값의 문법과 정확 일치 비교다([설정 계약 1.4절](../contracts/config-v3.md#14-origin-값-문법과-비교)). | 설정 읽기와 `check`가 쓴다. | — |
 | `src/serve.rs` `listen_until_shutdown` | WS 진입점은 TLS 없이 띄운다. WSS 진입점은 인증서 검사를 통과한 TLS 수락기를 옮겨 준다. 수락기가 없으면 진입점을 띄우지 않고 바인드한 리스너를 `idle`에 둔다. `WsPolicy`는 그 진입점의 `allow`, `timeouts.tls_upgrade_secs`(U), `allowed_origins`, `ws_message_bytes`(M), `buffer_bytes`(B)로 만든다. | 설정을 읽은 뒤 시작할 때 한 번. | `websocket.rs`, `settings` |
 
 ## 3. 데이터 모델

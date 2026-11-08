@@ -11,7 +11,7 @@ use std::time::Duration;
 
 use crate::peer_ip::PeerIp;
 
-/// The limit values of config-v2 §1.2 `[management.login_limit]`.
+/// The limit values of config-v3 §1.2 `[management.login_limit]`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct LoginLimitPolicy {
     per_account: usize,

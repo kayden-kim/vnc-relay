@@ -4,7 +4,7 @@
 
 | 계약 | 상태 | 만드는 쪽 → 사용하는 쪽 | 기준 형식 파일 | 관련 스펙 |
 | --- | --- | --- | --- | --- |
-| [설정 파일 v2](config-v2.md) | Active | 운영자 → `vnc-relay serve` | 없음(Markdown 표) | [운영](../specs/operations.md), [WS·WSS](../specs/websocket.md), [관리](../specs/management.md), [화면](../specs/dashboard.md), [중계](../specs/relay.md) |
+| [설정 파일 v3(3.0.0)](config-v3.md) | Active(재로드 범위 확대: 사용자 결정 2026-11-08(Q168·Q171), 새 편집 키 이름은 채택 대기) | 운영자·관리 API 편집 → `vnc-relay serve` | 없음(Markdown 표) | [운영](../specs/operations.md), [WS·WSS](../specs/websocket.md), [관리](../specs/management.md), [화면](../specs/dashboard.md), [중계](../specs/relay.md) |
 | [CLI와 관리자 계정 파일 v1](cli-v1.md) | Active | `vnc-relay` 실행파일 → 운영자·스크립트, `vnc-relay serve`(계정 파일) | 없음(Markdown 표) | [운영](../specs/operations.md) |
 | [관리 API v1](management-api-v1.md) | Active | 관리 리스너(서버) → 내장 대시보드, 외부 HTTP 클라이언트 | 없음(Markdown 표) | [관리](../specs/management.md), [화면](../specs/dashboard.md) |
 | [WebSocket 중계 v1](websocket-relay-v1.md) | Active | 외부 WebSocket 클라이언트 ↔ `vnc-relay` WS·WSS 리스너 | 없음(Markdown 표) | [WS·WSS](../specs/websocket.md) |

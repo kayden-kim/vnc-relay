@@ -173,7 +173,7 @@ pub struct RelayService {
 
 impl RelayService {
     /// Uses validated H, B, and mode settings. All contexts use `clock`'s epoch.
-    /// See config-v2 §1.2 and repeater-handshake-v1 §1.2.
+    /// See config-v3 §1.2 and repeater-handshake-v1 §1.2.
     pub fn new(
         modes: HandshakePolicy,
         handshake: Duration,

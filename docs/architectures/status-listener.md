@@ -10,7 +10,7 @@
 | 코드 위치 | `crates/app/src/lifecycle.rs`(`Readiness`, `LifecycleService`), `crates/app/src/events.rs`(`Event::ServerReady`, `RejectReason::AdminConnectionLimit`), `crates/app/src/settings.rs`(`Settings::status_listener`, `Settings::other_listeners`), `crates/adapters/src/admission.rs`(`AdmittingListener`), `crates/adapters/src/status_http.rs`(`StatusListener`), `crates/adapters/src/net.rs`(`bind_one`), `src/serve.rs`(상태 리스너 먼저 열기, 준비됨 전환) |
 | 코드 지도 | [코드 지도 2절](code-map.md#2-코드-위치와-구성요소), [3절](code-map.md#3-진입점) |
 | 관련 스펙 | [운영 스펙 2절](../specs/operations.md#2-상태와-검증-매개변수)의 준비 상태와 Lm, OPS-R08·OPS-R19·OPS-R20, OPS-013(일부), OPS-032, OPS-004(일부), OPS-033(일부) |
-| 관련 계약 | [운영 정보 계약 1.12절](../contracts/ops-info-v1.md#112-상태-리스너와-엔드포인트)·[2절](../contracts/ops-info-v1.md#2-오류)(상태 응답), [1.5절](../contracts/ops-info-v1.md#15-사건-목록)(`server_ready`), [1.6절](../contracts/ops-info-v1.md#16-원인-코드)(`admin_connection_limit`), [설정 계약 1.2절](../contracts/config-v2.md#12-키-표)(`status.listen`, `limits.admin_connections`) |
+| 관련 계약 | [운영 정보 계약 1.12절](../contracts/ops-info-v1.md#112-상태-리스너와-엔드포인트)·[2절](../contracts/ops-info-v1.md#2-오류)(상태 응답), [1.5절](../contracts/ops-info-v1.md#15-사건-목록)(`server_ready`), [1.6절](../contracts/ops-info-v1.md#16-원인-코드)(`admin_connection_limit`), [설정 계약 1.2절](../contracts/config-v3.md#12-키-표)(`status.listen`, `limits.admin_connections`) |
 | 관련 ADR | [ADR-0004 tokio·rustls](../decisions/ADR-0004-tokio-rustls.md) |
 
 ## 1. 책임과 경계

@@ -1,4 +1,4 @@
-//! Source IP allow list items (config-v2 §1.3).
+//! Source IP allow list items (config-v3 §1.3).
 
 use std::fmt;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
@@ -14,7 +14,7 @@ pub enum IpItem {
 }
 
 /// Why an IP item string is not valid. Each kind maps to one config error
-/// code (config-v2 §1.3).
+/// code (config-v3 §1.3).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum IpItemError {
     /// Bad notation, spaces, empty string, wildcard, prefix out of range,
@@ -55,7 +55,7 @@ impl IpItem {
     }
 
     /// True when this one item covers every address of its family, such as
-    /// `0.0.0.0/0` or `::-ffff:...:ffff` (config-v2 §1.3, warning `allow_all_source`).
+    /// `0.0.0.0/0` or `::-ffff:...:ffff` (config-v3 §1.3, warning `allow_all_source`).
     pub fn covers_whole_family(&self) -> bool {
         match *self {
             Self::Single(_) => false,

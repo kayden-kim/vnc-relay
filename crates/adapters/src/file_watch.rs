@@ -390,7 +390,7 @@ impl<A: Clone, C: ReloadClock> ReloadWatcher<A, C> {
             Some(Ok(text)) => self
                 .service
                 .handle_config(config_file::parse(text, &self.base_dir), &is_current),
-            // A missing or non-UTF-8 config file is unreadable (config-v2 §1.9, `config_file_unreadable`).
+            // A missing or non-UTF-8 config file is unreadable (config-v3 §1.9, `config_file_unreadable`).
             _ => self.service.handle_unreadable(&is_current),
         };
         if !matches!(outcome, ReloadOutcome::Discarded) {

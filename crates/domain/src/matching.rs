@@ -13,7 +13,7 @@ use crate::entry_point::Role;
 use crate::relay_id::RelayId;
 use crate::session::SessionId;
 
-/// One registered waiter's metadata (config-v2 §1.2, W and Lw).
+/// One registered waiter's metadata (config-v3 §1.2, W and Lw).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct WaitingEntry {
     /// The accepted connection; delayed removal must compare this value.
@@ -160,7 +160,7 @@ pub struct WaitingTable {
 }
 
 impl WaitingTable {
-    /// Creates an empty table with configured Lw and W (config-v2 §1.2).
+    /// Creates an empty table with configured Lw and W (config-v3 §1.2).
     pub fn new(waiting_limit: usize, wait_timeout: Duration) -> Self {
         Self {
             entries: HashMap::new(),
@@ -176,7 +176,7 @@ impl WaitingTable {
         self.waiting_count
     }
 
-    /// Returns the configured Lw metadata limit (config-v2 §1.2).
+    /// Returns the configured Lw metadata limit (config-v3 §1.2).
     pub fn waiting_limit(&self) -> usize {
         self.waiting_limit
     }

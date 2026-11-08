@@ -6,7 +6,7 @@
 | 결정일 | 2026-10-16 |
 | 결정자 | 프로젝트 소유자(사용자) |
 | 관련 요구사항 | [PRD 확정 기준 "구현 기술"·"TLS 종료"](../requirements/PRD.md#확정-기준), [FR-07](../requirements/PRD.md#fr-07-설정과-프로세스-수명), [7절 보안 및 신뢰 경계](../requirements/PRD.md#7-보안-및-신뢰-경계), [8절 이식성](../requirements/PRD.md#8-비기능-요구사항) |
-| 관련 스펙·계약 | [설정·운영 스펙](../specs/operations.md#4-보안과-신뢰-경계), [WS·WSS 전송 스펙](../specs/websocket.md), [설정 계약](../contracts/config-v2.md), [WebSocket 중계 계약](../contracts/websocket-relay-v1.md) |
+| 관련 스펙·계약 | [설정·운영 스펙](../specs/operations.md#4-보안과-신뢰-경계), [WS·WSS 전송 스펙](../specs/websocket.md), [설정 계약](../contracts/config-v3.md), [WebSocket 중계 계약](../contracts/websocket-relay-v1.md) |
 | 관련 아키텍처 문서 | 없음(구현 전) |
 | 이 ADR이 대체하는 이전 ADR | 없음 |
 | 이 ADR을 대체한 새 ADR | 없음 |
@@ -75,7 +75,7 @@ native-tls 행의 "미확인" 항목은 이 ADR에서 조사하지 않았다. �
 ### 후속 작업
 
 - 암호 모듈 선택(OPS-TBD-009): 2026-10-20에 사용자가 aws-lc-rs를 골랐다. Windows 11 x64와 Ubuntu 24.04 LTS x64에서 저장소 의존성 aws-lc-rs가 빌드되었고 라이선스 검사(`licenses ok`)가 통과했다. 근거는 [개발 환경 how-to](../how-to/set-up-and-verify.md) 4절 실행 기록 1·3과 [의존성 라이선스 검사](../how-to/check-dependency-licenses.md) 실행 기록 5다. Windows 빌드는 NASM 없이 `AWS_LC_SYS_PREBUILT_NASM=1`로 확인했다. rustls 의존성은 작업 3.1에서 `crates/adapters`에 더했다.
-- 설정 계약: `cert_file`·`key_file` 형식은 [설정 계약 1.9절](../contracts/config-v2.md#19-인증서개인키-파일-형식)이 PEM으로 채택(2026-10-16)했다.
+- 설정 계약: `cert_file`·`key_file` 형식은 [설정 계약 1.9절](../contracts/config-v3.md#19-인증서개인키-파일-형식)이 PEM으로 채택(2026-10-16)했다.
 - 허용 암호 스위트는 선택한 암호 모듈의 rustls 기본 목록으로 정했고 설정 키는 없다(2026-10-16). OPS-TBD-003은 결번이다.
 - tokio-rustls 등 어댑터 crate: tokio-rustls를 채택했다(2026-10-20 의존성 라이선스 검토, [PRD 확정 기준](../requirements/PRD.md#확정-기준)의 "구현 기술" 행).
 

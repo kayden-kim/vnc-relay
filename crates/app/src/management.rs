@@ -84,7 +84,7 @@ pub struct AdminAuth {
 
 impl AdminAuth {
     /// `dummy` is the hash of the dummy password (see `login::dummy_hash`).
-    /// The session policy and the limit policy come from config-v2 §1.2.
+    /// The session policy and the limit policy come from config-v3 §1.2.
     pub fn new(
         accounts: Vec<Account>,
         dummy: PasswordHash,

@@ -18,7 +18,7 @@
 | 호환성 범위 | WS(`ws://`)와 WSS(`wss://`) Viewer 진입점. 서버 쪽은 Mode I·II 모두. 클라이언트는 RFC 6455 클라이언트이며, 검증 대상은 고정 버전 noVNC의 `repeaterID` 옵션이다([WS-025](../specs/websocket.md#7-수용-테스트)). WS·WSS Server 역접속은 범위 밖이다. |
 | 관련 테스트 | [WS-001~027](../specs/websocket.md#7-수용-테스트). 연결은 2절과 5절에 있다. `ee0314f`의 두 OS 전체 게이트가 통과했다. 고정 버전 noVNC 시험은 두 OS에서 `--include-ignored`로 별도 통과했다(커밋 `d4c5678`). 현재 지원 판정은 [작업 5.9 판정표](../how-to/set-up-and-verify.md#41-작업-59-판정표)를 따른다. 1011은 예약 코드라 시험 대상이 아니다(사용자 결정 2026-11-07(Q152)). |
 
-관련 문서: [Repeater 초기 교환 계약](repeater-handshake-v1.md), [설정 계약](config-v2.md)(키 이름·값 범위, Origin 값 문법과 정규화), [관리 API 계약](management-api-v1.md)(관리자 종료·종료 원인 `close_cause`), [운영 정보 계약](ops-info-v1.md)(종료 원인·로그), [ADR-0001 내장 TLS](../decisions/ADR-0001-built-in-tls.md), [ADR-0002 출발지 IP 허용 목록](../decisions/ADR-0002-source-ip-allowlist.md).
+관련 문서: [Repeater 초기 교환 계약](repeater-handshake-v1.md), [설정 계약](config-v3.md)(키 이름·값 범위, Origin 값 문법과 정규화), [관리 API 계약](management-api-v1.md)(관리자 종료·종료 원인 `close_cause`), [운영 정보 계약](ops-info-v1.md)(종료 원인·로그), [ADR-0001 내장 TLS](../decisions/ADR-0001-built-in-tls.md), [ADR-0002 출발지 IP 허용 목록](../decisions/ADR-0002-source-ip-allowlist.md).
 
 ## 1. 형식과 의미
 
@@ -58,7 +58,7 @@
 6. 업그레이드 직전 출발지 IP 재검사. 그 순간의 유효한 목록을 쓴다.
 7. 모두 통과하면 `101`을 보낸다.
 
-TLS 협상과 업그레이드 단계에는 제한 시간 U(`tls_upgrade_secs`)가 적용된다. `101` 전에 U가 지나면 HTTP 응답 없이 연결을 닫는다. 출발지 IP 허용 목록 값의 형식은 [설정 계약](config-v2.md)이 정한다.
+TLS 협상과 업그레이드 단계에는 제한 시간 U(`tls_upgrade_secs`)가 적용된다. `101` 전에 U가 지나면 HTTP 응답 없이 연결을 닫는다. 출발지 IP 허용 목록 값의 형식은 [설정 계약](config-v3.md)이 정한다.
 
 H(`handshake_secs`)는 초기 교환 제한 시간이다. WS·WSS에서는 `101` 응답을 보낸 뒤부터 잰다. 101 전의 시간은 U가 맡는다(사용자 결정 2026-10-22(Q22)).
 
@@ -82,7 +82,7 @@ noVNC 호환: 고정 버전 noVNC 1.7.0([호환성 검증 기록](repeater-compa
 
 ### 1.3 Origin 비교
 
-허용 값(`allowed_origins`)의 문법과 `Origin` 값의 정규화·비교 규칙은 [설정 계약 1.4절](config-v2.md#14-origin-값-문법과-비교)이 정한다. 이 계약은 비교 결과에 따른 업그레이드 처리만 정한다. 정규화 규칙은 설정 계약과 함께 채택했다. Origin은 사용자 인증 수단이 아니다.
+허용 값(`allowed_origins`)의 문법과 `Origin` 값의 정규화·비교 규칙은 [설정 계약 1.4절](config-v3.md#14-origin-값-문법과-비교)이 정한다. 이 계약은 비교 결과에 따른 업그레이드 처리만 정한다. 정규화 규칙은 설정 계약과 함께 채택했다. Origin은 사용자 인증 수단이 아니다.
 
 | 비교 결과 | 처리 |
 | --- | --- |
@@ -102,16 +102,16 @@ noVNC 호환: 고정 버전 noVNC 1.7.0([호환성 검증 기록](repeater-compa
 | 바이너리 메시지 | 양방향 | 페이로드를 연속된 바이트 스트림으로 취급한다. 여러 메시지의 내용과 순서를 보존한다. 메시지·프레임 경계는 RFB 또는 Repeater 메시지의 경계가 아니다([WS-R02](../specs/websocket.md#3-정상-흐름과-규칙), [WS-R03](../specs/websocket.md#3-정상-흐름과-규칙), [WS-007](../specs/websocket.md#7-수용-테스트), [WS-018](../specs/websocket.md#7-수용-테스트)). 분할(연속 프레임)을 허용한다. 길이 0인 메시지는 허용하며 스트림에 바이트를 더하지 않는다. |
 | 시작 바이트 | 서버 → 클라이언트 | `101` 응답 직후 [Repeater 초기 교환 계약 1.1절](repeater-handshake-v1.md#11-메시지)의 시작 바이트 12바이트(`RFB 000.000\n`)를 바이너리 메시지 하나로 보낸다. 서버가 보내는 첫 데이터 메시지다. 클라이언트는 이것을 받은 뒤 초기 요청을 보낸다. |
 | 텍스트 메시지 | 클라이언트 → 서버 | 지원하지 않는다. 첫 프레임이 텍스트이면 즉시 종료 코드 1003으로 닫는다. 텍스트는 TCP에 전달하지 않는다([WS-R04](../specs/websocket.md#3-정상-흐름과-규칙), [WS-008](../specs/websocket.md#7-수용-테스트)). 서버도 텍스트 메시지를 보내지 않는다. |
-| 메시지 크기 M | 클라이언트 → 서버 | 프레임이 아니라 분할을 합친 논리 메시지 하나에 적용한다. 설정 키 `limits.ws_message_bytes`([설정 계약](config-v2.md)). 크기 M은 허용하고 M+1부터 거절한다. 초과를 확인하면 종료 코드 1009로 닫고 추가 전달을 멈춘다. 스트리밍하므로 초과를 확인하기 전에 앞부분이 TCP에 이미 전달될 수 있다. 실패한 메시지를 원자적으로 취소하지 않는다([WS-R06](../specs/websocket.md#3-정상-흐름과-규칙), [WS-010](../specs/websocket.md#7-수용-테스트)). |
+| 메시지 크기 M | 클라이언트 → 서버 | 프레임이 아니라 분할을 합친 논리 메시지 하나에 적용한다. 설정 키 `limits.ws_message_bytes`([설정 계약](config-v3.md)). 크기 M은 허용하고 M+1부터 거절한다. 초과를 확인하면 종료 코드 1009로 닫고 추가 전달을 멈춘다. 스트리밍하므로 초과를 확인하기 전에 앞부분이 TCP에 이미 전달될 수 있다. 실패한 메시지를 원자적으로 취소하지 않는다([WS-R06](../specs/websocket.md#3-정상-흐름과-규칙), [WS-010](../specs/websocket.md#7-수용-테스트)). |
 | 서버가 보내는 메시지 크기 | 서버 → 클라이언트 | 한 메시지는 M 이하로 나눠 보낸다. 입력 TCP 읽기 경계와 같을 필요는 없다. |
-| ping | 서버 → 클라이언트 | 연결 성립 후 `keepalive.ws_ping_secs`마다 보낸다([설정 계약](config-v2.md)). 페이로드는 비워 두며 중계 ID나 세션 정보를 담지 않는다. |
+| ping | 서버 → 클라이언트 | 연결 성립 후 `keepalive.ws_ping_secs`마다 보낸다([설정 계약](config-v3.md)). 페이로드는 비워 두며 중계 ID나 세션 정보를 담지 않는다. |
 | pong | 클라이언트 → 서버 | ping 하나마다 `keepalive.ws_pong_timeout_secs` 안에 pong이 와야 한다. 이 시간 안에 pong이 없으면 끊긴 연결로 처리한다. 데이터 메시지는 pong을 대신하지 않는다. 데이터가 없어도 pong에 응답하는 연결은 유지한다([WS-R13](../specs/websocket.md#3-정상-흐름과-규칙), [WS-026](../specs/websocket.md#7-수용-테스트)). |
 | 클라이언트의 ping | 클라이언트 → 서버 | 서버는 pong으로 응답한다([RFC 6455 5.5.2절](https://www.rfc-editor.org/rfc/rfc6455#section-5.5.2)). 이미 Close를 받은 뒤에는 응답하지 않는다. |
 | 요청하지 않은 pong | 클라이언트 → 서버 | 허용하며 무시한다. |
 | ping·pong·Close 페이로드 | 양방향 | 어떤 제어 프레임의 페이로드도 TCP 중계 스트림에 넣지 않는다([WS-R05](../specs/websocket.md#3-정상-흐름과-규칙), [WS-009](../specs/websocket.md#7-수용-테스트)). |
 | 잘못된 프레임·순서 | 클라이언트 → 서버 | 마스크 없는 클라이언트 프레임, 협상하지 않은 확장 비트, 알 수 없는 opcode, 연속 프레임 순서 위반, 분할되거나 125바이트를 넘는 제어 프레임, 유효하지 않은 Close 본문. 종료 코드 1002로 닫는다([WS-019](../specs/websocket.md#7-수용-테스트)). |
 
-WS·WSS 하부 TCP 소켓에는 TCP keepalive(K)도 적용한다. 값은 이 계약이 아니라 [설정 계약](config-v2.md)과 [운영 스펙 2절](../specs/operations.md#2-상태와-검증-매개변수)이 정한다.
+WS·WSS 하부 TCP 소켓에는 TCP keepalive(K)도 적용한다. 값은 이 계약이 아니라 [설정 계약](config-v3.md)과 [운영 스펙 2절](../specs/operations.md#2-상태와-검증-매개변수)이 정한다.
 
 ### 1.5 close 코드
 
@@ -142,7 +142,7 @@ reason 문자열은 UTF-8의 고정 식별자만 쓴다. Close 본문은 코드 
 
 ### 1.6 종료 의미
 
-WebSocket에는 TCP 같은 독립적인 양방향 half-close가 없다. 그래서 WS·WSS가 포함된 세션은 한쪽 EOF 뒤 반대 방향을 정리 제한 시간 E(`timeouts.close_secs`, [설정 계약](config-v2.md)) 이상 유지하지 않는다([websocket.md 4절](../specs/websocket.md#4-오류와-종료)). 아래는 이 의미를 사건별로 고정한 것이다. 이 세부는 스펙이 계약에서 정하도록 남긴 항목이다.
+WebSocket에는 TCP 같은 독립적인 양방향 half-close가 없다. 그래서 WS·WSS가 포함된 세션은 한쪽 EOF 뒤 반대 방향을 정리 제한 시간 E(`timeouts.close_secs`, [설정 계약](config-v3.md)) 이상 유지하지 않는다([websocket.md 4절](../specs/websocket.md#4-오류와-종료)). 아래는 이 의미를 사건별로 고정한 것이다. 이 세부는 스펙이 계약에서 정하도록 남긴 항목이다.
 
 | 사건 | 서버 동작 | 보장 범위 |
 | --- | --- | --- |
@@ -285,7 +285,7 @@ Close 예: 대기 시간이 W를 넘으면 서버는 코드 `4001`과 reason `wa
 ## 6. 초안을 확정하기 전에 해결할 사항
 
 - 이 계약의 이름·코드 선택은 2026-10-16에 사용자가 채택했다. 해당하는 것: 업그레이드 경로 처리의 세부(쿼리 무시, 끝 슬래시 불일치), HTTP 상태(특히 서브프로토콜 거절 400, 종료 유예 503, 상한 L 도달 시 연결 종료), 검사 순서, 확장 비수락, close 코드 번호·이름·reason, 1.6절 종료 의미, 서버 메시지 크기 M 이하.
-- 채택으로 WS-TBD-002(HTTP 상태·종료 코드)와 WS-TBD-003(Origin 정규화)을 해소했다. WS-TBD-003의 기준은 [설정 계약 1.4절](config-v2.md#14-origin-값-문법과-비교)이며 이 계약은 그 규칙을 인용하므로 따로 맞출 값이 없다.
-- (해결) WS-TBD-004: M·U·E의 기본값과 유효 범위는 사용자가 승인한 값이며 [설정 계약](config-v2.md)이 기준이다. B와 M 사이에 크기 제약은 없다(사용자 결정 2026-11-01(Q78)). 프레임 안에서 스트리밍하며 방향당 미전달 보관 바이트는 B 이하다. 분할 프레임을 합친 논리 메시지 크기가 M을 넘으면 1009로 닫고 추가 전달을 멈춘다. B보다 큰 유효 프레임도 수락해 스트리밍하며 전체를 저장하지 않는다. 프레임 분할 우회와 종료 중 자원 점유는 WS-010·WS-017로 검증한다.
+- 채택으로 WS-TBD-002(HTTP 상태·종료 코드)와 WS-TBD-003(Origin 정규화)을 해소했다. WS-TBD-003의 기준은 [설정 계약 1.4절](config-v3.md#14-origin-값-문법과-비교)이며 이 계약은 그 규칙을 인용하므로 따로 맞출 값이 없다.
+- (해결) WS-TBD-004: M·U·E의 기본값과 유효 범위는 사용자가 승인한 값이며 [설정 계약](config-v3.md)이 기준이다. B와 M 사이에 크기 제약은 없다(사용자 결정 2026-11-01(Q78)). 프레임 안에서 스트리밍하며 방향당 미전달 보관 바이트는 B 이하다. 분할 프레임을 합친 논리 메시지 크기가 M을 넘으면 1009로 닫고 추가 전달을 멈춘다. B보다 큰 유효 프레임도 수락해 스트리밍하며 전체를 저장하지 않는다. 프레임 분할 우회와 종료 중 자원 점유는 WS-010·WS-017로 검증한다.
 - (해결) WS-TBD-005와 noVNC 기본 서브프로토콜: noVNC 1.7.0을 [호환성 검증 기록](repeater-compat-record.md) 2.4절에 고정했다(버전·해시·받은 주소·날짜). 2026-11-01 관찰에서 이 버전은 WS·WSS 모두 `Sec-WebSocket-Protocol` 헤더를 보내지 않았다(같은 기록 3.4절 W-02·W-03b, 3.5절 F행). 1.2절 규칙과 같아 규칙은 그대로 두고, 1.2절 noVNC 문단을 관찰 사실로 고쳤다(TODO 1.7).
 - 1.4절 잘못된 프레임의 Close 1002와 자원 회수는 `crates/adapters/tests/websocket_scenarios.rs`의 `invalid_frame_sequences_and_controls_close_1002_and_release_registrations`가 WS·WSS에서 확인했다. 두 OS 전체 게이트에서 통과했다(5절).

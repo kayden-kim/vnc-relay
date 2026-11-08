@@ -7,7 +7,7 @@ use std::time::Duration;
 use tokio::time::{Instant, Sleep, sleep_until};
 use vnc_relay_app::settings::KeepaliveSettings;
 
-// ceil(300 / 5) + 1, from config-v2 §1.7. No per-Ping allocation.
+// ceil(300 / 5) + 1, from config-v3 §1.7. No per-Ping allocation.
 const MAX_DEADLINES: usize = 61;
 
 pub(super) struct Keepalive {

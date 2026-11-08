@@ -6,7 +6,7 @@
 | 결정일 | 2026-11-01 |
 | 결정자 | 프로젝트 소유자(사용자 결정 2026-11-01(Q77)) |
 | 관련 요구사항 | [PRD 확정 기준 "구현 기술"·"WS 버퍼와 메시지 상한"](../requirements/PRD.md#확정-기준), [FR-05](../requirements/PRD.md#fr-05-wswss-프록시), [7절 보안 및 신뢰 경계](../requirements/PRD.md#7-보안-및-신뢰-경계) |
-| 관련 스펙·계약 | [WS·WSS 전송 스펙](../specs/websocket.md), [WebSocket 중계 계약](../contracts/websocket-relay-v1.md), [설정 파일 계약](../contracts/config-v2.md) |
+| 관련 스펙·계약 | [WS·WSS 전송 스펙](../specs/websocket.md), [WebSocket 중계 계약](../contracts/websocket-relay-v1.md), [설정 파일 계약](../contracts/config-v3.md) |
 | 관련 아키텍처 문서 | [WebSocket 스트림 어댑터 모듈 설계](../architectures/websocket-stream.md) |
 | 이 ADR이 대체하는 이전 ADR | 없음 |
 | 이 ADR을 대체한 새 ADR | 없음 |
@@ -26,7 +26,7 @@
 
 - 맥락 없이 보면 의외인 점: tungstenite 0.30.0은 완전한 WebSocket 프로토콜 라이브러리다. 그럼에도 이 프로젝트는 tungstenite의 고수준 스트림·메시지 수신 API(`WebSocketStream`, `Message`)를 쓰지 않고, 프레임 헤더 파서와 accept_key 도우미만 빌려 쓰며 스트리밍 프레임 코덱을 직접 작성한다. 코드를 읽는 사람은 "완전한 WebSocket 라이브러리가 있는데 왜 프레임 코덱을 직접 작성했는가"라고 물을 수 있다.
 - 되돌리기 어려운 이유: WebSocket 프레임 처리 방식은 중계 버퍼 상한(B) 준수, 논리 메시지 크기(M) 계산, 비동기 I/O 루프 구조, 스트림 어댑터(`RelayStream`) 구현에 깊이 맞물린다. 나중에 구조를 바꾸면 스트리밍 중계와 프레임 분할 테스트 전체가 영향을 받는다.
-- 문제와 제약: tungstenite 0.30.0의 고수준 API는 메시지 또는 프레임 전체를 메모리에 모아서 전달한다. 그러나 [설정 계약](../contracts/config-v2.md)의 연결당 버퍼 상한 B는 16 KiB~4 MiB이고, 논리 메시지 상한 M은 64 KiB~16 MiB다. 유효한 설정에서 M > B가 가능하고, B보다 큰 단일 프레임이 올 수 있다. 프레임 전체를 모은 뒤 전달하면 연결당 버퍼 상한 B를 넘겨 메모리를 점유하므로 계약을 위반한다.
+- 문제와 제약: tungstenite 0.30.0의 고수준 API는 메시지 또는 프레임 전체를 메모리에 모아서 전달한다. 그러나 [설정 계약](../contracts/config-v3.md)의 연결당 버퍼 상한 B는 16 KiB~4 MiB이고, 논리 메시지 상한 M은 64 KiB~16 MiB다. 유효한 설정에서 M > B가 가능하고, B보다 큰 단일 프레임이 올 수 있다. 프레임 전체를 모은 뒤 전달하면 연결당 버퍼 상한 B를 넘겨 메모리를 점유하므로 계약을 위반한다.
 
 ## 3. 결정 요인
 

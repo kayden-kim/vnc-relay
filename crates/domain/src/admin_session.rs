@@ -82,7 +82,7 @@ impl fmt::Debug for AdminCsrfToken {
 }
 
 /// Lifetimes of administrator sessions: Si (`idle`) and Sa (`max_lifetime`)
-/// of config-v2 §1.2.
+/// of config-v3 §1.2.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct AdminSessionPolicy {
     idle: Duration,

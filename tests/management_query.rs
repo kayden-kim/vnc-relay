@@ -2675,7 +2675,7 @@ fn contract_rules_error_order_methods_polling_and_headers() {
             Some("invalid_request")
         );
     }
-    // Note on Si expiration: per config-v2.md, minimum allowed management.session.idle_secs
+    // Note on Si expiration: per config-v3.md, minimum allowed management.session.idle_secs
     // is 300s (5m), which is not cheap to wait in automated tests; timing test is skipped
     // per prompt instructions ("if the timing is cheap; else skip and say so").
 }

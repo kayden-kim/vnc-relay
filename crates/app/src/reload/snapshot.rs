@@ -4,7 +4,7 @@ use std::sync::{Arc, PoisonError, RwLock};
 
 use vnc_relay_domain::allow_list::AllowList;
 
-/// Allow lists of the four relay entry points (config-v2 §1.8).
+/// Allow lists of the four relay entry points (config-v3 §1.8).
 ///
 /// A missing or disabled list is `AllowList::default()`, which rejects everything.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]

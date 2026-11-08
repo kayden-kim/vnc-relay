@@ -8,7 +8,7 @@
 | 검증 상태 | Draft. 실제 실행 기록은 4절에 별도로 남긴다. |
 | 검증 환경·버전 | Windows 11 x64·WSL2 Ubuntu 24.04 LTS x64, 저장소의 Rust 도구 체인 |
 | 최종 검증일 | 2026-11-06. 커밋 `811491e`의 정식 측정에서 두 OS·세 전송 모두 OPS-017·OPS-018 통과(4절). |
-| 관련 기준 문서 | [운영 스펙 6절](../specs/operations.md#6-비기능호환성출처-수용-조건), [운영 정보 계약 1.5절](../contracts/ops-info-v1.md#15-사건-목록), [WebSocket 바이트 스트림 계약](../contracts/websocket-relay-v1.md#14-데이터-메시지와-제어-프레임), [설정 계약](../contracts/config-v2.md) |
+| 관련 기준 문서 | [운영 스펙 6절](../specs/operations.md#6-비기능호환성출처-수용-조건), [운영 정보 계약 1.5절](../contracts/ops-info-v1.md#15-사건-목록), [WebSocket 바이트 스트림 계약](../contracts/websocket-relay-v1.md#14-데이터-메시지와-제어-프레임), [설정 계약](../contracts/config-v3.md) |
 
 ## 1. 대상과 영향
 

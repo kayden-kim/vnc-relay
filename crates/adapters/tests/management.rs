@@ -65,7 +65,7 @@ const LIMIT: Duration = Duration::from_secs(10);
 /// connection, so a small limit could still be held by a closing one.
 const ROOMY_LM: u32 = 8;
 
-/// U of the default configuration (config-v2 §1.2, `tls_upgrade_secs` = 10).
+/// U of the default configuration (config-v3 §1.2, `tls_upgrade_secs` = 10).
 const UPGRADE: Duration = Duration::from_secs(10);
 
 /// A short U for tests that wait for the deadline to end a connection.

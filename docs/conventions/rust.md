@@ -132,5 +132,5 @@ suffix 목록:
 | `Listener` | adapters | 진입점이 아닌 HTTP 리스너(`ManagementListener`, `StatusListener`) | 최초 채택. 용어집 "관리 리스너"·"상태 리스너"와 같다. |
 | `Watcher` | adapters | 파일 변경을 감지하는 작업(`ReloadWatcher`) | 최초 채택 |
 | `Error` | 모든 레이어 | 모듈의 오류 enum(`ConfigError`) | 최초 채택 |
-| `Diagnostic` | app | 사용자에게 보여 줄 진단 한 건(오류 코드·키·문장)(`ConfigDiagnostic`) | 작업 2.1. [설정 계약 2.1절](../contracts/config-v2.md#21-설정-오류와-준비-실패)의 진단 형식이다. 오류 enum 하나로는 키와 문장을 담을 수 없다. |
-| `Warning` | app | 시작·재로드를 막지 않는 경고 enum(`ConfigWarning`) | 작업 2.1. [설정 계약 2.2절](../contracts/config-v2.md#22-경고)의 경고 코드와 대응한다. |
+| `Diagnostic` | app | 사용자에게 보여 줄 진단 한 건(오류 코드·키·문장)(`ConfigDiagnostic`) | 작업 2.1. [설정 계약 2.1절](../contracts/config-v3.md#21-설정-오류와-준비-실패)의 진단 형식이다. 오류 enum 하나로는 키와 문장을 담을 수 없다. |
+| `Warning` | app | 시작·재로드를 막지 않는 경고 enum(`ConfigWarning`) | 작업 2.1. [설정 계약 2.2절](../contracts/config-v3.md#22-경고)의 경고 코드와 대응한다. |
