@@ -194,7 +194,7 @@ Linux 전용 `tests/relay_dead_peer_linux.rs`는 사용자·네트워크 네임�
    cargo run --quiet -- --version
    ```
 
-   기대 결과: 빌드가 `Finished`로 끝나고 `vnc-relay <버전>`이 출력된다. `<버전>`은 루트 `Cargo.toml`의 `[workspace.package] version`이다(2026-11-08부터 `2026.11.0`, [버전 규칙](release.md#11-버전-규칙)).
+   기대 결과: 빌드가 `Finished`로 끝나고 `vnc-relay <버전>`이 출력된다. `<버전>`은 루트 `Cargo.toml`의 `[workspace.package] version`이다. 형식은 [버전 규칙](release.md#11-버전-규칙)을 따른다.
 
 ### 3.3 변경 범위별 검증
 
