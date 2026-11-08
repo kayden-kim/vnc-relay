@@ -66,6 +66,9 @@ pub(super) async fn answer(shared: &Shared, peer: &PeerAddr, parts: Parts, body:
     if super::terminate_api::is_terminate_path(parts.uri.path()) {
         return super::terminate_api::answer(shared, peer, &mut admin, parts, body).await;
     }
+    if parts.uri.path() == "/api/v1/logs" {
+        return super::logs_api::answer(shared, &mut admin, parts, body).await;
+    }
     super::query_api::answer(shared, &mut admin, parts, body).await
 }
 

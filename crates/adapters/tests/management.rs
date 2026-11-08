@@ -32,7 +32,7 @@ use vnc_relay_adapters::config_file;
 use vnc_relay_adapters::crypto::{RelayIdKey, SessionIdKey, SystemTokenSource};
 use vnc_relay_adapters::management_http::{DashboardHints, ManagementListener, ManagementServices};
 use vnc_relay_adapters::net::{AcceptPolicy, AllowSource, TcpEntryPoint, TcpRelayStream};
-use vnc_relay_adapters::ops_log::format_line;
+use vnc_relay_adapters::ops_log::{JsonLinesEventSink, RecentLogs, format_line};
 use vnc_relay_adapters::target::TcpTargetConnector;
 use vnc_relay_adapters::tls;
 use vnc_relay_app::events::{AdminTerminateResult, Event, Level, RejectReason, Stage};
@@ -63,7 +63,7 @@ use vnc_relay_domain::entry_point::EntryPoint;
 use vnc_relay_domain::handshake::{HANDSHAKE_REQUEST_LEN, HandshakePolicy, VIEWER_GREETING};
 use vnc_relay_domain::login_limit::{LimitScope, LoginLimitPolicy};
 use vnc_relay_domain::peer_ip::PeerIp;
-use vnc_relay_domain::session::ViewerTransport;
+use vnc_relay_domain::session::Transport;
 
 /// Upper bound for one exchange. A hang fails the test instead of blocking it.
 const LIMIT: Duration = Duration::from_secs(10);
@@ -72,7 +72,7 @@ const LIMIT: Duration = Duration::from_secs(10);
 /// connection, so a small limit could still be held by a closing one.
 const ROOMY_LM: u32 = 8;
 
-/// U of the default configuration (config-v3 §1.2, `tls_upgrade_secs` = 10).
+/// U of the default configuration (config-v4 §1.2, `tls_upgrade_secs` = 10).
 const UPGRADE: Duration = Duration::from_secs(10);
 
 /// A short U for tests that wait for the deadline to end a connection.
@@ -150,6 +150,7 @@ struct Running {
     addr: SocketAddr,
     events: Arc<Recorder>,
     task: JoinHandle<()>,
+    logs: Arc<RecentLogs>,
 }
 
 impl Drop for Running {
@@ -209,6 +210,28 @@ async fn start_with_ports(
     verifier: Arc<dyn PasswordVerifier>,
     clock: Arc<dyn Clock>,
 ) -> Running {
+    start_with_ports_and_logs(
+        tls,
+        admin_connections,
+        upgrade,
+        session,
+        limit,
+        verifier,
+        (clock, Arc::new(RecentLogs::new(1000))),
+    )
+    .await
+}
+
+async fn start_with_ports_and_logs(
+    tls: Option<TlsAcceptor>,
+    admin_connections: u32,
+    upgrade: Duration,
+    session: AdminSessionPolicy,
+    limit: LoginLimitPolicy,
+    verifier: Arc<dyn PasswordVerifier>,
+    state: (Arc<dyn Clock>, Arc<RecentLogs>),
+) -> Running {
+    let (clock, logs) = state;
     let events = Arc::new(Recorder::default());
     let log: Arc<dyn EventSink> = events.clone();
     let budget = ConnectionBudget::new();
@@ -242,6 +265,7 @@ async fn start_with_ports(
             query,
             terminate,
             config: config_fixture(false, Arc::new(SystemClock::new()), Arc::clone(&log)).service,
+            logs,
         },
         events,
     )
@@ -276,9 +300,15 @@ async fn start_services(
         });
         tls::TlsSource::management(runtime.clone())
     });
+    let logs = Arc::clone(&services.logs);
     let listener = ManagementListener::new(listener, tls, budget, runtime, dashboard, services);
     let task = tokio::spawn(listener.run(events.clone()));
-    Running { addr, events, task }
+    Running {
+        addr,
+        events,
+        task,
+        logs,
+    }
 }
 
 /// The same runtime backs TCP relay traffic, operational queries and termination.
@@ -366,6 +396,7 @@ impl RunningRelay {
                 query,
                 terminate,
                 config: config_fixture(false, Arc::clone(&clock), Arc::clone(&log)).service,
+                logs: Arc::new(RecentLogs::new(1000)),
             },
             events,
         )
@@ -2861,8 +2892,8 @@ impl AsyncWrite for PartialTcpStream {
 }
 
 impl RelayStream for PartialTcpStream {
-    fn transport(&self) -> ViewerTransport {
-        ViewerTransport::Tcp
+    fn transport(&self) -> Transport {
+        Transport::Tcp
     }
 
     fn pending_write_len(&self) -> usize {
@@ -2898,6 +2929,7 @@ impl RunningRelay {
             conn_id: ConnId::next(),
             entry_point,
             peer_ip: PeerIp::from(peer_addr),
+            forwarded_ip: None,
             peer_addr,
             accepted_wall: self.clock.wall(),
             accepted_at: self.clock.monotonic(),
@@ -3447,6 +3479,7 @@ async fn completion_mgt016_counts_lists_and_as_of_follow_one_capture_while_usage
                     conn_id: ConnId::next(),
                     entry_point: EntryPoint::TcpViewer,
                     peer_ip: PeerIp::from(peer_addr),
+                    forwarded_ip: None,
                     peer_addr,
                     accepted_wall: clock_for_hook.wall(),
                     accepted_at: clock_for_hook.monotonic(),
@@ -3752,18 +3785,20 @@ allow = ["127.0.0.1"]
 enabled = true
 listen = "127.0.0.1:5500"
 allow = ["127.0.0.1"]
-[relay.ws_viewer]
-enabled = true
+[relay.ws]
 listen = "127.0.0.1:6080"
-allow = ["127.0.0.1"]
-allowed_origins = ["https://example.test"]
-[relay.wss_viewer]
+[relay.ws.viewer]
 enabled = true
-listen = "127.0.0.1:6081"
 allow = ["127.0.0.1"]
 allowed_origins = ["https://example.test"]
+[relay.wss]
+listen = "127.0.0.1:6081"
 cert_file = "cert.pem"
 key_file = "key.pem"
+[relay.wss.viewer]
+enabled = true
+allow = ["127.0.0.1"]
+allowed_origins = ["https://example.test"]
 [mode1]
 enabled = true
 allow_targets = ["127.0.0.1:5900"]
@@ -3978,6 +4013,7 @@ async fn start_config_services(
             query,
             terminate,
             config,
+            logs: Arc::new(RecentLogs::new(1000)),
         },
         events,
     )
@@ -4300,8 +4336,8 @@ async fn invalid_config_candidate_returns_indexed_safe_diagnostics_without_write
             "PRIVATE-BAD-IP",
         ),
         (
-            json!({"relay.ws_viewer.allowed_origins": ["https://example.test", "PRIVATE-BAD-ORIGIN"]}),
-            "relay.ws_viewer.allowed_origins[1]",
+            json!({"relay.ws.viewer.allowed_origins": ["https://example.test", "PRIVATE-BAD-ORIGIN"]}),
+            "relay.ws.viewer.allowed_origins[1]",
             "config_origin_invalid",
             "PRIVATE-BAD-ORIGIN",
         ),
@@ -4358,7 +4394,11 @@ async fn invalid_config_candidate_returns_indexed_safe_diagnostics_without_write
 async fn config_patch_rejects_uneditable_empty_mistyped_and_poll_requests_without_audit() {
     let events = Arc::new(Recorder::default());
     let clock = Arc::new(FakeClock::default());
-    let fixture = config_fixture(true, clock.clone(), events.clone());
+    let all_roles = format!(
+        "{CONFIG_TEXT}\n[relay.ws.server]\nenabled=true\nallow=['127.0.0.1']\n\
+         [relay.wss.server]\nenabled=true\nallow=['127.0.0.1']\n"
+    );
+    let fixture = config_fixture_text(&all_roles, clock.clone(), events.clone());
     let original = fixture.files.bytes();
     let settings = fixture
         .reload
@@ -4385,7 +4425,7 @@ async fn config_patch_rejects_uneditable_empty_mistyped_and_poll_requests_withou
     }
     assert_eq!(
         items.iter().filter(|item| item["editable"] == true).count(),
-        23
+        29
     );
     for changes in [
         json!({}),
@@ -4423,8 +4463,8 @@ async fn config_patch_rejects_uneditable_empty_mistyped_and_poll_requests_withou
     let clock = Arc::new(FakeClock::default());
     let text = CONFIG_TEXT
         .replace(
-            "[relay.wss_viewer]\nenabled = true",
-            "[relay.wss_viewer]\nenabled = false",
+            "[relay.wss.viewer]\nenabled = true",
+            "[relay.wss.viewer]\nenabled = false",
         )
         .replace("[mode1]\nenabled = true", "[mode1]\nenabled = false");
     let fixture = config_fixture_text(&text, clock.clone(), events.clone());
@@ -4438,8 +4478,13 @@ async fn config_patch_rejects_uneditable_empty_mistyped_and_poll_requests_withou
     let running = start_config_services(fixture.service.clone(), events.clone(), clock).await;
     let (cookie, csrf) = config_login(&running).await;
     for changes in [
-        json!({"relay.wss_viewer.allow": ["127.0.0.1"]}),
-        json!({"relay.wss_viewer.allowed_origins": ["https://example.test"]}),
+        json!({"relay.wss.viewer.allow": ["127.0.0.1"]}),
+        json!({"relay.wss.viewer.allowed_origins": ["https://example.test"]}),
+        json!({"relay.ws.server.allow": ["127.0.0.1"]}),
+        json!({"relay.ws.server.allowed_origins": ["https://example.test"]}),
+        json!({"relay.wss.server.allow": ["127.0.0.1"]}),
+        json!({"relay.wss.server.allowed_origins": ["https://example.test"]}),
+        json!({"relay.wss.trusted_proxies": ["127.0.0.1"]}),
         json!({"mode1.allow_targets": ["127.0.0.1:5900"]}),
     ] {
         let reply = config_patch(
@@ -4947,4 +4992,817 @@ fn management_runtime(
     candidate.settings.timeouts.close = close;
     candidate.settings.mode1.enabled = false;
     Arc::new(ReloadCell::new(ReloadSnapshot::new(candidate, None, None)))
+}
+
+/// spec: management.md:MGT-051 partial
+#[tokio::test]
+async fn session_queries_and_termination_provide_full_transport_and_forwarded_ip_coverage() {
+    use std::collections::HashMap;
+    use vnc_relay_app::relay::{ActivePeer, ActiveSessionSnapshot, ClosedSessionSnapshot};
+    use vnc_relay_domain::handshake::Mode;
+    use vnc_relay_domain::session::{CloseCause, SessionId, SessionState, Transport};
+
+    struct ControllableRelayState {
+        snapshot: Mutex<RelaySnapshot>,
+        terminated: Mutex<HashMap<String, Arc<ClosedSessionSnapshot>>>,
+    }
+
+    impl RelayStateSource for ControllableRelayState {
+        fn snapshot(&self, _clock: &dyn Clock) -> RelaySnapshot {
+            self.snapshot.lock().unwrap().clone()
+        }
+    }
+
+    impl RelaySessionControl for ControllableRelayState {
+        fn request_terminate(
+            &self,
+            session_id: &str,
+            _account: AccountName,
+            _peer: PeerIp,
+            _clock: &dyn Clock,
+            _events: &dyn EventSink,
+        ) -> Option<TerminationTicket> {
+            let closed = self.terminated.lock().unwrap().get(session_id).cloned()?;
+            let (sender, completion) = watch::channel(Some(Ok(closed)));
+            drop(sender);
+            Some(TerminationTicket {
+                initiated: true,
+                completion,
+            })
+        }
+    }
+
+    let fwd_v4_viewer = PeerIp::new("198.51.100.7".parse().unwrap());
+    let fwd_v4_server = PeerIp::new("203.0.113.8".parse().unwrap());
+    let fwd_v6_viewer = PeerIp::new("2001:db8::7".parse().unwrap());
+
+    struct TestCase {
+        id: &'static str,
+        mode: Mode,
+        viewer_transport: Transport,
+        target_transport: Transport,
+        viewer_fwd: Option<PeerIp>,
+        target_fwd: Option<PeerIp>,
+        viewer_sock: SocketAddr,
+        target_sock: SocketAddr,
+        peer: ActivePeer,
+    }
+
+    let cases = [
+        TestCase {
+            id: "ses_aaaaaaaaaaaaaaaaaaaaaaaaae",
+            mode: Mode::Mode1,
+            viewer_transport: Transport::Tcp,
+            target_transport: Transport::Tcp,
+            viewer_fwd: None,
+            target_fwd: None,
+            viewer_sock: "127.0.0.1:5001".parse().unwrap(),
+            target_sock: "192.0.2.1:5900".parse().unwrap(),
+            peer: ActivePeer::Target("192.0.2.1:5900".parse().unwrap()),
+        },
+        TestCase {
+            id: "ses_aaaaaaaaaaaaaaaaaaaaaaaaai",
+            mode: Mode::Mode1,
+            viewer_transport: Transport::Ws,
+            target_transport: Transport::Tcp,
+            viewer_fwd: Some(fwd_v4_viewer),
+            target_fwd: None,
+            viewer_sock: "127.0.0.1:5002".parse().unwrap(),
+            target_sock: "192.0.2.2:5901".parse().unwrap(),
+            peer: ActivePeer::Target("192.0.2.2:5901".parse().unwrap()),
+        },
+        TestCase {
+            id: "ses_aaaaaaaaaaaaaaaaaaaaaaaaam",
+            mode: Mode::Mode2,
+            viewer_transport: Transport::Tcp,
+            target_transport: Transport::Tcp,
+            viewer_fwd: None,
+            target_fwd: None,
+            viewer_sock: "127.0.0.1:5003".parse().unwrap(),
+            target_sock: "127.0.0.1:5004".parse().unwrap(),
+            peer: ActivePeer::Server(ConnectionContext {
+                conn_id: ConnId::next(),
+                entry_point: EntryPoint::TcpServer,
+                peer_ip: PeerIp::from("127.0.0.1:5004".parse::<SocketAddr>().unwrap()),
+                forwarded_ip: None,
+                peer_addr: "127.0.0.1:5004".parse().unwrap(),
+                accepted_wall: UNIX_EPOCH + Duration::from_secs(1_700_000_000),
+                accepted_at: Duration::from_secs(1),
+                exchange_at: Duration::from_secs(1),
+                buffer_bytes: 16_384,
+                handshake: LIMIT,
+            }),
+        },
+        TestCase {
+            id: "ses_aaaaaaaaaaaaaaaaaaaaaaaaaq",
+            mode: Mode::Mode2,
+            viewer_transport: Transport::Ws,
+            target_transport: Transport::Wss,
+            viewer_fwd: Some(fwd_v4_viewer),
+            target_fwd: Some(fwd_v4_server),
+            viewer_sock: "127.0.0.1:5005".parse().unwrap(),
+            target_sock: "127.0.0.1:5006".parse().unwrap(),
+            peer: ActivePeer::Server(ConnectionContext {
+                conn_id: ConnId::next(),
+                entry_point: EntryPoint::WssServer,
+                peer_ip: PeerIp::from("127.0.0.1:5006".parse::<SocketAddr>().unwrap()),
+                forwarded_ip: Some(fwd_v4_server),
+                peer_addr: "127.0.0.1:5006".parse().unwrap(),
+                accepted_wall: UNIX_EPOCH + Duration::from_secs(1_700_000_000),
+                accepted_at: Duration::from_secs(2),
+                exchange_at: Duration::from_secs(2),
+                buffer_bytes: 16_384,
+                handshake: LIMIT,
+            }),
+        },
+        TestCase {
+            id: "ses_aaaaaaaaaaaaaaaaaaaaaaaaau",
+            mode: Mode::Mode2,
+            viewer_transport: Transport::Wss,
+            target_transport: Transport::Ws,
+            viewer_fwd: Some(fwd_v6_viewer),
+            target_fwd: None,
+            viewer_sock: "[::1]:5007".parse().unwrap(),
+            target_sock: "127.0.0.1:5008".parse().unwrap(),
+            peer: ActivePeer::Server(ConnectionContext {
+                conn_id: ConnId::next(),
+                entry_point: EntryPoint::WsServer,
+                peer_ip: PeerIp::from("127.0.0.1:5008".parse::<SocketAddr>().unwrap()),
+                forwarded_ip: None,
+                peer_addr: "127.0.0.1:5008".parse().unwrap(),
+                accepted_wall: UNIX_EPOCH + Duration::from_secs(1_700_000_000),
+                accepted_at: Duration::from_secs(3),
+                exchange_at: Duration::from_secs(3),
+                buffer_bytes: 16_384,
+                handshake: LIMIT,
+            }),
+        },
+    ];
+    let mut active = Vec::new();
+    let mut terminated_map = HashMap::new();
+    let mut recent_closed = Vec::new();
+
+    for tc in &cases {
+        let session_id = SessionId::parse(tc.id).unwrap();
+        let active_entry = ActiveSessionSnapshot {
+            session_id: session_id.clone(),
+            mode: tc.mode,
+            viewer_transport: tc.viewer_transport,
+            target_transport: tc.target_transport,
+            viewer_forwarded_ip: tc.viewer_fwd,
+            target_forwarded_ip: tc.target_fwd,
+            started_at: UNIX_EPOCH + Duration::from_secs(1_700_000_000),
+            started_mono: Duration::from_secs(1),
+            duration: Duration::from_secs(5),
+            state: SessionState::Active,
+            viewer: ConnectionContext {
+                conn_id: ConnId::next(),
+                entry_point: match tc.viewer_transport {
+                    Transport::Tcp => EntryPoint::TcpViewer,
+                    Transport::Ws => EntryPoint::WsViewer,
+                    Transport::Wss => EntryPoint::WssViewer,
+                },
+                peer_ip: PeerIp::from(tc.viewer_sock),
+                forwarded_ip: tc.viewer_fwd,
+                peer_addr: tc.viewer_sock,
+                accepted_wall: UNIX_EPOCH + Duration::from_secs(1_700_000_000),
+                accepted_at: Duration::from_secs(1),
+                exchange_at: Duration::from_secs(1),
+                buffer_bytes: 16_384,
+                handshake: LIMIT,
+            },
+            peer: tc.peer.clone(),
+            relay_id_ref: None,
+            bytes_viewer_to_target: 100,
+            bytes_target_to_viewer: 200,
+        };
+        active.push(active_entry);
+
+        let closed_entry = Arc::new(ClosedSessionSnapshot {
+            session_id: session_id.clone(),
+            mode: tc.mode,
+            viewer_transport: tc.viewer_transport,
+            target_transport: tc.target_transport,
+            started_at: UNIX_EPOCH + Duration::from_secs(1_700_000_000),
+            ended_at: UNIX_EPOCH + Duration::from_secs(1_700_000_010),
+            duration: Duration::from_secs(10),
+            bytes_viewer_to_target: 100,
+            bytes_target_to_viewer: 200,
+            close_cause: CloseCause::AdminTerminated,
+            relay_id_ref: None,
+            side: None,
+        });
+        terminated_map.insert(tc.id.to_owned(), closed_entry.clone());
+        recent_closed.push((*closed_entry).clone());
+    }
+
+    let relay_state = Arc::new(ControllableRelayState {
+        snapshot: Mutex::new(RelaySnapshot {
+            lifecycle: RelayLifecycle::Running,
+            observed_at: Duration::from_secs(10),
+            handshaking: 0,
+            target_connecting: 0,
+            max_entries: 16,
+            waiting: Vec::new(),
+            active,
+            recent_closed,
+        }),
+        terminated: Mutex::new(terminated_map),
+    });
+
+    let cell = management_runtime(ROOMY_LM, UPGRADE, Duration::from_secs(1));
+    let clock = Arc::new(SystemClock::new());
+    let events = Arc::new(Recorder::default());
+    let auth = admin_auth(
+        events.clone(),
+        session_policy(),
+        limit_policy(),
+        Arc::new(Argon2Verifier),
+        clock.clone(),
+    );
+    let query = Arc::new(ManagementQueryService::new(
+        relay_state.clone(),
+        ConnectionBudget::new(),
+        ConnectionBudget::new(),
+        clock.clone(),
+        cell.clone(),
+    ));
+    let terminate = Arc::new(ManagementTerminateService::new(
+        relay_state.clone(),
+        clock.clone(),
+        events.clone(),
+    ));
+    let running = start_services(
+        None,
+        ConnectionBudget::new(),
+        cell,
+        ManagementServices {
+            auth,
+            query,
+            terminate,
+            config: config_fixture(false, clock.clone(), events.clone()).service,
+            logs: Arc::new(RecentLogs::new(1000)),
+        },
+        events,
+    )
+    .await;
+
+    let login = plain_exchange(running.addr, &login_request(ACCOUNT, PASSWORD)).await;
+    assert_eq!(login.status, 200);
+    let cookie = cookie_line(&login);
+    let csrf = csrf_line(&login);
+
+    // 1. GET /api/v1/sessions
+    let list = authenticated_query(&running, &cookie, "/api/v1/sessions").await;
+    let items = list["items"].as_array().expect("items array");
+    assert_eq!(items.len(), cases.len());
+    for tc in &cases {
+        let item = items
+            .iter()
+            .find(|it| it["session_id"].as_str() == Some(tc.id))
+            .unwrap_or_else(|| panic!("missing session {}", tc.id));
+        assert_eq!(item["mode"], tc.mode.as_str());
+        assert_eq!(item["viewer_transport"], tc.viewer_transport.as_str());
+        assert_eq!(item["target_transport"], tc.target_transport.as_str());
+        assert_eq!(
+            item["viewer_forwarded_ip"],
+            json!(tc.viewer_fwd.map(|ip| ip.to_string()))
+        );
+        assert_eq!(
+            item["target_forwarded_ip"],
+            json!(tc.target_fwd.map(|ip| ip.to_string()))
+        );
+        assert_eq!(
+            item["viewer_address"]["ip"],
+            tc.viewer_sock.ip().to_string()
+        );
+        assert_eq!(item["viewer_address"]["port"], tc.viewer_sock.port());
+        assert_eq!(
+            item["target_address"]["ip"],
+            tc.target_sock.ip().to_string()
+        );
+        assert_eq!(item["target_address"]["port"], tc.target_sock.port());
+        assert!(item.get("viewer_forwarded_ip_unavailable_reason").is_none());
+        assert!(item.get("target_forwarded_ip_unavailable_reason").is_none());
+
+        // 2. GET /api/v1/sessions/{session_id}
+        let detail =
+            authenticated_query(&running, &cookie, &format!("/api/v1/sessions/{}", tc.id)).await;
+        let session = &detail["session"];
+        assert_eq!(session, item);
+
+        // 3. POST /api/v1/sessions/{session_id}/terminate
+        let terminate_cmd = request(
+            "POST",
+            &format!("/api/v1/sessions/{}/terminate", tc.id),
+            &[&cookie, &csrf],
+        );
+        let reply = plain_exchange(running.addr, &terminate_cmd).await;
+        assert_eq!(reply.status, 200, "terminate {}", tc.id);
+        let body = json_body(&reply);
+        assert_eq!(body["result"], "terminated");
+        let closed = &body["closed_session"];
+        assert_eq!(closed["session_id"], tc.id);
+        assert_eq!(closed["mode"], tc.mode.as_str());
+        assert_eq!(closed["viewer_transport"], tc.viewer_transport.as_str());
+        assert_eq!(closed["target_transport"], tc.target_transport.as_str());
+        assert!(closed.get("viewer_forwarded_ip").is_none());
+        assert!(closed.get("target_forwarded_ip").is_none());
+        assert!(
+            closed
+                .get("viewer_forwarded_ip_unavailable_reason")
+                .is_none()
+        );
+        assert!(
+            closed
+                .get("target_forwarded_ip_unavailable_reason")
+                .is_none()
+        );
+    }
+
+    // 4. GET /api/v1/closed-sessions
+    let closed_list = authenticated_query(&running, &cookie, "/api/v1/closed-sessions").await;
+    let closed_items = closed_list["items"].as_array().expect("closed items array");
+    assert_eq!(closed_items.len(), cases.len());
+    for tc in &cases {
+        let item = closed_items
+            .iter()
+            .find(|it| it["session_id"].as_str() == Some(tc.id))
+            .unwrap_or_else(|| panic!("missing closed session {}", tc.id));
+        assert_eq!(item["mode"], tc.mode.as_str());
+        assert_eq!(item["viewer_transport"], tc.viewer_transport.as_str());
+        assert_eq!(item["target_transport"], tc.target_transport.as_str());
+        assert!(item.get("viewer_forwarded_ip").is_none());
+        assert!(item.get("target_forwarded_ip").is_none());
+        assert_eq!(item["close_cause"], "admin_terminated");
+        assert!(item.get("viewer_forwarded_ip_unavailable_reason").is_none());
+        assert!(item.get("target_forwarded_ip_unavailable_reason").is_none());
+    }
+}
+
+/// spec: management.md:MGT-046
+#[tokio::test]
+async fn recent_logs_query_basics_limit_order_and_bounds() {
+    let running = start(None, ROOMY_LM).await;
+    let login = plain_exchange(running.addr, &login_request(ACCOUNT, PASSWORD)).await;
+    let cookie = cookie_line(&login);
+
+    let path = std::env::temp_dir().join(format!(
+        "vnc-relay-mgt046-{}-{}.jsonl",
+        std::process::id(),
+        ConnId::next()
+    ));
+    let sink = JsonLinesEventSink::open(
+        &vnc_relay_app::settings::LogOutput::File(path.clone()),
+        |_| {},
+        |_| {},
+    )
+    .unwrap()
+    .with_recent_logs(Arc::clone(&running.logs));
+    for _ in 0..5 {
+        sink.record(&Event::UpgradeRejected {
+            conn_id: ConnId::next(),
+            listener: "wss",
+            role: Some(vnc_relay_domain::entry_point::Role::Server),
+            reason: RejectReason::IpNotAllowed,
+            peer_ip: PeerIp::new("127.0.0.1".parse().unwrap()),
+            forwarded_ip: Some(PeerIp::new("198.51.100.8".parse().unwrap())),
+            origin: None,
+        });
+    }
+    drop(sink);
+    let expected: Vec<Value> = std::fs::read_to_string(&path)
+        .unwrap()
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect();
+    std::fs::remove_file(path).unwrap();
+
+    // 1. limit omitted -> defaults to 200, returns all 5 in ascending seq order
+    let res = authenticated_query(&running, &cookie, "/api/v1/logs").await;
+    assert_eq!(res["max_entries"], 1000);
+    assert_eq!(res["oldest_seq"], 1);
+    assert_eq!(res["latest_seq"], 5);
+    assert_eq!(res["has_more"], false);
+    let items = res["items"].as_array().unwrap();
+    assert_eq!(items.len(), 5);
+    for (i, item) in items.iter().enumerate() {
+        assert_eq!(item["seq"], (i + 1) as u64);
+        assert_eq!(item["entry"], expected[i]);
+    }
+
+    // 2. limit specified (limit=2) -> newest 2 matches in ascending order, has_more is true
+    let res = authenticated_query(&running, &cookie, "/api/v1/logs?limit=2").await;
+    assert_eq!(res["max_entries"], 1000);
+    assert_eq!(res["oldest_seq"], 1);
+    assert_eq!(res["latest_seq"], 5);
+    assert_eq!(res["has_more"], true);
+    let items = res["items"].as_array().unwrap();
+    assert_eq!(items.len(), 2);
+    assert_eq!(items[0]["seq"], 4);
+    assert_eq!(items[1]["seq"], 5);
+}
+
+/// spec: management.md:MGT-047
+#[tokio::test]
+async fn recent_logs_filters_alone_and_combined_and_session_relation() {
+    let running = start(None, ROOMY_LM).await;
+    let login = plain_exchange(running.addr, &login_request(ACCOUNT, PASSWORD)).await;
+    let cookie = cookie_line(&login);
+
+    let sink = JsonLinesEventSink::stdout(|_| {}).with_recent_logs(Arc::clone(&running.logs));
+    let conn1 = ConnId::next();
+    let conn2 = ConnId::next();
+    let sid1 = vnc_relay_domain::session::SessionId::from_block([1; 16]);
+    let sid2 = vnc_relay_domain::session::SessionId::from_block([2; 16]);
+    let ip = PeerIp::new(std::net::IpAddr::from([127, 0, 0, 1]));
+
+    // seq 1
+    sink.record(&Event::ConnectionAccepted {
+        conn_id: conn1,
+        listener: vnc_relay_domain::entry_point::Listener::TcpViewer,
+        peer_ip: ip,
+    });
+    // seq 2
+    sink.record(&Event::SessionStarted {
+        session_id: sid1.clone(),
+        mode: vnc_relay_domain::handshake::Mode::Mode1,
+        viewer_transport: Transport::Tcp,
+        server_transport: None,
+        viewer_conn_id: conn1,
+        viewer_peer_ip: ip,
+        viewer_forwarded_ip: None,
+        server_conn_id: None,
+        server_peer_ip: None,
+        server_forwarded_ip: None,
+        relay_id_ref: None,
+        waited_ms: None,
+        target_ip: None,
+        target_port: None,
+        target_host: None,
+    });
+    // seq 3
+    sink.record(&Event::ConnectionAccepted {
+        conn_id: conn2,
+        listener: vnc_relay_domain::entry_point::Listener::TcpServer,
+        peer_ip: ip,
+    });
+    // seq 4
+    sink.record(&Event::SessionStarted {
+        session_id: sid2,
+        mode: vnc_relay_domain::handshake::Mode::Mode2,
+        viewer_transport: Transport::Tcp,
+        server_transport: Some(Transport::Tcp),
+        viewer_conn_id: conn2,
+        viewer_peer_ip: ip,
+        viewer_forwarded_ip: None,
+        server_conn_id: Some(conn2),
+        server_peer_ip: Some(ip),
+        server_forwarded_ip: None,
+        relay_id_ref: Some(vnc_relay_app::events::RelayIdRef::from_hash_prefix([
+            0xab, 0xcd, 0xef, 0x01, 0x23, 0x45, 0x67, 0x89,
+        ])),
+        waited_ms: Some(100),
+        target_ip: None,
+        target_port: None,
+        target_host: None,
+    });
+    // seq 5
+    sink.record(&Event::ConfigWarning {
+        warning: vnc_relay_app::settings::ConfigWarning::TrustAllProxies {
+            listener: vnc_relay_domain::entry_point::Listener::Ws,
+            item: vnc_relay_domain::allow_list::IpItem::parse("0.0.0.0/0").unwrap(),
+        },
+        phase: vnc_relay_app::events::Phase::Startup,
+    });
+
+    // 1. level filter
+    let res = authenticated_query(&running, &cookie, "/api/v1/logs?level=warn").await;
+    let items = res["items"].as_array().unwrap();
+    assert_eq!(items.len(), 1);
+    assert_eq!(items[0]["entry"]["event"], "trust_all_proxies");
+
+    // level with multiple values
+    let res = authenticated_query(&running, &cookie, "/api/v1/logs?level=warn,info").await;
+    assert_eq!(res["items"].as_array().unwrap().len(), 5);
+
+    // 2. event filter alone
+    let res = authenticated_query(&running, &cookie, "/api/v1/logs?event=session_started").await;
+    assert_eq!(res["items"].as_array().unwrap().len(), 2);
+
+    // unknown event name -> empty result, bounds kept
+    let res = authenticated_query(&running, &cookie, "/api/v1/logs?event=unknown_event").await;
+    assert_eq!(res["items"].as_array().unwrap().len(), 0);
+    assert_eq!(res["oldest_seq"], 1);
+    assert_eq!(res["latest_seq"], 5);
+
+    // 3. q search: ASCII case-folding partial search on values
+    let res = authenticated_query(&running, &cookie, "/api/v1/logs?q=ABCDEF0123456789").await;
+    assert_eq!(res["items"].as_array().unwrap().len(), 1);
+    assert_eq!(res["items"][0]["seq"], 4);
+
+    // q matches numbers: 100
+    let res = authenticated_query(&running, &cookie, "/api/v1/logs?q=100").await;
+    assert!(
+        res["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|i| i["seq"] == 4)
+    );
+
+    // q does not match field names: "viewer_conn_id" is a key name only
+    let res = authenticated_query(&running, &cookie, "/api/v1/logs?q=viewer_conn_id").await;
+    assert_eq!(res["items"].as_array().unwrap().len(), 0);
+
+    // 4. session_id with relation to connection events
+    let res = authenticated_query(
+        &running,
+        &cookie,
+        &format!("/api/v1/logs?session_id={sid1}"),
+    )
+    .await;
+    let items = res["items"].as_array().unwrap();
+    assert_eq!(items.len(), 2);
+    assert_eq!(items[0]["entry"]["event"], "connection_accepted");
+    assert_eq!(items[0]["entry"]["conn_id"], conn1.to_string());
+    assert_eq!(items[1]["entry"]["event"], "session_started");
+
+    // 5. combined filters: level + event + q
+    let res = authenticated_query(
+        &running,
+        &cookie,
+        "/api/v1/logs?level=info&event=connection_accepted&q=tcp_viewer",
+    )
+    .await;
+    assert_eq!(res["items"].as_array().unwrap().len(), 1);
+    assert_eq!(res["items"][0]["seq"], 1);
+}
+
+/// spec: management.md:MGT-048
+#[tokio::test]
+async fn recent_logs_cursors_has_more_and_validation() {
+    let running = start(None, ROOMY_LM).await;
+    let login = plain_exchange(running.addr, &login_request(ACCOUNT, PASSWORD)).await;
+    let cookie = cookie_line(&login);
+
+    let sink = JsonLinesEventSink::stdout(|_| {}).with_recent_logs(Arc::clone(&running.logs));
+    for _ in 0..10 {
+        sink.record(&Event::ServerStarting);
+    }
+
+    // Multi-page with before:
+    let p1 = authenticated_query(&running, &cookie, "/api/v1/logs?limit=3").await;
+    assert_eq!(p1["has_more"], true);
+    let items = p1["items"].as_array().unwrap();
+    assert_eq!(items.len(), 3);
+    assert_eq!(items[0]["seq"], 8);
+    assert_eq!(items[1]["seq"], 9);
+    assert_eq!(items[2]["seq"], 10);
+
+    let p2 = authenticated_query(&running, &cookie, "/api/v1/logs?before=8&limit=3").await;
+    assert_eq!(p2["has_more"], true);
+    let items = p2["items"].as_array().unwrap();
+    assert_eq!(items.len(), 3);
+    assert_eq!(items[0]["seq"], 5);
+    assert_eq!(items[1]["seq"], 6);
+    assert_eq!(items[2]["seq"], 7);
+
+    let p3 = authenticated_query(&running, &cookie, "/api/v1/logs?before=5&limit=3").await;
+    assert_eq!(p3["has_more"], true);
+    let items = p3["items"].as_array().unwrap();
+    assert_eq!(items.len(), 3);
+    assert_eq!(items[0]["seq"], 2);
+    assert_eq!(items[1]["seq"], 3);
+    assert_eq!(items[2]["seq"], 4);
+
+    let p4 = authenticated_query(&running, &cookie, "/api/v1/logs?before=2&limit=3").await;
+    assert_eq!(p4["has_more"], false);
+    let items = p4["items"].as_array().unwrap();
+    assert_eq!(items.len(), 1);
+    assert_eq!(items[0]["seq"], 1);
+
+    // Multi-page with after:
+    let a1 = authenticated_query(&running, &cookie, "/api/v1/logs?after=0&limit=3").await;
+    assert_eq!(a1["has_more"], true);
+    let items = a1["items"].as_array().unwrap();
+    assert_eq!(items.len(), 3);
+    assert_eq!(items[0]["seq"], 1);
+    assert_eq!(items[1]["seq"], 2);
+    assert_eq!(items[2]["seq"], 3);
+
+    let a2 = authenticated_query(&running, &cookie, "/api/v1/logs?after=3&limit=3").await;
+    assert_eq!(a2["has_more"], true);
+    let items = a2["items"].as_array().unwrap();
+    assert_eq!(items[0]["seq"], 4);
+    assert_eq!(items[1]["seq"], 5);
+    assert_eq!(items[2]["seq"], 6);
+
+    let a4 = authenticated_query(&running, &cookie, "/api/v1/logs?after=9&limit=3").await;
+    assert_eq!(a4["has_more"], false);
+    let items = a4["items"].as_array().unwrap();
+    assert_eq!(items.len(), 1);
+    assert_eq!(items[0]["seq"], 10);
+
+    // Cursors outside retained range
+    let out = authenticated_query(&running, &cookie, "/api/v1/logs?before=1").await;
+    assert_eq!(out["items"].as_array().unwrap().len(), 0);
+    assert_eq!(out["has_more"], false);
+    let out = authenticated_query(&running, &cookie, "/api/v1/logs?after=100").await;
+    assert_eq!(out["items"].as_array().unwrap().len(), 0);
+    assert_eq!(out["has_more"], false);
+
+    // Refusals (400 invalid_request)
+    // Unknown parameters are ignored (contract §3 Producer rule)
+    let ign1 = authenticated_query(&running, &cookie, "/api/v1/logs?unknown_param=1&foo=bar").await;
+    assert_eq!(ign1["items"].as_array().unwrap().len(), 10);
+    let ign2 = authenticated_query(&running, &cookie, "/api/v1/logs?unknown_flag").await;
+    assert_eq!(ign2["items"].as_array().unwrap().len(), 10);
+
+    // Repeated level and event are combined
+    let comb1 = authenticated_query(&running, &cookie, "/api/v1/logs?level=info&level=warn").await;
+    assert_eq!(comb1["items"].as_array().unwrap().len(), 10);
+    let comb2 = authenticated_query(
+        &running,
+        &cookie,
+        "/api/v1/logs?event=server_starting&event=unknown_event",
+    )
+    .await;
+    assert_eq!(comb2["items"].as_array().unwrap().len(), 10);
+
+    // + and %20 are equivalent spaces in q
+    sink.record(&Event::LogReopenFailed {
+        detail: "broken pipe error".to_owned(),
+    });
+    let q_plus = authenticated_query(&running, &cookie, "/api/v1/logs?q=broken+pipe").await;
+    let q_pct = authenticated_query(&running, &cookie, "/api/v1/logs?q=broken%20pipe").await;
+    assert_eq!(q_plus["items"], q_pct["items"]);
+    assert_eq!(q_plus["items"].as_array().unwrap().len(), 1);
+    assert_eq!(q_plus["items"][0]["entry"]["event"], "log_reopen_failed");
+    // Refusals (400 invalid_request)
+    for bad_path in [
+        "/api/v1/logs?before=5&after=3",
+        "/api/v1/logs?before=0",
+        "/api/v1/logs?before=-1",
+        "/api/v1/logs?before=1.5",
+        "/api/v1/logs?after=-1",
+        "/api/v1/logs?limit=0",
+        "/api/v1/logs?limit=1001",
+        "/api/v1/logs?limit=abc",
+        "/api/v1/logs?q=",
+        "/api/v1/logs?q=%ZZ",
+        "/api/v1/logs?level=",
+        "/api/v1/logs?level=invalid",
+        "/api/v1/logs?event=",
+        "/api/v1/logs?event=UPPERCASE",
+        "/api/v1/logs?session_id=bad%20id",
+        "/api/v1/logs?limit=10&limit=20",
+        "/api/v1/logs?before=10&before=20",
+        "/api/v1/logs?after=10&after=20",
+        "/api/v1/logs?q=a&q=b",
+        "/api/v1/logs?session_id=ses_a&session_id=ses_b",
+        // Known parameter without = has empty value -> 400
+        "/api/v1/logs?level",
+        "/api/v1/logs?limit",
+        "/api/v1/logs?q",
+        "/api/v1/logs?session_id",
+        "/api/v1/logs?before",
+        "/api/v1/logs?after",
+    ] {
+        let reply = plain_exchange(running.addr, &get(bad_path, &[&cookie])).await;
+        assert_eq!(reply.status, 400, "{bad_path}");
+        assert_eq!(error_code(&reply), "invalid_request", "{bad_path}");
+    }
+}
+
+/// spec: management.md:MGT-049
+#[tokio::test]
+async fn recent_logs_zero_max_entries_and_empty_buffer_responses() {
+    // 1. Empty buffer with max_entries = 1000
+    let running = start(None, ROOMY_LM).await;
+    let login = plain_exchange(running.addr, &login_request(ACCOUNT, PASSWORD)).await;
+    let cookie = cookie_line(&login);
+
+    let res = authenticated_query(&running, &cookie, "/api/v1/logs").await;
+    assert_eq!(res["max_entries"], 1000);
+    assert!(res["oldest_seq"].is_null());
+    assert!(res["latest_seq"].is_null());
+    assert_eq!(res["has_more"], false);
+    assert_eq!(res["items"].as_array().unwrap().len(), 0);
+
+    // 2. Capacity zero still uses the authenticated HTTP route.
+    let zero_logs = Arc::new(RecentLogs::new(0));
+    let zero_sink = JsonLinesEventSink::stdout(|_| {}).with_recent_logs(Arc::clone(&zero_logs));
+    zero_sink.record(&Event::ServerStarting);
+    let running = start_with_ports_and_logs(
+        None,
+        ROOMY_LM,
+        UPGRADE,
+        session_policy(),
+        limit_policy(),
+        Arc::new(Argon2Verifier),
+        (Arc::new(SystemClock::new()), zero_logs),
+    )
+    .await;
+    let login = plain_exchange(running.addr, &login_request(ACCOUNT, PASSWORD)).await;
+    let cookie = cookie_line(&login);
+    let res = authenticated_query(&running, &cookie, "/api/v1/logs").await;
+    assert_eq!(res["max_entries"], 0);
+    assert!(res["oldest_seq"].is_null());
+    assert!(res["latest_seq"].is_null());
+    assert_eq!(res["has_more"], false);
+    assert_eq!(res["items"], json!([]));
+}
+
+/// spec: management.md:MGT-050
+#[tokio::test]
+async fn recent_logs_polling_idle_timeout_and_unauthenticated_guard() {
+    let idle = Duration::from_secs(400);
+    let clock = Arc::new(FakeClock::default());
+    let session = AdminSessionPolicy::new(idle, Duration::from_secs(3600));
+    let running = start_with_ports(
+        None,
+        ROOMY_LM,
+        UPGRADE,
+        session,
+        limit_policy(),
+        Arc::new(Argon2Verifier),
+        clock.clone(),
+    )
+    .await;
+    let login = plain_exchange(running.addr, &login_request(ACCOUNT, PASSWORD)).await;
+    let cookie = cookie_line(&login);
+
+    let sink = JsonLinesEventSink::stdout(|_| {}).with_recent_logs(Arc::clone(&running.logs));
+    sink.record(&Event::ServerStarting);
+
+    // 1. Unauthenticated request -> 401 unauthenticated, no log exposed
+    let unauth = plain_exchange(running.addr, &get("/api/v1/logs", &[])).await;
+    assert_eq!(unauth.status, 401);
+    assert_eq!(error_code(&unauth), "unauthenticated");
+    assert_eq!(
+        unauth.header("www-authenticate"),
+        Some(r#"Session realm="vnc-relay""#)
+    );
+    assert!(!String::from_utf8_lossy(&unauth.body).contains("server_starting"));
+
+    // 2. Method not allowed: POST, DELETE, PATCH -> 405 invalid_request with Allow: GET
+    let session_view = authenticated_query(&running, &cookie, "/api/v1/session").await;
+    let csrf = session_view["csrf_token"].as_str().unwrap();
+    for method in ["POST", "DELETE", "PATCH"] {
+        let req = request(
+            method,
+            "/api/v1/logs",
+            &[&cookie, &format!("X-CSRF-Token: {csrf}")],
+        );
+        let reply = plain_exchange(running.addr, &req).await;
+        assert_eq!(reply.status, 405, "{method}");
+        assert_eq!(reply.header("allow"), Some("GET"), "{method}");
+        assert_eq!(error_code(&reply), "invalid_request", "{method}");
+    }
+
+    // 3. Media type check: GET with non-empty non-JSON body -> 415 invalid_request
+    let mut sized = request(
+        "GET",
+        "/api/v1/logs",
+        &[
+            cookie.as_str(),
+            "Content-Type: text/plain",
+            "Content-Length: 5",
+        ],
+    );
+    sized.extend_from_slice(b"hello");
+    let reply = plain_exchange(running.addr, &sized).await;
+    assert_eq!(reply.status, 415);
+    assert_eq!(error_code(&reply), "invalid_request");
+
+    // 4. Polling vs user request idle timer behavior:
+    clock.set(Duration::from_secs(250));
+    let poll_req = get("/api/v1/logs", &[&cookie, "X-Relay-Poll: 1"]);
+    let reply = plain_exchange(running.addr, &poll_req).await;
+    assert_eq!(reply.status, 200);
+
+    // Move past the original idle deadline without a real-time race.
+    clock.set(Duration::from_secs(500));
+    let expired = plain_exchange(running.addr, &get("/api/v1/logs", &[&cookie])).await;
+    assert_eq!(
+        expired.status, 401,
+        "session must expire because X-Relay-Poll did not extend idle"
+    );
+    assert_eq!(error_code(&expired), "unauthenticated");
+
+    // 5. User request DOES extend idle timer:
+    let login2 = plain_exchange(running.addr, &login_request(ACCOUNT, PASSWORD)).await;
+    let cookie2 = cookie_line(&login2);
+    clock.set(Duration::from_secs(750));
+    let user_req = get("/api/v1/logs", &[&cookie2]);
+    let reply = plain_exchange(running.addr, &user_req).await;
+    assert_eq!(reply.status, 200);
+
+    clock.set(Duration::from_secs(1000));
+    let still_valid = plain_exchange(running.addr, &get("/api/v1/logs", &[&cookie2])).await;
+    assert_eq!(
+        still_valid.status, 200,
+        "session must remain valid because user request extended idle"
+    );
 }

@@ -1,8 +1,8 @@
-//! Ordered config-v3 §1.2 descriptors. Never read a referenced file here.
+//! Ordered config-v4 §1.2 descriptors. Never read a referenced file here.
 use super::ConfigValue;
 use crate::reload::ConfigPresence;
 use crate::settings::{LogOutput, Settings};
-use vnc_relay_domain::entry_point::EntryPoint;
+use vnc_relay_domain::entry_point::{EntryPoint, Listener};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ConfigReloadKind {
@@ -57,7 +57,7 @@ fn optional<T: ToString>(value: Option<T>) -> ConfigValue {
 
 pub fn config_items(s: &Settings, presence: &ConfigPresence) -> Vec<ConfigItem> {
     use ConfigReloadKind::{Dynamic, Restart};
-    let mut out = Vec::with_capacity(67);
+    let mut out = Vec::with_capacity(65);
     out.push(item(
         "admin.accounts_file",
         text(s.admin.accounts_file.display()),
@@ -85,49 +85,64 @@ pub fn config_items(s: &Settings, presence: &ConfigPresence) -> Vec<ConfigItem> 
         16,
         false,
     ));
-    for entry in EntryPoint::ALL {
-        let e = s.relay.get(entry);
-        let prefix = format!("relay.{}", entry.name());
+    for entry in [EntryPoint::TcpViewer, EntryPoint::TcpServer] {
+        let prefix = entry.config_table();
         out.push(item(
             format!("{prefix}.enabled"),
-            ConfigValue::Bool(e.enabled),
+            ConfigValue::Bool(s.relay.enabled(entry)),
             Restart,
             false,
         ));
         out.push(item(
             format!("{prefix}.listen"),
-            optional(e.listen),
+            optional(s.relay.listen(entry.listener())),
             Restart,
             false,
         ));
         out.push(item(
             format!("{prefix}.allow"),
-            e.allow
-                .as_ref()
+            s.relay
+                .allow(entry)
                 .map(|allow| {
                     ConfigValue::Strings(allow.items().iter().map(ToString::to_string).collect())
                 })
                 .unwrap_or(ConfigValue::Null),
             Dynamic,
-            e.enabled,
+            s.relay.enabled(entry),
         ));
-        if matches!(entry, EntryPoint::WsViewer | EntryPoint::WssViewer) {
-            let key = format!("{prefix}.allowed_origins");
-            let value = if !e.enabled && !presence.keys.contains(&key) {
+    }
+    for (listener, ws) in [(Listener::Ws, &s.relay.ws), (Listener::Wss, &s.relay.wss)] {
+        let prefix = format!("relay.{}", listener.name());
+        out.push(item(
+            format!("{prefix}.listen"),
+            optional(ws.listen),
+            Restart,
+            false,
+        ));
+        out.push(item(
+            format!("{prefix}.trusted_proxies"),
+            if !ws.enabled() && !presence.keys.contains(&format!("{prefix}.trusted_proxies")) {
                 ConfigValue::Null
             } else {
-                ConfigValue::Strings(e.allowed_origins.iter().map(ToString::to_string).collect())
-            };
-            out.push(item(key, value, Dynamic, e.enabled));
-        }
-        if entry == EntryPoint::WssViewer {
+                ConfigValue::Strings(
+                    ws.trusted_proxies
+                        .items()
+                        .iter()
+                        .map(ToString::to_string)
+                        .collect(),
+                )
+            },
+            Dynamic,
+            ws.enabled(),
+        ));
+        if listener == Listener::Wss {
             for (suffix, path) in [
-                ("cert_file", e.tls.as_ref().map(|tls| &tls.cert_file)),
-                ("key_file", e.tls.as_ref().map(|tls| &tls.key_file)),
+                ("cert_file", ws.tls.as_ref().map(|tls| &tls.cert_file)),
+                ("key_file", ws.tls.as_ref().map(|tls| &tls.key_file)),
             ] {
                 let key = format!("{prefix}.{suffix}");
                 let path = path.or_else(|| {
-                    (!e.enabled)
+                    (!ws.enabled())
                         .then(|| presence.inactive_paths.get(&key))
                         .flatten()
                 });
@@ -138,6 +153,42 @@ pub fn config_items(s: &Settings, presence: &ConfigPresence) -> Vec<ConfigItem> 
                     false,
                 ));
             }
+        }
+        for (role, settings) in [("viewer", &ws.viewer), ("server", &ws.server)] {
+            let prefix = format!("{prefix}.{role}");
+            out.push(item(
+                format!("{prefix}.enabled"),
+                ConfigValue::Bool(settings.enabled),
+                Restart,
+                false,
+            ));
+            out.push(item(
+                format!("{prefix}.allow"),
+                settings
+                    .allow
+                    .as_ref()
+                    .map(|allow| {
+                        ConfigValue::Strings(
+                            allow.items().iter().map(ToString::to_string).collect(),
+                        )
+                    })
+                    .unwrap_or(ConfigValue::Null),
+                Dynamic,
+                settings.enabled,
+            ));
+            let key = format!("{prefix}.allowed_origins");
+            let value = if !settings.enabled && !presence.keys.contains(&key) {
+                ConfigValue::Null
+            } else {
+                ConfigValue::Strings(
+                    settings
+                        .allowed_origins
+                        .iter()
+                        .map(ToString::to_string)
+                        .collect(),
+                )
+            };
+            out.push(item(key, value, Dynamic, settings.enabled));
         }
     }
     out.push(item(
@@ -305,6 +356,12 @@ pub fn config_items(s: &Settings, presence: &ConfigPresence) -> Vec<ConfigItem> 
             0,
             10000,
         ),
+        (
+            "recent_logs.max_entries",
+            u64::from(s.recent_logs.max_entries),
+            0,
+            10000,
+        ),
     ] {
         out.push(integer(key, value, min, max, false));
     }
@@ -343,11 +400,19 @@ pub(super) fn accepts_change(s: &Settings, change: &super::ConfigChange) -> bool
     match change.key.as_str() {
         "relay.tcp_viewer.allow" => strings && s.relay.tcp_viewer.enabled,
         "relay.tcp_server.allow" => strings && s.relay.tcp_server.enabled,
-        "relay.ws_viewer.allow" | "relay.ws_viewer.allowed_origins" => {
-            strings && s.relay.ws_viewer.enabled
+        "relay.ws.trusted_proxies" => strings && s.relay.ws.enabled(),
+        "relay.wss.trusted_proxies" => strings && s.relay.wss.enabled(),
+        "relay.ws.viewer.allow" | "relay.ws.viewer.allowed_origins" => {
+            strings && s.relay.ws.viewer.enabled
         }
-        "relay.wss_viewer.allow" | "relay.wss_viewer.allowed_origins" => {
-            strings && s.relay.wss_viewer.enabled
+        "relay.ws.server.allow" | "relay.ws.server.allowed_origins" => {
+            strings && s.relay.ws.server.enabled
+        }
+        "relay.wss.viewer.allow" | "relay.wss.viewer.allowed_origins" => {
+            strings && s.relay.wss.viewer.enabled
+        }
+        "relay.wss.server.allow" | "relay.wss.server.allowed_origins" => {
+            strings && s.relay.wss.server.enabled
         }
         "mode1.allow_targets" => strings && s.mode1.enabled,
         "limits.relay_connections"

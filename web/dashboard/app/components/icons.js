@@ -17,6 +17,13 @@ const PATHS = {
   grid: '<rect x="2.25" y="2.25" width="4.5" height="4.5" rx="1"/><rect x="9.25" y="2.25" width="4.5" height="4.5" rx="1"/><rect x="2.25" y="9.25" width="4.5" height="4.5" rx="1"/><rect x="9.25" y="9.25" width="4.5" height="4.5" rx="1"/>',
   settings: '<path d="M2 4h12M2 8h12M2 12h12"/><path d="M5 2.5v3M11 6.5v3M6 10.5v3"/>',
   brand: '<path d="M2.75 5.5h9.5"/><path d="M9.75 3l2.5 2.5-2.5 2.5"/><path d="M13.25 10.5h-9.5"/><path d="M6.25 8l-2.5 2.5 2.5 2.5"/>',
+  log: '<rect x="2.25" y="2.25" width="11.5" height="11.5" rx="1.5"/><path d="M5 5.75h6M5 8h6M5 10.25h3.5"/>',
+  search: '<circle cx="7" cy="7" r="4.25"/><path d="m10.25 10.25 3 3"/>',
+  download: '<path d="M8 2.25v7.5"/><path d="M4.75 6.75 8 10l3.25-3.25"/><path d="M2.75 12.75h10.5"/>',
+  close: '<path d="M4 4l8 8M12 4l-8 8"/>',
+  pause: '<path d="M5.75 3.75v8.5M10.25 3.75v8.5"/>',
+  'chevron-up': '<path d="M4.5 9.75 8 6.25l3.5 3.5"/>',
+  'arrow-right': '<path d="M2.75 8h10.5M9.5 4.25 13.25 8 9.5 11.75"/>',
 };
 
 const SIZE_CLASS = { md: 'icon-md', sm: 'icon-sm' };

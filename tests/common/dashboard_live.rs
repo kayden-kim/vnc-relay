@@ -274,9 +274,10 @@ allow = ["127.0.0.1"]
 enabled = true
 listen = "127.0.0.1:{target}"
 allow = ["127.0.0.1"]
-[relay.ws_viewer]
-enabled = true
+[relay.ws]
 listen = "127.0.0.1:{ws_port}"
+[relay.ws.viewer]
+enabled = true
 allow = ["127.0.0.1"]
 allowed_origins = ["http://127.0.0.1"]
 [mode1]

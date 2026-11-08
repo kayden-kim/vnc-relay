@@ -9,6 +9,7 @@ use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
 use vnc_relay_domain::budget::ConnectionBudget;
+use vnc_relay_domain::peer_ip::PeerIp;
 use vnc_relay_domain::session::SessionState;
 
 use crate::ports::{Clock, RelayLifecycle, RelayStateSource};
@@ -77,11 +78,16 @@ pub struct ActiveSessionItemView {
     pub state: &'static str,
     pub mode: &'static str,
     pub viewer_transport: &'static str,
+    pub target_transport: &'static str,
     pub started_at: SystemTime,
     pub bytes_viewer_to_target: u64,
     pub bytes_target_to_viewer: u64,
     pub viewer_address: SocketAddr,
     pub target_address: SocketAddr,
+    /// Trusted proxy address, separate from the socket peer (management-api-v1 §1.8).
+    pub viewer_forwarded_ip: Option<PeerIp>,
+    /// Absent for Mode I and direct connections (management-api-v1 §1.8).
+    pub target_forwarded_ip: Option<PeerIp>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -103,6 +109,7 @@ pub struct ClosedSessionItemView {
     pub session_id: String,
     pub mode: &'static str,
     pub viewer_transport: &'static str,
+    pub target_transport: &'static str,
     pub started_at: SystemTime,
     pub ended_at: SystemTime,
     pub bytes_viewer_to_target: u64,
@@ -251,6 +258,7 @@ impl ManagementQueryService {
                 session_id: closed.session_id.as_str().to_owned(),
                 mode: closed.mode.as_str(),
                 viewer_transport: closed.viewer_transport.as_str(),
+                target_transport: closed.target_transport.as_str(),
                 started_at: closed.started_at,
                 ended_at: closed.ended_at,
                 bytes_viewer_to_target: closed.bytes_viewer_to_target,
@@ -278,11 +286,14 @@ impl ManagementQueryService {
             state,
             mode: entry.mode.as_str(),
             viewer_transport: entry.viewer_transport.as_str(),
+            target_transport: entry.target_transport.as_str(),
             started_at: entry.started_at,
             bytes_viewer_to_target: entry.bytes_viewer_to_target,
             bytes_target_to_viewer: entry.bytes_target_to_viewer,
             viewer_address: entry.viewer.peer_addr,
             target_address,
+            viewer_forwarded_ip: entry.viewer_forwarded_ip,
+            target_forwarded_ip: entry.target_forwarded_ip,
         }
     }
 
@@ -309,7 +320,7 @@ mod tests {
     use vnc_relay_domain::handshake::Mode;
     use vnc_relay_domain::peer_ip::PeerIp;
     use vnc_relay_domain::relay_id::RelayId;
-    use vnc_relay_domain::session::{CloseCause, SessionId, ViewerTransport};
+    use vnc_relay_domain::session::{CloseCause, SessionId, Transport};
 
     struct TestClock {
         mono: AtomicU64,
@@ -376,6 +387,7 @@ mod tests {
                     peer_ip: PeerIp::from(
                         "192.0.2.1:5000".parse::<std::net::SocketAddr>().unwrap(),
                     ),
+                    forwarded_ip: None,
                     peer_addr: "192.0.2.1:5000".parse().unwrap(),
                     accepted_wall: SystemTime::UNIX_EPOCH + Duration::from_secs(1_700_000_000),
                     accepted_at: Duration::from_millis(8_000),
@@ -391,7 +403,8 @@ mod tests {
             recent_closed: vec![ClosedSessionSnapshot {
                 session_id: SessionId::parse("ses_aaaaaaaaaaaaaaaaaaaaaaaaaa").unwrap(),
                 mode: Mode::Mode1,
-                viewer_transport: ViewerTransport::Tcp,
+                viewer_transport: Transport::Tcp,
+                target_transport: Transport::Tcp,
                 started_at: SystemTime::UNIX_EPOCH + Duration::from_secs(1_700_000_000),
                 ended_at: SystemTime::UNIX_EPOCH + Duration::from_secs(1_700_000_010),
                 duration: Duration::from_secs(10),
@@ -560,5 +573,37 @@ mod tests {
             service.session_detail("unknown_id"),
             Err(SessionQueryError::NotFound)
         );
+    }
+
+    /// spec: management.md:MGT-051 partial
+    #[test]
+    fn recent_closed_projection_preserves_target_transport() {
+        for (mode, viewer_transport, target_transport) in [
+            (Mode::Mode1, Transport::Tcp, Transport::Tcp),
+            (Mode::Mode1, Transport::Ws, Transport::Tcp),
+            (Mode::Mode2, Transport::Tcp, Transport::Tcp),
+            (Mode::Mode2, Transport::Ws, Transport::Wss),
+            (Mode::Mode2, Transport::Wss, Transport::Tcp),
+            (Mode::Mode2, Transport::Tcp, Transport::Ws),
+        ] {
+            let mut snapshot = sample_snapshot();
+            let closed = &mut snapshot.recent_closed[0];
+            closed.mode = mode;
+            closed.viewer_transport = viewer_transport;
+            closed.target_transport = target_transport;
+            let service = ManagementQueryService::new(
+                Arc::new(DummyRelaySource::new(snapshot)),
+                ConnectionBudget::new(),
+                ConnectionBudget::new(),
+                Arc::new(TestClock::new()),
+                TestSettings::new(),
+            );
+            let view = service.closed_sessions();
+            assert_eq!(view.items.len(), 1);
+            let closed = &view.items[0];
+            assert_eq!(closed.mode, mode.as_str());
+            assert_eq!(closed.viewer_transport, viewer_transport.as_str());
+            assert_eq!(closed.target_transport, target_transport.as_str());
+        }
     }
 }

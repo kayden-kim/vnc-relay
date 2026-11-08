@@ -1,10 +1,12 @@
 //! Operation log: one JSON object per line on stdout or in a file
-//! (ops-info-v1 §1.1-1.4). Design: docs/architectures/ops-log.md.
+//! (ops-info-v2 §1.1-1.4). Design: docs/architectures/ops-log.md.
 
+use std::collections::{BTreeSet, VecDeque};
 use std::fmt;
 use std::fs::{File, OpenOptions};
 use std::io::{self, ErrorKind, Write};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, PoisonError};
 use std::time::SystemTime;
@@ -19,14 +21,14 @@ use vnc_relay_domain::session::CloseCause;
 
 use crate::clock::timestamp;
 
-/// Longest `detail` in bytes (ops-info-v1 §1.1).
+/// Longest `detail` in bytes (ops-info-v2 §1.1).
 const DETAIL_MAX_BYTES: usize = 512;
 
-/// Longest logged `origin` in bytes (ops-info-v1 §1.1). The full value stays
+/// Longest logged `origin` in bytes (ops-info-v2 §1.1). The full value stays
 /// in the refusal itself.
 const ORIGIN_MAX_BYTES: usize = 256;
 
-/// Longest logged target name or literal IP (ops-info-v1 §1.1).
+/// Longest logged target name or literal IP (ops-info-v2 §1.1).
 const TARGET_HOST_MAX_BYTES: usize = 256;
 
 type FailureNotice = Box<dyn Fn(&io::Error) + Send + Sync>;
@@ -41,6 +43,7 @@ pub struct JsonLinesEventSink {
     on_first_failure: FailureNotice,
     path: Option<PathBuf>,
     on_reopen_failure: Option<ReopenNotice>,
+    recent_logs: Option<Arc<RecentLogs>>,
 }
 
 enum Output {
@@ -68,7 +71,7 @@ impl JsonLinesEventSink {
     }
 
     /// Opens the configured output. A file is appended to and created when
-    /// it is missing (config-v3 §1.2 `log.output`).
+    /// it is missing (config-v4 §1.2 `log.output`).
     pub fn open(
         output: &LogOutput,
         on_first_failure: impl Fn(&io::Error) + Send + Sync + 'static,
@@ -104,7 +107,14 @@ impl JsonLinesEventSink {
             on_first_failure: Box::new(on_first_failure),
             path,
             on_reopen_failure,
+            recent_logs: None,
         }
+    }
+
+    /// Attaches an in-memory recent-logs ring buffer to receive every recorded entry.
+    pub fn with_recent_logs(mut self, recent_logs: Arc<RecentLogs>) -> Self {
+        self.recent_logs = Some(recent_logs);
+        self
     }
 
     /// Original configured file path. Stdout has no reopen target.
@@ -131,12 +141,12 @@ impl JsonLinesEventSink {
             }
             Err(error) if !*reopen_failed => {
                 *reopen_failed = true;
-                let line = format_line(
-                    &Event::LogReopenFailed {
-                        detail: error.cause().to_owned(),
-                    },
-                    SystemTime::now(),
-                );
+                let (entry, line) = self.prepare(&Event::LogReopenFailed {
+                    detail: error.cause().to_owned(),
+                });
+                if let Some((recent_logs, entry)) = entry {
+                    recent_logs.record(entry);
+                }
                 let written = output.write_line(line.as_bytes());
                 drop(output);
                 self.report_write_result(written);
@@ -145,6 +155,20 @@ impl JsonLinesEventSink {
                 }
             }
             Err(_) => {}
+        }
+    }
+
+    fn prepare(&self, event: &Event) -> (Option<(&RecentLogs, Arc<LogEntry>)>, String) {
+        match self
+            .recent_logs
+            .as_deref()
+            .filter(|logs| logs.max_entries() > 0)
+        {
+            Some(logs) => {
+                let (entry, line) = format_entry_and_line(event, SystemTime::now());
+                (Some((logs, entry)), line)
+            }
+            None => (None, format_line(event, SystemTime::now())),
         }
     }
 
@@ -159,12 +183,13 @@ impl JsonLinesEventSink {
 
 impl EventSink for JsonLinesEventSink {
     fn record(&self, event: &Event) {
-        let line = format_line(event, SystemTime::now());
-        let result = self
-            .output
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .write_line(line.as_bytes());
+        let (entry, line) = self.prepare(event);
+        let mut output = self.output.lock().unwrap_or_else(PoisonError::into_inner);
+        if let Some((recent_logs, entry)) = entry {
+            recent_logs.record(entry);
+        }
+        let result = output.write_line(line.as_bytes());
+        drop(output);
         self.report_write_result(result);
     }
 }
@@ -185,7 +210,7 @@ fn open_append(path: &Path) -> Result<File, LogFileError> {
 }
 
 /// The log file cannot be opened for appending (`log_file_unavailable`,
-/// config-v3 §2.1). The cause names no path: the path is a config value.
+/// config-v4 §2.1). The cause names no path: the path is a config value.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LogFileError {
     cause: String,
@@ -211,29 +236,405 @@ impl fmt::Display for LogFileError {
 
 impl std::error::Error for LogFileError {}
 
-/// One log line, LF included: `ts`, `level`, `event`, then the event fields.
-/// Absent optional fields are left out; no value is `null`.
-pub fn format_line(event: &Event, at: SystemTime) -> String {
+/// Ordered fields shared by the output line and the recent-log response.
+#[derive(Debug)]
+pub struct LogEntry {
+    fields: Vec<(&'static str, Value)>,
+}
+
+impl LogEntry {
+    pub fn get(&self, key: &str) -> Option<&Value> {
+        self.fields
+            .iter()
+            .find_map(|(name, value)| (*name == key).then_some(value))
+    }
+}
+
+impl std::ops::Index<&str> for LogEntry {
+    type Output = Value;
+
+    fn index(&self, key: &str) -> &Self::Output {
+        self.get(key).unwrap_or(&Value::Null)
+    }
+}
+
+impl fmt::Display for LogEntry {
+    fn fmt(&self, out: &mut fmt::Formatter<'_>) -> fmt::Result {
+        out.write_str("{")?;
+        for (index, (key, value)) in self.fields.iter().enumerate() {
+            if index > 0 {
+                out.write_str(",")?;
+            }
+            // Event field names are static ASCII identifiers, not user input.
+            write!(out, "\"{key}\":{value}")?;
+        }
+        out.write_str("}")
+    }
+}
+
+fn event_entry(event: &Event, at: SystemTime) -> LogEntry {
     let mut fields = vec![
         ("ts", Value::from(timestamp(at))),
         ("level", Value::from(event.level().as_str())),
         ("event", Value::from(event.name())),
     ];
     push_event_fields(&mut fields, event);
+    LogEntry { fields }
+}
+
+/// Builds both representations from the same ordered fields without key copies.
+fn format_entry_and_line(event: &Event, at: SystemTime) -> (Arc<LogEntry>, String) {
+    use std::fmt::Write;
+    let entry = Arc::new(event_entry(event, at));
     let mut line = String::with_capacity(160);
-    line.push('{');
-    for (i, (key, value)) in fields.iter().enumerate() {
-        if i > 0 {
-            line.push(',');
-        }
-        // serde_json escapes quotes, line breaks, and control characters, so
-        // the line ends with the one LF below.
-        line.push_str(&Value::from(*key).to_string());
-        line.push(':');
-        line.push_str(&value.to_string());
-    }
-    line.push_str("}\n");
+    let _ = writeln!(line, "{entry}");
+    (entry, line)
+}
+
+/// One log line, LF included: `ts`, `level`, `event`, then the event fields.
+/// Absent optional fields are left out; no value is `null`.
+pub fn format_line(event: &Event, at: SystemTime) -> String {
+    use std::fmt::Write;
+    let entry = event_entry(event, at);
+    let mut line = String::with_capacity(160);
+    let _ = writeln!(line, "{entry}");
     line
+}
+
+/// An item kept in the recent-logs ring buffer.
+#[derive(Debug, Clone)]
+pub struct RecentLogItem {
+    pub seq: u64,
+    pub entry: Arc<LogEntry>,
+}
+
+/// An item in the recent-logs query response.
+#[derive(Debug, Clone)]
+pub struct LogItemResponse {
+    pub seq: u64,
+    pub entry: Arc<LogEntry>,
+}
+
+/// Filter criteria for querying recent logs.
+#[derive(Debug, Clone, Default)]
+pub struct LogsFilter {
+    pub levels: Option<BTreeSet<String>>,
+    pub events: Option<BTreeSet<String>>,
+    pub q: Option<String>,
+    pub session_id: Option<String>,
+    pub before: Option<u64>,
+    pub after: Option<u64>,
+    pub limit: usize,
+}
+
+/// The response to `GET /api/v1/logs` (management-api-v1 §1.15).
+#[derive(Debug, Clone)]
+pub struct LogsResponse {
+    pub as_of: String,
+    pub max_entries: usize,
+    pub oldest_seq: Option<u64>,
+    pub latest_seq: Option<u64>,
+    pub has_more: bool,
+    pub items: Vec<LogItemResponse>,
+}
+
+impl LogsResponse {
+    pub fn to_json_string(&self) -> String {
+        use std::fmt::Write;
+        let mut out = String::with_capacity(self.items.len() * 128 + 128);
+        let oldest = match self.oldest_seq {
+            Some(s) => s.to_string(),
+            None => "null".to_owned(),
+        };
+        let latest = match self.latest_seq {
+            Some(s) => s.to_string(),
+            None => "null".to_owned(),
+        };
+        let _ = write!(
+            out,
+            r#"{{"as_of":"{}","max_entries":{},"oldest_seq":{},"latest_seq":{},"has_more":{},"items":["#,
+            self.as_of, self.max_entries, oldest, latest, self.has_more
+        );
+        for (i, item) in self.items.iter().enumerate() {
+            if i > 0 {
+                out.push(',');
+            }
+            let _ = write!(out, r#"{{"seq":{},"entry":{}}}"#, item.seq, item.entry);
+        }
+        out.push_str("]}");
+        out
+    }
+}
+
+/// Bounded in-memory ring buffer of recent operation-log events (OPS-068).
+#[derive(Debug)]
+pub struct RecentLogs {
+    max_entries: usize,
+    inner: Mutex<RecentLogsInner>,
+}
+
+#[derive(Debug)]
+struct RecentLogsInner {
+    next_seq: u64,
+    entries: VecDeque<RecentLogItem>,
+}
+
+struct QuerySnapshot {
+    entries: Vec<RecentLogItem>,
+    session: Option<Arc<LogEntry>>,
+    oldest_seq: Option<u64>,
+    latest_seq: Option<u64>,
+}
+
+impl RecentLogs {
+    pub fn new(max_entries: usize) -> Self {
+        Self {
+            max_entries,
+            inner: Mutex::new(RecentLogsInner {
+                next_seq: 1,
+                entries: VecDeque::with_capacity(max_entries.min(10_000)),
+            }),
+        }
+    }
+
+    pub fn max_entries(&self) -> usize {
+        self.max_entries
+    }
+
+    pub fn record(&self, entry: Arc<LogEntry>) {
+        if self.max_entries == 0 {
+            return;
+        }
+        let mut inner = self.inner.lock().unwrap_or_else(PoisonError::into_inner);
+        let seq = inner.next_seq;
+        inner.next_seq = inner.next_seq.saturating_add(1);
+        let evicted = if inner.entries.len() >= self.max_entries {
+            inner.entries.pop_front()
+        } else {
+            None
+        };
+        inner.entries.push_back(RecentLogItem { seq, entry });
+        drop(inner);
+        drop(evicted);
+    }
+
+    #[cfg(test)]
+    fn snapshot(&self) -> (Vec<RecentLogItem>, Option<u64>, Option<u64>) {
+        if self.max_entries == 0 {
+            return (Vec::new(), None, None);
+        }
+        let inner = self.inner.lock().unwrap_or_else(PoisonError::into_inner);
+        let oldest_seq = inner.entries.front().map(|i| i.seq);
+        let latest_seq = inner.entries.back().map(|i| i.seq);
+        let entries = inner.entries.iter().cloned().collect();
+        (entries, oldest_seq, latest_seq)
+    }
+
+    fn query_snapshot(&self, filter: &LogsFilter) -> QuerySnapshot {
+        let inner = self.inner.lock().unwrap_or_else(PoisonError::into_inner);
+        let oldest = inner.entries.front().map(|item| item.seq);
+        let latest = inner.entries.back().map(|item| item.seq);
+        let start = filter.after.map_or(0, |seq| {
+            inner.entries.partition_point(|item| item.seq <= seq)
+        });
+        let end = filter.before.map_or(inner.entries.len(), |seq| {
+            inner.entries.partition_point(|item| item.seq < seq)
+        });
+        // Session linkage can precede the requested cursor range.
+        let session = filter.session_id.as_deref().and_then(|sid| {
+            inner
+                .entries
+                .iter()
+                .rev()
+                .find(|item| {
+                    item.entry.get("event").and_then(Value::as_str) == Some("session_started")
+                        && item.entry.get("session_id").and_then(Value::as_str) == Some(sid)
+                })
+                .map(|item| Arc::clone(&item.entry))
+        });
+        let entries = inner.entries.range(start..end).cloned().collect();
+        QuerySnapshot {
+            entries,
+            session,
+            oldest_seq: oldest,
+            latest_seq: latest,
+        }
+    }
+
+    pub fn query(&self, filter: &LogsFilter, at: SystemTime) -> LogsResponse {
+        let QuerySnapshot {
+            entries,
+            session,
+            oldest_seq,
+            latest_seq,
+        } = self.query_snapshot(filter);
+        if self.max_entries == 0 || entries.is_empty() {
+            return LogsResponse {
+                as_of: timestamp(at),
+                max_entries: self.max_entries,
+                oldest_seq,
+                latest_seq,
+                has_more: false,
+                items: Vec::new(),
+            };
+        }
+
+        let mut related_conns = Vec::new();
+        if let Some(entry) = session {
+            for key in ["viewer_conn_id", "server_conn_id"] {
+                if let Some(conn) = entry.get(key).and_then(Value::as_str) {
+                    related_conns.push(conn.to_owned());
+                }
+            }
+        }
+
+        let needle_folded: Option<Vec<u8>> = filter
+            .q
+            .as_deref()
+            .map(|q| q.bytes().map(|b| b.to_ascii_lowercase()).collect());
+
+        let limit = filter.limit;
+        let (selected, has_more) = if filter.after.is_some() {
+            let mut matches = Vec::new();
+            let mut more = false;
+            for item in &entries {
+                if item_matches(item, filter, &related_conns, needle_folded.as_deref()) {
+                    matches.push(item);
+                    if matches.len() > limit {
+                        more = true;
+                        break;
+                    }
+                }
+            }
+            if more {
+                matches.pop();
+            }
+            (matches, more)
+        } else {
+            let mut matches = Vec::new();
+            let mut more = false;
+            for item in entries.iter().rev() {
+                if item_matches(item, filter, &related_conns, needle_folded.as_deref()) {
+                    matches.push(item);
+                    if matches.len() > limit {
+                        more = true;
+                        break;
+                    }
+                }
+            }
+            if more {
+                matches.pop();
+            }
+            matches.reverse();
+            (matches, more)
+        };
+
+        let items = selected
+            .into_iter()
+            .map(|item| LogItemResponse {
+                seq: item.seq,
+                entry: Arc::clone(&item.entry),
+            })
+            .collect();
+
+        LogsResponse {
+            as_of: timestamp(at),
+            max_entries: self.max_entries,
+            oldest_seq,
+            latest_seq,
+            has_more,
+            items,
+        }
+    }
+}
+
+fn item_matches(
+    item: &RecentLogItem,
+    filter: &LogsFilter,
+    related_conns: &[String],
+    needle_folded: Option<&[u8]>,
+) -> bool {
+    if let Some(levels) = &filter.levels {
+        let level_match = item
+            .entry
+            .get("level")
+            .and_then(Value::as_str)
+            .is_some_and(|lvl| levels.contains(lvl));
+        if !level_match {
+            return false;
+        }
+    }
+    if let Some(events) = &filter.events {
+        let event_match = item
+            .entry
+            .get("event")
+            .and_then(Value::as_str)
+            .is_some_and(|ev| events.contains(ev));
+        if !event_match {
+            return false;
+        }
+    }
+    if let Some(sid) = &filter.session_id {
+        let sid_match = item
+            .entry
+            .get("session_id")
+            .and_then(Value::as_str)
+            .is_some_and(|s| s == sid.as_str());
+        let conn_match = item
+            .entry
+            .get("conn_id")
+            .and_then(Value::as_str)
+            .is_some_and(|c| related_conns.iter().any(|rc| rc == c));
+        if !sid_match && !conn_match {
+            return false;
+        }
+    }
+    if let Some(needle) = needle_folded
+        && !item
+            .entry
+            .fields
+            .iter()
+            .any(|(_, value)| value_matches_q(value, needle))
+    {
+        return false;
+    }
+    true
+}
+
+fn contains_ascii_case_insensitive(haystack: &[u8], needle: &[u8]) -> bool {
+    if needle.is_empty() {
+        return true;
+    }
+    if haystack.len() < needle.len() {
+        return false;
+    }
+    haystack.windows(needle.len()).any(|window| {
+        window
+            .iter()
+            .zip(needle)
+            .all(|(&h, &n)| h.to_ascii_lowercase() == n)
+    })
+}
+
+fn value_matches_q(value: &Value, needle: &[u8]) -> bool {
+    match value {
+        Value::String(s) => contains_ascii_case_insensitive(s.as_bytes(), needle),
+        Value::Number(n) => {
+            let mut buf = [0u8; 64];
+            let mut cursor = std::io::Cursor::new(&mut buf[..]);
+            use std::io::Write;
+            let _ = write!(cursor, "{n}");
+            let len = cursor.position() as usize;
+            contains_ascii_case_insensitive(&buf[..len], needle)
+        }
+        Value::Bool(b) => {
+            let s: &[u8] = if *b { b"true" } else { b"false" };
+            contains_ascii_case_insensitive(s, needle)
+        }
+        Value::Null => contains_ascii_case_insensitive(b"null", needle),
+        Value::Array(arr) => arr.iter().any(|v| value_matches_q(v, needle)),
+        Value::Object(map) => map.values().any(|v| value_matches_q(v, needle)),
+    }
 }
 
 fn push_event_fields(fields: &mut Vec<(&'static str, Value)>, event: &Event) {
@@ -248,11 +649,19 @@ fn push_event_fields(fields: &mut Vec<(&'static str, Value)>, event: &Event) {
         }
         Event::ConfigWarning { warning, phase } => match warning {
             ConfigWarning::PlaintextWsEnabled { listen } => {
-                fields.push(("listener", Value::from("ws_viewer")));
+                fields.push(("listener", Value::from("ws")));
                 fields.push(("listen", Value::from(listen.to_string())));
             }
             ConfigWarning::AllowAllSource { entry_point, item } => {
-                fields.push(("listener", Value::from(entry_point.name())));
+                fields.push(("listener", Value::from(entry_point.listener().name())));
+                if entry_point.transport().is_websocket() {
+                    fields.push(("role", Value::from(entry_point.role().as_str())));
+                }
+                fields.push(("item", Value::from(item.to_string())));
+                fields.push(("phase", Value::from(phase.as_str())));
+            }
+            ConfigWarning::TrustAllProxies { listener, item } => {
+                fields.push(("listener", Value::from(listener.name())));
                 fields.push(("item", Value::from(item.to_string())));
                 fields.push(("phase", Value::from(phase.as_str())));
             }
@@ -288,12 +697,14 @@ fn push_event_fields(fields: &mut Vec<(&'static str, Value)>, event: &Event) {
         }
         Event::ConnectionAccepted {
             conn_id,
-            entry_point,
+            listener,
             peer_ip,
         } => {
             fields.push(("conn_id", Value::from(conn_id.to_string())));
-            fields.push(("listener", Value::from(entry_point.name())));
-            fields.push(("role", Value::from(entry_point.role().as_str())));
+            fields.push(("listener", Value::from(listener.name())));
+            if let Some(role) = listener.fixed_role() {
+                fields.push(("role", Value::from(role.as_str())));
+            }
             fields.push(("peer_ip", Value::from(peer_ip.to_string())));
         }
         Event::ConnectionRejected {
@@ -313,15 +724,23 @@ fn push_event_fields(fields: &mut Vec<(&'static str, Value)>, event: &Event) {
         Event::UpgradeRejected {
             conn_id,
             listener,
+            role,
             reason,
             peer_ip,
+            forwarded_ip,
             origin,
         } => {
             fields.push(("conn_id", Value::from(conn_id.to_string())));
             fields.push(("listener", Value::from(*listener)));
+            if let Some(role) = role {
+                fields.push(("role", Value::from(role.as_str())));
+            }
             fields.push(("stage", Value::from(Stage::Upgrade.as_str())));
             fields.push(("reason", Value::from(reason.as_str())));
             fields.push(("peer_ip", Value::from(peer_ip.to_string())));
+            if let Some(ip) = forwarded_ip {
+                fields.push(("forwarded_ip", Value::from(ip.to_string())));
+            }
             if let Some(origin) = origin {
                 fields.push((
                     "origin",
@@ -333,33 +752,45 @@ fn push_event_fields(fields: &mut Vec<(&'static str, Value)>, event: &Event) {
             conn_id,
             entry_point,
             peer_ip,
+            forwarded_ip,
             reason,
             mode,
         } => {
             fields.push(("conn_id", Value::from(conn_id.to_string())));
-            fields.push(("listener", Value::from(entry_point.name())));
+            fields.push(("listener", Value::from(entry_point.listener().name())));
+            fields.push(("role", Value::from(entry_point.role().as_str())));
             fields.push(("stage", Value::from(Stage::InitialExchange.as_str())));
             fields.push(("reason", Value::from(reason.as_str())));
             fields.push(("peer_ip", Value::from(peer_ip.to_string())));
+            if let Some(ip) = forwarded_ip {
+                fields.push(("forwarded_ip", Value::from(ip.to_string())));
+            }
             if let Some(mode) = mode {
                 fields.push(("mode", Value::from(mode.as_str())));
             }
         }
         Event::ConnectionAborted {
             conn_id,
-            entry_point,
+            listener,
+            role,
             stage,
             reason,
             peer_ip,
+            forwarded_ip,
             elapsed_ms,
         } => {
             fields.push(("conn_id", Value::from(conn_id.to_string())));
-            fields.push(("listener", Value::from(entry_point.name())));
+            fields.push(("listener", Value::from(listener.name())));
             fields.push(("stage", Value::from(stage.as_str())));
             fields.push(("reason", Value::from(reason.as_str())));
             fields.push(("peer_ip", Value::from(peer_ip.to_string())));
+            if let Some(ip) = forwarded_ip {
+                fields.push(("forwarded_ip", Value::from(ip.to_string())));
+            }
             fields.push(("elapsed_ms", Value::from(*elapsed_ms)));
-            fields.push(("role", Value::from(entry_point.role().as_str())));
+            if let Some(role) = role {
+                fields.push(("role", Value::from(role.as_str())));
+            }
             if let Some(kind) = reason.error_kind() {
                 fields.push(("error_kind", Value::from(kind.as_str())));
             }
@@ -368,16 +799,20 @@ fn push_event_fields(fields: &mut Vec<(&'static str, Value)>, event: &Event) {
             conn_id,
             entry_point,
             peer_ip,
+            forwarded_ip,
             reason,
             target_host,
             target_port,
             target_ip,
         } => {
             fields.push(("conn_id", Value::from(conn_id.to_string())));
-            fields.push(("listener", Value::from(entry_point.name())));
+            fields.push(("listener", Value::from(entry_point.listener().name())));
             fields.push(("role", Value::from(entry_point.role().as_str())));
             fields.push(("mode", Value::from(Mode::Mode1.as_str())));
             fields.push(("peer_ip", Value::from(peer_ip.to_string())));
+            if let Some(ip) = forwarded_ip {
+                fields.push(("forwarded_ip", Value::from(ip.to_string())));
+            }
             fields.push(("stage", Value::from(Stage::TargetConnect.as_str())));
             fields.push(("reason", Value::from(reason.as_str())));
             if let Some(limit) = reason.limit() {
@@ -398,14 +833,18 @@ fn push_event_fields(fields: &mut Vec<(&'static str, Value)>, event: &Event) {
             conn_id,
             entry_point,
             peer_ip,
+            forwarded_ip,
             reason,
             relay_id_ref,
         } => {
             fields.push(("conn_id", Value::from(conn_id.to_string())));
-            fields.push(("listener", Value::from(entry_point.name())));
+            fields.push(("listener", Value::from(entry_point.listener().name())));
             fields.push(("role", Value::from(entry_point.role().as_str())));
             fields.push(("mode", Value::from(Mode::Mode2.as_str())));
             fields.push(("peer_ip", Value::from(peer_ip.to_string())));
+            if let Some(ip) = forwarded_ip {
+                fields.push(("forwarded_ip", Value::from(ip.to_string())));
+            }
             fields.push(("stage", Value::from(Stage::Register.as_str())));
             fields.push(("reason", Value::from(reason.as_str())));
             if let Some(limit) = reason.limit() {
@@ -421,14 +860,18 @@ fn push_event_fields(fields: &mut Vec<(&'static str, Value)>, event: &Event) {
             stage,
             reason,
             peer_ip,
+            forwarded_ip,
             elapsed_ms,
             mode,
         } => {
             fields.push(("conn_id", Value::from(conn_id.to_string())));
-            fields.push(("listener", Value::from(entry_point.name())));
+            fields.push(("listener", Value::from(entry_point.listener().name())));
             fields.push(("stage", Value::from(stage.as_str())));
             fields.push(("reason", Value::from(reason.as_str())));
             fields.push(("peer_ip", Value::from(peer_ip.to_string())));
+            if let Some(ip) = forwarded_ip {
+                fields.push(("forwarded_ip", Value::from(ip.to_string())));
+            }
             fields.push(("elapsed_ms", Value::from(*elapsed_ms)));
             fields.push(("role", Value::from(entry_point.role().as_str())));
             fields.push(("mode", Value::from(mode.as_str())));
@@ -441,6 +884,7 @@ fn push_event_fields(fields: &mut Vec<(&'static str, Value)>, event: &Event) {
             entry_point,
             viewer_transport,
             peer_ip,
+            forwarded_ip,
             target_host,
             target_port,
             target_ip,
@@ -448,10 +892,13 @@ fn push_event_fields(fields: &mut Vec<(&'static str, Value)>, event: &Event) {
             reason,
         } => {
             fields.push(("conn_id", Value::from(conn_id.to_string())));
-            fields.push(("listener", Value::from(entry_point.name())));
+            fields.push(("listener", Value::from(entry_point.listener().name())));
             fields.push(("viewer_transport", Value::from(viewer_transport.as_str())));
             fields.push(("reason", Value::from(reason.as_str())));
             fields.push(("peer_ip", Value::from(peer_ip.to_string())));
+            if let Some(ip) = forwarded_ip {
+                fields.push(("forwarded_ip", Value::from(ip.to_string())));
+            }
             fields.push((
                 "target_host",
                 Value::from(cut(target_host, TARGET_HOST_MAX_BYTES)),
@@ -466,14 +913,18 @@ fn push_event_fields(fields: &mut Vec<(&'static str, Value)>, event: &Event) {
             conn_id,
             entry_point,
             peer_ip,
+            forwarded_ip,
             relay_id_ref,
         } => {
             fields.push(("conn_id", Value::from(conn_id.to_string())));
-            fields.push(("listener", Value::from(entry_point.name())));
+            fields.push(("listener", Value::from(entry_point.listener().name())));
             fields.push(("role", Value::from(entry_point.role().as_str())));
             fields.push(("mode", Value::from(Mode::Mode2.as_str())));
             fields.push(("relay_id_ref", Value::from(relay_id_ref.as_str())));
             fields.push(("peer_ip", Value::from(peer_ip.to_string())));
+            if let Some(ip) = forwarded_ip {
+                fields.push(("forwarded_ip", Value::from(ip.to_string())));
+            }
         }
         Event::WaitingExpired {
             conn_id,
@@ -506,10 +957,13 @@ fn push_event_fields(fields: &mut Vec<(&'static str, Value)>, event: &Event) {
             session_id,
             mode,
             viewer_transport,
+            server_transport,
             viewer_conn_id,
             viewer_peer_ip,
+            viewer_forwarded_ip,
             server_conn_id,
             server_peer_ip,
+            server_forwarded_ip,
             relay_id_ref,
             waited_ms,
             target_ip,
@@ -521,6 +975,9 @@ fn push_event_fields(fields: &mut Vec<(&'static str, Value)>, event: &Event) {
             fields.push(("viewer_transport", Value::from(viewer_transport.as_str())));
             fields.push(("viewer_conn_id", Value::from(viewer_conn_id.to_string())));
             fields.push(("viewer_peer_ip", Value::from(viewer_peer_ip.to_string())));
+            if let Some(ip) = viewer_forwarded_ip {
+                fields.push(("viewer_forwarded_ip", Value::from(ip.to_string())));
+            }
             match mode {
                 Mode::Mode1 => {
                     if let Some(ip) = target_ip {
@@ -534,11 +991,17 @@ fn push_event_fields(fields: &mut Vec<(&'static str, Value)>, event: &Event) {
                     }
                 }
                 Mode::Mode2 => {
+                    if let Some(transport) = server_transport {
+                        fields.push(("server_transport", Value::from(transport.as_str())));
+                    }
                     if let Some(id) = server_conn_id {
                         fields.push(("server_conn_id", Value::from(id.to_string())));
                     }
                     if let Some(ip) = server_peer_ip {
                         fields.push(("server_peer_ip", Value::from(ip.to_string())));
+                    }
+                    if let Some(ip) = server_forwarded_ip {
+                        fields.push(("server_forwarded_ip", Value::from(ip.to_string())));
                     }
                     if let Some(reference) = relay_id_ref {
                         fields.push(("relay_id_ref", Value::from(reference.as_str())));
@@ -781,14 +1244,16 @@ mod tests {
 
     #[test]
     fn cuts_origin_to_256_bytes_on_a_character_boundary() {
-        // ops-info-v1 §1.1: `origin` is cut to 256 bytes at a character boundary.
+        // ops-info-v2 §1.1: `origin` is cut to 256 bytes at a character boundary.
         let line = |origin: String| {
             format_line(
                 &Event::UpgradeRejected {
-                    listener: "ws_viewer",
+                    listener: "ws",
+                    role: Some(vnc_relay_domain::entry_point::Role::Viewer),
                     conn_id: ConnId::next(),
                     reason: RejectReason::OriginNotAllowed,
                     peer_ip: PeerIp::new(IpAddr::from([127, 0, 0, 1])),
+                    forwarded_ip: None,
                     origin: Some(origin),
                 },
                 UNIX_EPOCH,
@@ -807,7 +1272,7 @@ mod tests {
 
     #[test]
     fn admin_login_lines_carry_only_their_own_fields() {
-        // ops-info-v1 §1.8: `admin_account` is set only for a real account,
+        // ops-info-v2 §1.8: `admin_account` is set only for a real account,
         // and `scope` is set only for a refusal by a limit.
         let peer_ip = || PeerIp::new(IpAddr::from([127, 0, 0, 1]));
         let alice = AccountName::parse("alice")
@@ -859,5 +1324,322 @@ mod tests {
             "\"peer_ip\":\"127.0.0.1\"}\n",
         );
         assert!(lock.ends_with(tail), "{lock}");
+    }
+
+    /// spec: operations.md:OPS-068 partial
+    #[test]
+    fn recent_logs_record_order_and_seq() {
+        let buffer = Arc::new(RecentLogs::new(10));
+        let sink = JsonLinesEventSink::stdout(|_| {}).with_recent_logs(Arc::clone(&buffer));
+
+        let conn_id = ConnId::next();
+        sink.record(&Event::ServerStarting);
+        sink.record(&Event::ConnectionAccepted {
+            conn_id,
+            listener: vnc_relay_domain::entry_point::Listener::TcpViewer,
+            peer_ip: PeerIp::new(IpAddr::from([127, 0, 0, 1])),
+        });
+        sink.record(&Event::ServerStopped);
+
+        let (entries, oldest, latest) = buffer.snapshot();
+        assert_eq!(entries.len(), 3);
+        assert_eq!(entries[0].seq, 1);
+        assert_eq!(entries[1].seq, 2);
+        assert_eq!(entries[2].seq, 3);
+        assert_eq!(oldest, Some(1));
+        assert_eq!(latest, Some(3));
+        assert_eq!(entries[0].entry.get("event").unwrap(), "server_starting");
+        assert_eq!(
+            entries[1].entry.get("event").unwrap(),
+            "connection_accepted"
+        );
+        assert_eq!(entries[2].entry.get("event").unwrap(), "server_stopped");
+    }
+
+    /// spec: operations.md:OPS-068 partial
+    #[test]
+    fn recent_logs_entry_content_equals_log_line_object() {
+        let buffer = Arc::new(RecentLogs::new(10));
+        let path = std::env::temp_dir().join(format!(
+            "vnc-relay-log-entry-{}-{}.jsonl",
+            std::process::id(),
+            ConnId::next()
+        ));
+        let sink = JsonLinesEventSink::open(&LogOutput::File(path.clone()), |_| {}, |_| {})
+            .unwrap()
+            .with_recent_logs(Arc::clone(&buffer));
+        let event = Event::UpgradeRejected {
+            conn_id: ConnId::next(),
+            listener: "wss",
+            role: Some(vnc_relay_domain::entry_point::Role::Server),
+            reason: RejectReason::IpNotAllowed,
+            peer_ip: PeerIp::new("127.0.0.1".parse().unwrap()),
+            forwarded_ip: Some(PeerIp::new("198.51.100.8".parse().unwrap())),
+            origin: None,
+        };
+        sink.record(&event);
+
+        let (entries, _, _) = buffer.snapshot();
+        assert_eq!(entries.len(), 1);
+
+        drop(sink);
+        let line = std::fs::read_to_string(&path).unwrap();
+        let parsed: Value = serde_json::from_str(&line).unwrap();
+        let retained: Value = serde_json::from_str(&entries[0].entry.to_string()).unwrap();
+        assert_eq!(retained, parsed);
+        std::fs::remove_file(path).unwrap();
+    }
+
+    /// spec: operations.md:OPS-068 partial
+    #[test]
+    fn recent_logs_eviction_at_max() {
+        let buffer = Arc::new(RecentLogs::new(3));
+        let sink = JsonLinesEventSink::stdout(|_| {}).with_recent_logs(Arc::clone(&buffer));
+
+        sink.record(&Event::ServerStarting); // seq 1
+        sink.record(&Event::ServerStopped); // seq 2
+        sink.record(&Event::ServerStarting); // seq 3
+        assert_eq!(buffer.snapshot().1, Some(1));
+        assert_eq!(buffer.snapshot().2, Some(3));
+
+        sink.record(&Event::ServerStopped); // seq 4 -> evicts 1
+        let (entries, oldest, latest) = buffer.snapshot();
+        assert_eq!(entries.len(), 3);
+        assert_eq!(oldest, Some(2));
+        assert_eq!(latest, Some(4));
+        assert_eq!(
+            entries.iter().map(|e| e.seq).collect::<Vec<_>>(),
+            vec![2, 3, 4]
+        );
+
+        sink.record(&Event::ServerStarting); // seq 5 -> evicts 2
+        let (entries, oldest, latest) = buffer.snapshot();
+        assert_eq!(entries.len(), 3);
+        assert_eq!(oldest, Some(3));
+        assert_eq!(latest, Some(5));
+        assert_eq!(
+            entries.iter().map(|e| e.seq).collect::<Vec<_>>(),
+            vec![3, 4, 5]
+        );
+    }
+
+    /// spec: operations.md:OPS-068 partial
+    #[test]
+    fn recent_logs_zero_max_entries_keeps_nothing() {
+        let buffer = Arc::new(RecentLogs::new(0));
+        let sink = JsonLinesEventSink::stdout(|_| {}).with_recent_logs(Arc::clone(&buffer));
+
+        sink.record(&Event::ServerStarting);
+        sink.record(&Event::ServerStopped);
+
+        let (entries, oldest, latest) = buffer.snapshot();
+        assert!(entries.is_empty());
+        assert_eq!(oldest, None);
+        assert_eq!(latest, None);
+        assert_eq!(buffer.max_entries(), 0);
+
+        let query = buffer.query(&LogsFilter::default(), UNIX_EPOCH);
+        assert_eq!(query.max_entries, 0);
+        assert_eq!(query.oldest_seq, None);
+        assert_eq!(query.latest_seq, None);
+        assert!(!query.has_more);
+        assert!(query.items.is_empty());
+    }
+
+    /// spec: operations.md:OPS-068 partial
+    #[test]
+    fn recent_logs_records_independently_of_output_target_and_write_failure() {
+        let buffer = Arc::new(RecentLogs::new(10));
+        let failed_called = Arc::new(AtomicBool::new(false));
+        let failed_clone = Arc::clone(&failed_called);
+
+        let exe = std::env::current_exe().unwrap();
+        let sink = JsonLinesEventSink {
+            output: Mutex::new(Output::File {
+                handle: OpenOptions::new().read(true).open(exe).unwrap(),
+                reopen_failed: false,
+            }),
+            failed: AtomicBool::new(false),
+            on_first_failure: Box::new(move |_| {
+                failed_clone.store(true, Ordering::Relaxed);
+            }),
+            path: None,
+            on_reopen_failure: None,
+            recent_logs: Some(Arc::clone(&buffer)),
+        };
+
+        sink.record(&Event::ServerStarting);
+        assert!(failed_called.load(Ordering::Relaxed));
+        let (entries, oldest, latest) = buffer.snapshot();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(oldest, Some(1));
+        assert_eq!(latest, Some(1));
+        assert_eq!(entries[0].entry.get("event").unwrap(), "server_starting");
+    }
+
+    #[test]
+    fn recent_logs_query_filters_alone_and_combined() {
+        let buffer = Arc::new(RecentLogs::new(100));
+        let sid1 = vnc_relay_domain::session::SessionId::from_block([1; 16]);
+        let conn1 = ConnId::next();
+        let conn2 = ConnId::next();
+
+        for fields in [
+            vec![
+                ("event", json!("connection_accepted")),
+                ("level", json!("info")),
+                ("conn_id", json!(conn1.to_string())),
+            ],
+            vec![
+                ("event", json!("session_started")),
+                ("level", json!("info")),
+                ("session_id", json!(sid1.to_string())),
+                ("viewer_conn_id", json!(conn1.to_string())),
+            ],
+            vec![
+                ("event", json!("connection_rejected")),
+                ("level", json!("warn")),
+                ("conn_id", json!(conn2.to_string())),
+                ("reason", json!("ip_not_allowed")),
+            ],
+            vec![
+                ("event", json!("startup_failed")),
+                ("level", json!("error")),
+                ("reason", json!("runtime_unavailable")),
+            ],
+        ] {
+            buffer.record(Arc::new(LogEntry { fields }));
+        }
+
+        // level filter
+        let mut filter = LogsFilter {
+            limit: 10,
+            ..Default::default()
+        };
+        filter.levels = Some(BTreeSet::from(["warn".to_owned()]));
+        let res = buffer.query(&filter, UNIX_EPOCH);
+        assert_eq!(res.items.len(), 1);
+        assert_eq!(res.items[0].entry["event"], "connection_rejected");
+
+        // event filter
+        let mut filter = LogsFilter {
+            limit: 10,
+            ..Default::default()
+        };
+        filter.events = Some(BTreeSet::from(["connection_accepted".to_owned()]));
+        let res = buffer.query(&filter, UNIX_EPOCH);
+        assert_eq!(res.items.len(), 1);
+        assert_eq!(res.items[0].entry["event"], "connection_accepted");
+
+        // unknown event -> empty
+        let mut filter = LogsFilter {
+            limit: 10,
+            ..Default::default()
+        };
+        filter.events = Some(BTreeSet::from(["unknown_event".to_owned()]));
+        let res = buffer.query(&filter, UNIX_EPOCH);
+        assert_eq!(res.items.len(), 0);
+        assert_eq!(res.oldest_seq, Some(1));
+        assert_eq!(res.latest_seq, Some(4));
+
+        // q search (ASCII case-folded)
+        let mut filter = LogsFilter {
+            limit: 10,
+            ..Default::default()
+        };
+        filter.q = Some("IP_NOT".to_owned());
+        let res = buffer.query(&filter, UNIX_EPOCH);
+        assert_eq!(res.items.len(), 1);
+        assert_eq!(res.items[0].entry["reason"], "ip_not_allowed");
+
+        // session_id with conn relation
+        let mut filter = LogsFilter {
+            limit: 10,
+            ..Default::default()
+        };
+        filter.session_id = Some(sid1.to_string());
+        let res = buffer.query(&filter, UNIX_EPOCH);
+        assert_eq!(res.items.len(), 2);
+        assert_eq!(res.items[0].entry["event"], "connection_accepted");
+        assert_eq!(res.items[1].entry["event"], "session_started");
+        filter.before = Some(2);
+        let before = buffer.query(&filter, UNIX_EPOCH);
+        assert_eq!(
+            before.items.len(),
+            1,
+            "linkage survives a session_started outside the cursor range"
+        );
+        assert_eq!(before.items[0].seq, 1);
+        buffer.record(Arc::new(LogEntry {
+            fields: vec![
+                ("event", json!("connection_aborted")),
+                ("conn_id", json!(conn1.to_string())),
+            ],
+        }));
+        filter.before = None;
+        filter.after = Some(4);
+        let after = buffer.query(&filter, UNIX_EPOCH);
+        assert_eq!(after.items.len(), 1);
+        assert_eq!(after.items[0].seq, 5);
+        assert_eq!(after.oldest_seq, Some(1));
+        assert_eq!(after.latest_seq, Some(5));
+        filter.after = Some(5);
+        let empty = buffer.query(&filter, UNIX_EPOCH);
+        assert!(empty.items.is_empty());
+        assert!(!empty.has_more);
+        assert_eq!(empty.oldest_seq, Some(1));
+        assert_eq!(empty.latest_seq, Some(5));
+    }
+
+    /// spec: operations.md:OPS-068 partial
+    #[test]
+    fn concurrent_recent_log_sequences_equal_file_line_order() {
+        let path = std::env::temp_dir().join(format!(
+            "vnc-relay-log-order-{}-{}.jsonl",
+            std::process::id(),
+            ConnId::next()
+        ));
+        let logs = Arc::new(RecentLogs::new(512));
+        let sink = JsonLinesEventSink::open(&LogOutput::File(path.clone()), |_| {}, |_| {})
+            .unwrap()
+            .with_recent_logs(logs.clone());
+        let barrier = std::sync::Barrier::new(8);
+        std::thread::scope(|scope| {
+            for _ in 0..8 {
+                scope.spawn(|| {
+                    barrier.wait();
+                    for _ in 0..64 {
+                        sink.record(&Event::ConnectionAccepted {
+                            conn_id: ConnId::next(),
+                            listener: vnc_relay_domain::entry_point::Listener::Ws,
+                            peer_ip: PeerIp::new("127.0.0.1".parse().unwrap()),
+                        });
+                    }
+                });
+            }
+        });
+        drop(sink);
+        let written = std::fs::read_to_string(&path).unwrap();
+        let lines: Vec<Value> = written
+            .lines()
+            .map(|line| serde_json::from_str(line).unwrap())
+            .collect();
+        let retained = logs.query(
+            &LogsFilter {
+                limit: 512,
+                ..Default::default()
+            },
+            UNIX_EPOCH,
+        );
+        assert_eq!(retained.items.len(), 512);
+        assert_eq!(lines.len(), 512);
+        for (index, item) in retained.items.iter().enumerate() {
+            assert_eq!(item.seq, (index + 1) as u64);
+            assert_eq!(
+                serde_json::from_str::<Value>(&item.entry.to_string()).unwrap(),
+                lines[index]
+            );
+        }
+        std::fs::remove_file(path).unwrap();
     }
 }

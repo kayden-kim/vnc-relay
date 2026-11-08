@@ -1,5 +1,5 @@
 //! Admin login, session view, and restart through the real `serve` binary
-//! (management-api-v1 §1.4–§1.5, ops-info-v1 §1.5). The adapter tests in
+//! (management-api-v1 §1.4–§1.5, ops-info-v2 §1.5). The adapter tests in
 //! crates/adapters/tests/management.rs cover the HTTP rules in process. These
 //! tests cover the wiring in `serve`: the Argon2id check, the system clock, the
 //! token source, and the ops log.

@@ -15,7 +15,8 @@ use crate::settings::{
     AdminSessionSettings, AdminSettings, Argon2Settings, ConfigError, DashboardSettings,
     EntryPointSettings, KeepaliveSettings, LimitSettings, LogOutput, LogSettings,
     LoginLimitSettings, ManagementSettings, Mode1Settings, Mode2Settings, RecentClosedSettings,
-    RelaySettings, ReloadSettings, Settings, StatusSettings, TimeoutSettings, TlsFiles,
+    RecentLogsSettings, RelaySettings, ReloadSettings, Settings, StatusSettings, TimeoutSettings,
+    TlsFiles, WsListenerSettings, WsRoleSettings,
 };
 
 type Trace = Arc<Mutex<Vec<String>>>;
@@ -47,16 +48,14 @@ fn settings() -> Settings {
                 enabled: true,
                 listen: Some(addr(5901)),
                 allow: Some(AllowList::default()),
-                ..Default::default()
             },
             tcp_server: EntryPointSettings {
                 enabled: true,
                 listen: Some(addr(5500)),
                 allow: Some(AllowList::default()),
-                ..Default::default()
             },
-            ws_viewer: EntryPointSettings::default(),
-            wss_viewer: EntryPointSettings::default(),
+            ws: WsListenerSettings::default(),
+            wss: WsListenerSettings::default(),
         },
         mode1: Mode1Settings::default(),
         mode2: Mode2Settings::default(),
@@ -102,6 +101,7 @@ fn settings() -> Settings {
             query_timeout: Duration::from_secs(5),
         },
         recent_closed: RecentClosedSettings { max_entries: 100 },
+        recent_logs: RecentLogsSettings { max_entries: 1000 },
         status: StatusSettings { listen: addr(9090) },
         log: LogSettings {
             output: LogOutput::Stdout,
@@ -1126,7 +1126,7 @@ fn request_shape_and_editability_are_checked_before_disabled_switch_and_io() {
             change("timeouts.close_secs", 8),
         ],
         vec![ConfigChange {
-            key: "relay.ws_viewer.allowed_origins".to_owned(),
+            key: "relay.ws.viewer.allowed_origins".to_owned(),
             value: ConfigValue::Strings(vec![]),
         }],
     ] {
@@ -1257,20 +1257,20 @@ const ORDERED_KEYS: &str = "
 admin.accounts_file admin.argon2.memory_kib admin.argon2.iterations admin.argon2.parallelism
 relay.tcp_viewer.enabled relay.tcp_viewer.listen relay.tcp_viewer.allow
 relay.tcp_server.enabled relay.tcp_server.listen relay.tcp_server.allow
-relay.ws_viewer.enabled relay.ws_viewer.listen relay.ws_viewer.allow relay.ws_viewer.allowed_origins
-relay.wss_viewer.enabled relay.wss_viewer.listen relay.wss_viewer.allow relay.wss_viewer.allowed_origins relay.wss_viewer.cert_file relay.wss_viewer.key_file
+relay.ws.listen relay.ws.trusted_proxies relay.ws.viewer.enabled relay.ws.viewer.allow relay.ws.viewer.allowed_origins relay.ws.server.enabled relay.ws.server.allow relay.ws.server.allowed_origins
+relay.wss.listen relay.wss.trusted_proxies relay.wss.cert_file relay.wss.key_file relay.wss.viewer.enabled relay.wss.viewer.allow relay.wss.viewer.allowed_origins relay.wss.server.enabled relay.wss.server.allow relay.wss.server.allowed_origins
 mode1.enabled mode1.allow_targets mode2.enabled
 limits.relay_connections limits.admin_connections limits.waiting limits.buffer_bytes limits.ws_message_bytes
 timeouts.handshake_secs timeouts.tls_upgrade_secs timeouts.wait_secs timeouts.connect_secs timeouts.close_secs timeouts.shutdown_grace_secs
 keepalive.tcp_idle_secs keepalive.tcp_interval_secs keepalive.tcp_probes keepalive.ws_ping_secs keepalive.ws_pong_timeout_secs
 management.listen management.cert_file management.key_file management.config_edit
 management.login_limit.per_account management.login_limit.per_source management.login_limit.window_secs management.login_limit.lockout_secs
-management.session.idle_secs management.session.max_lifetime_secs dashboard.poll_secs dashboard.query_timeout_secs recent_closed.max_entries
+management.session.idle_secs management.session.max_lifetime_secs dashboard.poll_secs dashboard.query_timeout_secs recent_closed.max_entries recent_logs.max_entries
 status.listen log.output reload.settle_secs reload.poll_secs";
 
 const DYNAMIC_KEYS: &str = "
-relay.tcp_viewer.allow relay.tcp_server.allow relay.ws_viewer.allow relay.ws_viewer.allowed_origins
-relay.wss_viewer.allow relay.wss_viewer.allowed_origins relay.wss_viewer.cert_file relay.wss_viewer.key_file mode1.allow_targets
+relay.tcp_viewer.allow relay.tcp_server.allow relay.ws.trusted_proxies relay.ws.viewer.allow relay.ws.viewer.allowed_origins relay.ws.server.allow relay.ws.server.allowed_origins
+relay.wss.trusted_proxies relay.wss.cert_file relay.wss.key_file relay.wss.viewer.allow relay.wss.viewer.allowed_origins relay.wss.server.allow relay.wss.server.allowed_origins mode1.allow_targets
 limits.relay_connections limits.admin_connections limits.waiting limits.buffer_bytes limits.ws_message_bytes
 timeouts.handshake_secs timeouts.tls_upgrade_secs timeouts.wait_secs timeouts.connect_secs timeouts.close_secs timeouts.shutdown_grace_secs
 keepalive.tcp_idle_secs keepalive.tcp_interval_secs keepalive.tcp_probes keepalive.ws_ping_secs keepalive.ws_pong_timeout_secs management.cert_file management.key_file";
@@ -1285,18 +1285,23 @@ fn item_named<'a>(items: &'a [ConfigItem], key: &str) -> &'a ConfigItem {
 /// spec: management.md:MGT-028 partial
 /// spec: management.md:MGT-037 partial
 #[test]
-fn descriptors_follow_contract_order_with_27_dynamic_and_23_enabled_editable_keys() {
+fn descriptors_follow_contract_order_with_33_dynamic_and_29_enabled_editable_keys() {
     let mut all = transaction_settings();
-    all.relay.ws_viewer = EntryPointSettings {
+    let role = WsRoleSettings {
         enabled: true,
-        listen: Some(addr(8000)),
         allow: Some(AllowList::default()),
         ..Default::default()
     };
-    all.relay.wss_viewer = EntryPointSettings {
-        enabled: true,
+    all.relay.ws = WsListenerSettings {
+        listen: Some(addr(8000)),
+        viewer: role.clone(),
+        server: role.clone(),
+        ..Default::default()
+    };
+    all.relay.wss = WsListenerSettings {
         listen: Some(addr(8443)),
-        allow: Some(AllowList::default()),
+        viewer: role.clone(),
+        server: role,
         tls: Some(TlsFiles {
             cert_file: "wss.crt".into(),
             key_file: "wss.key".into(),
@@ -1308,8 +1313,8 @@ fn descriptors_follow_contract_order_with_27_dynamic_and_23_enabled_editable_key
         allow_targets: Some(TargetPolicy::default()),
     };
     let tls_paths = [
-        "relay.wss_viewer.cert_file",
-        "relay.wss_viewer.key_file",
+        "relay.wss.cert_file",
+        "relay.wss.key_file",
         "management.cert_file",
         "management.key_file",
     ];
@@ -1323,14 +1328,14 @@ fn descriptors_follow_contract_order_with_27_dynamic_and_23_enabled_editable_key
                 .collect::<Vec<_>>(),
             ORDERED_KEYS.split_whitespace().collect::<Vec<_>>()
         );
-        assert_eq!(items.len(), 56);
+        assert_eq!(items.len(), 65);
         let dynamic = items
             .iter()
             .filter(|item| item.reload == ConfigReloadKind::Dynamic)
             .map(|item| item.key.as_str())
             .collect::<Vec<_>>();
         assert_eq!(dynamic, DYNAMIC_KEYS.split_whitespace().collect::<Vec<_>>());
-        assert_eq!(dynamic.len(), 27);
+        assert_eq!(dynamic.len(), 33);
         let editable = items
             .iter()
             .filter(|item| item.editable)
@@ -1344,15 +1349,17 @@ fn descriptors_follow_contract_order_with_27_dynamic_and_23_enabled_editable_key
                 .filter(|key| !tls_paths.contains(key))
                 .collect::<Vec<_>>()
         );
-        assert_eq!(editable.len(), 23);
+        assert_eq!(editable.len(), 29);
         assert!(items.iter().all(|item| item.editable
             == (item.reload == ConfigReloadKind::Dynamic
                 && !tls_paths.contains(&item.key.as_str()))));
     }
     all.relay.tcp_viewer.enabled = false;
     all.relay.tcp_server.enabled = false;
-    all.relay.ws_viewer.enabled = false;
-    all.relay.wss_viewer.enabled = false;
+    all.relay.ws.viewer.enabled = false;
+    all.relay.ws.server.enabled = false;
+    all.relay.wss.viewer.enabled = false;
+    all.relay.wss.server.enabled = false;
     all.mode1.enabled = false;
     let items = config_items(&all, &ConfigPresence::default());
     assert_eq!(
@@ -1360,16 +1367,22 @@ fn descriptors_follow_contract_order_with_27_dynamic_and_23_enabled_editable_key
             .iter()
             .filter(|item| item.reload == ConfigReloadKind::Dynamic)
             .count(),
-        27
+        33
     );
     assert_eq!(items.iter().filter(|item| item.editable).count(), 16);
     for key in [
         "relay.tcp_viewer.allow",
         "relay.tcp_server.allow",
-        "relay.ws_viewer.allow",
-        "relay.ws_viewer.allowed_origins",
-        "relay.wss_viewer.allow",
-        "relay.wss_viewer.allowed_origins",
+        "relay.ws.trusted_proxies",
+        "relay.ws.viewer.allow",
+        "relay.ws.viewer.allowed_origins",
+        "relay.ws.server.allow",
+        "relay.ws.server.allowed_origins",
+        "relay.wss.trusted_proxies",
+        "relay.wss.viewer.allow",
+        "relay.wss.viewer.allowed_origins",
+        "relay.wss.server.allow",
+        "relay.wss.server.allowed_origins",
         "mode1.allow_targets",
     ] {
         assert!(!item_named(&items, key).editable, "{key}");
@@ -1388,14 +1401,20 @@ fn descriptors_distinguish_absent_disabled_values_from_explicit_empty_lists_and_
         "relay.tcp_viewer.allow",
         "relay.tcp_server.listen",
         "relay.tcp_server.allow",
-        "relay.ws_viewer.listen",
-        "relay.ws_viewer.allow",
-        "relay.ws_viewer.allowed_origins",
-        "relay.wss_viewer.listen",
-        "relay.wss_viewer.allow",
-        "relay.wss_viewer.allowed_origins",
-        "relay.wss_viewer.cert_file",
-        "relay.wss_viewer.key_file",
+        "relay.ws.listen",
+        "relay.ws.trusted_proxies",
+        "relay.ws.viewer.allow",
+        "relay.ws.viewer.allowed_origins",
+        "relay.ws.server.allow",
+        "relay.ws.server.allowed_origins",
+        "relay.wss.listen",
+        "relay.wss.trusted_proxies",
+        "relay.wss.viewer.allow",
+        "relay.wss.viewer.allowed_origins",
+        "relay.wss.server.allow",
+        "relay.wss.server.allowed_origins",
+        "relay.wss.cert_file",
+        "relay.wss.key_file",
         "mode1.allow_targets",
         "management.cert_file",
         "management.key_file",
@@ -1407,7 +1426,7 @@ fn descriptors_distinguish_absent_disabled_values_from_explicit_empty_lists_and_
         ConfigValue::Integer(100)
     );
     assert_eq!(
-        item_named(&absent, "relay.ws_viewer.enabled").value,
+        item_named(&absent, "relay.ws.viewer.enabled").value,
         ConfigValue::Bool(false)
     );
     assert_eq!(
@@ -1416,23 +1435,35 @@ fn descriptors_distinguish_absent_disabled_values_from_explicit_empty_lists_and_
     );
     let presence = ConfigPresence {
         keys: [
-            "relay.ws_viewer.allowed_origins",
-            "relay.wss_viewer.allowed_origins",
+            "relay.ws.viewer.allowed_origins",
+            "relay.wss.viewer.allowed_origins",
+            "relay.ws.server.allowed_origins",
+            "relay.wss.server.allowed_origins",
+            "relay.ws.trusted_proxies",
+            "relay.wss.trusted_proxies",
         ]
         .into_iter()
         .map(str::to_owned)
         .collect::<BTreeSet<_>>(),
         ..ConfigPresence::default()
     };
-    disabled.relay.ws_viewer.allow = Some(AllowList::default());
-    disabled.relay.wss_viewer.allow = Some(AllowList::default());
+    disabled.relay.ws.viewer.allow = Some(AllowList::default());
+    disabled.relay.wss.viewer.allow = Some(AllowList::default());
+    disabled.relay.ws.server.allow = Some(AllowList::default());
+    disabled.relay.wss.server.allow = Some(AllowList::default());
     disabled.mode1.allow_targets = Some(TargetPolicy::default());
     let explicit = config_items(&disabled, &presence);
     for key in [
-        "relay.ws_viewer.allow",
-        "relay.ws_viewer.allowed_origins",
-        "relay.wss_viewer.allow",
-        "relay.wss_viewer.allowed_origins",
+        "relay.ws.viewer.allow",
+        "relay.ws.viewer.allowed_origins",
+        "relay.ws.server.allow",
+        "relay.ws.server.allowed_origins",
+        "relay.wss.viewer.allow",
+        "relay.wss.viewer.allowed_origins",
+        "relay.wss.server.allow",
+        "relay.wss.server.allowed_origins",
+        "relay.ws.trusted_proxies",
+        "relay.wss.trusted_proxies",
         "mode1.allow_targets",
     ] {
         let item = item_named(&explicit, key);
@@ -1475,6 +1506,7 @@ fn descriptors_expose_all_integer_ranges_and_no_bounds_for_other_types() {
         ("dashboard.poll_secs", 1, 60),
         ("dashboard.query_timeout_secs", 1, 60),
         ("recent_closed.max_entries", 0, 10_000),
+        ("recent_logs.max_entries", 0, 10_000),
         ("reload.settle_secs", 1, 60),
         ("reload.poll_secs", 5, 600),
     ];
@@ -1501,7 +1533,7 @@ fn descriptors_expose_all_integer_ranges_and_no_bounds_for_other_types() {
 #[test]
 fn descriptors_keep_lone_disabled_tls_paths_without_inventing_omitted_paths() {
     let running = settings();
-    for key in ["relay.wss_viewer.cert_file", "relay.wss_viewer.key_file"] {
+    for key in ["relay.wss.cert_file", "relay.wss.key_file"] {
         let mut presence = ConfigPresence::default();
         let path = PathBuf::from("config/inactive.pem");
         presence.keys.insert(key.to_owned());
@@ -1515,14 +1547,175 @@ fn descriptors_keep_lone_disabled_tls_paths_without_inventing_omitted_paths() {
         assert_eq!(present.reload, ConfigReloadKind::Dynamic);
         assert!(!present.editable);
         let omitted = if key.ends_with(".cert_file") {
-            "relay.wss_viewer.key_file"
+            "relay.wss.key_file"
         } else {
-            "relay.wss_viewer.cert_file"
+            "relay.wss.cert_file"
         };
         assert_eq!(item_named(&items, omitted).value, ConfigValue::Null);
         assert_eq!(
-            item_named(&items, "relay.wss_viewer.enabled").value,
+            item_named(&items, "relay.wss.viewer.enabled").value,
             ConfigValue::Bool(false)
         );
     }
+}
+
+/// spec: management.md:MGT-037 partial
+/// spec: operations.md:OPS-067 partial
+#[test]
+fn shared_listener_editability_tracks_each_role_and_any_role_enablement() {
+    let mut running = settings();
+    running.relay.ws.server = WsRoleSettings {
+        enabled: true,
+        allow: Some(AllowList::default()),
+        ..Default::default()
+    };
+    let items = config_items(&running, &ConfigPresence::default());
+    for key in [
+        "relay.ws.trusted_proxies",
+        "relay.ws.server.allow",
+        "relay.ws.server.allowed_origins",
+    ] {
+        assert!(item_named(&items, key).editable, "{key}");
+        assert!(
+            items::accepts_change(
+                &running,
+                &ConfigChange {
+                    key: key.to_owned(),
+                    value: ConfigValue::Strings(vec![]),
+                }
+            ),
+            "{key}"
+        );
+    }
+    for key in [
+        "relay.ws.viewer.allow",
+        "relay.ws.viewer.allowed_origins",
+        "relay.wss.trusted_proxies",
+        "relay.wss.server.allow",
+        "relay.wss.server.allowed_origins",
+    ] {
+        assert!(!item_named(&items, key).editable, "{key}");
+        assert!(
+            !items::accepts_change(
+                &running,
+                &ConfigChange {
+                    key: key.to_owned(),
+                    value: ConfigValue::Strings(vec![]),
+                }
+            ),
+            "{key}"
+        );
+    }
+    let logs = item_named(&items, "recent_logs.max_entries");
+    assert_eq!(logs.value, ConfigValue::Integer(1000));
+    assert_eq!(logs.reload, ConfigReloadKind::Restart);
+    assert_eq!((logs.min, logs.max), (Some(0), Some(10000)));
+    assert!(!logs.editable);
+}
+
+/// spec: management.md:MGT-038 partial
+/// spec: operations.md:OPS-067 partial
+#[test]
+fn server_role_edit_uses_document_port_and_publishes_pending_policies_together() {
+    use vnc_relay_domain::allow_list::IpItem;
+    use vnc_relay_domain::origin::Origin;
+
+    let mut running = transaction_settings();
+    running.relay.ws.listen = Some(addr(8000));
+    running.relay.ws.server = WsRoleSettings {
+        enabled: true,
+        allow: Some(AllowList::default()),
+        ..Default::default()
+    };
+    let mut next = running.clone();
+    next.relay.ws.server.allow = Some(AllowList::new(vec![
+        IpItem::parse("192.0.2.10").unwrap_or_else(|error| panic!("allow: {error:?}")),
+    ]));
+    next.relay.ws.trusted_proxies = AllowList::new(vec![
+        IpItem::parse("198.51.100.1").unwrap_or_else(|error| panic!("proxy: {error:?}")),
+    ]);
+    next.relay.ws.server.allowed_origins = vec![
+        Origin::parse("https://server.example").unwrap_or_else(|error| panic!("origin: {error:?}")),
+    ];
+    let h = Harness::new(
+        running.clone(),
+        running,
+        next.clone(),
+        &["relay.ws.server.allow"],
+        false,
+    );
+    let result = h
+        .service
+        .patch(
+            actor(),
+            ConfigPatch {
+                revision: revision_of(b"original"),
+                changes: vec![ConfigChange {
+                    key: "relay.ws.server.allow".to_owned(),
+                    value: ConfigValue::Strings(vec!["192.0.2.10".to_owned()]),
+                }],
+            },
+        )
+        .unwrap_or_else(|error| panic!("edit: {error:?}"));
+    assert_eq!(
+        result.applied,
+        [
+            "relay.ws.trusted_proxies",
+            "relay.ws.server.allow",
+            "relay.ws.server.allowed_origins",
+        ]
+    );
+    assert_eq!(*h.cell.current().settings, next);
+    assert!(h.calls().contains(&"edit:relay.ws.server.allow".to_owned()));
+    let before_replace = h
+        .files
+        .snapshot_at_replace
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let before_replace = before_replace
+        .as_ref()
+        .unwrap_or_else(|| panic!("replacement must observe the old snapshot"));
+    assert!(
+        before_replace
+            .settings
+            .relay
+            .ws
+            .trusted_proxies
+            .items()
+            .is_empty()
+    );
+    assert!(
+        before_replace
+            .settings
+            .relay
+            .ws
+            .server
+            .allowed_origins
+            .is_empty()
+    );
+    assert!(
+        before_replace
+            .settings
+            .relay
+            .ws
+            .server
+            .allow
+            .as_ref()
+            .unwrap_or_else(|| panic!("enabled role has an allow list"))
+            .items()
+            .is_empty()
+    );
+    assert_eq!(
+        h.reload
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .last_reload()
+            .unwrap_or_else(|| panic!("successful edit records reload history"))
+            .config_keys,
+        [
+            "relay.ws.trusted_proxies",
+            "relay.ws.server.allow",
+            "relay.ws.server.allowed_origins"
+        ],
+    );
 }

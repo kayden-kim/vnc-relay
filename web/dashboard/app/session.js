@@ -111,6 +111,11 @@ export function mountSession(root, id, deps = {}) {
     listAction.href = '/';
     listAction.append(icon('back'), el('span', 'button-label', t.back));
 
+    const viewLogs = el('a', 'button button-outline');
+    viewLogs.id = 'session-view-logs';
+    viewLogs.href = `/#/logs?session_id=${encodeURIComponent(state.id)}`;
+    viewLogs.append(icon('log'), el('span', 'button-label', t.viewLogs));
+
     const terminate = createButton({ variant: 'destructive', label: t.terminate, icon: 'cancel' });
     terminate.id = 'session-terminate';
 
@@ -132,7 +137,9 @@ export function mountSession(root, id, deps = {}) {
     header.heading.tabIndex = -1;
 
     const notice = el('div', 'session-notice');
-    const info = panelCard({ title: t.sessionInfoTitle, span: 'span-8', chrome: true, footer: terminate });
+    const footFragment = document.createDocumentFragment();
+    footFragment.append(viewLogs, terminate);
+    const info = panelCard({ title: t.sessionInfoTitle, span: 'span-8', chrome: true, footer: footFragment });
     const transfer = panelCard({ title: t.transferTitle, span: 'span-4', chrome: false });
     const grid = el('div', 'grid');
     const main = el('main', 'app-main');
@@ -147,6 +154,7 @@ export function mountSession(root, id, deps = {}) {
       refresh,
       recheck,
       terminate,
+      viewLogs,
       dialog,
       heading: header.heading,
       meta: header.meta,
@@ -477,9 +485,16 @@ export function mountSession(root, id, deps = {}) {
     list.append(
       factRow(t.modeLabel, createBadge({ tone: 'neutral', label: formatMode(session.mode) })),
       factRow(t.transportLabel, createBadge({ tone: 'neutral', label: formatTransport(session.viewerTransport) })),
+      factRow(t.targetTransportLabel, createBadge({ tone: 'neutral', label: formatTransport(session.targetTransport) })),
       factRow(t.startedLabel, formatTime(session.startedAt)),
       factRow(t.viewerAddressLabel, formatAddress(session.viewerAddress), 'fact-address'),
+      ...(session.viewerForwardedIp !== null
+        ? [factRow(t.viewerForwardedAddressLabel, session.viewerForwardedIp, 'fact-address')]
+        : []),
       factRow(t.targetAddressLabel, formatAddress(session.targetAddress), 'fact-address'),
+      ...(session.targetForwardedIp !== null
+        ? [factRow(t.targetForwardedAddressLabel, session.targetForwardedIp, 'fact-address')]
+        : []),
     );
     const block = el('div', 'card-stack');
     block.append(list, el('p', 'card-note', t.addressNote));
@@ -490,9 +505,14 @@ export function mountSession(root, id, deps = {}) {
   function loadingFactsBlock(t) {
     const list = el('dl', 'fact-list');
     list.append(
-      ...[t.modeLabel, t.transportLabel, t.startedLabel, t.viewerAddressLabel, t.targetAddressLabel].map((label) =>
-        factRow(label, statusBadge(t, 'loading')),
-      ),
+      ...[
+        t.modeLabel,
+        t.transportLabel,
+        t.targetTransportLabel,
+        t.startedLabel,
+        t.viewerAddressLabel,
+        t.targetAddressLabel,
+      ].map((label) => factRow(label, statusBadge(t, 'loading'))),
     );
     const block = el('div', 'card-stack');
     block.append(list);

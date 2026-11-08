@@ -173,8 +173,10 @@ impl Running {
             Path::new("."),
         ).unwrap_or_else(|error| panic!("settings: {error:?}"));
         running.relay.tcp_server.allow = Some(allow.clone());
-        running.relay.ws_viewer.allow = Some(allow.clone());
-        running.relay.wss_viewer.allow = Some(allow);
+        running.relay.ws.viewer.enabled = true;
+        running.relay.wss.viewer.enabled = true;
+        running.relay.ws.viewer.allow = Some(allow.clone());
+        running.relay.wss.viewer.allow = Some(allow);
         running.limits.relay_connections = settings.places;
         running.limits.waiting = 8;
         running.limits.buffer_bytes = B as u32;
@@ -231,14 +233,14 @@ impl Running {
             EntryPoint::WsViewer
         };
         let ws = WsEntryPoint::new(
-            entry,
+            entry.listener(),
             listener,
             secure.then(|| TlsSource::wss(Arc::clone(&cell))),
             WsPolicy {
                 accept: accept(if secure {
-                    AllowSource::wss_viewer(Arc::clone(&cell))
+                    AllowSource::wss(Arc::clone(&cell))
                 } else {
-                    AllowSource::ws_viewer(Arc::clone(&cell))
+                    AllowSource::ws(Arc::clone(&cell))
                 }),
             },
             Arc::clone(&service),
@@ -313,11 +315,7 @@ impl Running {
     }
 
     fn listener_name(&self) -> &'static str {
-        if self.secure {
-            "wss_viewer"
-        } else {
-            "ws_viewer"
-        }
+        if self.secure { "wss" } else { "ws" }
     }
 
     async fn closed(&self, started: &Value, cause: &str) -> Value {

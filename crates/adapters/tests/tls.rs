@@ -1,5 +1,5 @@
 // Contract tests of the built-in TLS acceptor (docs/architectures/tls.md,
-// docs/contracts/config-v3.md §1.9).
+// docs/contracts/config-v4.md §1.9).
 //
 // Fixtures under tests/fixtures/tls are static PEM files, committed as they are.
 // They were generated once on WSL Ubuntu with OpenSSL 3.0.13, by the commands

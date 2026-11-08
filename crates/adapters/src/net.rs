@@ -25,7 +25,7 @@ use vnc_relay_app::reload::snapshot::ReloadCell;
 use vnc_relay_app::settings::{KeepaliveSettings, ListenerPlan, Settings};
 use vnc_relay_domain::budget::{BudgetPermit, ConnectionBudget};
 use vnc_relay_domain::conn_id::ConnId;
-use vnc_relay_domain::entry_point::EntryPoint;
+use vnc_relay_domain::entry_point::{EntryPoint, Listener};
 use vnc_relay_domain::peer_ip::PeerIp;
 
 use crate::target::TcpTargetConnector;
@@ -169,8 +169,8 @@ impl tokio::io::AsyncWrite for TcpRelayStream {
 }
 
 impl vnc_relay_app::ports::RelayStream for TcpRelayStream {
-    fn transport(&self) -> vnc_relay_domain::session::ViewerTransport {
-        vnc_relay_domain::session::ViewerTransport::Tcp
+    fn transport(&self) -> vnc_relay_domain::session::Transport {
+        vnc_relay_domain::session::Transport::Tcp
     }
 
     fn pending_write_len(&self) -> usize {
@@ -198,7 +198,7 @@ pub struct BoundListener {
 }
 
 /// A plan that could not be bound. `cause` is one Korean sentence without
-/// the address, so the operation log can carry it (ops-info-v1 §1.11).
+/// the address, so the operation log can carry it (ops-info-v2 §1.11).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BindFailure {
     pub plan: ListenerPlan,
@@ -226,7 +226,7 @@ pub async fn bind(plans: &[ListenerPlan]) -> Result<Vec<BoundListener>, Vec<Bind
 }
 
 /// Binds one plan. The status listener is bound alone first so that it
-/// answers while the others are bound (ops-info-v1 §1.12).
+/// answers while the others are bound (ops-info-v2 §1.12).
 pub async fn bind_one(plan: ListenerPlan) -> Result<BoundListener, BindFailure> {
     match TcpListener::bind(plan.addr).await {
         Ok(listener) => Ok(BoundListener { plan, listener }),
@@ -261,34 +261,34 @@ pub struct AcceptPolicy {
 #[derive(Clone)]
 pub struct AllowSource {
     runtime: Arc<dyn RuntimeSettingsSource>,
-    entry_point: EntryPoint,
+    listener: Listener,
 }
 
 impl AllowSource {
     /// The `tcp_viewer` allow list of the snapshot.
     pub fn tcp_viewer(cell: Arc<ReloadCell<TlsAcceptor>>) -> Self {
-        Self::new(cell, EntryPoint::TcpViewer)
+        Self::new(cell, Listener::TcpViewer)
     }
 
     /// The `tcp_server` allow list of the snapshot.
     pub fn tcp_server(cell: Arc<ReloadCell<TlsAcceptor>>) -> Self {
-        Self::new(cell, EntryPoint::TcpServer)
+        Self::new(cell, Listener::TcpServer)
     }
 
-    /// The `ws_viewer` allow list of the snapshot.
-    pub fn ws_viewer(cell: Arc<ReloadCell<TlsAcceptor>>) -> Self {
-        Self::new(cell, EntryPoint::WsViewer)
+    /// The union of the enabled WS roles' allow lists.
+    pub fn ws(cell: Arc<ReloadCell<TlsAcceptor>>) -> Self {
+        Self::new(cell, Listener::Ws)
     }
 
-    /// The `wss_viewer` allow list of the snapshot.
-    pub fn wss_viewer(cell: Arc<ReloadCell<TlsAcceptor>>) -> Self {
-        Self::new(cell, EntryPoint::WssViewer)
+    /// The union of the enabled WSS roles' allow lists.
+    pub fn wss(cell: Arc<ReloadCell<TlsAcceptor>>) -> Self {
+        Self::new(cell, Listener::Wss)
     }
 
-    fn new(cell: Arc<ReloadCell<TlsAcceptor>>, entry_point: EntryPoint) -> Self {
+    fn new(cell: Arc<ReloadCell<TlsAcceptor>>, listener: Listener) -> Self {
         Self {
             runtime: cell,
-            entry_point,
+            listener,
         }
     }
 
@@ -302,16 +302,30 @@ impl AllowSource {
     }
 
     pub(crate) fn permits_in(&self, settings: &Settings, peer_ip: PeerIp) -> bool {
+        if let Some(role) = self.listener.fixed_role() {
+            return EntryPoint::from_parts(self.listener, role)
+                .and_then(|entry| settings.relay.allow(entry))
+                .is_some_and(|allow| allow.permits(peer_ip));
+        }
         settings
             .relay
-            .get(self.entry_point)
-            .allow
-            .as_ref()
-            .is_some_and(|allow| allow.permits(peer_ip))
+            .websocket(self.listener)
+            .is_some_and(|listener| {
+                listener.trusted_proxies.permits(peer_ip)
+                    || [&listener.viewer, &listener.server]
+                        .into_iter()
+                        .any(|role| {
+                            role.enabled
+                                && role
+                                    .allow
+                                    .as_ref()
+                                    .is_some_and(|allow| allow.permits(peer_ip))
+                        })
+            })
     }
 
-    pub(crate) fn entry_point(&self) -> EntryPoint {
-        self.entry_point
+    pub(crate) fn listener(&self) -> Listener {
+        self.listener
     }
 
     pub(crate) fn with_current(&self, read: &mut dyn FnMut(&Settings)) {
@@ -340,7 +354,7 @@ pub struct TcpEntryPoint<L = TcpListener> {
 /// An accepted connection while it waits for the next stage.
 pub(crate) struct Accepted {
     pub(crate) conn_id: ConnId,
-    pub(crate) entry_point: EntryPoint,
+    pub(crate) listener: Listener,
     pub(crate) peer_ip: PeerIp,
     pub(crate) at: Instant,
     pub(crate) peer_addr: SocketAddr,
@@ -394,7 +408,7 @@ impl<L: crate::listener::Listener> TcpEntryPoint<L> {
         let runtime = self.runtime;
         let clock = self.clock;
         accept_connections(
-            self.entry_point,
+            self.entry_point.listener(),
             self.listener,
             self.policy,
             log,
@@ -408,8 +422,9 @@ impl<L: crate::listener::Listener> TcpEntryPoint<L> {
                 let exchange_at = accepted_at;
                 let context = ConnectionContext {
                     conn_id: conn.conn_id,
-                    entry_point: conn.entry_point,
+                    entry_point: self.entry_point,
                     peer_ip: conn.peer_ip,
+                    forwarded_ip: None,
                     peer_addr: conn.peer_addr,
                     accepted_wall: conn.accepted_wall,
                     accepted_at,
@@ -442,7 +457,7 @@ impl<L: crate::listener::Listener> TcpEntryPoint<L> {
 /// true, the listener closes and the function returns after every served
 /// connection has ended.
 pub(crate) async fn accept_connections<L: crate::listener::Listener, Serve, Fut>(
-    entry_point: EntryPoint,
+    relay_listener: Listener,
     listener: L,
     policy: AcceptPolicy,
     log: Arc<dyn EventSink>,
@@ -453,7 +468,7 @@ pub(crate) async fn accept_connections<L: crate::listener::Listener, Serve, Fut>
     Fut: Future<Output = ()> + Send + 'static,
 {
     accept_connections_with_keepalive(
-        entry_point,
+        relay_listener,
         listener,
         policy,
         log,
@@ -467,7 +482,7 @@ pub(crate) async fn accept_connections<L: crate::listener::Listener, Serve, Fut>
 // The socket-option operation is an explicit parameter so tests can fail it
 // deterministically without relying on platform-specific option limits.
 async fn accept_connections_with_keepalive<L: crate::listener::Listener, Serve, Fut, Keepalive>(
-    entry_point: EntryPoint,
+    relay_listener: Listener,
     mut listener: L,
     policy: AcceptPolicy,
     log: Arc<dyn EventSink>,
@@ -506,7 +521,7 @@ async fn accept_connections_with_keepalive<L: crate::listener::Listener, Serve, 
                 // Logged before the close, so a peer that sees the
                 // close also finds the line.
                 log.record(&Event::ConnectionRejected {
-                    listener: entry_point.name(),
+                    listener: relay_listener.name(),
                     stage: Stage::Accept,
                     reason,
                     peer_ip,
@@ -517,7 +532,7 @@ async fn accept_connections_with_keepalive<L: crate::listener::Listener, Serve, 
         };
         let conn = Accepted {
             conn_id: ConnId::next(),
-            entry_point,
+            listener: relay_listener,
             peer_ip,
             at,
             peer_addr: addr,
@@ -526,21 +541,23 @@ async fn accept_connections_with_keepalive<L: crate::listener::Listener, Serve, 
         };
         log.record(&Event::ConnectionAccepted {
             conn_id: conn.conn_id,
-            entry_point: conn.entry_point,
+            listener: conn.listener,
             peer_ip,
         });
         if keepalive(&stream, &conn.settings.keepalive).is_err() {
-            let stage = match entry_point {
-                EntryPoint::TcpViewer | EntryPoint::TcpServer => Stage::InitialExchange,
-                EntryPoint::WsViewer => Stage::Upgrade,
-                EntryPoint::WssViewer => Stage::Tls,
+            let stage = match relay_listener {
+                Listener::TcpViewer | Listener::TcpServer => Stage::InitialExchange,
+                Listener::Ws => Stage::Upgrade,
+                Listener::Wss => Stage::Tls,
             };
             log.record(&Event::ConnectionAborted {
                 conn_id: conn.conn_id,
-                entry_point,
+                listener: relay_listener,
+                role: relay_listener.fixed_role(),
                 stage,
                 reason: AbortReason::ConnectionError(ConnectionErrorKind::IoError),
                 peer_ip,
+                forwarded_ip: None,
                 elapsed_ms: u64::try_from(conn.at.elapsed().as_millis()).unwrap_or(u64::MAX),
             });
             drop(stream);
@@ -574,7 +591,7 @@ fn admit(
 }
 
 /// Sets the socket options of a relay connection: TCP keepalive with the idle
-/// time, probe interval, and probe count of K (config-v3 §1.2 `[keepalive]`),
+/// time, probe interval, and probe count of K (config-v4 §1.2 `[keepalive]`),
 /// and `TCP_NODELAY`. A relay forwards each read as it arrives; with Nagle on,
 /// a small write followed by a larger one waits for the peer's delayed ACK.
 fn set_keepalive(stream: &TcpStream, keepalive: &KeepaliveSettings) -> io::Result<()> {
@@ -659,10 +676,10 @@ mod accept_tests {
     #[tokio::test]
     async fn keepalive_failure_aborts_accepted_connections_and_releases_l() {
         for (entry_point, stage) in [
-            (EntryPoint::TcpViewer, "initial_exchange"),
-            (EntryPoint::TcpServer, "initial_exchange"),
-            (EntryPoint::WsViewer, "upgrade"),
-            (EntryPoint::WssViewer, "tls"),
+            (Listener::TcpViewer, "initial_exchange"),
+            (Listener::TcpServer, "initial_exchange"),
+            (Listener::Ws, "upgrade"),
+            (Listener::Wss, "tls"),
         ] {
             tokio::time::timeout(Duration::from_secs(5), check_failure(entry_point, stage))
                 .await
@@ -670,7 +687,7 @@ mod accept_tests {
         }
     }
 
-    async fn check_failure(entry_point: EntryPoint, stage: &str) {
+    async fn check_failure(entry_point: Listener, stage: &str) {
         let listener = TcpListener::bind("127.0.0.1:0")
             .await
             .unwrap_or_else(|error| panic!("bind: {error}"));
@@ -686,8 +703,10 @@ mod accept_tests {
         ).unwrap_or_else(|error| panic!("settings: {error:?}"));
         settings.relay.tcp_viewer.allow = Some(allow.clone());
         settings.relay.tcp_server.allow = Some(allow.clone());
-        settings.relay.ws_viewer.allow = Some(allow.clone());
-        settings.relay.wss_viewer.allow = Some(allow);
+        settings.relay.ws.viewer.enabled = true;
+        settings.relay.wss.viewer.enabled = true;
+        settings.relay.ws.viewer.allow = Some(allow.clone());
+        settings.relay.wss.viewer.allow = Some(allow);
         settings.limits.relay_connections = 1;
         settings.timeouts.handshake = Duration::from_secs(5);
         let snapshot = ReloadSnapshot::new(
@@ -700,10 +719,10 @@ mod accept_tests {
         );
         let cell = Arc::new(ReloadCell::new(snapshot));
         let allow = match entry_point {
-            EntryPoint::TcpViewer => AllowSource::tcp_viewer(cell),
-            EntryPoint::TcpServer => AllowSource::tcp_server(cell),
-            EntryPoint::WsViewer => AllowSource::ws_viewer(cell),
-            EntryPoint::WssViewer => AllowSource::wss_viewer(cell),
+            Listener::TcpViewer => AllowSource::tcp_viewer(cell),
+            Listener::TcpServer => AllowSource::tcp_server(cell),
+            Listener::Ws => AllowSource::ws(cell),
+            Listener::Wss => AllowSource::wss(cell),
         };
         let budget = ConnectionBudget::new();
         let policy = AcceptPolicy {
@@ -763,26 +782,24 @@ mod accept_tests {
             .as_str()
             .unwrap_or_else(|| panic!("conn_id must be a string: {accepted}"));
         assert!(!conn_id.is_empty());
-        assert_eq!(
-            accepted,
-            serde_json::json!({
-                "ts": "1970-01-01T00:00:00.000Z",
-                "level": "info", "event": "connection_accepted",
-                "conn_id": conn_id, "listener": entry_point.name(),
-                "role": entry_point.role().as_str(), "peer_ip": "127.0.0.1"
-            })
-        );
-        assert_eq!(
-            aborted,
-            serde_json::json!({
-                "ts": "1970-01-01T00:00:00.000Z",
-                "level": "warn", "event": "connection_aborted",
-                "conn_id": conn_id, "listener": entry_point.name(),
-                "stage": stage, "reason": "connection_error", "error_kind": "io_error",
-                "role": entry_point.role().as_str(), "peer_ip": "127.0.0.1",
-                "elapsed_ms": elapsed_ms
-            })
-        );
+        let mut expected_accepted = serde_json::json!({
+            "ts": "1970-01-01T00:00:00.000Z",
+            "level": "info", "event": "connection_accepted",
+            "conn_id": conn_id, "listener": entry_point.name(), "peer_ip": "127.0.0.1"
+        });
+        let mut expected_aborted = serde_json::json!({
+            "ts": "1970-01-01T00:00:00.000Z",
+            "level": "warn", "event": "connection_aborted",
+            "conn_id": conn_id, "listener": entry_point.name(),
+            "stage": stage, "reason": "connection_error", "error_kind": "io_error",
+            "peer_ip": "127.0.0.1", "elapsed_ms": elapsed_ms
+        });
+        if let Some(role) = entry_point.fixed_role() {
+            expected_accepted["role"] = role.as_str().into();
+            expected_aborted["role"] = role.as_str().into();
+        }
+        assert_eq!(accepted, expected_accepted);
+        assert_eq!(aborted, expected_aborted);
         let mut byte = [0; 1];
         match first.read(&mut byte).await {
             Ok(0) => {}
@@ -885,7 +902,7 @@ mod accept_tests {
         let (stop, stopped) = watch::channel(false);
         let (observed, mut seen) = mpsc::unbounded_channel();
         let task = tokio::spawn(accept_connections(
-            EntryPoint::TcpViewer,
+            Listener::TcpViewer,
             listener,
             policy,
             log,

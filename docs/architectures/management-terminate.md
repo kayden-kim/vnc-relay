@@ -10,8 +10,11 @@
 | 코드 위치 | `crates/app/src/management/terminate.rs`, `crates/adapters/src/management_http/terminate_api.rs`, `crates/app/src/ports.rs`, `crates/app/src/relay.rs`, `crates/app/src/relay/session.rs`, `crates/app/src/events.rs`, `crates/adapters/src/ops_log.rs`, `crates/adapters/src/request_deadline.rs`, `src/serve.rs` |
 | 코드 지도 | [코드 지도](code-map.md#2-코드-위치와-구성요소) |
 | 관련 스펙 | [관리 3.2·4·7절](../specs/management.md#32-관리자-종료) MGT-008~012, MGT-013·014·023; [운영](../specs/operations.md#7-수용-테스트) OPS-011·043; [중계](../specs/relay.md#7-수용-테스트) RLY-020 |
-| 관련 계약 | [관리 API 1.9절](../contracts/management-api-v1.md#19-관리자-종료-post-apiv1sessionssession_idterminate), 1.1~1.4·2.1·6절; [운영 정보 1.8절](../contracts/ops-info-v1.md#18-관리자-계정명-기록-규칙) |
+| 관련 계약 | [관리 API 1.9절](../contracts/management-api-v1.md#19-관리자-종료-post-apiv1sessionssession_idterminate), 1.1~1.4·2.1·6절; [운영 정보 1.8절](../contracts/ops-info-v2.md#18-관리자-계정명-기록-규칙) |
 | 관련 ADR | [ADR-0003 메모리 상태](../decisions/ADR-0003-single-instance-memory-state.md), [ADR-0004 tokio·rustls](../decisions/ADR-0004-tokio-rustls.md) |
+
+후속: R1은 종료 응답의 `closed_session.target_transport`를 활성·최근 종료 조회와 같은 자료에서 직렬화한다. `Session`→`ClosedSession`→`ClosedSessionSnapshot`→완료 핸들→`terminate_api`의 흐름으로 보존한다. Mode I은 `tcp`, Mode II는 실제 Server의 `tcp`·`ws`·`wss`다. R=0이나 최근 종료 목록 축출 뒤에도 완료 요약의 두 전송 값은 유지한다. 관리 API 계약 1.9·1.10절에 따라 종료 요약에는 주소 필드를 넣지 않는다. 최근 로그 API는 R3 범위다. 이전 실행 기록은 R1의 증거가 아니며 이번 문서 작업에서는 빌드·시험·포매터를 실행하지 않았다.
+
 
 ## 1. 책임과 경계
 
@@ -60,7 +63,7 @@ flowchart LR
 | 완료 상태 | `watch<Option<Result<Arc<ClosedSessionSnapshot>, ()>>>` | 세션별 `SessionControl.completion` | 알림 전에 완료돼도 결과를 읽는다. 성공 요약은 R=0·목록 축출과 무관하게 보유한다. |
 | `TerminateView` | `as_of`, `result`, `closed_session` | 응답 생성 때 | 성공의 요약은 필수·non-null이다. R=0·목록 축출·동시 다른 종료에도 요약을 잃지 않는다. |
 
-`closed_session`에는 `session_id`, `mode`, `viewer_transport`, `started_at`, `ended_at`, 두 방향 최종 바이트 정수, 실제 `close_cause`만 넣는다. 시각은 UTC 밀리초 3자리이고 `ended_at >= started_at`이다. 주소·관리자 계정·CSRF·원시 데이터·중계 ID를 넣지 않는다. `as_of`는 응답을 만드는 시점이다. 이는 계약 1.1.1·1.9·1.10절에 따른 **이 문서의 판단**이다.
+`closed_session`에는 `session_id`, `mode`, `viewer_transport`, `target_transport`, `started_at`, `ended_at`, 두 방향 최종 바이트 정수, 실제 `close_cause`를 넣는다. 시각은 UTC 밀리초 3자리이고 `ended_at >= started_at`이다. 주소·관리자 계정·CSRF·원시 데이터·중계 ID를 넣지 않는다. `as_of`는 응답을 만드는 시점이다. 이는 계약 1.1.1·1.9·1.10절에 따른 **이 문서의 판단**이다.
 
 ## 4. 처리 순서
 
@@ -182,7 +185,7 @@ flowchart LR
 
 Windows Cargo 실행에는 `CARGO_TARGET_DIR=D:/vr-target-term`, `AWS_LC_SYS_PREBUILT_NASM=1`, `TEMP=TMP=D:/vr-tools/tmp`를 사용했다. WSL은 `CARGO_TARGET_DIR=$HOME/vnc-relay-target-term`을 사용했다. 관리 시스템 시험 명령은 양쪽 모두 `cargo test --test management_terminate --test management_query --test management_session`이다.
 
-전체 게이트(커밋 `59fc535`): Windows `vr-win.ps1 -Only all`은 2026-11-01T23:41:53Z 보고서에서 `ALL PASSED (all)`이다(통과 77, 부분 61, 실패 0, 미연결 12). WSL `vr-full.sh`는 23:51:07Z 보고서에서 `FAILED: scenarios`다(통과 81, 부분 55, 실패 2, 미연결 12). 실패 2건은 이 작업과 무관한 RLY-025·026 netns 시험이며, WSL에 `nft`가 없어 실패했다(사용자 결정 2026-11-02(Q93)). `tests/management_terminate.rs` 7건과 관련 단위 시험은 두 OS에서 모두 통과했다. 두 OS의 판정은 MGT-008·009·010·011·014·023 통과, MGT-012·013·OPS-011·RLY-020 부분이다. 계약 실행 기록은 [관리 API 5절](../contracts/management-api-v1.md#5-예제와-계약-테스트)과 [운영 정보 계약 실행 기록](../contracts/ops-info-v1.md#계약-테스트-실행-기록)에 있다.
+전체 게이트(커밋 `59fc535`): Windows `vr-win.ps1 -Only all`은 2026-11-01T23:41:53Z 보고서에서 `ALL PASSED (all)`이다(통과 77, 부분 61, 실패 0, 미연결 12). WSL `vr-full.sh`는 23:51:07Z 보고서에서 `FAILED: scenarios`다(통과 81, 부분 55, 실패 2, 미연결 12). 실패 2건은 이 작업과 무관한 RLY-025·026 netns 시험이며, WSL에 `nft`가 없어 실패했다(사용자 결정 2026-11-02(Q93)). `tests/management_terminate.rs` 7건과 관련 단위 시험은 두 OS에서 모두 통과했다. 두 OS의 판정은 MGT-008·009·010·011·014·023 통과, MGT-012·013·OPS-011·RLY-020 부분이다. 계약 실행 기록은 [관리 API 5절](../contracts/management-api-v1.md#5-예제와-계약-테스트)과 [운영 정보 계약 실행 기록](../contracts/ops-info-v2.md#계약-테스트-실행-기록)에 있다.
 
 작업 4.5 완료 대조(2026-11-04): 위 표의 "남은 입증"을 아래 시험으로 채웠다. 커밋 `b0c25f9`의 두 OS 게이트(WSL 2026-11-04T12:01:00Z `ALL PASSED`, Windows 12:08:11Z `ALL PASSED (all)`)에서 MGT-008~012, OPS-011, RLY-020이 모두 두 OS에서 통과했다. 작업 4.5의 완료 조건을 모두 충족했다.
 

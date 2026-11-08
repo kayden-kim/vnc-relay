@@ -142,11 +142,16 @@ pub fn settings_edit_exposes_only_enabled_editable_keys() {
     );
     for key in [
         "relay.tcp_server.allow",
-        "relay.wss_viewer.allow",
-        "relay.wss_viewer.allowed_origins",
+        "relay.ws.server.allow",
+        "relay.ws.server.allowed_origins",
+        "relay.wss.trusted_proxies",
+        "relay.wss.viewer.allow",
+        "relay.wss.viewer.allowed_origins",
+        "relay.wss.server.allow",
+        "relay.wss.server.allowed_origins",
         "mode1.allow_targets",
-        "relay.wss_viewer.cert_file",
-        "relay.wss_viewer.key_file",
+        "relay.wss.cert_file",
+        "relay.wss.key_file",
         "management.cert_file",
         "management.key_file",
         "management.config_edit",
@@ -200,6 +205,14 @@ pub fn settings_edit_exposes_only_enabled_editable_keys() {
             "running input value for {key}"
         );
     }
+    set_field_value(
+        &mut browser,
+        "relay.ws.trusted_proxies",
+        "192.0.2.10\n192.0.2.11",
+    );
+    review(&mut browser);
+    assert_eq!(browser.eval("document.querySelector('dialog .config-change').textContent.includes('relay.ws.trusted_proxies') && document.querySelector('dialog .config-change').textContent.includes('192.0.2.10') && document.querySelector('dialog .config-change').textContent.includes('192.0.2.11')"),json!(true));
+    assert_eq!(server.proxy.count("PATCH", "/api/v1/config"), 0);
 }
 
 // DASH-036
@@ -326,7 +339,12 @@ pub fn invalid_settings_inputs_focus_first_error_without_patch() {
 
 // DASH-037
 pub fn settings_confirmation_shows_diffs_empty_list_warning_and_timing() {
-    let server = Server::start_with_config("dash-037", None, true);
+    let server = Server::start_with_config_transform("dash-037", None, true, |config, _| {
+        config.replace(
+            "[relay.ws]\n",
+            "[relay.ws]\ntrusted_proxies = [\"127.0.0.1\"]\n",
+        )
+    });
     let admin = server.login();
     let config = server.query(&admin, "/api/v1/config");
     let mut browser = Browser::start("dash-037", &["ko-KR"]);
@@ -337,7 +355,7 @@ pub fn settings_confirmation_shows_diffs_empty_list_warning_and_timing() {
     set_field_value(&mut browser, "relay.tcp_viewer.allow", "");
     set_field_value(
         &mut browser,
-        "relay.ws_viewer.allowed_origins",
+        "relay.ws.viewer.allowed_origins",
         "https://example.test\nhttp://localhost",
     );
     review(&mut browser);
@@ -351,7 +369,7 @@ pub fn settings_confirmation_shows_diffs_empty_list_warning_and_timing() {
             .collect::<String>()
     };
     let old_allow = list_text("relay.tcp_viewer.allow");
-    let old_origins = list_text("relay.ws_viewer.allowed_origins");
+    let old_origins = list_text("relay.ws.viewer.allowed_origins");
     let expected = json!([
         [
             "limits.waiting",
@@ -376,7 +394,7 @@ pub fn settings_confirmation_shows_diffs_empty_list_warning_and_timing() {
             ]
         ],
         [
-            "relay.ws_viewer.allowed_origins",
+            "relay.ws.viewer.allowed_origins",
             [
                 "이전 값",
                 old_origins,
@@ -399,7 +417,38 @@ pub fn settings_confirmation_shows_diffs_empty_list_warning_and_timing() {
     let dialog = browser.eval("document.querySelector('dialog.config-dialog').textContent");
     let text = dialog.as_str().unwrap_or("");
     assert!(text.contains("빈 허용 목록은 해당 키가 검사하는 모든 새 접속·요청을 거절합니다."));
-    assert!(text.contains("새 연결부터 적용됩니다. 기존 연결·이미 시작한 타이머·이미 설정한 소켓 옵션은 이전 값을 유지합니다."));
+    assert!(text.contains("바뀐 값은 키별 다음 검사·요청부터 적용됩니다. 이미 끝난 검사·시작한 타이머·설정한 소켓 옵션은 이전 결과를 유지합니다. 기존 중계 세션은 계속 동작합니다."));
+    assert_eq!(server.proxy.count("PATCH", "/api/v1/config"), 0);
+    browser.click("dialog.config-dialog .dialog-actions button:first-child");
+    set_field_value(&mut browser, "relay.ws.viewer.allowed_origins", "");
+    set_field_value(&mut browser, "relay.ws.trusted_proxies", "");
+    review(&mut browser);
+    let warnings = browser.eval("[...document.querySelectorAll('dialog .config-change')].map(c=>[c.querySelector('.card-heading').textContent,c.querySelector('.alert')?.textContent??''])");
+    let pairs: Vec<(String, String)> = must(serde_json::from_value(warnings));
+    for (key, expected) in [
+        (
+            "relay.tcp_viewer.allow",
+            "빈 허용 목록은 해당 키가 검사하는 모든 새 접속·요청을 거절합니다.",
+        ),
+        (
+            "relay.ws.trusted_proxies",
+            "빈 trusted_proxies 목록은 전달 헤더를 신뢰하지 않습니다. 소켓 상대 IP로 클라이언트 주소를 검사합니다.",
+        ),
+        (
+            "relay.ws.viewer.allowed_origins",
+            "빈 allowed_origins 목록은 Origin이 있는 요청을 거절합니다. Origin이 없는 요청은 IP 검사만 합니다.",
+        ),
+    ] {
+        let warning = &pairs
+            .iter()
+            .find(|(k, _)| k == key)
+            .unwrap_or_else(|| panic!("missing warning {key}"))
+            .1;
+        assert!(warning.contains(expected), "{key}: {warning}");
+        if key.ends_with("trusted_proxies") {
+            assert!(!warning.contains("모든 새 접속"));
+        }
+    }
     assert_eq!(server.proxy.count("PATCH", "/api/v1/config"), 0);
 }
 
@@ -625,7 +674,7 @@ pub fn server_settings_diagnostics_preserve_input_and_map_original_lines() {
         ),
         (
             "config_origin_invalid",
-            "relay.ws_viewer.allowed_origins",
+            "relay.ws.viewer.allowed_origins",
             "Origin 항목의 형식이 올바르지 않습니다.",
             "The Origin item has an invalid format.",
         ),
@@ -640,7 +689,7 @@ pub fn server_settings_diagnostics_preserve_input_and_map_original_lines() {
         switch_language(&mut browser, lang);
         set_field_value(&mut browser, "limits.waiting", "9");
         set_field_value(&mut browser, "relay.tcp_viewer.allow", ip);
-        set_field_value(&mut browser, "relay.ws_viewer.allowed_origins", origin);
+        set_field_value(&mut browser, "relay.ws.viewer.allowed_origins", origin);
         set_field_value(&mut browser, "mode1.allow_targets", target);
         let draft = form_values(&mut browser);
         let count = server.proxy.count("PATCH", "/api/v1/config") + 1;

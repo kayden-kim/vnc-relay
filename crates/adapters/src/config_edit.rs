@@ -1,5 +1,5 @@
 //! Byte-preserving config edits and same-directory atomic replacement.
-//! Design: docs/architectures/config-edit.md; config-v3 §1.10.
+//! Design: docs/architectures/config-edit.md; config-v4 §1.10.
 
 use std::fs::{self, OpenOptions};
 use std::io::{self, Write};
@@ -270,7 +270,8 @@ fn edit_change(
                     .as_table()
                     .is_some_and(|table| table.is_implicit() && !table.is_dotted())
             {
-                // A missing table is appended, not merged into a different scope.
+                // Append the full parent path, including missing listener/role
+                // levels. Never insert it beneath the last explicit sibling.
                 let at = source.len();
                 let separator = if source.is_empty() || source.ends_with('\n') {
                     ""

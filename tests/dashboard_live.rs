@@ -12,6 +12,14 @@ mod detail;
 mod live;
 #[path = "dashboard_live/login.rs"]
 mod login;
+#[path = "dashboard_live/logs.rs"]
+mod logs;
+#[path = "dashboard_live/logs_accessibility.rs"]
+mod logs_accessibility;
+#[path = "dashboard_live/logs_download.rs"]
+mod logs_download;
+#[path = "dashboard_live/logs_states.rs"]
+mod logs_states;
 #[path = "dashboard_live/overview.rs"]
 mod overview;
 #[path = "dashboard_live/settings.rs"]
@@ -22,6 +30,8 @@ mod settings_edit;
 mod settings_recovery;
 #[path = "dashboard_live/settings_view.rs"]
 mod settings_view;
+#[path = "dashboard_live/transports.rs"]
+mod transports;
 
 // Several scenarios hold multiple browsers and real listeners. Serialize this
 // binary's rows to preserve their timing evidence on both supported OS gates.
@@ -339,6 +349,66 @@ fn dashboard_052_unchanged_settings_return_without_patch_and_empty_applied_shows
 #[test]
 fn dashboard_053_leaving_settings_edit_discards_input_without_confirmation_or_patch() {
     run(settings_recovery::leaving_settings_edit_discards_input_without_confirmation_or_patch);
+}
+
+/// spec: dashboard.md:DASH-054
+#[test]
+fn dashboard_054_real_logs_first_load_and_entry_fields() {
+    run(logs::first_load_and_all_entry_fields);
+}
+
+/// spec: dashboard.md:DASH-055
+#[test]
+fn dashboard_055_real_level_event_filters_and_obsolete_reply() {
+    run(logs::level_event_filters_and_obsolete_reply);
+}
+
+/// spec: dashboard.md:DASH-056
+#[test]
+fn dashboard_056_real_unicode_value_search_and_boundaries() {
+    run(logs::unicode_value_search_and_boundaries);
+}
+
+/// spec: dashboard.md:DASH-057
+#[test]
+fn dashboard_057_real_polling_pages_pause_no_overlap_and_eviction() {
+    run(logs::polling_pages_pause_no_overlap_and_eviction);
+}
+
+/// spec: dashboard.md:DASH-058
+#[test]
+fn dashboard_058_real_older_pages_match_cursor_results() {
+    run(logs::older_pages_match_real_cursor_results);
+}
+
+/// spec: dashboard.md:DASH-059
+#[test]
+fn dashboard_059_real_session_link_invalid_id_and_retention_limit() {
+    run(logs::session_link_invalid_id_clear_and_retention_limit);
+}
+
+/// spec: dashboard.md:DASH-060
+#[test]
+fn dashboard_060_real_json_lines_download_and_no_partial_files() {
+    run(logs_download::complete_json_lines_snapshot_and_no_partial_files);
+}
+
+/// spec: dashboard.md:DASH-061
+#[test]
+fn dashboard_061_real_disabled_failures_recovery_and_300_second_expiry() {
+    run(logs_states::disabled_empty_failures_recovery_and_real_idle_expiry);
+}
+
+/// spec: dashboard.md:DASH-062
+#[test]
+fn dashboard_062_real_transport_matrix_and_forwarded_addresses() {
+    run(transports::real_transport_matrix_and_forwarded_addresses);
+}
+
+/// spec: dashboard.md:DASH-063
+#[test]
+fn dashboard_063_real_logs_keyboard_languages_widths_and_preservation() {
+    run(logs_accessibility::keyboard_languages_widths_and_state_preservation);
 }
 
 #[test]

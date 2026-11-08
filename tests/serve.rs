@@ -1,6 +1,6 @@
 //! System tests of `vnc-relay serve`: the start order, exit codes,
 //! diagnostic lines, and operation log lines of docs/contracts/cli-v1.md
-//! §1.5, §1.8, §2 and docs/contracts/ops-info-v1.md §1.1, §1.5, §1.6, the
+//! §1.5, §1.8, §2 and docs/contracts/ops-info-v2.md §1.1, §1.5, §1.6, the
 //! source IP check of the TCP entry points (relay spec §3.1 step 1), and
 //! the relay connection limit L and the initial exchange time H.
 
@@ -25,13 +25,14 @@ const HASH: &str = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
 const EXIT_LIMIT: Duration = Duration::from_secs(20);
 
 /// Requests that carry no login. Each one gets `401 unauthenticated` with no data.
-const LOGIN_LESS_REQUESTS: [(&str, &str); 7] = [
+const LOGIN_LESS_REQUESTS: [(&str, &str); 8] = [
     ("GET", "/api/v1/session"),
     ("GET", "/api/v1/summary"),
     ("GET", "/api/v1/waiting"),
     ("GET", "/api/v1/sessions"),
     ("GET", "/api/v1/sessions/ses_3k9d2m7q4x8v1b6n5c0z2h4w7y"),
     ("GET", "/api/v1/closed-sessions"),
+    ("GET", "/api/v1/logs"),
     (
         "POST",
         "/api/v1/sessions/ses_3k9d2m7q4x8v1b6n5c0z2h4w7y/terminate",
@@ -811,7 +812,7 @@ fn wss_config(ports: Ports, cert: &str, key: &str) -> String {
         .unwrap_or_else(|error| panic!("free port: {error}"))
         .port();
     format!(
-        "{}\n[relay.wss_viewer]\nenabled = true\nlisten = '127.0.0.1:{wss_port}'\nallow = ['127.0.0.1']\ncert_file = '{}'\nkey_file = '{}'\n",
+        "{}\n[relay.wss]\nlisten = '127.0.0.1:{wss_port}'\ncert_file = '{}'\nkey_file = '{}'\n[relay.wss.viewer]\nenabled = true\nallow = ['127.0.0.1']\n",
         config_text(ports),
         tls_file(cert),
         tls_file(key)
@@ -973,15 +974,12 @@ fn fails_with_exit_code_3_when_wss_key_does_not_match() {
     assert_eq!(events(&run.stdout), ["server_starting", "startup_failed"]);
     let lines: Vec<&str> = run.stdout.lines().collect();
     assert_eq!(field(lines[1], "reason"), Some("tls_file_invalid"));
-    assert_eq!(field(lines[1], "listener"), Some("wss_viewer"));
-    assert_eq!(
-        field(lines[1], "config_key"),
-        Some("relay.wss_viewer.key_file")
-    );
+    assert_eq!(field(lines[1], "listener"), Some("wss"));
+    assert_eq!(field(lines[1], "config_key"), Some("relay.wss.key_file"));
     assert_eq!(field(lines[1], "detail"), None);
     assert_eq!(
         run.stderr,
-        "error[tls_file_invalid] key=relay.wss_viewer.key_file: 개인키가 인증서와 맞지 않다.\n"
+        "error[tls_file_invalid] key=relay.wss.key_file: 개인키가 인증서와 맞지 않다.\n"
     );
     assert_released(ports);
 }
@@ -1026,7 +1024,7 @@ fn checks_tls_files_before_binding_a_taken_status_port() {
     assert_eq!(events(&run.stdout), ["server_starting", "startup_failed"]);
     assert_eq!(
         run.stderr,
-        "error[tls_file_invalid] key=relay.wss_viewer.key_file: 개인키가 인증서와 맞지 않다.\n"
+        "error[tls_file_invalid] key=relay.wss.key_file: 개인키가 인증서와 맞지 않다.\n"
     );
     assert_released(ports);
 }
@@ -1464,7 +1462,7 @@ fn plaintext_ws_listener_is_off_by_default_and_warns_at_start_when_enabled() {
     // Default: no WS section, but WSS and HTTPS management are on. No WS
     // listener opens and no WS warning is logged.
     let wss_section = format!(
-        "\n[relay.wss_viewer]\nenabled = true\nlisten = '127.0.0.1:{wss_port}'\nallow = ['127.0.0.1']\ncert_file = '{}'\nkey_file = '{}'\n",
+        "\n[relay.wss]\nlisten = '127.0.0.1:{wss_port}'\ncert_file = '{}'\nkey_file = '{}'\n[relay.wss.viewer]\nenabled = true\nallow = ['127.0.0.1']\n",
         tls_file("server-chain.pem"),
         tls_file("server-key-p256.pem")
     );
@@ -1484,7 +1482,7 @@ fn plaintext_ws_listener_is_off_by_default_and_warns_at_start_when_enabled() {
     // connection: the TLS listeners do not speak plaintext, and the TCP entry
     // points read it as a broken Repeater request.
     for (name, port) in [
-        ("wss_viewer", wss_port),
+        ("wss", wss_port),
         ("management", ports.management),
         ("tcp_viewer", ports.tcp_viewer),
         ("tcp_server", ports.tcp_server),
@@ -1510,7 +1508,7 @@ fn plaintext_ws_listener_is_off_by_default_and_warns_at_start_when_enabled() {
 
     // Enabled: the WS listener opens, and the warning comes before server_ready.
     let ws_section = format!(
-        "\n[relay.ws_viewer]\nenabled = true\nlisten = \"{ws_listen}\"\nallow = [\"127.0.0.1\"]\n"
+        "\n[relay.ws]\nlisten = \"{ws_listen}\"\n[relay.ws.viewer]\nenabled = true\nallow = [\"127.0.0.1\"]\n"
     );
     let config = setup_with(
         "ws-enabled",
@@ -1543,9 +1541,194 @@ fn plaintext_ws_listener_is_off_by_default_and_warns_at_start_when_enabled() {
         .find(|line| field(line, "event") == Some("plaintext_ws_enabled"))
         .unwrap_or_default();
     assert_eq!(field(warning, "level"), Some("warn"));
-    assert_eq!(field(warning, "listener"), Some("ws_viewer"));
+    assert_eq!(field(warning, "listener"), Some("ws"));
     assert_eq!(field(warning, "listen"), Some(ws_listen.as_str()));
     drop(guard);
+}
+
+/// spec: operations.md:OPS-065 partial
+/// spec: operations.md:OPS-069
+/// spec: websocket.md:WS-024
+#[test]
+fn server_only_websocket_roles_open_each_shared_listener() {
+    let _lock = lock_ports();
+    let (ports, ws, wss) = four_entry_ports();
+    let text = four_entry_config(ports, ws, wss, false)
+        .replace("[relay.ws.viewer]", "[relay.ws.server]")
+        .replace("[relay.wss.viewer]", "[relay.wss.server]")
+        .replace("127.0.0.0/8", "0.0.0.0/0");
+    let config = setup_with("server-only-websocket", &text);
+    let log = config.with_file_name("relay.log");
+    let _guard = Guard(Some(spawn(&config)));
+    let ready = wait_for_line(&log, |line| field(line, "event") == Some("server_ready"));
+    let ready: serde_json::Value =
+        serde_json::from_str(&ready).unwrap_or_else(|e| panic!("ready JSON: {e}"));
+    let listeners = ready["listeners"].as_array().expect("listeners array");
+    for (name, port, secure) in [("ws", ws, false), ("wss", wss, true)] {
+        assert_eq!(
+            listeners.iter().filter(|item| item["name"] == name).count(),
+            1,
+            "each shared listener is bound and reported once"
+        );
+        let mut server = relay_peer(1, port, secure);
+        upgrade_peer_path(server.as_mut(), "/relay/server");
+        let accepted = wait_for_line(&log, |line| {
+            is(line, "connection_accepted", name, "127.0.0.1")
+        });
+        assert_eq!(field(&accepted, "role"), None);
+        let warning = wait_for_line(&log, |line| {
+            field(line, "event") == Some("allow_all_source")
+                && field(line, "listener") == Some(name)
+        });
+        assert_eq!(field(&warning, "role"), Some("server"));
+    }
+    let starting = read_log(&log);
+    let starting = starting
+        .lines()
+        .find(|line| field(line, "event") == Some("server_starting"))
+        .expect("server_starting");
+    assert_eq!(field(starting, "log_contract"), Some("ops-info/2.0.0"));
+    let warning = wait_for_line(&log, |line| {
+        field(line, "event") == Some("plaintext_ws_enabled")
+    });
+    assert_eq!(field(&warning, "listener"), Some("ws"));
+}
+
+/// spec: operations.md:OPS-065 partial
+#[test]
+fn enabled_websocket_roles_require_their_policy_and_shared_tls_at_startup() {
+    let _lock = lock_ports();
+    let (ports, ws, wss) = four_entry_ports();
+    for listener in ["ws", "wss"] {
+        for role in ["viewer", "server"] {
+            let port = if listener == "ws" { ws } else { wss };
+            let text = format!(
+                "{}\n[relay.{listener}]\nlisten = '127.0.0.1:{port}'\n[relay.{listener}.{role}]\nenabled = true\n",
+                config_text(ports)
+            );
+            let config = setup_with(&format!("missing-{listener}-{role}"), &text);
+            let run = serve(&config);
+            assert_eq!(run.code, Some(3), "{}", run.stderr);
+            let mut expected = pairs(&[(
+                "config_missing_key",
+                &format!("relay.{listener}.{role}.allow"),
+            )]);
+            if listener == "wss" {
+                expected.extend(pairs(&[
+                    ("config_missing_key", "relay.wss.cert_file"),
+                    ("config_missing_key", "relay.wss.key_file"),
+                ]));
+            }
+            let mut actual = startup_failures(&run.stdout);
+            actual.sort();
+            expected.sort();
+            assert_eq!(actual, expected);
+            let mut diagnostics = run.errors();
+            diagnostics.sort();
+            assert_eq!(diagnostics, expected);
+            assert_released(ports);
+            assert!(!connects(port));
+        }
+    }
+}
+
+/// spec: operations.md:OPS-065
+#[test]
+fn shared_websocket_startup_validates_all_role_combinations_and_disabled_values() {
+    server_only_websocket_roles_open_each_shared_listener();
+    enabled_websocket_roles_require_their_policy_and_shared_tls_at_startup();
+    let _lock = lock_ports();
+    let (ports, ws, wss) = four_entry_ports();
+    for both in [false, true] {
+        let mut text = four_entry_config(ports, ws, wss, false);
+        if both {
+            text += "\n[relay.ws.server]\nenabled=true\nallow=['127.0.0.1']\n[relay.wss.server]\nenabled=true\nallow=['127.0.0.1']\n";
+        }
+        let config = setup_with(&format!("shared-enabled-{both}"), &text);
+        let log = config.with_file_name("relay.log");
+        let _guard = Guard(Some(spawn(&config)));
+        wait_for_line(&log, |line| field(line, "event") == Some("server_ready"));
+        for (port, secure) in [(ws, false), (wss, true)] {
+            let mut peer = relay_peer(1, port, secure);
+            upgrade_peer(peer.as_mut());
+            assert_peer_greeting(peer.as_mut(), true);
+            if both {
+                let mut peer = relay_peer(1, port, secure);
+                upgrade_peer_path(peer.as_mut(), "/relay/server");
+            }
+        }
+    }
+    for listener in ["ws", "wss"] {
+        for role in ["viewer", "server"] {
+            let text = config_text(ports)
+                + &format!("\n[relay.{listener}.{role}]\nenabled=false\nallow=['not-an-ip']\n");
+            let config = setup_with(&format!("disabled-bad-{listener}-{role}"), &text);
+            let run = serve(&config);
+            assert_eq!(run.code, Some(3), "{}", run.stderr);
+            let expected = pairs(&[(
+                "config_ip_item_invalid",
+                &format!("relay.{listener}.{role}.allow[0]"),
+            )]);
+            assert_eq!(run.errors(), expected);
+            assert_eq!(startup_failures(&run.stdout), expected);
+        }
+    }
+}
+
+/// spec: operations.md:OPS-066
+#[test]
+fn v3_websocket_tables_fail_startup_instead_of_silently_disabling_the_listener() {
+    let _lock = lock_ports();
+    let (ports, ws, wss) = four_entry_ports();
+    for table in ["ws_viewer", "wss_viewer"] {
+        let listener = if table == "ws_viewer" { "ws" } else { "wss" };
+        let port = if listener == "ws" { ws } else { wss };
+        let tls = if listener == "wss" {
+            format!(
+                "cert_file='{}'\nkey_file='{}'\n",
+                tls_file("server-chain.pem"),
+                tls_file("server-key-p256.pem")
+            )
+        } else {
+            String::new()
+        };
+        let legacy = entry_config(ports, r#"["127.0.0.1"]"#, r#"["127.0.0.1"]"#)
+            + &format!(
+                "\n[relay.{table}]\nlisten='127.0.0.1:{port}'\n{tls}enabled=true\nallow=['127.0.0.1']\n[mode2]\nenabled=true\n"
+            );
+        let config = setup_with(&format!("v3-{table}"), &legacy);
+        let run = serve(&config);
+        assert_eq!(run.code, Some(3), "{}", run.stderr);
+        assert_eq!(
+            startup_failures(&run.stdout),
+            pairs(&[("config_unknown_key", &format!("relay.{table}"))])
+        );
+        assert_eq!(
+            run.errors(),
+            pairs(&[("config_unknown_key", &format!("relay.{table}"))])
+        );
+        assert_released(ports);
+        // Contract §3.3 moves listener/TLS fields to the parent and policy
+        // fields to its viewer child; all values remain unchanged.
+        let migrated = legacy
+            .replace(&format!("[relay.{table}]"), &format!("[relay.{listener}]"))
+            .replace(
+                "enabled=true\nallow=",
+                &format!("[relay.{listener}.viewer]\nenabled=true\nallow="),
+            );
+        write(&config, &migrated);
+        let log = config.with_file_name("relay.log");
+        let _guard = Guard(Some(spawn(&config)));
+        wait_for_line(&log, |line| field(line, "event") == Some("server_ready"));
+        let mut viewer = relay_peer(1, port, listener == "wss");
+        upgrade_peer_path(viewer.as_mut(), "/relay");
+        assert_peer_greeting(viewer.as_mut(), true);
+        send_peer_request(viewer.as_mut(), &make_request(b"ID:66001"), true);
+        wait_for_line(&log, |line| {
+            field(line, "event") == Some("waiting_registered")
+                && field(line, "listener") == Some(listener)
+        });
+    }
 }
 
 /// Sends a plaintext WebSocket upgrade request to `port` and returns the bytes
@@ -2447,13 +2630,13 @@ fn four_entry_config(ports: Ports, ws: u16, wss: u16, separate_lists: bool) -> S
     };
     entry_config(ports, &allow(2), &allow(3))
         + &format!(
-            "\n[relay.ws_viewer]\nenabled = true\nlisten = '127.0.0.1:{ws}'\nallow = {}\n\
-             \n[relay.wss_viewer]\nenabled = true\nlisten = '127.0.0.1:{wss}'\nallow = {}\ncert_file = '{}'\nkey_file = '{}'\n\
+            "\n[relay.ws]\nlisten = '127.0.0.1:{ws}'\n[relay.ws.viewer]\nenabled = true\nallow = {}\n\
+             \n[relay.wss]\nlisten = '127.0.0.1:{wss}'\ncert_file = '{}'\nkey_file = '{}'\n[relay.wss.viewer]\nenabled = true\nallow = {}\n\
              \n[mode2]\nenabled = true\n",
             allow(4),
-            allow(5),
             tls_file("server-chain.pem"),
-            tls_file("server-key-p256.pem")
+            tls_file("server-key-p256.pem"),
+            allow(5)
         )
 }
 
@@ -2470,8 +2653,12 @@ fn relay_peer(source: u8, port: u16, secure: bool) -> Box<dyn TestPeer> {
 }
 
 fn upgrade_peer(peer: &mut dyn TestPeer) {
+    upgrade_peer_path(peer, "/relay");
+}
+
+fn upgrade_response_head(peer: &mut dyn TestPeer, path: &str) -> Vec<u8> {
     peer.write_all(
-        b"GET /relay HTTP/1.1\r\nHost: localhost\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n",
+        format!("GET {path} HTTP/1.1\r\nHost: localhost\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n").as_bytes(),
     )
     .unwrap_or_else(|e| panic!("upgrade request: {e}"));
     peer.flush()
@@ -2484,6 +2671,11 @@ fn upgrade_peer(peer: &mut dyn TestPeer) {
             .unwrap_or_else(|e| panic!("upgrade response: {e}"));
         head.push(byte[0]);
     }
+    head
+}
+
+fn upgrade_peer_path(peer: &mut dyn TestPeer, path: &str) {
+    let head = upgrade_response_head(peer, path);
     assert!(
         head.starts_with(b"HTTP/1.1 101 "),
         "upgrade: {}",
@@ -2492,6 +2684,28 @@ fn upgrade_peer(peer: &mut dyn TestPeer) {
     assert!(String::from_utf8_lossy(&head).lines().any(|line| {
         line.eq_ignore_ascii_case("Sec-WebSocket-Accept: s3pPLMBiTxaQ9kYGzzhZRbK+xOo=")
     }));
+}
+
+fn send_peer_request(peer: &mut dyn TestPeer, request: &[u8; 250], websocket: bool) {
+    if websocket {
+        let mask = [0x19, 0x27, 0x35, 0x43];
+        let mut frame = Vec::with_capacity(258);
+        frame.extend_from_slice(&[0x82, 0xfe, 0, 250]);
+        frame.extend_from_slice(&mask);
+        frame.extend(
+            request
+                .iter()
+                .enumerate()
+                .map(|(i, byte)| byte ^ mask[i % 4]),
+        );
+        peer.write_all(&frame)
+            .unwrap_or_else(|e| panic!("masked initial request: {e}"));
+    } else {
+        peer.write_all(request)
+            .unwrap_or_else(|e| panic!("TCP initial request: {e}"));
+    }
+    peer.flush()
+        .unwrap_or_else(|e| panic!("flush initial request: {e}"));
 }
 
 fn assert_peer_greeting(peer: &mut dyn TestPeer, websocket: bool) {
@@ -2528,22 +2742,45 @@ fn assert_peer_closed_without_data(peer: &mut dyn TestPeer) {
 fn every_relay_entry_point_accepts_only_its_own_source_ip() {
     let _lock = lock_ports();
     let (ports, ws, wss) = four_entry_ports();
-    let config = setup_with("four-entry-allow", &four_entry_config(ports, ws, wss, true));
+    let text = four_entry_config(ports, ws, wss, true)
+        + "\n[relay.ws.server]\nenabled=true\nallow=['127.0.0.6']\n[relay.wss.server]\nenabled=true\nallow=['127.0.0.7']\n";
+    let config = setup_with("six-entry-allow", &text);
     let log = config.with_file_name("relay.log");
     let _guard = Guard(Some(spawn(&config)));
     wait_for_line(&log, |line| field(line, "event") == Some("server_ready"));
 
-    // Every source appears in exactly one list. Check all 16 pairs, not just
-    // WS versus WSS or Viewer versus Server.
-    for (listener, port, own_source, websocket, secure) in [
-        ("tcp_viewer", ports.tcp_viewer, 2, false, false),
-        ("tcp_server", ports.tcp_server, 3, false, false),
-        ("ws_viewer", ws, 4, true, false),
-        ("wss_viewer", wss, 5, true, true),
+    // Each source belongs to one role list. All 36 role/source pairs are checked.
+    for (listener, role, port, own_source, websocket, secure) in [
+        ("tcp_viewer", "viewer", ports.tcp_viewer, 2, false, false),
+        ("tcp_server", "server", ports.tcp_server, 3, false, false),
+        ("ws", "viewer", ws, 4, true, false),
+        ("wss", "viewer", wss, 5, true, true),
+        ("ws", "server", ws, 6, true, false),
+        ("wss", "server", wss, 7, true, true),
     ] {
-        for source in 2..=5 {
+        let path = if role == "server" {
+            "/relay/server"
+        } else {
+            "/relay"
+        };
+        for source in 2..=7 {
             let ip = format!("127.0.0.{source}");
             if source != own_source {
+                let passes_union = (listener == "ws" && [4, 6].contains(&source))
+                    || (listener == "wss" && [5, 7].contains(&source));
+                if passes_union {
+                    let mut peer = relay_peer(source, port, secure);
+                    let head = upgrade_response_head(peer.as_mut(), path);
+                    assert!(head.starts_with(b"HTTP/1.1 403 "), "{head:?}");
+                    let rejected = wait_for_line(&log, |line| {
+                        is(line, "connection_rejected", listener, &ip)
+                            && field(line, "role") == Some(role)
+                            && field(line, "stage") == Some("upgrade")
+                    });
+                    assert_eq!(field(&rejected, "reason"), Some("ip_not_allowed"));
+                    assert!(field(&rejected, "conn_id").is_some());
+                    continue;
+                }
                 // No request or ClientHello: refusal precedes data and TLS.
                 let mut peer = connect_from([127, 0, 0, source], port);
                 assert_peer_closed_without_data(&mut peer);
@@ -2560,31 +2797,35 @@ fn every_relay_entry_point_accepts_only_its_own_source_ip() {
                 );
                 continue;
             }
+            let before = read_log(&log);
             let mut peer = relay_peer(source, port, secure);
             if websocket {
-                upgrade_peer(peer.as_mut());
+                upgrade_peer_path(peer.as_mut(), path);
             }
-            if listener == "tcp_server" {
-                peer.write_all(&make_request(b"ID:3701"))
-                    .unwrap_or_else(|e| panic!("server initial request: {e}"));
-                peer.flush().unwrap_or_else(|e| panic!("flush server: {e}"));
+            if role == "server" {
+                let request = make_request(format!("ID:370{own_source}").as_bytes());
+                send_peer_request(peer.as_mut(), &request, websocket);
             } else {
                 assert_peer_greeting(peer.as_mut(), websocket);
             }
-            let accepted =
-                wait_for_line(&log, |line| is(line, "connection_accepted", listener, &ip));
+            let accepted = wait_for_line(&log, |line| {
+                is(line, "connection_accepted", listener, &ip)
+                    && !before.lines().any(|old| old == line)
+            });
             assert_eq!(field(&accepted, "level"), Some("info"));
             assert_eq!(
                 field(&accepted, "role"),
-                Some(if listener == "tcp_server" {
-                    "server"
+                if websocket {
+                    None
+                } else if listener == "tcp_server" {
+                    Some("server")
                 } else {
-                    "viewer"
-                })
+                    Some("viewer")
+                }
             );
             let conn_id = field(&accepted, "conn_id")
                 .unwrap_or_else(|| panic!("accepted conn_id missing: {accepted}"));
-            if listener == "tcp_server" {
+            if role == "server" {
                 wait_for_line(&log, |line| {
                     field(line, "event") == Some("waiting_registered")
                         && field(line, "conn_id") == Some(conn_id)
@@ -2595,6 +2836,7 @@ fn every_relay_entry_point_accepts_only_its_own_source_ip() {
 }
 
 /// spec: operations.md:OPS-006
+/// spec: operations.md:OPS-069 partial
 #[test]
 fn initial_tls_and_upgrade_deadlines_have_distinct_causes_and_release_capacity() {
     let _lock = lock_ports();
@@ -2624,11 +2866,11 @@ fn initial_tls_and_upgrade_deadlines_have_distinct_causes_and_release_capacity()
             false,
             false,
         ),
-        ("ws_viewer", ws, "initial_exchange", false, true),
-        ("wss_viewer", wss, "initial_exchange", true, true),
-        ("ws_viewer", ws, "upgrade", false, true),
-        ("wss_viewer", wss, "tls", false, true),
-        ("wss_viewer", wss, "upgrade", true, true),
+        ("ws", ws, "initial_exchange", false, true),
+        ("wss", wss, "initial_exchange", true, true),
+        ("ws", ws, "upgrade", false, true),
+        ("wss", wss, "tls", false, true),
+        ("wss", wss, "upgrade", true, true),
     ]
     .into_iter()
     .zip(10..17)
@@ -2695,6 +2937,16 @@ fn initial_tls_and_upgrade_deadlines_have_distinct_causes_and_release_capacity()
         assert_eq!(field(&aborted, "listener"), Some(listener));
         assert_eq!(field(&aborted, "stage"), Some(stage));
         assert_eq!(
+            field(&aborted, "role"),
+            if listener == "tcp_server" {
+                Some("server")
+            } else if initial {
+                Some("viewer")
+            } else {
+                None
+            }
+        );
+        assert_eq!(
             field(&aborted, "reason"),
             Some(if initial {
                 "handshake_timeout"
@@ -2734,5 +2986,346 @@ fn initial_tls_and_upgrade_deadlines_have_distinct_causes_and_release_capacity()
             });
         }
         drop(peer);
+    }
+}
+
+fn setup_authenticated(name: &str, text: &str) -> PathBuf {
+    use vnc_relay_app::ports::PasswordHasher;
+    use vnc_relay_domain::account::{Argon2Params, Password};
+    let config = setup_with(name, text);
+    let hash = vnc_relay_adapters::accounts_file::Argon2Hasher
+        .hash(
+            &Password::parse("correct-horse-battery".to_owned())
+                .unwrap_or_else(|error| panic!("test password: {error:?}")),
+            Argon2Params {
+                memory_kib: 19_456,
+                iterations: 2,
+                parallelism: 1,
+            },
+        )
+        .unwrap_or_else(|error| panic!("test password hash: {error}"));
+    write(
+        &config.with_file_name("admin-accounts.toml"),
+        &format!(
+            "version=1\n[[account]]\nname='alice'\npassword_hash='{}'\n",
+            hash.as_str()
+        ),
+    );
+    config
+}
+
+fn management_exchange(
+    port: u16,
+    method: &str,
+    path: &str,
+    cookie: &str,
+    csrf: &str,
+    body: &str,
+) -> (u16, String, serde_json::Value) {
+    let mut peer = relay_peer(1, port, false);
+    write!(peer, "{method} {path} HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\nContent-Type: application/json\r\nContent-Length: {}\r\n{cookie}{csrf}\r\n{body}", body.len()).unwrap_or_else(|error| panic!("management request: {error}"));
+    peer.flush()
+        .unwrap_or_else(|error| panic!("management flush: {error}"));
+    let mut raw = String::new();
+    peer.read_to_string(&mut raw)
+        .unwrap_or_else(|error| panic!("management response: {error}"));
+    let (head, body) = raw
+        .split_once("\r\n\r\n")
+        .unwrap_or_else(|| panic!("HTTP response: {raw:?}"));
+    let status = head
+        .split_whitespace()
+        .nth(1)
+        .and_then(|status| status.parse().ok())
+        .unwrap_or_else(|| panic!("HTTP status: {head}"));
+    (
+        status,
+        head.to_owned(),
+        serde_json::from_str(body)
+            .unwrap_or_else(|error| panic!("management JSON: {error}: {body}")),
+    )
+}
+
+fn process_login(port: u16) -> (String, String) {
+    let (status, head, body) = management_exchange(
+        port,
+        "POST",
+        "/api/v1/session",
+        "",
+        "",
+        r#"{"account":"alice","password":"correct-horse-battery"}"#,
+    );
+    assert_eq!(status, 200, "{body}");
+    let cookie = head
+        .lines()
+        .find_map(|line| {
+            let (key, value) = line.split_once(':')?;
+            key.eq_ignore_ascii_case("set-cookie")
+                .then(|| value.trim().split(';').next().unwrap_or_default())
+        })
+        .unwrap_or_else(|| panic!("login cookie missing: {head}"));
+    let csrf = body["csrf_token"]
+        .as_str()
+        .unwrap_or_else(|| panic!("CSRF token missing: {body}"));
+    (
+        format!("Cookie: {cookie}\r\n"),
+        format!("X-CSRF-Token: {csrf}\r\n"),
+    )
+}
+
+fn process_query(port: u16, path: &str, cookie: &str) -> serde_json::Value {
+    let (status, _, body) = management_exchange(port, "GET", path, cookie, "", "");
+    assert_eq!(status, 200, "{path}: {body}");
+    body
+}
+
+/// spec: operations.md:OPS-068
+#[test]
+fn real_relay_logs_reach_management_and_restart_discards_previous_events() {
+    let _lock = lock_ports();
+    let ports = Ports::free();
+    let config = setup_authenticated(
+        "recent-logs-restart",
+        &entry_config(ports, r#"["127.0.0.1"]"#, r#"["127.0.0.1"]"#),
+    );
+    let log = config.with_file_name("relay.log");
+    {
+        let mut guard = Guard(Some(spawn(&config)));
+        wait_listening(guard.child(), ports);
+        let (cookie, _) = process_login(ports.management);
+        let mut refused = connect_from([127, 0, 0, 77], ports.tcp_viewer);
+        assert_peer_closed_without_data(&mut refused);
+        let event = wait_for_line(&log, |line| {
+            is(line, "connection_rejected", "tcp_viewer", "127.0.0.77")
+        });
+        let events = process_query(ports.management, "/api/v1/logs?q=127.0.0.77", &cookie);
+        assert_eq!(events["items"].as_array().unwrap().len(), 1);
+        assert_eq!(
+            events["items"][0]["entry"],
+            serde_json::from_str::<serde_json::Value>(&event).unwrap()
+        );
+    }
+    let mut guard = Guard(Some(spawn(&config)));
+    wait_listening(guard.child(), ports);
+    let (cookie, _) = process_login(ports.management);
+    let events = process_query(ports.management, "/api/v1/logs", &cookie);
+    assert_eq!(events["oldest_seq"], 1);
+    assert_eq!(events["items"][0]["seq"], 1);
+    assert_eq!(events["items"][0]["entry"]["event"], "server_starting");
+    let previous = process_query(ports.management, "/api/v1/logs?q=127.0.0.77", &cookie);
+    assert_eq!(previous["items"], serde_json::json!([]));
+    drop(guard);
+
+    // The same retention contract applies to stdout and file output.
+    use vnc_relay_adapters::ops_log::{JsonLinesEventSink, LogsFilter, RecentLogs};
+    use vnc_relay_app::events::Event;
+    use vnc_relay_app::ports::EventSink;
+    use vnc_relay_app::settings::LogOutput;
+    for file in [false, true] {
+        for capacity in [0, 3] {
+            let logs = Arc::new(RecentLogs::new(capacity));
+            let path = config.with_file_name(format!("retention-{file}-{capacity}.jsonl"));
+            let sink = if file {
+                JsonLinesEventSink::open(&LogOutput::File(path.clone()), |_| {}, |_| {}).unwrap()
+            } else {
+                JsonLinesEventSink::stdout(|_| {})
+            }
+            .with_recent_logs(logs.clone());
+            for index in 0..5 {
+                sink.record(&Event::LogReopenFailed {
+                    detail: format!("retention-{index}"),
+                });
+            }
+            drop(sink);
+            let response = logs.query(
+                &LogsFilter {
+                    limit: 10,
+                    ..Default::default()
+                },
+                std::time::SystemTime::now(),
+            );
+            let response: serde_json::Value =
+                serde_json::from_str(&response.to_json_string()).unwrap();
+            assert_eq!(response["max_entries"], capacity);
+            assert_eq!(response["has_more"], false);
+            if capacity == 0 {
+                assert_eq!(response["items"], serde_json::json!([]));
+                assert!(response["oldest_seq"].is_null());
+                assert!(response["latest_seq"].is_null());
+            } else {
+                assert_eq!(response["oldest_seq"], 3);
+                assert_eq!(response["latest_seq"], 5);
+                let items = response["items"].as_array().unwrap();
+                assert_eq!(items.len(), 3);
+                for (index, item) in items.iter().enumerate() {
+                    assert_eq!(item["seq"], index + 3);
+                    assert_eq!(item["entry"]["detail"], format!("retention-{}", index + 2));
+                }
+                if file {
+                    let lines: Vec<serde_json::Value> = read_log(&path)
+                        .lines()
+                        .map(|line| serde_json::from_str(line).unwrap())
+                        .collect();
+                    assert_eq!(lines.len(), 5);
+                    for (item, line) in items.iter().zip(&lines[2..]) {
+                        assert_eq!(&item["entry"], line);
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn upgrade_forwarded(peer: &mut dyn TestPeer, server: bool, forwarded: &str) {
+    let path = if server { "/relay/server" } else { "/relay" };
+    write!(peer, "GET {path} HTTP/1.1\r\nHost: localhost\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\nX-Forwarded-For: {forwarded}\r\n\r\n").unwrap_or_else(|error| panic!("forwarded upgrade: {error}"));
+    peer.flush()
+        .unwrap_or_else(|error| panic!("upgrade flush: {error}"));
+    let mut head = Vec::new();
+    while !head.ends_with(b"\r\n\r\n") {
+        assert!(head.len() < 16384);
+        let mut byte = [0];
+        peer.read_exact(&mut byte)
+            .unwrap_or_else(|error| panic!("upgrade response: {error}"));
+        head.push(byte[0]);
+    }
+    assert!(
+        head.starts_with(b"HTTP/1.1 101 "),
+        "{}",
+        String::from_utf8_lossy(&head)
+    );
+}
+
+/// spec: management.md:MGT-051
+#[test]
+fn real_mode_i_and_proxied_ws_wss_sessions_expose_transport_and_forwarded_addresses() {
+    let _lock = lock_ports();
+    for transport in ["tcp", "ws", "wss"] {
+        let (ports, ws, wss) = four_entry_ports();
+        let text = entry_config(ports, r#"["127.0.0.1"]"#, r#"["127.0.0.1"]"#)
+            + &format!(
+                "\n[mode1]\nenabled=true\nallow_targets=['127.0.0.1:1-65535']\n[mode2]\nenabled=true\n\
+             [timeouts]\nclose_secs=1\n\
+             [relay.ws]\nlisten='127.0.0.1:{ws}'\ntrusted_proxies=['127.0.0.1']\n\
+             [relay.ws.viewer]\nenabled=true\nallow=['198.51.100.7']\n\
+             [relay.ws.server]\nenabled=true\nallow=['203.0.113.8']\n\
+             [relay.wss]\nlisten='127.0.0.1:{wss}'\ntrusted_proxies=['127.0.0.1']\ncert_file='{}'\nkey_file='{}'\n\
+             [relay.wss.viewer]\nenabled=true\nallow=['198.51.100.7']\n\
+             [relay.wss.server]\nenabled=true\nallow=['203.0.113.8']\n",
+                tls_file("server-chain.pem"),
+                tls_file("server-key-p256.pem")
+            );
+        let config = setup_authenticated(&format!("real-session-fields-{transport}"), &text);
+        let log = config.with_file_name("relay.log");
+        let _guard = Guard(Some(spawn(&config)));
+        wait_for_line(&log, |line| field(line, "event") == Some("server_ready"));
+        let (cookie, csrf) = process_login(ports.management);
+        let mode1 = transport == "tcp";
+        let target = TcpListener::bind("127.0.0.1:0").unwrap();
+        target.set_nonblocking(true).unwrap();
+        let secure = transport == "wss";
+        let mut viewer = relay_peer(
+            1,
+            if mode1 {
+                ports.tcp_viewer
+            } else if secure {
+                wss
+            } else {
+                ws
+            },
+            !mode1 && secure,
+        );
+        if !mode1 {
+            upgrade_forwarded(viewer.as_mut(), false, "198.51.100.7, 127.0.0.1");
+        }
+        assert_peer_greeting(viewer.as_mut(), !mode1);
+        let mut server: Box<dyn TestPeer> = if mode1 {
+            send_peer_request(
+                viewer.as_mut(),
+                &make_request(target.local_addr().unwrap().to_string().as_bytes()),
+                false,
+            );
+            let deadline = Instant::now() + EXIT_LIMIT;
+            loop {
+                match target.accept() {
+                    Ok((peer, _)) => break Box::new(peer),
+                    Err(error)
+                        if error.kind() == ErrorKind::WouldBlock && Instant::now() < deadline =>
+                    {
+                        std::thread::sleep(Duration::from_millis(10))
+                    }
+                    Err(error) => panic!("Mode I target accept: {error}"),
+                }
+            }
+        } else {
+            send_peer_request(viewer.as_mut(), &make_request(b"ID:51001"), true);
+            let mut server = relay_peer(1, if secure { wss } else { ws }, secure);
+            upgrade_forwarded(server.as_mut(), true, "203.0.113.8, 127.0.0.1");
+            send_peer_request(server.as_mut(), &make_request(b"ID:51001"), true);
+            server
+        };
+        let started = wait_for_line(&log, |line| field(line, "event") == Some("session_started"));
+        let session_id = field(&started, "session_id").unwrap();
+        let list = process_query(ports.management, "/api/v1/sessions", &cookie);
+        let item = &list["items"][0];
+        assert_eq!(list["items"].as_array().unwrap().len(), 1);
+        assert_eq!(item["target_transport"], transport);
+        assert_eq!(
+            item["viewer_forwarded_ip"],
+            if mode1 {
+                serde_json::Value::Null
+            } else {
+                serde_json::json!("198.51.100.7")
+            }
+        );
+        assert_eq!(
+            item["target_forwarded_ip"],
+            if mode1 {
+                serde_json::Value::Null
+            } else {
+                serde_json::json!("203.0.113.8")
+            }
+        );
+        assert_eq!(item["viewer_address"]["ip"], "127.0.0.1");
+        assert_eq!(item["target_address"]["ip"], "127.0.0.1");
+        let detail = process_query(
+            ports.management,
+            &format!("/api/v1/sessions/{session_id}"),
+            &cookie,
+        );
+        for field in [
+            "target_transport",
+            "viewer_forwarded_ip",
+            "target_forwarded_ip",
+            "viewer_address",
+            "target_address",
+        ] {
+            assert_eq!(detail["session"][field], item[field]);
+        }
+        // TCP peers can acknowledge the server's EOF. WS peers deliberately wait
+        // for E; either close path must preserve the final transport metadata.
+        if mode1 {
+            viewer.flush().unwrap();
+            server.flush().unwrap();
+        }
+        let (status, _, closed) = management_exchange(
+            ports.management,
+            "POST",
+            &format!("/api/v1/sessions/{session_id}/terminate"),
+            &cookie,
+            &csrf,
+            "",
+        );
+        assert_eq!(status, 200, "{closed}");
+        assert_eq!(closed["result"], "terminated");
+        let history = process_query(ports.management, "/api/v1/closed-sessions", &cookie);
+        assert_eq!(history["items"].as_array().unwrap().len(), 1);
+        for item in [&closed["closed_session"], &history["items"][0]] {
+            assert_eq!(item["target_transport"], transport);
+            assert_eq!(item["session_id"], session_id);
+            assert!(item.get("viewer_forwarded_ip").is_none());
+            assert!(item.get("target_forwarded_ip").is_none());
+        }
+        drop(viewer);
+        drop(server);
     }
 }

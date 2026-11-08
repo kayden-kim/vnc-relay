@@ -1,4 +1,4 @@
-//! The WebSocket upgrade request of a WS or WSS viewer entry point
+//! The WebSocket upgrade request of a shared WS or WSS listener
 //! (websocket-relay-v1 §1.1): reading the request head, checking it in the
 //! contract's order, and the answers (101 or a refusal). The checks and the
 //! answer texts have no socket in them, so unit tests cover them directly.
@@ -8,7 +8,10 @@ use std::io;
 use tokio::io::{AsyncRead, AsyncReadExt};
 use tokio_tungstenite::tungstenite::handshake::derive_accept_key;
 use vnc_relay_app::events::RejectReason;
+use vnc_relay_app::settings::WsListenerSettings;
+use vnc_relay_domain::entry_point::Role;
 use vnc_relay_domain::origin::Origin;
+use vnc_relay_domain::peer_ip::PeerIp;
 
 /// Size of each read while the request head is collected.
 const READ_CHUNK: usize = 1024;
@@ -18,9 +21,9 @@ const READ_CHUNK: usize = 1024;
 /// A head that does not end within this size is refused with 400.
 pub(crate) const HEAD_LIMIT: usize = 16 * 1024;
 
-/// The only path of the relay endpoint (websocket-relay-v1 §1.1). A query
-/// string after it is not part of the path.
+/// Exact paths select the role; queries are ignored.
 const RELAY_PATH: &str = "/relay";
+const SERVER_PATH: &str = "/relay/server";
 
 /// Result of reading one request head.
 #[derive(Debug, PartialEq, Eq)]
@@ -69,13 +72,13 @@ fn head_end(buf: &[u8]) -> Option<usize> {
 
 /// Why an upgrade request is refused. Each refusal has one HTTP answer and
 /// one reason in the `connection_rejected` line of stage `upgrade`
-/// (ops-info-v1 §1.6).
+/// (ops-info-v2 §1.6).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Refusal {
     /// 400: a malformed request, a missing or wrong header, a duplicate
     /// Origin, an HTTP version below 1.1, or a head over the limit.
     Invalid,
-    /// 404: the path is not `/relay`.
+    /// 404: the path is unknown or its role is disabled.
     NotFound,
     /// 405: the method is not GET.
     MethodNotAllowed,
@@ -88,6 +91,8 @@ pub(crate) enum Refusal {
     SubprotocolNotSupported,
     /// 403: the source IP failed the pre-upgrade recheck (§1.1).
     IpNotAllowed,
+    /// 400: a trusted proxy did not supply a valid client address.
+    ForwardedForInvalid,
 }
 
 impl Refusal {
@@ -100,6 +105,7 @@ impl Refusal {
             Self::OriginNotAllowed(_) => RejectReason::OriginNotAllowed,
             Self::SubprotocolNotSupported => RejectReason::SubprotocolNotSupported,
             Self::IpNotAllowed => RejectReason::IpNotAllowed,
+            Self::ForwardedForInvalid => RejectReason::ForwardedForInvalid,
         }
     }
 
@@ -114,7 +120,9 @@ impl Refusal {
     /// The HTTP answer: status line, the headers the status needs, and no body.
     pub(crate) fn answer(&self) -> Vec<u8> {
         let (status, extra) = match self {
-            Self::Invalid | Self::SubprotocolNotSupported => ("400 Bad Request", ""),
+            Self::Invalid | Self::SubprotocolNotSupported | Self::ForwardedForInvalid => {
+                ("400 Bad Request", "")
+            }
             Self::NotFound => ("404 Not Found", ""),
             Self::MethodNotAllowed => ("405 Method Not Allowed", "Allow: GET\r\n"),
             Self::VersionUnsupported => ("426 Upgrade Required", "Sec-WebSocket-Version: 13\r\n"),
@@ -128,6 +136,7 @@ impl Refusal {
 /// A request that passed every check of §1.1 except the pre-upgrade IP recheck.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ValidUpgrade {
+    pub(crate) role: Role,
     /// `Sec-WebSocket-Accept` for the request key.
     pub(crate) accept_key: String,
     /// The client offered `binary`, which the 101 echoes.
@@ -139,7 +148,13 @@ pub(crate) struct ValidUpgrade {
 /// `Sec-WebSocket-Version`, then `Sec-WebSocket-Key`, then Origin, then the
 /// subprotocol. The first failed check decides the refusal. The IP recheck is
 /// not part of this function; the caller runs it after a request passes.
-pub(crate) fn check(head: &[u8], origins: &[Origin]) -> Result<ValidUpgrade, Refusal> {
+pub(crate) fn check(
+    head: &[u8],
+    listener: &WsListenerSettings,
+    resolved_role: &mut Option<Role>,
+    peer_ip: PeerIp,
+    forwarded_ip: &mut Option<PeerIp>,
+) -> Result<ValidUpgrade, Refusal> {
     let text = String::from_utf8_lossy(head);
     let mut lines = text.split("\r\n");
     let Some(request_line) = lines.next() else {
@@ -170,9 +185,12 @@ pub(crate) fn check(head: &[u8], origins: &[Origin]) -> Result<ValidUpgrade, Ref
         return Err(Refusal::Invalid);
     };
     let path = target.split_once('?').map_or(target, |(path, _)| path);
-    if path != RELAY_PATH {
-        return Err(Refusal::NotFound);
-    }
+    let (role, settings) = match path {
+        RELAY_PATH if listener.viewer.enabled => (Role::Viewer, &listener.viewer),
+        SERVER_PATH if listener.server.enabled => (Role::Server, &listener.server),
+        _ => return Err(Refusal::NotFound),
+    };
+    *resolved_role = Some(role);
     if method != "GET" {
         return Err(Refusal::MethodNotAllowed);
     }
@@ -199,12 +217,23 @@ pub(crate) fn check(head: &[u8], origins: &[Origin]) -> Result<ValidUpgrade, Ref
         _ => return Err(Refusal::Invalid),
     };
 
+    if listener.trusted_proxies.permits(peer_ip) {
+        *forwarded_ip = Some(
+            vnc_relay_domain::forwarded_for::client_ip(
+                values(&headers, "x-forwarded-for"),
+                &listener.trusted_proxies,
+            )
+            .map_err(|_| Refusal::ForwardedForInvalid)?,
+        );
+    }
+
     let mut origin_values = values(&headers, "origin");
     if let Some(origin) = origin_values.next() {
         if origin_values.next().is_some() {
             return Err(Refusal::Invalid);
         }
-        let allowed = Origin::parse(origin).is_ok_and(|parsed| origins.contains(&parsed));
+        let allowed =
+            Origin::parse(origin).is_ok_and(|parsed| settings.allowed_origins.contains(&parsed));
         if !allowed {
             return Err(Refusal::OriginNotAllowed(origin.to_owned()));
         }
@@ -220,6 +249,7 @@ pub(crate) fn check(head: &[u8], origins: &[Origin]) -> Result<ValidUpgrade, Ref
     }
 
     Ok(ValidUpgrade {
+        role,
         accept_key: derive_accept_key(key.as_bytes()),
         binary: tokens.contains(&"binary"),
     })
@@ -244,7 +274,7 @@ pub(crate) fn switching_protocols(upgrade: &ValidUpgrade) -> Vec<u8> {
 fn values<'a>(
     headers: &'a [(String, &'a str)],
     name: &'a str,
-) -> impl Iterator<Item = &'a str> + 'a {
+) -> impl DoubleEndedIterator<Item = &'a str> + 'a {
     headers
         .iter()
         .filter(move |(header, _)| header == name)
@@ -300,6 +330,28 @@ fn has_control(text: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use vnc_relay_domain::origin::Origin;
+
+    fn check(
+        head: &[u8],
+        origins: &[vnc_relay_domain::origin::Origin],
+    ) -> Result<ValidUpgrade, Refusal> {
+        let listener = WsListenerSettings {
+            viewer: vnc_relay_app::settings::WsRoleSettings {
+                enabled: true,
+                allowed_origins: origins.to_vec(),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        super::check(
+            head,
+            &listener,
+            &mut None,
+            PeerIp::new(std::net::Ipv4Addr::LOCALHOST.into()),
+            &mut None,
+        )
+    }
 
     const ACCEPT: &str = "s3pPLMBiTxaQ9kYGzzhZRbK+xOo=";
 
@@ -348,6 +400,7 @@ mod tests {
         assert_eq!(
             check(&request(None, &[]), &[]),
             Ok(ValidUpgrade {
+                role: Role::Viewer,
                 accept_key: ACCEPT.to_owned(),
                 binary: false,
             })
@@ -511,6 +564,7 @@ mod tests {
     #[test]
     fn switching_protocols_without_subprotocol_has_no_protocol_header() {
         let upgrade = ValidUpgrade {
+            role: Role::Viewer,
             accept_key: ACCEPT.to_owned(),
             binary: false,
         };
@@ -531,6 +585,8 @@ mod tests {
         assert!(text(Refusal::VersionUnsupported).contains("Sec-WebSocket-Version: 13\r\n"));
         assert!(text(Refusal::IpNotAllowed).starts_with("HTTP/1.1 403 Forbidden\r\n"));
         assert!(text(Refusal::Invalid).ends_with("Connection: close\r\n\r\n"));
+        assert!(text(Refusal::ForwardedForInvalid).starts_with("HTTP/1.1 400 Bad Request\r\n"));
+        assert!(text(Refusal::ForwardedForInvalid).ends_with("Connection: close\r\n\r\n"));
     }
 
     #[test]
@@ -545,6 +601,10 @@ mod tests {
             "subprotocol_not_supported"
         );
         assert_eq!(Refusal::IpNotAllowed.reason().as_str(), "ip_not_allowed");
+        assert_eq!(
+            Refusal::ForwardedForInvalid.reason().as_str(),
+            "forwarded_for_invalid"
+        );
     }
 
     /// spec: websocket.md:WS-018 partial

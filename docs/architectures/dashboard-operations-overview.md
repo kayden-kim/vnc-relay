@@ -1,4 +1,4 @@
-# 운영 현황 앱 구조 (SCR-001·SCR-002 자리)
+# 운영 대시보드 앱 구조 (SCR-001·002·004·005·006)
 
 | 항목 | 값 |
 | --- | --- |
@@ -18,7 +18,7 @@
 - SCR-001 전체와 앱 셸(진입점, 세션 확인, 언어 선택, 로그아웃)은 작업 4.10에서 구현했다.
 - SCR-002의 본문·상세 조회·종료 흐름과 해시 라우터는 작업 4.11에서 구현했다. SCR-001 목록 링크는 계약 1.11절의 화면 URL `/#/sessions/{session_id}`를 그대로 쓴다.
 - 해시(`#/sessions/…`)는 서버로 가지 않는다. 서버는 `/`와 같은 응답을 준다: 세션이 있으면 200 HTML, 없으면 303 `/login/`. 404 JSON이 아니다.
-- `router.js`는 `#/sessions/{session_id}`를 SCR-002(`session.js`)로, 그 밖의 해시를 SCR-001로 보낸다. 이 경로 선택은 이 문서의 판단, 사용자 결정 없음이다. 링크 처리 방식은 14절 D4에 적었다.
+- `router.js`는 세션 상세·설정 보기·설정 편집·최근 로그 해시를 각 화면으로 보낸다. 그 밖의 해시는 운영 현황으로 보낸다. `#/logs?session_id=…`의 값은 `logs.js`가 API 요청 전에 검사한다.
 - 이 문서가 정하지 않는 것: 관리 API 필드 의미(계약), 화면 문구(스펙 9절), 색과 간격 토큰(DESIGN.md).
 
 ## 2. 파일 배치
@@ -27,10 +27,11 @@
 web/dashboard/app/
 ├── index.html        신규. 제공 경로 `/` (frontend.md 1.1절). `/app/index.html`은 제공하지 않는다.
 ├── main.js           신규. 진입점. mountRouter(document.getElementById('app-root')) 호출. 해시에 따라 화면을 고른다
-├── router.js        신규. 해시 라우터. `#/sessions/{id}`는 session.js, 그 밖의 해시는 operations.js. 화면을 바꿀 때 이전 화면을 `dispose`한다
+├── router.js         해시 라우터. 운영 현황·세션 상세·설정 보기·편집·최근 로그를 고른다. 전환 전에 이전 화면을 `dispose`한다
 ├── operations.js     신규. SCR-001 조립과 흐름: 세션 확인, 조회 루프, 세대(generation) 번호, 로그아웃, 언어 상태
 ├── session.js        신규. SCR-002 조립과 흐름: 세션 확인, 상세 조회, 종료 확인, 종료 결과 분류, 대상 소멸, 세대(generation) 번호
-├── shell.js          신규. 두 화면이 같이 쓰는 상단 막대(언어 선택, 로그아웃)와 로그아웃 결과 판정
+├── logs.js           SCR-006. 필터, 증분 커서, 이전 페이지, 상세 펼침, 다운로드 수집과 정리
+├── shell.js          모든 보호 화면의 세 항목 상단 막대, 언어 선택, 로그아웃 결과 판정
 ├── query.js          신규. 조회 상태(진행 중, 세대, 데이터, 오류)와 갱신 타이머. DOM을 쓰지 않는다
 ├── model.js          신규. 응답 검증(계약 1.5~1.10절 필드). 맞지 않으면 `invalid`
 ├── panels.js         신규. 서버 요약 카드, 연결 카드, 목록 카드와 목록 상태 안내. SCR-002와 같이 쓰는 카드 틀(`panelCard`)과 조회 칸 갱신(`applyChrome`, `setContent`)
@@ -55,7 +56,7 @@ web/dashboard/app/
 
 | 파일 | 책임 | 테스트 주입 (deps) |
 | --- | --- | --- |
-| `main.js` | `mountOperations(document.getElementById('app-root'))`만 호출 | 없음 |
+| `main.js` | `mountRouter(document.getElementById('app-root'))`만 호출 | 없음 |
 | `operations.js` | `mountOperations(root, deps)`: 세션 확인(`GET /api/v1/session`), 네 조회 루프, 세대 번호, 로그아웃, 언어 상태 | `request`(fetch 대체), `storage`, `preferredLanguages`, `navigate`(페이지 이동 대체) |
 | `model.js` | 응답 검증: `parseSession`·`parseSummary`·`parseWaiting`·`parseSessions`·`parseClosed`. 맞지 않으면 `invalid` 오류 | 없음 |
 | `api.js` | 요청 헤더, 시간 제한(AbortController), 응답을 `ApiError`의 kind로 분류. 로그아웃은 204만 성공 | `request` 인자로 받음 |
@@ -63,12 +64,13 @@ web/dashboard/app/
 | `format.js` | 시각·기간·바이트·숫자 표시, 역할·모드·전송 경로 표시 이름 | 없음 (`Intl`과 `Date`만 사용) |
 | `copy.js` | `ko`·`en` 문구 객체. 각 키에 CPY ID 주석 | 없음 |
 | `language.js` | `LANGUAGES`, `chooseLanguage`, `readSavedLanguage`, `saveLanguage` (login과 같은 저장 키). login/language.js는 이 파일의 복사본 | `storage`, `preferredLanguages` |
+| `logs.js` | `mountLogs(root, deps, { sessionId })`: 최근 로그 상태와 조회를 소유한다. 다른 화면으로 이동하면 요청·타이머·보호 데이터를 제거한다. | `request`, `storage`, `preferredLanguages`, `navigate`, `replaceUrl` |
 
 사용할 기존 컴포넌트 (3.1절 함수, `app/components/`에 이미 있음): `createNavbar`, `createLanguageSelect`(variant `navbar`), `createButton`, `createCard`, `createStat`, `createGauge`, `createDataTable`, `createBadge`, `createAlert`, `createLink`, `icon`. SCR-002 단계(4.11)에서 `createDialog`.
 
 ## 4. 화면 골격 (SCR-001)
 
-- 상단 막대: `createNavbar`. 브랜드 "VNC Relay", 항목 "운영 현황"(현재 항목), 오른쪽에 언어 선택과 [로그아웃]. `createNavbar`는 `label`을 필수로 받는다. label은 CPY-078 한국어 "주 메뉴", English "Main menu"다 (사용자 결정 2026-10-23(Q55), 14절 navbar). 모바일 폭(1023.98px 이하)에서는 브랜드 글자와 "운영 현황" 항목을 CSS로 숨기고 DOM에는 남긴다 (DESIGN 543행).
+- 상단 막대는 `shell.js` `buildNavbar`를 쓴다. 브랜드, 운영 현황·로그·설정, 언어 선택과 로그아웃을 조합한다. 현재 화면은 `aria-current`로 표시한다. 모바일에서도 세 항목을 둘째 줄에 보이며 필요한 경우 줄바꿈한다. `nav` 이름은 CPY-078이다.
 - 랜드마크: 상단 막대는 `nav`, 본문은 `main`이다 (DESIGN 582행). `nav`의 이름은 CPY-078 한국어 "주 메뉴", English "Main menu"다 (14절 navbar).
 - 페이지 머리말: 제목 "운영 현황"(CPY-004), 줄 "마지막 성공 갱신: {시각}"(CPY-015), [새로고침] 버튼(CPY-008).
 - 상태 안내: 목록 상태 안내(조회 중·갱신 중·실패·오래된 데이터)는 각 목록 카드 맨 위에 둔다 (`operations.js`의 `applyChrome`). 머리말 아래 전체 폭 안내는 두지 않는다. 배치가 시안과 같은지는 스크린샷 비교(검증 기록 4.6)에서 확인한다 (구현 판단).
@@ -103,7 +105,7 @@ Query = { data,          // 마지막 성공 응답의 값 (없을 수 있음)
 - 오래된 데이터와 조회 실패 안내는 `createAlert`, 조회 중·갱신 중 표시는 `createBadge`로 그린다 (`panels.js`의 `statusAlert`·`statusBadge`).
 - 톤: 조회 중·갱신 중은 info, 오래된 데이터는 warning, 조회 실패는 destructive로 한다는 설계다. 실제 톤은 스크린샷 비교에서 확인한다 (검증 기록 4.6).
 - "조회 중"은 카드 머리 배지, 서버 요약 값(`summaryGrid`), 사용량 고리 가운데(`usageGauge`가 `createGauge`에 `unknownTone: 'info'`를 넘긴다), 목록 빈 행 모두에서 같은 info 배지다. "확인 불가"는 neutral 배지다([DESIGN 상태 색](../design/DESIGN.md#상태-색), 사용자 지적 2026-11-07을 반영한 판단).
-- SCR-002의 첫 조회 중(`viewOf`가 `loading`이고 사라진 세션이 아님)에는 `session.js`의 `loadingFactsBlock`이 사실 다섯 줄의 이름과 `statusBadge(t, 'loading')` 값을 그린다. `bytesBlock(t, null)`은 두 방향 이름과 방향 표식, info 배지 값을 그린다. 첫 조회 실패와 사라진 세션은 값을 그리지 않는다. 정보 카드의 내용 키는 사라진 세션을 `gone`으로 구분해 조회 중 내용을 지운다(사용자 결정 2026-11-07(Q143)).
+- SCR-002 첫 조회 중에는 `loadingFactsBlock`이 모드·양쪽 전송 경로·시작 시각·양쪽 소켓 주소의 여섯 줄을 조회 중 배지로 그린다. 전달 주소는 응답 전에는 유무를 모르므로 행을 만들지 않는다. `bytesBlock(t, null)`은 두 방향 이름·표식·정보 배지를 그린다. 첫 조회 실패와 사라진 세션은 값을 그리지 않는다.
 - 페이지 머리말의 "마지막 성공 갱신"은 네 조회의 `lastSuccessAt` 중 가장 최근 값이다 (구현 판단).
 - 개수 배지도 같은 `data`를 따른다. 첫 성공 전에는 숨긴다. 성공한 빈 목록은 0건/0 items다. 갱신 중·실패 때 이전 표를 유지하면 그 개수도 유지한다. 첫 조회 실패를 0건으로 바꾸지 않는다.
 
@@ -168,13 +170,13 @@ CSRF 토큰은 메모리에만 둔다. 저장소(localStorage, sessionStorage)�
 | `summary.usage.relay_connections.current` / `limit` | 중계 연결 (CPY-031·032) | `panelCard.description`은 CPY-032. 게이지는 현재 수와 `상한 {n}`(CPY-079). `current`가 null이면 확인 불가, `limit`이 null이면 `상한 확인 불가`(CPY-080) (사용자 결정 2026-10-23(Q55)) |
 | `summary.usage.admin_connections.current` / `limit` | 관리 연결 (CPY-033·034) | `panelCard.description`은 CPY-034. 게이지 규칙은 중계 연결과 같다 |
 | `waiting.items[]`: `role`, `relay_id`, `connected_at`, `waited_ms` | 대기 연결 (CPY-036·037) | `relay_id`는 원문 `.session-id`와 `mobileHead: 'primary'`. 역할은 아이콘 없는 중립 배지와 `'secondary'`. 시각·기간 형식을 적용한다. 빈 목록 CPY-038 (DESIGN 395·473·554·608·626·636행) |
-| `sessions.items[]`: `session_id`, `mode`, `viewer_transport`, `started_at`, `bytes_viewer_to_target`, `bytes_target_to_viewer`, `viewer_address`, `target_address` | 활성 세션 (CPY-039·040) | 식별자는 `createLink`로 `/#/sessions/${encodeURIComponent(sessionId)}`에 연결한다. `.session-id`와 `mobileHead: 'primary'`를 쓴다. [상세]는 `'secondary'`다. 모드·전송 경로는 아이콘 없는 중립 배지다. 주소는 Viewer·대상 주소 줄의 `.fact-address` 값으로 보인다. 빈 목록 CPY-041 (DESIGN 395·473·555·608·626·636·644행) |
-| `sessions.items[].state` | 없음 | D6에 따라 `closing` 배지를 포함해 표시하지 않는다. 스펙 9.3.2절 CPY-040 표 머리글과 DESIGN 555행(7열)을 따른다 |
+| `sessions.items[]`: `session_id`, `mode`, `viewer_transport`, `target_transport`, `started_at`, 방향별 바이트와 소켓 주소 | 활성 세션 (CPY-039·187) | 세션 링크는 `/#/sessions/${encodeURIComponent(sessionId)}`다. 전송 경로는 두 중립 배지를 Viewer → 대상 순서로 표시한다. 주소와 바이트의 방향은 유지한다. 빈 목록은 CPY-041이다. |
+| `sessions.items[].state` | 없음 | D6에 따라 `closing` 배지를 표시하지 않는다. 열 구성은 CPY-187을 따른다. |
 | `closed-sessions.items[]`: `session_id`, `close_cause`, `ended_at`, `bytes_viewer_to_target`, `bytes_target_to_viewer` | 최근 종료 목록 (CPY-042·043) | 식별자는 원문 `.session-id`와 `mobileHead: 'primary'`. 종료 원인 배지는 `'secondary'`다. 원인은 CPY-045~050·083으로 매핑하며 목록 밖 값은 원문이다. `connection_error`·`internal_error`는 destructive, `dead_connection`·`close_timeout`은 warning, 나머지는 neutral이다. `internal_error`의 문구는 화면 스펙 CPY-083(Q94), 톤은 DESIGN의 판단을 따른다. 빈 목록 CPY-044. `max_entries`는 표시하지 않는다 (구현 판단, 스펙에 문구 없음; DESIGN 393~395·473·556·608·622·626·636행) |
 
 - 응답의 `as_of`는 화면에 쓰지 않는다. "마지막 성공 갱신"은 클라이언트가 응답을 적용한 시각이다 (구현 판단).
 - 방향별 바이트는 두 줄이다. 각 줄은 `.direction-mark.direction-mark-1` 또는 `.direction-mark.direction-mark-2`, 흐린 방향 이름, 값 순서다. 표식은 `aria-hidden="true"`인 장식이다. Viewer→대상은 `chart-1`, 대상→Viewer는 `chart-2`다(DESIGN 378·643행).
-- 활성 세션의 바이트 열 이름은 CPY-040을 쓴다. 시안 문구로 바꾸지 않는다. [상세] 링크는 `.button.button-outline`에 오른쪽 꺾쇠 아이콘을 붙인다. 표 안 최소 높이는 데스크톱 `spacing.control-height-sm`, 모바일 `spacing.control-height-touch`다(DESIGN 579·623·634행).
+- 활성 세션의 열 이름은 CPY-187이다. [상세] 링크는 `.button.button-outline`과 오른쪽 꺾쇠를 쓴다. 표 안 최소 높이는 데스크톱 `spacing.control-height-sm`, 모바일 `spacing.control-height-touch`다.
 - 역할·모드·전송 경로와 중립 종료 원인 배지는 아이콘이 없다. warning·destructive 종료 원인 배지는 상태 아이콘을 함께 쓴다(DESIGN 608·622~626·636행).
 
 ## 11. 정적 제공과 서버 변경
@@ -346,3 +348,43 @@ CSRF 토큰은 메모리에만 둔다. 저장소(localStorage, sessionStorage)�
 | SCR-001 상세 조작 (2026-10-23, 4.12) | 상세 링크에 아이콘 없음 | 오른쪽 꺾쇠와 표 안 최소 높이 sm·모바일 touch를 적용한다 | DESIGN 579·623·634행으로 해소 | 10절 반영. 아이콘·높이 시험과 Chrome 캡처 확인(검증 기록 4.15절) |
 | SCR-001 연결 카드 설명 (2026-10-23, 4.12) | `usageGauge`가 본문 아래 `note`를 붙임 | `panelCard.description`을 `createCard`에 넘긴다. 제목 아래 `p.card-description`으로 옮기고 `usageGauge.note`를 없앤다 | DESIGN 527·638행으로 해소 | 4·10절·공통 컴포넌트 3.1절 반영. DOM 순서 시험과 Chrome 캡처 확인(검증 기록 4.15절) |
 | SCR-001 시안과 스펙 경계 (2026-10-23, 4.12) | 시안의 개수 배지·closing·바이트 머리글과 스펙 문구의 차이 | 개수 배지는 CPY 승인 전 미표시. `closing`은 D6으로 생략. 바이트 머리글은 CPY-040 유지 | 개수 배지는 승인 대기. 나머지는 스펙 우선으로 해소 | 10·15절 반영. 남은 차이는 검증 기록 4.15절에 있다 |
+
+## 16. 최근 로그 (SCR-006)
+
+사용자 결정 2026-11-08(Q189~Q191)의 화면·문구·API 이름을 따른다. 동작 기준은 [화면 스펙 4·5.2절](../specs/dashboard.md#52-로그-필터다운로드와-조회-오류), 데이터 형식은 [관리 API 계약 1.15절](../contracts/management-api-v1.md#115-최근-로그-get-apiv1logs)이다.
+
+대표 입력은 `/#/logs?session_id=ses_example`이다. `router.js`의 `routeOf`가 값을 해석해 `mountLogs`에 넘긴다. `isSessionId`가 형식을 확인한다. 형식 오류면 로그 조회·폴링·다운로드를 시작하지 않는다.
+
+화살표는 실행 중 호출과 응답 전달을 뜻한다.
+
+```text
+router.js mountRouter → logs.js mountLogs
+  → api.js getSession → model.js parseSession → P와 조회 제한 시간
+  → api.js getLogs → model.js parseLogs → 필터·커서 세대가 같은 응답만 반영
+  → 공통 Card·Badge·Alert·Button·상단 막대와 로그 표
+```
+
+### 상태와 요청 소유
+
+- `logs.js`의 `state`는 필터, 정렬한 항목, 펼친 seq 집합, 보관 범위, 마지막 성공 시각과 마지막 확인 seq를 소유한다. `api.js`는 헤더·제한 시간·오류 분류만 맡는다. `parseLogs`는 필수 응답 필드를 검사한다.
+- 첫 성공 전에는 수를 만들지 않는다. 보관 상태는 조회 중 또는 확인 불가 배지다. 시각은 CPY-035다. 실패는 기존 목록과 성공 시각을 유지하며 빈 결과로 바꾸지 않는다.
+- 첫 조회·수동 갱신·필터 변경은 커서 없는 요청이다. `snapshotReady`는 현재 필터의 첫 조회가 성공했는지 나타낸다. 필터 변경은 이 값을 끄고 이전 요청을 중단하며 `epoch`를 올린다. 실패하면 이전 목록·시각은 오래된 값으로 유지한다. 첫 조회가 성공하기 전의 자동 복구도 커서 없이 다시 읽는다. 성공한 새 스냅숏으로 목록을 교체한 뒤에만 증분을 합친다. 세션 필터 해제는 URL에서 그 값만 지우고 수준·사건·적용한 검색을 유지한다.
+- `schedulePoll`은 서버가 준 `pollMs` 뒤에 한 번 실행한다. `fetchInitialLogs({ poll })`가 커서 없는 요청의 출처를 받는다. 자동 재시도·seq 재시작 복구는 `poll: true`로 호출한다. 증분 요청과 이어지는 페이지도 `X-Relay-Poll: 1`을 쓴다. `has_more`가 끝나면 응답의 `latest_seq`까지 확인한 것으로 기록한다. 재시작으로 seq가 작아지면 이전 목록과 커서를 버리고 폴링 표시가 있는 커서 없는 요청으로 다시 읽는다.
+- 이전 페이지는 가장 오래된 표시 seq를 `before`로 보낸다. 수집 결과는 seq로 중복을 제거하고 최신 순으로 합친다. 이전 페이지·다운로드 중에는 자동 조회가 겹치지 않는다.
+- `400`·`405` 뒤에는 같은 자동 요청을 반복하지 않는다. `500`·응답 없음은 켜짐 상태에서 다음 주기에 다시 조회한다. `401`·로그아웃·화면 이탈은 `dispose`로 요청·타이머·로그·펼친 상세·다운로드 버퍼와 보호 DOM을 제거한다.
+- 언어 변경·갱신 렌더는 조작 요소 ID·상세 행 ID·링크 목적지로 초점을 복원한다. 검색 버튼에는 안정된 ID를 준다. 입력 선택 범위·작성 중인 검색어·펼친 상세도 유지한다. 표 본문은 라이브 영역이 아니다. 표·행·열·셀 역할과 상세의 `aria-expanded`·`aria-controls`를 명시한다.
+
+### 다운로드
+
+`downloadJsonLines`는 시작 필터를 고정하고 `limit=1000`으로 첫 페이지를 읽는다. 다음 페이지는 가장 오래된 수집 seq의 `before`다. 끝까지 성공했을 때만 seq 오름차순의 `entry`를 UTF-8·LF로 합쳐 Blob을 만든다. 파일명 시각은 시작 UTC다. 새 사건은 첫 페이지 이후 파일에 섞이지 않는다. 오류·이탈·401이면 부분 파일을 저장하지 않는다.
+
+### 관련 화면과 시험
+
+- SCR-001의 `panels.js` `transportCell`은 Viewer·대상 중립 배지와 화살표를 조합한다. SCR-002는 `target_transport`와 값이 있는 전달 주소를 따로 표시하고 세션 필터 로그 링크를 만든다. 필수 필드 누락은 응답 형식 오류이며 TCP로 대체하지 않는다.
+- SCR-004는 v4 계약의 테이블 순서를 유지한다. SCR-005의 `editableItems`는 allow 6개 → trusted_proxies 2개 → allowed_origins 4개 → Mode I 목록 → 상한·제한 시간·연결 유지 순서다. 비활성 진입점의 편집 불가 키는 목록에서 빠진다. 확인 대화상자는 허용 목록·프록시 목록·Origin 목록의 빈 값 경고를 각각 고른다.
+- `web/dashboard/tests/logs.html`의 `dash-054`~`dash-061`·`dash-063`은 가짜 API 부분 증거다. Rust 실행 함수의 표식은 `partial`이다. 실제 로그 보관·세션 연관 검색·유휴 만료·중계 전송 조합의 전체 증거는 실서버 시험이 맡는다.
+- SCR-006 실서버 실행기는 `tests/dashboard_live.rs`의 DASH-054~063 함수다. `logs.rs`는 실제 Repeater 거절·세션 사건과 `GET /api/v1/logs`를 화면과 대조한다. 설정 파일을 잠시 디렉터리로 바꿔 실제 `reload_watch_failed(level=error)`를 만든 뒤 원래 파일을 복구한다. 일반 로그 응답은 만들거나 바꾸지 않는다.
+- `logs_download.rs`는 1000건을 넘는 필터 결과의 모든 페이지를 모은 실제 브라우저 다운로드를 읽는다. CDP `Browser.downloadProgress(state=completed)`까지 기다려 파일 이동·닫힘과 시험의 파일 제거가 경합하지 않게 한다. `logs_states.rs`는 별도 서버의 보관 0·빈 필터 결과·실패와 복구, 실제 300초 유휴 만료를 맡는다.
+- `logs_accessibility.rs`는 1280·390px × ko·en에서 실제 CDP 키 입력으로 조작한다. `transports.rs`는 실제 TCP·WS·WSS 클라이언트와 시험 TLS 인증서로 Mode II의 양쪽 9조합과 전달 주소 0·1·2개를 만든다. 활성 목록과 상세의 대조 함수는 `overview.rs`·`detail.rs`가 제공한다. 검증 결과와 한계는 [실서버 로그 시험 기록](../how-to/verify-dashboard-frontend.md#431-로그-화면-실서버-시험-dash-054063-2026-11-08)에 적는다.
+- F-C 재현은 같은 페이지의 `shot-<상태>&lang=ko|en`을 쓴다. `loading`, `normal`, `empty`, `disabled`, `failed`, `failed-first`, `invalid-session`, `gap`, `paused`, `session`, `download`, `download-failed`, `refreshing`, `input-error`, `request-rejected`, `expired`를 제공한다. 실제 화면 함수와 공통 CSS를 쓰며 제품에 넣지 않는다.
+

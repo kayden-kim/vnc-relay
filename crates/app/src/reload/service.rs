@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::SystemTime;
 
-use vnc_relay_domain::entry_point::EntryPoint;
+use vnc_relay_domain::entry_point::{EntryPoint, Listener};
 
 use super::{
     ConfigCandidate, ConfigFileState, ConfigPresence, FileClassification, LastReload,
@@ -17,14 +17,6 @@ use crate::ports::EventSink;
 use crate::reload::ports::{ReloadFileStore, ReloadTlsStore, TlsBuildError};
 use crate::reload::snapshot::{ReloadCell, ReloadSnapshot};
 use crate::settings::{ConfigDiagnostic, ConfigError, ConfigWarning, Settings, TlsFiles};
-
-/// Entry points in config order (config-v3 §1.8).
-const ENTRY_POINTS: [EntryPoint; 4] = [
-    EntryPoint::TcpViewer,
-    EntryPoint::TcpServer,
-    EntryPoint::WsViewer,
-    EntryPoint::WssViewer,
-];
 
 /// `tls_file_invalid` detail for a certificate or key file that cannot be read.
 const UNREADABLE_DETAIL: &str = "file unreadable";
@@ -187,6 +179,9 @@ impl<A: Clone> ReloadService<A> {
                 ConfigWarning::AllowAllSource { entry_point, .. } => {
                     applied.iter().any(|key| key == allow_key(*entry_point))
                 }
+                ConfigWarning::TrustAllProxies { listener, .. } => applied
+                    .iter()
+                    .any(|key| key == &format!("relay.{}.trusted_proxies", listener.name())),
                 ConfigWarning::AllowAllTarget { .. } => {
                     applied.iter().any(|key| key == "mode1.allow_targets")
                 }
@@ -473,7 +468,7 @@ impl<A: Clone> ReloadService<A> {
     }
 }
 
-/// The two TLS listeners that can reload (config-v3 §1.9).
+/// The two TLS listeners that can reload (config-v4 §1.9).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum TlsSlot {
     Wss,
@@ -485,8 +480,8 @@ impl TlsSlot {
     fn files(self, settings: &Settings) -> Option<&TlsFiles> {
         match self {
             Self::Wss => {
-                let wss = settings.relay.get(EntryPoint::WssViewer);
-                wss.tls.as_ref().filter(|_| wss.enabled)
+                let wss = &settings.relay.wss;
+                wss.tls.as_ref().filter(|_| wss.enabled())
             }
             Self::Management => settings.management.tls.as_ref(),
         }
@@ -495,7 +490,7 @@ impl TlsSlot {
     /// Config key of the certificate file.
     fn cert_key(self) -> &'static str {
         match self {
-            Self::Wss => "relay.wss_viewer.cert_file",
+            Self::Wss => "relay.wss.cert_file",
             Self::Management => "management.cert_file",
         }
     }
@@ -503,7 +498,7 @@ impl TlsSlot {
     /// Config key of the private key file.
     fn key_key(self) -> &'static str {
         match self {
-            Self::Wss => "relay.wss_viewer.key_file",
+            Self::Wss => "relay.wss.key_file",
             Self::Management => "management.key_file",
         }
     }
@@ -599,13 +594,15 @@ fn tls_paths(settings: &Settings) -> Vec<PathBuf> {
         .collect()
 }
 
-/// Config key of an allow list (config-v3 §1.8).
+/// Config key of an allow list (config-v4 §1.8).
 fn allow_key(entry_point: EntryPoint) -> &'static str {
     match entry_point {
         EntryPoint::TcpViewer => "relay.tcp_viewer.allow",
         EntryPoint::TcpServer => "relay.tcp_server.allow",
-        EntryPoint::WsViewer => "relay.ws_viewer.allow",
-        EntryPoint::WssViewer => "relay.wss_viewer.allow",
+        EntryPoint::WsViewer => "relay.ws.viewer.allow",
+        EntryPoint::WsServer => "relay.ws.server.allow",
+        EntryPoint::WssViewer => "relay.wss.viewer.allow",
+        EntryPoint::WssServer => "relay.wss.server.allow",
     }
 }
 
@@ -615,16 +612,22 @@ fn push_if(keys: &mut Vec<String>, differs: bool, key: &str) {
     }
 }
 
-/// Canonical config-v3 key order, including TLS content changes.
-const DYNAMIC_KEYS: [&str; 27] = [
+/// Canonical config-v4 key order, including TLS content changes.
+const DYNAMIC_KEYS: [&str; 33] = [
     "relay.tcp_viewer.allow",
     "relay.tcp_server.allow",
-    "relay.ws_viewer.allow",
-    "relay.ws_viewer.allowed_origins",
-    "relay.wss_viewer.allow",
-    "relay.wss_viewer.allowed_origins",
-    "relay.wss_viewer.cert_file",
-    "relay.wss_viewer.key_file",
+    "relay.ws.trusted_proxies",
+    "relay.ws.viewer.allow",
+    "relay.ws.viewer.allowed_origins",
+    "relay.ws.server.allow",
+    "relay.ws.server.allowed_origins",
+    "relay.wss.trusted_proxies",
+    "relay.wss.cert_file",
+    "relay.wss.key_file",
+    "relay.wss.viewer.allow",
+    "relay.wss.viewer.allowed_origins",
+    "relay.wss.server.allow",
+    "relay.wss.server.allowed_origins",
     "mode1.allow_targets",
     "limits.relay_connections",
     "limits.admin_connections",
@@ -649,22 +652,36 @@ const DYNAMIC_KEYS: [&str; 27] = [
 /// Runtime value differences; TLS content differences are added by prepare.
 pub fn dynamic_changed_keys(a: &Settings, b: &Settings) -> Vec<String> {
     let mut keys = Vec::new();
-    for entry_point in ENTRY_POINTS {
-        let before = a.relay.get(entry_point);
-        let after = b.relay.get(entry_point);
+    for entry_point in EntryPoint::ALL {
         push_if(
             &mut keys,
-            before.allow.as_ref().filter(|_| before.enabled)
-                != after.allow.as_ref().filter(|_| after.enabled),
+            a.relay
+                .allow(entry_point)
+                .filter(|_| a.relay.enabled(entry_point))
+                != b.relay
+                    .allow(entry_point)
+                    .filter(|_| b.relay.enabled(entry_point)),
             allow_key(entry_point),
         );
-        if matches!(entry_point, EntryPoint::WsViewer | EntryPoint::WssViewer) {
+        if let (Some(before), Some(after)) =
+            (a.relay.ws_role(entry_point), b.relay.ws_role(entry_point))
+        {
             push_if(
                 &mut keys,
                 before.enabled && after.enabled && before.allowed_origins != after.allowed_origins,
-                &format!("relay.{}.allowed_origins", entry_point.name()),
+                &format!("{}.allowed_origins", entry_point.config_table()),
             );
         }
+    }
+    for (listener, before, after) in [
+        (Listener::Ws, &a.relay.ws, &b.relay.ws),
+        (Listener::Wss, &a.relay.wss, &b.relay.wss),
+    ] {
+        push_if(
+            &mut keys,
+            before.enabled() && after.enabled() && before.trusted_proxies != after.trusted_proxies,
+            &format!("relay.{}.trusted_proxies", listener.name()),
+        );
     }
     push_if(
         &mut keys,
@@ -760,26 +777,36 @@ pub fn dynamic_changed_keys(a: &Settings, b: &Settings) -> Vec<String> {
 }
 
 /// Config keys whose candidate value differs from the running value, excluding reload
-/// targets (config-v3 §1.8, file-watch-v1 §4 step 7).
+/// targets (config-v4 §1.8, file-watch-v1 §4 step 7).
 ///
 /// The management certificate is checked by presence only: HTTP and HTTPS switch need a
-/// restart. Changes to a WSS listener's TLS presence follow `relay.wss_viewer.enabled`.
+/// restart. WSS TLS presence follows whether either WSS role is enabled.
 pub fn restart_required_keys(running: &Settings, candidate: &Settings) -> Vec<String> {
     let mut keys = Vec::new();
-    for entry_point in ENTRY_POINTS {
-        let before = running.relay.get(entry_point);
-        let after = candidate.relay.get(entry_point);
-        let name = entry_point.name();
+    for listener in Listener::ALL {
+        if let Some(role) = listener.fixed_role()
+            && let Some(entry) = EntryPoint::from_parts(listener, role)
+        {
+            push_if(
+                &mut keys,
+                running.relay.enabled(entry) != candidate.relay.enabled(entry),
+                &format!("{}.enabled", entry.config_table()),
+            );
+        }
         push_if(
             &mut keys,
-            before.enabled != after.enabled,
-            &format!("relay.{name}.enabled"),
+            running.relay.listen(listener) != candidate.relay.listen(listener),
+            &format!("relay.{}.listen", listener.name()),
         );
-        push_if(
-            &mut keys,
-            before.listen != after.listen,
-            &format!("relay.{name}.listen"),
-        );
+        for entry in EntryPoint::ALL {
+            if entry.listener() == listener && listener.fixed_role().is_none() {
+                push_if(
+                    &mut keys,
+                    running.relay.enabled(entry) != candidate.relay.enabled(entry),
+                    &format!("{}.enabled", entry.config_table()),
+                );
+            }
+        }
     }
 
     let (a, b) = (running, candidate);
@@ -878,6 +905,11 @@ pub fn restart_required_keys(running: &Settings, candidate: &Settings) -> Vec<St
     );
     push_if(
         &mut keys,
+        a.recent_logs.max_entries != b.recent_logs.max_entries,
+        "recent_logs.max_entries",
+    );
+    push_if(
+        &mut keys,
         a.status.listen != b.status.listen,
         "status.listen",
     );
@@ -910,8 +942,8 @@ mod tests {
     use crate::settings::{
         AdminSessionSettings, AdminSettings, Argon2Settings, DashboardSettings, EntryPointSettings,
         KeepaliveSettings, LimitSettings, LogOutput, LogSettings, LoginLimitSettings,
-        Mode1Settings, Mode2Settings, RecentClosedSettings, RelaySettings, ReloadSettings,
-        StatusSettings, TimeoutSettings,
+        Mode1Settings, Mode2Settings, RecentClosedSettings, RecentLogsSettings, RelaySettings,
+        ReloadSettings, StatusSettings, TimeoutSettings, WsListenerSettings, WsRoleSettings,
     };
 
     /// In-memory file store. Tests change file contents through `put`.
@@ -1036,16 +1068,14 @@ mod tests {
                     enabled: true,
                     listen: Some(addr(5901)),
                     allow: Some(AllowList::default()),
-                    ..Default::default()
                 },
                 tcp_server: EntryPointSettings {
                     enabled: true,
                     listen: Some(addr(5500)),
                     allow: Some(AllowList::default()),
-                    ..Default::default()
                 },
-                ws_viewer: EntryPointSettings::default(),
-                wss_viewer: EntryPointSettings::default(),
+                ws: WsListenerSettings::default(),
+                wss: WsListenerSettings::default(),
             },
             mode1: Mode1Settings::default(),
             mode2: Mode2Settings::default(),
@@ -1091,6 +1121,7 @@ mod tests {
                 query_timeout: Duration::from_secs(5),
             },
             recent_closed: RecentClosedSettings { max_entries: 100 },
+            recent_logs: RecentLogsSettings { max_entries: 1000 },
             status: StatusSettings { listen: addr(9090) },
             log: LogSettings {
                 output: LogOutput::Stdout,
@@ -1104,15 +1135,18 @@ mod tests {
 
     /// `settings()` with an enabled WSS listener that uses `wss.crt` and `wss.key`.
     fn with_wss(mut settings: Settings) -> Settings {
-        settings.relay.wss_viewer = EntryPointSettings {
-            enabled: true,
+        settings.relay.wss = WsListenerSettings {
             listen: Some(addr(8443)),
-            allow: Some(AllowList::default()),
-            allowed_origins: Vec::new(),
+            viewer: WsRoleSettings {
+                enabled: true,
+                allow: Some(AllowList::default()),
+                allowed_origins: Vec::new(),
+            },
             tls: Some(TlsFiles {
                 cert_file: PathBuf::from("wss.crt"),
                 key_file: PathBuf::from("wss.key"),
             }),
+            ..Default::default()
         };
         settings
     }
@@ -1188,7 +1222,7 @@ mod tests {
             h.sink.events(),
             vec![Event::ReloadRejected {
                 reason: "tls_file_invalid".to_owned(),
-                config_key: Some("relay.wss_viewer.key_file".to_owned()),
+                config_key: Some("relay.wss.key_file".to_owned()),
                 detail: Some("pair mismatch".to_owned()),
             }]
         );
@@ -1431,11 +1465,11 @@ mod tests {
             ["management.cert_file", "management.config_edit"]
         );
         next = running.clone();
-        next.relay.ws_viewer.allowed_origins = Vec::new();
+        next.relay.ws.viewer.allowed_origins = Vec::new();
         let mut presence = ConfigPresence::default();
         presence
             .keys
-            .insert("relay.ws_viewer.allowed_origins".to_owned());
+            .insert("relay.ws.viewer.allowed_origins".to_owned());
         let h = harness(running, None);
         assert_eq!(
             h.service
@@ -1463,12 +1497,10 @@ mod tests {
         let mut presence = ConfigPresence::default();
         presence
             .keys
-            .insert("relay.ws_viewer.allowed_origins".to_owned());
-        presence
-            .keys
-            .insert("relay.wss_viewer.cert_file".to_owned());
+            .insert("relay.ws.viewer.allowed_origins".to_owned());
+        presence.keys.insert("relay.wss.cert_file".to_owned());
         presence.inactive_paths.insert(
-            "relay.wss_viewer.cert_file".to_owned(),
+            "relay.wss.cert_file".to_owned(),
             PathBuf::from("inactive.crt"),
         );
         let next = ConfigCandidate {
@@ -1493,19 +1525,57 @@ mod tests {
         use vnc_relay_domain::origin::Origin;
         use vnc_relay_domain::target_policy::{TargetItem, TargetPolicy};
         let mut running = with_wss(settings());
-        running.relay.ws_viewer.enabled = true;
+        running.relay.ws.viewer.enabled = true;
+        running.relay.ws.server.enabled = true;
+        running.relay.wss.server.enabled = true;
+        running.relay.ws.listen = Some(addr(8081));
+        running.relay.ws.viewer.allow = Some(AllowList::default());
+        running.relay.ws.server.allow = Some(AllowList::default());
+        running.relay.wss.server.allow = Some(AllowList::default());
         running.mode1.enabled = true;
         running.mode1.allow_targets = Some(TargetPolicy::default());
         type Change = (&'static str, fn(&mut Settings));
-        let changes: [Change; 19] = [
-            ("relay.ws_viewer.allowed_origins", |s| {
-                s.relay.ws_viewer.allowed_origins.push(
+        let changes: [Change; 25] = [
+            ("relay.ws.trusted_proxies", |s| {
+                s.relay.ws.trusted_proxies =
+                    AllowList::new(vec![IpItem::Single(IpAddr::from([10, 0, 0, 1]))]);
+            }),
+            ("relay.wss.trusted_proxies", |s| {
+                s.relay.wss.trusted_proxies =
+                    AllowList::new(vec![IpItem::Single(IpAddr::from([10, 0, 0, 1]))]);
+            }),
+            ("relay.ws.server.allow", |s| {
+                s.relay.ws.server.allow =
+                    Some(AllowList::new(vec![IpItem::Single(IpAddr::from([
+                        10, 0, 0, 1,
+                    ]))]));
+            }),
+            ("relay.wss.server.allow", |s| {
+                s.relay.wss.server.allow =
+                    Some(AllowList::new(vec![IpItem::Single(IpAddr::from([
+                        10, 0, 0, 1,
+                    ]))]));
+            }),
+            ("relay.ws.server.allowed_origins", |s| {
+                s.relay.ws.server.allowed_origins.push(
+                    Origin::parse("https://server.example")
+                        .unwrap_or_else(|error| panic!("origin: {error:?}")),
+                );
+            }),
+            ("relay.wss.server.allowed_origins", |s| {
+                s.relay.wss.server.allowed_origins.push(
+                    Origin::parse("https://server.example")
+                        .unwrap_or_else(|error| panic!("origin: {error:?}")),
+                );
+            }),
+            ("relay.ws.viewer.allowed_origins", |s| {
+                s.relay.ws.viewer.allowed_origins.push(
                     Origin::parse("https://viewer.example")
                         .unwrap_or_else(|error| panic!("origin: {error:?}")),
                 )
             }),
-            ("relay.wss_viewer.allowed_origins", |s| {
-                s.relay.wss_viewer.allowed_origins.push(
+            ("relay.wss.viewer.allowed_origins", |s| {
+                s.relay.wss.viewer.allowed_origins.push(
                     Origin::parse("https://viewer.example")
                         .unwrap_or_else(|error| panic!("origin: {error:?}")),
                 )
@@ -1573,5 +1643,92 @@ mod tests {
         }
         assert!(h.sink.events().is_empty());
         assert!(h.service.last_reload().is_none());
+    }
+    /// spec: operations.md:OPS-067 partial
+    #[test]
+    fn role_policies_and_trusted_proxies_publish_in_one_snapshot() {
+        use vnc_relay_domain::origin::Origin;
+
+        let mut running = with_wss(settings());
+        running.relay.wss.viewer.enabled = false;
+        running.relay.wss.server = WsRoleSettings {
+            enabled: true,
+            allow: Some(AllowList::default()),
+            ..Default::default()
+        };
+        let mut h = harness(running.clone(), Some(5));
+        assert_eq!(
+            h.service.watched_paths(),
+            [PathBuf::from("wss.crt"), PathBuf::from("wss.key")]
+        );
+        let before = h.cell.current();
+        let mut next = running;
+        let allow = AllowList::new(vec![IpItem::Single(IpAddr::from([10, 0, 0, 1]))]);
+        next.relay.wss.server.allow = Some(allow.clone());
+        next.relay.wss.server.allowed_origins = vec![
+            Origin::parse("https://server.example")
+                .unwrap_or_else(|error| panic!("origin: {error:?}")),
+        ];
+        next.relay.wss.trusted_proxies = allow;
+        let prepared = h
+            .service
+            .prepare_candidate(candidate(next.clone()))
+            .unwrap_or_else(|error| panic!("preparation: {error:?}"));
+        assert_eq!(
+            prepared.applied_keys(),
+            [
+                "relay.wss.trusted_proxies",
+                "relay.wss.server.allow",
+                "relay.wss.server.allowed_origins",
+            ]
+        );
+        assert!(Arc::ptr_eq(&before, &h.cell.current()));
+        h.service
+            .commit_prepared(prepared, ReloadTrigger::FileWatch, SystemTime::UNIX_EPOCH);
+        assert_eq!(*h.cell.current().settings, next);
+        assert!(before.settings.relay.wss.trusted_proxies.items().is_empty());
+        assert!(before.settings.relay.wss.server.allowed_origins.is_empty());
+        assert_eq!(h.cell.current().wss_tls, Some(5));
+    }
+
+    /// spec: operations.md:OPS-065 partial
+    #[test]
+    fn shared_listener_addresses_role_switches_and_recent_logs_require_restart() {
+        let running = settings();
+        let mut next = running.clone();
+        next.relay.ws.listen = Some(addr(8081));
+        next.relay.ws.server.enabled = true;
+        next.relay.wss.listen = Some(addr(8443));
+        next.relay.wss.viewer.enabled = true;
+        next.relay.wss.server.enabled = true;
+        next.recent_logs.max_entries = 0;
+        assert_eq!(
+            restart_required_keys(&running, &next),
+            [
+                "relay.ws.listen",
+                "relay.ws.server.enabled",
+                "relay.wss.listen",
+                "relay.wss.viewer.enabled",
+                "relay.wss.server.enabled",
+                "recent_logs.max_entries",
+            ]
+        );
+    }
+
+    #[test]
+    fn disabled_role_and_listener_lists_do_not_count_as_runtime_changes() {
+        use vnc_relay_domain::origin::Origin;
+
+        let running = settings();
+        let mut next = running.clone();
+        next.relay.ws.server.allow = Some(AllowList::default());
+        next.relay.ws.server.allowed_origins = vec![
+            Origin::parse("https://server.example")
+                .unwrap_or_else(|error| panic!("origin: {error:?}")),
+        ];
+        next.relay.ws.trusted_proxies =
+            AllowList::new(vec![IpItem::Single(IpAddr::from([10, 0, 0, 1]))]);
+        assert!(dynamic_changed_keys(&running, &next).is_empty());
+        assert!(restart_required_keys(&running, &next).is_empty());
     }
 }

@@ -2,7 +2,7 @@
 
 ## 작업 6.2 수락 경계 (Current / Active)
 
-`crates/adapters/src/net.rs`의 `AcceptPolicy`는 `AllowSource`와 사용량만 보관하는 L 예산을 가진다. `admit`는 `RuntimeSettingsSource::with_current` 안에서 출발지 IP와 현재 L을 검사하고 `try_acquire(limit)`의 CAS까지 끝낸다. 같은 세대의 B·H·U·K를 `AcceptedSettings`로 복사한다. TCP는 수락 시각을 초기 교환 시작 시각으로 쓰며, B·H를 `ConnectionContext`에 넘긴다. K는 수락 소켓에 한 번 설정한다. `target.rs`의 `TcpTargetConnector`는 새 대상 연결 시도에서 K를 별도로 읽는다. 기존 연결의 B·기한·소켓 옵션은 바꾸지 않는다([설정 §1.8](../contracts/config-v3.md#18-재로드-구분), OPS-050~053).
+`crates/adapters/src/net.rs`의 `AcceptPolicy`는 `AllowSource`와 사용량만 보관하는 L 예산을 가진다. `admit`는 `RuntimeSettingsSource::with_current` 안에서 출발지 IP와 현재 L을 검사하고 `try_acquire(limit)`의 CAS까지 끝낸다. 같은 세대의 B·H·U·K를 `AcceptedSettings`로 복사한다. TCP는 수락 시각을 초기 교환 시작 시각으로 쓰며, B·H를 `ConnectionContext`에 넘긴다. K는 수락 소켓에 한 번 설정한다. `target.rs`의 `TcpTargetConnector`는 새 대상 연결 시도에서 K를 별도로 읽는다. 기존 연결의 B·기한·소켓 옵션은 바꾸지 않는다([설정 §1.8](../contracts/config-v4.md#18-재로드-구분), OPS-050~053).
 
 구현과 경계 단위 시험을 추가했다. 커밋 `eae442f`는 수락 쪽 K 시험 `net::accept_tests::reloaded_keepalive_applies_to_new_accepts_and_keeps_accepted_sockets`(Linux 전용)를 더했다. 대상 연결의 K는 `crates/adapters/tests/tcp_target.rs`의 `reloaded_keepalive_is_used_only_for_new_target_sockets`가 확인한다. 이 변경의 시험은 커밋 `eae442f`의 두 OS 게이트에서 통과했다([작업 6.9 판정표](../how-to/set-up-and-verify.md#42-작업-69-판정표)). 기존 대조 기록은 과거 범위의 증거다.
 
@@ -13,11 +13,16 @@ TCP Viewer·TCP Server 진입점이 접속을 수락하고, 데이터를 읽기 
 | 구조 시점 | Current |
 | 문서 상태 | Draft |
 | 구현 대조 | Verified — [대조 기록](#대조-기록) |
-| 코드 위치 | `crates/domain/src/allow_list.rs`(허용 판정), `crates/domain/src/entry_point.rs`(`Role`), `crates/domain/src/conn_id.rs`, `crates/app/src/events.rs`(접속 사건), `crates/app/src/settings.rs`(`ListenerPlan::entry_point`), `crates/adapters/src/net.rs`(`TcpEntryPoint`, `TcpRelayStream`, 공통 수락 반복 `accept_connections`), `crates/app/src/relay.rs`(`RelayService::handle_connection`, `dispatch`), `crates/adapters/src/websocket.rs`(`WsEntryPoint`), `src/serve.rs`(진입점 작업 시작과 종료) |
+| 코드 위치 | `crates/domain/src/allow_list.rs`, `crates/domain/src/entry_point.rs`(`Listener`, `EntryPoint`, `Role`), `crates/domain/src/conn_id.rs`, `crates/app/src/events.rs`, `crates/app/src/settings.rs`(`ListenerPlan::listener`), `crates/adapters/src/net.rs`(`TcpEntryPoint`, `TcpRelayStream`, `accept_connections`), `crates/app/src/relay.rs`(`handle_connection`, `dispatch`), `crates/adapters/src/websocket.rs`(`WsEntryPoint`), `src/serve.rs` |
 | 코드 지도 | [코드 지도 2절](code-map.md#2-코드-위치와-구성요소), [3절](code-map.md#3-진입점) |
 | 관련 스펙 | [중계 스펙 3.1절](../specs/relay.md#31-초기-교환)의 1항과 RLY-R16, [운영 스펙 4절](../specs/operations.md#4-보안과-신뢰-경계), RLY-023(일부), RLY-024, OPS-037(일부), OPS-038(일부), OPS-040(일부), OPS-007(일부) |
-| 관련 계약 | [운영 정보 계약 1.4절](../contracts/ops-info-v1.md#14-필드-사전)(`conn_id`, `listener`, `role`, `peer_ip`), [1.5절](../contracts/ops-info-v1.md#15-사건-목록)(접속 수락·거절·중단), [1.6절](../contracts/ops-info-v1.md#16-원인-코드)(`stage`·`reason`), [설정 계약 1.3절](../contracts/config-v3.md#13-ip-항목-문법)(IP 항목) |
+| 관련 계약 | [운영 정보 계약 1.4절](../contracts/ops-info-v2.md#14-필드-사전)(`conn_id`, `listener`, `role`, `peer_ip`), [1.5절](../contracts/ops-info-v2.md#15-사건-목록)(접속 수락·거절·중단), [1.6절](../contracts/ops-info-v2.md#16-원인-코드)(`stage`·`reason`), [설정 계약 1.3절](../contracts/config-v4.md#13-ip-항목-문법)(IP 항목) |
 | 관련 ADR | [ADR-0002 출발지 IP 허용 목록](../decisions/ADR-0002-source-ip-allowlist.md) |
+
+후속: R1은 `domain::entry_point::Listener`(중계 소켓 네 개)와 `EntryPoint`(리스너·역할 조합 여섯 개)를 분리한다. TCP는 `Listener::fixed_role()`로 수락 때 역할을 알 수 있다. WS·WSS의 공통 수락은 켜진 역할 `allow`의 합집합만 검사하고 역할은 보관하지 않는다. `AllowSource::ws`·`wss`는 리스너를 기준으로 현재 설정을 읽는다. `trusted_proxies`의 허용 우회·전달 헤더 처리는 R2 범위이며 R1에서는 적용하지 않는다.
+
+R1 사건·전송 타입은 [운영 로그](ops-log.md)와 아래 표를 따른다. `ListenerPlan::listener`가 바인드 소켓을 나타낸다. 이전 대조 기록은 R1의 실행 증거가 아니다. 이번 문서 작업에서는 빌드·시험·포매터를 실행하지 않았다.
+
 
 ## 1. 책임과 경계
 
@@ -70,25 +75,25 @@ flowchart LR
 | `crates/app/src/settings.rs` `ListenerPlan::entry_point` | 바인드 계획이 진입점이면 그 진입점. 상태·관리 리스너는 `None`이다. | `Settings::other_listeners` | domain |
 | `crates/adapters/src/net.rs` `TcpEntryPoint::new`, `TcpEntryPoint::run` | `AcceptPolicy`는 현재 설정 원천을 가진 `AllowSource`와 L 사용량을 받는다. 허용 연결의 수락 당시 B/H는 `ConnectionContext`로 넘겨 `handle_connection`과 `dispatch`에 잇는다. | `serve`가 바인드 뒤 TCP 진입점마다 하나 띄운다 | tokio, app, domain |
 | `crates/adapters/src/net.rs` `accept_connections` | TCP와 WS·WSS가 함께 쓰는 수락 반복. 종료 알림, 끝난 작업 거두기, 수락을 함께 기다린다. 접속마다 출발지 IP를 판정하고(거절은 `connection_rejected`를 소켓을 닫기 전에 기록), 통과하면 L의 자리를 잡고, `conn_id`를 받고, K를 설정하고, `connection_accepted`를 기록한 뒤 호출자가 준 작업을 띄운다. 수락 실패는 100밀리초 기다린 뒤 다시 수락한다. | 진입점 `run`마다 하나 | tokio, socket2, app, domain |
-| `crates/adapters/src/net.rs` `TcpRelayStream` | 수락한 TCP 소켓을 감싸 `RelayStream`을 구현한다. `transport`는 `ViewerTransport::Tcp`, `pending_write_len`은 0이다. 닫을 때 쓰기 쪽을 닫는다(`poll_shutdown`). | 수락한 연결마다, `TcpEntryPoint::run`의 serve 작업이 만든다 | tokio, app, domain |
+| `crates/adapters/src/net.rs` `TcpRelayStream` | 수락한 TCP 소켓을 감싸 `RelayStream`을 구현한다. `transport`는 양쪽 역할에 공통인 `Transport::Tcp`, `pending_write_len`은 0이다. 닫을 때 쓰기 쪽을 닫는다(`poll_shutdown`). | 수락한 연결마다, `TcpEntryPoint::run`의 serve 작업이 만든다 | tokio, app, domain |
 | `crates/adapters/src/websocket.rs` `WsEntryPoint::new`, `WsEntryPoint::run`, `connection` | WS·WSS 진입점. `run`은 같은 `accept_connections`에 허용 연결마다 `connection`을 넘긴다. `connection`은 U 안에서 WSS면 `TlsIo`로 TLS 핸드셰이크를 하고, 업그레이드 요청을 읽고 검사한 뒤 101 응답을 쓴다. 101 뒤에는 `WsRelayStream`으로 감싸 `RelayService::handle_connection`과 `dispatch`에 넘긴다. 거절은 `Event::UpgradeRejected`(`stage` = `upgrade`)로 기록한다. | `serve`가 바인드 뒤 WS·WSS 진입점마다 하나 띄운다 | tokio, tokio-rustls, tokio-tungstenite, app, domain |
-| `src/serve.rs` `listen_until_shutdown` | L 예산을 하나 만들어 모든 진입점과 나눈다. 바인드한 리스너마다 TCP 진입점은 `TcpEntryPoint`, WS·WSS 진입점은 `WsEntryPoint`로 띄운다. WSS 진입점은 `wss_tls.take()`로 TLS 수락기를 받는다. 종료 요청을 받으면 종료 알림을 보내고, 진입점 작업이 모두 끝난 뒤 나머지 리스너를 닫고 `server_stopped`를 기록한다. | `serve` 실행마다 | adapters, app, domain, tokio |
+| `src/serve.rs` `listen_until_shutdown` | L 예산 하나를 공유한다. 바인드한 TCP 소켓은 `TcpEntryPoint`, WS·WSS 공유 소켓은 `WsEntryPoint`로 띄운다. WSS는 `TlsSource`로 현재 수락기를 고른다. 종료 알림 뒤 연결 소유 작업이 모두 끝나면 나머지 리스너를 닫는다. | `serve` 실행마다 | adapters, app, domain, tokio |
 
 ## 3. 데이터 모델
 
-줄 형식은 [운영 정보 계약 1.5절](../contracts/ops-info-v1.md#15-사건-목록)이 기준이다. 여기서는 메모리 타입과 필드 대응만 정한다.
+줄 형식은 [운영 정보 계약 1.5절](../contracts/ops-info-v2.md#15-사건-목록)이 기준이다. 여기서는 메모리 타입과 필드 대응만 정한다.
 
 | 이름 | 필드·형태 | 줄의 필드(순서대로) | 제약과 항상 지켜야 할 조건 |
 | --- | --- | --- | --- |
-| `Event::ConnectionAccepted` | `conn_id: ConnId`, `entry_point: EntryPoint`, `peer_ip: PeerIp` | `conn_id`, `listener`, `role`, `peer_ip` | `level`은 `info`. 허용 판정과 L을 통과한 연결만 만든다. |
-| `Event::ConnectionRejected` | `listener: &'static str`(진입점은 `EntryPoint::name`), `stage: Stage`, `reason: RejectReason`, `peer_ip: PeerIp` | `listener`, `stage`, `reason`, `peer_ip`, `limit`(상한 거절만) | `level`은 `warn`. `stage`가 `accept`이면 `conn_id`가 없다. 상태 리스너도 같은 사건을 쓰므로 진입점 대신 리스너 이름을 받는다. 나머지 선택 필드(`role` 등)는 그 값을 쓰는 작업이 더한다. |
-| `Event::UpgradeRejected` | `listener: &'static str`, `conn_id: ConnId`, `reason: RejectReason`과 나머지 필드 | `connection_rejected` 줄, `stage` = `upgrade` | `level`은 `warn`. WS·WSS가 101 응답 전에 거절할 때만 만든다. 나머지 필드는 [WebSocket 진입점 모듈 설계](websocket-entry-point.md)를 따른다. |
-| `Event::ConnectionAborted` | `conn_id: ConnId`, `entry_point: EntryPoint`, `stage: Stage`, `reason: AbortReason`, `peer_ip: PeerIp`, `elapsed_ms: u64` | `conn_id`, `listener`, `stage`, `reason`, `peer_ip`, `elapsed_ms`, `error_kind`(`connection_error`만) | `level`은 `peer_eof`·`server_shutdown`이면 `info`, 나머지는 `warn`. `elapsed_ms`는 수락부터 닫을 때까지의 밀리초다. |
+| `Event::ConnectionAccepted` | `conn_id: ConnId`, `listener: Listener`, `peer_ip: PeerIp` | `conn_id`, `listener`, TCP에만 `role`, `peer_ip` | `level`은 `info`. 허용 판정과 L을 통과한 연결만 만든다. TCP role은 `fixed_role()`로 출력한다. WS·WSS에는 아직 role이 없다. |
+| `Event::ConnectionRejected` | `listener: &'static str`(`Listener::name()`), `stage: Stage`, `reason: RejectReason`, `peer_ip: PeerIp` | `listener`, `stage`, `reason`, `peer_ip`, `limit`(상한 거절만) | `level`은 `warn`. accept에서는 `conn_id`·`role`이 없다. 상태·관리도 같은 사건을 쓴다. |
+| `Event::UpgradeRejected` | `listener: &'static str`, `role: Option<Role>`, `conn_id: ConnId`, `reason: RejectReason`과 나머지 필드 | `connection_rejected` 줄, `stage` = `upgrade`, 선택 `role` | WS·WSS의 켜진 경로 판정 뒤 거절에만 role이 있다. 나머지 필드는 [WebSocket 진입점 모듈 설계](websocket-entry-point.md)를 따른다. |
+| `Event::ConnectionAborted` | `conn_id: ConnId`, `listener: Listener`, `role: Option<Role>`, `stage: Stage`, `reason: AbortReason`, `peer_ip: PeerIp`, `elapsed_ms: u64` | `conn_id`, `listener`, 선택 `role`, `stage`, `reason`, `peer_ip`, `elapsed_ms`, 선택 `error_kind` | TCP는 고정 role을 보존한다. WS·WSS는 경로 판정 전 None, 뒤 Some(role)이다. `elapsed_ms`는 수락부터의 밀리초다. |
 | `Stage` | `Accept`, `InitialExchange`, `Tls`, `Upgrade` | `stage`(`accept`, `initial_exchange`, `tls`, `upgrade`) | `tls`는 TLS 핸드셰이크 단계(버전 거절, 핸드셰이크 중 중단), `upgrade`는 101 전 업그레이드 단계다. 계약 1.6절의 나머지 값은 그 단계를 만드는 작업이 더한다. |
 | `RejectReason` | `IpNotAllowed`, `RelayConnectionLimit { limit }`, `AdminConnectionLimit { limit }`(상태·관리 리스너), `TlsVersionUnsupported`, `InvalidUpgrade`, `OriginNotAllowed`, `SubprotocolNotSupported` | `reason`(`ip_not_allowed`, `relay_connection_limit`, `admin_connection_limit`, `tls_version_unsupported`, `invalid_upgrade`, `origin_not_allowed`, `subprotocol_not_supported`) | `limit`은 상한 거절 둘에만 있다. `tls_version_unsupported`는 WSS와 관리 리스너, 나머지 세 값은 WS·WSS 업그레이드 거절이다. |
 | `AbortReason` | `HandshakeTimeout`, `TlsUpgradeTimeout`, `PeerEof`, `ConnectionError(ConnectionErrorKind)`, `ServerShutdown` | `reason`(`handshake_timeout`, `tls_upgrade_timeout`, `peer_eof`, `connection_error`, `server_shutdown`) | `tls_upgrade_timeout`은 WS·WSS가 U 안에 TLS 핸드셰이크나 업그레이드 요청을 끝내지 못한 경우다(작업 3.2). |
 | `ConnId` | `u64` 순번 | `conn_id`(`c1`, `c2`, …) | 프로세스 안에서 유일하다. 재시작하면 다시 `c1`부터다(계약 1.4절이 허용한다). |
-| `Role` | `Viewer`, `Server` | `role`(`viewer`, `server`) | TCP 진입점은 진입점이 역할을 정한다. WS·WSS는 항상 `viewer`다. |
+| `Role` | `Viewer`, `Server` | `role`(`viewer`, `server`) | TCP는 리스너가 고정한다. WS·WSS는 켜진 정확한 `/relay`·`/relay/server` 경로가 정한다. |
 
 ## 4. 처리 순서
 
@@ -120,7 +125,7 @@ flowchart LR
 | --- | --- | --- | --- |
 | 출발지 IP가 목록에 없음 | `connection_rejected`(`ip_not_allowed`)를 기록하고 소켓을 닫는다. 데이터를 읽지 않는다. 다른 연결에는 영향이 없다. | 없음 | RLY-023, RLY-024, OPS-037, OPS-038 |
 | L 고갈, H 만료, 초기 교환 중 상대 종료 | [연결 상한과 시간 제한 모듈 설계 6절](connection-limits.md#6-오류-처리)을 따른다. | 같음 | OPS-004, OPS-006, RLY-005 |
-| `accept` 실패 | 일시 오류·파일 디스크립터 부족 등은 기존 100밀리초 뒤 재시도한다. 복구 불가능 오류는 `SupervisedListener`가 감독자에게 보고한다. 반복을 끝내고 리스너를 닫되 연결 소유 작업의 정리를 끝까지 기다린다. 정확한 OS 분류는 [운영 정보 계약 1.12절](../contracts/ops-info-v1.md#112-상태-리스너와-엔드포인트)을 따른다. | 일시 오류는 운영 유지, 장애는 전체 종료 | OPS-046 |
+| `accept` 실패 | 일시 오류·파일 디스크립터 부족 등은 기존 100밀리초 뒤 재시도한다. 복구 불가능 오류는 `SupervisedListener`가 감독자에게 보고한다. 반복을 끝내고 리스너를 닫되 연결 소유 작업의 정리를 끝까지 기다린다. 정확한 OS 분류는 [운영 정보 계약 1.12절](../contracts/ops-info-v2.md#112-상태-리스너와-엔드포인트)을 따른다. | 일시 오류는 운영 유지, 장애는 전체 종료 | OPS-046 |
 | 운영 로그 쓰기 실패 | [운영 로그 모듈 설계 6절](ops-log.md#6-오류-처리)대로 줄을 버린다. 접속 처리는 바뀌지 않는다. | 없음 | 없음 |
 
 ## 7. 설계 선택
@@ -128,10 +133,10 @@ flowchart LR
 | 선택 | 이유 | 검토한 다른 방법 | 근거 |
 | --- | --- | --- | --- |
 | 허용한 연결은 `RelayService::handle_connection`이 초기 교환을 읽는다. H 만료, 바이트 전 상대 종료, 서버 종료 중 먼저 오는 것으로 끝난다. | 초기 교환 형식을 이 진입점이 추정하지 않는다. H와 상대 종료로 끝내야 L 자리가 돌아온다. | 읽어서 해석 없이 보관(I 초과 처리를 미리 정해야 한다), 수락 직후 닫기(수락하지 않은 것과 구분되지 않는다), 서버 종료까지만 보류(L 자리가 돌아오지 않는다) | 사용자 결정 2026-10-20(작업 2.4 보류, 작업 2.5 H·상대 종료), [TODO 2-B](https://github.com/kayden-kim/vnc-relay/blob/556fab23d15e77125ca2ad5c575089857b312049/docs/TODO.md#2-b-중계-기능) |
-| `conn_id`는 `c`와 10진 순번이다(`c1`, `c2`, …). | 짧고 읽기 쉽다. 접두사가 있어 다른 숫자 필드·`session_id`와 섞이지 않는다. | 순번만, 무작위 16진수 | 사용자 결정 2026-10-20, [운영 정보 계약 1.4절](../contracts/ops-info-v1.md#14-필드-사전) |
+| `conn_id`는 `c`와 10진 순번이다(`c1`, `c2`, …). | 짧고 읽기 쉽다. 접두사가 있어 다른 숫자 필드·`session_id`와 섞이지 않는다. | 순번만, 무작위 16진수 | 사용자 결정 2026-10-20, [운영 정보 계약 1.4절](../contracts/ops-info-v2.md#14-필드-사전) |
 | 순번은 domain의 프로세스 전역 원자 변수(`ConnId::next`)다. | 계약이 프로세스 안의 유일성을 요구한다. 작업 3.2의 WS·WSS 진입점도 같은 순번을 쓴다. 값을 넘겨받는 생성기 객체를 두면 모든 진입점 조립이 그 객체를 받아야 한다. | `serve`가 만든 생성기 객체를 진입점마다 넘기기 | [rust.md 7절](../conventions/rust.md) `Id` suffix |
-| 허용 판정은 `PeerIp`를 받는다. | `PeerIp`가 IPv4-mapped 주소를 IPv4로 바꾼다. 설정 항목에는 IPv4-mapped 주소가 없으므로(설정 계약 1.3절) 바꾸지 않은 주소로 판정하면 이중 스택 리스너의 IPv4 상대를 잘못 거절한다. | `IpAddr`를 받고 호출하는 쪽이 바꾸기 | [운영 정보 계약 1.10절](../contracts/ops-info-v1.md#110-상대-주소-표기) |
-| 거절 줄은 `listener`, `stage`, `reason`, `peer_ip`만 쓴다. | 계약의 필수 필드다. `role`은 선택이고 `listener`에서 알 수 있다. | `role`도 쓴다 | [운영 정보 계약 1.5절](../contracts/ops-info-v1.md#15-사건-목록) |
+| 허용 판정은 `PeerIp`를 받는다. | `PeerIp`가 IPv4-mapped 주소를 IPv4로 바꾼다. 설정 항목에는 IPv4-mapped 주소가 없으므로(설정 계약 1.3절) 바꾸지 않은 주소로 판정하면 이중 스택 리스너의 IPv4 상대를 잘못 거절한다. | `IpAddr`를 받고 호출하는 쪽이 바꾸기 | [운영 정보 계약 1.10절](../contracts/ops-info-v2.md#110-상대-주소-표기) |
+| 거절 줄은 `listener`, `stage`, `reason`, `peer_ip`만 쓴다. | 계약의 필수 필드다. `role`은 선택이고 `listener`에서 알 수 있다. | `role`도 쓴다 | [운영 정보 계약 1.5절](../contracts/ops-info-v2.md#15-사건-목록) |
 | `accept` 오류 뒤 100밀리초 기다린다. | 파일 디스크립터가 모자라면 `accept`가 바로 다시 실패한다. 기다리지 않으면 반복이 CPU를 다 쓴다. | 기다리지 않고 반복, 진입점 작업 종료(진입점이 조용히 닫힌다) | 없음 |
 
 ## 8. 현재 코드와의 차이
@@ -142,7 +147,7 @@ TCP 경로는 2~4절과 같다. `hold`와 `closed_before_data`는 제거했다(`
 
 | 대조 범위 | 환경 | 확인 방법 | 결과 |
 | --- | --- | --- | --- |
-| 작업 2.4 변경(기준 커밋 `6d6f789` + 작업 트리) | Ubuntu 24.04.4(WSL2), Rust 1.99.1 | 1~4절의 파일·심볼과 실제 코드를 대조했다. 허용 판정은 `crates/domain/src/allow_list.rs`의 단위 테스트, 줄 필드는 `crates/adapters/tests/ops_info_contract.rs`, 수락·거절·보류·종료 순서는 `tests/serve.rs`의 진입점 테스트 4개로 확인했다([운영 정보 계약의 계약 테스트 실행 기록](../contracts/ops-info-v1.md#계약-테스트-실행-기록)). 레이어 규칙은 `cargo xtask layers`로 확인했다. | 통과 |
+| 작업 2.4 변경(기준 커밋 `6d6f789` + 작업 트리) | Ubuntu 24.04.4(WSL2), Rust 1.99.1 | 1~4절의 파일·심볼과 실제 코드를 대조했다. 허용 판정은 `crates/domain/src/allow_list.rs`의 단위 테스트, 줄 필드는 `crates/adapters/tests/ops_info_contract.rs`, 수락·거절·보류·종료 순서는 `tests/serve.rs`의 진입점 테스트 4개로 확인했다([운영 정보 계약의 계약 테스트 실행 기록](../contracts/ops-info-v2.md#계약-테스트-실행-기록)). 레이어 규칙은 `cargo xtask layers`로 확인했다. | 통과 |
 | 작업 2.5 변경(기준 커밋 `c89beb4` + 작업 트리): L 판정, 보류의 끝, `AcceptPolicy` | Ubuntu 24.04.4(WSL2), Rust 1.99.1 | 1~6절과 `crates/adapters/src/net.rs`·`src/serve.rs`를 대조했다. 2.4의 진입점 테스트 4개와 2.5의 L·H 테스트 2개가 `tests/serve.rs`에서 통과했다. | 통과 |
 | 작업 2.6 변경(기준 커밋 `b1f2ad5` + 작업 트리): `ConnectionRejected::listener` | Ubuntu 24.04.4(WSL2), Rust 1.99.1 | 3절과 `crates/app/src/events.rs`·`crates/adapters/src/net.rs`를 대조했다. 진입점 테스트와 `writes_connection_events_with_their_contract_fields`가 통과했다. | 통과 |
 | Windows 실행(기준 커밋 `e1cfc4f` + Windows 경고 수정) | Windows 11 Pro 10.0.26200, Rust 1.99.1(`x86_64-pc-windows-msvc`) | `tests/serve.rs`의 `checks_each_tcp_entry_point_against_its_own_allow_list`·`applies_item_boundaries_and_an_empty_list_at_accept`가 통과했다. Windows에서도 `127.0.0.2` 같은 루프백 주소를 출발지로 써서 허용·거절을 확인했다. 종료 때 보류 연결 정리(`closes_and_logs_every_held_connection_when_stopping`)와 이중 스택 테스트는 Unix·Linux 전용이라 실행하지 않았다. | 통과 |

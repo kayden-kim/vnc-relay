@@ -2,7 +2,7 @@
 
 ## 작업 6.2 상태 수락 경계 (Current / Active)
 
-`StatusListener::new`는 `Arc<dyn RuntimeSettingsSource>`를 받는다. `AdmittingListener::accept`는 현재 Lm을 읽는 callback 안에서 `ConnectionBudget::try_acquire(limit)`까지 마친다. management와 같은 사용량을 공유하며, 하향 때 기존 상태·관리 연결은 유지하고 새 수락만 거절한다. 거절 사건에는 그 판단에 쓴 Lm을 넣는다. 상태 리스너는 `DeadlineListener`나 TLS로 감싸지 않으므로 U를 적용하지 않는다([설정 §1.8 Lm/U](../contracts/config-v3.md#18-재로드-구분), OPS-051~053).
+`StatusListener::new`는 `Arc<dyn RuntimeSettingsSource>`를 받는다. `AdmittingListener::accept`는 현재 Lm을 읽는 callback 안에서 `ConnectionBudget::try_acquire(limit)`까지 마친다. management와 같은 사용량을 공유하며, 하향 때 기존 상태·관리 연결은 유지하고 새 수락만 거절한다. 거절 사건에는 그 판단에 쓴 Lm을 넣는다. 상태 리스너는 `DeadlineListener`나 TLS로 감싸지 않으므로 U를 적용하지 않는다([설정 §1.8 Lm/U](../contracts/config-v4.md#18-재로드-구분), OPS-051~053).
 
 `admission.rs`의 `reloaded_admin_limit_preserves_connections_and_captures_u_at_accept` 단위 시험을 추가했다. 이 변경의 시험은 커밋 `eae442f`의 두 OS 게이트에서 통과했다([작업 6.9 판정표](../how-to/set-up-and-verify.md#42-작업-69-판정표)). 기존 대조 기록은 과거 범위의 증거다.
 
@@ -16,7 +16,7 @@
 | 코드 위치 | `crates/app/src/lifecycle.rs`(`Readiness`, `LifecycleService`), `crates/app/src/events.rs`(`Event::ServerReady`, `RejectReason::AdminConnectionLimit`), `crates/app/src/settings.rs`(`Settings::status_listener`, `Settings::other_listeners`), `crates/adapters/src/admission.rs`(`AdmittingListener`), `crates/adapters/src/status_http.rs`(`StatusListener`), `crates/adapters/src/net.rs`(`bind_one`), `src/serve.rs`(상태 리스너 먼저 열기, 준비됨 전환) |
 | 코드 지도 | [코드 지도 2절](code-map.md#2-코드-위치와-구성요소), [3절](code-map.md#3-진입점) |
 | 관련 스펙 | [운영 스펙 2절](../specs/operations.md#2-상태와-검증-매개변수)의 준비 상태와 Lm, OPS-R08·OPS-R19·OPS-R20, OPS-013(일부), OPS-032, OPS-004(일부), OPS-033(일부) |
-| 관련 계약 | [운영 정보 계약 1.12절](../contracts/ops-info-v1.md#112-상태-리스너와-엔드포인트)·[2절](../contracts/ops-info-v1.md#2-오류)(상태 응답), [1.5절](../contracts/ops-info-v1.md#15-사건-목록)(`server_ready`), [1.6절](../contracts/ops-info-v1.md#16-원인-코드)(`admin_connection_limit`), [설정 계약 1.2절](../contracts/config-v3.md#12-키-표)(`status.listen`, `limits.admin_connections`) |
+| 관련 계약 | [운영 정보 계약 1.12절](../contracts/ops-info-v2.md#112-상태-리스너와-엔드포인트)·[2절](../contracts/ops-info-v2.md#2-오류)(상태 응답), [1.5절](../contracts/ops-info-v2.md#15-사건-목록)(`server_ready`), [1.6절](../contracts/ops-info-v2.md#16-원인-코드)(`admin_connection_limit`), [설정 계약 1.2절](../contracts/config-v4.md#12-키-표)(`status.listen`, `limits.admin_connections`) |
 | 관련 ADR | [ADR-0004 tokio·rustls](../decisions/ADR-0004-tokio-rustls.md) |
 
 ## 1. 책임과 경계
@@ -28,7 +28,7 @@
   - Lm: 수락은 `admission.rs`의 `AdmittingListener`(`name` = `status`)가 맡는다. 상태 연결은 수락 직후 Lm 예산의 자리를 잡는다. 자리가 없으면 `connection_rejected`(`listener` = `status`, `stage` = `accept`, `reason` = `admin_connection_limit`, `limit`)를 기록하고 HTTP 응답 없이 닫는다. 연결이 끝나면 자리를 돌려준다. L과는 다른 예산이다.
   - 준비됨으로 바뀔 때 `server_ready`(`listeners`: 바인드한 모든 리스너의 `name`·`listen`)를 기록한다. 설정 경고 뒤, 접속 사건 앞이다.
 - 맡지 않는 책임:
-  - 오류 분류는 `adapters::listener`가 맡는다. OS 코드의 기준은 [운영 정보 계약 1.12절](../contracts/ops-info-v1.md#112-상태-리스너와-엔드포인트)이다. `SupervisedListener`가 최초 장애를 watch 채널에 전달한다. `serve` 감독자가 최초 종료 원인을 고른다.
+  - 오류 분류는 `adapters::listener`가 맡는다. OS 코드의 기준은 [운영 정보 계약 1.12절](../contracts/ops-info-v2.md#112-상태-리스너와-엔드포인트)이다. `SupervisedListener`가 최초 장애를 watch 채널에 전달한다. `serve` 감독자가 최초 종료 원인을 고른다.
   - G와 정리는 `RelayService`가 맡는다. 상태·관리 HTTP는 중계 소유 작업을 모두 회수한 뒤 멈춘다. 상태 소켓 자체 장애의 응답은 보장하지 않는다.
   - 관리 리스너의 Lm 집계는 작업 4.2가 붙였다. 상태 리스너와 같은 Lm 예산을 쓴다([관리 리스너 모듈 설계](management-listener.md)).
   - WS·WSS 리스너의 연결 수락. `serve`가 만든 `WsEntryPoint`가 맡는다(`src/serve.rs`, 작업 3.2). 이 리스너들은 바인드해 준비됨 판정에 포함한다([`serve` 시작 모듈 설계 1절](serve-startup.md#1-책임과-경계)). 관리 리스너의 연결 수락은 작업 4.2가 붙였다([관리 리스너 모듈 설계](management-listener.md)).
@@ -110,13 +110,13 @@ flowchart LR
 | 선택 | 이유 | 검토한 다른 방법 | 근거 |
 | --- | --- | --- | --- |
 | HTTP는 axum(기본 기능 끔, `http1`·`tokio`만)으로 처리한다. | PRD가 HTTP 라이브러리로 axum을 정했다. 기본 기능의 `tracing`은 PRD가 뺀 crate다. 관리 HTTP(작업 4.x)도 같은 라이브러리를 쓴다. | HTTP/1.1 직접 해석. 요청 경계·keep-alive·오류 응답을 따로 구현해야 한다. | [PRD "구현 기술" 행](../requirements/PRD.md#확정-기준) |
-| 라우팅 없이 대체 처리기(`fallback`) 하나가 메서드와 경로를 직접 판정한다. | axum의 `get` 라우트는 `HEAD`도 받는다. 계약은 `GET` 밖의 메서드를 405로 답하라고 한다. axum 기본 405·404 응답은 계약의 JSON 본문이 없다. | 라우트별 처리기와 오류 처리기 조합 | [운영 정보 계약 1.12·2절](../contracts/ops-info-v1.md#112-상태-리스너와-엔드포인트) |
-| Lm 판정은 axum의 `Listener` 구현(`admission.rs`의 `AdmittingListener`) 안에서 수락 직후 한다. 잡은 자리는 연결 값에 넣어 연결이 끝날 때 돌려준다. | HTTP를 읽기 전에 거절해야 한다. 연결 수명과 자리 수명이 같아진다. | 요청 처리기에서 판정. 거절한 연결도 HTTP를 읽게 된다. | [운영 정보 계약 2절](../contracts/ops-info-v1.md#2-오류) Lm 문단 |
+| 라우팅 없이 대체 처리기(`fallback`) 하나가 메서드와 경로를 직접 판정한다. | axum의 `get` 라우트는 `HEAD`도 받는다. 계약은 `GET` 밖의 메서드를 405로 답하라고 한다. axum 기본 405·404 응답은 계약의 JSON 본문이 없다. | 라우트별 처리기와 오류 처리기 조합 | [운영 정보 계약 1.12·2절](../contracts/ops-info-v2.md#112-상태-리스너와-엔드포인트) |
+| Lm 판정은 axum의 `Listener` 구현(`admission.rs`의 `AdmittingListener`) 안에서 수락 직후 한다. 잡은 자리는 연결 값에 넣어 연결이 끝날 때 돌려준다. | HTTP를 읽기 전에 거절해야 한다. 연결 수명과 자리 수명이 같아진다. | 요청 처리기에서 판정. 거절한 연결도 HTTP를 읽게 된다. | [운영 정보 계약 2절](../contracts/ops-info-v2.md#2-오류) Lm 문단 |
 | 준비 상태는 app의 `AtomicU8` 하나로 둔다. | 읽기만 많고, 바뀌는 곳은 `serve` 한 곳이다. app이 tokio에 의존하지 않는다. | `tokio::sync::watch` | [코드 지도 레이어 표](code-map.md#레이어와-의존-방향) |
 | `ConnectionRejected`의 리스너를 진입점 대신 리스너 이름 문자열로 둔다. | 상태·관리 리스너는 진입점이 아니다. `StartupFailed::listener`와 `ListenerPlan::name`이 같은 방식을 쓴다. | 리스너 enum을 새로 만든다. 같은 이름을 두 방식으로 갖게 된다. | 없음 |
 | 상태 리스너 작업은 종료 마지막에 멈추고(`abort`) 남은 상태 연결을 기다리지 않는다. | 진입점 연결을 정리하는 동안 `shutting_down`으로 답해야 한다. 응답 중인 상태 연결이 종료를 붙잡지 않는다. | axum 정상 종료(`with_graceful_shutdown`). 요청을 보내다 멈춘 연결이 종료를 끝없이 막을 수 있다. | 없음 |
 | 수락 포트 `listener::Listener`와 `SupervisedListener` 공유 | 모든 리스너가 같은 분류·최초 장애 채널을 쓴다. 시험은 포트에서 오류를 주입하며 제품 훅은 없다. | 별도 오류 정책 | 사용자 결정 2026-11-05(Q114) |
-| `server_ready`의 `listeners`는 바인드한 모든 리스너다. WS·WSS 리스너도 넣는다(작업 3.2 전에는 수락하지 않았고, 지금은 `WsEntryPoint`가 수락한다). | 그 리스너들은 바인드돼 있어 운영체제가 연결을 대기열에 넣는다. 수락은 해당 작업이 붙인다. | 수락하는 리스너만 넣기. 작업이 진행되며 목록 의미가 바뀐다. | [운영 정보 계약 1.5절](../contracts/ops-info-v1.md#15-사건-목록) |
+| `server_ready`의 `listeners`는 바인드한 모든 리스너다. WS·WSS 리스너도 넣는다(작업 3.2 전에는 수락하지 않았고, 지금은 `WsEntryPoint`가 수락한다). | 그 리스너들은 바인드돼 있어 운영체제가 연결을 대기열에 넣는다. 수락은 해당 작업이 붙인다. | 수락하는 리스너만 넣기. 작업이 진행되며 목록 의미가 바뀐다. | [운영 정보 계약 1.5절](../contracts/ops-info-v2.md#15-사건-목록) |
 
 ## 8. 현재 코드와의 차이
 
@@ -126,7 +126,7 @@ flowchart LR
 
 | 대조 범위 | 환경 | 확인 방법 | 결과 |
 | --- | --- | --- | --- |
-| 작업 2.6 변경(기준 커밋 `b1f2ad5` + 작업 트리) | Ubuntu 24.04.4(WSL2), Rust 1.99.1 | 1~4절의 파일·심볼과 실제 코드를 대조했다. 준비 상태 전이는 `crates/app/src/lifecycle.rs` 단위 테스트 2건, 상태별 응답·헤더·405·404·`server_ready`·`admin_connection_limit` 줄은 `crates/adapters/tests/ops_info_contract.rs`, 준비됨 뒤 응답과 Lm·L 독립은 `tests/serve.rs`의 `answers_status_queries_without_login_once_ready`·`refuses_status_connections_beyond_lm_and_keeps_lm_and_l_apart`로 확인했다([운영 정보 계약의 계약 테스트 실행 기록](../contracts/ops-info-v1.md#계약-테스트-실행-기록)). 실행 중인 프로세스에서 `starting`·`shutting_down` 응답은 관찰하지 않았다. 그 구간이 밀리초 단위라 시스템 테스트가 맞출 수 없다. | 통과 |
+| 작업 2.6 변경(기준 커밋 `b1f2ad5` + 작업 트리) | Ubuntu 24.04.4(WSL2), Rust 1.99.1 | 1~4절의 파일·심볼과 실제 코드를 대조했다. 준비 상태 전이는 `crates/app/src/lifecycle.rs` 단위 테스트 2건, 상태별 응답·헤더·405·404·`server_ready`·`admin_connection_limit` 줄은 `crates/adapters/tests/ops_info_contract.rs`, 준비됨 뒤 응답과 Lm·L 독립은 `tests/serve.rs`의 `answers_status_queries_without_login_once_ready`·`refuses_status_connections_beyond_lm_and_keeps_lm_and_l_apart`로 확인했다([운영 정보 계약의 계약 테스트 실행 기록](../contracts/ops-info-v2.md#계약-테스트-실행-기록)). 실행 중인 프로세스에서 `starting`·`shutting_down` 응답은 관찰하지 않았다. 그 구간이 밀리초 단위라 시스템 테스트가 맞출 수 없다. | 통과 |
 | Windows 실행(기준 커밋 `e1cfc4f` + Windows 경고 수정) | Windows 11 Pro 10.0.26200, Rust 1.99.1(`x86_64-pc-windows-msvc`) | 같은 단위·계약 테스트와 `tests/serve.rs`의 `answers_status_queries_without_login_once_ready`·`refuses_status_connections_beyond_lm_and_keeps_lm_and_l_apart`가 통과했다. | 통과 |
 | 작업 4.2 변경(기준 커밋 `ead7be0` + 작업 트리): 관리 리스너와 Lm 공유, 수락을 `admission.rs`로 옮김 | Ubuntu 24.04.4(WSL2)·Windows 11 Pro 10.0.26200, Rust 1.99.1 | 1·2·4절과 `crates/adapters/src/admission.rs`·`status_http.rs`를 대조했다. `tests/serve.rs`의 `answers_status_queries_without_login_once_ready`·`refuses_status_connections_beyond_lm_and_keeps_lm_and_l_apart`·`refuses_management_connections_beyond_lm_and_keeps_lm_and_l_apart`가 두 환경에서 통과했다. | 통과 |
 | Q114 통합 작업 트리: 필수 리스너 감독·장애 준비 상태·치명 종료 사건 | Windows 11 x64·Ubuntu 24.04 LTS x64 | 부모가 `cargo test -p vnc-relay --bin vnc-relay serve::listener_tests:: -- --nocapture`를 두 OS에서 실행했다. OPS-046 각각 1통과·0실패, 약 2.3초. 실제 TCP·상태 HTTP·`serve` 감독 함수에 연결한 시험용 수락 포트의 오류 주입이다. | 통과(대상 시험 범위). `b5dc9b5` Windows 게이트는 DASH-024로 실패했다. 수락 소켓 blocking 모드 수정 뒤 `9cdebc6` 최종 게이트는 아래 기록처럼 통과했다. |

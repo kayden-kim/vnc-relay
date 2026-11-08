@@ -42,7 +42,7 @@ export const COPY = {
     waitingColumns: ['역할', '중계 ID', '접속 시각', '대기 시간'], // CPY-037
     waitingEmpty: '대기 없음', // CPY-038
     activeTitle: '활성 세션', // CPY-039
-    activeColumns: ['세션', '모드', '전송 경로', '시작', 'Viewer->대상 / 대상->Viewer', '상대 주소', '상세'], // CPY-040
+    activeColumns: ['세션', '모드', '전송 경로(Viewer → 대상)', '시작', 'Viewer->대상 / 대상->Viewer', '상대 주소', '상세'], // CPY-187 (replaces CPY-040)
     activeEmpty: '활성 없음', // CPY-041
     closedTitle: '최근 종료 목록', // CPY-042
     closedColumns: ['세션', '종료 원인', '종료 시각', 'Viewer->대상 / 대상->Viewer'], // CPY-043
@@ -72,7 +72,7 @@ export const COPY = {
     startedLabel: '시작 시각', // CPY-055
     viewerAddressLabel: 'Viewer 주소', // CPY-056
     targetAddressLabel: 'Server/대상 주소', // CPY-057
-    addressNote: '실제 소켓 상대 주소입니다.', // CPY-058
+    addressNote: '주소는 소켓 상대 주소입니다. 신뢰 프록시를 거쳤으면 전달 주소를 따로 표시합니다.', // CPY-188 (replaces CPY-058)
     notFound: '현재 세션을 찾을 수 없음', // CPY-059
     terminate: '세션 종료', // CPY-060
     terminateTitle: '세션 종료 확인', // CPY-061
@@ -98,7 +98,7 @@ export const COPY = {
     configEditDisabled: '편집 기능이 꺼져 있습니다. 설정 파일에서 management.config_edit = true로 바꾸고 서버를 재시작하십시오.', // CPY-097
     noReloadHistory: '이 프로세스의 재로드 이력이 없습니다.', // CPY-098
     settingsApplied: '설정 {n}개를 적용했습니다.', // CPY-099
-    settingsApplyTiming: '새 연결부터 적용됩니다. 기존 연결·이미 시작한 타이머·이미 설정한 소켓 옵션은 이전 값을 유지합니다.', // CPY-100
+    settingsApplyTiming: '바뀐 값은 키별 다음 검사·요청부터 적용됩니다. 이미 끝난 검사·시작한 타이머·설정한 소켓 옵션은 이전 결과를 유지합니다. 기존 중계 세션은 계속 동작합니다.', // CPY-189 (replaces CPY-100)
     settingsConfirmTitle: '설정 변경 확인', // CPY-101
     settingsComparisonLabels: ['이전 값', '새 값'], // CPY-102
     addedItems: '추가한 항목', // CPY-103
@@ -149,6 +149,47 @@ export const COPY = {
       config_origin_invalid: 'Origin 항목의 형식이 올바르지 않습니다.', // CPY-147
       config_target_item_invalid: 'Mode I 대상 항목의 형식이 올바르지 않습니다.', // CPY-148
     },
+    // SCR-002 labels & link
+    targetTransportLabel: 'Server/대상 전송 경로', // CPY-179
+    viewerForwardedAddressLabel: 'Viewer 전달 주소', // CPY-180
+    targetForwardedAddressLabel: 'Server/대상 전달 주소', // CPY-181
+    viewLogs: '로그 보기', // CPY-182
+    // SCR-005 warnings & help
+    emptyTrustedProxiesWarning: '빈 trusted_proxies 목록은 전달 헤더를 신뢰하지 않습니다. 소켓 상대 IP로 클라이언트 주소를 검사합니다.', // CPY-183
+    emptyAllowedOriginsWarning: '빈 allowed_origins 목록은 Origin이 있는 요청을 거절합니다. Origin이 없는 요청은 IP 검사만 합니다.', // CPY-184
+    trustedProxiesHelp: 'trusted_proxies에는 프록시 주소만 입력하십시오. 클라이언트 범위는 넣지 마십시오. 전달 주소가 모두 신뢰 프록시에 속하면 요청을 거절합니다.', // CPY-185
+    // SCR-006 logs
+    logs: '로그', // CPY-149
+    retainedCount: '보관 {n} / 최대 {max}', // CPY-150
+    levelLabel: '수준', // CPY-151
+    eventNameLabel: '사건 이름', // CPY-152
+    allEvents: '모든 사건', // CPY-153
+    searchLabel: '값 검색', // CPY-154
+    search: '검색', // CPY-155
+    searchHelp: '1~256자를 입력한 뒤 Enter를 누르거나 검색을 선택하십시오. 빈 값으로 검색하면 검색 조건을 해제합니다. 필드 값에서 ASCII 대소문자를 구분하지 않고 찾습니다.', // CPY-156
+    sessionFilterChip: '세션 {session_id}', // CPY-157
+    clearFilter: '필터 해제', // CPY-158
+    autoRefresh: '자동 갱신', // CPY-159
+    loadOlderLogs: '이전 로그 더 보기', // CPY-160
+    downloadJsonLines: 'JSON Lines 다운로드', // CPY-161
+    logColumns: ['시각', '수준', '사건', '요약', '자세히'], // CPY-162
+    showDetails: '자세히', // CPY-163
+    hideDetails: '접기', // CPY-164
+    searchLengthError: '검색어는 1~256자로 입력하십시오. 검색을 해제하려면 빈 값으로 검색하십시오.', // CPY-165
+    logsEmpty: '필터와 일치하는 최근 로그가 없습니다.', // CPY-166
+    logsDisabled: '최근 로그를 보관하지 않습니다. 보관하려면 설정 파일의 recent_logs.max_entries를 1~10000으로 바꾸고 서버를 재시작하십시오.', // CPY-167
+    logsGapNotice: '조회하기 전에 일부 로그가 보관 목록에서 제거됐습니다. 표시한 목록은 전체 이력이 아닙니다.', // CPY-168
+    logsPausedNotice: '자동 갱신을 일시정지했습니다. 새로고침과 필터는 계속 사용할 수 있습니다.', // CPY-169
+    autoRefreshOn: '켜짐', // CPY-170
+    autoRefreshOff: '꺼짐', // CPY-171
+    logFiltersTitle: '로그 필터', // CPY-172
+    levelRequiredError: '수준을 하나 이상 선택하십시오.', // CPY-173
+    downloadCollecting: '필터와 일치하는 로그 전체를 모으는 중입니다.', // CPY-174
+    downloadFailed: '로그 다운로드에 실패했습니다. 부분 파일은 저장하지 않았습니다. 다시 시도하십시오.', // CPY-175
+    logsInvalidRequest: '로그 조회 요청을 처리하지 못했습니다. 필터를 확인한 뒤 다시 조회하십시오.', // CPY-176
+    logsMethodNotAllowed: '로그 조회 방식이 맞지 않습니다. 화면을 다시 불러오십시오.', // CPY-177
+    recentLogsTitle: '최근 로그', // CPY-178
+    sessionFilterNote: '보관 중인 로그만 검색합니다. 세션 시작 로그가 제거됐으면 연결별 로그 일부는 포함되지 않을 수 있습니다.', // CPY-186
   },
   en: {
     navLabel: 'Main menu', // CPY-078
@@ -185,7 +226,7 @@ export const COPY = {
     waitingColumns: ['Role', 'Relay ID', 'Connected at', 'Waiting time'], // CPY-037
     waitingEmpty: 'No waiting connections', // CPY-038
     activeTitle: 'Active sessions', // CPY-039
-    activeColumns: ['Session', 'Mode', 'Transport', 'Started', 'Viewer->target / target->Viewer', 'Peer address', 'Details'], // CPY-040
+    activeColumns: ['Session', 'Mode', 'Transport (Viewer → target)', 'Started', 'Viewer->target / target->Viewer', 'Peer address', 'Details'], // CPY-187 (replaces CPY-040)
     activeEmpty: 'No active sessions', // CPY-041
     closedTitle: 'Recently closed sessions', // CPY-042
     closedColumns: ['Session', 'Close reason', 'Closed at', 'Viewer->target / target->Viewer'], // CPY-043
@@ -215,7 +256,7 @@ export const COPY = {
     startedLabel: 'Started at', // CPY-055
     viewerAddressLabel: 'Viewer address', // CPY-056
     targetAddressLabel: 'Server/target address', // CPY-057
-    addressNote: 'Actual socket peer address.', // CPY-058
+    addressNote: 'Addresses are socket peer addresses. Forwarded addresses are shown separately when a trusted proxy is used.', // CPY-188 (replaces CPY-058)
     notFound: 'The current session was not found', // CPY-059
     terminate: 'Terminate session', // CPY-060
     terminateTitle: 'Confirm session termination', // CPY-061
@@ -241,7 +282,7 @@ export const COPY = {
     configEditDisabled: 'Editing is disabled. Set management.config_edit = true in the configuration file and restart the server.', // CPY-097
     noReloadHistory: 'This process has no reload history.', // CPY-098
     settingsApplied: 'Applied {n} settings.', // CPY-099
-    settingsApplyTiming: 'Changes apply from new connections. Existing connections, started timers, and configured socket options keep their previous values.', // CPY-100
+    settingsApplyTiming: 'Changed values apply from the next check or request for each key. Completed checks, started timers, and configured socket options keep their previous results. Existing relay sessions continue.', // CPY-189 (replaces CPY-100)
     settingsConfirmTitle: 'Confirm settings changes', // CPY-101
     settingsComparisonLabels: ['Previous value', 'New value'], // CPY-102
     addedItems: 'Added items', // CPY-103
@@ -292,5 +333,46 @@ export const COPY = {
       config_origin_invalid: 'The Origin item has an invalid format.', // CPY-147
       config_target_item_invalid: 'The Mode I target item has an invalid format.', // CPY-148
     },
+    // SCR-002 labels & link
+    targetTransportLabel: 'Server/target transport', // CPY-179
+    viewerForwardedAddressLabel: 'Viewer forwarded address', // CPY-180
+    targetForwardedAddressLabel: 'Server/target forwarded address', // CPY-181
+    viewLogs: 'View logs', // CPY-182
+    // SCR-005 warnings & help
+    emptyTrustedProxiesWarning: 'An empty trusted_proxies list does not trust forwarded headers. The socket peer IP is used as the client address.', // CPY-183
+    emptyAllowedOriginsWarning: 'An empty allowed_origins list rejects requests with Origin. Requests without Origin use only the IP check.', // CPY-184
+    trustedProxiesHelp: 'Enter only proxy addresses in trusted_proxies. Do not include client ranges. A request is rejected when all forwarded addresses belong to trusted proxies.', // CPY-185
+    // SCR-006 logs
+    logs: 'Logs', // CPY-149
+    retainedCount: 'Retained {n} / Maximum {max}', // CPY-150
+    levelLabel: 'Level', // CPY-151
+    eventNameLabel: 'Event name', // CPY-152
+    allEvents: 'All events', // CPY-153
+    searchLabel: 'Search values', // CPY-154
+    search: 'Search', // CPY-155
+    searchHelp: 'Enter 1–256 characters, then press Enter or select Search. Searching with an empty value clears the search. Field values are matched without ASCII case sensitivity.', // CPY-156
+    sessionFilterChip: 'Session {session_id}', // CPY-157
+    clearFilter: 'Clear filter', // CPY-158
+    autoRefresh: 'Auto refresh', // CPY-159
+    loadOlderLogs: 'Load older logs', // CPY-160
+    downloadJsonLines: 'Download JSON Lines', // CPY-161
+    logColumns: ['Time', 'Level', 'Event', 'Summary', 'Details'], // CPY-162
+    showDetails: 'Show details', // CPY-163
+    hideDetails: 'Hide details', // CPY-164
+    searchLengthError: 'Enter a search value of 1–256 characters. To clear the search, search with an empty value.', // CPY-165
+    logsEmpty: 'No recent logs match the filters.', // CPY-166
+    logsDisabled: 'Recent logs are not retained. To retain them, set recent_logs.max_entries to 1–10000 in the configuration file and restart the server.', // CPY-167
+    logsGapNotice: 'Some logs were removed from the retained list before they could be fetched. The displayed list is not a complete history.', // CPY-168
+    logsPausedNotice: 'Auto refresh is paused. Refresh and filters are still available.', // CPY-169
+    autoRefreshOn: 'On', // CPY-170
+    autoRefreshOff: 'Off', // CPY-171
+    logFiltersTitle: 'Log filters', // CPY-172
+    levelRequiredError: 'Select at least one level.', // CPY-173
+    downloadCollecting: 'Collecting all logs that match the filters.', // CPY-174
+    downloadFailed: 'The log download failed. No partial file was saved. Try again.', // CPY-175
+    logsInvalidRequest: 'The log query could not be processed. Check the filters and query again.', // CPY-176
+    logsMethodNotAllowed: 'The log query method is not supported. Reload this screen.', // CPY-177
+    recentLogsTitle: 'Recent logs', // CPY-178
+    sessionFilterNote: 'Only retained logs are searched. Some connection logs may be excluded if the session start log has been removed.', // CPY-186
   },
 };

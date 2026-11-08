@@ -119,6 +119,7 @@ mod delayed_cleanup {
             conn_id: ConnId::next(),
             entry_point: EntryPoint::TcpServer,
             peer_ip: PeerIp::from(address),
+            forwarded_ip: None,
             peer_addr: address,
             accepted_wall: clock.wall(),
             accepted_at,

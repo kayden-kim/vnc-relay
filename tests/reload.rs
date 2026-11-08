@@ -41,7 +41,7 @@ const CERT: &str = "server-chain.pem";
 const KEY: &str = "server-key-p256.pem";
 
 /// Config key of the WSS key file, named by rejected TLS candidates.
-const KEY_KEY: &str = "relay.wss_viewer.key_file";
+const KEY_KEY: &str = "relay.wss.key_file";
 
 static PORTS_LOCK: Mutex<()> = Mutex::new(());
 
@@ -56,8 +56,8 @@ struct Ports {
     management: u16,
     tcp_viewer: u16,
     tcp_server: u16,
-    ws_viewer: u16,
-    wss_viewer: u16,
+    ws: u16,
+    wss: u16,
 }
 
 impl Ports {
@@ -80,8 +80,8 @@ impl Ports {
             management: port(1),
             tcp_viewer: port(2),
             tcp_server: port(3),
-            ws_viewer: port(4),
-            wss_viewer: port(5),
+            ws: port(4),
+            wss: port(5),
         }
     }
 
@@ -91,8 +91,8 @@ impl Ports {
             self.management,
             self.tcp_viewer,
             self.tcp_server,
-            self.ws_viewer,
-            self.wss_viewer,
+            self.ws,
+            self.wss,
         ]
     }
 }
@@ -151,17 +151,21 @@ enabled = true
 listen = "127.0.0.1:{tcp_server}"
 allow = {allow}
 
-[relay.ws_viewer]
+[relay.ws]
+listen = "127.0.0.1:{ws}"
+
+[relay.ws.viewer]
 enabled = true
-listen = "127.0.0.1:{ws_viewer}"
 allow = {allow}
 
-[relay.wss_viewer]
-enabled = true
-listen = "127.0.0.1:{wss_viewer}"
-allow = {allow}
+[relay.wss]
+listen = "127.0.0.1:{wss}"
 cert_file = '{cert_path}'
 key_file = '{key_path}'
+
+[relay.wss.viewer]
+enabled = true
+allow = {allow}
 
 [mode2]
 enabled = true
@@ -181,8 +185,8 @@ output = "relay.log"
         status = ports.status,
         tcp_viewer = ports.tcp_viewer,
         tcp_server = ports.tcp_server,
-        ws_viewer = ports.ws_viewer,
-        wss_viewer = ports.wss_viewer,
+        ws = ports.ws,
+        wss = ports.wss,
         cert_path = tls_path(cert),
         key_path = tls_path(key),
     )
@@ -575,6 +579,30 @@ impl WebSocket {
         bytes
     }
 }
+fn ws_upgrade_with_headers(
+    mut wire: Box<dyn Wire>,
+    path: &str,
+    headers: &[(&str, &str)],
+) -> (u16, Option<WebSocket>) {
+    let mut req = format!(
+        "GET {path} HTTP/1.1\r\nHost: localhost\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n"
+    );
+    for (name, value) in headers {
+        req.push_str(&format!("{name}: {value}\r\n"));
+    }
+    req.push_str("\r\n");
+    wire.write_all(req.as_bytes())
+        .unwrap_or_else(|error| panic!("send upgrade: {error}"));
+    wire.flush()
+        .unwrap_or_else(|error| panic!("flush upgrade: {error}"));
+    let head = read_head(&mut wire);
+    let status = status_of(&head);
+    if status == 101 {
+        (status, Some(WebSocket { wire }))
+    } else {
+        (status, None)
+    }
+}
 
 /// True when the server closes the connection (EOF or reset) within `wait`,
 /// false when the connection is still open after it.
@@ -769,7 +797,7 @@ fn allow_change_keeps_waiting_connections_and_applies_to_new_decisions() {
         .unwrap_or_else(|error| panic!("tcp read: {error}"));
     assert_eq!(&buf, b"tcp-pre-s2v");
 
-    let mut ws_v = WebSocket::upgrade(Box::new(connect_from([127, 0, 0, 1], ports.ws_viewer)));
+    let mut ws_v = WebSocket::upgrade(Box::new(connect_from([127, 0, 0, 1], ports.ws)));
     assert_eq!(ws_v.read_data(12), GREETING);
     ws_v.send_binary(&request("2504"));
 
@@ -793,7 +821,7 @@ fn allow_change_keeps_waiting_connections_and_applies_to_new_decisions() {
 
     let mut wss_v = WebSocket::upgrade(Box::new(tls_client(connect_from(
         [127, 0, 0, 1],
-        ports.wss_viewer,
+        ports.wss,
     ))));
     assert_eq!(wss_v.read_data(12), GREETING);
     wss_v.send_binary(&request("2505"));
@@ -850,8 +878,8 @@ fn allow_change_keeps_waiting_connections_and_applies_to_new_decisions() {
     let applied = wait_for_line(&log, |line| event_is(line, "reload_applied"));
     assert!(applied.contains("relay.tcp_viewer.allow"), "{applied}");
     assert!(applied.contains("relay.tcp_server.allow"), "{applied}");
-    assert!(applied.contains("relay.ws_viewer.allow"), "{applied}");
-    assert!(applied.contains("relay.wss_viewer.allow"), "{applied}");
+    assert!(applied.contains("relay.ws.viewer.allow"), "{applied}");
+    assert!(applied.contains("relay.wss.viewer.allow"), "{applied}");
 
     // State 3: Active relays keep forwarding exact bytes both ways after reload.
     tcp_v
@@ -987,11 +1015,11 @@ fn allow_change_keeps_waiting_connections_and_applies_to_new_decisions() {
         EXIT_LIMIT
     ));
     assert!(closed_within(
-        &mut connect_from([127, 0, 0, 1], ports.ws_viewer),
+        &mut connect_from([127, 0, 0, 1], ports.ws),
         EXIT_LIMIT
     ));
     assert!(closed_within(
-        &mut connect_from([127, 0, 0, 1], ports.wss_viewer),
+        &mut connect_from([127, 0, 0, 1], ports.wss),
         EXIT_LIMIT
     ));
 
@@ -1054,12 +1082,12 @@ fn allow_change_keeps_waiting_connections_and_applies_to_new_decisions() {
         .unwrap_or_else(|error| panic!("new read: {error}"));
     assert_eq!(&buf_new, b"new-s2v");
 
-    let mut new_ws = WebSocket::upgrade(Box::new(connect_from([127, 0, 0, 3], ports.ws_viewer)));
+    let mut new_ws = WebSocket::upgrade(Box::new(connect_from([127, 0, 0, 3], ports.ws)));
     assert_eq!(new_ws.read_data(12), GREETING);
 
     let mut new_wss = WebSocket::upgrade(Box::new(tls_client(connect_from(
         [127, 0, 0, 3],
-        ports.wss_viewer,
+        ports.wss,
     ))));
     assert_eq!(new_wss.read_data(12), GREETING);
 
@@ -1070,10 +1098,10 @@ fn allow_change_keeps_waiting_connections_and_applies_to_new_decisions() {
         is(line, "connection_accepted", "tcp_server", "127.0.0.3")
     });
     wait_for_line(&log, |line| {
-        is(line, "connection_accepted", "ws_viewer", "127.0.0.3")
+        is(line, "connection_accepted", "ws", "127.0.0.3")
     });
     wait_for_line(&log, |line| {
-        is(line, "connection_accepted", "wss_viewer", "127.0.0.3")
+        is(line, "connection_accepted", "wss", "127.0.0.3")
     });
 }
 
@@ -1093,7 +1121,7 @@ fn rejected_candidates_keep_the_old_settings_certificate_and_connections() {
     let old = leaf_of(CERT);
     // Held under the running list and certificate before any candidate.
     let mut waiting = connect_from([127, 0, 0, 1], ports.tcp_viewer);
-    let mut tls = tls_client(connect_from([127, 0, 0, 1], ports.wss_viewer));
+    let mut tls = tls_client(connect_from([127, 0, 0, 1], ports.wss));
     handshake(&mut tls);
 
     // Syntax error: the array is not closed.
@@ -1136,7 +1164,7 @@ fn rejected_candidates_keep_the_old_settings_certificate_and_connections() {
 
     // Nothing was applied: the old list, certificate and connections stay.
     assert_eq!(logged(&log, |line| event_is(line, "reload_applied")), 0);
-    assert_eq!(wss_leaf(ports.wss_viewer), old, "old certificate replaced");
+    assert_eq!(wss_leaf(ports.wss), old, "old certificate replaced");
     assert!(
         !closed_within(&mut waiting, SETTLE),
         "rejected candidates closed the waiting connection"
@@ -1226,8 +1254,8 @@ fn ipv6_items_decide_the_loopback_source_at_their_boundaries() {
                 ports.status,
                 ports.management,
                 ports.tcp_server,
-                ports.ws_viewer,
-                ports.wss_viewer,
+                ports.ws,
+                ports.wss,
             ]
             .into_iter()
             .all(connects)
@@ -1294,7 +1322,7 @@ fn new_tls_pair_is_used_by_new_handshakes_and_keeps_open_connections() {
     assert_ne!(old, new);
 
     // A TLS connection that is open before the reload.
-    let mut open = tls_client(connect_from([127, 0, 0, 1], ports.wss_viewer));
+    let mut open = tls_client(connect_from([127, 0, 0, 1], ports.wss));
     assert_eq!(handshake(&mut open), old);
 
     let before_write = Instant::now();
@@ -1312,7 +1340,7 @@ fn new_tls_pair_is_used_by_new_handshakes_and_keeps_open_connections() {
     });
     let applied = wait_for_line(&log, |line| event_is(line, "reload_applied"));
     let applied_by = Instant::now();
-    assert!(applied.contains("relay.wss_viewer.cert_file"), "{applied}");
+    assert!(applied.contains("relay.wss.cert_file"), "{applied}");
     // D is measured from the detection to the result. The log `ts` is wall-clock
     // time, and WSL2 steps that clock by seconds during a run, so the interval
     // uses the monotonic clock. It is never shorter than the logged interval:
@@ -1325,7 +1353,7 @@ fn new_tls_pair_is_used_by_new_handshakes_and_keeps_open_connections() {
     );
 
     assert_eq!(
-        wss_leaf(ports.wss_viewer),
+        wss_leaf(ports.wss),
         new,
         "a new handshake did not get the new certificate"
     );
@@ -1421,11 +1449,7 @@ fn restart_only_change_holds_back_a_certificate_change_until_the_port_is_reverte
     let line = wait_for_line(&log, |line| event_is(line, "reload_restart_required"));
     assert!(line.contains("relay.tcp_viewer.listen"), "{line}");
     // The whole candidate is refused, so the old certificate and port stay.
-    assert_eq!(
-        wss_leaf(ports.wss_viewer),
-        old,
-        "rejected certificate applied"
-    );
+    assert_eq!(wss_leaf(ports.wss), old, "rejected certificate applied");
     assert!(!connects(moved));
 
     // Candidate 2: the port is reverted and only the allow list changes.
@@ -1436,10 +1460,7 @@ fn restart_only_change_holds_back_a_certificate_change_until_the_port_is_reverte
         "127.0.0.2 refused after the IP change"
     );
     // The wss allow list is now 127.0.0.2 only, so the check connects from it.
-    let leaf = handshake(&mut tls_client(connect_from(
-        [127, 0, 0, 2],
-        ports.wss_viewer,
-    )));
+    let leaf = handshake(&mut tls_client(connect_from([127, 0, 0, 2], ports.wss)));
     assert_eq!(leaf, old, "rejected certificate came back");
 }
 
@@ -1623,8 +1644,7 @@ fn removed_source_is_refused_at_upgrade_on_connections_opened_before_the_removal
     wait_listening(guard.child(), ports);
 
     // An already-relaying WS session from the source that will be removed (127.0.0.2).
-    let mut relaying_ws =
-        WebSocket::upgrade(Box::new(connect_from([127, 0, 0, 2], ports.ws_viewer)));
+    let mut relaying_ws = WebSocket::upgrade(Box::new(connect_from([127, 0, 0, 2], ports.ws)));
     assert_eq!(relaying_ws.read_data(12), GREETING);
     relaying_ws.send_binary(&request("2201"));
 
@@ -1653,20 +1673,20 @@ fn removed_source_is_refused_at_upgrade_on_connections_opened_before_the_removal
     assert_eq!(relaying_ws.read_data(13), b"pre-server2ws");
 
     // A plain HTTP connection and a TLS connection that send nothing yet.
-    let mut held_http = connect_from([127, 0, 0, 2], ports.ws_viewer);
-    let mut held_tls = tls_client(connect_from([127, 0, 0, 2], ports.wss_viewer));
+    let mut held_http = connect_from([127, 0, 0, 2], ports.ws);
+    let mut held_tls = tls_client(connect_from([127, 0, 0, 2], ports.wss));
     handshake(&mut held_tls);
     wait_for_count(&log, 2, |line| {
-        is(line, "connection_accepted", "ws_viewer", "127.0.0.2")
+        is(line, "connection_accepted", "ws", "127.0.0.2")
     });
     wait_for_count(&log, 1, |line| {
-        is(line, "connection_accepted", "wss_viewer", "127.0.0.2")
+        is(line, "connection_accepted", "wss", "127.0.0.2")
     });
 
     write(&config, &config_text(ports, VIEWER_ONLY, CERT, KEY));
     let applied = wait_for_line(&log, |line| event_is(line, "reload_applied"));
-    assert!(applied.contains("relay.ws_viewer.allow"), "{applied}");
-    assert!(applied.contains("relay.wss_viewer.allow"), "{applied}");
+    assert!(applied.contains("relay.ws.viewer.allow"), "{applied}");
+    assert!(applied.contains("relay.wss.viewer.allow"), "{applied}");
 
     // The already-relaying WS session keeps forwarding data in both directions after removal.
     relaying_ws.send_binary(b"post-ws2server");
@@ -1689,7 +1709,7 @@ fn removed_source_is_refused_at_upgrade_on_connections_opened_before_the_removal
     let head = read_head(&mut held_http);
     assert_eq!(status_of(&head), 403, "{head}");
     wait_for_line(&log, |line| {
-        is(line, "connection_rejected", "ws_viewer", "127.0.0.2")
+        is(line, "connection_rejected", "ws", "127.0.0.2")
             && field(line, "stage") == Some("upgrade")
             && field(line, "reason") == Some("ip_not_allowed")
     });
@@ -1700,19 +1720,18 @@ fn removed_source_is_refused_at_upgrade_on_connections_opened_before_the_removal
     let head = read_head(&mut held_tls);
     assert_eq!(status_of(&head), 403, "{head}");
     wait_for_line(&log, |line| {
-        is(line, "connection_rejected", "wss_viewer", "127.0.0.2")
+        is(line, "connection_rejected", "wss", "127.0.0.2")
             && field(line, "stage") == Some("upgrade")
             && field(line, "reason") == Some("ip_not_allowed")
     });
 
     // A new connection from the removed source is refused at accept.
     assert!(closed_within(
-        &mut connect_from([127, 0, 0, 2], ports.ws_viewer),
+        &mut connect_from([127, 0, 0, 2], ports.ws),
         EXIT_LIMIT
     ));
     wait_for_line(&log, |line| {
-        is(line, "connection_rejected", "ws_viewer", "127.0.0.2")
-            && field(line, "stage") == Some("accept")
+        is(line, "connection_rejected", "ws", "127.0.0.2") && field(line, "stage") == Some("accept")
     });
 }
 
@@ -1957,21 +1976,21 @@ fn reverting_listen_allows_the_entire_dynamic_candidate_without_restart() {
     original = setting(original, "mode1.allow_targets", "[]");
     original = setting(
         original,
-        "relay.ws_viewer.allowed_origins",
+        "relay.ws.viewer.allowed_origins",
         r#"["https://old.example"]"#,
     );
     original = setting(
         original,
-        "relay.wss_viewer.allowed_origins",
+        "relay.wss.viewer.allowed_origins",
         r#"["https://old.example"]"#,
     );
     let changes = [
         (
-            "relay.ws_viewer.allowed_origins",
+            "relay.ws.viewer.allowed_origins",
             serde_json::json!(["https://new.example"]),
         ),
         (
-            "relay.wss_viewer.allowed_origins",
+            "relay.wss.viewer.allowed_origins",
             serde_json::json!(["https://new.example"]),
         ),
         ("mode1.allow_targets", serde_json::json!(["127.0.0.1:5900"])),
@@ -2066,9 +2085,9 @@ fn upgrade_origin(mut wire: Box<dyn Wire>, origin: &str, expected: u16) -> Optio
 
 fn origin_viewer(ports: Ports, secure: bool, origin: &str, expected: u16) -> Option<WebSocket> {
     let wire: Box<dyn Wire> = if secure {
-        Box::new(tls_client(connect_from([127, 0, 0, 1], ports.wss_viewer)))
+        Box::new(tls_client(connect_from([127, 0, 0, 1], ports.wss)))
     } else {
-        Box::new(connect_from([127, 0, 0, 1], ports.ws_viewer))
+        Box::new(connect_from([127, 0, 0, 1], ports.ws))
     };
     upgrade_origin(wire, origin, expected)
 }
@@ -2151,12 +2170,12 @@ fn origin_and_target_reload_affects_new_checks_and_keeps_established_sessions() 
         text = setting(text, "mode1.allow_targets", &targets.to_string());
         text = setting(
             text,
-            "relay.ws_viewer.allowed_origins",
+            "relay.ws.viewer.allowed_origins",
             &origins.to_string(),
         );
         setting(
             text,
-            "relay.wss_viewer.allowed_origins",
+            "relay.wss.viewer.allowed_origins",
             &origins.to_string(),
         )
     };
@@ -2186,7 +2205,7 @@ fn origin_and_target_reload_affects_new_checks_and_keeps_established_sessions() 
 
     // A transport accepted before the addition still uses the current Origin
     // policy when its HTTP upgrade is finally checked.
-    let held_add = connect_from([127, 0, 0, 1], ports.ws_viewer);
+    let held_add = connect_from([127, 0, 0, 1], ports.ws);
     let both_origins = serde_json::json!(["https://old.example", "https://new.example"]);
     let both_targets = serde_json::json!([old_address, new_address]);
     reload(&config, &policy(both_origins.clone(), both_targets.clone()));
@@ -2198,8 +2217,8 @@ fn origin_and_target_reload_affects_new_checks_and_keeps_established_sessions() 
     let mut new_target = accept_target(&added);
     exchange(&mut new_viewer, &mut new_target);
 
-    let held_remove = connect_from([127, 0, 0, 1], ports.ws_viewer);
-    let mut held_tls = tls_client(connect_from([127, 0, 0, 1], ports.wss_viewer));
+    let held_remove = connect_from([127, 0, 0, 1], ports.ws);
+    let mut held_tls = tls_client(connect_from([127, 0, 0, 1], ports.wss));
     handshake(&mut held_tls);
     reload(
         &config,
@@ -2341,20 +2360,8 @@ fn lowered_relay_and_admin_limits_keep_connections_and_recover_after_release_or_
         "relay_connection_limit",
         2,
     );
-    assert_budget_refusal(
-        &log,
-        ports.ws_viewer,
-        "ws_viewer",
-        "relay_connection_limit",
-        2,
-    );
-    assert_budget_refusal(
-        &log,
-        ports.wss_viewer,
-        "wss_viewer",
-        "relay_connection_limit",
-        2,
-    );
+    assert_budget_refusal(&log, ports.ws, "ws", "relay_connection_limit", 2);
+    assert_budget_refusal(&log, ports.wss, "wss", "relay_connection_limit", 2);
     exchange(&mut viewer, &mut server);
     exchange(&mut second_viewer, &mut second_server);
     // The independent admin budget still serves queries at exhausted L.
@@ -2769,12 +2776,12 @@ fn runtime_groups_take_effect_only_at_their_documented_boundaries() {
     wait_listening(guard.child(), ports);
 
     let mut old_initial = tcp_viewer(ports.tcp_viewer);
-    let mut old_upgrade = connect_from([127, 0, 0, 1], ports.ws_viewer);
+    let mut old_upgrade = connect_from([127, 0, 0, 1], ports.ws);
     let mut old_management = connect_from([127, 0, 0, 1], ports.management);
-    let mut old_wss_upgrade = connect_from([127, 0, 0, 1], ports.wss_viewer);
-    let held_for_upgrade = connect_from([127, 0, 0, 1], ports.ws_viewer);
-    let held_for_message = connect_from([127, 0, 0, 1], ports.ws_viewer);
-    let mut old_ws = WebSocket::upgrade(Box::new(connect_from([127, 0, 0, 1], ports.ws_viewer)));
+    let mut old_wss_upgrade = connect_from([127, 0, 0, 1], ports.wss);
+    let held_for_upgrade = connect_from([127, 0, 0, 1], ports.ws);
+    let held_for_message = connect_from([127, 0, 0, 1], ports.ws);
+    let mut old_ws = WebSocket::upgrade(Box::new(connect_from([127, 0, 0, 1], ports.ws)));
     assert_eq!(old_ws.read_data(12), GREETING);
     old_ws.send_binary(&request("5001"));
     let mut old_server = waiting_server(ports, "5001");
@@ -2814,8 +2821,8 @@ fn runtime_groups_take_effect_only_at_their_documented_boundaries() {
 
     // New U applies independently to WS, WSS TLS, and management first-head
     // deadlines. Hold old sockets throughout the new-deadline observation.
-    let mut new_upgrade = connect_from([127, 0, 0, 1], ports.ws_viewer);
-    let mut new_wss_upgrade = connect_from([127, 0, 0, 1], ports.wss_viewer);
+    let mut new_upgrade = connect_from([127, 0, 0, 1], ports.ws);
+    let mut new_wss_upgrade = connect_from([127, 0, 0, 1], ports.wss);
     let mut new_management = connect_from([127, 0, 0, 1], ports.management);
     assert!(closed_within(&mut new_upgrade, Duration::from_secs(3)));
     assert!(closed_within(&mut new_wss_upgrade, Duration::from_secs(2)));
@@ -2871,4 +2878,184 @@ fn runtime_groups_take_effect_only_at_their_documented_boundaries() {
     );
     // Deliberately partial: TCP K readback, Kw scheduling, C attempt timing,
     // and started G have adapter/app/platform-specific coverage.
+}
+
+/// spec: operations.md:OPS-067
+#[test]
+fn trusted_proxies_reload_and_edit_apply_to_new_checks_and_keep_open_connections() {
+    let _lock = lock_ports();
+    let ports = Ports::free();
+    let mut text = config_text(ports, VIEWER_ONLY, CERT, KEY);
+    text = setting(text, "management.config_edit", "true");
+    text = setting(text, "relay.ws.trusted_proxies", r#"["0.0.0.0/0"]"#);
+    text = setting(text, "relay.wss.trusted_proxies", r#"["::/0"]"#);
+    text = setting(
+        text,
+        "relay.ws.viewer.allow",
+        r#"["198.51.100.7", "2001:db8::7"]"#,
+    );
+    text = setting(text, "relay.ws.server.enabled", "true");
+    text = setting(text, "relay.ws.server.allow", r#"["127.0.0.1"]"#);
+    text = setting(text, "relay.tcp_server.allow", r#"["127.0.0.1"]"#);
+    let config = authenticated_setup("ops067-trusted-proxies", &text);
+    let log = log_of(&config);
+    let mut guard = Guard(Some(spawn(&config)));
+    wait_listening(guard.child(), ports);
+
+    // Startup phase warning for covering whole family
+    wait_for_count(&log, 2, |line| {
+        event_is(line, "trust_all_proxies") && field(line, "phase") == Some("startup")
+    });
+
+    // Pre-existing session established under initial proxy trust
+    let socket = connect_from([127, 0, 0, 1], ports.ws);
+    let (status, ws) = ws_upgrade_with_headers(
+        Box::new(socket),
+        "/relay",
+        &[("X-Forwarded-For", "2001:db8::7")],
+    );
+    assert_eq!(status, 101);
+    let mut preexisting_ws = ws.unwrap();
+    assert_eq!(preexisting_ws.read_data(12), GREETING);
+    preexisting_ws.send_binary(&request("6701"));
+    let mut preexisting_server = waiting_server(ports, "6701");
+    ws_exchange(&mut preexisting_ws, &mut preexisting_server);
+
+    // File watch reload replacing trusted list
+    text = setting(text, "relay.ws.trusted_proxies", r#"["127.0.0.1"]"#);
+    text = setting(text, "relay.wss.trusted_proxies", r#"["127.0.0.1"]"#);
+    let applied = reload(&config, &text);
+    let applied_keys = applied["applied"].as_array().unwrap();
+    assert!(applied_keys.iter().any(|k| k == "relay.ws.trusted_proxies"));
+    assert!(
+        applied_keys
+            .iter()
+            .any(|k| k == "relay.wss.trusted_proxies")
+    );
+
+    // Existing session survives reload
+    ws_exchange(&mut preexisting_ws, &mut preexisting_server);
+
+    // File watch reload with whole family warning at reload phase
+    text = setting(text, "relay.ws.trusted_proxies", r#"["0.0.0.0/0"]"#);
+    reload(&config, &text);
+    wait_for_line(&log, |line| {
+        event_is(line, "trust_all_proxies")
+            && field(line, "phase") == Some("reload")
+            && field(line, "listener") == Some("ws")
+    });
+
+    // Management API dynamic PATCH edit replacing trusted list
+    let (cookie, csrf, _) = login(ports.management);
+    let view = query(ports.management, &cookie, "/api/v1/config");
+    let revision = view["revision"].as_str().unwrap();
+    let patch_body = serde_json::json!({
+        "revision": revision,
+        "changes": {
+            "relay.ws.trusted_proxies": ["127.0.0.1"]
+        }
+    })
+    .to_string();
+    let reply = http(
+        ports.management,
+        "PATCH",
+        "/api/v1/config",
+        &[
+            ("Cookie", &cookie),
+            ("X-CSRF-Token", &csrf),
+            ("Content-Type", "application/json"),
+        ],
+        &patch_body,
+    );
+    assert_eq!(reply.status, 200, "{}", reply.body);
+    assert!(
+        reply.body["applied"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|k| k == "relay.ws.trusted_proxies")
+    );
+
+    // Existing connection continues to survive
+    ws_exchange(&mut preexisting_ws, &mut preexisting_server);
+
+    // Under trusted list ["127.0.0.1"], a new connection through proxy succeeds
+    let socket = connect_from([127, 0, 0, 1], ports.ws);
+    let (status, new_ws) = ws_upgrade_with_headers(
+        Box::new(socket),
+        "/relay",
+        &[("X-Forwarded-For", "198.51.100.7")],
+    );
+    assert_eq!(status, 101);
+    drop(new_ws);
+
+    // PATCH trusted list to empty: 127.0.0.1 is no longer trusted
+    let view2 = query(ports.management, &cookie, "/api/v1/config");
+    let revision2 = view2["revision"].as_str().unwrap();
+    let patch_body2 = serde_json::json!({
+        "revision": revision2,
+        "changes": {
+            "relay.ws.trusted_proxies": []
+        }
+    })
+    .to_string();
+    let reply2 = http(
+        ports.management,
+        "PATCH",
+        "/api/v1/config",
+        &[
+            ("Cookie", &cookie),
+            ("X-CSRF-Token", &csrf),
+            ("Content-Type", "application/json"),
+        ],
+        &patch_body2,
+    );
+    assert_eq!(reply2.status, 200, "{}", reply2.body);
+
+    // Existing connection still survives
+    ws_exchange(&mut preexisting_ws, &mut preexisting_server);
+
+    // Now from 127.0.0.1, X-Forwarded-For is ignored because 127.0.0.1 is not in trusted_proxies.
+    // Socket IP 127.0.0.1 is not in viewer.allow ("198.51.100.7"), so 403 Forbidden.
+    let socket = connect_from([127, 0, 0, 1], ports.ws);
+    let (status, refused_ws) = ws_upgrade_with_headers(
+        Box::new(socket),
+        "/relay",
+        &[("X-Forwarded-For", "198.51.100.7")],
+    );
+    assert_eq!(status, 403);
+    assert!(refused_ws.is_none());
+
+    // PATCH with whole-family trusted proxy emits trust_all_proxies reload warning
+    let view3 = query(ports.management, &cookie, "/api/v1/config");
+    let revision3 = view3["revision"].as_str().unwrap();
+    let patch_body3 = serde_json::json!({
+        "revision": revision3,
+        "changes": {
+            "relay.ws.trusted_proxies": ["0.0.0.0/0"]
+        }
+    })
+    .to_string();
+    let reply3 = http(
+        ports.management,
+        "PATCH",
+        "/api/v1/config",
+        &[
+            ("Cookie", &cookie),
+            ("X-CSRF-Token", &csrf),
+            ("Content-Type", "application/json"),
+        ],
+        &patch_body3,
+    );
+    assert_eq!(reply3.status, 200, "{}", reply3.body);
+    wait_for_line(&log, |line| {
+        event_is(line, "trust_all_proxies")
+            && field(line, "phase") == Some("reload")
+            && field(line, "item") == Some("0.0.0.0/0")
+    });
+
+    // Pre-existing session survives throughout
+    ws_exchange(&mut preexisting_ws, &mut preexisting_server);
+    drop(preexisting_ws);
+    drop(preexisting_server);
 }

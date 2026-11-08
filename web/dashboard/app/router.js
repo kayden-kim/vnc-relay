@@ -4,6 +4,7 @@
 import { mountOperations } from './operations.js';
 import { mountSession } from './session.js';
 import { mountSettings } from './settings.js';
+import { mountLogs } from './logs.js';
 
 const SESSION_HASH = /^#\/sessions\/([^/]+)$/;
 
@@ -11,6 +12,12 @@ const SESSION_HASH = /^#\/sessions\/([^/]+)$/;
 export function routeOf(hash) {
   if (hash === '#/settings' || hash === '#/settings/edit') {
     return { name: 'settings', edit: hash === '#/settings/edit' };
+  }
+  if (hash === '#/logs' || hash.startsWith('#/logs?')) {
+    const queryPart = hash.includes('?') ? hash.slice(hash.indexOf('?') + 1) : '';
+    const params = new URLSearchParams(queryPart);
+    const sessionId = params.get('session_id');
+    return { name: 'logs', sessionId };
   }
   const match = SESSION_HASH.exec(hash);
   if (!match) {
@@ -33,9 +40,9 @@ export function mountRouter(root, deps = {}) {
 
   // Successful settings edits carry the applied-key count in memory, never in the URL or storage.
   function navigate(url, options = {}) {
-    if (url === '/#/settings' || url === '/#/settings/edit') {
+    if (url.startsWith('/#/logs') || url === '/#/settings' || url === '/#/settings/edit' || url === '/#/' || url === '/') {
       applied = options.applied ?? null;
-      const hash = url.slice(1);
+      const hash = url.startsWith('/') ? url.slice(1) : url;
       if (location.hash === hash) show();
       else location.hash = hash;
       return;
@@ -54,6 +61,8 @@ export function mountRouter(root, deps = {}) {
     applied = null;
     if (route.name === 'settings') {
       current = mountSettings(root, screenDeps, { edit: route.edit, applied: count });
+    } else if (route.name === 'logs') {
+      current = mountLogs(root, screenDeps, { sessionId: route.sessionId });
     } else if (route.name === 'session') {
       current = mountSession(root, route.id, screenDeps);
     } else {

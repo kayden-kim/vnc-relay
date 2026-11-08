@@ -1,5 +1,5 @@
 //! Relay session state and finalized summaries, without I/O or clock access.
-//! See management-api-v1 §§1.8–1.10 and ops-info-v1 §1.6.
+//! See management-api-v1 §§1.8–1.10 and ops-info-v2 §1.6.
 
 use std::fmt;
 use std::time::{Duration, SystemTime};
@@ -64,7 +64,7 @@ impl fmt::Display for SessionId {
     }
 }
 
-/// Endpoint names used by operation events (ops-info-v1 §1.6).
+/// Endpoint names used by operation events (ops-info-v2 §1.6).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Side {
     /// The viewer endpoint in either mode.
@@ -86,18 +86,18 @@ impl Side {
     }
 }
 
-/// Viewer transport metadata (management-api-v1 §1.8).
+/// Transport metadata shared by Viewer, Server, and Mode I target sides.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ViewerTransport {
-    /// Plain TCP viewer connection.
+pub enum Transport {
+    /// Plain TCP connection.
     Tcp,
-    /// WebSocket viewer connection.
+    /// WebSocket connection.
     Ws,
-    /// TLS WebSocket viewer connection.
+    /// TLS WebSocket connection.
     Wss,
 }
 
-impl ViewerTransport {
+impl Transport {
     /// Returns the contract field value.
     pub fn as_str(self) -> &'static str {
         match self {
@@ -229,7 +229,8 @@ impl std::error::Error for SessionError {}
 pub struct Session {
     id: SessionId,
     mode: Mode,
-    viewer_transport: ViewerTransport,
+    viewer_transport: Transport,
+    target_transport: Transport,
     started_at: SystemTime,
     started_mono: Duration,
     state: SessionState,
@@ -247,7 +248,8 @@ impl Session {
     pub fn new(
         id: SessionId,
         mode: Mode,
-        viewer_transport: ViewerTransport,
+        viewer_transport: Transport,
+        target_transport: Transport,
         started_at: SystemTime,
         started_mono: Duration,
     ) -> Self {
@@ -255,6 +257,10 @@ impl Session {
             id,
             mode,
             viewer_transport,
+            target_transport: match mode {
+                Mode::Mode1 => Transport::Tcp,
+                Mode::Mode2 => target_transport,
+            },
             started_at,
             started_mono,
             state: SessionState::Active,
@@ -279,8 +285,14 @@ impl Session {
     }
 
     /// Returns the viewer's transport metadata.
-    pub fn viewer_transport(&self) -> ViewerTransport {
+    pub fn viewer_transport(&self) -> Transport {
         self.viewer_transport
+    }
+
+    /// Returns the Server transport, or TCP for a Mode I target.
+    /// See management-api-v1 §1.8.
+    pub fn target_transport(&self) -> Transport {
+        self.target_transport
     }
 
     /// Returns the wall-clock relay start time.
@@ -488,6 +500,7 @@ impl Session {
             id: self.id.clone(),
             mode: self.mode,
             viewer_transport: self.viewer_transport,
+            target_transport: self.target_transport,
             started_at: self.started_at,
             ended_at: ended_at.max(self.started_at),
             duration: self.duration(ended_mono),
@@ -532,7 +545,8 @@ impl Session {
 pub struct ClosedSession {
     id: SessionId,
     mode: Mode,
-    viewer_transport: ViewerTransport,
+    viewer_transport: Transport,
+    target_transport: Transport,
     started_at: SystemTime,
     ended_at: SystemTime,
     duration: Duration,
@@ -553,8 +567,14 @@ impl ClosedSession {
     }
 
     /// Returns the viewer's transport metadata.
-    pub fn viewer_transport(&self) -> ViewerTransport {
+    pub fn viewer_transport(&self) -> Transport {
         self.viewer_transport
+    }
+
+    /// Returns the finalized Server or Mode I target transport.
+    /// See management-api-v1 §1.10.
+    pub fn target_transport(&self) -> Transport {
+        self.target_transport
     }
 
     /// Returns the wall-clock relay start time.
@@ -599,7 +619,8 @@ mod tests {
         Session::new(
             SessionId::from_block([1; 16]),
             mode,
-            ViewerTransport::Tcp,
+            Transport::Tcp,
+            Transport::Tcp,
             SystemTime::UNIX_EPOCH + Duration::from_secs(100),
             Duration::from_secs(10),
         )
@@ -716,9 +737,9 @@ mod tests {
         assert_eq!(Side::Viewer.as_str(), "viewer");
         assert_eq!(Side::Server.as_str(), "server");
         assert_eq!(Side::Target.as_str(), "target");
-        assert_eq!(ViewerTransport::Tcp.as_str(), "tcp");
-        assert_eq!(ViewerTransport::Ws.as_str(), "ws");
-        assert_eq!(ViewerTransport::Wss.as_str(), "wss");
+        assert_eq!(Transport::Tcp.as_str(), "tcp");
+        assert_eq!(Transport::Ws.as_str(), "ws");
+        assert_eq!(Transport::Wss.as_str(), "wss");
         assert_eq!(SessionState::Active.as_str(), "active");
         assert_eq!(SessionState::Closing.as_str(), "closing");
         assert_eq!(SessionState::Finished.as_str(), "finished");
@@ -1059,10 +1080,12 @@ mod tests {
         assert_eq!(closed.id(), old.id());
         assert_eq!(closed.mode(), old.mode());
         assert_eq!(closed.viewer_transport(), old.viewer_transport());
+        assert_eq!(closed.target_transport(), old.target_transport());
         let mut fresh = Session::new(
             SessionId::from_block([2; 16]),
             Mode::Mode2,
-            ViewerTransport::Wss,
+            Transport::Wss,
+            Transport::Ws,
             SystemTime::UNIX_EPOCH,
             Duration::from_secs(40),
         );
@@ -1087,7 +1110,39 @@ mod tests {
             SystemTime::UNIX_EPOCH + Duration::from_secs(9)
         );
         assert_eq!(closed.mode(), Mode::Mode2);
-        assert_eq!(closed.viewer_transport(), ViewerTransport::Wss);
+        assert_eq!(closed.viewer_transport(), Transport::Wss);
+        assert_eq!(closed.target_transport(), Transport::Ws);
+    }
+
+    /// spec: management.md:MGT-051 partial
+    #[test]
+    fn preserves_both_transports_and_keeps_mode1_target_tcp() {
+        for mode in [Mode::Mode1, Mode::Mode2] {
+            for viewer in [Transport::Tcp, Transport::Ws, Transport::Wss] {
+                for target in [Transport::Tcp, Transport::Ws, Transport::Wss] {
+                    let mut session = Session::new(
+                        SessionId::from_block([3; 16]),
+                        mode,
+                        viewer,
+                        target,
+                        SystemTime::UNIX_EPOCH,
+                        Duration::ZERO,
+                    );
+                    let expected_target = match mode {
+                        Mode::Mode1 => Transport::Tcp,
+                        Mode::Mode2 => target,
+                    };
+                    assert_eq!(session.viewer_transport(), viewer);
+                    assert_eq!(session.target_transport(), expected_target);
+                    session.force_server_shutdown().unwrap();
+                    let closed = session
+                        .finish(SystemTime::UNIX_EPOCH, Duration::ZERO)
+                        .unwrap();
+                    assert_eq!(closed.viewer_transport(), viewer);
+                    assert_eq!(closed.target_transport(), expected_target);
+                }
+            }
+        }
     }
 
     /// spec: relay.md:RLY-020 partial

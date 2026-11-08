@@ -227,7 +227,7 @@ export function activeTable(t, items, emptyText) {
     rows: items.map((item) => [
       createLink({ href: `/#/sessions/${encodeURIComponent(item.sessionId)}`, label: item.sessionId }),
       createBadge({ label: formatMode(item.mode) }),
-      createBadge({ label: formatTransport(item.viewerTransport) }),
+      transportCell(item),
       formatTime(item.startedAt),
       bytesCell(t, item),
       peerCell(t, item),
@@ -236,6 +236,17 @@ export function activeTable(t, items, emptyText) {
     emptyText,
     numericColumns: ['bytes'],
   });
+}
+
+function transportCell(item) {
+  const cell = el('span', 'xport');
+  cell.append(
+    createBadge({ label: formatTransport(item.viewerTransport) }),
+    icon('arrow-right', { size: 'sm' }),
+    el('span', 'sr-only', ' → '),
+    createBadge({ label: formatTransport(item.targetTransport) }),
+  );
+  return cell;
 }
 
 function closeCauseBadge(t, cause) {

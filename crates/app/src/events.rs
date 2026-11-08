@@ -1,4 +1,4 @@
-//! Operation log events (ops-info-v1 §1.5) and their `level` (§1.3).
+//! Operation log events (ops-info-v2 §1.5) and their `level` (§1.3).
 //! Design: docs/architectures/ops-log.md, docs/architectures/tcp-entry-point.md,
 //! docs/architectures/status-listener.md, docs/architectures/initial-exchange.md.
 
@@ -8,19 +8,19 @@ use std::time::SystemTime;
 
 use vnc_relay_domain::account::AccountName;
 use vnc_relay_domain::conn_id::ConnId;
-use vnc_relay_domain::entry_point::{EntryPoint, Role};
+use vnc_relay_domain::entry_point::{EntryPoint, Listener, Role};
 use vnc_relay_domain::handshake::Mode;
 use vnc_relay_domain::login_limit::LimitScope;
 use vnc_relay_domain::peer_ip::PeerIp;
-use vnc_relay_domain::session::{CloseCause, SessionId, Side, ViewerTransport};
+use vnc_relay_domain::session::{CloseCause, SessionId, Side, Transport};
 
 use crate::reload::{ChangeSource, WatchFailure};
 use crate::settings::ConfigWarning;
 
-/// Value of `log_contract` in `server_starting` (ops-info-v1 §1.5).
-pub const LOG_CONTRACT: &str = "ops-info/1.3.0";
+/// Value of `log_contract` in `server_starting` (ops-info-v2 §1.5).
+pub const LOG_CONTRACT: &str = "ops-info/2.0.0";
 
-/// `level` values of ops-info-v1 §1.3. v1 has no other value.
+/// `level` values of ops-info-v2 §1.3. v2 has no other value.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Level {
     Info,
@@ -38,14 +38,14 @@ impl Level {
     }
 }
 
-/// The first shutdown cause (ops-info-v1 §1.5). Later signals do not replace it.
+/// The first shutdown cause (ops-info-v2 §1.5). Later signals do not replace it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ShutdownTrigger {
     Requested,
     FatalError { detail: String },
 }
 
-/// `phase` values of ops-info-v1 §1.4.
+/// `phase` values of ops-info-v2 §1.4.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Phase {
     Startup,
@@ -62,7 +62,7 @@ impl Phase {
 }
 
 /// `stage` values of `connection_rejected` and `connection_aborted`
-/// (ops-info-v1 §1.6). Tasks that add a stage add its value.
+/// (ops-info-v2 §1.6). Tasks that add a stage add its value.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Stage {
     Accept,
@@ -86,7 +86,7 @@ impl Stage {
     }
 }
 
-/// `reason` values of `connection_rejected` (ops-info-v1 §1.6). A reason
+/// `reason` values of `connection_rejected` (ops-info-v2 §1.6). A reason
 /// that comes from a limit carries the limit, written as `limit`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RejectReason {
@@ -103,6 +103,8 @@ pub enum RejectReason {
     /// The request is not a WebSocket upgrade request, or its head is
     /// malformed (websocket-relay-v1 §1.1).
     InvalidUpgrade,
+    /// A trusted proxy supplied no usable client address (WebSocket §1.8).
+    ForwardedForInvalid,
     /// The Origin header is not in the allowed list (websocket-relay-v1
     /// §1.3).
     OriginNotAllowed,
@@ -129,6 +131,7 @@ impl RejectReason {
             Self::AdminConnectionLimit { .. } => "admin_connection_limit",
             Self::TlsVersionUnsupported => "tls_version_unsupported",
             Self::InvalidUpgrade => "invalid_upgrade",
+            Self::ForwardedForInvalid => "forwarded_for_invalid",
             Self::OriginNotAllowed => "origin_not_allowed",
             Self::SubprotocolNotSupported => "subprotocol_not_supported",
             Self::HandshakeInvalid => "handshake_invalid",
@@ -145,6 +148,7 @@ impl RejectReason {
             Self::IpNotAllowed
             | Self::TlsVersionUnsupported
             | Self::InvalidUpgrade
+            | Self::ForwardedForInvalid
             | Self::OriginNotAllowed
             | Self::SubprotocolNotSupported
             | Self::HandshakeInvalid
@@ -158,7 +162,7 @@ impl RejectReason {
     }
 }
 
-/// `reason` values of `connection_aborted` (ops-info-v1 §1.6).
+/// `reason` values of `connection_aborted` (ops-info-v2 §1.6).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AbortReason {
     /// The initial exchange did not end within H.
@@ -211,7 +215,7 @@ impl AbortReason {
     }
 }
 
-/// `error_kind` values of ops-info-v1 §1.7. Tasks that meet another kind
+/// `error_kind` values of ops-info-v2 §1.7. Tasks that meet another kind
 /// add its value.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ConnectionErrorKind {
@@ -240,7 +244,7 @@ impl ConnectionErrorKind {
     }
 }
 
-/// Target connection failure codes (ops-info-v1 §1.5).
+/// Target connection failure codes (ops-info-v2 §1.5).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TargetFailureReason {
     ResolveFailed,
@@ -261,7 +265,7 @@ impl TargetFailureReason {
     }
 }
 
-/// Removal reasons other than waiting expiry (ops-info-v1 §1.5).
+/// Removal reasons other than waiting expiry (ops-info-v2 §1.5).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WaitingRemovalReason {
     PeerEof,
@@ -297,7 +301,7 @@ impl WaitingRemovalReason {
     }
 }
 
-/// The `reason` of `admin_login_failed` (ops-info-v1 §1.5).
+/// The `reason` of `admin_login_failed` (ops-info-v2 §1.5).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LoginFailReason {
     InvalidCredentials,
@@ -313,7 +317,7 @@ impl LoginFailReason {
     }
 }
 
-/// Outcome of an authenticated administrator termination (ops-info-v1 §1.5).
+/// Outcome of an authenticated administrator termination (ops-info-v2 §1.5).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AdminTerminateResult {
     Terminated,
@@ -333,19 +337,19 @@ impl AdminTerminateResult {
     }
 }
 
-/// One operation log event. Each variant is one event of ops-info-v1 §1.5.
+/// One operation log event. Each variant is one event of ops-info-v2 §1.5.
 /// Fields carry no secret, no raw relay ID, and no config value other than
 /// the ones the contract names (§1.11). Feature tasks add variants.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Event {
     /// First event of the start: the config is valid and the log is open.
     ServerStarting,
-    /// A config warning (config-v3 §2.2). The event name is the warning code.
+    /// A config warning (config-v4 §2.2). The event name is the warning code.
     ConfigWarning {
         warning: ConfigWarning,
         phase: Phase,
     },
-    /// One line per diagnostic that stopped the start (ops-info-v1 §1.6).
+    /// One line per diagnostic that stopped the start (ops-info-v2 §1.6).
     /// `detail` holds no config value, path, or file content.
     StartupFailed {
         reason: &'static str,
@@ -359,14 +363,14 @@ pub enum Event {
         listeners: Vec<(&'static str, SocketAddr)>,
     },
     /// A relay listener accepted a connection that passed the source IP
-    /// check and took a place of L. `role` comes from the entry point.
+    /// check and took a place of L. Only TCP has a role before path resolution.
     ConnectionAccepted {
         conn_id: ConnId,
-        entry_point: EntryPoint,
+        listener: Listener,
         peer_ip: PeerIp,
     },
     /// The server refused a connection. At `Stage::Accept` the connection
-    /// has no `conn_id` yet. `listener` is the ops-info-v1 §1.5 name of the
+    /// has no `conn_id` yet. `listener` is the ops-info-v2 §1.5 name of the
     /// listener that refused it.
     ConnectionRejected {
         listener: &'static str,
@@ -379,19 +383,22 @@ pub enum Event {
     /// `connection_rejected`, and `stage` is always `upgrade`.
     UpgradeRejected {
         listener: &'static str,
+        role: Option<Role>,
         conn_id: ConnId,
         reason: RejectReason,
         peer_ip: PeerIp,
+        forwarded_ip: Option<PeerIp>,
         /// The raw Origin header value; present for `origin_not_allowed`.
         origin: Option<String>,
     },
     /// The server refused an accepted connection during the initial exchange
-    /// (ops-info-v1 §1.5-1.6). The event name is `connection_rejected`, and
+    /// (ops-info-v2 §1.5-1.6). The event name is `connection_rejected`, and
     /// `stage` is always `initial_exchange`. No request or raw relay ID is held.
     HandshakeRejected {
         conn_id: ConnId,
         entry_point: EntryPoint,
         peer_ip: PeerIp,
+        forwarded_ip: Option<PeerIp>,
         reason: RejectReason,
         /// The caller must set this for `ModeDisabled`; omit it when unknown.
         mode: Option<Mode>,
@@ -399,37 +406,42 @@ pub enum Event {
     /// An accepted connection ended before it waited or joined a session.
     ConnectionAborted {
         conn_id: ConnId,
-        entry_point: EntryPoint,
+        listener: Listener,
+        role: Option<Role>,
         stage: Stage,
         reason: AbortReason,
         peer_ip: PeerIp,
+        forwarded_ip: Option<PeerIp>,
         elapsed_ms: u64,
     },
-    /// Mode I policy or target socket budget refusal (ops-info-v1 §1.6).
+    /// Mode I policy or target socket budget refusal (ops-info-v2 §1.6).
     TargetRejected {
         conn_id: ConnId,
         entry_point: EntryPoint,
         peer_ip: PeerIp,
+        forwarded_ip: Option<PeerIp>,
         reason: RejectReason,
         target_host: String,
         target_port: u16,
         target_ip: Option<IpAddr>,
     },
-    /// A Mode II registration refusal (ops-info-v1 §1.6).
+    /// A Mode II registration refusal (ops-info-v2 §1.6).
     RegistrationRejected {
         conn_id: ConnId,
         entry_point: EntryPoint,
         peer_ip: PeerIp,
+        forwarded_ip: Option<PeerIp>,
         reason: RejectReason,
         relay_id_ref: RelayIdRef,
     },
-    /// An unfinished relay connection with a known mode (ops-info-v1 §1.5).
+    /// An unfinished relay connection with a known mode (ops-info-v2 §1.5).
     RelayAborted {
         conn_id: ConnId,
         entry_point: EntryPoint,
         stage: Stage,
         reason: AbortReason,
         peer_ip: PeerIp,
+        forwarded_ip: Option<PeerIp>,
         elapsed_ms: u64,
         mode: Mode,
     },
@@ -437,19 +449,21 @@ pub enum Event {
     TargetConnectFailed {
         conn_id: ConnId,
         entry_point: EntryPoint,
-        viewer_transport: ViewerTransport,
+        viewer_transport: Transport,
         peer_ip: PeerIp,
+        forwarded_ip: Option<PeerIp>,
         target_host: String,
         target_port: u16,
         target_ip: Option<IpAddr>,
         elapsed_ms: u64,
         reason: TargetFailureReason,
     },
-    /// A Mode II connection entered the waiting table (ops-info-v1 §1.5).
+    /// A Mode II connection entered the waiting table (ops-info-v2 §1.5).
     WaitingRegistered {
         conn_id: ConnId,
         entry_point: EntryPoint,
         peer_ip: PeerIp,
+        forwarded_ip: Option<PeerIp>,
         relay_id_ref: RelayIdRef,
     },
     /// W expired; no additional aborted or removed event is required.
@@ -467,16 +481,20 @@ pub enum Event {
         waited_ms: u64,
         reason: WaitingRemovalReason,
     },
-    /// An active session was registered (ops-info-v1 §1.5).
+    /// An active session was registered (ops-info-v2 §1.5).
     /// Only fields belonging to `mode` are serialized.
     SessionStarted {
         session_id: SessionId,
         mode: Mode,
-        viewer_transport: ViewerTransport,
+        viewer_transport: Transport,
+        /// Present only for Mode II; identifies the Server transport.
+        server_transport: Option<Transport>,
         viewer_conn_id: ConnId,
         viewer_peer_ip: PeerIp,
+        viewer_forwarded_ip: Option<PeerIp>,
         server_conn_id: Option<ConnId>,
         server_peer_ip: Option<PeerIp>,
+        server_forwarded_ip: Option<PeerIp>,
         relay_id_ref: Option<RelayIdRef>,
         waited_ms: Option<u64>,
         target_ip: Option<IpAddr>,
@@ -484,11 +502,11 @@ pub enum Event {
         target_host: Option<String>,
     },
     /// Finalized session summary, after sockets and permits are released.
-    /// Cause-specific fields and the Mode II reference follow ops-info-v1 §1.6.
+    /// Cause-specific fields and the Mode II reference follow ops-info-v2 §1.6.
     SessionClosed {
         session_id: SessionId,
         mode: Mode,
-        viewer_transport: ViewerTransport,
+        viewer_transport: Transport,
         started_at: SystemTime,
         duration_ms: u64,
         bytes_viewer_to_target: u64,
@@ -506,30 +524,30 @@ pub enum Event {
         session_id: Option<SessionId>,
         result: AdminTerminateResult,
     },
-    /// The server entered shutdown grace (ops-info-v1 §1.5).
+    /// The server entered shutdown grace (ops-info-v2 §1.5).
     ShutdownStarted {
         trigger: ShutdownTrigger,
         grace_secs: u64,
         active_sessions: usize,
     },
-    /// Remaining sessions are about to be forcibly closed (ops-info-v1 §1.5).
+    /// Remaining sessions are about to be forcibly closed (ops-info-v2 §1.5).
     ShutdownForced { remaining_sessions: usize },
-    /// An administrator logged in and got a session (ops-info-v1 §1.5,
+    /// An administrator logged in and got a session (ops-info-v2 §1.5,
     /// management.md MGT-017). The login event carries no session ID.
     AdminLoginSucceeded {
         admin_account: AccountName,
         peer_ip: PeerIp,
     },
-    /// A login attempt was refused (ops-info-v1 §1.5, MGT-018, MGT-022).
+    /// A login attempt was refused (ops-info-v2 §1.5, MGT-018, MGT-022).
     /// `scope` is set for `Limited`. `admin_account` is set only when the
-    /// typed name is a real account (ops-info-v1 §1.8).
+    /// typed name is a real account (ops-info-v2 §1.8).
     AdminLoginFailed {
         reason: LoginFailReason,
         scope: Option<LimitScope>,
         admin_account: Option<AccountName>,
         peer_ip: PeerIp,
     },
-    /// A login lock started. One event for each lock (ops-info-v1 §1.5).
+    /// A login lock started. One event for each lock (ops-info-v2 §1.5).
     AdminLoginLimited {
         scope: LimitScope,
         lockout_secs: u64,
@@ -552,22 +570,22 @@ pub enum Event {
         reason: String,
         config_keys: Option<Vec<String>>,
     },
-    /// A change was detected in the config file or a TLS file (ops-info-v1 §1.5).
+    /// A change was detected in the config file or a TLS file (ops-info-v2 §1.5).
     ReloadChangeDetected { source: ChangeSource },
-    /// Reload targets were applied; `applied` lists the changed config keys (ops-info-v1 §1.5).
+    /// Reload targets were applied; `applied` lists the changed config keys (ops-info-v2 §1.5).
     ReloadApplied {
         trigger: crate::reload::ReloadTrigger,
         applied: Vec<String>,
     },
-    /// A candidate was refused; the running values are kept (ops-info-v1 §1.5).
+    /// A candidate was refused; the running values are kept (ops-info-v2 §1.5).
     ReloadRejected {
         reason: String,
         config_key: Option<String>,
         detail: Option<String>,
     },
-    /// A key that cannot change at runtime differs. Values are never written (ops-info-v1 §1.5).
+    /// A key that cannot change at runtime differs. Values are never written (ops-info-v2 §1.5).
     ReloadRestartRequired { config_keys: Vec<String> },
-    /// The config file or a TLS file cannot be watched (ops-info-v1 §1.5).
+    /// The config file or a TLS file cannot be watched (ops-info-v2 §1.5).
     ReloadWatchFailed {
         reason: WatchFailure,
         detail: Option<String>,
@@ -617,7 +635,7 @@ impl Event {
         }
     }
 
-    /// The `level` field of ops-info-v1 §1.5.
+    /// The `level` field of ops-info-v2 §1.5.
     pub fn level(&self) -> Level {
         match self {
             Self::ServerStarting
@@ -672,7 +690,7 @@ impl Event {
     }
 }
 
-/// `relay_id_ref` of ops-info-v1 §1.9: the first 8 bytes of the keyed hash
+/// `relay_id_ref` of ops-info-v2 §1.9: the first 8 bytes of the keyed hash
 /// of a relay ID as 16 lowercase hex digits. Only a hash prefix makes one,
 /// so a raw relay ID cannot reach a log line through this type.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

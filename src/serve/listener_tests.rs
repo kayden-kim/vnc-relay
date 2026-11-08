@@ -213,7 +213,7 @@ enabled = true
         ] {
             let listener = SupervisedListener::new(
                 FaultListener { inner, faults },
-                kind.name(),
+                kind.listener().name(),
                 failures.clone(),
             );
             let entry = TcpEntryPoint::new(

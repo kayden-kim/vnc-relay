@@ -501,7 +501,7 @@ struct RunningRelay {
     management: u16,
     viewer: u16,
     server: u16,
-    ws_viewer: Option<u16>,
+    ws: Option<u16>,
 }
 
 impl RunningRelay {
@@ -580,17 +580,19 @@ impl RunningRelay {
             // Literal strings: Windows path separators need no escapes.
             Some(files) => format!(
                 r#"
-[relay.ws_viewer]
-enabled = true
+[relay.ws]
 listen = "127.0.0.1:{}"
+[relay.ws.viewer]
+enabled = true
 allow = ["127.0.0.1"]
 allowed_origins = ["http://127.0.0.1"]
-[relay.wss_viewer]
-enabled = true
+[relay.wss]
 listen = "127.0.0.1:{}"
-allow = ["127.0.0.1"]
 cert_file = '{}'
 key_file = '{}'
+[relay.wss.viewer]
+enabled = true
+allow = ["127.0.0.1"]
 "#,
                 ports[4],
                 ports[5],
@@ -662,7 +664,7 @@ output = "events.jsonl"
             management: ports[0],
             viewer: ports[2],
             server: ports[3],
-            ws_viewer: wss.is_some().then(|| ports[4]),
+            ws: wss.is_some().then(|| ports[4]),
         };
         let deadline = Instant::now() + LIMIT;
         loop {
@@ -1354,6 +1356,7 @@ fn operations_log_records_contract_events_and_correlates_identifiers() {
                 assert!(!sid.is_empty());
                 assert_eq!(obj.str("mode"), Some("mode2"));
                 assert_eq!(obj.str("viewer_transport"), Some("tcp"));
+                assert_eq!(obj.str("server_transport"), Some("tcp"));
                 assert!(some(obj.str("viewer_conn_id"), "viewer_conn_id").starts_with("c"));
                 assert_eq!(obj.str("viewer_peer_ip"), Some("127.0.0.1"));
                 assert!(some(obj.str("server_conn_id"), "server_conn_id").starts_with("c"));
@@ -1440,7 +1443,7 @@ fn operations_log_records_contract_events_and_correlates_identifiers() {
     }
 }
 
-/// Feeds each secret kind of ops-info-v1.md 1.11 into one running process:
+/// Feeds each secret kind of ops-info-v2.md 1.11 into one running process:
 /// relay streams and initial requests, upgrade headers, administrator logins with
 /// a wrong password and an unknown account, the right password, the session
 /// cookie and CSRF token on a query, a termination and a logout, and WSS key
@@ -1570,7 +1573,7 @@ fn operations_log_and_status_endpoints_never_expose_secrets_or_raw_identifiers()
     drop(bad_client);
 
     // 4. WebSocket upgrade request containing Cookie, Authorization, X-Forwarded-For secret values
-    let ws_port = some(relay.ws_viewer, "ws_viewer port");
+    let ws_port = some(relay.ws, "ws port");
     let after_ws = relay.lines().len();
     {
         let mut ws_stream = match TcpStream::connect(("127.0.0.1", ws_port)) {
@@ -1857,7 +1860,7 @@ fn operations_log_and_status_endpoints_never_expose_secrets_or_raw_identifiers()
 #[test]
 fn idle_active_sessions_survive_longer_than_k_and_transfer_data() {
     let _lock = lock_ports();
-    // Minimum keepalive values allowed by config-v3.md:
+    // Minimum keepalive values allowed by config-v4.md:
     // tcp_idle_secs = 10 (range 10..=3600)
     // tcp_interval_secs = 1 (range 1..=300)
     // tcp_probes = 1 (range 1..=20)

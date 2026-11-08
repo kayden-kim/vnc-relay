@@ -67,6 +67,9 @@ const DEFAULT_ROUTES = {
           state: 'active',
           mode: 'mode1',
           viewer_transport: 'wss',
+          target_transport: 'tcp',
+          viewer_forwarded_ip: null,
+          target_forwarded_ip: null,
           started_at: STARTED,
           bytes_viewer_to_target: 1536,
           bytes_target_to_viewer: 1048575,
@@ -84,6 +87,9 @@ const DEFAULT_ROUTES = {
         state: 'active',
         mode: 'mode1',
         viewer_transport: 'wss',
+        target_transport: 'tcp',
+        viewer_forwarded_ip: null,
+        target_forwarded_ip: null,
         started_at: STARTED,
         bytes_viewer_to_target: 1536,
         bytes_target_to_viewer: 1048575,
@@ -131,14 +137,15 @@ function checkLayout(label) {
   const page = document.documentElement;
   check(`${label}: no horizontal scroll`, page.scrollWidth <= page.clientWidth);
   const links = [...host.querySelectorAll('.navbar-item')];
-  const settings = routeOf(location.hash).name === 'settings';
+  const route = routeOf(location.hash).name;
+  const currentIndex = route === 'settings' ? 2 : route === 'logs' ? 1 : 0;
   const copy = COPY[document.documentElement.lang];
-  check(`${label}: both navigation destinations are available`, links.length === 2
-    && links[0].textContent === copy.operations && links[1].textContent === copy.settings
-    && links[0].getAttribute('href') === '/' && links[1].getAttribute('href') === '/#/settings');
+  check(`${label}: three navigation destinations are available`, links.length === 3
+    && links[0].textContent === copy.operations && links[1].textContent === copy.logs && links[2].textContent === copy.settings
+    && links[0].getAttribute('href') === '/' && links[2].getAttribute('href') === '/#/settings');
   check(`${label}: current screen navigation is active`,
-    links[settings ? 1 : 0]?.getAttribute('aria-current') === 'page'
-    && !links[settings ? 0 : 1]?.hasAttribute('aria-current'));
+    links[currentIndex]?.getAttribute('aria-current') === 'page'
+    && links.every((link, index) => index === currentIndex || !link.hasAttribute('aria-current')));
   if (window.innerWidth < 1024) {
     const nav = host.querySelector('.navbar-nav');
     const tools = host.querySelector('.navbar-tools');
@@ -225,7 +232,7 @@ async function caseDash006() {
     input().value = value;
     input().dispatchEvent(new Event('input', { bubbles: true }));
   };
-  clickNav(1);
+  clickNav(2);
   await waitFor(readyView);
   check('settings router: navigation opens settings view', titleOf(host) === t.settingsTitle);
   checkLayout('settings router view navigation');
@@ -234,7 +241,7 @@ async function caseDash006() {
   check('settings router: edit action opens edit route', location.hash === '#/settings/edit'
     && titleOf(host) === t.settingsEditTitle);
   changeWaiting('9');
-  clickNav(1);
+  clickNav(2);
   await waitFor(readyView);
   check('settings router: settings navigation discards draft without PATCH', api.count('PATCH /api/v1/config') === 0);
   host.querySelector('#settings-edit').click();
@@ -251,7 +258,7 @@ async function caseDash006() {
   const readsAfterSave = api.count('GET /api/v1/config');
   clickNav(0);
   await waitFor(() => detailLinkOf(host) !== null);
-  clickNav(1);
+  clickNav(2);
   await waitFor(readyView);
   check('settings router: applied notice is consumed once', !host.textContent.includes(appliedMessage));
   check('settings router: revisiting view performs a fresh read', api.count('GET /api/v1/config') === readsAfterSave + 1);
@@ -317,10 +324,44 @@ async function caseDash025() {
   check('DASH-025: router stayed on this page', navigations.length === 0);
   checkLayout('DASH-025');
 }
+async function caseDash028() {
+  const api = fakeApi({
+    'GET /api/v1/logs': () =>
+      ok({
+        as_of: AS_OF,
+        max_entries: 1000,
+        oldest_seq: 1,
+        latest_seq: 1,
+        has_more: false,
+        items: [{ seq: 1, entry: { ts: AS_OF, level: 'info', event: 'server_ready' } }],
+      }),
+  });
+  location.hash = '';
+  const router = mountRouter(host, { request: api.request, storage: { getItem: () => lang, setItem() {} } });
+  await waitFor(() => linkNamed(host, t.details) !== null);
+
+  const navItems = [...host.querySelectorAll('.nav-item.nav, a.navbar-item')];
+  check('DASH-028: three nav items present', navItems.length === 3);
+  check('DASH-028: nav order is operations, logs, settings',
+    navItems[0]?.textContent.includes(t.operations) &&
+    navItems[1]?.textContent.includes(t.logs) &&
+    navItems[2]?.textContent.includes(t.settings));
+  check('DASH-028: operations item is current on root', navItems[0]?.getAttribute('aria-current') === 'page');
+
+  // Navigate to logs
+  location.hash = '#/logs';
+  await waitFor(() => host.querySelector('h1.page-title')?.textContent === t.logs);
+  const logsNavItems = [...host.querySelectorAll('.nav-item.nav, a.navbar-item')];
+  check('DASH-028: logs item is current on #/logs', logsNavItems[1]?.getAttribute('aria-current') === 'page');
+
+  checkLayout('DASH-028');
+  router.dispose();
+}
 
 const CASES = {
   'dash-006': caseDash006,
   'dash-025': caseDash025,
+  'dash-028': caseDash028,
 };
 
 const caseName = new URLSearchParams(location.search).get('case');

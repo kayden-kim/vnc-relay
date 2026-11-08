@@ -139,12 +139,12 @@ function checkLayout(label) {
   for (const navbar of host.querySelectorAll('.navbar')) {
     const links = [...navbar.querySelectorAll('.navbar-item')];
     const copy = PANEL_COPY[document.documentElement.lang];
-    check(`${label}: both navigation links remain available`, links.length === 2
-      && links[0].textContent === copy.operations && links[1].textContent === copy.settings
+    check(`${label}: three navigation links remain available`, links.length === 3
+      && links[0].textContent === copy.operations && links[1].textContent === copy.logs && links[2].textContent === copy.settings
       && links.every((link) => getComputedStyle(link).display !== 'none' && link.getBoundingClientRect().height > 0));
     check(`${label}: operations navigation is active`, links[0]?.getAttribute('aria-current') === 'page'
       && !links[1]?.hasAttribute('aria-current'));
-    check(`${label}: settings link uses the settings route`, links[1]?.getAttribute('href') === '/#/settings');
+    check(`${label}: settings link uses the settings route`, links[2]?.getAttribute('href') === '/#/settings');
     if (window.innerWidth < 1024) {
       check(`${label}: mobile navigation occupies a second row`,
         navbar.querySelector('.navbar-nav').getBoundingClientRect().top >= navbar.querySelector('.navbar-tools').getBoundingClientRect().bottom);
@@ -309,6 +309,9 @@ const activeItem = (overrides = {}) => ({
   state: 'active',
   mode: 'mode1',
   viewer_transport: 'wss',
+  target_transport: 'tcp',
+  viewer_forwarded_ip: null,
+  target_forwarded_ip: null,
   started_at: STARTED,
   bytes_viewer_to_target: 1536,
   bytes_target_to_viewer: 1048575,
@@ -321,6 +324,7 @@ const closedItem = (overrides = {}) => ({
   session_id: 'sess_0',
   mode: 'mode2',
   viewer_transport: 'tcp',
+  target_transport: 'tcp',
   started_at: STARTED,
   ended_at: ENDED,
   bytes_viewer_to_target: 0,
@@ -482,7 +486,7 @@ async function caseDash001() {
     check(`DASH-001 active row ${index}: both addresses use data typography`, addresses.length === 2);
     checkDataValue(`DASH-001 active row ${index} viewer address`, addresses[0], '192.0.2.10:51000');
     checkDataValue(`DASH-001 active row ${index} target address`, addresses[1], '198.51.100.5:5900');
-    check(`DASH-001 active row ${index}: no closing state badge`, row.querySelectorAll('.badge').length === 2);
+    check(`DASH-001 active row ${index}: no closing state badge`, row.querySelectorAll('.badge').length === 3);
   }
 
   const closedRows = dataRowsOf(cardOf(root, t.closedTitle));
@@ -530,6 +534,7 @@ async function caseDash001() {
     sessionId: encodedSessionId,
     mode: 'mode1',
     viewerTransport: 'wss',
+    targetTransport: 'tcp',
     startedAt: STARTED,
     bytesViewerToTarget: 0,
     bytesTargetToViewer: 0,
@@ -1053,6 +1058,70 @@ async function caseDash025() {
   check('DASH-025: no request carries a language value', api.calls.every((c) => !/lang/i.test(`${c.key} ${c.raw}`)));
   checkLayout('DASH-025');
 }
+async function caseDash062() {
+  const activeItem = {
+    session_id: 'sess_dash062',
+    state: 'active',
+    mode: 'mode2',
+    viewer_transport: 'wss',
+    target_transport: 'ws',
+    started_at: '2026-10-20T00:00:00.000Z',
+    bytes_viewer_to_target: 1048576,
+    bytes_target_to_viewer: 2097152,
+    viewer_address: { ip: '192.0.2.10', port: 51000 },
+    target_address: { ip: '198.51.100.5', port: 5900 },
+    viewer_forwarded_ip: '203.0.113.195',
+    target_forwarded_ip: null,
+  };
+  const api = fakeApi({
+    'GET /api/v1/sessions': () => ok({ as_of: '2026-10-20T00:01:00.000Z', items: [activeItem] }),
+  });
+  const m = await mount(api);
+  await waitFor(() => settled(m.root, t));
+  const card = cardOf(m.root, t.activeTitle);
+  const rows = dataRowsOf(card);
+  check('DASH-062: active row present', rows.length === 1);
+  const xport = rows[0]?.querySelector('.xport');
+  check('DASH-062: transport cell has xport container', !!xport);
+  const badges = xport?.querySelectorAll('.badge');
+  check('DASH-062: both transports shown', badges?.length === 2 && badges[0].textContent === 'WSS' && badges[1].textContent === 'WS');
+  check('DASH-062: arrow icon between transports', xport?.querySelector('svg') !== null);
+  checkLayout('DASH-062', m.root);
+}
+
+async function shot(state) {
+  const pending = new Promise(() => {});
+  const paths = ['/api/v1/summary', '/api/v1/waiting', '/api/v1/sessions', '/api/v1/closed-sessions'];
+  const overrides = {
+    'GET /api/v1/session': () => ok({ csrf_token: 'shot-token',
+      dashboard: { poll_secs: 3600, query_timeout_secs: 3600, terminate_timeout_secs: 3600 } }),
+  };
+  for (const path of paths) {
+    const normal = DEFAULT_ROUTES[`GET ${path}`];
+    overrides[`GET ${path}`] = (n) => {
+      if (state === 'loading' || (state === 'refreshing' && n > 1)) return pending;
+      if (state === 'denied') return fail(401);
+      if (state === 'failed-first' || (state === 'failed' && n > 1)) return fail(500);
+      if (state === 'empty') return path === '/api/v1/summary'
+        ? ok(summaryBody({ counts: { waiting: 0, active: 0, handshaking: 0, target_connecting: 0 } }))
+        : ok({ as_of: AS_OF, max_entries: 100, items: [] });
+      return normal();
+    };
+  }
+  const m = await mount(fakeApi(overrides));
+  if (state === 'loading') return;
+  if (state === 'denied') {
+    await waitFor(() => m.navigations.length > 0);
+    const { mountLogin } = await import('../login/login.js');
+    mountLogin(m.root, { preferredLanguages: [lang], storage: { getItem: () => lang, setItem() {} }, search: '' });
+    return;
+  }
+  await waitFor(() => settled(m.root));
+  if (state === 'failed' || state === 'refreshing') {
+    [...m.root.querySelectorAll('button')].find((node) => node.textContent.includes(t.refresh))?.click();
+    await waitFor(() => m.root.textContent.includes(state === 'failed' ? t.failed : PANEL_COPY[lang].refreshing));
+  }
+}
 
 const CASES = {
   'dash-001': caseDash001,
@@ -1068,10 +1137,11 @@ const CASES = {
   'dash-022': caseDash022,
   'dash-024': caseDash024,
   'dash-025': caseDash025,
+  'dash-062': caseDash062,
 };
 
 const caseName = new URLSearchParams(location.search).get('case');
-const run = CASES[caseName];
+const run = caseName?.startsWith('shot-') ? () => shot(caseName.slice(5)) : CASES[caseName];
 if (!run) {
   failures.push(`unknown case: ${caseName}`);
 } else {

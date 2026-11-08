@@ -171,7 +171,7 @@ mod tests {
     use std::time::Duration;
 
     use vnc_relay_domain::handshake::Mode;
-    use vnc_relay_domain::session::{CloseCause, ViewerTransport};
+    use vnc_relay_domain::session::{CloseCause, Transport};
 
     use super::*;
     use crate::management::test_support::{FakeClock, FakeEvents, base_wall, peer};
@@ -207,7 +207,8 @@ mod tests {
         Arc::new(ClosedSessionSnapshot {
             session_id: SessionId::from_block([1; 16]),
             mode: Mode::Mode2,
-            viewer_transport: ViewerTransport::Tcp,
+            viewer_transport: Transport::Tcp,
+            target_transport: Transport::Tcp,
             started_at: base_wall(),
             ended_at: base_wall() + Duration::from_secs(1),
             duration: Duration::from_secs(1),

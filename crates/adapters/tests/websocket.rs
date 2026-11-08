@@ -53,7 +53,7 @@ const LIMIT: Duration = Duration::from_secs(10);
 /// far below U, so this bound tells "closed at once" from "waited for U".
 const PROMPT: Duration = Duration::from_secs(2);
 
-/// U of the default configuration (config-v3 §1.2, `tls_upgrade_secs` = 10).
+/// U of the default configuration (config-v4 §1.2, `tls_upgrade_secs` = 10).
 const UPGRADE: Duration = Duration::from_secs(10);
 
 /// A short U for tests that wait for the deadline to end a connection.
@@ -226,14 +226,16 @@ async fn start_with_handshake(
             .collect(),
     );
     let mut settings = runtime_settings();
-    settings.relay.ws_viewer.allow = Some(allow_list.clone());
-    settings.relay.wss_viewer.allow = Some(allow_list);
+    settings.relay.ws.viewer.enabled = true;
+    settings.relay.wss.viewer.enabled = true;
+    settings.relay.ws.viewer.allow = Some(allow_list.clone());
+    settings.relay.wss.viewer.allow = Some(allow_list);
     let origins: Vec<_> = origins
         .iter()
         .map(|text| Origin::parse(text).unwrap_or_else(|_| panic!("origin {text} parses")))
         .collect();
-    settings.relay.ws_viewer.allowed_origins = origins.clone();
-    settings.relay.wss_viewer.allowed_origins = origins;
+    settings.relay.ws.viewer.allowed_origins = origins.clone();
+    settings.relay.wss.viewer.allowed_origins = origins;
     settings.limits.relay_connections = places;
     settings.limits.waiting = 8;
     settings.limits.buffer_bytes = BUFFER_BYTES as u32;
@@ -254,8 +256,8 @@ async fn start_with_handshake(
     )));
     let tls_source = tls.as_ref().map(|_| tls::TlsSource::wss(Arc::clone(&cell)));
     let allow_source = match entry {
-        EntryPoint::WsViewer => AllowSource::ws_viewer(Arc::clone(&cell)),
-        EntryPoint::WssViewer => AllowSource::wss_viewer(Arc::clone(&cell)),
+        EntryPoint::WsViewer => AllowSource::ws(Arc::clone(&cell)),
+        EntryPoint::WssViewer => AllowSource::wss(Arc::clone(&cell)),
         _ => panic!("the WS helper takes WsViewer or WssViewer"),
     };
     let source: Arc<dyn vnc_relay_app::reload::ports::RuntimeSettingsSource> = cell.clone();
@@ -294,7 +296,7 @@ async fn start_with_handshake(
     ));
     tokio::spawn(
         WsEntryPoint::new(
-            entry,
+            entry.listener(),
             listener,
             tls_source,
             policy,
@@ -625,7 +627,7 @@ async fn disallowed_source_is_closed_before_tls_or_http_even_with_session_hints(
         matches!(
             event,
             Event::ConnectionRejected {
-                listener: "ws_viewer",
+                listener: "ws",
                 stage: Stage::Accept,
                 reason: RejectReason::IpNotAllowed,
                 ..
@@ -650,7 +652,7 @@ async fn disallowed_source_is_closed_before_tls_or_http_even_with_session_hints(
         matches!(
             event,
             Event::ConnectionRejected {
-                listener: "wss_viewer",
+                listener: "wss",
                 stage: Stage::Accept,
                 reason: RejectReason::IpNotAllowed,
                 ..
@@ -693,7 +695,7 @@ async fn disallowed_source_on_wss_is_closed_before_tls_and_holds_no_relay_place(
         matches!(
             event,
             Event::ConnectionRejected {
-                listener: "wss_viewer",
+                listener: "wss",
                 stage: Stage::Accept,
                 reason: RejectReason::IpNotAllowed,
                 ..
@@ -741,16 +743,13 @@ async fn ws_and_wss_check_only_their_own_allow_lists() {
     let _ = plain.write_all(&request).await;
     let mut reply = Vec::new();
     let closed = timeout(PROMPT, plain.read_to_end(&mut reply)).await;
-    assert!(
-        closed.is_ok(),
-        "ws_viewer closes 127.0.0.3 within {PROMPT:?}"
-    );
-    assert!(reply.is_empty(), "ws_viewer gives 127.0.0.3 no HTTP reply");
+    assert!(closed.is_ok(), "ws closes 127.0.0.3 within {PROMPT:?}");
+    assert!(reply.is_empty(), "ws gives 127.0.0.3 no HTTP reply");
     wait_for(&ws.events, |event| {
         matches!(
             event,
             Event::ConnectionRejected {
-                listener: "ws_viewer",
+                listener: "ws",
                 stage: Stage::Accept,
                 reason: RejectReason::IpNotAllowed,
                 ..
@@ -767,13 +766,13 @@ async fn ws_and_wss_check_only_their_own_allow_lists() {
     .await;
     assert!(
         matches!(attempt, Ok(Err(_))),
-        "wss_viewer closes 127.0.0.2 before ServerHello within {PROMPT:?}"
+        "wss closes 127.0.0.2 before ServerHello within {PROMPT:?}"
     );
     wait_for(&wss.events, |event| {
         matches!(
             event,
             Event::ConnectionRejected {
-                listener: "wss_viewer",
+                listener: "wss",
                 stage: Stage::Accept,
                 reason: RejectReason::IpNotAllowed,
                 ..
@@ -1140,6 +1139,7 @@ async fn start_management(tls: Option<TlsAcceptor>) -> (SocketAddr, Arc<Recorder
             query,
             terminate,
             config,
+            logs: Arc::new(vnc_relay_adapters::ops_log::RecentLogs::new(1000)),
         },
     );
     tokio::spawn(listener.run(log));

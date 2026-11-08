@@ -57,7 +57,7 @@ impl Browser {
             _ => 0,
         };
         for kind in ["keyDown", "keyUp"] {
-            self.command("Input.dispatchKeyEvent", json!({"type":kind,"key":key,"code":key,"windowsVirtualKeyCode":code,"nativeVirtualKeyCode":code}));
+            self.command("Input.dispatchKeyEvent", json!({"type":kind,"key":key,"code":key,"windowsVirtualKeyCode":code,"nativeVirtualKeyCode":code,"text":if kind=="keyDown" && key=="Enter" {"\r"} else {""}}));
         }
     }
 

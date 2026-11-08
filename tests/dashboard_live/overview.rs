@@ -194,7 +194,8 @@ pub fn overview_known_data() {
           if (!row) return false;
           const c = cells(row);
           return c[1].textContent === (item.mode === 'mode1' ? 'Mode I' : 'Mode II') &&
-            c[2].textContent === 'TCP' && c[3].textContent === localTime(item.started_at) &&
+            JSON.stringify(values(c[2], '.badge')) === JSON.stringify([item.viewer_transport.toUpperCase(), item.target_transport.toUpperCase()]) &&
+            c[3].textContent === localTime(item.started_at) &&
             JSON.stringify(values(row, '.cell-bytes .cell-value')) === JSON.stringify([byteText(item.bytes_viewer_to_target), byteText(item.bytes_target_to_viewer)]) &&
             JSON.stringify(values(row, '.cell-bytes .cell-label')) === JSON.stringify(['Viewer->대상', '대상->Viewer']) &&
             JSON.stringify(values(row, '.cell-peer .cell-value')) === JSON.stringify([address(item.viewer_address), address(item.target_address)]) &&
@@ -640,4 +641,15 @@ pub fn overview_connection_counts() {
     assert_eq!(server.proxy.injected_count("GET", "/api/v1/summary"), 0);
     server.proxy.clear();
     assert_unavailable_summary(&server, &mut browser);
+}
+
+pub(super) fn assert_real_transport(browser: &mut Browser, session: &Value) {
+    assert_eq!(browser.eval(&format!(r#"(() => {{
+        const s={session};
+        const link=[...document.querySelectorAll('a[href^="/#/sessions/"]')].find(a=>a.textContent===s.session_id);
+        const row=link?.closest('tr');
+        return !!row && row.textContent.includes(s.viewer_transport.toUpperCase()) &&
+            row.textContent.includes(s.target_transport.toUpperCase()) &&
+            row.textContent.includes('→');
+    }})()"#)),json!(true),"active list shows both actual transports: {session}; {}",browser.text());
 }

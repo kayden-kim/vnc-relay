@@ -95,6 +95,7 @@ fn success(view: &TerminateView) -> Response {
                 "session_id": closed.session_id.as_str(),
                 "mode": closed.mode.as_str(),
                 "viewer_transport": closed.viewer_transport.as_str(),
+                "target_transport": closed.target_transport.as_str(),
                 "started_at": timestamp(closed.started_at),
                 "ended_at": timestamp(closed.ended_at),
                 "bytes_viewer_to_target": closed.bytes_viewer_to_target,
@@ -109,6 +110,7 @@ fn success(view: &TerminateView) -> Response {
 mod tests {
     use super::*;
 
+    /// spec: management.md:MGT-009 partial
     #[test]
     fn only_exact_terminate_paths_match() {
         assert_eq!(
@@ -139,5 +141,61 @@ mod tests {
         assert_eq!(body["error"]["code"], "terminate_failed");
         assert!(body.get("closed_session").is_none());
         assert!(body.get("result").is_none());
+    }
+
+    /// spec: management.md:MGT-051 partial
+    #[tokio::test]
+    async fn success_response_serializes_closed_session_target_transport() {
+        use std::sync::Arc;
+        use std::time::{Duration, SystemTime};
+        use vnc_relay_app::events::AdminTerminateResult;
+        use vnc_relay_app::relay::ClosedSessionSnapshot;
+        use vnc_relay_domain::handshake::Mode;
+        use vnc_relay_domain::session::{CloseCause, SessionId, Transport};
+
+        for (mode, viewer_transport, target_transport) in [
+            (Mode::Mode1, Transport::Tcp, Transport::Tcp),
+            (Mode::Mode2, Transport::Ws, Transport::Wss),
+        ] {
+            let view = TerminateView {
+                as_of: SystemTime::UNIX_EPOCH,
+                result: AdminTerminateResult::Terminated,
+                closed_session: Arc::new(ClosedSessionSnapshot {
+                    session_id: SessionId::parse("ses_aaaaaaaaaaaaaaaaaaaaaaaaaa").unwrap(),
+                    mode,
+                    viewer_transport,
+                    target_transport,
+                    started_at: SystemTime::UNIX_EPOCH,
+                    ended_at: SystemTime::UNIX_EPOCH + Duration::from_secs(1),
+                    duration: Duration::from_secs(1),
+                    bytes_viewer_to_target: 10,
+                    bytes_target_to_viewer: 20,
+                    close_cause: CloseCause::AdminTerminated,
+                    relay_id_ref: None,
+                    side: None,
+                }),
+            };
+            let response = success(&view);
+            let bytes = axum::body::to_bytes(response.into_body(), 4096)
+                .await
+                .expect("body");
+            let body: serde_json::Value = serde_json::from_slice(&bytes).expect("json");
+            let closed = &body["closed_session"];
+            assert_eq!(closed["mode"], mode.as_str());
+            assert_eq!(closed["viewer_transport"], viewer_transport.as_str());
+            assert_eq!(closed["target_transport"], target_transport.as_str());
+            assert!(closed.get("viewer_forwarded_ip").is_none());
+            assert!(closed.get("target_forwarded_ip").is_none());
+            assert!(
+                closed
+                    .get("viewer_forwarded_ip_unavailable_reason")
+                    .is_none()
+            );
+            assert!(
+                closed
+                    .get("target_forwarded_ip_unavailable_reason")
+                    .is_none()
+            );
+        }
     }
 }

@@ -17,7 +17,7 @@ use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 use vnc_relay_app::events::ConnectionErrorKind;
 use vnc_relay_app::ports::{RelayCloseAction, RelayStream, RelayStreamError};
 use vnc_relay_app::settings::KeepaliveSettings;
-use vnc_relay_domain::session::ViewerTransport;
+use vnc_relay_domain::session::Transport;
 
 use self::frame::{
     ControlOp, DecodeState, FrameDecoder, MAX_NON_DATA_FRAMES_PER_POLL, OutboundDataFrame,
@@ -30,7 +30,7 @@ use crate::net::classify_socket_error;
 /// implementing the common `RelayStream` port.
 pub struct WsRelayStream<S> {
     io: S,
-    transport: ViewerTransport,
+    transport: Transport,
     max_message_size: usize,
     budget_limit: usize,
     decoder: FrameDecoder,
@@ -54,14 +54,14 @@ impl<S> WsRelayStream<S> {
     /// - `upgrade_suffix`: raw bytes following the HTTP upgrade head (at most 1023 bytes).
     /// - `max_message_size`: M captured at this connection's upgrade.
     /// - `budget_limit`: B captured at TCP accept, not reread at upgrade.
-    /// - `transport`: `ViewerTransport::Ws` or `ViewerTransport::Wss`.
+    /// - `transport`: `Transport::Ws` or `Transport::Wss`.
     /// - `keepalive`: Kw captured at upgrade; existing ping/pong timers retain it.
     pub fn new(
         io: S,
         upgrade_suffix: Vec<u8>,
         max_message_size: usize,
         budget_limit: usize,
-        transport: ViewerTransport,
+        transport: Transport,
         keepalive: KeepaliveSettings,
     ) -> Self {
         let suffix = if upgrade_suffix.is_empty() {
@@ -89,8 +89,8 @@ impl<S> WsRelayStream<S> {
         }
     }
 
-    /// The viewer transport kind (Ws or Wss).
-    pub fn transport(&self) -> ViewerTransport {
+    /// The transport kind (Ws or Wss), independent of the connection role.
+    pub fn transport(&self) -> Transport {
         self.transport
     }
 
@@ -809,7 +809,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin + Send> AsyncWrite for WsRelayStream<S> {
 }
 
 impl<S: AsyncRead + AsyncWrite + Unpin + Send> RelayStream for WsRelayStream<S> {
-    fn transport(&self) -> ViewerTransport {
+    fn transport(&self) -> Transport {
         self.transport
     }
 

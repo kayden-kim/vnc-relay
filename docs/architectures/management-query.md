@@ -2,7 +2,7 @@
 
 ## 설정 조회 분리와 동적 상한 (Current / Active)
 
-설정 GET은 [ConfigEditService](config-edit.md#3-데이터-모델과-get)가 맡는다. 중계 registry를 복사하는 `ManagementQueryService`에는 파일 I/O를 넣지 않는다. `ManagementQueryService.settings: Arc<dyn RuntimeSettingsSource>`를 `src/serve.rs`에서 같은 `ReloadCell`로 주입하고 `summary`가 `with_current` 한 번으로 L/Lm을 같은 세대에서 읽는다. budget은 사용량의 원자 계수만 제공한다. counts와 사용량의 약한 일관성 예외는 유지한다([동적 상한 설계](connection-limits.md), [설정 §1.8 L/Lm](../contracts/config-v3.md#18-재로드-구분), [관리 MGT-R17·R19](../specs/management.md#33-설정-보기와-동적-설정-편집)).
+설정 GET은 [ConfigEditService](config-edit.md#3-데이터-모델과-get)가 맡는다. 중계 registry를 복사하는 `ManagementQueryService`에는 파일 I/O를 넣지 않는다. `ManagementQueryService.settings: Arc<dyn RuntimeSettingsSource>`를 `src/serve.rs`에서 같은 `ReloadCell`로 주입하고 `summary`가 `with_current` 한 번으로 L/Lm을 같은 세대에서 읽는다. budget은 사용량의 원자 계수만 제공한다. counts와 사용량의 약한 일관성 예외는 유지한다([동적 상한 설계](connection-limits.md), [설정 §1.8 L/Lm](../contracts/config-v4.md#18-재로드-구분), [관리 MGT-R17·R19](../specs/management.md#33-설정-보기와-동적-설정-편집)).
 
 관리 리스너(`[management] listen`)에서 인증된 관리자에게 서버 요약, 대기 연결 목록, 활성 세션 목록·상세, 최근 종료 목록을 제공하는 조회 API의 구조와 데이터 흐름을 정의한다. 중계 상태는 메모리 락 안에서 복사하고, 인증·HTTP 직렬화·소켓 I/O는 그 락 밖에서 처리한다.
 
@@ -13,9 +13,21 @@
 | 구현 대조 | 2026-11-08 작업 트리의 `ManagementQueryService::{new,summary}`와 `src/serve.rs`의 `RuntimeSettingsSource` 주입을 소스 읽기로 대조. 새 동적 상한 시험은 커밋 `eae442f`의 두 OS 게이트에서 통과([작업 6.9 판정표](../how-to/set-up-and-verify.md#42-작업-69-판정표)). 과거 증거는 [작업 4.4 완료 대조](#작업-44-완료-대조2026-11-04) |
 | 코드 위치 | `crates/app/src/management/query.rs`, `crates/adapters/src/management_http/query_api.rs`, `crates/domain/src/budget.rs` |
 | 코드 지도 | [코드 지도 2절](code-map.md#2-코드-위치와-구성요소) |
-| 관련 스펙 | [관리 스펙](../specs/management.md) MGT-001~007, MGT-013, MGT-015, MGT-016, MGT-021, MGT-023~024, MGT-026, [운영 스펙](../specs/operations.md) OPS-033 |
-| 관련 계약 | [관리 API 계약 1.6~1.8·1.10·1.12절](../contracts/management-api-v1.md#16-서버-요약-get-apiv1summary), [2.1절](../contracts/management-api-v1.md#21-오류-본문과-상태-코드), [설정 계약 1.2절](../contracts/config-v3.md#12-키-표)(P, R), [운영 정보 계약 1.5절](../contracts/ops-info-v1.md#15-사건-목록) |
+| 관련 스펙 | [관리 스펙](../specs/management.md) MGT-001~007, MGT-013, MGT-015, MGT-016, MGT-021, MGT-023~024, MGT-026, MGT-051, [운영 스펙](../specs/operations.md) OPS-033 |
+| 관련 계약 | [관리 API 계약 1.6~1.8·1.10·1.12절](../contracts/management-api-v1.md#16-서버-요약-get-apiv1summary), [2.1절](../contracts/management-api-v1.md#21-오류-본문과-상태-코드), [설정 계약 1.2절](../contracts/config-v4.md#12-키-표)(P, R), [운영 정보 계약 1.5절](../contracts/ops-info-v2.md#15-사건-목록) |
 | 관련 ADR | [ADR-0003 단일 인스턴스·메모리 상태](../decisions/ADR-0003-single-instance-memory-state.md), [ADR-0004 tokio·rustls](../decisions/ADR-0004-tokio-rustls.md) |
+
+R1은 `ActiveSessionItemView`와 `ClosedSessionItemView`에 필수 `target_transport`를 더했다. Mode I은 항상 `tcp`이고, Mode II는 실제 Server 전송이다.
+
+R2는 `ActiveSessionItemView`에 필수 nullable 전달 주소(`viewer_forwarded_ip`, `target_forwarded_ip`)를 더한다. `RelayRuntime` 스냅샷에서 `Option<PeerIp>`를 읽고, `query_api`가 활성 목록·상세 JSON에 정규화된 문자열 또는 `null`로 쓴다. Mode I의 `target_forwarded_ip`와 직접 연결의 전달 주소는 항상 `null`이다. 최근 종료 항목(`ClosedSessionItemView`)과 관리자 종료 응답의 `closed_session`은 계약 1.9·1.10절대로 주소 필드를 포함하지 않는다. 소켓 상대 주소(`viewer_address`, `target_address`)는 프록시 전달 헤더와 무관하게 실제 소켓 주소를 유지한다. `recent_logs.max_entries`는 설정 보기의 재시작 키이며 로그 버퍼·`GET /api/v1/logs`는 R3 범위다. 관리 인증·쿠키·로그인 제한의 소켓 IP 기준은 그대로다.
+
+R3은 최근 로그 조회 `GET /api/v1/logs`(MGT-046~050)를 `crates/adapters/src/management_http/logs_api.rs`로 제공한다(사용자 결정 2026-11-08(Q187·Q191)).
+- `session_api` 인증 뒤 `/api/v1/logs` 경로를 `logs_api::answer`로 연결한다.
+- 인증이 없으면 401 `unauthenticated`를 반환하고, 다른 HTTP 메서드는 405 `invalid_request`(`Allow: GET`)로 거절한다.
+- 본문이 있는 요청은 `Content-Type: application/json`이어야 하며, 아니면 415 `invalid_request`로 거절한다.
+- `X-Relay-Poll: 1`은 세션 유휴 만료를 연장하지 않고, 헤더가 없으면 사용자 행동으로 간주하여 연장한다.
+- 쿼리 매개변수(`level`, `event`, `q`, `session_id`, `before`, `after`, `limit`)를 검증하며, 단일 값 매개변수 중복이나 형식·범위 오류는 400 `invalid_request`로 거절한다. 정의되지 않은 알 수 없는 매개변수는 무시하고, `=`가 없는 매개변수는 빈 문자열 값으로 해석한다.
+- `RecentLogs::query`는 버퍼 잠금 안에서 커서 범위와 전체 보관 경계를 읽는다. 범위 안 항목의 `Arc<LogEntry>`와 필요한 세션 연계 사건 참조만 확보한다. 필드 일치 검사와 페이지 선택은 잠금 밖에서 한다. `LogsResponse::to_json_string`은 필드 목록을 직접 읽어 깊은 복사 없이 응답 계약(`as_of`, `max_entries`, `oldest_seq`, `latest_seq`, `has_more`, `items[]`)에 맞춰 직렬화한다.
 
 ## 1. 책임과 경계
 
@@ -40,6 +52,7 @@
 - 다른 모듈에 공개하는 기능:
   - `vnc_relay_app::management::query::ManagementQueryService`
   - `vnc_relay_adapters::management_http::query_api::answer`
+  - `vnc_relay_adapters::management_http::logs_api::answer`
 
 ## 2. 내부 구조
 
@@ -82,9 +95,9 @@ flowchart LR
 | `UsageView` | `relay_connections: ResourceUsageView`, `admin_connections: ResourceUsageView` | `SummaryResponse` 내부 | L과 Lm의 사용량은 서로 독립적으로 산출된다. |
 | `ResourceUsageView` | `current: u64`, `limit: u64` | `UsageView` 내부 | current는 budget 원자 계수, limit는 현재 runtime 값이다. 상한을 낮춘 직후에는 `current > limit`도 유효하며 기존 점유를 취소하지 않는다. 직렬화는 정수와 계약의 null 사유 필드를 제공한다. |
 | `WaitingItemView` | `role: &'static str` (`viewer` \| `server`), `relay_id: String`, `connected_at: String`, `waited_ms: u64` | `WaitingResponse.items` 배열 | `relay_id`는 1~247자의 숫자 원문 문자열을 보존한다. `waited_ms`는 `as_of`까지의 단조 시간 경과다. |
-| `ActiveSessionView` | `session_id: String`, `state: &'static str` (`active` \| `closing`), `mode: &'static str` (`mode1` \| `mode2`), `viewer_transport: &'static str` (`tcp` \| `ws` \| `wss`), `started_at: String`, `bytes_viewer_to_target: u64`, `bytes_target_to_viewer: u64`, `viewer_address: PeerAddressView`, `target_address: PeerAddressView` | `SessionsResponse.items` 및 상세 | `bytes_*`는 단조 증가하며 감소하거나 순환하지 않는다. `closing` 세션도 활성 세션에 포함된다. |
+| `ActiveSessionView` | `session_id`, `state`, `mode`, `viewer_transport`, `target_transport`, `viewer_forwarded_ip`, `target_forwarded_ip`, `started_at`, 양방향 `bytes_*`, `viewer_address`, `target_address` | `SessionsResponse.items` 및 상세 | 양쪽 전송은 `tcp`·`ws`·`wss`다. Mode I의 target은 `tcp`, Mode II는 실제 Server 전송이다. 전달 주소는 신뢰 프록시 판정 결과 또는 `null`이다. `closing`도 활성 목록에 포함한다. |
 | `ClosedSessionsResponse` | `as_of: String`, `max_entries: u64`, `items: Vec<ClosedSessionItemView>` | HTTP 직렬화 시 일시 생성 | `max_entries`는 설정된 R 값이다. `items`는 정리가 끝난 활성 세션만 담는다. |
-| `ClosedSessionItemView` | `session_id: String`, `mode: &'static str`, `viewer_transport: &'static str`, `started_at: String`, `ended_at: String`, `bytes_viewer_to_target: u64`, `bytes_target_to_viewer: u64`, `close_cause: &'static str` | `ClosedSessionsResponse.items` 배열 | 최대 R개 보관되며, 오래된 항목부터 선입선출(FIFO)로 제거된다. |
+| `ClosedSessionItemView` | `session_id`, `mode`, `viewer_transport`, `target_transport`, `started_at`, `ended_at`, 양방향 `bytes_*`, `close_cause` | `ClosedSessionsResponse.items` | 정리된 세션이 보존한 양쪽 전송을 반환한다. 계약 1.10절에 따라 주소 필드는 포함하지 않는다. 최대 R개이며 오래된 항목부터 제거한다. |
 | `PeerAddressView` | `ip: String`, `port: u16` | 세션 뷰 내부 | 프록시 전달 헤더를 무시하고 실제 소켓 상대 주소를 반영한다. 목표 표기는 `IpAddr::to_canonical()`을 적용하며 IPv4 매핑 IPv6는 `a.b.c.d`로 쓴다(사용자 결정 2026-11-02(Q88)). 같은 작업에서 직렬화를 수정한다(9.1절). |
 
 ## 4. 처리 순서
@@ -174,6 +187,7 @@ flowchart LR
 | MGT-024 | FR-06 / MGT-R15 | 단위/통합 | `crates/domain/src/recent_closed.rs`, `crates/adapters/tests/management.rs` | 최근 종료 목록이 R개 초과 시 FIFO 삭제 검증 및 프로세스 재시작 시 메모리 목록 초기화 검증 계획 |
 | MGT-026 | FR-06 / MGT-R17 | 통합 | `crates/adapters/tests/management.rs` | 초기 교환 n개, Mode I 대상 연결 m개, L 도달 상태에서 요약의 `counts` 및 `usage` 일치 검증 계획 |
 | OPS-033 | OPS-R18 / OPS-033 | 통합 | `tests/management_query.rs` | L=2를 실제 중계 연결로 채운 상태에서 로그인·조회·관리자 종료가 되고, Lm=2를 관리·상태 연결로 채운 상태에서 새 중계 연결이 수락·매칭·양방향 전달되는지 한 함수에서 확인한다(`exhausted_relay_and_admin_budgets_leave_the_other_service_operational`, 커밋 `e9221c6`) |
+| MGT-051 | FR-06 / MGT-R10·R15 | 단위/통합 | `crates/app/src/management/query.rs`, `crates/adapters/src/management_http/query_api.rs`, `crates/adapters/src/management_http/terminate_api.rs` | 활성 목록·상세 직렬화에서 실제 소켓 상대 주소 유지 및 필수 nullable 전달 주소(`viewer_forwarded_ip`, `target_forwarded_ip`) 투영과 null 처리 검증, 최근 종료 및 종료 요약의 `target_transport` 유지 검증 |
 
 ## 9. 미결정 사항과 계약 점검
 

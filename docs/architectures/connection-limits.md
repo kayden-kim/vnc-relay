@@ -10,10 +10,15 @@
 | 코드 위치 | `crates/domain/src/budget.rs`, `crates/app/src/events.rs`(`RejectReason::RelayConnectionLimit`, `AbortReason`, `ConnectionErrorKind`), `crates/adapters/src/net.rs`(`AcceptPolicy`, `accept_connections`, `set_keepalive`, `TcpRelayStream`), `crates/app/src/relay.rs`(`RelayService::handle_connection`), `crates/app/src/relay/handshake.rs`(`exchange`, `read_request`), `crates/adapters/src/websocket.rs`(`WsPolicy`, `connection`), `crates/adapters/src/request_deadline.rs`(관리 U), `src/serve.rs`(L 예산 만들기) |
 | 코드 지도 | [코드 지도 2절](code-map.md#2-코드-위치와-구성요소) |
 | 관련 스펙 | [운영 스펙 2절](../specs/operations.md#2-상태와-검증-매개변수)의 L·Lm·Lw·H·K·U, [4.1절](../specs/operations.md#41-판정-가능한-규칙)의 OPS-R03·OPS-R20, OPS-004(일부), OPS-006(일부), OPS-033(일부), [중계 스펙](../specs/relay.md#7-수용-테스트) RLY-005(일부) |
-| 관련 계약 | [설정 계약 1.2절](../contracts/config-v3.md#12-키-표)(`[limits]`·`[timeouts]`·`[keepalive]`), [운영 정보 계약 1.6절](../contracts/ops-info-v1.md#16-원인-코드)(`relay_connection_limit`, `handshake_timeout`, `peer_eof`, `connection_error`)·[1.7절](../contracts/ops-info-v1.md#17-error_kind-값)(`io_error`) |
+| 관련 계약 | [설정 계약 1.2절](../contracts/config-v4.md#12-키-표)(`[limits]`·`[timeouts]`·`[keepalive]`), [운영 정보 계약 1.6절](../contracts/ops-info-v2.md#16-원인-코드)(`relay_connection_limit`, `handshake_timeout`, `peer_eof`, `connection_error`)·[1.7절](../contracts/ops-info-v2.md#17-error_kind-값)(`io_error`) |
 | 관련 ADR | [ADR-0004 tokio·rustls](../decisions/ADR-0004-tokio-rustls.md) |
 
 작업 6.2의 현재 동적 상한·소비 경계는 [§10](#10-target--동적-상한과-시간-제한)에 정리한다. 이전 실행 기록은 해당 당시 범위만 뜻한다.
+
+후속: R1은 리스너 네 개와 진입점 여섯 개에서 같은 L 예산을 쓴다. WS·WSS는 켜진 역할 `allow` 합집합 검사 뒤에 소켓당 permit 하나를 잡는다. 경로로 역할을 정해도 추가 L 자리를 얻지 않는다. Mode II의 WS·WSS Server도 수락 때 얻은 permit을 대기·활성·정리까지 옮긴다. 역할이 다른 두 연결의 B·M·Kw는 각 연결이 받은 값을 유지한다.
+
+WS·WSS 수락·TLS·경로 판정 전 중단에는 role이 없다. 켜진 경로 판정 뒤에는 role을 보존한다. `trusted_proxies` 허용 우회·전달 헤더 판정은 R2, 최근 로그 보관·조회는 R3 범위다. 이전 실행 기록은 R1의 증거가 아니며 이번 문서 작업에서는 빌드·시험·포매터를 실행하지 않았다.
+
 
 ## 1. 책임과 경계
 
@@ -113,7 +118,7 @@ WS·WSS는 자리를 잡은 뒤 U 안에서 TLS 핸드셰이크(WSS)와 업그�
 | H 만료 | 닫고 `handshake_timeout`(`warn`)을 기록한다. | 자리 반환 | OPS-006, RLY-005 |
 | 바이트 전 상대 종료 | `peer_eof`(`info`)를 기록한다. | 자리 반환 | RLY-005 |
 | `peek` 오류(연결 재설정 등) | `connection_error`(`warn`, `error_kind` = `io_error`)를 기록한다. | 자리 반환 | 없음 |
-| keepalive 설정 실패 | `connection_accepted` 기록 → `set_keepalive` 실패 → `connection_aborted(reason=connection_error, error_kind=io_error)` 기록 → 소켓 drop → L permit drop. `stage`는 TCP `initial_exchange`, WS `upgrade`, WSS `tls`다(사용자 결정 2026-11-02(Q85), [운영 정보 계약 1.6·1.7절](../contracts/ops-info-v1.md#16-원인-코드)). 같은 함수의 `TCP_NODELAY` 설정 실패도 이 경로를 따른다(2026-11-06, 이 문서의 판단). 커밋 `5a38bfc`가 `crates/adapters/src/net.rs`의 공유 accept 루프(`accept_connections_with_keepalive`)에 구현했다. 단위 시험 `net::accept_tests::keepalive_failure_aborts_accepted_connections_and_releases_l`이 네 진입점의 사건 순서·필드, 소켓 닫힘, 다음 연결 수락, L 반환을 확인한다. 실패는 소켓 옵션 함수를 매개변수로 받아 주입한다. | 소켓 닫힘, 자리 반환 | RLY-R18, TODO 2.11 |
+| keepalive 설정 실패 | `connection_accepted` 기록 → `set_keepalive` 실패 → `connection_aborted(reason=connection_error, error_kind=io_error)` 기록 → 소켓 drop → L permit drop. `stage`는 TCP `initial_exchange`, WS `upgrade`, WSS `tls`다(사용자 결정 2026-11-02(Q85), [운영 정보 계약 1.6·1.7절](../contracts/ops-info-v2.md#16-원인-코드)). 같은 함수의 `TCP_NODELAY` 설정 실패도 이 경로를 따른다(2026-11-06, 이 문서의 판단). 커밋 `5a38bfc`가 `crates/adapters/src/net.rs`의 공유 accept 루프(`accept_connections_with_keepalive`)에 구현했다. 단위 시험 `net::accept_tests::keepalive_failure_aborts_accepted_connections_and_releases_l`이 네 진입점의 사건 순서·필드, 소켓 닫힘, 다음 연결 수락, L 반환을 확인한다. 실패는 소켓 옵션 함수를 매개변수로 받아 주입한다. | 소켓 닫힘, 자리 반환 | RLY-R18, TODO 2.11 |
 | Linux 중계 소켓의 `ETIMEDOUT`·`EHOSTUNREACH`·`ENETUNREACH` | keepalive 또는 재전송 포기는 응답 없는 상대이므로 `dead_connection`으로 분류한다(앞선 ICMP 도달 불능에 따른 포기 오류 포함, 커널 소스 분석 근거, 실행 관찰 아님, 이 문서의 구현 판단). 대기는 `waiting_removed.reason`, 활성 세션은 `session_closed.close_cause`와 응답 없는 `side`로 기록한다. 다른 소켓 I/O 오류는 기존 `connection_error`·`io_error`를 유지한다. WS·WSS도 `WsRelayStream`의 하부 전송 오류에 같은 함수를 쓴다. H·C·W의 app 타이머는 이 경로를 지나지 않는다. | 소켓·등록 제거, L 반환 | RLY-025·026 |
 | WS·WSS U 만료 | 닫고 `connection_aborted`(`tls_upgrade_timeout`, `warn`)를 기록한다. `stage`는 TLS 핸드셰이크 중이면 `tls`, 아니면 `upgrade`다. | 자리 반환 | 없음 |
 | 관리 리스너 U 만료 | 평문 응답 없이 닫는다. 기록하지 않는다(구현 판단, [관리 리스너 모듈 설계](management-listener.md) 6절). | 접속 없음, 자리 반환 | OPS-006(일부), OPS-033(일부) |
@@ -124,7 +129,7 @@ WS·WSS는 자리를 잡은 뒤 U 안에서 TLS 핸드셰이크(WSS)와 업그�
 
 | 선택 | 이유 | 검토한 다른 방법 | 근거 |
 | --- | --- | --- | --- |
-| 출발지 IP를 L보다 먼저 판정한다. | 목록 밖 출발지는 자리를 쓰지 않고, L이 찼는지도 알 수 없다. 코드 지도 4절 1단계의 순서와 같다. | L을 먼저 확인. 목록 밖 출발지가 상한 상태를 알게 된다. | [운영 정보 계약 1.5절](../contracts/ops-info-v1.md#15-사건-목록) `connection_accepted` 조건 |
+| 출발지 IP를 L보다 먼저 판정한다. | 목록 밖 출발지는 자리를 쓰지 않고, L이 찼는지도 알 수 없다. 코드 지도 4절 1단계의 순서와 같다. | L을 먼저 확인. 목록 밖 출발지가 상한 상태를 알게 된다. | [운영 정보 계약 1.5절](../contracts/ops-info-v2.md#15-사건-목록) `connection_accepted` 조건 |
 | L·Lm·Lw를 같은 `ConnectionBudget` 타입으로 센다. 예산은 사용처가 생길 때 만든다(L은 2.5, WS·WSS의 L 사용은 3.2, Lm은 2.6, 관리 리스너의 Lm 사용은 4.2). | 세 상한의 규칙(상한까지 잡고, 끝나면 반환하고, 서로 독립)이 같다. 사용처가 없는 예산을 미리 만들지 않는다. | 상한마다 다른 타입, 2.5에서 Lm·Lw 예산까지 만들기 | 사용자 결정 2026-10-20 |
 | 자리 수는 `AtomicU32`의 비교·교환으로 센다. | 잠금 없이 상한을 지킨다. domain은 외부 crate를 쓰지 않는다. | `tokio::sync::Semaphore`. domain이 tokio에 의존하게 된다. | [코드 지도 레이어 표](code-map.md#레이어와-의존-방향) |
 | 초기 교환 중인 TCP 연결에도 H를 적용한다. | TCP 연결은 수락 직후 초기 교환 상태다. 시간 제한이 없으면 서버 종료 전까지 L 자리가 돌아오지 않는다. | 서버 종료까지 시간 제한 없이 두기(작업 2.4의 방식) | 사용자 결정 2026-10-20 |
@@ -143,7 +148,7 @@ TCP 경로는 2~4절과 같다. WS·WSS 행은 [WebSocket 진입점 모듈 설�
 
 | 대조 범위 | 환경 | 확인 방법 | 결과 |
 | --- | --- | --- | --- |
-| 작업 2.5 변경(기준 커밋 `c89beb4` + 작업 트리) | Ubuntu 24.04.4(WSL2), Rust 1.99.1 | 1~4절의 파일·심볼과 실제 코드를 대조했다. 예산은 `crates/domain/src/budget.rs` 단위 테스트 3건, keepalive 값은 `crates/adapters/src/net.rs` 단위 테스트, 줄 필드는 `crates/adapters/tests/ops_info_contract.rs`, L·H·상대 종료 처리는 `tests/serve.rs`의 `refuses_relay_connections_beyond_l_and_accepts_again_after_a_release`·`tells_a_peer_close_from_an_initial_exchange_that_outlives_h`로 확인했다([운영 정보 계약의 계약 테스트 실행 기록](../contracts/ops-info-v1.md#계약-테스트-실행-기록)). | 통과 |
+| 작업 2.5 변경(기준 커밋 `c89beb4` + 작업 트리) | Ubuntu 24.04.4(WSL2), Rust 1.99.1 | 1~4절의 파일·심볼과 실제 코드를 대조했다. 예산은 `crates/domain/src/budget.rs` 단위 테스트 3건, keepalive 값은 `crates/adapters/src/net.rs` 단위 테스트, 줄 필드는 `crates/adapters/tests/ops_info_contract.rs`, L·H·상대 종료 처리는 `tests/serve.rs`의 `refuses_relay_connections_beyond_l_and_accepts_again_after_a_release`·`tells_a_peer_close_from_an_initial_exchange_that_outlives_h`로 확인했다([운영 정보 계약의 계약 테스트 실행 기록](../contracts/ops-info-v2.md#계약-테스트-실행-기록)). | 통과 |
 | Windows 실행(기준 커밋 `e1cfc4f` + Windows 경고 수정) | Windows 11 Pro 10.0.26200, Rust 1.99.1(`x86_64-pc-windows-msvc`) | `tests/serve.rs`의 `refuses_relay_connections_beyond_l_and_accepts_again_after_a_release`·`tells_a_peer_close_from_an_initial_exchange_that_outlives_h`, `budget` 단위 테스트 3건이 통과했다. keepalive 설정 호출은 오류 없이 끝났다. 설정한 값을 읽어 확인하는 단위 테스트는 Linux 전용이라 실행하지 않았다. | 통과 |
 | 작업 4.2 변경(기준 커밋 `ead7be0` + 작업 트리): 관리 리스너의 Lm 사용 | Ubuntu 24.04.4(WSL2)·Windows 11 Pro 10.0.26200, Rust 1.99.1 | 2·4절과 `crates/domain/src/budget.rs` 사용처를 대조했다. `tests/serve.rs`의 `refuses_management_connections_beyond_lm_and_keeps_lm_and_l_apart`가 두 환경에서 통과했다. | 통과 |
 | 작업 3.2 변경(기준 커밋 `c1c24d2`, 코드 = HEAD `0f63227`): WS·WSS의 L·U·H(101 뒤), 관리 U | Ubuntu 24.04(WSL2), Rust 1.99.1 | 1~4절과 `crates/adapters/src/net.rs`·`websocket.rs`·`request_deadline.rs`를 대조했다. 전체 검증 기록(Main 전달, 재실행 안 함): `vr-full.sh`, `시나리오 148건: 통과 9, 부분 22, 실패 0, 미실행 0, 미연결 117. 오류 0건.`, 마지막 줄 `ALL PASSED`. | 통과 |
@@ -160,14 +165,14 @@ TCP 경로는 2~4절과 같다. WS·WSS 행은 [WebSocket 진입점 모듈 설�
 
 ## 10. Target — 동적 상한과 시간 제한
 
-구조 시점 Current / 상태 Active / 작업 6.2 시험은 커밋 `eae442f`의 두 OS 게이트에서 통과([작업 6.9 판정표](../how-to/set-up-and-verify.md#42-작업-69-판정표)). 기존 링크를 유지하려고 절 제목의 Target 표기를 남긴다. 근거는 [설정 §1.8 적용 표](../contracts/config-v3.md#18-재로드-구분), [운영 §3.3](../specs/operations.md#33-파일-변경-자동-감지와-부분-재로드) OPS-R30~R33·OPS-050~057이다. 전체 소비 경계는 [파일 감지 §10.1](file-watch.md#101-발행-단위와-reader)을 따른다.
+구조 시점 Current / 상태 Active / 작업 6.2 시험은 커밋 `eae442f`의 두 OS 게이트에서 통과([작업 6.9 판정표](../how-to/set-up-and-verify.md#42-작업-69-판정표)). 기존 링크를 유지하려고 절 제목의 Target 표기를 남긴다. 근거는 [설정 §1.8 적용 표](../contracts/config-v4.md#18-재로드-구분), [운영 §3.3](../specs/operations.md#33-파일-변경-자동-감지와-부분-재로드) OPS-R30~R33·OPS-050~057이다. 전체 소비 경계는 [파일 감지 §10.1](file-watch.md#101-발행-단위와-reader)을 따른다.
 
-`ConnectionBudget`는 `used: AtomicU32`만 보유한다. `try_acquire(limit)`가 CAS로 사용량을 늘리고 permit drop이 줄인다. 상한 원본은 재로드 snapshot 하나에만 있다. domain은 app snapshot을 알지 않는다([레이어 규칙](code-map.md#레이어와-의존-방향), [설정 §1.8 규칙 5](../contracts/config-v3.md#18-재로드-구분)).
+`ConnectionBudget`는 `used: AtomicU32`만 보유한다. `try_acquire(limit)`가 CAS로 사용량을 늘리고 permit drop이 줄인다. 상한 원본은 재로드 snapshot 하나에만 있다. domain은 app snapshot을 알지 않는다([레이어 규칙](code-map.md#레이어와-의존-방향), [설정 §1.8 규칙 5](../contracts/config-v4.md#18-재로드-구분)).
 
 - `ConnectionBudget::new() -> Arc<Self>`와 `try_acquire(self: &Arc<Self>, limit: u32) -> Option<BudgetPermit>`를 사용한다. `limit()`은 없다. summary는 응답 때 현재 L·Lm을 함께 읽고, 거절 사건은 해당 판단에서 읽은 상한을 사용한다. `current`·permit drop의 의미는 유지한다([운영 OPS-R31](../specs/operations.md#33-파일-변경-자동-감지와-부분-재로드)).
-- 수락/대상 자리 판정은 RuntimeSettingsSource의 짧은 snapshot read callback 안에서 상한을 얻고 CAS까지 끝낸다. snapshot write는 이 read가 끝난 뒤 한 번 수행한다. 따라서 재로드와 수락이 경합하면 판정은 이전/새 세대 중 하나에 선형화된다. 사용량이 새 상한 이상이면 새 CAS는 실패하고, 기존 permit은 그대로다. 상향은 발행 직후 다음 판정부터 적용된다. L과 Lm은 독립된 사용량이며 management/status만 같은 Lm을 공유한다([설정 §1.8 L/Lm 행](../contracts/config-v3.md#18-재로드-구분), OPS-051~053).
+- 수락/대상 자리 판정은 RuntimeSettingsSource의 짧은 snapshot read callback 안에서 상한을 얻고 CAS까지 끝낸다. snapshot write는 이 read가 끝난 뒤 한 번 수행한다. 따라서 재로드와 수락이 경합하면 판정은 이전/새 세대 중 하나에 선형화된다. 사용량이 새 상한 이상이면 새 CAS는 실패하고, 기존 permit은 그대로다. 상향은 발행 직후 다음 판정부터 적용된다. L과 Lm은 독립된 사용량이며 management/status만 같은 Lm을 공유한다([설정 §1.8 L/Lm 행](../contracts/config-v4.md#18-재로드-구분), OPS-051~053).
 - 대기 등록은 snapshot read→relay registry mutex 순으로 잡고 Lw·W를 한 번 읽는다. domain `WaitingTable::new()`는 정책을 고정하지 않는다. `arrive`가 `RegistrationPolicy { waiting_limit, wait_timeout }`를 받는다. app은 동일 Lw로 table 판정과 permit 획득을 처리한다. 기존 match-first·expired 제거·한 대기당 permit 하나 규칙은 유지한다. 상한 하향으로 map을 truncate하거나 기존 `WaitingEntry.deadline`을 다시 쓰지 않는다. 즉시 매칭은 새 대기 자리를 요구하지 않는다([운영 OPS-R32](../specs/operations.md#33-파일-변경-자동-감지와-부분-재로드), OPS-054~056).
-- snapshot read callback 안에서 relay registry를 사용할 수 있지만 역순(registry→snapshot)은 금지한다. session poll은 필요한 E를 registry 잠금 전에 읽거나 registry 잠금 밖 종료 상태 소유자가 읽는다. 파일 트랜잭션 mutex는 budget/registry가 획득하지 않는다. 이 순서는 [설정 §1.8 전체 교체·기존 연결 유지](../contracts/config-v3.md#18-재로드-구분)를 교착 없이 구현하기 위한 내부 선택이다.
-- H/U/W/C/E/G는 각 시작 때 deadline으로 바꾼다. B는 수락 문맥, M/WS K는 업그레이드 문맥, TCP K는 해당 소켓 옵션으로 고정한다. 유효 설정 교체가 이미 저장한 deadline/옵션/버퍼를 수정하지 않는다. E는 세션 생성 시점이 아니라 **종료 교환 시작** 때 읽는다. 관리 세션 응답의 E+5는 별도 현재 snapshot 읽기다([설정 §1.8](../contracts/config-v3.md#18-재로드-구분), OPS-050·057).
+- snapshot read callback 안에서 relay registry를 사용할 수 있지만 역순(registry→snapshot)은 금지한다. session poll은 필요한 E를 registry 잠금 전에 읽거나 registry 잠금 밖 종료 상태 소유자가 읽는다. 파일 트랜잭션 mutex는 budget/registry가 획득하지 않는다. 이 순서는 [설정 §1.8 전체 교체·기존 연결 유지](../contracts/config-v4.md#18-재로드-구분)를 교착 없이 구현하기 위한 내부 선택이다.
+- H/U/W/C/E/G는 각 시작 때 deadline으로 바꾼다. B는 수락 문맥, M/WS K는 업그레이드 문맥, TCP K는 해당 소켓 옵션으로 고정한다. 유효 설정 교체가 이미 저장한 deadline/옵션/버퍼를 수정하지 않는다. E는 세션 생성 시점이 아니라 **종료 교환 시작** 때 읽는다. 관리 세션 응답의 E+5는 별도 현재 snapshot 읽기다([설정 §1.8](../contracts/config-v4.md#18-재로드-구분), OPS-050·057).
 
 관련 단위 시험은 `budget::tests::lower_limit_does_not_revoke_permits_and_recovers_after_release`, `matching::tests::registration_policy_changes_preserve_existing_deadlines`, `relay::tests::reload_keeps_waiting_deadlines_and_reads_new_registration_policy`, `relay::tests::reload_keeps_started_c_and_policy_but_changes_the_next_target_check`, `relay::handshake::tests::exchange_keeps_accepted_b_and_started_h_after_reload`, `relay::session::tests::reload_reads_e_at_first_close_and_keeps_started_close_fixed`, `relay::session::tests::mode_two_directions_keep_distinct_accepted_buffer_limits`, `management::query::tests::summary_reports_reloaded_limits_even_below_current_usage`, `net::accept_tests::reloaded_keepalive_applies_to_new_accepts_and_keeps_accepted_sockets`(Linux 전용)다. 대상 연결의 K는 `crates/adapters/tests/tcp_target.rs`의 `reloaded_keepalive_is_used_only_for_new_target_sockets`가 확인한다. 시나리오 marker는 부분 관측 범위를 표시한다. 두 OS의 실제 통과 결과는 [작업 6.9 판정표](../how-to/set-up-and-verify.md#42-작업-69-판정표)에 있다.

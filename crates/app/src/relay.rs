@@ -21,8 +21,7 @@ use vnc_relay_domain::peer_ip::PeerIp;
 use vnc_relay_domain::recent_closed::RecentClosedList;
 use vnc_relay_domain::relay_id::RelayId;
 use vnc_relay_domain::session::{
-    CloseCause, ClosedSession, Direction, Session, SessionError, SessionId, SessionState,
-    ViewerTransport,
+    CloseCause, ClosedSession, Direction, Session, SessionError, SessionId, SessionState, Transport,
 };
 
 use crate::events::{
@@ -44,12 +43,14 @@ pub(crate) mod test_support;
 
 /// Accepted connection metadata. Both times use the service's shared Clock.
 /// H starts at `exchange_at`; event elapsed time starts at `accepted_at`.
-/// See repeater-handshake-v1 §1.2 and ops-info-v1 §1.5.
+/// See repeater-handshake-v1 §1.2 and ops-info-v2 §1.5.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ConnectionContext {
     pub conn_id: ConnId,
     pub entry_point: EntryPoint,
     pub peer_ip: PeerIp,
+    /// Derived only for a trusted WS/WSS proxy; never replaces the socket IP.
+    pub forwarded_ip: Option<PeerIp>,
     pub peer_addr: SocketAddr,
     pub accepted_wall: SystemTime,
     pub accepted_at: Duration,
@@ -78,7 +79,7 @@ struct ConnectionResources<S> {
 }
 
 impl<S> PreparedConnection<S> {
-    /// Metadata from the admitted connection (ops-info-v1 §1.5).
+    /// Metadata from the admitted connection (ops-info-v2 §1.5).
     pub fn context(&self) -> ConnectionContext {
         self.context
     }
@@ -142,7 +143,7 @@ impl<S> fmt::Debug for PreparedConnection<S> {
 }
 
 /// One terminal initial-exchange result. Its event has already been recorded.
-/// See repeater-handshake-v1 §2 and ops-info-v1 §1.5–1.7.
+/// See repeater-handshake-v1 §2 and ops-info-v2 §1.5–1.7.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RelayError {
     Rejected(HandshakeError),
@@ -196,7 +197,7 @@ impl RelayService {
     /// Writes the viewer greeting and reads a request within one absolute H.
     /// Failure drops the stream and L permit before one rejection/abort event.
     /// Success returns every resource without choosing the next relay step.
-    /// See relay spec §3.1, repeater-handshake-v1 §1–2, and ops-info-v1 §1.5–1.7.
+    /// See relay spec §3.1, repeater-handshake-v1 §1–2, and ops-info-v2 §1.5–1.7.
     pub fn handle_connection<S>(
         &self,
         stream: S,
@@ -287,6 +288,7 @@ impl RelayService {
                             conn_id: context.conn_id,
                             entry_point: context.entry_point,
                             peer_ip: context.peer_ip,
+                            forwarded_ip: context.forwarded_ip,
                             reason,
                             mode,
                         });
@@ -295,10 +297,12 @@ impl RelayService {
                         let elapsed = self.clock.monotonic().saturating_sub(context.accepted_at);
                         self.events.record(&Event::ConnectionAborted {
                             conn_id: context.conn_id,
-                            entry_point: context.entry_point,
+                            listener: context.entry_point.listener(),
+                            role: Some(context.entry_point.role()),
                             stage: Stage::InitialExchange,
                             reason,
                             peer_ip: context.peer_ip,
+                            forwarded_ip: context.forwarded_ip,
                             elapsed_ms: u64::try_from(elapsed.as_millis()).unwrap_or(u64::MAX),
                         });
                     }
@@ -411,7 +415,7 @@ struct RelayState {
     active: HashMap<SessionId, ActiveSessionSnapshot>,
     controls: HashMap<SessionId, Arc<Mutex<SessionControl>>>,
     recent: RecentClosedList,
-    recent_refs: HashMap<SessionId, RelayIdRef>,
+    recent_metadata: HashMap<SessionId, ClosedMetadata>,
     next_session: Option<u128>,
     connecting: usize,
     handshaking: usize,
@@ -473,9 +477,12 @@ impl ActivePeer {
 pub struct ActiveSessionSnapshot {
     pub session_id: SessionId,
     pub mode: Mode,
-    pub viewer_transport: ViewerTransport,
+    pub viewer_transport: Transport,
+    pub target_transport: Transport,
+    pub viewer_forwarded_ip: Option<PeerIp>,
+    pub target_forwarded_ip: Option<PeerIp>,
     pub started_at: SystemTime,
-    started_mono: Duration,
+    pub started_mono: Duration,
     pub duration: Duration,
     pub state: SessionState,
     pub viewer: ConnectionContext,
@@ -489,7 +496,8 @@ pub struct ActiveSessionSnapshot {
 pub struct ClosedSessionSnapshot {
     pub session_id: SessionId,
     pub mode: Mode,
-    pub viewer_transport: ViewerTransport,
+    pub viewer_transport: Transport,
+    pub target_transport: Transport,
     pub started_at: SystemTime,
     pub ended_at: SystemTime,
     pub duration: Duration,
@@ -498,6 +506,23 @@ pub struct ClosedSessionSnapshot {
     pub close_cause: CloseCause,
     pub relay_id_ref: Option<RelayIdRef>,
     pub side: Option<vnc_relay_domain::session::Side>,
+}
+
+#[derive(Clone)]
+struct ClosedMetadata {
+    relay_id_ref: Option<RelayIdRef>,
+}
+
+impl ClosedMetadata {
+    fn from_active(active: &ActiveSessionSnapshot) -> Self {
+        Self {
+            relay_id_ref: active.relay_id_ref.clone(),
+        }
+    }
+
+    fn apply(&self, snapshot: &mut ClosedSessionSnapshot) {
+        snapshot.relay_id_ref = self.relay_id_ref.clone();
+    }
 }
 
 struct AdminClose {
@@ -521,6 +546,7 @@ impl From<&ClosedSession> for ClosedSessionSnapshot {
             session_id: closed.id().clone(),
             mode: closed.mode(),
             viewer_transport: closed.viewer_transport(),
+            target_transport: closed.target_transport(),
             started_at: closed.started_at(),
             ended_at: closed.ended_at(),
             duration: closed.duration(),
@@ -552,7 +578,7 @@ impl<C> RelayRuntime<C> {
             active: HashMap::new(),
             controls: HashMap::new(),
             recent: RecentClosedList::new(config.recent_closed),
-            recent_refs: HashMap::new(),
+            recent_metadata: HashMap::new(),
             next_session: Some(0),
             connecting: 0,
             handshaking: 0,
@@ -621,7 +647,9 @@ impl<C> RelayRuntime<C> {
                 .iter()
                 .map(|closed| {
                     let mut snapshot = ClosedSessionSnapshot::from(closed);
-                    snapshot.relay_id_ref = state.recent_refs.get(closed.id()).cloned();
+                    if let Some(metadata) = state.recent_metadata.get(closed.id()) {
+                        metadata.apply(&mut snapshot);
+                    }
                     snapshot
                 })
                 .collect(),
@@ -842,11 +870,11 @@ impl<C> Drop for ActiveGuard<'_, C> {
                         .filter(|_| closed.close_cause() == CloseCause::AdminTerminated)
                         .map(|admin| admin.account.clone()),
                 });
-                if let Some(reference) = entry.relay_id_ref {
-                    state.recent_refs.insert(closed.id().clone(), reference);
-                }
+                state
+                    .recent_metadata
+                    .insert(closed.id().clone(), ClosedMetadata::from_active(&entry));
                 if let Some(evicted) = state.recent.push(closed) {
-                    state.recent_refs.remove(evicted.id());
+                    state.recent_metadata.remove(evicted.id());
                 }
             }
         }
@@ -906,7 +934,7 @@ impl RelayService {
     }
 
     /// Starts fatal grace once. A failure during an existing shutdown is not
-    /// a second shutdown request and must not shorten G (ops-info-v1 §1.12).
+    /// a second shutdown request and must not shorten G (ops-info-v2 §1.12).
     pub fn request_fatal_shutdown<C>(
         &self,
         runtime: &RelayRuntime<C>,
@@ -993,6 +1021,7 @@ impl RelayService {
             stage,
             reason,
             peer_ip: context.peer_ip,
+            forwarded_ip: context.forwarded_ip,
             elapsed_ms: milliseconds(self.clock.monotonic().saturating_sub(context.accepted_at)),
             mode,
         });
@@ -1053,6 +1082,10 @@ impl RelayService {
             Mode::Mode1
         };
         let transport = pair.viewer.stream.transport();
+        let target_transport = match mode {
+            Mode::Mode1 => Transport::Tcp,
+            Mode::Mode2 => pair.other.stream.transport(),
+        };
         let (command, admin_close) = watch::channel(None);
         let (completion, _) = watch::channel(None);
         let control = Arc::new(Mutex::new(SessionControl {
@@ -1097,14 +1130,23 @@ impl RelayService {
                     }
                     state.next_session = counter.checked_add(1);
                     let started_mono = self.clock.monotonic();
-                    let session =
-                        Session::new(id.clone(), mode, transport, self.clock.wall(), started_mono);
+                    let session = Session::new(
+                        id.clone(),
+                        mode,
+                        transport,
+                        target_transport,
+                        self.clock.wall(),
+                        started_mono,
+                    );
                     state.active.insert(
                         id.clone(),
                         ActiveSessionSnapshot {
                             session_id: id,
                             mode,
                             viewer_transport: transport,
+                            target_transport,
+                            viewer_forwarded_ip: pair.viewer.context.forwarded_ip,
+                            target_forwarded_ip: pair.peer.server().and_then(|c| c.forwarded_ip),
                             started_at: session.started_at(),
                             started_mono,
                             duration: Duration::ZERO,
@@ -1126,8 +1168,11 @@ impl RelayService {
                         session_id: session.id().clone(),
                         mode,
                         viewer_transport: transport,
+                        server_transport: (mode == Mode::Mode2).then_some(target_transport),
                         viewer_conn_id: pair.viewer.context.conn_id,
                         viewer_peer_ip: pair.viewer.context.peer_ip,
+                        viewer_forwarded_ip: pair.viewer.context.forwarded_ip,
+                        server_forwarded_ip: pair.peer.server().and_then(|c| c.forwarded_ip),
                         server_conn_id: match &pair.peer {
                             ActivePeer::Server(context) => Some(context.conn_id),
                             ActivePeer::Target(_) => None,
@@ -1341,7 +1386,10 @@ impl RelayService {
             state.matching.begin_closing(id, closed.id());
             state.matching.release(id, closed.id());
         }
-        state.active.remove(closed.id());
+        let metadata = state
+            .active
+            .remove(closed.id())
+            .map(|active| ClosedMetadata::from_active(&active));
         state.controls.remove(closed.id());
         let reference = relay.map(|(_, reference, _)| reference);
         self.events.record(&Event::SessionClosed {
@@ -1363,12 +1411,12 @@ impl RelayService {
                 .map(|admin| admin.account.clone()),
         });
         let mut snapshot = ClosedSessionSnapshot::from(&closed);
-        snapshot.relay_id_ref = reference.clone();
-        if let Some(reference) = reference {
-            state.recent_refs.insert(closed.id().clone(), reference);
+        if let Some(metadata) = metadata {
+            metadata.apply(&mut snapshot);
+            state.recent_metadata.insert(closed.id().clone(), metadata);
         }
         if let Some(evicted) = state.recent.push(closed) {
-            state.recent_refs.remove(evicted.id());
+            state.recent_metadata.remove(evicted.id());
         }
         if let Some(admin) = &control.admin {
             self.events.record(&Event::AdminTerminate {
@@ -1510,8 +1558,8 @@ mod tests {
         }
     }
     impl RelayStream for TestStream {
-        fn transport(&self) -> ViewerTransport {
-            ViewerTransport::Tcp
+        fn transport(&self) -> Transport {
+            Transport::Tcp
         }
         fn pending_write_len(&self) -> usize {
             0
@@ -1727,6 +1775,7 @@ mod tests {
                     EntryPoint::TcpServer
                 },
                 peer_ip: PeerIp::new(peer_addr.ip()),
+                forwarded_ip: None,
                 peer_addr,
                 accepted_wall: self.clock.wall(),
                 accepted_at: self.clock.monotonic(),
@@ -3369,17 +3418,17 @@ mod tests {
         assert!(snap.recent_closed[1].relay_id_ref.is_some());
 
         let state = harness.runtime.lock();
-        assert_eq!(state.recent_refs.len(), 2);
+        assert_eq!(state.recent_metadata.len(), 2);
         assert!(
-            !state.recent_refs.contains_key(&session_ids[0]),
+            !state.recent_metadata.contains_key(&session_ids[0]),
             "evicted session ref must be removed"
         );
         assert!(
-            state.recent_refs.contains_key(&session_ids[1]),
+            state.recent_metadata.contains_key(&session_ids[1]),
             "retained session 2 ref must exist"
         );
         assert!(
-            state.recent_refs.contains_key(&session_ids[2]),
+            state.recent_metadata.contains_key(&session_ids[2]),
             "retained session 3 ref must exist"
         );
     }
@@ -3406,8 +3455,8 @@ mod tests {
         );
         let state = harness.runtime.lock();
         assert!(
-            state.recent_refs.is_empty(),
-            "R=0 must never retain recent_refs"
+            state.recent_metadata.is_empty(),
+            "R=0 must never retain recent metadata"
         );
     }
 

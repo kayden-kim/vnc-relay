@@ -1150,7 +1150,7 @@ fn assert_unknown_consumer_values(browser: &mut Browser, real_detail: &Value) {
           const source = {source};
           const contractInput = {{
             as_of: source.as_of,
-            items: [{{...source.session, mode:'future-mode', viewer_transport:'future-path'}}]
+            items: [{{...source.session, mode:'future-mode', viewer_transport:'future-path', target_transport:'future-target'}}]
           }};
           const parsed = model.parseSessions(contractInput);
           const results = [];
@@ -1163,7 +1163,7 @@ fn assert_unknown_consumer_values(browser: &mut Browser, real_detail: &Value) {
               results.push({{
                 language,
                 mode: row.cells[1].textContent,
-                transport: row.cells[2].textContent,
+                transport: [...row.cells[2].querySelectorAll('.badge')].map(n => n.textContent),
                 id: row.cells[0].textContent,
                 translatedAction: row.cells[6].textContent.trim() === t.details,
                 translatedHeading: [...table.querySelectorAll('th')].some(n => n.textContent === t.activeColumns[1]),
@@ -1176,7 +1176,10 @@ fn assert_unknown_consumer_values(browser: &mut Browser, real_detail: &Value) {
     ));
     for index in 0..2 {
         assert_eq!(result[index]["mode"], json!("future-mode"));
-        assert_eq!(result[index]["transport"], json!("future-path"));
+        assert_eq!(
+            result[index]["transport"],
+            json!(["future-path", "future-target"])
+        );
         assert_eq!(result[index]["id"], real_detail["session"]["session_id"]);
         assert_eq!(result[index]["translatedAction"], json!(true));
         assert_eq!(result[index]["translatedHeading"], json!(true));

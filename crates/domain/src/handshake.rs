@@ -287,6 +287,8 @@ mod tests {
             (EntryPoint::WssViewer, "[2001:db8::30]:5900"),
             (EntryPoint::TcpViewer, "ID:0123"),
             (EntryPoint::TcpServer, "ID:0123"),
+            (EntryPoint::WsServer, "ID:0123"),
+            (EntryPoint::WssServer, "ID:0123"),
         ] {
             let bytes = request(value.as_bytes());
             let expected = parse(value.as_bytes(), entry_point, ENABLED);
@@ -409,7 +411,7 @@ mod tests {
                     }
                     for value in [b"192.0.2.30".as_slice(), b"", b"bad target", b"\xff"] {
                         let result = parse(value, entry_point, modes);
-                        if entry_point == EntryPoint::TcpServer {
+                        if entry_point.role() == Role::Server {
                             assert_eq!(error_code(result), "handshake_invalid");
                         } else if !mode1_enabled {
                             assert_eq!(result, Err(HandshakeError::ModeDisabled(Mode::Mode1)));
@@ -421,6 +423,27 @@ mod tests {
                         }
                     }
                 }
+            }
+        }
+    }
+
+    /// spec: relay.md:RLY-028 partial
+    #[test]
+    fn every_server_transport_accepts_mode_two_and_rejects_mode_one() {
+        for entry in [
+            EntryPoint::TcpServer,
+            EntryPoint::WsServer,
+            EntryPoint::WssServer,
+        ] {
+            assert!(matches!(
+                parse(b"ID:0123", entry, ENABLED),
+                Ok(HandshakeRequest::Mode2(_))
+            ));
+            for target in [b"192.0.2.30:5900".as_slice(), b"pc.example:5900"] {
+                assert_eq!(
+                    error_code(parse(target, entry, ENABLED)),
+                    "handshake_invalid"
+                );
             }
         }
     }

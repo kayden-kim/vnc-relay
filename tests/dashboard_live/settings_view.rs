@@ -106,7 +106,7 @@ fn assert_query_time(browser: &mut Browser, server: &Server) -> Value {
 }
 
 fn expected_inputs(raw: &Value) -> Value {
-    let fields: Vec<_> = raw["items"]
+    let mut fields: Vec<_> = raw["items"]
         .as_array()
         .unwrap_or_else(|| panic!("config items missing"))
         .iter()
@@ -130,14 +130,34 @@ fn expected_inputs(raw: &Value) -> Value {
                         .join("\n")
                 },
             );
-            json!([item["key"], input])
+            (
+                item["key"].as_str().unwrap_or("").to_owned(),
+                json!([item["key"], input]),
+            )
         })
         .collect();
     assert!(
         !fields.is_empty(),
         "edit baseline must contain real editable settings"
     );
-    json!(fields)
+    fields.sort_by_key(|(key, _)| {
+        if key.starts_with("relay.") && key.ends_with(".allow") {
+            0
+        } else if key.ends_with(".trusted_proxies") {
+            1
+        } else if key.ends_with(".allowed_origins") {
+            2
+        } else if key.starts_with("mode1.") {
+            3
+        } else if key.starts_with("limits.") {
+            4
+        } else if key.starts_with("timeouts.") {
+            5
+        } else {
+            6
+        }
+    });
+    json!(fields.into_iter().map(|(_, v)| v).collect::<Vec<_>>())
 }
 
 fn assert_nav(browser: &mut Browser, active: &str) {
@@ -145,7 +165,7 @@ fn assert_nav(browser: &mut Browser, active: &str) {
         browser.eval(&format!(
             r#"(() => {{
         const links = [...document.querySelectorAll('a.navbar-item')];
-        return ['/', '/#/settings'].every(href => {{
+        return ['/', '/#/logs', '/#/settings'].every(href => {{
             const a = links.find(a => a.getAttribute('href') === href);
             const r = a?.getBoundingClientRect();
             return r?.width > 0 && r.height > 0 && r.left >= 0 && r.right <= innerWidth &&
@@ -162,7 +182,7 @@ fn assert_nav(browser: &mut Browser, active: &str) {
 pub fn settings_navigation_and_protected_direct_routes() {
     let server = Server::start_with_config("dash-028", Some(60), true);
     let mut browser = Browser::start("dash-028", &["ko-KR"]);
-    for route in ["/#/settings", "/#/settings/edit"] {
+    for route in ["/#/settings", "/#/settings/edit", "/#/logs"] {
         browser.navigate(&server.url(route));
         browser.wait(
             "location.pathname === '/login/' && document.querySelector('#login-account') !== null",
@@ -172,6 +192,10 @@ pub fn settings_navigation_and_protected_direct_routes() {
             json!(0)
         );
         assert!(!browser.text().contains("limits.waiting"));
+        assert_eq!(
+            browser.eval("document.querySelectorAll('.log-row,.log-detail,#logs-q').length"),
+            json!(0)
+        );
     }
     assert!(
         !server
@@ -193,6 +217,9 @@ pub fn settings_navigation_and_protected_direct_routes() {
         browser.navigate(&server.url("/"));
         browser.wait("document.querySelector('#operations-refresh')?.disabled === false");
         assert_nav(&mut browser, "/");
+        browser.click("a.navbar-item[href='/#/logs']");
+        browser.wait("document.querySelector('#logs-download')?.disabled === false");
+        assert_nav(&mut browser, "/#/logs");
         open_settings(&mut browser, &server);
         assert_nav(&mut browser, "/#/settings");
         open_settings_edit(&mut browser, &server);
@@ -235,7 +262,7 @@ pub fn settings_view_displays_all_effective_values_in_contract_order() {
                 "allowed_origins = []",
             )
             + &format!(
-                "\n[relay.wss_viewer]\nenabled = false\ncert_file = {cert:?}\nkey_file = {key:?}\n"
+                "\n[relay.wss]\ncert_file = {cert:?}\nkey_file = {key:?}\n[relay.wss.viewer]\nenabled = false\n"
             )
     });
     let admin = server.login();
@@ -256,8 +283,33 @@ pub fn settings_view_displays_all_effective_values_in_contract_order() {
     );
     assert_eq!(
         items.iter().filter(|i| i["reload"] == "dynamic").count(),
-        27
+        33
     );
+    for name in [
+        "relay.ws.trusted_proxies",
+        "relay.wss.trusted_proxies",
+        "relay.ws.viewer.allow",
+        "relay.ws.server.allow",
+        "relay.wss.viewer.allow",
+        "relay.wss.server.allow",
+        "relay.ws.viewer.allowed_origins",
+        "relay.ws.server.allowed_origins",
+        "relay.wss.viewer.allowed_origins",
+        "relay.wss.server.allowed_origins",
+    ] {
+        assert!(
+            items
+                .iter()
+                .any(|i| i["key"] == name && i["reload"] == "dynamic"),
+            "v4 dynamic key {name}"
+        );
+    }
+    let closed = items
+        .iter()
+        .position(|i| i["key"] == "recent_closed.max_entries")
+        .unwrap_or_else(|| panic!("closed limit"));
+    assert_eq!(items[closed + 1]["key"], "recent_logs.max_entries");
+    assert_eq!(items[closed + 1]["reload"], "restart");
     let mut browser = Browser::start("dash-029", &["ko-KR"]);
     login_alice(&mut browser, &server);
     open_settings(&mut browser, &server);

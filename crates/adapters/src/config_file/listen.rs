@@ -1,4 +1,4 @@
-//! `listen` address values (config-v3 §1.1 and the entry point default
+//! `listen` address values (config-v4 §1.1 and the entry point default
 //! ports of §1.2).
 
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};

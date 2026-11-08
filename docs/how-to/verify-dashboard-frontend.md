@@ -204,7 +204,7 @@
 | 제공 파일 표 | `dashboard_assets` 테스트 통과 | 3.2 1단계 | 통과. 2026-10-22 커밋 `df3b5b2`, Ubuntu 24.04(WSL2): `cargo test --test dashboard_assets` 시험 2개 통과. 같은 커밋의 Windows 전체 완료 검증도 이 시험을 포함해 통과했다. 작업 4.9 재작업(4.3절): 시험 2개 통과(Windows). 작업 4.10(4.4절): 시험 2개 통과(Windows, 작업 트리) | 검증 기록의 테스트 출력 |
 | 브라우저 테스트 | 모든 테스트 페이지의 `data-result`가 `pass` | 3.3 1단계 | 통과. 작업 4.8(Windows): `cargo test --test dashboard_browser` 시험 2개 통과(2026-10-22 재실행, 19.19초). Chrome 155.0.8059.84. Ubuntu 24.04(WSL2), 커밋 `df3b5b2`: 시험 2개 통과(10.39초), Google Chrome 156.0.8078.47(`/usr/bin/google-chrome`). 작업 4.9 재작업(4.3절): 시험 7개 통과(Windows, 27.20초). 작업 4.10(4.4절, Windows, 작업 트리): 시험 21개 통과(146.6초, 운영 화면 시험 포함). 작업 4.10 재실행(4.5절, 커밋 `3944dc2`): WSL 시험 21개 통과(61.78초), Windows 시험 21개 통과(97.16초). 기준 `61e03e9`의 WSL 실행은 시험 6개가 실패했다(4.5절). 작업 4.11(4.7절, 커밋 `5368dec`): 시험 31개 통과(WSL 89.48초, Windows 148.88초, 최종 HEAD). 바이트·레이아웃 수정 전 실행과 수정 뒤 `session_`·`router_` 시험 12개 통과는 4.7절에 있다. 작업 6.6(4.27절): 설정 가짜 API 시험 26개를 더해 63개다. 게이트 대상 `eae442f`에서 63개 통과(Windows 489.26초, WSL 614.01초) | 검증 기록의 테스트 출력과 브라우저 버전 |
 | 시나리오 보고서 | 자동 연결된 DASH 항목이 `통과` | 3.3 2단계 | 부분. 작업 4.10(4.4절, 작업 트리): 150건 중 통과 23, 부분 40, 실패 0, 미실행 1, 미연결 86. DASH 27건은 통과 0, 부분 17, 미연결 10이다. 미실행 1건은 OPS-007이다. 4.9 재작업 수치(WSL 통과 18, Windows 통과 17)보다 통과가 늘었다. 늘어난 항목은 확인하지 않았다. 작업 4.10 재실행(4.5절, 커밋 `3944dc2`): WSL 통과 24, 부분 40, 실패 0, 미실행 0, 미연결 86. Windows 통과 23, 부분 40, 실패 0, 미실행 1(OPS-007), 미연결 86. DASH 세부 수치는 이 재실행에서 세지 않았다. 최종 게이트 수치는 4.5절에 있다. 작업 4.11(4.7절, 커밋 `5368dec`): DASH-006·007·009~014·026이 `partial`로 연결됐다. 최종 HEAD 수치는 4.7절에 있다 | `<Cargo 대상 디렉터리>/scenario-report.md` |
-| 폭별 시각 대조 | 6개 폭에서 가로 스크롤 0건, 차이가 스펙·디자인 기준에 맞음 | 3.4 | 통과(작업 4.12·6.6 범위). 사용자가 4.22절 비교 페이지를 검토했고(Q138), 지적한 "조회 중" 표시 차이를 4.24·4.25절에서 고쳤다. 사용자는 2026-11-07에 수정 결과를 받아들였다(4.26절). 작업 6.6(4.27절, 2026-11-08): 설정 시안 62개 프레임을 1280·390px 구현 화면과 대조해 124쌍을 찍었다. 차이 12건 가운데 3건은 구현을 고쳤고, 8건은 화면 스펙이나 DESIGN.md를 따라 구현을 유지했으며, 1건은 예시 데이터 차이다. 구현 쪽 가로 넘침·CSP 위반·콘솔 오류는 0건이다. 사람의 비교 판정은 하지 않았다. `dashboard_browser`의 설정 시험 26개는 6개 폭 × ko·en으로 열리고, `settings-scenarios.js`의 13곳에서 `checkLayout`으로 가로 스크롤과 입력·대화상자·안내 상자를 확인한다. 이전 기록: 작업 4.8: 미리보기 6폭 × ko·en 12장(4.1절). 작업 4.9(2026-10-22): 로그인 화면 `/login/`을 6폭 × 7장으로 찍어 42장을 얻었다(`target/dashboard-shots/<폭>/{input-ko,invalid-ko,busy-ko,failed-ko,request-failed-ko,input-en,invalid-en}.png`). 6폭 모두 `scrollWidth`와 `clientWidth`가 같았고(320 포함), CSP 위반은 0건이었다. 콘솔 오류는 가로챈 401·500 응답의 "Failed to load resource"뿐이었다. 시안과의 차이는 4.2절. 작업 4.9 재작업(4.3절)에서 같은 42장을 다시 찍었다. 6폭 모두 가로 스크롤 0건, CSP 위반 0건이었다. 4.9 기준선과는 42장 모두 바이트가 달랐다(화면을 구성 요소로 바꾼 결과). 작업 4.10(4.4절): 실제 서버에서 `/login/`(ko 입력 화면)과 `/`(ko 운영 화면)를 6폭으로 찍었다. 가로 스크롤 0건. 320 폭의 상단 막대 언어 선택은 밑줄과 가까워 사람 확인이 필요하다. 사람 비교는 4.12에서 한다. 작업 4.10 화면 상태 대조(4.6절): SCR-001 목업 21장과 1280·390·320 × ko·en × 상태 8종 48장을 대조했다. 6폭·언어 모두 가로 스크롤 0건, CSP 위반 0건. 수정 필요 6건이 나왔다(상단 막대 5건, `Unavailable` 줄바꿈 1건). 1280은 정상 상태와 빈 목록 문구만 판정했다. 작업 4.11(4.7절): SCR-002 상태 5종(SCR-001 목록, SCR-002 상세·대화상자·실패, SCR-003 로그인) × 6폭 × ko·en 60장을 찍었다. 가로 넘침 0, CSP 위반 0. 이 60장은 바이트·레이아웃 수정 전 촬영이다. 수정 뒤에는 ko 1280·390·320만 다시 찍었다. 시안 차이 4건은 4.7절과 개요 14절 차이 표에 있다. 사람 비교는 4.12에서 한다. 비교 페이지(4.22절, 2026-11-07, Q138): 시안 26개 프레임 × 6폭 156쌍을 찍었다. 1023px을 뺀 폭은 시안 내용 폭이 구현 뷰포트와 같고, 1023px은 시안 내용 폭이 1005px이다. 구현 쪽 가로 넘침·페이지 오류·응답 없는 API 요청 0건. 4.23~4.25절에서 같은 페이지를 다시 찍었다 | 검토 기록 4.1~4.7·4.22~4.27절, `target/mockup-compare-q138/`, `target/settings-compare/` |
+| 폭별 시각 대조 | 6개 폭에서 가로 스크롤 0건, 차이가 스펙·디자인 기준에 맞음 | 3.4 | 통과(작업 4.12·6.6 범위). 사용자가 4.22절 비교 페이지를 검토했고(Q138), 지적한 "조회 중" 표시 차이를 4.24·4.25절에서 고쳤다. 사용자는 2026-11-07에 수정 결과를 받아들였다(4.26절). 작업 6.6(4.27절, 2026-11-08): 설정 시안 62개 프레임을 1280·390px 구현 화면과 대조해 124쌍을 찍었다. 차이 12건 가운데 3건은 구현을 고쳤고, 8건은 화면 스펙이나 DESIGN.md를 따라 구현을 유지했으며, 1건은 예시 데이터 차이다. 구현 쪽 가로 넘침·CSP 위반·콘솔 오류는 0건이다. 사람의 비교 판정은 하지 않았다. `dashboard_browser`의 설정 시험 26개는 6개 폭 × ko·en으로 열리고, `settings-scenarios.js`의 13곳에서 `checkLayout`으로 가로 스크롤과 입력·대화상자·안내 상자를 확인한다. 이전 기록: 작업 4.8: 미리보기 6폭 × ko·en 12장(4.1절). 작업 4.9(2026-10-22): 로그인 화면 `/login/`을 6폭 × 7장으로 찍어 42장을 얻었다(`target/dashboard-shots/<폭>/{input-ko,invalid-ko,busy-ko,failed-ko,request-failed-ko,input-en,invalid-en}.png`). 6폭 모두 `scrollWidth`와 `clientWidth`가 같았고(320 포함), CSP 위반은 0건이었다. 콘솔 오류는 가로챈 401·500 응답의 "Failed to load resource"뿐이었다. 시안과의 차이는 4.2절. 작업 4.9 재작업(4.3절)에서 같은 42장을 다시 찍었다. 6폭 모두 가로 스크롤 0건, CSP 위반 0건이었다. 4.9 기준선과는 42장 모두 바이트가 달랐다(화면을 구성 요소로 바꾼 결과). 작업 4.10(4.4절): 실제 서버에서 `/login/`(ko 입력 화면)과 `/`(ko 운영 화면)를 6폭으로 찍었다. 가로 스크롤 0건. 320 폭의 상단 막대 언어 선택은 밑줄과 가까워 사람 확인이 필요하다. 사람 비교는 4.12에서 한다. 작업 4.10 화면 상태 대조(4.6절): SCR-001 목업 21장과 1280·390·320 × ko·en × 상태 8종 48장을 대조했다. 6폭·언어 모두 가로 스크롤 0건, CSP 위반 0건. 수정 필요 6건이 나왔다(상단 막대 5건, `Unavailable` 줄바꿈 1건). 1280은 정상 상태와 빈 목록 문구만 판정했다. 작업 4.11(4.7절): SCR-002 상태 5종(SCR-001 목록, SCR-002 상세·대화상자·실패, SCR-003 로그인) × 6폭 × ko·en 60장을 찍었다. 가로 넘침 0, CSP 위반 0. 이 60장은 바이트·레이아웃 수정 전 촬영이다. 수정 뒤에는 ko 1280·390·320만 다시 찍었다. 시안 차이 4건은 4.7절과 개요 14절 차이 표에 있다. 사람 비교는 4.12에서 한다. 비교 페이지(4.22절, 2026-11-07, Q138): 시안 26개 프레임 × 6폭 156쌍을 찍었다. 1023px을 뺀 폭은 시안 내용 폭이 구현 뷰포트와 같고, 1023px은 시안 내용 폭이 1005px이다. 구현 쪽 가로 넘침·페이지 오류·응답 없는 API 요청 0건. 4.23~4.25절에서 같은 페이지를 다시 찍었다 F-C(4.30절, 2026-11-08): 115프레임을 1280·390px에서 230쌍으로 대조하고 구현 결함 15건을 고쳤으며 가로 넘침·CSP 위반·페이지 오류 0건과 favicon.ico 404 콘솔 오류 1건을 기록했다(에이전트 대조, 사람의 검토 아님). | 검토 기록 4.1~4.7·4.22~4.27절, `target/mockup-compare-q138/`, `target/settings-compare/` |
 | 키보드 | 3.5의 4개 항목 통과 | 3.5 | 통과(작업 4.12 범위, 사용자 결정 2026-11-07(Q145)). 4.26절: Chrome·Edge·Firefox·WebKit에서 실제 키 입력으로 로그인 Tab 순서·포커스 링, Enter 실행, 대화상자 포커스 규칙을 확인했다. 사람의 키보드 확인은 Q145에 따라 하지 않았다. WebKit은 Tab이 링크를 건너뛰는 엔진 차이가 있다(4.21·4.26절). 이전 기록: 작업 4.11(4.7절, 작업 트리)에서 SCR-002의 Tab 순서, 포커스 링 두께(2px)·간격(2px), Enter로 취소 실행, 대화상자 Escape·취소 뒤 포커스 복귀(ko·en)를 합성 keydown으로 확인했다. Firefox·Edge 실제 키 입력은 4.14·4.17절 | 검토 기록 4.7·4.14·4.17·4.26절 |
 | 스크린 리더 | 3.6의 항목 통과 | 3.6 | 미실행. 작업 4.12 완료 조건에서 뺐다(사용자 결정 2026-11-07(Q137)) | 검토 기록과 스크린 리더 이름·버전 |
 | 다른 브라우저·실기기 | 3.7 통과 또는 미실행 사유 기록 | 3.7 | 통과(작업 4.12 범위). 4.26절(2026-11-07): Chrome 157.0.8103.38·Edge 156.0.4314.58·Firefox 159.0·WebKit 27.2 실서버 각 6회 통과. 최신 안정판보다 낮은 버전으로 판정했다(사용자 결정 2026-11-07(Q146)). Safari는 WebKit 대체 확인이다(Q135). 실기기 확인은 작업 4.12 완료 조건에서 뺐다(사용자 결정 2026-11-07(Q136)). 이전 기록: Firefox 158.0.1(WSL Ubuntu)에서 3.4 2단계와 3.5를 실행했다. 403회 시나리오 탐색 통과, 캡처 80장 가로 넘침·CSP 위반 0건. 요약 격자 결함을 고쳤고, Chromium과 같은 기존 모바일 표 배치 차이는 남았다(4.14절). Edge 155.0.4283.62의 캡처·키보드 기록은 4.11·4.12절. 표 수정 뒤 재확인(4.17절, 2026-10-23): Firefox 192회 통과, 정상 8장·Edge 정상 3장 가로 넘침·CSP 위반 0건. 두 브라우저에서 세션 ID 링크의 Tab 순서·포커스 링·Enter 상세 이동을 확인했다. 4.14절의 모바일 표 배치 차이는 수정 뒤 해소됐다. WebKit 대체 확인(4.21절, 2026-11-07, Q135): 시험 페이지 396회 중 CSP 검사 외 실패 0건, 실서버 6회 통과. 마우스 취소 뒤 포커스 복귀 결함을 고쳤다. 엔진 고유 CSP 보고와 Tab 링크 건너뜀은 4.21절에 나누어 적었다 | 4.14·4.17·4.21·4.26절과 `target/firefox-412/`, `target/firefox-417/`, `target/webkit-q135/`, `target/q412-close/` |
@@ -1502,6 +1502,234 @@ Playwright가 내려받은 Firefox 157은 설치된 최신 Firefox가 아니라�
 
 - 증거: `target/settings-engines/`에 `results.json`과 `shots/`의 PNG 48장(실행마다 보기·편집·확인 대화상자)을 두었다(FE-TBD-008). `SHA256SUMS`는 49개 항목을 담고, 다시 계산한 해시가 모두 일치했다. 이 목록 파일의 SHA-256은 `f62163408f4509c422a43b41a55d37d98610aca0afb117c715db32e705f0b9db`이다. 실행 도구 `runner.py`의 SHA-256은 `a160d8e6134c0d1903d5ad7a2a5806580ee1a5f8463edd3a8d2bb2057562d6e8`이다.
 - 미실행: 실제 Safari, 실제 모바일 기기, 스크린 리더, 사람의 시안 비교.
+
+### 4.30 로그 화면 구현과 시안 대조 (2026-11-08)
+
+- 기록자·대조자: 에이전트 FCVisualCompare. 구현자는 F-A1의 FADashboardImpl과 F-A2의 FA2DashboardFinish다. **에이전트 대조, 사람의 검토 아님**.
+- 대상: 기준 HEAD `f001385` 위 작업 트리. F-A에서 `logs.js`와 로그 시험·재현 사례를 더하고 API·모델·경로·셸의 세 항목 내비게이션, 전송 경로·전달 주소·로그 링크, CPY-149~189, v4 설정의 편집 순서·빈 목록 경고를 구현했다. 공통 CSS·아이콘과 생성 복사본, 관련 브라우저·실서버 시험·자산 등록·구조 문서도 바뀌었다. 이는 `local://fa2-result.md` 1절의 요약이며 F-C가 Rust를 고쳤다는 뜻은 아니다.
+- F-A 검증 인계: 자산 2개·코드 지도 4개·관리 API 62개·브라우저 74개·실서버 52개, 합계 194개 통과(실패 0개). fmt·clippy·토큰 생성/대조도 통과했다고 인계받았다. §6 후속 수정까지 포함한 최종 결과다. 이 수치는 F-A의 실행 기록이고, F-C에서 직접 관찰한 결과는 아래에 따로 적었다.
+
+#### 시안 대조
+
+결론: 채택 시안 `docs/design/mockups/dashboard.html`의 범위 내 115프레임을 1280·390px에서 구현과 대조해 **230쌍·양쪽 PNG 460장**을 모두 찍었다. 짝 없는 프레임과 캡처 실패는 없다. 차이는 같은 원인을 묶어 34건이다. 구현 결함 (a) 15건은 고쳤고, 스펙·DESIGN 우선 차이 (b) 17건과 예시 데이터 차이 (c) 2건은 유지했다. 수정한 쌍은 다시 찍었다. 구현 쪽 가로 넘침·CSP 위반·페이지 오류는 각각 0건이다. 콘솔 오류는 1건이며 아래에 출처와 이유를 적었다.
+
+- 범위: SCR-001 8개, SCR-002 13개, SCR-004·005 62개, SCR-006 32개. 세 항목 상단 막대도 이 화면들과 함께 확인했다. SCR-004·005·006의 만료 화면은 인계서의 명시 범위라 포함했다. 제외한 7개는 상단 막대가 없는 SCR-003 로그인 프레임 `scr003-input`, `scr003-input-en`, `scr003-invalid`, `scr003-busy`, `scr003-failed`, `scr003-request-failed`, `scr003-logout-unknown`이다. 전체 포함·제외 목록은 `scope.json`에 있다.
+- 환경: Windows, Chrome 157.0.8103.38, Asia/Seoul, 기기 배율 1, 화면 높이 900px. 시계는 `2026-10-16T05:03:25Z`로 고정했고 타이머는 동작한다. Pretendard 400·700 로드를 확인했다. 구현은 격리된 `cargo xtask dashboard-serve --port 34129`에서 실제 제품 ES 모듈·CSS와 계약 모양 가짜 API의 기존 `shot-*` 사례를 사용했다.
+- 폭: 시안의 바깥 `.sheet` 8px 여백과 프레임 1px 경계를 보존했다. 시안 뷰포트 1298·408px에서 `.app`(대화상자는 `.stage`)을 찍어 내용 폭을 정확히 1280·390px로 맞췄다. 최초 시안 캡처는 외곽 여백을 잃어 내용이 16px 넓었으므로 버리고 전부 다시 찍었다. 구현은 1280·390px 뷰포트의 전체 페이지를 찍었다. 캡처 도구로 제품 DOM·스타일을 바꾸지 않았다.
+- 상태 맞추기: SCR-002 실패는 이전 데이터가 있는 `shot-stale-failed`로 대응했다. 로그 입력 오류는 257자 오류 뒤 수준 세 개를 모두 해제했다. 로그 상세 펼침 수는 시안과 같게 맞췄다. 요청 거절은 처음 조회 성공 후 새로고침 400으로 재현해 이전 행을 유지했다. 만료 shot은 탐색 후크를 통해 실제 로그인 컴포넌트를 보이므로 캡처 URL은 시험 페이지에 남는다.
+- 판정: 화면 스펙의 동작·문구 → DESIGN.md → 시안 순이다(`docs/specs/dashboard.md:14`). 모든 프레임의 두 폭 이미지를 실제로 열어 나란히 보고, 대표 차이는 원래 크기·확대 그림으로 다시 봤다. 폭·CSP·콘솔·페이지 오류는 쌍마다 `results.json`에 기록했다. 원인이 같은 반복 차이는 아래 한 행으로 묶고 각 쌍에 차이 ID를 연결했다. 해당 영역이 없는 화면에는 그 행의 차이가 적용되지 않는다. `results.json`에는 각 관련 시안 프레임의 줄번호도 있다.
+
+| 차이·분류 | 시안과 구현의 차이 | 근거(파일:행) | 처리 |
+| --- | --- | --- | --- |
+| A01 (a) 공통 본문 여백과 카드 사이 간격 | 시안: 데스크톱 위아래 32px·가로 24px, 모바일 16px, 카드 사이 16px. 구현: app-main이 모든 폭에서 24px 여백·24px 간격을 썼다. 32/24·16px 여백과 16px 간격으로 고쳤다. | `docs/design/DESIGN.md:567-568`<br>`docs/design/mockups/dashboard.html:253,405`<br>`web/dashboard/app/app.css:9-18`<br>`web/dashboard/app/styles/components.css:854-857` | 고침 |
+| A02 (a) 표 카드 본문 여백 | 시안: 표 본문은 세로 spacing.sm·가로 spacing.md, 모바일 가로 spacing.lg. 구현: 일반 카드의 24px 본문 여백이었다. 실제 data-table이 든 카드만 표용 여백으로 고쳤다. 다른 카드 본문은 바꾸지 않았다. | `docs/design/DESIGN.md:567,715`<br>`docs/design/mockups/dashboard.html:267,412`<br>`web/dashboard/app/app.css:394-396`<br>`web/dashboard/app/styles/components.css:866-868` | 고침 |
+| A03 (a) 로그 보관 상태·수준 이름·세션 도움말 글꼴 | 시안: 보관 상태·시각·그룹 이름·도움말은 label 단계, 도움말은 muted. 구현: 정의되지 않은 label·muted 클래스 등으로 본문 글꼴이 남았다. log-meta에 label 토큰, legend에 text-field-label, 세션 도움말에 text-field-help를 썼다. | `docs/design/DESIGN.md:710,713`<br>`docs/design/mockups/dashboard.html:444,453`<br>`web/dashboard/app/app.css:378`<br>`web/dashboard/app/logs.js:675,854` | 고침 |
+| A04 (a) 로그 단독 안내 문장의 굵기와 색 | 시안: 본문 400·foreground. 구현: alert-title의 700·상태색이었다. 설정 화면에서 쓰던 단독 문장 규칙을 로그에도 적용했다. 짧은 잘못된 세션 제목은 700·destructive로 유지한다. | `docs/design/DESIGN.md:671,719`<br>`docs/design/mockups/dashboard.html:691,719,744,769`<br>`docs/how-to/verify-dashboard-frontend.md:1399`<br>`web/dashboard/app/app.css:195-201` | 고침 |
+| A05 (a) 로그 조회 실패 안내의 제목과 본문 | 시안: CPY-018 제목 뒤에 오류 설명 본문. 구현: 설명 문장만 제목으로 썼다. 실패 제목과 본문을 분리했다. | `docs/specs/dashboard.md:352,440-444,616-619`<br>`docs/design/mockups/dashboard.html:689`<br>`web/dashboard/app/logs.js:902` | 고침 |
+| A06 (a) 검색 길이 오류 아이콘 | 시안: 위험 아이콘과 CPY-165 문장. 구현: 오류 문장만 있었다. 기존 alert 아이콘을 더했다. | `docs/design/DESIGN.md:712`<br>`docs/design/mockups/dashboard.html:812`<br>`web/dashboard/app/logs.js:770` | 고침 |
+| A07 (a) 첫 조회 실패의 표 자리 | 시안: 열 머리글 아래 확인 불가 배지. 구현: 빈 칸이었다. 중립 CPY-035 배지로 고쳤다. | `docs/design/DESIGN.md:720`<br>`docs/design/mockups/dashboard.html:689`<br>`web/dashboard/app/logs.js:975` | 고침 |
+| A08 (a) 보관 꺼짐·잘못된 세션에서 자동 갱신 상태 | 시안: 비활성·꺼짐·일시정지 아이콘. 구현: 요청은 없으나 켜짐·새로고침 아이콘이었다. 실제 가능한 자동 갱신 상태를 표시하고 사용자의 켜짐 선택은 내부에 보존했다. | `docs/design/DESIGN.md:714`<br>`docs/specs/dashboard.md:351,354`<br>`web/dashboard/app/logs.js:608` | 고침 |
+| A09 (a) 잘못된 세션의 불필요한 조회 중 표시 | 시안: 조회 상태를 만들지 않고 잘못된 원문과 해제 행동을 표시. 구현: 요청하지 않는데 조회 중을 표시했다. 조회 메타 정보는 유효한 세션에서만 그린다. CPY-186 도움말은 시안·DESIGN대로 남긴다. | `docs/specs/dashboard.md:354,429`<br>`docs/design/DESIGN.md:713`<br>`docs/design/mockups/dashboard.html:690`<br>`web/dashboard/app/logs.js:577` | 고침 |
+| A10 (a) 조회 중 새로고침 버튼 문구 | 시안: 조회 중 / 갱신 중. 구현: 항상 새로고침이었다. 진행 상태에 맞는 채택 문구로 고쳤다. | `docs/specs/dashboard.md:348,356`<br>`docs/design/mockups/dashboard.html:653,789`<br>`web/dashboard/app/logs.js:638` | 고침 |
+| A11 (a) 보관 꺼짐의 필터 비활성 | 시안: 수준·사건·검색 입력과 검색 버튼 비활성. 구현: 필터가 활성 상태였다. max_entries=0이면 필터를 비활성화했다. 새로고침·설정 보기는 남긴다. | `docs/specs/dashboard.md:351`<br>`docs/design/mockups/dashboard.html:684`<br>`web/dashboard/app/logs.js:657` | 고침 |
+| A12 (a) 갱신 중 배지 위치 | 시안: 최근 로그 카드 제목 옆 배지. 구현: 마지막 성공 시각 옆이었다. 목록 제목으로 옮겼다. | `docs/specs/dashboard.md:356`<br>`docs/design/mockups/dashboard.html:783`<br>`web/dashboard/app/logs.js:923` | 고침 |
+| A13 (a) 로그 모바일 규칙의 우선순위 | 시안: 체크 대상 44px, 세션 칩 전체 폭, 상세 키·값 한 열, 시각 줄바꿈. 구현: 뒤에 읽는 app.css가 같은 우선순위의 모바일 규칙을 덮었다. 로그 모바일 선택자에 logs-main 범위를 붙여 실제로 적용되게 했다. | `docs/design/DESIGN.md:710,713,715,717`<br>`docs/design/mockups/dashboard.html:500-523`<br>`web/dashboard/app/styles/components.css:1077-1147` | 고침 |
+| A14 (a) 보관 꺼짐 안내의 설정 보기 링크 | 시안: 안내 오른쪽 outline 작은 링크와 설정 아이콘, 좁으면 줄바꿈. 구현: 아이콘 없는 링크가 항상 다음 줄이었다. 기존 설정 아이콘과 줄바꿈 가능한 안내 묶음을 썼다. | `docs/design/DESIGN.md:720`<br>`web/dashboard/app/logs.js:982`<br>`web/dashboard/app/app.css:398` | 고침 |
+| A15 (a) 비활성 입력의 표면·글씨·경계 | 시안: 비활성 입력은 muted 바탕·muted-foreground 글씨·border 경계. 구현: 입력은 disabled지만 일반 흰 바탕이었다. 공통 text-field-input:disabled 규칙으로 시안의 비활성 표면을 적용했다. | `docs/design/mockups/dashboard.html:466`<br>`docs/design/DESIGN.md:668-669,688`<br>`web/dashboard/app/styles/components.css:152-157` | 고침 |
+| B01 (b) 첫 성공 전 시각 문구 | 시안: 아직 없음 / None yet. 구현: 확인 불가 / Unavailable(CPY-035). 확정 판단대로 유지. | `docs/specs/dashboard.md:348,352,633`<br>`docs/design/DESIGN.md:811` | 스펙 우선 |
+| B02 (b) 모바일 상단 막대와 공통 조작 요소 모양 | 시안: 상단 막대 높이 100px와 시안 전용 브랜드·언어 간격. 구현: 공통 Navbar의 108px 높이·활성 밑줄·브랜드와 언어 배치. 세 항목과 활성 범위는 같음. | `docs/design/DESIGN.md:558,577,687,708`<br>`docs/how-to/verify-dashboard-frontend.md:1408` | 내용 높이에 맞추는 공통 셸 유지 |
+| B03 (b) 인증 만료 화면 | 시안: 보호 화면 안 작은 안내 또는 로그인 일부만 있는 프레임. 구현: 보호 데이터를 제거한 실제 로그인 컴포넌트 전체. 재현 페이지는 navigate 호출을 기록한 뒤 같은 로그인 컴포넌트를 마운트한다. 실제 URL 이동은 dashboard_live 증거와 구분. | `docs/specs/dashboard.md:318,328,353,690`<br>`web/dashboard/tests/logs-scenarios.js:419`<br>`web/dashboard/tests/settings-scenarios.js:1018-1022` | 스펙 우선 |
+| B04 (b) 설정 파일 상태 안내의 제목·톤·진단 | 시안: 제목 없는 안내와 일부 warning/neutral, 키가 안내 밖. 구현: 상태 제목·본문·키·번역한 진단을 안내 안에 배치. invalid/unreadable은 destructive. | `docs/design/DESIGN.md:693`<br>`docs/specs/dashboard.md:198,414-417`<br>`docs/how-to/verify-dashboard-frontend.md:1402` | 스펙·DESIGN 우선 |
+| B05 (b) 설정 확인 대화상자 값·순서·스크롤 | 시안: 이전→새 값 한 줄과 시안의 정적 긴 대화상자. 구현: 이전·새 값, 목록 추가·삭제를 세로로 쌓고 계약/입력 순서를 따른다. 정수는 body-numeric. 실제 Dialog는 뷰포트 안에서 스크롤. | `docs/design/DESIGN.md:690,692,694,723`<br>`docs/specs/dashboard.md:249`<br>`docs/design/mockups/dashboard.html:494`<br>`docs/how-to/verify-dashboard-frontend.md:1403-1404` | DESIGN 우선 |
+| B06 (b) 설정 카드 접기 | 시안: 일부 상태에서 나머지 테이블/구역을 details로 접음. 구현: 모든 테이블·다섯 구역 Card를 펼쳐 보여 높이가 더 길다. | `docs/design/DESIGN.md:695`<br>`docs/specs/dashboard.md:200,237`<br>`docs/how-to/verify-dashboard-frontend.md:1407` | DESIGN 우선 |
+| B07 (b) 설정 모바일 페이지 행동 | 시안: 버튼을 나란히 둠. 구현: 전체 폭으로 세로로 쌓음. | `docs/design/DESIGN.md:695`<br>`docs/how-to/verify-dashboard-frontend.md:1406` | DESIGN 우선 |
+| B08 (b) 설정 서버 오류의 원문 키 토큰 | 시안: 줄 오류 아래 relay.tcp_viewer.allow[2] 원문 추가. 구현: 알려진 코드의 번역한 줄 오류만 표시. | `docs/specs/dashboard.md:408-417,730-731`<br>`docs/how-to/verify-dashboard-frontend.md:1405` | 스펙 우선 |
+| B09 (b) 설정 보기로 돌아가는 행동·적용 안내 | 시안: 일부 상태에 취소·설정 보기·적용 시점 안내가 생략됨. 구현: 취소/설정 보기 행동과 CPY-189 적용 안내를 스펙 상태에 맞게 유지. | `docs/specs/dashboard.md:78,211,251,414-420,524`<br>`docs/design/DESIGN.md:723`<br>`docs/how-to/verify-dashboard-frontend.md:1401` | 스펙 우선 |
+| B10 (b) 변경 없는 설정 확인 | 시안: 폼 위 CPY-106 안내. 구현: 실제 확인 대화상자에서 CPY-106 표시. 적용하면 PATCH 없이 설정 보기로 복귀. | `docs/specs/dashboard.md:523,720`<br>`web/dashboard/tests/settings-scenarios.js:937-947` | 스펙의 확인·적용 흐름 유지 |
+| B11 (b) SCR-001·002 조회 중 안내 위치와 배지 | 시안: 전체 폭 진행 안내, SCR-002 첫 로딩 설명 문장. 구현: 카드 머리와 각 값의 공통 정보 배지. CPY에 없는 설명은 넣지 않음. | `docs/specs/dashboard.md:312,316`<br>`docs/design/DESIGN.md:560`<br>`docs/how-to/verify-dashboard-frontend.md:1284-1287,1307,1320` | 기존 사용자 수락 범위와 공통 배지 유지 |
+| B12 (b) SCR-001 개별 조회 실패 안내 | 시안: 상단 전체 폭 안내 하나. 구현: 독립 요청의 실패·이전 데이터를 각 카드에서 구분. | `docs/specs/dashboard.md:119,121,317,363-365`<br>`docs/how-to/verify-dashboard-frontend.md:1284` | 목록별 조회 상태 규칙 유지 |
+| B13 (b) SCR-002 대상 없음·잘못된 ID·종료 결과 행동/안내 | 시안: 안내·복구 버튼의 일부 배치·톤이 다름. 구현: 대상 없음은 종료 비활성, 잘못된 ID는 데이터·종료 행동 없음, 종료 결과는 상태 재조회와 구분한 안내. 기존 수락된 공통 조립을 유지. | `docs/specs/dashboard.md:319-322,375-380`<br>`docs/how-to/verify-dashboard-frontend.md:1284,1320` | 스펙 행동과 기존 수락 범위 유지 |
+| B14 (b) 로그 다운로드 수집 중 필터 비활성 | 시안: 입력·필터가 활성. 구현: 수집 시작 필터를 고정하고 중첩 요청을 막으려고 입력·필터·수동 조회를 잠시 비활성화. 언어·이동·상세는 유지. | `docs/specs/dashboard.md:434-436`<br>`web/dashboard/app/logs.js:657` | 스펙의 고정 필터·요청 비중첩 우선 |
+| B15 (b) 실제 모달의 뷰포트 위치와 배경 | 시안: 시안 stage 안 정적 overlay, 설정 대화상자는 일부러 최대 높이를 풀어 모두 전시. 구현: 브라우저의 실제 Dialog를 뷰포트 가운데에 띄우며 배경은 현재 뷰포트에 적용. 긴 설정 내용은 대화상자 안에서 스크롤한다. 첫 초점이 취소 버튼에 놓여 좁은 폭 캡처에는 스크롤된 아래 내용이 보인다. | `docs/design/DESIGN.md:612,632,694`<br>`docs/design/mockups/dashboard.html:494`<br>`web/dashboard/app/components/dialog.js:52-60,71-75`<br>`docs/how-to/verify-dashboard-frontend.md:1403` | 모달·스크롤 기준 우선 |
+| B16 (b) 공통 배지의 세로 안쪽 여백 | 시안: spacing.xs / 2(2px). 구현: spacing.xs(4px). 그만큼 배지·행이 높다. DESIGN이 지정한 공통 Badge를 유지한다. | `docs/design/DESIGN.md:670`<br>`docs/design/mockups/dashboard.html:307`<br>`web/dashboard/app/styles/components.css:180-193` | DESIGN 우선 |
+| B17 (b) 세션 정보의 키·값 행 구분선과 간격 | 시안: 정적 kv 격자의 이름·값, 행 사이 여백. 구현: 기존 fact 키·값 행의 아래 구분선·안쪽 여백·모바일 한 열을 재사용. 데이터와 행동은 그대로다. | `docs/design/DESIGN.md:563,567,722`<br>`docs/design/mockups/dashboard.html:366-368`<br>`web/dashboard/app/styles/components.css:847-857`<br>`docs/how-to/verify-dashboard-frontend.md:1284,1307` | 기존 공통 컴포넌트·사용자 수락 범위 유지 |
+| C01 (c) API 예시 데이터와 그로 인한 줄바꿈·높이 | 시안: 시안의 고정된 로그 15건/보관 412·1000, 긴 세션 ID·IPv6·경로·revision, 날짜·시간·진단 예시. 구현: 계약 모양 shot fixture의 로그 4건·보관 수, sess_1·주소·전송량·숫자·경로·revision·진단 값. 데이터 길이와 개수에 따른 행수·높이도 달라짐. 시각의 형식·시간대는 같음. | `docs/specs/dashboard.md:277,283,288-297,305`<br>`web/dashboard/tests/logs-scenarios.js:15,33-43`<br>`web/dashboard/tests/session-scenarios.js:56`<br>`web/dashboard/tests/settings-scenarios.js:121` | 예시 데이터 차이, 제품 유지 |
+| C02 (c) 검색 예시·필터 빈 결과·펼친 entry 내용 | 시안: 빈 필터 결과의 검색어, a 반복 검색 길이 오류, 예시 줄 오류와 세션/배열 상세. 구현: 빈 버퍼 fixture, 257개 이모지 검색어, fixture가 만든 줄 오류·다른 사건 상세. 수준 전부 해제와 상세 펼침 수는 캡처에서 같은 상태로 맞춤. | `docs/specs/dashboard.md:283,350,428`<br>`web/dashboard/tests/logs-scenarios.js:417`<br>`target/logs-compare/capture.py:47-54`<br>`web/dashboard/tests/settings-scenarios.js:1032-1043` | 예시 입력·entry 차이, 제품 유지 |
+
+#### F-C 수정
+
+- `web/dashboard/app/logs.js`: 표제·본문을 나눈 실패 안내, 검색 오류 아이콘, 첫 실패의 확인 불가 배지, 실제 가능한 자동 갱신 상태, 초기 조회/갱신 버튼 문구, 보관 꺼짐 입력 잠금, 유효하지 않은 세션의 가짜 조회 중 표시 제거, 목록 제목 옆 갱신 배지, 설정 링크 아이콘과 공통 도움말 클래스를 고쳤다. 자동 갱신의 사용자 선택 값은 내부에 보존한다.
+- `web/dashboard/app/app.css`: 공통 본문 여백·카드 사이 간격, 표 카드 안쪽 여백, 로그 메타 글꼴, 단독 안내의 본문 굵기·색, 검색 오류와 보관 꺼짐 안내 배치를 고쳤다. 짧은 잘못된 세션 제목은 굵기 700과 destructive 색을 유지한다.
+- `web/dashboard/app/styles/components.css`: 비활성 입력의 바탕·글씨·테두리, 모바일 본문·표 여백, 로그 체크박스 높이 44px, 칩·시각 줄바꿈과 펼친 상세의 한 열 배치를 고쳤다. 뒤에서 읽는 `app.css`에 밀리지 않게 기존 모바일 중단점 안의 선택자만 구체화했다. 새 중단점·토큰은 없다.
+- `web/dashboard/login/styles/components.css`: 공통 원본에서 `cargo xtask tokens`로 다시 만든 복사본이다.
+- `web/dashboard/tests/logs-scenarios.js`: 위 상태·아이콘·글꼴·비활성 입력·44px 높이·모바일 상세 열 수를 회귀 검사에 더하고 요청 거절 shot을 처음 성공 뒤 실패로 맞췄다. 가짜 API 시험의 `partial` 표식은 그대로다. Rust 시험 수는 늘지 않았다.
+- 문서는 이 절과 4절의 '폭별 시각 대조' 실제 결과 칸 끝의 한 문장만 더했다. 스펙·계약·DESIGN.md·시안·Rust 제품 코드는 고치지 않았고 커밋하지 않았다.
+
+#### 재검증
+
+모든 Cargo 명령의 접두사는 `AWS_LC_SYS_PREBUILT_NASM=1 "$USERPROFILE/.cargo/bin/cargo.exe"`다. 제품 수정이 끝난 뒤 순서대로 실행했다. 아래는 F-C가 출력을 직접 관찰한 최종 실행이다.
+
+| 명령 | 최종 관찰 결과 | 증거 |
+| --- | --- | --- |
+| `cargo xtask tokens` | 생성 완료, 종료 코드 0 | `verify-1.txt` |
+| `cargo xtask tokens --check` | `tokens --check: 통과`, 종료 코드 0 | `verify-2.txt` |
+| `cargo test --test dashboard_assets --test code_map` | 자산 2개·코드 지도 4개 통과, 실패 0개, 종료 코드 0 | `verify-3.txt` |
+| `cargo test -p vnc-relay-adapters --test management` | 62개 통과·실패 0개, 시험 1.77초, 종료 코드 0 | `verify-4.txt` |
+| `cargo test --test dashboard_browser` | 74개 통과·실패 0개, 시험 492.12초, 종료 코드 0. timeout=3600 | `verify-5.txt` |
+| `cargo test --test dashboard_live` | 52개 통과·실패 0개, 시험 669.62초, 종료 코드 0. 실제 300초 유휴 만료 포함, timeout=3600 | `verify-6.txt` |
+
+합계 194개 통과·실패 0개다. 수정 도중 시작했던 브라우저 실행 3회는 추가 수정을 위해 중단했으며 위 합계에 넣지 않았다. 가짜 API 부분 시험이 실서버 전체 로그 시나리오 통과를 뜻하지는 않는다.
+
+- 비교 페이지 자체도 Chrome에서 1280·390px로 열었다. 230쌍이 있고 가로 넘침·페이지 오류는 0건이다. SCR-006·390px·en 필터 16쌍, 추가 `normal` 검색 1쌍, 초기화 뒤 230쌍을 확인했다. Tab은 화면→폭 필터로 이동했다. `report-check.json`과 `report-1280.png`·`report-390.png`에 결과를 남겼다.
+- 콘솔 예외: `scr001-loading` 1280px의 `http://127.0.0.1:34129/favicon.ico` 요청이 404여서 Chrome이 `Failed to load resource` 한 건을 남겼다. 오류 위치와 응답을 `results.json`의 `consoleExceptions`와 해당 쌍에 보존했다. 페이지 스크립트 오류나 CSP 위반이 아니며 다른 쌍은 콘솔 오류 0건이다. 아이콘 추가·오류 가로채기로 감추지 않았다.
+
+#### 증거와 미실행
+
+- 증거: `target/logs-compare/`의 `index.html`(나란히 보기·화면/폭/언어/이름 필터), `results.json`(차이·근거 줄번호·230쌍별 측정값·재현 URL), `mock/`·`impl/` 각각 230장과 `before/` 수정 전 구현 230장, `scope.json`·`frames.json`·`source-hashes.json`·`captures.json`·`verification.json`, `verify-1.txt`~`verify-6.txt`, 재현 도구 `capture.py`·`build_results.py`·`check_report.py`·`verify.py`를 남겼다(FE-TBD-008).
+- `SHA256SUMS.txt`는 자신을 제외한 711개 파일, 123,958,448바이트를 담는다. 이 목록 파일의 SHA-256은 `0ac688f0c41af94b5f44f18ae0e36cc01a5c62a1a5f7ae26ce456705ad2e4b41`이다. 운영 서버의 로그·세션이 아니라 루프백 재현의 예시 화면이다.
+- 정리: 비교용 서버(PID 57656, 포트 34129)를 종료했다. 운영 릴레이 PID 58072와 포트 5500·5901·443·18080·18081은 건드리지 않았다.
+- 미실행: Rust를 바꾸지 않았으므로 F-C의 `cargo fmt --all -- --check`·`cargo clippy --workspace --all-targets -- -D warnings`는 조건 밖이다. WSL 게이트, Edge·Firefox·WebKit·실제 Safari, 실제 모바일 기기·스크린 리더, 사람의 시안 검토는 이 대조에서 실행하지 않았다. F-B의 새 실서버 로그 전체 증거 확장도 이 이미지 대조로 대신하지 않는다. 기존 52개 실서버 시험 통과는 그 범위를 넓혔다는 뜻이 아니다.
+
+### 4.31 로그 화면 실서버 시험 (DASH-054~063, 2026-11-08)
+
+결론: `tests/dashboard_live.rs`에 DASH-054~063 실행기 10개와 전체 행 표식을 더했다. F-A·F-C가 인계한 `f001385` 기준 미커밋 작업 트리에 F-B1의 시험·공통 도우미·문서 변경을 더한 범위다. 최종 전체 `dashboard_live`는 Windows·WSL에서 각각 62개가 통과했다. 두 실행 모두 실제 300초 유휴 만료를 포함하며 끝까지 관찰했다. 커밋하지 않았다.
+
+- 기록자·시험 작성자: 에이전트 FB1LiveLogs. 사람의 검토가 아니다.
+- 기준: [화면 스펙 SCR-006·DASH-054~063](../specs/dashboard.md#7-수용-테스트), [관리 API 1.8·1.15절](../contracts/management-api-v1.md), [운영 로그 사건·수준](../contracts/ops-info-v2.md).
+- 제품 JS·CSS와 Rust 제품 코드는 바꾸지 않았다. 스펙·계약·DESIGN.md·시안도 바꾸지 않았다. 시험은 임의 루프백 포트만 썼다. 기존 운영 릴레이의 PID·포트는 건드리지 않았다.
+
+#### 구성
+
+- 실행 함수와 `/// spec: dashboard.md:DASH-054`~`DASH-063` 표식은 최상위 시험 파일에만 둔다. 가짜 API 시험의 `partial` 표식은 유지한다.
+- `tests/dashboard_live/logs.rs`: 실제 사건 만들기, GET 대조, 수준·사건·검색·증분·이전 페이지·세션 링크. `logs_download.rs`: 실제 브라우저 다운로드 파일. `logs_states.rs`: 보관 0·실패·복구·실제 유휴 만료. `logs_accessibility.rs`: 1280·390px × ko·en의 실제 키 입력과 상태 보존.
+- `transports.rs`는 TCP·WS·WSS 클라이언트를 만든다. 활성 목록·상세의 대조 함수는 기존 `overview.rs`·`detail.rs`에 더했다. Mode II의 양쪽 9조합과 전달 주소 없음·Viewer만·Server만·양쪽을 실제 중계로 확인한다. Mode I 대상은 TCP다.
+- 기존 `Server`·`Pair`·`Browser`·`Proxy`를 재사용한다. 새 crate·외부 WebDriver·제품 시험 훅은 없다. `recent_logs.max_entries`는 시험별로 0·8·1000·2000·10000을 쓴다. P=1초, 조회 제한=5초, Si=300초다. 변경 감지 주기는 계약 하한인 5초다.
+- 실제 잘못된 Repeater 초기 요청으로 거절 사건을 만든다. 실제 세션의 바이트 중계·종료로 숫자 값을 만든다. 배열·중첩 객체는 실제 `server_ready.listeners`다. `error`는 설정 파일을 잠시 디렉터리로 바꿔 실제 주기 읽기를 실패시킨 `reload_watch_failed`다. 사건을 확인한 뒤 원래 파일을 복구한다.
+- 다운로드는 CDP `Browser.setDownloadBehavior`로 임시 폴더를 정한다. `.jsonl` 파일뿐 아니라 `Browser.downloadProgress(state=completed)`도 기다린 뒤 읽는다. 브라우저가 파일을 마무리하기 전에 지우는 경합을 피한다.
+
+#### 시험 쪽 주입과 출처
+
+일반 데이터는 실제 실행파일과 실제 GET에서 얻는다. 프록시는 정상 본문을 만들거나 바꾸지 않는다. 아래 주입은 `injected_count`로 확인한다. 주입한 400·405·500을 제품 서버에서 발생한 오류의 증거로 세지 않는다.
+
+| 행 | 시험 쪽 주입 |
+| --- | --- |
+| DASH-054·055 | 실제 첫 응답·이전 필터 응답 보류 |
+| DASH-057 | 실제 증분 응답 1.8초 지연. P=1초보다 길다 |
+| DASH-060 | 실제 다운로드 첫·둘째 페이지 보류, 다음 페이지의 계약 모양 500. 401은 실제 쿠키 제거 뒤 서버 응답 |
+| DASH-061 | 첫·갱신 GET의 계약 모양 400·405·500, 실제 응답 6초 지연으로 5초 제한 초과. 유휴 만료 401은 주입하지 않음 |
+| DASH-063 | 로딩·갱신·수집 중을 위한 실제 응답 보류, 조회·다운로드 오류 응답. 만료 화면은 실제 쿠키 제거 뒤 401 |
+
+#### 행별 확인
+
+| 행 | 실서버 확인 요점 |
+| --- | --- |
+| DASH-028 | 기존 세 항목 이동·활성 항목·보호 직접 진입을 검토했다. 미인증 로그 URL에서 로그 행·상세·검색 입력도 없음을 보강했다 |
+| DASH-029 | v4 새 목록 10개와 재로드 33개를 확인한다. `recent_logs.max_entries`가 `recent_closed.max_entries` 다음이고 재시작 대상임을 확인한다. 기존 전체 값·순서·파일 차이·TLS 내용 비노출 대조는 유지한다 |
+| DASH-035 | 꺼진 역할·Mode I 제외와 다섯 구역을 유지한다. 실제 `trusted_proxies` 입력 두 줄이 확인 대화상자에 나타나고 PATCH는 없음을 더 확인한다 |
+| DASH-037 | 실제 비어 있지 않은 `trusted_proxies`·`allowed_origins`를 비운다. allow의 CPY-105, 프록시의 CPY-183, Origin의 CPY-184를 키별로 구분한다. 프록시 경고에 모든 새 접속 거절 문구가 없는지 확인한다 |
+| DASH-054 | 첫 로딩의 미확인 수·시각, 보관 수·최대, 최신 순, 현지 시각·시간대, info/warn/error, 사건·요약과 펼친 entry 전체 필드. 실제 GET과 항목이 같다 |
+| DASH-055 | 수준 하나·여러 개·전부와 사건의 AND 조합, 전체 해제 때 요청 0개, 이전 필터 응답 무시. 실제 GET 결과와 같다 |
+| DASH-056 | 1·256·257 유니코드 스칼라, Enter·버튼, 입력 중 요청 없음, 빈 값의 q 제거. ASCII 대소문자 무시·실제 숫자 517·배열 속 중첩 값·필드 이름 제외를 실제 GET과 대조한다 |
+| DASH-057 | P와 `X-Relay-Poll: 1`, after 여러 페이지의 순차 수집, P보다 긴 응답의 비중첩, 실제 증분 전체와 표시 순서·중복 대조. 일시정지·수동 요청·재개, 필터 불일치의 누락 오표시 없음, 작은 보관의 실제 제거 안내 |
+| DASH-058 | 최신 200건 뒤 before 여러 페이지. 커서는 가장 오래된 표시 seq이고 after는 없다. 전체 값·순서·중복과 has_more=false의 더 보기 제거를 확인한다 |
+| DASH-059 | 실제 상세의 로그 링크와 세션·연결 사건, 잘못된 ID의 요청 없음·CPY-067, 세션만 해제. 시작 사건이 실제 보관에서 제거된 경우의 제한 안내 |
+| DASH-060 | 실제 일치 결과 1005건 이상을 1000건 단위로 수집. entry 하나당 한 줄·래퍼 없음·UTF-8·LF·seq 오름차순·UTC 파일명. 첫 페이지 뒤 새 사건 제외, 오류·이탈·실제 401의 완료 파일 없음 |
+| DASH-061 | max_entries=0의 빈 보관·키·재시작 안내, 빈 필터 결과, 첫·갱신 실패의 구분과 이전 값·시각 유지·복구. 400·405·500·시간 초과. 실제 300초 전후의 자동 조회·보호 DOM과 첫 401·로그 제거·로그인·폴링 중단 |
+| DASH-062 | Mode I TCP 대상, Mode II TCP·WS·WSS 양쪽 9조합과 추가 프록시 3조합. 실제 바이트가 양방향으로 흐른다. 목록의 Viewer → 대상, 상세의 전송 경로·소켓 주소·있는 전달 주소만 표시를 실제 목록·상세 GET과 대조한다 |
+| DASH-063 | 두 폭 × 두 언어에서 Tab·Shift+Tab·Enter·Space·Home·End로 필터·검색·갱신·더 보기·펼침·다운로드·해제·탐색·언어를 조작한다. 긴 Origin·중첩 entry, 로딩·정상·빈 결과·꺼짐·실패·갱신·잘못된 ID·누락·일시정지·세션·수집·다운로드 실패·입력 오류·요청 거절·401 상태를 확인한다. 라벨·도움말·목록 제목·aria 연결, 목록의 live region 없음, 실제 자동 갱신 뒤 초점·초안·선택 범위·펼침 유지와 언어 변경 뒤 상태·문서 언어를 확인한다 |
+
+#### 최종 결과
+
+Windows Cargo 접두사는 `AWS_LC_SYS_PREBUILT_NASM=1 "$USERPROFILE/.cargo/bin/cargo.exe"`다. 전체 live 명령은 두 OS 모두 bash timeout=3600으로 실행했다. 표의 시간은 Cargo가 보고한 시험 시간이며, 도구의 전체 경과 시간과 구분한다.
+
+| 환경 | 명령·방법 | 통과·실패·시간 |
+| --- | --- | --- |
+| Windows 10.0.26200 x64, Chrome 157.0.8103.38 | 새 `dashboard_054`~`dashboard_063`을 이름으로 하나씩 실행 | 각각 1개 통과. 최종 전체 실행에서도 모두 통과 |
+| Windows, 같은 Chrome | `dashboard_028`·`029`·`035`·`037` 개별 실행 | 각각 1개 통과, 최종 5.07·2.88·3.39·3.23초 |
+| Windows, 같은 Chrome | `cargo test --test dashboard_live` | **62 통과·0 실패·0 무시, 1115.25초**, 종료 0 |
+| WSL Ubuntu, UID 1000, Google Chrome 156.0.8078.47 | `wsl -d Ubuntu -- bash -c "cd /mnt/d/Workspace/vnc-relay && export CARGO_TARGET_DIR=\$HOME/vnc-relay-target && . \$HOME/.cargo/env && cargo test --test dashboard_live"` | **62 통과·0 실패·0 무시, 1055.43초**, 종료 0. 브라우저 없음으로 건너뛴 시험 없음 |
+| Windows | `cargo fmt --all -- --check` | 통과, 종료 0 |
+| Windows | `cargo clippy --workspace --all-targets -- -D warnings` | 통과, 경고 0, 종료 0 |
+| Windows, 같은 Chrome | `cargo test --test dashboard_browser` | **74 통과·0 실패, 483.72초**, 종료 0 |
+| Windows | `cargo test -p vnc-relay-adapters --test management` | **62 통과·0 실패, 1.81초**, 종료 0 |
+| Windows | `cargo xtask tokens --check` | `tokens --check: 통과`, 종료 0 |
+
+제품 JS는 바꾸지 않았지만 공통 CDP 도우미를 바꿔 브라우저 회귀 시험도 실행했다. 관리·토큰 명령도 추가로 실행했다. 위 최종 결과에는 실패한 개발 중 실행과 개별 재실행을 더하지 않았다.
+
+#### 시험 결함과 한계
+
+- 처음에는 변경 감지 주기를 1초로 넣어 설정 검증이 거절했다. 계약 하한인 5초로 고쳤다.
+- 실제 Enter 검색이 요청을 보내지 않았다. 공통 CDP 도우미가 Enter의 문자 값 `\r`를 보내지 않아 폼 기본 동작을 실행하지 못했다. 도우미를 고친 뒤 실제 Enter 검색과 257자 오류를 확인했다. 제품 JS를 바꾼 것이 아니다.
+- 첫 다운로드 시험은 최종 파일 이름이 생기자마자 파일을 지워 브라우저의 파일 마무리와 경합했다. CDP 완료 사건까지 기다리도록 고쳤다. 전송 시험은 활성 세션에 없는 `relay_id`를 찾던 조건, 잘못된 DOM 선택자, WS 메시지 하나를 스트림 전체로 보던 가정을 고쳤다. Origin 경고 기대값도 채택된 CPY 원문으로 고쳤다.
+- 첫 Windows 전체는 62개 통과·1111.42초였다. 첫 WSL 전체는 61개 통과·1개 실패·1074.82초였다. DASH-061의 CDP I/O가 `WouldBlock`(`os error 11`, `Resource temporarily unavailable`)로 실패했다. **[INFERENCE]** 300초 동안 CDP를 읽지 않아 브라우저 사건 전달이 밀린 것으로 본다. 기존 DASH-008처럼 500ms마다 보호 DOM을 읽어 사건을 배출하고 297~299초의 실제 표시도 확인하도록 바꿨다. 이 DOM 읽기는 관리 요청이나 사용자 활동이 아니다. 수정 뒤 WSL DASH-061 단독은 1개 통과·320.12초였고, 이어 위 두 OS 전체를 다시 실행해 모두 통과했다. 최초 실패의 OS 내부 원인을 별도 추적한 것은 아니다.
+- 실행 중인 정상 서버는 시작 사건을 보관한다. 보관을 켠 채 비어 있는 버퍼를 인위적으로 만들지 않았다. 빈 보관은 max_entries=0의 실제 null 경계로, 빈 검색 결과는 보관을 켠 실제 필터로 확인했다. 프로세스 재시작 뒤 같은 관리 쿠키로 성공 응답을 받는 상황도 만들지 않았다. 세션이 사라져 401이 되는 실제 인증 규칙과 다르기 때문이다.
+- 제품 결함이나 Rust 제품 결함으로 확정한 항목은 없다. 새 토큰·컴포넌트도 없다. 코드 지도와 대시보드 구조 문서에 시험의 파일 책임·데이터 출처·다운로드 완료 대기를 반영했다.
+- 필수 명령의 남은 실패·미실행은 없다. Edge·Firefox·WebKit·실제 Safari, 사람의 시안·키보드 판정, 실제 모바일 기기·스크린 리더는 이 F-B1 범위에서 실행하지 않았다. 이 시험을 그 범위의 증거로 해석하지 않는다.
+
+### 4.32 로그 화면 네 엔진 확인 (2026-11-08)
+
+결론: 실서버의 최근 로그 흐름과 바뀐 SCR-001·002·004·005를 Chrome·Edge·Firefox·WebKit으로 1280·390px × ko·en **16회 실행해 모두 통과**했다. WebKit은 사용자 결정 2026-11-07(Q135)에 따른 Safari 대체 확인이다. 제품 결함은 발견하지 않았다. WebKit의 네이티브 `<select>`·캡처 도구 CSP 보고와 종료 확인용 GET의 예상된 404는 아래에 따로 기록했다.
+
+- 기록자·실행자: 에이전트 FB2FourEngines. 사람의 검토가 아니다.
+- 대상: 기준 HEAD `f001385` 위 F-A·F-C·F-B1 미커밋 작업 트리. 실행 서버가 보낸 `app/logs.js`, `app/app.css`, `app/styles/components.css`를 실행마다 현재 소스와 바이트 단위로 비교했다. 16회 모두 같았다. 실행파일·전체 대시보드 소스 해시는 `provenance.json`에 있다.
+- 이 절의 제목 날짜는 인계서의 지정 날짜다. 실제 실행 시각은 각 결과의 `started`·`finished`에 남겼다. 최종 실행은 한국 시각 2026-11-09에 했다.
+
+#### 환경과 16회 결과
+
+| 엔진 | 사용 버전·실행 방법 | 1280 ko | 1280 en | 390 ko | 390 en | 최신 안정판 비교 |
+| --- | --- | --- | --- | --- | --- | --- |
+| Chrome | Windows 설치본 157.0.8103.38, Playwright `channel=chrome` | 통과 | 통과 | 통과 | 통과 | 158.0.8127.18 |
+| Edge | Windows 설치본 156.0.4314.58, Playwright `channel=msedge` | 통과 | 통과 | 통과 | 통과 | 157.0.4341.42 |
+| Firefox | WSL Ubuntu snap 설치본 159.0, Bun·WebDriver BiDi | 통과 | 통과 | 통과 | 통과 | 159.0.1 |
+| WebKit | Windows 27.2, Playwright 빌드 v2370 | 통과 | 통과 | 통과 | 통과 | Q135의 Safari 대체 빌드. 실제 Safari 버전과 같은 것으로 보지 않는다 |
+
+- Windows 10.0.26200 x64, WSL Ubuntu 24.04.4 LTS(UID 1000), 높이 900px, Asia/Seoul, 헤드리스다. Windows 최종 드라이버는 Node 26.7.0과 Playwright Node 패키지 `1.64.0-beta-1791568591000`이다. WSL Bun은 1.3.11이다. 계정 생성에는 Python 3.14.6과 기존 argon2-cffi를 썼다.
+- 최신 안정판은 2026-11-09에 [Chrome versionhistory API](https://versionhistory.googleapis.com/v1/chrome/platforms/win/channels/stable/versions?pageSize=1), [Edge 업데이트 API](https://edgeupdates.microsoft.com/api/products?view=enterprise)의 Windows x64 Stable, [Mozilla 제품 정보](https://product-details.mozilla.org/1.0/firefox_versions.json)를 조회했다. 사용 버전은 최신 안정판보다 낮다. 4.26절의 Q146 선례처럼 설치된 버전을 명시했으며 브라우저 업데이트는 하지 않았다.
+- 서버: Windows 세 엔진은 `127.0.0.1:29701`, Firefox는 WSL 안의 `127.0.0.1:29801` 관리 HTTP에 접속했다. 두 서버 모두 debug 실행파일 복사본이다. 별도 상태·TCP Viewer·TCP Server·공유 WS 리스너를 열었다. WS의 `/relay`와 `/relay/server`, Mode I·II, 루프백 `trusted_proxies`, `recent_logs.max_entries=10000`, 설정 편집을 켰다. Argon2id 계정의 매개변수는 `m=19456,t=2,p=1`이다.
+- 실행마다 원시 TCP Viewer와 WS Server를 짝지은 활성 Mode II 세션을 만들었다. 양방향으로 11바이트씩 보냈다. Server 전달 주소는 `192.0.2.20`이다. TCP Server·WS Viewer 대기 연결도 각각 만들었다. 신뢰 프록시의 XFF 누락 요청을 1050번 보내 실제 `connection_rejected(reason=forwarded_for_invalid)` 사건을 만들었다. 정상 응답·로그 값을 가짜 API로 바꾸지 않았다.
+
+#### 흐름과 결과
+
+12단계의 15개 관찰점에서 필수 요소 중심점을 `elementFromPoint`로 검사했다. 최종 **240개 관찰점·720개 요소 검사에서 가림·화면 밖·크기 0은 0건**이다. 모든 관찰점의 `scrollWidth - clientWidth`는 0이다. 각 관찰점에 CSP·콘솔·페이지 오류와 요청 URL·poll 표시를 기록했다. 같은 문서의 누적 CSP를 중복 합산하지 않았으며 로그인·로그아웃 문서도 빠뜨리지 않았다.
+
+| 단계 | 실제 조작과 확인 | 최종 결과 |
+| --- | --- | --- |
+| 1 | 계정·비밀번호를 실제 키로 입력한다. Tab으로 비밀번호·로그인 버튼에 닿고 마우스로 로그인한다. | 16회 성공 |
+| 2 | SCR-001에서 `TCP → WS` 전송 경로 열과 상세 행동을 확인한다. | 16회 성공 |
+| 3 | [상세]로 SCR-002를 연다. 대상 전송 경로·전달 주소 행과 [로그 보기]를 확인한다. | 대상 WS·전달 주소 `192.0.2.20`, 행의 가림 없음 |
+| 4 | 로그의 세션 필터 칩을 확인하고 [필터 해제]를 누른다. | 세션 ID 일치, 칩·URL의 세션 필터 제거 |
+| 5 | 수준을 warn으로, 사건을 `connection_rejected`로 바꾼다. `forwarded_for_invalid`를 입력하고 Enter로 검색한다. | 검색어를 포함한 실제 GET 확인, 해당 사건의 200행 표시 |
+| 6 | 첫 로그의 [자세히]를 펼쳤다가 접는다. | `aria-expanded` true→false, 펼친 entry와 행동 가림 없음 |
+| 7 | [이전 로그 더 보기]를 누른다. | 표시 200→400행 |
+| 8 | 자동 갱신을 끄고 다시 켠다. | `aria-checked` false→true |
+| 9 | [다운로드]로 실제 JSON Lines 파일을 받는다. | 모든 실행에서 API 5페이지와 파일 전체 entry 일치. Chrome·Edge·WebKit은 4977줄, Firefox는 4975줄. 줄 수·첫 줄·마지막 줄뿐 아니라 모든 줄을 대조했다. UTF-8·LF와 마지막 LF도 확인 |
+| 10 | SCR-004 → SCR-005 → 변경 확인 대화상자 → [취소] | 16회 성공. 보기·편집·대화상자의 필수 행동 가림 없음. 설정을 적용하지 않음 |
+| 11 | 상세로 돌아가 [세션 종료] → [취소] → [세션 종료] → [종료 확인] | 취소 뒤 실제 상세 GET 200·종료 버튼으로 초점 복귀. 완료 안내 뒤 GET 404 |
+| 12 | 로그아웃한다. | `/login/`으로 이동, 보호 화면·로그 행·설정 입력 제거 |
+
+보관 상한과 이전 실행 사건 때문에 최종 다운로드 줄 수가 엔진별로 다르다. 각 실행의 필터 결과를 그 실행의 실제 API와 대조했다. 서로 다른 서버·시각의 파일이 같은 내용이어야 한다고 가정하지 않았다.
+
+#### 콘솔·CSP와 엔진·도구 차이
+
+- 페이지 오류: 네 엔진 모두 0건이다. Firefox도 BiDi `log.entryAdded`의 JavaScript 오류와 DOM `error`·`unhandledrejection`을 수집했다. 콘솔 오류를 수집하지 않았던 4.26절 드라이버와 구분한다.
+- Chrome·Edge: CSP 0건이다. 콘솔은 실행마다 1건이다. 11단계에서 종료된 세션을 확인하려고 보낸 GET의 예상된 404다. URL을 결과에 남겼다. JS 예외가 아니다.
+- Firefox: CSP·콘솔 오류 모두 0건이다.
+- WebKit: 실행마다 네이티브 `<select>` 생성의 `style-src-attr` 64건과 스크린샷의 `style-src-elem` 15건이다. 합계 79건이며 숨기지 않았다.
+  - 네이티브 보고의 출처는 `/app/components/language-select.js:35` 36건, `/app/panels.js:29` 26건, `/login/components/language-select.js:36` 2건이다. 앞의 두 언어 선택 출처는 `document.createElement('select')`, `panels.js`는 로그의 select를 만드는 공통 `el()`의 `document.createElement(tag)`다.
+  - `select-probe.json`에서 같은 실제 CSP 아래 도우미·스타일·캡처 없이 분리 재현했다. 분리된 `<div></div>` 생성은 보고 0건이고, 스타일 속성도 없는 `<select></select>` 생성만 `style-src-attr` 1건을 더 만들었다. 4.21절과 같은 엔진 고유 보고로 분류한다. 제품 CSP를 완화하지 않았다.
+  - 스크린샷 보고는 각 캡처 직전·직후 차이로 분리했고 `tool=screenshot`을 붙였다. 15개 캡처가 각각 1건을 만들었다. 이 계측을 보강한 뒤 WebKit 네 실행을 다시 통과했다.
+  - 콘솔은 실행마다 80건이다. 위 스타일 거부 79건과 종료 확인 GET의 예상된 404 1건이다. 다른 종류의 콘솔 오류는 없다. 로그 화면 관찰점의 제품 `<style>` 요소·style 속성은 0개이며, 필수 표시·필터·상세·더 보기·다운로드가 모두 동작했다.
+- 최종 결과 전의 실패는 실행 도구·관찰 조건의 결함이었다. Mode I 대상에 포트를 빠뜨린 시험 설정, Windows Bun에서의 Playwright launch 시간 초과, Node import의 `file://` 누락, 함수 문자열을 호출하지 않은 평가 래퍼, 잘못된 선택자·대기 조건, 배지 사이 줄바꿈을 무시한 전송 경로 비교를 고쳤다. Bun 시간 초과의 내부 원인은 추적하지 않았다. Node로 바꾼 뒤 같은 설치 브라우저가 실행됐다.
+- Firefox 초기 로그인 Enter가 제출을 일으키지 않아 실제 포인터로 로그인하도록 바꿨다. 최종 로그 검색은 실제 Enter 뒤 검색어가 들어간 GET을 확인했다. 종료 시험의 첫 404 검사는 비동기 작업 중의 disabled 상태를 완료로 오인했다. 현재 세션 없음 안내까지 기다린 뒤 검사하도록 고쳤고 Chrome·Firefox를 다시 통과했다. 이 관찰기 수정은 제품 수정을 뜻하지 않는다.
+
+#### 재검증·증거·미실행
+
+- 제품 JS·CSS·Rust를 바꾸지 않았다. 따라서 인계서 §4의 제품 변경 조건부 Cargo 재검증 5개는 이번 단계에서 실행하지 않았다. F-A·F-C·F-B1의 Cargo 통과 수를 이번 실행 결과에 더하지 않았다. 새 토큰·컴포넌트도 없다.
+- 최종 명령: Windows는 `node target/logs-engines/runner.js chrome`·`msedge`·`webkit`, Firefox는 `wsl -d Ubuntu -- bash -c 'TZ=Asia/Seoul bun /mnt/d/Workspace/vnc-relay/target/logs-engines/runner.js'`다. 모두 종료 0이다. `summarize.py` 집계는 16 통과·240 관찰점·720 요소·가림 0·가로 넘침 0·페이지 오류 0이다.
+- 증거: `target/logs-engines/summary.json`, 엔진별 `results.json`·실행별 JSON, 최종 관찰점 PNG 240장, 다운로드 파일·`*-download-api.json`, `select-probe.json`, `environment.json`, `latest-versions.json`, `provenance.json`, 두 서버의 `relay.jsonl`과 재현 도구다. 개발 중 실패는 `attempt-*.json`에 따로 두었다. 초기 Firefox 1·2차는 요약 기록이며 원본 스크린샷을 보존한 전체 기록이 아니다.
+- `target/logs-engines/SHA256SUMS`는 **351개 파일·98,271,828바이트**를 담는다. 목록 파일 자체의 SHA-256은 **`23e767997a7911d8a11b2bc50005e12067ffe15027efda6dc941741efe0a670e`**다. 이 수에는 초기 시도 증거도 들어가며 최종 16회의 통과 수와 혼동하지 않는다.
+- 이름 붙인 두 시험 서버를 종료했다. WSL의 시험 포트에 남은 프로세스가 없음을 확인했다. 자신의 실행파일 복사본·계정 파일·임시 비밀번호·Firefox 프로필을 제거했다. 운영 릴레이 PID 58072와 포트 5500·5901·443·18080·18081은 사용하지 않았다. 커밋하지 않았다.
+- 미실행: 실제 Safari, 실제 모바일 기기, 스크린 리더, 사람의 시안 비교·키보드 판정. 이번 범위는 Q135의 네 엔진 자동 확인이다. 실제 기기나 사람의 검토를 대신했다고 판정하지 않는다. F-C의 230쌍 이미지 대조와 F-B1의 로그 상태별 실서버 시험도 이번 16회 수에 포함하지 않았다.
 
 ## 5. 중단 조건
 

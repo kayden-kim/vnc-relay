@@ -571,18 +571,20 @@ allow = ["127.0.0.1"]
 enabled = true
 listen = "127.0.0.1:{server}"
 allow = ["127.0.0.1"]
-[relay.ws_viewer]
-enabled = true
+[relay.ws]
 listen = "127.0.0.1:{ws}"
-allow = ["127.0.0.1"]
-allowed_origins = ["http://127.0.0.1"]
-[relay.wss_viewer]
+[relay.ws.viewer]
 enabled = true
-listen = "127.0.0.1:{wss}"
 allow = ["127.0.0.1"]
 allowed_origins = ["http://127.0.0.1"]
+[relay.wss]
+listen = "127.0.0.1:{wss}"
 cert_file = "{cert}"
 key_file = "{key}"
+[relay.wss.viewer]
+enabled = true
+allow = ["127.0.0.1"]
+allowed_origins = ["http://127.0.0.1"]
 [mode1]
 enabled = true
 allow_targets = ["127.0.0.1:1-65535"]

@@ -18,7 +18,7 @@ use vnc_relay_app::reload::{
     snapshot::{ReloadCell, ReloadSnapshot},
 };
 use vnc_relay_app::settings::KeepaliveSettings;
-use vnc_relay_domain::session::ViewerTransport;
+use vnc_relay_domain::session::Transport;
 
 const KEEPALIVE: KeepaliveSettings = KeepaliveSettings {
     tcp_idle: Duration::from_secs(70),
@@ -87,7 +87,7 @@ async fn connects_only_to_the_supplied_ip_and_port_and_distinguishes_refusal() {
     let address = got(listener.local_addr());
     let connector = TcpTargetConnector::new(source(KEEPALIVE));
     let stream = got(within(connector.connect(address)).await);
-    assert_eq!(stream.transport(), ViewerTransport::Tcp);
+    assert_eq!(stream.transport(), Transport::Tcp);
     let stream = stream.into_inner();
     assert_eq!(got(stream.peer_addr()), address);
     let (peer, peer_address) = got(within(listener.accept()).await);
@@ -230,7 +230,7 @@ async fn wraps_an_already_admitted_socket_without_changing_its_identity() {
     let socket = got(within(TcpStream::connect(address)).await);
     let original_local_address = got(socket.local_addr());
     let stream = TcpRelayStream::new(socket);
-    assert_eq!(stream.transport(), ViewerTransport::Tcp);
+    assert_eq!(stream.transport(), Transport::Tcp);
     let socket = stream.into_inner();
     assert_eq!(got(socket.local_addr()), original_local_address);
     assert_eq!(got(socket.peer_addr()), address);

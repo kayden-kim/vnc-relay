@@ -16,17 +16,31 @@ listen = "127.0.0.1:5500"
 allow = ["127.0.0.1"]
 
 # Plaintext WebSocket is off. Use it only on protected networks.
-[relay.ws_viewer]
+[relay.ws]
+trusted_proxies = []
+
+[relay.ws.viewer]
 enabled = false
 
-# For public WebSocket access, enable WSS and provide your own certificate files.
-[relay.wss_viewer]
+[relay.ws.server]
 enabled = false
+
+# For public WebSocket access, enable a WSS role and provide certificate files.
+[relay.wss]
 # listen = "127.0.0.1:15903"
-# allow = ["127.0.0.1"]
-# allowed_origins = ["https://viewer.example"]
+trusted_proxies = []
 # cert_file = "certs/relay.pem"
 # key_file = "certs/relay.key"
+
+[relay.wss.viewer]
+enabled = false
+# allow = ["127.0.0.1"]
+# allowed_origins = ["https://viewer.example"]
+
+[relay.wss.server]
+enabled = false
+# allow = ["127.0.0.1"]
+# allowed_origins = []
 
 # Mode I target connections are off.
 [mode1]
@@ -46,6 +60,12 @@ listen = "127.0.0.1:18080"
 # Unauthenticated health endpoints are separate from management.
 [status]
 listen = "127.0.0.1:18081"
+
+[recent_closed]
+max_entries = 100
+
+[recent_logs]
+max_entries = 1000
 
 # Append one JSON event per line. The parent directory must already exist.
 [log]

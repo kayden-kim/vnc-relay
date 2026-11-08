@@ -1,6 +1,6 @@
 # VNC Relay 코드 지도
 
-VNC Relay는 TCP·WS·WSS Viewer를 Mode I 대상이나 Mode II Server와 이어 바이트 스트림을 중계한다. 관리 리스너는 대시보드와 관리 API를 제공한다. 이 지도는 실제 코드의 위치와 책임을 설명한다. 대표 흐름은 접속 수락에서 초기 교환·대상 연결 또는 매칭을 거쳐 세션 정리와 운영 로그 기록으로 끝난다.
+VNC Relay는 TCP·WS·WSS Viewer를 Mode I 대상이나 TCP·WS·WSS Mode II Server와 이어 바이트 스트림을 중계한다. 중계 소켓은 TCP Viewer·TCP Server·WS·WSS 네 개다. WS·WSS는 경로로 역할을 나눈다. 이 지도는 코드 위치와 책임, 수락에서 초기 교환·대상 연결 또는 매칭·정리·운영 로그까지의 흐름을 설명한다.
 
 | 항목 | 값 |
 | --- | --- |
@@ -11,6 +11,14 @@ VNC Relay는 TCP·WS·WSS Viewer를 Mode I 대상이나 Mode II Server와 이어
 | 관련 ADR | [ADR-0001 내장 TLS](../decisions/ADR-0001-built-in-tls.md), [ADR-0003 메모리 상태](../decisions/ADR-0003-single-instance-memory-state.md), [ADR-0004 tokio·rustls](../decisions/ADR-0004-tokio-rustls.md), [ADR-0005 WS 코덱](../decisions/ADR-0005-in-house-ws-streaming-frame-codec.md), [ADR-0006 파일을 통한 설정 편집](../decisions/ADR-0006-config-edit-through-file.md) |
 
 제품은 domain·app·adapters·실행파일 조립의 네 crate로 나뉜다. 개발 도구는 별도 `xtask` crate다. 정적 대시보드는 `web/dashboard/`에 있다. 코드가 있다는 사실과 스펙 시나리오 전체가 검증되었다는 판단은 다르다. 시나리오별 실행 결과는 [테스트 컨벤션](../conventions/testing.md#7-테스트와-스펙-시나리오-연결)의 보고서가 맡는다.
+
+### R1·R2 적용 범위
+
+후속: 2026-11-08 R1은 [설정 v4](../contracts/config-v4.md)·[ops-info 2.0.0](../contracts/ops-info-v2.md)의 리스너·역할 분리, WS·WSS Server, 양쪽 전송 메타데이터, 재로드 33개·편집 29개를 반영했다.
+
+후속: 2026-11-08 R2는 WS·WSS 리스너의 공식 역방향 프록시 TLS 종료 및 `X-Forwarded-For` 기반 전달 주소 판정을 반영한다(사용자 결정 2026-11-08(Q182·Q188), [ADR-0007](../decisions/ADR-0007-proxy-tls-termination.md)). `trusted_proxies`에 있는 소켓 상대는 accept의 역할 allow 검사를 건너뛰고, upgrade에서 전달 주소(`forwarded_ip`)를 도출해 역할 allow 검사에 적용한다. 잘못된 헤더나 신뢰 프록시로만 이뤄진 체인은 400 `forwarded_for_invalid`로 거절된다. 전체 주소 신뢰 프록시 항목은 시작·재로드 시 `trust_all_proxies` 경고를 낸다. 관리 API 세션 객체(활성 목록 및 상세)에 `viewer_forwarded_ip`·`target_forwarded_ip`를 제공한다.
+
+구조 시점은 R2 소스 반영 범위의 Current다. 아래 과거 대조·통과 기록은 R2 실행 증거가 아니다. 이번 문서 작업에서는 빌드·시험·포매터를 실행하지 않았다.
 
 ## 1. 전체 구조
 
@@ -94,10 +102,10 @@ flowchart LR
 | `crates/domain/src/lib.rs` | 모듈 공개 | domain 모듈 경계를 공개한다. | 조립·입출력 | 하위 모듈 | 이 지도 |
 | `crates/domain/src/handshake.rs` `HandshakeParser`; `crates/domain/src/relay_id.rs` `RelayId` | 초기 교환 | 250바이트 요청·모드·대상·정확한 ID를 해석한다. 후속 데이터는 소비하지 않는다. | 소켓·H·HMAC | 주소·대상 문법 | [초기 교환](initial-exchange.md) |
 | `crates/domain/src/matching.rs` `WaitingTable` `RegistrationPolicy` | Mode II 점유 | Waiting·Claimed·Active·Closing 전이와 중복·만료·식별자 일치를 판정한다. 등록마다 Lw·W를 받고 기존 대기의 deadline은 보존한다. | 소켓·실제 permit | RelayId·ConnId·SessionId | [중계 수명](relay-session.md) |
-| `crates/domain/src/session.rs` `SessionId` `Session` `Session::finish_after_owner_loss`; `crates/domain/src/recent_closed.rs` `RecentClosedList` | 세션·최근 종료 | 최초 종료 원인·부분 쓰기 카운터·EOF·E·소유자 유실의 최종 요약과 R 상한을 관리한다. | 바이트 전달·시각 읽기 | std 값 | [중계 수명](relay-session.md), [관리자 종료](management-terminate.md) |
+| `crates/domain/src/session.rs` `SessionId` `Transport` `Session` `Session::finish_after_owner_loss`; `crates/domain/src/recent_closed.rs` `RecentClosedList` | 세션·최근 종료 | 양쪽 전송, 최초 종료 원인·부분 쓰기 카운터·EOF·E·최종 요약과 R 상한을 관리한다. Mode I 대상은 TCP다. | 바이트 전달·시각 읽기 | std 값 | [중계 수명](relay-session.md), [관리자 종료](management-terminate.md) |
 | `crates/domain/src/target_policy.rs` `TargetPolicy::permits_name` `TargetPolicy::permits_ip` | 대상 정책 | 설정 항목을 해석하고 이름·포트와 최종 IP·포트를 각각 검사한다. | DNS·연결 | allow_list | [설정](config-loading.md), [중계 수명](relay-session.md) |
-| `crates/domain/src/entry_point.rs` `EntryPoint` `Role`; `crates/domain/src/conn_id.rs` `ConnId` | 진입점·연결 ID | 진입점 역할과 프로세스 안 연결 식별자를 제공한다. | 리스너·로그 | std | [TCP 진입점](tcp-entry-point.md) |
-| `crates/domain/src/allow_list.rs` `AllowList`; `crates/domain/src/origin.rs` `Origin`; `crates/domain/src/peer_ip.rs` `PeerIp` | 접근 값 | IP 항목 해석·허용 판정·Origin 정규화·상대 IP 표기 | HTTP·소켓 읽기 | std | [설정](config-loading.md), [WS 진입점](websocket-entry-point.md) |
+| `crates/domain/src/entry_point.rs` `Listener` `EntryPoint` `Role`; `crates/domain/src/conn_id.rs` `ConnId` | 리스너·진입점·연결 ID | 중계 리스너 네 개, 리스너·역할 진입점 여섯 개, TCP 고정 역할과 프로세스 안 연결 식별자를 제공한다. | 소켓 수락·로그 출력 | std | [TCP 진입점](tcp-entry-point.md), [WS 진입점](websocket-entry-point.md) |
+| `crates/domain/src/allow_list.rs` `AllowList`; `crates/domain/src/origin.rs` `Origin`; `crates/domain/src/peer_ip.rs` `PeerIp`; `crates/domain/src/forwarded_for.rs` `client_ip` `ForwardedForError` | 접근 값 | IP 항목 해석·허용 판정·Origin 정규화·상대 IP 표기와 신뢰 프록시 전달 주소 도출 | HTTP·소켓 읽기 | std | [설정](config-loading.md), [WS 진입점](websocket-entry-point.md) |
 | `crates/domain/src/budget.rs` `ConnectionBudget` `BudgetPermit` | 연결 예산 | 사용량만 저장한다. `try_acquire`가 받은 현재 L·Lm·Lw로 자리를 확보하고 permit 해제로 반환한다. 상한 하향은 기존 permit을 취소하지 않는다. | 설정 읽기·연결 수락 | std 원자 값 | [연결 상한](connection-limits.md) |
 | `crates/domain/src/account.rs` `Password`; `crates/domain/src/admin_session.rs` `AdminSessionTable`; `crates/domain/src/login_limit.rs` `LoginLimiter` | 관리 규칙 | 계정·비밀번호·해시 형식, 세션·CSRF 토큰·만료, 로그인 실패 제한 | 해시 계산·파일·시각 읽기 | std | [계정 준비](admin-accounts.md), [관리 세션](management-session.md) |
 
@@ -107,7 +115,7 @@ flowchart LR
 | --- | --- | --- | --- | --- | --- |
 | `crates/app/src/lib.rs` | 모듈 공개 | 사용 사례 모듈을 공개한다. | 구현체 주입 | 하위 모듈 | 이 지도 |
 | `crates/app/src/ports.rs` `TargetConnector` `RelayIdSource` `SessionIdSource` `RelayStream` `RelayStateSource` `RelaySessionControl` | 외부 기능 경계 | DNS·단일 IP 연결, ID 계산, 전송·종료·maintenance, 상태 조회·관리자 종료를 정의한다. 계정·입력·해시·시계·토큰·사건 포트도 정의한다. | 포트 구현·HTTP | domain·tokio trait | [중계 수명](relay-session.md), [관리 조회](management-query.md), [관리자 종료](management-terminate.md) |
-| `crates/app/src/settings.rs` `Settings`; `crates/app/src/events.rs` `Event` `ShutdownTrigger` | 설정·사건 | 유효 설정·리스너 계획·진단과 중계·관리·재로드·종료 사건 값, 요청·치명 오류의 종료 원인을 정의한다. | TOML·JSON 출력 | domain | [설정](config-loading.md), [운영 로그](ops-log.md) |
+| `crates/app/src/settings.rs` `Settings` `RelaySettings` `EntryPointSettings` `WsListenerSettings` `WsRoleSettings` `RecentLogsSettings` `ListenerPlan`; `crates/app/src/events.rs` `Event` `ShutdownTrigger` | 설정·사건 | v4의 TCP 설정·공유 WS 리스너·역할 설정·최근 로그 상한과 리스너 계획, ops-info 2.0.0의 선택 역할·Server 전송 사건 값을 정의한다. | TOML·JSON 출력·로그 보관 | domain | [설정](config-loading.md), [운영 로그](ops-log.md) |
 | `crates/app/src/relay.rs` `RelayService::handle_connection` `RelayService::dispatch` `PreparedConnection` `RelayRuntime` `RelayState` `run_pair` | 중계 소유권 | 초기 교환을 준비하고 Mode I·II로 분기한다. 공유 상태·활성 등록·정리 guard·최종 사건을 소유한다. B·L은 복제하지 않고 이동한다. | 수락·DNS 구현·프레임 | domain·ports·tokio | [초기 교환](initial-exchange.md), [중계 수명](relay-session.md) |
 | `crates/app/src/relay.rs` `RelayRuntime::snapshot` `RelaySnapshot` `ActivePeer` `HandshakingGuard` | 관리 상태·제어 | 상태 잠금 한 번으로 메타데이터를 복사한다. 실제 peer 주소·초기 교환 수를 보존한다. RelaySessionControl 구현은 세션 소유자에게 종료를 전달한다. | HTTP·스트림 읽기 | Clock·domain·제어 알림 | [관리 조회](management-query.md), [관리자 종료](management-terminate.md) |
 | `crates/app/src/relay/handshake.rs` `exchange`; `crates/app/src/relay/target.rs` `dispatch`; `crates/app/src/relay/matching.rs` `dispatch`; `crates/app/src/relay/session.rs` `run_session_controlled` | 처리 단계 | 각각 시작 바이트·H, 정책·C·대상 L, 대기·W·Lw·원자적 매칭, 두 방향 중계·E·관리자 종료·Kw 진행을 맡는다. | OS 소켓·신호·작업 생성 | RelayRuntime·RelayStream·domain | [중계 수명](relay-session.md), [WS 스트림](websocket-stream.md) |
@@ -126,18 +134,18 @@ flowchart LR
 | `crates/adapters/src/lib.rs` | 모듈 공개 | 외부 연결 구현을 공개하고 HTTP 보조 모듈은 비공개로 둔다. | 업무 규칙 | 하위 모듈 | 이 지도 |
 | `crates/adapters/src/net.rs` `TcpEntryPoint` `TcpRelayStream` `accept_connections` `AllowSource` `AcceptedSettings`; `crates/adapters/src/target.rs` `TcpTargetConnector` | TCP | 바인드·공유 수락·현재 IP/L 판정과 CAS, 수락 B/H/U/K를 `AcceptedSettings`로 보존, 공통 초기 교환→dispatch 호출, Linux 오류 분류, DNS와 새 대상 소켓의 현재 K 적용 | 매칭·대상 정책 | app·domain·tokio·socket2 | [TCP 진입점](tcp-entry-point.md), [중계 수명](relay-session.md) |
 | `crates/adapters/src/listener.rs` `Listener` `SupervisedListener` `ListenerFailure` `is_fatal_accept_error` | 리스너 감독 | 취소 가능한 수락 포트, OS별 복구 불가 오류 분류, 최초 장애의 감독 채널 전달 | 재시도 횟수·G·프로세스 종료 판정 | tokio·std 소켓 오류 | [상태 리스너](status-listener.md), [TCP 진입점](tcp-entry-point.md) |
-| `crates/adapters/src/websocket.rs` `WsEntryPoint` `check_upgrade` `exchange_handshake`; `crates/adapters/src/upgrade.rs` `read_head` | WS·WSS 진입점 | 공유 수락, WSS 협상, U·HTTP와 `check_upgrade`의 Origin/IP/M/Kw 검사, 101 전송·flush 뒤 `exchange_handshake`로 H 읽기, suffix 보존 뒤 공통 서비스 인계 | Repeater 해석·중계 정책 | app·TLS·tokio-tungstenite 헤더 도구 | [WS 진입점](websocket-entry-point.md) |
+| `crates/adapters/src/websocket.rs` `WsEntryPoint` `check_upgrade` `exchange_handshake`; `crates/adapters/src/upgrade.rs` `read_head` `check` | WS·WSS 진입점 | 공유 리스너 수락·WSS 협상, 경로별 역할과 해당 Origin/IP·M/Kw 검사, 101 뒤 H 읽기와 suffix·선택한 진입점의 공통 서비스 인계 | Repeater 해석·전달 헤더 판정 | app·TLS·헤더 도구 | [WS 진입점](websocket-entry-point.md) |
 | `crates/adapters/src/websocket_stream.rs` `WsRelayStream`; `crates/adapters/src/websocket_stream/frame.rs` `FrameDecoder`; `crates/adapters/src/websocket_stream/keepalive.rs` `Keepalive` | WS 스트림 | 페이로드 청크·마스크·분할·논리 M·같은 방향 B·제어 프레임·Close와 고정 Ping·Pong 기한 FIFO | H·C·W·E·G 판정·사건 | RelayStream·tokio·헤더 도구 | [WS 스트림](websocket-stream.md) |
 | `crates/adapters/src/websocket_stream/tests.rs` | WS 내부 시험 | 메모리 스트림·부분 쓰기·M/B·제어·Close·Kw 회귀 시험 | 실제 외부 Viewer | 테스트 전용 tokio | [WS 스트림 7절](websocket-stream.md#7-테스트-계획) |
 | `crates/adapters/src/tls.rs` `load_acceptor` `RustlsTlsStore` `TlsSource`; `crates/adapters/src/tls_listener.rs` `TlsListener` | TLS | 파일 검사·후보 acceptor·실행 중 스냅샷 선택·접속별 협상 | 관리 인증 | rustls·tokio-rustls·app | [TLS](tls.md), [관리 리스너](management-listener.md) |
 | `crates/adapters/src/management_http.rs` `ManagementListener` `ManagementServices` `DashboardHints` `answer` `static_answer`; `crates/adapters/src/dashboard_assets.rs` `ASSETS` `find_asset` | 관리 HTTP·정적 파일 | 관리 리스너와 API 분기, 보호 경로 세션 검사, 정확한 내장 파일 표, `DashboardHints`의 동적 E+5 힌트 계산, 응답 보안 헤더 | 관리 업무 규칙 | app·axum·TLS | [관리 리스너](management-listener.md) |
-| `crates/adapters/src/management_http/session_api.rs` `answer`; `crates/adapters/src/management_http/query_api.rs` `answer`; `crates/adapters/src/management_http/terminate_api.rs` `answer`; `crates/adapters/src/management_http/config_api.rs` `answer` | 관리 API 어댑터 | 인증→PATCH 포함 CSRF→경로·메서드·입력 검증, 서비스 호출, 계약 JSON·쿠키. 설정 GET/PATCH는 spawn_blocking에서 실행하고 PATCH 본문은 64KiB로 제한한다. 종료 수락 뒤 완료 대기에만 U를 멈춘다. | 상태·스트림·파일 소유 | app 관리 서비스·axum·serde_json | [관리 세션](management-session.md), [조회](management-query.md), [종료](management-terminate.md), [설정 편집](config-edit.md) |
+| `crates/adapters/src/management_http/session_api.rs` `answer`; `crates/adapters/src/management_http/query_api.rs` `answer`; `crates/adapters/src/management_http/terminate_api.rs` `answer`; `crates/adapters/src/management_http/config_api.rs` `answer`; `crates/adapters/src/management_http/logs_api.rs` `answer` | 관리 API 어댑터 | 인증→PATCH 포함 CSRF→경로·메서드·입력 검증, 서비스 호출, 계약 JSON·쿠키. 설정 GET/PATCH는 spawn_blocking에서 실행하고 PATCH 본문은 64KiB로 제한한다. 최근 로그는 링 버퍼에서 조건 검색·페이지네이션한다. 종료 수락 뒤 완료 대기에만 U를 멈춘다. | 상태·스트림·파일 소유 | app 관리 서비스·axum·serde_json | [관리 세션](management-session.md), [조회](management-query.md), [종료](management-terminate.md), [설정 편집](config-edit.md) |
 | `crates/adapters/src/status_http.rs` `StatusListener`; `crates/adapters/src/admission.rs` `AdmittingListener` `AdmittedAddr`; `crates/adapters/src/request_deadline.rs` `DeadlineListener` `IdleControl` | 상태·수락·기한 | /livez·/readyz, 공유 Lm의 현재 상한 읽기·CAS, `AdmittedAddr`로 수락 U 메타데이터 전달, 관리 요청 U와 종료 대기 일시 정지 | 준비 상태 전이 | app·domain·axum·tokio | [상태 리스너](status-listener.md), [관리 리스너](management-listener.md) |
-| `crates/adapters/src/config_file.rs` `load` `load_candidate` `parse_candidate` `load_admin`; `crates/adapters/src/config_file/reader.rs`; `crates/adapters/src/config_file/listen.rs`; `crates/adapters/src/toml_text.rs` | 설정 읽기 | TOML 값·위치·기본값·진단·listen 해석. 시작과 후보는 같은 바이트에서 Settings와 presence를 만든다. admin은 [admin]만 검증한다. | 재로드 판정 | app·domain·toml | [설정](config-loading.md) |
-| `crates/adapters/src/config_edit.rs` `FsConfigFileStore` `TomlConfigDocument` | 설정 파일 편집 | 원시 바이트 SHA-256 revision, toml_edit 0.25 기반 보존 편집, 같은 디렉터리 임시 파일 동기화→원본 revision 재확인→rename 교체를 구현한다. | 후보 수용·인증·HTTP | app 설정 포트·toml_edit·aws-lc-rs·std 파일 | [설정 보기·편집](config-edit.md) |
+| `crates/adapters/src/config_file.rs` `load` `load_candidate` `parse_candidate` `load_admin` `read_tcp_listener` `read_websocket_listener` `read_websocket_role` `read_recent_logs`; `crates/adapters/src/config_file/reader.rs`; `crates/adapters/src/config_file/listen.rs`; `crates/adapters/src/toml_text.rs` | 설정 읽기 | v4의 부모 listen/TLS/trusted_proxies와 역할별 enabled/allow/Origin, 최근 로그 상한을 검증한다. 시작과 후보는 같은 바이트에서 Settings·presence를 만든다. | 재로드 판정·XFF 해석·로그 보관 | app·domain·toml | [설정](config-loading.md) |
+| `crates/adapters/src/config_edit.rs` `FsConfigFileStore` `TomlConfigDocument` `edit_change` | 설정 파일 편집 | SHA-256 revision, 중첩 역할 테이블·dotted/inline 키의 source span 보존 편집, 임시 파일 동기화→원본 revision 재확인→rename 교체 | 후보 수용·인증·HTTP | app 포트·toml_edit·aws-lc-rs·std 파일 | [설정 보기·편집](config-edit.md) |
 | `crates/adapters/src/accounts_file.rs` `load`; `crates/adapters/src/accounts_file/store.rs` `AccountsFile`; `crates/adapters/src/accounts_file/hasher.rs` `Argon2Hasher` `Argon2Verifier` | 계정 파일 | 읽기·검증·잠금·원자적 교체·Argon2id 생성과 검증 | 계정 규칙 | app 포트·toml·argon2 | [계정 준비](admin-accounts.md), [관리 세션](management-session.md) |
 | `crates/adapters/src/file_watch.rs` `ReloadWatcher` `FsReloadFileStore` `SystemReloadClock`; `crates/adapters/src/file_watch/feed.rs` `ChangeQueue` `NotifyFeed` | 변경 감지 | OS 알림·유실 재검사·주기 확인·안정화·세대 관리·후보 읽기 | 후보 수용 판정 | notify·tokio·app 재로드 | [파일 감지](file-watch.md) |
-| `crates/adapters/src/ops_log.rs` `JsonLinesEventSink` `format_line`; `crates/adapters/src/clock.rs` `SystemClock` `timestamp`; `crates/adapters/src/crypto.rs` `RelayIdKey` `SessionIdKey` `SystemTokenSource` | 운영 기반 | 사건 JSON Lines, UTC와 단조 시각, ID HMAC·세션 ID 순열·토큰 난수. 초기·대상·대기·최종 세션 사건을 모두 직렬화한다. | 사건 의미·매칭 정책 | app 포트·serde_json·aws-lc-rs | [운영 로그](ops-log.md), [중계 수명](relay-session.md) |
+| `crates/adapters/src/ops_log.rs` `JsonLinesEventSink` `LogEntry` `RecentLogs` `format_line`; `crates/adapters/src/clock.rs` `SystemClock` `timestamp`; `crates/adapters/src/crypto.rs` `RelayIdKey` `SessionIdKey` `SystemTokenSource` | 운영 기반 | 사건 JSON Lines와 순서 있는 필드 목록, 최근 로그 메모리 링 버퍼, UTC와 단조 시각, ID HMAC·세션 ID 순열·토큰 난수. 같은 출력 잠금 안에서 보관 순번과 줄 순서를 정한다. | 사건 의미·매칭 정책 | app 포트·serde_json·aws-lc-rs | [운영 로그](ops-log.md), [중계 수명](relay-session.md) |
 | `crates/adapters/src/terminal.rs`; `crates/adapters/src/terminal/windows_console.rs` | 터미널 | 숨김 입력·확인·Ctrl+C, Windows 콘솔 모드 저장·복구 | 비밀번호 규칙 | rpassword·tokio signal·windows-sys | [계정 준비](admin-accounts.md) |
 | `src/main.rs` `main`; `src/cli.rs` `parse`; `src/admin.rs` `run` | CLI 조립 | 명령·옵션·진단·종료 코드, admin 포트 주입 | 계정 규칙 | clap·app·adapters | [시작](serve-startup.md), [계정 준비](admin-accounts.md) |
 | `src/serve.rs` `run` `listen_until_shutdown` `config_management` `generate_startup_keys` `ShutdownRequest` `wait_for_shutdown` `begin_process_shutdown` `begin_relay_shutdown` `finish_relay_shutdown` | 서버 조립 | 설정·로그·계정·키·TLS·감지·리스너를 준비한다. 같은 reload cell/source와 SharedReload를 실행 reader·watcher·설정 서비스에 주입한다. 종료 시작의 현재 G, 첫 원인·두 번째 신호·Windows 콘솔 닫기·작업 회수·종료 코드를 연결한다. | 매칭·바이트 전달·OS 오류 분류 | 제품 crate·tokio | [시작](serve-startup.md), [파일 감지](file-watch.md), [설정 편집](config-edit.md), [중계 수명](relay-session.md) |
@@ -152,12 +160,12 @@ flowchart LR
 | `xtask/src/tokens.rs` `run`; `xtask/src/tokens/front_matter.rs` `parse_document`; `xtask/src/tokens/screen_css.rs` `check`; `xtask/src/tokens/shared.rs` `write` `check`; `xtask/src/tokens/fonts.rs` `write` `check`; `xtask/src/dashboard_serve.rs` `run` | 대시보드 도구 | 토큰·`@font-face` 생성·CSS 검사·로그인 공통 복사본과 글꼴 복사본 대조·루프백 미리보기 | 제품 HTTP 제공 | std | [xtask](xtask.md) |
 | `xtask/src/notices.rs` `run` `render` `collect_texts` | 배포 의존성 고지 | 두 대상의 일반·빌드 의존성 합집합과 고지 전문, 내장 글꼴 라이선스 전문 생성·대조 | 허용 라이선스 판정·프로젝트 MIT 고지 확정 | Cargo 출력·std·serde_json | [xtask](xtask.md), [라이선스 검사](../how-to/check-dependency-licenses.md) |
 | `xtask/src/package.rs` `run` `check_version` `sha256` | 배포 묶음 | 실행한 OS의 release 빌드·고지 대조·묶음 압축·SHA-256 파일, 버전 형식 검사 | Release 게시(GitHub Actions `release` 작업) | Cargo·OS `tar`·std | [xtask](xtask.md), [릴리스 how-to](../how-to/release.md) |
-| `web/dashboard/app/index.html`; `web/dashboard/app/main.js`; `web/dashboard/app/router.js`; `web/dashboard/app/shell.js`; `web/dashboard/app/operations.js`; `web/dashboard/app/session.js`; `web/dashboard/app/settings.js` | 화면·라우팅 | 부팅·두 항목 셸·운영 현황·세션 상세·설정 보기·동적 설정 편집·화면 전환 | 서버 규칙 | 공통 JS·관리 API | [대시보드 컴포넌트](dashboard-components.md) |
-| `web/dashboard/app/api.js`; `web/dashboard/app/query.js`; `web/dashboard/app/model.js`; `web/dashboard/app/settings-model.js`; `web/dashboard/app/panels.js`; `web/dashboard/app/format.js`; `web/dashboard/app/copy.js`; `web/dashboard/app/language.js` | 화면 공통 상태 | API 통신·폴링·조회 모델·설정 입력 검사와 줄 진단 대응·패널·목록별 성공 응답의 개수·표시·문구·언어 | 중계 상태 소유 | 관리 API·브라우저 | [대시보드 컴포넌트](dashboard-components.md), [운영 현황 앱](dashboard-operations-overview.md) |
+| `web/dashboard/app/index.html`; `web/dashboard/app/main.js`; `web/dashboard/app/router.js`; `web/dashboard/app/shell.js`; `web/dashboard/app/operations.js`; `web/dashboard/app/session.js`; `web/dashboard/app/settings.js`; `web/dashboard/app/logs.js` | 화면·라우팅 | 부팅·세 항목 셸·운영 현황·세션 상세·설정 보기·동적 설정 편집·최근 로그·화면 전환 | 서버 규칙 | 공통 JS·관리 API | [대시보드 컴포넌트](dashboard-components.md) |
+| `web/dashboard/app/api.js`; `web/dashboard/app/query.js`; `web/dashboard/app/model.js`; `web/dashboard/app/settings-model.js`; `web/dashboard/app/panels.js`; `web/dashboard/app/format.js`; `web/dashboard/app/copy.js`; `web/dashboard/app/language.js` | 화면 공통 상태 | API 통신·조회 모델·v4 편집 구역 순서·줄 진단 대응·양쪽 전송 경로·전달 주소·목록별 성공 개수·문구·언어. 최근 로그는 필터·증분·이전 커서와 다운로드 요청을 분리한다 | 중계 상태 소유 | 관리 API·브라우저 | [대시보드 컴포넌트](dashboard-components.md), [최근 로그 흐름](dashboard-operations-overview.md#16-최근-로그-scr-006) |
 | `web/dashboard/app/components/`; `web/dashboard/app/styles/`; `web/dashboard/app/app.css`; `web/dashboard/app/tokens.css`; `web/dashboard/app/fonts/` | 공통 표시 | 컴포넌트·공통 스타일·화면 스타일·생성 토큰·글꼴 복사본 | 서버 권한 | 브라우저 | [프런트엔드 컨벤션](../conventions/frontend.md) |
 | `web/dashboard/login/index.html`; `web/dashboard/login/main.js`; `web/dashboard/login/login.js`; `web/dashboard/login/login.css`; `web/dashboard/login/components/`; `web/dashboard/login/styles/`; `web/dashboard/login/language.js`; `web/dashboard/login/tokens.css`; `web/dashboard/login/fonts/` | 로그인 | 세션 없는 로그인 화면과 tokens가 만드는 공통·글꼴 복사본 | 보호된 app 파일 직접 참조 | 관리 세션 API | [대시보드 컴포넌트](dashboard-components.md) |
 | `web/dashboard/fonts/` | 글꼴 원본 | Pretendard woff2 원본과 OFL 전문. 제공하지 않는다 | 제공 경로 | 없음 | [프런트엔드 컨벤션 2.4절](../conventions/frontend.md#24-글꼴-파일) |
-| `web/dashboard/preview/`; `web/dashboard/tests/` | 개발용 페이지 | 로컬 미리보기·컴포넌트·로그인·현황·세션·설정·라우터 브라우저 시험 | 제품 번들 제공 | 브라우저·Rust 실행기 | [대시보드 검증](../how-to/verify-dashboard-frontend.md) |
+| `web/dashboard/preview/`; `web/dashboard/tests/` | 개발용 페이지 | 공통 미리보기·가짜 API 브라우저 시험. `logs-scenarios.js`의 `shot-*`는 SCR-006 16개 상태, `settings-scenarios.js`의 `shot-scr004-*`·`shot-scr005-*`는 v4 설정 프레임을 실제 화면 함수로 재현한다 | 제품 번들 제공 | 브라우저·Rust 실행기 | [대시보드 검증](../how-to/verify-dashboard-frontend.md) |
 
 ### 2.5 통합·시스템 시험
 
@@ -169,11 +177,12 @@ flowchart LR
 | `tests/code_map.rs` `code_map_paths_and_symbols_resolve_to_current_code` | operations.md: OPS-022. §2 경로·정의와 §3·§4 파일 단위 연결 근거 |
 | `tests/dependency_notices.rs` `distribution_notices_match_locked_dependencies_and_license_texts` | operations.md: OPS-021 partial. 오프라인 고지 대조만 확인하며 프로젝트 LICENSE는 확인하지 않는다. |
 | `tests/admin.rs` | operations.md: OPS-029·030 |
-| `tests/serve.rs` | operations.md: 시작·종료·L/H·상태·관리 보안·IP·중복 시작. `initial_tls_and_upgrade_deadlines_have_distinct_causes_and_release_capacity`는 OPS-006 전체(H·TLS·업그레이드 U·원인·회수)를, `every_relay_entry_point_accepts_only_its_own_source_ip`는 OPS-037 전체(네 진입점과 네 출발지 IP의 16쌍)를 실제 실행파일로 확인한다. `management_legacy_tls_rejections_have_exact_json_fields_and_keep_tls12_available`은 OPS-036의 관리 HTTPS 부분과 거절 로그 줄 형식을 확인한다. relay.md: 초기 교환·Mode I/II·중계·half-close·IP. websocket.md: WS-024 |
+| `tests/serve.rs` | operations.md: 시작·종료·L/H·상태·관리 보안·IP·중복 시작. `every_relay_entry_point_accepts_only_its_own_source_ip`는 여섯 역할×여섯 IP의 36쌍과 공유 수락 뒤 역할별 403을 다룬다. `server_only_websocket_roles_open_each_shared_listener`는 Server만 켠 공유 소켓·role 없는 수락 사건을 다룬다. `enabled_websocket_roles_require_their_policy_and_shared_tls_at_startup`는 역할 allow·부모 TLS 필수를 다룬다. 기한 시험은 U/H와 경로 판정 전후 role을 구분한다. R1 실행 결과는 이 표에서 판정하지 않는다. |
 | `tests/unix_shutdown.rs`; `tests/windows_console.rs`; `tests/common/shutdown.rs` `ServerProcess` | operations.md: OPS-007~010·042·043(양 OS), OPS-044(Windows). Windows는 MGT-027·OPS-029·OPS-030과 Ctrl+C·Ctrl+Break도 확인한다. OPS-030 시험은 ConPTY 출력에서 제어 순서를 뺀 화면 문자로 비교한다(`tests/common/log_reopen.rs` `plain`). 공통 본문에는 표식이 없다. |
-| `tests/dashboard_browser.rs` | dashboard.md: 컴포넌트·목 응답을 쓰는 DASH-001~022·024~053 부분 증거. 설정 화면(DASH-028~053)은 `web/dashboard/tests/settings.html`의 계약 기반 가짜 API를 쓴다. |
+| `tests/dashboard_browser.rs` | dashboard.md: 컴포넌트·목 응답을 쓰는 DASH-001~022·024~063 부분 증거. 설정 화면(DASH-028~053)은 `web/dashboard/tests/settings.html`, 최근 로그 화면(DASH-054~061·063)은 `web/dashboard/tests/logs.html`의 계약 기반 가짜 API를 쓴다. |
 | `tests/dashboard_live.rs`; `tests/dashboard_live/login.rs`; `tests/dashboard_live/overview.rs`; `tests/dashboard_live/detail.rs`; `tests/dashboard_live/cross.rs`; `tests/dashboard_live/settings.rs`; `tests/dashboard_live/settings_view.rs`; `tests/dashboard_live/settings_edit.rs`; `tests/dashboard_live/settings_recovery.rs` | dashboard.md: 실제 로그인·중계·관리 조회·상세·종료·언어·폴링·Si 만료의 DASH-001~014·016~022·024~027, 실제 설정 파일·감시기·`GET`·`PATCH /api/v1/config`를 쓰는 설정 보기·편집의 DASH-028~053. management.md: MGT-040·042·043. `settings.rs`는 세 설정 모듈의 공통 도우미다. 표식은 최상위 Rust 테스트 함수에만 둔다. |
-| `tests/common/dashboard_live.rs` `Server` `Pair`; `tests/common/cdp.rs` `Browser`; `tests/common/dashboard_cdp.rs`; `tests/common/dashboard_proxy.rs` `Proxy` `Fault` `Traffic` | 실서버·중계 소켓·CDP 브라우저·전달 프록시의 시험 자원 소유자. `cdp.rs`는 브라우저 실행·CDP 명령·탐색·조건 대기만 맡고, `dashboard_cdp.rs`는 같은 `Browser`에 대시보드 입력·로그인 동작을 더한다. 일반 데이터는 실서버에서 받고, 프록시가 주입한 지연·실패·유실은 별도로 기록한다. 공통 모듈에는 표식이 없다. |
+| `tests/dashboard_live/logs.rs`; `tests/dashboard_live/logs_download.rs`; `tests/dashboard_live/logs_states.rs`; `tests/dashboard_live/logs_accessibility.rs`; `tests/dashboard_live/transports.rs` | dashboard.md: DASH-054~063. 실제 사건·로그 GET과 화면 필드·필터·검색·커서·증분을 대조한다. 다운로드는 CDP가 정한 폴더의 파일과 완료 사건을 읽는다. 실패·실제 300초 유휴 만료, 두 폭·두 언어의 키 입력, TCP·WS·WSS 양쪽 조합과 전달 주소를 확인한다. 실행 함수와 전체 표식은 `tests/dashboard_live.rs`에만 있다. |
+| `tests/common/dashboard_live.rs` `Server` `Pair`; `tests/common/cdp.rs` `Browser`; `tests/common/dashboard_cdp.rs`; `tests/common/dashboard_proxy.rs` `Proxy` `Fault` `Traffic` | 실서버·중계 소켓·CDP 브라우저·전달 프록시의 시험 자원 소유자. `cdp.rs`는 브라우저 실행·CDP 명령·탐색·조건 대기와 네트워크·다운로드 사건 수집을 맡는다. `dashboard_cdp.rs`는 같은 `Browser`에 대시보드 입력·로그인 동작을 더한다. Enter는 CDP 문자 값 `\r`도 보내 실제 폼 기본 동작을 실행한다. 일반 데이터는 실서버에서 받고, 프록시가 주입한 지연·실패·유실은 별도로 기록한다. 공통 모듈에는 표식이 없다. |
 | `tests/websocket_browser.rs` `browser_websocket_relays_mode_i_and_ii_over_ws_and_wss_without_novnc_or_websockify` `novnc_repeater_id_completes_rfb_through_ws_and_wss_in_both_server_orders` | websocket.md: WS-020(Chromium 내장 WebSocket과 실제 실행파일의 WS·WSS Mode I·II), WS-025(고정 noVNC 1.7.0 `repeaterID`와 시험 쪽 최소 RFB 서버, `#[ignore]`). 시험 쪽 정적 HTTP 서버가 빈 페이지와 noVNC 파일을 제공한다. |
 | `src/serve/listener_tests.rs` `listener_failures_retry_then_drive_fatal_grace_cleanup_and_preserve_requested_races`; `crates/adapters/src/listener.rs` | operations.md OPS-046: 실제 감독 함수·TCP 중계·상태 HTTP에 수락 포트를 연결한 시험, 일시 오류 재시도·치명 오류·최초 종료 원인·G 정리. 어댑터 내부 시험은 실제 OS 수락 오류와 분류를 확인한다. |
 | `tests/management_query.rs` | management.md: MGT-001~007·013·015·016·021·023·024·026. operations.md: OPS-033 |
@@ -200,8 +209,8 @@ flowchart LR
 | --- | --- | --- | --- |
 | CLI | `src/main.rs` `main` | 프로세스 실행 | `cli::parse` → `serve::run` 또는 `cli::parse` → `admin::run` |
 | TCP | `crates/adapters/src/net.rs` `TcpEntryPoint::run` | Viewer·Server 수락 | `accept_connections` → `RelayService::handle_connection` → `RelayService::dispatch` |
-| WS·WSS | `crates/adapters/src/websocket.rs` `WsEntryPoint::run` | 수락·TLS·HTTP 검사와 101 전송·flush 성공 | `WsRelayStream::new` → `RelayService::handle_connection` → `RelayService::dispatch` |
-| 관리 HTTP | `crates/adapters/src/management_http.rs` `answer` | 관리 요청 | `session_api` → `query_api` 또는 `session_api` → `terminate_api` 또는 `session_api` → `config_api` 또는 `static_answer` |
+| WS·WSS | `crates/adapters/src/websocket.rs` `WsEntryPoint::run` | 공유 리스너 수락·TLS·경로별 역할/정책 검사와 101 flush 성공 | `WsRelayStream::new` → `RelayService::handle_connection` → `RelayService::dispatch` |
+| 관리 HTTP | `crates/adapters/src/management_http.rs` `answer` | 관리 요청 | `session_api` → `query_api` 또는 `session_api` → `terminate_api` 또는 `session_api` → `config_api` 또는 `session_api` → `logs_api` 또는 `static_answer` |
 | 상태 HTTP | `crates/adapters/src/status_http.rs` `StatusListener::run` | 상태 요청 | `LifecycleService::readiness` |
 | 파일 변경 | `crates/adapters/src/file_watch.rs` `ReloadWatcher::run` | OS 알림·주기 확인 | `ReloadService::handle_config` 또는 `ReloadService::handle_unreadable` |
 | 종료 신호 | `src/serve.rs` `ShutdownSignal::wait` | Ctrl+C·SIGTERM(Ubuntu)·Ctrl+Break·콘솔 창 닫기(Windows) | `wait_for_shutdown` → `begin_process_shutdown` → `begin_relay_shutdown` → `finish_relay_shutdown` |
@@ -229,7 +238,9 @@ flowchart LR
 
 Mode I는 3~4단계 대신 `relay/target.rs`가 이름 정책→DNS→최종 IP 정책→같은 L의 대상 자리→단일 주소 연결을 진행한다. 전체가 같은 C 안에 있다. 성공하면 같은 `run_pair`로 간다.
 
-WS·WSS는 1단계에서 `websocket.rs`의 101 완료 후 `WsRelayStream`을 넘긴다. H는 `exchange_at`에서 시작한다. `frame.rs`는 바이너리 페이로드만 풀고 프레임·메시지 경계를 스트림 경계로 쓰지 않는다. Kw는 공통 소유 루프가 `poll_maintenance`로 진행한다.
+WS·WSS는 1단계의 수락을 공유 리스너에서 한다. 소켓 상대가 `trusted_proxies`에 있거나 켜진 역할 allow 합집합을 통과하면 연결을 수락하고, HTTP `/relay` 또는 `/relay/server`로 역할을 정한다. 소켓 상대가 신뢰 프록시이면 `X-Forwarded-For`로부터 전달 주소를 도출하고(실패 시 400 `forwarded_for_invalid`), 선택한 역할의 Origin과 클라이언트 주소 IP를 다시 검사한다. 101을 flush한 뒤 `WsRelayStream`과 `EntryPoint::from_parts(listener, role)`, 도출된 `forwarded_ip`의 문맥을 넘긴다. H는 `exchange_at`부터 잰다. Server에는 시작 바이트를 보내지 않는다. `frame.rs`는 프레임·메시지 경계를 스트림 경계로 쓰지 않는다.
+
+`run_pair`는 양쪽 스트림의 `Transport`를 세션과 조회 스냅샷에 보존한다. Mode I 대상은 `Tcp`, Mode II 대상은 실제 Server 전송이다. 운영 로그의 `session_started.server_transport`는 Mode II에만 있고 관리 목록·상세·최근 종료의 `target_transport`는 두 모드 모두에 있다. Kw와 종료는 각 연결의 스트림 유지 처리를 공통 소유 루프에서 진행한다.
 
 ### 관리 조회 흐름(Current)
 
@@ -249,6 +260,13 @@ WS·WSS는 1단계에서 `websocket.rs`의 101 완료 후 `WsRelayStream`을 넘
 GET의 `ConfigEditService::get`은 `SharedReload` 잠금 안에서 파일 원시 바이트와 revision을 읽는다. `ConfigDocument::parse`가 만든 후보를 `ReloadService::classify_file`로 분류한다. 응답 items는 파일 후보가 아니라 `running()`·`running_presence()`로 만든다. 조회는 snapshot·사건·이력을 바꾸지 않는다.
 
 PATCH의 `ConfigEditService::patch`는 같은 잠금으로 편집 허용→원본 읽기·revision 일치→원본 전체 검증·재시작 차이 검사→`ConfigDocument::edit`→후보 `prepare_candidate`→바이트 no-op 검사까지 진행한다. `FsConfigFileStore::replace`는 같은 디렉터리 임시 파일을 쓰고 동기화한 뒤 원본 revision을 다시 확인해 원자 교체한다. 성공하면 준비한 후보 그대로 `commit_prepared(ConfigEdit)`를 호출하고 `ConfigEdited`를 기록한다. 원본 바이트가 그대로인 요청은 파일·실행 값·이력을 바꾸지 않는다. 뒤 watcher의 같은 후보도 다시 적용하지 않는다([설정 보기·편집 설계](config-edit.md), [파일 감지 §10](file-watch.md#10-target--설정-v3-실행-값과-공유-트랜잭션)).
+
+설정 descriptor와 PATCH 검사는 29개 편집 키에 같은 조건을 쓴다. 역할 allow/Origin은 해당 역할이 켜져야 하고 부모 trusted_proxies는 어느 역할이든 켜져야 한다. TCP allow와 Mode I 정책도 각각 해당 기능이 켜져야 한다. TLS 네 경로는 재로드 33개에는 포함되지만 편집 불가다. 역할 enabled·부모 listen·recent_logs.max_entries는 재시작 키다. 문서 편집은 부모 설정을 역할 테이블로 잘못 옮기지 않고 중첩 경로의 leaf만 고친다.
+
+### 최근 로그 조회 흐름(Current)
+
+`management_http::answer` → `session_api::answer` → `logs_api::answer`가 `/api/v1/logs`를 처리한다. 세션 인증이 선행되며 CSRF 검증은 필요하지 않다. `X-Relay-Poll: 1` 자동 갱신 요청은 유휴 만료를 연장하지 않는다. `logs_api`는 쿼리 매개변수를 검증하고 `RecentLogs::query`를 부른다. 버퍼 잠금 안에서 커서 범위를 좁히고 그 범위의 `Arc<LogEntry>`를 복제한다. 세션 필터는 범위 밖의 `session_started` 참조도 확보해 연결 식별자 연계를 보존한다. 일치 검사와 페이지 선택은 잠금 밖에서 한다. `src/serve.rs::run`은 기록 싱크와 관리 서비스에 같은 `Arc<RecentLogs>`를 직접 전달한다.
+
 
 
 ## 5. 시작과 연결
@@ -285,6 +303,13 @@ PATCH의 `ConfigEditService::patch`는 같은 잠금으로 편집 허용→원�
 
 ## 대조 기록
 
+### R1 리스너·역할 전환 후속(2026-11-08)
+
+- 범위: `entry_point.rs`의 Listener·EntryPoint, `session.rs`의 Transport·양쪽 전송, settings의 리스너·역할 타입과 계획, config_file의 v4 reader, config_edit의 중첩 source span 편집, net의 enabled-role 합집합, upgrade의 경로·역할 보존, 공통 relay·관리 query·ops 사건의 전송 메타데이터다. 기존 파일에서 바꾸며 R2 전달 주소 모듈이나 R3 로그 API 파일을 현재 코드로 추가하지 않는다.
+- `Listener` 타입은 두 경계에 있다. domain의 enum은 소켓 종류의 값이고 adapters `listener.rs`의 trait는 수락 I/O 포트다. 두 타입의 이름이 같아도 책임과 의존 방향은 다르다.
+- 현재 흐름 설명은 소스 읽기와 작업별 공유 인터페이스를 근거로 갱신했다. 테스트 소스의 존재와 실행 결과를 구분한다. R1 빌드·시험·포매터는 이 문서 작업에서 미실행이며 통합 담당자의 실행 기록으로 판정한다. 이전 기록은 보존한다.
+
+
 ### 2026-11-08 설정 보기·편집과 실행 값 재로드 소스 대조
 
 - 범위: 작업 트리의 `management/config.rs`·`items.rs`, `config_edit.rs`·`config_api.rs`·`config_file.rs`, reload service/snapshot/ports, watcher 최종 read, serve의 공유 객체·종료 G 조립과 runtime reader다.
@@ -295,7 +320,7 @@ PATCH의 `ConfigEditService::patch`는 같은 잠금으로 편집 허용→원�
 
 - 대상: `b5dc9b5`의 `Listener`·`SupervisedListener`와 serve 조립, `tests/dashboard_live.rs`·공통 CDP·전달 프록시·화면별 하위 본문이다. `9cdebc6`에서 Windows 수락 소켓의 차단 모드와 지연 요청 회귀 시험을 보강했다.
 - §2의 새 코드 위치와 루트 개발 의존성, §3의 리스너 오류→종료 진입점, §4·§5의 감독·상태·중계 정리 연결을 실제 구현과 대조했다. 리스너 오류 분류와 최초 종료 원인의 보존은 Q114를 따른다. CDP와 시험용 장애 주입은 Q112·Q113을 따른다.
-- `9cdebc6`의 Windows·WSL 전체 게이트에서 `tests/code_map.rs` 4건이 모두 통과했다. OPS-022·OPS-046과 실서버 대시보드 26건도 두 OS에서 통과했다. 전체 집계와 증거 범위는 [대시보드 검증 4.19절](../how-to/verify-dashboard-frontend.md#419-실서버-대시보드-시험과-수동-스모크-2026-11-05), [운영 정보 계약 실행 기록](../contracts/ops-info-v1.md#계약-테스트-실행-기록)에 있다.
+- `9cdebc6`의 Windows·WSL 전체 게이트에서 `tests/code_map.rs` 4건이 모두 통과했다. OPS-022·OPS-046과 실서버 대시보드 26건도 두 OS에서 통과했다. 전체 집계와 증거 범위는 [대시보드 검증 4.19절](../how-to/verify-dashboard-frontend.md#419-실서버-대시보드-시험과-수동-스모크-2026-11-05), [운영 정보 계약 실행 기록](../contracts/ops-info-v2.md#계약-테스트-실행-기록)에 있다.
 - WSL 보고서는 `9cdebc6 + 미커밋 변경`으로 표시됐다. 게이트 실행 중 코드·문서를 수정하지 않았다. 이 실행에서 접미사 원인은 별도로 확인하지 않았다. 구조 대조는 외부 VNC 호환성과 사람의 화면 검토 완료를 뜻하지 않는다.
 - 후속 Q115는 기존 `operations.js` → `panels.js` 경로에 목록별 성공 응답의 개수 갱신을 연결했다. 새 파일·공통 컴포넌트 API는 없다. `177040d`의 두 OS 전체 게이트에서 코드 지도 4건과 브라우저·실서버 시험이 통과했다([검증 4.20절](../how-to/verify-dashboard-frontend.md#420-목록-개수-배지-q115-2026-11-05)).
 

@@ -200,7 +200,7 @@ pub struct TlsSource {
 }
 
 impl TlsSource {
-    /// The WSS acceptor of the snapshot. It is `None` while WSS is disabled.
+    /// The shared WSS listener's acceptor, used when either WSS role is enabled.
     pub fn wss(cell: Arc<ReloadCell<TlsAcceptor>>) -> Self {
         Self {
             cell,

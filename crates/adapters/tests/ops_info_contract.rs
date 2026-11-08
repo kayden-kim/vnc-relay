@@ -1,5 +1,5 @@
 //! Contract tests of the operation log writer, `relay_id_ref`, and the
-//! status listener (docs/contracts/ops-info-v1.md §1.1-1.6, §1.9, §1.11,
+//! status listener (docs/contracts/ops-info-v2.md §1.1-1.6, §1.9, §1.11,
 //! §1.12, §2; recorded in §5).
 
 use std::io::{Read, Write};
@@ -24,10 +24,10 @@ use vnc_relay_domain::account::AccountName;
 use vnc_relay_domain::allow_list::IpItem;
 use vnc_relay_domain::budget::ConnectionBudget;
 use vnc_relay_domain::conn_id::ConnId;
-use vnc_relay_domain::entry_point::{EntryPoint, Role};
+use vnc_relay_domain::entry_point::{EntryPoint, Listener, Role};
 use vnc_relay_domain::handshake::Mode;
 use vnc_relay_domain::peer_ip::PeerIp;
-use vnc_relay_domain::session::{CloseCause, SessionId, Side, ViewerTransport};
+use vnc_relay_domain::session::{CloseCause, SessionId, Side, Transport};
 
 fn temp_dir(name: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!("vnc-relay-ops-log-{}-{name}", std::process::id()));
@@ -86,7 +86,7 @@ fn failure(reason: &'static str, detail: Option<String>) -> Event {
     }
 }
 
-/// `ts` is `YYYY-MM-DDTHH:MM:SS.mmmZ` (ops-info-v1 §1.2).
+/// `ts` is `YYYY-MM-DDTHH:MM:SS.mmmZ` (ops-info-v2 §1.2).
 fn assert_timestamp(ts: &str) {
     let bytes = ts.as_bytes();
     assert_eq!(bytes.len(), 24, "{ts}");
@@ -106,6 +106,7 @@ fn assert_timestamp(ts: &str) {
     }
 }
 
+/// spec: operations.md:OPS-069 partial
 #[test]
 fn writes_one_json_object_per_line_with_common_fields_first() {
     let dir = temp_dir("lines");
@@ -148,7 +149,7 @@ fn writes_one_json_object_per_line_with_common_fields_first() {
             ("info", "server_stopped"),
         ]
     );
-    assert_eq!(text(&lines[0], "log_contract"), "ops-info/1.3.0");
+    assert_eq!(text(&lines[0], "log_contract"), "ops-info/2.0.0");
     assert_eq!(text(&lines[1], "listener"), "tcp_viewer");
     assert_eq!(text(&lines[1], "item"), "0.0.0.0/0");
     assert_eq!(text(&lines[1], "phase"), "startup");
@@ -338,7 +339,7 @@ fn writes_each_config_warning_with_its_contract_fields() {
     }
     let lines = objects(&read(&path));
     assert_eq!(text(&lines[0], "event"), "plaintext_ws_enabled");
-    assert_eq!(text(&lines[0], "listener"), "ws_viewer");
+    assert_eq!(text(&lines[0], "listener"), "ws");
     assert_eq!(text(&lines[0], "listen"), "0.0.0.0:8080");
     assert_eq!(
         keys(&lines[0]),
@@ -351,6 +352,90 @@ fn writes_each_config_warning_with_its_contract_fields() {
     assert_eq!(keys(&lines[2]), ["event", "level", "listen", "ts"]);
     for line in &lines {
         assert_eq!(text(line, "level"), "warn");
+    }
+}
+
+/// spec: operations.md:OPS-069 partial
+#[test]
+fn shared_listener_logs_resolve_role_only_after_the_path() {
+    for listener in Listener::ALL {
+        let conn_id = ConnId::next();
+        let accepted = objects(&format_line(
+            &Event::ConnectionAccepted {
+                conn_id,
+                listener,
+                peer_ip: relay_peer(),
+            },
+            UNIX_EPOCH,
+        ))
+        .remove(0);
+        assert_eq!(text(&accepted, "listener"), listener.name());
+        assert_eq!(
+            accepted.get("role").and_then(Value::as_str),
+            listener.fixed_role().map(Role::as_str)
+        );
+        if listener.fixed_role().is_none() {
+            for role in [None, Some(Role::Viewer), Some(Role::Server)] {
+                let aborted = objects(&format_line(
+                    &Event::ConnectionAborted {
+                        conn_id,
+                        listener,
+                        role,
+                        stage: Stage::Upgrade,
+                        reason: AbortReason::PeerEof,
+                        peer_ip: relay_peer(),
+                        forwarded_ip: None,
+                        elapsed_ms: 1,
+                    },
+                    UNIX_EPOCH,
+                ))
+                .remove(0);
+                let rejected = objects(&format_line(
+                    &Event::UpgradeRejected {
+                        conn_id,
+                        listener: listener.name(),
+                        role,
+                        reason: RejectReason::InvalidUpgrade,
+                        peer_ip: relay_peer(),
+                        forwarded_ip: None,
+                        origin: None,
+                    },
+                    UNIX_EPOCH,
+                ))
+                .remove(0);
+                for event in [aborted, rejected] {
+                    assert_eq!(text(&event, "listener"), listener.name());
+                    assert_eq!(
+                        event.get("role").and_then(Value::as_str),
+                        role.map(Role::as_str)
+                    );
+                }
+            }
+        }
+    }
+    for entry_point in EntryPoint::ALL {
+        for phase in [Phase::Startup, Phase::Reload] {
+            let warning = objects(&format_line(
+                &Event::ConfigWarning {
+                    warning: ConfigWarning::AllowAllSource {
+                        entry_point,
+                        item: IpItem::parse("0.0.0.0/0").unwrap(),
+                    },
+                    phase,
+                },
+                UNIX_EPOCH,
+            ))
+            .remove(0);
+            assert_eq!(text(&warning, "listener"), entry_point.listener().name());
+            assert_eq!(text(&warning, "phase"), phase.as_str());
+            assert_eq!(
+                warning.get("role").and_then(Value::as_str),
+                entry_point
+                    .transport()
+                    .is_websocket()
+                    .then(|| entry_point.role().as_str())
+            );
+        }
     }
 }
 
@@ -369,20 +454,22 @@ fn writes_connection_events_with_their_contract_fields() {
     });
     log.record(&Event::ConnectionAccepted {
         conn_id,
-        entry_point: EntryPoint::TcpServer,
+        listener: Listener::TcpServer,
         peer_ip: peer("2001:db8::5"),
     });
     log.record(&Event::ConnectionAborted {
         conn_id,
-        entry_point: EntryPoint::TcpServer,
+        listener: Listener::TcpServer,
+        role: Some(Role::Server),
         stage: Stage::InitialExchange,
         reason: AbortReason::ServerShutdown,
         peer_ip: peer("2001:db8::5"),
+        forwarded_ip: None,
         elapsed_ms: 1234,
     });
     let lines = objects(&read(&path));
 
-    // A connection refused at accept has no conn_id (ops-info-v1 §1.5).
+    // A connection refused at accept has no conn_id (ops-info-v2 §1.5).
     assert_eq!(text(&lines[0], "event"), "connection_rejected");
     assert_eq!(text(&lines[0], "level"), "warn");
     assert_eq!(
@@ -409,7 +496,7 @@ fn writes_connection_events_with_their_contract_fields() {
     assert_eq!(text(&lines[1], "role"), "server");
     assert_eq!(text(&lines[1], "peer_ip"), "2001:db8::5");
 
-    // server_shutdown is an info line (ops-info-v1 §1.5).
+    // server_shutdown is an info line (ops-info-v2 §1.5).
     assert_eq!(text(&lines[2], "event"), "connection_aborted");
     assert_eq!(text(&lines[2], "level"), "info");
     assert_eq!(
@@ -487,6 +574,7 @@ fn writes_initial_exchange_rejections_with_conn_id_and_disabled_mode() {
             conn_id,
             entry_point,
             peer_ip,
+            forwarded_ip: None,
             reason,
             mode,
         });
@@ -502,7 +590,8 @@ fn writes_initial_exchange_rejections_with_conn_id_and_disabled_mode() {
         assert_eq!(text(object, "event"), "connection_rejected");
         assert_eq!(text(object, "level"), "warn");
         assert_eq!(text(object, "conn_id"), conn_id.to_string());
-        assert_eq!(text(object, "listener"), entry_point.name());
+        assert_eq!(text(object, "listener"), entry_point.listener().name());
+        assert_eq!(text(object, "role"), entry_point.role().as_str());
         assert_eq!(text(object, "stage"), "initial_exchange");
         assert_eq!(text(object, "reason"), expected_reason);
         assert_eq!(text(object, "peer_ip"), "192.0.2.7");
@@ -512,15 +601,16 @@ fn writes_initial_exchange_rejections_with_conn_id_and_disabled_mode() {
         let mode_field =
             expected_mode.map_or_else(String::new, |mode| format!(",\"mode\":\"{mode}\""));
         // The exact line checks field order and excludes request bytes, raw
-        // relay IDs, and every absent optional field (ops-info-v1 §1.1, §1.9).
+        // relay IDs, and every absent optional field (ops-info-v2 §1.1, §1.9).
         assert_eq!(
             line,
             format!(
                 "{{\"ts\":\"{}\",\"level\":\"warn\",\"event\":\"connection_rejected\",\
-                 \"conn_id\":\"{conn_id}\",\"listener\":\"{}\",\"stage\":\"initial_exchange\",\
+                 \"conn_id\":\"{conn_id}\",\"listener\":\"{}\",\"role\":\"{}\",\"stage\":\"initial_exchange\",\
                  \"reason\":\"{expected_reason}\",\"peer_ip\":\"192.0.2.7\"{mode_field}}}",
                 text(object, "ts"),
-                entry_point.name(),
+                entry_point.listener().name(),
+                entry_point.role().as_str(),
             )
         );
     }
@@ -552,10 +642,12 @@ fn writes_limit_and_error_kind_with_the_reasons_that_carry_them() {
     ] {
         log.record(&Event::ConnectionAborted {
             conn_id,
-            entry_point: EntryPoint::TcpViewer,
+            listener: Listener::TcpViewer,
+            role: Some(Role::Viewer),
             stage: Stage::InitialExchange,
             reason,
             peer_ip: peer,
+            forwarded_ip: None,
             elapsed_ms: 10_000,
         });
     }
@@ -773,7 +865,7 @@ fn assert_json_reply(reply: &Reply, status: u16, body: &Value) {
     assert_eq!(&reply.json(), body);
 }
 
-/// The error body of ops-info-v1 §2: only `code` and a non-empty `message`.
+/// The error body of ops-info-v2 §2: only `code` and a non-empty `message`.
 fn assert_error_reply(reply: &Reply, status: u16, code: &str) {
     let body = reply.json();
     let message = body
@@ -1006,7 +1098,7 @@ fn relay_id_ref_is_a_keyed_16_hex_digest_without_the_relay_id() {
     // Same key, same relay ID: one session can be followed in the log.
     assert_eq!(key.reference(relay_id), reference);
     assert_ne!(key.reference(b"1235"), reference);
-    // A new process key gives a new reference (ops-info-v1 §1.9).
+    // A new process key gives a new reference (ops-info-v2 §1.9).
     assert_ne!(other.reference(relay_id), reference);
     assert_eq!(format!("{key:?}"), "RelayIdKey(<redacted>)");
 }
@@ -1051,6 +1143,7 @@ fn writes_target_rejections_failures_and_aborts_with_only_contract_fields() {
                 conn_id,
                 entry_point: EntryPoint::TcpViewer,
                 peer_ip: relay_peer(),
+                forwarded_ip: None,
                 reason: RejectReason::TargetNotAllowed,
                 target_host: "host.example".to_owned(),
                 target_port: 5900,
@@ -1064,6 +1157,7 @@ fn writes_target_rejections_failures_and_aborts_with_only_contract_fields() {
             conn_id,
             entry_point: EntryPoint::TcpViewer,
             peer_ip: relay_peer(),
+            forwarded_ip: None,
             reason: RejectReason::RelayConnectionLimit { limit: 12 },
             target_host: "not-logged.example".to_owned(),
             target_port: 5900,
@@ -1099,8 +1193,9 @@ fn writes_target_rejections_failures_and_aborts_with_only_contract_fields() {
                 &Event::TargetConnectFailed {
                     conn_id,
                     entry_point: EntryPoint::TcpViewer,
-                    viewer_transport: ViewerTransport::Tcp,
+                    viewer_transport: Transport::Tcp,
                     peer_ip: relay_peer(),
+                    forwarded_ip: None,
                     target_host: "host.example".to_owned(),
                     target_port: 5900,
                     target_ip,
@@ -1139,6 +1234,7 @@ fn writes_target_rejections_failures_and_aborts_with_only_contract_fields() {
                 stage: Stage::TargetConnect,
                 reason,
                 peer_ip: relay_peer(),
+                forwarded_ip: None,
                 elapsed_ms: 456,
                 mode: Mode::Mode1,
             },
@@ -1161,6 +1257,7 @@ fn writes_waiting_events_without_raw_ids_or_unrelated_optional_fields() {
             conn_id,
             entry_point: EntryPoint::TcpServer,
             peer_ip: relay_peer(),
+            forwarded_ip: None,
             relay_id_ref: reference.clone(),
         },
         json!({
@@ -1230,6 +1327,7 @@ fn writes_waiting_events_without_raw_ids_or_unrelated_optional_fields() {
             conn_id,
             entry_point: EntryPoint::TcpServer,
             peer_ip: relay_peer(),
+            forwarded_ip: None,
             reason,
             relay_id_ref: reference.clone(),
         };
@@ -1254,6 +1352,7 @@ fn writes_waiting_events_without_raw_ids_or_unrelated_optional_fields() {
             stage: Stage::Register,
             reason: AbortReason::ServerShutdown,
             peer_ip: relay_peer(),
+            forwarded_ip: None,
             elapsed_ms: 12,
             mode: Mode::Mode2,
         },
@@ -1271,6 +1370,7 @@ fn writes_waiting_events_without_raw_ids_or_unrelated_optional_fields() {
 /// spec: relay.md:RLY-010 partial
 /// spec: relay.md:RLY-011 partial
 /// spec: management.md:MGT-009 partial
+/// spec: websocket.md:WS-028 partial
 #[test]
 fn writes_session_start_fields_conditionally_by_mode_and_transport() {
     let session_id = SessionId::from_block([7; 16]);
@@ -1280,9 +1380,9 @@ fn writes_session_start_fields_conditionally_by_mode_and_transport() {
     let raw = b"session-raw-relay-id-123456789";
     let reference = key.reference(raw);
     for (transport, transport_text) in [
-        (ViewerTransport::Tcp, "tcp"),
-        (ViewerTransport::Ws, "ws"),
-        (ViewerTransport::Wss, "wss"),
+        (Transport::Tcp, "tcp"),
+        (Transport::Ws, "ws"),
+        (Transport::Wss, "wss"),
     ] {
         for mode in [Mode::Mode1, Mode::Mode2] {
             for host in [None, Some("host.example".to_owned())] {
@@ -1291,10 +1391,13 @@ fn writes_session_start_fields_conditionally_by_mode_and_transport() {
                     session_id: session_id.clone(),
                     mode,
                     viewer_transport: transport,
+                    server_transport: Some(transport),
                     viewer_conn_id: viewer,
                     viewer_peer_ip: relay_peer(),
+                    viewer_forwarded_ip: None,
                     server_conn_id: Some(server),
                     server_peer_ip: Some(relay_peer()),
+                    server_forwarded_ip: None,
                     relay_id_ref: Some(reference.clone()),
                     waited_ms: Some(0),
                     target_ip: Some("::ffff:192.0.2.80".parse().unwrap()),
@@ -1316,6 +1419,7 @@ fn writes_session_start_fields_conditionally_by_mode_and_transport() {
                         }
                     }
                     Mode::Mode2 => {
+                        expected["server_transport"] = json!(transport_text);
                         expected["server_conn_id"] = json!(server.to_string());
                         expected["server_peer_ip"] = json!("198.51.100.21");
                         expected["relay_id_ref"] = json!(reference.as_str());
@@ -1369,7 +1473,7 @@ fn writes_session_close_cause_levels_and_canonical_optional_fields() {
             let event = Event::SessionClosed {
                 session_id: id.clone(),
                 mode,
-                viewer_transport: ViewerTransport::Tcp,
+                viewer_transport: Transport::Tcp,
                 started_at: UNIX_EPOCH + Duration::from_millis(1234),
                 duration_ms: 987,
                 bytes_viewer_to_target: u64::MAX,
@@ -1408,7 +1512,7 @@ fn writes_session_close_cause_levels_and_canonical_optional_fields() {
         &Event::SessionClosed {
             session_id: id.clone(),
             mode: Mode::Mode1,
-            viewer_transport: ViewerTransport::Tcp,
+            viewer_transport: Transport::Tcp,
             started_at: UNIX_EPOCH,
             duration_ms: 0,
             bytes_viewer_to_target: 0,
@@ -1437,6 +1541,7 @@ fn cuts_target_host_on_utf8_boundaries_in_every_target_event() {
             conn_id,
             entry_point: EntryPoint::TcpViewer,
             peer_ip: relay_peer(),
+            forwarded_ip: None,
             reason: RejectReason::TargetNotAllowed,
             target_host: host.clone(),
             target_port: 5900,
@@ -1445,8 +1550,9 @@ fn cuts_target_host_on_utf8_boundaries_in_every_target_event() {
         Event::TargetConnectFailed {
             conn_id,
             entry_point: EntryPoint::TcpViewer,
-            viewer_transport: ViewerTransport::Tcp,
+            viewer_transport: Transport::Tcp,
             peer_ip: relay_peer(),
+            forwarded_ip: None,
             target_host: host.clone(),
             target_port: 5900,
             target_ip: None,
@@ -1456,11 +1562,14 @@ fn cuts_target_host_on_utf8_boundaries_in_every_target_event() {
         Event::SessionStarted {
             session_id: SessionId::from_block([0; 16]),
             mode: Mode::Mode1,
-            viewer_transport: ViewerTransport::Tcp,
+            viewer_transport: Transport::Tcp,
+            server_transport: None,
             viewer_conn_id: conn_id,
             viewer_peer_ip: relay_peer(),
+            viewer_forwarded_ip: None,
             server_conn_id: None,
             server_peer_ip: None,
+            server_forwarded_ip: None,
             relay_id_ref: None,
             waited_ms: None,
             target_ip: Some("192.0.2.80".parse().unwrap()),
@@ -1524,10 +1633,12 @@ fn preserves_typed_websocket_error_kinds_in_all_connection_error_events() {
         let events = [
             Event::ConnectionAborted {
                 conn_id,
-                entry_point: EntryPoint::WsViewer,
+                listener: Listener::Ws,
+                role: Some(Role::Viewer),
                 stage: Stage::InitialExchange,
                 reason: AbortReason::ConnectionError(kind),
                 peer_ip: relay_peer(),
+                forwarded_ip: None,
                 elapsed_ms: 17,
             },
             Event::RelayAborted {
@@ -1536,6 +1647,7 @@ fn preserves_typed_websocket_error_kinds_in_all_connection_error_events() {
                 stage: Stage::TargetConnect,
                 reason: AbortReason::ConnectionError(kind),
                 peer_ip: relay_peer(),
+                forwarded_ip: None,
                 elapsed_ms: 17,
                 mode: Mode::Mode1,
             },
@@ -1549,7 +1661,7 @@ fn preserves_typed_websocket_error_kinds_in_all_connection_error_events() {
             Event::SessionClosed {
                 session_id: session_id.clone(),
                 mode: Mode::Mode2,
-                viewer_transport: ViewerTransport::Ws,
+                viewer_transport: Transport::Ws,
                 started_at: UNIX_EPOCH,
                 duration_ms: 17,
                 bytes_viewer_to_target: 0,

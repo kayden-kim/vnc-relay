@@ -17,7 +17,7 @@ pub trait ReloadFileStore: Send + Sync {
     fn read(&self, path: &Path) -> io::Result<Vec<u8>>;
 }
 
-/// Builds a TLS acceptor from PEM bytes (config-v3 §1.9, file-watch-v1 §4 step 6).
+/// Builds a TLS acceptor from PEM bytes (config-v4 §1.9, file-watch-v1 §4 step 6).
 ///
 /// The acceptor type `A` is opaque to the app layer.
 pub trait ReloadTlsStore<A>: Send + Sync {
@@ -25,7 +25,7 @@ pub trait ReloadTlsStore<A>: Send + Sync {
     fn build(&self, cert_pem: &[u8], key_pem: &[u8]) -> Result<A, TlsBuildError>;
 }
 
-/// Why a certificate and key pair could not be built (config-v3 §2.1 `tls_file_invalid`).
+/// Why a certificate and key pair could not be built (config-v4 §2.1 `tls_file_invalid`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TlsBuildError {
     /// Fixed short cause such as `"pair mismatch"`, `"key format"`, or `"certificate format"`.

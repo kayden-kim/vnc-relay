@@ -30,8 +30,8 @@ fn repository_example_loads_without_secrets() {
         "example management uses loopback HTTP"
     );
     assert!(settings.status.listen.ip().is_loopback());
-    assert!(!settings.relay.ws_viewer.enabled);
-    assert!(!settings.relay.wss_viewer.enabled);
+    assert!(!settings.relay.ws.enabled());
+    assert!(!settings.relay.wss.enabled());
     for entry in [&settings.relay.tcp_viewer, &settings.relay.tcp_server] {
         assert!(entry.enabled);
         assert!(

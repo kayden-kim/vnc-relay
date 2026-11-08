@@ -13,7 +13,7 @@ import { parseSession } from './model.js';
 import { el, pageHead, statusAlert, statusBadge } from './panels.js';
 import { LOGIN_URL, buildNavbar, defaultStorage, signOutUrl } from './shell.js';
 import {
-  canEdit, diagnosticText, fieldGroup, fieldUnit, initialInputs, inputErrorText,
+  canEdit, diagnosticText, editableItems, fieldGroup, fieldUnit, initialInputs, inputErrorText,
   inspectInputs, mapDiagnostics, parseConfig, selectErrorLine,
 } from './settings-model.js';
 
@@ -178,6 +178,11 @@ export function mountSettings(root, deps = {}, { edit = false, applied = null } 
     const help = el('p', 'config-help', Array.isArray(item.value) ? t().configListHelp :
       fill(t().configRangeHelp, { min: item.min, max: item.max }));
     help.id = `${id}-help`;
+    let proxyHelp = null;
+    if (item.key.endsWith('.trusted_proxies')) {
+      proxyHelp = el('p', 'config-help', t().trustedProxiesHelp);
+      proxyHelp.id = `${id}-proxy-help`;
+    }
     const errors = state.errors.filter((error) => error.key === item.key && error.field !== false);
     const errorNode = el('div', 'config-field-errors');
     errorNode.id = `${id}-error`;
@@ -187,17 +192,18 @@ export function mountSettings(root, deps = {}, { edit = false, applied = null } 
       errorNode.append(message);
     }
     input.setAttribute('aria-invalid', String(errors.length > 0));
-    input.setAttribute('aria-describedby', `${help.id}${errors.length ? ` ${errorNode.id}` : ''}`);
+    const describedBy = [help.id, proxyHelp?.id, errors.length ? errorNode.id : null].filter(Boolean).join(' ');
+    input.setAttribute('aria-describedby', describedBy);
     const control = el('div', 'config-number-unit');
     control.append(input);
     if (!Array.isArray(item.value)) control.append(el('span', 'config-help', t().configUnits[fieldUnit(item.key)]));
-    wrapper.append(label, control, help, errorNode);
+    wrapper.append(label, control, help, ...(proxyHelp ? [proxyHelp] : []), errorNode);
     return wrapper;
   }
 
   function editCards() {
     const cards = [];
-    const editable = state.config.items.filter((item) => item.editable);
+    const editable = editableItems(state.config);
     for (const group of GROUPS) {
       const items = editable.filter((item) => fieldGroup(item.key) === group);
       if (!items.length) continue;
@@ -336,7 +342,14 @@ export function mountSettings(root, deps = {}, { edit = false, applied = null } 
       if (Array.isArray(value)) {
         content.append(el('p', 'config-help', t().addedItems), valueNode(value.filter((entry) => !previous.includes(entry))),
           el('p', 'config-help', t().removedItems), valueNode(previous.filter((entry) => !value.includes(entry))));
-        if (!value.length) content.append(alert(t().emptyAllowWarning, 'warning'));
+        if (!value.length) {
+          const warning = key.endsWith('.trusted_proxies')
+            ? t().emptyTrustedProxiesWarning
+            : key.endsWith('.allowed_origins')
+              ? t().emptyAllowedOriginsWarning
+              : t().emptyAllowWarning;
+          content.append(alert(warning, 'warning'));
+        }
       }
       const card = createCard({ title: key, headingLevel: 3, body: content });
       card.classList.add('config-change');

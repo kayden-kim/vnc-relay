@@ -25,6 +25,18 @@ export function fieldGroup(key) {
   return 'keepalive';
 }
 
+// DASH-035: five sections; proxy lists precede Origin lists within access policies.
+export function editableItems(config) {
+  const rank = (key) => {
+    const group = fieldGroup(key);
+    if (group === 'sourceAllowLists') return 0;
+    if (group === 'accessPolicies') return key.endsWith('.trusted_proxies') ? 1
+      : key.endsWith('.allowed_origins') ? 2 : 3;
+    return { connectionLimits: 4, timeouts: 5, keepalive: 6 }[group];
+  };
+  return config.items.filter((item) => item.editable).sort((a, b) => rank(a.key) - rank(b.key));
+}
+
 export function fieldUnit(key) {
   if (key.endsWith('_secs')) return 'seconds';
   if (key.endsWith('_bytes')) return 'bytes';
@@ -32,7 +44,7 @@ export function fieldUnit(key) {
 }
 
 export function initialInputs(config) {
-  return new Map(config.items.filter((item) => item.editable).map((item) =>
+  return new Map(editableItems(config).map((item) =>
     [item.key, Array.isArray(item.value) ? item.value.join('\n') : String(item.value)]));
 }
 
@@ -58,7 +70,7 @@ export function inspectInputs(config, inputs) {
   const changes = {};
   const errors = [];
   const lineMaps = new Map();
-  for (const item of config.items.filter((entry) => entry.editable)) {
+  for (const item of editableItems(config)) {
     const text = inputs.get(item.key);
     if (Array.isArray(item.value)) {
       const list = listLines(text);
@@ -83,13 +95,13 @@ export function inspectInputs(config, inputs) {
   if (values['limits.waiting'] > values['limits.relay_connections']) {
     errors.push({ key: 'limits.waiting', copy: 'waitingLimitError' });
   }
-  const order = new Map(config.items.map((item, index) => [item.key, index]));
+  const order = new Map(editableItems(config).map((item, index) => [item.key, index]));
   errors.sort((a, b) => order.get(a.key) - order.get(b.key));
   return { changes, values, errors, lineMaps };
 }
 
 export function mapDiagnostics(diagnostics, config, lineMaps) {
-  const keys = config.items.filter((item) => item.editable).map((item) => item.key);
+  const keys = editableItems(config).map((item) => item.key);
   return diagnostics.map((diagnostic) => {
     const match = /^(.*)\[(\d+)\]$/.exec(diagnostic.key);
     const key = match?.[1] ?? diagnostic.key;

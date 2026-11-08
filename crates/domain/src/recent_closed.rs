@@ -74,7 +74,7 @@ mod tests {
     use std::time::{Duration, SystemTime};
 
     use crate::handshake::Mode;
-    use crate::session::{CloseCause, Direction, Session, SessionId, Side, ViewerTransport};
+    use crate::session::{CloseCause, Direction, Session, SessionId, Side, Transport};
 
     use super::*;
 
@@ -82,7 +82,8 @@ mod tests {
         let mut session = Session::new(
             SessionId::from_block([seed; 16]),
             Mode::Mode2,
-            ViewerTransport::Ws,
+            Transport::Ws,
+            Transport::Wss,
             SystemTime::UNIX_EPOCH + Duration::from_secs(1),
             Duration::from_secs(10),
         );
@@ -295,7 +296,8 @@ mod tests {
         for (entry, cause) in list.iter().zip(causes.into_iter().rev()) {
             assert_eq!(entry.close_cause(), cause);
             assert_eq!(entry.mode(), Mode::Mode2);
-            assert_eq!(entry.viewer_transport(), ViewerTransport::Ws);
+            assert_eq!(entry.viewer_transport(), Transport::Ws);
+            assert_eq!(entry.target_transport(), Transport::Wss);
             assert_eq!(
                 entry.started_at(),
                 SystemTime::UNIX_EPOCH + Duration::from_secs(1)

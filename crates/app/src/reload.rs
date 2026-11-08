@@ -77,7 +77,7 @@ pub enum PrepareReloadError {
     RestartRequired(Vec<String>),
 }
 
-/// What noticed a change (ops-info-v1 §1.5 `reload_change_detected`).
+/// What noticed a change (ops-info-v2 §1.5 `reload_change_detected`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ChangeSource {
     /// The OS file notification API.
@@ -96,7 +96,7 @@ impl ChangeSource {
     }
 }
 
-/// Why watching stopped working (ops-info-v1 §1.5 `reload_watch_failed`).
+/// Why watching stopped working (ops-info-v2 §1.5 `reload_watch_failed`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WatchFailure {
     /// The OS notification API reported an error.

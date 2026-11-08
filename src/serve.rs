@@ -20,7 +20,7 @@ use vnc_relay_adapters::file_watch::{self, FsReloadFileStore, SystemReloadClock}
 use vnc_relay_adapters::listener::{ListenerFailure, SupervisedListener};
 use vnc_relay_adapters::management_http::{DashboardHints, ManagementListener, ManagementServices};
 use vnc_relay_adapters::net::{AcceptPolicy, AllowSource, BindFailure, TcpEntryPoint};
-use vnc_relay_adapters::ops_log::JsonLinesEventSink;
+use vnc_relay_adapters::ops_log::{JsonLinesEventSink, RecentLogs};
 use vnc_relay_adapters::status_http::StatusListener;
 use vnc_relay_adapters::target::TcpTargetConnector;
 use vnc_relay_adapters::tls::{self, TlsError, TlsFile, TlsSource};
@@ -42,7 +42,7 @@ use vnc_relay_app::reload::{ConfigCandidate, SharedReload};
 use vnc_relay_app::settings::{LogOutput, Settings, TlsFiles};
 use vnc_relay_domain::admin_session::AdminSessionPolicy;
 use vnc_relay_domain::budget::ConnectionBudget;
-use vnc_relay_domain::entry_point::EntryPoint;
+use vnc_relay_domain::entry_point::{EntryPoint, Listener};
 use vnc_relay_domain::handshake::HandshakePolicy;
 use vnc_relay_domain::login_limit::LoginLimitPolicy;
 
@@ -70,12 +70,13 @@ pub fn run(config: &Path) -> ExitCode {
         }
     };
     let settings = &running.settings;
+    let recent_logs = Arc::new(RecentLogs::new(settings.recent_logs.max_entries as usize));
     let output = match JsonLinesEventSink::open(
         &settings.log.output,
         report_log_write_failure,
         report_log_reopen_failure,
     ) {
-        Ok(log) => Arc::new(log),
+        Ok(log) => Arc::new(log.with_recent_logs(Arc::clone(&recent_logs))),
         Err(error) => {
             let path = match &settings.log.output {
                 LogOutput::File(path) => path.display().to_string(),
@@ -165,19 +166,26 @@ pub fn run(config: &Path) -> ExitCode {
             return runtime_failure(log.as_ref(), "비동기 런타임을 만들 수 없다", &error);
         }
     };
-    runtime.block_on(listen_until_shutdown(&running, output, auth, config, clock))
+    runtime.block_on(listen_until_shutdown(
+        &running,
+        output,
+        recent_logs,
+        auth,
+        config,
+        clock,
+    ))
 }
 
 async fn listen_until_shutdown(
     running: &ConfigCandidate,
     output: Arc<JsonLinesEventSink>,
+    recent_logs: Arc<RecentLogs>,
     auth: Arc<AdminAuth>,
     config: &Path,
     clock: Arc<dyn Clock>,
 ) -> ExitCode {
     let settings = &running.settings;
     let log: Arc<dyn EventSink> = output.clone();
-    // Registered before binding so that a request during startup is not lost.
     let mut shutdown = match ShutdownSignal::register() {
         Ok(shutdown) => shutdown,
         Err(error) => {
@@ -360,6 +368,7 @@ async fn listen_until_shutdown(
                 query: query_service,
                 terminate: terminate_service,
                 config: config_service,
+                logs: Arc::clone(&recent_logs),
             },
         );
         tokio::spawn(listener.run(Arc::clone(&log)))
@@ -385,11 +394,15 @@ async fn listen_until_shutdown(
     let mut entry_points = JoinSet::new();
     let mut idle = Vec::new();
     for bound in listeners {
-        match bound.plan.entry_point {
-            Some(entry_point @ (EntryPoint::TcpViewer | EntryPoint::TcpServer)) => {
+        match bound.plan.listener {
+            Some(listener @ (Listener::TcpViewer | Listener::TcpServer)) => {
+                let entry_point = match listener {
+                    Listener::TcpViewer => EntryPoint::TcpViewer,
+                    _ => EntryPoint::TcpServer,
+                };
                 let policy = AcceptPolicy {
-                    allow: match entry_point {
-                        EntryPoint::TcpViewer => AllowSource::tcp_viewer(Arc::clone(&cell)),
+                    allow: match listener {
+                        Listener::TcpViewer => AllowSource::tcp_viewer(Arc::clone(&cell)),
                         _ => AllowSource::tcp_server(Arc::clone(&cell)),
                     },
                     relay_budget: Arc::clone(&relay_budget),
@@ -408,26 +421,26 @@ async fn listen_until_shutdown(
                 );
                 entry_points.spawn(entry.run(Arc::clone(&log), stopped.clone()));
             }
-            Some(entry_point @ (EntryPoint::WsViewer | EntryPoint::WssViewer)) => {
-                let tls = match entry_point {
-                    EntryPoint::WssViewer if wss_present => Some(TlsSource::wss(Arc::clone(&cell))),
+            Some(listener @ (Listener::Ws | Listener::Wss)) => {
+                let tls = match listener {
+                    Listener::Wss if wss_present => Some(TlsSource::wss(Arc::clone(&cell))),
                     _ => None,
                 };
-                if matches!(entry_point, EntryPoint::WssViewer) && tls.is_none() {
+                if matches!(listener, Listener::Wss) && tls.is_none() {
                     idle.push(bound);
                     continue;
                 }
                 let policy = WsPolicy {
                     accept: AcceptPolicy {
-                        allow: match entry_point {
-                            EntryPoint::WssViewer => AllowSource::wss_viewer(Arc::clone(&cell)),
-                            _ => AllowSource::ws_viewer(Arc::clone(&cell)),
+                        allow: match listener {
+                            Listener::Wss => AllowSource::wss(Arc::clone(&cell)),
+                            _ => AllowSource::ws(Arc::clone(&cell)),
                         },
                         relay_budget: Arc::clone(&relay_budget),
                     },
                 };
                 let entry = WsEntryPoint::new(
-                    entry_point,
+                    listener,
                     SupervisedListener::new(
                         bound.listener,
                         bound.plan.name,
@@ -656,21 +669,21 @@ fn record_failure(
 
 /// One TLS identity that startup checks before any listener is bound.
 struct TlsCheck<'a> {
-    /// Config key prefix of the two files, such as `relay.wss_viewer`.
+    /// Config key prefix of the two files, such as `relay.wss`.
     prefix: &'static str,
     /// `listener` value of the operation log (ops-info-v1 §1.5).
     listener: &'static str,
     files: &'a TlsFiles,
 }
 
-/// The enabled WSS entry point, then management, when they set TLS files.
+/// The enabled WSS listener, then management, when they set TLS files.
 fn tls_checks(settings: &Settings) -> Vec<TlsCheck<'_>> {
     let mut checks = Vec::new();
-    let wss = settings.relay.get(EntryPoint::WssViewer);
-    if let (true, Some(files)) = (wss.enabled, wss.tls.as_ref()) {
+    let wss = &settings.relay.wss;
+    if let (true, Some(files)) = (wss.enabled(), wss.tls.as_ref()) {
         checks.push(TlsCheck {
-            prefix: "relay.wss_viewer",
-            listener: EntryPoint::WssViewer.name(),
+            prefix: "relay.wss",
+            listener: Listener::Wss.name(),
             files,
         });
     }

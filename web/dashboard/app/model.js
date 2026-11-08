@@ -39,6 +39,10 @@ function integer(value, min = 0) {
 function nullableInteger(value) {
   return value === null ? null : integer(value);
 }
+function nullableText(value) {
+  return value === null ? null : text(value);
+}
+
 
 function text(value) {
   if (typeof value !== 'string') {
@@ -133,11 +137,14 @@ function sessionItem(raw) {
     state: text(item.state),
     mode: text(item.mode),
     viewerTransport: text(item.viewer_transport),
+    targetTransport: text(item.target_transport),
     startedAt: timestamp(item.started_at),
     bytesViewerToTarget: integer(item.bytes_viewer_to_target),
     bytesTargetToViewer: integer(item.bytes_target_to_viewer),
     viewerAddress: address(item.viewer_address),
     targetAddress: address(item.target_address),
+    viewerForwardedIp: nullableText(item.viewer_forwarded_ip),
+    targetForwardedIp: nullableText(item.target_forwarded_ip),
   };
 }
 
@@ -153,6 +160,7 @@ function closedItem(raw) {
     sessionId: sessionId(item.session_id),
     mode: text(item.mode),
     viewerTransport: text(item.viewer_transport),
+    targetTransport: text(item.target_transport),
     startedAt,
     endedAt,
     bytesViewerToTarget: integer(item.bytes_viewer_to_target),
@@ -191,4 +199,25 @@ export function parseTerminate(body) {
   }
   closedItem(outcome.closed_session);
   return { result };
+}
+
+export function parseLogs(body) {
+  const data = object(body);
+  const asOf = timestamp(data.as_of);
+  const maxEntries = integer(data.max_entries);
+  const oldestSeq = nullableInteger(data.oldest_seq);
+  const latestSeq = nullableInteger(data.latest_seq);
+  if (typeof data.has_more !== 'boolean') {
+    throw invalid();
+  }
+  const items = array(data.items).map((raw) => {
+    const item = object(raw);
+    const seq = integer(item.seq, 1);
+    const entry = object(item.entry);
+    timestamp(entry.ts);
+    nonEmptyText(entry.level);
+    nonEmptyText(entry.event);
+    return { seq, entry };
+  });
+  return { asOf, maxEntries, oldestSeq, latestSeq, hasMore: data.has_more, items };
 }

@@ -168,6 +168,7 @@ pub(super) async fn dispatch<C: TargetConnector>(
                                     conn_id: context.conn_id,
                                     entry_point: context.entry_point,
                                     peer_ip: context.peer_ip,
+                                    forwarded_ip: context.forwarded_ip,
                                     relay_id_ref: reference.clone(),
                                 });
                                 break Registration::Waiting(metadata);
@@ -262,6 +263,7 @@ pub(super) async fn dispatch<C: TargetConnector>(
                 conn_id: context.conn_id,
                 entry_point: context.entry_point,
                 peer_ip: context.peer_ip,
+                forwarded_ip: context.forwarded_ip,
                 reason,
                 relay_id_ref: reference,
             });

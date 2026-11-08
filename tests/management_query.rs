@@ -613,8 +613,8 @@ struct RunningServer {
     status_port: u16,
     tcp_viewer_port: u16,
     tcp_server_port: u16,
-    ws_viewer_port: u16,
-    wss_viewer_port: u16,
+    ws_port: u16,
+    wss_port: u16,
 }
 
 impl RunningServer {
@@ -725,19 +725,23 @@ enabled = true
 listen = "127.0.0.1:{tcp_srv_port}"
 allow = ["127.0.0.1"]
 
-[relay.ws_viewer]
-enabled = true
+[relay.ws]
 listen = "127.0.0.1:{ws_vwr_port}"
+
+[relay.ws.viewer]
+enabled = true
 allow = ["127.0.0.1"]
 allowed_origins = ["http://127.0.0.1"]
 
-[relay.wss_viewer]
-enabled = true
+[relay.wss]
 listen = "127.0.0.1:{wss_vwr_port}"
-allow = ["127.0.0.1"]
-allowed_origins = ["http://127.0.0.1", "https://127.0.0.1"]
 cert_file = "{cert}"
 key_file = "{key}"
+
+[relay.wss.viewer]
+enabled = true
+allow = ["127.0.0.1"]
+allowed_origins = ["http://127.0.0.1", "https://127.0.0.1"]
 
 [mode1]
 enabled = true
@@ -770,8 +774,8 @@ enabled = true
             status_port,
             tcp_viewer_port: tcp_vwr_port,
             tcp_server_port: tcp_srv_port,
-            ws_viewer_port: ws_vwr_port,
-            wss_viewer_port: wss_vwr_port,
+            ws_port: ws_vwr_port,
+            wss_port: wss_vwr_port,
         };
 
         server.wait_ready();
@@ -785,8 +789,8 @@ enabled = true
             self.status_port,
             self.tcp_viewer_port,
             self.tcp_server_port,
-            self.ws_viewer_port,
-            self.wss_viewer_port,
+            self.ws_port,
+            self.wss_port,
         ];
         while !ports.into_iter().all(|p| {
             let addr = SocketAddr::from(([127, 0, 0, 1], p));
@@ -944,8 +948,8 @@ enabled = true
         s
     }
 
-    fn connect_ws_viewer(&self) -> WebSocket {
-        let addr = SocketAddr::from(([127, 0, 0, 1], self.ws_viewer_port));
+    fn connect_viewer_ws(&self) -> WebSocket {
+        let addr = SocketAddr::from(([127, 0, 0, 1], self.ws_port));
         let tcp = TcpStream::connect_timeout(&addr, IO_LIMIT)
             .unwrap_or_else(|e| panic!("connect ws viewer: {e:?}"));
         tcp.set_read_timeout(Some(IO_LIMIT))
@@ -959,8 +963,8 @@ enabled = true
         ws
     }
 
-    fn connect_wss_viewer(&self) -> WebSocket {
-        let addr = SocketAddr::from(([127, 0, 0, 1], self.wss_viewer_port));
+    fn connect_viewer_wss(&self) -> WebSocket {
+        let addr = SocketAddr::from(([127, 0, 0, 1], self.wss_port));
         let tcp = TcpStream::connect_timeout(&addr, IO_LIMIT)
             .unwrap_or_else(|e| panic!("connect wss viewer: {e:?}"));
         tcp.set_read_timeout(Some(IO_LIMIT))
@@ -1244,6 +1248,7 @@ fn inclusion_before_and_after_initial_exchange_mode1_connect_and_closing() {
     let items = some(sessions.arr("items"), "m1 sessions items");
     assert_eq!(items.len(), 1);
     assert_eq!(items[0].str("mode"), Some("mode1"));
+    assert_eq!(items[0].str("target_transport"), Some("tcp"));
     let m1_sid = some(items[0].str("session_id"), "m1 session_id").to_owned();
     assert_eq!(
         summary
@@ -1402,6 +1407,7 @@ fn session_detail_fields_timestamp_and_integer_bytes() {
     assert_eq!(s.str("state"), Some("active"));
     assert_eq!(s.str("mode"), Some("mode2"));
     assert_eq!(s.str("viewer_transport"), Some("tcp"));
+    assert_eq!(s.str("target_transport"), Some("tcp"));
     assert_timestamp(some(s.str("started_at"), "started_at"));
     assert_eq!(s.num("bytes_viewer_to_target"), Some(v2t_data.len() as i64));
     assert_eq!(s.num("bytes_target_to_viewer"), Some(t2v_data.len() as i64));
@@ -1591,6 +1597,7 @@ fn directional_bytes_and_partial_writes() {
 }
 
 /// spec: management.md:MGT-006
+/// spec: management.md:MGT-051 partial
 #[test]
 fn same_stream_over_tcp_ws_and_wss_gives_same_counters() {
     let _lock = lock_ports();
@@ -1637,6 +1644,7 @@ fn same_stream_over_tcp_ws_and_wss_gives_same_counters() {
                 .find(|i| i.str("viewer_transport") == Some("tcp")),
             "tcp session",
         );
+        assert_eq!(item.str("target_transport"), Some("tcp"));
         assert_eq!(item.num("bytes_viewer_to_target"), Some(120));
         assert_eq!(item.num("bytes_target_to_viewer"), Some(240));
     }
@@ -1646,7 +1654,7 @@ fn same_stream_over_tcp_ws_and_wss_gives_same_counters() {
         let mut srv = server.connect_tcp_server();
         srv.write_all(&make_mode2_request("6002"))
             .unwrap_or_else(|e| panic!("{e:?}"));
-        let mut ws_vwr = server.connect_ws_viewer();
+        let mut ws_vwr = server.connect_viewer_ws();
         ws_vwr.send_binary(&make_mode2_request("6002"));
 
         ws_vwr.send_binary(&v2t_payload);
@@ -1676,6 +1684,7 @@ fn same_stream_over_tcp_ws_and_wss_gives_same_counters() {
                 .find(|i| i.str("viewer_transport") == Some("ws")),
             "ws session",
         );
+        assert_eq!(item.str("target_transport"), Some("tcp"));
         assert_eq!(item.num("bytes_viewer_to_target"), Some(120));
         assert_eq!(item.num("bytes_target_to_viewer"), Some(240));
     }
@@ -1685,7 +1694,7 @@ fn same_stream_over_tcp_ws_and_wss_gives_same_counters() {
         let mut srv = server.connect_tcp_server();
         srv.write_all(&make_mode2_request("6003"))
             .unwrap_or_else(|e| panic!("{e:?}"));
-        let mut wss_vwr = server.connect_wss_viewer();
+        let mut wss_vwr = server.connect_viewer_wss();
         wss_vwr.send_binary(&make_mode2_request("6003"));
 
         wss_vwr.send_binary(&v2t_payload);
@@ -1715,8 +1724,97 @@ fn same_stream_over_tcp_ws_and_wss_gives_same_counters() {
                 .find(|i| i.str("viewer_transport") == Some("wss")),
             "wss session",
         );
+        assert_eq!(item.str("target_transport"), Some("tcp"));
         assert_eq!(item.num("bytes_viewer_to_target"), Some(120));
         assert_eq!(item.num("bytes_target_to_viewer"), Some(240));
+    }
+}
+
+/// spec: management.md:MGT-051 partial
+#[test]
+fn websocket_server_transport_is_preserved_in_active_and_closed_sessions() {
+    let _lock = lock_ports();
+    let server = RunningServer::start(
+        "mgt051-server",
+        "[relay.ws.server]\nenabled = true\nallow = [\"127.0.0.1\"]\nallowed_origins = [\"http://127.0.0.1\"]\n[relay.wss.server]\nenabled = true\nallow = [\"127.0.0.1\"]\nallowed_origins = [\"https://127.0.0.1\"]\n[timeouts]\nclose_secs = 1",
+        5,
+        10,
+        5,
+    );
+    let (cookie, csrf) = server.login();
+    for (tls, transport, port, relay_id) in [
+        (false, "ws", server.ws_port, "5101"),
+        (true, "wss", server.wss_port, "5102"),
+    ] {
+        let addr = SocketAddr::from(([127, 0, 0, 1], port));
+        let tcp = TcpStream::connect_timeout(&addr, IO_LIMIT)
+            .unwrap_or_else(|error| panic!("connect Server: {error:?}"));
+        tcp.set_read_timeout(Some(IO_LIMIT)).unwrap();
+        tcp.set_write_timeout(Some(IO_LIMIT)).unwrap();
+        let (wire, host, origin) = if tls {
+            let config = std::sync::Arc::new(tls_client_config());
+            let name = ServerName::try_from("localhost").unwrap();
+            let connection = ClientConnection::new(config, name).unwrap();
+            (
+                Wire::Tls(Box::new(StreamOwned::new(connection, tcp))),
+                "localhost",
+                "https://127.0.0.1",
+            )
+        } else {
+            (Wire::Plain(tcp), "127.0.0.1", "http://127.0.0.1")
+        };
+        let mut target = WebSocket::upgrade(wire, "/relay/server", host, origin);
+        target.send_binary(&make_mode2_request(relay_id));
+        let mut viewer = server.connect_tcp_viewer();
+        viewer.write_all(&make_mode2_request(relay_id)).unwrap();
+        viewer.write_all(b"viewer-payload").unwrap();
+        assert_eq!(target.read_binary(), b"viewer-payload");
+        target.send_binary(b"server-payload");
+        let mut received = [0; 14];
+        viewer.read_exact(&mut received).unwrap();
+        assert_eq!(&received, b"server-payload");
+        let active = server.poll_json_until(&cookie, "/api/v1/sessions", IO_LIMIT, |list| {
+            list.arr("items").is_some_and(|items| {
+                items
+                    .iter()
+                    .any(|item| item.str("target_transport") == Some(transport))
+            })
+        });
+        let item = some(
+            some(active.arr("items"), "active sessions")
+                .iter()
+                .find(|item| item.str("target_transport") == Some(transport)),
+            "Server transport session",
+        );
+        assert_eq!(item.str("viewer_transport"), Some("tcp"));
+        let session_id = some(item.str("session_id"), "session_id");
+        let detail = server
+            .query(&cookie, &format!("/api/v1/sessions/{session_id}"))
+            .json();
+        assert_eq!(
+            some(detail.obj("session"), "session").str("target_transport"),
+            Some(transport)
+        );
+        let terminated = server.send_http(
+            "POST",
+            &format!("/api/v1/sessions/{session_id}/terminate"),
+            &[("Cookie", &cookie), ("X-CSRF-Token", &csrf)],
+            b"",
+        );
+        assert_eq!(terminated.status, 200, "{}", terminated.body);
+        assert_eq!(
+            some(terminated.json().obj("closed_session"), "closed_session").str("target_transport"),
+            Some(transport)
+        );
+        let closed = server.query(&cookie, "/api/v1/closed-sessions").json();
+        let closed_item = some(
+            some(closed.arr("items"), "closed sessions")
+                .iter()
+                .find(|item| item.str("session_id") == Some(session_id)),
+            "closed Server session",
+        );
+        assert_eq!(closed_item.str("viewer_transport"), Some("tcp"));
+        assert_eq!(closed_item.str("target_transport"), Some(transport));
     }
 }
 
@@ -2028,6 +2126,7 @@ fn closed_sessions_records_eof_and_error_causes_and_detail_of_closed_is_404() {
     let mut found_eof = false;
     let mut any_sid = String::new();
     for it in items {
+        assert_eq!(it.str("target_transport"), Some("tcp"));
         assert_timestamp(some(it.str("started_at"), "started_at"));
         assert_timestamp(some(it.str("ended_at"), "ended_at"));
         assert!(some(it.num("bytes_viewer_to_target"), "bytes_v2t") >= 0);
@@ -2698,7 +2797,7 @@ fn contract_rules_error_order_methods_polling_and_headers() {
             Some("invalid_request")
         );
     }
-    // Note on Si expiration: per config-v3.md, minimum allowed management.session.idle_secs
+    // Note on Si expiration: per config-v4.md, minimum allowed management.session.idle_secs
     // is 300s (5m), which is not cheap to wait in automated tests; timing test is skipped
     // per prompt instructions ("if the timing is cheap; else skip and say so").
 }
@@ -2905,16 +3004,24 @@ fn config_view_reports_effective_values_all_file_states_and_reload_history() {
         "relay.tcp_server.enabled",
         "relay.tcp_server.listen",
         "relay.tcp_server.allow",
-        "relay.ws_viewer.enabled",
-        "relay.ws_viewer.listen",
-        "relay.ws_viewer.allow",
-        "relay.ws_viewer.allowed_origins",
-        "relay.wss_viewer.enabled",
-        "relay.wss_viewer.listen",
-        "relay.wss_viewer.allow",
-        "relay.wss_viewer.allowed_origins",
-        "relay.wss_viewer.cert_file",
-        "relay.wss_viewer.key_file",
+        "relay.ws.listen",
+        "relay.ws.trusted_proxies",
+        "relay.ws.viewer.enabled",
+        "relay.ws.viewer.allow",
+        "relay.ws.viewer.allowed_origins",
+        "relay.ws.server.enabled",
+        "relay.ws.server.allow",
+        "relay.ws.server.allowed_origins",
+        "relay.wss.listen",
+        "relay.wss.trusted_proxies",
+        "relay.wss.cert_file",
+        "relay.wss.key_file",
+        "relay.wss.viewer.enabled",
+        "relay.wss.viewer.allow",
+        "relay.wss.viewer.allowed_origins",
+        "relay.wss.server.enabled",
+        "relay.wss.server.allow",
+        "relay.wss.server.allowed_origins",
         "mode1.enabled",
         "mode1.allow_targets",
         "mode2.enabled",
@@ -2947,6 +3054,7 @@ fn config_view_reports_effective_values_all_file_states_and_reload_history() {
         "dashboard.poll_secs",
         "dashboard.query_timeout_secs",
         "recent_closed.max_entries",
+        "recent_logs.max_entries",
         "status.listen",
         "log.output",
         "reload.settle_secs",
@@ -3007,23 +3115,32 @@ fn config_view_reports_effective_values_all_file_states_and_reload_history() {
         ("dashboard.poll_secs", 2),
         ("dashboard.query_timeout_secs", 5),
         ("recent_closed.max_entries", 5),
+        ("recent_logs.max_entries", 1000),
         ("reload.settle_secs", 1),
         ("reload.poll_secs", 5),
     ] {
         assert_eq!(config_item(&initial, key)["value"], value, "{key}");
     }
-    for (prefix, port) in [
-        ("relay.tcp_viewer", server.tcp_viewer_port),
-        ("relay.tcp_server", server.tcp_server_port),
-        ("relay.ws_viewer", server.ws_viewer_port),
-        ("relay.wss_viewer", server.wss_viewer_port),
+    for (prefix, listener, port) in [
+        (
+            "relay.tcp_viewer",
+            "relay.tcp_viewer",
+            server.tcp_viewer_port,
+        ),
+        (
+            "relay.tcp_server",
+            "relay.tcp_server",
+            server.tcp_server_port,
+        ),
+        ("relay.ws.viewer", "relay.ws", server.ws_port),
+        ("relay.wss.viewer", "relay.wss", server.wss_port),
     ] {
         assert_eq!(
             config_item(&initial, &format!("{prefix}.enabled"))["value"],
             true
         );
         assert_eq!(
-            config_item(&initial, &format!("{prefix}.listen"))["value"],
+            config_item(&initial, &format!("{listener}.listen"))["value"],
             format!("127.0.0.1:{port}")
         );
         assert_eq!(
@@ -3033,6 +3150,16 @@ fn config_view_reports_effective_values_all_file_states_and_reload_history() {
         assert_eq!(
             config_item(&initial, &format!("{prefix}.allow"))["editable"],
             true
+        );
+    }
+    for listener in ["ws", "wss"] {
+        assert_eq!(
+            config_item(&initial, &format!("relay.{listener}.trusted_proxies"))["value"],
+            serde_json::json!([])
+        );
+        assert_eq!(
+            config_item(&initial, &format!("relay.{listener}.server.enabled"))["value"],
+            false
         );
     }
     for key in ["mode1.enabled", "mode2.enabled"] {
@@ -3047,11 +3174,11 @@ fn config_view_reports_effective_values_all_file_states_and_reload_history() {
         false
     );
     assert_eq!(
-        config_item(&initial, "relay.ws_viewer.allowed_origins")["value"],
+        config_item(&initial, "relay.ws.viewer.allowed_origins")["value"],
         serde_json::json!(["http://127.0.0.1"])
     );
     assert_eq!(
-        config_item(&initial, "relay.wss_viewer.allowed_origins")["value"],
+        config_item(&initial, "relay.wss.viewer.allowed_origins")["value"],
         serde_json::json!(["http://127.0.0.1", "https://127.0.0.1"])
     );
     for (key, expected) in [
@@ -3064,14 +3191,8 @@ fn config_view_reports_effective_values_all_file_states_and_reload_history() {
             "log.output",
             server.dir.join("relay.log").to_string_lossy().into_owned(),
         ),
-        (
-            "relay.wss_viewer.cert_file",
-            tls_fixture("server-chain.pem"),
-        ),
-        (
-            "relay.wss_viewer.key_file",
-            tls_fixture("server-key-p256.pem"),
-        ),
+        ("relay.wss.cert_file", tls_fixture("server-chain.pem")),
+        ("relay.wss.key_file", tls_fixture("server-key-p256.pem")),
     ] {
         let actual = some(config_item(&initial, key)["value"].as_str(), key).replace('\\', "/");
         assert_eq!(actual, expected.replace('\\', "/"), "{key}");
@@ -3190,10 +3311,10 @@ fn config_view_reports_effective_values_all_file_states_and_reload_history() {
     assert_eq!(unreadable["items"], applied["items"]);
 
     // Disabled omitted values are null, while an explicitly empty list stays [].
-    let ws_start = some(pending.find("[relay.ws_viewer]"), "WS table");
+    let ws_start = some(pending.find("[relay.ws]"), "WS table");
     let mode_start = some(pending.find("[mode1]"), "mode table");
     let disabled = format!(
-        "{}[relay.ws_viewer]\nenabled = false\n[relay.wss_viewer]\nenabled = false\nallowed_origins = []\ncert_file = \"certs/view-only.pem\"\n{}",
+        "{}[relay.ws.viewer]\nenabled = false\n[relay.wss]\ncert_file = \"certs/view-only.pem\"\n[relay.wss.viewer]\nenabled = false\nallowed_origins = []\n{}",
         &pending[..ws_start],
         &pending[mode_start..]
     );
@@ -3204,21 +3325,21 @@ fn config_view_reports_effective_values_all_file_states_and_reload_history() {
     let view = server.config_view(&fresh.0);
     assert!(view["last_reload"].is_null());
     for key in [
-        "relay.ws_viewer.listen",
-        "relay.ws_viewer.allow",
-        "relay.ws_viewer.allowed_origins",
-        "relay.wss_viewer.listen",
-        "relay.wss_viewer.allow",
-        "relay.wss_viewer.key_file",
+        "relay.ws.listen",
+        "relay.ws.viewer.allow",
+        "relay.ws.viewer.allowed_origins",
+        "relay.wss.listen",
+        "relay.wss.viewer.allow",
+        "relay.wss.key_file",
     ] {
         assert!(config_item(&view, key)["value"].is_null(), "{key}");
         assert_eq!(config_item(&view, key)["editable"], false, "{key}");
     }
     assert_eq!(
-        config_item(&view, "relay.wss_viewer.allowed_origins")["value"],
+        config_item(&view, "relay.wss.viewer.allowed_origins")["value"],
         serde_json::json!([])
     );
-    let cert = config_item(&view, "relay.wss_viewer.cert_file");
+    let cert = config_item(&view, "relay.wss.cert_file");
     assert_eq!(
         cert["value"],
         server
@@ -3237,14 +3358,14 @@ fn config_view_reports_effective_values_all_file_states_and_reload_history() {
     let updated = server.config_view(&fresh.0);
     assert_eq!(updated["file"]["state"], "in_effect");
     assert_eq!(
-        config_item(&updated, "relay.wss_viewer.cert_file")["value"],
+        config_item(&updated, "relay.wss.cert_file")["value"],
         server
             .dir
             .join("certs/updated-view.pem")
             .to_string_lossy()
             .as_ref()
     );
-    assert!(config_item(&updated, "relay.wss_viewer.key_file")["value"].is_null());
+    assert!(config_item(&updated, "relay.wss.key_file")["value"].is_null());
     assert!(updated["last_reload"].is_null());
     config_assert_no_success(&server.config_events()[before..]);
 }

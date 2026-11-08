@@ -121,7 +121,7 @@ mod tests {
     use crate::ports::{EventSink, RelayCloseAction, RelayStream};
     use crate::relay::test_support::TestSettings;
     use crate::relay::{ConnectionContext, PreparedConnection, RelayService};
-    use vnc_relay_domain::session::ViewerTransport;
+    use vnc_relay_domain::session::Transport;
 
     const H: Duration = Duration::from_secs(10);
     const ENABLED: HandshakePolicy = HandshakePolicy {
@@ -138,6 +138,7 @@ mod tests {
             conn_id: ConnId::next(),
             entry_point: EntryPoint::TcpServer,
             peer_ip: PeerIp::new(IpAddr::V4(Ipv4Addr::LOCALHOST)),
+            forwarded_ip: None,
             peer_addr: std::net::SocketAddr::from((Ipv4Addr::LOCALHOST, 12345)),
             accepted_wall: harness.clock.wall(),
             accepted_at: harness.clock.monotonic(),
@@ -278,6 +279,7 @@ mod tests {
                 conn_id: ConnId::next(),
                 entry_point,
                 peer_ip: PeerIp::new(IpAddr::V4(Ipv4Addr::LOCALHOST)),
+                forwarded_ip: None,
                 peer_addr: std::net::SocketAddr::from((Ipv4Addr::LOCALHOST, 12345)),
                 accepted_wall: self.clock.wall(),
                 accepted_at: self.clock.monotonic(),
@@ -348,8 +350,8 @@ mod tests {
     }
 
     impl<S: AsyncRead + AsyncWrite + Unpin + Send> RelayStream for TestStream<S> {
-        fn transport(&self) -> ViewerTransport {
-            ViewerTransport::Tcp
+        fn transport(&self) -> Transport {
+            Transport::Tcp
         }
         fn pending_write_len(&self) -> usize {
             0
@@ -704,8 +706,8 @@ mod tests {
     }
 
     impl RelayStream for TrackedStream {
-        fn transport(&self) -> ViewerTransport {
-            ViewerTransport::Tcp
+        fn transport(&self) -> Transport {
+            Transport::Tcp
         }
         fn pending_write_len(&self) -> usize {
             0
@@ -785,6 +787,7 @@ mod tests {
                 conn_id: ConnId::next(),
                 entry_point: EntryPoint::TcpServer,
                 peer_ip: PeerIp::new(IpAddr::V4(Ipv4Addr::LOCALHOST)),
+                forwarded_ip: None,
                 peer_addr: std::net::SocketAddr::from((Ipv4Addr::LOCALHOST, 12345)),
                 accepted_wall: SystemTime::UNIX_EPOCH,
                 accepted_at: Duration::ZERO,
@@ -833,6 +836,7 @@ mod tests {
                 conn_id: ConnId::next(),
                 entry_point: EntryPoint::TcpServer,
                 peer_ip: PeerIp::new(IpAddr::V4(Ipv4Addr::LOCALHOST)),
+                forwarded_ip: None,
                 peer_addr: std::net::SocketAddr::from((Ipv4Addr::LOCALHOST, 12345)),
                 accepted_wall: harness.clock.wall(),
                 accepted_at: harness.clock.monotonic(),
@@ -904,6 +908,7 @@ mod tests {
                 conn_id: ConnId::next(),
                 entry_point: EntryPoint::TcpServer,
                 peer_ip: PeerIp::new(IpAddr::V4(Ipv4Addr::LOCALHOST)),
+                forwarded_ip: None,
                 peer_addr: std::net::SocketAddr::from((Ipv4Addr::LOCALHOST, 12345)),
                 accepted_wall: harness.clock.wall(),
                 accepted_at: harness.clock.monotonic(),
@@ -949,6 +954,7 @@ mod tests {
                 conn_id: ConnId::next(),
                 entry_point: EntryPoint::TcpServer,
                 peer_ip: PeerIp::new(IpAddr::V4(Ipv4Addr::LOCALHOST)),
+                forwarded_ip: None,
                 peer_addr: std::net::SocketAddr::from((Ipv4Addr::LOCALHOST, 12345)),
                 accepted_wall: harness.clock.wall(),
                 accepted_at: harness.clock.monotonic(),
@@ -1003,6 +1009,7 @@ mod tests {
                 conn_id: ConnId::next(),
                 entry_point: EntryPoint::TcpServer,
                 peer_ip: PeerIp::new(IpAddr::V4(Ipv4Addr::LOCALHOST)),
+                forwarded_ip: None,
                 peer_addr: std::net::SocketAddr::from((Ipv4Addr::LOCALHOST, 12345)),
                 accepted_wall: harness.clock.wall(),
                 accepted_at: harness.clock.monotonic(),

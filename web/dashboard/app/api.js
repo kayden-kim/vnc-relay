@@ -39,6 +39,14 @@ export function isUnauthorized(error) {
 async function exchange(request, path, init, timeoutMs, handle) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const onParentAbort = () => controller.abort();
+  if (init?.signal) {
+    if (init.signal.aborted) {
+      clearTimeout(timer);
+      throw new ApiError('failed');
+    }
+    init.signal.addEventListener('abort', onParentAbort);
+  }
   try {
     const response = await request(path, {
       ...init,
@@ -57,6 +65,9 @@ async function exchange(request, path, init, timeoutMs, handle) {
     throw new ApiError(controller.signal.aborted ? 'timeout' : 'network');
   } finally {
     clearTimeout(timer);
+    if (init?.signal) {
+      init.signal.removeEventListener('abort', onParentAbort);
+    }
   }
 }
 
@@ -115,4 +126,24 @@ export function patchConfig(request, { csrfToken, timeoutMs, revision, changes }
     body: JSON.stringify({ revision, changes }),
   };
   return exchange(request, '/api/v1/config', init, timeoutMs, readJson);
+}
+export const LOGS_PATH = '/api/v1/logs';
+
+export function getLogs(request, params = {}, { poll = false, timeoutMs, signal } = {}) {
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== null && value !== '') {
+      if (Array.isArray(value)) {
+        for (const v of value) {
+          query.append(key, String(v));
+        }
+      } else {
+        query.set(key, String(value));
+      }
+    }
+  }
+  const qs = query.toString();
+  const path = qs ? `${LOGS_PATH}?${qs}` : LOGS_PATH;
+  const headers = poll ? { 'X-Relay-Poll': '1' } : {};
+  return exchange(request, path, { method: 'GET', headers, signal }, timeoutMs, readJson);
 }

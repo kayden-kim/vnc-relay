@@ -9,8 +9,8 @@ use vnc_relay_domain::account::{Account, Argon2Params, Password, PasswordHash};
 use crate::accounts::{AccountsDiagnostic, AccountsWarning, AdminFailure, LoadedAccounts};
 use crate::events::Event;
 
-/// Records operation log events (ops-info-v1). Recording does not fail for
-/// the caller: a sink that cannot write drops the line (ops-info-v1 §1.1),
+/// Records operation log events (ops-info-v2). Recording does not fail for
+/// the caller: a sink that cannot write drops the line (ops-info-v2 §1.1),
 /// so a log failure does not change the flow of a use case.
 pub trait EventSink: Send + Sync {
     fn record(&self, event: &Event);
@@ -153,8 +153,8 @@ pub enum RelayCloseAction {
 /// accepted by the transport, not bytes copied into an unbounded queue.
 /// See relay spec RLY-003, RLY-019 and websocket-relay-v1 §1.4–1.6.
 pub trait RelayStream: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send {
-    /// The viewer transport metadata used in session views and events.
-    fn transport(&self) -> vnc_relay_domain::session::ViewerTransport;
+    /// The endpoint transport metadata used in session views and events.
+    fn transport(&self) -> vnc_relay_domain::session::Transport;
 
     /// The remaining payload length of an outbound frame whose header is
     /// already written; 0 for TCP.
@@ -241,7 +241,7 @@ impl fmt::Display for RelayStreamError {
 
 impl std::error::Error for RelayStreamError {}
 
-/// DNS and single-address connection failures (ops-info-v1 §1.6).
+/// DNS and single-address connection failures (ops-info-v2 §1.6).
 /// The app owns the absolute resolve-plus-connect deadline C.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TargetError {
@@ -284,7 +284,7 @@ pub trait TargetConnector: Send + Sync {
 }
 
 /// Computes a log-only keyed reference; never use it as a matching key.
-/// See ops-info-v1 §1.9.
+/// See ops-info-v2 §1.9.
 pub trait RelayIdSource: Send + Sync {
     fn reference(&self, id: &vnc_relay_domain::relay_id::RelayId) -> crate::events::RelayIdRef;
 }

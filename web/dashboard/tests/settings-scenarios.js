@@ -26,7 +26,7 @@ const WORDS = {
     unreadable: '설정 파일을 읽지 못해 편집할 수 없습니다. 파일 접근을 복구한 뒤 다시 불러오십시오.',
     disabled: '편집 기능이 꺼져 있습니다. 설정 파일에서 management.config_edit = true로 바꾸고 서버를 재시작하십시오.',
     noHistory: '이 프로세스의 재로드 이력이 없습니다.', success: (n) => `설정 ${n}개를 적용했습니다.`,
-    timing: '새 연결부터 적용됩니다. 기존 연결·이미 시작한 타이머·이미 설정한 소켓 옵션은 이전 값을 유지합니다.',
+    timing: '바뀐 값은 키별 다음 검사·요청부터 적용됩니다. 이미 끝난 검사·시작한 타이머·설정한 소켓 옵션은 이전 결과를 유지합니다. 기존 중계 세션은 계속 동작합니다.',
     confirm: '설정 변경 확인', previous: '이전 값', next: '새 값', added: '추가한 항목', removed: '뺀 항목',
     emptyWarning: '빈 허용 목록은 해당 키가 검사하는 모든 새 접속·요청을 거절합니다.',
     noChanges: '바뀐 설정이 없습니다.', saving: '설정을 저장하고 적용하는 중입니다.',
@@ -57,7 +57,7 @@ const WORDS = {
     unreadable: 'The configuration file could not be read. Editing is blocked. Restore file access, then reload.',
     disabled: 'Editing is disabled. Set management.config_edit = true in the configuration file and restart the server.',
     noHistory: 'This process has no reload history.', success: (n) => `Applied ${n} settings.`,
-    timing: 'Changes apply from new connections. Existing connections, started timers, and configured socket options keep their previous values.',
+    timing: 'Changed values apply from the next check or request for each key. Completed checks, started timers, and configured socket options keep their previous results. Existing relay sessions continue.',
     confirm: 'Confirm settings changes', previous: 'Previous value', next: 'New value', added: 'Added items', removed: 'Removed items',
     emptyWarning: 'An empty allow list rejects all new connections or requests checked by this key.',
     noChanges: 'No settings have changed.', saving: 'Saving and applying settings.',
@@ -117,7 +117,7 @@ function deferred() {
   return { promise, resolve };
 }
 
-// Full contract order, all 27 reloadable keys (23 editable and four TLS paths).
+// Full contract order, all 33 reloadable keys (29 editable and four TLS paths).
 function config(overrides = {}) {
   const items = [];
   const add = (key, value, reload = 'restart', editable = false, min, max) => {
@@ -129,15 +129,25 @@ function config(overrides = {}) {
   add('admin.argon2.memory_kib', 19456, 'restart', false, 19456, 1048576);
   add('admin.argon2.iterations', 2, 'restart', false, 2, 10);
   add('admin.argon2.parallelism', 1, 'restart', false, 1, 16);
-  for (const [name, port] of [['tcp_viewer', 5901], ['tcp_server', 5500], ['ws_viewer', 8080], ['wss_viewer', 8443]]) {
+  for (const name of ['tcp_viewer', 'tcp_server']) {
     const prefix = `relay.${name}`;
     add(`${prefix}.enabled`, true);
-    add(`${prefix}.listen`, `127.0.0.1:${port}`);
+    add(`${prefix}.listen`, `127.0.0.1:${name === 'tcp_viewer' ? 5901 : 5500}`);
     add(`${prefix}.allow`, ['198.51.100.0/24'], 'dynamic', true);
-    if (name === 'ws_viewer' || name === 'wss_viewer') add(`${prefix}.allowed_origins`, [], 'dynamic', true);
-    if (name === 'wss_viewer') {
+  }
+  for (const name of ['ws', 'wss']) {
+    const prefix = `relay.${name}`;
+    add(`${prefix}.listen`, `127.0.0.1:${name === 'ws' ? 8080 : 8443}`);
+    add(`${prefix}.trusted_proxies`, ['192.0.2.10'], 'dynamic', true);
+    if (name === 'wss') {
       add(`${prefix}.cert_file`, '/settings/certificate.pem', 'dynamic');
       add(`${prefix}.key_file`, LONG_PATH, 'dynamic');
+    }
+    for (const role of ['viewer', 'server']) {
+      const rolePrefix = `${prefix}.${role}`;
+      add(`${rolePrefix}.enabled`, true);
+      add(`${rolePrefix}.allow`, ['198.51.100.0/24'], 'dynamic', true);
+      add(`${rolePrefix}.allowed_origins`, [], 'dynamic', true);
     }
   }
   add('mode1.enabled', true);
@@ -153,6 +163,7 @@ function config(overrides = {}) {
     ['keepalive.tcp_idle_secs', 60, 10, 3600], ['keepalive.tcp_interval_secs', 10, 1, 300],
     ['keepalive.tcp_probes', 6, 1, 20], ['keepalive.ws_ping_secs', 30, 5, 300], ['keepalive.ws_pong_timeout_secs', 30, 5, 300],
   ]) add(key, value, 'dynamic', true, min, max);
+  add('recent_logs.max_entries', 1000, 'restart', false, 0, 10000);
   add('management.listen', '127.0.0.1:9443');
   add('management.cert_file', '/settings/admin-certificate.pem', 'dynamic');
   add('management.key_file', '/settings/admin-private-key.pem', 'dynamic');
@@ -320,7 +331,7 @@ async function case029() {
   await ready(m);
   const rows = [...m.root.querySelectorAll('[data-config-key]')];
   check('DASH-029: all contract keys in order', same(rows.map((row) => row.dataset.configKey), data.items.map((item) => item.key)));
-  check('DASH-029: fixture has all 27 reloadable keys', data.items.filter((item) => item.reload === 'dynamic').length === 27);
+  check('DASH-029: fixture has all 33 reloadable keys', data.items.filter((item) => item.reload === 'dynamic').length === 33);
   for (const item of data.items) {
     const row = rowOf(m.root, item.key);
     const values = item.value === null ? [w.null] : Array.isArray(item.value) ? item.value.length ? item.value : [w.empty] : [String(item.value)];
@@ -418,7 +429,7 @@ async function case034() {
 async function case035() {
   const data = config();
   for (const item of data.items) {
-    if (item.key.startsWith('relay.tcp_server.') || item.key.startsWith('relay.wss_viewer.') || item.key.startsWith('mode1.')) {
+    if (item.key.startsWith('relay.tcp_server.') || item.key.startsWith('relay.wss.') || item.key.startsWith('mode1.')) {
       item.editable = false;
       if (item.key.endsWith('.enabled')) item.value = false;
       else item.value = null;
@@ -429,6 +440,7 @@ async function case035() {
   const inputs = inputsOf(m.root);
   const expectedKeys = [
     (key) => /^relay\..+\.allow$/.test(key),
+    (key) => key.endsWith('.trusted_proxies'),
     (key) => key.endsWith('.allowed_origins') || key === 'mode1.allow_targets',
     (key) => key.startsWith('limits.'), (key) => key.startsWith('timeouts.'), (key) => key.startsWith('keepalive.'),
   ].flatMap((belongs) => data.items.filter((item) => item.editable && belongs(item.key)).map((item) => item.key));
@@ -487,10 +499,13 @@ async function case036() {
   checkLayout('DASH-036', m.root);
 }
 async function case037() {
-  const m = mount(fakeApi(), { edit: true });
+  const baseline = withValue(config(), 'relay.ws.viewer.allowed_origins', ['https://viewer.example']);
+  const m = mount(fakeApi({ [GET]: () => ok(baseline) }), { edit: true });
   await ready(m, true);
   setValue(m.root, LIST, '192.0.2.7\n198.51.100.8');
   setValue(m.root, 'relay.tcp_server.allow', '');
+  setValue(m.root, 'relay.ws.trusted_proxies', '');
+  setValue(m.root, 'relay.ws.viewer.allowed_origins', '');
   setValue(m.root, WAITING, '250');
   await review(m.root);
   const dialog = dialogOf(m.root);
@@ -499,6 +514,8 @@ async function case037() {
   check('DASH-037: old/new numbers and changed keys', [LIST, 'relay.tcp_server.allow', WAITING, '200', '250'].every((part) => dialog.textContent.includes(part)));
   check('DASH-037: added/deleted list values', [w.added, w.removed, '192.0.2.7', '198.51.100.8', '198.51.100.0/24'].every((part) => dialog.textContent.includes(part)));
   check('DASH-037: empty list warning', dialog.textContent.includes(w.emptyWarning));
+  check('DASH-037: empty trusted proxy warning', dialog.textContent.includes(t.emptyTrustedProxiesWarning));
+  check('DASH-037: empty Origin warning', dialog.textContent.includes(t.emptyAllowedOriginsWarning));
   check('DASH-037: existing connections/timers/options guidance', dialog.textContent.includes(w.timing));
   check('DASH-037: no unchanged key in comparison', !dialog.textContent.includes('keepalive.tcp_probes'));
   check('DASH-037: no request before confirmation', m.api.count(PATCH) === 0);
@@ -560,7 +577,7 @@ async function case039() {
 async function case040() {
   for (const [index, code] of CODES.entries()) {
     const key = index === 2 || index === 3 ? WAITING : index === 7 ?
-      'relay.ws_viewer.allowed_origins' : index === 8 ? 'mode1.allow_targets' : LIST;
+      'relay.ws.viewer.allowed_origins' : index === 8 ? 'mode1.allow_targets' : LIST;
     const lineDiagnostic = index >= 4;
     const serverKey = lineDiagnostic ? `${key}[2]` : key;
     const api = fakeApi({ [PATCH]: () => fail(400, 'config_invalid', { diagnostics: [diagnostic(code, serverKey)] }) });
@@ -822,11 +839,11 @@ async function case050() {
   const saved = new Map();
   const storage = storageOf(saved);
   const longItems = Array.from({ length: 20 }, (_, i) => `https://host-${i}.${'long-domain-label.'.repeat(5)}example.test:8443`);
-  const data = withValue(config(), 'relay.ws_viewer.allowed_origins', longItems);
-  const m = mount(fakeApi({ [GET]: () => ok(data), [PATCH]: () => fail(400, 'config_invalid', { diagnostics: [diagnostic(CODES[7], 'relay.ws_viewer.allowed_origins[1]')] }) }), { edit: true, storage });
+  const data = withValue(config(), 'relay.ws.viewer.allowed_origins', longItems);
+  const m = mount(fakeApi({ [GET]: () => ok(data), [PATCH]: () => fail(400, 'config_invalid', { diagnostics: [diagnostic(CODES[7], 'relay.ws.viewer.allowed_origins[1]')] }) }), { edit: true, storage });
   await ready(m, true);
   const value = `${longItems.join('\n')}\nhttps://new.example.test`;
-  setValue(m.root, 'relay.ws_viewer.allowed_origins', value);
+  setValue(m.root, 'relay.ws.viewer.allowed_origins', value);
   setValue(m.root, WAITING, '250');
   const reads = m.api.count(GET);
   const other = lang === 'ko' ? 'en' : 'ko';
@@ -836,7 +853,7 @@ async function case050() {
   await WAIT(30);
   check('DASH-050: language/document/title changed immediately', document.documentElement.lang === other && titleOf(m.root) === WORDS[other].edit);
   check('DASH-050: choice stored', saved.get(STORAGE_KEY) === other);
-  check('DASH-050: draft survives language change', inputOf(m.root, WAITING)?.value === '250' && inputOf(m.root, 'relay.ws_viewer.allowed_origins')?.value === value);
+  check('DASH-050: draft survives language change', inputOf(m.root, WAITING)?.value === '250' && inputOf(m.root, 'relay.ws.viewer.allowed_origins')?.value === value);
   check('DASH-050: language does not trigger GET', m.api.count(GET) === reads);
   await review(m.root);
   const dialog = dialogOf(m.root);
@@ -849,12 +866,12 @@ async function case050() {
   await apply(m.root);
   await waitFor(() => has(m.root, WORDS[other].validation));
   check('DASH-050: diagnostics use current language', has(m.root, WORDS[other].diagnostics[7]));
-  checkAria('DASH-050', m.root, 'relay.ws_viewer.allowed_origins');
+  checkAria('DASH-050', m.root, 'relay.ws.viewer.allowed_origins');
   const back = m.root.querySelector('#settings-language');
   back.value = lang;
   back.dispatchEvent(new Event('change'));
   await WAIT(30);
-  check('DASH-050: error state retranslated without data loss', has(m.root, w.diagnostics[7]) && inputOf(m.root, 'relay.ws_viewer.allowed_origins')?.value === value);
+  check('DASH-050: error state retranslated without data loss', has(m.root, w.diagnostics[7]) && inputOf(m.root, 'relay.ws.viewer.allowed_origins')?.value === value);
   check('DASH-050: no API language parameters/headers', m.api.calls.every((call) => !/lang/i.test(call.raw)));
   checkLayout('DASH-050 diagnostics', m.root);
   const view = mount(fakeApi({ [GET]: () => ok(data) }), { storage });
@@ -863,7 +880,7 @@ async function case050() {
   language.value = other;
   language.dispatchEvent(new Event('change'));
   await WAIT(20);
-  check('DASH-050: view values preserved on language change', rowOf(view.root, 'relay.ws_viewer.allowed_origins')?.textContent.includes(longItems[19]));
+  check('DASH-050: view values preserved on language change', rowOf(view.root, 'relay.ws.viewer.allowed_origins')?.textContent.includes(longItems[19]));
   check('DASH-050: view document language updated', document.documentElement.lang === other && titleOf(view.root) === WORDS[other].view);
   checkLayout('DASH-050 view', view.root);
 }
@@ -970,6 +987,63 @@ async function case053() {
   }
 }
 
+// Persistent real-component states for the F-C frame comparison.
+async function shot(frame) {
+  const edit = frame.startsWith('scr005-') || ['edit', 'confirm'].includes(frame);
+  const state = frame.replace(/^scr00[45]-/, '');
+  const gate = deferred();
+  let baseline = withValue(config(), 'relay.ws.viewer.allowed_origins', ['https://viewer.example']);
+  if (state === 'disabled') baseline.edit_enabled = false;
+  const fileState = ({ pending: 'pending', restart: 'restart_required', blocked: 'invalid',
+    invalid: 'invalid', unreadable: 'unreadable', 'restart-blocked': 'restart_required',
+    'unreadable-blocked': 'unreadable' })[state];
+  if (fileState) baseline.file = { state: fileState, config_keys: fileState === 'restart_required' ? ['management.listen'] : fileState === 'pending' ? [WAITING] : [],
+    diagnostics: fileState === 'invalid' ? [diagnostic('config_ip_item_invalid')] : [] };
+  if (state === 'no-reload') baseline.last_reload = null;
+  const outcomes = {
+    'server-error': () => fail(400, 'config_invalid', { diagnostics: [diagnostic('config_ip_item_invalid')] }),
+    conflict: () => fail(409, 'config_conflict'), 'write-failed': () => fail(500, 'config_write_failed'),
+    unknown: () => { throw new TypeError('response lost'); },
+    'request-rejected': () => fail(400, 'invalid_request'), saving: () => gate.promise,
+  };
+  const api = fakeApi({
+    [SESSION]: () => ok({ csrf_token: 'shot-token',
+      dashboard: { poll_secs: 3600, query_timeout_secs: 3600, terminate_timeout_secs: 3600 } }),
+    [GET]: (n) => state === 'loading' ? gate.promise : state === 'expired' ? fail(401, 'unauthenticated')
+      : state === 'failed' || (state === 'failed-stale' && n > 1) ? fail(500, 'internal') : ok(baseline),
+    [PATCH]: outcomes[state] ?? (() => patchOk()),
+  });
+  const m = mount(api, { edit, applied: state === 'success' ? 3 : null });
+  if (state === 'loading') return;
+  if (state === 'expired') {
+    await waitFor(() => m.navigations.length > 0);
+    const { mountLogin } = await import('../login/login.js');
+    mountLogin(m.root, { storage: storageOf(new Map([[STORAGE_KEY, lang]])), search: '' });
+    return;
+  }
+  if (fileState || state === 'disabled' || state === 'failed') {
+    await waitFor(() => m.root.querySelector('.alert') !== null);
+    return;
+  }
+  await ready(m, edit);
+  if (state === 'failed-stale') {
+    buttonOf(m.root, 'refresh').click();
+    await waitFor(() => has(m.root, t.failed));
+  } else if (state === 'client-error') {
+    setValue(m.root, LIST, 'not an ip with spaces');
+    buttonOf(m.root, 'review').click();
+  } else if (state === 'confirm' || state === 'unchanged') {
+    if (state === 'confirm') {
+      for (const key of ['relay.tcp_viewer.allow', 'relay.ws.trusted_proxies', 'relay.ws.viewer.allowed_origins']) setValue(m.root, key, '');
+    }
+    await review(m.root);
+  } else if (outcomes[state]) {
+    setValue(m.root, LIST, '192.0.2.7');
+    await apply(m.root);
+    if (state !== 'saving') await waitFor(() => !dialogOf(m.root)?.open);
+  }
+}
+
 const CASES = {
   'dash-028': case028, 'dash-029': case029, 'dash-030': case030, 'dash-031': case031,
   'dash-032': case032, 'dash-033': case033, 'dash-034': case034, 'dash-035': case035,
@@ -981,13 +1055,16 @@ const CASES = {
 };
 const caseName = params.get('case');
 try {
-  const run = CASES[caseName];
-  if (!run) failures.push(`unknown case: ${caseName}`);
-  else await run();
+  if (caseName?.startsWith('shot-')) await shot(caseName.slice(5));
+  else {
+    const run = CASES[caseName];
+    if (!run) failures.push(`unknown case: ${caseName}`);
+    else await run();
+  }
 } catch (error) {
   failures.push(`${caseName} threw: ${error?.message ?? error}`);
 } finally {
-  current?.handle.dispose();
+  if (!caseName?.startsWith('shot-')) current?.handle.dispose();
 }
 check('no CSP violations', cspViolations === 0);
 result.dataset.result = failures.length === 0 ? 'pass' : 'fail';

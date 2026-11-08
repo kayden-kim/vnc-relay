@@ -764,7 +764,7 @@ pub fn settings_screens_preserve_input_and_accessibility_in_both_languages_and_w
     open_settings(&mut browser, &server);
     let raw = server.query(&admin, CONFIG);
     assert_eq!(
-        item_value(&raw, "relay.ws_viewer.allowed_origins"),
+        item_value(&raw, "relay.ws.viewer.allowed_origins"),
         json!(origins)
     );
     for width in [1280, 390] {
@@ -775,7 +775,7 @@ pub fn settings_screens_preserve_input_and_accessibility_in_both_languages_and_w
             assert_js(
                 &mut browser,
                 &format!(
-                    "Array.from(document.querySelectorAll('[data-config-key=\"relay.ws_viewer.allowed_origins\"] .config-value-list div')).map(e=>e.textContent).join('\\n') === {}",
+                    "Array.from(document.querySelectorAll('[data-config-key=\"relay.ws.viewer.allowed_origins\"] .config-value-list div')).map(e=>e.textContent).join('\\n') === {}",
                     script_str(&origins.join("\n"))
                 ),
             );

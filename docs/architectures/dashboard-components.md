@@ -60,11 +60,12 @@ flowchart LR
 | `app/styles/base.css` | `color-scheme`, 본문 글꼴, 포커스 링, 화면 밖 글 클래스 | `tokens.css` |
 | `app/styles/components.css` | 조각별 클래스와 상태 선택자. 화면 배치 클래스(`.grid`, `.span-3`·`.span-4`·`.span-6`·`.span-8`·`.span-12`, `.fact-list`·`.fact`, `.page-actions`)와 단일 중단점 `max-width: 1023.98px` 블록. `app.css`에는 `@media`가 없다 | `tokens.css` |
 | `app/query.js` `newQuery`, `clearTimer`, `viewOf`, `contentKey` | 조회 상태(진행 중, 세대, 데이터, 오류)와 갱신 타이머를 DOM 없이 다룬다. 운영 현황과 세션 상세가 같이 쓴다. | 없음 |
-| `app/shell.js` `buildNavbar`, `signOutUrl`, `defaultStorage`, `LOGIN_URL` | 모든 보호 화면의 두 항목 상단 막대(언어 선택, 로그아웃 단추)와 로그아웃 결과 판정을 만든다. `active`로 운영 현황 또는 설정을 고른다. 모바일에서도 두 항목을 둘째 줄에 보인다. | `components/navbar.js`, `components/language-select.js`, `components/button.js`, `api.js`, `model.js`, `copy.js`, `language.js` |
-| `app/session.js` `mountSession` | SCR-002를 조립한다. 세션 확인, 상세 조회, 종료 확인 대화상자, 종료 결과 분류, 대상 소멸을 맡는다. | `components/alert.js`, `button.js`, `dialog.js`, `link.js`, `stat.js`, `api.js`, `copy.js`, `format.js`, `language.js`, `model.js`, `panels.js`, `query.js`, `shell.js` |
-| `app/router.js` `mountRouter`, `routeOf` | 해시 `#/sessions/{id}`는 SCR-002, `#/settings`·`#/settings/edit`는 SCR-004·005, 그 밖은 SCR-001로 보낸다. 이전 화면을 `dispose`한다. 저장 적용 개수는 URL·저장소가 아닌 한 번 쓰는 메모리 값으로 전달한다. | `operations.js`, `session.js`, `settings.js` |
+| `app/shell.js` `buildNavbar`, `signOutUrl`, `defaultStorage`, `LOGIN_URL` | 모든 보호 화면의 운영 현황·로그·설정 상단 막대와 로그아웃 결과 판정을 만든다. `active`로 현재 항목을 고른다. 모바일에서도 세 항목을 숨기지 않는다. | `components/navbar.js`, `components/language-select.js`, `components/button.js`, `api.js`, `model.js`, `copy.js`, `language.js` |
+| `app/session.js` `mountSession` | SCR-002를 조립한다. 양쪽 전송 경로와 값이 있는 전달 주소, 세션 필터 로그 링크를 표시한다. 세션 확인·상세 조회·종료 확인·결과 분류·대상 소멸을 맡는다. | `components/alert.js`, `button.js`, `dialog.js`, `link.js`, `stat.js`, `api.js`, `copy.js`, `format.js`, `language.js`, `model.js`, `panels.js`, `query.js`, `shell.js` |
+| `app/router.js` `mountRouter`, `routeOf` | `#/sessions/{id}`는 SCR-002, `#/settings`·`#/settings/edit`는 SCR-004·005, `#/logs`와 선택 `session_id`는 SCR-006, 그 밖은 SCR-001로 보낸다. 이전 화면을 `dispose`한다. 저장 적용 개수는 한 번 쓰는 메모리 값으로 전달한다. | `operations.js`, `session.js`, `settings.js`, `logs.js` |
 | `app/settings.js` `mountSettings` | SCR-004·005를 조립한다. 진입·명시적 GET, 편집 가능 상태, 입력 보존, 변경 확인, PATCH 결과·복구, 언어·로그아웃을 맡는다. 폴링하지 않는다. | 공통 컴포넌트, `api.js`, `settings-model.js`, `copy.js`, `format.js`, `language.js`, `model.js`, `panels.js`, `shell.js` |
-| `app/settings-model.js` `parseConfig`, `canEdit`, `initialInputs`, `inspectInputs`, `mapDiagnostics` | 설정 응답 확인, 입력 그룹·단위, 변경 키 비교, 정수·공백·관계 검사, 전송 배열 첨자와 원래 줄 번호 대응을 맡는다. 진단은 코드로 번역하며 모르는 코드만 원문과 코드를 보인다. | `format.js` |
+| `app/settings-model.js` `parseConfig`, `canEdit`, `editableItems`, `initialInputs`, `inspectInputs`, `mapDiagnostics` | v4 설정 응답과 29개 편집 입력을 다룬다. `editableItems`가 다섯 구역과 구역 안 순서를 정한다. 렌더·검사·진단 초점 순서는 같은 목록을 쓴다. | `format.js` |
+| `app/logs.js` `mountLogs` | SCR-006의 필터·증분 폴링·이전 페이지·행 상세·JSON Lines 수집과 세션 종료 시 정리를 맡는다. 현재 필터의 첫 스냅숏 성공 전에는 증분 병합을 막는다. 자동 복구도 폴링으로 표시한다. 렌더는 조작 요소 ID·상세 행 ID·링크 목적지로 초점을 복원한다. [최근 로그 데이터 흐름](dashboard-operations-overview.md#16-최근-로그-scr-006)을 따른다. | 공통 컴포넌트, `api.js`, `model.js`, `shell.js`, `copy.js`, `format.js`, `language.js`, `panels.js` |
 
 ## 3. 데이터 모델
 
@@ -75,7 +76,7 @@ flowchart LR
 | `tone` | `success`, `info`, `warning`, `destructive`, `neutral` | 다른 값이면 `TypeError`. 요소에 `data-tone`으로 쓴다. |
 | `variant`(버튼) | `primary`, `outline`, `ghost`, `destructive`, `navbar` | 다른 값이면 `TypeError`. `navbar`는 상단 막대의 항목형(로그아웃) 버튼이다. |
 | `variant`(언어 선택) | `navbar`, `form` | 다른 값이면 `TypeError` |
-| 아이콘 이름 | `check`, `clock`, `warning`, `alert`, `refresh`, `logout`, `back`, `chevron-right`, `chevron-down`, `cancel`, `globe`, `grid`, `settings`, `brand` | 다른 값이면 `TypeError` |
+| 아이콘 이름 | `check`, `clock`, `warning`, `alert`, `refresh`, `logout`, `back`, `chevron-right`, `chevron-down`, `chevron-up`, `cancel`, `globe`, `grid`, `settings`, `brand`, `log`, `search`, `download`, `close`, `pause`, `arrow-right` | 다른 값이면 `TypeError`. 로그인 복사본은 `cargo xtask tokens`로 생성한다. |
 | 아이콘 크기 | `md`(`--space-icon-size`), `sm`(`--space-icon-size-sm`) | 기본값 `md` |
 | 상태 클래스 | `is-hover`, `is-focus` | 미리보기가 상태를 고정할 때만 붙인다. 화면 코드는 붙이지 않는다. |
 | 상태 속성 | `disabled`, `aria-busy`, `aria-invalid`, `aria-current`, `aria-describedby` | 상태 표현은 이 속성으로 한다. |

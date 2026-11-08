@@ -149,6 +149,13 @@
   border-color: var(--color-destructive);
 }
 
+.text-field-input:disabled {
+  background: var(--color-muted);
+  color: var(--color-muted-foreground);
+  border-color: var(--color-border);
+  cursor: not-allowed;
+}
+
 .text-field-help {
   color: var(--color-muted-foreground);
   font-family: var(--type-label-family);
@@ -852,6 +859,14 @@
 
 /* Narrow screens: the single breakpoint at 1024px. */
 @media (max-width: 1023.98px) {
+  main.app-main {
+    padding: var(--space-lg);
+  }
+
+  main.app-main .card-body:has(.data-table) {
+    padding: var(--space-sm) var(--space-lg);
+  }
+
   .settings-main .config-row,
   .settings-main .settings-fields,
   .settings-main .config-reload-row {
@@ -1064,5 +1079,77 @@
 
   .data-table tr.data-table-empty td::before {
     content: none;
+  }
+
+  .logs-main .log-meta {
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .logs-main .event-field {
+    flex: 1 1 100%;
+    max-width: none;
+  }
+
+  .logs-main .check {
+    min-height: var(--space-control-height-touch);
+  }
+
+  .logs-main .session-field > .chip {
+    align-self: stretch;
+  }
+
+  .chip {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .chip .button {
+    width: 100%;
+  }
+
+  .logs-main .log-table td.time,
+  .logs-main .log-table td.head {
+    white-space: normal;
+  }
+
+  .log-table td.sum:empty {
+    display: none;
+  }
+
+  .log-table td.act {
+    display: block;
+    padding: var(--space-xs) 0 0;
+  }
+
+  .log-table td.act::before,
+  .log-table .detail-row td::before {
+    content: none;
+  }
+
+  .log-table td.act .button {
+    width: 100%;
+  }
+
+  .log-table .detail-row {
+    padding-top: 0;
+  }
+
+  .logs-main .log-table .detail-row td {
+    display: block;
+    padding: 0;
+  }
+
+  .log-table tr.is-open {
+    border-bottom: 0;
+  }
+
+  .logs-main .log-detail {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+  }
+
+  .logs-main .log-detail dd {
+    margin: 0 0 var(--space-sm);
   }
 }

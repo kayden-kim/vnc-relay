@@ -7,7 +7,7 @@ use std::sync::{Arc, PoisonError, RwLock};
 pub struct ReloadSnapshot<A> {
     pub settings: Arc<crate::settings::Settings>,
     pub presence: Arc<super::ConfigPresence>,
-    /// Acceptor of the WSS viewer listener; `None` when WSS is disabled.
+    /// Acceptor of the shared WSS listener; `None` when both roles are disabled.
     pub wss_tls: Option<A>,
     /// Acceptor of the management listener; `None` when it serves plain HTTP.
     pub management_tls: Option<A>,

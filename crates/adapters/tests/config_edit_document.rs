@@ -1,4 +1,4 @@
-//! Real-file and byte-preservation coverage for config-v3 §1.10.
+//! Real-file and byte-preservation coverage for config-v4 §1.10.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -35,7 +35,7 @@ fn array_values(source: &str) -> Vec<String> {
     let table: toml::Table = source
         .parse()
         .unwrap_or_else(|error| panic!("invalid edited TOML: {error}"));
-    table["relay"]["ws_viewer"]["allowed_origins"]
+    table["relay"]["ws"]["viewer"]["allowed_origins"]
         .as_array()
         .unwrap_or_else(|| panic!("not an array"))
         .iter()
@@ -120,7 +120,7 @@ fn candidate_defaults_config_edit_off_and_collects_only_explicit_leaf_keys() {
         ["admin.accounts_file", "management.listen", "status.listen"]
     );
     let source = format!(
-        "{}\n[relay.ws_viewer]\nenabled = false\nallowed_origins = []\nallow = ['127.0.0.1']\n[mode1]\nenabled = false\nallow_targets = []\n",
+        "{}\n[relay.ws.viewer]\nenabled = false\nallowed_origins = []\nallow = ['127.0.0.1']\n[mode1]\nenabled = false\nallow_targets = []\n",
         REQUIRED.replace("[management]\n", "[management]\nconfig_edit = true\n")
     );
     let parsed = TomlConfigDocument
@@ -132,18 +132,18 @@ fn candidate_defaults_config_edit_off_and_collects_only_explicit_leaf_keys() {
         parsed
             .presence
             .keys
-            .contains("relay.ws_viewer.allowed_origins")
+            .contains("relay.ws.viewer.allowed_origins")
     );
-    assert!(parsed.presence.keys.contains("relay.ws_viewer.allow"));
+    assert!(parsed.presence.keys.contains("relay.ws.viewer.allow"));
     assert!(parsed.presence.keys.contains("mode1.allow_targets"));
-    assert!(!parsed.presence.keys.contains("relay.ws_viewer.listen"));
-    assert!(!parsed.presence.keys.contains("relay.ws_viewer"));
+    assert!(!parsed.presence.keys.contains("relay.ws.listen"));
+    assert!(!parsed.presence.keys.contains("relay.ws.viewer"));
     assert!(parsed.presence.keys.iter().all(|key| !key.contains('[')));
 }
 
 #[test]
 fn candidate_presence_handles_inline_and_dotted_tables_and_checks_new_flag_type() {
-    let source = "admin.accounts_file='accounts.toml'\nmanagement={listen='127.0.0.1:18080', config_edit=true}\nstatus.listen='127.0.0.1:18081'\nrelay.ws_viewer.allowed_origins=[]\n";
+    let source = "admin.accounts_file='accounts.toml'\nmanagement={listen='127.0.0.1:18080', config_edit=true}\nstatus.listen='127.0.0.1:18081'\nrelay.ws.viewer.allowed_origins=[]\n";
     let parsed = parse_candidate(source.as_bytes(), Path::new("."))
         .unwrap_or_else(|diagnostics| panic!("parse: {diagnostics:?}"));
     assert_eq!(parsed.presence.keys.len(), 5);
@@ -151,7 +151,7 @@ fn candidate_presence_handles_inline_and_dotted_tables_and_checks_new_flag_type(
         parsed
             .presence
             .keys
-            .contains("relay.ws_viewer.allowed_origins")
+            .contains("relay.ws.viewer.allowed_origins")
     );
     let invalid = source.replace("config_edit=true", "config_edit='true'");
     let diagnostics = parse_candidate(invalid.as_bytes(), Path::new("."))
@@ -197,12 +197,12 @@ fn non_utf8_is_unreadable_without_echoing_file_content() {
 /// spec: management.md:MGT-039 partial
 #[test]
 fn semantically_equal_values_keep_every_original_byte_and_file_metadata() {
-    let source = "\u{feff}# header\r\n[limits]\r\nrelay_connections = 0x3e8 # hex\n[relay.ws_viewer]\r\nenabled=false\nallowed_origins = [\r\n  'https://example.test', # retained, comma\n]\r\n";
+    let source = "\u{feff}# header\r\n[limits]\r\nrelay_connections = 0x3e8 # hex\n[relay.ws.viewer]\r\nenabled=false\nallowed_origins = [\r\n  'https://example.test', # retained, comma\n]\r\n";
     let changes = [
         change("limits.relay_connections", ConfigValue::Integer(1000)),
-        change("relay.ws_viewer.enabled", ConfigValue::Bool(false)),
+        change("relay.ws.viewer.enabled", ConfigValue::Bool(false)),
         change(
-            "relay.ws_viewer.allowed_origins",
+            "relay.ws.viewer.allowed_origins",
             strings(&["https://example.test"]),
         ),
     ];
@@ -251,11 +251,11 @@ fn scalar_edits_preserve_bom_comments_decor_and_mixed_newlines_exactly() {
 /// spec: operations.md:OPS-060 partial
 #[test]
 fn array_value_edits_keep_internal_comments_spacing_and_each_newline() {
-    let source = "[relay.ws_viewer]\r\nallowed_origins = [\r\n  'https://one.test', # first, comma\n\t\"https://two.test\", # second\r\n  # tail\n]  # after\r\n";
+    let source = "[relay.ws.viewer]\r\nallowed_origins = [\r\n  'https://one.test', # first, comma\n\t\"https://two.test\", # second\r\n  # tail\n]  # after\r\n";
     let result = edit(
         source,
         &[change(
-            "relay.ws_viewer.allowed_origins",
+            "relay.ws.viewer.allowed_origins",
             strings(&["https://one.test", "https://new.test"]),
         )],
     );
@@ -272,7 +272,7 @@ fn array_value_edits_keep_internal_comments_spacing_and_each_newline() {
 /// spec: management.md:MGT-031 partial
 #[test]
 fn array_shrink_empty_and_grow_keep_all_comments_and_parse_as_requested() {
-    let source = "[relay.ws_viewer]\nallowed_origins = [\n  'https://one.test', # first, comma\n  'https://two.test', # second, comma\n  # tail, comma\n] # outside\n";
+    let source = "[relay.ws.viewer]\nallowed_origins = [\n  'https://one.test', # first, comma\n  'https://two.test', # second, comma\n  # tail, comma\n] # outside\n";
     for values in [
         vec!["https://new.test"],
         vec![],
@@ -285,7 +285,7 @@ fn array_shrink_empty_and_grow_keep_all_comments_and_parse_as_requested() {
     ] {
         let result = edit(
             source,
-            &[change("relay.ws_viewer.allowed_origins", strings(&values))],
+            &[change("relay.ws.viewer.allowed_origins", strings(&values))],
         );
         assert_eq!(array_values(&result), values);
         for comment in [
@@ -298,14 +298,14 @@ fn array_shrink_empty_and_grow_keep_all_comments_and_parse_as_requested() {
         }
     }
     for source in [
-        "[relay.ws_viewer]\nallowed_origins=[] # empty\n",
-        "[relay.ws_viewer]\r\nallowed_origins=[\r\n # retained\r\n]\r\n",
-        "[relay.ws_viewer]\nallowed_origins=['a', 'b'] # no trailing comma\n",
+        "[relay.ws.viewer]\nallowed_origins=[] # empty\n",
+        "[relay.ws.viewer]\r\nallowed_origins=[\r\n # retained\r\n]\r\n",
+        "[relay.ws.viewer]\nallowed_origins=['a', 'b'] # no trailing comma\n",
     ] {
         let result = edit(
             source,
             &[change(
-                "relay.ws_viewer.allowed_origins",
+                "relay.ws.viewer.allowed_origins",
                 strings(&["one", "two", "three"]),
             )],
         );
@@ -320,14 +320,14 @@ fn array_shrink_empty_and_grow_keep_all_comments_and_parse_as_requested() {
 #[test]
 fn inline_and_dotted_table_edits_change_only_the_value_token() {
     for source in [
-        "relay = { ws_viewer = { enabled = false, allowed_origins = ['old'] } } # inline\r\n",
-        "relay.ws_viewer.enabled=false\r\nrelay.ws_viewer.allowed_origins=['old'] # dotted\n",
-        "[relay]\nws_viewer.enabled=false\nws_viewer.allowed_origins=['old']\n",
-        "relay = { ws_viewer.allowed_origins = ['old'] } # dotted inline\n",
+        "relay = { ws = { viewer = { enabled = false, allowed_origins = ['old'] } } } # inline\r\n",
+        "relay.ws.viewer.enabled=false\r\nrelay.ws.viewer.allowed_origins=['old'] # dotted\n",
+        "[relay]\nws.viewer.enabled=false\nws.viewer.allowed_origins=['old']\n",
+        "relay = { ws.viewer.allowed_origins = ['old'] } # dotted inline\n",
     ] {
         let result = edit(
             source,
-            &[change("relay.ws_viewer.allowed_origins", strings(&["new"]))],
+            &[change("relay.ws.viewer.allowed_origins", strings(&["new"]))],
         );
         assert_eq!(result, source.replace("'old'", "\"new\""));
         assert_eq!(array_values(&result), ["new"]);
@@ -409,10 +409,10 @@ fn absent_dotted_inline_and_implicit_parent_keys_stay_in_the_right_scope() {
 #[test]
 fn inserted_strings_are_toml_encoded_without_changing_unrelated_text() {
     let value = "한글 \"quotes\" \\ slash\nnew line";
-    let source = "[relay.ws_viewer]\nallowed_origins = [] # keep\n";
+    let source = "[relay.ws.viewer]\nallowed_origins = [] # keep\n";
     let result = edit(
         source,
-        &[change("relay.ws_viewer.allowed_origins", strings(&[value]))],
+        &[change("relay.ws.viewer.allowed_origins", strings(&[value]))],
     );
     assert_eq!(array_values(&result), [value]);
     assert!(result.ends_with(" # keep\n"));
@@ -547,28 +547,27 @@ fn disabled_lone_tls_paths_survive_candidate_presence_with_resolved_paths() {
     let base = Path::new("config-base");
     for key in ["cert_file", "key_file"] {
         let source = format!(
-            "{REQUIRED}\n[relay.wss_viewer]\nenabled = false\n{key} = 'tls/disabled.pem'\n"
+            "{REQUIRED}\n[relay.wss]\n{key} = 'tls/disabled.pem'\n[relay.wss.viewer]\nenabled = false\n[relay.wss.server]\nenabled = false\n"
         );
         let candidate = parse_candidate(source.as_bytes(), base)
             .unwrap_or_else(|diagnostics| panic!("parse: {diagnostics:?}"));
-        assert!(candidate.settings.relay.wss_viewer.tls.is_none());
+        assert!(candidate.settings.relay.wss.tls.is_none());
         assert_eq!(candidate.presence.inactive_paths.len(), 1);
         assert_eq!(
             candidate
                 .presence
                 .inactive_paths
-                .get(&format!("relay.wss_viewer.{key}")),
+                .get(&format!("relay.wss.{key}")),
             Some(&base.join("tls/disabled.pem"))
         );
         assert!(
             candidate
                 .presence
                 .keys
-                .contains(&format!("relay.wss_viewer.{key}"))
+                .contains(&format!("relay.wss.{key}"))
         );
     }
-    let source =
-        format!("{REQUIRED}\n[relay.wss_viewer]\ncert_file='cert.pem'\nkey_file='key.pem'\n");
+    let source = format!("{REQUIRED}\n[relay.wss]\ncert_file='cert.pem'\nkey_file='key.pem'\n");
     let candidate = parse_candidate(source.as_bytes(), base)
         .unwrap_or_else(|diagnostics| panic!("parse: {diagnostics:?}"));
     assert!(candidate.presence.inactive_paths.is_empty());
@@ -576,7 +575,7 @@ fn disabled_lone_tls_paths_survive_candidate_presence_with_resolved_paths() {
         candidate
             .settings
             .relay
-            .wss_viewer
+            .wss
             .tls
             .as_ref()
             .map(|tls| tls.cert_file.as_path()),
@@ -585,4 +584,181 @@ fn disabled_lone_tls_paths_survive_candidate_presence_with_resolved_paths() {
     let candidate = parse_candidate(REQUIRED.as_bytes(), base)
         .unwrap_or_else(|diagnostics| panic!("parse: {diagnostics:?}"));
     assert!(candidate.presence.inactive_paths.is_empty());
+}
+
+/// spec: management.md:MGT-031 partial
+/// spec: operations.md:OPS-060 partial
+#[test]
+fn missing_nested_role_tables_append_without_rewriting_listener_or_sibling_bytes() {
+    for source in [
+        "# untouched\r\n[status]\nlisten='127.0.0.1:18081' # keep",
+        "# untouched\r\n[relay.ws] # listener\nlisten='127.0.0.1:18090'\n[status]\nlisten='127.0.0.1:18081' # keep",
+        "# untouched\r\n[relay.ws.viewer]\nallow=['192.0.2.1'] # sibling\n[status]\nlisten='127.0.0.1:18081' # keep",
+    ] {
+        let result = edit(
+            source,
+            &[
+                change("relay.ws.server.allow", strings(&["192.0.2.2"])),
+                change(
+                    "relay.ws.server.allowed_origins",
+                    strings(&["https://server.example"]),
+                ),
+            ],
+        );
+        assert_eq!(
+            result,
+            format!(
+                "{source}\r\n[relay.ws.server]\r\nallow = [\"192.0.2.2\"]\r\n\
+                 allowed_origins = [\"https://server.example\"]\r\n"
+            )
+        );
+        let table: toml::Table = result.parse().expect("valid nested table");
+        assert_eq!(
+            table["relay"]["ws"]["server"]["allow"][0].as_str(),
+            Some("192.0.2.2")
+        );
+        assert_eq!(
+            table["relay"]["ws"]["server"]["allowed_origins"][0].as_str(),
+            Some("https://server.example")
+        );
+    }
+}
+
+/// spec: management.md:MGT-031 partial
+/// spec: operations.md:OPS-060 partial
+#[test]
+fn missing_shared_listener_keys_append_at_parent_not_under_existing_role() {
+    let source = "# heading\r\n[relay.wss.server]\nenabled=false\nallow=[] # role\n[status]\nlisten='127.0.0.1:18081'\n";
+    let result = edit(
+        source,
+        &[
+            change("relay.wss.trusted_proxies", strings(&["192.0.2.10"])),
+            change(
+                "relay.wss.listen",
+                ConfigValue::String("127.0.0.1:18090".to_owned()),
+            ),
+        ],
+    );
+    assert_eq!(
+        result,
+        format!(
+            "{source}[relay.wss]\r\ntrusted_proxies = [\"192.0.2.10\"]\r\n\
+             listen = \"127.0.0.1:18090\"\r\n"
+        )
+    );
+    let table: toml::Table = result.parse().expect("valid shared listener table");
+    assert_eq!(
+        table["relay"]["wss"]["trusted_proxies"][0].as_str(),
+        Some("192.0.2.10")
+    );
+    assert!(
+        table["relay"]["wss"]["server"]
+            .get("trusted_proxies")
+            .is_none()
+    );
+}
+
+/// spec: management.md:MGT-031 partial
+#[test]
+fn missing_nested_keys_respect_dotted_and_inline_listener_scopes() {
+    for source in [
+        "relay.ws.viewer.allow=['192.0.2.1'] # keep\r\n[status]\nlisten='127.0.0.1:18081'\n",
+        "[relay]\nws.viewer.allow=['192.0.2.1'] # keep\r\n[status]\nlisten='127.0.0.1:18081'\n",
+        "relay={ws={viewer={allow=['192.0.2.1']}}} # keep\r\nstatus.listen='127.0.0.1:18081'\n",
+        "relay={ws.viewer.allow=['192.0.2.1']} # keep\r\nstatus.listen='127.0.0.1:18081'\n",
+    ] {
+        let result = edit(
+            source,
+            &[
+                change(
+                    "relay.ws.viewer.allowed_origins",
+                    strings(&["https://viewer.example"]),
+                ),
+                change("relay.ws.server.allow", strings(&["192.0.2.2"])),
+                change("relay.ws.trusted_proxies", strings(&["192.0.2.10"])),
+            ],
+        );
+        let table: toml::Table = result.parse().expect("valid dotted or inline edit");
+        assert_eq!(
+            table["relay"]["ws"]["viewer"]["allow"][0].as_str(),
+            Some("192.0.2.1")
+        );
+        assert_eq!(
+            table["relay"]["ws"]["viewer"]["allowed_origins"][0].as_str(),
+            Some("https://viewer.example")
+        );
+        assert_eq!(
+            table["relay"]["ws"]["server"]["allow"][0].as_str(),
+            Some("192.0.2.2")
+        );
+        assert_eq!(
+            table["relay"]["ws"]["trusted_proxies"][0].as_str(),
+            Some("192.0.2.10")
+        );
+        assert_eq!(table["status"]["listen"].as_str(), Some("127.0.0.1:18081"));
+        assert!(result.contains("# keep\r\n"));
+        assert!(result.contains("['192.0.2.1']"));
+    }
+}
+
+/// spec: operations.md:OPS-065 partial
+#[test]
+fn nested_role_edits_and_trusted_proxy_edits_parse_through_the_real_loader() {
+    let source = format!(
+        "{REQUIRED}[relay.ws]\nlisten='127.0.0.1:18090'\n\
+         [relay.ws.viewer]\nenabled=true\nallow=[] # viewer\n\
+         [relay.ws.server]\nenabled=true\nallow=[] # server\n"
+    );
+    let result = edit(
+        &source,
+        &[
+            change("relay.ws.trusted_proxies", strings(&["192.0.2.10"])),
+            change("relay.ws.viewer.allow", strings(&["192.0.2.1"])),
+            change("relay.ws.server.allow", strings(&["192.0.2.2"])),
+            change(
+                "relay.ws.server.allowed_origins",
+                strings(&["https://server.example"]),
+            ),
+        ],
+    );
+    let candidate = parse_candidate(result.as_bytes(), Path::new(".")).expect("v4 loader");
+    assert!(candidate.settings.relay.ws.viewer.enabled);
+    assert!(candidate.settings.relay.ws.server.enabled);
+    assert_eq!(candidate.settings.relay.ws.trusted_proxies.items().len(), 1);
+    assert_eq!(candidate.settings.relay.ws.server.allowed_origins.len(), 1);
+    assert!(result.contains("# viewer\n"));
+    assert!(result.contains("# server\n"));
+    assert!(
+        !candidate
+            .presence
+            .keys
+            .contains("relay.ws.viewer.trusted_proxies")
+    );
+}
+
+/// spec: operations.md:OPS-065 partial
+#[test]
+fn server_only_wss_uses_parent_tls_and_never_records_inactive_paths() {
+    let base = Path::new("config-base");
+    let source = format!(
+        "{REQUIRED}[relay.wss]\nlisten='127.0.0.1:18090'\n\
+         cert_file='tls/cert.pem'\nkey_file='tls/key.pem'\n\
+         [relay.wss.viewer]\nenabled=false\n\
+         [relay.wss.server]\nenabled=true\nallow=[]\n"
+    );
+    let candidate = parse_candidate(source.as_bytes(), base).expect("server-only WSS");
+    assert!(!candidate.settings.relay.wss.viewer.enabled);
+    assert!(candidate.settings.relay.wss.server.enabled);
+    assert!(candidate.presence.inactive_paths.is_empty());
+    let tls = candidate.settings.relay.wss.tls.expect("parent TLS pair");
+    assert_eq!(tls.cert_file, base.join("tls/cert.pem"));
+    assert_eq!(tls.key_file, base.join("tls/key.pem"));
+    assert!(candidate.presence.keys.contains("relay.wss.cert_file"));
+    assert!(candidate.presence.keys.contains("relay.wss.key_file"));
+    assert!(
+        !candidate
+            .presence
+            .keys
+            .contains("relay.wss.server.cert_file")
+    );
 }

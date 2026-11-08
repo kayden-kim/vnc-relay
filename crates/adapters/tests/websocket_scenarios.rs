@@ -37,10 +37,10 @@ use vnc_relay_app::settings::KeepaliveSettings;
 use vnc_relay_domain::allow_list::{AllowList, IpItem};
 use vnc_relay_domain::budget::ConnectionBudget;
 use vnc_relay_domain::conn_id::ConnId;
-use vnc_relay_domain::entry_point::EntryPoint;
+use vnc_relay_domain::entry_point::{EntryPoint, Listener};
 use vnc_relay_domain::handshake::{HANDSHAKE_REQUEST_LEN, HandshakePolicy, VIEWER_GREETING};
 use vnc_relay_domain::peer_ip::PeerIp;
-use vnc_relay_domain::session::ViewerTransport;
+use vnc_relay_domain::session::Transport;
 use vnc_relay_domain::target_policy::{TargetItem, TargetPolicy};
 
 const LIMIT: Duration = Duration::from_secs(10);
@@ -134,6 +134,10 @@ impl EventSink for Recorder {
 struct Running {
     addr: SocketAddr,
     server_addr: SocketAddr,
+    viewer_addr: SocketAddr,
+    ws_addr: SocketAddr,
+    wss_addr: SocketAddr,
+    cell: Arc<ReloadCell<tokio_rustls::TlsAcceptor>>,
     secure: bool,
     events: Arc<Recorder>,
     service: Arc<RelayService>,
@@ -155,8 +159,25 @@ impl Running {
         keepalive: KeepaliveSettings,
         wait_timeout: Duration,
     ) -> Self {
+        Self::start_configured(secure, keepalive, wait_timeout, |_| {}).await
+    }
+
+    async fn start_configured(
+        secure: bool,
+        keepalive: KeepaliveSettings,
+        wait_timeout: Duration,
+        configure: impl FnOnce(&mut vnc_relay_app::settings::Settings),
+    ) -> Self {
         let listener = target().await;
         let server = target().await;
+        let other_ws = target().await;
+        let tcp_viewer = target().await;
+        let other_addr = other_ws
+            .local_addr()
+            .unwrap_or_else(|e| panic!("other WS address: {e}"));
+        let viewer_addr = tcp_viewer
+            .local_addr()
+            .unwrap_or_else(|e| panic!("TCP Viewer address: {e}"));
         let addr = listener
             .local_addr()
             .unwrap_or_else(|error| panic!("WS address: {error}"));
@@ -171,8 +192,13 @@ impl Running {
             Path::new("."),
         ).unwrap_or_else(|error| panic!("settings: {error:?}"));
         settings.relay.tcp_server.allow = Some(allow.clone());
-        settings.relay.ws_viewer.allow = Some(allow.clone());
-        settings.relay.wss_viewer.allow = Some(allow);
+        settings.relay.tcp_viewer.allow = Some(allow.clone());
+        settings.relay.ws.viewer.enabled = true;
+        settings.relay.wss.viewer.enabled = true;
+        settings.relay.ws.viewer.allow = Some(allow.clone());
+        settings.relay.wss.viewer.allow = Some(allow);
+        settings.relay.ws.server = settings.relay.ws.viewer.clone();
+        settings.relay.wss.server = settings.relay.wss.viewer.clone();
         settings.limits.relay_connections = 8;
         settings.limits.waiting = 8;
         settings.limits.buffer_bytes = B as u32;
@@ -187,12 +213,13 @@ impl Running {
             TargetItem::parse("127.0.0.1:1-65535")
                 .unwrap_or_else(|error| panic!("loopback targets: {error:?}")),
         ]));
+        configure(&mut settings);
         let cell = Arc::new(ReloadCell::new(ReloadSnapshot::new(
             vnc_relay_app::reload::ConfigCandidate {
                 settings,
                 presence: Default::default(),
             },
-            secure.then(acceptor),
+            Some(acceptor()),
             None,
         )));
         let source: Arc<dyn vnc_relay_app::reload::ports::RuntimeSettingsSource> = cell.clone();
@@ -225,18 +252,14 @@ impl Running {
             relay_budget: Arc::clone(&budget),
         };
         let ws = WsEntryPoint::new(
-            if secure {
-                EntryPoint::WssViewer
-            } else {
-                EntryPoint::WsViewer
-            },
+            if secure { Listener::Wss } else { Listener::Ws },
             listener,
             secure.then(|| TlsSource::wss(Arc::clone(&cell))),
             WsPolicy {
                 accept: accept(if secure {
-                    AllowSource::wss_viewer(Arc::clone(&cell))
+                    AllowSource::wss(Arc::clone(&cell))
                 } else {
-                    AllowSource::ws_viewer(Arc::clone(&cell))
+                    AllowSource::ws(Arc::clone(&cell))
                 }),
             },
             Arc::clone(&service),
@@ -246,7 +269,30 @@ impl Running {
         let tcp = TcpEntryPoint::new(
             EntryPoint::TcpServer,
             server,
-            accept(AllowSource::tcp_server(cell)),
+            accept(AllowSource::tcp_server(Arc::clone(&cell))),
+            Arc::clone(&service),
+            Arc::clone(&runtime),
+            Arc::clone(&clock),
+        );
+        let other = WsEntryPoint::new(
+            if secure { Listener::Ws } else { Listener::Wss },
+            other_ws,
+            (!secure).then(|| TlsSource::wss(Arc::clone(&cell))),
+            WsPolicy {
+                accept: accept(if secure {
+                    AllowSource::ws(Arc::clone(&cell))
+                } else {
+                    AllowSource::wss(Arc::clone(&cell))
+                }),
+            },
+            Arc::clone(&service),
+            Arc::clone(&runtime),
+            Arc::clone(&clock),
+        );
+        let viewer = TcpEntryPoint::new(
+            EntryPoint::TcpViewer,
+            tcp_viewer,
+            accept(AllowSource::tcp_viewer(Arc::clone(&cell))),
             Arc::clone(&service),
             Arc::clone(&runtime),
             Arc::clone(&clock),
@@ -258,12 +304,18 @@ impl Running {
         };
         let tasks = vec![
             tokio::spawn(ws.run(Arc::clone(&log), stopped.clone())),
+            tokio::spawn(other.run(Arc::clone(&log), stopped.clone())),
+            tokio::spawn(viewer.run(Arc::clone(&log), stopped.clone())),
             tokio::spawn(tcp.run(log, stopped)),
             supervisor,
         ];
         Self {
             addr,
             server_addr,
+            viewer_addr,
+            ws_addr: if secure { other_addr } else { addr },
+            wss_addr: if secure { addr } else { other_addr },
+            cell,
             secure,
             events,
             service,
@@ -395,6 +447,737 @@ impl Running {
                 .await
                 .unwrap_or_else(|error| panic!("listener completes: {error}"));
         }
+    }
+}
+
+enum Peer {
+    Tcp(TcpStream),
+    WebSocket(Client),
+}
+
+impl Peer {
+    async fn connect(running: &Running, transport: Transport, server: bool) -> Self {
+        if transport == Transport::Tcp {
+            let mut stream = bounded(TcpStream::connect(if server {
+                running.server_addr
+            } else {
+                running.viewer_addr
+            }))
+            .await
+            .unwrap_or_else(|e| panic!("TCP peer connect: {e}"));
+            if !server {
+                assert_eq!(
+                    read_tcp(&mut stream, VIEWER_GREETING.len()).await,
+                    VIEWER_GREETING
+                );
+            }
+            return Self::Tcp(stream);
+        }
+        let secure = transport == Transport::Wss;
+        let mut client = Client::transport(
+            if secure {
+                running.wss_addr
+            } else {
+                running.ws_addr
+            },
+            secure,
+        )
+        .await;
+        let response = client
+            .http(&upgrade(
+                "GET",
+                if server { "/relay/server" } else { "/relay" },
+                "13",
+                true,
+            ))
+            .await;
+        assert!(response.starts_with("HTTP/1.1 101 "), "{response}");
+        if server {
+            let mut byte = [0; 1];
+            assert!(
+                timeout(Duration::from_millis(30), client.wire.read(&mut byte))
+                    .await
+                    .is_err(),
+                "Server receives no greeting"
+            );
+        } else {
+            client.greeting().await;
+        }
+        Self::WebSocket(client)
+    }
+
+    async fn send(&mut self, bytes: &[u8]) {
+        match self {
+            Self::Tcp(stream) => bounded(stream.write_all(bytes))
+                .await
+                .unwrap_or_else(|e| panic!("TCP peer write: {e}")),
+            Self::WebSocket(client) => client.binary(bytes).await,
+        }
+    }
+
+    async fn data(&mut self, len: usize) -> Vec<u8> {
+        match self {
+            Self::Tcp(stream) => read_tcp(stream, len).await,
+            Self::WebSocket(client) => client.data(len).await,
+        }
+    }
+
+    async fn rejected(&mut self, code: u16, reason: &str) {
+        match self {
+            Self::Tcp(stream) => tcp_eof(stream).await,
+            Self::WebSocket(client) => {
+                let frame = client.frame().await;
+                assert_eq!(frame.opcode, 8);
+                assert_eq!(&frame.payload[..2], &code.to_be_bytes());
+                assert_eq!(&frame.payload[2..], reason.as_bytes());
+                client.close(Some(code)).await;
+                client.eof().await;
+            }
+        }
+    }
+}
+
+/// spec: websocket.md:WS-028
+#[tokio::test]
+async fn websocket_servers_pair_with_every_viewer_transport_in_both_orders() {
+    for server_transport in [Transport::Ws, Transport::Wss] {
+        for viewer_transport in [Transport::Tcp, Transport::Ws, Transport::Wss] {
+            for server_first in [false, true] {
+                let running = Running::start(false).await;
+                let (first_transport, first_server) = if server_first {
+                    (server_transport, true)
+                } else {
+                    (viewer_transport, false)
+                };
+                let mut first = Peer::connect(&running, first_transport, first_server).await;
+                first.send(&request("ID:28001")).await;
+                let registered = running
+                    .events
+                    .wait(|line| line["event"] == "waiting_registered")
+                    .await;
+                assert_eq!(
+                    registered["role"],
+                    if server_first { "server" } else { "viewer" }
+                );
+                let mut second = Peer::connect(
+                    &running,
+                    if server_first {
+                        viewer_transport
+                    } else {
+                        server_transport
+                    },
+                    !server_first,
+                )
+                .await;
+                second.send(&request("ID:28001")).await;
+                let started = running
+                    .events
+                    .wait(|line| line["event"] == "session_started")
+                    .await;
+                assert_eq!(started["mode"], "mode2");
+                assert_eq!(started["viewer_transport"], viewer_transport.as_str());
+                assert_eq!(started["server_transport"], server_transport.as_str());
+                let query = vnc_relay_app::management::query::ManagementQueryService::new(
+                    running.runtime.clone(),
+                    running.budget.clone(),
+                    ConnectionBudget::new(),
+                    running.clock.clone(),
+                    running.cell.clone(),
+                );
+                let sessions = query.sessions();
+                assert_eq!(sessions.items.len(), 1);
+                assert_eq!(
+                    sessions.items[0].target_transport,
+                    server_transport.as_str()
+                );
+                assert_eq!(
+                    sessions.items[0].viewer_transport,
+                    viewer_transport.as_str()
+                );
+                let (viewer, server) = if server_first {
+                    (&mut second, &mut first)
+                } else {
+                    (&mut first, &mut second)
+                };
+                let forward = b"viewer-to-server\0\xff";
+                viewer.send(forward).await;
+                assert_eq!(server.data(forward.len()).await, forward);
+                let reverse = b"server-to-viewer\xff\0";
+                server.send(reverse).await;
+                assert_eq!(viewer.data(reverse.len()).await, reverse);
+                drop(first);
+                drop(second);
+                running.finish().await;
+            }
+        }
+    }
+}
+
+async fn same_role_duplicates_share_one_id_space_across_all_transports() {
+    for server in [false, true] {
+        for first_transport in [Transport::Tcp, Transport::Ws, Transport::Wss] {
+            for next_transport in [Transport::Tcp, Transport::Ws, Transport::Wss] {
+                let running = Running::start(false).await;
+                let mut first = Peer::connect(&running, first_transport, server).await;
+                first.send(&request("ID:28002")).await;
+                let registered = running
+                    .events
+                    .wait(|line| line["event"] == "waiting_registered")
+                    .await;
+                assert_eq!(registered["role"], if server { "server" } else { "viewer" });
+                let mut next = Peer::connect(&running, next_transport, server).await;
+                next.send(&request("ID:28002")).await;
+                next.rejected(4004, "duplicate_id").await;
+                let rejected = running
+                    .events
+                    .wait(|line| {
+                        line["event"] == "connection_rejected" && line["reason"] == "duplicate_id"
+                    })
+                    .await;
+                assert_eq!(rejected["role"], if server { "server" } else { "viewer" });
+                let snapshot = running.runtime.snapshot(running.clock.as_ref());
+                assert_eq!(snapshot.waiting.len(), 1);
+                assert!(snapshot.active.is_empty());
+                assert!(
+                    !lock(&running.events.lines)
+                        .iter()
+                        .any(|line| line["event"] == "session_started")
+                );
+                drop(next);
+                drop(first);
+                running.finish().await;
+            }
+        }
+    }
+}
+
+async fn websocket_server_paths_refuse_mode_i_without_registration_or_target_connect() {
+    for transport in [Transport::Ws, Transport::Wss] {
+        let running = Running::start(false).await;
+        let target = target().await;
+        let mut server = Peer::connect(&running, transport, true).await;
+        server
+            .send(&request(
+                &target
+                    .local_addr()
+                    .unwrap_or_else(|error| panic!("target address: {error}"))
+                    .to_string(),
+            ))
+            .await;
+        server.rejected(4008, "handshake_invalid").await;
+        assert!(
+            timeout(Duration::from_millis(30), target.accept())
+                .await
+                .is_err()
+        );
+        let rejected = running
+            .events
+            .wait(|line| {
+                line["event"] == "connection_rejected" && line["reason"] == "handshake_invalid"
+            })
+            .await;
+        assert_eq!(rejected["role"], "server");
+        assert_eq!(
+            rejected["listener"],
+            if transport == Transport::Wss {
+                "wss"
+            } else {
+                "ws"
+            }
+        );
+        running.assert_empty();
+        drop(server);
+        running.finish().await;
+    }
+}
+
+/// spec: relay.md:RLY-028
+#[tokio::test]
+async fn websocket_server_rules_cover_mode_i_and_waiting_and_active_duplicates() {
+    websocket_server_paths_refuse_mode_i_without_registration_or_target_connect().await;
+    same_role_duplicates_share_one_id_space_across_all_transports().await;
+    for server_transport in [Transport::Ws, Transport::Wss] {
+        for duplicate_server in [false, true] {
+            for duplicate_transport in [Transport::Tcp, Transport::Ws, Transport::Wss] {
+                let running = Running::start(false).await;
+                let mut server = Peer::connect(&running, server_transport, true).await;
+                server.send(&request("ID:28003")).await;
+                running
+                    .events
+                    .wait(|line| line["event"] == "waiting_registered")
+                    .await;
+                let mut viewer = Peer::connect(&running, Transport::Tcp, false).await;
+                viewer.send(&request("ID:28003")).await;
+                running
+                    .events
+                    .wait(|line| line["event"] == "session_started")
+                    .await;
+                let mut duplicate =
+                    Peer::connect(&running, duplicate_transport, duplicate_server).await;
+                duplicate.send(&request("ID:28003")).await;
+                duplicate.rejected(4004, "duplicate_id").await;
+                let snapshot = running.runtime.snapshot(running.clock.as_ref());
+                assert_eq!(snapshot.active.len(), 1);
+                assert!(snapshot.waiting.is_empty());
+                viewer.send(b"existing-viewer").await;
+                assert_eq!(server.data(15).await, b"existing-viewer");
+                server.send(b"existing-server").await;
+                assert_eq!(viewer.data(15).await, b"existing-server");
+                drop(duplicate);
+                drop(viewer);
+                drop(server);
+                running.finish().await;
+            }
+        }
+    }
+}
+
+async fn role_pair(
+    running: &Running,
+    viewer_transport: Transport,
+    server_transport: Transport,
+) -> (Peer, Peer, Value) {
+    let mut server = Peer::connect(running, server_transport, true).await;
+    server.send(&request("ID:28003")).await;
+    running
+        .events
+        .wait(|line| line["event"] == "waiting_registered")
+        .await;
+    let mut viewer = Peer::connect(running, viewer_transport, false).await;
+    viewer.send(&request("ID:28003")).await;
+    let started = running
+        .events
+        .wait(|line| line["event"] == "session_started")
+        .await;
+    (viewer, server, started)
+}
+
+/// spec: websocket.md:WS-016
+/// spec: websocket.md:WS-028 partial
+#[tokio::test]
+async fn tcp_viewer_and_websocket_server_drain_data_on_server_close_or_viewer_eof() {
+    for server_transport in [Transport::Ws, Transport::Wss] {
+        for server_closes in [false, true] {
+            let running = Running::start(false).await;
+            let (viewer, server, started) =
+                role_pair(&running, Transport::Tcp, server_transport).await;
+            let Peer::Tcp(mut viewer) = viewer else {
+                panic!("TCP Viewer");
+            };
+            let Peer::WebSocket(mut server) = server else {
+                panic!("WebSocket Server");
+            };
+            bounded(viewer.write_all(b"viewer trailing bytes"))
+                .await
+                .unwrap();
+            assert_eq!(server.data(21).await, b"viewer trailing bytes");
+            server.binary(b"server trailing bytes").await;
+            assert_eq!(read_tcp(&mut viewer, 21).await, b"server trailing bytes");
+            if server_closes {
+                server.close(Some(1000)).await;
+                tcp_eof(&mut viewer).await;
+                bounded(viewer.shutdown()).await.unwrap();
+                server.expect_close(1000).await;
+            } else {
+                bounded(viewer.shutdown()).await.unwrap();
+                server.expect_close(1000).await;
+                server.binary(b"last response").await;
+                assert_eq!(read_tcp(&mut viewer, 13).await, b"last response");
+                server.close(Some(1000)).await;
+                tcp_eof(&mut viewer).await;
+            }
+            server.eof().await;
+            let closed = running
+                .closed(
+                    &started,
+                    "peer_eof",
+                    if server_closes { "server" } else { "viewer" },
+                )
+                .await;
+            assert_eq!(closed["bytes_viewer_to_target"], 21);
+            assert_eq!(
+                closed["bytes_target_to_viewer"],
+                if server_closes { 21 } else { 34 }
+            );
+            running.assert_empty();
+            running.finish().await;
+        }
+    }
+}
+
+/// spec: websocket.md:WS-016
+/// spec: websocket.md:WS-028 partial
+#[tokio::test]
+async fn websocket_pairs_complete_normal_close_from_either_role_without_control_bytes() {
+    for server_transport in [Transport::Ws, Transport::Wss] {
+        for viewer_transport in [Transport::Ws, Transport::Wss] {
+            for server_closes in [false, true] {
+                let running = Running::start(false).await;
+                let (viewer, server, started) =
+                    role_pair(&running, viewer_transport, server_transport).await;
+                let Peer::WebSocket(mut viewer) = viewer else {
+                    panic!("WebSocket Viewer");
+                };
+                let Peer::WebSocket(mut server) = server else {
+                    panic!("WebSocket Server");
+                };
+                viewer.binary(b"viewer bytes").await;
+                assert_eq!(server.data(12).await, b"viewer bytes");
+                server.binary(b"server bytes").await;
+                assert_eq!(viewer.data(12).await, b"server bytes");
+                let (initiator, responder) = if server_closes {
+                    (&mut server, &mut viewer)
+                } else {
+                    (&mut viewer, &mut server)
+                };
+                initiator.close(Some(1000)).await;
+                responder.expect_close(1000).await;
+                responder.close(Some(1000)).await;
+                initiator.expect_close(1000).await;
+                viewer.eof().await;
+                server.eof().await;
+                let closed = running
+                    .closed(
+                        &started,
+                        "peer_eof",
+                        if server_closes { "server" } else { "viewer" },
+                    )
+                    .await;
+                assert_eq!(closed["bytes_viewer_to_target"], 12);
+                assert_eq!(closed["bytes_target_to_viewer"], 12);
+                running.assert_empty();
+                running.finish().await;
+            }
+        }
+    }
+}
+
+async fn control_after_answering_pings(client: &mut Client) -> Frame {
+    loop {
+        let frame = client.frame().await;
+        if frame.opcode != 9 {
+            return frame;
+        }
+        assert!(frame.payload.is_empty());
+        client.send(10, true, &frame.payload).await;
+    }
+}
+
+/// spec: websocket.md:WS-009
+/// spec: websocket.md:WS-026 partial
+#[tokio::test]
+async fn server_role_handles_fragmented_data_control_frames_and_idle_pongs() {
+    for server_transport in [Transport::Ws, Transport::Wss] {
+        let keepalive = KeepaliveSettings {
+            ws_ping: Duration::from_millis(200),
+            ws_pong_timeout: Duration::from_millis(300),
+            ..KEEPALIVE
+        };
+        let running = Running::start_with_keepalive(false, keepalive, LIMIT).await;
+        let (viewer, server, started) = role_pair(&running, Transport::Tcp, server_transport).await;
+        let Peer::Tcp(mut viewer) = viewer else {
+            panic!("TCP Viewer");
+        };
+        let Peer::WebSocket(mut server) = server else {
+            panic!("WebSocket Server");
+        };
+        server.send(2, false, b"fragment-one").await;
+        server.send(9, true, b"server-ping\0\xff").await;
+        let pong = control_after_answering_pings(&mut server).await;
+        assert_eq!(pong.opcode, 10);
+        assert_eq!(pong.payload, b"server-ping\0\xff");
+        server.send(10, true, b"unsolicited-server-pong").await;
+        server.send(0, true, b"-fragment-two").await;
+        assert_eq!(
+            read_tcp(&mut viewer, 25).await,
+            b"fragment-one-fragment-two"
+        );
+        let until = Instant::now() + Duration::from_millis(800);
+        let mut pings = 0;
+        while Instant::now() < until {
+            let ping = server.frame().await;
+            assert_eq!(ping.opcode, 9);
+            assert!(ping.payload.is_empty());
+            server.send(10, true, &ping.payload).await;
+            pings += 1;
+        }
+        assert!(pings >= 3);
+        assert_eq!(
+            running
+                .runtime
+                .snapshot(running.clock.as_ref())
+                .active
+                .len(),
+            1
+        );
+        let mut byte = [0; 1];
+        assert!(
+            timeout(Duration::from_millis(30), viewer.read(&mut byte))
+                .await
+                .is_err(),
+            "Server ping/pong bytes never reach TCP Viewer"
+        );
+        bounded(viewer.write_all(b"still alive")).await.unwrap();
+        assert_eq!(server.data(11).await, b"still alive");
+        server.close(Some(1000)).await;
+        tcp_eof(&mut viewer).await;
+        bounded(viewer.shutdown()).await.unwrap();
+        let close = control_after_answering_pings(&mut server).await;
+        assert_eq!(close.opcode, 8);
+        assert_eq!(close.payload, 1000_u16.to_be_bytes());
+        server.eof().await;
+        let closed = running.closed(&started, "peer_eof", "server").await;
+        assert_eq!(closed["bytes_viewer_to_target"], 11);
+        assert_eq!(closed["bytes_target_to_viewer"], 25);
+        running.assert_empty();
+        running.finish().await;
+    }
+}
+
+/// spec: websocket.md:WS-026 partial
+#[tokio::test]
+async fn unresponsive_websocket_server_releases_tcp_viewer_and_session() {
+    for server_transport in [Transport::Ws, Transport::Wss] {
+        let running = Running::start_with_keepalive(
+            false,
+            KeepaliveSettings {
+                ws_ping: Duration::from_millis(100),
+                ws_pong_timeout: Duration::from_millis(200),
+                ..KEEPALIVE
+            },
+            LIMIT,
+        )
+        .await;
+        let (viewer, server, started) = role_pair(&running, Transport::Tcp, server_transport).await;
+        let Peer::Tcp(mut viewer) = viewer else {
+            panic!("TCP Viewer");
+        };
+        let Peer::WebSocket(mut server) = server else {
+            panic!("WebSocket Server");
+        };
+        assert!(server.kw_eof().await > 0);
+        tcp_eof(&mut viewer).await;
+        running.closed(&started, "dead_connection", "server").await;
+        running.assert_empty();
+        running.finish().await;
+    }
+}
+
+fn update_settings(running: &Running, update: impl FnOnce(&mut vnc_relay_app::settings::Settings)) {
+    let current = running.cell.current();
+    let mut settings = (*current.settings).clone();
+    update(&mut settings);
+    running.cell.replace(ReloadSnapshot::new(
+        vnc_relay_app::reload::ConfigCandidate {
+            settings,
+            presence: (*current.presence).clone(),
+        },
+        current.wss_tls.clone(),
+        current.management_tls.clone(),
+    ));
+}
+
+/// spec: websocket.md:WS-029
+#[tokio::test]
+async fn exact_enabled_paths_select_roles_and_rejections_never_register() {
+    for secure in [false, true] {
+        let running = Running::start(secure).await;
+        for (path, server) in [
+            ("/relay?ignored=1", false),
+            ("/relay/server?ignored=1", true),
+        ] {
+            let mut client = Client::transport(running.addr, secure).await;
+            assert!(
+                client
+                    .http(&upgrade("GET", path, "13", true))
+                    .await
+                    .starts_with("HTTP/1.1 101 ")
+            );
+            if !server {
+                client.greeting().await;
+            }
+            client
+                .binary(&request(if server { "ID:29001" } else { "ID:29002" }))
+                .await;
+            let role = if server { "server" } else { "viewer" };
+            running
+                .events
+                .wait(|line| line["event"] == "waiting_registered" && line["role"] == role)
+                .await;
+            drop(client);
+        }
+        running.finish().await;
+        for disabled_server in [false, true] {
+            let running = Running::start_configured(secure, KEEPALIVE, LIMIT, |settings| {
+                let listener = if secure {
+                    &mut settings.relay.wss
+                } else {
+                    &mut settings.relay.ws
+                };
+                listener.viewer.enabled = disabled_server;
+                listener.server.enabled = !disabled_server;
+            })
+            .await;
+            for path in [
+                if disabled_server {
+                    "/relay/server"
+                } else {
+                    "/relay"
+                },
+                "/",
+                "/relay/",
+                "/relay/server/",
+                "/Relay",
+                "/relay%2Fserver",
+                "/api/v1/sessions",
+            ] {
+                let mut client = Client::transport(running.addr, secure).await;
+                let before = lock(&running.events.lines).len();
+                assert!(
+                    client
+                        .http(&upgrade("GET", path, "13", true))
+                        .await
+                        .starts_with("HTTP/1.1 404 ")
+                );
+                client.eof().await;
+                let lines = lock(&running.events.lines);
+                let rejected = lines[before..]
+                    .iter()
+                    .find(|line| line["event"] == "connection_rejected")
+                    .unwrap();
+                assert_eq!(rejected["reason"], "invalid_upgrade");
+                assert!(rejected.get("role").is_none());
+                assert!(
+                    !lines[before..]
+                        .iter()
+                        .any(|line| line["event"] == "waiting_registered"
+                            || line["event"] == "session_started")
+                );
+            }
+            running.finish().await;
+        }
+    }
+}
+
+/// spec: websocket.md:WS-030
+#[tokio::test]
+async fn accept_union_does_not_replace_server_role_ip_check() {
+    for secure in [false, true] {
+        let running = Running::start(secure).await;
+        update_settings(&running, |settings| {
+            let listener = if secure {
+                &mut settings.relay.wss
+            } else {
+                &mut settings.relay.ws
+            };
+            listener.viewer.allow = Some(AllowList::new(vec![IpItem::parse("127.0.0.1").unwrap()]));
+            listener.server.allow = Some(AllowList::new(Vec::new()));
+        });
+        let mut client = Client::transport(running.addr, secure).await;
+        assert!(
+            client
+                .http(&upgrade("GET", "/relay/server", "13", true))
+                .await
+                .starts_with("HTTP/1.1 403 ")
+        );
+        client.eof().await;
+        let rejected = running
+            .events
+            .wait(|line| line["event"] == "connection_rejected" && line["stage"] == "upgrade")
+            .await;
+        assert_eq!(rejected["reason"], "ip_not_allowed");
+        assert_eq!(rejected["role"], "server");
+        update_settings(&running, |settings| {
+            let listener = if secure {
+                &mut settings.relay.wss
+            } else {
+                &mut settings.relay.ws
+            };
+            listener.viewer.allow = Some(AllowList::new(Vec::new()));
+            listener.trusted_proxies = AllowList::new(Vec::new());
+        });
+        let mut socket = bounded(TcpStream::connect(running.addr)).await.unwrap();
+        let mut bytes = Vec::new();
+        match bounded(socket.read_to_end(&mut bytes)).await {
+            Ok(_) => {}
+            Err(error) if error.kind() == io::ErrorKind::ConnectionReset => {}
+            other => panic!("accept refusal before TLS/HTTP: {other:?}"),
+        }
+        assert!(bytes.is_empty());
+        running
+            .events
+            .wait(|line| {
+                line["event"] == "connection_rejected"
+                    && line["stage"] == "accept"
+                    && line["reason"] == "ip_not_allowed"
+            })
+            .await;
+        assert!(!lock(&running.events.lines).iter().any(|line| line["event"]
+            == "waiting_registered"
+            || line["event"] == "session_started"));
+        running.assert_empty();
+        running.finish().await;
+    }
+}
+
+/// spec: websocket.md:WS-031
+#[tokio::test]
+async fn server_path_uses_only_server_origin_policy_on_ws_and_wss() {
+    for secure in [false, true] {
+        let running = Running::start(secure).await;
+        update_settings(&running, |settings| {
+            let listener = if secure {
+                &mut settings.relay.wss
+            } else {
+                &mut settings.relay.ws
+            };
+            listener.viewer.allowed_origins =
+                vec![vnc_relay_domain::origin::Origin::parse("https://viewer.example").unwrap()];
+            listener.server.allowed_origins =
+                vec![vnc_relay_domain::origin::Origin::parse("https://server.example").unwrap()];
+        });
+        for (origin, status) in [
+            ("https://server.example", 101),
+            ("https://viewer.example", 403),
+            ("https://other.example", 403),
+        ] {
+            let mut client = Client::transport(running.addr, secure).await;
+            let head = String::from_utf8(upgrade("GET", "/relay/server", "13", true)).unwrap();
+            let head = head.strip_suffix("\r\n").unwrap().to_owned()
+                + &format!("Origin: {origin}\r\n\r\n");
+            let before = lock(&running.events.lines).len();
+            assert!(
+                client
+                    .http(head.as_bytes())
+                    .await
+                    .starts_with(&format!("HTTP/1.1 {status} "))
+            );
+            if status == 101 {
+                client.binary(&request("ID:31001")).await;
+                let registered = running
+                    .events
+                    .wait(|line| line["event"] == "waiting_registered")
+                    .await;
+                assert_eq!(registered["role"], "server");
+            } else {
+                client.eof().await;
+                let lines = lock(&running.events.lines);
+                let rejected = lines[before..]
+                    .iter()
+                    .find(|line| line["event"] == "connection_rejected")
+                    .unwrap();
+                assert_eq!(rejected["reason"], "origin_not_allowed");
+                assert_eq!(rejected["role"], "server");
+                assert_eq!(rejected["origin"], origin);
+                assert!(
+                    !lines[before..]
+                        .iter()
+                        .any(|line| line["event"] == "waiting_registered"
+                            || line["event"] == "session_started")
+                );
+            }
+        }
+        running.finish().await;
     }
 }
 
@@ -852,10 +1635,7 @@ async fn management_paths_and_invalid_upgrades_cannot_register_or_connect_a_targ
                             > index
                 })
                 .await;
-            assert_eq!(
-                rejected["listener"],
-                if secure { "wss_viewer" } else { "ws_viewer" }
-            );
+            assert_eq!(rejected["listener"], if secure { "wss" } else { "ws" });
             running.assert_empty();
             assert!(
                 !lock(&running.events.lines)
@@ -901,11 +1681,8 @@ async fn allowed_non_browser_client_relays_without_origin_cookie_authorization_o
                 })
                 .await;
             assert_eq!(accepted["peer_ip"], "127.0.0.1");
-            assert_eq!(accepted["role"], "viewer");
-            assert_eq!(
-                accepted["listener"],
-                if secure { "wss_viewer" } else { "ws_viewer" }
-            );
+            assert!(accepted.get("role").is_none());
+            assert_eq!(accepted["listener"], if secure { "wss" } else { "ws" });
             client.binary(b"no administrator login").await;
             assert_eq!(read_tcp(&mut peer, 22).await, b"no administrator login");
             bounded(peer.write_all(b"anonymous relay reply"))
@@ -1309,7 +2086,7 @@ impl<S: AsyncWrite + Unpin> AsyncWrite for MeasuredStream<S> {
 }
 
 impl<S: RelayStream> RelayStream for MeasuredStream<S> {
-    fn transport(&self) -> ViewerTransport {
+    fn transport(&self) -> Transport {
         self.inner.transport()
     }
     fn pending_write_len(&self) -> usize {
@@ -1369,6 +2146,7 @@ async fn measured_pair(
             EntryPoint::WsViewer
         },
         peer_ip: PeerIp::from(addr),
+        forwarded_ip: None,
         peer_addr: addr,
         accepted_wall: running.clock.wall(),
         accepted_at: now,
@@ -1383,9 +2161,9 @@ async fn measured_pair(
             M,
             B,
             if running.secure {
-                ViewerTransport::Wss
+                Transport::Wss
             } else {
-                ViewerTransport::Ws
+                Transport::Ws
             },
             KEEPALIVE,
         ),
@@ -1424,6 +2202,7 @@ async fn measured_pair(
         conn_id: ConnId::next(),
         entry_point: EntryPoint::TcpServer,
         peer_ip: PeerIp::from(addr),
+        forwarded_ip: None,
         peer_addr: addr,
         accepted_wall: running.clock.wall(),
         accepted_at: now,
@@ -1892,4 +2671,449 @@ async fn ws_and_wss_kw_keeps_idle_peers_and_drops_unresponsive_peers() {
         running.assert_empty();
         running.finish().await;
     }
+}
+
+fn ip_list(items: &[&str]) -> AllowList {
+    AllowList::new(
+        items
+            .iter()
+            .map(|item| {
+                IpItem::parse(item).unwrap_or_else(|error| panic!("valid ip item: {error:?}"))
+            })
+            .collect(),
+    )
+}
+
+fn forwarded_upgrade(server: bool, headers: &str) -> Vec<u8> {
+    let head = String::from_utf8(upgrade(
+        "GET",
+        if server { "/relay/server" } else { "/relay" },
+        "13",
+        true,
+    ))
+    .unwrap_or_else(|error| panic!("valid utf-8 upgrade head: {error}"));
+    let stripped = head
+        .strip_suffix("\r\n")
+        .unwrap_or_else(|| panic!("crlf ending"));
+    (stripped.to_owned() + headers + "\r\n").into_bytes()
+}
+
+async fn proxy_running(secure: bool, client: &str) -> Running {
+    Running::start_configured(secure, KEEPALIVE, LIMIT, |settings| {
+        for listener in [&mut settings.relay.ws, &mut settings.relay.wss] {
+            listener.trusted_proxies = ip_list(&["127.0.0.1", "192.0.2.254", "2001:db8:ffff::/48"]);
+            listener.viewer.allow = Some(ip_list(&[client]));
+            listener.server.allow = Some(ip_list(&[client]));
+        }
+    })
+    .await
+}
+
+/// spec: websocket.md:WS-032
+#[tokio::test]
+async fn trusted_proxy_uses_rightmost_untrusted_canonical_address_on_both_paths() {
+    for secure in [false, true] {
+        for (client_ip, headers) in [
+            (
+                "198.51.100.7",
+                "X-Forwarded-For: invalid-left, 203.0.113.99\r\nX-Forwarded-For: \t198.51.100.7 \t, 192.0.2.254\r\n",
+            ),
+            (
+                "2001:db8::7",
+                "X-Forwarded-For: unknown, [2001:db8::7], [2001:db8:ffff::1]\r\n",
+            ),
+            (
+                "2001:db8::7",
+                "X-Forwarded-For: unknown, 2001:db8::7, 2001:db8:ffff::1\r\n",
+            ),
+            (
+                "198.51.100.7",
+                "X-Forwarded-For: unknown, [::ffff:198.51.100.7], ::ffff:192.0.2.254\r\n",
+            ),
+        ] {
+            let running = proxy_running(secure, client_ip).await;
+            let mut viewer = Client::transport(running.addr, secure).await;
+            assert!(
+                viewer
+                    .http(&forwarded_upgrade(false, headers))
+                    .await
+                    .starts_with("HTTP/1.1 101 ")
+            );
+            viewer.greeting().await;
+            viewer.binary(&request("ID:32001")).await;
+            let waiting = running
+                .events
+                .wait(|line| line["event"] == "waiting_registered")
+                .await;
+            assert_eq!(waiting["peer_ip"], "127.0.0.1");
+            assert_eq!(waiting["forwarded_ip"], client_ip);
+            let mut server = Client::transport(running.addr, secure).await;
+            assert!(
+                server
+                    .http(&forwarded_upgrade(true, headers))
+                    .await
+                    .starts_with("HTTP/1.1 101 ")
+            );
+            server.binary(&request("ID:32001")).await;
+            let started = running
+                .events
+                .wait(|line| line["event"] == "session_started")
+                .await;
+            for side in ["viewer", "server"] {
+                assert_eq!(started[format!("{side}_peer_ip")], "127.0.0.1");
+                assert_eq!(started[format!("{side}_forwarded_ip")], client_ip);
+            }
+            let query = vnc_relay_app::management::query::ManagementQueryService::new(
+                running.runtime.clone(),
+                running.budget.clone(),
+                ConnectionBudget::new(),
+                running.clock.clone(),
+                running.cell.clone(),
+            );
+            let sessions = query.sessions();
+            assert_eq!(sessions.items.len(), 1);
+            let item = &sessions.items[0];
+            assert_eq!(item.viewer_address.ip().to_string(), "127.0.0.1");
+            assert_eq!(item.target_address.ip().to_string(), "127.0.0.1");
+            assert_eq!(item.viewer_forwarded_ip.unwrap().to_string(), client_ip);
+            assert_eq!(item.target_forwarded_ip.unwrap().to_string(), client_ip);
+            viewer.binary(b"forward\0\xff").await;
+            assert_eq!(server.data(9).await, b"forward\0\xff");
+            server.binary(b"reverse\xff\0").await;
+            assert_eq!(viewer.data(9).await, b"reverse\xff\0");
+            {
+                let lines = lock(&running.events.lines);
+                for accepted in lines
+                    .iter()
+                    .filter(|line| line["event"] == "connection_accepted")
+                {
+                    assert_eq!(accepted["peer_ip"], "127.0.0.1");
+                    assert!(accepted.get("forwarded_ip").is_none());
+                    assert!(accepted.get("role").is_none());
+                }
+            }
+            drop(viewer);
+            drop(server);
+            running.finish().await;
+        }
+    }
+}
+
+/// spec: websocket.md:WS-033
+/// spec: websocket.md:WS-036
+#[tokio::test]
+async fn invalid_or_all_trusted_forwarded_chains_fail_before_origin_and_registration() {
+    for secure in [false, true] {
+        for server in [false, true] {
+            for value in [
+                None,
+                Some(""),
+                Some(" \t"),
+                Some("198.51.100.7:5900"),
+                Some("[2001:db8::7]:5900"),
+                Some("fe80::1%eth0"),
+                Some("[fe80::1%1]"),
+                Some("unknown"),
+                Some("_obfuscated"),
+                Some("198.51.100.7,"),
+                Some("198.51.100.7,,192.0.2.254"),
+                Some("999.1.1.1"),
+                Some("127.0.0.1"),
+                Some("192.0.2.254, 127.0.0.1"),
+                Some("[::ffff:127.0.0.1], [2001:db8:ffff::1]"),
+            ] {
+                let running = proxy_running(secure, "127.0.0.1").await;
+                update_settings(&running, |settings| {
+                    let listener = if secure {
+                        &mut settings.relay.wss
+                    } else {
+                        &mut settings.relay.ws
+                    };
+                    listener.viewer.allowed_origins = vec![
+                        vnc_relay_domain::origin::Origin::parse("https://allowed.example").unwrap(),
+                    ];
+                    listener.server.allowed_origins = listener.viewer.allowed_origins.clone();
+                });
+                let headers = value
+                    .map_or_else(String::new, |value| format!("X-Forwarded-For: {value}\r\n"))
+                    + "Origin: https://denied.example\r\n";
+                let mut client = Client::transport(running.addr, secure).await;
+                let response = client.http(&forwarded_upgrade(server, &headers)).await;
+                assert!(
+                    response.starts_with("HTTP/1.1 400 "),
+                    "{value:?}: {response}"
+                );
+                let rejected = running
+                    .events
+                    .wait(|line| line["event"] == "connection_rejected")
+                    .await;
+                assert_eq!(rejected["reason"], "forwarded_for_invalid");
+                assert_eq!(rejected["peer_ip"], "127.0.0.1");
+                assert_eq!(rejected["role"], if server { "server" } else { "viewer" });
+                assert!(rejected.get("forwarded_ip").is_none());
+                assert!(!lock(&running.events.lines).iter().any(|line| matches!(
+                    line["event"].as_str(),
+                    Some("waiting_registered" | "session_started" | "target_connect_failed")
+                )));
+                assert!(
+                    running
+                        .runtime
+                        .snapshot(running.clock.as_ref())
+                        .waiting
+                        .is_empty()
+                );
+                drop(client);
+                running.finish().await;
+            }
+        }
+    }
+}
+
+/// spec: websocket.md:WS-034
+#[tokio::test]
+async fn untrusted_peer_headers_neither_grant_access_nor_supply_forwarded_metadata() {
+    for secure in [false, true] {
+        for server in [false, true] {
+            let running = Running::start(secure).await;
+            update_settings(&running, |settings| {
+                let listener = if secure {
+                    &mut settings.relay.wss
+                } else {
+                    &mut settings.relay.ws
+                };
+                listener.trusted_proxies = ip_list(&["192.0.2.254"]);
+                if server {
+                    listener.server.allow = Some(ip_list(&["198.51.100.7"]));
+                } else {
+                    listener.viewer.allow = Some(ip_list(&["198.51.100.7"]));
+                }
+            });
+            let headers = "X-Forwarded-For: 198.51.100.7\r\nForwarded: for=198.51.100.7\r\nX-Real-IP: 198.51.100.7\r\nCookie: address=198.51.100.7\r\nAuthorization: Bearer 198.51.100.7\r\n";
+            let mut client = Client::transport(running.addr, secure).await;
+            assert!(
+                client
+                    .http(&forwarded_upgrade(server, headers))
+                    .await
+                    .starts_with("HTTP/1.1 403 ")
+            );
+            let rejected = running
+                .events
+                .wait(|line| line["event"] == "connection_rejected")
+                .await;
+            assert_eq!(rejected["reason"], "ip_not_allowed");
+            assert_eq!(rejected["peer_ip"], "127.0.0.1");
+            assert!(rejected.get("forwarded_ip").is_none());
+            drop(client);
+            update_settings(&running, |settings| {
+                let listener = if secure {
+                    &mut settings.relay.wss
+                } else {
+                    &mut settings.relay.ws
+                };
+                listener.viewer.allow = Some(ip_list(&["127.0.0.1"]));
+                listener.server.allow = Some(ip_list(&["127.0.0.1"]));
+            });
+            let mut client = Client::transport(running.addr, secure).await;
+            assert!(
+                client
+                    .http(&forwarded_upgrade(
+                        server,
+                        "X-Forwarded-For: unknown,,bad:port\r\n"
+                    ))
+                    .await
+                    .starts_with("HTTP/1.1 101 ")
+            );
+            if !server {
+                client.greeting().await;
+            }
+            client.binary(&request("ID:34001")).await;
+            let waiting = running
+                .events
+                .wait(|line| line["event"] == "waiting_registered")
+                .await;
+            assert_eq!(waiting["peer_ip"], "127.0.0.1");
+            assert!(waiting.get("forwarded_ip").is_none());
+            drop(client);
+            running.finish().await;
+        }
+    }
+}
+
+/// spec: websocket.md:WS-032
+#[tokio::test]
+async fn derived_address_survives_origin_rejection_abort_and_target_connect_failure() {
+    for secure in [false, true] {
+        for outcome in ["origin", "ip", "abort", "target"] {
+            let running = proxy_running(secure, "198.51.100.7").await;
+            update_settings(&running, |settings| {
+                let listener = if secure {
+                    &mut settings.relay.wss
+                } else {
+                    &mut settings.relay.ws
+                };
+                if outcome == "origin" {
+                    listener.viewer.allowed_origins = vec![
+                        vnc_relay_domain::origin::Origin::parse("https://allowed.example").unwrap(),
+                    ];
+                }
+                if outcome == "ip" {
+                    listener.viewer.allow = Some(ip_list(&["203.0.113.8"]));
+                }
+            });
+            let mut client = Some(Client::transport(running.addr, secure).await);
+            let headers = if outcome == "origin" {
+                "X-Forwarded-For: 198.51.100.7\r\nOrigin: https://denied.example\r\n"
+            } else {
+                "X-Forwarded-For: 198.51.100.7\r\n"
+            };
+            let response = client
+                .as_mut()
+                .unwrap()
+                .http(&forwarded_upgrade(false, headers))
+                .await;
+            if outcome == "origin" || outcome == "ip" {
+                assert!(response.starts_with("HTTP/1.1 403 "));
+            } else {
+                assert!(response.starts_with("HTTP/1.1 101 "));
+                client.as_mut().unwrap().greeting().await;
+                if outcome == "target" {
+                    let listener = target().await;
+                    let addr = listener.local_addr().unwrap();
+                    drop(listener);
+                    client
+                        .as_mut()
+                        .unwrap()
+                        .binary(&request(&addr.to_string()))
+                        .await;
+                }
+            }
+            if outcome == "abort" {
+                drop(client.take());
+            }
+            let event = running
+                .events
+                .wait(|line| match outcome {
+                    "origin" | "ip" => line["event"] == "connection_rejected",
+                    "target" => line["event"] == "target_connect_failed",
+                    _ => {
+                        line["event"] == "connection_aborted" && line["stage"] == "initial_exchange"
+                    }
+                })
+                .await;
+            assert_eq!(event["peer_ip"], "127.0.0.1");
+            assert_eq!(event["forwarded_ip"], "198.51.100.7");
+            if outcome == "origin" {
+                assert_eq!(event["reason"], "origin_not_allowed");
+            }
+            if outcome == "ip" {
+                assert_eq!(event["reason"], "ip_not_allowed");
+            }
+            drop(client);
+            running.finish().await;
+        }
+    }
+}
+
+/// spec: websocket.md:WS-035
+#[tokio::test]
+async fn tls_terminating_proxy_adds_each_client_address_and_pipes_mode_two_both_ways() {
+    let running = Running::start_configured(false, KEEPALIVE, LIMIT, |settings| {
+        settings.relay.ws.trusted_proxies = ip_list(&["127.0.0.1"]);
+        settings.relay.ws.viewer.allow = Some(ip_list(&["198.51.100.7"]));
+        settings.relay.ws.server.allow = Some(ip_list(&["203.0.113.8"]));
+    })
+    .await;
+    let listener = target().await;
+    let address = listener.local_addr().unwrap();
+    let upstream = running.addr;
+    let proxy = tokio::spawn(async move {
+        let mut pipes = Vec::new();
+        for _ in 0..2 {
+            let (socket, _) = bounded(listener.accept()).await.unwrap();
+            pipes.push(tokio::spawn(async move {
+                let mut external = bounded(acceptor().accept(socket)).await.unwrap();
+                let mut head = Vec::new();
+                while !head.ends_with(b"\r\n\r\n") {
+                    head.push(bounded(external.read_u8()).await.unwrap());
+                    assert!(head.len() <= 16 * 1024);
+                }
+                let head = String::from_utf8(head).unwrap();
+                assert!(!head.to_ascii_lowercase().contains("x-forwarded-for"));
+                let client = if head.starts_with("GET /relay/server ") {
+                    "203.0.113.8"
+                } else {
+                    assert!(head.starts_with("GET /relay "));
+                    "198.51.100.7"
+                };
+                let head = head.strip_suffix("\r\n").unwrap().to_owned()
+                    + &format!("X-Forwarded-For: {client}\r\n\r\n");
+                let mut internal = bounded(TcpStream::connect(upstream)).await.unwrap();
+                bounded(internal.write_all(head.as_bytes())).await.unwrap();
+                // This leg is deliberately plain WS. TLS exists only between client and proxy.
+                let _ = bounded(tokio::io::copy_bidirectional(&mut external, &mut internal)).await;
+            }));
+        }
+        for pipe in pipes {
+            bounded(pipe).await.unwrap();
+        }
+    });
+    let mut viewer = Client::transport(address, true).await;
+    assert!(
+        viewer
+            .http(&upgrade("GET", "/relay", "13", true))
+            .await
+            .starts_with("HTTP/1.1 101 ")
+    );
+    viewer.greeting().await;
+    viewer.binary(&request("ID:35001")).await;
+    let registered = running
+        .events
+        .wait(|line| line["event"] == "waiting_registered")
+        .await;
+    assert_eq!(registered["listener"], "ws");
+    assert_eq!(registered["forwarded_ip"], "198.51.100.7");
+    let mut server = Client::transport(address, true).await;
+    assert!(
+        server
+            .http(&upgrade("GET", "/relay/server", "13", true))
+            .await
+            .starts_with("HTTP/1.1 101 ")
+    );
+    server.binary(&request("ID:35001")).await;
+    let started = running
+        .events
+        .wait(|line| line["event"] == "session_started")
+        .await;
+    assert_eq!(started["viewer_transport"], "ws");
+    assert_eq!(started["server_transport"], "ws");
+    assert_eq!(started["viewer_peer_ip"], "127.0.0.1");
+    assert_eq!(started["server_peer_ip"], "127.0.0.1");
+    assert_eq!(started["viewer_forwarded_ip"], "198.51.100.7");
+    assert_eq!(started["server_forwarded_ip"], "203.0.113.8");
+    viewer.binary(b"TLS viewer\0\xff").await;
+    assert_eq!(server.data(12).await, b"TLS viewer\0\xff");
+    server.binary(b"TLS server\xff\0").await;
+    assert_eq!(viewer.data(12).await, b"TLS server\xff\0");
+    let query = vnc_relay_app::management::query::ManagementQueryService::new(
+        running.runtime.clone(),
+        running.budget.clone(),
+        ConnectionBudget::new(),
+        running.clock.clone(),
+        running.cell.clone(),
+    );
+    let sessions = query.sessions();
+    assert_eq!(
+        sessions.items[0].viewer_forwarded_ip.unwrap().to_string(),
+        "198.51.100.7"
+    );
+    assert_eq!(
+        sessions.items[0].target_forwarded_ip.unwrap().to_string(),
+        "203.0.113.8"
+    );
+    assert_eq!(sessions.items[0].viewer_transport, "ws");
+    assert_eq!(sessions.items[0].target_transport, "ws");
+    drop(viewer);
+    drop(server);
+    running.finish().await;
+    bounded(proxy).await.unwrap();
 }

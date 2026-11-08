@@ -1,4 +1,4 @@
-//! Config file loader (config-v3 §1 and §2.1).
+//! Config file loader (config-v4 §1 and §2.1).
 //! Design: docs/architectures/config-loading.md.
 
 mod listen;
@@ -14,12 +14,12 @@ use vnc_relay_app::settings::{
     AdminSessionSettings, AdminSettings, Argon2Settings, ConfigDiagnostic, ConfigError,
     DashboardSettings, EntryPointSettings, KeepaliveSettings, LimitSettings, LogOutput,
     LogSettings, LoginLimitSettings, ManagementSettings, Mode1Settings, Mode2Settings,
-    RecentClosedSettings, RelaySettings, ReloadSettings, Settings, StatusSettings, TimeoutSettings,
-    TlsFiles,
+    RecentClosedSettings, RecentLogsSettings, RelaySettings, ReloadSettings, Settings,
+    StatusSettings, TimeoutSettings, TlsFiles, WsListenerSettings, WsRoleSettings,
 };
 use vnc_relay_domain::account::Argon2Params;
 use vnc_relay_domain::allow_list::{AllowList, IpItem, IpItemError};
-use vnc_relay_domain::entry_point::EntryPoint;
+use vnc_relay_domain::entry_point::Listener;
 use vnc_relay_domain::origin::Origin;
 use vnc_relay_domain::target_policy::{TargetItem, TargetItemError, TargetPolicy};
 
@@ -128,18 +128,18 @@ pub fn parse_candidate(
     let settings = settings_from_table(&table, base_dir)?;
     let mut presence = ConfigPresence::default();
     collect_presence(&table, "", &mut presence);
-    if !settings.relay.wss_viewer.enabled
-        && settings.relay.wss_viewer.tls.is_none()
+    if !settings.relay.wss.enabled()
+        && settings.relay.wss.tls.is_none()
         && let Some(wss) = table
             .get("relay")
-            .and_then(|relay| relay.get("wss_viewer"))
+            .and_then(|relay| relay.get("wss"))
             .and_then(toml::Value::as_table)
     {
         for key in ["cert_file", "key_file"] {
             if let Some(path) = wss.get(key).and_then(toml::Value::as_str) {
                 presence
                     .inactive_paths
-                    .insert(format!("relay.wss_viewer.{key}"), base_dir.join(path));
+                    .insert(format!("relay.wss.{key}"), base_dir.join(path));
             }
         }
     }
@@ -172,7 +172,7 @@ fn parse_table(text: &str) -> Result<toml::Table, Vec<ConfigDiagnostic>> {
     })
 }
 
-/// Position only; the message must not quote file content (config-v3 §2.1).
+/// Position only; the message must not quote file content (config-v4 §2.1).
 fn syntax_message(text: &str, error: &toml::de::Error) -> String {
     match error_position(text, error) {
         Some((line, column)) => format!("TOML 구문 오류 또는 중복 키다({line}행 {column}열)."),
@@ -193,6 +193,7 @@ fn read_settings(root: &mut Section<'_>, base_dir: &Path, d: &mut Diagnostics) -
     let management = read_management(root, base_dir, d);
     let dashboard = read_dashboard(root, d);
     let recent_closed = read_recent_closed(root, d);
+    let recent_logs = read_recent_logs(root, d);
     let status = read_status(root, d);
     let log = read_log(root, base_dir, d);
     let reload = read_reload(root, d);
@@ -212,6 +213,7 @@ fn read_settings(root: &mut Section<'_>, base_dir: &Path, d: &mut Diagnostics) -
         management: management?,
         dashboard: dashboard?,
         recent_closed: recent_closed?,
+        recent_logs: recent_logs?,
         status: status?,
         log: log?,
         reload: reload?,
@@ -254,84 +256,137 @@ fn read_relay(
     d: &mut Diagnostics,
 ) -> Option<RelaySettings> {
     let mut relay = root.section("relay", d);
-    let tcp_viewer = read_entry_point(&mut relay, EntryPoint::TcpViewer, base_dir, d);
-    let tcp_server = read_entry_point(&mut relay, EntryPoint::TcpServer, base_dir, d);
-    let ws_viewer = read_entry_point(&mut relay, EntryPoint::WsViewer, base_dir, d);
-    let wss_viewer = read_entry_point(&mut relay, EntryPoint::WssViewer, base_dir, d);
+    let tcp_viewer = read_tcp_listener(&mut relay, Listener::TcpViewer, d);
+    let tcp_server = read_tcp_listener(&mut relay, Listener::TcpServer, d);
+    let ws = read_websocket_listener(&mut relay, Listener::Ws, base_dir, d);
+    let wss = read_websocket_listener(&mut relay, Listener::Wss, base_dir, d);
     relay.finish(d);
     Some(RelaySettings {
         tcp_viewer: tcp_viewer?,
         tcp_server: tcp_server?,
-        ws_viewer: ws_viewer?,
-        wss_viewer: wss_viewer?,
+        ws: ws?,
+        wss: wss?,
     })
 }
 
-fn read_entry_point(
+fn read_tcp_listener(
     relay: &mut Section<'_>,
-    entry_point: EntryPoint,
-    base_dir: &Path,
+    listener: Listener,
     d: &mut Diagnostics,
 ) -> Option<EntryPointSettings> {
-    let mut table = relay.section(entry_point.name(), d);
+    let mut table = relay.section(listener.name(), d);
     let enabled = table.bool("enabled", d).or(false);
-    let listen = read_listen(&mut table, "listen", entry_point.default_port(), d);
-    let allow = read_allow_list(&mut table, d);
-    let allowed_origins = match entry_point {
-        EntryPoint::WsViewer | EntryPoint::WssViewer => read_origins(&mut table, d),
-        EntryPoint::TcpViewer | EntryPoint::TcpServer => Some(Vec::new()),
-    };
-    let (cert_file, key_file) = match entry_point {
-        EntryPoint::WssViewer => (
-            read_path(&mut table, "cert_file", base_dir, d),
-            read_path(&mut table, "key_file", base_dir, d),
-        ),
-        EntryPoint::TcpViewer | EntryPoint::TcpServer | EntryPoint::WsViewer => {
-            (Field::Absent, Field::Absent)
-        }
-    };
-    // Disabled entry points skip the required-key check (config-v3 §1.2).
-    let (listen, allow, tls) = if enabled == Some(true) {
-        let condition = format!("relay.{}.enabled = true", entry_point.name());
-        let listen = required(&table, "listen", listen, &condition, d);
-        let allow = required(&table, "allow", allow, &condition, d);
-        let tls = if entry_point == EntryPoint::WssViewer {
-            let cert_file = required(&table, "cert_file", cert_file, &condition, d);
-            let key_file = required(&table, "key_file", key_file, &condition, d);
-            cert_file.zip(key_file).map(|(cert_file, key_file)| {
-                Some(TlsFiles {
-                    cert_file,
-                    key_file,
-                })
-            })
-        } else {
-            Some(None)
-        };
-        (listen.map(Some), allow.map(Some), tls)
+    let listen = read_listen(&mut table, "listen", listener.default_port(), d);
+    let allow = read_allow_list(&mut table, "allow", d);
+    // Disabled listeners still validate every supplied value.
+    let (listen, allow) = if enabled == Some(true) {
+        let condition = format!("relay.{}.enabled = true", listener.name());
+        (
+            required(&table, "listen", listen, &condition, d).map(Some),
+            required(&table, "allow", allow, &condition, d).map(Some),
+        )
     } else {
-        let tls = match (cert_file, key_file) {
-            (Field::Invalid, _) | (_, Field::Invalid) => None,
-            (Field::Value(cert_file), Field::Value(key_file)) => Some(Some(TlsFiles {
-                cert_file,
-                key_file,
-            })),
-            _ => Some(None),
-        };
-        (optional(listen), optional(allow), tls)
+        (optional(listen), optional(allow))
     };
     table.finish(d);
     Some(EntryPointSettings {
         enabled: enabled?,
         listen: listen?,
         allow: allow?,
-        allowed_origins: allowed_origins?,
-        tls: tls?,
     })
 }
 
-fn read_allow_list(table: &mut Section<'_>, d: &mut Diagnostics) -> Field<AllowList> {
-    let path = table.key_path("allow");
-    table.string_array("allow", d).map(|texts| {
+fn read_websocket_listener(
+    relay: &mut Section<'_>,
+    listener: Listener,
+    base_dir: &Path,
+    d: &mut Diagnostics,
+) -> Option<WsListenerSettings> {
+    let mut table = relay.section(listener.name(), d);
+    let listen = read_listen(&mut table, "listen", None, d);
+    let trusted_proxies =
+        read_allow_list(&mut table, "trusted_proxies", d).or(AllowList::new(Vec::new()));
+    let (cert_file, key_file) = if listener == Listener::Wss {
+        (
+            read_path(&mut table, "cert_file", base_dir, d),
+            read_path(&mut table, "key_file", base_dir, d),
+        )
+    } else {
+        (Field::Absent, Field::Absent)
+    };
+    let (viewer_enabled, viewer) = read_websocket_role(&mut table, "viewer", d);
+    let (server_enabled, server) = read_websocket_role(&mut table, "server", d);
+    let enabled = viewer_enabled || server_enabled;
+    let condition = format!("relay.{} 역할이 하나 이상 enabled = true", listener.name());
+    let listen = if enabled {
+        required(&table, "listen", listen, &condition, d).map(Some)
+    } else {
+        optional(listen)
+    };
+    let tls = if enabled && listener == Listener::Wss {
+        let cert_file = required(&table, "cert_file", cert_file, &condition, d);
+        let key_file = required(&table, "key_file", key_file, &condition, d);
+        cert_file.zip(key_file).map(|(cert_file, key_file)| {
+            Some(TlsFiles {
+                cert_file,
+                key_file,
+            })
+        })
+    } else {
+        match (cert_file, key_file) {
+            (Field::Invalid, _) | (_, Field::Invalid) => None,
+            (Field::Value(cert_file), Field::Value(key_file)) => Some(Some(TlsFiles {
+                cert_file,
+                key_file,
+            })),
+            _ => Some(None),
+        }
+    };
+    table.finish(d);
+    Some(WsListenerSettings {
+        listen: listen?,
+        trusted_proxies: trusted_proxies?,
+        tls: tls?,
+        viewer: viewer?,
+        server: server?,
+    })
+}
+
+fn read_websocket_role(
+    listener: &mut Section<'_>,
+    role: &'static str,
+    d: &mut Diagnostics,
+) -> (bool, Option<WsRoleSettings>) {
+    let mut table = listener.section(role, d);
+    let enabled = table.bool("enabled", d).or(false);
+    let allow = read_allow_list(&mut table, "allow", d);
+    let allowed_origins = read_origins(&mut table, d);
+    let allow = if enabled == Some(true) {
+        let condition = format!("{} = true", table.key_path("enabled"));
+        required(&table, "allow", allow, &condition, d).map(Some)
+    } else {
+        optional(allow)
+    };
+    table.finish(d);
+    let settings =
+        enabled
+            .zip(allow)
+            .zip(allowed_origins)
+            .map(|((enabled, allow), allowed_origins)| WsRoleSettings {
+                enabled,
+                allow,
+                allowed_origins,
+            });
+    (enabled == Some(true), settings)
+}
+
+fn read_allow_list(
+    table: &mut Section<'_>,
+    key: &'static str,
+    d: &mut Diagnostics,
+) -> Field<AllowList> {
+    let path = table.key_path(key);
+    table.string_array(key, d).map(|texts| {
         let mut items = Vec::with_capacity(texts.len());
         let mut valid = true;
         for (index, text) in texts.into_iter().enumerate() {
@@ -625,6 +680,15 @@ fn read_recent_closed(root: &mut Section<'_>, d: &mut Diagnostics) -> Option<Rec
     })
 }
 
+fn read_recent_logs(root: &mut Section<'_>, d: &mut Diagnostics) -> Option<RecentLogsSettings> {
+    let mut recent_logs = root.section("recent_logs", d);
+    let max_entries = count(&mut recent_logs, "max_entries", 1000, 0..=10_000, d);
+    recent_logs.finish(d);
+    Some(RecentLogsSettings {
+        max_entries: max_entries?,
+    })
+}
+
 fn read_status(root: &mut Section<'_>, d: &mut Diagnostics) -> Option<StatusSettings> {
     let mut status = root.section("status", d);
     let listen = read_listen(&mut status, "listen", None, d);
@@ -660,7 +724,7 @@ fn read_reload(root: &mut Section<'_>, d: &mut Diagnostics) -> Option<ReloadSett
     })
 }
 
-/// Enabled entry points, the management listener, and the status listener
+/// Enabled relay listeners, the management listener, and the status listener
 /// must not share an `IP:port`. A conflict is reported at the later key.
 fn check_listen_conflicts(
     relay: &RelaySettings,
@@ -668,12 +732,13 @@ fn check_listen_conflicts(
     status: &StatusSettings,
     d: &mut Diagnostics,
 ) {
-    let mut listeners: Vec<(String, SocketAddr)> = EntryPoint::ALL
+    let mut listeners: Vec<(String, SocketAddr)> = Listener::ALL
         .into_iter()
-        .filter_map(|entry_point| {
-            let settings = relay.get(entry_point);
-            let listen = settings.listen.filter(|_| settings.enabled)?;
-            Some((format!("relay.{}.listen", entry_point.name()), listen))
+        .filter_map(|listener| {
+            let listen = relay
+                .listen(listener)
+                .filter(|_| relay.listener_enabled(listener))?;
+            Some((format!("relay.{}.listen", listener.name()), listen))
         })
         .collect();
     listeners.push(("management.listen".to_owned(), management.listen));

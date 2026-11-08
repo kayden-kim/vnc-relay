@@ -1,4 +1,4 @@
-//! Contract tests of the config loader (docs/contracts/config-v3.md §5).
+//! Contract tests of the config loader (docs/contracts/config-v4.md §5).
 
 use std::net::SocketAddr;
 use std::path::PathBuf;
@@ -9,10 +9,11 @@ use vnc_relay_app::settings::{
     AdminSessionSettings, AdminSettings, Argon2Settings, ConfigWarning, DashboardSettings,
     EntryPointSettings, KeepaliveSettings, LimitSettings, LogOutput, LogSettings,
     LoginLimitSettings, ManagementSettings, Mode1Settings, Mode2Settings, RecentClosedSettings,
-    RelaySettings, ReloadSettings, Settings, StatusSettings, TimeoutSettings, TlsFiles,
+    RecentLogsSettings, RelaySettings, ReloadSettings, Settings, StatusSettings, TimeoutSettings,
+    TlsFiles, WsListenerSettings, WsRoleSettings,
 };
 use vnc_relay_domain::allow_list::{AllowList, IpItem};
-use vnc_relay_domain::entry_point::EntryPoint;
+use vnc_relay_domain::entry_point::{EntryPoint, Listener};
 use vnc_relay_domain::origin::Origin;
 use vnc_relay_domain::target_policy::{TargetItem, TargetPolicy};
 
@@ -82,8 +83,6 @@ fn tcp_entry_point(listen: &str, items: &[&str]) -> EntryPointSettings {
         enabled: true,
         listen: Some(addr(listen)),
         allow: Some(allow(items)),
-        allowed_origins: Vec::new(),
-        tls: None,
     }
 }
 
@@ -140,8 +139,8 @@ listen = "127.0.0.1:18081"
                 "0.0.0.0:15902",
                 &["203.0.113.10-203.0.113.20", "2001:db8::/32"],
             ),
-            ws_viewer: EntryPointSettings::default(),
-            wss_viewer: EntryPointSettings::default(),
+            ws: WsListenerSettings::default(),
+            wss: WsListenerSettings::default(),
         },
         mode1: Mode1Settings::default(),
         mode2: Mode2Settings { enabled: true },
@@ -187,6 +186,7 @@ listen = "127.0.0.1:18081"
             query_timeout: secs(5),
         },
         recent_closed: RecentClosedSettings { max_entries: 100 },
+        recent_logs: RecentLogsSettings { max_entries: 1000 },
         status: StatusSettings {
             listen: addr("127.0.0.1:18081"),
         },
@@ -209,13 +209,15 @@ fn accepts_tls_example_and_resolves_relative_paths() {
 [admin]
 accounts_file = "admin-accounts.toml"
 
-[relay.wss_viewer]
-enabled = true
+[relay.wss]
 listen = "0.0.0.0:15903"
-allow = ["198.51.100.0/24"]
-allowed_origins = ["https://viewer.example", "https://viewer.example:8443"]
 cert_file = "certs/relay.pem"
 key_file = "certs/relay.key"
+
+[relay.wss.viewer]
+enabled = true
+allow = ["198.51.100.0/24"]
+allowed_origins = ["https://viewer.example", "https://viewer.example:8443"]
 
 [mode1]
 enabled = true
@@ -238,15 +240,19 @@ output = "stdout"
     );
     let certs = base_dir().join("certs");
     assert_eq!(
-        settings.relay.wss_viewer,
-        EntryPointSettings {
-            enabled: true,
+        settings.relay.wss,
+        WsListenerSettings {
             listen: Some(addr("0.0.0.0:15903")),
-            allow: Some(allow(&["198.51.100.0/24"])),
-            allowed_origins: vec![
-                Origin::parse("https://viewer.example").expect("origin"),
-                Origin::parse("https://viewer.example:8443").expect("origin"),
-            ],
+            trusted_proxies: AllowList::default(),
+            viewer: WsRoleSettings {
+                enabled: true,
+                allow: Some(allow(&["198.51.100.0/24"])),
+                allowed_origins: vec![
+                    Origin::parse("https://viewer.example").expect("origin"),
+                    Origin::parse("https://viewer.example:8443").expect("origin"),
+                ],
+            },
+            server: WsRoleSettings::default(),
             tls: Some(TlsFiles {
                 cert_file: certs.join("relay.pem"),
                 key_file: certs.join("relay.key"),
@@ -388,7 +394,7 @@ fn load_resolves_relative_paths_against_the_config_directory() {
 #[test]
 fn checks_every_numeric_key_at_its_bounds() {
     type Getter = fn(&Settings) -> u64;
-    let cases: [(&str, &str, i64, i64, u64, Getter); 30] = [
+    let cases: [(&str, &str, i64, i64, u64, Getter); 31] = [
         (
             "admin.argon2",
             "memory_kib",
@@ -498,6 +504,9 @@ fn checks_every_numeric_key_at_its_bounds() {
         ("recent_closed", "max_entries", 0, 10_000, 100, |s| {
             s.recent_closed.max_entries.into()
         }),
+        ("recent_logs", "max_entries", 0, 10_000, 1000, |s| {
+            s.recent_logs.max_entries.into()
+        }),
         ("reload", "settle_secs", 1, 60, 5, |s| {
             s.reload.settle.as_secs()
         }),
@@ -554,7 +563,7 @@ fn checks_relations_between_values() {
     assert_eq!(settings.management.session.idle, secs(3600));
 
     // `initial_message_bytes` was removed in 2.0.0, so a v1 file that still
-    // sets it is refused like any unknown key (config-v3 §3.1).
+    // sets it is refused like any unknown key (config-v4 §3.1).
     let over = with_required(
         "[limits]\nrelay_connections = 300\nwaiting = 301\ninitial_message_bytes = 4096\nbuffer_bytes = 16384\n\
          [management.session]\nidle_secs = 3601\nmax_lifetime_secs = 3600\n",
@@ -604,10 +613,10 @@ listen = "2001:db8::1"
 [relay.tcp_server]
 listen = "203.0.113.10:0"
 
-[relay.ws_viewer]
+[relay.ws]
 listen = "203.0.113.10"
 
-[relay.wss_viewer]
+[relay.wss]
 listen = "[2001:db8::1]"
 
 [management]
@@ -622,8 +631,8 @@ listen = "localhost:18081"
         [
             problem("config_listen_invalid", "relay.tcp_viewer.listen"),
             problem("config_listen_invalid", "relay.tcp_server.listen"),
-            problem("config_listen_invalid", "relay.ws_viewer.listen"),
-            problem("config_listen_invalid", "relay.wss_viewer.listen"),
+            problem("config_listen_invalid", "relay.ws.listen"),
+            problem("config_listen_invalid", "relay.wss.listen"),
             problem("config_listen_invalid", "management.listen"),
             problem("config_listen_invalid", "status.listen"),
         ]
@@ -670,17 +679,17 @@ listen = "127.0.0.1:5901"
 fn requires_allow_list_only_for_enabled_entry_points() {
     let found = problems(&with_required(
         "[relay.tcp_viewer]\nenabled = true\n\
-         [relay.ws_viewer]\nenabled = true\nlisten = \"127.0.0.1:18090\"\n\
-         [relay.wss_viewer]\nenabled = true\nlisten = \"127.0.0.1:18091\"\nallow = []\n",
+         [relay.ws]\nlisten = \"127.0.0.1:18090\"\n[relay.ws.viewer]\nenabled = true\n\
+         [relay.wss]\nlisten = \"127.0.0.1:18091\"\n[relay.wss.viewer]\nenabled = true\nallow = []\n",
     ));
     assert_eq!(
         found,
         [
             problem("config_missing_key", "relay.tcp_viewer.listen"),
             problem("config_missing_key", "relay.tcp_viewer.allow"),
-            problem("config_missing_key", "relay.ws_viewer.allow"),
-            problem("config_missing_key", "relay.wss_viewer.cert_file"),
-            problem("config_missing_key", "relay.wss_viewer.key_file"),
+            problem("config_missing_key", "relay.ws.viewer.allow"),
+            problem("config_missing_key", "relay.wss.cert_file"),
+            problem("config_missing_key", "relay.wss.key_file"),
         ]
     );
 
@@ -723,7 +732,7 @@ enabled = true
 listen = "0.0.0.0:15902"
 allow = ["0.0.0.0-255.255.255.255", "::-ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff"]
 
-[relay.ws_viewer]
+[relay.ws.viewer]
 allow = ["0.0.0.0/1", "128.0.0.0/1"]
 
 [mode1]
@@ -749,6 +758,70 @@ allow_targets = ["0.0.0.0/0:5900", "pc1.example:5900"]
                 item: TargetItem::parse("0.0.0.0/0:5900").expect("target"),
             },
         ]
+    );
+}
+
+/// spec: operations.md:OPS-067 partial
+#[test]
+fn warns_once_per_listener_and_whole_family_trusted_proxy_item() {
+    let settings = parse_ok(&with_required(
+        r#"
+[relay.ws]
+listen = "127.0.0.1:18090"
+trusted_proxies = ["0.0.0.0/0", "::/0", "198.51.100.0/24"]
+[relay.ws.viewer]
+enabled = true
+allow = []
+[relay.ws.server]
+enabled = true
+allow = []
+
+[relay.wss]
+listen = "127.0.0.1:18443"
+cert_file = "relay.pem"
+key_file = "relay.key"
+trusted_proxies = ["0.0.0.0-255.255.255.255", "::-ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff"]
+[relay.wss.server]
+enabled = true
+allow = []
+"#,
+    ));
+    let trust = |listener, text: &str| ConfigWarning::TrustAllProxies {
+        listener,
+        item: IpItem::parse(text).expect("item"),
+    };
+    assert_eq!(
+        settings.warnings(),
+        [
+            ConfigWarning::PlaintextWsEnabled {
+                listen: addr("127.0.0.1:18090"),
+            },
+            trust(Listener::Ws, "0.0.0.0/0"),
+            trust(Listener::Ws, "::/0"),
+            trust(Listener::Wss, "0.0.0.0-255.255.255.255"),
+            trust(Listener::Wss, "::-ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff"),
+        ]
+    );
+    assert_eq!(trust(Listener::Ws, "::/0").code(), "trust_all_proxies");
+}
+
+/// spec: operations.md:OPS-067 partial
+#[test]
+fn warns_for_disabled_proxy_lists_but_does_not_combine_partial_family_items() {
+    let settings = parse_ok(&with_required(
+        r#"
+[relay.ws]
+trusted_proxies = ["0.0.0.0/1", "128.0.0.0/1", "::/1", "8000::/1"]
+[relay.wss]
+trusted_proxies = ["::/0"]
+"#,
+    ));
+    assert_eq!(
+        settings.warnings(),
+        [ConfigWarning::TrustAllProxies {
+            listener: Listener::Wss,
+            item: IpItem::parse("::/0").expect("item"),
+        }]
     );
 }
 
@@ -818,7 +891,7 @@ fn checks_origin_values_and_entry_point_specific_keys() {
 allowed_origins = ["https://viewer.example"]
 cert_file = "a.pem"
 
-[relay.ws_viewer]
+[relay.ws.viewer]
 allowed_origins = ["https://viewer.example", "null", "https://viewer.example/", "https://*.example"]
 cert_file = "a.pem"
 key_file = "a.key"
@@ -831,18 +904,18 @@ key_file = "a.key"
             problem("config_unknown_key", "relay.tcp_viewer.cert_file"),
             problem(
                 "config_origin_invalid",
-                "relay.ws_viewer.allowed_origins[1]"
+                "relay.ws.viewer.allowed_origins[1]"
             ),
             problem(
                 "config_origin_invalid",
-                "relay.ws_viewer.allowed_origins[2]"
+                "relay.ws.viewer.allowed_origins[2]"
             ),
             problem(
                 "config_origin_invalid",
-                "relay.ws_viewer.allowed_origins[3]"
+                "relay.ws.viewer.allowed_origins[3]"
             ),
-            problem("config_unknown_key", "relay.ws_viewer.cert_file"),
-            problem("config_unknown_key", "relay.ws_viewer.key_file"),
+            problem("config_unknown_key", "relay.ws.viewer.cert_file"),
+            problem("config_unknown_key", "relay.ws.viewer.key_file"),
         ]
     );
 }
@@ -941,9 +1014,10 @@ fn warns_for_plaintext_ws_and_non_loopback_status() {
 [admin]
 accounts_file = "a.toml"
 
-[relay.ws_viewer]
-enabled = true
+[relay.ws]
 listen = "127.0.0.1:18090"
+[relay.ws.viewer]
+enabled = true
 allow = ["127.0.0.1"]
 
 [management]
@@ -964,9 +1038,7 @@ listen = "0.0.0.0:18081"
             },
         ]
     );
-    let disabled = parse_ok(&with_required(
-        "[relay.ws_viewer]\nlisten = \"127.0.0.1:18090\"\n",
-    ));
+    let disabled = parse_ok(&with_required("[relay.ws]\nlisten = \"127.0.0.1:18090\"\n"));
     assert_eq!(disabled.warnings(), []);
 }
 
@@ -1035,8 +1107,8 @@ fn config_edit_is_opt_in_and_requires_a_boolean() {
 #[test]
 fn candidate_presence_distinguishes_disabled_omissions_and_explicit_empty_lists() {
     let text = with_required(
-        "[relay.ws_viewer]\nenabled = false\nallowed_origins = []\n\
-         [relay.wss_viewer]\nenabled = false\n",
+        "[relay.ws.viewer]\nenabled = false\nallowed_origins = []\n\
+         [relay.wss.viewer]\nenabled = false\n",
     );
     let candidate = vnc_relay_adapters::config_file::parse_candidate(text.as_bytes(), &base_dir())
         .unwrap_or_else(|diagnostics| panic!("{diagnostics:?}"));
@@ -1044,13 +1116,13 @@ fn candidate_presence_distinguishes_disabled_omissions_and_explicit_empty_lists(
         candidate
             .presence
             .keys
-            .contains("relay.ws_viewer.allowed_origins")
+            .contains("relay.ws.viewer.allowed_origins")
     );
     assert!(
         !candidate
             .presence
             .keys
-            .contains("relay.wss_viewer.allowed_origins")
+            .contains("relay.wss.viewer.allowed_origins")
     );
     assert!(!candidate.presence.keys.iter().any(|key| key.contains('[')));
     let items =
@@ -1063,11 +1135,11 @@ fn candidate_presence_distinguishes_disabled_omissions_and_explicit_empty_lists(
             .value
     };
     assert_eq!(
-        value("relay.ws_viewer.allowed_origins"),
+        value("relay.ws.viewer.allowed_origins"),
         &vnc_relay_app::management::config::ConfigValue::Strings(vec![])
     );
     assert_eq!(
-        value("relay.wss_viewer.allowed_origins"),
+        value("relay.wss.viewer.allowed_origins"),
         &vnc_relay_app::management::config::ConfigValue::Null
     );
     let errors = vnc_relay_adapters::config_file::parse_candidate(&[0xff], &base_dir())
@@ -1079,4 +1151,370 @@ fn candidate_presence_distinguishes_disabled_omissions_and_explicit_empty_lists(
         vnc_relay_app::settings::ConfigError::FileUnreadable
     );
     assert!(!errors[0].message.contains("ff"));
+}
+
+/// spec: operations.md:OPS-065 partial
+#[test]
+fn websocket_roles_share_one_listener_and_keep_independent_policies() {
+    for listener in ["ws", "wss"] {
+        for (viewer_enabled, server_enabled) in [(true, false), (false, true), (true, true)] {
+            let tls = if listener == "wss" {
+                "cert_file = 'tls/relay.pem'\nkey_file = 'tls/relay.key'\n"
+            } else {
+                ""
+            };
+            let text = with_required(&format!(
+                "[relay.{listener}]\nlisten = '127.0.0.1:18090'\n{tls}\
+                 [relay.{listener}.viewer]\nenabled = {viewer_enabled}\nallow = ['192.0.2.1']\n\
+                 allowed_origins = ['https://viewer.example']\n\
+                 [relay.{listener}.server]\nenabled = {server_enabled}\nallow = ['192.0.2.2']\n\
+                 allowed_origins = ['https://server.example']\n"
+            ));
+            let settings = parse_ok(&text);
+            let shared = if listener == "ws" {
+                &settings.relay.ws
+            } else {
+                &settings.relay.wss
+            };
+            assert!(shared.enabled());
+            assert_eq!(shared.listen, Some(addr("127.0.0.1:18090")));
+            assert_eq!(shared.viewer.enabled, viewer_enabled);
+            assert_eq!(shared.server.enabled, server_enabled);
+            assert_eq!(shared.viewer.allow, Some(allow(&["192.0.2.1"])));
+            assert_eq!(shared.server.allow, Some(allow(&["192.0.2.2"])));
+            assert_eq!(
+                shared.viewer.allowed_origins,
+                [Origin::parse("https://viewer.example").expect("origin")]
+            );
+            assert_eq!(
+                shared.server.allowed_origins,
+                [Origin::parse("https://server.example").expect("origin")]
+            );
+            assert_eq!(shared.tls.is_some(), listener == "wss");
+        }
+    }
+}
+
+/// spec: operations.md:OPS-065 partial
+#[test]
+fn enabled_websocket_roles_require_role_allow_and_shared_listen_and_tls() {
+    for listener in ["ws", "wss"] {
+        for role in ["viewer", "server"] {
+            let text = with_required(&format!("[relay.{listener}.{role}]\nenabled = true\n"));
+            let mut expected = vec![
+                problem(
+                    "config_missing_key",
+                    &format!("relay.{listener}.{role}.allow"),
+                ),
+                problem("config_missing_key", &format!("relay.{listener}.listen")),
+            ];
+            if listener == "wss" {
+                expected.extend([
+                    problem("config_missing_key", "relay.wss.cert_file"),
+                    problem("config_missing_key", "relay.wss.key_file"),
+                ]);
+            }
+            assert_eq!(problems(&text), expected);
+            let supplied = text.replace("enabled = true", "enabled = true\nallow = []");
+            expected.remove(0);
+            assert_eq!(problems(&supplied), expected);
+        }
+    }
+    let text = with_required(
+        "[relay.wss]\nlisten = '127.0.0.1:18090'\ncert_file = 'cert.pem'\n\
+         [relay.wss.server]\nenabled = true\nallow = []\n",
+    );
+    assert_eq!(
+        problems(&text),
+        [problem("config_missing_key", "relay.wss.key_file")]
+    );
+}
+
+/// spec: operations.md:OPS-065 partial
+#[test]
+fn disabled_websocket_roles_and_listeners_validate_supplied_values() {
+    for listener in ["ws", "wss"] {
+        assert!(
+            !parse_ok(&with_required(&format!(
+                "[relay.{listener}.server]\nenabled = false\n"
+            )))
+            .relay
+            .websocket(if listener == "ws" {
+                vnc_relay_domain::entry_point::Listener::Ws
+            } else {
+                vnc_relay_domain::entry_point::Listener::Wss
+            })
+            .expect("websocket listener")
+            .enabled()
+        );
+        for role in ["viewer", "server"] {
+            for (field, value, code, suffix) in [
+                ("enabled", "1", "config_type_mismatch", ""),
+                ("allow", "'192.0.2.1'", "config_type_mismatch", ""),
+                ("allow", "[1]", "config_type_mismatch", "[0]"),
+                ("allow", "['*']", "config_ip_item_invalid", "[0]"),
+                ("allowed_origins", "[false]", "config_type_mismatch", "[0]"),
+                (
+                    "allowed_origins",
+                    "['null']",
+                    "config_origin_invalid",
+                    "[0]",
+                ),
+                (
+                    "allowed_origins",
+                    "['https://example:0']",
+                    "config_origin_invalid",
+                    "[0]",
+                ),
+            ] {
+                assert_eq!(
+                    problems(&with_required(&format!(
+                        "[relay.{listener}.{role}]\n{field} = {value}\n"
+                    ))),
+                    [problem(
+                        code,
+                        &format!("relay.{listener}.{role}.{field}{suffix}")
+                    )],
+                );
+            }
+        }
+        for value in ["'127.0.0.1'", "'127.0.0.1:0'", "'127.0.0.1:65536'"] {
+            assert_eq!(
+                problems(&with_required(&format!(
+                    "[relay.{listener}]\nlisten = {value}\n"
+                ))),
+                [problem(
+                    "config_listen_invalid",
+                    &format!("relay.{listener}.listen")
+                )]
+            );
+        }
+    }
+    for key in ["cert_file", "key_file"] {
+        assert_eq!(
+            problems(&with_required(&format!("[relay.wss]\n{key} = ''\n"))),
+            [problem(
+                "config_value_out_of_range",
+                &format!("relay.wss.{key}")
+            )]
+        );
+        assert_eq!(
+            problems(&with_required(&format!("[relay.wss]\n{key} = false\n"))),
+            [problem("config_type_mismatch", &format!("relay.wss.{key}"))]
+        );
+    }
+}
+
+/// spec: operations.md:OPS-065 partial
+#[test]
+fn websocket_listen_conflicts_are_checked_once_per_enabled_listener() {
+    let text = with_required(
+        "[relay.ws]\nlisten = '127.0.0.1:18090'\n\
+         [relay.ws.viewer]\nenabled = true\nallow = []\n\
+         [relay.ws.server]\nenabled = true\nallow = []\n\
+         [relay.wss]\nlisten = '127.0.0.1:18090'\ncert_file = 'cert.pem'\nkey_file = 'key.pem'\n\
+         [relay.wss.server]\nenabled = true\nallow = []\n",
+    );
+    assert_eq!(
+        problems(&text),
+        [problem("config_listen_conflict", "relay.wss.listen")]
+    );
+    parse_ok(&text.replace(
+        "[relay.wss.server]\nenabled = true",
+        "[relay.wss.server]\nenabled = false",
+    ));
+    let text = with_required(
+        "[relay.ws]\nlisten = '127.0.0.1:18080'\n\
+         [relay.ws.server]\nenabled = true\nallow = []\n",
+    );
+    assert_eq!(
+        problems(&text),
+        [problem("config_listen_conflict", "management.listen")]
+    );
+}
+
+/// spec: operations.md:OPS-066 partial
+#[test]
+fn rejects_v3_websocket_tables_and_accepts_the_migrated_viewer_settings() {
+    for table in ["ws_viewer", "wss_viewer"] {
+        let text = with_required(&format!(
+            "[relay.{table}]\nenabled = false\nlisten = '127.0.0.1:18090'\n\
+             allow = ['192.0.2.1']\nallowed_origins = ['https://viewer.example']\n"
+        ));
+        assert_eq!(
+            problems(&text),
+            [problem("config_unknown_key", &format!("relay.{table}"))]
+        );
+    }
+    for listener in ["ws", "wss"] {
+        let tls = if listener == "wss" {
+            "cert_file = 'cert.pem'\nkey_file = 'key.pem'\n"
+        } else {
+            ""
+        };
+        let settings = parse_ok(&with_required(&format!(
+            "[relay.{listener}]\nlisten = '127.0.0.1:18090'\n{tls}\
+             [relay.{listener}.viewer]\nenabled = true\nallow = ['192.0.2.1']\n\
+             allowed_origins = ['https://viewer.example']\n"
+        )));
+        let shared = if listener == "ws" {
+            settings.relay.ws
+        } else {
+            settings.relay.wss
+        };
+        assert!(shared.viewer.enabled);
+        assert!(!shared.server.enabled);
+        assert_eq!(shared.listen, Some(addr("127.0.0.1:18090")));
+        assert_eq!(shared.viewer.allow, Some(allow(&["192.0.2.1"])));
+        assert_eq!(
+            shared.viewer.allowed_origins,
+            [Origin::parse("https://viewer.example").expect("origin")]
+        );
+    }
+}
+
+/// spec: operations.md:OPS-065 partial
+#[test]
+fn rejects_keys_in_the_wrong_listener_or_role_table() {
+    for (table, key, value) in [
+        ("relay.ws", "enabled", "false"),
+        ("relay.ws", "allow", "[]"),
+        ("relay.ws", "allowed_origins", "[]"),
+        ("relay.ws", "cert_file", "'cert.pem'"),
+        ("relay.ws", "key_file", "'key.pem'"),
+        ("relay.wss", "enabled", "false"),
+        ("relay.wss", "allow", "[]"),
+        ("relay.wss", "allowed_origins", "[]"),
+        ("relay.tcp_viewer", "trusted_proxies", "[]"),
+        ("relay.tcp_server", "trusted_proxies", "[]"),
+    ] {
+        assert_eq!(
+            problems(&with_required(&format!("[{table}]\n{key} = {value}\n"))),
+            [problem("config_unknown_key", &format!("{table}.{key}"))]
+        );
+    }
+    for table in [
+        "relay.ws.viewer",
+        "relay.ws.server",
+        "relay.wss.viewer",
+        "relay.wss.server",
+    ] {
+        for key in ["listen", "cert_file", "key_file", "trusted_proxies"] {
+            assert_eq!(
+                problems(&with_required(&format!(
+                    "[{table}]\n{key} = 'not-a-role-key'\n"
+                ))),
+                [problem("config_unknown_key", &format!("{table}.{key}"))]
+            );
+        }
+    }
+}
+
+/// spec: operations.md:OPS-067 partial
+#[test]
+fn trusted_proxies_use_the_ip_item_grammar_even_on_disabled_listeners() {
+    for listener in ["ws", "wss"] {
+        let settings = parse_ok(&with_required(&format!(
+            "[relay.{listener}]\ntrusted_proxies = ['192.0.2.1', '198.51.100.0/24', '2001:db8::1-2001:db8::9']\n"
+        )));
+        let shared = if listener == "ws" {
+            settings.relay.ws
+        } else {
+            settings.relay.wss
+        };
+        assert!(!shared.enabled());
+        assert_eq!(
+            shared.trusted_proxies,
+            allow(&["192.0.2.1", "198.51.100.0/24", "2001:db8::1-2001:db8::9"])
+        );
+        for (value, code, suffix) in [
+            ("[]", "", ""),
+            ("['192.0.2.9-192.0.2.1']", "config_ip_range_reversed", "[0]"),
+            (
+                "['192.0.2.1-2001:db8::1']",
+                "config_ip_range_family_mixed",
+                "[0]",
+            ),
+            ("['192.0.2.1/24']", "config_ip_item_invalid", "[0]"),
+            ("['::ffff:c000:201']", "config_ip_item_invalid", "[0]"),
+            ("['192.0.2.1 ']", "config_ip_item_invalid", "[0]"),
+            ("[7]", "config_type_mismatch", "[0]"),
+            ("'192.0.2.1'", "config_type_mismatch", ""),
+        ] {
+            let text = with_required(&format!("[relay.{listener}]\ntrusted_proxies = {value}\n"));
+            if code.is_empty() {
+                let settings = parse_ok(&text);
+                assert!(settings.relay.ws.trusted_proxies.items().is_empty());
+                assert!(settings.relay.wss.trusted_proxies.items().is_empty());
+            } else {
+                assert_eq!(
+                    problems(&text),
+                    [problem(
+                        code,
+                        &format!("relay.{listener}.trusted_proxies{suffix}")
+                    )]
+                );
+            }
+        }
+    }
+}
+
+/// spec: operations.md:OPS-068 partial
+#[test]
+fn recent_logs_defaults_and_integer_bounds_are_enforced() {
+    assert_eq!(parse_ok(REQUIRED).recent_logs.max_entries, 1000);
+    for max_entries in [0, 10_000] {
+        assert_eq!(
+            parse_ok(&with_required(&format!(
+                "[recent_logs]\nmax_entries = {max_entries}\n"
+            )))
+            .recent_logs
+            .max_entries,
+            max_entries
+        );
+    }
+    for (value, code) in [
+        ("-1", "config_value_out_of_range"),
+        ("10001", "config_value_out_of_range"),
+        ("'1000'", "config_type_mismatch"),
+        ("1000.0", "config_type_mismatch"),
+        ("true", "config_type_mismatch"),
+    ] {
+        assert_eq!(
+            problems(&with_required(&format!(
+                "[recent_logs]\nmax_entries = {value}\n"
+            ))),
+            [problem(code, "recent_logs.max_entries")]
+        );
+    }
+}
+
+/// spec: operations.md:OPS-065 partial
+#[test]
+fn nested_listener_and_role_tables_require_table_values() {
+    for (text, key) in [
+        ("[relay]\nws = false\n", "relay.ws"),
+        ("[relay]\nwss = []\n", "relay.wss"),
+        ("[relay.ws]\nviewer = false\n", "relay.ws.viewer"),
+        ("[relay.ws]\nserver = 'disabled'\n", "relay.ws.server"),
+        ("[relay.wss]\nviewer = []\n", "relay.wss.viewer"),
+        ("[relay.wss]\nserver = 0\n", "relay.wss.server"),
+    ] {
+        assert_eq!(
+            problems(&with_required(text)),
+            [problem("config_type_mismatch", key)]
+        );
+    }
+}
+
+/// spec: operations.md:OPS-066 partial
+#[test]
+fn even_empty_v3_websocket_tables_are_unknown() {
+    assert_eq!(
+        problems(&with_required("[relay.ws_viewer]\n[relay.wss_viewer]\n")),
+        [
+            problem("config_unknown_key", "relay.ws_viewer"),
+            problem("config_unknown_key", "relay.wss_viewer"),
+        ]
+    );
 }

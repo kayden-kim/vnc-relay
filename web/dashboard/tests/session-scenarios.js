@@ -58,6 +58,9 @@ const activeSession = (overrides = {}) => ({
   state: 'active',
   mode: 'mode1',
   viewer_transport: 'wss',
+  target_transport: 'tcp',
+  viewer_forwarded_ip: null,
+  target_forwarded_ip: null,
   started_at: STARTED,
   bytes_viewer_to_target: 1536,
   bytes_target_to_viewer: 1048575,
@@ -70,6 +73,7 @@ const closedSession = (overrides = {}) => ({
   session_id: SESSION_ID,
   mode: 'mode1',
   viewer_transport: 'wss',
+  target_transport: 'tcp',
   started_at: STARTED,
   ended_at: ENDED,
   bytes_viewer_to_target: 1536,
@@ -160,7 +164,7 @@ function checkLoadingMarks(label, root) {
   const isInfoBadge = (node) => node?.dataset.tone === 'info' && node.querySelector('svg') !== null
     && node.textContent.trim() === t.loading;
   const facts = [...root.querySelectorAll('.fact')];
-  check(`${label}: five fact labels shown while loading`, facts.length === 5);
+  check(`${label}: six fact labels shown while loading`, facts.length === 6);
   check(`${label}: every fact value is the loading badge`,
     facts.every((row) => isInfoBadge(row.querySelector('.fact-value > .badge'))));
   const stats = [...root.querySelectorAll('.stat')];
@@ -169,7 +173,7 @@ function checkLoadingMarks(label, root) {
   check(`${label}: every byte value is the loading badge`,
     stats.every((stat) => isInfoBadge(stat.querySelector('.stat-value > .badge'))));
   const marks = [...root.querySelectorAll('.badge')].filter((node) => node.textContent.trim() === t.loading);
-  check(`${label}: every loading mark is the same info badge`, marks.length === 8 && marks.every(isInfoBadge));
+  check(`${label}: every loading mark is the same info badge`, marks.length === 9 && marks.every(isInfoBadge));
 }
 
 const metaOf = (root) => root.querySelector('.page-meta')?.textContent.trim() ?? '';
@@ -187,12 +191,12 @@ function checkLayout(label) {
   for (const navbar of host.querySelectorAll('.navbar')) {
     const links = [...navbar.querySelectorAll('.navbar-item')];
     const copy = COPY[document.documentElement.lang];
-    check(`${label}: both navigation links remain available`, links.length === 2
-      && links[0].textContent === copy.operations && links[1].textContent === copy.settings
+    check(`${label}: three navigation links remain available`, links.length === 3
+      && links[0].textContent === copy.operations && links[1].textContent === copy.logs && links[2].textContent === copy.settings
       && links.every((link) => getComputedStyle(link).display !== 'none' && link.getBoundingClientRect().height > 0));
     check(`${label}: detail keeps operations navigation active`, links[0]?.getAttribute('aria-current') === 'page'
       && !links[1]?.hasAttribute('aria-current'));
-    check(`${label}: settings link uses the settings route`, links[1]?.getAttribute('href') === '/#/settings');
+    check(`${label}: settings link uses the settings route`, links[2]?.getAttribute('href') === '/#/settings');
     if (window.innerWidth < 1024) {
       check(`${label}: mobile navigation occupies a second row`,
         navbar.querySelector('.navbar-nav').getBoundingClientRect().top >= navbar.querySelector('.navbar-tools').getBoundingClientRect().bottom);
@@ -215,9 +219,10 @@ async function caseDash006() {
     root.querySelector('.page-title .session-id')?.textContent === SESSION_ID,
   );
   check('DASH-006: header refresh uses CPY-008', labelOf(refreshOf(root)) === t.refresh);
-  check('DASH-006: five fact rows, no state row', root.querySelectorAll('.fact').length === 5);
+  check('DASH-006: six fact rows, no state row', root.querySelectorAll('.fact').length === 6);
   check('DASH-006: mode label', factValue(root, t.modeLabel) === formatMode('mode1'));
   check('DASH-006: transport label', factValue(root, t.transportLabel) === formatTransport('wss'));
+  check('DASH-006: target transport label', factValue(root, t.targetTransportLabel) === formatTransport('tcp'));
   check('DASH-006: started time', TIME_IN.test(factValue(root, t.startedLabel) ?? ''));
   check(
     'DASH-006: viewer address',
@@ -233,6 +238,7 @@ async function caseDash006() {
     'DASH-006: terminate sits in the info card footer',
     terminateOf(root)?.parentElement?.classList.contains('card-foot') === true,
   );
+  check('DASH-006: view logs link in footer', root.querySelector('#session-view-logs')?.getAttribute('href') === `/#/logs?session_id=${encodeURIComponent(SESSION_ID)}`);
   check('DASH-006: no notice on a live session', noticeOf(root) === null);
   check('DASH-006: one detail read on load', api.count(DETAIL) === 1);
   checkLayout('DASH-006');
@@ -692,6 +698,27 @@ async function shotGone() {
   const { root } = mount(fakeApi({ [DETAIL]: () => fail(404, 'not_found') }));
   await waitFor(() => noticeOf(root) === t.notFound);
 }
+async function caseDash062() {
+  const sessionWithForwarded = {
+    ...activeSession(),
+    mode: 'mode2',
+    viewer_transport: 'wss',
+    target_transport: 'ws',
+    viewer_forwarded_ip: '203.0.113.195',
+    target_forwarded_ip: '198.51.100.22',
+  };
+  const api = fakeApi({
+    [DETAIL]: () => ok({ as_of: AS_OF, session: sessionWithForwarded }),
+  });
+  const { root } = mount(api);
+  await waitFor(() => enabled(root));
+  check('DASH-062: eight fact rows when both forwarded IPs present', root.querySelectorAll('.fact').length === 8);
+  check('DASH-062: target transport is WS', factValue(root, t.targetTransportLabel) === 'WS');
+  check('DASH-062: viewer forwarded ip', factValue(root, t.viewerForwardedAddressLabel) === '203.0.113.195');
+  check('DASH-062: target forwarded ip', factValue(root, t.targetForwardedAddressLabel) === '198.51.100.22');
+  check('DASH-062: address note is CPY-188', root.querySelector('.card-note')?.textContent === t.addressNote);
+  checkLayout('DASH-062', root);
+}
 
 const CASES = {
   'dash-006': caseDash006,
@@ -708,6 +735,20 @@ const CASES = {
   'dash-024': caseDash024,
   'dash-025': caseDash025,
   'dash-026': caseDash026,
+  'dash-062': caseDash062,
+  'shot-loading': async () => { mount(fakeApi({ [DETAIL]: () => new Promise(() => {}) })); },
+  'shot-normal': async () => {
+    const { root } = mount(fakeApi({ [DETAIL]: () => ok({ as_of: AS_OF, session: activeSession({ mode: 'mode2', target_transport: 'ws', target_forwarded_ip: '198.51.100.22' }) }) }));
+    await waitFor(() => enabled(root));
+  },
+  'shot-forwarded': caseDash062,
+  'shot-bad-id': async () => { mount(fakeApi(), { id: 'bad/id' }); },
+  'shot-denied': async () => {
+    const m = mount(fakeApi({ [DETAIL]: () => fail(401, 'unauthenticated') }));
+    await waitFor(() => m.navigations.length > 0);
+    const { mountLogin } = await import('../login/login.js');
+    mountLogin(m.root, { preferredLanguages: [lang], storage: { getItem: () => lang, setItem() {} }, search: '' });
+  },
   'shot-dialog': shotDialog,
   'shot-refreshing': shotRefreshing,
   'shot-query-failed': shotQueryFailed,

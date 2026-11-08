@@ -38,8 +38,8 @@ fn settings() -> Settings {
         relay: RelaySettings {
             tcp_viewer: EntryPointSettings::default(),
             tcp_server: EntryPointSettings::default(),
-            ws_viewer: EntryPointSettings::default(),
-            wss_viewer: EntryPointSettings::default(),
+            ws: WsListenerSettings::default(),
+            wss: WsListenerSettings::default(),
         },
         mode1: Mode1Settings::default(),
         mode2: Mode2Settings { enabled: true },
@@ -85,6 +85,7 @@ fn settings() -> Settings {
             query_timeout: Duration::from_secs(5),
         },
         recent_closed: RecentClosedSettings { max_entries: 2 },
+        recent_logs: RecentLogsSettings { max_entries: 1000 },
         status: StatusSettings { listen },
         log: LogSettings {
             output: LogOutput::Stdout,

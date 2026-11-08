@@ -14,7 +14,7 @@
 | 코드 위치 | `crates/adapters/src/admission.rs`(`AdmittingListener`, `Admitted`), `crates/adapters/src/tls_listener.rs`(`TlsListener`, `TlsIo`, `Handshake`, `Recorded`, `offers_no_tls12`), `crates/adapters/src/request_deadline.rs`(`DeadlineListener`, `Deadlined`), `crates/adapters/src/management_http.rs`(`ManagementListener`, `PeerAddr`, `answer`, `static_answer`, `static_file`), `crates/adapters/src/management_http/session_api.rs`(`answer`), `crates/adapters/src/status_http.rs`(`StatusListener`), `crates/adapters/src/dashboard_assets.rs`(`Asset`, `ASSETS`, `find_asset`), `crates/adapters/src/config_file.rs`(`read_management`), `crates/app/src/events.rs`(`Stage::Tls`, `RejectReason::TlsVersionUnsupported`), `crates/app/src/settings.rs`(`Settings::management_listener`, `Settings::other_listeners`), `src/serve.rs`(`listen_until_shutdown`, `stop_task`) |
 | 코드 지도 | [코드 지도 2절](code-map.md#2-코드-위치와-구성요소), [3절](code-map.md#3-진입점) |
 | 관련 스펙 | [운영 스펙 2절](../specs/operations.md#2-상태와-검증-매개변수)의 OPS-014, OPS-034, OPS-033(일부: 관리 연결), OPS-004(일부: 관리 연결을 L에 세지 않음), OPS-036, OPS-006(일부: 관리 TLS 협상과 첫 요청 머리의 U, 사용자 결정 2026-10-21 Q12), [관리 스펙 7절](../specs/management.md#7-수용-테스트)의 MGT-015(4.4 완료 조건으로 옮김, 사용자 결정 2026-10-21 Q14), [대시보드 스펙 7절](../specs/dashboard.md#7-수용-테스트)의 DASH-014(일부: 세션 없이 `/app/` 파일을 직접 요청하면 로그인 화면으로 보낸다. 상세 화면 행동은 작업 4.10·4.11) |
-| 관련 계약 | [관리 API 계약 1.1·1.3·1.4.1·1.11절](../contracts/management-api-v1.md#11-공통-규칙)(라우팅 순서, 쿠키, 정적 경로), [2.1·2.2절](../contracts/management-api-v1.md#21-오류-본문과-상태-코드)(401 본문과 헤더), [운영 정보 계약 1.5·1.6절](../contracts/ops-info-v1.md#15-사건-목록)(`connection_rejected`, `tls_version_unsupported`), [설정 계약 1.2절](../contracts/config-v3.md#12-키-표)(`management.listen`, `management.cert_file`·`key_file`), [프런트엔드 컨벤션 1.1·1.2절](../conventions/frontend.md#11-정적-파일-구조)(정적 파일 구조, 실행 파일 내장) |
+| 관련 계약 | [관리 API 계약 1.1·1.3·1.4.1·1.11절](../contracts/management-api-v1.md#11-공통-규칙)(라우팅 순서, 쿠키, 정적 경로), [2.1·2.2절](../contracts/management-api-v1.md#21-오류-본문과-상태-코드)(401 본문과 헤더), [운영 정보 계약 1.5·1.6절](../contracts/ops-info-v2.md#15-사건-목록)(`connection_rejected`, `tls_version_unsupported`), [설정 계약 1.2절](../contracts/config-v4.md#12-키-표)(`management.listen`, `management.cert_file`·`key_file`), [프런트엔드 컨벤션 1.1·1.2절](../conventions/frontend.md#11-정적-파일-구조)(정적 파일 구조, 실행 파일 내장) |
 | 관련 ADR | [ADR-0001 내장 TLS](../decisions/ADR-0001-built-in-tls.md), [ADR-0004 tokio·rustls](../decisions/ADR-0004-tokio-rustls.md) |
 
 ## 1. 책임과 경계
@@ -106,7 +106,7 @@ flowchart LR
 | 8 | `static_answer` 4단계, `dashboard_assets.rs` `find_asset` | 표에서 요청 경로와 정확히 같은 항목을 찾는다. 있으면 `200`: GET은 본문, HEAD는 본문 없이 같은 `Content-Length`. 헤더는 파일 응답 규칙(`Content-Type`, `Cache-Control`, 보안 헤더)을 따른다. 없으면 `404` `not_found` 본문(9절 13번). 세션이 있는 `/`도 항목이 없으면 `404`다(9절 12번). | 없음 | 응답 |
 | 9 | `management_http.rs` `answer` 4단계 | 나머지 경로는 메서드와 관계없이 `303`, `Location: /login/`, 본문 없음. 계약 1.11절 표는 존재하는 그 밖의 경로에 `404`를, 없는 경로에 `303`을 준다. 이 리스너에는 존재하는 그 밖의 경로가 없어 모두 `303`이다. | 없음 | 응답 |
 
-Q25 예외(Current, TODO 4.5): 5단계에서 검증·수락된 terminate 요청이 정리 완료를 기다리는 동안만 연결의 U를 멈춘다. `terminate_api`가 수락 뒤 `IdleControl::pause_for_termination`을 부르고, `Deadlined::resume_for_response`가 첫 응답 쓰기에서 U를 다시 잰다(`crates/adapters/src/request_deadline.rs`). 인증·CSRF·경로·본문 검사와 그 밖의 요청에는 기존 U를 적용한다. 이 예외는 사용자 결정 2026-11-02(Q92)다. 기준은 [설정 계약 1.2절](../contracts/config-v3.md#12-키-표)과 [종료 설계 4.2절](management-terminate.md#42-중계-소유자의-정리와-알림)이다.
+Q25 예외(Current, TODO 4.5): 5단계에서 검증·수락된 terminate 요청이 정리 완료를 기다리는 동안만 연결의 U를 멈춘다. `terminate_api`가 수락 뒤 `IdleControl::pause_for_termination`을 부르고, `Deadlined::resume_for_response`가 첫 응답 쓰기에서 U를 다시 잰다(`crates/adapters/src/request_deadline.rs`). 인증·CSRF·경로·본문 검사와 그 밖의 요청에는 기존 U를 적용한다. 이 예외는 사용자 결정 2026-11-02(Q92)다. 기준은 [설정 계약 1.2절](../contracts/config-v4.md#12-키-표)과 [종료 설계 4.2절](management-terminate.md#42-중계-소유자의-정리와-알림)이다.
 
 관리 응답은 모두 `Cache-Control: no-store`를 가진다. 정적 보안 헤더(`X-Content-Type-Options`·`Referrer-Policy`·`Content-Security-Policy`, 1.11절)는 정적 파일 응답(200)에만 붙인다. CSP는 계약 1.1.0부터 필수다(사용자 결정 2026-10-22(Q37)). 303과 404 응답에는 보안 헤더를 붙이지 않는다. 작업 4.6이 구현했다.
 
@@ -127,7 +127,7 @@ Q25 예외(Current, TODO 4.5): 5단계에서 검증·수락된 terminate 요청�
 | TLS 핸드셰이크가 U 안에 끝나지 않음 | 수락 때부터 U가 지나면 읽기·쓰기가 `TimedOut`으로 끝나고 axum이 접속을 닫는다. 평문 응답을 보내지 않는다. 기록하지 않는다(구현 판단: `connection_aborted`는 `conn_id`가 필요하다). | 접속 없음. Lm 자리는 돌아간다. | OPS-006(일부), OPS-033(일부) |
 | 첫 요청 머리가 U 안에 끝나지 않음 | 같은 방법으로 닫는다. 기록하지 않는다(구현 판단). | 접속 없음. Lm 자리는 돌아간다. | OPS-006(일부), OPS-033(일부) |
 | 첫 요청 뒤 읽기·쓰기가 U 동안 없음(keep-alive 유휴) | 같은 방법으로 닫는다(사용자 결정 2026-10-22(Q25)). 기록하지 않는다(구현 판단, 9절 11번). | 접속 없음. Lm 자리는 돌아간다. | OPS-006(일부) |
-| 수락 오류 | 일시 오류는 기존 `ACCEPT_RETRY_DELAY` 뒤 재시도한다. 복구 불가능 오류는 감독자에게 보고하고 axum 수락을 대기시킨다. 기존 연결은 중계 G·정리 뒤 HTTP 작업을 멈출 때까지 남는다. OS 분류는 [운영 정보 계약 1.12절](../contracts/ops-info-v1.md#112-상태-리스너와-엔드포인트)을 따른다. | 장애 종료 | OPS-046 |
+| 수락 오류 | 일시 오류는 기존 `ACCEPT_RETRY_DELAY` 뒤 재시도한다. 복구 불가능 오류는 감독자에게 보고하고 axum 수락을 대기시킨다. 기존 연결은 중계 G·정리 뒤 HTTP 작업을 멈출 때까지 남는다. OS 분류는 [운영 정보 계약 1.12절](../contracts/ops-info-v2.md#112-상태-리스너와-엔드포인트)을 따른다. | 장애 종료 | OPS-046 |
 | 관리 요청의 읽기 오류 | axum이 접속을 닫는다. 기록하지 않는다(`connection_aborted`는 `conn_id`가 필요하다). | 접속 없음 | 구현 판단(Q13은 TLS 실패만 다룬다) |
 | 보호 정적 경로(`/`, `/app/`)에 세션이 없거나 만료됨 | `303`, `Location: /login/`, 본문 없음. 쿠키를 지우지 않는다. 유휴 기한을 늘리지 않는다(계약 1.4.2절). | 없음 | DASH-014(일부) |
 

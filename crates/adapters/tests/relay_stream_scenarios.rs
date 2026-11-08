@@ -35,7 +35,7 @@ use vnc_relay_domain::conn_id::ConnId;
 use vnc_relay_domain::entry_point::EntryPoint;
 use vnc_relay_domain::handshake::{HANDSHAKE_REQUEST_LEN, HandshakePolicy, VIEWER_GREETING};
 use vnc_relay_domain::peer_ip::PeerIp;
-use vnc_relay_domain::session::ViewerTransport;
+use vnc_relay_domain::session::Transport;
 
 const B: usize = 16_384;
 const LIMIT: Duration = Duration::from_secs(10);
@@ -731,8 +731,8 @@ impl AsyncWrite for MeasuredStream {
 }
 
 impl RelayStream for MeasuredStream {
-    fn transport(&self) -> ViewerTransport {
-        ViewerTransport::Tcp
+    fn transport(&self) -> Transport {
+        Transport::Tcp
     }
     fn pending_write_len(&self) -> usize {
         0
@@ -775,6 +775,7 @@ async fn measured_pair(
             conn_id: ConnId::next(),
             entry_point,
             peer_ip: PeerIp::from(peer_addr),
+            forwarded_ip: None,
             peer_addr,
             accepted_wall: running.clock.wall(),
             accepted_at: now,

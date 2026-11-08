@@ -37,10 +37,10 @@ use crate::tls::TlsSource;
 use crate::tls_listener::TlsListener;
 
 mod config_api;
+mod logs_api;
 mod query_api;
 mod session_api;
 mod terminate_api;
-
 /// `listener` of the management listener in operation events (ops-info-v1 §1.5).
 const LISTENER: &str = "management";
 
@@ -59,6 +59,7 @@ pub struct ManagementServices {
     pub query: Arc<ManagementQueryService>,
     pub terminate: Arc<ManagementTerminateService>,
     pub config: Arc<dyn ConfigManagement>,
+    pub logs: Arc<crate::ops_log::RecentLogs>,
 }
 
 /// A management listener. Connections run TLS when `tls` is set and plain
@@ -112,6 +113,7 @@ impl<L: Listener> ManagementListener<L> {
             query: self.services.query,
             terminate: self.services.terminate,
             config: self.services.config,
+            logs: self.services.logs,
             dashboard: self.dashboard,
         };
         let router = Router::new()
@@ -197,6 +199,7 @@ struct Shared {
     query: Arc<ManagementQueryService>,
     terminate: Arc<ManagementTerminateService>,
     config: Arc<dyn ConfigManagement>,
+    logs: Arc<crate::ops_log::RecentLogs>,
     dashboard: DashboardHints,
 }
 

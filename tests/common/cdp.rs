@@ -255,6 +255,12 @@ impl Browser {
                                     "url":params["request"]["url"],
                                     "body_bytes":params["request"]["postData"].as_str().map(str::len),
                                 })),
+                                "Browser.downloadWillBegin" | "Browser.downloadProgress" => {
+                                    Some(json!({
+                                        "event":event,"guid":params["guid"],"state":params["state"],
+                                        "filename":params["suggestedFilename"],
+                                    }))
+                                }
                                 _ => None,
                             };
                             if let Some(record) = record {

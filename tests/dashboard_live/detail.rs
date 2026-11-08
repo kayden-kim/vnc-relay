@@ -127,6 +127,7 @@ pub fn selected_detail_matches_real_session_and_returns_to_list() {
             json!(if mode == "I" { "mode1" } else { "mode2" })
         );
         assert_eq!(session["viewer_transport"], json!("tcp"));
+        assert_eq!(session["target_transport"], json!("tcp"));
         assert_eq!(session["bytes_viewer_to_target"], json!(1536));
         assert_eq!(session["bytes_target_to_viewer"], json!(1_572_864));
         for (field, address) in [
@@ -160,6 +161,7 @@ pub fn selected_detail_matches_real_session_and_returns_to_list() {
             json!([
                 if mode == "I" { "Mode I" } else { "Mode II" },
                 "TCP",
+                "TCP",
                 started,
                 must(pair.viewer.local_addr()).to_string(),
                 must(pair.target.local_addr()).to_string()
@@ -169,7 +171,7 @@ pub fn selected_detail_matches_real_session_and_returns_to_list() {
             browser.eval("Array.from(document.querySelectorAll('.grid .stat-value'), node => node.textContent)"),
             json!(["1.5 KiB", "1.5 MiB"])
         );
-        assert!(browser.text().contains("Actual socket peer address."));
+        assert!(browser.text().contains("Addresses are socket peer addresses. Forwarded addresses are shown separately when a trusted proxy is used."));
         let reads: Vec<_> = server
             .proxy
             .traffic()
@@ -512,7 +514,7 @@ pub fn unauthenticated_direct_detail_exposes_no_data_or_termination() {
     let text = browser.text();
     for protected in [
         pair.sid.as_str(),
-        "Actual socket peer address.",
+        "Addresses are socket peer addresses.",
         "Terminate session",
         "73",
         "97",
@@ -588,4 +590,23 @@ pub fn malformed_detail_ids_make_no_api_request_and_differ_from_real_not_found()
     assert_no_terminate(&server);
     browser.click(".session-notice a[href='/']");
     browser.wait("location.hash === '' && document.querySelector('h1')?.textContent === 'Operations overview'");
+}
+
+pub(super) fn assert_real_transport_and_addresses(
+    browser: &mut Browser,
+    session: &serde_json::Value,
+) {
+    assert_eq!(browser.eval(&format!(r#"(() => {{
+        const s={session}, facts=[...document.querySelectorAll('.fact-row')];
+        const values=[...document.querySelectorAll('.fact-value')].map(n=>n.textContent);
+        const address=a=>a.ip.includes(':')?`[${{a.ip}}]:${{a.port}}`:`${{a.ip}}:${{a.port}}`;
+        const rows=[...document.querySelectorAll('.fact')];
+        const text=document.body.innerText;
+        return values[1]===s.viewer_transport.toUpperCase() && values[2]===s.target_transport.toUpperCase() &&
+            values.includes(address(s.viewer_address)) && values.includes(address(s.target_address)) &&
+            [s.viewer_forwarded_ip,s.target_forwarded_ip].filter(v=>v!==null).every(v=>values.includes(v)) &&
+            text.includes('Viewer forwarded address')===(s.viewer_forwarded_ip!==null) &&
+            text.includes('Server/target forwarded address')===(s.target_forwarded_ip!==null) &&
+            text.includes('Addresses are socket peer addresses. Forwarded addresses are shown separately when a trusted proxy is used.');
+    }})()"#)),json!(true),"detail preserves socket peers and displays only present forwarded addresses");
 }

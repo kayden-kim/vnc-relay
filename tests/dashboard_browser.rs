@@ -435,6 +435,72 @@ fn settings_noop_skips_patch_and_empty_applied_reports_zero_in_browser() {
 fn settings_cancel_discards_drafts_and_dispose_ignores_late_requests_in_browser() {
     check_localized_case("/tests/settings.html", "dash-053");
 }
+/// spec: dashboard.md:DASH-062 partial
+#[test]
+fn operations_and_session_show_forwarded_and_target_transports_in_browser() {
+    check_localized_case("/tests/operations.html", "dash-062");
+    check_localized_case("/tests/session.html", "dash-062");
+}
+
+/// spec: dashboard.md:DASH-028 partial
+#[test]
+fn router_navigates_between_three_menu_items_in_browser() {
+    check_localized_case("/tests/router.html", "dash-028");
+}
+
+/// spec: dashboard.md:DASH-054 partial
+#[test]
+fn logs_shows_initial_loading_newest_first_and_expand_details_in_browser() {
+    check_localized_case("/tests/logs.html", "dash-054");
+}
+
+/// spec: dashboard.md:DASH-055 partial
+#[test]
+fn logs_filters_by_level_and_event_in_browser() {
+    check_localized_case("/tests/logs.html", "dash-055");
+}
+
+/// spec: dashboard.md:DASH-056 partial
+#[test]
+fn logs_searches_values_and_validates_scalar_length_in_browser() {
+    check_localized_case("/tests/logs.html", "dash-056");
+}
+
+/// spec: dashboard.md:DASH-057 partial
+#[test]
+fn logs_polls_incrementally_pauses_and_notices_gaps_in_browser() {
+    check_localized_case("/tests/logs.html", "dash-057");
+}
+
+/// spec: dashboard.md:DASH-058 partial
+#[test]
+fn logs_loads_older_pages_with_before_in_browser() {
+    check_localized_case("/tests/logs.html", "dash-058");
+}
+
+/// spec: dashboard.md:DASH-059 partial
+#[test]
+fn logs_filters_by_session_id_and_rejects_invalid_id_in_browser() {
+    check_localized_case("/tests/logs.html", "dash-059");
+}
+
+/// spec: dashboard.md:DASH-060 partial
+#[test]
+fn logs_downloads_json_lines_in_browser() {
+    check_localized_case("/tests/logs.html", "dash-060");
+}
+
+/// spec: dashboard.md:DASH-061 partial
+#[test]
+fn logs_handles_retention_off_empty_results_and_errors_in_browser() {
+    check_localized_case("/tests/logs.html", "dash-061");
+}
+
+/// spec: dashboard.md:DASH-063 partial
+#[test]
+fn logs_supports_keyboard_aria_and_language_change_in_browser() {
+    check_localized_case("/tests/logs.html", "dash-063");
+}
 
 /// Runs one page at every width and language, then reports all failing runs at once.
 fn check_page(page: &str) {

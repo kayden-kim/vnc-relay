@@ -93,8 +93,8 @@ impl Transport {
     fn name(self) -> &'static str {
         match self {
             Self::Tcp => "tcp_viewer",
-            Self::Ws => "ws_viewer",
-            Self::Wss => "wss_viewer",
+            Self::Ws => "ws",
+            Self::Wss => "wss",
         }
     }
     fn index(self) -> usize {
@@ -144,16 +144,18 @@ allow = ['127.0.0.1']
 enabled = true
 listen = '127.0.0.1:{}'
 allow = ['127.0.0.1']
-[relay.ws_viewer]
-enabled = true
+[relay.ws]
 listen = '127.0.0.1:{}'
-allow = ['127.0.0.1']
-[relay.wss_viewer]
+[relay.ws.viewer]
 enabled = true
-listen = '127.0.0.1:{}'
 allow = ['127.0.0.1']
+[relay.wss]
+listen = '127.0.0.1:{}'
 cert_file = '{}'
 key_file = '{}'
+[relay.wss.viewer]
+enabled = true
+allow = ['127.0.0.1']
 [mode1]
 enabled = false
 [mode2]

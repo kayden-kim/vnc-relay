@@ -127,8 +127,8 @@ impl Transport {
 
     fn listener(self) -> &'static str {
         match self {
-            Self::Ws => "ws_viewer",
-            Self::Wss => "wss_viewer",
+            Self::Ws => "ws",
+            Self::Wss => "wss",
         }
     }
 }
@@ -178,18 +178,20 @@ listen = '127.0.0.1:{status}'
 enabled = true
 listen = '127.0.0.1:{server}'
 allow = ['127.0.0.1']
-[relay.ws_viewer]
-enabled = true
+[relay.ws]
 listen = '127.0.0.1:{ws}'
-allow = ['127.0.0.1']
-allowed_origins = ['{origin}']
-[relay.wss_viewer]
+[relay.ws.viewer]
 enabled = true
-listen = '127.0.0.1:{wss}'
 allow = ['127.0.0.1']
 allowed_origins = ['{origin}']
+[relay.wss]
+listen = '127.0.0.1:{wss}'
 cert_file = '{cert}'
 key_file = '{key}'
+[relay.wss.viewer]
+enabled = true
+allow = ['127.0.0.1']
+allowed_origins = ['{origin}']
 [mode1]
 enabled = true
 allow_targets = ['127.0.0.1:1-65535']
