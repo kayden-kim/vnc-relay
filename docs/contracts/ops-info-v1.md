@@ -198,14 +198,14 @@ VNC Relay가 운영자에게 내보내는 두 가지 정보의 교환 형식을 
 | `admin_login_failed` | `warn` | 로그인 요청을 거절했을 때 | `reason`: `invalid_credentials` 또는 `limited`. `peer_ip`. 선택: `admin_account`. `reason`이 `limited`이면 `scope`(`account` 또는 `source`)도 쓴다. | MGT-018, MGT-022 |
 | `admin_login_limited` | `warn` | 실패 횟수가 F를 넘어 제한을 시작했을 때. 제한 중 시도마다 기록하지 않는다(그 시도는 `admin_login_failed`다). | `scope`: `account` 또는 `source`. `peer_ip`(기준을 넘게 한 시도의 출발지). `lockout_secs`: 정수. 선택: `admin_account`. | MGT-022, MGT-R14 |
 | `admin_terminate` | `info`. `result`가 `failed`이면 `error` | 유효한 관리 세션과 CSRF 검증을 통과한 세션 종료 요청을 처리했을 때. 응답과 같은 시점이며 정리가 끝난 뒤다. | `admin_account`, `result`(`terminated`, `already_closed`, `not_found`, `failed`), `peer_ip`. `result`가 `not_found`가 아니면 `session_id`. | OPS-011, MGT-009, MGT-010, MGT-011, MGT-012 |
-| `config_edited` | `info` | `PATCH /api/v1/config`가 파일 쓰기와 유효 설정 교체를 마쳤을 때. 바뀐 키가 있을 때만 기록 | `admin_account`(필수), `peer_ip`, `config_keys`(실제 바뀐 키), `revision`(새 파일). 설정 값은 쓰지 않는다. | OPS-060, OPS-062, MGT-031 |
+| `config_edited` | `info` | `PATCH /api/v1/config`가 파일 쓰기와 유효 설정 교체를 마쳤을 때. 편집 전후 파일 바이트가 다를 때만 기록 | `admin_account`(필수), `peer_ip`, `config_keys`(요청 `changes` 가운데 파일 값이 바뀐 키만), `revision`(새 파일). 설정 값은 쓰지 않는다. 키 범위와 변경 없음 판정은 이 문서의 판단이며 사용자 결정은 없다. | OPS-060, OPS-062, MGT-031 |
 | `config_edit_rejected` | `warn` | 인증·CSRF를 통과한 `PATCH /api/v1/config`를 거절했을 때. `invalid_request`는 제외 | `admin_account`(필수), `peer_ip`, `reason`(관리 API 오류 코드 중 `invalid_request` 제외). 선택: `config_keys`(요청한 키 배열). 설정 값은 쓰지 않는다. | OPS-061, OPS-063, MGT-030, MGT-033~036, MGT-038 |
 
 `result`는 [관리 API 계약 1.9절](management-api-v1.md#19-관리자-종료-post-apiv1sessionssession_idterminate)의 종료 결과에 대응한다. 이 요청이 종료를 시작하면 `terminated`, 이미 시작한 정리에 합류해 완료를 확인하면 `already_closed`, 대상이 없으면 `not_found`, 종료를 확인하지 못하면 `failed`다(사용자 결정 2026-11-02(Q90)). `already_closed`는 `info`이며 `session_id`를 포함한다. 유효한 관리 세션이 없는 요청은 관리 세션 없음으로 응답하며 이 사건을 기록하지 않는다. `result`가 `not_found`이면 `session_id`를 쓰지 않는다. 존재하지 않는 세션 식별자를 연결된 것처럼 기록하지 않기 위해서다.
 
 대상을 정리한 `session_closed`가 먼저 오고, 같은 요청의 `admin_terminate`가 뒤따른다. 이 요청이 종료를 시작했고 `close_cause`가 `admin_terminated`이면 두 줄은 같은 `admin_account`를 가진다. `already_closed`일 때 `session_closed`는 실제 최초 종료 원인을 유지한다. 합류 요청은 자신의 인증 계정으로 `admin_terminate(result=already_closed)`를 기록하며 `session_closed`를 추가로 만들지 않는다(사용자 결정 2026-11-02(Q90)). 관리자 정리의 E 만료 때 계정과 `side`는 1.6절을 따른다.
 
-같은 설정 편집에서는 `reload_applied`(`trigger = config_edit`)가 먼저 오고 `config_edited`가 뒤따른다. 성공 사건은 계정명·키·새 revision만으로 편집을 추적하며 IP 정책 값·Origin·대상 항목·수치는 쓰지 않는다. 실제 값 차이가 없는 요청은 두 사건을 만들지 않는다. 거절은 `config_edit_rejected`만 기록한다. 오류 코드의 의미는 [관리 API 계약](management-api-v1.md)이 정한다.
+같은 설정 편집에서는 `reload_applied`(`trigger = config_edit`)가 먼저 오고 `config_edited`가 뒤따른다. 두 사건의 키 목록은 범위가 다르다. `reload_applied.applied`는 실제 실행 값이 바뀐 모든 키다. 파일에 먼저 저장되어 아직 반영되지 않은 변경도 포함할 수 있다. `config_edited.config_keys`는 요청 `changes` 가운데 파일 값이 바뀐 키만 담는다. 편집 전후 파일 바이트가 같으면 두 성공 사건을 만들지 않는다. 반영 전 파일 변경이 남아 있어도 이 요청은 적용하지 않고 파일 감지가 적용한다. 이 키 범위와 변경 없음 판정은 이 문서의 판단이며 사용자 결정은 없다. 성공 사건에는 IP 정책 값·Origin·대상 항목·수치를 쓰지 않는다. 거절은 `config_edit_rejected`만 기록한다. 오류 코드의 의미는 [관리 API 계약](management-api-v1.md)이 정한다.
 
 ### 1.6 원인 코드
 

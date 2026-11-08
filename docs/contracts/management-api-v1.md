@@ -353,13 +353,13 @@
 | 필드·메시지 | 자료형 | 필수 여부·null 허용 여부 | 의미·제약 |
 | --- | --- | --- | --- |
 | `as_of` | `timestamp` | 필수, null 불가 | 조회 기준 시점 |
-| `revision` | 문자열 | 필수, null 허용 | 지금 설정 파일 바이트의 SHA-256. `sha256:` 뒤 소문자 16진수 64자다. 읽기 실패면 `null`이다. |
+| `revision` | 문자열 | 필수, null 허용 | 지금 설정 파일 바이트의 SHA-256. `sha256:` 뒤 소문자 16진수 64자다. 바이트 읽기 실패일 때만 `null`이다. UTF-8이 아니어도 바이트를 읽었으면 그 바이트의 리비전을 반환한다(이 문서의 판단, 사용자 결정 없음). |
 | `edit_enabled` | 불리언 | 필수, null 불가 | 실행 중 `management.config_edit` 값 |
 | `file` | 객체 | 필수, null 불가 | 요청 때 다시 읽은 파일의 상태 |
 | `file.state` | 문자열 | 필수, null 불가 | 아래 표의 5가지 상태 |
 | `file.config_keys` | 문자열 배열 | 필수, null 불가 | `pending`이면 다른 재로드 대상 키, `restart_required`면 다른 재시작 필요 키. 그 밖에는 빈 배열이다. 값은 넣지 않는다. |
 | `file.diagnostics` | 진단 객체 배열 | 필수, null 불가 | `invalid`일 때 설정 계약 2.1절의 `code`·`key`·`message`. 그 밖에는 빈 배열이다. |
-| `last_reload` | 객체 | 필수, null 허용 | 이 프로세스 시작 뒤 마지막 재로드 결과. 없으면 `null`이다. |
+| `last_reload` | 객체 | 필수, null 허용 | 이 프로세스 시작 뒤 마지막 재로드 결과. 파일 변경 감지의 `applied`·`rejected`·`restart_required`와 파일·실행 중 값 교체를 마친 PATCH의 `applied`만 기록한다. 없으면 `null`이다(이 문서의 판단, 사용자 결정 없음). |
 | `last_reload.at` | `timestamp` | 객체가 있으면 필수, null 불가 | 마지막 재로드 결과 시각 |
 | `last_reload.result` | 문자열 | 객체가 있으면 필수, null 불가 | `applied`·`rejected`·`restart_required` |
 | `last_reload.trigger` | 문자열 | 객체가 있으면 필수, null 불가 | `file_watch`·`config_edit` |
@@ -377,7 +377,9 @@
 | `pending` | 재로드 대상 키만 다르다. 파일 변경 감지가 적용할 후보가 남아 있다. |
 | `restart_required` | 재시작 필요 키에 차이가 남아 있다. |
 | `invalid` | 파일을 읽었으나 설정 검증에 실패했다. |
-| `unreadable` | 파일을 읽지 못했다. |
+| `unreadable` | 파일 바이트를 읽지 못했거나 UTF-8이 아니다. `diagnostics`는 빈 배열이다. 바이트 읽기에 성공한 비UTF-8 파일의 `revision`은 `null`이 아니다(이 문서의 판단, 사용자 결정 없음). |
+
+`last_reload`는 GET, 같은 후보를 다시 읽은 파일 변경 감지, 변경 없음·폐기된 파일 변경 감지 결과로 갱신하지 않는다. PATCH의 인증·본문·편집 꺼짐·충돌·파일 상태·후보 검증·쓰기 실패와 no-op도 이력을 갱신하지 않는다. `trigger = config_edit`와 `result = rejected`·`restart_required`의 조합은 스키마에서 허용하지만 현재 서버는 생성하지 않는다(이 문서의 판단, 사용자 결정 없음).
 
 설정 파일에는 비밀이 없다([설정 계약 1.1절](config-v3.md#11-파일-규칙)). 설정 경로는 보여 주되 경로가 가리키는 파일 내용은 넣지 않는다. 인증서·개인키·계정 파일의 내용도 노출하지 않는다. 설정 보기에서 파일의 미적용 값은 반환하지 않는다.
 
@@ -395,20 +397,22 @@
 | `changes` | 객체 | 필수, null 불가 | 바꿀 설정 키를 속성 이름으로, 새 값을 속성 값으로 담는다. 빈 객체는 거절한다. |
 | `changes.<설정 키>` | 정수·문자열 배열 | 하나 이상 필수, null 불가 | 해당 설정 자료형과 맞아야 한다. JSON 자료형 오류는 `invalid_request`, 설정 범위·항목 문법·관계 오류는 `config_invalid`다. |
 
+PATCH 본문은 64 KiB(65536바이트) 이하여야 한다. 초과하면 `400 invalid_request`이며 파일·실행 중 값을 바꾸거나 편집 사건을 기록하지 않는다. 로그인의 기존 16 KiB 상한은 그대로다(이 문서의 판단, 사용자 결정 없음).
+
 편집 대상은 출발지 IP 허용 목록 4개, WS·WSS Origin 허용 목록 2개, `mode1.allow_targets`, `[limits]` 5개, `[timeouts]` 6개, `[keepalive]` 5개인 총 23개 키다. 목록과 적용 시점은 [설정 계약 1.8절](config-v3.md#18-재로드-구분)이 기준이다. 인증서·개인키 경로 4개는 재로드 대상이지만 편집 대상이 아니다(사용자 결정 2026-11-08(Q172)). 진입점별 키는 그 진입점이 켜져 있을 때만, `mode1.allow_targets`는 `mode1.enabled = true`일 때만 편집할 수 있다. `management.config_edit`와 그 밖의 재시작 필요 키는 편집할 수 없다.
 
 서버는 재로드 서비스와 직렬화하여 다음 10단계를 순서대로 처리한다. 앞 단계에서 거절하면 뒤 단계는 하지 않는다.
 
 1. 인증·CSRF·본문 형식을 공통 순서(1.3절)로 검사한다. 빈 `changes`, 편집 대상이 아니거나 지금 `editable`이 아닌 키, 맞지 않는 JSON 자료형은 `400 invalid_request`다. `PATCH`에 `X-Relay-Poll`이 있으면 `400 invalid_request`다.
 2. 실행 중 `management.config_edit`가 `false`이면 `403 config_edit_disabled`로 거절한다.
-3. 설정 파일을 읽는다. 읽지 못하면 `409 config_file_invalid`다. `diagnostics`는 빈 배열이며 조회의 `file.state = unreadable`에 대응한다.
+3. 설정 파일 바이트를 읽고 UTF-8인지 확인한다. 바이트를 읽지 못했거나 UTF-8이 아니면 `409 config_file_invalid`다. `diagnostics`는 빈 배열이며 조회의 `file.state = unreadable`에 대응한다. 비UTF-8도 이 단계에서 거절하므로 리비전 비교보다 먼저다(이 문서의 판단, 사용자 결정 없음).
 4. 요청 `revision`이 지금 파일 바이트의 리비전과 다르면 `409 config_conflict`로 거절한다.
 5. 지금 파일이 검증에 실패하면 `409 config_file_invalid`와 `diagnostics`를 반환한다. 재시작 필요 키의 차이가 남아 있으면 `409 config_restart_pending`과 그 키의 `config_keys`를 반환한다.
-6. `toml_edit`로 바뀐 키의 값만 고친다. 나머지 주석·공백·키 순서·다른 값은 보존한다(사용자 결정 2026-11-08(Q167·Q173)). 없는 키는 기존 테이블에 넣는다. 테이블도 없으면 파일 끝에 새 테이블로 더한다. 새 줄은 파일의 기존 줄바꿈 방식을 따른다.
+6. `toml_edit`로 요청 `changes` 중 파일값이 바뀐 키의 값만 고친다. 나머지 주석·공백·키 순서·다른 값은 보존한다(사용자 결정 2026-11-08(Q167·Q173)). 없는 키는 기존 테이블에 넣는다. 테이블도 없으면 파일 끝에 새 테이블로 더한다. 새 줄은 파일의 기존 줄바꿈 방식을 따른다. 지금 파일이 `pending`이면 그 미적용 변경에 이번 편집을 얹은 후보 전체를 만든다(이 문서의 판단, 사용자 결정 없음).
 7. 고친 후보 전체를 시작·재로드와 같은 규칙으로 검증한다. 실패하면 `400 config_invalid`와 `diagnostics`를 반환한다. 진단의 `key`는 `relay.tcp_viewer.allow[2]`처럼 첨자를 포함할 수 있다. 파일은 바꾸지 않는다.
-8. 값이 실제로 바뀐 키가 없으면 쓰지 않고 `200`으로 응답한다. `applied`는 빈 배열이며 `revision`은 그대로다. `reload_applied`·`config_edited`도 기록하지 않는다.
-9. 같은 디렉터리의 임시 파일에 쓰고 원자적으로 교체한다. 쓰기·교체에 실패하면 `500 config_write_failed`다. 파일과 실행 중 값은 이전 그대로다.
-10. 같은 후보의 재로드 대상 값을 한 번에 교체한다. `reload_applied`(`trigger = config_edit`) 다음 `config_edited`를 기록한다([운영 정보 계약 1.5절](ops-info-v1.md#15-사건-목록)). 이후 파일 변경 감지가 같은 내용을 읽으면 차이가 없으므로 다시 교체하거나 `reload_applied`를 기록하지 않는다. `reload_change_detected`는 기록될 수 있다.
+8. 편집 전후 파일 바이트가 같으면 쓰기·교체·실행 중 값 적용 없이 `200`으로 응답한다. `applied`는 빈 배열이며 `revision`은 그대로다. `reload_applied`·`config_edited`를 기록하거나 `last_reload`를 갱신하지 않는다. 파일에 이미 남아 있던 `pending` 변경은 파일 변경 감지가 적용한다(이 문서의 판단, 사용자 결정 없음).
+9. 공유 잠금 안에서 같은 디렉터리의 임시 파일을 쓰고 flush한다. 원자 교체 바로 전에 현재 파일을 다시 읽어 `revision`을 비교한다. 다르면 임시 파일을 지우고 `409 config_conflict`로 거절하며 이번 요청은 파일·실행 중 값을 바꾸지 않는다. 같으면 원자 교체한 뒤 같은 후보를 적용한다. 마지막 재확인과 교체 사이의 아주 짧은 틈은 보장 범위가 아니다(사용자 결정 2026-11-08(Q178)). 재확인 읽기 실패도 임시 파일을 지우고 `409 config_conflict`로 거절하며 `config_edit_rejected.reason = config_conflict`를 기록한다(이 문서의 판단, 사용자 결정 없음). 쓰기·교체 자체에 실패하면 `500 config_write_failed`이며 파일과 실행 중 값은 이전 그대로다.
+10. 같은 후보의 재로드 대상 값을 한 번에 교체한다. `pending`에 있던 변경도 함께 적용한다. 응답과 `reload_applied`의 `applied`는 실제 실행 중 값이 바뀐 모든 키다. `config_edited.config_keys`는 요청 `changes` 중 파일값이 바뀐 키만이다(이 문서의 판단, 사용자 결정 없음). 실행 중 값이 바뀌면 `reload_applied`(`trigger = config_edit`)를 기록하고 `last_reload`를 갱신한다. 그 뒤 `config_edited`를 기록한다([운영 정보 계약 1.5절](ops-info-v1.md#15-사건-목록)). 실행 중 값의 차이가 없으면 `reload_applied`와 이력 갱신 없이 `config_edited`만 기록한다. 이후 파일 변경 감지가 같은 내용을 읽으면 다시 교체하거나 성공 사건·이력을 추가하지 않는다. `reload_change_detected`는 기록될 수 있다.
 
 성공 응답 `200`:
 
@@ -417,11 +421,11 @@
 | `as_of` | `timestamp` | 필수, null 불가 | 처리 결과 시점 |
 | `result` | 문자열 | 필수, null 불가 | `applied` |
 | `revision` | 문자열 | 필수, null 불가 | 처리 뒤 파일 바이트의 리비전. `sha256:` 뒤 소문자 16진수 64자다. |
-| `applied` | 문자열 배열 | 필수, null 불가 | 실제 바뀐 키. 값이 바뀌지 않았으면 빈 배열이다. |
+| `applied` | 문자열 배열 | 필수, null 불가 | 후보 전체에서 실제 실행 중 값이 바뀐 모든 키. 파일에 이미 남아 있던 `pending` 변경도 포함한다. 요청 `changes` 중 파일값이 바뀐 키만 담는 `config_edited.config_keys`와 구분한다. 편집 전후 파일 바이트가 같으면 빈 배열이다(이 문서의 판단, 사용자 결정 없음). |
 
 편집은 파일에 남아 재시작 뒤에도 유지된다. 이미 맺은 연결·시작한 타이머·설정한 소켓 옵션은 이전 값을 유지한다. 바뀐 값은 [설정 계약 1.8절](config-v3.md#18-재로드-구분)의 시점부터 적용한다. 정상 종료 유예 중에도 다른 관리 요청처럼 처리한다. 특별히 거절하지 않는다.
 
-인증·CSRF를 통과한 편집 거절은 `invalid_request`를 제외하고 `config_edit_rejected`로 기록한다. 편집 사건의 `admin_account`는 필수다. 키와 리비전 등 사건별 메타 정보는 기록하되 설정값(IP·Origin·대상 항목·수치)은 기록하지 않는다. 필드·사건 형식은 [운영 정보 계약 1.5절](ops-info-v1.md#15-사건-목록)과 [1.8절](ops-info-v1.md#18-관리자-계정명-기록-규칙)을 따른다.
+인증·CSRF를 통과한 편집 거절은 `invalid_request`를 제외하고 `config_edit_rejected`로 기록한다. PATCH 거절은 `last_reload`를 갱신하지 않는다(이 문서의 판단, 사용자 결정 없음). 편집 사건의 `admin_account`는 필수다. 키와 리비전 등 사건별 메타 정보는 기록하되 설정값(IP·Origin·대상 항목·수치)은 기록하지 않는다. 필드·사건 형식은 [운영 정보 계약 1.5절](ops-info-v1.md#15-사건-목록)과 [1.8절](ops-info-v1.md#18-관리자-계정명-기록-규칙)을 따른다.
 
 ## 2. 오류
 
@@ -455,7 +459,7 @@
 | `csrf_invalid` | `403`. 관리 세션은 유효하지만 상태 변경 메서드 `POST`·`PATCH`·`DELETE`의 `X-CSRF-Token`이 없거나 틀리다(로그인 제외). 관리 세션을 유지하고 대상의 상태를 바꾸지 않는다. | [관리: MGT-014·MGT-032](../specs/management.md#7-수용-테스트), [관리 4절](../specs/management.md#4-오류와-복구) "관리 세션·CSRF 검증 실패" |
 | `login_failed` | `401`. 로그인 실패. 계정 없음·비밀번호 틀림·로그인 제한 중이 모두 같은 상태·코드·본문이다. 세션을 발급하지 않는다. 계정 존재 여부를 알 수 있는 정보를 담지 않는다. | [관리: MGT-018·MGT-022](../specs/management.md#7-수용-테스트), [화면: DASH-018](../specs/dashboard.md#7-수용-테스트) |
 | `not_found` | `404`. 대상 없음. 형식은 맞지만 지금 활성 세션이 아닌 `session_id`(정리 완료·최근 종료 목록에 있음·처음부터 없음), 또는 알 수 없는 `/api/v1/` 경로. 다른 세션으로 대체하지 않는다. | [관리: MGT-010·MGT-011·MGT-023](../specs/management.md#7-수용-테스트), [화면: DASH-007·DASH-011](../specs/dashboard.md#7-수용-테스트), [관리 4절](../specs/management.md#4-오류와-복구) "상세 대상 소멸"·"종료 중 대상 소멸" |
-| `invalid_request` | `400`(본문·필드·`session_id` 형식·`X-Relay-Poll` 값 오류. `POST`·`PATCH`·`DELETE`의 `X-Relay-Poll`, 빈 `changes`·편집 불가 키·잘못된 JSON 자료형 포함), `405`(경로는 있으나 메서드가 다름, `Allow` 헤더 포함), `415`(본문이 있고 `Content-Type`이 `application/json`이 아님. 단, 1.9절의 terminate 본문은 항상 400). 잘못된 대상을 대상 없음(`not_found`)과 구분한다. 로그인 실패 횟수에 세지 않는다. | [화면 5절](../specs/dashboard.md#5-입력-검증과-종료-오류), [관리: MGT-025·MGT-013·MGT-037](../specs/management.md#7-수용-테스트) |
+| `invalid_request` | `400`(본문·필드·`session_id` 형식·`X-Relay-Poll` 값 오류. `POST`·`PATCH`·`DELETE`의 `X-Relay-Poll`, 빈 `changes`·편집 불가 키·잘못된 JSON 자료형 포함. PATCH 본문 64 KiB(65536바이트) 초과도 포함하며 파일·실행 중 값 변경과 편집 사건이 없다. 로그인 상한은 기존 16 KiB 그대로다. 본문 상한은 이 문서의 판단, 사용자 결정 없음), `405`(경로는 있으나 메서드가 다름, `Allow` 헤더 포함), `415`(본문이 있고 `Content-Type`이 `application/json`이 아님. 단, 1.9절의 terminate 본문은 항상 400). 잘못된 대상을 대상 없음(`not_found`)과 구분한다. 로그인 실패 횟수에 세지 않는다. | [화면 5절](../specs/dashboard.md#5-입력-검증과-종료-오류), [관리: MGT-025·MGT-013·MGT-037](../specs/management.md#7-수용-테스트) |
 | `terminate_failed` | `500`. 종료 요청은 유효했지만 양 끝점 정리에 실패해 종료를 확인하지 못했다. 완료로 표시하지 않는다. 재조회로 실제 상태를 확인한다. | [관리: MGT-012](../specs/management.md#7-수용-테스트), [화면: DASH-012](../specs/dashboard.md#7-수용-테스트), [관리 4절](../specs/management.md#4-오류와-복구) "종료 처리 실패" |
 | `internal` | `500`. 조회 처리 중 서버 내부 오류. 빈 성공 목록과 구분한다. 중계 영향은 없다. | [관리: MGT-004](../specs/management.md#7-수용-테스트), [화면: DASH-003](../specs/dashboard.md#7-수용-테스트), [관리 4절](../specs/management.md#4-오류와-복구) "조회 처리·통신 실패" |
 | `config_invalid` | `400`. 고친 후보가 설정 검증에 실패했다. `diagnostics`를 포함한다. 파일·실행 중 값을 바꾸지 않는다. | [관리: MGT-036](../specs/management.md#7-수용-테스트) |
