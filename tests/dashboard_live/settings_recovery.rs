@@ -4,7 +4,7 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use serde_json::{Value, json};
 
@@ -679,6 +679,7 @@ pub fn config_response_loss_and_timeout_require_get_before_retry() {
         let injected = server.proxy.injected_count("PATCH", CONFIG);
         server.proxy.once("PATCH", CONFIG, fault);
         set_field_value(&mut browser, WAITING, &(12 + index).to_string());
+        let submitted = Instant::now();
         submit(&mut browser);
         unknown(&mut browser);
         assert_eq!(server.proxy.injected_count("PATCH", CONFIG), injected + 1);
@@ -690,14 +691,9 @@ pub fn config_response_loss_and_timeout_require_get_before_retry() {
             );
         }
         if index == 1 {
-            let traffic = server.proxy.traffic();
-            let patch = traffic
-                .iter()
-                .rev()
-                .find(|t| t.method == "PATCH")
-                .unwrap_or_else(|| panic!("PATCH"));
+            // The browser timer starts before the proxy reads the request.
             assert!(
-                patch.at.elapsed() >= Duration::from_secs(5),
+                submitted.elapsed() >= Duration::from_secs(5),
                 "query_timeout_secs must elapse"
             );
             assert_eq!(

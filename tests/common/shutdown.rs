@@ -396,6 +396,19 @@ fn assert_closed(stream: &mut TcpStream) {
     }
 }
 
+/// After shutdown starts, a new relay connection may fail at TCP connect or
+/// close without a greeting. Either way it must not stay open as a relay.
+fn assert_relay_accept_stopped(port: u16, id: &str) {
+    let address = SocketAddr::from(([127, 0, 0, 1], port));
+    if let Ok(mut stream) = TcpStream::connect_timeout(&address, Duration::from_secs(1)) {
+        stream
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .unwrap_or_else(|error| panic!("new connection timeout: {error}"));
+        let _ = stream.write_all(&make_frame(&format!("ID:{id}")));
+        assert_closed(&mut stream);
+    }
+}
+
 fn assert_status(port: u16, path: &str, status: u16, body: &str) {
     let reply = send(port, "GET", path, &[], "");
     assert_eq!(reply.status, status);
@@ -598,17 +611,10 @@ pub fn stop_unfinished_work<P: ServerProcess>() {
             && number(body, "handshaking") == 0
             && number(body, "target_connecting") == 0
     });
-    // New accepts may fail at TCP connect or close without a greeting; neither
-    // may create a session, including an attempted match for the removed IDs.
+    // Neither new accept may create a session, including an attempted match
+    // for the removed IDs.
     for (port, id) in [(fixture.ports[2], "7001"), (fixture.ports[3], "7002")] {
-        let address = SocketAddr::from(([127, 0, 0, 1], port));
-        if let Ok(mut stream) = TcpStream::connect_timeout(&address, Duration::from_secs(1)) {
-            stream
-                .set_read_timeout(Some(Duration::from_secs(2)))
-                .unwrap_or_else(|error| panic!("new connection timeout: {error}"));
-            let _ = stream.write_all(&make_frame(&format!("ID:{id}")));
-            assert_closed(&mut stream);
-        }
+        assert_relay_accept_stopped(port, id);
     }
     let log = fixture.log();
     for conn in accepted {
@@ -1072,8 +1078,7 @@ pub fn config_edit_works_during_grace_without_changing_the_started_grace_deadlin
         503,
         r#"{"status":"not_ready","reason":"shutting_down"}"#,
     );
-    let mut refused = connect(fixture.ports[3]);
-    assert_closed(&mut refused);
+    assert_relay_accept_stopped(fixture.ports[3], "45001");
     keeper.transfer();
     assert_eq!(process.try_wait(), None);
     wait_exit(&mut process, Duration::from_secs(10));
