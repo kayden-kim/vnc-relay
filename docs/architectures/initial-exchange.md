@@ -267,7 +267,7 @@ U는 별도 시험 범위다. `crates/adapters/tests/websocket.rs`의 HTTP·TLS 
 
 다른 선택은 계약에 없는 제품 동작을 만든다. A는 W 없는 무기한 보류다. B는 이미 유효한 요청에 `handshake_timeout`을 붙인다. C는 정의되지 않은 닫기 원인을 요구한다. 이를 피하려고 실제 대상 연결·매칭·중계가 모두 준비된 뒤 연결한다. `waiting_registered`·`session_started`를 가짜로 기록하지 않는다.
 
-근거: [중계 스펙 2절·3.1~3.3절](../specs/relay.md#2-상태와-경계), [Repeater 계약 1.2절 H·2절 오류](../contracts/repeater-handshake-v1.md#12-초기-요청-250바이트), [TODO 2.8·2.9](../TODO.md#2-b-중계-기능). 아래 내용은 저장소에 남은 결정 요약이다. Q16·Q21·Q22의 질의·답변 원문은 확인하지 못했다. Q16 요약은 3.2를 101까지만 구현하고 이후 중계를 2.7 뒤에 연결한다고 적는다([WebSocket 진입점 7절](websocket-entry-point.md#7-설계-선택), [TODO 3.2의 현재](../TODO.md#3-wswss-진입점)). Q21 요약은 2.7 전까지 프레임·Close를 읽지 않고 H 뒤 close 4009로 끝내는 방식을 적는다([9절 항목 11](websocket-entry-point.md#9-미결정-사항)). Q22 요약은 H를 101 응답부터 잰다고 적는다(같은 절 항목 10). 이 요약들은 유효한 250바이트 요청을 해석한 뒤의 수명을 정하지 않는다.
+근거: [중계 스펙 2절·3.1~3.3절](../specs/relay.md#2-상태와-경계), [Repeater 계약 1.2절 H·2절 오류](../contracts/repeater-handshake-v1.md#12-초기-요청-250바이트), [TODO 2.8·2.9](https://github.com/kayden-kim/vnc-relay/blob/556fab23d15e77125ca2ad5c575089857b312049/docs/TODO.md#2-b-중계-기능). 아래 내용은 저장소에 남은 결정 요약이다. Q16·Q21·Q22의 질의·답변 원문은 확인하지 못했다. Q16 요약은 3.2를 101까지만 구현하고 이후 중계를 2.7 뒤에 연결한다고 적는다([WebSocket 진입점 7절](websocket-entry-point.md#7-설계-선택), [TODO 3.2의 현재](https://github.com/kayden-kim/vnc-relay/blob/556fab23d15e77125ca2ad5c575089857b312049/docs/TODO.md#3-wswss-진입점)). Q21 요약은 2.7 전까지 프레임·Close를 읽지 않고 H 뒤 close 4009로 끝내는 방식을 적는다([9절 항목 11](websocket-entry-point.md#9-미결정-사항)). Q22 요약은 H를 101 응답부터 잰다고 적는다(같은 절 항목 10). 이 요약들은 유효한 250바이트 요청을 해석한 뒤의 수명을 정하지 않는다.
 
 ### 2. (해결) WS·WSS를 2.7에서 연결할지
 
@@ -280,7 +280,7 @@ U는 별도 시험 범위다. `crates/adapters/tests/websocket.rs`의 HTTP·TLS 
 
 **적용: A.** Q21의 101 뒤 보류는 `638cf09`에서 제거했다. 바이너리 메시지 ↔ 스트림 어댑터와 같은 B 안의 페이로드 계산을 위해 3.3 범위를 앞당겼다. M>B의 WS-TBD-004와 스트리밍 코덱은 사용자 결정 2026-11-01(Q77, Q78)로 해소했다. 단일 메시지만 읽는 임시 해석기는 없다. TODO 3.2의 “현재:”와 WebSocket 진입점 Q21은 당시 결정 기록이다. 현재 WS-018 전체 표식은 실제 중계 도착을 확인하는 `ws_and_wss_forward_initial_trailing_data_once`에 있다. 단위 시험의 부분 표식은 유지한다.
 
-근거: [TODO 3.2의 현재·3.3 완료 조건 WS-018](../TODO.md#3-wswss-진입점), [WebSocket 진입점 9절 항목 1·5·11](websocket-entry-point.md#9-미결정-사항), [코드 지도 3절 WS·WSS 행](code-map.md#3-진입점), [WebSocket 계약 1.4절](../contracts/websocket-relay-v1.md#14-데이터-메시지와-제어-프레임), [Repeater 계약 1.4절](../contracts/repeater-handshake-v1.md#14-형식과-무관한-제품-제약).
+근거: [TODO 3.2의 현재·3.3 완료 조건 WS-018](https://github.com/kayden-kim/vnc-relay/blob/556fab23d15e77125ca2ad5c575089857b312049/docs/TODO.md#3-wswss-진입점), [WebSocket 진입점 9절 항목 1·5·11](websocket-entry-point.md#9-미결정-사항), [코드 지도 3절 WS·WSS 행](code-map.md#3-진입점), [WebSocket 계약 1.4절](../contracts/websocket-relay-v1.md#14-데이터-메시지와-제어-프레임), [Repeater 계약 1.4절](../contracts/repeater-handshake-v1.md#14-형식과-무관한-제품-제약).
 
 ### 3. (해결) 빈 값 검사와 모드 판정의 순서
 

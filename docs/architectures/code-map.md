@@ -279,7 +279,7 @@ PATCH의 `ConfigEditService::patch`는 같은 잠금으로 편집 허용→원�
 
 ## 8. 계획과 문서 정리(Target)
 
-이 절은 현재 구조 그림에 포함하지 않는다. [TODO 5.3](../TODO.md)의 완료 판정은 별도다. 현재 코드에는 이미 RelayService의 G·두 번째 종료 요청과 serve의 감독 조립이 있다. 이를 미구현 경로로 나열하지 않는다.
+이 절은 현재 구조 그림에 포함하지 않는다. [TODO 5.3](https://github.com/kayden-kim/vnc-relay/blob/556fab23d15e77125ca2ad5c575089857b312049/docs/TODO.md)의 완료 판정은 별도다. 현재 코드에는 이미 RelayService의 G·두 번째 종료 요청과 serve의 감독 조립이 있다. 이를 미구현 경로로 나열하지 않는다.
 
 `LifecycleService::request_shutdown`이라는 API는 현재 없다. 준비 상태 전이는 `LifecycleService::begin_shutdown`이, 중계 수명 전이는 `RelayService::request_shutdown`이 맡는다. 이 이름을 전제로 한 설계·TODO 문구는 실제 책임 분리와 대조해야 한다. 이 지도는 향후 API 이동을 결정하지 않는다. **이 문서의 판단, 사용자 결정 없음**이다.
 

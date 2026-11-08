@@ -10,7 +10,7 @@
 | 검증 상태 | 실행 완료(2026-11-05·06, Windows VNC Relay). 3절의 22~31·34단계를 모두 실행했고 모두 성공 조건과 맞았다(4.1·4.2절). 32단계 자동 증거 대조는 4.3절이다. 프로젝트 소유자가 2026-11-06에 판정 캡처를 검토했고 문제가 없었다. AC-08은 작업 5.4로 옮겼다(사용자 결정 2026-11-06(Q117)). Ubuntu VNC Relay는 분리 실행 환경이 없어 2절 규칙대로 미실행으로 남긴다 |
 | 검증 환경·버전 | Hyper-V VM 3대(`vr-lab` `Private` 스위치, 게이트웨이 없음), 게스트 Windows 11 Enterprise Evaluation 10.0.26300, UltraVNC Server·Viewer 1.8.3.0, VNC Relay 커밋 `ceb6a7c` Windows debug 빌드. Ubuntu VNC Relay는 미실행 |
 | 최종 검증일 | 2026-11-06. 작성일 2026-11-02 |
-| 관련 기준 문서 | [TODO 2.13](../TODO.md#2-tcp-repeater), [PRD 10절](../requirements/PRD.md#10-검증-및-수용-기준), [중계 스펙 7절](../specs/relay.md#7-수용-테스트), [초기 교환 계약](../contracts/repeater-handshake-v1.md), [설정 계약](../contracts/config-v3.md), [CLI 계약](../contracts/cli-v1.md), [운영 정보 계약](../contracts/ops-info-v1.md), [호환성 검증 기록](../contracts/repeater-compat-record.md) |
+| 관련 기준 문서 | [TODO 2.13](https://github.com/kayden-kim/vnc-relay/blob/556fab23d15e77125ca2ad5c575089857b312049/docs/TODO.md#2-tcp-repeater), [PRD 10절](../requirements/PRD.md#10-검증-및-수용-기준), [중계 스펙 7절](../specs/relay.md#7-수용-테스트), [초기 교환 계약](../contracts/repeater-handshake-v1.md), [설정 계약](../contracts/config-v3.md), [CLI 계약](../contracts/cli-v1.md), [운영 정보 계약](../contracts/ops-info-v1.md), [호환성 검증 기록](../contracts/repeater-compat-record.md) |
 
 ## 1. 대상과 영향
 
@@ -330,7 +330,7 @@ IP 정책 변형은 원본이 아닌 설정 사본에서 한다. 현재 프로�
 | AC-18 | 중계 L과 관리·상태 Lm이 서로 수락을 막지 않음 | OPS-033 자동 증거에서 L 포화 중 관리·상태 수락과 Lm 포화 중 중계 수락을 모두 확인. 수동 범위 밖: GUI 연결 수만으로 양 예산의 포화·회수를 제어할 수 없다 | | |
 | AC-26 | TCP 무응답 대기·활성 연결을 K 안에 회수하고 살아 있는 유휴 연결 유지 | 31단계 + RLY-027 자동 증거. RLY-025~026은 수동 범위 밖이며 TODO 2.11의 Q86 Linux netns + DROP 자동 시험 증거가 필요하다(작성 시 미구현). Windows는 부분으로 구분한다. WS Kw 부분은 TODO 3.4 범위 | | |
 
-자동 시험 위치·결과는 최신 `scenario-report.md`에서 찾는다. 과거 문서의 통과 기록을 현재 작업 트리의 실행 결과로 복사하지 않는다. 특히 Windows에서 RLY-009가 부분인 이유와 Linux의 전체 증거를 구분한다([TODO 2.8](../TODO.md#2-tcp-repeater)). 운영 로그에 사건이 있다는 것만으로 메모리·자원 회수·바이트 무결성을 증명하지 않는다.
+자동 시험 위치·결과는 최신 `scenario-report.md`에서 찾는다. 과거 문서의 통과 기록을 현재 작업 트리의 실행 결과로 복사하지 않는다. 특히 Windows에서 RLY-009가 부분인 이유와 Linux의 전체 증거를 구분한다([TODO 2.8](https://github.com/kayden-kim/vnc-relay/blob/556fab23d15e77125ca2ad5c575089857b312049/docs/TODO.md#2-tcp-repeater)). 운영 로그에 사건이 있다는 것만으로 메모리·자원 회수·바이트 무결성을 증명하지 않는다.
 
 ### 복사해서 쓸 실행 기록
 

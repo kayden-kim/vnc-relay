@@ -44,7 +44,6 @@
 | 실행파일 배포와 수동 운영 | [실행파일을 묶고 수동 운영하는 방법](how-to/operate-relay.md) — Draft. Windows 11 x64·Ubuntu 24.04 LTS x64의 release 묶음과 계정·재로드·종료 절차. 두 OS 수동 기록 전에는 검증 완료로 표시하지 않는다 |
 | 버전 규칙과 릴리스 | [릴리스 묶음을 만들고 배포하는 방법](how-to/release.md) — Verified(2026-11-08). `연.월.순서` 버전, `cargo xtask package`, GitHub Actions 검사, 태그로 GitHub Release 내기. 첫 Release는 `v2026.11.0` |
 | 변경 범위별 테스트와 전체 완료 검증 | [개발 환경·검증 how-to 3.3·3.4절](how-to/set-up-and-verify.md#33-변경-범위별-검증). 시나리오 표식과 보고 명령은 [테스트 컨벤션](conventions/testing.md)이 정한다. 의존성을 바꾸면 [의존성 라이선스 검사](how-to/check-dependency-licenses.md)를 실행한다. [스펙 문서 검증 기록](specs/README.md#문서-검증-기록)은 문서 구조 확인만 포함 |
-| 구현 작업 순서와 완료 조건 | [구현 작업 목록](TODO.md) — 기준 문서가 아니다. 작업마다 기준 문서를 링크한다 |
 
 프런트엔드 프로젝트는 위 표에 실제 디자인 기준·컨벤션·검증 절차를 연결한다. 작업은 [frontend-workflow 스킬](../.agents/skills/frontend-workflow/SKILL.md)을 따른다.
 
