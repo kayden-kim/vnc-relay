@@ -262,6 +262,8 @@ Linux 전용 `tests/relay_dead_peer_linux.rs`는 사용자·네트워크 네임�
 
 기준 보고서는 커밋 `ee0314f`의 두 OS 전체 게이트(2026-11-07)다. 커밋 `0c0ba5e`는 계약 시험 두 개(OPS-003·OPS-036 부분 표식)를, 커밋 `84f4086`은 WS 요청 머리 상한 경계 시험(WS-012 부분 표식)을 더했다. 두 커밋의 두 OS 게이트도 같은 상태 수로 통과했고 새 시험이 통과했다. 그래서 아래 판정은 바뀌지 않는다. 마지막 확인은 루트 LICENSE를 더한 뒤의 커밋 `eb5f3ee`다. 바로 앞 커밋 `d7608e3`의 Windows 게이트는 코드 지도에 넣은 `LICENSE` 행 때문에 `tests/code_map.rs`가 실패했다(`symbol `LICENSE` has no preceding path`). 코드가 아닌 그 행을 지운 `eb5f3ee`에서 두 OS 게이트가 통과했다.
 
+커밋 `5b4aed3`은 [작업 6](../TODO.md#6-설정-보기와-동적-설정-편집)의 기준 문서와 시안을 더했다. 코드는 주석과 `crates/app/clippy.toml`의 설명 문자열만 바꿨다. 이 커밋의 두 OS 게이트도 통과했다. 시나리오는 215건으로 늘었고, 새 62건은 구현 전이라 `미연결`이다. 기존 153건의 상태 수는 위와 같으므로 아래 판정은 바뀌지 않는다. 작업 6의 판정은 [TODO 6.9](../TODO.md#6-설정-보기와-동적-설정-편집)에서 따로 한다.
+
 | 확인 대상 | 기준 | 환경 | 결과 | 증거 |
 | --- | --- | --- | --- | --- |
 | Windows 시나리오 보고서 | `오류`·`실패` 0건 | Windows 11 Pro 10.0.26200 x64, Rust 1.99.1 | 통과. `ALL PASSED (all)`. 153건: 통과 137, 부분 11, 실패 0, 미실행 3, 미연결 2, 오류 0 | `target/scenario-report.md`(`ee0314f`, 2026-11-07T09:31:01Z) |
@@ -272,6 +274,8 @@ Linux 전용 `tests/relay_dead_peer_linux.rs`는 사용자·네트워크 네임�
 | Ubuntu 재실행 | 같음 | 같음 | 통과. `ALL PASSED`. 상태 수와 새 시험 결과는 위와 같다. `+ 미커밋 변경`은 줄 끝 차이뿐이다(`git -c core.autocrlf=true diff --exit-code` 종료 코드 0) | `~/vnc-relay-target/scenario-report.md`(`84f4086`, 2026-11-07T14:13:58Z) |
 | Windows 최종 | 같음 | 같음 | 통과. `ALL PASSED (all)`. 153건: 통과 137, 부분 11, 실패 0, 미실행 3, 미연결 2, 오류 0 | `target/scenario-report.md`(`eb5f3ee`, 2026-11-07T15:13:17Z) |
 | Ubuntu 최종 | 같음 | 같음 | 통과. `ALL PASSED`. 153건: 통과 140, 부분 7, 실패 0, 미실행 4, 미연결 2, 오류 0. `+ 미커밋 변경`은 줄 끝 차이뿐이다(`git -c core.autocrlf=true diff --exit-code` 종료 코드 0) | `~/vnc-relay-target/scenario-report.md`(`eb5f3ee`, 2026-11-07T15:30:57Z) |
+| Windows 작업 6 문서 | 같음 | 같음 | 통과. `ALL PASSED (all)`. 215건: 통과 137, 부분 11, 실패 0, 미실행 3, 미연결 64, 오류 0. 머리글의 `+ 미커밋 변경`은 게이트 실행 중 편집한 채택 기록 문서다. 시나리오 ID와 시험 코드는 바뀌지 않았다 | `target/scenario-report.md`(`5b4aed3`, 2026-11-08T05:44:12Z) |
+| Ubuntu 작업 6 문서 | 같음 | 같음 | 통과. `ALL PASSED`. 215건: 통과 140, 부분 7, 실패 0, 미실행 4, 미연결 64, 오류 0. `+ 미커밋 변경`은 Windows 행과 같다 | `~/vnc-relay-target/scenario-report.md`(`5b4aed3`, 2026-11-08T05:46:11Z) |
 
 보고서에 `통과`가 아닌 상태로 남은 시나리오의 판정은 다음과 같다. 보고서 열은 Windows / Ubuntu 순서다.
 
