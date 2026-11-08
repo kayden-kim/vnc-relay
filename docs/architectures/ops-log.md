@@ -1,5 +1,9 @@
 # 운영 로그 모듈 설계
 
+## 작업 6.5 목표 사건 (Target / Active)
+
+기존 Current/Verified와 별개인 구현 전 목표다. [설정 보기·편집 §7](config-edit.md#7-사건오류와-남는-상태)대로 config_edited/config_edit_rejected를 app Event와 JsonLinesEventSink에 더한다. reload_applied에 필수 trigger를 더하고 모든 기존 생성/직렬화/시험을 이관한다(현재 commit 생성: `crates/app/src/reload/service.rs:255-262`). 실제 바뀐 대상 정책의 allow_all_target도 phase=reload로 기록한다. 성공은 reload_applied 다음 config_edited, no-op은 둘 다 없음, 인증/CSRF/invalid_request에는 편집 사건 없음이다. 계정은 AuthorizedAdmin, peer는 socket PeerIp, revision은 저장 바이트 SHA-256이며 값은 남기지 않는다([운영 정보 §1.5](../contracts/ops-info-v1.md#15-사건-목록)·[§1.8](../contracts/ops-info-v1.md#18-관리자-계정명-기록-규칙), OPS-058~062).
+
 운영 로그 사건을 JSON Lines로 표준 출력이나 로그 파일에 쓰는 구조를 다룬다. 사건의 종류와 `level`은 app이, 줄 형식과 출력은 adapters가 맡는다. [운영 정보 계약](../contracts/ops-info-v1.md)의 공통 규칙(1.1~1.4절), 중계 ID 참조 값(1.9절), 상대 주소 표기(1.10절), 로그에 넣지 않는 값(1.11절)을 구현한다. app의 `Event`는 시작·준비·종료·설정 경고와 접속·대기·세션·재로드·관리자 사건을 정의한다.
 
 | 항목 | 값 |

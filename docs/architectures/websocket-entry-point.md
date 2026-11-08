@@ -1,5 +1,9 @@
 # WebSocket 진입점 모듈 설계
 
+## 작업 6.2 업그레이드 목표 (Target / Active)
+
+기존 Current/Verified와 구별한 구현 전 목표다. 현재 WsPolicy가 origins/M/B/U를 고정한다(`crates/adapters/src/websocket.rs:34-50,309-319`). [소비 경계](file-watch.md#101-발행-단위와-reader)에 따라 수락 때 allow/L/B/U/TCP K를 잡고 Origin 검사와 IP 재검사는 업그레이드 당시 snapshot으로 한다. M/WS ping/pong은 업그레이드값, B는 수락값이다. 101 flush 뒤 초기 교환에는 H를 새로 읽는다. U는 수락값이며 기존 연결/교환 값은 바꾸지 않는다([설정 §1.8](../contracts/config-v3.md#18-재로드-구분), OPS-047~050).
+
 이 문서는 WS·WSS Viewer 진입점이 접속을 받은 뒤의 흐름을 다룬다. 접속을 받고, 허용 판정과 L을 거치고, TLS(WSS)를 협상하고, 업그레이드 요청을 검사하고, 101 응답을 보내는 데까지가 범위다. 101 뒤 연결은 WS 스트림 어댑터와 공통 서비스가 맡는다. 접수 반복은 TCP 진입점과 같은 함수(`accept_connections`)를 쓴다. TLS 협상 세부는 [TLS 모듈 설계](tls.md), L·H·U의 값과 규칙은 [연결 상한과 시간 제한 모듈 설계](connection-limits.md)가 맡는다.
 
 **현재 동작:** 101 뒤 연결은 `connection`이 `WsRelayStream`으로 감싸 공통 서비스(`handle_connection` → `dispatch`)에 넘긴다(`638cf09`). H는 101 응답 전송 완료 시각(`ConnectionContext.exchange_at`)부터 잰다. 머리 뒤 바이트는 `suffix`로 보존한다. 보류 방식(Q21)은 제거되었다. 작업 3.2는 남은 OPS-006·OPS-037 실행파일 시험을 더해 커밋 `534d4f7`의 두 OS 게이트에서 완료 조건을 모두 채웠다(2026-11-05).

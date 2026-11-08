@@ -13,6 +13,8 @@
 | 관련 계약 | [설정 계약 1.2절](../contracts/config-v3.md#12-키-표), [1.8절](../contracts/config-v3.md#18-재로드-구분), [2.1절](../contracts/config-v3.md#21-설정-오류와-준비-실패), [운영 정보 계약 자동 재로드](../contracts/ops-info-v1.md#자동-재로드), [CLI·계정 파일 계약 1.8절](../contracts/cli-v1.md#18-수동-시작과-종료) |
 | 관련 ADR | 없음 |
 
+작업 6.2~6.5의 **Target / Active**는 [§10](#10-target--설정-v3-실행-값과-공유-트랜잭션)이다. 위 Current/Verified와 기존 본문은 구현된 8개 키 범위만의 설명이며, 27개 키·편집·공유 잠금이 이미 구현됐다는 뜻이 아니다. GET/PATCH의 경계는 [설정 보기·편집 모듈](config-edit.md)이 맡는다.
+
 ## 1. 책임과 경계
 
 - 맡는 책임:
@@ -357,3 +359,68 @@ flowchart LR
   - Windows 11 Pro 10.0.26200 x64, `powershell -NoProfile -ExecutionPolicy Bypass -File D:/vr-tools/vr-win.ps1 -Only all`: `ALL PASSED (all)`. 시나리오 보고 2026-11-02T15:50:17Z(대상 커밋 `fd8c097`, 미커밋 변경 없음): 통과 77, 부분 61, 실패 0, 미실행 0, 미연결 12, 오류 0.
   - Ubuntu 24.04 WSL2, `wsl -d Ubuntu -- bash /mnt/d/vr-tools/vr-full.sh`: `ALL PASSED`. 시나리오 보고 2026-11-02T15:43:31Z: 통과 83, 부분 55, 실패 0, 미실행 0, 미연결 12, 오류 0. `+ 미커밋 변경`은 CRLF 때문에 나타난다.
 - 판정: OPS-024는 두 OS에서 통과다. 바뀐 것은 시험의 측정 방법뿐이다. 판정 기준(D = 1초)은 그대로다.
+
+## 10. Target — 설정 v3 실행 값과 공유 트랜잭션
+
+| 항목 | 값 |
+| --- | --- |
+| 구조 시점·상태 | Target / Active — 2026-11-08 Q167~Q177, 구현 전·미대조 |
+| 근거 | [설정 §1.8 규칙 1~10](../contracts/config-v3.md#18-재로드-구분), [운영 §3.3](../specs/operations.md#33-파일-변경-자동-감지와-부분-재로드) OPS-R30~R36·OPS-047~064, [관리 API §1.13~14](../contracts/management-api-v1.md#113-설정-보기-get-apiv1config), [ADR-0006](../decisions/ADR-0006-config-edit-through-file.md) |
+
+### 10.1 발행 단위와 reader
+
+현재 `ReloadSnapshot<A>`에는 `relay_allow`·`wss_tls`·`management_tls`만 있다(`crates/app/src/reload/snapshot.rs:20-26`). `ReloadCell::replace`가 RwLock 아래 Arc를 한 번 바꾼다(`snapshot.rs:43-65`). Target은 이 발행 단위를 유지하고, **유효 Settings 전체·실행 후보의 명시 키 집합(ConfigPresence)·TLS 수락기**를 한 `ReloadSnapshot<A>`에 둔다. IP는 Settings에서 읽도록 모든 호출자를 옮기고 중복 relay_allow 저장을 없앤다. 비대상 값은 후보 검증에서 반드시 기존과 같으므로 전체 Settings 발행이 비대상 변경을 허용하지 않는다([설정 §1.8 규칙 2·4·5](../contracts/config-v3.md#18-재로드-구분)).
+
+`ReloadCell`은 runtime에 TLS 타입을 노출하지 않는 app `RuntimeSettingsSource` 포트도 구현한다. reader는 필요한 경계에서 짧은 read callback으로 현재 Settings를 읽는다. 같은 판단에 필요한 값은 같은 callback에서 꺼낸다. callback 안에는 await·파일 I/O·네트워크 I/O를 넣지 않는다. 한 번 정해진 연결값·deadline은 그 연결/교환의 소유자가 보관한다. 대상 연결·종료 같은 **나중 단계**에서 다시 읽어야 할 값까지 수락 시점에 고정하지 않는다([설정 §1.8 적용 시점 표](../contracts/config-v3.md#18-재로드-구분), OPS-050).
+
+다음 표는 19개 새 키 전부의 Target 읽기 지점이다. 기호별 정확한 수치는 [설정 키 표](../contracts/config-v3.md#12-키-표)가 소유한다.
+
+| 키·묶음 | 읽는 위치(계획)와 경계 | 이전 상태 유지 |
+| --- | --- | --- |
+| WS·WSS `allowed_origins` (2개) | `adapters/websocket.rs::upgrade`가 Origin 검사 직전 현재 스냅샷 읽기. 업그레이드 전 IP 재검사도 같은 스냅샷 | 이미 업그레이드한 연결에 정책 재검사 없음 |
+| `mode1.allow_targets` (1개) | `app/relay/target.rs`가 Mode I 대상 연결 작업 시작의 허용 판정 때 읽고, 그 작업의 DNS 이름/IP 후보 검증에 같은 정책 사용 | 이미 성립한 세션 유지 |
+| L·Lm (2개) | `net::accept_connections`, `admission::AdmittingListener`의 새 수락 판정에서 현재 상한+permit 판정을 같은 read callback에서 수행. Mode I 대상의 L 자리도 대상 소켓 생성 판정 때 현재 L 사용 | 사용 중 permit은 취소/회수하지 않음. 요약 상한은 현재 snapshot |
+| Lw (1개) | `app/relay/matching.rs`의 새 대기 등록 때 현재 Lw 사용. 같은 판단에서 table과 Lw permit 일치 | 기존 대기·매칭 자격 유지 |
+| B (1개) | TCP/WS/WSS 수락 직후 연결 문맥에 고정해 initial exchange·waiting·relay·WS stream으로 전달 | 기존 연결의 버퍼 한도 유지. Mode II 서로 다른 세대의 두 endpoint는 각자의 B로 방향 버퍼 생성 |
+| M (1개) | WS/WSS 업그레이드 성공을 정할 때 읽어 WsRelayStream에 고정 | 기존 논리 메시지 한도 유지 |
+| H (1개) | TCP는 초기 교환 시작(수락 직후), WS/WSS는 101 flush 뒤 초기 교환 시작에 읽고 absolute deadline 생성 | 이미 시작한 H 불변. WS 수락 때 H를 미리 고정하지 않음 |
+| U (1개) | WS/WSS/관리 TCP 수락 때 읽고 TLS+업그레이드 또는 관리 요청 제한 객체에 고정 | 기존 관리 keep-alive 연결도 기존 U 사용. 상태 리스너에는 U를 더하지 않음 |
+| W (1개) | 대기 등록 때 Lw와 같은 callback에서 읽어 metadata.deadline 생성 | 기존 WaitingEntry.deadline 불변 |
+| C (1개) | Mode I 대상 연결 시도 시작 때 읽어 DNS와 IP 후보 전체를 묶는 기존 absolute C deadline 생성 | 진행 중 시도의 deadline 불변 |
+| E (1개) | `app/relay/session.rs`의 첫 EOF/admin close/error 종료 교환 시작과 단일 스트림 오류 종료 시작에서 읽어 그 교환에 고정. 응답 때 DashboardHints도 새 E 읽기 | 활성 세션 생성 때 E를 고정하지 않음. 이미 시작한 종료 deadline 불변 |
+| G (1개) | `src/serve.rs`가 정상 종료 시작 때 읽어 lifecycle grace deadline으로 전달 | 유예 중 G 편집도 기존 grace deadline 불변 |
+| TCP keepalive (3개) | `net::accept_connections`에서 수락한 TCP 소켓에 한 묶음으로 읽고 설정; `TcpTargetConnector::connect`는 새 대상 소켓을 연결할 때 다시 읽음 | 이미 설정한 소켓 옵션 불변. 수락값을 WS upgrade 때 다시 TCP에 설정하지 않음 |
+| WS ping/pong (2개) | WS/WSS 업그레이드 때 M과 같은 세대에서 읽어 stream의 ping/pong timer policy에 고정 | 기존 업그레이드 연결 timer policy 불변 |
+
+기존 8개도 같은 발행을 쓴다. TCP allow는 새 접속, WS/WSS allow는 수락 직후와 업그레이드 직전, TLS 수락기는 새 핸드셰이크에 읽는다. 기존 TLS 연결은 기존 수락기로 만든 세션을 유지한다([설정 §1.8](../contracts/config-v3.md#18-재로드-구분)). 원자적 교체는 **각 경계에서 이전/새 한 세대만 읽는다**는 뜻이며, 수락과 업그레이드처럼 서로 다른 경계가 서로 다른 세대를 쓰는 것은 의도한 동작이다.
+
+### 10.2 후보 비교와 공개 서비스
+
+- `SharedReload<A> = Arc<Mutex<ReloadService<A>>>`를 watcher와 ConfigEditService가 공유한다. 기존 watcher가 서비스를 단독 소유한다(`crates/adapters/src/file_watch.rs:144-164`); 현재 최종 후보 처리도 watcher 안에서 parse 후 `handle_config`를 부른다(`file_watch.rs:384-399`). Target은 안정화 대기 동안 mutex를 잡지 않고, **최종 read 전에** 잡아 read→검증→세대 확인→commit/결과 기록→watch path 추출까지 유지한다. 이미 읽은 stale 후보를 뒤늦게 적용하지 않는다([운영 §3.3 규칙 5·7](../specs/operations.md#33-파일-변경-자동-감지와-부분-재로드)).
+- `prepare_candidate`는 Settings·presence 및 TLS 파일 내용 검증, TLS 수락기 생성, 차이 키/경고/해시 계산까지 하되 발행·사건·이력 변경은 하지 않는다. `PreparedReload<A>`를 같은 mutex 구간에서만 소비한다. `commit_prepared`는 준비된 snapshot 한 번 교체, running/해시 갱신, 경고와 `reload_applied(trigger)` 기록을 한다. PATCH는 파일 교체 뒤 추가 실패 가능 검증을 하지 않는다([설정 §1.8 규칙 10](../contracts/config-v3.md#18-재로드-구분), [API §1.14 단계 7~10](../contracts/management-api-v1.md#114-동적-설정-편집-patch-apiv1config)).
+- `restart_required_keys`에서 새 19개를 뺀다. 진입점 enabled/listen, mode enabled, admin, management의 TLS 경로 외 키(config_edit 포함), dashboard/recent_closed/status/log/reload는 남긴다. management TLS 존재 여부 변화는 HTTP/HTTPS 전환이므로 계속 재시작 필요다. TCP의 지원되지 않는 allowed_origins 같은 비대상 키를 무조건 비교에서 지우지 않는다. 현재 비교 위치는 `crates/app/src/reload/service.rs:524-741`, 새 대상이 아직 포함된 곳은 `540-556,585-666`이다([설정 §1.8](../contracts/config-v3.md#18-재로드-구분), OPS-063~064).
+- GET이 쓰는 `classify_file`은 무변경 준비/비교의 결과를 in_effect/pending/restart_required/invalid/unreadable로 투영한다. 원본 byte revision과 실행 Settings의 의미 차이를 혼동하지 않는다. 주석만 다른 파일은 revision은 달라도 in_effect다([API §1.13](../contracts/management-api-v1.md#113-설정-보기-get-apiv1config)).
+
+### 10.3 마지막 결과·중복 알림·종료
+
+`ReloadService`는 `LastReload { at: SystemTime, result: Applied|Rejected|RestartRequired, trigger: FileWatch|ConfigEdit, config_keys: Vec<String> }`를 프로세스 메모리에 둔다. 시작은 None이고 재시작에 복원하지 않는다. 시각은 주입 Clock.wall이며 결과를 확정할 때 기록한다. rejected 키는 빈 배열, applied는 실제 적용 키, restart_required는 비대상 차이 키다([API §1.13](../contracts/management-api-v1.md#113-설정-보기-get-apiv1config)).
+
+작성자 판단(lead 2026-11-08): 실제 재로드 시도인 watcher의 세 결과와 파일·실행 교체가 끝난 PATCH만 이력을 갱신한다. GET, discarded/unchanged watcher, PATCH 사전 거절·쓰기 실패·no-op은 갱신하지 않는다. config_edit+rejected/restart_required 조합은 스키마에 있지만 현재 생성하지 않는다. PATCH 거절은 config_edit_rejected만 기록한다([관리 API §1.13~14](../contracts/management-api-v1.md#113-설정-보기-get-apiv1config), [설정 보기·편집 §9](config-edit.md#9-미결정계약-보완-경계)).
+
+PATCH commit은 running Settings·TLS 해시를 같은 후보로 갱신한다. 뒤 watcher가 동일 후보를 읽으면 prepare 결과의 적용 키가 비므로 swap·reload_applied·config_edited·last_reload 갱신이 없다. OS 알림 episode의 `reload_change_detected`는 나올 수 있고 watcher의 processed 해시·경로는 정상 갱신한다. 다른 TLS 내용/파일 변경이 정말 있으면 동일 후보가 아니므로 정상 처리한다([설정 §1.8 규칙 10](../contracts/config-v3.md#18-재로드-구분), OPS-059~060).
+
+정상 종료는 watcher의 새 적용만 막는다. PATCH는 종료 유예 중에도 같은 mutex와 commit을 쓰되 lifecycle을 바꾸지 않는다. 이미 시작한 G는 snapshot 교체와 무관하다. stale watcher 판단과 PATCH 허용을 같은 is_current 조건으로 묶지 않는다([운영 §3.3 규칙 7](../specs/operations.md#33-파일-변경-자동-감지와-부분-재로드), [API §1.14](../contracts/management-api-v1.md#114-동적-설정-편집-patch-apiv1config)).
+
+### 10.4 Current에서 바꿀 소비자 증거
+
+| 확인한 소스 | Target 차이 |
+| --- | --- |
+| `src/serve.rs:314-329,364-371,389-397,422-435,465-470` | 생성자에 복사한 19개 값을 위 표의 경계 읽기로 교체 |
+| `crates/app/src/relay.rs:165-192,221-240,377-394,537-540,1255-1257` | 고정 H/B/E·runtime W/C/E/target 및 WaitingTable 시작값 제거. B는 endpoint 문맥, E는 종료 시작 때 읽기 |
+| `crates/app/src/relay/target.rs:43-44,227-255`; `crates/adapters/src/target.rs:15-23,36-45` | 대상 시도 정책·C 및 대상 소켓 K를 경계에서 읽기 |
+| `crates/adapters/src/websocket.rs:34-50,256-268,309-319` | 수락 B/U/TCP K와 업그레이드 Origin/M/WS K, 뒤 초기 교환 H의 읽기 분리 |
+| `crates/app/src/relay/session.rs:35-36,72-78,100-103` | 세션 시작 때 넘긴 E 대신 첫 종료 때 한 번 읽고 저장 |
+| `crates/adapters/src/management_http.rs:64-70,118-124,152-168` | 수락 U 고정과 응답 E 재계산 분리 |
+| `crates/adapters/src/status_http.rs:26-54` | Lm만 동적으로 읽음. U reader를 새로 넣지 않음 |
+
+위 표는 소스 읽기 증거이며 실행 검증이 아니다. 구현 뒤 코드 지도·각 소비 모듈의 Current 본문과 시험 기록을 함께 맞춘다([아키텍처 규칙](AGENTS.md#작성-규칙)).

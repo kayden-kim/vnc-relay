@@ -13,6 +13,8 @@
 | 관련 계약 | [설정 계약 1.2절](../contracts/config-v3.md#12-키-표)(`[limits]`·`[timeouts]`·`[keepalive]`), [운영 정보 계약 1.6절](../contracts/ops-info-v1.md#16-원인-코드)(`relay_connection_limit`, `handshake_timeout`, `peer_eof`, `connection_error`)·[1.7절](../contracts/ops-info-v1.md#17-error_kind-값)(`io_error`) |
 | 관련 ADR | [ADR-0004 tokio·rustls](../decisions/ADR-0004-tokio-rustls.md) |
 
+작업 6.2의 확장 설계는 아래 [§10 Target](#10-target--동적-상한과-시간-제한)이다. 기존 Current/Verified는 고정 상한의 현재 구현만 뜻한다.
+
 ## 1. 책임과 경계
 
 - 맡는 책임:
@@ -155,3 +157,15 @@ TCP 경로는 2~4절과 같다. WS·WSS 행은 [WebSocket 진입점 모듈 설�
 | --- | --- | --- |
 | Windows의 keepalive 값과 단절 오류 | 설정한 유휴 시간·탐색 간격·탐색 횟수를 Windows에서 읽어 확인하지 않았다. socket2가 그 값을 읽는 함수를 Linux에서만 준다. RLY-027은 K 최솟값으로 두 OS에서 유휴 세션이 유지됨을 확인했다(`1a6f93e`). Windows의 실제 keepalive 실패 오류 코드는 아직 관찰하지 않았다. Linux의 `ETIMEDOUT` 분류를 Windows 오류로 추정해 넓히지 않는다. | 사용자 결정 2026-11-02(Q86): Linux netns DROP 시험, Windows 기존 부분 시험 유지 |
 | WS H 시작점(101 뒤) (해결) | 101 뒤부터 H를 잰다. 수락부터 재면 U와 기한이 겹친다. | 사용자 결정 2026-10-22(Q22) |
+
+## 10. Target — 동적 상한과 시간 제한
+
+구조 시점 Target / 상태 Active / 구현 전·미대조. 근거는 [설정 §1.8 적용 표](../contracts/config-v3.md#18-재로드-구분), [운영 §3.3](../specs/operations.md#33-파일-변경-자동-감지와-부분-재로드) OPS-R30~R33·OPS-050~057이다. 전체 소비 경계는 [파일 감지 §10.1](file-watch.md#101-발행-단위와-reader)을 따른다.
+
+현재 `ConnectionBudget`는 고정 `limit: u32`와 `used: AtomicU32`를 보유한다(`crates/domain/src/budget.rs:12-28`). `try_acquire`는 CAS로 사용량을 증가시키며 permit drop은 감소만 한다(`budget.rs:38-60`). 상한을 3개의 AtomicU32 setter로 따로 갱신하면 27개 snapshot의 단일 발행과 다른 세대가 보일 수 있다. Target에서는 **상한의 원본을 snapshot 하나로 모으고 budget에는 사용량만 둔다**. domain은 app snapshot을 알지 않는다([레이어 규칙](code-map.md#레이어와-의존-방향), [설정 §1.8 규칙 5](../contracts/config-v3.md#18-재로드-구분)).
+
+- `ConnectionBudget::new() -> Arc<Self>`와 `try_acquire(self: &Arc<Self>, limit: u32) -> Option<BudgetPermit>`로 모든 호출자를 이관한다. `limit()`은 제거하고 summary·거절 사건은 해당 판단에서 읽은 snapshot 상한을 사용한다. `current`·permit drop의 의미는 유지한다. 기존 fixed constructor의 alias/shim은 남기지 않는다([운영 OPS-R31](../specs/operations.md#33-파일-변경-자동-감지와-부분-재로드)).
+- 수락/대상 자리 판정은 RuntimeSettingsSource의 짧은 snapshot read callback 안에서 상한을 얻고 CAS까지 끝낸다. snapshot write는 이 read가 끝난 뒤 한 번 수행한다. 따라서 재로드와 수락이 경합하면 판정은 이전/새 세대 중 하나에 선형화된다. 사용량이 새 상한 이상이면 새 CAS는 실패하고, 기존 permit은 그대로다. 상향은 발행 직후 다음 판정부터 적용된다. L과 Lm은 독립된 사용량이며 management/status만 같은 Lm을 공유한다([설정 §1.8 L/Lm 행](../contracts/config-v3.md#18-재로드-구분), OPS-051~053).
+- 대기 등록은 snapshot read→relay registry mutex 순으로 잡고 Lw·W를 한 번 읽는다. domain WaitingTable은 생성자에 Lw/W를 고정하지 않고 `arrive`의 등록 정책 인자로 받는다. app은 동일 Lw로 table 판정과 Lw permit 획득을 처리한다. 기존 match-first·expired 제거·한 대기당 permit 하나 규칙은 유지한다. 상한 하향으로 map을 truncate하거나 기존 기한을 다시 쓰지 않는다. 현재 table의 두 고정 필드는 `crates/domain/src/matching.rs:154-170`, deadline은 `WaitingEntry`에 있다(`matching.rs:18-26`). 즉시 매칭은 새 대기 자리를 요구하지 않는다([운영 OPS-R32](../specs/operations.md#33-파일-변경-자동-감지와-부분-재로드), OPS-054~056).
+- snapshot read callback 안에서 relay registry를 사용할 수 있지만 역순(registry→snapshot)은 금지한다. session poll은 필요한 E를 registry 잠금 전에 읽거나 registry 잠금 밖 종료 상태 소유자가 읽는다. 파일 트랜잭션 mutex는 budget/registry가 획득하지 않는다. 이 순서는 [설정 §1.8 전체 교체·기존 연결 유지](../contracts/config-v3.md#18-재로드-구분)를 교착 없이 구현하기 위한 내부 선택이다.
+- H/U/W/C/E/G는 각 시작 때 deadline으로 바꾼다. B는 수락 문맥, M/WS K는 업그레이드 문맥, TCP K는 해당 소켓 옵션으로 고정한다. 유효 설정 교체가 이미 저장한 deadline/옵션/버퍼를 수정하지 않는다. E는 세션 생성 시점이 아니라 **종료 교환 시작** 때 읽는다. 관리 세션 응답의 E+5는 별도 현재 snapshot 읽기다([설정 §1.8](../contracts/config-v3.md#18-재로드-구분), OPS-050·057).

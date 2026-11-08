@@ -1,5 +1,9 @@
 # `serve` 시작과 CLI 골격 모듈 설계
 
+## 작업 6.2~6.5 목표 조립 (Target / Active)
+
+이 절은 구현 전이며 기존 Current/Verified를 확대하지 않는다. 현재 조립은 `src/serve.rs:224-240`의 reload cell/service, `258,314-329`의 고정 상한·runtime, `344-360`의 관리 서비스, `465-472`의 시작값 G 전달이다. Target은 [파일 감지 §10](file-watch.md#10-target--설정-v3-실행-값과-공유-트랜잭션)에 따라 Settings/presence/TLS snapshot과 SharedReload를 한 번 만들고 watcher와 ConfigEditService에 같은 Arc를 주입한다. runtime reader를 TCP·WS·target·관리·상태·relay에 주입하되 status에는 U를 넣지 않는다. 관리 서비스 조립은 [설정 보기·편집 §2](config-edit.md#2-내부-구조와-초기화)를 따른다. 종료 시작 시 현재 G를 읽고 한 deadline으로 고정한다. watcher 적용만 중지하고 유예 동안 GET/PATCH는 유지한다. PATCH가 lifecycle이나 수락 중지를 되돌리지 않는다([설정 §1.8](../contracts/config-v3.md#18-재로드-구분), [운영 §3.3·3.4](../specs/operations.md#33-파일-변경-자동-감지와-부분-재로드)).
+
 `vnc-relay` 실행파일의 명령행 해석, 오류 출력, 종료 코드와 `serve`의 시작 순서를 다룬다. `serve`는 설정 파일과 관리자 계정 파일을 검증하고, 필요한 리스너를 모두 바인드한 뒤 종료 요청을 기다린다. 어느 단계든 실패하면 그 단계의 오류를 모두 stderr에 쓰고, 운영 로그에 `startup_failed`를 남기고, 확보한 자원을 놓고, [CLI 계약 2.1절](../contracts/cli-v1.md#21-종료-코드)의 종료 코드로 끝난다. 운영 로그의 줄 형식과 출력은 [운영 로그 모듈 설계](ops-log.md)가 다룬다. TCP 진입점의 연결 수락은 [TCP 진입점 모듈 설계](tcp-entry-point.md)가, WS·WSS 진입점의 연결 수락과 101 응답 전 처리는 [WebSocket 진입점 모듈 설계](websocket-entry-point.md)가 다룬다. 인증서·개인키 파일 검사는 바인드 앞에서 이 골격이 한다. 파일 변경 감지는 뒤 작업이 이 골격에 더한다.
 
 | 항목 | 값 |

@@ -1,5 +1,9 @@
 # 대상 연결·매칭·중계 수명 모듈 설계
 
+## 작업 6.2 실행 값 목표 (Target / Active)
+
+구현 전 Target은 [소비 경계 표](file-watch.md#101-발행-단위와-reader)와 [동적 상한](connection-limits.md#10-target--동적-상한과-시간-제한)을 따른다. 기존 Current/Verified와 섞지 않는다. 현재 runtime은 target policy/C/E/W를 고정하고 WaitingTable도 시작 Lw/W를 받는다(`crates/app/src/relay.rs:377-394,537-540`). Target은 대상 허용 판정/시도 시작의 policy/C, 대기 등록의 Lw/W, 종료 교환 시작의 E를 각각 읽는다. 세션 생성 때 E를 고정하지 않는다(`crates/app/src/relay/session.rs:35-36,72-78`). B는 수락 연결의 PreparedConnection에서 방향별로 이어받는다. 진행 중 C/W/E와 기존 매칭 자격을 변경하지 않는다. G는 정상 종료 시작 때만 읽는다([설정 §1.8](../contracts/config-v3.md#18-재로드-구분), OPS-047~057).
+
 이 문서는 유효한 `PreparedConnection<S>`를 받아 Mode I 대상에 연결하거나 Mode II 상대를 찾고, 양방향 중계와 세션 정리까지 이어 가는 현재 구조를 설명한다. 예를 들어 Server가 `ID:0123`으로 기다릴 때 Viewer가 같은 ID로 접속하면 두 연결을 한 세션으로 옮긴다. 초기 요청 뒤의 데이터부터 상대에게 한 번씩 전달한다.
 
 | 항목 | 값 |

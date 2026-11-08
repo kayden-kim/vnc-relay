@@ -1,5 +1,9 @@
 # 설정 로딩 모듈 설계
 
+## 작업 6.3~6.4 목표 설계 (Target / Active)
+
+이 절만 구현 전 Target이며 기존 Current/Verified와 구분한다. [설정 §1.2](../contracts/config-v3.md#12-키-표)·[§3.2](../contracts/config-v3.md#32-v2-파일을-v3로-옮기기)에 따라 `ManagementSettings.config_edit: bool`을 기본 false로 읽고 재시작 필요로 분류한다(현재 필드 없음: `crates/app/src/settings.rs:144-151`). 기존 `parse`(`crates/adapters/src/config_file.rs:86-98`)를 GET·PATCH·watcher가 공통 사용한다. 새 `parse_candidate`는 같은 검증 결과와 명시 키 집합을 `ConfigCandidate`로 반환하여 꺼진 진입점 생략 키의 null을 실행 스냅샷에 보존한다. v2 파일은 수정 없이 읽고 config_edit를 쓴 파일의 롤백은 키 제거를 요구한다. 쓰기·TOML 보존 편집은 [설정 보기·편집 모듈](config-edit.md#5-파일-포트와-os-경계)이 맡는다([API §1.13~14](../contracts/management-api-v1.md#113-설정-보기-get-apiv1config)).
+
 설정 로딩은 TOML 설정 파일 하나를 읽어 [설정 계약](../contracts/config-v3.md)의 모든 검사를 한 번에 수행한다. 결과는 둘 중 하나다. 검증을 마친 유효 설정 `Settings`이거나, 발견한 모든 진단(`code`·`key`·`message`) 목록이다. TOML 해석과 키 검사는 adapters가, 항목 문법(IP 항목·Origin·Mode I 대상)은 domain이, 유효 설정 타입과 오류·경고 코드는 app이 맡는다. 시작(작업 2.2)과 재로드(작업 5.2)가 같은 함수를 부른다.
 
 | 항목 | 값 |

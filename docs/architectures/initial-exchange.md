@@ -1,5 +1,9 @@
 # 초기 교환 처리 모듈 설계
 
+## 작업 6.2 초기 교환 목표 (Target / Active)
+
+현재 RelayService는 H/B/E를 고정한다(`crates/app/src/relay.rs:165-192,221-240`). 구현 전 Target은 [소비 경계](file-watch.md#101-발행-단위와-reader)에 따라 B를 수락 문맥에서 받고 H는 초기 교환 시작(TCP 수락 직후, WS/WSS 101 flush 뒤)에 읽는다. 실패 종료 E도 종료 시작 때 읽는다. 진행 중 H는 다시 계산하지 않는다. PreparedConnection은 수락 B를 대기·대상·세션 방향 버퍼까지 보존한다([설정 §1.8](../contracts/config-v3.md#18-재로드-구분), OPS-050). 기존 대조는 이 Target의 구현 증거가 아니다.
+
 이 문서는 초기 요청을 모으고 해석한 뒤 다음 중계 단계에 넘기는 현재 구조를 설명한다. 예를 들어 Viewer가 `ID:0123`을 보내면 Mode II 요청과 중계 ID `0123`을 얻는다. 요청 뒤의 바이트는 상대에게 보낼 데이터로 남긴다. TCP·WS·WSS 진입점은 공통 `handle_connection`을 호출한 뒤 유효 요청을 `dispatch`에 넘긴다.
 
 | 항목 | 값 |

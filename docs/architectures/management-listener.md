@@ -1,5 +1,9 @@
 # 관리 리스너 모듈 설계
 
+## 작업 6.3~6.6 서버 목표 (Target / Active)
+
+구현 전 목표는 [설정 보기·편집 모듈](config-edit.md#6-http시간-제한종료-유예)이다. 기존 Current/Verified는 새 API의 증거가 아니다. 현재 `ManagementServices`는 auth/query/terminate만 받는다(`crates/adapters/src/management_http.rs:55-70`). `Arc<dyn ConfigManagement>`와 `/api/v1/config` GET/PATCH를 기존 인증 우선 fallback에 더한다. PATCH도 CSRF를 검사한다(현재 POST/DELETE만: `management_http/session_api.rs:44-66`). 본문 상한·진단·오류·사건은 연결한 모듈을 따른다. U는 수락 때 현재값으로 고정하고 session 응답의 terminate timeout은 응답 때 E+5로 만든다(현재 시작값: `management_http.rs:64-70,118-124,152-168`). blocking 파일 작업은 응답 유실로 취소하지 않으며 유예 중에도 이 경로를 막지 않는다([API §1.3](../contracts/management-api-v1.md#13-요청-처리-순서)·[§1.12~14](../contracts/management-api-v1.md#112-폴링-주기와-조회-제한-시간의-전달)·[§2.3](../contracts/management-api-v1.md#23-consumer의-판정-규칙)).
+
 관리 리스너(`[management] listen`)가 접속을 받고, 관리 HTTPS(내장 TLS)와 루프백 평문 HTTP를 처리하는 구조를 다룬다. 접속은 상태 리스너와 같은 관리·상태 연결 상한 Lm을 쓴다. 관리 리스너의 접속은 L을 쓰지 않는다. 이 문서는 작업 4.2에서 썼다. 로그인과 세션 검사는 작업 4.3이 더했다. 정적 파일 제공은 작업 4.6이 더했다. 조회(4.4)·종료(4.5)는 맡지 않는다.
 
 | 항목 | 값 |

@@ -1,5 +1,9 @@
 # TCP 진입점 모듈 설계
 
+## 작업 6.2 수락 목표 (Target / Active)
+
+기존 Current/Verified와 별개로 [소비 경계](file-watch.md#101-발행-단위와-reader)를 적용한다. 현재 AcceptPolicy는 H/K를 고정한다(`crates/adapters/src/net.rs:249-260`). Target은 수락 판단의 allow/L/B/TCP K를 같은 세대에서 읽어 permit·소켓 옵션·연결 문맥에 반영한다. H는 즉시 시작하는 TCP 초기 교환에서 읽어 deadline으로 고정한다. 기존 B/기한/소켓 옵션은 바꾸지 않는다([설정 §1.8](../contracts/config-v3.md#18-재로드-구분), OPS-050~053).
+
 TCP Viewer·TCP Server 진입점이 접속을 수락하고, 데이터를 읽기 전에 그 진입점의 출발지 IP 허용 목록으로 판정하는 구조를 다룬다. WS·WSS 진입점(작업 3.2)도 같은 수락 반복과 같은 판정을 쓰며, 101 응답까지의 처리는 [WebSocket 진입점 모듈 설계](websocket-entry-point.md)가 다룬다. TCP 연결은 허용되면 연결 상한 L의 자리를 잡고, 연결 식별자(`conn_id`)를 받고, 초기 교환 단계에 들어간다. 초기 교환 읽기와 해석은 `RelayService::handle_connection`이 맡는다. 초기 교환 형식은 [Repeater 초기 교환 계약](../contracts/repeater-handshake-v1.md)을 따른다. 초기 교환은 H 만료, 바이트 전 상대 종료, 연결 재설정, 서버 종료 중 먼저 오는 것으로 끝난다. L·H·TCP keepalive의 규칙은 [연결 상한과 시간 제한 모듈 설계](connection-limits.md)가 다룬다.
 
 | 항목 | 값 |

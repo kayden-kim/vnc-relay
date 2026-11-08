@@ -1,5 +1,9 @@
 # 관리 조회 API 모듈 설계
 
+## 작업 6.2~6.3 목표 경계 (Target / Active)
+
+설정 GET은 [ConfigEditService](config-edit.md#3-데이터-모델과-get)가 맡으며 relay registry를 복사하는 이 서비스에 파일 I/O를 넣지 않는다. L/Lm 상한은 budget.limit가 아니라 [runtime snapshot](connection-limits.md#10-target--동적-상한과-시간-제한)에서 같은 세대로 읽는다. 사용량의 기존 원자 계수와 counts의 약한 일관성 예외는 유지한다. 현재 query 조립은 `src/serve.rs:331-336`이다. Target은 같은 사용량 budget과 runtime source를 준다([설정 §1.8 L/Lm](../contracts/config-v3.md#18-재로드-구분), [관리 MGT-R17·R19](../specs/management.md#33-설정-보기와-동적-설정-편집)). 기존 Current/Verified는 이 Target을 포함하지 않는다.
+
 관리 리스너(`[management] listen`)에서 인증된 관리자에게 서버 요약, 대기 연결 목록, 활성 세션 목록·상세, 최근 종료 목록을 제공하는 조회 API의 구조와 데이터 흐름을 정의한다. 중계 상태는 메모리 락 안에서 복사하고, 인증·HTTP 직렬화·소켓 I/O는 그 락 밖에서 처리한다.
 
 | 항목 | 값 |
