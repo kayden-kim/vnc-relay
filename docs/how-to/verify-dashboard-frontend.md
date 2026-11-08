@@ -1491,7 +1491,12 @@ Playwright가 내려받은 Firefox 157은 설치된 최신 Firefox가 아니라�
 
 - Chrome·Edge: 실행마다 1건이다. 6단계의 의도한 `400` 응답에 대한 "Failed to load resource" 로그다.
 - Firefox: 0건이다.
-- WebKit: CSP 보고 1건은 4.21절 1번과 같은 `/login/components/language-select.js` 36행의 `style-src-attr`다. 콘솔 22건은 6단계의 `400` 로그 1건과 스타일시트 적용 거부 21건이다. 캡처에는 제품 CSS가 적용되어 있으므로 거부된 것은 제품 스타일이 아니다. 4.21절 2번처럼 자동화 도구가 넣은 스타일로 추정한다[INFERENCE: 거부 건과 도구 호출을 하나씩 대응시키지 않았다].
+- WebKit:
+  - CSP 보고: 러너는 CSP 보고를 문서마다 모았고, 실행 합계에는 마지막 문서(로그아웃 뒤 `/login/`)의 보고만 넣었다. 그 1건은 `/login/components/language-select.js` 36행의 `style-src-attr`다. 2단계 기록에는 대시보드 문서의 `/app/components/language-select.js` 35행 `style-src-attr`가 3건(390px en은 4건) 있다. 모두 4.21절 1번의 `<select>` 보고와 같고, 다른 지시어나 출처는 없었다. 같은 2단계 기록에서 Chrome·Edge·Firefox는 0건이다.
+  - 콘솔: 22건이다. 6단계의 `400` 로그 1건과 "Refused to apply a stylesheet because its hash, its nonce, or 'unsafe-inline' appears in neither the style-src directive nor the default-src directive of the Content Security Policy." 21건이다. 이 문구에는 파일 URL이 없으며, 인라인 스타일을 막은 기록이다. 스크립트·연결·이미지·외부 파일을 막은 메시지는 없었다.
+  - 제품 스타일 영향: 없다. 제품 `web/dashboard`에는 `<style>` 요소, `style` 속성 설정, `insertRule`, `adoptedStyleSheets`가 없다. 캡처(예: `scr005-dialog-webkit-1280-ko.png`)에도 제품 CSS가 적용되어 있다.
+  - 거부의 출처: 4.21절 1번의 `<select>` 보고와 2번의 스크린샷 `<style>` 보고가 콘솔에 남은 것으로 추정한다[INFERENCE: 2단계까지의 콘솔 거부 6건은 같은 시점의 대시보드 보고 3~4건, 캡처 1장, 로그인 화면 보고를 더한 수와 가깝다. 문서가 바뀌면 CSP 기록이 지워져 하나씩 대응시키지 못했다].
+  - 고친 기록: 이 항목의 첫 기록은 CSP 보고를 1건으로 적고, 거부를 자동화 도구가 넣은 스타일로만 추정했다. 2026-11-08 검토에서 `results.json`의 단계 기록으로 고쳤다.
 
 #### 증거와 미실행
 
