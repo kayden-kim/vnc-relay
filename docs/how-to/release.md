@@ -5,7 +5,7 @@ Windows 11 x64와 Ubuntu 24.04 LTS x64용 배포 묶음을 만들고, 버전 태
 | 항목 | 값 |
 | --- | --- |
 | 대상 독자 | 릴리스 담당자 |
-| 검증 상태 | Verified — 1.1·1.2·3.1·3.2절과 3.3절 1~8단계를 두 OS와 GitHub Actions에서 실행해 확인했다([4절](#4-검증)). 첫 버전 `2026.11.0`은 구현 커밋 `7859b5d`가 버전을 바꿨으므로 3.3절 1~6단계를 따로 실행하지 않았다. `2026.11.1`에서 1~8단계를 모두 실행했다. 6절 롤백은 실행하지 않았다. |
+| 검증 상태 | Verified — 1.1·1.2·3.1·3.2절과 3.3절 7·8단계는 첫 버전 `2026.11.0`에서 두 OS와 GitHub Actions로 실행해 확인했다. 그때는 구현 커밋 `7859b5d`가 버전을 바꿨으므로 3.3절 1~6단계를 따로 실행하지 않았다. `2026.11.1`에서는 3.3절 1~8단계를 모두 실행했다. 3.1절 로컬 묶음은 실행하지 않았고, CI가 만든 Release 묶음 두 개를 내려받아 해시와 버전을 확인했다([4절](#4-검증)). 6절 롤백은 실행하지 않았다. |
 | 검증 환경·버전 | Windows 11 Pro 10.0.26200 x64(PowerShell 7, Python 3), WSL2 Ubuntu 24.04.4 LTS x64(GNU coreutils `sha256sum`), Rust 1.99.1, GitHub Actions 호스팅 러너 `windows-2025`·`ubuntu-24.04` |
 | 최종 검증일 | 2026-11-08 |
 | 관련 기준 문서 | [PRD 확정 기준](../requirements/PRD.md#확정-기준)의 "배포 산출물"·"버전 규칙" 행, [수동 운영 안내 3.1절](operate-relay.md#31-release-빌드와-묶음), [xtask 모듈 설계](../architectures/xtask.md), [개발 환경·검증 how-to](set-up-and-verify.md) |
@@ -174,7 +174,9 @@ Windows 11 x64와 Ubuntu 24.04 LTS x64용 배포 묶음을 만들고, 버전 태
 
 확인 중 관찰한 도구 차이를 적는다. 검증 PC의 Git Bash에 있는 `sha256sum 0.8.0`은 `-c`에서 CR 바이트가 든 파일을 자기가 쓴 해시 파일로도 `FAILED`로 보고했다. 직접 계산한 값은 맞았다. GNU coreutils `sha256sum`(Ubuntu)은 같은 파일을 `OK`로 판정했다. 이 PC의 Windows PowerShell 5.1은 `PSModulePath` 앞에 PowerShell 7 경로가 있어 `Get-FileHash`를 찾지 못했다. Windows에서는 PowerShell 7의 `Get-FileHash`나 `certutil -hashfile <파일> SHA256`으로 확인하기를 권장한다.
 
-`2026.11.1` 릴리스(2026-11-08)는 3.3절 1~8단계를 모두 실행했다. 1~4단계: 버전을 바꾼 뒤 `cargo run --quiet -- --version`이 `vnc-relay 2026.11.1`을 출력했다. `Cargo.lock`은 작업 공간 패키지 네 개의 버전만 바뀌었고, `cargo xtask notices`는 `notices: 통과 (THIRD-PARTY-NOTICES.txt)`였다. 두 OS의 전체 완료 검증은 `e3fa56f`에 버전 변경과 링크 정리를 더한 작업 트리에서 실행했다. 이 트리는 아래 커밋 `c9194a8`의 내용과 같다. Windows `vr-win.ps1 -Only all`은 `ALL PASSED (all)`, 시나리오 215건 중 통과 198·부분 12·실패 0·미실행 3·미연결 2·오류 0이다(보고 2026-11-08T11:22:35Z). WSL `vr-full.sh`는 `ALL PASSED`, 통과 201·부분 8·실패 0·미실행 4·미연결 2·오류 0이다(보고 2026-11-08T11:25:50Z).
+`2026.11.1` 릴리스(2026-11-08)는 3.3절 1~8단계를 모두 실행했다. 1~4단계: 버전을 바꾼 뒤 `cargo run --quiet -- --version`이 `vnc-relay 2026.11.1`을 출력했다. `Cargo.lock`은 작업 공간 패키지 네 개의 버전만 바뀌었고, `cargo xtask notices`는 `notices: 통과 (THIRD-PARTY-NOTICES.txt)`였다. 두 OS의 전체 완료 검증은 `e3fa56f`에 버전 변경을 더한 작업 트리에서 시작했다. 두 보고서의 대상 커밋은 `e3fa56f` + 미커밋 변경이다. Windows `vr-win.ps1 -Only all`은 `ALL PASSED (all)`, 시나리오 215건 중 통과 198·부분 12·실패 0·미실행 3·미연결 2·오류 0이다(보고 2026-11-08T11:22:35Z). WSL `vr-full.sh`는 `ALL PASSED`, 통과 201·부분 8·실패 0·미실행 4·미연결 2·오류 0이다(보고 2026-11-08T11:25:50Z).
+
+게이트가 실행되는 동안 스펙이 아닌 문서 8개의 링크 대상과 문서 안내 행 하나를 바꿨다(아래 커밋 `70aba2d`). 그래서 두 게이트는 커밋 `c9194a8` 자체를 대상으로 하지 않았다. 코드·시험·스펙은 게이트를 시작할 때와 같다. 이 문서 변경은 [변경 범위별 검증](set-up-and-verify.md#33-변경-범위별-검증)의 "문서만" 행에 따라 확인했다. Python 검사로 저장소 Markdown의 상대 링크·앵커 3,007개를 확인했고 문제는 0건이었다. 새 고정 링크는 push 뒤 HTTP 200으로 열렸다. `code-map.md`를 읽는 `tests/code_map.rs`는 게이트 안에서 이 변경보다 먼저 실행됐을 수 있다. 그래서 `c9194a8`과 같은 코드·시험·코드 지도로 두 OS에서 다시 실행했고, 두 OS 모두 4건이 통과했다. "작업 공간 버전" 행의 `cargo xtask package`는 로컬에서 실행하지 않았다. 같은 커밋 `c9194a8`에서 CI가 두 OS로 실행했다(아래 두 실행). `cargo test --package xtask`는 두 게이트와 CI에서 통과했다.
 
 5·6단계: 링크 정리 커밋 `70aba2d`와 `chore(release): 2026.11.1` 커밋 `c9194a8`을 `main`에 push했다. [실행 42475766731](https://github.com/kayden-kim/vnc-relay/actions/runs/42475766731)에서 `check (windows-2025)`(4분 44초)와 `check (ubuntu-24.04)`(3분 10초)가 성공했고, `release`는 태그가 아니어서 건너뛰었다.
 
