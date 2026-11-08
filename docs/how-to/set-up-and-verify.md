@@ -303,6 +303,93 @@ PRD 10절의 AC-01~37을 같은 기준으로 대조했다. 각 AC 행이 링크�
 
 남은 일은 없다. Q97의 저작권자·적용 연도 확정과 LICENSE 작성·검토로 OPS-021·AC-12를 통과로 판정해 작업 5.9를 닫았다. 스펙·계약의 상태 문장은 사용자 결정 2026-11-07(Q150~Q152)에 따라 갱신했고, 계약 시험 표에 남았던 규칙은 새 시험 두 개와 Q152로 닫았다([TODO 5.9](../TODO.md#5-운영배포-검증)).
 
+### 4.2 작업 6.9 판정표
+
+결론: 커밋 `eae442f`의 두 OS 최종 게이트에서 `오류`와 `실패`는 0건이다. 새 범위 62개 시나리오 가운데 61개는 두 OS 보고서에서 `통과`다. OPS-050은 두 OS에서 `부분`이며 아래 조항별 시험으로 통과로 판정한다. 기존 153개 가운데 `통과`가 아닌 상태로 남은 17개는 4.1절과 같은 근거로 통과로 판정한다. 확대된 AC-13, 새 AC-38~43, 기존 AC-01~37을 모두 충족했다. 작업 6.9는 완료다.
+
+이 절의 위치와 형식은 이 문서의 판단, 사용자 결정 없음이다. 판정 규칙은 [TODO 6.9](../TODO.md#6-설정-보기와-동적-설정-편집)의 완료 조건, [테스트 컨벤션 5절](../conventions/testing.md#5-검증-명령과-통과-기준)(사용자 결정 2026-11-06(Q132)), 사용자 결정 2026-11-04(Q99)를 따른다. TODO 6.9에 따라 새 시나리오는 4.1절의 판정으로 대체하지 않는다. 4.1절의 근거는 기존 17개 시나리오에만 다시 쓴다. 보고서 도구는 바꾸지 않았다.
+
+구현 커밋 `7ce077f`의 첫 게이트는 두 OS에서 동시에 실행했고, 둘 다 실패했다. 원인은 시험 두 개의 결함이었다. 제품 코드는 바꾸지 않았다.
+
+1. 유예 중 설정 편집 시험 `config_edit_works_during_grace_without_changing_the_started_grace_deadline`이 두 OS에서 실패했다. 이 시험은 종료가 시작된 뒤에도 TCP Server 포트에 접속할 수 있다고 가정했다. 제품은 종료가 시작되면 중계 리스너를 닫으므로 접속이 거절된다(Windows os error 10061, Ubuntu os error 111). [운영 스펙 3.3절](../specs/operations.md#33-파일-변경-자동-감지와-부분-재로드) 항목 7은 새 중계 수락을 다시 시작하지 않는 것만 요구한다. 기존 `stop_unfinished_work` 시험처럼 접속 거절과 닫힌 연결을 모두 수락 중지로 인정하도록 고쳤다(커밋 `0bc9a47`, `tests/common/shutdown.rs`의 `assert_relay_accept_stopped`). Windows에서 이 시험만 따로 실행해도 4.12초 만에 실패했으므로 부하가 원인이 아니다. OPS-043·OPS-050의 실패는 이 시험의 표식에서 나왔다.
+2. DASH-046 시험 `dashboard_046_config_response_loss_and_timeout_require_get_before_retry`가 Ubuntu에서 `query_timeout_secs must elapse`로 실패했다. 시험은 프록시가 요청을 다 읽은 시각부터 5초 하한을 쟀다. 브라우저 타이머는 그보다 먼저 시작한다(`web/dashboard/app/api.js`의 `exchange`). 그래서 부하가 크면 하한 검사가 거짓으로 실패할 수 있다. 실제 지연 값은 기록하지 않았으므로 이 원인은 추정이다. 저장 단추를 누르기 직전부터 재도록 고쳤다(같은 커밋, `tests/dashboard_live/settings_recovery.rs`). MGT-040의 실패는 같은 실행기의 표식에서 나왔다.
+
+커밋 `eae442f`는 OPS-050의 수락 쪽 K 시험을 더했다(Linux 전용, 아래 OPS-050 표). Windows 진단 실행은 `0bc9a47` 트리에서 시험을 빌드했다. 실행 중에 `eae442f`를 커밋했으므로 보고서 머리글은 `eae442f`다. 두 커밋의 차이는 Linux 전용 시험뿐이다. 최종 판정은 `eae442f`에서 다시 실행한 두 OS 게이트를 기준으로 한다. 최종 두 게이트도 동시에 실행했다.
+
+| 확인 대상 | 기준 | 환경 | 결과 | 증거 |
+| --- | --- | --- | --- | --- |
+| Windows 첫 실행 | `오류`·`실패` 0건 | Windows 11 Pro 10.0.26200 x64, Rust 1.99.1 | 실패. `FAILED (all): scenarios`. 215건: 통과 197, 부분 11, 실패 2(OPS-043·OPS-050), 미실행 3, 미연결 2, 오류 0. 원인은 위 1번이다. 머리글의 `+ 미커밋 변경`은 이 검증 기록을 위한 대시보드 검증 문서 초안이다 | `target/scenario-report.md`(`7ce077f`, 2026-11-08T08:52:36Z) |
+| Ubuntu 첫 실행 | 같음 | Ubuntu 24.04.4 LTS x64(WSL2), Rust 1.99.1 | 실패. `FAILED: scenarios`. 215건: 통과 198, 부분 7, 실패 4(DASH-046·MGT-040·OPS-043·OPS-050), 미실행 4, 미연결 2, 오류 0. 원인은 위 1·2번이다. `+ 미커밋 변경`은 Windows 행과 같다 | `~/vnc-relay-target/scenario-report.md`(`7ce077f`, 2026-11-08T08:55:33Z) |
+| Windows 진단 실행 | 같음 | Windows 11 Pro 10.0.26200 x64, Rust 1.99.1 | 통과. `ALL PASSED (all)`. 215건: 통과 198, 부분 12, 실패 0, 미실행 3, 미연결 2, 오류 0. 시험은 `0bc9a47` 트리에서 빌드했다 | `target/scenario-report.md`(`eae442f`, 2026-11-08T09:27:40Z) |
+| Windows 최종 | 같음 | 같음 | 통과. `ALL PASSED (all)`. 215건: 통과 198, 부분 12, 실패 0, 미실행 3, 미연결 2, 오류 0. 시나리오별 상태는 진단 실행과 같다 | `target/scenario-report.md`(`eae442f`, 2026-11-08T09:56:59Z) |
+| Ubuntu 최종 | 같음 | Ubuntu 24.04.4 LTS x64(WSL2), Rust 1.99.1 | 통과. `ALL PASSED`. 215건: 통과 201, 부분 8, 실패 0, 미실행 4, 미연결 2, 오류 0. 머리글의 `+ 미커밋 변경`은 줄 끝 차이뿐이다(`git -c core.autocrlf=true diff --exit-code` 종료 코드 0) | `~/vnc-relay-target/scenario-report.md`(`eae442f`, 2026-11-08T09:59:46Z) |
+
+새 범위 62개 시나리오의 판정은 다음과 같다. 보고서 열은 Windows / Ubuntu 순서다.
+
+| 시나리오 | 보고서 | 판정 | 근거 |
+| --- | --- | --- | --- |
+| OPS-047~049·051~059·063~064 | 통과 / 통과 | 통과 | 시나리오마다 비부분 시험이 두 OS 보고서에서 통과했다 |
+| OPS-050 | 부분 / 부분 | 통과 | 부분 시험만 연결한 시나리오다. 아래 조항별 표의 시험이 모두 통과했다. Windows에서는 수락·대상 소켓의 K 값을 다시 읽어 대조하지 못한다. socket2 0.6.5의 `tcp_keepalive_time`·`tcp_keepalive_interval`·`tcp_keepalive_retries`가 Windows를 지원하지 않기 때문이다. 두 OS의 수락 쪽 K는 같은 `admit` 경로가 같은 설정 세대에서 복사한 값이다(`crates/adapters/src/net.rs`). 이 OS별 범위 판단은 Q99와 같은 방식이며 이 문서의 판단, 사용자 결정 없음이다 |
+| MGT-028~045 | 통과 / 통과 | 통과 | Producer 계약 시험(`crates/adapters/tests/management.rs`, `tests/management_query.rs`)과 거래 단위 시험(`crates/app/src/management/config/tests.rs`)이 통과했다. MGT-040·042·043의 전체 표식은 DASH-046·048·042 실서버 실행기에 있다 |
+| OPS-060~062 | 통과 / 통과 | 통과 | 사건 계약 시험과 실행파일 시험이 두 OS에서 통과했다 |
+| DASH-028~053 | 통과 / 통과 | 통과 | `tests/dashboard_live.rs`의 실서버 실행기 26개가 통과했다([대시보드 검증 4.28절](verify-dashboard-frontend.md#428-설정-화면-실서버-시험-dash-028053-mgt-040042043-2026-11-08)). 시험 쪽 주입은 Q113·Q180 범위이며 같은 절의 출처 표를 따른다. 가짜 API 시험 26개와 시안 대조 124쌍([4.27절](verify-dashboard-frontend.md#427-설정-화면-구현과-시안-대조-작업-66-2026-11-08)), 네 엔진 16회 실행([4.29절](verify-dashboard-frontend.md#429-설정-화면-네-엔진-확인-작업-66-2026-11-08))을 함께 보았다 |
+
+OPS-050 조항별 시험은 다음과 같다. 조항은 [설정 계약 1.8절](../contracts/config-v3.md#18-재로드-구분)의 적용 시점이다.
+
+| 조항 | 확인한 시험 | OS |
+| --- | --- | --- |
+| B: 수락 때 값 유지, 새 수락부터 새 값 | `relay::handshake::tests::exchange_keeps_accepted_b_and_started_h_after_reload`, `relay::session::tests::mode_two_directions_keep_distinct_accepted_buffer_limits`, 실행파일 시험 `tests/reload.rs`의 `runtime_groups_take_effect_only_at_their_documented_boundaries` | 두 OS |
+| M·Kw: 업그레이드 때 값 | `websocket::tests::reload_separates_accept_upgrade_and_exchange_values`, 같은 실행파일 시험 | 두 OS |
+| H: 초기 교환 시작 때 값 | 위 handshake 단위 시험, 같은 실행파일 시험 | 두 OS |
+| U: 수락 때 값 | `admission::tests::reloaded_admin_limit_preserves_connections_and_captures_u_at_accept`, `request_deadline::tests::delayed_wrapping_keeps_the_original_accept_deadline_and_u`, 같은 실행파일 시험 | 두 OS |
+| W: 등록 때 값, 기존 대기 기한 유지 | `relay::tests::reload_keeps_waiting_deadlines_and_reads_new_registration_policy` | 두 OS |
+| C: 대상 연결 시도 때 값 | `relay::tests::reload_keeps_started_c_and_policy_but_changes_the_next_target_check` | 두 OS |
+| E: 첫 종료 전이 때 값 | `relay::session::tests::reload_reads_e_at_first_close_and_keeps_started_close_fixed` | 두 OS |
+| G: 시작한 종료 유예 유지 | `tests/windows_console.rs`·`tests/unix_shutdown.rs`의 `config_edit_works_during_grace_without_changing_the_started_grace_deadline`. 유예 중 G를 0과 60으로 편집해도 이미 시작한 6초 유예가 그대로다 | 두 OS |
+| K: 새 TCP 수락·대상 연결부터 새 값 | `net::accept_tests::reloaded_keepalive_applies_to_new_accepts_and_keeps_accepted_sockets`(Linux 전용), `crates/adapters/tests/tcp_target.rs`의 `reloaded_keepalive_is_used_only_for_new_target_sockets` | Ubuntu는 값 대조. Windows는 대상 시험이 두 소켓의 keepalive 켜짐만 확인 |
+| 일부만 적용하지 않음 | `reload::service::tests::prepared_snapshot_publishes_all_runtime_groups_once` | 두 OS |
+
+기존 153개 가운데 `통과`가 아닌 상태로 남은 시나리오는 4.1절과 같은 17개다. 두 최종 보고서의 상태도 4.1절의 기준 보고서와 같다. 판정 근거는 4.1절의 같은 행을 따른다.
+
+| 시나리오 | 보고서 | 판정 | 근거 |
+| --- | --- | --- | --- |
+| DASH-015 | 부분 / 부분 | 통과 | 4.1절과 같다 |
+| DASH-023 | 미연결 / 미연결 | 통과 | 4.1절과 같다. 작업 6.6의 [대시보드 검증 4.29절](verify-dashboard-frontend.md#429-설정-화면-네-엔진-확인-작업-66-2026-11-08)은 설정 내비게이션을 더한 공통 셸에서 로그인·로그아웃을 네 엔진·두 폭으로 다시 실행했다(16회 통과) |
+| OPS-017 | 미실행 / 미실행 | 통과 | 4.1절과 같다 |
+| OPS-018 | 미실행 / 미실행 | 통과 | 4.1절과 같다 |
+| OPS-020 | 미연결 / 미연결 | 통과 | 4.1절과 같다 |
+| OPS-021 | 부분 / 부분 | 통과 | 4.1절과 같다. 작업 6의 `toml_edit` 추가는 [라이선스 검사 실행 기록 9](check-dependency-licenses.md#4-검증)에서 확인했다 |
+| OPS-023 | 부분 / 통과 | 통과 | 4.1절과 같다(Q99) |
+| OPS-031 | 부분 / 부분 | 통과 | 4.1절과 같다 |
+| OPS-040 | 부분 / 부분 | 통과 | 4.1절과 같다 |
+| OPS-044 | 통과 / 미실행 | 통과 | 4.1절과 같다(Windows 전용 시나리오) |
+| RLY-006 | 부분 / 부분 | 통과 | 4.1절과 같다 |
+| RLY-009 | 부분 / 통과 | 통과 | 4.1절과 같다(Q99) |
+| RLY-010 | 부분 / 부분 | 통과 | 4.1절과 같다 |
+| RLY-011 | 부분 / 부분 | 통과 | 4.1절과 같다 |
+| RLY-025 | 부분 / 통과 | 통과 | 4.1절과 같다(Q86·Q99) |
+| RLY-026 | 부분 / 통과 | 통과 | 4.1절과 같다(Q86·Q99) |
+| WS-025 | 미실행 / 미실행 | 통과 | 4.1절과 같다 |
+
+[PRD 10절](../requirements/PRD.md#10-검증-및-수용-기준)의 AC를 같은 기준으로 대조했다. 각 AC 행이 링크한 시나리오 ID를 두 최종 보고서와 위 표에 맞춰 보았다.
+
+| AC | 연결 시나리오 | 판정 |
+| --- | --- | --- |
+| AC-13(확대) | OPS-003·024~028·047~059·063~064, WS-022 | 충족. OPS-050은 위 표에서 통과다 |
+| AC-38 | MGT-028, DASH-028~034 | 충족 |
+| AC-39 | MGT-031·039·041, OPS-060, DASH-035·037~039·052 | 충족 |
+| AC-40 | MGT-029~030·032~038, OPS-061, DASH-036·040~041·043~044 | 충족 |
+| AC-41 | MGT-040·042~045, OPS-062, DASH-042·045~049 | 충족 |
+| AC-42 | MGT-030~031·033~036·038, OPS-059~061 | 충족 |
+| AC-43 | DASH-050~051·053 | 충족 |
+| AC-01~37(회귀) | 4.1절과 같은 연결 | 충족. 기존 153개는 두 최종 보고서에서 통과이거나 위 표에서 통과다 |
+
+TODO 6.7의 운영 권한 확인은 다음과 같다. [수동 운영 안내 3.5.1절](operate-relay.md#351-대시보드-설정-보기편집)은 서버 실행 계정에 설정 디렉터리의 파일 생성·쓰기·교체 권한이 필요하다고 안내한다. DASH-044·045 실서버 시험이 두 OS에서 그 권한을 실제로 막았다. Windows는 `icacls <dir> /deny <USERNAME>:(WD,AD)`, Ubuntu는 디렉터리 `0o555`다. 그 결과 `500 config_write_failed`가 나고 원본 바이트·revision·실행 값·`last_reload`가 그대로였다. 권한을 되돌린 뒤 명시적으로 다시 저장하면 한 번만 적용됐다. Windows에서 공유 삭제 없이 연 핸들이 교체를 막고 임시 파일을 지우는 시험(`windows_open_handle_without_share_delete_prevents_rename_and_cleans_temp`)도 통과했다. 인증서 경로는 편집 대상이 아니며 같은 경로의 파일 교체는 [3.6절](operate-relay.md#36-인증서-교체)이 안내한다. 시험은 시험 실행 계정으로 했다. 별도 서비스 로그온 계정에서는 확인하지 않았다.
+
+라이선스: 두 OS 최종 게이트의 deny 단계가 `licenses ok`, 종료 코드 0이었다. 고지 대조는 게이트 안의 `tests/dependency_notices.rs`(`notices --check`)가 두 OS에서 통과했다([라이선스 검사 실행 기록 9](check-dependency-licenses.md#4-검증)).
+
+남은 일은 없다. 스펙·계약·설계·PRD의 상태 문장은 같은 변경에서 이 판정에 맞췄다([TODO 6.9](../TODO.md#6-설정-보기와-동적-설정-편집)).
+
 ## 5. 중단 조건
 
 - 1단계 Build Tools 설치가 1602로 끝나면 이후 단계를 진행하지 않는다. UAC를 승인할 수 있을 때 다시 실행한다.

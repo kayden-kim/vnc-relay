@@ -25,11 +25,11 @@
 | [대시보드 공통 컴포넌트 모듈 설계](dashboard-components.md) | 대시보드 공통 조각(버튼·입력·배지·경고·카드·지표·게이지·상단 메뉴·언어 선택·데이터 표·링크·대화상자)과 아이콘을 어떤 DOM·옵션·상태 속성으로 만들고, 색과 크기를 토큰 CSS에서 가져오는가 | Current | Draft | Verified — [대조 기록](dashboard-components.md#대조-기록) |
 | [대시보드 운영 현황 앱 구조](dashboard-operations-overview.md) | 운영 현황 화면(SCR-001)의 파일 배치, 모듈 책임, 조회·갱신 흐름, 실패 처리, 로그아웃, 표시 형식을 어떻게 나누는가 | Current | Draft | Partial — [대조 기록](dashboard-operations-overview.md#대조-기록) |
 | [파일 변경 감지 모듈 설계](file-watch.md) | 설정 파일과 인증서·개인키 파일의 변경을 어떻게 감지하고, 안정된 후보를 어떻게 한 번에 검증해 교체하며, 실패와 재시작 필요를 어떻게 알리는가 | Current | Draft | Verified — [대조 기록](file-watch.md#대조-기록) (§9 항목 14의 편집기 공유 모드·디렉터리 삭제와 §9.2의 Ubuntu 알림 항목 제외) |
-| [설정 보기·편집 모듈 설계](config-edit.md) | GET/PATCH가 실행 값·파일 상태를 읽고, 같은 TOML을 보존 편집하며, 재로드와 직렬화해 파일·실행 값·감사를 연결하는가 | Target | Active — Q167~Q178; 교체 직전 revision 재확인 | 미대조(구현 전) |
+| [설정 보기·편집 모듈 설계](config-edit.md) | GET/PATCH가 실행 값·파일 상태를 읽고, 같은 TOML을 보존 편집하며, 재로드와 직렬화해 파일·실행 값·감사를 연결하는가 | Current | Active — Q167~Q178; 교체 직전 revision 재확인 | Verified — [대조 기록](config-edit.md#8-current-구조-대조), 커밋 `eae442f` 두 OS 게이트([작업 6.9 판정표](../how-to/set-up-and-verify.md#42-작업-69-판정표)) |
 
 - 구조 시점: 문서가 설명하는 구조가 현재 코드(`Current`), 목표(`Target`), 전환 중(`Transitional`), 과거(`Historical`) 중 무엇인지 나타낸다.
 - 문서 상태: 구현 기준으로 채택했는지 나타낸다. `Draft`는 초안, `Active`는 채택되어 적용 중, `Retired`는 더 이상 쓰지 않음을 뜻한다.
 - 구현 대조: `미대조` 또는 `Verified`와 [대조 기록](../AGENTS.md#검증-기록)을 적는다. 채택 여부와 동작 테스트 결과는 별도로 확인한다.
-- 작업 6의 backend 확장은 [파일 감지 Target](file-watch.md#10-target--설정-v3-실행-값과-공유-트랜잭션), [동적 상한 Target](connection-limits.md#10-target--동적-상한과-시간-제한), [설정 보기·편집](config-edit.md)을 따른다. 기존 모듈 첫머리의 Target 절은 각 행의 Current/Verified와 구별한다. 구현 뒤 각 본문과 코드 지도를 함께 맞춘다.
+- 작업 6의 backend 확장은 [파일 감지 §10](file-watch.md#10-target--설정-v3-실행-값과-공유-트랜잭션), [동적 상한 §10](connection-limits.md#10-target--동적-상한과-시간-제한), [설정 보기·편집](config-edit.md)을 따른다. 두 §10과 기존 모듈 첫머리의 작업 6.2 절은 현재 구조를 설명한다. 이전 Target anchor는 기존 링크를 지키려고 남겼다. 구현 뒤 각 본문과 코드 지도를 현재 코드에 맞췄고, 커밋 `eae442f`의 두 OS 게이트로 확인했다([작업 6.9 판정표](../how-to/set-up-and-verify.md#42-작업-69-판정표)).
 
 작성 규칙은 [AGENTS.md](AGENTS.md)를 따른다.

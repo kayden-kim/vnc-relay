@@ -8,7 +8,7 @@
 | 관련 요구사항 | [PRD](../requirements/PRD.md) FR-06·FR-07·FR-08, 7절 보안, 8절 비기능, 9절 독립 구현, AC-07·AC-08·AC-11~14, AC-32·AC-34·AC-35 |
 | 용어 | [VNC Relay 용어집](../../GLOSSARY.md) |
 | 관련 스펙 | [중계와 매칭](relay.md), [WS·WSS](websocket.md), [관리 기능](management.md), [화면](dashboard.md) |
-| 관련 계약 | [설정 파일 v3](../contracts/config-v3.md), [CLI와 관리자 계정 파일 v1](../contracts/cli-v1.md), [운영 로그와 상태 엔드포인트 v1](../contracts/ops-info-v1.md). 기존 채택은 2026-10-16이며, 설정 계약 3.0.0의 확대 재로드는 사용자 결정 2026-11-08(Q168·Q171)를 따른다. 기존 구현의 지원 판정은 [작업 5.9 판정표](../how-to/set-up-and-verify.md#41-작업-59-판정표)에 있다. 확대 재로드·설정 편집은 구현 전이다. OPS-021의 MIT LICENSE 조건은 사용자 결정 2026-11-07(Q97)과 루트 LICENSE 검토로 해소했다. |
+| 관련 계약 | [설정 파일 v3](../contracts/config-v3.md), [CLI와 관리자 계정 파일 v1](../contracts/cli-v1.md), [운영 로그와 상태 엔드포인트 v1](../contracts/ops-info-v1.md). 기존 채택은 2026-10-16이며, 설정 계약 3.0.0의 확대 재로드는 사용자 결정 2026-11-08(Q168·Q171)를 따른다. 기존 구현의 지원 판정은 [작업 5.9 판정표](../how-to/set-up-and-verify.md#41-작업-59-판정표)에 있다. 확대 재로드·설정 편집의 판정은 [작업 6.9 판정표](../how-to/set-up-and-verify.md#42-작업-69-판정표)에 있다. OPS-021의 MIT LICENSE 조건은 사용자 결정 2026-11-07(Q97)과 루트 LICENSE 검토로 해소했다. |
 | 관련 아키텍처 문서·ADR | [코드 지도](../architectures/code-map.md), [설정 로딩 모듈 설계](../architectures/config-loading.md), [`serve` 시작 모듈 설계](../architectures/serve-startup.md), [관리자 계정 준비 CLI 모듈 설계](../architectures/admin-accounts.md), [운영 로그 모듈 설계](../architectures/ops-log.md), [파일 변경 감지 모듈 설계](../architectures/file-watch.md), [TCP 진입점 모듈 설계](../architectures/tcp-entry-point.md), [연결 상한과 시간 제한 모듈 설계](../architectures/connection-limits.md), [상태 리스너와 준비 상태 모듈 설계](../architectures/status-listener.md), [TLS 모듈 설계](../architectures/tls.md), [중계 세션 수명 모듈 설계](../architectures/relay-session.md), [ADR-0001 내장 TLS](../decisions/ADR-0001-built-in-tls.md), [ADR-0002 출발지 IP 허용 목록](../decisions/ADR-0002-source-ip-allowlist.md), [ADR-0003 단일 인스턴스·메모리 상태](../decisions/ADR-0003-single-instance-memory-state.md), [ADR-0004 tokio·rustls](../decisions/ADR-0004-tokio-rustls.md). 코드 지도는 현재(Current) 구조이며 구현 대조를 마쳤다(Verified). |
 
 ## 1. 범위와 적용 상태
@@ -372,13 +372,13 @@ Windows 11 x64·Ubuntu 24.04 LTS x64와 Mode I·II, 모든 전송 조합을 검�
 
 OPS-015는 제거한 프록시 배치 전용 시나리오 ID다. 다시 사용하지 않는다.
 
-변경 기록(2026-11-08): OPS-003은 Q171로 한도가 재로드 대상이 되어 비재로드 예시를 `listen`·계정 파일 경로로 바꿨다. OPS-028은 종료 중 적용 중지를 파일 감지 경로로 한정했다. 관리 API 편집은 종료 유예 중에도 다른 관리 요청처럼 처리하기 때문이다. OPS-029는 Q169에 따라 모든 관리자에게 동적 설정 변경 권한도 있음을 반영했다. OPS-060은 반영 전 파일 변경이 있는 편집의 두 사건별 키 범위와 새 줄의 줄바꿈 방식을 명확히 했다(이 문서의 판단, 사용자 결정 없음). 기존 ID는 유지한다. OPS-047~064는 구현 전이며 기존 시험의 통과 기록을 적용하지 않는다.
+변경 기록(2026-11-08): OPS-003은 Q171로 한도가 재로드 대상이 되어 비재로드 예시를 `listen`·계정 파일 경로로 바꿨다. OPS-028은 종료 중 적용 중지를 파일 감지 경로로 한정했다. 관리 API 편집은 종료 유예 중에도 다른 관리 요청처럼 처리하기 때문이다. OPS-029는 Q169에 따라 모든 관리자에게 동적 설정 변경 권한도 있음을 반영했다. OPS-060은 반영 전 파일 변경이 있는 편집의 두 사건별 키 범위와 새 줄의 줄바꿈 방식을 명확히 했다(이 문서의 판단, 사용자 결정 없음). 기존 ID는 유지한다. OPS-047~064는 구현 전이며 기존 시험의 통과 기록을 적용하지 않는다. 후속: 커밋 `eae442f`의 두 OS 게이트로 OPS-047~064를 판정했다. OPS-050을 뺀 17건은 두 OS 보고서에서 통과이고, OPS-050은 조항별 시험으로 통과로 판정했다([작업 6.9 판정표](../how-to/set-up-and-verify.md#42-작업-69-판정표)).
 
 ## 8. 미결정 사항
 
 프로젝트 요구사항·운영 결정 담당자가 확정한다. 기술 선택을 확정했다고 가장하는 기본값은 두지 않는다.
 
-확대 재로드·편집의 구현과 아키텍처 갱신은 이번 문서 작성 범위에 포함하지 않는다. 구현·테스트는 미실행(구현 전)이다.
+확대 재로드·편집의 구현과 아키텍처 갱신은 이번 문서 작성 범위에 포함하지 않는다. 구현·테스트는 미실행(구현 전)이다. 후속: 구현과 아키텍처 갱신은 작업 6.2~6.8에서 했고, 시험은 커밋 `eae442f`의 두 OS 게이트에서 통과했다([작업 6.9 판정표](../how-to/set-up-and-verify.md#42-작업-69-판정표)).
 
 | ID | 항목 | 영향과 제약 | 확정 위치 |
 | --- | --- | --- | --- |

@@ -2,7 +2,7 @@
 
 ## 작업 6.2 초기 교환 경계 (Current / Active)
 
-`ConnectionContext.buffer_bytes`는 수락 때의 B이고 `handshake`는 초기 교환 시작 때의 H다. TCP는 수락 직후, WS·WSS는 101 flush 뒤에 H를 읽는다. `RelayService::prepare`는 이 H와 `exchange_at`으로 절대 기한을 한 번 만든다. 실패 종료 E는 `RelayService::close_timeout`이 종료 시작 때 실행 설정에서 읽는다. 서비스 생성 때 H/B/E를 고정하지 않는다. `PreparedConnection`의 문맥은 B를 대기·대상·세션의 각 방향 버퍼로 이어 준다([소비 경계](file-watch.md#101-발행-단위와-reader), [설정 §1.8](../contracts/config-v3.md#18-재로드-구분), OPS-050). 이 변경의 시험은 통합 검증 전이며 기존 Verified 기록은 과거 범위에만 해당한다.
+`ConnectionContext.buffer_bytes`는 수락 때의 B이고 `handshake`는 초기 교환 시작 때의 H다. TCP는 수락 직후, WS·WSS는 101 flush 뒤에 H를 읽는다. `RelayService::prepare`는 이 H와 `exchange_at`으로 절대 기한을 한 번 만든다. 실패 종료 E는 `RelayService::close_timeout`이 종료 시작 때 실행 설정에서 읽는다. 서비스 생성 때 H/B/E를 고정하지 않는다. `PreparedConnection`의 문맥은 B를 대기·대상·세션의 각 방향 버퍼로 이어 준다([소비 경계](file-watch.md#101-발행-단위와-reader), [설정 §1.8](../contracts/config-v3.md#18-재로드-구분), OPS-050). 이 변경의 시험은 커밋 `eae442f`의 두 OS 게이트에서 통과했다([작업 6.9 판정표](../how-to/set-up-and-verify.md#42-작업-69-판정표)). 기존 Verified 기록은 과거 범위의 증거다.
 
 이 문서는 초기 요청을 모으고 해석한 뒤 다음 중계 단계에 넘기는 현재 구조를 설명한다. 예를 들어 Viewer가 `ID:0123`을 보내면 Mode II 요청과 중계 ID `0123`을 얻는다. 요청 뒤의 바이트는 상대에게 보낼 데이터로 남긴다. TCP·WS·WSS 진입점은 공통 `handle_connection`을 호출한 뒤 유효 요청을 `dispatch`에 넘긴다.
 
@@ -10,7 +10,7 @@
 | --- | --- |
 | 구조 시점 | Current |
 | 문서 상태 | Draft |
-| 구현 대조 | 작업 6.2 변경은 Current / 실행 미확인. 이전 범위는 [2026-11-04 대조 기록](#8-현재-코드와-목표의-차이)을 따른다. |
+| 구현 대조 | 작업 6.2 변경은 Current. 시험은 커밋 `eae442f`의 두 OS 게이트에서 통과([작업 6.9 판정표](../how-to/set-up-and-verify.md#42-작업-69-판정표)). 이전 범위는 [2026-11-04 대조 기록](#8-현재-코드와-목표의-차이)을 따른다. |
 | 코드 위치 | `crates/domain/src/handshake.rs`, `crates/domain/src/relay_id.rs`, `crates/app/src/relay.rs`, `crates/app/src/relay/handshake.rs`, `crates/app/src/events.rs`, `crates/adapters/src/ops_log.rs`, `crates/adapters/src/net.rs`, `crates/adapters/src/websocket.rs` |
 | 코드 지도 | [코드 지도](code-map.md#2-코드-위치와-구성요소) |
 | 관련 스펙 | [중계 스펙 2~4절·7절](../specs/relay.md#2-상태와-경계): RLY-001~005, RLY-022. [운영 스펙 2절·OPS-006](../specs/operations.md#2-상태와-검증-매개변수): TCP H 부분 |

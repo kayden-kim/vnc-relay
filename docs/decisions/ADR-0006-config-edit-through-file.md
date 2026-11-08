@@ -8,7 +8,7 @@
 | 채택 범위 | 전체 Accepted. 같은 파일 기록·서식 보존·toml_edit 선택은 사용자 결정 2026-11-08(Q167·Q173), 같은 요청 안에서 직접 교체하는 설계는 사용자 결정 2026-11-08(Q177)으로 채택 |
 | 관련 요구사항 | [PRD 확정 기준](../requirements/PRD.md#확정-기준), [FR-06](../requirements/PRD.md#fr-06-관리-api와-대시보드), [FR-07](../requirements/PRD.md#fr-07-설정과-프로세스-수명), [7절 보안 및 신뢰 경계](../requirements/PRD.md#7-보안-및-신뢰-경계) |
 | 관련 스펙·계약 | [운영 스펙 3.3절](../specs/operations.md#33-파일-변경-자동-감지와-부분-재로드), [관리 스펙](../specs/management.md), [화면 스펙](../specs/dashboard.md), [설정 계약 v3](../contracts/config-v3.md), [관리 API 계약](../contracts/management-api-v1.md), [운영 정보 계약](../contracts/ops-info-v1.md) |
-| 관련 아키텍처 문서 | [파일 감지 모듈 설계](../architectures/file-watch.md), [설정 로더 설계](../architectures/config-loading.md), [관리 리스너 설계](../architectures/management-listener.md)(현재 구조. 이 기능의 목표 설계는 구현 전에 갱신) |
+| 관련 아키텍처 문서 | [설정 보기·편집 모듈 설계](../architectures/config-edit.md), [파일 감지 모듈 설계](../architectures/file-watch.md), [설정 로더 설계](../architectures/config-loading.md), [관리 리스너 설계](../architectures/management-listener.md) |
 | 이 ADR이 대체하는 이전 ADR | 없음 |
 | 이 ADR을 대체한 새 ADR | 없음 |
 
@@ -85,17 +85,17 @@
 
 ### 후속 작업
 
-- 시안·문구·이름·직접 적용 설계는 사용자 결정 2026-11-08(Q174~Q177)으로 채택했다. 구현·테스트는 미실행(구현 전)이다.
-- [작업 목록의 설정 보기·동적 설정 편집 묶음](../TODO.md#6-설정-보기와-동적-설정-편집)에 따라 코드 지도·모듈 설계, 재로드·API·로그·화면·운영 안내를 갱신한다.
+- 시안·문구·이름·직접 적용 설계는 사용자 결정 2026-11-08(Q174~Q177)으로 채택했다. 구현·테스트는 미실행(구현 전)이다. 후속: 커밋 `7ce077f`에서 구현했고, 커밋 `eae442f`의 두 OS 게이트로 확인했다([작업 6.9 판정표](../how-to/set-up-and-verify.md#42-작업-69-판정표)).
+- [작업 목록의 설정 보기·동적 설정 편집 묶음](../TODO.md#6-설정-보기와-동적-설정-편집)에 따라 코드 지도·모듈 설계, 재로드·API·로그·화면·운영 안내를 갱신했다(작업 6.2~6.8).
 
 ## 7. 검증
 
 | 가설·결정 요인 | 검증 방법 | 합격 기준 | 증거 |
 | --- | --- | --- | --- |
-| 같은 파일과 재시작 지속성 | 편집 API 통합 시험과 재시작 뒤 조회 | 파일에 바뀐 값이 남고 재시작 뒤 같은 값 | 미실행(구현 전). [관리 스펙 수용 테스트](../specs/management.md#7-수용-테스트) |
-| 파일 저장과 실행 값의 일치 | 파일 감지와 편집의 직렬화·쓰기 실패·뒤따른 알림 시험 | 성공 때 같은 후보를 한 번 적용. 쓰기 실패 때 파일·실행 값 유지 | 미실행(구현 전). [운영 스펙 수용 테스트](../specs/operations.md#7-수용-테스트) |
-| 파일 내용 보존 | 주석·공백·키 순서·LF·CRLF가 있는 파일 편집 전후 대조 | 바뀐 키의 값 밖 내용 유지 | 미실행(구현 전). [관리 API 계약 5절](../contracts/management-api-v1.md#5-예제와-계약-테스트) |
-| 의존성 허용 범위 | 두 OS 의존성 라이선스·고지 검사 | PRD 허용 목록 준수와 고지 갱신 | 미실행(구현 전). [라이선스 검사](../how-to/check-dependency-licenses.md) |
+| 같은 파일과 재시작 지속성 | 편집 API 통합 시험과 재시작 뒤 조회 | 파일에 바뀐 값이 남고 재시작 뒤 같은 값 | 통과. `tests/management_query.rs`의 `config_edit_preserves_document_applies_once_and_survives_restart`(커밋 `eae442f`의 두 OS 게이트). [관리 스펙 수용 테스트](../specs/management.md#7-수용-테스트) |
+| 파일 저장과 실행 값의 일치 | 파일 감지와 편집의 직렬화·쓰기 실패·뒤따른 알림 시험 | 성공 때 같은 후보를 한 번 적용. 쓰기 실패 때 파일·실행 값 유지 | 통과. 위 재시작 시험, `crates/adapters/tests/management.rs`의 `temporary_write_and_replace_failures_keep_original_bytes_and_running_values`, `tests/relay_log_scenarios.rs`의 `file_watch_and_config_edit_log_distinct_triggers_and_actual_applied_keys`, DASH-044·045 실서버 시험(두 OS 게이트). [운영 스펙 수용 테스트](../specs/operations.md#7-수용-테스트) |
+| 파일 내용 보존 | 주석·공백·키 순서·LF·CRLF가 있는 파일 편집 전후 대조 | 바뀐 키의 값 밖 내용 유지 | 통과. `crates/adapters/tests/config_edit_document.rs`의 `scalar_edits_preserve_bom_comments_decor_and_mixed_newlines_exactly`·`array_value_edits_keep_internal_comments_spacing_and_each_newline`, 위 재시작 시험의 LF·CRLF 파일(두 OS 게이트). [관리 API 계약 5절](../contracts/management-api-v1.md#5-예제와-계약-테스트) |
+| 의존성 허용 범위 | 두 OS 의존성 라이선스·고지 검사 | PRD 허용 목록 준수와 고지 갱신 | 통과. 새 패키지 `toml_edit 0.25.17+spec-1.1.0`(MIT OR Apache-2.0). 두 OS deny `licenses ok`, 고지 대조 시험 통과. [라이선스 검사 실행 기록 9](../how-to/check-dependency-licenses.md#4-검증) |
 
 ## 8. 재검토 조건
 

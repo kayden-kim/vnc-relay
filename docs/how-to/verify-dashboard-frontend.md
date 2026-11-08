@@ -9,7 +9,7 @@
 | 대상 독자 | 대시보드 프런트엔드 구현자와 검토자 |
 | 검증 상태 | Draft |
 | 검증 환경·버전 | 작업 4.8(2026-10-22): Windows 10.0.26200 x64, PowerShell, Chrome 155.0.8059.84. Ubuntu 24.04.4 LTS x64(WSL2), Google Chrome 156.0.8078.47. 4.11·4.12절: Microsoft Edge 155.0.4283.62(Windows)도 사용했다. 4.14절: Firefox 158.0.1(WSL Ubuntu)도 사용했다. 4.21절: Playwright 1.64.1(Python 3.14.6)의 WebKit 27.2(Playwright 빌드 v2370, Windows)를 Safari 대체로 사용했다(Q135). 4.22절: 같은 Playwright로 Windows Chrome 157.0.8103.38을 실행해 비교 페이지를 만들었다(Q138). 4.26절: 같은 Playwright로 Windows Chrome 157.0.8103.38·Edge 156.0.4314.58을, WebDriver BiDi로 WSL Ubuntu snap Firefox 159.0을 실행했다(Q146). rustc는 두 OS 모두 1.99.1(`rust-toolchain.toml`). 나머지 환경은 실행할 때 기록한다 |
-| 최종 검증일 | 2026-10-22. 3.1 1단계, 3.2 1단계, 3.3 1단계, 3.4 일부를 실행했다(4절). 작업 4.10 재실행(4.5절, 커밋 `3944dc2`): WSL·Windows 게이트 모두 `ALL PASSED`. 작업 4.11(4.7절, 커밋 `5368dec`): 3.3 1단계, 3.4 SCR-002 일부, 3.5 자동 확인 일부를 실행했다. 최종 HEAD 게이트는 WSL·Windows 모두 `ALL PASSED`. 같은 절의 후속 게이트 대상 `8975537`·`06753e3`·`98b2fc1`도 WSL·Windows 모두 `ALL PASSED`. 작업 4.10·4.11 중단점 통합(4.8절, 수정·게이트 대상 `0ca9466`): WSL·Windows 게이트 모두 `ALL PASSED`. 작업 4.11 세션 시험 보강(4.9절, 커밋 `d0ef8d0`): 3.4 SCR-002 일부(DASH-016·019·022·024·025 시험)를 실행했다. 이 게이트도 WSL·Windows 모두 `ALL PASSED`. 작업 4.11 라우터 언어 시험(4.10절, 커밋 `a917eb1`): 3.4 일부(DASH-025 라우터 시험)를 실행했다. 최종 HEAD `48918d3`의 게이트도 WSL·Windows 모두 `ALL PASSED`. 작업 4.12 검토(4.11절, 수정 `5cfe4c9`·`50ae0ba`, 게이트 대상 `50ae0ba`): WSL·Windows 게이트 모두 `ALL PASSED`. 작업 4.12(4.12절, 수정 `91f3fc1`·`05f4989`·`3cf643d`, 게이트 대상 `3cf643d`): 3.3·3.4 일부를 실행했고 WSL·Windows 게이트 모두 `ALL PASSED`. 작업 4.12 후속 검토(4.13절, 수정 `f24ca68`·`6cc47a1`, 게이트 대상 `6cc47a1`): `fmt`, 토큰 대조, dashboard_browser 37건, dashboard_assets 2건을 실행했다. WSL·Windows 모두 `ALL PASSED`. 시나리오 150건: WSL 통과 24·부분 49·실패 0·미실행 0·미연결 77, Windows 통과 23·부분 49·실패 0·미실행 1(OPS-007)·미연결 77. 3.5의 사람 확인, 3.6, 3.7은 미실행. 작업 4.12 Firefox(4.14절, 2026-10-23, 기준 `154d3ec`와 요약 격자 수정 작업 트리): 37개 사례의 403회 탐색 통과, 80장 가로 넘침·CSP 위반 0건, 실제 키 입력으로 3.5 확인. 기존 모바일 표 배치 차이, Safari·실기기·스크린 리더·사람 비교는 남음. 작업 4.12 SCR-001 표 대조(4.15절, 기준 `849b0ba`와 표·연결 카드 수정 작업 트리): 토큰 대조·dashboard_assets 2건 통과, Chrome 정상 6장과 시안 대조, 가로 넘침·CSP 위반 0건. 모바일 표 첫 줄·링크·배지·설명 위치를 수정했다. 개수 배지 문구 승인과 변경 뒤 다른 브라우저·사람 확인은 남음. 사용자 결정 반영과 통합 확인(4.16절, 2026-10-23, 게이트 대상 `eecaa5b`): WSL·Windows 모두 `ALL PASSED`, 시나리오 수는 4.13절과 같다. 표 수정 뒤 Firefox·Edge 재확인(4.17절, 2026-10-23, 기준 `8f3c20f`와 표 버튼 줄바꿈 수정 작업 트리): Firefox 192회 통과, 정상 8장 가로 넘침·CSP 위반 0건. Firefox·Edge의 새 세션 링크 Tab 순서·Enter 이동 통과. 1024px 표 버튼 줄바꿈을 고쳤다(`997167c`). 게이트 대상 `0650ae5`: WSL·Windows 모두 `ALL PASSED`, 시나리오 수는 4.13절과 같다. WebKit 대체 확인(4.21절, 2026-11-07, Q135, 기준 `e71dcee`와 대화상자 포커스 수정 작업 트리): 시험 페이지 396회의 CSP 검사 외 실패 0건, 실서버 6회 통과. 마우스 취소 뒤 포커스 복귀를 고쳤다. WSL·Windows 모두 `ALL PASSED`, 시나리오 153건(WSL 통과 140·부분 7, Windows 통과 136·부분 12, 두 OS 실패 0). 시안·구현 비교 페이지(4.22절, 2026-11-07, Q138, 기준 `e3231c4`): 3.4 4단계를 실행해 26개 프레임 × 6폭 156쌍을 찍었다. 구현 쪽 가로 넘침·페이지 오류·응답 없는 API 요청 0건. 문서만 바꿔 게이트는 실행하지 않았다. 사용자의 비교 검토와 지적 반영은 4.23~4.25절이다. 작업 4.12 완료 판정(4.26절, 2026-11-07, 제품 기준 `ae4e98b`): Chrome·Edge·Firefox·WebKit 실서버 6회씩 통과, 네 엔진의 실제 키 입력 통과. 브라우저 버전은 최신 안정판보다 낮다(Q146) |
+| 최종 검증일 | 2026-10-22. 3.1 1단계, 3.2 1단계, 3.3 1단계, 3.4 일부를 실행했다(4절). 작업 4.10 재실행(4.5절, 커밋 `3944dc2`): WSL·Windows 게이트 모두 `ALL PASSED`. 작업 4.11(4.7절, 커밋 `5368dec`): 3.3 1단계, 3.4 SCR-002 일부, 3.5 자동 확인 일부를 실행했다. 최종 HEAD 게이트는 WSL·Windows 모두 `ALL PASSED`. 같은 절의 후속 게이트 대상 `8975537`·`06753e3`·`98b2fc1`도 WSL·Windows 모두 `ALL PASSED`. 작업 4.10·4.11 중단점 통합(4.8절, 수정·게이트 대상 `0ca9466`): WSL·Windows 게이트 모두 `ALL PASSED`. 작업 4.11 세션 시험 보강(4.9절, 커밋 `d0ef8d0`): 3.4 SCR-002 일부(DASH-016·019·022·024·025 시험)를 실행했다. 이 게이트도 WSL·Windows 모두 `ALL PASSED`. 작업 4.11 라우터 언어 시험(4.10절, 커밋 `a917eb1`): 3.4 일부(DASH-025 라우터 시험)를 실행했다. 최종 HEAD `48918d3`의 게이트도 WSL·Windows 모두 `ALL PASSED`. 작업 4.12 검토(4.11절, 수정 `5cfe4c9`·`50ae0ba`, 게이트 대상 `50ae0ba`): WSL·Windows 게이트 모두 `ALL PASSED`. 작업 4.12(4.12절, 수정 `91f3fc1`·`05f4989`·`3cf643d`, 게이트 대상 `3cf643d`): 3.3·3.4 일부를 실행했고 WSL·Windows 게이트 모두 `ALL PASSED`. 작업 4.12 후속 검토(4.13절, 수정 `f24ca68`·`6cc47a1`, 게이트 대상 `6cc47a1`): `fmt`, 토큰 대조, dashboard_browser 37건, dashboard_assets 2건을 실행했다. WSL·Windows 모두 `ALL PASSED`. 시나리오 150건: WSL 통과 24·부분 49·실패 0·미실행 0·미연결 77, Windows 통과 23·부분 49·실패 0·미실행 1(OPS-007)·미연결 77. 3.5의 사람 확인, 3.6, 3.7은 미실행. 작업 4.12 Firefox(4.14절, 2026-10-23, 기준 `154d3ec`와 요약 격자 수정 작업 트리): 37개 사례의 403회 탐색 통과, 80장 가로 넘침·CSP 위반 0건, 실제 키 입력으로 3.5 확인. 기존 모바일 표 배치 차이, Safari·실기기·스크린 리더·사람 비교는 남음. 작업 4.12 SCR-001 표 대조(4.15절, 기준 `849b0ba`와 표·연결 카드 수정 작업 트리): 토큰 대조·dashboard_assets 2건 통과, Chrome 정상 6장과 시안 대조, 가로 넘침·CSP 위반 0건. 모바일 표 첫 줄·링크·배지·설명 위치를 수정했다. 개수 배지 문구 승인과 변경 뒤 다른 브라우저·사람 확인은 남음. 사용자 결정 반영과 통합 확인(4.16절, 2026-10-23, 게이트 대상 `eecaa5b`): WSL·Windows 모두 `ALL PASSED`, 시나리오 수는 4.13절과 같다. 표 수정 뒤 Firefox·Edge 재확인(4.17절, 2026-10-23, 기준 `8f3c20f`와 표 버튼 줄바꿈 수정 작업 트리): Firefox 192회 통과, 정상 8장 가로 넘침·CSP 위반 0건. Firefox·Edge의 새 세션 링크 Tab 순서·Enter 이동 통과. 1024px 표 버튼 줄바꿈을 고쳤다(`997167c`). 게이트 대상 `0650ae5`: WSL·Windows 모두 `ALL PASSED`, 시나리오 수는 4.13절과 같다. WebKit 대체 확인(4.21절, 2026-11-07, Q135, 기준 `e71dcee`와 대화상자 포커스 수정 작업 트리): 시험 페이지 396회의 CSP 검사 외 실패 0건, 실서버 6회 통과. 마우스 취소 뒤 포커스 복귀를 고쳤다. WSL·Windows 모두 `ALL PASSED`, 시나리오 153건(WSL 통과 140·부분 7, Windows 통과 136·부분 12, 두 OS 실패 0). 시안·구현 비교 페이지(4.22절, 2026-11-07, Q138, 기준 `e3231c4`): 3.4 4단계를 실행해 26개 프레임 × 6폭 156쌍을 찍었다. 구현 쪽 가로 넘침·페이지 오류·응답 없는 API 요청 0건. 문서만 바꿔 게이트는 실행하지 않았다. 사용자의 비교 검토와 지적 반영은 4.23~4.25절이다. 작업 4.12 완료 판정(4.26절, 2026-11-07, 제품 기준 `ae4e98b`): Chrome·Edge·Firefox·WebKit 실서버 6회씩 통과, 네 엔진의 실제 키 입력 통과. 브라우저 버전은 최신 안정판보다 낮다(Q146). 작업 6.6 설정 화면(4.27~4.29절, 2026-11-08, 구현 `7ce077f`): 시안 124쌍 대조, 설정 실서버 시험 26개 두 OS 통과, 네 엔진 16회 통과. 최종 게이트 대상 `eae442f`: WSL·Windows 모두 `ALL PASSED`, 시나리오 215건(WSL 통과 201·부분 8, Windows 통과 198·부분 12, 두 OS 실패 0). 첫 게이트(`7ce077f`)의 시험 결함과 수정은 4.28절에 있다 |
 | 관련 기준 문서 | [프런트엔드 컨벤션](../conventions/frontend.md), [디자인 기준](../design/DESIGN.md), [화면 스펙](../specs/dashboard.md), [관리 API 계약 1.11절](../contracts/management-api-v1.md) |
 
 ## 1. 대상과 영향
@@ -202,9 +202,9 @@
 | 토큰 CSS와 저장된 파일 | 차이 0건, 종료 코드 0 | 3.1 1단계 | 통과. 작업 4.8(Windows): `tokens --check: 통과`, 종료 코드 0. DESIGN.md L6 값을 `#f4f6f6`으로 바꾸면 `실패 (3건)`과 종료 코드 1이 나왔고, 원래 값으로 되돌린 뒤 다시 통과했다. 작업 4.9 재작업(4.3절): 로그인 복사본 포함 `tokens --check: 통과`. 복사본·원본·복사 목록 밖 파일을 변조하면 `실패 (1건)`과 종료 코드 1이 나왔고, 되돌린 뒤 통과했다 | 작업 4.8 보고의 명령 출력 |
 | DESIGN.md 린트(선택) | 오류 0건, 경고·정보 수 기록 | 3.1 2단계 | 미실행 | 검증 기록의 출력 |
 | 제공 파일 표 | `dashboard_assets` 테스트 통과 | 3.2 1단계 | 통과. 2026-10-22 커밋 `df3b5b2`, Ubuntu 24.04(WSL2): `cargo test --test dashboard_assets` 시험 2개 통과. 같은 커밋의 Windows 전체 완료 검증도 이 시험을 포함해 통과했다. 작업 4.9 재작업(4.3절): 시험 2개 통과(Windows). 작업 4.10(4.4절): 시험 2개 통과(Windows, 작업 트리) | 검증 기록의 테스트 출력 |
-| 브라우저 테스트 | 모든 테스트 페이지의 `data-result`가 `pass` | 3.3 1단계 | 통과. 작업 4.8(Windows): `cargo test --test dashboard_browser` 시험 2개 통과(2026-10-22 재실행, 19.19초). Chrome 155.0.8059.84. Ubuntu 24.04(WSL2), 커밋 `df3b5b2`: 시험 2개 통과(10.39초), Google Chrome 156.0.8078.47(`/usr/bin/google-chrome`). 작업 4.9 재작업(4.3절): 시험 7개 통과(Windows, 27.20초). 작업 4.10(4.4절, Windows, 작업 트리): 시험 21개 통과(146.6초, 운영 화면 시험 포함). 작업 4.10 재실행(4.5절, 커밋 `3944dc2`): WSL 시험 21개 통과(61.78초), Windows 시험 21개 통과(97.16초). 기준 `61e03e9`의 WSL 실행은 시험 6개가 실패했다(4.5절). 작업 4.11(4.7절, 커밋 `5368dec`): 시험 31개 통과(WSL 89.48초, Windows 148.88초, 최종 HEAD). 바이트·레이아웃 수정 전 실행과 수정 뒤 `session_`·`router_` 시험 12개 통과는 4.7절에 있다 | 검증 기록의 테스트 출력과 브라우저 버전 |
+| 브라우저 테스트 | 모든 테스트 페이지의 `data-result`가 `pass` | 3.3 1단계 | 통과. 작업 4.8(Windows): `cargo test --test dashboard_browser` 시험 2개 통과(2026-10-22 재실행, 19.19초). Chrome 155.0.8059.84. Ubuntu 24.04(WSL2), 커밋 `df3b5b2`: 시험 2개 통과(10.39초), Google Chrome 156.0.8078.47(`/usr/bin/google-chrome`). 작업 4.9 재작업(4.3절): 시험 7개 통과(Windows, 27.20초). 작업 4.10(4.4절, Windows, 작업 트리): 시험 21개 통과(146.6초, 운영 화면 시험 포함). 작업 4.10 재실행(4.5절, 커밋 `3944dc2`): WSL 시험 21개 통과(61.78초), Windows 시험 21개 통과(97.16초). 기준 `61e03e9`의 WSL 실행은 시험 6개가 실패했다(4.5절). 작업 4.11(4.7절, 커밋 `5368dec`): 시험 31개 통과(WSL 89.48초, Windows 148.88초, 최종 HEAD). 바이트·레이아웃 수정 전 실행과 수정 뒤 `session_`·`router_` 시험 12개 통과는 4.7절에 있다. 작업 6.6(4.27절): 설정 가짜 API 시험 26개를 더해 63개다. 게이트 대상 `eae442f`에서 63개 통과(Windows 489.26초, WSL 614.01초) | 검증 기록의 테스트 출력과 브라우저 버전 |
 | 시나리오 보고서 | 자동 연결된 DASH 항목이 `통과` | 3.3 2단계 | 부분. 작업 4.10(4.4절, 작업 트리): 150건 중 통과 23, 부분 40, 실패 0, 미실행 1, 미연결 86. DASH 27건은 통과 0, 부분 17, 미연결 10이다. 미실행 1건은 OPS-007이다. 4.9 재작업 수치(WSL 통과 18, Windows 통과 17)보다 통과가 늘었다. 늘어난 항목은 확인하지 않았다. 작업 4.10 재실행(4.5절, 커밋 `3944dc2`): WSL 통과 24, 부분 40, 실패 0, 미실행 0, 미연결 86. Windows 통과 23, 부분 40, 실패 0, 미실행 1(OPS-007), 미연결 86. DASH 세부 수치는 이 재실행에서 세지 않았다. 최종 게이트 수치는 4.5절에 있다. 작업 4.11(4.7절, 커밋 `5368dec`): DASH-006·007·009~014·026이 `partial`로 연결됐다. 최종 HEAD 수치는 4.7절에 있다 | `<Cargo 대상 디렉터리>/scenario-report.md` |
-| 폭별 시각 대조 | 6개 폭에서 가로 스크롤 0건, 차이가 스펙·디자인 기준에 맞음 | 3.4 | 통과(작업 4.12 범위). 사용자가 4.22절 비교 페이지를 검토했고(Q138), 지적한 "조회 중" 표시 차이를 4.24·4.25절에서 고쳤다. 사용자는 2026-11-07에 수정 결과를 받아들였다(4.26절). 이전 기록: 작업 4.8: 미리보기 6폭 × ko·en 12장(4.1절). 작업 4.9(2026-10-22): 로그인 화면 `/login/`을 6폭 × 7장으로 찍어 42장을 얻었다(`target/dashboard-shots/<폭>/{input-ko,invalid-ko,busy-ko,failed-ko,request-failed-ko,input-en,invalid-en}.png`). 6폭 모두 `scrollWidth`와 `clientWidth`가 같았고(320 포함), CSP 위반은 0건이었다. 콘솔 오류는 가로챈 401·500 응답의 "Failed to load resource"뿐이었다. 시안과의 차이는 4.2절. 작업 4.9 재작업(4.3절)에서 같은 42장을 다시 찍었다. 6폭 모두 가로 스크롤 0건, CSP 위반 0건이었다. 4.9 기준선과는 42장 모두 바이트가 달랐다(화면을 구성 요소로 바꾼 결과). 작업 4.10(4.4절): 실제 서버에서 `/login/`(ko 입력 화면)과 `/`(ko 운영 화면)를 6폭으로 찍었다. 가로 스크롤 0건. 320 폭의 상단 막대 언어 선택은 밑줄과 가까워 사람 확인이 필요하다. 사람 비교는 4.12에서 한다. 작업 4.10 화면 상태 대조(4.6절): SCR-001 목업 21장과 1280·390·320 × ko·en × 상태 8종 48장을 대조했다. 6폭·언어 모두 가로 스크롤 0건, CSP 위반 0건. 수정 필요 6건이 나왔다(상단 막대 5건, `Unavailable` 줄바꿈 1건). 1280은 정상 상태와 빈 목록 문구만 판정했다. 작업 4.11(4.7절): SCR-002 상태 5종(SCR-001 목록, SCR-002 상세·대화상자·실패, SCR-003 로그인) × 6폭 × ko·en 60장을 찍었다. 가로 넘침 0, CSP 위반 0. 이 60장은 바이트·레이아웃 수정 전 촬영이다. 수정 뒤에는 ko 1280·390·320만 다시 찍었다. 시안 차이 4건은 4.7절과 개요 14절 차이 표에 있다. 사람 비교는 4.12에서 한다. 비교 페이지(4.22절, 2026-11-07, Q138): 시안 26개 프레임 × 6폭 156쌍을 찍었다. 1023px을 뺀 폭은 시안 내용 폭이 구현 뷰포트와 같고, 1023px은 시안 내용 폭이 1005px이다. 구현 쪽 가로 넘침·페이지 오류·응답 없는 API 요청 0건. 4.23~4.25절에서 같은 페이지를 다시 찍었다 | 검토 기록 4.1~4.7·4.22~4.26절, `target/mockup-compare-q138/` |
+| 폭별 시각 대조 | 6개 폭에서 가로 스크롤 0건, 차이가 스펙·디자인 기준에 맞음 | 3.4 | 통과(작업 4.12·6.6 범위). 사용자가 4.22절 비교 페이지를 검토했고(Q138), 지적한 "조회 중" 표시 차이를 4.24·4.25절에서 고쳤다. 사용자는 2026-11-07에 수정 결과를 받아들였다(4.26절). 작업 6.6(4.27절, 2026-11-08): 설정 시안 62개 프레임을 1280·390px 구현 화면과 대조해 124쌍을 찍었다. 차이 12건 가운데 3건은 구현을 고쳤고, 8건은 화면 스펙이나 DESIGN.md를 따라 구현을 유지했으며, 1건은 예시 데이터 차이다. 구현 쪽 가로 넘침·CSP 위반·콘솔 오류는 0건이다. 사람의 비교 판정은 하지 않았다. `dashboard_browser`의 설정 시험 26개는 6개 폭 × ko·en으로 열리고, `settings-scenarios.js`의 13곳에서 `checkLayout`으로 가로 스크롤과 입력·대화상자·안내 상자를 확인한다. 이전 기록: 작업 4.8: 미리보기 6폭 × ko·en 12장(4.1절). 작업 4.9(2026-10-22): 로그인 화면 `/login/`을 6폭 × 7장으로 찍어 42장을 얻었다(`target/dashboard-shots/<폭>/{input-ko,invalid-ko,busy-ko,failed-ko,request-failed-ko,input-en,invalid-en}.png`). 6폭 모두 `scrollWidth`와 `clientWidth`가 같았고(320 포함), CSP 위반은 0건이었다. 콘솔 오류는 가로챈 401·500 응답의 "Failed to load resource"뿐이었다. 시안과의 차이는 4.2절. 작업 4.9 재작업(4.3절)에서 같은 42장을 다시 찍었다. 6폭 모두 가로 스크롤 0건, CSP 위반 0건이었다. 4.9 기준선과는 42장 모두 바이트가 달랐다(화면을 구성 요소로 바꾼 결과). 작업 4.10(4.4절): 실제 서버에서 `/login/`(ko 입력 화면)과 `/`(ko 운영 화면)를 6폭으로 찍었다. 가로 스크롤 0건. 320 폭의 상단 막대 언어 선택은 밑줄과 가까워 사람 확인이 필요하다. 사람 비교는 4.12에서 한다. 작업 4.10 화면 상태 대조(4.6절): SCR-001 목업 21장과 1280·390·320 × ko·en × 상태 8종 48장을 대조했다. 6폭·언어 모두 가로 스크롤 0건, CSP 위반 0건. 수정 필요 6건이 나왔다(상단 막대 5건, `Unavailable` 줄바꿈 1건). 1280은 정상 상태와 빈 목록 문구만 판정했다. 작업 4.11(4.7절): SCR-002 상태 5종(SCR-001 목록, SCR-002 상세·대화상자·실패, SCR-003 로그인) × 6폭 × ko·en 60장을 찍었다. 가로 넘침 0, CSP 위반 0. 이 60장은 바이트·레이아웃 수정 전 촬영이다. 수정 뒤에는 ko 1280·390·320만 다시 찍었다. 시안 차이 4건은 4.7절과 개요 14절 차이 표에 있다. 사람 비교는 4.12에서 한다. 비교 페이지(4.22절, 2026-11-07, Q138): 시안 26개 프레임 × 6폭 156쌍을 찍었다. 1023px을 뺀 폭은 시안 내용 폭이 구현 뷰포트와 같고, 1023px은 시안 내용 폭이 1005px이다. 구현 쪽 가로 넘침·페이지 오류·응답 없는 API 요청 0건. 4.23~4.25절에서 같은 페이지를 다시 찍었다 | 검토 기록 4.1~4.7·4.22~4.27절, `target/mockup-compare-q138/`, `target/settings-compare/` |
 | 키보드 | 3.5의 4개 항목 통과 | 3.5 | 통과(작업 4.12 범위, 사용자 결정 2026-11-07(Q145)). 4.26절: Chrome·Edge·Firefox·WebKit에서 실제 키 입력으로 로그인 Tab 순서·포커스 링, Enter 실행, 대화상자 포커스 규칙을 확인했다. 사람의 키보드 확인은 Q145에 따라 하지 않았다. WebKit은 Tab이 링크를 건너뛰는 엔진 차이가 있다(4.21·4.26절). 이전 기록: 작업 4.11(4.7절, 작업 트리)에서 SCR-002의 Tab 순서, 포커스 링 두께(2px)·간격(2px), Enter로 취소 실행, 대화상자 Escape·취소 뒤 포커스 복귀(ko·en)를 합성 keydown으로 확인했다. Firefox·Edge 실제 키 입력은 4.14·4.17절 | 검토 기록 4.7·4.14·4.17·4.26절 |
 | 스크린 리더 | 3.6의 항목 통과 | 3.6 | 미실행. 작업 4.12 완료 조건에서 뺐다(사용자 결정 2026-11-07(Q137)) | 검토 기록과 스크린 리더 이름·버전 |
 | 다른 브라우저·실기기 | 3.7 통과 또는 미실행 사유 기록 | 3.7 | 통과(작업 4.12 범위). 4.26절(2026-11-07): Chrome 157.0.8103.38·Edge 156.0.4314.58·Firefox 159.0·WebKit 27.2 실서버 각 6회 통과. 최신 안정판보다 낮은 버전으로 판정했다(사용자 결정 2026-11-07(Q146)). Safari는 WebKit 대체 확인이다(Q135). 실기기 확인은 작업 4.12 완료 조건에서 뺐다(사용자 결정 2026-11-07(Q136)). 이전 기록: Firefox 158.0.1(WSL Ubuntu)에서 3.4 2단계와 3.5를 실행했다. 403회 시나리오 탐색 통과, 캡처 80장 가로 넘침·CSP 위반 0건. 요약 격자 결함을 고쳤고, Chromium과 같은 기존 모바일 표 배치 차이는 남았다(4.14절). Edge 155.0.4283.62의 캡처·키보드 기록은 4.11·4.12절. 표 수정 뒤 재확인(4.17절, 2026-10-23): Firefox 192회 통과, 정상 8장·Edge 정상 3장 가로 넘침·CSP 위반 0건. 두 브라우저에서 세션 ID 링크의 Tab 순서·포커스 링·Enter 상세 이동을 확인했다. 4.14절의 모바일 표 배치 차이는 수정 뒤 해소됐다. WebKit 대체 확인(4.21절, 2026-11-07, Q135): 시험 페이지 396회 중 CSP 검사 외 실패 0건, 실서버 6회 통과. 마우스 취소 뒤 포커스 복귀 결함을 고쳤다. 엔진 고유 CSP 보고와 Tab 링크 건너뜀은 4.21절에 나누어 적었다 | 4.14·4.17·4.21·4.26절과 `target/firefox-412/`, `target/firefox-417/`, `target/webkit-q135/`, `target/q412-close/` |
@@ -1380,6 +1380,123 @@ Playwright가 내려받은 Firefox 157은 설치된 최신 Firefox가 아니라�
 - 도구: 저장소 밖 `D:/vr-tools/q412-close/`의 `check.py`(SHA-256 `a0a3c91bad355ea6c17e942032440618bf2dbe13c706f3c2201c03c758d9381c`)와 `ff_bidi.ts`(SHA-256 `2f480270aa18ae28b82af15dcd261d07702be38d9ecf17000918051eb16815c0`)다. 가상 환경과 WebKit은 4.21절의 `D:/vr-tools/webkit-q135/`를 썼다.
 - 게이트: 이 절은 외부 브라우저 확인만 실행했다. 대상 제품 내용의 두 OS 전체 게이트는 4.25절이다. 작업 4.13의 첫 Windows 게이트(`4513b0a`)에서 `dashboard_025_saved_language_survives_real_navigation_and_preserves_values`가 다시 불러오기 뒤 상세 값 비교(`tests/dashboard_live/cross.rs` 1080행)에서 실패했다. 이 시험은 `.fact-list`가 생기기만 기다렸다. 4.25절(Q143) 뒤에는 첫 조회 중 화면도 `.fact-list`를 그리므로, 값이 "조회 중" 배지일 때 읽을 수 있다 [INFERENCE: 실패 메시지의 값은 남지 않았다]. 다시 불러오기 뒤 `settled`로 조회 완료를 기다리게 고쳤다(`cce6c50`). 제품 코드는 바꾸지 않았다. 단독 3회 통과 뒤 `cce6c50`의 두 OS 전체 게이트가 통과했다(Windows 통과 137·부분 11, WSL 통과 140·부분 7, 두 OS 실패 0). Windows 보고서 대상은 `cce6c50`이고 작업 트리는 깨끗했다. WSL 보고서 대상은 `cce6c50 + 미커밋 변경`이다. WSL에서 `git diff --ignore-cr-at-eol --stat` 출력이 없었고, `git -c core.autocrlf=true diff --exit-code -- . ":(exclude)docs/**"`가 종료 코드 0이었다. 따라서 차이는 줄 끝뿐이다.
 - 미실행: 실제 Safari, 최신 안정판 Chrome 158·Edge 157·Firefox 159.0.1(Q146), 실제 모바일 기기와 스크린 리더(Q136·Q137).
+
+### 4.27 설정 화면 구현과 시안 대조 (작업 6.6, 2026-11-08)
+
+- 기록자: 에이전트 Main. 구현은 에이전트 DashboardSettings가, 시안 대조는 에이전트 SettingsVisual이 했다. 사람의 검토가 아니다.
+- 대상: 커밋 `7ce077f`. 화면 파일 `web/dashboard/app/settings.js`·`settings-model.js`를 더하고 `api.js`·`copy.js`(CPY-086~148)·`router.js`·`shell.js`·`components/navbar.js`·`components/icons.js`·`app.css`·`styles/components.css`를 고쳤다. 제공 표는 `crates/adapters/src/dashboard_assets.rs`에 더했다. 로그인 복사본 `login/components/icons.js`·`login/styles/components.css`는 `cargo xtask tokens`로 다시 만들었다. 구조는 [공통 컴포넌트 설계 7절](../architectures/dashboard-components.md#설정-화면-조립과-스타일)에 있다.
+- 가짜 API 시험: `web/dashboard/tests/settings.html`·`settings-scenarios.js`의 사례 26개를 `tests/dashboard_browser.rs`의 시험 26개가 6개 폭 × ko·en으로 연다. 배치 검사(`checkLayout`)를 부르는 사례는 페이지 가로 스크롤과 입력·대화상자·안내의 상자를 확인한다. 표식은 모두 `/// spec: dashboard.md:DASH-0xx partial`이다. 전체 행 표식은 4.28절의 실서버 시험이 가진다.
+- 이 절의 이전 초안은 합성 이미지 4장만으로 "시안과의 차이 없음"이라고 적었다. 아래 전수 대조가 그 주장을 대체한다. 초안의 대표 화면(`target/dashboard-shots/<폭>/settings-*.png`)은 아래 수정 전 화면이므로 판정 근거로 쓰지 않는다.
+
+#### 시안 대조
+
+결론: 채택 시안(`docs/design/mockups/dashboard.html`의 `#g-settings`, 사용자 결정 2026-11-08(Q174))의 설정 프레임 62개를 같은 상태·언어의 구현 화면과 1280·390px에서 대조했다. 124쌍을 모두 찍었다. 구현 쪽 가로 넘침·CSP 위반·콘솔 오류는 0건이다. 차이 12건 가운데 3건은 구현을 고쳤다. 8건은 화면 스펙이나 DESIGN.md가 시안과 달라 구현을 유지했다. 1건은 예시 데이터 차이다. 사람의 비교 판정은 하지 않았다.
+
+- 방법: 구현은 정적 서버와 계약 모양 가짜 API(`fixtures.js`)로 시안과 같은 값을 보였다. 시안은 프레임 내용만 찍었다. 프레임은 SCR-004 13개 상태와 SCR-005 18개 상태의 ko·en이다. 판정 순서는 화면 스펙(동작·문구), DESIGN.md, 시안이다.
+
+| 차이 | 시안 | 구현 | 기준 | 조치 |
+| --- | --- | --- | --- | --- |
+| 단독 안내 문구의 굵기 | 본문 400 | `alert-title` 700 | DESIGN `typography.body` | 고침. `app.css`의 `.settings-main .alert-body > .alert-title:only-child` |
+| 확인 대화상자의 키 제목 글꼴 | 고정폭 | 가변폭 카드 제목 | DESIGN 690행 | 고침. `.config-change :is(.card-title, .card-heading)`에 고정폭 |
+| 편집 꺼짐 화면 | CPY-097 안내 하나 | 파일 상태 안내가 겹침 | 화면 스펙 SCR-005 | 고침. 겹친 안내를 지웠다. [취소]는 스펙의 설정 보기 이동이므로 유지 |
+| 파일 상태 안내 | 제목 없는 한 줄, 키는 안내 밖 | 제목·본문·키를 안내 안에 | DESIGN 693행 | 구현 유지 |
+| 변경 확인의 이전·새 값 | `1000 → 2000` 한 줄 | 이전 값·새 값 행을 세로로 쌓음 | DESIGN 694행 | 구현 유지 |
+| 확인 목록의 숫자 글꼴과 키 순서 | 고정폭, limits 먼저 | `typography.body-numeric`, 계약 순서 | DESIGN 692행, 설정 계약 1.2절 | 구현 유지 |
+| 서버 진단 아래 키 | 원문 키 토큰을 덧붙임 | 번역한 줄 오류만 | 화면 스펙 CPY-117·DASH-040 | 구현 유지 |
+| 모바일 페이지 행동 | 한 줄에 나란히 | 전체 폭으로 세로로 쌓음 | DESIGN 695행 | 구현 유지 |
+| 카드 접기 | 일부 프레임에서 `<details>`로 접음 | 모든 Card를 펼침 | DESIGN 695행 | 구현 유지. 시안 목록을 줄이는 표시 장치로 판단 |
+| 모바일 상단 막대 | 높이 100px, 글씨 로그아웃 | 108px, 아이콘과 글씨 | DESIGN 558·687행(공통 셸) | 구현 유지 |
+| 관리 세션 만료 | 프레임 안의 로그인 카드 | `/login/`으로 이동(CPY-075) | 화면 스펙 SCR-004·SCR-005 | 구현 유지 |
+| 예시 경로·revision | 시안의 임의 값 | 시험 fixture 값 | 데이터 | 해당 없음 |
+
+- 증거: `target/settings-compare/`에 비교 페이지 `index.html`, `results.json`, 시안 `mock/` 124장, 구현 `impl/` 124장, 수정 전후 `crops/` 8장, 도구(`server.py`, `fixtures.js`, `capture.js`, `build_results.py`, `build_index.py`)를 두었다(FE-TBD-008). `SHA256SUMS.txt`는 268개 파일, 47,526,483바이트를 담는다. 이 목록 파일의 SHA-256은 `4bd5ea6a468e872a27f3e4a358dbbc16f3feb9f25d81855becf2d779654b95cb`이다.
+
+### 4.28 설정 화면 실서버 시험 (DASH-028~053, MGT-040·042·043, 2026-11-08)
+
+결론: `tests/dashboard_live.rs`의 설정 실행기 26개가 DASH-028~053의 전체 행 표식을 가진다. MGT-043·040·042의 전체 표식은 DASH-042·046·048 실행기에 함께 있다. 커밋 `7ce077f`에 들어간 작업 트리에서 Windows·WSL 모두 26개가 통과했다.
+
+- 기록자: 에이전트 Main. 시험 작성과 보강은 에이전트 DeepenView·DeepenEdit·DeepenRecovery가, 독립 검토는 에이전트 LiveReviewViewEdit·LiveReviewRecovery가 했다. 사람의 검토가 아니다.
+- 이전 초안의 "26개 통과, 약 68초"와 주입 범위 설명은 보강 전 시험의 결과다. 아래 기록이 대체한다.
+
+#### 구성
+
+- 본문: `tests/dashboard_live/settings_view.rs`(DASH-028~034·048·049), `settings_edit.rs`(DASH-035~040·052), `settings_recovery.rs`(DASH-041~047·050·051·053). 공통 도우미 `settings.rs`는 로그인·화면 열기·입력과 `PermissionGuard`·`PendingFile`을 제공한다. 하위 모듈에는 표식이 없다.
+- 서버: `Server::start_with_config_transform`이 시나리오마다 실제 설정 파일을 바꿔 `vnc-relay serve`를 시작한다. 전달 프록시는 API 응답 본문을 기록한다. DASH-039는 브라우저가 보낸 PATCH의 `revision`과 `X-CSRF-Token`을 같은 브라우저 세션의 실제 GET 응답과 대조한다.
+- 미적용 파일 상태: `PendingFile`은 50ms마다 설정 파일의 수정 시각만 바꾼다. [파일 감지](../architectures/file-watch.md)는 100ms 간격으로 시각·길이가 같아야 후보를 안정된 것으로 본다. 그래서 시험 동안 실제 `pending` 상태가 유지된다.
+- 쓰기 실패: 실제 디렉터리 권한을 바꾼다. Windows는 `icacls <dir> /deny <USERNAME>:(WD,AD)`, Linux는 `0o555`다. 바꾼 뒤 `create_new` 탐침이 `PermissionDenied`로 실패하는지 확인한다. 실패하지 않으면(Linux root, Windows `USERNAME` 불일치) 원인을 밝히고 시험을 실패시킨다. 건너뛰지 않는다. 끝나면 권한을 되돌린다.
+- 요청 취소: DASH-051은 로그아웃 때 진행 중 GET·PATCH의 취소를 CDP `Network.loadingFailed`의 `canceled: true`로 확인한다. 시험 페이지의 fetch는 바꾸지 않는다.
+
+#### 시험 쪽 주입과 출처
+
+일반 데이터와 파일 입출력은 실제 실행파일에서 얻는다. 아래 주입은 `injected_count`로 횟수를 확인한다. 주입한 응답을 제품에서 발생한 오류의 증거로 세지 않는다. 서버가 4xx를 만드는지는 Producer 계약 시험(`crates/adapters/tests/management.rs`)이 확인한다. 정상 응답 본문은 바꾸지 않는다. DASH-032의 모르는 진단 코드도 실제 파일이 만든 `config_unknown_key`다.
+
+| 시나리오 | 주입 | 근거 |
+| --- | --- | --- |
+| DASH-039 | 실제 PATCH 응답을 보관했다가 내보냄 | 지연(Q113) |
+| DASH-040 | 계약 모양 `400 config_invalid`의 `config_missing_key`·`config_type_mismatch`·`config_relation_violated`와 모르는 코드. 나머지 진단은 실제 PATCH 검증 결과다 | 편집 가능 키의 PATCH로는 서버가 이 코드를 내지 않는다(사용자 결정 2026-11-08(Q180)) |
+| DASH-042 | 실제 GET 응답을 보관했다가 화면을 떠난 뒤 내보냄 | 지연(Q113) |
+| DASH-043 | 실제 본문 재생. `403 config_edit_disabled`는 `config_edit = false`인 두 번째 서버에서, `409 config_restart_pending`·`config_file_invalid`는 같은 서버에 보낸 원시 PATCH에서 얻었다. 브라우저 PATCH는 서버로 전달하지 않는다 | [관리 API 1.14절](../contracts/management-api-v1.md#114-동적-설정-편집-patch-apiv1config) 4단계 revision 검사가 5단계보다 먼저라 정상 화면 흐름은 이 409에 도달하지 않는다. 편집 화면을 연 채 편집을 끌 수도 없다(Q180) |
+| DASH-046·047 | 응답 유실, 6초 지연(`query_timeout_secs` 5초), `500` | Q113 |
+| DASH-048·049 | 설정 GET의 `500`과 연결 종료, 첫 응답 보관 | Q113 |
+| DASH-051 | 진행 중 GET·PATCH 보관, 결과 불명 로그아웃을 위한 DELETE 응답 유실 | Q113 |
+
+#### 검토로 보강한 항목
+
+- DASH-039: 다른 키(`timeouts.close_secs`)가 파일에서 대기 중일 때 한 키를 저장해, `applied` 2개와 "설정 2개를 적용했습니다."를 확인한다.
+- DASH-042(MGT-043): 다시 불러온 같은 화면에서 바로 저장해, PATCH `revision`이 새 GET의 값과 같고 응답이 `200`임을 확인한다.
+- DASH-050: 두 폭 × 두 언어마다 첫 오류 초점과 선택한 줄을 다시 확인한다.
+- DASH-051: 정상 로그아웃 뒤 CPY-075는 있고 CPY-076은 없으며 `location.search`가 비어 있음을 확인한다. CPY-075는 로그아웃을 구분하지 않는 미인증 안내다(화면 스펙 CPY-075의 근거 열).
+- 정상 응답 본문을 바꾸던 시험 도우미 `Fault::ResponseOwned`와 DASH-051의 fetch 교체를 지웠다.
+
+#### 결과
+
+| 실행 | 환경 | 결과 |
+| --- | --- | --- |
+| `cargo test --test dashboard_live`에 `dashboard_028`~`dashboard_053` 필터 26개 | Windows 11 Pro 10.0.26200 x64, Rust 1.99.1, Chrome 157.0.8103.38 | 26 passed·0 failed, 164.38초 |
+| 같은 명령 | Ubuntu 24.04.4 LTS x64(WSL2, root 아닌 사용자), Rust 1.99.1, Google Chrome 156.0.8078.47 | 26 passed·0 failed, 154.20초 |
+| 게이트 대상 `eae442f`의 `cargo test --workspace` 안 `dashboard_live` 52개(설정 실행기 26개 포함) | Windows 11 Pro 10.0.26200 x64, Rust 1.99.1 | 52 passed·0 failed, 706.22초. 전체 게이트 `ALL PASSED (all)` |
+| 같은 게이트 | Ubuntu 24.04.4 LTS x64(WSL2), Rust 1.99.1 | 52 passed·0 failed, 642.49초. 전체 게이트 `ALL PASSED` |
+
+- 같은 작업 트리에서 두 OS의 `cargo clippy --workspace --all-targets -- -D warnings`와 Windows의 `cargo fmt --all --check`가 통과했다. 실행 뒤 코드는 바꾸지 않고 `7ce077f`로 커밋했다.
+- 첫 게이트(`7ce077f`)의 Ubuntu 실행에서 DASH-046 실행기가 `query_timeout_secs must elapse`로 실패했다. 시험은 프록시가 요청을 다 읽은 시각부터 5초 하한을 쟀다. 브라우저 타이머는 그보다 먼저 시작한다(`web/dashboard/app/api.js`의 `exchange`). 두 OS 게이트를 동시에 실행한 부하에서 하한 검사가 거짓으로 실패한 것으로 추정한다. 실제 지연 값은 기록하지 않았다. 커밋 `0bc9a47`에서 저장 단추를 누르기 직전부터 재도록 고쳤다. 게이트 기록과 판정은 [개발 환경·검증 4.2절](set-up-and-verify.md#42-작업-69-판정표)에 있다.
+- 확인하지 않은 범위: SCR-005에서 설정 GET이 서로 겹치지 않는지는 시나리오 행의 기대 결과가 아니어서 실서버 시험이 확인하지 않는다.
+
+### 4.29 설정 화면 네 엔진 확인 (작업 6.6, 2026-11-08)
+
+결론: 실서버의 설정 흐름을 Chrome·Edge·Firefox·WebKit(Safari 대체, 사용자 결정 2026-11-07(Q135))으로 1280·390px × ko·en 16회 실행했다. 16회 모두 통과했고 제품 결함은 없었다.
+
+- 기록자: 에이전트 Main. 실행은 에이전트 SettingsEngines가 했다. 사람의 검토가 아니다.
+- 서버: 커밋 `7ce077f`과 같은 소스의 Windows debug 실행파일을 루프백 설정(`management.config_edit = true`)과 Argon2id 계정 파일로 시작했다. 네 엔진 모두 이 서버에 접속했다.
+
+| 엔진 | 버전 | 실행 방법 |
+| --- | --- | --- |
+| Chrome | 157.0.8103.38 | 설치본, Playwright `channel="chrome"`, 헤드리스 |
+| Edge | 156.0.4314.58 | 설치본, Playwright `channel="msedge"`, 헤드리스 |
+| Firefox | 157.0 | Playwright Firefox(빌드 1555), 헤드리스 |
+| WebKit | 27.2 | Playwright WebKit(빌드 2370), 헤드리스 |
+
+#### 흐름과 결과
+
+실행마다 아래 7단계를 실제 키 입력으로 했다. 단계마다 가로 넘침(`scrollWidth - clientWidth`)을 쟀고 16회 모두 0이었다.
+
+1. 로그인: Tab 순서가 언어 선택 → 계정 → 비밀번호 → [로그인]이다. Enter로 들어간다.
+2. 설정 보기: 내비게이션의 설정 항목이 `aria-current="page"`이고 모든 구역이 보인다.
+3. 편집: `limits.waiting`을 8에서 10으로 바꾸고 `relay.tcp_viewer.allow`에 `10.0.0.1`을 입력한다.
+4. 변경 확인: 초기 초점은 [취소]다. Tab·Shift+Tab이 대화상자 안에서 돈다. Escape로 닫으면 [변경 내용 확인]으로 초점이 돌아가고 입력이 남는다.
+5. 적용: 키보드로 적용하면 "설정 2개를 적용했습니다." / "Applied 2 settings."가 보인다. 실제 `relay.toml`에 `waiting = 10`과 `"10.0.0.1"`이 기록됐다.
+6. 서버 진단: `not-an-ip`를 더해 적용하면 "3줄: IP·CIDR·범위 항목의 형식이 올바르지 않습니다." / "Line 3: The IP, CIDR, or range item has an invalid format."이 보인다. 초점이 목록 입력으로 가고 해당 줄이 선택된다.
+7. 로그아웃: `/login/`으로 이동하고 설정 영역이 DOM에서 사라진다.
+
+#### 콘솔·CSP 보고
+
+- Chrome·Edge: 실행마다 1건이다. 6단계의 의도한 `400` 응답에 대한 "Failed to load resource" 로그다.
+- Firefox: 0건이다.
+- WebKit: CSP 보고 1건은 4.21절 1번과 같은 `/login/components/language-select.js` 36행의 `style-src-attr`다. 콘솔 22건은 6단계의 `400` 로그 1건과 스타일시트 적용 거부 21건이다. 캡처에는 제품 CSS가 적용되어 있으므로 거부된 것은 제품 스타일이 아니다. 4.21절 2번처럼 자동화 도구가 넣은 스타일로 추정한다[INFERENCE: 거부 건과 도구 호출을 하나씩 대응시키지 않았다].
+
+#### 증거와 미실행
+
+- 증거: `target/settings-engines/`에 `results.json`과 `shots/`의 PNG 48장(실행마다 보기·편집·확인 대화상자)을 두었다(FE-TBD-008). `SHA256SUMS`는 49개 항목을 담고, 다시 계산한 해시가 모두 일치했다. 이 목록 파일의 SHA-256은 `f62163408f4509c422a43b41a55d37d98610aca0afb117c715db32e705f0b9db`이다. 실행 도구 `runner.py`의 SHA-256은 `a160d8e6134c0d1903d5ad7a2a5806580ee1a5f8463edd3a8d2bb2057562d6e8`이다.
+- 미실행: 실제 Safari, 실제 모바일 기기, 스크린 리더, 사람의 시안 비교.
 
 ## 5. 중단 조건
 

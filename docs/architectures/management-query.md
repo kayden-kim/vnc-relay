@@ -10,7 +10,7 @@
 | --- | --- |
 | 구조 시점 | Current |
 | 문서 상태 | Draft |
-| 구현 대조 | 2026-11-08 작업 트리의 `ManagementQueryService::{new,summary}`와 `src/serve.rs`의 `RuntimeSettingsSource` 주입을 소스 읽기로 대조. 새 동적 상한 시험은 미실행. 과거 증거는 [작업 4.4 완료 대조](#작업-44-완료-대조2026-11-04) |
+| 구현 대조 | 2026-11-08 작업 트리의 `ManagementQueryService::{new,summary}`와 `src/serve.rs`의 `RuntimeSettingsSource` 주입을 소스 읽기로 대조. 새 동적 상한 시험은 커밋 `eae442f`의 두 OS 게이트에서 통과([작업 6.9 판정표](../how-to/set-up-and-verify.md#42-작업-69-판정표)). 과거 증거는 [작업 4.4 완료 대조](#작업-44-완료-대조2026-11-04) |
 | 코드 위치 | `crates/app/src/management/query.rs`, `crates/adapters/src/management_http/query_api.rs`, `crates/domain/src/budget.rs` |
 | 코드 지도 | [코드 지도 2절](code-map.md#2-코드-위치와-구성요소) |
 | 관련 스펙 | [관리 스펙](../specs/management.md) MGT-001~007, MGT-013, MGT-015, MGT-016, MGT-021, MGT-023~024, MGT-026, [운영 스펙](../specs/operations.md) OPS-033 |

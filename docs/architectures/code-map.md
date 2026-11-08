@@ -6,7 +6,7 @@ VNC Relay는 TCP·WS·WSS Viewer를 Mode I 대상이나 Mode II Server와 이어
 | --- | --- |
 | 구조 시점 | Current |
 | 문서 상태 | Draft |
-| 구현 대조 | 설정 보기·편집과 실행 값 재로드는 [2026-11-08 소스 대조](#2026-11-08-설정-보기편집과-실행-값-재로드-소스-대조). 이번 변경의 자동 검사는 미실행이다. 이전 실행 증거는 [2026-11-04 대조 기록](#2026-11-04-구조-대조)에 있다. |
+| 구현 대조 | 설정 보기·편집과 실행 값 재로드는 [2026-11-08 소스 대조](#2026-11-08-설정-보기편집과-실행-값-재로드-소스-대조). 이번 변경의 자동 검사(`tests/code_map.rs` 포함)는 커밋 `eae442f`의 두 OS 게이트에서 통과했다([작업 6.9 판정표](../how-to/set-up-and-verify.md#42-작업-69-판정표)). 이전 실행 증거는 [2026-11-04 대조 기록](#2026-11-04-구조-대조)에 있다. |
 | 관련 PRD | [PRD](../requirements/PRD.md), [유지보수성](../requirements/PRD.md#8-비기능-요구사항), [구현 기술](../requirements/PRD.md#확정-기준) |
 | 관련 ADR | [ADR-0001 내장 TLS](../decisions/ADR-0001-built-in-tls.md), [ADR-0003 메모리 상태](../decisions/ADR-0003-single-instance-memory-state.md), [ADR-0004 tokio·rustls](../decisions/ADR-0004-tokio-rustls.md), [ADR-0005 WS 코덱](../decisions/ADR-0005-in-house-ws-streaming-frame-codec.md), [ADR-0006 파일을 통한 설정 편집](../decisions/ADR-0006-config-edit-through-file.md) |
 
@@ -289,7 +289,7 @@ PATCH의 `ConfigEditService::patch`는 같은 잠금으로 편집 허용→원�
 
 - 범위: 작업 트리의 `management/config.rs`·`items.rs`, `config_edit.rs`·`config_api.rs`·`config_file.rs`, reload service/snapshot/ports, watcher 최종 read, serve의 공유 객체·종료 G 조립과 runtime reader다.
 - §2에 설정 서비스·포트·descriptor·파일 어댑터·HTTP 경계와 실제 reload 타입을 반영했다. 중복 `RelayAllow`는 제거된 코드에 맞춰 지웠다. §3은 관리 HTTP에 `session_api` → `config_api` 대안을 추가했다. §4의 설정 흐름은 문단으로 분리했다. 숫자 단계 표는 기존 Mode II 한 흐름을 유지한다.
-- `tests/code_map.rs`의 정의·진입점·인접 단계 해석 규칙을 읽고 실제 정의·사용 경로에 맞춰 적었다. 이번 개정에서는 테스트·빌드·포매터를 실행하지 않았다. 과거 실행 기록은 이번 작업 트리의 자동 검사 통과를 뜻하지 않는다.
+- `tests/code_map.rs`의 정의·진입점·인접 단계 해석 규칙을 읽고 실제 정의·사용 경로에 맞춰 적었다. 이번 개정에서는 테스트·빌드·포매터를 실행하지 않았다. 과거 실행 기록은 이번 작업 트리의 자동 검사 통과를 뜻하지 않는다. 후속: 커밋 `eae442f`의 두 OS 게이트에서 `tests/code_map.rs`를 포함한 자동 검사가 통과했다([작업 6.9 판정표](../how-to/set-up-and-verify.md#42-작업-69-판정표)).
 
 ### 2026-11-05 리스너 감독과 실서버 대시보드 시험 대조
 

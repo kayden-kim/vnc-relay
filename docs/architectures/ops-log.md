@@ -10,7 +10,7 @@
 | --- | --- |
 | 구조 시점 | Current |
 | 문서 상태 | Draft |
-| 구현 대조 | 2026-11-08 작업 트리의 `Event::ConfigEdited`·`ConfigEditRejected`·`ReloadApplied`, `ConfigEditService::patch`, `format_line` 직렬화 arm을 소스 읽기로 대조. 새 사건 시험은 미실행. 과거 범위의 기록은 [대조 기록](#대조-기록) |
+| 구현 대조 | 2026-11-08 작업 트리의 `Event::ConfigEdited`·`ConfigEditRejected`·`ReloadApplied`, `ConfigEditService::patch`, `format_line` 직렬화 arm을 소스 읽기로 대조. 새 사건 시험은 커밋 `eae442f`의 두 OS 게이트에서 통과([작업 6.9 판정표](../how-to/set-up-and-verify.md#42-작업-69-판정표)). 과거 범위의 기록은 [대조 기록](#대조-기록) |
 | 코드 위치 | `crates/domain/src/peer_ip.rs`, `crates/app/src/events.rs`, `crates/app/src/ports.rs`, `crates/adapters/src/ops_log.rs`, `crates/adapters/src/crypto.rs`, `src/serve.rs`(사건 기록 위치) |
 | 코드 지도 | [코드 지도 2절](code-map.md#2-코드-위치와-구성요소) |
 | 관련 스펙 | [운영 스펙 3.5절](../specs/operations.md#35-운영-정보), OPS-012(일부) |

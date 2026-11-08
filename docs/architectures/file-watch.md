@@ -6,7 +6,7 @@
 | --- | --- |
 | 구조 시점 | Current |
 | 문서 상태 | Draft |
-| 구현 대조 | 2026-11-08 작업 트리의 소스 대조. 이번 변경은 테스트·빌드·포매터 미실행이다. 이전 실행 증거는 [대조 기록](#대조-기록)에 보존한다. |
+| 구현 대조 | 2026-11-08 작업 트리의 소스 대조. 이번 변경의 시험은 커밋 `eae442f`의 두 OS 게이트에서 통과했다([작업 6.9 판정표](../how-to/set-up-and-verify.md#42-작업-69-판정표)). 이전 실행 증거는 [대조 기록](#대조-기록)에 보존한다. |
 | 코드 위치 | `crates/adapters/src/file_watch.rs` `ReloadWatcher::run`·`attach`·`episode`·`apply`, `crates/adapters/src/file_watch/feed.rs`, `crates/app/src/reload.rs` `SharedReload`·`ConfigCandidate`·`ConfigPresence`, `crates/app/src/reload/service.rs` `ReloadService`·`PreparedReload`, `crates/app/src/reload/snapshot.rs` `ReloadSnapshot`·`ReloadCell` |
 | 코드 지도 | [코드 지도](code-map.md) |
 | 관련 스펙 | [운영 §3.3](../specs/operations.md#33-파일-변경-자동-감지와-부분-재로드), OPS-003·024~028·035·038·040·041·047~064 |
@@ -100,7 +100,7 @@ flowchart LR
 
 ### 4.3 검증 순서 확인점
 
-소스에는 `ReloadService::arm_before_validation` 동기 일회 훅과 주입한 ReloadClock·ChangeFeed가 있다. 알림 차단, 검증 중 새 세대, TLS 한쪽 교체를 재현하는 경계다. 표식과 실행 범위는 [테스트 컨벤션](../conventions/testing.md#7-테스트와-스펙-시나리오-연결)을 따른다. 이번 개정은 이 시험을 실행하지 않았다.
+소스에는 `ReloadService::arm_before_validation` 동기 일회 훅과 주입한 ReloadClock·ChangeFeed가 있다. 알림 차단, 검증 중 새 세대, TLS 한쪽 교체를 재현하는 경계다. 표식과 실행 범위는 [테스트 컨벤션](../conventions/testing.md#7-테스트와-스펙-시나리오-연결)을 따른다. 이번 개정은 이 시험을 실행하지 않았다. 후속: 커밋 `eae442f`의 두 OS 게이트에서 이 시험들이 통과했다([작업 6.9 판정표](../how-to/set-up-and-verify.md#42-작업-69-판정표)).
 
 ## 5. 상태와 초기화
 
@@ -138,7 +138,7 @@ flowchart LR
 
 위 본문과 §10은 현재 구조다. `ReloadService::on_change`, 별도 허용 목록 snapshot, watcher 단독 service 소유 구조는 사용하지 않는다. 현재 공개 함수는 `prepare_candidate`·`classify_file`·`commit_prepared`, watcher 전용 `handle_config`·`handle_unreadable`이다.
 
-2026-11-08 작업 트리의 reload·watcher·serve와 소비자 경계를 소스로 대조했다. 테스트·빌드·포매터는 실행하지 않았다. 아래 과거 기록의 통과는 이번 실행 값·편집 변경의 실행 검증을 뜻하지 않는다.
+2026-11-08 작업 트리의 reload·watcher·serve와 소비자 경계를 소스로 대조했다. 테스트·빌드·포매터는 실행하지 않았다. 아래 과거 기록의 통과는 이번 실행 값·편집 변경의 실행 검증을 뜻하지 않는다. 후속: 이번 실행 값·편집 변경의 시험은 커밋 `eae442f`의 두 OS 게이트에서 통과했다([작업 6.9 판정표](../how-to/set-up-and-verify.md#42-작업-69-판정표)).
 
 
 ## 9. 결정 기록과 미결정 사항
@@ -315,7 +315,7 @@ flowchart LR
 <a id="10-target--설정-v3-실행-값과-공유-트랜잭션"></a>
 ## 10. Current — 설정 v3 실행 값과 공유 트랜잭션
 
-이 절은 [설정 §1.8](../contracts/config-v3.md#18-재로드-구분)의 27개 동적 키와 [ADR-0006](../decisions/ADR-0006-config-edit-through-file.md)의 공유 적용 경계를 설명한다. 기존 링크를 위해 이전 §10 anchor를 보존했다. 구조는 소스로 대조했으며 이번 개정에서 실행 검증은 하지 않았다.
+이 절은 [설정 §1.8](../contracts/config-v3.md#18-재로드-구분)의 27개 동적 키와 [ADR-0006](../decisions/ADR-0006-config-edit-through-file.md)의 공유 적용 경계를 설명한다. 기존 링크를 위해 이전 §10 anchor를 보존했다. 구조는 소스로 대조했으며 이번 개정에서 실행 검증은 하지 않았다. 후속: 커밋 `eae442f`의 두 OS 게이트에서 이 절의 시험이 통과했다([작업 6.9 판정표](../how-to/set-up-and-verify.md#42-작업-69-판정표)).
 
 ### 10.1 발행 단위와 reader
 

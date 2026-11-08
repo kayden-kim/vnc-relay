@@ -2,7 +2,7 @@
 
 ## 작업 6.2 실행 값 경계 (Current / Active)
 
-`RelayService`와 `RelayRuntime`은 `Arc<dyn RuntimeSettingsSource>`를 공유한다. [소비 경계 표](file-watch.md#101-발행-단위와-reader)와 [동적 상한](connection-limits.md#10-target--동적-상한과-시간-제한)에 따라 `relay/target.rs`가 대상 허용 정책과 C를 시도 시작에 읽고, `relay/matching.rs`가 Lw·W를 등록 때 읽는다. `WaitingTable::arrive`는 `RegistrationPolicy`를 값으로 받는다. 세션 엔진은 첫 EOF·오류의 종료 전이 때 E를 한 번 읽는다. 관리자 종료는 `request_terminate`가 수락 시각과 E를 명령에 함께 담는다. 이미 시작한 종료에는 새 E를 적용하지 않는다. B는 `ConnectionContext.buffer_bytes`에서 각 방향으로 전달하며 Mode II의 두 값이 달라도 유지한다. `RelayRuntimeConfig`에는 재시작 대상인 `recent_closed`만 남는다. G는 정상 종료 시작 때 받은 절대 기한으로 유지한다([설정 §1.8](../contracts/config-v3.md#18-재로드-구분), OPS-047~057). 이 변경의 시험은 통합 검증 전이며 기존 Verified 기록은 과거 범위에만 해당한다.
+`RelayService`와 `RelayRuntime`은 `Arc<dyn RuntimeSettingsSource>`를 공유한다. [소비 경계 표](file-watch.md#101-발행-단위와-reader)와 [동적 상한](connection-limits.md#10-target--동적-상한과-시간-제한)에 따라 `relay/target.rs`가 대상 허용 정책과 C를 시도 시작에 읽고, `relay/matching.rs`가 Lw·W를 등록 때 읽는다. `WaitingTable::arrive`는 `RegistrationPolicy`를 값으로 받는다. 세션 엔진은 첫 EOF·오류의 종료 전이 때 E를 한 번 읽는다. 관리자 종료는 `request_terminate`가 수락 시각과 E를 명령에 함께 담는다. 이미 시작한 종료에는 새 E를 적용하지 않는다. B는 `ConnectionContext.buffer_bytes`에서 각 방향으로 전달하며 Mode II의 두 값이 달라도 유지한다. `RelayRuntimeConfig`에는 재시작 대상인 `recent_closed`만 남는다. G는 정상 종료 시작 때 받은 절대 기한으로 유지한다([설정 §1.8](../contracts/config-v3.md#18-재로드-구분), OPS-047~057). 이 변경의 시험은 커밋 `eae442f`의 두 OS 게이트에서 통과했다([작업 6.9 판정표](../how-to/set-up-and-verify.md#42-작업-69-판정표)). 기존 Verified 기록은 과거 범위의 증거다.
 
 이 문서는 유효한 `PreparedConnection<S>`를 받아 Mode I 대상에 연결하거나 Mode II 상대를 찾고, 양방향 중계와 세션 정리까지 이어 가는 현재 구조를 설명한다. 예를 들어 Server가 `ID:0123`으로 기다릴 때 Viewer가 같은 ID로 접속하면 두 연결을 한 세션으로 옮긴다. 초기 요청 뒤의 데이터부터 상대에게 한 번씩 전달한다.
 
@@ -10,7 +10,7 @@
 | --- | --- |
 | 구조 시점 | Current |
 | 문서 상태 | Draft |
-| 구현 대조 | 작업 6.2 변경은 Current / 실행 미확인. 이전 범위는 [2026-11-04 대조 기록](#8-현재-코드와의-차이와-연결-순서)을 따른다. |
+| 구현 대조 | 작업 6.2 변경은 Current. 시험은 커밋 `eae442f`의 두 OS 게이트에서 통과([작업 6.9 판정표](../how-to/set-up-and-verify.md#42-작업-69-판정표)). 이전 범위는 [2026-11-04 대조 기록](#8-현재-코드와의-차이와-연결-순서)을 따른다. |
 | 코드 위치 | `crates/domain/src/{matching,session,recent_closed,target_policy}.rs`, `crates/app/src/{ports,events,relay}.rs`와 `relay/{handshake,target,matching,session}.rs`, `crates/adapters/src/{target,crypto,ops_log}.rs`와 `net.rs`의 `TcpRelayStream`, `crates/adapters/tests/{tcp_target,ops_info_contract}.rs` |
 | 코드 지도 | [코드 지도](code-map.md#2-코드-위치와-구성요소) |
 | 관련 스펙 | [중계](../specs/relay.md): RLY-003·006~021·023·025~027. [운영](../specs/operations.md): OPS-005·007~009·023·039·042~043. [관리](../specs/management.md#2-조회-대상과-상태): MGT-005 일부 |

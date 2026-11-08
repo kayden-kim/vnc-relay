@@ -4,7 +4,7 @@
 
 `WsPolicy`는 `AcceptPolicy`만 가진다. `net.rs`의 `admit`가 수락 당시 allow/L/B/U/TCP K를 같은 설정 세대에서 읽는다. `websocket.rs`의 `check_upgrade`는 업그레이드 요청의 Origin과 출발지 IP를 한 callback의 현재 설정으로 검사하고 M/WS ping/pong을 보관한다. 101 flush 뒤 `exchange_handshake`가 현재 H를 읽어 `ConnectionContext`에 넘긴다. `WsRelayStream`은 수락 당시 B와 업그레이드 당시 M/Kw를 받는다. U는 수락값이며 기존 연결·교환 값은 바꾸지 않는다([설정 §1.8](../contracts/config-v3.md#18-재로드-구분), OPS-047~050).
 
-`reload_separates_accept_upgrade_and_exchange_values` 단위 시험이 각 소비 시점과 Origin 제거를 다룬다. 이번 변경의 빌드·시험은 아직 실행하지 않았다. 기존 대조 기록은 과거 범위의 증거다.
+`reload_separates_accept_upgrade_and_exchange_values` 단위 시험이 각 소비 시점과 Origin 제거를 다룬다. 이 변경의 시험은 커밋 `eae442f`의 두 OS 게이트에서 통과했다([작업 6.9 판정표](../how-to/set-up-and-verify.md#42-작업-69-판정표)). 기존 대조 기록은 과거 범위의 증거다.
 
 이 문서는 WS·WSS Viewer 진입점이 접속을 받은 뒤의 흐름을 다룬다. 접속을 받고, 허용 판정과 L을 거치고, TLS(WSS)를 협상하고, 업그레이드 요청을 검사하고, 101 응답을 보내는 데까지가 범위다. 101 뒤 연결은 WS 스트림 어댑터와 공통 서비스가 맡는다. 접수 반복은 TCP 진입점과 같은 함수(`accept_connections`)를 쓴다. TLS 협상 세부는 [TLS 모듈 설계](tls.md), L·H·U의 값과 규칙은 [연결 상한과 시간 제한 모듈 설계](connection-limits.md)가 맡는다.
 

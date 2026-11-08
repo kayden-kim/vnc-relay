@@ -307,7 +307,7 @@ components:
 
 **이 문서는 채택된 기준(Accepted)이다.** 사용자가 2026-10-20에 이 문서와 [dashboard.html](mockups/dashboard.html) 시안을 채택했다. 대시보드 구현은 이 문서의 토큰과 컴포넌트 기준을 따라야 한다. 남은 미결정 사항은 [미결정 사항](#미결정-사항)에서 관리한다.
 
-2026-11-08 추가 범위(상단 막대의 설정 항목, SCR-004·SCR-005, 아래 "설정 화면 확장")와 새 `typography.input-data` 단계는 사용자 결정 2026-11-08(Q174)으로 채택했다. 기존 토큰 값과 기존 화면의 채택은 유지한다. 구현·테스트는 미실행(구현 전)이다.
+2026-11-08 추가 범위(상단 막대의 설정 항목, SCR-004·SCR-005, 아래 "설정 화면 확장")와 새 `typography.input-data` 단계는 사용자 결정 2026-11-08(Q174)으로 채택했다. 기존 토큰 값과 기존 화면의 채택은 유지한다. 구현은 커밋 `7ce077f`이다. 시안 대조·실서버 시험·네 엔진 확인은 [검증 how-to 4.27~4.29절](../how-to/verify-dashboard-frontend.md#427-설정-화면-구현과-시안-대조-작업-66-2026-11-08)과 아래 [검증](#검증) 표에 있다.
 
 | 항목 | 값 |
 | --- | --- |
@@ -764,6 +764,9 @@ shadcn/ui처럼 경계선과 얕은 그림자로 층을 나눈다.
 | lead 검토 반영 뒤 토큰·CSS | 기존 YAML·생성 토큰 유지, 설정 화면 CSS 변경 | 2026-11-08. `AWS_LC_SYS_PREBUILT_NASM=1 "$USERPROFILE/.cargo/bin/cargo.exe" xtask tokens --check` 재실행 | 통과: `tokens --check: 통과` | 로컬 명령 실행 |
 | 설정 입력 16px·input-data 단계(사용자 결정 2026-11-08(Q174)으로 채택) | YAML `typography.input-data`, 여러 줄 목록 입력, 숫자 입력. 키 이름·보기 값은 기존 단계 유지 | 2026-11-08. Windows Git Bash에서 `AWS_LC_SYS_PREBUILT_NASM=1 "$USERPROFILE/.cargo/bin/cargo.exe" xtask tokens`와 같은 명령의 `tokens --check` 실행. Chromium 1280·390px, 한국어·English 전체 시안의 접힌 구역을 펼쳐 넘침·입력 글꼴을 측정하고 모바일 한국어 두 장을 육안 확인 | 통과(시안 한정): 생성 명령 정상 완료, `tokens --check: 통과`. 두 폭 모두 16px 미만 설정 입력 0개. 목록 입력은 고정폭 16px·행간 24px·400·자간 0, 숫자 입력은 기존 input 16px. 키·보기 목록 값·확인 키는 고정폭 12px 유지. 가로 넘침·프레임 밖 가로 요소·상단 막대 겹침 0건. 실제 iOS Safari 입력 확대는 미실행(구현 전) | `local://mockup-settings-edit-mobile-ko.png`, `local://mockup-settings-error-mobile-ko.png` 갱신 |
 | 사용자 결정 2026-11-08(Q174~Q177) 채택 기록 | `5b4aed3`에 채택 상태·근거를 반영한 작업 트리. YAML 주석과 시안의 채택 안내만 변경하며 토큰 값·생성 블록은 유지 | 2026-11-08. Windows Git Bash. `AWS_LC_SYS_PREBUILT_NASM=1 "$USERPROFILE/.cargo/bin/cargo.exe" xtask tokens --check` 1회 실행 | 통과: `tokens --check: 통과`. 구현·화면 동작 시험은 미실행(구현 전) | 로컬 명령 실행 |
+| 설정 화면 구현과 시안 대조(작업 6.6) | 구현한 SCR-004·SCR-005와 채택 시안의 설정 프레임 62개 | 2026-11-08. Windows. 구현 화면을 계약 모양 가짜 API로 시안과 같은 값으로 띄워 1280·390px에서 시안 프레임과 124쌍을 찍었다. 커밋 `7ce077f` | 통과(확인 범위 한정). 차이 12건 가운데 3건은 구현을 고쳤고, 8건은 화면 스펙이나 이 문서를 따라 구현을 유지했으며, 1건은 예시 데이터 차이다. 구현 쪽 가로 넘침·CSP 위반·콘솔 오류 0건. 에이전트의 대조이며 사람의 비교 판정은 미실행 | [검증 4.27절](../how-to/verify-dashboard-frontend.md#427-설정-화면-구현과-시안-대조-작업-66-2026-11-08) |
+| 설정 화면 실제 동작·시나리오 연결(작업 6.6) | DASH-028~053 | 2026-11-08. `tests/dashboard_live.rs`의 설정 실행기 26개와 `tests/dashboard_browser.rs`의 설정 가짜 API 시험 26개(6개 폭 × ko·en). 커밋 `eae442f`의 두 OS 전체 게이트 | 통과. DASH-028~053이 Windows·Ubuntu 보고서에서 모두 통과다. 시험 쪽 주입은 Q113·Q180 범위다. 위 2026-11-08 "미실행(구현 전)" 행의 후속 기록이다 | [검증 4.28절](../how-to/verify-dashboard-frontend.md#428-설정-화면-실서버-시험-dash-028053-mgt-040042043-2026-11-08), [작업 6.9 판정표](../how-to/set-up-and-verify.md#42-작업-69-판정표) |
+| 설정 화면 네 엔진 확인(작업 6.6) | 로그인부터 설정 보기·편집·변경 확인·적용·서버 진단·로그아웃까지 | 2026-11-08. Windows. Chrome 157.0.8103.38·Edge 156.0.4314.58·Firefox 157.0·WebKit 27.2(Safari 대체, 사용자 결정 2026-11-07(Q135)), 1280·390px × ko·en, 실제 키 입력. 커밋 `7ce077f`과 같은 소스 | 통과(16회). 단계마다 가로 넘침 0. 실제 Safari·실기기·스크린 리더·사람 비교는 미실행 | [검증 4.29절](../how-to/verify-dashboard-frontend.md#429-설정-화면-네-엔진-확인-작업-66-2026-11-08) |
 
 ### 미결정 사항
 
@@ -771,4 +774,4 @@ shadcn/ui처럼 경계선과 얕은 그림자로 층을 나눈다.
 
 DESIGN-TBD-002(다크 테마)는 사용자 결정(2026-10-20)으로 라이트 테마만 두기로 해 [테마](#테마)에 반영했다. DESIGN-TBD-001(시각 방향), DESIGN-TBD-003(중단점과 모바일 배치), DESIGN-TBD-004(표시 형식)는 사용자가 이 문서를 채택(2026-10-20)해 결정했다. 이 ID들은 재사용하지 않는다.
 
-DESIGN-TBD-005도 사용자 결정 2026-10-22(Q32~Q38)로 해소했으며, 이 ID도 재사용하지 않는다. DESIGN-TBD-006(설정 화면 확장·시안·이름)은 사용자 결정 2026-11-08(Q174·Q176)으로 결정되어 [설정 화면 확장](#설정-화면-확장)·[설정 시안](mockups/dashboard.html)·[화면 스펙](../specs/dashboard.md)·[관리 API 계약](../contracts/management-api-v1.md)에 반영했으며 재사용하지 않는다. 구현·컴포넌트 API 갱신과 테스트는 미실행(구현 전)이다.
+DESIGN-TBD-005도 사용자 결정 2026-10-22(Q32~Q38)로 해소했으며, 이 ID도 재사용하지 않는다. DESIGN-TBD-006(설정 화면 확장·시안·이름)은 사용자 결정 2026-11-08(Q174·Q176)으로 결정되어 [설정 화면 확장](#설정-화면-확장)·[설정 시안](mockups/dashboard.html)·[화면 스펙](../specs/dashboard.md)·[관리 API 계약](../contracts/management-api-v1.md)에 반영했으며 재사용하지 않는다. 구현·컴포넌트 API 갱신과 테스트는 미실행(구현 전)이다. 후속: 구현은 커밋 `7ce077f`이며 조립·스타일은 [공통 컴포넌트 설계의 설정 화면 조립과 스타일](../architectures/dashboard-components.md#설정-화면-조립과-스타일)에 있다. 시험은 커밋 `eae442f`의 두 OS 게이트에서 통과했다([검증](#검증) 표).

@@ -10,7 +10,7 @@
 | --- | --- |
 | 구조 시점 | Current |
 | 문서 상태 | Draft |
-| 구현 대조 | 2026-11-08 작업 트리의 `read_management`·`parse_candidate`·`collect_presence`를 소스 읽기로 대조. 새 동작 시험은 미실행. 이전 범위의 기록은 [대조 기록](#대조-기록) |
+| 구현 대조 | 2026-11-08 작업 트리의 `read_management`·`parse_candidate`·`collect_presence`를 소스 읽기로 대조. 새 동작 시험은 커밋 `eae442f`의 두 OS 게이트에서 통과([작업 6.9 판정표](../how-to/set-up-and-verify.md#42-작업-69-판정표)). 이전 범위의 기록은 [대조 기록](#대조-기록) |
 | 코드 위치 | `crates/domain/src/{allow_list,entry_point,origin,target_policy}.rs`, `crates/app/src/settings.rs`, `crates/adapters/src/config_file.rs`, `crates/adapters/src/config_file/` |
 | 코드 지도 | [코드 지도 2절](code-map.md#2-코드-위치와-구성요소) |
 | 관련 스펙 | [운영 스펙 3.1절](../specs/operations.md#31-설정-검증과-시작), OPS-001(일부), OPS-038(일부), OPS-040(일부) |

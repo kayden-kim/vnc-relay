@@ -6,7 +6,7 @@
 | --- | --- |
 | 구조 시점 | Current — 설정 보기·편집의 app·파일·HTTP 경계 |
 | 문서 상태 | Active — Q167~Q178, 2026-11-08 채택 범위 |
-| 구현 대조 | 2026-11-08 작업 트리를 소스 읽기로 대조. [§8](#8-current-구조-대조)의 범위만 확인했으며 빌드·시험은 미실행 |
+| 구현 대조 | Verified — 2026-11-08 작업 트리의 소스 대조([§8](#8-current-구조-대조))와 커밋 `eae442f`의 두 OS 게이트([§9](#9-확정-경계와-검증-범위), [작업 6.9 판정표](../how-to/set-up-and-verify.md#42-작업-69-판정표)) |
 | 코드 위치 | `crates/app/src/management/config.rs`, `crates/app/src/management/config/items.rs`, `crates/adapters/src/config_edit.rs`, `crates/adapters/src/management_http/config_api.rs`, `src/serve.rs` |
 | 코드 지도 | [코드 지도](code-map.md) |
 | 관련 스펙 | [관리 §3.3](../specs/management.md#33-설정-보기와-동적-설정-편집) MGT-R19~R27·MGT-028~045, [운영 §3.3](../specs/operations.md#33-파일-변경-자동-감지와-부분-재로드) OPS-059~064, [화면](../specs/dashboard.md#scr-004-설정-보기) DASH-028~053 |
@@ -128,10 +128,14 @@ flowchart LR
 | `crates/adapters/src/management_http.rs` `ManagementServices`, `DashboardHints`; `session_api::answer`, `config_api::{answer,patch_body,view_body,edit_error}` | 서비스 주입·PATCH CSRF·64 KiB·blocking 호출·JSON 오류 매핑·응답 때 현재 E+5 | API §1.3·§1.12~14 |
 | `src/serve.rs` `config_management`, `listen_until_shutdown` | `std::path::absolute`로 설정 경로와 base_dir을 맞춘 뒤 같은 SharedReload·파일/문서 포트·시계·사건 싱크를 app 서비스에 주입. helper는 `io::Result<Arc<dyn ConfigManagement>>`를 반환 | ADR-0006, 운영 §3.3 |
 
-대조 범위는 2026-11-08 설정 편집 작업 트리의 위 소스다. 소스의 경계·타입·순서를 읽은 기록이며 실행 검증이 아니다. 빌드·시험·formatter는 실행하지 않았다. 양 OS 계약/시나리오 결과는 통합 검증 담당자의 실제 실행 기록을 따른다.
+대조 범위는 2026-11-08 설정 편집 작업 트리의 위 소스다. 소스의 경계·타입·순서를 읽은 기록이며 실행 검증이 아니다. 빌드·시험·formatter는 실행하지 않았다. 양 OS 계약/시나리오 결과는 통합 검증 담당자의 실제 실행 기록을 따른다. 후속: 위 표의 심볼은 커밋 `eae442f`에도 있다. 실행 검증은 커밋 `eae442f`의 두 OS 게이트에서 통과했다([§9](#9-확정-경계와-검증-범위), [작업 6.9 판정표](../how-to/set-up-and-verify.md#42-작업-69-판정표)).
 
 ## 9. 확정 경계와 검증 범위
 
 - PATCH 64 KiB·pending/edited 키 구분·비UTF-8·새 줄바꿈·재확인 읽기 실패 매핑은 작성자 판단(lead 2026-11-08)에 따른다. 외부 편집 경쟁은 Q178의 교체 직전 재확인·짧은 보장 밖 틈으로 확정했다. 외부 동작의 정확한 형식은 관련 계약을 기준으로 한다.
 - `last_reload`는 watcher의 applied/rejected/restart_required와 실행값을 실제 발행한 PATCH(applied)를 기록한다. GET·동일 후보 watcher·PATCH 인증/본문/꺼짐/충돌/파일 상태/후보 검증/쓰기 실패/no-op은 갱신하지 않는다. `commit_prepared`의 applied가 비어도 갱신하지 않는다. 스키마가 허용하는 config_edit+rejected/restart_required는 현재 생성하지 않는다.
-- disabled 생략 null·단독 WSS 경로·배열 내부 주석·혼합 줄바꿈·Q178 경쟁·실제 OS 교체 권한은 통합 검증 대상이다. 이 문서의 소스 대조만으로 시험 통과나 양 OS 운영 검증을 주장하지 않는다.
+- disabled 생략 null·단독 WSS 경로·배열 내부 주석·혼합 줄바꿈·Q178 경쟁·실제 OS 교체 권한은 통합 검증 대상이었다. 아래 시험이 커밋 `eae442f`의 두 OS 게이트에서 통과했다([작업 6.9 판정표](../how-to/set-up-and-verify.md#42-작업-69-판정표)). OS 전용 시험은 해당 OS에서만 실행된다.
+  - disabled 생략 null·단독 WSS 경로: `tests/management_query.rs`의 `config_view_reports_effective_values_all_file_states_and_reload_history`.
+  - 배열 내부 주석·혼합 줄바꿈: `crates/adapters/tests/config_edit_document.rs`의 `array_value_edits_keep_internal_comments_spacing_and_each_newline`, `scalar_edits_preserve_bom_comments_decor_and_mixed_newlines_exactly`. 재시작 뒤 유지와 LF·CRLF 파일은 `tests/management_query.rs`의 `config_edit_preserves_document_applies_once_and_survives_restart`가 확인한다.
+  - Q178 경쟁: `crates/adapters/src/config_edit.rs`의 단위 시험 `external_save_after_temp_sync_is_rechecked_and_temp_is_removed`, `tests/management_query.rs`의 `stale_config_revision_refuses_other_admin_and_external_comment_changes`.
+  - 실제 OS 교체 권한: DASH-044·045 실서버 시험이 설정 디렉터리 쓰기를 막는다(Windows는 `icacls`의 거부 항목, Ubuntu는 `0o555`). Windows 전용 `crates/adapters/tests/config_edit_document.rs`의 `windows_open_handle_without_share_delete_prevents_rename_and_cleans_temp`도 있다. 시험은 시험 실행 계정으로 했고, 별도 서비스 로그온 계정에서는 확인하지 않았다.

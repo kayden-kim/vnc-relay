@@ -6,7 +6,7 @@
 | --- | --- |
 | 구조 시점 | Current |
 | 문서 상태 | Draft |
-| 구현 대조 | 작업 6.2 변경은 Current / 실행 미확인. 이전 범위의 결과는 [대조 기록](#대조-기록)을 따른다. |
+| 구현 대조 | 작업 6.2 변경은 Current. 시험은 커밋 `eae442f`의 두 OS 게이트에서 통과([작업 6.9 판정표](../how-to/set-up-and-verify.md#42-작업-69-판정표)). 이전 범위의 결과는 [대조 기록](#대조-기록)을 따른다. |
 | 코드 위치 | `crates/domain/src/budget.rs`, `crates/app/src/events.rs`(`RejectReason::RelayConnectionLimit`, `AbortReason`, `ConnectionErrorKind`), `crates/adapters/src/net.rs`(`AcceptPolicy`, `accept_connections`, `set_keepalive`, `TcpRelayStream`), `crates/app/src/relay.rs`(`RelayService::handle_connection`), `crates/app/src/relay/handshake.rs`(`exchange`, `read_request`), `crates/adapters/src/websocket.rs`(`WsPolicy`, `connection`), `crates/adapters/src/request_deadline.rs`(관리 U), `src/serve.rs`(L 예산 만들기) |
 | 코드 지도 | [코드 지도 2절](code-map.md#2-코드-위치와-구성요소) |
 | 관련 스펙 | [운영 스펙 2절](../specs/operations.md#2-상태와-검증-매개변수)의 L·Lm·Lw·H·K·U, [4.1절](../specs/operations.md#41-판정-가능한-규칙)의 OPS-R03·OPS-R20, OPS-004(일부), OPS-006(일부), OPS-033(일부), [중계 스펙](../specs/relay.md#7-수용-테스트) RLY-005(일부) |
@@ -160,7 +160,7 @@ TCP 경로는 2~4절과 같다. WS·WSS 행은 [WebSocket 진입점 모듈 설�
 
 ## 10. Target — 동적 상한과 시간 제한
 
-구조 시점 Current / 상태 Active / 작업 6.2 실행 미확인. 기존 링크를 유지하려고 절 제목의 Target 표기를 남긴다. 근거는 [설정 §1.8 적용 표](../contracts/config-v3.md#18-재로드-구분), [운영 §3.3](../specs/operations.md#33-파일-변경-자동-감지와-부분-재로드) OPS-R30~R33·OPS-050~057이다. 전체 소비 경계는 [파일 감지 §10.1](file-watch.md#101-발행-단위와-reader)을 따른다.
+구조 시점 Current / 상태 Active / 작업 6.2 시험은 커밋 `eae442f`의 두 OS 게이트에서 통과([작업 6.9 판정표](../how-to/set-up-and-verify.md#42-작업-69-판정표)). 기존 링크를 유지하려고 절 제목의 Target 표기를 남긴다. 근거는 [설정 §1.8 적용 표](../contracts/config-v3.md#18-재로드-구분), [운영 §3.3](../specs/operations.md#33-파일-변경-자동-감지와-부분-재로드) OPS-R30~R33·OPS-050~057이다. 전체 소비 경계는 [파일 감지 §10.1](file-watch.md#101-발행-단위와-reader)을 따른다.
 
 `ConnectionBudget`는 `used: AtomicU32`만 보유한다. `try_acquire(limit)`가 CAS로 사용량을 늘리고 permit drop이 줄인다. 상한 원본은 재로드 snapshot 하나에만 있다. domain은 app snapshot을 알지 않는다([레이어 규칙](code-map.md#레이어와-의존-방향), [설정 §1.8 규칙 5](../contracts/config-v3.md#18-재로드-구분)).
 
@@ -170,4 +170,4 @@ TCP 경로는 2~4절과 같다. WS·WSS 행은 [WebSocket 진입점 모듈 설�
 - snapshot read callback 안에서 relay registry를 사용할 수 있지만 역순(registry→snapshot)은 금지한다. session poll은 필요한 E를 registry 잠금 전에 읽거나 registry 잠금 밖 종료 상태 소유자가 읽는다. 파일 트랜잭션 mutex는 budget/registry가 획득하지 않는다. 이 순서는 [설정 §1.8 전체 교체·기존 연결 유지](../contracts/config-v3.md#18-재로드-구분)를 교착 없이 구현하기 위한 내부 선택이다.
 - H/U/W/C/E/G는 각 시작 때 deadline으로 바꾼다. B는 수락 문맥, M/WS K는 업그레이드 문맥, TCP K는 해당 소켓 옵션으로 고정한다. 유효 설정 교체가 이미 저장한 deadline/옵션/버퍼를 수정하지 않는다. E는 세션 생성 시점이 아니라 **종료 교환 시작** 때 읽는다. 관리 세션 응답의 E+5는 별도 현재 snapshot 읽기다([설정 §1.8](../contracts/config-v3.md#18-재로드-구분), OPS-050·057).
 
-관련 단위 시험은 `budget::tests::lower_limit_does_not_revoke_permits_and_recovers_after_release`, `matching::tests::registration_policy_changes_preserve_existing_deadlines`, `relay::tests::reload_keeps_waiting_deadlines_and_reads_new_registration_policy`, `relay::tests::reload_keeps_started_c_and_policy_but_changes_the_next_target_check`, `relay::handshake::tests::exchange_keeps_accepted_b_and_started_h_after_reload`, `relay::session::tests::reload_reads_e_at_first_close_and_keeps_started_close_fixed`, `relay::session::tests::mode_two_directions_keep_distinct_accepted_buffer_limits`, `management::query::tests::summary_reports_reloaded_limits_even_below_current_usage`다. 시나리오 marker는 부분 관측 범위를 표시하며 실제 통과 결과는 통합 검증 기록을 따른다.
+관련 단위 시험은 `budget::tests::lower_limit_does_not_revoke_permits_and_recovers_after_release`, `matching::tests::registration_policy_changes_preserve_existing_deadlines`, `relay::tests::reload_keeps_waiting_deadlines_and_reads_new_registration_policy`, `relay::tests::reload_keeps_started_c_and_policy_but_changes_the_next_target_check`, `relay::handshake::tests::exchange_keeps_accepted_b_and_started_h_after_reload`, `relay::session::tests::reload_reads_e_at_first_close_and_keeps_started_close_fixed`, `relay::session::tests::mode_two_directions_keep_distinct_accepted_buffer_limits`, `management::query::tests::summary_reports_reloaded_limits_even_below_current_usage`, `net::accept_tests::reloaded_keepalive_applies_to_new_accepts_and_keeps_accepted_sockets`(Linux 전용)다. 대상 연결의 K는 `crates/adapters/tests/tcp_target.rs`의 `reloaded_keepalive_is_used_only_for_new_target_sockets`가 확인한다. 시나리오 marker는 부분 관측 범위를 표시한다. 두 OS의 실제 통과 결과는 [작업 6.9 판정표](../how-to/set-up-and-verify.md#42-작업-69-판정표)에 있다.

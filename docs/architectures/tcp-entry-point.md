@@ -4,7 +4,7 @@
 
 `crates/adapters/src/net.rs`의 `AcceptPolicy`는 `AllowSource`와 사용량만 보관하는 L 예산을 가진다. `admit`는 `RuntimeSettingsSource::with_current` 안에서 출발지 IP와 현재 L을 검사하고 `try_acquire(limit)`의 CAS까지 끝낸다. 같은 세대의 B·H·U·K를 `AcceptedSettings`로 복사한다. TCP는 수락 시각을 초기 교환 시작 시각으로 쓰며, B·H를 `ConnectionContext`에 넘긴다. K는 수락 소켓에 한 번 설정한다. `target.rs`의 `TcpTargetConnector`는 새 대상 연결 시도에서 K를 별도로 읽는다. 기존 연결의 B·기한·소켓 옵션은 바꾸지 않는다([설정 §1.8](../contracts/config-v3.md#18-재로드-구분), OPS-050~053).
 
-구현과 경계 단위 시험을 추가했다. 이번 변경의 빌드·시험은 아직 실행하지 않았다. 기존 대조 기록은 과거 범위의 증거다.
+구현과 경계 단위 시험을 추가했다. 커밋 `eae442f`는 수락 쪽 K 시험 `net::accept_tests::reloaded_keepalive_applies_to_new_accepts_and_keeps_accepted_sockets`(Linux 전용)를 더했다. 대상 연결의 K는 `crates/adapters/tests/tcp_target.rs`의 `reloaded_keepalive_is_used_only_for_new_target_sockets`가 확인한다. 이 변경의 시험은 커밋 `eae442f`의 두 OS 게이트에서 통과했다([작업 6.9 판정표](../how-to/set-up-and-verify.md#42-작업-69-판정표)). 기존 대조 기록은 과거 범위의 증거다.
 
 TCP Viewer·TCP Server 진입점이 접속을 수락하고, 데이터를 읽기 전에 그 진입점의 출발지 IP 허용 목록으로 판정하는 구조를 다룬다. WS·WSS 진입점(작업 3.2)도 같은 수락 반복과 같은 판정을 쓰며, 101 응답까지의 처리는 [WebSocket 진입점 모듈 설계](websocket-entry-point.md)가 다룬다. TCP 연결은 허용되면 연결 상한 L의 자리를 잡고, 연결 식별자(`conn_id`)를 받고, 초기 교환 단계에 들어간다. 초기 교환 읽기와 해석은 `RelayService::handle_connection`이 맡는다. 초기 교환 형식은 [Repeater 초기 교환 계약](../contracts/repeater-handshake-v1.md)을 따른다. 초기 교환은 H 만료, 바이트 전 상대 종료, 연결 재설정, 서버 종료 중 먼저 오는 것으로 끝난다. L·H·TCP keepalive의 규칙은 [연결 상한과 시간 제한 모듈 설계](connection-limits.md)가 다룬다.
 
