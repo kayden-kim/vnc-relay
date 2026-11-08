@@ -9,6 +9,7 @@ use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
+use vnc_relay_app::reload::{ConfigCandidate, ConfigPresence};
 use vnc_relay_app::settings::{
     AdminSessionSettings, AdminSettings, Argon2Settings, ConfigDiagnostic, ConfigError,
     DashboardSettings, EntryPointSettings, KeepaliveSettings, LimitSettings, LogOutput,
@@ -31,6 +32,12 @@ use reader::{Diagnostics, Field, Section, out_of_range};
 pub fn load(path: &Path) -> Result<Settings, Vec<ConfigDiagnostic>> {
     let (text, absolute) = read_text(path)?;
     parse(&text, base_dir(&absolute))
+}
+
+/// Reads settings and presence from the same file read at startup.
+pub fn load_candidate(path: &Path) -> Result<ConfigCandidate, Vec<ConfigDiagnostic>> {
+    let (text, absolute) = read_text(path)?;
+    parse_candidate(text.as_bytes(), base_dir(&absolute))
 }
 
 /// Reads the config file for the `admin` commands: the whole TOML syntax and
@@ -87,8 +94,15 @@ fn base_dir(absolute: &Path) -> &Path {
 /// resolved against. Returns every diagnostic found, or the settings.
 pub fn parse(text: &str, base_dir: &Path) -> Result<Settings, Vec<ConfigDiagnostic>> {
     let table = parse_table(text)?;
+    settings_from_table(&table, base_dir)
+}
+
+fn settings_from_table(
+    table: &toml::Table,
+    base_dir: &Path,
+) -> Result<Settings, Vec<ConfigDiagnostic>> {
     let mut d = Diagnostics::default();
-    let mut root = Section::root(&table);
+    let mut root = Section::root(table);
     let settings = read_settings(&mut root, base_dir, &mut d);
     root.finish(&mut d);
     match settings {
@@ -97,7 +111,58 @@ pub fn parse(text: &str, base_dir: &Path) -> Result<Settings, Vec<ConfigDiagnost
     }
 }
 
+/// Checks raw config bytes and records every explicitly written leaf key,
+/// including values of disabled features (management-api-v1 §1.13).
+pub fn parse_candidate(
+    bytes: &[u8],
+    base_dir: &Path,
+) -> Result<ConfigCandidate, Vec<ConfigDiagnostic>> {
+    let text = std::str::from_utf8(bytes).map_err(|_| {
+        vec![ConfigDiagnostic {
+            error: ConfigError::FileUnreadable,
+            key: String::new(),
+            message: "설정 파일이 UTF-8 텍스트가 아니다.".to_owned(),
+        }]
+    })?;
+    let table = parse_table(text)?;
+    let settings = settings_from_table(&table, base_dir)?;
+    let mut presence = ConfigPresence::default();
+    collect_presence(&table, "", &mut presence);
+    if !settings.relay.wss_viewer.enabled
+        && settings.relay.wss_viewer.tls.is_none()
+        && let Some(wss) = table
+            .get("relay")
+            .and_then(|relay| relay.get("wss_viewer"))
+            .and_then(toml::Value::as_table)
+    {
+        for key in ["cert_file", "key_file"] {
+            if let Some(path) = wss.get(key).and_then(toml::Value::as_str) {
+                presence
+                    .inactive_paths
+                    .insert(format!("relay.wss_viewer.{key}"), base_dir.join(path));
+            }
+        }
+    }
+    Ok(ConfigCandidate { settings, presence })
+}
+
+fn collect_presence(table: &toml::Table, prefix: &str, presence: &mut ConfigPresence) {
+    for (key, value) in table {
+        let path = if prefix.is_empty() {
+            key.clone()
+        } else {
+            format!("{prefix}.{key}")
+        };
+        if let toml::Value::Table(table) = value {
+            collect_presence(table, &path, presence);
+        } else {
+            presence.keys.insert(path);
+        }
+    }
+}
+
 fn parse_table(text: &str) -> Result<toml::Table, Vec<ConfigDiagnostic>> {
+    let text = text.strip_prefix('\u{feff}').unwrap_or(text);
     text.parse().map_err(|error: toml::de::Error| {
         vec![ConfigDiagnostic {
             error: ConfigError::SyntaxError,
@@ -461,6 +526,7 @@ fn read_management(
     let mut management = root.section("management", d);
     let listen = read_listen(&mut management, "listen", None, d);
     let listen = required(&management, "listen", listen, "", d);
+    let config_edit = management.bool("config_edit", d).or(false);
     let cert_file = read_path(&mut management, "cert_file", base_dir, d);
     let key_file = read_path(&mut management, "key_file", base_dir, d);
     match (cert_file.is_absent(), key_file.is_absent()) {
@@ -512,6 +578,7 @@ fn read_management(
     Some(ManagementSettings {
         listen: listen?,
         tls: tls?,
+        config_edit: config_edit?,
         login_limit: LoginLimitSettings {
             per_account: per_account?,
             per_source: per_source?,

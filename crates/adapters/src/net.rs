@@ -20,9 +20,9 @@ use tokio_rustls::TlsAcceptor;
 use vnc_relay_app::events::{AbortReason, ConnectionErrorKind, Event, RejectReason, Stage};
 use vnc_relay_app::ports::{Clock, EventSink};
 use vnc_relay_app::relay::{ConnectionContext, RelayRuntime, RelayService};
-use vnc_relay_app::reload::snapshot::{RelayAllow, ReloadCell};
-use vnc_relay_app::settings::{KeepaliveSettings, ListenerPlan};
-use vnc_relay_domain::allow_list::AllowList;
+use vnc_relay_app::reload::ports::RuntimeSettingsSource;
+use vnc_relay_app::reload::snapshot::ReloadCell;
+use vnc_relay_app::settings::{KeepaliveSettings, ListenerPlan, Settings};
 use vnc_relay_domain::budget::{BudgetPermit, ConnectionBudget};
 use vnc_relay_domain::conn_id::ConnId;
 use vnc_relay_domain::entry_point::EntryPoint;
@@ -253,11 +253,6 @@ pub struct AcceptPolicy {
     pub allow: AllowSource,
     /// L, shared by every relay entry point.
     pub relay_budget: Arc<ConnectionBudget>,
-    /// H, counted from the accept: a TCP connection enters the initial
-    /// exchange as soon as it is accepted.
-    pub handshake: Duration,
-    /// K, set on every accepted relay socket.
-    pub keepalive: KeepaliveSettings,
 }
 
 /// Where an entry point takes its allow list. Each check reads the list from
@@ -265,39 +260,62 @@ pub struct AcceptPolicy {
 /// pre-upgrade IP recheck (file-watch.md §4).
 #[derive(Clone)]
 pub struct AllowSource {
-    cell: Arc<ReloadCell<TlsAcceptor>>,
-    pick: fn(&RelayAllow) -> &AllowList,
+    runtime: Arc<dyn RuntimeSettingsSource>,
+    entry_point: EntryPoint,
 }
 
 impl AllowSource {
     /// The `tcp_viewer` allow list of the snapshot.
     pub fn tcp_viewer(cell: Arc<ReloadCell<TlsAcceptor>>) -> Self {
-        Self::new(cell, pick_tcp_viewer)
+        Self::new(cell, EntryPoint::TcpViewer)
     }
 
     /// The `tcp_server` allow list of the snapshot.
     pub fn tcp_server(cell: Arc<ReloadCell<TlsAcceptor>>) -> Self {
-        Self::new(cell, pick_tcp_server)
+        Self::new(cell, EntryPoint::TcpServer)
     }
 
     /// The `ws_viewer` allow list of the snapshot.
     pub fn ws_viewer(cell: Arc<ReloadCell<TlsAcceptor>>) -> Self {
-        Self::new(cell, pick_ws_viewer)
+        Self::new(cell, EntryPoint::WsViewer)
     }
 
     /// The `wss_viewer` allow list of the snapshot.
     pub fn wss_viewer(cell: Arc<ReloadCell<TlsAcceptor>>) -> Self {
-        Self::new(cell, pick_wss_viewer)
+        Self::new(cell, EntryPoint::WssViewer)
     }
 
-    fn new(cell: Arc<ReloadCell<TlsAcceptor>>, pick: fn(&RelayAllow) -> &AllowList) -> Self {
-        Self { cell, pick }
+    fn new(cell: Arc<ReloadCell<TlsAcceptor>>, entry_point: EntryPoint) -> Self {
+        Self {
+            runtime: cell,
+            entry_point,
+        }
     }
 
     /// Whether the allow list current now permits `peer_ip`.
     pub fn permits(&self, peer_ip: PeerIp) -> bool {
-        let snapshot = self.cell.current();
-        (self.pick)(&snapshot.relay_allow).permits(peer_ip)
+        let mut permitted = false;
+        self.runtime.with_current(&mut |settings| {
+            permitted = self.permits_in(settings, peer_ip);
+        });
+        permitted
+    }
+
+    pub(crate) fn permits_in(&self, settings: &Settings, peer_ip: PeerIp) -> bool {
+        settings
+            .relay
+            .get(self.entry_point)
+            .allow
+            .as_ref()
+            .is_some_and(|allow| allow.permits(peer_ip))
+    }
+
+    pub(crate) fn entry_point(&self) -> EntryPoint {
+        self.entry_point
+    }
+
+    pub(crate) fn with_current(&self, read: &mut dyn FnMut(&Settings)) {
+        self.runtime.with_current(read);
     }
 }
 
@@ -305,22 +323,6 @@ impl fmt::Debug for AllowSource {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("AllowSource").finish_non_exhaustive()
     }
-}
-
-fn pick_tcp_viewer(relay: &RelayAllow) -> &AllowList {
-    &relay.tcp_viewer
-}
-
-fn pick_tcp_server(relay: &RelayAllow) -> &AllowList {
-    &relay.tcp_server
-}
-
-fn pick_ws_viewer(relay: &RelayAllow) -> &AllowList {
-    &relay.ws_viewer
-}
-
-fn pick_wss_viewer(relay: &RelayAllow) -> &AllowList {
-    &relay.wss_viewer
 }
 
 /// The TCP Viewer or TCP Server entry point: accepts connections, checks
@@ -343,8 +345,28 @@ pub(crate) struct Accepted {
     pub(crate) at: Instant,
     pub(crate) peer_addr: SocketAddr,
     pub(crate) accepted_wall: SystemTime,
+    pub(crate) settings: AcceptedSettings,
 }
 
+/// Values fixed at TCP accept, including B even when WS upgrades much later.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct AcceptedSettings {
+    pub(crate) buffer_bytes: usize,
+    pub(crate) handshake: Duration,
+    pub(crate) upgrade: Duration,
+    pub(crate) keepalive: KeepaliveSettings,
+}
+
+impl AcceptedSettings {
+    pub(crate) fn from_settings(settings: &Settings) -> Self {
+        Self {
+            buffer_bytes: settings.limits.buffer_bytes as usize,
+            handshake: settings.timeouts.handshake,
+            upgrade: settings.timeouts.tls_upgrade,
+            keepalive: settings.keepalive,
+        }
+    }
+}
 impl<L: crate::listener::Listener> TcpEntryPoint<L> {
     pub fn new(
         entry_point: EntryPoint,
@@ -383,7 +405,7 @@ impl<L: crate::listener::Listener> TcpEntryPoint<L> {
                 let clock = Arc::clone(&clock);
                 let elapsed = conn.at.elapsed();
                 let accepted_at = clock.monotonic().saturating_sub(elapsed);
-                let exchange_at = clock.monotonic();
+                let exchange_at = accepted_at;
                 let context = ConnectionContext {
                     conn_id: conn.conn_id,
                     entry_point: conn.entry_point,
@@ -392,6 +414,8 @@ impl<L: crate::listener::Listener> TcpEntryPoint<L> {
                     accepted_wall: conn.accepted_wall,
                     accepted_at,
                     exchange_at,
+                    buffer_bytes: conn.settings.buffer_bytes,
+                    handshake: conn.settings.handshake,
                 };
                 async move {
                     let stream = TcpRelayStream::new(stream);
@@ -473,9 +497,11 @@ async fn accept_connections_with_keepalive<L: crate::listener::Listener, Serve, 
                 continue;
             }
         };
+        let at = Instant::now();
+        let accepted_wall = SystemTime::now();
         let peer_ip = PeerIp::from(addr);
-        let permit = match admit(&policy, peer_ip) {
-            Ok(permit) => permit,
+        let (permit, settings) = match admit(&policy, peer_ip) {
+            Ok(admitted) => admitted,
             Err(reason) => {
                 // Logged before the close, so a peer that sees the
                 // close also finds the line.
@@ -493,16 +519,17 @@ async fn accept_connections_with_keepalive<L: crate::listener::Listener, Serve, 
             conn_id: ConnId::next(),
             entry_point,
             peer_ip,
-            at: Instant::now(),
+            at,
             peer_addr: addr,
-            accepted_wall: SystemTime::now(),
+            accepted_wall,
+            settings,
         };
         log.record(&Event::ConnectionAccepted {
             conn_id: conn.conn_id,
             entry_point: conn.entry_point,
             peer_ip,
         });
-        if keepalive(&stream, &policy.keepalive).is_err() {
+        if keepalive(&stream, &conn.settings.keepalive).is_err() {
             let stage = match entry_point {
                 EntryPoint::TcpViewer | EntryPoint::TcpServer => Stage::InitialExchange,
                 EntryPoint::WsViewer => Stage::Upgrade,
@@ -528,16 +555,22 @@ async fn accept_connections_with_keepalive<L: crate::listener::Listener, Serve, 
 
 /// The source IP check, then a place of L (relay spec §3.1 step 1, RLY-R16).
 /// A refused source neither takes a place of L nor learns that L is full.
-fn admit(policy: &AcceptPolicy, peer_ip: PeerIp) -> Result<BudgetPermit, RejectReason> {
-    if !policy.allow.permits(peer_ip) {
-        return Err(RejectReason::IpNotAllowed);
-    }
-    policy
-        .relay_budget
-        .try_acquire()
-        .ok_or(RejectReason::RelayConnectionLimit {
-            limit: policy.relay_budget.limit(),
-        })
+fn admit(
+    policy: &AcceptPolicy,
+    peer_ip: PeerIp,
+) -> Result<(BudgetPermit, AcceptedSettings), RejectReason> {
+    let mut admitted = Err(RejectReason::IpNotAllowed);
+    policy.allow.with_current(&mut |settings| {
+        if policy.allow.permits_in(settings, peer_ip) {
+            let limit = settings.limits.relay_connections;
+            admitted = policy
+                .relay_budget
+                .try_acquire(limit)
+                .map(|permit| (permit, AcceptedSettings::from_settings(settings)))
+                .ok_or(RejectReason::RelayConnectionLimit { limit });
+        }
+    });
+    admitted
 }
 
 /// Sets the socket options of a relay connection: TCP keepalive with the idle
@@ -605,6 +638,7 @@ mod accept_tests {
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::sync::mpsc;
     use vnc_relay_app::reload::snapshot::ReloadSnapshot;
+    use vnc_relay_domain::allow_list::AllowList;
     use vnc_relay_domain::allow_list::IpItem;
 
     use crate::ops_log::format_line;
@@ -646,12 +680,20 @@ mod accept_tests {
         let allow = AllowList::new(vec![
             IpItem::parse("127.0.0.1").unwrap_or_else(|error| panic!("allow: {error:?}")),
         ]);
+        let mut settings = crate::config_file::parse(
+            "[admin]\naccounts_file='accounts.toml'\n[management]\nlisten='127.0.0.1:8443'\n[status]\nlisten='127.0.0.1:9090'\n",
+            std::path::Path::new("."),
+        ).unwrap_or_else(|error| panic!("settings: {error:?}"));
+        settings.relay.tcp_viewer.allow = Some(allow.clone());
+        settings.relay.tcp_server.allow = Some(allow.clone());
+        settings.relay.ws_viewer.allow = Some(allow.clone());
+        settings.relay.wss_viewer.allow = Some(allow);
+        settings.limits.relay_connections = 1;
+        settings.timeouts.handshake = Duration::from_secs(5);
         let snapshot = ReloadSnapshot::new(
-            RelayAllow {
-                tcp_viewer: allow.clone(),
-                tcp_server: allow.clone(),
-                ws_viewer: allow.clone(),
-                wss_viewer: allow,
+            vnc_relay_app::reload::ConfigCandidate {
+                settings,
+                presence: Default::default(),
             },
             None,
             None,
@@ -663,18 +705,10 @@ mod accept_tests {
             EntryPoint::WsViewer => AllowSource::ws_viewer(cell),
             EntryPoint::WssViewer => AllowSource::wss_viewer(cell),
         };
-        let budget = ConnectionBudget::new(1);
+        let budget = ConnectionBudget::new();
         let policy = AcceptPolicy {
             allow,
             relay_budget: Arc::clone(&budget),
-            handshake: Duration::from_secs(5),
-            keepalive: KeepaliveSettings {
-                tcp_idle: Duration::from_secs(60),
-                tcp_interval: Duration::from_secs(10),
-                tcp_probes: 3,
-                ws_ping: Duration::from_secs(30),
-                ws_pong_timeout: Duration::from_secs(30),
-            },
         };
         let (events, mut received) = mpsc::unbounded_channel();
         let log: Arc<dyn EventSink> = Arc::new(LogSender(events));

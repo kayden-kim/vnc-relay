@@ -32,7 +32,7 @@ use vnc_relay_adapters::websocket_stream::WsRelayStream;
 use vnc_relay_app::events::Event;
 use vnc_relay_app::ports::{Clock, EventSink, RelayCloseAction, RelayStream};
 use vnc_relay_app::relay::{ConnectionContext, RelayRuntime, RelayRuntimeConfig, RelayService};
-use vnc_relay_app::reload::snapshot::{RelayAllow, ReloadCell, ReloadSnapshot};
+use vnc_relay_app::reload::snapshot::{ReloadCell, ReloadSnapshot};
 use vnc_relay_app::settings::KeepaliveSettings;
 use vnc_relay_domain::allow_list::{AllowList, IpItem};
 use vnc_relay_domain::budget::ConnectionBudget;
@@ -166,46 +166,56 @@ impl Running {
         let allow = AllowList::new(vec![
             IpItem::parse("127.0.0.1").unwrap_or_else(|error| panic!("loopback allow: {error:?}")),
         ]);
+        let mut settings = vnc_relay_adapters::config_file::parse(
+            "[admin]\naccounts_file='accounts.toml'\n[management]\nlisten='127.0.0.1:8443'\n[status]\nlisten='127.0.0.1:9090'\n",
+            Path::new("."),
+        ).unwrap_or_else(|error| panic!("settings: {error:?}"));
+        settings.relay.tcp_server.allow = Some(allow.clone());
+        settings.relay.ws_viewer.allow = Some(allow.clone());
+        settings.relay.wss_viewer.allow = Some(allow);
+        settings.limits.relay_connections = 8;
+        settings.limits.waiting = 8;
+        settings.limits.buffer_bytes = B as u32;
+        settings.limits.ws_message_bytes = M as u32;
+        settings.timeouts.handshake = Duration::from_secs(3);
+        settings.timeouts.tls_upgrade = Duration::from_secs(3);
+        settings.timeouts.wait = wait_timeout;
+        settings.timeouts.connect = E;
+        settings.timeouts.close = E;
+        settings.keepalive = keepalive;
+        settings.mode1.allow_targets = Some(TargetPolicy::new(vec![
+            TargetItem::parse("127.0.0.1:1-65535")
+                .unwrap_or_else(|error| panic!("loopback targets: {error:?}")),
+        ]));
         let cell = Arc::new(ReloadCell::new(ReloadSnapshot::new(
-            RelayAllow {
-                tcp_server: allow.clone(),
-                ws_viewer: allow.clone(),
-                wss_viewer: allow,
-                ..RelayAllow::default()
+            vnc_relay_app::reload::ConfigCandidate {
+                settings,
+                presence: Default::default(),
             },
             secure.then(acceptor),
             None,
         )));
+        let source: Arc<dyn vnc_relay_app::reload::ports::RuntimeSettingsSource> = cell.clone();
         let clock: Arc<dyn Clock> = Arc::new(SystemClock::new());
         let events = Arc::new(Recorder::default());
         let log: Arc<dyn EventSink> = events.clone();
-        let budget = ConnectionBudget::new(8);
-        let waiting_budget = ConnectionBudget::new(8);
+        let budget = ConnectionBudget::new();
+        let waiting_budget = ConnectionBudget::new();
         let runtime = Arc::new(RelayRuntime::new(
-            TcpTargetConnector::new(keepalive),
+            TcpTargetConnector::new(Arc::clone(&source)),
             Arc::new(RelayIdKey::generate().unwrap_or_else(|error| panic!("relay key: {error:?}"))),
             Arc::new(SessionIdKey::from_bytes(&[0x61; 32])),
             Arc::clone(&budget),
             Arc::clone(&waiting_budget),
-            RelayRuntimeConfig {
-                wait_timeout,
-                connect_timeout: E,
-                close_timeout: E,
-                recent_closed: 32,
-                target_policy: TargetPolicy::new(vec![
-                    TargetItem::parse("127.0.0.1:1-65535")
-                        .unwrap_or_else(|error| panic!("loopback targets: {error:?}")),
-                ]),
-            },
+            RelayRuntimeConfig { recent_closed: 32 },
+            Arc::clone(&source),
         ));
         let service = Arc::new(RelayService::new(
             HandshakePolicy {
                 mode1_enabled: true,
                 mode2_enabled: true,
             },
-            Duration::from_secs(3),
-            B,
-            E,
+            source,
             Arc::clone(&clock),
             Arc::clone(&log),
         ));
@@ -213,8 +223,6 @@ impl Running {
         let accept = |allow| AcceptPolicy {
             allow,
             relay_budget: Arc::clone(&budget),
-            handshake: Duration::from_secs(3),
-            keepalive,
         };
         let ws = WsEntryPoint::new(
             if secure {
@@ -230,10 +238,6 @@ impl Running {
                 } else {
                     AllowSource::ws_viewer(Arc::clone(&cell))
                 }),
-                upgrade: Duration::from_secs(3),
-                origins: Vec::new(),
-                message_bytes: M,
-                buffer_bytes: B,
             },
             Arc::clone(&service),
             Arc::clone(&runtime),
@@ -371,14 +375,14 @@ impl Running {
         assert!(snapshot.active.is_empty());
         assert_eq!(snapshot.target_connecting, 0);
         for budget in [&self.budget, &self.waiting_budget] {
-            let permits: Vec<_> = (0..budget.limit())
+            let permits: Vec<_> = (0..8)
                 .map(|_| {
                     budget
-                        .try_acquire()
+                        .try_acquire(8)
                         .unwrap_or_else(|| panic!("all connection and waiting permits released"))
                 })
                 .collect();
-            assert!(budget.try_acquire().is_none());
+            assert!(budget.try_acquire(8).is_none());
             drop(permits);
         }
     }
@@ -1369,6 +1373,8 @@ async fn measured_pair(
         accepted_wall: running.clock.wall(),
         accepted_at: now,
         exchange_at: now,
+        buffer_bytes: B,
+        handshake: Duration::from_secs(3),
     };
     let viewer_stream = MeasuredStream {
         inner: WsRelayStream::new(
@@ -1389,7 +1395,7 @@ async fn measured_pair(
     };
     let viewer_permit = running
         .budget
-        .try_acquire()
+        .try_acquire(8)
         .unwrap_or_else(|| panic!("measured viewer admission"));
     let prepare = running.service.handle_connection(
         viewer_stream,
@@ -1422,6 +1428,8 @@ async fn measured_pair(
         accepted_wall: running.clock.wall(),
         accepted_at: now,
         exchange_at: now,
+        buffer_bytes: B,
+        handshake: Duration::from_secs(3),
     };
     let server_stream = MeasuredStream {
         inner: vnc_relay_adapters::net::TcpRelayStream::with_keepalive(tcp, &KEEPALIVE)
@@ -1432,7 +1440,7 @@ async fn measured_pair(
     };
     let server_permit = running
         .budget
-        .try_acquire()
+        .try_acquire(8)
         .unwrap_or_else(|| panic!("measured Server admission"));
     let prepare = running.service.handle_connection(
         server_stream,

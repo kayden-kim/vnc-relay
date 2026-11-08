@@ -14,6 +14,14 @@ mod live;
 mod login;
 #[path = "dashboard_live/overview.rs"]
 mod overview;
+#[path = "dashboard_live/settings.rs"]
+mod settings;
+#[path = "dashboard_live/settings_edit.rs"]
+mod settings_edit;
+#[path = "dashboard_live/settings_recovery.rs"]
+mod settings_recovery;
+#[path = "dashboard_live/settings_view.rs"]
+mod settings_view;
 
 // Several scenarios hold multiple browsers and real listeners. Serialize this
 // binary's rows to preserve their timing evidence on both supported OS gates.
@@ -172,6 +180,165 @@ fn dashboard_026_malformed_ids_send_no_query_and_differ_from_not_found() {
 #[test]
 fn dashboard_027_injected_login_failures_block_duplicates_and_allow_retry() {
     run(login::login_transport_failures_are_distinct_and_block_duplicates);
+}
+
+/// spec: dashboard.md:DASH-028
+#[test]
+fn dashboard_028_settings_navigation_and_protected_direct_routes() {
+    run(settings_view::settings_navigation_and_protected_direct_routes);
+}
+
+/// spec: dashboard.md:DASH-029
+#[test]
+fn dashboard_029_settings_view_displays_all_effective_values_in_contract_order() {
+    run(settings_view::settings_view_displays_all_effective_values_in_contract_order);
+}
+
+/// spec: dashboard.md:DASH-030
+#[test]
+fn dashboard_030_in_effect_and_pending_settings_allow_edit_without_polling() {
+    run(settings_view::in_effect_and_pending_settings_allow_edit_without_polling);
+}
+
+/// spec: dashboard.md:DASH-031
+#[test]
+fn dashboard_031_restart_pending_settings_show_keys_and_block_edit() {
+    run(settings_view::restart_pending_settings_show_keys_and_block_edit);
+}
+
+/// spec: dashboard.md:DASH-032
+#[test]
+fn dashboard_032_invalid_and_unreadable_settings_keep_effective_values_and_localize_diagnostics() {
+    run(settings_view::invalid_and_unreadable_settings_keep_effective_values_and_localize_diagnostics);
+}
+
+/// spec: dashboard.md:DASH-033
+#[test]
+fn dashboard_033_settings_without_reload_history_show_no_history() {
+    run(settings_view::settings_without_reload_history_show_no_history);
+}
+
+/// spec: dashboard.md:DASH-034
+#[test]
+fn dashboard_034_disabled_edit_direct_route_keeps_view_without_inputs() {
+    run(settings_view::disabled_edit_direct_route_keeps_view_without_inputs);
+}
+
+/// spec: dashboard.md:DASH-035
+#[test]
+fn dashboard_035_settings_edit_exposes_only_enabled_editable_keys() {
+    run(settings_edit::settings_edit_exposes_only_enabled_editable_keys);
+}
+
+/// spec: dashboard.md:DASH-036
+#[test]
+fn dashboard_036_invalid_settings_inputs_focus_first_error_without_patch() {
+    run(settings_edit::invalid_settings_inputs_focus_first_error_without_patch);
+}
+
+/// spec: dashboard.md:DASH-037
+#[test]
+fn dashboard_037_settings_confirmation_shows_diffs_empty_list_warning_and_timing() {
+    run(settings_edit::settings_confirmation_shows_diffs_empty_list_warning_and_timing);
+}
+
+/// spec: dashboard.md:DASH-038
+#[test]
+fn dashboard_038_settings_confirmation_cancel_and_escape_preserve_input_and_focus() {
+    run(settings_edit::settings_confirmation_cancel_and_escape_preserve_input_and_focus);
+}
+
+/// spec: dashboard.md:DASH-039
+#[test]
+fn dashboard_039_confirmed_settings_patch_sends_revision_csrf_and_shows_applied_count() {
+    run(settings_edit::confirmed_settings_patch_sends_revision_csrf_and_shows_applied_count);
+}
+
+/// spec: dashboard.md:DASH-040
+#[test]
+fn dashboard_040_server_settings_diagnostics_preserve_input_and_map_original_lines() {
+    run(settings_edit::server_settings_diagnostics_preserve_input_and_map_original_lines);
+}
+
+/// spec: dashboard.md:DASH-041
+#[test]
+fn dashboard_041_settings_conflict_keeps_input_and_never_resends_automatically() {
+    run(settings_recovery::settings_conflict_keeps_input_and_never_resends_automatically);
+}
+
+/// spec: management.md:MGT-043
+/// spec: dashboard.md:DASH-042
+#[test]
+fn dashboard_042_config_conflict_reload_discards_input_and_uses_fresh_revision() {
+    run(settings_recovery::config_conflict_reload_discards_input_and_uses_fresh_revision);
+}
+
+/// spec: dashboard.md:DASH-043
+#[test]
+fn dashboard_043_disabled_restart_pending_and_invalid_patch_results_remove_edit_actions() {
+    run(settings_recovery::disabled_restart_pending_and_invalid_patch_results_remove_edit_actions);
+}
+
+/// spec: dashboard.md:DASH-044
+#[test]
+fn dashboard_044_config_write_failure_keeps_input_without_success_notice() {
+    run(settings_recovery::config_write_failure_keeps_input_without_success_notice);
+}
+
+/// spec: dashboard.md:DASH-045
+#[test]
+fn dashboard_045_explicit_settings_retry_after_write_repair_saves_once() {
+    run(settings_recovery::explicit_settings_retry_after_write_repair_saves_once);
+}
+
+/// spec: management.md:MGT-040
+/// spec: dashboard.md:DASH-046
+#[test]
+fn dashboard_046_config_response_loss_and_timeout_require_get_before_retry() {
+    run(settings_recovery::config_response_loss_and_timeout_require_get_before_retry);
+}
+
+/// spec: dashboard.md:DASH-047
+#[test]
+fn dashboard_047_unknown_edit_result_is_checked_with_get_without_patch_replay() {
+    run(settings_recovery::unknown_edit_result_is_checked_with_get_without_patch_replay);
+}
+
+/// spec: management.md:MGT-042
+/// spec: dashboard.md:DASH-048
+#[test]
+fn dashboard_048_config_query_failures_keep_stale_values_and_never_show_empty_success() {
+    run(settings_view::config_query_failures_keep_stale_values_and_never_show_empty_success);
+}
+
+/// spec: dashboard.md:DASH-049
+#[test]
+fn dashboard_049_explicit_settings_refresh_after_repair_updates_values_revision_and_time() {
+    run(settings_view::explicit_settings_refresh_after_repair_updates_values_revision_and_time);
+}
+
+/// spec: dashboard.md:DASH-050
+#[test]
+fn dashboard_050_settings_screens_preserve_input_and_accessibility_in_both_languages_and_widths() {
+    run(settings_recovery::settings_screens_preserve_input_and_accessibility_in_both_languages_and_widths);
+}
+
+/// spec: dashboard.md:DASH-051
+#[test]
+fn dashboard_051_settings_expiry_and_logout_remove_protected_values_and_leave_relays_alive() {
+    run(settings_recovery::settings_expiry_and_logout_remove_protected_values_and_leave_relays_alive);
+}
+
+/// spec: dashboard.md:DASH-052
+#[test]
+fn dashboard_052_unchanged_settings_return_without_patch_and_empty_applied_shows_zero() {
+    run(settings_edit::unchanged_settings_return_without_patch_and_empty_applied_shows_zero);
+}
+
+/// spec: dashboard.md:DASH-053
+#[test]
+fn dashboard_053_leaving_settings_edit_discards_input_without_confirmation_or_patch() {
+    run(settings_recovery::leaving_settings_edit_discards_input_without_confirmation_or_patch);
 }
 
 #[test]

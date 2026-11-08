@@ -3,7 +3,8 @@ use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use tokio::sync::oneshot;
 use vnc_relay_app::reload::ports::{ReloadTlsStore, TlsBuildError};
-use vnc_relay_app::reload::snapshot::{RelayAllow, ReloadCell, ReloadSnapshot};
+use vnc_relay_app::reload::service::ReloadService;
+use vnc_relay_app::reload::snapshot::{ReloadCell, ReloadSnapshot};
 use vnc_relay_app::settings::LogOutput;
 
 static NEXT: AtomicU64 = AtomicU64::new(0);
@@ -261,7 +262,8 @@ async fn log_directory_registration_failure_keeps_poll_and_retries() {
     let config = dir.0.join("relay.toml");
     let source = "[admin]\naccounts_file = 'accounts.toml'\n[management]\nlisten = '127.0.0.1:18080'\n[status]\nlisten = '127.0.0.1:18081'\n";
     std::fs::write(&config, source).unwrap_or_else(|e| panic!("config: {e}"));
-    let settings = config_file::parse(source, &dir.0).unwrap_or_else(|e| panic!("parse: {e:?}"));
+    let settings = config_file::parse_candidate(source.as_bytes(), &dir.0)
+        .unwrap_or_else(|e| panic!("parse: {e:?}"));
     let path = log_dir.join("relay.log");
     let log = Arc::new(
         JsonLinesEventSink::open(
@@ -273,12 +275,8 @@ async fn log_directory_registration_failure_keeps_poll_and_retries() {
     );
     let files = Arc::new(FsReloadFileStore);
     let service = ReloadService::new(
-        settings,
-        Arc::new(ReloadCell::new(ReloadSnapshot::new(
-            RelayAllow::default(),
-            None,
-            None,
-        ))),
+        settings.clone(),
+        Arc::new(ReloadCell::new(ReloadSnapshot::new(settings, None, None))),
         files.clone(),
         Arc::new(NoTls),
         log.clone(),
@@ -288,7 +286,7 @@ async fn log_directory_registration_failure_keeps_poll_and_retries() {
     let (requests, _sleeps) = mpsc::unbounded_channel();
     let mut watcher = assemble(
         &config,
-        service,
+        Arc::new(Mutex::new(service)),
         Duration::from_secs(30),
         Clock(requests),
         files,

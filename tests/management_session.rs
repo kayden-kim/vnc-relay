@@ -338,6 +338,44 @@ fn query(port: u16, cookie: &str, path: &str) -> Reply {
     send(port, "GET", path, &[("Cookie", cookie)], "")
 }
 
+fn assert_config_edit_rights(port: u16, cookie: &str, csrf: &str, value: u32) {
+    let view = query(port, cookie, "/api/v1/config");
+    assert_eq!(view.status, 200, "{}", view.body);
+    assert!(view.body.contains("\"edit_enabled\":true"), "{}", view.body);
+    let revision = field(&view.body, "revision");
+    let patch = send(
+        port,
+        "PATCH",
+        "/api/v1/config",
+        &[
+            ("Cookie", cookie),
+            ("X-CSRF-Token", csrf),
+            ("Content-Type", "application/json"),
+        ],
+        &format!(
+            "{{\"revision\":\"{revision}\",\"changes\":{{\"timeouts.connect_secs\":{value}}}}}"
+        ),
+    );
+    assert_eq!(patch.status, 200, "{}", patch.body);
+    assert!(
+        patch.body.contains("\"timeouts.connect_secs\""),
+        "{}",
+        patch.body
+    );
+    assert_ne!(field(&patch.body, "revision"), revision);
+    let refreshed = query(port, cookie, "/api/v1/config");
+    assert_eq!(refreshed.status, 200, "{}", refreshed.body);
+    let refreshed: serde_json::Value =
+        serde_json::from_str(&refreshed.body).unwrap_or_else(|e| panic!("config JSON: {e}"));
+    assert!(
+        refreshed["items"]
+            .as_array()
+            .unwrap_or_else(|| panic!("config items"))
+            .iter()
+            .any(|item| item["key"] == "timeouts.connect_secs" && item["value"] == value)
+    );
+}
+
 fn terminate(port: u16, cookie: &str, csrf: &str, sid: &str) -> Reply {
     send(
         port,
@@ -692,7 +730,7 @@ fn account_file_content_changes_apply_only_after_restart() {
     let _ = fs::remove_dir_all(&dir);
 }
 
-// Windows retains the login-only evidence: Linux below also exercises local
+// Windows exercises equal API rights; Linux below additionally exercises local
 // CLI hidden input and restricted Unix file permissions end to end.
 /// spec: operations.md:OPS-029 partial
 #[test]
@@ -702,7 +740,13 @@ fn each_admin_account_logs_in_and_gets_its_own_session_view() {
     let dir = setup_dir("two-accounts");
     write_accounts(&dir);
     let ports = free_ports();
-    let server = Server::start(&dir, ports);
+    let config = write_config(&dir, ports);
+    let text = fs::read_to_string(&config).unwrap_or_else(|e| panic!("config: {e}"));
+    write(
+        &config,
+        &text.replace("[management]", "[management]\nconfig_edit = true"),
+    );
+    let server = Server::start_config(&config, ports);
 
     for (account, password) in [(ALICE, ALICE_PASSWORD), (BOB, BOB_PASSWORD)] {
         let reply = login(ports[0], account, password);
@@ -711,6 +755,13 @@ fn each_admin_account_logs_in_and_gets_its_own_session_view() {
             reply.body.contains(&format!("\"account\":\"{account}\"")),
             "{account}: {}",
             reply.body
+        );
+        let cookie = cookie_pair(&reply);
+        assert_config_edit_rights(
+            ports[0],
+            &cookie,
+            field(&reply.body, "csrf_token"),
+            if account == ALICE { 11 } else { 12 },
         );
     }
 
@@ -890,6 +941,11 @@ fn cli_prepared_admins_have_hidden_salted_credentials_and_equal_relay_rights() {
         .unwrap_or_else(|e| panic!("restrict account directory: {e}"));
     let ports = free_ports();
     let config = write_config(&dir, ports);
+    let text = fs::read_to_string(&config).unwrap_or_else(|e| panic!("config: {e}"));
+    write(
+        &config,
+        &text.replace("[management]", "[management]\nconfig_edit = true"),
+    );
     let accounts_path = dir.join("admin-accounts.toml");
     for (account, password) in [(ALICE, ALICE_PASSWORD), (BOB, BOB_PASSWORD)] {
         let mut terminal = PtySession::start(account, &config);
@@ -947,13 +1003,19 @@ fn cli_prepared_admins_have_hidden_salted_credentials_and_equal_relay_rights() {
     }
     assert_ne!(salts[0], salts[1], "separate accounts need different salts");
 
-    let server = Server::start(&dir, ports);
+    let server = Server::start_config(&config, ports);
     for (account, password) in [(ALICE, ALICE_PASSWORD), (BOB, BOB_PASSWORD)] {
         let reply = login(ports[0], account, password);
         assert_eq!(reply.status, 200, "{account}: {}", reply.body);
         assert_eq!(field(&reply.body, "account"), account);
         let cookie = cookie_pair(&reply);
         assert_eq!(query(ports[0], &cookie, "/api/v1/summary").status, 200);
+        assert_config_edit_rights(
+            ports[0],
+            &cookie,
+            field(&reply.body, "csrf_token"),
+            if account == ALICE { 11 } else { 12 },
+        );
         let mut relay = RelayPair::start(ports, &cookie);
         relay.transfer();
         assert_listed(ports[0], &cookie, &relay.sid);

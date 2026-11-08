@@ -122,6 +122,7 @@ pub struct ManagementQueryService {
     relay_budget: Arc<ConnectionBudget>,
     admin_budget: Arc<ConnectionBudget>,
     clock: Arc<dyn Clock>,
+    settings: Arc<dyn crate::reload::ports::RuntimeSettingsSource>,
     start_mono: Duration,
 }
 
@@ -131,6 +132,7 @@ impl ManagementQueryService {
         relay_budget: Arc<ConnectionBudget>,
         admin_budget: Arc<ConnectionBudget>,
         clock: Arc<dyn Clock>,
+        settings: Arc<dyn crate::reload::ports::RuntimeSettingsSource>,
     ) -> Self {
         let start_mono = clock.monotonic();
         Self {
@@ -138,6 +140,7 @@ impl ManagementQueryService {
             relay_budget,
             admin_budget,
             clock,
+            settings,
             start_mono,
         }
     }
@@ -154,6 +157,13 @@ impl ManagementQueryService {
     pub fn summary(&self) -> SummaryView {
         let (snapshot, as_of, now_mono) = self.capture_snapshot();
         let uptime_ms = now_mono.saturating_sub(self.start_mono).as_millis() as u64;
+        let mut limits = (0, 0);
+        self.settings.with_current(&mut |settings| {
+            limits = (
+                settings.limits.relay_connections,
+                settings.limits.admin_connections,
+            );
+        });
 
         let server_state = match snapshot.lifecycle {
             RelayLifecycle::Running => "ready",
@@ -175,11 +185,11 @@ impl ManagementQueryService {
             usage: UsageView {
                 relay_connections: ResourceUsageView {
                     current: self.relay_budget.current() as u64,
-                    limit: self.relay_budget.limit() as u64,
+                    limit: limits.0 as u64,
                 },
                 admin_connections: ResourceUsageView {
                     current: self.admin_budget.current() as u64,
-                    limit: self.admin_budget.limit() as u64,
+                    limit: limits.1 as u64,
                 },
             },
         }
@@ -291,6 +301,7 @@ impl ManagementQueryService {
 mod tests {
     use super::*;
     use crate::events::RelayIdRef;
+    use crate::relay::test_support::TestSettings;
     use crate::relay::{ClosedSessionSnapshot, ConnectionContext, WaitingSnapshot};
     use std::sync::atomic::{AtomicI64, AtomicU64, Ordering};
     use vnc_relay_domain::conn_id::ConnId;
@@ -369,6 +380,8 @@ mod tests {
                     accepted_wall: SystemTime::UNIX_EPOCH + Duration::from_secs(1_700_000_000),
                     accepted_at: Duration::from_millis(8_000),
                     exchange_at: Duration::from_millis(8_500),
+                    buffer_bytes: 16,
+                    handshake: Duration::from_secs(10),
                 },
                 registered_at: Duration::from_millis(8_500),
                 deadline: Duration::from_millis(18_500),
@@ -391,12 +404,58 @@ mod tests {
         }
     }
 
+    /// spec: operations.md:OPS-051 partial
+    /// spec: operations.md:OPS-052 partial
+    /// spec: operations.md:OPS-053 partial
+    #[test]
+    fn summary_reports_reloaded_limits_even_below_current_usage() {
+        let settings = TestSettings::new();
+        let relay = ConnectionBudget::new();
+        let admin = ConnectionBudget::new();
+        let first = relay.try_acquire(20).expect("relay first");
+        let second = relay.try_acquire(20).expect("relay second");
+        let admin_first = admin.try_acquire(10).expect("admin first");
+        let admin_second = admin.try_acquire(10).expect("admin second");
+        let service = ManagementQueryService::new(
+            Arc::new(DummyRelaySource::new(sample_snapshot())),
+            relay.clone(),
+            admin.clone(),
+            Arc::new(TestClock::new()),
+            settings.clone(),
+        );
+        settings.change(|settings| {
+            settings.limits.relay_connections = 1;
+            settings.limits.admin_connections = 1;
+        });
+        let view = service.summary();
+        assert_eq!(
+            view.usage.relay_connections,
+            ResourceUsageView {
+                current: 2,
+                limit: 1
+            }
+        );
+        assert_eq!(
+            view.usage.admin_connections,
+            ResourceUsageView {
+                current: 2,
+                limit: 1
+            }
+        );
+        assert!(relay.try_acquire(1).is_none());
+        assert!(admin.try_acquire(1).is_none());
+        drop((first, second, admin_first, admin_second));
+        assert_eq!(service.summary().usage.relay_connections.current, 0);
+        settings.change(|settings| settings.limits.relay_connections = 3);
+        assert_eq!(service.summary().usage.relay_connections.limit, 3);
+    }
+
     /// spec: management.md:MGT-007 partial
     #[test]
     fn elapsed_and_uptime_never_negative_on_backward_wall_clock_step() {
         let clock = Arc::new(TestClock::new());
-        let relay_budget = ConnectionBudget::new(10);
-        let admin_budget = ConnectionBudget::new(5);
+        let relay_budget = ConnectionBudget::new();
+        let admin_budget = ConnectionBudget::new();
         let relay_source = Arc::new(DummyRelaySource::new(sample_snapshot()));
 
         let service = ManagementQueryService::new(
@@ -404,6 +463,7 @@ mod tests {
             relay_budget,
             admin_budget,
             Arc::clone(&clock) as Arc<dyn Clock>,
+            TestSettings::new(),
         );
 
         // Advance monotonic time by 5,000 ms, but move wall-clock BACKWARD by 3,600 seconds
@@ -426,11 +486,11 @@ mod tests {
     #[test]
     fn query_summary_counts_and_usage() {
         let clock = Arc::new(TestClock::new());
-        let relay_budget = ConnectionBudget::new(20);
-        let admin_budget = ConnectionBudget::new(10);
-        let _p1 = relay_budget.try_acquire();
-        let _p2 = relay_budget.try_acquire();
-        let _a1 = admin_budget.try_acquire();
+        let relay_budget = ConnectionBudget::new();
+        let admin_budget = ConnectionBudget::new();
+        let _p1 = relay_budget.try_acquire(20);
+        let _p2 = relay_budget.try_acquire(20);
+        let _a1 = admin_budget.try_acquire(10);
 
         let relay_source = Arc::new(DummyRelaySource::new(sample_snapshot()));
         let service = ManagementQueryService::new(
@@ -438,6 +498,7 @@ mod tests {
             relay_budget,
             admin_budget,
             Arc::clone(&clock) as Arc<dyn Clock>,
+            TestSettings::new(),
         );
 
         let summary = service.summary();
@@ -457,14 +518,15 @@ mod tests {
     #[test]
     fn session_detail_validations() {
         let clock = Arc::new(TestClock::new());
-        let relay_budget = ConnectionBudget::new(10);
-        let admin_budget = ConnectionBudget::new(5);
+        let relay_budget = ConnectionBudget::new();
+        let admin_budget = ConnectionBudget::new();
         let relay_source = Arc::new(DummyRelaySource::new(sample_snapshot()));
         let service = ManagementQueryService::new(
             relay_source,
             relay_budget,
             admin_budget,
             Arc::clone(&clock) as Arc<dyn Clock>,
+            TestSettings::new(),
         );
 
         // Invalid IDs

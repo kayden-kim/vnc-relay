@@ -124,6 +124,7 @@ Rust 의존성이 승인된 라이선스 허용 목록을 지키는지 검사하
 | 작업 3.1 직접 의존성(rustls 0.23.46, rustls-pki-types 1.15.1, tokio-rustls 0.26.6, tokio `io-util`) | `licenses ok`, 종료 코드 0. 새로 들어온 패키지마다 라이선스 파일이 있다. `NOTICE` 파일 유무를 안다. | 3단계 명령, 패키지 디렉터리에서 파일 이름 확인 | 통과(2026-10-21). 새 패키지 19개 모두 라이선스 파일이 있고 `NOTICE` 파일은 없다. Ubuntu와 Windows 모두 `licenses ok`다. | 아래 실행 기록 6 |
 | windows-sys 직접 의존성(작업 4.1, Windows 전용) | `licenses ok`, 종료 코드 0. 새로 들어온 패키지마다 라이선스 파일이 있다. `NOTICE` 파일 유무를 안다. | 3단계 명령, 잠금 파일 변화와 패키지 디렉터리에서 파일 이름 확인 | 통과(2026-10-21). 잠금 파일에 새 패키지는 없다. windows-sys 0.61.2는 MIT OR Apache-2.0이고 `license-mit`·`license-apache-2.0`이 있으며 `NOTICE` 파일은 없다. Windows와 Ubuntu 모두 deny 단계를 통과했다. | 아래 실행 기록 7 |
 | 작업 3.2 직접 의존성(tokio-tungstenite 0.30.0, adapters, WS·WSS 업그레이드) | `licenses ok`, 종료 코드 0. 새로 들어온 패키지마다 라이선스 파일이 있다. `NOTICE` 파일 유무를 안다. | 3단계 명령, 잠금 파일 변화와 패키지 디렉터리에서 파일 이름 확인 | 통과(2026-10-21). 새 패키지 12개 모두 라이선스 파일이 있고 `NOTICE` 파일은 없다. Windows와 Ubuntu 모두 deny 단계가 `licenses ok`였다. | 아래 실행 기록 8 |
+| 작업 6 설정 편집 직접 의존성(toml_edit 0.25, adapters) | `licenses ok`, 종료 코드 0. 라이선스·NOTICE 확인과 배포 고지 재생성·대조 | 3·3.1절 명령, 패키지 메타데이터·라이선스 파일 확인 | 라이선스 파일 확인 완료. 명령 결과는 아래 실행 기록 9를 따른다. | 아래 실행 기록 9 |
 
 실행 기록 1: 의존성을 추가하기 전에 [PRD "구현 기술" 행](../requirements/PRD.md#확정-기준)의 라이브러리를 검토했다.
 
@@ -176,6 +177,10 @@ ring 0.17.14는 rustls-webpki의 `alloc` 기능이 `ring?/alloc`으로 켜는 �
 | tungstenite 0.30.0 | MIT OR Apache-2.0 | `LICENSE-APACHE`, `LICENSE-MIT` |
 
 `NOTICE` 파일을 둔 패키지는 없다. 배포물의 의존성 고지는 실행 기록 1과 같이 [OPS-021](../specs/operations.md#7-수용-테스트)에서 확인한다.
+
+실행 기록 9(2026-11-08): 설정 편집 작업 트리에 workspace `toml_edit = { version = "0.25", default-features = false, features = ["parse", "display"] }`와 adapters의 직접 의존성을 더했다(사용자 결정 Q173). 잠금 파일의 새 패키지는 `toml_edit 0.25.17+spec-1.1.0` 하나이며 기존 TOML 파서 의존성을 재사용한다.
+
+Windows Cargo 캐시의 해당 패키지 `Cargo.toml`에서 `license = "MIT OR Apache-2.0"`을 확인했다. 파일 목록은 `LICENSE-MIT`·`LICENSE-APACHE`를 포함하며 별도 `NOTICE`는 없다. 허용 목록은 넓히지 않았다. MIT 저작권·전문과 Apache 전문은 기존 생성기로 배포 고지에 포함한다. 이 파일 확인은 `cargo deny`와 `notices --check` 실행 결과를 대신하지 않는다.
 
 ### 4.1 출처 검토 기록 (2026-11-04)
 

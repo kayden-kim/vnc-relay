@@ -69,6 +69,7 @@ const STRINGS = {
     gaugeUnknown: "측정 없음",
     navbar: "상단 메뉴",
     navItem: "운영 현황",
+    navSettings: "설정",
     languageSelect: "언어 선택",
     languageLabel: "언어 (Language)",
     form: "입력 양식",
@@ -137,6 +138,7 @@ const STRINGS = {
     gaugeUnknown: "No reading",
     navbar: "Navbar",
     navItem: "Operations",
+    navSettings: "Settings",
     languageSelect: "Language select",
     languageLabel: "Language (언어)",
     form: "Form",
@@ -346,8 +348,10 @@ function languageSelect(sid, variant, label) {
 function navbar(sid, itemLabel) {
   return createNavbar({
     brand: "VNC Relay",
-    // The single nav item is hidden below 1024px, as DESIGN.md's top bar specifies.
-    items: [{ label: itemLabel, href: `#${sid}`, current: true, desktopOnly: true }],
+    items: [
+      { label: itemLabel, href: `#${sid}`, current: true, icon: "grid" },
+      { label: t.navSettings, href: `#${sid}-settings`, icon: "settings" },
+    ],
     language: languageSelect(`${sid}-language`, "navbar", t.languageLabel),
     action: createButton({ variant: "navbar", label: t.logout, icon: "logout" }),
     label: t.navLabel,

@@ -29,7 +29,7 @@ use vnc_relay_adapters::websocket::{WsEntryPoint, WsPolicy};
 use vnc_relay_app::events::Event;
 use vnc_relay_app::ports::{Clock, EventSink};
 use vnc_relay_app::relay::{RelayRuntime, RelayRuntimeConfig, RelayService};
-use vnc_relay_app::reload::snapshot::{RelayAllow, ReloadCell, ReloadSnapshot};
+use vnc_relay_app::reload::snapshot::{ReloadCell, ReloadSnapshot};
 use vnc_relay_app::settings::KeepaliveSettings;
 use vnc_relay_domain::allow_list::{AllowList, IpItem};
 use vnc_relay_domain::budget::ConnectionBudget;
@@ -139,6 +139,7 @@ struct Running {
     runtime: Arc<RelayRuntime<TcpTargetConnector>>,
     clock: Arc<dyn Clock>,
     budget: Arc<ConnectionBudget>,
+    limit: u32,
     stop: watch::Sender<bool>,
     tasks: Vec<JoinHandle<()>>,
 }
@@ -167,45 +168,55 @@ impl Running {
             )
             .unwrap_or_else(|error| panic!(concat!("test TLS identity", ": {:?}"), error))
         });
+        let mut running = vnc_relay_adapters::config_file::parse(
+            "[admin]\naccounts_file='accounts.toml'\n[management]\nlisten='127.0.0.1:8443'\n[status]\nlisten='127.0.0.1:9090'\n",
+            Path::new("."),
+        ).unwrap_or_else(|error| panic!("settings: {error:?}"));
+        running.relay.tcp_server.allow = Some(allow.clone());
+        running.relay.ws_viewer.allow = Some(allow.clone());
+        running.relay.wss_viewer.allow = Some(allow);
+        running.limits.relay_connections = settings.places;
+        running.limits.waiting = 8;
+        running.limits.buffer_bytes = B as u32;
+        running.limits.ws_message_bytes = M as u32;
+        running.timeouts.handshake = settings.handshake;
+        running.timeouts.tls_upgrade = LIMIT;
+        running.timeouts.wait = LIMIT;
+        running.timeouts.connect = LIMIT;
+        running.timeouts.close = settings.close;
+        running.keepalive = KEEPALIVE;
+        running.mode1.allow_targets = Some(TargetPolicy::new(vec![
+            TargetItem::parse("127.0.0.1:1-65535")
+                .unwrap_or_else(|error| panic!("loopback targets: {error:?}")),
+        ]));
         let cell = Arc::new(ReloadCell::new(ReloadSnapshot::new(
-            RelayAllow {
-                tcp_server: allow.clone(),
-                ws_viewer: allow.clone(),
-                wss_viewer: allow,
-                ..RelayAllow::default()
+            vnc_relay_app::reload::ConfigCandidate {
+                settings: running,
+                presence: Default::default(),
             },
             acceptor,
             None,
         )));
+        let source: Arc<dyn vnc_relay_app::reload::ports::RuntimeSettingsSource> = cell.clone();
         let clock: Arc<dyn Clock> = Arc::new(SystemClock::new());
         let events = Arc::new(Recorder::default());
         let log: Arc<dyn EventSink> = events.clone();
-        let budget = ConnectionBudget::new(settings.places);
+        let budget = ConnectionBudget::new();
         let runtime =
             Arc::new(RelayRuntime::new(
-                TcpTargetConnector::new(KEEPALIVE),
+                TcpTargetConnector::new(Arc::clone(&source)),
                 Arc::new(RelayIdKey::generate().unwrap_or_else(|error| {
                     panic!(concat!("relay reference key", ": {:?}"), error)
                 })),
                 Arc::new(SessionIdKey::from_bytes(&[0x37; 32])),
                 Arc::clone(&budget),
-                ConnectionBudget::new(8),
-                RelayRuntimeConfig {
-                    wait_timeout: LIMIT,
-                    connect_timeout: LIMIT,
-                    close_timeout: settings.close,
-                    recent_closed: 16,
-                    target_policy: TargetPolicy::new(vec![
-                        TargetItem::parse("127.0.0.1:1-65535")
-                            .unwrap_or_else(|error| panic!("loopback targets: {error:?}")),
-                    ]),
-                },
+                ConnectionBudget::new(),
+                RelayRuntimeConfig { recent_closed: 16 },
+                Arc::clone(&source),
             ));
         let service = Arc::new(RelayService::new(
             settings.modes,
-            settings.handshake,
-            B,
-            settings.close,
+            source,
             Arc::clone(&clock),
             Arc::clone(&log),
         ));
@@ -213,8 +224,6 @@ impl Running {
         let accept = |allow| AcceptPolicy {
             allow,
             relay_budget: Arc::clone(&budget),
-            handshake: settings.handshake,
-            keepalive: KEEPALIVE,
         };
         let entry = if secure {
             EntryPoint::WssViewer
@@ -231,10 +240,6 @@ impl Running {
                 } else {
                     AllowSource::ws_viewer(Arc::clone(&cell))
                 }),
-                upgrade: LIMIT,
-                origins: Vec::new(),
-                message_bytes: M,
-                buffer_bytes: B,
             },
             Arc::clone(&service),
             Arc::clone(&runtime),
@@ -267,6 +272,7 @@ impl Running {
             runtime,
             clock,
             budget,
+            limit: settings.places,
             stop,
             tasks,
         }
@@ -357,14 +363,14 @@ impl Running {
         assert!(snapshot.waiting.is_empty());
         assert!(snapshot.active.is_empty());
         assert_eq!(snapshot.target_connecting, 0);
-        let permits: Vec<_> = (0..self.budget.limit())
+        let permits: Vec<_> = (0..self.limit)
             .map(|_| {
                 self.budget
-                    .try_acquire()
+                    .try_acquire(self.limit)
                     .unwrap_or_else(|| panic!("relay place released"))
             })
             .collect();
-        assert!(self.budget.try_acquire().is_none());
+        assert!(self.budget.try_acquire(self.limit).is_none());
         drop(permits);
     }
 
@@ -1085,9 +1091,9 @@ async fn mode_i_target_limit_after_101_closes_4011_and_preserves_existing_sessio
         assert_eq!(first.data(5).await, b"reply");
         let available = running
             .budget
-            .try_acquire()
+            .try_acquire(running.limit)
             .unwrap_or_else(|| panic!("rejected viewer released its L place"));
-        assert!(running.budget.try_acquire().is_none());
+        assert!(running.budget.try_acquire(running.limit).is_none());
         drop(available);
         close_normally(&running, &mut first, &mut first_peer, &started).await;
         running.assert_empty();

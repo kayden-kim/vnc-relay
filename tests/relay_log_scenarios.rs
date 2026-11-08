@@ -91,6 +91,16 @@ enum JsonValue {
 }
 
 impl JsonValue {
+    fn field(&self, key: &str) -> Option<&Self> {
+        match self {
+            Self::Object(entries) => entries
+                .iter()
+                .find(|(name, _)| name == key)
+                .map(|(_, value)| value),
+            _ => None,
+        }
+    }
+
     fn str(&self, key: &str) -> Option<&str> {
         match self {
             JsonValue::Object(entries) => {
@@ -503,6 +513,17 @@ impl RunningRelay {
         places: u32,
         wss: Option<WssFiles>,
     ) -> Self {
+        Self::start_with_config_edit(name, extra_config, wait_secs, places, wss, false)
+    }
+
+    fn start_with_config_edit(
+        name: &str,
+        extra_config: &str,
+        wait_secs: u64,
+        places: u32,
+        wss: Option<WssFiles>,
+        config_edit: bool,
+    ) -> Self {
         let port_count = if wss.is_some() { 6 } else { 4 };
         let holders: Vec<_> = (0..port_count)
             .map(|_| match TcpListener::bind("127.0.0.1:0") {
@@ -583,6 +604,7 @@ key_file = '{}'
 accounts_file = "accounts.toml"
 [management]
 listen = "127.0.0.1:{}"
+config_edit = {config_edit}
 [status]
 listen = "127.0.0.1:{}"
 [relay.tcp_viewer]
@@ -782,6 +804,164 @@ impl Drop for RunningRelay {
         let _ = self.child.wait();
         let _ = std::fs::remove_dir_all(&self.dir);
     }
+}
+
+/// spec: operations.md:OPS-059
+/// spec: operations.md:OPS-060 partial
+#[test]
+fn file_watch_and_config_edit_log_distinct_triggers_and_actual_applied_keys() {
+    let _lock = lock_ports();
+    let relay = RunningRelay::start_with_config_edit(
+        "config-edit-log",
+        "[reload]\nsettle_secs = 1\npoll_secs = 5\n",
+        10,
+        10,
+        None,
+        true,
+    );
+    let config_path = relay.dir.join("relay.toml");
+    let original = std::fs::read_to_string(&config_path)
+        .unwrap_or_else(|error| panic!("read original config: {error}"));
+    let after = relay.lines().len();
+    std::fs::write(
+        &config_path,
+        original.replace("wait_secs = 10", "wait_secs = 11"),
+    )
+    .unwrap_or_else(|error| panic!("write file-watch candidate: {error}"));
+    let watched = parse_json_object_line(
+        &relay.wait_for_line_after(after, |line| field_matches(line, "event", "reload_applied")),
+    );
+    assert_eq!(watched.str("trigger"), Some("file_watch"));
+    assert_eq!(
+        watched.field("applied"),
+        Some(&JsonValue::Array(vec![JsonValue::String(
+            "timeouts.wait_secs".to_owned(),
+        )]))
+    );
+
+    let login_body = format!(r#"{{"account":"alice","password":"{ADMIN_PASSWORD}"}}"#);
+    let (status, headers, login) = read_management_reply(relay.management_begin(
+        "POST",
+        "/api/v1/session",
+        &["Content-Type: application/json"],
+        &login_body,
+    ));
+    assert_eq!(status, 200, "administrator login: {login:?}");
+    let set_cookie = some(
+        headers.lines().find_map(|line| {
+            let (name, value) = line.split_once(':')?;
+            name.eq_ignore_ascii_case("set-cookie")
+                .then_some(value.trim())
+        }),
+        "login Set-Cookie",
+    );
+    let cookie = format!(
+        "Cookie: {}",
+        some(set_cookie.split(';').next(), "cookie pair")
+    );
+    let csrf = format!(
+        "X-CSRF-Token: {}",
+        some(login.str("csrf_token"), "login CSRF")
+    );
+    let (status, _, view) =
+        read_management_reply(relay.management_begin("GET", "/api/v1/config", &[&cookie], ""));
+    assert_eq!(status, 200, "configuration query: {view:?}");
+    let revision = some(view.str("revision"), "current revision");
+    let request = format!(
+        r#"{{"revision":"{revision}","changes":{{"relay.tcp_viewer.allow":["127.0.0.1","192.0.2.88"],"timeouts.close_secs":2}}}}"#,
+    );
+    let after_edit = relay.lines().len();
+    let (status, _, response) = read_management_reply(relay.management_begin(
+        "PATCH",
+        "/api/v1/config",
+        &[&cookie, &csrf, "Content-Type: application/json"],
+        &request,
+    ));
+    assert_eq!(status, 200, "configuration edit: {response:?}");
+    let edited = parse_json_object_line(&relay.wait_for_line_after(after_edit, |line| {
+        field_matches(line, "event", "config_edited")
+    }));
+    let expected = JsonValue::Array(vec![JsonValue::String("relay.tcp_viewer.allow".to_owned())]);
+    assert_eq!(response.field("applied"), Some(&expected));
+    assert_eq!(edited.field("config_keys"), Some(&expected));
+    assert_eq!(edited.str("admin_account"), Some("alice"));
+    assert_eq!(edited.str("peer_ip"), Some("127.0.0.1"));
+    assert_eq!(edited.str("revision"), response.str("revision"));
+    let new_revision = some(edited.str("revision"), "edited revision");
+    assert_ne!(new_revision, revision);
+    let hash = some(new_revision.strip_prefix("sha256:"), "SHA-256 prefix");
+    assert_eq!(hash.len(), 64);
+    assert!(
+        hash.bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    );
+    let edit_events: Vec<_> = parse_log_objects(&relay.dir)
+        .into_iter()
+        .skip(after_edit)
+        .filter(|event| matches!(event.str("event"), Some("reload_applied" | "config_edited")))
+        .collect();
+    assert_eq!(edit_events.len(), 2, "{edit_events:?}");
+    assert_eq!(edit_events[0].str("event"), Some("reload_applied"));
+    assert_eq!(edit_events[0].str("trigger"), Some("config_edit"));
+    assert_eq!(edit_events[0].field("applied"), Some(&expected));
+    assert_eq!(edit_events[1].str("event"), Some("config_edited"));
+    for event in &edit_events {
+        for forbidden in [
+            "changes",
+            "values",
+            "origin",
+            "target_host",
+            "limit",
+            "detail",
+        ] {
+            assert!(!event.has_key(forbidden), "{forbidden}: {event:?}");
+        }
+    }
+    for line in relay.lines().iter().skip(after_edit) {
+        assert!(!line.contains("192.0.2.88"), "policy value leaked: {line}");
+        assert!(!line.contains(ADMIN_PASSWORD), "password leaked: {line}");
+    }
+
+    // A later watched change completes after the edit's notification and must
+    // report only its own delta, never re-apply the already committed edit.
+    let saved = std::fs::read_to_string(&config_path)
+        .unwrap_or_else(|error| panic!("read edited config: {error}"));
+    let after_following = relay.lines().len();
+    std::fs::write(
+        &config_path,
+        saved.replace("wait_secs = 11", "wait_secs = 12"),
+    )
+    .unwrap_or_else(|error| panic!("write following file-watch candidate: {error}"));
+    let following = parse_json_object_line(&relay.wait_for_line_after(after_following, |line| {
+        field_matches(line, "event", "reload_applied")
+    }));
+    assert_eq!(following.str("trigger"), Some("file_watch"));
+    assert_eq!(
+        following.field("applied"),
+        Some(&JsonValue::Array(vec![JsonValue::String(
+            "timeouts.wait_secs".to_owned(),
+        )]))
+    );
+    let events = parse_log_objects(&relay.dir);
+    assert_eq!(
+        events
+            .iter()
+            .filter(|event| event.str("event") == Some("reload_applied"))
+            .count(),
+        3
+    );
+    assert_eq!(
+        events
+            .iter()
+            .filter(|event| event.str("event") == Some("config_edited"))
+            .count(),
+        1
+    );
+    assert!(
+        events
+            .iter()
+            .all(|event| event.str("event") != Some("config_edit_rejected"))
+    );
 }
 
 /// spec: operations.md:OPS-011

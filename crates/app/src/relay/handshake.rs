@@ -119,6 +119,7 @@ mod tests {
     use super::*;
     use crate::events::{ConnectionErrorKind, Event, RejectReason, Stage};
     use crate::ports::{EventSink, RelayCloseAction, RelayStream};
+    use crate::relay::test_support::TestSettings;
     use crate::relay::{ConnectionContext, PreparedConnection, RelayService};
     use vnc_relay_domain::session::ViewerTransport;
 
@@ -127,6 +128,60 @@ mod tests {
         mode1_enabled: true,
         mode2_enabled: true,
     };
+
+    /// spec: operations.md:OPS-050 partial
+    #[tokio::test(start_paused = true)]
+    async fn exchange_keeps_accepted_b_and_started_h_after_reload() {
+        let harness = Harness::new(4, ENABLED);
+        let (stream, mut peer) = duplex(4096);
+        let context = ConnectionContext {
+            conn_id: ConnId::next(),
+            entry_point: EntryPoint::TcpServer,
+            peer_ip: PeerIp::new(IpAddr::V4(Ipv4Addr::LOCALHOST)),
+            peer_addr: std::net::SocketAddr::from((Ipv4Addr::LOCALHOST, 12345)),
+            accepted_wall: harness.clock.wall(),
+            accepted_at: harness.clock.monotonic(),
+            exchange_at: harness.clock.monotonic(),
+            buffer_bytes: 4,
+            handshake: H,
+        };
+        let mut exchange = pin!(harness.service.handle_connection(
+            TestStream {
+                stream,
+                actions: harness.close_actions.clone(),
+                budget: harness.budget.clone(),
+                block_close: false,
+                failure: None
+            },
+            context,
+            harness.budget.try_acquire(1).expect("L"),
+            harness.shutdown.subscribe(),
+        ));
+        poll_fn(|cx| {
+            assert!(exchange.as_mut().poll(cx).is_pending());
+            Poll::Ready(())
+        })
+        .await;
+        harness.settings.change(|settings| {
+            settings.timeouts.handshake = Duration::from_secs(1);
+            settings.limits.buffer_bytes = 1;
+        });
+        advance(Duration::from_secs(2)).await;
+        poll_fn(|cx| {
+            assert!(
+                exchange.as_mut().poll(cx).is_pending(),
+                "started H is unchanged"
+            );
+            Poll::Ready(())
+        })
+        .await;
+        let mut bytes = request(b"ID:1").to_vec();
+        bytes.extend_from_slice(b"abcd");
+        peer.write_all(&bytes).await.expect("request");
+        let prepared = exchange.await.expect("old H accepts request");
+        assert_eq!(prepared.context().buffer_bytes, 4);
+        assert_eq!(prepared.trailing_bytes(), b"abcd");
+    }
 
     struct TestClock {
         epoch: Instant,
@@ -165,7 +220,7 @@ mod tests {
                     dropped.load(Ordering::SeqCst),
                     "stream must already be dropped"
                 );
-                drop(budget.try_acquire().expect("L must already be returned"));
+                drop(budget.try_acquire(1).expect("L must already be returned"));
             }
             self.events.lock().expect("events lock").push(event.clone());
         }
@@ -184,6 +239,7 @@ mod tests {
         budget: Arc<ConnectionBudget>,
         shutdown: watch::Sender<RelayLifecycle>,
         close_actions: Arc<Mutex<Vec<RelayCloseAction>>>,
+        settings: Arc<TestSettings>,
     }
 
     impl Harness {
@@ -194,20 +250,19 @@ mod tests {
             });
             let events = Arc::new(Recorder::default());
             let (shutdown, _) = watch::channel(RelayLifecycle::Running);
+            let settings = TestSettings::new();
+            settings.change(|settings| {
+                settings.limits.buffer_bytes = buffer_bytes as u32;
+                settings.timeouts.close = Duration::from_secs(3);
+            });
             Arc::new(Self {
-                service: RelayService::new(
-                    modes,
-                    H,
-                    buffer_bytes,
-                    Duration::from_secs(3),
-                    clock.clone(),
-                    events.clone(),
-                ),
+                service: RelayService::new(modes, settings.clone(), clock.clone(), events.clone()),
                 clock,
                 events,
-                budget: ConnectionBudget::new(1),
+                budget: ConnectionBudget::new(),
                 shutdown,
                 close_actions: Arc::new(Mutex::new(Vec::new())),
+                settings,
             })
         }
 
@@ -227,8 +282,16 @@ mod tests {
                 accepted_wall: self.clock.wall(),
                 accepted_at: self.clock.monotonic(),
                 exchange_at: self.clock.monotonic(),
+                buffer_bytes: self
+                    .settings
+                    .0
+                    .read()
+                    .expect("settings")
+                    .limits
+                    .buffer_bytes as usize,
+                handshake: H,
             };
-            let permit = self.budget.try_acquire().expect("test L slot");
+            let permit = self.budget.try_acquire(1).expect("test L slot");
             let shutdown = self.shutdown.subscribe();
             let harness = self.clone();
             let stream = TestStream {
@@ -297,7 +360,7 @@ mod tests {
             action: RelayCloseAction,
         ) -> Poll<io::Result<()>> {
             assert!(
-                self.budget.try_acquire().is_none(),
+                self.budget.try_acquire(1).is_none(),
                 "close must precede L release"
             );
             self.actions.lock().expect("close actions").push(action);
@@ -325,7 +388,7 @@ mod tests {
                 ..
             } if actual == reason
         ));
-        assert!(harness.budget.try_acquire().is_some());
+        assert!(harness.budget.try_acquire(1).is_some());
     }
 
     /// spec: relay.md:RLY-001 partial
@@ -350,9 +413,9 @@ mod tests {
                     .is_err()
             );
             assert!(harness.events.snapshot().is_empty());
-            assert!(harness.budget.try_acquire().is_none());
+            assert!(harness.budget.try_acquire(1).is_none());
             drop(prepared);
-            assert!(harness.budget.try_acquire().is_some());
+            assert!(harness.budget.try_acquire(1).is_some());
         }
     }
 
@@ -396,7 +459,7 @@ mod tests {
             assert_eq!(prepared.buffered_bytes(), buffer_bytes);
             assert_eq!(prepared.remaining_buffer_bytes(), 0);
             let (mut stream, _, _, prefix, permit) = prepared.into_parts();
-            assert!(harness.budget.try_acquire().is_none());
+            assert!(harness.budget.try_acquire(1).is_none());
             let mut remainder = vec![0; 12 - buffer_bytes];
             stream
                 .read_exact(&mut remainder)
@@ -407,7 +470,7 @@ mod tests {
             assert_eq!(delivered, b"abcdefghNEXT");
             drop(stream);
             drop(permit);
-            assert!(harness.budget.try_acquire().is_some());
+            assert!(harness.budget.try_acquire(1).is_some());
             assert!(harness.events.snapshot().is_empty());
         }
     }
@@ -488,7 +551,7 @@ mod tests {
                 RelayCloseAction::HandshakeInvalid
             };
             assert_eq!(*harness.close_actions.lock().expect("actions"), [action]);
-            assert!(harness.budget.try_acquire().is_some());
+            assert!(harness.budget.try_acquire(1).is_some());
         }
     }
 
@@ -596,7 +659,10 @@ mod tests {
 
     impl Drop for TrackedStream {
         fn drop(&mut self) {
-            assert!(self.budget.try_acquire().is_none(), "stream must precede L");
+            assert!(
+                self.budget.try_acquire(1).is_none(),
+                "stream must precede L"
+            );
             self.dropped.store(true, Ordering::SeqCst);
         }
     }
@@ -650,7 +716,7 @@ mod tests {
             _: RelayCloseAction,
         ) -> Poll<io::Result<()>> {
             assert!(
-                self.budget.try_acquire().is_none(),
+                self.budget.try_acquire(1).is_none(),
                 "close must precede L release"
             );
             Pin::new(&mut self.stream).poll_shutdown(cx)
@@ -723,11 +789,13 @@ mod tests {
                 accepted_wall: SystemTime::UNIX_EPOCH,
                 accepted_at: Duration::ZERO,
                 exchange_at: Duration::ZERO,
+                buffer_bytes: 8,
+                handshake: H,
             };
             let mut future = Box::pin(harness.service.handle_connection(
                 stream,
                 context,
-                harness.budget.try_acquire().expect("test L slot"),
+                harness.budget.try_acquire(1).expect("test L slot"),
                 harness.shutdown.subscribe(),
             ));
             if poll_once {
@@ -739,7 +807,7 @@ mod tests {
             }
             drop(future);
             assert!(dropped.load(Ordering::SeqCst));
-            assert!(harness.budget.try_acquire().is_some());
+            assert!(harness.budget.try_acquire(1).is_some());
         }
     }
 
@@ -769,11 +837,13 @@ mod tests {
                 accepted_wall: harness.clock.wall(),
                 accepted_at: harness.clock.monotonic(),
                 exchange_at: harness.clock.monotonic(),
+                buffer_bytes: 8,
+                handshake: H,
             };
             let mut future = Box::pin(harness.service.handle_connection(
                 stream,
                 context,
-                harness.budget.try_acquire().expect("L"),
+                harness.budget.try_acquire(1).expect("L"),
                 harness.shutdown.subscribe(),
             ));
             poll_fn(|cx| {
@@ -801,11 +871,11 @@ mod tests {
                     .expect("actions")
                     .contains(&action)
             );
-            assert!(harness.budget.try_acquire().is_none());
+            assert!(harness.budget.try_acquire(1).is_none());
             assert!(harness.events.snapshot().is_empty());
             advance(Duration::from_secs(3)).await;
             assert!(future.await.is_err());
-            assert!(harness.budget.try_acquire().is_some());
+            assert!(harness.budget.try_acquire(1).is_some());
             assert_eq!(peer.read(&mut [0; 1]).await.expect("stream dropped"), 0);
             assert_eq!(harness.events.snapshot().len(), 1);
         }
@@ -838,13 +908,15 @@ mod tests {
                 accepted_wall: harness.clock.wall(),
                 accepted_at: harness.clock.monotonic(),
                 exchange_at: harness.clock.monotonic(),
+                buffer_bytes: 8,
+                handshake: H,
             };
             let result = harness
                 .service
                 .handle_connection(
                     stream,
                     context,
-                    harness.budget.try_acquire().expect("L"),
+                    harness.budget.try_acquire(1).expect("L"),
                     harness.shutdown.subscribe(),
                 )
                 .await;
@@ -881,6 +953,8 @@ mod tests {
                 accepted_wall: harness.clock.wall(),
                 accepted_at: harness.clock.monotonic(),
                 exchange_at: harness.clock.monotonic(),
+                buffer_bytes: 8,
+                handshake: H,
             };
             harness.shutdown.send_replace(RelayLifecycle::Force);
             let result = harness
@@ -888,7 +962,7 @@ mod tests {
                 .handle_connection(
                     stream,
                     context,
-                    harness.budget.try_acquire().expect("L"),
+                    harness.budget.try_acquire(1).expect("L"),
                     harness.shutdown.subscribe(),
                 )
                 .await;
@@ -901,7 +975,7 @@ mod tests {
                 [RelayCloseAction::ServerShutdown]
             );
             assert_eq!(harness.clock.monotonic(), Duration::ZERO);
-            assert!(harness.budget.try_acquire().is_some());
+            assert!(harness.budget.try_acquire(1).is_some());
             assert_eq!(peer.read(&mut [0; 1]).await.expect("stream dropped"), 0);
             assert_abort(&harness, AbortReason::ServerShutdown);
         }
@@ -933,11 +1007,13 @@ mod tests {
                 accepted_wall: harness.clock.wall(),
                 accepted_at: harness.clock.monotonic(),
                 exchange_at: harness.clock.monotonic(),
+                buffer_bytes: 8,
+                handshake: H,
             };
             let mut future = Box::pin(harness.service.handle_connection(
                 stream,
                 context,
-                harness.budget.try_acquire().expect("L"),
+                harness.budget.try_acquire(1).expect("L"),
                 harness.shutdown.subscribe(),
             ));
             poll_fn(|cx| {
@@ -952,7 +1028,7 @@ mod tests {
                     .expect("actions")
                     .contains(&RelayCloseAction::HandshakeInvalid)
             );
-            assert!(harness.budget.try_acquire().is_none());
+            assert!(harness.budget.try_acquire(1).is_none());
 
             // Enter Grace phase with G = 1s, which is well before E = 3s
             harness.shutdown.send_replace(RelayLifecycle::Grace {
@@ -973,7 +1049,7 @@ mod tests {
                 advance(Duration::from_secs(1)).await;
                 assert!(future.await.is_err());
             }
-            assert!(harness.budget.try_acquire().is_some());
+            assert!(harness.budget.try_acquire(1).is_some());
             assert_eq!(peer.read(&mut [0; 1]).await.expect("stream dropped"), 0);
             assert_eq!(harness.events.snapshot().len(), 1);
         }

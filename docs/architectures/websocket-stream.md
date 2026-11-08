@@ -1,8 +1,8 @@
 # WebSocket 스트림 어댑터 모듈 설계
 
-## 작업 6.2 스트림 목표 (Target / Active)
+## 작업 6.2 스트림 값의 시점 (Current)
 
-구현 전 Target이며 기존 시험/대조를 새 범위의 증거로 쓰지 않는다. 현재 stream 생성은 고정 M/B/keepalive를 넘긴다(`crates/adapters/src/websocket.rs:256-268`). [소비 경계](file-watch.md#101-발행-단위와-reader)에 따라 B는 수락값, M/WS ping·pong은 업그레이드값으로 분리한다. TCP K는 수락 소켓에 이미 설정한 값이며 업그레이드 때 다시 설정하지 않는다. E는 app이 첫 종료 시작에 현재값으로 고정해 Close를 지시한다. 진행 중 Close E나 기존 stream의 Kw를 바꾸지 않는다([설정 §1.8](../contracts/config-v3.md#18-재로드-구분), OPS-050·057).
+`websocket.rs`의 `connection`은 101을 flush한 뒤 `WsRelayStream::new`를 만든다. 이때 M(`message_bytes`)과 WS ping·pong(`keepalive`)은 업그레이드 검사 때 읽은 `UpgradedSettings` 값을, B는 수락 때 읽은 `AcceptedSettings.buffer_bytes`를 넘긴다. `ConnectionContext`에는 같은 B와 101 뒤에 읽은 H(`exchange_handshake`)를 담는다. TCP K는 수락 소켓에 이미 설정한 값이며 업그레이드 때 다시 설정하지 않는다. E는 app이 첫 종료 시작 때 현재값으로 고정해 Close를 지시한다. 재로드는 진행 중인 Close의 E나 이미 만든 스트림의 Kw를 바꾸지 않는다([소비 경계](file-watch.md#101-발행-단위와-reader), [설정 §1.8](../contracts/config-v3.md#18-재로드-구분), OPS-050·057). `websocket.rs`의 단위 시험 `reload_separates_accept_upgrade_and_exchange_values`가 이 분리를 확인한다.
 
 이 문서는 WS·WSS의 바이너리 페이로드를 공통 `RelayStream`으로 옮기는 현재 구조를 설명한다. 예를 들어 한 메시지에 250바이트 요청과 후속 데이터가 들어오면, 요청은 `handle_connection`이 해석한다. 후속 데이터는 같은 연결의 중계 스트림 앞부분으로 남는다.
 

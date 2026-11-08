@@ -184,6 +184,20 @@ function isFilledTemplate(text, template) {
 function checkLayout(label) {
   const page = document.documentElement;
   check(`${label}: no horizontal scroll`, page.scrollWidth <= page.clientWidth);
+  for (const navbar of host.querySelectorAll('.navbar')) {
+    const links = [...navbar.querySelectorAll('.navbar-item')];
+    const copy = COPY[document.documentElement.lang];
+    check(`${label}: both navigation links remain available`, links.length === 2
+      && links[0].textContent === copy.operations && links[1].textContent === copy.settings
+      && links.every((link) => getComputedStyle(link).display !== 'none' && link.getBoundingClientRect().height > 0));
+    check(`${label}: detail keeps operations navigation active`, links[0]?.getAttribute('aria-current') === 'page'
+      && !links[1]?.hasAttribute('aria-current'));
+    check(`${label}: settings link uses the settings route`, links[1]?.getAttribute('href') === '/#/settings');
+    if (window.innerWidth < 1024) {
+      check(`${label}: mobile navigation occupies a second row`,
+        navbar.querySelector('.navbar-nav').getBoundingClientRect().top >= navbar.querySelector('.navbar-tools').getBoundingClientRect().bottom);
+    }
+  }
 }
 
 // DASH-006: the detail shows the session facts and an enabled terminate action for an active session.

@@ -625,6 +625,24 @@ impl RunningServer {
         relay_limit: u32,
         admin_limit: u32,
     ) -> Self {
+        Self::start_with_config_edit(
+            name,
+            extra_config,
+            max_entries,
+            relay_limit,
+            admin_limit,
+            false,
+        )
+    }
+
+    fn start_with_config_edit(
+        name: &str,
+        extra_config: &str,
+        max_entries: u32,
+        relay_limit: u32,
+        admin_limit: u32,
+        config_edit: bool,
+    ) -> Self {
         let n = SERIAL.fetch_add(1, Ordering::Relaxed);
         let dir = std::env::temp_dir().join(format!(
             "vnc-relay-query-{}-{}-{name}",
@@ -685,6 +703,7 @@ accounts_file = "admin-accounts.toml"
 
 [management]
 listen = "127.0.0.1:{mgt_port}"
+config_edit = {config_edit}
 [status]
 listen = "127.0.0.1:{status_port}"
 
@@ -788,7 +807,11 @@ enabled = true
     }
 
     fn login(&self) -> (String, String) {
-        let body = format!("{{\"account\":\"{ALICE}\",\"password\":\"{ALICE_PASSWORD}\"}}");
+        self.login_as(ALICE)
+    }
+
+    fn login_as(&self, account: &str) -> (String, String) {
+        let body = format!("{{\"account\":\"{account}\",\"password\":\"{ALICE_PASSWORD}\"}}");
         let reply = self.send_http(
             "POST",
             "/api/v1/session",
@@ -2678,4 +2701,1205 @@ fn contract_rules_error_order_methods_polling_and_headers() {
     // Note on Si expiration: per config-v3.md, minimum allowed management.session.idle_secs
     // is 300s (5m), which is not cheap to wait in automated tests; timing test is skipped
     // per prompt instructions ("if the timing is cheap; else skip and say so").
+}
+
+// File-backed configuration scenarios share the real listener, credentials,
+// HTTP transport and lifecycle fixture above.
+type ConfigJson = serde_json::Value;
+
+fn config_json(reply: &Reply) -> ConfigJson {
+    serde_json::from_str(&reply.body)
+        .unwrap_or_else(|error| panic!("configuration JSON: {error}: {}", reply.body))
+}
+
+fn config_server(name: &str, enabled: bool) -> RunningServer {
+    RunningServer::start_with_config_edit(
+        name,
+        "[reload]\nsettle_secs = 1\npoll_secs = 5\n[log]\noutput = \"relay.log\"",
+        5,
+        10,
+        5,
+        enabled,
+    )
+}
+
+impl RunningServer {
+    fn config_path(&self) -> PathBuf {
+        self.dir.join("relay.toml")
+    }
+
+    fn config_bytes(&self) -> Vec<u8> {
+        fs::read(self.config_path()).unwrap_or_else(|error| panic!("read config: {error}"))
+    }
+
+    fn config_write(&self, bytes: impl AsRef<[u8]>) {
+        fs::write(self.config_path(), bytes)
+            .unwrap_or_else(|error| panic!("write config: {error}"));
+    }
+
+    fn config_view(&self, cookie: &str) -> ConfigJson {
+        let reply = self.query(cookie, "/api/v1/config");
+        assert_eq!(reply.status, 200, "{}", reply.body);
+        assert_eq!(reply.header("cache-control"), Some("no-store"));
+        let view = config_json(&reply);
+        assert_timestamp(some(view["as_of"].as_str(), "config as_of"));
+        view
+    }
+
+    fn config_patch(
+        &self,
+        admin: &(String, String),
+        revision: &ConfigJson,
+        changes: ConfigJson,
+    ) -> Reply {
+        let body = serde_json::json!({"revision": revision, "changes": changes}).to_string();
+        self.send_http(
+            "PATCH",
+            "/api/v1/config",
+            &[
+                ("Cookie", &admin.0),
+                ("X-CSRF-Token", &admin.1),
+                ("Content-Type", "application/json"),
+            ],
+            body.as_bytes(),
+        )
+    }
+
+    fn config_events(&self) -> Vec<ConfigJson> {
+        let text = fs::read_to_string(self.dir.join("relay.log"))
+            .unwrap_or_else(|error| panic!("read config events: {error}"));
+        text.split_inclusive('\n')
+            .filter(|line| line.ends_with('\n'))
+            .map(|line| {
+                serde_json::from_str(line)
+                    .unwrap_or_else(|error| panic!("config event: {error}: {line}"))
+            })
+            .collect()
+    }
+
+    fn config_wait_event(&self, after: usize, name: &str) -> ConfigJson {
+        let deadline = Instant::now() + READY_LIMIT;
+        loop {
+            let events = self.config_events();
+            if let Some(event) = events.iter().skip(after).find(|e| e["event"] == name) {
+                return event.clone();
+            }
+            assert!(Instant::now() < deadline, "missing {name}: {events:?}");
+            std::thread::sleep(Duration::from_millis(10));
+        }
+    }
+
+    fn config_restart(&mut self) {
+        let before = self.config_events().len();
+        if let Some(mut child) = self.child.take() {
+            child
+                .kill()
+                .unwrap_or_else(|error| panic!("stop config child: {error}"));
+            child
+                .wait()
+                .unwrap_or_else(|error| panic!("reap config child: {error}"));
+        }
+        self.child = Some(
+            Command::new(BIN)
+                .args(["serve", "--config"])
+                .arg(self.config_path())
+                .stdin(Stdio::null())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped())
+                .spawn()
+                .unwrap_or_else(|error| panic!("restart config child: {error}")),
+        );
+        self.config_wait_event(before, "server_ready");
+    }
+}
+
+fn config_item<'a>(view: &'a ConfigJson, key: &str) -> &'a ConfigJson {
+    some(
+        some(view["items"].as_array(), "config items")
+            .iter()
+            .find(|item| item["key"] == key),
+        key,
+    )
+}
+
+fn config_revision(bytes: &[u8]) -> String {
+    use vnc_relay_app::management::config::ConfigFileStore;
+    vnc_relay_adapters::config_edit::FsConfigFileStore.revision(bytes)
+}
+
+fn config_assert_revision(view: &ConfigJson, bytes: &[u8]) {
+    assert_eq!(view["revision"], config_revision(bytes));
+    assert!(vnc_relay_app::management::config::valid_revision(some(
+        view["revision"].as_str(),
+        "revision"
+    )));
+}
+
+fn config_assert_error(reply: &Reply, status: u16, code: &str) -> ConfigJson {
+    assert_eq!(reply.status, status, "{}", reply.body);
+    let body = config_json(reply);
+    assert_eq!(body["error"]["code"], code, "{}", reply.body);
+    body
+}
+
+fn config_assert_no_success(events: &[ConfigJson]) {
+    assert!(
+        events.iter().all(|event| {
+            event["event"] != "config_edited" && event["event"] != "reload_applied"
+        }),
+        "{events:?}"
+    );
+}
+
+fn config_assert_audit(event: &ConfigJson, reason: Option<&str>, keys: ConfigJson) {
+    config_assert_audit_account(event, ALICE, reason, keys);
+}
+
+fn config_assert_audit_account(
+    event: &ConfigJson,
+    account: &str,
+    reason: Option<&str>,
+    keys: ConfigJson,
+) {
+    assert_eq!(event["admin_account"], account);
+    assert_eq!(event["peer_ip"], "127.0.0.1");
+    assert_eq!(event["config_keys"], keys);
+    if let Some(reason) = reason {
+        assert_eq!(event["event"], "config_edit_rejected");
+        assert_eq!(event["reason"], reason);
+        assert!(event.get("revision").is_none());
+    } else {
+        assert_eq!(event["event"], "config_edited");
+    }
+    for field in ["changes", "value", "values", "password", "csrf_token"] {
+        assert!(event.get(field).is_none(), "unexpected {field}: {event}");
+    }
+}
+
+/// spec: management.md:MGT-028
+#[test]
+fn config_view_reports_effective_values_all_file_states_and_reload_history() {
+    let _lock = lock_ports();
+    let mut server = config_server("config-view", false);
+    let admin = server.login();
+    let original = String::from_utf8(server.config_bytes())
+        .unwrap_or_else(|error| panic!("config UTF-8: {error}"));
+    let initial = server.config_view(&admin.0);
+    assert_eq!(initial["edit_enabled"], false);
+    assert_eq!(
+        initial["file"],
+        serde_json::json!({
+            "state": "in_effect", "config_keys": [], "diagnostics": []
+        })
+    );
+    assert!(initial["last_reload"].is_null());
+    config_assert_revision(&initial, original.as_bytes());
+    let keys = [
+        "admin.accounts_file",
+        "admin.argon2.memory_kib",
+        "admin.argon2.iterations",
+        "admin.argon2.parallelism",
+        "relay.tcp_viewer.enabled",
+        "relay.tcp_viewer.listen",
+        "relay.tcp_viewer.allow",
+        "relay.tcp_server.enabled",
+        "relay.tcp_server.listen",
+        "relay.tcp_server.allow",
+        "relay.ws_viewer.enabled",
+        "relay.ws_viewer.listen",
+        "relay.ws_viewer.allow",
+        "relay.ws_viewer.allowed_origins",
+        "relay.wss_viewer.enabled",
+        "relay.wss_viewer.listen",
+        "relay.wss_viewer.allow",
+        "relay.wss_viewer.allowed_origins",
+        "relay.wss_viewer.cert_file",
+        "relay.wss_viewer.key_file",
+        "mode1.enabled",
+        "mode1.allow_targets",
+        "mode2.enabled",
+        "limits.relay_connections",
+        "limits.admin_connections",
+        "limits.waiting",
+        "limits.buffer_bytes",
+        "limits.ws_message_bytes",
+        "timeouts.handshake_secs",
+        "timeouts.tls_upgrade_secs",
+        "timeouts.wait_secs",
+        "timeouts.connect_secs",
+        "timeouts.close_secs",
+        "timeouts.shutdown_grace_secs",
+        "keepalive.tcp_idle_secs",
+        "keepalive.tcp_interval_secs",
+        "keepalive.tcp_probes",
+        "keepalive.ws_ping_secs",
+        "keepalive.ws_pong_timeout_secs",
+        "management.listen",
+        "management.cert_file",
+        "management.key_file",
+        "management.config_edit",
+        "management.login_limit.per_account",
+        "management.login_limit.per_source",
+        "management.login_limit.window_secs",
+        "management.login_limit.lockout_secs",
+        "management.session.idle_secs",
+        "management.session.max_lifetime_secs",
+        "dashboard.poll_secs",
+        "dashboard.query_timeout_secs",
+        "recent_closed.max_entries",
+        "status.listen",
+        "log.output",
+        "reload.settle_secs",
+        "reload.poll_secs",
+    ];
+    let items = some(initial["items"].as_array(), "items");
+    assert_eq!(
+        items
+            .iter()
+            .map(|item| some(item["key"].as_str(), "item key"))
+            .collect::<Vec<_>>(),
+        keys
+    );
+    for item in items {
+        assert!(item.get("value").is_some(), "{item}");
+        assert!(
+            matches!(item["reload"].as_str(), Some("dynamic" | "restart")),
+            "{item}"
+        );
+        assert!(item["editable"].is_boolean(), "{item}");
+        if let Some(value) = item["value"].as_i64() {
+            let min = some(item["min"].as_i64(), "item min");
+            let max = some(item["max"].as_i64(), "item max");
+            assert!((min..=max).contains(&value), "{item}");
+        } else {
+            assert!(
+                item.get("min").is_none() && item.get("max").is_none(),
+                "{item}"
+            );
+        }
+    }
+    for (key, value) in [
+        ("admin.argon2.memory_kib", 19456),
+        ("admin.argon2.iterations", 2),
+        ("admin.argon2.parallelism", 1),
+        ("limits.relay_connections", 10),
+        ("limits.admin_connections", 5),
+        ("limits.waiting", 10),
+        ("limits.buffer_bytes", 131072),
+        ("limits.ws_message_bytes", 1048576),
+        ("timeouts.handshake_secs", 10),
+        ("timeouts.tls_upgrade_secs", 10),
+        ("timeouts.wait_secs", 3600),
+        ("timeouts.connect_secs", 10),
+        ("timeouts.close_secs", 10),
+        ("timeouts.shutdown_grace_secs", 30),
+        ("keepalive.tcp_idle_secs", 60),
+        ("keepalive.tcp_interval_secs", 10),
+        ("keepalive.tcp_probes", 6),
+        ("keepalive.ws_ping_secs", 30),
+        ("keepalive.ws_pong_timeout_secs", 30),
+        ("management.login_limit.per_account", 5),
+        ("management.login_limit.per_source", 20),
+        ("management.login_limit.window_secs", 900),
+        ("management.login_limit.lockout_secs", 900),
+        ("management.session.idle_secs", 1800),
+        ("management.session.max_lifetime_secs", 43200),
+        ("dashboard.poll_secs", 2),
+        ("dashboard.query_timeout_secs", 5),
+        ("recent_closed.max_entries", 5),
+        ("reload.settle_secs", 1),
+        ("reload.poll_secs", 5),
+    ] {
+        assert_eq!(config_item(&initial, key)["value"], value, "{key}");
+    }
+    for (prefix, port) in [
+        ("relay.tcp_viewer", server.tcp_viewer_port),
+        ("relay.tcp_server", server.tcp_server_port),
+        ("relay.ws_viewer", server.ws_viewer_port),
+        ("relay.wss_viewer", server.wss_viewer_port),
+    ] {
+        assert_eq!(
+            config_item(&initial, &format!("{prefix}.enabled"))["value"],
+            true
+        );
+        assert_eq!(
+            config_item(&initial, &format!("{prefix}.listen"))["value"],
+            format!("127.0.0.1:{port}")
+        );
+        assert_eq!(
+            config_item(&initial, &format!("{prefix}.allow"))["value"],
+            serde_json::json!(["127.0.0.1"])
+        );
+        assert_eq!(
+            config_item(&initial, &format!("{prefix}.allow"))["editable"],
+            true
+        );
+    }
+    for key in ["mode1.enabled", "mode2.enabled"] {
+        assert_eq!(config_item(&initial, key)["value"], true);
+    }
+    assert_eq!(
+        config_item(&initial, "mode1.allow_targets")["value"],
+        serde_json::json!(["127.0.0.1:1-65535"])
+    );
+    assert_eq!(
+        config_item(&initial, "management.config_edit")["value"],
+        false
+    );
+    assert_eq!(
+        config_item(&initial, "relay.ws_viewer.allowed_origins")["value"],
+        serde_json::json!(["http://127.0.0.1"])
+    );
+    assert_eq!(
+        config_item(&initial, "relay.wss_viewer.allowed_origins")["value"],
+        serde_json::json!(["http://127.0.0.1", "https://127.0.0.1"])
+    );
+    for (key, expected) in [
+        (
+            "management.listen",
+            format!("127.0.0.1:{}", server.management_port),
+        ),
+        ("status.listen", format!("127.0.0.1:{}", server.status_port)),
+        (
+            "log.output",
+            server.dir.join("relay.log").to_string_lossy().into_owned(),
+        ),
+        (
+            "relay.wss_viewer.cert_file",
+            tls_fixture("server-chain.pem"),
+        ),
+        (
+            "relay.wss_viewer.key_file",
+            tls_fixture("server-key-p256.pem"),
+        ),
+    ] {
+        let actual = some(config_item(&initial, key)["value"].as_str(), key).replace('\\', "/");
+        assert_eq!(actual, expected.replace('\\', "/"), "{key}");
+    }
+    for key in ["management.cert_file", "management.key_file"] {
+        assert!(config_item(&initial, key)["value"].is_null());
+        assert_eq!(config_item(&initial, key)["reload"], "dynamic");
+        assert_eq!(config_item(&initial, key)["editable"], false);
+    }
+    assert_eq!(config_item(&initial, "limits.waiting")["max"], 65535);
+    assert_eq!(config_item(&initial, "limits.waiting")["editable"], true);
+    assert_eq!(
+        config_item(&initial, "admin.accounts_file")["value"],
+        server
+            .dir
+            .join("admin-accounts.toml")
+            .to_string_lossy()
+            .as_ref()
+    );
+    let rendered = initial.to_string();
+    for secret in [
+        ALICE_PASSWORD,
+        "password_hash",
+        "$argon2id$",
+        "BEGIN PRIVATE KEY",
+        "BEGIN CERTIFICATE",
+    ] {
+        assert!(!rendered.contains(secret), "{rendered}");
+    }
+
+    let before = server.config_events().len();
+    let pending = original.replace("admin_connections = 5", "admin_connections = 6");
+    server.config_write(&pending);
+    let view = server.config_view(&admin.0);
+    assert_eq!(view["file"]["state"], "pending");
+    assert_eq!(
+        view["file"]["config_keys"],
+        serde_json::json!(["limits.admin_connections"])
+    );
+    assert_eq!(view["items"], initial["items"]);
+    assert!(view["last_reload"].is_null());
+    config_assert_revision(&view, pending.as_bytes());
+    server.config_wait_event(before, "reload_applied");
+    let applied = server.config_view(&admin.0);
+    assert_eq!(applied["file"]["state"], "in_effect");
+    assert_eq!(
+        config_item(&applied, "limits.admin_connections")["value"],
+        6
+    );
+    assert_eq!(applied["last_reload"]["result"], "applied");
+    assert_eq!(applied["last_reload"]["trigger"], "file_watch");
+    assert_eq!(
+        applied["last_reload"]["config_keys"],
+        serde_json::json!(["limits.admin_connections"])
+    );
+    assert_timestamp(some(applied["last_reload"]["at"].as_str(), "reload at"));
+
+    let before = server.config_events().len();
+    server.config_write("[private-marker-invalid\n");
+    let invalid = server.config_view(&admin.0);
+    assert_eq!(invalid["file"]["state"], "invalid");
+    assert_eq!(invalid["file"]["config_keys"], serde_json::json!([]));
+    assert!(!some(invalid["file"]["diagnostics"].as_array(), "diagnostics").is_empty());
+    assert_eq!(invalid["items"], applied["items"]);
+    assert!(
+        !invalid["file"]["diagnostics"]
+            .to_string()
+            .contains("private-marker-invalid")
+    );
+    server.config_wait_event(before, "reload_rejected");
+    let rejected = server.config_view(&admin.0);
+    assert_eq!(rejected["last_reload"]["result"], "rejected");
+    assert_eq!(rejected["last_reload"]["trigger"], "file_watch");
+    assert_eq!(
+        rejected["last_reload"]["config_keys"],
+        serde_json::json!([])
+    );
+
+    let before = server.config_events().len();
+    let restart = pending.replace(
+        &format!("listen = \"127.0.0.1:{}\"", server.tcp_viewer_port),
+        "listen = \"127.0.0.1:1\"",
+    );
+    server.config_write(&restart);
+    let view = server.config_view(&admin.0);
+    assert_eq!(view["file"]["state"], "restart_required");
+    assert_eq!(
+        view["file"]["config_keys"],
+        serde_json::json!(["relay.tcp_viewer.listen"])
+    );
+    assert_eq!(view["items"], applied["items"]);
+    server.config_wait_event(before, "reload_restart_required");
+    let view = server.config_view(&admin.0);
+    assert_eq!(view["last_reload"]["result"], "restart_required");
+    assert_eq!(view["last_reload"]["trigger"], "file_watch");
+    assert_eq!(
+        view["last_reload"]["config_keys"],
+        serde_json::json!(["relay.tcp_viewer.listen"])
+    );
+
+    fs::remove_file(server.config_path()).unwrap_or_else(|error| panic!("remove config: {error}"));
+    let unreadable = server.config_view(&admin.0);
+    assert!(unreadable["revision"].is_null());
+    assert_eq!(
+        unreadable["file"],
+        serde_json::json!({
+            "state": "unreadable", "config_keys": [], "diagnostics": []
+        })
+    );
+    assert_eq!(unreadable["items"], applied["items"]);
+    server.config_write([0xff, 0xfe]);
+    let unreadable = server.config_view(&admin.0);
+    config_assert_revision(&unreadable, &[0xff, 0xfe]);
+    assert_eq!(unreadable["file"]["state"], "unreadable");
+    assert_eq!(unreadable["file"]["diagnostics"], serde_json::json!([]));
+    assert_eq!(unreadable["items"], applied["items"]);
+
+    // Disabled omitted values are null, while an explicitly empty list stays [].
+    let ws_start = some(pending.find("[relay.ws_viewer]"), "WS table");
+    let mode_start = some(pending.find("[mode1]"), "mode table");
+    let disabled = format!(
+        "{}[relay.ws_viewer]\nenabled = false\n[relay.wss_viewer]\nenabled = false\nallowed_origins = []\ncert_file = \"certs/view-only.pem\"\n{}",
+        &pending[..ws_start],
+        &pending[mode_start..]
+    );
+    server.config_write(&disabled);
+    server.config_restart();
+    assert_eq!(server.query(&admin.0, "/api/v1/config").status, 401);
+    let fresh = server.login();
+    let view = server.config_view(&fresh.0);
+    assert!(view["last_reload"].is_null());
+    for key in [
+        "relay.ws_viewer.listen",
+        "relay.ws_viewer.allow",
+        "relay.ws_viewer.allowed_origins",
+        "relay.wss_viewer.listen",
+        "relay.wss_viewer.allow",
+        "relay.wss_viewer.key_file",
+    ] {
+        assert!(config_item(&view, key)["value"].is_null(), "{key}");
+        assert_eq!(config_item(&view, key)["editable"], false, "{key}");
+    }
+    assert_eq!(
+        config_item(&view, "relay.wss_viewer.allowed_origins")["value"],
+        serde_json::json!([])
+    );
+    let cert = config_item(&view, "relay.wss_viewer.cert_file");
+    assert_eq!(
+        cert["value"],
+        server
+            .dir
+            .join("certs/view-only.pem")
+            .to_string_lossy()
+            .as_ref()
+    );
+    assert_eq!(cert["editable"], false);
+    // A disabled TLS path need not exist. Its display-only presence changes
+    // without publishing runtime settings, a reload event, or reload history.
+    let before = server.config_events().len();
+    server.config_write(disabled.replace("certs/view-only.pem", "certs/updated-view.pem"));
+    server.config_wait_event(before, "reload_change_detected");
+    std::thread::sleep(Duration::from_secs(6));
+    let updated = server.config_view(&fresh.0);
+    assert_eq!(updated["file"]["state"], "in_effect");
+    assert_eq!(
+        config_item(&updated, "relay.wss_viewer.cert_file")["value"],
+        server
+            .dir
+            .join("certs/updated-view.pem")
+            .to_string_lossy()
+            .as_ref()
+    );
+    assert!(config_item(&updated, "relay.wss_viewer.key_file")["value"].is_null());
+    assert!(updated["last_reload"].is_null());
+    config_assert_no_success(&server.config_events()[before..]);
+}
+
+/// spec: management.md:MGT-031
+/// spec: operations.md:OPS-060
+#[test]
+fn config_edit_preserves_document_applies_once_and_survives_restart() {
+    let _lock = lock_ports();
+    for newline in ["\n", "\r\n"] {
+        let mut server = config_server("config-preservation", true);
+        let text = String::from_utf8(server.config_bytes())
+            .unwrap_or_else(|error| panic!("config UTF-8: {error}"));
+        let original = format!("# preserve leading comment\n{text}")
+            .replace(
+                "relay_connections = 10",
+                "relay_connections   = 10 # preserve scalar",
+            )
+            .replace("waiting = 10", "waiting = 10 # untouched waiting")
+            .replace('\n', newline);
+        server.config_write(&original);
+        server.config_restart();
+        let admin = server.login();
+        let before = server.config_events().len();
+        // The edit incorporates a valid external pending field, but audits only
+        // requested fields whose file values actually changed.
+        let pending = original.replace("admin_connections = 5", "admin_connections = 6");
+        server.config_write(&pending);
+        let view = server.config_view(&admin.0);
+        assert_eq!(view["file"]["state"], "pending");
+        let reply = server.config_patch(
+            &admin,
+            &view["revision"],
+            serde_json::json!({
+                "limits.relay_connections": 12,
+                "limits.buffer_bytes": 262144,
+                "timeouts.close_secs": 2,
+                "keepalive.tcp_idle_secs": 90
+            }),
+        );
+        assert_eq!(reply.status, 200, "{}", reply.body);
+        let response = config_json(&reply);
+        assert_eq!(response["result"], "applied");
+        assert_timestamp(some(response["as_of"].as_str(), "patch as_of"));
+        let applied_keys = serde_json::json!([
+            "limits.relay_connections",
+            "limits.admin_connections",
+            "limits.buffer_bytes",
+            "timeouts.close_secs",
+            "keepalive.tcp_idle_secs"
+        ]);
+        assert_eq!(response["applied"], applied_keys);
+        let saved = server.config_bytes();
+        config_assert_revision(&response, &saved);
+        let saved_text =
+            std::str::from_utf8(&saved).unwrap_or_else(|error| panic!("saved UTF-8: {error}"));
+        assert!(saved_text.contains("# preserve leading comment"));
+        assert!(saved_text.contains("relay_connections   = 12 # preserve scalar"));
+        assert!(saved_text.contains("waiting = 10 # untouched waiting"));
+        assert!(saved_text.contains("admin_connections = 6"));
+        let original_limits = some(pending.split_once("[limits]"), "original limits").1;
+        let original_after_limits =
+            some(original_limits.split_once("[recent_closed]"), "next table").1;
+        let saved_after_limits =
+            some(saved_text.split_once("[recent_closed]"), "saved next table").1;
+        let preserved_tail = original_after_limits.trim_end_matches(['\r', '\n']);
+        assert!(
+            saved_after_limits.starts_with(preserved_tail),
+            "{saved_text}"
+        );
+        assert!(saved_text.contains(&format!("buffer_bytes = 262144{newline}")));
+        assert!(
+            some(saved_text.find("buffer_bytes = 262144"), "inserted key")
+                < some(saved_text.find("[recent_closed]"), "following table")
+        );
+        for (table, key) in [
+            ("[timeouts]", "close_secs = 2"),
+            ("[keepalive]", "tcp_idle_secs = 90"),
+        ] {
+            let position = some(saved_text.find(table), "inserted table");
+            assert!(position > some(saved_text.find("[log]"), "last original table"));
+            assert!(saved_text[position..].contains(key), "{saved_text}");
+        }
+        if newline == "\r\n" {
+            assert!(
+                !saved_text.replace("\r\n", "").contains('\n'),
+                "{saved_text:?}"
+            );
+        } else {
+            assert!(!saved_text.contains('\r'), "{saved_text:?}");
+        }
+        let effective = server.config_view(&admin.0);
+        assert_eq!(effective["file"]["state"], "in_effect");
+        assert_eq!(effective["revision"], response["revision"]);
+        for (key, value) in [
+            ("limits.relay_connections", 12),
+            ("limits.admin_connections", 6),
+            ("limits.buffer_bytes", 262144),
+            ("timeouts.close_secs", 2),
+            ("keepalive.tcp_idle_secs", 90),
+        ] {
+            assert_eq!(config_item(&effective, key)["value"], value, "{key}");
+        }
+        assert_eq!(effective["last_reload"]["trigger"], "config_edit");
+        assert_eq!(effective["last_reload"]["result"], "applied");
+        assert_eq!(effective["last_reload"]["config_keys"], applied_keys);
+        assert_eq!(effective["last_reload"]["at"], response["as_of"]);
+        server.config_wait_event(before, "config_edited");
+        // Cross both the native-watch quiet window and a fallback poll cycle.
+        std::thread::sleep(Duration::from_secs(6));
+        let events = server.config_events();
+        let edits: Vec<_> = events[before..]
+            .iter()
+            .filter(|e| e["event"] == "config_edited")
+            .collect();
+        let reloads: Vec<_> = events[before..]
+            .iter()
+            .filter(|e| e["event"] == "reload_applied")
+            .collect();
+        assert_eq!(edits.len(), 1, "{events:?}");
+        assert_eq!(reloads.len(), 1, "{events:?}");
+        assert_eq!(reloads[0]["trigger"], "config_edit");
+        assert_eq!(reloads[0]["applied"], applied_keys);
+        config_assert_audit(
+            edits[0],
+            None,
+            serde_json::json!([
+                "keepalive.tcp_idle_secs",
+                "limits.buffer_bytes",
+                "limits.relay_connections",
+                "timeouts.close_secs"
+            ]),
+        );
+        assert_eq!(edits[0]["revision"], response["revision"]);
+        let reload_position = some(
+            events[before..]
+                .iter()
+                .position(|e| e["event"] == "reload_applied"),
+            "reload position",
+        );
+        let edit_position = some(
+            events[before..]
+                .iter()
+                .position(|e| e["event"] == "config_edited"),
+            "edit position",
+        );
+        assert!(reload_position < edit_position);
+        assert_eq!(
+            server.config_view(&admin.0)["last_reload"],
+            effective["last_reload"]
+        );
+        server.config_restart();
+        assert_eq!(server.query(&admin.0, "/api/v1/config").status, 401);
+        let fresh = server.login();
+        let restarted = server.config_view(&fresh.0);
+        assert_eq!(restarted["items"], effective["items"]);
+        assert_eq!(restarted["revision"], response["revision"]);
+        assert!(restarted["last_reload"].is_null());
+        assert_eq!(server.config_bytes(), saved);
+    }
+}
+
+/// spec: management.md:MGT-033
+#[test]
+fn stale_config_revision_refuses_other_admin_and_external_comment_changes() {
+    let _lock = lock_ports();
+    let mut server = config_server("config-conflict", true);
+    let accounts_path = server.dir.join("admin-accounts.toml");
+    let accounts = fs::read_to_string(&accounts_path)
+        .unwrap_or_else(|error| panic!("read two-admin fixture: {error}"));
+    let bob = accounts
+        .replace("version = 1", "")
+        .replace("name = \"alice\"", "name = \"bob\"");
+    fs::write(&accounts_path, format!("{accounts}\n{bob}"))
+        .unwrap_or_else(|error| panic!("write two-admin fixture: {error}"));
+    server.config_restart();
+    let first = server.login();
+    let second = server.login_as("bob");
+    assert_ne!(first.0, second.0);
+    let first_view = server.config_view(&first.0);
+    let second_view = server.config_view(&second.0);
+    assert_eq!(first_view["revision"], second_view["revision"]);
+    let changed = server.config_patch(
+        &first,
+        &first_view["revision"],
+        serde_json::json!({
+            "limits.admin_connections": 6
+        }),
+    );
+    assert_eq!(changed.status, 200, "{}", changed.body);
+    let saved = server.config_bytes();
+    let effective = server.config_view(&first.0);
+    let before = server.config_events().len();
+    let stale = server.config_patch(
+        &second,
+        &second_view["revision"],
+        serde_json::json!({
+            "limits.admin_connections": 7
+        }),
+    );
+    config_assert_error(&stale, 409, "config_conflict");
+    assert_eq!(server.config_bytes(), saved);
+    let view = server.config_view(&first.0);
+    assert_eq!(view["items"], effective["items"]);
+    assert_eq!(view["last_reload"], effective["last_reload"]);
+    let rejected = server.config_wait_event(before, "config_edit_rejected");
+    config_assert_audit_account(
+        &rejected,
+        "bob",
+        Some("config_conflict"),
+        serde_json::json!(["limits.admin_connections"]),
+    );
+    config_assert_no_success(&server.config_events()[before..]);
+
+    let mut comment_only = saved.clone();
+    comment_only.extend_from_slice(b"\n# external comment only\n");
+    server.config_write(&comment_only);
+    let before = server.config_events().len();
+    let stale = server.config_patch(
+        &second,
+        &effective["revision"],
+        serde_json::json!({
+            "limits.admin_connections": 8
+        }),
+    );
+    config_assert_error(&stale, 409, "config_conflict");
+    assert_eq!(server.config_bytes(), comment_only);
+    let current = server.config_view(&second.0);
+    assert_ne!(current["revision"], effective["revision"]);
+    config_assert_revision(&current, &comment_only);
+    assert_eq!(current["items"], effective["items"]);
+    assert_eq!(current["last_reload"], effective["last_reload"]);
+    config_assert_audit_account(
+        &server.config_wait_event(before, "config_edit_rejected"),
+        "bob",
+        Some("config_conflict"),
+        serde_json::json!(["limits.admin_connections"]),
+    );
+    config_assert_no_success(&server.config_events()[before..]);
+}
+
+/// spec: management.md:MGT-043 partial
+#[test]
+fn config_conflict_retry_with_fresh_revision_applies_and_preserves_both_changes() {
+    let _lock = lock_ports();
+    let server = config_server("config-conflict-retry", true);
+    let admin = server.login();
+    let initial_view = server.config_view(&admin.0);
+    let initial_items = initial_view["items"].clone();
+    let initial_last_reload = initial_view["last_reload"].clone();
+
+    // 1. External change introduces a new comment into the file.
+    let mut modified = server.config_bytes();
+    modified.extend_from_slice(b"\n# external operator note\n");
+    server.config_write(&modified);
+
+    let before = server.config_events().len();
+
+    // 2. PATCH using the stale revision is refused with 409 config_conflict.
+    let stale_patch = server.config_patch(
+        &admin,
+        &initial_view["revision"],
+        serde_json::json!({
+            "limits.admin_connections": 12
+        }),
+    );
+    config_assert_error(&stale_patch, 409, "config_conflict");
+
+    // File bytes, runtime values, and last_reload remain unchanged by the rejected request.
+    assert_eq!(server.config_bytes(), modified);
+    let mid_view = server.config_view(&admin.0);
+    assert_eq!(mid_view["items"], initial_items);
+    assert_eq!(mid_view["last_reload"], initial_last_reload);
+
+    // 3. GET fetches fresh revision, values, and file state.
+    let fresh_view = server.config_view(&admin.0);
+    assert_ne!(fresh_view["revision"], initial_view["revision"]);
+    config_assert_revision(&fresh_view, &modified);
+    assert_eq!(fresh_view["file"]["state"], "in_effect");
+    assert_eq!(fresh_view["items"], initial_items);
+
+    // 4. PATCH using the fresh revision succeeds with 200 applied.
+    let applied_patch = server.config_patch(
+        &admin,
+        &fresh_view["revision"],
+        serde_json::json!({
+            "limits.admin_connections": 12
+        }),
+    );
+    assert_eq!(applied_patch.status, 200, "{}", applied_patch.body);
+    let response: serde_json::Value = serde_json::from_str(&applied_patch.body)
+        .unwrap_or_else(|error| panic!("response json: {error}"));
+    assert_eq!(response["result"], "applied");
+    assert_eq!(
+        response["applied"],
+        serde_json::json!(["limits.admin_connections"])
+    );
+
+    // 5. File contains both the external comment and the new edit.
+    let final_bytes = server.config_bytes();
+    let final_text = String::from_utf8_lossy(&final_bytes);
+    assert!(
+        final_text.contains("# external operator note"),
+        "missing external change: {final_text}"
+    );
+    assert!(
+        final_text.contains("admin_connections = 12"),
+        "missing new edit: {final_text}"
+    );
+
+    // 6. Events: exactly one config_edit_rejected, then reload_applied(trigger=config_edit) -> config_edited.
+    server.config_wait_event(before, "config_edited");
+    let events = server.config_events();
+    let window = &events[before..];
+
+    let rejections: Vec<_> = window
+        .iter()
+        .filter(|e| e["event"] == "config_edit_rejected")
+        .collect();
+    let reloads: Vec<_> = window
+        .iter()
+        .filter(|e| e["event"] == "reload_applied")
+        .collect();
+    let edits: Vec<_> = window
+        .iter()
+        .filter(|e| e["event"] == "config_edited")
+        .collect();
+
+    assert_eq!(rejections.len(), 1, "{window:?}");
+    assert_eq!(rejections[0]["reason"], "config_conflict");
+    assert_eq!(
+        rejections[0]["config_keys"],
+        serde_json::json!(["limits.admin_connections"])
+    );
+
+    assert_eq!(reloads.len(), 1, "{window:?}");
+    assert_eq!(reloads[0]["trigger"], "config_edit");
+    assert_eq!(
+        reloads[0]["applied"],
+        serde_json::json!(["limits.admin_connections"])
+    );
+
+    assert_eq!(edits.len(), 1, "{window:?}");
+    assert_eq!(
+        edits[0]["config_keys"],
+        serde_json::json!(["limits.admin_connections"])
+    );
+    assert_eq!(edits[0]["revision"], response["revision"]);
+
+    let rejection_pos = some(
+        window
+            .iter()
+            .position(|e| e["event"] == "config_edit_rejected"),
+        "rejection pos",
+    );
+    let reload_pos = some(
+        window.iter().position(|e| e["event"] == "reload_applied"),
+        "reload pos",
+    );
+    let edit_pos = some(
+        window.iter().position(|e| e["event"] == "config_edited"),
+        "edit pos",
+    );
+
+    assert!(
+        rejection_pos < reload_pos,
+        "rejection should precede reload: {window:?}"
+    );
+    assert!(
+        reload_pos < edit_pos,
+        "reload should precede config_edited: {window:?}"
+    );
+
+    let after_view = server.config_view(&admin.0);
+    assert_eq!(after_view["revision"], response["revision"]);
+    assert_eq!(
+        config_item(&after_view, "limits.admin_connections")["value"],
+        12
+    );
+    assert_eq!(after_view["last_reload"]["trigger"], "config_edit");
+    assert_eq!(after_view["last_reload"]["result"], "applied");
+    assert_eq!(
+        after_view["last_reload"]["config_keys"],
+        serde_json::json!(["limits.admin_connections"])
+    );
+}
+
+/// spec: management.md:MGT-034
+/// spec: operations.md:OPS-063
+#[test]
+fn restart_pending_file_blocks_config_patch_and_reports_only_restart_keys() {
+    let _lock = lock_ports();
+    let server = config_server("config-restart-pending", true);
+    let admin = server.login();
+    let initial = server.config_view(&admin.0);
+    let holder = TcpListener::bind("127.0.0.1:0")
+        .unwrap_or_else(|error| panic!("reserve restart-only port: {error}"));
+    let replacement_port = holder
+        .local_addr()
+        .unwrap_or_else(|error| panic!("replacement address: {error}"))
+        .port();
+    let original = String::from_utf8(server.config_bytes())
+        .unwrap_or_else(|error| panic!("config UTF-8: {error}"));
+    let candidate = original
+        .replace(
+            &format!("listen = \"127.0.0.1:{}\"", server.tcp_viewer_port),
+            &format!("listen = \"127.0.0.1:{replacement_port}\""),
+        )
+        .replace("admin_connections = 5", "admin_connections = 6");
+    let before = server.config_events().len();
+    server.config_write(&candidate);
+    let view = server.config_view(&admin.0);
+    assert_eq!(view["file"]["state"], "restart_required");
+    assert_eq!(
+        view["file"]["config_keys"],
+        serde_json::json!(["relay.tcp_viewer.listen"])
+    );
+    assert_eq!(view["items"], initial["items"]);
+    let watch = server.config_wait_event(before, "reload_restart_required");
+    assert_eq!(
+        watch["config_keys"],
+        serde_json::json!(["relay.tcp_viewer.listen"])
+    );
+    let view = server.config_view(&admin.0);
+    let last_before_patch = view["last_reload"].clone();
+    let reply = server.config_patch(
+        &admin,
+        &view["revision"],
+        serde_json::json!({
+            "limits.relay_connections": 12
+        }),
+    );
+    let error = config_assert_error(&reply, 409, "config_restart_pending");
+    assert_eq!(
+        error["error"]["config_keys"],
+        serde_json::json!(["relay.tcp_viewer.listen"])
+    );
+    assert_eq!(server.config_bytes(), candidate.as_bytes());
+    assert_eq!(
+        server.config_view(&admin.0)["last_reload"],
+        last_before_patch
+    );
+    config_assert_audit(
+        &server.config_wait_event(before, "config_edit_rejected"),
+        Some("config_restart_pending"),
+        serde_json::json!(["limits.relay_connections"]),
+    );
+    let refused = server.config_view(&admin.0);
+    assert_eq!(refused["items"], initial["items"]);
+    assert_eq!(refused["last_reload"]["result"], "restart_required");
+    assert_eq!(refused["last_reload"]["trigger"], "file_watch");
+    assert_eq!(
+        refused["last_reload"]["config_keys"],
+        serde_json::json!(["relay.tcp_viewer.listen"])
+    );
+    assert_eq!(server.config_bytes(), candidate.as_bytes());
+    let summary = server.query(&admin.0, "/api/v1/summary").json();
+    assert_eq!(
+        some(
+            some(summary.obj("usage"), "usage").obj("admin_connections"),
+            "admin usage"
+        )
+        .num("limit"),
+        Some(5)
+    );
+    let _old_listener = server.connect_tcp_viewer();
+    config_assert_no_success(&server.config_events()[before..]);
+}
+
+/// spec: management.md:MGT-039
+#[test]
+fn same_file_value_patch_is_noop_even_with_pending_runtime_delta() {
+    let _lock = lock_ports();
+    let server = config_server("config-noop", true);
+    let admin = server.login();
+    let initial = server.config_view(&admin.0);
+    for pending in [false, true] {
+        if pending {
+            let text = String::from_utf8(server.config_bytes())
+                .unwrap_or_else(|error| panic!("config UTF-8: {error}"));
+            server.config_write(text.replace("admin_connections = 5", "admin_connections = 6"));
+        }
+        let view = server.config_view(&admin.0);
+        assert_eq!(
+            view["file"]["state"],
+            if pending { "pending" } else { "in_effect" }
+        );
+        let bytes = server.config_bytes();
+        let modified = fs::metadata(server.config_path())
+            .and_then(|m| m.modified())
+            .unwrap_or_else(|error| panic!("config mtime: {error}"));
+        let before = server.config_events().len();
+        let reply = server.config_patch(
+            &admin,
+            &view["revision"],
+            serde_json::json!({
+                "limits.admin_connections": if pending { 6 } else { 5 }
+            }),
+        );
+        assert_eq!(reply.status, 200, "{}", reply.body);
+        let response = config_json(&reply);
+        assert_eq!(response["result"], "applied");
+        assert_eq!(response["applied"], serde_json::json!([]));
+        assert_eq!(response["revision"], view["revision"]);
+        assert_eq!(server.config_bytes(), bytes);
+        assert_eq!(
+            fs::metadata(server.config_path())
+                .and_then(|m| m.modified())
+                .unwrap_or_else(|error| panic!("config mtime after: {error}")),
+            modified
+        );
+        let after = server.config_view(&admin.0);
+        assert_eq!(after["items"], initial["items"]);
+        assert_eq!(after["last_reload"], view["last_reload"]);
+        config_assert_no_success(&server.config_events()[before..]);
+        if pending {
+            let event = server.config_wait_event(before, "reload_applied");
+            assert_eq!(event["trigger"], "file_watch");
+            assert_eq!(
+                event["applied"],
+                serde_json::json!(["limits.admin_connections"])
+            );
+            let applied = server.config_view(&admin.0);
+            assert_eq!(
+                config_item(&applied, "limits.admin_connections")["value"],
+                6
+            );
+            assert_eq!(applied["last_reload"]["trigger"], "file_watch");
+            assert!(
+                server.config_events()[before..]
+                    .iter()
+                    .all(|e| e["event"] != "config_edited")
+            );
+        } else {
+            std::thread::sleep(Duration::from_secs(6));
+            config_assert_no_success(&server.config_events()[before..]);
+            let unchanged = server.config_view(&admin.0);
+            assert_eq!(unchanged["revision"], view["revision"]);
+            assert_eq!(unchanged["last_reload"], view["last_reload"]);
+            assert_eq!(unchanged["items"], view["items"]);
+        }
+    }
+}
+
+/// spec: management.md:MGT-044
+#[test]
+fn config_edit_recovers_only_after_disabled_restart_or_file_repair() {
+    let _lock = lock_ports();
+    let mut server = config_server("config-recovery", false);
+    let disabled_admin = server.login();
+    let disabled = server.config_view(&disabled_admin.0);
+    let reply = server.config_patch(
+        &disabled_admin,
+        &disabled["revision"],
+        serde_json::json!({
+            "limits.admin_connections": 6
+        }),
+    );
+    config_assert_error(&reply, 403, "config_edit_disabled");
+    let text = String::from_utf8(server.config_bytes())
+        .unwrap_or_else(|error| panic!("config UTF-8: {error}"));
+    server.config_write(text.replace("config_edit = false", "config_edit = true"));
+    let enabled_file = server.config_view(&disabled_admin.0);
+    assert_eq!(enabled_file["edit_enabled"], false);
+    assert_eq!(enabled_file["file"]["state"], "restart_required");
+    let reply = server.config_patch(
+        &disabled_admin,
+        &enabled_file["revision"],
+        serde_json::json!({
+            "limits.admin_connections": 6
+        }),
+    );
+    config_assert_error(&reply, 403, "config_edit_disabled");
+    server.config_restart();
+    assert_eq!(
+        server.query(&disabled_admin.0, "/api/v1/config").status,
+        401
+    );
+    let admin = server.login();
+    let enabled = server.config_view(&admin.0);
+    assert_eq!(enabled["edit_enabled"], true);
+    assert_eq!(enabled["file"]["state"], "in_effect");
+    let reply = server.config_patch(
+        &admin,
+        &enabled["revision"],
+        serde_json::json!({
+            "limits.admin_connections": 6
+        }),
+    );
+    assert_eq!(reply.status, 200, "{}", reply.body);
+
+    for damage in ["restart", "invalid", "unreadable"] {
+        let healthy = server.config_bytes();
+        match damage {
+            "restart" => {
+                let text = std::str::from_utf8(&healthy)
+                    .unwrap_or_else(|error| panic!("healthy UTF-8: {error}"));
+                server.config_write(text.replace(
+                    &format!("listen = \"127.0.0.1:{}\"", server.tcp_viewer_port),
+                    "listen = \"127.0.0.1:1\"",
+                ));
+            }
+            "invalid" => server.config_write("[broken\n"),
+            "unreadable" => {
+                fs::remove_file(server.config_path())
+                    .unwrap_or_else(|error| panic!("remove current file: {error}"));
+            }
+            _ => unreachable!(),
+        }
+        let damaged = server.config_view(&admin.0);
+        let revision = if damaged["revision"].is_null() {
+            serde_json::json!(config_revision(&healthy))
+        } else {
+            damaged["revision"].clone()
+        };
+        let reply = server.config_patch(
+            &admin,
+            &revision,
+            serde_json::json!({
+                "timeouts.close_secs": 3
+            }),
+        );
+        config_assert_error(
+            &reply,
+            409,
+            if damage == "restart" {
+                "config_restart_pending"
+            } else {
+                "config_file_invalid"
+            },
+        );
+        server.config_write(&healthy);
+        let repaired = server.config_view(&admin.0);
+        assert_eq!(repaired["file"]["state"], "in_effect");
+        config_assert_revision(&repaired, &healthy);
+        // A new explicit request uses the revision returned by the repaired GET.
+        let next = if config_item(&repaired, "limits.admin_connections")["value"] == 6 {
+            7
+        } else {
+            6
+        };
+        let reply = server.config_patch(
+            &admin,
+            &repaired["revision"],
+            serde_json::json!({
+                "limits.admin_connections": next
+            }),
+        );
+        assert_eq!(reply.status, 200, "{damage}: {}", reply.body);
+        let after = server.config_view(&admin.0);
+        assert_eq!(
+            config_item(&after, "limits.admin_connections")["value"],
+            next
+        );
+        assert_eq!(after["file"]["state"], "in_effect");
+        assert_eq!(after["last_reload"]["trigger"], "config_edit");
+    }
 }

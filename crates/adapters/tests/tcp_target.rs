@@ -3,6 +3,7 @@
 use std::future::{Future, poll_fn};
 use std::net::SocketAddr;
 use std::pin::Pin;
+use std::sync::Arc;
 use std::time::Duration;
 
 use socket2::SockRef;
@@ -12,6 +13,10 @@ use vnc_relay_adapters::net::TcpRelayStream;
 use vnc_relay_adapters::target::TcpTargetConnector;
 use vnc_relay_app::events::ConnectionErrorKind;
 use vnc_relay_app::ports::{RelayCloseAction, RelayStream, TargetConnector, TargetError};
+use vnc_relay_app::reload::{
+    ConfigCandidate,
+    snapshot::{ReloadCell, ReloadSnapshot},
+};
 use vnc_relay_app::settings::KeepaliveSettings;
 use vnc_relay_domain::session::ViewerTransport;
 
@@ -23,6 +28,22 @@ const KEEPALIVE: KeepaliveSettings = KeepaliveSettings {
     ws_pong_timeout: Duration::from_secs(30),
 };
 
+fn source(keepalive: KeepaliveSettings) -> Arc<ReloadCell<()>> {
+    let mut settings = got(vnc_relay_adapters::config_file::parse(
+        "[admin]\naccounts_file='accounts.toml'\n[management]\nlisten='127.0.0.1:8443'\n[status]\nlisten='127.0.0.1:9090'\n",
+        std::path::Path::new("."),
+    ));
+    settings.keepalive = keepalive;
+    Arc::new(ReloadCell::new(ReloadSnapshot::new(
+        ConfigCandidate {
+            settings,
+            presence: Default::default(),
+        },
+        None,
+        None,
+    )))
+}
+
 fn got<T, E: std::fmt::Debug>(result: Result<T, E>) -> T {
     result.unwrap_or_else(|error| panic!("unexpected error: {error:?}"))
 }
@@ -33,7 +54,7 @@ async fn within<T>(future: impl Future<Output = T>) -> T {
 
 async fn connected_pair() -> (TcpRelayStream, TcpStream) {
     let listener = got(TcpListener::bind("127.0.0.1:0").await);
-    let connector = TcpTargetConnector::new(KEEPALIVE);
+    let connector = TcpTargetConnector::new(source(KEEPALIVE));
     let stream = got(within(connector.connect(got(listener.local_addr()))).await);
     let (peer, _) = got(within(listener.accept()).await);
     (stream, peer)
@@ -42,7 +63,7 @@ async fn connected_pair() -> (TcpRelayStream, TcpStream) {
 /// spec: relay.md:RLY-009 partial
 #[tokio::test]
 async fn resolves_literal_ips_and_preserves_the_system_candidate_order() {
-    let connector = TcpTargetConnector::new(KEEPALIVE);
+    let connector = TcpTargetConnector::new(source(KEEPALIVE));
     for text in ["127.0.0.1", "::1"] {
         assert_eq!(
             got(connector.resolve(text).await),
@@ -64,7 +85,7 @@ async fn resolves_literal_ips_and_preserves_the_system_candidate_order() {
 async fn connects_only_to_the_supplied_ip_and_port_and_distinguishes_refusal() {
     let listener = got(TcpListener::bind("127.0.0.1:0").await);
     let address = got(listener.local_addr());
-    let connector = TcpTargetConnector::new(KEEPALIVE);
+    let connector = TcpTargetConnector::new(source(KEEPALIVE));
     let stream = got(within(connector.connect(address)).await);
     assert_eq!(stream.transport(), ViewerTransport::Tcp);
     let stream = stream.into_inner();
@@ -95,15 +116,52 @@ async fn applies_keepalive_to_the_connected_target_before_returning_it() {
     }
 }
 
+/// spec: operations.md:OPS-050 partial
+#[tokio::test]
+async fn reloaded_keepalive_is_used_only_for_new_target_sockets() {
+    let listener = got(TcpListener::bind("127.0.0.1:0").await);
+    let source = source(KEEPALIVE);
+    let connector = TcpTargetConnector::new(source.clone());
+    let first = got(within(connector.connect(got(listener.local_addr()))).await).into_inner();
+    let (_first_peer, _) = got(within(listener.accept()).await);
+    let mut next = source.current().settings.as_ref().clone();
+    next.keepalive.tcp_idle = Duration::from_secs(90);
+    next.keepalive.tcp_interval = Duration::from_secs(13);
+    next.keepalive.tcp_probes = 9;
+    source.replace(ReloadSnapshot::new(
+        ConfigCandidate {
+            settings: next,
+            presence: Default::default(),
+        },
+        None,
+        None,
+    ));
+    let second = got(within(connector.connect(got(listener.local_addr()))).await).into_inner();
+    let (_second_peer, _) = got(within(listener.accept()).await);
+    assert!(got(SockRef::from(&first).keepalive()));
+    assert!(got(SockRef::from(&second).keepalive()));
+    #[cfg(target_os = "linux")]
+    {
+        let old = SockRef::from(&first);
+        let new = SockRef::from(&second);
+        assert_eq!(got(old.tcp_keepalive_time()), KEEPALIVE.tcp_idle);
+        assert_eq!(got(old.tcp_keepalive_interval()), KEEPALIVE.tcp_interval);
+        assert_eq!(got(old.tcp_keepalive_retries()), KEEPALIVE.tcp_probes);
+        assert_eq!(got(new.tcp_keepalive_time()), Duration::from_secs(90));
+        assert_eq!(got(new.tcp_keepalive_interval()), Duration::from_secs(13));
+        assert_eq!(got(new.tcp_keepalive_retries()), 9);
+    }
+}
+
 #[cfg(target_os = "linux")]
 #[tokio::test]
 async fn closes_the_new_target_socket_when_keepalive_cannot_be_applied() {
     let listener = got(TcpListener::bind("127.0.0.1:0").await);
-    let connector = TcpTargetConnector::new(KeepaliveSettings {
+    let connector = TcpTargetConnector::new(source(KeepaliveSettings {
         // Linux rejects TCP_KEEPIDLE=0; no external network fault is needed.
         tcp_idle: Duration::ZERO,
         ..KEEPALIVE
-    });
+    }));
     assert_eq!(
         within(connector.connect(got(listener.local_addr())))
             .await

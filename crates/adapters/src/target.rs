@@ -4,22 +4,23 @@
 
 use std::io;
 use std::net::{IpAddr, SocketAddr};
+use std::sync::Arc;
 
 use tokio::net::{TcpStream, lookup_host};
 use vnc_relay_app::ports::{TargetConnector, TargetError};
-use vnc_relay_app::settings::KeepaliveSettings;
+use vnc_relay_app::reload::ports::RuntimeSettingsSource;
 
 use crate::net::TcpRelayStream;
 
 /// Resolves once and connects only to the supplied, already checked address.
-#[derive(Debug, Clone, Copy)]
+#[derive(Clone)]
 pub struct TcpTargetConnector {
-    keepalive: KeepaliveSettings,
+    runtime: Arc<dyn RuntimeSettingsSource>,
 }
 
 impl TcpTargetConnector {
-    pub fn new(keepalive: KeepaliveSettings) -> Self {
-        Self { keepalive }
+    pub fn new(runtime: Arc<dyn RuntimeSettingsSource>) -> Self {
+        Self { runtime }
     }
 }
 
@@ -34,6 +35,10 @@ impl TargetConnector for TcpTargetConnector {
     }
 
     async fn connect(&self, address: SocketAddr) -> Result<Self::Stream, TargetError> {
+        let mut keepalive = None;
+        self.runtime
+            .with_current(&mut |settings| keepalive = Some(settings.keepalive));
+        let keepalive = keepalive.ok_or(TargetError::KeepaliveFailed)?;
         let stream = TcpStream::connect(address).await.map_err(|error| {
             if error.kind() == io::ErrorKind::ConnectionRefused {
                 TargetError::ConnectRefused
@@ -41,7 +46,6 @@ impl TargetConnector for TcpTargetConnector {
                 TargetError::ConnectError
             }
         })?;
-        TcpRelayStream::with_keepalive(stream, &self.keepalive)
-            .map_err(|_| TargetError::KeepaliveFailed)
+        TcpRelayStream::with_keepalive(stream, &keepalive).map_err(|_| TargetError::KeepaliveFailed)
     }
 }

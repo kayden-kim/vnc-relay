@@ -1,8 +1,8 @@
 # 운영 로그 모듈 설계
 
-## 작업 6.5 목표 사건 (Target / Active)
+## 설정 편집과 재로드 사건 (Current / Active)
 
-기존 Current/Verified와 별개인 구현 전 목표다. [설정 보기·편집 §7](config-edit.md#7-사건오류와-남는-상태)대로 config_edited/config_edit_rejected를 app Event와 JsonLinesEventSink에 더한다. reload_applied에 필수 trigger를 더하고 모든 기존 생성/직렬화/시험을 이관한다(현재 commit 생성: `crates/app/src/reload/service.rs:255-262`). 실제 바뀐 대상 정책의 allow_all_target도 phase=reload로 기록한다. 성공은 reload_applied 다음 config_edited, no-op은 둘 다 없음, 인증/CSRF/invalid_request에는 편집 사건 없음이다. 계정은 AuthorizedAdmin, peer는 socket PeerIp, revision은 저장 바이트 SHA-256이며 값은 남기지 않는다([운영 정보 §1.5](../contracts/ops-info-v1.md#15-사건-목록)·[§1.8](../contracts/ops-info-v1.md#18-관리자-계정명-기록-규칙), OPS-058~062).
+`Event::ConfigEdited`·`ConfigEditRejected`는 `ConfigEditService::patch`가 만들고 `format_line`이 JSON Lines로 직렬화한다. `ReloadService::commit_prepared`는 `ReloadApplied { trigger, applied }`를 만들며 trigger는 `file_watch` 또는 `config_edit`다. 실제 바뀐 대상 정책의 `allow_all_target`도 `phase=reload`로 기록한다. 파일 편집 성공은 재로드 commit 뒤 `config_edited` 순서다. 실행값 차이가 있으면 먼저 `reload_applied`가 나온다. no-op은 둘 다 없고 인증/CSRF/invalid_request에도 편집 사건이 없다. 계정은 `AuthorizedAdmin`, peer는 실제 socket `PeerIp`, revision은 저장 바이트 SHA-256이며 설정값은 기록하지 않는다([설정 보기·편집 §7](config-edit.md#7-사건오류와-남는-상태), [운영 정보 §1.5](../contracts/ops-info-v1.md#15-사건-목록)·[§1.8](../contracts/ops-info-v1.md#18-관리자-계정명-기록-규칙), OPS-058~062).
 
 운영 로그 사건을 JSON Lines로 표준 출력이나 로그 파일에 쓰는 구조를 다룬다. 사건의 종류와 `level`은 app이, 줄 형식과 출력은 adapters가 맡는다. [운영 정보 계약](../contracts/ops-info-v1.md)의 공통 규칙(1.1~1.4절), 중계 ID 참조 값(1.9절), 상대 주소 표기(1.10절), 로그에 넣지 않는 값(1.11절)을 구현한다. app의 `Event`는 시작·준비·종료·설정 경고와 접속·대기·세션·재로드·관리자 사건을 정의한다.
 
@@ -10,7 +10,7 @@
 | --- | --- |
 | 구조 시점 | Current |
 | 문서 상태 | Draft |
-| 구현 대조 | Verified — [대조 기록](#대조-기록) |
+| 구현 대조 | 2026-11-08 작업 트리의 `Event::ConfigEdited`·`ConfigEditRejected`·`ReloadApplied`, `ConfigEditService::patch`, `format_line` 직렬화 arm을 소스 읽기로 대조. 새 사건 시험은 미실행. 과거 범위의 기록은 [대조 기록](#대조-기록) |
 | 코드 위치 | `crates/domain/src/peer_ip.rs`, `crates/app/src/events.rs`, `crates/app/src/ports.rs`, `crates/adapters/src/ops_log.rs`, `crates/adapters/src/crypto.rs`, `src/serve.rs`(사건 기록 위치) |
 | 코드 지도 | [코드 지도 2절](code-map.md#2-코드-위치와-구성요소) |
 | 관련 스펙 | [운영 스펙 3.5절](../specs/operations.md#35-운영-정보), OPS-012(일부) |
@@ -83,6 +83,9 @@ flowchart LR
 | `Event::ServerStopped` | 없음 | 없음 | 마지막 줄이다. |
 | `Event::ShutdownStarted`, `ShutdownTrigger` | `Requested` 또는 `FatalError { detail }`, G, 활성 수 | `trigger`, `grace_secs`, `active_sessions`, 장애 때만 `detail` | 정상은 `info`, 장애는 `error`다. `RelayService`가 최초 종료 원인을 기록하고 재요청은 새 시작 사건을 만들지 않는다. 사용자 결정 2026-11-05(Q114). |
 | `Event::HandshakeRejected` | `conn_id: ConnId`, `entry_point: EntryPoint`, `peer_ip: PeerIp`, `reason: RejectReason`, `mode: Option<Mode>` | 사건 이름 `connection_rejected`. `conn_id`, `listener`, `stage`, `reason`, `peer_ip`, 선택 `mode` | `stage`는 항상 `initial_exchange`다. 사유는 `handshake_invalid`·`mode_disabled`다. 후자는 호출자가 `Some(Mode)`를 준다. `level`은 `warn`이다. domain의 `handshake::Mode`를 쓴다. 초기 요청·ID 원문은 보관하지 않는다. 사건·JSON·계약 시험을 구현했다. 실제 연결에서는 `relay.rs`의 `handle_connection` 실패 경로가 기록한다. [초기 교환 설계 6절](initial-exchange.md#6-사건오류자원-회수) |
+| `Event::ReloadApplied` | `trigger: ReloadTrigger`, `applied: Vec<String>` | `trigger`, `applied` | 파일 감지는 `file_watch`, 편집 commit은 `config_edit`다. 실제 바뀐 실행값/TLS 키만 담고 값은 넣지 않는다. |
+| `Event::ConfigEdited` | `admin_account: AccountName`, `peer_ip: PeerIp`, `config_keys`, `revision` | 같은 이름 | info. 요청 changes 중 파일값이 달라진 키와 새 바이트 revision이다. 이미 pending이던 실행값 차이는 `ReloadApplied.applied`에만 추가된다. |
+| `Event::ConfigEditRejected` | `admin_account: AccountName`, `peer_ip: PeerIp`, `reason: String`, `config_keys: Option<Vec<String>>` | 같은 이름, 없는 config_keys는 생략 | warn. reason은 여섯 편집 업무 오류의 API code다. 설정값·후보·revision은 없다. 인증·CSRF·invalid_request·internal에는 만들지 않는다. |
 | `Level` | `Info`, `Warn`, `Error` | `level` | v1에 다른 값이 없다. |
 | `RelayIdRef` | 소문자 16진수 16자 `String` | `relay_id_ref` | HMAC 결과 앞 8바이트로만 만든다. 원문 중계 ID로 만드는 생성자가 없다. |
 | `PeerIp` | `IpAddr` | `peer_ip` | IPv4-mapped가 아니다. 포트·영역 식별자가 없다. |
@@ -102,6 +105,8 @@ flowchart LR
 | 7 | `ShutdownSignal::wait` | 첫 종료 요청을 받으면 리스너를 닫고 `server_stopped`를 쓴 뒤 0으로 끝난다. | 없음 | 로그 출력 |
 
 `format_line`은 `Event::name()`·`level()`과 사건 필드로 `serde_json::Value` 목록을 만들고, 키와 값을 차례로 직렬화해 `{...}\n`을 만든다. serde_json이 문자열 안의 줄바꿈과 제어 문자를 이스케이프하므로 줄은 LF 하나로 끝난다.
+
+편집 경로에서는 `ConfigEditService::patch`가 같은 공유 재로드 mutex 안에서 검증→임시 파일 원자 교체→`commit_prepared`→`ConfigEdited` 기록을 끝낸다. `ConfigEditService::reject`는 여섯 업무 오류에만 `ConfigEditRejected`를 기록한다. 파일 교체 직전 revision 불일치나 재읽기 실패는 `reason=config_conflict`다. GET·거절·no-op은 `last_reload`를 바꾸지 않는다. 뒤따른 watcher의 같은 후보도 추가 `reload_applied`·`config_edited`·이력 갱신을 만들지 않는다. 로그 쓰기 실패를 app에 반환하지 않는 기존 포트 규칙은 이 경로에도 같다([설정 보기·편집 §4](config-edit.md#4-patch-처리-순서)).
 
 ### 4.1 로그 파일 교체
 

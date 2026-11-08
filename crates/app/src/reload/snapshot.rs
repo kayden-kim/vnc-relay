@@ -2,23 +2,11 @@
 
 use std::sync::{Arc, PoisonError, RwLock};
 
-use vnc_relay_domain::allow_list::AllowList;
-
-/// Allow lists of the four relay entry points (config-v3 §1.8).
-///
-/// A missing or disabled list is `AllowList::default()`, which rejects everything.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub struct RelayAllow {
-    pub tcp_viewer: AllowList,
-    pub tcp_server: AllowList,
-    pub ws_viewer: AllowList,
-    pub wss_viewer: AllowList,
-}
-
 /// Values that a reload can replace (file-watch-v1 §3).
 #[derive(Debug, Clone)]
 pub struct ReloadSnapshot<A> {
-    pub relay_allow: RelayAllow,
+    pub settings: Arc<crate::settings::Settings>,
+    pub presence: Arc<super::ConfigPresence>,
     /// Acceptor of the WSS viewer listener; `None` when WSS is disabled.
     pub wss_tls: Option<A>,
     /// Acceptor of the management listener; `None` when it serves plain HTTP.
@@ -27,9 +15,14 @@ pub struct ReloadSnapshot<A> {
 
 impl<A> ReloadSnapshot<A> {
     /// Creates a snapshot from the values of one candidate.
-    pub fn new(relay_allow: RelayAllow, wss_tls: Option<A>, management_tls: Option<A>) -> Self {
+    pub fn new(
+        candidate: super::ConfigCandidate,
+        wss_tls: Option<A>,
+        management_tls: Option<A>,
+    ) -> Self {
         Self {
-            relay_allow,
+            settings: Arc::new(candidate.settings),
+            presence: Arc::new(candidate.presence),
             wss_tls,
             management_tls,
         }
@@ -60,7 +53,19 @@ impl<A> ReloadCell<A> {
 
     /// Replaces the snapshot. New readers see `next`; existing readers keep theirs.
     pub fn replace(&self, next: ReloadSnapshot<A>) {
+        self.publish(Arc::new(next));
+    }
+
+    /// Publishes a snapshot allocated during candidate preparation.
+    pub(crate) fn publish(&self, next: Arc<ReloadSnapshot<A>>) {
         let mut guard = self.current.write().unwrap_or_else(PoisonError::into_inner);
-        *guard = Arc::new(next);
+        *guard = next;
+    }
+}
+
+impl<A: Send + Sync> super::ports::RuntimeSettingsSource for ReloadCell<A> {
+    fn with_current(&self, read: &mut dyn FnMut(&crate::settings::Settings)) {
+        let guard = self.current.read().unwrap_or_else(PoisonError::into_inner);
+        read(&guard.settings);
     }
 }

@@ -1,8 +1,10 @@
 # TCP 진입점 모듈 설계
 
-## 작업 6.2 수락 목표 (Target / Active)
+## 작업 6.2 수락 경계 (Current / Active)
 
-기존 Current/Verified와 별개로 [소비 경계](file-watch.md#101-발행-단위와-reader)를 적용한다. 현재 AcceptPolicy는 H/K를 고정한다(`crates/adapters/src/net.rs:249-260`). Target은 수락 판단의 allow/L/B/TCP K를 같은 세대에서 읽어 permit·소켓 옵션·연결 문맥에 반영한다. H는 즉시 시작하는 TCP 초기 교환에서 읽어 deadline으로 고정한다. 기존 B/기한/소켓 옵션은 바꾸지 않는다([설정 §1.8](../contracts/config-v3.md#18-재로드-구분), OPS-050~053).
+`crates/adapters/src/net.rs`의 `AcceptPolicy`는 `AllowSource`와 사용량만 보관하는 L 예산을 가진다. `admit`는 `RuntimeSettingsSource::with_current` 안에서 출발지 IP와 현재 L을 검사하고 `try_acquire(limit)`의 CAS까지 끝낸다. 같은 세대의 B·H·U·K를 `AcceptedSettings`로 복사한다. TCP는 수락 시각을 초기 교환 시작 시각으로 쓰며, B·H를 `ConnectionContext`에 넘긴다. K는 수락 소켓에 한 번 설정한다. `target.rs`의 `TcpTargetConnector`는 새 대상 연결 시도에서 K를 별도로 읽는다. 기존 연결의 B·기한·소켓 옵션은 바꾸지 않는다([설정 §1.8](../contracts/config-v3.md#18-재로드-구분), OPS-050~053).
+
+구현과 경계 단위 시험을 추가했다. 이번 변경의 빌드·시험은 아직 실행하지 않았다. 기존 대조 기록은 과거 범위의 증거다.
 
 TCP Viewer·TCP Server 진입점이 접속을 수락하고, 데이터를 읽기 전에 그 진입점의 출발지 IP 허용 목록으로 판정하는 구조를 다룬다. WS·WSS 진입점(작업 3.2)도 같은 수락 반복과 같은 판정을 쓰며, 101 응답까지의 처리는 [WebSocket 진입점 모듈 설계](websocket-entry-point.md)가 다룬다. TCP 연결은 허용되면 연결 상한 L의 자리를 잡고, 연결 식별자(`conn_id`)를 받고, 초기 교환 단계에 들어간다. 초기 교환 읽기와 해석은 `RelayService::handle_connection`이 맡는다. 초기 교환 형식은 [Repeater 초기 교환 계약](../contracts/repeater-handshake-v1.md)을 따른다. 초기 교환은 H 만료, 바이트 전 상대 종료, 연결 재설정, 서버 종료 중 먼저 오는 것으로 끝난다. L·H·TCP keepalive의 규칙은 [연결 상한과 시간 제한 모듈 설계](connection-limits.md)가 다룬다.
 
@@ -66,7 +68,7 @@ flowchart LR
 | `crates/domain/src/conn_id.rs` `ConnId` | 연결 식별자. `ConnId::next`가 프로세스 전체에서 1부터 하나씩 늘린 순번을 준다. `Display`는 `c`와 10진 순번이다(예: `c1`). | 허용할 때 하나 | 없음 |
 | `crates/app/src/events.rs` `Event::ConnectionAccepted`, `ConnectionRejected`, `ConnectionAborted`, `Stage`, `RejectReason`, `AbortReason` | 운영 정보 계약 1.5절의 접속 사건 세 가지와 1.6절의 `stage`·`reason` 값. 지금은 이 작업이 쓰는 값만 있다. | 사건이 생길 때 | domain |
 | `crates/app/src/settings.rs` `ListenerPlan::entry_point` | 바인드 계획이 진입점이면 그 진입점. 상태·관리 리스너는 `None`이다. | `Settings::other_listeners` | domain |
-| `crates/adapters/src/net.rs` `TcpEntryPoint::new`, `TcpEntryPoint::run` | 진입점 값을 만든다. `run`은 `accept_connections`를 부르고, 허용 연결마다 `TcpRelayStream`으로 감싼 소켓을 `RelayService::handle_connection`에 넘긴 뒤 결과를 `dispatch`로 잇는다. 수락 반복이 끝난 뒤 돌아온다. 적용할 값은 `AcceptPolicy`로 받는다. | `serve`가 바인드 뒤 TCP 진입점마다 하나 띄운다 | tokio, app, domain |
+| `crates/adapters/src/net.rs` `TcpEntryPoint::new`, `TcpEntryPoint::run` | `AcceptPolicy`는 현재 설정 원천을 가진 `AllowSource`와 L 사용량을 받는다. 허용 연결의 수락 당시 B/H는 `ConnectionContext`로 넘겨 `handle_connection`과 `dispatch`에 잇는다. | `serve`가 바인드 뒤 TCP 진입점마다 하나 띄운다 | tokio, app, domain |
 | `crates/adapters/src/net.rs` `accept_connections` | TCP와 WS·WSS가 함께 쓰는 수락 반복. 종료 알림, 끝난 작업 거두기, 수락을 함께 기다린다. 접속마다 출발지 IP를 판정하고(거절은 `connection_rejected`를 소켓을 닫기 전에 기록), 통과하면 L의 자리를 잡고, `conn_id`를 받고, K를 설정하고, `connection_accepted`를 기록한 뒤 호출자가 준 작업을 띄운다. 수락 실패는 100밀리초 기다린 뒤 다시 수락한다. | 진입점 `run`마다 하나 | tokio, socket2, app, domain |
 | `crates/adapters/src/net.rs` `TcpRelayStream` | 수락한 TCP 소켓을 감싸 `RelayStream`을 구현한다. `transport`는 `ViewerTransport::Tcp`, `pending_write_len`은 0이다. 닫을 때 쓰기 쪽을 닫는다(`poll_shutdown`). | 수락한 연결마다, `TcpEntryPoint::run`의 serve 작업이 만든다 | tokio, app, domain |
 | `crates/adapters/src/websocket.rs` `WsEntryPoint::new`, `WsEntryPoint::run`, `connection` | WS·WSS 진입점. `run`은 같은 `accept_connections`에 허용 연결마다 `connection`을 넘긴다. `connection`은 U 안에서 WSS면 `TlsIo`로 TLS 핸드셰이크를 하고, 업그레이드 요청을 읽고 검사한 뒤 101 응답을 쓴다. 101 뒤에는 `WsRelayStream`으로 감싸 `RelayService::handle_connection`과 `dispatch`에 넘긴다. 거절은 `Event::UpgradeRejected`(`stage` = `upgrade`)로 기록한다. | `serve`가 바인드 뒤 WS·WSS 진입점마다 하나 띄운다 | tokio, tokio-rustls, tokio-tungstenite, app, domain |
@@ -94,7 +96,7 @@ flowchart LR
 
 | 순서 | 코드 위치(파일·심볼) | 조건·계산 | 바뀌는 상태 | 결과를 쓰는 곳 |
 | --- | --- | --- | --- | --- |
-| 1 | `src/serve.rs` `listen_until_shutdown` | 바인드가 모두 성공하면 `ListenerPlan::entry_point`가 `TcpViewer`·`TcpServer`인 리스너마다 `TcpEntryPoint::new(entry_point, listener, policy)`를 만들어 띄운다. `policy`는 그 진입점의 `AcceptPolicy`(허용 목록, L 예산, H, K)다. WS·WSS 진입점은 `WsEntryPoint::new(entry_point, listener, tls, policy)`로 만든다. `tls`는 WSS의 TLS 수락기이고 WS는 `None`이다. | 진입점 작업 | 2단계 |
+| 1 | `src/serve.rs` `listen_until_shutdown` | 바인드한 진입점마다 `AcceptPolicy`(현재 설정 원천인 `AllowSource`, L 사용량)와 공통 서비스·runtime·clock을 주입한다. TCP는 `TcpEntryPoint`, WS·WSS는 `WsEntryPoint`로 만든다. | 진입점 작업 | 2단계 |
 | 2 | `accept_connections`(`TcpEntryPoint::run`·`WsEntryPoint::run`이 부른다) | `accept`가 소켓과 상대 주소를 준다. `PeerIp::from(addr)`로 IPv4-mapped 주소를 IPv4로 바꾼다. | 없음 | 3단계 |
 | 3 | `AllowList::permits` | `tcp_server` 목록에 그 IP가 없으므로 거절이다. 소켓에서 아무것도 읽지 않았다. | 없음 | 4단계 |
 | 4 | `EventSink::record`, 소켓 닫기 | `connection_rejected`(`listener` = `tcp_server`, `stage` = `accept`, `reason` = `ip_not_allowed`, `peer_ip`)를 기록한 뒤 소켓을 닫는다. 상대는 연결 끊김을 본다. | 없음 | 운영 로그 |

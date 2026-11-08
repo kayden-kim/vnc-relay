@@ -1,8 +1,8 @@
 # 대상 연결·매칭·중계 수명 모듈 설계
 
-## 작업 6.2 실행 값 목표 (Target / Active)
+## 작업 6.2 실행 값 경계 (Current / Active)
 
-구현 전 Target은 [소비 경계 표](file-watch.md#101-발행-단위와-reader)와 [동적 상한](connection-limits.md#10-target--동적-상한과-시간-제한)을 따른다. 기존 Current/Verified와 섞지 않는다. 현재 runtime은 target policy/C/E/W를 고정하고 WaitingTable도 시작 Lw/W를 받는다(`crates/app/src/relay.rs:377-394,537-540`). Target은 대상 허용 판정/시도 시작의 policy/C, 대기 등록의 Lw/W, 종료 교환 시작의 E를 각각 읽는다. 세션 생성 때 E를 고정하지 않는다(`crates/app/src/relay/session.rs:35-36,72-78`). B는 수락 연결의 PreparedConnection에서 방향별로 이어받는다. 진행 중 C/W/E와 기존 매칭 자격을 변경하지 않는다. G는 정상 종료 시작 때만 읽는다([설정 §1.8](../contracts/config-v3.md#18-재로드-구분), OPS-047~057).
+`RelayService`와 `RelayRuntime`은 `Arc<dyn RuntimeSettingsSource>`를 공유한다. [소비 경계 표](file-watch.md#101-발행-단위와-reader)와 [동적 상한](connection-limits.md#10-target--동적-상한과-시간-제한)에 따라 `relay/target.rs`가 대상 허용 정책과 C를 시도 시작에 읽고, `relay/matching.rs`가 Lw·W를 등록 때 읽는다. `WaitingTable::arrive`는 `RegistrationPolicy`를 값으로 받는다. 세션 엔진은 첫 EOF·오류의 종료 전이 때 E를 한 번 읽는다. 관리자 종료는 `request_terminate`가 수락 시각과 E를 명령에 함께 담는다. 이미 시작한 종료에는 새 E를 적용하지 않는다. B는 `ConnectionContext.buffer_bytes`에서 각 방향으로 전달하며 Mode II의 두 값이 달라도 유지한다. `RelayRuntimeConfig`에는 재시작 대상인 `recent_closed`만 남는다. G는 정상 종료 시작 때 받은 절대 기한으로 유지한다([설정 §1.8](../contracts/config-v3.md#18-재로드-구분), OPS-047~057). 이 변경의 시험은 통합 검증 전이며 기존 Verified 기록은 과거 범위에만 해당한다.
 
 이 문서는 유효한 `PreparedConnection<S>`를 받아 Mode I 대상에 연결하거나 Mode II 상대를 찾고, 양방향 중계와 세션 정리까지 이어 가는 현재 구조를 설명한다. 예를 들어 Server가 `ID:0123`으로 기다릴 때 Viewer가 같은 ID로 접속하면 두 연결을 한 세션으로 옮긴다. 초기 요청 뒤의 데이터부터 상대에게 한 번씩 전달한다.
 
@@ -10,7 +10,7 @@
 | --- | --- |
 | 구조 시점 | Current |
 | 문서 상태 | Draft |
-| 구현 대조 | Verified — [2026-11-04 대조 기록](#8-현재-코드와의-차이와-연결-순서). API·소유권·등록·중계·관리·종료 경로와 현재 시험 소스를 대조했다. |
+| 구현 대조 | 작업 6.2 변경은 Current / 실행 미확인. 이전 범위는 [2026-11-04 대조 기록](#8-현재-코드와의-차이와-연결-순서)을 따른다. |
 | 코드 위치 | `crates/domain/src/{matching,session,recent_closed,target_policy}.rs`, `crates/app/src/{ports,events,relay}.rs`와 `relay/{handshake,target,matching,session}.rs`, `crates/adapters/src/{target,crypto,ops_log}.rs`와 `net.rs`의 `TcpRelayStream`, `crates/adapters/tests/{tcp_target,ops_info_contract}.rs` |
 | 코드 지도 | [코드 지도](code-map.md#2-코드-위치와-구성요소) |
 | 관련 스펙 | [중계](../specs/relay.md): RLY-003·006~021·023·025~027. [운영](../specs/operations.md): OPS-005·007~009·023·039·042~043. [관리](../specs/management.md#2-조회-대상과-상태): MGT-005 일부 |
@@ -60,7 +60,7 @@ flowchart LR
 
 | 요소·파일 | 역할 | 생성 시점·소유자 | 의존 대상 |
 | --- | --- | --- | --- |
-| `crates/domain/src/target_policy.rs` `TargetPolicy` | `permits_name(name, port)`와 `permits_ip(ip, port)`로 정책 검사. 기존 `TargetItem`, `IpItem::contains` 재사용 | 시작 설정이 소유 | 기존 주소·포트 값 |
+| `crates/domain/src/target_policy.rs` `TargetPolicy` | `permits_name(name, port)`와 `permits_ip(ip, port)`로 정책 검사. 기존 `TargetItem`, `IpItem::contains` 재사용 | 실행 설정이 원본을 소유하고 대상 시도는 시작 세대의 정책을 보관 | 기존 주소·포트 값 |
 | `crates/domain/src/matching.rs` `WaitingTable` | `RelayId`별 `Waiting`·`Claimed`·`Active`·`Closing` 점유 판정. 연결 식별자·세션 식별자를 비교해 전이 | app의 `RelayState`가 소유 | `RelayId`, `Role`, `ConnId`, `SessionId` |
 | `crates/domain/src/session.rs` `SessionId`, `Session`, `CloseCause` | 식별자 형식, `active`·`closing`, 첫 종료 원인, 방향별 카운터 | 세션 활성화 때 생성 | std 값 |
 | `crates/domain/src/recent_closed.rs` `RecentClosedList` | 정리된 세션의 요약, R 초과 시 가장 오래된 항목 제거 | 프로세스마다 하나 | `session` |
@@ -80,7 +80,7 @@ flowchart LR
 
 ### 3.1 초기 교환에서 받는 값
 
-`PreparedConnection<S>`는 초기 교환의 스트림, `HandshakeRequest`, 후속 데이터, `ConnectionContext`, L의 `BudgetPermit` 하나를 이동받는다. 진입점은 실제 상대 IP·소켓 주소 `peer_addr`, 표시용 수락 시각 `accepted_wall`, 수락·초기 교환 진입 단조 시각을 채운다. 파싱한 요청·IP나 현재 벽시계로 상대 주소·수락 시각을 재구성하지 않는다.
+`PreparedConnection<S>`는 초기 교환의 스트림, `HandshakeRequest`, 후속 데이터, `ConnectionContext`, L의 `BudgetPermit` 하나를 이동받는다. 진입점은 실제 상대 IP·소켓 주소 `peer_addr`, 표시용 수락 시각 `accepted_wall`, 수락·초기 교환 진입 단조 시각, 수락 B와 초기 교환 시작 H를 채운다. 파싱한 요청·IP나 현재 벽시계로 상대 주소·수락 시각을 재구성하지 않는다.
 
 H 감시는 유효 요청 반환으로 끝난다. C·W·E에서 H를 다시 쓰지 않는다. `PreparedConnection`을 복제하지 않는다. L permit을 다시 얻거나 단계 전환 때 반환하지 않는다. 후속 데이터 `n`바이트는 이미 해당 연결의 B를 쓴 상태다.
 
@@ -118,7 +118,7 @@ H 감시는 유효 요청 반환으로 끝난다. C·W·E에서 H를 다시 쓰�
 | 대기 항목 | `RelayId`, 역할, `conn_id`, 수락 시각, `registered_at`, `deadline = registered_at + W`, `relay_id_ref`, 스트림·후속 데이터·L permit·Lw permit | ID 원문은 비교·인증된 관리 조회에만 쓴다. 로그는 ref만 쓴다. |
 | `Claimed` 점유 | ID, 역할 순서의 두 연결 식별자, 선행 대기 메타데이터, 매칭 시각 | 두 연결 식별자가 인계의 소유권을 구별한다. 활성화 때 세션 식별자를 이동한다. 인계 중에도 ID를 점유하며 조회의 대기·활성 목록에는 노출하지 않는다. |
 | 활성 항목 | `ActiveSessionSnapshot`의 `Session` 메타데이터, `viewer: ConnectionContext`, `peer: ActivePeer`, 연결 소유자, 종료 요청·완료 알림 | `peer`는 Mode II의 `ActivePeer::Server(ConnectionContext)` 또는 Mode I의 `ActivePeer::Target(SocketAddr)` 중 하나다. `active`와 `closing` 모두 활성 수에 포함한다. Mode II의 양 역할을 함께 점유한다. |
-| 방향 버퍼 | 원본 연결의 후속 데이터와 읽기 작업 공간, 미전달 범위의 시작·끝 인덱스 | 원본 연결마다 미전달 페이로드와 그 저장 공간은 B 이내다. 두 방향 합계는 최대 2B다. |
+| 방향 버퍼 | 원본 연결의 후속 데이터와 읽기 작업 공간, 미전달 범위의 시작·끝 인덱스 | 각 방향은 해당 원본 연결을 수락할 때의 B 이내다. Mode II의 두 B가 다르면 합계 상한은 두 값의 합이다. Mode I의 대상 방향은 Viewer 수락 B를 이어받는다. |
 | `SessionId` | 계약의 `ses_` + 소문자 영문·숫자 26자 | 중계 ID·연결 식별자와 별도다. 프로세스 안에서 한 번 발급한 값을 다시 쓰지 않는다. |
 | 최근 종료 항목 | 계약 1.10절의 시작·종료 시각, 최종 두 카운터, 종료 원인과 식별자·모드·전송 | 정리된 활성 세션만 넣는다. 대기 만료·연결 실패는 넣지 않는다. R=0이면 보관하지 않는다. |
 
@@ -145,10 +145,10 @@ H 감시는 유효 요청 반환으로 끝난다. C·W·E에서 H를 다시 쓰�
 | 순서 | 위치·처리 | 상태·결과 |
 | --- | --- | --- |
 | 1 | 진입점이 `HandshakingGuard`를 버린 뒤 `dispatch`가 `Mode1(TargetAddress)`를 선택한다. 종료 중인지 확인한다. | 초기 교환 중 집계는 이미 끝났다. 대상 연결 중 집계를 시작한다. 아직 세션 식별자 없음 |
-| 2 | `relay/target.rs`가 `started = clock.monotonic()`, 절대 기한 `started + C`를 한 번 만든다. | IP 리터럴이면 해석을 생략하되 같은 C를 사용 |
+| 2 | `relay/target.rs`가 같은 실행 설정 읽기에서 정책과 C를 보관하고 `started = clock.monotonic()`, 절대 기한 `started + C`를 한 번 만든다. | IP 리터럴이면 해석을 생략하되 같은 C를 사용. DNS 대기 중 재로드도 시작 정책과 기한을 바꾸지 않음 |
 | 3 | DNS 요청이면 `TargetPolicy::permits_name`으로 정규화된 이름·포트를 검사한다. 거절이면 DNS와 연결을 하지 않는다. 허용이면 `resolve`를 기다린다. | DNS 실패·빈 결과는 `resolve_failed`. 결과는 IPv4·IPv6 모두 포함 |
 | 4 | 각 IP를 canonical IPv4로 바꾼다. `permits_ip`가 단일 IP·포트를 검사한다. | 금지 주소는 시도하지 않는다. 허용 주소가 없으면 `target_not_allowed`. 이름 허용만으로 IP를 허용하지 않음 |
-| 5 | 첫 대상 소켓 생성 직전에 수락 측과 **같은** L에서 `try_acquire`한다. | 없으면 `relay_connection_limit`, `stage = target_connect`, `limit = L`. 대상 소켓 없음(OPS-023) |
+| 5 | 첫 대상 소켓 생성 직전에 실행 설정 읽기 callback 안에서 현재 L을 읽고 수락 측과 **같은** 예산의 `try_acquire(L)`까지 실행한다. | 없으면 `relay_connection_limit`, `stage = target_connect`, `limit = 판정에 쓴 L`. 대상 소켓 없음(OPS-023) |
 | 6 | 허용한 `SocketAddr`를 `connect`에 준다. 연결 성립 후 K를 적용한다. `TcpStream::connect((name, port))`처럼 이름을 다시 해석하는 API는 쓰지 않는다. | 연결 중에도 대상 L permit 유지. 성공 소켓과 실제 IP·포트 반환 |
 | 7 | 연결 성공 직후 C·서버 종료를 다시 확인한다. 두 소켓과 permit을 세션 시작 함수로 이동한다. | 활성 등록과 `session_started`, 이어서 `run_session_controlled` |
 

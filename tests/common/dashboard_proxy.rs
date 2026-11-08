@@ -18,6 +18,8 @@ pub enum Fault {
     DropResponse,
     Close,
     Error500(&'static str),
+    Response(u16, &'static str),
+    ReplayResponse(u16, String, String),
 }
 
 #[derive(Clone)]
@@ -26,6 +28,8 @@ pub struct Traffic {
     pub path: String,
     pub headers: String,
     pub body: String,
+    /// Settings /api/v1/ oracle bodies, or an injected reply; static assets are not copied.
+    pub response_body: String,
     pub at: Instant,
     pub completed: Option<Instant>,
     pub forwarded: bool,
@@ -292,6 +296,7 @@ fn exchange(mut downstream: TcpStream, upstream: u16, state: &Shared) {
             path,
             headers: head.into_owned(),
             body: String::from_utf8_lossy(&bytes[head_end + 4..]).into_owned(),
+            response_body: String::new(),
             at: Instant::now(),
             completed: None,
             forwarded: false,
@@ -324,6 +329,25 @@ fn exchange(mut downstream: TcpStream, upstream: u16, state: &Shared) {
     }
 }
 
+fn injected_response(
+    downstream: &mut TcpStream,
+    state: &Shared,
+    index: usize,
+    status: u16,
+    body: &str,
+) -> io::Result<()> {
+    let response = format!(
+        "HTTP/1.1 {status} Test Response\r\nContent-Type: application/json\r\nCache-Control: no-store\r\nX-Test-Proxy-Fault: injected\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+        body.len()
+    );
+    {
+        let mut traffic = state.traffic.lock().unwrap_or_else(PoisonError::into_inner);
+        traffic[index].status = Some(status);
+        traffic[index].response_body = body.to_owned();
+    }
+    downstream.write_all(response.as_bytes())
+}
+
 fn forward(
     downstream: &mut TcpStream,
     upstream: u16,
@@ -339,12 +363,21 @@ fn forward(
             let body =
                 serde_json::json!({"error":{"code":code,"message":"Injected test proxy failure"}})
                     .to_string();
-            let response = format!(
-                "HTTP/1.1 500 Internal Server Error\r\nContent-Type: application/json\r\nCache-Control: no-store\r\nX-Test-Proxy-Fault: injected\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
-                body.len()
-            );
-            state.traffic.lock().unwrap_or_else(PoisonError::into_inner)[index].status = Some(500);
-            return downstream.write_all(response.as_bytes());
+            return injected_response(downstream, state, index, 500, &body);
+        }
+        Some(Fault::Response(status, body)) => {
+            return injected_response(downstream, state, index, *status, body);
+        }
+
+        Some(Fault::ReplayResponse(status, headers, body)) => {
+            {
+                let mut traffic = state.traffic.lock().unwrap_or_else(PoisonError::into_inner);
+                traffic[index].status = Some(*status);
+                traffic[index].response_body = body.clone();
+            }
+            downstream.write_all(headers.as_bytes())?;
+            downstream.write_all(b"\r\n\r\n")?;
+            return downstream.write_all(body.as_bytes());
         }
         Some(Fault::DelayBefore(delay)) if !pause(*delay, state) => return Ok(()),
         _ => {}
@@ -387,7 +420,17 @@ fn forward(
         .nth(1)
         .and_then(|value| std::str::from_utf8(value).ok())
         .and_then(|value| value.parse::<u16>().ok());
-    state.traffic.lock().unwrap_or_else(PoisonError::into_inner)[index].status = status;
+    {
+        let mut traffic = state.traffic.lock().unwrap_or_else(PoisonError::into_inner);
+        traffic[index].status = status;
+        if traffic[index].path.starts_with("/api/v1/") {
+            traffic[index].response_body = response
+                .windows(4)
+                .position(|part| part == b"\r\n\r\n")
+                .map(|end| String::from_utf8_lossy(&response[end + 4..]).into_owned())
+                .unwrap_or_default();
+        }
+    }
     match fault {
         Some(Fault::DropResponse) => return Ok(()),
         Some(Fault::Delay(delay)) if !pause(*delay, state) => return Ok(()),

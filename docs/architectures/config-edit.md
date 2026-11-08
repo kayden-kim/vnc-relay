@@ -1,14 +1,14 @@
 # 설정 보기·편집 모듈 설계
 
-인증된 관리자가 실행 값을 보고, 같은 TOML 파일의 허용된 값만 고치도록 한다. 파일 저장과 실행 값 교체 사이에 다시 실패할 작업을 두지 않는다. 재로드의 공유 상태와 소비 시점은 [파일 감지 목표 설계](file-watch.md#10-target--설정-v3-실행-값과-공유-트랜잭션)가 맡고, 이 문서는 GET/PATCH의 사용 사례·파일 포트·HTTP 경계를 맡는다.
+인증된 관리자가 실행 값을 보고, 같은 TOML 파일의 허용된 값만 고치도록 한다. 파일 저장과 실행 값 교체 사이에 다시 실패할 작업을 두지 않는다. 재로드의 공유 상태와 소비 시점은 [파일 감지 설계](file-watch.md)가 맡고, 이 문서는 GET/PATCH의 사용 사례·파일 포트·HTTP 경계를 맡는다.
 
 | 항목 | 값 |
 | --- | --- |
-| 구조 시점 | Target — 작업 6.3~6.5 및 6.6 서버 측 |
-| 문서 상태 | Active — Q167~Q177, 2026-11-08 채택 범위의 목표 설계 |
-| 구현 대조 | 미대조(구현 전). 아래 Current 증거는 소스 읽기이며 시험 결과가 아니다 |
-| 코드 위치 | 계획: `crates/app/src/management/config.rs`, `crates/adapters/src/config_edit.rs`, `crates/adapters/src/management_http/config_api.rs` |
-| 코드 지도 | [코드 지도](code-map.md) — 실제 구현과 함께 갱신 |
+| 구조 시점 | Current — 설정 보기·편집의 app·파일·HTTP 경계 |
+| 문서 상태 | Active — Q167~Q178, 2026-11-08 채택 범위 |
+| 구현 대조 | 2026-11-08 작업 트리를 소스 읽기로 대조. [§8](#8-current-구조-대조)의 범위만 확인했으며 빌드·시험은 미실행 |
+| 코드 위치 | `crates/app/src/management/config.rs`, `crates/app/src/management/config/items.rs`, `crates/adapters/src/config_edit.rs`, `crates/adapters/src/management_http/config_api.rs`, `src/serve.rs` |
+| 코드 지도 | [코드 지도](code-map.md) |
 | 관련 스펙 | [관리 §3.3](../specs/management.md#33-설정-보기와-동적-설정-편집) MGT-R19~R27·MGT-028~045, [운영 §3.3](../specs/operations.md#33-파일-변경-자동-감지와-부분-재로드) OPS-059~064, [화면](../specs/dashboard.md#scr-004-설정-보기) DASH-028~053 |
 | 관련 계약 | [설정 §1.8](../contracts/config-v3.md#18-재로드-구분)·[§1.10](../contracts/config-v3.md#110-관리-api-편집의-파일-쓰기), [관리 API §1.13](../contracts/management-api-v1.md#113-설정-보기-get-apiv1config)·[§1.14](../contracts/management-api-v1.md#114-동적-설정-편집-patch-apiv1config)·[§2.3](../contracts/management-api-v1.md#23-consumer의-판정-규칙), [운영 정보 §1.5](../contracts/ops-info-v1.md#15-사건-목록) |
 | 관련 ADR | [ADR-0006](../decisions/ADR-0006-config-edit-through-file.md) |
@@ -21,13 +21,13 @@
 
 ## 2. 내부 구조와 초기화
 
-다음은 Target만 나타낸다. 실선은 실행 중 호출, 점선은 `serve`의 포트 주입이다. 컴파일 의존은 실행파일 → adapters → app → domain이다([레이어 규칙](code-map.md#레이어와-의존-방향)).
+다음은 Current 호출 경계다. 실선은 실행 중 호출, 점선은 `serve`의 포트 주입이다. 컴파일 의존은 실행파일 → adapters → app → domain이다([레이어 규칙](code-map.md#레이어와-의존-방향)).
 
 ```mermaid
 flowchart LR
     S["src/serve.rs"] -.-> H["management_http/config_api.rs"]
     S -.-> E["app/management/config.rs ConfigEditService"]
-    S -.-> F["adapters/config_edit.rs FsConfigStore / TomlConfigDocument"]
+    S -.-> F["adapters/config_edit.rs FsConfigFileStore / TomlConfigDocument"]
     H -->|"인증된 GET / PATCH 값"| E
     E -->|"하나의 Mutex 획득"| R["SharedReload / ReloadService"]
     E -->|"읽기·revision·편집·검증·원자 교체 포트"| F
@@ -40,20 +40,23 @@ flowchart LR
 | --- | --- | --- |
 | `SharedReload<A> = Arc<Mutex<ReloadService<A>>>` | `serve`에서 한 번 생성, watcher·편집 서비스가 공유 | read→revision→edit→validate→write→swap 직렬화. [API §1.14](../contracts/management-api-v1.md#114-동적-설정-편집-patch-apiv1config) |
 | `ConfigEditService<A>` | `serve`, 관리 리스너 종료까지 | 설정 경로·base_dir·공유 재로드·파일/문서 포트·Clock·EventSink 보유. [API §1.13~14](../contracts/management-api-v1.md#113-설정-보기-get-apiv1config) |
-| `FsConfigStore` | adapters, 프로세스 수명 | 원시 바이트 읽기, SHA-256, 같은 디렉터리 임시 파일과 교체. [설정 §1.10](../contracts/config-v3.md#110-관리-api-편집의-파일-쓰기) |
-| `TomlConfigDocument` | adapters, 요청별 문서 | `toml_edit` 0.25로 값만 편집, 기존 `config_file::parse` 재사용. [ADR-0006](../decisions/ADR-0006-config-edit-through-file.md) |
+| `FsConfigFileStore` | adapters, 프로세스 수명 | 원시 바이트 읽기, SHA-256, 같은 디렉터리 임시 파일과 교체. [설정 §1.10](../contracts/config-v3.md#110-관리-api-편집의-파일-쓰기) |
+| `TomlConfigDocument` | adapters 포트 구현, 문서는 요청마다 생성 | `toml_edit` 0.25의 `Document<&str>` source span으로 바뀐 값만 치환하고 `config_file::parse_candidate`로 전체 후보 검증. [ADR-0006](../decisions/ADR-0006-config-edit-through-file.md) |
 | `ConfigView`·`ConfigPatch`·`ConfigEditResult` | app 값, 요청 수명 | 교환 필드의 정의는 [API §1.13~14](../contracts/management-api-v1.md#113-설정-보기-get-apiv1config). JSON Value를 app에 넘기지 않음 |
+| `management/config/items.rs` `config_items`, `ConfigItem`, `ConfigReloadKind` | app의 명시적 descriptor 목록 | 계약 순서의 실행값·reload 구분·정수 정적 min/max·편집 조건 생성. 참조 파일 내용은 읽지 않음 |
 
 ## 3. 데이터 모델과 GET
 
 [API §1.13](../contracts/management-api-v1.md#113-설정-보기-get-apiv1config)을 다음 내부 자료로 만든다.
+
+`ConfigView`는 `as_of: SystemTime`, `revision: Option<String>`, `edit_enabled: bool`, `file: FileClassification`, `last_reload: Option<LastReload>`, `items: Vec<ConfigItem>`를 담는다. `ConfigPatch`는 revision과 `Vec<ConfigChange>`이며 각 값은 `ConfigValue`다. HTTP의 changes 객체를 이 자료로 바꾸므로 app에 JSON/TOML 타입이 들어오지 않는다. `ConfigActor`는 `AccountName`·`PeerIp`, 성공 `ConfigEditResult`는 as_of·revision·applied를 담는다.
 
 1. 공유 재로드 mutex를 잡는다. 현재 파일 바이트를 다시 읽고 revision을 계산한다. 실행 `Settings`·`last_reload`·파일 분류를 같은 잠금 구간에서 복사한 뒤 푼다. 파일 I/O 때문에 중계 상태 mutex를 잡지 않는다. GET은 어떤 재로드 결과 사건이나 `last_reload` 갱신도 만들지 않는다.
 2. `ReloadService::classify_file`은 바이트 읽기 실패 또는 비UTF-8 → `unreadable`, 그 밖의 설정/TLS 후보 검증 실패 → `invalid`, 재시작 필요 차이 존재 → `restart_required`, 재로드 대상 차이만 존재 → `pending`, 차이 없음 → `in_effect` 순으로 분류한다. 비UTF-8에서도 읽은 바이트의 revision은 유지한다(작성자 판단 lead 2026-11-08). `restart_required`에는 재시작 키만, `pending`에는 동적 차이만 담는다. 진단은 `invalid`에만 담는다. 검증과 차이 비교는 쓰기 경로와 같은 함수를 쓰고 TLS 내용 변경도 준비 후보 차이에 포함한다([설정 §1.8 규칙 2~6](../contracts/config-v3.md#18-재로드-구분), [API §1.13](../contracts/management-api-v1.md#113-설정-보기-get-apiv1config)).
 3. `items`는 파일 후보가 아니라 실행 중 유효 `Settings`를 [설정 키 표](../contracts/config-v3.md#12-키-표) 순서의 명시적 descriptor 목록에 투영한다. descriptor는 자료형·정수 정적 min/max·dynamic/restart·편집 조건을 함께 정의한다. Lw의 max는 L의 현재값이 아니라 65535다. 경로는 base_dir 기준으로 이미 푼 값이다. 기능 꺼짐과 무관하게 `editable`을 계산하고 `edit_enabled`는 별도로 보낸다. 꺼진 진입점의 생략 키는 `null`을 보존한다([API §1.13](../contracts/management-api-v1.md#113-설정-보기-get-apiv1config)).
 4. 인증서·개인키·계정 파일은 경로만 투영한다. 내용을 직렬화하지 않는다. 후보의 미적용 값·원시 TOML·해시·비밀번호·토큰을 응답/진단/로그에 넣지 않는다. revision은 설정 파일 바이트만의 SHA-256(`sha256:`+소문자 hex 64자)이며 TLS 파일 해시와 별개다([API §1.1.1](../contracts/management-api-v1.md#111-운영-정보-노출-범위), [설정 §1.10](../contracts/config-v3.md#110-관리-api-편집의-파일-쓰기)).
 
-`Settings`가 보존하지 않는 생략 여부는 loader가 만드는 보기용 presence 정보로 보완한다. 예를 들어 현재 `EntryPointSettings.allowed_origins`는 `Vec`라 생략/명시적 빈 배열을 구별하지 못한다(`crates/app/src/settings.rs:78-90`). 실행 스냅샷에는 후보를 적용할 때의 presence도 함께 보관한다. GET 때 현재 파일의 presence를 실행 값의 presence로 덮지 않는다([API §1.13](../contracts/management-api-v1.md#113-설정-보기-get-apiv1config)).
+`config_file::collect_presence`는 명시된 leaf 키를 `ConfigPresence.keys`에 모은다. `config_items`는 이를 실행값과 함께 읽어 꺼진 Origin의 생략/명시적 빈 배열을 구별한다. 꺼진 WSS에 인증서 또는 개인키 경로 하나만 있으면 `ConfigPresence.inactive_paths`에서 절대 기준 경로를 읽는다. 내용은 읽지 않는다. `ReloadSnapshot`은 `Arc<Settings>`·`Arc<ConfigPresence>`·TLS 수락기를 한 번에 발행한다. GET 때 현재 파일의 presence로 실행 표시를 덮지 않는다. watcher가 실행 의미는 같고 presence만 다른 유효 후보를 받으면 보기 정보만 갱신하며 사건·last_reload는 만들지 않는다([API §1.13](../contracts/management-api-v1.md#113-설정-보기-get-apiv1config)).
 
 ## 4. PATCH 처리 순서
 
@@ -80,10 +83,10 @@ flowchart LR
 
 포트는 app에 선언하고 adapters가 구현한다. 포트가 반환하는 진단은 `ConfigDiagnostic`, 값은 app 자료형이다([레이어 규칙](code-map.md#레이어와-의존-방향), [설정 §1.10](../contracts/config-v3.md#110-관리-api-편집의-파일-쓰기)).
 
-- `ConfigFileStore::read(path) -> io::Result<Vec<u8>>`: 원시 바이트를 읽어 SHA-256을 계산한다. 작성자 판단(lead 2026-11-08): 비UTF-8이면 file.state=unreadable, diagnostics=[]이고 바이트를 읽었으므로 revision은 그 바이트의 SHA-256이다. null은 바이트 읽기 실패일 때만이다. PATCH는 비UTF-8도 3단계에서 `409 config_file_invalid`, 빈 진단으로 거절한다([API §1.13~14](../contracts/management-api-v1.md#113-설정-보기-get-apiv1config), [설정 §2.1](../contracts/config-v3.md#21-설정-오류와-준비-실패)).
-- `ConfigFileStore::revision(bytes) -> String`: adapters에서 기존 aws-lc-rs SHA-256 사용. 프로세스 내부 TLS 변경 탐지용 `DefaultHasher`를 외부 revision에 재사용하지 않는다. 현재 후자는 `crates/app/src/reload/service.rs:456-473`에 있다.
-- `ConfigDocument::parse(bytes, base_dir) -> Result<ConfigCandidate, Vec<ConfigDiagnostic>>`: UTF-8·기존 로더·필수키·unknown key·관계 검사를 재사용하고 실행값의 생략 여부를 보존한다. `ConfigDocument::edit(bytes, changes) -> Result<Vec<u8>, Vec<ConfigDiagnostic>>`: `toml_edit::DocumentMut`의 기존 item decor를 유지하고 바뀐 값만 교체한다. 없는 키는 기존 테이블에, 없는 테이블은 끝에 넣는다. 모든 문서를 정규화해 다시 직렬화하거나 CRLF 전체를 LF로 바꾸지 않는다. 배열 내부 주석도 보존 대상으로 시험한다([설정 §1.10](../contracts/config-v3.md#110-관리-api-편집의-파일-쓰기)).
-- `ConfigFileStore::replace(path, expected_revision, next) -> Result<(), ConfigReplaceError>`: 같은 디렉터리의 고유 임시 파일을 create_new로 만들고 write_all·flush/sync_all·close 뒤, **원자 교체 바로 전에** 현재 파일을 다시 읽어 expected revision과 비교한다. 다르거나 재읽기에 실패하면 자기 임시 파일만 지우고 Conflict를 반환한다. 같으면 Linux의 같은 파일시스템 rename-over-existing, Windows의 replace-over-existing(`std::fs::rename`)으로 바꾼다. 원본 선삭제·copy+delete는 하지 않는다. Windows 공유 삭제 권한 없는 열린 핸들은 교체 실패로 남기고, Unix 교체 후 directory sync 실패를 원본 불변인 `config_write_failed`로 오인하지 않는다. 기존 계정 writer도 rename을 쓴다(`crates/adapters/src/accounts_file/store.rs:57-81`). 근거는 [설정 §1.10](../contracts/config-v3.md#110-관리-api-편집의-파일-쓰기), 사용자 결정 2026-11-08(Q178), 재읽기 실패 매핑의 작성자 판단(lead 2026-11-08)이다.
+- `ConfigFileStore::read(path) -> io::Result<Vec<u8>>`: 원시 바이트만 읽는다. 비UTF-8이면 file.state=unreadable, diagnostics=[]이고 바이트를 읽었으므로 revision은 그 바이트의 SHA-256이다. null은 바이트 읽기 실패일 때만이다. PATCH는 비UTF-8도 3단계에서 `409 config_file_invalid`, 빈 진단으로 거절한다([API §1.13~14](../contracts/management-api-v1.md#113-설정-보기-get-apiv1config), [설정 §2.1](../contracts/config-v3.md#21-설정-오류와-준비-실패), 작성자 판단 lead 2026-11-08).
+- `ConfigFileStore::revision(bytes) -> String`: adapters에서 aws-lc-rs SHA-256을 사용한다. `read`는 바이트 읽기만 맡고 revision 계산은 이 별도 메서드가 맡는다. `ReloadService`의 프로세스 내부 TLS 변경 탐지용 해시를 외부 revision에 재사용하지 않는다.
+- `ConfigDocument::parse(bytes, base_dir) -> Result<ConfigCandidate, Vec<ConfigDiagnostic>>`: `TomlConfigDocument`가 `config_file::parse_candidate`를 호출한다. 이 함수는 공통 `settings_from_table` 전체 검사와 presence 수집을 사용한다. `edit(bytes, changes)`는 `toml_edit::Document<&str>`로 키·값의 원본 바이트 범위를 찾고 실제 값이 다른 범위만 치환한다. `same_value`는 같은 값이면 치환하지 않는다. `edit_array`는 배열 토큰 사이의 주석·공백을 원문에서 보존한다. 누락 키/테이블은 해당 scope/끝에 삽입한다. 기존 문서 전체를 `DocumentMut`로 다시 직렬화하지 않으므로 BOM·혼합 LF/CRLF도 고치지 않은 범위에서는 그대로다([설정 §1.10](../contracts/config-v3.md#110-관리-api-편집의-파일-쓰기)).
+- `ConfigFileStore::replace(path, expected_revision, next) -> Result<(), ConfigReplaceError>`: `FsConfigFileStore`의 `replace_file`이 같은 디렉터리에 `create_new` 임시 파일을 만든다. write_all→원본 permission bits 복사→flush→sync_all→close→원본 재읽기·revision 비교→`std::fs::rename` 순이다. 다르거나 재읽기 실패이면 `Conflict`, 그 밖의 교체 전 쓰기/rename 실패이면 `WriteFailed`다. `TempFile::drop`은 실패 때 자기 임시 파일만 지운다. 원본 선삭제·copy+delete는 없다. Windows 공유 삭제가 막힌 핸들은 rename 실패로 남는다. rename 뒤 실패 가능한 directory sync를 추가하지 않아 교체 성공을 원본 불변 오류로 돌리지 않는다. Windows ACL과 Unix 디렉터리 권한의 운영 조건은 [운영 how-to](../how-to/operate-relay.md#351-대시보드-설정-보기편집)를 따른다([설정 §1.10](../contracts/config-v3.md#110-관리-api-편집의-파일-쓰기), 사용자 결정 2026-11-08(Q178)).
 
 **사용자 결정 2026-11-08(Q178): 교체 직전 재확인 + 계약에 틈 명시.** 공유 mutex는 프로세스 안의 watcher/PATCH·PATCH/PATCH를 직렬화한다. 외부 편집은 단계 3 읽기와 교체 직전 재확인으로 검출한다. 마지막 재확인과 원자 교체 사이의 아주 짧은 틈은 계약의 보장 범위가 아니다. 운영 안내에는 “편집 기능을 켠 동안 외부 편집과 대시보드 편집을 동시에 하지 않는다”를 적는다([관리 MGT-033](../specs/management.md#7-수용-테스트)의 보장 범위 보완 대상). 충돌 사건은 `config_edit_rejected(reason=config_conflict)`이며 성공 사건은 없다.
 
@@ -93,11 +96,11 @@ flowchart LR
 
 ## 6. HTTP·시간 제한·종료 유예
 
-- `session_api::answer`의 상태 변경 메서드에 PATCH를 더한 뒤 `config_api::answer`로 분기한다. 현재 CSRF 조건은 POST/DELETE뿐이다(`crates/adapters/src/management_http/session_api.rs:44-66`). 인증 실패는 경로·진단·편집 enabled 상태보다 먼저다. GET은 CSRF 불필요, PATCH는 필수다. 성공한 사용자 행동만 `AdminAuth::touch`로 연장한다. PATCH의 `X-Relay-Poll`은 값과 무관하게 거절한다([API §1.3](../contracts/management-api-v1.md#13-요청-처리-순서)·[§1.4](../contracts/management-api-v1.md#14-관리-세션)·[§1.14](../contracts/management-api-v1.md#114-동적-설정-편집-patch-apiv1config)).
-- 작성자 판단(lead 2026-11-08): 설정 파일 크기 상한이 [설정 §1.1](../contracts/config-v3.md#11-파일-규칙)에 없으므로 PATCH 본문 상한은 64 KiB(65536바이트)로 둔다. `axum::body::to_bytes`에 명시적으로 넘기며 초과는 `400 invalid_request`다. 413을 추가하지 않는다. 로그인은 기존 16 KiB 그대로다(`crates/adapters/src/management_http/session_api.rs:25-26,71-84`). 이 한도는 계약 보완 목록에 등록한다.
+- `session_api::answer`는 로그인 이외 상태 변경 메서드 POST/PATCH/DELETE의 CSRF를 경로 분기 전에 검사하고 `config_api::answer`로 전달한다. 인증 실패는 경로·진단·편집 enabled 상태보다 먼저다. GET은 CSRF 불필요, PATCH는 필수다. `config_api::patch_body`는 JSON을 app `ConfigPatch`·`ConfigValue`로 바꾸고, `view_body`·`edit_error`는 응답을 직렬화한다. 성공한 사용자 행동만 `AdminAuth::touch`로 연장한다. PATCH의 `X-Relay-Poll`은 값과 무관하게 거절한다([API §1.3](../contracts/management-api-v1.md#13-요청-처리-순서)·[§1.4](../contracts/management-api-v1.md#14-관리-세션)·[§1.14](../contracts/management-api-v1.md#114-동적-설정-편집-patch-apiv1config)).
+- `config_api::PATCH_BODY_LIMIT`는 64 KiB(65536바이트)다. `axum::body::to_bytes`의 초과·읽기 실패는 `400 invalid_request`다. 413을 추가하지 않는다. 로그인은 기존 `session_api::LOGIN_BODY_LIMIT` 16 KiB 그대로다. 이는 설정 파일 자체의 크기 상한이 아니다([설정 §1.1](../contracts/config-v3.md#11-파일-규칙), 작성자 판단 lead 2026-11-08).
 - GET/PATCH의 Consumer 대기 한도는 `dashboard.query_timeout_secs`다. 서버 전체 트랜잭션에 이 값의 취소 타이머를 씌우지 않는다. 파일 read/parse/TLS 준비/replace를 포함한 동기 작업은 `spawn_blocking`에서 끝까지 실행한다. 클라이언트 timeout·응답 연결 종료로 await가 없어져도 이미 시작한 blocking 작업을 취소하지 않는다. 특히 rename 성공 뒤에는 commit·감사 기록까지 이어 간다. Consumer는 결과 불명으로 GET을 다시 하며 자동 PATCH 재전송하지 않는다([API §2.3](../contracts/management-api-v1.md#23-consumer의-판정-규칙), MGT-R27).
 - U는 해당 관리 연결 수락 때 고정한 값이다. PATCH를 위해 U를 특별히 멈추지 않는다. 기존 terminate 전용 예외를 넓히지 않는다. U로 응답 연결이 닫혀도 트랜잭션은 계속되고 결과 불명 복구를 쓴다([설정 §1.8](../contracts/config-v3.md#18-재로드-구분), [API §1.9](../contracts/management-api-v1.md#19-관리자-종료-post-apiv1sessionssession_idterminate)·[§2.3](../contracts/management-api-v1.md#23-consumer의-판정-규칙)).
-- `DashboardHints`는 P·query timeout만 시작값으로 보유하고 login/GET session 응답 때 현재 E를 읽어 terminate timeout을 E+5로 만든다. 현재는 생성자에서 E를 고정한다(`crates/adapters/src/management_http.rs:152-168`, `session_api.rs:115,145-188`). 기존 종료 교환 기한은 별개로 유지한다([API §1.12](../contracts/management-api-v1.md#112-폴링-주기와-조회-제한-시간의-전달)).
+- `DashboardHints`는 P·query timeout만 시작값으로 보유한다. `session_api::session_body`가 로그인/GET session 응답 때 `terminate_timeout_secs()`를 호출하며, 이 helper가 `RuntimeSettingsSource::with_current`로 현재 E를 읽어 E+5를 만든다. 기존 종료 교환 기한은 별개로 유지한다([API §1.12](../contracts/management-api-v1.md#112-폴링-주기와-조회-제한-시간의-전달)).
 - `serve`는 공유 mutex/파일 포트를 만든 뒤 watcher와 관리 서비스에 같은 인스턴스를 주입한다. 정상 종료 시작 시 watcher 적용만 중지한다. 관리 서비스는 유예 동안 살아 있어 GET/PATCH를 허용한다. G는 종료 시작 때 한 번 읽고 deadline으로 고정하므로 유예 중 G 편집은 기존 deadline을 바꾸지 않는다. 편집이 lifecycle을 Running으로 되돌리거나 신규 중계 수락을 열지 않는다([운영 §3.3 규칙 7](../specs/operations.md#33-파일-변경-자동-감지와-부분-재로드), [API §1.14](../contracts/management-api-v1.md#114-동적-설정-편집-patch-apiv1config)).
 
 ## 7. 사건·오류와 남는 상태
@@ -106,27 +109,29 @@ flowchart LR
 
 | 사건 | 작성 위치와 필드 출처 | 순서·금지 |
 | --- | --- | --- |
-| `reload_applied` | R의 commit, `trigger=config_edit`, 실행값/경로/내용이 달라진 27개 중 키 | 같은 편집의 `config_edited`보다 먼저. 값 없음 |
-| `config_edited` | E의 app 서비스, `admin_account`는 AuthorizedAdmin의 계정, `peer_ip`는 실제 소켓의 정규화 PeerIp, `config_keys`는 요청 중 파일값 변경 키, `revision`은 저장한 바이트 SHA-256 | 파일 변경 있는 성공만 한 번. 헤더 전달 IP·설정값·후보 텍스트 없음 |
-| `config_edit_rejected` | E의 app 서비스, 인증/CSRF 뒤의 6개 편집 오류와 기타 처리 거절; `reason`은 API 오류 code, account/peer는 위와 같음, 선택 `config_keys`는 요청 키 | invalid_request·인증·CSRF 실패에는 없음. 성공 사건 없음 |
-| `allow_all_target`·`allow_all_source` | R이 실제 바뀐 정책의 후보 경고를 선별, `phase=reload` | [설정 §1.8 규칙 5~6](../contracts/config-v3.md#18-재로드-구분), OPS-058. 기존 허용 목록 경고와 같은 적용 경로 |
+| `reload_applied` | `ReloadService::commit_prepared`, `trigger=config_edit`, 실행값/경로/내용이 달라진 27개 중 키 | 실행값 차이가 있으면 같은 편집의 `config_edited`보다 먼저. 값 없음 |
+| `config_edited` | `ConfigEditService::patch`, `admin_account`는 AuthorizedAdmin의 계정, `peer_ip`는 실제 소켓의 정규화 PeerIp, `config_keys`는 요청 중 파일값 변경 키, `revision`은 저장한 바이트 SHA-256 | 파일 변경 있는 성공만 한 번. 헤더 전달 IP·설정값·후보 텍스트 없음 |
+| `config_edit_rejected` | `ConfigEditService::reject`, 인증/CSRF 뒤의 6개 편집 업무 오류; `reason`은 API 오류 code, account/peer는 위와 같음, 선택 `config_keys`는 요청 키 | invalid_request·internal·인증·CSRF 실패에는 없음. 성공 사건 없음 |
+| `allow_all_target`·`allow_all_source` | `prepare_candidate`가 실제 바뀐 정책의 경고만 준비하고 commit에서 `phase=reload`로 기록 | [설정 §1.8 규칙 5~6](../contracts/config-v3.md#18-재로드-구분), OPS-058 |
 
 6개 업무 오류의 상태·diagnostics/config_keys는 §4 표대로 매핑한다. 조회 자체 내부 실패는 `500 internal`, 파일 읽기/검증 실패 GET은 `200`이다. 진단은 code/key만 안정된 값으로 사용하며 message는 값을 인용하지 않는다([API §2.1](../contracts/management-api-v1.md#21-오류-본문과-상태-코드)).
 
-## 8. Current 증거와 구현 전환
+## 8. Current 구조 대조
 
-| 현재 확인한 코드 | 차이와 Target 전환 | 근거 |
+| 확인한 코드 위치·심볼 | 현재 역할 | 근거 |
 | --- | --- | --- |
-| `crates/app/src/reload/snapshot.rs:20-26,43-65`: IP·TLS 셋만, RwLock 아래 Arc 교체 | 실행 유효 Settings·presence와 TLS를 같은 발행 단위에 포함. 공유 mutex 및 prepare/commit 분리는 [파일 감지 Target](file-watch.md#10-target--설정-v3-실행-값과-공유-트랜잭션) | 설정 §1.8, MGT-R19·25 |
-| `crates/app/src/reload/service.rs:53-69,124-164,168-262`: watcher 전용 running·검증·교체, last_reload 없음 | SharedReload, 외부 호출 가능한 무변경 prepare 및 무실패 commit, 파일 분류·결과 이력 | API §1.13~14 |
-| `crates/adapters/src/config_file.rs:29-34,86-98`; `settings.rs:144-151`: 로더와 Settings에 config_edit 없음 | 동일 로더에 기본 false 키 추가, 보기 presence와 descriptor 추가 | 설정 §1.2·§3.2 |
-| `crates/adapters/src/management_http.rs:55-70,103-109`; `session_api.rs:44-66` | ConfigManagement 주입·config route·PATCH CSRF, 기존 동작을 유지 | API §1.3·§1.13~14 |
-| `src/serve.rs:224-240,344-360,465-472`: reload service를 watcher에 넘기고 관리 서비스는 auth/query/terminate뿐, G는 시작값 | 한 공유 서비스 두 호출자, 동적 reader 주입, 종료 시 G 읽기 | 운영 §3.3·3.4 |
+| `crates/app/src/management/config.rs` `ConfigManagement`, `ConfigEditService::{get,patch,reject}` | object-safe 동기 포트, 동일 mutex의 GET/10단계 PATCH, 파일값 변경 키와 실행값 차이 분리, 업무 오류 감사 | API §1.13~14 |
+| `crates/app/src/management/config/items.rs` `config_items` | 실행값·적용된 presence만 표시하고 TLS/계정 파일은 경로만 반환 | API §1.13 |
+| `crates/app/src/reload/snapshot.rs` `ReloadSnapshot`, `ReloadCell`; `reload/service.rs` `prepare_candidate`, `classify_file`, `commit_prepared` | Settings·presence·TLS 원자 발행, 부작용 없는 준비/분류, 실패를 반환하지 않는 commit과 last_reload | 설정 §1.8, API §1.13~14 |
+| `crates/adapters/src/config_file.rs` `parse_candidate`, `collect_presence`; `settings.rs` `ManagementSettings::config_edit` | 공통 전체 검증과 생략 정보, 기본 false | 설정 §1.2·§3.2 |
+| `crates/adapters/src/config_edit.rs` `FsConfigFileStore`, `replace_file`, `TempFile`, `TomlConfigDocument`, `edit_change`, `edit_array` | SHA-256, 같은 디렉터리 임시 파일·최종 revision 확인·rename·실패 정리, TOML source span 기반 부분 치환 | 설정 §1.10, Q178 |
+| `crates/adapters/src/management_http.rs` `ManagementServices`, `DashboardHints`; `session_api::answer`, `config_api::{answer,patch_body,view_body,edit_error}` | 서비스 주입·PATCH CSRF·64 KiB·blocking 호출·JSON 오류 매핑·응답 때 현재 E+5 | API §1.3·§1.12~14 |
+| `src/serve.rs` `config_management`, `listen_until_shutdown` | `std::path::absolute`로 설정 경로와 base_dir을 맞춘 뒤 같은 SharedReload·파일/문서 포트·시계·사건 싱크를 app 서비스에 주입. helper는 `io::Result<Arc<dyn ConfigManagement>>`를 반환 | ADR-0006, 운영 §3.3 |
 
-구현자는 실제 경로·심볼·호출을 대조한 뒤 관련 Target을 Current로 바꾸고 코드 지도 및 계약 테스트 기록을 갱신한다. 구현 전 이 문서에 Verified나 시험 통과를 붙이지 않는다([아키텍처 규칙](AGENTS.md#작성-규칙), [검증 기록](../AGENTS.md#검증-기록)).
+대조 범위는 2026-11-08 설정 편집 작업 트리의 위 소스다. 소스의 경계·타입·순서를 읽은 기록이며 실행 검증이 아니다. 빌드·시험·formatter는 실행하지 않았다. 양 OS 계약/시나리오 결과는 통합 검증 담당자의 실제 실행 기록을 따른다.
 
-## 9. 미결정·계약 보완 경계
+## 9. 확정 경계와 검증 범위
 
-- PATCH 64 KiB·pending/edited 키 구분·비UTF-8/줄바꿈/재확인 읽기 실패 매핑은 작성자 판단(lead 2026-11-08)이다. 외부 편집 경쟁은 사용자 결정 2026-11-08(Q178)의 교체 직전 재확인·보장 범위 명시로 확정했다. 필요한 문안은 구현 인계의 계약 보완 목록으로 넘기며 이 작업에서 계약을 직접 바꾸지 않는다.
-- 작성자 판단(lead 2026-11-08): `last_reload`는 실제 재로드 시도만 기록한다. watcher의 applied/rejected/restart_required 및 파일 교체·실행 교체를 마친 PATCH(applied)만 갱신한다. PATCH의 인증·본문·꺼짐·충돌·파일 상태·후보 검증·쓰기 실패·no-op과 GET은 갱신하지 않는다. watcher의 동일 후보도 갱신하지 않는다. 스키마상 config_edit+rejected/restart_required는 허용되지만 현재 설계에서는 발생하지 않는다. 거절 PATCH는 정해진 `config_edit_rejected`만 남긴다([API §1.13~14](../contracts/management-api-v1.md#113-설정-보기-get-apiv1config), [운영 §3.3](../specs/operations.md#33-파일-변경-자동-감지와-부분-재로드)).
-- disabled 생략 null과 배열 내부 주석 보존은 구현 인계의 시험 항목이다. 비UTF-8·혼합 줄바꿈의 경계는 위 lead 판단으로 확정했다. 비밀/설정값을 진단에 인용하지 않는다([API §1.13](../contracts/management-api-v1.md#113-설정-보기-get-apiv1config), [설정 §1.10](../contracts/config-v3.md#110-관리-api-편집의-파일-쓰기)).
+- PATCH 64 KiB·pending/edited 키 구분·비UTF-8·새 줄바꿈·재확인 읽기 실패 매핑은 작성자 판단(lead 2026-11-08)에 따른다. 외부 편집 경쟁은 Q178의 교체 직전 재확인·짧은 보장 밖 틈으로 확정했다. 외부 동작의 정확한 형식은 관련 계약을 기준으로 한다.
+- `last_reload`는 watcher의 applied/rejected/restart_required와 실행값을 실제 발행한 PATCH(applied)를 기록한다. GET·동일 후보 watcher·PATCH 인증/본문/꺼짐/충돌/파일 상태/후보 검증/쓰기 실패/no-op은 갱신하지 않는다. `commit_prepared`의 applied가 비어도 갱신하지 않는다. 스키마가 허용하는 config_edit+rejected/restart_required는 현재 생성하지 않는다.
+- disabled 생략 null·단독 WSS 경로·배열 내부 주석·혼합 줄바꿈·Q178 경쟁·실제 OS 교체 권한은 통합 검증 대상이다. 이 문서의 소스 대조만으로 시험 통과나 양 OS 운영 검증을 주장하지 않는다.

@@ -1,4 +1,4 @@
-// Shared page chrome for SCR-001 and SCR-002: the navigation bar (language select, sign-out) and the sign-out request.
+// Shared page chrome for protected screens: the navigation bar (language select, sign-out) and the sign-out request.
 
 import { createButton } from './components/button.js';
 import { createLanguageSelect } from './components/language-select.js';
@@ -20,7 +20,7 @@ export function defaultStorage() {
 }
 
 // Navigation bar of one screen. `idPrefix` keeps element ids unique per screen.
-export function buildNavbar({ t, lang, idPrefix, onLanguageChange, onSignOut }) {
+export function buildNavbar({ t, lang, idPrefix, active = 'operations', onLanguageChange, onSignOut }) {
   const language = createLanguageSelect({
     id: `${idPrefix}-language`,
     label: LANGUAGE_LABEL,
@@ -40,7 +40,10 @@ export function buildNavbar({ t, lang, idPrefix, onLanguageChange, onSignOut }) 
 
   const navbar = createNavbar({
     brand: BRAND_NAME,
-    items: [{ label: t.operations, href: '/', current: true, desktopOnly: true }],
+    items: [
+      { label: t.operations, href: '/', current: active === 'operations', icon: 'grid' },
+      { label: t.settings, href: '/#/settings', current: active === 'settings', icon: 'settings' },
+    ],
     language,
     action: logout,
     label: t.navLabel,

@@ -14,10 +14,10 @@ use tokio::task::{AbortHandle, JoinHandle};
 use vnc_relay_adapters::listener::{Listener, is_fatal_accept_error};
 use vnc_relay_adapters::ops_log::format_line;
 use vnc_relay_app::lifecycle::Readiness;
+use vnc_relay_app::reload::ports::RuntimeSettingsSource;
 use vnc_relay_app::settings::KeepaliveSettings;
 use vnc_relay_domain::allow_list::{AllowList, IpItem};
 use vnc_relay_domain::handshake::{HANDSHAKE_REQUEST_LEN, VIEWER_GREETING};
-use vnc_relay_domain::target_policy::TargetPolicy;
 
 const LIMIT: Duration = Duration::from_secs(10);
 const KEEPALIVE: KeepaliveSettings = KeepaliveSettings {
@@ -130,46 +130,71 @@ impl Running {
         let events = Arc::new(Recorder::default());
         let log: Arc<dyn EventSink> = events.clone();
         log.record(&Event::ServerStarting);
-        let budget = ConnectionBudget::new(8);
-        let admin_budget = ConnectionBudget::new(8);
+        let budget = ConnectionBudget::new();
+        let admin_budget = ConnectionBudget::new();
         let clock: Arc<dyn Clock> = Arc::new(SystemClock::new());
+        let allow = AllowList::new(vec![
+            IpItem::parse("127.0.0.1").unwrap_or_else(|error| panic!("allow: {error:?}")),
+        ]);
+        let mut settings = config_file::parse(
+            r#"[admin]
+accounts_file = "accounts.toml"
+[management]
+listen = "127.0.0.1:8443"
+[status]
+listen = "127.0.0.1:9090"
+[mode1]
+allow_targets = []
+[mode2]
+enabled = true
+"#,
+            std::path::Path::new("."),
+        )
+        .unwrap_or_else(|error| panic!("listener settings: {error:?}"));
+        settings.relay.tcp_viewer.enabled = true;
+        settings.relay.tcp_viewer.listen = Some(viewer_addr);
+        settings.relay.tcp_viewer.allow = Some(allow.clone());
+        settings.relay.tcp_server.enabled = true;
+        settings.relay.tcp_server.listen = Some(server_addr);
+        settings.relay.tcp_server.allow = Some(allow);
+        settings.status.listen = status_addr;
+        settings.limits.relay_connections = 8;
+        settings.limits.admin_connections = 8;
+        settings.limits.waiting = 8;
+        settings.limits.buffer_bytes = 16_384;
+        settings.timeouts.handshake = LIMIT;
+        settings.timeouts.wait = LIMIT;
+        settings.timeouts.connect = Duration::from_secs(1);
+        settings.timeouts.close = Duration::from_secs(1);
+        settings.keepalive = KEEPALIVE;
+        settings.recent_closed.max_entries = 8;
+        let cell = Arc::new(ReloadCell::new(ReloadSnapshot::new(
+            ConfigCandidate {
+                settings,
+                presence: Default::default(),
+            },
+            None,
+            None,
+        )));
+        let settings: Arc<dyn RuntimeSettingsSource> = cell.clone();
         let runtime = Arc::new(RelayRuntime::new(
-            TcpTargetConnector::new(KEEPALIVE),
+            TcpTargetConnector::new(Arc::clone(&settings)),
             Arc::new(RelayIdKey::generate().unwrap_or_else(|error| panic!("relay key: {error:?}"))),
             Arc::new(SessionIdKey::from_bytes(&[0x51; 32])),
             Arc::clone(&budget),
-            ConnectionBudget::new(8),
-            RelayRuntimeConfig {
-                wait_timeout: LIMIT,
-                connect_timeout: Duration::from_secs(1),
-                close_timeout: Duration::from_secs(1),
-                recent_closed: 8,
-                target_policy: TargetPolicy::new(Vec::new()),
-            },
+            ConnectionBudget::new(),
+            RelayRuntimeConfig { recent_closed: 8 },
+            Arc::clone(&settings),
         ));
         let service = Arc::new(RelayService::new(
             HandshakePolicy {
                 mode1_enabled: false,
                 mode2_enabled: true,
             },
-            LIMIT,
-            16_384,
-            Duration::from_secs(1),
+            Arc::clone(&settings),
             Arc::clone(&clock),
             Arc::clone(&log),
         ));
-        let allow = AllowList::new(vec![
-            IpItem::parse("127.0.0.1").unwrap_or_else(|error| panic!("allow: {error:?}")),
-        ]);
-        let cell = Arc::new(ReloadCell::new(ReloadSnapshot::new(
-            RelayAllow {
-                tcp_viewer: allow.clone(),
-                tcp_server: allow,
-                ..RelayAllow::default()
-            },
-            None,
-            None,
-        )));
         let mut owners = JoinSet::new();
         let mut abort = Vec::new();
         for (kind, inner, faults, allow) in [
@@ -197,8 +222,6 @@ impl Running {
                 AcceptPolicy {
                     allow,
                     relay_budget: Arc::clone(&budget),
-                    handshake: LIMIT,
-                    keepalive: KEEPALIVE,
                 },
                 Arc::clone(&service),
                 Arc::clone(&runtime),
@@ -217,6 +240,7 @@ impl Running {
             ),
             Arc::clone(&admin_budget),
             Arc::clone(&lifecycle),
+            settings,
         );
         let status_task = tokio::spawn(status.run(Arc::clone(&log)));
         abort.push(status_task.abort_handle());

@@ -21,7 +21,9 @@ mod delayed_cleanup {
     use vnc_relay_app::relay::{
         ConnectionContext, PreparedConnection, RelayRuntime, RelayRuntimeConfig, RelayService,
     };
-    use vnc_relay_app::reload::snapshot::{RelayAllow, ReloadCell, ReloadSnapshot};
+    use vnc_relay_app::reload::ports::RuntimeSettingsSource;
+    use vnc_relay_app::reload::snapshot::{ReloadCell, ReloadSnapshot};
+    use vnc_relay_app::reload::{ConfigCandidate, ConfigPresence};
     use vnc_relay_app::settings::KeepaliveSettings;
     use vnc_relay_domain::allow_list::{AllowList, IpItem};
     use vnc_relay_domain::budget::ConnectionBudget;
@@ -121,6 +123,8 @@ mod delayed_cleanup {
             accepted_wall: clock.wall(),
             accepted_at,
             exchange_at: accepted_at,
+            buffer_bytes: 16384,
+            handshake: Duration::from_secs(20),
         };
         bounded(peer.write_all(&request("9201")))
             .await
@@ -132,7 +136,7 @@ mod delayed_cleanup {
                 }),
                 context,
                 budget
-                    .try_acquire()
+                    .try_acquire(8)
                     .unwrap_or_else(|| panic!("available connection budget")),
                 runtime.lifecycle(),
             ),
@@ -201,54 +205,66 @@ mod delayed_cleanup {
                 let clock: Arc<dyn Clock> = Arc::new(SystemClock::new());
                 let events = Arc::new(Recorder::default());
                 let log: Arc<dyn EventSink> = events.clone();
-                let budget = ConnectionBudget::new(8);
+                let mut settings = vnc_relay_adapters::config_file::parse(
+                    "[admin]\naccounts_file = 'accounts.toml'\n\
+                     [management]\nlisten = '127.0.0.1:18080'\n\
+                     [status]\nlisten = '127.0.0.1:18081'\n",
+                    &std::env::temp_dir(),
+                )
+                .unwrap_or_else(|error| panic!("real fixture settings: {error:?}"));
+                settings.relay.tcp_viewer.enabled = true;
+                settings.relay.tcp_viewer.listen = Some(viewer_address);
+                settings.relay.tcp_viewer.allow = Some(AllowList::new(vec![
+                    IpItem::parse("127.0.0.1")
+                        .unwrap_or_else(|error| panic!(concat!("loopback allow", ": {:?}"), error)),
+                ]));
+                settings.mode1.allow_targets = Some(TargetPolicy::new(Vec::new()));
+                settings.mode2.enabled = true;
+                settings.limits.relay_connections = 8;
+                settings.limits.waiting = 4;
+                settings.limits.buffer_bytes = 16384;
+                settings.timeouts.handshake = Duration::from_secs(20);
+                settings.timeouts.wait = Duration::from_secs(60);
+                settings.timeouts.connect = Duration::from_secs(1);
+                settings.timeouts.close = Duration::from_secs(2);
+                settings.keepalive = KEEPALIVE;
+                settings.recent_closed.max_entries = 8;
+                let cell = Arc::new(ReloadCell::new(ReloadSnapshot::new(
+                    ConfigCandidate {
+                        settings,
+                        presence: ConfigPresence::default(),
+                    },
+                    None,
+                    None,
+                )));
+                let settings: Arc<dyn RuntimeSettingsSource> = cell.clone();
+                let budget = ConnectionBudget::new();
                 let runtime = Arc::new(RelayRuntime::new(
-                    TcpTargetConnector::new(KEEPALIVE),
+                    TcpTargetConnector::new(Arc::clone(&settings)),
                     Arc::new(RelayIdKey::generate().unwrap_or_else(|error| {
                         panic!(concat!("real relay reference key", ": {:?}"), error)
                     })),
                     Arc::new(SessionIdKey::from_bytes(&[0x49; 32])),
                     Arc::clone(&budget),
-                    ConnectionBudget::new(4),
-                    RelayRuntimeConfig {
-                        wait_timeout: Duration::from_secs(60),
-                        connect_timeout: Duration::from_secs(1),
-                        close_timeout: Duration::from_secs(2),
-                        recent_closed: 8,
-                        target_policy: TargetPolicy::new(Vec::new()),
-                    },
+                    ConnectionBudget::new(),
+                    RelayRuntimeConfig { recent_closed: 8 },
+                    Arc::clone(&settings),
                 ));
                 let service = Arc::new(RelayService::new(
                     HandshakePolicy {
                         mode1_enabled: false,
                         mode2_enabled: true,
                     },
-                    Duration::from_secs(20),
-                    16384,
-                    Duration::from_secs(2),
+                    Arc::clone(&settings),
                     Arc::clone(&clock),
                     Arc::clone(&log),
                 ));
-                let allow =
-                    AllowList::new(vec![IpItem::parse("127.0.0.1").unwrap_or_else(|error| {
-                        panic!(concat!("loopback allow", ": {:?}"), error)
-                    })]);
-                let cell = Arc::new(ReloadCell::new(ReloadSnapshot::new(
-                    RelayAllow {
-                        tcp_viewer: allow,
-                        ..RelayAllow::default()
-                    },
-                    None,
-                    None,
-                )));
                 let entry = TcpEntryPoint::new(
                     EntryPoint::TcpViewer,
                     viewer_listener,
                     AcceptPolicy {
                         allow: AllowSource::tcp_viewer(cell),
                         relay_budget: Arc::clone(&budget),
-                        handshake: Duration::from_secs(20),
-                        keepalive: KEEPALIVE,
                     },
                     Arc::clone(&service),
                     Arc::clone(&runtime),
@@ -387,11 +403,11 @@ mod delayed_cleanup {
                 let released: Vec<_> = (0..8)
                     .map(|_| {
                         budget
-                            .try_acquire()
+                            .try_acquire(8)
                             .unwrap_or_else(|| panic!("socket permit released"))
                     })
                     .collect();
-                assert!(budget.try_acquire().is_none());
+                assert!(budget.try_acquire(8).is_none());
                 drop(released);
             });
     }

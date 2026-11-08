@@ -1,5 +1,5 @@
 //! Session routes and the authenticated API boundary (management-api-v1 §1.3).
-//! Authentication and POST/DELETE CSRF precede path and method dispatch.
+//! Authentication and POST/PATCH/DELETE CSRF precede path and method dispatch.
 
 use std::sync::Arc;
 
@@ -45,7 +45,7 @@ pub(super) async fn answer(shared: &Shared, peer: &PeerAddr, parts: Parts, body:
         Ok(admin) => admin,
         Err(error) => return refuse(error, shared.secure, &parts.headers),
     };
-    if matches!(parts.method, Method::POST | Method::DELETE)
+    if matches!(parts.method, Method::POST | Method::PATCH | Method::DELETE)
         && let Err(error) = shared.auth.check_csrf(&admin, csrf_header(&parts.headers))
     {
         return refuse(error, shared.secure, &parts.headers);
@@ -59,6 +59,9 @@ pub(super) async fn answer(shared: &Shared, peer: &PeerAddr, parts: Parts, body:
                 "이 경로는 GET, POST, DELETE 요청만 받는다.",
             ),
         };
+    }
+    if parts.uri.path() == "/api/v1/config" {
+        return super::config_api::answer(shared, peer, &mut admin, parts, body).await;
     }
     if super::terminate_api::is_terminate_path(parts.uri.path()) {
         return super::terminate_api::answer(shared, peer, &mut admin, parts, body).await;
@@ -112,7 +115,7 @@ async fn get_session(
     if !poll {
         shared.auth.touch(admin);
     }
-    session_response(StatusCode::OK, admin.session(), shared.dashboard, true)
+    session_response(StatusCode::OK, admin.session(), &shared.dashboard, true)
 }
 
 /// `DELETE /api/v1/session`: ends this session only. The response clears the
@@ -143,7 +146,7 @@ fn logged_in_response(shared: &Shared, logged_in: LoggedIn) -> Response {
         return internal_error();
     };
     let mut response =
-        session_response(StatusCode::OK, &logged_in.session, shared.dashboard, false);
+        session_response(StatusCode::OK, &logged_in.session, &shared.dashboard, false);
     response.headers_mut().insert(SET_COOKIE, cookie);
     response
 }
@@ -163,7 +166,7 @@ fn session_set_cookie(token: &str, secure: bool) -> Option<HeaderValue> {
 fn session_response(
     status: StatusCode,
     view: &SessionView,
-    dashboard: DashboardHints,
+    dashboard: &DashboardHints,
     as_of: bool,
 ) -> Response {
     let mut body = session_body(view, dashboard);
@@ -176,7 +179,7 @@ fn session_response(
 /// The body of management-api-v1 §1.5. 구현 판단(사용자 결정 없음): the
 /// contract's dotted `dashboard.*` names are read as one nested `dashboard`
 /// object, the same way its other dotted names read.
-fn session_body(view: &SessionView, dashboard: DashboardHints) -> Value {
+fn session_body(view: &SessionView, dashboard: &DashboardHints) -> Value {
     json!({
         "account": view.account.as_str(),
         "csrf_token": view.csrf.as_str(),
@@ -185,7 +188,7 @@ fn session_body(view: &SessionView, dashboard: DashboardHints) -> Value {
         "dashboard": {
             "poll_secs": dashboard.poll_secs,
             "query_timeout_secs": dashboard.query_timeout_secs,
-            "terminate_timeout_secs": dashboard.terminate_timeout_secs,
+            "terminate_timeout_secs": dashboard.terminate_timeout_secs(),
         },
     })
 }
@@ -223,7 +226,7 @@ fn non_empty_string(value: &Value, key: &str) -> Option<String> {
 
 /// `true` when `Content-Type` names `application/json`. Parameters such as
 /// `charset` are ignored.
-fn is_json(headers: &HeaderMap) -> bool {
+pub(super) fn is_json(headers: &HeaderMap) -> bool {
     headers
         .get(CONTENT_TYPE)
         .and_then(|value| value.to_str().ok())

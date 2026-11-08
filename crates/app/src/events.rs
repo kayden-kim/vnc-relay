@@ -536,10 +536,29 @@ pub enum Event {
         admin_account: Option<AccountName>,
         peer_ip: PeerIp,
     },
+    /// An authenticated edit replaced the file and effective configuration.
+    /// Only changed key names and the new raw-file revision are recorded (§1.5).
+    ConfigEdited {
+        admin_account: AccountName,
+        peer_ip: PeerIp,
+        config_keys: Vec<String>,
+        revision: String,
+    },
+    /// An authenticated, CSRF-validated edit failed with a management API code.
+    /// `reason` and optional requested key names contain no setting values (§1.8).
+    ConfigEditRejected {
+        admin_account: AccountName,
+        peer_ip: PeerIp,
+        reason: String,
+        config_keys: Option<Vec<String>>,
+    },
     /// A change was detected in the config file or a TLS file (ops-info-v1 §1.5).
     ReloadChangeDetected { source: ChangeSource },
     /// Reload targets were applied; `applied` lists the changed config keys (ops-info-v1 §1.5).
-    ReloadApplied { applied: Vec<&'static str> },
+    ReloadApplied {
+        trigger: crate::reload::ReloadTrigger,
+        applied: Vec<String>,
+    },
     /// A candidate was refused; the running values are kept (ops-info-v1 §1.5).
     ReloadRejected {
         reason: String,
@@ -586,6 +605,8 @@ impl Event {
             Self::AdminLoginSucceeded { .. } => "admin_login_succeeded",
             Self::AdminLoginFailed { .. } => "admin_login_failed",
             Self::AdminLoginLimited { .. } => "admin_login_limited",
+            Self::ConfigEdited { .. } => "config_edited",
+            Self::ConfigEditRejected { .. } => "config_edit_rejected",
             Self::ReloadChangeDetected { .. } => "reload_change_detected",
             Self::ReloadApplied { .. } => "reload_applied",
             Self::ReloadRejected { .. } => "reload_rejected",
@@ -639,6 +660,8 @@ impl Event {
             }
             Self::AdminLoginSucceeded { .. } => Level::Info,
             Self::AdminLoginFailed { .. } | Self::AdminLoginLimited { .. } => Level::Warn,
+            Self::ConfigEdited { .. } => Level::Info,
+            Self::ConfigEditRejected { .. } => Level::Warn,
             Self::StartupFailed { .. } => Level::Error,
             Self::ReloadChangeDetected { .. } | Self::ReloadApplied { .. } => Level::Info,
             Self::ReloadRejected { .. }

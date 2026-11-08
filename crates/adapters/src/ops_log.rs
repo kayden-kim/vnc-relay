@@ -646,6 +646,30 @@ fn push_event_fields(fields: &mut Vec<(&'static str, Value)>, event: &Event) {
             fields.push(("admin_account", Value::from(admin_account.as_str())));
             fields.push(("peer_ip", Value::from(peer_ip.to_string())));
         }
+        Event::ConfigEdited {
+            admin_account,
+            peer_ip,
+            config_keys,
+            revision,
+        } => {
+            fields.push(("admin_account", Value::from(admin_account.as_str())));
+            fields.push(("peer_ip", Value::from(peer_ip.to_string())));
+            fields.push(("config_keys", json!(config_keys)));
+            fields.push(("revision", Value::from(revision.as_str())));
+        }
+        Event::ConfigEditRejected {
+            admin_account,
+            peer_ip,
+            reason,
+            config_keys,
+        } => {
+            fields.push(("admin_account", Value::from(admin_account.as_str())));
+            fields.push(("peer_ip", Value::from(peer_ip.to_string())));
+            fields.push(("reason", Value::from(reason.as_str())));
+            if let Some(config_keys) = config_keys {
+                fields.push(("config_keys", json!(config_keys)));
+            }
+        }
         Event::AdminLoginFailed {
             reason,
             scope,
@@ -677,8 +701,12 @@ fn push_event_fields(fields: &mut Vec<(&'static str, Value)>, event: &Event) {
         Event::ReloadChangeDetected { source } => {
             fields.push(("source", Value::from(source.as_str())));
         }
-        Event::ReloadApplied { applied } => {
-            let applied = applied.iter().map(|key| Value::from(*key)).collect();
+        Event::ReloadApplied { trigger, applied } => {
+            fields.push(("trigger", Value::from(trigger.as_str())));
+            let applied = applied
+                .iter()
+                .map(|key| Value::from(key.as_str()))
+                .collect();
             fields.push(("applied", Value::Array(applied)));
         }
         Event::ReloadRejected {

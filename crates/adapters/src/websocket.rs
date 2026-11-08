@@ -19,7 +19,6 @@ use vnc_relay_app::ports::{Clock, EventSink};
 use vnc_relay_app::relay::{ConnectionContext, RelayRuntime, RelayService};
 use vnc_relay_domain::budget::BudgetPermit;
 use vnc_relay_domain::entry_point::EntryPoint;
-use vnc_relay_domain::origin::Origin;
 use vnc_relay_domain::session::ViewerTransport;
 
 use crate::listener::Listener;
@@ -33,21 +32,9 @@ use crate::websocket_stream::WsRelayStream;
 /// What a WS or WSS entry point applies to each connection.
 #[derive(Debug, Clone)]
 pub struct WsPolicy {
-    /// The allow list, L, and H. For a WebSocket connection H counts from the
-    /// 101, not from the accept, because the initial exchange starts after the
-    /// upgrade. The `handshake` field's doc in `AcceptPolicy` describes the
-    /// TCP case.
+    /// Live settings source and the count-only L budget. Accept fixes B/U/K;
+    /// upgrade fixes M/Kw, then initial exchange fixes H after the 101 flush.
     pub accept: AcceptPolicy,
-    /// U. It counts from the accept and covers the TLS handshake and the
-    /// upgrade request (websocket-relay-v1 §1.1).
-    pub upgrade: Duration,
-    /// Origins a browser may send, from `allowed_origins`. An empty list
-    /// refuses every Origin.
-    pub origins: Vec<Origin>,
-    /// M, the validated maximum logical WebSocket message length.
-    pub message_bytes: usize,
-    /// B, the validated relay buffer size per direction.
-    pub buffer_bytes: usize,
 }
 
 /// A WS or WSS viewer entry point. `tls` is the WSS acceptor source and is
@@ -225,7 +212,7 @@ async fn connection(
         ))),
         None => Wire::Plain(stream),
     };
-    let deadline = conn.at + shared.policy.upgrade;
+    let deadline = conn.at + conn.settings.upgrade;
     // Biased: on every wake-up the stop and U are polled before the upgrade.
     // A poll that is already inside `upgrade` is covered by its own U check
     // right before the answer (websocket-relay-v1 §1.1).
@@ -239,6 +226,8 @@ async fn connection(
         Some(Ok(Step::Switched {
             suffix,
             exchange_at,
+            settings,
+            handshake,
         })) => {
             let context = ConnectionContext {
                 conn_id: conn.conn_id,
@@ -248,6 +237,8 @@ async fn connection(
                 accepted_wall: conn.accepted_wall,
                 accepted_at,
                 exchange_at,
+                buffer_bytes: conn.settings.buffer_bytes,
+                handshake,
             };
             let transport = match conn.entry_point {
                 EntryPoint::WssViewer => ViewerTransport::Wss,
@@ -256,10 +247,10 @@ async fn connection(
             let stream = WsRelayStream::new(
                 wire,
                 suffix,
-                shared.policy.message_bytes,
-                shared.policy.buffer_bytes,
+                settings.message_bytes,
+                conn.settings.buffer_bytes,
                 transport,
-                shared.policy.accept.keepalive,
+                settings.keepalive,
             );
             let lifecycle = shared.runtime.lifecycle();
             let _handshaking = shared.runtime.track_handshaking();
@@ -293,6 +284,8 @@ enum Step {
     Switched {
         suffix: Vec<u8>,
         exchange_at: Duration,
+        settings: UpgradedSettings,
+        handshake: Duration,
     },
     /// A refusal was logged and answered. The connection is closed.
     Refused,
@@ -303,6 +296,44 @@ enum Step {
     TimedOut,
 }
 
+/// M and Kw belong to this upgrade, independently of accept-time B/U/K.
+#[derive(Debug, Clone, Copy)]
+struct UpgradedSettings {
+    message_bytes: usize,
+    keepalive: vnc_relay_app::settings::KeepaliveSettings,
+}
+
+fn check_upgrade(
+    head: &[u8],
+    peer_ip: vnc_relay_domain::peer_ip::PeerIp,
+    policy: &WsPolicy,
+) -> Result<(crate::upgrade::ValidUpgrade, UpgradedSettings), Refusal> {
+    let mut decision = Err(Refusal::Invalid);
+    policy.accept.allow.with_current(&mut |settings| {
+        decision = check(
+            head,
+            &settings
+                .relay
+                .get(policy.accept.allow.entry_point())
+                .allowed_origins,
+        )
+        .and_then(|upgrade| {
+            if policy.accept.allow.permits_in(settings, peer_ip) {
+                Ok((
+                    upgrade,
+                    UpgradedSettings {
+                        message_bytes: settings.limits.ws_message_bytes as usize,
+                        keepalive: settings.keepalive,
+                    },
+                ))
+            } else {
+                Err(Refusal::IpNotAllowed)
+            }
+        });
+    });
+    decision
+}
+
 /// Reads the request head, checks it, runs the pre-upgrade IP recheck, and
 /// writes either the 101 or the refusal. Nothing is written once U is seen
 /// to have passed.
@@ -310,39 +341,36 @@ async fn upgrade(wire: &mut Wire, conn: &Accepted, shared: &WsShared) -> io::Res
     let read = read_head(wire).await?;
     let (decision, suffix) = match read {
         HeadRead::Complete { head, suffix } => {
-            let decision = check(&head, &shared.policy.origins).and_then(|upgrade| {
-                if shared.policy.accept.allow.permits(conn.peer_ip) {
-                    Ok(upgrade)
-                } else {
-                    Err(Refusal::IpNotAllowed)
-                }
-            });
+            let decision = check_upgrade(&head, conn.peer_ip, &shared.policy);
             (decision, suffix)
         }
         HeadRead::TooLarge => (Err(Refusal::Invalid), Vec::new()),
-        HeadRead::Eof if !expired(conn, shared) => return Ok(Step::PeerEof),
+        HeadRead::Eof if !expired(conn) => return Ok(Step::PeerEof),
         HeadRead::Eof => return Ok(Step::TimedOut),
     };
     // The answer bytes are built before the last U check, so only the refusal
     // log line runs between that check and the write.
     let (answer, refusal) = match decision {
-        Ok(upgrade) => (switching_protocols(&upgrade), None),
-        Err(refusal) => (refusal.answer(), Some(refusal)),
+        Ok((upgrade, settings)) => (switching_protocols(&upgrade), Ok(settings)),
+        Err(refusal) => (refusal.answer(), Err(refusal)),
     };
-    if expired(conn, shared) {
+    if expired(conn) {
         return Ok(Step::TimedOut);
     }
     match refusal {
-        None => {
+        Ok(settings) => {
             wire.write_all(&answer).await?;
             wire.flush().await?;
             let exchange_at = shared.clock.monotonic();
+            let handshake = exchange_handshake(&shared.policy);
             Ok(Step::Switched {
                 suffix,
                 exchange_at,
+                settings,
+                handshake,
             })
         }
-        Some(refusal) => {
+        Err(refusal) => {
             refuse(wire, conn, shared, &refusal, &answer).await;
             Ok(Step::Refused)
         }
@@ -350,8 +378,16 @@ async fn upgrade(wire: &mut Wire, conn: &Accepted, shared: &WsShared) -> io::Res
 }
 
 /// Whether U has passed since accept (websocket-relay-v1 §1.1).
-fn expired(conn: &Accepted, shared: &WsShared) -> bool {
-    Instant::now() >= conn.at + shared.policy.upgrade
+fn expired(conn: &Accepted) -> bool {
+    Instant::now() >= conn.at + conn.settings.upgrade
+}
+
+fn exchange_handshake(policy: &WsPolicy) -> Duration {
+    let mut handshake = Duration::ZERO;
+    policy.accept.allow.with_current(&mut |settings| {
+        handshake = settings.timeouts.handshake;
+    });
+    handshake
 }
 
 /// Logs a refusal (`connection_rejected`, stage `upgrade`), then writes its
@@ -398,4 +434,95 @@ fn log_abort(shared: &WsShared, conn: &Accepted, stage: Stage, reason: AbortReas
         peer_ip: conn.peer_ip,
         elapsed_ms: u64::try_from(conn.at.elapsed().as_millis()).unwrap_or(u64::MAX),
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::net::{AcceptedSettings, AllowSource};
+    use vnc_relay_app::reload::{
+        ConfigCandidate,
+        snapshot::{ReloadCell, ReloadSnapshot},
+    };
+    use vnc_relay_domain::budget::ConnectionBudget;
+
+    const HEAD: &[u8] = b"GET /relay HTTP/1.1\r\nHost: localhost\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nOrigin: https://old.example\r\n\r\n";
+
+    fn candidate(settings: vnc_relay_app::settings::Settings) -> ConfigCandidate {
+        ConfigCandidate {
+            settings,
+            presence: Default::default(),
+        }
+    }
+
+    /// spec: operations.md:OPS-050 partial
+    /// spec: operations.md:OPS-047 partial
+    #[test]
+    fn reload_separates_accept_upgrade_and_exchange_values() {
+        for entry in [EntryPoint::WsViewer, EntryPoint::WssViewer] {
+            let mut settings = crate::config_file::parse(
+                "[admin]\naccounts_file='accounts.toml'\n[management]\nlisten='127.0.0.1:8443'\n[status]\nlisten='127.0.0.1:9090'\n",
+                std::path::Path::new("."),
+            ).unwrap_or_else(|error| panic!("settings: {error:?}"));
+            let allow = vnc_relay_domain::allow_list::AllowList::new(vec![
+                vnc_relay_domain::allow_list::IpItem::parse("127.0.0.1").unwrap(),
+            ]);
+            let origin = vnc_relay_domain::origin::Origin::parse("https://old.example").unwrap();
+            settings.relay.ws_viewer.allow = Some(allow.clone());
+            settings.relay.wss_viewer.allow = Some(allow);
+            settings.relay.ws_viewer.allowed_origins = vec![origin.clone()];
+            settings.relay.wss_viewer.allowed_origins = vec![origin];
+            let accepted = AcceptedSettings::from_settings(&settings);
+            let cell = Arc::new(ReloadCell::<tokio_rustls::TlsAcceptor>::new(
+                ReloadSnapshot::new(candidate(settings.clone()), None, None),
+            ));
+            let policy = WsPolicy {
+                accept: AcceptPolicy {
+                    allow: if entry == EntryPoint::WsViewer {
+                        AllowSource::ws_viewer(Arc::clone(&cell))
+                    } else {
+                        AllowSource::wss_viewer(Arc::clone(&cell))
+                    },
+                    relay_budget: ConnectionBudget::new(),
+                },
+            };
+            let peer = vnc_relay_domain::peer_ip::PeerIp::new("127.0.0.1".parse().unwrap());
+            let (_, previous) = check_upgrade(HEAD, peer, &policy).unwrap();
+            settings.limits.buffer_bytes *= 2;
+            settings.limits.ws_message_bytes *= 2;
+            settings.timeouts.handshake = Duration::from_secs(21);
+            settings.timeouts.tls_upgrade = Duration::from_secs(22);
+            settings.keepalive.tcp_idle = Duration::from_secs(90);
+            settings.keepalive.ws_ping = Duration::from_secs(41);
+            settings.keepalive.ws_pong_timeout = Duration::from_secs(42);
+            cell.replace(ReloadSnapshot::new(candidate(settings.clone()), None, None));
+            let (_, upgraded) = check_upgrade(HEAD, peer, &policy).unwrap();
+            assert_eq!(
+                accepted.buffer_bytes * 2,
+                settings.limits.buffer_bytes as usize
+            );
+            assert_eq!(accepted.upgrade, Duration::from_secs(10));
+            assert_eq!(accepted.handshake, Duration::from_secs(10));
+            assert_eq!(accepted.keepalive.tcp_idle, Duration::from_secs(60));
+            assert_eq!(
+                upgraded.message_bytes,
+                settings.limits.ws_message_bytes as usize
+            );
+            assert_eq!(upgraded.keepalive.ws_ping, Duration::from_secs(41));
+            assert_eq!(upgraded.keepalive.ws_pong_timeout, Duration::from_secs(42));
+            assert_eq!(previous.keepalive.ws_ping, Duration::from_secs(30));
+            assert_eq!(previous.message_bytes * 2, upgraded.message_bytes);
+            assert_eq!(exchange_handshake(&policy), Duration::from_secs(21));
+            settings.timeouts.handshake = Duration::from_secs(31);
+            settings.relay.ws_viewer.allowed_origins.clear();
+            settings.relay.wss_viewer.allowed_origins.clear();
+            cell.replace(ReloadSnapshot::new(candidate(settings), None, None));
+            assert_eq!(exchange_handshake(&policy), Duration::from_secs(31));
+            assert!(matches!(
+                check_upgrade(HEAD, peer, &policy),
+                Err(Refusal::OriginNotAllowed(_))
+            ));
+            assert_eq!(upgraded.keepalive.ws_ping, Duration::from_secs(41));
+        }
+    }
 }

@@ -3,7 +3,7 @@
 // app/router.js, the same entry as app/main.js, and drives it with hash changes. One page load runs one case,
 // ?case=dash-006&lang=ko|en or ?case=dash-025, against a fake management API.
 // The result goes to <main id="result">. Wording comes from app/copy.js, which holds the spec §9.3 CPY table.
-import { mountRouter } from '../app/router.js';
+import { mountRouter, routeOf } from '../app/router.js';
 import { COPY } from '../app/copy.js';
 import { STORAGE_KEY } from '../app/language.js';
 
@@ -93,16 +93,17 @@ const DEFAULT_ROUTES = {
     }),
 };
 
-function fakeApi() {
+function fakeApi(overrides = {}) {
   const calls = [];
   const counts = new Map();
+  const routes = { ...DEFAULT_ROUTES, ...overrides };
   const request = (path, init = {}) => {
     const key = `${init.method ?? 'GET'} ${path}`;
     const n = (counts.get(key) ?? 0) + 1;
     counts.set(key, n);
     calls.push({ key, text: `${path} ${JSON.stringify(init)}` });
-    const route = DEFAULT_ROUTES[key];
-    return Promise.resolve().then(() => (route ? route(n) : fail(404, 'not_found')));
+    const route = routes[key];
+    return Promise.resolve().then(() => (route ? route(n, init) : fail(404, 'not_found')));
   };
   return { request, calls, count: (key) => counts.get(key) ?? 0 };
 }
@@ -129,11 +130,50 @@ const enabled = (root) => terminateOf(root) !== null && !terminateOf(root).disab
 function checkLayout(label) {
   const page = document.documentElement;
   check(`${label}: no horizontal scroll`, page.scrollWidth <= page.clientWidth);
+  const links = [...host.querySelectorAll('.navbar-item')];
+  const settings = routeOf(location.hash).name === 'settings';
+  const copy = COPY[document.documentElement.lang];
+  check(`${label}: both navigation destinations are available`, links.length === 2
+    && links[0].textContent === copy.operations && links[1].textContent === copy.settings
+    && links[0].getAttribute('href') === '/' && links[1].getAttribute('href') === '/#/settings');
+  check(`${label}: current screen navigation is active`,
+    links[settings ? 1 : 0]?.getAttribute('aria-current') === 'page'
+    && !links[settings ? 0 : 1]?.hasAttribute('aria-current'));
+  if (window.innerWidth < 1024) {
+    const nav = host.querySelector('.navbar-nav');
+    const tools = host.querySelector('.navbar-tools');
+    check(`${label}: mobile navigation is visible below the tools`, links.every((link) => link.getBoundingClientRect().height > 0)
+      && nav.getBoundingClientRect().top >= tools.getBoundingClientRect().bottom);
+  }
 }
 
 // DASH-006: a list row opens the selected active session through the router, and the back link returns to the list.
 async function caseDash006() {
-  const api = fakeApi();
+  check('DASH-006: settings view has a protected route', routeOf('#/settings').name === 'settings'
+    && routeOf('#/settings').edit === false);
+  check('DASH-006: settings edit has a protected route', routeOf('#/settings/edit').name === 'settings'
+    && routeOf('#/settings/edit').edit === true);
+  let waiting = 5;
+  let revision = `sha256:${'0'.repeat(64)}`;
+  const configRead = () => ok({
+    as_of: AS_OF, revision, edit_enabled: true,
+    file: { state: 'in_effect', config_keys: [], diagnostics: [] }, last_reload: null,
+    items: [
+      { key: 'limits.relay_connections', value: 100, reload: 'dynamic', editable: true, min: 1, max: 65535 },
+      { key: 'limits.waiting', value: waiting, reload: 'dynamic', editable: true, min: 1, max: 65535 },
+    ],
+  });
+  const api = fakeApi({
+    'GET /api/v1/config': configRead,
+    'PATCH /api/v1/config': (_, init) => {
+      const body = JSON.parse(init.body);
+      check('settings router save: only the changed key is sent', JSON.stringify(body.changes) === '{"limits.waiting":7}');
+      check('settings router save: current revision is sent', body.revision === revision);
+      waiting = body.changes['limits.waiting'];
+      revision = `sha256:${'1'.repeat(64)}`;
+      return ok({ as_of: AS_OF, result: 'applied', revision, applied: ['limits.waiting'] });
+    },
+  });
   const navigations = [];
   mountRouter(host, {
     request: api.request,
@@ -159,6 +199,7 @@ async function caseDash006() {
   check('DASH-006: one detail read', api.count(DETAIL) === 1);
   check('DASH-006: list not queried again for the detail', api.count(LIST) === 1);
   check('DASH-006: back link goes to the list', backOf(host)?.getAttribute('href') === '/');
+  checkLayout('DASH-006 detail navigation');
 
   location.hash = '';
   await waitFor(() => detailLinkOf(host) !== null);
@@ -166,6 +207,63 @@ async function caseDash006() {
   check('DASH-006: detail removed on back', terminateOf(host) === null);
   check('DASH-006: list queried again on return', api.count(LIST) === 2);
   check('DASH-006: router stayed on this page', navigations.length === 0);
+
+  // The test document is under /tests/. Adapt the root-relative link destination to
+  // its hash while still exercising the actual visible navigation link's click.
+  function clickNav(index) {
+    const link = host.querySelectorAll('.navbar-item')[index];
+    link.addEventListener('click', (event) => {
+      event.preventDefault();
+      location.hash = new URL(link.href).hash;
+    }, { once: true });
+    link.click();
+  }
+  const input = () => host.querySelector('input[data-config-key="limits.waiting"]');
+  const readyView = () => host.querySelector('#settings-edit')?.disabled === false;
+  const readyEdit = () => input() !== null && !host.querySelector('#settings-review')?.disabled;
+  const changeWaiting = (value) => {
+    input().value = value;
+    input().dispatchEvent(new Event('input', { bubbles: true }));
+  };
+  clickNav(1);
+  await waitFor(readyView);
+  check('settings router: navigation opens settings view', titleOf(host) === t.settingsTitle);
+  checkLayout('settings router view navigation');
+  host.querySelector('#settings-edit').click();
+  await waitFor(readyEdit);
+  check('settings router: edit action opens edit route', location.hash === '#/settings/edit'
+    && titleOf(host) === t.settingsEditTitle);
+  changeWaiting('9');
+  clickNav(1);
+  await waitFor(readyView);
+  check('settings router: settings navigation discards draft without PATCH', api.count('PATCH /api/v1/config') === 0);
+  host.querySelector('#settings-edit').click();
+  await waitFor(readyEdit);
+  check('settings router: revisiting edit reloads original value', input()?.value === '5');
+  changeWaiting('7');
+  host.querySelector('#settings-review').click();
+  await waitFor(() => host.querySelector('.dialog[open]') !== null);
+  host.querySelector('.dialog-actions button:last-child').click();
+  await waitFor(readyView);
+  const appliedMessage = t.settingsApplied.replace('{n}', '1');
+  check('settings router: save returns to view with applied count', location.hash === '#/settings'
+    && host.textContent.includes(appliedMessage) && api.count('PATCH /api/v1/config') === 1);
+  const readsAfterSave = api.count('GET /api/v1/config');
+  clickNav(0);
+  await waitFor(() => detailLinkOf(host) !== null);
+  clickNav(1);
+  await waitFor(readyView);
+  check('settings router: applied notice is consumed once', !host.textContent.includes(appliedMessage));
+  check('settings router: revisiting view performs a fresh read', api.count('GET /api/v1/config') === readsAfterSave + 1);
+  location.hash = '#/settings/edit';
+  await waitFor(readyEdit);
+  check('settings router: direct edit hash mounts saved values', input()?.value === '7');
+  changeWaiting('8');
+  clickNav(0);
+  await waitFor(() => detailLinkOf(host) !== null);
+  check('settings router: operations navigation discards edit without another PATCH',
+    api.count('PATCH /api/v1/config') === 1 && titleOf(host) === t.operations);
+  check('settings router: internal routes never leave the dashboard', navigations.length === 0);
   checkLayout('DASH-006');
 }
 

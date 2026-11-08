@@ -15,29 +15,27 @@ use tokio::time::{Instant, Sleep, sleep_until};
 /// The bytes `\r\n\r\n` as a big-endian word. It ends an HTTP/1.1 request head.
 const HEAD_END: u32 = u32::from_be_bytes(*b"\r\n\r\n");
 
-/// A listener whose connections get a deadline of `limit` (U). `inner` hands
-/// over each connection unchanged; the wrapper only adds the timer.
+/// Adds the U deadline captured by admission, without rereading runtime settings.
 pub(crate) struct DeadlineListener<L> {
     inner: L,
-    limit: Duration,
 }
 
 impl<L> DeadlineListener<L> {
-    pub(crate) fn new(inner: L, limit: Duration) -> Self {
-        Self { inner, limit }
+    pub(crate) fn new(inner: L) -> Self {
+        Self { inner }
     }
 }
 
 impl<L> axum::serve::Listener for DeadlineListener<L>
 where
-    L: axum::serve::Listener,
+    L: axum::serve::Listener<Addr = crate::admission::AdmittedAddr>,
 {
     type Io = Deadlined<L::Io>;
     type Addr = L::Addr;
 
     async fn accept(&mut self) -> (Self::Io, Self::Addr) {
         let (io, addr) = self.inner.accept().await;
-        (Deadlined::new(io, self.limit), addr)
+        (Deadlined::at(io, addr.upgrade, addr.at), addr)
     }
 
     fn local_addr(&self) -> io::Result<Self::Addr> {
@@ -72,11 +70,16 @@ pub(crate) struct Deadlined<IO> {
 }
 
 impl<IO> Deadlined<IO> {
+    #[cfg(test)]
     fn new(io: IO, limit: Duration) -> Self {
+        Self::at(io, limit, Instant::now())
+    }
+
+    fn at(io: IO, limit: Duration, at: Instant) -> Self {
         Self {
             io,
             limit,
-            timer: Box::pin(sleep_until(Instant::now() + limit)),
+            timer: Box::pin(sleep_until(at + limit)),
             head_done: false,
             window: 0,
             idle: IdleControl(Arc::new(AtomicBool::new(false))),
@@ -191,6 +194,22 @@ mod tests {
     use tokio::io::AsyncWriteExt;
     use tokio::time::advance;
 
+    /// spec: operations.md:OPS-050 partial
+    #[tokio::test(start_paused = true)]
+    async fn delayed_wrapping_keeps_the_original_accept_deadline_and_u() {
+        let accepted_at = Instant::now();
+        let old_u = Duration::from_secs(3);
+        advance(Duration::from_secs(2)).await;
+        let mut old = Deadlined::at(tokio::io::sink(), old_u, accepted_at);
+        let mut new = Deadlined::new(tokio::io::sink(), Duration::from_secs(7));
+        let mut cx = Context::from_waker(Waker::noop());
+        assert!(!old.expired(&mut cx));
+        advance(Duration::from_secs(1)).await;
+        assert!(old.expired(&mut cx));
+        assert!(!new.expired(&mut cx));
+        advance(Duration::from_secs(6)).await;
+        assert!(new.expired(&mut cx));
+    }
     use super::*;
 
     #[tokio::test(start_paused = true)]

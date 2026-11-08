@@ -164,6 +164,40 @@ pub struct Server {
 
 impl Server {
     pub fn start(name: &str, poll_secs: Option<u32>) -> Self {
+        Self::start_custom(name, poll_secs, false, "")
+    }
+
+    pub fn start_with_config(name: &str, poll_secs: Option<u32>, config_edit: bool) -> Self {
+        Self::start_custom(name, poll_secs, config_edit, "")
+    }
+
+    pub fn start_custom(
+        name: &str,
+        poll_secs: Option<u32>,
+        config_edit: bool,
+        extra_config: &str,
+    ) -> Self {
+        Self::start_transformed(name, poll_secs, config_edit, extra_config, |config, _| {
+            config
+        })
+    }
+
+    pub fn start_with_config_transform(
+        name: &str,
+        poll_secs: Option<u32>,
+        config_edit: bool,
+        transform: impl FnOnce(String, &std::path::Path) -> String,
+    ) -> Self {
+        Self::start_transformed(name, poll_secs, config_edit, "", transform)
+    }
+
+    fn start_transformed(
+        name: &str,
+        poll_secs: Option<u32>,
+        config_edit: bool,
+        extra_config: &str,
+        transform: impl FnOnce(String, &std::path::Path) -> String,
+    ) -> Self {
         let serial = NEXT.fetch_add(1, Ordering::Relaxed);
         let dir = std::env::temp_dir().join(format!(
             "vnc-relay-dashboard-live-{}-{serial}-{name}",
@@ -195,12 +229,21 @@ impl Server {
         let dashboard = poll_secs.map_or_else(String::new, |poll| {
             format!("[dashboard]\npoll_secs = {poll}\nquery_timeout_secs = 5\n")
         });
+        let edit_block = if config_edit {
+            "config_edit = true\n"
+        } else {
+            ""
+        };
         let config = format!(
             r#"
 [admin]
 accounts_file = "accounts.toml"
 [management]
 listen = "127.0.0.1:{management}"
+{edit_block}"#
+        );
+        let config = format!(
+            r#"{config}
 [management.session]
 idle_secs = 300
 max_lifetime_secs = 3600
@@ -222,6 +265,7 @@ handshake_secs = 30
 connect_secs = 30
 close_secs = 2
 {dashboard}
+{extra_config}
 [relay.tcp_viewer]
 enabled = true
 listen = "127.0.0.1:{viewer}"
@@ -242,7 +286,7 @@ allow_targets = ["127.0.0.1:1-65535"]
 enabled = true
 "#
         );
-        must(fs::write(dir.join("relay.toml"), config));
+        must(fs::write(dir.join("relay.toml"), transform(config, &dir)));
         drop(holders);
         let proxy = Proxy::start(management);
         let child = must(
@@ -286,6 +330,26 @@ enabled = true
             thread::sleep(Duration::from_millis(20));
         }
         server
+    }
+
+    pub fn dir(&self) -> &std::path::Path {
+        &self.dir
+    }
+
+    pub fn config_path(&self) -> PathBuf {
+        self.dir.join("relay.toml")
+    }
+
+    pub fn config_bytes(&self) -> Vec<u8> {
+        must(fs::read(self.config_path()))
+    }
+
+    pub fn config_text(&self) -> String {
+        must(String::from_utf8(self.config_bytes()))
+    }
+
+    pub fn config_write(&self, contents: impl AsRef<[u8]>) {
+        must(fs::write(self.config_path(), contents));
     }
 
     pub fn url(&self, path: &str) -> String {

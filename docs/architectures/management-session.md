@@ -1,12 +1,12 @@
 # 관리 로그인과 세션 모듈 설계
 
-관리자 로그인(`POST /api/v1/session`)을 처리하고, 관리 세션 쿠키와 CSRF 토큰을 검사하며, 로그인 실패를 계정별·출발지별로 세어 제한 시간 동안 로그인을 거절한다. 관리 세션은 서버 메모리에만 두며 프로세스를 재시작하면 모두 무효다. 이 문서는 작업 4.3 범위다. 조회 API(4.4)와 종료 API(4.5)는 이 문서의 세션 검사를 쓰지만 구현하지 않는다. 정적 파일과 로그인 화면(4.6)도 맡지 않는다.
+관리자 로그인(`POST /api/v1/session`)을 처리하고, 관리 세션 쿠키와 CSRF 토큰을 검사하며, 로그인 실패를 계정별·출발지별로 세어 제한 시간 동안 로그인을 거절한다. 관리 세션은 서버 메모리에만 두며 프로세스를 재시작하면 모두 무효다. 조회·종료·설정 GET/PATCH가 이 문서의 공통 인증 경계를 쓴다. 각 업무 처리와 정적 파일·화면 구현은 맡지 않는다.
 
 | 항목 | 값 |
 | --- | --- |
 | 구조 시점 | Current |
 | 문서 상태 | Draft |
-| 구현 대조 | Verified — 커밋 `a143539`(설계 수정 구현) + 작업 트리 기준. 대조 기록은 [대조 기록](#대조-기록)의 작업 4.3 구현 대조(Phase 2) |
+| 구현 대조 | 2026-11-08 작업 트리의 `session_api::answer`·`session_body`, `DashboardHints::terminate_timeout_secs`, `config_api::answer`를 소스 읽기로 대조. PATCH CSRF·성공 touch·응답 시 E+5의 새 시험은 미실행. 기존 범위 증거는 [대조 기록](#대조-기록) |
 | 코드 위치 | `crates/domain/src/admin_session.rs`(`AdminSessionToken`, `AdminCsrfToken`, `AdminSession`, `AdminSessionTable`, `AdminSessionPolicy`), `crates/domain/src/login_limit.rs`(`LoginLimitPolicy`, `LoginLimiter`, `LimitScope`), `crates/app/src/management.rs`(`AdminAuth`), `crates/app/src/management/login.rs`, `crates/app/src/management/session.rs`, `crates/app/src/ports.rs`(`Clock`, `PasswordVerifier`, `TokenSource`), `crates/adapters/src/clock.rs`(`SystemClock`, `timestamp`), `crates/adapters/src/crypto.rs`(`SystemTokenSource`), `crates/adapters/src/accounts_file/hasher.rs`(`Argon2Verifier`), `crates/adapters/src/management_http.rs`(`ManagementListener`, `answer`), `crates/adapters/src/management_http/session_api.rs`, `src/serve.rs` |
 | 코드 지도 | [코드 지도 2절](code-map.md#2-코드-위치와-구성요소), [3절](code-map.md#3-진입점) |
 | 관련 스펙 | [관리 스펙 3.0절](../specs/management.md#30-관리자-로그인과-세션)과 [7절](../specs/management.md#7-수용-테스트)의 MGT-014, MGT-017~020, MGT-022, MGT-025, MGT-027(MGT-018 포함); [운영 스펙](../specs/operations.md)의 OPS-029, OPS-012(로그인 사건 부분) |
@@ -19,7 +19,7 @@
   - 로그인: 요청 본문을 검사하고, 계정과 비밀번호를 Argon2id로 검증한다. 맞으면 관리 세션과 CSRF 토큰을 만든다.
   - 로그인 제한: 실패를 계정 이름별과 출발지 IP별로 센다. 실패가 F를 넘으면 제한 시간 동안 로그인을 거절한다.
   - 세션 검사: 쿠키의 세션이 살아 있는지 본다. 살아 있으면 계정과 CSRF 토큰을 돌려준다.
-  - CSRF 검사: `POST`·`DELETE` 요청의 `X-CSRF-Token`을 세션의 값과 비교한다.
+  - CSRF 검사: 로그인 이외의 `POST`·`PATCH`·`DELETE` 요청에서 `X-CSRF-Token`을 세션의 값과 비교한다. 경로 분기보다 먼저 검사한다.
   - 유휴 만료 연장: 사용자 행동 요청이 검사와 처리를 통과했을 때만 유휴 만료 시각을 늦춘다.
   - 로그아웃: 세션을 무효화한다. 활성 VNC 중계 세션은 건드리지 않는다.
   - 로그인 사건: `admin_login_succeeded`, `admin_login_failed`, `admin_login_limited`를 기록한다.
@@ -27,9 +27,10 @@
   - 관리 HTTP 해석과 `Set-Cookie`·`Cookie` 헤더 문자열 처리: 어댑터(`management_http`, `session_api`)가 한다. 응용 계층은 헤더를 모른다.
   - 관리 세션 종료 사건(`admin_terminate`)과 관리자 종료 권한 검사: 작업 4.5.
   - 조회 응답 작성: 작업 4.4.
+  - 설정 파일 조회·편집과 편집 감사 사건: [설정 보기·편집 서비스](config-edit.md). 이 서비스는 `AuthorizedAdmin`의 계정과 실제 소켓 `PeerIp`를 받으며 별도 특권 관리자 역할을 만들지 않는다.
   - 활성 VNC 세션 조회와 종료: 관리 세션과 독립이다. 세션 검사는 활성 세션 표를 읽거나 바꾸지 않는다.
   - 계정 파일 읽기와 쓰기: 관리자 계정 준비 CLI와 시작 모듈이 맡는다([관리자 계정 준비 CLI 모듈 설계](admin-accounts.md)).
-- 다른 모듈에 공개하는 기능: `AdminAuth::login`, `AdminAuth::authorize`, `AdminAuth::check_csrf`, `AdminAuth::touch`, `AdminAuth::logout`, `SessionView`, `LoggedIn`, `AuthorizedAdmin`, `AuthError`(작업 4.4·4.5가 `authorize`와 `touch`를 호출한다).
+- 다른 모듈에 공개하는 기능: `AdminAuth::login`, `AdminAuth::authorize`, `AdminAuth::check_csrf`, `AdminAuth::touch`, `AdminAuth::logout`, `SessionView`, `LoggedIn`, `AuthorizedAdmin`, `AuthError`. 중계 조회·종료와 설정 handler가 인증 결과를 받아 성공한 사용자 행동에 `touch`를 호출한다.
 
 ## 2. 내부 구조
 
@@ -104,11 +105,15 @@ flowchart LR
 | --- | --- | --- | --- | --- |
 | 1 | `session_api` 쿠키 읽기 | `Cookie` 헤더에서 `relay_admin_session` 값을 찾는다. 형식이 틀리면 없는 것으로 본다 | 없음 | 다음 단계 |
 | 2 | `AdminAuth::authorize` | 조회 전에 기한이 지난 항목을 모두 지운다(`prune`, 7절 자동 정리). 남은 항목에서 토큰을 찾는다. 만료 시각은 `now ≥ deadline`이면 이미 무효다 | 만료 항목 삭제 | 없으면 `401 unauthenticated` + 쿠키 지우기 |
-| 3 | `AdminAuth::authorize`(CSRF) | `POST`·`DELETE`만. `TokenSource::same_token(세션 값, X-CSRF-Token 값)`이 거짓이면 `403 csrf_invalid`. 세션은 그대로 둔다 | 없음 | 응답 |
-| 4 | 경로·메서드 검사(어댑터) | 404, 405를 먼저 본다. 이어서 `X-Relay-Poll`(400)과 GET·DELETE 본문 미디어 타입(415)을 본다. 로그인 본문 검사는 4.1절 1–2단계다 | 없음 | 응답 |
+| 3 | `session_api::answer` → `AdminAuth::check_csrf` | 로그인 이외 `POST`·`PATCH`·`DELETE`에 적용한다. 중복/누락/틀린 `X-CSRF-Token`은 경로 분기 전에 `403 csrf_invalid`다. 세션은 유지한다. | 없음 | 응답 또는 다음 단계 |
+| 4 | 경로·메서드 검사(어댑터) | session/config/terminate/query 경로로 분기한 뒤 메서드·poll·본문을 검사한다. 설정 PATCH는 poll 헤더를 거절하고 JSON 본문을 64 KiB까지 읽는다. 로그인은 기존 16 KiB다. | 없음 | 각 handler 응답 |
 | 5 | `AdminAuth::touch` | 성공한 사용자 행동 요청만. 단조 유휴 기한 = `min(now + Si, 단조 절대 기한)`. 공개 유휴 값 = `min(벽시계 + Si, 저장된 절대 공개 값)` | 유휴 기한 연장 | 응답 |
 
 `X-Relay-Poll: 1`이 있는 `GET`(자동 폴링)은 5단계를 건너뛴다. 연장하지 않는다. 헤더 없는 `GET`은 사용자 행동으로 보고 연장한다(사용자 결정 2026-10-22(Q30), 9절 나).
+
+설정 GET은 성공 뒤에만 `touch`하며 `X-Relay-Poll: 1`이면 연장하지 않는다. 화면은 설정 진입·명시 새로고침 때만 GET하고 자동 폴링하지 않는다. PATCH는 성공(no-op 포함) 뒤에만 연장하며 인증·CSRF·입력·파일·충돌·쓰기 실패는 연장하지 않는다. 파일 트랜잭션은 `spawn_blocking`에서 끝까지 수행하므로 응답 연결이 사라져도 서버의 저장·commit을 취소하지 않는다([설정 보기·편집 §6](config-edit.md#6-http시간-제한종료-유예)).
+
+로그인과 세션 GET 응답의 `session_body`는 `DashboardHints::terminate_timeout_secs()`로 현재 E+5를 읽는다. P와 query timeout은 시작값이다. 이 힌트 변경은 이미 시작한 종료 교환의 타이머를 바꾸지 않는다. `management.config_edit` 활성화에는 재시작이 필요하므로 기존 세션을 재사용하지 않고 다시 로그인한다.
 
 ### 4.3 로그아웃 `DELETE /api/v1/session`
 

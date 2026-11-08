@@ -252,6 +252,7 @@ impl Browser {
                                 "Network.requestWillBeSent" => Some(json!({
                                     "event":event,"request":params["requestId"],
                                     "method":params["request"]["method"],
+                                    "url":params["request"]["url"],
                                     "body_bytes":params["request"]["postData"].as_str().map(str::len),
                                 })),
                                 _ => None,

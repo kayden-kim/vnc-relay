@@ -52,10 +52,10 @@ impl<S> WsRelayStream<S> {
     ///
     /// - `io`: the underlying transport (e.g. `Wire`).
     /// - `upgrade_suffix`: raw bytes following the HTTP upgrade head (at most 1023 bytes).
-    /// - `max_message_size`: M (maximum logical message length).
-    /// - `budget_limit`: B (maximum holding budget per direction).
+    /// - `max_message_size`: M captured at this connection's upgrade.
+    /// - `budget_limit`: B captured at TCP accept, not reread at upgrade.
     /// - `transport`: `ViewerTransport::Ws` or `ViewerTransport::Wss`.
-    /// - `keepalive`: validated Kw durations (each 5..=300 seconds, config-v3).
+    /// - `keepalive`: Kw captured at upgrade; existing ping/pong timers retain it.
     pub fn new(
         io: S,
         upgrade_suffix: Vec<u8>,

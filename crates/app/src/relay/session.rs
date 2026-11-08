@@ -32,14 +32,14 @@ pub(super) async fn run_session_controlled(
     session: &mut Session,
     clock: &dyn Clock,
     mut lifecycle: watch::Receiver<RelayLifecycle>,
-    buffer_bytes: usize,
-    close_timeout: Duration,
-    mut admin_close: watch::Receiver<Option<Duration>>,
+    buffer_bytes: [usize; 2],
+    settings: &dyn crate::reload::ports::RuntimeSettingsSource,
+    mut admin_close: watch::Receiver<Option<(Duration, Duration)>>,
     on_update: impl Fn(&Session, Option<ConnectionErrorKind>),
 ) -> Result<Option<ConnectionErrorKind>, SessionError> {
     let mut directions = [
-        BufferedDirection::new(viewer_trailing, buffer_bytes),
-        BufferedDirection::new(other_trailing, buffer_bytes),
+        BufferedDirection::new(viewer_trailing, buffer_bytes[0]),
+        BufferedDirection::new(other_trailing, buffer_bytes[1]),
     ];
     let other_side = match session.mode() {
         Mode::Mode1 => Side::Target,
@@ -55,28 +55,35 @@ pub(super) async fn run_session_controlled(
     let mut next = 0;
     let mut operations = 0;
     let mut error_kind = None;
+    // Read E only for the first close transition, never at session creation.
+    let mut close_timeout = None;
 
     loop {
         let state = *lifecycle.borrow_and_update();
         let now = clock.monotonic().max(timer_now);
         let admin_started = *admin_close.borrow_and_update();
-        if let Some(accepted_at) = admin_started
+        if let Some((accepted_at, timeout)) = admin_started
             && session.begin_admin_close(accepted_at)?
         {
+            close_timeout.get_or_insert(timeout);
             on_update(session, error_kind);
         }
         let grace_deadline = match state {
             RelayLifecycle::Grace { deadline } => Some(deadline),
             RelayLifecycle::Running | RelayLifecycle::Force => None,
         };
+        if close_timeout.is_none()
+            && session.state() != vnc_relay_domain::session::SessionState::Active
+        {
+            settings.with_current(&mut |settings| close_timeout = Some(settings.timeouts.close));
+        }
+        let timeout = close_timeout.unwrap_or_default();
         let eof_deadline = session
             .first_eof()
-            .map(|(_, at)| at.saturating_add(close_timeout));
-        let admin_deadline = admin_started.map(|at| at.saturating_add(close_timeout));
+            .map(|(_, at)| at.saturating_add(timeout));
+        let admin_deadline = admin_started.map(|(at, _)| at.saturating_add(timeout));
         let cleanup_deadline = eof_deadline.or(admin_deadline);
-        if cleanup_deadline.is_some_and(|end| now >= end)
-            && session.expire_close(now, close_timeout)?
-        {
+        if cleanup_deadline.is_some_and(|end| now >= end) && session.expire_close(now, timeout)? {
             on_update(session, error_kind);
         }
 
@@ -100,7 +107,7 @@ pub(super) async fn run_session_controlled(
             || directions.iter().all(|direction| direction.complete);
         if closing && terminal_deadline.is_none() {
             terminal_deadline =
-                Some(cleanup_deadline.unwrap_or_else(|| now.saturating_add(close_timeout)));
+                Some(cleanup_deadline.unwrap_or_else(|| now.saturating_add(timeout)));
         }
         let close_deadline = cleanup_deadline.or(terminal_deadline);
         let expired = close_deadline.is_some_and(|end| now >= end);
@@ -262,6 +269,20 @@ pub(super) async fn run_session_controlled(
                 };
                 let input = if index == 0 { Side::Viewer } else { other_side };
                 let output = if index == 0 { other_side } else { Side::Viewer };
+                if close_timeout.is_none()
+                    && matches!(
+                        step,
+                        Step::Eof
+                            | Step::InputDead
+                            | Step::OutputDead
+                            | Step::InputError(_)
+                            | Step::OutputError(_)
+                    )
+                {
+                    settings.with_current(&mut |settings| {
+                        close_timeout = Some(settings.timeouts.close)
+                    });
+                }
                 match step {
                     Step::Read => {}
                     Step::Written(count) => {
@@ -579,6 +600,7 @@ mod tests {
     use vnc_relay_domain::session::{SessionId, SessionState, ViewerTransport};
 
     use super::*;
+    use crate::relay::test_support::TestSettings;
 
     #[expect(
         clippy::too_many_arguments,
@@ -597,6 +619,8 @@ mod tests {
         on_update: impl Fn(&Session),
     ) -> Result<Option<ConnectionErrorKind>, SessionError> {
         let (_command, receiver) = watch::channel(None);
+        let settings = TestSettings::new();
+        settings.change(|settings| settings.timeouts.close = close_timeout);
         run_session_controlled(
             viewer,
             other,
@@ -605,12 +629,88 @@ mod tests {
             session,
             clock,
             lifecycle,
-            buffer_bytes,
-            close_timeout,
+            [buffer_bytes; 2],
+            settings.as_ref(),
             receiver,
             |session, _| on_update(session),
         )
         .await
+    }
+
+    /// spec: operations.md:OPS-050 partial
+    /// spec: operations.md:OPS-057 partial
+    /// spec: management.md:MGT-041 partial
+    #[tokio::test(start_paused = true)]
+    async fn reload_reads_e_at_first_close_and_keeps_started_close_fixed() {
+        let settings = TestSettings::new();
+        let clock = TestClock::new();
+        let mut session = model(Mode::Mode2);
+        let (_lifecycle, lifecycle) = watch::channel(RelayLifecycle::Running);
+        let (_command, command) = watch::channel(None);
+        let (mut viewer, viewer_control) = stream(&[], false);
+        let (mut other, other_control) = stream(&[], false);
+        other_control.change(|state| state.half = CloseBehavior::Pending);
+        let mut relay = pin!(run_session_controlled(
+            &mut viewer,
+            &mut other,
+            Vec::new(),
+            Vec::new(),
+            &mut session,
+            clock.as_ref(),
+            lifecycle,
+            [4, 8],
+            settings.as_ref(),
+            command,
+            |_, _| {},
+        ));
+        pump(&mut relay).await;
+        advance(Duration::from_secs(3)).await;
+        settings.change(|settings| settings.timeouts.close = Duration::from_secs(5));
+        viewer_control.feed(&[], true);
+        pump(&mut relay).await;
+        settings.change(|settings| settings.timeouts.close = Duration::from_secs(1));
+        advance(Duration::from_secs(4)).await;
+        poll_fn(|cx| {
+            assert!(
+                relay.as_mut().poll(cx).is_pending(),
+                "started E must remain five seconds"
+            );
+            Poll::Ready(())
+        })
+        .await;
+        advance(Duration::from_secs(1)).await;
+        relay.await.expect("old E expires");
+    }
+
+    /// spec: operations.md:OPS-050 partial
+    #[tokio::test(start_paused = true)]
+    async fn mode_two_directions_keep_distinct_accepted_buffer_limits() {
+        let settings = TestSettings::new();
+        let clock = TestClock::new();
+        let mut session = model(Mode::Mode2);
+        let (_lifecycle, lifecycle) = watch::channel(RelayLifecycle::Running);
+        let (_command, command) = watch::channel(None);
+        let (mut viewer, viewer_control) = stream(b"viewer payload", true);
+        let (mut other, other_control) = stream(b"server payload", true);
+        run_session_controlled(
+            &mut viewer,
+            &mut other,
+            Vec::new(),
+            Vec::new(),
+            &mut session,
+            clock.as_ref(),
+            lifecycle,
+            [3, 7],
+            settings.as_ref(),
+            command,
+            |_, _| {},
+        )
+        .await
+        .expect("relay");
+        assert_eq!(viewer_control.0.lock().expect("viewer").max_read, 3);
+        assert_eq!(other_control.0.lock().expect("server").max_read, 7);
+        assert_eq!(viewer_control.output(), b"server payload");
+        assert_eq!(other_control.output(), b"viewer payload");
     }
 
     const E: Duration = Duration::from_secs(10);
@@ -2572,11 +2672,13 @@ mod tests {
             let clock = TestClock::new();
             let mut session = model(Mode::Mode1);
             let (_lifecycle, receiver) = watch::channel(RelayLifecycle::Running);
-            let (_command, command) = watch::channel(Some(Duration::ZERO));
+            let (_command, command) = watch::channel(Some((Duration::ZERO, E)));
             let (mut viewer, viewer_control) = stream(b"must-not-read", false);
             let (mut other, other_control) = stream(b"must-not-read-either", false);
             viewer_control.change(|state| state.terminal = behavior);
             other_control.change(|state| state.terminal = behavior);
+            let settings = TestSettings::new();
+            settings.change(|settings| settings.timeouts.close = E);
             {
                 let mut relay = pin!(run_session_controlled(
                     &mut viewer,
@@ -2586,8 +2688,8 @@ mod tests {
                     &mut session,
                     clock.as_ref(),
                     receiver,
-                    8,
-                    E,
+                    [8; 2],
+                    settings.as_ref(),
                     command,
                     |_, _| {},
                 ));
@@ -2663,7 +2765,7 @@ mod tests {
             .record_write(Direction::TargetToViewer, 2)
             .unwrap_or_else(|e| panic!("prior write: {e}"));
         let (_lifecycle, receiver) = watch::channel(RelayLifecycle::Running);
-        let (_command, command) = watch::channel(Some(Duration::ZERO));
+        let (_command, command) = watch::channel(Some((Duration::ZERO, E)));
         let (mut viewer, viewer_control) = stream(b"unread", false);
         let (mut other, other_control) = stream(b"no-new-read", false);
         viewer_control.change(|state| {
@@ -2673,6 +2775,8 @@ mod tests {
             state.write_chunk = 1;
             state.require_frame_finished = true;
         });
+        let settings = TestSettings::new();
+        settings.change(|settings| settings.timeouts.close = E);
         run_session_controlled(
             &mut viewer,
             &mut other,
@@ -2681,8 +2785,8 @@ mod tests {
             &mut session,
             clock.as_ref(),
             receiver,
-            8,
-            E,
+            [8; 2],
+            settings.as_ref(),
             command,
             |_, _| {},
         )

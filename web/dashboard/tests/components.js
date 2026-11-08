@@ -46,6 +46,7 @@ const STRINGS = {
     gaugeUnknown: "측정 없음",
     navLabel: "주 메뉴",
     navItemA: "운영 현황",
+    navItemB: "설정",
     languageLabel: "언어 (Language)",
     tableCaption: "활성 세션 목록",
     colSession: "세션",
@@ -80,6 +81,7 @@ const STRINGS = {
     gaugeUnknown: "No reading",
     navLabel: "Main menu",
     navItemA: "Operations",
+    navItemB: "Settings",
     languageLabel: "Language (언어)",
     tableCaption: "Active session list",
     colSession: "Session",
@@ -99,7 +101,7 @@ const TONES = ["success", "info", "warning", "destructive", "neutral"];
 const BUTTON_VARIANTS = ["primary", "outline", "ghost", "destructive", "navbar"];
 const ICON_NAMES = [
   "check", "clock", "warning", "alert", "refresh", "logout", "back",
-  "chevron-right", "chevron-down", "cancel", "globe", "grid", "brand",
+  "chevron-right", "chevron-down", "cancel", "globe", "grid", "settings", "brand",
 ];
 const LANGUAGE_OPTIONS = [
   { value: "ko", label: "한국어" },
@@ -168,7 +170,8 @@ function makeNavbar(sid, extra) {
   return createNavbar({
     brand: "VNC Relay",
     items: [
-      { label: t.navItemA, href: `#${sid}-a`, current: true, desktopOnly: true },
+      { label: t.navItemA, href: `#${sid}-a`, current: true, icon: "grid" },
+      { label: t.navItemB, href: `#${sid}-b`, icon: "settings" },
     ],
     language: createLanguageSelect({
       id: `${sid}-language`,
@@ -362,12 +365,15 @@ function runChecks() {
     expect(current.length === 1 && current[0].textContent.includes(t.navItemA));
   });
 
-  check("navbar-desktop-only", () => {
-    const navbar = makeNavbar("test-nav-desktop", {});
-    const items = navbar.querySelectorAll(".navbar-item");
-    const desktop = navbar.querySelectorAll(".navbar-desktop-only");
-    expect(items.length === 1 && desktop.length === 1);
-    expect(desktop[0].textContent.includes(t.navItemA));
+  check("navbar-items-visible", () => {
+    const navbar = mount(makeNavbar("test-nav-visible", {}));
+    const items = [...navbar.querySelectorAll(".navbar-item")];
+    expect(items.length === 2 && items[0].textContent.includes(t.navItemA) && items[1].textContent.includes(t.navItemB));
+    expect(items.every((item) => getComputedStyle(item).display !== "none" && item.getBoundingClientRect().height > 0));
+    expect(items.every((item) => item.querySelector('svg[aria-hidden="true"]') !== null));
+    if (window.innerWidth < 1024) {
+      expect(navbar.querySelector(".navbar-nav").getBoundingClientRect().top >= navbar.querySelector(".navbar-tools").getBoundingClientRect().bottom);
+    }
   });
 
   check("create-language-select", () => {

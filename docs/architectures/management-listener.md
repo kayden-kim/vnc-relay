@@ -1,16 +1,16 @@
 # 관리 리스너 모듈 설계
 
-## 작업 6.3~6.6 서버 목표 (Target / Active)
+## 설정 GET/PATCH와 동적 관리 경계 (Current / Active)
 
-구현 전 목표는 [설정 보기·편집 모듈](config-edit.md#6-http시간-제한종료-유예)이다. 기존 Current/Verified는 새 API의 증거가 아니다. 현재 `ManagementServices`는 auth/query/terminate만 받는다(`crates/adapters/src/management_http.rs:55-70`). `Arc<dyn ConfigManagement>`와 `/api/v1/config` GET/PATCH를 기존 인증 우선 fallback에 더한다. PATCH도 CSRF를 검사한다(현재 POST/DELETE만: `management_http/session_api.rs:44-66`). 본문 상한·진단·오류·사건은 연결한 모듈을 따른다. U는 수락 때 현재값으로 고정하고 session 응답의 terminate timeout은 응답 때 E+5로 만든다(현재 시작값: `management_http.rs:64-70,118-124,152-168`). blocking 파일 작업은 응답 유실로 취소하지 않으며 유예 중에도 이 경로를 막지 않는다([API §1.3](../contracts/management-api-v1.md#13-요청-처리-순서)·[§1.12~14](../contracts/management-api-v1.md#112-폴링-주기와-조회-제한-시간의-전달)·[§2.3](../contracts/management-api-v1.md#23-consumer의-판정-규칙)).
+`ManagementServices.config: Arc<dyn ConfigManagement>`를 `Shared`에 전달하고 `session_api::answer`가 인증→POST/PATCH/DELETE CSRF 검사 뒤 `/api/v1/config`를 `config_api::answer`로 보낸다. GET/PATCH의 파일 작업은 `spawn_blocking`에서 수행하므로 응답 유실이 이미 시작한 트랜잭션을 취소하지 않는다. PATCH에 terminate 전용 U 중지 예외를 적용하지 않는다. U는 관리 연결 수락 때 현재값으로 고정하고 `DashboardHints::terminate_timeout_secs`는 로그인/세션 조회 응답 때 현재 E+5를 만든다. 유예 중에도 관리 경로는 유지한다([설정 보기·편집](config-edit.md#6-http시간-제한종료-유예), [API §1.3](../contracts/management-api-v1.md#13-요청-처리-순서)·[§1.12~14](../contracts/management-api-v1.md#112-폴링-주기와-조회-제한-시간의-전달)·[§2.3](../contracts/management-api-v1.md#23-consumer의-판정-규칙)).
 
 관리 리스너(`[management] listen`)가 접속을 받고, 관리 HTTPS(내장 TLS)와 루프백 평문 HTTP를 처리하는 구조를 다룬다. 접속은 상태 리스너와 같은 관리·상태 연결 상한 Lm을 쓴다. 관리 리스너의 접속은 L을 쓰지 않는다. 이 문서는 작업 4.2에서 썼다. 로그인과 세션 검사는 작업 4.3이 더했다. 정적 파일 제공은 작업 4.6이 더했다. 조회(4.4)·종료(4.5)는 맡지 않는다.
 
 | 항목 | 값 |
 | --- | --- |
-| 구조 시점 | Current (작업 4.6 구현 뒤) |
-| 문서 상태 | Draft |
-| 구현 대조 | Verified — 작업 4.6 시점, 커밋 `54a59e7`. 그 시점의 WSL 전체 게이트는 Chromium이 없어 `dashboard_browser` 두 시험이 실패했다([대조 기록](#대조-기록) 4.6). Chrome을 설치한 뒤 커밋 `df3b5b2`에서 통과했다([개발 환경 how-to](../how-to/set-up-and-verify.md#4-검증) 실행 기록 4). 4.3 항목도 [대조 기록](#대조-기록)에 있다 |
+| 구조 시점 | Current |
+| 문서 상태 | Active — 기존 관리 경계와 설정 v3 채택 범위 |
+| 구현 대조 | 2026-11-08 작업 트리의 `ManagementServices`·`ManagementListener::run`·`DashboardHints`·`session_api::answer`·`config_api::answer`를 소스 읽기로 대조. 새 API 시험 미실행. 이전 실행 증거는 [대조 기록](#대조-기록) |
 | 코드 위치 | `crates/adapters/src/admission.rs`(`AdmittingListener`, `Admitted`), `crates/adapters/src/tls_listener.rs`(`TlsListener`, `TlsIo`, `Handshake`, `Recorded`, `offers_no_tls12`), `crates/adapters/src/request_deadline.rs`(`DeadlineListener`, `Deadlined`), `crates/adapters/src/management_http.rs`(`ManagementListener`, `PeerAddr`, `answer`, `static_answer`, `static_file`), `crates/adapters/src/management_http/session_api.rs`(`answer`), `crates/adapters/src/status_http.rs`(`StatusListener`), `crates/adapters/src/dashboard_assets.rs`(`Asset`, `ASSETS`, `find_asset`), `crates/adapters/src/config_file.rs`(`read_management`), `crates/app/src/events.rs`(`Stage::Tls`, `RejectReason::TlsVersionUnsupported`), `crates/app/src/settings.rs`(`Settings::management_listener`, `Settings::other_listeners`), `src/serve.rs`(`listen_until_shutdown`, `stop_task`) |
 | 코드 지도 | [코드 지도 2절](code-map.md#2-코드-위치와-구성요소), [3절](code-map.md#3-진입점) |
 | 관련 스펙 | [운영 스펙 2절](../specs/operations.md#2-상태와-검증-매개변수)의 OPS-014, OPS-034, OPS-033(일부: 관리 연결), OPS-004(일부: 관리 연결을 L에 세지 않음), OPS-036, OPS-006(일부: 관리 TLS 협상과 첫 요청 머리의 U, 사용자 결정 2026-10-21 Q12), [관리 스펙 7절](../specs/management.md#7-수용-테스트)의 MGT-015(4.4 완료 조건으로 옮김, 사용자 결정 2026-10-21 Q14), [대시보드 스펙 7절](../specs/dashboard.md#7-수용-테스트)의 DASH-014(일부: 세션 없이 `/app/` 파일을 직접 요청하면 로그인 화면으로 보낸다. 상세 화면 행동은 작업 4.10·4.11) |
@@ -31,7 +31,7 @@
 - 맡지 않는 책임:
   - 로그인 처리와 관리 세션 발급(작업 4.3, [관리 로그인과 세션 설계](management-session.md)).
   - 관리 세션 검사·CSRF 검사·유휴 만료(작업 4.3, [관리 로그인과 세션 설계](management-session.md)).
-  - 조회 API 처리(작업 4.4), 종료 API 처리(작업 4.5).
+  - 중계 조회·종료의 업무 처리([관리 조회](management-query.md), [관리자 종료](management-terminate.md)), 설정 파일 조회·편집의 업무 처리([설정 보기·편집](config-edit.md)). 리스너는 서비스 주입과 인증 뒤 HTTP 분기만 연결한다.
   - 관리 리스너의 연결 기록 `connection_accepted`. ops-info-v1 §1.5가 관리 리스너에 이 사건을 정하지 않는다.
   - TLS 핸드셰이크 실패 가운데 버전 거절이 아닌 것(인증서 오류, 클라이언트 중단). 9절 6번(Q13).
 - 다른 모듈에 공개하는 기능:
@@ -68,20 +68,21 @@ flowchart LR
 | `crates/adapters/src/management_http.rs` `answer` | fallback 라우터. 4절 순서로 응답을 고른다. `/api/v1/` 요청은 `management_http/session_api.rs`의 `answer`로 넘긴다. 정적 경로(`/`·`/login/`·`/app/`)는 `static_answer`로 넘긴다. 그 밖의 경로는 303이다. | `ManagementListener::run`이 만든다 | axum, serde_json |
 | `crates/adapters/src/management_http.rs` `static_answer`, `static_file` | 정적 경로 응답을 만든다(4절 6–8단계). 메서드를 검사하고, `/`·`/app/`은 세션을 읽기만 확인한 뒤 `dashboard_assets.rs` 표에서 파일을 찾는다. 파일 응답에 헤더를 붙인다. | `answer`가 정적 경로일 때 부른다 | axum, app(`AdminAuth::authorize`), `dashboard_assets.rs` |
 | `crates/adapters/src/management_http.rs` `PeerAddr` | 접속의 상대 소켓 주소를 `PeerIp`로 바꾼다(IPv4 매핑 IPv6는 IPv4로). 로그인 제한 키와 로그 `peer_ip`가 같은 값을 쓴다. `axum::extract::connect_info::Connected`를 구현한다. | `ManagementListener::run`이 `into_make_service_with_connect_info::<PeerAddr>()`로 만든다 | domain(`PeerIp`), axum |
-| `crates/adapters/src/management_http/session_api.rs` `answer` | `/api/v1/` 요청을 맡는다. `POST /api/v1/session`은 로그인(`login`)이다. 그 밖은 세션 검사 → CSRF → 경로 → 메서드 순으로 검사한다. 4.4·4.5 경로는 아직 없어 인증 뒤 `404 not_found`다(관리 로그인과 세션 설계 9절 카). | `management_http.rs` `answer`가 `/api/v1/`일 때 부른다 | axum, app(`AdminAuth`) |
+| `crates/adapters/src/management_http/session_api.rs` `answer` | `/api/v1/`의 인증 경계다. 로그인 이외는 세션→POST/PATCH/DELETE CSRF→경로/메서드 순으로 검사한 뒤 session/config/terminate/query handler로 전달한다. | `management_http.rs` `answer`가 호출 | axum, app `AdminAuth` |
+| `crates/adapters/src/management_http/config_api.rs` `answer`, `patch_body`, `view_body`, `edit_error` | 설정 GET/PATCH 본문·64 KiB 상한·오류 직렬화·blocking 서비스 호출을 맡는다. 성공한 사용자 행동만 세션 유휴 기한을 연장한다. | 인증/CSRF 이후 요청마다 | app `ConfigManagement`, axum, serde_json |
 | `crates/adapters/src/status_http.rs` `StatusListener` | 상태 리스너. 이 문서가 옮긴 `AdmittingListener`를 `status` 이름으로 쓴다. | `serve`가 상태 리스너를 바인드한 직후 띄운다. | `admission` 모듈 |
 | `crates/adapters/src/dashboard_assets.rs` `Asset`, `ASSETS`, `find_asset` | 정적 파일 표. 한 항목은 제공 경로, Content-Type, `include_bytes!`로 넣은 본문을 가진다. `find_asset`은 요청 경로와 정확히 같은 항목만 찾는다. `preview/`·`tests/`는 넣지 않는다. | 빌드 때 상수로 실행 파일에 들어간다 | 없음(std) |
 | `crates/app/src/events.rs` `Stage::Tls`, `RejectReason::TlsVersionUnsupported` | `connection_rejected`의 `stage` 값 `tls`와 `reason` 값 `tls_version_unsupported` | 사건이 생길 때 | 없음 |
 | `crates/adapters/src/config_file.rs` `read_management` | 평문 HTTP 주소가 루프백이 아니면 `config_plaintext_management_not_loopback` 설정 오류를 낸다. 관리 리스너는 이 검사를 다시 하지 않는다. | 설정 읽기 때 | 없음 |
 | `crates/app/src/settings.rs` `Settings::management_listener`, `Settings::other_listeners` | `management_listener`는 관리 리스너 바인드 계획(이름 `management`, 키 `management.listen`)을 만든다. `other_listeners`는 관리 리스너를 넣지 않는다. | `serve`가 바인드 전에 부른다 | 없음 |
-| `src/serve.rs` `listen_until_shutdown` | 관리 리스너를 바인드하고, 준비됨 뒤 띄우고, 종료 때 진입점 정리 뒤에 멈춘다. 관리 TLS acceptor를 `ManagementListener`에 넘긴다. WSS용 `wss_tls`는 `take()`로 꺼내 `WsEntryPoint`에 넘긴다(작업 3.2). | serve 실행마다 | adapters, app, domain, tokio |
+| `src/serve.rs` `listen_until_shutdown`, `config_management` | 같은 `SharedReload`를 watcher와 `ConfigEditService`에 주입하고 관리 서비스를 조립한다. WSS·관리 TLS는 실행 스냅샷을 읽는 `TlsSource`로 전달한다. 종료 유예 뒤 관리 작업을 멈춘다. | serve 실행마다 | adapters, app, domain, tokio |
 
 ## 3. 데이터 모델
 
 | 이름 | 필드·형태 | 저장 위치 | 제약과 항상 지켜야 할 조건 |
 | --- | --- | --- | --- |
-| `ManagementListener` | `listener: TcpListener`, `tls: Option<TlsAcceptor>`, `admin_budget: Arc<ConnectionBudget>`, `tls_upgrade: Duration`(U) | 메모리, `run`이 소비 | `tls`가 `Some`이면 HTTPS, `None`이면 평문. 두 값 중 하나만 쓴다. `tls_upgrade`는 설정 `[timeouts] tls_upgrade_secs`다. |
-| `TlsListener<L>` | `inner: L`, `acceptor: TlsAcceptor`, `log: Arc<dyn EventSink>`, `name: &'static str` | 메모리 | `L::Addr`는 `SocketAddr`여야 한다. 거절 기록에 상대 IP를 쓴다. |
+| `ManagementListener` | listener, `tls: Option<TlsSource>`, admin budget, `Arc<dyn RuntimeSettingsSource>`, services, dashboard hints | 메모리, `run`이 소비 | TLS 존재 여부는 시작 때 정한다. 수락 시 Lm·U를 같은 runtime 세대에서 읽는다. |
+| `TlsListener<L>` | inner, `TlsSource`, log, listener name | 메모리 | 새 TLS 협상은 현재 스냅샷의 수락기를 쓴다. 진행 중인 협상의 수락기는 유지한다. |
 | `TlsIo<IO>` | `Handshaking(Handshake<IO>)`, `Established(TlsStream<Recorded<IO>>)`, `Failed(HandshakeFailure)` | 접속 하나의 `Io`값 | 상태는 앞으로만 간다: `Handshaking` → `Established` 또는 `Failed`. `Failed`에서는 되돌아가지 않는다. |
 | `Handshake<IO>` | `accept: Accept<Recorded<IO>>`, `capture: Capture`, `peer: PeerIp`, `log: Arc<dyn EventSink>`, `name: &'static str` | `TlsIo::Handshaking` 안 | 핸드셰이크가 끝나면 `Accept`를 버린다. 버전 거절을 기록할 때 `peer`를 쓴다. |
 | `Recorded<IO>` | `io: IO`, `capture: Capture`(`Arc<Mutex<Option<Vec<u8>>>>`) | 접속 하나. `Accept`가 읽는 `Io`를 감싼다 | 핸드셰이크 동안 읽은 바이트를 `capture`에 복사한다(최대 `CAPTURE_LIMIT` = 5 + 16 384 바이트). 핸드셰이크가 끝나면 `capture`를 `None`으로 바꾼다. |
@@ -99,7 +100,7 @@ flowchart LR
 | 2 | `tls_listener.rs` `TlsListener::accept` | 평문이면 이 단계를 건너뛴다(`tls` = `None`일 때 `serve`가 `TlsListener`를 만들지 않는다). HTTPS면 `TlsIo::Handshaking`을 만든다. 핸드셰이크는 하지 않는다. | `TlsIo` 상태 `Handshaking` | 없음 |
 | 3 | `tls_listener.rs` `TlsIo::poll_handshake` | `poll_read`·`poll_write`·`poll_flush`가 먼저 부른다. 핸드셰이크를 진행한다. 성공하면 `Established`로 바꾸고 캡처를 `None`으로 바꾼다. 실패하면 캡처한 ClientHello 바이트(레코드 한 개 분)로 버전을 판정한다. `supported_versions`가 있으면 그 목록에 TLS 1.2 이상이 없을 때, 없으면 `legacy_version`이 TLS 1.2 미만일 때 버전 거절이다. 버전 거절이면 기록을 먼저 쓴다. 그다음 `Failed`로 바꾸고 `io::Error`를 돌려준다. | `TlsIo` 상태 `Established` 또는 `Failed` | 버전 거절: `connection_rejected`(`listener` = `management`, `stage` = `tls`, `reason` = `tls_version_unsupported`). 그 밖의 실패: 기록 없음(사용자 결정 Q13). |
 | 4 | `request_deadline.rs` `Deadlined::poll_read`·`poll_write`·`poll_flush` | 읽기·쓰기 전에 타이머를 먼저 본다. 기한이 지났으면 `TimedOut`을 돌려준다. 첫 요청 머리가 끝나기 전에는 절대 기한(수락 + U)이다. 끝난 뒤 바이트가 오가면 U를 다시 건다. 2·3단계의 TLS 핸드셰이크도 이 안에서 진행된다. | 타이머, `head_done`, `window` | 기한이 지나면 axum이 접속을 닫는다(6절). 머리가 끝나면 axum이 요청을 5단계(`answer`)로 넘긴다. |
-| 5 | `management_http.rs` `answer` 1단계 | 경로가 `/api/v1/`로 시작하면 `management_http/session_api.rs` `answer`로 넘긴다. 그 안에서 `POST /api/v1/session`은 세션을 보지 않고 로그인한다. 그 밖의 `/api/v1/` 요청은 세션을 먼저 본다. 세션이 없으면 경로·메서드와 관계없이 `401`이고, 요청에 `relay_admin_session` 쿠키가 있었으면 지우기 `Set-Cookie`를 붙인다. 세션이 있으면 CSRF(`POST`·`DELETE`) → 경로 → 메서드 순으로 검사한다(관리 로그인과 세션 설계 4절, 관리 API 계약 1.3절). | 없음 | 응답(`WWW-Authenticate`, `Cache-Control: no-store`). 로그인과 세션의 응답 본문·상태 코드는 관리 로그인과 세션 설계 4·6절 |
+| 5 | `management_http.rs` `answer`, `session_api::answer` | `/api/v1/`이면 로그인만 세션 검사 없이 처리한다. 나머지는 세션→CSRF(`POST`·`PATCH`·`DELETE`)→경로→메서드 순이다. 설정 경로는 `config_api::answer`에 전달하며 허용 메서드는 GET/PATCH다. 세션 실패는 경로·편집 허용·진단보다 먼저 401과 필요 시 쿠키 삭제를 반환한다. | 성공한 사용자 행동만 유휴 기한 연장 | `WWW-Authenticate`, `Cache-Control: no-store`와 각 handler 응답 |
 | 6 | `management_http.rs` `answer` 2단계, `static_answer` | 경로가 `/`, `/login/`, `/app/`로 시작하면(정적 경로) 메서드가 `GET`·`HEAD`가 아닐 때 `405`(`Allow: GET, HEAD`, `invalid_request` 본문). 세션은 보지 않는다. | 없음 | 응답 |
 | 7 | `static_answer` 3단계 | 경로가 `/`이거나 `/app/`로 시작하면(보호 경로) `AdminAuth::authorize`로 세션을 읽기만 확인한다. 세션이 없으면 `303`, `Location: /login/`, 본문 없음. 쿠키는 지우지 않고 유휴 기한은 늘리지 않는다(계약 1.4.2절). | 없음 | 응답 |
 | 8 | `static_answer` 4단계, `dashboard_assets.rs` `find_asset` | 표에서 요청 경로와 정확히 같은 항목을 찾는다. 있으면 `200`: GET은 본문, HEAD는 본문 없이 같은 `Content-Length`. 헤더는 파일 응답 규칙(`Content-Type`, `Cache-Control`, 보안 헤더)을 따른다. 없으면 `404` `not_found` 본문(9절 13번). 세션이 있는 `/`도 항목이 없으면 `404`다(9절 12번). | 없음 | 응답 |
@@ -113,7 +114,7 @@ Q25 예외(Current, TODO 4.5): 5단계에서 검증·수락된 terminate 요청�
 
 - 관리 리스너는 바인드 뒤 `serve`가 준비됨 전환과 `server_ready` 기록을 마친 뒤 접속을 받는다. 상태 리스너처럼 준비 전 응답은 없다.
 - Lm 사용량은 접속마다 하나씩 늘고 접속이 끝나면 줄어든다. 관리 연결과 상태 연결이 같은 예산을 쓴다.
-- 관리 TLS acceptor는 `serve` 시작 단계에서 검사하고 만든다(`tls.md` 7절). 핸드셰이크 중 인증서를 다시 읽지 않는다. 설정 변경은 재시작으로 반영한다(설정 계약 1.2절).
+- 관리 TLS는 시작 단계에서 검사하고 `TlsSource`를 만든다. 유효한 TLS 경로·내용 변경은 원자 교체된 스냅샷을 통해 새 핸드셰이크부터 사용한다. HTTP/HTTPS 전환은 여전히 재시작 필요다. 협상 중 파일을 직접 다시 읽지 않는다.
 - 종료 요청을 받으면 신규 중계 접속을 멈추고 종료 유예 G를 시작한다. `serve`의 `begin_relay_shutdown`이 `shutdown_started`를 기록한다. 유예 중 관리 처리는 유지한다. 중계 정리 뒤 관리 리스너 작업을 멈춘다([중계 수명 설계 5.2절](relay-session.md#52-정상-종료와-g), 작업 5.3 완료).
 
 ## 6. 오류 처리

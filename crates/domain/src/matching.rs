@@ -144,41 +144,39 @@ impl fmt::Display for MatchingError {
 
 impl std::error::Error for MatchingError {}
 
+/// Current registration policy. Existing waiters retain their own deadline.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RegistrationPolicy {
+    pub waiting_limit: usize,
+    pub wait_timeout: Duration,
+}
+
 /// Exact-ID waiting and occupancy state, with no sockets or permit ownership.
 ///
 /// See relay.md RLY-010 through RLY-016 and operations.md OPS-005. The caller
 /// serializes every mutation with its app resource changes. A connection index
 /// rejects double dispatch across IDs in every phase. The count is metadata, not
 /// a second budget: hold exactly one Lw permit per Waiting entry before unlocking.
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct WaitingTable {
     entries: HashMap<RelayId, IdOccupancy>,
     connections: HashSet<ConnId>,
     waiting_count: usize,
-    waiting_limit: usize,
-    wait_timeout: Duration,
 }
 
 impl WaitingTable {
-    /// Creates an empty table with configured Lw and W (config-v3 §1.2).
-    pub fn new(waiting_limit: usize, wait_timeout: Duration) -> Self {
+    /// Creates an empty table. Each arrival supplies its current Lw and W.
+    pub fn new() -> Self {
         Self {
             entries: HashMap::new(),
             connections: HashSet::new(),
             waiting_count: 0,
-            waiting_limit,
-            wait_timeout,
         }
     }
 
     /// Returns the number of Waiting entries, excluding all claimed sessions.
     pub fn waiting_count(&self) -> usize {
         self.waiting_count
-    }
-
-    /// Returns the configured Lw metadata limit (config-v3 §1.2).
-    pub fn waiting_limit(&self) -> usize {
-        self.waiting_limit
     }
 
     /// Borrows occupancy for the exact original ID, without normalization.
@@ -216,6 +214,7 @@ impl WaitingTable {
         role: Role,
         conn_id: ConnId,
         now: Duration,
+        policy: RegistrationPolicy,
     ) -> ArrivalOutcome {
         if self.connections.contains(&conn_id) {
             return ArrivalOutcome::Rejected(MatchingError::ConnectionOccupied);
@@ -249,14 +248,14 @@ impl WaitingTable {
             self.waiting_count -= 1;
             return ArrivalOutcome::Claimed(claim);
         }
-        if self.waiting_count >= self.waiting_limit {
+        if self.waiting_count >= policy.waiting_limit {
             return ArrivalOutcome::Rejected(MatchingError::WaitingFull);
         }
         let waiter = WaitingEntry {
             conn_id,
             role,
             registered_at: now,
-            deadline: now.saturating_add(self.wait_timeout),
+            deadline: now.saturating_add(policy.wait_timeout),
         };
         self.entries
             .insert(relay_id.clone(), IdOccupancy::Waiting(waiter));
@@ -404,8 +403,72 @@ mod tests {
         Duration::from_secs(seconds)
     }
 
-    fn table(limit: usize) -> WaitingTable {
-        WaitingTable::new(limit, at(10))
+    /// spec: operations.md:OPS-054 partial
+    /// spec: operations.md:OPS-055 partial
+    /// spec: operations.md:OPS-056 partial
+    #[test]
+    fn registration_policy_changes_preserve_existing_deadlines() {
+        let mut table = WaitingTable::new();
+        let old_policy = RegistrationPolicy {
+            waiting_limit: 3,
+            wait_timeout: at(20),
+        };
+        let new_policy = RegistrationPolicy {
+            waiting_limit: 1,
+            wait_timeout: at(2),
+        };
+        let first_id = id("1");
+        let second_id = id("2");
+        let third_id = id("3");
+        let ArrivalOutcome::Waiting(first) =
+            table.arrive(&first_id, Role::Server, ConnId::next(), at(1), old_policy)
+        else {
+            panic!("first waiter");
+        };
+        let ArrivalOutcome::Waiting(second) =
+            table.arrive(&second_id, Role::Server, ConnId::next(), at(1), old_policy)
+        else {
+            panic!("second waiter");
+        };
+        assert_eq!(
+            table.arrive(&third_id, Role::Server, ConnId::next(), at(5), new_policy),
+            ArrivalOutcome::Rejected(MatchingError::WaitingFull)
+        );
+        assert_eq!(table.get(&first_id), Some(&IdOccupancy::Waiting(first)));
+        assert_eq!(table.get(&second_id), Some(&IdOccupancy::Waiting(second)));
+        assert_eq!(table.expire(&first_id, first.conn_id, at(5)), None);
+        let ArrivalOutcome::Claimed(claim) =
+            table.arrive(&first_id, Role::Viewer, ConnId::next(), at(6), new_policy)
+        else {
+            panic!("old waiter remains matchable above new limit");
+        };
+        assert_eq!(claim.waiter.deadline, at(21));
+        assert_eq!(
+            table.arrive(&third_id, Role::Server, ConnId::next(), at(6), new_policy),
+            ArrivalOutcome::Rejected(MatchingError::WaitingFull)
+        );
+        assert_eq!(table.observe_eof(&second_id, second.conn_id), Some(second));
+        let ArrivalOutcome::Waiting(fresh) =
+            table.arrive(&third_id, Role::Server, ConnId::next(), at(7), new_policy)
+        else {
+            panic!("below new limit");
+        };
+        assert_eq!(fresh.deadline, at(9));
+        assert_eq!(table.expire(&third_id, fresh.conn_id, at(9)), Some(fresh));
+        let raised = RegistrationPolicy {
+            waiting_limit: 4,
+            wait_timeout: at(30),
+        };
+        let ArrivalOutcome::Waiting(fresh) =
+            table.arrive(&third_id, Role::Server, ConnId::next(), at(10), raised)
+        else {
+            panic!("raised policy");
+        };
+        assert_eq!(fresh.deadline, at(40));
+    }
+
+    fn table() -> WaitingTable {
+        WaitingTable::new()
     }
 
     fn register(
@@ -415,7 +478,16 @@ mod tests {
         conn: ConnId,
         now: Duration,
     ) -> WaitingEntry {
-        match table.arrive(id, role, conn, now) {
+        match table.arrive(
+            id,
+            role,
+            conn,
+            now,
+            RegistrationPolicy {
+                waiting_limit: 8,
+                wait_timeout: at(10),
+            },
+        ) {
             ArrivalOutcome::Waiting(waiter) => waiter,
             outcome => panic!("unexpected registration: {outcome:?}"),
         }
@@ -428,7 +500,16 @@ mod tests {
             Role::Viewer => Role::Server,
             Role::Server => Role::Viewer,
         };
-        match table.arrive(id, second_role, ConnId::next(), at(2)) {
+        match table.arrive(
+            id,
+            second_role,
+            ConnId::next(),
+            at(2),
+            RegistrationPolicy {
+                waiting_limit: 1,
+                wait_timeout: at(10),
+            },
+        ) {
             ArrivalOutcome::Claimed(claim) => claim,
             outcome => panic!("unexpected matching: {outcome:?}"),
         }
@@ -447,7 +528,7 @@ mod tests {
     }
 
     fn matches_both_roles(first_role: Role) {
-        let mut table = table(1);
+        let mut table = table();
         let id = id("0123");
         let claim = claim(&mut table, &id, first_role);
         assert_ne!(claim.viewer_conn_id, claim.server_conn_id);
@@ -471,7 +552,7 @@ mod tests {
     /// spec: relay.md:RLY-012 partial
     #[test]
     fn keeps_roles_and_exact_ids_separate() {
-        let mut table = table(8);
+        let mut table = table();
         let long_a = "0".repeat(RelayId::MAX_LEN);
         let long_b = format!("{}1", "0".repeat(RelayId::MAX_LEN - 1));
         let ids = [id("0123"), id("123"), id(&long_a), id(&long_b)];
@@ -488,15 +569,32 @@ mod tests {
         assert_eq!(table.waiting_count(), 4);
         for (id, waiter) in ids.iter().zip(&waiters) {
             assert_eq!(
-                table.arrive(id, Role::Server, ConnId::next(), at(2)),
+                table.arrive(
+                    id,
+                    Role::Server,
+                    ConnId::next(),
+                    at(2),
+                    RegistrationPolicy {
+                        waiting_limit: 1,
+                        wait_timeout: at(10)
+                    }
+                ),
                 ArrivalOutcome::Rejected(MatchingError::DuplicateId)
             );
             assert_eq!(table.get(id), Some(&IdOccupancy::Waiting(*waiter)));
         }
         for (id, waiter) in ids.iter().zip(waiters) {
             let viewer = ConnId::next();
-            let ArrivalOutcome::Claimed(claim) = table.arrive(id, Role::Viewer, viewer, at(3))
-            else {
+            let ArrivalOutcome::Claimed(claim) = table.arrive(
+                id,
+                Role::Viewer,
+                viewer,
+                at(3),
+                RegistrationPolicy {
+                    waiting_limit: 1,
+                    wait_timeout: at(10),
+                },
+            ) else {
                 panic!("different IDs must keep their own waiter");
             };
             assert_eq!(claim.viewer_conn_id, viewer);
@@ -510,12 +608,21 @@ mod tests {
     #[test]
     fn preserves_the_existing_waiter_for_late_same_role_duplicates() {
         for role in [Role::Viewer, Role::Server] {
-            let mut table = table(1);
+            let mut table = table();
             let id = id("1");
             let waiter = register(&mut table, &id, role, ConnId::next(), at(1));
             for now in [at(2), at(5), at(10)] {
                 assert_eq!(
-                    table.arrive(&id, role, ConnId::next(), now),
+                    table.arrive(
+                        &id,
+                        role,
+                        ConnId::next(),
+                        now,
+                        RegistrationPolicy {
+                            waiting_limit: 1,
+                            wait_timeout: at(10)
+                        }
+                    ),
                     ArrivalOutcome::Rejected(MatchingError::DuplicateId)
                 );
                 assert_eq!(table.get(&id), Some(&IdOccupancy::Waiting(waiter)));
@@ -528,20 +635,35 @@ mod tests {
     /// spec: relay.md:RLY-013 partial
     #[test]
     fn rejects_new_waiting_at_capacity_but_allows_an_immediate_match() {
-        let mut table = table(1);
+        let mut table = table();
         let first_id = id("1");
         let second_id = id("2");
         let waiter = register(&mut table, &first_id, Role::Server, ConnId::next(), at(1));
-        assert_eq!(table.waiting_limit(), 1);
         assert_eq!(
-            table.arrive(&second_id, Role::Viewer, ConnId::next(), at(2)),
+            table.arrive(
+                &second_id,
+                Role::Viewer,
+                ConnId::next(),
+                at(2),
+                RegistrationPolicy {
+                    waiting_limit: 1,
+                    wait_timeout: at(10)
+                }
+            ),
             ArrivalOutcome::Rejected(MatchingError::WaitingFull)
         );
         assert_eq!(table.get(&second_id), None);
         assert_eq!(table.waiting_count(), 1);
-        let ArrivalOutcome::Claimed(claim) =
-            table.arrive(&first_id, Role::Viewer, ConnId::next(), at(2))
-        else {
+        let ArrivalOutcome::Claimed(claim) = table.arrive(
+            &first_id,
+            Role::Viewer,
+            ConnId::next(),
+            at(2),
+            RegistrationPolicy {
+                waiting_limit: 1,
+                wait_timeout: at(10),
+            },
+        ) else {
             panic!("a match does not need an extra Lw place");
         };
         assert_eq!(claim.waiter, waiter);
@@ -555,13 +677,22 @@ mod tests {
     fn expires_at_the_absolute_w_boundary_before_processing_arrival() {
         for arrival_time in [at(11), at(12)] {
             for role in [Role::Viewer, Role::Server] {
-                let mut table = table(1);
+                let mut table = table();
                 let id = id("1");
                 let old = register(&mut table, &id, Role::Server, ConnId::next(), at(1));
                 let incoming = ConnId::next();
                 assert_eq!(table.expire(&id, old.conn_id, at(10)), None);
                 assert_eq!(
-                    table.arrive(&id, role, incoming, arrival_time),
+                    table.arrive(
+                        &id,
+                        role,
+                        incoming,
+                        arrival_time,
+                        RegistrationPolicy {
+                            waiting_limit: 1,
+                            wait_timeout: at(10)
+                        }
+                    ),
                     ArrivalOutcome::Expired(old)
                 );
                 assert_eq!(table.get(&id), None);
@@ -573,7 +704,7 @@ mod tests {
                 assert_eq!(table.get(&id), Some(&IdOccupancy::Waiting(fresh)));
             }
         }
-        let mut table = table(1);
+        let mut table = table();
         let id = id("2");
         let waiter = register(&mut table, &id, Role::Viewer, ConnId::next(), at(1));
         assert_eq!(table.expire(&id, waiter.conn_id, at(11)), Some(waiter));
@@ -584,13 +715,20 @@ mod tests {
     /// spec: relay.md:RLY-014 partial
     #[test]
     fn matches_just_before_w_without_restarting_the_deadline() {
-        let mut table = table(1);
+        let mut table = table();
         let id = id("1");
         let waiter = register(&mut table, &id, Role::Viewer, ConnId::next(), at(1));
         let before = at(11) - Duration::from_nanos(1);
-        let ArrivalOutcome::Claimed(claim) =
-            table.arrive(&id, Role::Server, ConnId::next(), before)
-        else {
+        let ArrivalOutcome::Claimed(claim) = table.arrive(
+            &id,
+            Role::Server,
+            ConnId::next(),
+            before,
+            RegistrationPolicy {
+                waiting_limit: 1,
+                wait_timeout: at(10),
+            },
+        ) else {
             panic!("the waiter is still valid");
         };
         assert_eq!(claim.waiter, waiter);
@@ -603,7 +741,7 @@ mod tests {
     #[test]
     fn orders_observed_eof_and_claiming_without_inferring_remote_fin() {
         let id = id("1");
-        let mut eof_first = table(1);
+        let mut eof_first = table();
         let old = register(&mut eof_first, &id, Role::Server, ConnId::next(), at(1));
         assert_eq!(eof_first.observe_eof(&id, ConnId::next()), None);
         assert_eq!(eof_first.observe_eof(&id, old.conn_id), Some(old));
@@ -612,7 +750,7 @@ mod tests {
         assert_eq!(eof_first.observe_eof(&id, old.conn_id), None);
         assert_eq!(eof_first.get(&id), Some(&IdOccupancy::Waiting(fresh)));
 
-        let mut match_first = table(1);
+        let mut match_first = table();
         let claim = claim(&mut match_first, &id, Role::Server);
         assert_eq!(match_first.observe_eof(&id, claim.waiter.conn_id), None);
         assert!(match_first.cancel_claim(&id, &claim));
@@ -629,7 +767,7 @@ mod tests {
     /// spec: relay.md:RLY-015 partial
     #[test]
     fn claims_each_connection_once_and_blocks_both_roles_until_cleanup() {
-        let mut table = table(2);
+        let mut table = table();
         let id = id("1");
         let claim = claim(&mut table, &id, Role::Server);
         let session_id = SessionId::from_block([1; 16]);
@@ -637,7 +775,16 @@ mod tests {
             for role in [Role::Viewer, Role::Server] {
                 for _ in 0..4 {
                     assert_eq!(
-                        table.arrive(&id, role, ConnId::next(), at(3)),
+                        table.arrive(
+                            &id,
+                            role,
+                            ConnId::next(),
+                            at(3),
+                            RegistrationPolicy {
+                                waiting_limit: 1,
+                                wait_timeout: at(10)
+                            }
+                        ),
                         ArrivalOutcome::Rejected(MatchingError::DuplicateId)
                     );
                 }
@@ -669,12 +816,21 @@ mod tests {
     /// spec: relay.md:RLY-013 partial
     #[test]
     fn never_pairs_a_connection_with_itself() {
-        let mut table = table(1);
+        let mut table = table();
         let id = id("1");
         let conn_id = ConnId::next();
         let waiter = register(&mut table, &id, Role::Viewer, conn_id, at(1));
         assert_eq!(
-            table.arrive(&id, Role::Server, conn_id, at(2)),
+            table.arrive(
+                &id,
+                Role::Server,
+                conn_id,
+                at(2),
+                RegistrationPolicy {
+                    waiting_limit: 1,
+                    wait_timeout: at(10)
+                }
+            ),
             ArrivalOutcome::Rejected(MatchingError::ConnectionOccupied)
         );
         assert_eq!(table.get(&id), Some(&IdOccupancy::Waiting(waiter)));
@@ -683,7 +839,7 @@ mod tests {
     /// spec: relay.md:RLY-016 partial
     #[test]
     fn rejects_stale_activation_and_cleanup_after_same_id_reuse() {
-        let mut table = table(2);
+        let mut table = table();
         let id = id("1");
         let old_claim = claim(&mut table, &id, Role::Viewer);
         let old_session = SessionId::from_block([1; 16]);
@@ -706,9 +862,16 @@ mod tests {
             table.activate(&id, &old_claim, old_session.clone()),
             Err(MatchingError::InvalidClaim)
         );
-        let ArrivalOutcome::Claimed(fresh_claim) =
-            table.arrive(&id, Role::Viewer, ConnId::next(), at(2))
-        else {
+        let ArrivalOutcome::Claimed(fresh_claim) = table.arrive(
+            &id,
+            Role::Viewer,
+            ConnId::next(),
+            at(2),
+            RegistrationPolicy {
+                waiting_limit: 1,
+                wait_timeout: at(10),
+            },
+        ) else {
             panic!("fresh pair must match");
         };
         assert_eq!(
@@ -742,7 +905,7 @@ mod tests {
     /// spec: relay.md:RLY-016 partial
     #[test]
     fn verifies_both_role_ordered_connection_ids_when_activating() {
-        let mut table = table(1);
+        let mut table = table();
         let id = id("1");
         let claim = claim(&mut table, &id, Role::Server);
         for wrong in [
@@ -776,14 +939,23 @@ mod tests {
     /// spec: relay.md:RLY-013 partial
     #[test]
     fn rejects_double_dispatch_across_ids_in_every_occupied_phase() {
-        let mut table = table(3);
+        let mut table = table();
         let first_id = id("1");
         let other_id = id("2");
         let first = ConnId::next();
         let waiter = register(&mut table, &first_id, Role::Viewer, first, at(1));
         for role in [Role::Viewer, Role::Server] {
             assert_eq!(
-                table.arrive(&other_id, role, first, at(100)),
+                table.arrive(
+                    &other_id,
+                    role,
+                    first,
+                    at(100),
+                    RegistrationPolicy {
+                        waiting_limit: 1,
+                        wait_timeout: at(10)
+                    }
+                ),
                 ArrivalOutcome::Rejected(MatchingError::ConnectionOccupied)
             );
         }
@@ -792,8 +964,16 @@ mod tests {
         assert_eq!(table.waiting_count(), 1);
         assert_eq!(table.connections.len(), 1);
         let second = ConnId::next();
-        let ArrivalOutcome::Claimed(claim) = table.arrive(&first_id, Role::Server, second, at(2))
-        else {
+        let ArrivalOutcome::Claimed(claim) = table.arrive(
+            &first_id,
+            Role::Server,
+            second,
+            at(2),
+            RegistrationPolicy {
+                waiting_limit: 1,
+                wait_timeout: at(10),
+            },
+        ) else {
             panic!("a different connection must match");
         };
         let session_id = SessionId::from_block([3; 16]);
@@ -801,7 +981,16 @@ mod tests {
             for conn_id in [first, second] {
                 for role in [Role::Viewer, Role::Server] {
                     assert_eq!(
-                        table.arrive(&other_id, role, conn_id, at(3)),
+                        table.arrive(
+                            &other_id,
+                            role,
+                            conn_id,
+                            at(3),
+                            RegistrationPolicy {
+                                waiting_limit: 1,
+                                wait_timeout: at(10)
+                            }
+                        ),
                         ArrivalOutcome::Rejected(MatchingError::ConnectionOccupied)
                     );
                 }
@@ -824,7 +1013,7 @@ mod tests {
     /// spec: relay.md:RLY-014 partial
     #[test]
     fn removes_only_live_connection_index_entries_on_waiting_and_claim_cleanup() {
-        let mut table = table(3);
+        let mut table = table();
         let first_id = id("1");
         let second_id = id("2");
         let first = register(&mut table, &first_id, Role::Viewer, ConnId::next(), at(1));

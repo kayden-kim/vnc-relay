@@ -1,8 +1,8 @@
 # 관리 조회 API 모듈 설계
 
-## 작업 6.2~6.3 목표 경계 (Target / Active)
+## 설정 조회 분리와 동적 상한 (Current / Active)
 
-설정 GET은 [ConfigEditService](config-edit.md#3-데이터-모델과-get)가 맡으며 relay registry를 복사하는 이 서비스에 파일 I/O를 넣지 않는다. L/Lm 상한은 budget.limit가 아니라 [runtime snapshot](connection-limits.md#10-target--동적-상한과-시간-제한)에서 같은 세대로 읽는다. 사용량의 기존 원자 계수와 counts의 약한 일관성 예외는 유지한다. 현재 query 조립은 `src/serve.rs:331-336`이다. Target은 같은 사용량 budget과 runtime source를 준다([설정 §1.8 L/Lm](../contracts/config-v3.md#18-재로드-구분), [관리 MGT-R17·R19](../specs/management.md#33-설정-보기와-동적-설정-편집)). 기존 Current/Verified는 이 Target을 포함하지 않는다.
+설정 GET은 [ConfigEditService](config-edit.md#3-데이터-모델과-get)가 맡는다. 중계 registry를 복사하는 `ManagementQueryService`에는 파일 I/O를 넣지 않는다. `ManagementQueryService.settings: Arc<dyn RuntimeSettingsSource>`를 `src/serve.rs`에서 같은 `ReloadCell`로 주입하고 `summary`가 `with_current` 한 번으로 L/Lm을 같은 세대에서 읽는다. budget은 사용량의 원자 계수만 제공한다. counts와 사용량의 약한 일관성 예외는 유지한다([동적 상한 설계](connection-limits.md), [설정 §1.8 L/Lm](../contracts/config-v3.md#18-재로드-구분), [관리 MGT-R17·R19](../specs/management.md#33-설정-보기와-동적-설정-편집)).
 
 관리 리스너(`[management] listen`)에서 인증된 관리자에게 서버 요약, 대기 연결 목록, 활성 세션 목록·상세, 최근 종료 목록을 제공하는 조회 API의 구조와 데이터 흐름을 정의한다. 중계 상태는 메모리 락 안에서 복사하고, 인증·HTTP 직렬화·소켓 I/O는 그 락 밖에서 처리한다.
 
@@ -10,7 +10,7 @@
 | --- | --- |
 | 구조 시점 | Current |
 | 문서 상태 | Draft |
-| 구현 대조 | Verified — 커밋 `ec05fd1`의 조회 API 구조와 [작업 4.4 완료 대조](#작업-44-완료-대조2026-11-04)(2026-11-04, 커밋 `b0c25f9`·`0196cab`) |
+| 구현 대조 | 2026-11-08 작업 트리의 `ManagementQueryService::{new,summary}`와 `src/serve.rs`의 `RuntimeSettingsSource` 주입을 소스 읽기로 대조. 새 동적 상한 시험은 미실행. 과거 증거는 [작업 4.4 완료 대조](#작업-44-완료-대조2026-11-04) |
 | 코드 위치 | `crates/app/src/management/query.rs`, `crates/adapters/src/management_http/query_api.rs`, `crates/domain/src/budget.rs` |
 | 코드 지도 | [코드 지도 2절](code-map.md#2-코드-위치와-구성요소) |
 | 관련 스펙 | [관리 스펙](../specs/management.md) MGT-001~007, MGT-013, MGT-015, MGT-016, MGT-021, MGT-023~024, MGT-026, [운영 스펙](../specs/operations.md) OPS-033 |
@@ -36,6 +36,7 @@
   - 대시보드 정적 HTML·CSS·JS 파일 제공: 작업 4.6의 [관리 리스너 모듈 설계](management-listener.md)가 소유한다.
   - 생존·준비 엔드포인트(`/livez`, `/readyz`): [상태 리스너와 준비 상태 모듈 설계](status-listener.md)가 소유한다.
   - 클라이언트 대시보드의 폴링 타이머 및 렌더링: [대시보드 화면 스펙](../specs/dashboard.md)이 소유한다.
+  - 설정 파일 조회·검증·편집과 파일 상태/이력: [설정 보기·편집 서비스](config-edit.md)가 별도 공유 재로드 mutex에서 처리한다. 중계 상태 락과 파일 I/O를 함께 잡지 않는다.
 - 다른 모듈에 공개하는 기능:
   - `vnc_relay_app::management::query::ManagementQueryService`
   - `vnc_relay_adapters::management_http::query_api::answer`
@@ -54,12 +55,13 @@ flowchart LR
     RS -->|"구현: 상태 락 1회 복사"| RT["app::relay<br/>RelayRuntime"]
     QS -->|"5 L 사용량 읽기"| RB["domain::budget<br/>ConnectionBudget (L)"]
     QS -->|"6 Lm 사용량 읽기"| AB["domain::budget<br/>ConnectionBudget (Lm)"]
+    QS -->|"7 같은 세대의 L/Lm 읽기"| CFG["app::reload::ports<br/>RuntimeSettingsSource"]
     QA -->|"8 계약 JSON 직렬화"| RES["HTTP Response"]
 ```
 
 | 요소(파일·심볼) | 역할 | 만들어지는 시점과 소유자 | 의존 대상 |
 | --- | --- | --- | --- |
-| `crates/app/src/management/query.rs` `ManagementQueryService` | 서버 요약, 대기 목록, 활성 세션, 최근 종료 목록의 응용 뷰를 생성한다. | 시작 시 `src/serve.rs`가 생성하고 `ManagementListener`에 전달한다. | `RelayStateSource`, `ConnectionBudget`, `Clock` |
+| `crates/app/src/management/query.rs` `ManagementQueryService` | 서버 요약, 대기 목록, 활성 세션, 최근 종료 목록의 응용 뷰를 생성한다. L/Lm은 runtime source에서 한 번에 읽는다. | 시작 시 `src/serve.rs`가 생성하고 `ManagementListener`에 전달한다. | `RelayStateSource`, `ConnectionBudget`, `Clock`, `RuntimeSettingsSource` |
 | `crates/adapters/src/management_http/query_api.rs` `answer` | `/api/v1/summary`, `/waiting`, `/sessions`, `/closed-sessions` 요청을 분기하고 JSON 응답을 구성한다. | `management_http.rs`의 `answer`가 `/api/v1/` 요청 중 세션 경로 이외를 전달한다. | `ManagementQueryService`, `AdminAuth`, `serde_json`, `axum` |
 | `crates/domain/src/budget.rs` `ConnectionBudget::current` | L 및 Lm의 현재 점유 카운트(`used`)를 원자적으로 읽는다. **(신규 추가)** | 시작 시 `src/serve.rs`가 예산 생성 시 소유한다. | `AtomicU32` |
 | `crates/app/src/ports.rs` `RelayStateSource` | 중계 런타임 상태 스냅샷을 조회하기 위한 포트 trait이다. **(신규 추가)** | `ManagementQueryService`가 주입받아 사용하며 `RelayRuntime`이 구현한다. | `Clock`, `RelaySnapshot` |
@@ -78,7 +80,7 @@ flowchart LR
 | `ServerStateView` | `state: &'static str` (`ready` \| `shutdown_grace`), `uptime_ms: u64` | `SummaryResponse` 내부 | `uptime_ms`는 음수가 될 수 없으며 단조 시간 차이로 계산한다. |
 | `CountsView` | `waiting: u64`, `active: u64`, `handshaking: u64`, `target_connecting: u64` | `SummaryResponse` 내부 | 본 구현은 인메모리 카운터로 항상 정확한 정수를 제공하므로 `Option` 없이 정수로 노출하고, 어댑터 직렬화 시 계약 요구에 따라 `null` 사유를 추가한다. |
 | `UsageView` | `relay_connections: ResourceUsageView`, `admin_connections: ResourceUsageView` | `SummaryResponse` 내부 | L과 Lm의 사용량은 서로 독립적으로 산출된다. |
-| `ResourceUsageView` | `current: u64`, `limit: u64` | `UsageView` 내부 | 상한에 도달하면 `current == limit`이다. 본 구현은 `AtomicU32`에서 직접 읽으므로 `Option` 없이 정수로 노출하고, 어댑터 직렬화 시 계약 요구에 따라 `null` 사유를 추가한다. |
+| `ResourceUsageView` | `current: u64`, `limit: u64` | `UsageView` 내부 | current는 budget 원자 계수, limit는 현재 runtime 값이다. 상한을 낮춘 직후에는 `current > limit`도 유효하며 기존 점유를 취소하지 않는다. 직렬화는 정수와 계약의 null 사유 필드를 제공한다. |
 | `WaitingItemView` | `role: &'static str` (`viewer` \| `server`), `relay_id: String`, `connected_at: String`, `waited_ms: u64` | `WaitingResponse.items` 배열 | `relay_id`는 1~247자의 숫자 원문 문자열을 보존한다. `waited_ms`는 `as_of`까지의 단조 시간 경과다. |
 | `ActiveSessionView` | `session_id: String`, `state: &'static str` (`active` \| `closing`), `mode: &'static str` (`mode1` \| `mode2`), `viewer_transport: &'static str` (`tcp` \| `ws` \| `wss`), `started_at: String`, `bytes_viewer_to_target: u64`, `bytes_target_to_viewer: u64`, `viewer_address: PeerAddressView`, `target_address: PeerAddressView` | `SessionsResponse.items` 및 상세 | `bytes_*`는 단조 증가하며 감소하거나 순환하지 않는다. `closing` 세션도 활성 세션에 포함된다. |
 | `ClosedSessionsResponse` | `as_of: String`, `max_entries: u64`, `items: Vec<ClosedSessionItemView>` | HTTP 직렬화 시 일시 생성 | `max_entries`는 설정된 R 값이다. `items`는 정리가 끝난 활성 세션만 담는다. |
@@ -97,7 +99,7 @@ flowchart LR
 | 4 | `management_http/query_api.rs` | `session_api.rs`의 `poll_flag` 헬퍼로 `X-Relay-Poll` 헤더 검증. 부재(`Some(false)`) 시 `AdminAuth::touch` 호출. `1`(`Some(true)`)이면 `touch` 건너뜀. 그 외(`None`)는 `400 invalid_request` | 유휴 기한 연장 여부 결정 | 다음 단계 또는 400 |
 | 5 | `management_http/query_api.rs` | 본문 검사: 빈 본문은 통과. 본문이 있는 경우의 거절(415/400)은 9.2절 계약 불일치를 따름 | 없음 | 다음 단계 또는 415/400 |
 | 6 | `ManagementQueryService::capture_snapshot` | `RelayStateSource::snapshot`으로 중계 상태를 복사한 뒤 `Clock::wall`과 `Clock::monotonic`을 읽는다. 런타임 구현은 `RelayRuntime::snapshot`에서 상태 락을 한 번 획득한다. | 없음 | `RelaySnapshot`과 표시·경과 시각 |
-| 7 | `ManagementQueryService` | 경로에 따라 DTO 조립: <br/>- 요약: L/Lm 예산 읽기 및 라이프사이클 전이 상태 확인<br/>- 대기: `waited_ms` 단조 계산 및 접속 시각 변환<br/>- 세션: 상세의 경우 ASCII 조건문으로 `session_id` 검증 후 활성 목록 검색<br/>- 최근종료: FIFO 정렬된 완료 목록 변환 | 없음 | 계약 DTO 객체 |
+| 7 | `ManagementQueryService` | 요약은 runtime `with_current` 한 번에서 L/Lm 쌍을 복사한 뒤 budget 사용량·라이프사이클을 조합한다. 대기는 단조 waited_ms, 상세는 session_id 검사와 활성 목록 검색, 최근 종료는 완료 목록 변환을 수행한다. | 없음 | 계약 DTO 객체 |
 | 8 | `management_http/query_api.rs` | JSON 직렬화 및 공통 헤더(`Cache-Control: no-store`) 부착 | 없음 | `200 OK` HTTP Response |
 
 ### 4.1 폴링 주기 P와 조회 제한 시간 전달 흐름
@@ -109,7 +111,7 @@ flowchart LR
 
 ## 5. 상태와 초기화
 
-- 초기화 시점: `src/serve.rs`에서 `RelayRuntime`, `RelayService`, `LifecycleService`, `ConnectionBudget`을 조립한 뒤 `ManagementQueryService`를 생성하여 `ManagementListener`에 주입한다.
+- 초기화 시점: `src/serve.rs`에서 `RelayRuntime`, `RelayService`, `LifecycleService`, `ConnectionBudget`을 조립한 뒤 `ManagementQueryService`를 생성한다. watcher·설정 편집·중계 reader와 같은 `ReloadCell`을 `RuntimeSettingsSource`로 주입한 뒤 `ManagementListener`에 전달한다.
 - 상태 소유자와 수명:
   - 활성 세션 표와 대기 표는 `RelayRuntime` 내부의 `std::sync::Mutex<RelayState>`가 소유하며(`crates/app/src/relay.rs:9, 390`), 프로세스 수명 동안만 유지된다.
   - 최근 종료 목록은 `RecentClosedList`가 소유하며 최대 R개를 보관한다. 프로세스가 재시작되면 모두 비워진다(ADR-0003).

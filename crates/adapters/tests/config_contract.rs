@@ -170,6 +170,7 @@ listen = "127.0.0.1:18081"
         management: ManagementSettings {
             listen: addr("127.0.0.1:18080"),
             tls: None,
+            config_edit: false,
             login_limit: LoginLimitSettings {
                 per_account: 5,
                 per_source: 20,
@@ -1012,4 +1013,70 @@ fn rejects_non_table_values_in_place_of_tables() {
         ),
         [problem("config_type_mismatch", "admin.argon2")]
     );
+}
+
+/// spec: management.md:MGT-030 partial
+/// spec: management.md:MGT-044 partial
+#[test]
+fn config_edit_is_opt_in_and_requires_a_boolean() {
+    assert!(!parse_ok(REQUIRED).management.config_edit);
+    let enabled = REQUIRED.replace(
+        "listen = \"127.0.0.1:18080\"",
+        "listen = \"127.0.0.1:18080\"\nconfig_edit = true",
+    );
+    assert!(parse_ok(&enabled).management.config_edit);
+    assert_eq!(
+        problems(&enabled.replace("config_edit = true", "config_edit = 1")),
+        [problem("config_type_mismatch", "management.config_edit")],
+    );
+}
+
+/// spec: management.md:MGT-028 partial
+#[test]
+fn candidate_presence_distinguishes_disabled_omissions_and_explicit_empty_lists() {
+    let text = with_required(
+        "[relay.ws_viewer]\nenabled = false\nallowed_origins = []\n\
+         [relay.wss_viewer]\nenabled = false\n",
+    );
+    let candidate = vnc_relay_adapters::config_file::parse_candidate(text.as_bytes(), &base_dir())
+        .unwrap_or_else(|diagnostics| panic!("{diagnostics:?}"));
+    assert!(
+        candidate
+            .presence
+            .keys
+            .contains("relay.ws_viewer.allowed_origins")
+    );
+    assert!(
+        !candidate
+            .presence
+            .keys
+            .contains("relay.wss_viewer.allowed_origins")
+    );
+    assert!(!candidate.presence.keys.iter().any(|key| key.contains('[')));
+    let items =
+        vnc_relay_app::management::config::config_items(&candidate.settings, &candidate.presence);
+    let value = |key: &str| {
+        &items
+            .iter()
+            .find(|item| item.key == key)
+            .unwrap_or_else(|| panic!("missing {key}"))
+            .value
+    };
+    assert_eq!(
+        value("relay.ws_viewer.allowed_origins"),
+        &vnc_relay_app::management::config::ConfigValue::Strings(vec![])
+    );
+    assert_eq!(
+        value("relay.wss_viewer.allowed_origins"),
+        &vnc_relay_app::management::config::ConfigValue::Null
+    );
+    let errors = vnc_relay_adapters::config_file::parse_candidate(&[0xff], &base_dir())
+        .err()
+        .unwrap_or_else(|| panic!("non UTF-8 unexpectedly accepted"));
+    assert_eq!(errors.len(), 1);
+    assert_eq!(
+        errors[0].error,
+        vnc_relay_app::settings::ConfigError::FileUnreadable
+    );
+    assert!(!errors[0].message.contains("ff"));
 }

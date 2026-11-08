@@ -554,6 +554,7 @@
   position: relative;
   display: inline-flex;
   align-items: center;
+  gap: var(--space-sm);
   min-height: var(--space-control-height);
   padding: var(--space-xs) var(--space-md);
   border-radius: var(--radius-md);
@@ -852,6 +853,26 @@
 
 /* Narrow screens: the single breakpoint at 1024px. */
 @media (max-width: 1023.98px) {
+  .settings-main .config-row,
+  .settings-main .settings-fields,
+  .settings-main .config-reload-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .settings-main .page-actions,
+  .settings-main .page-head .page-actions {
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .settings-main .page-actions .button {
+    width: 100%;
+  }
+
+  .settings-main .config-list-input {
+    height: auto;
+  }
+
   .span-3,
   .span-4,
   .span-6,
@@ -906,15 +927,22 @@
   }
 
   .navbar {
-    padding: 0 var(--space-lg);
+    flex-wrap: wrap;
+    padding: var(--space-sm) var(--space-lg) 0;
   }
 
   .navbar-brand {
     margin-right: 0;
   }
 
-  .navbar-desktop-only {
-    display: none;
+  .navbar-nav {
+    order: 1;
+    flex-basis: 100%;
+    padding-bottom: var(--space-sm);
+  }
+
+  .navbar-item[aria-current="page"]::after {
+    bottom: calc(-1 * var(--space-sm));
   }
 
   .navbar-brand-text {

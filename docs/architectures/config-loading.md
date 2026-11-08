@@ -1,8 +1,8 @@
 # 설정 로딩 모듈 설계
 
-## 작업 6.3~6.4 목표 설계 (Target / Active)
+## 설정 v3 실행값과 보기용 생략 정보 (Current / Active)
 
-이 절만 구현 전 Target이며 기존 Current/Verified와 구분한다. [설정 §1.2](../contracts/config-v3.md#12-키-표)·[§3.2](../contracts/config-v3.md#32-v2-파일을-v3로-옮기기)에 따라 `ManagementSettings.config_edit: bool`을 기본 false로 읽고 재시작 필요로 분류한다(현재 필드 없음: `crates/app/src/settings.rs:144-151`). 기존 `parse`(`crates/adapters/src/config_file.rs:86-98`)를 GET·PATCH·watcher가 공통 사용한다. 새 `parse_candidate`는 같은 검증 결과와 명시 키 집합을 `ConfigCandidate`로 반환하여 꺼진 진입점 생략 키의 null을 실행 스냅샷에 보존한다. v2 파일은 수정 없이 읽고 config_edit를 쓴 파일의 롤백은 키 제거를 요구한다. 쓰기·TOML 보존 편집은 [설정 보기·편집 모듈](config-edit.md#5-파일-포트와-os-경계)이 맡는다([API §1.13~14](../contracts/management-api-v1.md#113-설정-보기-get-apiv1config)).
+`ManagementSettings.config_edit: bool`은 `read_management`가 기본 `false`로 읽는다. 이 키의 변경은 `reload::service::restart_required_keys`에서 재시작 필요로 분류한다. `config_file::parse_candidate(bytes, base_dir)`는 `parse`와 공통인 `settings_from_table`로 전체 검증한 뒤 명시된 leaf 키를 `ConfigPresence.keys`에 담아 `ConfigCandidate { settings, presence }`를 반환한다. 배열 원소는 별도 키로 넣지 않는다. 꺼진 WSS의 인증서/개인키 경로가 한쪽만 명시되어 `TlsFiles`에 담기지 않는 경우 `presence.inactive_paths`에 base_dir 기준 경로를 보관한다. GET·PATCH·watcher는 이 후보를 사용하며 실행 스냅샷에 presence를 함께 보관한다. 꺼진 기능에서 생략한 `null`과 명시한 `[]`·단독 경로를 구별하기 위해서다. 원시 TOML이나 비밀 파일 내용은 presence에 담지 않는다([설정 계약 §3.2](../contracts/config-v3.md#32-v2-파일을-v3로-옮기기), [설정 보기·편집](config-edit.md#3-데이터-모델과-get)).
 
 설정 로딩은 TOML 설정 파일 하나를 읽어 [설정 계약](../contracts/config-v3.md)의 모든 검사를 한 번에 수행한다. 결과는 둘 중 하나다. 검증을 마친 유효 설정 `Settings`이거나, 발견한 모든 진단(`code`·`key`·`message`) 목록이다. TOML 해석과 키 검사는 adapters가, 항목 문법(IP 항목·Origin·Mode I 대상)은 domain이, 유효 설정 타입과 오류·경고 코드는 app이 맡는다. 시작(작업 2.2)과 재로드(작업 5.2)가 같은 함수를 부른다.
 
@@ -10,7 +10,7 @@
 | --- | --- |
 | 구조 시점 | Current |
 | 문서 상태 | Draft |
-| 구현 대조 | Verified — [대조 기록](#대조-기록) |
+| 구현 대조 | 2026-11-08 작업 트리의 `read_management`·`parse_candidate`·`collect_presence`를 소스 읽기로 대조. 새 동작 시험은 미실행. 이전 범위의 기록은 [대조 기록](#대조-기록) |
 | 코드 위치 | `crates/domain/src/{allow_list,entry_point,origin,target_policy}.rs`, `crates/app/src/settings.rs`, `crates/adapters/src/config_file.rs`, `crates/adapters/src/config_file/` |
 | 코드 지도 | [코드 지도 2절](code-map.md#2-코드-위치와-구성요소) |
 | 관련 스펙 | [운영 스펙 3.1절](../specs/operations.md#31-설정-검증과-시작), OPS-001(일부), OPS-038(일부), OPS-040(일부) |
@@ -36,6 +36,8 @@
 - 다른 모듈에 공개하는 기능:
   - `vnc_relay_adapters::config_file::load(path) -> Result<Settings, Vec<ConfigDiagnostic>>`
   - `vnc_relay_adapters::config_file::parse(text, base_dir) -> Result<Settings, Vec<ConfigDiagnostic>>`
+  - `vnc_relay_adapters::config_file::parse_candidate(bytes, base_dir) -> Result<ConfigCandidate, Vec<ConfigDiagnostic>>`
+  - `vnc_relay_adapters::config_file::load_candidate(path) -> Result<ConfigCandidate, Vec<ConfigDiagnostic>>` — 시작 시 한 번 읽은 파일에서 Settings와 presence를 함께 만든다.
   - `vnc_relay_app::settings::{Settings, ConfigError, ConfigDiagnostic, ConfigWarning}`와 `Settings::warnings`
   - `vnc_relay_domain::{allow_list::{IpItem, AllowList}, origin::Origin, target_policy::{TargetItem, TargetPolicy}, entry_point::EntryPoint}`
 
@@ -66,6 +68,7 @@ flowchart LR
 | `crates/app/src/settings.rs` `ConfigDiagnostic` | 진단 한 건: `error`, `key`(전체 경로, 배열은 `[i]`), `message`(한국어 문장, 비밀·파일 내용 없음) | `parse`가 만든다 | `ConfigError` |
 | `crates/app/src/settings.rs` `ConfigWarning`, `Settings::warnings` | 경고 4종과 사건 필드 값(진입점, 항목 표준 표기, 주소) | 호출할 때 계산 | domain |
 | `crates/adapters/src/config_file.rs` `load`, `parse` | 파일 읽기, TOML 해석, 테이블별 키 읽기, 관계·필수 키 검사, `Settings` 조립. `[admin.argon2]` 범위는 `vnc_relay_domain::account::Argon2Params`의 승인 범위 상수다. 구문 오류 위치는 `crates/adapters/src/toml_text.rs` `error_position`이 계정 파일 읽기와 같은 방식으로 계산한다. | 호출마다 | `reader`, `listen`, `toml_text`, domain, app, toml |
+| `crates/adapters/src/config_file.rs` `load_candidate`, `parse_candidate`, `settings_from_table`, `collect_presence` | 시작·조회·편집·watcher가 같은 전체 검증을 쓴다. 명시 leaf 키와 꺼진 WSS의 단독 경로를 presence로 보관한다. | 파일/바이트 후보 읽기마다 | `reader`, app `ConfigCandidate`·`ConfigPresence` |
 | `crates/adapters/src/config_file/reader.rs` `Section`, `Field`, `Diagnostics` | 한 TOML 테이블의 키를 읽고 읽은 키를 기록한다. 끝에서 읽지 않은 키를 `config_unknown_key`로 보고한다. 자료형·범위 오류를 진단으로 남긴다. `Field`는 키 상태(생략·무효·값)다. | 테이블마다 | toml, app |
 | `crates/adapters/src/config_file/listen.rs` `parse_listen` | `"IP:포트"`, `"[IPv6]:포트"`, 기본 포트가 있을 때 주소만 쓴 형식. 호스트 이름·영역 ID·포트 0을 거절한다. | 호출마다 | 없음. 호출한 쪽이 `EntryPoint::default_port`를 넘긴다. |
 
@@ -79,9 +82,10 @@ flowchart LR
 | `EntryPointSettings` | `enabled: bool`, `listen: Option<SocketAddr>`, `allow: Option<AllowList>`, `allowed_origins: Vec<Origin>`, `tls: Option<TlsFiles>` | `Settings.relay`의 네 칸 | `enabled = true`이면 `listen`·`allow`가 있다. `wss_viewer`가 켜져 있으면 `tls`가 있다. `allowed_origins`는 WS·WSS만, `tls`는 WSS만 값을 가진다. 꺼진 진입점도 쓴 값은 담는다. 단 꺼진 `wss_viewer`는 `cert_file`·`key_file`을 둘 다 쓴 경우만 `tls`에 담는다. |
 | `Mode1Settings` | `enabled`, `allow_targets: Option<TargetPolicy>` | `Settings.mode1` | `enabled = true`이면 `allow_targets`가 있다. |
 | `LimitSettings` 등 수치 | `u32`(개수·바이트), `Duration`(초 단위 키) | 각 하위 설정 | 1.2절 범위 안. Lw ≤ L, Si ≤ Sa |
-| `ManagementSettings` | `listen`, `tls: Option<TlsFiles>`, `login_limit`, `session` | `Settings.management` | `tls`가 없으면 `listen`이 루프백(127.0.0.0/8, ::1)이다. |
+| `ManagementSettings` | `listen`, `tls: Option<TlsFiles>`, `config_edit: bool`, `login_limit`, `session` | `Settings.management` | `config_edit` 기본값은 false이고 재시작 필요다. `tls`가 없으면 `listen`이 루프백(127.0.0.0/8, ::1)이다. |
 | `LogOutput` | `Stdout` 또는 `File(PathBuf)` | `Settings.log` | 값 `"stdout"`만 표준 출력이다. |
 | `ConfigDiagnostic` | `error: ConfigError`, `key: String`, `message: String` | 반환 값 | 파일 단위 오류(`config_file_unreadable`, `config_syntax_error`)의 `key`는 빈 문자열이다. |
+| `ConfigCandidate`·`ConfigPresence` | 검증된 `settings: Settings`, `presence.keys: BTreeSet<String>`, `presence.inactive_paths: BTreeMap<String, PathBuf>` | app `reload` 후보·실행 스냅샷 | 생략 정보와 꺼진 WSS 단독 경로는 실행 세대와 함께 보관한다. GET이 미적용 파일 presence로 실행 표시를 덮지 않는다. |
 
 ## 4. 처리 순서
 
@@ -97,6 +101,8 @@ flowchart LR
 | 6 | `config_file.rs` `parse` | 진단이 하나라도 있으면 전체 목록을 `Err`로 돌려준다. 없으면 `Settings`를 조립해 `Ok`로 돌려준다. | 없음 | 호출한 쪽(작업 2.2 `serve`, 재로드) |
 
 경고는 7단계로 호출한 쪽이 `Settings::warnings`를 불러 얻는다. 시작과 재로드가 같은 함수를 쓰고 사건의 `phase`는 호출한 쪽이 정한다.
+
+보기·편집·watcher는 바이트를 이미 읽었으면 `parse_candidate`로 이 경로에 진입한다. 비UTF-8은 `ConfigError::FileUnreadable` 진단이며, GET의 파일 상태 분류가 이를 `unreadable`·빈 진단으로 바꾼다. 파일 revision 계산과 API 오류 상태 매핑은 이 로더가 아니라 [설정 보기·편집 서비스](config-edit.md)가 맡는다.
 
 ## 5. 상태와 초기화
 

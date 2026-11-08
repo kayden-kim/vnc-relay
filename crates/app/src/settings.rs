@@ -146,6 +146,8 @@ pub struct ManagementSettings {
     pub listen: SocketAddr,
     /// HTTPS when present. Without it, `listen` is a loopback address.
     pub tls: Option<TlsFiles>,
+    /// Allows management API edits only when explicitly enabled at startup.
+    pub config_edit: bool,
     pub login_limit: LoginLimitSettings,
     pub session: AdminSessionSettings,
 }
@@ -323,6 +325,7 @@ pub enum ConfigError {
     TargetItemInvalid,
     PlaintextManagementNotLoopback,
     TlsPairIncomplete,
+    TlsFileInvalid,
 }
 
 impl ConfigError {
@@ -345,6 +348,7 @@ impl ConfigError {
             Self::TargetItemInvalid => "config_target_item_invalid",
             Self::PlaintextManagementNotLoopback => "config_plaintext_management_not_loopback",
             Self::TlsPairIncomplete => "config_tls_pair_incomplete",
+            Self::TlsFileInvalid => "tls_file_invalid",
         }
     }
 }

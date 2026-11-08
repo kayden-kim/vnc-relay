@@ -35,7 +35,7 @@ use vnc_relay_app::ports::{
     Clock, EventSink, RelayLifecycle, RelaySessionControl, RelayStateSource,
 };
 use vnc_relay_app::relay::{RelayRuntime, RelayRuntimeConfig, RelayService, RelaySnapshot};
-use vnc_relay_app::reload::snapshot::{RelayAllow, ReloadCell, ReloadSnapshot};
+use vnc_relay_app::reload::snapshot::{ReloadCell, ReloadSnapshot};
 use vnc_relay_app::settings::KeepaliveSettings;
 use vnc_relay_domain::account::Argon2Params;
 use vnc_relay_domain::admin_session::AdminSessionPolicy;
@@ -45,7 +45,6 @@ use vnc_relay_domain::entry_point::EntryPoint;
 use vnc_relay_domain::handshake::{HandshakePolicy, VIEWER_GREETING};
 use vnc_relay_domain::login_limit::LoginLimitPolicy;
 use vnc_relay_domain::origin::Origin;
-use vnc_relay_domain::target_policy::TargetPolicy;
 
 /// Upper bound for one exchange. A hang fails the test instead of blocking it.
 const LIMIT: Duration = Duration::from_secs(10);
@@ -84,6 +83,13 @@ const CONNECTION_LINE: &str = "Connection: Upgrade";
 const VERSION_LINE: &str = "Sec-WebSocket-Version: 13";
 
 const ALLOWED_ORIGIN: &str = "https://a.example:8443";
+
+fn runtime_settings() -> vnc_relay_app::settings::Settings {
+    vnc_relay_adapters::config_file::parse(
+        "[admin]\naccounts_file='accounts.toml'\n[management]\nlisten='127.0.0.1:8443'\n[status]\nlisten='127.0.0.1:9090'\n",
+        Path::new("."),
+    ).unwrap_or_else(|error| panic!("settings: {error:?}"))
+}
 
 fn fixture(name: &str) -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -219,14 +225,30 @@ async fn start_with_handshake(
             .map(|text| IpItem::parse(text).unwrap_or_else(|_| panic!("allow item {text} parses")))
             .collect(),
     );
-    // The snapshot carries the list in the field of this entry point.
-    let relay_allow = RelayAllow {
-        ws_viewer: allow_list.clone(),
-        wss_viewer: allow_list,
-        ..RelayAllow::default()
-    };
+    let mut settings = runtime_settings();
+    settings.relay.ws_viewer.allow = Some(allow_list.clone());
+    settings.relay.wss_viewer.allow = Some(allow_list);
+    let origins: Vec<_> = origins
+        .iter()
+        .map(|text| Origin::parse(text).unwrap_or_else(|_| panic!("origin {text} parses")))
+        .collect();
+    settings.relay.ws_viewer.allowed_origins = origins.clone();
+    settings.relay.wss_viewer.allowed_origins = origins;
+    settings.limits.relay_connections = places;
+    settings.limits.waiting = 8;
+    settings.limits.buffer_bytes = BUFFER_BYTES as u32;
+    settings.limits.ws_message_bytes = MESSAGE_BYTES as u32;
+    settings.timeouts.handshake = handshake;
+    settings.timeouts.tls_upgrade = upgrade;
+    settings.timeouts.wait = HANDSHAKE;
+    settings.timeouts.connect = HANDSHAKE;
+    settings.timeouts.close = CLOSE;
+    settings.keepalive = KEEPALIVE;
     let cell = Arc::new(ReloadCell::new(ReloadSnapshot::new(
-        relay_allow,
+        vnc_relay_app::reload::ConfigCandidate {
+            settings,
+            presence: Default::default(),
+        },
         tls.clone(),
         None,
     )));
@@ -236,26 +258,18 @@ async fn start_with_handshake(
         EntryPoint::WssViewer => AllowSource::wss_viewer(Arc::clone(&cell)),
         _ => panic!("the WS helper takes WsViewer or WssViewer"),
     };
-    let relay_budget = ConnectionBudget::new(places);
+    let source: Arc<dyn vnc_relay_app::reload::ports::RuntimeSettingsSource> = cell.clone();
+    let relay_budget = ConnectionBudget::new();
     let policy = WsPolicy {
         accept: AcceptPolicy {
             allow: allow_source,
             relay_budget: Arc::clone(&relay_budget),
-            handshake,
-            keepalive: KEEPALIVE,
         },
-        upgrade,
-        origins: origins
-            .iter()
-            .map(|text| Origin::parse(text).unwrap_or_else(|_| panic!("origin {text} parses")))
-            .collect(),
-        message_bytes: MESSAGE_BYTES,
-        buffer_bytes: BUFFER_BYTES,
     };
     let log: Arc<dyn EventSink> = events.clone();
     let clock: Arc<dyn Clock> = Arc::new(SystemClock::new());
     let runtime = Arc::new(RelayRuntime::new(
-        TcpTargetConnector::new(KEEPALIVE),
+        TcpTargetConnector::new(Arc::clone(&source)),
         Arc::new(
             RelayIdKey::generate()
                 .unwrap_or_else(|error| panic!(concat!("relay key", ": {:?}"), error)),
@@ -265,23 +279,16 @@ async fn start_with_handshake(
                 .unwrap_or_else(|error| panic!(concat!("session key", ": {:?}"), error)),
         ),
         relay_budget,
-        ConnectionBudget::new(8),
-        RelayRuntimeConfig {
-            wait_timeout: HANDSHAKE,
-            connect_timeout: HANDSHAKE,
-            close_timeout: CLOSE,
-            recent_closed: 8,
-            target_policy: TargetPolicy::default(),
-        },
+        ConnectionBudget::new(),
+        RelayRuntimeConfig { recent_closed: 8 },
+        Arc::clone(&source),
     ));
     let service = Arc::new(RelayService::new(
         HandshakePolicy {
             mode1_enabled: true,
             mode2_enabled: true,
         },
-        handshake,
-        BUFFER_BYTES,
-        CLOSE,
+        source,
         Arc::clone(&clock),
         Arc::clone(&log),
     ));
@@ -1044,7 +1051,21 @@ async fn start_management(tls: Option<TlsAcceptor>) -> (SocketAddr, Arc<Recorder
         .unwrap_or_else(|error| panic!("local address: {error}"));
     let events = Arc::new(Recorder::default());
     let log: Arc<dyn EventSink> = events.clone();
-    let budget = ConnectionBudget::new(8);
+    let budget = ConnectionBudget::new();
+    let mut settings = runtime_settings();
+    settings.limits.admin_connections = 8;
+    settings.limits.relay_connections = 10;
+    settings.timeouts.tls_upgrade = UPGRADE;
+    let secure = tls.is_some();
+    let cell = Arc::new(ReloadCell::new(ReloadSnapshot::new(
+        vnc_relay_app::reload::ConfigCandidate {
+            settings,
+            presence: Default::default(),
+        },
+        None,
+        tls,
+    )));
+    let source: Arc<dyn vnc_relay_app::reload::ports::RuntimeSettingsSource> = cell.clone();
     // No admin account: the tests only need the TLS handshake and a 401 for a
     // stale session cookie.
     let params = Argon2Params {
@@ -1067,21 +1088,41 @@ async fn start_management(tls: Option<TlsAcceptor>) -> (SocketAddr, Arc<Recorder
         AdminSessionPolicy::new(Duration::from_secs(600), Duration::from_secs(3600)),
         LoginLimitPolicy::new(5, 20, Duration::from_secs(300), Duration::from_secs(60)),
     ));
+    let snapshot = cell.current();
+    let reload = Arc::new(Mutex::new(
+        vnc_relay_app::reload::service::ReloadService::new(
+            vnc_relay_app::reload::ConfigCandidate {
+                settings: snapshot.settings.as_ref().clone(),
+                presence: snapshot.presence.as_ref().clone(),
+            },
+            Arc::clone(&cell),
+            Arc::new(vnc_relay_adapters::file_watch::FsReloadFileStore),
+            Arc::new(tls::RustlsTlsStore),
+            Arc::clone(&log),
+        ),
+    ));
+    let config = Arc::new(vnc_relay_app::management::config::ConfigEditService::new(
+        reload,
+        Arc::new(vnc_relay_adapters::config_edit::FsConfigFileStore),
+        Arc::new(vnc_relay_adapters::config_edit::TomlConfigDocument),
+        PathBuf::from("missing-websocket-fixture.toml"),
+        PathBuf::from("."),
+        Arc::clone(&clock),
+        Arc::clone(&log),
+    ));
     let dashboard = DashboardHints::new(
         Duration::from_secs(2),
         Duration::from_secs(5),
-        Duration::from_secs(10),
+        Arc::clone(&source),
     );
-    let tls = tls.map(|acceptor| {
-        let snapshot = ReloadSnapshot::new(RelayAllow::default(), None, Some(acceptor));
-        tls::TlsSource::management(Arc::new(ReloadCell::new(snapshot)))
-    });
-    let relay_budget = ConnectionBudget::new(10);
+    let tls = secure.then(|| tls::TlsSource::management(cell));
+    let relay_budget = ConnectionBudget::new();
     let query = Arc::new(ManagementQueryService::new(
         Arc::new(EmptyRelaySource),
         relay_budget,
         Arc::clone(&budget),
         Arc::clone(&clock),
+        Arc::clone(&source),
     ));
     let terminate = Arc::new(ManagementTerminateService::new(
         Arc::new(EmptyRelaySource),
@@ -1092,12 +1133,13 @@ async fn start_management(tls: Option<TlsAcceptor>) -> (SocketAddr, Arc<Recorder
         listener,
         tls,
         budget,
-        UPGRADE,
+        source,
         dashboard,
         ManagementServices {
             auth,
             query,
             terminate,
+            config,
         },
     );
     tokio::spawn(listener.run(log));

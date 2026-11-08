@@ -1,8 +1,10 @@
 # 상태 리스너와 준비 상태 모듈 설계
 
-## 작업 6.2 상태 수락 목표 (Target / Active)
+## 작업 6.2 상태 수락 경계 (Current / Active)
 
-기존 Current/Verified와 별개인 구현 전 범위다. 현재 status는 admin budget만 받고 U를 쓰지 않는다(`crates/adapters/src/status_http.rs:26-54`). [동적 상한](connection-limits.md#10-target--동적-상한과-시간-제한)에 따라 management와 같은 Lm 사용량을 공유하되 새 수락은 현재 snapshot Lm으로 판정한다. 하향 때 기존 상태/관리 연결은 유지하고 새 수락만 막는다. U/TLS를 status에 추가하지 않는다([설정 §1.8 Lm/U](../contracts/config-v3.md#18-재로드-구분), OPS-051~053).
+`StatusListener::new`는 `Arc<dyn RuntimeSettingsSource>`를 받는다. `AdmittingListener::accept`는 현재 Lm을 읽는 callback 안에서 `ConnectionBudget::try_acquire(limit)`까지 마친다. management와 같은 사용량을 공유하며, 하향 때 기존 상태·관리 연결은 유지하고 새 수락만 거절한다. 거절 사건에는 그 판단에 쓴 Lm을 넣는다. 상태 리스너는 `DeadlineListener`나 TLS로 감싸지 않으므로 U를 적용하지 않는다([설정 §1.8 Lm/U](../contracts/config-v3.md#18-재로드-구분), OPS-051~053).
+
+`admission.rs`의 `reloaded_admin_limit_preserves_connections_and_captures_u_at_accept` 단위 시험을 추가했다. 이번 변경의 빌드·시험은 아직 실행하지 않았다. 기존 대조 기록은 과거 범위의 증거다.
 
 상태 리스너(`[status] listen`)가 `/livez`·`/readyz`에 답하는 구조와 준비 상태를 다룬다. 준비 상태는 시작 중·준비됨·정상 종료 중·리스너 장애다. 상태 리스너는 다른 필수 리스너보다 먼저 열고, 관리·상태 연결 상한 Lm으로 센다. 모든 필수 리스너가 준비되면 준비됨으로 바꾸고 `server_ready`를 기록한다. 장애 종료는 사용자 결정 2026-11-05(Q114)를 따른다.
 

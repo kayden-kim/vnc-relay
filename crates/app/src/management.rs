@@ -5,6 +5,7 @@
 //! `/api/v1/` request. The state lock covers only table and limiter
 //! access. The password check and the event writes run outside the lock.
 
+pub mod config;
 pub mod login;
 pub mod query;
 pub mod session;

@@ -4,7 +4,7 @@ import { createLink } from './link.js';
 
 /**
  * @param {{brand?: string, items?: Array<{label: string, href: string, current?: boolean,
- *   desktopOnly?: boolean}>,
+ *   icon?: string}>,
  *   language?: Node, action?: Node, label: string}} options
  * @returns {HTMLElement}
  */
@@ -43,7 +43,7 @@ export function createNavbar({
   for (const item of items) {
     const link = createLink({ href: item.href, label: item.label });
     link.className = 'navbar-item';
-    if (item.desktopOnly) link.classList.add('navbar-desktop-only');
+    if (item.icon) link.prepend(icon(item.icon));
     if (item.current) link.setAttribute('aria-current', 'page');
     nav.append(link);
   }

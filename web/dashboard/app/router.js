@@ -1,13 +1,17 @@
-// Hash router of the dashboard. `#/sessions/<id>` shows the session detail (SCR-002). Any other hash shows the operations overview (SCR-001).
+// Hash router for operations (SCR-001), session details (SCR-002), and settings (SCR-004·005).
 // The previous screen is disposed before the next one mounts, so late responses from it are dropped.
 
 import { mountOperations } from './operations.js';
 import { mountSession } from './session.js';
+import { mountSettings } from './settings.js';
 
 const SESSION_HASH = /^#\/sessions\/([^/]+)$/;
 
 // Route of a hash. The id is decoded. When decoding fails the raw text is kept, and the id check then rejects it.
 export function routeOf(hash) {
+  if (hash === '#/settings' || hash === '#/settings/edit') {
+    return { name: 'settings', edit: hash === '#/settings/edit' };
+  }
   const match = SESSION_HASH.exec(hash);
   if (!match) {
     return { name: 'operations' };
@@ -25,15 +29,45 @@ export function routeOf(hash) {
 export function mountRouter(root, deps = {}) {
   const location = deps.location ?? globalThis.location;
   let current = null;
+  let applied = null;
+
+  // Successful settings edits carry the applied-key count in memory, never in the URL or storage.
+  function navigate(url, options = {}) {
+    if (url === '/#/settings' || url === '/#/settings/edit') {
+      applied = options.applied ?? null;
+      const hash = url.slice(1);
+      if (location.hash === hash) show();
+      else location.hash = hash;
+      return;
+    }
+    (deps.navigate ?? ((target) => globalThis.location.assign(target)))(url);
+  }
+
+  const screenDeps = { ...deps, navigate };
 
   function show() {
     current?.dispose();
     current = null;
     root.replaceChildren();
     const route = routeOf(location.hash);
-    current = route.name === 'session' ? mountSession(root, route.id, deps) : mountOperations(root, deps);
+    const count = applied;
+    applied = null;
+    if (route.name === 'settings') {
+      current = mountSettings(root, screenDeps, { edit: route.edit, applied: count });
+    } else if (route.name === 'session') {
+      current = mountSession(root, route.id, screenDeps);
+    } else {
+      current = mountOperations(root, screenDeps);
+    }
   }
 
   globalThis.addEventListener('hashchange', show);
   show();
+  return {
+    dispose() {
+      globalThis.removeEventListener('hashchange', show);
+      current?.dispose();
+      current = null;
+    },
+  };
 }

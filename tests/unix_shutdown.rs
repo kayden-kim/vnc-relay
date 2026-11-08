@@ -94,3 +94,12 @@ fn second_request_forces_cleanup() {
 fn management_works_during_grace() {
     shutdown::management_works_during_grace::<UnixProcess>();
 }
+
+/// spec: operations.md:OPS-043 partial
+/// spec: operations.md:OPS-050 partial
+#[test]
+fn config_edit_works_during_grace_without_changing_the_started_grace_deadline() {
+    shutdown::config_edit_works_during_grace_without_changing_the_started_grace_deadline::<
+        UnixProcess,
+    >();
+}

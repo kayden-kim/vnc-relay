@@ -14,6 +14,7 @@ use tokio::sync::watch;
 use tokio::task::JoinSet;
 use vnc_relay_adapters::accounts_file::{Argon2Hasher, Argon2Verifier, HashFloor};
 use vnc_relay_adapters::clock::SystemClock;
+use vnc_relay_adapters::config_edit::{FsConfigFileStore, TomlConfigDocument};
 use vnc_relay_adapters::crypto::{CryptoError, RelayIdKey, SessionIdKey, SystemTokenSource};
 use vnc_relay_adapters::file_watch::{self, FsReloadFileStore, SystemReloadClock};
 use vnc_relay_adapters::listener::{ListenerFailure, SupervisedListener};
@@ -28,6 +29,7 @@ use vnc_relay_adapters::{accounts_file, config_file, net};
 use vnc_relay_app::accounts::{self, ACCOUNTS_FILE_KEY, AccountsDiagnostic};
 use vnc_relay_app::events::{Event, Phase};
 use vnc_relay_app::lifecycle::LifecycleService;
+use vnc_relay_app::management::config::{ConfigEditService, ConfigManagement};
 use vnc_relay_app::management::login::dummy_hash;
 use vnc_relay_app::management::query::ManagementQueryService;
 use vnc_relay_app::management::terminate::ManagementTerminateService;
@@ -35,7 +37,8 @@ use vnc_relay_app::management::{AdminAuth, AdminPorts};
 use vnc_relay_app::ports::{Clock, EventSink, RelaySessionControl, RelayStateSource};
 use vnc_relay_app::relay::{RelayRuntime, RelayRuntimeConfig, RelayService};
 use vnc_relay_app::reload::service::ReloadService;
-use vnc_relay_app::reload::snapshot::{RelayAllow, ReloadCell, ReloadSnapshot};
+use vnc_relay_app::reload::snapshot::{ReloadCell, ReloadSnapshot};
+use vnc_relay_app::reload::{ConfigCandidate, SharedReload};
 use vnc_relay_app::settings::{LogOutput, Settings, TlsFiles};
 use vnc_relay_domain::admin_session::AdminSessionPolicy;
 use vnc_relay_domain::budget::ConnectionBudget;
@@ -54,8 +57,8 @@ const LOG_OUTPUT_KEY: &str = "log.output";
 pub fn run(config: &Path) -> ExitCode {
     // Stage 1: config, then the log output. Until the log is open, events
     // go to stdout (ops-info-v1 §1.1).
-    let settings = match config_file::load(config) {
-        Ok(settings) => settings,
+    let running = match config_file::load_candidate(config) {
+        Ok(running) => running,
         Err(diagnostics) => {
             let log = JsonLinesEventSink::stdout(report_log_write_failure);
             for d in &diagnostics {
@@ -66,6 +69,7 @@ pub fn run(config: &Path) -> ExitCode {
             return ExitCode::from(EXIT_CONFIG);
         }
     };
+    let settings = &running.settings;
     let output = match JsonLinesEventSink::open(
         &settings.log.output,
         report_log_write_failure,
@@ -161,18 +165,17 @@ pub fn run(config: &Path) -> ExitCode {
             return runtime_failure(log.as_ref(), "비동기 런타임을 만들 수 없다", &error);
         }
     };
-    runtime.block_on(listen_until_shutdown(
-        &settings, output, auth, config, clock,
-    ))
+    runtime.block_on(listen_until_shutdown(&running, output, auth, config, clock))
 }
 
 async fn listen_until_shutdown(
-    settings: &Settings,
+    running: &ConfigCandidate,
     output: Arc<JsonLinesEventSink>,
     auth: Arc<AdminAuth>,
     config: &Path,
     clock: Arc<dyn Clock>,
 ) -> ExitCode {
+    let settings = &running.settings;
     let log: Arc<dyn EventSink> = output.clone();
     // Registered before binding so that a request during startup is not lost.
     let mut shutdown = match ShutdownSignal::register() {
@@ -213,35 +216,33 @@ async fn listen_until_shutdown(
     // this start. A failed watch start exits 1 before any listener is bound.
     let wss_present = wss_tls.is_some();
     let management_tls_on = management_tls.is_some();
-    let allow = |entry_point: EntryPoint| {
-        settings
-            .relay
-            .get(entry_point)
-            .allow
-            .clone()
-            .unwrap_or_default()
-    };
     let cell = Arc::new(ReloadCell::new(ReloadSnapshot::new(
-        RelayAllow {
-            tcp_viewer: allow(EntryPoint::TcpViewer),
-            tcp_server: allow(EntryPoint::TcpServer),
-            ws_viewer: allow(EntryPoint::WsViewer),
-            wss_viewer: allow(EntryPoint::WssViewer),
-        },
+        running.clone(),
         wss_tls,
         management_tls,
     )));
-    let service = ReloadService::new(
-        settings.clone(),
+    let reload = Arc::new(std::sync::Mutex::new(ReloadService::new(
+        running.clone(),
         Arc::clone(&cell),
         Arc::new(FsReloadFileStore),
         Arc::new(tls::RustlsTlsStore),
         Arc::clone(&log),
-    );
+    )));
+    let config_service = match config_management(
+        config,
+        Arc::clone(&reload),
+        Arc::clone(&clock),
+        Arc::clone(&log),
+    ) {
+        Ok(service) => service,
+        Err(error) => {
+            return runtime_failure(log.as_ref(), "설정 편집 경로를 준비할 수 없다", &error);
+        }
+    };
     let (stop, stopped) = watch::channel(false);
     let watcher = match file_watch::start(
         config,
-        service,
+        Arc::clone(&reload),
         settings.reload.poll,
         SystemReloadClock,
         Arc::new(FsReloadFileStore),
@@ -255,7 +256,7 @@ async fn listen_until_shutdown(
     let lifecycle = Arc::new(LifecycleService::new());
     let (listener_failures, mut failed_listener) = watch::channel(None);
     // Lm, shared by the status listener and the management listener (4.2).
-    let admin_budget = ConnectionBudget::new(settings.limits.admin_connections);
+    let admin_budget = ConnectionBudget::new();
     let status_plan = settings.status_listener();
     let management_plan = settings.management_listener();
 
@@ -268,6 +269,7 @@ async fn listen_until_shutdown(
                 SupervisedListener::new(bound.listener, bound.plan.name, listener_failures.clone()),
                 Arc::clone(&admin_budget),
                 Arc::clone(&lifecycle),
+                Arc::clone(&cell) as Arc<dyn vnc_relay_app::reload::ports::RuntimeSettingsSource>,
             );
             Some(tokio::spawn(status.run(Arc::clone(&log))))
         }
@@ -311,9 +313,11 @@ async fn listen_until_shutdown(
 
     // The TCP and WebSocket entry points accept from here on. Every relay entry
     // point takes places from one L.
-    let relay_budget = ConnectionBudget::new(settings.limits.relay_connections);
-    let waiting_budget = ConnectionBudget::new(settings.limits.waiting);
-    let connector = TcpTargetConnector::new(settings.keepalive);
+    let relay_budget = ConnectionBudget::new();
+    let waiting_budget = ConnectionBudget::new();
+    let connector = TcpTargetConnector::new(
+        Arc::clone(&cell) as Arc<dyn vnc_relay_app::reload::ports::RuntimeSettingsSource>
+    );
     let runtime = Arc::new(RelayRuntime::new(
         connector,
         Arc::new(relay_key),
@@ -321,18 +325,16 @@ async fn listen_until_shutdown(
         Arc::clone(&relay_budget),
         waiting_budget,
         RelayRuntimeConfig {
-            wait_timeout: settings.timeouts.wait,
-            connect_timeout: settings.timeouts.connect,
-            close_timeout: settings.timeouts.close,
             recent_closed: settings.recent_closed.max_entries as usize,
-            target_policy: settings.mode1.allow_targets.clone().unwrap_or_default(),
         },
+        Arc::clone(&cell) as Arc<dyn vnc_relay_app::reload::ports::RuntimeSettingsSource>,
     ));
     let query_service = Arc::new(ManagementQueryService::new(
         Arc::clone(&runtime) as Arc<dyn RelayStateSource>,
         Arc::clone(&relay_budget),
         Arc::clone(&admin_budget),
         Arc::clone(&clock),
+        Arc::clone(&cell) as Arc<dyn vnc_relay_app::reload::ports::RuntimeSettingsSource>,
     ));
     let terminate_service = Arc::new(ManagementTerminateService::new(
         Arc::clone(&runtime) as Arc<dyn RelaySessionControl>,
@@ -345,18 +347,19 @@ async fn listen_until_shutdown(
         let dashboard = DashboardHints::new(
             settings.dashboard.poll,
             settings.dashboard.query_timeout,
-            settings.timeouts.close,
+            Arc::clone(&cell) as Arc<dyn vnc_relay_app::reload::ports::RuntimeSettingsSource>,
         );
         let listener = ManagementListener::new(
             SupervisedListener::new(bound.listener, bound.plan.name, listener_failures.clone()),
             management_tls_on.then(|| TlsSource::management(Arc::clone(&cell))),
             Arc::clone(&admin_budget),
-            settings.timeouts.tls_upgrade,
+            Arc::clone(&cell) as Arc<dyn vnc_relay_app::reload::ports::RuntimeSettingsSource>,
             dashboard,
             ManagementServices {
                 auth,
                 query: query_service,
                 terminate: terminate_service,
+                config: config_service,
             },
         );
         tokio::spawn(listener.run(Arc::clone(&log)))
@@ -366,9 +369,7 @@ async fn listen_until_shutdown(
             mode1_enabled: settings.mode1.enabled,
             mode2_enabled: settings.mode2.enabled,
         },
-        settings.timeouts.handshake,
-        settings.limits.buffer_bytes as usize,
-        settings.timeouts.close,
+        Arc::clone(&cell) as Arc<dyn vnc_relay_app::reload::ports::RuntimeSettingsSource>,
         Arc::clone(&clock),
         Arc::clone(&log),
     ));
@@ -392,8 +393,6 @@ async fn listen_until_shutdown(
                         _ => AllowSource::tcp_server(Arc::clone(&cell)),
                     },
                     relay_budget: Arc::clone(&relay_budget),
-                    handshake: settings.timeouts.handshake,
-                    keepalive: settings.keepalive,
                 };
                 let entry = TcpEntryPoint::new(
                     entry_point,
@@ -410,7 +409,6 @@ async fn listen_until_shutdown(
                 entry_points.spawn(entry.run(Arc::clone(&log), stopped.clone()));
             }
             Some(entry_point @ (EntryPoint::WsViewer | EntryPoint::WssViewer)) => {
-                let entry_settings = settings.relay.get(entry_point);
                 let tls = match entry_point {
                     EntryPoint::WssViewer if wss_present => Some(TlsSource::wss(Arc::clone(&cell))),
                     _ => None,
@@ -426,13 +424,7 @@ async fn listen_until_shutdown(
                             _ => AllowSource::ws_viewer(Arc::clone(&cell)),
                         },
                         relay_budget: Arc::clone(&relay_budget),
-                        handshake: settings.timeouts.handshake,
-                        keepalive: settings.keepalive,
                     },
-                    upgrade: settings.timeouts.tls_upgrade,
-                    origins: entry_settings.allowed_origins.clone(),
-                    message_bytes: settings.limits.ws_message_bytes as usize,
-                    buffer_bytes: settings.limits.buffer_bytes as usize,
                 };
                 let entry = WsEntryPoint::new(
                     entry_point,
@@ -467,7 +459,7 @@ async fn listen_until_shutdown(
         &lifecycle,
         &relay_service,
         &runtime,
-        settings.timeouts.shutdown_grace,
+        cell.current().settings.timeouts.shutdown_grace,
     );
     stop.send_replace(true);
 
@@ -486,6 +478,26 @@ async fn listen_until_shutdown(
     let _ = watch_task.await;
     log.record(&Event::ServerStopped);
     exit
+}
+
+/// Keeps path resolution identical to the loader and shares the watcher's
+/// transaction guard. No file is opened until a management request needs it.
+fn config_management<A: Clone + Send + Sync + 'static>(
+    config: &Path,
+    reload: SharedReload<A>,
+    clock: Arc<dyn Clock>,
+    log: Arc<dyn EventSink>,
+) -> io::Result<Arc<dyn ConfigManagement>> {
+    let config = std::path::absolute(config)?;
+    Ok(Arc::new(ConfigEditService::new(
+        reload,
+        Arc::new(FsConfigFileStore),
+        Arc::new(TomlConfigDocument),
+        config.to_path_buf(),
+        config.parent().unwrap_or(Path::new("")).to_path_buf(),
+        clock,
+        log,
+    )))
 }
 
 /// A closed Windows console requests Grace and Force in the same turn (Q102).

@@ -5,7 +5,6 @@
 //! Design: docs/architectures/management-listener.md,
 //! management-session.md and management-terminate.md.
 
-use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -23,6 +22,7 @@ use axum::serve::IncomingStream;
 use serde_json::{Value, json};
 use tokio::net::TcpListener;
 use vnc_relay_app::management::AdminAuth;
+use vnc_relay_app::management::config::ConfigManagement;
 use vnc_relay_app::management::query::ManagementQueryService;
 use vnc_relay_app::management::terminate::ManagementTerminateService;
 use vnc_relay_app::ports::EventSink;
@@ -36,6 +36,7 @@ use crate::request_deadline::{DeadlineListener, IdleControl};
 use crate::tls::TlsSource;
 use crate::tls_listener::TlsListener;
 
+mod config_api;
 mod query_api;
 mod session_api;
 mod terminate_api;
@@ -57,6 +58,7 @@ pub struct ManagementServices {
     pub auth: Arc<AdminAuth>,
     pub query: Arc<ManagementQueryService>,
     pub terminate: Arc<ManagementTerminateService>,
+    pub config: Arc<dyn ConfigManagement>,
 }
 
 /// A management listener. Connections run TLS when `tls` is set and plain
@@ -65,20 +67,19 @@ pub struct ManagementListener<L = TcpListener> {
     listener: L,
     tls: Option<TlsSource>,
     admin_budget: Arc<ConnectionBudget>,
-    tls_upgrade: Duration,
+    runtime: Arc<dyn vnc_relay_app::reload::ports::RuntimeSettingsSource>,
     services: ManagementServices,
     dashboard: DashboardHints,
 }
 
 impl<L: Listener> ManagementListener<L> {
-    /// `admin_budget` is Lm, shared with the status listener. `tls_upgrade` is U:
-    /// the limit on the TLS handshake and on reading each request head.
+    /// `admin_budget` counts Lm. The runtime source supplies Lm and U at accept.
     /// `services` uses the actual relay runtime for queries and termination.
     pub fn new(
         listener: L,
         tls: Option<TlsSource>,
         admin_budget: Arc<ConnectionBudget>,
-        tls_upgrade: Duration,
+        runtime: Arc<dyn vnc_relay_app::reload::ports::RuntimeSettingsSource>,
         dashboard: DashboardHints,
         services: ManagementServices,
     ) -> Self {
@@ -86,7 +87,7 @@ impl<L: Listener> ManagementListener<L> {
             listener,
             tls,
             admin_budget,
-            tls_upgrade,
+            runtime,
             services,
             dashboard,
         }
@@ -95,8 +96,13 @@ impl<L: Listener> ManagementListener<L> {
     /// Answers management requests until the task that runs it is aborted.
     pub async fn run(self, log: Arc<dyn EventSink>) {
         let secure = self.tls.is_some();
-        let admitting =
-            AdmittingListener::new(self.listener, self.admin_budget, Arc::clone(&log), LISTENER);
+        let admitting = AdmittingListener::new(
+            self.listener,
+            self.admin_budget,
+            self.runtime,
+            Arc::clone(&log),
+            LISTENER,
+        );
         // One fallback judges path and method itself, so every method reaches
         // the same rules (management-api-v1 §1.3, §1.11). The peer address
         // reaches the login limit through `ConnectInfo`.
@@ -105,6 +111,7 @@ impl<L: Listener> ManagementListener<L> {
             auth: self.services.auth,
             query: self.services.query,
             terminate: self.services.terminate,
+            config: self.services.config,
             dashboard: self.dashboard,
         };
         let router = Router::new()
@@ -116,11 +123,11 @@ impl<L: Listener> ManagementListener<L> {
         match self.tls {
             Some(source) => {
                 let listener = TlsListener::new(admitting, source, log, LISTENER);
-                let listener = DeadlineListener::new(listener, self.tls_upgrade);
+                let listener = DeadlineListener::new(listener);
                 let _ = axum::serve(listener, router).await;
             }
             None => {
-                let listener = DeadlineListener::new(admitting, self.tls_upgrade);
+                let listener = DeadlineListener::new(admitting);
                 let _ = axum::serve(listener, router).await;
             }
         }
@@ -139,32 +146,44 @@ struct PeerAddr {
 
 impl<L> Connected<IncomingStream<'_, DeadlineListener<L>>> for PeerAddr
 where
-    L: axum::serve::Listener<Addr = SocketAddr>,
+    L: axum::serve::Listener<Addr = crate::admission::AdmittedAddr>,
 {
     fn connect_info(stream: IncomingStream<'_, DeadlineListener<L>>) -> Self {
         Self {
-            ip: PeerIp::from(*stream.remote_addr()),
+            ip: PeerIp::from(stream.remote_addr().socket),
             idle: stream.io().idle_control(),
         }
     }
 }
 
 /// The dashboard values that the session view carries (management-api-v1 §1.5).
-#[derive(Debug, Clone, Copy)]
+#[derive(Clone)]
 pub struct DashboardHints {
     poll_secs: u64,
     query_timeout_secs: u64,
-    terminate_timeout_secs: u64,
+    runtime: Arc<dyn vnc_relay_app::reload::ports::RuntimeSettingsSource>,
 }
 
 impl DashboardHints {
-    /// `close` is `[timeouts] close_secs`. The terminate wait adds 5 seconds.
-    pub fn new(poll: Duration, query_timeout: Duration, close: Duration) -> Self {
+    /// P and query timeout remain startup values; E is read for each response.
+    pub fn new(
+        poll: Duration,
+        query_timeout: Duration,
+        runtime: Arc<dyn vnc_relay_app::reload::ports::RuntimeSettingsSource>,
+    ) -> Self {
         Self {
             poll_secs: poll.as_secs(),
             query_timeout_secs: query_timeout.as_secs(),
-            terminate_timeout_secs: close.as_secs().saturating_add(5),
+            runtime,
         }
+    }
+
+    fn terminate_timeout_secs(&self) -> u64 {
+        let mut seconds = 0;
+        self.runtime.with_current(&mut |settings| {
+            seconds = settings.timeouts.close.as_secs().saturating_add(5);
+        });
+        seconds
     }
 }
 
@@ -177,6 +196,7 @@ struct Shared {
     auth: Arc<AdminAuth>,
     query: Arc<ManagementQueryService>,
     terminate: Arc<ManagementTerminateService>,
+    config: Arc<dyn ConfigManagement>,
     dashboard: DashboardHints,
 }
 
@@ -345,4 +365,44 @@ fn json_error(status: StatusCode, code: &str, message: &str) -> Response {
         status,
         &json!({ "error": { "code": code, "message": message } }),
     )
+}
+
+#[cfg(test)]
+mod dashboard_hint_tests {
+    /// spec: management.md:MGT-041 partial
+    /// spec: operations.md:OPS-057 partial
+    #[test]
+    fn session_hint_reads_current_close_timeout_without_changing_startup_poll_values() {
+        let mut settings = crate::config_file::parse(
+            "[admin]\naccounts_file='accounts.toml'\n[management]\nlisten='127.0.0.1:8443'\n[status]\nlisten='127.0.0.1:9090'\n",
+            std::path::Path::new("."),
+        ).unwrap();
+        settings.timeouts.close = std::time::Duration::from_secs(3);
+        let candidate = |settings| vnc_relay_app::reload::ConfigCandidate {
+            settings,
+            presence: Default::default(),
+        };
+        let source = std::sync::Arc::new(vnc_relay_app::reload::snapshot::ReloadCell::<()>::new(
+            vnc_relay_app::reload::snapshot::ReloadSnapshot::new(
+                candidate(settings.clone()),
+                None,
+                None,
+            ),
+        ));
+        let hints = super::DashboardHints::new(
+            std::time::Duration::from_secs(2),
+            std::time::Duration::from_secs(5),
+            source.clone(),
+        );
+        assert_eq!(hints.terminate_timeout_secs(), 8);
+        settings.timeouts.close = std::time::Duration::from_secs(13);
+        source.replace(vnc_relay_app::reload::snapshot::ReloadSnapshot::new(
+            candidate(settings),
+            None,
+            None,
+        ));
+        assert_eq!(hints.terminate_timeout_secs(), 18);
+        assert_eq!(hints.poll_secs, 2);
+        assert_eq!(hints.query_timeout_secs, 5);
+    }
 }

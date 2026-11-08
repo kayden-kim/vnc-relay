@@ -256,6 +256,16 @@ pub const ASSETS: &[Asset] = &[
         body: include_bytes!("../../../web/dashboard/app/session.js"),
     },
     Asset {
+        path: "/app/settings.js",
+        content_type: JS,
+        body: include_bytes!("../../../web/dashboard/app/settings.js"),
+    },
+    Asset {
+        path: "/app/settings-model.js",
+        content_type: JS,
+        body: include_bytes!("../../../web/dashboard/app/settings-model.js"),
+    },
+    Asset {
         path: "/app/router.js",
         content_type: JS,
         body: include_bytes!("../../../web/dashboard/app/router.js"),

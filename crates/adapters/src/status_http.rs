@@ -13,6 +13,7 @@ use serde_json::{Value, json};
 use tokio::net::TcpListener;
 use vnc_relay_app::lifecycle::LifecycleService;
 use vnc_relay_app::ports::EventSink;
+use vnc_relay_app::reload::ports::RuntimeSettingsSource;
 use vnc_relay_domain::budget::ConnectionBudget;
 
 use crate::admission::AdmittingListener;
@@ -27,6 +28,7 @@ pub struct StatusListener<L = TcpListener> {
     listener: L,
     admin_budget: Arc<ConnectionBudget>,
     lifecycle: Arc<LifecycleService>,
+    runtime: Arc<dyn RuntimeSettingsSource>,
 }
 
 impl<L: Listener> StatusListener<L> {
@@ -35,17 +37,25 @@ impl<L: Listener> StatusListener<L> {
         listener: L,
         admin_budget: Arc<ConnectionBudget>,
         lifecycle: Arc<LifecycleService>,
+        runtime: Arc<dyn RuntimeSettingsSource>,
     ) -> Self {
         Self {
             listener,
             admin_budget,
             lifecycle,
+            runtime,
         }
     }
 
     /// Answers status queries until the task that runs it is aborted.
     pub async fn run(self, log: Arc<dyn EventSink>) {
-        let listener = AdmittingListener::new(self.listener, self.admin_budget, log, LISTENER);
+        let listener = AdmittingListener::new(
+            self.listener,
+            self.admin_budget,
+            self.runtime,
+            log,
+            LISTENER,
+        );
         // One fallback judges method and path itself: a `get` route would
         // also take HEAD, and the stock 404 and 405 have no contract body.
         let router = Router::new().fallback(answer).with_state(self.lifecycle);

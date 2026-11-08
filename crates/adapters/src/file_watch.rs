@@ -20,8 +20,8 @@ use tokio::sync::{mpsc, watch};
 use vnc_relay_app::events::Event;
 use vnc_relay_app::ports::EventSink;
 use vnc_relay_app::reload::ports::{ReloadClock, ReloadFileStore};
-use vnc_relay_app::reload::service::{ReloadOutcome, ReloadService};
-use vnc_relay_app::reload::{ChangeSource, WatchFailure};
+use vnc_relay_app::reload::service::ReloadOutcome;
+use vnc_relay_app::reload::{ChangeSource, SharedReload, WatchFailure};
 
 use crate::config_file;
 use crate::ops_log::JsonLinesEventSink;
@@ -88,7 +88,7 @@ impl ReloadClock for SystemReloadClock {
 /// watcher could not start.
 pub fn start<A: Clone, C: ReloadClock>(
     config_path: &Path,
-    service: ReloadService<A>,
+    service: SharedReload<A>,
     poll: Duration,
     clock: C,
     files: Arc<dyn ReloadFileStore>,
@@ -106,7 +106,7 @@ pub fn start<A: Clone, C: ReloadClock>(
 /// Builds the watcher around `make_feed`, so tests can replace the OS backend.
 fn assemble<A: Clone, C: ReloadClock>(
     config_path: &Path,
-    service: ReloadService<A>,
+    service: SharedReload<A>,
     poll: Duration,
     clock: C,
     files: Arc<dyn ReloadFileStore>,
@@ -144,7 +144,7 @@ fn assemble<A: Clone, C: ReloadClock>(
 pub struct ReloadWatcher<A, C> {
     config_path: PathBuf,
     base_dir: PathBuf,
-    service: ReloadService<A>,
+    service: SharedReload<A>,
     feed: Box<dyn ChangeFeed>,
     queue: Arc<ChangeQueue>,
     wake: mpsc::Receiver<()>,
@@ -271,7 +271,12 @@ impl<A: Clone, C: ReloadClock> ReloadWatcher<A, C> {
     /// The config file plus every path the service watches (file-watch.md §1.8, §9 item 9).
     fn current_watched(&self) -> Vec<PathBuf> {
         let mut paths = vec![self.config_path.clone()];
-        for path in self.service.watched_paths() {
+        for path in self
+            .service
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .watched_paths()
+        {
             if !paths.contains(&path) {
                 paths.push(path);
             }
@@ -381,21 +386,38 @@ impl<A: Clone, C: ReloadClock> ReloadWatcher<A, C> {
         self.resync_notify();
     }
 
-    /// Hands the candidate to the service. The processed state is refreshed unless the result is
-    /// discarded, so a discarded candidate is seen again on the next change (file-watch.md §4 step 5, §9 item 10).
-    fn apply(&mut self, window: u64, candidate: Candidate, stop: &watch::Receiver<bool>) {
+    /// The final read, parse, prepare and commit share the same lock as PATCH.
+    fn apply(
+        &mut self,
+        window: u64,
+        before: &[Option<FileStamp>],
+        stop: &watch::Receiver<bool>,
+    ) -> bool {
+        let shared = Arc::clone(&self.service);
+        let mut service = shared
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let candidate = self.read_candidate();
+        if self.stamps() != before || self.queue.generation() != window {
+            return false;
+        }
         let queue = Arc::clone(&self.queue);
         let is_current = || queue.generation() == window && !*stop.borrow();
+        let at = SystemTime::now();
         let outcome = match candidate.config.as_deref().map(std::str::from_utf8) {
-            Some(Ok(text)) => self
-                .service
-                .handle_config(config_file::parse(text, &self.base_dir), &is_current),
-            // A missing or non-UTF-8 config file is unreadable (config-v3 §1.9, `config_file_unreadable`).
-            _ => self.service.handle_unreadable(&is_current),
+            Some(Ok(text)) => service.handle_config(
+                config_file::parse_candidate(text.as_bytes(), &self.base_dir),
+                &is_current,
+                at,
+            ),
+            _ => service.handle_unreadable(&is_current, at),
         };
+        drop(service);
+        self.seen_generation = window;
         if !matches!(outcome, ReloadOutcome::Discarded) {
             self.refresh_watch_set(candidate.hashes);
         }
+        true
     }
 
     /// Waits for the quiet window Q. A notify event or a stop signal ends the wait early.
@@ -442,12 +464,9 @@ impl<A: Clone, C: ReloadClock> ReloadWatcher<A, C> {
             if self.stamps() != before || self.queue.generation() != window {
                 continue;
             }
-            let candidate = self.read_candidate();
-            if self.stamps() != before || self.queue.generation() != window {
+            if !self.apply(window, &before, stop) {
                 continue;
             }
-            self.seen_generation = window;
-            self.apply(window, candidate, stop);
             return Flow::Continue;
         }
     }
@@ -584,7 +603,8 @@ mod tests {
     use std::sync::atomic::{AtomicBool, Ordering};
     use tokio::sync::oneshot;
     use vnc_relay_app::reload::ports::{ReloadTlsStore, TlsBuildError};
-    use vnc_relay_app::reload::snapshot::{RelayAllow, ReloadCell, ReloadSnapshot};
+    use vnc_relay_app::reload::service::ReloadService;
+    use vnc_relay_app::reload::snapshot::{ReloadCell, ReloadSnapshot};
     use vnc_relay_domain::allow_list::{AllowList, IpItem};
     use vnc_relay_domain::peer_ip::PeerIp;
 
@@ -746,9 +766,10 @@ mod tests {
         // The watcher parses candidates against the config directory, so the running settings must
         // use the same base; otherwise relative paths differ and read as restart-required changes.
         let base_dir = config_path.parent().expect("config directory");
-        let running = config_file::parse(running_text, base_dir).expect("valid running config");
+        let running = config_file::parse_candidate(running_text.as_bytes(), base_dir)
+            .expect("valid running config");
         let cell = Arc::new(ReloadCell::<()>::new(ReloadSnapshot::new(
-            RelayAllow::default(),
+            running.clone(),
             None,
             None,
         )));
@@ -761,7 +782,7 @@ mod tests {
         );
         let watcher = assemble(
             &config_path,
-            service,
+            Arc::new(Mutex::new(service)),
             POLL,
             ManualClock { requests },
             files.clone(),
@@ -863,13 +884,13 @@ mod tests {
             mut stop,
             _stop_sender,
         } = fixture_running(RELAY_CONFIG);
-        let before = cell.current().relay_allow.tcp_viewer.clone();
+        let before = cell.current().settings.relay.tcp_viewer.allow.clone();
         files.deny(&config_path);
         assert_eq!(watcher.on_tick(&mut stop).await, Flow::Continue);
         assert!(sleeps.try_recv().is_err());
         assert_eq!(sink.names(), ["reload_watch_failed"]);
         // The failed read starts no episode, and the running list stays in force.
-        assert_eq!(cell.current().relay_allow.tcp_viewer, before);
+        assert_eq!(cell.current().settings.relay.tcp_viewer.allow, before);
     }
 
     /// spec: operations.md:OPS-041
@@ -917,7 +938,14 @@ mod tests {
             "Q + G must stay below the smallest settle_secs (1 s)"
         );
         // New decisions use the new list: 127.0.0.2 is permitted and the removed 127.0.0.1 is not.
-        let allow = cell.current().relay_allow.tcp_viewer.clone();
+        let allow = cell
+            .current()
+            .settings
+            .relay
+            .tcp_viewer
+            .allow
+            .clone()
+            .expect("enabled allow");
         assert!(allow.permits(PeerIp::new(IpAddr::from([127, 0, 0, 2]))));
         assert!(!allow.permits(PeerIp::new(IpAddr::from([127, 0, 0, 1]))));
         assert_eq!(
@@ -964,7 +992,10 @@ mod tests {
             ]
         );
         let allow = AllowList::new(vec![IpItem::Single(IpAddr::from([127, 0, 0, 2]))]);
-        assert_eq!(cell.current().relay_allow.tcp_viewer, allow);
+        assert_eq!(
+            cell.current().settings.relay.tcp_viewer.allow.as_ref(),
+            Some(&allow)
+        );
     }
 
     /// spec: operations.md:OPS-027 partial
@@ -997,7 +1028,10 @@ mod tests {
         assert_eq!(flow, Flow::Continue);
         assert_eq!(sink.names(), ["reload_change_detected", "reload_applied"]);
         let allow = AllowList::new(vec![IpItem::Single(IpAddr::from([127, 0, 0, 3]))]);
-        assert_eq!(cell.current().relay_allow.tcp_viewer, allow);
+        assert_eq!(
+            cell.current().settings.relay.tcp_viewer.allow.as_ref(),
+            Some(&allow)
+        );
     }
 
     /// spec: operations.md:OPS-027 partial
@@ -1014,7 +1048,7 @@ mod tests {
             _stop_sender,
         } = fixture_running(RELAY_CONFIG);
         let queue = Arc::clone(&watcher.queue);
-        let before = cell.current().relay_allow.tcp_viewer.clone();
+        let before = cell.current().settings.relay.tcp_viewer.allow.clone();
         files.set(&config_path, RELAY_CANDIDATE.as_bytes());
         let driver = async {
             let quiet = next_sleep(&mut sleeps, QUIET).await;
@@ -1034,7 +1068,7 @@ mod tests {
         let (flow, ()) = tokio::join!(watcher.on_tick(&mut stop), driver);
         assert_eq!(flow, Flow::Continue);
         assert_eq!(sink.names(), ["reload_change_detected", "reload_rejected"]);
-        assert_eq!(cell.current().relay_allow.tcp_viewer, before);
+        assert_eq!(cell.current().settings.relay.tcp_viewer.allow, before);
     }
 
     /// Arms the §4.3 validation hook. While the candidate is being validated, `text` is written and
@@ -1049,10 +1083,14 @@ mod tests {
         let files = Arc::clone(files);
         let path = config_path.to_path_buf();
         let text = text.to_owned();
-        watcher.service.arm_before_validation(Box::new(move || {
-            files.set(&path, text.as_bytes());
-            queue.offer_path(&path);
-        }));
+        watcher
+            .service
+            .lock()
+            .expect("reload lock")
+            .arm_before_validation(Box::new(move || {
+                files.set(&path, text.as_bytes());
+                queue.offer_path(&path);
+            }));
     }
 
     /// spec: operations.md:OPS-028 partial
@@ -1068,14 +1106,18 @@ mod tests {
             mut stop,
             _stop_sender: stop_sender,
         } = fixture_running(RELAY_CONFIG);
-        let before = cell.current().relay_allow.tcp_viewer.clone();
+        let before = cell.current().settings.relay.tcp_viewer.allow.clone();
         files.set(&config_path, RELAY_CANDIDATE.as_bytes());
-        watcher.service.arm_before_validation(Box::new(move || {
-            // The stop request arrives after the candidate was read and before it is validated.
-            stop_sender
-                .send(true)
-                .expect("the watcher holds the stop receiver");
-        }));
+        watcher
+            .service
+            .lock()
+            .expect("reload lock")
+            .arm_before_validation(Box::new(move || {
+                // The stop request arrives after the candidate was read and before it is validated.
+                stop_sender
+                    .send(true)
+                    .expect("the watcher holds the stop receiver");
+            }));
         let driver = async {
             let quiet = next_sleep(&mut sleeps, QUIET).await;
             let _ = quiet.send(());
@@ -1086,7 +1128,7 @@ mod tests {
         assert_eq!(flow, Flow::Continue);
         assert!(*stop.borrow());
         assert_eq!(sink.names(), ["reload_change_detected"]);
-        assert_eq!(cell.current().relay_allow.tcp_viewer, before);
+        assert_eq!(cell.current().settings.relay.tcp_viewer.allow, before);
     }
 
     /// spec: operations.md:OPS-027
@@ -1106,7 +1148,7 @@ mod tests {
                 _stop_sender,
             } = fixture_running(RELAY_CONFIG);
             let newest = RELAY_CANDIDATE.replace("127.0.0.2", "127.0.0.3");
-            let before = cell.current().relay_allow.tcp_viewer.clone();
+            let before = cell.current().settings.relay.tcp_viewer.allow.clone();
             files.set(&config_path, RELAY_CANDIDATE.as_bytes());
             arm_newer_write(&mut watcher, &files, &config_path, &newest);
             let driver = async {
@@ -1118,7 +1160,7 @@ mod tests {
             let (flow, ()) = tokio::join!(watcher.on_tick(&mut stop), driver);
             assert_eq!(flow, Flow::Continue);
             assert_eq!(sink.names(), ["reload_change_detected"]);
-            assert_eq!(cell.current().relay_allow.tcp_viewer, before);
+            assert_eq!(cell.current().settings.relay.tcp_viewer.allow, before);
             // The newer write left a wake, which starts the episode for the newest candidate.
             watcher.wake.recv().await.expect("wake sent");
             let driver = async {
@@ -1138,7 +1180,10 @@ mod tests {
                 ]
             );
             let allow = AllowList::new(vec![IpItem::Single(IpAddr::from([127, 0, 0, 3]))]);
-            assert_eq!(cell.current().relay_allow.tcp_viewer, allow);
+            assert_eq!(
+                cell.current().settings.relay.tcp_viewer.allow.as_ref(),
+                Some(&allow)
+            );
         }
         // Newest invalid: an invalid newer write lands while the first candidate is validated. The
         // first candidate is still never applied, and the running allow list stays in force.
@@ -1153,7 +1198,7 @@ mod tests {
                 mut stop,
                 _stop_sender,
             } = fixture_running(RELAY_CONFIG);
-            let before = cell.current().relay_allow.tcp_viewer.clone();
+            let before = cell.current().settings.relay.tcp_viewer.allow.clone();
             files.set(&config_path, RELAY_CANDIDATE.as_bytes());
             arm_newer_write(&mut watcher, &files, &config_path, INVALID_CONFIG);
             let driver = async {
@@ -1165,7 +1210,7 @@ mod tests {
             let (flow, ()) = tokio::join!(watcher.on_tick(&mut stop), driver);
             assert_eq!(flow, Flow::Continue);
             assert_eq!(sink.names(), ["reload_change_detected"]);
-            assert_eq!(cell.current().relay_allow.tcp_viewer, before);
+            assert_eq!(cell.current().settings.relay.tcp_viewer.allow, before);
             watcher.wake.recv().await.expect("wake sent");
             let driver = async {
                 let quiet = next_sleep(&mut sleeps, QUIET).await;
@@ -1183,7 +1228,7 @@ mod tests {
                     "reload_rejected",
                 ]
             );
-            assert_eq!(cell.current().relay_allow.tcp_viewer, before);
+            assert_eq!(cell.current().settings.relay.tcp_viewer.allow, before);
         }
     }
 
@@ -1206,14 +1251,14 @@ mod tests {
             _stop_sender,
             ..
         } = fixture_with_feed(RELAY_CONFIG, Arc::clone(&refuse)).expect("watcher assembles");
-        let before = cell.current().relay_allow.tcp_viewer.clone();
+        let before = cell.current().settings.relay.tcp_viewer.allow.clone();
         refuse.store(true, Ordering::SeqCst);
         watcher.queue.offer_failure("OS notify error".to_owned());
         // The run loop consumes the wake before it calls the handler.
         watcher.wake.recv().await.expect("wake sent");
         assert_eq!(watcher.on_tick(&mut stop).await, Flow::Continue);
         assert_eq!(sink.names(), ["reload_watch_failed", "reload_watch_failed"]);
-        assert_eq!(cell.current().relay_allow.tcp_viewer, before);
+        assert_eq!(cell.current().settings.relay.tcp_viewer.allow, before);
         assert!(matches!(
             sink.snapshot()[0],
             Event::ReloadWatchFailed {
@@ -1239,7 +1284,7 @@ mod tests {
             mut stop,
             _stop_sender: stop_sender,
         } = fixture_running(RELAY_CONFIG);
-        let before = cell.current().relay_allow.tcp_viewer.clone();
+        let before = cell.current().settings.relay.tcp_viewer.allow.clone();
         files.set(&config_path, RELAY_CANDIDATE.as_bytes());
         let driver = async {
             let quiet = next_sleep(&mut sleeps, QUIET).await;
@@ -1251,6 +1296,45 @@ mod tests {
         let (flow, _quiet) = tokio::join!(watcher.on_tick(&mut stop), driver);
         assert_eq!(flow, Flow::Stop);
         assert_eq!(sink.names(), ["reload_change_detected"]);
-        assert_eq!(cell.current().relay_allow.tcp_viewer, before);
+        assert_eq!(cell.current().settings.relay.tcp_viewer.allow, before);
+    }
+    #[test]
+    fn final_candidate_read_holds_the_same_mutex_as_config_edit() {
+        use std::sync::atomic::AtomicUsize;
+        struct CheckingFiles {
+            inner: Arc<MemoryFiles>,
+            reload: std::sync::Weak<Mutex<ReloadService<()>>>,
+            reads: AtomicUsize,
+        }
+        impl ReloadFileStore for CheckingFiles {
+            fn read(&self, path: &Path) -> io::Result<Vec<u8>> {
+                let reload = self.reload.upgrade().expect("shared transaction alive");
+                assert!(
+                    matches!(reload.try_lock(), Err(std::sync::TryLockError::WouldBlock)),
+                    "the watcher must lock before its final file read"
+                );
+                self.reads.fetch_add(1, Ordering::SeqCst);
+                self.inner.read(path)
+            }
+        }
+        let Fixture {
+            mut watcher,
+            files,
+            config_path,
+            sink,
+            stop,
+            ..
+        } = fixture_running(RELAY_CONFIG);
+        let checked = Arc::new(CheckingFiles {
+            inner: files.clone(),
+            reload: Arc::downgrade(&watcher.service),
+            reads: AtomicUsize::new(0),
+        });
+        watcher.files = checked.clone();
+        files.set(&config_path, RELAY_CANDIDATE.as_bytes());
+        let before = watcher.stamps();
+        assert!(watcher.apply(watcher.queue.generation(), &before, &stop));
+        assert!(checked.reads.load(Ordering::SeqCst) > 0);
+        assert_eq!(sink.names(), ["reload_applied"]);
     }
 }

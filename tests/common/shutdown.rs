@@ -930,6 +930,187 @@ pub fn management_works_during_grace<P: ServerProcess>() {
     fixture.assert_final_log();
 }
 
+pub fn config_edit_works_during_grace_without_changing_the_started_grace_deadline<
+    P: ServerProcess,
+>() {
+    fn json(reply: &Reply) -> serde_json::Value {
+        assert_eq!(reply.status, 200, "{}", reply.body);
+        serde_json::from_str(&reply.body)
+            .unwrap_or_else(|error| panic!("grace configuration JSON: {error}: {}", reply.body))
+    }
+
+    fn value<'a>(view: &'a serde_json::Value, key: &str) -> &'a serde_json::Value {
+        &view["items"]
+            .as_array()
+            .unwrap_or_else(|| panic!("missing configuration items: {view}"))
+            .iter()
+            .find(|item| item["key"] == key)
+            .unwrap_or_else(|| panic!("missing configuration key {key}: {view}"))["value"]
+    }
+
+    fn patch(
+        fixture: &Fixture,
+        admin: &Admin,
+        view: &serde_json::Value,
+        changes: serde_json::Value,
+    ) -> serde_json::Value {
+        let body = serde_json::json!({
+            "revision": view["revision"], "changes": changes
+        })
+        .to_string();
+        json(&send(
+            fixture.ports[0],
+            "PATCH",
+            "/api/v1/config",
+            &[
+                ("Cookie", &admin.cookie),
+                ("X-CSRF-Token", &admin.csrf),
+                ("Content-Type", "application/json"),
+            ],
+            &body,
+        ))
+    }
+
+    let _lock = PORTS.lock().unwrap_or_else(PoisonError::into_inner);
+    let fixture = Fixture::new("grace-config-edit", 6);
+    let original = fs::read_to_string(&fixture.config)
+        .unwrap_or_else(|error| panic!("read grace configuration: {error}"));
+    fs::write(
+        &fixture.config,
+        original.replace("[management]\n", "[management]\nconfig_edit = true\n"),
+    )
+    .unwrap_or_else(|error| panic!("enable grace configuration edits: {error}"));
+    let mut process = P::start(&fixture.config);
+    fixture.wait_ready(&mut process);
+    let admin = fixture.login();
+    let mut keeper = RelayPair::start(&fixture, "45000");
+    let initial = json(&fixture.query(&admin, "/api/v1/config"));
+    assert_eq!(initial["edit_enabled"], true);
+    assert_eq!(value(&initial, "timeouts.shutdown_grace_secs"), 6);
+    let initial_session = json(&fixture.query(&admin, "/api/v1/session"));
+    let began = Instant::now();
+    process.request_stop();
+    let started = fixture.event("shutdown_started");
+    assert_eq!(number(&started, "grace_secs"), 6);
+    let grace = json(&fixture.query(&admin, "/api/v1/config"));
+    assert_eq!(grace["file"]["state"], "in_effect");
+    assert_eq!(grace["revision"], initial["revision"]);
+    let applied = patch(
+        &fixture,
+        &admin,
+        &grace,
+        serde_json::json!({
+            "timeouts.shutdown_grace_secs": 0,
+            "timeouts.close_secs": 2
+        }),
+    );
+    assert_eq!(applied["result"], "applied");
+    assert_eq!(
+        applied["applied"],
+        serde_json::json!(["timeouts.close_secs", "timeouts.shutdown_grace_secs"])
+    );
+    let zero = json(&fixture.query(&admin, "/api/v1/config"));
+    assert_eq!(value(&zero, "timeouts.shutdown_grace_secs"), 0);
+    assert_eq!(value(&zero, "timeouts.close_secs"), 2);
+    assert_eq!(zero["last_reload"]["trigger"], "config_edit");
+    assert_eq!(zero["revision"], applied["revision"]);
+    keeper.transfer();
+    assert_eq!(
+        process.try_wait(),
+        None,
+        "editing G to zero cancelled started grace"
+    );
+    let session = json(&fixture.query(&admin, "/api/v1/session"));
+    assert_eq!(session["dashboard"]["terminate_timeout_secs"], 7);
+    assert_eq!(
+        session["dashboard"]["poll_secs"],
+        initial_session["dashboard"]["poll_secs"]
+    );
+    assert_eq!(
+        session["dashboard"]["query_timeout_secs"],
+        initial_session["dashboard"]["query_timeout_secs"]
+    );
+
+    let extended = patch(
+        &fixture,
+        &admin,
+        &zero,
+        serde_json::json!({
+            "timeouts.shutdown_grace_secs": 60
+        }),
+    );
+    assert_eq!(
+        extended["applied"],
+        serde_json::json!(["timeouts.shutdown_grace_secs"])
+    );
+    let current = json(&fixture.query(&admin, "/api/v1/config"));
+    assert_eq!(value(&current, "timeouts.shutdown_grace_secs"), 60);
+    assert_eq!(current["last_reload"]["trigger"], "config_edit");
+    let persisted = fs::read_to_string(&fixture.config)
+        .unwrap_or_else(|error| panic!("read edited grace file: {error}"));
+    assert!(
+        persisted.contains("shutdown_grace_secs = 60"),
+        "{persisted}"
+    );
+    assert!(persisted.contains("close_secs = 2"), "{persisted}");
+    let external = format!("{persisted}\n[keepalive]\ntcp_idle_secs = 90\n");
+    fs::write(&fixture.config, external)
+        .unwrap_or_else(|error| panic!("external grace file write: {error}"));
+    // Watcher remains stopped, while authenticated GET still classifies files.
+    std::thread::sleep(Duration::from_millis(500));
+    let pending = json(&fixture.query(&admin, "/api/v1/config"));
+    assert_eq!(pending["file"]["state"], "pending");
+    assert_eq!(
+        pending["file"]["config_keys"],
+        serde_json::json!(["keepalive.tcp_idle_secs"])
+    );
+    assert_eq!(value(&pending, "keepalive.tcp_idle_secs"), 60);
+    assert_eq!(pending["last_reload"], current["last_reload"]);
+    assert_status(
+        fixture.ports[1],
+        "/readyz",
+        503,
+        r#"{"status":"not_ready","reason":"shutting_down"}"#,
+    );
+    let mut refused = connect(fixture.ports[3]);
+    assert_closed(&mut refused);
+    keeper.transfer();
+    assert_eq!(process.try_wait(), None);
+    wait_exit(&mut process, Duration::from_secs(10));
+    assert!(
+        began.elapsed() >= Duration::from_secs(6),
+        "started grace was shortened"
+    );
+    assert!(
+        began.elapsed() < Duration::from_secs(11),
+        "started grace was extended"
+    );
+    keeper.assert_closed();
+    let forced = fixture.event("shutdown_forced");
+    assert_eq!(number(&forced, "remaining_sessions"), 1);
+    assert_eq!(
+        string_field(&fixture.closed(&keeper.sid), "close_cause"),
+        "server_shutdown"
+    );
+    let log = fixture.log();
+    let during = log
+        .split_once("\"event\":\"shutdown_started\"")
+        .unwrap_or_else(|| panic!("missing shutdown_started: {log}"))
+        .1;
+    assert_eq!(
+        during.matches("\"event\":\"config_edited\"").count(),
+        2,
+        "{during}"
+    );
+    assert_eq!(
+        during.matches("\"event\":\"reload_applied\"").count(),
+        2,
+        "{during}"
+    );
+    assert!(!during.contains("\"trigger\":\"file_watch\""), "{during}");
+    fixture.assert_final_log();
+}
+
 #[cfg(windows)]
 pub fn console_close_forces_cleanup<P: ServerProcess>(close: impl FnOnce(&mut P)) {
     let _lock = PORTS.lock().unwrap_or_else(PoisonError::into_inner);

@@ -24,7 +24,6 @@ use vnc_relay_domain::session::{
     CloseCause, ClosedSession, Direction, Session, SessionError, SessionId, SessionState,
     ViewerTransport,
 };
-use vnc_relay_domain::target_policy::TargetPolicy;
 
 use crate::events::{
     AbortReason, AdminTerminateResult, Event, RejectReason, RelayIdRef, ShutdownTrigger, Stage,
@@ -33,11 +32,15 @@ use crate::ports::{
     BoxRelayStream, Clock, EventSink, RelayCloseAction, RelayIdSource, RelayLifecycle,
     RelaySessionControl, RelayStateSource, RelayStream, SessionIdSource, TargetConnector,
 };
+use crate::reload::ports::RuntimeSettingsSource;
 
 mod handshake;
 mod matching;
 mod session;
 mod target;
+
+#[cfg(test)]
+pub(crate) mod test_support;
 
 /// Accepted connection metadata. Both times use the service's shared Clock.
 /// H starts at `exchange_at`; event elapsed time starts at `accepted_at`.
@@ -51,6 +54,10 @@ pub struct ConnectionContext {
     pub accepted_wall: SystemTime,
     pub accepted_at: Duration,
     pub exchange_at: Duration,
+    /// B captured at socket acceptance, independent for both Mode II endpoints.
+    pub buffer_bytes: usize,
+    /// H captured when this connection starts its initial exchange.
+    pub handshake: Duration,
 }
 
 /// A connection whose request is valid. The caller owns its next step.
@@ -164,29 +171,23 @@ impl std::error::Error for RelayError {}
 /// Preparation remains independently usable (initial-exchange.md §4–6).
 pub struct RelayService {
     modes: HandshakePolicy,
-    handshake: Duration,
-    buffer_bytes: usize,
-    close_timeout: Duration,
+    settings: Arc<dyn RuntimeSettingsSource>,
     clock: Arc<dyn Clock>,
     events: Arc<dyn EventSink>,
 }
 
 impl RelayService {
-    /// Uses validated H, B, and mode settings. All contexts use `clock`'s epoch.
-    /// See config-v3 §1.2 and repeater-handshake-v1 §1.2.
+    /// Uses startup mode flags and the current E at each close start.
+    /// B and H are supplied by the entry point in the connection context.
     pub fn new(
         modes: HandshakePolicy,
-        handshake: Duration,
-        buffer_bytes: usize,
-        close_timeout: Duration,
+        settings: Arc<dyn RuntimeSettingsSource>,
         clock: Arc<dyn Clock>,
         events: Arc<dyn EventSink>,
     ) -> Self {
         Self {
             modes,
-            handshake,
-            buffer_bytes,
-            close_timeout,
+            settings,
             clock,
             events,
         }
@@ -218,12 +219,12 @@ impl RelayService {
     where
         S: RelayStream,
     {
-        let deadline = context.exchange_at.saturating_add(self.handshake);
+        let deadline = context.exchange_at.saturating_add(context.handshake);
         let result = handshake::exchange(
             &mut resources.stream,
             context.entry_point,
             self.modes,
-            self.buffer_bytes,
+            context.buffer_bytes,
             deadline,
             self.clock.as_ref(),
             shutdown.clone(),
@@ -237,7 +238,7 @@ impl RelayService {
                     context,
                     request,
                     trailing,
-                    buffer_limit: self.buffer_bytes,
+                    buffer_limit: context.buffer_bytes,
                     permit,
                 })
             }
@@ -264,8 +265,13 @@ impl RelayService {
                         RelayCloseAction::HandshakeTimeout
                     }
                 };
-                self.close_stream(&mut resources.stream, action, self.close_timeout, shutdown)
-                    .await;
+                self.close_stream(
+                    &mut resources.stream,
+                    action,
+                    self.close_timeout(),
+                    shutdown,
+                )
+                .await;
                 drop(resources);
                 match error {
                     RelayError::Rejected(error) => {
@@ -300,6 +306,13 @@ impl RelayService {
                 Err(error)
             }
         }
+    }
+
+    fn close_timeout(&self) -> Duration {
+        let mut timeout = Duration::ZERO;
+        self.settings
+            .with_current(&mut |settings| timeout = settings.timeouts.close);
+        timeout
     }
 
     async fn close_stream<S: RelayStream + ?Sized>(
@@ -375,11 +388,7 @@ impl RelayService {
 
 /// Required dispatch settings; no prepare-only or disabled-dispatch defaults.
 pub struct RelayRuntimeConfig {
-    pub wait_timeout: Duration,
-    pub connect_timeout: Duration,
-    pub close_timeout: Duration,
     pub recent_closed: usize,
-    pub target_policy: TargetPolicy,
 }
 
 /// Runtime dependencies and the single atomic relay registry.
@@ -390,6 +399,7 @@ pub struct RelayRuntime<C> {
     relay_budget: Arc<ConnectionBudget>,
     waiting_budget: Arc<ConnectionBudget>,
     config: RelayRuntimeConfig,
+    settings: Arc<dyn RuntimeSettingsSource>,
     state: Mutex<RelayState>,
     lifecycle: watch::Sender<RelayLifecycle>,
 }
@@ -498,7 +508,7 @@ struct AdminClose {
 /// The owner holds this lock only during a synchronous engine poll.
 /// HTTP clones its handle under the registry lock, then releases that lock.
 struct SessionControl {
-    command: watch::Sender<Option<Duration>>,
+    command: watch::Sender<Option<(Duration, Duration)>>,
     completion: watch::Sender<Option<Result<Arc<ClosedSessionSnapshot>, ()>>>,
     admin: Option<AdminClose>,
     closing: bool,
@@ -532,11 +542,12 @@ impl<C> RelayRuntime<C> {
         relay_budget: Arc<ConnectionBudget>,
         waiting_budget: Arc<ConnectionBudget>,
         config: RelayRuntimeConfig,
+        settings: Arc<dyn RuntimeSettingsSource>,
     ) -> Self {
         let (lifecycle, _) = watch::channel(RelayLifecycle::Running);
         let state = RelayState {
             lifecycle: RelayLifecycle::Running,
-            matching: WaitingTable::new(waiting_budget.limit() as usize, config.wait_timeout),
+            matching: WaitingTable::new(),
             waiting: HashMap::new(),
             active: HashMap::new(),
             controls: HashMap::new(),
@@ -553,6 +564,7 @@ impl<C> RelayRuntime<C> {
             relay_budget,
             waiting_budget,
             config,
+            settings,
             state: Mutex::new(state),
             lifecycle,
         }
@@ -663,21 +675,25 @@ impl<C: Send + Sync> RelaySessionControl for RelayRuntime<C> {
         if control.completed {
             return None;
         }
-        let mut state = self.lock();
-        let accepted_at = clock.monotonic();
-        if matches!(state.lifecycle, RelayLifecycle::Grace { deadline } if accepted_at >= deadline)
-        {
-            self.force_locked(&mut state, events);
-        }
-        let initiated = !control.closing && state.lifecycle != RelayLifecycle::Force;
-        if initiated {
-            control.closing = true;
-            control.admin = Some(AdminClose { account, peer });
-            if let Some(entry) = state.active.get_mut(&id) {
-                entry.state = SessionState::Closing;
+        let mut initiated = false;
+        let mut admin = Some(AdminClose { account, peer });
+        self.settings.with_current(&mut |settings| {
+            let mut state = self.lock();
+            let accepted_at = clock.monotonic();
+            if matches!(state.lifecycle, RelayLifecycle::Grace { deadline } if accepted_at >= deadline)
+            {
+                self.force_locked(&mut state, events);
             }
-            control.command.send_replace(Some(accepted_at));
-        }
+            initiated = !control.closing && state.lifecycle != RelayLifecycle::Force;
+            if initiated {
+                control.closing = true;
+                control.admin = admin.take();
+                if let Some(entry) = state.active.get_mut(&id) {
+                    entry.state = SessionState::Closing;
+                }
+                control.command.send_replace(Some((accepted_at, settings.timeouts.close)));
+            }
+        });
         Some(crate::management::terminate::TerminationTicket {
             initiated,
             completion: control.completion.subscribe(),
@@ -748,6 +764,7 @@ impl OwnedConnection {
                 stream,
                 trailing,
                 permit,
+                buffer_bytes: context.buffer_bytes,
             },
             context,
         )
@@ -758,6 +775,7 @@ struct RelayEndpoint {
     stream: BoxRelayStream,
     trailing: Vec<u8>,
     permit: BudgetPermit,
+    buffer_bytes: usize,
 }
 
 struct SessionPair {
@@ -794,7 +812,7 @@ impl<C> Drop for ActiveGuard<'_, C> {
             state.matching.release(id, &self.session_id);
         }
         if let Some(entry) = state.active.remove(&self.session_id) {
-            if let Some(accepted_at) = *control.command.borrow() {
+            if let Some((accepted_at, _)) = *control.command.borrow() {
                 let _ = self.model.begin_admin_close(accepted_at);
             }
             if let Ok(closed) = self.model.finish_after_owner_loss(
@@ -989,7 +1007,7 @@ impl RelayService {
         self.close_stream(
             connection.stream.as_mut(),
             action,
-            runtime.config.close_timeout,
+            self.close_timeout(),
             runtime.lifecycle(),
         )
         .await;
@@ -1168,7 +1186,7 @@ impl RelayService {
                     self.close_pair(
                         &mut pair,
                         RelayCloseAction::WaitingExpired,
-                        runtime.config.close_timeout,
+                        self.close_timeout(),
                         runtime.lifecycle(),
                     )
                     .await;
@@ -1177,7 +1195,7 @@ impl RelayService {
                     self.close_pair(
                         &mut pair,
                         RelayCloseAction::ServerShutdown,
-                        runtime.config.close_timeout,
+                        self.close_timeout(),
                         runtime.lifecycle(),
                     )
                     .await;
@@ -1253,8 +1271,8 @@ impl RelayService {
                 &mut active_guard.model,
                 self.clock.as_ref(),
                 runtime.lifecycle(),
-                self.buffer_bytes,
-                runtime.config.close_timeout,
+                [pair.viewer.context.buffer_bytes, pair.other.buffer_bytes],
+                self.settings.as_ref(),
                 admin_close,
                 |session, error_kind| {
                     *observed
@@ -1386,8 +1404,10 @@ mod tests {
     use vnc_relay_domain::entry_point::Role;
     use vnc_relay_domain::handshake::HANDSHAKE_REQUEST_LEN;
 
+    use super::test_support::TestSettings;
     use super::*;
     use crate::ports::{RelayStreamError, TargetError};
+    use vnc_relay_domain::target_policy::TargetPolicy;
 
     struct TestClock {
         epoch: Instant,
@@ -1560,6 +1580,7 @@ mod tests {
         events: Arc<Recorder>,
         budget: Arc<ConnectionBudget>,
         waiting: Arc<ConnectionBudget>,
+        settings: Arc<TestSettings>,
     }
 
     impl Harness {
@@ -1569,8 +1590,23 @@ mod tests {
                 offset: AtomicU64::new(0),
             });
             let events = Arc::new(Recorder::default());
-            let budget = ConnectionBudget::new(l);
-            let waiting = ConnectionBudget::new(lw);
+            let budget = ConnectionBudget::new();
+            let waiting = ConnectionBudget::new();
+            let settings = TestSettings::new();
+            settings.change(|settings| {
+                settings.limits.relay_connections = l;
+                settings.limits.waiting = lw;
+                settings.limits.buffer_bytes = b as u32;
+                settings.mode1.allow_targets = Some(TargetPolicy::new(
+                    policy
+                        .iter()
+                        .map(|item| {
+                            vnc_relay_domain::target_policy::TargetItem::parse(item)
+                                .expect("policy")
+                        })
+                        .collect(),
+                ));
+            });
             let connector = Connector {
                 resolved: Mutex::new(Ok(Vec::new())),
                 resolve_delay: Mutex::new(Duration::ZERO),
@@ -1584,9 +1620,7 @@ mod tests {
                         mode1_enabled: true,
                         mode2_enabled: true,
                     },
-                    Duration::from_secs(10),
-                    b,
-                    Duration::from_secs(2),
+                    settings.clone(),
                     clock.clone(),
                     events.clone(),
                 ),
@@ -1596,26 +1630,14 @@ mod tests {
                     Arc::new(Sources),
                     budget.clone(),
                     waiting.clone(),
-                    RelayRuntimeConfig {
-                        wait_timeout: Duration::from_secs(5),
-                        connect_timeout: Duration::from_secs(4),
-                        close_timeout: Duration::from_secs(2),
-                        recent_closed: 2,
-                        target_policy: TargetPolicy::new(
-                            policy
-                                .iter()
-                                .map(|item| {
-                                    vnc_relay_domain::target_policy::TargetItem::parse(item)
-                                        .expect("policy")
-                                })
-                                .collect(),
-                        ),
-                    },
+                    RelayRuntimeConfig { recent_closed: 2 },
+                    settings.clone(),
                 ),
                 clock,
                 events,
                 budget,
                 waiting,
+                settings,
             })
         }
         fn new_with_recent(l: u32, lw: u32, b: usize, recent_closed: usize) -> Arc<Self> {
@@ -1624,8 +1646,15 @@ mod tests {
                 offset: AtomicU64::new(0),
             });
             let events = Arc::new(Recorder::default());
-            let budget = ConnectionBudget::new(l);
-            let waiting = ConnectionBudget::new(lw);
+            let budget = ConnectionBudget::new();
+            let waiting = ConnectionBudget::new();
+            let settings = TestSettings::new();
+            settings.change(|settings| {
+                settings.limits.relay_connections = l;
+                settings.limits.waiting = lw;
+                settings.limits.buffer_bytes = b as u32;
+                settings.mode1.allow_targets = Some(TargetPolicy::new(vec![]));
+            });
             let connector = Connector {
                 resolved: Mutex::new(Ok(Vec::new())),
                 resolve_delay: Mutex::new(Duration::ZERO),
@@ -1639,9 +1668,7 @@ mod tests {
                         mode1_enabled: true,
                         mode2_enabled: true,
                     },
-                    Duration::from_secs(10),
-                    b,
-                    Duration::from_secs(2),
+                    settings.clone(),
                     clock.clone(),
                     events.clone(),
                 ),
@@ -1651,18 +1678,14 @@ mod tests {
                     Arc::new(Sources),
                     budget.clone(),
                     waiting.clone(),
-                    RelayRuntimeConfig {
-                        wait_timeout: Duration::from_secs(5),
-                        connect_timeout: Duration::from_secs(4),
-                        close_timeout: Duration::from_secs(2),
-                        recent_closed,
-                        target_policy: TargetPolicy::new(vec![]),
-                    },
+                    RelayRuntimeConfig { recent_closed },
+                    settings.clone(),
                 ),
                 clock,
                 events,
                 budget,
                 waiting,
+                settings,
             })
         }
 
@@ -1708,13 +1731,28 @@ mod tests {
                 accepted_wall: self.clock.wall(),
                 accepted_at: self.clock.monotonic(),
                 exchange_at: self.clock.monotonic(),
+                buffer_bytes: self
+                    .settings
+                    .0
+                    .read()
+                    .expect("settings")
+                    .limits
+                    .buffer_bytes as usize,
+                handshake: self.settings.0.read().expect("settings").timeouts.handshake,
             };
+            let relay_limit = self
+                .settings
+                .0
+                .read()
+                .expect("settings")
+                .limits
+                .relay_connections;
             let prepared = self
                 .service
                 .handle_connection(
                     stream,
                     context,
-                    self.budget.try_acquire().expect("L"),
+                    self.budget.try_acquire(relay_limit).expect("L"),
                     self.runtime.lifecycle(),
                 )
                 .await
@@ -1755,6 +1793,15 @@ mod tests {
         fn snapshot(&self) -> RelaySnapshot {
             self.runtime.snapshot(self.clock.as_ref())
         }
+        fn free_places(&self, budget: &Arc<ConnectionBudget>) -> usize {
+            let settings = self.settings.0.read().expect("settings");
+            let limit = if Arc::ptr_eq(budget, &self.waiting) {
+                settings.limits.waiting
+            } else {
+                settings.limits.relay_connections
+            };
+            free_places(budget, limit)
+        }
         fn stop(&self) {
             self.service.request_shutdown(&self.runtime, Duration::ZERO);
         }
@@ -1766,9 +1813,137 @@ mod tests {
         }
     }
 
-    fn free_places(budget: &Arc<ConnectionBudget>) -> usize {
-        let permits: Vec<_> = std::iter::from_fn(|| budget.try_acquire()).collect();
-        permits.len()
+    fn free_places(budget: &Arc<ConnectionBudget>, limit: u32) -> usize {
+        limit.saturating_sub(budget.current()) as usize
+    }
+
+    /// spec: operations.md:OPS-050 partial
+    /// spec: operations.md:OPS-054 partial
+    /// spec: operations.md:OPS-055 partial
+    /// spec: operations.md:OPS-056 partial
+    #[tokio::test(start_paused = true)]
+    async fn reload_keeps_waiting_deadlines_and_reads_new_registration_policy() {
+        let harness = Harness::new(6, 3, 8, &[]);
+        let (first, _first_peer, _) = harness.prepare(Role::Server, "ID:1", b"").await;
+        let first = harness.start(first);
+        let (second, mut second_peer, _) = harness.prepare(Role::Server, "ID:2", b"").await;
+        let second = harness.start(second);
+        settle().await;
+        let old = harness.snapshot().waiting;
+        harness.settings.change(|settings| {
+            settings.limits.waiting = 1;
+            settings.timeouts.wait = Duration::from_secs(1);
+            settings.limits.buffer_bytes = 4;
+        });
+        let (third, _third_peer, _) = harness.prepare(Role::Server, "ID:3", b"").await;
+        let third = harness.start(third);
+        assert!(matches!(
+            third.await.expect("third task"),
+            Err(RelayDispatchError::Rejected(RejectReason::WaitingFull {
+                limit: 1
+            }))
+        ));
+        for waiter in harness.snapshot().waiting {
+            assert_eq!(
+                waiter.deadline,
+                old.iter()
+                    .find(|old| old.context.conn_id == waiter.context.conn_id)
+                    .expect("old waiter")
+                    .deadline
+            );
+        }
+        let (viewer, _viewer_peer, _) = harness.prepare(Role::Viewer, "ID:1", b"").await;
+        let viewer = harness.start(viewer);
+        settle().await;
+        assert_eq!(
+            harness.snapshot().active.len(),
+            1,
+            "matching is allowed above lowered Lw"
+        );
+        second_peer.shutdown().await.expect("release second waiter");
+        second.await.expect("second task").expect("removed waiter");
+        let (fresh, _fresh_peer, _) = harness.prepare(Role::Server, "ID:3", b"").await;
+        let fresh = harness.start(fresh);
+        settle().await;
+        let waiting = harness.snapshot().waiting;
+        assert_eq!(waiting.len(), 1);
+        assert_eq!(
+            waiting[0].deadline - waiting[0].registered_at,
+            Duration::from_secs(1)
+        );
+        harness.stop();
+        first.await.expect("first task").expect("handoff");
+        viewer
+            .await
+            .expect("viewer task")
+            .expect("shutdown session");
+        fresh.await.expect("fresh task").expect("shutdown waiter");
+    }
+
+    /// spec: operations.md:OPS-050 partial
+    /// spec: operations.md:OPS-047 partial
+    /// spec: operations.md:OPS-048 partial
+    /// spec: operations.md:OPS-049 partial
+    #[tokio::test(start_paused = true)]
+    async fn reload_keeps_started_c_and_policy_but_changes_the_next_target_check() {
+        let harness = Harness::new(3, 1, 8, &["host.example:5900", "192.0.2.10:5900"]);
+        *harness.runtime.connector.resolved.lock().expect("resolve") =
+            Ok(vec!["192.0.2.10".parse().expect("ip")]);
+        *harness
+            .runtime
+            .connector
+            .resolve_delay
+            .lock()
+            .expect("delay") = Duration::from_secs(2);
+        let (prepared, _peer, _) = harness
+            .prepare(Role::Viewer, "host.example:5900", b"")
+            .await;
+        let owner = harness.start(prepared);
+        settle().await;
+        harness.settings.change(|settings| {
+            settings.timeouts.connect = Duration::from_secs(1);
+            settings.mode1.allow_targets = Some(TargetPolicy::new(vec![]));
+        });
+        tokio::time::advance(Duration::from_secs(2)).await;
+        settle().await;
+        assert!(!owner.is_finished(), "started C remains four seconds");
+        assert_eq!(
+            harness.runtime.connector.calls.lock().expect("calls").len(),
+            1,
+            "started policy survives DNS"
+        );
+        tokio::time::advance(Duration::from_secs(2)).await;
+        assert!(matches!(
+            owner.await.expect("owner"),
+            Err(RelayDispatchError::Target(
+                crate::events::TargetFailureReason::ConnectTimeout
+            ))
+        ));
+        let (prepared, _peer, _) = harness.prepare(Role::Viewer, "192.0.2.10:5900", b"").await;
+        assert!(matches!(
+            harness.service.dispatch(prepared, &harness.runtime).await,
+            Err(RelayDispatchError::Rejected(RejectReason::TargetNotAllowed))
+        ));
+        harness.settings.change(|settings| {
+            settings.mode1.allow_targets = Some(TargetPolicy::new(vec![
+                vnc_relay_domain::target_policy::TargetItem::parse("192.0.2.10:5900")
+                    .expect("policy"),
+            ]));
+        });
+        let (prepared, _peer, _) = harness.prepare(Role::Viewer, "192.0.2.10:5900", b"").await;
+        let owner = harness.start(prepared);
+        settle().await;
+        tokio::time::advance(Duration::from_secs(1)).await;
+        assert!(matches!(
+            owner.await.expect("new owner"),
+            Err(RelayDispatchError::Target(
+                crate::events::TargetFailureReason::ConnectTimeout
+            ))
+        ));
+        assert_eq!(
+            harness.runtime.connector.calls.lock().expect("calls").len(),
+            2
+        );
     }
 
     /// spec: relay.md:RLY-010 partial
@@ -1789,14 +1964,14 @@ mod tests {
             let first_task = harness.start(prepared);
             settle().await;
             assert_eq!(harness.snapshot().waiting.len(), 1);
-            assert_eq!(free_places(&harness.waiting), 0);
+            assert_eq!(harness.free_places(&harness.waiting), 0);
             let (prepared, mut second_peer, _) =
                 harness.prepare(second, "ID:0123", b"second").await;
             let second_task = harness.start(prepared);
             settle().await;
             assert_eq!(harness.snapshot().active.len(), 1);
             assert!(harness.snapshot().waiting.is_empty());
-            assert_eq!(free_places(&harness.waiting), 1);
+            assert_eq!(harness.free_places(&harness.waiting), 1);
             let mut received = [0; 6];
             first_peer
                 .read_exact(&mut received)
@@ -1826,7 +2001,7 @@ mod tests {
                 if first == Role::Viewer { 6 } else { 5 }
             );
             assert_eq!(closed.close_cause, CloseCause::PeerEof);
-            assert_eq!(free_places(&harness.budget), 2);
+            assert_eq!(harness.free_places(&harness.budget), 2);
             assert_eq!(
                 harness
                     .events()
@@ -1859,8 +2034,8 @@ mod tests {
         task.abort();
         assert!(task.await.expect_err("cancelled").is_cancelled());
         assert!(harness.snapshot().waiting.is_empty());
-        assert_eq!(free_places(&harness.waiting), 1);
-        assert_eq!(free_places(&harness.budget), 3);
+        assert_eq!(harness.free_places(&harness.waiting), 1);
+        assert_eq!(harness.free_places(&harness.budget), 3);
         let (prepared, _peer, _) = harness.prepare(Role::Server, "ID:1", b"").await;
         let task = harness.start(prepared);
         settle().await;
@@ -1876,7 +2051,7 @@ mod tests {
         assert_eq!(harness.snapshot().waiting.len(), 1);
         harness.stop();
         task.await.expect("task").expect("shutdown waiting");
-        assert_eq!(free_places(&harness.budget), 3);
+        assert_eq!(harness.free_places(&harness.budget), 3);
     }
 
     /// spec: relay.md:RLY-014 partial
@@ -1895,8 +2070,8 @@ mod tests {
             }
             task.await.expect("task").expect("wait end");
             assert!(harness.snapshot().waiting.is_empty());
-            assert_eq!(free_places(&harness.budget), 2);
-            assert_eq!(free_places(&harness.waiting), 1);
+            assert_eq!(harness.free_places(&harness.budget), 2);
+            assert_eq!(harness.free_places(&harness.waiting), 1);
             let events = harness.events();
             assert_eq!(
                 events
@@ -1958,7 +2133,7 @@ mod tests {
             );
             assert_eq!(harness.snapshot().active.len(), 1);
         }
-        assert_eq!(free_places(&harness.waiting), 1);
+        assert_eq!(harness.free_places(&harness.waiting), 1);
         harness.stop();
         waiter.await.expect("waiter").expect("handoff");
         owner.await.expect("owner").expect("forced close");
@@ -1990,7 +2165,7 @@ mod tests {
         let owner = harness.start(prepared);
         settle().await;
         assert_eq!(harness.snapshot().active.len(), 1);
-        assert_eq!(free_places(&harness.waiting), 1);
+        assert_eq!(harness.free_places(&harness.waiting), 1);
         harness.stop();
         waiter.await.expect("waiter").expect("handoff");
         owner.await.expect("owner").expect("session");
@@ -2080,7 +2255,7 @@ mod tests {
                 harness.snapshot().recent_closed[0].close_cause,
                 CloseCause::ServerShutdown
             );
-            assert_eq!(free_places(&harness.budget), 3);
+            assert_eq!(harness.free_places(&harness.budget), 3);
         }
     }
 
@@ -2106,7 +2281,11 @@ mod tests {
                     let dropped = Arc::clone(&dropped);
                     let budget = Arc::clone(&harness.budget);
                     Arc::new(move || {
-                        assert_eq!(free_places(&budget), 1, "both permits outlive both streams");
+                        assert_eq!(
+                            free_places(&budget, 3),
+                            1,
+                            "both permits outlive both streams"
+                        );
                         dropped.fetch_add(1, Ordering::SeqCst);
                     })
                 };
@@ -2117,7 +2296,7 @@ mod tests {
                     Box::new(move |event| {
                         assert_eq!(dropped.load(Ordering::SeqCst), 2);
                         assert_eq!(
-                            free_places(&budget),
+                            free_places(&budget, 3),
                             3,
                             "SessionClosed follows permit release"
                         );
@@ -2159,7 +2338,7 @@ mod tests {
                 );
                 assert_eq!(dropped.load(Ordering::SeqCst), 0);
                 assert_eq!(closed.load(Ordering::SeqCst), 0);
-                assert_eq!(free_places(&harness.budget), 1);
+                assert_eq!(harness.free_places(&harness.budget), 1);
 
                 harness
                     .service
@@ -2256,7 +2435,7 @@ mod tests {
                 .await
                 .expect_err("failure");
             assert_eq!(result.to_string(), expected);
-            assert_eq!(free_places(&harness.budget), 2);
+            assert_eq!(harness.free_places(&harness.budget), 2);
             assert!(harness.snapshot().active.is_empty());
             assert_eq!(harness.runtime.lock().next_session, Some(0));
             let events = harness.events();
@@ -2364,7 +2543,7 @@ mod tests {
             harness.snapshot().recent_closed[0].bytes_target_to_viewer,
             5
         );
-        assert_eq!(free_places(&harness.budget), 2);
+        assert_eq!(harness.free_places(&harness.budget), 2);
     }
 
     /// spec: relay.md:RLY-009 partial
@@ -2407,7 +2586,7 @@ mod tests {
                 ..
             }
         ));
-        assert_eq!(free_places(&harness.budget), 2);
+        assert_eq!(harness.free_places(&harness.budget), 2);
 
         let harness = Harness::new(1, 1, 8, &["192.0.2.10:5900"]);
         let (prepared, _peer, _) = harness.prepare(Role::Viewer, "192.0.2.10:5900", b"").await;
@@ -2435,7 +2614,7 @@ mod tests {
                 .expect("names")
                 .is_empty()
         );
-        assert_eq!(free_places(&harness.budget), 1);
+        assert_eq!(harness.free_places(&harness.budget), 1);
     }
 
     /// spec: relay.md:RLY-014 partial
@@ -2496,7 +2675,7 @@ mod tests {
         assert!(harness.snapshot().waiting.is_empty());
         assert!(harness.snapshot().active.is_empty());
         assert_eq!(harness.runtime.lock().next_session, Some(0));
-        assert_eq!(free_places(&harness.budget), 4);
+        assert_eq!(harness.free_places(&harness.budget), 4);
         assert!(!harness.events().iter().any(|event| matches!(
             event,
             Event::ShutdownForced { .. } | Event::SessionStarted { .. }
@@ -2561,8 +2740,8 @@ mod tests {
                 .get(&RelayId::parse("12").expect("id"))
                 .is_none()
         );
-        assert_eq!(free_places(&harness.budget), 3);
-        assert_eq!(free_places(&harness.waiting), 1);
+        assert_eq!(harness.free_places(&harness.budget), 3);
+        assert_eq!(harness.free_places(&harness.waiting), 1);
         assert_eq!(
             harness
                 .events()
@@ -2624,7 +2803,7 @@ mod tests {
                 .get(&RelayId::parse("13").expect("id"))
                 .is_none()
         );
-        assert_eq!(free_places(&harness.budget), 3);
+        assert_eq!(harness.free_places(&harness.budget), 3);
         assert_eq!(
             harness
                 .events()
@@ -2713,7 +2892,7 @@ mod tests {
             CloseCause::ServerShutdown
         );
         assert!(harness.snapshot().active.is_empty());
-        assert_eq!(free_places(&harness.budget), 3);
+        assert_eq!(harness.free_places(&harness.budget), 3);
     }
 
     /// spec: operations.md:OPS-008 partial
@@ -2783,8 +2962,8 @@ mod tests {
         waiter.await.expect("waiter").expect("handoff");
         assert_eq!(harness.runtime.lock().next_session, Some(0));
         assert!(harness.snapshot().active.is_empty());
-        assert_eq!(free_places(&harness.budget), 3);
-        assert_eq!(free_places(&harness.waiting), 1);
+        assert_eq!(harness.free_places(&harness.budget), 3);
+        assert_eq!(harness.free_places(&harness.waiting), 1);
         assert!(
             !harness
                 .events()
@@ -2845,7 +3024,7 @@ mod tests {
             );
             assert!(harness.snapshot().active.is_empty());
             assert_eq!(harness.runtime.lock().next_session, Some(0));
-            assert_eq!(free_places(&harness.budget), 2);
+            assert_eq!(harness.free_places(&harness.budget), 2);
             assert!(matches!(
                 harness.events()[0],
                 Event::TargetConnectFailed {
@@ -2918,7 +3097,7 @@ mod tests {
                     .expect("actions")
                     .contains(&RelayCloseAction::ServerShutdown)
             );
-            assert_eq!(free_places(&harness.budget), 1);
+            assert_eq!(harness.free_places(&harness.budget), 1);
 
             if second_shutdown {
                 harness
@@ -2929,7 +3108,7 @@ mod tests {
                 tokio::time::advance(Duration::from_secs(3)).await;
                 assert!(task.await.expect("task").is_err());
             }
-            assert_eq!(free_places(&harness.budget), 3);
+            assert_eq!(harness.free_places(&harness.budget), 3);
         }
     }
 
@@ -3034,7 +3213,7 @@ mod tests {
                     ..
                 }
             )));
-            assert_eq!(free_places(&harness.budget), 3);
+            assert_eq!(harness.free_places(&harness.budget), 3);
         }
     }
 
@@ -3345,7 +3524,7 @@ mod tests {
             .unwrap_or_else(|e| panic!("completion: {e}"));
         assert!(matches!(&*ticket.completion.borrow(), Some(Err(()))));
         assert!(harness.snapshot().active.is_empty());
-        assert_eq!(free_places(&harness.budget), 4);
+        assert_eq!(harness.free_places(&harness.budget), 4);
         assert!(
             harness
                 .runtime
@@ -3489,7 +3668,7 @@ mod tests {
             assert!(snapshot.active.is_empty());
             assert_eq!(snapshot.recent_closed.len(), 1);
             assert_eq!(snapshot.recent_closed[0].close_cause, expected);
-            assert_eq!(free_places(&harness.budget), 4);
+            assert_eq!(harness.free_places(&harness.budget), 4);
             let closed: Vec<_> = harness
                 .events()
                 .into_iter()
@@ -3556,6 +3735,6 @@ mod tests {
             && *bytes_viewer_to_target == recent.bytes_viewer_to_target
             && *bytes_target_to_viewer == recent.bytes_target_to_viewer
             && error_kind.is_none()));
-        assert_eq!(free_places(&harness.budget), 4);
+        assert_eq!(harness.free_places(&harness.budget), 4);
     }
 }

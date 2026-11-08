@@ -1,8 +1,8 @@
 # 초기 교환 처리 모듈 설계
 
-## 작업 6.2 초기 교환 목표 (Target / Active)
+## 작업 6.2 초기 교환 경계 (Current / Active)
 
-현재 RelayService는 H/B/E를 고정한다(`crates/app/src/relay.rs:165-192,221-240`). 구현 전 Target은 [소비 경계](file-watch.md#101-발행-단위와-reader)에 따라 B를 수락 문맥에서 받고 H는 초기 교환 시작(TCP 수락 직후, WS/WSS 101 flush 뒤)에 읽는다. 실패 종료 E도 종료 시작 때 읽는다. 진행 중 H는 다시 계산하지 않는다. PreparedConnection은 수락 B를 대기·대상·세션 방향 버퍼까지 보존한다([설정 §1.8](../contracts/config-v3.md#18-재로드-구분), OPS-050). 기존 대조는 이 Target의 구현 증거가 아니다.
+`ConnectionContext.buffer_bytes`는 수락 때의 B이고 `handshake`는 초기 교환 시작 때의 H다. TCP는 수락 직후, WS·WSS는 101 flush 뒤에 H를 읽는다. `RelayService::prepare`는 이 H와 `exchange_at`으로 절대 기한을 한 번 만든다. 실패 종료 E는 `RelayService::close_timeout`이 종료 시작 때 실행 설정에서 읽는다. 서비스 생성 때 H/B/E를 고정하지 않는다. `PreparedConnection`의 문맥은 B를 대기·대상·세션의 각 방향 버퍼로 이어 준다([소비 경계](file-watch.md#101-발행-단위와-reader), [설정 §1.8](../contracts/config-v3.md#18-재로드-구분), OPS-050). 이 변경의 시험은 통합 검증 전이며 기존 Verified 기록은 과거 범위에만 해당한다.
 
 이 문서는 초기 요청을 모으고 해석한 뒤 다음 중계 단계에 넘기는 현재 구조를 설명한다. 예를 들어 Viewer가 `ID:0123`을 보내면 Mode II 요청과 중계 ID `0123`을 얻는다. 요청 뒤의 바이트는 상대에게 보낼 데이터로 남긴다. TCP·WS·WSS 진입점은 공통 `handle_connection`을 호출한 뒤 유효 요청을 `dispatch`에 넘긴다.
 
@@ -10,7 +10,7 @@
 | --- | --- |
 | 구조 시점 | Current |
 | 문서 상태 | Draft |
-| 구현 대조 | Verified — [2026-11-04 대조 기록](#8-현재-코드와-목표의-차이). 경로·API·책임·인계와 현재 시험 소스를 대조했다. |
+| 구현 대조 | 작업 6.2 변경은 Current / 실행 미확인. 이전 범위는 [2026-11-04 대조 기록](#8-현재-코드와-목표의-차이)을 따른다. |
 | 코드 위치 | `crates/domain/src/handshake.rs`, `crates/domain/src/relay_id.rs`, `crates/app/src/relay.rs`, `crates/app/src/relay/handshake.rs`, `crates/app/src/events.rs`, `crates/adapters/src/ops_log.rs`, `crates/adapters/src/net.rs`, `crates/adapters/src/websocket.rs` |
 | 코드 지도 | [코드 지도](code-map.md#2-코드-위치와-구성요소) |
 | 관련 스펙 | [중계 스펙 2~4절·7절](../specs/relay.md#2-상태와-경계): RLY-001~005, RLY-022. [운영 스펙 2절·OPS-006](../specs/operations.md#2-상태와-검증-매개변수): TCP H 부분 |
@@ -58,7 +58,7 @@ flowchart LR
 | `crates/app/src/relay/handshake.rs` | 시작 바이트 쓰기, 제한된 읽기, 기한·단절 구분 | `handle_connection`이 호출한다. |
 | `crates/app/src/events.rs`, `crates/adapters/src/ops_log.rs` | 초기 교환 거절 사건 타입과 JSON Lines 필드 | 기존 사건 처리 방식을 확장한다. |
 | `crates/adapters/src/net.rs` `TcpEntryPoint::run` | 허용 연결마다 `TcpRelayStream`으로 감싼 소켓을 `handle_connection`에 넘기고, 유효 요청은 `dispatch`로 잇는다. | 기존 `accept_connections`의 `JoinSet`이 연결 작업을 관리한다. |
-| `src/serve.rs` `listen_until_shutdown` | 모드 설정·H·B·E·`EventSink`·`Clock`으로 서비스를 조립하고 진입점에 공유 | 프로세스 실행마다 하나 |
+| `src/serve.rs` `listen_until_shutdown` | 시작 모드·`RuntimeSettingsSource`·`EventSink`·`Clock`으로 서비스를 조립하고 진입점에 공유 | 프로세스 실행마다 하나 |
 
 `crates/app/src/relay.rs`와 `relay/`를 함께 쓴다. `relay/mod.rs`는 없다. app은 tokio의 시간·동기화·공통 입출력 trait만 쓴다. 소켓 타입은 adapters에 남긴다. 형식·레이어·이름은 [Rust 컨벤션](../conventions/rust.md#2-규칙)을 따른다.
 
@@ -116,9 +116,9 @@ tokio 금지 항목에는 `allow-invalid = true`를 둔다. 플랫폼 전용 경
 
 | 순서 | 코드 위치·처리 | 전달 값·결과 |
 | --- | --- | --- |
-| 1 | `src/serve.rs`가 `RelayService`를 조립한다. | `mode1.enabled`, `mode2.enabled`, H·B·E, 공유 `EventSink`·`Clock` |
-| 2 | `net.rs`의 `accept_connections`가 IP → L → K → `conn_id` → `connection_accepted` 순서를 유지한다. | 소켓과 기존 `BudgetPermit` 하나 |
-| 3 | TCP·WS·WSS 연결 작업이 `ConnectionContext`와 스트림을 `handle_connection`에 넘긴다. | 실제 상대 주소·수락 시각·초기 교환 진입 시각과 종료 알림 |
+| 1 | `src/serve.rs`가 `RelayService`를 조립한다. | 시작 모드, 실행 설정 소스, 공유 `EventSink`·`Clock` |
+| 2 | `net.rs`의 `accept_connections`가 IP → L → `conn_id` → `connection_accepted` → K 순서를 유지한다. | 수락 B/H/U/K, 소켓과 기존 `BudgetPermit` 하나 |
+| 3 | TCP·WS·WSS 연결 작업이 `ConnectionContext`와 스트림을 `handle_connection`에 넘긴다. | 실제 상대 주소·수락 시각·초기 교환 진입 시각·수락 B·시작 H와 종료 알림 |
 | 4 | app이 H의 절대 기한을 만든다. Viewer면 즉시 `RFB 000.000\n`을 한 번 쓰고 flush한다. Server에는 쓰지 않는다. | 쓰기·flush도 같은 H 안에 둔다. 이후 H를 다시 시작하지 않는다. |
 | 5 | 요청을 읽어 `feed`에 넣는다. 매번 소비 길이와 완료 여부를 확인한다. | 250바이트 미만이면 같은 기한으로 계속 읽는다. |
 | 6 | 250바이트가 H 안에 모였으면 `finish`를 부른다. | 잘못된 값·꺼진 모드는 6절로 간다. 유효 요청이면 H 감시를 끝낸다. |
@@ -130,7 +130,7 @@ app은 기존 `Clock` 포트를 재사용한다. `tokio::time::sleep`에는 남�
 
 수락 시각과 WS·WSS의 U·H 계산은 공통 단조 시계 기준으로 연결된다. U의 시작·범위는 바꾸지 않는다. app 단위 시험은 제어 가능한 `Clock`과 tokio 정지 시각을 함께 쓴다. 실제 소켓과 대기는 adapters·시스템 시험에 둔다.
 
-`handle_connection(stream, context, permit, shutdown)`은 `Result<PreparedConnection<S>, RelayError>`를 내는 future를 반환한다. `S: RelayStream`이다. 종료 입력은 `watch::Receiver<RelayLifecycle>`이다. `ConnectionContext`는 `conn_id`, `entry_point`, `peer_ip`, `peer_addr`, `accepted_wall`, `accepted_at`, `exchange_at`을 가진다. `accepted_wall`은 표시용 벽시계다. 나머지 두 시각은 공유 `Clock`의 단조 시각이다. `RelayService::new(modes, H, B, E, clock, events)`로 만든다. 실패하면 E 안에서 close action을 진행하고 stream → permit → 사건 순서로 정리한다. 유효 요청은 소유권을 호출자에게 돌려준다. TCP·WS·WSS는 같은 연결 작업에서 `dispatch(prepared, &runtime)`을 실행한다.
+`handle_connection(stream, context, permit, shutdown)`은 `Result<PreparedConnection<S>, RelayError>`를 내는 future를 반환한다. `S: RelayStream`이다. 종료 입력은 `watch::Receiver<RelayLifecycle>`이다. `ConnectionContext`는 `conn_id`, `entry_point`, `peer_ip`, `peer_addr`, `accepted_wall`, `accepted_at`, `exchange_at`, `buffer_bytes`, `handshake`를 가진다. `accepted_wall`은 표시용 벽시계다. 나머지 두 시각은 공유 `Clock`의 단조 시각이다. `RelayService::new(modes, settings, clock, events)`에서 settings는 `Arc<dyn RuntimeSettingsSource>`다. 실패하면 종료 시작에 읽은 E 안에서 close action을 진행하고 stream → permit → 사건 순서로 정리한다. 유효 요청은 소유권을 호출자에게 돌려준다. TCP·WS·WSS는 같은 연결 작업에서 `dispatch(prepared, &runtime)`을 실행한다.
 
 ## 5. 후속 바이트와 B
 

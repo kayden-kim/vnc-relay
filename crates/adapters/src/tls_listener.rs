@@ -4,7 +4,6 @@
 //! Design: docs/architectures/management-listener.md.
 
 use std::io;
-use std::net::SocketAddr;
 use std::pin::Pin;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::task::{Context, Poll, ready};
@@ -45,24 +44,24 @@ impl<L> TlsListener<L> {
 
 impl<L> axum::serve::Listener for TlsListener<L>
 where
-    L: axum::serve::Listener<Addr = SocketAddr>,
+    L: axum::serve::Listener<Addr = crate::admission::AdmittedAddr>,
 {
     type Io = TlsIo<L::Io>;
-    type Addr = SocketAddr;
+    type Addr = crate::admission::AdmittedAddr;
 
-    async fn accept(&mut self) -> (TlsIo<L::Io>, SocketAddr) {
+    async fn accept(&mut self) -> (TlsIo<L::Io>, Self::Addr) {
         let (stream, addr) = self.inner.accept().await;
         let io = TlsIo::handshaking(
             stream,
             &self.source,
-            PeerIp::from(addr),
+            PeerIp::from(addr.socket),
             Arc::clone(&self.log),
             self.name,
         );
         (io, addr)
     }
 
-    fn local_addr(&self) -> io::Result<SocketAddr> {
+    fn local_addr(&self) -> io::Result<Self::Addr> {
         self.inner.local_addr()
     }
 }

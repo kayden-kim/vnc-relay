@@ -40,8 +40,14 @@ pub(super) async fn dispatch<C: TargetConnector>(
     mut viewer: OwnedConnection,
     address: TargetAddress,
 ) -> Result<(), RelayDispatchError> {
+    let mut connect_timeout = Duration::ZERO;
+    let mut policy = None;
+    runtime.settings.with_current(&mut |settings| {
+        connect_timeout = settings.timeouts.connect;
+        policy = settings.mode1.allow_targets.clone();
+    });
     let started = service.clock.monotonic();
-    let deadline = started.saturating_add(runtime.config.connect_timeout);
+    let deadline = started.saturating_add(connect_timeout);
     let context = viewer.context;
     let transport = viewer.stream.transport();
     let host = match &address.host {
@@ -75,11 +81,17 @@ pub(super) async fn dispatch<C: TargetConnector>(
     let mut filled = viewer.trailing.len();
     let websocket = viewer.stream.transport().is_websocket();
     if websocket {
-        viewer.trailing.resize(service.buffer_bytes, 0);
+        viewer.trailing.resize(context.buffer_bytes, 0);
     }
     let result = {
         let lifecycle = runtime.lifecycle();
-        let mut connecting = pin!(connect(service, runtime, &address, deadline));
+        let mut connecting = pin!(connect(
+            service,
+            runtime,
+            &address,
+            deadline,
+            policy.as_ref()
+        ));
         poll_fn(|cx| {
             if let Err(failure) = check(service.clock.as_ref(), deadline, &lifecycle) {
                 return Poll::Ready(Err(failure));
@@ -119,6 +131,7 @@ pub(super) async fn dispatch<C: TargetConnector>(
                 stream: Box::new(stream),
                 trailing: Vec::new(),
                 permit,
+                buffer_bytes: context.buffer_bytes,
             };
             service
                 .run_pair(
@@ -211,6 +224,7 @@ async fn connect<C: TargetConnector>(
     runtime: &RelayRuntime<C>,
     address: &TargetAddress,
     deadline: Duration,
+    policy: Option<&vnc_relay_domain::target_policy::TargetPolicy>,
 ) -> Result<
     (
         C::Stream,
@@ -223,11 +237,7 @@ async fn connect<C: TargetConnector>(
     let candidates: &[IpAddr] = match &address.host {
         TargetHost::Ip(ip) => std::slice::from_ref(ip),
         TargetHost::Name(name) => {
-            if !runtime
-                .config
-                .target_policy
-                .permits_name(name, address.port)
-            {
+            if !policy.is_some_and(|policy| policy.permits_name(name, address.port)) {
                 return Err(Failure::Rejected(RejectReason::TargetNotAllowed, None));
             }
             resolved = match bounded(
@@ -252,15 +262,20 @@ async fn connect<C: TargetConnector>(
     for ip in candidates {
         let ip = ip.to_canonical();
         last_checked = Some(ip);
-        if !runtime.config.target_policy.permits_ip(ip, address.port) {
+        if !policy.is_some_and(|policy| policy.permits_ip(ip, address.port)) {
             continue;
         }
         check(service.clock.as_ref(), deadline, &runtime.lifecycle())?;
         if permit.is_none() {
-            permit = Some(runtime.relay_budget.try_acquire().ok_or(Failure::Rejected(
-                RejectReason::RelayConnectionLimit {
-                    limit: runtime.relay_budget.limit(),
-                },
+            // The runtime source calls its reader once; an unread limit stays 0 and rejects.
+            let mut limit = 0;
+            let mut admission = None;
+            runtime.settings.with_current(&mut |settings| {
+                limit = settings.limits.relay_connections;
+                admission = runtime.relay_budget.try_acquire(limit);
+            });
+            permit = Some(admission.ok_or(Failure::Rejected(
+                RejectReason::RelayConnectionLimit { limit },
                 None,
             ))?);
         }

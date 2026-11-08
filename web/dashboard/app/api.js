@@ -21,12 +21,13 @@ export const LOGOUT_TIMEOUT_MS = 10000;
 // kind: 'unauthorized' (HTTP 401), 'failed' (other HTTP status), 'timeout', 'network', or 'invalid' (body does not parse).
 // code: the contract error code of a failed response, or null when the body has none.
 export class ApiError extends Error {
-  constructor(kind, status = null, code = null) {
+  constructor(kind, status = null, code = null, details = null) {
     super(kind);
     this.name = 'ApiError';
     this.kind = kind;
     this.status = status;
     this.code = code;
+    this.details = details;
   }
 }
 
@@ -59,19 +60,15 @@ async function exchange(request, path, init, timeoutMs, handle) {
   }
 }
 
-// Reads error.code from a contract error body. Null when the body has no code.
-async function errorCode(response) {
-  try {
-    const code = JSON.parse(await response.text())?.error?.code;
-    return typeof code === 'string' ? code : null;
-  } catch {
-    return null;
-  }
-}
-
 async function readJson(response) {
   if (!response.ok) {
-    throw new ApiError('failed', response.status, await errorCode(response));
+    let details = null;
+    try {
+      details = JSON.parse(await response.text())?.error ?? null;
+    } catch {
+      // A non-JSON rejection still belongs to its HTTP status category.
+    }
+    throw new ApiError('failed', response.status, details?.code ?? null, details);
   }
   const text = await response.text();
   try {
@@ -105,4 +102,17 @@ export function getQuery(request, path, { poll, timeoutMs }) {
 export function terminateSession(request, id, { csrfToken, timeoutMs }) {
   const init = { method: 'POST', headers: { 'X-CSRF-Token': csrfToken } };
   return exchange(request, `${sessionPath(id)}/terminate`, init, timeoutMs, readJson);
+}
+
+export function getConfig(request, { timeoutMs }) {
+  return getQuery(request, '/api/v1/config', { poll: false, timeoutMs });
+}
+
+export function patchConfig(request, { csrfToken, timeoutMs, revision, changes }) {
+  const init = {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
+    body: JSON.stringify({ revision, changes }),
+  };
+  return exchange(request, '/api/v1/config', init, timeoutMs, readJson);
 }

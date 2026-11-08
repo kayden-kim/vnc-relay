@@ -1,8 +1,7 @@
-//! Partial automatic reload of a running `vnc-relay serve`, run against the
-//! real binary with the file watcher on: the scenarios of
-//! docs/specs/operations.md (OPS-003, OPS-024 to OPS-028, OPS-035, OPS-038,
-//! OPS-040) and docs/specs/websocket.md (WS-022). Results are read from the
-//! operation log that every test configures as `relay.log`.
+//! Automatic reload against the real binary, file watcher, relay transports,
+//! management API, and JSON operation log. Runtime groups are exercised at their
+//! documented boundaries; socket-option and shutdown boundary coverage also
+//! lives in the adapter and platform-specific suites.
 
 use std::io::{ErrorKind, Read, Write};
 use std::net::{Ipv6Addr, SocketAddr, TcpListener, TcpStream};
@@ -462,20 +461,18 @@ impl WebSocket {
     }
 
     fn send_binary(&mut self, payload: &[u8]) {
-        assert!(payload.len() <= u16::MAX as usize);
         let mut bytes = vec![0x82];
         if payload.len() < 126 {
             bytes.push(
                 0x80 | u8::try_from(payload.len())
                     .unwrap_or_else(|error| panic!("short frame: {error}")),
             );
-        } else {
+        } else if let Ok(length) = u16::try_from(payload.len()) {
             bytes.push(0x80 | 126);
-            bytes.extend_from_slice(
-                &u16::try_from(payload.len())
-                    .unwrap_or_else(|error| panic!("frame length: {error}"))
-                    .to_be_bytes(),
-            );
+            bytes.extend_from_slice(&length.to_be_bytes());
+        } else {
+            bytes.push(0x80 | 127);
+            bytes.extend_from_slice(&(payload.len() as u64).to_be_bytes());
         }
         let mask = [0x13, 0x57, 0x9b, 0xdf];
         bytes.extend_from_slice(&mask);
@@ -1456,7 +1453,7 @@ fn restart_only_change_applies_at_the_next_start() {
     let mut first = Guard(Some(spawn(&config)));
     wait_listening(first.child(), ports);
 
-    // One candidate changes the listen address, the accounts file, a limit, and the allow list.
+    // Listen/accounts require restart, so they also hold back the dynamic limit and allow list.
     let moved = Ports {
         tcp_viewer: free_port(),
         ..ports
@@ -1476,13 +1473,10 @@ fn restart_only_change_applies_at_the_next_start() {
         );
     write(&config, &candidate);
     let line = wait_for_line(&log, |line| event_is(line, "reload_restart_required"));
-    for key in [
-        "relay.tcp_viewer.listen",
-        "admin.accounts_file",
-        "limits.admin_connections",
-    ] {
+    for key in ["relay.tcp_viewer.listen", "admin.accounts_file"] {
         assert!(line.contains(key), "{key} missing from {line}");
     }
+    assert!(!line.contains("limits.admin_connections"), "{line}");
     // The whole candidate waits: nothing is applied, and the running listener and allow list stay.
     assert_eq!(logged(&log, |line| event_is(line, "reload_applied")), 0);
     assert!(connects(ports.tcp_viewer), "old port closed while running");
@@ -1720,4 +1714,1161 @@ fn removed_source_is_refused_at_upgrade_on_connections_opened_before_the_removal
         is(line, "connection_rejected", "ws_viewer", "127.0.0.2")
             && field(line, "stage") == Some("accept")
     });
+}
+
+/// Sets a leaf in the fixture TOML without changing unrelated tables.
+fn setting(mut text: String, key: &str, value: &str) -> String {
+    let (table, leaf) = key
+        .rsplit_once('.')
+        .unwrap_or_else(|| panic!("leaf key: {key}"));
+    let heading = format!("[{table}]\n");
+    let assignment = format!("{leaf} = {value}\n");
+    if let Some(start) = text.find(&heading) {
+        let body = start + heading.len();
+        let end = text[body..]
+            .find("\n[")
+            .map_or(text.len(), |n| body + n + 1);
+        let mut offset = body;
+        for line in text[body..end].split_inclusive('\n') {
+            if line.starts_with(&format!("{leaf} =")) {
+                text.replace_range(offset..offset + line.len(), &assignment);
+                return text;
+            }
+            offset += line.len();
+        }
+        text.insert_str(body, &assignment);
+    } else {
+        text.push_str(&format!("\n{heading}{assignment}"));
+    }
+    text
+}
+
+const PASSWORD: &str = "correct-horse-battery";
+
+fn authenticated_setup(name: &str, text: &str) -> PathBuf {
+    use vnc_relay_adapters::accounts_file::Argon2Hasher;
+    use vnc_relay_app::ports::PasswordHasher;
+    use vnc_relay_domain::account::{Argon2Params, Password};
+
+    let config = setup(name, text);
+    let password =
+        Password::parse(PASSWORD.to_owned()).unwrap_or_else(|error| panic!("password: {error:?}"));
+    let hash = Argon2Hasher
+        .hash(
+            &password,
+            Argon2Params {
+                memory_kib: 19_456,
+                iterations: 2,
+                parallelism: 1,
+            },
+        )
+        .unwrap_or_else(|error| panic!("hash: {error:?}"));
+    write(
+        &config.with_file_name("admin-accounts.toml"),
+        &format!(
+            "version = 1\n\n[[account]]\nname = \"alice\"\npassword_hash = \"{}\"\n",
+            hash.as_str()
+        ),
+    );
+    config
+}
+
+struct HttpReply {
+    status: u16,
+    head: String,
+    body: serde_json::Value,
+}
+
+fn finish_http(
+    mut stream: TcpStream,
+    method: &str,
+    path: &str,
+    headers: &[(&str, &str)],
+    body: &str,
+) -> HttpReply {
+    stream
+        .set_read_timeout(Some(EXIT_LIMIT))
+        .unwrap_or_else(|error| panic!("HTTP timeout: {error}"));
+    let mut request = format!(
+        "{method} {path} HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\nContent-Length: {}\r\n",
+        body.len()
+    );
+    for (key, value) in headers {
+        request.push_str(&format!("{key}: {value}\r\n"));
+    }
+    request.push_str("\r\n");
+    request.push_str(body);
+    stream
+        .write_all(request.as_bytes())
+        .unwrap_or_else(|error| panic!("HTTP write: {error}"));
+    let mut raw = String::new();
+    stream
+        .read_to_string(&mut raw)
+        .unwrap_or_else(|error| panic!("HTTP read: {error}"));
+    let (head, body) = raw
+        .split_once("\r\n\r\n")
+        .unwrap_or_else(|| panic!("HTTP response: {raw}"));
+    HttpReply {
+        status: status_of(head),
+        head: head.to_owned(),
+        body: serde_json::from_str(body).unwrap_or_else(|error| panic!("JSON {body}: {error}")),
+    }
+}
+
+fn http(port: u16, method: &str, path: &str, headers: &[(&str, &str)], body: &str) -> HttpReply {
+    finish_http(
+        connect_from([127, 0, 0, 1], port),
+        method,
+        path,
+        headers,
+        body,
+    )
+}
+
+fn login(port: u16) -> (String, String, serde_json::Value) {
+    let reply = http(
+        port,
+        "POST",
+        "/api/v1/session",
+        &[("Content-Type", "application/json")],
+        &serde_json::json!({"account": "alice", "password": PASSWORD}).to_string(),
+    );
+    assert_eq!(reply.status, 200, "{}", reply.body);
+    let cookie = reply
+        .head
+        .lines()
+        .find_map(|line| {
+            let (key, value) = line.split_once(':')?;
+            key.eq_ignore_ascii_case("set-cookie")
+                .then(|| value.trim().split(';').next().unwrap_or("").to_owned())
+        })
+        .unwrap_or_else(|| panic!("no cookie: {}", reply.head));
+    let csrf = reply.body["csrf_token"]
+        .as_str()
+        .unwrap_or_else(|| panic!("no CSRF"))
+        .to_owned();
+    (cookie, csrf, reply.body)
+}
+
+fn query(port: u16, cookie: &str, path: &str) -> serde_json::Value {
+    let reply = http(port, "GET", path, &[("Cookie", cookie)], "");
+    assert_eq!(reply.status, 200, "{}", reply.body);
+    reply.body
+}
+
+fn poll_query(
+    port: u16,
+    cookie: &str,
+    path: &str,
+    ready: impl Fn(&serde_json::Value) -> bool,
+) -> serde_json::Value {
+    let deadline = Instant::now() + EXIT_LIMIT;
+    loop {
+        let value = query(port, cookie, path);
+        if ready(&value) {
+            return value;
+        }
+        assert!(Instant::now() < deadline, "{path} did not settle: {value}");
+        std::thread::sleep(Duration::from_millis(20));
+    }
+}
+
+fn effective<'a>(view: &'a serde_json::Value, key: &str) -> &'a serde_json::Value {
+    &view["items"]
+        .as_array()
+        .unwrap_or_else(|| panic!("config items: {view}"))
+        .iter()
+        .find(|item| item["key"] == key)
+        .unwrap_or_else(|| panic!("missing {key}"))["value"]
+}
+
+fn reload(config: &Path, text: &str) -> serde_json::Value {
+    let log = log_of(config);
+    let count = logged(&log, |line| event_is(line, "reload_applied")) + 1;
+    write(config, text);
+    wait_for_count(&log, count, |line| event_is(line, "reload_applied"));
+    let lines = std::fs::read_to_string(&log).unwrap_or_else(|error| panic!("log: {error}"));
+    let line = lines
+        .lines()
+        .filter(|line| event_is(line, "reload_applied"))
+        .nth(count - 1)
+        .unwrap_or_else(|| panic!("missing reload"));
+    let event: serde_json::Value =
+        serde_json::from_str(line).unwrap_or_else(|error| panic!("event: {error}"));
+    assert_eq!(event["trigger"], "file_watch");
+    event
+}
+
+fn tcp_viewer(port: u16) -> TcpStream {
+    let mut stream = connect_from([127, 0, 0, 1], port);
+    let mut greeting = [0; 12];
+    stream
+        .read_exact(&mut greeting)
+        .unwrap_or_else(|error| panic!("greeting: {error}"));
+    assert_eq!(&greeting, GREETING);
+    stream
+}
+
+fn waiting_server(ports: Ports, id: &str) -> TcpStream {
+    let mut server = connect_from([127, 0, 0, 1], ports.tcp_server);
+    server
+        .write_all(&request(id))
+        .unwrap_or_else(|error| panic!("register: {error}"));
+    server
+}
+
+fn pair(ports: Ports, id: &str) -> (TcpStream, TcpStream) {
+    let server = waiting_server(ports, id);
+    let mut viewer = tcp_viewer(ports.tcp_viewer);
+    viewer
+        .write_all(&request(id))
+        .unwrap_or_else(|error| panic!("match: {error}"));
+    (viewer, server)
+}
+
+fn exchange(viewer: &mut impl Wire, server: &mut TcpStream) {
+    viewer
+        .write_all(b"forward")
+        .unwrap_or_else(|error| panic!("forward: {error}"));
+    viewer
+        .flush()
+        .unwrap_or_else(|error| panic!("flush: {error}"));
+    let mut bytes = [0; 7];
+    server
+        .read_exact(&mut bytes)
+        .unwrap_or_else(|error| panic!("receive: {error}"));
+    assert_eq!(&bytes, b"forward");
+    server
+        .write_all(b"reverse")
+        .unwrap_or_else(|error| panic!("reverse: {error}"));
+    viewer
+        .read_exact(&mut bytes)
+        .unwrap_or_else(|error| panic!("receive reverse: {error}"));
+    assert_eq!(&bytes, b"reverse");
+}
+
+/// spec: operations.md:OPS-064
+#[test]
+fn reverting_listen_allows_the_entire_dynamic_candidate_without_restart() {
+    let _lock = lock_ports();
+    let ports = Ports::free();
+    let mut original = config_text(ports, VIEWER_ONLY, CERT, KEY);
+    original = setting(original, "mode1.enabled", "true");
+    original = setting(original, "mode1.allow_targets", "[]");
+    original = setting(
+        original,
+        "relay.ws_viewer.allowed_origins",
+        r#"["https://old.example"]"#,
+    );
+    original = setting(
+        original,
+        "relay.wss_viewer.allowed_origins",
+        r#"["https://old.example"]"#,
+    );
+    let changes = [
+        (
+            "relay.ws_viewer.allowed_origins",
+            serde_json::json!(["https://new.example"]),
+        ),
+        (
+            "relay.wss_viewer.allowed_origins",
+            serde_json::json!(["https://new.example"]),
+        ),
+        ("mode1.allow_targets", serde_json::json!(["127.0.0.1:5900"])),
+        ("limits.relay_connections", serde_json::json!(32)),
+        ("limits.admin_connections", serde_json::json!(12)),
+        ("limits.waiting", serde_json::json!(12)),
+        ("limits.buffer_bytes", serde_json::json!(65536)),
+        ("limits.ws_message_bytes", serde_json::json!(131072)),
+        ("timeouts.handshake_secs", serde_json::json!(90)),
+        ("timeouts.tls_upgrade_secs", serde_json::json!(90)),
+        ("timeouts.wait_secs", serde_json::json!(120)),
+        ("timeouts.connect_secs", serde_json::json!(20)),
+        ("timeouts.close_secs", serde_json::json!(2)),
+        ("timeouts.shutdown_grace_secs", serde_json::json!(15)),
+        ("keepalive.tcp_idle_secs", serde_json::json!(70)),
+        ("keepalive.tcp_interval_secs", serde_json::json!(12)),
+        ("keepalive.tcp_probes", serde_json::json!(7)),
+        ("keepalive.ws_ping_secs", serde_json::json!(15)),
+        ("keepalive.ws_pong_timeout_secs", serde_json::json!(16)),
+    ];
+    let config = authenticated_setup("all-runtime-listen-revert", &original);
+    let log = log_of(&config);
+    let mut guard = Guard(Some(spawn(&config)));
+    wait_listening(guard.child(), ports);
+    let (cookie, _, _) = login(ports.management);
+    let before = query(ports.management, &cookie, "/api/v1/config");
+    let (mut viewer, mut server) = pair(ports, "6401");
+    exchange(&mut viewer, &mut server);
+    let mut candidate = original;
+    for (key, value) in &changes {
+        assert_ne!(effective(&before, key), value, "{key} must change");
+        candidate = setting(candidate, key, &value.to_string());
+    }
+    let moved = free_port();
+    write(
+        &config,
+        &setting(
+            candidate.clone(),
+            "relay.tcp_viewer.listen",
+            &format!("\"127.0.0.1:{moved}\""),
+        ),
+    );
+    let rejected = wait_for_line(&log, |line| event_is(line, "reload_restart_required"));
+    let rejected: serde_json::Value =
+        serde_json::from_str(&rejected).unwrap_or_else(|error| panic!("event: {error}"));
+    assert_eq!(
+        rejected["config_keys"],
+        serde_json::json!(["relay.tcp_viewer.listen"])
+    );
+    let held = query(ports.management, &cookie, "/api/v1/config");
+    for (key, _) in &changes {
+        assert_eq!(
+            effective(&held, key),
+            effective(&before, key),
+            "{key} leaked from rejected candidate"
+        );
+    }
+    assert!(!connects(moved));
+    exchange(&mut viewer, &mut server);
+    let applied = reload(&config, &candidate);
+    assert_eq!(
+        applied["applied"].as_array().map(Vec::len),
+        Some(changes.len())
+    );
+    let after = query(ports.management, &cookie, "/api/v1/config");
+    for (key, value) in &changes {
+        assert_eq!(effective(&after, key), value, "{key}");
+        assert!(
+            applied["applied"]
+                .as_array()
+                .is_some_and(|keys| keys.iter().any(|item| item.as_str() == Some(*key))),
+            "{key}: {applied}"
+        );
+    }
+    assert_eq!(after["file"]["state"], "in_effect");
+    assert_eq!(after["last_reload"]["trigger"], "file_watch");
+    exchange(&mut viewer, &mut server);
+}
+
+fn upgrade_origin(mut wire: Box<dyn Wire>, origin: &str, expected: u16) -> Option<WebSocket> {
+    let request = String::from_utf8(upgrade_request())
+        .unwrap_or_else(|error| panic!("request: {error}"))
+        .replace("\r\n\r\n", &format!("\r\nOrigin: {origin}\r\n\r\n"));
+    wire.write_all(request.as_bytes())
+        .unwrap_or_else(|error| panic!("upgrade: {error}"));
+    wire.flush()
+        .unwrap_or_else(|error| panic!("upgrade flush: {error}"));
+    let head = read_head(&mut wire);
+    assert_eq!(status_of(&head), expected, "{head}");
+    (expected == 101).then_some(WebSocket { wire })
+}
+
+fn origin_viewer(ports: Ports, secure: bool, origin: &str, expected: u16) -> Option<WebSocket> {
+    let wire: Box<dyn Wire> = if secure {
+        Box::new(tls_client(connect_from([127, 0, 0, 1], ports.wss_viewer)))
+    } else {
+        Box::new(connect_from([127, 0, 0, 1], ports.ws_viewer))
+    };
+    upgrade_origin(wire, origin, expected)
+}
+
+fn ws_exchange(viewer: &mut WebSocket, server: &mut TcpStream) {
+    viewer.send_binary(b"forward");
+    let mut bytes = [0; 7];
+    server
+        .read_exact(&mut bytes)
+        .unwrap_or_else(|error| panic!("WS receive: {error}"));
+    assert_eq!(&bytes, b"forward");
+    server
+        .write_all(b"reverse")
+        .unwrap_or_else(|error| panic!("WS reverse: {error}"));
+    assert_eq!(viewer.read_data(7), b"reverse");
+}
+
+fn accept_target(listener: &TcpListener) -> TcpStream {
+    listener
+        .set_nonblocking(true)
+        .unwrap_or_else(|error| panic!("target nonblocking: {error}"));
+    let deadline = Instant::now() + EXIT_LIMIT;
+    loop {
+        match listener.accept() {
+            Ok((stream, _)) => {
+                stream
+                    .set_nonblocking(false)
+                    .unwrap_or_else(|error| panic!("target blocking: {error}"));
+                stream
+                    .set_read_timeout(Some(EXIT_LIMIT))
+                    .unwrap_or_else(|error| panic!("target timeout: {error}"));
+                return stream;
+            }
+            Err(error) if error.kind() == ErrorKind::WouldBlock => {}
+            Err(error) => panic!("target accept: {error}"),
+        }
+        assert!(Instant::now() < deadline, "target not connected");
+        std::thread::sleep(Duration::from_millis(20));
+    }
+}
+
+fn mode1_viewer(ports: Ports, target: &TcpListener) -> TcpStream {
+    let mut viewer = tcp_viewer(ports.tcp_viewer);
+    let address = target
+        .local_addr()
+        .unwrap_or_else(|error| panic!("target address: {error}"))
+        .to_string();
+    let mut bytes = [0; HANDSHAKE_REQUEST_LEN];
+    bytes[..address.len()].copy_from_slice(address.as_bytes());
+    viewer
+        .write_all(&bytes)
+        .unwrap_or_else(|error| panic!("mode1 request: {error}"));
+    viewer
+}
+
+/// spec: operations.md:OPS-047
+/// spec: operations.md:OPS-048
+/// spec: operations.md:OPS-049
+#[test]
+fn origin_and_target_reload_affects_new_checks_and_keeps_established_sessions() {
+    let _lock = lock_ports();
+    let ports = Ports::free();
+    let target = TcpListener::bind("127.0.0.1:0").unwrap_or_else(|error| panic!("target: {error}"));
+    let added =
+        TcpListener::bind("127.0.0.1:0").unwrap_or_else(|error| panic!("added target: {error}"));
+    let old_address = target
+        .local_addr()
+        .unwrap_or_else(|error| panic!("address: {error}"))
+        .to_string();
+    let new_address = added
+        .local_addr()
+        .unwrap_or_else(|error| panic!("address: {error}"))
+        .to_string();
+    let policy = |origins: serde_json::Value, targets: serde_json::Value| {
+        let mut text = setting(
+            config_text(ports, VIEWER_ONLY, CERT, KEY),
+            "mode1.enabled",
+            "true",
+        );
+        text = setting(text, "mode1.allow_targets", &targets.to_string());
+        text = setting(
+            text,
+            "relay.ws_viewer.allowed_origins",
+            &origins.to_string(),
+        );
+        setting(
+            text,
+            "relay.wss_viewer.allowed_origins",
+            &origins.to_string(),
+        )
+    };
+    let config = setup(
+        "origin-target-policy",
+        &policy(
+            serde_json::json!(["https://old.example"]),
+            serde_json::json!([old_address]),
+        ),
+    );
+    let log = log_of(&config);
+    let mut guard = Guard(Some(spawn(&config)));
+    wait_listening(guard.child(), ports);
+    let mut established = Vec::new();
+    for (secure, id) in [(false, "4701"), (true, "4702")] {
+        let mut viewer = origin_viewer(ports, secure, "https://old.example", 101)
+            .unwrap_or_else(|| panic!("accepted upgrade"));
+        assert_eq!(viewer.read_data(12), GREETING);
+        viewer.send_binary(&request(id));
+        let server = waiting_server(ports, id);
+        established.push((viewer, server));
+    }
+    let mut mode1 = mode1_viewer(ports, &target);
+    let mut target_peer = accept_target(&target);
+    exchange(&mut mode1, &mut target_peer);
+    wait_for_count(&log, 3, |line| event_is(line, "session_started"));
+
+    // A transport accepted before the addition still uses the current Origin
+    // policy when its HTTP upgrade is finally checked.
+    let held_add = connect_from([127, 0, 0, 1], ports.ws_viewer);
+    let both_origins = serde_json::json!(["https://old.example", "https://new.example"]);
+    let both_targets = serde_json::json!([old_address, new_address]);
+    reload(&config, &policy(both_origins.clone(), both_targets.clone()));
+    let _added_upgrade = upgrade_origin(Box::new(held_add), "https://new.example", 101);
+    for secure in [false, true] {
+        let _new = origin_viewer(ports, secure, "https://new.example", 101);
+    }
+    let mut new_viewer = mode1_viewer(ports, &added);
+    let mut new_target = accept_target(&added);
+    exchange(&mut new_viewer, &mut new_target);
+
+    let held_remove = connect_from([127, 0, 0, 1], ports.ws_viewer);
+    let mut held_tls = tls_client(connect_from([127, 0, 0, 1], ports.wss_viewer));
+    handshake(&mut held_tls);
+    reload(
+        &config,
+        &policy(
+            serde_json::json!(["https://new.example"]),
+            serde_json::json!([new_address]),
+        ),
+    );
+    assert!(upgrade_origin(Box::new(held_remove), "https://old.example", 403).is_none());
+    assert!(upgrade_origin(Box::new(held_tls), "https://old.example", 403).is_none());
+    for secure in [false, true] {
+        assert!(origin_viewer(ports, secure, "https://old.example", 403).is_none());
+    }
+    let mut refused_target = mode1_viewer(ports, &target);
+    assert!(closed_within(&mut refused_target, EXIT_LIMIT));
+    assert!(
+        matches!(target.accept(), Err(error) if error.kind() == ErrorKind::WouldBlock),
+        "removed target must not receive a new connection"
+    );
+    for (viewer, server) in &mut established {
+        ws_exchange(viewer, server);
+    }
+    exchange(&mut mode1, &mut target_peer);
+    exchange(&mut new_viewer, &mut new_target);
+
+    reload(&config, &policy(both_origins, both_targets));
+    for secure in [false, true] {
+        let mut restored = origin_viewer(ports, secure, "https://old.example", 101)
+            .unwrap_or_else(|| panic!("restored upgrade"));
+        assert_eq!(restored.read_data(12), GREETING);
+    }
+    let mut restored = mode1_viewer(ports, &target);
+    let mut restored_target = accept_target(&target);
+    exchange(&mut restored, &mut restored_target);
+    for (viewer, server) in &mut established {
+        ws_exchange(viewer, server);
+    }
+    exchange(&mut mode1, &mut target_peer);
+    assert_eq!(
+        logged(&log, |line| event_is(line, "reload_restart_required")),
+        0
+    );
+}
+
+/// spec: operations.md:OPS-058
+#[test]
+fn reloaded_all_target_policy_emits_reload_phase_warning() {
+    let _lock = lock_ports();
+    let ports = Ports::free();
+    let mut text = setting(
+        config_text(ports, VIEWER_ONLY, CERT, KEY),
+        "mode1.enabled",
+        "true",
+    );
+    text = setting(text, "mode1.allow_targets", "[]");
+    let config = setup("all-target-warning", &text);
+    let log = log_of(&config);
+    let mut guard = Guard(Some(spawn(&config)));
+    wait_listening(guard.child(), ports);
+    assert_eq!(logged(&log, |line| event_is(line, "allow_all_target")), 0);
+    for targets in [r#"["0.0.0.0/0:5900"]"#, r#"["[::/0]:5900"]"#] {
+        text = setting(text, "mode1.allow_targets", targets);
+        reload(&config, &text);
+    }
+    wait_for_count(&log, 2, |line| {
+        event_is(line, "allow_all_target") && field(line, "phase") == Some("reload")
+    });
+    let contents = std::fs::read_to_string(&log).unwrap_or_else(|error| panic!("log: {error}"));
+    for line in contents
+        .lines()
+        .filter(|line| event_is(line, "allow_all_target"))
+    {
+        let event: serde_json::Value =
+            serde_json::from_str(line).unwrap_or_else(|error| panic!("event: {error}"));
+        assert_eq!(event["phase"], "reload");
+        assert_eq!(event["level"], "warn");
+    }
+}
+
+fn limited_config(ports: Ports, relay: u32, admin: u32, waiting: u32) -> String {
+    let mut text = config_text(ports, VIEWER_ONLY, CERT, KEY);
+    for (key, value) in [
+        ("limits.relay_connections", relay),
+        ("limits.admin_connections", admin),
+        ("limits.waiting", waiting),
+    ] {
+        text = setting(text, key, &value.to_string());
+    }
+    setting(text, "timeouts.close_secs", "1")
+}
+
+fn assert_budget_refusal(log: &Path, port: u16, listener: &str, reason: &str, limit: u32) {
+    let count = logged(log, |line| {
+        reason_is(line, "connection_rejected", reason) && field(line, "listener") == Some(listener)
+    }) + 1;
+    assert!(closed_within(
+        &mut connect_from([127, 0, 0, 1], port),
+        EXIT_LIMIT
+    ));
+    wait_for_count(log, count, |line| {
+        reason_is(line, "connection_rejected", reason)
+            && field(line, "listener") == Some(listener)
+            && line.contains(&format!("\"limit\":{limit}"))
+    });
+}
+
+/// spec: operations.md:OPS-051
+/// spec: operations.md:OPS-052
+/// spec: operations.md:OPS-053
+#[test]
+fn lowered_relay_and_admin_limits_keep_connections_and_recover_after_release_or_raise() {
+    let _lock = lock_ports();
+    let ports = Ports::free();
+    let config = authenticated_setup("lower-budgets", &limited_config(ports, 8, 8, 2));
+    let log = log_of(&config);
+    let mut guard = Guard(Some(spawn(&config)));
+    wait_listening(guard.child(), ports);
+    let (cookie, _, _) = login(ports.management);
+    poll_query(ports.management, &cookie, "/api/v1/summary", |value| {
+        value["usage"]["relay_connections"]["current"] == 0
+    });
+    let (mut viewer, mut server) = pair(ports, "5101");
+    let (mut second_viewer, mut second_server) = pair(ports, "5102");
+    exchange(&mut viewer, &mut server);
+    exchange(&mut second_viewer, &mut second_server);
+    poll_query(ports.management, &cookie, "/api/v1/summary", |value| {
+        value["usage"]["relay_connections"]["current"] == 4
+    });
+
+    // L is below the four live sockets; admission changes without revocation.
+    reload(&config, &limited_config(ports, 2, 8, 2));
+    let summary = query(ports.management, &cookie, "/api/v1/summary");
+    assert_eq!(summary["usage"]["relay_connections"]["limit"], 2);
+    assert_eq!(summary["usage"]["relay_connections"]["current"], 4);
+    assert_budget_refusal(
+        &log,
+        ports.tcp_server,
+        "tcp_server",
+        "relay_connection_limit",
+        2,
+    );
+    assert_budget_refusal(
+        &log,
+        ports.ws_viewer,
+        "ws_viewer",
+        "relay_connection_limit",
+        2,
+    );
+    assert_budget_refusal(
+        &log,
+        ports.wss_viewer,
+        "wss_viewer",
+        "relay_connection_limit",
+        2,
+    );
+    exchange(&mut viewer, &mut server);
+    exchange(&mut second_viewer, &mut second_server);
+    // The independent admin budget still serves queries at exhausted L.
+    assert_eq!(
+        query(ports.management, &cookie, "/api/v1/session")["account"],
+        "alice"
+    );
+
+    let held_management = connect_from([127, 0, 0, 1], ports.management);
+    let mut held_status = connect_from([127, 0, 0, 1], ports.status);
+    let mut second_status = connect_from([127, 0, 0, 1], ports.status);
+    // The query's own permit makes four while all three idle holders are alive.
+    poll_query(ports.management, &cookie, "/api/v1/summary", |value| {
+        value["usage"]["admin_connections"]["current"] == 4
+    });
+    reload(&config, &limited_config(ports, 2, 2, 2));
+    let summary = finish_http(
+        held_management,
+        "GET",
+        "/api/v1/summary",
+        &[("Cookie", &cookie)],
+        "",
+    );
+    assert_eq!(summary.status, 200);
+    assert_eq!(summary.body["usage"]["admin_connections"]["limit"], 2);
+    assert_eq!(summary.body["usage"]["relay_connections"]["limit"], 2);
+    assert!(
+        summary.body["usage"]["admin_connections"]["current"]
+            .as_u64()
+            .is_some_and(|n| n >= 3)
+    );
+    assert!(
+        !closed_within(&mut held_status, SETTLE),
+        "Lm reduction revoked status"
+    );
+    assert!(
+        !closed_within(&mut second_status, SETTLE),
+        "Lm reduction revoked status"
+    );
+    assert_budget_refusal(
+        &log,
+        ports.management,
+        "management",
+        "admin_connection_limit",
+        2,
+    );
+    assert_budget_refusal(&log, ports.status, "status", "admin_connection_limit", 2);
+    exchange(&mut viewer, &mut server);
+
+    // Raising L admits a complete new relay while Lm remains exhausted.
+    reload(&config, &limited_config(ports, 8, 2, 2));
+    let (mut independent_viewer, mut independent_server) = pair(ports, "5201");
+    exchange(&mut independent_viewer, &mut independent_server);
+    assert_budget_refusal(
+        &log,
+        ports.management,
+        "management",
+        "admin_connection_limit",
+        2,
+    );
+    // Raising Lm then admits management and status without releasing holders.
+    reload(&config, &limited_config(ports, 8, 8, 2));
+    let mut raised_relay = tcp_viewer(ports.tcp_viewer);
+    assert!(!closed_within(&mut raised_relay, SETTLE));
+    assert_eq!(
+        query(ports.management, &cookie, "/api/v1/summary")["usage"]["admin_connections"]["limit"],
+        8
+    );
+    let mut status = connect_from([127, 0, 0, 1], ports.status);
+    status
+        .write_all(b"GET /livez HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n")
+        .unwrap_or_else(|error| panic!("status: {error}"));
+    assert_eq!(status_of(&read_head(&mut status)), 200);
+    drop((raised_relay, status));
+
+    // Lower again, then release below each new limit. Next admissions recover.
+    reload(&config, &limited_config(ports, 2, 2, 2));
+    drop((
+        viewer,
+        server,
+        second_viewer,
+        second_server,
+        independent_viewer,
+        independent_server,
+        held_status,
+        second_status,
+    ));
+    // Existing tasks retire asynchronously; the remaining budget is observed
+    // through the real summary before testing the next relay connection.
+    let deadline = Instant::now() + EXIT_LIMIT;
+    loop {
+        let mut stream = connect_from([127, 0, 0, 1], ports.management);
+        if !closed_within(&mut stream, Duration::from_millis(30)) {
+            let summary = finish_http(stream, "GET", "/api/v1/summary", &[("Cookie", &cookie)], "");
+            assert_eq!(summary.status, 200);
+            if summary.body["usage"]["relay_connections"]["current"] == 0 {
+                break;
+            }
+        }
+        assert!(
+            Instant::now() < deadline,
+            "released budgets did not recover"
+        );
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    let (mut recovered_viewer, mut recovered_server) = pair(ports, "5301");
+    exchange(&mut recovered_viewer, &mut recovered_server);
+    assert_eq!(
+        query(ports.management, &cookie, "/api/v1/summary")["usage"]["relay_connections"]["limit"],
+        2
+    );
+}
+
+/// spec: operations.md:OPS-054
+/// spec: operations.md:OPS-055
+/// spec: operations.md:OPS-056
+#[test]
+fn lowered_waiting_limit_keeps_deadlines_and_matching_then_allows_registration_after_release() {
+    let _lock = lock_ports();
+    let ports = Ports::free();
+    let mut text = setting(limited_config(ports, 12, 8, 4), "timeouts.wait_secs", "18");
+    let config = authenticated_setup("lower-waiting", &text);
+    let log = log_of(&config);
+    let mut guard = Guard(Some(spawn(&config)));
+    wait_listening(guard.child(), ports);
+    let (cookie, _, _) = login(ports.management);
+    let mut first = waiting_server(ports, "5401");
+    let mut second = waiting_server(ports, "5402");
+    let mut deadline_witness = waiting_server(ports, "5403");
+    wait_for_count(&log, 3, |line| event_is(line, "waiting_registered"));
+    let registered_by = Instant::now();
+    let before = query(ports.management, &cookie, "/api/v1/waiting");
+    // A restarted old W would now expire later than the original deadline.
+    std::thread::sleep(Duration::from_secs(3));
+    text = setting(text, "limits.waiting", "1");
+    text = setting(text, "timeouts.wait_secs", "10");
+    reload(&config, &text);
+    let after = query(ports.management, &cookie, "/api/v1/waiting");
+    let before_items = before["items"]
+        .as_array()
+        .unwrap_or_else(|| panic!("waiting items"));
+    let after_items = after["items"]
+        .as_array()
+        .unwrap_or_else(|| panic!("waiting items"));
+    assert_eq!(before_items.len(), after_items.len());
+    for old in before_items {
+        let kept = after_items
+            .iter()
+            .find(|item| item["relay_id"] == old["relay_id"])
+            .unwrap_or_else(|| panic!("waiter removed: {old}"));
+        assert_eq!(kept["connected_at"], old["connected_at"]);
+        assert_eq!(kept["role"], old["role"]);
+        assert!(kept["waited_ms"].as_u64() >= old["waited_ms"].as_u64());
+    }
+    assert!(!closed_within(&mut first, SETTLE));
+    assert!(!closed_within(&mut second, SETTLE));
+    let mut overflow = waiting_server(ports, "5501");
+    assert!(closed_within(&mut overflow, EXIT_LIMIT));
+    let rejection = wait_for_line(&log, |line| event_is(line, "connection_rejected"));
+    assert!(rejection.contains("\"limit\":1"), "{rejection}");
+    assert_eq!(
+        query(ports.management, &cookie, "/api/v1/waiting")["items"]
+            .as_array()
+            .map(Vec::len),
+        Some(3)
+    );
+
+    // Immediate matches do not require a waiting slot, even while count > Lw.
+    let mut first_match = tcp_viewer(ports.tcp_viewer);
+    first_match
+        .write_all(&request("5401"))
+        .unwrap_or_else(|error| panic!("match: {error}"));
+    exchange(&mut first_match, &mut first);
+    let mut second_match = tcp_viewer(ports.tcp_viewer);
+    second_match
+        .write_all(&request("5402"))
+        .unwrap_or_else(|error| panic!("match: {error}"));
+    exchange(&mut second_match, &mut second);
+    poll_query(ports.management, &cookie, "/api/v1/summary", |value| {
+        value["counts"]["waiting"] == 1
+    });
+    // The third original waiter retains W=18, not the reloaded W=10.
+    let wait_to = registered_by + Duration::from_secs(11);
+    if let Some(remaining) = wait_to.checked_duration_since(Instant::now()) {
+        std::thread::sleep(remaining);
+    }
+    assert!(
+        !closed_within(&mut deadline_witness, Duration::from_millis(50)),
+        "old W shortened"
+    );
+    assert!(
+        closed_within(&mut deadline_witness, Duration::from_secs(9)),
+        "old W extended/reset"
+    );
+    assert!(
+        registered_by.elapsed() >= Duration::from_secs(17),
+        "old W was replaced by new W"
+    );
+    assert!(
+        registered_by.elapsed() < Duration::from_secs(20),
+        "old deadline changed"
+    );
+    poll_query(ports.management, &cookie, "/api/v1/summary", |value| {
+        value["counts"]["waiting"] == 0
+    });
+    let mut recovered = waiting_server(ports, "5601");
+    wait_for_count(&log, 4, |line| event_is(line, "waiting_registered"));
+    let new_registered_by = Instant::now();
+    assert!(!closed_within(&mut recovered, SETTLE));
+    let mut at_limit = waiting_server(ports, "5602");
+    assert!(
+        closed_within(&mut at_limit, EXIT_LIMIT),
+        "count == Lw must refuse registration"
+    );
+    text = setting(text, "limits.waiting", "2");
+    reload(&config, &text);
+    let mut raised = waiting_server(ports, "5603");
+    wait_for_count(&log, 5, |line| event_is(line, "waiting_registered"));
+    let mut raised_match = tcp_viewer(ports.tcp_viewer);
+    raised_match
+        .write_all(&request("5603"))
+        .unwrap_or_else(|error| panic!("raised match: {error}"));
+    exchange(&mut raised_match, &mut raised);
+    assert!(
+        closed_within(&mut recovered, Duration::from_secs(11)),
+        "new waiter did not use W=10"
+    );
+    assert!(
+        new_registered_by.elapsed() >= Duration::from_secs(9),
+        "new waiter expired too early"
+    );
+    assert!(
+        new_registered_by.elapsed() < Duration::from_secs(12),
+        "raising Lw reset the waiting deadline"
+    );
+    exchange(&mut first_match, &mut first);
+    exchange(&mut second_match, &mut second);
+}
+
+fn session_for_viewer(port: u16, cookie: &str, source_port: u16) -> String {
+    let sessions = poll_query(port, cookie, "/api/v1/sessions", |value| {
+        value["items"].as_array().is_some_and(|items| {
+            items
+                .iter()
+                .any(|item| item["viewer_address"]["port"] == source_port)
+        })
+    });
+    sessions["items"]
+        .as_array()
+        .unwrap_or_else(|| panic!("sessions"))
+        .iter()
+        .find(|item| item["viewer_address"]["port"] == source_port)
+        .and_then(|item| item["session_id"].as_str())
+        .unwrap_or_else(|| panic!("session id: {sessions}"))
+        .to_owned()
+}
+
+fn close_boundary_scenario(name: &str, edit: bool) {
+    let _lock = lock_ports();
+    let ports = Ports::free();
+    let mut text = setting(
+        config_text(ports, VIEWER_ONLY, CERT, KEY),
+        "timeouts.close_secs",
+        "8",
+    );
+    text = setting(text, "management.config_edit", "true");
+    text = setting(text, "dashboard.poll_secs", "3");
+    text = setting(text, "dashboard.query_timeout_secs", "4");
+    let config = authenticated_setup(name, &text);
+    let mut guard = Guard(Some(spawn(&config)));
+    wait_listening(guard.child(), ports);
+    let (cookie, csrf, initial) = login(ports.management);
+    assert_eq!(initial["dashboard"]["terminate_timeout_secs"], 13);
+    let (mut old_viewer, old_server) = pair(ports, "5701");
+    let (mut preexisting_viewer, preexisting_server) = pair(ports, "5702");
+    let old_id = session_for_viewer(
+        ports.management,
+        &cookie,
+        old_viewer
+            .local_addr()
+            .unwrap_or_else(|error| panic!("address: {error}"))
+            .port(),
+    );
+    let preexisting_id = session_for_viewer(
+        ports.management,
+        &cookie,
+        preexisting_viewer
+            .local_addr()
+            .unwrap_or_else(|error| panic!("address: {error}"))
+            .port(),
+    );
+    let old_path = format!("/api/v1/sessions/{old_id}");
+    let preexisting_path = format!("/api/v1/sessions/{preexisting_id}");
+    let old_started = Instant::now();
+    old_server
+        .shutdown(std::net::Shutdown::Write)
+        .unwrap_or_else(|error| panic!("old EOF: {error}"));
+    poll_query(ports.management, &cookie, &old_path, |value| {
+        value["session"]["state"] == "closing"
+    });
+    if edit {
+        let view = query(ports.management, &cookie, "/api/v1/config");
+        let reply = http(ports.management, "PATCH", "/api/v1/config",
+            &[("Cookie", &cookie), ("X-CSRF-Token", &csrf), ("Content-Type", "application/json")],
+            &serde_json::json!({"revision": view["revision"], "changes": {"timeouts.close_secs": 1}}).to_string());
+        assert_eq!(reply.status, 200, "{}", reply.body);
+        assert_eq!(
+            reply.body["applied"],
+            serde_json::json!(["timeouts.close_secs"])
+        );
+    } else {
+        text = setting(text, "timeouts.close_secs", "1");
+        reload(&config, &text);
+    }
+    let current = query(ports.management, &cookie, "/api/v1/session");
+    assert_eq!(current["dashboard"]["terminate_timeout_secs"], 6);
+    assert_eq!(
+        current["dashboard"]["poll_secs"],
+        initial["dashboard"]["poll_secs"]
+    );
+    assert_eq!(
+        current["dashboard"]["query_timeout_secs"],
+        initial["dashboard"]["query_timeout_secs"]
+    );
+    let (_, _, new_login) = login(ports.management);
+    assert_eq!(new_login["dashboard"]["terminate_timeout_secs"], 6);
+    assert_eq!(new_login["dashboard"]["poll_secs"], 3);
+    assert_eq!(new_login["dashboard"]["query_timeout_secs"], 4);
+
+    // A session established under old E but first closed after reload uses new E.
+    let new_started = Instant::now();
+    preexisting_server
+        .shutdown(std::net::Shutdown::Write)
+        .unwrap_or_else(|error| panic!("new EOF: {error}"));
+    poll_query(ports.management, &cookie, &preexisting_path, |value| {
+        value["session"]["state"] == "closing"
+    });
+    poll_query(
+        ports.management,
+        &cookie,
+        "/api/v1/closed-sessions",
+        |value| {
+            value["items"].as_array().is_some_and(|items| {
+                items.iter().any(|item| {
+                    item["session_id"] == preexisting_id && item["close_cause"] == "close_timeout"
+                })
+            })
+        },
+    );
+    assert!(
+        new_started.elapsed() >= Duration::from_millis(850),
+        "new E expired early"
+    );
+    assert!(
+        new_started.elapsed() < Duration::from_secs(4),
+        "new close retained old E"
+    );
+    assert_eq!(
+        query(ports.management, &cookie, &old_path)["session"]["state"],
+        "closing",
+        "started close was shortened to new E"
+    );
+    poll_query(
+        ports.management,
+        &cookie,
+        "/api/v1/closed-sessions",
+        |value| {
+            value["items"].as_array().is_some_and(|items| {
+                items.iter().any(|item| {
+                    item["session_id"] == old_id && item["close_cause"] == "close_timeout"
+                })
+            })
+        },
+    );
+    assert!(
+        old_started.elapsed() >= Duration::from_secs(7),
+        "old E changed"
+    );
+    assert!(
+        old_started.elapsed() < Duration::from_secs(11),
+        "old E restarted or extended"
+    );
+    assert!(closed_within(&mut old_viewer, SETTLE));
+    assert!(closed_within(&mut preexisting_viewer, SETTLE));
+}
+
+/// spec: management.md:MGT-041
+#[test]
+fn edited_close_timeout_updates_session_hint_but_not_started_close() {
+    close_boundary_scenario("edited-close", true);
+}
+
+/// spec: operations.md:OPS-057
+#[test]
+fn reloaded_close_timeout_changes_new_closes_and_response_hints_only() {
+    close_boundary_scenario("watched-close", false);
+}
+
+/// spec: operations.md:OPS-050 partial
+#[test]
+fn runtime_groups_take_effect_only_at_their_documented_boundaries() {
+    let _lock = lock_ports();
+    let ports = Ports::free();
+    let mut text = config_text(ports, VIEWER_ONLY, CERT, KEY);
+    text = setting(text, "timeouts.handshake_secs", "12");
+    text = setting(text, "timeouts.tls_upgrade_secs", "12");
+    text = setting(text, "limits.ws_message_bytes", "131072");
+    text = setting(text, "limits.buffer_bytes", "32768");
+    let config = setup("runtime-boundaries", &text);
+    let _log = log_of(&config);
+    let mut guard = Guard(Some(spawn(&config)));
+    wait_listening(guard.child(), ports);
+
+    let mut old_initial = tcp_viewer(ports.tcp_viewer);
+    let mut old_upgrade = connect_from([127, 0, 0, 1], ports.ws_viewer);
+    let mut old_management = connect_from([127, 0, 0, 1], ports.management);
+    let mut old_wss_upgrade = connect_from([127, 0, 0, 1], ports.wss_viewer);
+    let held_for_upgrade = connect_from([127, 0, 0, 1], ports.ws_viewer);
+    let held_for_message = connect_from([127, 0, 0, 1], ports.ws_viewer);
+    let mut old_ws = WebSocket::upgrade(Box::new(connect_from([127, 0, 0, 1], ports.ws_viewer)));
+    assert_eq!(old_ws.read_data(12), GREETING);
+    old_ws.send_binary(&request("5001"));
+    let mut old_server = waiting_server(ports, "5001");
+    ws_exchange(&mut old_ws, &mut old_server);
+    // Old raw transports remain accepted while the candidate is published.
+    // Runtime unit tests separately pin the accept/upgrade generation race.
+    std::thread::sleep(Duration::from_millis(100));
+    for (key, value) in [
+        ("timeouts.handshake_secs", "1"),
+        ("timeouts.tls_upgrade_secs", "1"),
+        ("limits.ws_message_bytes", "65536"),
+        ("limits.buffer_bytes", "16384"),
+        ("keepalive.ws_ping_secs", "5"),
+        ("keepalive.ws_pong_timeout_secs", "5"),
+    ] {
+        text = setting(text, key, value);
+    }
+    let applied = reload(&config, &text);
+    assert_eq!(applied["applied"].as_array().map(Vec::len), Some(6));
+    let mut new_ws = WebSocket::upgrade(Box::new(held_for_message));
+    assert_eq!(new_ws.read_data(12), GREETING);
+    new_ws.send_binary(&request("5002"));
+    let mut new_server = waiting_server(ports, "5002");
+    ws_exchange(&mut new_ws, &mut new_server);
+
+    // H starts at initial exchange, not at transport accept.
+    let mut new_initial = tcp_viewer(ports.tcp_viewer);
+    let initial_at = Instant::now();
+    assert!(closed_within(&mut new_initial, Duration::from_secs(3)));
+    assert!(initial_at.elapsed() >= Duration::from_millis(850));
+    let mut post_upgrade = WebSocket::upgrade(Box::new(held_for_upgrade));
+    assert_eq!(post_upgrade.read_data(12), GREETING);
+    let (_, opcode, payload) = post_upgrade.frame();
+    assert_eq!(opcode, 8);
+    assert_eq!(&payload[..2], &4009_u16.to_be_bytes());
+    assert_eq!(&payload[2..], b"handshake_timeout");
+
+    // New U applies independently to WS, WSS TLS, and management first-head
+    // deadlines. Hold old sockets throughout the new-deadline observation.
+    let mut new_upgrade = connect_from([127, 0, 0, 1], ports.ws_viewer);
+    let mut new_wss_upgrade = connect_from([127, 0, 0, 1], ports.wss_viewer);
+    let mut new_management = connect_from([127, 0, 0, 1], ports.management);
+    assert!(closed_within(&mut new_upgrade, Duration::from_secs(3)));
+    assert!(closed_within(&mut new_wss_upgrade, Duration::from_secs(2)));
+    assert!(closed_within(&mut new_management, Duration::from_secs(2)));
+    for stream in [
+        &mut old_initial,
+        &mut old_upgrade,
+        &mut old_management,
+        &mut old_wss_upgrade,
+    ] {
+        assert!(
+            !closed_within(stream, Duration::from_millis(50)),
+            "started H/U was shortened"
+        );
+    }
+
+    // Upgraded-before retains M=128 KiB. New upgrades, even on previously
+    // accepted transports, enforce M=64 KiB. The payload also exceeds B.
+    let large = vec![0x5a; 70_000];
+    let reader = std::thread::spawn(move || {
+        let mut received = vec![0; 70_000];
+        old_server
+            .read_exact(&mut received)
+            .unwrap_or_else(|error| panic!("old M stream: {error}"));
+        received
+    });
+    old_ws.send_binary(&large);
+    assert_eq!(
+        reader
+            .join()
+            .unwrap_or_else(|error| panic!("old M reader: {error:?}")),
+        large
+    );
+    // M is checked from the declared length, before a rejected payload is
+    // delivered. Do not race a large client write against the close response.
+    let mut header = vec![0x82, 0xff];
+    header.extend_from_slice(&70_000_u64.to_be_bytes());
+    header.extend_from_slice(&[0x13, 0x57, 0x9b, 0xdf]);
+    new_ws
+        .wire
+        .write_all(&header)
+        .unwrap_or_else(|error| panic!("new M header: {error}"));
+    new_ws
+        .wire
+        .flush()
+        .unwrap_or_else(|error| panic!("new M flush: {error}"));
+    let (_, opcode, payload) = new_ws.frame();
+    assert_eq!(opcode, 8);
+    assert_eq!(
+        &payload[..2],
+        &1009_u16.to_be_bytes(),
+        "new M must reject oversized message"
+    );
+    // Deliberately partial: TCP K readback, Kw scheduling, C attempt timing,
+    // and started G have adapter/app/platform-specific coverage.
 }

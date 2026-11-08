@@ -163,3 +163,185 @@
   gap: var(--space-xs);
   min-width: 0;
 }
+
+/* Settings reuse cards, fields, badges, alerts and the protected application shell. */
+.settings-main {
+  gap: var(--space-lg);
+}
+
+.settings-main :is(p, dt, dd),
+.config-dialog {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.settings-main .page-meta,
+.config-help {
+  margin: 0;
+  color: var(--color-muted-foreground);
+  font-family: var(--type-label-family);
+  font-size: var(--type-label-size);
+  font-weight: var(--type-label-weight);
+  line-height: var(--type-label-line);
+  letter-spacing: var(--type-label-tracking);
+}
+
+.config-data,
+.config-change :is(.card-title, .card-heading) {
+  font-family: var(--type-data-family);
+  font-size: var(--type-data-size);
+  font-weight: var(--type-data-weight);
+  line-height: var(--type-data-line);
+  letter-spacing: var(--type-data-tracking);
+  overflow-wrap: anywhere;
+}
+
+.settings-main .alert-body > .alert-title:only-child {
+  font-family: var(--type-body-family);
+  font-size: var(--type-body-size);
+  font-weight: var(--type-body-weight);
+  color: var(--color-foreground);
+}
+
+.config-number {
+  font-family: var(--type-body-numeric-family);
+  font-size: var(--type-body-numeric-size);
+  font-weight: var(--type-body-numeric-weight);
+  line-height: var(--type-body-numeric-line);
+  letter-spacing: var(--type-body-numeric-tracking);
+  font-feature-settings: var(--type-body-numeric-feature);
+}
+
+.config-body,
+.config-list,
+.config-value-list,
+.config-diagnostics {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  min-width: 0;
+  margin: 0;
+}
+
+.config-value-list,
+.config-diagnostic {
+  gap: var(--space-xs);
+}
+
+.config-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-md);
+  padding: var(--space-lg) 0;
+  border-bottom: var(--space-border-width) solid var(--color-border);
+}
+
+.config-row:last-child {
+  border-bottom: 0;
+}
+
+.config-row dd,
+.config-reload dd,
+.config-reload {
+  margin: 0;
+}
+
+.config-application {
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  align-items: flex-start;
+  gap: var(--space-sm);
+}
+
+.config-reload-row {
+  display: grid;
+  grid-template-columns: var(--space-kv-label-col) minmax(0, 1fr);
+  gap: var(--space-md);
+  padding-block: var(--space-sm);
+}
+
+.config-diagnostic {
+  display: flex;
+  flex-direction: column;
+}
+
+.config-diagnostic p {
+  margin: 0;
+}
+
+.settings-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-lg);
+}
+
+.config-input {
+  padding: var(--space-xs) var(--space-sm);
+}
+
+.config-list-input {
+  height: auto;
+  min-height: calc(var(--space-control-height) * 3);
+  resize: vertical;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-family: var(--type-input-data-family);
+  font-size: var(--type-input-data-size);
+  font-weight: var(--type-input-data-weight);
+  line-height: var(--type-input-data-line);
+  letter-spacing: var(--type-input-data-tracking);
+}
+
+.config-number-unit {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  min-width: 0;
+}
+
+.config-number-unit > .config-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.config-number-unit > span {
+  flex: none;
+}
+
+.config-field-error {
+  margin: 0;
+  color: var(--color-destructive);
+  font-family: var(--type-body-family);
+  font-size: var(--type-body-size);
+  font-weight: var(--type-body-weight);
+  line-height: var(--type-body-line);
+  letter-spacing: var(--type-body-tracking);
+}
+
+.config-field-error .icon {
+  display: inline-block;
+  vertical-align: middle;
+  margin-right: var(--space-xs);
+}
+
+.settings-actions {
+  justify-content: flex-end;
+}
+
+.config-dialog {
+  max-height: calc(100vh - var(--space-md) * 2);
+  overflow-y: auto;
+}
+
+.config-confirm-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+  min-width: 0;
+}
+
+.config-dialog > *,
+.config-confirm-body > * {
+  flex: none;
+}

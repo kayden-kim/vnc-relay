@@ -15,6 +15,7 @@ const PATHS = {
   cancel: '<circle cx="8" cy="8" r="6.25"/><path d="M5.5 8h5"/>',
   globe: '<circle cx="8" cy="8" r="6.25"/><path d="M1.75 8h12.5"/><path d="M8 1.75c1.8 1.7 2.7 3.8 2.7 6.25S9.8 12.55 8 14.25C6.2 12.55 5.3 10.45 5.3 8S6.2 3.45 8 1.75z"/>',
   grid: '<rect x="2.25" y="2.25" width="4.5" height="4.5" rx="1"/><rect x="9.25" y="2.25" width="4.5" height="4.5" rx="1"/><rect x="2.25" y="9.25" width="4.5" height="4.5" rx="1"/><rect x="9.25" y="9.25" width="4.5" height="4.5" rx="1"/>',
+  settings: '<path d="M2 4h12M2 8h12M2 12h12"/><path d="M5 2.5v3M11 6.5v3M6 10.5v3"/>',
   brand: '<path d="M2.75 5.5h9.5"/><path d="M9.75 3l2.5 2.5-2.5 2.5"/><path d="M13.25 10.5h-9.5"/><path d="M6.25 8l-2.5 2.5 2.5 2.5"/>',
 };
 

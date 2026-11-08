@@ -186,6 +186,10 @@ fn session_shows_the_facts_and_terminate_action_in_browser() {
 }
 
 /// spec: dashboard.md:DASH-006 partial
+/// spec: dashboard.md:DASH-028 partial
+/// spec: dashboard.md:DASH-039 partial
+/// spec: dashboard.md:DASH-052 partial
+/// spec: dashboard.md:DASH-053 partial
 #[test]
 fn router_opens_session_detail_from_the_list_in_browser() {
     check_localized_case("/tests/router.html", "dash-006");
@@ -274,6 +278,162 @@ fn session_follows_the_browser_language_in_browser() {
 #[test]
 fn session_keeps_the_chosen_language_in_browser() {
     check_localized_case("/tests/session.html", "dash-025");
+}
+
+/// spec: dashboard.md:DASH-028 partial
+#[test]
+fn settings_navigation_and_protected_entry_in_browser() {
+    check_localized_case("/tests/settings.html", "dash-028");
+}
+
+/// spec: dashboard.md:DASH-029 partial
+#[test]
+fn settings_shows_all_effective_keys_values_and_reload_metadata_in_browser() {
+    check_localized_case("/tests/settings.html", "dash-029");
+}
+
+/// spec: dashboard.md:DASH-030 partial
+#[test]
+fn settings_shows_current_and_pending_files_without_polling_in_browser() {
+    check_localized_case("/tests/settings.html", "dash-030");
+}
+
+/// spec: dashboard.md:DASH-031 partial
+#[test]
+fn settings_restart_required_blocks_editing_in_browser() {
+    check_localized_case("/tests/settings.html", "dash-031");
+}
+
+/// spec: dashboard.md:DASH-032 partial
+#[test]
+fn settings_localizes_invalid_file_diagnostics_and_distinguishes_unreadable_in_browser() {
+    check_localized_case("/tests/settings.html", "dash-032");
+}
+
+/// spec: dashboard.md:DASH-033 partial
+#[test]
+fn settings_distinguishes_absent_reload_history_and_unknown_history_values_in_browser() {
+    check_localized_case("/tests/settings.html", "dash-033");
+}
+
+/// spec: dashboard.md:DASH-034 partial
+#[test]
+fn settings_disabled_editing_keeps_view_and_blocks_direct_edit_in_browser() {
+    check_localized_case("/tests/settings.html", "dash-034");
+}
+
+/// spec: dashboard.md:DASH-035 partial
+#[test]
+fn settings_inputs_include_only_enabled_editable_keys_in_browser() {
+    check_localized_case("/tests/settings.html", "dash-035");
+}
+
+/// spec: dashboard.md:DASH-036 partial
+#[test]
+fn settings_rejects_invalid_numbers_relations_and_list_whitespace_in_browser() {
+    check_localized_case("/tests/settings.html", "dash-036");
+}
+
+/// spec: dashboard.md:DASH-037 partial
+#[test]
+fn settings_review_shows_changes_list_diffs_and_empty_list_warning_in_browser() {
+    check_localized_case("/tests/settings.html", "dash-037");
+}
+
+/// spec: dashboard.md:DASH-038 partial
+#[test]
+fn settings_review_cancel_and_escape_preserve_input_and_restore_focus_in_browser() {
+    check_localized_case("/tests/settings.html", "dash-038");
+}
+
+/// spec: dashboard.md:DASH-039 partial
+#[test]
+fn settings_applies_once_with_revision_csrf_and_actual_applied_count_in_browser() {
+    check_localized_case("/tests/settings.html", "dash-039");
+}
+
+/// spec: dashboard.md:DASH-040 partial
+#[test]
+fn settings_localizes_all_validation_diagnostics_and_selects_original_line_in_browser() {
+    check_localized_case("/tests/settings.html", "dash-040");
+}
+
+/// spec: dashboard.md:DASH-041 partial
+#[test]
+fn settings_conflict_retains_input_without_resubmission_in_browser() {
+    check_localized_case("/tests/settings.html", "dash-041");
+}
+
+/// spec: dashboard.md:DASH-042 partial
+#[test]
+fn settings_conflict_reload_replaces_revision_and_ignores_stale_result_in_browser() {
+    check_localized_case("/tests/settings.html", "dash-042");
+}
+
+/// spec: dashboard.md:DASH-043 partial
+#[test]
+fn settings_patch_rejections_remove_editing_and_localize_diagnostics_in_browser() {
+    check_localized_case("/tests/settings.html", "dash-043");
+}
+
+/// spec: dashboard.md:DASH-044 partial
+#[test]
+fn settings_write_failure_retains_input_and_does_not_claim_success_in_browser() {
+    check_localized_case("/tests/settings.html", "dash-044");
+}
+
+/// spec: dashboard.md:DASH-045 partial
+#[test]
+fn settings_write_failure_recovers_only_after_explicit_review_and_retry_in_browser() {
+    check_localized_case("/tests/settings.html", "dash-045");
+}
+
+/// spec: dashboard.md:DASH-046 partial
+#[test]
+fn settings_timeout_lost_unknown_and_invalid_outcomes_are_not_resent_in_browser() {
+    check_localized_case("/tests/settings.html", "dash-046");
+}
+
+/// spec: dashboard.md:DASH-047 partial
+#[test]
+fn settings_unknown_apply_recovers_through_explicit_view_get_in_browser() {
+    check_localized_case("/tests/settings.html", "dash-047");
+}
+
+/// spec: dashboard.md:DASH-048 partial
+#[test]
+fn settings_failed_queries_distinguish_loading_empty_and_stale_data_in_browser() {
+    check_localized_case("/tests/settings.html", "dash-048");
+}
+
+/// spec: dashboard.md:DASH-049 partial
+#[test]
+fn settings_explicit_reload_recovers_files_queries_and_csrf_token_in_browser() {
+    check_localized_case("/tests/settings.html", "dash-049");
+}
+
+/// spec: dashboard.md:DASH-050 partial
+#[test]
+fn settings_preserves_drafts_and_errors_across_languages_and_accessible_dialog_in_browser() {
+    check_localized_case("/tests/settings.html", "dash-050");
+}
+
+/// spec: dashboard.md:DASH-051 partial
+#[test]
+fn settings_expiry_and_logout_clear_protected_data_and_ignore_late_results_in_browser() {
+    check_localized_case("/tests/settings.html", "dash-051");
+}
+
+/// spec: dashboard.md:DASH-052 partial
+#[test]
+fn settings_noop_skips_patch_and_empty_applied_reports_zero_in_browser() {
+    check_localized_case("/tests/settings.html", "dash-052");
+}
+
+/// spec: dashboard.md:DASH-053 partial
+#[test]
+fn settings_cancel_discards_drafts_and_dispose_ignores_late_requests_in_browser() {
+    check_localized_case("/tests/settings.html", "dash-053");
 }
 
 /// Runs one page at every width and language, then reports all failing runs at once.

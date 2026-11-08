@@ -103,78 +103,104 @@ impl<C> Drop for ClaimGuard<'_, C> {
 pub(super) async fn dispatch<C: TargetConnector>(
     service: &RelayService,
     runtime: &RelayRuntime<C>,
-    mut incoming: OwnedConnection,
+    incoming: OwnedConnection,
     id: RelayId,
 ) -> Result<(), RelayDispatchError> {
     let reference = runtime.relay_ids.reference(&id);
     let context = incoming.context;
     let mut expired = None;
-    let registration = {
+    let mut incoming = Some(incoming);
+    let mut registration = None;
+    let mut waiting_limit = 0;
+    runtime.settings.with_current(&mut |settings| {
+        let Some(mut incoming) = incoming.take() else {
+            return;
+        };
+        waiting_limit = settings.limits.waiting;
+        let policy = vnc_relay_domain::matching::RegistrationPolicy {
+            waiting_limit: waiting_limit as usize,
+            wait_timeout: settings.timeouts.wait,
+        };
         let mut state = runtime.lock();
-        if state.lifecycle != RelayLifecycle::Running {
-            Registration::Shutdown(incoming)
-        } else {
-            loop {
-                match state.matching.arrive(
-                    &id,
-                    context.entry_point.role(),
-                    context.conn_id,
-                    service.clock.monotonic(),
-                ) {
-                    ArrivalOutcome::Expired(old) => {
-                        if let Some(mut entry) = state.waiting.remove(&id) {
-                            debug_assert_eq!(old.conn_id, entry.metadata.conn_id);
-                            drop(entry.waiting_permit.take());
-                            expired = Some(Removed {
-                                entry,
-                                reason: RemovedReason::Expired,
-                            });
+        registration = Some({
+            if state.lifecycle != RelayLifecycle::Running {
+                Registration::Shutdown(incoming)
+            } else {
+                loop {
+                    match state.matching.arrive(
+                        &id,
+                        context.entry_point.role(),
+                        context.conn_id,
+                        service.clock.monotonic(),
+                        policy,
+                    ) {
+                        ArrivalOutcome::Expired(old) => {
+                            if let Some(mut entry) = state.waiting.remove(&id) {
+                                debug_assert_eq!(old.conn_id, entry.metadata.conn_id);
+                                drop(entry.waiting_permit.take());
+                                expired = Some(Removed {
+                                    entry,
+                                    reason: RemovedReason::Expired,
+                                });
+                            }
                         }
-                    }
-                    ArrivalOutcome::Waiting(metadata) => {
-                        if let Some(waiting_permit) = runtime.waiting_budget.try_acquire() {
-                            let filled = incoming.trailing.len();
-                            incoming
-                                .trailing
-                                .reserve_exact(service.buffer_bytes.saturating_sub(filled));
-                            incoming.trailing.resize(service.buffer_bytes, 0);
-                            state.waiting.insert(
-                                id.clone(),
-                                WaitingConnection {
-                                    connection: incoming,
-                                    metadata,
-                                    reference: reference.clone(),
-                                    filled,
-                                    waiting_permit: Some(waiting_permit),
-                                    waker: None,
-                                },
-                            );
-                            service.events.record(&Event::WaitingRegistered {
-                                conn_id: context.conn_id,
-                                entry_point: context.entry_point,
-                                peer_ip: context.peer_ip,
-                                relay_id_ref: reference.clone(),
-                            });
-                            break Registration::Waiting(metadata);
+                        ArrivalOutcome::Waiting(metadata) => {
+                            if let Some(waiting_permit) =
+                                runtime.waiting_budget.try_acquire(waiting_limit)
+                            {
+                                let filled = incoming.trailing.len();
+                                incoming
+                                    .trailing
+                                    .reserve_exact(context.buffer_bytes.saturating_sub(filled));
+                                incoming.trailing.resize(context.buffer_bytes, 0);
+                                state.waiting.insert(
+                                    id.clone(),
+                                    WaitingConnection {
+                                        connection: incoming,
+                                        metadata,
+                                        reference: reference.clone(),
+                                        filled,
+                                        waiting_permit: Some(waiting_permit),
+                                        waker: None,
+                                    },
+                                );
+                                service.events.record(&Event::WaitingRegistered {
+                                    conn_id: context.conn_id,
+                                    entry_point: context.entry_point,
+                                    peer_ip: context.peer_ip,
+                                    relay_id_ref: reference.clone(),
+                                });
+                                break Registration::Waiting(metadata);
+                            }
+                            state.matching.remove_waiting(&id, context.conn_id);
+                            break Registration::Rejected(incoming, MatchingError::WaitingFull);
                         }
-                        state.matching.remove_waiting(&id, context.conn_id);
-                        break Registration::Rejected(incoming, MatchingError::WaitingFull);
-                    }
-                    ArrivalOutcome::Claimed(claim) => {
-                        if let Some(entry) = state.waiting.remove(&id) {
-                            // Lw is returned at this transition, before unlocking.
-                            // The stream and L remain owned by the matched pair.
-                            break Registration::Matched(incoming, entry.into_connection(), claim);
+                        ArrivalOutcome::Claimed(claim) => {
+                            if let Some(entry) = state.waiting.remove(&id) {
+                                // Lw is returned at this transition, before unlocking.
+                                // The stream and L remain owned by the matched pair.
+                                break Registration::Matched(
+                                    incoming,
+                                    entry.into_connection(),
+                                    claim,
+                                );
+                            }
+                            state.matching.cancel_claim(&id, &claim);
+                            break Registration::Rejected(incoming, MatchingError::InvalidClaim);
                         }
-                        state.matching.cancel_claim(&id, &claim);
-                        break Registration::Rejected(incoming, MatchingError::InvalidClaim);
-                    }
-                    ArrivalOutcome::Rejected(error) => {
-                        break Registration::Rejected(incoming, error);
+                        ArrivalOutcome::Rejected(error) => {
+                            break Registration::Rejected(incoming, error);
+                        }
                     }
                 }
             }
-        }
+        });
+    });
+    // The runtime source calls its reader once. If it never does, close only this connection.
+    let registration = match (registration, incoming.take()) {
+        (Some(registration), _) => registration,
+        (None, Some(incoming)) => Registration::Shutdown(incoming),
+        (None, None) => return Err(RelayDispatchError::Aborted(AbortReason::ServerShutdown)),
     };
     let _waiting_guard = WaitingGuard {
         runtime,
@@ -222,7 +248,7 @@ pub(super) async fn dispatch<C: TargetConnector>(
                 }
                 MatchingError::WaitingFull => (
                     RejectReason::WaitingFull {
-                        limit: runtime.waiting_budget.limit(),
+                        limit: waiting_limit,
                     },
                     RelayCloseAction::WaitingFull,
                 ),

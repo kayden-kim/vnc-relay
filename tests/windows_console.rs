@@ -556,6 +556,15 @@ fn management_works_during_grace() {
     shutdown::management_works_during_grace::<pseudo_console::ConsoleProcess>();
 }
 
+/// spec: operations.md:OPS-043 partial
+/// spec: operations.md:OPS-050 partial
+#[test]
+fn config_edit_works_during_grace_without_changing_the_started_grace_deadline() {
+    shutdown::config_edit_works_during_grace_without_changing_the_started_grace_deadline::<
+        pseudo_console::ConsoleProcess,
+    >();
+}
+
 /// spec: operations.md:OPS-044
 #[test]
 fn console_close_forces_cleanup() {

@@ -4,14 +4,18 @@ use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::time::SystemTime;
 
-use vnc_relay_domain::allow_list::AllowList;
 use vnc_relay_domain::entry_point::EntryPoint;
 
+use super::{
+    ConfigCandidate, ConfigFileState, ConfigPresence, FileClassification, LastReload,
+    PrepareReloadError, ReloadResult, ReloadTrigger,
+};
 use crate::events::{Event, Phase};
 use crate::ports::EventSink;
 use crate::reload::ports::{ReloadFileStore, ReloadTlsStore, TlsBuildError};
-use crate::reload::snapshot::{RelayAllow, ReloadCell, ReloadSnapshot};
+use crate::reload::snapshot::{ReloadCell, ReloadSnapshot};
 use crate::settings::{ConfigDiagnostic, ConfigError, ConfigWarning, Settings, TlsFiles};
 
 /// Entry points in config order (config-v3 §1.8).
@@ -52,7 +56,9 @@ pub enum ReloadOutcome {
 /// event.
 pub struct ReloadService<A> {
     /// Settings the process runs with. Replaced only by an applied candidate.
-    running: Settings,
+    running: Arc<Settings>,
+    presence: Arc<ConfigPresence>,
+    last_reload: Option<LastReload>,
     cell: Arc<ReloadCell<A>>,
     files: Arc<dyn ReloadFileStore>,
     tls: Arc<dyn ReloadTlsStore<A>>,
@@ -75,17 +81,23 @@ impl<A> ReloadService<A> {
     /// Reads the running certificate and key bytes once to store baseline content hashes.
     /// Emits no event.
     pub fn new(
-        running: Settings,
+        running: ConfigCandidate,
         cell: Arc<ReloadCell<A>>,
         files: Arc<dyn ReloadFileStore>,
         tls: Arc<dyn ReloadTlsStore<A>>,
         events: Arc<dyn EventSink>,
     ) -> Self {
+        let ConfigCandidate {
+            settings: running,
+            presence,
+        } = running;
         let wss_hashes = baseline_hashes(files.as_ref(), TlsSlot::Wss.files(&running));
         let management_hashes =
             baseline_hashes(files.as_ref(), TlsSlot::Management.files(&running));
         Self {
-            running,
+            running: Arc::new(running),
+            presence: Arc::new(presence),
+            last_reload: None,
             cell,
             files,
             tls,
@@ -97,6 +109,17 @@ impl<A> ReloadService<A> {
         }
     }
 
+    pub fn running(&self) -> &Settings {
+        &self.running
+    }
+
+    pub fn running_presence(&self) -> &ConfigPresence {
+        &self.presence
+    }
+
+    pub fn last_reload(&self) -> Option<&LastReload> {
+        self.last_reload.as_ref()
+    }
     /// Paths to watch besides the config file (file-watch-v1 §9 item 9): the running TLS
     /// files and those of the last candidate that parsed, without duplicates.
     pub fn watched_paths(&self) -> Vec<PathBuf> {
@@ -116,150 +139,245 @@ impl<A> ReloadService<A> {
     }
 }
 
+/// A fully validated candidate; commit does not read files or rebuild TLS.
+pub struct PreparedReload<A> {
+    snapshot: Arc<ReloadSnapshot<A>>,
+    wss_hashes: Option<FileHashes>,
+    management_hashes: Option<FileHashes>,
+    applied: Vec<String>,
+    event_keys: Vec<String>,
+    history_keys: Vec<String>,
+    warnings: Vec<ConfigWarning>,
+}
+
+impl<A> PreparedReload<A> {
+    pub fn applied_keys(&self) -> &[String] {
+        &self.applied
+    }
+}
+
 impl<A: Clone> ReloadService<A> {
-    /// Handles a parsed config file (file-watch-v1 §4 steps 4–9, §4.2 event order).
-    ///
-    /// `is_current` returns false when the generation is stale or shutdown began. It is
-    /// checked before any work and again before each result event and the swap.
-    pub fn handle_config(
-        &mut self,
-        parsed: Result<Settings, Vec<ConfigDiagnostic>>,
-        is_current: &dyn Fn() -> bool,
-    ) -> ReloadOutcome {
-        if !is_current() {
-            return ReloadOutcome::Discarded;
+    pub fn prepare_candidate(
+        &self,
+        candidate: ConfigCandidate,
+    ) -> Result<PreparedReload<A>, PrepareReloadError> {
+        let tls = self.load_tls(&candidate.settings).map_err(|rejection| {
+            PrepareReloadError::Invalid(vec![ConfigDiagnostic {
+                error: ConfigError::TlsFileInvalid,
+                key: rejection.config_key.to_owned(),
+                message: rejection.detail.to_owned(),
+            }])
+        })?;
+        let restart = restart_required_keys(&self.running, &candidate.settings);
+        if !restart.is_empty() {
+            return Err(PrepareReloadError::RestartRequired(restart));
         }
-        let candidate = match parsed {
-            Ok(candidate) => candidate,
-            Err(diagnostics) => {
-                let (reason, config_key) = rejection_of(&diagnostics);
-                self.events.record(&Event::ReloadRejected {
-                    reason: reason.to_owned(),
-                    config_key,
-                    detail: None,
-                });
-                return ReloadOutcome::Rejected;
-            }
-        };
-        let paths = tls_paths(&candidate);
-        let outcome = self.apply_candidate(candidate, is_current);
-        if outcome != ReloadOutcome::Discarded {
-            self.candidate_paths = paths;
-        }
-        outcome
-    }
-
-    /// Handles a config file that could not be read during stabilization.
-    ///
-    /// Emits `reload_rejected` with `config_file_unreadable`. The running settings stay.
-    pub fn handle_unreadable(&mut self, is_current: &dyn Fn() -> bool) -> ReloadOutcome {
-        if !is_current() {
-            return ReloadOutcome::Discarded;
-        }
-        self.events.record(&Event::ReloadRejected {
-            reason: ConfigError::FileUnreadable.code().to_owned(),
-            config_key: None,
-            detail: None,
-        });
-        ReloadOutcome::Rejected
-    }
-
-    /// Runs file-watch-v1 §4 steps 6–9 for a parsed candidate.
-    fn apply_candidate(
-        &mut self,
-        candidate: Settings,
-        is_current: &dyn Fn() -> bool,
-    ) -> ReloadOutcome {
-        if let Some(action) = self.before_validation.take() {
-            action();
-        }
-
-        // Step 6: build the TLS acceptors of enabled listeners.
-        let tls = match self.load_tls(&candidate) {
-            Ok(tls) => tls,
-            Err(rejection) => {
-                if !is_current() {
-                    return ReloadOutcome::Discarded;
-                }
-                self.events.record(&Event::ReloadRejected {
-                    reason: "tls_file_invalid".to_owned(),
-                    config_key: Some(rejection.config_key.to_owned()),
-                    detail: Some(rejection.detail.to_owned()),
-                });
-                return ReloadOutcome::Rejected;
-            }
-        };
-
-        // Step 7: any key outside the reload targets must match the running value.
-        let restart_keys = restart_required_keys(&self.running, &candidate);
-        if !restart_keys.is_empty() {
-            if !is_current() {
-                return ReloadOutcome::Discarded;
-            }
-            self.events.record(&Event::ReloadRestartRequired {
-                config_keys: restart_keys,
-            });
-            return ReloadOutcome::RestartRequired;
-        }
-
-        // Step 8: final generation check before the swap.
-        if !is_current() {
-            return ReloadOutcome::Discarded;
-        }
-
-        // Step 9: collect the changed reload targets in the fixed order of file-watch-v1 §4.
-        let mut changed_allow = Vec::new();
-        let mut applied: Vec<&'static str> = Vec::new();
-        for entry_point in ENTRY_POINTS {
-            if effective_allow(&self.running, entry_point)
-                != effective_allow(&candidate, entry_point)
-            {
-                applied.push(allow_key(entry_point));
-                changed_allow.push(entry_point);
+        let mut applied = dynamic_changed_keys(&self.running, &candidate.settings);
+        for key in tls.changed {
+            if !applied.iter().any(|existing| existing == key) {
+                applied.push(key.to_owned());
             }
         }
-        let TlsLoad {
-            wss_acceptor,
-            management_acceptor,
-            wss_hashes,
-            management_hashes,
-            changed,
-        } = tls;
-        applied.extend(changed);
-        if applied.is_empty() {
-            return ReloadOutcome::Unchanged;
-        }
-
-        let warnings: Vec<ConfigWarning> = candidate
+        applied.sort_by_key(|key| DYNAMIC_KEYS.iter().position(|known| known == key));
+        let warnings = candidate
+            .settings
             .warnings()
             .into_iter()
-            .filter(|warning| {
-                matches!(
-                    warning,
-                    ConfigWarning::AllowAllSource { entry_point, .. }
-                        if changed_allow.contains(entry_point)
-                )
+            .filter(|warning| match warning {
+                ConfigWarning::AllowAllSource { entry_point, .. } => {
+                    applied.iter().any(|key| key == allow_key(*entry_point))
+                }
+                ConfigWarning::AllowAllTarget { .. } => {
+                    applied.iter().any(|key| key == "mode1.allow_targets")
+                }
+                _ => false,
             })
             .collect();
+        Ok(PreparedReload {
+            snapshot: Arc::new(ReloadSnapshot::new(
+                candidate,
+                tls.wss_acceptor,
+                tls.management_acceptor,
+            )),
+            wss_hashes: tls.wss_hashes,
+            management_hashes: tls.management_hashes,
+            event_keys: applied.clone(),
+            history_keys: applied.clone(),
+            applied,
+            warnings,
+        })
+    }
 
-        let relay_allow = relay_allow_of(&candidate);
-        self.cell.replace(ReloadSnapshot::new(
-            relay_allow,
-            wss_acceptor,
-            management_acceptor,
-        ));
-        self.running = candidate;
+    pub fn classify_file(
+        &self,
+        parsed: Option<Result<ConfigCandidate, Vec<ConfigDiagnostic>>>,
+    ) -> FileClassification {
+        let (state, config_keys, diagnostics) = match parsed {
+            None => (ConfigFileState::Unreadable, Vec::new(), Vec::new()),
+            Some(Err(diagnostics))
+                if diagnostics
+                    .iter()
+                    .any(|d| d.error == ConfigError::FileUnreadable) =>
+            {
+                (ConfigFileState::Unreadable, Vec::new(), Vec::new())
+            }
+            Some(Err(diagnostics)) => (ConfigFileState::Invalid, Vec::new(), diagnostics),
+            Some(Ok(candidate)) => match self.prepare_candidate(candidate) {
+                Err(PrepareReloadError::Invalid(diagnostics)) => {
+                    (ConfigFileState::Invalid, Vec::new(), diagnostics)
+                }
+                Err(PrepareReloadError::RestartRequired(keys)) => {
+                    (ConfigFileState::RestartRequired, keys, Vec::new())
+                }
+                Ok(prepared) if prepared.applied.is_empty() => {
+                    (ConfigFileState::InEffect, Vec::new(), Vec::new())
+                }
+                Ok(prepared) => (ConfigFileState::Pending, prepared.applied, Vec::new()),
+            },
+        };
+        FileClassification {
+            state,
+            config_keys,
+            diagnostics,
+        }
+    }
+
+    pub fn commit_prepared(
+        &mut self,
+        prepared: PreparedReload<A>,
+        trigger: ReloadTrigger,
+        at: SystemTime,
+    ) -> Vec<String> {
+        if prepared.applied.is_empty() {
+            return Vec::new();
+        }
+        let PreparedReload {
+            snapshot,
+            wss_hashes,
+            management_hashes,
+            applied,
+            event_keys,
+            history_keys,
+            warnings,
+        } = prepared;
+        // All accepted settings and TLS handles are published in one generation.
+        let settings = Arc::clone(&snapshot.settings);
+        let presence = Arc::clone(&snapshot.presence);
+        let event = Event::ReloadApplied {
+            trigger,
+            applied: event_keys,
+        };
+        let history = LastReload {
+            at,
+            result: ReloadResult::Applied,
+            trigger,
+            config_keys: history_keys,
+        };
+        self.cell.publish(snapshot);
+        self.running = settings;
+        self.presence = presence;
         self.wss_hashes = wss_hashes;
         self.management_hashes = management_hashes;
-
         for warning in warnings {
             self.events.record(&Event::ConfigWarning {
                 warning,
                 phase: Phase::Reload,
             });
         }
-        self.events.record(&Event::ReloadApplied { applied });
-        ReloadOutcome::Applied
+        self.events.record(&event);
+        self.last_reload = Some(history);
+        applied
+    }
+
+    /// Watcher-only transaction. Shutdown/generation veto does not affect PATCH commits.
+    pub fn handle_config(
+        &mut self,
+        parsed: Result<ConfigCandidate, Vec<ConfigDiagnostic>>,
+        is_current: &dyn Fn() -> bool,
+        at: SystemTime,
+    ) -> ReloadOutcome {
+        if !is_current() {
+            return ReloadOutcome::Discarded;
+        }
+        if let Some(action) = self.before_validation.take() {
+            action();
+        }
+        let paths = parsed
+            .as_ref()
+            .ok()
+            .map(|candidate| tls_paths(&candidate.settings));
+        let prepared = match parsed {
+            Ok(candidate) => self.prepare_candidate(candidate),
+            Err(diagnostics) => Err(PrepareReloadError::Invalid(diagnostics)),
+        };
+        if !is_current() {
+            return ReloadOutcome::Discarded;
+        }
+        if let Some(paths) = paths {
+            self.candidate_paths = paths;
+        }
+        match prepared {
+            Ok(mut prepared) if prepared.applied.is_empty() => {
+                if *prepared.snapshot.presence != *self.presence {
+                    let snapshot = Arc::make_mut(&mut prepared.snapshot);
+                    snapshot.settings = Arc::clone(&self.running);
+                    self.presence = Arc::clone(&snapshot.presence);
+                    self.cell.publish(prepared.snapshot);
+                }
+                ReloadOutcome::Unchanged
+            }
+            Ok(prepared) => {
+                self.commit_prepared(prepared, ReloadTrigger::FileWatch, at);
+                ReloadOutcome::Applied
+            }
+            Err(PrepareReloadError::Invalid(diagnostics)) => {
+                let (reason, config_key) = rejection_of(&diagnostics);
+                let detail = diagnostics
+                    .first()
+                    .filter(|d| d.error == ConfigError::TlsFileInvalid)
+                    .map(|d| d.message.clone());
+                self.events.record(&Event::ReloadRejected {
+                    reason: reason.to_owned(),
+                    config_key,
+                    detail,
+                });
+                self.last_reload = Some(LastReload {
+                    at,
+                    result: ReloadResult::Rejected,
+                    trigger: ReloadTrigger::FileWatch,
+                    config_keys: Vec::new(),
+                });
+                ReloadOutcome::Rejected
+            }
+            Err(PrepareReloadError::RestartRequired(keys)) => {
+                self.events.record(&Event::ReloadRestartRequired {
+                    config_keys: keys.clone(),
+                });
+                self.last_reload = Some(LastReload {
+                    at,
+                    result: ReloadResult::RestartRequired,
+                    trigger: ReloadTrigger::FileWatch,
+                    config_keys: keys,
+                });
+                ReloadOutcome::RestartRequired
+            }
+        }
+    }
+
+    pub fn handle_unreadable(
+        &mut self,
+        is_current: &dyn Fn() -> bool,
+        at: SystemTime,
+    ) -> ReloadOutcome {
+        self.handle_config(
+            Err(vec![ConfigDiagnostic {
+                error: ConfigError::FileUnreadable,
+                key: String::new(),
+                message: "configuration file unreadable".to_owned(),
+            }]),
+            is_current,
+            at,
+        )
     }
 
     /// Loads both TLS listeners of the candidate. Rejects on the first failure.
@@ -481,25 +599,6 @@ fn tls_paths(settings: &Settings) -> Vec<PathBuf> {
         .collect()
 }
 
-/// Allow list in effect: empty when the entry point is disabled or has no list.
-fn effective_allow(settings: &Settings, entry_point: EntryPoint) -> AllowList {
-    let entry = settings.relay.get(entry_point);
-    if entry.enabled {
-        entry.allow.clone().unwrap_or_default()
-    } else {
-        AllowList::default()
-    }
-}
-
-fn relay_allow_of(settings: &Settings) -> RelayAllow {
-    RelayAllow {
-        tcp_viewer: effective_allow(settings, EntryPoint::TcpViewer),
-        tcp_server: effective_allow(settings, EntryPoint::TcpServer),
-        ws_viewer: effective_allow(settings, EntryPoint::WsViewer),
-        wss_viewer: effective_allow(settings, EntryPoint::WssViewer),
-    }
-}
-
 /// Config key of an allow list (config-v3 §1.8).
 fn allow_key(entry_point: EntryPoint) -> &'static str {
     match entry_point {
@@ -516,12 +615,156 @@ fn push_if(keys: &mut Vec<String>, differs: bool, key: &str) {
     }
 }
 
+/// Canonical config-v3 key order, including TLS content changes.
+const DYNAMIC_KEYS: [&str; 27] = [
+    "relay.tcp_viewer.allow",
+    "relay.tcp_server.allow",
+    "relay.ws_viewer.allow",
+    "relay.ws_viewer.allowed_origins",
+    "relay.wss_viewer.allow",
+    "relay.wss_viewer.allowed_origins",
+    "relay.wss_viewer.cert_file",
+    "relay.wss_viewer.key_file",
+    "mode1.allow_targets",
+    "limits.relay_connections",
+    "limits.admin_connections",
+    "limits.waiting",
+    "limits.buffer_bytes",
+    "limits.ws_message_bytes",
+    "timeouts.handshake_secs",
+    "timeouts.tls_upgrade_secs",
+    "timeouts.wait_secs",
+    "timeouts.connect_secs",
+    "timeouts.close_secs",
+    "timeouts.shutdown_grace_secs",
+    "keepalive.tcp_idle_secs",
+    "keepalive.tcp_interval_secs",
+    "keepalive.tcp_probes",
+    "keepalive.ws_ping_secs",
+    "keepalive.ws_pong_timeout_secs",
+    "management.cert_file",
+    "management.key_file",
+];
+
+/// Runtime value differences; TLS content differences are added by prepare.
+pub fn dynamic_changed_keys(a: &Settings, b: &Settings) -> Vec<String> {
+    let mut keys = Vec::new();
+    for entry_point in ENTRY_POINTS {
+        let before = a.relay.get(entry_point);
+        let after = b.relay.get(entry_point);
+        push_if(
+            &mut keys,
+            before.allow.as_ref().filter(|_| before.enabled)
+                != after.allow.as_ref().filter(|_| after.enabled),
+            allow_key(entry_point),
+        );
+        if matches!(entry_point, EntryPoint::WsViewer | EntryPoint::WssViewer) {
+            push_if(
+                &mut keys,
+                before.enabled && after.enabled && before.allowed_origins != after.allowed_origins,
+                &format!("relay.{}.allowed_origins", entry_point.name()),
+            );
+        }
+    }
+    push_if(
+        &mut keys,
+        a.mode1.allow_targets.as_ref().filter(|_| a.mode1.enabled)
+            != b.mode1.allow_targets.as_ref().filter(|_| b.mode1.enabled),
+        "mode1.allow_targets",
+    );
+    macro_rules! changed {
+        ($key:literal, $before:expr, $after:expr) => {
+            push_if(&mut keys, $before != $after, $key);
+        };
+    }
+    changed!(
+        "limits.relay_connections",
+        a.limits.relay_connections,
+        b.limits.relay_connections
+    );
+    changed!(
+        "limits.admin_connections",
+        a.limits.admin_connections,
+        b.limits.admin_connections
+    );
+    changed!("limits.waiting", a.limits.waiting, b.limits.waiting);
+    changed!(
+        "limits.buffer_bytes",
+        a.limits.buffer_bytes,
+        b.limits.buffer_bytes
+    );
+    changed!(
+        "limits.ws_message_bytes",
+        a.limits.ws_message_bytes,
+        b.limits.ws_message_bytes
+    );
+    changed!(
+        "timeouts.handshake_secs",
+        a.timeouts.handshake,
+        b.timeouts.handshake
+    );
+    changed!(
+        "timeouts.tls_upgrade_secs",
+        a.timeouts.tls_upgrade,
+        b.timeouts.tls_upgrade
+    );
+    changed!("timeouts.wait_secs", a.timeouts.wait, b.timeouts.wait);
+    changed!(
+        "timeouts.connect_secs",
+        a.timeouts.connect,
+        b.timeouts.connect
+    );
+    changed!("timeouts.close_secs", a.timeouts.close, b.timeouts.close);
+    changed!(
+        "timeouts.shutdown_grace_secs",
+        a.timeouts.shutdown_grace,
+        b.timeouts.shutdown_grace
+    );
+    changed!(
+        "keepalive.tcp_idle_secs",
+        a.keepalive.tcp_idle,
+        b.keepalive.tcp_idle
+    );
+    changed!(
+        "keepalive.tcp_interval_secs",
+        a.keepalive.tcp_interval,
+        b.keepalive.tcp_interval
+    );
+    changed!(
+        "keepalive.tcp_probes",
+        a.keepalive.tcp_probes,
+        b.keepalive.tcp_probes
+    );
+    changed!(
+        "keepalive.ws_ping_secs",
+        a.keepalive.ws_ping,
+        b.keepalive.ws_ping
+    );
+    changed!(
+        "keepalive.ws_pong_timeout_secs",
+        a.keepalive.ws_pong_timeout,
+        b.keepalive.ws_pong_timeout
+    );
+    for slot in [TlsSlot::Wss, TlsSlot::Management] {
+        if let (Some(before), Some(after)) = (slot.files(a), slot.files(b)) {
+            push_if(
+                &mut keys,
+                before.cert_file != after.cert_file,
+                slot.cert_key(),
+            );
+            push_if(&mut keys, before.key_file != after.key_file, slot.key_key());
+        }
+    }
+    keys.sort_by_key(|key| DYNAMIC_KEYS.iter().position(|known| known == key));
+    keys
+}
+
 /// Config keys whose candidate value differs from the running value, excluding reload
 /// targets (config-v3 §1.8, file-watch-v1 §4 step 7).
 ///
 /// The management certificate is checked by presence only: HTTP and HTTPS switch need a
 /// restart. Changes to a WSS listener's TLS presence follow `relay.wss_viewer.enabled`.
-fn restart_required_keys(running: &Settings, candidate: &Settings) -> Vec<String> {
+pub fn restart_required_keys(running: &Settings, candidate: &Settings) -> Vec<String> {
     let mut keys = Vec::new();
     for entry_point in ENTRY_POINTS {
         let before = running.relay.get(entry_point);
@@ -537,11 +780,6 @@ fn restart_required_keys(running: &Settings, candidate: &Settings) -> Vec<String
             before.listen != after.listen,
             &format!("relay.{name}.listen"),
         );
-        push_if(
-            &mut keys,
-            before.allowed_origins != after.allowed_origins,
-            &format!("relay.{name}.allowed_origins"),
-        );
     }
 
     let (a, b) = (running, candidate);
@@ -549,11 +787,6 @@ fn restart_required_keys(running: &Settings, candidate: &Settings) -> Vec<String
         &mut keys,
         a.mode1.enabled != b.mode1.enabled,
         "mode1.enabled",
-    );
-    push_if(
-        &mut keys,
-        a.mode1.allow_targets != b.mode1.allow_targets,
-        "mode1.allow_targets",
     );
     push_if(
         &mut keys,
@@ -584,89 +817,6 @@ fn restart_required_keys(running: &Settings, candidate: &Settings) -> Vec<String
 
     push_if(
         &mut keys,
-        a.limits.relay_connections != b.limits.relay_connections,
-        "limits.relay_connections",
-    );
-    push_if(
-        &mut keys,
-        a.limits.admin_connections != b.limits.admin_connections,
-        "limits.admin_connections",
-    );
-    push_if(
-        &mut keys,
-        a.limits.waiting != b.limits.waiting,
-        "limits.waiting",
-    );
-    push_if(
-        &mut keys,
-        a.limits.buffer_bytes != b.limits.buffer_bytes,
-        "limits.buffer_bytes",
-    );
-    push_if(
-        &mut keys,
-        a.limits.ws_message_bytes != b.limits.ws_message_bytes,
-        "limits.ws_message_bytes",
-    );
-
-    push_if(
-        &mut keys,
-        a.timeouts.handshake != b.timeouts.handshake,
-        "timeouts.handshake_secs",
-    );
-    push_if(
-        &mut keys,
-        a.timeouts.tls_upgrade != b.timeouts.tls_upgrade,
-        "timeouts.tls_upgrade_secs",
-    );
-    push_if(
-        &mut keys,
-        a.timeouts.wait != b.timeouts.wait,
-        "timeouts.wait_secs",
-    );
-    push_if(
-        &mut keys,
-        a.timeouts.connect != b.timeouts.connect,
-        "timeouts.connect_secs",
-    );
-    push_if(
-        &mut keys,
-        a.timeouts.close != b.timeouts.close,
-        "timeouts.close_secs",
-    );
-    push_if(
-        &mut keys,
-        a.timeouts.shutdown_grace != b.timeouts.shutdown_grace,
-        "timeouts.shutdown_grace_secs",
-    );
-
-    push_if(
-        &mut keys,
-        a.keepalive.tcp_idle != b.keepalive.tcp_idle,
-        "keepalive.tcp_idle_secs",
-    );
-    push_if(
-        &mut keys,
-        a.keepalive.tcp_interval != b.keepalive.tcp_interval,
-        "keepalive.tcp_interval_secs",
-    );
-    push_if(
-        &mut keys,
-        a.keepalive.tcp_probes != b.keepalive.tcp_probes,
-        "keepalive.tcp_probes",
-    );
-    push_if(
-        &mut keys,
-        a.keepalive.ws_ping != b.keepalive.ws_ping,
-        "keepalive.ws_ping_secs",
-    );
-    push_if(
-        &mut keys,
-        a.keepalive.ws_pong_timeout != b.keepalive.ws_pong_timeout,
-        "keepalive.ws_pong_timeout_secs",
-    );
-
-    push_if(
-        &mut keys,
         a.management.listen != b.management.listen,
         "management.listen",
     );
@@ -674,6 +824,11 @@ fn restart_required_keys(running: &Settings, candidate: &Settings) -> Vec<String
         &mut keys,
         a.management.tls.is_some() != b.management.tls.is_some(),
         "management.cert_file",
+    );
+    push_if(
+        &mut keys,
+        a.management.config_edit != b.management.config_edit,
+        "management.config_edit",
     );
     push_if(
         &mut keys,
@@ -748,6 +903,7 @@ mod tests {
     use std::sync::{Mutex, PoisonError};
     use std::time::Duration;
 
+    use vnc_relay_domain::allow_list::AllowList;
     use vnc_relay_domain::allow_list::IpItem;
 
     use super::*;
@@ -829,18 +985,25 @@ mod tests {
         service: ReloadService<u32>,
     }
 
+    fn candidate(settings: Settings) -> ConfigCandidate {
+        ConfigCandidate {
+            settings,
+            presence: ConfigPresence::default(),
+        }
+    }
+
     fn harness(running: Settings, wss_acceptor: Option<u32>) -> Harness {
         let files = Arc::new(FakeFiles::default());
         files.put("wss.crt", b"cert-v1");
         files.put("wss.key", b"key-v1");
         let cell = Arc::new(ReloadCell::new(ReloadSnapshot::new(
-            relay_allow_of(&running),
+            candidate(running.clone()),
             wss_acceptor,
             None,
         )));
         let sink = Arc::new(RecordingSink::default());
         let service = ReloadService::new(
-            running,
+            candidate(running),
             Arc::clone(&cell),
             files.clone(),
             Arc::new(FakeTls),
@@ -911,6 +1074,7 @@ mod tests {
             management: crate::settings::ManagementSettings {
                 listen: addr(8080),
                 tls: None,
+                config_edit: false,
                 login_limit: LoginLimitSettings {
                     per_account: 5,
                     per_source: 20,
@@ -960,15 +1124,19 @@ mod tests {
         let mut h = harness(running.clone(), None);
         let before = h.cell.current();
         let mut candidate = running;
-        candidate.limits.relay_connections = 200;
+        candidate.relay.tcp_viewer.listen = Some(addr(5902));
 
-        let outcome = h.service.handle_config(Ok(candidate), &|| true);
+        let outcome = h.service.handle_config(
+            Ok(self::candidate(candidate)),
+            &|| true,
+            SystemTime::UNIX_EPOCH,
+        );
 
         assert_eq!(outcome, ReloadOutcome::RestartRequired);
         assert_eq!(
             h.sink.events(),
             vec![Event::ReloadRestartRequired {
-                config_keys: vec!["limits.relay_connections".to_owned()],
+                config_keys: vec!["relay.tcp_viewer.listen".to_owned()],
             }]
         );
         assert!(Arc::ptr_eq(&before, &h.cell.current()));
@@ -983,14 +1151,22 @@ mod tests {
         let mut candidate = running;
         candidate.relay.tcp_viewer.allow = Some(allow.clone());
 
-        let outcome = h.service.handle_config(Ok(candidate), &|| true);
+        let outcome = h.service.handle_config(
+            Ok(self::candidate(candidate)),
+            &|| true,
+            SystemTime::UNIX_EPOCH,
+        );
 
         assert_eq!(outcome, ReloadOutcome::Applied);
-        assert_eq!(h.cell.current().relay_allow.tcp_viewer, allow);
+        assert_eq!(
+            h.cell.current().settings.relay.tcp_viewer.allow.as_ref(),
+            Some(&allow)
+        );
         assert_eq!(
             h.sink.events(),
             vec![Event::ReloadApplied {
-                applied: vec!["relay.tcp_viewer.allow"],
+                trigger: ReloadTrigger::FileWatch,
+                applied: vec!["relay.tcp_viewer.allow".to_owned()],
             }]
         );
     }
@@ -1002,7 +1178,9 @@ mod tests {
         let mut h = harness(running.clone(), Some(5));
         h.files.put("wss.crt", b"bad");
 
-        let outcome = h.service.handle_config(Ok(running), &|| true);
+        let outcome =
+            h.service
+                .handle_config(Ok(candidate(running)), &|| true, SystemTime::UNIX_EPOCH);
 
         assert_eq!(outcome, ReloadOutcome::Rejected);
         assert_eq!(h.cell.current().wss_tls, Some(5));
@@ -1021,7 +1199,9 @@ mod tests {
         let running = settings();
         let mut h = harness(running.clone(), None);
 
-        let outcome = h.service.handle_config(Ok(running), &|| true);
+        let outcome =
+            h.service
+                .handle_config(Ok(candidate(running)), &|| true, SystemTime::UNIX_EPOCH);
 
         assert_eq!(outcome, ReloadOutcome::Unchanged);
         assert!(h.sink.events().is_empty());
@@ -1039,14 +1219,22 @@ mod tests {
                 10, 0, 0, 1,
             ]))]));
 
-        let outcome = h.service.handle_config(Ok(candidate.clone()), &|| false);
+        let outcome = h.service.handle_config(
+            Ok(self::candidate(candidate.clone())),
+            &|| false,
+            SystemTime::UNIX_EPOCH,
+        );
 
         assert_eq!(outcome, ReloadOutcome::Discarded);
         assert!(h.sink.events().is_empty());
         assert!(Arc::ptr_eq(&before, &h.cell.current()));
 
         // The discarded attempt left no state behind, so a current attempt applies.
-        let outcome = h.service.handle_config(Ok(candidate), &|| true);
+        let outcome = h.service.handle_config(
+            Ok(self::candidate(candidate)),
+            &|| true,
+            SystemTime::UNIX_EPOCH,
+        );
         assert_eq!(outcome, ReloadOutcome::Applied);
     }
 
@@ -1060,7 +1248,9 @@ mod tests {
             message: "unknown key".to_owned(),
         };
 
-        let outcome = h.service.handle_config(Err(vec![diagnostic]), &|| true);
+        let outcome =
+            h.service
+                .handle_config(Err(vec![diagnostic]), &|| true, SystemTime::UNIX_EPOCH);
 
         assert_eq!(outcome, ReloadOutcome::Rejected);
         assert_eq!(
@@ -1071,5 +1261,317 @@ mod tests {
                 detail: None,
             }]
         );
+    }
+    /// spec: operations.md:OPS-050 partial
+    #[test]
+    fn prepared_snapshot_publishes_all_runtime_groups_once() {
+        let running = settings();
+        let mut h = harness(running.clone(), None);
+        let before = h.cell.current();
+        let mut next = running.clone();
+        next.limits.relay_connections = 80;
+        next.limits.admin_connections = 8;
+        next.limits.waiting = 40;
+        next.limits.buffer_bytes = 32_768;
+        next.limits.ws_message_bytes = 131_072;
+        next.timeouts.handshake = Duration::from_secs(11);
+        next.timeouts.tls_upgrade = Duration::from_secs(12);
+        next.timeouts.wait = Duration::from_secs(40);
+        next.timeouts.connect = Duration::from_secs(13);
+        next.timeouts.close = Duration::from_secs(14);
+        next.timeouts.shutdown_grace = Duration::from_secs(15);
+        next.keepalive.tcp_idle = Duration::from_secs(70);
+        next.keepalive.tcp_interval = Duration::from_secs(11);
+        next.keepalive.tcp_probes = 4;
+        next.keepalive.ws_ping = Duration::from_secs(35);
+        next.keepalive.ws_pong_timeout = Duration::from_secs(15);
+        let prepared = h
+            .service
+            .prepare_candidate(candidate(next.clone()))
+            .unwrap_or_else(|error| panic!("valid preparation: {error:?}"));
+        assert_eq!(prepared.applied_keys().len(), 16);
+        assert!(Arc::ptr_eq(&before, &h.cell.current()));
+        assert_eq!(h.service.running(), &running);
+        assert!(h.service.last_reload().is_none());
+        assert!(h.sink.events().is_empty());
+        let applied =
+            h.service
+                .commit_prepared(prepared, ReloadTrigger::ConfigEdit, SystemTime::UNIX_EPOCH);
+        assert_eq!(*h.cell.current().settings, next);
+        assert_eq!(*before.settings, running);
+        assert_eq!(h.service.running(), &next);
+        assert_eq!(
+            h.sink.events(),
+            vec![Event::ReloadApplied {
+                trigger: ReloadTrigger::ConfigEdit,
+                applied: applied.clone(),
+            }]
+        );
+        let history = h.service.last_reload().cloned();
+        assert_eq!(
+            history.as_ref().map(|result| &result.config_keys),
+            Some(&applied)
+        );
+        let unchanged = h
+            .service
+            .prepare_candidate(candidate(next.clone()))
+            .unwrap_or_else(|error| panic!("unchanged preparation: {error:?}"));
+        assert!(
+            h.service
+                .commit_prepared(unchanged, ReloadTrigger::ConfigEdit, SystemTime::UNIX_EPOCH)
+                .is_empty()
+        );
+        assert_eq!(h.service.last_reload(), history.as_ref());
+        assert_eq!(
+            h.service.classify_file(Some(Ok(candidate(next)))).state,
+            ConfigFileState::InEffect
+        );
+        assert_eq!(h.service.last_reload(), history.as_ref());
+        assert_eq!(h.sink.events().len(), 1);
+    }
+
+    /// spec: operations.md:OPS-063 partial
+    #[test]
+    fn restart_key_blocks_all_new_dynamic_fields() {
+        let running = settings();
+        let h = harness(running.clone(), None);
+        let mut next = running.clone();
+        next.relay.tcp_viewer.listen = Some(addr(5902));
+        next.limits.relay_connections = 200;
+        next.timeouts.close = Duration::from_secs(20);
+        next.keepalive.tcp_probes = 10;
+        assert!(matches!(h.service.prepare_candidate(candidate(next)),
+            Err(PrepareReloadError::RestartRequired(keys))
+                if keys == ["relay.tcp_viewer.listen"]));
+        assert_eq!(h.service.running(), &running);
+        assert!(h.sink.events().is_empty());
+        assert!(h.service.last_reload().is_none());
+    }
+
+    #[test]
+    fn classification_is_side_effect_free_and_tls_invalid_precedes_restart() {
+        let running = with_wss(settings());
+        let h = harness(running.clone(), Some(5));
+        let before = h.cell.current();
+        assert_eq!(
+            h.service.classify_file(None).state,
+            ConfigFileState::Unreadable
+        );
+        let unreadable = h.service.classify_file(Some(Err(vec![ConfigDiagnostic {
+            error: ConfigError::FileUnreadable,
+            key: String::new(),
+            message: "unreadable".to_owned(),
+        }])));
+        assert_eq!(unreadable.state, ConfigFileState::Unreadable);
+        assert!(unreadable.diagnostics.is_empty());
+        let mut next = running.clone();
+        next.timeouts.close = Duration::from_secs(20);
+        let pending = h.service.classify_file(Some(Ok(candidate(next.clone()))));
+        assert_eq!(pending.state, ConfigFileState::Pending);
+        assert_eq!(pending.config_keys, ["timeouts.close_secs"]);
+        next.management.listen = addr(8081);
+        assert_eq!(
+            h.service
+                .classify_file(Some(Ok(candidate(next.clone()))))
+                .state,
+            ConfigFileState::RestartRequired
+        );
+        h.files.put("wss.crt", b"bad");
+        let invalid = h.service.classify_file(Some(Ok(candidate(next))));
+        assert_eq!(invalid.state, ConfigFileState::Invalid);
+        assert_eq!(invalid.diagnostics[0].error, ConfigError::TlsFileInvalid);
+        assert!(Arc::ptr_eq(&before, &h.cell.current()));
+        assert!(h.sink.events().is_empty());
+        assert!(h.service.last_reload().is_none());
+    }
+
+    #[test]
+    fn config_edit_commit_is_not_vetoed_by_watcher_shutdown() {
+        let running = settings();
+        let mut h = harness(running.clone(), None);
+        let mut next = running;
+        next.timeouts.close = Duration::from_secs(20);
+        let prepared = h
+            .service
+            .prepare_candidate(candidate(next.clone()))
+            .unwrap_or_else(|error| panic!("preparation: {error:?}"));
+        assert_eq!(
+            h.service.handle_config(
+                Ok(candidate(next.clone())),
+                &|| false,
+                SystemTime::UNIX_EPOCH
+            ),
+            ReloadOutcome::Discarded
+        );
+        assert_eq!(
+            h.service
+                .commit_prepared(prepared, ReloadTrigger::ConfigEdit, SystemTime::UNIX_EPOCH),
+            ["timeouts.close_secs"]
+        );
+        let history = h.service.last_reload().cloned();
+        assert_eq!(
+            h.service
+                .handle_config(Ok(candidate(next)), &|| true, SystemTime::UNIX_EPOCH),
+            ReloadOutcome::Unchanged
+        );
+        assert_eq!(h.service.last_reload(), history.as_ref());
+    }
+
+    #[test]
+    fn management_transport_presence_and_edit_permission_require_restart() {
+        let running = settings();
+        let mut next = running.clone();
+        next.management.config_edit = true;
+        next.management.tls = Some(TlsFiles {
+            cert_file: "m.crt".into(),
+            key_file: "m.key".into(),
+        });
+        assert_eq!(
+            restart_required_keys(&running, &next),
+            ["management.cert_file", "management.config_edit"]
+        );
+        next = running.clone();
+        next.relay.ws_viewer.allowed_origins = Vec::new();
+        let mut presence = ConfigPresence::default();
+        presence
+            .keys
+            .insert("relay.ws_viewer.allowed_origins".to_owned());
+        let h = harness(running, None);
+        assert_eq!(
+            h.service
+                .classify_file(Some(Ok(ConfigCandidate {
+                    settings: next,
+                    presence
+                })))
+                .state,
+            ConfigFileState::InEffect
+        );
+    }
+    #[test]
+    fn watcher_refreshes_presence_without_runtime_change_event_or_history() {
+        let mut h = harness(settings(), None);
+        let mut next = h.service.running().clone();
+        next.timeouts.close = Duration::from_secs(20);
+        h.service.handle_config(
+            Ok(candidate(next.clone())),
+            &|| true,
+            SystemTime::UNIX_EPOCH,
+        );
+        let history = h.service.last_reload().cloned();
+        let events = h.sink.events();
+        let before = h.cell.current();
+        let mut presence = ConfigPresence::default();
+        presence
+            .keys
+            .insert("relay.ws_viewer.allowed_origins".to_owned());
+        presence
+            .keys
+            .insert("relay.wss_viewer.cert_file".to_owned());
+        presence.inactive_paths.insert(
+            "relay.wss_viewer.cert_file".to_owned(),
+            PathBuf::from("inactive.crt"),
+        );
+        let next = ConfigCandidate {
+            settings: next,
+            presence: presence.clone(),
+        };
+        assert_eq!(
+            h.service
+                .handle_config(Ok(next), &|| true, SystemTime::UNIX_EPOCH),
+            ReloadOutcome::Unchanged
+        );
+        let after = h.cell.current();
+        assert!(Arc::ptr_eq(&before.settings, &after.settings));
+        assert_eq!(h.service.running_presence(), &presence);
+        assert_eq!(*after.presence, presence);
+        assert_eq!(h.service.last_reload(), history.as_ref());
+        assert_eq!(h.sink.events(), events);
+    }
+    /// spec: operations.md:OPS-064 partial
+    #[test]
+    fn every_new_runtime_key_is_dynamic_and_not_restart_only() {
+        use vnc_relay_domain::origin::Origin;
+        use vnc_relay_domain::target_policy::{TargetItem, TargetPolicy};
+        let mut running = with_wss(settings());
+        running.relay.ws_viewer.enabled = true;
+        running.mode1.enabled = true;
+        running.mode1.allow_targets = Some(TargetPolicy::default());
+        type Change = (&'static str, fn(&mut Settings));
+        let changes: [Change; 19] = [
+            ("relay.ws_viewer.allowed_origins", |s| {
+                s.relay.ws_viewer.allowed_origins.push(
+                    Origin::parse("https://viewer.example")
+                        .unwrap_or_else(|error| panic!("origin: {error:?}")),
+                )
+            }),
+            ("relay.wss_viewer.allowed_origins", |s| {
+                s.relay.wss_viewer.allowed_origins.push(
+                    Origin::parse("https://viewer.example")
+                        .unwrap_or_else(|error| panic!("origin: {error:?}")),
+                )
+            }),
+            ("mode1.allow_targets", |s| {
+                s.mode1.allow_targets = Some(TargetPolicy::new(vec![
+                    TargetItem::parse("127.0.0.1:5900")
+                        .unwrap_or_else(|error| panic!("target: {error:?}")),
+                ]))
+            }),
+            ("limits.relay_connections", |s| {
+                s.limits.relay_connections += 1
+            }),
+            ("limits.admin_connections", |s| {
+                s.limits.admin_connections += 1
+            }),
+            ("limits.waiting", |s| s.limits.waiting += 1),
+            ("limits.buffer_bytes", |s| s.limits.buffer_bytes += 1),
+            ("limits.ws_message_bytes", |s| {
+                s.limits.ws_message_bytes += 1
+            }),
+            ("timeouts.handshake_secs", |s| {
+                s.timeouts.handshake += Duration::from_secs(1)
+            }),
+            ("timeouts.tls_upgrade_secs", |s| {
+                s.timeouts.tls_upgrade += Duration::from_secs(1)
+            }),
+            ("timeouts.wait_secs", |s| {
+                s.timeouts.wait += Duration::from_secs(1)
+            }),
+            ("timeouts.connect_secs", |s| {
+                s.timeouts.connect += Duration::from_secs(1)
+            }),
+            ("timeouts.close_secs", |s| {
+                s.timeouts.close += Duration::from_secs(1)
+            }),
+            ("timeouts.shutdown_grace_secs", |s| {
+                s.timeouts.shutdown_grace += Duration::from_secs(1)
+            }),
+            ("keepalive.tcp_idle_secs", |s| {
+                s.keepalive.tcp_idle += Duration::from_secs(1)
+            }),
+            ("keepalive.tcp_interval_secs", |s| {
+                s.keepalive.tcp_interval += Duration::from_secs(1)
+            }),
+            ("keepalive.tcp_probes", |s| s.keepalive.tcp_probes += 1),
+            ("keepalive.ws_ping_secs", |s| {
+                s.keepalive.ws_ping += Duration::from_secs(1)
+            }),
+            ("keepalive.ws_pong_timeout_secs", |s| {
+                s.keepalive.ws_pong_timeout += Duration::from_secs(1)
+            }),
+        ];
+        let h = harness(running.clone(), Some(5));
+        for (key, change) in changes {
+            let mut next = running.clone();
+            change(&mut next);
+            assert_eq!(dynamic_changed_keys(&running, &next), [key], "{key}");
+            assert!(restart_required_keys(&running, &next).is_empty(), "{key}");
+            let prepared = h
+                .service
+                .prepare_candidate(candidate(next))
+                .unwrap_or_else(|error| panic!("{key}: {error:?}"));
+            assert_eq!(prepared.applied_keys(), [key], "{key}");
+        }
+        assert!(h.sink.events().is_empty());
+        assert!(h.service.last_reload().is_none());
     }
 }

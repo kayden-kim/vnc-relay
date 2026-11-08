@@ -18,7 +18,9 @@ use vnc_relay_app::events::{
 };
 use vnc_relay_app::lifecycle::LifecycleService;
 use vnc_relay_app::ports::EventSink;
+use vnc_relay_app::reload::ReloadTrigger;
 use vnc_relay_app::settings::{ConfigWarning, LogOutput};
+use vnc_relay_domain::account::AccountName;
 use vnc_relay_domain::allow_list::IpItem;
 use vnc_relay_domain::budget::ConnectionBudget;
 use vnc_relay_domain::conn_id::ConnId;
@@ -157,6 +159,163 @@ fn writes_one_json_object_per_line_with_common_fields_first() {
     assert_eq!(keys(&lines[3]), ["event", "level", "ts"]);
 }
 
+/// spec: operations.md:OPS-059 partial
+/// spec: operations.md:OPS-060 partial
+/// spec: operations.md:OPS-061 partial
+#[test]
+fn config_edit_events_have_required_fields_and_never_values() {
+    let dir = temp_dir("config-edit-events");
+    let path = dir.join("relay.log");
+    let log = file_sink(&path);
+    let account = AccountName::parse("alice").unwrap_or_else(|error| panic!("account: {error}"));
+    let peer = PeerIp::new(
+        "::ffff:192.0.2.17"
+            .parse()
+            .unwrap_or_else(|error| panic!("peer: {error}")),
+    );
+    let changed = vec![
+        "relay.tcp_viewer.allow".to_owned(),
+        "mode1.allow_targets".to_owned(),
+    ];
+    let applied = vec![
+        "relay.tcp_viewer.allow".to_owned(),
+        "mode1.allow_targets".to_owned(),
+        "timeouts.wait_secs".to_owned(),
+    ];
+    // SHA-256 of the raw bytes "abc"; the log must preserve the exact revision.
+    let revision =
+        "sha256:ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad".to_owned();
+    for trigger in [ReloadTrigger::FileWatch, ReloadTrigger::ConfigEdit] {
+        log.record(&Event::ReloadApplied {
+            trigger,
+            applied: applied.clone(),
+        });
+    }
+    log.record(&Event::ConfigEdited {
+        admin_account: account.clone(),
+        peer_ip: peer,
+        config_keys: changed.clone(),
+        revision: revision.clone(),
+    });
+    let reasons = [
+        "config_invalid",
+        "config_edit_disabled",
+        "config_conflict",
+        "config_restart_pending",
+        "config_file_invalid",
+        "config_write_failed",
+    ];
+    for reason in reasons {
+        for config_keys in [None, Some(Vec::new()), Some(changed.clone())] {
+            log.record(&Event::ConfigEditRejected {
+                admin_account: account.clone(),
+                peer_ip: peer,
+                reason: reason.to_owned(),
+                config_keys,
+            });
+        }
+    }
+    let written = read(&path);
+    let lines = objects(&written);
+    assert_eq!(lines.len(), 3 + reasons.len() * 3);
+    for (line, trigger) in lines[..2].iter().zip(["file_watch", "config_edit"]) {
+        assert_eq!(text(line, "event"), "reload_applied");
+        assert_eq!(text(line, "level"), "info");
+        assert_eq!(text(line, "trigger"), trigger);
+        assert_eq!(line.get("applied"), Some(&json!(applied)));
+        assert_eq!(keys(line), ["applied", "event", "level", "trigger", "ts"]);
+    }
+    let edited = &lines[2];
+    assert_eq!(text(edited, "event"), "config_edited");
+    assert_eq!(text(edited, "level"), "info");
+    assert_eq!(text(edited, "admin_account"), "alice");
+    assert_eq!(text(edited, "peer_ip"), "192.0.2.17");
+    assert_eq!(edited.get("config_keys"), Some(&json!(changed)));
+    assert_eq!(text(edited, "revision"), revision);
+    let hash = text(edited, "revision")
+        .strip_prefix("sha256:")
+        .unwrap_or_else(|| panic!("revision has no SHA-256 prefix: {edited:?}"));
+    assert_eq!(hash.len(), 64);
+    assert!(
+        hash.bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    );
+    assert_eq!(
+        keys(edited),
+        [
+            "admin_account",
+            "config_keys",
+            "event",
+            "level",
+            "peer_ip",
+            "revision",
+            "ts",
+        ]
+    );
+    for (group, reason) in lines[3..].as_chunks::<3>().0.iter().zip(reasons) {
+        for (index, rejected) in group.iter().enumerate() {
+            assert_eq!(text(rejected, "event"), "config_edit_rejected");
+            assert_eq!(text(rejected, "level"), "warn");
+            assert_eq!(text(rejected, "admin_account"), "alice");
+            assert_eq!(text(rejected, "peer_ip"), "192.0.2.17");
+            assert_eq!(text(rejected, "reason"), reason);
+            let mut expected_keys =
+                vec!["admin_account", "event", "level", "peer_ip", "reason", "ts"];
+            match index {
+                0 => assert!(!rejected.contains_key("config_keys")),
+                1 => {
+                    assert_eq!(rejected.get("config_keys"), Some(&json!([])));
+                    expected_keys.push("config_keys");
+                }
+                _ => {
+                    assert_eq!(rejected.get("config_keys"), Some(&json!(changed)));
+                    expected_keys.push("config_keys");
+                }
+            }
+            expected_keys.sort_unstable();
+            assert_eq!(keys(rejected), expected_keys);
+        }
+    }
+    for line in &lines {
+        assert_timestamp(text(line, "ts"));
+        assert!(line.values().all(|value| !value.is_null()));
+        for forbidden in [
+            "value",
+            "values",
+            "changes",
+            "diagnostics",
+            "detail",
+            "origin",
+            "target_host",
+            "target_ip",
+            "target_port",
+            "limit",
+            "password",
+            "password_hash",
+            "cookie",
+            "csrf_token",
+        ] {
+            assert!(!line.contains_key(forbidden), "{forbidden}: {line:?}");
+        }
+    }
+    let ipv6 = objects(&format_line(
+        &Event::ConfigEditRejected {
+            admin_account: account,
+            peer_ip: PeerIp::new(
+                "2001:0DB8:0000:0000:0000:0000:0000:0017"
+                    .parse()
+                    .unwrap_or_else(|error| panic!("IPv6 peer: {error}")),
+            ),
+            reason: "config_conflict".to_owned(),
+            config_keys: None,
+        },
+        UNIX_EPOCH,
+    ))
+    .remove(0);
+    assert_eq!(text(&ipv6, "peer_ip"), "2001:db8::17");
+}
+
+/// spec: operations.md:OPS-058 partial
 #[test]
 fn writes_each_config_warning_with_its_contract_fields() {
     let dir = temp_dir("warnings");
@@ -496,7 +655,21 @@ impl StatusServer {
                 addr_tx
                     .send(addr)
                     .unwrap_or_else(|error| panic!("send: {error}"));
-                let status = StatusListener::new(listener, ConnectionBudget::new(64), lifecycle);
+                let mut candidate = vnc_relay_adapters::config_file::parse_candidate(
+                    b"[admin]\naccounts_file = 'accounts.toml'\n[management]\nlisten = '127.0.0.1:18080'\n[status]\nlisten = '127.0.0.1:18081'\n",
+                    &std::env::temp_dir(),
+                )
+                .unwrap_or_else(|diagnostics| panic!("status settings: {diagnostics:?}"));
+                candidate.settings.limits.admin_connections = 64;
+                let source = Arc::new(vnc_relay_app::reload::snapshot::ReloadCell::<()>::new(
+                    vnc_relay_app::reload::snapshot::ReloadSnapshot::new(candidate, None, None),
+                ));
+                let status = StatusListener::new(
+                    listener,
+                    ConnectionBudget::new(),
+                    lifecycle,
+                    source,
+                );
                 tokio::select! {
                     () = status.run(log) => {}
                     _ = stopped => {}

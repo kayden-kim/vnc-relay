@@ -1,8 +1,10 @@
 # WebSocket 진입점 모듈 설계
 
-## 작업 6.2 업그레이드 목표 (Target / Active)
+## 작업 6.2 업그레이드 경계 (Current / Active)
 
-기존 Current/Verified와 구별한 구현 전 목표다. 현재 WsPolicy가 origins/M/B/U를 고정한다(`crates/adapters/src/websocket.rs:34-50,309-319`). [소비 경계](file-watch.md#101-발행-단위와-reader)에 따라 수락 때 allow/L/B/U/TCP K를 잡고 Origin 검사와 IP 재검사는 업그레이드 당시 snapshot으로 한다. M/WS ping/pong은 업그레이드값, B는 수락값이다. 101 flush 뒤 초기 교환에는 H를 새로 읽는다. U는 수락값이며 기존 연결/교환 값은 바꾸지 않는다([설정 §1.8](../contracts/config-v3.md#18-재로드-구분), OPS-047~050).
+`WsPolicy`는 `AcceptPolicy`만 가진다. `net.rs`의 `admit`가 수락 당시 allow/L/B/U/TCP K를 같은 설정 세대에서 읽는다. `websocket.rs`의 `check_upgrade`는 업그레이드 요청의 Origin과 출발지 IP를 한 callback의 현재 설정으로 검사하고 M/WS ping/pong을 보관한다. 101 flush 뒤 `exchange_handshake`가 현재 H를 읽어 `ConnectionContext`에 넘긴다. `WsRelayStream`은 수락 당시 B와 업그레이드 당시 M/Kw를 받는다. U는 수락값이며 기존 연결·교환 값은 바꾸지 않는다([설정 §1.8](../contracts/config-v3.md#18-재로드-구분), OPS-047~050).
+
+`reload_separates_accept_upgrade_and_exchange_values` 단위 시험이 각 소비 시점과 Origin 제거를 다룬다. 이번 변경의 빌드·시험은 아직 실행하지 않았다. 기존 대조 기록은 과거 범위의 증거다.
 
 이 문서는 WS·WSS Viewer 진입점이 접속을 받은 뒤의 흐름을 다룬다. 접속을 받고, 허용 판정과 L을 거치고, TLS(WSS)를 협상하고, 업그레이드 요청을 검사하고, 101 응답을 보내는 데까지가 범위다. 101 뒤 연결은 WS 스트림 어댑터와 공통 서비스가 맡는다. 접수 반복은 TCP 진입점과 같은 함수(`accept_connections`)를 쓴다. TLS 협상 세부는 [TLS 모듈 설계](tls.md), L·H·U의 값과 규칙은 [연결 상한과 시간 제한 모듈 설계](connection-limits.md)가 맡는다.
 
@@ -57,7 +59,7 @@ flowchart LR
 
 | 요소(파일·심볼) | 역할 | 만들어지는 시점과 소유자 | 의존 대상 |
 | --- | --- | --- | --- |
-| `websocket.rs` `WsPolicy` | 진입점 정책 값을 묶는다. `accept`(허용 목록, L, H, keepalive를 담은 `AcceptPolicy`), `upgrade`(U), `origins`(허용 Origin 목록), `message_bytes`(M), `buffer_bytes`(B). | `serve`가 진입점마다 만든다. 값 타입. | `net.rs`, `domain` |
+| `websocket.rs` `WsPolicy` | 현재 설정 원천과 L 사용량을 가진 `accept: AcceptPolicy`만 보관한다. U/B/K는 수락 문맥, Origin/M/Kw는 업그레이드 판단, H는 101 flush 뒤에 읽는다. | `serve`가 진입점마다 만든다 | `net.rs`, app |
 | `websocket.rs` `WsEntryPoint::new`, `run` | `run`은 로그와 정책, TLS 수락기를 담은 공유 상태를 만들고 `accept_connections`에 연결 처리(`connection`)를 넘긴다. TLS 수락기는 WSS에만 있다. | `serve`가 리스너를 바인드한 뒤 띄운다. 리스너와 TLS 수락기를 소유한다. | `net.rs`, `tls_listener.rs` |
 | `net.rs` `accept_connections`, `AcceptPolicy` | TCP와 WS가 같이 쓰는 접수 반복이다. 출발지 IP 허용 판정, L 자리 확보, keepalive 설정, `connection_accepted` 기록, 연결마다 작업 생성을 맡는다. 멈춤 신호가 오면 리스너를 닫고 연결 작업이 모두 끝날 때까지 기다린다. | `run`이 호출한다. 연결 작업 모음을 소유한다. | `domain`, `app` |
 | `websocket.rs` `Wire` | 연결의 전송 계층이다. `Plain(TcpStream)` 또는 `Tls(Box<TlsIo<TcpStream>>)`. `stage()`는 TLS가 끝나지 않았으면 `tls`, 아니면 `upgrade`를 준다. | `connection`이 만든다. 박싱은 구현 판단이다(7절). | `tls_listener.rs` |
@@ -71,7 +73,7 @@ flowchart LR
 | `websocket.rs` `io_reason`, `log_abort` | 전송 I/O 오류를 `AbortReason`과 `ConnectionErrorKind`로 바꿔 `connection_aborted`를 쓴다. `VersionUnsupported`면 줄을 더 쓰지 않는다. TLS 계층이 이미 기록했다. | `connection`이 쓴다. | `app` |
 | `tls_listener.rs` `TlsIo` | WSS 협상을 한다. 첫 읽기·쓰기에서 협상이 돈다. TLS 1.2 미만은 `connection_rejected`(`stage` = `tls`, `reason` = `tls_version_unsupported`)를 스스로 쓰고 `HandshakeFailure::VersionUnsupported`를 준다. | WSS 연결마다. | [TLS 모듈 설계](tls.md) |
 | `domain/src/origin.rs` `Origin` | `Origin` 값의 문법과 정확 일치 비교다([설정 계약 1.4절](../contracts/config-v3.md#14-origin-값-문법과-비교)). | 설정 읽기와 `check`가 쓴다. | — |
-| `src/serve.rs` `listen_until_shutdown` | WS 진입점은 TLS 없이 띄운다. WSS 진입점은 인증서 검사를 통과한 TLS 수락기를 옮겨 준다. 수락기가 없으면 진입점을 띄우지 않고 바인드한 리스너를 `idle`에 둔다. `WsPolicy`는 그 진입점의 `allow`, `timeouts.tls_upgrade_secs`(U), `allowed_origins`, `ws_message_bytes`(M), `buffer_bytes`(B)로 만든다. | 설정을 읽은 뒤 시작할 때 한 번. | `websocket.rs`, `settings` |
+| `src/serve.rs` `listen_until_shutdown` | WS는 TLS 없이, WSS는 `TlsSource`를 받아 띄운다. `WsPolicy`에는 해당 진입점의 `AllowSource`와 공통 L 사용량을 넣는다. 동적 값을 시작 시 고정하지 않는다. | 설정과 바인드가 끝난 뒤 한 번 | `websocket.rs`, app |
 
 ## 3. 데이터 모델
 
@@ -86,7 +88,7 @@ flowchart LR
 | `Refusal` | `Invalid`, `NotFound`, `MethodNotAllowed`, `VersionUnsupported`, `OriginNotAllowed(String)`, `SubprotocolNotSupported`, `IpNotAllowed` | `reason()`: `invalid_upgrade`(앞 네 개), `origin_not_allowed`, `subprotocol_not_supported`, `ip_not_allowed`. `answer()`: `400`(`Invalid`, `SubprotocolNotSupported`), `404`(`NotFound`), `405` + `Allow: GET`(`MethodNotAllowed`), `426` + `Sec-WebSocket-Version: 13`(`VersionUnsupported`), `403`(`OriginNotAllowed`, `IpNotAllowed`) | 응답은 `Content-Length: 0`과 `Connection: close`를 붙인다. 본문이 없다([WebSocket 계약 2.1절](../contracts/websocket-relay-v1.md#21-http-단계의-거절)). |
 | `ValidUpgrade` | `accept_key`(`String`), `binary`(`bool`) | 101 응답의 `Sec-WebSocket-Accept`와 서브프로토콜 여부 | `binary`는 요청의 `Sec-WebSocket-Protocol`에 `binary`가 있을 때만 참이다. |
 | `HeadRead` | `Complete(Vec<u8>)`, `Eof`, `TooLarge` | 머리 바이트, 상대 닫힘, 상한 초과 | `Complete`의 바이트는 빈 줄까지다. 뒤 바이트는 버린다. |
-| `WsPolicy` | `accept: AcceptPolicy`, `upgrade: Duration`, `origins: Vec<Origin>` | 접수 정책, U, 허용 Origin | `upgrade`는 `timeouts.tls_upgrade_secs`다. 설정 파일에 없는 값을 쓰지 않는다. |
+| `WsPolicy` | `accept: AcceptPolicy` | 접수 정책·현재 설정 원천 | U/B/K는 수락 당시 값, Origin/M/Kw는 업그레이드 당시 값이다. |
 
 ## 4. 처리 순서
 

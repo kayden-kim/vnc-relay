@@ -60,9 +60,11 @@ flowchart LR
 | `app/styles/base.css` | `color-scheme`, 본문 글꼴, 포커스 링, 화면 밖 글 클래스 | `tokens.css` |
 | `app/styles/components.css` | 조각별 클래스와 상태 선택자. 화면 배치 클래스(`.grid`, `.span-3`·`.span-4`·`.span-6`·`.span-8`·`.span-12`, `.fact-list`·`.fact`, `.page-actions`)와 단일 중단점 `max-width: 1023.98px` 블록. `app.css`에는 `@media`가 없다 | `tokens.css` |
 | `app/query.js` `newQuery`, `clearTimer`, `viewOf`, `contentKey` | 조회 상태(진행 중, 세대, 데이터, 오류)와 갱신 타이머를 DOM 없이 다룬다. 운영 현황과 세션 상세가 같이 쓴다. | 없음 |
-| `app/shell.js` `buildNavbar`, `signOutUrl`, `defaultStorage`, `LOGIN_URL` | 상단 막대(언어 선택, 로그아웃 단추)와 로그아웃 결과 판정을 만든다. 운영 현황과 세션 상세가 같이 쓴다. | `components/navbar.js`, `components/language-select.js`, `components/button.js`, `api.js`, `model.js`, `copy.js`, `language.js` |
+| `app/shell.js` `buildNavbar`, `signOutUrl`, `defaultStorage`, `LOGIN_URL` | 모든 보호 화면의 두 항목 상단 막대(언어 선택, 로그아웃 단추)와 로그아웃 결과 판정을 만든다. `active`로 운영 현황 또는 설정을 고른다. 모바일에서도 두 항목을 둘째 줄에 보인다. | `components/navbar.js`, `components/language-select.js`, `components/button.js`, `api.js`, `model.js`, `copy.js`, `language.js` |
 | `app/session.js` `mountSession` | SCR-002를 조립한다. 세션 확인, 상세 조회, 종료 확인 대화상자, 종료 결과 분류, 대상 소멸을 맡는다. | `components/alert.js`, `button.js`, `dialog.js`, `link.js`, `stat.js`, `api.js`, `copy.js`, `format.js`, `language.js`, `model.js`, `panels.js`, `query.js`, `shell.js` |
-| `app/router.js` `mountRouter`, `routeOf` | 해시 `#/sessions/{id}`는 SCR-002로, 그 밖의 해시는 SCR-001로 보낸다. 화면을 바꿀 때 이전 화면을 `dispose`한다. | `operations.js`, `session.js` |
+| `app/router.js` `mountRouter`, `routeOf` | 해시 `#/sessions/{id}`는 SCR-002, `#/settings`·`#/settings/edit`는 SCR-004·005, 그 밖은 SCR-001로 보낸다. 이전 화면을 `dispose`한다. 저장 적용 개수는 URL·저장소가 아닌 한 번 쓰는 메모리 값으로 전달한다. | `operations.js`, `session.js`, `settings.js` |
+| `app/settings.js` `mountSettings` | SCR-004·005를 조립한다. 진입·명시적 GET, 편집 가능 상태, 입력 보존, 변경 확인, PATCH 결과·복구, 언어·로그아웃을 맡는다. 폴링하지 않는다. | 공통 컴포넌트, `api.js`, `settings-model.js`, `copy.js`, `format.js`, `language.js`, `model.js`, `panels.js`, `shell.js` |
+| `app/settings-model.js` `parseConfig`, `canEdit`, `initialInputs`, `inspectInputs`, `mapDiagnostics` | 설정 응답 확인, 입력 그룹·단위, 변경 키 비교, 정수·공백·관계 검사, 전송 배열 첨자와 원래 줄 번호 대응을 맡는다. 진단은 코드로 번역하며 모르는 코드만 원문과 코드를 보인다. | `format.js` |
 
 ## 3. 데이터 모델
 
@@ -73,7 +75,7 @@ flowchart LR
 | `tone` | `success`, `info`, `warning`, `destructive`, `neutral` | 다른 값이면 `TypeError`. 요소에 `data-tone`으로 쓴다. |
 | `variant`(버튼) | `primary`, `outline`, `ghost`, `destructive`, `navbar` | 다른 값이면 `TypeError`. `navbar`는 상단 막대의 항목형(로그아웃) 버튼이다. |
 | `variant`(언어 선택) | `navbar`, `form` | 다른 값이면 `TypeError` |
-| 아이콘 이름 | `check`, `clock`, `warning`, `alert`, `refresh`, `logout`, `back`, `chevron-right`, `chevron-down`, `cancel`, `globe`, `grid`, `brand` | 다른 값이면 `TypeError` |
+| 아이콘 이름 | `check`, `clock`, `warning`, `alert`, `refresh`, `logout`, `back`, `chevron-right`, `chevron-down`, `cancel`, `globe`, `grid`, `settings`, `brand` | 다른 값이면 `TypeError` |
 | 아이콘 크기 | `md`(`--space-icon-size`), `sm`(`--space-icon-size-sm`) | 기본값 `md` |
 | 상태 클래스 | `is-hover`, `is-focus` | 미리보기가 상태를 고정할 때만 붙인다. 화면 코드는 붙이지 않는다. |
 | 상태 속성 | `disabled`, `aria-busy`, `aria-invalid`, `aria-current`, `aria-describedby` | 상태 표현은 이 속성으로 한다. |
@@ -91,7 +93,7 @@ flowchart LR
 | `createCard({title, headingLevel, description, count, actions, body, footer})` | `title` 필수. `headingLevel` 기본 2(1~6의 정수). `description`은 선택 문자열이다. 카드 머리(`.card-head`)의 제목 아래 `p.card-description`에 넣는다(DESIGN 527·638행). `count`는 `createBadge`로 붙인다. SCR-001 개수 문구는 CPY-084·085(Q115)를 따르며 목록별 성공 데이터와 함께 갱신한다. | `HTMLElement`(`section`). `aria-labelledby`로 제목과 묶는다. |
 | `createStat({label, value, unit, tone, badge})` | `label` 필수. 값은 문자열 또는 숫자다. `badge` 기본값은 `false`이며, 기본 값은 `metric` 글꼴과 `tnum`을 쓴다. `badge: true`이면 `createBadge`에 값과 `tone`을 넘긴다. 실행 상태와 확인 불가·조회 중 값에 쓴다(DESIGN.md Stat). | `HTMLDivElement` |
 | `createGauge({label, value, max, valueText, limitText, unknownText, unknownTone})` | `value`는 `0`~`max`. `label`과 `limitText`는 필수다. 알려진 값은 가운데에 `valueText`(없으면 값)를 크게 보이고, 아래 줄에 `limitText`(상한 줄)를 보인다. `value`가 `null`이면 알 수 없음이며 링을 그리지 않고 `unknownText`(필수)를 `createBadge`의 배지로 쓴다. `unknownTone`은 그 배지의 톤이며 기본값은 `neutral`(확인 불가)이다. 첫 조회 전에는 호출자가 `info`(조회 중)를 넘긴다(DESIGN 상태 색). `value`가 `null`일 때 톤이 잘못되면 `TypeError`다. 알려진 값에서는 배지를 만들지 않으므로 `unknownTone`을 쓰지 않는다. 채움 길이는 `style.setProperty`로 쓴다. | `HTMLDivElement`. `role="progressbar"`, `aria-label`, `aria-valuemin`, `aria-valuemax`, `aria-valuenow`, `aria-valuetext`. 알려진 값의 `aria-valuetext`는 `valueText, limitText`다. |
-| `createNavbar({brand, items, language, action, label})` | `label`은 필수다(기본값 없음, 호출자가 준다). `items`는 `{label, href, current, desktopOnly}`. `desktopOnly` 항목은 1024px 미만에서 숨긴다. | `HTMLElement`(`header`). 안에 `nav`를 둔다. 현재 항목은 `aria-current="page"`. |
+| `createNavbar({brand, items, language, action, label})` | `label`은 필수다(기본값 없음, 호출자가 준다). `items`는 `{label, href, current, icon}`. 화면이 활성 항목을 고르며 모든 항목은 모바일에서도 보인다. | `HTMLElement`(`header`). 안에 `nav`를 둔다. 현재 항목은 `aria-current="page"`. |
 | `createLanguageSelect({id, label, value, options, variant})` | `id`, `label`, `options`(`{value, label}` 배열, 빈 배열이면 `TypeError`)는 필수. `variant` 기본 `form`(`navbar`·`form`). | `HTMLDivElement`. 안에 `label`과 `select`. |
 | `createDataTable({caption, columns, rows, emptyText, numericColumns})` | `columns`는 `{key, label, mobileHead?}` 배열이다. `key`·`label`은 문자열이다. 배열이 아니거나 비었거나 열 값이 잘못되면 `TypeError`다. `mobileHead`는 생략 또는 `'primary'`·`'secondary'`만 허용한다. 다른 값이면 `TypeError`다. 생략한 열은 모바일에서 일반 레이블·값 쌍이다. `rows`는 값 배열의 배열이다. 셀 값이 `Node`면 그대로 넣고, 그 밖의 값은 문자열로 쓴다. `emptyText`는 문자열 또는 `Node`다. 조회 중 행은 호출자가 정보 배지를 넘긴다. `numericColumns`의 각 항목은 `columns`의 `key`여야 한다(아니면 `TypeError`). | `HTMLTableElement`. 열 머리글은 `scope="col"`이고, 숫자 열은 `data-table-num` 클래스를 쓴다. 행이 없으면 `emptyText`를 한 행으로 쓴다. 아래 표 역할과 모바일 첫 줄 규칙을 따른다. |
 | `createLink({href, label, icon})` | `icon`은 아이콘 이름 | `HTMLAnchorElement` |
@@ -141,6 +143,17 @@ flowchart LR
 | 대화상자 | 네이티브 `dialog`와 `showModal()`. Tab 순환과 취소 뒤 포커스 복귀만 직접 만든다 | 열기와 Escape 닫기를 브라우저가 한다. 탐침에서 Tab이 `body`로 빠져서 `dialog.js`의 keydown이 두 단추 사이를 돈다(DASH-015, 검증 기록 4.7절). 브라우저는 닫을 때 열 당시 포커스가 있던 요소로 돌린다. WebKit은 마우스로 누른 단추에 포커스를 주지 않아 그 요소가 `body`일 수 있다. 그래서 취소·Escape 뒤에는 `returnFocus`로 직접 돌린다. 취소 단추는 `close` 이벤트를 기다리지 않는다. 가상 시간으로 실행한 Chromium 시험에서 이 이벤트가 시험의 100ms 대기 안에 오지 않았기 때문이다(DASH-009, 검증 기록 4.21절). | 포커스 가두기 전부를 직접 만드는 것. |
 | 언어 선택 | 네이티브 `select` | 키보드 동작과 스크린 리더 이름을 브라우저가 맡는다. | 직접 만든 목록 상자. |
 | 아이콘 | 인라인 SVG와 `<template>` 복제 | 외부 파일 요청이 없고 CSP를 지킨다. | 외부 스프라이트 `<use href>`. 외부 파일 요청이 생긴다. |
+| 설정 입력과 진단 | 기존 `text-field-input`·Card·Alert·Dialog를 조립한다. 목록은 `textarea`, 정수는 단위가 있는 텍스트 입력과 숫자 키보드다. 입력 문법은 서버에 보내기 전에 검사한다 | 기존 단일 줄 `createTextField`는 로그인에 맞춘 API다. 설정의 여러 줄·단위·원래 줄 선택·여러 진단을 별도 화면 조립으로 추가하되 기존 시각 토큰과 오류 의미를 공유한다. 새 시각 토큰은 없다. | 로그인 필드 API에 설정 전용 자료형·상태를 넣는 것. |
+| 설정 생명주기 | `settings.js`는 epoch와 `AbortController`로 이탈·인증 만료 때 요청·값·입력을 제거한다. PATCH 자동 재전송은 없다. 충돌은 명시적 GET으로 입력과 revision을 함께 교체한다 | 기존 운영 현황·세션의 늦은 응답 무시 패턴을 재사용하고, 비폴링 설정 화면에 요청 중단을 더한다. 쓰기 실패는 입력 유지, 응답 유실은 결과 불명으로 구분한다. | 폴링 모듈을 설정에도 적용하는 것. |
+
+### 설정 화면 조립과 스타일
+
+`mountSettings(root, deps, {edit, applied})`는 기존 화면과 같은 `request`·`storage`·`preferredLanguages`·`navigate` 의존성을 받는다. `edit`는 두 설정 화면을 고르고, `applied`는 성공 안내에만 쓴다. PATCH는 `api.js`의 `patchConfig`를 통해 `{revision, changes}`와 CSRF를 보낸다. 오류의 `details`는 키별 진단과 재시작 필요 키를 보존한다. 제한 시간은 `parseSession`이 읽은 `query_timeout_secs`다.
+
+`app.css`의 `.config-*`는 키·값 3열 목록, 다섯 입력 구역, 변경 목록과 스크롤 가능한 확인 대화상자를 그린다. `styles/components.css`의 기존 단일 중단점은 이 목록과 입력 격자를 한 열로 바꾼다. 목록 입력은 `typography.input-data`, 숫자 입력은 `typography.input`을 쓴다. 두 입력 모두 16px 이상이다. 키·문자열 보기 값은 기존 `typography.data`를 유지한다.
+
+`tests/settings.html`·`settings-scenarios.js`는 기존 `operations`·`session` 시험 페이지와 같은 가짜 API 패턴이다. 읽기 행과 입력에는 `data-config-key`를 두어 같은 키의 값·진단·배지와 연결한다. 실서버에 대한 파일 기록·기존 연결 유지 증거는 이 시험의 범위가 아니다. 그 증거는 `tests/dashboard_live/settings_view.rs`·`settings_edit.rs`·`settings_recovery.rs`가 실제 설정 파일·파일 변경 감지·`/api/v1/config`로 확인한다. 시험 쪽 주입 범위는 [프런트엔드 컨벤션 검증 표](../conventions/frontend.md)의 사용자 결정 2026-11-05(Q113)·2026-11-08(Q180)을 따른다.
+
 
 ## 8. 미결정 사항
 

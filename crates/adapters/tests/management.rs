@@ -27,12 +27,19 @@ use tokio::time::timeout;
 use tokio_rustls::{TlsAcceptor, TlsConnector};
 use vnc_relay_adapters::accounts_file::{Argon2Hasher, Argon2Verifier};
 use vnc_relay_adapters::clock::SystemClock;
+use vnc_relay_adapters::config_edit::{FsConfigFileStore, TomlConfigDocument};
+use vnc_relay_adapters::config_file;
 use vnc_relay_adapters::crypto::{RelayIdKey, SessionIdKey, SystemTokenSource};
 use vnc_relay_adapters::management_http::{DashboardHints, ManagementListener, ManagementServices};
 use vnc_relay_adapters::net::{AcceptPolicy, AllowSource, TcpEntryPoint, TcpRelayStream};
+use vnc_relay_adapters::ops_log::format_line;
 use vnc_relay_adapters::target::TcpTargetConnector;
 use vnc_relay_adapters::tls;
 use vnc_relay_app::events::{AdminTerminateResult, Event, Level, RejectReason, Stage};
+use vnc_relay_app::management::config::{
+    ConfigActor, ConfigEditError, ConfigEditResult, ConfigEditService, ConfigFileStore,
+    ConfigGetError, ConfigManagement, ConfigPatch, ConfigReplaceError, ConfigView,
+};
 use vnc_relay_app::management::login::dummy_hash;
 use vnc_relay_app::management::query::ManagementQueryService;
 use vnc_relay_app::management::terminate::{ManagementTerminateService, TerminationTicket};
@@ -44,11 +51,12 @@ use vnc_relay_app::ports::{
 use vnc_relay_app::relay::{
     ConnectionContext, RelayRuntime, RelayRuntimeConfig, RelayService, RelaySnapshot,
 };
-use vnc_relay_app::reload::snapshot::{RelayAllow, ReloadCell, ReloadSnapshot};
-use vnc_relay_app::settings::KeepaliveSettings;
+use vnc_relay_app::reload::SharedReload;
+use vnc_relay_app::reload::ports::{ReloadFileStore, ReloadTlsStore, TlsBuildError};
+use vnc_relay_app::reload::service::ReloadService;
+use vnc_relay_app::reload::snapshot::{ReloadCell, ReloadSnapshot};
 use vnc_relay_domain::account::{Account, AccountName, Argon2Params, Password, PasswordHash};
 use vnc_relay_domain::admin_session::AdminSessionPolicy;
-use vnc_relay_domain::allow_list::{AllowList, IpItem};
 use vnc_relay_domain::budget::ConnectionBudget;
 use vnc_relay_domain::conn_id::ConnId;
 use vnc_relay_domain::entry_point::EntryPoint;
@@ -56,7 +64,6 @@ use vnc_relay_domain::handshake::{HANDSHAKE_REQUEST_LEN, HandshakePolicy, VIEWER
 use vnc_relay_domain::login_limit::{LimitScope, LoginLimitPolicy};
 use vnc_relay_domain::peer_ip::PeerIp;
 use vnc_relay_domain::session::ViewerTransport;
-use vnc_relay_domain::target_policy::TargetPolicy;
 
 /// Upper bound for one exchange. A hang fails the test instead of blocking it.
 const LIMIT: Duration = Duration::from_secs(10);
@@ -204,7 +211,8 @@ async fn start_with_ports(
 ) -> Running {
     let events = Arc::new(Recorder::default());
     let log: Arc<dyn EventSink> = events.clone();
-    let budget = ConnectionBudget::new(admin_connections);
+    let budget = ConnectionBudget::new();
+    let runtime = management_runtime(admin_connections, upgrade, Duration::from_secs(10));
     let auth = admin_auth(
         Arc::clone(&log),
         session,
@@ -212,12 +220,13 @@ async fn start_with_ports(
         verifier,
         Arc::clone(&clock),
     );
-    let relay_budget = ConnectionBudget::new(10);
+    let relay_budget = ConnectionBudget::new();
     let query = Arc::new(ManagementQueryService::new(
         Arc::new(EmptyRelaySource),
         relay_budget,
         Arc::clone(&budget),
         Arc::clone(&clock),
+        runtime.clone(),
     ));
     let terminate = Arc::new(ManagementTerminateService::new(
         Arc::new(EmptyRelaySource),
@@ -227,11 +236,12 @@ async fn start_with_ports(
     start_services(
         tls,
         budget,
-        upgrade,
+        runtime,
         ManagementServices {
             auth,
             query,
             terminate,
+            config: config_fixture(false, Arc::new(SystemClock::new()), Arc::clone(&log)).service,
         },
         events,
     )
@@ -241,7 +251,7 @@ async fn start_with_ports(
 async fn start_services(
     tls: Option<TlsAcceptor>,
     budget: Arc<ConnectionBudget>,
-    upgrade: Duration,
+    runtime: Arc<ReloadCell<TlsAcceptor>>,
     services: ManagementServices,
     events: Arc<Recorder>,
 ) -> Running {
@@ -254,13 +264,19 @@ async fn start_services(
     let dashboard = DashboardHints::new(
         Duration::from_secs(2),
         Duration::from_secs(5),
-        Duration::from_secs(10),
+        runtime.clone(),
     );
     let tls = tls.map(|acceptor| {
-        let snapshot = ReloadSnapshot::new(RelayAllow::default(), None, Some(acceptor));
-        tls::TlsSource::management(Arc::new(ReloadCell::new(snapshot)))
+        let current = runtime.current();
+        runtime.replace(ReloadSnapshot {
+            settings: current.settings.clone(),
+            presence: current.presence.clone(),
+            wss_tls: None,
+            management_tls: Some(acceptor),
+        });
+        tls::TlsSource::management(runtime.clone())
     });
-    let listener = ManagementListener::new(listener, tls, budget, upgrade, dashboard, services);
+    let listener = ManagementListener::new(listener, tls, budget, runtime, dashboard, services);
     let task = tokio::spawn(listener.run(events.clone()));
     Running { addr, events, task }
 }
@@ -300,30 +316,19 @@ impl RunningRelay {
     ) -> Self {
         let events = Arc::new(Recorder::default());
         let log: Arc<dyn EventSink> = events.clone();
-        let relay_budget = ConnectionBudget::new(10);
-        let admin_budget = ConnectionBudget::new(ROOMY_LM);
-        let keepalive = KeepaliveSettings {
-            tcp_idle: Duration::from_secs(60),
-            tcp_interval: Duration::from_secs(10),
-            tcp_probes: 6,
-            ws_ping: Duration::from_secs(30),
-            ws_pong_timeout: Duration::from_secs(30),
-        };
+        let relay_budget = ConnectionBudget::new();
+        let admin_budget = ConnectionBudget::new();
+        let cell = management_runtime(ROOMY_LM, UPGRADE, Duration::from_secs(1));
         let runtime = Arc::new(RelayRuntime::new(
-            TcpTargetConnector::new(keepalive),
+            TcpTargetConnector::new(cell.clone()),
             Arc::new(RelayIdKey::generate().unwrap_or_else(|error| panic!("relay key: {error:?}"))),
             Arc::new(
                 SessionIdKey::generate().unwrap_or_else(|error| panic!("session key: {error:?}")),
             ),
             Arc::clone(&relay_budget),
-            ConnectionBudget::new(10),
-            RelayRuntimeConfig {
-                wait_timeout: LIMIT,
-                connect_timeout: LIMIT,
-                close_timeout: Duration::from_secs(1),
-                recent_closed: 16,
-                target_policy: TargetPolicy::new(Vec::new()),
-            },
+            ConnectionBudget::new(),
+            RelayRuntimeConfig { recent_closed: 16 },
+            cell.clone(),
         ));
         let auth = admin_auth(
             Arc::clone(&log),
@@ -342,6 +347,7 @@ impl RunningRelay {
             Arc::clone(&relay_budget),
             Arc::clone(&admin_budget),
             Arc::clone(&clock),
+            cell.clone(),
         ));
         let terminate = Arc::new(ManagementTerminateService::new(
             Arc::new(FailFirstTermination {
@@ -354,11 +360,12 @@ impl RunningRelay {
         let management = start_services(
             None,
             admin_budget,
-            UPGRADE,
+            cell.clone(),
             ManagementServices {
                 auth,
                 query,
                 terminate,
+                config: config_fixture(false, Arc::clone(&clock), Arc::clone(&log)).service,
             },
             events,
         )
@@ -368,24 +375,10 @@ impl RunningRelay {
                 mode1_enabled: false,
                 mode2_enabled: true,
             },
-            LIMIT,
-            16_384,
-            Duration::from_secs(1),
+            cell.clone(),
             Arc::clone(&clock),
             Arc::clone(&log),
         ));
-        let allow = AllowList::new(vec![
-            IpItem::parse("127.0.0.1").unwrap_or_else(|error| panic!("loopback allow: {error:?}")),
-        ]);
-        let cell = Arc::new(ReloadCell::new(ReloadSnapshot::new(
-            RelayAllow {
-                tcp_viewer: allow.clone(),
-                tcp_server: allow,
-                ..RelayAllow::default()
-            },
-            None,
-            None,
-        )));
         let mut addresses = Vec::new();
         let mut tasks = Vec::new();
         let (stop, stopped) = watch::channel(false);
@@ -394,7 +387,10 @@ impl RunningRelay {
                 EntryPoint::TcpViewer,
                 AllowSource::tcp_viewer(Arc::clone(&cell)),
             ),
-            (EntryPoint::TcpServer, AllowSource::tcp_server(cell)),
+            (
+                EntryPoint::TcpServer,
+                AllowSource::tcp_server(Arc::clone(&cell)),
+            ),
         ] {
             let listener = TcpListener::bind("127.0.0.1:0")
                 .await
@@ -410,8 +406,6 @@ impl RunningRelay {
                 AcceptPolicy {
                     allow,
                     relay_budget: Arc::clone(&relay_budget),
-                    handshake: LIMIT,
-                    keepalive,
                 },
                 Arc::clone(&service),
                 Arc::clone(&runtime),
@@ -2908,10 +2902,12 @@ impl RunningRelay {
             accepted_wall: self.clock.wall(),
             accepted_at: self.clock.monotonic(),
             exchange_at: self.clock.monotonic(),
+            buffer_bytes: 16_384,
+            handshake: LIMIT,
         };
         let permit = self
             .budget
-            .try_acquire()
+            .try_acquire(10)
             .unwrap_or_else(|| panic!("partial stream L permit"));
         let prepare = self.service.handle_connection(
             PartialTcpStream {
@@ -3445,7 +3441,7 @@ async fn completion_mgt016_counts_lists_and_as_of_follow_one_capture_while_usage
                     .unwrap_or_else(|error| panic!("snapshot Tokio socket: {error}"));
                 let _handshaking = runtime.track_handshaking();
                 let permit = budget
-                    .try_acquire()
+                    .try_acquire(10)
                     .unwrap_or_else(|| panic!("snapshot admission L permit"));
                 let context = ConnectionContext {
                     conn_id: ConnId::next(),
@@ -3455,6 +3451,8 @@ async fn completion_mgt016_counts_lists_and_as_of_follow_one_capture_while_usage
                     accepted_wall: clock_for_hook.wall(),
                     accepted_at: clock_for_hook.monotonic(),
                     exchange_at: clock_for_hook.monotonic(),
+                    buffer_bytes: 16_384,
+                    handshake: LIMIT,
                 };
                 let result = service
                     .handle_connection(
@@ -3734,4 +3732,1219 @@ async fn completion_mgt023_shutdown_history_is_queryable_and_preserves_prior_eof
     assert_eq!(sessions["items"], json!([]));
     let waiting = authenticated_query(running, &cookie, "/api/v1/waiting").await;
     assert_eq!(waiting["items"], json!([]));
+}
+
+// Config HTTP tests keep the app transaction and document adapter real. Only
+// filesystem failures and TLS content checks are controlled at their ports.
+const CONFIG_TEXT: &str = r#"
+[admin]
+accounts_file = "accounts.toml"
+[management]
+listen = "127.0.0.1:8443"
+config_edit = true
+[status]
+listen = "127.0.0.1:8081"
+[relay.tcp_viewer]
+enabled = true
+listen = "127.0.0.1:5901"
+allow = ["127.0.0.1"]
+[relay.tcp_server]
+enabled = true
+listen = "127.0.0.1:5500"
+allow = ["127.0.0.1"]
+[relay.ws_viewer]
+enabled = true
+listen = "127.0.0.1:6080"
+allow = ["127.0.0.1"]
+allowed_origins = ["https://example.test"]
+[relay.wss_viewer]
+enabled = true
+listen = "127.0.0.1:6081"
+allow = ["127.0.0.1"]
+allowed_origins = ["https://example.test"]
+cert_file = "cert.pem"
+key_file = "key.pem"
+[mode1]
+enabled = true
+allow_targets = ["127.0.0.1:5900"]
+[mode2]
+enabled = true
+"#;
+
+struct ConfigMemory {
+    bytes: Mutex<Vec<u8>>,
+    unreadable: AtomicBool,
+    fail_replace: AtomicBool,
+    fail_write: AtomicBool,
+    temporary_writes: std::sync::atomic::AtomicUsize,
+    replaces: std::sync::atomic::AtomicUsize,
+    replacement_gate: Mutex<Option<Arc<ConfigReplacementGate>>>,
+}
+
+#[derive(Default)]
+struct ConfigReplacementGate {
+    entered: AtomicBool,
+    released: Mutex<bool>,
+    ready: std::sync::Condvar,
+}
+
+struct ReleaseConfigReplacement(Arc<ConfigReplacementGate>);
+impl Drop for ReleaseConfigReplacement {
+    fn drop(&mut self) {
+        *self
+            .0
+            .released
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner) = true;
+        self.0.ready.notify_all();
+    }
+}
+
+impl ConfigMemory {
+    fn bytes(&self) -> Vec<u8> {
+        self.bytes
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone()
+    }
+    fn set(&self, bytes: Vec<u8>) {
+        *self.bytes.lock().unwrap_or_else(PoisonError::into_inner) = bytes;
+    }
+}
+
+impl ConfigFileStore for ConfigMemory {
+    fn read(&self, _path: &Path) -> io::Result<Vec<u8>> {
+        if self.unreadable.load(Ordering::SeqCst) {
+            return Err(io::Error::from(io::ErrorKind::PermissionDenied));
+        }
+        Ok(self.bytes())
+    }
+    fn revision(&self, bytes: &[u8]) -> String {
+        FsConfigFileStore.revision(bytes)
+    }
+    fn replace(&self, _path: &Path, expected: &str, next: &[u8]) -> Result<(), ConfigReplaceError> {
+        self.replaces.fetch_add(1, Ordering::SeqCst);
+        if self.fail_write.load(Ordering::SeqCst) {
+            return Err(ConfigReplaceError::WriteFailed);
+        }
+        self.temporary_writes.fetch_add(1, Ordering::SeqCst);
+        let gate = self
+            .replacement_gate
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone();
+        if let Some(gate) = gate {
+            gate.entered.store(true, Ordering::SeqCst);
+            let mut released = gate.released.lock().unwrap_or_else(PoisonError::into_inner);
+            while !*released {
+                released = gate
+                    .ready
+                    .wait(released)
+                    .unwrap_or_else(PoisonError::into_inner);
+            }
+        }
+        if self.fail_replace.load(Ordering::SeqCst) {
+            return Err(ConfigReplaceError::WriteFailed);
+        }
+        let mut bytes = self.bytes.lock().unwrap_or_else(PoisonError::into_inner);
+        if self.revision(&bytes) != expected {
+            return Err(ConfigReplaceError::Conflict);
+        }
+        *bytes = next.to_vec();
+        Ok(())
+    }
+}
+
+#[derive(Default)]
+struct ConfigTls {
+    invalid: AtomicBool,
+}
+impl ReloadFileStore for ConfigTls {
+    fn read(&self, _path: &Path) -> io::Result<Vec<u8>> {
+        Ok(b"TLS-FILE-SECRET".to_vec())
+    }
+}
+impl ReloadTlsStore<()> for ConfigTls {
+    fn build(&self, _cert: &[u8], _key: &[u8]) -> Result<(), TlsBuildError> {
+        if self.invalid.load(Ordering::SeqCst) {
+            Err(TlsBuildError {
+                detail: "certificate format",
+            })
+        } else {
+            Ok(())
+        }
+    }
+}
+
+struct ConfigFixture {
+    service: Arc<ConfigEditService<()>>,
+    files: Arc<ConfigMemory>,
+    tls: Arc<ConfigTls>,
+    reload: SharedReload<()>,
+}
+
+fn config_fixture(
+    enabled: bool,
+    clock: Arc<dyn Clock>,
+    events: Arc<dyn EventSink>,
+) -> ConfigFixture {
+    config_fixture_text(
+        &CONFIG_TEXT.replace("config_edit = true", &format!("config_edit = {enabled}")),
+        clock,
+        events,
+    )
+}
+
+fn config_fixture_text(
+    text: &str,
+    clock: Arc<dyn Clock>,
+    events: Arc<dyn EventSink>,
+) -> ConfigFixture {
+    let base = std::env::temp_dir();
+    let candidate = config_file::parse_candidate(text.as_bytes(), &base)
+        .unwrap_or_else(|error| panic!("config fixture: {error:?}"));
+    let cell = Arc::new(ReloadCell::new(ReloadSnapshot::new(
+        candidate.clone(),
+        None,
+        None,
+    )));
+    let tls = Arc::new(ConfigTls::default());
+    let reload = Arc::new(Mutex::new(ReloadService::new(
+        candidate,
+        cell,
+        tls.clone(),
+        tls.clone(),
+        events.clone(),
+    )));
+    let files = Arc::new(ConfigMemory {
+        bytes: Mutex::new(text.as_bytes().to_vec()),
+        unreadable: AtomicBool::new(false),
+        fail_write: AtomicBool::new(false),
+        temporary_writes: std::sync::atomic::AtomicUsize::new(0),
+        fail_replace: AtomicBool::new(false),
+        replaces: std::sync::atomic::AtomicUsize::new(0),
+        replacement_gate: Mutex::new(None),
+    });
+    let service = Arc::new(ConfigEditService::new(
+        reload.clone(),
+        files.clone(),
+        Arc::new(TomlConfigDocument),
+        base.join("relay.toml"),
+        base,
+        clock,
+        events,
+    ));
+    ConfigFixture {
+        service,
+        files,
+        tls,
+        reload,
+    }
+}
+
+async fn start_config_services(
+    config: Arc<dyn ConfigManagement>,
+    events: Arc<Recorder>,
+    clock: Arc<dyn Clock>,
+) -> Running {
+    let log: Arc<dyn EventSink> = events.clone();
+    let budget = ConnectionBudget::new();
+    let runtime = management_runtime(ROOMY_LM, UPGRADE, Duration::from_secs(10));
+    let auth = admin_auth(
+        log.clone(),
+        session_policy(),
+        limit_policy(),
+        Arc::new(Argon2Verifier),
+        clock.clone(),
+    );
+    let query = Arc::new(ManagementQueryService::new(
+        Arc::new(EmptyRelaySource),
+        ConnectionBudget::new(),
+        budget.clone(),
+        clock.clone(),
+        runtime.clone(),
+    ));
+    let terminate = Arc::new(ManagementTerminateService::new(
+        Arc::new(EmptyRelaySource),
+        clock,
+        log,
+    ));
+    start_services(
+        None,
+        budget,
+        runtime,
+        ManagementServices {
+            auth,
+            query,
+            terminate,
+            config,
+        },
+        events,
+    )
+    .await
+}
+
+async fn config_login(running: &Running) -> (String, String) {
+    let reply = plain_exchange(running.addr, &login_request(ACCOUNT, PASSWORD)).await;
+    assert_eq!(reply.status, 200);
+    let body: Value =
+        serde_json::from_slice(&reply.body).unwrap_or_else(|error| panic!("login JSON: {error}"));
+    (
+        cookie_line(&reply),
+        format!(
+            "X-CSRF-Token: {}",
+            body["csrf_token"].as_str().unwrap_or_default()
+        ),
+    )
+}
+
+fn patch_bytes(body: &str, headers: &[&str], content_type: Option<&str>) -> Vec<u8> {
+    let length = format!("Content-Length: {}", body.len());
+    let mut all = vec![length.as_str()];
+    if let Some(content_type) = content_type {
+        all.push(content_type);
+    }
+    all.extend_from_slice(headers);
+    let mut bytes = request("PATCH", "/api/v1/config", &all);
+    bytes.extend_from_slice(body.as_bytes());
+    bytes
+}
+
+async fn config_patch(
+    running: &Running,
+    cookie: &str,
+    csrf: &str,
+    revision: &str,
+    changes: Value,
+) -> Reply {
+    let body = json!({"revision": revision, "changes": changes}).to_string();
+    plain_exchange(
+        running.addr,
+        &patch_bytes(
+            &body,
+            &[cookie, csrf],
+            Some("Content-Type: application/json"),
+        ),
+    )
+    .await
+}
+
+fn config_revision(fixture: &ConfigFixture) -> String {
+    fixture.files.revision(&fixture.files.bytes())
+}
+
+fn config_json(reply: &Reply) -> Value {
+    serde_json::from_slice(&reply.body)
+        .unwrap_or_else(|error| panic!("config JSON: {error}: {:?}", reply.body))
+}
+
+fn config_audits(events: &Recorder) -> Vec<Value> {
+    events
+        .snapshot()
+        .iter()
+        .filter(|event| {
+            matches!(
+                event,
+                Event::ConfigEdited { .. }
+                    | Event::ConfigEditRejected { .. }
+                    | Event::ReloadApplied { .. }
+            )
+        })
+        .map(|event| {
+            serde_json::from_str(&format_line(event, UNIX_EPOCH))
+                .unwrap_or_else(|error| panic!("audit JSON: {error}"))
+        })
+        .collect()
+}
+
+fn assert_config_unchanged(
+    fixture: &ConfigFixture,
+    bytes: &[u8],
+    running: &vnc_relay_app::settings::Settings,
+) {
+    assert_eq!(fixture.files.bytes(), bytes);
+    let reload = fixture
+        .reload
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner);
+    assert_eq!(reload.running(), running);
+    assert!(reload.last_reload().is_none());
+}
+
+fn assert_rejection(events: &Recorder, reason: &str, key: &str) {
+    let audits = config_audits(events);
+    assert_eq!(audits.len(), 1, "{audits:?}");
+    assert_eq!(audits[0]["event"], "config_edit_rejected");
+    assert_eq!(audits[0]["admin_account"], ACCOUNT);
+    assert_eq!(audits[0]["peer_ip"], "127.0.0.1");
+    assert_eq!(audits[0]["reason"], reason);
+    assert_eq!(audits[0]["config_keys"], json!([key]));
+    assert!(audits[0].get("revision").is_none());
+    for forbidden in [
+        "changes",
+        "value",
+        "password",
+        "password_hash",
+        "origin",
+        "target",
+    ] {
+        assert!(audits[0].get(forbidden).is_none(), "{audits:?}");
+    }
+}
+
+/// spec: management.md:MGT-029
+#[tokio::test]
+async fn config_routes_refuse_unauthenticated_requests_before_details() {
+    let events = Arc::new(Recorder::default());
+    let clock = Arc::new(FakeClock::default());
+    let fixture = config_fixture(true, clock.clone(), events.clone());
+    fixture
+        .files
+        .set(b"not TOML; PRIVATE-CONFIG-VALUE".to_vec());
+    let original = fixture.files.bytes();
+    let settings = fixture
+        .reload
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .running()
+        .clone();
+    let running = start_config_services(fixture.service.clone(), events.clone(), clock).await;
+    for method in ["GET", "PATCH", "HEAD", "PUT"] {
+        let reply = plain_exchange(running.addr, &request(method, "/api/v1/config", &[])).await;
+        assert_eq!(reply.status, 401);
+        if method != "HEAD" {
+            assert_eq!(error_code(&reply), "unauthenticated");
+            assert!(config_json(&reply)["error"].get("diagnostics").is_none());
+        }
+        assert!(!String::from_utf8_lossy(&reply.body).contains("PRIVATE-CONFIG-VALUE"));
+    }
+    assert_config_unchanged(&fixture, &original, &settings);
+    assert_eq!(fixture.files.replaces.load(Ordering::SeqCst), 0);
+    assert!(config_audits(&events).is_empty());
+}
+
+/// spec: management.md:MGT-030
+#[tokio::test]
+async fn disabled_config_edit_keeps_file_and_runtime_and_audits_rejection() {
+    let events = Arc::new(Recorder::default());
+    let clock = Arc::new(FakeClock::default());
+    let fixture = config_fixture(false, clock.clone(), events.clone());
+    let original = fixture.files.bytes();
+    let settings = fixture
+        .reload
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .running()
+        .clone();
+    let revision = config_revision(&fixture);
+    let running = start_config_services(fixture.service.clone(), events.clone(), clock).await;
+    let (cookie, csrf) = config_login(&running).await;
+    let view = plain_exchange(running.addr, &get("/api/v1/config", &[&cookie])).await;
+    assert_eq!(view.status, 200);
+    assert_eq!(config_json(&view)["edit_enabled"], false);
+    // Disabled is checked before the unreadable file and stale revision.
+    fixture.files.unreadable.store(true, Ordering::SeqCst);
+    let reply = config_patch(
+        &running,
+        &cookie,
+        &csrf,
+        &revision,
+        json!({"timeouts.connect_secs": 17}),
+    )
+    .await;
+    assert_eq!(reply.status, 403);
+    assert_eq!(error_code(&reply), "config_edit_disabled");
+    assert_config_unchanged(&fixture, &original, &settings);
+    assert_eq!(fixture.files.replaces.load(Ordering::SeqCst), 0);
+    assert_rejection(&events, "config_edit_disabled", "timeouts.connect_secs");
+}
+
+/// spec: management.md:MGT-032
+#[tokio::test]
+async fn config_patch_csrf_failure_changes_nothing_and_emits_no_edit_event() {
+    let events = Arc::new(Recorder::default());
+    let clock = Arc::new(FakeClock::default());
+    let fixture = config_fixture(true, clock.clone(), events.clone());
+    let original = fixture.files.bytes();
+    let settings = fixture
+        .reload
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .running()
+        .clone();
+    let running = start_config_services(fixture.service.clone(), events.clone(), clock).await;
+    let (cookie, csrf) = config_login(&running).await;
+    for headers in [
+        vec![cookie.as_str()],
+        vec![cookie.as_str(), "X-CSRF-Token: wrong"],
+        vec![cookie.as_str(), csrf.as_str(), csrf.as_str()],
+    ] {
+        // A malformed body must not win over CSRF.
+        let reply = plain_exchange(
+            running.addr,
+            &patch_bytes("{", &headers, Some("Content-Type: text/plain")),
+        )
+        .await;
+        assert_eq!(reply.status, 403);
+        assert_eq!(error_code(&reply), "csrf_invalid");
+    }
+    let session = plain_exchange(
+        running.addr,
+        &get("/api/v1/session", &[&cookie, "X-Relay-Poll: 1"]),
+    )
+    .await;
+    assert_eq!(session.status, 200, "CSRF rejection preserves the session");
+    assert_config_unchanged(&fixture, &original, &settings);
+    assert_eq!(fixture.files.replaces.load(Ordering::SeqCst), 0);
+    assert!(config_audits(&events).is_empty());
+}
+
+/// spec: management.md:MGT-035
+#[tokio::test]
+async fn invalid_or_unreadable_current_file_refuses_patch_with_safe_diagnostics() {
+    for state in ["read", "utf8", "syntax", "tls"] {
+        let events = Arc::new(Recorder::default());
+        let clock = Arc::new(FakeClock::default());
+        let text = if state == "tls" {
+            CONFIG_TEXT.replace(
+                "config_edit = true",
+                "config_edit = true\ncert_file = \"cert.pem\"\nkey_file = \"key.pem\"",
+            )
+        } else {
+            CONFIG_TEXT.to_owned()
+        };
+        let fixture = config_fixture_text(&text, clock.clone(), events.clone());
+        match state {
+            "read" => fixture.files.unreadable.store(true, Ordering::SeqCst),
+            "utf8" => fixture.files.set(vec![0xff, 0xfe]),
+            "syntax" => fixture
+                .files
+                .set(b"[management\nPRIVATE-CONFIG-VALUE".to_vec()),
+            "tls" => fixture.tls.invalid.store(true, Ordering::SeqCst),
+            _ => unreachable!(),
+        }
+        let original = fixture.files.bytes();
+        let settings = fixture
+            .reload
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .running()
+            .clone();
+        let running = start_config_services(fixture.service.clone(), events.clone(), clock).await;
+        let (cookie, csrf) = config_login(&running).await;
+        let reply = config_patch(
+            &running,
+            &cookie,
+            &csrf,
+            &config_revision(&fixture),
+            json!({"timeouts.connect_secs": 17}),
+        )
+        .await;
+        assert_eq!(reply.status, 409, "{state}: {:?}", config_json(&reply));
+        assert_eq!(error_code(&reply), "config_file_invalid");
+        let body = config_json(&reply);
+        let diagnostics = body["error"]["diagnostics"]
+            .as_array()
+            .unwrap_or_else(|| panic!("diagnostics array"));
+        if matches!(state, "read" | "utf8") {
+            assert!(diagnostics.is_empty());
+        } else {
+            assert!(!diagnostics.is_empty());
+        }
+        if let Some(diagnostic) = diagnostics.first() {
+            assert_eq!(
+                diagnostic["code"],
+                if state == "tls" {
+                    "tls_file_invalid"
+                } else {
+                    "config_syntax_error"
+                }
+            );
+            assert!(diagnostic["message"].is_string());
+        }
+        for secret in ["PRIVATE-CONFIG-VALUE", "TLS-FILE-SECRET"] {
+            assert!(!String::from_utf8_lossy(&reply.body).contains(secret));
+        }
+        assert_config_unchanged(&fixture, &original, &settings);
+        assert_eq!(fixture.files.replaces.load(Ordering::SeqCst), 0);
+        assert_rejection(&events, "config_file_invalid", "timeouts.connect_secs");
+    }
+}
+
+/// spec: management.md:MGT-036
+#[tokio::test]
+async fn invalid_config_candidate_returns_indexed_safe_diagnostics_without_writes() {
+    for (changes, key, code, secret) in [
+        (
+            json!({"timeouts.connect_secs": 0}),
+            "timeouts.connect_secs",
+            "config_value_out_of_range",
+            "not-present",
+        ),
+        (
+            json!({"timeouts.connect_secs": u64::MAX}),
+            "timeouts.connect_secs",
+            "config_value_out_of_range",
+            "not-present",
+        ),
+        (
+            json!({"limits.relay_connections": 2, "limits.waiting": 3}),
+            "limits.waiting",
+            "config_value_out_of_range",
+            "not-present",
+        ),
+        (
+            json!({"relay.tcp_viewer.allow": ["127.0.0.1", "::1", "PRIVATE-BAD-IP"]}),
+            "relay.tcp_viewer.allow[2]",
+            "config_ip_item_invalid",
+            "PRIVATE-BAD-IP",
+        ),
+        (
+            json!({"relay.ws_viewer.allowed_origins": ["https://example.test", "PRIVATE-BAD-ORIGIN"]}),
+            "relay.ws_viewer.allowed_origins[1]",
+            "config_origin_invalid",
+            "PRIVATE-BAD-ORIGIN",
+        ),
+        (
+            json!({"mode1.allow_targets": ["127.0.0.1:5900", "PRIVATE-BAD-TARGET"]}),
+            "mode1.allow_targets[1]",
+            "config_target_item_invalid",
+            "PRIVATE-BAD-TARGET",
+        ),
+    ] {
+        let events = Arc::new(Recorder::default());
+        let clock = Arc::new(FakeClock::default());
+        let fixture = config_fixture(true, clock.clone(), events.clone());
+        let original = fixture.files.bytes();
+        let settings = fixture
+            .reload
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .running()
+            .clone();
+        let running = start_config_services(fixture.service.clone(), events.clone(), clock).await;
+        let (cookie, csrf) = config_login(&running).await;
+        let reply = config_patch(
+            &running,
+            &cookie,
+            &csrf,
+            &config_revision(&fixture),
+            changes,
+        )
+        .await;
+        assert_eq!(reply.status, 400, "{key}: {:?}", config_json(&reply));
+        assert_eq!(error_code(&reply), "config_invalid");
+        assert!(
+            config_json(&reply)["error"]["diagnostics"]
+                .as_array()
+                .unwrap_or_else(|| panic!("diagnostics"))
+                .iter()
+                .any(|diagnostic| diagnostic["key"] == key
+                    && diagnostic["code"] == code
+                    && diagnostic["message"].is_string())
+        );
+        assert!(!String::from_utf8_lossy(&reply.body).contains(secret));
+        assert_config_unchanged(&fixture, &original, &settings);
+        assert_eq!(fixture.files.replaces.load(Ordering::SeqCst), 0);
+        let audits = config_audits(&events);
+        assert_eq!(audits.len(), 1);
+        assert_eq!(audits[0]["reason"], "config_invalid");
+        assert!(!audits[0].to_string().contains(secret));
+    }
+}
+
+/// spec: management.md:MGT-037
+#[tokio::test]
+async fn config_patch_rejects_uneditable_empty_mistyped_and_poll_requests_without_audit() {
+    let events = Arc::new(Recorder::default());
+    let clock = Arc::new(FakeClock::default());
+    let fixture = config_fixture(true, clock.clone(), events.clone());
+    let original = fixture.files.bytes();
+    let settings = fixture
+        .reload
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .running()
+        .clone();
+    let running = start_config_services(fixture.service.clone(), events.clone(), clock).await;
+    let (cookie, csrf) = config_login(&running).await;
+    let revision = config_revision(&fixture);
+    let view = plain_exchange(running.addr, &get("/api/v1/config", &[&cookie])).await;
+    let items = config_json(&view)["items"]
+        .as_array()
+        .unwrap_or_else(|| panic!("items"))
+        .clone();
+    // Every restart key and all four TLS paths are rejected.
+    for item in items.iter().filter(|item| item["editable"] == false) {
+        let key = item["key"].as_str().unwrap_or_default();
+        let mut changes = serde_json::Map::new();
+        changes.insert(key.to_owned(), item["value"].clone());
+        let reply = config_patch(&running, &cookie, &csrf, &revision, Value::Object(changes)).await;
+        assert_eq!(reply.status, 400, "{key}");
+        assert_eq!(error_code(&reply), "invalid_request");
+    }
+    assert_eq!(
+        items.iter().filter(|item| item["editable"] == true).count(),
+        23
+    );
+    for changes in [
+        json!({}),
+        json!({"unknown.key": 1}),
+        json!({"timeouts.connect_secs": "17"}),
+        json!({"timeouts.connect_secs": 1.5}),
+        json!({"timeouts.connect_secs": true}),
+        json!({"timeouts.connect_secs": null}),
+        json!({"relay.tcp_viewer.allow": "127.0.0.1"}),
+        json!({"relay.tcp_viewer.allow": [1]}),
+        serde_json::from_str(r#"{"timeouts.connect_secs":18446744073709551616}"#)
+            .unwrap_or_else(|error| panic!("JSON: {error}")),
+    ] {
+        let reply = config_patch(&running, &cookie, &csrf, &revision, changes).await;
+        assert_eq!(reply.status, 400);
+        assert_eq!(error_code(&reply), "invalid_request");
+    }
+    let body = json!({"revision": revision, "changes": {"timeouts.connect_secs": 17}}).to_string();
+    let reply = plain_exchange(
+        running.addr,
+        &patch_bytes(
+            &body,
+            &[&cookie, &csrf, "X-Relay-Poll: 1"],
+            Some("Content-Type: application/json"),
+        ),
+    )
+    .await;
+    assert_eq!(reply.status, 400);
+    assert_eq!(error_code(&reply), "invalid_request");
+    assert_config_unchanged(&fixture, &original, &settings);
+    assert_eq!(fixture.files.replaces.load(Ordering::SeqCst), 0);
+    assert!(config_audits(&events).is_empty());
+    drop(running);
+    let events = Arc::new(Recorder::default());
+    let clock = Arc::new(FakeClock::default());
+    let text = CONFIG_TEXT
+        .replace(
+            "[relay.wss_viewer]\nenabled = true",
+            "[relay.wss_viewer]\nenabled = false",
+        )
+        .replace("[mode1]\nenabled = true", "[mode1]\nenabled = false");
+    let fixture = config_fixture_text(&text, clock.clone(), events.clone());
+    let original = fixture.files.bytes();
+    let settings = fixture
+        .reload
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .running()
+        .clone();
+    let running = start_config_services(fixture.service.clone(), events.clone(), clock).await;
+    let (cookie, csrf) = config_login(&running).await;
+    for changes in [
+        json!({"relay.wss_viewer.allow": ["127.0.0.1"]}),
+        json!({"relay.wss_viewer.allowed_origins": ["https://example.test"]}),
+        json!({"mode1.allow_targets": ["127.0.0.1:5900"]}),
+    ] {
+        let reply = config_patch(
+            &running,
+            &cookie,
+            &csrf,
+            &config_revision(&fixture),
+            changes,
+        )
+        .await;
+        assert_eq!(reply.status, 400);
+        assert_eq!(error_code(&reply), "invalid_request");
+    }
+    assert_config_unchanged(&fixture, &original, &settings);
+    assert_eq!(fixture.files.replaces.load(Ordering::SeqCst), 0);
+    assert!(config_audits(&events).is_empty());
+}
+
+/// spec: management.md:MGT-038
+/// spec: operations.md:OPS-061
+#[tokio::test]
+async fn temporary_write_and_replace_failures_keep_original_bytes_and_running_values() {
+    for stage in ["temporary_write", "atomic_replace"] {
+        let events = Arc::new(Recorder::default());
+        let clock = Arc::new(FakeClock::default());
+        let fixture = config_fixture(true, clock.clone(), events.clone());
+        fixture
+            .files
+            .fail_write
+            .store(stage == "temporary_write", Ordering::SeqCst);
+        fixture
+            .files
+            .fail_replace
+            .store(stage == "atomic_replace", Ordering::SeqCst);
+        let original = fixture.files.bytes();
+        let settings = fixture
+            .reload
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .running()
+            .clone();
+        let running = start_config_services(fixture.service.clone(), events.clone(), clock).await;
+        let (cookie, csrf) = config_login(&running).await;
+        let reply = config_patch(
+            &running,
+            &cookie,
+            &csrf,
+            &config_revision(&fixture),
+            json!({"relay.tcp_viewer.allow": ["198.51.100.219"]}),
+        )
+        .await;
+        assert_eq!(reply.status, 500);
+        assert_eq!(error_code(&reply), "config_write_failed");
+        assert_config_unchanged(&fixture, &original, &settings);
+        assert_eq!(fixture.files.replaces.load(Ordering::SeqCst), 1);
+        assert_eq!(
+            fixture.files.temporary_writes.load(Ordering::SeqCst),
+            usize::from(stage == "atomic_replace")
+        );
+        assert_rejection(&events, "config_write_failed", "relay.tcp_viewer.allow");
+        assert!(
+            !config_audits(&events)[0]
+                .to_string()
+                .contains("198.51.100.219")
+        );
+    }
+}
+
+/// spec: management.md:MGT-045
+/// spec: operations.md:OPS-062
+#[tokio::test]
+async fn explicit_config_retry_after_write_repair_commits_and_audits_once() {
+    let events = Arc::new(Recorder::default());
+    let clock = Arc::new(FakeClock::default());
+    let fixture = config_fixture(true, clock.clone(), events.clone());
+    fixture.files.fail_replace.store(true, Ordering::SeqCst);
+    let revision = config_revision(&fixture);
+    let running = start_config_services(fixture.service.clone(), events.clone(), clock).await;
+    let (cookie, csrf) = config_login(&running).await;
+    let reply = config_patch(
+        &running,
+        &cookie,
+        &csrf,
+        &revision,
+        json!({"timeouts.connect_secs": 17}),
+    )
+    .await;
+    assert_eq!(reply.status, 500);
+    assert_rejection(&events, "config_write_failed", "timeouts.connect_secs");
+    fixture.files.fail_replace.store(false, Ordering::SeqCst);
+    let view = plain_exchange(running.addr, &get("/api/v1/config", &[&cookie])).await;
+    assert_eq!(config_json(&view)["revision"], revision);
+    assert!(config_json(&view)["last_reload"].is_null());
+    let reply = config_patch(
+        &running,
+        &cookie,
+        &csrf,
+        &revision,
+        json!({"timeouts.connect_secs": 17}),
+    )
+    .await;
+    assert_eq!(reply.status, 200, "{:?}", config_json(&reply));
+    assert_eq!(
+        config_json(&reply)["applied"],
+        json!(["timeouts.connect_secs"])
+    );
+    assert_ne!(config_revision(&fixture), revision);
+    assert_eq!(config_json(&reply)["revision"], config_revision(&fixture));
+    assert_eq!(fixture.files.replaces.load(Ordering::SeqCst), 2);
+    let reload = fixture
+        .reload
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner);
+    assert_eq!(reload.running().timeouts.connect, Duration::from_secs(17));
+    assert!(reload.last_reload().is_some());
+    drop(reload);
+    let audits = config_audits(&events);
+    assert_eq!(audits.len(), 3, "{audits:?}");
+    assert_eq!(audits[1]["event"], "reload_applied");
+    assert_eq!(audits[1]["trigger"], "config_edit");
+    assert_eq!(audits[2]["event"], "config_edited");
+    assert_eq!(audits[2]["admin_account"], ACCOUNT);
+    assert_eq!(audits[2]["peer_ip"], "127.0.0.1");
+    assert_eq!(audits[2]["config_keys"], json!(["timeouts.connect_secs"]));
+    assert_eq!(audits[2]["revision"], config_revision(&fixture));
+}
+
+struct FailedConfigQuery;
+impl ConfigManagement for FailedConfigQuery {
+    fn get(&self) -> Result<ConfigView, ConfigGetError> {
+        Err(ConfigGetError::Internal)
+    }
+    fn patch(
+        &self,
+        _actor: ConfigActor,
+        _request: ConfigPatch,
+    ) -> Result<ConfigEditResult, ConfigEditError> {
+        Err(ConfigEditError::Internal)
+    }
+}
+
+/// spec: management.md:MGT-042 partial
+#[tokio::test]
+async fn config_query_internal_error_is_not_an_empty_view() {
+    let events = Arc::new(Recorder::default());
+    let running = start_config_services(
+        Arc::new(FailedConfigQuery),
+        events.clone(),
+        Arc::new(FakeClock::default()),
+    )
+    .await;
+    let (cookie, _) = config_login(&running).await;
+    let reply = plain_exchange(running.addr, &get("/api/v1/config", &[&cookie])).await;
+    assert_eq!(reply.status, 500);
+    assert_eq!(error_code(&reply), "internal");
+    assert!(config_json(&reply).get("items").is_none());
+    assert!(config_audits(&events).is_empty());
+}
+
+/// spec: management.md:MGT-040 partial
+#[tokio::test]
+async fn disconnected_config_client_does_not_cancel_commit() {
+    let events = Arc::new(Recorder::default());
+    let clock = Arc::new(FakeClock::default());
+    let fixture = config_fixture(true, clock.clone(), events.clone());
+    let gate = Arc::new(ConfigReplacementGate::default());
+    let _release_on_failure = ReleaseConfigReplacement(gate.clone());
+    *fixture
+        .files
+        .replacement_gate
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner) = Some(gate.clone());
+    let running = start_config_services(fixture.service.clone(), events.clone(), clock).await;
+    let (cookie, csrf) = config_login(&running).await;
+    let body =
+        json!({"revision": config_revision(&fixture), "changes": {"timeouts.connect_secs": 17}})
+            .to_string();
+    let mut stream = TcpStream::connect(running.addr)
+        .await
+        .unwrap_or_else(|error| panic!("connect: {error}"));
+    stream
+        .write_all(&patch_bytes(
+            &body,
+            &[&cookie, &csrf],
+            Some("Content-Type: application/json"),
+        ))
+        .await
+        .unwrap_or_else(|error| panic!("write PATCH: {error}"));
+    timeout(LIMIT, async {
+        while !gate.entered.load(Ordering::SeqCst) {
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+    })
+    .await
+    .unwrap_or_else(|error| panic!("replacement starts: {error}"));
+    drop(stream);
+    *gate.released.lock().unwrap_or_else(PoisonError::into_inner) = true;
+    gate.ready.notify_all();
+    wait_for(&events, |event| matches!(event, Event::ConfigEdited { .. })).await;
+    assert_eq!(
+        fixture
+            .reload
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .running()
+            .timeouts
+            .connect,
+        Duration::from_secs(17)
+    );
+    assert_eq!(fixture.files.replaces.load(Ordering::SeqCst), 1);
+    let view = plain_exchange(running.addr, &get("/api/v1/config", &[&cookie])).await;
+    assert_eq!(view.status, 200);
+    assert_eq!(config_json(&view)["revision"], config_revision(&fixture));
+    assert_eq!(config_audits(&events).len(), 2);
+}
+
+/// spec: management.md:MGT-025 partial
+#[tokio::test]
+async fn config_user_actions_extend_idle_but_failures_do_not() {
+    for action in [
+        "get",
+        "patch",
+        "noop",
+        "poll",
+        "invalid",
+        "internal",
+        "write",
+        "csrf",
+        "disabled",
+        "conflict",
+        "file",
+        "candidate",
+        "restart",
+    ] {
+        let events = Arc::new(Recorder::default());
+        let clock = Arc::new(FakeClock::default());
+        let fixture = config_fixture(action != "disabled", clock.clone(), events.clone());
+        let revision = config_revision(&fixture);
+        let config: Arc<dyn ConfigManagement> = if action == "internal" {
+            Arc::new(FailedConfigQuery)
+        } else {
+            fixture.service.clone()
+        };
+        let running = start_config_services(config, events, clock.clone()).await;
+        let (cookie, csrf) = config_login(&running).await;
+        clock.set(Duration::from_secs(400));
+        let reply = match action {
+            "get" | "internal" => {
+                plain_exchange(running.addr, &get("/api/v1/config", &[&cookie])).await
+            }
+            "poll" => {
+                plain_exchange(
+                    running.addr,
+                    &get("/api/v1/config", &[&cookie, "X-Relay-Poll: 1"]),
+                )
+                .await
+            }
+            "invalid" => {
+                config_patch(
+                    &running,
+                    &cookie,
+                    &csrf,
+                    &config_revision(&fixture),
+                    json!({}),
+                )
+                .await
+            }
+            "noop" => {
+                config_patch(
+                    &running,
+                    &cookie,
+                    &csrf,
+                    &revision,
+                    json!({"relay.tcp_viewer.allow": ["127.0.0.1"]}),
+                )
+                .await
+            }
+            "conflict" => {
+                let mut bytes = fixture.files.bytes();
+                bytes.extend_from_slice(b"\n# external edit\n");
+                fixture.files.set(bytes);
+                config_patch(
+                    &running,
+                    &cookie,
+                    &csrf,
+                    &revision,
+                    json!({"timeouts.connect_secs": 17}),
+                )
+                .await
+            }
+            "file" => {
+                fixture.files.unreadable.store(true, Ordering::SeqCst);
+                config_patch(
+                    &running,
+                    &cookie,
+                    &csrf,
+                    &revision,
+                    json!({"timeouts.connect_secs": 17}),
+                )
+                .await
+            }
+            "candidate" => {
+                config_patch(
+                    &running,
+                    &cookie,
+                    &csrf,
+                    &revision,
+                    json!({"timeouts.connect_secs": 0}),
+                )
+                .await
+            }
+            "restart" => {
+                fixture.files.set(
+                    CONFIG_TEXT
+                        .replace("127.0.0.1:8443", "127.0.0.1:8444")
+                        .into_bytes(),
+                );
+                config_patch(
+                    &running,
+                    &cookie,
+                    &csrf,
+                    &config_revision(&fixture),
+                    json!({"timeouts.connect_secs": 17}),
+                )
+                .await
+            }
+            "csrf" => {
+                config_patch(
+                    &running,
+                    &cookie,
+                    "X-CSRF-Token: wrong",
+                    &config_revision(&fixture),
+                    json!({"timeouts.connect_secs": 17}),
+                )
+                .await
+            }
+            _ => {
+                fixture
+                    .files
+                    .fail_replace
+                    .store(action == "write", Ordering::SeqCst);
+                config_patch(
+                    &running,
+                    &cookie,
+                    &csrf,
+                    &config_revision(&fixture),
+                    json!({"timeouts.connect_secs": 17}),
+                )
+                .await
+            }
+        };
+        assert_eq!(
+            reply.status,
+            match action {
+                "invalid" | "candidate" => 400,
+                "csrf" | "disabled" => 403,
+                "conflict" | "file" | "restart" => 409,
+                "internal" | "write" => 500,
+                _ => 200,
+            },
+            "{action}"
+        );
+        clock.set(Duration::from_secs(650));
+        let session = plain_exchange(
+            running.addr,
+            &get("/api/v1/session", &[&cookie, "X-Relay-Poll: 1"]),
+        )
+        .await;
+        assert_eq!(
+            session.status,
+            if matches!(action, "get" | "patch" | "noop") {
+                200
+            } else {
+                401
+            },
+            "{action}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn config_methods_media_type_body_limit_and_unknown_fields_follow_common_order() {
+    let events = Arc::new(Recorder::default());
+    let clock = Arc::new(FakeClock::default());
+    let fixture = config_fixture(true, clock.clone(), events.clone());
+    let running = start_config_services(fixture.service.clone(), events.clone(), clock).await;
+    let (cookie, csrf) = config_login(&running).await;
+    for method in ["HEAD", "PUT", "POST", "DELETE"] {
+        let reply = plain_exchange(
+            running.addr,
+            &request(method, "/api/v1/config", &[&cookie, &csrf]),
+        )
+        .await;
+        assert_eq!(reply.status, 405, "{method}");
+        assert_eq!(reply.header("allow"), Some("GET, PATCH"));
+    }
+    for path in ["/api/v1/config", "/api/v1/no-such-path"] {
+        let reply = plain_exchange(running.addr, &request("PATCH", path, &[&cookie])).await;
+        assert_eq!(reply.status, 403);
+        assert_eq!(error_code(&reply), "csrf_invalid");
+    }
+    let revision = config_revision(&fixture);
+    let basic = json!({"revision": revision, "changes": {"timeouts.connect_secs": 17}});
+    for content_type in [None, Some("Content-Type: text/plain")] {
+        let reply = plain_exchange(
+            running.addr,
+            &patch_bytes(&basic.to_string(), &[&cookie, &csrf], content_type),
+        )
+        .await;
+        assert_eq!(reply.status, 415);
+    }
+    let mut wrong_get_body = request(
+        "GET",
+        "/api/v1/config",
+        &[&cookie, "Content-Type: text/plain", "Content-Length: 1"],
+    );
+    wrong_get_body.push(b'x');
+    let reply = plain_exchange(running.addr, &wrong_get_body).await;
+    assert_eq!(reply.status, 415);
+    for body in [
+        "{".to_owned(),
+        "[]".to_owned(),
+        json!({"changes": {"timeouts.connect_secs": 17}}).to_string(),
+        json!({"revision": "bad", "changes": {"timeouts.connect_secs": 17}}).to_string(),
+        json!({"revision": revision, "changes": []}).to_string(),
+    ] {
+        let reply = plain_exchange(
+            running.addr,
+            &patch_bytes(
+                &body,
+                &[&cookie, &csrf],
+                Some("Content-Type: application/json"),
+            ),
+        )
+        .await;
+        assert_eq!(reply.status, 400);
+        assert_eq!(error_code(&reply), "invalid_request");
+    }
+    let padded = |size: usize| {
+        let bare =
+            json!({"revision": revision, "changes": {"timeouts.connect_secs": 17}, "future": ""})
+                .to_string();
+        let body = json!({"revision": revision, "changes": {"timeouts.connect_secs": 17}, "future": "x".repeat(size - bare.len())}).to_string();
+        assert_eq!(body.len(), size);
+        body
+    };
+    let oversized = padded(65_537);
+    let reply = plain_exchange(
+        running.addr,
+        &patch_bytes(
+            &oversized,
+            &[&cookie, &csrf],
+            Some("Content-Type: application/json"),
+        ),
+    )
+    .await;
+    assert_eq!(reply.status, 400);
+    assert_eq!(error_code(&reply), "invalid_request");
+    let mut chunked = request(
+        "PATCH",
+        "/api/v1/config",
+        &[
+            &cookie,
+            &csrf,
+            "Content-Type: application/json",
+            "Transfer-Encoding: chunked",
+        ],
+    );
+    chunked
+        .extend_from_slice(format!("{:x}\r\n{oversized}\r\n0\r\n\r\n", oversized.len()).as_bytes());
+    let reply = plain_exchange(running.addr, &chunked).await;
+    assert_eq!(reply.status, 400);
+    assert_eq!(error_code(&reply), "invalid_request");
+    assert!(config_audits(&events).is_empty());
+    assert_eq!(fixture.files.replaces.load(Ordering::SeqCst), 0);
+    let fitting = padded(65_536);
+    let reply = plain_exchange(
+        running.addr,
+        &patch_bytes(
+            &fitting,
+            &[&cookie, &csrf],
+            Some("Content-Type: application/json"),
+        ),
+    )
+    .await;
+    assert_eq!(reply.status, 200, "{:?}", config_json(&reply));
+    assert_eq!(fixture.files.replaces.load(Ordering::SeqCst), 1);
+}
+
+fn management_runtime(
+    admin_connections: u32,
+    upgrade: Duration,
+    close: Duration,
+) -> Arc<ReloadCell<TlsAcceptor>> {
+    let mut candidate = config_file::parse_candidate(CONFIG_TEXT.as_bytes(), &std::env::temp_dir())
+        .unwrap_or_else(|error| panic!("runtime fixture: {error:?}"));
+    candidate.settings.limits.admin_connections = admin_connections;
+    candidate.settings.limits.relay_connections = 10;
+    candidate.settings.limits.waiting = 10;
+    candidate.settings.limits.buffer_bytes = 16_384;
+    candidate.settings.timeouts.tls_upgrade = upgrade;
+    candidate.settings.timeouts.handshake = LIMIT;
+    candidate.settings.timeouts.wait = LIMIT;
+    candidate.settings.timeouts.connect = LIMIT;
+    candidate.settings.timeouts.close = close;
+    candidate.settings.mode1.enabled = false;
+    Arc::new(ReloadCell::new(ReloadSnapshot::new(candidate, None, None)))
 }

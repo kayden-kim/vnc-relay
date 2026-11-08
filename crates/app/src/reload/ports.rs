@@ -6,6 +6,11 @@ use std::io;
 use std::path::Path;
 use std::time::Duration;
 
+/// Synchronous read access to one published runtime settings generation.
+/// Readers must not await or perform I/O in the callback.
+pub trait RuntimeSettingsSource: Send + Sync {
+    fn with_current(&self, read: &mut dyn FnMut(&crate::settings::Settings));
+}
 /// Reads whole files, used for certificate and key bytes (file-watch-v1 §4 step 6).
 pub trait ReloadFileStore: Send + Sync {
     /// Reads the whole file at `path`.

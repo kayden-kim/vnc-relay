@@ -266,8 +266,9 @@ impl fmt::Display for TargetError {
 impl std::error::Error for TargetError {}
 
 /// Resolves once and connects only to an already policy-checked socket address.
-/// Dropping a connect future closes its in-progress socket. A successful stream
-/// already has K configured; KeepaliveFailed aborts the request as connect_error.
+/// The adapter captures current K at each socket dial start; it must not retain
+/// startup K or change an established stream's options. Dropping a connect
+/// future closes its in-progress socket. KeepaliveFailed aborts the request.
 pub trait TargetConnector: Send + Sync {
     type Stream: RelayStream + 'static;
 

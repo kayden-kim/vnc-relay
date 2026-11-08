@@ -6,14 +6,14 @@
 | --- | --- |
 | 구조 시점 | Current |
 | 문서 상태 | Draft |
-| 구현 대조 | Verified — [대조 기록](#대조-기록) |
+| 구현 대조 | 작업 6.2 변경은 Current / 실행 미확인. 이전 범위의 결과는 [대조 기록](#대조-기록)을 따른다. |
 | 코드 위치 | `crates/domain/src/budget.rs`, `crates/app/src/events.rs`(`RejectReason::RelayConnectionLimit`, `AbortReason`, `ConnectionErrorKind`), `crates/adapters/src/net.rs`(`AcceptPolicy`, `accept_connections`, `set_keepalive`, `TcpRelayStream`), `crates/app/src/relay.rs`(`RelayService::handle_connection`), `crates/app/src/relay/handshake.rs`(`exchange`, `read_request`), `crates/adapters/src/websocket.rs`(`WsPolicy`, `connection`), `crates/adapters/src/request_deadline.rs`(관리 U), `src/serve.rs`(L 예산 만들기) |
 | 코드 지도 | [코드 지도 2절](code-map.md#2-코드-위치와-구성요소) |
 | 관련 스펙 | [운영 스펙 2절](../specs/operations.md#2-상태와-검증-매개변수)의 L·Lm·Lw·H·K·U, [4.1절](../specs/operations.md#41-판정-가능한-규칙)의 OPS-R03·OPS-R20, OPS-004(일부), OPS-006(일부), OPS-033(일부), [중계 스펙](../specs/relay.md#7-수용-테스트) RLY-005(일부) |
 | 관련 계약 | [설정 계약 1.2절](../contracts/config-v3.md#12-키-표)(`[limits]`·`[timeouts]`·`[keepalive]`), [운영 정보 계약 1.6절](../contracts/ops-info-v1.md#16-원인-코드)(`relay_connection_limit`, `handshake_timeout`, `peer_eof`, `connection_error`)·[1.7절](../contracts/ops-info-v1.md#17-error_kind-값)(`io_error`) |
 | 관련 ADR | [ADR-0004 tokio·rustls](../decisions/ADR-0004-tokio-rustls.md) |
 
-작업 6.2의 확장 설계는 아래 [§10 Target](#10-target--동적-상한과-시간-제한)이다. 기존 Current/Verified는 고정 상한의 현재 구현만 뜻한다.
+작업 6.2의 현재 동적 상한·소비 경계는 [§10](#10-target--동적-상한과-시간-제한)에 정리한다. 이전 실행 기록은 해당 당시 범위만 뜻한다.
 
 ## 1. 책임과 경계
 
@@ -26,7 +26,7 @@
   - K: 수락한 중계 소켓마다 TCP keepalive의 유휴 시간·탐색 간격·탐색 횟수를 설정한다. Linux 소켓 I/O의 `ETIMEDOUT`(`io::ErrorKind::TimedOut`)과 앞선 ICMP 도달 불능에 따른 포기 오류 `EHOSTUNREACH`(`io::ErrorKind::HostUnreachable`)·`ENETUNREACH`(`io::ErrorKind::NetworkUnreachable`)는 keepalive 또는 재전송 포기로 판정한 응답 없는 상대다. `net::classify_socket_error`는 이를 `RelayStreamError::DeadConnection`으로 바꾼다. ICMP 사례는 Linux 커널 소스 분석에 근거하며 실행으로 직접 관찰한 것은 아니다. 이는 이 문서의 구현 판단이며 사용자 결정은 아니다. `TcpRelayStream`은 수락·Mode I 대상 소켓에, `WsRelayStream`은 WS·WSS의 하부 전송 I/O에 같은 판정을 쓴다. app의 H·C·W 타이머에는 적용하지 않는다. Windows 오류 코드는 관찰하지 않았으므로 추정해 추가하지 않는다.
 - 맡지 않는 책임:
   - Lm의 판정과 거절 기록. 수락 판정은 `admission.rs`의 `AdmittingListener`가 맡고, 상태·관리 리스너가 쓴다([상태 리스너와 준비 상태 모듈 설계](status-listener.md), [관리 리스너 모듈 설계](management-listener.md)). 관리 리스너는 작업 4.2에서 같은 Lm 예산을 쓴다.
-  - Lw의 사용처. 작업 2.9에서 대기 등록에 연결했다. `crates/app/src/relay/matching.rs`가 `runtime.waiting_budget.try_acquire()`로 같은 `ConnectionBudget`의 자리를 잡는다.
+  - Lw의 사용처. `crates/app/src/relay/matching.rs`가 실행 설정 callback 안에서 Lw·W를 읽고 `runtime.waiting_budget.try_acquire(Lw)`로 자리를 잡는다.
   - Mode I 대상 소켓의 L 집계. 작업 2.8이 대상 연결 전에 같은 L 예산에서 자리를 잡는다(OPS-023).
   - 끊긴 연결의 판정과 회수(`dead_connection`). keepalive가 끊긴 연결을 운영체제 오류로 알리면 그 연결을 다루는 단계가 처리한다. 대기·활성 연결의 처리와 RLY-025~027은 작업 2.11에서 구현·검증했다. OS별 증거 범위는 [작업 5.9 판정표](../how-to/set-up-and-verify.md#41-작업-59-판정표)를 따른다.
   - 바이트를 보낸 뒤 닫은 연결의 판정과 초기 교환 읽기·해석. `RelayService::handle_connection`(app)이 맡는다. 이 문서는 그 단계의 H 시간과 자리 반환 규칙만 정한다.
@@ -59,25 +59,25 @@ flowchart LR
 
 | 요소(파일·심볼) | 역할 | 만들어지는 시점과 소유자 | 의존 대상 |
 | --- | --- | --- | --- |
-| `crates/domain/src/budget.rs` `ConnectionBudget` | 상한(`limit`)과 사용 중인 자리 수. `try_acquire`가 원자적 비교·교환으로 상한 안에서만 자리를 잡는다. | `serve`가 시작 때 하나 만들고 `Arc`로 진입점에 나눈다 | 없음(std 원자 변수) |
+| `crates/domain/src/budget.rs` `ConnectionBudget` | 사용 중인 자리 수만 보유한다. `try_acquire(limit)`는 caller가 실행 설정에서 읽은 상한으로 원자적 비교·교환을 한다. | `serve`가 시작 때 만들고 `Arc`로 사용처에 나눈다 | 없음(std 원자 변수) |
 | `crates/domain/src/budget.rs` `BudgetPermit` | 잡은 자리 하나. 버리면(`Drop`) 자리를 돌려준다. 연결을 다루는 작업이 연결과 함께 소유한다. | `try_acquire`가 성공할 때 | `ConnectionBudget` |
 | `crates/app/src/events.rs` `RejectReason::RelayConnectionLimit { limit }` | `relay_connection_limit`과 `limit` 값. 상한 거절만 `limit`을 가진다. | 거절할 때 | 없음 |
 | `crates/app/src/events.rs` `AbortReason`, `ConnectionErrorKind` | `handshake_timeout`·`peer_eof`·`connection_error`·`server_shutdown`과 `level`. `connection_error`만 `error_kind`를 가진다. | 연결이 끝날 때 | 없음 |
-| `crates/adapters/src/net.rs` `AcceptPolicy` | 진입점이 수락한 연결에 적용할 값: 허용 목록, L 예산, H, K | `serve`가 진입점마다 만든다 | domain, app |
+| `crates/adapters/src/net.rs` `AcceptPolicy` | 진입점 허용 판정의 `AllowSource`와 공유 L 예산 | `serve`가 진입점마다 만든다 | domain, app |
 | `crates/adapters/src/net.rs` `set_keepalive` | socket2 `SockRef`로 `SO_KEEPALIVE`와 유휴 시간·탐색 간격·탐색 횟수를 설정한다. 이어서 `TCP_NODELAY`를 켠다. 중계는 읽은 바이트를 바로 쓰므로, Nagle이 켜져 있으면 작은 쓰기 뒤의 다음 쓰기가 상대의 지연 ACK를 기다릴 수 있다. 작업 5.4 측정 스모크(2026-11-06, WSL2, 20초, 판정 불가 길이)에서 WS·WSS의 늘어난 지연 p99가 약 34 ms였고, `TCP_NODELAY` 뒤 0.69 ms·0.34 ms였다. `TCP_NODELAY` 선택은 **이 문서의 판단, 사용자 결정 없음**이다. | 자리를 잡은 연결마다, Mode I 대상 연결마다(`TcpRelayStream::with_keepalive`) | socket2, tokio |
 | `crates/app/src/relay.rs` `RelayService::handle_connection`, `crates/app/src/relay/handshake.rs` `exchange`, `read_request` | 허용한 TCP 연결의 초기 교환을 H 안에 읽는다. H 만료, 상대 종료, 서버 종료, 연결 재설정 중 먼저 오는 것으로 끝낸다. 실패하면 `RelayCloseAction`을 정해 소켓을 닫고, 자리를 버린 뒤 사건을 기록한다. | 허용한 TCP 연결마다, `TcpEntryPoint::run`의 serve 작업이 부른다 | tokio, app, domain |
 | `crates/adapters/src/net.rs` `accept_connections` | TCP·WS·WSS가 함께 쓰는 수락 반복. IP 검사 뒤 L 자리를 잡는다. 자리가 없으면 `connection_rejected`(`relay_connection_limit`)를 기록하고 닫는다. 있으면 K를 설정하고 `BudgetPermit`을 연결 작업에 넘긴다. | 진입점 `run`마다 하나 | tokio, socket2, app, domain |
-| `crates/adapters/src/websocket.rs` `WsPolicy` | WS·WSS 진입점에 적용할 값: `accept`(`AcceptPolicy`. H는 101 뒤부터 잰다), `upgrade`(U, `[timeouts] tls_upgrade_secs`), `origins`. | `serve`가 WS·WSS 진입점마다 만든다 | adapters |
+| `crates/adapters/src/websocket.rs` `WsPolicy` | `accept: AcceptPolicy`. U·B는 수락 메타데이터, Origin·M·Kw는 업그레이드 판정의 실행 설정에서 얻는다. | `serve`가 WS·WSS 진입점마다 만든다 | adapters |
 | `crates/adapters/src/websocket.rs` `connection` | `connection`은 U 안에서 WSS의 TLS 핸드셰이크와 업그레이드 요청을 끝낸다. 101 뒤 `WsRelayStream`을 만들어 `RelayService::handle_connection`에 넘기고, H는 `handle_connection`이 `exchange_at`부터 잰다. 자리는 연결 작업이 받아 `handle_connection`에 넘기고, 연결을 끝낸 뒤 돌려준다. | 허용한 WS·WSS 연결마다 | tokio, tokio-rustls, tokio-tungstenite, app, domain |
 
 ## 3. 데이터 모델
 
 | 이름 | 필드·형태 | 저장 위치 | 제약과 항상 지켜야 할 조건 |
 | --- | --- | --- | --- |
-| `ConnectionBudget` | `limit: u32`, `used: AtomicU32` | `Arc`로 공유하는 메모리 | `used ≤ limit`. 자리를 잡을 때만 늘고 `BudgetPermit`이 버려질 때만 준다. |
+| `ConnectionBudget` | `used: AtomicU32` | `Arc`로 공유하는 메모리 | 자리 획득은 `used < 이번 판정의 limit`일 때만 성공한다. 하향 뒤 `used > limit`도 허용하며 기존 permit은 회수하지 않는다. |
 | `BudgetPermit` | `budget: Arc<ConnectionBudget>` | 연결 작업 | 연결 하나에 하나. 소켓을 닫은 뒤 버린다. |
-| `AcceptPolicy` | `allow: AllowList`, `relay_budget: Arc<ConnectionBudget>`, `handshake: Duration`(H), `keepalive: KeepaliveSettings`(K) | `TcpEntryPoint`, `WsPolicy.accept` | 모든 진입점의 `relay_budget`은 같은 예산이다. 값은 시작할 때 정하고 바꾸지 않는다(설정 계약에서 모두 재시작 필요). |
-| `WsPolicy` | `accept: AcceptPolicy`, `upgrade: Duration`(U), `origins`(허용 Origin 목록) | `WsEntryPoint` | `accept.handshake`(H)는 101 뒤부터 잰다(사용자 결정 2026-10-22(Q22)). `upgrade`(U)는 수락부터 잰다. 값은 시작할 때 정한다. |
+| `AcceptPolicy` | `allow: AllowSource`, `relay_budget: Arc<ConnectionBudget>` | `TcpEntryPoint`, `WsPolicy.accept` | 모든 진입점의 `relay_budget`은 같다. `AllowSource`가 실행 설정 callback 안에서 허용·L/CAS·수락 B/H/U/K를 함께 읽는다. |
+| `WsPolicy` | `accept: AcceptPolicy` | `WsEntryPoint` | U·B는 수락 값을 유지한다. `check_upgrade`가 IP·Origin·M·Kw를 읽고, 101 flush 뒤 H만 새로 읽는다. |
 
 `connection_rejected`와 `connection_aborted`의 줄 필드는 [TCP 진입점 모듈 설계 3절](tcp-entry-point.md#3-데이터-모델)과 같다. `limit`은 `peer_ip` 다음, `error_kind`는 `elapsed_ms` 다음에 쓴다.
 
@@ -87,7 +87,7 @@ flowchart LR
 
 | 순서 | 코드 위치(파일·심볼) | 조건·계산 | 바뀌는 상태 | 결과를 쓰는 곳 |
 | --- | --- | --- | --- | --- |
-| 1 | `src/serve.rs` `listen_until_shutdown` | `ConnectionBudget::new(limits.relay_connections)`를 하나 만들고 TCP·WS·WSS 진입점마다 `AcceptPolicy` 또는 `WsPolicy`에 넣는다. | L 예산 | 2단계 |
+| 1 | `src/serve.rs` `listen_until_shutdown` | `ConnectionBudget::new()`를 만들고 TCP·WS·WSS 진입점마다 같은 L 예산과 실행 설정 소스를 전달한다. | L 사용량 | 2단계 |
 | 2 | `accept_connections`, `AllowList::permits` | 출발지 IP를 먼저 판정한다. 목록에 없으면 `ip_not_allowed`로 거절하고 자리를 잡지 않는다. | 없음 | 3단계 |
 | 3 | `ConnectionBudget::try_acquire` | 두 연결이 자리를 잡았으므로 세 번째는 `None`이다. `connection_rejected`(`relay_connection_limit`, `limit` = 2)를 기록하고 소켓을 닫는다. | 없음 | 운영 로그 |
 | 4 | `set_keepalive`, `TcpRelayStream`, `RelayService::handle_connection` | 자리를 잡은 연결은 `connection_accepted`를 먼저 기록한 뒤 K를 설정한다(사용자 결정 2026-11-02(Q85), 커밋 `5a38bfc`). 성공하면 소켓을 `TcpRelayStream`으로 감싸 `handle_connection`에 넘긴다. 실패하면 6절의 중단 기록과 자원 반환을 따른다. | 성공: 초기 교환 중인 연결. 실패: 반환 | 성공: 5단계 |
@@ -160,12 +160,14 @@ TCP 경로는 2~4절과 같다. WS·WSS 행은 [WebSocket 진입점 모듈 설�
 
 ## 10. Target — 동적 상한과 시간 제한
 
-구조 시점 Target / 상태 Active / 구현 전·미대조. 근거는 [설정 §1.8 적용 표](../contracts/config-v3.md#18-재로드-구분), [운영 §3.3](../specs/operations.md#33-파일-변경-자동-감지와-부분-재로드) OPS-R30~R33·OPS-050~057이다. 전체 소비 경계는 [파일 감지 §10.1](file-watch.md#101-발행-단위와-reader)을 따른다.
+구조 시점 Current / 상태 Active / 작업 6.2 실행 미확인. 기존 링크를 유지하려고 절 제목의 Target 표기를 남긴다. 근거는 [설정 §1.8 적용 표](../contracts/config-v3.md#18-재로드-구분), [운영 §3.3](../specs/operations.md#33-파일-변경-자동-감지와-부분-재로드) OPS-R30~R33·OPS-050~057이다. 전체 소비 경계는 [파일 감지 §10.1](file-watch.md#101-발행-단위와-reader)을 따른다.
 
-현재 `ConnectionBudget`는 고정 `limit: u32`와 `used: AtomicU32`를 보유한다(`crates/domain/src/budget.rs:12-28`). `try_acquire`는 CAS로 사용량을 증가시키며 permit drop은 감소만 한다(`budget.rs:38-60`). 상한을 3개의 AtomicU32 setter로 따로 갱신하면 27개 snapshot의 단일 발행과 다른 세대가 보일 수 있다. Target에서는 **상한의 원본을 snapshot 하나로 모으고 budget에는 사용량만 둔다**. domain은 app snapshot을 알지 않는다([레이어 규칙](code-map.md#레이어와-의존-방향), [설정 §1.8 규칙 5](../contracts/config-v3.md#18-재로드-구분)).
+`ConnectionBudget`는 `used: AtomicU32`만 보유한다. `try_acquire(limit)`가 CAS로 사용량을 늘리고 permit drop이 줄인다. 상한 원본은 재로드 snapshot 하나에만 있다. domain은 app snapshot을 알지 않는다([레이어 규칙](code-map.md#레이어와-의존-방향), [설정 §1.8 규칙 5](../contracts/config-v3.md#18-재로드-구분)).
 
-- `ConnectionBudget::new() -> Arc<Self>`와 `try_acquire(self: &Arc<Self>, limit: u32) -> Option<BudgetPermit>`로 모든 호출자를 이관한다. `limit()`은 제거하고 summary·거절 사건은 해당 판단에서 읽은 snapshot 상한을 사용한다. `current`·permit drop의 의미는 유지한다. 기존 fixed constructor의 alias/shim은 남기지 않는다([운영 OPS-R31](../specs/operations.md#33-파일-변경-자동-감지와-부분-재로드)).
+- `ConnectionBudget::new() -> Arc<Self>`와 `try_acquire(self: &Arc<Self>, limit: u32) -> Option<BudgetPermit>`를 사용한다. `limit()`은 없다. summary는 응답 때 현재 L·Lm을 함께 읽고, 거절 사건은 해당 판단에서 읽은 상한을 사용한다. `current`·permit drop의 의미는 유지한다([운영 OPS-R31](../specs/operations.md#33-파일-변경-자동-감지와-부분-재로드)).
 - 수락/대상 자리 판정은 RuntimeSettingsSource의 짧은 snapshot read callback 안에서 상한을 얻고 CAS까지 끝낸다. snapshot write는 이 read가 끝난 뒤 한 번 수행한다. 따라서 재로드와 수락이 경합하면 판정은 이전/새 세대 중 하나에 선형화된다. 사용량이 새 상한 이상이면 새 CAS는 실패하고, 기존 permit은 그대로다. 상향은 발행 직후 다음 판정부터 적용된다. L과 Lm은 독립된 사용량이며 management/status만 같은 Lm을 공유한다([설정 §1.8 L/Lm 행](../contracts/config-v3.md#18-재로드-구분), OPS-051~053).
-- 대기 등록은 snapshot read→relay registry mutex 순으로 잡고 Lw·W를 한 번 읽는다. domain WaitingTable은 생성자에 Lw/W를 고정하지 않고 `arrive`의 등록 정책 인자로 받는다. app은 동일 Lw로 table 판정과 Lw permit 획득을 처리한다. 기존 match-first·expired 제거·한 대기당 permit 하나 규칙은 유지한다. 상한 하향으로 map을 truncate하거나 기존 기한을 다시 쓰지 않는다. 현재 table의 두 고정 필드는 `crates/domain/src/matching.rs:154-170`, deadline은 `WaitingEntry`에 있다(`matching.rs:18-26`). 즉시 매칭은 새 대기 자리를 요구하지 않는다([운영 OPS-R32](../specs/operations.md#33-파일-변경-자동-감지와-부분-재로드), OPS-054~056).
+- 대기 등록은 snapshot read→relay registry mutex 순으로 잡고 Lw·W를 한 번 읽는다. domain `WaitingTable::new()`는 정책을 고정하지 않는다. `arrive`가 `RegistrationPolicy { waiting_limit, wait_timeout }`를 받는다. app은 동일 Lw로 table 판정과 permit 획득을 처리한다. 기존 match-first·expired 제거·한 대기당 permit 하나 규칙은 유지한다. 상한 하향으로 map을 truncate하거나 기존 `WaitingEntry.deadline`을 다시 쓰지 않는다. 즉시 매칭은 새 대기 자리를 요구하지 않는다([운영 OPS-R32](../specs/operations.md#33-파일-변경-자동-감지와-부분-재로드), OPS-054~056).
 - snapshot read callback 안에서 relay registry를 사용할 수 있지만 역순(registry→snapshot)은 금지한다. session poll은 필요한 E를 registry 잠금 전에 읽거나 registry 잠금 밖 종료 상태 소유자가 읽는다. 파일 트랜잭션 mutex는 budget/registry가 획득하지 않는다. 이 순서는 [설정 §1.8 전체 교체·기존 연결 유지](../contracts/config-v3.md#18-재로드-구분)를 교착 없이 구현하기 위한 내부 선택이다.
 - H/U/W/C/E/G는 각 시작 때 deadline으로 바꾼다. B는 수락 문맥, M/WS K는 업그레이드 문맥, TCP K는 해당 소켓 옵션으로 고정한다. 유효 설정 교체가 이미 저장한 deadline/옵션/버퍼를 수정하지 않는다. E는 세션 생성 시점이 아니라 **종료 교환 시작** 때 읽는다. 관리 세션 응답의 E+5는 별도 현재 snapshot 읽기다([설정 §1.8](../contracts/config-v3.md#18-재로드-구분), OPS-050·057).
+
+관련 단위 시험은 `budget::tests::lower_limit_does_not_revoke_permits_and_recovers_after_release`, `matching::tests::registration_policy_changes_preserve_existing_deadlines`, `relay::tests::reload_keeps_waiting_deadlines_and_reads_new_registration_policy`, `relay::tests::reload_keeps_started_c_and_policy_but_changes_the_next_target_check`, `relay::handshake::tests::exchange_keeps_accepted_b_and_started_h_after_reload`, `relay::session::tests::reload_reads_e_at_first_close_and_keeps_started_close_fixed`, `relay::session::tests::mode_two_directions_keep_distinct_accepted_buffer_limits`, `management::query::tests::summary_reports_reloaded_limits_even_below_current_usage`다. 시나리오 marker는 부분 관측 범위를 표시하며 실제 통과 결과는 통합 검증 기록을 따른다.
