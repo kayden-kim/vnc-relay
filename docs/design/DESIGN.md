@@ -107,7 +107,7 @@ typography:
     fontWeight: 400
     lineHeight: normal
     letterSpacing: -0.03em
-  # 채택 대기: 설정 목록 입력용 고정폭 단계.
+  # 사용자 결정 2026-11-08(Q174): 설정 목록 입력용 고정폭 단계.
   input-data:
     fontFamily: "ui-monospace, 'SF Mono', 'Cascadia Mono', Consolas, 'Liberation Mono', monospace"
     fontSize: 16px
@@ -307,17 +307,17 @@ components:
 
 **이 문서는 채택된 기준(Accepted)이다.** 사용자가 2026-10-20에 이 문서와 [dashboard.html](mockups/dashboard.html) 시안을 채택했다. 대시보드 구현은 이 문서의 토큰과 컴포넌트 기준을 따라야 한다. 남은 미결정 사항은 [미결정 사항](#미결정-사항)에서 관리한다.
 
-2026-11-08 추가 범위(상단 막대의 설정 항목, SCR-004·SCR-005, 아래 "설정 화면 확장")는 **채택 대기**다. 기존 토큰 값과 기존 화면의 채택은 유지한다. 사용자 지시 2026-11-08과 사용자 결정 2026-11-08(Q167~Q173)은 기능 범위의 근거이며 새 시각 구성의 채택을 뜻하지 않는다. 새 `typography.input-data` 단계도 채택 대기다.
+2026-11-08 추가 범위(상단 막대의 설정 항목, SCR-004·SCR-005, 아래 "설정 화면 확장")와 새 `typography.input-data` 단계는 사용자 결정 2026-11-08(Q174)으로 채택했다. 기존 토큰 값과 기존 화면의 채택은 유지한다. 구현·테스트는 미실행(구현 전)이다.
 
 | 항목 | 값 |
 | --- | --- |
 | 상태 | Accepted |
-| 적용 대상 | 운영 대시보드(SCR-001 운영 현황, SCR-002 세션 상세, SCR-003 관리자 로그인). SCR-004 설정 보기·SCR-005 동적 설정 편집과 내비게이션 확장은 채택 대기다. 라이트 테마만 둔다 |
-| 채택 근거 | 사용자 채택(2026-10-20). 라이트 테마만 두는 결정도 같은 날의 사용자 결정이다 |
+| 적용 대상 | 운영 대시보드(SCR-001 운영 현황, SCR-002 세션 상세, SCR-003 관리자 로그인, SCR-004 설정 보기, SCR-005 동적 설정 편집). SCR-004·005와 내비게이션 확장은 사용자 결정 2026-11-08(Q174)으로 채택했다. 라이트 테마만 둔다 |
+| 채택 근거 | 사용자 채택(2026-10-20). 라이트 테마만 두는 결정도 같은 날의 사용자 결정이다. 설정 화면 확장은 사용자 결정 2026-11-08(Q174)으로 채택했다 |
 | 적용 시작일 | 2026-10-20 |
 | 관련 PRD·스펙 | [PRD](../requirements/PRD.md) FR-06·AC-31, [대시보드 화면 스펙](../specs/dashboard.md) DASH-015·DASH-021·DASH-023 |
 | 관련 아키텍처 문서·ADR | 없음. 정적 HTML·JS 선택은 [PRD 확정 기준](../requirements/PRD.md#확정-기준)이 정한다 |
-| 기준 시안 | [dashboard.html](mockups/dashboard.html). 기존 범위는 2026-10-20 사용자 채택. 설정 내비게이션·SCR-004·005 추가분은 채택 대기 |
+| 기준 시안 | [dashboard.html](mockups/dashboard.html). 기존 범위는 2026-10-20 사용자 채택. 설정 내비게이션·SCR-004·005 추가분 62개 프레임(한국어·English)은 사용자 결정 2026-11-08(Q174)으로 채택 |
 | 토큰 원본 | 이 파일의 YAML 머리말 |
 | 컴포넌트 미리보기 | `web/dashboard/preview/`. `cargo xtask dashboard-serve`로 띄운다. 로컬 전용이며 실행 파일에 넣지 않는다. 명세의 컴포넌트를 상태별로 보여 준다(작업 4.8). |
 | 명세·도구 버전 | [DESIGN.md 명세](https://github.com/google-labs-code/design.md/blob/main/docs/spec.md) `version: alpha`(2026-10-16 확인). 검사 도구 버전은 [검증](#검증)에 기록한다 |
@@ -337,7 +337,7 @@ components:
 
 | 구분 | 요소 | 적용 방식과 이유 |
 | --- | --- | --- |
-| 벗어난 점 | 세로 내비게이션 대신 상단 막대. 활성 항목의 밝은 바탕과 녹색 표시 막대는 유지한다 | 사용자 요청(2026-10-20)이다. 세로 레일로 본문 폭을 줄이지 않는다. `navbar` 토큰을 쓴다. 활성 항목은 `navbar-accent` 바탕과 아래쪽 `navbar-primary` 막대로 표시한다. 아이콘 옆에 글씨 레이블을 둔다. 설정 항목 추가도 같은 표시를 재사용한다(추가분 채택 대기) |
+| 벗어난 점 | 세로 내비게이션 대신 상단 막대. 활성 항목의 밝은 바탕과 녹색 표시 막대는 유지한다 | 사용자 요청(2026-10-20)이다. 세로 레일로 본문 폭을 줄이지 않는다. `navbar` 토큰을 쓴다. 활성 항목은 `navbar-accent` 바탕과 아래쪽 `navbar-primary` 막대로 표시한다. 아이콘 옆에 글씨 레이블을 둔다. 설정 항목 추가도 같은 표시를 재사용한다(사용자 결정 2026-11-08(Q174)) |
 | 채택 | 밝은 회녹색 바탕, 큰 페이지 제목, 제목 아래 흐린 보조 줄 | 페이지 머리말은 바탕(`background`) 위에 둔다. 보조 줄에는 마지막 성공 갱신 시각을 쓴다 |
 | 채택 | 흰 카드 격자, 카드 제목 줄 아래 구분선, 오른쪽 위 조작 | `card` 컴포넌트를 쓴다. SCR-001의 세 목록 제목 옆에는 개수 배지를 둔다. 문구는 [화면 스펙 CPY-084·085](../specs/dashboard.md#932-scr-001-운영-현황)를 따른다(사용자 결정 2026-11-05(Q115)) |
 | 채택 | 고리형 게이지(DR·UR·Top AR)와 가운데 큰 숫자 | 중계 연결·관리 연결 사용량에 `gauge`를 쓴다. 현재 값과 상한을 글씨로 함께 쓴다 |
@@ -394,7 +394,7 @@ components:
 | `colors.border` | 장식 경계·구분선 | 카드 경계, 카드 제목 줄 구분선, 표 행 구분선, outline 버튼 경계. 정보를 전달하지 않는 선만 해당한다 | 3:1을 요구하지 않는다 |
 | `colors.input` | 입력 상자 경계 | 입력 상자 경계. 입력은 경계로 식별하므로 3:1 이상이어야 한다 | `colors.card`·`colors.background`에서 3:1 이상 |
 | `colors.ring` | 포커스 링 | 상단 막대 밖 모든 조작 요소의 `:focus-visible` 윤곽선 | `spacing.focus-ring-width`·`spacing.focus-ring-offset` |
-| `colors.primary` / `colors.primary-foreground` / `colors.primary-hover` | 주요 행동 | 로그인 버튼. 설정 보기의 편집·변경 확인·적용에도 재사용한다(추가분 채택 대기). 한 영역에 주요 버튼은 하나만 둔다 | 버튼 글씨 |
+| `colors.primary` / `colors.primary-foreground` / `colors.primary-hover` | 주요 행동 | 로그인 버튼. 설정 보기의 편집·변경 확인·적용에도 재사용한다(사용자 결정 2026-11-08(Q174)). 한 영역에 주요 버튼은 하나만 둔다 | 버튼 글씨 |
 | `colors.link` | 링크 글씨 | 세션 식별자 링크 | 밑줄을 함께 쓴다 |
 | `colors.destructive` / `colors.destructive-foreground` / `colors.destructive-hover` | 위험한 행동 | 세션 종료 버튼과 종료 확인 버튼에만 쓴다. 입력 오류 경계와 오류 문장에도 쓴다 | 버튼에 "종료" 글씨를 쓴다 |
 | `colors.navbar` / `colors.navbar-foreground` / `colors.navbar-muted-foreground` | 상단 막대 바탕·글씨 | 모든 폭의 상단 막대. 브랜드 이름·활성 항목·언어 선택 글씨는 `navbar-foreground`, 나머지 항목은 `navbar-muted-foreground`다. 언어 선택 경계도 `navbar-muted-foreground`다. 로그인 화면의 브랜드 표식 바탕은 `navbar`다 | 상단 막대 안의 모든 글씨 |
@@ -499,8 +499,8 @@ components:
 | 버튼 | `typography.button` | outline·ghost 버튼, 상단 막대 항목, 언어 선택. 14px 굵기 400, 행간 `normal` | 한 줄. 좁은 폭에서 줄바꿈이 필요하면 버튼을 전체 폭으로 만든다 |
 | 강조 버튼 | `typography.button-strong` | 주요 버튼과 위험 버튼. 14px 굵기 700, 행간 `normal` | 같음 |
 | 입력 | `typography.input` | 계정명·비밀번호·설정 숫자 입력. 16px 굵기 400, 행간 `normal` | 모든 입력은 모든 폭에서 16px 이상이다. 모바일 브라우저가 입력 때 화면을 확대하지 않게 한다 |
-| 값(고정 폭) | `typography.data` | 세션 식별자, 중계 ID, 상대 주소. 설정 키·문자열 값도 같은 단계다(추가분 채택 대기). 12px 굵기 400, 행간 150%, 자간 0 | 긴 값은 `overflow-wrap: anywhere`로 줄바꿈한다. 값을 잘라 표시하지 않는다 |
-| 입력 값(고정 폭, 채택 대기) | `typography.input-data` | SCR-005의 여러 줄 목록 입력. `data`와 같은 고정폭 계열·400 굵기·자간 0, 16px·행간 150% | 키 이름과 보기 값은 기존 `data`로 유지한다. 입력 값만 16px 이상을 지킨다. 긴 항목은 줄바꿈하며 항목의 원래 줄 번호를 유지한다 |
+| 값(고정 폭) | `typography.data` | 세션 식별자, 중계 ID, 상대 주소. 설정 키·문자열 값도 같은 단계다(사용자 결정 2026-11-08(Q174)). 12px 굵기 400, 행간 150%, 자간 0 | 긴 값은 `overflow-wrap: anywhere`로 줄바꿈한다. 값을 잘라 표시하지 않는다 |
+| 입력 값(고정 폭) | `typography.input-data` | SCR-005의 여러 줄 목록 입력(사용자 결정 2026-11-08(Q174)). `data`와 같은 고정폭 계열·400 굵기·자간 0, 16px·행간 150% | 키 이름과 보기 값은 기존 `data`로 유지한다. 입력 값만 16px 이상을 지킨다. 긴 항목은 줄바꿈하며 항목의 원래 줄 번호를 유지한다 |
 | 요약 숫자 | `typography.metric` | 서버 요약의 개수·시간 길이, 사용량 고리 가운데 현재 값, 세션 상세의 전송량. 28px 굵기 700, 행간 150% | 자릿수가 맞는 숫자. 폭이 모자라면 줄바꿈한다 |
 
 - 글꼴: Pretendard 1.3.9의 부분 글자 woff2 두 개(Regular 400, Bold 700)를 실행파일에 넣는다(사용자 결정 2026-11-07(Q139)). 부분 글자 파일은 KS X 1001 한글 2,350자와 라틴 문자를 담는다. 이 밖의 글자는 그 글자만 다음 글꼴로 보인다. 글꼴 스택은 `Pretendard, 'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans KR', system-ui, -apple-system, 'Segoe UI', sans-serif`다.
@@ -555,7 +555,7 @@ components:
 
 | 영역 | 데스크톱 폭 배치 | 근거 |
 | --- | --- | --- |
-| 상단 막대 | 높이 `spacing.appbar-height`, 전체 폭, `navbar` 바탕. 왼쪽부터 브랜드 표식과 "VNC Relay", 운영 현황·설정 두 항목, 오른쪽 끝에 언어 선택과 [로그아웃]. 가로 안쪽 여백은 본문과 같은 `spacing.xl` | 기존 항목·브랜드·언어의 토큰을 재사용. 설정 항목 추가와 활성 범위는 [설정 화면 확장](#설정-화면-확장)(채택 대기) |
+| 상단 막대 | 높이 `spacing.appbar-height`, 전체 폭, `navbar` 바탕. 왼쪽부터 브랜드 표식과 "VNC Relay", 운영 현황·설정 두 항목, 오른쪽 끝에 언어 선택과 [로그아웃]. 가로 안쪽 여백은 본문과 같은 `spacing.xl` | 기존 항목·브랜드·언어의 토큰을 재사용. 설정 항목 추가와 활성 범위는 [설정 화면 확장](#설정-화면-확장)(사용자 결정 2026-11-08(Q174)) |
 | 페이지 머리말 | 왼쪽에 제목과 마지막 성공 갱신 시각, 오른쪽에 [새로고침]. SCR-002는 제목 위에 [목록으로] ghost 버튼 | DASH-003~005·DASH-007 |
 | 상태 안내 | 머리말 아래 전체 폭 Alert. 상태가 있을 때만 | 화면 스펙 4절 |
 | SCR-001 첫 줄 | 12열 격자. 서버 요약 카드 6열, 중계 연결 카드 3열, 관리 연결 카드 3열. 연결 카드는 제목 아래 한 줄 설명으로 무엇을 세는지 밝힌다 | DASH-001·DASH-021 |
@@ -574,14 +574,14 @@ components:
 
 | 이름 | 조건 | 적용 |
 | --- | --- | --- |
-| 모바일 폭 | 뷰포트 폭 1023.98px 이하(`@media (max-width: 1023.98px)`) | 브랜드 이름 글씨를 감춘다. 두 내비게이션 항목은 둘째 줄에 표시한다(내비게이션 확장 채택 대기). 카드를 한 열로 쌓는다. 표를 카드 목록으로 바꾼다. 조작 요소 높이는 `spacing.control-height-touch`다 |
+| 모바일 폭 | 뷰포트 폭 1023.98px 이하(`@media (max-width: 1023.98px)`) | 브랜드 이름 글씨를 감춘다. 두 내비게이션 항목은 둘째 줄에 표시한다(사용자 결정 2026-11-08(Q174)). 카드를 한 열로 쌓는다. 표를 카드 목록으로 바꾼다. 조작 요소 높이는 `spacing.control-height-touch`다 |
 | 데스크톱 폭 | 뷰포트 폭 1024px 이상 | 상단 막대 전체 항목, 12열 격자, 표를 쓴다. 조작 요소 높이는 `spacing.control-height`다 |
 
 중단점은 하나만 둔다. CSS 미디어 쿼리에는 사용자 정의 속성을 쓸 수 없으므로 값 1024px를 CSS 한 곳에서만 쓴다. 1024px에서 본문 여백을 뺀 카드 안 표 영역은 시안에서 956px이고, 활성 세션 7열 표의 최소 내용 폭은 753px이다([검증](#검증)). 최소 지원 폭은 320px이다.
 
 | 구성 | 데스크톱 폭 | 모바일 폭 |
 | --- | --- | --- |
-| 상단 막대 | 브랜드 표식과 "VNC Relay", 운영 현황·설정, 언어 선택, [로그아웃] | 브랜드 표식·언어 선택·[로그아웃] 아래 둘째 줄에 운영 현황·설정을 모두 표시한다(확장 채택 대기). 브랜드 이름은 화면에서만 감추고 접근성 트리에는 남긴다. SCR-002의 [목록으로]는 페이지 머리말에 그대로 둔다 |
+| 상단 막대 | 브랜드 표식과 "VNC Relay", 운영 현황·설정, 언어 선택, [로그아웃] | 브랜드 표식·언어 선택·[로그아웃] 아래 둘째 줄에 운영 현황·설정을 모두 표시한다(사용자 결정 2026-11-08(Q174)). 브랜드 이름은 화면에서만 감추고 접근성 트리에는 남긴다. SCR-002의 [목록으로]는 페이지 머리말에 그대로 둔다 |
 | 페이지 머리말 | 왼쪽에 제목·갱신 시각, 오른쪽에 [새로고침]을 한 줄에 둔다 | 제목, 갱신 시각, 전체 폭 [새로고침] 순서로 쌓는다 |
 | 서버 요약 | 카드 안 값 격자 3열 | 실행 상태와 가동 시간은 각각 한 줄 전체 폭, 나머지 네 값은 2열. 320px에서도 같다. 순서는 데스크톱과 같다 |
 | 중계 연결·관리 연결 사용량 | 카드 둘, 각 3열 | 각각 전체 폭 카드. 고리와 값은 가운데 정렬을 유지한다 |
@@ -680,20 +680,20 @@ shadcn/ui처럼 경계선과 얕은 그림자로 층을 나눈다.
 
 ### 설정 화면 확장
 
-이 절은 2026-11-08 추가한 **채택 대기** 기준이다. 기존 토큰을 재사용하고 설정 목록 입력용 `typography.input-data`만 더한다. 기존 Input·Alert·Badge·Navbar·Card·Dialog를 다음처럼 확장한다. 함수·props는 구현 단계의 모듈 설계에서 정한다.
+이 절은 사용자 결정 2026-11-08(Q174)으로 채택한 기준이다. 기존 토큰을 재사용하고 설정 목록 입력용 `typography.input-data`만 더한다. 기존 Input·Alert·Badge·Navbar·Card·Dialog를 다음처럼 확장한다. 함수·props는 구현 단계의 모듈 설계에서 정한다.
 
 | 공통 요소 | 토큰·구성 | 폭·상태·사용 조건 | 상태 |
 | --- | --- | --- | --- |
-| 여러 항목 내비게이션 | `navbar-item`·`navbar-item-active`, `navbar-accent`·`navbar-primary`, `indicator-width` 재사용. 항목 사이 `spacing.xs`, 아이콘·글씨 사이 `spacing.sm` | 운영 현황과 설정을 모두 표시. SCR-001·002는 운영 현황, SCR-004·005는 설정 활성. `aria-current="page"`. 모바일에서는 브랜드·언어·로그아웃 아래 둘째 줄을 전체 폭으로 쓰고 항목을 숨기지 않음. 상단 막대 높이는 이때 내용만큼 늘어남 | 채택 대기 |
-| 여러 줄 목록 입력 | Input과 같은 바탕·경계·모서리·포커스. 채택 대기 단계 `typography.input-data`(고정폭 16px·행간 150%). 안쪽은 세로 `spacing.xs`·가로 `spacing.sm`, 최소 높이 `spacing.control-height`의 3배 | 세로 크기 조절 가능. 모든 폭에서 너비 100%, 가로로 늘리지 않음. 한 항목 한 줄. 원문 줄을 유지하며 긴 문자열은 시각적으로 줄바꿈. 오류는 destructive 경계와 아래 글씨 | 채택 대기 |
-| 단위 있는 숫자 입력 | 기존 `typography.input`(16px). 옆 단위는 `typography.label`·`muted-foreground`. 범위는 도움말. 안쪽은 여러 줄 입력과 같음 | 입력과 단위를 같은 행에 놓고 입력은 남는 폭 사용. 도움말은 다음 줄. 초·바이트·개수. 모바일 입력 높이 `control-height-touch` 유지 | 채택 대기 |
-| 입력 도움말·오류 | 설정 키 라벨은 `typography.data`. 도움말은 `typography.label`·`muted-foreground`. 오류는 `typography.body`·`destructive`와 위험 아이콘. 간격 `spacing.xs` | 보이는 label에 키 포함. 보기 목록·입력 라벨·확인 대화상자의 키 이름은 같은 고정폭 단계. 도움말·오류 모두 입력과 연결. 오류는 색 외에 문장·줄 번호 포함. 첫 오류 초점은 스펙 6절 | 채택 대기 |
-| 적용 구분 표시 | dynamic은 `badge-info`, restart는 `badge-neutral`. 글씨와 정보 아이콘/재시작 필요 글씨로 구분. 기존 배지 형태 | 값 자체에 상태 배지를 붙이지 않음. 적용 구분은 별도 자리. 긴 영어 구분 문구는 배지 전체를 다음 줄로 보냄 | 채택 대기 |
-| 키·값 목록 | Card 안 항목별 `colors.border` 구분선, 안쪽 `spacing.lg`, 항목 사이 `spacing.md`. 키·문자열 값은 `typography.data`, 정수·불리언 값은 `typography.body-numeric`, 구분은 Badge | 데스크톱은 같은 너비 3열(키·값·적용 구분). 모바일은 키·값·구분 순서 1열. 배열은 항목별 줄, 빈 목록·null은 글씨로 구분. 긴 키·경로는 `overflow-wrap:anywhere`. 잘라 숨기지 않음 | 채택 대기 |
-| 화면 상단 안내 | 기존 Alert의 info·warning·destructive·neutral 재사용. 성공은 `colors.success-bg`·`success-border`·`success`, 설명은 `foreground`, 아이콘은 원 안 체크. 간격·모서리는 기존 Alert와 같음 | 머리말 아래 전체 폭. 저장 성공은 success, pending·충돌·결과 불명은 warning, 검증·쓰기 실패는 destructive, 꺼짐은 neutral. 파일 상태는 제목·본문·키·진단으로 표시 | 채택 대기 |
-| 변경 확인 | 기존 Dialog·Card·목록·Alert와 `dialog-max` 재사용. 키별 이전/새 값과 목록 추가/삭제를 세로로 쌓음. 항목 간 `spacing.lg` | 내용이 길면 대화상자 자체를 뷰포트 안에서 세로 스크롤. 최대 높이는 뷰포트에서 `spacing.md` 양쪽 여백을 뺀 값. 모바일 버튼은 전체 폭, 취소 먼저. 확인·적용은 primary, 취소는 outline | 채택 대기 |
-| 설정 구역 배치 | SCR-004는 테이블별 전체 폭 Card, SCR-005는 다섯 구역 전체 폭 Card. 입력란 격자는 데스크톱 2열, 모바일 1열, 간격 `spacing.lg` | 읽기 순서는 스펙 구역 순서. 페이지 행동은 데스크톱 오른쪽, 모바일은 전체 폭으로 쌓음. 기존 content-max·카드 여백을 유지 | 채택 대기 |
-| 재로드 정보 글꼴 | 번역한 결과·계기는 `typography.body`, 키 이름은 `typography.data`. 시각은 화면 머리의 조회 시각과 같은 `typography.label`·`muted-foreground` | 시각 값은 두 자리 날짜·시각과 시간대를 포함하는 기존 표시 형식. 번역 문구에 고정폭 글꼴을 쓰지 않음 | 채택 대기 |
+| 여러 항목 내비게이션 | `navbar-item`·`navbar-item-active`, `navbar-accent`·`navbar-primary`, `indicator-width` 재사용. 항목 사이 `spacing.xs`, 아이콘·글씨 사이 `spacing.sm` | 운영 현황과 설정을 모두 표시. SCR-001·002는 운영 현황, SCR-004·005는 설정 활성. `aria-current="page"`. 모바일에서는 브랜드·언어·로그아웃 아래 둘째 줄을 전체 폭으로 쓰고 항목을 숨기지 않음. 상단 막대 높이는 이때 내용만큼 늘어남 | Accepted. 사용자 결정 2026-11-08(Q174) |
+| 여러 줄 목록 입력 | Input과 같은 바탕·경계·모서리·포커스. 채택한 단계 `typography.input-data`(고정폭 16px·행간 150%). 안쪽은 세로 `spacing.xs`·가로 `spacing.sm`, 최소 높이 `spacing.control-height`의 3배 | 세로 크기 조절 가능. 모든 폭에서 너비 100%, 가로로 늘리지 않음. 한 항목 한 줄. 원문 줄을 유지하며 긴 문자열은 시각적으로 줄바꿈. 오류는 destructive 경계와 아래 글씨 | Accepted. 사용자 결정 2026-11-08(Q174) |
+| 단위 있는 숫자 입력 | 기존 `typography.input`(16px). 옆 단위는 `typography.label`·`muted-foreground`. 범위는 도움말. 안쪽은 여러 줄 입력과 같음 | 입력과 단위를 같은 행에 놓고 입력은 남는 폭 사용. 도움말은 다음 줄. 초·바이트·개수. 모바일 입력 높이 `control-height-touch` 유지 | Accepted. 사용자 결정 2026-11-08(Q174) |
+| 입력 도움말·오류 | 설정 키 라벨은 `typography.data`. 도움말은 `typography.label`·`muted-foreground`. 오류는 `typography.body`·`destructive`와 위험 아이콘. 간격 `spacing.xs` | 보이는 label에 키 포함. 보기 목록·입력 라벨·확인 대화상자의 키 이름은 같은 고정폭 단계. 도움말·오류 모두 입력과 연결. 오류는 색 외에 문장·줄 번호 포함. 첫 오류 초점은 스펙 6절 | Accepted. 사용자 결정 2026-11-08(Q174) |
+| 적용 구분 표시 | dynamic은 `badge-info`, restart는 `badge-neutral`. 글씨와 정보 아이콘/재시작 필요 글씨로 구분. 기존 배지 형태 | 값 자체에 상태 배지를 붙이지 않음. 적용 구분은 별도 자리. 긴 영어 구분 문구는 배지 전체를 다음 줄로 보냄 | Accepted. 사용자 결정 2026-11-08(Q174) |
+| 키·값 목록 | Card 안 항목별 `colors.border` 구분선, 안쪽 `spacing.lg`, 항목 사이 `spacing.md`. 키·문자열 값은 `typography.data`, 정수·불리언 값은 `typography.body-numeric`, 구분은 Badge | 데스크톱은 같은 너비 3열(키·값·적용 구분). 모바일은 키·값·구분 순서 1열. 배열은 항목별 줄, 빈 목록·null은 글씨로 구분. 긴 키·경로는 `overflow-wrap:anywhere`. 잘라 숨기지 않음 | Accepted. 사용자 결정 2026-11-08(Q174) |
+| 화면 상단 안내 | 기존 Alert의 info·warning·destructive·neutral 재사용. 성공은 `colors.success-bg`·`success-border`·`success`, 설명은 `foreground`, 아이콘은 원 안 체크. 간격·모서리는 기존 Alert와 같음 | 머리말 아래 전체 폭. 저장 성공은 success, pending·충돌·결과 불명은 warning, 검증·쓰기 실패는 destructive, 꺼짐은 neutral. 파일 상태는 제목·본문·키·진단으로 표시 | Accepted. 사용자 결정 2026-11-08(Q174) |
+| 변경 확인 | 기존 Dialog·Card·목록·Alert와 `dialog-max` 재사용. 키별 이전/새 값과 목록 추가/삭제를 세로로 쌓음. 항목 간 `spacing.lg` | 내용이 길면 대화상자 자체를 뷰포트 안에서 세로 스크롤. 최대 높이는 뷰포트에서 `spacing.md` 양쪽 여백을 뺀 값. 모바일 버튼은 전체 폭, 취소 먼저. 확인·적용은 primary, 취소는 outline | Accepted. 사용자 결정 2026-11-08(Q174) |
+| 설정 구역 배치 | SCR-004는 테이블별 전체 폭 Card, SCR-005는 다섯 구역 전체 폭 Card. 입력란 격자는 데스크톱 2열, 모바일 1열, 간격 `spacing.lg` | 읽기 순서는 스펙 구역 순서. 페이지 행동은 데스크톱 오른쪽, 모바일은 전체 폭으로 쌓음. 기존 content-max·카드 여백을 유지 | Accepted. 사용자 결정 2026-11-08(Q174) |
+| 재로드 정보 글꼴 | 번역한 결과·계기는 `typography.body`, 키 이름은 `typography.data`. 시각은 화면 머리의 조회 시각과 같은 `typography.label`·`muted-foreground` | 시각 값은 두 자리 날짜·시각과 시간대를 포함하는 기존 표시 형식. 번역 문구에 고정폭 글꼴을 쓰지 않음 | Accepted. 사용자 결정 2026-11-08(Q174) |
 
 설정 항목 아이콘은 같은 `viewBox`와 선 규칙으로 그린 가로선 세 개와 조절 막대다. 네트워크·외부 아이콘은 쓰지 않는다. 글씨 레이블을 항상 함께 둔다.
 
@@ -757,18 +757,18 @@ shadcn/ui처럼 경계선과 얕은 그림자로 층을 나눈다.
 | Pretendard 글꼴·자간·행간. 사용자 지시 2026-11-07, 사용자 결정 2026-11-07(Q139~Q142) | [Typography](#typography)의 모든 단계, 미리보기·로그인·시안, 비교 페이지 26개 프레임 × 6개 폭 | 2026-11-07. Windows, Chrome 157.0.8103.38(Playwright 1.64.1). `cargo xtask tokens --check`, `document.fonts`·`getComputedStyle` 측정(1280·320px), 두 OS 전체 게이트, 비교 페이지 재촬영 | 통과(확인 범위 한정). 400·700 글꼴이 세 페이지와 비교 페이지 156쌍의 두 쪽에서 모두 로드됐다. 계산된 크기·행간·자간이 위 표와 같다. 값 글꼴은 12px·자간 0이다. 가로 넘침 0. 사람의 시안 비교, Firefox·Edge·WebKit 재확인, 대비 재측정은 미실행이다. 색 토큰은 바뀌지 않았다 | [검증 4.23절](../how-to/verify-dashboard-frontend.md#423-pretendard-글꼴과-자간행간-q139q142-2026-11-07) |
 | 조회 중 표시 통일. 사용자 지적 2026-11-07 | [상태 색](#상태-색)의 조회 중 규칙. SCR-001 카드 머리·요약 값·고리·목록 빈 행 | 2026-11-07. Windows, Chrome 157.0.8103.38(Playwright 1.64.1). 브라우저 시험(DASH-005 사례의 조회 중 표시 확인), 비교 페이지 재촬영, 두 OS 전체 게이트 | 통과(확인 범위 한정). 네 자리 모두 시계 아이콘이 있는 같은 정보 배지다. "확인 불가"는 중립 배지 그대로다. 가로 넘침 0. 사람의 재비교와 다른 브라우저 확인은 미실행이다. 이때 남은 SCR-002 첫 조회 중 화면의 차이는 다음 줄(Q143)에서 처리했다 | [검증 4.24절](../how-to/verify-dashboard-frontend.md#424-조회-중-표시-통일-작업-412-사용자-지적-2026-11-07) |
 | SCR-002 첫 조회 중 화면. 사용자 결정 2026-11-07(Q143) | [상태 색](#상태-색)의 조회 중 규칙. 세션 정보 사실 다섯 줄, 전송량 두 방향 | 2026-11-07. Windows, Chrome 157.0.8103.38(Playwright 1.64.1). 브라우저 시험(DASH-022 느린 읽기 사례), 비교 페이지 재촬영, 두 OS 전체 게이트 | 통과(확인 범위 한정). 항목 이름과 방향 표식을 보이고 값 자리 7곳이 카드 머리와 같은 정보 배지다. 가로 넘침 0. 시안의 전체 폭 안내는 CPY 표에 없어 넣지 않았다. 사람의 재비교와 다른 브라우저 확인은 미실행이다 | [검증 4.25절](../how-to/verify-dashboard-frontend.md#425-scr-002-첫-조회-중-화면-작업-412-q143-2026-11-07) |
-| 설정 보기·편집 시안(추가분 채택 대기) | 작업 트리의 SCR-004·005 모든 상태: 62개 프레임(한국어·English 각각 31개), 기존 26개 프레임의 내비게이션 확장. DASH-028~053의 시각 산출물 | 2026-11-08. Windows, 관리형 헤드리스 Chromium(UA Chrome/157.0.0.0). `file:///`로 열고 폭 1280·390px에서 모든 접힌 구역까지 펼쳐 DOM 경계·넘침·상단 막대 겹침을 측정했다. 대표 화면 4장을 에이전트가 육안 확인했다 | 통과(시안 한정): 두 폭 모두 페이지 가로 넘침 0px, 프레임 밖 가로 요소 0건, 설정 콘텐츠 넘침 0건, 상단 막대 자식 겹침 0건. 전체 88개 프레임. ID 중복·깨진 내부 링크 0건. 정상 보기의 키 56개, 편집 입력 23개. 확인 대화상자는 두 폭에서 프레임 안에 보임. 실제 API·키보드 초점·언어 전환·다른 브라우저·실기기·대비 재측정은 미실행(구현 전) | `local://mockup-settings-view-desktop-ko.png`, `local://mockup-settings-edit-mobile-ko.png`, `local://mockup-settings-confirm-desktop-en.png`, `local://mockup-settings-error-mobile-en.png` |
+| 설정 보기·편집 시안(사용자 결정 2026-11-08(Q174)으로 채택) | 작업 트리의 SCR-004·005 모든 상태: 62개 프레임(한국어·English 각각 31개), 기존 26개 프레임의 내비게이션 확장. DASH-028~053의 시각 산출물 | 2026-11-08. Windows, 관리형 헤드리스 Chromium(UA Chrome/157.0.0.0). `file:///`로 열고 폭 1280·390px에서 모든 접힌 구역까지 펼쳐 DOM 경계·넘침·상단 막대 겹침을 측정했다. 대표 화면 4장을 에이전트가 육안 확인했다 | 통과(시안 한정): 두 폭 모두 페이지 가로 넘침 0px, 프레임 밖 가로 요소 0건, 설정 콘텐츠 넘침 0건, 상단 막대 자식 겹침 0건. 전체 88개 프레임. ID 중복·깨진 내부 링크 0건. 정상 보기의 키 56개, 편집 입력 23개. 확인 대화상자는 두 폭에서 프레임 안에 보임. 실제 API·키보드 초점·언어 전환·다른 브라우저·실기기·대비 재측정은 미실행(구현 전) | `local://mockup-settings-view-desktop-ko.png`, `local://mockup-settings-edit-mobile-ko.png`, `local://mockup-settings-confirm-desktop-en.png`, `local://mockup-settings-error-mobile-en.png` |
 | 설정 시안 최초 토큰·CSS 일치(입력 전용 단계 추가 전) | 당시 YAML 머리말·생성 토큰 유지. 기존 색·글꼴·간격·폭 값 재사용 | 2026-11-08. Windows Git Bash. `AWS_LC_SYS_PREBUILT_NASM=1 "$USERPROFILE/.cargo/bin/cargo.exe" xtask tokens --check` | 통과: `tokens --check: 통과` | 로컬 명령 실행 |
 | 설정 화면 실제 동작·시나리오 연결 | DASH-028~053 | 이번 변경은 기준 문서·HTML 시안만 작성 | 미실행(구현 전). 시안의 링크·입력은 시각 예시이며 관리 API 요청을 보내지 않음 | 구현 단계에서 테스트 메타 정보와 실행 결과 연결 필요 |
 | lead 검토 반영: 진단 문구·키 이름 | CPY-140~148 진단 대응, CPY-117 줄 문구, 설정 보기·편집의 IP 진단 예시 | 2026-11-08. 같은 Windows·Chromium에서 폭 1280·390px, 한국어·English 전체 프레임의 접힌 구역을 펼쳐 측정했다. 대표 화면 5장을 에이전트가 육안 확인했다 | 통과(시안 한정): 두 폭 모두 페이지·설정 콘텐츠 가로 넘침 0, 프레임 밖 가로 요소·상단 막대 겹침 0. 키 이름 세 자리는 고정폭 12px/18px로 일치. 재로드 결과·계기는 본문 14px, 재로드 시각·조회 시각은 같은 본문 보조 단계 12px. 파일·편집 막힘·입력 오류 예시가 각 언어의 CPY-144를 표시하고 줄은 CPY-117로 표시됨. 실제 API 응답은 미실행(구현 전) | 대표 화면 네 장과 `local://mockup-settings-error-mobile-ko.png` |
 | lead 검토 반영 뒤 토큰·CSS | 기존 YAML·생성 토큰 유지, 설정 화면 CSS 변경 | 2026-11-08. `AWS_LC_SYS_PREBUILT_NASM=1 "$USERPROFILE/.cargo/bin/cargo.exe" xtask tokens --check` 재실행 | 통과: `tokens --check: 통과` | 로컬 명령 실행 |
-| 설정 입력 16px·input-data 단계(채택 대기) | YAML `typography.input-data`, 여러 줄 목록 입력, 숫자 입력. 키 이름·보기 값은 기존 단계 유지 | 2026-11-08. Windows Git Bash에서 `AWS_LC_SYS_PREBUILT_NASM=1 "$USERPROFILE/.cargo/bin/cargo.exe" xtask tokens`와 같은 명령의 `tokens --check` 실행. Chromium 1280·390px, 한국어·English 전체 시안의 접힌 구역을 펼쳐 넘침·입력 글꼴을 측정하고 모바일 한국어 두 장을 육안 확인 | 통과(시안 한정): 생성 명령 정상 완료, `tokens --check: 통과`. 두 폭 모두 16px 미만 설정 입력 0개. 목록 입력은 고정폭 16px·행간 24px·400·자간 0, 숫자 입력은 기존 input 16px. 키·보기 목록 값·확인 키는 고정폭 12px 유지. 가로 넘침·프레임 밖 가로 요소·상단 막대 겹침 0건. 실제 iOS Safari 입력 확대는 미실행(구현 전) | `local://mockup-settings-edit-mobile-ko.png`, `local://mockup-settings-error-mobile-ko.png` 갱신 |
+| 설정 입력 16px·input-data 단계(사용자 결정 2026-11-08(Q174)으로 채택) | YAML `typography.input-data`, 여러 줄 목록 입력, 숫자 입력. 키 이름·보기 값은 기존 단계 유지 | 2026-11-08. Windows Git Bash에서 `AWS_LC_SYS_PREBUILT_NASM=1 "$USERPROFILE/.cargo/bin/cargo.exe" xtask tokens`와 같은 명령의 `tokens --check` 실행. Chromium 1280·390px, 한국어·English 전체 시안의 접힌 구역을 펼쳐 넘침·입력 글꼴을 측정하고 모바일 한국어 두 장을 육안 확인 | 통과(시안 한정): 생성 명령 정상 완료, `tokens --check: 통과`. 두 폭 모두 16px 미만 설정 입력 0개. 목록 입력은 고정폭 16px·행간 24px·400·자간 0, 숫자 입력은 기존 input 16px. 키·보기 목록 값·확인 키는 고정폭 12px 유지. 가로 넘침·프레임 밖 가로 요소·상단 막대 겹침 0건. 실제 iOS Safari 입력 확대는 미실행(구현 전) | `local://mockup-settings-edit-mobile-ko.png`, `local://mockup-settings-error-mobile-ko.png` 갱신 |
+| 사용자 결정 2026-11-08(Q174~Q177) 채택 기록 | `5b4aed3`에 채택 상태·근거를 반영한 작업 트리. YAML 주석과 시안의 채택 안내만 변경하며 토큰 값·생성 블록은 유지 | 2026-11-08. Windows Git Bash. `AWS_LC_SYS_PREBUILT_NASM=1 "$USERPROFILE/.cargo/bin/cargo.exe" xtask tokens --check` 1회 실행 | 통과: `tokens --check: 통과`. 구현·화면 동작 시험은 미실행(구현 전) | 로컬 명령 실행 |
 
 ### 미결정 사항
 
-- DESIGN-TBD-006: "설정 화면 확장"과 SCR-004·SCR-005·내비게이션 시안은 채택 대기다. 설정 보기·편집의 이름 선택도 채택 대기다. 기존 토큰 값은 유지하며 구현·컴포넌트 API는 아직 바꾸지 않았다.
 - DESIGN-TBD-005(프런트엔드 컨벤션과 검증 방법)는 사용자 결정 2026-10-22(Q32~Q38)로 해소했다. 결정 내용은 [프런트엔드 컨벤션 8절](../conventions/frontend.md#8-미결정-사항)에 있다. 프런트엔드 성능 지표(FE-TBD-016)는 사용자 결정 2026-11-07(Q159)로 지표 없이 닫았다.
 
 DESIGN-TBD-002(다크 테마)는 사용자 결정(2026-10-20)으로 라이트 테마만 두기로 해 [테마](#테마)에 반영했다. DESIGN-TBD-001(시각 방향), DESIGN-TBD-003(중단점과 모바일 배치), DESIGN-TBD-004(표시 형식)는 사용자가 이 문서를 채택(2026-10-20)해 결정했다. 이 ID들은 재사용하지 않는다.
 
-DESIGN-TBD-005도 사용자 결정 2026-10-22(Q32~Q38)로 해소했으며, 이 ID도 재사용하지 않는다.
+DESIGN-TBD-005도 사용자 결정 2026-10-22(Q32~Q38)로 해소했으며, 이 ID도 재사용하지 않는다. DESIGN-TBD-006(설정 화면 확장·시안·이름)은 사용자 결정 2026-11-08(Q174·Q176)으로 결정되어 [설정 화면 확장](#설정-화면-확장)·[설정 시안](mockups/dashboard.html)·[화면 스펙](../specs/dashboard.md)·[관리 API 계약](../contracts/management-api-v1.md)에 반영했으며 재사용하지 않는다. 구현·컴포넌트 API 갱신과 테스트는 미실행(구현 전)이다.

@@ -11,7 +11,7 @@
 | 관련 계약 | [관리 API v1](../contracts/management-api-v1.md). Active(2026-10-16 채택)이며 경로·응답 본문·화면 URL은 이 계약이 기준이다. 관리 API는 JSON over HTTP이며 경로 접두사는 `/api/v1/`이다(사용자 확정). |
 | 관련 아키텍처 문서·ADR | [코드 지도](../architectures/code-map.md), [대시보드 구성 요소 설계](../architectures/dashboard-components.md), [대시보드 운영 화면 설계](../architectures/dashboard-operations-overview.md), [관리 리스너 모듈 설계](../architectures/management-listener.md). 정적 HTML·JS 대시보드 선택은 별도 ADR 없이 [PRD 확정 기준](../requirements/PRD.md#확정-기준)으로 관리한다. 대시보드는 별도 빌드 단계 없는 정적 HTML·JS이며 실행파일에 넣어 관리 리스너가 제공한다. 프런트엔드 코드는 `web/dashboard/`에 있다. |
 | 디자인 원본·공통 시각 기준 | [운영 대시보드 디자인 기준](../design/DESIGN.md). Accepted(2026-10-20 사용자 채택). 색·간격·폰트·토큰·배치 기준은 디자인 기준이 정한다. |
-| HTML 시안 | [대시보드 시안](../design/mockups/dashboard.html). SCR-001~003의 기존 시안은 2026-10-20 사용자 채택 범위다. 설정 내비게이션 추가와 SCR-004·005의 모든 상태(한국어·English)는 채택 대기다. 시안과 이 문서의 문장이 다르면 문장을 따른다. |
+| HTML 시안 | [대시보드 시안](../design/mockups/dashboard.html). SCR-001~003의 기존 시안은 2026-10-20 사용자 채택 범위다. 설정 내비게이션 추가와 SCR-004·005의 모든 상태(한국어·English)는 사용자 결정 2026-11-08(Q174)으로 채택했다. 시안과 이 문서의 문장이 다르면 문장을 따른다. |
 | 관련 컴포넌트 예시 | 구성 요소는 `web/dashboard/app/components/`에 있다([대시보드 구성 요소 설계](../architectures/dashboard-components.md)). 미리보기 `web/dashboard/preview/`는 `cargo xtask dashboard-serve`로 연다(로컬 전용). 로그인 화면(SCR-003)은 `web/dashboard/login/`에 있다. `login/`과 `app/`은 파일을 공유하지 않으므로 구성 요소를 가져오지 않는다([프런트엔드 컨벤션 1.1절](../conventions/frontend.md)). |
 
 선택 기준·시나리오 소유·와이어프레임 판정은 [스펙 작성 규칙](AGENTS.md)을, HTML 시안 판정은 [디자인 문서 작성 규칙](../design/AGENTS.md#html-시안)을 따른다. 색·간격·글꼴 값은 디자인 기준을 연결한다. 시안 작성 순서는 [frontend-workflow 참고 문서](../../.agents/skills/frontend-workflow/references/frontend-workflow.md#화면별-html-시안-4단계)를 따른다.
@@ -239,7 +239,7 @@ flowchart LR
 - 직접 선택: SCR-001·SCR-002·SCR-004·SCR-005의 상단 막대와 SCR-003에서 언어를 고를 수 있다. 고르면 다시 불러오지 않고 화면 문구를 바로 바꾼다. 입력값·조회 데이터·화면 상태는 유지한다.
 - 저장: 직접 고른 언어는 브라우저 저장소에 남긴다. 같은 브라우저에서 다시 열거나 로그인·로그아웃해도 유지한다. 저장된 선택은 자동 선택보다 우선한다. 서버 설정·관리 API·관리 세션에는 언어를 보내거나 저장하지 않는다.
 - 번역 범위: 화면 문구·버튼·레이블·상태 안내·오류 안내를 번역한다. 세션 식별자·중계 ID·주소 같은 데이터 값, 모드·전송 경로 이름(Mode I, TCP 등), 목록에 없는 알 수 없는 값은 받은 그대로 보여 주고 번역하지 않는다.
-- 문구 확정: 두 언어의 문구는 [9절](#9-화면-문구)이 정한다. 기존 승인 범위와 설정 화면의 승인 대기 문구를 구분한다.
+- 문구 확정: 두 언어의 문구는 [9절](#9-화면-문구)이 정한다. 설정 화면의 CPY-086~148은 사용자 결정 2026-11-08(Q175)으로 채택했다.
 
 ## 4. 화면 상태와 갱신
 
@@ -421,15 +421,14 @@ flowchart LR
 
 DASH-TBD-003(로그인·세션 오류의 화면 메시지 문구)은 사용자 결정 2026-10-22(Q49)로 해소했으며 재사용하지 않는다.
 
-- DASH-TBD-005: 설정 보기·편집의 이름 선택(화면 ID·경로·문구·새 API 이름)은 채택 대기다. 설정 화면 추가 자체는 사용자 지시 2026-11-08이며, Q167~Q173은 해당 사용자 결정 범위만 적용한다. 새 CPY-086~148과 DESIGN.md 추가분·설정 시안은 별도 채택이 필요하다.
 - 설정 화면 구현·DASH-028~053 테스트는 미실행(구현 전)이다. 이 시안 확인을 구현 검증으로 보지 않는다.
 
-DASH-TBD-001은 결정되어 4.1절과 설정 계약에 반영했으며 재사용하지 않는다. DASH-TBD-002는 [관리 API v1](../contracts/management-api-v1.md) 채택(2026-10-16)으로 결정되어 계약 1.8·1.11절에 반영했으며 재사용하지 않는다. DASH-TBD-004(시각 기준·모바일 배치·표시 자릿수)는 [디자인 기준](../design/DESIGN.md) 채택(2026-10-20)으로 결정했으며 재사용하지 않는다.
+DASH-TBD-001은 결정되어 4.1절과 설정 계약에 반영했으며 재사용하지 않는다. DASH-TBD-002는 [관리 API v1](../contracts/management-api-v1.md) 채택(2026-10-16)으로 결정되어 계약 1.8·1.11절에 반영했으며 재사용하지 않는다. DASH-TBD-004(시각 기준·모바일 배치·표시 자릿수)는 [디자인 기준](../design/DESIGN.md) 채택(2026-10-20)으로 결정했으며 재사용하지 않는다. DASH-TBD-005(설정 보기·편집의 이름·문구·시각 기준)는 사용자 결정 2026-11-08(Q174~Q176)으로 결정되어 이 문서 1·9절과 [관리 API 계약](../contracts/management-api-v1.md)·[디자인 기준](../design/DESIGN.md)·[설정 시안](../design/mockups/dashboard.html)에 반영했으며 재사용하지 않는다.
 
 ## 9. 화면 문구
 
 - 상태: 기존 CPY-001~077은 사용자 결정 2026-10-22(Q49), CPY-078~082는 사용자 결정 2026-10-23(Q55), CPY-083은 사용자 결정 2026-11-02(Q94), CPY-084·085는 사용자 결정 2026-11-05(Q115)의 승인 범위다.
-- 설정 보기·편집의 CPY-086~148은 **승인 대기**다(2026-11-08 작성). 기존 문구 승인 결정이 새 문구까지 승인한 것은 아니다.
+- 설정 보기·편집의 CPY-086~148은 사용자 결정 2026-11-08(Q175)으로 한국어·English 문구 전체를 채택했다. 코드별 진단 문구 CPY-140~148도 포함한다.
 - CPY-083은 사용자 결정 2026-11-02(Q94)의 내부 오류 종료 원인을 표시한다.
 
 ### 9.1 상태와 읽는 법
@@ -561,73 +560,73 @@ DASH-TBD-001은 결정되어 4.1절과 설정 계약에 반영했으며 재사�
 
 #### 9.3.5 SCR-004·SCR-005 설정 보기·편집
 
-아래 문구는 모두 **승인 대기**다. 설정 키·배열 항목·경로는 번역하지 않는다. 진단은 5.1절에 따른 코드별 한영 문구를 쓴다. 목록에 없는 코드의 진단 원문만 번역하지 않는다. 설정 구역 이름은 설정 테이블 이름을 그대로 쓴다. 적용 키 수는 PATCH의 `applied.length`다.
+아래 문구는 사용자 결정 2026-11-08(Q175)으로 모두 채택했다. 설정 키·배열 항목·경로는 번역하지 않는다. 진단은 5.1절에 따른 코드별 한영 문구를 쓴다. 목록에 없는 코드의 진단 원문만 번역하지 않는다. 설정 구역 이름은 설정 테이블 이름을 그대로 쓴다. 적용 키 수는 PATCH의 `applied.length`다.
 
-| ID | 위치 | 한국어 | English | 상태 |
+| ID | 위치 | 한국어 | English | 근거 |
 | --- | --- | --- | --- | --- |
-| CPY-086 | 내비게이션 | 설정 | Settings | 승인 대기 |
-| CPY-087 | SCR-004 제목 | 설정 보기 | View settings | 승인 대기 |
-| CPY-088 | SCR-005 제목 | 동적 설정 편집 | Edit dynamic settings | 승인 대기 |
-| CPY-089 | 편집 행동 | 편집 | Edit | 승인 대기 |
-| CPY-090 | 확인 행동 | 변경 내용 확인 | Review changes | 승인 대기 |
-| CPY-091 | 적용 행동 | 적용 | Apply | 승인 대기 |
-| CPY-092 | in_effect | 설정 파일과 실행 중인 설정이 같습니다. | The configuration file matches the settings in effect. | 승인 대기 |
-| CPY-093 | pending | 설정 파일에 재시작 없이 적용할 차이가 있습니다. 표시 값은 실행 중인 설정입니다. | The configuration file has changes that can be applied without a restart. The values shown are in effect now. | 승인 대기 |
-| CPY-094 | restart_required | 설정 파일에 재시작이 필요한 차이가 있어 편집할 수 없습니다. 파일을 수정하거나 서버를 재시작한 뒤 다시 불러오십시오. | The configuration file has changes that require a restart. Editing is blocked. Update the file or restart the server, then reload. | 승인 대기 |
-| CPY-095 | invalid | 설정 파일의 검증에 실패해 편집할 수 없습니다. 진단을 확인하고 파일을 수정한 뒤 다시 불러오십시오. | The configuration file failed validation. Editing is blocked. Check the diagnostics, update the file, then reload. | 승인 대기 |
-| CPY-096 | unreadable | 설정 파일을 읽지 못해 편집할 수 없습니다. 파일 접근을 복구한 뒤 다시 불러오십시오. | The configuration file could not be read. Editing is blocked. Restore file access, then reload. | 승인 대기 |
-| CPY-097 | 편집 꺼짐 | 편집 기능이 꺼져 있습니다. 설정 파일에서 management.config_edit = true로 바꾸고 서버를 재시작하십시오. | Editing is disabled. Set management.config_edit = true in the configuration file and restart the server. | 승인 대기 |
-| CPY-098 | 재로드 없음 | 이 프로세스의 재로드 이력이 없습니다. | This process has no reload history. | 승인 대기 |
-| CPY-099 | 저장 성공 | 설정 {n}개를 적용했습니다. | Applied {n} settings. | 승인 대기 |
-| CPY-100 | 적용 시점 | 새 연결부터 적용됩니다. 기존 연결·이미 시작한 타이머·이미 설정한 소켓 옵션은 이전 값을 유지합니다. | Changes apply from new connections. Existing connections, started timers, and configured socket options keep their previous values. | 승인 대기 |
-| CPY-101 | 확인 제목 | 설정 변경 확인 | Confirm settings changes | 승인 대기 |
-| CPY-102 | 비교 라벨 | 이전 값 / 새 값 | Previous value / New value | 승인 대기 |
-| CPY-103 | 목록 추가 | 추가한 항목 | Added items | 승인 대기 |
-| CPY-104 | 목록 삭제 | 뺀 항목 | Removed items | 승인 대기 |
-| CPY-105 | 빈 목록 경고 | 빈 허용 목록은 해당 키가 검사하는 모든 새 접속·요청을 거절합니다. | An empty allow list rejects all new connections or requests checked by this key. | 승인 대기 |
-| CPY-106 | 변경 없음 | 바뀐 설정이 없습니다. | No settings have changed. | 승인 대기 |
-| CPY-107 | 저장 중 | 설정을 저장하고 적용하는 중입니다. | Saving and applying settings. | 승인 대기 |
-| CPY-108 | 충돌 | 그사이 설정 파일이 바뀌었습니다. 다시 불러오면 입력 내용을 버리고 현재 설정으로 바꿉니다. | The configuration file has changed. Reloading discards your input and loads the current settings. | 승인 대기 |
-| CPY-109 | 쓰기 실패 | 설정 파일을 쓰지 못했습니다. 파일과 실행 값은 바뀌지 않았습니다. 입력을 확인한 뒤 다시 시도하십시오. | The configuration file could not be written. The file and settings in effect are unchanged. Review your input and try again. | 승인 대기 |
-| CPY-110 | 결과 불명 | 적용 결과를 확인할 수 없습니다. 요청을 자동으로 다시 보내지 않습니다. 설정 보기에서 현재 값을 확인하십시오. | The apply result cannot be confirmed. The request is not sent again automatically. Check the current values in View settings. | 승인 대기 |
-| CPY-111 | 다시 불러오기 행동 | 다시 불러오기 | Reload settings | 승인 대기 |
-| CPY-112 | 정수 오류 | 정수를 입력하십시오. | Enter an integer. | 승인 대기 |
-| CPY-113 | 범위 오류 | {min} 이상 {max} 이하로 입력하십시오. | Enter a value from {min} to {max}. | 승인 대기 |
-| CPY-114 | 관계 오류 | limits.waiting은 limits.relay_connections 이하여야 합니다. | limits.waiting must not exceed limits.relay_connections. | 승인 대기 |
-| CPY-115 | 공백 오류 | {line}줄: 항목에 공백을 넣지 마십시오. | Line {line}: do not include whitespace in an item. | 승인 대기 |
-| CPY-116 | 서버 검증 안내 | 입력한 설정의 검증에 실패했습니다. 표시한 입력란을 확인하십시오. | The entered settings failed validation. Check the marked fields. | 승인 대기 |
-| CPY-117 | 줄 진단. diagnostic은 코드별 번역 문구, 모르는 코드이면 원문과 코드 | {line}줄: {diagnostic} | Line {line}: {diagnostic} | 승인 대기 |
-| CPY-118 | 요청 거절 | 요청을 처리하지 못했습니다. 화면을 다시 불러오십시오. 입력 내용은 버립니다. | The request could not be processed. Reload this screen. Your input will be discarded. | 승인 대기 |
-| CPY-119 | 목록 도움말 | 한 줄에 항목 하나를 입력하십시오. 빈 줄은 무시합니다. 공백은 넣지 마십시오. | Enter one item per line. Empty lines are ignored. Do not include whitespace. | 승인 대기 |
-| CPY-120 | 적용 구분 | 재시작 없이 적용 | Applies without restart | 승인 대기 |
-| CPY-121 | 적용 구분 | 재시작 필요 | Restart required | 승인 대기 |
-| CPY-122 | 파일 차이 표식 | 파일과 다름 | Differs from file | 승인 대기 |
-| CPY-123 | 최근 재로드 제목 | 마지막 재로드 | Last reload | 승인 대기 |
-| CPY-124 | 재로드 결과 | 적용 / 거절 / 재시작 필요 | Applied / Rejected / Restart required | 승인 대기 |
-| CPY-125 | 재로드 계기 | 파일 변경 감지 / 설정 편집 | File watch / Configuration edit | 승인 대기 |
-| CPY-126 | 목록 빈 값 | 빈 목록 | Empty list | 승인 대기 |
-| CPY-127 | null 값 | 값 없음 | No value | 승인 대기 |
-| CPY-128 | 조회 시각 | 조회 시각: {time} | Retrieved at: {time} | 승인 대기 |
-| CPY-129 | 키·값 목록 라벨 | 키 / 값 / 적용 구분 | Key / Value / Application | 승인 대기 |
-| CPY-130 | 입력 구역 | 출발지 IP 허용 목록 | Source IP allow lists | 승인 대기 |
-| CPY-131 | 입력 구역 | 접근 정책 | Access policies | 승인 대기 |
-| CPY-132 | 입력 구역 | 연결 상한 | Connection limits | 승인 대기 |
-| CPY-133 | 입력 구역 | 시간 제한 | Timeouts | 승인 대기 |
-| CPY-134 | 입력 구역 | 연결 유지 | Keepalive | 승인 대기 |
-| CPY-135 | 단위 | 초 / 바이트 / 개 | seconds / bytes / count | 승인 대기 |
-| CPY-136 | 정수 도움말 | 범위: {min}~{max} | Range: {min}–{max} | 승인 대기 |
-| CPY-137 | 오류 요약 | 입력 오류가 {n}개 있습니다. 첫 오류로 이동합니다. | There are {n} input errors. Focus moves to the first error. | 승인 대기 |
-| CPY-138 | 재로드 정보 라벨 | 시각 / 결과 / 계기 / 바뀐 키 | Time / Result / Trigger / Changed keys | 승인 대기 |
-| CPY-139 | 파일 상태 제목 | 설정 파일 상태 | Configuration file status | 승인 대기 |
-| CPY-140 | `config_missing_key` | 필수 설정 값이 없습니다. | A required setting value is missing. | 승인 대기 |
-| CPY-141 | `config_type_mismatch` | 설정 값의 자료형이 맞지 않습니다. | The setting value has an invalid type. | 승인 대기 |
-| CPY-142 | `config_value_out_of_range` | 설정 값이 허용 범위를 벗어났습니다. | The setting value is outside its allowed range. | 승인 대기 |
-| CPY-143 | `config_relation_violated` | 설정 키 사이의 관계를 만족하지 않습니다. | The relationship between setting keys is not valid. | 승인 대기 |
-| CPY-144 | `config_ip_item_invalid` | IP·CIDR·범위 항목의 형식이 올바르지 않습니다. | The IP, CIDR, or range item has an invalid format. | 승인 대기 |
-| CPY-145 | `config_ip_range_reversed` | IP 범위의 시작 주소는 끝 주소 이하여야 합니다. | The start address of an IP range must not exceed its end address. | 승인 대기 |
-| CPY-146 | `config_ip_range_family_mixed` | IP 범위의 두 주소는 모두 IPv4이거나 모두 IPv6여야 합니다. | Both addresses in an IP range must be IPv4 or both must be IPv6. | 승인 대기 |
-| CPY-147 | `config_origin_invalid` | Origin 항목의 형식이 올바르지 않습니다. | The Origin item has an invalid format. | 승인 대기 |
-| CPY-148 | `config_target_item_invalid` | Mode I 대상 항목의 형식이 올바르지 않습니다. | The Mode I target item has an invalid format. | 승인 대기 |
+| CPY-086 | 내비게이션 | 설정 | Settings | 사용자 결정 2026-11-08(Q175) |
+| CPY-087 | SCR-004 제목 | 설정 보기 | View settings | 사용자 결정 2026-11-08(Q175) |
+| CPY-088 | SCR-005 제목 | 동적 설정 편집 | Edit dynamic settings | 사용자 결정 2026-11-08(Q175) |
+| CPY-089 | 편집 행동 | 편집 | Edit | 사용자 결정 2026-11-08(Q175) |
+| CPY-090 | 확인 행동 | 변경 내용 확인 | Review changes | 사용자 결정 2026-11-08(Q175) |
+| CPY-091 | 적용 행동 | 적용 | Apply | 사용자 결정 2026-11-08(Q175) |
+| CPY-092 | in_effect | 설정 파일과 실행 중인 설정이 같습니다. | The configuration file matches the settings in effect. | 사용자 결정 2026-11-08(Q175) |
+| CPY-093 | pending | 설정 파일에 재시작 없이 적용할 차이가 있습니다. 표시 값은 실행 중인 설정입니다. | The configuration file has changes that can be applied without a restart. The values shown are in effect now. | 사용자 결정 2026-11-08(Q175) |
+| CPY-094 | restart_required | 설정 파일에 재시작이 필요한 차이가 있어 편집할 수 없습니다. 파일을 수정하거나 서버를 재시작한 뒤 다시 불러오십시오. | The configuration file has changes that require a restart. Editing is blocked. Update the file or restart the server, then reload. | 사용자 결정 2026-11-08(Q175) |
+| CPY-095 | invalid | 설정 파일의 검증에 실패해 편집할 수 없습니다. 진단을 확인하고 파일을 수정한 뒤 다시 불러오십시오. | The configuration file failed validation. Editing is blocked. Check the diagnostics, update the file, then reload. | 사용자 결정 2026-11-08(Q175) |
+| CPY-096 | unreadable | 설정 파일을 읽지 못해 편집할 수 없습니다. 파일 접근을 복구한 뒤 다시 불러오십시오. | The configuration file could not be read. Editing is blocked. Restore file access, then reload. | 사용자 결정 2026-11-08(Q175) |
+| CPY-097 | 편집 꺼짐 | 편집 기능이 꺼져 있습니다. 설정 파일에서 management.config_edit = true로 바꾸고 서버를 재시작하십시오. | Editing is disabled. Set management.config_edit = true in the configuration file and restart the server. | 사용자 결정 2026-11-08(Q175) |
+| CPY-098 | 재로드 없음 | 이 프로세스의 재로드 이력이 없습니다. | This process has no reload history. | 사용자 결정 2026-11-08(Q175) |
+| CPY-099 | 저장 성공 | 설정 {n}개를 적용했습니다. | Applied {n} settings. | 사용자 결정 2026-11-08(Q175) |
+| CPY-100 | 적용 시점 | 새 연결부터 적용됩니다. 기존 연결·이미 시작한 타이머·이미 설정한 소켓 옵션은 이전 값을 유지합니다. | Changes apply from new connections. Existing connections, started timers, and configured socket options keep their previous values. | 사용자 결정 2026-11-08(Q175) |
+| CPY-101 | 확인 제목 | 설정 변경 확인 | Confirm settings changes | 사용자 결정 2026-11-08(Q175) |
+| CPY-102 | 비교 라벨 | 이전 값 / 새 값 | Previous value / New value | 사용자 결정 2026-11-08(Q175) |
+| CPY-103 | 목록 추가 | 추가한 항목 | Added items | 사용자 결정 2026-11-08(Q175) |
+| CPY-104 | 목록 삭제 | 뺀 항목 | Removed items | 사용자 결정 2026-11-08(Q175) |
+| CPY-105 | 빈 목록 경고 | 빈 허용 목록은 해당 키가 검사하는 모든 새 접속·요청을 거절합니다. | An empty allow list rejects all new connections or requests checked by this key. | 사용자 결정 2026-11-08(Q175) |
+| CPY-106 | 변경 없음 | 바뀐 설정이 없습니다. | No settings have changed. | 사용자 결정 2026-11-08(Q175) |
+| CPY-107 | 저장 중 | 설정을 저장하고 적용하는 중입니다. | Saving and applying settings. | 사용자 결정 2026-11-08(Q175) |
+| CPY-108 | 충돌 | 그사이 설정 파일이 바뀌었습니다. 다시 불러오면 입력 내용을 버리고 현재 설정으로 바꿉니다. | The configuration file has changed. Reloading discards your input and loads the current settings. | 사용자 결정 2026-11-08(Q175) |
+| CPY-109 | 쓰기 실패 | 설정 파일을 쓰지 못했습니다. 파일과 실행 값은 바뀌지 않았습니다. 입력을 확인한 뒤 다시 시도하십시오. | The configuration file could not be written. The file and settings in effect are unchanged. Review your input and try again. | 사용자 결정 2026-11-08(Q175) |
+| CPY-110 | 결과 불명 | 적용 결과를 확인할 수 없습니다. 요청을 자동으로 다시 보내지 않습니다. 설정 보기에서 현재 값을 확인하십시오. | The apply result cannot be confirmed. The request is not sent again automatically. Check the current values in View settings. | 사용자 결정 2026-11-08(Q175) |
+| CPY-111 | 다시 불러오기 행동 | 다시 불러오기 | Reload settings | 사용자 결정 2026-11-08(Q175) |
+| CPY-112 | 정수 오류 | 정수를 입력하십시오. | Enter an integer. | 사용자 결정 2026-11-08(Q175) |
+| CPY-113 | 범위 오류 | {min} 이상 {max} 이하로 입력하십시오. | Enter a value from {min} to {max}. | 사용자 결정 2026-11-08(Q175) |
+| CPY-114 | 관계 오류 | limits.waiting은 limits.relay_connections 이하여야 합니다. | limits.waiting must not exceed limits.relay_connections. | 사용자 결정 2026-11-08(Q175) |
+| CPY-115 | 공백 오류 | {line}줄: 항목에 공백을 넣지 마십시오. | Line {line}: do not include whitespace in an item. | 사용자 결정 2026-11-08(Q175) |
+| CPY-116 | 서버 검증 안내 | 입력한 설정의 검증에 실패했습니다. 표시한 입력란을 확인하십시오. | The entered settings failed validation. Check the marked fields. | 사용자 결정 2026-11-08(Q175) |
+| CPY-117 | 줄 진단. diagnostic은 코드별 번역 문구, 모르는 코드이면 원문과 코드 | {line}줄: {diagnostic} | Line {line}: {diagnostic} | 사용자 결정 2026-11-08(Q175) |
+| CPY-118 | 요청 거절 | 요청을 처리하지 못했습니다. 화면을 다시 불러오십시오. 입력 내용은 버립니다. | The request could not be processed. Reload this screen. Your input will be discarded. | 사용자 결정 2026-11-08(Q175) |
+| CPY-119 | 목록 도움말 | 한 줄에 항목 하나를 입력하십시오. 빈 줄은 무시합니다. 공백은 넣지 마십시오. | Enter one item per line. Empty lines are ignored. Do not include whitespace. | 사용자 결정 2026-11-08(Q175) |
+| CPY-120 | 적용 구분 | 재시작 없이 적용 | Applies without restart | 사용자 결정 2026-11-08(Q175) |
+| CPY-121 | 적용 구분 | 재시작 필요 | Restart required | 사용자 결정 2026-11-08(Q175) |
+| CPY-122 | 파일 차이 표식 | 파일과 다름 | Differs from file | 사용자 결정 2026-11-08(Q175) |
+| CPY-123 | 최근 재로드 제목 | 마지막 재로드 | Last reload | 사용자 결정 2026-11-08(Q175) |
+| CPY-124 | 재로드 결과 | 적용 / 거절 / 재시작 필요 | Applied / Rejected / Restart required | 사용자 결정 2026-11-08(Q175) |
+| CPY-125 | 재로드 계기 | 파일 변경 감지 / 설정 편집 | File watch / Configuration edit | 사용자 결정 2026-11-08(Q175) |
+| CPY-126 | 목록 빈 값 | 빈 목록 | Empty list | 사용자 결정 2026-11-08(Q175) |
+| CPY-127 | null 값 | 값 없음 | No value | 사용자 결정 2026-11-08(Q175) |
+| CPY-128 | 조회 시각 | 조회 시각: {time} | Retrieved at: {time} | 사용자 결정 2026-11-08(Q175) |
+| CPY-129 | 키·값 목록 라벨 | 키 / 값 / 적용 구분 | Key / Value / Application | 사용자 결정 2026-11-08(Q175) |
+| CPY-130 | 입력 구역 | 출발지 IP 허용 목록 | Source IP allow lists | 사용자 결정 2026-11-08(Q175) |
+| CPY-131 | 입력 구역 | 접근 정책 | Access policies | 사용자 결정 2026-11-08(Q175) |
+| CPY-132 | 입력 구역 | 연결 상한 | Connection limits | 사용자 결정 2026-11-08(Q175) |
+| CPY-133 | 입력 구역 | 시간 제한 | Timeouts | 사용자 결정 2026-11-08(Q175) |
+| CPY-134 | 입력 구역 | 연결 유지 | Keepalive | 사용자 결정 2026-11-08(Q175) |
+| CPY-135 | 단위 | 초 / 바이트 / 개 | seconds / bytes / count | 사용자 결정 2026-11-08(Q175) |
+| CPY-136 | 정수 도움말 | 범위: {min}~{max} | Range: {min}–{max} | 사용자 결정 2026-11-08(Q175) |
+| CPY-137 | 오류 요약 | 입력 오류가 {n}개 있습니다. 첫 오류로 이동합니다. | There are {n} input errors. Focus moves to the first error. | 사용자 결정 2026-11-08(Q175) |
+| CPY-138 | 재로드 정보 라벨 | 시각 / 결과 / 계기 / 바뀐 키 | Time / Result / Trigger / Changed keys | 사용자 결정 2026-11-08(Q175) |
+| CPY-139 | 파일 상태 제목 | 설정 파일 상태 | Configuration file status | 사용자 결정 2026-11-08(Q175) |
+| CPY-140 | `config_missing_key` | 필수 설정 값이 없습니다. | A required setting value is missing. | 사용자 결정 2026-11-08(Q175) |
+| CPY-141 | `config_type_mismatch` | 설정 값의 자료형이 맞지 않습니다. | The setting value has an invalid type. | 사용자 결정 2026-11-08(Q175) |
+| CPY-142 | `config_value_out_of_range` | 설정 값이 허용 범위를 벗어났습니다. | The setting value is outside its allowed range. | 사용자 결정 2026-11-08(Q175) |
+| CPY-143 | `config_relation_violated` | 설정 키 사이의 관계를 만족하지 않습니다. | The relationship between setting keys is not valid. | 사용자 결정 2026-11-08(Q175) |
+| CPY-144 | `config_ip_item_invalid` | IP·CIDR·범위 항목의 형식이 올바르지 않습니다. | The IP, CIDR, or range item has an invalid format. | 사용자 결정 2026-11-08(Q175) |
+| CPY-145 | `config_ip_range_reversed` | IP 범위의 시작 주소는 끝 주소 이하여야 합니다. | The start address of an IP range must not exceed its end address. | 사용자 결정 2026-11-08(Q175) |
+| CPY-146 | `config_ip_range_family_mixed` | IP 범위의 두 주소는 모두 IPv4이거나 모두 IPv6여야 합니다. | Both addresses in an IP range must be IPv4 or both must be IPv6. | 사용자 결정 2026-11-08(Q175) |
+| CPY-147 | `config_origin_invalid` | Origin 항목의 형식이 올바르지 않습니다. | The Origin item has an invalid format. | 사용자 결정 2026-11-08(Q175) |
+| CPY-148 | `config_target_item_invalid` | Mode I 대상 항목의 형식이 올바르지 않습니다. | The Mode I target item has an invalid format. | 사용자 결정 2026-11-08(Q175) |
 
 ### 9.4 근거 문서
 
@@ -653,7 +652,7 @@ DASH-TBD-001은 결정되어 4.1절과 설정 계약에 반영했으며 재사�
 11. 로그아웃 요청 거절(403). 사용자 결정 2026-10-23(Q54): 로그아웃 결과 불명 안내(CPY-076)를 쓴다. 새 문구는 두지 않는다. 4절 SCR-003 '로그아웃 결과 확인 필요' 행에 반영했다.
 12. 목록 개수 배지. 사용자 결정 2026-11-05(Q115): 대기 연결·활성 세션·최근 종료 목록 제목 옆에 한국어 `{n}건`, 영어 `1 item` 또는 `{n} items`를 쓴다. CPY-084·085로 관리한다. 숫자만 표시하거나 배지를 없애는 대안은 채택하지 않았다.
 13. 로그인 새로고침과 요청 제한 시간. 사용자 결정 2026-11-07(Q158): 새로고침 후 계정명은 복원하지 않는다. 로그인 요청 제한 시간은 10초로 유지한다. 기존 구현의 두 선택을 승인했다.
-14. 설정 보기·편집. 사용자 지시 2026-11-08과 사용자 결정 2026-11-08(Q167~Q173)을 반영했다. 새 이름·CPY-086~148·설정 시안은 승인 대기다. 입력·확인·오류·화면 이동 세부는 이 문서의 설계이며 사용자 결정으로 표시하지 않는다.
+14. 설정 보기·편집. 사용자 지시 2026-11-08과 사용자 결정 2026-11-08(Q167~Q173)을 반영했다. 사용자 결정 2026-11-08(Q174)으로 설정 시안·내비게이션·디자인 확장을, 사용자 결정 2026-11-08(Q175)으로 CPY-086~148을, 사용자 결정 2026-11-08(Q176)으로 새 이름을 채택했다. 사용자 결정 2026-11-08(Q177)으로 파일 기록 뒤 같은 요청 안에서 실행 값을 직접 교체하고 200을 반환하는 설계를 채택했다. 뒤따른 파일 감지의 같은 후보는 다시 적용하지 않는다. 구현·테스트는 미실행(구현 전)이다.
 15. DASH-016의 기대 결과를 2026-11-08에 고쳤다. "설정 편집 행동 없음"은 설정 화면 추가와 맞지 않으므로 "운영 화면에 설정 입력란 없음, 설정 내비게이션 제공"으로 바꿨다. 기존 번호는 유지한다. 새 시나리오와 구현 테스트 연결은 구현 단계에서 추가한다.
 16. 진단 번역. 2026-11-08 lead 검토로 CPY-140~148의 코드별 한영 문구를 더하고 CPY-117의 변수를 `{message}`에서 `{diagnostic}`으로 바꿨다. API의 한국어 `message`를 영어 화면에 그대로 표시하던 규칙과 영어 시안의 차이를 없앴다. DASH-032·040·043의 기대 결과에 같은 번역·모르는 코드 처리를 명시했다. 기존 번호를 유지한다.
 
