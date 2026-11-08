@@ -271,14 +271,22 @@ async function case059() {
 async function captureDownloads(run) {
   const blobs = [];
   const names = [];
+  const OriginalBlob = window.Blob;
   const originalCreate = URL.createObjectURL;
   const originalRevoke = URL.revokeObjectURL;
   const originalClick = HTMLAnchorElement.prototype.click;
+  // Reading a Blob back waits on the browser process in real time. Under the runner's
+  // virtual time an idle page can skip to the budget end during that wait, so keep the
+  // parts the page wrote. The real-server DASH-060 runner checks the saved bytes.
+  window.Blob = class extends OriginalBlob {
+    constructor(parts = [], options) { super(parts, options); this.parts = parts; }
+  };
   URL.createObjectURL = (blob) => { blobs.push(blob); return 'blob:fixture'; };
   URL.revokeObjectURL = () => {};
   HTMLAnchorElement.prototype.click = function () { names.push(this.download); };
   try { await run(blobs, names); }
   finally {
+    window.Blob = OriginalBlob;
     URL.createObjectURL = originalCreate;
     URL.revokeObjectURL = originalRevoke;
     HTMLAnchorElement.prototype.click = originalClick;
@@ -297,7 +305,7 @@ async function case060() {
     host.querySelector('#logs-download').click();
     await waitFor(() => blobs.length === 1);
     check('060: paginated until exhausted', api.calls.length === 3 && api.calls[1].query.get('limit') === '1000' && api.calls[2].query.get('limit') === '1000' && api.calls[2].query.get('before') === '2');
-    const content = await blobs[0].text();
+    const content = blobs[0].parts.join('');
     const lines = content.trimEnd().split('\n').map(JSON.parse);
     check('060: all 1001 entries, LF, no wrappers or new entries', lines.length === 1001 && lines.every((entry) => entry.event === 'session_started' && !('seq' in entry)) && !content.includes('\r') && content.endsWith('\n'));
     check('060: file entries are in ascending seq order', lines.every((entry, index) => entry.viewer_conn_id === `c-${index + 1}`));

@@ -1194,7 +1194,7 @@ fn writes_the_log_to_the_configured_file_from_start_to_stop() {
     );
     let lines: Vec<&str> = log.lines().collect();
     assert_eq!(field(lines[0], "level"), Some("info"));
-    assert_eq!(field(lines[0], "log_contract"), Some("ops-info/1.3.0"));
+    assert_eq!(field(lines[0], "log_contract"), Some("ops-info/2.0.0"));
     assert_eq!(field(lines[1], "level"), Some("warn"));
     assert_eq!(field(lines[1], "listener"), Some("tcp_viewer"));
     assert_eq!(field(lines[1], "item"), Some("0.0.0.0/0"));
