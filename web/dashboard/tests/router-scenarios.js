@@ -26,9 +26,11 @@ const DETAIL = `GET /api/v1/sessions/${SESSION_ID}`;
 const DETAIL_HASH = `#/sessions/${SESSION_ID}`;
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+// Waits until `ready()` holds or `ms` passes; the caller's check then reports the outcome either way.
+// Each step is one 20 ms timer, so the bound is page time. A wall-clock bound ended early when the
+// system clock stepped forward during the wait; the WSL clock stepped by about 32 s.
 async function waitFor(ready, ms = 5000) {
-  const until = Date.now() + ms;
-  while (!ready() && Date.now() < until) await wait(20);
+  for (let steps = Math.ceil(ms / 20); steps > 0 && !ready(); steps -= 1) await wait(20);
 }
 const check = (label, passed) => {
   if (!passed) failures.push(label);

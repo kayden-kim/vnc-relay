@@ -115,9 +115,10 @@ const TIME_ONLY = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} \S+$/;
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 // Waits until `ready()` holds or `ms` passes; the caller's check then reports the outcome either way.
+// Each step is one 20 ms timer, so the bound is page time. A wall-clock bound ended early when the
+// system clock stepped forward during the wait; the WSL clock stepped by about 32 s.
 async function waitFor(ready, ms = 5000) {
-  const until = Date.now() + ms;
-  while (!ready() && Date.now() < until) await wait(20);
+  for (let steps = Math.ceil(ms / 20); steps > 0 && !ready(); steps -= 1) await wait(20);
 }
 // The first load is over: cards are on screen and none still reads as loading.
 const settled = (root, copy = t) => root.querySelectorAll('section.card').length > 0 && !root.textContent.includes(copy.loading);
