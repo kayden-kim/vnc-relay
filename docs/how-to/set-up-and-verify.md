@@ -211,6 +211,8 @@ Linux 전용 `tests/relay_dead_peer_linux.rs`는 사용자·네트워크 네임�
 
    한 crate만 빠르게 확인할 때는 `cargo test --package <패키지 이름>`을 쓸 수 있다. 완료 보고 전에는 6단계를 실행해야 한다.
 
+설정 예시·시험용 파일을 v4에 맞출 때는 [설정 계약 3.3절](../contracts/config-v4.md#33-v3-파일을-v4로-옮기기)의 매핑을 따른다. TCP 키는 그대로다. WS·WSS의 공통 리스너 키와 역할 키는 분리한다. 별도 버전 키는 넣지 않는다. 운영 파일 이관·대체 포트 검증·롤백은 [수동 운영 안내 3.2.2절](operate-relay.md#322-v3-파일을-v4로-옮기기)을 따른다.
+
 ### 3.4 전체 완료 검증
 
 6. 저장소 루트에서 다음 명령을 순서대로 실행한다. 하나라도 실패하면 멈추고 [5절](#5-중단-조건)을 따른다.
@@ -250,7 +252,7 @@ Linux 전용 `tests/relay_dead_peer_linux.rs`는 사용자·네트워크 네임�
 
 실행 기록 2: 2026-10-20 Windows 11 x64에서 1단계 winget 명령을 처음 실행했다. UAC를 승인하지 않아 종료 코드는 1602였다. rustup은 `%USERPROFILE%\.cargo\bin`에 설치되어 있지만 사용자 PATH에 없다. 이 상태의 `cargo build`는 `` `link.exe` returned an unexpected error ``로 실패했다.
 
-실행 기록 3: 2026-10-20 같은 Windows 11 Pro 10.0.26200 x64에서 UAC를 승인해 1단계 설치를 마쳤다. 커밋 `e1cfc4f`에 Windows 경고 수정(`crates/adapters/src/net.rs` 테스트 모듈을 Linux 전용으로, `tests/serve.rs`의 `lifecycle_events`를 Unix 전용으로)을 더한 작업 트리에서 실행했다. PowerShell에서 `PATH`에 `%USERPROFILE%\.cargo\bin`을 더하고 `AWS_LC_SYS_PREBUILT_NASM=1`을 정했다. Cargo 대상 디렉터리는 저장소의 `target\`이다. 3·4·6단계의 명령은 모두 종료 코드 0이었다. 수정 전 clippy 오류는 `unused import: super::*`(`crates\adapters\src\net.rs`)와 `function lifecycle_events is never used`(`tests\serve.rs`)였다. 같은 작업 트리에서 Ubuntu 6단계도 다시 통과했다. 테스트별 결과는 [운영 정보 계약 실행 기록](../contracts/ops-info-v1.md#계약-테스트-실행-기록)에 있다.
+실행 기록 3: 2026-10-20 같은 Windows 11 Pro 10.0.26200 x64에서 UAC를 승인해 1단계 설치를 마쳤다. 커밋 `e1cfc4f`에 Windows 경고 수정(`crates/adapters/src/net.rs` 테스트 모듈을 Linux 전용으로, `tests/serve.rs`의 `lifecycle_events`를 Unix 전용으로)을 더한 작업 트리에서 실행했다. PowerShell에서 `PATH`에 `%USERPROFILE%\.cargo\bin`을 더하고 `AWS_LC_SYS_PREBUILT_NASM=1`을 정했다. Cargo 대상 디렉터리는 저장소의 `target\`이다. 3·4·6단계의 명령은 모두 종료 코드 0이었다. 수정 전 clippy 오류는 `unused import: super::*`(`crates\adapters\src\net.rs`)와 `function lifecycle_events is never used`(`tests\serve.rs`)였다. 같은 작업 트리에서 Ubuntu 6단계도 다시 통과했다. 테스트별 결과는 [운영 정보 계약 실행 기록](../contracts/ops-info-v2.md#계약-테스트-실행-기록)에 있다.
 
 실행 기록 4: 2026-10-22 Ubuntu 24.04.4 LTS x86_64(WSL2, 커널 6.6.87.2-microsoft-standard-WSL2)에서 Chrome을 설치했다. `sudo`가 암호를 요구해 2절의 `sudo apt install` 명령은 실행하지 않았다. 대신 Windows에서 root 셸로 같은 .deb를 설치했다: `wsl -d Ubuntu -u root -- bash -lc 'cd /tmp && wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb && DEBIAN_FRONTEND=noninteractive apt-get install -y -q ./google-chrome-stable_current_amd64.deb'`. 받은 .deb 파일은 설치 뒤 지웠다. 설치 뒤 `command -v google-chrome`은 `/usr/bin/google-chrome`, `dpkg-query -W google-chrome-stable`은 `156.0.8078.47-1`이었다. 커밋 `df3b5b2`(작업 트리 변경 없음)에서 6단계를 다시 실행했다. 여섯 명령이 모두 종료 코드 0이었고 브라우저 테스트 2건이 통과했다. 시나리오 150건: 통과 16, 부분 23, 실패 0, 미실행 0, 미연결 111, 오류 0건. 같은 커밋의 Windows 6단계도 통과했다(통과 15, 부분 23, 미실행 1 = OPS-007, 미연결 111).
 
@@ -334,7 +336,7 @@ PRD 10절의 AC-01~37을 같은 기준으로 대조했다. 각 AC 행이 링크�
 | OPS-060~062 | 통과 / 통과 | 통과 | 사건 계약 시험과 실행파일 시험이 두 OS에서 통과했다 |
 | DASH-028~053 | 통과 / 통과 | 통과 | `tests/dashboard_live.rs`의 실서버 실행기 26개가 통과했다([대시보드 검증 4.28절](verify-dashboard-frontend.md#428-설정-화면-실서버-시험-dash-028053-mgt-040042043-2026-11-08)). 시험 쪽 주입은 Q113·Q180 범위이며 같은 절의 출처 표를 따른다. 가짜 API 시험 26개와 시안 대조 124쌍([4.27절](verify-dashboard-frontend.md#427-설정-화면-구현과-시안-대조-작업-66-2026-11-08)), 네 엔진 16회 실행([4.29절](verify-dashboard-frontend.md#429-설정-화면-네-엔진-확인-작업-66-2026-11-08))을 함께 보았다 |
 
-OPS-050 조항별 시험은 다음과 같다. 조항은 [설정 계약 1.8절](../contracts/config-v3.md#18-재로드-구분)의 적용 시점이다.
+OPS-050 조항별 시험은 다음과 같다. 조항은 [설정 계약 1.8절](../contracts/config-v4.md#18-재로드-구분)의 적용 시점이다.
 
 | 조항 | 확인한 시험 | OS |
 | --- | --- | --- |
@@ -389,6 +391,8 @@ TODO 6.7의 운영 권한 확인은 다음과 같다. [수동 운영 안내 3.5.
 라이선스: 두 OS 최종 게이트의 deny 단계가 `licenses ok`, 종료 코드 0이었다. 고지 대조는 게이트 안의 `tests/dependency_notices.rs`(`notices --check`)가 두 OS에서 통과했다([라이선스 검사 실행 기록 9](check-dependency-licenses.md#4-검증)).
 
 남은 일은 없다. 스펙·계약·설계·PRD의 상태 문장은 같은 변경에서 이 판정에 맞췄다([TODO 6.9](https://github.com/kayden-kim/vnc-relay/blob/556fab23d15e77125ca2ad5c575089857b312049/docs/TODO.md#6-설정-보기와-동적-설정-편집)).
+
+후속: 사용자 결정 2026-11-08(Q181~Q188)의 설정 v4·ops-info 2.0.0·공유 WS·WSS 역할·프록시 TLS 종료·최근 로그는 위 작업 6.9 판정 뒤에 추가된 기준이다. 위 실행 기록과 판정은 당시 범위로 보존한다. 새 OPS-065~069와 변경된 기존 시나리오의 v4 범위는 미실행 (구현 전)이다. 과거 전체 게이트의 통과를 새 기준의 구현·검증 증거로 적용하지 않는다.
 
 ## 5. 중단 조건
 

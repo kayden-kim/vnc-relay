@@ -2,14 +2,14 @@
 
 | 항목 | 내용 |
 | --- | --- |
-| 상태 | Accepted |
+| 상태 | Superseded by [ADR-0007](ADR-0007-proxy-tls-termination.md) (2026-11-08) |
 | 결정일 | 2026-10-16 |
 | 결정자 | 프로젝트 소유자(사용자) |
 | 관련 요구사항 | [PRD 확정 기준 "TLS 종료"](../requirements/PRD.md#확정-기준), [FR-05](../requirements/PRD.md#fr-05-wswss-프록시), [FR-07](../requirements/PRD.md#fr-07-설정과-프로세스-수명), [7절 보안 및 신뢰 경계](../requirements/PRD.md#7-보안-및-신뢰-경계) |
-| 관련 스펙·계약 | [WS·WSS 전송 스펙](../specs/websocket.md), [설정·운영 스펙](../specs/operations.md#4-보안과-신뢰-경계), [관리 스펙](../specs/management.md), [설정 계약](../contracts/config-v3.md), [관리 API 계약](../contracts/management-api-v1.md), [WebSocket 중계 계약](../contracts/websocket-relay-v1.md) |
+| 관련 스펙·계약 | [WS·WSS 전송 스펙](../specs/websocket.md), [설정·운영 스펙](../specs/operations.md#4-보안과-신뢰-경계), [관리 스펙](../specs/management.md), [설정 계약](../contracts/config-v4.md), [관리 API 계약](../contracts/management-api-v1.md), [WebSocket 중계 계약](../contracts/websocket-relay-v1.md) |
 | 관련 아키텍처 문서 | 없음(구현 전) |
 | 이 ADR이 대체하는 이전 ADR | 없음 |
-| 이 ADR을 대체한 새 ADR | 없음 |
+| 이 ADR을 대체한 새 ADR | [ADR-0007](ADR-0007-proxy-tls-termination.md) (2026-11-08) |
 
 ## 1. 결정
 
@@ -66,7 +66,7 @@ WSS와 관리 HTTPS는 인터넷에서 접근할 수 있다. 일반적인 웹 �
 
 ### 후속 작업
 
-- 설정 계약: `cert_file`·`key_file` 키와 재로드 대상은 [설정 계약](../contracts/config-v3.md)이 채택(2026-10-16)해 정했다.
+- 설정 계약: `cert_file`·`key_file` 키와 재로드 대상은 [설정 계약](../contracts/config-v4.md)이 채택(2026-10-16)해 정했다.
 - 수동 운영 안내: 인증서 교체 절차를 쓴다(OPS-031 대상). [운영 안내 3.6절](../how-to/operate-relay.md#36-인증서-교체)에 썼다(작업 5.6, 2026-11-05). 예시 묶음은 TLS를 끄므로 두 OS 수동 실행에서 이 절차는 해당 없음이었다. 인증서 교체 동작의 자동 증거는 OPS-024다.
 - 허용 암호 스위트는 선택한 rustls 암호 모듈의 rustls 기본 목록으로 정했고 설정 키는 없다(2026-10-16). 암호 모듈 선택은 OPS-TBD-009에서 관리한다.
 
@@ -87,3 +87,5 @@ WSS와 관리 HTTPS는 인터넷에서 접근할 수 있다. 일반적인 웹 �
 - 운영자가 프록시 뒤 배치를 요구하는 이슈가 접수되고, 프록시가 전달하는 클라이언트 주소를 신뢰하는 방식이 PRD에서 채택된다.
 - 내장 TLS 구조에서 WS-023 또는 OPS-036 테스트를 두 대상 OS 중 한 곳에서 통과시킬 수 없다는 결과가 기록된다.
 - OPS-024의 인증서 교체 테스트가 두 대상 OS 중 한 곳에서 반복해서 실패한다.
+
+후속: 2026-11-08. 사용자 지시 2026-11-08과 사용자 결정 2026-11-08(Q182·Q183)으로 첫 재검토 조건이 충족되었다. [ADR-0007](ADR-0007-proxy-tls-termination.md)이 중계 WS·WSS 리스너 앞의 프록시 TLS 종료를 지원한다. 내장 TLS와 관리 리스너의 기존 보안 규칙은 유지한다. 위 본문과 검증 기록은 당시의 결정으로 보존한다.

@@ -1,6 +1,6 @@
 # 관리 API v1 계약
 
-관리 리스너가 제공하는 JSON over HTTP 관리 API의 경로·메서드·요청·응답·오류와 로그인 교환 형식을 정한다. 내장 대시보드(정적 HTML·JS)가 이 API로 서버 요약·대기 연결·활성 세션·최근 종료 목록과 설정을 조회하고, 동적 설정을 편집하고, 활성 세션을 종료하고, 관리자 로그인·로그아웃을 한다. 이 문서는 [관리 스펙](../specs/management.md)과 [화면 스펙](../specs/dashboard.md)의 동작을 바꾸지 않는다. 스펙과 다르면 스펙을 따른다.
+관리 리스너가 제공하는 JSON over HTTP 관리 API의 경로·메서드·요청·응답·오류와 로그인 교환 형식을 정한다. 내장 대시보드(정적 HTML·JS)가 이 API로 서버 요약·대기 연결·활성 세션·최근 종료 목록·최근 로그와 설정을 조회하고, 동적 설정을 편집하고, 활성 세션을 종료하고, 관리자 로그인·로그아웃을 한다. 이 문서는 [관리 스펙](../specs/management.md)과 [화면 스펙](../specs/dashboard.md)의 동작을 바꾸지 않는다. 스펙과 다르면 스펙을 따른다.
 
 | 항목 | 값 |
 | --- | --- |
@@ -10,6 +10,7 @@
 | 결정 반영 | 명확화(2026-11-02, 1.1.0 유지): `address.ip`의 IPv4 매핑 IPv6 정규화(사용자 결정 2026-11-02(Q88)), terminate의 본문 금지 규칙 우선(사용자 결정 2026-11-02(Q89)), 검증·수락된 종료 완료 대기 중 U 일시 중지(사용자 결정 2026-11-02(Q92))를 반영했다. 2.1절 경로 표에서 빠진 415(GET 경로와 `DELETE /api/v1/session`)를 1.1절 공통 규칙과 `a143539`의 기존 구현에 맞춰 보완했다(T415). 동작은 바뀌지 않는다. 명확화(2026-11-07, 1.1.0 유지): 정적 경로의 `404`도 JSON `not_found`를 유지한다(사용자 결정 2026-11-07(Q153)). `/app/` 하위 디렉터리 파일의 제공 경로를 명시했다(사용자 결정 2026-11-07(Q154)). 로그인 화면 정적 응답에도 `Cache-Control: no-store`를 붙인다(사용자 결정 2026-11-07(Q155)). 기존 구현의 동작은 바뀌지 않는다. |
 | 호환 값 추가 | 2026-11-02, 1.1.0 유지: `close_cause`에 `internal_error`를 더했다(사용자 결정 2026-11-02(Q94)). 기존 값과 필드는 바뀌지 않는다. 1.10·3절에 따라 Consumer는 알 수 없는 값을 받은 그대로 표시하므로 호환 변경이다. |
 | 설정 보기·편집 호환 추가 | 2026-11-08, 1.1.0 유지: 설정 보기·편집 경로와 메서드, 응답 필드, 오류 코드 6개를 더한다. 새 409도 2.3절의 4xx 범주에 속한다. 기존 경로의 요구를 약하게 바꾸지 않는다(3절). 설정 파일 기록·재로드 확대·관리 권한·편집 기본 꺼짐은 사용자 결정 2026-11-08(Q167~Q172)이다. 새 이름과 상태 코드, PATCH의 `query_timeout_secs` 재사용은 사용자 결정 2026-11-08(Q176)으로 채택했다. 구현·계약 테스트는 미실행(구현 전)이다. 후속: 커밋 `eae442f`의 두 OS 게이트에서 구현과 계약 테스트가 통과했다(5절). |
+| 최근 로그·세션 필드 호환 추가 | 2026-11-08, 1.1.0 유지: 최근 로그 조회 경로와 세션의 대상 전송 경로·전달 주소 필드를 더한다(사용자 결정 2026-11-08(Q185), 사용자 결정 2026-11-08(Q186), 사용자 결정 2026-11-08(Q187)). 기존 경로·필드·인증·CSRF 요구는 바꾸지 않는다. 매개변수·응답 필드 이름과 세션 필터 화면 URL은 사용자 결정 2026-11-08(Q191)으로 채택했다(6절). 구현·계약 테스트는 미실행(구현 전)이다. |
 | 소유자 | vnc-relay 프로젝트 관리자 |
 | 만드는 쪽(Producer) | `vnc-relay` 관리 리스너(서버) |
 | 사용하는 쪽(Consumer) | 같은 실행파일에 내장된 대시보드(정적 HTML·JS). 같은 규칙으로 호출하는 외부 HTTP 클라이언트도 Consumer로 본다. |
@@ -18,18 +19,20 @@
 | 기준 스펙 | [관리 조회와 세션 종료](../specs/management.md), [운영 대시보드 화면](../specs/dashboard.md). L·Lm·E·P 등 매개변수 정의는 [운영 스펙 2절](../specs/operations.md#2-상태와-검증-매개변수)을 따른다. |
 | 관련 요구사항 | [PRD](../requirements/PRD.md) FR-06·FR-07·FR-08(비밀 비노출), 7절 보안 경계, AC-09·AC-10·AC-19~AC-21 |
 | 호환성 범위 | 경로 접두사 `/api/v1/`. 같은 릴리스의 서버와 내장 대시보드. HTTPS 관리 리스너와 평문 HTTP 루프백 관리 리스너. |
-| 관련 테스트 | [관리 스펙 7절](../specs/management.md#7-수용-테스트) MGT-001~MGT-045, [화면 스펙 7절](../specs/dashboard.md#7-수용-테스트), [운영 스펙 7절](../specs/operations.md#7-수용-테스트) OPS-043. 계약 테스트는 5절에 연결한다. 기존 범위는 `ee0314f`의 두 OS 전체 게이트가 통과했다. 설정 보기·편집 범위(MGT-028~045)는 `eae442f`의 두 OS 전체 게이트가 통과했다. 현재 지원 판정과 브라우저별 수동 확인 범위는 [작업 5.9 판정표](../how-to/set-up-and-verify.md#41-작업-59-판정표)와 [작업 6.9 판정표](../how-to/set-up-and-verify.md#42-작업-69-판정표)를 따른다. |
+| 관련 테스트 | [관리 스펙 7절](../specs/management.md#7-수용-테스트) MGT-001~MGT-051, [화면 스펙 7절](../specs/dashboard.md#7-수용-테스트), [운영 스펙 7절](../specs/operations.md#7-수용-테스트) OPS-043. 계약 테스트는 5절에 연결한다. 기존 범위는 `ee0314f`의 두 OS 전체 게이트가 통과했다. 설정 보기·편집 범위(MGT-028~045)는 `eae442f`의 두 OS 전체 게이트가 통과했다. MGT-046~051은 미실행 (구현 전)이다. 현재 지원 판정과 브라우저별 수동 확인 범위는 [작업 5.9 판정표](../how-to/set-up-and-verify.md#41-작업-59-판정표)와 [작업 6.9 판정표](../how-to/set-up-and-verify.md#42-작업-69-판정표)를 따른다. |
 
-관련 문서: [설정 계약](config-v3.md)(`[dashboard]`·`[limits]`·`[recent_closed]`·`[timeouts]`·`[management]` 키와 기본값·범위), [CLI·계정 파일 계약](cli-v1.md)(계정명 규칙), [운영 정보 계약](ops-info-v1.md)(`session_id`·종료 사건 로그, 상태 리스너), [WebSocket 중계 계약](websocket-relay-v1.md)(관리자 종료의 Close 4005), [ADR-0001 내장 TLS](../decisions/ADR-0001-built-in-tls.md), [ADR-0003 단일 인스턴스·메모리 상태](../decisions/ADR-0003-single-instance-memory-state.md).
+관련 문서: [설정 계약](config-v4.md)(`[dashboard]`·`[limits]`·`[recent_closed]`·`[recent_logs]`·`[timeouts]`·`[management]` 키와 기본값·범위), [CLI·계정 파일 계약](cli-v1.md)(계정명 규칙), [운영 정보 계약](ops-info-v2.md)(`session_id`·종료 사건 로그, 상태 리스너), [WebSocket 중계 계약](websocket-relay-v1.md)(관리자 종료의 Close 4005), [ADR-0001 내장 TLS](../decisions/ADR-0001-built-in-tls.md), [ADR-0003 단일 인스턴스·메모리 상태](../decisions/ADR-0003-single-instance-memory-state.md).
 
 이 계약은 2026-10-16에 사용자가 채택했다(상태 Active). 당시의 `/api/v1/` 아래 경로 이름과 메서드, 필드 이름, 오류 코드 일곱 개, `X-Relay-Poll`·`X-CSRF-Token` 값 규칙, 종료 원인 값 이름, 화면 URL, `WWW-Authenticate` 헤더 값이 채택 범위다. 새 설정 보기·편집 이름과 상태 코드, PATCH의 `query_timeout_secs` 재사용은 사용자 결정 2026-11-08(Q176)으로 채택했다. 6절에 "관찰로 확인 필요"·"구현에서 확인"으로 남긴 항목은 채택으로 해소되지 않았다. 앞서 사용자가 확정한 값은 다음과 같다.
+
+최근 로그의 메모리 보관과 조회·화면 기능은 사용자 결정 2026-11-08(Q185), 사용자 결정 2026-11-08(Q186)으로 채택했다. `GET /api/v1/logs`, `target_transport`, `viewer_forwarded_ip`, `target_forwarded_ip`, SCR-006 `/#/logs` 이름은 사용자 결정 2026-11-08(Q187)으로 채택했다. 1.15절의 매개변수·응답 필드 이름과 `/#/logs?session_id={session_id}` 형식은 사용자 결정 2026-11-08(Q191)으로 채택했다(6절).
 
 - 관리 API는 JSON over HTTP이고 경로 접두사는 `/api/v1/`이다.
 - 시각은 UTC ISO 8601 문자열이고, 전송량은 바이트 정수다. 화면이 현지 시각과 KiB/MiB로 바꿔 표시한다.
 - 관리 세션 쿠키는 HttpOnly·SameSite=Strict이고, HTTPS에서는 Secure를 붙인다. 평문 HTTP 루프백 관리 리스너에서만 Secure를 뺀다. CSRF 방어를 별도로 유지한다.
 - 관리 세션은 서버 메모리에 두며, 재시작하면 모두 무효다.
 - 종료 요청은 정리가 끝난 뒤 응답한다. 별도의 "처리 중" 응답은 없다.
-- 폴링 주기 P(`dashboard.poll_secs`)와 폴링 조회 제한 시간(`dashboard.query_timeout_secs`)의 기본값·유효 범위는 [설정 계약 1.2절](config-v3.md#12-키-표)이 정한다. 이 문서는 수치를 반복하지 않는다.
+- 폴링 주기 P(`dashboard.poll_secs`)와 폴링 조회 제한 시간(`dashboard.query_timeout_secs`)의 기본값·유효 범위는 [설정 계약 1.2절](config-v4.md#12-키-표)이 정한다. 이 문서는 수치를 반복하지 않는다.
 
 ## 1. 형식과 의미
 
@@ -47,7 +50,7 @@
 | 기준 시점 | 모든 `GET` 성공 응답은 최상위 `as_of`(`timestamp`)를 가진다. 한 응답 안의 집계와 목록은 `as_of` 시점에 일관된다. 서로 다른 요청의 결과가 같은 시점이라고 보장하지 않는다. 서버 요약의 `usage`(L·Lm 사용량)는 이 일관성의 대상이 아니며, 연결이 바뀌는 동안 같은 응답의 `counts`와 잠깐 어긋날 수 있다([관리 스펙 2.2절](../specs/management.md#22-주소와-스냅샷), 사용자 결정 2026-11-04(Q100)). |
 | 목록 | 목록은 항상 `items` 배열이다. 정상적으로 조회한 빈 목록은 `200`과 `"items": []`다. 조회 실패나 인증 실패로 대신하지 않는다. |
 | 정렬 | `waiting`·`sessions`는 오래된 항목이 먼저다(`connected_at`·`started_at` 오름차순). `closed-sessions`는 최근 종료가 먼저다(`ended_at` 내림차순). 같은 시각 항목의 순서는 정하지 않는다. |
-| null과 확인 불가 | 값을 읽지 못하면 0으로 대신하지 않는다. 그 필드를 `null`로 주고, 같은 객체의 `<필드>_unavailable_reason`에 사유 문자열을 준다. 값이 있으면 사유는 `null`이다. 이 규칙은 1.6절 표가 "확인 불가 가능"으로 표시한 필드에만 적용한다. 설정 보기의 `revision`·`last_reload`·`items[].value`는 1.13절의 별도 `null` 규칙을 따른다. 그 밖의 필드는 항상 값을 가진다. |
+| null과 확인 불가 | 값을 읽지 못하면 0으로 대신하지 않는다. 그 필드를 `null`로 주고, 같은 객체의 `<필드>_unavailable_reason`에 사유 문자열을 준다. 값이 있으면 사유는 `null`이다. 이 규칙은 1.6절 표가 "확인 불가 가능"으로 표시한 필드에만 적용한다. 설정 보기의 `revision`·`last_reload`·`items[].value`는 1.13절, 전달 주소는 1.8절, 최근 로그의 순번 경계는 1.15절의 별도 `null` 규칙을 따른다. 그 밖의 필드는 항상 값을 가진다. |
 | 확인 불가 사유 | 현재 값은 `read_failed`(값을 읽는 데 실패)다. Consumer는 모르는 사유 문자열을 일반 "확인 불가"로 표시한다. |
 | 상대 주소(`address`) | 객체 `{"ip": 문자열, "port": 정수}`. 실제 소켓 상대 주소다. 전달 헤더(`Forwarded`·`X-Forwarded-For` 등)로 바꾸지 않는다. `ip`는 `IpAddr::to_canonical()`을 적용한 표기다. IPv4 매핑 IPv6(`::ffff:a.b.c.d`)는 `a.b.c.d`로 쓴다. 그 밖의 IPv6는 괄호 없는 소문자 압축 표기다. `PeerIp`와 운영 로그도 같은 규칙을 쓴다(사용자 결정 2026-11-02(Q88)). |
 | 노출 범위 | 아래 1.1.1절을 따른다. |
@@ -59,14 +62,15 @@
 | 정보 | 나오는 곳 | 나오지 않는 곳 |
 | --- | --- | --- |
 | 중계 ID(`relay_id`) | `GET /api/v1/waiting`의 항목만 | 활성 세션 목록·상세, 최근 종료 목록, 오류 본문, 쿠키 |
-| 세션 식별자(`session_id`) | 활성 세션 목록·상세, 최근 종료 목록, 종료 응답 | 대기 연결 목록(세션이 아직 없음) |
-| 상대 주소(`viewer_address`·`target_address`) | 활성 세션 목록·상세 | 대기 연결 목록, 최근 종료 목록, 오류 본문 |
+| 세션 식별자(`session_id`) | 활성 세션 목록·상세, 최근 종료 목록, 종료 응답, 최근 로그의 해당 사건 | 대기 연결 목록(세션이 아직 없음) |
+| 상대 주소(`viewer_address`·`target_address`)와 전달 주소 | 활성 세션 목록·상세. 최근 로그에는 운영 정보 계약이 정한 주소 필드가 나옴 | 대기 연결 목록, 최근 종료 목록, 오류 본문 |
 | 관리자 비밀번호·비밀번호 해시·관리 세션 쿠키 값 | 어디에도 없음. 비밀번호는 로그인 요청 본문에만 있다. | 모든 응답·오류·로그 |
 | CSRF 토큰 | 로그인 응답과 `GET /api/v1/session` 응답만 | 그 밖의 모든 응답 |
 | 원시 중계 데이터(RFB 스트림) | 어디에도 없음 | 모든 응답 |
-| 설정 키·값과 설정 경로 | `GET /api/v1/config`의 실행 중 유효 설정만(1.13절) | 경로가 가리키는 파일 내용, 비밀번호·해시·개인키 내용, 오류의 입력값 인용 |
+| 설정 키·값과 설정 경로 | `GET /api/v1/config`의 실행 중 유효 설정(1.13절). 최근 로그에는 운영 정보 계약이 정한 설정 키 등 사건 메타 정보만 포함 | 경로가 가리키는 파일 내용, 비밀번호·해시·개인키 내용, 오류의 입력값 인용 |
+| 최근 로그 사건 | `GET /api/v1/logs`의 `entry`. 운영 정보 계약의 비밀 비노출·`relay_id_ref` 규칙을 그대로 따름 | 원시 중계 ID·인증 비밀·원시 스트림은 로그에 없음 |
 
-오류 본문의 `message`에는 요청 입력값(계정명·비밀번호·세션 식별자·중계 ID·설정값)을 되풀이하지 않는다. 설정 진단의 `message`에도 값을 인용하지 않는다([설정 계약 2.1절](config-v3.md#21-설정-오류와-준비-실패)).
+오류 본문의 `message`에는 요청 입력값(계정명·비밀번호·세션 식별자·중계 ID·설정값)을 되풀이하지 않는다. 설정 진단의 `message`에도 값을 인용하지 않는다([설정 계약 2.1절](config-v4.md#21-설정-오류와-준비-실패)).
 
 ### 1.2 경로 목록과 스펙 대응
 
@@ -83,6 +87,7 @@
 | `GET /api/v1/sessions/{session_id}` | 필요 | 불필요 | `200` 활성 세션 상세(1.8절) | 세션 상세(MGT-R02) |
 | `POST /api/v1/sessions/{session_id}/terminate` | 필요 | 필요 | `200` 종료 결과(1.9절) | 관리자 종료(MGT-R05·R06·R07, [관리 3.2절](../specs/management.md#32-관리자-종료)) |
 | `GET /api/v1/closed-sessions` | 필요 | 불필요 | `200` 최근 종료 목록(1.10절) | 최근 종료 목록(MGT-R15, [관리 2.3절](../specs/management.md#23-최근-종료-목록)) |
+| `GET /api/v1/logs` | 필요 | 불필요 | `200` 최근 로그(1.15절) | 최근 로그 조회([관리 2.4절](../specs/management.md#24-최근-로그), MGT-046~050) |
 | `GET /api/v1/config` | 필요 | 불필요 | `200` 설정 보기(1.13절) | 실행 중 유효 설정과 파일 상태([관리 3.3절](../specs/management.md#33-설정-보기와-동적-설정-편집), MGT-R19) |
 | `PATCH /api/v1/config` | 필요 | 필요 | `200` 편집 결과(1.14절) | 설정 파일 기록과 동적 설정 변경([관리 3.3절](../specs/management.md#33-설정-보기와-동적-설정-편집), MGT-R20~R27) |
 
@@ -169,11 +174,11 @@
 | `csrf_token` | 문자열 | 필수, null 불가 | 상태 변경 요청의 `X-CSRF-Token` 값. 256비트 무작위 값이며 URL 안전 문자만 쓴다. |
 | `idle_expires_at` | `timestamp` | 필수, null 불가 | 응답 시점의 유휴 만료 시각. `absolute_expires_at`을 넘지 않는다. 자동 폴링은 이 값을 바꾸지 않는다. |
 | `absolute_expires_at` | `timestamp` | 필수, null 불가 | 절대 최대 수명 Sa가 끝나는 시각. 로그인 이후 변하지 않는다. |
-| `dashboard.poll_secs` | 정수 | 필수, null 불가 | 폴링 주기 P(초). 설정 `[dashboard] poll_secs`의 값이다. 기본값·범위는 [설정 계약](config-v3.md#12-키-표). |
-| `dashboard.query_timeout_secs` | 정수 | 필수, null 불가 | 조회 제한 시간과 설정 편집 응답 대기 한도(초). 설정 `[dashboard] query_timeout_secs`의 값이다. 기본값·범위는 [설정 계약](config-v3.md#12-키-표). |
+| `dashboard.poll_secs` | 정수 | 필수, null 불가 | 폴링 주기 P(초). 설정 `[dashboard] poll_secs`의 값이다. 기본값·범위는 [설정 계약](config-v4.md#12-키-표). |
+| `dashboard.query_timeout_secs` | 정수 | 필수, null 불가 | 조회 제한 시간과 설정 편집 응답 대기 한도(초). 설정 `[dashboard] query_timeout_secs`의 값이다. 기본값·범위는 [설정 계약](config-v4.md#12-키-표). |
 | `dashboard.terminate_timeout_secs` | 정수 | 필수, null 불가 | 종료 요청의 응답 대기 한도(초). 응답 때의 실행 중 `[timeouts] close_secs`(E)에 5초를 더한 값이다. E는 재로드 대상이다. |
 
-폴링 주기 P와 `query_timeout_secs`는 재시작이 필요한 설정이므로 관리 세션이 살아 있는 동안 바뀌지 않는다. 화면은 로그인 직후와 새로고침 직후 세션 정보로 이 값을 받아 쓴다. 서버 요약에는 P를 넣지 않는다. E는 재로드 대상이므로 이후 세션 정보 응답의 `terminate_timeout_secs`는 새 E + 5초가 된다. 이미 시작한 종료 교환의 기한은 이전 E를 유지한다([설정 계약 1.8절](config-v3.md#18-재로드-구분)).
+폴링 주기 P와 `query_timeout_secs`는 재시작이 필요한 설정이므로 관리 세션이 살아 있는 동안 바뀌지 않는다. 화면은 로그인 직후와 새로고침 직후 세션 정보로 이 값을 받아 쓴다. 서버 요약에는 P를 넣지 않는다. E는 재로드 대상이므로 이후 세션 정보 응답의 `terminate_timeout_secs`는 새 E + 5초가 된다. 이미 시작한 종료 교환의 기한은 이전 E를 유지한다([설정 계약 1.8절](config-v4.md#18-재로드-구분)).
 
 ### 1.6 서버 요약 `GET /api/v1/summary`
 
@@ -227,22 +232,26 @@
 | `state` | 문자열 | 필수, null 불가 | `active`(중계 중), `closing`(종료 중, 정리가 끝나기 전). 종료 중인 세션도 활성 수에 포함한다. 알 수 없는 값은 받은 그대로 표시한다. |
 | `mode` | 문자열 | 필수, null 불가 | `mode1`(Mode I) 또는 `mode2`(Mode II) |
 | `viewer_transport` | 문자열 | 필수, null 불가 | Viewer 전송 경로. `tcp`, `ws`, `wss`. |
+| `target_transport` | 문자열 | 필수, null 불가 | Server/Mode I 대상 전송 경로. `tcp`, `ws`, `wss`. Mode I은 항상 `tcp`이고, Mode II는 Server의 전송 경로다. |
 | `started_at` | `timestamp` | 필수, null 불가 | 중계 시작 시각 |
 | `bytes_viewer_to_target` | `bytes` | 필수, null 불가 | Viewer → Server/Mode I 대상 방향의 누적 바이트 |
 | `bytes_target_to_viewer` | `bytes` | 필수, null 불가 | Server/Mode I 대상 → Viewer 방향의 누적 바이트 |
 | `viewer_address` | `address` | 필수, null 불가 | Viewer 쪽 상대 주소 |
 | `target_address` | `address` | 필수, null 불가 | Server(Mode II) 또는 Mode I 대상 쪽 상대 주소 |
+| `viewer_forwarded_ip` | 문자열 | 필수, null 허용 | Viewer가 신뢰 프록시를 거친 경우의 전달 주소. 없으면 `null`이다. |
+| `target_forwarded_ip` | 문자열 | 필수, null 허용 | Mode II Server가 신뢰 프록시를 거친 경우의 전달 주소. Mode I 또는 전달 주소가 없으면 `null`이다. |
 
 - 누적 바이트는 한 세션 안에서 줄거나 순환하지 않는다. 재접속 세션은 새 `session_id`와 0에서 시작한다(MGT-007).
 - `session_id`가 위 형식을 만족하지 않으면 `400 invalid_request`다(잘못된 대상).
 - 형식은 맞지만 지금 활성 세션이 아니면 `404 not_found`다(대상 없음). 이미 정리가 끝난 세션과 처음부터 없던 세션을 구분하지 않는다. 같은 중계 ID의 다른 세션으로 대체하지 않는다.
 - 상세는 `state`가 `closing`인 세션도 돌려준다.
+- `viewer_address`·`target_address`는 프록시를 거쳐도 실제 소켓 상대 주소다. 전달 주소는 별도 필드에만 담는다. IP 표기는 1.1절의 정규화 규칙을 따른다. 전달 주소가 없는 경우는 확인 불가가 아니므로 `*_unavailable_reason`을 추가하지 않는다. 주소 결정은 [WebSocket 계약 1.8절](websocket-relay-v1.md#18-신뢰-프록시와-x-forwarded-for)을 따른다.
 
 ### 1.9 관리자 종료 `POST /api/v1/sessions/{session_id}/terminate`
 
 요청: 관리 세션 쿠키와 `X-CSRF-Token`이 필요하다. 본문은 없다. 본문이 있으면 `Content-Type`과 관계없이 `400 invalid_request`다. 이 경로별 규칙은 1.1절의 415 규칙보다 우선한다(사용자 결정 2026-11-02(Q89)). 서버는 지정한 `session_id`의 세션에만 영향을 준다.
 
-서버는 그 세션의 신규 데이터 수락을 멈추고 양 끝점을 종료한다. 자원 정리가 끝난 뒤에 응답한다. 응답 시간은 최대 정리 제한 시간 E까지 길어질 수 있다. 검증·수락된 종료 요청이 완료를 기다리는 동안만 관리 연결의 U를 멈춰 연결을 유지한다. 응답 쓰기부터 U를 다시 잰다([설정 계약 1.2절](config-v3.md#12-키-표)의 Q25 예외, 사용자 결정 2026-11-02(Q92)). 정리 중에는 그 세션이 `counts.active`와 `GET /api/v1/sessions`에 `closing`으로 남는다.
+서버는 그 세션의 신규 데이터 수락을 멈추고 양 끝점을 종료한다. 자원 정리가 끝난 뒤에 응답한다. 응답 시간은 최대 정리 제한 시간 E까지 길어질 수 있다. 검증·수락된 종료 요청이 완료를 기다리는 동안만 관리 연결의 U를 멈춰 연결을 유지한다. 응답 쓰기부터 U를 다시 잰다([설정 계약 1.2절](config-v4.md#12-키-표)의 Q25 예외, 사용자 결정 2026-11-02(Q92)). 정리 중에는 그 세션이 `counts.active`와 `GET /api/v1/sessions`에 `closing`으로 남는다.
 
 성공 응답 `200`의 본문:
 
@@ -263,7 +272,7 @@
 | 양 끝점 정리에 실패했다 | `500 terminate_failed` | 세션이 종료됐다고 확인하지 못했다. 성공으로 표시하지 않는다. 재조회로 실제 상태를 확인한다. |
 
 - 요청마다 `session_id`로 활성 세션을 찾는다. 같은 중계 ID를 다시 찾아 종료하지 않는다. 오래된 요청이 같은 중계 ID의 새 세션을 종료하지 못한다(MGT-010).
-- 서버는 종료 사건 로그에 수행한 관리자 계정명을 기록한다([운영 스펙](../specs/operations.md)의 OPS-011, 사건 형식은 [운영 정보 계약](ops-info-v1.md)의 `admin_terminate`). 계정명은 이 응답에 넣지 않는다.
+- 서버는 종료 사건 로그에 수행한 관리자 계정명을 기록한다([운영 스펙](../specs/operations.md)의 OPS-011, 사건 형식은 [운영 정보 계약](ops-info-v2.md)의 `admin_terminate`). 계정명은 이 응답에 넣지 않는다.
 
 응답 유실 때 Consumer 규칙:
 
@@ -284,6 +293,7 @@
 | `items[].session_id` | 문자열 | 필수, null 불가 | 세션 식별자. 이 값으로 상세·종료를 요청하면 `404 not_found`다. |
 | `items[].mode` | 문자열 | 필수, null 불가 | `mode1` 또는 `mode2` |
 | `items[].viewer_transport` | 문자열 | 필수, null 불가 | `tcp`, `ws`, `wss` |
+| `items[].target_transport` | 문자열 | 필수, null 불가 | `tcp`, `ws`, `wss`. Mode I은 `tcp`, Mode II는 Server의 전송 경로다. |
 | `items[].started_at` | `timestamp` | 필수, null 불가 | 중계 시작 시각 |
 | `items[].ended_at` | `timestamp` | 필수, null 불가 | 정리 완료 시각. `started_at` 이상이다. |
 | `items[].bytes_viewer_to_target` | `bytes` | 필수, null 불가 | Viewer → Server/Mode I 대상 방향의 최종 누적 바이트 |
@@ -314,7 +324,7 @@
 | --- | --- | --- | --- |
 | `GET /login/` | 로그인 화면 HTML(SCR-003) | 불필요 | 해당 없음 |
 | `GET /login/<파일>` | 로그인 화면이 쓰는 정적 파일 | 불필요 | 해당 없음 |
-| `GET /` | 운영 화면 HTML(SCR-001·SCR-002·SCR-004·SCR-005) | 필요 | `303 See Other`, `Location: /login/` |
+| `GET /` | 운영 화면 HTML(SCR-001·SCR-002·SCR-004·SCR-005·SCR-006) | 필요 | `303 See Other`, `Location: /login/` |
 | `GET /app/<경로>` | 운영 화면이 쓰는 정적 파일. `components/`·`styles/` 등 하위 디렉터리 포함(사용자 결정 2026-11-07(Q154)) | 필요 | `303 See Other`, `Location: /login/` |
 | `/api/v1/` 아래 | 1.2절의 API | 경로별 | `401 unauthenticated` (로그인 제외) |
 | 그 밖의 경로 | 없음 | 있으면 `404`, 없으면 `303`으로 `/login/` | 존재 여부를 노출하지 않는다 |
@@ -324,14 +334,14 @@
 - 정적 경로의 `404`는 2.1절 형식의 JSON 본문과 `not_found`를 유지한다(사용자 결정 2026-11-07(Q153)). 정적 `303`·`404`를 API와 나누는 예외는 경로 범위에 관한 것이다. `404`의 JSON 본문을 없애는 뜻이 아니다.
 - 로그인 화면 파일에는 운영 데이터·계정 정보·설정 값을 넣지 않는다.
 - 로그인 성공 뒤 화면은 `/`로 이동한다.
-- 화면 URL: SCR-003은 `/login/`, SCR-001은 `/`, SCR-002는 `/#/sessions/{session_id}`, SCR-004는 `/#/settings`, SCR-005는 `/#/settings/edit`다. URL의 조각(`#` 뒤)은 서버로 전송되지 않고 서버 접근 로그에 남지 않는다. 서버는 이 조각을 해석하지 않는다.
-- 화면은 URL의 `session_id`가 1.8절 형식을 만족하는지 먼저 확인한다. 형식이 틀리면 요청을 보내지 않고 "잘못된 세션 식별자"를 표시한다. 형식이 맞으면 상세를 조회하고, `404`이면 "대상 없음"을 표시한다. 두 상황을 서로 다른 안내로 구분한다.
+- 화면 URL: SCR-003은 `/login/`, SCR-001은 `/`, SCR-002는 `/#/sessions/{session_id}`, SCR-004는 `/#/settings`, SCR-005는 `/#/settings/edit`, SCR-006은 `/#/logs`다. URL의 조각(`#` 뒤)은 서버로 전송되지 않고 서버 접근 로그에 남지 않는다. 서버는 이 조각을 해석하지 않는다.
+- 화면은 URL의 `session_id`가 1.8절 형식을 만족하는지 먼저 확인한다. 형식이 틀리면 요청을 보내지 않고 "잘못된 세션 식별자"를 표시한다. SCR-002에서 형식이 맞으면 상세를 조회하고, `404`이면 "대상 없음"을 표시한다. SCR-006의 세션 필터 URL은 `/#/logs?session_id={session_id}`다(사용자 결정 2026-11-08(Q191)). 이 형식도 요청 전에 같은 형식 검사를 한다. 형식이 맞지만 일치하는 로그가 없으면 `200`의 빈 결과다.
 - 보호된 정적 응답과 API 응답에 `Cache-Control: no-store`를 붙인다. 로그인 화면 정적 응답에도 같은 헤더를 붙인다(사용자 결정 2026-11-07(Q155)). 서버를 갱신한 뒤 브라우저가 이전 버전의 화면 코드를 다시 쓰지 않게 하기 위해서다.
 - 정적 응답에 `X-Content-Type-Options: nosniff`와 `Referrer-Policy: no-referrer`를 권장한다. `Content-Security-Policy: default-src 'self'; frame-ancestors 'none'`은 필수다(사용자 결정 2026-10-22(Q37)). 대시보드는 인라인 스크립트와 인라인 스타일(`<style>`, `style` 속성)을 쓰지 않는다.
 
 ### 1.12 폴링 주기와 조회 제한 시간의 전달
 
-기본값과 유효 범위는 [설정 계약 1.2절](config-v3.md#12-키-표)이 정한다. 이 표는 전달 방법만 정한다.
+기본값과 유효 범위는 [설정 계약 1.2절](config-v4.md#12-키-표)이 정한다. 이 표는 전달 방법만 정한다.
 
 | 값 | 설정 키(설정 계약) | 전달 방법 |
 | --- | --- | --- |
@@ -339,7 +349,7 @@
 | 조회 제한 시간·설정 편집 응답 대기 한도 | `[dashboard] query_timeout_secs`(재시작 필요) | 세션 정보의 `dashboard.query_timeout_secs` |
 | 종료 응답 대기 한도 | 설정 키 없음. 재로드 대상 `[timeouts] close_secs`(E)에서 계산 | 세션 정보의 `dashboard.terminate_timeout_secs`. 응답 때의 E + 5초다. |
 
-- 폴링 조회는 `GET` 다섯 경로(`summary`·`waiting`·`sessions`·`sessions/{session_id}`·`closed-sessions`)에 붙인 자동 요청이다. 응답이 `query_timeout_secs` 안에 오지 않으면 Consumer는 요청을 중단하고 조회 실패로 처리한다. 실패를 빈 목록으로 표시하지 않는다.
+- 폴링 조회는 `GET` 여섯 경로(`summary`·`waiting`·`sessions`·`sessions/{session_id}`·`closed-sessions`·`logs`)에 붙인 자동 요청이다. 응답이 `query_timeout_secs` 안에 오지 않으면 Consumer는 요청을 중단하고 조회 실패로 처리한다. 실패를 빈 목록으로 표시하지 않는다.
 - 같은 조회가 진행 중이면 다음 주기 요청을 겹쳐 보내지 않는다([화면 4.1절](../specs/dashboard.md#41-폴링)). 조회 제한 시간이 P보다 길어도 된다.
 - 종료 요청에는 폴링 조회 제한 시간을 쓰지 않는다. 정리가 최대 E까지 걸릴 수 있기 때문이다. `terminate_timeout_secs`를 쓴다.
 - E를 교체한 뒤 세션 정보를 응답하면 새 E + 5초를 전달한다. 이미 시작한 종료 교환의 기한은 바꾸지 않는다. P와 `query_timeout_secs`는 재시작 필요로 남는다.
@@ -364,10 +374,10 @@
 | `last_reload.result` | 문자열 | 객체가 있으면 필수, null 불가 | `applied`·`rejected`·`restart_required` |
 | `last_reload.trigger` | 문자열 | 객체가 있으면 필수, null 불가 | `file_watch`·`config_edit` |
 | `last_reload.config_keys` | 문자열 배열 | 객체가 있으면 필수, null 불가 | `applied`면 바뀐 키, `restart_required`면 다른 키, `rejected`면 빈 배열 |
-| `items` | 객체 배열 | 필수, null 불가 | 기본값을 포함한 실행 중 유효 설정의 모든 키. 순서는 [설정 계약 1.2절](config-v3.md#12-키-표)의 표 순서다. |
+| `items` | 객체 배열 | 필수, null 불가 | 기본값을 포함한 실행 중 유효 설정의 모든 키. 순서는 [설정 계약 1.2절](config-v4.md#12-키-표)의 표 순서다. |
 | `items[].key` | 문자열 | 필수, null 불가 | 테이블과 키를 점으로 이은 설정 키 |
 | `items[].value` | 불리언·정수·문자열·문자열 배열 | 필수, null 허용 | 설정 자료형 그대로다. 꺼진 진입점의 생략된 키는 `null`이다. 경로는 설정 파일 기준으로 푼 값이다. |
-| `items[].reload` | 문자열 | 필수, null 불가 | `dynamic`(재로드 대상)·`restart`(재시작 필요). [설정 계약 1.8절](config-v3.md#18-재로드-구분)을 따른다. |
+| `items[].reload` | 문자열 | 필수, null 불가 | `dynamic`(재로드 대상)·`restart`(재시작 필요). [설정 계약 1.8절](config-v4.md#18-재로드-구분)을 따른다. |
 | `items[].editable` | 불리언 | 필수, null 불가 | 편집 대상이고 해당 진입점·모드가 켜져 있으면 `true`. `edit_enabled`와는 별개다. |
 | `items[].min`·`items[].max` | 정수 | 정수 키에 필수, null 불가. 그 밖의 키에는 없음 | 설정 계약의 정적 범위. Lw의 `max`는 65535이며 Lw ≤ L 관계 검사는 따로 한다. |
 
@@ -381,7 +391,7 @@
 
 `last_reload`는 GET, 같은 후보를 다시 읽은 파일 변경 감지, 변경 없음·폐기된 파일 변경 감지 결과로 갱신하지 않는다. PATCH의 인증·본문·편집 꺼짐·충돌·파일 상태·후보 검증·쓰기 실패와 no-op도 이력을 갱신하지 않는다. `trigger = config_edit`와 `result = rejected`·`restart_required`의 조합은 스키마에서 허용하지만 현재 서버는 생성하지 않는다(이 문서의 판단, 사용자 결정 없음).
 
-설정 파일에는 비밀이 없다([설정 계약 1.1절](config-v3.md#11-파일-규칙)). 설정 경로는 보여 주되 경로가 가리키는 파일 내용은 넣지 않는다. 인증서·개인키·계정 파일의 내용도 노출하지 않는다. 설정 보기에서 파일의 미적용 값은 반환하지 않는다.
+설정 파일에는 비밀이 없다([설정 계약 1.1절](config-v4.md#11-파일-규칙)). 설정 경로는 보여 주되 경로가 가리키는 파일 내용은 넣지 않는다. 인증서·개인키·계정 파일의 내용도 노출하지 않는다. 설정 보기에서 파일의 미적용 값은 반환하지 않는다.
 
 ### 1.14 동적 설정 편집 `PATCH /api/v1/config`
 
@@ -401,7 +411,7 @@ PATCH 본문은 64 KiB(65536바이트) 이하여야 한다. 초과하면 `400 in
 
 JSON 정수는 `i64`나 `u64`로 읽을 수 있으면 정수로 받아 7단계에서 설정 범위를 검사한다. 범위를 벗어나면 `config_invalid`다. 이보다 큰 정수 표기는 JSON 수 해석 한계 때문에 지수 표기 실수와 구분하지 않으므로 1단계에서 `invalid_request`로 거절한다(이 문서의 판단, 사용자 결정 없음).
 
-편집 대상은 출발지 IP 허용 목록 4개, WS·WSS Origin 허용 목록 2개, `mode1.allow_targets`, `[limits]` 5개, `[timeouts]` 6개, `[keepalive]` 5개인 총 23개 키다. 목록과 적용 시점은 [설정 계약 1.8절](config-v3.md#18-재로드-구분)이 기준이다. 인증서·개인키 경로 4개는 재로드 대상이지만 편집 대상이 아니다(사용자 결정 2026-11-08(Q172)). 진입점별 키는 그 진입점이 켜져 있을 때만, `mode1.allow_targets`는 `mode1.enabled = true`일 때만 편집할 수 있다. `management.config_edit`와 그 밖의 재시작 필요 키는 편집할 수 없다.
+편집 대상은 출발지 IP 허용 목록 6개, WS·WSS 역할별 Origin 허용 목록 4개, 리스너별 `trusted_proxies` 2개, `mode1.allow_targets`, `[limits]` 5개, `[timeouts]` 6개, `[keepalive]` 5개인 총 29개 키다(사용자 결정 2026-11-08(Q184), 사용자 결정 2026-11-08(Q188)). 목록과 적용 시점은 [설정 계약 1.8절](config-v4.md#18-재로드-구분)이 기준이다. 인증서·개인키 경로 4개는 재로드 대상 33개에 포함하지만 편집 대상이 아니다(사용자 결정 2026-11-08(Q172)). 역할별 키는 그 역할이 켜져 있을 때만, `trusted_proxies`는 해당 리스너의 역할 중 하나 이상이 켜져 있을 때만 편집할 수 있다. `mode1.allow_targets`는 `mode1.enabled = true`일 때만 편집할 수 있다. `management.config_edit`와 `recent_logs.max_entries`를 비롯한 재시작 필요 키는 편집할 수 없다.
 
 서버는 재로드 서비스와 직렬화하여 다음 10단계를 순서대로 처리한다. 앞 단계에서 거절하면 뒤 단계는 하지 않는다.
 
@@ -414,7 +424,7 @@ JSON 정수는 `i64`나 `u64`로 읽을 수 있으면 정수로 받아 7단계�
 7. 고친 후보 전체를 시작·재로드와 같은 규칙으로 검증한다. 실패하면 `400 config_invalid`와 `diagnostics`를 반환한다. 진단의 `key`는 `relay.tcp_viewer.allow[2]`처럼 첨자를 포함할 수 있다. 파일은 바꾸지 않는다.
 8. 편집 전후 파일 바이트가 같으면 쓰기·교체·실행 중 값 적용 없이 `200`으로 응답한다. `applied`는 빈 배열이며 `revision`은 그대로다. `reload_applied`·`config_edited`를 기록하거나 `last_reload`를 갱신하지 않는다. 파일에 이미 남아 있던 `pending` 변경은 파일 변경 감지가 적용한다(이 문서의 판단, 사용자 결정 없음).
 9. 공유 잠금 안에서 같은 디렉터리의 임시 파일을 쓰고 flush한다. 원자 교체 바로 전에 현재 파일을 다시 읽어 `revision`을 비교한다. 다르면 임시 파일을 지우고 `409 config_conflict`로 거절하며 이번 요청은 파일·실행 중 값을 바꾸지 않는다. 같으면 원자 교체한 뒤 같은 후보를 적용한다. 마지막 재확인과 교체 사이의 아주 짧은 틈은 보장 범위가 아니다(사용자 결정 2026-11-08(Q178)). 재확인 읽기 실패도 임시 파일을 지우고 `409 config_conflict`로 거절하며 `config_edit_rejected.reason = config_conflict`를 기록한다(이 문서의 판단, 사용자 결정 없음). 쓰기·교체 자체에 실패하면 `500 config_write_failed`이며 파일과 실행 중 값은 이전 그대로다.
-10. 같은 후보의 재로드 대상 값을 한 번에 교체한다. `pending`에 있던 변경도 함께 적용한다. 응답과 `reload_applied`의 `applied`는 실제 실행 중 값이 바뀐 모든 키다. `config_edited.config_keys`는 요청 `changes` 중 파일값이 바뀐 키만이다(이 문서의 판단, 사용자 결정 없음). 실행 중 값이 바뀌면 `reload_applied`(`trigger = config_edit`)를 기록하고 `last_reload`를 갱신한다. 그 뒤 `config_edited`를 기록한다([운영 정보 계약 1.5절](ops-info-v1.md#15-사건-목록)). 실행 중 값의 차이가 없으면 `reload_applied`와 이력 갱신 없이 `config_edited`만 기록한다. 이후 파일 변경 감지가 같은 내용을 읽으면 다시 교체하거나 성공 사건·이력을 추가하지 않는다. `reload_change_detected`는 기록될 수 있다.
+10. 같은 후보의 재로드 대상 값을 한 번에 교체한다. `pending`에 있던 변경도 함께 적용한다. 응답과 `reload_applied`의 `applied`는 실제 실행 중 값이 바뀐 모든 키다. `config_edited.config_keys`는 요청 `changes` 중 파일값이 바뀐 키만이다(이 문서의 판단, 사용자 결정 없음). 실행 중 값이 바뀌면 `reload_applied`(`trigger = config_edit`)를 기록하고 `last_reload`를 갱신한다. 그 뒤 `config_edited`를 기록한다([운영 정보 계약 1.5절](ops-info-v2.md#15-사건-목록)). 실행 중 값의 차이가 없으면 `reload_applied`와 이력 갱신 없이 `config_edited`만 기록한다. 이후 파일 변경 감지가 같은 내용을 읽으면 다시 교체하거나 성공 사건·이력을 추가하지 않는다. `reload_change_detected`는 기록될 수 있다.
 
 성공 응답 `200`:
 
@@ -425,9 +435,66 @@ JSON 정수는 `i64`나 `u64`로 읽을 수 있으면 정수로 받아 7단계�
 | `revision` | 문자열 | 필수, null 불가 | 처리 뒤 파일 바이트의 리비전. `sha256:` 뒤 소문자 16진수 64자다. |
 | `applied` | 문자열 배열 | 필수, null 불가 | 후보 전체에서 실제 실행 중 값이 바뀐 모든 키. 파일에 이미 남아 있던 `pending` 변경도 포함한다. 요청 `changes` 중 파일값이 바뀐 키만 담는 `config_edited.config_keys`와 구분한다. 편집 전후 파일 바이트가 같으면 빈 배열이다(이 문서의 판단, 사용자 결정 없음). |
 
-편집은 파일에 남아 재시작 뒤에도 유지된다. 이미 맺은 연결·시작한 타이머·설정한 소켓 옵션은 이전 값을 유지한다. 바뀐 값은 [설정 계약 1.8절](config-v3.md#18-재로드-구분)의 시점부터 적용한다. 정상 종료 유예 중에도 다른 관리 요청처럼 처리한다. 특별히 거절하지 않는다.
+편집은 파일에 남아 재시작 뒤에도 유지된다. 이미 맺은 연결·시작한 타이머·설정한 소켓 옵션은 이전 값을 유지한다. 바뀐 값은 [설정 계약 1.8절](config-v4.md#18-재로드-구분)의 시점부터 적용한다. 정상 종료 유예 중에도 다른 관리 요청처럼 처리한다. 특별히 거절하지 않는다.
 
-인증·CSRF를 통과한 편집 거절은 `invalid_request`를 제외하고 `config_edit_rejected`로 기록한다. PATCH 거절은 `last_reload`를 갱신하지 않는다(이 문서의 판단, 사용자 결정 없음). 편집 사건의 `admin_account`는 필수다. 키와 리비전 등 사건별 메타 정보는 기록하되 설정값(IP·Origin·대상 항목·수치)은 기록하지 않는다. 필드·사건 형식은 [운영 정보 계약 1.5절](ops-info-v1.md#15-사건-목록)과 [1.8절](ops-info-v1.md#18-관리자-계정명-기록-규칙)을 따른다.
+인증·CSRF를 통과한 편집 거절은 `invalid_request`를 제외하고 `config_edit_rejected`로 기록한다. PATCH 거절은 `last_reload`를 갱신하지 않는다(이 문서의 판단, 사용자 결정 없음). 편집 사건의 `admin_account`는 필수다. 키와 리비전 등 사건별 메타 정보는 기록하되 설정값(IP·Origin·대상 항목·수치)은 기록하지 않는다. 필드·사건 형식은 [운영 정보 계약 1.5절](ops-info-v2.md#15-사건-목록)과 [1.8절](ops-info-v2.md#18-관리자-계정명-기록-규칙)을 따른다.
+
+### 1.15 최근 로그 `GET /api/v1/logs`
+
+유효한 관리 세션이 필요하다. CSRF 토큰은 필요하지 않다. `X-Relay-Poll: 1`을 허용하며, 이 헤더가 있는 자동 갱신은 관리 세션의 유휴 만료를 연장하지 않는다. 헤더가 없으면 사용자 행동 요청이다(1.4.2절).
+
+서버는 메모리에 보관한 최근 운영 로그를 조회한다. 보관 수명과 출력 대상과의 관계는 [운영 스펙](../specs/operations.md)이 정한다. 각 `entry`는 [운영 정보 계약](ops-info-v2.md)의 JSON 로그 한 줄을 해석한 객체와 같아야 한다. 비밀을 담지 않으며 중계 ID는 원문 대신 `relay_id_ref`로만 나온다. 다음 매개변수·응답 필드 이름은 사용자 결정 2026-11-08(Q191)으로 채택했다(6절).
+
+모든 쿼리 매개변수는 선택이다. 여러 종류의 필터는 AND로 결합한다. `level`·`event` 목록 안에서는 OR로 결합한다.
+
+| 매개변수 | 형식·범위 | 의미 |
+| --- | --- | --- |
+| `level` | `info,warn,error` 중 하나 이상의 값을 쉼표로 구분 | 지정한 레벨만 조회한다. 모르는 값이나 빈 항목은 `400 invalid_request`다. 생략하면 모든 레벨이다. |
+| `event` | `[a-z0-9_]{1,64}`를 만족하는 사건 이름 하나 이상을 쉼표로 구분 | 대소문자를 구분해 정확히 일치시킨다. 형식에 맞는 모르는 이름은 오류가 아니며 아무 사건과도 일치하지 않는다. 빈 항목은 `400 invalid_request`다. 생략하면 모든 사건이다. |
+| `q` | 문자열, 1~256 유니코드 스칼라 값 | `entry` 안의 모든 필드 값에서 부분 문자열을 찾는다. UTF-8 바이트 수로 길이를 세지 않는다. ASCII 영문만 대소문자를 구분하지 않고 그 밖의 문자는 그대로 비교한다. 검색용 텍스트 변환은 아래 규칙을 따른다. |
+| `session_id` | 1.8절의 세션 식별자 형식 | 사건의 `session_id`가 이 값과 같은 항목을 찾는다. 해당 세션의 `session_started`가 아직 보관되어 있으면, 그 사건의 `viewer_conn_id`·`server_conn_id`와 `conn_id`가 같은 사건도 포함한다. `session_started`가 없으면 연결 식별자 관계를 복구하지 않는다. |
+| `before` | 부호 없는 10진 숫자. `u64` 범위의 정수, 1 이상 | 이 순번보다 작은 항목을 조회한다. `after`와 함께 쓰면 `400 invalid_request`다. |
+| `after` | 부호 없는 10진 숫자. `u64` 범위의 정수, 0 이상 | 이 순번보다 큰 항목을 조회한다. `before`와 함께 쓰면 `400 invalid_request`다. |
+| `limit` | 정수, 1~1000. 기본 200 | 반환할 최대 항목 수다. |
+
+문법·자료형·범위가 틀린 매개변수와 빈 `q`는 `400 invalid_request`다. 필터 조건은 보관된 사건에만 적용한다. 형식에 맞는 세션 식별자가 현재 활성 세션이 아니어도 오류가 아니다. 일치하는 사건이 없으면 성공한 빈 결과다.
+
+검색과 커서 표현의 세부 규칙은 이 문서의 판단이다(사용자 결정 없음).
+
+- `q`는 `entry`의 문자열 값을 그대로 비교한다. 수는 JSON 로그 줄에 쓰인 10진 표기로 비교한다. 불리언은 `true`·`false`, `null`은 `null`로 비교한다. 배열 원소와 중첩 객체의 값도 같은 규칙을 따른다. 필드 이름과 응답의 조회용 `seq`는 검색하지 않는다.
+- `before`·`after`는 `[0-9]+` 표기만 받는다. 부호·공백·소수점·지수 표기는 거절한다. 64비트 부호 없는 정수의 최댓값을 넘거나 각 하한을 벗어나면 `400 invalid_request`다. 별도의 업무 상한은 없다.
+- 쿼리 문자열은 `application/x-www-form-urlencoded` 규칙으로 해석한다. `+`는 공백이고, `%XX`는 UTF-8 바이트다. 잘못된 퍼센트 인코딩과 UTF-8이 아닌 값은 `400 invalid_request`다. `=`가 없는 항목은 값이 빈 문자열인 매개변수로 본다. 그래서 위 표의 매개변수이면 빈 값 규칙에 따라 `400 invalid_request`다.
+- `level`·`event`를 여러 번 보내면 모든 값을 한 목록으로 합친다. `q`·`session_id`·`before`·`after`·`limit`를 두 번 이상 보내면 `400 invalid_request`다. 어느 값을 쓸지 서버가 추측하지 않기 위해서다.
+- 위 표에 없는 매개변수 이름은 무시한다. [3절](#3-호환성-규칙)의 Producer 규칙(요청의 알 수 없는 필드 무시)을 따른다. 그래서 이후 호환 버전이 선택 매개변수를 더해도 이전 서버가 요청을 거절하지 않는다.
+
+페이지 선택과 정렬:
+
+| 커서 | 선택 | `has_more`가 참인 조건 |
+| --- | --- | --- |
+| 없음 | 일치하는 항목 중 가장 최근 `limit`개 | 선택한 항목보다 오래된 일치 항목이 더 있다. |
+| `before=B` | `seq < B`인 일치 항목 중 가장 최근 `limit`개 | 이번 페이지보다 오래되고 `seq < B`인 일치 항목이 더 있다. |
+| `after=A` | `seq > A`인 일치 항목 중 가장 오래된 `limit`개 | 이번 페이지보다 새롭고 `seq > A`인 일치 항목이 더 있다. |
+
+`items`는 항상 `seq` 오름차순이다. 커서가 현재 보관 범위 밖이어도 위 부등식만 적용한다. 응답 하나의 항목·경계·`has_more`는 같은 `as_of`의 보관 목록에서 계산한다. 서로 다른 페이지 요청 사이의 추가·제거를 막거나 이미 제거한 항목을 복구하지 않는다.
+
+`200` 응답 본문:
+
+| 필드 | 자료형 | 필수 여부·null 허용 여부 | 의미 |
+| --- | --- | --- | --- |
+| `as_of` | `timestamp` | 필수, null 불가 | 조회 기준 시점. 1.1절 형식이다. |
+| `max_entries` | 정수 | 필수, null 불가 | 실행 중 `recent_logs.max_entries`. 기본 1000, 범위 0~10000이다. |
+| `oldest_seq` | 정수 | 필수, null 허용 | 필터·커서를 적용하기 전 보관 목록의 가장 오래된 순번. 보관 목록이 비었으면 `null`이다. |
+| `latest_seq` | 정수 | 필수, null 허용 | 필터·커서를 적용하기 전 보관 목록의 가장 최근 순번. 보관 목록이 비었으면 `null`이다. |
+| `has_more` | 불리언 | 필수, null 불가 | 위 표의 요청 방향으로 일치하는 항목이 더 있는지 나타낸다. |
+| `items` | 객체 배열 | 필수, null 불가 | 선택한 항목. 일치 항목이 없으면 빈 배열이다. |
+| `items[].seq` | 정수 | 항목마다 필수, null 불가 | 1 이상인 기록 순번. 아래 규칙을 따른다. |
+| `items[].entry` | 객체 | 항목마다 필수, null 불가 | 운영 로그 한 줄의 객체. 필드·값을 바꾸거나 검색용 요약으로 대신하지 않는다. |
+
+`seq`는 프로세스의 첫 보관 사건에서 1로 시작하고 기록할 때마다 1씩 증가한다. 가장 오래된 항목을 제거해도 순번을 다시 쓰지 않는다. 재시작하면 보관 목록을 비우고 순번을 다시 시작한다. `seq`는 사건 객체 밖의 조회용 값이며 운영 로그 한 줄에 추가하지 않는다. `max_entries = 0`이면 아무 사건도 보관하지 않는다. 이때 `items`는 빈 배열, `oldest_seq`·`latest_seq`는 `null`, `has_more`는 `false`다. 필터 결과만 비었을 때는 보관 목록의 경계가 `null`로 바뀌지 않는다.
+
+오류는 `400 invalid_request`(매개변수·폴링 헤더 오류), `401 unauthenticated`, `405 invalid_request`(`Allow: GET`), `500 internal`이다. 인증·메서드·본문·Content-Type의 공통 규칙(1.1·1.3절)도 적용하므로 본문이 있고 Content-Type이 틀리면 `415 invalid_request`다. 조회 실패를 빈 성공 목록으로 바꾸지 않는다.
+
+JSON Lines 다운로드는 Consumer가 만든다. 같은 필터로 커서 없이 `limit=1000`을 조회한 뒤 `before`와 `limit=1000`으로 과거 페이지를 수집한다. 각 다음 요청의 `before`는 직전 페이지의 가장 작은 `seq`다. `has_more = false`이면 끝낸다. 각 `entry`를 UTF-8·LF의 JSON 한 줄로 기록한다. 조회용 `seq`와 응답 포장 필드는 파일에 넣지 않는다. 파일 이름은 `vnc-relay-logs-<UTC yyyymmddThhmmssZ>.jsonl`이다. 다운로드 전용 API 경로는 추가하지 않는다. 첫 페이지 이후 생긴 새 사건은 포함하지 않는다. 페이지 요청 사이에 제거된 사건까지 완전한 이력으로 보장하지 않는다.
 
 ## 2. 오류
 
@@ -450,7 +517,7 @@ JSON 정수는 `i64`나 `u64`로 읽을 수 있으면 정수로 받아 7단계�
 | `code` | 문자열 | 필수, null 불가 | 아래 표의 오류 코드 |
 | `message` | 문자열 | 필수, null 불가 | 입력값·비밀을 담지 않는 한국어 한 문장. Consumer 판정에는 쓰지 않는다. |
 | `diagnostics` | 객체 배열 | 선택, 있으면 null 불가 | `config_invalid`·`config_file_invalid`에 필수. 읽기 실패면 빈 배열이다. |
-| `diagnostics[].code` | 문자열 | 진단마다 필수, null 불가 | [설정 계약 2.1절](config-v3.md#21-설정-오류와-준비-실패)의 안정적인 진단 코드 |
+| `diagnostics[].code` | 문자열 | 진단마다 필수, null 불가 | [설정 계약 2.1절](config-v4.md#21-설정-오류와-준비-실패)의 안정적인 진단 코드 |
 | `diagnostics[].key` | 문자열 | 진단마다 필수, null 불가 | 점으로 이은 키. 배열은 0부터 센 `[i]` 첨자를 포함할 수 있다. |
 | `diagnostics[].message` | 문자열 | 진단마다 필수, null 불가 | 값을 인용하지 않는 진단 설명. 비밀·파일 내용도 넣지 않는다. |
 | `config_keys` | 문자열 배열 | 선택, 있으면 null 불가 | `config_restart_pending`에 필수. 재시작 필요 차이가 남은 키. 값은 넣지 않는다. |
@@ -483,6 +550,7 @@ JSON 정수는 `i64`나 `u64`로 읽을 수 있으면 정수로 받아 7단계�
 | `POST /api/v1/sessions/{session_id}/terminate` | `200` | `400`, `401`, `403`, `404`, `405`, `500`(`terminate_failed`·`internal`) |
 | `GET /api/v1/config` | `200` | `400`, `401`, `405`, `415`, `500`(`internal`). 파일 검증·읽기 실패 자체는 `200`의 `file.state`로 구분한다. |
 | `PATCH /api/v1/config` | `200` | `400`(`invalid_request`·`config_invalid`), `401`(`unauthenticated`), `403`(`csrf_invalid`·`config_edit_disabled`), `405`, `409`(`config_conflict`·`config_restart_pending`·`config_file_invalid`), `415`, `500`(`config_write_failed`·`internal`) |
+| `GET /api/v1/logs` | `200` | `400`(`invalid_request`), `401`(`unauthenticated`), `405`(`invalid_request`), `415`(공통 본문 형식 규칙), `500`(`internal`) |
 
 ### 2.2 HTTP 응답이 없는 실패
 
@@ -498,7 +566,7 @@ JSON 정수는 `i64`나 `u64`로 읽을 수 있으면 정수로 받아 7단계�
 
 | 받은 것 | Consumer 동작 |
 | --- | --- |
-| `200`과 빈 `items` | 성공한 빈 결과. "대기 없음"·"활성 없음"·"최근 종료 없음"을 표시한다. |
+| `200`과 빈 `items` | 성공한 빈 결과. "대기 없음"·"활성 없음"·"최근 종료 없음" 또는 최근 로그의 빈 상태를 표시한다. 최근 로그의 `max_entries = 0`은 보관 꺼짐으로 구분한다. |
 | `401 unauthenticated` | 보호된 이전 데이터와 갱신을 제거하고 `/login/`으로 이동한다. |
 | `401 login_failed` | 공통 실패 안내를 표시하고 비밀번호를 지운다. 계정명은 남긴다. |
 | `403 csrf_invalid` | 관리 세션은 유효하다. `GET /api/v1/session`으로 토큰을 다시 받아 사용자가 새로 확인한 뒤 요청한다. 자동 재전송하지 않는다. 로그아웃 요청의 `403`은 이 행이 아니라 아래 로그아웃 요청 행을 따른다(사용자 결정 2026-10-23(Q54)). |
@@ -519,10 +587,11 @@ JSON 정수는 `i64`나 `u64`로 읽을 수 있으면 정수로 받아 7단계�
 
 ## 3. 호환성 규칙
 
-- 데이터를 사용하는 쪽(Consumer)은 응답의 알 수 없는 필드를 무시해야 한다. 허용 값 목록에 없는 문자열 값(`server.state`·`state`·`mode`·`viewer_transport`·`close_cause`·`role`·`*_unavailable_reason`)은 받은 그대로 표시하고 오류로 처리하지 않아야 한다. 모르는 `result` 값은 결과 불명으로 보고 재조회해야 한다. 모르는 오류 코드는 2.3절대로 HTTP 상태 코드 범주로 처리해야 한다.
+- 데이터를 사용하는 쪽(Consumer)은 응답의 알 수 없는 필드를 무시해야 한다. 허용 값 목록에 없는 문자열 값(`server.state`·`state`·`mode`·`viewer_transport`·`target_transport`·`close_cause`·`role`·`*_unavailable_reason`)은 받은 그대로 표시하고 오류로 처리하지 않아야 한다. 모르는 `result` 값은 결과 불명으로 보고 재조회해야 한다. 모르는 오류 코드는 2.3절대로 HTTP 상태 코드 범주로 처리해야 한다.
 - 데이터를 만드는 쪽(Producer)은 요청의 알 수 없는 필드를 무시해야 한다. 헤더·쿠키·경로는 이 계약이 정한 것만 해석한다.
 - 호환 변경(v1.x): 응답에 필드를 추가한다. 허용 값 목록에 값을 추가한다. 새 경로를 추가한다. 요청에 선택 필드를 추가한다. 새 오류 코드를 기존 상태 코드 범주 안에 추가한다. 확인 불가 사유 값을 추가한다. 성능·내부 동작을 바꾼다.
 - 설정 보기·편집 추가(2026-11-08)는 새 경로·메서드·응답 필드·오류 코드의 호환 변경이다. 새 상태 코드 `409`도 2.3절의 기존 `4xx` 요청 오류 범주에 속한다. 머리 표의 호환 값 추가 선례대로 1.1.0을 유지한다.
+- 최근 로그 경로·세션 필드 추가(2026-11-08)도 새 경로·선택 매개변수·응답 필드의 호환 변경이다. 같은 선례대로 1.1.0을 유지한다. 새 매개변수·응답 필드 이름과 세션 필터 URL은 사용자 결정 2026-11-08(Q191)으로 채택했다(6절).
 - 호환성을 깨는 변경(Breaking change): 필드나 경로를 삭제·이름 변경한다. 자료형·단위·시각 형식·`null` 의미를 바꾼다. 기존 조건의 HTTP 상태 코드나 오류 코드를 바꾼다. 요청 필드를 필수로 바꾼다. 쿠키 이름이나 헤더 이름·의미를 바꾼다. 쿠키 보안 속성을 약하게 바꾼다. 인증·CSRF 요구를 약하게 바꾼다. 위 변경은 새 major 버전(`/api/v2/`)으로 낸다.
 - 마이그레이션: 새 major 버전은 새 접두사로 제공하고, 같은 릴리스에서 대시보드를 새 버전으로 옮긴다. 대시보드는 같은 실행파일에 들어 있으므로 서버와 대시보드의 버전이 어긋나지 않는다. 외부 클라이언트가 있으면 이전 major를 한동안 함께 제공한다. 기간은 새 major 채택 때 정한다.
 - 롤백: 이전 릴리스 실행파일로 되돌리면 이전 major와 대시보드가 함께 돌아온다. 관리 세션은 서버 메모리에만 있으므로 되돌리는 시점에 모두 무효가 되고, 관리자는 다시 로그인한다. 최근 종료 목록도 비워진다.
@@ -646,11 +715,14 @@ X-Relay-Poll: 1
     "state": "active",
     "mode": "mode2",
     "viewer_transport": "wss",
+    "target_transport": "ws",
     "started_at": "2026-10-16T08:40:10.120Z",
     "bytes_viewer_to_target": 1048576,
     "bytes_target_to_viewer": 73400320,
     "viewer_address": {"ip": "198.51.100.7", "port": 51234},
-    "target_address": {"ip": "192.0.2.20", "port": 40022}
+    "target_address": {"ip": "192.0.2.20", "port": 40022},
+    "viewer_forwarded_ip": null,
+    "target_forwarded_ip": "192.0.2.42"
   }
 }
 ```
@@ -670,6 +742,7 @@ X-CSRF-Token: <csrf-token>
     "session_id": "ses_3k9d2m7q4x8v1b6n5c0z2h4w7y",
     "mode": "mode2",
     "viewer_transport": "wss",
+    "target_transport": "ws",
     "started_at": "2026-10-16T08:40:10.120Z",
     "ended_at": "2026-10-16T09:00:05.380Z",
     "bytes_viewer_to_target": 1049600,
@@ -683,6 +756,27 @@ X-CSRF-Token: <csrf-token>
 
 ```json
 {"error": {"code": "not_found", "message": "지정한 세션을 찾을 수 없습니다."}}
+```
+
+최근 로그 요청과 응답(쿠키는 문서용 표시다. 필터·응답 필드 이름은 사용자 결정 2026-11-08(Q191)으로 채택):
+
+```http
+GET /api/v1/logs?level=info&event=connection_accepted&after=0&limit=200 HTTP/1.1
+Cookie: relay_admin_session=<불투명 식별자>
+X-Relay-Poll: 1
+```
+
+```json
+{
+  "as_of": "2026-11-08T05:00:02.000Z",
+  "max_entries": 1000,
+  "oldest_seq": 1,
+  "latest_seq": 3,
+  "has_more": false,
+  "items": [
+    {"seq": 2, "entry": {"ts": "2026-11-08T05:00:01.000Z", "level": "info", "event": "connection_accepted", "conn_id": "con_example", "listener": "ws", "peer_ip": "192.0.2.20"}}
+  ]
+}
 ```
 
 계약 테스트 위치는 `crates/adapters/tests/management.rs`, `tests/management_session.rs`, `tests/management_query.rs`, `tests/management_terminate.rs`, `tests/dashboard_assets.rs`, `tests/serve.rs`, `tests/dashboard_browser.rs`, `tests/dashboard_live.rs`와 각 행에 적은 단위 시험이다. 아래 표는 Producer와 Consumer 시험의 확인 범위와 현재 결과를 적는다. 결과와 증거는 [검증 기록](../AGENTS.md#검증-기록)을 따른다. 과거 실행 기록의 미실행·미생성 표기는 당시 상태이며 현재 결과를 대신하지 않는다.
@@ -717,6 +811,9 @@ X-CSRF-Token: <csrf-token>
 | Consumer / 실서버 CDP E2E 종합 | DASH-001~014·016~022·024~027의 전체 기대 결과. 실제 Si=300초 만료, 세 화면 언어 포함 | 통과 | `9cdebc6`의 `tests/dashboard_live.rs`: Windows 26개 통과(502.32초), WSL 26개 통과(491.04초). 25개는 비부분 DASH 행이고 1개는 사전 연결 프록시 회귀 시험이다. 두 OS의 DASH 보고서는 모두 통과 25·부분 1(DASH-015)·미연결 1(DASH-023)이다. Q112/Q113의 주입 오류·미래 enum 입력 범위는 아래 출처 구분을 따른다. 네 브라우저 호환성·수동 접근성은 통과 범위가 아니다. |
 | Producer / 설정 보기·편집 계약 시험 | 1.13·1.14절의 경로·필드·10단계 처리 순서·파일 상태 5종·오류 6개·CSRF·편집 불가 키·서식 보존·원자적 쓰기·no-op·사건 순서. MGT-028~039·041~045 | 통과 | 2026-11-08 작업 트리: `crates/app/src/management/config/tests.rs`의 거래 순서·descriptor 시험, `crates/adapters/tests/management.rs`의 `config_routes_refuse_unauthenticated_requests_before_details`·`disabled_config_edit_keeps_file_and_runtime_and_audits_rejection`·`config_patch_csrf_failure_changes_nothing_and_emits_no_edit_event`·`invalid_or_unreadable_current_file_refuses_patch_with_safe_diagnostics`·`invalid_config_candidate_returns_indexed_safe_diagnostics_without_writes`·`config_patch_rejects_uneditable_empty_mistyped_and_poll_requests_without_audit`·`temporary_write_and_replace_failures_keep_original_bytes_and_running_values`·`disconnected_config_client_does_not_cancel_commit`·`config_query_internal_error_is_not_an_empty_view`·`explicit_config_retry_after_write_repair_commits_and_audits_once`, `tests/management_query.rs`의 설정 보기·저장·충돌·충돌 뒤 재조회 및 편집 복구(`config_conflict_retry_with_fresh_revision_applies_and_preserves_both_changes`)·재시작 필요·no-op·복구 실행파일 시험과 `tests/management_session.rs`의 두 관리자 동등 편집 권한 시험을 연결했다. 실행 결과는 아래 작업 6 설정 편집 기록을 따른다. |
 | Consumer / 설정 화면 계약 시험 | 설정 보기 실패, 키별 진단, 충돌 다시 불러오기, 편집 불가 이유, 쓰기 실패의 입력 유지, 결과 불명 뒤 자동 재전송 없는 리비전·값 재조회. MGT-040·042~045, 화면 스펙 7절의 설정 보기·편집 시나리오 | 통과 | `tests/dashboard_live.rs`의 실서버 실행기 26개(DASH-028~053. MGT-040·042·043의 전체 표식은 DASH-046·048·042 실행기에 있다)와 `tests/dashboard_browser.rs`의 설정 가짜 API 시험 26개. 시험 쪽 주입의 출처는 아래 2026-11-08 출처 구분을 따른다. 실행 결과는 아래 작업 6 설정 편집 기록을 따른다. |
+| Producer / 최근 로그 계약 시험(계획) | 1.15절의 최신 항목 선택·순번·원본 사건 객체·필터 결합·세션 연결 관계·양방향 커서·`has_more`·잘못된 값·빈 목록·보관 꺼짐·폴링 유휴 만료·401. MGT-046~050 | 미실행 (구현 전) | 구현과 테스트가 아직 없다. |
+| Producer / 세션 필드 계약 시험(계획) | 1.8·1.10절의 `target_transport`·전달 주소·`null`·실제 소켓 주소. Mode I/II, TCP/WS/WSS, 프록시 유무. MGT-051 | 미실행 (구현 전) | 구현과 테스트가 아직 없다. |
+| Consumer / 최근 로그 계약 시험(계획) | SCR-006의 필터·폴링·이전 페이지·세션 URL 형식 검사·UTF-8 LF JSON Lines 다운로드. DASH-054~063 | 미실행 (구현 전) | 구현과 테스트가 아직 없다. |
 
 2026-11-05 Consumer 시험의 출처 구분: `tests/dashboard_live.rs`의 25개 행은 일반 로그인·조회·종료 데이터를 실제 실행파일에서 얻는다. DASH-001·021의 확인 불가 상태는 실제 조회 전달 실패로 만든다. DASH-025의 미래 enum 값만 제품 파서와 표 컴포넌트에 직접 주는 별도 Consumer 계약 입력이다. 현재의 타입화된 Producer는 그 값을 낼 수 없다. 프록시가 정상 응답을 위조하지 않으며 이 입력을 실제 서버 데이터라고 주장하지 않는다. 기존 부분 시험과 아래 과거 실행 기록은 그대로 보존한다.
 
@@ -753,8 +850,12 @@ WSL 첫 전체 게이트(2026-11-01T18:25:46Z)는 `tests/reload.rs`의 `new_tls_
 
 ## 6. 초안을 확정하기 전에 해결할 사항
 
+- (해결) 사용자 결정 2026-11-08(Q191)으로 채택했다: `GET /api/v1/logs`의 매개변수 이름 `level`·`event`·`q`·`session_id`·`before`·`after`·`limit`와 응답 필드 이름 `as_of`·`max_entries`·`oldest_seq`·`latest_seq`·`has_more`·`items[].seq`·`items[].entry`. 기준은 1.15절이다. 경로 자체는 사용자 결정 2026-11-08(Q187)으로 채택했다.
+- (해결) 사용자 결정 2026-11-08(Q191)으로 채택했다: SCR-002에서 SCR-006으로 이동하는 세션 필터 URL `/#/logs?session_id={session_id}` 형식. SCR-006 기본 URL `/#/logs`는 사용자 결정 2026-11-08(Q187)으로 채택했다. 화면 시안·탐색 순서·문구의 채택 기록은 [화면 스펙](../specs/dashboard.md#8-미결정-사항)이 관리한다.
+- (해결) 사용자 결정 2026-11-08(Q191)으로 채택했다: 운영 로그의 경고 사건 이름 `trust_all_proxies`. 최근 로그의 사건 목록에도 영향을 준다. 경고 이름과 형식의 채택은 [운영 정보 계약](ops-info-v2.md)이 관리한다.
+
 - 이 계약의 이름·코드 선택은 2026-10-16에 사용자가 채택했다. 채택 범위는 `/api/v1/` 아래 경로 이름과 메서드, 필드 이름, 오류 코드 일곱 개, `X-Relay-Poll`·`X-CSRF-Token` 값 규칙, 종료 원인 값 이름, 화면 URL이다. 쿠키 이름 `relay_admin_session`과 헤더 이름은 공유 인터페이스 이름이다. 사용자가 앞서 확정한 값은 이 문서 앞부분에 따로 적었다.
-- (해결) 설정 보기·편집의 이름과 상태 코드는 사용자 결정 2026-11-08(Q176)으로 채택했다. `GET`·`PATCH /api/v1/config`와 모든 요청·응답 필드, `config_invalid`·`config_edit_disabled`·`config_conflict`·`config_restart_pending`·`config_file_invalid`·`config_write_failed`의 6개 오류 코드와 상태 코드, `/#/settings`·`/#/settings/edit` 경로, SCR-004·SCR-005 화면 ID, PATCH의 `query_timeout_secs` 재사용이 해당한다. 기준은 1.11~1.14절과 2절이다. 사건·설정 키 이름은 [운영 정보 계약](ops-info-v1.md)·[설정 계약](config-v3.md)에 같은 결정으로 반영했다. 구현·계약 테스트는 미실행(구현 전)이다. 후속: 커밋 `eae442f`의 두 OS 게이트에서 구현과 계약 테스트가 통과했다(5절).
+- (해결) 설정 보기·편집의 이름과 상태 코드는 사용자 결정 2026-11-08(Q176)으로 채택했다. `GET`·`PATCH /api/v1/config`와 모든 요청·응답 필드, `config_invalid`·`config_edit_disabled`·`config_conflict`·`config_restart_pending`·`config_file_invalid`·`config_write_failed`의 6개 오류 코드와 상태 코드, `/#/settings`·`/#/settings/edit` 경로, SCR-004·SCR-005 화면 ID, PATCH의 `query_timeout_secs` 재사용이 해당한다. 기준은 1.11~1.14절과 2절이다. 사건·설정 키 이름은 [운영 정보 계약](ops-info-v2.md)·[설정 계약](config-v4.md)에 같은 결정으로 반영했다. 구현·계약 테스트는 미실행(구현 전)이다. 후속: 커밋 `eae442f`의 두 OS 게이트에서 구현과 계약 테스트가 통과했다(5절).
 - 이 계약의 채택으로 관리 스펙의 MGT-TBD-001(경로·메서드·오류 본문·로그인 교환 형식, 자동·사용자 요청 구분 방식)과 화면 스펙의 DASH-TBD-002(화면 URL·세션 식별자 입력 형식)를 해소했다. 기준은 1.2·1.3·1.4·1.5절과 2절(MGT-TBD-001), 1.8절(형식)과 1.11절(화면 URL, 잘못된 대상과 대상 없음의 구분)(DASH-TBD-002)이다. DASH-TBD-003은 로그인·로그아웃 URL과 세션 오류 코드(1.2절 `POST`·`DELETE /api/v1/session`, 2절)가 해소됐다. 화면 메시지 문구는 [화면 스펙 9절](../specs/dashboard.md#9-화면-문구)이 정한다(사용자 결정 2026-10-22(Q49)). 이로써 DASH-TBD-003이 모두 해소됐다.
 - 공유 인터페이스에 없던 `GET /api/v1/session`(세션 정보·CSRF 토큰 복구)과 `terminate_timeout_secs`(E + 5초), `max_entries`·`as_of` 필드, 세션 객체의 `state`도 채택 범위다.
 - `WWW-Authenticate: Session realm="vnc-relay"`는 확정했다. (해결, Safari 제외) 2026-11-04 관찰: Windows의 Chrome 156.0.8078.76·Edge 156.0.4314.58과 WSL의 Firefox 159.0은 이 헤더의 401에 기본 인증 창을 띄우지 않고 JSON 본문을 보였다. 같은 브라우저가 `Basic` 401에는 인증 요구로 반응해 대조가 성립했다. 자동화 환경에서는 인증 창 자체가 화면에 보이지 않으므로, 판정 근거는 `Session`과 `Basic`의 반응 차이다. Safari는 macOS가 없어 관찰하지 않았으며 작업 4.12의 Safari 확인에서 함께 본다. 2026-11-07 Safari 대체 WebKit 27.2(Playwright, 사용자 결정 2026-11-07(Q135))는 `Basic` 401에도 본문을 보여 대조가 성립하지 않았다. 판정하지 못했다([검증 기록 4.21절](../how-to/verify-dashboard-frontend.md#421-webkit-대체-확인-작업-412-q135-2026-11-07)).
@@ -762,7 +863,7 @@ WSL 첫 전체 게이트(2026-11-01T18:25:46Z)는 `tests/reload.rs`의 `new_tls_
 - (해결) 전송량이 JavaScript 정수의 안전 범위(2^53 − 1 바이트, 약 8 PiB)를 넘으면 대시보드가 정확한 정수를 다루지 못한다. Producer는 정확한 정수를 그대로 낸다. 대시보드 표시 형식은 [디자인 기준](../design/DESIGN.md#표시-형식)이 MiB 소수 첫째 자리로 정했다. 사용자 결정 2026-10-23(Q53)으로 한계를 받아들이고 이 항목을 닫았다. 2^53 − 1 바이트까지는 표시가 정확하다. 2^53 이상 2^70 바이트 미만에서는 반올림 경계 근처 값의 표시가 한 칸(0.1 MiB) 어긋날 수 있다. 2^70 바이트 이상은 시험하지 않는다. 근거와 시험은 [운영 현황 앱 구조](../architectures/dashboard-operations-overview.md) 9절과 14절 D1에 있다.
 - (해결) IPv4 매핑 IPv6 주소(`::ffff:a.b.c.d`)의 `ip` 표기는 `IpAddr::to_canonical()`을 적용한 `a.b.c.d`다. `PeerIp`와 운영 로그의 규칙에 맞췄다. 기준은 1.1절 `address` 행이다(사용자 결정 2026-11-02(Q88)).
 - (해결) terminate의 모든 본문은 `Content-Type`과 관계없이 400이며 1.1절의 415 규칙보다 우선한다. 기준은 1.9절이다(사용자 결정 2026-11-02(Q89)).
-- (해결) 검증·수락된 terminate 요청의 정리 완료 대기 중에만 U를 멈춘다. 응답 쓰기부터 다시 잰다. 기준은 1.9절과 [설정 계약 1.2절](config-v3.md#12-키-표)이다(사용자 결정 2026-11-02(Q92)).
+- (해결) 검증·수락된 terminate 요청의 정리 완료 대기 중에만 U를 멈춘다. 응답 쓰기부터 다시 잰다. 기준은 1.9절과 [설정 계약 1.2절](config-v4.md#12-키-표)이다(사용자 결정 2026-11-02(Q92)).
 - 로그인 CSRF는 `Content-Type: application/json` 요구, CORS 헤더 미송신, `SameSite=Strict`로 막는다. (해결, Safari 제외) 2026-11-04 관찰: Chrome·Edge(Windows)와 Firefox(WSL)에서 다른 사이트(`http://localhost:<port>`)의 공격 페이지가 평문 루프백 관리 리스너에 로그인을 시도했다. JSON `fetch`는 사전 요청에서 막혔고, `no-cors` `text/plain` 요청은 불투명 응답만 받았으며, `text/plain` 폼 POST는 `415 invalid_request`와 `Set-Cookie` 없음으로 끝났다. 공격 뒤 쿠키는 생기지 않았고 운영 로그의 `admin_login_succeeded`는 정상 로그인의 것뿐이었다. 정상 로그인 뒤 다른 사이트의 `no-cors` 요청에는 쿠키가 실리지 않았다. Safari는 관찰하지 않았다(작업 4.12). 2026-11-07 Safari 대체 WebKit 27.2(Playwright, Q135)에서도 로그인 시도 세 가지는 같은 결과였다. 다만 이 Windows용 빌드는 `SameSite=Strict` 쿠키를 `SameSite=None`으로 저장해 다른 사이트의 `no-cors` GET에 쿠키를 실었다. 같은 조건의 다른 사이트 종료 요청은 `X-CSRF-Token`이 없어 403이었다. 실제 Safari의 SameSite 동작은 판정하지 못했다([검증 기록 4.21절](../how-to/verify-dashboard-frontend.md#421-webkit-대체-확인-작업-412-q135-2026-11-07)).
 - (해결) 로그인 응답 시간으로 계정 존재 여부를 알 수 없는지는 구조 시험으로 판정한다. 사용자 결정 2026-10-22(Q31)로 해결했다. 모든 로그인 시도가 비밀번호 검증을 정확히 한 번 하는지를 `CountingVerifier`로 센다. 자동 시간 측정은 하지 않는다. 계정 해시와 더미 해시의 Argon2 매개변수가 같은지는 확인하지 않았다 [INFERENCE: 다를 수 있다].
 - 계정명의 허용 문자와 길이는 [CLI 계약 1.2절](cli-v1.md#12-계정-이름과-비밀번호-규칙)이 정한다. 로그인 본문 한도 16 KiB와 종료 대기 여유 5초도 채택 범위다.

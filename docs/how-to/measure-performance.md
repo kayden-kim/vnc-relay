@@ -8,7 +8,7 @@
 | 검증 상태 | Draft. 실제 실행 기록은 4절에 별도로 남긴다. |
 | 검증 환경·버전 | Windows 11 x64·WSL2 Ubuntu 24.04 LTS x64, 저장소의 Rust 도구 체인 |
 | 최종 검증일 | 2026-11-06. 커밋 `811491e`의 정식 측정에서 두 OS·세 전송 모두 OPS-017·OPS-018 통과(4절). |
-| 관련 기준 문서 | [운영 스펙 6절](../specs/operations.md#6-비기능호환성출처-수용-조건), [운영 정보 계약 1.5절](../contracts/ops-info-v1.md#15-사건-목록), [WebSocket 바이트 스트림 계약](../contracts/websocket-relay-v1.md#14-데이터-메시지와-제어-프레임), [설정 계약](../contracts/config-v3.md) |
+| 관련 기준 문서 | [운영 스펙 6절](../specs/operations.md#6-비기능호환성출처-수용-조건), [운영 정보 계약 1.5절](../contracts/ops-info-v2.md#15-사건-목록), [WebSocket 바이트 스트림 계약](../contracts/websocket-relay-v1.md#14-데이터-메시지와-제어-프레임), [설정 계약 v4](../contracts/config-v4.md) |
 
 ## 1. 대상과 영향
 
@@ -17,6 +17,8 @@
 - CPU·메모리·루프백 대역폭을 사용한다. 다른 부하를 멈추고, 두 OS 시험을 동시에 실행하지 않는다.
 - 시험마다 임시 포트를 예약하고, 설정·계정 파일을 만든다. 시험이 끝나면 자식 프로세스를 종료한다. 결과와 로그는 보존한다.
 - 기본 설정은 `L=1000`, `Lw=200`, `B=131072`, `M=1048576`이다. WS ping·pong 제한은 각각 300초다. 느린 수신자 60초 구간에서 ping 만료가 부하를 중단하지 않도록 한다. 정상 수신자는 ping마다 pong을 보낸다.
+
+설정 v4 적용 시 시험용 WS·WSS 파일은 [설정 계약 3.3절](../contracts/config-v4.md#33-v3-파일을-v4로-옮기기)의 매핑으로 옮겨야 한다. `listen`·WSS TLS 경로는 `[relay.ws]`·`[relay.wss]`에 둔다. Viewer의 `enabled`·`allow`·`allowed_origins`는 `[relay.ws.viewer]`·`[relay.wss.viewer]`에 둔다. Server를 TCP로 고정하는 이 측정에서는 WS·WSS Server 역할과 `trusted_proxies`를 추가하지 않는다. 새 역할·프록시의 성능을 측정했다고 표시해서는 안 된다. 새 v4 설정으로의 도구 이관과 재측정은 미실행 (구현 전)이다. 4절의 날짜가 있는 측정 기록과 결과 파일명은 당시 그대로 보존한다.
 
 ## 2. 전제 조건
 

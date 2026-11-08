@@ -19,6 +19,9 @@ _Avoid_: 중계기, 중계 서버
 **Server(server)**:
 원격 화면을 제공하고 사용자 입력을 처리하는 VNC 서버 역할이다. VNC Relay와 구분한다.
 
+**역할(role)**:
+중계 연결에서 Viewer 또는 Server가 맡는 쪽이다. 전송 방식이나 리스너와 구분한다.
+
 **역접속**:
 Mode II에서 Server가 VNC Relay에 먼저 연결해 오는 방식이다.
 
@@ -67,15 +70,27 @@ Viewer가 들어온 전송 방식(TCP·WS·WSS)이다.
 
 ### 접근 경계
 
+**리스너(listener)**:
+접속을 받도록 바인드한 소켓 하나다. 중계 리스너는 TCP Viewer·TCP Server·WS·WSS이며, 관리·상태 리스너와 구분한다.
+
 **진입점(entry_point)**:
-역할과 전송 방식으로 구분한 중계 리스너다(TCP Viewer, TCP Server, WS Viewer, WSS Viewer). 관리 리스너와 상태 리스너는 진입점이 아니다.
-_Avoid_: 진입 경로
+중계 연결이 들어오는 리스너와 역할의 조합이다(TCP Viewer·TCP Server·WS Viewer·WS Server·WSS Viewer·WSS Server). TCP 리스너는 역할이 고정되며, WS·WSS 리스너는 `/relay`와 `/relay/server` 경로로 역할을 구분한다.
+_Avoid_: 진입 경로, 리스너(진입점을 가리킬 때)
 
 **출발지 IP(peer_ip)**:
 접속을 수락한 소켓에서 확인한 실제 상대 IP다. 전달 헤더가 알려 주는 주소가 아니다.
 
+**신뢰 프록시(trusted_proxy)**:
+WS·WSS 리스너의 `trusted_proxies`에 IP가 속하는 소켓 상대다. 이 상대가 보낸 `X-Forwarded-For`가 전달 주소의 근거다.
+
+**전달 주소(forwarded_ip)**:
+신뢰 프록시의 `X-Forwarded-For`에서 구한 클라이언트 IP다. 소켓에서 확인한 출발지 IP와 구분한다.
+
+**클라이언트 주소(client_address)**:
+WS·WSS 업그레이드 때 역할별 출발지 IP 허용 목록과 대조하는 주소다. 신뢰 프록시를 거쳤으면 전달 주소이며, 나머지는 소켓 상대 IP다.
+
 **출발지 IP 허용 목록(allow)**:
-진입점마다 중계 접속을 허용할 출발지 IP를 적은 목록이다. 항목은 단일 IP, CIDR, 범위(`a-b`) 중 하나다.
+진입점마다 중계 접속을 허용할 IP를 적은 목록이다. WS·WSS에서는 클라이언트 주소와 대조하며, 항목은 단일 IP·CIDR·범위(`a-b`) 중 하나다.
 
 **전체 허용 항목(allow_all)**:
 출발지 IP 허용 목록에서 IPv4나 IPv6 주소 전체를 덮는 항목이다(`0.0.0.0/0`, `::/0`).
@@ -159,6 +174,9 @@ _Avoid_: 종료 사유, 종료 이유
 **운영 로그(log)**:
 VNC Relay가 표준 출력이나 지정한 파일로 내보내는 JSON Lines 기록이다.
 
+**최근 로그(recent_logs)**:
+운영 로그 사건의 최근 N개를 메모리에 보관한 목록이다. 대시보드의 SCR-006 로그 화면에서 확인하는 기록이며 장기 로그 저장소와 구분한다.
+
 **사건(event)**:
 운영 로그의 한 줄이 기록하는 일이다. 이름은 `event` 필드에 쓴다.
 _Avoid_: 이벤트
@@ -169,7 +187,7 @@ _Avoid_: 이벤트
 서버를 재시작하지 않고 재로드 대상 설정과 TLS 인증서·개인키를 실행 중에 교체하는 설정 반영이다.
 
 **재로드 대상(dynamic)**:
-재시작 없이 실행 값을 바꿀 수 있는 설정 키다. 범위는 [설정 계약](docs/contracts/config-v3.md#18-재로드-구분)이 정한다.
+재시작 없이 실행 값을 바꿀 수 있는 설정 키다. 범위는 [설정 계약](docs/contracts/config-v4.md#18-재로드-구분)이 정한다.
 
 **편집 대상**:
 재로드 대상 가운데 관리 API와 대시보드로 값을 바꿀 수 있는 설정 키다. 인증서·개인키 경로와 편집 기능 켜기는 포함하지 않는다.

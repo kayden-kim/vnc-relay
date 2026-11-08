@@ -17,6 +17,17 @@
 | 관리 | 내장 로그인(Argon2id 해시)이 있는 대시보드와 관리 API(`/api/v1/`). 서버·대기 연결·활성 세션·최근 종료 목록을 조회하고 활성 세션을 종료한다. 화면은 한국어·영어다. |
 | 운영 | 인증 없는 상태 리스너(`/livez`, `/readyz`), JSON Lines 운영 로그, 허용 목록·인증서의 자동 재로드, 종료 유예 G. |
 
+위 표는 현재 구현 범위다. 사용자 지시 2026-11-08과 사용자 결정 2026-11-08(Q181~Q188)으로 다음 범위도 채택했다. 아래 항목의 구현·테스트는 미실행(구현 전)이다.
+
+| 새 기준 | 내용 |
+| --- | --- |
+| WS·WSS Server | 공유 리스너에서 `/relay`는 Viewer, `/relay/server`는 Server(Mode II) 역할이다. 허용 목록은 역할별이며 수락 때 합집합, 업그레이드 때 역할 목록을 검사한다. |
+| 프록시 TLS 종료 | 중계 WS·WSS 앞의 역방향 프록시 TLS 종료를 지원한다. `trusted_proxies`와 `X-Forwarded-For`로 클라이언트 주소를 정한다. 내장 TLS는 유지하며 관리 리스너는 이 지원에서 제외한다. [ADR-0007](docs/decisions/ADR-0007-proxy-tls-termination.md) 참조. |
+| 최근 로그 | SCR-006 `/#/logs`에서 메모리의 최근 운영 로그를 필터·검색·자동 갱신하고 JSON Lines로 내려받는다. `recent_logs.max_entries`는 기본 1000, 0~10000이며 재시작이 필요하다. |
+| 계약 이전 | [vnc-relay-config 4.0.0](docs/contracts/config-v4.md)과 [ops-info 2.0.0](docs/contracts/ops-info-v2.md). 설정 v3 파일은 v4 서버 배포 전에 이전한다. 재로드 33개·편집 29개 키를 사용한다. [ADR-0008](docs/decisions/ADR-0008-shared-ws-listener-path-roles.md) 참조. |
+
+로그 화면 시안·기존 화면 변경·상단 순서는 사용자 결정 2026-11-08(Q189)으로, 문구 CPY-149~189는 사용자 결정 2026-11-08(Q190)으로, 로그 API 이름·세션 필터 URL·`trust_all_proxies` 이름과 필드는 사용자 결정 2026-11-08(Q191)으로 채택했다. [PRD의 결정 기록](docs/requirements/PRD.md#12-미확정-결정과-주요-위험)에서 범위를 확인한다. 현재 실행파일의 빠른 시작 절차는 아래와 같다.
+
 noVNC 클라이언트는 포함하지 않는다. noVNC는 외부 클라이언트로 접속할 수 있고, 상호운용 시험에만 쓴다.
 
 ## 빠른 시작
@@ -67,7 +78,7 @@ Windows PowerShell에서는 `./vnc-relay`를 `.\vnc-relay.exe`로, `curl`을 `cu
 | `vnc-relay admin list --config <path>` | 계정 이름을 나열한다. |
 | `vnc-relay --help`, `vnc-relay --version` | 사용법이나 버전을 출력한다. |
 
-계정 변경은 서버를 다시 시작해야 적용된다. 옵션·종료 코드·입력 규칙은 [CLI 계약](docs/contracts/cli-v1.md)이 정한다. 설정 키와 기본값은 [설정 계약](docs/contracts/config-v3.md)이 정한다.
+계정 변경은 서버를 다시 시작해야 적용된다. 옵션·종료 코드·입력 규칙은 [CLI 계약](docs/contracts/cli-v1.md)이 정한다. 다음 구현의 설정 키와 기본값은 [설정 계약 v4](docs/contracts/config-v4.md)가 정하며, 현재 실행파일에 v4 파일을 그대로 적용해서는 안 된다.
 
 ## 개발
 

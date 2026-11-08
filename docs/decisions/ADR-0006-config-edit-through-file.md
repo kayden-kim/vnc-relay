@@ -7,7 +7,7 @@
 | 결정자 | 프로젝트 소유자(사용자 결정 2026-11-08(Q167·Q173·Q177)) |
 | 채택 범위 | 전체 Accepted. 같은 파일 기록·서식 보존·toml_edit 선택은 사용자 결정 2026-11-08(Q167·Q173), 같은 요청 안에서 직접 교체하는 설계는 사용자 결정 2026-11-08(Q177)으로 채택 |
 | 관련 요구사항 | [PRD 확정 기준](../requirements/PRD.md#확정-기준), [FR-06](../requirements/PRD.md#fr-06-관리-api와-대시보드), [FR-07](../requirements/PRD.md#fr-07-설정과-프로세스-수명), [7절 보안 및 신뢰 경계](../requirements/PRD.md#7-보안-및-신뢰-경계) |
-| 관련 스펙·계약 | [운영 스펙 3.3절](../specs/operations.md#33-파일-변경-자동-감지와-부분-재로드), [관리 스펙](../specs/management.md), [화면 스펙](../specs/dashboard.md), [설정 계약 v3](../contracts/config-v3.md), [관리 API 계약](../contracts/management-api-v1.md), [운영 정보 계약](../contracts/ops-info-v1.md) |
+| 관련 스펙·계약 | [운영 스펙 3.3절](../specs/operations.md#33-파일-변경-자동-감지와-부분-재로드), [관리 스펙](../specs/management.md), [화면 스펙](../specs/dashboard.md), [설정 계약 v3](../contracts/config-v4.md), [관리 API 계약](../contracts/management-api-v1.md), [운영 정보 계약](../contracts/ops-info-v2.md) |
 | 관련 아키텍처 문서 | [설정 보기·편집 모듈 설계](../architectures/config-edit.md), [파일 감지 모듈 설계](../architectures/file-watch.md), [설정 로더 설계](../architectures/config-loading.md), [관리 리스너 설계](../architectures/management-listener.md) |
 | 이 ADR이 대체하는 이전 ADR | 없음 |
 | 이 ADR을 대체한 새 ADR | 없음 |

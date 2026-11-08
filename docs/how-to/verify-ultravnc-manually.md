@@ -10,7 +10,7 @@
 | 검증 상태 | 실행 완료(2026-11-05·06, Windows VNC Relay). 3절의 22~31·34단계를 모두 실행했고 모두 성공 조건과 맞았다(4.1·4.2절). 32단계 자동 증거 대조는 4.3절이다. 프로젝트 소유자가 2026-11-06에 판정 캡처를 검토했고 문제가 없었다. AC-08은 작업 5.4로 옮겼다(사용자 결정 2026-11-06(Q117)). Ubuntu VNC Relay는 분리 실행 환경이 없어 2절 규칙대로 미실행으로 남긴다 |
 | 검증 환경·버전 | Hyper-V VM 3대(`vr-lab` `Private` 스위치, 게이트웨이 없음), 게스트 Windows 11 Enterprise Evaluation 10.0.26300, UltraVNC Server·Viewer 1.8.3.0, VNC Relay 커밋 `ceb6a7c` Windows debug 빌드. Ubuntu VNC Relay는 미실행 |
 | 최종 검증일 | 2026-11-06. 작성일 2026-11-02 |
-| 관련 기준 문서 | [TODO 2.13](https://github.com/kayden-kim/vnc-relay/blob/556fab23d15e77125ca2ad5c575089857b312049/docs/TODO.md#2-tcp-repeater), [PRD 10절](../requirements/PRD.md#10-검증-및-수용-기준), [중계 스펙 7절](../specs/relay.md#7-수용-테스트), [초기 교환 계약](../contracts/repeater-handshake-v1.md), [설정 계약](../contracts/config-v3.md), [CLI 계약](../contracts/cli-v1.md), [운영 정보 계약](../contracts/ops-info-v1.md), [호환성 검증 기록](../contracts/repeater-compat-record.md) |
+| 관련 기준 문서 | [TODO 2.13](https://github.com/kayden-kim/vnc-relay/blob/556fab23d15e77125ca2ad5c575089857b312049/docs/TODO.md#2-tcp-repeater), [PRD 10절](../requirements/PRD.md#10-검증-및-수용-기준), [중계 스펙 7절](../specs/relay.md#7-수용-테스트), [초기 교환 계약](../contracts/repeater-handshake-v1.md), [설정 계약](../contracts/config-v4.md), [CLI 계약](../contracts/cli-v1.md), [운영 정보 계약](../contracts/ops-info-v2.md), [호환성 검증 기록](../contracts/repeater-compat-record.md) |
 
 ## 1. 대상과 영향
 
@@ -74,7 +74,7 @@
 
    기대 결과: 버전 한 줄이 나오고 종료 코드가 0이다. 실제 출력과 빌드한 커밋을 기록한다. 제품 버전만으로 커밋을 대신하지 않는다.
 
-4. 텍스트 편집기로 `C:\vr\manual-ultravnc\relay.toml`을 UTF-8로 저장한다.
+4. 텍스트 편집기로 `C:\vr\manual-ultravnc\relay.toml`을 UTF-8로 저장한다. 아래 TCP 전용 예시는 v4에서도 키가 같다. WS·WSS 역할은 기본 비활성이므로 추가할 필요가 없다. v4 실행파일로 이 절차를 다시 검증한 것은 아니다.
 
    ```toml
    [admin]
@@ -124,7 +124,7 @@
    output = "relay.jsonl"
    ```
 
-   기대 결과: Mode I·II와 TCP 진입점만 켠 설정 파일이 생긴다. 수치형 상한·시간은 [설정 계약 1.2절](../contracts/config-v3.md#12-키-표)의 기본값이다. 관리·상태 포트는 같은 계약 5절의 시험 예시이며 제품 기본 포트가 아니다. 상대 경로인 계정·로그 파일은 설정 파일 디렉터리에서 찾는다. Mode I만 시험하면 `mode2.enabled`를 `false`로, Mode II만 시험하면 `mode1.enabled`를 `false`로 바꾼 별도 사본을 쓸 수 있다. 본 절차는 두 모드를 켠 원본을 쓴다.
+   기대 결과: Mode I·II와 TCP 진입점만 켠 설정 파일이 생긴다. 수치형 상한·시간은 [설정 계약 1.2절](../contracts/config-v4.md#12-키-표)의 기본값이다. 관리·상태 포트는 같은 계약 5절의 시험 예시이며 제품 기본 포트가 아니다. 상대 경로인 계정·로그 파일은 설정 파일 디렉터리에서 찾는다. Mode I만 시험하면 `mode2.enabled`를 `false`로, Mode II만 시험하면 `mode1.enabled`를 `false`로 바꾼 별도 사본을 쓸 수 있다. 본 절차는 두 모드를 켠 원본을 쓴다.
 
 5. 대화형 터미널에서 시험용 관리자 계정을 만든다. TCP 중계에 관리자 로그인을 쓰지는 않지만 `serve` 시작에는 계정이 하나 이상 필요하다.
 
@@ -460,7 +460,9 @@ VNC 인증 설정: 2절의 같은 화면에서 VNC Password만 바꾸었다. Ent
 
 31단계 관찰: 화면에 시계 등 바뀌는 영역이 있어 유휴 동안 RFB 화면 갱신 바이트가 오갔을 수 있다. VNC Relay 로그는 시간별 바이트를 남기지 않으므로 애플리케이션 데이터가 없었는지는 판정하지 않는다. 이 부분은 RLY-027 자동 증거로 확인한다.
 
-이 실행에서 계약과 다른 점을 하나 찾았다. `server_starting`의 `log_contract`가 `ops-info/1.2.0`이었다. [운영 정보 계약 1.5절](../contracts/ops-info-v1.md#15-사건-목록)은 `ops-info/1.3.0`을 요구한다. 계약은 사용자 결정 2026-11-01(Q81)로 1.3.0이 되었지만 상수 `LOG_CONTRACT`와 시험의 기대값이 1.2.0으로 남아 있었다. 코드와 시험을 1.3.0으로 고쳤다. 위 회차의 실행파일은 고치기 전 빌드다.
+이 실행에서 계약과 다른 점을 하나 찾았다. `server_starting`의 `log_contract`가 `ops-info/1.2.0`이었다. [운영 정보 계약 1.5절](../contracts/ops-info-v2.md#15-사건-목록)은 `ops-info/1.3.0`을 요구한다. 계약은 사용자 결정 2026-11-01(Q81)로 1.3.0이 되었지만 상수 `LOG_CONTRACT`와 시험의 기대값이 1.2.0으로 남아 있었다. 코드와 시험을 1.3.0으로 고쳤다. 위 회차의 실행파일은 고치기 전 빌드다.
+
+후속: 사용자 결정 2026-11-08(Q188)으로 현재 운영 정보 계약은 2.0.0이다. 위 2026-11-06 기록의 계약 버전과 관찰값은 당시 사실로 보존한다. 새 `log_contract = ops-info/2.0.0`과 WS·WSS 역할·프록시 동작은 미실행 (구현 전)이며 위 TCP 수동 증거에 포함하지 않는다.
 
 ### 4.3 자동 증거 대조 (32단계)
 

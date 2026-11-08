@@ -6,7 +6,8 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 이름과 버전 | `websocket-relay` 1.1.0. 1.1.0은 새 close 코드 4011 `relay_connection_limit`을 더하고(사용자 결정 2026-11-01(Q79)), 클라이언트 Close 수신 시 전송 중 프레임 마무리 규칙(1.6절 1행, 사용자 결정 2026-11-01(Q83))과 강제 정리 시 1001 발송 및 종료 원인 보존 규칙(1.5·1.6·2.2절, 사용자 결정 2026-11-01(Q82))을 명시했다. 3절에 따른 호환 변경이다. 명확화(2026-11-07, 1.1.0 유지): 1011을 예약 코드로 적었다. 현재 구현은 1011을 보내지 않는다(사용자 결정 2026-11-07(Q152)). 요청 머리의 16 KiB 상한과 HTTP 400 경계를 명시했다(사용자 결정 2026-11-07(Q156)). 종료 시 새 접속은 TCP에서 거절하고 101 전 연결은 HTTP 응답 없이 닫는다(사용자 결정 2026-11-07(Q160)). 기존 구현은 503을 보내지 않았으므로 클라이언트가 보는 동작은 바뀌지 않는다. 1.0.0 이력: H 시작점과 검사 순서의 명확화(사용자 결정 2026-10-22(Q22), 2026-10-22(Q24)), Repeater 초기 교환 계약 채택에 따른 4008 문장·시작 바이트 반영(사용자 결정 2026-11-01(Q71~Q73)), noVNC 1.7.0 관찰 결과 반영(2026-11-01). |
+| 이전 버전 이력 | `websocket-relay` 1.1.0. 1.1.0은 새 close 코드 4011 `relay_connection_limit`을 더하고(사용자 결정 2026-11-01(Q79)), 클라이언트 Close 수신 시 전송 중 프레임 마무리 규칙(1.6절 1행, 사용자 결정 2026-11-01(Q83))과 강제 정리 시 1001 발송 및 종료 원인 보존 규칙(1.5·1.6·2.2절, 사용자 결정 2026-11-01(Q82))을 명시했다. 3절에 따른 호환 변경이다. 명확화(2026-11-07, 1.1.0 유지): 1011을 예약 코드로 적었다. 현재 구현은 1011을 보내지 않는다(사용자 결정 2026-11-07(Q152)). 요청 머리의 16 KiB 상한과 HTTP 400 경계를 명시했다(사용자 결정 2026-11-07(Q156)). 종료 시 새 접속은 TCP에서 거절하고 101 전 연결은 HTTP 응답 없이 닫는다(사용자 결정 2026-11-07(Q160)). 기존 구현은 503을 보내지 않았으므로 클라이언트가 보는 동작은 바뀌지 않는다. 1.0.0 이력: H 시작점과 검사 순서의 명확화(사용자 결정 2026-10-22(Q22), 2026-10-22(Q24)), Repeater 초기 교환 계약 채택에 따른 4008 문장·시작 바이트 반영(사용자 결정 2026-11-01(Q71~Q73)), noVNC 1.7.0 관찰 결과 반영(2026-11-01). |
+| 이름과 버전 | `websocket-relay` 1.2.0(2026-11-08). 공유 WS·WSS 리스너의 경로별 Server 역할과 신뢰 프록시의 `X-Forwarded-For` 처리를 더했다(사용자 결정 2026-11-08(Q181), 사용자 결정 2026-11-08(Q182), 사용자 결정 2026-11-08(Q188)). 기존 `/relay` 동작을 유지하는 3절의 호환 추가다. 새 규칙은 구현 전이며 5절의 기존 실행 기록은 새 규칙의 통과 증거가 아니다. |
 | 상태 | Active(2026-10-16 채택) |
 | 소유자 | vnc-relay 프로젝트 관리자 |
 | 만드는 쪽(Producer) | 외부 WebSocket 클라이언트(요청·바이너리 메시지·Close 송신), `vnc-relay` WS·WSS 리스너(응답·바이너리 메시지·ping·Close 송신). 방향마다 만드는 쪽이 다르며, 각 절에 방향을 적는다. |
@@ -15,21 +16,22 @@
 | 스키마 기준 파일 | 없음. 아래 Markdown 표가 형식의 기준이다. WebSocket 프레임 형식은 [RFC 6455](https://www.rfc-editor.org/rfc/rfc6455)를 따른다. |
 | 기준 스펙 | [WS·WSS 전송](../specs/websocket.md), [TCP 중계와 연결 매칭](../specs/relay.md) |
 | 관련 요구사항 | [PRD](../requirements/PRD.md) FR-05, 7절 보안 경계, AC-05~08, AC-16~17 |
-| 호환성 범위 | WS(`ws://`)와 WSS(`wss://`) Viewer 진입점. 서버 쪽은 Mode I·II 모두. 클라이언트는 RFC 6455 클라이언트이며, 검증 대상은 고정 버전 noVNC의 `repeaterID` 옵션이다([WS-025](../specs/websocket.md#7-수용-테스트)). WS·WSS Server 역접속은 범위 밖이다. |
+| 호환성 범위 | WS(`ws://`)와 WSS(`wss://`)의 Viewer·Server 진입점. Viewer는 Mode I·II, Server는 Mode II만 지원한다. 공유 리스너의 요청 경로가 역할을 정한다(1.7절). 외부 RFC 6455 클라이언트가 대상이며, 고정 버전 noVNC의 `repeaterID` 옵션은 Viewer 검증 대상이다([WS-025](../specs/websocket.md#7-수용-테스트)). |
 | 관련 테스트 | [WS-001~027](../specs/websocket.md#7-수용-테스트). 연결은 2절과 5절에 있다. `ee0314f`의 두 OS 전체 게이트가 통과했다. 고정 버전 noVNC 시험은 두 OS에서 `--include-ignored`로 별도 통과했다(커밋 `d4c5678`). 현재 지원 판정은 [작업 5.9 판정표](../how-to/set-up-and-verify.md#41-작업-59-판정표)를 따른다. 1011은 예약 코드라 시험 대상이 아니다(사용자 결정 2026-11-07(Q152)). |
+| 후속 테스트 범위 | WS-028~036과 RLY-028, 변경된 WS-012·014·022·023·024. 미실행 (구현 전). 계약 테스트 계획은 5절을 따른다. |
 
-관련 문서: [Repeater 초기 교환 계약](repeater-handshake-v1.md), [설정 계약](config-v3.md)(키 이름·값 범위, Origin 값 문법과 정규화), [관리 API 계약](management-api-v1.md)(관리자 종료·종료 원인 `close_cause`), [운영 정보 계약](ops-info-v1.md)(종료 원인·로그), [ADR-0001 내장 TLS](../decisions/ADR-0001-built-in-tls.md), [ADR-0002 출발지 IP 허용 목록](../decisions/ADR-0002-source-ip-allowlist.md).
+관련 문서: [Repeater 초기 교환 계약](repeater-handshake-v1.md), [설정 계약](config-v4.md)(키 이름·값 범위, Origin 값 문법과 정규화), [관리 API 계약](management-api-v1.md)(관리자 종료·종료 원인 `close_cause`), [운영 정보 계약](ops-info-v2.md)(종료 원인·로그), [ADR-0001 내장 TLS](../decisions/ADR-0001-built-in-tls.md), [ADR-0002 출발지 IP 허용 목록](../decisions/ADR-0002-source-ip-allowlist.md).
 
 ## 1. 형식과 의미
 
 ### 1.1 업그레이드 요청
 
-클라이언트가 `vnc-relay`에 보내는 HTTP 요청이다. WSS는 TLS 1.2 이상이 성립한 뒤에 보낸다([ADR-0001](../decisions/ADR-0001-built-in-tls.md), [OPS-R17](../specs/operations.md#41-판정-가능한-규칙)).
+클라이언트가 `vnc-relay`에 보내는 HTTP 요청이다. 내장 WSS는 TLS 1.2 이상이 성립한 뒤에 보낸다([ADR-0001](../decisions/ADR-0001-built-in-tls.md), [OPS-R17](../specs/operations.md#41-판정-가능한-규칙)). 역방향 프록시가 TLS를 종료하면 릴레이 WS 리스너로 평문 업그레이드를 전달할 수 있다. 신뢰 프록시의 주소 처리는 1.8절을 따른다.
 
 | 요소 | 값·규칙 | 어긋날 때 |
 | --- | --- | --- |
 | 요청 머리 크기 | 요청 줄·헤더·끝 빈 줄을 합쳐 최대 16 KiB(16,384바이트)다. 머리 끝 위치가 정확히 16,384바이트이면 허용한다. 그 안에서 끝나지 않으면 요청 구문 단계(가)에서 거절한다(사용자 결정 2026-11-07(Q156)). | HTTP 400 |
-| 업그레이드 경로 | 요청 대상의 경로가 정확히 `/relay`여야 한다. 대소문자를 구분한다. 끝 슬래시(`/relay/`)·퍼센트 인코딩·점 세그먼트(`/./relay`)를 같은 경로로 보지 않는다. 쿼리 문자열은 해석하지 않으며 대상이나 ID 선택에 쓰지 않는다. | HTTP 404 |
+| 업그레이드 경로 | 요청 대상의 경로가 정확히 `/relay`이면 Viewer, `/relay/server`이면 Server다(1.7절). 해당 리스너에서 역할이 꺼졌거나 다른 경로이면 404다. 대소문자를 구분한다. 끝 슬래시·퍼센트 인코딩·점 세그먼트를 같은 경로로 보지 않는다. 쿼리 문자열은 해석하지 않으며 대상이나 ID 선택에 쓰지 않는다. | HTTP 404 |
 | `/api/` 요청 | 관리 API 경로(`/api/` 이하)는 WS·WSS 리스너에서 처리하지 않는다. 다른 경로와 같이 404다. 관리 리스너는 별도다([WS-R08](../specs/websocket.md#3-정상-흐름과-규칙), [WS-012](../specs/websocket.md#7-수용-테스트)). | HTTP 404 |
 | 메서드 | `GET`만 허용한다. | HTTP 405, `Allow: GET` |
 | HTTP 버전 | HTTP/1.1 이상. | HTTP 400 |
@@ -41,24 +43,25 @@
 | `Origin` | 선택. 비교와 처리는 1.3절이 정한다. | 불일치 HTTP 403, 중복 HTTP 400 |
 | `Sec-WebSocket-Protocol` | 선택. 1.2절 규칙을 따른다. | HTTP 400 |
 | `Sec-WebSocket-Extensions` | 선택. 서버는 어떤 확장도 수락하지 않는다. 요청에 있어도 거절하지 않고, 응답에 이 헤더를 넣지 않는다. | 해당 없음 |
-| 그 밖의 헤더 | 무시한다. `Cookie`, `Authorization`, `X-Forwarded-For`, `Forwarded`는 접근 판정에 쓰지 않는다. 출발지 IP는 항상 실제 소켓 상대 주소다([ADR-0002](../decisions/ADR-0002-source-ip-allowlist.md), [WS-014](../specs/websocket.md#7-수용-테스트)). | 해당 없음 |
+| 그 밖의 헤더 | 신뢰 프록시의 `X-Forwarded-For`만 1.8절에 따라 읽는다. 신뢰하지 않는 상대의 `X-Forwarded-For`는 무시한다([WS-014](../specs/websocket.md#7-수용-테스트)). `Cookie`, `Authorization`, `Forwarded`, `X-Real-IP`와 나머지 헤더는 접근 판정에 쓰지 않는다. | 해당 없음 |
 
 검사 순서. 한 요청이 여러 조건을 어길 때 먼저 걸리는 상태를 하나만 돌려준다.
 
-1. 접속 수락 직후: 출발지 IP 허용 목록. 실패하면 TLS·HTTP 처리 전에 연결을 닫는다. HTTP 응답은 없다.
+1. 접속 수락 직후: 소켓 상대 IP가 당시 유효한 해당 리스너의 `trusted_proxies`에 있거나, 켠 역할들의 `allow` 합집합에 있어야 한다. 둘 다 아니면 TLS·HTTP 처리 전에 연결을 닫는다. HTTP 응답은 없다.
 2. WSS: TLS 협상. 실패하면 연결이 성립하지 않는다.
-3. 요청 구문, 경로, 메서드, 업그레이드 헤더와 버전, 키. 이 단계 안의 순서는 다음과 같다(사용자 결정 2026-10-22(Q24)).
-   - 가. 요청 구문과 요청 머리 크기. 머리가 16,384바이트 안에서 끝나지 않으면 HTTP 400이다(사용자 결정 2026-11-07(Q156)). 다른 구문 오류도 HTTP 400이다.
-   - 나. 경로(404), 메서드(405), HTTP 버전(400).
-   - 다. `Host`, `Upgrade`, `Connection` 헤더(400).
-   - 라. `Sec-WebSocket-Version`(426).
+3. 요청 머리 검사. 이 단계 안의 순서는 다음과 같다(사용자 결정 2026-10-22(Q24)의 순서를 유지하며 경로에 역할 판정을 더함, 사용자 결정 2026-11-08(Q188)).
+   - 가. 요청 줄 → 헤더 구문과 요청 머리 크기. 머리가 16,384바이트 안에서 끝나지 않으면 HTTP 400이다(사용자 결정 2026-11-07(Q156)). 다른 구문 오류도 HTTP 400이다.
+   - 나. 경로·역할(404) → `GET` 메서드(405) → HTTP/1.1 이상(400).
+   - 다. `Host` → `Upgrade` → `Connection` 헤더(400).
+   - 라. `Sec-WebSocket-Version` 13(426).
    - 마. `Sec-WebSocket-Key`(400).
-4. `Origin`.
-5. 서브프로토콜.
-6. 업그레이드 직전 출발지 IP 재검사. 그 순간의 유효한 목록을 쓴다.
-7. 모두 통과하면 `101`을 보낸다.
+4. 클라이언트 주소 판정. 소켓 상대가 당시 유효한 `trusted_proxies`에 있으면 1.8절로 전달 주소를 얻는다. 실패하면 HTTP 400과 `connection_rejected(stage=upgrade, reason=forwarded_for_invalid)`를 기록한다. 신뢰하지 않는 상대이면 클라이언트 주소는 소켓 상대 IP다.
+5. `Origin`과 해당 역할의 `allowed_origins` 비교. 불일치면 403이다.
+6. 서브프로토콜. 위반이면 400이다.
+7. 업그레이드 직전 두 번째 IP 검사. 클라이언트 주소를 해당 역할의 그 순간 유효한 `allow`와 비교한다. 실패하면 HTTP 403과 `ip_not_allowed`를 기록한다.
+8. 모두 통과하면 `101`을 보낸다.
 
-TLS 협상과 업그레이드 단계에는 제한 시간 U(`tls_upgrade_secs`)가 적용된다. `101` 전에 U가 지나면 HTTP 응답 없이 연결을 닫는다. 출발지 IP 허용 목록 값의 형식은 [설정 계약](config-v3.md)이 정한다.
+TLS 협상과 업그레이드 단계에는 제한 시간 U(`tls_upgrade_secs`)가 적용된다. `101` 전에 U가 지나면 HTTP 응답 없이 연결을 닫는다. 출발지 IP 허용 목록과 `trusted_proxies` 값의 형식은 [설정 계약](config-v4.md)이 정한다.
 
 H(`handshake_secs`)는 초기 교환 제한 시간이다. WS·WSS에서는 `101` 응답을 보낸 뒤부터 잰다. 101 전의 시간은 U가 맡는다(사용자 결정 2026-10-22(Q22)).
 
@@ -82,7 +85,7 @@ noVNC 호환: 고정 버전 noVNC 1.7.0([호환성 검증 기록](repeater-compa
 
 ### 1.3 Origin 비교
 
-허용 값(`allowed_origins`)의 문법과 `Origin` 값의 정규화·비교 규칙은 [설정 계약 1.4절](config-v3.md#14-origin-값-문법과-비교)이 정한다. 이 계약은 비교 결과에 따른 업그레이드 처리만 정한다. 정규화 규칙은 설정 계약과 함께 채택했다. Origin은 사용자 인증 수단이 아니다.
+허용 값(`allowed_origins`)의 문법과 `Origin` 값의 정규화·비교 규칙은 [설정 계약 1.4절](config-v4.md#14-origin-값-문법과-비교)이 정한다. 선택한 역할의 허용 값을 쓴다. 이 계약은 비교 결과에 따른 업그레이드 처리만 정한다. 정규화 규칙은 설정 계약과 함께 채택했다. Origin은 사용자 인증 수단이 아니다.
 
 | 비교 결과 | 처리 |
 | --- | --- |
@@ -100,18 +103,18 @@ noVNC 호환: 고정 버전 noVNC 1.7.0([호환성 검증 기록](repeater-compa
 | 요소 | 방향 | 규칙 |
 | --- | --- | --- |
 | 바이너리 메시지 | 양방향 | 페이로드를 연속된 바이트 스트림으로 취급한다. 여러 메시지의 내용과 순서를 보존한다. 메시지·프레임 경계는 RFB 또는 Repeater 메시지의 경계가 아니다([WS-R02](../specs/websocket.md#3-정상-흐름과-규칙), [WS-R03](../specs/websocket.md#3-정상-흐름과-규칙), [WS-007](../specs/websocket.md#7-수용-테스트), [WS-018](../specs/websocket.md#7-수용-테스트)). 분할(연속 프레임)을 허용한다. 길이 0인 메시지는 허용하며 스트림에 바이트를 더하지 않는다. |
-| 시작 바이트 | 서버 → 클라이언트 | `101` 응답 직후 [Repeater 초기 교환 계약 1.1절](repeater-handshake-v1.md#11-메시지)의 시작 바이트 12바이트(`RFB 000.000\n`)를 바이너리 메시지 하나로 보낸다. 서버가 보내는 첫 데이터 메시지다. 클라이언트는 이것을 받은 뒤 초기 요청을 보낸다. |
+| 시작 바이트 | 서버 → Viewer | Viewer 경로의 `101` 응답 직후 [Repeater 초기 교환 계약 1.1절](repeater-handshake-v1.md#11-메시지)의 시작 바이트 12바이트(`RFB 000.000\n`)를 바이너리 메시지 하나로 보낸다. Viewer가 받는 첫 데이터 메시지다. Viewer는 이것을 받은 뒤 초기 요청을 보낸다. Server 경로에는 시작 바이트를 보내지 않는다. |
 | 텍스트 메시지 | 클라이언트 → 서버 | 지원하지 않는다. 첫 프레임이 텍스트이면 즉시 종료 코드 1003으로 닫는다. 텍스트는 TCP에 전달하지 않는다([WS-R04](../specs/websocket.md#3-정상-흐름과-규칙), [WS-008](../specs/websocket.md#7-수용-테스트)). 서버도 텍스트 메시지를 보내지 않는다. |
-| 메시지 크기 M | 클라이언트 → 서버 | 프레임이 아니라 분할을 합친 논리 메시지 하나에 적용한다. 설정 키 `limits.ws_message_bytes`([설정 계약](config-v3.md)). 크기 M은 허용하고 M+1부터 거절한다. 초과를 확인하면 종료 코드 1009로 닫고 추가 전달을 멈춘다. 스트리밍하므로 초과를 확인하기 전에 앞부분이 TCP에 이미 전달될 수 있다. 실패한 메시지를 원자적으로 취소하지 않는다([WS-R06](../specs/websocket.md#3-정상-흐름과-규칙), [WS-010](../specs/websocket.md#7-수용-테스트)). |
+| 메시지 크기 M | 클라이언트 → 서버 | 프레임이 아니라 분할을 합친 논리 메시지 하나에 적용한다. 설정 키 `limits.ws_message_bytes`([설정 계약](config-v4.md)). 크기 M은 허용하고 M+1부터 거절한다. 초과를 확인하면 종료 코드 1009로 닫고 추가 전달을 멈춘다. 스트리밍하므로 초과를 확인하기 전에 앞부분이 상대 스트림에 이미 전달될 수 있다. 실패한 메시지를 원자적으로 취소하지 않는다([WS-R06](../specs/websocket.md#3-정상-흐름과-규칙), [WS-010](../specs/websocket.md#7-수용-테스트)). |
 | 서버가 보내는 메시지 크기 | 서버 → 클라이언트 | 한 메시지는 M 이하로 나눠 보낸다. 입력 TCP 읽기 경계와 같을 필요는 없다. |
-| ping | 서버 → 클라이언트 | 연결 성립 후 `keepalive.ws_ping_secs`마다 보낸다([설정 계약](config-v3.md)). 페이로드는 비워 두며 중계 ID나 세션 정보를 담지 않는다. |
+| ping | 서버 → 클라이언트 | 연결 성립 후 `keepalive.ws_ping_secs`마다 보낸다([설정 계약](config-v4.md)). 페이로드는 비워 두며 중계 ID나 세션 정보를 담지 않는다. |
 | pong | 클라이언트 → 서버 | ping 하나마다 `keepalive.ws_pong_timeout_secs` 안에 pong이 와야 한다. 이 시간 안에 pong이 없으면 끊긴 연결로 처리한다. 데이터 메시지는 pong을 대신하지 않는다. 데이터가 없어도 pong에 응답하는 연결은 유지한다([WS-R13](../specs/websocket.md#3-정상-흐름과-규칙), [WS-026](../specs/websocket.md#7-수용-테스트)). |
 | 클라이언트의 ping | 클라이언트 → 서버 | 서버는 pong으로 응답한다([RFC 6455 5.5.2절](https://www.rfc-editor.org/rfc/rfc6455#section-5.5.2)). 이미 Close를 받은 뒤에는 응답하지 않는다. |
 | 요청하지 않은 pong | 클라이언트 → 서버 | 허용하며 무시한다. |
 | ping·pong·Close 페이로드 | 양방향 | 어떤 제어 프레임의 페이로드도 TCP 중계 스트림에 넣지 않는다([WS-R05](../specs/websocket.md#3-정상-흐름과-규칙), [WS-009](../specs/websocket.md#7-수용-테스트)). |
 | 잘못된 프레임·순서 | 클라이언트 → 서버 | 마스크 없는 클라이언트 프레임, 협상하지 않은 확장 비트, 알 수 없는 opcode, 연속 프레임 순서 위반, 분할되거나 125바이트를 넘는 제어 프레임, 유효하지 않은 Close 본문. 종료 코드 1002로 닫는다([WS-019](../specs/websocket.md#7-수용-테스트)). |
 
-WS·WSS 하부 TCP 소켓에는 TCP keepalive(K)도 적용한다. 값은 이 계약이 아니라 [설정 계약](config-v3.md)과 [운영 스펙 2절](../specs/operations.md#2-상태와-검증-매개변수)이 정한다.
+WS·WSS 하부 TCP 소켓에는 TCP keepalive(K)도 적용한다. 값은 이 계약이 아니라 [설정 계약](config-v4.md)과 [운영 스펙 2절](../specs/operations.md#2-상태와-검증-매개변수)이 정한다.
 
 ### 1.5 close 코드
 
@@ -142,7 +145,9 @@ reason 문자열은 UTF-8의 고정 식별자만 쓴다. Close 본문은 코드 
 
 ### 1.6 종료 의미
 
-WebSocket에는 TCP 같은 독립적인 양방향 half-close가 없다. 그래서 WS·WSS가 포함된 세션은 한쪽 EOF 뒤 반대 방향을 정리 제한 시간 E(`timeouts.close_secs`, [설정 계약](config-v3.md)) 이상 유지하지 않는다([websocket.md 4절](../specs/websocket.md#4-오류와-종료)). 아래는 이 의미를 사건별로 고정한 것이다. 이 세부는 스펙이 계약에서 정하도록 남긴 항목이다.
+WebSocket에는 TCP 같은 독립적인 양방향 half-close가 없다. 그래서 WS·WSS가 포함된 세션은 한쪽 EOF 뒤 반대 방향을 정리 제한 시간 E(`timeouts.close_secs`, [설정 계약](config-v4.md)) 이상 유지하지 않는다([websocket.md 4절](../specs/websocket.md#4-오류와-종료)). 아래는 이 의미를 사건별로 고정한 것이다. 이 세부는 스펙이 계약에서 정하도록 남긴 항목이다.
+
+반대쪽이 WS·WSS인 Mode II에도 같은 스트림 전달·정리 규칙을 적용한다. 각 WS·WSS 끝점에는 이 절의 Close·E 규칙을 적용한다. 아래 “상대 TCP”는 반대쪽 중계 스트림이 WS·WSS인 경우도 포함한다.
 
 | 사건 | 서버 동작 | 보장 범위 |
 | --- | --- | --- |
@@ -157,6 +162,36 @@ WebSocket에는 TCP 같은 독립적인 양방향 half-close가 없다. 그래�
 
 Close를 보낸 뒤에는 데이터 메시지를 보내지 않는다([RFC 6455 5.5.1절](https://www.rfc-editor.org/rfc/rfc6455#section-5.5.1)). Mode I·II 모두 같은 규칙이다. 서버는 세션을 자동으로 재접속·재매칭하지 않는다. 새 접속은 새 연결 수명이다.
 
+### 1.7 경로와 역할
+
+공유 WS·WSS 리스너에서 경로가 역할을 정한다(사용자 결정 2026-11-08(Q181), 사용자 결정 2026-11-08(Q188)).
+
+| 정확한 경로 | 역할·처리 |
+| --- | --- |
+| `/relay` | Viewer. Mode I·II 초기 교환을 받는다. |
+| `/relay/server` | Server. TCP Server와 같이 Mode II만 받는다. Server는 `ID:` 초기 요청을 먼저 보내야 한다. `vnc-relay`는 Server에 시작 바이트를 보내지 않는다. |
+| 꺼진 역할의 경로 | 알 수 없는 경로와 같이 HTTP 404다. `invalid_upgrade`를 기록하고 등록하지 않는다. |
+| 그 밖의 경로 | HTTP 404다. `/api/`도 포함한다. |
+
+쿼리 문자열은 무시한다. 끝 슬래시가 붙으면 다른 경로다. Repeater 초기 교환 바이트 형식은 바뀌지 않는다.
+
+### 1.8 신뢰 프록시와 `X-Forwarded-For`
+
+릴레이 WS·WSS 리스너 앞의 역방향 프록시가 TLS를 종료할 수 있다(사용자 지시 2026-11-08). 클라이언트 주소는 다음 순서로 정해야 한다(사용자 결정 2026-11-08(Q182), 사용자 결정 2026-11-08(Q188)).
+
+1. 소켓 상대 IP가 해당 리스너의 당시 유효한 `trusted_proxies`에 있을 때만 `X-Forwarded-For`를 읽어야 한다. 신뢰하지 않는 상대의 이 헤더는 무시하며, 클라이언트 주소는 소켓 상대 IP다.
+2. 모든 `X-Forwarded-For` 필드 줄을 받은 순서대로 `,`로 합쳐야 한다. `,`로 나눈 각 요소의 앞뒤 SP·HTAB을 제거해야 한다.
+3. 요소는 점으로 구분한 IPv4 또는 대괄호가 있거나 없는 IPv6 리터럴이어야 한다. 포트, 영역 ID, `unknown`, 난독화 토큰과 빈 요소는 잘못된 값이다.
+4. 오른쪽 끝 요소부터 왼쪽으로 검사해야 한다. 잘못된 요소를 만나면 `forwarded_for_invalid`로 거절해야 한다. 정규 IP가 `trusted_proxies`에 없는 첫 요소를 클라이언트 주소로 정해야 한다. 그 왼쪽 요소는 검사하지 않는다.
+5. 모든 요소가 `trusted_proxies`에 있으면 `forwarded_for_invalid`로 거절해야 한다. 프록시 주소가 해당 역할의 `allow`에 있어도 클라이언트 주소로 대신 써서는 안 된다.
+6. `X-Forwarded-For` 필드가 없거나 빈 값만 있으면 `forwarded_for_invalid`로 거절해야 한다.
+7. IP 비교와 주소 판정에는 `PeerIp`와 같이 IPv4-mapped IPv6를 IPv4로 정규화해야 한다.
+8. `Forwarded`(RFC 7239), `X-Real-IP`, `Cookie`, `Authorization`은 접근 판정에 읽어서는 안 된다.
+
+전달 주소 판정에 실패하면 HTTP 400과 `connection_rejected(stage=upgrade, reason=forwarded_for_invalid)`를 기록한다. 등록과 `forwarded_ip` 기록은 없다. 판정에 성공하면 클라이언트 주소를 해당 역할의 `allow` 검사에 쓴다. `peer_ip`는 소켓 상대 IP로 유지하고, 전달 주소는 [운영 정보 계약](ops-info-v2.md)의 `forwarded_ip`로 기록한다. 관리 리스너의 전달 헤더 정책은 바꾸지 않는다.
+
+`trusted_proxies`에는 프록시 주소만 넣어야 한다. 클라이언트 범위를 넣어서는 안 된다. 신뢰 프록시는 accept 단계의 역할 허용 목록 검사를 건너뛰므로, 프록시 주소로 클라이언트를 대신하면 접근 정책을 우회할 수 있다. 신뢰 프록시 호스트나 그 범위 안의 클라이언트에서 시작한 요청은 프록시를 거치면 거절될 수 있다. 같은 출발지에서 이 리스너에 직접 접속해도 신뢰 프록시 연결로 취급해 이 절의 전달 헤더 검사를 적용한다. 그래서 유효한 전달 헤더가 없으면 거절되고, 있으면 같은 전달 주소 판정과 역할 허용 목록 검사를 받는다. 전달 헤더 없이 직접 접속하려면 출발지가 이 리스너의 `trusted_proxies` 밖에 있고 해당 역할의 허용 목록에 들어야 한다. 모든 요소가 신뢰 프록시인 체인의 회귀 시나리오는 WS-036이다.
+
 ## 2. 오류
 
 ### 2.1 HTTP 단계의 거절
@@ -165,20 +200,21 @@ Close를 보낸 뒤에는 데이터 메시지를 보내지 않는다([RFC 6455 5
 
 | 오류 코드 | 의미·형식 | 관련 스펙 시나리오 |
 | --- | --- | --- |
-| 연결 종료(HTTP 응답 없음) | 접속 수락 시 출발지 IP가 허용 목록에 없음. WSS는 TLS 협상 전에 닫는다. 쿠키·전달 헤더로 우회할 수 없다. | [WS-014](../specs/websocket.md#7-수용-테스트), [WS-023](../specs/websocket.md#7-수용-테스트), [websocket.md 4절](../specs/websocket.md#4-오류와-종료) 넷째 행 |
+| 연결 종료(HTTP 응답 없음) | 접속 수락 시 소켓 상대 IP가 켠 역할들의 `allow` 합집합에도, 해당 리스너의 `trusted_proxies`에도 없음. WSS는 TLS 협상 전에 닫는다. | [WS-014](../specs/websocket.md#7-수용-테스트), [WS-023](../specs/websocket.md#7-수용-테스트), [WS-030](../specs/websocket.md#7-수용-테스트) |
 | 연결 종료(HTTP 응답 없음) | 중계 연결 상한 L 도달 시 새 접속. TLS·업그레이드 제한 시간 U 초과. | [OPS-004](../specs/operations.md#7-수용-테스트), [OPS-006](../specs/operations.md#7-수용-테스트) |
 | TLS 협상 실패(HTTP 응답 없음) | 인증서 검증 실패, TLS 1.2 미만. 평문 WS로 전환하지 않는다. | [WS-013](../specs/websocket.md#7-수용-테스트), [OPS-036](../specs/operations.md#7-수용-테스트), [websocket.md 4절](../specs/websocket.md#4-오류와-종료) 첫·둘째 행 |
-| `HTTP 400` | 요청 구문 오류, 요청 머리가 16,384바이트 안에서 끝나지 않음, HTTP/1.0, 필수 헤더 누락·잘못된 값, `Origin` 중복, 허용되지 않는 서브프로토콜. 중계 등록·대상 연결 없음. | [WS-012](../specs/websocket.md#7-수용-테스트), [websocket.md 4절](../specs/websocket.md#4-오류와-종료) 셋째 행 |
-| `HTTP 404` | 경로가 `/relay`가 아님. `/api/` 요청 포함. | [WS-012](../specs/websocket.md#7-수용-테스트) |
+| `HTTP 400` | 요청 구문 오류, 요청 머리가 16,384바이트 안에서 끝나지 않음, HTTP/1.0, 필수 헤더 누락·잘못된 값, `Origin` 중복, 허용되지 않는 서브프로토콜. 중계 등록·대상 연결 없음. | [WS-012](../specs/websocket.md#7-수용-테스트), [websocket.md 4절](../specs/websocket.md#4-오류와-종료) |
+| `HTTP 400` | 신뢰 프록시의 `X-Forwarded-For`가 없거나 비어 있음, 검사 대상 요소가 잘못됨, 또는 모든 요소가 신뢰 프록시 주소임. `forwarded_for_invalid`, 중계 등록·대상 연결·`forwarded_ip` 없음. | [WS-033](../specs/websocket.md#7-수용-테스트), [WS-036](../specs/websocket.md#7-수용-테스트) |
+| `HTTP 404` | 알 수 없는 경로 또는 해당 리스너에서 꺼진 역할의 경로. `/api/` 요청 포함. `invalid_upgrade`를 기록한다. | [WS-012](../specs/websocket.md#7-수용-테스트), [WS-029](../specs/websocket.md#7-수용-테스트) |
 | `HTTP 405` | `GET`이 아닌 메서드. `Allow: GET`. | [WS-012](../specs/websocket.md#7-수용-테스트) |
 | `HTTP 426` | `Sec-WebSocket-Version`이 13이 아님. `Sec-WebSocket-Version: 13`을 함께 보낸다. | [WS-012](../specs/websocket.md#7-수용-테스트) |
-| `HTTP 403` | `Origin`이 허용 값과 불일치, 또는 업그레이드 직전 출발지 IP 재검사 실패. 신규 중계 세션 없음. | [WS-015](../specs/websocket.md#7-수용-테스트), [WS-022](../specs/websocket.md#7-수용-테스트), [WS-027](../specs/websocket.md#7-수용-테스트), [websocket.md 4절](../specs/websocket.md#4-오류와-종료) 다섯째 행 |
+| `HTTP 403` | `Origin`이 해당 역할의 허용 값과 불일치, 또는 업그레이드 직전 클라이언트 주소가 해당 역할의 `allow`에 없음(`ip_not_allowed`). 신규 중계 세션 없음. | [WS-015](../specs/websocket.md#7-수용-테스트), [WS-022](../specs/websocket.md#7-수용-테스트), [WS-027](../specs/websocket.md#7-수용-테스트), [WS-030~032](../specs/websocket.md#7-수용-테스트) |
 | 종료 시 TCP 접속 거절 또는 연결 종료(HTTP 응답 없음) | 종료 신호를 받으면 WS·WSS 리스너를 닫는다. 새 접속은 TCP에서 거절되며 HTTP 503은 보내지 않는다. 수락된 연결이 101 전에 종료 신호를 받으면 응답 없이 닫고 `connection_aborted`(`reason` = `server_shutdown`)를 기록한다. `stage`는 WS에서 `upgrade`다. WSS는 TLS 협상 완료 전이면 `tls`, 완료 뒤면 `upgrade`다(사용자 결정 2026-11-07(Q160)). | [OPS-007](../specs/operations.md#7-수용-테스트) |
 | `HTTP 500` | 서버 내부 오류. | [operations.md 5절](../specs/operations.md#5-오류와-복구) 단일 세션 오류 행 |
 
 ### 2.2 close 코드와 스펙 오류의 대응
 
-종료 원인 열은 [관리 API 계약 1.10절](management-api-v1.md#110-최근-종료-목록-get-apiv1closed-sessions)의 `close_cause` 값이다. 운영 로그의 같은 필드는 [운영 정보 계약](ops-info-v1.md)이 정한다. "해당 없음"은 활성 세션이 되기 전에 끝나 최근 종료 목록에 오르지 않는 경우다([management.md 2.3절](../specs/management.md#23-최근-종료-목록)).
+종료 원인 열은 [관리 API 계약 1.10절](management-api-v1.md#110-최근-종료-목록-get-apiv1closed-sessions)의 `close_cause` 값이다. 운영 로그의 같은 필드는 [운영 정보 계약](ops-info-v2.md)이 정한다. "해당 없음"은 활성 세션이 되기 전에 끝나 최근 종료 목록에 오르지 않는 경우다([management.md 2.3절](../specs/management.md#23-최근-종료-목록)).
 
 | 오류 코드 | 의미·형식 | 관련 스펙 시나리오 | 종료 원인 |
 | --- | --- | --- | --- |
@@ -209,7 +245,7 @@ Close를 보낸 뒤에는 데이터 메시지를 보내지 않는다([RFC 6455 5
 
 - 서버는 알 수 없는 요청 헤더와 확장 요청을 무시하며 업그레이드를 막지 않는다. 필수 헤더의 잘못된 값은 거절한다.
 - 클라이언트는 알 수 없는 4000번대 코드를 받으면 중계 사유를 알 수 없는 종료로 처리해야 한다. reason 문자열은 사람이 읽는 문장이 아니므로 화면 문구로 쓰지 않는다.
-- 호환 변경: 새 4000번대 코드·reason 추가, 새 선택 요청 헤더 처리, 서버 메시지 분할 크기 조정. 이때 `1.x.0`으로 올린다. 기존 코드의 번호나 뜻은 바꾸지 않는다.
+- 호환 변경: 새 4000번대 코드·reason 추가, 새 선택 요청 헤더 처리, 기존 경로를 유지하는 새 역할 경로 추가, 명시적으로 설정한 신뢰 프록시의 전달 헤더 처리, 서버 메시지 분할 크기 조정. 이때 `1.x.0`으로 올린다. 기존 코드의 번호나 뜻은 바꾸지 않는다. 1.2.0의 `/relay/server`와 `trusted_proxies`는 이 범위다. 기본 `trusted_proxies = []`에서 기존 `/relay` 클라이언트의 판정은 바뀌지 않는다.
 - 호환성을 깨는 변경(Breaking change): 업그레이드 경로 변경, 서브프로토콜 규칙 변경, 기존 close 코드의 번호·뜻 변경, Origin 비교 규칙 변경, 종료 의미(1.6절) 변경. 새 major 버전(`websocket-relay` 2.0.0)과 마이그레이션·롤백 계획이 필요하다. 지금은 v1만 있어 계획 문서는 없다.
 
 ## 4. 버전과 지원 단계
@@ -239,6 +275,39 @@ Connection: Upgrade
 Sec-WebSocket-Accept: s3pPLMBiTxaQ9kYGzzhZRbK+xOo=
 Sec-WebSocket-Protocol: binary
 ```
+
+Server 요청 예. 해당 리스너의 Server 역할과 IP 정책이 허용한 경우다. 응답은 위와 같은 101이다. 이후 Server가 `ID:1234`를 NUL로 채운 250바이트 초기 요청을 먼저 보낸다. `vnc-relay`는 Server에 시작 바이트를 보내지 않는다.
+
+```text
+GET /relay/server HTTP/1.1
+Host: relay.example:8080
+Upgrade: websocket
+Connection: Upgrade
+Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==
+Sec-WebSocket-Version: 13
+```
+
+프록시 요청 예. 프록시가 클라이언트의 TLS를 종료하고 WS로 전달한다. 소켓 상대 `192.0.2.20`과 중간 프록시 `192.0.2.21`이 `trusted_proxies`에 있다고 가정한다. 오른쪽의 신뢰 프록시를 건너뛴 `198.51.100.10`이 클라이언트 주소다. 그 왼쪽의 `unknown`은 검사하지 않는다.
+
+```text
+GET /relay HTTP/1.1
+Host: relay.example:8080
+Upgrade: websocket
+Connection: Upgrade
+Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==
+Sec-WebSocket-Version: 13
+X-Forwarded-For: unknown, 198.51.100.10
+X-Forwarded-For: 192.0.2.21
+```
+
+아래는 1.2.0 계약 테스트 계획이다. 이전 버전의 날짜별 실행 기록은 그대로 유지하며 새 규칙의 증거로 쓰지 않는다.
+
+| 주체·테스트 위치 | 확인할 계약 규칙 | 결과 | 실행 기록 |
+| --- | --- | --- | --- |
+| Producer: WS·WSS Server 시험 클라이언트 / Consumer: 공유 WS·WSS 리스너(테스트 구현 전) | 1.7절 경로·역할, Server 시작 바이트 없음, Mode II 매칭과 양방향 전달. WS-028·WS-029, RLY-028 | 미실행 (구현 전) | 사용자 결정 2026-11-08(Q181·Q188)에 따른 계획 |
+| Producer: 역할별 IP·Origin 시험 클라이언트 / Consumer: 공유 WS·WSS 리스너(테스트 구현 전) | 1.1절 검사 순서, accept 합집합과 upgrade 역할별 목록. WS-030·WS-031, 변경된 WS-012·022·023·024 | 미실행 (구현 전) | 사용자 결정 2026-11-08(Q188)에 따른 계획 |
+| Producer: 신뢰·비신뢰 프록시 시험 클라이언트 / Consumer: WS·WSS 리스너(테스트 구현 전) | 1.8절 1~8단계. 복수 필드·SP/HTAB, 양 IPv6 표기·mapped 정규화, 오른쪽 비신뢰 주소, 그 왼쪽 위조 값 무시. 검사 대상의 포트·영역 ID·unknown·난독화·빈 요소와 헤더 누락은 400. 모두 신뢰인 체인은 역할 허용 목록과 관계없이 400이며 `forwarded_ip` 없음. WS-032~034·WS-036, 변경된 WS-014 | 미실행 (구현 전) | 사용자 결정 2026-11-08(Q182)에 따른 계획 |
+| Producer: TLS 종료 시험 프록시 / Consumer: WS 리스너(테스트 구현 전) | 1.8절 TLS 종료 배포, Viewer·Server Mode II와 전달 주소·운영 로그·관리 조회. WS-035 | 미실행 (구현 전) | 사용자 지시 2026-11-08에 따른 계획 |
 
 Close 예: 대기 시간이 W를 넘으면 서버는 코드 `4001`과 reason `wait_timeout`을 담은 Close 프레임을 보낸다.
 
@@ -285,7 +354,10 @@ Close 예: 대기 시간이 W를 넘으면 서버는 코드 `4001`과 reason `wa
 ## 6. 초안을 확정하기 전에 해결할 사항
 
 - 이 계약의 이름·코드 선택은 2026-10-16에 사용자가 채택했다. 해당하는 것: 업그레이드 경로 처리의 세부(쿼리 무시, 끝 슬래시 불일치), HTTP 상태(특히 서브프로토콜 거절 400, 종료 유예 503, 상한 L 도달 시 연결 종료), 검사 순서, 확장 비수락, close 코드 번호·이름·reason, 1.6절 종료 의미, 서버 메시지 크기 M 이하.
-- 채택으로 WS-TBD-002(HTTP 상태·종료 코드)와 WS-TBD-003(Origin 정규화)을 해소했다. WS-TBD-003의 기준은 [설정 계약 1.4절](config-v3.md#14-origin-값-문법과-비교)이며 이 계약은 그 규칙을 인용하므로 따로 맞출 값이 없다.
-- (해결) WS-TBD-004: M·U·E의 기본값과 유효 범위는 사용자가 승인한 값이며 [설정 계약](config-v3.md)이 기준이다. B와 M 사이에 크기 제약은 없다(사용자 결정 2026-11-01(Q78)). 프레임 안에서 스트리밍하며 방향당 미전달 보관 바이트는 B 이하다. 분할 프레임을 합친 논리 메시지 크기가 M을 넘으면 1009로 닫고 추가 전달을 멈춘다. B보다 큰 유효 프레임도 수락해 스트리밍하며 전체를 저장하지 않는다. 프레임 분할 우회와 종료 중 자원 점유는 WS-010·WS-017로 검증한다.
+- 채택으로 WS-TBD-002(HTTP 상태·종료 코드)와 WS-TBD-003(Origin 정규화)을 해소했다. WS-TBD-003의 기준은 [설정 계약 1.4절](config-v4.md#14-origin-값-문법과-비교)이며 이 계약은 그 규칙을 인용하므로 따로 맞출 값이 없다.
+- (해결) WS-TBD-004: M·U·E의 기본값과 유효 범위는 사용자가 승인한 값이며 [설정 계약](config-v4.md)이 기준이다. B와 M 사이에 크기 제약은 없다(사용자 결정 2026-11-01(Q78)). 프레임 안에서 스트리밍하며 방향당 미전달 보관 바이트는 B 이하다. 분할 프레임을 합친 논리 메시지 크기가 M을 넘으면 1009로 닫고 추가 전달을 멈춘다. B보다 큰 유효 프레임도 수락해 스트리밍하며 전체를 저장하지 않는다. 프레임 분할 우회와 종료 중 자원 점유는 WS-010·WS-017로 검증한다.
 - (해결) WS-TBD-005와 noVNC 기본 서브프로토콜: noVNC 1.7.0을 [호환성 검증 기록](repeater-compat-record.md) 2.4절에 고정했다(버전·해시·받은 주소·날짜). 2026-11-01 관찰에서 이 버전은 WS·WSS 모두 `Sec-WebSocket-Protocol` 헤더를 보내지 않았다(같은 기록 3.4절 W-02·W-03b, 3.5절 F행). 1.2절 규칙과 같아 규칙은 그대로 두고, 1.2절 noVNC 문단을 관찰 사실로 고쳤다(TODO 1.7).
 - 1.4절 잘못된 프레임의 Close 1002와 자원 회수는 `crates/adapters/tests/websocket_scenarios.rs`의 `invalid_frame_sequences_and_controls_close_1002_and_release_registrations`가 WS·WSS에서 확인했다. 두 OS 전체 게이트에서 통과했다(5절).
+- 후속: 현재 계약 버전은 1.2.0이다(사용자 결정 2026-11-08(Q181·Q182·Q188)). 1.7·1.8절과 변경된 검사 순서는 구현 전·미검증이다. 위 날짜별 관찰·실행 기록은 그 당시 범위의 증거로 유지한다.
+- 후속: 2026-11-07(Q160) 이후 종료 시 503을 보내지 않는다(2.1절). 위 2026-10-16 채택 기록의 “종료 유예 503”은 과거 기록이다.
+- (해결) 사용자 결정 2026-11-08(Q191)으로 채택했다: `trusted_proxies` 전체 허용 경고 코드·사건명 `trust_all_proxies`. 이름과 필드의 채택은 [운영 정보 계약](ops-info-v2.md)의 결정 기록에서 관리한다.

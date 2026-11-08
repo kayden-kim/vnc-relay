@@ -10,15 +10,16 @@ UltraVNC Viewer·Server와 외부 WebSocket 클라이언트가 VNC Relay에 접�
 | 상태 | Active(2026-11-01 채택) |
 | 소유자 | vnc-relay 프로젝트 관리자 |
 | 만드는 쪽(Producer) | 초기 요청: UltraVNC Viewer, UltraVNC Server, 외부 WebSocket 클라이언트(검증 대상은 noVNC 1.7.0의 `repeaterID` 옵션). 시작 바이트: `vnc-relay` |
-| 사용하는 쪽(Consumer) | 초기 요청: `vnc-relay` (TCP Viewer·TCP Server·WS Viewer·WSS Viewer 진입점). 시작 바이트: Viewer와 외부 WebSocket 클라이언트 |
+| 사용하는 쪽(Consumer) | 초기 요청: `vnc-relay` (TCP Viewer·TCP Server·WS Viewer·WS Server·WSS Viewer·WSS Server 진입점). 시작 바이트: Viewer와 외부 WebSocket Viewer 클라이언트 |
 | 방향 | 끝점이 `vnc-relay`에 250바이트 초기 요청 하나를 보낸다. Viewer 쪽 연결에는 `vnc-relay`가 먼저 12바이트 시작 바이트를 보낸다. 오류를 알리는 바이트는 없다. |
 | 스키마 기준 파일 | 없음. 1절의 표가 형식의 기준이다. |
 | 기준 스펙 | [TCP 중계와 연결 매칭](../specs/relay.md), [WS·WSS 전송](../specs/websocket.md) |
 | 관련 요구사항 | [PRD](../requirements/PRD.md) FR-01·FR-02·FR-03·FR-05, 9절·9.1절 |
 | 호환성 범위 | 검증 대상은 UltraVNC Server·Viewer 1.8.3.0, UltraVNC Repeater(Windows) 1.6.0.0, noVNC 1.7.0이다([호환성 검증 기록](repeater-compat-record.md) 2절). Windows VNC Relay의 실제 클라이언트 조합과 비교 캡처는 통과했다(5절, [기록 6절](repeater-compat-record.md#6-모드전송-조합-검증-todo-55), [기록 7절](repeater-compat-record.md#7-계약-64-비교-캡처-q133)). Ubuntu의 지원 판정은 자동 시험을 근거로 한다([작업 5.9 판정표](../how-to/set-up-and-verify.md#41-작업-59-판정표)). noVNC 증거는 사용자 결정 2026-11-06(Q129)를 따른다. 이를 실제 UltraVNC 시나리오 RLY-006·010·011의 Ubuntu 증거에도 적용한 것은 이 문서의 판단, 사용자 결정 없음이다. 실제 UltraVNC와 Ubuntu VNC Relay의 조합 및 Ubuntu 비교 캡처는 미실행이다(Q133). 대상 버전 Repeater와 일부러 다르게 처리하는 입력은 [3.1절](#31-대상-버전-repeater와-다르게-처리하는-입력)에 있다. |
 | 관련 테스트 | [RLY-001~005, RLY-010~015, RLY-022](../specs/relay.md#7-수용-테스트), [WS-003~006, WS-018, WS-025](../specs/websocket.md#7-수용-테스트). 계약 테스트는 5절을 따른다. |
+| 후속 적용 범위 | 사용자 결정 2026-11-08(Q181), 사용자 결정 2026-11-08(Q188)에 따라 WS·WSS Server에도 같은 초기 교환 바이트를 적용한다. 형식은 바뀌지 않으며 계약 버전은 1.0.0을 유지한다. WS-028과 RLY-028은 미실행 (구현 전)이다. |
 
-관련 계약: [WebSocket 중계](websocket-relay-v1.md)(WS·WSS 쪽 전송 규칙과 종료 코드), [운영 정보](ops-info-v1.md)(로그에서 중계 ID 노출 방식과 오류 코드의 로그 이름), [설정](config-v3.md)(`handshake_secs`·`mode1`·`mode2`·`allow_targets` 키). 관련 결정: [ADR-0002 출발지 IP 허용 목록](../decisions/ADR-0002-source-ip-allowlist.md).
+관련 계약: [WebSocket 중계](websocket-relay-v1.md)(WS·WSS 쪽 전송 규칙과 종료 코드), [운영 정보](ops-info-v2.md)(로그에서 중계 ID 노출 방식과 오류 코드의 로그 이름), [설정](config-v4.md)(`handshake_secs`·`mode1`·`mode2`·`allow_targets` 키). 관련 결정: [ADR-0002 출발지 IP 허용 목록](../decisions/ADR-0002-source-ip-allowlist.md).
 
 ## 1. 형식과 의미
 
@@ -35,9 +36,11 @@ UltraVNC Viewer·Server와 외부 WebSocket 클라이언트가 VNC Relay에 접�
 | E. 초기 교환 뒤 스트림 | 양방향 | 초기 요청 250바이트 바로 다음 바이트부터 중계 스트림이다. 초기 요청은 상대에게 전달하지 않는다. 250바이트 뒤에 이미 받은 바이트와 매칭 전에 도착한 바이트는 도착 순서대로, 매칭이나 대상 연결 직후 상대에게 첫 바이트로 전달한다. Viewer가 처음 받는 RFB 바이트는 Server(Mode I은 대상)가 보낸 ProtocolVersion(`RFB 003.008\n` 등)이다. | M1-01, M2-01, S-02~S-05, E-03 |
 | F. 외부 WebSocket 클라이언트(noVNC) 요청 | B와 같다. noVNC 1.7.0은 D를 받은 뒤 67~110ms 안에 보냈다. | noVNC 1.7.0은 `repeaterID`를 B와 같은 250바이트(`ID:<repeaterID>` + NUL 채움)로 바이너리 메시지 하나에 담아 보낸다. WS·WSS 메시지 경계는 초기 요청의 경계가 아니다(1.4절). | W-02, W-03b |
 
+후속: 사용자 결정 2026-11-08(Q181·Q188)에 따라 A의 Server 진입점에 WS Server·WSS Server를 더한다. WS·WSS에서는 `101` 뒤 Server가 초기 요청을 먼저 보내며, 시작 바이트는 없다. 이 추가 범위는 관찰 기록의 UltraVNC Server TCP 동작과 구분한다.
+
 공개 문서의 사용법은 다음과 같다. Server는 `-id:<ID>` 또는 `-autoreconnect ID:<ID>`와 Repeater를 가리키는 `-connect`로 접속한다([Server 명령줄](https://uvnc.com/docs/ultravnc-server/51-ultravnc-server-commandline-parameters.html)). Viewer는 Mode II에서 `-proxy <Repeater>:<포트> ID:<ID>`, Mode I에서 `-proxy <Repeater>:<포트> -connect <대상>`으로 접속한다([Viewer 명령줄](https://uvnc.com/docs/ultravnc-viewer/52-ultravnc-viewer-commandline-parameters.html)). noVNC는 `RFB()`의 `repeaterID` 옵션을 쓴다([noVNC API](https://novnc.com/noVNC/docs/API.html)). 중계 ID만으로는 보안이 없다고 공식 문서도 설명한다([Connections](https://uvnc.com/docs/documentation/132-ultravnc-connections.html)).
 
-포트 번호는 이 계약의 형식 항목이 아니다. 공개 문서 사이에는 Repeater 기본 포트를 다르게 적은 곳이 있다([Repeater 안내 PDF](https://www.uvnc.eu/download/1210/Repeater.pdf), [Single Click Repeater](https://uvnc.com/pchelpware/sc/repeater.html)). `vnc-relay`의 기본 포트는 [설정 계약 1.2절](config-v3.md#12-키-표)이 정한다.
+포트 번호는 이 계약의 형식 항목이 아니다. 공개 문서 사이에는 Repeater 기본 포트를 다르게 적은 곳이 있다([Repeater 안내 PDF](https://www.uvnc.eu/download/1210/Repeater.pdf), [Single Click Repeater](https://uvnc.com/pchelpware/sc/repeater.html)). `vnc-relay`의 기본 포트는 [설정 계약 1.2절](config-v4.md#12-키-표)이 정한다.
 
 ### 1.2 초기 요청 250바이트
 
@@ -45,14 +48,16 @@ UltraVNC Viewer·Server와 외부 WebSocket 클라이언트가 VNC Relay에 접�
 | --- | --- | --- |
 | 길이 | 정확히 250바이트다. TCP 청크와 WebSocket 메시지의 경계와 관계없이 250바이트를 모은 뒤 해석한다. 250바이트가 다 오기 전에는 해석·대기 등록·대상 연결을 하지 않는다. 250바이트를 넘게 받은 바이트는 1.1절 E의 후속 바이트다. | S-01, E-02, E-03, E-04 |
 | 값과 채움 | 값은 첫 NUL(`00`) 앞까지다. NUL이 없으면 250바이트 전체가 값이다. 첫 NUL 뒤의 채움 바이트는 내용과 관계없이 무시한다. 본문 문법 검사에서 빈 값은 `handshake_invalid`다. 모드 검사와의 선후는 표 아래 검사 순서를 따른다. | M1-01, M2-01, M2-06b, T-03 |
-| 모드 판정 | Viewer 진입점(TCP Viewer·WS·WSS): 값이 `ID:`(대문자, `49 44 3A`)로 시작하면 Mode II, 아니면 Mode I이다. TCP Server 진입점: 값이 `ID:`로 시작해야 한다. 아니면 `handshake_invalid`다. | M1-01, M2-01, E-01 |
+| 모드 판정 | Viewer 진입점(TCP Viewer·WS Viewer·WSS Viewer): 값이 `ID:`(대문자, `49 44 3A`)로 시작하면 Mode II, 아니면 Mode I이다. Server 진입점(TCP Server·WS Server·WSS Server): 값이 `ID:`로 시작해야 한다. 아니면 `handshake_invalid`다. | M1-01, M2-01, E-01. 후속: 사용자 결정 2026-11-08(Q181·Q188) |
 | 꺼진 모드 | 판정한 모드가 설정에서 꺼져 있으면 값을 더 검사하지 않고 `mode_disabled`로 거절한다. | [RLY-R17](../specs/relay.md#21-판정-가능한-규칙) |
-| 역할 | 진입점이 정한다. TCP Server 진입점은 Server, Viewer 진입점은 Viewer다. 요청 안에는 역할 표시가 없다. | M2-01 |
+| 역할 | TCP에서는 리스너가 역할을 정한다. WS·WSS에서는 경로 `/relay`가 Viewer, `/relay/server`가 Server를 정한다([WebSocket 계약 1.7절](websocket-relay-v1.md#17-경로와-역할)). 초기 요청 바이트 안에는 역할 표시가 없다. 바이트 형식은 바뀌지 않는다. | M2-01. 후속: 사용자 결정 2026-11-08(Q181), 사용자 결정 2026-11-08(Q188) |
 | 중계 ID | `ID:` 뒤의 값이다. ASCII 숫자(`0`~`9`) 1~247자리이고, 247자리는 250바이트에 들어가는 최대 길이다. 숫자가 아닌 바이트가 하나라도 있거나 숫자가 없으면 `handshake_invalid`다. 두 ID는 바이트열이 정확히 같을 때만 같다. 앞자리 0, 수 값, 대소문자로 서로 다른 ID를 합치지 않는다(`0123`과 `123`은 다른 ID). 사용자 결정 2026-11-01(Q68·Q69). | [기록 3.5절](repeater-compat-record.md#35-계약-1절-항목별-해석) "중계 ID 비교"·"중계 ID 길이" 행 |
 | 버전 문자열 | Viewer 쪽의 시작 바이트 `RFB 000.000\n` 하나다(1.1절 D). Server 쪽에는 없다. | M2-01 |
-| 시간 | 250바이트는 제한 시간 H 안에 다 와야 한다. TCP는 초기 교환에 들어간 때부터, WS·WSS는 `101` 응답을 보낸 때부터 잰다([설정 계약](config-v3.md)의 `handshake_secs`). | E-04 |
+| 시간 | 250바이트는 제한 시간 H 안에 다 와야 한다. TCP는 초기 교환에 들어간 때부터, WS·WSS는 `101` 응답을 보낸 때부터 잰다([설정 계약](config-v4.md)의 `handshake_secs`). | E-04 |
 
 검사 순서는 다음과 같다(사용자 결정 2026-11-01(Q80)). Viewer는 빈 값도 먼저 모드를 판정한다. 빈 값은 `ID:`로 시작하지 않으므로 Mode I이다. 그 모드가 꺼졌으면 빈 값·본문을 더 검사하지 않고 `mode_disabled`로 거절한다. 모드가 켜졌을 때 빈 값·본문 문법을 검사한다. 따라서 빈 Viewer 값은 Mode I이 켜졌으면 `handshake_invalid`다. TCP Server는 모드 활성 검사보다 먼저 `ID:` 접두어를 검사한다. 빈 값과 비접두어 값은 항상 `handshake_invalid`다. `ID:`만 있는 값은 Mode II가 꺼졌으면 `mode_disabled`이고, 켜졌으면 빈 ID라 `handshake_invalid`다.
+
+후속: 사용자 결정 2026-11-08(Q181·Q188)에 따라 위 TCP Server 검사 순서를 WS·WSS Server에도 적용한다. Server의 Mode I 요청은 `handshake_invalid`다. Mode II가 꺼져 있어도 `ID:`가 아닌 값은 먼저 형식 오류로 거절한다.
 
 ### 1.3 Mode I 대상 문법
 
@@ -60,11 +65,11 @@ UltraVNC Viewer·Server와 외부 WebSocket 클라이언트가 VNC Relay에 접�
 
 | 부분 | 문법 | 근거 |
 | --- | --- | --- |
-| 호스트: IPv4 | 십진수 넷을 점으로 이은 표기. 각 자리 0~255이고 앞자리 0은 받지 않는다([설정 계약 1.3절](config-v3.md#13-ip-항목-문법)의 단일 IPv4와 같다). | M1-01 |
-| 호스트: DNS 이름 | [설정 계약 1.5절](config-v3.md#15-mode-i-대상-허용-항목-문법)의 DNS 이름 문법과 같다. 대소문자를 구분하지 않는다. UltraVNC Viewer는 이름을 대문자로 바꿔 보낸다. 숫자와 점만으로 된 값은 IPv4로 해석하고, IPv4 문법에 맞지 않으면 `handshake_invalid`다. | M1-03 |
+| 호스트: IPv4 | 십진수 넷을 점으로 이은 표기. 각 자리 0~255이고 앞자리 0은 받지 않는다([설정 계약 1.3절](config-v4.md#13-ip-항목-문법)의 단일 IPv4와 같다). | M1-01 |
+| 호스트: DNS 이름 | [설정 계약 1.5절](config-v4.md#15-mode-i-대상-허용-항목-문법)의 DNS 이름 문법과 같다. 대소문자를 구분하지 않는다. UltraVNC Viewer는 이름을 대문자로 바꿔 보낸다. 숫자와 점만으로 된 값은 IPv4로 해석하고, IPv4 문법에 맞지 않으면 `handshake_invalid`다. | M1-03 |
 | 호스트: IPv6 | 대괄호로 묶은 RFC 4291 텍스트 표기다(`[2001:db8::30]`). 영역 ID(`%`)는 받지 않는다. 대괄호 없는 IPv6는 포트와 구분할 수 없으므로 받지 않는다. 대상 버전 Repeater에는 없는 확장이다(3.1절). 사용자 결정 2026-11-01(Q70). | M1-06 |
 | 포트 | `:` 뒤의 십진수 1~65535. 앞자리 0은 받지 않는다. 생략하면 5900이다. | M1-02 |
-| 주소 해석과 정책 | 이름은 IPv4·IPv6 해석 결과를 모두 쓴다(Q70). 허용 정책은 실제로 연결할 IP와 포트에 적용한다([중계 스펙 3.2절](../specs/relay.md#32-mode-i), [설정 계약 1.5절](config-v3.md#15-mode-i-대상-허용-항목-문법)). IPv4-mapped IPv6 주소(`::ffff:0:0/96`)는 IPv4 주소로 바꾼 뒤 판정하고 연결한다. 설정 항목에는 이 대역이 없으므로, 바꾸지 않으면 IPv6 전체 허용 항목으로 IPv4 정책을 우회할 수 있다. | M1-01, M1-03, M1-04 |
+| 주소 해석과 정책 | 이름은 IPv4·IPv6 해석 결과를 모두 쓴다(Q70). 허용 정책은 실제로 연결할 IP와 포트에 적용한다([중계 스펙 3.2절](../specs/relay.md#32-mode-i), [설정 계약 1.5절](config-v4.md#15-mode-i-대상-허용-항목-문법)). IPv4-mapped IPv6 주소(`::ffff:0:0/96`)는 IPv4 주소로 바꾼 뒤 판정하고 연결한다. 설정 항목에는 이 대역이 없으므로, 바꾸지 않으면 IPv6 전체 허용 항목으로 IPv4 정책을 우회할 수 있다. | M1-01, M1-03, M1-04 |
 
 ### 1.4 형식과 무관한 제품 제약
 
@@ -74,18 +79,18 @@ UltraVNC Viewer·Server와 외부 WebSocket 클라이언트가 VNC Relay에 접�
 | --- | --- | --- |
 | 분할·병합 수신 | 수신 청크 경계와 관계없이 같은 초기 요청을 같은 의미로 해석한다. 한 번의 읽기를 한 메시지로 가정하지 않는다. WS·WSS의 바이너리 메시지 경계도 초기 요청의 경계로 보지 않는다. | RLY-R02, WS-R03, [RLY-002](../specs/relay.md#7-수용-테스트), [WS-018](../specs/websocket.md#7-수용-테스트) |
 | 후속 바이트 보존 | 초기 요청 뒤에 이미 받은 데이터는 중계 스트림의 첫 바이트로 한 번만 전달한다. 이 데이터도 버퍼 상한 B에 포함한다. | RLY-R03, [RLY-003](../specs/relay.md#7-수용-테스트), [WS-018](../specs/websocket.md#7-수용-테스트) |
-| 크기와 시간 | 초기 요청은 250바이트 고정이다. 초기 교환은 제한 시간 H를 지킨다. 설정 키는 `handshake_secs`다([설정 계약](config-v3.md)). | [운영 스펙 2절](../specs/operations.md#2-상태와-검증-매개변수), [RLY-004](../specs/relay.md#7-수용-테스트), [RLY-005](../specs/relay.md#7-수용-테스트) |
+| 크기와 시간 | 초기 요청은 250바이트 고정이다. 초기 교환은 제한 시간 H를 지킨다. 설정 키는 `handshake_secs`다([설정 계약](config-v4.md)). | [운영 스펙 2절](../specs/operations.md#2-상태와-검증-매개변수), [RLY-004](../specs/relay.md#7-수용-테스트), [RLY-005](../specs/relay.md#7-수용-테스트) |
 | 모드 비활성 | 설정으로 끈 모드의 요청은 대기 등록과 대상 연결 전에 거절한다. | RLY-R17, [RLY-022](../specs/relay.md#7-수용-테스트) |
 | 인증 필드 없음 | 초기 교환에 인증 필드를 추가하지 않는다. 접근은 진입점별 출발지 IP 허용 목록으로 통제한다. | [ADR-0002](../decisions/ADR-0002-source-ip-allowlist.md) |
 | 대상 선택 단계 없음 | 별도의 대상 선택 메시지나 URL API를 추가하지 않는다. | [relay.md 3.1절](../specs/relay.md#31-초기-교환), [websocket.md 1절](../specs/websocket.md#1-범위와-적용-상태) |
-| 중계 ID 노출 제한 | 초기 교환 바이트와 중계 ID 원문을 로그에 그대로 남기지 않는다. 노출 방식은 [운영 정보 계약](ops-info-v1.md)이 정한다. | [websocket.md 5절](../specs/websocket.md#5-항상-지켜야-할-규칙과-비보장-범위) |
+| 중계 ID 노출 제한 | 초기 교환 바이트와 중계 ID 원문을 로그에 그대로 남기지 않는다. 노출 방식은 [운영 정보 계약](ops-info-v2.md)이 정한다. | [websocket.md 5절](../specs/websocket.md#5-항상-지켜야-할-규칙과-비보장-범위) |
 | 독립 구현 | 이 계약의 형식은 공개 문서와 허가된 관찰로만 확정했다. UltraVNC·websockify·noVNC 소스 코드를 읽거나 복사·번역하지 않는다. | [PRD 9절](../requirements/PRD.md#9-호환성-조사와-독립-구현-원칙), [relay.md 6절](../specs/relay.md#6-검증-전제) |
 
 재접속은 새 연결의 새 초기 교환이다. 대상 버전에서 Server의 `-autoreconnect`는 끊긴 뒤 약 2초에 다시 등록했고, 새 Viewer와 매칭됐다(T-03). 서버가 세션을 자동으로 재매칭하지 않는다는 스펙 규칙은 그대로다([websocket.md 4절](../specs/websocket.md#4-오류와-종료)).
 
 ## 2. 오류
 
-아래 코드 이름은 사용자 결정 2026-11-01(Q72)로 채택했다. WS close 사유(reason)와 로그의 `reason`이 같은 이름을 쓴다. 로그에서의 대응은 [운영 정보 계약 1.6절](ops-info-v1.md#16-원인-코드)이 정한다. 이름이 다른 `handshake_incomplete`의 대응도 거기에 있다.
+아래 코드 이름은 사용자 결정 2026-11-01(Q72)로 채택했다. WS close 사유(reason)와 로그의 `reason`이 같은 이름을 쓴다. 로그에서의 대응은 [운영 정보 계약 1.6절](ops-info-v2.md#16-원인-코드)이 정한다. 이름이 다른 `handshake_incomplete`의 대응도 거기에 있다.
 
 TCP 진입점은 오류를 알리는 바이트를 보내지 않고 정상 종료(FIN)로 연결을 닫는다. 대상 버전 Repeater도 오류 바이트를 보내지 않았다([기록 3.5절](repeater-compat-record.md#35-계약-1절-항목별-해석) D행). 닫을 때 읽지 않은 수신 데이터가 남아 있으면 OS가 재설정(RST)을 보낼 수 있다. WS·WSS 진입점은 연결이 성립한 뒤이므로 WebSocket close 코드로 알린다. 번호와 규칙은 [WebSocket 중계 계약 1.5절](websocket-relay-v1.md#15-close-코드)이 정한다.
 
@@ -119,13 +124,15 @@ TCP 진입점은 오류를 알리는 바이트를 보내지 않고 정상 종료
 | 숫자 뒤에 다른 바이트가 있는 ID(`56-78`, `12-34`, `12 34`, `12ab`) | `56-78`/`56`, 같은 값끼리의 `12-34`·`12 34`, `12ab`/`12AB`가 매칭됐다(M2-07, M2-12). | `handshake_invalid` | Q68 |
 | Server ID `999999999` | 거절된다. | 받는다. | Q68·Q69 |
 | 형식이 틀린 요청(TCP Server 진입점의 `XX:1234`·`1234`처럼 `ID:`로 시작하지 않는 값), 꺼진 모드의 요청 | 연결을 닫지 않고 둔다(E-01, M2-06b, M1-00). 숫자로 시작하지 않는 ID(`ID:abcd`)와 빈 ID는 바로 닫는다. | 모두 닫는다(`handshake_invalid`, `mode_disabled`). | [relay.md 4절](../specs/relay.md#4-오류와-복구) |
-| 짝이 없는 대기 | 60초 넘게 유지했고 대기 시간 상한은 보이지 않았다. | W가 지나면 닫는다(`wait_timeout`). | [설정 계약](config-v3.md)의 `wait_secs` |
+| 짝이 없는 대기 | 60초 넘게 유지했고 대기 시간 상한은 보이지 않았다. | W가 지나면 닫는다(`wait_timeout`). | [설정 계약](config-v4.md)의 `wait_secs` |
 | 초기 교환 시간 | 접속 약 6초 뒤(Viewer 쪽은 마지막 수신 약 5초 뒤) 닫는다. | H가 지나면 닫는다(`handshake_timeout`). | `handshake_secs`, E-04 |
-| Mode I 대상이 연결 요청(SYN)에 응답하지 않음 | SYN을 1·2·4·8초 간격으로 다시 보내고, 첫 SYN 약 21초 뒤 Viewer에 FIN을 보낸다. 오류 바이트는 없다(M1-05). | C가 지나면 대상 연결을 포기하고 Viewer 연결을 닫는다(`target_connect_failed`, `reason=connect_timeout`). 오류 바이트는 없다. 기본값 C=10초에서 첫 SYN 약 10초 뒤 FIN을 보냈다. | [설정 계약](config-v3.md)의 `connect_secs`, [relay.md 3.2절](../specs/relay.md#32-mode-i), 기록 7.4절 |
-| 활성 세션의 한쪽이 정상 종료(FIN)를 보냄 | Server FIN 1ms 안에 Server와 Viewer 양쪽 연결에 FIN을 보낸다(T-02). | 받은 데이터를 모두 전달한 뒤 상대 연결의 쓰기 방향만 닫는다(FIN). FIN을 보낸 쪽으로 가는 반대 방향은 E까지 계속 전달한다. 반대 방향도 끝나거나 E가 지나면 정리한다(E 만료는 `close_cause=close_timeout`). T-02에서는 Viewer가 연결을 닫지 않아 Server 쪽 FIN이 E(기본 10초) 뒤에 나갔다. | [relay.md 3.4절](../specs/relay.md#34-중계와-eof), [설정 계약](config-v3.md)의 `close_secs`, 기록 7.4절 |
+| Mode I 대상이 연결 요청(SYN)에 응답하지 않음 | SYN을 1·2·4·8초 간격으로 다시 보내고, 첫 SYN 약 21초 뒤 Viewer에 FIN을 보낸다. 오류 바이트는 없다(M1-05). | C가 지나면 대상 연결을 포기하고 Viewer 연결을 닫는다(`target_connect_failed`, `reason=connect_timeout`). 오류 바이트는 없다. 기본값 C=10초에서 첫 SYN 약 10초 뒤 FIN을 보냈다. | [설정 계약](config-v4.md)의 `connect_secs`, [relay.md 3.2절](../specs/relay.md#32-mode-i), 기록 7.4절 |
+| 활성 세션의 한쪽이 정상 종료(FIN)를 보냄 | Server FIN 1ms 안에 Server와 Viewer 양쪽 연결에 FIN을 보낸다(T-02). | 받은 데이터를 모두 전달한 뒤 상대 연결의 쓰기 방향만 닫는다(FIN). FIN을 보낸 쪽으로 가는 반대 방향은 E까지 계속 전달한다. 반대 방향도 끝나거나 E가 지나면 정리한다(E 만료는 `close_cause=close_timeout`). T-02에서는 Viewer가 연결을 닫지 않아 Server 쪽 FIN이 E(기본 10초) 뒤에 나갔다. | [relay.md 3.4절](../specs/relay.md#34-중계와-eof), [설정 계약](config-v4.md)의 `close_secs`, 기록 7.4절 |
 | IPv6 대상(대괄호 IPv6, 이름의 IPv6 결과) | 대상에 연결하지 않고 닫는다. | 허용 정책을 만족하면 연결한다. 호환 지원이 아닌 확장이다. | Q70, M1-06 |
 | 같은 역할 중복 ID | 대기 중인 ID: 먼저 온 연결을 유지하고, 뒤에 온 연결은 등록하지 않으며 닫지도 않는다. 활성 세션이 쓰는 ID: 관찰하지 않았다(사용자 결정 2026-11-01(Q75)). | 대기 중이거나 활성 세션이 쓰는 ID 모두 뒤에 온 연결을 바로 닫는다(`duplicate_id`). 먼저 온 연결과 활성 세션은 유지한다. | Q74·Q75, 기록 3.5절 |
 | WebSocket·TLS 접속 | Viewer 포트에서 처리하지 않는다. | WS·WSS Viewer 진입점에서 처리한다. | [WS·WSS 스펙](../specs/websocket.md) |
+
+후속: 사용자 결정 2026-11-08(Q181·Q188)에 따라 WS·WSS Server 진입점도 제공한다. 위 관찰과 기존 검증 기록의 WebSocket 범위는 Viewer 진입점으로 유지한다. 새 Server 조합은 미실행 (구현 전)이다.
 
 ## 4. 버전과 지원 단계
 

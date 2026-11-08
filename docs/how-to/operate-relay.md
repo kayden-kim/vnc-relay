@@ -5,10 +5,10 @@ Windows 11 x64와 Ubuntu 24.04 LTS x64에서 release 실행파일을 만들고 �
 | 항목 | 값 |
 | --- | --- |
 | 대상 독자 | 배포 담당자와 서버를 직접 실행하는 운영자 |
-| 검증 상태 | Draft — 두 OS 수동 실행 기록 전이다. 자동 시험만으로 안내 전체를 검증했다고 표시하지 않는다. |
+| 검증 상태 | Draft — 과거 두 OS 수동 기록은 4절에 보존한다. v4 이관·공유 WSS 역할·프록시 TLS 종료·최근 로그의 새 절차는 미실행 (구현 전)이다. 자동 시험만으로 안내 전체를 검증했다고 표시하지 않는다. |
 | 검증 환경·버전 | Windows 11 x64의 PowerShell, Ubuntu 24.04 LTS x64의 bash. Rust 버전은 `rust-toolchain.toml`을 따른다. 실제 OS·Rust·실행파일 버전은 실행 기록에 적는다. |
 | 최종 검증일 | 없음(Draft 2026-11-04) |
-| 관련 기준 문서 | [운영 스펙](../specs/operations.md), [설정 계약](../contracts/config-v3.md), [CLI 계약](../contracts/cli-v1.md), [운영 정보 계약](../contracts/ops-info-v1.md), [ADR-0001](../decisions/ADR-0001-built-in-tls.md) |
+| 관련 기준 문서 | [운영 스펙](../specs/operations.md), [설정 계약 v4](../contracts/config-v4.md), [CLI 계약](../contracts/cli-v1.md), [운영 정보 계약 v2](../contracts/ops-info-v2.md), [WebSocket 계약](../contracts/websocket-relay-v1.md), [ADR-0001](../decisions/ADR-0001-built-in-tls.md) |
 
 ## 1. 대상과 영향
 
@@ -16,9 +16,9 @@ Windows 11 x64와 Ubuntu 24.04 LTS x64에서 release 실행파일을 만들고 �
 - 예상 사용자 영향: 시작은 리스너를 연다. 재로드는 허용 정책·한도·시간 제한·keepalive·TLS의 이후 소비 시점에 영향을 준다. 이미 허용한 연결과 시작한 타이머는 유지한다. 종료·재시작은 연결과 관리 세션을 끝낸다.
 - 작업 허용 시간: 재시작이 필요한 변경은 운영자가 승인한 중단 시간에 한다.
 
-예시는 루프백 TCP의 Mode II만 켠다. 관리 HTTP와 상태 리스너도 루프백이다. 이 구성 선택은 **이 문서의 판단, 사용자 결정 없음**이다. 공개 주소에 그대로 옮기는 예시가 아니다.
+기본 검증 예시는 루프백 TCP의 Mode II만 켠다. 관리 HTTP와 상태 리스너도 루프백이다. 이 구성 선택은 **이 문서의 판단, 사용자 결정 없음**이다. 공개 주소에 그대로 옮기는 예시가 아니다. WSS와 프록시 배치는 3.2.1절·3.9절의 별도 v4 예시를 쓴다.
 
-인터넷에 공개하는 WebSocket 진입점에는 WSS를 권장한다. 평문 WS는 보호된 네트워크에서만 켜기를 권장한다. 보호 여부와 공개 배치의 책임은 운영자에게 있다(사용자 결정 2026-11-04(Q96)). 관리 리스너를 외부에 열 때는 내장 HTTPS가 필수다. TLS 종료를 역방향 프록시에 맡기지 않는다.
+인터넷에 공개하는 WebSocket 진입점에는 내장 WSS 또는 역방향 프록시 TLS 종료를 권장한다(사용자 지시 2026-11-08). 평문 WS는 보호된 네트워크에서만 켜기를 권장한다. 프록시→VNC Relay 구간의 보호와 공개 배치의 책임은 운영자에게 있다. 관리 리스너를 외부에 열 때는 내장 HTTPS가 필수다. 관리 리스너는 프록시 TLS 종료 지원의 대상이 아니며 전달 헤더를 무시한다. 관리 쿠키와 로그인 제한 출발지 주소 규칙도 바꾸지 않는다(사용자 결정 2026-11-08(Q182·Q183)).
 
 ## 2. 전제 조건
 
@@ -82,7 +82,7 @@ Windows 11 x64와 Ubuntu 24.04 LTS x64에서 release 실행파일을 만들고 �
 
 2. `relay.toml`을 대상 배치에 맞게 편집한다.
 
-   로컬 검증에서는 예시 그대로 쓴다. 공개 배치에서는 리스너 주소와 출발지 `allow`를 의도한 값으로 정한다. `[]`는 모두 거절이며 목록 생략은 시작 실패다. `0.0.0.0/0`·`::/0`는 전체 허용과 경고를 뜻한다. Mode I을 켜면 `mode1.allow_targets`도 명시해야 한다. WSS는 `listen`·`allow`·필요한 `allowed_origins`·`cert_file`·`key_file`을 설정한다. 브라우저 Origin은 IP 제한을 대신하지 않는다.
+   로컬 검증에서는 예시 그대로 쓴다. 공개 배치에서는 리스너 주소와 역할별 출발지 `allow`를 의도한 값으로 정한다. `[]`는 모두 거절이며 켠 역할의 목록 생략은 시작 실패다. `0.0.0.0/0`·`::/0`는 전체 허용과 경고를 뜻한다. Mode I을 켜면 `mode1.allow_targets`도 명시해야 한다. WSS의 공통 `listen`·`cert_file`·`key_file`은 `[relay.wss]`에 둔다. `enabled`·`allow`·`allowed_origins`는 `[relay.wss.viewer]`와 `[relay.wss.server]`에 둔다. 브라우저 Origin은 IP 제한을 대신하지 않는다.
 
 3. 대화형 터미널에서 관리자 계정을 추가한다.
 
@@ -109,6 +109,78 @@ Windows 11 x64와 Ubuntu 24.04 LTS x64에서 release 실행파일을 만들고 �
    기대 결과: `opsadmin`이 보이고 비밀번호·해시는 보이지 않는다. 계정이 없으면 서버를 시작하지 않는다.
 
 기존 계정을 바꾸려면 먼저 서버를 정상 종료한다. 같은 실행파일의 `admin passwd opsadmin --config ./relay.toml`로 비밀번호를 바꿀 수 있다. `admin remove opsadmin --config ./relay.toml`은 삭제 확인을 묻는다. Windows에서는 실행파일·경로 표기를 위 명령처럼 바꾼다. 마지막 계정을 삭제하면 시작할 수 없다. 계정 변경은 서버 재시작 전까지 적용되지 않으며 기존 관리 세션도 재시작 전까지 유효하다.
+
+#### 3.2.1 v4 WSS Viewer·Server 설정 예시
+
+다음은 v4 형식의 별도 `relay.toml` 전체 예시다. 기본 TCP 검증 예시에 그대로 덧붙이지 않는다. 문서용 주소·Origin·인증서 경로는 실제 배치 값으로 바꾸어야 한다. `tls/relay-chain.pem`과 `tls/relay-key.pem`은 운영자가 먼저 준비한 유효한 쌍이어야 한다. 이 예시는 추정이며 미실행 (구현 전)이다.
+
+```toml
+[admin]
+accounts_file = "admin-accounts.toml"
+
+[relay.wss]
+listen = "0.0.0.0:8443"
+cert_file = "tls/relay-chain.pem"
+key_file = "tls/relay-key.pem"
+trusted_proxies = []
+
+[relay.wss.viewer]
+enabled = true
+allow = ["192.0.2.10"]
+allowed_origins = ["https://viewer.example.test"]
+
+[relay.wss.server]
+enabled = true
+allow = ["192.0.2.30"]
+allowed_origins = []
+
+[mode2]
+enabled = true
+
+[management]
+listen = "127.0.0.1:18080"
+
+[status]
+listen = "127.0.0.1:18081"
+
+[recent_logs]
+max_entries = 1000
+
+[log]
+output = "relay.log"
+```
+
+두 역할은 같은 WSS 소켓을 쓴다. Viewer는 `wss://HOST:8443/relay`, Server는 `wss://HOST:8443/relay/server`로 접속한다. `HOST`는 인증서에 맞는 실제 호스트명이다. 경로 뒤 `/`는 붙이지 않는다. Server 역할은 Mode II만 받으며 TCP Server와 같은 `ID:` 초기 교환을 쓴다. Server에는 greeting을 보내지 않는다(사용자 결정 2026-11-08(Q181·Q188)). 위 Server의 빈 Origin 목록은 `Origin` 없는 클라이언트만 허용한다.
+
+#### 3.2.2 v3 파일을 v4로 옮기기
+
+v4 서버는 v3의 WS·WSS 테이블을 읽지 않는다. 호환 지원 기간은 없다. 이관 전 파일을 넣으면 `config_unknown_key`로 시작 실패한다. 실제 운영 `relay.toml`도 배포 전에 이관해야 한다(사용자 결정 2026-11-08(Q188)). 아래 절차는 미실행 (구현 전)이다.
+
+1. 현재 실행파일·`relay.toml`·계정 파일·TLS 파일 쌍을 접근이 제한된 복구 위치에 복사한다. 실행파일 버전·해시와 파일 경로도 기록한다.
+2. 운영 파일과 같은 디렉터리에 `relay-v4.toml` 사본을 만든다. 실행 중인 구버전의 파일은 아직 바꾸지 않는다.
+3. [설정 계약 3.3절의 매핑](../contracts/config-v4.md#33-v3-파일을-v4로-옮기기)으로 사본을 편집한다.
+
+   | v3 위치 | v4 위치 |
+   | --- | --- |
+   | `[relay.ws_viewer]`의 `enabled`·`allow`·`allowed_origins` | `[relay.ws.viewer]`의 같은 키 |
+   | `[relay.ws_viewer]`의 `listen` | `[relay.ws]`의 `listen` |
+   | `[relay.wss_viewer]`의 `enabled`·`allow`·`allowed_origins` | `[relay.wss.viewer]`의 같은 키 |
+   | `[relay.wss_viewer]`의 `listen`·`cert_file`·`key_file` | `[relay.wss]`의 같은 키 |
+
+   이전 테이블은 남기지 않는다. TOML 파일에 버전 키를 추가하지 않는다. 기존 Viewer 동작과 `/relay` 경로만 유지하려면 Server 역할·`trusted_proxies`·`[recent_logs]`를 추가할 필요는 없다. 새 역할은 기본 비활성이다.
+
+4. 이관한 파일의 별도 검증 사본 `relay-v4-check.toml`을 같은 디렉터리에 만든다. 켜진 모든 중계 리스너와 관리·상태 리스너의 `listen`을 서로 다른 미사용 루프백 포트로 바꾸고 `log.output = "stdout"`으로 바꾼다. 운영 파일과 계정·TLS 파일은 수정하지 않는다.
+5. 운영 파일과 같은 디렉터리에서 새 실행파일의 실제 경로로 검증 사본을 시작한다. Windows는 `& 'C:\배포\v4\vnc-relay.exe' serve --config .\relay-v4-check.toml`, Ubuntu는 `/opt/vnc-relay-v4/vnc-relay serve --config ./relay-v4-check.toml`이다. 실행파일 경로는 새 묶음의 실제 경로로 바꾼다. 구버전 실행파일을 덮어쓰지 않는다.
+
+   별도의 검증 전용 CLI는 없다. 이 시작으로 전체 설정·계정·TLS 검증과 대체 포트 바인드를 확인한다. `server_ready`와 검증 사본의 상태 포트 `/readyz` 200을 확인한 뒤 Ctrl+C로 정상 종료한다. 오류가 나면 운영 서버를 멈추지 말고 사본을 고친다. 이 절차는 운영 포트·방화벽·실제 중계의 검증을 대신하지 않는다.
+
+6. 중단 시간에 3.8절로 구버전을 정상 종료한다. 이 단계는 모든 연결과 관리 세션을 끝낸다. 복구본으로 이전 실행파일과 파일을 함께 복원할 수 있는지 먼저 확인한다.
+7. 새 실행파일과 검증된 `relay-v4.toml`을 운영 위치에 설치한다. 운영용 `listen`·로그 경로를 유지한 파일을 `relay.toml`로 쓴다. 대체 포트의 검증 사본을 설치하지 않는다.
+8. 3.3절로 시작·상태·관리 재로그인을 확인한다. 기존 Viewer 경로 `/relay`의 실제 중계와 3.5절 재로드도 확인한다. 새 Server 역할은 `/relay/server`의 Mode II 양방향 중계를 따로 확인한다.
+
+로그 소비자도 같은 배포에서 바꾼다. `server_starting.log_contract`는 `ops-info/2.0.0`이다. 예전 `listener=ws_viewer`는 `listener=ws`와 `role=viewer`, `wss_viewer`는 `wss`와 `role=viewer`로 대응한다. `ws`·`wss`의 `connection_accepted`에는 아직 `role`이 없다. 경로로 역할을 정한 뒤에만 `role`이 있다. 리스너 값은 `tcp_viewer`·`tcp_server`·`ws`·`wss`·`management`·`status`다. 자세한 범위는 [운영 정보 계약 v2](../contracts/ops-info-v2.md)를 따른다.
+
+롤백은 6절의 v4→v3 복구 절차를 따른다. 검증 사본은 증거를 보관한 뒤 지운다. 계정·TLS 비밀을 일반 검증 로그에 복사하지 않는다.
 
 ### 3.3 시작과 상태 확인
 
@@ -191,9 +263,9 @@ Windows 11 x64와 Ubuntu 24.04 LTS x64에서 release 실행파일을 만들고 �
 
 ### 3.5 자동 재로드
 
-재로드 대상은 [설정 계약 1.8절](../contracts/config-v3.md#18-재로드-구분)의 27개 키다. 켠 진입점의 출발지 IP·WS/WSS Origin, 켠 Mode I의 대상 허용 정책, L·Lm·Lw·B·M, H·U·W·C·E·G, TCP/WS keepalive와 TLS 경로·내용을 포함한다. 기존에 허용한 초기 교환·대기·활성 연결과 시작한 타이머를 취소하지 않는다. 낮춘 상한을 이미 넘었으면 기존 점유를 유지하고 새 점유만 거절한다. 세부 적용 시점은 계약 표를 따른다.
+재로드 대상은 [설정 계약 1.8절](../contracts/config-v4.md#18-재로드-구분)의 33개 키다. 이 중 TLS 네 경로를 뺀 29개가 편집 대상이다(사용자 결정 2026-11-08(Q184·Q188)). 역할별 출발지 IP·Origin, 리스너별 `trusted_proxies`, 켠 Mode I의 대상 허용 정책, L·Lm·Lw·B·M, H·U·W·C·E·G, TCP/WS keepalive와 TLS 경로·내용을 포함한다. `trusted_proxies`는 교체 뒤 다음 수락·업그레이드 검사부터 적용한다. 이미 통과한 검사 결과, 기존 연결과 시작한 타이머는 유지한다. 낮춘 상한을 이미 넘었으면 기존 점유를 유지하고 새 점유만 거절한다. 세부 적용 시점은 계약 표를 따른다.
 
-리스너 주소·포트, 진입점·모드 켜기/끄기, HTTP/HTTPS 전환, 계정·로그인 제한·관리 세션 정책, `management.config_edit`, 대시보드·최근 종료 보관·로그·재로드 주기는 재시작해야 한다. 이런 값이 실행 중 값과 다르면 후보 전체를 `reload_restart_required`로 거절한다. 그 차이를 되돌리거나 서버를 재시작하기 전에는 동적 값과 급한 인증서 교체도 적용되지 않는다.
+리스너 주소·포트, 역할·모드 켜기/끄기, 관리 HTTP/HTTPS 전환, 계정·로그인 제한·관리 세션 정책, `management.config_edit`, 대시보드·최근 종료 보관·최근 로그 보관 수·로그 출력·재로드 주기는 재시작해야 한다. 이런 값이 실행 중 값과 다르면 후보 전체를 `reload_restart_required`로 거절한다. 그 차이를 되돌리거나 서버를 재시작하기 전에는 동적 값과 급한 인증서 교체도 적용되지 않는다.
 
 1. 실행 중인 예시의 `relay.tcp_viewer.allow`만 `["127.0.0.1", "::1"]`로 바꾸어 저장한다.
 
@@ -241,7 +313,7 @@ Windows 11 x64와 Ubuntu 24.04 LTS x64에서 release 실행파일을 만들고 �
 
 ### 3.6 인증서 교체
 
-TLS를 켠 배치에만 적용한다. TLS 1.2 이상이 필요하다. 지원 PEM 체인·키 형식은 [설정 계약 1.9절](../contracts/config-v3.md#19-인증서개인키-파일-형식)을 따른다. 비밀키 내용은 로그·명령행에 넣지 않는다.
+TLS를 켠 배치에만 적용한다. TLS 1.2 이상이 필요하다. 지원 PEM 체인·키 형식은 [설정 계약 1.9절](../contracts/config-v4.md#19-인증서개인키-파일-형식)을 따른다. 비밀키 내용은 로그·명령행에 넣지 않는다.
 
 1. 새 인증서 체인과 일치하는 개인키를 보호된 새 파일 두 개에 저장한다.
 
@@ -289,6 +361,14 @@ JSON Lines는 한 줄에 JSON 객체 하나를 기록하는 형식이다. `log.o
 - 보관 파일의 접근 권한도 원본과 같이 제한하고 필요하면 보호된 저장소로 옮기기를 권장한다.
 - 디스크 여유와 stderr 경고를 감시하기를 권장한다. 로그에는 관리자 계정명과 접속 관련 정보가 포함될 수 있다.
 
+#### 3.7.1 대시보드 최근 로그
+
+`[recent_logs] max_entries = 1000`은 메모리에 최근 사건 1000개를 보관하는 기본값이다. 범위는 0~10000이며 `0`이면 보관하지 않는다. 값을 바꾸면 재시작해야 한다. 재시작하면 목록은 빈다(사용자 결정 2026-11-08(Q185)). 보관 수를 늘릴 때는 최대 로그 줄 크기에 비례해 메모리를 더 쓴다는 점을 반영한다.
+
+관리자로 로그인한 뒤 `/#/logs`를 연다. 수준·사건명 필터와 값 검색으로 좁힐 수 있다. 자동 갱신은 P 주기이며 일시정지할 수 있다. 세션 상세의 "로그 보기"로 해당 세션에 관련된 사건을 열 수 있다. 내려받기는 현재 필터 결과를 JSON Lines로 저장한다(사용자 결정 2026-11-08(Q186·Q187)).
+
+이 목록은 `log.output`과 출력 쓰기 성공 여부에 관계없이 채운다. 파일 출력 실패여도 화면에 사건이 보일 수 있으므로 파일 기록 성공의 증거로 삼지 않는다. 목록은 오래된 항목부터 버리며 영속 보관·감사 로그를 대신하지 않는다. API 매개변수·응답 필드 이름과 세션 필터 URL은 사용자 결정 2026-11-08(Q191)으로, 화면 시안은 사용자 결정 2026-11-08(Q189)으로, 문구는 사용자 결정 2026-11-08(Q190)으로 채택했다. 기준은 [운영 스펙의 채택 기록](../specs/operations.md#8-미결정-사항)을 따른다.
+
 ### 3.8 정상 종료와 재시작
 
 1. 서버를 실행한 터미널에서 Ctrl+C를 한 번 누른다.
@@ -307,9 +387,97 @@ JSON Lines는 한 줄에 JSON 객체 하나를 기록하는 형식이다. `log.o
 
 Windows 로그오프·시스템 종료는 강제 종료다. 대화형 콘솔 프로그램의 정상 유예·종료 기록을 보장하지 않는다. SIGKILL·작업 관리자 종료·전원 장애도 같다. 다시 시작하면 이전 소켓·대기·세션·관리 로그인은 복원되지 않는다.
 
+### 3.9 역방향 프록시로 TLS 종료
+
+중계 WS·WSS 리스너만 대상이다. 이 예시는 Nginx가 외부 WSS를 받고 같은 호스트의 평문 `ws` 리스너로 전달하는 구성이다. Nginx 설정과 연결 절차는 이 저장소에서 검증하지 않았다. **추정 / 미실행 (구현 전)**이다. 실제 Nginx 버전·경로·인증서·방화벽에 맞게 바꾸고 4절의 별도 검증을 해야 한다.
+
+1. 프록시에서 제공할 호스트명의 인증서·개인키를 준비한다. 아래 `relay.example.test`와 `/etc/nginx/tls/` 경로를 실제 값으로 바꾼다.
+2. 운영 `relay.toml`에 다음 구성을 적용한다. 기존 WSS 예시 대신 쓰는 별도 전체 예시다. 문서용 클라이언트 IP를 실제 허용 주소로 바꾼다.
+
+   ```toml
+   [admin]
+   accounts_file = "admin-accounts.toml"
+
+   [relay.ws]
+   listen = "127.0.0.1:8080"
+   trusted_proxies = ["127.0.0.1"]
+
+   [relay.ws.viewer]
+   enabled = true
+   allow = ["192.0.2.10"]
+   allowed_origins = ["https://viewer.example.test"]
+
+   [relay.ws.server]
+   enabled = true
+   allow = ["192.0.2.30"]
+   allowed_origins = []
+
+   [mode2]
+   enabled = true
+
+   [keepalive]
+   ws_ping_secs = 30
+   ws_pong_timeout_secs = 30
+
+   [management]
+   listen = "127.0.0.1:18080"
+
+   [status]
+   listen = "127.0.0.1:18081"
+
+   [recent_logs]
+   max_entries = 1000
+
+   [log]
+   output = "relay.log"
+   ```
+
+   `trusted_proxies`는 서버가 소켓에서 실제로 보는 프록시 주소여야 한다. 이 예시는 Nginx의 접속을 `127.0.0.1`로 고정한다. 별도 호스트라면 해당 프록시의 실제 주소만 넣고 리스너 주소·방화벽도 함께 바꾼다.
+
+3. Nginx의 `http` 블록 안에 다음 `map`과 `server`를 둔다. `proxy_pass`에는 URI를 붙이지 않는다. 그래야 `/relay`와 `/relay/server`를 그대로 전달한다.
+
+   ```nginx
+   map $http_upgrade $connection_upgrade {
+       default upgrade;
+       ''      close;
+   }
+
+   server {
+       listen 443 ssl;
+       server_name relay.example.test;
+       ssl_certificate     /etc/nginx/tls/relay-chain.pem;
+       ssl_certificate_key /etc/nginx/tls/relay-key.pem;
+       ssl_protocols TLSv1.2 TLSv1.3;
+
+       location /relay {
+           proxy_pass http://127.0.0.1:8080;
+           proxy_http_version 1.1;
+           proxy_set_header Host $host;
+           proxy_set_header Upgrade $http_upgrade;
+           proxy_set_header Connection $connection_upgrade;
+           proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+           proxy_read_timeout 120s;
+           proxy_send_timeout 120s;
+       }
+   }
+   ```
+
+   120초는 이 예시의 Kw ping 30초와 pong 제한 30초보다 길다. Kw를 바꾸면 프록시 읽기·쓰기 제한도 그 주기·응답 대기보다 길게 정한다. 경로 일치 여부와 꺼진 역할의 404 판정은 VNC Relay가 맡는다.
+
+4. Nginx 호스트에서 `nginx -t`로 설정을 검사한다. 성공한 뒤 `nginx -s reload`로 적용한다. 기존 배치의 실행 권한과 설정 경로가 다르면 그 배치 명령을 쓴다.
+5. 3.8절로 VNC Relay를 재시작한 뒤 외부 Viewer의 `wss://relay.example.test/relay`와 Server의 `wss://relay.example.test/relay/server`로 Mode II 중계를 확인한다. 클라이언트는 인증서·호스트 검증을 생략하지 않는다.
+
+`trusted_proxies`에는 프록시 주소만 넣어야 한다. 클라이언트 대역이나 `0.0.0.0/0`·`::/0` 같은 전체 범위를 넣어서는 안 된다. 그렇지 않으면 비신뢰 상대가 주소를 위조하거나 정상 클라이언트 체인이 거절될 수 있다. 전체 신뢰 경고 이름 `trust_all_proxies`과 필드 `listener`·`item`·`phase`는 사용자 결정 2026-11-08(Q191)으로 채택했다. 구현·시험은 미실행(구현 전)이므로 경고에 의존해 안전성을 판단하지 않는다.
+
+신뢰 프록시에서 온 `X-Forwarded-For`는 오른쪽부터 검사한다. 처음 만나는 `trusted_proxies` 밖 주소를 클라이언트 주소로 쓰며 그 왼쪽의 위조 요소는 읽지 않는다. Nginx의 `$proxy_add_x_forwarded_for`는 실제 접속 주소를 오른쪽에 덧붙인다. 여러 프록시를 거치면 각 프록시가 같은 방식으로 실제 상대 주소를 전달하고 모든 중간 프록시 주소만 신뢰 목록에 넣어야 한다. 신뢰하지 않은 소켓 상대의 전달 헤더는 무시한다([WebSocket 계약 1.8절](../contracts/websocket-relay-v1.md#18-신뢰-프록시와-x-forwarded-for)).
+
+헤더 누락·빈 값·검사 중 잘못된 요소·모든 요소가 신뢰 프록시 주소인 체인은 `HTTP 400`과 `forwarded_for_invalid`로 거절한다. 이때 등록과 `forwarded_ip`는 없다. 프록시 주소가 역할 허용 목록에 있어도 모두 신뢰하는 체인은 거절한다([WS-033·WS-036](../specs/websocket.md#7-수용-테스트)). 따라서 이 예시에서 Nginx 호스트 자체의 루프백 요청은 프록시를 거치면 거절된다. `127.0.0.1:8080`에 전달 헤더 없이 직접 접속해도 거절된다. 출발지 `127.0.0.1`이 `trusted_proxies`에 있어 신뢰 프록시 연결로 취급되기 때문이다. 이 출발지의 직접 접속은 유효한 전달 헤더가 있어야 하며, 같은 전달 주소 판정과 역할 `allow` 검사를 받는다. 전달 헤더 없이 직접 접속하려면 출발지가 그 리스너의 `trusted_proxies` 밖에 있고 해당 역할의 `allow`에 들어야 한다. 이 예시의 호스트에서 전달 헤더 없이 직접 시험해야 하면 신뢰 프록시를 두지 않은 다른 리스너(예: TCP 진입점이나 `trusted_proxies`가 빈 WSS 리스너)를 쓴다.
+
+**프록시→VNC Relay 구간은 운영자가 보호해야 한다.** 같은 호스트의 루프백 또는 접근을 제한한 사설망을 권장한다. 사설망 자체가 암호화를 보장하는 것은 아니다. 도청·변조 위험이 있으면 그 구간에도 TLS 등 보호를 적용한다. 프록시를 통하지 않는 평문 리스너의 외부 접근은 방화벽으로 막아야 한다. 관리 경로 `/`·`/api/`는 이 예시에 추가하지 않는다. 관리 리스너는 내장 HTTPS 또는 루프백 HTTP와 기존 로그인 규칙을 그대로 쓴다(사용자 결정 2026-11-08(Q183)).
+
 ## 4. 검증
 
-각 OS에서 3.1~3.8절을 실행한다. TLS 배치가 아니면 3.6절은 해당 없음으로 기록한다. OPS-031의 일반 배포 확인에 없는 TLS 동작을 확인한 것처럼 표시하지 않는다. 인증서 교체 자체의 자동 증거는 OPS-024가 담당한다.
+각 OS에서 기본 TCP 배치의 3.1~3.8절을 실행한다. TLS 배치가 아니면 3.6절은 해당 없음으로 기록한다. v3→v4 이관은 3.2.2절, WSS 두 역할은 3.2.1절, 프록시 TLS 종료는 3.9절을 각각 추가 검증한다. OPS-031의 일반 배포 확인에 없는 TLS 동작을 확인한 것처럼 표시하지 않는다. 인증서 교체 자체의 자동 증거는 OPS-024가 담당한다.
 
 | 관찰 대상 | 성공 조건 | 확인 명령·방법 | 실제 결과 | 실행 증거 위치 |
 | --- | --- | --- | --- | --- |
@@ -322,6 +490,10 @@ Windows 로그오프·시스템 종료는 강제 종료다. 대화형 콘솔 프
 | 로그 회전 | 원래 경로 재생성, 새 사건 기록 | 3.7절 | Windows·Ubuntu 통과 | [CLI 계약 실행 기록](../contracts/cli-v1.md#계약-테스트-실행-기록) |
 | 종료 | 정상 종료 코드 0, `server_stopped` | 3.8절 | Windows·Ubuntu 통과 | 같음 |
 | 설정 보기·편집·복구 | 읽기 전용 기본값, 활성화 뒤 재시작·재로그인, 다섯 파일 상태, 충돌·쓰기 실패·응답 불명 복구 | 3.5.1절과 6절. OS 계정·파일/디렉터리 권한·관찰값을 기록 | 미실행 — 2026-11-08 추가 절차. 과거 수동 기록은 새 편집 기능의 증거가 아님 | 통합 검증 담당자가 실행 기록을 추가 |
+| v3→v4 이관·롤백 | 기존 Viewer 동작·경로 유지, 새 로그 표기, 이전 실행파일·설정의 함께 복구 | 3.2.2절·6절 | 미실행 (구현 전) | 구현 뒤 두 OS 실행 기록 필요 |
+| 공유 WSS Viewer·Server | 같은 리스너의 두 경로로 Mode II 양방향 중계, 역할별 IP·Origin | 3.2.1절 | 미실행 (구현 전) | OPS-065·OPS-069, WS-028~031 |
+| 프록시 TLS 종료 | 외부 WSS→평문 WS, 오른쪽 첫 비신뢰 주소의 역할별 허용 판정, 잘못된·모두 신뢰하는 체인 거절 | 3.9절, Nginx 버전·`nginx -t`·양쪽 주소·비밀 없는 로그 기록 | 미실행 (구현 전), Nginx 예시 추정 | WS-032~036의 증거와 실제 배치 기록 필요 |
+| 최근 로그 | 설정 상한·오래된 항목 제거·재시작·0 보관·필터·JSON Lines 내려받기 | 3.7.1절 | 미실행 (구현 전) | OPS-068과 관리·화면 시나리오 증거 필요 |
 
 2026-11-07 갱신: 위 2026-11-05·커밋 `1c7c7a9` 묶음의 `LICENSE 없음(Q97 대기)`는 당시 기록으로 보존한다. 루트 `LICENSE` 작성·검토는 마쳤다(사용자 결정 2026-11-07(Q97), [검토 기록](check-dependency-licenses.md#42-프로젝트-license-검토-기록2026-11-07)). 앞으로 만드는 두 OS 배포 묶음에는 3.1절에 따라 루트 `LICENSE`를 포함한다. 과거 묶음을 다시 만들거나 LICENSE 포함을 재확인했다는 뜻은 아니다.
 
@@ -336,6 +508,8 @@ Windows 로그오프·시스템 종료는 강제 종료다. 대화형 콘솔 프
 3. 이전 설치 디렉터리는 다른 이름으로 옮겨 보존하고, 묶음을 같은 경로에 풀었다. 같은 명령으로 다시 시작했다. 정지부터 `server_ready`까지 13.6초였고, 리스너 다섯 개가 이전과 같은 주소로 열렸다. `/livez`·`/readyz` 200, 관리 `/login/` 200, `/` 303(`/login/`)이었다. WSS는 허용 Origin에 101, 다른 Origin에 403(`origin_not_allowed`)으로 답했다. 공인 주소로 되돌아오는 연결(공유기 NAT 루프백)에서도 TLS와 101을 확인했다.
 
 이 기록은 6절의 "v2 파일을 수정 없이 v3 서버로 재시작"을 Windows에서 한 번 확인한 것이다. 3.4절 중계, 3.5절 재로드, 3.5.1절 설정 편집과 Ubuntu는 실행하지 않았다. 그래서 위 표와 문서 상태는 바꾸지 않는다.
+
+후속: 사용자 결정 2026-11-08(Q181~Q188)의 설정 v4·ops-info 2.0.0·공유 역할·프록시·최근 로그는 위 실제 배치 교체 뒤의 기준이다. 위 기록은 바꾸지 않는다. 새 기준의 구현·배포·검증 증거로 확대하지 않는다.
 
 ## 5. 중단 조건
 
@@ -356,9 +530,15 @@ Windows 로그오프·시스템 종료는 강제 종료다. 대화형 콘솔 프
 
 계정 변경 실패는 기존 파일을 유지한다. 강제 종료 뒤 `<계정 파일 이름>.lock`이 남았으면 실행 중인 `admin` 명령이 없는지 먼저 확인한다. 그때만 운영자가 잠금 파일을 지운다. 로그 다시 열기 실패는 경로·디렉터리·권한을 복구하고 다음 시도의 결과를 확인한다.
 
-v2→v3 전환은 [설정 계약 3.2절](../contracts/config-v3.md#32-v2-파일을-v3로-옮기기)을 따른다. 기존 v2 파일은 수정이나 버전 키 추가 없이 v3 서버로 재시작한다. 다만 재시작용으로 미리 고쳐 둔 19개 키도 v3에서는 동적 적용될 수 있다. 미리 적용하면 안 되는 변경은 별도 사본에 두고 재시작 때 파일을 교체한다.
+v2→v3 전환은 [설정 계약 3.2절](../contracts/config-v4.md#32-v2-파일을-v3로-옮기기)을 따른다. 기존 v2 파일은 수정이나 버전 키 추가 없이 v3 서버로 재시작한다. 다만 재시작용으로 미리 고쳐 둔 19개 키도 v3에서는 동적 적용될 수 있다. 미리 적용하면 안 되는 변경은 별도 사본에 두고 재시작 때 파일을 교체한다.
 
 v2 서버(릴리스 v2026.11.0)로 롤백할 때는 정상 종료 뒤 `management.config_edit` 줄을 지운 파일과 이전 실행파일을 함께 복원한다. `false`로 바꾸는 것만으로는 충분하지 않다. 키가 남으면 이전 서버는 `config_unknown_key`로 시작하지 않는다. 이 키를 쓰지 않은 v3 파일은 v2가 그대로 읽는다. 롤백 뒤 시작·중계·관리 재로그인을 확인한다. 이전 서버의 더 좁은 재로드 구분도 다시 적용된다.
+
+v4→v3(릴리스 `v2026.11.1`) 롤백은 정상 종료 뒤 이전 실행파일과 보호된 v3 파일을 함께 복원하는 방법을 권장한다. 새 WS·WSS Server 역할·전달 주소·최근 로그 기능은 잃는다. 관리 세션도 재시작으로 무효다. v4 파일을 되돌려 쓸 때는 WS·WSS Server 역할 테이블, `trusted_proxies`, `[recent_logs]`를 제거한 뒤 [설정 계약 3.3절](../contracts/config-v4.md#33-v3-파일을-v4로-옮기기)의 표를 역으로 적용해야 한다. 빈 테이블도 남기지 않는다. 공통 리스너 키는 기존 Viewer 테이블로 합친다. 이관 전 복구본이 있으면 그 파일을 쓰는 편이 안전하다.
+
+프록시 TLS 종료를 쓰던 배치는 v3의 전달 주소 검사가 없어진다. 롤백 전에 직접 내장 WSS와 실제 소켓 IP 정책으로 되돌리거나 프록시를 통한 접근을 중지해야 한다. 프록시 주소를 전체 클라이언트의 주소처럼 허용해 우회하지 않는다. 시작·준비·실제 Viewer 중계·관리 재로그인과 로그 소비자 표기를 다시 확인한다. 이전 서버의 재로드 구분을 다시 적용한다. 이 롤백 절차는 미실행 (구현 전)이다.
+
+`trust_all_proxies` 이름과 필드, 로그 조회 매개변수·응답 필드 이름과 세션 필터 URL은 사용자 결정 2026-11-08(Q191)으로 채택했다. 로그 화면 시안·상단 메뉴 순서는 사용자 결정 2026-11-08(Q189)으로, CPY-149~189 ko/en 원문은 사용자 결정 2026-11-08(Q190)으로 채택했다. [운영 스펙 8절](../specs/operations.md#8-미결정-사항)에서 기록을 관리한다. 실제 배포의 구현 여부는 채택과 별도로 확인해야 한다.
 
 ## 7. 해결되지 않을 때 전달할 대상
 
