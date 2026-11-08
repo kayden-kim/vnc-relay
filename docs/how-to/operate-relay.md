@@ -329,6 +329,14 @@ Windows 로그오프·시스템 종료는 강제 종료다. 대화형 콘솔 프
 
 수동 기록에는 날짜, 커밋, OS 버전·아키텍처, `rustc --version`, 빌드 명령·결과, 실행파일 버전·SHA-256, 각 단계 명령과 관찰값을 남긴다. Windows 해시는 `Get-FileHash .\vnc-relay.exe -Algorithm SHA256`, Ubuntu 해시는 `sha256sum ./vnc-relay`로 읽는다. 비밀 없는 로그와 종료 코드를 붙인다. 두 OS 기록과 자동 시험을 함께 검토한 뒤 OPS-031을 판정한다.
 
+2026-11-08 실제 배치 교체 기록(Windows 11 Pro 10.0.26200 x64, PowerShell 7): 운영 중인 `2026.11.0` 서버를 [Release `v2026.11.1`](https://github.com/kayden-kim/vnc-relay/releases/tag/v2026.11.1)의 Windows 묶음으로 바꿨다. 설정 파일은 v2 형식 그대로 두었다. 이 배치는 TCP 두 진입점, WSS 진입점(내장 TLS), 루프백 평문 관리 리스너, 파일 로그를 쓴다.
+
+1. 새 실행파일(SHA-256 `f97c18a55d3a2b2d1b2567b33537f6663c1b78acb6ffe91e379e3a4f63884064`)을 같은 설정·계정·TLS 파일로 먼저 실행했다. 리스너 주소만 루프백 대체 포트로 바꾼 사본을 썼다. `server_ready`, `/livez`·`/readyz` 200, WSS TLS 1.3을 확인했고 Ctrl+Break 뒤 종료 코드는 0이었다.
+2. 서버 터미널에서 Ctrl+C로 이전 서버(SHA-256 `f0727fcd828793254acd68278a1f5f253ce5a462f346480943445de21e40b9df`)를 멈췄다. 활성 세션이 없었고, 0.65초 뒤 종료 코드 0으로 끝났다. 로그에 `shutdown_started`와 `server_stopped`가 있었다.
+3. 이전 설치 디렉터리는 다른 이름으로 옮겨 보존하고, 묶음을 같은 경로에 풀었다. 같은 명령으로 다시 시작했다. 정지부터 `server_ready`까지 13.6초였고, 리스너 다섯 개가 이전과 같은 주소로 열렸다. `/livez`·`/readyz` 200, 관리 `/login/` 200, `/` 303(`/login/`)이었다. WSS는 허용 Origin에 101, 다른 Origin에 403(`origin_not_allowed`)으로 답했다. 공인 주소로 되돌아오는 연결(공유기 NAT 루프백)에서도 TLS와 101을 확인했다.
+
+이 기록은 6절의 "v2 파일을 수정 없이 v3 서버로 재시작"을 Windows에서 한 번 확인한 것이다. 3.4절 중계, 3.5절 재로드, 3.5.1절 설정 편집과 Ubuntu는 실행하지 않았다. 그래서 위 표와 문서 상태는 바꾸지 않는다.
+
 ## 5. 중단 조건
 
 - 설정·계정·TLS·리스너 준비 실패이면 운영을 시작하지 않는다. 진단 `error[<code>]`와 종료 코드를 확인한다.

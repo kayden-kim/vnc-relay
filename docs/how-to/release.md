@@ -5,7 +5,7 @@ Windows 11 x64와 Ubuntu 24.04 LTS x64용 배포 묶음을 만들고, 버전 태
 | 항목 | 값 |
 | --- | --- |
 | 대상 독자 | 릴리스 담당자 |
-| 검증 상태 | Verified — 1.1·1.2·3.1·3.2절과 3.3절 7·8단계(태그·Release)를 두 OS와 GitHub Actions에서 실행해 확인했다([4절](#4-검증)). 첫 버전 `2026.11.0`은 구현 커밋 `7859b5d`가 버전을 바꿨으므로 3.3절 1~6단계를 따로 실행하지 않았다. 6절 롤백은 실행하지 않았다. |
+| 검증 상태 | Verified — 1.1·1.2·3.1·3.2절과 3.3절 1~8단계를 두 OS와 GitHub Actions에서 실행해 확인했다([4절](#4-검증)). 첫 버전 `2026.11.0`은 구현 커밋 `7859b5d`가 버전을 바꿨으므로 3.3절 1~6단계를 따로 실행하지 않았다. `2026.11.1`에서 1~8단계를 모두 실행했다. 6절 롤백은 실행하지 않았다. |
 | 검증 환경·버전 | Windows 11 Pro 10.0.26200 x64(PowerShell 7, Python 3), WSL2 Ubuntu 24.04.4 LTS x64(GNU coreutils `sha256sum`), Rust 1.99.1, GitHub Actions 호스팅 러너 `windows-2025`·`ubuntu-24.04` |
 | 최종 검증일 | 2026-11-08 |
 | 관련 기준 문서 | [PRD 확정 기준](../requirements/PRD.md#확정-기준)의 "배포 산출물"·"버전 규칙" 행, [수동 운영 안내 3.1절](operate-relay.md#31-release-빌드와-묶음), [xtask 모듈 설계](../architectures/xtask.md), [개발 환경·검증 how-to](set-up-and-verify.md) |
@@ -173,6 +173,12 @@ Windows 11 x64와 Ubuntu 24.04 LTS x64용 배포 묶음을 만들고, 버전 태
 커밋 `aa15af8`에서 묶음 파일 권한을 정규화하고 CI에 `cargo test --package xtask --locked`를 더했다. WSL에서 `/mnt/d` 작업 트리로 만든 tar.gz는 이전에 모든 파일이 `-rwxr-xr-x`였다. 바꾼 뒤에는 파일 94개가 `-rw-r--r--`, 실행파일 `vnc-relay`만 `-rwxr-xr-x`, 디렉터리 14개가 `drwxr-xr-x`였고 `sha256sum -c`는 `OK`였다. 같은 커밋의 [실행 42411305345](https://github.com/kayden-kim/vnc-relay/actions/runs/42411305345)에서 두 OS `check`가 성공했고, 두 OS 모두 xtask 단위 시험 16건이 통과했다. 기록 커밋 `e7eed86`의 실행 42411172978도 성공했다. 전체 완료 검증은 `7859b5d` 기준이다. `aa15af8`은 `xtask/src/package.rs`·워크플로·문서만 바꿨으므로 [개발 환경·검증 how-to 3.3절](set-up-and-verify.md#33-변경-범위별-검증)의 해당 행 명령으로 확인했다.
 
 확인 중 관찰한 도구 차이를 적는다. 검증 PC의 Git Bash에 있는 `sha256sum 0.8.0`은 `-c`에서 CR 바이트가 든 파일을 자기가 쓴 해시 파일로도 `FAILED`로 보고했다. 직접 계산한 값은 맞았다. GNU coreutils `sha256sum`(Ubuntu)은 같은 파일을 `OK`로 판정했다. 이 PC의 Windows PowerShell 5.1은 `PSModulePath` 앞에 PowerShell 7 경로가 있어 `Get-FileHash`를 찾지 못했다. Windows에서는 PowerShell 7의 `Get-FileHash`나 `certutil -hashfile <파일> SHA256`으로 확인하기를 권장한다.
+
+`2026.11.1` 릴리스(2026-11-08)는 3.3절 1~8단계를 모두 실행했다. 1~4단계: 버전을 바꾼 뒤 `cargo run --quiet -- --version`이 `vnc-relay 2026.11.1`을 출력했다. `Cargo.lock`은 작업 공간 패키지 네 개의 버전만 바뀌었고, `cargo xtask notices`는 `notices: 통과 (THIRD-PARTY-NOTICES.txt)`였다. 두 OS의 전체 완료 검증은 `e3fa56f`에 버전 변경과 링크 정리를 더한 작업 트리에서 실행했다. 이 트리는 아래 커밋 `c9194a8`의 내용과 같다. Windows `vr-win.ps1 -Only all`은 `ALL PASSED (all)`, 시나리오 215건 중 통과 198·부분 12·실패 0·미실행 3·미연결 2·오류 0이다(보고 2026-11-08T11:22:35Z). WSL `vr-full.sh`는 `ALL PASSED`, 통과 201·부분 8·실패 0·미실행 4·미연결 2·오류 0이다(보고 2026-11-08T11:25:50Z).
+
+5·6단계: 링크 정리 커밋 `70aba2d`와 `chore(release): 2026.11.1` 커밋 `c9194a8`을 `main`에 push했다. [실행 42475766731](https://github.com/kayden-kim/vnc-relay/actions/runs/42475766731)에서 `check (windows-2025)`(4분 44초)와 `check (ubuntu-24.04)`(3분 10초)가 성공했고, `release`는 태그가 아니어서 건너뛰었다.
+
+7·8단계: 태그 `v2026.11.1`을 커밋 `c9194a8`에 붙여 push했다(프로젝트 소유자 요청, 2026-11-08). [실행 42476169218](https://github.com/kayden-kim/vnc-relay/actions/runs/42476169218)에서 두 OS `check`(Windows 7분 43초, Ubuntu 3분 59초)와 `release`가 성공했다. [Release `vnc-relay 2026.11.1`](https://github.com/kayden-kim/vnc-relay/releases/tag/v2026.11.1)은 초안·사전 릴리스가 아니고, 묶음 2개와 `.sha256` 2개가 붙었다. 내려받은 묶음의 SHA-256이 각 `.sha256`과 같았다(Linux `41b1a6881e76900dcf118228ce5560993988bbc78eecae212c78dd054cd6a378`, Windows `400cffcae4696d840b709fba7a29777e731b917036800ef60f828279b12c421e`). WSL `sha256sum -c`는 `OK`였다. tar.gz 안의 파일 95개는 `-rw-r--r--`, 실행파일 1개는 `-rwxr-xr-x`, 디렉터리 14개는 `drwxr-xr-x`이고 소유자는 `0/0`이다. Windows 묶음은 최상위 디렉터리 하나에 3.1절 파일 7종과 `docs/` 파일 90개(저장소와 같은 수)를 담았다. 푼 실행파일은 두 OS에서 `vnc-relay 2026.11.1`을 출력했다.
 
 ## 5. 중단 조건
 
