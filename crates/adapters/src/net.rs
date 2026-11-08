@@ -821,4 +821,134 @@ mod accept_tests {
             .unwrap_or_else(|error| panic!("accept task: {error}"));
         assert_eq!(budget.current(), 0);
     }
+
+    // Reading K back needs socket2 getters that exist on Linux only.
+    /// spec: operations.md:OPS-050 partial
+    #[cfg(target_os = "linux")]
+    #[tokio::test]
+    async fn reloaded_keepalive_applies_to_new_accepts_and_keeps_accepted_sockets() {
+        tokio::time::timeout(Duration::from_secs(5), check_reloaded_keepalive())
+            .await
+            .unwrap_or_else(|error| panic!("keepalive reload timed out: {error}"));
+    }
+
+    #[cfg(target_os = "linux")]
+    async fn check_reloaded_keepalive() {
+        type Keepalive = (Duration, Duration, u32);
+        fn keepalive_of(stream: &TcpStream) -> Keepalive {
+            fn got<T>(result: io::Result<T>) -> T {
+                result.unwrap_or_else(|error| panic!("get: {error}"))
+            }
+            let socket = SockRef::from(stream);
+            (
+                got(socket.tcp_keepalive_time()),
+                got(socket.tcp_keepalive_interval()),
+                got(socket.tcp_keepalive_retries()),
+            )
+        }
+        fn snapshot(settings: Settings) -> ReloadSnapshot<TlsAcceptor> {
+            ReloadSnapshot::new(
+                vnc_relay_app::reload::ConfigCandidate {
+                    settings,
+                    presence: Default::default(),
+                },
+                None,
+                None,
+            )
+        }
+
+        let listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .unwrap_or_else(|error| panic!("bind: {error}"));
+        let address = listener
+            .local_addr()
+            .unwrap_or_else(|error| panic!("listener address: {error}"));
+        let mut settings = crate::config_file::parse(
+            "[admin]\naccounts_file='accounts.toml'\n[management]\nlisten='127.0.0.1:8443'\n[status]\nlisten='127.0.0.1:9090'\n",
+            std::path::Path::new("."),
+        ).unwrap_or_else(|error| panic!("settings: {error:?}"));
+        settings.relay.tcp_viewer.allow = Some(AllowList::new(vec![
+            IpItem::parse("127.0.0.1").unwrap_or_else(|error| panic!("allow: {error:?}")),
+        ]));
+        settings.keepalive.tcp_idle = Duration::from_secs(70);
+        settings.keepalive.tcp_interval = Duration::from_secs(11);
+        settings.keepalive.tcp_probes = 7;
+        let old: Keepalive = (Duration::from_secs(70), Duration::from_secs(11), 7);
+        let new: Keepalive = (Duration::from_secs(90), Duration::from_secs(13), 9);
+        let cell = Arc::new(ReloadCell::new(snapshot(settings.clone())));
+        let policy = AcceptPolicy {
+            allow: AllowSource::tcp_viewer(Arc::clone(&cell)),
+            relay_budget: ConnectionBudget::new(),
+        };
+        let (events, _log_lines) = mpsc::unbounded_channel();
+        let log: Arc<dyn EventSink> = Arc::new(LogSender(events));
+        let (stop, stopped) = watch::channel(false);
+        let (observed, mut seen) = mpsc::unbounded_channel();
+        let task = tokio::spawn(accept_connections(
+            EntryPoint::TcpViewer,
+            listener,
+            policy,
+            log,
+            stopped,
+            move |stream, conn, permit, mut stopped| {
+                let observed = observed.clone();
+                async move {
+                    let report = |when| {
+                        observed
+                            .send((when, conn.peer_addr, keepalive_of(&stream)))
+                            .unwrap_or_else(|error| panic!("send keepalive: {error}"));
+                    };
+                    report("accepted");
+                    stopped
+                        .wait_for(|stop| *stop)
+                        .await
+                        .unwrap_or_else(|error| panic!("wait for stop: {error}"));
+                    report("stopping");
+                    drop(permit);
+                }
+            },
+        ));
+
+        let first = TcpStream::connect(address)
+            .await
+            .unwrap_or_else(|error| panic!("first connect: {error}"));
+        let first_addr = first
+            .local_addr()
+            .unwrap_or_else(|error| panic!("first address: {error}"));
+        let accepted = seen.recv().await.unwrap_or_else(|| panic!("first accept"));
+        assert_eq!(accepted, ("accepted", first_addr, old));
+
+        settings.keepalive.tcp_idle = Duration::from_secs(90);
+        settings.keepalive.tcp_interval = Duration::from_secs(13);
+        settings.keepalive.tcp_probes = 9;
+        cell.replace(snapshot(settings));
+        let second = TcpStream::connect(address)
+            .await
+            .unwrap_or_else(|error| panic!("second connect: {error}"));
+        let second_addr = second
+            .local_addr()
+            .unwrap_or_else(|error| panic!("second address: {error}"));
+        let accepted = seen.recv().await.unwrap_or_else(|| panic!("second accept"));
+        assert_eq!(accepted, ("accepted", second_addr, new));
+
+        stop.send(true)
+            .unwrap_or_else(|error| panic!("stop accept: {error}"));
+        task.await
+            .unwrap_or_else(|error| panic!("accept task: {error}"));
+        let mut kept = vec![
+            seen.try_recv()
+                .unwrap_or_else(|error| panic!("first kept: {error}")),
+            seen.try_recv()
+                .unwrap_or_else(|error| panic!("second kept: {error}")),
+        ];
+        kept.sort_by_key(|(_, peer, _)| *peer != first_addr);
+        assert_eq!(
+            kept,
+            vec![
+                ("stopping", first_addr, old),
+                ("stopping", second_addr, new)
+            ],
+            "an accepted socket keeps the K it was accepted with"
+        );
+    }
 }
