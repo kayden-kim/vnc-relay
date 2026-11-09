@@ -329,7 +329,7 @@ enabled = true
     /// starts serve again in the same directory. Ports that a test transform
     /// added itself stay unchanged.
     fn restart_on_fresh_ports(&mut self, config: &mut String) {
-        let (holders, fresh) = reserve_ports();
+        let (holders, fresh) = reserve_ports_unused_by(config);
         let [management, status, viewer, target] = self.ports;
         for (old, new) in [management, status, viewer, target, self.ws_port]
             .into_iter()
@@ -598,6 +598,26 @@ fn reserve_ports() -> (Vec<TcpListener>, [u16; 5]) {
         .collect();
     let ports = std::array::from_fn(|i| must(holders[i].local_addr()).port());
     (holders, ports)
+}
+
+/// Like `reserve_ports`, but no reserved port is a listen address in `config`
+/// yet. The failed start released its ports, so a new reservation can get one
+/// back. A listener moved onto a port that a later listener still has would
+/// then move again with that later replacement.
+fn reserve_ports_unused_by(config: &str) -> (Vec<TcpListener>, [u16; 5]) {
+    // Rejected reservations stay bound, so each new try gets other ports.
+    let mut rejected = Vec::new();
+    loop {
+        let (holders, ports) = reserve_ports();
+        if ports
+            .iter()
+            .all(|port| !config.contains(&format!("\"127.0.0.1:{port}\"")))
+        {
+            return (holders, ports);
+        }
+        rejected.push(holders);
+        assert!(rejected.len() < 8, "fresh ports keep matching the config");
+    }
 }
 
 fn spawn_serve(dir: &std::path::Path) -> Child {
