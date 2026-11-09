@@ -5,7 +5,7 @@ Windows 11 x64와 Ubuntu 24.04 LTS x64에서 release 실행파일을 만들고 �
 | 항목 | 값 |
 | --- | --- |
 | 대상 독자 | 배포 담당자와 서버를 직접 실행하는 운영자 |
-| 검증 상태 | Draft — 과거 두 OS 수동 기록은 4절에 보존한다. v4 이관·공유 WSS 역할·프록시 TLS 종료·최근 로그의 새 절차는 미실행이다. 이 기능들의 구현과 자동 시험은 커밋 `51bd747`의 두 OS 게이트에서 통과했다([WSS Server·프록시·최근 로그 판정표](set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)). 자동 시험만으로 안내 전체를 검증했다고 표시하지 않는다. |
+| 검증 상태 | Draft — 과거 두 OS 수동 기록은 4절에 보존한다. v4 이관(3.2.2절)은 2026-11-09 Windows 실제 배치에서 실행했다(4절). v4 롤백·Ubuntu 이관과 공유 WSS 역할·프록시 TLS 종료·최근 로그의 새 절차는 미실행이다. 이 기능들의 구현과 자동 시험은 커밋 `51bd747`의 두 OS 게이트에서 통과했다([WSS Server·프록시·최근 로그 판정표](set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)). 자동 시험만으로 안내 전체를 검증했다고 표시하지 않는다. |
 | 검증 환경·버전 | Windows 11 x64의 PowerShell, Ubuntu 24.04 LTS x64의 bash. Rust 버전은 `rust-toolchain.toml`을 따른다. 실제 OS·Rust·실행파일 버전은 실행 기록에 적는다. |
 | 최종 검증일 | 없음(Draft 2026-11-04) |
 | 관련 기준 문서 | [운영 스펙](../specs/operations.md), [설정 계약 v4](../contracts/config-v4.md), [CLI 계약](../contracts/cli-v1.md), [운영 정보 계약 v2](../contracts/ops-info-v2.md), [WebSocket 계약](../contracts/websocket-relay-v1.md), [ADR-0001](../decisions/ADR-0001-built-in-tls.md) |
@@ -154,7 +154,7 @@ output = "relay.log"
 
 #### 3.2.2 v3 파일을 v4로 옮기기
 
-v4 서버는 v3의 WS·WSS 테이블을 읽지 않는다. 호환 지원 기간은 없다. 이관 전 파일을 넣으면 `config_unknown_key`로 시작 실패한다. 이 시작 실패는 OPS-066 자동 시험이 두 OS에서 확인했다. 실제 운영 `relay.toml`도 배포 전에 이관해야 한다(사용자 결정 2026-11-08(Q188)). 아래 절차는 미실행이다.
+v4 서버는 v3의 WS·WSS 테이블을 읽지 않는다. 호환 지원 기간은 없다. 이관 전 파일을 넣으면 `config_unknown_key`로 시작 실패한다. 이 시작 실패는 OPS-066 자동 시험이 두 OS에서 확인했다. 실제 운영 `relay.toml`도 배포 전에 이관해야 한다(사용자 결정 2026-11-08(Q188)). 아래 절차는 2026-11-09 Windows 실제 배치에서 실행했다([4절 기록](#4-검증)). Ubuntu에서는 미실행이다.
 
 1. 현재 실행파일·`relay.toml`·계정 파일·TLS 파일 쌍을 접근이 제한된 복구 위치에 복사한다. 실행파일 버전·해시와 파일 경로도 기록한다.
 2. 운영 파일과 같은 디렉터리에 `relay-v4.toml` 사본을 만든다. 실행 중인 구버전의 파일은 아직 바꾸지 않는다.
@@ -490,7 +490,7 @@ Windows 로그오프·시스템 종료는 강제 종료다. 대화형 콘솔 프
 | 로그 회전 | 원래 경로 재생성, 새 사건 기록 | 3.7절 | Windows·Ubuntu 통과 | [CLI 계약 실행 기록](../contracts/cli-v1.md#계약-테스트-실행-기록) |
 | 종료 | 정상 종료 코드 0, `server_stopped` | 3.8절 | Windows·Ubuntu 통과 | 같음 |
 | 설정 보기·편집·복구 | 읽기 전용 기본값, 활성화 뒤 재시작·재로그인, 다섯 파일 상태, 충돌·쓰기 실패·응답 불명 복구 | 3.5.1절과 6절. OS 계정·파일/디렉터리 권한·관찰값을 기록 | 미실행 — 2026-11-08 추가 절차. 과거 수동 기록은 새 편집 기능의 증거가 아님 | 통합 검증 담당자가 실행 기록을 추가 |
-| v3→v4 이관·롤백 | 기존 Viewer 동작·경로 유지, 새 로그 표기, 이전 실행파일·설정의 함께 복구 | 3.2.2절·6절 | 미실행 | 두 OS 수동 실행 기록 필요. v3 테이블의 시작 실패는 OPS-066 자동 시험이 통과([판정표](set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)) |
+| v3→v4 이관·롤백 | 기존 Viewer 동작·경로 유지, 새 로그 표기, 이전 실행파일·설정의 함께 복구 | 3.2.2절·6절 | Windows 이관 통과(2026-11-09, 릴리스 `2026.11.2`). 관리 재로그인·롤백·Ubuntu 미실행 | Windows는 아래 2026-11-09 기록. Ubuntu 수동 실행 기록 필요. v3 테이블의 시작 실패는 OPS-066 자동 시험이 통과([판정표](set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)) |
 | 공유 WSS Viewer·Server | 같은 리스너의 두 경로로 Mode II 양방향 중계, 역할별 IP·Origin | 3.2.1절 | 미실행 | 두 OS 수동 실행 기록 필요. 자동 증거 OPS-065·OPS-069, WS-028~031은 통과([판정표](set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)) |
 | 프록시 TLS 종료 | 외부 WSS→평문 WS, 오른쪽 첫 비신뢰 주소의 역할별 허용 판정, 잘못된·모두 신뢰하는 체인 거절 | 3.9절, Nginx 버전·`nginx -t`·양쪽 주소·비밀 없는 로그 기록 | 미실행, Nginx 예시 추정 | 실제 배치 기록 필요. 자동 증거 WS-032~036은 통과([판정표](set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)) |
 | 최근 로그 | 설정 상한·오래된 항목 제거·재시작·0 보관·필터·JSON Lines 내려받기 | 3.7.1절 | 미실행 | 두 OS 수동 실행 기록 필요. 자동 증거 OPS-068, MGT-046~050, DASH-054~063은 통과([판정표](set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)) |
@@ -510,6 +510,21 @@ Windows 로그오프·시스템 종료는 강제 종료다. 대화형 콘솔 프
 이 기록은 6절의 "v2 파일을 수정 없이 v3 서버로 재시작"을 Windows에서 한 번 확인한 것이다. 3.4절 중계, 3.5절 재로드, 3.5.1절 설정 편집과 Ubuntu는 실행하지 않았다. 그래서 위 표와 문서 상태는 바꾸지 않는다.
 
 후속: 사용자 결정 2026-11-08(Q181~Q188)의 설정 v4·ops-info 2.0.0·공유 역할·프록시·최근 로그는 위 실제 배치 교체 뒤의 기준이다. 위 기록은 바꾸지 않는다. 새 기준의 구현·배포·검증 증거로 확대하지 않는다.
+
+2026-11-09 실제 배치 교체·v3→v4 이관 기록(Windows 11 Pro 10.0.26200 x64, PowerShell 7): 운영 중인 `2026.11.1` 서버를 [Release `v2026.11.2`](https://github.com/kayden-kim/vnc-relay/releases/tag/v2026.11.2)의 Windows 묶음으로 바꿨다. 위 2026-11-08 기록에서 v2 형식 그대로 쓰던 운영 `relay.toml`은 3.2.2절에 따라 v4 형식으로 옮겼다. 배치 구성은 위 기록과 같다.
+
+1. 이전 실행파일(`2026.11.1`, SHA-256 `f97c18a55d3a2b2d1b2567b33537f6663c1b78acb6ffe91e379e3a4f63884064`), `relay.toml`, 계정 파일, TLS 파일 쌍을 복구 디렉터리에 복사했다. 이 디렉터리는 권한 상속을 끊고 Administrators·SYSTEM·현재 사용자만 접근하게 했다. 목록 파일에 실행파일 버전과 다섯 파일의 원래 경로·SHA-256을 남겼다.
+2. 같은 디렉터리에 `relay-v4.toml` 사본을 만들었다. `[relay.wss_viewer]`의 `listen`·`cert_file`·`key_file`은 `[relay.wss]`로, `enabled`·`allow`·`allowed_origins`는 `[relay.wss.viewer]`로 옮겼다. 꺼져 있던 `[relay.ws_viewer]`는 `[relay.ws.viewer]`의 `enabled = false`로 옮겼다. Server 역할·`trusted_proxies`·`[recent_logs]`는 추가하지 않았다.
+3. 검증 사본 `relay-v4-check.toml`은 리스너 다섯 개를 서로 다른 루프백 대체 포트로, 로그 출력을 표준 출력으로 바꿨다.
+4. Release에서 내려받은 묶음을 설치 디렉터리 옆의 준비 디렉터리에 풀었다. 실행파일 SHA-256은 `3100e8033c153f6814376377eea6113b50202ff428fa6d1774f4874147875181`이다. 이 실행파일로 검증 사본을 시작했다. `server_starting.log_contract`는 `ops-info/2.0.0`이었고, 명령을 보낸 뒤 1.7초 안에 `server_ready`가 나왔다. `/livez`·`/readyz` 200, 관리 `/login/` 200, `/` 303(`/login/`)이었다. WSS는 TLS 1.3과 두 이름의 SAN을 보였다. 두 허용 Origin의 WSS Viewer와 TCP Server, TCP Viewer와 TCP Server를 각각 짝지어 양방향 시험 바이트가 일치했다. 다른 Origin은 403, `/relay/server`는 404였다(Server 역할 꺼짐). Ctrl+C 뒤 종료 코드는 0이었다.
+5. 로그로 활성 세션과 짝을 기다리는 연결이 0건임을 확인했다. 서버 터미널에서 Ctrl+C로 이전 서버를 멈췄다. `shutdown_started`(활성 세션 0)와 `server_stopped`가 기록됐고 종료 코드는 0이었다.
+6. 이전 설치 디렉터리는 다른 이름으로 옮겨 보존했다. 준비 디렉터리를 같은 경로로 옮기고, `relay-v4.toml`을 `relay.toml`로 바꿨다. 같은 명령으로 다시 시작했다. `shutdown_started`부터 `server_ready`까지 2.3초였고, 리스너 다섯 개가 이전과 같은 주소로 열렸다.
+7. 시작 로그는 새 표기를 따랐다. `log_contract`는 `ops-info/2.0.0`이고, WSS의 `allow_all_source`는 `listener = wss`와 `role = viewer`로 기록됐다. 운영 포트에서 위 4번과 같은 확인이 모두 통과했다. 공인 주소로 되돌아오는 연결(공유기 NAT 루프백)에서도 두 이름의 TLS 1.3, 두 Origin의 WSS 짝 연결(101, 바이트 일치), TCP 짝 연결을 확인했다.
+8. 3.5절 재로드는 실제 Viewer를 막지 않도록 바꿔 실행했다. `relay.tcp_viewer.allow`에 `"::1"`을 더했다. 이 리스너는 IPv4 주소에만 바인드하므로 실제 허용 범위는 같다. `reload_change_detected` 뒤 0.42초에 `reload_applied`(`trigger = file_watch`, `applied = ["relay.tcp_viewer.allow"]`)가 기록됐다. 되돌린 뒤에도 0.41초 만에 같은 사건이 기록됐고, 파일 해시는 교체 때와 같았다. 되돌린 뒤 TCP 짝 연결도 성공했다.
+
+시험 Viewer·Server는 RFB 버전 문자열과 시험 바이트만 주고받는 Python 클라이언트다. ID는 `99`로 시작하는 12자리를 썼다. 교체 뒤 경고 수준 사건 7건은 모두 이 확인에서 나왔다. TLS만 맺고 닫은 연결, 다른 Origin과 `/relay/server` 거절, 연결만 하고 닫은 도달성 확인이다. 확인을 마친 뒤 활성 세션과 대기 연결은 0건이었다. 검증 사본의 출력은 저장소 밖에 보관하고 사본은 지웠다.
+
+이 기록은 3.2.2절 이관을 Windows에서 한 번 실행한 것이다. 3.2.2절 8단계의 관리 재로그인은 계정 비밀번호가 필요해 실행하지 않았다. 6절 v4→v3 롤백, Ubuntu 이관, 3.5.1절 설정 편집, 실제 noVNC·UltraVNC·부스 기기의 중계도 실행하지 않았다. 이관 전 파일과 이전 실행파일은 복구 디렉터리와 보존한 설치 디렉터리에 남겨 두었다.
 
 ## 5. 중단 조건
 
