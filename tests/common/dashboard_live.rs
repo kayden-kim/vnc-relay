@@ -211,21 +211,7 @@ impl Server {
                 "version = 1\n[[account]]\nname = \"alice\"\npassword_hash = \"{hash}\"\n[[account]]\nname = \"bob\"\npassword_hash = \"{hash}\"\n"
             ),
         ));
-        let holders: Vec<_> = (0..5)
-            .map(|_| must(TcpListener::bind("127.0.0.1:0")))
-            .collect();
-        let port_values: Vec<_> = holders
-            .iter()
-            .map(|listener| must(listener.local_addr()).port())
-            .collect();
-        let ports = [
-            port_values[0],
-            port_values[1],
-            port_values[2],
-            port_values[3],
-        ];
-        let [management, status, viewer, target] = ports;
-        let ws_port = port_values[4];
+        let (holders, [management, status, viewer, target, ws_port]) = reserve_ports();
         let dashboard = poll_secs.map_or_else(String::new, |poll| {
             format!("[dashboard]\npoll_secs = {poll}\nquery_timeout_secs = 5\n")
         });
@@ -287,35 +273,41 @@ allow_targets = ["127.0.0.1:1-65535"]
 enabled = true
 "#
         );
-        must(fs::write(dir.join("relay.toml"), transform(config, &dir)));
-        drop(holders);
+        let mut config = transform(config, &dir);
+        must(fs::write(dir.join("relay.toml"), &config));
+        // Bind the proxy while the reservations are still held, so that its own
+        // ephemeral port cannot be one of them.
         let proxy = Proxy::start(management);
-        let child = must(
-            Command::new(env!("CARGO_BIN_EXE_vnc-relay"))
-                .args(["serve", "--config"])
-                .arg(dir.join("relay.toml"))
-                .stdin(Stdio::null())
-                .stdout(Stdio::null())
-                .stderr(Stdio::from(must(fs::File::create(dir.join("stderr.txt")))))
-                .spawn(),
-        );
+        drop(holders);
+        let child = spawn_serve(&dir);
         let mut server = Self {
             dir,
             child,
-            ports,
+            ports: [management, status, viewer, target],
             ws_port,
             proxy,
         };
-        let deadline = Instant::now() + LIMIT;
+        // Another socket of this parallel suite can take a released reservation
+        // before serve binds it. Only that start failure is retried, on fresh
+        // ports. Any other exit fails the test.
+        let mut retries = 2;
+        let mut deadline = Instant::now() + LIMIT;
         loop {
-            if let Some(status) = must(server.child.try_wait()) {
-                panic!(
-                    "serve exited {status}: {}",
-                    fs::read_to_string(server.dir.join("stderr.txt")).unwrap_or_default()
-                );
+            if let Some(exit) = must(server.child.try_wait()) {
+                let stderr = fs::read_to_string(server.dir.join("stderr.txt")).unwrap_or_default();
+                if retries > 0
+                    && exit.code() == Some(4)
+                    && stderr.contains("error[listener_bind_failed]")
+                {
+                    retries -= 1;
+                    server.restart_on_fresh_ports(&mut config);
+                    deadline = Instant::now() + LIMIT;
+                    continue;
+                }
+                panic!("serve exited {exit}: {stderr}");
             }
             if let Ok(mut stream) = TcpStream::connect_timeout(
-                &SocketAddr::from(([127, 0, 0, 1], status)),
+                &SocketAddr::from(([127, 0, 0, 1], server.ports[1])),
                 Duration::from_millis(100),
             ) {
                 must(stream.set_read_timeout(Some(LIMIT)));
@@ -331,6 +323,35 @@ enabled = true
             thread::sleep(Duration::from_millis(20));
         }
         server
+    }
+
+    /// Moves the five harness listeners in `config` to fresh reserved ports and
+    /// starts serve again in the same directory. Ports that a test transform
+    /// added itself stay unchanged.
+    fn restart_on_fresh_ports(&mut self, config: &mut String) {
+        let (holders, fresh) = reserve_ports();
+        let [management, status, viewer, target] = self.ports;
+        for (old, new) in [management, status, viewer, target, self.ws_port]
+            .into_iter()
+            .zip(fresh)
+        {
+            *config = config.replace(
+                &format!("\"127.0.0.1:{old}\""),
+                &format!("\"127.0.0.1:{new}\""),
+            );
+        }
+        must(fs::write(self.dir.join("relay.toml"), &*config));
+        // The failed process wrote its own start lines. The next one starts a new log.
+        if let Err(error) = fs::remove_file(self.dir.join("events.jsonl"))
+            && error.kind() != io::ErrorKind::NotFound
+        {
+            panic!("remove failed start log: {error:?}");
+        }
+        self.proxy = Proxy::start(fresh[0]);
+        self.ports = [fresh[0], fresh[1], fresh[2], fresh[3]];
+        self.ws_port = fresh[4];
+        drop(holders);
+        self.child = spawn_serve(&self.dir);
     }
 
     pub fn dir(&self) -> &std::path::Path {
@@ -568,6 +589,27 @@ impl Pair {
         must((&mut self.viewer).take(1024).read_to_end(&mut bytes));
         must((&mut self.target).take(1024).read_to_end(&mut bytes));
     }
+}
+
+/// Holds five distinct loopback ports until the caller drops the listeners.
+fn reserve_ports() -> (Vec<TcpListener>, [u16; 5]) {
+    let holders: Vec<_> = (0..5)
+        .map(|_| must(TcpListener::bind("127.0.0.1:0")))
+        .collect();
+    let ports = std::array::from_fn(|i| must(holders[i].local_addr()).port());
+    (holders, ports)
+}
+
+fn spawn_serve(dir: &std::path::Path) -> Child {
+    must(
+        Command::new(env!("CARGO_BIN_EXE_vnc-relay"))
+            .args(["serve", "--config"])
+            .arg(dir.join("relay.toml"))
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::from(must(fs::File::create(dir.join("stderr.txt")))))
+            .spawn(),
+    )
 }
 
 impl Drop for Server {

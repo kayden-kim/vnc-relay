@@ -275,6 +275,16 @@ fn select_event_pending(browser: &mut Browser, event: &str) {
     browser.eval(&format!("(()=>{{const e=document.querySelector('#logs-event');e.value={};e.dispatchEvent(new Event('change',{{bubbles:true}}));}})()",json!(event)));
 }
 
+/// Values only, ASCII case-insensitive, like the log search `q`. `needle` is lowercase.
+fn value_contains(value: &Value, needle: &str) -> bool {
+    match value {
+        Value::Object(map) => map.values().any(|v| value_contains(v, needle)),
+        Value::Array(list) => list.iter().any(|v| value_contains(v, needle)),
+        Value::String(text) => text.to_ascii_lowercase().contains(needle),
+        other => other.to_string().contains(needle),
+    }
+}
+
 pub fn unicode_value_search_and_boundaries() {
     let server = start("dash-056", 60, 1000);
     let admin = server.login();
@@ -328,21 +338,28 @@ pub fn unicode_value_search_and_boundaries() {
         .as_str()
         .unwrap_or("");
     // listeners is a real array of nested objects. Search their values, numbers
-    // and ASCII mixed case; a field name alone must not match.
+    // and ASCII mixed case; a field name alone must not match. server_ready has
+    // both probed field names but neither in a value. Other entries may hold a
+    // probe in a value: a random session_id can contain "ts".
     for value in ["SeRvEr_ReAdY", listen, "127.0.0.1", "listeners", "ts"] {
         search(&mut browser, value, true);
         let (path, actual) = last_reply(&server);
         let oracle = server.query(&admin, &path);
         assert_eq!(actual["items"], oracle["items"]);
         assert_items(&mut browser, &actual);
+        let has_ready = items(&actual)
+            .iter()
+            .any(|i| i["seq"] == ready_event["seq"]);
         if value == "listeners" || value == "ts" {
-            assert!(items(&actual).is_empty());
+            assert!(!has_ready, "field name {value:?} matched: {actual}");
+            for item in items(&actual) {
+                assert!(
+                    value_contains(&item["entry"], value),
+                    "{value:?} matched no value: {item}"
+                );
+            }
         } else {
-            assert!(
-                items(&actual)
-                    .iter()
-                    .any(|i| i["seq"] == ready_event["seq"])
-            );
+            assert!(has_ready);
         }
     }
     search(&mut browser, "517", false);
