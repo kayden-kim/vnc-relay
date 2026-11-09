@@ -479,7 +479,7 @@ TODO 6.7의 운영 권한 확인은 다음과 같다. [수동 운영 안내 3.5.
 
 자동 판정에 남은 일은 없다. 다음 확인은 미실행이며 이 판정에 포함하지 않는다.
 
-- [수동 운영 안내 4절](operate-relay.md#4-검증)의 v3→v4 이관·롤백, 공유 WSS Viewer·Server, 프록시 TLS 종료(Nginx 실제 배치), 최근 로그 절차. 후속: v3→v4 이관은 2026-11-09 Windows 실제 배치에서 실행했다. 롤백과 Ubuntu 이관은 미실행이다.
+- [수동 운영 안내 4절](operate-relay.md#4-검증)의 v3→v4 이관·롤백, 공유 WSS Viewer·Server, 프록시 TLS 종료(Nginx 실제 배치), 최근 로그 절차. 후속: v3→v4 이관은 2026-11-09 Windows 실제 배치에서 관리 재로그인을 빼고 실행했다. 롤백과 Ubuntu 이관은 미실행이다.
 - v4 설정의 [성능 재측정](measure-performance.md).
 - 로그 화면의 실제 Safari·최신 안정판 Chrome·Edge·Firefox·실기기·스크린 리더 확인과 사람의 시안 비교.
 - 실제 UltraVNC와 WS·WSS Server 역할 조합의 수동 관찰.
