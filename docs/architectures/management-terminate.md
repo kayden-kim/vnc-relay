@@ -6,14 +6,14 @@
 | --- | --- |
 | 구조 시점 | Current |
 | 문서 상태 | Active — 작업 4.5 사용자 지시와 Q89~Q92 적용 |
-| 구현 대조 | Verified — 작업 4.5 완료 대조(2026-11-04, 커밋 `b0c25f9`의 두 OS 게이트). 범위와 실행 기록은 8절 |
+| 구현 대조 | Verified — 작업 4.5 완료 대조(2026-11-04, 커밋 `b0c25f9`의 두 OS 게이트). 범위와 실행 기록은 8절. 종료 요약의 Server 전송 범위의 구현은 커밋 `3df0693`이다. 시험은 커밋 `51bd747`의 두 OS 게이트에서 통과했다([WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)). |
 | 코드 위치 | `crates/app/src/management/terminate.rs`, `crates/adapters/src/management_http/terminate_api.rs`, `crates/app/src/ports.rs`, `crates/app/src/relay.rs`, `crates/app/src/relay/session.rs`, `crates/app/src/events.rs`, `crates/adapters/src/ops_log.rs`, `crates/adapters/src/request_deadline.rs`, `src/serve.rs` |
 | 코드 지도 | [코드 지도](code-map.md#2-코드-위치와-구성요소) |
 | 관련 스펙 | [관리 3.2·4·7절](../specs/management.md#32-관리자-종료) MGT-008~012, MGT-013·014·023; [운영](../specs/operations.md#7-수용-테스트) OPS-011·043; [중계](../specs/relay.md#7-수용-테스트) RLY-020 |
 | 관련 계약 | [관리 API 1.9절](../contracts/management-api-v1.md#19-관리자-종료-post-apiv1sessionssession_idterminate), 1.1~1.4·2.1·6절; [운영 정보 1.8절](../contracts/ops-info-v2.md#18-관리자-계정명-기록-규칙) |
 | 관련 ADR | [ADR-0003 메모리 상태](../decisions/ADR-0003-single-instance-memory-state.md), [ADR-0004 tokio·rustls](../decisions/ADR-0004-tokio-rustls.md) |
 
-후속: R1은 종료 응답의 `closed_session.target_transport`를 활성·최근 종료 조회와 같은 자료에서 직렬화한다. `Session`→`ClosedSession`→`ClosedSessionSnapshot`→완료 핸들→`terminate_api`의 흐름으로 보존한다. Mode I은 `tcp`, Mode II는 실제 Server의 `tcp`·`ws`·`wss`다. R=0이나 최근 종료 목록 축출 뒤에도 완료 요약의 두 전송 값은 유지한다. 관리 API 계약 1.9·1.10절에 따라 종료 요약에는 주소 필드를 넣지 않는다. 최근 로그 API는 R3 범위다. 이전 실행 기록은 R1의 증거가 아니며 이번 문서 작업에서는 빌드·시험·포매터를 실행하지 않았다.
+후속: R1은 종료 응답의 `closed_session.target_transport`를 활성·최근 종료 조회와 같은 자료에서 직렬화한다. `Session`→`ClosedSession`→`ClosedSessionSnapshot`→완료 핸들→`terminate_api`의 흐름으로 보존한다. Mode I은 `tcp`, Mode II는 실제 Server의 `tcp`·`ws`·`wss`다. R=0이나 최근 종료 목록 축출 뒤에도 완료 요약의 두 전송 값은 유지한다. 관리 API 계약 1.9·1.10절에 따라 종료 요약에는 주소 필드를 넣지 않는다. 최근 로그 API는 R3 범위다. 이전 실행 기록은 R1의 증거가 아니며 이번 문서 작업에서는 빌드·시험·포매터를 실행하지 않았다. 후속: 구현은 커밋 `3df0693`이며, 시험은 커밋 `51bd747`의 두 OS 게이트에서 통과했다([WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)).
 
 
 ## 1. 책임과 경계

@@ -6,7 +6,7 @@ VNC Relay는 TCP·WS·WSS Viewer를 Mode I 대상이나 TCP·WS·WSS Mode II Ser
 | --- | --- |
 | 구조 시점 | Current |
 | 문서 상태 | Draft |
-| 구현 대조 | 설정 보기·편집과 실행 값 재로드는 [2026-11-08 소스 대조](#2026-11-08-설정-보기편집과-실행-값-재로드-소스-대조). 이번 변경의 자동 검사(`tests/code_map.rs` 포함)는 커밋 `eae442f`의 두 OS 게이트에서 통과했다([작업 6.9 판정표](../how-to/set-up-and-verify.md#42-작업-69-판정표)). 이전 실행 증거는 [2026-11-04 대조 기록](#2026-11-04-구조-대조)에 있다. |
+| 구현 대조 | 설정 보기·편집과 실행 값 재로드는 [2026-11-08 소스 대조](#2026-11-08-설정-보기편집과-실행-값-재로드-소스-대조). 이번 변경의 자동 검사(`tests/code_map.rs` 포함)는 커밋 `eae442f`의 두 OS 게이트에서 통과했다([작업 6.9 판정표](../how-to/set-up-and-verify.md#42-작업-69-판정표)). 이전 실행 증거는 [2026-11-04 대조 기록](#2026-11-04-구조-대조)에 있다. WSS Server·프록시 TLS 종료·최근 로그 범위의 구현은 커밋 `3df0693`이다. 시험은 커밋 `51bd747`의 두 OS 게이트에서 통과했다([WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)). |
 | 관련 PRD | [PRD](../requirements/PRD.md), [유지보수성](../requirements/PRD.md#8-비기능-요구사항), [구현 기술](../requirements/PRD.md#확정-기준) |
 | 관련 ADR | [ADR-0001 내장 TLS](../decisions/ADR-0001-built-in-tls.md), [ADR-0003 메모리 상태](../decisions/ADR-0003-single-instance-memory-state.md), [ADR-0004 tokio·rustls](../decisions/ADR-0004-tokio-rustls.md), [ADR-0005 WS 코덱](../decisions/ADR-0005-in-house-ws-streaming-frame-codec.md), [ADR-0006 파일을 통한 설정 편집](../decisions/ADR-0006-config-edit-through-file.md) |
 
@@ -18,7 +18,7 @@ VNC Relay는 TCP·WS·WSS Viewer를 Mode I 대상이나 TCP·WS·WSS Mode II Ser
 
 후속: 2026-11-08 R2는 WS·WSS 리스너의 공식 역방향 프록시 TLS 종료 및 `X-Forwarded-For` 기반 전달 주소 판정을 반영한다(사용자 결정 2026-11-08(Q182·Q188), [ADR-0007](../decisions/ADR-0007-proxy-tls-termination.md)). `trusted_proxies`에 있는 소켓 상대는 accept의 역할 allow 검사를 건너뛰고, upgrade에서 전달 주소(`forwarded_ip`)를 도출해 역할 allow 검사에 적용한다. 잘못된 헤더나 신뢰 프록시로만 이뤄진 체인은 400 `forwarded_for_invalid`로 거절된다. 전체 주소 신뢰 프록시 항목은 시작·재로드 시 `trust_all_proxies` 경고를 낸다. 관리 API 세션 객체(활성 목록 및 상세)에 `viewer_forwarded_ip`·`target_forwarded_ip`를 제공한다.
 
-구조 시점은 R2 소스 반영 범위의 Current다. 아래 과거 대조·통과 기록은 R2 실행 증거가 아니다. 이번 문서 작업에서는 빌드·시험·포매터를 실행하지 않았다.
+구조 시점은 R2 소스 반영 범위의 Current다. 아래 과거 대조·통과 기록은 R2 실행 증거가 아니다. 이번 문서 작업에서는 빌드·시험·포매터를 실행하지 않았다. 후속: 구현은 커밋 `3df0693`이며, 시험은 커밋 `51bd747`의 두 OS 게이트에서 통과했다([WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)).
 
 ## 1. 전체 구조
 
@@ -307,7 +307,7 @@ PATCH의 `ConfigEditService::patch`는 같은 잠금으로 편집 허용→원�
 
 - 범위: `entry_point.rs`의 Listener·EntryPoint, `session.rs`의 Transport·양쪽 전송, settings의 리스너·역할 타입과 계획, config_file의 v4 reader, config_edit의 중첩 source span 편집, net의 enabled-role 합집합, upgrade의 경로·역할 보존, 공통 relay·관리 query·ops 사건의 전송 메타데이터다. 기존 파일에서 바꾸며 R2 전달 주소 모듈이나 R3 로그 API 파일을 현재 코드로 추가하지 않는다.
 - `Listener` 타입은 두 경계에 있다. domain의 enum은 소켓 종류의 값이고 adapters `listener.rs`의 trait는 수락 I/O 포트다. 두 타입의 이름이 같아도 책임과 의존 방향은 다르다.
-- 현재 흐름 설명은 소스 읽기와 작업별 공유 인터페이스를 근거로 갱신했다. 테스트 소스의 존재와 실행 결과를 구분한다. R1 빌드·시험·포매터는 이 문서 작업에서 미실행이며 통합 담당자의 실행 기록으로 판정한다. 이전 기록은 보존한다.
+- 현재 흐름 설명은 소스 읽기와 작업별 공유 인터페이스를 근거로 갱신했다. 테스트 소스의 존재와 실행 결과를 구분한다. R1 빌드·시험·포매터는 이 문서 작업에서 미실행이며 통합 담당자의 실행 기록으로 판정한다. 이전 기록은 보존한다. 후속: 구현은 커밋 `3df0693`이며, 시험은 커밋 `51bd747`의 두 OS 게이트에서 통과했다([WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)).
 
 
 ### 2026-11-08 설정 보기·편집과 실행 값 재로드 소스 대조

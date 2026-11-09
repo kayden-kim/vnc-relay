@@ -6,7 +6,7 @@
 | --- | --- |
 | 구조 시점 | Current |
 | 문서 상태 | Draft |
-| 구현 대조 | Verified - [대조 기록](#대조-기록) |
+| 구현 대조 | Verified - [대조 기록](#대조-기록). 공유 WSS TLS 범위의 구현은 커밋 `3df0693`이다. 시험은 커밋 `51bd747`의 두 OS 게이트에서 통과했다([WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)). |
 | 코드 위치 | `crates/adapters/src/tls.rs` |
 | 코드 지도 | [코드 지도](code-map.md) |
 | 관련 스펙 | [운영 스펙](../specs/operations.md) OPS-002·OPS-026·OPS-036, [WebSocket 스펙](../specs/websocket.md) WS-013 |
@@ -15,7 +15,7 @@
 
 후속: R1의 TLS 설정은 역할이 아니라 리스너에 속한다. WSS Viewer·Server가 `relay.wss.cert_file`·`relay.wss.key_file` 한 쌍과 수락기 하나를 공유한다. 어느 역할이든 켜면 시작·재로드 때 검사한다. 두 역할이 모두 꺼졌으면 명시한 경로 문자열만 검증하고 참조 파일은 읽거나 감시하지 않는다. WS 부모의 TLS 키는 설정 로더가 거절한다.
 
-새 협상은 `TlsSource`를 통해 현재 snapshot의 WSS 수락기를 읽는다. TLS 단계에는 아직 역할이 없으므로 사건의 `listener=wss`만 기록하고 `role`은 생략한다. 관리 TLS의 보안 경계는 바뀌지 않는다. 프록시 TLS 종료의 전달 주소 처리는 R2 범위이며 R1에서 지원 완료로 표시하지 않는다. 이전 대조 기록은 R1 실행 증거가 아니다. 이번 문서 작업에서는 빌드·시험·포매터를 실행하지 않았다.
+새 협상은 `TlsSource`를 통해 현재 snapshot의 WSS 수락기를 읽는다. TLS 단계에는 아직 역할이 없으므로 사건의 `listener=wss`만 기록하고 `role`은 생략한다. 관리 TLS의 보안 경계는 바뀌지 않는다. 프록시 TLS 종료의 전달 주소 처리는 R2 범위이며 R1에서 지원 완료로 표시하지 않는다. 이전 대조 기록은 R1 실행 증거가 아니다. 이번 문서 작업에서는 빌드·시험·포매터를 실행하지 않았다. 후속: 구현은 커밋 `3df0693`이며, 시험은 커밋 `51bd747`의 두 OS 게이트에서 통과했다([WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)).
 
 
 ## 1. 책임과 경계

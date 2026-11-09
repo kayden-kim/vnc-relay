@@ -65,16 +65,16 @@ Viewer와 Server가 WS 리스너 하나, WSS 리스너 하나를 각각 공유�
 ### 후속 작업
 
 - [ADR-0002 후속](ADR-0002-source-ip-allowlist.md#8-재검토-조건)과 관련 스펙·계약에서 리스너와 진입점을 구분한다.
-- 구현과 테스트는 미실행(구현 전)이다.
+- 구현은 커밋 `3df0693`이다. 시험은 커밋 `51bd747`의 두 OS 게이트에서 통과했다([WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)).
 
 ## 7. 검증
 
 | 가설·결정 요인 | 검증 방법 | 합격 기준 | 증거 |
 | --- | --- | --- | --- |
-| 공유 리스너와 경로별 역할 | [WS-028~029](../specs/websocket.md#7-수용-테스트) 통합 테스트 | 두 전송에서 Server·Viewer 매칭. 꺼진 역할·다른 경로는 404 | 미실행(구현 전) |
-| 역할별 접근 경계 | [WS-030~031](../specs/websocket.md#7-수용-테스트) 보안 테스트 | 합집합만 통과한 IP는 다른 역할에서 403. 역할별 Origin 적용 | 미실행(구현 전) |
-| Server 규칙의 전송 독립성 | [RLY-028](../specs/relay.md#7-수용-테스트) 통합 테스트 | Mode II만 허용. 전송을 가로지르는 같은 ID·역할 중복은 거절 | 미실행(구현 전) |
-| 설정과 로그 이전 | [OPS-065~066·OPS-069](../specs/operations.md#7-수용-테스트) 계약·통합 테스트 | v4 구조·필수 키 검사, v3 거절·이전, ops-info 2.0.0 이름·역할 생략 | 미실행(구현 전) |
+| 공유 리스너와 경로별 역할 | [WS-028~029](../specs/websocket.md#7-수용-테스트) 통합 테스트 | 두 전송에서 Server·Viewer 매칭. 꺼진 역할·다른 경로는 404 | 통과. 커밋 `51bd747`의 두 OS 게이트([WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)) |
+| 역할별 접근 경계 | [WS-030~031](../specs/websocket.md#7-수용-테스트) 보안 테스트 | 합집합만 통과한 IP는 다른 역할에서 403. 역할별 Origin 적용 | 통과. 커밋 `51bd747`의 두 OS 게이트([WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)) |
+| Server 규칙의 전송 독립성 | [RLY-028](../specs/relay.md#7-수용-테스트) 통합 테스트 | Mode II만 허용. 전송을 가로지르는 같은 ID·역할 중복은 거절 | 통과. 커밋 `51bd747`의 두 OS 게이트([WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)) |
+| 설정과 로그 이전 | [OPS-065~066·OPS-069](../specs/operations.md#7-수용-테스트) 계약·통합 테스트 | v4 구조·필수 키 검사, v3 거절·이전, ops-info 2.0.0 이름·역할 생략 | 통과. 커밋 `51bd747`의 두 OS 게이트([WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)) |
 
 ## 8. 재검토 조건
 

@@ -17,7 +17,7 @@ UltraVNC Viewer·Server와 외부 WebSocket 클라이언트가 VNC Relay에 접�
 | 관련 요구사항 | [PRD](../requirements/PRD.md) FR-01·FR-02·FR-03·FR-05, 9절·9.1절 |
 | 호환성 범위 | 검증 대상은 UltraVNC Server·Viewer 1.8.3.0, UltraVNC Repeater(Windows) 1.6.0.0, noVNC 1.7.0이다([호환성 검증 기록](repeater-compat-record.md) 2절). Windows VNC Relay의 실제 클라이언트 조합과 비교 캡처는 통과했다(5절, [기록 6절](repeater-compat-record.md#6-모드전송-조합-검증-todo-55), [기록 7절](repeater-compat-record.md#7-계약-64-비교-캡처-q133)). Ubuntu의 지원 판정은 자동 시험을 근거로 한다([작업 5.9 판정표](../how-to/set-up-and-verify.md#41-작업-59-판정표)). noVNC 증거는 사용자 결정 2026-11-06(Q129)를 따른다. 이를 실제 UltraVNC 시나리오 RLY-006·010·011의 Ubuntu 증거에도 적용한 것은 이 문서의 판단, 사용자 결정 없음이다. 실제 UltraVNC와 Ubuntu VNC Relay의 조합 및 Ubuntu 비교 캡처는 미실행이다(Q133). 대상 버전 Repeater와 일부러 다르게 처리하는 입력은 [3.1절](#31-대상-버전-repeater와-다르게-처리하는-입력)에 있다. |
 | 관련 테스트 | [RLY-001~005, RLY-010~015, RLY-022](../specs/relay.md#7-수용-테스트), [WS-003~006, WS-018, WS-025](../specs/websocket.md#7-수용-테스트). 계약 테스트는 5절을 따른다. |
-| 후속 적용 범위 | 사용자 결정 2026-11-08(Q181), 사용자 결정 2026-11-08(Q188)에 따라 WS·WSS Server에도 같은 초기 교환 바이트를 적용한다. 형식은 바뀌지 않으며 계약 버전은 1.0.0을 유지한다. WS-028과 RLY-028은 미실행 (구현 전)이다. |
+| 후속 적용 범위 | 사용자 결정 2026-11-08(Q181), 사용자 결정 2026-11-08(Q188)에 따라 WS·WSS Server에도 같은 초기 교환 바이트를 적용한다. 형식은 바뀌지 않으며 계약 버전은 1.0.0을 유지한다. 구현은 커밋 `3df0693`이다. WS-028과 RLY-028은 커밋 `51bd747`의 두 OS 게이트에서 통과했다([WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)). |
 
 관련 계약: [WebSocket 중계](websocket-relay-v1.md)(WS·WSS 쪽 전송 규칙과 종료 코드), [운영 정보](ops-info-v2.md)(로그에서 중계 ID 노출 방식과 오류 코드의 로그 이름), [설정](config-v4.md)(`handshake_secs`·`mode1`·`mode2`·`allow_targets` 키). 관련 결정: [ADR-0002 출발지 IP 허용 목록](../decisions/ADR-0002-source-ip-allowlist.md).
 
@@ -132,7 +132,7 @@ TCP 진입점은 오류를 알리는 바이트를 보내지 않고 정상 종료
 | 같은 역할 중복 ID | 대기 중인 ID: 먼저 온 연결을 유지하고, 뒤에 온 연결은 등록하지 않으며 닫지도 않는다. 활성 세션이 쓰는 ID: 관찰하지 않았다(사용자 결정 2026-11-01(Q75)). | 대기 중이거나 활성 세션이 쓰는 ID 모두 뒤에 온 연결을 바로 닫는다(`duplicate_id`). 먼저 온 연결과 활성 세션은 유지한다. | Q74·Q75, 기록 3.5절 |
 | WebSocket·TLS 접속 | Viewer 포트에서 처리하지 않는다. | WS·WSS Viewer 진입점에서 처리한다. | [WS·WSS 스펙](../specs/websocket.md) |
 
-후속: 사용자 결정 2026-11-08(Q181·Q188)에 따라 WS·WSS Server 진입점도 제공한다. 위 관찰과 기존 검증 기록의 WebSocket 범위는 Viewer 진입점으로 유지한다. 새 Server 조합은 미실행 (구현 전)이다.
+후속: 사용자 결정 2026-11-08(Q181·Q188)에 따라 WS·WSS Server 진입점도 제공한다. 위 관찰과 기존 검증 기록의 WebSocket 범위는 Viewer 진입점으로 유지한다. 새 Server 조합은 미실행 (구현 전)이다. 후속: 구현은 커밋 `3df0693`이며, 시험은 커밋 `51bd747`의 두 OS 게이트에서 통과했다([WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)). 실제 UltraVNC와 WS·WSS Server의 조합 관찰은 미실행이다.
 
 ## 4. 버전과 지원 단계
 

@@ -68,16 +68,16 @@
 ### 후속 작업
 
 - [설정 계약](../contracts/config-v4.md), [운영 스펙](../specs/operations.md), [수동 운영 안내](../how-to/operate-relay.md)에 신뢰 범위와 보호 책임을 반영한다.
-- 구현과 테스트는 미실행(구현 전)이다.
+- 구현은 커밋 `3df0693`이다. 시험은 커밋 `51bd747`의 두 OS 게이트에서 통과했다([WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)).
 
 ## 7. 검증
 
 | 가설·결정 요인 | 검증 방법 | 합격 기준 | 증거 |
 | --- | --- | --- | --- |
-| 주소 체인의 신뢰 경계 | [WS-032~034](../specs/websocket.md#7-수용-테스트) 보안 통합 테스트 | 오른쪽 첫 비신뢰 주소 사용. 오류는 400. 비신뢰 상대 헤더 무시 | 미실행(구현 전) |
-| 모두 신뢰 주소인 체인의 우회 방지 | [WS-036](../specs/websocket.md#7-수용-테스트) 회귀 테스트 | 프록시 IP가 역할 목록에 있어도 400 forwarded_for_invalid. 등록·forwarded_ip 없음 | 미실행(구현 전) |
-| 공식 TLS 종료 배치 | [WS-035](../specs/websocket.md#7-수용-테스트) 통합 테스트 | TLS 종료 프록시를 거친 Viewer·Server Mode II 매칭과 전달 주소 판정 | 미실행(구현 전) |
-| 신뢰 목록 변경의 적용 경계 | [OPS-067](../specs/operations.md#7-수용-테스트) 재로드·편집 테스트 | 새 검사부터 새 목록 적용. 기존 연결 유지. 전체 범위 경고는 이름 채택 뒤 확인 | 미실행(구현 전) |
+| 주소 체인의 신뢰 경계 | [WS-032~034](../specs/websocket.md#7-수용-테스트) 보안 통합 테스트 | 오른쪽 첫 비신뢰 주소 사용. 오류는 400. 비신뢰 상대 헤더 무시 | 통과. 커밋 `51bd747`의 두 OS 게이트([WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)) |
+| 모두 신뢰 주소인 체인의 우회 방지 | [WS-036](../specs/websocket.md#7-수용-테스트) 회귀 테스트 | 프록시 IP가 역할 목록에 있어도 400 forwarded_for_invalid. 등록·forwarded_ip 없음 | 통과. 커밋 `51bd747`의 두 OS 게이트([WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)) |
+| 공식 TLS 종료 배치 | [WS-035](../specs/websocket.md#7-수용-테스트) 통합 테스트 | TLS 종료 프록시를 거친 Viewer·Server Mode II 매칭과 전달 주소 판정 | 통과. 커밋 `51bd747`의 두 OS 게이트([WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)). 시험 코드의 rustls TLS 종료 프록시로 확인했다. Nginx 실제 배치는 미실행이며 예시는 추정이다 |
+| 신뢰 목록 변경의 적용 경계 | [OPS-067](../specs/operations.md#7-수용-테스트) 재로드·편집 테스트 | 새 검사부터 새 목록 적용. 기존 연결 유지. 전체 범위 경고는 이름 채택 뒤 확인 | 통과. 커밋 `51bd747`의 두 OS 게이트([WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)) |
 
 ## 8. 재검토 조건
 

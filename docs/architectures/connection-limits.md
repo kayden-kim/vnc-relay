@@ -6,7 +6,7 @@
 | --- | --- |
 | 구조 시점 | Current |
 | 문서 상태 | Draft |
-| 구현 대조 | 작업 6.2 변경은 Current. 시험은 커밋 `eae442f`의 두 OS 게이트에서 통과([작업 6.9 판정표](../how-to/set-up-and-verify.md#42-작업-69-판정표)). 이전 범위의 결과는 [대조 기록](#대조-기록)을 따른다. |
+| 구현 대조 | 작업 6.2 변경은 Current. 시험은 커밋 `eae442f`의 두 OS 게이트에서 통과([작업 6.9 판정표](../how-to/set-up-and-verify.md#42-작업-69-판정표)). 이전 범위의 결과는 [대조 기록](#대조-기록)을 따른다. 공유 WS·WSS 역할의 연결 상한 범위의 구현은 커밋 `3df0693`이다. 시험은 커밋 `51bd747`의 두 OS 게이트에서 통과했다([WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)). |
 | 코드 위치 | `crates/domain/src/budget.rs`, `crates/app/src/events.rs`(`RejectReason::RelayConnectionLimit`, `AbortReason`, `ConnectionErrorKind`), `crates/adapters/src/net.rs`(`AcceptPolicy`, `accept_connections`, `set_keepalive`, `TcpRelayStream`), `crates/app/src/relay.rs`(`RelayService::handle_connection`), `crates/app/src/relay/handshake.rs`(`exchange`, `read_request`), `crates/adapters/src/websocket.rs`(`WsPolicy`, `connection`), `crates/adapters/src/request_deadline.rs`(관리 U), `src/serve.rs`(L 예산 만들기) |
 | 코드 지도 | [코드 지도 2절](code-map.md#2-코드-위치와-구성요소) |
 | 관련 스펙 | [운영 스펙 2절](../specs/operations.md#2-상태와-검증-매개변수)의 L·Lm·Lw·H·K·U, [4.1절](../specs/operations.md#41-판정-가능한-규칙)의 OPS-R03·OPS-R20, OPS-004(일부), OPS-006(일부), OPS-033(일부), [중계 스펙](../specs/relay.md#7-수용-테스트) RLY-005(일부) |
@@ -17,7 +17,7 @@
 
 후속: R1은 리스너 네 개와 진입점 여섯 개에서 같은 L 예산을 쓴다. WS·WSS는 켜진 역할 `allow` 합집합 검사 뒤에 소켓당 permit 하나를 잡는다. 경로로 역할을 정해도 추가 L 자리를 얻지 않는다. Mode II의 WS·WSS Server도 수락 때 얻은 permit을 대기·활성·정리까지 옮긴다. 역할이 다른 두 연결의 B·M·Kw는 각 연결이 받은 값을 유지한다.
 
-WS·WSS 수락·TLS·경로 판정 전 중단에는 role이 없다. 켜진 경로 판정 뒤에는 role을 보존한다. `trusted_proxies` 허용 우회·전달 헤더 판정은 R2, 최근 로그 보관·조회는 R3 범위다. 이전 실행 기록은 R1의 증거가 아니며 이번 문서 작업에서는 빌드·시험·포매터를 실행하지 않았다.
+WS·WSS 수락·TLS·경로 판정 전 중단에는 role이 없다. 켜진 경로 판정 뒤에는 role을 보존한다. `trusted_proxies` 허용 우회·전달 헤더 판정은 R2, 최근 로그 보관·조회는 R3 범위다. 이전 실행 기록은 R1의 증거가 아니며 이번 문서 작업에서는 빌드·시험·포매터를 실행하지 않았다. 후속: 구현은 커밋 `3df0693`이며, 시험은 커밋 `51bd747`의 두 OS 게이트에서 통과했다([WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)).
 
 
 ## 1. 책임과 경계

@@ -14,7 +14,7 @@ VNC Relay가 운영자에게 내보내는 두 가지 정보의 교환 형식을 
 | 호환 사건 추가 | 2026-11-04, 1.3.0 유지: 로그 파일을 다시 열지 못했을 때의 `log_reopen_failed`를 더했다(1.1절 "파일 다시 열기", 사용자 결정 2026-11-04(Q104·Q109·Q110)). 3절의 사건 추가 규칙을 따른다. |
 | 장애 조건 확정 | 2026-11-05, 1.3.0 유지: 필수 리스너의 복구 불가능 수락 오류·감독 경계와 장애 종료 동안 `listener_failed` 보존을 1.12절에 정했다. 기존 `fatal_error`·`detail` 형식은 유지한다. 사용자 결정 2026-11-05(Q114). |
 | 호환 설정 편집 추가 | 2026-11-08, 1.3.0 유지: `config_edited`·`config_edit_rejected`와 `revision`을 더했다. `reload_applied`의 대상 값은 27개로 넓히고 `trigger`(`file_watch`·`config_edit`)를 더했다. `allow_all_target.phase`에 `reload`를 허용한다. 3절의 새 사건·선택 필드·값 추가 규칙을 따른다. 편집 계정·키 기록은 사용자 결정 2026-11-08(Q169), 대상 확대는 Q168·Q171을 따른다. 이름 채택·구현 여부는 5·6절에서 구분한다. |
-| 상태 | Active(2.0.0, 사용자 결정 2026-11-08(Q188)). 구현·계약 테스트는 미실행(구현 전). |
+| 상태 | Active(2.0.0, 사용자 결정 2026-11-08(Q188)). 구현은 커밋 `3df0693`이다. 계약 테스트는 커밋 `51bd747`의 두 OS 게이트에서 통과했다([WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)). |
 | 소유자 | vnc-relay 프로젝트 관리자 |
 | 만드는 쪽(Producer) | `vnc-relay` (`vnc-relay serve` 프로세스) |
 | 사용하는 쪽(Consumer) | 운영자의 로그 수집 도구, 운영자의 상태 확인 도구(상태 점검·감시 도구) |
@@ -22,7 +22,7 @@ VNC Relay가 운영자에게 내보내는 두 가지 정보의 교환 형식을 
 | 스키마 기준 파일 | 없음. 1절의 Markdown 표가 형식의 기준이다. |
 | 기준 스펙 | [운영 스펙 3.5절](../specs/operations.md#35-운영-정보), [4절](../specs/operations.md#4-보안과-신뢰-경계), [5절](../specs/operations.md#5-오류와-복구), [중계 스펙](../specs/relay.md), [WS·WSS 스펙](../specs/websocket.md), [관리 스펙](../specs/management.md) |
 | 관련 요구사항 | [PRD](../requirements/PRD.md) FR-08, FR-07, 7절 보안, AC-23, AC-25 |
-| 호환성 범위 | 이 계약의 2.x 형식을 따르는 `vnc-relay` 구현과 소비자. 2.0.0 구현·계약 테스트는 미실행(구현 전)이다. 1.3.0까지의 과거 실행 결과는 5절에 보존한다. 현재 지원 판정은 Producer 시험과 [작업 5.9 판정표](../how-to/set-up-and-verify.md#41-작업-59-판정표)를 따른다. 저장소에 없는 외부 소비 도구의 시험은 지원 판정 대상이 아니다(사용자 결정 2026-11-07(Q151)). |
+| 호환성 범위 | 이 계약의 2.x 형식을 따르는 `vnc-relay` 구현과 소비자. 2.0.0의 구현은 커밋 `3df0693`이다. 계약 테스트는 커밋 `51bd747`의 두 OS 게이트에서 통과했다. 1.3.0까지의 과거 실행 결과는 5절에 보존한다. 현재 지원 판정은 Producer 시험과 [WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)를 따른다. 저장소에 없는 외부 소비 도구의 시험은 지원 판정 대상이 아니다(사용자 결정 2026-11-07(Q151)). |
 | 관련 테스트 | [운영 스펙 7절](../specs/operations.md#7-수용-테스트)의 OPS-011·OPS-012·OPS-013·OPS-032를 중심으로 5절 표에 연결한다. 계약 테스트는 `crates/adapters/tests/ops_info_contract.rs`와 `tests/serve.rs`에 있다. |
 
 관련 문서: [설정 계약](config-v4.md)(`[log]`·`[status]` 키, 경고 코드, 오류 코드, 재로드 결과 코드), [관리 API 계약](management-api-v1.md)(`session_id`·`close_cause`·바이트 필드 이름), [CLI·계정 파일 계약](cli-v1.md)(시작 실패 오류 코드), [WebSocket 중계 계약](websocket-relay-v1.md)(close 코드와 종료 원인 대응), [Repeater 초기 교환 계약](repeater-handshake-v1.md)(초기 교환 오류 코드), [ADR-0002 출발지 IP 허용 목록](../decisions/ADR-0002-source-ip-allowlist.md), [ADR-0003 단일 인스턴스·메모리 상태](../decisions/ADR-0003-single-instance-memory-state.md).
@@ -31,7 +31,7 @@ VNC Relay가 운영자에게 내보내는 두 가지 정보의 교환 형식을 
 
 이 계약은 2026-10-16에 사용자가 채택했다(상태 Active). 필드 이름, 사건 이름, `level` 기준, 원인 코드, 중계 ID 노출 방식(1.9절), 상대 주소 표기(1.10절), 상태 응답 본문(1.12절)이 채택 범위다. 6절에 구현·관찰에서 확인한다고 남긴 항목은 채택으로 해소되지 않았다. 앞서 사용자가 확정한 값은 다음과 같다.
 
-2.0.0의 채택 근거는 사용자 결정 2026-11-08(Q188)이다. 채택 범위는 1절의 리스너·역할 표기, 전달 주소, Server 전송 경로와 v4 설정 키 이름이다. `trust_all_proxies` 사건 이름과 필드 `listener`·`item`·`phase`는 사용자 결정 2026-11-08(Q191)으로 채택했다(6절). 채택과 구현 완료는 다르며 새 규칙의 구현·시험은 미실행(구현 전)이다.
+2.0.0의 채택 근거는 사용자 결정 2026-11-08(Q188)이다. 채택 범위는 1절의 리스너·역할 표기, 전달 주소, Server 전송 경로와 v4 설정 키 이름이다. `trust_all_proxies` 사건 이름과 필드 `listener`·`item`·`phase`는 사용자 결정 2026-11-08(Q191)으로 채택했다(6절). 채택과 구현 완료는 다르며 새 규칙의 구현·시험은 미실행(구현 전)이다. 후속: 구현은 커밋 `3df0693`이며, 시험은 커밋 `51bd747`의 두 OS 게이트에서 통과했다([WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)).
 
 - 확정: 로그는 JSON Lines이고 한 줄에 사건 하나를 쓴다. 출력 위치는 표준 출력 또는 지정한 파일이며 VNC Relay는 출력만 한다. 관리자 종료 사건에는 계정명을 기록한다. 평문 WS 활성화와 전체 허용 항목은 경고로 기록한다. 상태 리스너는 관리 리스너와 분리하며 인증 없이 생존·준비 결과만 응답한다. 상태 응답에 세션 목록·중계 ID·상대 주소·인증 비밀을 넣지 않는다.
 
@@ -430,7 +430,7 @@ Lm 상한에서 거절한 연결은 HTTP 응답을 받지 못하고 연결이 �
 | 상태 | 조건 | 지원 종료·대체 |
 | --- | --- | --- |
 | Draft | 채택 전 상태. 이 계약은 2026-10-16에 채택해 Draft를 지났다. | 해당 없음 |
-| Active | 현재 `ops-info` 2.0.0. 사용자 결정 2026-11-08(Q188)으로 채택했다. 구현·Producer 계약 테스트는 미실행(구현 전)이다. 저장소에 소비 도구가 없어 Consumer 시험은 해당 없음이다. 3절의 무시 규칙은 외부 도구를 위한 지침이며 지원 판정은 Producer 시험을 따른다(사용자 결정 2026-11-07(Q151)). | 1.3.0은 2.0.0으로 대체됨(Superseded)이다. 과거 실행 기록은 5절에 보존한다. |
+| Active | 현재 `ops-info` 2.0.0. 사용자 결정 2026-11-08(Q188)으로 채택했다. 구현은 커밋 `3df0693`이다. Producer 계약 테스트는 커밋 `51bd747`의 두 OS 게이트에서 통과했다([WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)). 저장소에 소비 도구가 없어 Consumer 시험은 해당 없음이다. 3절의 무시 규칙은 외부 도구를 위한 지침이며 지원 판정은 Producer 시험을 따른다(사용자 결정 2026-11-07(Q151)). | 1.3.0은 2.0.0으로 대체됨(Superseded)이다. 과거 실행 기록은 5절에 보존한다. |
 | Deprecated | 새 major가 있고 이전 major를 쓰는 소비자가 남아 있다. | 신규 적용을 피하고 대체 문서를 확인한다. |
 | Retired | 지원 종료. | 새 구현의 근거로 쓰지 않는다. |
 | Superseded | `ops-info` 1.3.0. 사용자 결정 2026-11-08(Q188)으로 새 구현 기준을 2.0.0으로 바꿨다. | 새 구현의 근거로 쓰지 않는다. 기존 로그를 읽을 때만 3절의 마이그레이션 표를 따른다. |
@@ -475,13 +475,13 @@ GET /readyz ->  503 {"status":"not_ready","reason":"shutting_down"}
 
 결과와 증거는 [검증 기록](../AGENTS.md#검증-기록)을 따른다. 아래 테스트는 스펙의 시나리오 기록을 연결한다. Producer 계약 테스트는 해당 시나리오 위에 이 계약의 필드·사건 이름 검사를 더한다. 작업 2.3~2.6의 테스트는 `crates/adapters/tests/ops_info_contract.rs`(아래 표에서 "운영 로그 계약 테스트". 상태 리스너 응답 테스트도 이 파일에 있다), `tests/serve.rs`(실행파일 시스템 테스트), `crates/adapters/src/ops_log.rs`·`crates/adapters/src/crypto.rs`·`crates/domain/src/peer_ip.rs`·`crates/domain/src/allow_list.rs`·`crates/app/src/lifecycle.rs` 단위 테스트에 있다. 실행 기록은 표 아래 [계약 테스트 실행 기록](#계약-테스트-실행-기록)에 있다.
 
-아래 기존 실행 행은 1.3.0까지의 기록이며 2.0.0의 통과 증거가 아니다. 후속: 2026-11-08에 채택한 2.0.0 규칙은 다음 계획 행으로 따로 확인한다.
+아래 기존 실행 행은 1.3.0까지의 기록이며 2.0.0의 통과 증거가 아니다. 후속: 2026-11-08에 채택한 2.0.0 규칙은 다음 계획 행으로 따로 확인한다. 후속: 구현은 커밋 `3df0693`이며, 시험은 커밋 `51bd747`의 두 OS 게이트에서 통과했다([WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)).
 
 | 주체·테스트 위치 | 확인할 계약 규칙 | 결과 | 실행 기록 |
 | --- | --- | --- | --- |
-| Producer / 2.0.0 계약 시험(계획) | [OPS-069](../specs/operations.md#7-수용-테스트): `log_contract=ops-info/2.0.0`, `listener=ws`·`wss`, `server_ready.listeners[].name`, 수락·경로 판정 전 거절·중단의 `role` 생략, WS·WSS `allow_all_source.role`. Mode II `server_transport`와 v4 재로드 33개·편집 29개 키도 확인한다. | 미실행 (구현 전) | 구현·테스트 없음. |
-| Producer / 프록시 전달 주소 계약 시험(계획) | [WS-032](../specs/websocket.md#7-수용-테스트): 도출 뒤 `peer_ip`를 가진 모든 연결 사건의 `forwarded_ip`, 업그레이드 거절·대기 등록·대상 연결 실패·중단에서 유지, `session_started`의 양쪽 소켓 IP와 `*_forwarded_ip` 구분. [WS-034](../specs/websocket.md#7-수용-테스트)의 신뢰하지 않는 상대 헤더 무시와 관리 사건의 MGT-015도 확인한다. | 미실행 (구현 전) | 구현·테스트 없음. |
-| Producer / 전달 주소 오류 계약 시험(계획) | [WS-033·WS-036](../specs/websocket.md#7-수용-테스트): 헤더 없음·빈 값·잘못된 요소·모두 신뢰 프록시인 체인을 `connection_rejected(stage=upgrade, reason=forwarded_for_invalid)`로 기록한다. 프록시 소켓의 `peer_ip`, 경로로 정한 `role`, `forwarded_ip` 생략과 HTTP 400, 대기 등록 없음을 확인한다. 모두 신뢰 프록시인 체인은 그 주소가 역할 허용 목록에 있어도 거절한다. | 미실행 (구현 전) | 구현·테스트 없음. |
+| Producer / 2.0.0 계약 시험 | [OPS-069](../specs/operations.md#7-수용-테스트): `log_contract=ops-info/2.0.0`, `listener=ws`·`wss`, `server_ready.listeners[].name`, 수락·경로 판정 전 거절·중단의 `role` 생략, WS·WSS `allow_all_source.role`. Mode II `server_transport`와 v4 재로드 33개·편집 29개 키도 확인한다. | 통과 | `crates/adapters/tests/ops_info_contract.rs`의 `writes_one_json_object_per_line_with_common_fields_first`·`shared_listener_logs_resolve_role_only_after_the_path`(OPS-069 부분 표식), `tests/serve.rs`의 `server_only_websocket_roles_open_each_shared_listener`(OPS-069 전체 표식)·`initial_tls_and_upgrade_deadlines_have_distinct_causes_and_release_capacity`(OPS-069 부분 표식), `crates/adapters/tests/websocket_scenarios.rs`의 `websocket_servers_pair_with_every_viewer_transport_in_both_orders`와 `tests/reload.rs`의 `trusted_proxies_reload_and_edit_apply_to_new_checks_and_keep_open_connections`를 연결한다. 실행 결과는 아래 실행 기록을 따른다. |
+| Producer / 프록시 전달 주소 계약 시험 | [WS-032](../specs/websocket.md#7-수용-테스트): 도출 뒤 `peer_ip`를 가진 모든 연결 사건의 `forwarded_ip`, 업그레이드 거절·대기 등록·대상 연결 실패·중단에서 유지, `session_started`의 양쪽 소켓 IP와 `*_forwarded_ip` 구분. [WS-034](../specs/websocket.md#7-수용-테스트)의 신뢰하지 않는 상대 헤더 무시와 관리 사건의 MGT-015도 확인한다. | 통과 | `crates/adapters/tests/websocket_scenarios.rs`의 `trusted_proxy_uses_rightmost_untrusted_canonical_address_on_both_paths`·`derived_address_survives_origin_rejection_abort_and_target_connect_failure`(WS-032 전체 표식)·`untrusted_peer_headers_neither_grant_access_nor_supply_forwarded_metadata`(WS-034 전체 표식)를 연결한다. 관리 사건의 기존 MGT-015 증거는 [관리 API 계약 5절](management-api-v1.md#5-예제와-계약-테스트)을 따른다. 실행 결과는 아래 실행 기록을 따른다. |
+| Producer / 전달 주소 오류 계약 시험 | [WS-033·WS-036](../specs/websocket.md#7-수용-테스트): 헤더 없음·빈 값·잘못된 요소·모두 신뢰 프록시인 체인을 `connection_rejected(stage=upgrade, reason=forwarded_for_invalid)`로 기록한다. 프록시 소켓의 `peer_ip`, 경로로 정한 `role`, `forwarded_ip` 생략과 HTTP 400, 대기 등록 없음을 확인한다. 모두 신뢰 프록시인 체인은 그 주소가 역할 허용 목록에 있어도 거절한다. | 통과 | `crates/adapters/tests/websocket_scenarios.rs`의 `invalid_or_all_trusted_forwarded_chains_fail_before_origin_and_registration`(WS-033·WS-036 전체 표식)을 연결한다. 실행 결과는 아래 실행 기록을 따른다. |
 
 기존 계약 시험과 실행 결과(1.3.0까지):
 
@@ -599,11 +599,13 @@ GET /readyz ->  503 {"status":"not_ready","reason":"shutting_down"}
 | 같은 작업 트리 | Ubuntu 24.04.4(WSL2), Rust 1.99.1 | `wsl -d Ubuntu -- bash /mnt/d/vr-tools/vr-full.sh` | 통과(`ALL PASSED`). 시나리오 153건: 통과 140, 부분 7, 실패 0, 미실행 4, 미연결 2, 오류 0, 판정 통과. OPS-012 통과 |
 | 커밋 `eae442f`(작업 6 설정 편집 기록. 구현 `7ce077f`, 시험 수정 `0bc9a47` 포함). 작업 트리 깨끗함 | Windows 11 Pro 10.0.26200 x64, Rust 1.99.1 | `powershell -NoProfile -ExecutionPolicy Bypass -File D:/vr-tools/vr-win.ps1 -Only all` | 통과(`ALL PASSED (all)`). 시나리오 215건: 통과 198, 부분 12, 실패 0, 미실행 3, 미연결 2, 오류 0, 판정 통과(보고 2026-11-08T09:56:59Z). 위 확대 재로드·설정 편집 사건 계약 시험이 통과했다. OPS-058~064와 MGT-031·MGT-039가 통과다 |
 | 같은 커밋 `eae442f` | Ubuntu 24.04.4(WSL2), Rust 1.99.1 | `wsl -d Ubuntu -- bash /mnt/d/vr-tools/vr-full.sh` | 통과(`ALL PASSED`). 시나리오 215건: 통과 201, 부분 8, 실패 0, 미실행 4, 미연결 2, 오류 0, 판정 통과(보고 2026-11-08T09:59:46Z). `+ 미커밋 변경`은 줄 끝 차이다. OPS-058~064와 MGT-031·MGT-039가 통과다. 판정은 [작업 6.9 판정표](../how-to/set-up-and-verify.md#42-작업-69-판정표)에 있다 |
+| 커밋 `51bd747`(WSS Server·프록시 TLS 종료·최근 로그. 구현 `3df0693`, 시험 수정 `f772408`·`51bd747`) | Windows 11 Pro 10.0.26200 x64, Rust 1.99.1 | `powershell -NoProfile -ExecutionPolicy Bypass -File D:/vr-tools/vr-win.ps1 -Only all` | 통과(`ALL PASSED (all)`). 시나리오 246건: 통과 229, 부분 12, 실패 0, 미실행 3, 미연결 2, 오류 0, 판정 통과(보고 2026-11-09T00:32:47Z). 작업 트리는 깨끗했다. ops-info 2.0.0 계약 시험의 판정은 [WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)를 따른다. |
+| 같은 커밋 `51bd747` | Ubuntu 24.04.4 LTS x64(WSL2), Rust 1.99.1 | `wsl -d Ubuntu -- bash /mnt/d/vr-tools/vr-full.sh` | 통과(`ALL PASSED`). 시나리오 246건: 통과 232, 부분 8, 실패 0, 미실행 4, 미연결 2, 오류 0, 판정 통과(보고 2026-11-09T01:05:57Z). `+ 미커밋 변경`은 줄 끝 차이다. 같은 구현의 앞선 게이트(`3df0693`, `f772408`)는 Ubuntu에서 시험 결함으로 실패했고 `f772408`·`51bd747`이 고쳤다. ops-info 2.0.0 계약 시험의 판정은 [WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)를 따른다. |
 
 ## 6. 초안을 확정하기 전에 해결할 사항
 
 - (해결) 경고 코드·사건 이름 `trust_all_proxies`. 사용자 결정 2026-11-08(Q191)으로 사건 이름과 필드 `listener`·`item`·`phase`를 채택했다. `level=warn`, 필드(`listener`, `item`, `phase`)와 시작·재로드 기록 조건은 1.5절에 있다. 사용자 결정 2026-11-08(Q188)의 2.0.0 채택에는 이 이름의 확정이 포함되지 않았으며 Q191로 추가 채택했다.
-- 후속: 사용자 결정 2026-11-08(Q181·Q182·Q187·Q188)으로 2.0.0의 공유 리스너·역할 표기, 전달 주소와 Server 전송 경로를 채택했다. 구현·계약 테스트는 미실행(구현 전)이다. 아래 기존 구현 기록은 1.3.0까지의 기록이다.
+- 후속: 사용자 결정 2026-11-08(Q181·Q182·Q187·Q188)으로 2.0.0의 공유 리스너·역할 표기, 전달 주소와 Server 전송 경로를 채택했다. 구현·계약 테스트는 미실행(구현 전)이다. 아래 기존 구현 기록은 1.3.0까지의 기록이다. 후속: 구현은 커밋 `3df0693`이며, 시험은 커밋 `51bd747`의 두 OS 게이트에서 통과했다([WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)).
 
 - (해결) 설정 보기·편집의 사건 `config_edited`·`config_edit_rejected`와 `reload_applied.trigger` 필드는 사용자 결정 2026-11-08(Q176)으로 채택해 1절에 반영했다. 관련 API·설정 키 이름은 [관리 API 계약](management-api-v1.md)·[설정 계약](config-v4.md)에 같은 결정으로 반영했다. 구현·계약 테스트는 미실행(구현 전)이다. 후속: 커밋 `eae442f`의 두 OS 게이트에서 구현과 계약 테스트가 통과했다(5절).
 

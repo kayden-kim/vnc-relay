@@ -11,14 +11,14 @@
 | --- | --- |
 | 구조 시점 | Current |
 | 문서 상태 | Draft |
-| 구현 대조 | 2026-11-08 작업 트리의 `read_management`·`parse_candidate`·`collect_presence`를 소스 읽기로 대조. 새 동작 시험은 커밋 `eae442f`의 두 OS 게이트에서 통과([작업 6.9 판정표](../how-to/set-up-and-verify.md#42-작업-69-판정표)). 이전 범위의 기록은 [대조 기록](#대조-기록) |
+| 구현 대조 | 2026-11-08 작업 트리의 `read_management`·`parse_candidate`·`collect_presence`를 소스 읽기로 대조. 새 동작 시험은 커밋 `eae442f`의 두 OS 게이트에서 통과([작업 6.9 판정표](../how-to/set-up-and-verify.md#42-작업-69-판정표)). 이전 범위의 기록은 [대조 기록](#대조-기록). 설정 v4 로딩·검증 범위의 구현은 커밋 `3df0693`이다. 시험은 커밋 `51bd747`의 두 OS 게이트에서 통과했다([WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)). |
 | 코드 위치 | `crates/domain/src/{allow_list,entry_point,origin,target_policy}.rs`, `crates/app/src/settings.rs`, `crates/adapters/src/config_file.rs`, `crates/adapters/src/config_file/` |
 | 코드 지도 | [코드 지도 2절](code-map.md#2-코드-위치와-구성요소) |
 | 관련 스펙 | [운영 스펙 3.1절](../specs/operations.md#31-설정-검증과-시작), OPS-001(일부), OPS-038(일부), OPS-040(일부) |
 | 관련 계약 | [설정 계약](../contracts/config-v4.md) 1·2절, [운영 정보 계약 1.5절](../contracts/ops-info-v2.md#15-사건-목록)(경고 사건 필드) |
 | 관련 ADR | [ADR-0002 출발지 IP 허용 목록](../decisions/ADR-0002-source-ip-allowlist.md) |
 
-후속: R1은 [설정 v4](../contracts/config-v4.md)의 리스너·역할 모델과 모든 새 키의 해석·검증을 반영한다(사용자 결정 2026-11-08(Q181·Q184·Q185·Q188)). 이전 대조 기록은 v3 범위의 증거다. R1의 빌드·시험·포매터는 이 문서 작업에서 실행하지 않았다. `trusted_proxies`의 전달 헤더 판정과 `trust_all_proxies` 경고는 R2, 최근 로그 보관·조회는 R3 범위다.
+후속: R1은 [설정 v4](../contracts/config-v4.md)의 리스너·역할 모델과 모든 새 키의 해석·검증을 반영한다(사용자 결정 2026-11-08(Q181·Q184·Q185·Q188)). 이전 대조 기록은 v3 범위의 증거다. R1의 빌드·시험·포매터는 이 문서 작업에서 실행하지 않았다. `trusted_proxies`의 전달 헤더 판정과 `trust_all_proxies` 경고는 R2, 최근 로그 보관·조회는 R3 범위다. 후속: 구현은 커밋 `3df0693`이며, 시험은 커밋 `51bd747`의 두 OS 게이트에서 통과했다([WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)).
 
 
 ## 1. 책임과 경계

@@ -10,7 +10,7 @@
 | --- | --- |
 | 구조 시점 | Current |
 | 문서 상태 | Draft |
-| 구현 대조 | 작업 6.2 변경은 Current. 시험은 커밋 `eae442f`의 두 OS 게이트에서 통과([작업 6.9 판정표](../how-to/set-up-and-verify.md#42-작업-69-판정표)). 이전 범위는 [2026-11-04 대조 기록](#8-현재-코드와의-차이와-연결-순서)을 따른다. |
+| 구현 대조 | 작업 6.2 변경은 Current. 시험은 커밋 `eae442f`의 두 OS 게이트에서 통과([작업 6.9 판정표](../how-to/set-up-and-verify.md#42-작업-69-판정표)). 이전 범위는 [2026-11-04 대조 기록](#8-현재-코드와의-차이와-연결-순서)을 따른다. WS·WSS Server 중계·양쪽 WS 종료 범위의 구현은 커밋 `3df0693`이다. 시험은 커밋 `51bd747`의 두 OS 게이트에서 통과했다([WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)). |
 | 코드 위치 | `crates/domain/src/{matching,session,recent_closed,target_policy}.rs`, `crates/app/src/{ports,events,relay}.rs`와 `relay/{handshake,target,matching,session}.rs`, `crates/adapters/src/{target,crypto,ops_log}.rs`와 `net.rs`의 `TcpRelayStream`, `crates/adapters/tests/{tcp_target,ops_info_contract}.rs` |
 | 코드 지도 | [코드 지도](code-map.md#2-코드-위치와-구성요소) |
 | 관련 스펙 | [중계](../specs/relay.md): RLY-003·006~021·023·025~027. [운영](../specs/operations.md): OPS-005·007~009·023·039·042~043. [관리](../specs/management.md#2-조회-대상과-상태): MGT-005 일부 |
@@ -19,7 +19,7 @@
 
 후속: R1은 `session::Transport` 하나로 Viewer와 Server/대상 양쪽의 `tcp`·`ws`·`wss`를 나타낸다. `run_pair`는 Viewer 스트림과 Mode II Server 스트림의 전송을 각각 읽는다. Mode I의 대상 전송은 `Tcp`로 고정한다. `Session::new`는 viewer_transport 다음에 target_transport를 받는다. 활성 스냅샷·종료 요약·최근 종료 목록에 두 값을 보존하고 관리 조회에 `target_transport`를 넘긴다. `SessionStarted.server_transport`는 Mode II에만 값이 있다.
 
-Mode II는 TCP·WS·WSS의 양 역할을 같은 `WaitingTable`에서 매칭한다. 같은 중계 ID와 같은 역할은 전송 방식이 달라도 `duplicate_id`다. 양쪽 WS 스트림의 제어 출력·Kw·Close는 기존 공통 소유 루프에서 각각 진행한다. R2 전달 주소와 R3 로그 보관·API는 R1에 포함하지 않는다. 이전 실행 기록은 R1의 증거가 아니며 이번 문서 작업에서는 빌드·시험·포매터를 실행하지 않았다.
+Mode II는 TCP·WS·WSS의 양 역할을 같은 `WaitingTable`에서 매칭한다. 같은 중계 ID와 같은 역할은 전송 방식이 달라도 `duplicate_id`다. 양쪽 WS 스트림의 제어 출력·Kw·Close는 기존 공통 소유 루프에서 각각 진행한다. R2 전달 주소와 R3 로그 보관·API는 R1에 포함하지 않는다. 이전 실행 기록은 R1의 증거가 아니며 이번 문서 작업에서는 빌드·시험·포매터를 실행하지 않았다. 후속: 구현은 커밋 `3df0693`이며, 시험은 커밋 `51bd747`의 두 OS 게이트에서 통과했다([WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)).
 
 
 작업 2.8·2.9·2.10을 한 문서로 묶는다. 세 작업이 같은 연결 소유권, L 예산, 활성 등록과 정리 경계를 공유하기 때문이다. 각 작업의 구현 범위는 절과 파일로 나눈다. 이 배치와 아래 내부 API·동시 실행 방식은 모두 **이 문서의 판단, 사용자 결정 없음**이다. 계약이 정한 외부 동작은 바꾸지 않는다. 계약에 없는 오류 대응은 9절의 권고이며, 채택 전 구현 기준이 아니다.
@@ -221,7 +221,7 @@ WS·WSS는 `WsRelayStream`을 통해 같은 초기 교환→`dispatch`에 연결
 
 후속: R1은 아래 Viewer↔TCP 사례를 역할과 무관한 양쪽 스트림에 적용한다. WS Server↔TCP Viewer에서는 Server 쪽이 WS 끝점이다. 양쪽이 WS이면 두 끝점의 제어 출력·유지 처리·Close를 모두 진행한다. 첫 EOF의 실제 쪽과 각 전송 종류로 action을 정한다. 한쪽의 Close를 다른 쪽의 Close 수신으로 취급하지 않는다. 각 끝점은 자기 수신 Close 코드와 출력 진행 상태를 유지하며 같은 세션 E·G·Force 경계를 따른다.
 
-현재 엔진의 `is_ws: [bool; 2]`와 `ws_close_sent: [bool; 2]`는 Viewer와 Server/대상을 따로 추적한다. 관리자 종료도 양쪽에서 이미 시작한 출력 프레임의 잔여만 같은 E 안에 마친다. `close_once`는 각 WS 끝점의 Close 시작 여부를 따로 보존한다. 관련 회귀 시험 소스를 추가했지만 이번 문서 작업에서 실행하지 않았다.
+현재 엔진의 `is_ws: [bool; 2]`와 `ws_close_sent: [bool; 2]`는 Viewer와 Server/대상을 따로 추적한다. 관리자 종료도 양쪽에서 이미 시작한 출력 프레임의 잔여만 같은 E 안에 마친다. `close_once`는 각 WS 끝점의 Close 시작 여부를 따로 보존한다. 관련 회귀 시험 소스를 추가했지만 이번 문서 작업에서 실행하지 않았다. 후속: 구현은 커밋 `3df0693`이며, 시험은 커밋 `51bd747`의 두 OS 게이트에서 통과했다([WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)).
 
 
 

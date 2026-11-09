@@ -6,14 +6,14 @@
 | --- | --- |
 | 구조 시점 | Current — 설정 보기·편집의 app·파일·HTTP 경계 |
 | 문서 상태 | Active — Q167~Q178, 2026-11-08 채택 범위 |
-| 구현 대조 | Verified — 2026-11-08 작업 트리의 소스 대조([§8](#8-current-구조-대조))와 커밋 `eae442f`의 두 OS 게이트([§9](#9-확정-경계와-검증-범위), [작업 6.9 판정표](../how-to/set-up-and-verify.md#42-작업-69-판정표)) |
+| 구현 대조 | Verified — 2026-11-08 작업 트리의 소스 대조([§8](#8-current-구조-대조))와 커밋 `eae442f`의 두 OS 게이트([§9](#9-확정-경계와-검증-범위), [작업 6.9 판정표](../how-to/set-up-and-verify.md#42-작업-69-판정표)). 설정 v4·신뢰 프록시 편집 범위의 구현은 커밋 `3df0693`이다. 시험은 커밋 `51bd747`의 두 OS 게이트에서 통과했다([WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)). |
 | 코드 위치 | `crates/app/src/management/config.rs`, `crates/app/src/management/config/items.rs`, `crates/adapters/src/config_edit.rs`, `crates/adapters/src/management_http/config_api.rs`, `src/serve.rs` |
 | 코드 지도 | [코드 지도](code-map.md) |
 | 관련 스펙 | [관리 §3.3](../specs/management.md#33-설정-보기와-동적-설정-편집) MGT-R19~R27·MGT-028~045, [운영 §3.3](../specs/operations.md#33-파일-변경-자동-감지와-부분-재로드) OPS-059~064, [화면](../specs/dashboard.md#scr-004-설정-보기) DASH-028~053 |
 | 관련 계약 | [설정 §1.8](../contracts/config-v4.md#18-재로드-구분)·[§1.10](../contracts/config-v4.md#110-관리-api-편집의-파일-쓰기), [관리 API §1.13](../contracts/management-api-v1.md#113-설정-보기-get-apiv1config)·[§1.14](../contracts/management-api-v1.md#114-동적-설정-편집-patch-apiv1config)·[§2.3](../contracts/management-api-v1.md#23-consumer의-판정-규칙), [운영 정보 §1.5](../contracts/ops-info-v2.md#15-사건-목록) |
 | 관련 ADR | [ADR-0006](../decisions/ADR-0006-config-edit-through-file.md) |
 
-후속: R1은 설정 v4의 재로드 33개·편집 29개 이름을 사용한다. 아래 과거 대조·실행 기록은 R1의 실행 증거가 아니다. 이번 문서 작업에서는 빌드·시험·포매터를 실행하지 않았다. `trusted_proxies`는 해석·검증·저장·재로드까지만 반영하며 전달 주소 판정은 R2에서 연결한다. `recent_logs.max_entries`는 보기 전용 재시작 키다. 로그 버퍼와 API는 R3 범위다.
+후속: R1은 설정 v4의 재로드 33개·편집 29개 이름을 사용한다. 아래 과거 대조·실행 기록은 R1의 실행 증거가 아니다. 이번 문서 작업에서는 빌드·시험·포매터를 실행하지 않았다. `trusted_proxies`는 해석·검증·저장·재로드까지만 반영하며 전달 주소 판정은 R2에서 연결한다. `recent_logs.max_entries`는 보기 전용 재시작 키다. 로그 버퍼와 API는 R3 범위다. 후속: 구현은 커밋 `3df0693`이며, 시험은 커밋 `51bd747`의 두 OS 게이트에서 통과했다([WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)).
 
 
 ## 1. 책임과 경계

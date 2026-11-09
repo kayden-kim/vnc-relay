@@ -18,7 +18,7 @@
 - 시험마다 임시 포트를 예약하고, 설정·계정 파일을 만든다. 시험이 끝나면 자식 프로세스를 종료한다. 결과와 로그는 보존한다.
 - 기본 설정은 `L=1000`, `Lw=200`, `B=131072`, `M=1048576`이다. WS ping·pong 제한은 각각 300초다. 느린 수신자 60초 구간에서 ping 만료가 부하를 중단하지 않도록 한다. 정상 수신자는 ping마다 pong을 보낸다.
 
-설정 v4 적용 시 시험용 WS·WSS 파일은 [설정 계약 3.3절](../contracts/config-v4.md#33-v3-파일을-v4로-옮기기)의 매핑으로 옮겨야 한다. `listen`·WSS TLS 경로는 `[relay.ws]`·`[relay.wss]`에 둔다. Viewer의 `enabled`·`allow`·`allowed_origins`는 `[relay.ws.viewer]`·`[relay.wss.viewer]`에 둔다. Server를 TCP로 고정하는 이 측정에서는 WS·WSS Server 역할과 `trusted_proxies`를 추가하지 않는다. 새 역할·프록시의 성능을 측정했다고 표시해서는 안 된다. 새 v4 설정으로의 도구 이관과 재측정은 미실행 (구현 전)이다. 4절의 날짜가 있는 측정 기록과 결과 파일명은 당시 그대로 보존한다.
+설정 v4 적용 시 시험용 WS·WSS 파일은 [설정 계약 3.3절](../contracts/config-v4.md#33-v3-파일을-v4로-옮기기)의 매핑으로 옮겨야 한다. `listen`·WSS TLS 경로는 `[relay.ws]`·`[relay.wss]`에 둔다. Viewer의 `enabled`·`allow`·`allowed_origins`는 `[relay.ws.viewer]`·`[relay.wss.viewer]`에 둔다. Server를 TCP로 고정하는 이 측정에서는 WS·WSS Server 역할과 `trusted_proxies`를 추가하지 않는다. 새 역할·프록시의 성능을 측정했다고 표시해서는 안 된다. 측정 도구 `tests/performance.rs`의 설정은 커밋 `3df0693`에서 v4 형식으로 옮겼다. 두 측정 시험은 `#[ignore]`이므로 커밋 `51bd747`의 두 OS 게이트는 도구를 빌드만 했다. v4 설정으로의 재측정은 미실행이다. 4절의 날짜가 있는 측정 기록과 결과 파일명은 당시 그대로 보존한다.
 
 ## 2. 전제 조건
 

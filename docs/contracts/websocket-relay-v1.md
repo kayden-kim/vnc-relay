@@ -7,7 +7,7 @@
 | 항목 | 값 |
 | --- | --- |
 | 이전 버전 이력 | `websocket-relay` 1.1.0. 1.1.0은 새 close 코드 4011 `relay_connection_limit`을 더하고(사용자 결정 2026-11-01(Q79)), 클라이언트 Close 수신 시 전송 중 프레임 마무리 규칙(1.6절 1행, 사용자 결정 2026-11-01(Q83))과 강제 정리 시 1001 발송 및 종료 원인 보존 규칙(1.5·1.6·2.2절, 사용자 결정 2026-11-01(Q82))을 명시했다. 3절에 따른 호환 변경이다. 명확화(2026-11-07, 1.1.0 유지): 1011을 예약 코드로 적었다. 현재 구현은 1011을 보내지 않는다(사용자 결정 2026-11-07(Q152)). 요청 머리의 16 KiB 상한과 HTTP 400 경계를 명시했다(사용자 결정 2026-11-07(Q156)). 종료 시 새 접속은 TCP에서 거절하고 101 전 연결은 HTTP 응답 없이 닫는다(사용자 결정 2026-11-07(Q160)). 기존 구현은 503을 보내지 않았으므로 클라이언트가 보는 동작은 바뀌지 않는다. 1.0.0 이력: H 시작점과 검사 순서의 명확화(사용자 결정 2026-10-22(Q22), 2026-10-22(Q24)), Repeater 초기 교환 계약 채택에 따른 4008 문장·시작 바이트 반영(사용자 결정 2026-11-01(Q71~Q73)), noVNC 1.7.0 관찰 결과 반영(2026-11-01). |
-| 이름과 버전 | `websocket-relay` 1.2.0(2026-11-08). 공유 WS·WSS 리스너의 경로별 Server 역할과 신뢰 프록시의 `X-Forwarded-For` 처리를 더했다(사용자 결정 2026-11-08(Q181), 사용자 결정 2026-11-08(Q182), 사용자 결정 2026-11-08(Q188)). 기존 `/relay` 동작을 유지하는 3절의 호환 추가다. 새 규칙은 구현 전이며 5절의 기존 실행 기록은 새 규칙의 통과 증거가 아니다. |
+| 이름과 버전 | `websocket-relay` 1.2.0(2026-11-08). 공유 WS·WSS 리스너의 경로별 Server 역할과 신뢰 프록시의 `X-Forwarded-For` 처리를 더했다(사용자 결정 2026-11-08(Q181), 사용자 결정 2026-11-08(Q182), 사용자 결정 2026-11-08(Q188)). 기존 `/relay` 동작을 유지하는 3절의 호환 추가다. 구현은 커밋 `3df0693`이다. 새 규칙은 커밋 `51bd747`의 두 OS 게이트에서 통과했다([WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)). |
 | 상태 | Active(2026-10-16 채택) |
 | 소유자 | vnc-relay 프로젝트 관리자 |
 | 만드는 쪽(Producer) | 외부 WebSocket 클라이언트(요청·바이너리 메시지·Close 송신), `vnc-relay` WS·WSS 리스너(응답·바이너리 메시지·ping·Close 송신). 방향마다 만드는 쪽이 다르며, 각 절에 방향을 적는다. |
@@ -18,7 +18,7 @@
 | 관련 요구사항 | [PRD](../requirements/PRD.md) FR-05, 7절 보안 경계, AC-05~08, AC-16~17 |
 | 호환성 범위 | WS(`ws://`)와 WSS(`wss://`)의 Viewer·Server 진입점. Viewer는 Mode I·II, Server는 Mode II만 지원한다. 공유 리스너의 요청 경로가 역할을 정한다(1.7절). 외부 RFC 6455 클라이언트가 대상이며, 고정 버전 noVNC의 `repeaterID` 옵션은 Viewer 검증 대상이다([WS-025](../specs/websocket.md#7-수용-테스트)). |
 | 관련 테스트 | [WS-001~027](../specs/websocket.md#7-수용-테스트). 연결은 2절과 5절에 있다. `ee0314f`의 두 OS 전체 게이트가 통과했다. 고정 버전 noVNC 시험은 두 OS에서 `--include-ignored`로 별도 통과했다(커밋 `d4c5678`). 현재 지원 판정은 [작업 5.9 판정표](../how-to/set-up-and-verify.md#41-작업-59-판정표)를 따른다. 1011은 예약 코드라 시험 대상이 아니다(사용자 결정 2026-11-07(Q152)). |
-| 후속 테스트 범위 | WS-028~036과 RLY-028, 변경된 WS-012·014·022·023·024. 미실행 (구현 전). 계약 테스트 계획은 5절을 따른다. |
+| 후속 테스트 범위 | WS-028~036과 RLY-028, 변경된 WS-012·014·022·023·024는 커밋 `51bd747`의 두 OS 게이트에서 통과했다([WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)). 계약 테스트는 5절을 따른다. |
 
 관련 문서: [Repeater 초기 교환 계약](repeater-handshake-v1.md), [설정 계약](config-v4.md)(키 이름·값 범위, Origin 값 문법과 정규화), [관리 API 계약](management-api-v1.md)(관리자 종료·종료 원인 `close_cause`), [운영 정보 계약](ops-info-v2.md)(종료 원인·로그), [ADR-0001 내장 TLS](../decisions/ADR-0001-built-in-tls.md), [ADR-0002 출발지 IP 허용 목록](../decisions/ADR-0002-source-ip-allowlist.md).
 
@@ -300,14 +300,14 @@ X-Forwarded-For: unknown, 198.51.100.10
 X-Forwarded-For: 192.0.2.21
 ```
 
-아래는 1.2.0 계약 테스트 계획이다. 이전 버전의 날짜별 실행 기록은 그대로 유지하며 새 규칙의 증거로 쓰지 않는다.
+아래는 1.2.0 계약 테스트다. 새 규칙은 커밋 `51bd747`의 두 OS 게이트에서 통과했다. 이전 버전의 날짜별 실행 기록은 그대로 유지하며 새 규칙의 증거로 쓰지 않는다.
 
 | 주체·테스트 위치 | 확인할 계약 규칙 | 결과 | 실행 기록 |
 | --- | --- | --- | --- |
-| Producer: WS·WSS Server 시험 클라이언트 / Consumer: 공유 WS·WSS 리스너(테스트 구현 전) | 1.7절 경로·역할, Server 시작 바이트 없음, Mode II 매칭과 양방향 전달. WS-028·WS-029, RLY-028 | 미실행 (구현 전) | 사용자 결정 2026-11-08(Q181·Q188)에 따른 계획 |
-| Producer: 역할별 IP·Origin 시험 클라이언트 / Consumer: 공유 WS·WSS 리스너(테스트 구현 전) | 1.1절 검사 순서, accept 합집합과 upgrade 역할별 목록. WS-030·WS-031, 변경된 WS-012·022·023·024 | 미실행 (구현 전) | 사용자 결정 2026-11-08(Q188)에 따른 계획 |
-| Producer: 신뢰·비신뢰 프록시 시험 클라이언트 / Consumer: WS·WSS 리스너(테스트 구현 전) | 1.8절 1~8단계. 복수 필드·SP/HTAB, 양 IPv6 표기·mapped 정규화, 오른쪽 비신뢰 주소, 그 왼쪽 위조 값 무시. 검사 대상의 포트·영역 ID·unknown·난독화·빈 요소와 헤더 누락은 400. 모두 신뢰인 체인은 역할 허용 목록과 관계없이 400이며 `forwarded_ip` 없음. WS-032~034·WS-036, 변경된 WS-014 | 미실행 (구현 전) | 사용자 결정 2026-11-08(Q182)에 따른 계획 |
-| Producer: TLS 종료 시험 프록시 / Consumer: WS 리스너(테스트 구현 전) | 1.8절 TLS 종료 배포, Viewer·Server Mode II와 전달 주소·운영 로그·관리 조회. WS-035 | 미실행 (구현 전) | 사용자 지시 2026-11-08에 따른 계획 |
+| Producer: WS·WSS Server 시험 클라이언트 / Consumer: 공유 WS·WSS 리스너 | 1.7절 경로·역할, Server 시작 바이트 없음, Mode II 매칭과 양방향 전달. WS-028·WS-029, RLY-028 | 통과 | `crates/adapters/tests/websocket_scenarios.rs`의 `websocket_servers_pair_with_every_viewer_transport_in_both_orders`·`exact_enabled_paths_select_roles_and_rejections_never_register`·`websocket_server_rules_cover_mode_i_and_waiting_and_active_duplicates`. 실행 결과는 아래 실행 기록을 따른다. |
+| Producer: 역할별 IP·Origin 시험 클라이언트 / Consumer: 공유 WS·WSS 리스너 | 1.1절 검사 순서, accept 합집합과 upgrade 역할별 목록. WS-030·WS-031, 변경된 WS-012·022·023·024 | 통과 | `crates/adapters/tests/websocket_scenarios.rs`의 `accept_union_does_not_replace_server_role_ip_check`·`server_path_uses_only_server_origin_policy_on_ws_and_wss`·`management_paths_and_invalid_upgrades_cannot_register_or_connect_a_target`, `tests/reload.rs`의 `trusted_proxies_reload_and_edit_apply_to_new_checks_and_keep_open_connections`, `tests/serve.rs`의 `server_only_websocket_roles_open_each_shared_listener`. 실행 결과는 아래 실행 기록을 따른다. |
+| Producer: 신뢰·비신뢰 프록시 시험 클라이언트 / Consumer: WS·WSS 리스너 | 1.8절 1~8단계. 복수 필드·SP/HTAB, 양 IPv6 표기·mapped 정규화, 오른쪽 비신뢰 주소, 그 왼쪽 위조 값 무시. 검사 대상의 포트·영역 ID·unknown·난독화·빈 요소와 헤더 누락은 400. 모두 신뢰인 체인은 역할 허용 목록과 관계없이 400이며 `forwarded_ip` 없음. WS-032~034·WS-036, 변경된 WS-014 | 통과 | `crates/adapters/tests/websocket_scenarios.rs`의 `trusted_proxy_uses_rightmost_untrusted_canonical_address_on_both_paths`·`derived_address_survives_origin_rejection_abort_and_target_connect_failure`·`invalid_or_all_trusted_forwarded_chains_fail_before_origin_and_registration`·`untrusted_peer_headers_neither_grant_access_nor_supply_forwarded_metadata`. 실행 결과는 아래 실행 기록을 따른다. |
+| Producer: TLS 종료 시험 프록시 / Consumer: WS 리스너 | 1.8절 TLS 종료 배포, Viewer·Server Mode II와 전달 주소·운영 로그·관리 조회. WS-035 | 통과 | `crates/adapters/tests/websocket_scenarios.rs`의 `tls_terminating_proxy_adds_each_client_address_and_pipes_mode_two_both_ways`. 시험 코드의 rustls TLS 종료 프록시가 평문 WS에 `X-Forwarded-For`를 더해 보낸다. Nginx 예시는 추정이며 실제 배치는 미실행이다. 실행 결과는 아래 실행 기록을 따른다. |
 
 Close 예: 대기 시간이 W를 넘으면 서버는 코드 `4001`과 reason `wait_timeout`을 담은 Close 프레임을 보낸다.
 
@@ -350,6 +350,8 @@ Close 예: 대기 시간이 W를 넘으면 서버는 코드 `4001`과 reason `wa
 | 커밋 `70ff541`의 Windows release 실행파일(SHA-256 `d94e4dd3…b5fc`) | Hyper-V VM 3대, UltraVNC Server·Viewer 1.8.3.0, noVNC 1.7.0, Edge 152.0.4191.66 | 에이전트가 VM 안의 Viewer·브라우저를 UI 자동 조작으로 실행(사용자 결정 2026-11-05(Q116)의 방식, [호환성 검증 기록](repeater-compat-record.md) 6절) | 통과. 실제 Server를 상대로 WS·WSS Mode I(UltraVNC Viewer와 시험용 바이트 중계 스크립트)과 WS·WSS Mode II(noVNC, Server 먼저·noVNC 먼저)의 화면·입력을 확인했다. 프로젝트 소유자가 캡처를 검토했다(Q130·Q131) |
 | 커밋 `d4c5678`(작업 5.9 판정 준비, `70ff541` 뒤 제품 변경은 대시보드 자산뿐), 깨끗한 작업 트리 | Windows 11 Pro 10.0.26200 x64, `VNC_RELAY_NOVNC_ZIP=D:\vr-lab\installers\novnc-v1.7.0.zip` | `cargo test --test websocket_browser -- --include-ignored` | 통과(2 passed, 42.43초). WS-020과 WS-025 모두 통과 |
 | 같은 커밋 `d4c5678` | Ubuntu 24.04 LTS(WSL2), `CARGO_TARGET_DIR=$HOME/vnc-relay-target`, `VNC_RELAY_NOVNC_ZIP=/mnt/d/vr-lab/installers/novnc-v1.7.0.zip` | `cargo test --test websocket_browser -- --include-ignored` | 통과(2 passed, 42.31초). WS-020과 WS-025 모두 통과 |
+| 커밋 `51bd747`(WSS Server·프록시 TLS 종료·최근 로그. 구현 `3df0693`, 시험 수정 `f772408`·`51bd747`) | Windows 11 Pro 10.0.26200 x64, Rust 1.99.1 | `powershell -NoProfile -ExecutionPolicy Bypass -File D:/vr-tools/vr-win.ps1 -Only all` | 통과(`ALL PASSED (all)`). 시나리오 246건: 통과 229, 부분 12, 실패 0, 미실행 3, 미연결 2, 오류 0, 판정 통과(보고 2026-11-09T00:32:47Z). 작업 트리는 깨끗했다. WS-028~036과 RLY-028의 판정은 [WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)를 따른다. |
+| 같은 커밋 `51bd747` | Ubuntu 24.04.4 LTS x64(WSL2), Rust 1.99.1 | `wsl -d Ubuntu -- bash /mnt/d/vr-tools/vr-full.sh` | 통과(`ALL PASSED`). 시나리오 246건: 통과 232, 부분 8, 실패 0, 미실행 4, 미연결 2, 오류 0, 판정 통과(보고 2026-11-09T01:05:57Z). `+ 미커밋 변경`은 줄 끝 차이다. 같은 구현의 앞선 게이트(`3df0693`, `f772408`)는 Ubuntu에서 시험 결함으로 실패했고 `f772408`·`51bd747`이 고쳤다. WS-028~036과 RLY-028의 판정은 [WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)를 따른다. |
 
 ## 6. 초안을 확정하기 전에 해결할 사항
 
@@ -358,6 +360,6 @@ Close 예: 대기 시간이 W를 넘으면 서버는 코드 `4001`과 reason `wa
 - (해결) WS-TBD-004: M·U·E의 기본값과 유효 범위는 사용자가 승인한 값이며 [설정 계약](config-v4.md)이 기준이다. B와 M 사이에 크기 제약은 없다(사용자 결정 2026-11-01(Q78)). 프레임 안에서 스트리밍하며 방향당 미전달 보관 바이트는 B 이하다. 분할 프레임을 합친 논리 메시지 크기가 M을 넘으면 1009로 닫고 추가 전달을 멈춘다. B보다 큰 유효 프레임도 수락해 스트리밍하며 전체를 저장하지 않는다. 프레임 분할 우회와 종료 중 자원 점유는 WS-010·WS-017로 검증한다.
 - (해결) WS-TBD-005와 noVNC 기본 서브프로토콜: noVNC 1.7.0을 [호환성 검증 기록](repeater-compat-record.md) 2.4절에 고정했다(버전·해시·받은 주소·날짜). 2026-11-01 관찰에서 이 버전은 WS·WSS 모두 `Sec-WebSocket-Protocol` 헤더를 보내지 않았다(같은 기록 3.4절 W-02·W-03b, 3.5절 F행). 1.2절 규칙과 같아 규칙은 그대로 두고, 1.2절 noVNC 문단을 관찰 사실로 고쳤다(TODO 1.7).
 - 1.4절 잘못된 프레임의 Close 1002와 자원 회수는 `crates/adapters/tests/websocket_scenarios.rs`의 `invalid_frame_sequences_and_controls_close_1002_and_release_registrations`가 WS·WSS에서 확인했다. 두 OS 전체 게이트에서 통과했다(5절).
-- 후속: 현재 계약 버전은 1.2.0이다(사용자 결정 2026-11-08(Q181·Q182·Q188)). 1.7·1.8절과 변경된 검사 순서는 구현 전·미검증이다. 위 날짜별 관찰·실행 기록은 그 당시 범위의 증거로 유지한다.
+- 후속: 현재 계약 버전은 1.2.0이다(사용자 결정 2026-11-08(Q181·Q182·Q188)). 1.7·1.8절과 변경된 검사 순서는 구현 전·미검증이다. 위 날짜별 관찰·실행 기록은 그 당시 범위의 증거로 유지한다. 후속: 구현은 커밋 `3df0693`이며, 시험은 커밋 `51bd747`의 두 OS 게이트에서 통과했다([WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)).
 - 후속: 2026-11-07(Q160) 이후 종료 시 503을 보내지 않는다(2.1절). 위 2026-10-16 채택 기록의 “종료 유예 503”은 과거 기록이다.
 - (해결) 사용자 결정 2026-11-08(Q191)으로 채택했다: `trusted_proxies` 전체 허용 경고 코드·사건명 `trust_all_proxies`. 이름과 필드의 채택은 [운영 정보 계약](ops-info-v2.md)의 결정 기록에서 관리한다.

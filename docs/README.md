@@ -45,7 +45,7 @@
 | 버전 규칙과 릴리스 | [릴리스 묶음을 만들고 배포하는 방법](how-to/release.md) — Verified(2026-11-08). `연.월.순서` 버전, `cargo xtask package`, GitHub Actions 검사, 태그로 GitHub Release 내기. 첫 Release는 `v2026.11.0` |
 | 변경 범위별 테스트와 전체 완료 검증 | [개발 환경·검증 how-to 3.3·3.4절](how-to/set-up-and-verify.md#33-변경-범위별-검증). 시나리오 표식과 보고 명령은 [테스트 컨벤션](conventions/testing.md)이 정한다. 의존성을 바꾸면 [의존성 라이선스 검사](how-to/check-dependency-licenses.md)를 실행한다. [스펙 문서 검증 기록](specs/README.md#문서-검증-기록)은 문서 구조 확인만 포함 |
 
-사용자 지시 2026-11-08로 더한 WS·WSS Server·프록시 TLS 종료·최근 로그 화면의 구현·테스트는 미실행(구현 전)이다. 공유 WS·WSS 리스너와 v4 설정의 재로드 33개·편집 29개 키는 사용자 결정 2026-11-08(Q181~Q188)을 따른다. 새 수용 범위는 [PRD AC-44~48](requirements/PRD.md#10-검증-및-수용-기준)과 [스펙 추적](specs/README.md#적용-범위와-추적)을 참조한다. 로그 화면 시안·기존 화면 변경·상단 순서는 사용자 결정 2026-11-08(Q189)으로, CPY-149~189는 사용자 결정 2026-11-08(Q190)으로, 로그 API 이름·세션 필터 URL·`trust_all_proxies` 이름과 필드는 사용자 결정 2026-11-08(Q191)으로 채택했다. 기준과 범위는 해당 문서의 결정 기록을 따른다.
+사용자 지시 2026-11-08로 더한 WS·WSS Server·프록시 TLS 종료·최근 로그 화면의 구현은 커밋 `3df0693`이다. 시험은 커밋 `51bd747`의 두 OS 게이트에서 통과했다([WSS Server·프록시·최근 로그 판정표](how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)). 공유 WS·WSS 리스너와 v4 설정의 재로드 33개·편집 29개 키는 사용자 결정 2026-11-08(Q181~Q188)을 따른다. 새 수용 범위는 [PRD AC-44~48](requirements/PRD.md#10-검증-및-수용-기준)과 [스펙 추적](specs/README.md#적용-범위와-추적)을 참조한다. 로그 화면 시안·기존 화면 변경·상단 순서는 사용자 결정 2026-11-08(Q189)으로, CPY-149~189는 사용자 결정 2026-11-08(Q190)으로, 로그 API 이름·세션 필터 URL·`trust_all_proxies` 이름과 필드는 사용자 결정 2026-11-08(Q191)으로 채택했다. 기준과 범위는 해당 문서의 결정 기록을 따른다.
 
 프런트엔드 프로젝트는 위 표에 실제 디자인 기준·컨벤션·검증 절차를 연결한다. 작업은 [frontend-workflow 스킬](../.agents/skills/frontend-workflow/SKILL.md)을 따른다.
 

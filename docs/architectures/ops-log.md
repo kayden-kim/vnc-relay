@@ -10,7 +10,7 @@
 | --- | --- |
 | 구조 시점 | Current |
 | 문서 상태 | Draft |
-| 구현 대조 | 2026-11-08 작업 트리의 `Event::ConfigEdited`·`ConfigEditRejected`·`ReloadApplied`, `ConfigEditService::patch`, `format_line` 직렬화 arm을 소스 읽기로 대조. 새 사건 시험은 커밋 `eae442f`의 두 OS 게이트에서 통과([작업 6.9 판정표](../how-to/set-up-and-verify.md#42-작업-69-판정표)). 과거 범위의 기록은 [대조 기록](#대조-기록) |
+| 구현 대조 | 2026-11-08 작업 트리의 `Event::ConfigEdited`·`ConfigEditRejected`·`ReloadApplied`, `ConfigEditService::patch`, `format_line` 직렬화 arm을 소스 읽기로 대조. 새 사건 시험은 커밋 `eae442f`의 두 OS 게이트에서 통과([작업 6.9 판정표](../how-to/set-up-and-verify.md#42-작업-69-판정표)). 과거 범위의 기록은 [대조 기록](#대조-기록). ops-info 2.0.0·최근 로그 범위의 구현은 커밋 `3df0693`이다. 시험은 커밋 `51bd747`의 두 OS 게이트에서 통과했다([WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)). |
 | 코드 위치 | `crates/domain/src/peer_ip.rs`, `crates/app/src/events.rs`, `crates/app/src/ports.rs`, `crates/adapters/src/ops_log.rs`, `crates/adapters/src/crypto.rs`, `src/serve.rs`(사건 기록 위치) |
 | 코드 지도 | [코드 지도 2절](code-map.md#2-코드-위치와-구성요소) |
 | 관련 스펙 | [운영 스펙 3.5절](../specs/operations.md#35-운영-정보), OPS-012(일부) |
@@ -19,7 +19,7 @@
 
 후속: R1은 [ops-info 2.0.0](../contracts/ops-info-v2.md)의 리스너·역할 표기와 `session_started.server_transport`를 반영한다(사용자 결정 2026-11-08(Q181·Q187·Q188)). `LOG_CONTRACT`는 `ops-info/2.0.0`이다. `listener`는 `tcp_viewer`·`tcp_server`·`ws`·`wss`·`management`·`status` 중 하나다. WS·WSS는 경로 판정 전 role을 생략하고 켜진 경로 판정 뒤 role을 보존한다. TCP 수락은 고정 role을 출력한다. `allow_all_source`는 WS·WSS 역할 목록일 때 role을 더하고 `plaintext_ws_enabled.listener`는 `ws`다.
 
-후속: R2는 [운영 정보 계약 v2](../contracts/ops-info-v2.md)의 `forwarded_ip`, `viewer_forwarded_ip`, `server_forwarded_ip`, `connection_rejected.reason = forwarded_for_invalid`, 그리고 `trust_all_proxies` 경고(사용자 결정 2026-11-08(Q191))를 반영한다. 신뢰 프록시의 전달 주소를 도출한 뒤의 사건에 `forwarded_ip`가 기록되며, 소켓 상대 IP인 `peer_ip`는 변경하지 않는다. 전체 범위를 포괄하는 `trusted_proxies` 항목은 시작·재로드 시 `trust_all_proxies` 경고(`listener`, `item`, `phase`)로 기록된다. 최근 로그 보관·API는 R3 범위다. 이전 실행 기록은 R2의 증거가 아니며 이번 문서 작업에서는 빌드·시험·포매터를 실행하지 않았다.
+후속: R2는 [운영 정보 계약 v2](../contracts/ops-info-v2.md)의 `forwarded_ip`, `viewer_forwarded_ip`, `server_forwarded_ip`, `connection_rejected.reason = forwarded_for_invalid`, 그리고 `trust_all_proxies` 경고(사용자 결정 2026-11-08(Q191))를 반영한다. 신뢰 프록시의 전달 주소를 도출한 뒤의 사건에 `forwarded_ip`가 기록되며, 소켓 상대 IP인 `peer_ip`는 변경하지 않는다. 전체 범위를 포괄하는 `trusted_proxies` 항목은 시작·재로드 시 `trust_all_proxies` 경고(`listener`, `item`, `phase`)로 기록된다. 최근 로그 보관·API는 R3 범위다. 이전 실행 기록은 R2의 증거가 아니며 이번 문서 작업에서는 빌드·시험·포매터를 실행하지 않았다. 후속: 구현은 커밋 `3df0693`이며, 시험은 커밋 `51bd747`의 두 OS 게이트에서 통과했다([WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)).
 
 후속: R3은 최근 로그의 메모리 보관(`RecentLogs`, OPS-068)과 `GET /api/v1/logs`(MGT-046~050)를 반영한다(사용자 결정 2026-11-08(Q185·Q186·Q187·Q191)).
 - `recent_logs.max_entries` 상한(0~10000, 기본 1000, 0=끄기, 재시작 필요)의 메모리 링 버퍼(`RecentLogs`)를 프로세스 시작 시 생성한다.

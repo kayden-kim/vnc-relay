@@ -349,11 +349,11 @@ UltraVNC Server와 Viewer 사이의 TCP 연결을 중계하면서, WS 또는 WSS
 | AC-41 | 설정 조회·편집 복구 | 조회 실패·충돌·편집 불가·쓰기 실패를 해소한 뒤 명시적으로 재조회하거나 재시도. 결과 불명 때 자동 재전송하지 않고 설정 보기로 결과 확인 | [관리: MGT-040·MGT-042~045](../specs/management.md#7-수용-테스트), [운영: OPS-062](../specs/operations.md#7-수용-테스트), [화면: DASH-042·DASH-045~049](../specs/dashboard.md#7-수용-테스트) |
 | AC-42 | 설정 편집 추적 | 편집 성공·거절 사건에 수행 계정명과 바뀐 키 또는 요청한 키를 기록하고 설정 값은 기록하지 않음 | [관리: MGT-030~031·MGT-033~036·MGT-038](../specs/management.md#7-수용-테스트), [운영: OPS-059~061](../specs/operations.md#7-수용-테스트) |
 | AC-43 | 설정 화면 접근성·언어 | 설정 보기·동적 설정 편집을 두 화면 폭과 한국어·영어로 사용. 키보드 이동·진단 초점·관리 세션 만료·미저장 이탈을 화면 스펙대로 처리 | [화면: DASH-050~051·DASH-053](../specs/dashboard.md#7-수용-테스트) |
-| AC-44 | WS·WSS Server 역할 | 공유 리스너의 `/relay/server`로 Mode II Server가 접속. TCP·WS·WSS Viewer와 양쪽 접속 순서에서 양방향 바이트 보존. 꺼진 역할·다른 경로는 404. 역할별 IP·Origin·중복 ID 규칙 유지. 미실행(구현 전) | [전송: WS-028~031](../specs/websocket.md#7-수용-테스트), [중계: RLY-028](../specs/relay.md#7-수용-테스트) |
-| AC-45 | 프록시 클라이언트 주소 | 오른쪽 첫 비신뢰 전달 주소로 허용 판정·로그·API 표시. 헤더 누락·오류·모든 요소가 신뢰 프록시인 체인은 400이며 등록·`forwarded_ip` 없음. 비신뢰 상대의 헤더는 무시. 프록시 TLS 종료로 Viewer·Server 매칭. 미실행(구현 전) | [전송: WS-032~036](../specs/websocket.md#7-수용-테스트), [운영: OPS-067](../specs/operations.md#7-수용-테스트), [관리: MGT-051](../specs/management.md#7-수용-테스트) |
-| AC-46 | 최근 로그 화면 | 최근 N개 보관·필터·값 검색·P 주기 갱신과 일시 정지·세션 로그 열기·필터 결과 전체 JSON Lines 내려받기. 자동 폴링은 유휴 만료를 연장하지 않음. 비활성·빈 목록·조회 실패·만료·두 폭·두 언어·키보드 상태 구분. 미실행(구현 전) | [운영: OPS-068](../specs/operations.md#7-수용-테스트), [관리: MGT-046~050](../specs/management.md#7-수용-테스트), [화면: DASH-054~061·DASH-063](../specs/dashboard.md#7-수용-테스트) |
-| AC-47 | 설정 v4 이전 | 리스너·역할 표의 필수 키와 형식 검사. v3 표는 시작 실패. 이전 뒤 Viewer 동작 유지. ops-info 2.0.0의 리스너 이름과 역할 생략 규칙 준수. 미실행(구현 전) | [운영: OPS-065~066·OPS-069](../specs/operations.md#7-수용-테스트) |
-| AC-48 | 양쪽 전송 경로와 전달 주소 | 세션·최근 종료 목록에서 Server/대상 전송 경로를 제공. 소켓 주소와 전달 주소를 구분해 표시. 미실행(구현 전) | [관리: MGT-051](../specs/management.md#7-수용-테스트), [화면: DASH-062](../specs/dashboard.md#7-수용-테스트) |
+| AC-44 | WS·WSS Server 역할 | 공유 리스너의 `/relay/server`로 Mode II Server가 접속. TCP·WS·WSS Viewer와 양쪽 접속 순서에서 양방향 바이트 보존. 꺼진 역할·다른 경로는 404. 역할별 IP·Origin·중복 ID 규칙 유지. 충족. 커밋 `51bd747`의 두 OS 게이트([WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)) | [전송: WS-028~031](../specs/websocket.md#7-수용-테스트), [중계: RLY-028](../specs/relay.md#7-수용-테스트) |
+| AC-45 | 프록시 클라이언트 주소 | 오른쪽 첫 비신뢰 전달 주소로 허용 판정·로그·API 표시. 헤더 누락·오류·모든 요소가 신뢰 프록시인 체인은 400이며 등록·`forwarded_ip` 없음. 비신뢰 상대의 헤더는 무시. 프록시 TLS 종료로 Viewer·Server 매칭. 충족. 커밋 `51bd747`의 두 OS 게이트([WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)) | [전송: WS-032~036](../specs/websocket.md#7-수용-테스트), [운영: OPS-067](../specs/operations.md#7-수용-테스트), [관리: MGT-051](../specs/management.md#7-수용-테스트) |
+| AC-46 | 최근 로그 화면 | 최근 N개 보관·필터·값 검색·P 주기 갱신과 일시 정지·세션 로그 열기·필터 결과 전체 JSON Lines 내려받기. 자동 폴링은 유휴 만료를 연장하지 않음. 비활성·빈 목록·조회 실패·만료·두 폭·두 언어·키보드 상태 구분. 충족. 커밋 `51bd747`의 두 OS 게이트([WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)) | [운영: OPS-068](../specs/operations.md#7-수용-테스트), [관리: MGT-046~050](../specs/management.md#7-수용-테스트), [화면: DASH-054~061·DASH-063](../specs/dashboard.md#7-수용-테스트) |
+| AC-47 | 설정 v4 이전 | 리스너·역할 표의 필수 키와 형식 검사. v3 표는 시작 실패. 이전 뒤 Viewer 동작 유지. ops-info 2.0.0의 리스너 이름과 역할 생략 규칙 준수. 충족. 커밋 `51bd747`의 두 OS 게이트([WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)) | [운영: OPS-065~066·OPS-069](../specs/operations.md#7-수용-테스트) |
+| AC-48 | 양쪽 전송 경로와 전달 주소 | 세션·최근 종료 목록에서 Server/대상 전송 경로를 제공. 소켓 주소와 전달 주소를 구분해 표시. 충족. 커밋 `51bd747`의 두 OS 게이트([WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)) | [관리: MGT-051](../specs/management.md#7-수용-테스트), [화면: DASH-062](../specs/dashboard.md#7-수용-테스트) |
 
 외부 WebSocket 뷰어의 화면 렌더링 자체는 수용 범위가 아니다. 대신 WebSocket 프록시의 바이트 전달 계약을 실제 대상과 검증한다. noVNC 검증(AC-17)의 수용 판정은 WS·WSS Mode II의 매칭 성립과 noVNC의 RFB 연결 완료 관찰이다. noVNC 화면 렌더링은 VNC Relay의 수용 기준이 아니다. TCP 기반 UltraVNC 호환성은 실제 화면·입력까지 별도로 확인한다.
 
@@ -406,7 +406,7 @@ UltraVNC Server와 Viewer 사이의 TCP 연결을 중계하면서, WS 또는 WSS
 
 스펙 5개는 사용자 결정 2026-11-07(Q150)으로 전체를 채택해 Active로 바꿨다. 채택과 구현·테스트 완료 여부는 구분한다. 기존 범위의 지원 판정은 [작업 5.9 판정표](../how-to/set-up-and-verify.md#41-작업-59-판정표)를 따른다. 2026-11-08에 더한 설정 보기·동적 설정 편집과 확대 재로드는 사용자 결정 2026-11-08(Q174~Q177)으로 시안·문구·이름·직접 적용 설계를 채택했다. 구현·테스트는 작업 6.2~6.9에서 마쳤고, 판정은 [작업 6.9 판정표](../how-to/set-up-and-verify.md#42-작업-69-판정표)를 따른다. Mode I·II 및 TCP·WS·WSS의 지원 조합은 모두 검증 대상이다. 각 스펙의 규칙 ID는 기존 FR ID를 세부 동작으로 나누어 추적하며, 상위 요구사항 ID를 대체하지 않는다.
 
-후속: 사용자 지시 2026-11-08와 사용자 결정 2026-11-08(Q181~Q188)로 더한 WS·WSS Server·프록시 TLS 종료·최근 로그는 미실행(구현 전)이다. 기존 판정표의 통과는 이 새 범위를 포함하지 않는다.
+후속: 사용자 지시 2026-11-08와 사용자 결정 2026-11-08(Q181~Q188)로 더한 WS·WSS Server·프록시 TLS 종료·최근 로그는 미실행(구현 전)이다. 기존 판정표의 통과는 이 새 범위를 포함하지 않는다. 후속: 구현은 커밋 `3df0693`이며, 시험은 커밋 `51bd747`의 두 OS 게이트에서 통과했다([WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)).
 
 | PRD 기준 | 동작의 기준 문서 | 시나리오 ID |
 | --- | --- | --- |

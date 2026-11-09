@@ -14,7 +14,7 @@
 | --- | --- |
 | 구조 시점 | Current |
 | 문서 상태 | Draft |
-| 구현 대조 | Verified — [대조 기록](#대조-기록) (기준 커밋 `c1c24d2`) |
+| 구현 대조 | Verified — [대조 기록](#대조-기록) (기준 커밋 `c1c24d2`). 공유 WS·WSS 역할·신뢰 프록시 범위의 구현은 커밋 `3df0693`이다. 시험은 커밋 `51bd747`의 두 OS 게이트에서 통과했다([WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)). |
 | 코드 위치 | `crates/adapters/src/websocket.rs`(`WsPolicy`, `WsEntryPoint`, 연결 처리, 101 뒤 전달), `crates/adapters/src/upgrade.rs`(머리 읽기, 검사, 101 응답, 거절 응답), `crates/adapters/src/net.rs`(`accept_connections`, `AcceptPolicy`), `crates/adapters/src/tls_listener.rs`(`TlsIo`), `crates/adapters/src/websocket_stream.rs`(`WsRelayStream`), `crates/domain/src/origin.rs`(`Origin`), `src/serve.rs`(WS·WSS 진입점 시작) |
 | 코드 지도 | [코드 지도 2절](code-map.md#2-코드-위치와-구성요소), [3절](code-map.md#3-진입점) |
 | 관련 스펙 | [WebSocket 스펙 7절](../specs/websocket.md#7-수용-테스트)의 WS-012(일부), WS-013(일부), WS-014, WS-015(WS·WSS), WS-021(일부), WS-022(일부), WS-023(WSS), WS-027(WS·WSS); [운영 스펙 7절](../specs/operations.md#7-수용-테스트)의 OPS-006(일부), OPS-037(WS·WSS, 일부) |
@@ -23,7 +23,7 @@
 
 후속: R1은 [공유 리스너·경로별 역할](../contracts/websocket-relay-v1.md#11-업그레이드-요청)을 반영한다(사용자 결정 2026-11-08(Q181·Q188)). 수락·TLS·경로 판정 전에는 역할이 없다. `/relay`는 Viewer, `/relay/server`는 Server다. 꺼진 역할이나 다른 경로는 404 `invalid_upgrade`다. Server는 Mode II만 사용하고 시작 바이트를 받지 않는다.
 
-후속: R2는 [신뢰 프록시와 X-Forwarded-For](../contracts/websocket-relay-v1.md#18-신뢰-프록시와-x-forwarded-for) 및 전달 주소 판정을 반영한다(사용자 결정 2026-11-08(Q182·Q188)). 수락 때 소켓 IP가 `trusted_proxies`에 들면 역할 allow 합집합을 건너뛴다. 업그레이드 단계에서 소켓 IP가 `trusted_proxies`에 있으면 헤더를 오른쪽부터 검사해 전달 주소를 얻는다. 헤더가 없거나 비어 있거나 검사 중 잘못된 요소가 있거나 모든 요소가 신뢰 프록시면 HTTP 400 `forwarded_for_invalid`로 거절한다. 비신뢰 상대의 헤더는 무시한다. 역할 allow 검사는 클라이언트 주소(전달 주소 또는 소켓 IP)를 쓰고, `ConnectionContext`와 사건에 `forwarded_ip`를 전달한다.
+후속: R2는 [신뢰 프록시와 X-Forwarded-For](../contracts/websocket-relay-v1.md#18-신뢰-프록시와-x-forwarded-for) 및 전달 주소 판정을 반영한다(사용자 결정 2026-11-08(Q182·Q188)). 수락 때 소켓 IP가 `trusted_proxies`에 들면 역할 allow 합집합을 건너뛴다. 업그레이드 단계에서 소켓 IP가 `trusted_proxies`에 있으면 헤더를 오른쪽부터 검사해 전달 주소를 얻는다. 헤더가 없거나 비어 있거나 검사 중 잘못된 요소가 있거나 모든 요소가 신뢰 프록시면 HTTP 400 `forwarded_for_invalid`로 거절한다. 비신뢰 상대의 헤더는 무시한다. 역할 allow 검사는 클라이언트 주소(전달 주소 또는 소켓 IP)를 쓰고, `ConnectionContext`와 사건에 `forwarded_ip`를 전달한다. 후속: 구현은 커밋 `3df0693`이며, 시험은 커밋 `51bd747`의 두 OS 게이트에서 통과했다([WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)).
 
 
 ## 1. 책임과 경계

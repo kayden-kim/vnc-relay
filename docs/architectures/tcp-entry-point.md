@@ -12,7 +12,7 @@ TCP Viewer·TCP Server 진입점이 접속을 수락하고, 데이터를 읽기 
 | --- | --- |
 | 구조 시점 | Current |
 | 문서 상태 | Draft |
-| 구현 대조 | Verified — [대조 기록](#대조-기록) |
+| 구현 대조 | Verified — [대조 기록](#대조-기록). 공유 수락·리스너와 역할 분리 범위의 구현은 커밋 `3df0693`이다. 시험은 커밋 `51bd747`의 두 OS 게이트에서 통과했다([WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)). |
 | 코드 위치 | `crates/domain/src/allow_list.rs`, `crates/domain/src/entry_point.rs`(`Listener`, `EntryPoint`, `Role`), `crates/domain/src/conn_id.rs`, `crates/app/src/events.rs`, `crates/app/src/settings.rs`(`ListenerPlan::listener`), `crates/adapters/src/net.rs`(`TcpEntryPoint`, `TcpRelayStream`, `accept_connections`), `crates/app/src/relay.rs`(`handle_connection`, `dispatch`), `crates/adapters/src/websocket.rs`(`WsEntryPoint`), `src/serve.rs` |
 | 코드 지도 | [코드 지도 2절](code-map.md#2-코드-위치와-구성요소), [3절](code-map.md#3-진입점) |
 | 관련 스펙 | [중계 스펙 3.1절](../specs/relay.md#31-초기-교환)의 1항과 RLY-R16, [운영 스펙 4절](../specs/operations.md#4-보안과-신뢰-경계), RLY-023(일부), RLY-024, OPS-037(일부), OPS-038(일부), OPS-040(일부), OPS-007(일부) |
@@ -21,7 +21,7 @@ TCP Viewer·TCP Server 진입점이 접속을 수락하고, 데이터를 읽기 
 
 후속: R1은 `domain::entry_point::Listener`(중계 소켓 네 개)와 `EntryPoint`(리스너·역할 조합 여섯 개)를 분리한다. TCP는 `Listener::fixed_role()`로 수락 때 역할을 알 수 있다. WS·WSS의 공통 수락은 켜진 역할 `allow`의 합집합만 검사하고 역할은 보관하지 않는다. `AllowSource::ws`·`wss`는 리스너를 기준으로 현재 설정을 읽는다. `trusted_proxies`의 허용 우회·전달 헤더 처리는 R2 범위이며 R1에서는 적용하지 않는다.
 
-R1 사건·전송 타입은 [운영 로그](ops-log.md)와 아래 표를 따른다. `ListenerPlan::listener`가 바인드 소켓을 나타낸다. 이전 대조 기록은 R1의 실행 증거가 아니다. 이번 문서 작업에서는 빌드·시험·포매터를 실행하지 않았다.
+R1 사건·전송 타입은 [운영 로그](ops-log.md)와 아래 표를 따른다. `ListenerPlan::listener`가 바인드 소켓을 나타낸다. 이전 대조 기록은 R1의 실행 증거가 아니다. 이번 문서 작업에서는 빌드·시험·포매터를 실행하지 않았다. 후속: 구현은 커밋 `3df0693`이며, 시험은 커밋 `51bd747`의 두 OS 게이트에서 통과했다([WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)).
 
 
 ## 1. 책임과 경계
