@@ -291,8 +291,8 @@
       <p class="eyebrow">01 / 문제 상황</p>
       <h2 id="problem-title">중계 ID만으로는 누가 연결하는지 알 수 없다</h2>
       <p>브라우저의 noVNC는 vnc-relay의 <code>/relay</code> 경로로 WebSocket 업그레이드 요청을 보낸다. 101 응답 뒤에는 초기 교환으로 중계 ID를 보낸다. 같은 중계 ID로 기다리던 기기의 대기 연결이 있으면 둘은 Mode II로 짝을 이룬다.</p>
-      <p>vnc-relay가 업그레이드 전에 보는 접근 조건은 클라이언트 주소와 Origin이다(<a href="../contracts/websocket-relay-v1.md#11-업그레이드-요청">계약 1.1절</a>). 출발지 IP 허용 목록에 전체 허용 항목(<code>0.0.0.0/0</code>)을 쓰면 주소 검사는 아무도 거르지 않는다. Origin은 다른 사이트의 브라우저 페이지만 막는다. 요청을 직접 만드는 프로그램은 Origin 헤더를 빼고 보낼 수 있다. 이때 vnc-relay는 Origin 검사를 건너뛴다(<a href="../contracts/websocket-relay-v1.md#13-origin-비교">계약 1.3절</a>).</p>
-      <p>중계 ID는 짝을 찾는 값이며 비밀값이 아니다(<a href="../../GLOSSARY.md#중계-방식과-세션">용어집</a>). 그러면 남는 보호는 기기가 확인하는 VNC 비밀번호다. ticket은 여기에 "어드민 서비스에서 방금 연결을 요청한 브라우저인가"라는 조건을 더하려는 방법이다.</p>
+      <p>vnc-relay가 업그레이드 전에 보는 접근 조건은 클라이언트 주소와 Origin이다(<a href="../contracts/websocket-relay-v1.md#11-업그레이드-요청">계약 1.1절</a>). 출발지 IP 허용 목록에 전체 허용 항목(<code>0.0.0.0/0</code>)을 쓰면 주소 검사는 아무도 거르지 않는다. Origin은 다른 사이트의 브라우저 페이지만 막는다. 요청을 직접 만드는 프로그램은 Origin 헤더를 빼고 보낼 수 있다. 이때 vnc-relay는 Origin 검사만 건너뛰고 주소 검사는 그대로 한다(<a href="../contracts/websocket-relay-v1.md#13-origin-비교">계약 1.3절</a>).</p>
+      <p>중계 ID는 짝을 찾는 값이며 비밀값이 아니다(<a href="../../GLOSSARY.md#중계-방식과-세션">용어집</a>). 그래서 허용된 출발지에서 Origin 검사를 통과한 클라이언트는 중계 ID만 알면 자격 증명 없이 짝을 이룰 수 있다. 그 뒤에 남는 보호는 기기가 확인하는 VNC 비밀번호다. ticket은 여기에 "어드민 서비스에서 방금 연결을 요청한 브라우저인가"라는 조건을 더하려는 방법이다.</p>
     </div>
     <figure class="side-figure" aria-labelledby="fig2-caption">
       <ol class="checks">
@@ -618,7 +618,7 @@ allowed_origins = ["https://admin.example"]</code></pre>
           <tr><th scope="row">확인은 통과했으나 업그레이드 실패(중계 중지, Origin·IP 403, 프록시에서 중계로의 연결 실패)</th><td>ticket은 사용됨. 중계에는 대기 연결이나 활성 세션이 없다.</td><td>같은 ticket은 쓸 수 없다. 새 ticket이 필요하다.</td><td>사용 기록은 업그레이드 결과를 모른다.</td></tr>
           <tr><th scope="row">확인 응답이 사라진 뒤 자동 재전송</th><td>첫 확인이 쓴 사용 기록</td><td>두 번째 확인은 401이다. 새 ticket이 필요하다.</td><td>GET으로 소비하는 대가다(05절의 선택지).</td></tr>
           <tr><th scope="row">사용 기록 저장소 장애</th><td>판단할 수 없다. ticket은 아직 쓰지 않은 상태일 수 있다.</td><td>저장소가 복구된 뒤 새로 시도한다.</td><td>판단할 수 없으면 통과시키지 않는다. 철회한 설계는 503이며, 기록을 잃었으면 70초 동안 모두 503이다.</td></tr>
-          <tr><th scope="row">확인 서버 무응답(대안)</th><td>바뀐 상태가 없다.</td><td>확인 서버가 복구된 뒤 새로 시도한다.</td><td>프록시가 요청을 넘기지 않는다. 브라우저가 받는 코드는 프록시마다 다르다(표 4).</td></tr>
+          <tr><th scope="row">확인 서버 무응답(대안)</th><td>요청이 닿기 전이나 기록 전에 실패했으면 바뀐 상태가 없다. 기록한 뒤 응답만 사라졌으면 ticket은 이미 사용됐을 수 있다.</td><td>확인 서버가 복구된 뒤 같은 ticket으로 다시 시도할 수 있다. 이미 사용됐으면 401이므로 새 ticket이 필요하다.</td><td>프록시가 요청을 넘기지 않는다. 브라우저가 받는 코드는 프록시마다 다르다(표 4). 프록시는 확인 서버가 기록을 남겼는지 알 수 없다.</td></tr>
           <tr><th scope="row">연결 뒤 권한 회수나 세션 만료</th><td>중계의 활성 세션이 유지된다.</td><td>해당 없음</td><td>확인은 업그레이드 때 한 번뿐이다. 대안과 현재 기준에서는 vnc-relay의 <a href="../../GLOSSARY.md#세션-종료와-기록">관리자 종료</a>로 끝낼 수 있다. 철회한 설계는 <code>sx</code>에 <code>4410</code>으로 끊었다.</td></tr>
         </tbody>
       </table>
@@ -663,7 +663,7 @@ allowed_origins = ["https://admin.example"]</code></pre>
         <caption><strong>표 8. 선택에 따른 이점과 제약.</strong> 어느 선택도 이 저장소의 기준을 바꾸지 않는다.</caption>
         <thead><tr><th scope="col">선택</th><th scope="col">이점</th><th scope="col">제약</th></tr></thead>
         <tbody>
-          <tr><th scope="row">ticket 없이 출발지 IP 허용 목록(현재 기준)</th><td>구성 요소가 늘지 않는다. 기존 UltraVNC와 호환된다.</td><td>허용한 IP 안의 사용자를 구분하지 못한다. 전체 허용 항목이면 보호가 없다.</td></tr>
+          <tr><th scope="row">ticket 없이 출발지 IP 허용 목록(현재 기준)</th><td>구성 요소가 늘지 않는다. 기존 UltraVNC와 호환된다.</td><td>허용한 IP 안의 사용자를 구분하지 못한다. 전체 허용 항목이면 주소 검사가 아무도 거르지 않는다.</td></tr>
           <tr><th scope="row">중계가 직접 확인(철회한 설계)</th><td>중계 ID·중계 호스트와 묶고, 세션 만료 때 끊을 수 있다.</td><td>중계에 ticket 기능이 있어야 한다. vnc-relay에는 없다.</td></tr>
           <tr><th scope="row">프록시와 어드민 API 확인</th><td>vnc-relay 코드가 바뀌지 않는다. 발급과 사용 기록이 한곳에 있다.</td><td>연결마다 API를 왕복한다. API 장애가 연결 불가로 이어진다. 중계 ID와 묶지 않는다.</td></tr>
           <tr><th scope="row">프록시와 로컬 확인 서버</th><td>왕복이 없다.</td><td>서명 키와 확인 서버를 운영한다. 일회용이려면 기록을 영속화하거나 거절 기간을 둔다.</td></tr>
