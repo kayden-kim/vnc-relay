@@ -107,7 +107,7 @@ Windows 11 x64와 Ubuntu 24.04 LTS x64용 배포 묶음을 만들고, 버전 태
 ### 3.3 버전을 올리고 Release 내기
 
 1. 새 버전을 정한다. 1.1절 규칙을 따른다. 이미 낸 버전은 `git tag --list "v*"`로 확인한다.
-2. 루트 `Cargo.toml`의 `[workspace.package] version`을 새 버전으로 바꾼다. 루트 `README.md`의 "버전" 줄도 같은 값으로 바꾼다.
+2. 루트 `Cargo.toml`의 `[workspace.package] version`을 새 버전으로 바꾼다. 루트 `README.md`의 "버전" 줄도 같은 값으로 바꾼다. README의 "기준" 줄과 "연결 구성 예" 절에 이전 공개 묶음과 다른 동작을 적은 문장이 있으면 지운다. 새 묶음은 현재 소스와 같기 때문이다.
 3. `Cargo.lock`을 갱신하고 버전을 확인한다.
 
    ```shell

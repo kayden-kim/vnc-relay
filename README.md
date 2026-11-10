@@ -3,6 +3,7 @@
 `vnc-relay`는 UltraVNC Repeater와 호환되는 VNC 중계 서버다. TCP·WS·WSS 중계와 웹 관리 대시보드를 실행파일 하나로 제공한다. Rust로 독립 구현했다.
 
 - 버전: 2026.11.2. 버전은 `연.월.순서`다([릴리스 how-to](docs/how-to/release.md)).
+- 기준: 이 README는 `main`의 현재 소스를 설명한다. 현재 소스로 빌드한 실행파일도 다음 릴리스 전까지 위 버전을 출력한다. 공개된 `2026.11.2` 묶음과 다른 동작은 WS·WSS Viewer 경로 하나다. 묶음은 `/relay`를, 현재 소스는 `/relay/viewer`를 쓴다.
 - 지원 OS: Windows 11 x64, Ubuntu 24.04 LTS x64. Windows Server와 다른 OS·아키텍처는 검증 범위가 아니다.
 - 라이선스: [MIT](LICENSE)
 
@@ -123,7 +124,7 @@ output = "relay.log"
 
 noVNC는 `repeaterID` 값 앞에 `ID:`를 붙여 보낸다. 같은 ID를 다른 Viewer가 이미 쓰고 있으면(대기 중이거나 중계 중) 뒤에 온 Viewer는 거절된다.
 
-Viewer 경로 `/relay/viewer`는 릴리스 `2026.11.2` 다음 버전부터 쓴다. `2026.11.2` 묶음의 Viewer 경로는 `/relay`다.
+이 예제는 현재 소스로 빌드한 실행파일 기준이다. 공개된 `2026.11.2` 묶음으로 따라 할 때는 noVNC URL의 `path=relay/viewer`를 `path=relay`로 바꾼다.
 
 같은 파일에 다음 설정을 더하면 다른 연결 방식도 쓸 수 있다.
 
