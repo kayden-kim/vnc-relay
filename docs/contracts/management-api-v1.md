@@ -21,7 +21,7 @@
 | 호환성 범위 | 경로 접두사 `/api/v1/`. 같은 릴리스의 서버와 내장 대시보드. HTTPS 관리 리스너와 평문 HTTP 루프백 관리 리스너. |
 | 관련 테스트 | [관리 스펙 7절](../specs/management.md#7-수용-테스트) MGT-001~MGT-051, [화면 스펙 7절](../specs/dashboard.md#7-수용-테스트), [운영 스펙 7절](../specs/operations.md#7-수용-테스트) OPS-043. 계약 테스트는 5절에 연결한다. 기존 범위는 `ee0314f`의 두 OS 전체 게이트가 통과했다. 설정 보기·편집 범위(MGT-028~045)는 `eae442f`의 두 OS 전체 게이트가 통과했다. MGT-046~051은 커밋 `51bd747`의 두 OS 게이트에서 통과했다([WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)). 기존 범위의 지원 판정과 브라우저별 수동 확인 범위는 [작업 5.9 판정표](../how-to/set-up-and-verify.md#41-작업-59-판정표)와 [작업 6.9 판정표](../how-to/set-up-and-verify.md#42-작업-69-판정표)를 따른다. |
 
-관련 문서: [설정 계약](config-v4.md)(`[dashboard]`·`[limits]`·`[recent_closed]`·`[recent_logs]`·`[timeouts]`·`[management]` 키와 기본값·범위), [CLI·계정 파일 계약](cli-v1.md)(계정명 규칙), [운영 정보 계약](ops-info-v2.md)(`session_id`·종료 사건 로그, 상태 리스너), [WebSocket 중계 계약](websocket-relay-v1.md)(관리자 종료의 Close 4005), [ADR-0001 내장 TLS](../decisions/ADR-0001-built-in-tls.md), [ADR-0003 단일 인스턴스·메모리 상태](../decisions/ADR-0003-single-instance-memory-state.md).
+관련 문서: [설정 계약](config-v4.md)(`[dashboard]`·`[limits]`·`[recent_closed]`·`[recent_logs]`·`[timeouts]`·`[management]` 키와 기본값·범위), [CLI·계정 파일 계약](cli-v1.md)(계정명 규칙), [운영 정보 계약](ops-info-v2.md)(`session_id`·종료 사건 로그, 상태 리스너), [WebSocket 중계 계약](websocket-relay-v2.md)(관리자 종료의 Close 4005), [ADR-0001 내장 TLS](../decisions/ADR-0001-built-in-tls.md), [ADR-0003 단일 인스턴스·메모리 상태](../decisions/ADR-0003-single-instance-memory-state.md).
 
 이 계약은 2026-10-16에 사용자가 채택했다(상태 Active). 당시의 `/api/v1/` 아래 경로 이름과 메서드, 필드 이름, 오류 코드 일곱 개, `X-Relay-Poll`·`X-CSRF-Token` 값 규칙, 종료 원인 값 이름, 화면 URL, `WWW-Authenticate` 헤더 값이 채택 범위다. 새 설정 보기·편집 이름과 상태 코드, PATCH의 `query_timeout_secs` 재사용은 사용자 결정 2026-11-08(Q176)으로 채택했다. 6절에 "관찰로 확인 필요"·"구현에서 확인"으로 남긴 항목은 채택으로 해소되지 않았다. 앞서 사용자가 확정한 값은 다음과 같다.
 
@@ -245,7 +245,7 @@
 - `session_id`가 위 형식을 만족하지 않으면 `400 invalid_request`다(잘못된 대상).
 - 형식은 맞지만 지금 활성 세션이 아니면 `404 not_found`다(대상 없음). 이미 정리가 끝난 세션과 처음부터 없던 세션을 구분하지 않는다. 같은 중계 ID의 다른 세션으로 대체하지 않는다.
 - 상세는 `state`가 `closing`인 세션도 돌려준다.
-- `viewer_address`·`target_address`는 프록시를 거쳐도 실제 소켓 상대 주소다. 전달 주소는 별도 필드에만 담는다. IP 표기는 1.1절의 정규화 규칙을 따른다. 전달 주소가 없는 경우는 확인 불가가 아니므로 `*_unavailable_reason`을 추가하지 않는다. 주소 결정은 [WebSocket 계약 1.8절](websocket-relay-v1.md#18-신뢰-프록시와-x-forwarded-for)을 따른다.
+- `viewer_address`·`target_address`는 프록시를 거쳐도 실제 소켓 상대 주소다. 전달 주소는 별도 필드에만 담는다. IP 표기는 1.1절의 정규화 규칙을 따른다. 전달 주소가 없는 경우는 확인 불가가 아니므로 `*_unavailable_reason`을 추가하지 않는다. 주소 결정은 [WebSocket 계약 1.8절](websocket-relay-v2.md#18-신뢰-프록시와-x-forwarded-for)을 따른다.
 
 ### 1.9 관리자 종료 `POST /api/v1/sessions/{session_id}/terminate`
 

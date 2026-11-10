@@ -1721,7 +1721,7 @@ fn v3_websocket_tables_fail_startup_instead_of_silently_disabling_the_listener()
         let _guard = Guard(Some(spawn(&config)));
         wait_for_line(&log, |line| field(line, "event") == Some("server_ready"));
         let mut viewer = relay_peer(1, port, listener == "wss");
-        upgrade_peer_path(viewer.as_mut(), "/relay");
+        upgrade_peer_path(viewer.as_mut(), "/relay/viewer");
         assert_peer_greeting(viewer.as_mut(), true);
         send_peer_request(viewer.as_mut(), &make_request(b"ID:66001"), true);
         wait_for_line(&log, |line| {
@@ -1742,7 +1742,7 @@ fn plaintext_upgrade(port: u16) -> Vec<u8> {
         .set_read_timeout(Some(Duration::from_secs(2)))
         .unwrap_or_else(|error| panic!("read timeout: {error}"));
     let request = format!(
-        "GET /relay HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\nX-Padding: {}\r\n\r\n",
+        "GET /relay/viewer HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\nX-Padding: {}\r\n\r\n",
         "a".repeat(200)
     );
     let mut reply = Vec::new();
@@ -2653,7 +2653,7 @@ fn relay_peer(source: u8, port: u16, secure: bool) -> Box<dyn TestPeer> {
 }
 
 fn upgrade_peer(peer: &mut dyn TestPeer) {
-    upgrade_peer_path(peer, "/relay");
+    upgrade_peer_path(peer, "/relay/viewer");
 }
 
 fn upgrade_response_head(peer: &mut dyn TestPeer, path: &str) -> Vec<u8> {
@@ -2761,7 +2761,7 @@ fn every_relay_entry_point_accepts_only_its_own_source_ip() {
         let path = if role == "server" {
             "/relay/server"
         } else {
-            "/relay"
+            "/relay/viewer"
         };
         for source in 2..=7 {
             let ip = format!("127.0.0.{source}");
@@ -2893,7 +2893,7 @@ fn initial_tls_and_upgrade_deadlines_have_distinct_causes_and_release_capacity()
                 assert_peer_greeting(peer.as_mut(), websocket);
             }
         } else if stage == "upgrade" {
-            peer.write_all(b"GET /relay HTTP/1.1\r\nHost: localhost\r\n")
+            peer.write_all(b"GET /relay/viewer HTTP/1.1\r\nHost: localhost\r\n")
                 .unwrap_or_else(|e| panic!("incomplete upgrade: {e}"));
             peer.flush()
                 .unwrap_or_else(|e| panic!("flush partial: {e}"));
@@ -3176,7 +3176,11 @@ fn real_relay_logs_reach_management_and_restart_discards_previous_events() {
 }
 
 fn upgrade_forwarded(peer: &mut dyn TestPeer, server: bool, forwarded: &str) {
-    let path = if server { "/relay/server" } else { "/relay" };
+    let path = if server {
+        "/relay/server"
+    } else {
+        "/relay/viewer"
+    };
     write!(peer, "GET {path} HTTP/1.1\r\nHost: localhost\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\nX-Forwarded-For: {forwarded}\r\n\r\n").unwrap_or_else(|error| panic!("forwarded upgrade: {error}"));
     peer.flush()
         .unwrap_or_else(|error| panic!("upgrade flush: {error}"));

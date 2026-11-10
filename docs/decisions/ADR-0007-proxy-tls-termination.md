@@ -6,7 +6,7 @@
 | 결정일 | 2026-11-08 |
 | 결정자 | 프로젝트 소유자(사용자) |
 | 관련 요구사항 | [PRD 확정 기준](../requirements/PRD.md#확정-기준), [FR-05](../requirements/PRD.md#fr-05-wswss-프록시), [FR-07](../requirements/PRD.md#fr-07-설정과-프로세스-수명), [7절](../requirements/PRD.md#7-보안-및-신뢰-경계) |
-| 관련 스펙·계약 | [WS·WSS 스펙](../specs/websocket.md), [운영 스펙](../specs/operations.md), [설정 계약 v4](../contracts/config-v4.md), [WebSocket 계약 1.8절](../contracts/websocket-relay-v1.md#18-신뢰-프록시와-x-forwarded-for), [운영 정보 계약 v2](../contracts/ops-info-v2.md) |
+| 관련 스펙·계약 | [WS·WSS 스펙](../specs/websocket.md), [운영 스펙](../specs/operations.md), [설정 계약 v4](../contracts/config-v4.md), [WebSocket 계약 1.8절](../contracts/websocket-relay-v2.md#18-신뢰-프록시와-x-forwarded-for), [운영 정보 계약 v2](../contracts/ops-info-v2.md) |
 | 관련 아키텍처 문서 | [WebSocket 진입점](../architectures/websocket-entry-point.md), [운영 로그](../architectures/ops-log.md) |
 | 이 ADR이 대체하는 이전 ADR | [ADR-0001](ADR-0001-built-in-tls.md) |
 | 이 ADR을 대체한 새 ADR | 없음 |
@@ -15,7 +15,7 @@
 
 내장 TLS는 유지한다. 중계 WS·WSS 리스너 앞에서 역방향 프록시가 TLS를 종료하는 배치도 지원한다(사용자 지시 2026-11-08, 사용자 결정 2026-11-08(Q182)).
 
-클라이언트 주소는 리스너별 `trusted_proxies`와 `X-Forwarded-For`로 구한다. 소켓 상대가 신뢰 프록시일 때만 헤더를 읽는다. 오른쪽부터 처음 만나는 비신뢰 주소를 쓴다. 소켓 상대가 신뢰 프록시가 아니면 전달 헤더를 무시한다. 정확한 주소 문법과 거절 규칙은 [WebSocket 계약](../contracts/websocket-relay-v1.md#18-신뢰-프록시와-x-forwarded-for)을 따른다.
+클라이언트 주소는 리스너별 `trusted_proxies`와 `X-Forwarded-For`로 구한다. 소켓 상대가 신뢰 프록시일 때만 헤더를 읽는다. 오른쪽부터 처음 만나는 비신뢰 주소를 쓴다. 소켓 상대가 신뢰 프록시가 아니면 전달 헤더를 무시한다. 정확한 주소 문법과 거절 규칙은 [WebSocket 계약](../contracts/websocket-relay-v2.md#18-신뢰-프록시와-x-forwarded-for)을 따른다.
 
 관리 리스너는 이 지원에서 제외한다. 내장 HTTPS 또는 루프백 평문 HTTP만 허용하며 전달 헤더를 무시한다. 쿠키의 Secure 판단과 로그인 제한의 출발지 주소 기준도 유지한다(사용자 결정 2026-11-08(Q183)). 프록시 인증 종료와 중계 접속 토큰은 이 결정의 범위가 아니다.
 

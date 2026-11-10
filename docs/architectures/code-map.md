@@ -238,7 +238,7 @@ flowchart LR
 
 Mode I는 3~4단계 대신 `relay/target.rs`가 이름 정책→DNS→최종 IP 정책→같은 L의 대상 자리→단일 주소 연결을 진행한다. 전체가 같은 C 안에 있다. 성공하면 같은 `run_pair`로 간다.
 
-WS·WSS는 1단계의 수락을 공유 리스너에서 한다. 소켓 상대가 `trusted_proxies`에 있거나 켜진 역할 allow 합집합을 통과하면 연결을 수락하고, HTTP `/relay` 또는 `/relay/server`로 역할을 정한다. 소켓 상대가 신뢰 프록시이면 `X-Forwarded-For`로부터 전달 주소를 도출하고(실패 시 400 `forwarded_for_invalid`), 선택한 역할의 Origin과 클라이언트 주소 IP를 다시 검사한다. 101을 flush한 뒤 `WsRelayStream`과 `EntryPoint::from_parts(listener, role)`, 도출된 `forwarded_ip`의 문맥을 넘긴다. H는 `exchange_at`부터 잰다. Server에는 시작 바이트를 보내지 않는다. `frame.rs`는 프레임·메시지 경계를 스트림 경계로 쓰지 않는다.
+WS·WSS는 1단계의 수락을 공유 리스너에서 한다. 소켓 상대가 `trusted_proxies`에 있거나 켜진 역할 allow 합집합을 통과하면 연결을 수락하고, HTTP `/relay/viewer` 또는 `/relay/server`로 역할을 정한다. 소켓 상대가 신뢰 프록시이면 `X-Forwarded-For`로부터 전달 주소를 도출하고(실패 시 400 `forwarded_for_invalid`), 선택한 역할의 Origin과 클라이언트 주소 IP를 다시 검사한다. 101을 flush한 뒤 `WsRelayStream`과 `EntryPoint::from_parts(listener, role)`, 도출된 `forwarded_ip`의 문맥을 넘긴다. H는 `exchange_at`부터 잰다. Server에는 시작 바이트를 보내지 않는다. `frame.rs`는 프레임·메시지 경계를 스트림 경계로 쓰지 않는다.
 
 `run_pair`는 양쪽 스트림의 `Transport`를 세션과 조회 스냅샷에 보존한다. Mode I 대상은 `Tcp`, Mode II 대상은 실제 Server 전송이다. 운영 로그의 `session_started.server_transport`는 Mode II에만 있고 관리 목록·상세·최근 종료의 `target_transport`는 두 모드 모두에 있다. Kw와 종료는 각 연결의 스트림 유지 처리를 공통 소유 루프에서 진행한다.
 

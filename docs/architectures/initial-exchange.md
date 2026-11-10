@@ -14,7 +14,7 @@
 | 코드 위치 | `crates/domain/src/handshake.rs`, `crates/domain/src/relay_id.rs`, `crates/app/src/relay.rs`, `crates/app/src/relay/handshake.rs`, `crates/app/src/events.rs`, `crates/adapters/src/ops_log.rs`, `crates/adapters/src/net.rs`, `crates/adapters/src/websocket.rs` |
 | 코드 지도 | [코드 지도](code-map.md#2-코드-위치와-구성요소) |
 | 관련 스펙 | [중계 스펙 2~4절·7절](../specs/relay.md#2-상태와-경계): RLY-001~005, RLY-022. [운영 스펙 2절·OPS-006](../specs/operations.md#2-상태와-검증-매개변수): TCP H 부분 |
-| 관련 계약 | [Repeater 초기 교환 1~3절](../contracts/repeater-handshake-v1.md#1-형식과-의미), [운영 정보 1.5~1.7절](../contracts/ops-info-v2.md#15-사건-목록), [설정 1.2~1.5절](../contracts/config-v4.md#12-키-표), [WebSocket 1.4~1.5절](../contracts/websocket-relay-v1.md#14-데이터-메시지와-제어-프레임) |
+| 관련 계약 | [Repeater 초기 교환 1~3절](../contracts/repeater-handshake-v1.md#1-형식과-의미), [운영 정보 1.5~1.7절](../contracts/ops-info-v2.md#15-사건-목록), [설정 1.2~1.5절](../contracts/config-v4.md#12-키-표), [WebSocket 1.4~1.5절](../contracts/websocket-relay-v2.md#14-데이터-메시지와-제어-프레임) |
 | 관련 ADR | [ADR-0002 출발지 IP 허용 목록](../decisions/ADR-0002-source-ip-allowlist.md), [ADR-0003 단일 인스턴스·메모리 상태](../decisions/ADR-0003-single-instance-memory-state.md), [ADR-0004 tokio·rustls](../decisions/ADR-0004-tokio-rustls.md) |
 
 후속: R1의 domain 파서는 여섯 `EntryPoint`의 `role()`만 사용한다. TCP는 리스너, WS·WSS는 101 전 경로 검사에서 역할을 정한다. `/relay/server`는 Server로서 시작 바이트 없이 `ID:` 요청만 보낸다. WS·WSS Server의 Mode I 요청도 TCP Server와 같이 `handshake_invalid`다. 요청 250바이트의 형식·H·B 인계는 바뀌지 않는다(사용자 결정 2026-11-08(Q181·Q188), [Repeater 계약](../contracts/repeater-handshake-v1.md)).
@@ -175,7 +175,7 @@ app의 일반 tokio 기능은 `time`, `sync`, `io-util`뿐이다. `macros`, `rt`
 
 서비스 호출 시 스트림과 permit을 비공개 자원 묶음으로 옮긴다. 반환된 future가 아직 실행되지 않았거나 도중에 버려져도 스트림을 먼저 버린다. 이를 위해 `handle_connection`은 future를 반환하는 일반 함수로 쓴다. 호출자는 기존 비동기 함수처럼 `.await`한다. 자원 묶음에는 별도 할당이 없다.
 
-WS·WSS의 형식 오류는 Close 4008(`handshake_invalid`), H는 4009(`handshake_timeout`), 비활성 모드는 1008(`mode_disabled`)다. 시작 바이트는 101 뒤 첫 바이너리 메시지 하나다. Close 전송 실패가 L 반환을 막지 않는다. Close 정리의 E는 [WebSocket 계약 1.6절](../contracts/websocket-relay-v1.md#16-종료-의미)을 따른다.
+WS·WSS의 형식 오류는 Close 4008(`handshake_invalid`), H는 4009(`handshake_timeout`), 비활성 모드는 1008(`mode_disabled`)다. 시작 바이트는 101 뒤 첫 바이너리 메시지 하나다. Close 전송 실패가 L 반환을 막지 않는다. Close 정리의 E는 [WebSocket 계약 1.6절](../contracts/websocket-relay-v2.md#16-종료-의미)을 따른다.
 
 <a id="7-테스트-계획"></a>
 
@@ -285,7 +285,7 @@ U는 별도 시험 범위다. `crates/adapters/tests/websocket.rs`의 HTTP·TLS 
 
 **적용: A.** Q21의 101 뒤 보류는 `638cf09`에서 제거했다. 바이너리 메시지 ↔ 스트림 어댑터와 같은 B 안의 페이로드 계산을 위해 3.3 범위를 앞당겼다. M>B의 WS-TBD-004와 스트리밍 코덱은 사용자 결정 2026-11-01(Q77, Q78)로 해소했다. 단일 메시지만 읽는 임시 해석기는 없다. TODO 3.2의 “현재:”와 WebSocket 진입점 Q21은 당시 결정 기록이다. 현재 WS-018 전체 표식은 실제 중계 도착을 확인하는 `ws_and_wss_forward_initial_trailing_data_once`에 있다. 단위 시험의 부분 표식은 유지한다.
 
-근거: [TODO 3.2의 현재·3.3 완료 조건 WS-018](https://github.com/kayden-kim/vnc-relay/blob/556fab23d15e77125ca2ad5c575089857b312049/docs/TODO.md#3-wswss-진입점), [WebSocket 진입점 9절 항목 1·5·11](websocket-entry-point.md#9-미결정-사항), [코드 지도 3절 WS·WSS 행](code-map.md#3-진입점), [WebSocket 계약 1.4절](../contracts/websocket-relay-v1.md#14-데이터-메시지와-제어-프레임), [Repeater 계약 1.4절](../contracts/repeater-handshake-v1.md#14-형식과-무관한-제품-제약).
+근거: [TODO 3.2의 현재·3.3 완료 조건 WS-018](https://github.com/kayden-kim/vnc-relay/blob/556fab23d15e77125ca2ad5c575089857b312049/docs/TODO.md#3-wswss-진입점), [WebSocket 진입점 9절 항목 1·5·11](websocket-entry-point.md#9-미결정-사항), [코드 지도 3절 WS·WSS 행](code-map.md#3-진입점), [WebSocket 계약 1.4절](../contracts/websocket-relay-v2.md#14-데이터-메시지와-제어-프레임), [Repeater 계약 1.4절](../contracts/repeater-handshake-v1.md#14-형식과-무관한-제품-제약).
 
 ### 3. (해결) 빈 값 검사와 모드 판정의 순서
 

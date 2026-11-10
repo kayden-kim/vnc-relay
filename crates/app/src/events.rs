@@ -101,15 +101,15 @@ pub enum RejectReason {
     /// no plaintext fallback (OPS-036).
     TlsVersionUnsupported,
     /// The request is not a WebSocket upgrade request, or its head is
-    /// malformed (websocket-relay-v1 §1.1).
+    /// malformed (websocket-relay-v2 §1.1).
     InvalidUpgrade,
     /// A trusted proxy supplied no usable client address (WebSocket §1.8).
     ForwardedForInvalid,
-    /// The Origin header is not in the allowed list (websocket-relay-v1
+    /// The Origin header is not in the allowed list (websocket-relay-v2
     /// §1.3).
     OriginNotAllowed,
     /// The client offered subprotocols and none of them is `binary`
-    /// (websocket-relay-v1 §1.2).
+    /// (websocket-relay-v2 §1.2).
     SubprotocolNotSupported,
     /// The initial request has an invalid format (repeater-handshake-v1 §2).
     HandshakeInvalid,
@@ -379,7 +379,7 @@ pub enum Event {
         peer_ip: PeerIp,
     },
     /// The server refused an upgrade request on an accepted WS or WSS
-    /// connection (websocket-relay-v1 §1.1, §1.3). The event name is
+    /// connection (websocket-relay-v2 §1.1, §1.3). The event name is
     /// `connection_rejected`, and `stage` is always `upgrade`.
     UpgradeRejected {
         listener: &'static str,

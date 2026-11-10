@@ -1,5 +1,5 @@
 // Real-loopback tests of the WS and WSS viewer entry points and their common
-// initial exchange (docs/contracts/websocket-relay-v1.md §1.1–§1.4, §3).
+// initial exchange (docs/contracts/websocket-relay-v2.md §1.1–§1.4, §3).
 // Successful upgrades receive the common service's binary greeting; refusal
 // cases still end before the relay pipeline.
 
@@ -471,7 +471,7 @@ async fn connect_from(source: [u8; 4], addr: SocketAddr) -> TcpStream {
 /// A plain request whose Origin header has the given value.
 async fn with_origin(addr: SocketAddr, origin: &str) -> Vec<u8> {
     let line = format!("Origin: {origin}");
-    plain_head(addr, &upgrade_request("/relay", &[line.as_str()])).await
+    plain_head(addr, &upgrade_request("/relay/viewer", &[line.as_str()])).await
 }
 
 /// spec: websocket.md:WS-021 partial
@@ -487,7 +487,7 @@ async fn allowed_client_without_origin_or_session_gets_switching_protocols() {
     .await;
     let head = plain_head(
         running.addr,
-        &upgrade_request("/relay", &["Sec-WebSocket-Protocol: binary"]),
+        &upgrade_request("/relay/viewer", &["Sec-WebSocket-Protocol: binary"]),
     )
     .await;
     assert_eq!(status_of(&head), 101);
@@ -556,7 +556,7 @@ async fn allowed_source_with_disallowed_origin_is_refused_with_403() {
 /// A TLS request whose Origin header has the given value.
 async fn tls_with_origin(addr: SocketAddr, origin: &str) -> Vec<u8> {
     let line = format!("Origin: {origin}");
-    tls_head(addr, &upgrade_request("/relay", &[line.as_str()])).await
+    tls_head(addr, &upgrade_request("/relay/viewer", &[line.as_str()])).await
 }
 
 /// spec: websocket.md:WS-027
@@ -616,7 +616,7 @@ async fn disallowed_source_is_closed_before_tls_or_http_even_with_session_hints(
         "X-Forwarded-For: 10.0.0.1",
         "Forwarded: for=10.0.0.1",
     ];
-    let bytes = upgrade_request("/relay", &hints);
+    let bytes = upgrade_request("/relay/viewer", &hints);
 
     let plain = start(EntryPoint::WsViewer, None, &["10.0.0.1/32"], &[], UPGRADE).await;
     assert!(
@@ -714,7 +714,7 @@ async fn disallowed_source_on_wss_is_closed_before_tls_and_holds_no_relay_place(
         .await
         .unwrap_or_else(|error| panic!("allowed client gets a TLS session: {error}"));
     stream
-        .write_all(&upgrade_request("/relay", &[]))
+        .write_all(&upgrade_request("/relay/viewer", &[]))
         .await
         .unwrap_or_else(|error| panic!("request is sent: {error}"));
     let head = read_head(&mut stream).await;
@@ -733,7 +733,7 @@ async fn ws_and_wss_check_only_their_own_allow_lists() {
         UPGRADE,
     )
     .await;
-    let request = upgrade_request("/relay", &[]);
+    let request = upgrade_request("/relay/viewer", &[]);
     let name =
         ServerName::try_from("localhost").unwrap_or_else(|error| panic!("server name: {error}"));
 
@@ -807,10 +807,10 @@ async fn ws_and_wss_check_only_their_own_allow_lists() {
 #[tokio::test]
 async fn request_head_accepts_16384_bytes_and_refuses_16385_bytes() {
     let running = start(EntryPoint::WsViewer, None, &["127.0.0.1/32"], &[], UPGRADE).await;
-    let empty_padding_len = upgrade_request("/relay", &["X-Padding: "]).len();
+    let empty_padding_len = upgrade_request("/relay/viewer", &["X-Padding: "]).len();
     for head_bytes in [16_384, 16_385] {
         let padding = format!("X-Padding: {}", "x".repeat(head_bytes - empty_padding_len));
-        let request = upgrade_request("/relay", &[&padding]);
+        let request = upgrade_request("/relay/viewer", &[&padding]);
         assert_eq!(request.len(), head_bytes, "includes the ending blank line");
 
         if head_bytes == 16_384 {
@@ -851,11 +851,11 @@ async fn management_paths_and_malformed_upgrades_are_refused_without_upgrade() {
         "Origin: https://a.example:8443",
     ];
     let post = format!(
-        "POST /relay HTTP/1.1\r\n{}\r\n\r\n",
+        "POST /relay/viewer HTTP/1.1\r\n{}\r\n\r\n",
         valid_headers().join("\r\n")
     );
     let wrong_version = request(
-        "/relay",
+        "/relay/viewer",
         &[
             HOST_LINE,
             UPGRADE_LINE,
@@ -864,11 +864,12 @@ async fn management_paths_and_malformed_upgrades_are_refused_without_upgrade() {
             "Sec-WebSocket-Version: 8",
         ],
     );
-    let cases: [(Vec<u8>, u16); 4] = [
+    let cases: [(Vec<u8>, u16); 5] = [
         (upgrade_request("/api/v1/session", &[]), 404),
-        (upgrade_request("/relay/", &[]), 404),
-        (request("/relay", &without_key), 400),
-        (request("/relay", &two_origins), 400),
+        (upgrade_request("/relay", &[]), 404),
+        (upgrade_request("/relay/viewer/", &[]), 404),
+        (request("/relay/viewer", &without_key), 400),
+        (request("/relay/viewer", &two_origins), 400),
     ];
     for (index, (bytes, expected)) in cases.into_iter().enumerate() {
         let head = plain_head(running.addr, &bytes).await;
@@ -890,13 +891,13 @@ async fn management_paths_and_malformed_upgrades_are_refused_without_upgrade() {
     );
 }
 
-/// Unmarked: a subprotocol other than `binary` is refused (websocket-relay-v1 §1.2).
+/// Unmarked: a subprotocol other than `binary` is refused (websocket-relay-v2 §1.2).
 #[tokio::test]
 async fn subprotocol_without_binary_is_refused_with_400() {
     let running = start(EntryPoint::WsViewer, None, &["127.0.0.1/32"], &[], UPGRADE).await;
     let head = plain_head(
         running.addr,
-        &upgrade_request("/relay", &["Sec-WebSocket-Protocol: chat"]),
+        &upgrade_request("/relay/viewer", &["Sec-WebSocket-Protocol: chat"]),
     )
     .await;
     assert_eq!(status_of(&head), 400);
@@ -913,7 +914,7 @@ async fn wss_allowed_client_gets_switching_protocols_after_tls() {
         UPGRADE,
     )
     .await;
-    let head = tls_head(running.addr, &upgrade_request("/relay", &[])).await;
+    let head = tls_head(running.addr, &upgrade_request("/relay/viewer", &[])).await;
     assert_eq!(status_of(&head), 101);
     assert!(has_line(&head, &format!("Sec-WebSocket-Accept: {ACCEPT}")));
 }
@@ -934,7 +935,7 @@ async fn stalled_upgrade_request_is_closed_at_u_without_a_reply() {
         .unwrap_or_else(|error| panic!("connect: {error}"));
     // The head never ends: no blank line arrives.
     stream
-        .write_all(b"GET /relay HTTP/1.1\r\nHost: localhost\r\n")
+        .write_all(b"GET /relay/viewer HTTP/1.1\r\nHost: localhost\r\n")
         .await
         .unwrap_or_else(|error| panic!("partial head is sent: {error}"));
     let mut reply = Vec::new();
@@ -998,7 +999,7 @@ async fn head_completed_after_u_gets_no_answer() {
     // The test thread blocks in `std::thread::sleep`, so the single-threaded
     // runtime cannot run the server task. The server reads the head only after
     // U has passed. Neither the 101 nor a refusal may be sent.
-    for path in ["/relay", "/api/v1/session"] {
+    for path in ["/relay/viewer", "/api/v1/session"] {
         let running = start(
             EntryPoint::WsViewer,
             None,
@@ -1278,7 +1279,7 @@ async fn assert_client_refuses_wss_certificate(
         )
     })
     .await;
-    let reply = refused(running.addr, &upgrade_request("/relay", &[])).await;
+    let reply = refused(running.addr, &upgrade_request("/relay/viewer", &[])).await;
     assert!(
         !reply.starts_with(b"HTTP/"),
         "{chain}: no plaintext reply on the WSS port, got {:?}",
@@ -1346,7 +1347,7 @@ async fn tls10_and_tls11_are_refused_and_tls12_and_tls13_succeed_on_wss_and_mana
     let (management, _) = start_management(Some(tls_acceptor())).await;
     let session = request("/api/v1/session", &["Cookie: relay_admin_session=stale"]);
     for versions in [&[&TLS12][..], &[&TLS13][..]] {
-        let head = tls_head_with(wss.addr, versions, &upgrade_request("/relay", &[])).await;
+        let head = tls_head_with(wss.addr, versions, &upgrade_request("/relay/viewer", &[])).await;
         assert_eq!(status_of(&head), 101, "WSS answers the upgrade");
         let head = tls_head_with(management, versions, &session).await;
         assert_eq!(
@@ -1363,7 +1364,7 @@ async fn assert_initial_exchange_close<S: AsyncRead + AsyncWrite + Unpin>(
     shutdown: Option<Duration>,
 ) {
     stream
-        .write_all(&upgrade_request("/relay", &[]))
+        .write_all(&upgrade_request("/relay/viewer", &[]))
         .await
         .unwrap_or_else(|error| panic!(concat!("upgrade request", ": {:?}"), error));
     assert_eq!(status_of(&read_head(&mut stream).await), 101);

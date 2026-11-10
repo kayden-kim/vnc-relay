@@ -349,7 +349,7 @@ impl WebSocket {
         } else {
             Wire::Tcp(tcp)
         };
-        must(wire.write_all(b"GET /relay HTTP/1.1\r\nHost: localhost\r\nOrigin: http://127.0.0.1\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n"));
+        must(wire.write_all(b"GET /relay/viewer HTTP/1.1\r\nHost: localhost\r\nOrigin: http://127.0.0.1\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n"));
         must(wire.flush());
         let mut head = Vec::new();
         while !head.ends_with(b"\r\n\r\n") {

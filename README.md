@@ -16,10 +16,10 @@
 | 접근 제한 | 진입점마다 출발지 IP 허용 목록(단일 IP·CIDR·범위)을 둔다. WS·WSS는 역할별 IP·`Origin` 정책을 검사한다. 신뢰 프록시를 거치면 전달 주소로 클라이언트 주소를 판정한다. |
 | 관리 | 내장 로그인(Argon2id 해시)이 있는 대시보드와 관리 API(`/api/v1/`). 서버·대기 연결·활성 세션·최근 종료 목록·최근 로그·설정을 조회한다. 활성 세션 종료와 동적 설정 편집도 제공한다. 화면은 한국어·영어다. |
 | 운영 | 인증 없는 상태 리스너(`/livez`, `/readyz`), JSON Lines 운영 로그와 메모리의 최근 로그, 33개 키 자동 재로드·29개 키 편집, 종료 유예 G. |
-| WS·WSS Server | 공유 리스너에서 `/relay`는 Viewer, `/relay/server`는 Server(Mode II) 역할이다. 허용 목록은 역할별이며 수락 때 합집합, 업그레이드 때 역할 목록을 검사한다. |
+| WS·WSS Server | 공유 리스너에서 `/relay/viewer`는 Viewer, `/relay/server`는 Server(Mode II) 역할이다. 허용 목록은 역할별이며 수락 때 합집합, 업그레이드 때 역할 목록을 검사한다. |
 | 프록시 TLS 종료 | 중계 WS·WSS 앞의 역방향 프록시 TLS 종료를 지원한다. `trusted_proxies`와 `X-Forwarded-For`로 클라이언트 주소를 정한다. 내장 TLS는 유지하며 관리 리스너는 이 지원에서 제외한다. [ADR-0007](docs/decisions/ADR-0007-proxy-tls-termination.md) 참조. |
 | 최근 로그 | SCR-006 `/#/logs`에서 메모리의 최근 운영 로그를 필터·검색·자동 갱신하고 JSON Lines로 내려받는다. `recent_logs.max_entries`는 기본 1000, 0~10000이며 재시작이 필요하다. |
-| 계약 이전 | [vnc-relay-config 4.0.0](docs/contracts/config-v4.md)과 [ops-info 2.0.0](docs/contracts/ops-info-v2.md). 설정 v3 파일은 v4 서버 배포 전에 이전한다. 재로드 33개·편집 29개 키를 사용한다. [ADR-0008](docs/decisions/ADR-0008-shared-ws-listener-path-roles.md) 참조. |
+| 계약 이전 | [vnc-relay-config 4.0.0](docs/contracts/config-v4.md)과 [ops-info 2.0.0](docs/contracts/ops-info-v2.md). 설정 v3 파일은 v4 서버 배포 전에 이전한다. 재로드 33개·편집 29개 키를 사용한다. [ADR-0008](docs/decisions/ADR-0008-shared-ws-listener-path-roles.md) 참조. [websocket-relay 2.0.0](docs/contracts/websocket-relay-v2.md)은 Viewer 경로를 `/relay`에서 `/relay/viewer`로 바꿨다(사용자 결정 2026-11-10). 릴리스 `2026.11.2` 이하는 `/relay`를 쓴다. 서버를 바꿀 때 Viewer 접속 URL도 함께 바꾼다. |
 
 위 표는 현재 구현 범위다. 사용자 지시 2026-11-08과 사용자 결정 2026-11-08(Q181~Q188)으로 더한 WS·WSS Server·프록시 TLS 종료·최근 로그의 구현은 커밋 `3df0693`이다. 시험은 커밋 `51bd747`의 두 OS 게이트에서 통과했다([WSS Server·프록시·최근 로그 판정표](docs/how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)).
 

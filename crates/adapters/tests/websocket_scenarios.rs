@@ -330,7 +330,9 @@ impl Running {
 
     async fn connect(&self) -> Client {
         let mut client = Client::transport(self.addr, self.secure).await;
-        let response = client.http(&upgrade("GET", "/relay", "13", true)).await;
+        let response = client
+            .http(&upgrade("GET", "/relay/viewer", "13", true))
+            .await;
         assert!(response.starts_with("HTTP/1.1 101 "), "{response}");
         assert!(!response.to_ascii_lowercase().contains("set-cookie:"));
         client.greeting().await;
@@ -486,7 +488,11 @@ impl Peer {
         let response = client
             .http(&upgrade(
                 "GET",
-                if server { "/relay/server" } else { "/relay" },
+                if server {
+                    "/relay/server"
+                } else {
+                    "/relay/viewer"
+                },
                 "13",
                 true,
             ))
@@ -983,7 +989,7 @@ async fn exact_enabled_paths_select_roles_and_rejections_never_register() {
     for secure in [false, true] {
         let running = Running::start(secure).await;
         for (path, server) in [
-            ("/relay?ignored=1", false),
+            ("/relay/viewer?ignored=1", false),
             ("/relay/server?ignored=1", true),
         ] {
             let mut client = Client::transport(running.addr, secure).await;
@@ -1022,12 +1028,15 @@ async fn exact_enabled_paths_select_roles_and_rejections_never_register() {
                 if disabled_server {
                     "/relay/server"
                 } else {
-                    "/relay"
+                    "/relay/viewer"
                 },
                 "/",
+                "/relay",
                 "/relay/",
+                "/relay/viewer/",
                 "/relay/server/",
-                "/Relay",
+                "/relay/Viewer",
+                "/relay%2Fviewer",
                 "/relay%2Fserver",
                 "/api/v1/sessions",
             ] {
@@ -1586,12 +1595,13 @@ async fn management_paths_and_invalid_upgrades_cannot_register_or_connect_a_targ
         let cases = [
             (upgrade("GET", "/api/v1/session", "13", true), 404),
             (upgrade("GET", "/api/v1/sessions", "13", true), 404),
-            (upgrade("GET", "/relay/", "13", true), 404),
-            (upgrade("GET", "/relay", "13", false), 400),
-            (upgrade("POST", "/relay", "13", true), 405),
-            (upgrade("GET", "/relay", "8", true), 426),
+            (upgrade("GET", "/relay", "13", true), 404),
+            (upgrade("GET", "/relay/viewer/", "13", true), 404),
+            (upgrade("GET", "/relay/viewer", "13", false), 400),
+            (upgrade("POST", "/relay/viewer", "13", true), 405),
+            (upgrade("GET", "/relay/viewer", "8", true), 426),
             (
-                b"GET /relay HTTP/1.1\r\nHost: localhost\r\nBroken Header\r\n\r\n".to_vec(),
+                b"GET /relay/viewer HTTP/1.1\r\nHost: localhost\r\nBroken Header\r\n\r\n".to_vec(),
                 400,
             ),
         ];
@@ -2687,7 +2697,11 @@ fn ip_list(items: &[&str]) -> AllowList {
 fn forwarded_upgrade(server: bool, headers: &str) -> Vec<u8> {
     let head = String::from_utf8(upgrade(
         "GET",
-        if server { "/relay/server" } else { "/relay" },
+        if server {
+            "/relay/server"
+        } else {
+            "/relay/viewer"
+        },
         "13",
         true,
     ))
@@ -3042,7 +3056,7 @@ async fn tls_terminating_proxy_adds_each_client_address_and_pipes_mode_two_both_
                 let client = if head.starts_with("GET /relay/server ") {
                     "203.0.113.8"
                 } else {
-                    assert!(head.starts_with("GET /relay "));
+                    assert!(head.starts_with("GET /relay/viewer "));
                     "198.51.100.7"
                 };
                 let head = head.strip_suffix("\r\n").unwrap().to_owned()
@@ -3060,7 +3074,7 @@ async fn tls_terminating_proxy_adds_each_client_address_and_pipes_mode_two_both_
     let mut viewer = Client::transport(address, true).await;
     assert!(
         viewer
-            .http(&upgrade("GET", "/relay", "13", true))
+            .http(&upgrade("GET", "/relay/viewer", "13", true))
             .await
             .starts_with("HTTP/1.1 101 ")
     );

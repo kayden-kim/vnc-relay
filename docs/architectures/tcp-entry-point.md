@@ -93,7 +93,7 @@ flowchart LR
 | `RejectReason` | `IpNotAllowed`, `RelayConnectionLimit { limit }`, `AdminConnectionLimit { limit }`(상태·관리 리스너), `TlsVersionUnsupported`, `InvalidUpgrade`, `OriginNotAllowed`, `SubprotocolNotSupported` | `reason`(`ip_not_allowed`, `relay_connection_limit`, `admin_connection_limit`, `tls_version_unsupported`, `invalid_upgrade`, `origin_not_allowed`, `subprotocol_not_supported`) | `limit`은 상한 거절 둘에만 있다. `tls_version_unsupported`는 WSS와 관리 리스너, 나머지 세 값은 WS·WSS 업그레이드 거절이다. |
 | `AbortReason` | `HandshakeTimeout`, `TlsUpgradeTimeout`, `PeerEof`, `ConnectionError(ConnectionErrorKind)`, `ServerShutdown` | `reason`(`handshake_timeout`, `tls_upgrade_timeout`, `peer_eof`, `connection_error`, `server_shutdown`) | `tls_upgrade_timeout`은 WS·WSS가 U 안에 TLS 핸드셰이크나 업그레이드 요청을 끝내지 못한 경우다(작업 3.2). |
 | `ConnId` | `u64` 순번 | `conn_id`(`c1`, `c2`, …) | 프로세스 안에서 유일하다. 재시작하면 다시 `c1`부터다(계약 1.4절이 허용한다). |
-| `Role` | `Viewer`, `Server` | `role`(`viewer`, `server`) | TCP는 리스너가 고정한다. WS·WSS는 켜진 정확한 `/relay`·`/relay/server` 경로가 정한다. |
+| `Role` | `Viewer`, `Server` | `role`(`viewer`, `server`) | TCP는 리스너가 고정한다. WS·WSS는 켜진 정확한 `/relay/viewer`·`/relay/server` 경로가 정한다. |
 
 ## 4. 처리 순서
 

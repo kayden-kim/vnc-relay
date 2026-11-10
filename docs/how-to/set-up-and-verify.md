@@ -175,7 +175,7 @@ Linux 전용 `tests/relay_dead_peer_linux.rs`는 사용자·네트워크 네임�
 
    기대 결과: 시험 1건이 통과한다. 시험은 압축 파일의 SHA-256이 고정값과 다르거나, 환경 변수가 없거나, 압축을 풀 수 없으면 실패한다. 조용히 건너뛰지 않는다.
 
-4. 실행 결과를 [WebSocket 중계 계약 5절](../contracts/websocket-relay-v1.md#5-예제와-계약-테스트)의 실행 기록에 남긴다. 대상 커밋, OS, 명령, 결과를 적는다.
+4. 실행 결과를 [WebSocket 중계 계약 5절](../contracts/websocket-relay-v2.md#5-예제와-계약-테스트)의 실행 기록에 남긴다. 대상 커밋, OS, 명령, 결과를 적는다.
 
 ### 3.2 빌드
 
@@ -299,7 +299,7 @@ Linux 전용 `tests/relay_dead_peer_linux.rs`는 사용자·네트워크 네임�
 | RLY-011 | 부분 / 부분 | 통과 | RLY-006과 같은 근거(Mode II, Viewer 먼저 독립 2회) |
 | RLY-025 | 부분 / 통과 | 통과 | Q86·Q99. Ubuntu의 netns·nftables 비부분 시험이 통과했다. Windows에는 응답 없이 끊긴 네트워크를 root 없이 만들 수단이 없다([중계 수명 설계 bf27d30 기록](../architectures/relay-session.md#전체-게이트-실행-기록-커밋-bf27d30)) |
 | RLY-026 | 부분 / 통과 | 통과 | RLY-025와 같은 근거 |
-| WS-025 | 미실행 / 미실행 | 통과 | 무시된 시험의 실행 기록. 커밋 `d4c5678`에서 두 OS 모두 `--include-ignored`로 통과했다([WebSocket 계약 실행 기록](../contracts/websocket-relay-v1.md#계약-테스트-실행-기록)). 실제 VM의 noVNC 확인도 통과했다([호환성 기록 6.3절](../contracts/repeater-compat-record.md#63-조합별-결과)) |
+| WS-025 | 미실행 / 미실행 | 통과 | 무시된 시험의 실행 기록. 커밋 `d4c5678`에서 두 OS 모두 `--include-ignored`로 통과했다([WebSocket 계약 실행 기록](../contracts/websocket-relay-v2.md#계약-테스트-실행-기록)). 실제 VM의 noVNC 확인도 통과했다([호환성 기록 6.3절](../contracts/repeater-compat-record.md#63-조합별-결과)) |
 
 PRD 10절의 AC-01~37을 같은 기준으로 대조했다. 각 AC 행이 링크한 시나리오 ID를 두 보고서와 위 표에 맞춰 보았다. 37개 모두 연결된 시나리오가 두 보고서에서 통과이거나 위 표에서 통과다. AC-12는 OPS-021의 부분 시험과 출처·LICENSE 검토 기록을 합쳐 충족으로 판정했다.
 

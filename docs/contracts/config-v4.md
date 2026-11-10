@@ -22,7 +22,7 @@
 
 용어는 [VNC Relay 용어집](../../GLOSSARY.md)을 따른다. 테스트·검증 기호 L~Dp 등은 [운영 스펙 2절](../specs/operations.md#2-상태와-검증-매개변수)의 기호이며, 이 계약이 각 기호를 키에 연결한다.
 
-관련 문서: [CLI·계정 파일 계약](cli-v1.md)(`[admin]` 테이블 사용, 종료 코드), [관리 API 계약](management-api-v1.md)(`[dashboard]`·`[recent_closed]`·`[management]`의 값 전달), [WebSocket 중계 계약](websocket-relay-v1.md)(`allowed_origins`·WS 키 사용), [Repeater 초기 교환 계약](repeater-handshake-v1.md)(`handshake_secs`·`[mode1]`·`[mode2]` 사용), [운영 정보 계약](ops-info-v2.md)(경고·재로드 사건 이름, `[log]`·`[status]`), [ADR-0001 내장 TLS](../decisions/ADR-0001-built-in-tls.md), [ADR-0002 출발지 IP 허용 목록](../decisions/ADR-0002-source-ip-allowlist.md), [ADR-0004 tokio·rustls](../decisions/ADR-0004-tokio-rustls.md).
+관련 문서: [CLI·계정 파일 계약](cli-v1.md)(`[admin]` 테이블 사용, 종료 코드), [관리 API 계약](management-api-v1.md)(`[dashboard]`·`[recent_closed]`·`[management]`의 값 전달), [WebSocket 중계 계약](websocket-relay-v2.md)(`allowed_origins`·WS 키 사용), [Repeater 초기 교환 계약](repeater-handshake-v1.md)(`handshake_secs`·`[mode1]`·`[mode2]` 사용), [운영 정보 계약](ops-info-v2.md)(경고·재로드 사건 이름, `[log]`·`[status]`), [ADR-0001 내장 TLS](../decisions/ADR-0001-built-in-tls.md), [ADR-0002 출발지 IP 허용 목록](../decisions/ADR-0002-source-ip-allowlist.md), [ADR-0004 tokio·rustls](../decisions/ADR-0004-tokio-rustls.md).
 
 ## 1. 형식과 의미
 
@@ -71,12 +71,12 @@ TCP 리스너는 역할 하나를 고정해 받는다. 두 테이블의 키는 �
 
 #### WS·WSS 리스너: `[relay.ws]`, `[relay.wss]`
 
-한 리스너가 Viewer·Server 역할을 함께 받는다. 경로 `/relay`는 Viewer, `/relay/server`는 Server를 고른다(사용자 결정 2026-11-08(Q181), 사용자 결정 2026-11-08(Q188)). 어느 역할이든 켜면 리스너를 연다. 기본 포트는 없다.
+한 리스너가 Viewer·Server 역할을 함께 받는다. 경로 `/relay/viewer`는 Viewer, `/relay/server`는 Server를 고른다(사용자 결정 2026-11-08(Q181), 사용자 결정 2026-11-08(Q188), Viewer 경로: 사용자 결정 2026-11-10). 경로 규칙은 [WebSocket 계약 1.7절](websocket-relay-v2.md#17-경로와-역할)이 정한다. 어느 역할이든 켜면 리스너를 연다. 기본 포트는 없다.
 
 | 키 | 자료형 | 필수 여부 | 기본값 | 유효 범위·의미 | 재로드 |
 | --- | --- | --- | --- | --- | --- |
 | `listen` | 문자열(주소) | 이 리스너의 역할이 하나라도 켜져 있으면 필수 | 없음 | `"IP:포트"`(1.1절). 포트까지 써야 한다. | 재시작 |
-| `trusted_proxies` | 문자열 배열 | 아님 | `[]` | IP 항목(1.3절)과 일치하는 소켓 상대의 `X-Forwarded-For`만 읽는다. `[]`이면 읽지 않는다. 전달 주소 판정은 [WebSocket 중계 계약 1.8절](websocket-relay-v1.md#18-신뢰-프록시와-x-forwarded-for)을 따른다. | 대상·편집 대상 |
+| `trusted_proxies` | 문자열 배열 | 아님 | `[]` | IP 항목(1.3절)과 일치하는 소켓 상대의 `X-Forwarded-For`만 읽는다. `[]`이면 읽지 않는다. 전달 주소 판정은 [WebSocket 중계 계약 1.8절](websocket-relay-v2.md#18-신뢰-프록시와-x-forwarded-for)을 따른다. | 대상·편집 대상 |
 | `cert_file` | 문자열(경로) | `[relay.wss]`만. WSS 역할이 하나라도 켜져 있으면 필수 | 없음 | PEM 인증서 체인 파일(1.9절). | 대상(경로와 파일 내용)·편집 불가 |
 | `key_file` | 문자열(경로) | `cert_file`과 같음 | 없음 | PEM 개인키 파일(1.9절). | 대상(경로와 파일 내용)·편집 불가 |
 
@@ -90,7 +90,7 @@ TCP 리스너는 역할 하나를 고정해 받는다. 두 테이블의 키는 �
 
 TCP 테이블은 `allowed_origins`·`trusted_proxies`·`cert_file`·`key_file`을 받지 않는다. `[relay.ws]`는 `cert_file`·`key_file`을 받지 않는다. 알 수 없는 키는 `config_unknown_key`다. 꺼진 역할·리스너도 값의 형식·범위를 검사한다. 꺼진 역할과 모든 역할이 꺼진 리스너는 필수 키 검사를 생략한다.
 
-수락 때는 소켓 상대가 `trusted_proxies` 또는 켜진 역할의 `allow` 합집합에 있어야 한다. 업그레이드 때는 선택한 역할의 `allow`를 클라이언트 주소에 적용한다. 신뢰 프록시는 전달 주소를 쓰고, 그 밖은 소켓 상대 IP를 쓴다. 검사 순서와 실패 응답은 [WebSocket 중계 계약](websocket-relay-v1.md)이 정한다. 프록시 TLS 종료의 공식 지원 범위는 중계 WS·WSS뿐이다. 관리 리스너의 내장 HTTPS·루프백 HTTP 제한은 바뀌지 않는다(사용자 결정 2026-11-08(Q182), 사용자 결정 2026-11-08(Q183)).
+수락 때는 소켓 상대가 `trusted_proxies` 또는 켜진 역할의 `allow` 합집합에 있어야 한다. 업그레이드 때는 선택한 역할의 `allow`를 클라이언트 주소에 적용한다. 신뢰 프록시는 전달 주소를 쓰고, 그 밖은 소켓 상대 IP를 쓴다. 검사 순서와 실패 응답은 [WebSocket 중계 계약](websocket-relay-v2.md)이 정한다. 프록시 TLS 종료의 공식 지원 범위는 중계 WS·WSS뿐이다. 관리 리스너의 내장 HTTPS·루프백 HTTP 제한은 바뀌지 않는다(사용자 결정 2026-11-08(Q182), 사용자 결정 2026-11-08(Q183)).
 
 `trusted_proxies`에는 프록시 주소만 넣어야 한다. 클라이언트 범위를 넣으면 안 된다. 신뢰 프록시의 전달 헤더가 없거나 비어 있거나, 검사한 요소가 잘못됐거나, 모든 요소가 신뢰 프록시 주소이면 HTTP 400 `forwarded_for_invalid`로 거절한다. 마지막 경우는 프록시 주소가 역할 `allow`에 있어도 같다. 등록하지 않고 `forwarded_ip`도 기록하지 않는다([WS-036](../specs/websocket.md#7-수용-테스트)). 신뢰 프록시 호스트나 그 범위 안의 클라이언트는 프록시를 거치면 이 조건으로 거절될 수 있다. 같은 출발지에서 그 리스너에 직접 접속해도 신뢰 프록시 연결로 취급한다. 그래서 유효한 전달 헤더가 없으면 거절되고, 있으면 같은 전달 주소 판정과 역할 `allow` 검사를 받는다. 전달 헤더 없이 직접 접속하려면 출발지가 그 리스너의 `trusted_proxies` 밖에 있고 해당 역할의 `allow`에 들어야 한다.
 
@@ -225,7 +225,7 @@ K의 감지 시간은 `tcp_idle_secs + tcp_interval_secs × tcp_probes`다. 기�
 | `port` | 생략하거나 1~65535의 십진수. |
 | 오류 | 위 규칙에 맞지 않으면 `config_origin_invalid`. 값 `null`도 받지 않는다. |
 
-비교 규칙. 이 절이 Origin 값 문법과 정규화의 유일한 기준이며 [WebSocket 중계 계약 1.3절](websocket-relay-v1.md#13-origin-비교)은 이 규칙을 인용한다. 서버는 허용 값과 요청의 `Origin` 헤더 값을 같은 방식으로 정규화한 뒤 비교한다.
+비교 규칙. 이 절이 Origin 값 문법과 정규화의 유일한 기준이며 [WebSocket 중계 계약 1.3절](websocket-relay-v2.md#13-origin-비교)은 이 규칙을 인용한다. 서버는 허용 값과 요청의 `Origin` 헤더 값을 같은 방식으로 정규화한 뒤 비교한다.
 
 1. 스킴과 호스트는 ASCII 소문자로 바꿔 비교한다. 요청 값에 비ASCII 문자가 있으면 일치하지 않는다.
 2. 기본 포트(http 80, https 443)를 생략한 표기는 그 포트를 명시한 표기와 같은 값이다. 그 밖의 포트는 숫자가 같을 때만 일치한다.
@@ -457,7 +457,7 @@ UTF-8이 아닌 파일도 `config_file_unreadable` 진단에 해당한다. 관�
 | --- | --- |
 | 바뀐 점 | WS·WSS의 리스너·역할 표를 나눴다. Server 역할과 `trusted_proxies`, `[recent_logs]`를 더했다. 재로드 대상은 33개, 편집 대상은 29개다(사용자 결정 2026-11-08(Q181), 사용자 결정 2026-11-08(Q184), 사용자 결정 2026-11-08(Q185), 사용자 결정 2026-11-08(Q188)). |
 | v4 서버가 v3 파일을 읽을 때 | `[relay.ws_viewer]`·`[relay.wss_viewer]`가 있으면 `config_unknown_key`로 시작하지 않는다. 재로드 후보이면 `reload_rejected`다. 이 표들이 없는 파일은 다른 v4 규칙을 만족하면 읽는다. |
-| 마이그레이션 | 서버를 시작하기 전에 아래 대응표대로 파일을 옮겨야 한다. 실행 중인 v3 서버가 읽는 파일은 그대로 두고 사본을 준비한 뒤, 서버를 멈추고 v4 파일·서버로 함께 바꾼다. Viewer 경로 `/relay`와 동작은 같다. 로그 `listener` 표기는 ops-info 2.0.0에 맞춰 바뀐다. |
+| 마이그레이션 | 서버를 시작하기 전에 아래 대응표대로 파일을 옮겨야 한다. 실행 중인 v3 서버가 읽는 파일은 그대로 두고 사본을 준비한 뒤, 서버를 멈추고 v4 파일·서버로 함께 바꾼다. Viewer 동작은 같다. Viewer 경로는 새 서버가 구현한 WebSocket 계약을 따른다. `websocket-relay` 2.0.0부터는 `/relay/viewer`다([WebSocket 계약 3.1절](websocket-relay-v2.md#31-1x-클라이언트를-200으로-옮기기)). 로그 `listener` 표기는 ops-info 2.0.0에 맞춰 바뀐다. |
 | 롤백 | Server 역할 표, `trusted_proxies`, `[recent_logs]`를 쓰지 않는 v4 파일은 아래 대응표를 거꾸로 적용하면 v3 서버(릴리스 v2026.11.1)가 읽는다. 새 기능을 쓰고 있으면 그 사용을 멈추고 해당 표·키를 제거한 사본을 준비해야 한다. v4 서버를 멈춘 뒤 v3 파일·서버로 함께 되돌린다. v3는 새 표·키를 남기면 `config_unknown_key`로 시작하지 않는다. |
 | 지원 기간 | 두지 않는다. v4 서버는 v3 전용 표를 읽지 않는다(사용자 결정 2026-11-08(Q188)). |
 
@@ -570,7 +570,7 @@ output = "stdout"
 | Consumer·`crates/domain/src/allow_list.rs` 단위 테스트, 계약 테스트 파일 `accepts_single_cidr_and_range_items_of_both_families`, `rejects_bad_ip_items_with_their_own_codes`, `requires_allow_list_only_for_enabled_entry_points`, `accepts_an_empty_allow_list`, `accepts_items_covering_a_whole_family_with_warnings` | IP 항목: 단일·CIDR·범위 해석, 역순 범위·체계 혼합·표기 오류의 코드, 목록 누락은 오류, 빈 목록은 받음, 전체 허용 항목의 경고 대상 계산(1.3·2절). [OPS-038](../specs/operations.md#7-수용-테스트), [OPS-040](../specs/operations.md#7-수용-테스트)의 설정 검증 부분 | 통과 | [실행 기록](#계약-테스트-실행-기록) |
 | Consumer·`tests/serve.rs` `every_relay_entry_point_accepts_only_its_own_source_ip`, `applies_item_boundaries_and_an_empty_list_at_accept`, `tests/reload.rs` `allow_list_modes_hold_at_start_and_at_reload` | 경계 주소의 허용·거절, 빈 목록의 모든 출발지 거절, 진입점별 목록, 전체 허용 경고 기록(1.3·2절). 첫 시험은 TCP Viewer·TCP Server·WS Viewer·WSS Viewer의 서로 다른 출발지 IP 4개로 16쌍을 검사한다. [OPS-037](../specs/operations.md#7-수용-테스트)(비부분), [OPS-038](../specs/operations.md#7-수용-테스트), [OPS-040](../specs/operations.md#7-수용-테스트) | 부분 | 커밋 `534d4f7`의 두 OS 게이트에서 OPS-037·OPS-038은 통과했다. OPS-040은 IPv6 출발지를 이 환경에서 만들 수 없어 부분이다(461행과 같다). [운영 정보 계약 실행 기록](ops-info-v2.md#계약-테스트-실행-기록) |
 | Consumer·`crates/domain/src/origin.rs` 단위 테스트, 계약 테스트 파일 `checks_origin_values_and_entry_point_specific_keys` | Origin 문법과 정규화·정확 일치(1.4절). 진입점별로 쓸 수 있는 키 | 통과 | [실행 기록](#계약-테스트-실행-기록) |
-| Consumer·`crates/adapters/tests/websocket.rs` `origin_must_equal_the_allowed_value`, `origin_must_equal_the_allowed_value_on_wss`, `allowed_source_with_disallowed_origin_is_refused_with_403`, `allowed_source_with_disallowed_origin_is_refused_with_403_on_wss` | 업그레이드 요청의 Origin 비교. [WS-027](../specs/websocket.md#7-수용-테스트), [WS-015](../specs/websocket.md#7-수용-테스트) | 통과 | 커밋 `534d4f7`의 두 OS 게이트에서 WS-015·WS-027 통과. 시험 내용은 [WebSocket 중계 계약 5절](websocket-relay-v1.md#5-예제와-계약-테스트)에도 있다 |
+| Consumer·`crates/adapters/tests/websocket.rs` `origin_must_equal_the_allowed_value`, `origin_must_equal_the_allowed_value_on_wss`, `allowed_source_with_disallowed_origin_is_refused_with_403`, `allowed_source_with_disallowed_origin_is_refused_with_403_on_wss` | 업그레이드 요청의 Origin 비교. [WS-027](../specs/websocket.md#7-수용-테스트), [WS-015](../specs/websocket.md#7-수용-테스트) | 통과 | 커밋 `534d4f7`의 두 OS 게이트에서 WS-015·WS-027 통과. 시험 내용은 [WebSocket 중계 계약 5절](websocket-relay-v2.md#5-예제와-계약-테스트)에도 있다 |
 | Consumer·`crates/domain/src/target_policy.rs` 단위 테스트, 계약 테스트 파일 `checks_mode1_targets`, `accepts_tls_example_and_resolves_relative_paths` | Mode I 대상 항목 문법과 세부 원인(1.5절), `mode1.enabled = true`일 때 필수 | 통과 | [실행 기록](#계약-테스트-실행-기록) |
 | Consumer·`tests/relay_target_scenarios.rs` `forbidden_ip_and_forbidden_port_never_create_target_connections`·`allowed_hostname_cannot_connect_to_a_forbidden_resolved_ip`, `tests/relay_entry_scenarios.rs` `disabled_modes_reject_before_waiting_registration_or_target_connect` | 최종 IP 판정(1.5절). 꺼진 모드 거절. [RLY-007](../specs/relay.md#7-수용-테스트), [RLY-008](../specs/relay.md#7-수용-테스트), [RLY-022](../specs/relay.md#7-수용-테스트) | 통과 | `ee0314f`의 두 OS 전체 게이트. 금지 IP·포트와 금지된 최종 IP로 대상 연결을 만들지 않는지 확인한다. 꺼진 모드는 대기 등록·대상 연결 전에 거절한다. [작업 5.9 판정표](../how-to/set-up-and-verify.md#41-작업-59-판정표) |
 | Consumer·계약 테스트 파일 `allows_plaintext_management_only_on_loopback`, `warns_for_plaintext_ws_and_non_loopback_status` | 평문 관리 리스너는 루프백만, 관리 TLS 파일 쌍, 평문 WS·비루프백 상태 리스너의 경고 대상 계산(1.6·2.2절) | 통과 | [실행 기록](#계약-테스트-실행-기록) |
@@ -588,7 +588,7 @@ output = "stdout"
 | 주체·테스트 위치 | 확인할 계약 규칙 | 결과 | 실행 기록 |
 | --- | --- | --- | --- |
 | Producer·Consumer / v4 설정 로더·시작 계약 시험 | TCP·리스너·역할 표, 역할 하나 이상일 때 리스너 열기, 켠 역할의 `allow`, WSS 파일 필수, 꺼진 역할 형식·범위 검사, WS·WSS 포트 필수와 중복 검사(1.2·1.6·1.7절). [OPS-065](../specs/operations.md#7-수용-테스트) | 통과 | `tests/serve.rs`의 `shared_websocket_startup_validates_all_role_combinations_and_disabled_values`와 계약 테스트 파일의 `websocket_roles_share_one_listener_and_keep_independent_policies`·`enabled_websocket_roles_require_role_allow_and_shared_listen_and_tls`·`disabled_websocket_roles_and_listeners_validate_supplied_values`·`websocket_listen_conflicts_are_checked_once_per_enabled_listener`. 실행 결과는 아래 실행 기록을 따른다. |
-| Producer·Consumer / v3 마이그레이션·롤백 계약 시험 | v3 전용 표는 `config_unknown_key`. 3.3절 대응표로 옮긴 Viewer의 `/relay` 동작 유지. 새 기능 표·키를 제거하고 역변환한 파일은 v3로 롤백 가능. [OPS-066](../specs/operations.md#7-수용-테스트) | 통과 | `tests/serve.rs`의 `v3_websocket_tables_fail_startup_instead_of_silently_disabling_the_listener`와 계약 테스트 파일의 `rejects_v3_websocket_tables_and_accepts_the_migrated_viewer_settings`·`even_empty_v3_websocket_tables_are_unknown`. 운영 안내의 수동 이관·롤백은 미실행이다. 실행 결과는 아래 실행 기록을 따른다. 후속: Windows 수동 이관은 2026-11-09 실제 배치에서 관리 재로그인을 빼고 실행했다([수동 운영 안내 4절](../how-to/operate-relay.md#4-검증)). 롤백과 Ubuntu 이관은 미실행이다. |
+| Producer·Consumer / v3 마이그레이션·롤백 계약 시험 | v3 전용 표는 `config_unknown_key`. 3.3절 대응표로 옮긴 Viewer의 동작 유지. Viewer 경로는 [WebSocket 계약 1.7절](websocket-relay-v2.md#17-경로와-역할)을 따른다. 새 기능 표·키를 제거하고 역변환한 파일은 v3로 롤백 가능. [OPS-066](../specs/operations.md#7-수용-테스트) | 통과 | `tests/serve.rs`의 `v3_websocket_tables_fail_startup_instead_of_silently_disabling_the_listener`와 계약 테스트 파일의 `rejects_v3_websocket_tables_and_accepts_the_migrated_viewer_settings`·`even_empty_v3_websocket_tables_are_unknown`. 운영 안내의 수동 이관·롤백은 미실행이다. 실행 결과는 아래 실행 기록을 따른다. 후속: Windows 수동 이관은 2026-11-09 실제 배치에서 관리 재로그인을 빼고 실행했다([수동 운영 안내 4절](../how-to/operate-relay.md#4-검증)). 롤백과 Ubuntu 이관은 미실행이다. |
 | Producer·Consumer / v4 재로드·편집 계약 시험 | 33개 재로드·29개 편집 대상, TLS 경로 4개 편집 불가, `trusted_proxies`와 역할 키의 적용 시점, 기존 연결 유지, 전체 범위 경고 `trust_all_proxies`(이름·필드: 사용자 결정 2026-11-08(Q191)). [OPS-067](../specs/operations.md#7-수용-테스트) | 통과 | `tests/reload.rs`의 `trusted_proxies_reload_and_edit_apply_to_new_checks_and_keep_open_connections`와 계약 테스트 파일의 `warns_once_per_listener_and_whole_family_trusted_proxy_item`·`warns_for_disabled_proxy_lists_but_does_not_combine_partial_family_items`·`trusted_proxies_use_the_ip_item_grammar_even_on_disabled_listeners`. 실행 결과는 아래 실행 기록을 따른다. |
 | Consumer / 최근 로그 계약 시험 | 기본 1000, 0·10000 경계와 범위 밖 거절, 0이면 보관 안 함, 재시작 필요·목록 초기화, 기록 순서와 오래된 항목 제거, 출력 경로·쓰기 성공과 독립. [OPS-068](../specs/operations.md#7-수용-테스트) | 통과 | 계약 테스트 파일의 `recent_logs_defaults_and_integer_bounds_are_enforced`와 `tests/serve.rs`의 `real_relay_logs_reach_management_and_restart_discards_previous_events`. 실행 결과는 아래 실행 기록을 따른다. |
 | Consumer / 설정 경고·사건 계약 시험 | ops-info 2.0.0의 `ws`·`wss` 리스너 값, 역할 확정 전 `role` 없음, `allow_all_source.role`, `plaintext_ws_enabled.listener = ws`. [OPS-069](../specs/operations.md#7-수용-테스트) | 통과 | `tests/serve.rs`의 `server_only_websocket_roles_open_each_shared_listener`와 `crates/adapters/tests/ops_info_contract.rs`의 `shared_listener_logs_resolve_role_only_after_the_path`·`writes_each_config_warning_with_its_contract_fields`. 실행 결과는 아래 실행 기록을 따른다. |

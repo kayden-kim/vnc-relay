@@ -1587,7 +1587,7 @@ fn operations_log_and_status_endpoints_never_expose_secrets_or_raw_identifiers()
             panic!("write timeout: {e:?}");
         }
         let ws_req = format!(
-            "GET /relay HTTP/1.1\r\n\
+            "GET /relay/viewer HTTP/1.1\r\n\
              Host: 127.0.0.1\r\n\
              Upgrade: websocket\r\n\
              Connection: Upgrade\r\n\

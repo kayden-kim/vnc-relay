@@ -14,7 +14,7 @@
 | 코드 위치 | `crates/domain/src/{matching,session,recent_closed,target_policy}.rs`, `crates/app/src/{ports,events,relay}.rs`와 `relay/{handshake,target,matching,session}.rs`, `crates/adapters/src/{target,crypto,ops_log}.rs`와 `net.rs`의 `TcpRelayStream`, `crates/adapters/tests/{tcp_target,ops_info_contract}.rs` |
 | 코드 지도 | [코드 지도](code-map.md#2-코드-위치와-구성요소) |
 | 관련 스펙 | [중계](../specs/relay.md): RLY-003·006~021·023·025~027. [운영](../specs/operations.md): OPS-005·007~009·023·039·042~043. [관리](../specs/management.md#2-조회-대상과-상태): MGT-005 일부 |
-| 관련 계약 | [Repeater 초기 교환](../contracts/repeater-handshake-v1.md), [설정 1.2·1.5절](../contracts/config-v4.md#12-키-표), [운영 정보 1.5~1.9절](../contracts/ops-info-v2.md#15-사건-목록), [관리 API 1.6~1.10절](../contracts/management-api-v1.md#16-서버-요약-get-apiv1summary), [WebSocket 1.4~1.6절](../contracts/websocket-relay-v1.md#14-데이터-메시지와-제어-프레임) |
+| 관련 계약 | [Repeater 초기 교환](../contracts/repeater-handshake-v1.md), [설정 1.2·1.5절](../contracts/config-v4.md#12-키-표), [운영 정보 1.5~1.9절](../contracts/ops-info-v2.md#15-사건-목록), [관리 API 1.6~1.10절](../contracts/management-api-v1.md#16-서버-요약-get-apiv1summary), [WebSocket 1.4~1.6절](../contracts/websocket-relay-v2.md#14-데이터-메시지와-제어-프레임) |
 | 관련 ADR | [ADR-0003 단일 인스턴스·메모리 상태](../decisions/ADR-0003-single-instance-memory-state.md), [ADR-0004 tokio·rustls](../decisions/ADR-0004-tokio-rustls.md) |
 
 후속: R1은 `session::Transport` 하나로 Viewer와 Server/대상 양쪽의 `tcp`·`ws`·`wss`를 나타낸다. `run_pair`는 Viewer 스트림과 Mode II Server 스트림의 전송을 각각 읽는다. Mode I의 대상 전송은 `Tcp`로 고정한다. `Session::new`는 viewer_transport 다음에 target_transport를 받는다. 활성 스냅샷·종료 요약·최근 종료 목록에 두 값을 보존하고 관리 조회에 `target_transport`를 넘긴다. `SessionStarted.server_transport`는 Mode II에만 값이 있다.

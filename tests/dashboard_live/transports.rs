@@ -90,7 +90,11 @@ impl Endpoint {
         } else {
             Wire::Tcp(socket)
         };
-        let path = if viewer { "/relay" } else { "/relay/server" };
+        let path = if viewer {
+            "/relay/viewer"
+        } else {
+            "/relay/server"
+        };
         let mut request = must(format!("ws://localhost:{port}{path}").into_client_request());
         if forwarded {
             request.headers_mut().insert(

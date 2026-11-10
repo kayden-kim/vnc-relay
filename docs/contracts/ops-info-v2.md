@@ -25,7 +25,7 @@ VNC Relay가 운영자에게 내보내는 두 가지 정보의 교환 형식을 
 | 호환성 범위 | 이 계약의 2.x 형식을 따르는 `vnc-relay` 구현과 소비자. 2.0.0의 구현은 커밋 `3df0693`이다. 계약 테스트는 커밋 `51bd747`의 두 OS 게이트에서 통과했다. 1.3.0까지의 과거 실행 결과는 5절에 보존한다. 현재 지원 판정은 Producer 시험과 [WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)를 따른다. 저장소에 없는 외부 소비 도구의 시험은 지원 판정 대상이 아니다(사용자 결정 2026-11-07(Q151)). |
 | 관련 테스트 | [운영 스펙 7절](../specs/operations.md#7-수용-테스트)의 OPS-011·OPS-012·OPS-013·OPS-032를 중심으로 5절 표에 연결한다. 계약 테스트는 `crates/adapters/tests/ops_info_contract.rs`와 `tests/serve.rs`에 있다. |
 
-관련 문서: [설정 계약](config-v4.md)(`[log]`·`[status]` 키, 경고 코드, 오류 코드, 재로드 결과 코드), [관리 API 계약](management-api-v1.md)(`session_id`·`close_cause`·바이트 필드 이름), [CLI·계정 파일 계약](cli-v1.md)(시작 실패 오류 코드), [WebSocket 중계 계약](websocket-relay-v1.md)(close 코드와 종료 원인 대응), [Repeater 초기 교환 계약](repeater-handshake-v1.md)(초기 교환 오류 코드), [ADR-0002 출발지 IP 허용 목록](../decisions/ADR-0002-source-ip-allowlist.md), [ADR-0003 단일 인스턴스·메모리 상태](../decisions/ADR-0003-single-instance-memory-state.md).
+관련 문서: [설정 계약](config-v4.md)(`[log]`·`[status]` 키, 경고 코드, 오류 코드, 재로드 결과 코드), [관리 API 계약](management-api-v1.md)(`session_id`·`close_cause`·바이트 필드 이름), [CLI·계정 파일 계약](cli-v1.md)(시작 실패 오류 코드), [WebSocket 중계 계약](websocket-relay-v2.md)(close 코드와 종료 원인 대응), [Repeater 초기 교환 계약](repeater-handshake-v1.md)(초기 교환 오류 코드), [ADR-0002 출발지 IP 허용 목록](../decisions/ADR-0002-source-ip-allowlist.md), [ADR-0003 단일 인스턴스·메모리 상태](../decisions/ADR-0003-single-instance-memory-state.md).
 
 ## 1. 형식과 의미
 
@@ -272,7 +272,7 @@ WS·WSS의 수락·TLS·경로 판정 전 업그레이드 거절·중단에는 `
 
 #### `session_closed`의 `close_cause`와 `level`
 
-`close_cause`의 값 이름과 의미는 [관리 API 계약 1.10절](management-api-v1.md#110-최근-종료-목록-get-apiv1closed-sessions)이 정한다([관리 스펙 2.3절](../specs/management.md#23-최근-종료-목록)의 종료 원인과 같은 뜻이다). 이 표는 로그에서 값마다 쓰는 `level`·`side`와 추가 필드만 정한다. [WebSocket 계약 2.2절](websocket-relay-v1.md#22-close-코드와-스펙-오류의-대응)이 close 코드를 정한다. `internal_error` 경로에서는 panic 되감기가 스트림을 버리므로 WebSocket Close를 보내지 못한다([WebSocket 계약 2.2절 끝](websocket-relay-v1.md#22-close-코드와-스펙-오류의-대응), 이 문서의 판단, 사용자 결정 없음).
+`close_cause`의 값 이름과 의미는 [관리 API 계약 1.10절](management-api-v1.md#110-최근-종료-목록-get-apiv1closed-sessions)이 정한다([관리 스펙 2.3절](../specs/management.md#23-최근-종료-목록)의 종료 원인과 같은 뜻이다). 이 표는 로그에서 값마다 쓰는 `level`·`side`와 추가 필드만 정한다. [WebSocket 계약 2.2절](websocket-relay-v2.md#22-close-코드와-스펙-오류의-대응)이 close 코드를 정한다. `internal_error` 경로에서는 panic 되감기가 스트림을 버리므로 WebSocket Close를 보내지 못한다([WebSocket 계약 2.2절 끝](websocket-relay-v2.md#22-close-코드와-스펙-오류의-대응), 이 문서의 판단, 사용자 결정 없음).
 
 | `close_cause` | `level` | `side` | 추가 규칙 | 근거 |
 | --- | --- | --- | --- | --- |
@@ -324,7 +324,7 @@ WS·WSS의 수락·TLS·경로 판정 전 업그레이드 거절·중단에는 `
 ### 1.10 상대 주소 표기
 
 - `peer_ip`는 실제 소켓 상대 IP다. 전달 헤더로 바꾸지 않는다. `viewer_peer_ip`·`server_peer_ip`도 각 쪽의 소켓 IP다.
-- `forwarded_ip`는 WS·WSS 리스너의 신뢰 프록시에서 도출한 전달 주소다. 설정 범위는 [설정 계약](config-v4.md#12-키-표), 도출 규칙은 [WebSocket 계약 1.8절](websocket-relay-v1.md#18-신뢰-프록시와-x-forwarded-for)을 따른다(사용자 결정 2026-11-08(Q182·Q187·Q188)). 신뢰하지 않는 소켓 상대가 보낸 헤더는 무시하며 `forwarded_ip`를 쓰지 않는다.
+- `forwarded_ip`는 WS·WSS 리스너의 신뢰 프록시에서 도출한 전달 주소다. 설정 범위는 [설정 계약](config-v4.md#12-키-표), 도출 규칙은 [WebSocket 계약 1.8절](websocket-relay-v2.md#18-신뢰-프록시와-x-forwarded-for)을 따른다(사용자 결정 2026-11-08(Q182·Q187·Q188)). 신뢰하지 않는 소켓 상대가 보낸 헤더는 무시하며 `forwarded_ip`를 쓰지 않는다.
 - `trusted_proxies`에는 프록시 주소만 넣어야 한다. 클라이언트 주소 범위를 넣으면 안 된다. 전달 체인의 모든 요소가 신뢰 프록시이면 클라이언트 주소를 프록시 주소로 대신하지 않고 거절한다(WS-036). 프록시 호스트나 이 목록 범위 안에서 시작한 요청도 프록시를 거치면 거절된다. 같은 출발지의 직접 접속도 신뢰 프록시 연결로 취급한다. 그래서 유효한 전달 헤더가 없으면 거절되고, 있으면 같은 전달 주소 판정과 역할 허용 목록 검사를 받는다. 전달 헤더 없이 직접 접속하려면 출발지가 그 리스너의 `trusted_proxies` 밖에 있고 해당 역할의 허용 목록에 들어야 한다.
 - `viewer_peer_ip`·`server_peer_ip`를 가진 다른 사건에도 해당 쪽의 전달 주소를 도출했으면 `viewer_forwarded_ip`·`server_forwarded_ip`를 함께 써야 한다. 전달 주소가 없으면 선택 필드를 생략하며 소켓 주소를 복사하지 않는다.
 - 관리 사건은 계속 전달 헤더를 무시한다(MGT-015). 관리자 로그인·종료·설정 편집의 `peer_ip`는 소켓 IP이며 `forwarded_ip`를 쓰지 않는다(사용자 결정 2026-11-08(Q183)).

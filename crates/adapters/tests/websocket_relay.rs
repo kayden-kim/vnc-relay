@@ -414,7 +414,7 @@ impl Client {
         };
         let mut client = Self { wire, secure };
         bounded(client.wire.write_all(
-            b"GET /relay HTTP/1.1\r\nHost: localhost\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n",
+            b"GET /relay/viewer HTTP/1.1\r\nHost: localhost\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n",
         )).await.unwrap_or_else(|error| panic!(concat!("upgrade request sent", ": {:?}"), error));
         let mut head = Vec::new();
         while !head.ends_with(b"\r\n\r\n") {

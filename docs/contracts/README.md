@@ -7,11 +7,11 @@
 | [설정 파일 v4(vnc-relay-config 4.0.0)](config-v4.md) | Active(공유 리스너·역할 표: 사용자 결정 2026-11-08(Q188), 재로드 33개·편집 29개: Q184·Q188) | 운영자·관리 API 편집 → `vnc-relay serve` | 없음(Markdown 표) | [운영](../specs/operations.md), [WS·WSS](../specs/websocket.md), [관리](../specs/management.md), [화면](../specs/dashboard.md), [중계](../specs/relay.md) |
 | [CLI와 관리자 계정 파일 v1](cli-v1.md) | Active | `vnc-relay` 실행파일 → 운영자·스크립트, `vnc-relay serve`(계정 파일) | 없음(Markdown 표) | [운영](../specs/operations.md) |
 | [관리 API v1](management-api-v1.md) | Active | 관리 리스너(서버) → 내장 대시보드, 외부 HTTP 클라이언트 | 없음(Markdown 표) | [관리](../specs/management.md), [화면](../specs/dashboard.md) |
-| [WebSocket 중계 v1](websocket-relay-v1.md) | Active | 외부 WebSocket 클라이언트 ↔ `vnc-relay` WS·WSS 리스너 | 없음(Markdown 표) | [WS·WSS](../specs/websocket.md) |
+| [WebSocket 중계 v2(websocket-relay 2.0.0)](websocket-relay-v2.md) | Active(Viewer 경로 변경: 사용자 결정 2026-11-10) | 외부 WebSocket 클라이언트 ↔ `vnc-relay` WS·WSS 리스너 | 없음(Markdown 표) | [WS·WSS](../specs/websocket.md) |
 | [Repeater 초기 교환 v1](repeater-handshake-v1.md) | Active | UltraVNC Viewer·Server, 외부 WebSocket 클라이언트 → `vnc-relay` 진입점(Viewer 쪽 시작 바이트는 반대 방향) | 없음(Markdown 표) | [중계](../specs/relay.md), [WS·WSS](../specs/websocket.md) |
 | [운영 로그와 상태 엔드포인트 v2(ops-info 2.0.0)](ops-info-v2.md) | Active(리스너·역할 의미 변경: 사용자 결정 2026-11-08(Q188)) | `vnc-relay serve` → 운영자의 로그 수집·상태 확인 도구, 관리 API·내장 대시보드 | 없음(Markdown 표) | [운영](../specs/operations.md), [관리](../specs/management.md), [화면](../specs/dashboard.md) |
 
-설정 v4와 ops-info v2는 호환성을 깨는 변경이다. 이전·롤백은 각 계약 3절을 따른다. 사용자 지시 2026-11-08로 더한 WS·WSS Server·프록시 TLS 종료·최근 로그의 구현은 커밋 `3df0693`이다. 시험은 커밋 `51bd747`의 두 OS 게이트에서 통과했다([WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)). `trust_all_proxies`, 최근 로그 API의 질의·응답 필드 이름과 세션 필터 URL은 사용자 결정 2026-11-08(Q191)으로 채택했다. 이름과 필드의 기준은 관련 계약을 따른다.
+설정 v4, ops-info v2, WebSocket 중계 v2는 호환성을 깨는 변경이다. 이전·롤백은 각 계약 3절을 따른다. 사용자 지시 2026-11-08로 더한 WS·WSS Server·프록시 TLS 종료·최근 로그의 구현은 커밋 `3df0693`이다. 시험은 커밋 `51bd747`의 두 OS 게이트에서 통과했다([WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)). `trust_all_proxies`, 최근 로그 API의 질의·응답 필드 이름과 세션 필터 URL은 사용자 결정 2026-11-08(Q191)으로 채택했다. 이름과 필드의 기준은 관련 계약을 따른다.
 
 ## 호환성 검증 기록
 

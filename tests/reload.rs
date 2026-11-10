@@ -712,9 +712,9 @@ fn tls_closed_within(stream: &mut Tls, wait: Duration) -> bool {
     }
 }
 
-/// A WebSocket upgrade to `/relay` with the RFC 6455 sample key.
+/// A WebSocket upgrade to `/relay/viewer` with the RFC 6455 sample key.
 fn upgrade_request() -> Vec<u8> {
-    b"GET /relay HTTP/1.1\r\nHost: localhost\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n"
+    b"GET /relay/viewer HTTP/1.1\r\nHost: localhost\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n"
         .to_vec()
 }
 
@@ -2911,7 +2911,7 @@ fn trusted_proxies_reload_and_edit_apply_to_new_checks_and_keep_open_connections
     let socket = connect_from([127, 0, 0, 1], ports.ws);
     let (status, ws) = ws_upgrade_with_headers(
         Box::new(socket),
-        "/relay",
+        "/relay/viewer",
         &[("X-Forwarded-For", "2001:db8::7")],
     );
     assert_eq!(status, 101);
@@ -2983,7 +2983,7 @@ fn trusted_proxies_reload_and_edit_apply_to_new_checks_and_keep_open_connections
     let socket = connect_from([127, 0, 0, 1], ports.ws);
     let (status, new_ws) = ws_upgrade_with_headers(
         Box::new(socket),
-        "/relay",
+        "/relay/viewer",
         &[("X-Forwarded-For", "198.51.100.7")],
     );
     assert_eq!(status, 101);
@@ -3020,7 +3020,7 @@ fn trusted_proxies_reload_and_edit_apply_to_new_checks_and_keep_open_connections
     let socket = connect_from([127, 0, 0, 1], ports.ws);
     let (status, refused_ws) = ws_upgrade_with_headers(
         Box::new(socket),
-        "/relay",
+        "/relay/viewer",
         &[("X-Forwarded-For", "198.51.100.7")],
     );
     assert_eq!(status, 403);

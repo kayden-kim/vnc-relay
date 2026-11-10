@@ -8,7 +8,7 @@ Windows 11 x64와 Ubuntu 24.04 LTS x64에서 release 실행파일을 만들고 �
 | 검증 상태 | Draft — 과거 두 OS 수동 기록은 4절에 보존한다. v4 이관(3.2.2절)은 2026-11-09 Windows 실제 배치에서 관리 재로그인을 빼고 실행했다(4절). v4 롤백·Ubuntu 이관과 공유 WSS 역할·프록시 TLS 종료·최근 로그의 새 절차는 미실행이다. 이 기능들의 구현과 자동 시험은 커밋 `51bd747`의 두 OS 게이트에서 통과했다([WSS Server·프록시·최근 로그 판정표](set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)). 자동 시험만으로 안내 전체를 검증했다고 표시하지 않는다. |
 | 검증 환경·버전 | Windows 11 x64의 PowerShell, Ubuntu 24.04 LTS x64의 bash. Rust 버전은 `rust-toolchain.toml`을 따른다. 실제 OS·Rust·실행파일 버전은 실행 기록에 적는다. |
 | 최종 검증일 | 없음(Draft 2026-11-04) |
-| 관련 기준 문서 | [운영 스펙](../specs/operations.md), [설정 계약 v4](../contracts/config-v4.md), [CLI 계약](../contracts/cli-v1.md), [운영 정보 계약 v2](../contracts/ops-info-v2.md), [WebSocket 계약](../contracts/websocket-relay-v1.md), [ADR-0001](../decisions/ADR-0001-built-in-tls.md) |
+| 관련 기준 문서 | [운영 스펙](../specs/operations.md), [설정 계약 v4](../contracts/config-v4.md), [CLI 계약](../contracts/cli-v1.md), [운영 정보 계약 v2](../contracts/ops-info-v2.md), [WebSocket 계약](../contracts/websocket-relay-v2.md), [ADR-0001](../decisions/ADR-0001-built-in-tls.md) |
 
 ## 1. 대상과 영향
 
@@ -150,7 +150,7 @@ max_entries = 1000
 output = "relay.log"
 ```
 
-두 역할은 같은 WSS 소켓을 쓴다. Viewer는 `wss://HOST:8443/relay`, Server는 `wss://HOST:8443/relay/server`로 접속한다. `HOST`는 인증서에 맞는 실제 호스트명이다. 경로 뒤 `/`는 붙이지 않는다. Server 역할은 Mode II만 받으며 TCP Server와 같은 `ID:` 초기 교환을 쓴다. Server에는 greeting을 보내지 않는다(사용자 결정 2026-11-08(Q181·Q188)). 위 Server의 빈 Origin 목록은 `Origin` 없는 클라이언트만 허용한다.
+두 역할은 같은 WSS 소켓을 쓴다. Viewer는 `wss://HOST:8443/relay/viewer`, Server는 `wss://HOST:8443/relay/server`로 접속한다. `HOST`는 인증서에 맞는 실제 호스트명이다. 경로 뒤 `/`는 붙이지 않는다. 릴리스 `2026.11.2` 이하의 Viewer 경로는 `/relay`다(3.2.3절). Server 역할은 Mode II만 받으며 TCP Server와 같은 `ID:` 초기 교환을 쓴다. Server에는 greeting을 보내지 않는다(사용자 결정 2026-11-08(Q181·Q188)). 위 Server의 빈 Origin 목록은 `Origin` 없는 클라이언트만 허용한다.
 
 #### 3.2.2 v3 파일을 v4로 옮기기
 
@@ -167,7 +167,7 @@ v4 서버는 v3의 WS·WSS 테이블을 읽지 않는다. 호환 지원 기간�
    | `[relay.wss_viewer]`의 `enabled`·`allow`·`allowed_origins` | `[relay.wss.viewer]`의 같은 키 |
    | `[relay.wss_viewer]`의 `listen`·`cert_file`·`key_file` | `[relay.wss]`의 같은 키 |
 
-   이전 테이블은 남기지 않는다. TOML 파일에 버전 키를 추가하지 않는다. 기존 Viewer 동작과 `/relay` 경로만 유지하려면 Server 역할·`trusted_proxies`·`[recent_logs]`를 추가할 필요는 없다. 새 역할은 기본 비활성이다.
+   이전 테이블은 남기지 않는다. TOML 파일에 버전 키를 추가하지 않는다. 기존 Viewer 동작만 유지하려면 Server 역할·`trusted_proxies`·`[recent_logs]`를 추가할 필요는 없다. 새 역할은 기본 비활성이다. 새 실행파일이 릴리스 `2026.11.2`보다 새 버전이면 Viewer 경로도 바뀐다. 이때는 3.2.3절을 함께 따른다.
 
 4. 이관한 파일의 별도 검증 사본 `relay-v4-check.toml`을 같은 디렉터리에 만든다. 켜진 모든 중계 리스너와 관리·상태 리스너의 `listen`을 서로 다른 미사용 루프백 포트로 바꾸고 `log.output = "stdout"`으로 바꾼다. 운영 파일과 계정·TLS 파일은 수정하지 않는다.
 5. 운영 파일과 같은 디렉터리에서 새 실행파일의 실제 경로로 검증 사본을 시작한다. Windows는 `& 'C:\배포\v4\vnc-relay.exe' serve --config .\relay-v4-check.toml`, Ubuntu는 `/opt/vnc-relay-v4/vnc-relay serve --config ./relay-v4-check.toml`이다. 실행파일 경로는 새 묶음의 실제 경로로 바꾼다. 구버전 실행파일을 덮어쓰지 않는다.
@@ -176,11 +176,27 @@ v4 서버는 v3의 WS·WSS 테이블을 읽지 않는다. 호환 지원 기간�
 
 6. 중단 시간에 3.8절로 구버전을 정상 종료한다. 이 단계는 모든 연결과 관리 세션을 끝낸다. 복구본으로 이전 실행파일과 파일을 함께 복원할 수 있는지 먼저 확인한다.
 7. 새 실행파일과 검증된 `relay-v4.toml`을 운영 위치에 설치한다. 운영용 `listen`·로그 경로를 유지한 파일을 `relay.toml`로 쓴다. 대체 포트의 검증 사본을 설치하지 않는다.
-8. 3.3절로 시작·상태·관리 재로그인을 확인한다. 기존 Viewer 경로 `/relay`의 실제 중계와 3.5절 재로드도 확인한다. 새 Server 역할은 `/relay/server`의 Mode II 양방향 중계를 따로 확인한다.
+8. 3.3절로 시작·상태·관리 재로그인을 확인한다. 기존 Viewer의 실제 중계와 3.5절 재로드도 확인한다. Viewer 경로는 새 실행파일의 경로를 쓴다(3.2.3절). 새 Server 역할은 `/relay/server`의 Mode II 양방향 중계를 따로 확인한다.
 
 로그 소비자도 같은 배포에서 바꾼다. `server_starting.log_contract`는 `ops-info/2.0.0`이다. 예전 `listener=ws_viewer`는 `listener=ws`와 `role=viewer`, `wss_viewer`는 `wss`와 `role=viewer`로 대응한다. `ws`·`wss`의 `connection_accepted`에는 아직 `role`이 없다. 경로로 역할을 정한 뒤에만 `role`이 있다. 리스너 값은 `tcp_viewer`·`tcp_server`·`ws`·`wss`·`management`·`status`다. 자세한 범위는 [운영 정보 계약 v2](../contracts/ops-info-v2.md)를 따른다.
 
 롤백은 6절의 v4→v3 복구 절차를 따른다. 검증 사본은 증거를 보관한 뒤 지운다. 계정·TLS 비밀을 일반 검증 로그에 복사하지 않는다.
+
+#### 3.2.3 Viewer 경로를 `/relay/viewer`로 옮기기
+
+릴리스 `2026.11.2`보다 새 실행파일은 `websocket-relay` 2.0.0을 구현한다. 이 실행파일은 WS·WSS Viewer 경로로 `/relay/viewer`만 받는다(사용자 결정 2026-11-10). 이전 경로 `/relay`는 404로 거절한다. 두 경로를 함께 받는 기간은 없다([WebSocket 계약 3.1절](../contracts/websocket-relay-v2.md#31-1x-클라이언트를-200으로-옮기기)). 설정 파일은 바꾸지 않는다. TCP 진입점과 Server 경로 `/relay/server`는 그대로다.
+
+1. 이 서버의 WS·WSS Viewer 경로로 접속하는 클라이언트를 모두 찾는다. 예: noVNC에 접속 URL을 넘기는 서비스 설정, 바이트 중계 스크립트. 클라이언트마다 URL을 바꿀 위치와 되돌릴 방법을 기록한다.
+2. 3.2.2절 1단계와 같이 현재 실행파일·`relay.toml`·계정 파일·TLS 파일을 복구 위치에 복사한다.
+3. 중단 시간을 정한다. 서버를 바꾼 뒤 URL을 바꾸기 전까지 Viewer 접속은 404로 실패한다. URL을 먼저 바꾸면 이전 서버에서 같은 404가 난다.
+4. 3.8절로 이전 서버를 정상 종료한다. 새 실행파일을 설치한다. 설정 파일은 그대로 쓴다.
+5. 1단계의 모든 클라이언트에서 접속 URL의 경로를 `/relay/viewer`로 바꾼다. 예: `wss://HOST:8443/relay`는 `wss://HOST:8443/relay/viewer`가 된다. 호스트·포트·쿼리는 바꾸지 않는다.
+6. 3.3절로 시작과 상태를 확인한다. 바꾼 URL로 Viewer의 실제 중계를 확인한다.
+7. 운영 로그의 `connection_rejected`(`stage=upgrade`, `reason=invalid_upgrade`)를 확인한다. 로그에는 요청 경로가 없다. 이 거절이 이어지면 이전 URL을 쓰는 클라이언트가 남았는지 클라이언트 설정에서 확인한다.
+
+롤백은 서버와 URL을 함께 되돌린다. 3.8절로 새 서버를 멈추고 2단계의 복구본으로 이전 실행파일을 설치한다. 1단계의 모든 클라이언트 URL을 `/relay`로 되돌린 뒤 3.3절로 확인한다. 설정 파일은 그대로 쓴다.
+
+3.9절의 Nginx 예시는 `location /relay` 접두사로 두 경로를 모두 전달한다. 이 예시를 쓰면 프록시 설정은 바꾸지 않는다.
 
 ### 3.3 시작과 상태 확인
 
@@ -434,7 +450,7 @@ Windows 로그오프·시스템 종료는 강제 종료다. 대화형 콘솔 프
 
    `trusted_proxies`는 서버가 소켓에서 실제로 보는 프록시 주소여야 한다. 이 예시는 Nginx의 접속을 `127.0.0.1`로 고정한다. 별도 호스트라면 해당 프록시의 실제 주소만 넣고 리스너 주소·방화벽도 함께 바꾼다.
 
-3. Nginx의 `http` 블록 안에 다음 `map`과 `server`를 둔다. `proxy_pass`에는 URI를 붙이지 않는다. 그래야 `/relay`와 `/relay/server`를 그대로 전달한다.
+3. Nginx의 `http` 블록 안에 다음 `map`과 `server`를 둔다. `proxy_pass`에는 URI를 붙이지 않는다. 그래야 `/relay/viewer`와 `/relay/server`를 그대로 전달한다.
 
    ```nginx
    map $http_upgrade $connection_upgrade {
@@ -465,11 +481,11 @@ Windows 로그오프·시스템 종료는 강제 종료다. 대화형 콘솔 프
    120초는 이 예시의 Kw ping 30초와 pong 제한 30초보다 길다. Kw를 바꾸면 프록시 읽기·쓰기 제한도 그 주기·응답 대기보다 길게 정한다. 경로 일치 여부와 꺼진 역할의 404 판정은 VNC Relay가 맡는다.
 
 4. Nginx 호스트에서 `nginx -t`로 설정을 검사한다. 성공한 뒤 `nginx -s reload`로 적용한다. 기존 배치의 실행 권한과 설정 경로가 다르면 그 배치 명령을 쓴다.
-5. 3.8절로 VNC Relay를 재시작한 뒤 외부 Viewer의 `wss://relay.example.test/relay`와 Server의 `wss://relay.example.test/relay/server`로 Mode II 중계를 확인한다. 클라이언트는 인증서·호스트 검증을 생략하지 않는다.
+5. 3.8절로 VNC Relay를 재시작한 뒤 외부 Viewer의 `wss://relay.example.test/relay/viewer`와 Server의 `wss://relay.example.test/relay/server`로 Mode II 중계를 확인한다. 클라이언트는 인증서·호스트 검증을 생략하지 않는다.
 
 `trusted_proxies`에는 프록시 주소만 넣어야 한다. 클라이언트 대역이나 `0.0.0.0/0`·`::/0` 같은 전체 범위를 넣어서는 안 된다. 그렇지 않으면 비신뢰 상대가 주소를 위조하거나 정상 클라이언트 체인이 거절될 수 있다. 전체 신뢰 경고 이름 `trust_all_proxies`과 필드 `listener`·`item`·`phase`는 사용자 결정 2026-11-08(Q191)으로 채택했다. 시작·재로드·설정 편집 때의 경고는 OPS-067 자동 시험이 두 OS에서 확인했다. 경고는 설정 실수를 알리는 보조 수단이므로 경고에 의존해 안전성을 판단하지 않는다.
 
-신뢰 프록시에서 온 `X-Forwarded-For`는 오른쪽부터 검사한다. 처음 만나는 `trusted_proxies` 밖 주소를 클라이언트 주소로 쓰며 그 왼쪽의 위조 요소는 읽지 않는다. Nginx의 `$proxy_add_x_forwarded_for`는 실제 접속 주소를 오른쪽에 덧붙인다. 여러 프록시를 거치면 각 프록시가 같은 방식으로 실제 상대 주소를 전달하고 모든 중간 프록시 주소만 신뢰 목록에 넣어야 한다. 신뢰하지 않은 소켓 상대의 전달 헤더는 무시한다([WebSocket 계약 1.8절](../contracts/websocket-relay-v1.md#18-신뢰-프록시와-x-forwarded-for)).
+신뢰 프록시에서 온 `X-Forwarded-For`는 오른쪽부터 검사한다. 처음 만나는 `trusted_proxies` 밖 주소를 클라이언트 주소로 쓰며 그 왼쪽의 위조 요소는 읽지 않는다. Nginx의 `$proxy_add_x_forwarded_for`는 실제 접속 주소를 오른쪽에 덧붙인다. 여러 프록시를 거치면 각 프록시가 같은 방식으로 실제 상대 주소를 전달하고 모든 중간 프록시 주소만 신뢰 목록에 넣어야 한다. 신뢰하지 않은 소켓 상대의 전달 헤더는 무시한다([WebSocket 계약 1.8절](../contracts/websocket-relay-v2.md#18-신뢰-프록시와-x-forwarded-for)).
 
 헤더 누락·빈 값·검사 중 잘못된 요소·모든 요소가 신뢰 프록시 주소인 체인은 `HTTP 400`과 `forwarded_for_invalid`로 거절한다. 이때 등록과 `forwarded_ip`는 없다. 프록시 주소가 역할 허용 목록에 있어도 모두 신뢰하는 체인은 거절한다([WS-033·WS-036](../specs/websocket.md#7-수용-테스트)). 따라서 이 예시에서 Nginx 호스트 자체의 루프백 요청은 프록시를 거치면 거절된다. `127.0.0.1:8080`에 전달 헤더 없이 직접 접속해도 거절된다. 출발지 `127.0.0.1`이 `trusted_proxies`에 있어 신뢰 프록시 연결로 취급되기 때문이다. 이 출발지의 직접 접속은 유효한 전달 헤더가 있어야 하며, 같은 전달 주소 판정과 역할 `allow` 검사를 받는다. 전달 헤더 없이 직접 접속하려면 출발지가 그 리스너의 `trusted_proxies` 밖에 있고 해당 역할의 `allow`에 들어야 한다. 이 예시의 호스트에서 전달 헤더 없이 직접 시험해야 하면 신뢰 프록시를 두지 않은 다른 리스너(예: TCP 진입점이나 `trusted_proxies`가 빈 WSS 리스너)를 쓴다.
 
@@ -477,7 +493,7 @@ Windows 로그오프·시스템 종료는 강제 종료다. 대화형 콘솔 프
 
 ## 4. 검증
 
-각 OS에서 기본 TCP 배치의 3.1~3.8절을 실행한다. TLS 배치가 아니면 3.6절은 해당 없음으로 기록한다. v3→v4 이관은 3.2.2절, WSS 두 역할은 3.2.1절, 프록시 TLS 종료는 3.9절을 각각 추가 검증한다. OPS-031의 일반 배포 확인에 없는 TLS 동작을 확인한 것처럼 표시하지 않는다. 인증서 교체 자체의 자동 증거는 OPS-024가 담당한다.
+각 OS에서 기본 TCP 배치의 3.1~3.8절을 실행한다. TLS 배치가 아니면 3.6절은 해당 없음으로 기록한다. v3→v4 이관은 3.2.2절, Viewer 경로 이전은 3.2.3절, WSS 두 역할은 3.2.1절, 프록시 TLS 종료는 3.9절을 각각 추가 검증한다. OPS-031의 일반 배포 확인에 없는 TLS 동작을 확인한 것처럼 표시하지 않는다. 인증서 교체 자체의 자동 증거는 OPS-024가 담당한다.
 
 | 관찰 대상 | 성공 조건 | 확인 명령·방법 | 실제 결과 | 실행 증거 위치 |
 | --- | --- | --- | --- | --- |
@@ -494,6 +510,7 @@ Windows 로그오프·시스템 종료는 강제 종료다. 대화형 콘솔 프
 | 공유 WSS Viewer·Server | 같은 리스너의 두 경로로 Mode II 양방향 중계, 역할별 IP·Origin | 3.2.1절 | 미실행 | 두 OS 수동 실행 기록 필요. 자동 증거 OPS-065·OPS-069, WS-028~031은 통과([판정표](set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)) |
 | 프록시 TLS 종료 | 외부 WSS→평문 WS, 오른쪽 첫 비신뢰 주소의 역할별 허용 판정, 잘못된·모두 신뢰하는 체인 거절 | 3.9절, Nginx 버전·`nginx -t`·양쪽 주소·비밀 없는 로그 기록 | 미실행, Nginx 예시 추정 | 실제 배치 기록 필요. 자동 증거 WS-032~036은 통과([판정표](set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)) |
 | 최근 로그 | 설정 상한·오래된 항목 제거·재시작·0 보관·필터·JSON Lines 내려받기 | 3.7.1절 | 미실행 | 두 OS 수동 실행 기록 필요. 자동 증거 OPS-068, MGT-046~050, DASH-054~063은 통과([판정표](set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)) |
+| Viewer 경로 이전·롤백 | `/relay/viewer` 중계 성공, 이전 경로 `/relay`는 404, 롤백 때 이전 실행파일과 `/relay` URL을 함께 복구 | 3.2.3절 | 미실행 | 두 OS 수동 실행 기록 필요. 자동 증거는 WS-012·WS-029 |
 
 2026-11-07 갱신: 위 2026-11-05·커밋 `1c7c7a9` 묶음의 `LICENSE 없음(Q97 대기)`는 당시 기록으로 보존한다. 루트 `LICENSE` 작성·검토는 마쳤다(사용자 결정 2026-11-07(Q97), [검토 기록](check-dependency-licenses.md#42-프로젝트-license-검토-기록2026-11-07)). 앞으로 만드는 두 OS 배포 묶음에는 3.1절에 따라 루트 `LICENSE`를 포함한다. 과거 묶음을 다시 만들거나 LICENSE 포함을 재확인했다는 뜻은 아니다.
 

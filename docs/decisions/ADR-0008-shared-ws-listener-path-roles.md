@@ -6,7 +6,7 @@
 | 결정일 | 2026-11-08 |
 | 결정자 | 프로젝트 소유자(사용자) |
 | 관련 요구사항 | [PRD 확정 기준](../requirements/PRD.md#확정-기준), [FR-05](../requirements/PRD.md#fr-05-wswss-프록시), [FR-07](../requirements/PRD.md#fr-07-설정과-프로세스-수명), [FR-08](../requirements/PRD.md#fr-08-운영-정보) |
-| 관련 스펙·계약 | [WS·WSS 스펙](../specs/websocket.md), [중계 스펙](../specs/relay.md), [운영 스펙](../specs/operations.md), [설정 계약 v4](../contracts/config-v4.md), [WebSocket 계약 1.7절](../contracts/websocket-relay-v1.md#17-경로와-역할), [운영 정보 계약 v2](../contracts/ops-info-v2.md) |
+| 관련 스펙·계약 | [WS·WSS 스펙](../specs/websocket.md), [중계 스펙](../specs/relay.md), [운영 스펙](../specs/operations.md), [설정 계약 v4](../contracts/config-v4.md), [WebSocket 계약 1.7절](../contracts/websocket-relay-v2.md#17-경로와-역할), [운영 정보 계약 v2](../contracts/ops-info-v2.md) |
 | 관련 아키텍처 문서 | [WebSocket 진입점](../architectures/websocket-entry-point.md), [운영 로그](../architectures/ops-log.md) |
 | 이 ADR이 대체하는 이전 ADR | 없음 |
 | 이 ADR을 대체한 새 ADR | 없음 |
@@ -14,6 +14,8 @@
 ## 1. 결정
 
 Viewer와 Server가 WS 리스너 하나, WSS 리스너 하나를 각각 공유한다. 정확한 `/relay` 경로는 Viewer, `/relay/server` 경로는 Server 역할을 선택한다(사용자 결정 2026-11-08(Q181·Q188)). Server는 TCP Server와 같은 Mode II 초기 교환을 사용한다.
+
+후속: 사용자 결정 2026-11-10으로 Viewer 경로를 `/relay/viewer`로 바꿨다(`websocket-relay` 2.0.0). 공유 리스너와 경로별 역할이라는 이 결정은 그대로다. 위 문단의 `/relay`는 결정 당시의 Viewer 경로다. 현재 경로는 [WebSocket 계약 1.7절](../contracts/websocket-relay-v2.md#17-경로와-역할)을 따른다.
 
 설정은 리스너 표 `[relay.ws]`·`[relay.wss]`와 그 아래 역할 표 `viewer`·`server`로 나눈다. 리스너는 주소·신뢰 프록시·WSS 인증서를 갖고, 역할은 활성화 여부·IP 허용 목록·Origin 허용 목록을 갖는다. 이 구조는 `vnc-relay-config` 4.0.0의 호환성 파괴 변경이다.
 
@@ -52,6 +54,7 @@ Viewer와 Server가 WS 리스너 하나, WSS 리스너 하나를 각각 공유�
 ### 긍정적 결과
 
 - Viewer의 기존 `/relay` 경로를 유지하면서 `/relay/server`를 추가한다.
+- 후속: 사용자 결정 2026-11-10으로 Viewer 경로를 `/relay/viewer`로 바꿨다. 기존 Viewer 클라이언트는 서버 교체와 함께 URL을 옮긴다([WebSocket 계약 3.1절](../contracts/websocket-relay-v2.md#31-1x-클라이언트를-200으로-옮기기)). 두 경로는 여전히 `/relay` 접두사 아래에 있다.
 - 두 역할이 포트와 WSS 인증서를 공유한다.
 - TCP·WS·WSS를 섞은 Mode II 연결에도 같은 초기 교환과 중복 ID 규칙을 사용한다.
 

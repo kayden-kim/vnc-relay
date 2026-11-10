@@ -500,7 +500,7 @@ Server 명령은 `winvnc -id:<ID> -connect 192.0.2.20::5500 -run`, Viewer 명령
 | 4.1 | Repeater Ubuntu 24.04 빌드 버전 미확인 | 고정 범위 밖. RLY-TBD-001 해소에 영향 없음 | 없음. 사용자 결정 2026-10-22(Q19): Ubuntu `uvncrepeater` 관찰을 미루고 Windows Repeater만 고정한다. Ubuntu 쪽 검증은 2.6절 |
 | 4.2 | Repeater Windows 표기 1.4.0.0과 받은 파일 1.6.0.0 불일치 | 해소. 사용자 결정 2026-10-22(Q20): 받은 파일 1.6.0.0을 고정 대상으로 채택. 표기 차이의 원인은 확인하지 않음 | 없음 |
 | 4.3 | 설치 뒤 `vncviewer.exe` 파일 버전 미확인 | 해소(2026-10-27). `vncviewer.exe` 1.8.3.0과 Viewer 구성 요소 설치를 확인했다(3.1절) | 없음 |
-| 4.4 | noVNC 기본 `Sec-WebSocket-Protocol` 값 미관찰 | 해소(2026-11-01). noVNC 1.7.0은 WS와 WSS 모두 이 헤더를 보내지 않았다(3.4절 W-02·W-03b) | 없음. TODO 1.7에서 [WebSocket 중계 계약](websocket-relay-v1.md) 1.2절·6절에 반영했다(2026-11-01) |
+| 4.4 | noVNC 기본 `Sec-WebSocket-Protocol` 값 미관찰 | 해소(2026-11-01). noVNC 1.7.0은 WS와 WSS 모두 이 헤더를 보내지 않았다(3.4절 W-02·W-03b) | 없음. TODO 1.7에서 [WebSocket 중계 계약](websocket-relay-v2.md) 1.2절·6절에 반영했다(2026-11-01) |
 | 4.5 | 저작권자·적용 연도 미정 | OPS-TBD-005, LICENSE 고지 | 보류 중인 결정 Q10 |
 | 4.6 | 관찰 증거 전부 미수집 | 해소(2026-11-01). 76회차의 증거와 해석을 3절에 기록했다. RLY-TBD-002·003과 WS-025의 입력이다 | 없음. TODO 1.5(계약 1절 반영과 채택), 1.6(중복 ID 정책), 1.7(다른 계약 반영)을 2026-11-01에 모두 마쳤다 |
 | 4.7 | 설치 파일의 `repeater.exe`가 고정 `repeater_v160.zip`의 파일과 다름(둘 다 1.6.0.0) | 잘못된 파일로 관찰하면 증거가 고정 대상과 맞지 않는다 | 없음. Q20에 따라 고정 파일을 쓰고, 관찰 기록에 실행 파일 경로와 SHA-256을 적는다(3.1절) |
@@ -746,7 +746,7 @@ tshark -r D:\vr-captures\p11-mode2\M2-04-duplicate-server-id\run1\capture.pcapng
 | WS-025 `tests/websocket_browser.rs` `novnc_repeater_id_completes_rfb_through_ws_and_wss_in_both_server_orders` | WSL2 Ubuntu 24.04, 커밋 `70ff541`, noVNC 1.7.0 zip 해시 일치, `--include-ignored` | 통과(2 passed, 42.07초, WS-020 포함). 시험의 TCP Server는 최소 RFB 3.8 서버이며 UltraVNC가 아니다 |
 | 전체 게이트 `vr-full.sh` | WSL2 Ubuntu 24.04, 커밋 `70ff541` | `ALL PASSED`. WS-001~006·WS-020과 TCP Mode I·II 시나리오 통과 |
 
-같은 WS-025 시험은 Windows에서도 통과했다(2 passed, 42.57초). 실행 기록은 [WebSocket 중계 계약의 실행 기록](websocket-relay-v1.md#계약-테스트-실행-기록)에 있다.
+같은 WS-025 시험은 Windows에서도 통과했다(2 passed, 42.57초). 실행 기록은 [WebSocket 중계 계약의 실행 기록](websocket-relay-v2.md#계약-테스트-실행-기록)에 있다.
 
 ### 6.7 원본과 명령
 

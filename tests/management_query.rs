@@ -956,8 +956,12 @@ enabled = true
             .unwrap_or_else(|e| panic!("set read timeout: {e:?}"));
         tcp.set_write_timeout(Some(IO_LIMIT))
             .unwrap_or_else(|e| panic!("set write timeout: {e:?}"));
-        let mut ws =
-            WebSocket::upgrade(Wire::Plain(tcp), "/relay", "127.0.0.1", "http://127.0.0.1");
+        let mut ws = WebSocket::upgrade(
+            Wire::Plain(tcp),
+            "/relay/viewer",
+            "127.0.0.1",
+            "http://127.0.0.1",
+        );
         let greeting = ws.read_binary();
         assert_eq!(&greeting, b"RFB 000.000\n");
         ws
@@ -981,7 +985,7 @@ enabled = true
 
         let mut ws = WebSocket::upgrade(
             Wire::Tls(Box::new(tls)),
-            "/relay",
+            "/relay/viewer",
             "localhost",
             "https://127.0.0.1",
         );

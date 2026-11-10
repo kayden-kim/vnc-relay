@@ -1,4 +1,4 @@
-//! The shared WS and WSS listeners (websocket-relay-v1 §1.1). Each
+//! The shared WS and WSS listeners (websocket-relay-v2 §1.1). Each
 //! connection passes the source IP check at accept. Then, within U counted
 //! from the accept, it runs the TLS handshake (WSS only) and the upgrade
 //! request. After the 101 is flushed, the common relay service owns the
@@ -217,7 +217,7 @@ async fn connection(
     let mut forwarded_ip = None;
     // Biased: on every wake-up the stop and U are polled before the upgrade.
     // A poll that is already inside `upgrade` is covered by its own U check
-    // right before the answer (websocket-relay-v1 §1.1).
+    // right before the answer (websocket-relay-v2 §1.1).
     let finished = tokio::select! {
         biased;
         _ = stop.wait_for(|stopped| *stopped) => None,
@@ -391,7 +391,7 @@ async fn upgrade(
     }
 }
 
-/// Whether U has passed since accept (websocket-relay-v1 §1.1).
+/// Whether U has passed since accept (websocket-relay-v2 §1.1).
 fn expired(conn: &Accepted) -> bool {
     Instant::now() >= conn.at + conn.settings.upgrade
 }
@@ -473,7 +473,7 @@ mod tests {
     };
     use vnc_relay_domain::budget::ConnectionBudget;
 
-    const HEAD: &[u8] = b"GET /relay HTTP/1.1\r\nHost: localhost\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nOrigin: https://old.example\r\n\r\n";
+    const HEAD: &[u8] = b"GET /relay/viewer HTTP/1.1\r\nHost: localhost\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nOrigin: https://old.example\r\n\r\n";
 
     fn candidate(settings: vnc_relay_app::settings::Settings) -> ConfigCandidate {
         ConfigCandidate {

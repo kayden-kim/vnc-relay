@@ -6,7 +6,7 @@
 | 결정일 | 2026-10-16 |
 | 결정자 | 프로젝트 소유자(사용자) |
 | 관련 요구사항 | [PRD 확정 기준 "TCP 중계 접근"·"WS·WSS 중계 접근"·"출발지 IP 허용 목록 규칙"](../requirements/PRD.md#확정-기준), [FR-01](../requirements/PRD.md#fr-01-tcp-접속과-프로토콜-처리), [FR-05](../requirements/PRD.md#fr-05-wswss-프록시), [7절 보안 및 신뢰 경계](../requirements/PRD.md#7-보안-및-신뢰-경계) |
-| 관련 스펙·계약 | [중계와 매칭 스펙](../specs/relay.md), [WS·WSS 전송 스펙](../specs/websocket.md), [설정·운영 스펙](../specs/operations.md#4-보안과-신뢰-경계), [설정 계약](../contracts/config-v4.md), [Repeater 초기 교환 계약](../contracts/repeater-handshake-v1.md), [WebSocket 중계 계약](../contracts/websocket-relay-v1.md), [운영 정보 계약](../contracts/ops-info-v2.md) |
+| 관련 스펙·계약 | [중계와 매칭 스펙](../specs/relay.md), [WS·WSS 전송 스펙](../specs/websocket.md), [설정·운영 스펙](../specs/operations.md#4-보안과-신뢰-경계), [설정 계약](../contracts/config-v4.md), [Repeater 초기 교환 계약](../contracts/repeater-handshake-v1.md), [WebSocket 중계 계약](../contracts/websocket-relay-v2.md), [운영 정보 계약](../contracts/ops-info-v2.md) |
 | 관련 아키텍처 문서 | 없음(구현 전) |
 | 이 ADR이 대체하는 이전 ADR | 없음 |
 | 이 ADR을 대체한 새 ADR | 없음 |

@@ -246,7 +246,7 @@ SCR-004는 [설정 v4 계약 1.2절](../contracts/config-v4.md#12-키-표)의 �
 | `relay.wss.cert_file`·`relay.wss.key_file` | WSS 리스너 테이블, 재로드 가능 | 입력 없음. `management.cert_file`·`management.key_file`도 동일 |
 | `recent_logs.max_entries` | `recent_closed.max_entries` 옆, 재시작 필요 | 입력 없음 |
 
-`trusted_proxies = []`는 전달 헤더를 신뢰하지 않는다는 뜻이다. 역할의 `allow = []`처럼 모든 새 접속을 거절하는 목록이 아니다. 확인 대화상자는 이 키에 CPY-105를 쓰지 않고 CPY-183을 써야 한다. 역할의 `allowed_origins = []`는 Origin이 있는 요청을 거절하며 Origin이 없는 요청은 IP 검사만 한다([WebSocket 계약](../contracts/websocket-relay-v1.md)). 이 키에도 CPY-105 대신 CPY-184를 써야 한다.
+`trusted_proxies = []`는 전달 헤더를 신뢰하지 않는다는 뜻이다. 역할의 `allow = []`처럼 모든 새 접속을 거절하는 목록이 아니다. 확인 대화상자는 이 키에 CPY-105를 쓰지 않고 CPY-183을 써야 한다. 역할의 `allowed_origins = []`는 Origin이 있는 요청을 거절하며 Origin이 없는 요청은 IP 검사만 한다([WebSocket 계약](../contracts/websocket-relay-v2.md)). 이 키에도 CPY-105 대신 CPY-184를 써야 한다.
 `trusted_proxies`에는 프록시 주소만 넣어야 하며 클라이언트 범위를 넣어서는 안 된다. 모든 전달 주소가 신뢰 프록시에 속하면 요청을 거절한다. 이 입력 도움말은 CPY-185로 표시한다. IP·CIDR·범위의 문법과 진단은 기존 출발지 IP 목록과 같다.
 `trusted_proxies` 변경은 다음 수락 검사 또는 업그레이드 검사에 적용한다. 역할 `allow` 변경은 다음 수락 시의 합집합 검사와 업그레이드 시의 역할 검사에 적용한다. `allowed_origins` 변경은 다음 업그레이드 요청에 적용한다. 이미 끝난 검사의 결과는 유지한다. 수락됐지만 아직 업그레이드하지 않은 연결도 새 값으로 업그레이드 검사를 할 수 있다. CPY-100의 채택 원문은 보존하고 이 차이를 담은 CPY-189를 교체안으로 둔다.
 

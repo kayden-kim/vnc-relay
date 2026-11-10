@@ -128,7 +128,7 @@ pub enum RelayLifecycle {
 }
 
 /// Transport close intent; adapters map it without exposing transport libraries.
-/// See relay-session §3.2 and websocket-relay-v1 §1.4–1.6.
+/// See relay-session §3.2 and websocket-relay-v2 §1.4–1.6.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RelayCloseAction {
     WriteHalf,
@@ -151,7 +151,7 @@ pub enum RelayCloseAction {
 /// Bounded payload stream with explicit half-close and terminal-close intent.
 /// An empty payload message is not EOF. Successful writes count only payload
 /// accepted by the transport, not bytes copied into an unbounded queue.
-/// See relay spec RLY-003, RLY-019 and websocket-relay-v1 §1.4–1.6.
+/// See relay spec RLY-003, RLY-019 and websocket-relay-v2 §1.4–1.6.
 pub trait RelayStream: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send {
     /// The endpoint transport metadata used in session views and events.
     fn transport(&self) -> vnc_relay_domain::session::Transport;
@@ -184,7 +184,7 @@ pub type BoxRelayStream = Box<dyn RelayStream>;
 
 /// Typed transport failure carried inside the standard AsyncRead/AsyncWrite
 /// I/O error. Adapters retain WS protocol/text/size failures without exposing
-/// their library types (websocket-relay-v1 §2.2).
+/// their library types (websocket-relay-v2 §2.2).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RelayStreamError {
     Transport(crate::events::ConnectionErrorKind),

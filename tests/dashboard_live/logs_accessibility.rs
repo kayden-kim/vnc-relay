@@ -64,7 +64,7 @@ pub fn keyboard_languages_widths_and_state_preservation() {
             let admin = server.login();
             let session = server.pair(&admin, "II", "46301");
             let mut origin = connect(server.ws_port);
-            must(origin.write_all(format!("GET /relay HTTP/1.1\r\nHost: localhost\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\nOrigin: https://{}.example\r\n\r\n","long-origin-".repeat(24)).as_bytes()));
+            must(origin.write_all(format!("GET /relay/viewer HTTP/1.1\r\nHost: localhost\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\nOrigin: https://{}.example\r\n\r\n","long-origin-".repeat(24)).as_bytes()));
             assert_eq!(read_reply(origin).status, 403);
             generate(&server, 105);
             let mut browser =

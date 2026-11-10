@@ -32,12 +32,12 @@
 
 ## 프로젝트 작업 안내
 
-제품 요구사항은 [PRD.md](requirements/PRD.md)에서 관리한다. 현재 문서 상태는 초안 0.7이며, [사용자 확정 기준](requirements/PRD.md#확정-기준)과 나머지 제안·미확정 사항을 구분한다. 명령과 규칙은 연결한 문서 한 곳에서 관리한다.
+제품 요구사항은 [PRD.md](requirements/PRD.md)에서 관리한다. 현재 문서 상태는 초안 0.8이며, [사용자 확정 기준](requirements/PRD.md#확정-기준)과 나머지 제안·미확정 사항을 구분한다. 명령과 규칙은 연결한 문서 한 곳에서 관리한다.
 
 | 확인할 내용 | 프로젝트의 기준 문서 |
 | --- | --- |
 | 외부 동작과 수용 시나리오 | [스펙 목록](specs/README.md) — Active 5건(사용자 결정 2026-11-07(Q150)). 채택과 검증 완료는 구분한다. |
-| 교환 형식(계약)과 기술 결정 | [계약 목록](contracts/README.md) — Active 6건. 설정은 [vnc-relay-config 4.0.0](contracts/config-v4.md), 운영 정보는 [ops-info 2.0.0](contracts/ops-info-v2.md)(사용자 결정 2026-11-08(Q188)). [ADR 목록](decisions/README.md) — Accepted 7건·Superseded 1건. [ADR-0007](decisions/ADR-0007-proxy-tls-termination.md)은 중계 프록시 TLS 종료, [ADR-0008](decisions/ADR-0008-shared-ws-listener-path-roles.md)은 공유 리스너와 경로별 역할을 정함 |
+| 교환 형식(계약)과 기술 결정 | [계약 목록](contracts/README.md) — Active 6건. 설정은 [vnc-relay-config 4.0.0](contracts/config-v4.md), 운영 정보는 [ops-info 2.0.0](contracts/ops-info-v2.md)(사용자 결정 2026-11-08(Q188)). WebSocket 중계는 [websocket-relay 2.0.0](contracts/websocket-relay-v2.md)(Viewer 경로 `/relay/viewer`, 사용자 결정 2026-11-10). [ADR 목록](decisions/README.md) — Accepted 7건·Superseded 1건. [ADR-0007](decisions/ADR-0007-proxy-tls-termination.md)은 중계 프록시 TLS 종료, [ADR-0008](decisions/ADR-0008-shared-ws-listener-path-roles.md)은 공유 리스너와 경로별 역할을 정함 |
 | 코드 지도(변경 대상의 코드 위치와 연결 관계) | [코드 지도](architectures/code-map.md) — Current, Draft, Verified. 현재 코드는 `serve` 시작과 CLI 골격([`serve` 시작 모듈 설계](architectures/serve-startup.md): `src/`와 계정 파일·리스너 모듈), 설정 로더([설정 로딩 모듈 설계](architectures/config-loading.md): `crates/domain`·`crates/app`·`crates/adapters`), 운영 로그([운영 로그 모듈 설계](architectures/ops-log.md): 사건 타입·JSON Lines 출력·`relay_id_ref`), TCP 진입점([TCP 진입점 모듈 설계](architectures/tcp-entry-point.md): 접속 수락·출발지 IP 검사), 연결 상한과 시간 제한([연결 상한과 시간 제한 모듈 설계](architectures/connection-limits.md): 연결 예산·L·H·TCP keepalive), 상태 리스너와 준비 상태([상태 리스너와 준비 상태 모듈 설계](architectures/status-listener.md): `/livez`·`/readyz`·Lm·`server_ready`), 대시보드 공통 컴포넌트([대시보드 공통 컴포넌트 모듈 설계](architectures/dashboard-components.md): 조각 DOM·옵션·상태 속성과 미리보기), 개발 도구 [`xtask/`](architectures/xtask.md)다 |
 | 적용할 컨벤션 | [컨벤션 목록](conventions/README.md) — [Rust 코드 컨벤션](conventions/rust.md)(Active, 2026-10-20), [테스트 컨벤션](conventions/testing.md)(Active, 2026-10-20), [프런트엔드 컨벤션](conventions/frontend.md)(Active, 2026-10-22, 사용자 결정 2026-10-22(Q32~Q39)). 디자인 시스템은 [디자인 목록](design/README.md)의 [운영 대시보드 디자인 시스템](design/DESIGN.md)(Accepted, 2026-10-20)과 채택된 [대시보드 HTML 시안](design/mockups/dashboard.html) |
 | 개발 환경 준비와 실행 방법 | [개발 환경을 준비하고 변경을 검증하는 방법](how-to/set-up-and-verify.md) — Draft. 빌드와 전체 완료 검증은 Ubuntu와 Windows에서 확인했다. rustup 설치 단계는 두 OS 모두 미실행이다 |

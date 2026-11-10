@@ -6,7 +6,7 @@
 | 결정일 | 2026-11-01 |
 | 결정자 | 프로젝트 소유자(사용자 결정 2026-11-01(Q77)) |
 | 관련 요구사항 | [PRD 확정 기준 "구현 기술"·"WS 버퍼와 메시지 상한"](../requirements/PRD.md#확정-기준), [FR-05](../requirements/PRD.md#fr-05-wswss-프록시), [7절 보안 및 신뢰 경계](../requirements/PRD.md#7-보안-및-신뢰-경계) |
-| 관련 스펙·계약 | [WS·WSS 전송 스펙](../specs/websocket.md), [WebSocket 중계 계약](../contracts/websocket-relay-v1.md), [설정 파일 계약](../contracts/config-v4.md) |
+| 관련 스펙·계약 | [WS·WSS 전송 스펙](../specs/websocket.md), [WebSocket 중계 계약](../contracts/websocket-relay-v2.md), [설정 파일 계약](../contracts/config-v4.md) |
 | 관련 아키텍처 문서 | [WebSocket 스트림 어댑터 모듈 설계](../architectures/websocket-stream.md) |
 | 이 ADR이 대체하는 이전 ADR | 없음 |
 | 이 ADR을 대체한 새 ADR | 없음 |

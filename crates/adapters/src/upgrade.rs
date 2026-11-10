@@ -1,5 +1,5 @@
 //! The WebSocket upgrade request of a shared WS or WSS listener
-//! (websocket-relay-v1 §1.1): reading the request head, checking it in the
+//! (websocket-relay-v2 §1.1): reading the request head, checking it in the
 //! contract's order, and the answers (101 or a refusal). The checks and the
 //! answer texts have no socket in them, so unit tests cover them directly.
 
@@ -17,12 +17,12 @@ use vnc_relay_domain::peer_ip::PeerIp;
 const READ_CHUNK: usize = 1024;
 
 /// Largest request head accepted, in bytes, blank line included
-/// (websocket-relay-v1 §1.1, user decision 2026-11-07(Q156)).
+/// (websocket-relay-v2 §1.1, user decision 2026-11-07(Q156)).
 /// A head that does not end within this size is refused with 400.
 pub(crate) const HEAD_LIMIT: usize = 16 * 1024;
 
 /// Exact paths select the role; queries are ignored.
-const RELAY_PATH: &str = "/relay";
+const VIEWER_PATH: &str = "/relay/viewer";
 const SERVER_PATH: &str = "/relay/server";
 
 /// Result of reading one request head.
@@ -143,7 +143,7 @@ pub(crate) struct ValidUpgrade {
     pub(crate) binary: bool,
 }
 
-/// Checks a request head in the order of websocket-relay-v1 §1.1: request
+/// Checks a request head in the order of websocket-relay-v2 §1.1: request
 /// syntax, then path, method, and HTTP version, then the upgrade headers and
 /// `Sec-WebSocket-Version`, then `Sec-WebSocket-Key`, then Origin, then the
 /// subprotocol. The first failed check decides the refusal. The IP recheck is
@@ -186,7 +186,7 @@ pub(crate) fn check(
     };
     let path = target.split_once('?').map_or(target, |(path, _)| path);
     let (role, settings) = match path {
-        RELAY_PATH if listener.viewer.enabled => (Role::Viewer, &listener.viewer),
+        VIEWER_PATH if listener.viewer.enabled => (Role::Viewer, &listener.viewer),
         SERVER_PATH if listener.server.enabled => (Role::Server, &listener.server),
         _ => return Err(Refusal::NotFound),
     };
@@ -357,7 +357,7 @@ mod tests {
 
     /// The lines of a valid request. The key is the RFC 6455 example key.
     const VALID: [&str; 6] = [
-        "GET /relay HTTP/1.1",
+        "GET /relay/viewer HTTP/1.1",
         "Host: relay.example:8443",
         "Upgrade: websocket",
         "Connection: Upgrade",
@@ -409,13 +409,20 @@ mod tests {
 
     #[test]
     fn query_string_does_not_change_the_path() {
-        let head = request(Some(("GET ", "GET /relay?room=1 HTTP/1.1")), &[]);
+        let head = request(Some(("GET ", "GET /relay/viewer?room=1 HTTP/1.1")), &[]);
         assert!(check(&head, &[]).is_ok());
     }
 
     #[test]
     fn other_paths_are_not_found() {
-        for target in ["/", "/relay/", "/relayx", "/api/v1/session"] {
+        for target in [
+            "/",
+            "/relay",
+            "/relay/",
+            "/relay/viewer/",
+            "/relay/viewerx",
+            "/api/v1/session",
+        ] {
             let line = format!("GET {target} HTTP/1.1");
             let head = request(Some(("GET ", line.as_str())), &[]);
             assert_eq!(check(&head, &[]), Err(Refusal::NotFound), "{target}");
@@ -424,26 +431,26 @@ mod tests {
 
     #[test]
     fn method_other_than_get_is_not_allowed() {
-        let head = request(Some(("GET ", "POST /relay HTTP/1.1")), &[]);
+        let head = request(Some(("GET ", "POST /relay/viewer HTTP/1.1")), &[]);
         assert_eq!(check(&head, &[]), Err(Refusal::MethodNotAllowed));
     }
 
     #[test]
     fn http_below_1_1_is_invalid() {
-        let head = request(Some(("GET ", "GET /relay HTTP/1.0")), &[]);
+        let head = request(Some(("GET ", "GET /relay/viewer HTTP/1.0")), &[]);
         assert_eq!(check(&head, &[]), Err(Refusal::Invalid));
     }
 
     #[test]
     fn malformed_request_line_is_invalid() {
-        let head = head(&["GET /relay", "Host: relay.example"]);
+        let head = head(&["GET /relay/viewer", "Host: relay.example"]);
         assert_eq!(check(&head, &[]), Err(Refusal::Invalid));
     }
 
     #[test]
     fn missing_host_is_invalid() {
         let head = head(&[
-            "GET /relay HTTP/1.1",
+            "GET /relay/viewer HTTP/1.1",
             "Upgrade: websocket",
             "Connection: Upgrade",
             "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==",
@@ -610,11 +617,11 @@ mod tests {
     /// spec: websocket.md:WS-018 partial
     #[tokio::test]
     async fn preserves_bytes_after_the_http_head() {
-        let mut bytes: &[u8] = b"GET /relay HTTP/1.1\r\nHost: a\r\n\r\nextra";
+        let mut bytes: &[u8] = b"GET /relay/viewer HTTP/1.1\r\nHost: a\r\n\r\nextra";
         assert_eq!(
             read_head(&mut bytes).await.ok(),
             Some(HeadRead::Complete {
-                head: b"GET /relay HTTP/1.1\r\nHost: a\r\n\r\n".to_vec(),
+                head: b"GET /relay/viewer HTTP/1.1\r\nHost: a\r\n\r\n".to_vec(),
                 suffix: b"extra".to_vec(),
             })
         );
@@ -622,7 +629,7 @@ mod tests {
 
     #[tokio::test]
     async fn read_head_reports_a_closed_peer() {
-        let mut bytes: &[u8] = b"GET /relay HTTP/1.1\r\n";
+        let mut bytes: &[u8] = b"GET /relay/viewer HTTP/1.1\r\n";
         assert_eq!(read_head(&mut bytes).await.ok(), Some(HeadRead::Eof));
     }
 
@@ -647,7 +654,7 @@ mod tests {
     #[test]
     fn control_characters_in_the_head_are_refused() {
         let cases = [
-            request(Some(("GET ", "GET /relay\u{0} HTTP/1.1")), &[]),
+            request(Some(("GET ", "GET /relay/viewer\u{0} HTTP/1.1")), &[]),
             request(Some(("Host", "Host: a\u{0}b")), &[]),
             request(Some(("Host", "Host: a\rb")), &[]),
             request(Some(("Host", "Host: a\nb")), &[]),
@@ -670,7 +677,7 @@ mod tests {
     #[test]
     fn wrong_version_is_refused_before_a_bad_key() {
         let bytes = head(&[
-            "GET /relay HTTP/1.1",
+            "GET /relay/viewer HTTP/1.1",
             "Host: relay.example:8443",
             "Upgrade: websocket",
             "Connection: Upgrade",

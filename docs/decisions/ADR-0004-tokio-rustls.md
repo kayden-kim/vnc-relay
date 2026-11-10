@@ -6,7 +6,7 @@
 | 결정일 | 2026-10-16 |
 | 결정자 | 프로젝트 소유자(사용자) |
 | 관련 요구사항 | [PRD 확정 기준 "구현 기술"·"TLS 종료"](../requirements/PRD.md#확정-기준), [FR-07](../requirements/PRD.md#fr-07-설정과-프로세스-수명), [7절 보안 및 신뢰 경계](../requirements/PRD.md#7-보안-및-신뢰-경계), [8절 이식성](../requirements/PRD.md#8-비기능-요구사항) |
-| 관련 스펙·계약 | [설정·운영 스펙](../specs/operations.md#4-보안과-신뢰-경계), [WS·WSS 전송 스펙](../specs/websocket.md), [설정 계약](../contracts/config-v4.md), [WebSocket 중계 계약](../contracts/websocket-relay-v1.md) |
+| 관련 스펙·계약 | [설정·운영 스펙](../specs/operations.md#4-보안과-신뢰-경계), [WS·WSS 전송 스펙](../specs/websocket.md), [설정 계약](../contracts/config-v4.md), [WebSocket 중계 계약](../contracts/websocket-relay-v2.md) |
 | 관련 아키텍처 문서 | 없음(구현 전) |
 | 이 ADR이 대체하는 이전 ADR | 없음 |
 | 이 ADR을 대체한 새 ADR | 없음 |

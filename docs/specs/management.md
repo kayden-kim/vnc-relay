@@ -61,7 +61,7 @@
 
 - `viewer_address`·`target_address`는 실제 소켓 상대 주소다. 중계 연결이 프록시를 거쳐도 이 주소를 전달 헤더로 바꾸지 않는다.
 - 활성 세션 목록·상세는 양 끝의 전송 경로를 제공한다. `target_transport`는 Mode I에서 `tcp`, Mode II에서 Server의 `tcp`·`ws`·`wss`다. 이 필드는 최근 종료 항목과 관리자 종료 응답의 `closed_session`에도 남긴다(사용자 결정 2026-11-08(Q187)).
-- WS·WSS 중계 리스너의 신뢰 프록시에서 구한 전달 주소만 `viewer_forwarded_ip`·`target_forwarded_ip`로 제공한다. 전달 주소가 없으면 필드를 생략하지 않고 `null`로 준다. Mode I의 `target_forwarded_ip`는 항상 `null`이다. 결정 규칙은 [WebSocket 계약 1.8절](../contracts/websocket-relay-v1.md#18-신뢰-프록시와-x-forwarded-for)을 따른다.
+- WS·WSS 중계 리스너의 신뢰 프록시에서 구한 전달 주소만 `viewer_forwarded_ip`·`target_forwarded_ip`로 제공한다. 전달 주소가 없으면 필드를 생략하지 않고 `null`로 준다. Mode I의 `target_forwarded_ip`는 항상 `null`이다. 결정 규칙은 [WebSocket 계약 1.8절](../contracts/websocket-relay-v2.md#18-신뢰-프록시와-x-forwarded-for)을 따른다.
 - 관리 리스너 자체는 전달 헤더를 계속 무시한다. 관리 TLS 종료를 프록시로 확대하지 않는다. 내장 HTTPS·루프백 평문 HTTP·Secure 쿠키·로그인 제한의 실제 소켓 출발지 IP 규칙은 그대로다(사용자 결정 2026-11-08(Q183)). MGT-015는 유지한다.
 - 읽기 응답 하나 안의 집계와 목록은 그 응답의 기준 시점에 일관돼야 한다. 집계와 목록은 한 번 포착한 상태에서 만든다. 서로 다른 시점의 요청 결과가 완전히 같은 전역 상태라고 보장하지 않는다.
 - 서버 요약의 L·Lm 사용량은 위 일관성의 대상이 아니다. 사용량은 응답을 만들 때 따로 읽는 자원 사용량이다. 연결이 바뀌는 동안에는 같은 응답의 집계와 잠깐 어긋날 수 있다. 예를 들어 막 수락한 연결은 초기 교환 중 집계보다 L 사용량에 먼저 나타날 수 있다. 연결이 바뀌지 않는 동안에는 사용량이 실제 연결 수와 같다(MGT-026). 사용자 결정 2026-11-04(Q100).

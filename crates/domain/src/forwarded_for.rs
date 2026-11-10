@@ -1,4 +1,4 @@
-//! Trusted proxy client address selection (websocket-relay-v1 §1.8).
+//! Trusted proxy client address selection (websocket-relay-v2 §1.8).
 
 use std::fmt;
 use std::net::{IpAddr, Ipv6Addr};
@@ -7,12 +7,12 @@ use crate::allow_list::AllowList;
 use crate::peer_ip::PeerIp;
 
 /// The inspected chain is missing, malformed, or contains only trusted proxies
-/// (websocket-relay-v1 §1.8). No client address can be used in these cases.
+/// (websocket-relay-v2 §1.8). No client address can be used in these cases.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ForwardedForError;
 
 impl ForwardedForError {
-    /// The upgrade rejection reason of websocket-relay-v1 §2.1.
+    /// The upgrade rejection reason of websocket-relay-v2 §2.1.
     pub fn code(self) -> &'static str {
         "forwarded_for_invalid"
     }
@@ -27,7 +27,7 @@ impl fmt::Display for ForwardedForError {
 impl std::error::Error for ForwardedForError {}
 
 /// Selects the rightmost untrusted canonical IP from `X-Forwarded-For` fields
-/// in received order (websocket-relay-v1 §1.8). The caller must first establish
+/// in received order (websocket-relay-v2 §1.8). The caller must first establish
 /// that the socket peer is trusted. Elements left of the selected IP are ignored.
 /// Missing fields, an inspected invalid element, and an all-trusted chain fail.
 pub fn client_ip<'a, I>(fields: I, trusted: &AllowList) -> Result<PeerIp, ForwardedForError>

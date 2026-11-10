@@ -376,7 +376,7 @@ struct WebSocket {
 
 impl WebSocket {
     fn upgrade(mut wire: Box<dyn Wire>) -> Self {
-        wire.write_all(b"GET /relay HTTP/1.1\r\nHost: localhost\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n").unwrap_or_else(|error| panic!(concat!("send real WebSocket upgrade", ": {:?}"), error));
+        wire.write_all(b"GET /relay/viewer HTTP/1.1\r\nHost: localhost\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n").unwrap_or_else(|error| panic!(concat!("send real WebSocket upgrade", ": {:?}"), error));
         wire.flush()
             .unwrap_or_else(|error| panic!(concat!("flush upgrade", ": {:?}"), error));
         let mut head = Vec::new();

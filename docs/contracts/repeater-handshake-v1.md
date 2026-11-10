@@ -19,7 +19,7 @@ UltraVNC Viewer·Server와 외부 WebSocket 클라이언트가 VNC Relay에 접�
 | 관련 테스트 | [RLY-001~005, RLY-010~015, RLY-022](../specs/relay.md#7-수용-테스트), [WS-003~006, WS-018, WS-025](../specs/websocket.md#7-수용-테스트). 계약 테스트는 5절을 따른다. |
 | 후속 적용 범위 | 사용자 결정 2026-11-08(Q181), 사용자 결정 2026-11-08(Q188)에 따라 WS·WSS Server에도 같은 초기 교환 바이트를 적용한다. 형식은 바뀌지 않으며 계약 버전은 1.0.0을 유지한다. 구현은 커밋 `3df0693`이다. WS-028과 RLY-028은 커밋 `51bd747`의 두 OS 게이트에서 통과했다([WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)). |
 
-관련 계약: [WebSocket 중계](websocket-relay-v1.md)(WS·WSS 쪽 전송 규칙과 종료 코드), [운영 정보](ops-info-v2.md)(로그에서 중계 ID 노출 방식과 오류 코드의 로그 이름), [설정](config-v4.md)(`handshake_secs`·`mode1`·`mode2`·`allow_targets` 키). 관련 결정: [ADR-0002 출발지 IP 허용 목록](../decisions/ADR-0002-source-ip-allowlist.md).
+관련 계약: [WebSocket 중계](websocket-relay-v2.md)(WS·WSS 쪽 전송 규칙과 종료 코드), [운영 정보](ops-info-v2.md)(로그에서 중계 ID 노출 방식과 오류 코드의 로그 이름), [설정](config-v4.md)(`handshake_secs`·`mode1`·`mode2`·`allow_targets` 키). 관련 결정: [ADR-0002 출발지 IP 허용 목록](../decisions/ADR-0002-source-ip-allowlist.md).
 
 ## 1. 형식과 의미
 
@@ -50,7 +50,7 @@ UltraVNC Viewer·Server와 외부 WebSocket 클라이언트가 VNC Relay에 접�
 | 값과 채움 | 값은 첫 NUL(`00`) 앞까지다. NUL이 없으면 250바이트 전체가 값이다. 첫 NUL 뒤의 채움 바이트는 내용과 관계없이 무시한다. 본문 문법 검사에서 빈 값은 `handshake_invalid`다. 모드 검사와의 선후는 표 아래 검사 순서를 따른다. | M1-01, M2-01, M2-06b, T-03 |
 | 모드 판정 | Viewer 진입점(TCP Viewer·WS Viewer·WSS Viewer): 값이 `ID:`(대문자, `49 44 3A`)로 시작하면 Mode II, 아니면 Mode I이다. Server 진입점(TCP Server·WS Server·WSS Server): 값이 `ID:`로 시작해야 한다. 아니면 `handshake_invalid`다. | M1-01, M2-01, E-01. 후속: 사용자 결정 2026-11-08(Q181·Q188) |
 | 꺼진 모드 | 판정한 모드가 설정에서 꺼져 있으면 값을 더 검사하지 않고 `mode_disabled`로 거절한다. | [RLY-R17](../specs/relay.md#21-판정-가능한-규칙) |
-| 역할 | TCP에서는 리스너가 역할을 정한다. WS·WSS에서는 경로 `/relay`가 Viewer, `/relay/server`가 Server를 정한다([WebSocket 계약 1.7절](websocket-relay-v1.md#17-경로와-역할)). 초기 요청 바이트 안에는 역할 표시가 없다. 바이트 형식은 바뀌지 않는다. | M2-01. 후속: 사용자 결정 2026-11-08(Q181), 사용자 결정 2026-11-08(Q188) |
+| 역할 | TCP에서는 리스너가 역할을 정한다. WS·WSS에서는 경로 `/relay/viewer`가 Viewer, `/relay/server`가 Server를 정한다([WebSocket 계약 1.7절](websocket-relay-v2.md#17-경로와-역할)). 초기 요청 바이트 안에는 역할 표시가 없다. 바이트 형식은 바뀌지 않는다. | M2-01. 후속: 사용자 결정 2026-11-08(Q181), 사용자 결정 2026-11-08(Q188). Viewer 경로: 사용자 결정 2026-11-10 |
 | 중계 ID | `ID:` 뒤의 값이다. ASCII 숫자(`0`~`9`) 1~247자리이고, 247자리는 250바이트에 들어가는 최대 길이다. 숫자가 아닌 바이트가 하나라도 있거나 숫자가 없으면 `handshake_invalid`다. 두 ID는 바이트열이 정확히 같을 때만 같다. 앞자리 0, 수 값, 대소문자로 서로 다른 ID를 합치지 않는다(`0123`과 `123`은 다른 ID). 사용자 결정 2026-11-01(Q68·Q69). | [기록 3.5절](repeater-compat-record.md#35-계약-1절-항목별-해석) "중계 ID 비교"·"중계 ID 길이" 행 |
 | 버전 문자열 | Viewer 쪽의 시작 바이트 `RFB 000.000\n` 하나다(1.1절 D). Server 쪽에는 없다. | M2-01 |
 | 시간 | 250바이트는 제한 시간 H 안에 다 와야 한다. TCP는 초기 교환에 들어간 때부터, WS·WSS는 `101` 응답을 보낸 때부터 잰다([설정 계약](config-v4.md)의 `handshake_secs`). | E-04 |
@@ -92,7 +92,7 @@ UltraVNC Viewer·Server와 외부 WebSocket 클라이언트가 VNC Relay에 접�
 
 아래 코드 이름은 사용자 결정 2026-11-01(Q72)로 채택했다. WS close 사유(reason)와 로그의 `reason`이 같은 이름을 쓴다. 로그에서의 대응은 [운영 정보 계약 1.6절](ops-info-v2.md#16-원인-코드)이 정한다. 이름이 다른 `handshake_incomplete`의 대응도 거기에 있다.
 
-TCP 진입점은 오류를 알리는 바이트를 보내지 않고 정상 종료(FIN)로 연결을 닫는다. 대상 버전 Repeater도 오류 바이트를 보내지 않았다([기록 3.5절](repeater-compat-record.md#35-계약-1절-항목별-해석) D행). 닫을 때 읽지 않은 수신 데이터가 남아 있으면 OS가 재설정(RST)을 보낼 수 있다. WS·WSS 진입점은 연결이 성립한 뒤이므로 WebSocket close 코드로 알린다. 번호와 규칙은 [WebSocket 중계 계약 1.5절](websocket-relay-v1.md#15-close-코드)이 정한다.
+TCP 진입점은 오류를 알리는 바이트를 보내지 않고 정상 종료(FIN)로 연결을 닫는다. 대상 버전 Repeater도 오류 바이트를 보내지 않았다([기록 3.5절](repeater-compat-record.md#35-계약-1절-항목별-해석) D행). 닫을 때 읽지 않은 수신 데이터가 남아 있으면 OS가 재설정(RST)을 보낼 수 있다. WS·WSS 진입점은 연결이 성립한 뒤이므로 WebSocket close 코드로 알린다. 번호와 규칙은 [WebSocket 중계 계약 1.5절](websocket-relay-v2.md#15-close-코드)이 정한다.
 
 | 오류 코드 | 의미·형식 | 관련 스펙 시나리오 |
 | --- | --- | --- |
@@ -169,7 +169,7 @@ TCP 진입점은 오류를 알리는 바이트를 보내지 않고 정상 종료
 | Producer: UltraVNC Server·Viewer(Mode II) → Consumer: `vnc-relay` / `crates/app/src/relay.rs` `matches_both_arrival_orders_and_finishes_once_with_exact_counters`, `crates/domain/src/matching.rs` `matches_server_first`, `matches_viewer_first`, `tests/serve.rs` `mode2_relays_bytes_in_both_orders_with_trailing_data`, `tests/relay_matching_scenarios.rs` `different_ids_same_roles_and_leading_zero_collisions_never_cross_match`, `simultaneous_same_id_arrivals_form_one_pair…`, `arrival_races_disconnect_and_wait_expiry…`, `tcp_ws_and_wss_duplicates_close_without_registering_or_replacing_the_existing_pair` | 두 접속 순서의 매칭, 다른 ID·앞자리 0만 다른 ID, 중복 ID: [RLY-010](../specs/relay.md#7-수용-테스트), [RLY-011](../specs/relay.md#7-수용-테스트), [RLY-012](../specs/relay.md#7-수용-테스트), [RLY-013](../specs/relay.md#7-수용-테스트), [RLY-015](../specs/relay.md#7-수용-테스트) | 통과. RLY-012·013·015는 테스트 클라이언트 시나리오로 통과(4e4a271). RLY-010·011은 실제 UltraVNC 1.8.3.0으로 각각 독립 2회 통과(Windows VNC Relay, 프로젝트 소유자 캡처 검토 완료 2026-11-06). Ubuntu VNC Relay 미실행 | [초기 교환 설계의 실행 기록](../architectures/initial-exchange.md#실행-기록), 커밋 `4e4a271`. [실제 UltraVNC 수동 확인 기록 4.1·4.2절](../how-to/verify-ultravnc-manually.md#41-2026-11-05-실행-기록)
 | Producer: UltraVNC Viewer(Mode I) → Consumer: `vnc-relay` / 시험 파일 없음. 실제 UltraVNC 1.8.3.0 수동 확인(TODO 2.13) | 실제 Server 대상 접속: [RLY-006](../specs/relay.md#7-수용-테스트) | 통과(Windows VNC Relay, 독립 2회, 프로젝트 소유자 캡처 검토 완료 2026-11-06). Ubuntu VNC Relay 미실행 | [실제 UltraVNC 수동 확인 기록 4.1·4.2절](../how-to/verify-ultravnc-manually.md#41-2026-11-05-실행-기록), 커밋 `ceb6a7c` 실행파일
 | Producer: WS·WSS 클라이언트 → Consumer: `vnc-relay` WS·WSS 진입점 / `crates/adapters/tests/websocket_relay.rs` `ws_and_wss_forward_initial_trailing_data_once` | 101 직후 시작 바이트, 초기 요청과 후속 바이트를 한 메시지에 넣음, WS·WSS Mode II 두 순서: [WS-018](../specs/websocket.md#7-수용-테스트), [WS-003~006](../specs/websocket.md#7-수용-테스트) | 통과(시나리오, 4e4a271) | [초기 교환 설계의 실행 기록](../architectures/initial-exchange.md#실행-기록), 커밋 `4e4a271`
-| Producer: noVNC 1.7.0(`repeaterID`) -> Consumer: `vnc-relay` WS·WSS / `tests/websocket_browser.rs` `novnc_repeater_id_completes_rfb_through_ws_and_wss_in_both_server_orders`(`#[ignore]`) | 같은 ID로 매칭 성립, noVNC의 RFB 연결 완료: [WS-025](../specs/websocket.md#7-수용-테스트). TCP Server는 시험 코드의 최소 RFB 3.8 서버다 | 통과(커밋 `f62f11d`, 두 OS `--include-ignored`) | [WebSocket 중계 계약 실행 기록](websocket-relay-v1.md#계약-테스트-실행-기록) |
+| Producer: noVNC 1.7.0(`repeaterID`) -> Consumer: `vnc-relay` WS·WSS / `tests/websocket_browser.rs` `novnc_repeater_id_completes_rfb_through_ws_and_wss_in_both_server_orders`(`#[ignore]`) | 같은 ID로 매칭 성립, noVNC의 RFB 연결 완료: [WS-025](../specs/websocket.md#7-수용-테스트). TCP Server는 시험 코드의 최소 RFB 3.8 서버다 | 통과(커밋 `f62f11d`, 두 OS `--include-ignored`) | [WebSocket 중계 계약 실행 기록](websocket-relay-v2.md#계약-테스트-실행-기록) |
 
 ## 6. 초안을 확정하기 전에 해결할 사항
 

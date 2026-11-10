@@ -471,7 +471,7 @@ fn exercise_browser_relay(
     key: &str,
 ) {
     let url = format!(
-        "{}://127.0.0.1:{}/relay",
+        "{}://127.0.0.1:{}/relay/viewer",
         transport.name(),
         relay.port(transport)
     );
@@ -735,7 +735,7 @@ fn novnc_repeater_id_completes_rfb_through_ws_and_wss_in_both_server_orders() {
         // Separate host, port, encrypt and path: an `http:` page with a
         // `wss:` path connected in plain text in the recorded observation.
         let url = site.url(&format!(
-            "/vnc.html?autoconnect=true&reconnect=false&repeaterID={id}&host=127.0.0.1&port={}&encrypt={}&path=relay",
+            "/vnc.html?autoconnect=true&reconnect=false&repeaterID={id}&host=127.0.0.1&port={}&encrypt={}&path=relay/viewer",
             relay.port(transport),
             matches!(transport, Transport::Wss)
         ));

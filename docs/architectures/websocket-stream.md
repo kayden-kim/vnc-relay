@@ -12,7 +12,7 @@
 | 문서 상태 | Draft |
 | 구조 범위 | 101 뒤 스트림·프레임·B·종료·Kw와 공통 app 소유 루프의 연결 |
 | 적용 작업 | 3.3의 스트림 어댑터와 3.4의 Kw·종료 처리. 초기 교환·중계의 공통 포트를 구현한다. |
-| 기준 | [WebSocket 계약 1.4~1.6절](../contracts/websocket-relay-v1.md#14-데이터-메시지와-제어-프레임), [초기 교환 설계](initial-exchange.md), [세션 설계 3.2절](relay-session.md#32-전송-수명-인터페이스) |
+| 기준 | [WebSocket 계약 1.4~1.6절](../contracts/websocket-relay-v2.md#14-데이터-메시지와-제어-프레임), [초기 교환 설계](initial-exchange.md), [세션 설계 3.2절](relay-session.md#32-전송-수명-인터페이스) |
 | 결정 수준 | 9.1~9.3절은 사용자 결정 2026-11-01(Q77, Q78, Q79)로 해결했다. 9.4절은 사용자 결정 2026-11-01(Q83)로 확정했다. 9.5절은 사용자 결정 2026-11-02(Q84)으로 선택 A를 확정했다. 채택된 계약을 바르게 반영함 |
 | 구현 대조 | Verified — [2026-11-04 대조 기록](#8-현재와-목표의-차이). 프레임 입출력·소유권·종료·Kw와 실제 시험 소스를 대조했다. 양쪽 WS·WSS 스트림 범위의 구현은 커밋 `3df0693`이다. 시험은 커밋 `51bd747`의 두 OS 게이트에서 통과했다([WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)). |
 
@@ -44,10 +44,10 @@ WS·WSS의 H는 101 응답 전송 완료 뒤 `ConnectionContext.exchange_at`에�
 ### 1.2 계약의 제약
 
 - [설정 계약](../contracts/config-v4.md)은 B를 16 KiB~4 MiB로 정한다. M은 64 KiB~16 MiB다. 따라서 유효한 설정에도 M > B가 있다.
-- [데이터 계약 1.4절](../contracts/websocket-relay-v1.md#14-데이터-메시지와-제어-프레임)은 프레임·메시지 경계를 중계 스트림 경계로 쓰지 않는다. 빈 바이너리 메시지는 EOF가 아니다.
+- [데이터 계약 1.4절](../contracts/websocket-relay-v2.md#14-데이터-메시지와-제어-프레임)은 프레임·메시지 경계를 중계 스트림 경계로 쓰지 않는다. 빈 바이너리 메시지는 EOF가 아니다.
 - M은 **논리 메시지 전체**의 페이로드 길이다. 분할 프레임의 합에도 적용한다. M+1이면 1009다. 초과를 알기 전에 앞부분이 TCP로 전달될 수 있다.
 - Viewer 역할에는 VNC Relay의 첫 데이터 메시지로 `RFB 000.000\n` 12바이트를 담은 바이너리 메시지 하나를 보낸다. Server 역할에는 시작 바이트를 보내지 않는다. VNC Relay가 보내는 각 메시지는 M 이하다.
-- [운영 스펙 2절](../specs/operations.md#2-상태와-검증-매개변수)은 초기 교환 후속 데이터도 B에 포함한다. [종료 계약 1.6절](../contracts/websocket-relay-v1.md#16-종료-의미)은 Close와 TCP half-close를 구별하고 정리 시간 E를 제한한다.
+- [운영 스펙 2절](../specs/operations.md#2-상태와-검증-매개변수)은 초기 교환 후속 데이터도 B에 포함한다. [종료 계약 1.6절](../contracts/websocket-relay-v2.md#16-종료-의미)은 Close와 TCP half-close를 구별하고 정리 시간 E를 제한한다.
 - [초기 교환 설계 9.2절](initial-exchange.md#2-해결-wswss를-27에서-연결할지)은 WS·WSS 인계를 2.7 완료 전에 요구한다. Q16·Q21과 기존 3.2의 `현재:`는 바꾸지 않는다. 단일 메시지만 처리하는 임시 파서는 만들지 않는다.
 
 ### 1.3 잠금 버전의 스트리밍 한계
@@ -173,7 +173,7 @@ M 초과는 프레임 헤더만으로도 알 수 있다. 이때 해당 프레임
 
 ### 5.2 action과 Close 코드
 
-아래 대응은 [계약 1.5절](../contracts/websocket-relay-v1.md#15-close-코드)의 값이다. `poll_close`는 가능한 경우 고정 reason과 함께 전송한다. 전송 불능·E 만료이면 소켓을 반환한다. Close를 보내기 위해 E를 연장하지 않는다. `1005`, `1006`, `1015`는 wire에 쓰지 않는다.
+아래 대응은 [계약 1.5절](../contracts/websocket-relay-v2.md#15-close-코드)의 값이다. `poll_close`는 가능한 경우 고정 reason과 함께 전송한다. 전송 불능·E 만료이면 소켓을 반환한다. Close를 보내기 위해 E를 연장하지 않는다. `1005`, `1006`, `1015`는 wire에 쓰지 않는다.
 
 | 기존 `RelayCloseAction` | WS·WSS 동작 |
 | --- | --- |
@@ -258,7 +258,7 @@ Force의 action은 [세션 설계 5.2절](relay-session.md#52-정상-종료와-g
 - 1002·1003·1009로 거절한 입력은 프레임 해석을 신뢰할 수 없다. 이때는 Close를 flush하고 쓰기를 닫는다. 이어 원시 입력을 EOF까지 제한된 횟수로 버린다. 거절한 페이로드 안의 Close 같은 바이트를 응답으로 오인하지 않는다. 유효한 terminal 정리 중 프레임 검사에 실패해도 이 원시 폐기 경로로 전환한다.
 - 두 폐기 경로 모두 poll당 처리를 제한한다. E·G·Force의 절대 상한은 app이 유지한다. 별도 WS 유예 시간은 없다. 어댑터 drop 뒤 소켓을 가진 배경 작업도 남기지 않는다. 상태 슬롯, 재시도와 폐기 경로의 구현 배치는 **이 문서의 판단, 사용자 결정 없음**이다.
 
-Kw는 빈 Ping의 주기와 Pong 기한을 각각 가진다. 일반 데이터 수신은 Pong 응답이 아니다. 대기 중인 Ping이 없을 때 받은 Pong은 생존 판정을 갱신하지 않는다. Pong 기한 초과에는 Close 없이 TCP를 닫는다. 1006은 상대의 관찰 값이지 송신 코드가 아니다([계약 1.4~1.6절](../contracts/websocket-relay-v1.md#14-데이터-메시지와-제어-프레임)). 사용자 결정 2026-11-02(Q84)으로 고정 Ping 주기를 유지하고 전송한 빈 Ping마다 기한을 FIFO에 보관한다. Pong을 받으면 가장 오래된 대기 기한을 지운다. 상한은 `ceil(pong_timeout / ping_interval) + 1`이다(9.5절).
+Kw는 빈 Ping의 주기와 Pong 기한을 각각 가진다. 일반 데이터 수신은 Pong 응답이 아니다. 대기 중인 Ping이 없을 때 받은 Pong은 생존 판정을 갱신하지 않는다. Pong 기한 초과에는 Close 없이 TCP를 닫는다. 1006은 상대의 관찰 값이지 송신 코드가 아니다([계약 1.4~1.6절](../contracts/websocket-relay-v2.md#14-데이터-메시지와-제어-프레임)). 사용자 결정 2026-11-02(Q84)으로 고정 Ping 주기를 유지하고 전송한 빈 Ping마다 기한을 FIFO에 보관한다. Pong을 받으면 가장 오래된 대기 기한을 지운다. 상한은 `ceil(pong_timeout / ping_interval) + 1`이다(9.5절).
 
 B가 찬 데이터 프레임 뒤의 새 Ping·Pong·Close는 아직 읽을 수 없다. 같은 TCP 바이트열에서 그 뒤 제어만 골라 읽을 수는 없다. 유지보수 poll도 이 한계를 바꾸지 않는다. 이미 대기한 제어 출력 진행과 새 제어 입력의 수신을 구별한다. 사용자 결정 2026-11-02(Q84)에 따라 backpressure 중에도 Pong 기한을 멈추지 않는다. 가려진 Pong을 기한 안에 관찰하지 못하면 종료될 수 있다.
 
@@ -364,7 +364,7 @@ B가 찬 데이터 프레임 뒤의 새 Ping·Pong·Close는 아직 읽을 수 �
 
 사용자 결정 2026-11-01(Q83)로 선택 A를 확정했다. 대상은 Close 수신 전에 헤더를 이미 쓴 프레임뿐이다. app이 이미 보유한 잔여만 같은 E 안에서 마친 뒤 같은 코드로 Close에 응답한다. 수신 코드가 없으면 1000으로 응답한다. Close 수신 뒤에 읽은 TCP 데이터는 전달하지 않는다. 새 메시지도 시작하지 않는다.
 
-따라서 [계약 1.6절 첫 행](../contracts/websocket-relay-v1.md#16-종료-의미)의 “Close 뒤 TCP에서 오는 데이터는 WS로 보내지 못하며 버린다”는 규칙을 유지한다. [RFC 6455 5.5.1절](https://www.rfc-editor.org/rfc/rfc6455#section-5.5.1)도 진행 중 메시지를 마친 뒤 응답할 수 있게 한다. B는 잘못된 wire를 만든다. C는 E 안에 전송할 수 있는 경우에도 계약의 같은 코드 응답을 생략하므로 선택하지 않는다. 전송 실패나 E 만료 때의 강제 자원 반환은 그대로 유지한다. 위 표는 검토한 대안의 기록이다.
+따라서 [계약 1.6절 첫 행](../contracts/websocket-relay-v2.md#16-종료-의미)의 “Close 뒤 TCP에서 오는 데이터는 WS로 보내지 못하며 버린다”는 규칙을 유지한다. [RFC 6455 5.5.1절](https://www.rfc-editor.org/rfc/rfc6455#section-5.5.1)도 진행 중 메시지를 마친 뒤 응답할 수 있게 한다. B는 잘못된 wire를 만든다. C는 E 안에 전송할 수 있는 경우에도 계약의 같은 코드 응답을 생략하므로 선택하지 않는다. 전송 실패나 E 만료 때의 강제 자원 반환은 그대로 유지한다. 위 표는 검토한 대안의 기록이다.
 
 ### 9.5 Kw의 여러 Ping과 B backpressure
 
@@ -376,13 +376,13 @@ B가 찬 데이터 프레임 뒤의 새 Ping·Pong·Close는 아직 읽을 수 �
 | B. Pong 하나를 기다리는 동안 다음 Ping을 미룸 | 한 개의 대기 상태만 필요 | 고정 주기 문장과 다름. 응답 대기로 생존 판정이 늦어짐 |
 | C. backpressure 동안 Pong 시계를 멈추거나 식별자 Ping으로 바꿈 | 지연된 Pong의 오판 감소 또는 응답 구분 | 절대 응답 기한 또는 빈 Ping 계약 변경 필요. 무응답 점유 시간이 늘 수 있음 |
 
-선택 A는 [데이터·제어 계약](../contracts/websocket-relay-v1.md#14-데이터-메시지와-제어-프레임)의 빈 Ping·각 Pong 기한과 [설정 계약](../contracts/config-v4.md)의 범위를 유지한다. FIFO는 응답의 실제 신원을 증명하지 않는다. RFC가 허용하는 Pong 합치기와도 구별한다. backpressure 동안에도 기한을 멈추지 않으므로 B 뒤에 가려진 Pong을 기한 안에 관찰하지 못하면 종료될 수 있다(사용자 결정 2026-11-02(Q84)). 유예·식별자·새 기본값을 도입하지 않는다. 위 표는 검토한 대안의 기록이다.
+선택 A는 [데이터·제어 계약](../contracts/websocket-relay-v2.md#14-데이터-메시지와-제어-프레임)의 빈 Ping·각 Pong 기한과 [설정 계약](../contracts/config-v4.md)의 범위를 유지한다. FIFO는 응답의 실제 신원을 증명하지 않는다. RFC가 허용하는 Pong 합치기와도 구별한다. backpressure 동안에도 기한을 멈추지 않으므로 B 뒤에 가려진 Pong을 기한 안에 관찰하지 못하면 종료될 수 있다(사용자 결정 2026-11-02(Q84)). 유예·식별자·새 기본값을 도입하지 않는다. 위 표는 검토한 대안의 기록이다.
 
 `Keepalive`는 검증된 설정 범위의 최대 크기인 61칸 고정 배열을 쓴다. 실제 FIFO 인덱스는 해당 연결의 계산한 상한 안에서만 돈다. Ping마다 메모리를 할당하지 않는다. 스트림당 tokio `Sleep` 하나가 다음 Ping 또는 가장 오래된 Pong 기한의 wake를 등록한다. 일반 데이터나 Pong이 Ping 기준 시각을 옮기지 않는다. 타이머 poll에서 기한 만료와 다음 Ping이 겹치면 만료를 먼저 판정한다.
 
 미완료 데이터 프레임·Pong·Ping의 바이트 사이에 다른 제어 프레임을 끼워 넣지 않는다. 서버 Ping은 빈 프레임 두 바이트를 모두 쓰고 하부 전송을 flush한 시각부터 Pong 제한을 잰다. 출력이 막힌 동안에는 미완료 Ping 한 개만 보존한다. 지나간 주기의 Ping을 한꺼번에 쌓아 보내지 않고, 원래 고정 기준의 다음 시각으로 진행한다. 이 내부 저장·poll 방식은 **이 문서의 판단, 사용자 결정 없음**이다.
 
-자기 WS의 Pong 제한 초과는 `RelayStreamError::DeadConnection`으로 공통 소유자에게 전달한다. H·C에서는 `connection_aborted(reason=dead_connection)`, Mode II 대기에서는 `waiting_removed(reason=dead_connection)`, 활성 세션에서는 `session_closed(close_cause=dead_connection, side=viewer)`로 기록한다. 어댑터의 만료 상태는 Close 없이 자기 TCP를 닫게 한다. 반대 TCP가 끊긴 연결일 때 살아 있는 WS에 보내는 4006은 그대로 유지한다. 이는 [WebSocket 계약 1.6·2.2절](../contracts/websocket-relay-v1.md#16-종료-의미)을 따른 것이며 새 사용자 결정이 아니다.
+자기 WS의 Pong 제한 초과는 `RelayStreamError::DeadConnection`으로 공통 소유자에게 전달한다. H·C에서는 `connection_aborted(reason=dead_connection)`, Mode II 대기에서는 `waiting_removed(reason=dead_connection)`, 활성 세션에서는 `session_closed(close_cause=dead_connection, side=viewer)`로 기록한다. 어댑터의 만료 상태는 Close 없이 자기 TCP를 닫게 한다. 반대 TCP가 끊긴 연결일 때 살아 있는 WS에 보내는 4006은 그대로 유지한다. 이는 [WebSocket 계약 1.6·2.2절](../contracts/websocket-relay-v2.md#16-종료-의미)을 따른 것이며 새 사용자 결정이 아니다.
 
 ## 대조·실행 기록
 

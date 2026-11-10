@@ -531,7 +531,7 @@ impl Peer {
         };
         let ws = !matches!(transport, Transport::Tcp);
         if ws {
-            wire.write_all(b"GET /relay HTTP/1.1\r\nHost: localhost\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Protocol: binary\r\n\r\n").await?;
+            wire.write_all(b"GET /relay/viewer HTTP/1.1\r\nHost: localhost\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Protocol: binary\r\n\r\n").await?;
             wire.flush().await?;
             let mut head = Vec::new();
             while !head.ends_with(b"\r\n\r\n") {

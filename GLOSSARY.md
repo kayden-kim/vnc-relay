@@ -74,7 +74,7 @@ Viewer가 들어온 전송 방식(TCP·WS·WSS)이다.
 접속을 받도록 바인드한 소켓 하나다. 중계 리스너는 TCP Viewer·TCP Server·WS·WSS이며, 관리·상태 리스너와 구분한다.
 
 **진입점(entry_point)**:
-중계 연결이 들어오는 리스너와 역할의 조합이다(TCP Viewer·TCP Server·WS Viewer·WS Server·WSS Viewer·WSS Server). TCP 리스너는 역할이 고정되며, WS·WSS 리스너는 `/relay`와 `/relay/server` 경로로 역할을 구분한다.
+중계 연결이 들어오는 리스너와 역할의 조합이다(TCP Viewer·TCP Server·WS Viewer·WS Server·WSS Viewer·WSS Server). TCP 리스너는 역할이 고정되며, WS·WSS 리스너는 `/relay/viewer`와 `/relay/server` 경로로 역할을 구분한다.
 _Avoid_: 진입 경로, 리스너(진입점을 가리킬 때)
 
 **출발지 IP(peer_ip)**:

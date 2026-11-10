@@ -257,8 +257,8 @@
         <table class="meta" aria-labelledby="meta-title">
           <tbody>
             <tr><th scope="row">기준 독자</th><td>vnc-relay에 중계 접속 ticket을 넣을지 검토하는 개발자와 운영자</td></tr>
-            <tr><th scope="row">먼저 읽을 문서</th><td><a href="../architectures/websocket-entry-point.md">WebSocket 진입점 모듈 설계</a>, <a href="../contracts/websocket-relay-v1.md#11-업그레이드-요청">WebSocket 중계 계약 1.1절</a></td></tr>
-            <tr><th scope="row">관련 기준 문서</th><td><a href="../requirements/PRD.md#확정-기준">PRD 확정 기준</a>, <a href="../decisions/ADR-0002-source-ip-allowlist.md">ADR-0002</a>, <a href="../decisions/ADR-0003-single-instance-memory-state.md">ADR-0003</a>, <a href="../contracts/websocket-relay-v1.md">WebSocket 중계 계약 v1</a>, <a href="../contracts/config-v4.md">설정 계약 v4</a>, <a href="../specs/relay.md">중계와 매칭 스펙</a>, <a href="../contracts/repeater-handshake-v1.md">Repeater 초기 교환 계약</a></td></tr>
+            <tr><th scope="row">먼저 읽을 문서</th><td><a href="../architectures/websocket-entry-point.md">WebSocket 진입점 모듈 설계</a>, <a href="../contracts/websocket-relay-v2.md#11-업그레이드-요청">WebSocket 중계 계약 1.1절</a></td></tr>
+            <tr><th scope="row">관련 기준 문서</th><td><a href="../requirements/PRD.md#확정-기준">PRD 확정 기준</a>, <a href="../decisions/ADR-0002-source-ip-allowlist.md">ADR-0002</a>, <a href="../decisions/ADR-0003-single-instance-memory-state.md">ADR-0003</a>, <a href="../contracts/websocket-relay-v2.md">WebSocket 중계 계약 v2</a>, <a href="../contracts/config-v4.md">설정 계약 v4</a>, <a href="../specs/relay.md">중계와 매칭 스펙</a>, <a href="../contracts/repeater-handshake-v1.md">Repeater 초기 교환 계약</a></td></tr>
             <tr><th scope="row">대상 버전·확인일</th><td>vnc-relay main <code>4902343</code>의 코드와 문서. 사용처 계약은 비공개 저장소의 철회 직전 커밋 <code>96b0258</code>과 현재 커밋 <code>a012d9d</code>(결정 <code>ADM-TBD-059</code>, <code>238</code>, <code>239</code>, <code>242</code>). 사용처 기기 앱은 비공개 커밋 <code>ca34577</code>. 기기 쪽 공개 코드는 droidVNC-NG <code>3e5f27e</code>(2.22.2)와 그 LibVNCServer 하위 모듈 <code>98aaee0</code>. 외부 문서를 포함해 2026-11-10에 확인했다.</td></tr>
             <tr><th scope="row">검증 기록</th><td>2026-11-10, 커밋 <code>40110cf</code> 위의 작업 트리에서 이 해설의 미커밋 변경(06절 문구 정리와 이 행)을 확인했다. <a href="README.md">해설 목록</a>은 링크만 다시 확인했다. 환경은 Windows 11 x64, omp 관리 Chromium(헤드리스), Python <code>urllib</code>, <code>curl</code>이다. 그림·표·코드 번호, 절 참조, <code>id</code> 중복 검사는 통과했다. 폭 1280·760·390·320px에서 가로 넘침, 제목 단계, 스크롤 영역 포커스, 스크립트 오류, 외부 요청, 단계 버튼 검사도 통과했다. 390·320px에서는 긴 코드 경로와 식별자가 단어 중간에서 줄을 바꾼다. 내부 링크·앵커와 외부 링크 33개 검사는 통과했다. gnu.org는 이 환경의 기본 경로 연결이 끊겨 IPv4로 확인했다. aws-lc-rs 문서 링크의 404는 <code>40110cf</code> 전 검사에서 찾아 그 커밋에서 고쳤다. 저장소 게이트는 미실행이다. 문서만 바꿨으므로 코드에 영향이 없다.</td></tr>
           </tbody>
@@ -281,8 +281,8 @@
     <div class="prose">
       <p class="eyebrow">01 / 문제 상황</p>
       <h2 id="problem-title">중계 ID만으로는 누가 연결하는지 알 수 없다</h2>
-      <p>브라우저의 noVNC는 vnc-relay의 <code>/relay</code> 경로로 WebSocket 업그레이드 요청을 보낸다. 101 응답 뒤에는 초기 교환으로 중계 ID를 보낸다. 같은 중계 ID로 기다리던 기기의 대기 연결이 있으면 둘은 Mode II로 짝을 이룬다.</p>
-      <p>vnc-relay가 업그레이드 전에 보는 접근 조건은 클라이언트 주소와 Origin이다(<a href="../contracts/websocket-relay-v1.md#11-업그레이드-요청">계약 1.1절</a>). 출발지 IP 허용 목록에 전체 허용 항목(<code>0.0.0.0/0</code>)을 쓰면 주소 검사는 아무도 거르지 않는다. Origin은 다른 사이트의 브라우저 페이지만 막는다. 요청을 직접 만드는 프로그램은 Origin 헤더를 빼고 보낼 수 있다. 이때 vnc-relay는 Origin 검사만 건너뛰고 주소 검사는 그대로 한다(<a href="../contracts/websocket-relay-v1.md#13-origin-비교">계약 1.3절</a>).</p>
+      <p>브라우저의 noVNC는 vnc-relay의 <code>/relay/viewer</code> 경로로 WebSocket 업그레이드 요청을 보낸다. 101 응답 뒤에는 초기 교환으로 중계 ID를 보낸다. 같은 중계 ID로 기다리던 기기의 대기 연결이 있으면 둘은 Mode II로 짝을 이룬다.</p>
+      <p>vnc-relay가 업그레이드 전에 보는 접근 조건은 클라이언트 주소와 Origin이다(<a href="../contracts/websocket-relay-v2.md#11-업그레이드-요청">계약 1.1절</a>). 출발지 IP 허용 목록에 전체 허용 항목(<code>0.0.0.0/0</code>)을 쓰면 주소 검사는 아무도 거르지 않는다. Origin은 다른 사이트의 브라우저 페이지만 막는다. 요청을 직접 만드는 프로그램은 Origin 헤더를 빼고 보낼 수 있다. 이때 vnc-relay는 Origin 검사만 건너뛰고 주소 검사는 그대로 한다(<a href="../contracts/websocket-relay-v2.md#13-origin-비교">계약 1.3절</a>).</p>
       <p>중계 ID는 짝을 찾는 값이며 비밀값이 아니다(<a href="../../GLOSSARY.md#중계-방식과-세션">용어집</a>). 그래서 허용된 출발지에서 Origin 검사를 통과한 클라이언트는 중계 ID만 알면 자격 증명 없이 짝을 이룰 수 있다. 그 뒤에 남는 보호는 기기가 확인하는 VNC 비밀번호다. ticket은 여기에 "어드민 서비스에서 방금 연결을 요청한 브라우저인가"라는 조건을 더하려는 방법이다.</p>
     </div>
     <figure class="side-figure" aria-labelledby="fig2-caption">
@@ -445,7 +445,7 @@
         <li><code>sx</code>가 되면 <code>4410</code>으로 끊는다.</li>
         <li>로그에는 시각·<code>sub</code>·<code>jti</code>·결과·전송량만 남긴다.</li>
       </ul>
-      <p class="note">이 close 코드들은 vnc-relay의 <a href="../contracts/websocket-relay-v1.md#15-close-코드">close 코드</a>에 없다. vnc-relay는 4000번대 코드를 다른 뜻으로 쓴다. 05절은 이 규칙들이 vnc-relay 안에서 어디로 가는지 설명한다.</p>
+      <p class="note">이 close 코드들은 vnc-relay의 <a href="../contracts/websocket-relay-v2.md#15-close-코드">close 코드</a>에 없다. vnc-relay는 4000번대 코드를 다른 뜻으로 쓴다. 05절은 이 규칙들이 vnc-relay 안에서 어디로 가는지 설명한다.</p>
     </div>
   </section>
 
@@ -470,16 +470,16 @@
           <li class="added"><strong>사용 기록 쓰기<span class="who">추가</span></strong><code>jti</code>가 이미 있으면 거절한다.<span class="gap">이 뒤에는 실패할 검사가 없다.</span></li>
           <li><strong>101 응답<span class="who">지금과 같음</span></strong><code>binary</code>만 되돌린다. ticket은 응답에 없다.</li>
         </ol>
-        <figcaption id="fig5-caption"><strong>그림 5. 내재화 안의 업그레이드 검사 순서(예).</strong> 채운 번호가 바뀌거나 새로 들어가는 단계다. 나머지는 <a href="../contracts/websocket-relay-v1.md#11-업그레이드-요청">계약 1.1절</a>의 지금 순서다.</figcaption>
+        <figcaption id="fig5-caption"><strong>그림 5. 내재화 안의 업그레이드 검사 순서(예).</strong> 채운 번호가 바뀌거나 새로 들어가는 단계다. 나머지는 <a href="../contracts/websocket-relay-v2.md#11-업그레이드-요청">계약 1.1절</a>의 지금 순서다.</figcaption>
       </figure>
     </div>
 
     <div class="prose">
       <h3>서브프로토콜에 싣는 값</h3>
-      <p>브라우저는 noVNC의 <code>wsProtocols</code> 옵션으로 값 두 개를 보낸다(<a href="https://github.com/novnc/noVNC/blob/master/docs/API.md">noVNC API</a>). 예를 들면 <code>binary</code>와 <code>ticket.</code> 뒤에 JWS를 붙인 값이다. JWS 압축 형식은 base64url 문자와 점만 쓰므로 서브프로토콜 값의 문자 규칙에 맞는다. 길이는 수백 바이트이고, 요청 머리 상한 16 KiB(<a href="../contracts/websocket-relay-v1.md#11-업그레이드-요청">계약 1.1절</a>)보다 훨씬 작다.</p>
-      <p>noVNC 1.7.0은 이 옵션이 없으면 <code>Sec-WebSocket-Protocol</code> 헤더를 보내지 않는다(<a href="../contracts/websocket-relay-v1.md#12-업그레이드-응답과-서브프로토콜">계약 1.2절</a>의 관찰 기록). 그래서 이 안은 vnc-relay만 바꾸어서는 동작하지 않는다. 사용처 페이지가 noVNC에 ticket을 넘기도록 함께 바뀌어야 한다.</p>
+      <p>브라우저는 noVNC의 <code>wsProtocols</code> 옵션으로 값 두 개를 보낸다(<a href="https://github.com/novnc/noVNC/blob/master/docs/API.md">noVNC API</a>). 예를 들면 <code>binary</code>와 <code>ticket.</code> 뒤에 JWS를 붙인 값이다. JWS 압축 형식은 base64url 문자와 점만 쓰므로 서브프로토콜 값의 문자 규칙에 맞는다. 길이는 수백 바이트이고, 요청 머리 상한 16 KiB(<a href="../contracts/websocket-relay-v2.md#11-업그레이드-요청">계약 1.1절</a>)보다 훨씬 작다.</p>
+      <p>noVNC 1.7.0은 이 옵션이 없으면 <code>Sec-WebSocket-Protocol</code> 헤더를 보내지 않는다(<a href="../contracts/websocket-relay-v2.md#12-업그레이드-응답과-서브프로토콜">계약 1.2절</a>의 관찰 기록). 그래서 이 안은 vnc-relay만 바꾸어서는 동작하지 않는다. 사용처 페이지가 noVNC에 ticket을 넘기도록 함께 바뀌어야 한다.</p>
       <p>브라우저는 제시한 값 가운데 하나를 서버가 고르지 않으면 연결을 실패로 처리한다(<a href="https://websockets.spec.whatwg.org/#websocket-opening-handshake">WHATWG WebSockets 2.2절</a>). vnc-relay는 지금처럼 <code>binary</code>를 고른다. ticket 값은 응답에 되돌리지 않는다.</p>
-      <p>지금 계약은 값이 없거나 <code>binary</code>만 있어도 수락한다(<a href="../contracts/websocket-relay-v1.md#12-업그레이드-응답과-서브프로토콜">계약 1.2절</a>). ticket을 요구하는 역할에서는 이 두 경우가 거절로 바뀐다. 계약 3절은 서브프로토콜 규칙 변경을 호환성을 깨는 변경으로 나눈다(<a href="../contracts/websocket-relay-v1.md#3-호환성-규칙">계약 3절</a>). 설정으로 켜는 기능이어도 1.2절의 규칙이 바뀌므로 이 분류에 든다(추정: 계약은 설정으로 켜는 규칙 변경을 따로 다루지 않는다).</p>
+      <p>지금 계약은 값이 없거나 <code>binary</code>만 있어도 수락한다(<a href="../contracts/websocket-relay-v2.md#12-업그레이드-응답과-서브프로토콜">계약 1.2절</a>). ticket을 요구하는 역할에서는 이 두 경우가 거절로 바뀐다. 계약 3절은 서브프로토콜 규칙 변경을 호환성을 깨는 변경으로 나눈다(<a href="../contracts/websocket-relay-v2.md#3-호환성-규칙">계약 3절</a>). 설정으로 켜는 기능이어도 1.2절의 규칙이 바뀌므로 이 분류에 든다(추정: 계약은 설정으로 켜는 규칙 변경을 따로 다루지 않는다).</p>
 
       <h3>서명과 클레임 확인</h3>
       <p>확인은 표 4의 순서로 한다. 서명을 먼저 검증한다. 서명이 맞지 않는 값의 클레임은 믿을 근거가 없기 때문이다. 시각 비교에는 vnc-relay 호스트의 시스템 시각을 쓴다. 그래서 발급 쪽과 vnc-relay 양쪽의 시계가 맞아야 한다.</p>
@@ -491,7 +491,8 @@
         <tbody>
           <tr><th scope="row">헤더 <code>alg</code></th><td><code>ES256</code>만 받는다. <code>none</code>을 포함한 다른 값은 거절한다.</td><td>401</td></tr>
           <tr><th scope="row">서명</th><td>설정한 공개 키</td><td>401</td></tr>
-          <tr><th scope="row"><code>iss</code>, <code>aud</code></th><td>설정한 발급자와 대상</td><td>401</td></tr>
+          <tr><th scope="row"><code>iss</code></th><td>설정한 발급자</td><td>401</td></tr>
+          <tr><th scope="row"><code>aud</code></th><td>경로로 고른 역할의 고정 값 하나. Viewer는 <code>vnc-relay/viewer</code>다. 정확히 같은 문자열만 받고 배열은 거절한다.</td><td>401</td></tr>
           <tr><th scope="row"><code>iat</code>, <code>exp</code></th><td>vnc-relay의 현재 시각. 5초의 시계 오차를 허용한다.</td><td>401</td></tr>
           <tr><th scope="row"><code>rh</code></th><td>설정한 이 vnc-relay의 이름. 요청의 <code>Host</code>는 쓰지 않는다.</td><td>403</td></tr>
           <tr><th scope="row"><code>jti</code></th><td>사용 기록(그림 5의 8)</td><td>401</td></tr>
@@ -502,7 +503,10 @@
       </table>
     </div>
     <div class="prose" style="margin-top:28px">
-      <p><code>rh</code>는 요청의 <code>Host</code>가 아니라 설정값과 대조한다. <code>Host</code>는 클라이언트가 정하는 값이고, 계약도 이 값을 라우팅에 쓰지 않는다(<a href="../contracts/websocket-relay-v1.md#11-업그레이드-요청">계약 1.1절</a>). 설정한 이름과 대조해야 다른 중계용으로 발급한 ticket을 거른다.</p>
+      <p><code>aud</code>는 역할마다 고정한 값 하나다. Viewer는 <code>vnc-relay/viewer</code>, Server는 <code>vnc-relay/server</code>다(사용자 결정 2026-11-10). vnc-relay는 기대값을 ticket이나 요청 헤더에서 가져오지 않는다. 경로로 고른 역할에서 정한다. 그래서 Server 역할도 ticket을 요구하면(06절) Viewer ticket을 <code>/relay/server</code>에 내도 401이다.</p>
+      <p>비교는 변환 없이 대소문자를 구분하는 문자열 비교다. 두 값에는 <code>:</code>가 없으므로 URI가 아니어도 된다(<a href="https://www.rfc-editor.org/rfc/rfc7519#section-2">RFC 7519 2절</a>의 StringOrURI). 표준은 <code>aud</code>를 배열로도 허용한다(<a href="https://www.rfc-editor.org/rfc/rfc7519#section-4.1.3">RFC 7519 4.1.3절</a>). 이 안은 문자열 하나만 받는다. 배열을 받으면 두 역할 값을 함께 담은 ticket이 두 경로에서 모두 통과하기 때문이다.</p>
+      <p>역할마다 <code>aud</code>를 나누는 것은 역할을 구분하는 여러 방법 가운데 하나다. RFC 8725 3.12절은 같은 발급자가 여러 종류의 JWT를 내면 확인 규칙이 서로 겹치지 않아야 한다고 정한다. 그 방법으로 <code>typ</code>, 필수 클레임, 서명 키, 발급자, <code>aud</code>를 나누는 방식을 예로 든다(<a href="https://www.rfc-editor.org/rfc/rfc8725#section-3.12">RFC 8725 3.12절</a>). 서명 키를 역할마다 나눌지는 정하지 않았다(표 9).</p>
+      <p><code>rh</code>는 요청의 <code>Host</code>가 아니라 설정값과 대조한다. <code>Host</code>는 클라이언트가 정하는 값이고, 계약도 이 값을 라우팅에 쓰지 않는다(<a href="../contracts/websocket-relay-v2.md#11-업그레이드-요청">계약 1.1절</a>). 설정한 이름과 대조해야 다른 중계용으로 발급한 ticket을 거른다.</p>
       <p><code>sx</code>는 <code>exp</code>와 따로 비교한다. <code>exp</code>는 <code>sx</code>를 넘지 않지만, <code>exp</code> 확인에는 5초 오차를 허용한다. 그 오차만 적용하면 <code>sx</code> 뒤 5초 안에 온 요청도 통과한다. 이 연결은 원격 지원 세션이 끝난 뒤에 열리고 101 직후 바로 끊긴다. 그래서 이 안은 업그레이드 때 <code>sx</code>를 오차 없이 비교한다(예). vnc-relay 호스트의 시계가 발급 쪽보다 빠르면 그 차이만큼 세션이 일찍 끝난다.</p>
       <p>서명 검증에 쓸 라이브러리는 이미 있다. aws-lc-rs는 작업공간 의존성이며, 그 <code>ECDSA_P256_SHA256_FIXED</code>는 R‖S 고정 길이 서명을 검증한다(<a href="https://docs.rs/aws-lc-rs/1.18.2/aws_lc_rs/signature/constant.ECDSA_P256_SHA256_FIXED.html">aws-lc-rs 문서</a>). JWS의 ES256 서명 형식과 같다.</p>
 
@@ -516,7 +520,7 @@
       <p>내재화 안에서 <code>rid</code> 대조와 <code>sx</code> 시각은 그 Viewer 역할 연결에만 붙는다. 같은 중계 ID로 기다리는 기기 쪽 연결(Server 역할)은 ticket 없이 지금처럼 대기한다. 기기 쪽에도 ticket을 요구하는 확장은 06절의 Server 역할 변형이다. 이 변형도 채택하지 않았다.</p>
       <p>ticket은 중계 ID에 묶이므로 Mode I 요청에는 대조할 값이 없다. ticket을 요구하는 역할에서 Mode I 요청을 거절할지는 정해야 한다(표 6).</p>
       <p><code>sx</code>가 되면 활성 세션을 끝낸다. vnc-relay에는 관리자 종료가 세션을 끝내는 경로가 이미 있다(07절). 관리자 종료는 같은 종료 동작을 브라우저 쪽과 기기 쪽 연결에 모두 보낸다. WS 연결은 close <code>4005</code>를 받고, TCP 연결은 소켓이 닫힌다. <code>sx</code> 종료는 이 경로에 새 종료 원인과 close 코드를 더하는 방식이 가능하다(추정). 그러면 기기 쪽 연결도 함께 닫힌다. 짝을 이루기 전 대기 중에 <code>sx</code>가 지나는 경우도 같은 시각에 끊어야 규칙이 맞는다.</p>
-      <p>철회한 설계의 <code>4502</code>(Repeater 연결 실패)와 <code>4408</code>(Repeater 무응답)에 해당하는 규칙은 필요 없다. vnc-relay는 같은 프로세스에서 짝을 짓는다. 상대가 오지 않으면 기존 <code>4001</code>(대기 시간 초과)이, 상대 연결이 끊기면 기존 <code>4006</code>·<code>4007</code>이 쓰인다(<a href="../contracts/websocket-relay-v1.md#15-close-코드">계약 1.5절</a>).</p>
+      <p>철회한 설계의 <code>4502</code>(Repeater 연결 실패)와 <code>4408</code>(Repeater 무응답)에 해당하는 규칙은 필요 없다. vnc-relay는 같은 프로세스에서 짝을 짓는다. 상대가 오지 않으면 기존 <code>4001</code>(대기 시간 초과)이, 상대 연결이 끊기면 기존 <code>4006</code>·<code>4007</code>이 쓰인다(<a href="../contracts/websocket-relay-v2.md#15-close-코드">계약 1.5절</a>).</p>
 
       <h3>설정과 재로드</h3>
       <p>ticket 설정은 역할마다 둘 수 있다. 이 안에서는 WS Viewer와 WSS Viewer가 각각 켜고 끈다. Server 역할에는 쓰지 않는다. 지금 기기는 ticket을 받지 않기 때문이다. Server 역할에도 쓰는 변형은 06절에서 설명한다.</p>
@@ -534,7 +538,7 @@ allowed_origins = ["https://admin.example"]
 [relay.wss.viewer.ticket]
 required = true
 issuer = "admin.example/prod"
-audience = "vnc-relay"
+# aud 키는 없다. 기대값은 Viewer 역할의 고정 값 vnc-relay/viewer다.
 relay_host = "relay.example"
 public_keys_file = "keys/ticket-public.jwks"
 max_skew_secs = 5</code></pre>
@@ -551,7 +555,7 @@ max_skew_secs = 5</code></pre>
         <tbody>
           <tr><th scope="row"><a href="../requirements/PRD.md#확정-기준">PRD 확정 기준</a> "WS·WSS 중계 접근"</th><td>"관리자 로그인·접속 토큰과 분리" 문구</td><td>사용자 결정</td></tr>
           <tr><th scope="row"><a href="../decisions/ADR-0002-source-ip-allowlist.md">ADR-0002</a></th><td>대안에서 제외한 WS 전용 토큰을 다시 결정</td><td>새 ADR</td></tr>
-          <tr><th scope="row"><a href="../contracts/websocket-relay-v1.md">WebSocket 중계 계약</a></th><td>1.1절 검사 순서, 1.2절 서브프로토콜 규칙, 2.1절 HTTP 거절(401 등), 1.5절과 2.2절의 close 코드 추가</td><td>서브프로토콜 규칙 변경이므로 <code>websocket-relay</code> 2.0.0. close 코드 추가만이면 1.x.0이다.</td></tr>
+          <tr><th scope="row"><a href="../contracts/websocket-relay-v2.md">WebSocket 중계 계약</a></th><td>1.1절 검사 순서, 1.2절 서브프로토콜 규칙, 2.1절 HTTP 거절(401 등), 1.5절과 2.2절의 close 코드 추가</td><td>서브프로토콜 규칙 변경이므로 <code>websocket-relay</code> 3.0.0. close 코드 추가만이면 2.x.0이다.</td></tr>
           <tr><th scope="row"><a href="../contracts/config-v4.md">설정 계약</a></th><td>역할별 ticket 표와 키, 재로드·편집 구분</td><td>생략하면 지금과 같으므로 호환 변경</td></tr>
           <tr><th scope="row"><a href="../contracts/ops-info-v2.md">운영 정보 계약</a></th><td>업그레이드 거절 사유, 새 종료 원인, 키 파일 재로드 결과</td><td>그 계약의 호환성 규칙에 따른다.</td></tr>
           <tr><th scope="row"><a href="../contracts/management-api-v1.md">관리 API 계약</a></th><td>최근 종료 목록의 <code>close_cause</code> 값 추가</td><td>그 계약의 호환성 규칙에 따른다.</td></tr>
@@ -604,23 +608,23 @@ max_skew_secs = 5</code></pre>
 
     <div class="prose">
       <h3>vnc-relay 쪽: 같은 검사를 역할별로 쓴다</h3>
-      <p>vnc-relay는 WS·WSS의 Server 역할을 이미 받는다. 경로 <code>/relay/server</code>가 Server 역할을 고른다(<a href="../contracts/websocket-relay-v1.md#17-경로와-역할">계약 1.7절</a>). 지금은 이 역할에서도 ticket을 확인하지 않는다. 변형에서는 그림 5의 검사 순서를 그대로 쓰고, 고른 역할의 ticket 설정으로 확인할 수 있다(추정). 코드에서 이 자리는 07절에 있다.</p>
+      <p>vnc-relay는 WS·WSS의 Server 역할을 이미 받는다. 경로 <code>/relay/server</code>가 Server 역할을 고른다(<a href="../contracts/websocket-relay-v2.md#17-경로와-역할">계약 1.7절</a>). 지금은 이 역할에서도 ticket을 확인하지 않는다. 변형에서는 그림 5의 검사 순서를 그대로 쓰고, 고른 역할의 ticket 설정으로 확인할 수 있다(추정). 코드에서 이 자리는 07절에 있다.</p>
       <p>101 뒤에는 Server가 <code>ID:</code> 초기 요청을 먼저 보낸다(계약 1.7절). 변형에서는 이 중계 ID를 ticket의 <code>rid</code>와 대조한다(예). Server 역할은 Mode II만 받으므로 표 6의 Mode I 선택은 생기지 않는다(<a href="../specs/relay.md#21-판정-가능한-규칙">중계와 매칭 스펙 RLY-R20</a>).</p>
       <p>Viewer ticket과 Server ticket은 서로 바꿔 쓸 수 없어야 한다. 바꿔 쓸 수 있으면 브라우저가 받은 Viewer ticket으로 기기 자리에 등록할 수 있다. 표 7은 두 ticket의 차이를 정리했다.</p>
     </div>
     <div class="table-wrap wide" tabindex="0" role="region" aria-label="표 7">
       <table>
-        <caption><strong>표 7. Viewer ticket과 Server ticket의 차이.</strong> Server ticket 열의 값은 모두 예시다.</caption>
+        <caption><strong>표 7. Viewer ticket과 Server ticket의 차이.</strong> Server ticket 열의 값은 <code>aud</code>를 빼면 모두 예시다. 두 <code>aud</code> 값은 사용자 결정 2026-11-10이다.</caption>
         <thead><tr><th scope="col">항목</th><th scope="col">Viewer ticket(05절)</th><th scope="col">Server ticket(06절)</th></tr></thead>
         <tbody>
-          <tr><th scope="row">업그레이드 경로</th><td><code>/relay</code></td><td><code>/relay/server</code></td></tr>
+          <tr><th scope="row">업그레이드 경로</th><td><code>/relay/viewer</code></td><td><code>/relay/server</code></td></tr>
           <tr><th scope="row">받는 쪽</th><td>브라우저의 noVNC</td><td>기기 쪽 WSS 클라이언트(그림 7의 A 또는 B)</td></tr>
           <tr><th scope="row">발급</th><td>어드민 API가 로그인·권한·세션을 확인한 뒤 접속정보 응답에 담는다.</td><td>사용처의 기기용 API가 기기를 인증한 뒤 발급한다. 기기 인증 방식은 이 해설에서 확인하지 않았다.</td></tr>
           <tr><th scope="row">받는 시점</th><td>브라우저가 연결하기 직전</td><td>기기가 연결하기 직전. 연결 시도마다 새로 받는다.</td></tr>
-          <tr><th scope="row"><code>aud</code></th><td>Viewer용 값</td><td>Viewer용과 다른 값. 한 역할의 ticket이 다른 역할에서 통과하지 않게 한다.</td></tr>
+          <tr><th scope="row"><code>aud</code></th><td><code>vnc-relay/viewer</code></td><td><code>vnc-relay/server</code>. 한 역할의 ticket이 다른 역할에서 통과하지 않게 한다.</td></tr>
           <tr><th scope="row"><code>rid</code> 대조</th><td>101 뒤 Viewer가 보낸 초기 교환</td><td>101 뒤 Server가 먼저 보낸 <code>ID:</code> 초기 요청</td></tr>
           <tr><th scope="row"><code>sx</code></th><td>활성 세션을 끝낼 시각</td><td>짝을 이루기 전 대기 중인 기기 연결을 끝낼 시각. 활성 세션은 Viewer 쪽 <code>sx</code>로 끝난다.</td></tr>
-          <tr><th scope="row">Origin</th><td>브라우저가 보낸다. 역할의 허용 값과 비교한다.</td><td>보내지 않으면 IP 검사만 한다(<a href="../contracts/websocket-relay-v1.md#13-origin-비교">계약 1.3절</a>).</td></tr>
+          <tr><th scope="row">Origin</th><td>브라우저가 보낸다. 역할의 허용 값과 비교한다.</td><td>보내지 않으면 IP 검사만 한다(<a href="../contracts/websocket-relay-v2.md#13-origin-비교">계약 1.3절</a>).</td></tr>
           <tr><th scope="row">101 전 거절이 보이는 방식</th><td>페이지는 close 1006만 받는다.</td><td>기기 쪽 클라이언트는 HTTP 상태를 읽을 수 있다. 예를 들어 OkHttp는 101이 아닌 응답을 실패 처리에 넘긴다(<a href="https://github.com/square/okhttp/blob/parent-5.3.0/okhttp/src/commonJvmAndroid/kotlin/okhttp3/internal/ws/RealWebSocket.kt#L175-L183">RealWebSocket.kt</a> 175~183행).</td></tr>
         </tbody>
       </table>
@@ -734,11 +738,11 @@ max_skew_secs = 5</code></pre>
     </div>
     <div class="table-wrap wide" tabindex="0" role="region" aria-label="표 9">
       <table>
-        <caption><strong>표 9. Server 역할 변형에 남는 선택.</strong> 어느 것도 정하지 않았다.</caption>
+        <caption><strong>표 9. Server 역할 변형에 남는 선택.</strong> 역할 구분의 (가)만 정했다(사용자 결정 2026-11-10). 나머지는 정하지 않았다.</caption>
         <thead><tr><th scope="col">선택</th><th scope="col">가능한 방식</th><th scope="col">결과</th></tr></thead>
         <tbody>
           <tr><th scope="row">기기 쪽 방법</th><td>(가) A<br>(나) B<br>(다) A로 시작하고 B로 바꾼다.</td><td>vnc-relay와 기기용 API의 변경은 셋 모두 같다. (다)는 B로 바꿀 때 vnc-relay를 다시 바꾸지 않는다. 기기마다 방법이 섞여도 vnc-relay는 구분하지 않는다.</td></tr>
-          <tr><th scope="row">역할 구분</th><td>(가) 역할마다 <code>aud</code> 값을 다르게 한다.<br>(나) 역할마다 서명 키를 나눈다.</td><td>(가) 키 하나로 운영한다. 발급 쪽이 <code>aud</code>를 잘못 넣으면 다른 역할에서 통과한다.<br>(나) 관리할 키가 늘어난다. 한 키가 새어도 다른 역할의 ticket은 위조되지 않는다.</td></tr>
+          <tr><th scope="row">역할 구분</th><td>(가) 역할마다 <code>aud</code> 값을 다르게 한다. Viewer는 <code>vnc-relay/viewer</code>, Server는 <code>vnc-relay/server</code>로 정했다.<br>(나) 역할마다 서명 키를 나눈다. 정하지 않았다.</td><td>(가) 키 하나로도 운영할 수 있다. 발급 쪽이 <code>aud</code>를 잘못 넣으면 다른 역할에서 통과한다.<br>(나) (가)에 더할 수 있다. 관리할 키가 늘어난다. 한 키가 새어도 다른 역할의 ticket은 위조되지 않는다.</td></tr>
           <tr><th scope="row">TCP Server 진입점</th><td>(가) 끈다.<br>(나) 좁은 허용 목록으로 둔다.</td><td>켜 두면 ticket 없이 같은 중계 ID에 Server로 등록하는 경로가 남는다. (나)는 그 경로를 허용 목록의 주소로만 좁힌다. 어느 쪽이든 모든 기기가 WSS로 옮긴 뒤에 할 수 있다.</td></tr>
           <tr><th scope="row">ticket을 받는 시점</th><td>(가) 연결 직전에 기기 인증 뒤 받는다.<br>(나) 원격 지원 세션 정보와 함께 받는다.</td><td>(나)에서는 기기가 접속하기까지 걸리는 시간(최대 약 70초)이 수명 60초보다 길 수 있다. 그러면 쓰기 전에 만료된다.</td></tr>
           <tr><th scope="row">B의 배포</th><td>(가) 같은 패키지 이름으로 다시 설치한다.<br>(나) 새 패키지 이름을 쓴다.</td><td>(가) 기존 앱을 지워야 하고 앱 데이터가 사라진다.<br>(나) 기기 앱이 부르는 패키지 이름을 바꾼다. 두 앱이 함께 설치될 수 있다.</td></tr>
@@ -759,7 +763,7 @@ allowed_origins = []
 [relay.wss.server.ticket]
 required = true
 issuer = "device-api.example/prod"
-audience = "vnc-relay/server"
+# aud 키는 없다. 기대값은 Server 역할의 고정 값 vnc-relay/server다.
 relay_host = "relay.example"
 public_keys_file = "keys/ticket-public.jwks"
 max_skew_secs = 5</code></pre>
@@ -813,7 +817,7 @@ if let Ok(prepared) = prepared {
       <figcaption id="code2-caption"><strong>코드 2. <code>crates/adapters/src/websocket.rs</code> 256~265행(<code>connection</code>의 일부).</strong> 들여쓰기만 줄였다. <code>handle_connection</code>이 돌려준 <code>prepared</code>가 <code>dispatch</code>에 넘어가기 전이 <code>rid</code>를 대조할 수 있는 자리다.</figcaption>
     </figure>
     <div class="prose" style="margin-top:28px">
-      <p>지금은 <code>Cookie</code>와 <code>Authorization</code>도 접근 판정에 쓰지 않는다(<a href="../contracts/websocket-relay-v1.md#11-업그레이드-요청">계약 1.1절</a> 표의 "그 밖의 헤더" 행). 따라서 vnc-relay에는 ticket이나 로그인 쿠키를 확인할 자리가 없다. 내재화 안은 이 자리를 서브프로토콜 값으로 새로 만든다.</p>
+      <p>지금은 <code>Cookie</code>와 <code>Authorization</code>도 접근 판정에 쓰지 않는다(<a href="../contracts/websocket-relay-v2.md#11-업그레이드-요청">계약 1.1절</a> 표의 "그 밖의 헤더" 행). 따라서 vnc-relay에는 ticket이나 로그인 쿠키를 확인할 자리가 없다. 내재화 안은 이 자리를 서브프로토콜 값으로 새로 만든다.</p>
     </div>
   </section>
 
@@ -858,7 +862,7 @@ if let Ok(prepared) = prepared {
           <tr><th scope="row">101 뒤 <code>ID:</code>가 <code>rid</code>와 다름</th><td>ticket은 사용됨. 대기 등록 전이다.</td><td>올바른 중계 ID로 새 ticket을 받는다.</td><td>새 close 코드(예: <code>4012</code>). 브라우저 쪽 대기 연결은 그대로다.</td></tr>
           <tr><th scope="row">같은 중계 ID의 Server 연결이 이미 있음</th><td>ticket은 사용됨. 먼저 온 연결과 그 세션은 그대로다.</td><td>먼저 온 연결이 정리된 뒤 새 ticket으로 다시 연결한다.</td><td>기존 close <code>4004</code>(<code>duplicate_id</code>). 사용 기록은 업그레이드 때 쓰고, 중복은 그 뒤 짝짓기 단계에서 판정한다. 그래서 거절된 연결도 ticket을 소비한다.</td></tr>
           <tr><th scope="row">A에서 다른 앱이 루프백 포트에 먼저 접속</th><td>터널이 그 연결을 닫는다. ticket은 아직 받지 않았다.</td><td>기기 앱이 새 수신 소켓으로 droidVNC-NG 연결을 다시 요청한다.</td><td>첫 250바이트가 기대한 값과 다르면 닫는다(예). 수신 소켓이 이미 닫혔으므로 droidVNC-NG의 연결 시도는 실패한다.</td></tr>
-          <tr><th scope="row">A에서 기기 앱 프로세스가 끝남</th><td>WSS 연결과 루프백 연결이 끊긴다. 활성 세션이었으면 세션도 끝난다.</td><td>앱이 다시 시작되면 새 ticket으로 연결한다.</td><td>vnc-relay는 Server 쪽 연결의 종료로 처리한다. 브라우저 쪽 연결은 <a href="../contracts/websocket-relay-v1.md#16-종료-의미">계약 1.6절</a>의 종료 의미에 따라 닫힌다.</td></tr>
+          <tr><th scope="row">A에서 기기 앱 프로세스가 끝남</th><td>WSS 연결과 루프백 연결이 끊긴다. 활성 세션이었으면 세션도 끝난다.</td><td>앱이 다시 시작되면 새 ticket으로 연결한다.</td><td>vnc-relay는 Server 쪽 연결의 종료로 처리한다. 브라우저 쪽 연결은 <a href="../contracts/websocket-relay-v2.md#16-종료-의미">계약 1.6절</a>의 종료 의미에 따라 닫힌다.</td></tr>
           <tr><th scope="row">TCP Server 진입점이 열려 있음</th><td>ticket 없는 TCP 연결이 같은 중계 ID에 Server로 등록할 수 있다.</td><td>해당 없음</td><td>실패로 드러나지 않는다. 이 진입점을 끄거나 좁히기 전에는 Server ticket의 보호 효과가 없다.</td></tr>
         </tbody>
       </table>
@@ -890,7 +894,7 @@ if let Ok(prepared) = prepared {
         <dt>"서명한 ticket이면 일회용이다."</dt>
         <dd>서명은 위조만 막는다. 같은 값을 두 번 내면 두 번 모두 서명 검증을 통과한다. JWT 표준도 <code>jti</code>를 재사용 방지에 쓸 수 있는 식별자로만 정한다(<a href="https://www.rfc-editor.org/rfc/rfc7519#section-4.1.7">RFC 7519 4.1.7절</a>). 일회용은 확인 지점의 사용 기록에서 나온다.</dd>
         <dt>"Origin 검사나 중계 ID가 인증 역할을 한다."</dt>
-        <dd>둘 다 인증 수단이 아니다(<a href="../contracts/websocket-relay-v1.md#13-origin-비교">계약 1.3절</a>, <a href="../../GLOSSARY.md#중계-방식과-세션">용어집</a>).</dd>
+        <dd>둘 다 인증 수단이 아니다(<a href="../contracts/websocket-relay-v2.md#13-origin-비교">계약 1.3절</a>, <a href="../../GLOSSARY.md#중계-방식과-세션">용어집</a>).</dd>
         <dt>"지금 vnc-relay에 ticket을 실으면 거른다."</dt>
         <dd>지금 vnc-relay는 <code>binary</code> 외의 값을 판정에 쓰지 않는다(07절). 내재화 안이 구현되기 전에는 ticket을 실어도 101로 수락된다.</dd>
         <dt>"vnc-relay가 ticket을 확인하면 모든 접속 경로가 보호된다."</dt>
@@ -937,7 +941,7 @@ if let Ok(prepared) = prepared {
         <thead><tr><th scope="col">찾는 것</th><th scope="col">위치</th></tr></thead>
         <tbody>
           <tr><th scope="row">업그레이드 검사 순서</th><td><a href="../../crates/adapters/src/upgrade.rs"><code>crates/adapters/src/upgrade.rs</code></a> <code>check</code>, <a href="../architectures/websocket-entry-point.md#검사-순서check">모듈 설계의 검사 순서</a></td></tr>
-          <tr><th scope="row">경로로 역할 고르기</th><td><a href="../../crates/adapters/src/upgrade.rs"><code>crates/adapters/src/upgrade.rs</code></a> <code>check</code>, <a href="../contracts/websocket-relay-v1.md#17-경로와-역할">계약 1.7절</a></td></tr>
+          <tr><th scope="row">경로로 역할 고르기</th><td><a href="../../crates/adapters/src/upgrade.rs"><code>crates/adapters/src/upgrade.rs</code></a> <code>check</code>, <a href="../contracts/websocket-relay-v2.md#17-경로와-역할">계약 1.7절</a></td></tr>
           <tr><th scope="row">101 응답과 <code>binary</code></th><td><a href="../../crates/adapters/src/upgrade.rs"><code>crates/adapters/src/upgrade.rs</code></a> <code>switching_protocols</code></td></tr>
           <tr><th scope="row">IP 재검사, U 확인, 101 쓰기</th><td><a href="../../crates/adapters/src/websocket.rs"><code>crates/adapters/src/websocket.rs</code></a> <code>check_upgrade</code>, <code>upgrade</code></td></tr>
           <tr><th scope="row">업그레이드 거절 로그</th><td><a href="../../crates/adapters/src/websocket.rs"><code>crates/adapters/src/websocket.rs</code></a> <code>refuse</code></td></tr>
@@ -945,9 +949,9 @@ if let Ok(prepared) = prepared {
           <tr><th scope="row">초기 교환 해석</th><td><a href="../../crates/domain/src/handshake.rs"><code>crates/domain/src/handshake.rs</code></a> <code>HandshakeRequest</code></td></tr>
           <tr><th scope="row">세션 종료 명령</th><td><a href="../../crates/app/src/relay.rs"><code>crates/app/src/relay.rs</code></a> <code>request_terminate</code>, <a href="../../crates/app/src/relay/session.rs"><code>crates/app/src/relay/session.rs</code></a> <code>close_once</code></td></tr>
           <tr><th scope="row">중복 ID 거절</th><td><a href="../../crates/app/src/relay/matching.rs"><code>crates/app/src/relay/matching.rs</code></a>, <a href="../specs/relay.md#33-mode-ii">중계와 매칭 스펙 3.3절</a> 4항</td></tr>
-          <tr><th scope="row">close 코드 대응</th><td><a href="../../crates/adapters/src/websocket_stream.rs"><code>crates/adapters/src/websocket_stream.rs</code></a>, <a href="../contracts/websocket-relay-v1.md#15-close-코드">계약 1.5절</a></td></tr>
+          <tr><th scope="row">close 코드 대응</th><td><a href="../../crates/adapters/src/websocket_stream.rs"><code>crates/adapters/src/websocket_stream.rs</code></a>, <a href="../contracts/websocket-relay-v2.md#15-close-코드">계약 1.5절</a></td></tr>
           <tr><th scope="row">서명 검증 라이브러리</th><td><a href="../../Cargo.toml"><code>Cargo.toml</code></a>의 <code>aws-lc-rs</code>, 사용 예는 <a href="../../crates/adapters/src/crypto.rs"><code>crates/adapters/src/crypto.rs</code></a></td></tr>
-          <tr><th scope="row">기준 문서</th><td><a href="../requirements/PRD.md#확정-기준">PRD 확정 기준</a>, <a href="../decisions/ADR-0002-source-ip-allowlist.md">ADR-0002</a>, <a href="../decisions/ADR-0003-single-instance-memory-state.md">ADR-0003</a>, <a href="../contracts/websocket-relay-v1.md">WebSocket 중계 계약 v1</a> 1.1·1.2·1.5·1.7·2.1·3절, <a href="../contracts/config-v4.md">설정 계약 v4</a> 1.8·3절, <a href="../specs/relay.md">중계와 매칭 스펙</a> 3.3·5절, <a href="../contracts/repeater-handshake-v1.md">Repeater 초기 교환 계약</a> 1.2절</td></tr>
+          <tr><th scope="row">기준 문서</th><td><a href="../requirements/PRD.md#확정-기준">PRD 확정 기준</a>, <a href="../decisions/ADR-0002-source-ip-allowlist.md">ADR-0002</a>, <a href="../decisions/ADR-0003-single-instance-memory-state.md">ADR-0003</a>, <a href="../contracts/websocket-relay-v2.md">WebSocket 중계 계약 v1</a> 1.1·1.2·1.5·1.7·2.1·3절, <a href="../contracts/config-v4.md">설정 계약 v4</a> 1.8·3절, <a href="../specs/relay.md">중계와 매칭 스펙</a> 3.3·5절, <a href="../contracts/repeater-handshake-v1.md">Repeater 초기 교환 계약</a> 1.2절</td></tr>
         </tbody>
       </table>
     </div>
@@ -998,6 +1002,8 @@ if let Ok(prepared) = prepared {
         <li><a href="https://www.rfc-editor.org/rfc/rfc7515">RFC 7515</a>: JWS</li>
         <li><a href="https://www.rfc-editor.org/rfc/rfc7518#section-3.4">RFC 7518 3.4절</a>: ES256 서명 형식</li>
         <li><a href="https://www.rfc-editor.org/rfc/rfc7519#section-4.1.7">RFC 7519 4.1.7절</a>: <code>jti</code></li>
+        <li><a href="https://www.rfc-editor.org/rfc/rfc7519#section-4.1.3">RFC 7519 4.1.3절</a>: <code>aud</code>, <a href="https://www.rfc-editor.org/rfc/rfc7519#section-2">2절</a>: StringOrURI 비교</li>
+        <li><a href="https://www.rfc-editor.org/rfc/rfc8725#section-3.12">RFC 8725 3.12절</a>: 종류가 다른 JWT의 확인 규칙 분리</li>
         <li><a href="https://docs.aws.amazon.com/kms/latest/APIReference/API_Sign.html">AWS KMS Sign</a>: ECDSA 서명의 DER 형식</li>
         <li><a href="https://docs.rs/aws-lc-rs/1.18.2/aws_lc_rs/signature/constant.ECDSA_P256_SHA256_FIXED.html">aws-lc-rs <code>ECDSA_P256_SHA256_FIXED</code></a>: 고정 길이 ECDSA 서명 검증(<code>Cargo.lock</code>의 1.18.2)</li>
         <li><a href="https://github.com/novnc/noVNC/blob/master/docs/API.md">noVNC API</a>: <code>wsProtocols</code></li>
@@ -1042,7 +1048,7 @@ if let Ok(prepared) = prepared {
   const view = (browser, relay, device = '대기 연결') => ({ api: '관여 없음', browser, relay, device });
   const SEND = { from: 'browser', to: 'relay', label: 'WS+T' };
   const CHECK = { pulse: 'relay', label: 'CHECK' };
-  const UPGRADE = { title: '업그레이드 요청', text: 'noVNC가 /relay 업그레이드 요청을 보낸다. 서브프로토콜 값은 binary와 ticket 두 개다.',
+  const UPGRADE = { title: '업그레이드 요청', text: 'noVNC가 /relay/viewer 업그레이드 요청을 보낸다. 서브프로토콜 값은 binary와 ticket 두 개다.',
     states: view('업그레이드 보냄', '요청 받음'), ticket: '발급됨 · 미사용', current: 'relay', moves: [SEND] };
   const RECORD = { title: 'ticket 확인과 사용 기록', text: 'vnc-relay가 주소와 Origin을 검사한 뒤 서명·발급자·대상·시각·중계 호스트를 확인한다. 업그레이드 직전 IP 재검사까지 통과하면 jti를 사용 기록에 쓴다. 이 쓰기가 성공해야 101을 보낸다.',
     states: view('응답 대기', '사용 기록 씀'), ticket: '사용됨', current: 'relay', moves: [CHECK] };
