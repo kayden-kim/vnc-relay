@@ -11,19 +11,12 @@
 | 기능 | 내용 |
 | --- | --- |
 | 중계 모드 | Mode I: Viewer가 대상 주소를 보내면 서버가 그 대상에 연결한다. 대상은 허용 목록 안에서만 연다. Mode II: 같은 중계 ID로 들어온 Viewer와 Server를 짝지어 중계한다. |
-| 진입점 | TCP·WS·WSS의 Viewer·Server(역접속). WS·WSS는 경로로 역할을 나눈다. 평문 WS는 기본으로 꺼져 있다. |
-| TLS | WSS와 관리 HTTPS의 TLS를 서버가 직접 처리한다. 중계 WS·WSS 앞의 프록시 TLS 종료도 지원한다. 내장 TLS는 TLS 1.2 미만을 거절한다. 인증서는 운영자가 준비한다. |
-| 접근 제한 | 진입점마다 출발지 IP 허용 목록(단일 IP·CIDR·범위)을 둔다. WS·WSS는 역할별 IP·`Origin` 정책을 검사한다. 신뢰 프록시를 거치면 전달 주소로 클라이언트 주소를 판정한다. |
-| 관리 | 내장 로그인(Argon2id 해시)이 있는 대시보드와 관리 API(`/api/v1/`). 서버·대기 연결·활성 세션·최근 종료 목록·최근 로그·설정을 조회한다. 활성 세션 종료와 동적 설정 편집도 제공한다. 화면은 한국어·영어다. |
-| 운영 | 인증 없는 상태 리스너(`/livez`, `/readyz`), JSON Lines 운영 로그와 메모리의 최근 로그, 33개 키 자동 재로드·29개 키 편집, 종료 유예 G. |
-| WS·WSS Server | 공유 리스너에서 `/relay/viewer`는 Viewer, `/relay/server`는 Server(Mode II) 역할이다. 허용 목록은 역할별이며 수락 때 합집합, 업그레이드 때 역할 목록을 검사한다. |
-| 프록시 TLS 종료 | 중계 WS·WSS 앞의 역방향 프록시 TLS 종료를 지원한다. `trusted_proxies`와 `X-Forwarded-For`로 클라이언트 주소를 정한다. 내장 TLS는 유지하며 관리 리스너는 이 지원에서 제외한다. [ADR-0007](docs/decisions/ADR-0007-proxy-tls-termination.md) 참조. |
-| 최근 로그 | SCR-006 `/#/logs`에서 메모리의 최근 운영 로그를 필터·검색·자동 갱신하고 JSON Lines로 내려받는다. `recent_logs.max_entries`는 기본 1000, 0~10000이며 재시작이 필요하다. |
-| 계약 이전 | [vnc-relay-config 4.0.0](docs/contracts/config-v4.md)과 [ops-info 2.0.0](docs/contracts/ops-info-v2.md). 설정 v3 파일은 v4 서버 배포 전에 이전한다. 재로드 33개·편집 29개 키를 사용한다. [ADR-0008](docs/decisions/ADR-0008-shared-ws-listener-path-roles.md) 참조. [websocket-relay 2.0.0](docs/contracts/websocket-relay-v2.md)은 Viewer 경로를 `/relay`에서 `/relay/viewer`로 바꿨다(사용자 결정 2026-11-10). 릴리스 `2026.11.2` 이하는 `/relay`를 쓴다. 서버를 바꿀 때 Viewer 접속 URL도 함께 바꾼다. |
-
-위 표는 현재 구현 범위다. 사용자 지시 2026-11-08과 사용자 결정 2026-11-08(Q181~Q188)으로 더한 WS·WSS Server·프록시 TLS 종료·최근 로그의 구현은 커밋 `3df0693`이다. 시험은 커밋 `51bd747`의 두 OS 게이트에서 통과했다([WSS Server·프록시·최근 로그 판정표](docs/how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)).
-
-로그 화면 시안·기존 화면 변경·상단 순서는 사용자 결정 2026-11-08(Q189)으로, 문구 CPY-149~189는 사용자 결정 2026-11-08(Q190)으로, 로그 API 이름·세션 필터 URL·`trust_all_proxies` 이름과 필드는 사용자 결정 2026-11-08(Q191)으로 채택했다. [PRD의 결정 기록](docs/requirements/PRD.md#12-미확정-결정과-주요-위험)에서 범위를 확인한다. 현재 실행파일의 빠른 시작 절차는 아래와 같다.
+| 진입점 | TCP·WS·WSS의 Viewer·Server(역접속). TCP는 역할마다 리스너가 따로 있다. WS·WSS는 리스너 하나에서 요청 경로로 역할을 나눈다. `/relay/viewer`는 Viewer, `/relay/server`는 Server(Mode II만) 역할이다([ADR-0008](docs/decisions/ADR-0008-shared-ws-listener-path-roles.md)). 평문 WS는 기본으로 꺼져 있다. |
+| TLS | WSS와 관리 HTTPS의 TLS를 서버가 직접 처리한다. 내장 TLS는 TLS 1.2 미만을 거절한다. 인증서는 운영자가 준비한다. 중계 WS·WSS 앞에서 역방향 프록시가 TLS를 끝내는 배치도 지원한다. 관리 리스너는 이 배치에서 제외한다([ADR-0007](docs/decisions/ADR-0007-proxy-tls-termination.md)). |
+| 접근 제한 | 진입점마다 출발지 IP 허용 목록(단일 IP·CIDR·범위)을 둔다. WS·WSS는 역할마다 IP·`Origin` 허용 목록을 따로 둔다. 연결을 받을 때는 켠 역할 목록의 합집합으로, 업그레이드 때는 고른 역할의 목록으로 검사한다. 신뢰 프록시(`trusted_proxies`)를 거친 요청은 `X-Forwarded-For`의 전달 주소로 판정한다. |
+| 관리 | 내장 로그인(Argon2id 해시)이 있는 대시보드와 관리 API(`/api/v1/`). 서버·대기 연결·활성 세션·최근 종료 목록·최근 로그·설정을 조회한다. 활성 세션 종료와 동적 설정 편집도 제공한다. 로그 화면(`/#/logs`)에서는 최근 운영 로그를 필터·검색·자동 갱신하고 JSON Lines로 내려받는다. 화면은 한국어·영어다. |
+| 운영 | 인증 없는 상태 리스너(`/livez`, `/readyz`), JSON Lines 운영 로그, 메모리의 최근 로그(기본 1000건, 0~10000, 바꾸면 재시작), 33개 키 자동 재로드·29개 키 편집, 종료 유예 G. |
+| 계약 버전 | 설정 [vnc-relay-config 4.0.0](docs/contracts/config-v4.md), 운영 로그 [ops-info 2.0.0](docs/contracts/ops-info-v2.md), WebSocket [websocket-relay 2.0.0](docs/contracts/websocket-relay-v2.md). |
 
 noVNC 클라이언트는 포함하지 않는다. noVNC는 외부 클라이언트로 접속할 수 있고, 상호운용 시험에만 쓴다.
 
@@ -64,6 +57,81 @@ noVNC 클라이언트는 포함하지 않는다. noVNC는 외부 클라이언트
 
 Windows PowerShell에서는 `./vnc-relay`를 `.\vnc-relay.exe`로, `curl`을 `curl.exe`로 바꾼다.
 
+## 연결 구성 예
+
+Viewer와 Server는 서로 직접 연결하지 않는다. 둘 다 vnc-relay에 접속하고, vnc-relay가 같은 중계 ID로 들어온 둘을 짝지어 중계한다(Mode II). 어느 쪽이 먼저 접속해도 된다.
+
+아래 예에서 vnc-relay 호스트는 `relay.example.test`(192.0.2.20)이고, 중계 ID는 `1234`다. Viewer는 UltraVNC Viewer와 브라우저의 noVNC 가운데 하나를 쓴다.
+
+```mermaid
+flowchart LR
+    UV["UltraVNC Viewer<br/>192.0.2.10"] -->|"TCP 5901, ID:1234"| R["vnc-relay<br/>relay.example.test"]
+    NV["noVNC(브라우저)<br/>192.0.2.10"] -->|"WSS 8443 /relay/viewer, ID:1234"| R
+    US["UltraVNC Server<br/>192.0.2.30"] -->|"TCP 5500, ID:1234"| R
+```
+
+vnc-relay의 `relay.toml`은 다음과 같다. 계정 파일은 빠른 시작 4단계처럼 만든다.
+
+```toml
+[admin]
+accounts_file = "admin-accounts.toml"
+
+[relay.tcp_viewer]
+enabled = true
+listen = "0.0.0.0:5901"
+allow = ["192.0.2.10"]
+
+[relay.tcp_server]
+enabled = true
+listen = "0.0.0.0:5500"
+allow = ["192.0.2.30"]
+
+[relay.wss]
+listen = "0.0.0.0:8443"
+cert_file = "tls/relay-chain.pem"
+key_file = "tls/relay-key.pem"
+
+[relay.wss.viewer]
+enabled = true
+allow = ["192.0.2.10"]
+allowed_origins = ["https://viewer.example.test"]
+
+[mode2]
+enabled = true
+
+[management]
+listen = "127.0.0.1:18080"
+
+[status]
+listen = "127.0.0.1:18081"
+
+[log]
+output = "relay.log"
+```
+
+- `allow`에는 해당 진입점에 접속할 PC의 IP를 넣는다. 목록 밖의 출발지는 거절한다.
+- `cert_file`·`key_file`은 `relay.example.test`용 인증서 체인과 개인키다. 브라우저가 신뢰하는 인증서여야 한다.
+- `allowed_origins`에는 noVNC 페이지를 제공하는 사이트의 origin을 넣는다. 브라우저는 WebSocket 요청에 이 값을 `Origin` 헤더로 보낸다. 목록이 비어 있으면 브라우저의 접속은 모두 거절된다.
+
+각 PC에서는 다음과 같이 접속한다. UltraVNC 명령은 UltraVNC 1.8.3.0에서 확인한 형식이다([호환성 검증 기록 6절](docs/contracts/repeater-compat-record.md#6-모드전송-조합-검증-todo-55)).
+
+| 역할 | 접속 방법 |
+| --- | --- |
+| UltraVNC Server(192.0.2.30) | `winvnc.exe -id:1234 -connect 192.0.2.20::5500 -run` |
+| UltraVNC Viewer(192.0.2.10) | `vncviewer.exe -proxy 192.0.2.20:5901 ID:1234` |
+| noVNC(192.0.2.10의 브라우저) | `https://viewer.example.test/vnc.html?autoconnect=true&host=relay.example.test&port=8443&encrypt=true&path=relay/viewer&repeaterID=1234` |
+
+noVNC는 `repeaterID` 값 앞에 `ID:`를 붙여 보낸다. 같은 ID를 다른 Viewer가 이미 쓰고 있으면(대기 중이거나 중계 중) 뒤에 온 Viewer는 거절된다.
+
+Viewer 경로 `/relay/viewer`는 릴리스 `2026.11.2` 다음 버전부터 쓴다. `2026.11.2` 묶음의 Viewer 경로는 `/relay`다.
+
+같은 파일에 다음 설정을 더하면 다른 연결 방식도 쓸 수 있다.
+
+- WebSocket으로 접속하는 Server: `[relay.wss.server]`에 `enabled = true`와 `allow = ["192.0.2.30"]`을 넣는다. Server는 `wss://relay.example.test:8443/relay/server`로 접속하고, 이 경로는 Mode II만 받는다.
+- Mode I(Viewer가 대상을 지정): `[mode1]`에 `enabled = true`와 `allow_targets = ["192.0.2.30:5900"]`을 넣는다. Viewer가 `vncviewer.exe -connect 192.0.2.30::5900 -proxy 192.0.2.20:5901`로 접속하면 vnc-relay가 그 대상에 연결한다. 이때 Server는 vnc-relay에 접속하지 않고 대상 포트에서 기다린다.
+
+설정 키 전체는 [설정 계약 v4](docs/contracts/config-v4.md)에, 운영 배치 절차는 [실행파일을 묶고 수동 운영하는 방법](docs/how-to/operate-relay.md)에 있다.
+
 ## 명령
 
 | 명령 | 하는 일 |
@@ -75,7 +143,7 @@ Windows PowerShell에서는 `./vnc-relay`를 `.\vnc-relay.exe`로, `curl`을 `cu
 | `vnc-relay admin list --config <path>` | 계정 이름을 나열한다. |
 | `vnc-relay --help`, `vnc-relay --version` | 사용법이나 버전을 출력한다. |
 
-계정 변경은 서버를 다시 시작해야 적용된다. 옵션·종료 코드·입력 규칙은 [CLI 계약](docs/contracts/cli-v1.md)이 정한다. 다음 구현의 설정 키와 기본값은 [설정 계약 v4](docs/contracts/config-v4.md)가 정하며, 현재 실행파일에 v4 파일을 그대로 적용해서는 안 된다.
+계정 변경은 서버를 다시 시작해야 적용된다. 옵션·종료 코드·입력 규칙은 [CLI 계약](docs/contracts/cli-v1.md)이, 설정 키와 기본값은 [설정 계약 v4](docs/contracts/config-v4.md)가 정한다.
 
 ## 개발
 
@@ -117,6 +185,7 @@ cargo deny check licenses
 | [스펙 목록](docs/specs/README.md) | 중계·WebSocket·관리·대시보드·운영의 외부 동작과 수용 시나리오 |
 | [계약 목록](docs/contracts/README.md) | 설정·CLI·관리 API·운영 로그·WebSocket·Repeater 초기 교환 형식 |
 | [호환성 검증 기록](docs/contracts/repeater-compat-record.md) | UltraVNC 1.8.3.0·Repeater·noVNC 1.7.0과의 대조 결과 |
+| [실행파일을 묶고 수동 운영하는 방법](docs/how-to/operate-relay.md) | 배포 묶음 설치·설정·업그레이드·롤백 절차 |
 | [용어집](GLOSSARY.md) | 업무 용어의 이름과 뜻 |
 
 ## 독립 구현과 라이선스
