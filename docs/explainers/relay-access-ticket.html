@@ -1,0 +1,914 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>중계 접속 ticket 해설 — VNC Relay</title>
+<style>
+  :root {
+    --sans: 'Pretendard', 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', '맑은 고딕', sans-serif;
+    --mono: 'Cascadia Code', Consolas, Menlo, monospace;
+    --desk: #c5d2df; --paper: #f8fbff; --ink: #18334f; --muted: #425a73;
+    --accent: #135cab; --rule: #8ca5c1; --wash: #e1edf9; --wash-alt: #e9eef5;
+    --title-size: clamp(2rem, 4.5vw, 3.4rem);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; color: var(--ink); background: var(--desk);
+    font: 17px/1.85 var(--sans);
+    word-break: keep-all; overflow-wrap: anywhere; letter-spacing: -0.01em;
+  }
+  h1, h2, h3, p, figure, ul, ol, dl, dd, table, pre, blockquote { margin: 0; }
+  h1, h2, h3 {
+    font-family: var(--sans); font-weight: 700; line-height: 1.4; letter-spacing: -0.015em;
+    word-break: keep-all; overflow-wrap: anywhere; text-wrap: balance;
+  }
+  h1 { font-size: var(--title-size); }
+  h2 { font-size: clamp(1.6rem, 3vw, 2.3rem); }
+  h3 { font-size: 1.25rem; margin-top: 44px; }
+  p + p, p + ul, p + ol, ul + p, ol + p { margin-top: 1em; }
+  a { color: var(--accent); text-underline-offset: 0.25em; }
+  code { font-family: var(--mono); font-size: 0.86em; background: var(--wash-alt); padding: 0.08em 0.32em; }
+  pre {
+    padding: 16px 18px; background: var(--wash-alt); border-left: 3px solid var(--rule);
+    overflow-x: auto; font: 0.84rem/1.65 var(--mono); white-space: pre; word-break: normal; overflow-wrap: normal;
+  }
+  pre code { background: none; padding: 0; font-size: inherit; }
+  button, select { font: inherit; color: inherit; border: 1px solid var(--rule); background: var(--paper); padding: 7px 12px; border-radius: 0; }
+  button { cursor: pointer; }
+  button:disabled { cursor: default; opacity: 0.55; }
+  button:hover:not(:disabled) { background: var(--wash-alt); }
+  :focus-visible { outline: 3px solid var(--accent); outline-offset: 4px; }
+  [hidden] { display: none !important; }
+
+  .paper { max-width: 1100px; margin: 0 auto 50px; background: var(--paper); }
+  .page-inset { padding-inline: clamp(22px, 6vw, 76px); }
+  .masthead {
+    padding-block: 26px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;
+    border-bottom: 1px solid var(--rule); font-size: 0.8rem;
+  }
+  .masthead nav { display: flex; flex-wrap: wrap; gap: 6px 18px; }
+  .masthead a { text-decoration: none; color: var(--ink); }
+  .masthead a:hover { text-decoration: underline; }
+  .eyebrow { font-size: 0.78rem; letter-spacing: 0.04em; color: var(--accent); font-weight: 600; font-variant-numeric: tabular-nums; }
+  .cover { padding-top: 62px; }
+  .cover h1 { max-width: 14em; margin-top: 18px; }
+  .lead { max-width: 40em; margin-top: 24px; font-size: 1.08rem; }
+  .status { margin-top: 34px; max-width: 46em; border-left: 3px solid var(--accent); padding: 4px 0 4px 22px; }
+  .status-title { font-weight: 700; }
+  .status dl { margin-top: 10px; }
+  .status dl > div { display: grid; grid-template-columns: 7.5em 1fr; gap: 4px 16px; padding-block: 8px; border-top: 1px dashed var(--rule); }
+  .status dt { font-weight: 700; }
+  .status dd { color: var(--muted); }
+  .status > p:last-child { margin-top: 10px; font-size: 0.92rem; color: var(--muted); }
+  figcaption, caption { color: var(--muted); font-size: 0.86rem; line-height: 1.65; }
+  figcaption { margin-top: 13px; }
+  caption { text-align: left; caption-side: top; padding-bottom: 8px; }
+  figcaption strong, caption strong { color: var(--ink); font-weight: 600; }
+
+  .lanes-figure { margin-top: 44px; }
+  .lanes { background: var(--wash); padding: 10px clamp(16px, 3vw, 30px) 22px; }
+  .lane { padding-top: 16px; }
+  .lane + .lane { border-top: 1px dashed var(--rule); margin-top: 16px; }
+  .lane-label { font-weight: 700; font-size: 0.95rem; }
+  .lane-label span { font-weight: 400; color: var(--muted); margin-left: 8px; font-size: 0.85rem; }
+  .lane-steps {
+    list-style: none; padding: 0; margin-top: 10px;
+    display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 0 36px;
+  }
+  .lane-steps li { position: relative; background: var(--paper); border: 1px solid var(--rule); padding: 10px 12px; line-height: 1.55; }
+  .lane-steps li strong { display: block; font-weight: 600; }
+  .lane-steps li span { display: block; font-size: 0.82rem; color: var(--muted); }
+  .lane-steps li + li::before {
+    content: "→"; content: "→" / "";
+    position: absolute; left: -28px; top: 50%; transform: translateY(-50%); color: var(--accent); font-weight: 700;
+  }
+  .lane-steps li.check { border: 2px solid var(--accent); }
+  .lane-steps li.check em { display: block; font-style: normal; font-size: 0.74rem; font-weight: 700; color: var(--accent); letter-spacing: 0.03em; }
+
+  .chapter { padding-block: 66px; }
+  .chapter + .chapter { border-top: 1px dashed var(--rule); }
+  .prose { max-width: 44em; }
+  .prose h2 { margin: 14px 0 24px; }
+  .spread { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr); gap: 46px; align-items: start; }
+  .side-figure { margin-top: 64px; }
+  .guide { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 0.75fr); gap: 46px; align-items: start; }
+  .guide ul { padding-left: 1.2em; }
+  .guide h2 { font-size: 1.35rem; margin-bottom: 14px; }
+
+  .table-wrap { margin-top: 28px; overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; font-size: 0.93rem; line-height: 1.7; }
+  .wide table { min-width: 40rem; }
+  th, td { text-align: left; vertical-align: top; padding: 10px 12px; border-top: 1px solid var(--rule); }
+  thead th { background: var(--wash); border-top: 0; font-weight: 600; }
+  tbody th { font-weight: 600; white-space: normal; }
+  .meta th { width: 9em; background: var(--wash); }
+
+  .checks { list-style: none; padding: 0; counter-reset: check; }
+  .checks li { counter-increment: check; position: relative; padding: 12px 0 12px 44px; border-top: 1px solid var(--rule); }
+  .checks li:first-child { border-top: 0; }
+  .checks li::before {
+    content: counter(check); position: absolute; left: 0; top: 14px; width: 28px; height: 28px; line-height: 26px;
+    text-align: center; border: 1px solid var(--accent); color: var(--accent); font-weight: 700; font-size: 0.85rem;
+  }
+  .checks strong { display: block; }
+  .checks .who { font-size: 0.8rem; color: var(--muted); font-weight: 400; margin-left: 6px; }
+  .checks .gap { display: block; color: var(--muted); font-size: 0.92rem; }
+
+  .chapter-band { background: var(--wash); padding-block: 66px; }
+  .chapter-band .prose p:not(.eyebrow) { color: var(--ink); }
+  .mechanism { margin-top: 36px; }
+  .track {
+    position: relative; display: grid; grid-template-columns: 1fr 44px 1fr 44px 1fr 44px 1fr;
+    align-items: center; padding-bottom: 56px;
+  }
+  .process-node {
+    min-width: 0; padding: 18px 10px 38px; text-align: center; border: 1px solid var(--rule);
+    background: var(--paper); min-height: 128px; line-height: 1.5;
+  }
+  .process-node strong { display: block; font-weight: 600; }
+  .process-node .node-role { display: block; font-size: 0.75rem; color: var(--muted); }
+  .process-node .node-state { display: block; font-size: 0.82rem; margin-top: 6px; }
+  .process-node[data-state="current"] { border-color: var(--accent); outline: 2px solid var(--accent); }
+  .flow-arrow { font-size: 1.5rem; text-align: center; color: var(--accent); }
+  .flow-arrow .vertical { display: none; }
+  #packet {
+    position: absolute; left: 0; top: 0; padding: 1px 7px; z-index: 2;
+    font: 0.7rem/22px var(--mono); background: var(--ink); color: var(--paper);
+  }
+  .controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 18px; }
+  .controls label { font-size: 0.9rem; margin-right: 2px; }
+  .motion-note { font-size: 0.86rem; color: var(--muted); margin-top: 14px; }
+  .stage-readout { border-top: 1px solid var(--rule); padding-top: 18px; margin-top: 22px; min-height: 150px; }
+  .stage-readout h3 { margin-top: 0; font-size: 1.25rem; margin-bottom: 6px; }
+  .ticket-line { font-size: 0.92rem; margin-top: 10px; }
+  .ticket-line strong { font-weight: 600; }
+
+  .jws { display: flex; flex-wrap: wrap; align-items: stretch; gap: 6px; }
+  .jws .seg { flex: 1 1 9em; background: var(--wash); border: 1px solid var(--rule); padding: 10px 12px; line-height: 1.5; }
+  .jws .seg b { display: block; font-weight: 600; }
+  .jws .seg code { background: none; padding: 0; font-size: 0.8rem; }
+  .jws .dot { align-self: center; font: 700 1.6rem/1 var(--mono); color: var(--accent); }
+  .rules { padding-left: 1.4em; margin-top: 14px; }
+  .rules li + li { margin-top: 6px; }
+  .note { margin-top: 14px; font-size: 0.92rem; color: var(--muted); }
+
+  .split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0 26px; }
+  .split-head { grid-column: 1 / -1; background: var(--ink); color: var(--paper); padding: 10px 14px; font-size: 0.92rem; }
+  .split-head code { background: none; color: inherit; }
+  .split-col { border: 1px solid var(--rule); border-top: 0; background: var(--paper); padding: 12px 16px 14px; }
+  .split-title { margin: 0 0 8px; font-size: 0.95rem; font-weight: 700; }
+  .split-col ul { padding-left: 1.1em; font-size: 0.9rem; line-height: 1.7; }
+  .split-arrow { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr 1fr; gap: 0 26px; text-align: center; color: var(--accent); font-weight: 700; }
+
+  details { border-top: 1px solid var(--rule); padding-block: 12px; }
+  details:last-of-type { border-bottom: 1px solid var(--rule); }
+  summary { cursor: pointer; font-weight: 600; }
+  details > :not(summary) { margin-top: 10px; }
+  .example { margin-top: 28px; }
+  .example summary { font-weight: 600; }
+
+  .misread dt { font-weight: 700; margin-top: 22px; }
+  .misread dt:first-child { margin-top: 0; }
+  .misread dd { color: var(--muted); margin-top: 4px; }
+  .refs { padding-left: 1.2em; }
+  .refs li + li { margin-top: 4px; }
+  .colophon { padding-block: 25px; border-top: 1px solid var(--rule); color: var(--muted); font-size: 0.82rem; }
+
+  @media (max-width: 760px) {
+    .paper { margin-bottom: 0; }
+    .cover { padding-top: 40px; }
+    .status dl > div { grid-template-columns: 1fr; }
+    .lane-steps { grid-auto-flow: row; grid-auto-columns: auto; gap: 30px 0; }
+    .lane-steps li + li::before { content: "↓"; content: "↓" / ""; left: 50%; top: -27px; transform: translateX(-50%); }
+    .chapter, .chapter-band { padding-block: 44px; }
+    .spread, .guide { grid-template-columns: 1fr; gap: 24px; }
+    .side-figure { margin-top: 0; }
+    .track { grid-template-columns: 1fr; padding: 0 30px 24px; }
+    .process-node { min-height: 104px; }
+    .flow-arrow { line-height: 1.2; padding: 8px 0; }
+    .flow-arrow .horizontal { display: none; }
+    .flow-arrow .vertical { display: inline; }
+    .controls button, .controls select { min-height: 44px; }
+    .split { grid-template-columns: 1fr; }
+    .split-arrow { grid-template-columns: 1fr; }
+    .split-arrow span + span { display: none; }
+    .split-col + .split-col { border-top: 1px solid var(--rule); margin-top: 12px; }
+  }
+  @media (prefers-reduced-motion: reduce) { #packet { display: none !important; } }
+  @media print {
+    body { background: var(--paper); }
+    .controls, .motion-note { display: none; }
+    .paper { max-width: none; margin: 0; }
+    figure, table { break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<main class="paper">
+  <header class="masthead page-inset">
+    <span>VNC RELAY / 해설</span>
+    <nav aria-label="목차">
+      <a href="#problem">문제</a><a href="#flow">정상 흐름</a><a href="#withdrawn">철회한 설계</a><a href="#proxy">대안</a><a href="#code">코드</a><a href="#failure">실패 흐름</a><a href="#choices">선택</a>
+    </nav>
+  </header>
+
+  <section class="cover page-inset" aria-labelledby="document-title">
+    <p class="eyebrow">VNC Relay 해설 · WebSocket 중계 접속</p>
+    <h1 id="document-title">ticket은 누가 확인해야<br>효과가 생기는가</h1>
+    <p class="lead">ticket은 어드민 서비스가 연결 직전에 발급하는 짧은 수명의 접속 허가값이다. 업그레이드 요청을 받는 쪽이 ticket의 진위·만료·사용 여부를 확인해야 효과가 생긴다. vnc-relay는 ticket을 읽지 않는다. 그래서 vnc-relay를 바꾸지 않고 ticket을 쓰려면 확인 지점을 vnc-relay 앞의 프록시에 두어야 한다.</p>
+
+    <aside class="status" aria-labelledby="status-title">
+      <p class="status-title" id="status-title">이 해설이 다루는 세 상태</p>
+      <dl>
+        <div><dt>현재 기준</dt><dd>vnc-relay는 중계 접속에 토큰을 쓰지 않는다. 접근 통제는 진입점별 출발지 IP 허용 목록이다(<a href="../decisions/ADR-0002-source-ip-allowlist.md">ADR-0002</a>). 프록시의 인증 종료와 중계 접속 토큰은 <a href="../decisions/ADR-0007-proxy-tls-termination.md">ADR-0007</a>의 범위 밖이다. 사용처의 현재 계약도 ticket 없이 연결한다.</dd></div>
+        <div><dt>철회한 설계</dt><dd>사용처의 어드민 서비스가 2026-10-12에 채택하고 2026-11-08에 철회했다. 전용 중계가 서명한 일회용 ticket을 직접 확인하는 설계였다.</dd></div>
+        <div><dt>미승인 대안</dt><dd>vnc-relay 앞의 프록시가 ticket을 확인하는 방식이다. 아무도 채택하지 않았고 실행하지도 않았다.</dd></div>
+      </dl>
+      <p>이 해설은 요구사항이나 설계를 정하지 않는다. 경로·헤더 이름·설정은 설명을 위한 예시다.</p>
+    </aside>
+
+    <figure class="lanes-figure" aria-labelledby="fig1-caption">
+      <div class="lanes">
+        <div class="lane">
+          <p class="lane-label">현재 기준<span>ticket 없음</span></p>
+          <ol class="lane-steps">
+            <li><strong>브라우저</strong><span>noVNC</span></li>
+            <li><strong>vnc-relay</strong><span>클라이언트 주소·Origin 검사, 중계 ID로 짝짓기</span></li>
+            <li><strong>기기</strong><span>TCP로 먼저 대기</span></li>
+          </ol>
+        </div>
+        <div class="lane">
+          <p class="lane-label">철회한 설계<span>중계가 직접 확인</span></p>
+          <ol class="lane-steps">
+            <li><strong>브라우저</strong><span>noVNC + ticket</span></li>
+            <li class="check"><em>확인 지점</em><strong>전용 중계</strong><span>서명·만료·사용 기록, 중계 ID 대조</span></li>
+            <li><strong>UltraVNC Repeater</strong><span>중계 ID로 짝짓기</span></li>
+            <li><strong>기기</strong><span>TCP로 먼저 대기</span></li>
+          </ol>
+        </div>
+        <div class="lane">
+          <p class="lane-label">미승인 대안<span>프록시가 앞에서 확인</span></p>
+          <ol class="lane-steps">
+            <li><strong>브라우저</strong><span>noVNC + ticket</span></li>
+            <li class="check"><em>확인 지점</em><strong>프록시 + 확인 서버</strong><span>발급 기록·만료·사용 기록</span></li>
+            <li><strong>vnc-relay</strong><span>클라이언트 주소·Origin 검사, 중계 ID로 짝짓기</span></li>
+            <li><strong>기기</strong><span>TCP로 먼저 대기</span></li>
+          </ol>
+        </div>
+      </div>
+      <figcaption id="fig1-caption"><strong>그림 1. ticket을 확인하는 위치.</strong> 굵은 테두리와 "확인 지점" 표시가 ticket을 확인하는 곳이다. 기기 쪽 TCP 연결은 세 상태 모두 ticket을 쓰지 않는다.</figcaption>
+    </figure>
+  </section>
+
+  <section class="chapter page-inset guide" aria-label="읽기 안내">
+    <div>
+      <h2 id="meta-title">읽기 안내</h2>
+      <div class="table-wrap">
+        <table class="meta" aria-labelledby="meta-title">
+          <tbody>
+            <tr><th scope="row">기준 독자</th><td>vnc-relay 앞에 어드민 웹이나 역방향 프록시를 붙이려는 개발자와 운영자</td></tr>
+            <tr><th scope="row">먼저 읽을 문서</th><td><a href="../architectures/websocket-entry-point.md">WebSocket 진입점 모듈 설계</a>, <a href="../contracts/websocket-relay-v1.md#11-업그레이드-요청">WebSocket 중계 계약 1.1절</a></td></tr>
+            <tr><th scope="row">관련 기준 문서</th><td><a href="../decisions/ADR-0002-source-ip-allowlist.md">ADR-0002</a>, <a href="../decisions/ADR-0007-proxy-tls-termination.md">ADR-0007</a>, <a href="../contracts/websocket-relay-v1.md">WebSocket 중계 계약 v1</a>, <a href="../contracts/config-v4.md">설정 계약 v4</a></td></tr>
+            <tr><th scope="row">대상 버전·확인일</th><td>vnc-relay <code>v2026.11.2</code> 이후 main <code>c13e82e</code>의 코드와 문서. 사용처 계약은 비공개 저장소의 철회 직전 커밋 <code>96b0258</code>과 현재 커밋 <code>a012d9d</code>(결정 <code>ADM-TBD-059</code>·<code>238</code>·<code>239</code>). 외부 문서를 포함해 2026-11-10에 확인했다.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div>
+      <h2>읽고 나면 답할 수 있는 질문</h2>
+      <ul>
+        <li>ticket을 붙이면 무엇을 막고, 무엇을 막지 못하는가?</li>
+        <li>서명한 ticket만으로는 왜 일회용이 되지 않는가?</li>
+        <li>vnc-relay를 바꾸지 않고 ticket을 확인하려면 어디에 무엇을 두는가?</li>
+        <li>확인은 통과했는데 연결이 실패하면 같은 ticket으로 다시 연결할 수 있는가?</li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="chapter page-inset spread" id="problem" aria-labelledby="problem-title">
+    <div class="prose">
+      <p class="eyebrow">01 / 문제 상황</p>
+      <h2 id="problem-title">중계 ID만으로는 누가 연결하는지 알 수 없다</h2>
+      <p>브라우저의 noVNC는 vnc-relay의 <code>/relay</code> 경로로 WebSocket 업그레이드 요청을 보낸다. 101 응답 뒤에는 초기 교환으로 중계 ID를 보낸다. 같은 중계 ID로 기다리던 기기의 대기 연결이 있으면 둘은 Mode II로 짝을 이룬다.</p>
+      <p>vnc-relay가 업그레이드 전에 보는 접근 조건은 클라이언트 주소와 Origin이다(<a href="../contracts/websocket-relay-v1.md#11-업그레이드-요청">계약 1.1절</a>). 출발지 IP 허용 목록에 전체 허용 항목(<code>0.0.0.0/0</code>)을 쓰면 주소 검사는 아무도 거르지 않는다. Origin은 다른 사이트의 브라우저 페이지만 막는다. 요청을 직접 만드는 프로그램은 Origin 헤더를 빼고 보낼 수 있다. 이때 vnc-relay는 Origin 검사를 건너뛴다(<a href="../contracts/websocket-relay-v1.md#13-origin-비교">계약 1.3절</a>).</p>
+      <p>중계 ID는 짝을 찾는 값이며 비밀값이 아니다(<a href="../../GLOSSARY.md#중계-방식과-세션">용어집</a>). 그러면 남는 보호는 기기가 확인하는 VNC 비밀번호다. ticket은 여기에 "어드민 서비스에서 방금 연결을 요청한 브라우저인가"라는 조건을 더하려는 방법이다.</p>
+    </div>
+    <figure class="side-figure" aria-labelledby="fig2-caption">
+      <ol class="checks">
+        <li><strong>출발지 IP 허용 목록<span class="who">vnc-relay</span></strong>목록 밖의 클라이언트 주소를 막는다.<span class="gap">전체 허용 항목이면 효과가 없다.</span></li>
+        <li><strong>Origin<span class="who">vnc-relay</span></strong>다른 사이트의 브라우저 페이지를 막는다.<span class="gap">헤더가 없으면 검사를 건너뛴다.</span></li>
+        <li><strong>중계 ID<span class="who">vnc-relay</span></strong>Viewer와 기기의 짝을 찾는다.<span class="gap">비밀값이 아니므로 막는 장치가 아니다.</span></li>
+        <li><strong>VNC 비밀번호<span class="who">기기</span></strong>비밀번호를 모르는 Viewer를 막는다.<span class="gap">vnc-relay는 이 교환을 해석하지 않는다.</span></li>
+      </ol>
+      <figcaption id="fig2-caption"><strong>그림 2. 지금 경로에서 연결 하나가 지나는 확인.</strong> 1~3은 vnc-relay가, 4는 기기가 한다. 4는 짝을 이룬 뒤 중계 스트림 안에서 일어난다.</figcaption>
+    </figure>
+  </section>
+
+  <section class="chapter page-inset" id="terms" aria-labelledby="terms-title">
+    <div class="prose">
+      <p class="eyebrow">02 / 필수 용어</p>
+      <h2 id="terms-title">이 해설에서 쓰는 말</h2>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <caption><strong>표 1. 용어.</strong> 용어집에 있는 업무 용어는 다시 정의하지 않고 연결한다.</caption>
+        <thead><tr><th scope="col">용어</th><th scope="col">뜻과 이 해설에서의 역할</th></tr></thead>
+        <tbody>
+          <tr><th scope="row">ticket</th><td>어드민 서비스가 접속정보 응답에 담아 주는 짧은 수명의 접속 허가값이다. 이 해설에서만 쓰는 말이며 용어집 용어가 아니다.</td></tr>
+          <tr><th scope="row">확인 지점</th><td>ticket을 검사해 업그레이드를 통과시킬지 정하는 곳이다. 철회한 설계에서는 전용 중계, 대안에서는 프록시와 확인 서버다.</td></tr>
+          <tr><th scope="row">사용 기록</th><td>이미 쓴 ticket을 기억하는 저장 상태다. 같은 ticket의 두 번째 사용을 막는 근거는 이것뿐이다.</td></tr>
+          <tr><th scope="row">서브프로토콜</th><td>WebSocket 업그레이드 요청의 <code>Sec-WebSocket-Protocol</code> 값 목록이다. 브라우저의 <code>WebSocket</code> 생성자는 주소와 이 목록만 받는다(<a href="https://websockets.spec.whatwg.org/#dom-websocket-websocket">WHATWG WebSockets</a>). 주소의 쿼리는 접근 로그에 남기 쉽다. 그래서 두 ticket 설계 모두 ticket을 이 목록에 싣는다. 값에는 공백·쉼표 같은 구분 문자를 쓸 수 없다(<a href="https://www.rfc-editor.org/rfc/rfc6455#section-4.1">RFC 6455 4.1절</a>).</td></tr>
+          <tr><th scope="row">JWS, ES256</th><td>JWS는 헤더·내용·서명을 점으로 이은 서명 형식이다(<a href="https://www.rfc-editor.org/rfc/rfc7515">RFC 7515</a>). ES256은 P-256 곡선의 ECDSA 서명이며, JWS 안의 서명 길이는 64바이트다(<a href="https://www.rfc-editor.org/rfc/rfc7518#section-3.4">RFC 7518 3.4절</a>).</td></tr>
+          <tr><th scope="row">원격 지원 세션</th><td>사용처의 어드민 서비스가 기기 연결을 허락한 기간이다. 만료 시각이 있다. vnc-relay의 활성 세션이나 관리 세션과 다르다.</td></tr>
+          <tr><th scope="row">중계 ID, 초기 교환, Mode II, 대기 연결</th><td><a href="../../GLOSSARY.md#중계-방식과-세션">용어집 "중계 방식과 세션"</a>을 따른다.</td></tr>
+          <tr><th scope="row">진입점, 신뢰 프록시, 전달 주소, 클라이언트 주소, 출발지 IP 허용 목록, 전체 허용 항목</th><td><a href="../../GLOSSARY.md#접근-경계">용어집 "접근 경계"</a>를 따른다.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="chapter-band page-inset" id="flow" aria-labelledby="flow-title">
+    <div class="prose">
+      <p class="eyebrow">03 / 정상 흐름</p>
+      <h2 id="flow-title">확인 위치만 다르고 순서는 같다</h2>
+      <p>두 ticket 설계는 같은 순서를 따른다. 브라우저가 접속정보를 요청하면 어드민 API가 ticket을 발급한다. 브라우저는 업그레이드 요청에 ticket을 싣는다. 확인 지점은 ticket을 확인하고 사용 기록을 남긴 뒤에만 요청을 통과시킨다.</p>
+      <p>아래 모형은 확인 지점을 상자 하나로 묶었다. 시나리오를 바꾸면 같은 요청이 어디에서 갈라지는지 볼 수 있다.</p>
+    </div>
+    <figure class="mechanism" aria-labelledby="fig3-caption">
+      <div class="track" id="track" role="group" aria-label="어드민 API, 브라우저, 확인 지점, vnc-relay의 상태">
+        <div class="process-node" id="node-api"><strong>어드민 API</strong><span class="node-role">발급</span><span class="node-state" id="state-api">대기</span></div>
+        <div class="flow-arrow" aria-hidden="true"><span class="horizontal">⇄</span><span class="vertical">⇅</span></div>
+        <div class="process-node" id="node-browser"><strong>브라우저</strong><span class="node-role">noVNC</span><span class="node-state" id="state-browser">ticket 없음</span></div>
+        <div class="flow-arrow" aria-hidden="true"><span class="horizontal">→</span><span class="vertical">↓</span></div>
+        <div class="process-node" id="node-gate"><strong>확인 지점</strong><span class="node-role">전용 중계 또는 프록시</span><span class="node-state" id="state-gate">대기</span></div>
+        <div class="flow-arrow" aria-hidden="true"><span class="horizontal">→</span><span class="vertical">↓</span></div>
+        <div class="process-node" id="node-relay"><strong>vnc-relay</strong><span class="node-role">중계·짝짓기</span><span class="node-state" id="state-relay">연결 없음</span></div>
+        <span id="packet" aria-hidden="true" hidden>REQ</span>
+      </div>
+      <figcaption id="fig3-caption"><strong>그림 3. ticket 한 개의 정상 흐름과 실패 흐름.</strong> 설명용 모형이다. 이동 속도는 실제 시간과 관계없다. 철회한 설계에서는 확인 지점이 전용 중계이고, 그 뒤는 vnc-relay가 아니라 UltraVNC Repeater다.</figcaption>
+    </figure>
+    <div class="controls" aria-label="동작 탐색">
+      <label for="scenario">시나리오</label>
+      <select id="scenario">
+        <option value="ok">정상</option>
+        <option value="replay">이미 쓴 ticket</option>
+        <option value="expired">만료된 ticket</option>
+        <option value="store">사용 기록 저장소 장애</option>
+      </select>
+      <button id="previous" type="button" disabled>이전</button>
+      <button id="next" type="button">다음</button>
+      <button id="play" type="button">한 번 재생</button>
+      <button id="reset" type="button">다시 시작</button>
+    </div>
+    <p class="motion-note" id="motionNote">직접 재생하거나 이전·다음으로 한 단계씩 볼 수 있다.</p>
+    <div class="stage-readout" aria-live="polite" aria-atomic="true">
+      <h3 id="stageTitle">0 / 연결 전</h3>
+      <p id="stageText">브라우저는 원격 지원 세션을 시작했다. 아직 ticket은 없다.</p>
+      <p class="ticket-line">ticket 상태: <strong id="ticketState">없음</strong></p>
+    </div>
+
+    <div class="table-wrap wide" tabindex="0" role="region" aria-label="표 2">
+      <table>
+        <caption><strong>표 2. 세 상태의 차이.</strong> 그림 1의 위치 차이가 만드는 결과를 항목별로 나눴다.</caption>
+        <thead><tr><th scope="col">항목</th><th scope="col">현재 기준</th><th scope="col">철회한 설계</th><th scope="col">미승인 대안</th></tr></thead>
+        <tbody>
+          <tr><th scope="row">확인 지점</th><td>없음</td><td>전용 중계</td><td>vnc-relay 앞의 프록시와 확인 서버</td></tr>
+          <tr><th scope="row">ticket 형식</th><td>없음</td><td>JWS(ES256 서명)</td><td>무작위 값. 서버에는 해시만 저장(예)</td></tr>
+          <tr><th scope="row">일회용의 근거</th><td>해당 없음</td><td>전용 중계의 사용 기록(<code>jti</code>)</td><td>확인 서버의 조건부 쓰기</td></tr>
+          <tr><th scope="row">중계 ID와 묶음</th><td>없음</td><td>있음. <code>rid</code>와 첫 250바이트를 대조</td><td>없음</td></tr>
+          <tr><th scope="row">세션 만료 때 중계 연결</th><td>중계는 끊지 않음</td><td>close <code>4410</code>으로 끊음</td><td>중계는 끊지 않음</td></tr>
+          <tr><th scope="row">vnc-relay 변경</th><td>해당 없음</td><td>해당 없음. vnc-relay 도입 전의 설계</td><td>코드 변경 없음. 설정만 바꿈</td></tr>
+          <tr><th scope="row">상태</th><td>사용 중</td><td>2026-11-08 철회</td><td>채택하지 않음. 실행하지 않음</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="chapter page-inset" id="withdrawn" aria-labelledby="withdrawn-title">
+    <div class="spread">
+      <div class="prose">
+        <p class="eyebrow">04 / 철회한 설계</p>
+        <h2 id="withdrawn-title">전용 중계가 서명과 사용 기록을 본다</h2>
+        <p>사용처는 처음에 브라우저 앞에 전용 WebSocket 중계를 두려고 했다. 이 중계가 ticket을 확인한 뒤 기존 UltraVNC Repeater의 Viewer 포트로 TCP 연결을 열 예정이었다. 2026-11-08 결정(<code>ADM-TBD-238</code>)이 ticket 인증을 철회하고 중계를 vnc-relay로 바꾸었다. vnc-relay에는 ticket을 확인하는 기능이 없다.</p>
+        <p>ticket은 JWS 압축 형식이다. 어드민 API가 KMS(키 관리 서비스)의 P-256 서명 키로 서명하고, 전용 중계는 공개 키만 가진다. KMS는 ECDSA 서명을 DER 형식으로 돌려준다(<a href="https://docs.aws.amazon.com/kms/latest/APIReference/API_Sign.html">AWS KMS Sign</a>). 그래서 API가 JWS가 요구하는 R‖S 64바이트로 바꾼다. 서명 키는 환경(stage)마다 하나이며 키 교체 절차는 정하지 않았다.</p>
+        <p>API는 세션 만료 시각 <code>sx</code>가 발급 시각 <code>iat</code>보다 늦지 않으면 발급하지 않고 409로 답한다. ticket 원문은 DB·감사 기록·로그에 남기지 않는다.</p>
+      </div>
+      <figure class="side-figure" aria-labelledby="fig4-caption">
+        <div class="jws" role="img" aria-label="JWS 압축 형식. 헤더, 내용, 서명을 점으로 잇는다.">
+          <span class="seg"><b>헤더</b><code>{"alg":"ES256",<wbr>"typ":"JWT"}</code></span>
+          <span class="dot" aria-hidden="true">.</span>
+          <span class="seg"><b>내용</b><code>iss aud sub jti iat exp sx rh rid</code></span>
+          <span class="dot" aria-hidden="true">.</span>
+          <span class="seg"><b>서명</b><code>R‖S</code> <small>64바이트</small></span>
+        </div>
+        <figcaption id="fig4-caption"><strong>그림 4. 철회한 설계의 ticket 구조.</strong> 세 부분을 각각 base64url로 바꾼 뒤 점으로 잇는다. 서명은 앞의 두 부분을 대상으로 한다. 각 클레임의 뜻은 표 3에 있다.</figcaption>
+      </figure>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <caption><strong>표 3. 철회한 설계의 클레임 9개.</strong> 발급자와 수신자 이름은 일반화해 적었다.</caption>
+        <thead><tr><th scope="col">클레임</th><th scope="col">값</th><th scope="col">전용 중계가 쓰는 곳</th></tr></thead>
+        <tbody>
+          <tr><th scope="row"><code>iss</code></th><td>환경 이름을 포함한 발급자</td><td>다른 환경의 ticket 거절</td></tr>
+          <tr><th scope="row"><code>aud</code></th><td>중계를 가리키는 고정 값</td><td>다른 용도로 서명한 값 거절</td></tr>
+          <tr><th scope="row"><code>sub</code></th><td>원격 지원 세션 ID</td><td>로그에서 세션 추적</td></tr>
+          <tr><th scope="row"><code>jti</code></th><td>128비트 난수(22자)</td><td>사용 기록의 키</td></tr>
+          <tr><th scope="row"><code>iat</code></th><td>발급 시각(초)</td><td>시계 오차 검사</td></tr>
+          <tr><th scope="row"><code>exp</code></th><td><code>min(iat + 60, sx)</code></td><td>수명 60초</td></tr>
+          <tr><th scope="row"><code>sx</code></th><td>세션 만료 시각(초 단위로 내림)</td><td>101 뒤 연결을 끊는 시각</td></tr>
+          <tr><th scope="row"><code>rh</code></th><td>중계 호스트</td><td>허용한 중계인지 대조</td></tr>
+          <tr><th scope="row"><code>rid</code></th><td>중계 ID</td><td>브라우저가 보낸 첫 250바이트와 대조</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="prose">
+      <h3>101 전에 전용 중계가 확인하는 순서</h3>
+      <ol class="rules">
+        <li>TLS 연결이 성립해야 한다.</li>
+        <li>Origin이 허용 값과 다르면 403이다.</li>
+        <li>서브프로토콜 값 목록의 형식이 틀리면 400이다. 목록은 앱 고유 이름 하나와 접두어를 붙인 ticket 하나로 이루어진다.</li>
+        <li>서명·<code>iss</code>·<code>aud</code>·<code>exp</code>·<code>iat</code>를 5초의 시계 오차 안에서 확인한다. 틀리면 401이다.</li>
+        <li><code>jti</code>를 사용 기록에 원자적으로 쓴다. 이미 있으면 401이다. 기록은 <code>exp</code> 뒤 5초까지 두고, 재시작해도 유지한다. 저장에 실패하면 503이다. 기록을 잃었으면 시계를 다시 맞춘 뒤 70초 동안 모든 요청을 503으로 거절한다. 그래서 환경마다 전용 중계 인스턴스는 하나다.</li>
+        <li><code>rh</code>가 허용한 중계 호스트가 아니면 403이다.</li>
+        <li>101은 앱 고유 이름만 고른다. ticket 값은 응답에 되돌리지 않는다.</li>
+      </ol>
+      <p class="note">70초는 ticket 수명 60초와 시계 오차 5초를 더한 값보다 길다. 그래서 기록을 잃기 전에 발급된 ticket은 이 기간 안에 모두 만료된다(추정: 원문에서 이 이유를 확인하지 않았다).</p>
+
+      <h3>101 뒤의 동작</h3>
+      <ul class="rules">
+        <li>5초 안에 Repeater의 Viewer 포트로 TCP 연결을 열지 못하면 close <code>4502</code>로 끊는다.</li>
+        <li>브라우저의 첫 250바이트가 <code>ID:</code>와 <code>rid</code>를 이은 값(남는 자리는 NUL로 채움)과 다르면 <code>4403</code>으로 끊는다. ticket을 중계 ID 하나에 묶는 장치다.</li>
+        <li>120초 동안 Repeater에서 바이트가 오지 않으면 <code>4408</code>로 끊는다.</li>
+        <li><code>sx</code>가 되면 <code>4410</code>으로 끊는다.</li>
+        <li>로그에는 시각·<code>sub</code>·<code>jti</code>·결과·전송량만 남긴다.</li>
+      </ul>
+      <p class="note">이 close 코드들은 vnc-relay의 <a href="../contracts/websocket-relay-v1.md#15-close-코드">close 코드</a>에 없다. vnc-relay는 4000번대 코드를 다른 뜻으로 쓴다.</p>
+    </div>
+  </section>
+
+  <section class="chapter page-inset" id="proxy" aria-labelledby="proxy-title">
+    <div class="spread">
+      <div class="prose">
+        <p class="eyebrow">05 / 미승인 대안</p>
+        <h2 id="proxy-title">프록시가 업그레이드 전에 묻는다</h2>
+        <p>vnc-relay를 바꾸지 않으려면 확인 지점을 vnc-relay 앞으로 옮긴다. 역방향 프록시가 WSS를 받아 TLS를 끝낸다. 프록시는 업그레이드를 넘기기 전에 확인 서버에 ticket을 보낸다. 확인 서버가 2xx로 답할 때만 요청을 vnc-relay의 루프백 WS 리스너로 넘긴다.</p>
+        <p>vnc-relay 쪽은 설정만 바뀐다. <code>[relay.ws]</code>를 루프백 주소에서 열고, 그 리스너의 <code>trusted_proxies</code>에 프록시 주소를 넣는다. 그러면 vnc-relay는 프록시가 붙인 <code>X-Forwarded-For</code>로 클라이언트 주소를 구한다(<a href="../contracts/websocket-relay-v1.md#18-신뢰-프록시와-x-forwarded-for">계약 1.8절</a>, <a href="../decisions/ADR-0007-proxy-tls-termination.md">ADR-0007</a>). 역할별 출발지 IP 허용 목록과 Origin 검사는 그대로 동작한다. <code>trusted_proxies</code>는 재로드 대상이지만, 리스너를 새로 열거나 역할을 켜고 끄는 변경은 재시작이 필요하다(<a href="../contracts/config-v4.md#18-재로드-구분">설정 계약 1.8절</a>).</p>
+        <p>프록시를 거치지 않는 Viewer 진입점이 열려 있으면 ticket을 건너뛸 수 있다. 그래서 이 대안은 공개 WSS Viewer 역할을 끄고, 프록시 뒤의 WS만 남기는 배치를 전제로 한다.</p>
+      </div>
+      <figure class="side-figure" aria-labelledby="fig5-caption">
+        <div class="split">
+          <p class="split-head">브라우저 → 프록시: <code>GET /relay</code>, <code>Sec-WebSocket-Protocol: binary, &lt;ticket&gt;</code></p>
+          <p class="split-arrow" aria-hidden="true"><span>↓ 먼저</span><span>↓ 그다음</span></p>
+          <div class="split-col">
+            <p class="split-title">① 확인 요청 → 확인 서버</p>
+            <ul>
+              <li>메서드: <code>GET</code></li>
+              <li>경로: <code>/relay-tickets/verify</code>(예)</li>
+              <li><code>X-Relay-Subprotocols</code>: 원래 값 복사(예)</li>
+              <li><code>Connection</code>, <code>Upgrade</code>, <code>Sec-WebSocket-*</code>: 제거</li>
+            </ul>
+          </div>
+          <div class="split-col">
+            <p class="split-title">② 2xx일 때 넘기는 요청 → vnc-relay</p>
+            <ul>
+              <li>경로 <code>/relay</code>와 <code>Origin</code>: 그대로</li>
+              <li><code>Sec-WebSocket-Protocol</code>: <code>binary</code>로 교체</li>
+              <li><code>X-Forwarded-For</code>: 브라우저 주소 추가</li>
+              <li>대상: 루프백 WS 리스너</li>
+            </ul>
+          </div>
+        </div>
+        <figcaption id="fig5-caption"><strong>그림 5. 프록시가 원래 요청 하나로 만드는 두 요청.</strong> 헤더 이름과 확인 경로는 예시다. 이 구성 전체는 실행하지 않았다.</figcaption>
+      </figure>
+    </div>
+
+    <div class="prose">
+      <h3>ticket과 웹 쪽 형태</h3>
+      <p>확인 서버가 발급 기록을 직접 읽을 수 있으면 서명이 필요 없다. 예를 들어 32바이트 난수를 base64url로 바꾼 값을 ticket으로 준다. 서버에는 그 값의 해시와 만료 시각만 저장한다. 해시 앞에는 용도·버전·환경 이름을 붙여 다른 용도의 해시와 섞이지 않게 한다. 확인 때는 "미사용이면 사용됨으로 바꾼다"는 조건부 쓰기를 한 번 한다. 이 쓰기가 성공한 요청만 통과한다.</p>
+      <p>웹은 noVNC의 <code>wsProtocols</code> 옵션에 <code>['binary', ticket]</code>을 넣는다(<a href="https://github.com/novnc/noVNC/blob/master/docs/API.md">noVNC API</a>). <code>binary</code>를 함께 넣는 이유는 응답 때문이다. 서버는 클라이언트가 제시한 값만 고를 수 있다. vnc-relay는 <code>binary</code>를 골라 101에 되돌린다(<a href="../contracts/websocket-relay-v1.md#12-업그레이드-응답과-서브프로토콜">계약 1.2절</a>).</p>
+      <p>지금의 vnc-relay도 <code>binary</code>가 들어 있는 목록은 받아들이고, 나머지 값은 판정에 쓰지 않는다. 그래서 웹이 프록시보다 먼저 ticket을 실어도 연결은 깨지지 않는다. 그때 ticket은 아무 효과가 없다.</p>
+
+      <h3>헤더를 다룰 때 생기는 문제</h3>
+      <p>확인 요청에 업그레이드 헤더가 남으면 확인 서버는 WebSocket 업그레이드 요청을 받는다. 그래서 이 헤더를 지운다. 그런데 <code>Sec-WebSocket-*</code>를 지우면 ticket도 함께 지워진다. 지우기 전에 다른 헤더로 옮겨야 한다. 2026-11-10 Caddy 2.11.9 루프백 임시 시험에서 두 가지를 관찰했다. <code>forward_auth</code>는 업그레이드 헤더를 확인 요청에 그대로 넘겼다. 헤더를 지우자 ticket이 사라져 확인 서버가 401로 답했다. 이 시험은 저장소에 기록하지 않았다. 옮긴 뒤 지우는 설정은 실행하지 않았다.</p>
+      <p>Caddy 접근 로그는 요청 헤더를 남긴다. 기본으로 가리는 헤더는 <code>Cookie</code>·<code>Set-Cookie</code>·<code>Authorization</code>·<code>Proxy-Authorization</code>뿐이다(<a href="https://caddyserver.com/docs/caddyfile/options#log-credentials">Caddy log_credentials</a>). 그래서 ticket이 든 <code>Sec-WebSocket-Protocol</code>은 로그 필터로 따로 지워야 한다. 같은 임시 시험에서 이 값이 평문으로 남은 것을 관찰했다.</p>
+      <p>Caddy는 설정을 다시 적용할 때 열린 WebSocket을 바로 닫는다. <code>stream_close_delay</code>를 주면 그 시간 동안 유지한다(<a href="https://caddyserver.com/docs/caddyfile/directives/reverse_proxy#stream_close_delay">Caddy reverse_proxy</a>).</p>
+
+      <h3>확인 요청이 GET일 때의 문제</h3>
+      <p>Caddy의 <code>forward_auth</code>는 확인 요청을 항상 GET으로 보낸다(<a href="https://caddyserver.com/docs/caddyfile/directives/forward_auth">Caddy forward_auth</a>). GET은 멱등 메서드이며, 응답을 읽기 전에 통신이 실패하면 자동으로 다시 보낼 수 있다(<a href="https://www.rfc-editor.org/rfc/rfc9110#section-9.2.2">RFC 9110 9.2.2절</a>). 일회용 확인은 상태를 바꾸므로 이 가정과 맞지 않는다. 첫 확인이 사용 기록을 쓴 뒤 응답이 사라져 다시 보내면, 두 번째 확인은 "이미 사용됨"으로 거절한다. 선택지는 세 가지다.</p>
+      <ol class="rules">
+        <li>GET에서 소비하는 것을 받아들인다. 드물게 정상 사용자가 401을 받으면 접속정보를 다시 요청해 새 ticket으로 연결한다.</li>
+        <li><code>forward_auth</code> 대신 같은 동작의 확장형 <code>reverse_proxy</code>를 쓰고 메서드를 POST로 바꾼다. <code>forward_auth</code>는 <code>method GET</code>이 들어간 <code>reverse_proxy</code>의 축약이다. 이 구성은 실행하지 않았다.</li>
+        <li>확인 때 소비하지 않는다. 만료 전까지 같은 ticket을 다시 쓸 수 있으므로 일회용이 아니다.</li>
+      </ol>
+    </div>
+
+    <div class="table-wrap wide" tabindex="0" role="region" aria-label="표 4">
+      <table>
+        <caption><strong>표 4. 프록시별 확인 요청 처리.</strong> 각 프록시 공식 문서 기준이며 nginx는 실행하지 않았다.</caption>
+        <thead><tr><th scope="col">프록시</th><th scope="col">2xx</th><th scope="col">401·403</th><th scope="col">그 밖의 응답</th></tr></thead>
+        <tbody>
+          <tr><th scope="row">Caddy <code>forward_auth</code></th><td>원래 요청을 계속 처리한다.</td><td>확인 서버의 응답을 클라이언트에 그대로 복사한다.</td><td>같다. 그래서 확인 서버의 503이 브라우저에 503으로 보인다.</td></tr>
+          <tr><th scope="row">nginx <a href="https://nginx.org/en/docs/http/ngx_http_auth_request_module.html"><code>auth_request</code></a></th><td>허용한다.</td><td>같은 코드로 거절한다.</td><td>오류로 처리한다(500). 확인 서버의 503은 브라우저에 500으로 보인다.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="table-wrap wide" tabindex="0" role="region" aria-label="표 5">
+      <table>
+        <caption><strong>표 5. 확인 서버를 두는 위치.</strong> 두 위치 모두 미승인 대안의 세부 선택지다.</caption>
+        <thead><tr><th scope="col">위치</th><th scope="col">이점</th><th scope="col">비용</th></tr></thead>
+        <tbody>
+          <tr><th scope="row">어드민 API</th><td>발급 기록과 사용 기록이 한 저장소에 있다. 서명 키가 필요 없다.</td><td>연결마다 프록시가 인터넷 너머의 API를 부른다. API 장애는 곧 연결 불가다. 확인 경로가 인터넷에 열리므로 호출자 인증과 요청 수 제한을 정해야 한다.</td></tr>
+          <tr><th scope="row">프록시 옆 로컬 확인 서버</th><td>네트워크 왕복이 없다.</td><td>서명한 ticket과 공개 키가 필요하다. 일회용이려면 사용 기록을 디스크에 남기거나, 기록을 잃은 뒤 수명보다 긴 시간 동안 모두 거절해야 한다. 서버를 하나 더 운영한다.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <details class="example">
+      <summary>설정 예시 보기(개념 예시, 실행하지 않음)</summary>
+      <p>채택한 설정이 아니다. 이름과 주소는 문서용 값이다. 헤더 복사와 삭제의 적용 순서는 확인하지 않았다.</p>
+      <pre tabindex="0" aria-label="Caddyfile 예시"><code>relay.example {
+	@relay path /relay
+	handle @relay {
+		forward_auth https://admin.example {
+			uri /relay-tickets/verify
+			header_up X-Relay-Subprotocols {http.request.header.Sec-WebSocket-Protocol}
+			header_up -Connection
+			header_up -Upgrade
+			header_up -Sec-WebSocket-*
+		}
+		reverse_proxy 127.0.0.1:8080 {
+			header_up Sec-WebSocket-Protocol binary
+			stream_close_delay 30m
+		}
+	}
+	handle {
+		respond 404
+	}
+	log {
+		format filter {
+			request&gt;headers&gt;Sec-Websocket-Protocol delete
+		}
+	}
+}</code></pre>
+      <pre tabindex="0" aria-label="relay.toml 예시"><code>[relay.ws]
+listen = "127.0.0.1:8080"
+trusted_proxies = ["127.0.0.1"]
+
+[relay.ws.viewer]
+enabled = true
+allow = ["198.51.100.0/24"]                  # 전달 주소와 대조한다
+allowed_origins = ["https://admin.example"]</code></pre>
+    </details>
+  </section>
+
+  <section class="chapter page-inset" id="code" aria-labelledby="code-title">
+    <div class="prose">
+      <p class="eyebrow">06 / 코드에서 따라가기</p>
+      <h2 id="code-title">vnc-relay 코드에서 ticket이 지나가는 곳</h2>
+      <p>검사 순서의 기준은 <a href="../architectures/websocket-entry-point.md#검사-순서check">WebSocket 진입점 모듈 설계의 검사 순서</a>다. 여기서는 ticket과 관련된 지점만 따라간다.</p>
+      <ol class="rules">
+        <li><a href="../../crates/adapters/src/websocket.rs"><code>crates/adapters/src/websocket.rs</code></a>의 <code>upgrade</code>가 요청 머리를 읽고 <code>check_upgrade</code>를 부른다. <code>check_upgrade</code>는 현재 설정으로 <code>check</code>를 실행한다. 그다음 클라이언트 주소(<code>forwarded_ip.unwrap_or(peer_ip)</code>)를 선택한 역할의 허용 목록과 다시 대조한다.</li>
+        <li><a href="../../crates/adapters/src/upgrade.rs"><code>crates/adapters/src/upgrade.rs</code></a>의 <code>check</code>가 요청 머리를 순서대로 검사한다. 소켓 상대가 <code>trusted_proxies</code>에 있으면 <a href="../../crates/domain/src/forwarded_for.rs"><code>vnc_relay_domain::forwarded_for::client_ip</code></a>가 <code>X-Forwarded-For</code>를 오른쪽부터 읽어 처음 만나는 비신뢰 주소를 고른다.</li>
+        <li>같은 함수가 Origin을 본다. 헤더가 없으면 이 검사를 건너뛴다.</li>
+        <li>마지막으로 서브프로토콜 값을 모은다. 아래가 그 부분이다.</li>
+      </ol>
+    </div>
+    <figure style="margin-top:22px" aria-labelledby="code-caption">
+      <pre tabindex="0" aria-label="upgrade.rs의 서브프로토콜 검사"><code>    let tokens: Vec&lt;&amp;str&gt; = values(&amp;headers, "sec-websocket-protocol")
+        .flat_map(|value| value.split(','))
+        .map(str::trim)
+        .filter(|token| !token.is_empty())
+        .collect();
+    if !tokens.is_empty() &amp;&amp; !tokens.contains(&amp;"binary") {
+        return Err(Refusal::SubprotocolNotSupported);
+    }
+
+    Ok(ValidUpgrade {
+        role,
+        accept_key: derive_accept_key(key.as_bytes()),
+        binary: tokens.contains(&amp;"binary"),
+    })</code></pre>
+      <figcaption id="code-caption"><strong>코드 1. <code>crates/adapters/src/upgrade.rs</code> 242~255행(<code>check</code>의 끝).</strong> <code>c13e82e</code>에서 그대로 옮겼다.</figcaption>
+    </figure>
+    <div class="prose" style="margin-top:28px">
+      <p>ticket은 <code>tokens</code>에 들어가지만 어떤 판정에도 쓰이지 않는다. <code>binary</code>가 함께 있으면 통과하고, 값이 있는데 <code>binary</code>가 없으면 400(<code>SubprotocolNotSupported</code>)이다. 그래서 철회한 설계의 값 목록(앱 고유 이름과 ticket)을 vnc-relay에 그대로 보내면 400이 된다.</p>
+      <p>같은 파일의 <code>switching_protocols</code>가 101 응답을 만든다. <code>binary</code>를 제시한 요청에만 <code>Sec-WebSocket-Protocol: binary</code>를 넣는다. ticket은 응답에 나타나지 않는다.</p>
+      <p><code>Cookie</code>와 <code>Authorization</code>도 접근 판정에 쓰지 않는다(<a href="../contracts/websocket-relay-v1.md#11-업그레이드-요청">계약 1.1절</a> 표의 "그 밖의 헤더" 행). 따라서 vnc-relay에는 ticket이나 로그인 쿠키를 확인할 자리가 없다. <a href="../decisions/ADR-0002-source-ip-allowlist.md">ADR-0002</a>가 토큰 대신 출발지 IP 허용 목록을 고른 결과다. 그 ADR은 WS 전용 토큰과 관리자 로그인 재사용을 대안에서 제외했다. TCP 경로에 적용할 수 없고, 관리 권한과 중계 권한이 섞이기 때문이다.</p>
+    </div>
+  </section>
+
+  <section class="chapter page-inset" id="failure" aria-labelledby="failure-title">
+    <div class="prose">
+      <p class="eyebrow">07 / 실패 흐름</p>
+      <h2 id="failure-title">실패하면 무엇이 남고, 다시 할 수 있는가</h2>
+      <p>ticket 방식의 실패는 대부분 "새 ticket으로 다시 시작"으로 복구한다. ticket은 한 번 쓰면 끝난다. 또 확인과 업그레이드는 하나의 원자적 작업이 아니다. 확인 지점이 사용 기록을 쓴 뒤에 업그레이드가 실패해도 기록은 되돌아가지 않는다.</p>
+    </div>
+    <div class="table-wrap wide" tabindex="0" role="region" aria-label="표 6">
+      <table>
+        <caption><strong>표 6. 실패 지점별 결과.</strong> 철회한 설계와 대안이 다르면 함께 적었다.</caption>
+        <thead><tr><th scope="col">실패 지점</th><th scope="col">남는 상태</th><th scope="col">재시도</th><th scope="col">복구 원리</th></tr></thead>
+        <tbody>
+          <tr><th scope="row">접속정보 요청 거절(로그인·권한·세션 만료)</th><td>ticket 없음</td><td>원인을 해소한 뒤 다시 요청한다.</td><td>발급 전에 끝나므로 정리할 상태가 없다.</td></tr>
+          <tr><th scope="row">ticket 만료(받은 뒤 60초 경과 또는 세션 만료)</th><td>쓰지 않은 ticket. 대안에서는 해시 기록이 보존 기간 뒤 지워진다.</td><td>같은 ticket은 쓸 수 없다. 접속정보를 다시 요청한다.</td><td>확인 지점이 만료 시각으로 거절한다(401).</td></tr>
+          <tr><th scope="row">이미 쓴 ticket 제출</th><td>사용 기록이 그대로 남는다.</td><td>새 ticket이 필요하다.</td><td>조건부 쓰기는 한 번만 성공한다(401).</td></tr>
+          <tr><th scope="row">확인은 통과했으나 업그레이드 실패(중계 중지, Origin·IP 403, 프록시에서 중계로의 연결 실패)</th><td>ticket은 사용됨. 중계에는 대기 연결이나 활성 세션이 없다.</td><td>같은 ticket은 쓸 수 없다. 새 ticket이 필요하다.</td><td>사용 기록은 업그레이드 결과를 모른다.</td></tr>
+          <tr><th scope="row">확인 응답이 사라진 뒤 자동 재전송</th><td>첫 확인이 쓴 사용 기록</td><td>두 번째 확인은 401이다. 새 ticket이 필요하다.</td><td>GET으로 소비하는 대가다(05절의 선택지).</td></tr>
+          <tr><th scope="row">사용 기록 저장소 장애</th><td>판단할 수 없다. ticket은 아직 쓰지 않은 상태일 수 있다.</td><td>저장소가 복구된 뒤 새로 시도한다.</td><td>판단할 수 없으면 통과시키지 않는다. 철회한 설계는 503이며, 기록을 잃었으면 70초 동안 모두 503이다.</td></tr>
+          <tr><th scope="row">확인 서버 무응답(대안)</th><td>바뀐 상태가 없다.</td><td>확인 서버가 복구된 뒤 새로 시도한다.</td><td>프록시가 요청을 넘기지 않는다. 브라우저가 받는 코드는 프록시마다 다르다(표 4).</td></tr>
+          <tr><th scope="row">연결 뒤 권한 회수나 세션 만료</th><td>중계의 활성 세션이 유지된다.</td><td>해당 없음</td><td>확인은 업그레이드 때 한 번뿐이다. 대안과 현재 기준에서는 vnc-relay의 <a href="../../GLOSSARY.md#세션-종료와-기록">관리자 종료</a>로 끝낼 수 있다. 철회한 설계는 <code>sx</code>에 <code>4410</code>으로 끊었다.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="table-wrap wide" tabindex="0" role="region" aria-label="표 7">
+      <table>
+        <caption><strong>표 7. 상태의 소유자와 수명.</strong> 대안의 저장 방식은 예시다.</caption>
+        <thead><tr><th scope="col">상태</th><th scope="col">소유자</th><th scope="col">만드는 때</th><th scope="col">지우는 때</th></tr></thead>
+        <tbody>
+          <tr><th scope="row">ticket 원문</th><td>브라우저 메모리</td><td>접속정보 응답을 받을 때</td><td>연결을 시도한 뒤 버린다(예). 서버는 원문을 저장하지 않는다.</td></tr>
+          <tr><th scope="row">발급·사용 기록(대안)</th><td>확인 서버의 저장소</td><td>발급 때 해시와 만료 시각을 쓴다. 확인 때 "사용됨"으로 바꾼다.</td><td>만료 뒤 보존 기간이 지나면</td></tr>
+          <tr><th scope="row">사용 기록(철회한 설계)</th><td>전용 중계</td><td>확인에 성공할 때</td><td><code>exp</code> 뒤 5초가 지나면. 재시작해도 남는다.</td></tr>
+          <tr><th scope="row">중계 연결</th><td>vnc-relay</td><td>101 뒤</td><td>연결이 끝날 때. ticket과 관계없다.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="chapter page-inset" id="choices" aria-labelledby="choices-title">
+    <div class="prose">
+      <p class="eyebrow">08 / 오해와 선택</p>
+      <h2 id="choices-title">자주 하는 오해와 선택의 대가</h2>
+      <dl class="misread">
+        <dt>"서명한 ticket이면 일회용이다."</dt>
+        <dd>서명은 위조만 막는다. 같은 값을 두 번 내면 두 번 모두 서명 검증을 통과한다. JWT 표준도 <code>jti</code>를 재사용 방지에 쓸 수 있는 식별자로만 정한다(<a href="https://www.rfc-editor.org/rfc/rfc7519#section-4.1.7">RFC 7519 4.1.7절</a>). 일회용은 확인 지점의 사용 기록에서 나온다.</dd>
+        <dt>"Origin 검사나 중계 ID가 인증 역할을 한다."</dt>
+        <dd>둘 다 인증 수단이 아니다(<a href="../contracts/websocket-relay-v1.md#13-origin-비교">계약 1.3절</a>, <a href="../../GLOSSARY.md#중계-방식과-세션">용어집</a>).</dd>
+        <dt>"ticket을 실으면 vnc-relay가 거른다."</dt>
+        <dd>vnc-relay는 <code>binary</code> 외의 값을 판정에 쓰지 않는다(06절).</dd>
+        <dt>"ticket이 있으면 권한 회수가 바로 반영된다."</dt>
+        <dd>확인은 업그레이드 때 한 번이다. 그 뒤 연결은 계속된다.</dd>
+        <dt>"프록시를 두면 모든 접속 경로가 보호된다."</dt>
+        <dd>TCP 진입점은 HTTP가 아니어서 프록시의 확인을 거치지 않는다. TCP Viewer 진입점이 열려 있으면 ticket 없이 같은 중계 ID로 연결할 수 있다.</dd>
+        <dt>"대안에서 ticket을 통과하면 그 중계 ID에만 연결된다."</dt>
+        <dd>대안의 확인 지점은 WebSocket 프레임 안의 초기 교환을 보지 않는다. ticket을 받은 사용자는 다른 중계 ID를 보낼 수 있다. 철회한 설계는 <code>rid</code>로 이것을 막았다.</dd>
+        <dt>"ticket은 수명이 짧으니 원문이 로그에 남아도 괜찮다."</dt>
+        <dd>ticket은 가진 사람이면 누구나 쓸 수 있는 값이다. 수명 안에 다른 사람이 먼저 쓰면 그 사람이 통과하고, 정상 사용자는 401을 받는다. 그래서 두 설계 모두 원문을 로그에 남기지 않는다.</dd>
+      </dl>
+    </div>
+    <div class="table-wrap wide" tabindex="0" role="region" aria-label="표 8">
+      <table>
+        <caption><strong>표 8. 선택에 따른 이점과 제약.</strong> 어느 선택도 이 저장소의 기준을 바꾸지 않는다.</caption>
+        <thead><tr><th scope="col">선택</th><th scope="col">이점</th><th scope="col">제약</th></tr></thead>
+        <tbody>
+          <tr><th scope="row">ticket 없이 출발지 IP 허용 목록(현재 기준)</th><td>구성 요소가 늘지 않는다. 기존 UltraVNC와 호환된다.</td><td>허용한 IP 안의 사용자를 구분하지 못한다. 전체 허용 항목이면 보호가 없다.</td></tr>
+          <tr><th scope="row">중계가 직접 확인(철회한 설계)</th><td>중계 ID·중계 호스트와 묶고, 세션 만료 때 끊을 수 있다.</td><td>중계에 ticket 기능이 있어야 한다. vnc-relay에는 없다.</td></tr>
+          <tr><th scope="row">프록시와 어드민 API 확인</th><td>vnc-relay 코드가 바뀌지 않는다. 발급과 사용 기록이 한곳에 있다.</td><td>연결마다 API를 왕복한다. API 장애가 연결 불가로 이어진다. 중계 ID와 묶지 않는다.</td></tr>
+          <tr><th scope="row">프록시와 로컬 확인 서버</th><td>왕복이 없다.</td><td>서명 키와 확인 서버를 운영한다. 일회용이려면 기록을 영속화하거나 거절 기간을 둔다.</td></tr>
+          <tr><th scope="row">프록시가 어드민 로그인 쿠키 확인</th><td>발급 단계가 없다.</td><td>쿠키가 중계 주소로 가야 하므로 쿠키 범위와 SameSite 조건에 묶인다. 로그인 권한 전체가 중계 접속 권한이 된다. 일회용이 아니다.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="prose" style="margin-top:28px">
+      <p>대안에는 아직 정하지 않은 질문이 남아 있다. 확인 서버를 어디에 둘 것인가. 확인 경로의 호출자를 어떻게 인증할 것인가. 확인 때 원격 지원 세션을 다시 볼 것인가. TCP Viewer 진입점을 어떻게 할 것인가. GET으로 소비하는 문제를 어떻게 다룰 것인가. 이 질문은 사용처의 보호 강화 검토(<code>ADM-TBD-239</code>)에 속한다. 프록시의 인증은 <a href="../decisions/ADR-0007-proxy-tls-termination.md">ADR-0007</a>의 범위 밖이다. 그래서 이 저장소가 아니라 배치하는 쪽이 정한다.</p>
+    </div>
+  </section>
+
+  <section class="chapter page-inset" id="where" aria-labelledby="where-title">
+    <div class="prose">
+      <p class="eyebrow">09 / 프로젝트에서 찾을 위치</p>
+      <h2 id="where-title">코드와 기준 문서</h2>
+    </div>
+    <div class="table-wrap wide" tabindex="0" role="region" aria-label="표 9">
+      <table>
+        <caption><strong>표 9. 찾을 위치.</strong> 코드 전체의 구조는 <a href="../architectures/code-map.md">코드 지도</a>에 있다.</caption>
+        <thead><tr><th scope="col">찾는 것</th><th scope="col">위치</th></tr></thead>
+        <tbody>
+          <tr><th scope="row">업그레이드 검사 순서</th><td><a href="../../crates/adapters/src/upgrade.rs"><code>crates/adapters/src/upgrade.rs</code></a> <code>check</code>, <a href="../architectures/websocket-entry-point.md#검사-순서check">모듈 설계의 검사 순서</a></td></tr>
+          <tr><th scope="row">101 응답과 <code>binary</code></th><td><a href="../../crates/adapters/src/upgrade.rs"><code>crates/adapters/src/upgrade.rs</code></a> <code>switching_protocols</code></td></tr>
+          <tr><th scope="row">업그레이드 직전 IP 재검사</th><td><a href="../../crates/adapters/src/websocket.rs"><code>crates/adapters/src/websocket.rs</code></a> <code>check_upgrade</code></td></tr>
+          <tr><th scope="row">전달 주소 계산</th><td><a href="../../crates/domain/src/forwarded_for.rs"><code>crates/domain/src/forwarded_for.rs</code></a> <code>client_ip</code></td></tr>
+          <tr><th scope="row">업그레이드·서브프로토콜·Origin·신뢰 프록시 계약</th><td><a href="../contracts/websocket-relay-v1.md">WebSocket 중계 계약 v1</a> 1.1·1.2·1.3·1.8절</td></tr>
+          <tr><th scope="row"><code>trusted_proxies</code>와 재로드</th><td><a href="../contracts/config-v4.md#18-재로드-구분">설정 계약 v4 1.8절</a></td></tr>
+          <tr><th scope="row">접근 통제 결정</th><td><a href="../decisions/ADR-0002-source-ip-allowlist.md">ADR-0002</a>, <a href="../decisions/ADR-0007-proxy-tls-termination.md">ADR-0007</a></td></tr>
+          <tr><th scope="row">프록시 TLS 종료 예시(Nginx, 추정·미실행)</th><td><a href="../how-to/operate-relay.md#39-역방향-프록시로-tls-종료">운영 how-to 3.9절</a></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="chapter page-inset" id="quiz" aria-labelledby="quiz-title">
+    <div class="prose">
+      <p class="eyebrow">10 / 확인 질문</p>
+      <h2 id="quiz-title">이해했는지 확인하기</h2>
+      <details>
+        <summary>서명만 검증하는 확인 서버가 같은 ticket을 두 번 받으면 어떻게 되는가?</summary>
+        <p>두 번 모두 통과한다. 사용 기록이 없으므로 두 번째 요청을 구분할 근거가 없다.</p>
+      </details>
+      <details>
+        <summary>브라우저가 <code>['binary', ticket]</code>을 보냈는데 프록시 없이 vnc-relay에 바로 닿으면?</summary>
+        <p>vnc-relay는 <code>binary</code>를 골라 101로 수락한다. ticket은 무시된다.</p>
+      </details>
+      <details>
+        <summary>확인은 성공했는데 vnc-relay가 Origin 불일치로 403을 돌려주면 그 ticket은 어떻게 되는가?</summary>
+        <p>이미 사용됨 상태다. 같은 ticket으로는 다시 연결할 수 없고, 새 ticket이 필요하다.</p>
+      </details>
+      <details>
+        <summary>프록시 앞단 확인을 두어도 막지 못하는 것 두 가지는?</summary>
+        <p>프록시를 거치지 않는 TCP 진입점으로 들어오는 연결, 그리고 연결이 성립한 뒤의 권한 회수나 세션 만료다. 대안에서는 다른 중계 ID로 바꿔 보내는 것도 막지 못한다.</p>
+      </details>
+    </div>
+  </section>
+
+  <section class="chapter page-inset" id="refs" aria-labelledby="refs-title">
+    <div class="prose">
+      <p class="eyebrow">11 / 참고 자료</p>
+      <h2 id="refs-title">참고 자료</h2>
+      <ul class="refs">
+        <li><a href="https://www.rfc-editor.org/rfc/rfc6455#section-4.1">RFC 6455 4.1절</a>: 서브프로토콜 값의 문자 규칙</li>
+        <li><a href="https://websockets.spec.whatwg.org/#dom-websocket-websocket">WHATWG WebSockets Standard</a>: <code>WebSocket</code> 생성자의 인자</li>
+        <li><a href="https://www.rfc-editor.org/rfc/rfc7515">RFC 7515</a>: JWS</li>
+        <li><a href="https://www.rfc-editor.org/rfc/rfc7518#section-3.4">RFC 7518 3.4절</a>: ES256 서명 형식</li>
+        <li><a href="https://www.rfc-editor.org/rfc/rfc7519#section-4.1.7">RFC 7519 4.1.7절</a>: <code>jti</code></li>
+        <li><a href="https://www.rfc-editor.org/rfc/rfc9110#section-9.2.2">RFC 9110 9.2.2절</a>: 멱등 메서드와 자동 재전송</li>
+        <li><a href="https://docs.aws.amazon.com/kms/latest/APIReference/API_Sign.html">AWS KMS Sign</a>: ECDSA 서명의 DER 형식</li>
+        <li><a href="https://caddyserver.com/docs/caddyfile/directives/forward_auth">Caddy forward_auth</a>, <a href="https://caddyserver.com/docs/caddyfile/directives/reverse_proxy#stream_close_delay">reverse_proxy</a>, <a href="https://caddyserver.com/docs/caddyfile/options#log-credentials">log_credentials</a></li>
+        <li><a href="https://nginx.org/en/docs/http/ngx_http_auth_request_module.html">nginx ngx_http_auth_request_module</a></li>
+        <li><a href="https://github.com/novnc/noVNC/blob/master/docs/API.md">noVNC API</a>: <code>wsProtocols</code></li>
+        <li>사용처 기록(비공개): API 계약 6.4.2절. 철회한 설계는 커밋 <code>96b0258</code>, 현재 계약은 커밋 <code>a012d9d</code></li>
+      </ul>
+    </div>
+  </section>
+
+  <footer class="colophon page-inset">
+    <p>VNC Relay 해설 · 단일 HTML · 외부 폰트·스크립트·이미지 요청 없음 · 2026-11-10 확인</p>
+    <p>그림 3은 개념 모형이다. 미승인 대안의 이름·경로·설정은 예시이며 실행하지 않았다.</p>
+  </footer>
+</main>
+<script>
+  const byId = id => document.getElementById(id);
+  const packet = byId('packet');
+  const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
+  const narrowLayout = matchMedia('(max-width: 760px)');
+  const LAST = 5;
+  const NODES = ['api', 'browser', 'gate', 'relay'];
+  let stage = 0;
+  let scenario = 'ok';
+  let running = false;
+  let animation = null;
+  let generation = 0;
+
+  const IDLE = { api: '관여 없음', relay: '연결 없음' };
+  const COMMON = [
+    { title: '연결 전', text: '브라우저는 원격 지원 세션을 시작했다. 아직 ticket은 없다.',
+      states: { api: '대기', browser: 'ticket 없음', gate: '대기', relay: '연결 없음' },
+      ticket: '없음', current: 'browser', moves: [] },
+    { title: '접속정보 요청', text: '브라우저가 어드민 API에 접속정보를 요청한다. API는 로그인·권한·원격 지원 세션 상태를 확인한다.',
+      states: { api: '로그인·권한·세션 확인', browser: '응답 대기', gate: '대기', relay: '연결 없음' },
+      ticket: '없음', current: 'api', moves: [{ from: 'browser', to: 'api', label: 'REQ' }] },
+    { title: 'ticket 발급', text: 'API가 ticket을 만들어 중계 주소·중계 ID와 함께 돌려준다. 수명은 60초와 세션 만료 가운데 이른 쪽이다. API는 ticket 원문을 로그에 남기지 않는다.',
+      states: { api: 'ticket 발급', browser: 'ticket 받음', gate: '대기', relay: '연결 없음' },
+      ticket: '발급됨 · 미사용', current: 'browser', moves: [{ from: 'api', to: 'browser', label: 'TICKET' }] }
+  ];
+  const SEND = { from: 'browser', to: 'gate', label: 'WS+T' };
+  const CHECK = { pulse: 'gate', label: 'CHECK' };
+  const SCENARIOS = {
+    ok: [
+      { title: '업그레이드 요청', text: 'noVNC가 /relay 업그레이드 요청을 보낸다. ticket은 서브프로토콜 값으로 실린다.',
+        states: { ...IDLE, browser: '업그레이드 보냄', gate: '요청 받음' }, ticket: '발급됨 · 미사용', current: 'gate', moves: [SEND] },
+      { title: '확인과 사용 기록', text: '확인 지점이 서명(또는 발급 기록)과 만료를 확인한다. 그다음 이 ticket을 사용 기록에 "사용됨"으로 쓴다. 이 쓰기가 성공해야 통과다.',
+        states: { ...IDLE, browser: '응답 대기', gate: '사용 기록 씀' }, ticket: '사용됨', current: 'gate', moves: [CHECK] },
+      { title: '101 수락', text: '확인 지점이 요청을 vnc-relay로 넘긴다. vnc-relay는 클라이언트 주소와 Origin을 검사한 뒤 101로 수락한다. 이후 noVNC가 초기 교환으로 중계 ID를 보내 기기의 대기 연결과 짝을 이룬다.',
+        states: { ...IDLE, browser: '연결됨(101)', gate: '통과', relay: '101 · 초기 교환' }, ticket: '사용됨 · 보존 기간 뒤 정리', current: 'relay',
+        moves: [{ from: 'gate', to: 'relay', label: 'WS' }, { from: 'relay', to: 'browser', label: '101', around: true }] }
+    ],
+    replay: [
+      { title: '같은 ticket 다시 제출', text: '첫 연결에 이미 쓴 ticket을 두 번째 업그레이드 요청에 다시 싣는다. 첫 요청은 이미 통과했다.',
+        states: { ...IDLE, browser: '업그레이드 보냄', gate: '요청 받음' }, ticket: '사용됨(첫 연결)', current: 'gate', moves: [SEND] },
+      { title: '사용 기록 발견', text: '서명과 만료는 맞다. 그러나 사용 기록에 이미 있으므로 통과시키지 않는다. 사용 기록이 없었다면 이 요청도 통과했을 것이다.',
+        states: { ...IDLE, browser: '응답 대기', gate: '이미 사용됨' }, ticket: '사용됨(바뀌지 않음)', current: 'gate', moves: [CHECK] },
+      { title: '401 거절', text: '확인 지점이 401로 거절한다. vnc-relay에는 연결이 생기지 않는다. 정상 사용자라면 접속정보를 다시 요청해 새 ticket을 받는다.',
+        states: { ...IDLE, browser: '401 거절', gate: '거절' }, ticket: '사용됨(바뀌지 않음)', current: 'browser',
+        moves: [{ from: 'gate', to: 'browser', label: '401' }] }
+    ],
+    expired: [
+      { title: '늦은 업그레이드 요청', text: 'ticket을 받은 지 60초가 지난 뒤 업그레이드 요청을 보낸다.',
+        states: { ...IDLE, browser: '업그레이드 보냄', gate: '요청 받음' }, ticket: '만료됨 · 미사용', current: 'gate', moves: [SEND] },
+      { title: '만료 확인', text: '만료 시각이 지났다. 사용 기록을 볼 필요 없이 거절한다. 사용 기록에는 아무것도 쓰지 않는다.',
+        states: { ...IDLE, browser: '응답 대기', gate: '만료' }, ticket: '만료됨 · 미사용', current: 'gate', moves: [CHECK] },
+      { title: '401 거절', text: '확인 지점이 401로 거절한다. vnc-relay에는 연결이 없다. 접속정보를 다시 요청해 새 ticket을 받아야 한다.',
+        states: { ...IDLE, browser: '401 거절', gate: '거절' }, ticket: '만료됨 · 미사용', current: 'browser',
+        moves: [{ from: 'gate', to: 'browser', label: '401' }] }
+    ],
+    store: [
+      { title: '업그레이드 요청', text: 'noVNC가 /relay 업그레이드 요청을 보낸다. ticket은 서브프로토콜 값으로 실린다.',
+        states: { ...IDLE, browser: '업그레이드 보냄', gate: '요청 받음' }, ticket: '발급됨 · 미사용', current: 'gate', moves: [SEND] },
+      { title: '사용 기록 저장소 장애', text: '사용 기록을 읽거나 쓸 수 없다. 이 ticket이 한 번만 쓰였는지 판단할 수 없으므로 통과시키지 않는다.',
+        states: { ...IDLE, browser: '응답 대기', gate: '판단 불가' }, ticket: '판단 불가(미사용일 수 있음)', current: 'gate', moves: [CHECK] },
+      { title: '503 거절', text: '철회한 설계는 503으로 거절한다. 대안에서는 프록시가 확인 서버의 응답을 다루는 방식에 따라 브라우저가 받는 코드가 달라진다(표 4). vnc-relay에는 연결이 없다.',
+        states: { ...IDLE, browser: '503 거절', gate: '거절' }, ticket: '판단 불가(미사용일 수 있음)', current: 'browser',
+        moves: [{ from: 'gate', to: 'browser', label: '503' }] }
+    ]
+  };
+  function stageData(value) { return value < 3 ? COMMON[value] : SCENARIOS[scenario][value - 3]; }
+
+  function render() {
+    const data = stageData(stage);
+    byId('stageTitle').textContent = `${stage} / ${data.title}`;
+    byId('stageText').textContent = animation
+      ? `${running ? '이동 중' : '일시정지'} · 완료한 단계: ${data.title} · 다음 단계: ${stageData(stage + 1).title}`
+      : data.text;
+    byId('ticketState').textContent = data.ticket;
+    byId('previous').disabled = stage === 0;
+    byId('next').disabled = stage === LAST;
+    byId('play').hidden = reducedMotion.matches;
+    byId('play').textContent = animation ? (running ? '일시정지' : '재개') : (stage === LAST ? '처음부터 재생' : '한 번 재생');
+    byId('motionNote').textContent = reducedMotion.matches
+      ? '움직임 줄이기 설정이 켜져 있다. 이전·다음으로 같은 내용을 단계별로 볼 수 있다.'
+      : '직접 재생하거나 이전·다음으로 한 단계씩 볼 수 있다.';
+    NODES.forEach(id => {
+      byId(`node-${id}`).dataset.state = id === data.current ? 'current' : 'other';
+      byId(`state-${id}`).textContent = data.states[id];
+    });
+  }
+  function stop() {
+    generation += 1;
+    running = false;
+    if (animation) animation.cancel();
+    animation = null;
+    packet.hidden = true;
+  }
+  function stepTo(value) {
+    stop();
+    stage = Math.max(0, Math.min(LAST, value));
+    render();
+  }
+  function setScenario(value) {
+    stop();
+    scenario = value;
+    stage = 0;
+    render();
+  }
+  function anchor(id) {
+    const track = byId('track').getBoundingClientRect();
+    const box = byId(`node-${id}`).getBoundingClientRect();
+    return { x: box.left - track.left + box.width / 2, y: box.bottom - track.top - 15 };
+  }
+  function keyframes(move) {
+    const at = (point, scale = 1) => ({ transform: `translate(${point.x}px, ${point.y}px) translate(-50%, -50%) scale(${scale})` });
+    if (move.pulse) {
+      const point = anchor(move.pulse);
+      return [at(point), at(point, 1.3), at(point), at(point, 1.3), at(point)];
+    }
+    const start = anchor(move.from);
+    const end = anchor(move.to);
+    if (!move.around) return [at(start), at(end)];
+    const width = byId('track').getBoundingClientRect().width;
+    const path = narrowLayout.matches
+      ? [start, { x: width - 14, y: start.y }, { x: width - 14, y: end.y }, end]
+      : [start, { x: start.x, y: start.y + 42 }, { x: end.x, y: end.y + 42 }, end];
+    return path.map(point => at(point));
+  }
+  async function run() {
+    if (reducedMotion.matches) return;
+    if (animation) {
+      running = !running;
+      if (running) animation.play(); else animation.pause();
+      render();
+      return;
+    }
+    if (stage === LAST) stage = 0;
+    const ownGeneration = ++generation;
+    running = true;
+    while (stage < LAST && ownGeneration === generation) {
+      const next = stage + 1;
+      for (const move of stageData(next).moves) {
+        packet.textContent = move.label;
+        packet.hidden = false;
+        animation = packet.animate(keyframes(move), { duration: move.pulse ? 1200 : 1500, easing: 'ease-in-out', fill: 'forwards' });
+        render();
+        try { await animation.finished; } catch { return; }
+        // 다시 시작 전의 완료 처리가 새 상태를 덮지 않게 한다.
+        if (ownGeneration !== generation) return;
+        animation.cancel();
+        animation = null;
+      }
+      packet.hidden = true;
+      stage = next;
+      render();
+    }
+    if (ownGeneration === generation) { running = false; render(); }
+  }
+  byId('scenario').addEventListener('change', event => setScenario(event.target.value));
+  byId('previous').addEventListener('click', () => stepTo(stage - 1));
+  byId('next').addEventListener('click', () => stepTo(stage + 1));
+  byId('reset').addEventListener('click', () => stepTo(0));
+  byId('play').addEventListener('click', run);
+  reducedMotion.addEventListener('change', () => { stop(); render(); });
+  window.addEventListener('resize', () => { if (animation) { stop(); render(); } });
+  render();
+</script>
+</body>
+</html>
