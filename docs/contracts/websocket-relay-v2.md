@@ -20,7 +20,7 @@
 | 관련 요구사항 | [PRD](../requirements/PRD.md) FR-05, 7절 보안 경계, AC-05~08, AC-16~17 |
 | 호환성 범위 | WS(`ws://`)와 WSS(`wss://`)의 Viewer·Server 진입점. Viewer는 Mode I·II, Server는 Mode II만 지원한다. 공유 리스너의 요청 경로가 역할을 정한다(1.7절). 1.x의 Viewer 클라이언트는 3.1절에 따라 경로를 옮겨야 한다. 외부 RFC 6455 클라이언트가 대상이며, 고정 버전 noVNC의 `repeaterID` 옵션은 Viewer 검증 대상이다([WS-025](../specs/websocket.md#7-수용-테스트)). |
 | 관련 테스트 | [WS-001~027](../specs/websocket.md#7-수용-테스트). 연결은 2절과 5절에 있다. `ee0314f`의 두 OS 전체 게이트가 통과했다. 고정 버전 noVNC 시험은 두 OS에서 `--include-ignored`로 별도 통과했다(커밋 `d4c5678`). 현재 지원 판정은 [작업 5.9 판정표](../how-to/set-up-and-verify.md#41-작업-59-판정표)를 따른다. 1011은 예약 코드라 시험 대상이 아니다(사용자 결정 2026-11-07(Q152)). |
-| 후속 테스트 범위 | WS-028~036과 RLY-028, 변경된 WS-012·014·022·023·024는 커밋 `51bd747`의 두 OS 게이트에서 통과했다([WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)). 2.0.0의 Viewer 경로와 이전 경로 `/relay`의 404는 WS-012·WS-029로 확인한다. 계약 테스트는 5절을 따른다. |
+| 후속 테스트 범위 | WS-028~036과 RLY-028, 변경된 WS-012·014·022·023·024는 커밋 `51bd747`의 두 OS 게이트에서 통과했다([WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)). 2.0.0의 Viewer 경로와 이전 경로 `/relay`의 404는 WS-012·WS-029로 확인한다. 두 시나리오는 커밋 `41dda1f`의 두 OS 게이트에서 통과했다([Viewer 경로 이전 판정표](../how-to/set-up-and-verify.md#44-viewer-경로-이전-판정표)). 계약 테스트는 5절을 따른다. |
 
 관련 문서: [Repeater 초기 교환 계약](repeater-handshake-v1.md), [설정 계약](config-v4.md)(키 이름·값 범위, Origin 값 문법과 정규화), [관리 API 계약](management-api-v1.md)(관리자 종료·종료 원인 `close_cause`), [운영 정보 계약](ops-info-v2.md)(종료 원인·로그), [ADR-0001 내장 TLS](../decisions/ADR-0001-built-in-tls.md), [ADR-0002 출발지 IP 허용 목록](../decisions/ADR-0002-source-ip-allowlist.md).
 
@@ -365,6 +365,10 @@ Close 예: 대기 시간이 W를 넘으면 서버는 코드 `4001`과 reason `wa
 | 같은 커밋 `d4c5678` | Ubuntu 24.04 LTS(WSL2), `CARGO_TARGET_DIR=$HOME/vnc-relay-target`, `VNC_RELAY_NOVNC_ZIP=/mnt/d/vr-lab/installers/novnc-v1.7.0.zip` | `cargo test --test websocket_browser -- --include-ignored` | 통과(2 passed, 42.31초). WS-020과 WS-025 모두 통과 |
 | 커밋 `51bd747`(WSS Server·프록시 TLS 종료·최근 로그. 구현 `3df0693`, 시험 수정 `f772408`·`51bd747`) | Windows 11 Pro 10.0.26200 x64, Rust 1.99.1 | `powershell -NoProfile -ExecutionPolicy Bypass -File D:/vr-tools/vr-win.ps1 -Only all` | 통과(`ALL PASSED (all)`). 시나리오 246건: 통과 229, 부분 12, 실패 0, 미실행 3, 미연결 2, 오류 0, 판정 통과(보고 2026-11-09T00:32:47Z). 작업 트리는 깨끗했다. WS-028~036과 RLY-028의 판정은 [WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)를 따른다. |
 | 같은 커밋 `51bd747` | Ubuntu 24.04.4 LTS x64(WSL2), Rust 1.99.1 | `wsl -d Ubuntu -- bash /mnt/d/vr-tools/vr-full.sh` | 통과(`ALL PASSED`). 시나리오 246건: 통과 232, 부분 8, 실패 0, 미실행 4, 미연결 2, 오류 0, 판정 통과(보고 2026-11-09T01:05:57Z). `+ 미커밋 변경`은 줄 끝 차이다. 같은 구현의 앞선 게이트(`3df0693`, `f772408`)는 Ubuntu에서 시험 결함으로 실패했고 `f772408`·`51bd747`이 고쳤다. WS-028~036과 RLY-028의 판정은 [WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)를 따른다. |
+| 커밋 `41dda1f`(2.0.0 Viewer 경로 `/relay/viewer`), 작업 트리 깨끗함 | Windows 11 Pro 10.0.26200 x64, Rust 1.99.1 | `powershell -NoProfile -ExecutionPolicy Bypass -File D:/vr-tools/vr-win.ps1 -Only all` | 통과(`ALL PASSED (all)`). 시나리오 246건: 통과 229, 부분 12, 실패 0, 미실행 3, 미연결 2, 오류 0, 판정 통과(보고 2026-11-10T12:05:09Z). WS-012·WS-029 통과. 판정은 [Viewer 경로 이전 판정표](../how-to/set-up-and-verify.md#44-viewer-경로-이전-판정표)를 따른다. |
+| 같은 커밋 `41dda1f` | Ubuntu 24.04.4 LTS x64(WSL2), Rust 1.99.1 | `wsl -d Ubuntu -- bash /mnt/d/vr-tools/vr-full.sh` | 통과(`ALL PASSED`). 시나리오 246건: 통과 232, 부분 8, 실패 0, 미실행 4, 미연결 2, 오류 0, 판정 통과(보고 2026-11-10T12:39:25Z). `+ 미커밋 변경`은 줄 끝 차이다. WS-012·WS-029 통과. |
+| `41dda1f`와 같은 시험 소스(커밋 직전 작업 트리) | Windows 11 Pro 10.0.26200 x64, `VNC_RELAY_NOVNC_ZIP=D:\vr-lab\installers\novnc-v1.7.0.zip` | `cargo test --test websocket_browser -- --include-ignored` | 통과(2 passed, 43.54초). WS-020과 WS-025 모두 통과. noVNC `vnc.html`의 `path=relay/viewer`로 WS·WSS × Server 먼저·noVNC 먼저 4조합에서 Viewer 등록과 RFB 교환을 확인했다 |
+| 커밋 `41dda1f` | Ubuntu 24.04.4 LTS(WSL2), `CARGO_TARGET_DIR=$HOME/vnc-relay-target`, `VNC_RELAY_NOVNC_ZIP=/mnt/d/vr-lab/installers/novnc-v1.7.0.zip` | `cargo test --test websocket_browser -- --include-ignored` | 통과(2 passed, 42.02초). 확인 내용은 Windows와 같다 |
 
 ## 6. 초안을 확정하기 전에 해결할 사항
 
@@ -374,6 +378,6 @@ Close 예: 대기 시간이 W를 넘으면 서버는 코드 `4001`과 reason `wa
 - (해결) WS-TBD-005와 noVNC 기본 서브프로토콜: noVNC 1.7.0을 [호환성 검증 기록](repeater-compat-record.md) 2.4절에 고정했다(버전·해시·받은 주소·날짜). 2026-11-01 관찰에서 이 버전은 WS·WSS 모두 `Sec-WebSocket-Protocol` 헤더를 보내지 않았다(같은 기록 3.4절 W-02·W-03b, 3.5절 F행). 1.2절 규칙과 같아 규칙은 그대로 두고, 1.2절 noVNC 문단을 관찰 사실로 고쳤다(TODO 1.7).
 - 1.4절 잘못된 프레임의 Close 1002와 자원 회수는 `crates/adapters/tests/websocket_scenarios.rs`의 `invalid_frame_sequences_and_controls_close_1002_and_release_registrations`가 WS·WSS에서 확인했다. 두 OS 전체 게이트에서 통과했다(5절).
 - 후속: 1.2.0(사용자 결정 2026-11-08(Q181·Q182·Q188))의 1.7·1.8절과 변경된 검사 순서는 커밋 `3df0693`에서 구현했다. 시험은 커밋 `51bd747`의 두 OS 게이트에서 통과했다([WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)). 위 날짜별 관찰·실행 기록은 그 당시 범위의 증거로 유지한다.
-- 후속: 2.0.0(사용자 결정 2026-11-10)은 Viewer 경로만 `/relay/viewer`로 바꿨다. 이전과 롤백은 3.1절을 따른다.
+- 후속: 2.0.0(사용자 결정 2026-11-10)은 Viewer 경로만 `/relay/viewer`로 바꿨다. 구현은 커밋 `41dda1f`다. 시험은 같은 커밋의 두 OS 게이트에서 통과했다([Viewer 경로 이전 판정표](../how-to/set-up-and-verify.md#44-viewer-경로-이전-판정표)). 이전과 롤백은 3.1절을 따른다.
 - 후속: 2026-11-07(Q160) 이후 종료 시 503을 보내지 않는다(2.1절). 위 2026-10-16 채택 기록의 “종료 유예 503”은 과거 기록이다.
 - (해결) 사용자 결정 2026-11-08(Q191)으로 채택했다: `trusted_proxies` 전체 허용 경고 코드·사건명 `trust_all_proxies`. 이름과 필드의 채택은 [운영 정보 계약](ops-info-v2.md)의 결정 기록에서 관리한다.

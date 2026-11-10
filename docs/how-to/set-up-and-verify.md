@@ -484,6 +484,34 @@ TODO 6.7의 운영 권한 확인은 다음과 같다. [수동 운영 안내 3.5.
 - 로그 화면의 실제 Safari·최신 안정판 Chrome·Edge·Firefox·실기기·스크린 리더 확인과 사람의 시안 비교.
 - 실제 UltraVNC와 WS·WSS Server 역할 조합의 수동 관찰.
 
+### 4.4 Viewer 경로 이전 판정표
+
+결론: 커밋 `41dda1f`의 두 OS 전체 게이트에서 `오류`와 `실패`는 0건이다. 범위를 바꾼 WS-012·WS-029는 두 OS 보고서에서 모두 `통과`다. 시나리오는 246건 그대로이며 새 ID는 없다. `통과`가 아닌 상태로 남은 시나리오는 4.3절 표의 18개와 같고, OS별 보고서 상태도 같다. 이 18개는 4.3절과 같은 근거로 통과로 판정한다. AC-01~48을 모두 충족했다.
+
+이 절의 위치와 형식은 이 문서의 판단, 사용자 결정 없음이다. 변경은 사용자 결정 2026-11-10으로 더했다. 판정 기준은 4.3절과 같다.
+
+| 확인 대상 | 기준 | 환경 | 결과 | 증거 |
+| --- | --- | --- | --- | --- |
+| Windows | `오류`·`실패` 0건 | Windows 11 Pro 10.0.26200 x64, Rust 1.99.1 | 통과. `ALL PASSED (all)`. 246건: 통과 229, 부분 12, 실패 0, 미실행 3, 미연결 2, 오류 0. 작업 트리는 깨끗했다 | `target/scenario-report.md`(`41dda1f`, 2026-11-10T12:05:09Z) |
+| Ubuntu | 같음 | Ubuntu 24.04.4 LTS x64(WSL2), Rust 1.99.1 | 통과. `ALL PASSED`. 246건: 통과 232, 부분 8, 실패 0, 미실행 4, 미연결 2, 오류 0. `+ 미커밋 변경`은 줄 끝 차이다 | `~/vnc-relay-target/scenario-report.md`(`41dda1f`, 2026-11-10T12:39:25Z) |
+| noVNC 1.7.0 | 무시 표시 시험을 포함한 실행에서 WS-025 시험 통과 | 두 OS, 고정 noVNC 압축 파일 | 통과. Windows 2 passed(43.54초), Ubuntu 2 passed(42.02초). noVNC `vnc.html`에 `path=relay/viewer`를 주면 WS·WSS와 두 접속 순서에서 Viewer로 등록하고 RFB 교환을 마쳤다 | [WebSocket 계약 실행 기록](../contracts/websocket-relay-v2.md#계약-테스트-실행-기록) |
+
+범위를 바꾼 시나리오의 판정은 다음과 같다. 보고서 열은 Windows / Ubuntu 순서다.
+
+| 시나리오 | 보고서 | 판정 | 근거 |
+| --- | --- | --- | --- |
+| WS-029 | 통과 / 통과 | 통과 | `crates/adapters/tests/websocket_scenarios.rs`의 `exact_enabled_paths_select_roles_and_rejections_never_register`가 통과했다. WS·WSS에서 `/relay/viewer`는 Viewer, `/relay/server`는 Server를 선택한다. 꺼진 역할의 경로와 이전 경로 `/relay`, `/relay/`, `/relay/viewer/`, `/relay/Viewer`, `/relay%2Fviewer`는 404다. 이때 `connection_rejected`(`invalid_upgrade`)만 남고 대기 등록이나 세션은 생기지 않는다 |
+| WS-012 | 통과 / 통과 | 통과 | 같은 파일의 `management_paths_and_invalid_upgrades_cannot_register_or_connect_a_target`와 `crates/adapters/tests/websocket.rs`의 부분 시험이 통과했다. 이전 경로 `/relay`와 `/relay/viewer/`는 404다 |
+
+WS-025는 두 게이트에서 `미실행`(무시 표시 시험)이며 4.3절 표와 같다. 별도 실행 결과는 위 noVNC 행에 있다.
+
+[PRD 10절](../requirements/PRD.md#10-검증-및-수용-기준)의 AC 문구는 PRD 0.8에서 바뀌지 않았다. AC-01~48은 4.3절과 같은 방법으로 대조했고 모두 충족했다. 라이선스: 두 OS 게이트의 deny 단계가 `licenses ok`, 종료 코드 0이었다. 이번 범위는 `Cargo.lock`·매니페스트·`deny.toml`을 바꾸지 않았다.
+
+다음 확인은 미실행이며 이 판정에 포함하지 않는다.
+
+- [수동 운영 안내 3.2.3절](operate-relay.md#323-viewer-경로를-relayviewer로-옮기기)의 Viewer 경로 이전·롤백을 두 OS에서 실행하는 일.
+- 사용처 페이지의 접속 URL 변경과 실제 연결 확인. 이 저장소 밖의 일이다.
+
 ## 5. 중단 조건
 
 - 1단계 Build Tools 설치가 1602로 끝나면 이후 단계를 진행하지 않는다. UAC를 승인할 수 있을 때 다시 실행한다.
