@@ -102,6 +102,7 @@
   th, td { text-align: left; vertical-align: top; padding: 10px 12px; border-top: 1px solid var(--rule); }
   thead th { background: var(--wash); border-top: 0; font-weight: 600; }
   tbody th { font-weight: 600; white-space: normal; }
+  th code { overflow-wrap: normal; }
   .meta th { width: 9em; background: var(--wash); }
 
   .checks { list-style: none; padding: 0; counter-reset: check; }
@@ -471,6 +472,7 @@
     <div class="prose">
       <h3>서브프로토콜에 싣는 값</h3>
       <p>브라우저는 noVNC의 <code>wsProtocols</code> 옵션으로 값 두 개를 보낸다(<a href="https://github.com/novnc/noVNC/blob/master/docs/API.md">noVNC API</a>). 예를 들면 <code>binary</code>와 <code>ticket.</code> 뒤에 JWS를 붙인 값이다. JWS 압축 형식은 base64url 문자와 점만 쓰므로 서브프로토콜 값의 문자 규칙에 맞는다. 길이는 수백 바이트이고, 요청 머리 상한 16 KiB(<a href="../contracts/websocket-relay-v1.md#11-업그레이드-요청">계약 1.1절</a>)보다 훨씬 작다.</p>
+      <p>noVNC 1.7.0은 이 옵션이 없으면 <code>Sec-WebSocket-Protocol</code> 헤더를 보내지 않는다(<a href="../contracts/websocket-relay-v1.md#12-업그레이드-응답과-서브프로토콜">계약 1.2절</a>의 관찰 기록). 그래서 이 안은 vnc-relay만 바꾸어서는 동작하지 않는다. 사용처 페이지가 noVNC에 ticket을 넘기도록 함께 바뀌어야 한다.</p>
       <p>브라우저는 제시한 값 가운데 하나를 서버가 고르지 않으면 연결을 실패로 처리한다(<a href="https://websockets.spec.whatwg.org/#websocket-opening-handshake">WHATWG WebSockets 2.2절</a>). vnc-relay는 지금처럼 <code>binary</code>를 고른다. ticket 값은 응답에 되돌리지 않는다.</p>
       <p>지금 계약은 값이 없거나 <code>binary</code>만 있어도 수락한다(<a href="../contracts/websocket-relay-v1.md#12-업그레이드-응답과-서브프로토콜">계약 1.2절</a>). ticket을 요구하는 역할에서는 이 두 경우가 거절로 바뀐다. 계약 3절은 서브프로토콜 규칙 변경을 호환성을 깨는 변경으로 나눈다(<a href="../contracts/websocket-relay-v1.md#3-호환성-규칙">계약 3절</a>). 설정으로 켜는 기능이어도 1.2절의 규칙이 바뀌므로 이 분류에 든다(추정: 계약은 설정으로 켜는 규칙 변경을 따로 다루지 않는다).</p>
 
@@ -489,13 +491,14 @@
           <tr><th scope="row"><code>rh</code></th><td>설정한 이 vnc-relay의 이름. 요청의 <code>Host</code>는 쓰지 않는다.</td><td>403</td></tr>
           <tr><th scope="row"><code>jti</code></th><td>사용 기록(그림 5의 8)</td><td>401</td></tr>
           <tr><th scope="row"><code>rid</code></th><td>101 뒤 초기 교환의 중계 ID</td><td>새 close 코드(예: <code>4012</code>)</td></tr>
-          <tr><th scope="row"><code>sx</code></th><td>활성 세션을 끝낼 시각</td><td>새 close 코드(예: <code>4013</code>)</td></tr>
+          <tr><th scope="row"><code>sx</code></th><td>업그레이드 때는 vnc-relay의 현재 시각. 시계 오차를 허용하지 않는다(예). 101 뒤에는 활성 세션을 끝낼 시각이다.</td><td>101 전 401, 101 뒤 새 close 코드(예: <code>4013</code>)</td></tr>
           <tr><th scope="row"><code>sub</code></th><td>대조하지 않는다. 운영 로그에 남긴다.</td><td>해당 없음</td></tr>
         </tbody>
       </table>
     </div>
     <div class="prose" style="margin-top:28px">
       <p><code>rh</code>는 요청의 <code>Host</code>가 아니라 설정값과 대조한다. <code>Host</code>는 클라이언트가 정하는 값이고, 계약도 이 값을 라우팅에 쓰지 않는다(<a href="../contracts/websocket-relay-v1.md#11-업그레이드-요청">계약 1.1절</a>). 설정한 이름과 대조해야 다른 중계용으로 발급한 ticket을 거른다.</p>
+      <p><code>sx</code>는 <code>exp</code>와 따로 비교한다. <code>exp</code>는 <code>sx</code>를 넘지 않지만, <code>exp</code> 확인에는 5초 오차를 허용한다. 그 오차만 적용하면 <code>sx</code> 뒤 5초 안에 온 요청도 통과한다. 이 연결은 원격 지원 세션이 끝난 뒤에 열리고 101 직후 바로 끊긴다. 그래서 이 안은 업그레이드 때 <code>sx</code>를 오차 없이 비교한다(예). vnc-relay 호스트의 시계가 발급 쪽보다 빠르면 그 차이만큼 세션이 일찍 끝난다.</p>
       <p>서명 검증에 쓸 라이브러리는 이미 있다. aws-lc-rs는 작업공간 의존성이며, 그 <code>ECDSA_P256_SHA256_FIXED</code>는 R‖S 고정 길이 서명을 검증한다(<a href="https://docs.rs/aws-lc-rs/latest/aws_lc_rs/signature/static.ECDSA_P256_SHA256_FIXED.html">aws-lc-rs 문서</a>). JWS의 ES256 서명 형식과 같다.</p>
 
       <h3>사용 기록을 메모리에 두는 근거와 한계</h3>
@@ -504,9 +507,10 @@
       <p>한계는 재시작이다. 프로세스가 끝나면 기록이 사라진다. 재시작 전에 쓴 ticket이 아직 만료 전이면 다시 통과할 수 있다. 다루는 방법은 표 6의 첫 행에 비교했다.</p>
 
       <h3>101 뒤: 중계 ID 대조와 세션 만료</h3>
-      <p>101을 보낸 뒤 vnc-relay는 초기 교환을 제한 시간 H 안에 읽는다. 해석 결과가 Mode II 요청이면 그 중계 ID를 ticket의 <code>rid</code>와 비교한다. 중계 ID는 바이트열이 정확히 같을 때만 같은 ID다(<a href="../requirements/PRD.md#확정-기준">PRD 확정 기준 "Repeater 초기 교환"</a>). 다르면 대기 등록 전에 새 close 코드로 끊는다. 기기의 대기 연결은 영향을 받지 않는다.</p>
+      <p>101을 보낸 뒤 vnc-relay는 초기 교환을 제한 시간 H 안에 읽는다. ticket을 싣고 온 Viewer 역할 연결에서 해석 결과가 Mode II 요청이면 그 중계 ID를 ticket의 <code>rid</code>와 비교한다. 중계 ID는 바이트열이 정확히 같을 때만 같은 ID다(<a href="../requirements/PRD.md#확정-기준">PRD 확정 기준 "Repeater 초기 교환"</a>). 다르면 대기 등록 전에 새 close 코드로 끊는다. 기기의 대기 연결은 영향을 받지 않는다.</p>
+      <p><code>rid</code> 대조와 <code>sx</code> 시각은 그 Viewer 역할 연결에만 붙는다. 같은 중계 ID로 기다리는 기기 쪽 연결(Server 역할)은 ticket 없이 지금처럼 대기한다.</p>
       <p>ticket은 중계 ID에 묶이므로 Mode I 요청에는 대조할 값이 없다. ticket을 요구하는 역할에서 Mode I 요청을 거절할지는 정해야 한다(표 6).</p>
-      <p><code>sx</code>가 되면 활성 세션을 끝낸다. vnc-relay에는 관리자 종료가 세션을 끝내는 경로가 이미 있다(06절). <code>sx</code> 종료는 그 경로에 새 종료 원인과 close 코드를 더하는 방식이 가능하다(추정). 짝을 이루기 전 대기 중에 <code>sx</code>가 지나는 경우도 같은 시각에 끊어야 규칙이 맞는다.</p>
+      <p><code>sx</code>가 되면 활성 세션을 끝낸다. vnc-relay에는 관리자 종료가 세션을 끝내는 경로가 이미 있다(06절). 관리자 종료는 같은 종료 동작을 브라우저 쪽과 기기 쪽 연결에 모두 보낸다. WS 연결은 close <code>4005</code>를 받고, TCP 연결은 소켓이 닫힌다. <code>sx</code> 종료는 이 경로에 새 종료 원인과 close 코드를 더하는 방식이 가능하다(추정). 그러면 기기 쪽 연결도 함께 닫힌다. 짝을 이루기 전 대기 중에 <code>sx</code>가 지나는 경우도 같은 시각에 끊어야 규칙이 맞는다.</p>
       <p>철회한 설계의 <code>4502</code>(Repeater 연결 실패)와 <code>4408</code>(Repeater 무응답)에 해당하는 규칙은 필요 없다. vnc-relay는 같은 프로세스에서 짝을 짓는다. 상대가 오지 않으면 기존 <code>4001</code>(대기 시간 초과)이, 상대 연결이 끊기면 기존 <code>4006</code>·<code>4007</code>이 쓰인다(<a href="../contracts/websocket-relay-v1.md#15-close-코드">계약 1.5절</a>).</p>
 
       <h3>설정과 재로드</h3>
@@ -583,7 +587,7 @@ max_skew_secs = 5</code></pre>
         <li><code>upgrade</code>는 응답 바이트를 먼저 만든다. 그다음 업그레이드 제한 시간 U가 지났는지 마지막으로 보고(367행) 응답을 쓴다(375행). 내재화 안: 사용 기록 쓰기(그림 5의 8)는 이 마지막 확인 뒤, 응답 쓰기 앞이 가장 늦은 자리다. 여기서 <code>jti</code>가 이미 있으면 101 대신 거절 응답을 써야 하므로 응답을 고르는 순서가 바뀐다.</li>
         <li><code>upgrade.rs</code>의 <code>switching_protocols</code>(260~271행)는 <code>binary</code>를 제시한 요청에만 <code>Sec-WebSocket-Protocol: binary</code>를 넣는다. ticket을 되돌리지 않으므로 바뀔 필요가 없다.</li>
         <li>101 뒤 <code>websocket.rs</code>의 <code>connection</code>(197~280행)은 <code>handle_connection</code>으로 초기 교환을 H 안에 읽고, <code>dispatch</code>로 짝짓기와 중계를 넘긴다(코드 2). 그 사이의 값이 <a href="../../crates/app/src/relay.rs"><code>PreparedConnection</code></a>이다. 이 형은 해석한 요청을 <code>request()</code>로 보여 주고, 다음 단계를 호출자에게 맡긴다. 내재화 안: <code>rid</code> 대조는 이 두 호출 사이에 들어갈 수 있다.</li>
-        <li>관리자 종료는 <code>RelayRuntime</code>의 <code>request_terminate</code>(<a href="../../crates/app/src/relay.rs"><code>crates/app/src/relay.rs</code></a> 689~730행)가 세션 제어에 종료 명령을 넣는 방식이다. WS 쪽 close 코드는 <a href="../../crates/adapters/src/websocket_stream.rs"><code>crates/adapters/src/websocket_stream.rs</code></a>(885~920행)가 <code>RelayCloseAction</code>에서 고른다. 내재화 안: <code>sx</code> 종료와 <code>rid</code> 불일치에는 새 종료 동작과 새 코드가 필요하다.</li>
+        <li>관리자 종료는 <code>RelayRuntime</code>의 <code>request_terminate</code>(<a href="../../crates/app/src/relay.rs"><code>crates/app/src/relay.rs</code></a> 689~730행)가 세션 제어에 종료 명령을 넣는 방식이다. 세션 쪽의 <code>close_once</code>(<a href="../../crates/app/src/relay/session.rs"><code>crates/app/src/relay/session.rs</code></a> 592~611행)는 같은 <code>RelayCloseAction</code>을 두 연결에 보낸다. WS 쪽 close 코드는 <a href="../../crates/adapters/src/websocket_stream.rs"><code>crates/adapters/src/websocket_stream.rs</code></a>(885~920행)가 그 값에서 고른다. TCP 쪽은 소켓을 닫는다(<a href="../../crates/adapters/tests/tcp_target.rs"><code>crates/adapters/tests/tcp_target.rs</code></a>). 내재화 안: <code>sx</code> 종료와 <code>rid</code> 불일치에는 새 종료 동작과 새 코드가 필요하다.</li>
         <li><code>websocket.rs</code>의 <code>refuse</code>(409~429행)는 거절 사유와 주소를 운영 로그에 남긴다. 헤더 값은 Origin 거절일 때의 Origin 원문만 남긴다. 내재화 안: ticket 거절 사유를 더하되 원문은 남기지 않는다. 남길 수 있는 값은 철회한 설계처럼 <code>jti</code>와 <code>sub</code>다.</li>
       </ol>
     </div>
@@ -637,7 +641,7 @@ if let Ok(prepared) = prepared {
           <tr><th scope="row">접속정보 요청 거절(로그인·권한·세션 만료)</th><td>ticket 없음</td><td>원인을 해소한 뒤 다시 요청한다.</td><td>발급 전에 끝나므로 정리할 상태가 없다.</td></tr>
           <tr><th scope="row">ticket 없음, 형식 오류</th><td>바뀐 상태가 없다.</td><td>ticket을 받아 다시 연결한다.</td><td>400 또는 401. 사용 기록을 보기 전에 끝난다.</td></tr>
           <tr><th scope="row">서명·발급자·대상·중계 호스트 불일치</th><td>바뀐 상태가 없다.</td><td>같은 ticket은 다시 실패한다. 키·설정·발급 대상을 고친 뒤 새 ticket을 받는다.</td><td>401 또는 403. 사용 기록에 쓰지 않는다.</td></tr>
-          <tr><th scope="row">만료(받은 뒤 60초 경과 또는 세션 만료)</th><td>쓰지 않은 ticket</td><td>새 ticket이 필요하다.</td><td>401</td></tr>
+          <tr><th scope="row">만료(받은 뒤 60초 경과 또는 세션 만료)</th><td>쓰지 않은 ticket</td><td>새 ticket이 필요하다.</td><td>401. <code>exp</code>에는 5초 오차를 허용하고, <code>sx</code>에는 허용하지 않는다(예).</td></tr>
           <tr><th scope="row">이미 쓴 ticket</th><td>사용 기록이 그대로 남는다.</td><td>새 ticket이 필요하다.</td><td>401. 기록 쓰기는 한 번만 성공한다.</td></tr>
           <tr><th scope="row">사용 기록 뒤 101 쓰기 실패(연결 끊김)</th><td>ticket은 사용됨. vnc-relay에는 연결이 없다.</td><td>새 ticket이 필요하다.</td><td>사용 기록은 101의 결과를 모른다.</td></tr>
           <tr><th scope="row">101 뒤 초기 교환 오류나 시간 초과</th><td>ticket은 사용됨. 대기 등록 전이다.</td><td>새 ticket이 필요하다.</td><td>기존 <code>4008</code>·<code>4009</code></td></tr>
@@ -646,7 +650,7 @@ if let Ok(prepared) = prepared {
           <tr><th scope="row">vnc-relay 재시작</th><td>사용 기록이 사라진다. 대기 연결과 활성 세션도 끝난다.</td><td>새 ticket으로 다시 연결한다.</td><td>재시작 전에 발급한 ticket의 처리는 표 6 첫 행의 선택에 따른다.</td></tr>
           <tr><th scope="row">시계 오차가 5초를 넘음</th><td>바뀐 상태가 없다.</td><td>시계를 맞출 때까지 정상 ticket도 거절될 수 있다.</td><td>발급 쪽과 vnc-relay의 시계 동기화에 기댄다.</td></tr>
           <tr><th scope="row">공개 키 파일 재로드 실패</th><td>이전 키로 계속 확인한다(추정: 인증서 재로드와 같은 규칙을 쓴다면).</td><td>파일을 고친 뒤 다시 재로드한다.</td><td>새 키로 서명한 ticket은 그동안 401이다.</td></tr>
-          <tr><th scope="row"><code>sx</code> 도달</th><td>활성 세션이 끝난다. 기기 쪽 연결도 닫힌다(추정).</td><td>새 원격 지원 세션에서 새 ticket을 받는다.</td><td>새 close 코드(예: <code>4013</code>)와 새 종료 원인</td></tr>
+          <tr><th scope="row"><code>sx</code> 도달</th><td>활성 세션이 끝난다. 관리자 종료 경로를 쓰면 기기 쪽 연결도 닫힌다.</td><td>새 원격 지원 세션에서 새 ticket을 받는다.</td><td>새 close 코드(예: <code>4013</code>)와 새 종료 원인</td></tr>
           <tr><th scope="row">연결 뒤 권한 회수</th><td>활성 세션이 <code>sx</code>까지 유지된다.</td><td>해당 없음</td><td>확인은 업그레이드 때 한 번이다. 그 전에 끊으려면 <a href="../../GLOSSARY.md#세션-종료와-기록">관리자 종료</a>를 쓴다.</td></tr>
         </tbody>
       </table>
@@ -722,7 +726,7 @@ if let Ok(prepared) = prepared {
           <tr><th scope="row">업그레이드 거절 로그</th><td><a href="../../crates/adapters/src/websocket.rs"><code>crates/adapters/src/websocket.rs</code></a> <code>refuse</code></td></tr>
           <tr><th scope="row">초기 교환과 짝짓기 사이</th><td><a href="../../crates/adapters/src/websocket.rs"><code>crates/adapters/src/websocket.rs</code></a> <code>connection</code>, <a href="../../crates/app/src/relay.rs"><code>crates/app/src/relay.rs</code></a> <code>PreparedConnection</code></td></tr>
           <tr><th scope="row">초기 교환 해석</th><td><a href="../../crates/domain/src/handshake.rs"><code>crates/domain/src/handshake.rs</code></a> <code>HandshakeRequest</code></td></tr>
-          <tr><th scope="row">세션 종료 명령</th><td><a href="../../crates/app/src/relay.rs"><code>crates/app/src/relay.rs</code></a> <code>request_terminate</code></td></tr>
+          <tr><th scope="row">세션 종료 명령</th><td><a href="../../crates/app/src/relay.rs"><code>crates/app/src/relay.rs</code></a> <code>request_terminate</code>, <a href="../../crates/app/src/relay/session.rs"><code>crates/app/src/relay/session.rs</code></a> <code>close_once</code></td></tr>
           <tr><th scope="row">close 코드 대응</th><td><a href="../../crates/adapters/src/websocket_stream.rs"><code>crates/adapters/src/websocket_stream.rs</code></a>, <a href="../contracts/websocket-relay-v1.md#15-close-코드">계약 1.5절</a></td></tr>
           <tr><th scope="row">서명 검증 라이브러리</th><td><a href="../../Cargo.toml"><code>Cargo.toml</code></a>의 <code>aws-lc-rs</code>, 사용 예는 <a href="../../crates/adapters/src/crypto.rs"><code>crates/adapters/src/crypto.rs</code></a></td></tr>
           <tr><th scope="row">기준 문서</th><td><a href="../requirements/PRD.md#확정-기준">PRD 확정 기준</a>, <a href="../decisions/ADR-0002-source-ip-allowlist.md">ADR-0002</a>, <a href="../decisions/ADR-0003-single-instance-memory-state.md">ADR-0003</a>, <a href="../contracts/websocket-relay-v1.md">WebSocket 중계 계약 v1</a> 1.1·1.2·1.5·2.1·3절, <a href="../contracts/config-v4.md">설정 계약 v4</a> 1.8·3절</td></tr>
@@ -841,7 +845,7 @@ if let Ok(prepared) = prepared {
         states: view('종료(예: 4012)', '연결 정리', '대기 연결(그대로)'), ticket: '사용됨', current: 'browser', moves: [{ from: 'relay', to: 'browser', label: 'CLOSE' }] }
     ],
     sessionend: [UPGRADE, RECORD, ACCEPT, MATCH, PAIR,
-      { title: 'sx 도달', text: 'sx가 되면 vnc-relay가 활성 세션을 끝낸다. 브라우저에는 새 close 코드(예: 4013)를 보낸다. 관리자 종료와 같은 경로라면 기기 쪽 연결도 함께 닫힌다(추정).',
+      { title: 'sx 도달', text: 'sx가 되면 vnc-relay가 활성 세션을 끝낸다. 브라우저에는 새 close 코드(예: 4013)를 보낸다. 관리자 종료와 같은 경로를 쓰면 기기 쪽 TCP 연결도 함께 닫힌다. 관리자 종료는 두 연결을 모두 닫기 때문이다.',
         states: view('종료(예: 4013)', '세션 종료', '연결 닫힘'), ticket: '사용됨', current: 'relay',
         moves: [{ pulse: 'relay', label: 'SX' }, { from: 'relay', to: 'browser', label: 'CLOSE' }, { from: 'relay', to: 'device', label: 'FIN' }] }
     ]
