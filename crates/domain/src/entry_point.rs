@@ -125,7 +125,7 @@ impl EntryPoint {
 }
 
 /// Role of a connection: the VNC viewer or the VNC server side.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Role {
     Viewer,
     Server,

@@ -15,6 +15,7 @@
 | 기준 | [WebSocket 계약 1.4~1.6절](../contracts/websocket-relay-v2.md#14-데이터-메시지와-제어-프레임), [초기 교환 설계](initial-exchange.md), [세션 설계 3.2절](relay-session.md#32-전송-수명-인터페이스) |
 | 결정 수준 | 9.1~9.3절은 사용자 결정 2026-11-01(Q77, Q78, Q79)로 해결했다. 9.4절은 사용자 결정 2026-11-01(Q83)로 확정했다. 9.5절은 사용자 결정 2026-11-02(Q84)으로 선택 A를 확정했다. 채택된 계약을 바르게 반영함 |
 | 구현 대조 | Verified — [2026-11-04 대조 기록](#8-현재와-목표의-차이). 프레임 입출력·소유권·종료·Kw와 실제 시험 소스를 대조했다. 양쪽 WS·WSS 스트림 범위의 구현은 커밋 `3df0693`이다. 시험은 커밋 `51bd747`의 두 OS 게이트에서 통과했다([WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)). |
+| 관련 문서 | [접속 ticket 모듈 설계](relay-access-ticket.md) |
 
 별도 문서로 둔다. [기존 진입점 설계](websocket-entry-point.md)는 HTTP·TLS 검사와 101까지를 설명한다. 이 문서는 101 뒤의 프레임·B·종료 수명을 맡는다. `Current`와 `Target`을 섞지 않기 위한 선택이다(**이 문서의 판단, 사용자 결정 없음**).
 
@@ -136,17 +137,17 @@ M 초과는 프레임 헤더만으로도 알 수 있다. 이때 해당 프레임
 
 다음은 현재 인계 흐름이다. 함수 연결 방식은 **이 문서의 판단, 사용자 결정 없음**이다. 전체 연결 순서는 [세션 설계 8절](relay-session.md#8-현재-코드와의-차이와-연결-순서)을 따른다.
 
-1. 현재 U·출발지 IP·HTTP·Origin 검사 순서를 유지한다. `read_head`는 HTTP head뿐 아니라 후속 원시 바이트도 보존한다.
-2. U 안에서 101 응답을 모두 쓰고 `flush`한다. 완료 직후 공통 `Clock::monotonic()`을 한 번 읽는다. 이것이 `ConnectionContext.exchange_at`이다.
+1. 현재 U·출발지 IP·HTTP·Origin·서브프로토콜·ticket·두 번째 IP 검사 순서를 유지한다. ticket 확인 뒤 사용 기록을 쓰고 `ticket_accepted`를 기록한다. `read_head`는 HTTP head뿐 아니라 후속 원시 바이트도 보존한다([접속 ticket 모듈 설계](relay-access-ticket.md#42-업그레이드대표-시나리오-ws-038)).
+2. U 안에서 101 응답을 모두 쓰고 `flush`한다. 완료 직후 공통 `Clock::monotonic()`을 한 번 읽는다. 이것이 `ConnectionContext.exchange_at`이다. ticket의 `sx`가 있으면 이 시각과 현재 벽시계로 단조 세션 만료 기한을 정한다.
 3. `conn_id`, 실제 상대 IP·포트, `accepted_wall`, `accepted_at`은 수락 때의 값을 보존한다. 101 완료 시각을 수락 시각으로 덮어쓰지 않는다.
 4. `WsRelayStream<Wire>`에 선행 바이트와 검증된 M·B·전송 종류·`KeepaliveSettings`를 준다. 이미 보낸 101을 라이브러리 수락 함수로 다시 보내지 않는다.
-5. `handle_connection(stream, context, permit, shutdown)`을 호출한다. `shutdown`은 기존 `watch::Receiver<RelayLifecycle>`이다. `Running`, `Grace { deadline }`, `Force`를 다른 bool 수명으로 바꾸지 않는다.
+5. `handle_connection(stream, context, ticket, permit, shutdown)`을 호출한다. `ticket`은 `Option<TicketBinding>`이며 `jti`·`rid`·세션 만료 기한을 담는다. 스트림 어댑터는 JWS를 해석하지 않는다. `shutdown`은 기존 `watch::Receiver<RelayLifecycle>`이다. `Running`, `Grace { deadline }`, `Force`를 다른 bool 수명으로 바꾸지 않는다.
 6. 시작 바이트는 **공통 서비스만** 쓴다. 어댑터는 최초 12바이트를 FIN이 있는 바이너리 프레임 하나에 담는다. 부분 소켓 쓰기로 나뉘어도 프레임·메시지 수는 하나다. 진입점에서 별도로 greeting을 보내지 않는다.
-7. greeting의 쓰기·flush와 요청 읽기에 같은 절대 `exchange_at + H`를 쓴다. 공통 `read_request`가 `write_all` 뒤 `flush`까지 기다린다. 청크·프레임·메시지마다 H를 다시 주지 않는다.
-8. 성공한 `PreparedConnection`은 즉시 기존 `RelayService::dispatch`에 이동한다. Mode I·II의 C·W·매칭·중계는 app이 맡는다. 실패는 5절의 close action과 사건으로 끝낸다.
+7. greeting의 쓰기·flush와 요청 읽기에 같은 절대 `exchange_at + H`를 쓴다. `sx`의 단조 기한이 더 이르면 그 기한을 쓴다. 두 기한이 같으면 H가 우선한다(이 문서의 판단, 사용자 결정 없음). 공통 `read_request`가 `write_all` 뒤 `flush`까지 기다린다. 청크·프레임·메시지마다 H를 다시 주지 않는다.
+8. 성공한 `PreparedConnection`은 ticket 바인딩과 함께 기존 `RelayService::dispatch`에 이동한다. 기존 초기 요청 검사 뒤 ticket의 `rid`를 대조한다. Mode I 또는 다른 중계 ID는 4012로 거절한다. Mode II의 W·매칭·중계와 `sx` 만료는 app이 맡는다. 실패는 5절의 close action과 사건으로 끝낸다.
 9. `hold_upgraded`는 `638cf09`에서 제거되었다. WS·WSS는 공통 서비스(`handle_connection` → `dispatch`)에 연결되어 있다. 2.7 완료 표시는 이 문서가 정하지 않는다.
 
-`WsPolicy`의 `message_bytes`와 `buffer_bytes`가 M·B를 전달한다. `accept.keepalive`가 Kw의 Ping 주기와 Pong 제한을 전달한다. WS·WSS는 같은 어댑터를 쓴다. TLS는 기존 `Wire::Tls`가 맡는다.
+`WsPolicy.accept`의 설정 원천에서 수락 당시 B와 업그레이드 당시 M·Kw를 얻어 스트림에 전달한다. `ticket_uses`와 `started_at`은 업그레이드의 ticket 확인에 쓴다. WS·WSS는 같은 어댑터를 쓴다. TLS는 기존 `Wire::Tls`가 맡는다.
 
 ## 5. 기존 `RelayStream`과의 대응
 
@@ -196,8 +197,12 @@ M 초과는 프레임 헤더만으로도 알 수 있다. 이때 해당 프레임
 | `AdminTerminated` | 4005 `admin_terminated` |
 | `ServerShutdown` | 아직 정리를 시작하지 않은 세션에 1001 `server_shutdown`. 이미 받은 Close나 대기 중 응답을 덮어쓰지 않음(사용자 결정 2026-11-01(Q82)) |
 | `TargetConnectionLimit` | 4011 `relay_connection_limit`. Mode I에서 101 성공 후 대상 연결을 위한 중계 연결 상한 L 슬롯이 없을 때(사용자 결정 2026-11-01(Q79)) |
+| `TicketRelayMismatch` | 4012 `ticket_relay_mismatch`. 기존 초기 요청 검사 뒤 ticket의 `rid` 대조 실패 |
+| `SessionExpired` | 4013 `session_expired`. 초기 교환·대기·활성 세션의 만료. 활성 세션의 TCP 상대는 소켓을 닫음 |
 
 Force의 action은 [세션 설계 5.2절](relay-session.md#52-정상-종료와-g)에서 보존한 원인으로 고른다. 클라이언트 Close가 먼저면 `PeerEof`로 같은 코드에 응답한다. TCP EOF가 먼저면 `WriteHalf`로 1000을 보낸다. 뒤늦은 클라이언트 Close가 이 선택을 바꾸지 않는다. 형식 있는 오류는 `StreamError(kind)`를 유지한다. 이미 전송한 Close는 다시 보내지 않는다. 최초 원인 보존은 사용자 결정 2026-11-01(Q82)다. 수신 Close 앞에 시작한 데이터 프레임만 마치는 범위는 같은 날의 Q83이다.
+
+ticket 만료의 기한·원인 선택은 app이 맡는다. `WsRelayStream`은 `SessionExpired` action의 Close 4013과 E 안의 응답 대기만 진행한다. 활성 세션은 `session_closed(close_cause=session_expired)`를 `info`로 기록하며 `side`는 없다. E가 지나도 원인은 바뀌지 않는다([접속 ticket 모듈 설계](relay-access-ticket.md#43-101-뒤)).
 
 `encode_close`는 최대 127바이트의 고정 배열을 쓴다. 코드 뒤 reason은 최대 123바이트다. 잘라야 하면 UTF-8 문자 경계에서 자른다. 이 저장 방식은 **이 문서의 판단, 사용자 결정 없음**이다.
 

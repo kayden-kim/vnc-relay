@@ -381,7 +381,7 @@ router.js mountRouter → logs.js mountLogs
 ### 관련 화면과 시험
 
 - SCR-001의 `panels.js` `transportCell`은 Viewer·대상 중립 배지와 화살표를 조합한다. SCR-002는 `target_transport`와 값이 있는 전달 주소를 따로 표시하고 세션 필터 로그 링크를 만든다. 필수 필드 누락은 응답 형식 오류이며 TCP로 대체하지 않는다.
-- SCR-004는 v4 계약의 테이블 순서를 유지한다. SCR-005의 `editableItems`는 allow 6개 → trusted_proxies 2개 → allowed_origins 4개 → Mode I 목록 → 상한·제한 시간·연결 유지 순서다. 비활성 진입점의 편집 불가 키는 목록에서 빠진다. 확인 대화상자는 허용 목록·프록시 목록·Origin 목록의 빈 값 경고를 각각 고른다.
+- SCR-004는 v4 계약의 테이블 순서를 유지하며 ticket 키도 `[relay.ticket.viewer]`·`[relay.ticket.server]`로 묶는다. SCR-005의 `editableItems`는 allow 6개 → trusted_proxies 2개 → allowed_origins 4개 → Mode I 목록 → 상한·제한 시간·연결 유지 → 접속 ticket 순서다. 마지막 구역은 Viewer 다음 Server이며 각 역할의 `enabled`·`issuer`·`relay_host`·`max_lifetime_secs` 순서다. 비활성 진입점의 편집 불가 키와 공개 키 파일 경로는 입력 목록에서 빠진다. 확인 대화상자는 허용 목록·프록시 목록·Origin 목록의 빈 값 경고(CPY-105·183·192)를 각각 고른다. ticket `enabled`의 false→true 경고(CPY-194)는 그 키의 변경 항목 안에 둔다.
 - `web/dashboard/tests/logs.html`의 `dash-054`~`dash-061`·`dash-063`은 가짜 API 부분 증거다. Rust 실행 함수의 표식은 `partial`이다. 실제 로그 보관·세션 연관 검색·유휴 만료·중계 전송 조합의 전체 증거는 실서버 시험이 맡는다.
 - SCR-006 실서버 실행기는 `tests/dashboard_live.rs`의 DASH-054~063 함수다. `logs.rs`는 실제 Repeater 거절·세션 사건과 `GET /api/v1/logs`를 화면과 대조한다. 설정 파일을 잠시 디렉터리로 바꿔 실제 `reload_watch_failed(level=error)`를 만든 뒤 원래 파일을 복구한다. 일반 로그 응답은 만들거나 바꾸지 않는다.
 - `logs_download.rs`는 1000건을 넘는 필터 결과의 모든 페이지를 모은 실제 브라우저 다운로드를 읽는다. CDP `Browser.downloadProgress(state=completed)`까지 기다려 파일 이동·닫힘과 시험의 파일 제거가 경합하지 않게 한다. `logs_states.rs`는 별도 서버의 보관 0·빈 필터 결과·실패와 복구, 실제 300초 유휴 만료를 맡는다.

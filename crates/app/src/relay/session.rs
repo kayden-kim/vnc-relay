@@ -14,6 +14,11 @@ use vnc_relay_domain::session::{CloseCause, Direction, Session, SessionError, Si
 use crate::events::ConnectionErrorKind;
 use crate::ports::{Clock, RelayCloseAction, RelayLifecycle, RelayStream, RelayStreamError};
 
+/// Longest single timer sleep. Tokio clamps longer sleeps to about 30 years,
+/// so a far deadline such as a large `sx` is reached in steps and is never
+/// treated as reached early.
+const MAX_TIMER_STEP: Duration = Duration::from_secs(24 * 60 * 60);
+
 /// Runs until transport cleanup completes or its absolute bound expires.
 /// `PeerEof` stays provisional: only the caller can drop streams/permits and
 /// call `Session::finish`. Close actions preserve TCP half-close and the
@@ -35,6 +40,7 @@ pub(super) async fn run_session_controlled(
     buffer_bytes: [usize; 2],
     settings: &dyn crate::reload::ports::RuntimeSettingsSource,
     mut admin_close: watch::Receiver<Option<(Duration, Duration)>>,
+    session_deadline: Option<Duration>,
     on_update: impl Fn(&Session, Option<ConnectionErrorKind>),
 ) -> Result<Option<ConnectionErrorKind>, SessionError> {
     let mut directions = [
@@ -61,6 +67,7 @@ pub(super) async fn run_session_controlled(
     // Read E only for the first close transition, never at session creation.
     let mut close_timeout = None;
 
+    let mut expiry_started = None;
     loop {
         let state = *lifecycle.borrow_and_update();
         let now = clock.monotonic().max(timer_now);
@@ -75,6 +82,14 @@ pub(super) async fn run_session_controlled(
             RelayLifecycle::Grace { deadline } => Some(deadline),
             RelayLifecycle::Running | RelayLifecycle::Force => None,
         };
+        if state != RelayLifecycle::Force
+            && grace_deadline.is_none_or(|end| now < end)
+            && session_deadline.is_some_and(|end| now >= end)
+            && session.begin_session_expiry(now)?
+        {
+            expiry_started = Some(now);
+            on_update(session, error_kind);
+        }
         if close_timeout.is_none()
             && session.state() != vnc_relay_domain::session::SessionState::Active
         {
@@ -85,7 +100,9 @@ pub(super) async fn run_session_controlled(
             .first_eof()
             .map(|(_, at)| at.saturating_add(timeout));
         let admin_deadline = admin_started.map(|(at, _)| at.saturating_add(timeout));
-        let cleanup_deadline = eof_deadline.or(admin_deadline);
+        let cleanup_deadline = eof_deadline
+            .or(admin_deadline)
+            .or_else(|| expiry_started.map(|at: Duration| at.saturating_add(timeout)));
         if cleanup_deadline.is_some_and(|end| now >= end) && session.expire_close(now, timeout)? {
             on_update(session, error_kind);
         }
@@ -152,13 +169,22 @@ pub(super) async fn run_session_controlled(
             (Some(left), Some(right)) => Some(left.min(right)),
             (left, right) => left.or(right),
         };
+        let deadline = if session.state() == vnc_relay_domain::session::SessionState::Active {
+            match (deadline, session_deadline) {
+                (Some(left), Some(right)) => Some(left.min(right)),
+                (left, right) => left.or(right),
+            }
+        } else {
+            deadline
+        };
+        let wake_at = deadline.map(|end| end.min(now.saturating_add(MAX_TIMER_STEP)));
         let event = {
             // Both futures survive every Pending poll. Dropping `changed` only
             // after an event is cancellation-safe and cannot lose a transition.
             let mut changed = pin!(lifecycle.changed());
             let mut command_changed = pin!(admin_close.changed());
             let mut timeout = pin!(async {
-                match deadline {
+                match wake_at {
                     Some(end) => tokio::time::sleep(end.saturating_sub(now)).await,
                     None => pending::<()>().await,
                 }
@@ -210,7 +236,10 @@ pub(super) async fn run_session_controlled(
                         // Stop new messages on both endpoints, but finish any
                         // frame header that already reached a WebSocket peer.
                         if is_ws[index]
-                            && session.close_cause() == Some(CloseCause::AdminTerminated)
+                            && matches!(
+                                session.close_cause(),
+                                Some(CloseCause::AdminTerminated | CloseCause::SessionExpired)
+                            )
                             && stream.pending_write_len() > 0
                             && incoming.start < incoming.end
                         {
@@ -272,7 +301,7 @@ pub(super) async fn run_session_controlled(
                 watch_closed = lifecycle.has_changed().is_err();
             }
             Wake::Deadline => {
-                if let Some(end) = deadline {
+                if let Some(end) = wake_at {
                     timer_now = timer_now.max(end);
                 }
             }
@@ -573,6 +602,7 @@ fn close_action(
         Some(CloseCause::DeadConnection) => RelayCloseAction::DeadConnection,
         Some(CloseCause::AdminTerminated) => RelayCloseAction::AdminTerminated,
         Some(CloseCause::ServerShutdown) => RelayCloseAction::ServerShutdown,
+        Some(CloseCause::SessionExpired) => RelayCloseAction::SessionExpired,
         Some(CloseCause::InternalError) => return None,
         None | Some(CloseCause::PeerEof | CloseCause::CloseTimeout) => {
             if is_ws != [false; 2]
@@ -656,6 +686,7 @@ mod tests {
             [buffer_bytes; 2],
             settings.as_ref(),
             receiver,
+            None,
             |session, _| on_update(session),
         )
         .await
@@ -685,6 +716,7 @@ mod tests {
             [4, 8],
             settings.as_ref(),
             command,
+            None,
             |_, _| {},
         ));
         pump(&mut relay).await;
@@ -727,6 +759,7 @@ mod tests {
             [3, 7],
             settings.as_ref(),
             command,
+            None,
             |_, _| {},
         )
         .await
@@ -2727,6 +2760,7 @@ mod tests {
                     [8; 2],
                     settings.as_ref(),
                     command,
+                    None,
                     |_, _| {},
                 ));
                 if matches!(behavior, CloseBehavior::Pending) {
@@ -2824,6 +2858,7 @@ mod tests {
             [8; 2],
             settings.as_ref(),
             command,
+            None,
             |_, _| {},
         )
         .await
@@ -3133,6 +3168,7 @@ mod tests {
             [8; 2],
             settings.as_ref(),
             command,
+            None,
             |_, _| {},
         )
         .await
@@ -3147,5 +3183,124 @@ mod tests {
             assert_eq!(control.actions(), [RelayCloseAction::AdminTerminated]);
             assert_eq!(control.0.lock().unwrap().read_calls, 0);
         }
+    }
+
+    /// spec: relay.md:RLY-031 partial
+    #[tokio::test(start_paused = true)]
+    async fn ticket_expiry_waits_e_without_changing_cause_or_reading_more_payload() {
+        for transport in [Transport::Tcp, Transport::Ws, Transport::Wss] {
+            let clock = TestClock::new();
+            let mut session = model(Mode::Mode2);
+            let (_lifecycle, lifecycle) = watch::channel(RelayLifecycle::Running);
+            let (_command, command) = watch::channel(None);
+            let settings = TestSettings::new();
+            settings.change(|settings| settings.timeouts.close = E);
+            let (mut viewer, viewer_control) = stream(&[], false);
+            let (mut other, other_control) = stream(&[], false);
+            for control in [&viewer_control, &other_control] {
+                control.change(|state| {
+                    state.transport = transport;
+                    state.terminal = CloseBehavior::Pending;
+                });
+            }
+            {
+                let mut relay = pin!(run_session_controlled(
+                    &mut viewer,
+                    &mut other,
+                    Vec::new(),
+                    Vec::new(),
+                    &mut session,
+                    clock.as_ref(),
+                    lifecycle,
+                    [8; 2],
+                    settings.as_ref(),
+                    command,
+                    Some(Duration::from_secs(4)),
+                    |_, _| {},
+                ));
+                pump(&mut relay).await;
+                advance(Duration::from_secs(4)).await;
+                poll_fn(|cx| {
+                    assert!(relay.as_mut().poll(cx).is_pending());
+                    Poll::Ready(())
+                })
+                .await;
+                for control in [&viewer_control, &other_control] {
+                    assert!(
+                        control
+                            .actions()
+                            .contains(&RelayCloseAction::SessionExpired)
+                    );
+                    control.feed(b"must-not-read", false);
+                }
+                settings.change(|settings| settings.timeouts.close = Duration::from_secs(1));
+                advance(E - Duration::from_millis(1)).await;
+                poll_fn(|cx| {
+                    assert!(relay.as_mut().poll(cx).is_pending());
+                    Poll::Ready(())
+                })
+                .await;
+                advance(Duration::from_millis(1)).await;
+                assert_eq!(relay.await.expect("E bounds cleanup"), None);
+            }
+            assert_eq!(session.close_cause(), Some(CloseCause::SessionExpired));
+            assert_eq!(session.close_side(), None);
+            assert_eq!(clock.monotonic(), Duration::from_secs(4) + E);
+            assert!(viewer_control.output().is_empty());
+            assert!(other_control.output().is_empty());
+        }
+    }
+
+    /// spec: relay.md:RLY-031 partial
+    #[tokio::test(start_paused = true)]
+    async fn far_ticket_expiry_outlives_the_tokio_sleep_cap_and_fires_at_sx() {
+        const YEAR: Duration = Duration::from_secs(365 * 24 * 60 * 60);
+        let clock = TestClock::new();
+        let mut session = model(Mode::Mode2);
+        let (_lifecycle, lifecycle) = watch::channel(RelayLifecycle::Running);
+        let (_command, command) = watch::channel(None);
+        let settings = TestSettings::new();
+        settings.change(|settings| settings.timeouts.close = E);
+        let (mut viewer, viewer_control) = stream(&[], false);
+        let (mut other, other_control) = stream(&[], false);
+        for control in [&viewer_control, &other_control] {
+            control.change(|state| state.terminal = CloseBehavior::Pending);
+        }
+        {
+            let mut relay = pin!(run_session_controlled(
+                &mut viewer,
+                &mut other,
+                Vec::new(),
+                Vec::new(),
+                &mut session,
+                clock.as_ref(),
+                lifecycle,
+                [8; 2],
+                settings.as_ref(),
+                command,
+                Some(YEAR * 40),
+                |_, _| {},
+            ));
+            pump(&mut relay).await;
+            // One tokio sleep stops at 30 years; that wake is not the deadline.
+            advance(YEAR * 31).await;
+            pump(&mut relay).await;
+            for control in [&viewer_control, &other_control] {
+                assert!(control.actions().is_empty());
+            }
+            advance(YEAR * 9).await;
+            poll_fn(|cx| {
+                assert!(relay.as_mut().poll(cx).is_pending());
+                Poll::Ready(())
+            })
+            .await;
+            for control in [&viewer_control, &other_control] {
+                assert_eq!(control.actions(), [RelayCloseAction::SessionExpired]);
+            }
+            advance(E).await;
+            assert_eq!(relay.await.expect("E bounds cleanup"), None);
+        }
+        assert_eq!(session.close_cause(), Some(CloseCause::SessionExpired));
+        assert_eq!(clock.monotonic(), YEAR * 40 + E);
     }
 }

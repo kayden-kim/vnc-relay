@@ -2947,6 +2947,7 @@ impl RunningRelay {
                 writes: writes.clone(),
             },
             context,
+            None,
             permit,
             self.runtime.lifecycle(),
         );
@@ -3491,6 +3492,7 @@ async fn completion_mgt016_counts_lists_and_as_of_follow_one_capture_while_usage
                     .handle_connection(
                         TcpRelayStream::new(stream),
                         context,
+                        None,
                         permit,
                         runtime.lifecycle(),
                     )
@@ -3895,7 +3897,13 @@ struct ConfigTls {
     invalid: AtomicBool,
 }
 impl ReloadFileStore for ConfigTls {
-    fn read(&self, _path: &Path) -> io::Result<Vec<u8>> {
+    fn read(&self, path: &Path) -> io::Result<Vec<u8>> {
+        if path
+            .extension()
+            .is_some_and(|extension| extension == "jwks")
+        {
+            return std::fs::read(path);
+        }
         Ok(b"TLS-FILE-SECRET".to_vec())
     }
 }
@@ -3949,6 +3957,7 @@ fn config_fixture_text(
         cell,
         tls.clone(),
         tls.clone(),
+        Arc::new(vnc_relay_adapters::ticket::TicketJwksStore),
         events.clone(),
     )));
     let files = Arc::new(ConfigMemory {
@@ -4414,7 +4423,7 @@ async fn config_patch_rejects_uneditable_empty_mistyped_and_poll_requests_withou
         .as_array()
         .unwrap_or_else(|| panic!("items"))
         .clone();
-    // Every restart key and all four TLS paths are rejected.
+    // Every restart key and all TLS/JWKS paths are rejected.
     for item in items.iter().filter(|item| item["editable"] == false) {
         let key = item["key"].as_str().unwrap_or_default();
         let mut changes = serde_json::Map::new();
@@ -4425,7 +4434,7 @@ async fn config_patch_rejects_uneditable_empty_mistyped_and_poll_requests_withou
     }
     assert_eq!(
         items.iter().filter(|item| item["editable"] == true).count(),
-        29
+        37
     );
     for changes in [
         json!({}),
@@ -4501,6 +4510,336 @@ async fn config_patch_rejects_uneditable_empty_mistyped_and_poll_requests_withou
     assert_config_unchanged(&fixture, &original, &settings);
     assert_eq!(fixture.files.replaces.load(Ordering::SeqCst), 0);
     assert!(config_audits(&events).is_empty());
+}
+
+struct TicketConfigFiles(std::path::PathBuf);
+
+impl TicketConfigFiles {
+    fn new() -> Self {
+        use ::aws_lc_rs::rand::SystemRandom;
+        use ::aws_lc_rs::signature::{ECDSA_P256_SHA256_FIXED_SIGNING, EcdsaKeyPair, KeyPair};
+
+        let dir = std::env::temp_dir().join(format!(
+            "vnc-relay-ticket-management-{}-{}",
+            std::process::id(),
+            ConnId::next()
+        ));
+        std::fs::create_dir(&dir).unwrap_or_else(|error| panic!("ticket directory: {error}"));
+        let files = Self(dir);
+        for role in ["viewer", "server"] {
+            let rng = SystemRandom::new();
+            let document = EcdsaKeyPair::generate_pkcs8(&ECDSA_P256_SHA256_FIXED_SIGNING, &rng)
+                .unwrap_or_else(|error| panic!("generate ticket key: {error:?}"));
+            let pair =
+                EcdsaKeyPair::from_pkcs8(&ECDSA_P256_SHA256_FIXED_SIGNING, document.as_ref())
+                    .unwrap_or_else(|error| panic!("load ticket key: {error:?}"));
+            let public = pair.public_key().as_ref();
+            let jwks = json!({"keys": [{
+                "kty": "EC", "crv": "P-256", "kid": role,
+                "x": ticket_coordinate(&public[1..33]),
+                "y": ticket_coordinate(&public[33..65]),
+            }]})
+            .to_string();
+            std::fs::write(files.0.join(format!("{role}.jwks")), jwks)
+                .unwrap_or_else(|error| panic!("write ticket JWKS: {error}"));
+        }
+        files
+    }
+
+    fn table(&self, role: &str, missing: Option<&str>) -> String {
+        let path = self.0.join(format!("{role}.jwks"));
+        let mut table = format!("\n[relay.ticket.{role}]\nenabled = false\n");
+        for (key, value) in [
+            ("issuer", "issuer.example".to_owned()),
+            ("relay_host", "relay.example".to_owned()),
+            ("public_keys_file", path.to_string_lossy().into_owned()),
+        ] {
+            if missing != Some(key) {
+                table.push_str(&format!("{key} = {}\n", toml_edit::Value::from(value)));
+            }
+        }
+        table
+    }
+}
+
+impl Drop for TicketConfigFiles {
+    fn drop(&mut self) {
+        std::fs::remove_dir_all(&self.0)
+            .unwrap_or_else(|error| panic!("remove ticket directory: {error}"));
+    }
+}
+
+fn ticket_coordinate(bytes: &[u8]) -> String {
+    const TABLE: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+    let mut text = String::new();
+    for chunk in bytes.chunks(3) {
+        let mut block = [0u8; 3];
+        block[..chunk.len()].copy_from_slice(chunk);
+        let value = u32::from(block[0]) << 16 | u32::from(block[1]) << 8 | u32::from(block[2]);
+        for index in 0..=chunk.len() {
+            text.push(char::from(
+                TABLE[(value >> (18 - 6 * index) & 0x3f) as usize],
+            ));
+        }
+    }
+    text
+}
+
+/// spec: management.md:MGT-053
+/// spec: operations.md:OPS-072 partial
+#[tokio::test]
+async fn ticket_config_view_edits_and_refusals_follow_management_contract() {
+    let key_files = TicketConfigFiles::new();
+    let events = Arc::new(Recorder::default());
+    let clock = Arc::new(FakeClock::default());
+    let text = format!(
+        "{CONFIG_TEXT}\n[relay.ws.server]\nenabled = true\nallow = [\"127.0.0.1\"]\n[relay.wss.server]\nenabled = true\nallow = [\"127.0.0.1\"]\n{}{}",
+        key_files.table("viewer", None),
+        key_files.table("server", None)
+    );
+    let fixture = config_fixture_text(&text, clock.clone(), events.clone());
+    let running = start_config_services(fixture.service.clone(), events.clone(), clock).await;
+    let (cookie, csrf) = config_login(&running).await;
+    let view = plain_exchange(running.addr, &get("/api/v1/config", &[&cookie])).await;
+    assert_eq!(view.status, 200);
+    let body = config_json(&view);
+    let items = body["items"].as_array().unwrap_or_else(|| panic!("items"));
+    assert_eq!(items.len(), 75);
+    assert_eq!(
+        items
+            .iter()
+            .filter(|item| item["reload"] == "dynamic")
+            .count(),
+        43
+    );
+    assert_eq!(
+        items.iter().filter(|item| item["editable"] == true).count(),
+        37
+    );
+    let ticket_items = items
+        .iter()
+        .filter(|item| {
+            item["key"]
+                .as_str()
+                .unwrap_or_default()
+                .starts_with("relay.ticket.")
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(ticket_items.len(), 10);
+    for (role_index, role) in ["viewer", "server"].into_iter().enumerate() {
+        for (offset, key) in [
+            "enabled",
+            "issuer",
+            "relay_host",
+            "public_keys_file",
+            "max_lifetime_secs",
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let item = ticket_items[role_index * 5 + offset];
+            assert_eq!(item["key"], format!("relay.ticket.{role}.{key}"));
+            assert_eq!(item["reload"], "dynamic");
+            assert_eq!(item["editable"], key != "public_keys_file");
+        }
+        assert_eq!(ticket_items[role_index * 5]["value"], false);
+        let lifetime = ticket_items[role_index * 5 + 4];
+        assert_eq!(lifetime["value"], 60);
+        assert_eq!(lifetime["min"], 10);
+        assert_eq!(lifetime["max"], 600);
+        assert_eq!(ticket_items[role_index * 5 + 1]["value"], "issuer.example");
+        assert_eq!(ticket_items[role_index * 5 + 2]["value"], "relay.example");
+        assert_eq!(
+            ticket_items[role_index * 5 + 3]["value"],
+            key_files
+                .0
+                .join(format!("{role}.jwks"))
+                .to_string_lossy()
+                .as_ref()
+        );
+    }
+    for role in ["viewer", "server"] {
+        for (key, value, code) in [
+            ("enabled", json!("true"), "invalid_request"),
+            ("issuer", json!(true), "invalid_request"),
+            ("relay_host", json!(null), "invalid_request"),
+            ("max_lifetime_secs", json!("60"), "invalid_request"),
+            ("public_keys_file", json!("other.jwks"), "invalid_request"),
+            ("issuer", json!(""), "config_invalid"),
+            ("relay_host", json!("é".repeat(129)), "config_invalid"),
+            ("max_lifetime_secs", json!(9), "config_invalid"),
+            ("max_lifetime_secs", json!(601), "config_invalid"),
+        ] {
+            let original = fixture.files.bytes();
+            let reply = config_patch(
+                &running,
+                &cookie,
+                &csrf,
+                &config_revision(&fixture),
+                json!({format!("relay.ticket.{role}.{key}"): value}),
+            )
+            .await;
+            assert_eq!(reply.status, 400, "{role}.{key}: {:?}", config_json(&reply));
+            assert_eq!(error_code(&reply), code);
+            assert_eq!(fixture.files.bytes(), original);
+            if code == "config_invalid" {
+                assert!(
+                    config_json(&reply)["error"]["diagnostics"]
+                        .as_array()
+                        .unwrap_or_else(|| panic!("diagnostics"))
+                        .iter()
+                        .any(
+                            |diagnostic| diagnostic["code"] == "config_value_out_of_range"
+                                && diagnostic["key"] == format!("relay.ticket.{role}.{key}")
+                        )
+                );
+            }
+        }
+    }
+    for (enabled, lifetime) in [(true, 10), (false, 600), (true, 90)] {
+        let reply = config_patch(
+            &running,
+            &cookie,
+            &csrf,
+            &config_revision(&fixture),
+            json!({
+                "relay.ticket.viewer.enabled": enabled,
+                "relay.ticket.viewer.issuer": " issuer.example ",
+                "relay.ticket.viewer.relay_host": "é".repeat(128),
+                "relay.ticket.viewer.max_lifetime_secs": lifetime,
+                "relay.ticket.server.enabled": enabled,
+                "relay.ticket.server.issuer": "i",
+                "relay.ticket.server.relay_host": "relay.example",
+                "relay.ticket.server.max_lifetime_secs": lifetime,
+            }),
+        )
+        .await;
+        assert_eq!(reply.status, 200, "{:?}", config_json(&reply));
+        let applied = config_json(&reply);
+        assert!(
+            applied["applied"]
+                .as_array()
+                .unwrap_or_else(|| panic!("applied"))
+                .contains(&json!("relay.ticket.viewer.enabled"))
+        );
+        let reload = fixture
+            .reload
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
+        for settings in [
+            &reload.running().relay.ticket.viewer,
+            &reload.running().relay.ticket.server,
+        ] {
+            assert_eq!(settings.enabled, enabled);
+            assert_eq!(settings.max_lifetime.as_secs(), lifetime);
+            assert_eq!(settings.keys.len(), usize::from(enabled));
+        }
+        assert_eq!(
+            reload.running().relay.ticket.viewer.issuer.as_deref(),
+            Some(" issuer.example ")
+        );
+        assert_eq!(
+            reload.running().relay.ticket.viewer.relay_host.as_deref(),
+            Some("é".repeat(128).as_str())
+        );
+    }
+    drop(running);
+
+    // Both transports disabled must reject every editable ticket kind.
+    for role in ["viewer", "server"] {
+        let events = Arc::new(Recorder::default());
+        let clock = Arc::new(FakeClock::default());
+        let text = CONFIG_TEXT
+            .replace(
+                "[relay.ws.viewer]\nenabled = true",
+                "[relay.ws.viewer]\nenabled = false",
+            )
+            .replace(
+                "[relay.wss.viewer]\nenabled = true",
+                "[relay.wss.viewer]\nenabled = false",
+            );
+        let fixture = config_fixture_text(&text, clock.clone(), events.clone());
+        let running = start_config_services(fixture.service.clone(), events.clone(), clock).await;
+        let (cookie, csrf) = config_login(&running).await;
+        let view = plain_exchange(running.addr, &get("/api/v1/config", &[&cookie])).await;
+        for item in config_json(&view)["items"]
+            .as_array()
+            .unwrap_or_else(|| panic!("items"))
+        {
+            if item["key"]
+                .as_str()
+                .unwrap_or_default()
+                .starts_with(&format!("relay.ticket.{role}."))
+            {
+                assert_eq!(item["editable"], false);
+                if item["key"] == format!("relay.ticket.{role}.issuer")
+                    || item["key"] == format!("relay.ticket.{role}.relay_host")
+                {
+                    assert!(item["value"].is_null());
+                }
+            }
+        }
+        let original = fixture.files.bytes();
+        for (key, value) in [
+            ("enabled", json!(true)),
+            ("issuer", json!("issuer.example")),
+            ("relay_host", json!("relay.example")),
+            ("max_lifetime_secs", json!(60)),
+        ] {
+            let reply = config_patch(
+                &running,
+                &cookie,
+                &csrf,
+                &config_revision(&fixture),
+                json!({format!("relay.ticket.{role}.{key}"): value}),
+            )
+            .await;
+            assert_eq!(reply.status, 400);
+            assert_eq!(error_code(&reply), "invalid_request");
+            assert_eq!(fixture.files.bytes(), original);
+        }
+    }
+    for role in ["viewer", "server"] {
+        for missing in ["issuer", "relay_host", "public_keys_file"] {
+            let events = Arc::new(Recorder::default());
+            let clock = Arc::new(FakeClock::default());
+            let text = format!(
+                "{CONFIG_TEXT}\n[relay.ws.server]\nenabled = true\nallow = [\"127.0.0.1\"]\n{}",
+                key_files.table(role, Some(missing))
+            );
+            let fixture = config_fixture_text(&text, clock.clone(), events.clone());
+            let original = fixture.files.bytes();
+            let settings = fixture
+                .reload
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .running()
+                .clone();
+            let running =
+                start_config_services(fixture.service.clone(), events.clone(), clock).await;
+            let (cookie, csrf) = config_login(&running).await;
+            let reply = config_patch(
+                &running,
+                &cookie,
+                &csrf,
+                &config_revision(&fixture),
+                json!({format!("relay.ticket.{role}.enabled"): true}),
+            )
+            .await;
+            assert_eq!(reply.status, 400, "{:?}", config_json(&reply));
+            assert_eq!(error_code(&reply), "config_invalid");
+            assert!(
+                config_json(&reply)["error"]["diagnostics"]
+                    .as_array()
+                    .unwrap_or_else(|| panic!("diagnostics"))
+                    .iter()
+                    .any(|diagnostic| diagnostic["code"] == "config_missing_key"
+                        && diagnostic["key"] == format!("relay.ticket.{role}.{missing}"))
+            );
+            assert_config_unchanged(&fixture, &original, &settings);
+            assert_eq!(fixture.files.replaces.load(Ordering::SeqCst), 0);
+        }
+    }
 }
 
 /// spec: management.md:MGT-038
@@ -5368,6 +5707,7 @@ async fn recent_logs_query_basics_limit_order_and_bounds() {
             peer_ip: PeerIp::new("127.0.0.1".parse().unwrap()),
             forwarded_ip: Some(PeerIp::new("198.51.100.8".parse().unwrap())),
             origin: None,
+            ticket_jti: None,
         });
     }
     drop(sink);

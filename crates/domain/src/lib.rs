@@ -19,3 +19,4 @@ pub mod recent_closed;
 pub mod relay_id;
 pub mod session;
 pub mod target_policy;
+pub mod ticket;

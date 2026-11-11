@@ -18,6 +18,7 @@ export function canEdit(config) {
 }
 
 export function fieldGroup(key) {
+  if (key.startsWith('relay.ticket.')) return 'accessTickets';
   if (/^relay\..+\.allow$/.test(key)) return 'sourceAllowLists';
   if (key.startsWith('relay.') || key.startsWith('mode1.')) return 'accessPolicies';
   if (key.startsWith('limits.')) return 'connectionLimits';
@@ -25,14 +26,14 @@ export function fieldGroup(key) {
   return 'keepalive';
 }
 
-// DASH-035: five sections; proxy lists precede Origin lists within access policies.
+// DASH-035: six sections; access tickets follow keepalive in contract order.
 export function editableItems(config) {
   const rank = (key) => {
     const group = fieldGroup(key);
     if (group === 'sourceAllowLists') return 0;
     if (group === 'accessPolicies') return key.endsWith('.trusted_proxies') ? 1
       : key.endsWith('.allowed_origins') ? 2 : 3;
-    return { connectionLimits: 4, timeouts: 5, keepalive: 6 }[group];
+    return { connectionLimits: 4, timeouts: 5, keepalive: 6, accessTickets: 7 }[group];
   };
   return config.items.filter((item) => item.editable).sort((a, b) => rank(a.key) - rank(b.key));
 }
@@ -45,7 +46,8 @@ export function fieldUnit(key) {
 
 export function initialInputs(config) {
   return new Map(editableItems(config).map((item) =>
-    [item.key, Array.isArray(item.value) ? item.value.join('\n') : String(item.value)]));
+    [item.key, Array.isArray(item.value) ? item.value.join('\n') :
+      typeof item.value === 'boolean' ? item.value : String(item.value ?? '')]));
 }
 
 export function diagnosticText(diagnostic, t) {
@@ -79,6 +81,13 @@ export function inspectInputs(config, inputs) {
       list.values.forEach((value, index) => {
         if (/\s/u.test(value)) errors.push({ key: item.key, line: list.lines[index], copy: 'listWhitespaceError' });
       });
+    } else if (typeof item.value === 'boolean') {
+      values[item.key] = text;
+    } else if (typeof item.value === 'string' || item.value === null) {
+      if (item.value === null && text === '') continue;
+      values[item.key] = text;
+      const bytes = new TextEncoder().encode(text).length;
+      if (bytes < 1 || bytes > 256) errors.push({ key: item.key, copy: 'stringLengthError' });
     } else if (!/^-?\d+$/.test(text)) {
       errors.push({ key: item.key, copy: 'integerRequired' });
     } else {

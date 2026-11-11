@@ -132,6 +132,7 @@ pub(super) async fn dispatch<C: TargetConnector>(
                 trailing: Vec::new(),
                 permit,
                 buffer_bytes: context.buffer_bytes,
+                session_deadline: None,
             };
             service
                 .run_pair(

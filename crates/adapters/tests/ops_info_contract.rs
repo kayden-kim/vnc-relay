@@ -149,7 +149,7 @@ fn writes_one_json_object_per_line_with_common_fields_first() {
             ("info", "server_stopped"),
         ]
     );
-    assert_eq!(text(&lines[0], "log_contract"), "ops-info/2.0.0");
+    assert_eq!(text(&lines[0], "log_contract"), "ops-info/2.1.0");
     assert_eq!(text(&lines[1], "listener"), "tcp_viewer");
     assert_eq!(text(&lines[1], "item"), "0.0.0.0/0");
     assert_eq!(text(&lines[1], "phase"), "startup");
@@ -399,6 +399,7 @@ fn shared_listener_logs_resolve_role_only_after_the_path() {
                         peer_ip: relay_peer(),
                         forwarded_ip: None,
                         origin: None,
+                        ticket_jti: None,
                     },
                     UNIX_EPOCH,
                 ))
@@ -1725,5 +1726,79 @@ fn administrator_termination_outcomes_use_contract_levels_and_omit_absent_identi
         assert!(!object.contains_key("relay_id"));
         assert!(!object.contains_key("csrf_token"));
         assert!(!object.contains_key("cookie"));
+    }
+}
+
+/// spec: websocket.md:WS-038 partial
+/// spec: websocket.md:WS-045 partial
+#[test]
+fn writes_ticket_acceptance_with_only_authenticated_contract_fields() {
+    for listener in [Listener::Ws, Listener::Wss] {
+        for role in [Role::Viewer, Role::Server] {
+            let conn_id = ConnId::next();
+            for optional in [false, true] {
+                let event = Event::TicketAccepted {
+                    conn_id,
+                    listener,
+                    role,
+                    peer_ip: relay_peer(),
+                    forwarded_ip: optional.then(|| PeerIp::new("198.51.100.7".parse().unwrap())),
+                    ticket_jti: "connection-1".into(),
+                    ticket_sub: optional.then(|| "session-1".into()),
+                    session_expires_at: optional.then_some(UNIX_EPOCH + Duration::from_secs(100)),
+                };
+                let mut expected = json!({
+                    "level":"info", "event":"ticket_accepted", "conn_id":conn_id.to_string(),
+                    "listener":listener.name(), "role":role.as_str(), "peer_ip":relay_peer().to_string(),
+                    "ticket_jti":"connection-1"
+                });
+                if optional {
+                    expected["forwarded_ip"] = json!("198.51.100.7");
+                    expected["ticket_sub"] = json!("session-1");
+                    expected["session_expires_at"] = json!("1970-01-01T00:01:40.000Z");
+                }
+                assert_relay_fields(&event, expected);
+            }
+        }
+    }
+}
+
+/// spec: websocket.md:WS-039 partial
+/// spec: websocket.md:WS-040 partial
+/// spec: websocket.md:WS-041 partial
+/// spec: websocket.md:WS-042 partial
+/// spec: websocket.md:WS-043 partial
+#[test]
+fn writes_ticket_upgrade_rejections_without_unrelated_or_unauthenticated_fields() {
+    use vnc_relay_domain::ticket::TicketError;
+    for reason in [
+        TicketError::Missing,
+        TicketError::Invalid,
+        TicketError::Expired,
+        TicketError::IssuedBeforeStart,
+        TicketError::Reused,
+    ] {
+        for authenticated in [false, true] {
+            let conn_id = ConnId::next();
+            let event = Event::UpgradeRejected {
+                conn_id,
+                listener: "wss",
+                role: Some(Role::Viewer),
+                reason: RejectReason::Ticket(reason),
+                peer_ip: relay_peer(),
+                forwarded_ip: Some(PeerIp::new("198.51.100.7".parse().unwrap())),
+                origin: None,
+                ticket_jti: authenticated.then(|| "connection-1".into()),
+            };
+            let mut expected = json!({
+                "level":"warn", "event":"connection_rejected", "conn_id":conn_id.to_string(),
+                "listener":"wss", "role":"viewer", "stage":"upgrade", "reason":reason.code(),
+                "peer_ip":relay_peer().to_string(), "forwarded_ip":"198.51.100.7"
+            });
+            if authenticated {
+                expected["ticket_jti"] = json!("connection-1");
+            }
+            assert_relay_fields(&event, expected);
+        }
     }
 }

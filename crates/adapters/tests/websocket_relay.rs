@@ -242,6 +242,8 @@ impl Running {
                 } else {
                     AllowSource::ws(Arc::clone(&cell))
                 }),
+                ticket_uses: Arc::default(),
+                started_at: std::time::SystemTime::UNIX_EPOCH,
             },
             Arc::clone(&service),
             Arc::clone(&runtime),

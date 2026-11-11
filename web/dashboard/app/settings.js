@@ -17,7 +17,7 @@ import {
   inspectInputs, mapDiagnostics, parseConfig, selectErrorLine,
 } from './settings-model.js';
 
-const GROUPS = ['sourceAllowLists', 'accessPolicies', 'connectionLimits', 'timeouts', 'keepalive'];
+const GROUPS = ['sourceAllowLists', 'accessPolicies', 'connectionLimits', 'timeouts', 'keepalive', 'accessTickets'];
 const FILE_COPY = {
   in_effect: 'configInEffect', pending: 'configPending', restart_required: 'configRestartRequired',
   invalid: 'configInvalid', unreadable: 'configUnreadable',
@@ -155,29 +155,37 @@ export function mountSettings(root, deps = {}, { edit = false, applied = null } 
   }
 
   function field(item) {
-    const wrapper = el('div', 'text-field config-field');
+    const boolean = typeof item.value === 'boolean';
+    const integer = typeof item.value === 'number';
+    const list = Array.isArray(item.value);
+    const wrapper = el('div', `text-field config-field${boolean ? ' config-field-bool' : ''}`);
     const id = `config-${item.key.replaceAll('.', '-')}`;
-    const label = el('label', 'config-data', item.key);
+    const label = el('label', boolean ? 'check config-data' : 'config-data', boolean ? '' : item.key);
     label.htmlFor = id;
-    const input = el(Array.isArray(item.value) ? 'textarea' : 'input', 'text-field-input config-input');
+    const input = el(list ? 'textarea' : 'input', boolean ? '' : 'text-field-input config-input');
     input.id = id;
     input.dataset.configKey = item.key;
-    input.value = state.inputs.get(item.key);
-    input.disabled = state.saving;
+    if (boolean) input.checked = state.inputs.get(item.key);
+    else input.value = state.inputs.get(item.key);
+    input.disabled = state.saving || state.notice === 'settingsUnknown';
     if (input.tagName === 'TEXTAREA') {
       input.classList.add('config-list-input');
       input.rows = 3;
       input.spellcheck = false;
+    } else if (boolean) {
+      input.type = 'checkbox';
     } else {
       // Text plus numeric keyboard retains invalid decimal/exponent input for explicit client validation.
       input.type = 'text';
-      input.inputMode = 'numeric';
+      if (integer) input.inputMode = 'numeric';
       input.autocomplete = 'off';
+      input.spellcheck = false;
     }
-    input.addEventListener('input', () => state.inputs.set(item.key, input.value));
-    const help = el('p', 'config-help', Array.isArray(item.value) ? t().configListHelp :
-      fill(t().configRangeHelp, { min: item.min, max: item.max }));
-    help.id = `${id}-help`;
+    input.addEventListener(boolean ? 'change' : 'input',
+      () => state.inputs.set(item.key, boolean ? input.checked : input.value));
+    const help = list || integer ? el('p', 'config-help', list ? t().configListHelp :
+      fill(t().configRangeHelp, { min: item.min, max: item.max })) : null;
+    if (help) help.id = `${id}-help`;
     let proxyHelp = null;
     if (item.key.endsWith('.trusted_proxies')) {
       proxyHelp = el('p', 'config-help', t().trustedProxiesHelp);
@@ -192,12 +200,17 @@ export function mountSettings(root, deps = {}, { edit = false, applied = null } 
       errorNode.append(message);
     }
     input.setAttribute('aria-invalid', String(errors.length > 0));
-    const describedBy = [help.id, proxyHelp?.id, errors.length ? errorNode.id : null].filter(Boolean).join(' ');
-    input.setAttribute('aria-describedby', describedBy);
-    const control = el('div', 'config-number-unit');
-    control.append(input);
-    if (!Array.isArray(item.value)) control.append(el('span', 'config-help', t().configUnits[fieldUnit(item.key)]));
-    wrapper.append(label, control, help, ...(proxyHelp ? [proxyHelp] : []), errorNode);
+    const describedBy = [help?.id, proxyHelp?.id, errors.length ? errorNode.id : null].filter(Boolean).join(' ');
+    if (describedBy) input.setAttribute('aria-describedby', describedBy);
+    if (boolean) {
+      label.append(input, el('span', '', item.key));
+      wrapper.append(label, errorNode);
+    } else {
+      const control = el('div', 'config-number-unit');
+      control.append(input);
+      if (integer) control.append(el('span', 'config-help', t().configUnits[fieldUnit(item.key)]));
+      wrapper.append(label, control, ...(help ? [help] : []), ...(proxyHelp ? [proxyHelp] : []), errorNode);
+    }
     return wrapper;
   }
 
@@ -350,6 +363,9 @@ export function mountSettings(root, deps = {}, { edit = false, applied = null } 
               : t().emptyAllowWarning;
           content.append(alert(warning, 'warning'));
         }
+      }
+      if (key.startsWith('relay.ticket.') && key.endsWith('.enabled') && previous === false && value === true) {
+        content.append(alert(t().enableTicketWarning, 'warning'));
       }
       const card = createCard({ title: key, headingLevel: 3, body: content });
       card.classList.add('config-change');

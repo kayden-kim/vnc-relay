@@ -1,6 +1,6 @@
 # 파일 변경 감지 모듈 설계
 
-이 모듈은 설정 파일과 켜진 TLS 리스너의 인증서·개인키 변경을 감지한다. 안정화 뒤 후보를 읽고 검증해 33개 동적 설정과 TLS 수락기를 한 snapshot으로 발행한다. watcher와 설정 편집 서비스는 같은 잠금으로 파일 읽기부터 적용까지 직렬화한다. GET/PATCH의 업무 경계는 [설정 보기·편집 모듈](config-edit.md)이 맡는다.
+이 모듈은 설정 파일, 켜진 TLS 리스너의 인증서·개인키, ticket을 켠 역할의 공개 키 파일 변경을 감지한다. 안정화 뒤 후보를 읽고 검증해 43개 동적 설정과 TLS 수락기를 한 snapshot으로 발행한다. 공개 키 목록도 Settings에 포함한다. watcher와 설정 편집 서비스는 같은 잠금으로 파일 읽기부터 적용까지 직렬화한다. GET/PATCH의 업무 경계는 [설정 보기·편집 모듈](config-edit.md)이 맡는다. ticket 연결은 [접속 ticket 모듈 설계](relay-access-ticket.md#44-재로드와-편집)를 따른다.
 
 | 항목 | 값 |
 | --- | --- |
@@ -12,17 +12,18 @@
 | 관련 스펙 | [운영 §3.3](../specs/operations.md#33-파일-변경-자동-감지와-부분-재로드), OPS-003·024~028·035·038·040·041·047~064 |
 | 관련 계약 | [설정 §1.8](../contracts/config-v4.md#18-재로드-구분), [설정 오류](../contracts/config-v4.md#21-설정-오류와-준비-실패), [관리 API §1.13~14](../contracts/management-api-v1.md#113-설정-보기-get-apiv1config), [운영 정보 자동 재로드](../contracts/ops-info-v2.md#자동-재로드) |
 | 관련 ADR | [ADR-0006](../decisions/ADR-0006-config-edit-through-file.md) |
+| 관련 문서 | [접속 ticket 모듈 설계](relay-access-ticket.md) |
 
-후속: R1은 [설정 v4](../contracts/config-v4.md#18-재로드-구분)의 33개 키를 비교·발행한다. WS·WSS 부모 `trusted_proxies`, 네 역할의 `allow`·`allowed_origins`, 부모 `relay.wss.cert_file`·`key_file`을 각각 비교한다. 부모 `listen`·역할 `enabled`·`recent_logs.max_entries`의 차이는 후보 전체를 재시작 필요로 거절한다. 모든 WSS 역할이 꺼졌으면 TLS 내용을 읽거나 감시하지 않는다. 어느 한 역할이라도 켜졌으면 부모 TLS 한 쌍만 감시한다.
+현재는 [설정 v4](../contracts/config-v4.md#18-재로드-구분)의 ticket 10개를 포함한 43개 키를 비교·발행한다. WS·WSS 부모 `trusted_proxies`, 네 역할의 `allow`·`allowed_origins`, 부모 `relay.wss.cert_file`·`key_file`을 각각 비교한다. 부모 `listen`·WS·WSS 역할 `enabled`·`recent_logs.max_entries`의 차이는 후보 전체를 재시작 필요로 거절한다. ticket의 역할 `enabled`는 동적 키다. 모든 WSS 역할이 꺼졌으면 TLS 내용을 읽거나 감시하지 않는다. 어느 한 역할이라도 켜졌으면 부모 TLS 한 쌍만 감시한다.
 
 R1은 `trusted_proxies` 값을 교체하지만 허용 판정에 사용하지 않는다. 전달 주소와 경고는 R2 범위다. `recent_logs.max_entries`는 검증만 하며 보관·API는 R3 범위다. 이전 실행 기록은 R1의 증거가 아니며 이번 문서 작업에서는 빌드·시험·포매터를 실행하지 않았다. 후속: 구현은 커밋 `3df0693`이며, 시험은 커밋 `51bd747`의 두 OS 게이트에서 통과했다([WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)).
 
 
 ## 1. 책임과 경계
 
-- 설정 파일과 켜진 WSS·관리 TLS의 참조 파일을 OS 알림과 Dp 주기 확인으로 감지한다. 계정 파일은 감시하지 않는다.
+- 설정 파일과 켜진 WSS·관리 TLS의 참조 파일, ticket을 켠 역할의 공개 키 파일을 OS 알림과 Dp 주기 확인으로 감지한다. 계정 파일은 감시하지 않는다.
 - 안정화 대기는 잠금 밖에서 한다. 최종 파일 read 전에 `SharedReload<A>` mutex를 잡는다. read·parse·prepare·세대/종료 확인·commit과 결과 기록은 같은 잠금 구간이다.
-- `config_file::parse_candidate`가 구문·설정 값·명시 키를 만든다. `ReloadService`가 TLS 후보 검증, 재시작 차이 비교, snapshot 발행과 마지막 재로드 결과를 맡는다.
+- `config_file::parse_candidate`가 구문·설정 값·명시 키를 만든다. `ReloadService`가 TLS·ticket 키 후보 검증, 재시작 차이 비교, snapshot 발행과 마지막 재로드 결과를 맡는다.
 - 파일 감시·로그 재열기는 adapters, 실행 값·정책·후보 수용은 app이다. app은 notify·TOML·rustls 타입을 알지 못한다.
 - 수동 재로드 API·CLI는 없다. PATCH는 설정 파일을 먼저 교체한 뒤 같은 준비 후보를 commit한다.
 - 로그 경로는 재로드 해시·세대와 분리한다. 생성·삭제·이름 변경과 독립 Dp 작업이 로그 핸들을 다시 연다.
@@ -56,7 +57,7 @@ flowchart LR
 
 | 이름 | 실제 형태·제약 |
 | --- | --- |
-| `ReloadWatcher.watched` | 설정 파일과 실행 중 TLS 경로, 마지막 파싱 성공 후보의 TLS 경로를 합친 `Vec<PathBuf>`. 같은 경로는 한 번만 넣는다. |
+| `ReloadWatcher.watched` | 설정 파일, 실행 중과 마지막 파싱 성공 후보의 TLS 경로·ticket을 켠 역할의 공개 키 경로를 합친 `Vec<PathBuf>`. 같은 경로는 한 번만 넣는다. |
 | `ReloadWatcher.processed` | 경로별 `Option<u64>` 내용 해시. 읽은 파일은 DefaultHasher 64비트, 없으면 None. 프로세스 안 감지용이며 API revision SHA-256과 다르다. |
 | `ChangeQueue` | 변경 세대와 유실·실패·로그 신호. 한 episode에 `reload_change_detected`를 한 번 기록한다. |
 | `FileStamp` | 크기와 수정 시각. 안정화 read 전후를 비교한다. |
@@ -79,10 +80,12 @@ flowchart LR
 | 2 | `file_watch.rs` `episode`·`wait_quiet` | `reload_change_detected`를 한 번 기록한다. Q 300ms 뒤 stat, G 100ms 뒤 다시 stat을 비교한다. 새 세대나 stop이면 재시작/중지한다. 여기서는 공유 서비스 잠금을 잡지 않는다. |
 | 3 | `file_watch.rs` `apply`·`read_candidate` | SharedReload 잠금을 잡은 뒤 설정·감시 파일을 최종 읽는다. read 뒤 stat과 세대를 다시 확인한다. 불일치면 잠금을 놓고 안정화부터 반복한다. |
 | 4 | `config_file.rs` `parse_candidate`; `reload/service.rs` `handle_config`·`handle_unreadable` | 같은 guard 안에서 바이트를 파싱한다. 읽기 실패·비UTF-8이면 unreadable 경로다. `is_current`는 세대와 stop을 준비 전후에 검사한다. |
-| 5 | `reload/service.rs` `prepare_candidate` | 켜진 TLS 내용을 검사하고 필요하면 acceptor를 만든다. 잘못된 후보는 Invalid, 유효하지만 비대상 차이가 있으면 RestartRequired다. 33개 동적 값/경로 차이와 TLS 내용 차이를 합쳐 계약 순서로 정렬한다. 아직 발행·사건·이력은 없다. |
+| 5 | `reload/service.rs` `prepare_candidate` | 켜진 TLS 내용을 검사하고 필요하면 acceptor를 만든다. 이어 `ticket_keys::load`로 후보의 공개 키 목록을 채운다. 키 오류는 `ticket_keys_invalid`로 후보 전체를 거절한다. 잘못된 후보는 Invalid, 유효하지만 비대상 차이가 있으면 RestartRequired다. 43개 동적 값/경로 차이와 TLS·공개 키 내용 차이를 합쳐 계약 순서로 정렬한다. 아직 발행·사건·이력은 없다. |
 | 6 | `reload/service.rs` `handle_config` | 낡은 후보·종료 중 후보는 Discarded다. 거절·재시작 필요는 사건과 FileWatch 이력을 기록한다. 적용 키가 없으면 Unchanged다. presence만 다르면 아래 판단에 따라 표시 정보만 갱신한다. |
 | 7 | `reload/service.rs` `commit_prepared` | 준비 snapshot을 한 번 발행하고 running/presence/TLS 기준 해시를 바꾼다. 적용한 정책의 Reload 경고→`ReloadApplied { trigger, applied }`→이력 순서다. commit은 재검증·파일 재읽기·실패 반환·종료 veto가 없다. |
 | 8 | `file_watch.rs` `refresh_watch_set` | service guard를 놓은 뒤, Discarded가 아니면 처리 해시와 감시 경로를 다시 계산하고 알림 등록을 맞춘다. 다음 변경을 기다린다. |
+
+공개 키 경로가 같고 실행 중·후보 모두 그 역할의 ticket을 켰으면 키 목록의 의미를 비교한다. 내용 교체로 목록이 바뀌면 `relay.ticket.<role>.public_keys_file`을 `applied`에 더한다. 실패한 후보는 기존 설정·키를 유지한다. `watched_paths`는 후보에서 ticket을 켠 역할의 키 경로도 돌려준다. 사용 기록과 기존 연결의 기한은 재로드로 바꾸지 않는다([접속 ticket 모듈 설계](relay-access-ticket.md#44-재로드와-편집)).
 
 **작성자 판단(lead 2026-11-08): presence-only 갱신.** 명시 키 유무는 `dynamic_changed_keys`·`restart_required_keys`의 의미 차이가 아니다. watcher 후보의 실행 값·TLS가 같고 presence만 다르면 `handle_config`는 `running_presence`와 snapshot presence만 갱신한다. snapshot의 Settings는 기존 running Arc를 그대로 쓴다. 결과는 Unchanged이며 `reload_applied`·경고·last_reload는 바뀌지 않는다. 이 갱신은 꺼진 기능의 표시에서 생략과 명시를 구분하기 위한 것이다. `inactive_paths`는 꺼진 WSS에 TLS 경로 하나만 있어 `Settings.tls=None`인 경우 그 경로를 표시하는 fallback으로만 쓴다. 해당 파일을 읽거나 감시하지 않는다.
 
@@ -100,7 +103,7 @@ flowchart LR
 - watcher episode는 `reload_change_detected` 한 번 뒤 최대 한 결과 사건을 기록한다. Unchanged·Discarded는 결과 사건이 없다.
 - `reload_rejected`와 `reload_restart_required`는 서로 다르다. 둘 다 기존 실행 값·연결을 유지한다.
 - 적용 사건에는 실제 적용 키와 `FileWatch` 또는 `ConfigEdit` trigger가 있다. PATCH의 성공 감사는 commit 뒤 별도 `ConfigEdited`다.
-- `reload_watch_failed`는 episode 없이 기록할 수 있다. 시작의 설정/TLS 감시 등록 실패는 `startup_failed(watch_unavailable)`·종료 코드 1이다.
+- `reload_watch_failed`는 episode 없이 기록할 수 있다. 시작의 설정/TLS/ticket 공개 키 감시 등록 실패는 `startup_failed(watch_unavailable)`·종료 코드 1이다.
 - 로그 디렉터리 알림 등록만 실패하면 시작을 계속한다. Dp의 로그 재열기와 알림 재등록을 유지한다.
 
 ### 4.3 검증 순서 확인점
@@ -109,7 +112,7 @@ flowchart LR
 
 ## 5. 상태와 초기화
 
-`serve`는 `load_candidate`로 같은 시작 바이트의 Settings와 presence를 준비한다. 계정·런타임·키·TLS 준비 뒤 `ReloadCell`과 `SharedReload`를 만들고 watcher·ConfigEditService에 같은 Arc를 주입한다. `file_watch::start`는 리스너 바인드 전에 감시를 등록하고 기준 해시를 읽는다. `ReloadWatcher::run`은 그 뒤 spawn한다.
+`serve`는 `load_candidate`로 같은 시작 바이트의 Settings와 presence를 준비한다. 계정·런타임·시작 키·TLS·ticket 공개 키 준비 뒤 `ReloadCell`과 `SharedReload`를 만들고 watcher·ConfigEditService에 같은 Arc를 주입한다. `file_watch::start`는 리스너 바인드 전에 감시를 등록하고 기준 해시를 읽는다. `ReloadWatcher::run`은 그 뒤 spawn한다.
 
 후보 처리는 watcher 작업 하나가 맡지만 PATCH·GET과도 같은 mutex로 직렬화한다. snapshot read callback에는 await·파일/네트워크 I/O를 넣지 않는다. 새 수락의 현재 상한 읽기와 permit CAS는 callback 안에서 끝나므로 교체와 수락 판단이 섞이지 않는다.
 
@@ -119,11 +122,11 @@ flowchart LR
 
 | 실패 지점 | 처리와 남는 상태 |
 | --- | --- |
-| 시작 설정/TLS 감시 등록 | `startup_failed(watch_unavailable)`, 종료 코드 1. 리스너를 바인드하지 않는다. |
+| 시작 설정/TLS/ticket 공개 키 감시 등록 | `startup_failed(watch_unavailable)`, 종료 코드 1. 리스너를 바인드하지 않는다. |
 | 실행 중 OS 알림 등록·수신 | `reload_watch_failed(notify_error)`. Dp마다 재등록하며 주기 확인은 계속한다. |
 | 주기 확인 I/O | `reload_watch_failed(poll_error)`. 실행 값은 유지한다. OS 알림이 살아 있으면 그 경로는 계속한다. |
 | 알림 유실·넘침 | 전체 재확인을 요청한다. 새로운 재로드 세대로 처리한다. |
-| 설정 구문·값·TLS 오류 | `reload_rejected`, FileWatch rejected 이력. 실행 값·인증서·기존 연결은 유지한다. 설정 파일 소멸·비UTF-8은 `config_file_unreadable`이다. |
+| 설정 구문·값·TLS·ticket 키 오류 | `reload_rejected`, FileWatch rejected 이력. 실행 값·인증서·공개 키·기존 연결은 유지한다. ticket 키 오류 사유는 `ticket_keys_invalid`다. 설정 파일 소멸·비UTF-8은 `config_file_unreadable`이다. |
 | 유효한 비대상 차이 | `reload_restart_required`와 해당 키의 이력. 동적 변경도 함께 거절한다. |
 | 세대 교체·watcher stop | Discarded. snapshot·처리 해시·결과 사건·이력을 바꾸지 않는다. |
 | 정책 전체 허용 경고 | 실제 변경된 source/target 정책의 적용 뒤에만 Reload 경고를 쓴다. 거절 후보에는 쓰지 않는다. |
@@ -324,9 +327,9 @@ flowchart LR
 <a id="10-current--설정-v3-실행-값과-공유-트랜잭션"></a>
 ## 10. Current — 설정 v4 실행 값과 공유 트랜잭션
 
-이 절은 [설정 §1.8](../contracts/config-v4.md#18-재로드-구분)의 27개 동적 키와 [ADR-0006](../decisions/ADR-0006-config-edit-through-file.md)의 공유 적용 경계를 설명한다. 기존 링크를 위해 이전 §10 anchor를 보존했다. 구조는 소스로 대조했으며 이번 개정에서 실행 검증은 하지 않았다. 후속: 커밋 `eae442f`의 두 OS 게이트에서 이 절의 시험이 통과했다([작업 6.9 판정표](../how-to/set-up-and-verify.md#42-작업-69-판정표)).
+이 절은 [설정 §1.8](../contracts/config-v4.md#18-재로드-구분)의 43개 동적 키와 [ADR-0006](../decisions/ADR-0006-config-edit-through-file.md)의 공유 적용 경계를 설명한다. 기존 링크를 위해 이전 §10 anchor를 보존했다. 구조는 소스로 대조했으며 이번 개정에서 실행 검증은 하지 않았다. 후속: 커밋 `eae442f`의 두 OS 게이트에서 당시 v3 범위의 시험이 통과했다([작업 6.9 판정표](../how-to/set-up-and-verify.md#42-작업-69-판정표)).
 
-후속: 이 절의 현재 대상은 v4 33개 키다. 바로 위 27개와 `eae442f`의 통과는 v3 당시 기록이다. R1의 실행 검증은 이 문서에서 주장하지 않는다. 후속: 구현은 커밋 `3df0693`이며, 시험은 커밋 `51bd747`의 두 OS 게이트에서 통과했다([WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)).
+현재 대상 43개에는 ticket 10개가 포함된다. `eae442f`의 통과는 v3 당시 기록이다. R1의 구현은 커밋 `3df0693`이며, 그 범위의 시험은 커밋 `51bd747`의 두 OS 게이트에서 통과했다([WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)). ticket 흐름은 [접속 ticket 모듈 설계](relay-access-ticket.md#44-재로드와-편집)를 따른다.
 
 
 ### 10.1 발행 단위와 reader
@@ -338,6 +341,7 @@ flowchart LR
 | 6개 source allow | TCP는 해당 목록, WS·WSS 수락은 켜진 역할 합집합, `check_upgrade`는 선택한 역할 목록을 현재 snapshot에서 검사 | 성립한 연결을 끊지 않는다. |
 | 4개 TLS 경로·내용 | `tls.rs` `TlsSource`와 `tls_listener.rs`의 새 협상 | 기존 TLS 세션 유지 |
 | 4개 allowed_origins | `websocket.rs` `check_upgrade`가 선택한 역할의 Origin·IP·M/Kw를 같은 callback에서 읽음 | 이미 업그레이드한 연결 유지 |
+| ticket 10개 값·공개 키 목록 | `websocket.rs` `check_upgrade`가 Origin·ticket·두 번째 IP를 같은 callback에서 검사 | 기존 연결의 `TicketBinding`·사용 기록 유지 |
 | 2개 trusted_proxies | snapshot 교체와 설정 조회·편집까지 R1에 반영. 수락 우회·전달 주소 판정의 소비는 R2 | R1의 허용 판정에는 사용하지 않음 |
 | mode1.allow_targets·C | `relay/target.rs` `dispatch`에서 시도 시작 때 정책·C 읽기, 같은 정책으로 DNS 이름/IP 전체 판정 | 성립한 세션·시작한 C 유지 |
 | L | `net.rs` 수락과 `relay/target.rs` 대상 자리 확보 때 현재 상한 읽기와 CAS를 같은 callback에서 완료 | 기존 permit 유지 |
@@ -355,8 +359,8 @@ flowchart LR
 
 ### 10.2 후보 비교와 공개 서비스
 
-- `prepare_candidate`는 TLS 검증/생성·동적 차이·경고·snapshot·사건/이력 키를 준비한다. Invalid가 RestartRequired보다 우선한다. 발행·사건·이력 부작용은 없다.
-- `dynamic_changed_keys`는 33개 값/경로 차이를 계산하고 prepare가 TLS 내용 차이를 합친다. presence 차이는 동적/재시작 차이에 넣지 않는다.
+- `prepare_candidate`는 TLS 검증/생성 뒤 ticket 공개 키를 적재한다. 동적 차이·경고·snapshot·사건/이력 키도 준비한다. Invalid가 RestartRequired보다 우선한다. 발행·사건·이력 부작용은 없다.
+- `dynamic_changed_keys`는 43개 값/경로 차이를 계산하고 prepare가 TLS·ticket 공개 키 내용 차이를 합친다. 같은 경로의 공개 키 목록이 바뀌면 `public_keys_file`도 적용 키에 넣는다. presence 차이는 동적/재시작 차이에 넣지 않는다.
 - `restart_required_keys`는 TCP enabled/listen, WS·WSS 부모 listen·역할 enabled, mode enabled, admin, management.config_edit·TLS 존재 여부, dashboard/recent_closed/recent_logs/status/log/reload 등 비대상 차이를 유지한다. 관리 HTTP/HTTPS 전환은 계속 재시작이 필요하다.
 - `classify_file`은 read 실패 또는 FileUnreadable(비UTF-8 포함)을 Unreadable/diagnostics=[]로, 나머지 검증 실패를 Invalid로, 비대상 차이를 RestartRequired로, 동적 차이를 Pending으로, 없으면 InEffect로 분류한다. GET이 이 함수를 호출해도 실행 값·이력은 바뀌지 않는다.
 - `commit_prepared`는 같은 guard 안에서 준비 직후 소비한다. 파일 읽기·TLS 생성·종료 veto·실패 반환이 없다. 적용 키가 비면 발행·사건·이력을 바꾸지 않는다. watcher의 presence-only 표시는 §4의 별도 Unchanged 경로다.

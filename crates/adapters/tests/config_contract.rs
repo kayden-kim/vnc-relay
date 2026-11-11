@@ -9,8 +9,8 @@ use vnc_relay_app::settings::{
     AdminSessionSettings, AdminSettings, Argon2Settings, ConfigWarning, DashboardSettings,
     EntryPointSettings, KeepaliveSettings, LimitSettings, LogOutput, LogSettings,
     LoginLimitSettings, ManagementSettings, Mode1Settings, Mode2Settings, RecentClosedSettings,
-    RecentLogsSettings, RelaySettings, ReloadSettings, Settings, StatusSettings, TimeoutSettings,
-    TlsFiles, WsListenerSettings, WsRoleSettings,
+    RecentLogsSettings, RelaySettings, ReloadSettings, Settings, StatusSettings, TicketSettings,
+    TimeoutSettings, TlsFiles, WsListenerSettings, WsRoleSettings,
 };
 use vnc_relay_domain::allow_list::{AllowList, IpItem};
 use vnc_relay_domain::entry_point::{EntryPoint, Listener};
@@ -141,6 +141,7 @@ listen = "127.0.0.1:18081"
             ),
             ws: WsListenerSettings::default(),
             wss: WsListenerSettings::default(),
+            ticket: TicketSettings::default(),
         },
         mode1: Mode1Settings::default(),
         mode2: Mode2Settings { enabled: true },
@@ -1516,5 +1517,94 @@ fn even_empty_v3_websocket_tables_are_unknown() {
             problem("config_unknown_key", "relay.ws_viewer"),
             problem("config_unknown_key", "relay.wss_viewer"),
         ]
+    );
+}
+
+/// spec: operations.md:OPS-070 partial
+#[test]
+fn ticket_tables_check_defaults_required_keys_types_and_byte_bounds() {
+    let default = parse_ok(REQUIRED).relay.ticket;
+    assert!(!default.viewer.enabled && !default.server.enabled);
+    assert_eq!(default.viewer.max_lifetime, secs(60));
+    assert!(default.viewer.keys.is_empty());
+    for role in ["viewer", "server"] {
+        let table = format!("relay.ticket.{role}");
+        for missing in ["issuer", "relay_host", "public_keys_file"] {
+            let fields: String = [
+                ("issuer", "\"issuer.example\""),
+                ("relay_host", "\"relay.example\""),
+                ("public_keys_file", "\"keys/public.jwks\""),
+            ]
+            .into_iter()
+            .filter(|(key, _)| *key != missing)
+            .map(|(key, value)| format!("{key} = {value}\n"))
+            .collect();
+            assert_eq!(
+                problems(&with_required(&format!(
+                    "[{table}]\nenabled = true\n{fields}"
+                ))),
+                [problem("config_missing_key", &format!("{table}.{missing}"))]
+            );
+        }
+        for (value, valid) in [(9, false), (10, true), (600, true), (601, false)] {
+            let text = with_required(&format!("[{table}]\nmax_lifetime_secs = {value}\n"));
+            if valid {
+                let settings = parse_ok(&text);
+                let ticket = if role == "viewer" {
+                    &settings.relay.ticket.viewer
+                } else {
+                    &settings.relay.ticket.server
+                };
+                assert_eq!(ticket.max_lifetime, secs(value));
+            } else {
+                assert_eq!(
+                    problems(&text),
+                    [problem(
+                        "config_value_out_of_range",
+                        &format!("{table}.max_lifetime_secs")
+                    )]
+                );
+            }
+        }
+        for key in ["issuer", "relay_host"] {
+            for value in ["".to_owned(), "é".repeat(129)] {
+                assert_eq!(
+                    problems(&with_required(&format!("[{table}]\n{key} = \"{value}\"\n"))),
+                    [problem(
+                        "config_value_out_of_range",
+                        &format!("{table}.{key}")
+                    )]
+                );
+            }
+            parse_ok(&with_required(&format!(
+                "[{table}]\n{key} = \"{}\"\n",
+                "é".repeat(128)
+            )));
+        }
+        let invalid = with_required(&format!(
+            "[{table}]\nenabled = 1\nissuer = false\nrelay_host = []\npublic_keys_file = 7\nmax_lifetime_secs = \"60\"\nunknown = true\n"
+        ));
+        assert_eq!(problems(&invalid).len(), 6);
+        assert_eq!(
+            problems(&with_required(&format!(
+                "[{table}]\npublic_keys_file = \"\"\n"
+            ))),
+            [problem(
+                "config_value_out_of_range",
+                &format!("{table}.public_keys_file")
+            )]
+        );
+    }
+    let settings = parse_ok(&with_required(
+        "[relay.ticket.viewer]\nenabled = true\nissuer = \"issuer.example\"\nrelay_host = \"relay.example\"\npublic_keys_file = \"keys/viewer.jwks\"\n",
+    ));
+    assert_eq!(
+        settings.relay.ticket.viewer.public_keys_file,
+        Some(base_dir().join("keys/viewer.jwks"))
+    );
+    assert!(settings.relay.ticket.viewer.keys.is_empty());
+    assert_eq!(
+        problems(&with_required("[relay.ticket]\nunknown = true")),
+        [problem("config_unknown_key", "relay.ticket.unknown")]
     );
 }

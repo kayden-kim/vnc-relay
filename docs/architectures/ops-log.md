@@ -16,8 +16,9 @@
 | 관련 스펙 | [운영 스펙 3.5절](../specs/operations.md#35-운영-정보), OPS-012(일부) |
 | 관련 계약 | [운영 정보 계약](../contracts/ops-info-v2.md) 1.1~1.5·1.9~1.11절, [설정 계약 1.2절](../contracts/config-v4.md#12-키-표)(`log.output`)·[2.1절](../contracts/config-v4.md#21-설정-오류와-준비-실패)(`log_file_unavailable`)·[2.2절](../contracts/config-v4.md#22-경고), [CLI 계약 1.8절](../contracts/cli-v1.md#18-수동-시작과-종료)(시작 순서) |
 | 관련 ADR | 없음 |
+| 관련 문서 | [접속 ticket 모듈 설계](relay-access-ticket.md) |
 
-후속: R1은 [ops-info 2.0.0](../contracts/ops-info-v2.md)의 리스너·역할 표기와 `session_started.server_transport`를 반영한다(사용자 결정 2026-11-08(Q181·Q187·Q188)). `LOG_CONTRACT`는 `ops-info/2.0.0`이다. `listener`는 `tcp_viewer`·`tcp_server`·`ws`·`wss`·`management`·`status` 중 하나다. WS·WSS는 경로 판정 전 role을 생략하고 켜진 경로 판정 뒤 role을 보존한다. TCP 수락은 고정 role을 출력한다. `allow_all_source`는 WS·WSS 역할 목록일 때 role을 더하고 `plaintext_ws_enabled.listener`는 `ws`다.
+후속: R1은 [ops-info 2.0.0](../contracts/ops-info-v2.md)의 리스너·역할 표기와 `session_started.server_transport`를 반영했다(사용자 결정 2026-11-08(Q181·Q187·Q188)). 현재 `LOG_CONTRACT`는 ticket을 더한 `ops-info/2.1.0`이다([접속 ticket 모듈 설계](relay-access-ticket.md)). `listener`는 `tcp_viewer`·`tcp_server`·`ws`·`wss`·`management`·`status` 중 하나다. WS·WSS는 경로 판정 전 role을 생략하고 켜진 경로 판정 뒤 role을 보존한다. TCP 수락은 고정 role을 출력한다. `allow_all_source`는 WS·WSS 역할 목록일 때 role을 더하고 `plaintext_ws_enabled.listener`는 `ws`다.
 
 후속: R2는 [운영 정보 계약 v2](../contracts/ops-info-v2.md)의 `forwarded_ip`, `viewer_forwarded_ip`, `server_forwarded_ip`, `connection_rejected.reason = forwarded_for_invalid`, 그리고 `trust_all_proxies` 경고(사용자 결정 2026-11-08(Q191))를 반영한다. 신뢰 프록시의 전달 주소를 도출한 뒤의 사건에 `forwarded_ip`가 기록되며, 소켓 상대 IP인 `peer_ip`는 변경하지 않는다. 전체 범위를 포괄하는 `trusted_proxies` 항목은 시작·재로드 시 `trust_all_proxies` 경고(`listener`, `item`, `phase`)로 기록된다. 최근 로그 보관·API는 R3 범위다. 이전 실행 기록은 R2의 증거가 아니며 이번 문서 작업에서는 빌드·시험·포매터를 실행하지 않았다. 후속: 구현은 커밋 `3df0693`이며, 시험은 커밋 `51bd747`의 두 OS 게이트에서 통과했다([WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)).
 
@@ -97,16 +98,21 @@ flowchart LR
 
 | 이름 | 필드·형태 | 줄의 필드 | 제약과 항상 지켜야 할 조건 |
 | --- | --- | --- | --- |
-| `Event::ServerStarting` | 없음 | `log_contract`(`LOG_CONTRACT` = `ops-info/2.0.0`) | 시작 단계의 첫 사건이다. |
+| `Event::ServerStarting` | 없음 | `log_contract`(`LOG_CONTRACT` = `ops-info/2.1.0`) | 시작 단계의 첫 사건이다. |
 | `Event::ConfigWarning` | `warning: ConfigWarning`, `phase: Phase` | 사건 이름은 경고 코드. `plaintext_ws_enabled`: `listener=ws`, `listen`. `allow_all_source`: `listener`, WS·WSS 목록의 `role`, `item`, `phase`. `trust_all_proxies`: `listener`, `item`, `phase`. 나머지는 기존 필드. | `item`은 항목의 표준 표기다. `trust_all_proxies`는 신뢰 프록시 목록에 전체 체계 항목이 있을 때 기록한다. |
+| `Event::ConfigWarning`의 ticket 경고 | `TicketTcpBypass { role }`, `TicketPlaintextWs { role }`, `phase` | `ticket_tcp_bypass`: 해당 TCP `listener`, `role`, `phase`. `ticket_plaintext_ws`: `listener=ws`, `role`, `phase` | ticket을 켠 역할의 TCP·평문 WS가 켜졌을 때 쓴다. 재로드는 해당 ticket `enabled` 키가 실제 바뀐 경우에만 다시 쓴다. |
 | `Event::StartupFailed` | `reason: &'static str`, `config_key: Option<String>`, `listener: Option<&'static str>`, `detail: Option<String>` | 같은 이름 | 진단 하나에 한 줄이다(계약 1.6절). `detail`에 설정 값·경로·파일 내용을 넣지 않는다(6절). |
 | `Event::ServerStopped` | 없음 | 없음 | 마지막 줄이다. |
 | `Event::ShutdownStarted`, `ShutdownTrigger` | `Requested` 또는 `FatalError { detail }`, G, 활성 수 | `trigger`, `grace_secs`, `active_sessions`, 장애 때만 `detail` | 정상은 `info`, 장애는 `error`다. `RelayService`가 최초 종료 원인을 기록하고 재요청은 새 시작 사건을 만들지 않는다. 사용자 결정 2026-11-05(Q114). |
 | `Event::HandshakeRejected` | `conn_id: ConnId`, `entry_point: EntryPoint`, `peer_ip: PeerIp`, `reason: RejectReason`, `mode: Option<Mode>` | 사건 이름 `connection_rejected`. `conn_id`, `listener`, `stage`, `reason`, `peer_ip`, 선택 `mode` | `stage`는 항상 `initial_exchange`다. 사유는 `handshake_invalid`·`mode_disabled`다. 후자는 호출자가 `Some(Mode)`를 준다. `level`은 `warn`이다. domain의 `handshake::Mode`를 쓴다. 초기 요청·ID 원문은 보관하지 않는다. 사건·JSON·계약 시험을 구현했다. 실제 연결에서는 `relay.rs`의 `handle_connection` 실패 경로가 기록한다. [초기 교환 설계 6절](initial-exchange.md#6-사건오류자원-회수) |
-| `Event::ReloadApplied` | `trigger: ReloadTrigger`, `applied: Vec<String>` | `trigger`, `applied` | 파일 감지는 `file_watch`, 편집 commit은 `config_edit`다. 실제 바뀐 실행값/TLS 키만 담고 값은 넣지 않는다. |
+| `Event::TicketAccepted` | `conn_id`, `listener`, `role`, `peer_ip`, 선택 `forwarded_ip`, `ticket_jti`, 선택 `ticket_sub`·`session_expires_at` | `ticket_accepted`, `info`, 위 필드 | 사용 기록을 쓴 뒤, U 재확인·101 전송 전에 쓴다. `sx`를 네 자리 연도 UTC로 표시할 수 없으면 `session_expires_at`만 생략한다. |
+| `Event::TicketRelayMismatch` | 연결 정보, `mode`, 선택 `relay_id_ref`, `ticket_jti` | `connection_rejected`, `warn`, `stage=initial_exchange`, `reason=ticket_relay_mismatch` | 기존 초기 요청 검사 뒤 `dispatch`가 쓴다. Mode II만 `relay_id_ref`가 있다. |
+| 기존 중단·대기 제거·세션 종료 사건의 만료 원인 | `AbortReason::SessionExpired`, `WaitingRemovalReason::SessionExpired`, `CloseCause::SessionExpired` | 초기 교환 `connection_aborted(reason=session_expired)`, 대기 `waiting_removed(reason=session_expired)`, 활성 정리 `session_closed(close_cause=session_expired)` | 모두 `info`다. 활성 세션은 `side`가 없다. E가 지나도 `session_expired`를 유지한다. |
+| `Event::UpgradeRejected`의 ticket 거절 | `RejectReason::Ticket`, 선택 `ticket_jti` | `connection_rejected`, `warn`, `stage=upgrade`, ticket 오류 사유 | `ticket_jti`는 서명 확인 뒤 문법이 유효한 값일 때만 넣는다. ticket 원문은 기록하지 않는다. |
+| `Event::ReloadApplied` | `trigger: ReloadTrigger`, `applied: Vec<String>` | `trigger`, `applied` | 파일 감지는 `file_watch`, 편집 commit은 `config_edit`다. 실제 바뀐 실행값/TLS/ticket 공개 키 항목만 담고 값은 넣지 않는다. 같은 경로의 공개 키 목록이 바뀌면 `public_keys_file`을 넣는다. |
 | `Event::ConfigEdited` | `admin_account: AccountName`, `peer_ip: PeerIp`, `config_keys`, `revision` | 같은 이름 | info. 요청 changes 중 파일값이 달라진 키와 새 바이트 revision이다. 이미 pending이던 실행값 차이는 `ReloadApplied.applied`에만 추가된다. |
 | `Event::ConfigEditRejected` | `admin_account: AccountName`, `peer_ip: PeerIp`, `reason: String`, `config_keys: Option<Vec<String>>` | 같은 이름, 없는 config_keys는 생략 | warn. reason은 여섯 편집 업무 오류의 API code다. 설정값·후보·revision은 없다. 인증·CSRF·invalid_request·internal에는 만들지 않는다. |
-| `Level` | `Info`, `Warn`, `Error` | `level` | 2.0.0에 다른 값이 없다. |
+| `Level` | `Info`, `Warn`, `Error` | `level` | 2.1.0에 다른 값이 없다. |
 | `RelayIdRef` | 소문자 16진수 16자 `String` | `relay_id_ref` | HMAC 결과 앞 8바이트로만 만든다. 원문 중계 ID로 만드는 생성자가 없다. |
 | `PeerIp` | `IpAddr` | `peer_ip` | IPv4-mapped가 아니다. 포트·영역 식별자가 없다. |
 
@@ -121,8 +127,11 @@ flowchart LR
 | 3 | `EventSink::record` | `server_starting`, 이어서 `Settings::warnings`의 경고마다 경고 사건(`phase` = `startup`) | 없음 | 로그 출력 |
 | 4 | `accounts_file::load`, `accounts::require_any` | 진단마다 stderr에 `error[...]`, 로그에 `startup_failed`(`reason`, `config_key` = `admin.accounts_file`)를 쓰고 5로 끝난다. `detail`은 없다. 진단 문장도 해시를 담지 않는다. | 없음 | stderr, 로그 출력 |
 | 5 | `serve.rs` 런타임·신호 처리기 준비 | 실패하면 `startup_failed`(`runtime_unavailable`, `detail` = 운영체제 오류 문장)를 쓰고 1로 끝난다. | 없음 | 로그 출력 |
+| 5-1 | `serve.rs` TLS 검사 → `reload::ticket_keys::load` | TLS 파일 뒤 ticket을 켠 역할의 공개 키 파일을 검사한다. 키 진단마다 `startup_failed(reason=ticket_keys_invalid, config_key)`와 stderr 오류 줄을 쓴다. TLS 오류와 함께 모아 바인드 전 종료 코드 3으로 끝낸다. | 오류면 없음 | 로그 출력 |
 | 6 | `net::bind` | 실패마다 `startup_failed`(`listener_bind_failed`, `listener`, `config_key`, `detail` = 주소를 뺀 원인)를 쓰고 4로 끝난다. | 바인드한 리스너 | 로그 출력 |
 | 7 | `ShutdownSignal::wait` | 첫 종료 요청을 받으면 리스너를 닫고 `server_stopped`를 쓴 뒤 0으로 끝난다. | 없음 | 로그 출력 |
+
+ticket 사건의 생성 위치·순서·필드는 [접속 ticket 모듈 설계](relay-access-ticket.md#42-업그레이드대표-시나리오-ws-038)를 따른다. 공개 키 파일 내용과 ticket 원문은 로그·오류 문장에 넣지 않는다.
 
 `format_line`은 `Event::name()`·`level()`과 사건 필드로 `LogEntry`의 순서 있는 필드 목록을 만든다. 정적 키와 `serde_json::Value`를 `fmt::Write`로 직접 직렬화해 `{...}\n`을 만든다. serde_json이 문자열 안의 줄바꿈과 제어 문자를 이스케이프하므로 줄은 LF 하나로 끝난다.
 
@@ -158,6 +167,7 @@ flowchart LR
 | `reason` | `detail` |
 | --- | --- |
 | `config_*`, `accounts_*` | 없음. 진단 문장에 설정 값이나 계정 이름이 들어갈 수 있다. |
+| `ticket_keys_invalid` | 키 파일 내용·경로·ticket 원문을 넣지 않는다. 진단은 고정된 짧은 원인만 쓴다. |
 | `log_file_unavailable` | 원인 문장(예: "상위 디렉터리가 없다."). 경로는 넣지 않는다. |
 | `listener_bind_failed` | 원인 문장(예: "이미 사용 중이다."). 주소는 넣지 않는다. |
 | `runtime_unavailable` | 운영체제 오류 문장 |

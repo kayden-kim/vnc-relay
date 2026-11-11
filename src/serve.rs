@@ -6,9 +6,9 @@ use std::fmt::Display;
 use std::io;
 use std::path::Path;
 use std::process::ExitCode;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::task::Poll;
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 
 use tokio::sync::watch;
 use tokio::task::JoinSet;
@@ -45,6 +45,7 @@ use vnc_relay_domain::budget::ConnectionBudget;
 use vnc_relay_domain::entry_point::{EntryPoint, Listener};
 use vnc_relay_domain::handshake::HandshakePolicy;
 use vnc_relay_domain::login_limit::LoginLimitPolicy;
+use vnc_relay_domain::ticket::TicketUseTable;
 
 use crate::cli::{self, EXIT_ACCOUNTS, EXIT_CONFIG, EXIT_LISTENER, EXIT_RUNTIME};
 
@@ -55,6 +56,8 @@ const LOG_OUTPUT_KEY: &str = "log.output";
 /// writes all its diagnostics to stderr, one `startup_failed` line per
 /// diagnostic to the operation log, and returns its exit code.
 pub fn run(config: &Path) -> ExitCode {
+    // Process start time of the ticket check (websocket-relay-v2 §1.9.3 step 11).
+    let started_at = SystemTime::now();
     // Stage 1: config, then the log output. Until the log is open, events
     // go to stdout (ops-info-v1 §1.1).
     let running = match config_file::load_candidate(config) {
@@ -173,6 +176,7 @@ pub fn run(config: &Path) -> ExitCode {
         auth,
         config,
         clock,
+        started_at,
     ))
 }
 
@@ -183,7 +187,9 @@ async fn listen_until_shutdown(
     auth: Arc<AdminAuth>,
     config: &Path,
     clock: Arc<dyn Clock>,
+    started_at: SystemTime,
 ) -> ExitCode {
+    let mut running = running.clone();
     let settings = &running.settings;
     let log: Arc<dyn EventSink> = output.clone();
     let mut shutdown = match ShutdownSignal::register() {
@@ -205,20 +211,45 @@ async fn listen_until_shutdown(
     // acceptor goes into the reload snapshot below.
     let mut management_tls = None;
     let mut wss_tls = None;
-    let mut tls_failed = false;
+    let mut files_failed = false;
     for check in tls_checks(settings) {
         match tls::load_acceptor(&check.files.cert_file, &check.files.key_file) {
             Ok(acceptor) if check.listener == "management" => management_tls = Some(acceptor),
             Ok(acceptor) => wss_tls = Some(acceptor),
             Err(error) => {
-                tls_failed = true;
+                files_failed = true;
                 tls_failure(log.as_ref(), &check, &error);
             }
         }
     }
-    if tls_failed {
+    // Ticket public key files of enabled roles are checked at the same point
+    // (config-v4 §1.11): any failure exits 3 before binding.
+    if let Err(diagnostics) = vnc_relay_app::reload::ticket_keys::load(
+        &mut running.settings,
+        &FsReloadFileStore,
+        &vnc_relay_adapters::ticket::TicketJwksStore,
+    ) {
+        files_failed = true;
+        for diagnostic in diagnostics {
+            cli::report(
+                "error",
+                diagnostic.error.code(),
+                &diagnostic.key,
+                &diagnostic.message,
+            );
+            record_failure(
+                log.as_ref(),
+                diagnostic.error.code(),
+                Some(diagnostic.key),
+                None,
+                None,
+            );
+        }
+    }
+    if files_failed {
         return ExitCode::from(EXIT_CONFIG);
     }
+    let settings = &running.settings;
 
     // Reload state (file-watch.md §5): the running values are the snapshot of
     // this start. A failed watch start exits 1 before any listener is bound.
@@ -234,6 +265,7 @@ async fn listen_until_shutdown(
         Arc::clone(&cell),
         Arc::new(FsReloadFileStore),
         Arc::new(tls::RustlsTlsStore),
+        Arc::new(vnc_relay_adapters::ticket::TicketJwksStore),
         Arc::clone(&log),
     )));
     let config_service = match config_management(
@@ -322,6 +354,8 @@ async fn listen_until_shutdown(
     // The TCP and WebSocket entry points accept from here on. Every relay entry
     // point takes places from one L.
     let relay_budget = ConnectionBudget::new();
+    // One ticket use table for WS and WSS (websocket-relay-v2 §1.9.4).
+    let ticket_uses = Arc::new(Mutex::new(TicketUseTable::new()));
     let waiting_budget = ConnectionBudget::new();
     let connector = TcpTargetConnector::new(
         Arc::clone(&cell) as Arc<dyn vnc_relay_app::reload::ports::RuntimeSettingsSource>
@@ -438,6 +472,8 @@ async fn listen_until_shutdown(
                         },
                         relay_budget: Arc::clone(&relay_budget),
                     },
+                    ticket_uses: Arc::clone(&ticket_uses),
+                    started_at,
                 };
                 let entry = WsEntryPoint::new(
                     listener,

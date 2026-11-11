@@ -818,9 +818,10 @@ pub fn settings_screens_preserve_input_and_accessibility_in_both_languages_and_w
                 }),
                 "{text}"
             );
+            // A field without help or errors has nothing to describe; rendered help must be linked.
             assert_js(
                 &mut browser,
-                "Array.from(document.querySelectorAll('.config-input')).every(e=>document.querySelector('label[for=\"'+e.id+'\"]') && e.getAttribute('aria-describedby').split(' ').every(id=>document.getElementById(id)))",
+                "Array.from(document.querySelectorAll('.config-input')).every(e=>{const ids=(e.getAttribute('aria-describedby')||'').split(' ').filter(Boolean);return !!document.querySelector('label[for=\"'+e.id+'\"]') && ids.every(id=>document.getElementById(id)) && Array.from(e.closest('.config-field').querySelectorAll('.config-help[id]')).every(help=>ids.includes(help.id))})",
             );
             assert_js(
                 &mut browser,

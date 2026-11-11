@@ -235,7 +235,7 @@ ticket을 켠 역할의 값 개수와 `binary` 유무 판정은 1.2절을 따른
 | `sx` | 선택 | 0 이상 정수(Unix 초). 세션 만료 시각 | 업그레이드 때 현재 시각(오차 없음), 101 뒤 종료 시각 |
 | `sub` | 선택 | 1~128바이트 문자열. 발급 쪽의 세션 식별자 | 대조하지 않는다. 운영 로그 `ticket_sub`에 남긴다. |
 
-알 수 없는 클레임은 무시한다. 숫자 클레임에 소수·문자열을 쓰면 거절한다. 최대 수명은 역할의 `max_lifetime_secs`로 정한다(기본 60, 범위 10~600, 사용자 결정 2026-11-11(Q212·Q213)).
+알 수 없는 클레임은 무시한다. 숫자 클레임에 소수·문자열을 쓰면 거절한다. 숫자 클레임은 소수점과 지수가 없는 0~18446744073709551615(2^64 − 1)의 정수 표기만 받는다. 지수 표기(`1e3`)와 이보다 큰 값도 6단계에서 `ticket_invalid`로 거절한다(이 문서의 판단, 사용자 결정 없음). 최대 수명은 역할의 `max_lifetime_secs`로 정한다(기본 60, 범위 10~600, 사용자 결정 2026-11-11(Q212·Q213)).
 
 #### 1.9.3 확인 순서와 거절
 
@@ -261,7 +261,7 @@ ticket을 켠 역할의 값 개수와 `binary` 유무 판정은 1.2절을 따른
 
 사용 기록의 키는 (역할, `jti`)다. 기록은 프로세스 메모리에만 둔다([ADR-0003](../decisions/ADR-0003-single-instance-memory-state.md)).
 
-1.1절 9단계에서 기록을 쓴다. 이미 있으면 HTTP 401 `ticket_reused`로 거절한다. `WWW-Authenticate: VncRelayTicket`과 `connection_rejected(stage=upgrade, reason=ticket_reused)`를 남긴다. 서명을 확인했으므로 `ticket_jti`도 기록한다. 성공하면 101 전에 `ticket_accepted`(`info`)를 기록한다. 필드는 `conn_id`, `listener`(`ws`·`wss`), `role`, `peer_ip`, `forwarded_ip`(있으면), `ticket_jti`, `ticket_sub`(있으면), `session_expires_at`(있으면)이다. `session_expires_at`은 `sx`를 UTC ISO 8601 문자열로 나타낸 값이다([운영 정보 계약](ops-info-v2.md), 사용자 결정 2026-11-11(Q213)).
+1.1절 9단계에서 기록을 쓴다. 이미 있으면 HTTP 401 `ticket_reused`로 거절한다. `WWW-Authenticate: VncRelayTicket`과 `connection_rejected(stage=upgrade, reason=ticket_reused)`를 남긴다. 서명을 확인했으므로 `ticket_jti`도 기록한다. 성공하면 101 전에 `ticket_accepted`(`info`)를 기록한다. 필드는 `conn_id`, `listener`(`ws`·`wss`), `role`, `peer_ip`, `forwarded_ip`(있으면), `ticket_jti`, `ticket_sub`(있으면), `session_expires_at`(있으면)이다. `session_expires_at`은 `sx`를 UTC ISO 8601 문자열로 나타낸 값이다([운영 정보 계약](ops-info-v2.md), 사용자 결정 2026-11-11(Q213)). `sx`가 9999-12-31T23:59:59Z보다 늦으면 그 형식으로 나타낼 수 없으므로 `session_expires_at`만 생략한다. ticket 확인과 1.9.5절의 만료 시각은 바뀌지 않는다(이 문서의 판단, 사용자 결정 없음).
 
 같은 (역할, `jti`)로 동시에 온 요청도 하나만 기록을 쓴다. 기록이 있는지 확인하는 일과 기록을 쓰는 일 사이에 다른 요청이 끼어들 수 없어야 한다. 기록을 쓰지 못한 요청은 위와 같이 HTTP 401 `ticket_reused`로 거절한다(이 문서의 판단, 사용자 결정 없음).
 

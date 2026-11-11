@@ -5,7 +5,7 @@
 
 `serve`는 시작 파일의 Settings·presence와 검사한 TLS로 `ReloadCell`을 만들고, `SharedReload` 하나를 watcher와 `ConfigEditService`에 주입한다. 같은 cell의 `RuntimeSettingsSource`는 중계·대상·수락·관리·상태 reader에 전달한다. status에는 U를 넣지 않는다. 종료 시작 때 현재 G를 한 번 읽어 deadline을 고정하고 watcher 적용을 멈춘다. 유예 중 관리 GET/PATCH는 유지한다([파일 감지 §10](file-watch.md#10-target--설정-v3-실행-값과-공유-트랜잭션), [설정 보기·편집 §2](config-edit.md#2-내부-구조와-초기화)).
 
-이 문서는 실행파일의 CLI·진단·종료 코드와 `serve` 조립 순서를 다룬다. `serve`는 설정·계정·TLS·감시를 준비한 뒤 필요한 리스너를 바인드한다. 단계가 실패하면 진단을 모아 stderr와 `startup_failed`로 보고하고 확보한 자원을 회수한다. 구체 종료 코드는 [CLI 계약 2.1절](../contracts/cli-v1.md#21-종료-코드)을 따른다. 수락·TLS·재로드·설정 편집의 업무 규칙은 각 모듈이 맡고 `serve`는 객체와 수명을 연결한다.
+이 문서는 실행파일의 CLI·진단·종료 코드와 `serve` 조립 순서를 다룬다. `serve`는 설정·계정·TLS·ticket 공개 키·감시를 준비한 뒤 필요한 리스너를 바인드한다. 단계가 실패하면 진단을 모아 stderr와 `startup_failed`로 보고하고 확보한 자원을 회수한다. 구체 종료 코드는 [CLI 계약 2.1절](../contracts/cli-v1.md#21-종료-코드)을 따른다. 수락·TLS·ticket·재로드·설정 편집의 업무 규칙은 각 모듈이 맡고 `serve`는 객체와 수명을 연결한다.
 
 | 항목 | 값 |
 | --- | --- |
@@ -17,6 +17,7 @@
 | 관련 스펙 | [운영 스펙 3.1절](../specs/operations.md#31-설정-검증과-시작), OPS-001, OPS-002(일부), OPS-039(일부) |
 | 관련 계약 | [CLI 계약](../contracts/cli-v1.md) 1.1·1.3·1.4·1.5·1.8·2절, [설정 계약 2.1절](../contracts/config-v4.md#21-설정-오류와-준비-실패), [운영 정보 계약](../contracts/ops-info-v2.md) 1.5·1.6절(시작·종료 사건)·[1.12절](../contracts/ops-info-v2.md#112-상태-리스너와-엔드포인트)(상태 리스너를 먼저 연다) |
 | 관련 ADR | [ADR-0003 단일 인스턴스·메모리 상태](../decisions/ADR-0003-single-instance-memory-state.md), [ADR-0006 설정 파일을 통한 편집](../decisions/ADR-0006-config-edit-through-file.md) |
+| 관련 문서 | [접속 ticket 모듈 설계](relay-access-ticket.md) |
 
 후속: R1은 중계 리스너 네 개(`tcp_viewer`·`tcp_server`·`ws`·`wss`)와 진입점 여섯 개를 구분한다. `Settings::other_listeners`는 WS·WSS의 역할이 하나라도 켜져 있으면 공유 소켓을 한 번만 계획한다. WS·WSS의 부모 `listen`과 WSS 부모 TLS를 사용한다. `WsEntryPoint::new`에는 `Listener`, `TcpEntryPoint::new`에는 역할이 고정된 `EntryPoint`를 넘긴다. 같은 WSS 수락기를 두 역할이 공유한다.
 
@@ -29,11 +30,12 @@
   - 명령행 해석: `serve --config <path>`(`--config=<path>` 포함, 한 번만), `--help`·`-h`, `--version`·`-V`. 그 밖의 하위 명령·옵션은 `usage_error`(종료 코드 2)다. `admin` 하위 명령의 해석은 `cli::parse`가 하고, 실행은 [관리자 계정 준비 CLI 모듈 설계](admin-accounts.md)가 맡는다.
   - 진단 출력: `error[<code>] key=<key>: <message>`, `warning[<code>] key=<key>: <message>`. 키가 없으면 ` key=`를 뺀다(1.5절).
   - 종료 코드 매핑: 사용법 2, 설정 3, 리스너 4, 계정 파일 5, 런타임 준비 1, 정상 종료 0.
-  - `serve` 시작 순서: 설정·presence 읽기와 로그 열기 → 계정 검증·인증 서비스 → 런타임·종료 신호 → 시작 키 → TLS 검사 → snapshot·공유 재로드·설정 서비스·감시 등록 → 리스너 바인드. 같은 단계의 오류는 모은다.
+  - `serve` 시작 순서: 설정·presence 읽기와 로그 열기 → 계정 검증·인증 서비스 → 런타임·종료 신호 → 시작 키 → TLS 검사 → ticket 공개 키 검사 → snapshot·공유 재로드·설정 서비스·감시 등록 → 리스너 바인드. TLS·ticket 공개 키 오류는 함께 모은다([접속 ticket 모듈 설계](relay-access-ticket.md#41-시작)).
   - 단계마다 운영 로그 사건을 기록한다: `server_starting`, 설정 경고(`phase` = `startup`), 진단마다 `startup_failed`, 정상 종료 때 `server_stopped`. 필드 규칙은 [운영 로그 모듈 설계 4·6절](ops-log.md#4-처리-순서)이다.
   - 계정 파일 읽기와 형식·해시 문자열 검사(1.3·1.4절), 계정이 없을 때의 시작 거절, Ubuntu의 권한 경고(1.6절).
   - 리스너 바인드 실패 수집과 실패 때 이미 바인드한 리스너 닫기.
   - 인증서·개인키 파일 검사(`tls_file_invalid`, 종료 코드 3). 활성화된 WSS 진입점과 관리 리스너의 인증서·개인키 파일을 어떤 리스너도 바인드하기 전에 검사하고, 오류는 모두 모은다([CLI 계약 1.8절](../contracts/cli-v1.md#18-수동-시작과-종료), [설정 계약 2.1절](../contracts/config-v4.md#21-설정-오류와-준비-실패)).
+  - ticket을 켠 역할의 공개 키 파일을 TLS 파일 뒤에 검사한다. `ticket_keys_invalid` 진단마다 오류 줄과 `startup_failed`를 쓴다. TLS 오류와 함께 종료 코드 3으로 끝낸다. 어떤 리스너도 바인드하지 않는다.
   - 종료 요청을 받으면 준비 상태·중계 lifecycle을 바꾸고 watcher와 TCP·WS·WSS 수락을 멈춘다. 관리·상태 작업은 중계 소유자 정리 뒤 종료한다.
   - 종료 시작 snapshot의 G를 한 번 읽어 유예를 고정한다. `finish_relay_shutdown`은 소유자가 끝날 때까지 G 감독을 유지한다. 유예 중 GET/PATCH와 G 편집은 이미 시작한 종료를 되돌리거나 연장하지 않는다.
   - 필수 리스너의 복구 불가능 수락 오류 감독. `SupervisedListener`의 최초 장애 채널과 OS 종료 요청을 `wait_for_shutdown`에서 함께 기다린다. 같은 turn에 둘 다 준비됐으면 요청을 우선한다. `begin_process_shutdown`이 준비 상태·중계 종료를 함께 시작한다. 장애가 먼저이면 `listener_failed`, `request_fatal_shutdown`, 종료 코드 1이다. G와 소유자 정리는 그대로다. 사용자 결정 2026-11-05(Q114).
@@ -127,10 +129,12 @@ flowchart LR
 | 1 | `src/main.rs` `main`, `src/cli.rs` `parse` | 인수를 해석한다. 오류면 `error[usage_error]`와 사용법을 stderr에 쓰고 2로 끝난다. | `Command::Serve { config }` | 2단계 |
 | 2 | `src/serve.rs` `run`, `config_file::load_candidate`, `JsonLinesEventSink::open` | 같은 바이트에서 Settings와 presence를 얻는다. 설정 진단은 모두 출력하고 3으로 끝난다. 로그를 열지 못해도 3이다. 성공하면 server_starting·시작 경고를 쓴다. | ConfigCandidate·로그 출력 | 3단계 |
 | 3 | `accounts_file::load`, `accounts::require_any` | `settings.admin.accounts_file`을 읽고 검증한다. 경고는 stderr에 쓴다. 진단이 있거나 계정이 없으면 모두 쓰고, 진단마다 `startup_failed`를 기록하고, 5로 끝난다. | `LoadedAccounts` | 4단계 |
-| 4 | `src/serve.rs` `run`, `ShutdownSignal::register`, `generate_startup_keys`, `tls_checks` | 인증 서비스·tokio 런타임·신호·시작 키를 준비한다. 런타임 준비 실패는 1이다. 켜진 WSS·관리 TLS를 모두 검사한다. 오류가 있으면 파일별 진단과 startup_failed를 남기고 3으로 끝난다. | 인증·런타임·신호·키·검사 통과 acceptor | 5단계 |
-| 5 | `listen_until_shutdown`, `config_management`, `file_watch::start` | 후보·TLS로 ReloadCell을 만든다. ReloadService를 Arc/Mutex로 감싸 설정 서비스와 watcher에 공유한다. 감시 등록 후 기준 해시를 읽고 watcher를 spawn한다. 감시 시작 실패는 바인드 전 watch_unavailable·1이다. | cell·SharedReload·ConfigManagement·감시 작업 | 6단계 |
+| 4 | `src/serve.rs` `run`, `ShutdownSignal::register`, `generate_startup_keys`, `tls_checks`, `reload::ticket_keys::load` | 인증 서비스·tokio 런타임·신호·시작 키를 준비한다. 런타임 준비 실패는 1이다. 켜진 WSS·관리 TLS를 모두 검사한 뒤 ticket을 켠 역할의 공개 키 파일을 검사한다. 오류가 있으면 파일별 진단과 `startup_failed`를 남기고 3으로 끝난다. | 인증·런타임·신호·시작 키·검사 통과 acceptor·공개 키를 채운 후보 | 5단계 |
+| 5 | `listen_until_shutdown`, `config_management`, `file_watch::start` | 공개 키를 채운 후보·TLS로 ReloadCell을 만든다. ReloadService에 `TicketJwksStore`를 주입한다. Arc/Mutex로 감싸 설정 서비스와 watcher에 공유한다. 켠 역할의 공개 키 파일도 감시한다. 감시 등록 후 기준 해시를 읽고 watcher를 spawn한다. 감시 시작 실패는 바인드 전 `watch_unavailable`·1이다. | cell·SharedReload·ConfigManagement·감시 작업 | 6단계 |
 | 6 | `Settings::status_listener`, `net::bind_one`, `Settings::management_listener`, `Settings::other_listeners`, `net::bind` | 상태→관리→나머지 순으로 바인드한다. 상태 작업은 바인드 직후 시작한다. 상태와 관리는 같은 count-only Lm과 현재 값 source를 쓴다. 실패는 모두 모아 성공 리스너·상태·감시를 회수하고 listener_bind_failed·4로 끝난다. | 바인드한 리스너·상태 작업 | 7단계 |
 | 7 | `listen_until_shutdown`, `ManagementListener::new`, `TcpEntryPoint::run`, `WsEntryPoint::run` | ready 사건 뒤 count-only L/Lw, source를 가진 TcpTargetConnector·RelayRuntime·RelayService를 만든다. 관리 query/terminate/config와 DashboardHints를 주입하고 관리·중계·G 감독 작업을 실행한다. | 준비 상태·공유 runtime·작업 소유자 | 종료 감독 |
+
+`run` 시작 시 기동 벽시계를 잰다. `serve`는 `TicketUseTable` 하나를 만들고 WS·WSS의 `WsPolicy.ticket_uses`에 같은 `Arc<Mutex<_>>`를 넣는다. `WsPolicy.started_at`에는 기동 시각을 넣는다. 사용 기록은 재로드로 지우지 않는다. 시작의 `ticket_tcp_bypass`·`ticket_plaintext_ws` 경고는 `phase=startup`으로 쓴다([접속 ticket 모듈 설계](relay-access-ticket.md#41-시작)).
 
 ### 4.1 종료 요청 뒤 소유자 정리
 
@@ -164,6 +168,7 @@ Force는 종료 교환 완료를 기다리는 새 유예가 아니다. 세션은
 | `accounts::require_any` | `accounts_none`, 종료 코드 5 | 없음 | OPS-001 |
 | 런타임·신호 처리기·시작 키 생성 | `runtime_unavailable`, 종료 코드 1 | 없음 | 없음 |
 | `tls::load_acceptor`(검사마다) | `tls_file_invalid`, 실패한 파일마다 stderr 한 줄과 `startup_failed`. 모든 검사를 마친 뒤 종료 코드 3. 리스너는 바인드하지 않는다. | 없음 | OPS-002 |
+| `reload::ticket_keys::load` | `ticket_keys_invalid`, 진단마다 stderr 한 줄과 `startup_failed`. TLS 오류와 함께 모아 종료 코드 3. 리스너는 바인드하지 않는다. | 없음 | OPS-070 |
 | `config_management` 경로 준비·`file_watch::start` | 각각 runtime_unavailable 또는 watch_unavailable, 종료 코드 1. 리스너 바인드 전 종료 | 없음 | OPS-028(감시) |
 | `net::bind_one`, `net::bind` | 실패마다 `listener_bind_failed`, 성공한 리스너를 닫고 상태 리스너 작업을 멈춘 뒤 종료 코드 4 | 없음 | OPS-002, OPS-039 |
 | 실행 중 필수 리스너의 복구 불가능 수락 오류 | `listener_failed` 진단, `shutdown_started(fatal_error,error)`, 기존 G·정리 뒤 종료 코드 1. 시작 실패 사건은 없다. | 장애 준비 상태 유지 | OPS-046 |

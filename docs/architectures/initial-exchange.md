@@ -16,6 +16,7 @@
 | 관련 스펙 | [중계 스펙 2~4절·7절](../specs/relay.md#2-상태와-경계): RLY-001~005, RLY-022. [운영 스펙 2절·OPS-006](../specs/operations.md#2-상태와-검증-매개변수): TCP H 부분 |
 | 관련 계약 | [Repeater 초기 교환 1~3절](../contracts/repeater-handshake-v1.md#1-형식과-의미), [운영 정보 1.5~1.7절](../contracts/ops-info-v2.md#15-사건-목록), [설정 1.2~1.5절](../contracts/config-v4.md#12-키-표), [WebSocket 1.4~1.5절](../contracts/websocket-relay-v2.md#14-데이터-메시지와-제어-프레임) |
 | 관련 ADR | [ADR-0002 출발지 IP 허용 목록](../decisions/ADR-0002-source-ip-allowlist.md), [ADR-0003 단일 인스턴스·메모리 상태](../decisions/ADR-0003-single-instance-memory-state.md), [ADR-0004 tokio·rustls](../decisions/ADR-0004-tokio-rustls.md) |
+| 관련 문서 | [접속 ticket 모듈 설계](relay-access-ticket.md) |
 
 후속: R1의 domain 파서는 여섯 `EntryPoint`의 `role()`만 사용한다. TCP는 리스너, WS·WSS는 101 전 경로 검사에서 역할을 정한다. `/relay/server`는 Server로서 시작 바이트 없이 `ID:` 요청만 보낸다. WS·WSS Server의 Mode I 요청도 TCP Server와 같이 `handshake_invalid`다. 요청 250바이트의 형식·H·B 인계는 바뀌지 않는다(사용자 결정 2026-11-08(Q181·Q188), [Repeater 계약](../contracts/repeater-handshake-v1.md)).
 
@@ -123,11 +124,13 @@ tokio 금지 항목에는 `allow-invalid = true`를 둔다. 플랫폼 전용 경
 | --- | --- | --- |
 | 1 | `src/serve.rs`가 `RelayService`를 조립한다. | 시작 모드, 실행 설정 소스, 공유 `EventSink`·`Clock` |
 | 2 | `net.rs`의 `accept_connections`가 IP → L → `conn_id` → `connection_accepted` → K 순서를 유지한다. | 수락 B/H/U/K, 소켓과 기존 `BudgetPermit` 하나 |
-| 3 | TCP·WS·WSS 연결 작업이 `ConnectionContext`와 스트림을 `handle_connection`에 넘긴다. | 실제 상대 주소·수락 시각·초기 교환 진입 시각·수락 B·시작 H와 종료 알림 |
-| 4 | app이 H의 절대 기한을 만든다. Viewer면 즉시 `RFB 000.000\n`을 한 번 쓰고 flush한다. Server에는 쓰지 않는다. | 쓰기·flush도 같은 H 안에 둔다. 이후 H를 다시 시작하지 않는다. |
+| 3 | TCP·WS·WSS 연결 작업이 `ConnectionContext`와 스트림을 `handle_connection`에 넘긴다. | 실제 상대 주소·수락 시각·초기 교환 진입 시각·수락 B·시작 H와 종료 알림. ticket 업그레이드는 별도 `Option<TicketBinding>`도 넘긴다. TCP는 `None`이다. |
+| 4 | app이 H의 절대 기한을 만든다. ticket에 `sx`가 있으면 단조 세션 만료 기한과 비교한다. Viewer면 즉시 `RFB 000.000\n`을 한 번 쓰고 flush한다. Server에는 쓰지 않는다. | 쓰기·flush와 읽기는 더 이른 기한을 따른다. 두 기한이 같으면 H가 우선한다(이 문서의 판단, 사용자 결정 없음). 이후 H를 다시 시작하지 않는다. |
 | 5 | 요청을 읽어 `feed`에 넣는다. 매번 소비 길이와 완료 여부를 확인한다. | 250바이트 미만이면 같은 기한으로 계속 읽는다. |
 | 6 | 250바이트가 H 안에 모였으면 `finish`를 부른다. | 잘못된 값·꺼진 모드는 6절로 간다. 유효 요청이면 H 감시를 끝낸다. |
 | 7 | 결과·스트림·후속 데이터·문맥·`BudgetPermit`을 `PreparedConnection<S>`로 묶는다. | `handle_connection`은 유효 요청을 호출자에게 반환한다. 임시 보류·닫기·가짜 인계를 하지 않는다. TCP·WS·WSS 호출자가 `dispatch`를 실행한다([연결 순서](relay-session.md#8-현재-코드와의-차이와-연결-순서)). |
+
+`dispatch`는 기존 초기 요청 검사 뒤, 모드 분기 전에 ticket의 `rid`를 대조한다. ticket 연결의 Mode I 요청과 `rid`가 바이트 단위로 다른 Mode II 요청은 Close 4012 `ticket_relay_mismatch`로 거절한다. 꺼진 Mode I의 기존 1008은 먼저 적용한다. `connection_rejected(stage=initial_exchange, reason=ticket_relay_mismatch)`는 `warn`이며 `mode`·`ticket_jti`를 쓴다. Mode II이면 `relay_id_ref`도 쓴다. 같은 ID로 대기 중인 상대는 유지한다([접속 ticket 모듈 설계](relay-access-ticket.md#43-101-뒤)).
 
 `ConnectionContext`의 단조 시각은 공유 `Clock::monotonic()`이 주는 `Duration`이다. 수락 시각은 adapters가 수락 처리에서 잡는다. TCP의 초기 교환 진입 시각은 IP·L 검사 통과 직후다. `Accepted.at`은 이 위치에서 `Instant::now()`로 채운다. WS·WSS의 초기 교환 시각은 101 응답 완료 직후다. `elapsed_ms`는 H의 시작점이 아니라 수락 시각부터 계산한다.
 
@@ -135,7 +138,7 @@ app은 기존 `Clock` 포트를 재사용한다. `tokio::time::sleep`에는 남�
 
 수락 시각과 WS·WSS의 U·H 계산은 공통 단조 시계 기준으로 연결된다. U의 시작·범위는 바꾸지 않는다. app 단위 시험은 제어 가능한 `Clock`과 tokio 정지 시각을 함께 쓴다. 실제 소켓과 대기는 adapters·시스템 시험에 둔다.
 
-`handle_connection(stream, context, permit, shutdown)`은 `Result<PreparedConnection<S>, RelayError>`를 내는 future를 반환한다. `S: RelayStream`이다. 종료 입력은 `watch::Receiver<RelayLifecycle>`이다. `ConnectionContext`는 `conn_id`, `entry_point`, `peer_ip`, `peer_addr`, `accepted_wall`, `accepted_at`, `exchange_at`, `buffer_bytes`, `handshake`를 가진다. `accepted_wall`은 표시용 벽시계다. 나머지 두 시각은 공유 `Clock`의 단조 시각이다. `RelayService::new(modes, settings, clock, events)`에서 settings는 `Arc<dyn RuntimeSettingsSource>`다. 실패하면 종료 시작에 읽은 E 안에서 close action을 진행하고 stream → permit → 사건 순서로 정리한다. 유효 요청은 소유권을 호출자에게 돌려준다. TCP·WS·WSS는 같은 연결 작업에서 `dispatch(prepared, &runtime)`을 실행한다.
+`handle_connection(stream, context, ticket, permit, shutdown)`은 `Result<PreparedConnection<S>, RelayError>`를 내는 future를 반환한다. `ticket`은 `Option<TicketBinding>`이다. `S: RelayStream`이다. 종료 입력은 `watch::Receiver<RelayLifecycle>`이다. `ConnectionContext`는 `conn_id`, `entry_point`, `peer_ip`, `peer_addr`, `accepted_wall`, `accepted_at`, `exchange_at`, `buffer_bytes`, `handshake`를 가진다. `accepted_wall`은 표시용 벽시계다. 나머지 두 시각은 공유 `Clock`의 단조 시각이다. `RelayService::new(modes, settings, clock, events)`에서 settings는 `Arc<dyn RuntimeSettingsSource>`다. 실패하면 종료 시작에 읽은 E 안에서 close action을 진행하고 stream → permit → 사건 순서로 정리한다. 유효 요청은 ticket 바인딩과 함께 소유권을 호출자에게 돌려준다. TCP·WS·WSS는 같은 연결 작업에서 `dispatch(prepared, &runtime)`을 실행한다.
 
 ## 5. 후속 바이트와 B
 
@@ -161,13 +164,14 @@ app의 일반 tokio 기능은 `time`, `sync`, `io-util`뿐이다. `macros`, `rt`
 | 모드 비활성 | 위와 같은 거절 사건, `reason = mode_disabled`, 판정한 `mode` 필수 | TCP FIN. 오류 바이트 없음 |
 | 250바이트 전 정상 EOF | `connection_aborted`, `stage = initial_exchange`, `reason = peer_eof`, `elapsed_ms`, `info` | 상대가 이미 닫았다. 계약의 `handshake_incomplete`에 대응한다. |
 | H 만료 | 같은 중단 사건, `reason = handshake_timeout`, `warn` | TCP FIN |
+| H보다 이른 세션 만료 기한 도달 | `connection_aborted`, `stage = initial_exchange`, `reason = session_expired`, `info` | WS·WSS Close 4013 `session_expired`. H와 기한이 같으면 기존 H 만료다. |
 | 시작 바이트 쓰기·flush·요청 읽기 오류 | 같은 중단 사건. typed 오류는 `connection_error`와 원래 `error_kind`를 보존한다. 응답 없는 연결은 `dead_connection`이다. | 해당 연결만 정리 |
 | 서버 종료 알림 | 같은 중단 사건, `reason = server_shutdown`, `info` | 미완성 연결 정리 |
 | 유효 요청 | 새 성공 사건을 만들지 않는다. | 다음 단계의 등록·연결·세션 사건은 각 작업이 만든다. |
 
 기존 `Event::ConnectionRejected`에는 `conn_id`·`mode`가 없다. 수락 뒤 거절을 나타내는 `Event::HandshakeRejected`를 별도로 구현했다. 이 사건은 `conn_id`, `entry_point`, `peer_ip`, `reason`, `mode: Option<Mode>`를 받는다. JSON 사건 이름은 `connection_rejected`이고 `stage`는 항상 `initial_exchange`다. `RejectReason::HandshakeInvalid`·`ModeDisabled`를 추가했다. `ModeDisabled`일 때 `Some(Mode)`를 주는 책임은 호출자에게 있다. 모드를 확정하지 못했으면 생략한다. `AbortReason::PeerEof`와 `HandshakeTimeout`은 그대로 쓴다. `handshake_incomplete`라는 새 로그 사유는 만들지 않았다. 실제 연결에서는 `relay.rs`의 `handle_connection` 실패 경로가 이 사건을 쓴다.
 
-초기 요청·채움·후속 데이터·ID 원문은 기록하지 않는다. 초기 교환은 `relay_id_ref`를 계산하지 않는다. `src/serve.rs`가 시작 키를 만들고 `RelayRuntime`에 주입한다. ref 계산은 Mode II 등록 단계의 책임이다.
+초기 요청·채움·후속 데이터·ID 원문은 기록하지 않는다. 일반 초기 교환은 `relay_id_ref`를 계산하지 않는다. ticket의 Mode II `rid` 대조 실패는 `dispatch`가 ref를 계산해 거절 사건에 넣는다. `src/serve.rs`가 시작 키를 만들고 `RelayRuntime`에 주입한다. 일반 ref 계산은 Mode II 등록 단계의 책임이다.
 
 거절·중단은 E 안에서 close action을 진행한다. 절대 E·Grace의 G·Force 중 먼저 온 경계에서 기다림을 끝낸다. 이후 스트림과 후속 데이터를 버리고 L 자리를 돌려준 뒤 사건 하나를 쓴다(**이 문서의 판단, 사용자 결정 없음**). E는 H와 별도다. 닫기를 기다리면서 H를 다시 시작하지 않는다. 읽지 않은 수신 데이터 때문에 OS가 RST를 보낼 수 있다는 계약의 주의도 유지한다.
 

@@ -1772,6 +1772,27 @@ Ubuntu 첫 실행이 이전 빌드를 다시 쓴 원인은 시계 차이다. WSL
 
 `0264863`의 Ubuntu 게이트가 같은 영향을 받았는지는 로그로 확인할 수 없다. 받았더라도 남은 차이는 환경 변수가 있을 때만 동작하는 임시 코드와 출력뿐이었으므로 판정은 같았을 것으로 추정한다. 두 커밋 사이에 제품 코드는 바뀌지 않았다. `01f5424`의 [CI 실행 42588616456](https://github.com/kayden-kim/vnc-relay/actions/runs/42588616456)에서 `check (windows-2025)`(7분 17초)와 `check (ubuntu-24.04)`(3분 13초)가 성공했다. CI는 서식·clippy·xtask 시험만 실행하고 전체 시험은 실행하지 않는다.
 
+### 4.34 접속 ticket 화면 구현과 시안 대조 (2026-11-11)
+
+- 기록자: 에이전트 S5Dashboard. 구현은 에이전트 S5Dashboard가, 시험 보강은 S5Dashboard.TicketFakeTests와 S5Dashboard.TicketLiveTests가 분담했다. 사람의 검토가 아닌 에이전트의 대조다.
+- 대상: `web/dashboard/app/copy.js`(CPY-190~194, CPY-184 대체)·`panels.js`(`session_expired` 중립 배지)·`settings-model.js`(여섯째 `accessTickets` 구역, 불리언 체크박스, 문자열 1~256 바이트 길이 검사, null/빈 문자열 유지)·`settings.js`(불리언 체크박스 입력, CPY-192 빈 Origin 경고, CPY-194 활성화 경고, 결과 불명 잠금)·`app.css`·`styles/components.css`(`cargo xtask tokens`로 로그인 복사본 동기화), `web/dashboard/tests/settings-scenarios.js`·`operations-scenarios.js`·`tests/dashboard_browser.rs`, `tests/dashboard_live/settings_view.rs`·`settings_edit.rs`·`settings.rs`·`overview.rs`·`tests/dashboard_live.rs`.
+- 가짜 API 시험: `cargo test --test dashboard_browser`로 74개 브라우저 시험을 실행했다. DASH-020(종료 원인 `session_expired`의 CPY-190 번역과 중립 배지), DASH-029(75개 키, 43개 dynamic 키, ticket 테이블 순서와 경로 전용 표시), DASH-035(여섯 구역 순서, 마지막 접속 ticket 구역, 활성 역할의 4개 입력란과 비활성 역할 제외), DASH-036(빈 issuer와 257바이트 relay_host CPY-193 오류, 첫 오류 초점, PATCH 없음, 체크박스 토글과 비트리밍 유지), DASH-037(빈 allowed_origins CPY-192 경고, enabled false→true CPY-194 경고, 불리언/문자열 diff)을 6개 폭 × ko·en에서 확인했다.
+- 실서버 시험: `tests/dashboard_live.rs`의 `dashboard_020`(real `session_expired` session with P-256 signer, Close 4013, CPY-190 badge/cells, ko·en), `dashboard_029`(75개 키, 43개 dynamic, ticket 테이블 순서와 JWKS 경로 전용), `dashboard_035`(역할별 4개 ticket 입력, 마지막 구역 배치), `dashboard_036`(CPY-193 문자열 길이 오류 및 PATCH 차단), `dashboard_037`(CPY-192 및 CPY-194 경고, 불리언 PATCH)을 단독 실행해 모두 통과를 확인했다.
+- 두 OS 게이트: 통합 담당이 기록한다.
+
+#### 시안 대조
+
+채택 시안(`docs/design/mockups/dashboard.html`의 SCR-001 정상, SCR-004 정상, SCR-005 편집·오류·확인, 사용자 결정 2026-11-11(Q219)) 10개 프레임을 1280px와 390px 폭(ko·en)에서 대조했다. 20쌍을 캡처했다. 구현 쪽 가로 넘침·페이지 오류·콘솔 오류는 0건이다. 에이전트의 대조이며 사람의 검토는 하지 않았다.
+
+| 차이·분류 | 시안과 구현의 차이 | 근거 | 처리 |
+| --- | --- | --- | --- |
+| 확인 대화상자 경고 문구 글꼴 | 시안: 경고 제목 없는 400 본문 글씨. 초기 구현: 700 굵기와 경고 색 | DESIGN `typography.body`, CPY-184/192/194 | 고침. `app.css`의 `.config-dialog .alert-body > .alert-title:only-child`를 본문 400 및 foreground 색으로 맞춤 |
+| 데스크톱 불리언 체크박스 상단 여백 | 시안: 옆 열의 text 입력과 높이를 맞추려고 라벨 높이만큼 내려놓음 | DESIGN 690행 "설정 불리언 입력" | 고침. `app.css`의 `.settings-fields > .config-field-bool`에 상단 여백 추가. 390px 1열에서는 여백을 0으로 둠 |
+| 모바일 체크박스 터치 높이 | 시안: 44px 터치 높이 | DESIGN 690행, `spacing.control-height-touch` | 고침. `styles/components.css` 모바일 중단점에 `.settings-main .check` 44px 규칙 추가 (`cargo xtask tokens`로 로그인 복사본 재생성) |
+| 확인 대화상자의 뷰포트 배치 | 시안: 정적 overlay이며 대화상자 내용 전체를 펼침. 구현: 실제 modal이며 뷰포트 안에서 스크롤 | DESIGN 694행, 스펙 SCR-005, 4.27절 B15 | 기준 우선 유지. 실제 대화상자 스크롤 및 취소 버튼 초점 복귀 동작을 유지 |
+| 예시 데이터 | 시안: 임의의 도메인·키 경로. 구현: 계약 및 가짜 API의 안정된 fixture 값 | 4.27절 C01 | 데이터 차이, 해당 없음 |
+
+- 증거: `target/ticket-dashboard-compare/`에 시안 캡처(`mock/`, 20장), 구현 캡처(`impl/`, 20장), 비교 측정(`mock-results.json`, `impl-results.json`, `checkbox-results.json`, `confirm-results.json`)을 남겼다.
 ## 5. 중단 조건
 
 - `cargo xtask tokens --check`의 종료 코드가 0이 아니면 3.2 이후 단계를 실행하지 않는다.

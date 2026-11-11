@@ -874,6 +874,10 @@
     grid-template-columns: minmax(0, 1fr);
   }
 
+  .settings-main .settings-fields > .config-field-bool {
+    margin-top: 0;
+  }
+
   .settings-main .page-actions,
   .settings-main .page-head .page-actions {
     flex-direction: column;
@@ -1092,7 +1096,8 @@
     max-width: none;
   }
 
-  .logs-main .check {
+  .logs-main .check,
+  .settings-main .check {
     min-height: var(--space-control-height-touch);
   }
 

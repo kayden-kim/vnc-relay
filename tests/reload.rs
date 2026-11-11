@@ -3059,3 +3059,646 @@ fn trusted_proxies_reload_and_edit_apply_to_new_checks_and_keep_open_connections
     drop(preexisting_ws);
     drop(preexisting_server);
 }
+
+fn ticket_jwks(fixture: &str, kid: &str) -> String {
+    let pem =
+        std::fs::read(tls_file(fixture)).unwrap_or_else(|error| panic!("read {fixture}: {error}"));
+    let private = rustls::pki_types::PrivateKeyDer::from_pem_slice(&pem)
+        .unwrap_or_else(|error| panic!("parse {fixture}: {error}"));
+    let signer = rustls::crypto::aws_lc_rs::sign::any_supported_type(&private)
+        .unwrap_or_else(|error| panic!("signing key {fixture}: {error}"));
+    let public = signer
+        .public_key()
+        .unwrap_or_else(|| panic!("public key {fixture}"));
+    let point = &public.as_ref()[public.as_ref().len() - 65..];
+    let encode = |bytes: &[u8]| {
+        const ALPHABET: &[u8; 64] =
+            b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+        let mut encoded = String::new();
+        for chunk in bytes.chunks(3) {
+            let mut block = [0u8; 3];
+            block[..chunk.len()].copy_from_slice(chunk);
+            let value = u32::from_be_bytes([0, block[0], block[1], block[2]]);
+            for index in 0..=chunk.len() {
+                encoded.push(char::from(
+                    ALPHABET[((value >> (18 - index * 6)) & 63) as usize],
+                ));
+            }
+        }
+        encoded
+    };
+    serde_json::json!({"keys": [{
+        "kty": "EC", "crv": "P-256", "kid": kid,
+        "x": encode(&point[1..33]), "y": encode(&point[33..65])
+    }]})
+    .to_string()
+}
+
+fn ticket_config(role: &str, enabled: bool, file: &str) -> String {
+    format!(
+        "\n[relay.ticket.{role}]\nenabled = {enabled}\nissuer = \"issuer.example\"\nrelay_host = \"relay.example\"\npublic_keys_file = \"{file}\"\nmax_lifetime_secs = 60\n"
+    )
+}
+
+/// spec: operations.md:OPS-070 partial
+/// spec: operations.md:OPS-072 partial
+#[test]
+fn ticket_key_file_watcher_applies_rotation_and_rejects_every_invalid_candidate() {
+    let _lock = lock_ports();
+    let ports = Ports::free();
+    let text =
+        config_text(ports, VIEWER_ONLY, CERT, KEY) + &ticket_config("viewer", true, "viewer.jwks");
+    let config = setup("ticket-key-rotation", &text);
+    let key_file = config.with_file_name("viewer.jwks");
+    let old = ticket_jwks(KEY, "old");
+    let new = ticket_jwks("other-key-p256.pem", "new");
+    write(&key_file, &old);
+    let mut guard = Guard(Some(spawn(&config)));
+    wait_listening(guard.child(), ports);
+    let log = log_of(&config);
+    // A connection that predates every rotation must survive every rejection.
+    let (mut held, mut held_server) = pair(ports, "7201");
+    exchange(&mut held, &mut held_server);
+    let valid: serde_json::Value = serde_json::from_str(&new).unwrap();
+    let key = valid["keys"][0].clone();
+    let mut non_p256 = key.clone();
+    non_p256["crv"] = "P-384".into();
+    let mut private = key.clone();
+    private["d"] = "PRIVATE_KEY_CONTENT_MUST_NOT_APPEAR".into();
+    let invalid = [
+        None,
+        Some("NOT_JSON_TICKET_KEY_CONTENT".to_owned()),
+        Some(r#"{"keys":[]}"#.to_owned()),
+        Some(serde_json::json!({"keys": [non_p256]}).to_string()),
+        Some(serde_json::json!({"keys": [private]}).to_string()),
+        Some(serde_json::json!({"keys": [key.clone(), key]}).to_string()),
+        Some("X".repeat(65_537)),
+    ];
+    for (index, candidate) in invalid.into_iter().enumerate() {
+        match candidate {
+            Some(bytes) => write(&key_file, &bytes),
+            None => std::fs::remove_file(&key_file).unwrap(),
+        }
+        wait_for_count(&log, index + 1, |line| {
+            reason_is(line, "reload_rejected", "ticket_keys_invalid")
+        });
+        assert_eq!(logged(&log, |line| event_is(line, "reload_applied")), 0);
+    }
+    write(&key_file, &new);
+    let applied = wait_for_line(&log, |line| event_is(line, "reload_applied"));
+    let applied: serde_json::Value = serde_json::from_str(&applied).unwrap();
+    assert_eq!(
+        applied["applied"],
+        serde_json::json!(["relay.ticket.viewer.public_keys_file"])
+    );
+    assert_eq!(applied["trigger"], "file_watch");
+    // Rewriting equal keys with a different JSON layout is not an applied change.
+    write(&key_file, &serde_json::to_string_pretty(&valid).unwrap());
+    wait_for_count(&log, 9, |line| event_is(line, "reload_change_detected"));
+    write(
+        &config,
+        &(text.clone() + &ticket_config("server", true, "viewer.jwks")),
+    );
+    wait_for_count(&log, 8, |line| {
+        reason_is(line, "reload_rejected", "ticket_keys_invalid")
+    });
+    let lines = std::fs::read_to_string(&log).unwrap();
+    assert!(lines.lines().any(|line| {
+        reason_is(line, "reload_rejected", "ticket_keys_invalid")
+            && field(line, "config_key") == Some("relay.ticket.server.public_keys_file")
+    }));
+    assert!(!lines.contains("PRIVATE_KEY_CONTENT_MUST_NOT_APPEAR"));
+    assert!(!lines.contains("NOT_JSON_TICKET_KEY_CONTENT"));
+    assert!(!lines.contains(&old));
+    assert!(!lines.contains(&new));
+    // Disabling ticket is another dynamic change, never a restart requirement.
+    write(
+        &config,
+        &text.replace(
+            "[relay.ticket.viewer]\nenabled = true",
+            "[relay.ticket.viewer]\nenabled = false",
+        ),
+    );
+    wait_for_count(&log, 2, |line| event_is(line, "reload_applied"));
+    exchange(&mut held, &mut held_server);
+    stop(guard.child());
+}
+
+/// spec: operations.md:OPS-071
+#[test]
+fn ticket_tcp_and_plaintext_warnings_cover_both_roles_at_start_and_reload() {
+    let _lock = lock_ports();
+    let ports = Ports::free();
+    let base = config_text(ports, VIEWER_ONLY, CERT, KEY)
+        + "\n[relay.ws.server]\nenabled = true\nallow = [\"127.0.0.1\"]\n";
+    let enabled = base.clone()
+        + &ticket_config("viewer", true, "viewer.jwks")
+        + &ticket_config("server", true, "server.jwks");
+    let config = setup("ticket-warnings", &enabled);
+    write(
+        &config.with_file_name("viewer.jwks"),
+        &ticket_jwks(KEY, "viewer"),
+    );
+    write(
+        &config.with_file_name("server.jwks"),
+        &ticket_jwks("other-key-p256.pem", "server"),
+    );
+    let mut guard = Guard(Some(spawn(&config)));
+    wait_listening(guard.child(), ports);
+    let log = log_of(&config);
+    for (role, listener) in [("viewer", "tcp_viewer"), ("server", "tcp_server")] {
+        for (event, listener) in [
+            ("ticket_tcp_bypass", listener),
+            ("ticket_plaintext_ws", "ws"),
+        ] {
+            wait_for_line(&log, |line| {
+                event_is(line, event)
+                    && field(line, "role") == Some(role)
+                    && field(line, "listener") == Some(listener)
+                    && field(line, "phase") == Some("startup")
+            });
+        }
+    }
+    let disabled = base
+        + &ticket_config("viewer", false, "viewer.jwks")
+        + &ticket_config("server", false, "server.jwks");
+    write(&config, &disabled);
+    wait_for_count(&log, 1, |line| event_is(line, "reload_applied"));
+    write(&config, &enabled);
+    wait_for_count(&log, 2, |line| event_is(line, "reload_applied"));
+    for (role, listener) in [("viewer", "tcp_viewer"), ("server", "tcp_server")] {
+        for (event, listener) in [
+            ("ticket_tcp_bypass", listener),
+            ("ticket_plaintext_ws", "ws"),
+        ] {
+            wait_for_line(&log, |line| {
+                event_is(line, event)
+                    && field(line, "role") == Some(role)
+                    && field(line, "listener") == Some(listener)
+                    && field(line, "phase") == Some("reload")
+            });
+        }
+    }
+    assert_eq!(logged(&log, |line| event_is(line, "ticket_tcp_bypass")), 4);
+    assert_eq!(
+        logged(&log, |line| event_is(line, "ticket_plaintext_ws")),
+        4
+    );
+    assert_eq!(
+        logged(&log, |line| event_is(line, "reload_restart_required")),
+        0
+    );
+    stop(guard.child());
+}
+
+fn ticket_base64(bytes: &[u8]) -> String {
+    const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+    let mut encoded = String::new();
+    for chunk in bytes.chunks(3) {
+        let mut block = [0u8; 3];
+        block[..chunk.len()].copy_from_slice(chunk);
+        let value = u32::from_be_bytes([0, block[0], block[1], block[2]]);
+        for index in 0..=chunk.len() {
+            encoded.push(char::from(
+                ALPHABET[((value >> (18 - index * 6)) & 63) as usize],
+            ));
+        }
+    }
+    encoded
+}
+
+fn ticket_wall_secs() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::SystemTime::UNIX_EPOCH)
+        .unwrap_or_else(|error| panic!("wall clock: {error}"))
+        .as_secs()
+}
+
+/// Signs with the existing test TLS fixture; rustls returns DER, JWS uses R || S.
+fn signed_viewer_ticket(fixture: &str, kid: &str, jti: &str, issuer: &str, host: &str) -> String {
+    let pem =
+        std::fs::read(tls_file(fixture)).unwrap_or_else(|error| panic!("read {fixture}: {error}"));
+    let private = rustls::pki_types::PrivateKeyDer::from_pem_slice(&pem)
+        .unwrap_or_else(|error| panic!("parse {fixture}: {error}"));
+    let key = rustls::crypto::aws_lc_rs::sign::any_supported_type(&private)
+        .unwrap_or_else(|error| panic!("signing key {fixture}: {error}"));
+    let signer = key
+        .choose_scheme(&[rustls::SignatureScheme::ECDSA_NISTP256_SHA256])
+        .unwrap_or_else(|| panic!("P-256 scheme for {fixture}"));
+    let issued = ticket_wall_secs() + 5;
+    let header = serde_json::json!({"alg": "ES256", "kid": kid}).to_string();
+    let claims = serde_json::json!({
+        "iss": issuer, "aud": "vnc-relay/viewer", "rh": host, "rid": "7202",
+        "jti": jti, "iat": issued, "exp": issued + 10
+    })
+    .to_string();
+    let input = format!(
+        "{}.{}",
+        ticket_base64(header.as_bytes()),
+        ticket_base64(claims.as_bytes())
+    );
+    let der = signer
+        .sign(input.as_bytes())
+        .unwrap_or_else(|error| panic!("sign: {error}"));
+    assert_eq!(der[0], 0x30);
+    let mut raw = [0u8; 64];
+    let mut offset = 2;
+    for half in raw.chunks_mut(32) {
+        assert_eq!(der[offset], 0x02);
+        let len = usize::from(der[offset + 1]);
+        offset += 2;
+        let integer = &der[offset..offset + len];
+        let integer = integer.strip_prefix(&[0]).unwrap_or(integer);
+        assert!(integer.len() <= 32);
+        half[32 - integer.len()..].copy_from_slice(integer);
+        offset += len;
+    }
+    format!("{input}.{}", ticket_base64(&raw))
+}
+
+fn assert_viewer_key_works(ports: Ports, fixture: &str, kid: &str, jti: &str) {
+    let ticket = signed_viewer_ticket(fixture, kid, jti, "issuer.example", "relay.example");
+    let protocol = format!("binary, ticket.{ticket}");
+    let (status, viewer) = ws_upgrade_with_headers(
+        Box::new(connect_from([127, 0, 0, 1], ports.ws)),
+        "/relay/viewer",
+        &[("Sec-WebSocket-Protocol", &protocol)],
+    );
+    assert_eq!(status, 101);
+    drop(viewer);
+}
+
+fn ticket_startup_output(config: &Path) -> std::process::Output {
+    let mut guard = Guard(Some(spawn(config)));
+    let deadline = Instant::now() + EXIT_LIMIT;
+    loop {
+        if guard
+            .child()
+            .try_wait()
+            .unwrap_or_else(|error| panic!("try_wait: {error}"))
+            .is_some()
+        {
+            let child = guard
+                .0
+                .take()
+                .unwrap_or_else(|| panic!("child already taken"));
+            return child
+                .wait_with_output()
+                .unwrap_or_else(|error| panic!("output: {error}"));
+        }
+        assert!(Instant::now() < deadline, "startup did not fail");
+        std::thread::sleep(Duration::from_millis(20));
+    }
+}
+
+/// spec: operations.md:OPS-070
+#[test]
+fn full_ticket_validation_at_startup_and_reload_preserves_the_last_valid_generation() {
+    let _lock = lock_ports();
+    let ports = Ports::free();
+    let base = config_text(ports, VIEWER_ONLY, CERT, KEY);
+    let enabled = ticket_config("viewer", true, "viewer.jwks");
+    let old = ticket_jwks(KEY, "old");
+    let key: serde_json::Value =
+        serde_json::from_str::<serde_json::Value>(&old).unwrap()["keys"][0].clone();
+    let mut wrong_curve = key.clone();
+    wrong_curve["crv"] = "P-384".into();
+    let mut private = key.clone();
+    private["d"] = "PRIVATE_TICKET_KEY_MUST_NOT_BE_LOGGED".into();
+    let mut cases: Vec<(String, Option<String>, &str, &str)> = Vec::new();
+    for (assignment, leaf) in [
+        ("issuer = \"issuer.example\"\n", "issuer"),
+        ("relay_host = \"relay.example\"\n", "relay_host"),
+        ("public_keys_file = \"viewer.jwks\"\n", "public_keys_file"),
+    ] {
+        cases.push((
+            enabled.replace(assignment, ""),
+            Some(old.clone()),
+            "config_missing_key",
+            leaf,
+        ));
+    }
+    for value in [9, 601] {
+        cases.push((
+            enabled.replace(
+                "max_lifetime_secs = 60",
+                &format!("max_lifetime_secs = {value}"),
+            ),
+            Some(old.clone()),
+            "config_value_out_of_range",
+            "max_lifetime_secs",
+        ));
+    }
+    cases.push((
+        enabled.replace("issuer.example", ""),
+        Some(old.clone()),
+        "config_value_out_of_range",
+        "issuer",
+    ));
+    for contents in [
+        None,
+        Some("INVALID_JWKS_MUST_NOT_BE_LOGGED".to_owned()),
+        Some(r#"{"keys":[]}"#.to_owned()),
+        Some(serde_json::json!({"keys": [wrong_curve]}).to_string()),
+        Some(serde_json::json!({"keys": [private]}).to_string()),
+        Some(serde_json::json!({"keys": [key.clone(), key]}).to_string()),
+        Some("X".repeat(65_537)),
+    ] {
+        cases.push((
+            enabled.clone(),
+            contents,
+            "ticket_keys_invalid",
+            "public_keys_file",
+        ));
+    }
+    cases.push((
+        enabled.clone() + &ticket_config("server", true, "viewer.jwks"),
+        Some(old.clone()),
+        "ticket_keys_invalid",
+        "server.public_keys_file",
+    ));
+    for (index, (suffix, contents, code, leaf)) in cases.iter().enumerate() {
+        let config = setup(
+            &format!("full-ticket-startup-{index}"),
+            &(base.clone() + suffix),
+        );
+        if let Some(contents) = contents {
+            write(&config.with_file_name("viewer.jwks"), contents);
+        }
+        // A held first-bind port distinguishes pre-bind validation from bind failure.
+        let held = TcpListener::bind(("127.0.0.1", ports.status)).unwrap();
+        let output = ticket_startup_output(&config);
+        drop(held);
+        assert_eq!(output.status.code(), Some(3));
+        let stderr = String::from_utf8(output.stderr).unwrap();
+        let config_key = if leaf.starts_with("server.") {
+            format!("relay.ticket.{leaf}")
+        } else {
+            format!("relay.ticket.viewer.{leaf}")
+        };
+        assert!(
+            stderr.contains(&format!("error[{code}] key={config_key}:")),
+            "{stderr}"
+        );
+        let log = String::from_utf8(output.stdout).unwrap()
+            + &std::fs::read_to_string(log_of(&config)).unwrap_or_default();
+        assert_eq!(
+            log.lines()
+                .filter(|line| {
+                    reason_is(line, "startup_failed", code)
+                        && field(line, "config_key") == Some(config_key.as_str())
+                })
+                .count(),
+            1
+        );
+        assert!(!log.contains("listener_ready"));
+        for text in [&stderr, &log] {
+            assert!(!text.contains("PRIVATE_TICKET_KEY_MUST_NOT_BE_LOGGED"));
+            assert!(!text.contains("INVALID_JWKS_MUST_NOT_BE_LOGGED"));
+            assert!(!text.contains(&old));
+        }
+        for port in ports.all() {
+            assert!(TcpListener::bind(("127.0.0.1", port)).is_ok());
+        }
+    }
+    // Both lifetime boundaries start normally; the disabled-role shared-key boundary does too.
+    for lifetime in [10, 600] {
+        let text = base.clone()
+            + &enabled.replace(
+                "max_lifetime_secs = 60",
+                &format!("max_lifetime_secs = {lifetime}"),
+            )
+            + &ticket_config("server", false, "viewer.jwks");
+        let config = setup(&format!("full-ticket-valid-{lifetime}"), &text);
+        write(&config.with_file_name("viewer.jwks"), &old);
+        let mut guard = Guard(Some(spawn(&config)));
+        wait_listening(guard.child(), ports);
+        stop(guard.child());
+    }
+    let config = authenticated_setup("full-ticket-reload-validation", &(base.clone() + &enabled));
+    write(&config.with_file_name("viewer.jwks"), &old);
+    let mut guard = Guard(Some(spawn(&config)));
+    wait_listening(guard.child(), ports);
+    let ready = ticket_wall_secs();
+    wait_until(guard.child(), || ticket_wall_secs() > ready);
+    let (cookie, _, _) = login(ports.management);
+    let (mut viewer, mut server) = pair(ports, "7202");
+    exchange(&mut viewer, &mut server);
+    let log = log_of(&config);
+    for (index, (suffix, contents, code, _)) in cases.iter().enumerate() {
+        // Preparing these unreferenced files before changing the config avoids intermediate candidates.
+        let path = config.with_file_name(format!("candidate-{index}.jwks"));
+        if let Some(contents) = contents {
+            write(&path, contents);
+        }
+        let suffix = suffix.replace("viewer.jwks", &format!("candidate-{index}.jwks"));
+        write(&config, &(base.clone() + &suffix));
+        wait_for_count(&log, index + 1, |line| event_is(line, "reload_rejected"));
+        let latest = std::fs::read_to_string(&log)
+            .unwrap()
+            .lines()
+            .rfind(|line| event_is(line, "reload_rejected"))
+            .unwrap()
+            .to_owned();
+        assert_eq!(field(&latest, "reason"), Some(*code));
+        exchange(&mut viewer, &mut server);
+        assert_viewer_key_works(ports, KEY, "old", &format!("retained-{index}"));
+        let view = query(ports.management, &cookie, "/api/v1/config");
+        assert_eq!(
+            effective(&view, "relay.ticket.viewer.issuer"),
+            "issuer.example"
+        );
+        assert_eq!(
+            effective(&view, "relay.ticket.viewer.max_lifetime_secs"),
+            60
+        );
+        assert_eq!(effective(&view, "relay.ticket.server.enabled"), false);
+        assert_eq!(logged(&log, |line| event_is(line, "reload_applied")), 0);
+    }
+    let valid = setting(
+        base + &enabled,
+        "relay.ticket.viewer.max_lifetime_secs",
+        "10",
+    );
+    let applied = reload(&config, &valid);
+    assert_eq!(
+        applied["applied"],
+        serde_json::json!(["relay.ticket.viewer.max_lifetime_secs"])
+    );
+    exchange(&mut viewer, &mut server);
+    assert_viewer_key_works(ports, KEY, "old", "retained-final");
+    stop(guard.child());
+}
+
+fn ticket_config_item<'a>(view: &'a serde_json::Value, key: &str) -> &'a serde_json::Value {
+    view["items"]
+        .as_array()
+        .unwrap_or_else(|| panic!("config items: {view}"))
+        .iter()
+        .find(|item| item["key"] == key)
+        .unwrap_or_else(|| panic!("config item {key}"))
+}
+
+/// spec: operations.md:OPS-072
+#[test]
+fn full_ticket_dynamic_reload_rotation_and_management_capabilities() {
+    let _lock = lock_ports();
+    let ports = Ports::free();
+    let mut text = config_text(ports, VIEWER_ONLY, CERT, KEY)
+        + &ticket_config("viewer", true, "viewer.jwks")
+        + &ticket_config("server", true, "server.jwks");
+    for (key, value) in [
+        ("management.config_edit", "true"),
+        ("relay.ws.server.enabled", "true"),
+        ("relay.ws.server.allow", "[\"127.0.0.1\"]"),
+        ("relay.wss.server.enabled", "true"),
+        ("relay.wss.server.allow", "[\"127.0.0.1\"]"),
+        ("mode1.enabled", "true"),
+        ("mode1.allow_targets", "[]"),
+    ] {
+        text = setting(text, key, value);
+    }
+    let config = authenticated_setup("full-ticket-dynamic", &text);
+    let old = ticket_jwks(KEY, "old");
+    let server_keys = ticket_jwks("other-key-p256.pem", "server");
+    for path in ["viewer.jwks", "viewer-next.jwks"] {
+        write(&config.with_file_name(path), &old);
+    }
+    for path in ["server.jwks", "server-next.jwks"] {
+        write(&config.with_file_name(path), &server_keys);
+    }
+    let mut guard = Guard(Some(spawn(&config)));
+    wait_listening(guard.child(), ports);
+    let ready = ticket_wall_secs();
+    wait_until(guard.child(), || ticket_wall_secs() > ready);
+    let (cookie, _, _) = login(ports.management);
+    let view = query(ports.management, &cookie, "/api/v1/config");
+    let items = view["items"].as_array().unwrap();
+    assert_eq!(
+        items
+            .iter()
+            .filter(|item| item["reload"] == "dynamic")
+            .count(),
+        43
+    );
+    assert_eq!(
+        items.iter().filter(|item| item["editable"] == true).count(),
+        37
+    );
+    let (mut viewer, mut server) = pair(ports, "7203");
+    exchange(&mut viewer, &mut server);
+    for role in ["viewer", "server"] {
+        for (leaf, value) in [
+            ("enabled", "false"),
+            ("issuer", "\"other-issuer.example\""),
+            ("relay_host", "\"other-relay.example\""),
+            (
+                "public_keys_file",
+                if role == "viewer" {
+                    "\"viewer-next.jwks\""
+                } else {
+                    "\"server-next.jwks\""
+                },
+            ),
+            ("max_lifetime_secs", "10"),
+        ] {
+            let key = format!("relay.ticket.{role}.{leaf}");
+            text = setting(text, &key, value);
+            let applied = reload(&config, &text);
+            assert_eq!(applied["applied"], serde_json::json!([key]));
+            exchange(&mut viewer, &mut server);
+        }
+    }
+    // Return to an enabled Viewer with claims matching the old key verification helper.
+    for (leaf, value) in [
+        ("issuer", "\"issuer.example\""),
+        ("relay_host", "\"relay.example\""),
+        ("enabled", "true"),
+    ] {
+        text = setting(text, &format!("relay.ticket.viewer.{leaf}"), value);
+    }
+    reload(&config, &text);
+    assert_viewer_key_works(ports, KEY, "old", "before-rotation");
+    let log = log_of(&config);
+    let path = config.with_file_name("viewer-next.jwks");
+    let new = ticket_jwks("other-key-p256.pem", "rotated");
+    let before = logged(&log, |line| event_is(line, "reload_applied"));
+    write(&path, &new);
+    wait_for_count(&log, before + 1, |line| event_is(line, "reload_applied"));
+    let line = std::fs::read_to_string(&log)
+        .unwrap()
+        .lines()
+        .rfind(|line| event_is(line, "reload_applied"))
+        .unwrap()
+        .to_owned();
+    let event: serde_json::Value = serde_json::from_str(&line).unwrap();
+    assert_eq!(
+        event["applied"],
+        serde_json::json!(["relay.ticket.viewer.public_keys_file"])
+    );
+    assert_viewer_key_works(ports, "other-key-p256.pem", "rotated", "after-rotation");
+    exchange(&mut viewer, &mut server);
+    write(&path, "INVALID_ROTATION_MUST_NOT_BE_LOGGED");
+    wait_for_count(&log, 1, |line| {
+        reason_is(line, "reload_rejected", "ticket_keys_invalid")
+    });
+    assert_viewer_key_works(ports, "other-key-p256.pem", "rotated", "after-rejection");
+    exchange(&mut viewer, &mut server);
+    assert_eq!(
+        logged(&log, |line| event_is(line, "reload_applied")),
+        before + 1
+    );
+    assert!(
+        !std::fs::read_to_string(&log)
+            .unwrap()
+            .contains("INVALID_ROTATION_MUST_NOT_BE_LOGGED")
+    );
+    stop(guard.child());
+    // Listener switches require restart. Exercise each role's OR condition independently.
+    for (index, (viewer_ws, viewer_wss, server_ws, server_wss)) in [
+        (false, false, true, true),
+        (true, true, false, false),
+        (true, false, false, true),
+        (false, true, true, false),
+        (false, false, false, false),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let mut candidate = text.clone();
+        for (key, value) in [
+            ("relay.ws.viewer.enabled", viewer_ws),
+            ("relay.wss.viewer.enabled", viewer_wss),
+            ("relay.ws.server.enabled", server_ws),
+            ("relay.wss.server.enabled", server_wss),
+        ] {
+            candidate = setting(candidate, key, if value { "true" } else { "false" });
+        }
+        let config = authenticated_setup(&format!("full-ticket-capabilities-{index}"), &candidate);
+        write(&config.with_file_name("viewer-next.jwks"), &old);
+        write(&config.with_file_name("server-next.jwks"), &server_keys);
+        let mut guard = Guard(Some(spawn(&config)));
+        wait_until(guard.child(), || {
+            connects(ports.management) && connects(ports.status)
+        });
+        let (cookie, _, _) = login(ports.management);
+        let view = query(ports.management, &cookie, "/api/v1/config");
+        for (role, editable) in [
+            ("viewer", viewer_ws || viewer_wss),
+            ("server", server_ws || server_wss),
+        ] {
+            for leaf in [
+                "enabled",
+                "issuer",
+                "relay_host",
+                "max_lifetime_secs",
+                "public_keys_file",
+            ] {
+                let item = ticket_config_item(&view, &format!("relay.ticket.{role}.{leaf}"));
+                assert_eq!(item["reload"], "dynamic");
+                assert_eq!(item["editable"], leaf != "public_keys_file" && editable);
+            }
+        }
+        stop(guard.child());
+    }
+}

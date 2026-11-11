@@ -1,8 +1,8 @@
 //! Ordered config-v4 §1.2 descriptors. Never read a referenced file here.
 use super::ConfigValue;
 use crate::reload::ConfigPresence;
-use crate::settings::{LogOutput, Settings};
-use vnc_relay_domain::entry_point::{EntryPoint, Listener};
+use crate::settings::{LogOutput, Settings, TicketSettings};
+use vnc_relay_domain::entry_point::{EntryPoint, Listener, Role};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ConfigReloadKind {
@@ -57,7 +57,7 @@ fn optional<T: ToString>(value: Option<T>) -> ConfigValue {
 
 pub fn config_items(s: &Settings, presence: &ConfigPresence) -> Vec<ConfigItem> {
     use ConfigReloadKind::{Dynamic, Restart};
-    let mut out = Vec::with_capacity(65);
+    let mut out = Vec::with_capacity(75);
     out.push(item(
         "admin.accounts_file",
         text(s.admin.accounts_file.display()),
@@ -190,6 +190,49 @@ pub fn config_items(s: &Settings, presence: &ConfigPresence) -> Vec<ConfigItem> 
             };
             out.push(item(key, value, Dynamic, settings.enabled));
         }
+    }
+    for role in [Role::Viewer, Role::Server] {
+        let prefix = TicketSettings::table(role);
+        let settings = s.relay.ticket.role(role);
+        let editable = ticket_role_editable(s, role);
+        out.push(item(
+            format!("{prefix}.enabled"),
+            ConfigValue::Bool(settings.enabled),
+            Dynamic,
+            editable,
+        ));
+        out.push(item(
+            format!("{prefix}.issuer"),
+            optional(settings.issuer.as_deref()),
+            Dynamic,
+            editable,
+        ));
+        out.push(item(
+            format!("{prefix}.relay_host"),
+            optional(settings.relay_host.as_deref()),
+            Dynamic,
+            editable,
+        ));
+        out.push(item(
+            format!("{prefix}.public_keys_file"),
+            optional(
+                settings
+                    .public_keys_file
+                    .as_ref()
+                    .map(|path| path.display()),
+            ),
+            Dynamic,
+            false,
+        ));
+        let mut lifetime = integer(
+            &format!("{prefix}.max_lifetime_secs"),
+            settings.max_lifetime.as_secs(),
+            10,
+            600,
+            true,
+        );
+        lifetime.editable = editable;
+        out.push(lifetime);
     }
     out.push(item(
         "mode1.enabled",
@@ -414,6 +457,20 @@ pub(super) fn accepts_change(s: &Settings, change: &super::ConfigChange) -> bool
         "relay.wss.server.allow" | "relay.wss.server.allowed_origins" => {
             strings && s.relay.wss.server.enabled
         }
+        "relay.ticket.viewer.enabled" => {
+            matches!(change.value, ConfigValue::Bool(_)) && ticket_role_editable(s, Role::Viewer)
+        }
+        "relay.ticket.server.enabled" => {
+            matches!(change.value, ConfigValue::Bool(_)) && ticket_role_editable(s, Role::Server)
+        }
+        "relay.ticket.viewer.issuer" | "relay.ticket.viewer.relay_host" => {
+            matches!(change.value, ConfigValue::String(_)) && ticket_role_editable(s, Role::Viewer)
+        }
+        "relay.ticket.server.issuer" | "relay.ticket.server.relay_host" => {
+            matches!(change.value, ConfigValue::String(_)) && ticket_role_editable(s, Role::Server)
+        }
+        "relay.ticket.viewer.max_lifetime_secs" => integer && ticket_role_editable(s, Role::Viewer),
+        "relay.ticket.server.max_lifetime_secs" => integer && ticket_role_editable(s, Role::Server),
         "mode1.allow_targets" => strings && s.mode1.enabled,
         "limits.relay_connections"
         | "limits.admin_connections"
@@ -432,5 +489,14 @@ pub(super) fn accepts_change(s: &Settings, change: &super::ConfigChange) -> bool
         | "keepalive.ws_ping_secs"
         | "keepalive.ws_pong_timeout_secs" => integer,
         _ => false,
+    }
+}
+
+/// A role's ticket keys are editable while the role is on in `[relay.ws]` or
+/// `[relay.wss]` (config-v4 §1.8 item 9). Key file paths never are.
+fn ticket_role_editable(s: &Settings, role: Role) -> bool {
+    match role {
+        Role::Viewer => s.relay.ws.viewer.enabled || s.relay.wss.viewer.enabled,
+        Role::Server => s.relay.ws.server.enabled || s.relay.wss.server.enabled,
     }
 }

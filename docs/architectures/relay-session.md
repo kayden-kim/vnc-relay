@@ -16,6 +16,7 @@
 | 관련 스펙 | [중계](../specs/relay.md): RLY-003·006~021·023·025~027. [운영](../specs/operations.md): OPS-005·007~009·023·039·042~043. [관리](../specs/management.md#2-조회-대상과-상태): MGT-005 일부 |
 | 관련 계약 | [Repeater 초기 교환](../contracts/repeater-handshake-v1.md), [설정 1.2·1.5절](../contracts/config-v4.md#12-키-표), [운영 정보 1.5~1.9절](../contracts/ops-info-v2.md#15-사건-목록), [관리 API 1.6~1.10절](../contracts/management-api-v1.md#16-서버-요약-get-apiv1summary), [WebSocket 1.4~1.6절](../contracts/websocket-relay-v2.md#14-데이터-메시지와-제어-프레임) |
 | 관련 ADR | [ADR-0003 단일 인스턴스·메모리 상태](../decisions/ADR-0003-single-instance-memory-state.md), [ADR-0004 tokio·rustls](../decisions/ADR-0004-tokio-rustls.md) |
+| 관련 문서 | [접속 ticket 모듈 설계](relay-access-ticket.md) |
 
 후속: R1은 `session::Transport` 하나로 Viewer와 Server/대상 양쪽의 `tcp`·`ws`·`wss`를 나타낸다. `run_pair`는 Viewer 스트림과 Mode II Server 스트림의 전송을 각각 읽는다. Mode I의 대상 전송은 `Tcp`로 고정한다. `Session::new`는 viewer_transport 다음에 target_transport를 받는다. 활성 스냅샷·종료 요약·최근 종료 목록에 두 값을 보존하고 관리 조회에 `target_transport`를 넘긴다. `SessionStarted.server_transport`는 Mode II에만 값이 있다.
 
@@ -85,7 +86,7 @@ flowchart LR
 
 ### 3.1 초기 교환에서 받는 값
 
-`PreparedConnection<S>`는 초기 교환의 스트림, `HandshakeRequest`, 후속 데이터, `ConnectionContext`, L의 `BudgetPermit` 하나를 이동받는다. 진입점은 실제 상대 IP·소켓 주소 `peer_addr`, 표시용 수락 시각 `accepted_wall`, 수락·초기 교환 진입 단조 시각, 수락 B와 초기 교환 시작 H를 채운다. 파싱한 요청·IP나 현재 벽시계로 상대 주소·수락 시각을 재구성하지 않는다.
+`PreparedConnection<S>`는 초기 교환의 스트림, `HandshakeRequest`, 후속 데이터, `ConnectionContext`, `Option<TicketBinding>`, L의 `BudgetPermit` 하나를 이동받는다. ticket 바인딩은 `jti`·`rid`·단조 세션 만료 기한을 담는다. `dispatch`는 기존 초기 요청 검사 뒤, 모드 분기 전에 `rid`를 대조한다. ticket 연결의 Mode I 또는 다른 중계 ID는 Close 4012로 거절한다. 진입점은 실제 상대 IP·소켓 주소 `peer_addr`, 표시용 수락 시각 `accepted_wall`, 수락·초기 교환 진입 단조 시각, 수락 B와 초기 교환 시작 H를 채운다. 파싱한 요청·IP나 현재 벽시계로 상대 주소·수락 시각을 재구성하지 않는다.
 
 H 감시는 유효 요청 반환으로 끝난다. C·W·E에서 H를 다시 쓰지 않는다. `PreparedConnection`을 복제하지 않는다. L permit을 다시 얻거나 단계 전환 때 반환하지 않는다. 후속 데이터 `n`바이트는 이미 해당 연결의 B를 쓴 상태다.
 
@@ -170,16 +171,18 @@ DNS 후보는 반환 순서를 유지해 허용된 주소만 순차 시도한다
 원자적 전이는 동시에 온 작업 중 하나만 상태를 바꾼다는 뜻이다. app은 `RelayState` 잠금 아래 domain 표의 판정과 스트림 이동을 함께 한다. 잠금은 짧게 잡는다. I/O 결과로 이미 관찰한 EOF·오류만 값으로 반영한다.
 
 1. 새 요청의 정확한 `RelayId`로 ref를 계산한다. 수명 상태가 종료 중이면 등록하지 않는다.
-2. 잠금을 잡고 현재 시각을 읽는다. 같은 ID 대기의 `now >= deadline`, 관찰한 EOF·오류를 먼저 판정한다. 종료 대상은 매칭 후보에서 제거한다. 제거된 연결의 정리는 잠금 밖에서 끝낸다.
+2. 잠금을 잡고 현재 시각을 읽는다. 같은 ID 대기의 W 기한·ticket 세션 만료 기한과 관찰한 EOF·오류를 먼저 판정한다. 종료 대상은 매칭 후보에서 제거한다. 제거된 연결의 정리는 잠금 밖에서 끝낸다.
 3. 유효한 같은 역할 대기가 있거나 `Claimed`·`Active`·`Closing`이 ID를 점유했으면 후발만 `duplicate_id`로 거절한다. 기존 대기와 세션은 건드리지 않는다. 후발은 Lw를 얻지 않고 대기 사건도 만들지 않는다. TCP는 오류 바이트 없이 FIN, WS·WSS는 Close 4004다(Q74).
-4. 유효한 반대 역할 대기가 있으면 Lw 고갈 여부보다 먼저 매칭한다. 추가 대기 항목을 만들지 않으므로 후발용 Lw가 필요 없다. 두 연결의 종료 상태·W·서버 종료를 다시 검사하고 둘을 한 번에 `Claimed`로 옮긴다. 선행 항목의 Lw permit을 이 전이에서 반환한다. L permit 두 개는 유지한다.
+4. 유효한 반대 역할 대기가 있으면 Lw 고갈 여부보다 먼저 매칭한다. 추가 대기 항목을 만들지 않으므로 후발용 Lw가 필요 없다. 두 연결의 종료 상태·W·ticket 세션 만료 기한·서버 종료를 다시 검사하고 둘을 한 번에 `Claimed`로 옮긴다. 선행 항목의 Lw permit을 이 전이에서 반환한다. L permit 두 개는 유지한다.
 5. 반대 역할이 없으면 Lw `try_acquire`를 잠금 안에서 호출한다. 없으면 `waiting_full`로 후발만 거절한다. 있으면 `registered_at`·W 기한과 app 항목을 함께 삽입한다. `waiting_registered`를 기록한다. 처음 온 역할이 Viewer인지 Server인지에 따른 별도 경로를 두지 않는다.
-6. 매칭을 확정한 작업이 두 스트림을 소유한다. 다른 연결 작업에는 소유권 인계 완료를 알린다. 빈손이 된 작업은 끝나며 permit을 다시 반환하지 않는다. 잠금 안에서 `Claimed`의 두 연결 식별자·세대를 확인해 활성 항목으로 바꾼다. 세션 시작 함수를 한 번만 부른다.
-7. 활성 등록·`session_started` 뒤 두 후속 버퍼를 `run_session_controlled`로 이동한다. `waited_ms`는 먼저 등록된 연결의 등록부터 매칭까지다. 매칭 때문에 `waiting_removed`를 추가하지 않는다. 계약에 그런 reason이 없다.
+6. 매칭을 확정한 작업이 두 스트림을 소유한다. 다른 연결 작업에는 소유권 인계 완료를 알린다. 빈손이 된 작업은 끝나며 permit을 다시 반환하지 않는다. 잠금 안에서 `Claimed`의 두 연결 식별자·세대를 확인한다. 매칭 중 ticket 기한을 넘긴 연결은 활성화하지 않는다. 유효한 쌍만 활성 항목으로 바꾸고 세션 시작 함수를 한 번 부른다.
+7. 활성 등록·`session_started` 뒤 두 후속 버퍼와 두 쪽 가운데 이른 세션 만료 기한을 `run_session_controlled`로 이동한다. `waited_ms`는 먼저 등록된 연결의 등록부터 매칭까지다. 매칭 때문에 `waiting_removed`를 추가하지 않는다. 계약에 그런 reason이 없다.
 
 매칭을 확정할 때 동기화된 카운터에서 다음 값 하나를 가져와 순열·인코딩을 적용한다. 반환형에는 `RandomError`가 없고 발급 집합에 넣는 단계도 없다. 인계 직전 W·관찰한 종료·서버 수명은 그대로 검사한다. 카운터 후보를 계산하는 동안 W를 멈추지 않는다. 시작 키와 순열을 사용하는 이유는 3.3절과 같다(**이 문서의 판단, 사용자 결정 없음**).
 
 대기 작업은 W 타이머, 서버 종료 알림, 매칭 인계 알림, I/O를 함께 기다린다. B가 남으면 그 길이까지만 읽어 후속 데이터 뒤에 붙인다. B가 차면 읽기를 멈춘다. 별도 OS 종료 준비 신호로 FIN을 탐색하지 않는다. EOF는 `read=0`, 오류는 실제 I/O 오류가 돌아올 때 관찰한다. 따라서 매칭 전 B 이상을 보낸 상대가 FIN도 보내면, 저장 바이트를 매칭 뒤 소진하고 다시 읽은 다음에야 종료를 관찰할 수 있다. 그 전에는 매칭할 수 있다. 정상 VNC 끝점의 대기 데이터는 최대 12바이트이므로 이 한계는 대기 중 B 이상을 보내는 상대에 해당한다. 대기 항목의 점유는 W와 Lw로 제한한다.
+
+ticket에 `sx`가 있으면 대기 작업은 그 단조 기한도 기다린다. 세션 만료 기한이 W보다 이르고 지나면 `waiting_removed(reason=session_expired)`를 `info`로 기록하고 Close 4013으로 닫는다. W가 더 이르거나 두 기한이 같으면 기존 `waiting_expired`와 Close 4001이다(이 문서의 판단, 사용자 결정 없음). 상대 도착 때도 매칭 전에 이미 만료된 대기를 제거한다([접속 ticket 모듈 설계](relay-access-ticket.md#43-101-뒤)).
 
 이 선택은 이식 가능한 읽기 API만 쓰고, TCP half-close(RLY-019)와 관찰된 전이 경합 규칙을 일관되게 적용하기 위한 것이다(**이 문서의 판단, 사용자 결정 없음**). 데이터를 버리거나 B+1 버퍼로 EOF를 탐색하지 않는다. 매칭은 기존 허용 판정을 재사용한다. 재로드된 출발지 허용 목록으로 대기를 다시 거절하지 않는다.
 
@@ -194,6 +197,8 @@ DNS 후보는 반환 순서를 유지해 허용된 주소만 순차 시도한다
 ### 4.3 작업 2.10: 두 방향 중계
 
 `run_session_controlled`는 두 방향을 같은 세션 소유자에서 번갈아 poll한다. 한 방향의 읽기·쓰기가 막혀도 다른 방향과 종료 신호, 관리자 종료 명령을 계속 poll한다. app에 소켓별 작업 생성이나 무제한 메시지 채널을 추가하지 않는다.
+
+활성 세션은 두 연결의 ticket 기한 가운데 이른 값에 `Session::begin_session_expiry`로 종료를 시작한다. WS·WSS 끝점에는 Close 4013 `session_expired`를 보내고 TCP 끝점은 소켓을 닫는다. 클라이언트 Close는 기존 E까지 기다린다. 이미 정리를 시작했으면 만료가 첫 원인을 바꾸지 않는다. 만료가 먼저 정리를 시작했으면 E가 지나도 `CloseCause::SessionExpired`를 유지한다([접속 ticket 모듈 설계](relay-access-ticket.md#43-101-뒤)).
 
 각 방향은 `BufferedDirection`의 `storage`, 미전달 범위 `start..end`, `eof`, `complete`로 진행 상태를 보관한다. 별도 `Buffered`·`Reading`·`Writing` enum은 없다. 초기 후속 데이터가 있으면 같은 저장 공간의 미전달 범위에서 시작한다.
 
@@ -272,7 +277,7 @@ Mode II가 초기 교환을 마쳤더라도 대기 등록 전에 서버 종료�
 | 대기 등록 | `waiting_registered`, info | `conn_id`, `listener`, `role`, `mode=mode2`, `relay_id_ref`, `peer_ip` |
 | 후발 중복·Lw 부족 | `connection_rejected`, warn | 후발 `conn_id`, `listener`, `role`, `mode=mode2`, `peer_ip`, `stage=register`, `reason=duplicate_id`와 `relay_id_ref`, 또는 `reason=waiting_full`과 `limit=Lw` |
 | W 만료 | `waiting_expired`, info | `conn_id`, `role`, `relay_id_ref`, `waited_ms`. 별도의 `wait_timeout` 중단 사건을 중복 기록하지 않음 |
-| EOF·오류·단절·서버 종료로 대기 제거 | `waiting_removed`, info. 오류·단절은 warn | `conn_id`, `role`, `relay_id_ref`, `waited_ms`, `reason=peer_eof/connection_error/dead_connection/server_shutdown`, 연결 오류면 `error_kind` |
+| EOF·오류·단절·서버 종료·세션 만료로 대기 제거 | `waiting_removed`, info. 오류·단절은 warn | `conn_id`, `role`, `relay_id_ref`, `waited_ms`, `reason=peer_eof/connection_error/dead_connection/server_shutdown/session_expired`, 연결 오류면 `error_kind` |
 | 활성화 성공 | `session_started`, info | `session_id`, `mode`, `viewer_transport`, `viewer_conn_id`, `viewer_peer_ip`. Mode II: `server_transport`, `server_conn_id`, `server_peer_ip`, `relay_id_ref`, 선행 `waited_ms`. Mode I: `target_ip`, `target_port`, 이름 요청이면 `target_host`. Mode I에는 server_transport 없음 |
 | 활성 세션 최종 정리 | `session_closed`, 원인별 | `session_id`, `mode`, `viewer_transport`, UTC `started_at`, `duration_ms`, `bytes_viewer_to_target`, `bytes_target_to_viewer`, `close_cause`. Mode II `relay_id_ref`. 필요한 `side`, `error_kind`, `admin_account` |
 
@@ -284,6 +289,7 @@ Mode II가 초기 교환을 마쳤더라도 대기 등록 전에 서버 종료�
 | `connection_error` | warn, 오류 쪽 `side`, `error_kind=io_error` 등 | 해당 연결 쌍만 종료 |
 | `dead_connection` | warn, 응답 없는 `side` | Linux 소켓 `ETIMEDOUT`과 앞선 ICMP 도달 불능에 따른 포기 오류 `EHOSTUNREACH`·`ENETUNREACH`는 keepalive 또는 재전송 포기로 판정한 응답 없는 상대이므로 `dead_connection`으로 바꾼다(ICMP 사례는 커널 소스 분석 근거, 실행 관찰 아님, 이 문서의 구현 판단, 사용자 결정 아님). `TcpRelayStream`과 `WsRelayStream`의 하부 I/O가 `net::classify_socket_error`를 쓰며 H·C·W의 app 타이머는 제외한다. Windows의 단절 오류는 관찰하지 않아 기존 부분 범위를 유지한다(Q86). 유휴 자체를 이 원인으로 만들지 않는다. |
 | `admin_terminated` | info, `admin_account`, side 없음 | [관리자 세션 종료](management-terminate.md)가 지정 세션만 종료. 완료 알림 뒤 API 응답 |
+| `session_expired` | info, side 없음 | ticket의 `sx`로 정리를 시작한 세션. WS·WSS Close 4013·TCP 소켓 닫기. E가 지나도 원인 유지. 최근 종료 목록에도 같은 값 보존 |
 | `close_timeout` | warn, EOF가 있으면 먼저 EOF를 낸 `side` | EOF 뒤 E 초과. 관리자 종료 E 초과도 같은 원인 |
 | `server_shutdown` | warn, side 없음 | G 만료·두 번째 종료 요청으로 강제 정리하거나 정상 종료 중(Grace·Force)에 소유 작업을 취소한 경우. 기존 원인이 없는 세션에만 쓴다. Running 중 버그 종료는 제외한다(사용자 결정 2026-11-01(Q82), 2026-11-02(Q94)) |
 | `internal_error` | warn(운영 정보 계약 1.3절), side·추가 필드 없음 | Running 중 세션 소유 작업이 panic 등 버그로 끝났고 기존 원인이 없는 경우(사용자 결정 2026-11-02(Q94)). panic 되감기가 스트림을 버리므로 WebSocket Close를 보내지 못한다(구현 한계, 이 문서의 판단, 사용자 결정 없음) |

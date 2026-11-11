@@ -16,6 +16,7 @@
 | 관련 스펙 | [관리 스펙](../specs/management.md) MGT-001~007, MGT-013, MGT-015, MGT-016, MGT-021, MGT-023~024, MGT-026, MGT-051, [운영 스펙](../specs/operations.md) OPS-033 |
 | 관련 계약 | [관리 API 계약 1.6~1.8·1.10·1.12절](../contracts/management-api-v1.md#16-서버-요약-get-apiv1summary), [2.1절](../contracts/management-api-v1.md#21-오류-본문과-상태-코드), [설정 계약 1.2절](../contracts/config-v4.md#12-키-표)(P, R), [운영 정보 계약 1.5절](../contracts/ops-info-v2.md#15-사건-목록) |
 | 관련 ADR | [ADR-0003 단일 인스턴스·메모리 상태](../decisions/ADR-0003-single-instance-memory-state.md), [ADR-0004 tokio·rustls](../decisions/ADR-0004-tokio-rustls.md) |
+| 관련 문서 | [접속 ticket 모듈 설계](relay-access-ticket.md) |
 
 R1은 `ActiveSessionItemView`와 `ClosedSessionItemView`에 필수 `target_transport`를 더했다. Mode I은 항상 `tcp`이고, Mode II는 실제 Server 전송이다.
 
@@ -41,7 +42,7 @@ R3은 최근 로그 조회 `GET /api/v1/logs`(MGT-046~050)를 `crates/adapters/s
   - 세션 식별자 형식 검증: `GET /api/v1/sessions/{session_id}` 요청 시 정규식 크레이트 없이 ASCII 조건문(`len 1~64`, 영문 대소문자·숫자·밑줄·하이픈)으로 검증한다. 잘못된 형식이면 즉시 `400 invalid_request`를 반환하고, 형식은 올바르나 활성 세션 표에 없으면(최근 종료 목록에 있는 경우 포함) `404 not_found`를 반환한다(스펙 §2.3, MGT-023).
   - 연결 수 및 예산 사용량 집계(MGT-026): 초기 교환 중 연결 수(`handshaking`), Mode I 대상 연결 중 연결 수(`target_connecting`), 중계 연결 상한 및 사용량(L), 관리·상태 연결 상한 및 사용량(Lm)을 반환한다. 모든 수치는 원자적 변수 및 인메모리 상태에서 직접 읽으므로 읽기 실패 분기(dead branch)가 없으며 항상 정수와 `null` 사유를 반환한다.
   - 단조 시간 기반 경과 시간 산출(MGT-007): 프로세스 가동 시간(`server.uptime_ms`), 대기 시간(`waited_ms`), 세션 경과 시간은 단조 시계(`Instant`) 차이로 계산해 시스템 시각 보정 시 음수가 발생하지 않도록 보장한다. 표시용 시각은 UTC ISO 8601 문자열로 변환한다.
-  - 최근 종료 세션 목록 제공: 메모리에 보관된 최대 R개의 최근 종료 세션과 6가지 종료 원인(`close_cause`)을 계약 형식(`ClosedSessionsResponse`)에 맞춰 직렬화한다.
+  - 최근 종료 세션 목록 제공: 메모리에 보관된 최대 R개의 최근 종료 세션과 8가지 종료 원인(`close_cause`)을 계약 형식(`ClosedSessionsResponse`)에 맞춰 직렬화한다. ticket 만료로 정리한 활성 세션은 `session_expired`다([접속 ticket 모듈 설계](relay-access-ticket.md#43-101-뒤)).
 - 맡지 않는 책임:
   - 관리자 로그인·세션 토큰 발급·CSRF 검증: 작업 4.3의 [관리 로그인과 세션 설계](management-session.md)가 소유한다.
   - 관리자 종료(`POST /api/v1/sessions/{session_id}/terminate`): 작업 4.5가 소유한다.
@@ -97,7 +98,7 @@ flowchart LR
 | `WaitingItemView` | `role: &'static str` (`viewer` \| `server`), `relay_id: String`, `connected_at: String`, `waited_ms: u64` | `WaitingResponse.items` 배열 | `relay_id`는 1~247자의 숫자 원문 문자열을 보존한다. `waited_ms`는 `as_of`까지의 단조 시간 경과다. |
 | `ActiveSessionView` | `session_id`, `state`, `mode`, `viewer_transport`, `target_transport`, `viewer_forwarded_ip`, `target_forwarded_ip`, `started_at`, 양방향 `bytes_*`, `viewer_address`, `target_address` | `SessionsResponse.items` 및 상세 | 양쪽 전송은 `tcp`·`ws`·`wss`다. Mode I의 target은 `tcp`, Mode II는 실제 Server 전송이다. 전달 주소는 신뢰 프록시 판정 결과 또는 `null`이다. `closing`도 활성 목록에 포함한다. |
 | `ClosedSessionsResponse` | `as_of: String`, `max_entries: u64`, `items: Vec<ClosedSessionItemView>` | HTTP 직렬화 시 일시 생성 | `max_entries`는 설정된 R 값이다. `items`는 정리가 끝난 활성 세션만 담는다. |
-| `ClosedSessionItemView` | `session_id`, `mode`, `viewer_transport`, `target_transport`, `started_at`, `ended_at`, 양방향 `bytes_*`, `close_cause` | `ClosedSessionsResponse.items` | 정리된 세션이 보존한 양쪽 전송을 반환한다. 계약 1.10절에 따라 주소 필드는 포함하지 않는다. 최대 R개이며 오래된 항목부터 제거한다. |
+| `ClosedSessionItemView` | `session_id`, `mode`, `viewer_transport`, `target_transport`, `started_at`, `ended_at`, 양방향 `bytes_*`, `close_cause` | `ClosedSessionsResponse.items` | 정리된 세션이 보존한 양쪽 전송과 `session_expired`를 포함한 종료 원인을 반환한다. 초기 교환·대기 중 만료는 이 목록에 넣지 않는다. 계약 1.10절에 따라 주소 필드는 포함하지 않는다. 최대 R개이며 오래된 항목부터 제거한다. |
 | `PeerAddressView` | `ip: String`, `port: u16` | 세션 뷰 내부 | 프록시 전달 헤더를 무시하고 실제 소켓 상대 주소를 반영한다. 목표 표기는 `IpAddr::to_canonical()`을 적용하며 IPv4 매핑 IPv6는 `a.b.c.d`로 쓴다(사용자 결정 2026-11-02(Q88)). 같은 작업에서 직렬화를 수정한다(9.1절). |
 
 ## 4. 처리 순서
@@ -183,7 +184,7 @@ flowchart LR
 | MGT-015 | FR-06 / MGT-R10 | 통합 | `crates/adapters/tests/management.rs` | `X-Forwarded-For`, `Forwarded` 헤더를 주입해도 실제 소켓 피어 주소가 응답 주소에 표시됨을 검증 계획 |
 | MGT-016 | FR-06 / MGT-R01 | 단위/통합 | `crates/adapters/tests/management.rs` | 상태 복사 직후 실제 종료와 실제 연결 수락을 일으켜, 각 응답의 집계·목록이 그 응답이 복사한 상태와 같고 `as_of`가 하나인지 확인한다. L 사용량이 같은 응답의 집계보다 앞설 수 있음(사용자 결정 2026-11-04(Q100))과 다음 응답에서 맞는 것도 확인한다(`completion_mgt016_counts_lists_and_as_of_follow_one_capture_while_usage_is_sampled`) |
 | MGT-021 | FR-06·7절 / MGT-R11 | 통합 | `crates/adapters/tests/management.rs` | 세션 쿠키 없이 4개 조회 엔드포인트 직접 호출 시 `401 unauthenticated` 반환 및 보호 정보 차단 검증 계획 |
-| MGT-023 | FR-06 / MGT-R15 | 통합 | `crates/adapters/tests/management.rs` | 정상 EOF, 연결 오류, 관리자 종료로 끝난 세션의 최근 종료 목록 조회 및 `internal_error`(사용자 결정 2026-11-02(Q94))를 포함한 종료 원인 7종 구별 표시, 최근 종료된 세션 식별자로 상세 조회 시 `404 not_found` 반환 검증 계획 (종료 요청 검증은 작업 4.5 몫) |
+| MGT-023 | FR-06 / MGT-R15 | 통합 | `crates/adapters/tests/management.rs` | 정상 EOF, 연결 오류, 관리자 종료로 끝난 세션의 최근 종료 목록 조회 및 `internal_error`(사용자 결정 2026-11-02(Q94))를 포함한 기존 종료 원인 7종 구별 표시, 최근 종료된 세션 식별자로 상세 조회 시 `404 not_found` 반환 검증 계획. ticket의 추가 원인 `session_expired`는 [접속 ticket 모듈 설계](relay-access-ticket.md#43-101-뒤)와 MGT-052 범위다. 종료 요청 검증은 작업 4.5 몫이다. |
 | MGT-024 | FR-06 / MGT-R15 | 단위/통합 | `crates/domain/src/recent_closed.rs`, `crates/adapters/tests/management.rs` | 최근 종료 목록이 R개 초과 시 FIFO 삭제 검증 및 프로세스 재시작 시 메모리 목록 초기화 검증 계획 |
 | MGT-026 | FR-06 / MGT-R17 | 통합 | `crates/adapters/tests/management.rs` | 초기 교환 n개, Mode I 대상 연결 m개, L 도달 상태에서 요약의 `counts` 및 `usage` 일치 검증 계획 |
 | OPS-033 | OPS-R18 / OPS-033 | 통합 | `tests/management_query.rs` | L=2를 실제 중계 연결로 채운 상태에서 로그인·조회·관리자 종료가 되고, Lm=2를 관리·상태 연결로 채운 상태에서 새 중계 연결이 수락·매칭·양방향 전달되는지 한 함수에서 확인한다(`exhausted_relay_and_admin_budgets_leave_the_other_service_operational`, 커밋 `e9221c6`) |

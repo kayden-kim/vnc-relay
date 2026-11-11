@@ -55,6 +55,7 @@ export const COPY = {
       close_timeout: '정리 제한 시간 초과', // CPY-049
       server_shutdown: '서버 종료', // CPY-050
       internal_error: '내부 오류', // CPY-083
+      session_expired: '세션 만료', // CPY-190
     },
     directionViewerToTarget: 'Viewer->대상', // CPY-040·CPY-043 table headers (spec §9.3.2).
     directionTargetToViewer: '대상->Viewer', // CPY-040·CPY-043 table headers (spec §9.3.2).
@@ -156,8 +157,11 @@ export const COPY = {
     viewLogs: '로그 보기', // CPY-182
     // SCR-005 warnings & help
     emptyTrustedProxiesWarning: '빈 trusted_proxies 목록은 전달 헤더를 신뢰하지 않습니다. 소켓 상대 IP로 클라이언트 주소를 검사합니다.', // CPY-183
-    emptyAllowedOriginsWarning: '빈 allowed_origins 목록은 Origin이 있는 요청을 거절합니다. Origin이 없는 요청은 IP 검사만 합니다.', // CPY-184
+    emptyAllowedOriginsWarning: '빈 allowed_origins 목록은 Origin이 있는 요청을 거절합니다. Origin이 없는 요청은 IP 검사를 하고, 그 역할에 접속 ticket 확인을 켰으면 ticket도 확인합니다.', // CPY-192 (replaces CPY-184)
     trustedProxiesHelp: 'trusted_proxies에는 프록시 주소만 입력하십시오. 클라이언트 범위는 넣지 마십시오. 전달 주소가 모두 신뢰 프록시에 속하면 요청을 거절합니다.', // CPY-185
+    accessTickets: '접속 ticket', // CPY-191
+    stringLengthError: '1바이트 이상 256바이트 이하로 입력하십시오.', // CPY-193
+    enableTicketWarning: '접속 ticket 확인을 켜면 이 역할의 WS·WSS 업그레이드 요청 가운데 유효한 ticket이 없는 요청을 거절합니다. 기존 중계 세션은 계속 동작합니다.', // CPY-194
     // SCR-006 logs
     logs: '로그', // CPY-149
     retainedCount: '보관 {n} / 최대 {max}', // CPY-150
@@ -239,6 +243,7 @@ export const COPY = {
       close_timeout: 'Cleanup time limit exceeded', // CPY-049
       server_shutdown: 'Server shutdown', // CPY-050
       internal_error: 'Internal error', // CPY-083
+      session_expired: 'Session expired', // CPY-190
     },
     directionViewerToTarget: 'Viewer->target', // CPY-040·CPY-043 table headers (spec §9.3.2).
     directionTargetToViewer: 'target->Viewer', // CPY-040·CPY-043 table headers (spec §9.3.2).
@@ -340,8 +345,11 @@ export const COPY = {
     viewLogs: 'View logs', // CPY-182
     // SCR-005 warnings & help
     emptyTrustedProxiesWarning: 'An empty trusted_proxies list does not trust forwarded headers. The socket peer IP is used as the client address.', // CPY-183
-    emptyAllowedOriginsWarning: 'An empty allowed_origins list rejects requests with Origin. Requests without Origin use only the IP check.', // CPY-184
+    emptyAllowedOriginsWarning: 'An empty allowed_origins list rejects requests with Origin. Requests without Origin use the IP check, and also the ticket check when access tickets are on for the role.', // CPY-192 (replaces CPY-184)
     trustedProxiesHelp: 'Enter only proxy addresses in trusted_proxies. Do not include client ranges. A request is rejected when all forwarded addresses belong to trusted proxies.', // CPY-185
+    accessTickets: 'Access tickets', // CPY-191
+    stringLengthError: 'Enter 1 to 256 bytes.', // CPY-193
+    enableTicketWarning: "Turning on access ticket checks rejects this role's WS and WSS upgrade requests that have no valid ticket. Existing relay sessions continue.", // CPY-194
     // SCR-006 logs
     logs: 'Logs', // CPY-149
     retainedCount: 'Retained {n} / Maximum {max}', // CPY-150

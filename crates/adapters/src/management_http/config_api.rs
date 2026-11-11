@@ -97,6 +97,10 @@ fn patch_body(bytes: &[u8]) -> Option<ConfigPatch> {
                 ConfigValue::Integer(integer)
             } else if let Some(integer) = value.as_u64() {
                 ConfigValue::Integer(i64::try_from(integer).unwrap_or(i64::MAX))
+            } else if let Some(boolean) = value.as_bool() {
+                ConfigValue::Bool(boolean)
+            } else if let Some(string) = value.as_str() {
+                ConfigValue::String(string.to_owned())
             } else {
                 ConfigValue::Strings(
                     value
@@ -210,6 +214,48 @@ fn internal_error() -> Response {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// spec: management.md:MGT-053 partial
+    #[test]
+    fn ticket_patch_preserves_boolean_string_and_integer_types_without_trimming() {
+        let revision = format!("sha256:{}", "0".repeat(64));
+        let body = json!({
+            "revision": revision,
+            "changes": {
+                "relay.ticket.viewer.enabled": true,
+                "relay.ticket.viewer.issuer": " issuer.example ",
+                "relay.ticket.viewer.relay_host": "relay.example",
+                "relay.ticket.viewer.max_lifetime_secs": 90,
+            }
+        })
+        .to_string();
+        let request =
+            patch_body(body.as_bytes()).unwrap_or_else(|| panic!("ticket request types rejected"));
+        for (key, expected) in [
+            ("enabled", ConfigValue::Bool(true)),
+            ("issuer", ConfigValue::String(" issuer.example ".to_owned())),
+            (
+                "relay_host",
+                ConfigValue::String("relay.example".to_owned()),
+            ),
+            ("max_lifetime_secs", ConfigValue::Integer(90)),
+        ] {
+            let change = request
+                .changes
+                .iter()
+                .find(|change| change.key == format!("relay.ticket.viewer.{key}"))
+                .unwrap_or_else(|| panic!("missing ticket change"));
+            assert_eq!(change.value, expected);
+        }
+        for value in [json!(null), json!({}), json!(1.5), json!([true])] {
+            let body = json!({
+                "revision": revision,
+                "changes": {"relay.ticket.viewer.issuer": value}
+            })
+            .to_string();
+            assert!(patch_body(body.as_bytes()).is_none());
+        }
+    }
 
     /// spec: management.md:MGT-036 partial
     #[test]

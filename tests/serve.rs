@@ -1194,7 +1194,7 @@ fn writes_the_log_to_the_configured_file_from_start_to_stop() {
     );
     let lines: Vec<&str> = log.lines().collect();
     assert_eq!(field(lines[0], "level"), Some("info"));
-    assert_eq!(field(lines[0], "log_contract"), Some("ops-info/2.0.0"));
+    assert_eq!(field(lines[0], "log_contract"), Some("ops-info/2.1.0"));
     assert_eq!(field(lines[1], "level"), Some("warn"));
     assert_eq!(field(lines[1], "listener"), Some("tcp_viewer"));
     assert_eq!(field(lines[1], "item"), Some("0.0.0.0/0"));
@@ -1587,7 +1587,7 @@ fn server_only_websocket_roles_open_each_shared_listener() {
         .lines()
         .find(|line| field(line, "event") == Some("server_starting"))
         .expect("server_starting");
-    assert_eq!(field(starting, "log_contract"), Some("ops-info/2.0.0"));
+    assert_eq!(field(starting, "log_contract"), Some("ops-info/2.1.0"));
     let warning = wait_for_line(&log, |line| {
         field(line, "event") == Some("plaintext_ws_enabled")
     });
@@ -3332,4 +3332,152 @@ fn real_mode_i_and_proxied_ws_wss_sessions_expose_transport_and_forwarded_addres
         drop(viewer);
         drop(server);
     }
+}
+
+/// spec: operations.md:OPS-070 partial
+#[test]
+fn ticket_key_startup_failures_exit_three_before_binding_and_never_expose_contents() {
+    let _lock = lock_ports();
+    let ports = Ports::free();
+    let base = config_text(ports);
+    let enabled = "\n[relay.ticket.viewer]\nenabled = true\nissuer = \"issuer.example\"\nrelay_host = \"relay.example\"\npublic_keys_file = \"viewer.jwks\"\n";
+    // Public curve generator, encoded locally to construct public test keys.
+    let encode = |hex: &str| {
+        const ALPHABET: &[u8; 64] =
+            b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+        let bytes: Vec<_> = (0..hex.len())
+            .step_by(2)
+            .map(|index| u8::from_str_radix(&hex[index..index + 2], 16).unwrap())
+            .collect();
+        let mut encoded = String::new();
+        for chunk in bytes.chunks(3) {
+            let mut block = [0u8; 3];
+            block[..chunk.len()].copy_from_slice(chunk);
+            let value = u32::from_be_bytes([0, block[0], block[1], block[2]]);
+            for index in 0..=chunk.len() {
+                encoded.push(char::from(
+                    ALPHABET[((value >> (18 - index * 6)) & 63) as usize],
+                ));
+            }
+        }
+        encoded
+    };
+    let key = serde_json::json!({
+        "kty": "EC", "crv": "P-256", "kid": "startup",
+        "x": encode("6b17d1f2e12c4247f8bce6e563a440f277037d812deb33a0f4a13945d898c296"),
+        "y": encode("4fe342e2fe1a7f9b8ee7eb4a7c0f9e162bce33576b315ececbb6406837bf51f5")
+    });
+    let mut non_p256 = key.clone();
+    non_p256["crv"] = "P-384".into();
+    let mut private = key.clone();
+    private["d"] = "PRIVATE_TICKET_KEY_CONTENT_MARKER".into();
+    let invalid_files = [
+        None,
+        Some("INVALID_TICKET_KEY_CONTENT_MARKER".to_owned()),
+        Some(r#"{"keys":[]}"#.to_owned()),
+        Some(serde_json::json!({"keys": [non_p256]}).to_string()),
+        Some(serde_json::json!({"keys": [private]}).to_string()),
+        Some(serde_json::json!({"keys": [key.clone(), key.clone()]}).to_string()),
+        Some("X".repeat(65_537)),
+    ];
+    for (index, bytes) in invalid_files.into_iter().enumerate() {
+        let config = setup_with(
+            &format!("ticket-startup-{index}"),
+            &(base.clone() + enabled),
+        );
+        if let Some(bytes) = bytes {
+            write(&config.with_file_name("viewer.jwks"), &bytes);
+        }
+        let taken = TcpListener::bind(("127.0.0.1", ports.status)).unwrap();
+        let run = serve(&config);
+        drop(taken);
+        assert_eq!(run.code, Some(3), "{}", run.stderr);
+        let expected = pairs(&[(
+            "ticket_keys_invalid",
+            "relay.ticket.viewer.public_keys_file",
+        )]);
+        assert_eq!(run.errors(), expected);
+        assert_eq!(startup_failures(&run.stdout), expected);
+        for text in [&run.stdout, &run.stderr] {
+            assert!(!text.contains("PRIVATE_TICKET_KEY_CONTENT_MARKER"));
+            assert!(!text.contains("INVALID_TICKET_KEY_CONTENT_MARKER"));
+        }
+        assert_released(ports);
+    }
+    let text = base.clone()
+        + enabled
+        + "\n[relay.ticket.server]\nenabled = true\nissuer = \"issuer.example\"\nrelay_host = \"relay.example\"\npublic_keys_file = \"viewer.jwks\"\n";
+    for (index, (candidate, code, config_key)) in [
+        (
+            enabled.replace("issuer = \"issuer.example\"\n", ""),
+            "config_missing_key",
+            "relay.ticket.viewer.issuer",
+        ),
+        (
+            enabled.replace("relay_host = \"relay.example\"\n", ""),
+            "config_missing_key",
+            "relay.ticket.viewer.relay_host",
+        ),
+        (
+            enabled.replace("public_keys_file = \"viewer.jwks\"\n", ""),
+            "config_missing_key",
+            "relay.ticket.viewer.public_keys_file",
+        ),
+        (
+            format!("{enabled}max_lifetime_secs = 9\n"),
+            "config_value_out_of_range",
+            "relay.ticket.viewer.max_lifetime_secs",
+        ),
+        (
+            format!("{enabled}max_lifetime_secs = 601\n"),
+            "config_value_out_of_range",
+            "relay.ticket.viewer.max_lifetime_secs",
+        ),
+        (
+            enabled.replace("issuer.example", ""),
+            "config_value_out_of_range",
+            "relay.ticket.viewer.issuer",
+        ),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let config = setup_with(
+            &format!("ticket-config-startup-{index}"),
+            &(base.clone() + &candidate),
+        );
+        let run = serve(&config);
+        assert_eq!(run.code, Some(3), "{}", run.stderr);
+        assert_eq!(run.errors(), pairs(&[(code, config_key)]));
+        assert_eq!(startup_failures(&run.stdout), run.errors());
+        assert_released(ports);
+    }
+    let config = setup_with("ticket-startup-shared", &text);
+    write(
+        &config.with_file_name("viewer.jwks"),
+        &serde_json::json!({"keys": [key]}).to_string(),
+    );
+    let run = serve(&config);
+    assert_eq!(run.code, Some(3), "{}", run.stderr);
+    assert_eq!(
+        run.errors(),
+        pairs(&[(
+            "ticket_keys_invalid",
+            "relay.ticket.server.public_keys_file"
+        )])
+    );
+    assert_eq!(startup_failures(&run.stdout), run.errors());
+    assert_released(ports);
+    // Both independently checked roles and TLS diagnostics are retained in one pass.
+    let config = setup_with(
+        "ticket-and-tls-failures",
+        &(wss_config(ports, "missing-cert.pem", "missing-key.pem")
+            + enabled
+            + "\n[relay.ticket.server]\nenabled = true\nissuer = \"issuer.example\"\nrelay_host = \"relay.example\"\npublic_keys_file = \"server.jwks\"\n"),
+    );
+    let run = serve(&config);
+    assert_eq!(run.code, Some(3));
+    assert_eq!(run.errors().len(), 3);
+    assert_eq!(startup_failures(&run.stdout), run.errors());
+    assert_released(ports);
 }

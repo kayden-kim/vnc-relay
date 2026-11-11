@@ -279,6 +279,7 @@ async fn log_directory_registration_failure_keeps_poll_and_retries() {
         Arc::new(ReloadCell::new(ReloadSnapshot::new(settings, None, None))),
         files.clone(),
         Arc::new(NoTls),
+        Arc::new(crate::ticket::TicketJwksStore),
         log.clone(),
     );
     let refuse = Arc::new(AtomicBool::new(true));

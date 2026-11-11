@@ -17,6 +17,7 @@ mod request_deadline;
 pub mod status_http;
 pub mod target;
 pub mod terminal;
+pub mod ticket;
 pub mod tls;
 mod tls_listener;
 mod toml_text;

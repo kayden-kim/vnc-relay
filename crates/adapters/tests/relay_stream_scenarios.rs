@@ -795,10 +795,13 @@ async fn measured_pair(
             meter: Arc::clone(&meter),
         };
         let mut peer = peer;
-        let prepare =
-            running
-                .service
-                .handle_connection(input, context, permit, running.runtime.lifecycle());
+        let prepare = running.service.handle_connection(
+            input,
+            context,
+            None,
+            permit,
+            running.runtime.lifecycle(),
+        );
         let send = async {
             if side == 0 {
                 greeting(&mut peer).await;

@@ -10,7 +10,7 @@ use serde_json::{Value, json};
 use super::live::{Browser, Fault, LIMIT, Server, must, wait_for};
 use super::settings::{
     PendingFile, get_field_value, login_alice, open_settings, open_settings_edit, script_str,
-    set_field_value,
+    set_field_value, with_ticket_config,
 };
 
 fn items(config: &Value) -> &[Value] {
@@ -28,7 +28,7 @@ fn item<'a>(config: &'a Value, key: &str) -> &'a Value {
 
 fn form_values(browser: &mut Browser) -> Value {
     browser.eval(
-        "Object.fromEntries([...document.querySelectorAll('.config-input')].map(n=>[n.dataset.configKey,n.value]))",
+        "Object.fromEntries([...document.querySelectorAll('input[data-config-key],textarea[data-config-key]')].map(n=>[n.dataset.configKey,n.type === 'checkbox' ? n.checked : n.value]))",
     )
 }
 
@@ -112,13 +112,17 @@ fn patch_reply(server: &Server, count: usize) -> Value {
 
 // DASH-035
 pub fn settings_edit_exposes_only_enabled_editable_keys() {
-    let server = Server::start_with_config_transform("dash-035", None, true, |config, _| {
-        config
-            .replace(
-                "[relay.tcp_server]\nenabled = true",
-                "[relay.tcp_server]\nenabled = false",
-            )
-            .replace("[mode1]\nenabled = true", "[mode1]\nenabled = false")
+    let server = Server::start_with_config_transform("dash-035", None, true, |config, dir| {
+        with_ticket_config(
+            config
+                .replace(
+                    "[relay.tcp_server]\nenabled = true",
+                    "[relay.tcp_server]\nenabled = false",
+                )
+                .replace("[mode1]\nenabled = true", "[mode1]\nenabled = false"),
+            dir,
+            "viewer",
+        )
     });
     let admin = server.login();
     let config = server.query(&admin, "/api/v1/config");
@@ -155,6 +159,12 @@ pub fn settings_edit_exposes_only_enabled_editable_keys() {
         "management.cert_file",
         "management.key_file",
         "management.config_edit",
+        "relay.ticket.viewer.public_keys_file",
+        "relay.ticket.server.public_keys_file",
+        "relay.ticket.server.enabled",
+        "relay.ticket.server.issuer",
+        "relay.ticket.server.relay_host",
+        "relay.ticket.server.max_lifetime_secs",
     ] {
         assert!(
             !expected.contains(key),
@@ -169,13 +179,15 @@ pub fn settings_edit_exposes_only_enabled_editable_keys() {
     }
     assert_eq!(browser.eval(
         "[...document.querySelectorAll('.card')].filter(c=>c.querySelector('.settings-fields')).map(c=>c.querySelector('.card-heading').textContent)",
-    ), json!(["출발지 IP 허용 목록", "접근 정책", "연결 상한", "시간 제한", "연결 유지"]));
+    ), json!(["출발지 IP 허용 목록", "접근 정책", "연결 상한", "시간 제한", "연결 유지", "접속 ticket"]));
     for entry in items(&config)
         .iter()
         .filter(|entry| entry["editable"] == true)
     {
         let key = entry["key"].as_str().unwrap_or("");
-        let group = if key.starts_with("relay.") && key.ends_with(".allow") {
+        let group = if key.starts_with("relay.ticket.") {
+            "접속 ticket"
+        } else if key.starts_with("relay.") && key.ends_with(".allow") {
             "출발지 IP 허용 목록"
         } else if key.starts_with("relay.") || key.starts_with("mode1.") {
             "접근 정책"
@@ -196,6 +208,8 @@ pub fn settings_edit_exposes_only_enabled_editable_keys() {
                 .map(|value| value.as_str().unwrap_or(""))
                 .collect::<Vec<_>>()
                 .join("\n")
+        } else if value.is_string() || value.is_null() {
+            value.as_str().unwrap_or("").to_owned()
         } else {
             value.to_string()
         };
@@ -205,6 +219,35 @@ pub fn settings_edit_exposes_only_enabled_editable_keys() {
             "running input value for {key}"
         );
     }
+    assert_eq!(
+        browser.eval("[...document.querySelectorAll('.settings-fields')].at(-1).querySelectorAll('input').length"),
+        json!(4)
+    );
+    assert_eq!(
+        browser.eval("[...document.querySelectorAll('.settings-fields')].at(-1).closest('.card').querySelector('.card-heading').textContent"),
+        json!("접속 ticket")
+    );
+    assert_eq!(
+        browser.eval("[...document.querySelectorAll('input[data-config-key]')].filter(n=>n.dataset.configKey.startsWith('relay.ticket.')).map(n=>[n.dataset.configKey,n.type,n.type === 'checkbox' ? n.checked : n.value])"),
+        json!([
+            ["relay.ticket.viewer.enabled", "checkbox", false],
+            ["relay.ticket.viewer.issuer", "text", "dashboard-issuer"],
+            ["relay.ticket.viewer.relay_host", "text", "relay.example.test"],
+            ["relay.ticket.viewer.max_lifetime_secs", "text", "60"]
+        ])
+    );
+    assert_eq!(
+        browser.eval("document.querySelector('[data-config-key=\"relay.ticket.viewer.enabled\"]').labels[0].textContent"),
+        json!("relay.ticket.viewer.enabled")
+    );
+    set_field_value(&mut browser, "relay.ticket.viewer.enabled", "true");
+    set_field_value(&mut browser, "relay.ticket.viewer.issuer", "changed-issuer");
+    set_field_value(
+        &mut browser,
+        "relay.ticket.viewer.relay_host",
+        "changed-relay",
+    );
+    set_field_value(&mut browser, "relay.ticket.viewer.max_lifetime_secs", "120");
     set_field_value(
         &mut browser,
         "relay.ws.trusted_proxies",
@@ -213,11 +256,59 @@ pub fn settings_edit_exposes_only_enabled_editable_keys() {
     review(&mut browser);
     assert_eq!(browser.eval("document.querySelector('dialog .config-change').textContent.includes('relay.ws.trusted_proxies') && document.querySelector('dialog .config-change').textContent.includes('192.0.2.10') && document.querySelector('dialog .config-change').textContent.includes('192.0.2.11')"),json!(true));
     assert_eq!(server.proxy.count("PATCH", "/api/v1/config"), 0);
+
+    // Role gating is symmetric: a server-only WS role gets its own four fields,
+    // never the Viewer's fields or either public-key path.
+    let server_only = Server::start_with_config_transform(
+        "dash-035-server",
+        None,
+        true,
+        |config, dir| {
+            with_ticket_config(
+                config.replace(
+                    "[relay.ws.viewer]\nenabled = true",
+                    "[relay.ws.viewer]\nenabled = false",
+                ) + "\n[relay.ws.server]\nenabled = true\nallow = [\"127.0.0.1\"]\nallowed_origins = []\n",
+                dir,
+                "server",
+            )
+        },
+    );
+    let mut server_browser = Browser::start("dash-035-server", &["en-US"]);
+    login_alice(&mut server_browser, &server_only);
+    open_settings(&mut server_browser, &server_only);
+    open_settings_edit(&mut server_browser, &server_only);
+    assert_eq!(
+        server_browser.eval("[...document.querySelectorAll('input[data-config-key]')].filter(n=>n.dataset.configKey.startsWith('relay.ticket.')).map(n=>n.dataset.configKey)"),
+        json!([
+            "relay.ticket.server.enabled",
+            "relay.ticket.server.issuer",
+            "relay.ticket.server.relay_host",
+            "relay.ticket.server.max_lifetime_secs"
+        ])
+    );
+    assert_eq!(
+        server_browser.eval("[...document.querySelectorAll('.settings-fields')].at(-1).closest('.card').querySelector('.card-heading').textContent"),
+        json!("Access tickets")
+    );
+    for key in [
+        "relay.ticket.server.enabled",
+        "relay.ticket.server.issuer",
+        "relay.ticket.server.relay_host",
+        "relay.ticket.server.max_lifetime_secs",
+    ] {
+        assert_eq!(server_browser.eval(&format!(
+            "document.querySelector('[data-config-key=\"' + {} + '\"]').closest('.card').querySelector('.card-heading').textContent",
+            script_str(key)
+        )), json!("Access tickets"));
+    }
 }
 
 // DASH-036
 pub fn invalid_settings_inputs_focus_first_error_without_patch() {
-    let server = Server::start_with_config("dash-036", None, true);
+    let server = Server::start_with_config_transform("dash-036", None, true, |config, dir| {
+        with_ticket_config(config, dir, "viewer")
+    });
     let admin = server.login();
     let config = server.query(&admin, "/api/v1/config");
     let mut browser = Browser::start("dash-036", &["ko-KR"]);
@@ -330,6 +421,61 @@ pub fn invalid_settings_inputs_focus_first_error_without_patch() {
             .text()
             .contains("입력 오류가 2개 있습니다. 첫 오류로 이동합니다.")
     );
+    set_field_value(&mut browser, "relay.tcp_viewer.allow", "127.0.0.1");
+    set_field_value(
+        &mut browser,
+        "limits.waiting",
+        &item(&config, "limits.waiting")["value"].to_string(),
+    );
+    for (lang, message) in [
+        ("ko", "1바이트 이상 256바이트 이하로 입력하십시오."),
+        ("en", "Enter 1 to 256 bytes."),
+    ] {
+        switch_language(&mut browser, lang);
+        for (key, invalid) in [
+            ("relay.ticket.viewer.issuer", String::new()),
+            ("relay.ticket.viewer.relay_host", "a".repeat(257)),
+            (
+                "relay.ticket.viewer.relay_host",
+                format!("{}ab", "가".repeat(85)),
+            ),
+        ] {
+            set_field_value(&mut browser, key, &invalid);
+            browser.click("#settings-review");
+            field_error(&mut browser, key, message);
+            focused(&mut browser, key, None);
+            assert_eq!(get_field_value(&mut browser, key), invalid);
+            assert_eq!(
+                browser.eval("document.querySelector('dialog[open]') === null"),
+                json!(true)
+            );
+            assert_eq!(server.proxy.count("PATCH", "/api/v1/config"), 0);
+            set_field_value(
+                &mut browser,
+                key,
+                item(&config, key)["value"].as_str().unwrap_or(""),
+            );
+        }
+    }
+    // Boundary lengths are UTF-8 bytes, and surrounding spaces are not trimmed.
+    let boundary = format!(" {} ", "가".repeat(84)) + "ab";
+    assert_eq!(boundary.len(), 256);
+    set_field_value(&mut browser, "relay.ticket.viewer.issuer", " ");
+    set_field_value(&mut browser, "relay.ticket.viewer.relay_host", &boundary);
+    browser.click("[data-config-key=\"relay.ticket.viewer.enabled\"]");
+    assert_eq!(
+        form_values(&mut browser)["relay.ticket.viewer.enabled"],
+        true
+    );
+    review(&mut browser);
+    assert_eq!(
+        browser.eval("[...document.querySelectorAll('dialog .config-change')].map(c=>[c.querySelector('.card-heading').textContent,[...c.querySelector('.config-body').children].filter(n=>!n.classList.contains('alert')).map(n=>n.textContent)])"),
+        json!([
+            ["relay.ticket.viewer.enabled", ["Previous value", "false", "New value", "true"]],
+            ["relay.ticket.viewer.issuer", ["Previous value", "dashboard-issuer", "New value", " "]],
+            ["relay.ticket.viewer.relay_host", ["Previous value", "relay.example.test", "New value", boundary]]
+        ])
+    );
     assert_eq!(
         server.proxy.count("PATCH", "/api/v1/config"),
         0,
@@ -339,10 +485,14 @@ pub fn invalid_settings_inputs_focus_first_error_without_patch() {
 
 // DASH-037
 pub fn settings_confirmation_shows_diffs_empty_list_warning_and_timing() {
-    let server = Server::start_with_config_transform("dash-037", None, true, |config, _| {
-        config.replace(
-            "[relay.ws]\n",
-            "[relay.ws]\ntrusted_proxies = [\"127.0.0.1\"]\n",
+    let server = Server::start_with_config_transform("dash-037", None, true, |config, dir| {
+        with_ticket_config(
+            config.replace(
+                "[relay.ws]\n",
+                "[relay.ws]\ntrusted_proxies = [\"127.0.0.1\"]\n",
+            ),
+            dir,
+            "viewer",
         )
     });
     let admin = server.login();
@@ -436,7 +586,7 @@ pub fn settings_confirmation_shows_diffs_empty_list_warning_and_timing() {
         ),
         (
             "relay.ws.viewer.allowed_origins",
-            "빈 allowed_origins 목록은 Origin이 있는 요청을 거절합니다. Origin이 없는 요청은 IP 검사만 합니다.",
+            "빈 allowed_origins 목록은 Origin이 있는 요청을 거절합니다. Origin이 없는 요청은 IP 검사를 하고, 그 역할에 접속 ticket 확인을 켰으면 ticket도 확인합니다.",
         ),
     ] {
         let warning = &pairs
@@ -449,6 +599,53 @@ pub fn settings_confirmation_shows_diffs_empty_list_warning_and_timing() {
             assert!(!warning.contains("모든 새 접속"));
         }
     }
+    assert_eq!(server.proxy.count("PATCH", "/api/v1/config"), 0);
+    browser.key("Escape");
+    set_field_value(&mut browser, "relay.ticket.viewer.enabled", "true");
+    set_field_value(&mut browser, "relay.ticket.viewer.issuer", " new issuer ");
+    set_field_value(
+        &mut browser,
+        "relay.ticket.viewer.relay_host",
+        "new-relay.example.test",
+    );
+    set_field_value(&mut browser, "relay.ticket.viewer.max_lifetime_secs", "120");
+    review(&mut browser);
+    for (lang, warning, origins) in [
+        (
+            "ko",
+            "접속 ticket 확인을 켜면 이 역할의 WS·WSS 업그레이드 요청 가운데 유효한 ticket이 없는 요청을 거절합니다. 기존 중계 세션은 계속 동작합니다.",
+            "빈 allowed_origins 목록은 Origin이 있는 요청을 거절합니다. Origin이 없는 요청은 IP 검사를 하고, 그 역할에 접속 ticket 확인을 켰으면 ticket도 확인합니다.",
+        ),
+        (
+            "en",
+            "Turning on access ticket checks rejects this role's WS and WSS upgrade requests that have no valid ticket. Existing relay sessions continue.",
+            "An empty allowed_origins list rejects requests with Origin. Requests without Origin use the IP check, and also the ticket check when access tickets are on for the role.",
+        ),
+    ] {
+        if lang == "en" {
+            browser.key("Escape");
+            switch_language(&mut browser, lang);
+            review(&mut browser);
+        }
+        assert_eq!(browser.eval(
+            "[...document.querySelectorAll('dialog .config-change')].find(c=>c.querySelector('.card-heading').textContent === 'relay.ticket.viewer.enabled').querySelector('.alert').textContent"
+        ), json!(warning));
+        assert_eq!(browser.eval(
+            "[...document.querySelectorAll('dialog .config-change')].filter(c=>c.querySelector('.card-heading').textContent !== 'relay.ticket.viewer.enabled').every(c=>!c.textContent.includes('Turning on access ticket') && !c.textContent.includes('접속 ticket 확인을 켜면'))"
+        ), json!(true), "CPY-194 belongs only to the enabled change");
+        assert_eq!(browser.eval(
+            "[...document.querySelectorAll('dialog .config-change')].find(c=>c.querySelector('.card-heading').textContent === 'relay.ws.viewer.allowed_origins').querySelector('.alert').textContent"
+        ), json!(origins));
+    }
+    assert_eq!(
+        browser.eval("[...document.querySelectorAll('dialog .config-change')].filter(c=>c.querySelector('.card-heading').textContent.startsWith('relay.ticket.')).map(c=>[c.querySelector('.card-heading').textContent,[...c.querySelector('.config-body').children].filter(n=>!n.classList.contains('alert')).map(n=>n.textContent)])"),
+        json!([
+            ["relay.ticket.viewer.enabled", ["Previous value", "false", "New value", "true"]],
+            ["relay.ticket.viewer.issuer", ["Previous value", "dashboard-issuer", "New value", " new issuer "]],
+            ["relay.ticket.viewer.relay_host", ["Previous value", "relay.example.test", "New value", "new-relay.example.test"]],
+            ["relay.ticket.viewer.max_lifetime_secs", ["Previous value", "60", "New value", "120"]]
+        ])
+    );
     assert_eq!(server.proxy.count("PATCH", "/api/v1/config"), 0);
 }
 
@@ -488,10 +685,14 @@ pub fn settings_confirmation_cancel_and_escape_preserve_input_and_focus() {
 
 // DASH-039
 pub fn confirmed_settings_patch_sends_revision_csrf_and_shows_applied_count() {
-    let server = Server::start_with_config_transform("dash-039", None, true, |config, _| {
-        config.replace(
-            "waiting = 8",
-            "# Keep this comment and the neighboring spacing.\nwaiting  =  8  # waiting comment",
+    let server = Server::start_with_config_transform("dash-039", None, true, |config, dir| {
+        with_ticket_config(
+            config.replace(
+                "waiting = 8",
+                "# Keep this comment and the neighboring spacing.\nwaiting  =  8  # waiting comment",
+            ),
+            dir,
+            "viewer",
         )
     });
     let admin = server.login();
@@ -511,6 +712,7 @@ pub fn confirmed_settings_patch_sends_revision_csrf_and_shows_applied_count() {
     assert_eq!(item(&before, "timeouts.close_secs")["value"], 2);
     open_settings_edit(&mut browser, &server);
     set_field_value(&mut browser, "limits.waiting", "10");
+    browser.click("[data-config-key=\"relay.ticket.viewer.enabled\"]");
     review(&mut browser);
     let released = Arc::new(AtomicBool::new(false));
     let injected = server.proxy.injected_count("PATCH", "/api/v1/config");
@@ -535,7 +737,7 @@ pub fn confirmed_settings_patch_sends_revision_csrf_and_shows_applied_count() {
             .any(|entry| entry.method == "PATCH" && entry.stage == "response_held")
     });
     assert_eq!(browser.eval(
-        "[...document.querySelectorAll('.config-input,#settings-review,#settings-refresh')].every(n=>n.disabled) && document.querySelectorAll('dialog[open]').length === 0",
+        "[...document.querySelectorAll('input[data-config-key],textarea[data-config-key],#settings-review,#settings-refresh')].every(n=>n.disabled) && document.querySelectorAll('dialog[open]').length === 0",
     ), json!(true), "inputs and duplicate review/apply must be disabled while saving");
     assert!(
         browser
@@ -548,9 +750,19 @@ pub fn confirmed_settings_patch_sends_revision_csrf_and_shows_applied_count() {
     view_ready(&mut browser);
     let reply = patch_reply(&server, 1);
     assert_eq!(reply["result"], "applied");
+    // The contract defines which keys applied, not their order.
+    let mut applied: Vec<&str> = reply["applied"]
+        .as_array()
+        .map(|keys| keys.iter().filter_map(Value::as_str).collect())
+        .unwrap_or_default();
+    applied.sort_unstable();
     assert_eq!(
-        reply["applied"],
-        json!(["limits.waiting", "timeouts.close_secs"])
+        applied,
+        [
+            "limits.waiting",
+            "relay.ticket.viewer.enabled",
+            "timeouts.close_secs"
+        ]
     );
     let traffic = server.proxy.traffic();
     let patch = traffic
@@ -560,7 +772,7 @@ pub fn confirmed_settings_patch_sends_revision_csrf_and_shows_applied_count() {
     let body: Value = must(serde_json::from_str(&patch.body));
     assert_eq!(
         body,
-        json!({"revision":before["revision"],"changes":{"limits.waiting":10}})
+        json!({"revision":before["revision"],"changes":{"limits.waiting":10,"relay.ticket.viewer.enabled":true}})
     );
     let session = traffic
         .iter()
@@ -593,8 +805,8 @@ pub fn confirmed_settings_patch_sends_revision_csrf_and_shows_applied_count() {
     );
     let count = reply["applied"].as_array().map_or(0, Vec::len);
     assert_eq!(
-        count, 2,
-        "one requested key applies together with the real pending key"
+        count, 3,
+        "two requested keys apply together with the real pending key"
     );
     assert!(
         browser
@@ -603,12 +815,16 @@ pub fn confirmed_settings_patch_sends_revision_csrf_and_shows_applied_count() {
     );
     assert_eq!(
         server.config_text(),
-        pending.replace("waiting  =  8", "waiting  =  10"),
+        pending.replace("waiting  =  8", "waiting  =  10").replace(
+            "[relay.ticket.viewer]\nenabled = false",
+            "[relay.ticket.viewer]\nenabled = true",
+        ),
         "only edited value bytes change; comments/spacing/order preserved"
     );
     let after = server.query(&admin, "/api/v1/config");
     assert_eq!(item(&after, "limits.waiting")["value"], 10);
     assert_eq!(item(&after, "timeouts.close_secs")["value"], 3);
+    assert_eq!(item(&after, "relay.ticket.viewer.enabled")["value"], true);
     assert_eq!(browser.eval("document.querySelector('.config-row[data-config-key=\"limits.waiting\"] .config-value').textContent"), item(&after, "limits.waiting")["value"].to_string());
     std::thread::sleep(Duration::from_millis(200));
     assert_eq!(
@@ -871,6 +1087,18 @@ pub fn unchanged_settings_return_without_patch_and_empty_applied_shows_zero() {
     login_alice(&mut browser, &server);
     open_settings(&mut browser, &server);
     open_settings_edit(&mut browser, &server);
+    let initial = server.query(&admin, "/api/v1/config");
+    for key in [
+        "relay.ticket.viewer.issuer",
+        "relay.ticket.viewer.relay_host",
+    ] {
+        assert!(item(&initial, key)["value"].is_null());
+        assert_eq!(get_field_value(&mut browser, key), "");
+    }
+    assert_eq!(
+        form_values(&mut browser)["relay.ticket.viewer.enabled"],
+        false
+    );
     review(&mut browser);
     assert!(browser.text().contains("바뀐 설정이 없습니다."));
     apply(&mut browser);

@@ -330,13 +330,14 @@ fn settings_inputs_include_only_enabled_editable_keys_in_browser() {
 
 /// spec: dashboard.md:DASH-036 partial
 #[test]
-fn settings_rejects_invalid_numbers_relations_and_list_whitespace_in_browser() {
+fn settings_rejects_invalid_numbers_lists_and_ticket_strings_and_preserves_boolean_inputs_in_browser()
+ {
     check_localized_case("/tests/settings.html", "dash-036");
 }
 
 /// spec: dashboard.md:DASH-037 partial
 #[test]
-fn settings_review_shows_changes_list_diffs_and_empty_list_warning_in_browser() {
+fn settings_review_shows_typed_changes_and_key_specific_warnings_in_browser() {
     check_localized_case("/tests/settings.html", "dash-037");
 }
 

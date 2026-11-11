@@ -7,7 +7,7 @@
 | 결정자 | 프로젝트 소유자(사용자) |
 | 관련 요구사항 | [PRD 확정 기준](../requirements/PRD.md#확정-기준), [FR-05](../requirements/PRD.md#fr-05-wswss-프록시), [FR-06](../requirements/PRD.md#fr-06-관리-api와-대시보드), [FR-07](../requirements/PRD.md#fr-07-설정과-프로세스-수명), [FR-08](../requirements/PRD.md#fr-08-운영-정보), [7절](../requirements/PRD.md#7-보안-및-신뢰-경계), [AC-49~52](../requirements/PRD.md#10-검증-및-수용-기준) |
 | 관련 스펙·계약 | [WS·WSS 스펙](../specs/websocket.md), [중계 스펙](../specs/relay.md), [운영 스펙](../specs/operations.md), [관리 스펙](../specs/management.md), [화면 스펙](../specs/dashboard.md#8-미결정-사항), [WebSocket 계약 1.9절](../contracts/websocket-relay-v2.md#19-접속-ticket), [설정 계약 1.11절](../contracts/config-v4.md#111-접속-ticket-공개-키-파일-형식), [운영 정보 계약](../contracts/ops-info-v2.md), [관리 API 계약](../contracts/management-api-v1.md) |
-| 관련 아키텍처 문서 | 없음(구현 전) |
+| 관련 아키텍처 문서 | [접속 ticket 설계](../architectures/relay-access-ticket.md) |
 | 이 ADR이 대체하는 이전 ADR | 없음. [ADR-0002](ADR-0002-source-ip-allowlist.md)는 유지하고 후속 메모를 단다. |
 | 이 ADR을 대체한 새 ADR | 없음 |
 

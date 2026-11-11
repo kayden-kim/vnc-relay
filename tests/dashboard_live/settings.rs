@@ -8,6 +8,17 @@ use std::time::{Duration, SystemTime};
 
 use super::live::{Browser, PASSWORD, Server, must};
 
+// Public P-256 generator point; coordinates are the standard 6B17D1F2…C296 / 4FE342E2…51F5.
+pub(super) const TICKET_JWKS: &str = r#"{"keys":[{"kty":"EC","crv":"P-256","kid":"k1","x":"axfR8uEsQkf4vOblY6RA8ncDfYEt6zOg9KE5RdiYwpY","y":"T-NC4v4af5uO5-tKfA-eFivOM1drMV7Oy7ZAaDe_UfU"}]}"#;
+
+pub(super) fn with_ticket_config(config: String, dir: &Path, role: &str) -> String {
+    must(std::fs::write(dir.join("ticket-public.jwks"), TICKET_JWKS));
+    config
+        + &format!(
+            "\n[relay.ticket.{role}]\nenabled = false\nissuer = \"dashboard-issuer\"\nrelay_host = \"relay.example.test\"\npublic_keys_file = \"ticket-public.jwks\"\n"
+        )
+}
+
 // Keep real file bytes pending without depending on OS notification kinds.
 // file_watch.rs: ReloadWatcher::episode compares stamps() across GAP=100ms;
 // stamp_of includes modified time and length. Touching every 50ms prevents that
@@ -182,7 +193,8 @@ pub(super) fn set_field_value(browser: &mut Browser, key: &str, value: &str) {
             const el = document.querySelector('[data-config-key="' + {key_js} + '"]');
             if (!el) throw new Error("field not found: " + {key_js});
             el.focus();
-            el.value = {val_js};
+            if (el.type === 'checkbox') el.checked = {val_js} === 'true';
+            else el.value = {val_js};
             el.dispatchEvent(new Event('input', {{ bubbles: true }}));
             el.dispatchEvent(new Event('change', {{ bubbles: true }}));
         }})()"#
@@ -193,7 +205,7 @@ pub(super) fn get_field_value(browser: &mut Browser, key: &str) -> String {
     let key_js = script_str(key);
     browser
         .eval(&format!(
-            "document.querySelector('[data-config-key=\"' + {key_js} + '\"]')?.value ?? ''"
+            "(() => {{ const el = document.querySelector('[data-config-key=\"' + {key_js} + '\"]'); return el?.type === 'checkbox' ? String(el.checked) : el?.value ?? ''; }})()"
         ))
         .as_str()
         .unwrap_or("")

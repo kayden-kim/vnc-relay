@@ -12,8 +12,9 @@
 | 관련 스펙 | [관리 §3.3](../specs/management.md#33-설정-보기와-동적-설정-편집) MGT-R19~R27·MGT-028~045, [운영 §3.3](../specs/operations.md#33-파일-변경-자동-감지와-부분-재로드) OPS-059~064, [화면](../specs/dashboard.md#scr-004-설정-보기) DASH-028~053 |
 | 관련 계약 | [설정 §1.8](../contracts/config-v4.md#18-재로드-구분)·[§1.10](../contracts/config-v4.md#110-관리-api-편집의-파일-쓰기), [관리 API §1.13](../contracts/management-api-v1.md#113-설정-보기-get-apiv1config)·[§1.14](../contracts/management-api-v1.md#114-동적-설정-편집-patch-apiv1config)·[§2.3](../contracts/management-api-v1.md#23-consumer의-판정-규칙), [운영 정보 §1.5](../contracts/ops-info-v2.md#15-사건-목록) |
 | 관련 ADR | [ADR-0006](../decisions/ADR-0006-config-edit-through-file.md) |
+| 관련 문서 | [접속 ticket 모듈 설계](relay-access-ticket.md) |
 
-후속: R1은 설정 v4의 재로드 33개·편집 29개 이름을 사용한다. 아래 과거 대조·실행 기록은 R1의 실행 증거가 아니다. 이번 문서 작업에서는 빌드·시험·포매터를 실행하지 않았다. `trusted_proxies`는 해석·검증·저장·재로드까지만 반영하며 전달 주소 판정은 R2에서 연결한다. `recent_logs.max_entries`는 보기 전용 재시작 키다. 로그 버퍼와 API는 R3 범위다. 후속: 구현은 커밋 `3df0693`이며, 시험은 커밋 `51bd747`의 두 OS 게이트에서 통과했다([WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)).
+현재는 ticket을 포함한 설정 v4의 재로드 43개·편집 37개 이름을 사용한다([접속 ticket 모듈 설계](relay-access-ticket.md#44-재로드와-편집)). 아래 과거 대조·실행 기록은 ticket의 실행 증거가 아니다. 이번 문서 작업에서는 빌드·시험·포매터를 실행하지 않았다. `trusted_proxies`는 해석·검증·저장·재로드까지만 반영하며 전달 주소 판정은 R2에서 연결한다. `recent_logs.max_entries`는 보기 전용 재시작 키다. 로그 버퍼와 API는 R3 범위다. 후속: R1의 구현은 커밋 `3df0693`이며, 그 범위의 시험은 커밋 `51bd747`의 두 OS 게이트에서 통과했다([WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)).
 
 
 ## 1. 책임과 경계
@@ -65,7 +66,9 @@ flowchart LR
 
 `config_items`와 PATCH 키 검사는 같은 조건을 쓴다. TCP `allow`는 해당 TCP 진입점이 켜졌을 때만 편집할 수 있다. WS·WSS의 역할 `allow`·`allowed_origins`는 해당 역할이 켜졌을 때만 편집할 수 있다. 부모 `trusted_proxies`는 해당 리스너의 역할이 하나라도 켜졌을 때만 편집할 수 있다. Mode I `allow_targets`는 Mode I이 켜졌을 때만 편집할 수 있다. 나머지 편집 대상 수치 키는 기능 켜짐과 무관하다. `management.config_edit`는 항목별 `editable`과 별도인 요청 전체 허용 조건이다.
 
-`relay.wss.cert_file`·`relay.wss.key_file`·`management.cert_file`·`management.key_file`은 재로드 대상이지만 편집할 수 없다. `enabled`·부모 `listen`·`recent_logs.max_entries`는 재시작 키다. 꺼진 역할의 생략한 `allow`·`allowed_origins`와 꺼진 리스너의 생략한 `listen`·TLS 경로·`trusted_proxies`는 실행 presence에 따라 `null`로 표시한다. 켜진 리스너에서 생략한 `trusted_proxies`는 기본값 `[]`다. 꺼진 리스너라도 명시한 빈 배열은 `[]`로 보존한다.
+ticket 10개 항목은 WS·WSS 역할 뒤, `mode1` 앞에 놓으며 모두 `dynamic`이다. `relay.ticket.<role>.enabled`는 `ConfigValue::Bool`이다. `issuer`·`relay_host`는 `ConfigValue::String`, `max_lifetime_secs`는 정수다. 이 8개 키는 해당 역할이 WS 또는 WSS에서 켜졌을 때만 편집할 수 있다. ticket 자체의 켜짐 여부와는 다르다. 두 `public_keys_file` 경로는 편집할 수 없다. 공개 키 내용은 응답에 넣지 않는다([접속 ticket 모듈 설계](relay-access-ticket.md#44-재로드와-편집)).
+
+`relay.wss.cert_file`·`relay.wss.key_file`·`management.cert_file`·`management.key_file`과 ticket 공개 키 경로는 재로드 대상이지만 편집할 수 없다. TCP·WS·WSS 진입점의 `enabled`·부모 `listen`·`recent_logs.max_entries`는 재시작 키다. 꺼진 역할의 생략한 `allow`·`allowed_origins`와 꺼진 리스너의 생략한 `listen`·TLS 경로·`trusted_proxies`는 실행 presence에 따라 `null`로 표시한다. 켜진 리스너에서 생략한 `trusted_proxies`는 기본값 `[]`다. 꺼진 리스너라도 명시한 빈 배열은 `[]`로 보존한다.
 
 
 ## 4. PATCH 처리 순서
@@ -74,13 +77,13 @@ flowchart LR
 
 | 단계 | 위치·동작 | 실패 또는 결과 |
 | --- | --- | --- |
-| 1 | HTTP에서 인증→CSRF→경로/메서드/헤더/JSON. app에서 빈 changes·29개 외 키·위 편집 가능 조건 불충족·값 자료형 거절 | `400 invalid_request`; 매체 형식은 기존 `415`, 메서드는 `405 Allow: GET, PATCH`. 편집 사건 없음 |
+| 1 | HTTP에서 인증→CSRF→경로/메서드/헤더/JSON. app에서 빈 changes·37개 외 키·위 편집 가능 조건 불충족·값 자료형 거절 | `400 invalid_request`; 매체 형식은 기존 `415`, 메서드는 `405 Allow: GET, PATCH`. 편집 사건 없음 |
 | 2 | app에서 실행 중 `management.config_edit` 확인 | `403 config_edit_disabled` |
 | 3 | 공유 mutex 아래 현재 파일 읽기 | `409 config_file_invalid`, 진단 `[]` |
 | 4 | 현재 원시 바이트 revision과 요청 비교 | `409 config_conflict` |
-| 5 | 원본 전체 parse/validate/TLS 검증. 실행값과 비대상 비교 | `409 config_file_invalid`+진단 또는 `409 config_restart_pending`+재시작 키 |
-| 6 | 원본 문서 위에 요청 중 실제 파일값이 달라지는 키만 편집 | 기타 값·주석·공백·순서·LF/CRLF 유지 |
-| 7 | 편집 결과를 같은 loader와 `prepare_candidate`로 전체 검증하고 수락기/해시/스냅샷 준비 | `400 config_invalid`+값 인용 없는 진단. 아직 원본·실행값 불변 |
+| 5 | 원본 전체 parse/validate/TLS·ticket 공개 키 검증. 실행값과 비대상 비교 | `409 config_file_invalid`+진단 또는 `409 config_restart_pending`+재시작 키 |
+| 6 | 원본 문서 위에 요청 중 실제 파일값이 달라지는 키만 편집 | 기타 값·주석·공백·순서·LF/CRLF 유지. ticket Bool/String/정수도 같은 부분 편집 경로 사용 |
+| 7 | 편집 결과를 같은 loader와 `prepare_candidate`로 전체 검증하고 수락기/공개 키/해시/스냅샷 준비 | `400 config_invalid`+값 인용 없는 진단. 아직 원본·실행값 불변 |
 | 8 | 출력 바이트와 읽은 원본 바이트 비교 | 같으면 쓰기/적용/성공 사건 없음. `200 applied: []`, 기존 revision |
 | 9 | 같은 디렉터리에 create_new 임시 파일, 전부 쓰기·flush/sync·닫기, 교체 직전 파일을 다시 읽어 revision 비교, 원자 교체 | 사용자 결정 2026-11-08(Q178). 불일치/재읽기 실패면 임시 파일 삭제·`409 config_conflict`·이번 요청의 파일/실행값 변경 없음. 쓰기/교체 실패는 `500 config_write_failed` |
 | 10 | 준비한 같은 후보를 `commit_prepared`로 무실패 발행. `reload_applied(config_edit)` 뒤 `config_edited` 기록 | 실행값 차이 전부를 `applied`로 응답, 새 파일 revision |
@@ -122,7 +125,7 @@ v4의 `edit_change`는 마지막 점 앞까지를 테이블 경로로, 마지막
 
 | 사건 | 작성 위치와 필드 출처 | 순서·금지 |
 | --- | --- | --- |
-| `reload_applied` | `ReloadService::commit_prepared`, `trigger=config_edit`, 실행값/경로/내용이 달라진 33개 중 키 | 실행값 차이가 있으면 같은 편집의 `config_edited`보다 먼저. 값 없음 |
+| `reload_applied` | `ReloadService::commit_prepared`, `trigger=config_edit`, 실행값/경로/내용이 달라진 43개 중 키. 같은 경로의 ticket 키 목록 교체도 `public_keys_file`에 포함 | 실행값 차이가 있으면 같은 편집의 `config_edited`보다 먼저. 값 없음 |
 | `config_edited` | `ConfigEditService::patch`, `admin_account`는 AuthorizedAdmin의 계정, `peer_ip`는 실제 소켓의 정규화 PeerIp, `config_keys`는 요청 중 파일값 변경 키, `revision`은 저장한 바이트 SHA-256 | 파일 변경 있는 성공만 한 번. 헤더 전달 IP·설정값·후보 텍스트 없음 |
 | `config_edit_rejected` | `ConfigEditService::reject`, 인증/CSRF 뒤의 6개 편집 업무 오류; `reason`은 API 오류 code, account/peer는 위와 같음, 선택 `config_keys`는 요청 키 | invalid_request·internal·인증·CSRF 실패에는 없음. 성공 사건 없음 |
 | `allow_all_target`·`allow_all_source` | `prepare_candidate`가 실제 바뀐 정책의 경고만 준비하고 commit에서 `phase=reload`로 기록 | [설정 §1.8 규칙 5~6](../contracts/config-v4.md#18-재로드-구분), OPS-058 |

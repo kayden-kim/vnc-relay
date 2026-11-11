@@ -12,6 +12,7 @@
 | 관련 스펙 | [운영 스펙](../specs/operations.md) OPS-002·OPS-026·OPS-036, [WebSocket 스펙](../specs/websocket.md) WS-013 |
 | 관련 계약 | [설정 계약 1.9절](../contracts/config-v4.md#19-인증서개인키-파일-형식), [설정 계약 2.1절](../contracts/config-v4.md#21-설정-오류와-준비-실패), [CLI 계약 2.2절](../contracts/cli-v1.md#22-오류-코드) |
 | 관련 ADR | [ADR-0001 내장 TLS](../decisions/ADR-0001-built-in-tls.md), [ADR-0004 tokio-rustls](../decisions/ADR-0004-tokio-rustls.md) |
+| 관련 문서 | [접속 ticket 모듈 설계](relay-access-ticket.md) |
 
 후속: R1의 TLS 설정은 역할이 아니라 리스너에 속한다. WSS Viewer·Server가 `relay.wss.cert_file`·`relay.wss.key_file` 한 쌍과 수락기 하나를 공유한다. 어느 역할이든 켜면 시작·재로드 때 검사한다. 두 역할이 모두 꺼졌으면 명시한 경로 문자열만 검증하고 참조 파일은 읽거나 감시하지 않는다. WS 부모의 TLS 키는 설정 로더가 거절한다.
 
@@ -68,7 +69,9 @@ flowchart LR
 | 3 | `crates/adapters/src/tls.rs` `read_key` | 개인키 PEM 하나를 읽는다. I/O 오류는 `Unreadable`, 키가 없거나 형식이 틀리면 `Malformed`다. | 없음 | 개인키 |
 | 4 | `crates/adapters/src/tls.rs` `load_acceptor` | 암호 모듈 aws-lc-rs, 프로토콜 TLS 1.2·1.3, 클라이언트 인증 없음으로 설정한 뒤 인증서와 개인키를 넣는다. 실패하면 `classify_config`가 나눈다. 지원하지 않는 키 종류는 `KeyUnsupported`, 쌍이 맞지 않으면 `KeyMismatch`, 인증서 형식 오류는 `Malformed { file: Cert }`, 그 밖의 설정 오류는 `Config`다. | 없음 | `rustls::ServerConfig` |
 | 5 | `crates/adapters/src/tls.rs` `load_acceptor` | 설정을 `Arc`로 감싸 `TlsAcceptor`로 바꾼다. | `TlsAcceptor` 생성 | 호출한 쪽 |
-| 6 | `src/serve.rs` `listen_until_shutdown` | 실패가 하나라도 있으면 진단마다 stderr 줄과 `startup_failed`를 남기고 종료 코드 3(`EXIT_CONFIG`)으로 끝낸다. 모두 성공하면 다음 단계(바인드)로 간다. | 준비 완료 아님 | 종료 코드 |
+| 6 | `src/serve.rs` `run` | TLS 검사 뒤 켠 역할의 ticket 공개 키 파일을 검사한다. TLS·ticket 오류를 모아 진단마다 stderr 줄과 `startup_failed`를 남긴다. 오류가 하나라도 있으면 종료 코드 3(`EXIT_CONFIG`)으로 끝낸다. 모두 성공하면 snapshot·감시 준비 뒤 바인드한다. | 준비 완료 아님 또는 초기 snapshot 준비 | 종료 코드·후속 시작 단계 |
+
+ticket 공개 키의 JWKS 해석은 TLS 모듈이 맡지 않는다. `reload::ticket_keys::load`와 `TicketJwksStore`가 맡는다. 실패 코드는 `ticket_keys_invalid`다. 시작과 재로드의 세부 흐름은 [접속 ticket 모듈 설계](relay-access-ticket.md#41-시작)를 따른다.
 
 ## 5. 상태와 초기화
 

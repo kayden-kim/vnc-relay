@@ -9,7 +9,9 @@ use std::time::Duration;
 use serde_json::{Value, json};
 
 use super::live::{Browser, Fault, LIMIT, Server, must, wait_for};
-use super::settings::{PendingFile, login_alice, open_settings, open_settings_edit, script_str};
+use super::settings::{
+    PendingFile, TICKET_JWKS, login_alice, open_settings, open_settings_edit, script_str,
+};
 
 const CONFIG: &str = "/api/v1/config";
 
@@ -113,23 +115,29 @@ fn expected_inputs(raw: &Value) -> Value {
         .filter(|item| item["editable"] == true)
         .map(|item| {
             let value = &item["value"];
-            let input = value.as_array().map_or_else(
-                || {
-                    value
-                        .as_str()
-                        .map_or_else(|| value.to_string(), str::to_owned)
-                },
-                |values| {
-                    values
-                        .iter()
-                        .map(|v| {
-                            v.as_str()
-                                .unwrap_or_else(|| panic!("string array required"))
-                        })
-                        .collect::<Vec<_>>()
-                        .join("\n")
-                },
-            );
+            let input = if value.is_boolean() {
+                value.clone()
+            } else {
+                json!(value.as_array().map_or_else(
+                    || if value.is_null() {
+                        String::new()
+                    } else {
+                        value
+                            .as_str()
+                            .map_or_else(|| value.to_string(), str::to_owned)
+                    },
+                    |values| {
+                        values
+                            .iter()
+                            .map(|v| {
+                                v.as_str()
+                                    .unwrap_or_else(|| panic!("string array required"))
+                            })
+                            .collect::<Vec<_>>()
+                            .join("\n")
+                    },
+                ))
+            };
             (
                 item["key"].as_str().unwrap_or("").to_owned(),
                 json!([item["key"], input]),
@@ -143,6 +151,8 @@ fn expected_inputs(raw: &Value) -> Value {
     fields.sort_by_key(|(key, _)| {
         if key.starts_with("relay.") && key.ends_with(".allow") {
             0
+        } else if key.starts_with("relay.ticket.") {
+            7
         } else if key.ends_with(".trusted_proxies") {
             1
         } else if key.ends_with(".allowed_origins") {
@@ -242,6 +252,8 @@ pub fn settings_view_displays_all_effective_values_in_contract_order() {
     let long = format!("{}-accounts.toml", "long-path-segment-".repeat(8));
     let cert = format!("{}certificate.pem", "certificate-path-".repeat(8));
     let key = format!("{}private-key.pem", "private-key-path-".repeat(8));
+    let viewer_keys = format!("{}viewer-public.jwks", "public-key-path-".repeat(8));
+    let server_keys = format!("{}server-public.jwks", "public-key-path-".repeat(8));
     let server = Server::start_with_config_transform("dash-029", None, true, |config, dir| {
         must(fs::copy(dir.join("accounts.toml"), dir.join(&long)));
         must(fs::write(
@@ -252,6 +264,8 @@ pub fn settings_view_displays_all_effective_values_in_contract_order() {
             dir.join(&key),
             "PRIVATE_KEY_CONTENT_MUST_NOT_APPEAR",
         ));
+        must(fs::write(dir.join(&viewer_keys), TICKET_JWKS));
+        must(fs::write(dir.join(&server_keys), TICKET_JWKS));
         config
             .replace(
                 "accounts_file = \"accounts.toml\"",
@@ -262,7 +276,9 @@ pub fn settings_view_displays_all_effective_values_in_contract_order() {
                 "allowed_origins = []",
             )
             + &format!(
-                "\n[relay.wss]\ncert_file = {cert:?}\nkey_file = {key:?}\n[relay.wss.viewer]\nenabled = false\n"
+                "\n[relay.wss]\ncert_file = {cert:?}\nkey_file = {key:?}\n[relay.wss.viewer]\nenabled = false\n\
+                 [relay.ticket.viewer]\nissuer = \"dashboard-viewer\"\nrelay_host = \"viewer.example.test\"\npublic_keys_file = {viewer_keys:?}\n\
+                 [relay.ticket.server]\nissuer = \"dashboard-server\"\nrelay_host = \"server.example.test\"\npublic_keys_file = {server_keys:?}\n"
             )
     });
     let admin = server.login();
@@ -270,6 +286,7 @@ pub fn settings_view_displays_all_effective_values_in_contract_order() {
     let items = raw["items"]
         .as_array()
         .unwrap_or_else(|| panic!("items missing"));
+    assert_eq!(items.len(), 75, "every v4 config key must be present");
     assert!(items.iter().any(|i| i["value"].is_null()));
     assert!(items.iter().any(|i| i["value"] == json!([])));
     assert!(
@@ -283,7 +300,7 @@ pub fn settings_view_displays_all_effective_values_in_contract_order() {
     );
     assert_eq!(
         items.iter().filter(|i| i["reload"] == "dynamic").count(),
-        33
+        43
     );
     for name in [
         "relay.ws.trusted_proxies",
@@ -304,6 +321,44 @@ pub fn settings_view_displays_all_effective_values_in_contract_order() {
             "v4 dynamic key {name}"
         );
     }
+    let ticket_items: Vec<_> = items
+        .iter()
+        .filter(|i| {
+            i["key"]
+                .as_str()
+                .is_some_and(|key| key.starts_with("relay.ticket."))
+        })
+        .collect();
+    let mut expected_ticket_keys = Vec::new();
+    for role in ["viewer", "server"] {
+        for field in [
+            "enabled",
+            "issuer",
+            "relay_host",
+            "public_keys_file",
+            "max_lifetime_secs",
+        ] {
+            expected_ticket_keys.push(format!("relay.ticket.{role}.{field}"));
+        }
+    }
+    assert_eq!(
+        ticket_items
+            .iter()
+            .map(|i| i["key"].as_str().unwrap_or(""))
+            .collect::<Vec<_>>(),
+        expected_ticket_keys
+            .iter()
+            .map(String::as_str)
+            .collect::<Vec<_>>()
+    );
+    assert!(ticket_items.iter().all(|i| i["reload"] == "dynamic"));
+    for role in ["viewer", "server"] {
+        let public_keys = ticket_items
+            .iter()
+            .find(|i| i["key"] == format!("relay.ticket.{role}.public_keys_file"))
+            .unwrap_or_else(|| panic!("missing ticket public key path"));
+        assert_eq!(public_keys["editable"], false);
+    }
     let closed = items
         .iter()
         .position(|i| i["key"] == "recent_closed.max_entries")
@@ -317,12 +372,16 @@ pub fn settings_view_displays_all_effective_values_in_contract_order() {
         language(&mut browser, lang);
         assert_rows(&mut browser, &raw, lang);
         let text = browser.text();
-        for path in [&long, &cert, &key] {
+        for path in [&long, &cert, &key, &viewer_keys, &server_keys] {
             assert!(text.contains(path));
         }
         for secret in [
             "CERTIFICATE_CONTENT_MUST_NOT_APPEAR",
             "PRIVATE_KEY_CONTENT_MUST_NOT_APPEAR",
+            "\"kty\"",
+            "\"P-256\"",
+            "axfR8uEsQkf4vOblY6RA8ncDfYEt6zOg9KE5RdiYwpY",
+            "T-NC4v4af5uO5-tKfA-eFivOM1drMV7Oy7ZAaDe_UfU",
             "password_hash",
             "$argon2id$",
         ] {
@@ -725,7 +784,7 @@ pub fn config_query_failures_keep_stale_values_and_never_show_empty_success() {
         }
         let fields = expected_inputs(&before);
         if route == "/#/settings/edit" {
-            assert_eq!(browser.eval("[...document.querySelectorAll('.config-input')].map(n => [n.dataset.configKey,n.value])"), fields, "successful edit baseline must match real GET values");
+            assert_eq!(browser.eval("[...document.querySelectorAll('input[data-config-key],textarea[data-config-key]')].map(n => [n.dataset.configKey,n.type === 'checkbox' ? n.checked : n.value])"), fields, "successful edit baseline must match real GET values");
         }
         let injections = server.proxy.injected_count("GET", CONFIG);
         server
@@ -748,7 +807,7 @@ pub fn config_query_failures_keep_stale_values_and_never_show_empty_success() {
         if route == "/#/settings" {
             assert_rows(&mut browser, &before, "ko");
         } else {
-            assert_eq!(browser.eval("[...document.querySelectorAll('.config-input')].map(n => [n.dataset.configKey,n.value])"), fields);
+            assert_eq!(browser.eval("[...document.querySelectorAll('input[data-config-key],textarea[data-config-key]')].map(n => [n.dataset.configKey,n.type === 'checkbox' ? n.checked : n.value])"), fields);
         }
         assert_eq!(server.proxy.injected_count("GET", CONFIG), injections + 1);
         assert_eq!(browser.eval("document.querySelector('#settings-review')?.disabled ?? document.querySelector('#settings-edit')?.disabled"), json!(true));
@@ -866,7 +925,7 @@ pub fn explicit_settings_refresh_after_repair_updates_values_revision_and_time()
     assert_ne!(latest["revision"], repaired["revision"]);
     let latest_time = assert_query_time(&mut browser, &server);
     let latest_fields = browser.eval(
-        "[...document.querySelectorAll('.config-input')].map(n => [n.dataset.configKey,n.value])",
+        "[...document.querySelectorAll('input[data-config-key],textarea[data-config-key]')].map(n => [n.dataset.configKey,n.type === 'checkbox' ? n.checked : n.value])",
     );
     released.store(true, Ordering::Release);
     wait_for("held response completed", LIMIT, || {
@@ -880,7 +939,7 @@ pub fn explicit_settings_refresh_after_repair_updates_values_revision_and_time()
     assert_eq!(server.proxy.injected_count("GET", CONFIG), injections + 2);
     assert_eq!(meta(&mut browser), latest_time);
     assert_eq!(browser.eval("location.hash"), json!("#/settings/edit"));
-    assert_eq!(browser.eval("[...document.querySelectorAll('.config-input')].map(n => [n.dataset.configKey,n.value])"), latest_fields);
+    assert_eq!(browser.eval("[...document.querySelectorAll('input[data-config-key],textarea[data-config-key]')].map(n => [n.dataset.configKey,n.type === 'checkbox' ? n.checked : n.value])"), latest_fields);
     server
         .proxy
         .once("GET", CONFIG, Fault::Error500("internal"));

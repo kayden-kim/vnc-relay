@@ -778,6 +778,7 @@ mod tests {
             Arc::clone(&cell),
             files.clone(),
             Arc::new(NoTls),
+            Arc::new(crate::ticket::TicketJwksStore),
             sink.clone(),
         );
         let watcher = assemble(

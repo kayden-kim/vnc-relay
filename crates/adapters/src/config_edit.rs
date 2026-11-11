@@ -271,7 +271,7 @@ fn edit_change(
                     .is_some_and(|table| table.is_implicit() && !table.is_dotted())
             {
                 // Append the full parent path, including missing listener/role
-                // levels. Never insert it beneath the last explicit sibling.
+                // or ticket tables. Never insert beneath the last explicit sibling.
                 let at = source.len();
                 let separator = if source.is_empty() || source.ends_with('\n') {
                     ""
@@ -449,6 +449,54 @@ fn without_commas(gap: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// spec: management.md:MGT-053 partial
+    /// spec: operations.md:OPS-060 partial
+    #[test]
+    fn missing_ticket_tables_append_and_later_keys_preserve_existing_bytes() {
+        for newline in ["\n", "\r\n"] {
+            for source in [
+                "# untouched\n[relay.ws.viewer]\nenabled = true # keep\n",
+                "# untouched\n[relay.ticket.server]\nenabled = false # keep\n",
+                "# untouched\n[relay.ticket]\n# keep parent\n[mode1]\nenabled = false",
+            ] {
+                let source = source.replace('\n', newline);
+                let changes = [
+                    ConfigChange {
+                        key: "relay.ticket.viewer.enabled".to_owned(),
+                        value: ConfigValue::Bool(false),
+                    },
+                    ConfigChange {
+                        key: "relay.ticket.viewer.issuer".to_owned(),
+                        value: ConfigValue::String(" issuer.example ".to_owned()),
+                    },
+                    ConfigChange {
+                        key: "relay.ticket.viewer.relay_host".to_owned(),
+                        value: ConfigValue::String("relay.example".to_owned()),
+                    },
+                    ConfigChange {
+                        key: "relay.ticket.viewer.max_lifetime_secs".to_owned(),
+                        value: ConfigValue::Integer(90),
+                    },
+                ];
+                let result = TomlConfigDocument
+                    .edit(source.as_bytes(), &changes)
+                    .unwrap_or_else(|error| panic!("edit ticket: {error:?}"));
+                let separator = if source.ends_with('\n') { "" } else { newline };
+                assert_eq!(
+                    String::from_utf8(result.clone()).unwrap_or_default(),
+                    format!(
+                        "{source}{separator}[relay.ticket.viewer]{newline}enabled = false{newline}issuer = \" issuer.example \"{newline}relay_host = \"relay.example\"{newline}max_lifetime_secs = 90{newline}"
+                    )
+                );
+                assert_eq!(
+                    TomlConfigDocument.edit(&result, &changes),
+                    Ok(result),
+                    "repeating the edit must preserve all bytes"
+                );
+            }
+        }
+    }
 
     struct Fixture(PathBuf);
 

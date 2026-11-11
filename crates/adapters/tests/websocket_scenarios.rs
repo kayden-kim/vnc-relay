@@ -261,6 +261,8 @@ impl Running {
                 } else {
                     AllowSource::ws(Arc::clone(&cell))
                 }),
+                ticket_uses: Arc::default(),
+                started_at: std::time::SystemTime::UNIX_EPOCH,
             },
             Arc::clone(&service),
             Arc::clone(&runtime),
@@ -284,6 +286,8 @@ impl Running {
                 } else {
                     AllowSource::wss(Arc::clone(&cell))
                 }),
+                ticket_uses: Arc::default(),
+                started_at: std::time::SystemTime::UNIX_EPOCH,
             },
             Arc::clone(&service),
             Arc::clone(&runtime),
@@ -2188,6 +2192,7 @@ async fn measured_pair(
     let prepare = running.service.handle_connection(
         viewer_stream,
         viewer_context,
+        None,
         viewer_permit,
         running.runtime.lifecycle(),
     );
@@ -2234,6 +2239,7 @@ async fn measured_pair(
     let prepare = running.service.handle_connection(
         server_stream,
         server_context,
+        None,
         server_permit,
         running.runtime.lifecycle(),
     );

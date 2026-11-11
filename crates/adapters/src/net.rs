@@ -437,7 +437,7 @@ impl<L: crate::listener::Listener> TcpEntryPoint<L> {
                     let lifecycle = runtime.lifecycle();
                     let _handshaking = runtime.track_handshaking();
                     let prepared = service
-                        .handle_connection(stream, context, permit, lifecycle)
+                        .handle_connection(stream, context, None, permit, lifecycle)
                         .await;
                     drop(_handshaking);
                     if let Ok(prepared) = prepared {

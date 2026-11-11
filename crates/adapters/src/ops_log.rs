@@ -15,6 +15,7 @@ use serde_json::{Value, json};
 use vnc_relay_app::events::{Event, LOG_CONTRACT, RejectReason, Stage};
 use vnc_relay_app::ports::EventSink;
 use vnc_relay_app::settings::{ConfigWarning, LogOutput};
+use vnc_relay_domain::entry_point::{Listener, Role};
 use vnc_relay_domain::handshake::Mode;
 use vnc_relay_domain::peer_ip::PeerIp;
 use vnc_relay_domain::session::CloseCause;
@@ -672,6 +673,20 @@ fn push_event_fields(fields: &mut Vec<(&'static str, Value)>, event: &Event) {
             ConfigWarning::StatusListenNotLoopback { listen } => {
                 fields.push(("listen", Value::from(listen.to_string())));
             }
+            ConfigWarning::TicketTcpBypass { role } => {
+                fields.push(("role", Value::from(role.as_str())));
+                let listener = match role {
+                    Role::Viewer => Listener::TcpViewer,
+                    Role::Server => Listener::TcpServer,
+                };
+                fields.push(("listener", Value::from(listener.name())));
+                fields.push(("phase", Value::from(phase.as_str())));
+            }
+            ConfigWarning::TicketPlaintextWs { role } => {
+                fields.push(("role", Value::from(role.as_str())));
+                fields.push(("listener", Value::from(Listener::Ws.name())));
+                fields.push(("phase", Value::from(phase.as_str())));
+            }
         },
         Event::StartupFailed {
             reason,
@@ -707,6 +722,31 @@ fn push_event_fields(fields: &mut Vec<(&'static str, Value)>, event: &Event) {
             }
             fields.push(("peer_ip", Value::from(peer_ip.to_string())));
         }
+        Event::TicketAccepted {
+            conn_id,
+            listener,
+            role,
+            peer_ip,
+            forwarded_ip,
+            ticket_jti,
+            ticket_sub,
+            session_expires_at,
+        } => {
+            fields.push(("conn_id", Value::from(conn_id.to_string())));
+            fields.push(("listener", Value::from(listener.name())));
+            fields.push(("role", Value::from(role.as_str())));
+            fields.push(("peer_ip", Value::from(peer_ip.to_string())));
+            if let Some(ip) = forwarded_ip {
+                fields.push(("forwarded_ip", Value::from(ip.to_string())));
+            }
+            fields.push(("ticket_jti", Value::from(ticket_jti.as_str())));
+            if let Some(sub) = ticket_sub {
+                fields.push(("ticket_sub", Value::from(sub.as_str())));
+            }
+            if let Some(expires_at) = session_expires_at {
+                fields.push(("session_expires_at", Value::from(timestamp(*expires_at))));
+            }
+        }
         Event::ConnectionRejected {
             listener,
             stage,
@@ -729,6 +769,7 @@ fn push_event_fields(fields: &mut Vec<(&'static str, Value)>, event: &Event) {
             peer_ip,
             forwarded_ip,
             origin,
+            ticket_jti,
         } => {
             fields.push(("conn_id", Value::from(conn_id.to_string())));
             fields.push(("listener", Value::from(*listener)));
@@ -746,6 +787,9 @@ fn push_event_fields(fields: &mut Vec<(&'static str, Value)>, event: &Event) {
                     "origin",
                     Value::from(cut(origin.as_str(), ORIGIN_MAX_BYTES)),
                 ));
+            }
+            if let Some(jti) = ticket_jti {
+                fields.push(("ticket_jti", Value::from(jti.as_str())));
             }
         }
         Event::HandshakeRejected {
@@ -768,6 +812,33 @@ fn push_event_fields(fields: &mut Vec<(&'static str, Value)>, event: &Event) {
             if let Some(mode) = mode {
                 fields.push(("mode", Value::from(mode.as_str())));
             }
+        }
+        Event::TicketRelayMismatch {
+            conn_id,
+            entry_point,
+            peer_ip,
+            forwarded_ip,
+            mode,
+            relay_id_ref,
+            ticket_jti,
+        } => {
+            fields.push(("conn_id", Value::from(conn_id.to_string())));
+            fields.push(("listener", Value::from(entry_point.listener().name())));
+            fields.push(("role", Value::from(entry_point.role().as_str())));
+            fields.push(("stage", Value::from(Stage::InitialExchange.as_str())));
+            fields.push((
+                "reason",
+                Value::from(RejectReason::TicketRelayMismatch.as_str()),
+            ));
+            fields.push(("peer_ip", Value::from(peer_ip.to_string())));
+            if let Some(ip) = forwarded_ip {
+                fields.push(("forwarded_ip", Value::from(ip.to_string())));
+            }
+            fields.push(("mode", Value::from(mode.as_str())));
+            if let Some(reference) = relay_id_ref {
+                fields.push(("relay_id_ref", Value::from(reference.as_str())));
+            }
+            fields.push(("ticket_jti", Value::from(ticket_jti.as_str())));
         }
         Event::ConnectionAborted {
             conn_id,
@@ -1056,7 +1127,8 @@ fn push_event_fields(fields: &mut Vec<(&'static str, Value)>, event: &Event) {
                 }
                 CloseCause::AdminTerminated
                 | CloseCause::ServerShutdown
-                | CloseCause::InternalError => {}
+                | CloseCause::InternalError
+                | CloseCause::SessionExpired => {}
             }
             if *close_cause == CloseCause::ConnectionError
                 && let Some(kind) = error_kind
@@ -1255,6 +1327,7 @@ mod tests {
                     peer_ip: PeerIp::new(IpAddr::from([127, 0, 0, 1])),
                     forwarded_ip: None,
                     origin: Some(origin),
+                    ticket_jti: None,
                 },
                 UNIX_EPOCH,
             )
@@ -1376,6 +1449,7 @@ mod tests {
             peer_ip: PeerIp::new("127.0.0.1".parse().unwrap()),
             forwarded_ip: Some(PeerIp::new("198.51.100.8".parse().unwrap())),
             origin: None,
+            ticket_jti: None,
         };
         sink.record(&event);
 

@@ -3,6 +3,7 @@
 pub mod ports;
 pub mod service;
 pub mod snapshot;
+pub mod ticket_keys;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;

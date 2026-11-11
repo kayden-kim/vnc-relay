@@ -41,6 +41,17 @@ impl fmt::Display for TlsBuildError {
 
 impl std::error::Error for TlsBuildError {}
 
+/// Parses the bytes of an access ticket public key file (config-v4 §1.11).
+///
+/// The implementation checks the JWKS format and that each point is on P-256.
+/// Errors carry fixed causes only, never file contents.
+pub trait ReloadTicketKeyStore: Send + Sync {
+    fn parse(
+        &self,
+        bytes: &[u8],
+    ) -> Result<vnc_relay_domain::ticket::TicketKeyList, vnc_relay_domain::ticket::TicketKeyError>;
+}
+
 /// The watcher's only wait (file-watch-v1 §4). Tests drive it manually.
 pub trait ReloadClock: Send + Sync {
     /// Completes once `duration` has passed.

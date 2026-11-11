@@ -170,6 +170,9 @@ pub enum CloseCause {
     ServerShutdown,
     /// The owner disappeared while the service was still running (Q94).
     InternalError,
+    /// The access ticket's session expiry time `sx` was reached
+    /// (websocket-relay-v2 §1.9.5).
+    SessionExpired,
 }
 
 impl CloseCause {
@@ -183,6 +186,7 @@ impl CloseCause {
             Self::CloseTimeout => "close_timeout",
             Self::ServerShutdown => "server_shutdown",
             Self::InternalError => "internal_error",
+            Self::SessionExpired => "session_expired",
         }
     }
 }
@@ -403,6 +407,18 @@ impl Session {
         }
         self.close_started_mono = Some(now);
         Ok(self.select_cause(CloseCause::AdminTerminated, None))
+    }
+
+    /// Starts cleanup at the access ticket's `sx` only if the session is still
+    /// active (websocket-relay-v2 §1.9.5). The cause has no endpoint. E does not
+    /// replace it with `close_timeout`.
+    pub fn begin_session_expiry(&mut self, now: Duration) -> Result<bool, SessionError> {
+        self.ensure_unfinished()?;
+        if self.state != SessionState::Active {
+            return Ok(false);
+        }
+        self.close_started_mono = Some(now);
+        Ok(self.select_cause(CloseCause::SessionExpired, None))
     }
 
     /// Forces shutdown after G or a second request for any unfinished session.
@@ -731,6 +747,7 @@ mod tests {
             (CloseCause::CloseTimeout, "close_timeout"),
             (CloseCause::ServerShutdown, "server_shutdown"),
             (CloseCause::InternalError, "internal_error"),
+            (CloseCause::SessionExpired, "session_expired"),
         ] {
             assert_eq!(cause.as_str(), expected);
         }
@@ -1142,6 +1159,62 @@ mod tests {
                     assert_eq!(closed.target_transport(), expected_target);
                 }
             }
+        }
+    }
+
+    /// spec: relay.md:RLY-031 partial
+    #[test]
+    fn session_expiry_keeps_its_cause_after_e_and_later_admin_or_shutdown() {
+        let mut session = session(Mode::Mode2);
+        assert!(
+            session
+                .begin_session_expiry(Duration::from_secs(12))
+                .unwrap()
+        );
+        assert!(
+            !session
+                .begin_session_expiry(Duration::from_secs(13))
+                .unwrap()
+        );
+        assert!(!session.begin_admin_close(Duration::from_secs(13)).unwrap());
+        assert!(!session.force_server_shutdown().unwrap());
+        assert!(
+            !session
+                .expire_close(Duration::MAX, Duration::from_secs(10))
+                .unwrap()
+        );
+        let closed = finish(&mut session);
+        assert_eq!(closed.close_cause(), CloseCause::SessionExpired);
+        assert_eq!(closed.close_side(), None);
+    }
+
+    /// spec: relay.md:RLY-031 partial
+    #[test]
+    fn session_expiry_never_replaces_an_existing_close_transition() {
+        for cause in [
+            CloseCause::AdminTerminated,
+            CloseCause::ServerShutdown,
+            CloseCause::PeerEof,
+        ] {
+            let mut session = session(Mode::Mode2);
+            match cause {
+                CloseCause::AdminTerminated => {
+                    session.begin_admin_close(Duration::from_secs(11)).unwrap();
+                }
+                CloseCause::ServerShutdown => {
+                    session.force_server_shutdown().unwrap();
+                }
+                CloseCause::PeerEof => {
+                    normal_complete(&mut session, Side::Viewer, Side::Server);
+                }
+                _ => unreachable!(),
+            }
+            assert!(
+                !session
+                    .begin_session_expiry(Duration::from_secs(12))
+                    .unwrap()
+            );
+            assert_eq!(finish(&mut session).close_cause(), cause);
         }
     }
 

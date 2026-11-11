@@ -17,6 +17,7 @@
 | 관련 스펙 | [운영 스펙 3.1절](../specs/operations.md#31-설정-검증과-시작), OPS-001(일부), OPS-038(일부), OPS-040(일부) |
 | 관련 계약 | [설정 계약](../contracts/config-v4.md) 1·2절, [운영 정보 계약 1.5절](../contracts/ops-info-v2.md#15-사건-목록)(경고 사건 필드) |
 | 관련 ADR | [ADR-0002 출발지 IP 허용 목록](../decisions/ADR-0002-source-ip-allowlist.md) |
+| 관련 문서 | [접속 ticket 모듈 설계](relay-access-ticket.md) |
 
 후속: R1은 [설정 v4](../contracts/config-v4.md)의 리스너·역할 모델과 모든 새 키의 해석·검증을 반영한다(사용자 결정 2026-11-08(Q181·Q184·Q185·Q188)). 이전 대조 기록은 v3 범위의 증거다. R1의 빌드·시험·포매터는 이 문서 작업에서 실행하지 않았다. `trusted_proxies`의 전달 헤더 판정과 `trust_all_proxies` 경고는 R2, 최근 로그 보관·조회는 R3 범위다. 후속: 구현은 커밋 `3df0693`이며, 시험은 커밋 `51bd747`의 두 OS 게이트에서 통과했다([WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)).
 
@@ -34,6 +35,7 @@
   - 모든 진단을 모아 한 번에 돌려주기(2.1절)
 - 맡지 않는 책임:
   - 인증서·개인키 파일 내용 검사(`tls_file_invalid`). TLS 작업(3.1)이 맡는다.
+  - 접속 ticket 공개 키 파일 내용 검사(`ticket_keys_invalid`). 시작·재로드의 `reload::ticket_keys::load`와 `TicketJwksStore`가 맡는다([접속 ticket 모듈 설계](relay-access-ticket.md#41-시작)).
   - 경고·진단의 출력. 진단 출력 형식은 `serve` 골격(작업 2.2), 경고 사건 기록은 운영 로그(작업 2.3)가 맡는다.
   - 상대 IP의 허용 판정(`AllowList::permits`), Mode I 최종 IP 판정(`TargetPolicy::permits_ip`), 요청 Origin 비교의 사용. 각각 작업 2.4·2.8·3.2에서 구현했다. domain의 `allow_list`·`target_policy`·`origin` 모듈을 쓴다.
   - 재로드 대상과 재시작 필요 값의 비교. 재로드 작업(5.2)이 `Settings`의 값 비교로 한다(`crates/app/src/reload/service.rs` `restart_required_keys`).
@@ -70,13 +72,15 @@ flowchart LR
 | `crates/app/src/settings.rs` `Settings`와 하위 `*Settings` | 검증을 마친 유효 설정. 시간은 `Duration`, 주소는 `SocketAddr`, 경로는 설정 파일 디렉터리 기준으로 푼 `PathBuf`(`load`가 주는 기준 디렉터리는 절대 경로), 항목은 domain 타입 | `parse`가 만들고 호출한 쪽이 소유 | domain |
 | `crates/app/src/settings.rs` `ConfigError` | 설정 오류 코드 enum. `code()`가 계약 문자열(`config_unknown_key` 등)을 준다. | 값 타입 | 없음 |
 | `crates/app/src/settings.rs` `ConfigDiagnostic` | 진단 한 건: `error`, `key`(전체 경로, 배열은 `[i]`), `message`(한국어 문장, 비밀·파일 내용 없음) | `parse`가 만든다 | `ConfigError` |
-| `crates/app/src/settings.rs` `ConfigWarning`, `Settings::warnings` | 경고 4종과 사건 필드 값(진입점, 항목 표준 표기, 주소) | 호출할 때 계산 | domain |
+| `crates/app/src/settings.rs` `ConfigWarning`, `Settings::warnings` | 설정 경고와 사건 필드 값(진입점, 역할, 항목 표준 표기, 주소). ticket 경고도 계산한다. | 호출할 때 계산 | domain |
 | `crates/adapters/src/config_file.rs` `load`, `parse` | 파일 읽기, TOML 해석, 테이블별 키 읽기, 관계·필수 키 검사, `Settings` 조립. `[admin.argon2]` 범위는 `vnc_relay_domain::account::Argon2Params`의 승인 범위 상수다. 구문 오류 위치는 `crates/adapters/src/toml_text.rs` `error_position`이 계정 파일 읽기와 같은 방식으로 계산한다. | 호출마다 | `reader`, `listen`, `toml_text`, domain, app, toml |
 | `crates/adapters/src/config_file.rs` `load_candidate`, `parse_candidate`, `settings_from_table`, `collect_presence` | 시작·조회·편집·watcher가 같은 전체 검증을 쓴다. 명시 leaf 키와 꺼진 WSS의 단독 경로를 presence로 보관한다. | 파일/바이트 후보 읽기마다 | `reader`, app `ConfigCandidate`·`ConfigPresence` |
 | `crates/adapters/src/config_file/reader.rs` `Section`, `Field`, `Diagnostics` | 한 TOML 테이블의 키를 읽고 읽은 키를 기록한다. 끝에서 읽지 않은 키를 `config_unknown_key`로 보고한다. 자료형·범위 오류를 진단으로 남긴다. `Field`는 키 상태(생략·무효·값)다. | 테이블마다 | toml, app |
 | `crates/adapters/src/config_file/listen.rs` `parse_listen` | `"IP:포트"`, `"[IPv6]:포트"`, 기본 포트가 있을 때 주소만 쓴 형식. 호스트 이름·영역 ID·포트 0을 거절한다. | 호출마다 | 호출한 쪽이 `Listener::default_port()`를 넘긴다. |
 
 v4의 `config_file.rs`는 `read_tcp_listener(Listener)`와 `read_websocket_listener(Listener)`를 나눈다. 뒤 함수는 부모 listen·trusted_proxies·TLS를 읽고 `read_websocket_role`로 Viewer·Server 자식을 읽는다. `read_allow_list`가 allow와 trusted_proxies의 IP 항목 검증을 공유한다. `read_recent_logs`는 max_entries를 읽는다. 주소 충돌은 `check_listen_conflicts`가 `Listener::ALL`을 한 번 순회하므로 공유 리스너를 역할 수만큼 중복 검사하지 않는다.
+
+`read_relay`는 `[relay.ticket.viewer]`·`[relay.ticket.server]`도 읽는다. 각 역할의 `enabled`는 기본 `false`다. `issuer`·`relay_host`는 1~256바이트 문자열이다. `max_lifetime_secs`는 10~600초이며 기본 60초다. `enabled = true`이면 `issuer`·`relay_host`·`public_keys_file`이 필수다. 빠진 값은 `config_missing_key`다. 공개 키 경로는 설정 파일 디렉터리 기준으로 푼다. 꺼진 역할도 명시한 값의 자료형·범위를 검사한다. 로더는 키 파일을 읽지 않는다([접속 ticket 모듈 설계](relay-access-ticket.md#41-시작)).
 
 
 ## 3. 데이터 모델
@@ -86,10 +90,11 @@ v4의 `config_file.rs`는 `read_tcp_listener(Listener)`와 `read_websocket_liste
 | 이름 | 필드·형태 | 저장 위치 | 제약과 항상 지켜야 할 조건 |
 | --- | --- | --- | --- |
 | `Settings` | `admin`, `relay`, `mode1`, `mode2`, `limits`, `timeouts`, `keepalive`, `management`, `dashboard`, `recent_closed`, `recent_logs`, `status`, `log`, `reload` | 메모리 | 전체 검사를 통과한 값만 담는다. 생략한 키는 기본값으로 채운다. `PartialEq`는 표기·주석·키 순서가 아니라 실행 의미를 비교한다. |
-| `RelaySettings` | `tcp_viewer`, `tcp_server`: `EntryPointSettings`; `ws`, `wss`: `WsListenerSettings` | `Settings.relay` | TCP 두 리스너와 공유 WS·WSS 두 리스너를 구분한다. `enabled(EntryPoint)`는 역할, `listener_enabled(Listener)`는 바인드 여부를 조회한다. |
+| `RelaySettings` | `tcp_viewer`, `tcp_server`: `EntryPointSettings`; `ws`, `wss`: `WsListenerSettings`; `ticket: TicketSettings` | `Settings.relay` | TCP 두 리스너와 공유 WS·WSS 두 리스너를 구분한다. `enabled(EntryPoint)`는 역할, `listener_enabled(Listener)`는 바인드 여부를 조회한다. ticket 정책은 역할별로 WS·WSS가 공유한다. |
 | `EntryPointSettings` | `enabled`, `listen: Option<SocketAddr>`, `allow: Option<AllowList>` | TCP 두 칸 | 켜진 TCP 진입점의 `listen`·`allow`는 필수다. |
 | `WsListenerSettings` | `listen`, `trusted_proxies: AllowList`, `tls: Option<TlsFiles>`, `viewer`, `server`: `WsRoleSettings` | WS·WSS 두 칸 | `enabled()`는 두 역할의 OR다. 어느 역할이든 켜면 부모의 `listen`이 필수다. WSS는 부모 TLS 두 경로도 필수다. WS에는 TLS 키를 받지 않는다. |
 | `WsRoleSettings` | `enabled`, `allow: Option<AllowList>`, `allowed_origins: Vec<Origin>` | 공유 리스너 아래 역할 두 칸 | 켜진 역할의 `allow`만 필수다. 꺼진 역할도 명시한 값의 형식·범위를 검사한다. |
+| `TicketSettings`·`TicketRoleSettings` | Viewer·Server별 `enabled`, `issuer`, `relay_host`, `public_keys_file`, `max_lifetime`, `keys` | `Settings.relay.ticket` | 로더는 빈 키 목록을 만든다. 시작·재로드가 파일을 검사해 실행 스냅샷의 키 목록을 채운다. |
 | `RecentLogsSettings` | `max_entries: u32` | `Settings.recent_logs` | 기본 1000, 범위 0~10000. 변경은 재시작 필요다. R1은 값을 읽고 검증하며 버퍼를 만들지 않는다. |
 | `Mode1Settings` | `enabled`, `allow_targets: Option<TargetPolicy>` | `Settings.mode1` | `enabled = true`이면 `allow_targets`가 있다. |
 | `LimitSettings` 등 수치 | `u32`(개수·바이트), `Duration`(초 단위 키) | 각 하위 설정 | 1.2절 범위 안. Lw ≤ L, Si ≤ Sa |
@@ -115,6 +120,8 @@ v3의 `[relay.ws_viewer]`·`[relay.wss_viewer]`는 `config_unknown_key`다. 자�
 | 6 | `config_file.rs` `parse` | 진단이 하나라도 있으면 전체 목록을 `Err`로 돌려준다. 없으면 `Settings`를 조립해 `Ok`로 돌려준다. | 없음 | 호출한 쪽(작업 2.2 `serve`, 재로드) |
 
 경고는 7단계로 호출한 쪽이 `Settings::warnings`를 불러 얻는다. 시작과 재로드가 같은 함수를 쓰고 사건의 `phase`는 호출한 쪽이 정한다.
+
+ticket을 켠 역할에 TCP 진입점도 켜져 있으면 `ticket_tcp_bypass` 경고를 낸다. 그 역할의 평문 WS가 켜져 있으면 `ticket_plaintext_ws` 경고를 낸다. 시작은 `phase=startup`이다. 재로드는 실제 바뀐 ticket `enabled` 키에 대해서만 경고를 다시 쓴다([접속 ticket 모듈 설계](relay-access-ticket.md#44-재로드와-편집)).
 
 보기·편집·watcher는 바이트를 이미 읽었으면 `parse_candidate`로 이 경로에 진입한다. 비UTF-8은 `ConfigError::FileUnreadable` 진단이며, GET의 파일 상태 분류가 이를 `unreadable`·빈 진단으로 바꾼다. 파일 revision 계산과 API 오류 상태 매핑은 이 로더가 아니라 [설정 보기·편집 서비스](config-edit.md)가 맡는다.
 

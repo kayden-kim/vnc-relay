@@ -16,18 +16,27 @@ use super::RelayError;
 use crate::events::AbortReason;
 use crate::ports::{Clock, RelayLifecycle, RelayStreamError};
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the accepted connection fixes H and the independent ticket deadline"
+)]
 pub(super) async fn exchange<S>(
     stream: &mut S,
     entry_point: EntryPoint,
     modes: HandshakePolicy,
     buffer_bytes: usize,
     deadline: Duration,
+    session_deadline: Option<Duration>,
     clock: &dyn Clock,
     mut shutdown: watch::Receiver<RelayLifecycle>,
 ) -> Result<(HandshakeRequest, Vec<u8>), RelayError>
 where
     S: AsyncRead + AsyncWrite + Unpin,
 {
+    let (deadline, reason) = match session_deadline.filter(|end| *end < deadline) {
+        Some(end) => (end, AbortReason::SessionExpired),
+        None => (deadline, AbortReason::HandshakeTimeout),
+    };
     let mut stopped = pin!(shutdown.wait_for(|phase| *phase != RelayLifecycle::Running));
     let mut timeout = pin!(tokio::time::sleep(
         deadline.saturating_sub(clock.monotonic()),
@@ -38,7 +47,7 @@ where
             return Poll::Ready(Err(RelayError::Aborted(AbortReason::ServerShutdown)));
         }
         if clock.monotonic() >= deadline || timeout.as_mut().poll(cx).is_ready() {
-            return Poll::Ready(Err(RelayError::Aborted(AbortReason::HandshakeTimeout)));
+            return Poll::Ready(Err(RelayError::Aborted(reason)));
         }
         let result = exchange.as_mut().poll(cx);
         if result.is_ready() {
@@ -46,7 +55,7 @@ where
                 return Poll::Ready(Err(RelayError::Aborted(AbortReason::ServerShutdown)));
             }
             if clock.monotonic() >= deadline || timeout.as_mut().poll(cx).is_ready() {
-                return Poll::Ready(Err(RelayError::Aborted(AbortReason::HandshakeTimeout)));
+                return Poll::Ready(Err(RelayError::Aborted(reason)));
             }
         }
         result
@@ -129,6 +138,83 @@ mod tests {
         mode2_enabled: true,
     };
 
+    /// spec: relay.md:RLY-031 partial
+    #[tokio::test(start_paused = true)]
+    async fn ticket_initial_exchange_uses_earlier_deadline_and_h_wins_ties() {
+        for (sx, elapsed, expected) in [
+            (
+                Duration::from_secs(4),
+                Duration::from_secs(4),
+                AbortReason::SessionExpired,
+            ),
+            (
+                Duration::from_secs(4),
+                H + Duration::from_secs(1),
+                AbortReason::SessionExpired,
+            ),
+            (H, H, AbortReason::HandshakeTimeout),
+            (H + Duration::from_secs(1), H, AbortReason::HandshakeTimeout),
+        ] {
+            let harness = Harness::new(4, ENABLED);
+            let (stream, _peer) = duplex(4096);
+            let context = ConnectionContext {
+                conn_id: ConnId::next(),
+                entry_point: EntryPoint::WsServer,
+                peer_ip: PeerIp::new(IpAddr::V4(Ipv4Addr::LOCALHOST)),
+                forwarded_ip: None,
+                peer_addr: (Ipv4Addr::LOCALHOST, 12345).into(),
+                accepted_wall: harness.clock.wall(),
+                accepted_at: harness.clock.monotonic(),
+                exchange_at: harness.clock.monotonic(),
+                buffer_bytes: 4,
+                handshake: H,
+            };
+            let mut exchange = pin!(harness.service.handle_connection(
+                TestStream {
+                    stream,
+                    actions: harness.close_actions.clone(),
+                    budget: harness.budget.clone(),
+                    block_close: false,
+                    failure: None,
+                },
+                context,
+                Some(crate::relay::TicketBinding {
+                    jti: "initial-ticket".to_owned(),
+                    relay_id: vnc_relay_domain::relay_id::RelayId::parse("123").expect("rid"),
+                    session_deadline: Some(harness.clock.monotonic() + sx),
+                }),
+                harness.budget.try_acquire(1).expect("L"),
+                harness.shutdown.subscribe(),
+            ));
+            poll_fn(|cx| {
+                assert!(exchange.as_mut().poll(cx).is_pending());
+                Poll::Ready(())
+            })
+            .await;
+            advance(elapsed).await;
+            assert_eq!(exchange.await.err(), Some(RelayError::Aborted(expected)));
+            assert!(
+                harness
+                    .close_actions
+                    .lock()
+                    .expect("actions")
+                    .contains(&if expected == AbortReason::SessionExpired {
+                        RelayCloseAction::SessionExpired
+                    } else {
+                        RelayCloseAction::HandshakeTimeout
+                    })
+            );
+            let events = harness.events.snapshot();
+            assert_eq!(events.len(), 1);
+            assert!(matches!(&events[0], Event::ConnectionAborted {
+                stage: Stage::InitialExchange, reason, ..
+            } if *reason == expected));
+            if expected == AbortReason::SessionExpired {
+                assert_eq!(events[0].level(), crate::events::Level::Info);
+            }
+        }
+    }
+
     /// spec: operations.md:OPS-050 partial
     #[tokio::test(start_paused = true)]
     async fn exchange_keeps_accepted_b_and_started_h_after_reload() {
@@ -155,6 +241,7 @@ mod tests {
                 failure: None
             },
             context,
+            None,
             harness.budget.try_acquire(1).expect("L"),
             harness.shutdown.subscribe(),
         ));
@@ -306,7 +393,7 @@ mod tests {
             tokio::spawn(async move {
                 harness
                     .service
-                    .handle_connection(stream, context, permit, shutdown)
+                    .handle_connection(stream, context, None, permit, shutdown)
                     .await
             })
         }
@@ -798,6 +885,7 @@ mod tests {
             let mut future = Box::pin(harness.service.handle_connection(
                 stream,
                 context,
+                None,
                 harness.budget.try_acquire(1).expect("test L slot"),
                 harness.shutdown.subscribe(),
             ));
@@ -847,6 +935,7 @@ mod tests {
             let mut future = Box::pin(harness.service.handle_connection(
                 stream,
                 context,
+                None,
                 harness.budget.try_acquire(1).expect("L"),
                 harness.shutdown.subscribe(),
             ));
@@ -921,6 +1010,7 @@ mod tests {
                 .handle_connection(
                     stream,
                     context,
+                    None,
                     harness.budget.try_acquire(1).expect("L"),
                     harness.shutdown.subscribe(),
                 )
@@ -968,6 +1058,7 @@ mod tests {
                 .handle_connection(
                     stream,
                     context,
+                    None,
                     harness.budget.try_acquire(1).expect("L"),
                     harness.shutdown.subscribe(),
                 )
@@ -1020,6 +1111,7 @@ mod tests {
             let mut future = Box::pin(harness.service.handle_connection(
                 stream,
                 context,
+                None,
                 harness.budget.try_acquire(1).expect("L"),
                 harness.shutdown.subscribe(),
             ));

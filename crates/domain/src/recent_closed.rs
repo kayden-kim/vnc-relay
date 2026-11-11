@@ -112,6 +112,11 @@ mod tests {
             CloseCause::AdminTerminated => {
                 session.begin_admin_close(Duration::from_secs(12)).unwrap();
             }
+            CloseCause::SessionExpired => {
+                session
+                    .begin_session_expiry(Duration::from_secs(12))
+                    .unwrap();
+            }
             CloseCause::DeadConnection => {
                 session.dead_connection(Side::Viewer).unwrap();
             }

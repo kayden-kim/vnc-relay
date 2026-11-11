@@ -38,6 +38,25 @@ impl WaitingConnection {
     }
 }
 
+fn session_deadline(entry: &WaitingConnection) -> Option<std::time::Duration> {
+    entry
+        .connection
+        .ticket
+        .as_ref()
+        .and_then(|binding| binding.session_deadline)
+}
+
+fn expiry_reason(entry: &WaitingConnection, now: std::time::Duration) -> Option<RemovedReason> {
+    if let Some(end) = session_deadline(entry).filter(|end| *end < entry.metadata.deadline) {
+        if now >= end {
+            return Some(RemovedReason::Removed(WaitingRemovalReason::SessionExpired));
+        }
+    } else if now >= entry.metadata.deadline {
+        return Some(RemovedReason::Expired);
+    }
+    None
+}
+
 #[expect(
     clippy::large_enum_variant,
     reason = "one stack-owned registration transition avoids allocating another box for a matched connection"
@@ -126,6 +145,19 @@ pub(super) async fn dispatch<C: TargetConnector>(
             if state.lifecycle != RelayLifecycle::Running {
                 Registration::Shutdown(incoming)
             } else {
+                if let Some(reason) = state
+                    .waiting
+                    .get(&id)
+                    .and_then(|entry| expiry_reason(entry, service.clock.monotonic()))
+                    && let Some(mut entry) = state.waiting.remove(&id)
+                {
+                    state.matching.remove_waiting(&id, entry.metadata.conn_id);
+                    drop(entry.waiting_permit.take());
+                    if let Some(waker) = entry.waker.take() {
+                        waker.wake();
+                    }
+                    expired = Some(Removed { entry, reason });
+                }
                 loop {
                     match state.matching.arrive(
                         &id,
@@ -292,15 +324,21 @@ async fn wait<C: TargetConnector>(
 ) -> Result<(), RelayDispatchError> {
     let mut lifecycle = runtime.lifecycle();
     let mut stopped = pin!(lifecycle.wait_for(|phase| *phase != RelayLifecycle::Running));
+    let deadline = runtime
+        .lock()
+        .waiting
+        .get(id)
+        .and_then(session_deadline)
+        .map_or(metadata.deadline, |end| end.min(metadata.deadline));
     let mut timer = pin!(tokio::time::sleep(
-        metadata.deadline.saturating_sub(service.clock.monotonic())
+        deadline.saturating_sub(service.clock.monotonic())
     ));
     let removed = poll_fn(|cx| {
         let shutdown = stopped.as_mut().poll(cx).is_ready();
-        let expired =
-            service.clock.monotonic() >= metadata.deadline || timer.as_mut().poll(cx).is_ready();
+        let now = service.clock.monotonic();
+        let timer_expired = timer.as_mut().poll(cx).is_ready();
         let mut state = runtime.lock();
-        let Some(entry) = state.waiting.get_mut(id) else {
+        let Some(entry) = state.waiting.get(id) else {
             return Poll::Ready(None);
         };
         if entry.metadata.conn_id != metadata.conn_id {
@@ -308,10 +346,8 @@ async fn wait<C: TargetConnector>(
         }
         let mut reason = if state.lifecycle != RelayLifecycle::Running || shutdown {
             Some(RemovedReason::Removed(WaitingRemovalReason::ServerShutdown))
-        } else if expired {
-            Some(RemovedReason::Expired)
         } else {
-            None
+            expiry_reason(entry, now.max(if timer_expired { deadline } else { now }))
         };
         if reason.is_none() {
             let entry = match state.waiting.get_mut(id) {
@@ -357,9 +393,10 @@ async fn wait<C: TargetConnector>(
         }
         if state.lifecycle == RelayLifecycle::Running
             && !shutdown
-            && service.clock.monotonic() >= metadata.deadline
+            && let Some(entry) = state.waiting.get(id)
+            && let Some(expired) = expiry_reason(entry, service.clock.monotonic())
         {
-            reason = Some(RemovedReason::Expired);
+            reason = Some(expired);
         }
         if let Some(reason) = reason {
             state.matching.remove_waiting(id, metadata.conn_id);
@@ -403,6 +440,9 @@ async fn cleanup<C: TargetConnector>(
         }
         RemovedReason::Removed(WaitingRemovalReason::DeadConnection) => {
             RelayCloseAction::DeadConnection
+        }
+        RemovedReason::Removed(WaitingRemovalReason::SessionExpired) => {
+            RelayCloseAction::SessionExpired
         }
     };
     service.reject_connection(connection, action, runtime).await;

@@ -29,6 +29,10 @@ const WORDS = {
     timing: '바뀐 값은 키별 다음 검사·요청부터 적용됩니다. 이미 끝난 검사·시작한 타이머·설정한 소켓 옵션은 이전 결과를 유지합니다. 기존 중계 세션은 계속 동작합니다.',
     confirm: '설정 변경 확인', previous: '이전 값', next: '새 값', added: '추가한 항목', removed: '뺀 항목',
     emptyWarning: '빈 허용 목록은 해당 키가 검사하는 모든 새 접속·요청을 거절합니다.',
+    emptyTrustedProxiesWarning: '빈 trusted_proxies 목록은 전달 헤더를 신뢰하지 않습니다. 소켓 상대 IP로 클라이언트 주소를 검사합니다.',
+    emptyAllowedOriginsWarning: '빈 allowed_origins 목록은 Origin이 있는 요청을 거절합니다. Origin이 없는 요청은 IP 검사를 하고, 그 역할에 접속 ticket 확인을 켰으면 ticket도 확인합니다.',
+    stringLengthError: '1바이트 이상 256바이트 이하로 입력하십시오.',
+    enableTicketWarning: '접속 ticket 확인을 켜면 이 역할의 WS·WSS 업그레이드 요청 가운데 유효한 ticket이 없는 요청을 거절합니다. 기존 중계 세션은 계속 동작합니다.',
     noChanges: '바뀐 설정이 없습니다.', saving: '설정을 저장하고 적용하는 중입니다.',
     conflict: '그사이 설정 파일이 바뀌었습니다. 다시 불러오면 입력 내용을 버리고 현재 설정으로 바꿉니다.',
     writeFailed: '설정 파일을 쓰지 못했습니다. 파일과 실행 값은 바뀌지 않았습니다. 입력을 확인한 뒤 다시 시도하십시오.',
@@ -40,7 +44,7 @@ const WORDS = {
     rejected: '요청을 처리하지 못했습니다. 화면을 다시 불러오십시오. 입력 내용은 버립니다.',
     dynamic: '재시작 없이 적용', restart: '재시작 필요', differs: '파일과 다름', empty: '빈 목록', null: '값 없음',
     applied: '적용', rejectedReload: '거절', fileWatch: '파일 변경 감지', configEdit: '설정 편집',
-    groups: ['출발지 IP 허용 목록', '접근 정책', '연결 상한', '시간 제한', '연결 유지'],
+    groups: ['출발지 IP 허용 목록', '접근 정책', '연결 상한', '시간 제한', '연결 유지', '접속 ticket'],
     diagnostics: [
       '필수 설정 값이 없습니다.', '설정 값의 자료형이 맞지 않습니다.', '설정 값이 허용 범위를 벗어났습니다.',
       '설정 키 사이의 관계를 만족하지 않습니다.', 'IP·CIDR·범위 항목의 형식이 올바르지 않습니다.',
@@ -60,6 +64,10 @@ const WORDS = {
     timing: 'Changed values apply from the next check or request for each key. Completed checks, started timers, and configured socket options keep their previous results. Existing relay sessions continue.',
     confirm: 'Confirm settings changes', previous: 'Previous value', next: 'New value', added: 'Added items', removed: 'Removed items',
     emptyWarning: 'An empty allow list rejects all new connections or requests checked by this key.',
+    emptyTrustedProxiesWarning: 'An empty trusted_proxies list does not trust forwarded headers. The socket peer IP is used as the client address.',
+    emptyAllowedOriginsWarning: 'An empty allowed_origins list rejects requests with Origin. Requests without Origin use the IP check, and also the ticket check when access tickets are on for the role.',
+    stringLengthError: 'Enter 1 to 256 bytes.',
+    enableTicketWarning: "Turning on access ticket checks rejects this role's WS and WSS upgrade requests that have no valid ticket. Existing relay sessions continue.",
     noChanges: 'No settings have changed.', saving: 'Saving and applying settings.',
     conflict: 'The configuration file has changed. Reloading discards your input and loads the current settings.',
     writeFailed: 'The configuration file could not be written. The file and settings in effect are unchanged. Review your input and try again.',
@@ -71,7 +79,7 @@ const WORDS = {
     rejected: 'The request could not be processed. Reload this screen. Your input will be discarded.',
     dynamic: 'Applies without restart', restart: 'Restart required', differs: 'Differs from file', empty: 'Empty list', null: 'No value',
     applied: 'Applied', rejectedReload: 'Rejected', fileWatch: 'File watch', configEdit: 'Configuration edit',
-    groups: ['Source IP allow lists', 'Access policies', 'Connection limits', 'Timeouts', 'Keepalive'],
+    groups: ['Source IP allow lists', 'Access policies', 'Connection limits', 'Timeouts', 'Keepalive', 'Access tickets'],
     diagnostics: [
       'A required setting value is missing.', 'The setting value has an invalid type.', 'The setting value is outside its allowed range.',
       'The relationship between setting keys is not valid.', 'The IP, CIDR, or range item has an invalid format.',
@@ -97,6 +105,9 @@ const NEXT_REV = `sha256:${'1'.repeat(64)}`;
 const LIST = 'relay.tcp_viewer.allow';
 const WAITING = 'limits.waiting';
 const LONG_PATH = `/settings/${'very-long-directory-name/'.repeat(9)}private-key.pem`;
+const TICKET = 'relay.ticket.viewer';
+const TICKET_FIELDS = ['enabled', 'issuer', 'relay_host', 'max_lifetime_secs'];
+const ticketPublicPath = (role) => `/settings/${role}-ticket-public-keys.jwks`;
 const WAIT = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 async function waitFor(ready, ms = 5000) {
   for (let steps = Math.ceil(ms / 20); steps > 0 && !ready(); steps -= 1) await WAIT(20);
@@ -117,7 +128,7 @@ function deferred() {
   return { promise, resolve };
 }
 
-// Full contract order, all 33 reloadable keys (29 editable and four TLS paths).
+// Full contract order: 75 keys, 43 reloadable (37 editable and six file paths).
 function config(overrides = {}) {
   const items = [];
   const add = (key, value, reload = 'restart', editable = false, min, max) => {
@@ -149,6 +160,14 @@ function config(overrides = {}) {
       add(`${rolePrefix}.allow`, ['198.51.100.0/24'], 'dynamic', true);
       add(`${rolePrefix}.allowed_origins`, [], 'dynamic', true);
     }
+  }
+  for (const role of ['viewer', 'server']) {
+    const prefix = `relay.ticket.${role}`;
+    add(`${prefix}.enabled`, false, 'dynamic', true);
+    add(`${prefix}.issuer`, `${role}.issuer.example`, 'dynamic', true);
+    add(`${prefix}.relay_host`, `${role}.relay.example`, 'dynamic', true);
+    add(`${prefix}.public_keys_file`, ticketPublicPath(role), 'dynamic');
+    add(`${prefix}.max_lifetime_secs`, 60, 'dynamic', true, 10, 600);
   }
   add('mode1.enabled', true);
   add('mode1.allow_targets', ['198.51.100.7:5900'], 'dynamic', true);
@@ -258,12 +277,21 @@ const dialogOf = (root) => root.querySelector('dialog.dialog');
 const confirmOf = (root) => dialogOf(root)?.querySelector('.dialog-actions button:last-child');
 const cancelOf = (root) => dialogOf(root)?.querySelector('.dialog-actions button:first-child');
 const titleOf = (root) => root.querySelector('h1.page-title')?.textContent.trim();
+const changeOf = (root, key) => [...root.querySelectorAll('.config-change')]
+  .find((card) => card.querySelector('.card-title')?.textContent === key);
+const comparisonOf = (card) => [...(card?.querySelectorAll('.config-body > span') ?? [])].map((node) => node.textContent);
 function setValue(root, key, value) {
   const input = inputOf(root, key);
   if (!input) throw new Error(`missing input: ${key}`);
   input.value = value;
   input.dispatchEvent(new Event('input', { bubbles: true }));
   input.dispatchEvent(new Event('change', { bubbles: true }));
+  return input;
+}
+function setChecked(root, key, checked) {
+  const input = inputOf(root, key);
+  if (!input || input.type !== 'checkbox') throw new Error(`missing checkbox: ${key}`);
+  if (input.checked !== checked) input.click();
   return input;
 }
 async function ready(mounted, edit = false) {
@@ -301,7 +329,7 @@ function checkAria(label, root, key) {
   const input = inputOf(root, key);
   check(`${label}: input has invalid state`, input?.getAttribute('aria-invalid') === 'true');
   const references = input?.getAttribute('aria-describedby')?.split(/\s+/).filter(Boolean) ?? [];
-  check(`${label}: help and error linked`, references.length >= 2 && references.every((id) => root.querySelector(`[id="${id}"]`) !== null));
+  check(`${label}: error linked`, references.some((id) => id.endsWith('-error')) && references.every((id) => root.querySelector(`[id="${id}"]`) !== null));
   check(`${label}: visible key label linked`, [...root.querySelectorAll('label')].some((label) => label.htmlFor === input?.id && label.textContent.includes(key)));
   check(`${label}: error summary announced`, [...root.querySelectorAll('[role="alert"], [aria-live]')].some((node) => node.textContent.trim().length > 0));
 }
@@ -331,7 +359,21 @@ async function case029() {
   await ready(m);
   const rows = [...m.root.querySelectorAll('[data-config-key]')];
   check('DASH-029: all contract keys in order', same(rows.map((row) => row.dataset.configKey), data.items.map((item) => item.key)));
-  check('DASH-029: fixture has all 33 reloadable keys', data.items.filter((item) => item.reload === 'dynamic').length === 33);
+  check('DASH-029: fixture has all 75 contract keys', data.items.length === 75);
+  check('DASH-029: fixture has all 43 reloadable keys', data.items.filter((item) => item.reload === 'dynamic').length === 43);
+  check('DASH-029: fixture has all 37 potential editable keys', data.items.filter((item) => item.editable).length === 37);
+  const sections = [...m.root.querySelectorAll('.card-title')].map((node) => node.textContent);
+  const ticketSections = ['[relay.ticket.viewer]', '[relay.ticket.server]'];
+  check('DASH-029: ticket sections follow WS/WSS and precede Mode I', ticketSections.every((section, index) =>
+    sections.indexOf(section) === sections.indexOf('[relay.wss.server]') + index + 1) &&
+    sections.indexOf('[mode1]') === sections.indexOf(ticketSections[1]) + 1);
+  for (const role of ['viewer', 'server']) {
+    const ticketRows = rows.filter((row) => row.dataset.configKey.startsWith(`relay.ticket.${role}.`));
+    check(`DASH-029 ${role}: five ticket keys in contract order`, same(ticketRows.map((row) => row.dataset.configKey),
+      ['enabled', 'issuer', 'relay_host', 'public_keys_file', 'max_lifetime_secs'].map((key) => `relay.ticket.${role}.${key}`)));
+    const path = rowOf(m.root, `relay.ticket.${role}.public_keys_file`);
+    check(`DASH-029 ${role}: public key file is path only`, path?.querySelector('.config-value')?.textContent === ticketPublicPath(role));
+  }
   for (const item of data.items) {
     const row = rowOf(m.root, item.key);
     const values = item.value === null ? [w.null] : Array.isArray(item.value) ? item.value.length ? item.value : [w.empty] : [String(item.value)];
@@ -339,7 +381,8 @@ async function case029() {
     check(`DASH-029: ${item.key} application`, row?.textContent.includes(item.reload === 'dynamic' ? w.dynamic : w.restart));
   }
   check('DASH-029: full long key path visible', has(m.root, LONG_PATH));
-  check('DASH-029: no file content or editable controls', !has(m.root, 'BEGIN PRIVATE KEY') && inputsOf(m.root).length === 0);
+  check('DASH-029: no file content or editable controls', !has(m.root, 'BEGIN PRIVATE KEY') &&
+    !has(m.root, 'BEGIN PUBLIC KEY') && !has(m.root, '"kty"') && inputsOf(m.root).length === 0);
   check('DASH-029: as_of local time and zone', has(m.root, formatTime(AS_OF)));
   check('DASH-029: reload local time and zone', has(m.root, formatTime(RELOADED)));
   check('DASH-029: reload result and trigger localized', has(m.root, w.applied) && has(m.root, w.fileWatch));
@@ -427,37 +470,54 @@ async function case034() {
   }
 }
 async function case035() {
-  const data = config();
-  for (const item of data.items) {
-    if (item.key.startsWith('relay.tcp_server.') || item.key.startsWith('relay.wss.') || item.key.startsWith('mode1.')) {
-      item.editable = false;
-      if (item.key.endsWith('.enabled')) item.value = false;
-      else item.value = null;
+  for (const [role, listener] of [['viewer', 'ws'], ['server', 'wss']]) {
+    const data = config();
+    for (const item of data.items) {
+      const wsRole = /^relay\.(ws|wss)\.(viewer|server)\./.exec(item.key);
+      const disabled = item.key.startsWith('relay.tcp_server.') || item.key.startsWith('mode1.') ||
+        (wsRole && (wsRole[1] !== listener || wsRole[2] !== role)) ||
+        (item.key.startsWith(`relay.${listener === 'ws' ? 'wss' : 'ws'}.`) && !wsRole);
+      if (disabled) {
+        item.editable = false;
+        item.value = item.key.endsWith('.enabled') ? false : null;
+      }
+      if (item.key.startsWith('relay.ticket.') && !item.key.startsWith(`relay.ticket.${role}.`)) item.editable = false;
     }
+    const m = mount(fakeApi({ [GET]: () => ok(data) }), { edit: true });
+    await ready(m, true);
+    const inputs = inputsOf(m.root);
+    const expectedKeys = [
+      (key) => /^relay\..+\.allow$/.test(key),
+      (key) => key.endsWith('.trusted_proxies'),
+      (key) => key.endsWith('.allowed_origins') || key === 'mode1.allow_targets',
+      (key) => key.startsWith('limits.'), (key) => key.startsWith('timeouts.'), (key) => key.startsWith('keepalive.'),
+      (key) => key.startsWith('relay.ticket.'),
+    ].flatMap((belongs) => data.items.filter((item) => item.editable && belongs(item.key)).map((item) => item.key));
+    check(`DASH-035 ${role}: exactly editable keys in six groups`, same(inputs.map((node) => node.dataset.configKey), expectedKeys));
+    const sections = [...m.root.querySelectorAll('.card')].filter((card) => card.querySelector('[data-config-key]'));
+    check(`DASH-035 ${role}: all six section titles in order`, same(sections.map((card) => card.querySelector('.card-title')?.textContent), w.groups));
+    check(`DASH-035 ${role}: only enabled role's four ticket inputs last`, same(inputs.slice(-4).map((node) => node.dataset.configKey),
+      TICKET_FIELDS.map((key) => `relay.ticket.${role}.${key}`)) &&
+      inputs.filter((node) => node.dataset.configKey.startsWith('relay.ticket.')).length === 4);
+    check('DASH-035: no TLS/public key paths or restart key inputs', !inputs.some((node) =>
+      /cert_file|key_file|public_keys_file|management\./.test(node.dataset.configKey) ||
+      (node.dataset.configKey.endsWith('.enabled') && !node.dataset.configKey.startsWith('relay.ticket.'))));
+    for (const input of inputs) {
+      const item = data.items.find((item) => item.key === input.dataset.configKey);
+      check('DASH-035: stable input ID', input.id === `config-${item.key.replaceAll('.', '-')}`);
+      check('DASH-035: visible label includes key', [...m.root.querySelectorAll('label')].some((label) => label.htmlFor === input.id && label.textContent.includes(item.key)));
+      if (typeof item.value === 'boolean') check('DASH-035: enabled uses an unchecked boolean checkbox', input.type === 'checkbox' && input.checked === false);
+      else {
+        check('DASH-035: readable minimum input font', parseFloat(getComputedStyle(input).fontSize) >= 16);
+        if (typeof item.value === 'string') check('DASH-035: ticket string is a single-line text input', input.tagName === 'INPUT' && input.type === 'text');
+      }
+      const help = input.getAttribute('aria-describedby')?.split(/\s+/).map((id) => document.getElementById(id)?.textContent ?? '').join(' ') ?? '';
+      if (Array.isArray(item.value) || typeof item.value === 'number') check('DASH-035: connected help', help.length > 0);
+      if (item.min !== undefined) check('DASH-035: min/max in help', help.includes(String(item.min)) && help.includes(String(item.max)));
+    }
+    check('DASH-035: timing guidance', has(m.root, w.timing));
+    checkLayout('DASH-035', m.root);
   }
-  const m = mount(fakeApi({ [GET]: () => ok(data) }), { edit: true });
-  await ready(m, true);
-  const inputs = inputsOf(m.root);
-  const expectedKeys = [
-    (key) => /^relay\..+\.allow$/.test(key),
-    (key) => key.endsWith('.trusted_proxies'),
-    (key) => key.endsWith('.allowed_origins') || key === 'mode1.allow_targets',
-    (key) => key.startsWith('limits.'), (key) => key.startsWith('timeouts.'), (key) => key.startsWith('keepalive.'),
-  ].flatMap((belongs) => data.items.filter((item) => item.editable && belongs(item.key)).map((item) => item.key));
-  check('DASH-035: exactly editable keys in five groups', same(inputs.map((node) => node.dataset.configKey), expectedKeys));
-  check('DASH-035: all five section titles', w.groups.every((group) => has(m.root, group)));
-  check('DASH-035: no TLS paths/restart keys inputs', !inputs.some((node) => /cert_file|key_file|\.enabled$|management\./.test(node.dataset.configKey)));
-  for (const input of inputs) {
-    const item = data.items.find((item) => item.key === input.dataset.configKey);
-    check('DASH-035: stable input ID', input.id === `config-${item.key.replaceAll('.', '-')}`);
-    check('DASH-035: visible label includes key', [...m.root.querySelectorAll('label')].some((label) => label.htmlFor === input.id && label.textContent.includes(item.key)));
-    check('DASH-035: readable minimum input font', parseFloat(getComputedStyle(input).fontSize) >= 16);
-    const help = input.getAttribute('aria-describedby')?.split(/\s+/).map((id) => document.getElementById(id)?.textContent ?? '').join(' ') ?? '';
-    check('DASH-035: connected help', help.length > 0);
-    if (item.min !== undefined) check('DASH-035: min/max in help', help.includes(String(item.min)) && help.includes(String(item.max)));
-  }
-  check('DASH-035: timing guidance', has(m.root, w.timing));
-  checkLayout('DASH-035', m.root);
 }
 async function case036() {
   const m = mount(fakeApi(), { edit: true });
@@ -497,9 +557,86 @@ async function case036() {
   check('DASH-036: blank lines alone ignored', m.api.count(PATCH) === 0);
   cancelOf(m.root).click();
   checkLayout('DASH-036', m.root);
+
+  const tickets = mount(fakeApi(), { edit: true });
+  await ready(tickets, true);
+  const issuer = `${TICKET}.issuer`;
+  const relayHost = `${TICKET}.relay_host`;
+  setValue(tickets.root, issuer, '');
+  setValue(tickets.root, relayHost, 'a'.repeat(257));
+  buttonOf(tickets.root, 'review').click();
+  await WAIT(20);
+  for (const key of [issuer, relayHost]) {
+    checkAria(`DASH-036 ticket ${key}`, tickets.root, key);
+    check(`DASH-036 ${key}: adopted CPY-193 field error`, inputOf(tickets.root, key)?.closest('.config-field')?.textContent.includes(w.stringLengthError));
+  }
+  check('DASH-036: empty issuer and 257-byte host focus first error', document.activeElement === inputOf(tickets.root, issuer));
+  check('DASH-036: string errors prevent dialog and PATCH', !dialogOf(tickets.root)?.open && tickets.api.count(PATCH) === 0);
+  setValue(tickets.root, issuer, 'viewer.issuer.example');
+  for (const value of ['a'.repeat(257), `${'가'.repeat(85)}ab`, `${'😀'.repeat(64)}a`]) {
+    setValue(tickets.root, relayHost, value);
+    buttonOf(tickets.root, 'review').click();
+    await WAIT(20);
+    check('DASH-036: 257 UTF-8 bytes rejected regardless of character count', has(tickets.root, w.stringLengthError) &&
+      inputOf(tickets.root, relayHost)?.getAttribute('aria-invalid') === 'true');
+    check('DASH-036: UTF-8 error focuses host without dialog or PATCH', document.activeElement === inputOf(tickets.root, relayHost) &&
+      !dialogOf(tickets.root)?.open && tickets.api.count(PATCH) === 0);
+  }
+  for (const value of [' ', 'a'.repeat(256), `${'가'.repeat(85)}a`, '😀'.repeat(64)]) {
+    setValue(tickets.root, issuer, value);
+    setValue(tickets.root, relayHost, value);
+    await review(tickets.root);
+    for (const key of [issuer, relayHost]) {
+      check(`DASH-036 ${key}: 1..256 bytes retained without trimming`, comparisonOf(changeOf(tickets.root, key))[1] === value);
+    }
+    check('DASH-036: valid byte boundaries do not PATCH before confirmation', tickets.api.count(PATCH) === 0);
+    cancelOf(tickets.root).click();
+  }
+  setValue(tickets.root, issuer, ' issuer with spaces ');
+  setValue(tickets.root, relayHost, ' relay.example ');
+  const enabled = `${TICKET}.enabled`;
+  check('DASH-036: checkbox starts unchecked', inputOf(tickets.root, enabled)?.checked === false);
+  setChecked(tickets.root, enabled, true);
+  check('DASH-036: checkbox can be selected', inputOf(tickets.root, enabled)?.checked === true);
+  setChecked(tickets.root, enabled, false);
+  check('DASH-036: checkbox can be cleared', inputOf(tickets.root, enabled)?.checked === false);
+  await review(tickets.root);
+  check('DASH-036: toggling checkbox back is unchanged', changeOf(tickets.root, enabled) === undefined);
+  cancelOf(tickets.root).click();
+  setChecked(tickets.root, enabled, true);
+  await review(tickets.root);
+  check('DASH-036: checkbox comparison is false to true', same(comparisonOf(changeOf(tickets.root, enabled)), ['false', 'true']));
+  checkLayout('DASH-036 ticket review', tickets.root);
+  confirmOf(tickets.root).click();
+  await waitFor(() => tickets.api.count(PATCH) === 1);
+  const ticketChanges = tickets.api.calls.find((call) => call.key === PATCH)?.body?.changes;
+  check('DASH-036: PATCH preserves strings and sends actual boolean', same(ticketChanges, {
+    [enabled]: true, [issuer]: ' issuer with spaces ', [relayHost]: ' relay.example ',
+  }));
+
+  let nullData = config();
+  for (const role of ['viewer', 'server']) {
+    for (const key of ['issuer', 'relay_host']) nullData = withValue(nullData, `relay.ticket.${role}.${key}`, null);
+  }
+  const unchanged = mount(fakeApi({ [GET]: () => ok(nullData) }), { edit: true });
+  await ready(unchanged, true);
+  for (const role of ['viewer', 'server']) {
+    for (const key of ['issuer', 'relay_host']) {
+      const fullKey = `relay.ticket.${role}.${key}`;
+      check('DASH-036: null ticket string starts empty', inputOf(unchanged.root, fullKey)?.value === '');
+      setValue(unchanged.root, fullKey, '');
+    }
+  }
+  await review(unchanged.root);
+  check('DASH-036: null plus empty is unchanged without length error', has(dialogOf(unchanged.root), w.noChanges) &&
+    unchanged.root.querySelectorAll('.config-change').length === 0 && !has(unchanged.root, w.stringLengthError));
+  confirmOf(unchanged.root).click();
+  await waitFor(() => unchanged.navigations.length > 0);
+  check('DASH-036: null plus empty never sends PATCH', unchanged.api.count(PATCH) === 0 &&
+    unchanged.navigations.some((navigation) => navigation.url === '/#/settings'));
 }
 async function case037() {
-  const baseline = withValue(config(), 'relay.ws.viewer.allowed_origins', ['https://viewer.example']);
+  const baseline = withValue(withValue(config(), 'relay.ws.viewer.allowed_origins', ['https://viewer.example']), 'relay.ticket.server.enabled', true);
   const m = mount(fakeApi({ [GET]: () => ok(baseline) }), { edit: true });
   await ready(m, true);
   setValue(m.root, LIST, '192.0.2.7\n198.51.100.8');
@@ -507,19 +644,57 @@ async function case037() {
   setValue(m.root, 'relay.ws.trusted_proxies', '');
   setValue(m.root, 'relay.ws.viewer.allowed_origins', '');
   setValue(m.root, WAITING, '250');
+  setChecked(m.root, `${TICKET}.enabled`, true);
+  setChecked(m.root, 'relay.ticket.server.enabled', false);
+  setValue(m.root, `${TICKET}.issuer`, ' next issuer ');
+  setValue(m.root, `${TICKET}.relay_host`, 'next.relay.example');
+  setValue(m.root, `${TICKET}.max_lifetime_secs`, '90');
   await review(m.root);
   const dialog = dialogOf(m.root);
   check('DASH-037: confirmation title', dialog.textContent.includes(w.confirm));
   check('DASH-037: before and after labels', dialog.textContent.includes(w.previous) && dialog.textContent.includes(w.next));
   check('DASH-037: old/new numbers and changed keys', [LIST, 'relay.tcp_server.allow', WAITING, '200', '250'].every((part) => dialog.textContent.includes(part)));
   check('DASH-037: added/deleted list values', [w.added, w.removed, '192.0.2.7', '198.51.100.8', '198.51.100.0/24'].every((part) => dialog.textContent.includes(part)));
-  check('DASH-037: empty list warning', dialog.textContent.includes(w.emptyWarning));
-  check('DASH-037: empty trusted proxy warning', dialog.textContent.includes(t.emptyTrustedProxiesWarning));
-  check('DASH-037: empty Origin warning', dialog.textContent.includes(t.emptyAllowedOriginsWarning));
+  const allowChange = changeOf(m.root, 'relay.tcp_server.allow');
+  const proxiesChange = changeOf(m.root, 'relay.ws.trusted_proxies');
+  const originsChange = changeOf(m.root, 'relay.ws.viewer.allowed_origins');
+  check('DASH-037: empty allow warning belongs to allow entry', has(allowChange, w.emptyWarning));
+  check('DASH-037: empty trusted proxy warning has its distinct meaning', has(proxiesChange, w.emptyTrustedProxiesWarning) && !has(proxiesChange, w.emptyWarning));
+  check('DASH-037: adopted CPY-192 belongs to empty Origin entry', has(originsChange, w.emptyAllowedOriginsWarning) && !has(originsChange, w.emptyWarning));
+  const enableChange = changeOf(m.root, `${TICKET}.enabled`);
+  const disableChange = changeOf(m.root, 'relay.ticket.server.enabled');
+  check('DASH-037: boolean changes compare exact false/true values', same(comparisonOf(enableChange), ['false', 'true']) &&
+    same(comparisonOf(disableChange), ['true', 'false']));
+  check('DASH-037: adopted CPY-194 is inside false-to-true change only', has(enableChange, w.enableTicketWarning) &&
+    !has(disableChange, w.enableTicketWarning) &&
+    [...dialog.querySelectorAll('.alert')].filter((alert) => has(alert, w.enableTicketWarning)).length === 1);
+  for (const change of [originsChange, enableChange]) {
+    const warning = change.querySelector('.alert-body > p');
+    check('DASH-037: standalone warnings use adopted body typography', getComputedStyle(warning).fontWeight === '400' &&
+      getComputedStyle(warning).color === getComputedStyle(dialog).color);
+  }
+  check('DASH-037: issuer string diff preserves surrounding spaces', same(comparisonOf(changeOf(m.root, `${TICKET}.issuer`)),
+    ['viewer.issuer.example', ' next issuer ']));
+  check('DASH-037: relay host string diff', same(comparisonOf(changeOf(m.root, `${TICKET}.relay_host`)),
+    ['viewer.relay.example', 'next.relay.example']));
+  check('DASH-037: ticket lifetime numeric diff', same(comparisonOf(changeOf(m.root, `${TICKET}.max_lifetime_secs`)), ['60', '90']));
   check('DASH-037: existing connections/timers/options guidance', dialog.textContent.includes(w.timing));
   check('DASH-037: no unchanged key in comparison', !dialog.textContent.includes('keepalive.tcp_probes'));
   check('DASH-037: no request before confirmation', m.api.count(PATCH) === 0);
   checkLayout('DASH-037', m.root);
+  confirmOf(m.root).click();
+  await waitFor(() => m.api.count(PATCH) === 1);
+  const changes = m.api.calls.find((call) => call.key === PATCH)?.body?.changes;
+  const expected = {
+    [LIST]: ['192.0.2.7', '198.51.100.8'], 'relay.tcp_server.allow': [],
+    'relay.ws.trusted_proxies': [], 'relay.ws.viewer.allowed_origins': [], [WAITING]: 250,
+    [`${TICKET}.enabled`]: true, [`${TICKET}.issuer`]: ' next issuer ',
+    [`${TICKET}.relay_host`]: 'next.relay.example', [`${TICKET}.max_lifetime_secs`]: 90,
+    'relay.ticket.server.enabled': false,
+  };
+  check('DASH-037: PATCH contains only changed keys with boolean/string/list/number types', changes !== undefined &&
+    same(Object.keys(changes).sort(), Object.keys(expected).sort()) &&
+    Object.entries(expected).every(([key, value]) => same(changes[key], value)));
 }
 async function case038() {
   const m = mount(fakeApi(), { edit: true });
@@ -1031,10 +1206,15 @@ async function shot(frame) {
     await waitFor(() => has(m.root, t.failed));
   } else if (state === 'client-error') {
     setValue(m.root, LIST, 'not an ip with spaces');
+    setValue(m.root, `${TICKET}.issuer`, '');
+    setValue(m.root, `${TICKET}.relay_host`, 'a'.repeat(257));
     buttonOf(m.root, 'review').click();
   } else if (state === 'confirm' || state === 'unchanged') {
     if (state === 'confirm') {
       for (const key of ['relay.tcp_viewer.allow', 'relay.ws.trusted_proxies', 'relay.ws.viewer.allowed_origins']) setValue(m.root, key, '');
+      setChecked(m.root, `${TICKET}.enabled`, true);
+      setValue(m.root, `${TICKET}.issuer`, 'next.issuer.example');
+      setValue(m.root, `${TICKET}.relay_host`, 'next.relay.example');
     }
     await review(m.root);
   } else if (outcomes[state]) {

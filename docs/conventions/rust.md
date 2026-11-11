@@ -102,6 +102,7 @@ cargo xtask layers
 | `Target` | Mode I 대상, 대상 허용 정책 | [용어집](../../GLOSSARY.md#중계-방식과-세션) |
 | `EntryPoint` | 진입점 | [용어집](../../GLOSSARY.md#접근-경계) |
 | `Allow` | 출발지 IP 허용 목록, 전체 허용 항목 | [용어집](../../GLOSSARY.md#접근-경계) |
+| `Ticket` | 접속 ticket, 사용 기록, ticket 공개 키 | [용어집](../../GLOSSARY.md#접근-경계) |
 | `Management` | 관리 리스너, 관리 API | [용어집](../../GLOSSARY.md#관리-기능) |
 | `Status` | 상태 리스너 | [용어집](../../GLOSSARY.md#관리-기능) |
 | `Admin` | 관리자 계정, 관리자 계정 준비, 관리 세션 | [용어집](../../GLOSSARY.md#관리-기능) |
@@ -134,3 +135,7 @@ suffix 목록:
 | `Error` | 모든 레이어 | 모듈의 오류 enum(`ConfigError`) | 최초 채택 |
 | `Diagnostic` | app | 사용자에게 보여 줄 진단 한 건(오류 코드·키·문장)(`ConfigDiagnostic`) | 작업 2.1. [설정 계약 2.1절](../contracts/config-v4.md#21-설정-오류와-준비-실패)의 진단 형식이다. 오류 enum 하나로는 키와 문장을 담을 수 없다. |
 | `Warning` | app | 시작·재로드를 막지 않는 경고 enum(`ConfigWarning`) | 작업 2.1. [설정 계약 2.2절](../contracts/config-v4.md#22-경고)의 경고 코드와 대응한다. |
+| `Claims` | domain | 서명을 확인한 접속 ticket의 클레임 값 묶음(`TicketClaims`) | 접속 ticket 구현(2026-11-11). [RFC 7519 4절](https://www.rfc-editor.org/rfc/rfc7519#section-4)의 클레임 집합과 대응한다. `Policy`는 판정 규칙이고 `List`는 순서 있는 목록이라 값 묶음을 나타내지 못한다. |
+| `Key` | domain·adapters | 서명 확인·HMAC 계산에 쓰는 키 값(`TicketKey`, `RelayIdKey`, `SessionIdKey`) | 접속 ticket 구현(2026-11-11)에서 목록에 올렸다. 기존 `RelayIdKey`·`SessionIdKey`가 이미 쓰던 suffix다. |
+| `Parts` | domain | 한 입력 문자열을 나눈 부분의 빌린 참조(`TicketParts`) | 접속 ticket 구현(2026-11-11). JWS 압축 직렬화의 세 부분과 서명 입력을 복사하지 않고 가리킨다. `Parser`는 분할 수신을 다루는 상태 기계라 맞지 않는다. |
+| `Binding` | app | 업그레이드 검사가 101 뒤 연결에 묶어 넘기는 확인 결과(`TicketBinding`) | 접속 ticket 구현(2026-11-11). ticket의 `jti`·`rid`·`sx`를 초기 교환과 세션 만료까지 전달한다. 설정 값(`Settings`)이나 정책(`Policy`)이 아니다. |

@@ -24,7 +24,7 @@ impl TestSettings {
     }
 }
 
-fn settings() -> Settings {
+pub(crate) fn settings() -> Settings {
     let listen = "127.0.0.1:8080".parse().expect("fixture address");
     Settings {
         admin: AdminSettings {
@@ -40,6 +40,7 @@ fn settings() -> Settings {
             tcp_server: EntryPointSettings::default(),
             ws: WsListenerSettings::default(),
             wss: WsListenerSettings::default(),
+            ticket: TicketSettings::default(),
         },
         mode1: Mode1Settings::default(),
         mode2: Mode2Settings { enabled: true },

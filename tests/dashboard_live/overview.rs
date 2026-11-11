@@ -5,6 +5,10 @@ use std::time::{Duration, Instant};
 use serde_json::{Value, json};
 
 use super::live::{Admin, Browser, Fault, LIMIT, Server, must, wait_for};
+#[path = "../../crates/adapters/tests/common/ticket.rs"]
+mod ticket;
+
+use ticket::Signer;
 
 const WAITING: &str = ".grid > .card:nth-child(4)";
 const ACTIVE: &str = ".grid > .card:nth-child(5)";
@@ -257,15 +261,39 @@ pub fn overview_empty_lists() {
     assert_list_counts(&mut browser, [Some(0), Some(0), Some(0)], "ko");
     assert!(server.proxy.traffic().iter().all(|entry| !entry.injected));
 }
+fn now_secs() -> u64 {
+    must(std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)).as_secs()
+}
+
+fn ticket_claims(rid: &str, sx: Option<u64>) -> Value {
+    let iat = now_secs() + 5;
+    let mut value = json!({
+        "iss": "issuer/viewer",
+        "aud": "vnc-relay/viewer",
+        "rh": "relay.example",
+        "rid": rid,
+        "jti": format!("live-jti-{rid}"),
+        "iat": iat,
+        "exp": iat + 60,
+        "sub": "live-test-subject"
+    });
+    if let Some(sx) = sx {
+        value["sx"] = json!(sx);
+    }
+    value
+}
 
 struct WebSocket {
     stream: TcpStream,
 }
 
 impl WebSocket {
-    fn open(port: u16) -> Self {
+    fn open_with_ticket(port: u16, ticket: &str) -> Self {
         let mut stream = connect(port);
-        must(stream.write_all(b"GET /relay/viewer HTTP/1.1\r\nHost: localhost\r\nOrigin: http://127.0.0.1\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n"));
+        let request = format!(
+            "GET /relay/viewer HTTP/1.1\r\nHost: localhost\r\nOrigin: http://127.0.0.1\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Protocol: binary, ticket.{ticket}\r\n\r\n"
+        );
+        must(stream.write_all(request.as_bytes()));
         let mut head = Vec::new();
         while !head.ends_with(b"\r\n\r\n") {
             let mut byte = [0];
@@ -273,7 +301,13 @@ impl WebSocket {
             head.push(byte[0]);
             assert!(head.len() < 16384, "bounded WebSocket handshake");
         }
-        assert!(head.starts_with(b"HTTP/1.1 101 "), "{head:?}");
+        let head_str = String::from_utf8_lossy(&head);
+        assert!(head.starts_with(b"HTTP/1.1 101 "), "{head_str}");
+        assert!(
+            head_str.contains("Sec-WebSocket-Protocol: binary\r\n")
+                || head_str.contains("sec-websocket-protocol: binary\r\n"),
+            "{head_str}"
+        );
         let mut socket = Self { stream };
         assert_eq!(socket.frame(), (2, b"RFB 000.000\n".to_vec()));
         socket
@@ -325,8 +359,8 @@ impl WebSocket {
     }
 }
 
-fn close_with_protocol_error(server: &Server, admin: &Admin) -> String {
-    let mut viewer = WebSocket::open(server.ws_port);
+fn close_with_protocol_error(server: &Server, admin: &Admin, ticket: &str) -> String {
+    let mut viewer = WebSocket::open_with_ticket(server.ws_port, ticket);
     let mut target = connect(server.ports[3]);
     must(target.write_all(&initial("ID:42002")));
     wait_for("WebSocket error target waiting", LIMIT, || {
@@ -379,7 +413,22 @@ fn close_with_protocol_error(server: &Server, admin: &Admin) -> String {
 }
 
 pub fn overview_recent_closed() {
-    let server = Server::start("overview-history", Some(60));
+    let signer = Signer::new();
+    let server = Server::start_with_config_transform(
+        "overview-history",
+        Some(60),
+        true,
+        |config, dir| {
+            must(std::fs::write(
+                dir.join("viewer-ticket.json"),
+                signer.jwks(),
+            ));
+            config
+                + "\n[relay.ticket.viewer]\nenabled = true\nissuer = \"issuer/viewer\"\nrelay_host = \"relay.example\"\npublic_keys_file = \"viewer-ticket.json\"\nmax_lifetime_secs = 60\n"
+        },
+    );
+    // Ensure at least 1 s passes so iat = now+5 > server_start+5.
+    std::thread::sleep(Duration::from_millis(1500));
     let admin = server.login();
     assert!(items(&server.query(&admin, "/api/v1/closed-sessions")).is_empty());
     let mut browser = Browser::start("overview-history", &["ko-KR"]);
@@ -403,7 +452,8 @@ pub fn overview_recent_closed() {
             .iter()
             .any(|item| item["session_id"] == eof_sid && item["close_cause"] == "peer_eof")
     });
-    let error_sid = close_with_protocol_error(&server, &admin);
+    let error_token = signer.sign(&ticket_claims("42002", None));
+    let error_sid = close_with_protocol_error(&server, &admin, &error_token);
     let mut terminated = server.pair(&admin, "I", "42003");
     terminated.transfer(MIB_BYTES, KIB_BYTES);
     browser.navigate(&server.url(&format!("/#/sessions/{}", terminated.sid)));
@@ -417,12 +467,63 @@ pub fn overview_recent_closed() {
                 item["session_id"] == terminated.sid && item["close_cause"] == "admin_terminated"
             })
     });
+    let sx = now_secs() + 3;
+    let token = signer.sign(&ticket_claims("42004", Some(sx)));
+    let mut expired_ws = WebSocket::open_with_ticket(server.ws_port, &token);
+    let mut expired_target = connect(server.ports[3]);
+    must(expired_target.write_all(&initial("ID:42004")));
+    wait_for("WebSocket expired target waiting", LIMIT, || {
+        items(&server.query(&admin, "/api/v1/waiting"))
+            .iter()
+            .any(|item| item["relay_id"] == "42004")
+    });
+    expired_ws.send(2, &initial("ID:42004"));
+    let mut expired_sid = String::new();
+    wait_for("real WS session with ticket active", LIMIT, || {
+        let list = server.query(&admin, "/api/v1/sessions");
+        if let Some(item) = items(&list)
+            .iter()
+            .find(|item| item["viewer_transport"] == "ws" && item["session_id"] != error_sid)
+        {
+            expired_sid = text(&item["session_id"]).to_owned();
+            true
+        } else {
+            false
+        }
+    });
+    expired_ws.send(2, &vec![0x42; KIB_BYTES]);
+    let mut received = vec![0; KIB_BYTES];
+    must(expired_target.read_exact(&mut received));
+    must(expired_target.write_all(&vec![0x84; MIB_BYTES]));
+    let mut target_to_viewer = 0;
+    while target_to_viewer < MIB_BYTES {
+        let (opcode, bytes) = expired_ws.frame();
+        assert_eq!(opcode, 2);
+        target_to_viewer += bytes.len();
+    }
+    let (close_opcode, close_payload) = expired_ws.frame();
+    assert_eq!(close_opcode, 8, "session must end with Close frame");
+    assert!(close_payload.len() >= 2);
+    assert_eq!(
+        u16::from_be_bytes([close_payload[0], close_payload[1]]),
+        4013
+    );
+    assert_eq!(&close_payload[2..], b"session_expired");
+    drop((expired_ws, expired_target));
+    wait_for("actual session_expired history", LIMIT, || {
+        items(&server.query(&admin, "/api/v1/closed-sessions"))
+            .iter()
+            .any(|item| {
+                item["session_id"] == expired_sid && item["close_cause"] == "session_expired"
+            })
+    });
     let history = server.query(&admin, "/api/v1/closed-sessions");
-    assert_eq!(items(&history).len(), 3);
+    assert_eq!(items(&history).len(), 4);
     for (sid, cause, outgoing, incoming) in [
         (&eof_sid, "peer_eof", KIB_BYTES, MIB_BYTES),
         (&error_sid, "connection_error", KIB_BYTES, 3072),
         (&terminated.sid, "admin_terminated", MIB_BYTES, KIB_BYTES),
+        (&expired_sid, "session_expired", KIB_BYTES, MIB_BYTES),
     ] {
         let item = items(&history)
             .iter()
@@ -444,14 +545,17 @@ pub fn overview_recent_closed() {
             {LOCAL_TIME}
             const items = {history}.items;
             const rows = [...document.querySelectorAll('{CLOSED} tbody tr')];
-            const causes = {{peer_eof:'정상 EOF', connection_error:'연결 오류', admin_terminated:'관리자 종료'}};
+            const causes = {{peer_eof:'정상 EOF', connection_error:'연결 오류', admin_terminated:'관리자 종료', session_expired:'세션 만료'}};
             const bytes = n => ({{1536:'1.5 KiB', 3072:'3.0 KiB', 1572864:'1.5 MiB'}})[n];
-            return rows.length === 3 && items.every(item => {{
+            return rows.length === 4 && items.every(item => {{
               const row = rows.find(r => r.querySelector('td')?.textContent === item.session_id);
               if (!row) return false;
               const c = row.querySelectorAll('td');
+              const badge = c[1].querySelector('.badge');
               return c.length === 4 && c[1].textContent === causes[item.close_cause] &&
                 c[2].textContent === localTime(item.ended_at) &&
+                badge !== null && badge.dataset.tone === (['peer_eof','admin_terminated','session_expired'].includes(item.close_cause) ? 'neutral' : 'destructive') &&
+                (item.close_cause === 'session_expired' ? !badge.querySelector('svg') : true) &&
                 JSON.stringify([...row.querySelectorAll('.cell-value')].map(n => n.textContent)) ===
                   JSON.stringify([bytes(item.bytes_viewer_to_target),bytes(item.bytes_target_to_viewer)]) &&
                 JSON.stringify([...row.querySelectorAll('.cell-label')].map(n => n.textContent)) ===
@@ -461,10 +565,39 @@ pub fn overview_recent_closed() {
             }})()"#,
         )),
         json!(true),
+        "all four actual close causes retain local timestamps, directional bytes, and badge styles",
+    );
+    browser.eval("(() => { const s = document.querySelector('select'); s.value = 'en'; s.dispatchEvent(new Event('change', {bubbles:true})); })()");
+    assert_eq!(
+        browser.eval(&format!(
+            r#"(() => {{
+            {LOCAL_TIME}
+            const items = {history}.items;
+            const rows = [...document.querySelectorAll('{CLOSED} tbody tr')];
+            const causes = {{peer_eof:'Normal EOF', connection_error:'Connection error', admin_terminated:'Terminated by administrator', session_expired:'Session expired'}};
+            const bytes = n => ({{1536:'1.5 KiB', 3072:'3.0 KiB', 1572864:'1.5 MiB'}})[n];
+            return rows.length === 4 && items.every(item => {{
+              const row = rows.find(r => r.querySelector('td')?.textContent === item.session_id);
+              if (!row) return false;
+              const c = row.querySelectorAll('td');
+              const badge = c[1].querySelector('.badge');
+              return c.length === 4 && c[1].textContent === causes[item.close_cause] &&
+                c[2].textContent === localTime(item.ended_at) &&
+                badge !== null && badge.dataset.tone === (['peer_eof','admin_terminated','session_expired'].includes(item.close_cause) ? 'neutral' : 'destructive') &&
+                (item.close_cause === 'session_expired' ? !badge.querySelector('svg') : true) &&
+                JSON.stringify([...row.querySelectorAll('.cell-value')].map(n => n.textContent)) ===
+                  JSON.stringify([bytes(item.bytes_viewer_to_target),bytes(item.bytes_target_to_viewer)]) &&
+                JSON.stringify([...row.querySelectorAll('.cell-label')].map(n => n.textContent)) ===
+                  JSON.stringify(['Viewer->target','target->Viewer']) &&
+                !row.querySelector('a,button,[role=button]');
+            }});
+            }})()"#,
+        )),
+        json!(true),
         "all three actual close causes retain local timestamps and directional bytes without historical actions",
     );
     assert_clean(&mut browser);
-    assert_list_counts(&mut browser, [Some(0), Some(0), Some(3)], "ko");
+    assert_list_counts(&mut browser, [Some(0), Some(0), Some(4)], "en");
     assert!(server.proxy.traffic().iter().all(|entry| !entry.injected));
 }
 

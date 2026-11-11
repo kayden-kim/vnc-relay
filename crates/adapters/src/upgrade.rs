@@ -12,6 +12,7 @@ use vnc_relay_app::settings::WsListenerSettings;
 use vnc_relay_domain::entry_point::Role;
 use vnc_relay_domain::origin::Origin;
 use vnc_relay_domain::peer_ip::PeerIp;
+use vnc_relay_domain::ticket::TicketError;
 
 /// Size of each read while the request head is collected.
 const READ_CHUNK: usize = 1024;
@@ -89,10 +90,16 @@ pub(crate) enum Refusal {
     OriginNotAllowed(String),
     /// 400: the client offered subprotocols and none of them is `binary`.
     SubprotocolNotSupported,
-    /// 403: the source IP failed the pre-upgrade recheck (§1.1).
-    IpNotAllowed,
+    /// 403: the source IP failed the pre-upgrade recheck (§1.1). It keeps
+    /// the `jti` of a ticket that already passed its checks for the log.
+    IpNotAllowed(Option<String>),
     /// 400: a trusted proxy did not supply a valid client address.
     ForwardedForInvalid,
+    /// 401: an enabled role requires a valid, unused access ticket.
+    Ticket {
+        reason: TicketError,
+        jti: Option<String>,
+    },
 }
 
 impl Refusal {
@@ -104,8 +111,9 @@ impl Refusal {
             }
             Self::OriginNotAllowed(_) => RejectReason::OriginNotAllowed,
             Self::SubprotocolNotSupported => RejectReason::SubprotocolNotSupported,
-            Self::IpNotAllowed => RejectReason::IpNotAllowed,
+            Self::IpNotAllowed(_) => RejectReason::IpNotAllowed,
             Self::ForwardedForInvalid => RejectReason::ForwardedForInvalid,
+            Self::Ticket { reason, .. } => RejectReason::Ticket(*reason),
         }
     }
 
@@ -113,6 +121,14 @@ impl Refusal {
     pub(crate) fn origin(&self) -> Option<&str> {
         match self {
             Self::OriginNotAllowed(origin) => Some(origin.as_str()),
+            _ => None,
+        }
+    }
+
+    /// The `jti` to log: only refusals after the signature check have one.
+    pub(crate) fn ticket_jti(&self) -> Option<&str> {
+        match self {
+            Self::Ticket { jti, .. } | Self::IpNotAllowed(jti) => jti.as_deref(),
             _ => None,
         }
     }
@@ -126,10 +142,29 @@ impl Refusal {
             Self::NotFound => ("404 Not Found", ""),
             Self::MethodNotAllowed => ("405 Method Not Allowed", "Allow: GET\r\n"),
             Self::VersionUnsupported => ("426 Upgrade Required", "Sec-WebSocket-Version: 13\r\n"),
-            Self::OriginNotAllowed(_) | Self::IpNotAllowed => ("403 Forbidden", ""),
+            Self::OriginNotAllowed(_) | Self::IpNotAllowed(_) => ("403 Forbidden", ""),
+            Self::Ticket { .. } => ("401 Unauthorized", "WWW-Authenticate: VncRelayTicket\r\n"),
         };
         format!("HTTP/1.1 {status}\r\n{extra}Content-Length: 0\r\nConnection: close\r\n\r\n")
             .into_bytes()
+    }
+}
+
+/// Ticket protocol offers, counted across all protocol header lines.
+#[derive(Clone, PartialEq, Eq)]
+pub(crate) enum TicketOffer {
+    None,
+    One(String),
+    Many,
+}
+
+impl std::fmt::Debug for TicketOffer {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::None => "None",
+            Self::One(_) => "One(<redacted>)",
+            Self::Many => "Many",
+        })
     }
 }
 
@@ -141,6 +176,7 @@ pub(crate) struct ValidUpgrade {
     pub(crate) accept_key: String,
     /// The client offered `binary`, which the 101 echoes.
     pub(crate) binary: bool,
+    pub(crate) ticket: TicketOffer,
 }
 
 /// Checks a request head in the order of websocket-relay-v2 §1.1: request
@@ -247,11 +283,20 @@ pub(crate) fn check(
     if !tokens.is_empty() && !tokens.contains(&"binary") {
         return Err(Refusal::SubprotocolNotSupported);
     }
+    let mut tickets = tokens
+        .iter()
+        .filter_map(|token| token.strip_prefix("ticket."));
+    let ticket = match (tickets.next(), tickets.next()) {
+        (None, _) => TicketOffer::None,
+        (Some(value), None) => TicketOffer::One(value.to_owned()),
+        (Some(_), Some(_)) => TicketOffer::Many,
+    };
 
     Ok(ValidUpgrade {
         role,
         accept_key: derive_accept_key(key.as_bytes()),
         binary: tokens.contains(&"binary"),
+        ticket,
     })
 }
 
@@ -403,6 +448,7 @@ mod tests {
                 role: Role::Viewer,
                 accept_key: ACCEPT.to_owned(),
                 binary: false,
+                ticket: TicketOffer::None,
             })
         );
     }
@@ -574,6 +620,7 @@ mod tests {
             role: Role::Viewer,
             accept_key: ACCEPT.to_owned(),
             binary: false,
+            ticket: TicketOffer::None,
         };
         let answer = String::from_utf8_lossy(&switching_protocols(&upgrade)).into_owned();
         assert_eq!(
@@ -590,7 +637,7 @@ mod tests {
         assert!(text(Refusal::NotFound).starts_with("HTTP/1.1 404 Not Found\r\n"));
         assert!(text(Refusal::MethodNotAllowed).contains("Allow: GET\r\n"));
         assert!(text(Refusal::VersionUnsupported).contains("Sec-WebSocket-Version: 13\r\n"));
-        assert!(text(Refusal::IpNotAllowed).starts_with("HTTP/1.1 403 Forbidden\r\n"));
+        assert!(text(Refusal::IpNotAllowed(None)).starts_with("HTTP/1.1 403 Forbidden\r\n"));
         assert!(text(Refusal::Invalid).ends_with("Connection: close\r\n\r\n"));
         assert!(text(Refusal::ForwardedForInvalid).starts_with("HTTP/1.1 400 Bad Request\r\n"));
         assert!(text(Refusal::ForwardedForInvalid).ends_with("Connection: close\r\n\r\n"));
@@ -607,7 +654,10 @@ mod tests {
             Refusal::SubprotocolNotSupported.reason().as_str(),
             "subprotocol_not_supported"
         );
-        assert_eq!(Refusal::IpNotAllowed.reason().as_str(), "ip_not_allowed");
+        assert_eq!(
+            Refusal::IpNotAllowed(None).reason().as_str(),
+            "ip_not_allowed"
+        );
         assert_eq!(
             Refusal::ForwardedForInvalid.reason().as_str(),
             "forwarded_for_invalid"

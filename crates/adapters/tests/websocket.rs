@@ -267,6 +267,8 @@ async fn start_with_handshake(
             allow: allow_source,
             relay_budget: Arc::clone(&relay_budget),
         },
+        ticket_uses: Arc::default(),
+        started_at: std::time::SystemTime::UNIX_EPOCH,
     };
     let log: Arc<dyn EventSink> = events.clone();
     let clock: Arc<dyn Clock> = Arc::new(SystemClock::new());
@@ -1098,6 +1100,7 @@ async fn start_management(tls: Option<TlsAcceptor>) -> (SocketAddr, Arc<Recorder
             Arc::clone(&cell),
             Arc::new(vnc_relay_adapters::file_watch::FsReloadFileStore),
             Arc::new(tls::RustlsTlsStore),
+            Arc::new(vnc_relay_adapters::ticket::TicketJwksStore),
             Arc::clone(&log),
         ),
     ));

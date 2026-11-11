@@ -13,12 +13,13 @@ use vnc_relay_domain::handshake::Mode;
 use vnc_relay_domain::login_limit::LimitScope;
 use vnc_relay_domain::peer_ip::PeerIp;
 use vnc_relay_domain::session::{CloseCause, SessionId, Side, Transport};
+use vnc_relay_domain::ticket::TicketError;
 
 use crate::reload::{ChangeSource, WatchFailure};
 use crate::settings::ConfigWarning;
 
 /// Value of `log_contract` in `server_starting` (ops-info-v2 §1.5).
-pub const LOG_CONTRACT: &str = "ops-info/2.0.0";
+pub const LOG_CONTRACT: &str = "ops-info/2.1.0";
 
 /// `level` values of ops-info-v2 §1.3. v2 has no other value.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -121,6 +122,12 @@ pub enum RejectReason {
     WaitingFull { limit: u32 },
     /// This relay ID and role are already occupied.
     DuplicateId,
+    /// The access ticket check refused the upgrade with HTTP 401
+    /// (websocket-relay-v2 §1.9.3, §1.9.4).
+    Ticket(TicketError),
+    /// The initial request does not match the ticket's `rid`, or a ticket
+    /// connection asked for Viewer Mode I (websocket-relay-v2 §1.9.5).
+    TicketRelayMismatch,
 }
 
 impl RejectReason {
@@ -139,6 +146,8 @@ impl RejectReason {
             Self::TargetNotAllowed => "target_not_allowed",
             Self::WaitingFull { .. } => "waiting_full",
             Self::DuplicateId => "duplicate_id",
+            Self::Ticket(error) => error.code(),
+            Self::TicketRelayMismatch => "ticket_relay_mismatch",
         }
     }
 
@@ -154,7 +163,9 @@ impl RejectReason {
             | Self::HandshakeInvalid
             | Self::ModeDisabled
             | Self::TargetNotAllowed
-            | Self::DuplicateId => None,
+            | Self::DuplicateId
+            | Self::Ticket(_)
+            | Self::TicketRelayMismatch => None,
             Self::RelayConnectionLimit { limit }
             | Self::AdminConnectionLimit { limit }
             | Self::WaitingFull { limit } => Some(limit),
@@ -177,6 +188,9 @@ pub enum AbortReason {
     ServerShutdown,
     /// A liveness check found an unresponsive connection.
     DeadConnection,
+    /// The access ticket's `sx` was reached during the initial exchange
+    /// (websocket-relay-v2 §1.9.5).
+    SessionExpired,
 }
 
 impl AbortReason {
@@ -188,6 +202,7 @@ impl AbortReason {
             Self::ConnectionError(_) => "connection_error",
             Self::ServerShutdown => "server_shutdown",
             Self::DeadConnection => "dead_connection",
+            Self::SessionExpired => "session_expired",
         }
     }
 
@@ -199,14 +214,15 @@ impl AbortReason {
             | Self::PeerEof
             | Self::ServerShutdown
             | Self::DeadConnection
-            | Self::TlsUpgradeTimeout => None,
+            | Self::TlsUpgradeTimeout
+            | Self::SessionExpired => None,
         }
     }
 
     /// `level` of the `connection_aborted` line with this reason.
     fn level(self) -> Level {
         match self {
-            Self::PeerEof | Self::ServerShutdown => Level::Info,
+            Self::PeerEof | Self::ServerShutdown | Self::SessionExpired => Level::Info,
             Self::HandshakeTimeout
             | Self::TlsUpgradeTimeout
             | Self::ConnectionError(_)
@@ -272,6 +288,8 @@ pub enum WaitingRemovalReason {
     ConnectionError(ConnectionErrorKind),
     DeadConnection,
     ServerShutdown,
+    /// The access ticket's `sx` was reached while waiting (websocket-relay-v2 §1.9.5).
+    SessionExpired,
 }
 
 impl WaitingRemovalReason {
@@ -282,6 +300,7 @@ impl WaitingRemovalReason {
             Self::ConnectionError(_) => "connection_error",
             Self::DeadConnection => "dead_connection",
             Self::ServerShutdown => "server_shutdown",
+            Self::SessionExpired => "session_expired",
         }
     }
 
@@ -289,13 +308,15 @@ impl WaitingRemovalReason {
     pub fn error_kind(self) -> Option<ConnectionErrorKind> {
         match self {
             Self::ConnectionError(kind) => Some(kind),
-            Self::PeerEof | Self::DeadConnection | Self::ServerShutdown => None,
+            Self::PeerEof | Self::DeadConnection | Self::ServerShutdown | Self::SessionExpired => {
+                None
+            }
         }
     }
 
     fn level(self) -> Level {
         match self {
-            Self::PeerEof | Self::ServerShutdown => Level::Info,
+            Self::PeerEof | Self::ServerShutdown | Self::SessionExpired => Level::Info,
             Self::ConnectionError(_) | Self::DeadConnection => Level::Warn,
         }
     }
@@ -390,6 +411,22 @@ pub enum Event {
         forwarded_ip: Option<PeerIp>,
         /// The raw Origin header value; present for `origin_not_allowed`.
         origin: Option<String>,
+        /// The ticket `jti`; present only for ticket refusals after the
+        /// signature check passed (websocket-relay-v2 §1.9.3).
+        ticket_jti: Option<String>,
+    },
+    /// A ticket upgrade passed the ticket check and wrote its use record,
+    /// before the 101 response (websocket-relay-v2 §1.9.4).
+    TicketAccepted {
+        conn_id: ConnId,
+        listener: Listener,
+        role: Role,
+        peer_ip: PeerIp,
+        forwarded_ip: Option<PeerIp>,
+        ticket_jti: String,
+        ticket_sub: Option<String>,
+        /// `sx` as a wall-clock time; written as UTC ISO 8601.
+        session_expires_at: Option<SystemTime>,
     },
     /// The server refused an accepted connection during the initial exchange
     /// (ops-info-v2 §1.5-1.6). The event name is `connection_rejected`, and
@@ -402,6 +439,19 @@ pub enum Event {
         reason: RejectReason,
         /// The caller must set this for `ModeDisabled`; omit it when unknown.
         mode: Option<Mode>,
+    },
+    /// A ticket connection's initial request does not match the ticket
+    /// (websocket-relay-v2 §1.9.5). The event name is `connection_rejected`,
+    /// `stage` is `initial_exchange`, and `reason` is `ticket_relay_mismatch`.
+    TicketRelayMismatch {
+        conn_id: ConnId,
+        entry_point: EntryPoint,
+        peer_ip: PeerIp,
+        forwarded_ip: Option<PeerIp>,
+        mode: Mode,
+        /// Present for Mode II requests only.
+        relay_id_ref: Option<RelayIdRef>,
+        ticket_jti: String,
     },
     /// An accepted connection ended before it waited or joined a session.
     ConnectionAborted {
@@ -605,9 +655,11 @@ impl Event {
             Self::ConfigWarning { warning, .. } => warning.code(),
             Self::StartupFailed { .. } => "startup_failed",
             Self::ConnectionAccepted { .. } => "connection_accepted",
+            Self::TicketAccepted { .. } => "ticket_accepted",
             Self::ConnectionRejected { .. }
             | Self::UpgradeRejected { .. }
             | Self::HandshakeRejected { .. }
+            | Self::TicketRelayMismatch { .. }
             | Self::TargetRejected { .. }
             | Self::RegistrationRejected { .. } => "connection_rejected",
             Self::ConnectionAborted { .. } | Self::RelayAborted { .. } => "connection_aborted",
@@ -642,6 +694,7 @@ impl Event {
             | Self::ServerReady { .. }
             | Self::ServerStopped
             | Self::ConnectionAccepted { .. }
+            | Self::TicketAccepted { .. }
             | Self::WaitingRegistered { .. }
             | Self::WaitingExpired { .. }
             | Self::SessionStarted { .. } => Level::Info,
@@ -649,6 +702,7 @@ impl Event {
             | Self::ConnectionRejected { .. }
             | Self::UpgradeRejected { .. }
             | Self::HandshakeRejected { .. }
+            | Self::TicketRelayMismatch { .. }
             | Self::TargetRejected { .. }
             | Self::RegistrationRejected { .. }
             | Self::TargetConnectFailed { .. }
@@ -658,7 +712,9 @@ impl Event {
             }
             Self::WaitingRemoved { reason, .. } => reason.level(),
             Self::SessionClosed { close_cause, .. } => match close_cause {
-                CloseCause::PeerEof | CloseCause::AdminTerminated => Level::Info,
+                CloseCause::PeerEof | CloseCause::AdminTerminated | CloseCause::SessionExpired => {
+                    Level::Info
+                }
                 CloseCause::ConnectionError
                 | CloseCause::DeadConnection
                 | CloseCause::CloseTimeout

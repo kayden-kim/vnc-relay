@@ -61,6 +61,20 @@ pub struct ConnectionContext {
     pub handshake: Duration,
 }
 
+/// What a ticket upgrade fixed at its 101 response (websocket-relay-v2 §1.9.5).
+/// The relay compares the initial request with `relay_id` and ends the
+/// connection at `session_deadline`. Reloads do not change either value.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TicketBinding {
+    /// The ticket `jti`, written as `ticket_jti`.
+    pub jti: String,
+    /// The ticket `rid`. The initial request must carry the same ID byte for byte.
+    pub relay_id: RelayId,
+    /// `sx` as a time of the service Clock's monotonic scale, or `None` when
+    /// the ticket has no `sx`.
+    pub session_deadline: Option<Duration>,
+}
+
 /// A connection whose request is valid. The caller owns its next step.
 /// The stream is dropped before its L permit, even when preparation is discarded.
 /// See relay spec §3.1 and operations spec §2 (B and L).
@@ -71,6 +85,8 @@ pub struct PreparedConnection<S> {
     trailing: Vec<u8>,
     buffer_limit: usize,
     permit: BudgetPermit,
+    /// Present when the connection was upgraded with an access ticket.
+    ticket: Option<TicketBinding>,
 }
 
 struct ConnectionResources<S> {
@@ -93,6 +109,11 @@ impl<S> PreparedConnection<S> {
     /// See repeater-handshake-v1 §1.1 E.
     pub fn trailing_bytes(&self) -> &[u8] {
         &self.trailing
+    }
+
+    /// The access ticket binding of a ticket upgrade (websocket-relay-v2 §1.9.5).
+    pub fn ticket(&self) -> Option<&TicketBinding> {
+        self.ticket.as_ref()
     }
 
     /// Bytes already charged against this connection's B (operations spec §2).
@@ -197,24 +218,32 @@ impl RelayService {
     /// Writes the viewer greeting and reads a request within one absolute H.
     /// Failure drops the stream and L permit before one rejection/abort event.
     /// Success returns every resource without choosing the next relay step.
+    /// `ticket` is present only for a ticket upgrade (websocket-relay-v2 §1.9.5).
     /// See relay spec §3.1, repeater-handshake-v1 §1–2, and ops-info-v2 §1.5–1.7.
     pub fn handle_connection<S>(
         &self,
         stream: S,
         context: ConnectionContext,
+        ticket: Option<TicketBinding>,
         permit: BudgetPermit,
         shutdown: watch::Receiver<RelayLifecycle>,
     ) -> impl Future<Output = Result<PreparedConnection<S>, RelayError>> + Send
     where
         S: RelayStream,
     {
-        self.prepare(ConnectionResources { stream, permit }, context, shutdown)
+        self.prepare(
+            ConnectionResources { stream, permit },
+            context,
+            ticket,
+            shutdown,
+        )
     }
 
     async fn prepare<S>(
         &self,
         mut resources: ConnectionResources<S>,
         context: ConnectionContext,
+        ticket: Option<TicketBinding>,
         shutdown: watch::Receiver<RelayLifecycle>,
     ) -> Result<PreparedConnection<S>, RelayError>
     where
@@ -227,6 +256,7 @@ impl RelayService {
             self.modes,
             context.buffer_bytes,
             deadline,
+            ticket.as_ref().and_then(|binding| binding.session_deadline),
             self.clock.as_ref(),
             shutdown.clone(),
         )
@@ -241,6 +271,7 @@ impl RelayService {
                     trailing,
                     buffer_limit: context.buffer_bytes,
                     permit,
+                    ticket,
                 })
             }
             Err(error) => {
@@ -264,6 +295,9 @@ impl RelayService {
                     }
                     RelayError::Aborted(AbortReason::TlsUpgradeTimeout) => {
                         RelayCloseAction::HandshakeTimeout
+                    }
+                    RelayError::Aborted(AbortReason::SessionExpired) => {
+                        RelayCloseAction::SessionExpired
                     }
                 };
                 self.close_stream(
@@ -739,6 +773,7 @@ pub enum RelayDispatchError {
     Session(SessionError),
     SessionIdsExhausted,
     WaitingExpired,
+    WaitingSessionExpired,
 }
 
 impl fmt::Display for RelayDispatchError {
@@ -751,6 +786,7 @@ impl fmt::Display for RelayDispatchError {
             Self::Session(error) => error.fmt(f),
             Self::SessionIdsExhausted => f.write_str("session identifier counter exhausted"),
             Self::WaitingExpired => f.write_str("waiting_expired"),
+            Self::WaitingSessionExpired => f.write_str("session_expired"),
         }
     }
 }
@@ -762,19 +798,29 @@ struct OwnedConnection {
     trailing: Vec<u8>,
     permit: BudgetPermit,
     context: ConnectionContext,
+    ticket: Option<TicketBinding>,
 }
 
 impl OwnedConnection {
     fn from_prepared<S: RelayStream + 'static>(
         prepared: PreparedConnection<S>,
     ) -> (Self, HandshakeRequest) {
-        let (stream, context, request, trailing, permit) = prepared.into_parts();
+        let PreparedConnection {
+            stream,
+            context,
+            request,
+            trailing,
+            permit,
+            ticket,
+            ..
+        } = prepared;
         (
             Self {
                 stream: Box::new(stream),
                 trailing,
                 permit,
                 context,
+                ticket,
             },
             request,
         )
@@ -786,6 +832,7 @@ impl OwnedConnection {
             trailing,
             permit,
             context,
+            ticket,
         } = self;
         (
             RelayEndpoint {
@@ -793,6 +840,7 @@ impl OwnedConnection {
                 trailing,
                 permit,
                 buffer_bytes: context.buffer_bytes,
+                session_deadline: ticket.and_then(|binding| binding.session_deadline),
             },
             context,
         )
@@ -804,6 +852,7 @@ struct RelayEndpoint {
     trailing: Vec<u8>,
     permit: BudgetPermit,
     buffer_bytes: usize,
+    session_deadline: Option<Duration>,
 }
 
 struct SessionPair {
@@ -919,7 +968,37 @@ impl RelayService {
         S: RelayStream + 'static,
         C: TargetConnector,
     {
-        let (connection, request) = OwnedConnection::from_prepared(prepared);
+        let (mut connection, request) = OwnedConnection::from_prepared(prepared);
+        if let Some(binding) = &mut connection.ticket {
+            let (mode, relay_id_ref, matches) = match &request {
+                HandshakeRequest::Mode1(_) => (Mode::Mode1, None, false),
+                HandshakeRequest::Mode2(id) => {
+                    let matches = id == &binding.relay_id;
+                    (
+                        Mode::Mode2,
+                        (!matches).then(|| runtime.relay_ids.reference(id)),
+                        matches,
+                    )
+                }
+            };
+            if !matches {
+                let event = Event::TicketRelayMismatch {
+                    conn_id: connection.context.conn_id,
+                    entry_point: connection.context.entry_point,
+                    peer_ip: connection.context.peer_ip,
+                    forwarded_ip: connection.context.forwarded_ip,
+                    mode,
+                    relay_id_ref,
+                    ticket_jti: std::mem::take(&mut binding.jti),
+                };
+                self.reject_connection(connection, RelayCloseAction::TicketRelayMismatch, runtime)
+                    .await;
+                self.events.record(&event);
+                return Err(RelayDispatchError::Rejected(
+                    RejectReason::TicketRelayMismatch,
+                ));
+            }
+        }
         match request {
             HandshakeRequest::Mode1(address) => {
                 target::dispatch(self, runtime, connection, address).await
@@ -1114,13 +1193,28 @@ impl RelayService {
                     ));
                 }
                 let id = runtime.session_ids.session_id(counter);
-                if let Some((relay_id, _, claim)) = pair
-                    .relay
-                    .as_ref()
-                    .filter(|(_, _, claim)| self.clock.monotonic() >= claim.waiter.deadline)
-                {
+                let waiter_session_deadline = pair.relay.as_ref().and_then(|(_, _, claim)| {
+                    let deadline = if claim.waiter.conn_id == pair.viewer.context.conn_id {
+                        pair.viewer
+                            .ticket
+                            .as_ref()
+                            .and_then(|binding| binding.session_deadline)
+                    } else {
+                        pair.other.session_deadline
+                    };
+                    deadline.filter(|end| *end < claim.waiter.deadline)
+                });
+                if let Some((relay_id, _, claim)) = pair.relay.as_ref().filter(|(_, _, claim)| {
+                    waiter_session_deadline.is_none()
+                        && self.clock.monotonic() >= claim.waiter.deadline
+                }) {
                     state.matching.cancel_claim(relay_id, claim);
                     Err(RelayDispatchError::WaitingExpired)
+                } else if let Some((relay_id, _, claim)) = pair.relay.as_ref().filter(|_| {
+                    waiter_session_deadline.is_some_and(|end| self.clock.monotonic() >= end)
+                }) {
+                    state.matching.cancel_claim(relay_id, claim);
+                    Err(RelayDispatchError::WaitingSessionExpired)
                 } else {
                     if let Some((relay_id, _, claim)) = &pair.relay {
                         state
@@ -1220,7 +1314,10 @@ impl RelayService {
                     .relay
                     .as_ref()
                     .map(|(_, reference, claim)| (reference.clone(), claim.waiter));
-                let expired = if matches!(error, RelayDispatchError::WaitingExpired) {
+                let expired = if matches!(
+                    error,
+                    RelayDispatchError::WaitingExpired | RelayDispatchError::WaitingSessionExpired
+                ) {
                     pair.relay
                         .as_ref()
                         .map(|(_, reference, claim)| (reference.clone(), claim.waiter))
@@ -1230,7 +1327,11 @@ impl RelayService {
                 if expired.is_some() {
                     self.close_pair(
                         &mut pair,
-                        RelayCloseAction::WaitingExpired,
+                        if matches!(error, RelayDispatchError::WaitingSessionExpired) {
+                            RelayCloseAction::SessionExpired
+                        } else {
+                            RelayCloseAction::WaitingExpired
+                        },
                         self.close_timeout(),
                         runtime.lifecycle(),
                     )
@@ -1247,14 +1348,24 @@ impl RelayService {
                 }
                 drop(pair);
                 if let Some((reference, waiter)) = expired {
-                    self.events.record(&Event::WaitingExpired {
-                        conn_id: waiter.conn_id,
-                        role: waiter.role,
-                        relay_id_ref: reference,
-                        waited_ms: milliseconds(
-                            self.clock.monotonic().saturating_sub(waiter.registered_at),
-                        ),
-                    });
+                    let waited_ms =
+                        milliseconds(self.clock.monotonic().saturating_sub(waiter.registered_at));
+                    if matches!(error, RelayDispatchError::WaitingSessionExpired) {
+                        self.events.record(&Event::WaitingRemoved {
+                            conn_id: waiter.conn_id,
+                            role: waiter.role,
+                            relay_id_ref: reference,
+                            reason: crate::events::WaitingRemovalReason::SessionExpired,
+                            waited_ms,
+                        });
+                    } else {
+                        self.events.record(&Event::WaitingExpired {
+                            conn_id: waiter.conn_id,
+                            role: waiter.role,
+                            relay_id_ref: reference,
+                            waited_ms,
+                        });
+                    }
                 }
                 if matches!(error, RelayDispatchError::Aborted(_)) {
                     if let Some((reference, waiter)) = predecessor {
@@ -1308,6 +1419,16 @@ impl RelayService {
         let relay_id = pair.relay.as_ref().map(|(id, _, _)| id);
         let observed = Mutex::new(SessionState::Active);
         let result = {
+            let session_deadline = match (
+                pair.viewer
+                    .ticket
+                    .as_ref()
+                    .and_then(|binding| binding.session_deadline),
+                pair.other.session_deadline,
+            ) {
+                (Some(left), Some(right)) => Some(left.min(right)),
+                (left, right) => left.or(right),
+            };
             let engine = session::run_session_controlled(
                 pair.viewer.stream.as_mut(),
                 pair.other.stream.as_mut(),
@@ -1319,6 +1440,7 @@ impl RelayService {
                 [pair.viewer.context.buffer_bytes, pair.other.buffer_bytes],
                 self.settings.as_ref(),
                 admin_close,
+                session_deadline,
                 |session, error_kind| {
                     *observed
                         .lock()
@@ -1801,6 +1923,7 @@ mod tests {
                 .handle_connection(
                     stream,
                     context,
+                    None,
                     self.budget.try_acquire(relay_limit).expect("L"),
                     self.runtime.lifecycle(),
                 )
@@ -1864,6 +1987,281 @@ mod tests {
 
     fn free_places(budget: &Arc<ConnectionBudget>, limit: u32) -> usize {
         limit.saturating_sub(budget.current()) as usize
+    }
+
+    fn bind_ticket(prepared: &mut PreparedConnection<TestStream>, rid: &str, sx: Option<Duration>) {
+        prepared.ticket = Some(TicketBinding {
+            jti: "relay-ticket".to_owned(),
+            relay_id: RelayId::parse(rid).expect("rid"),
+            session_deadline: sx,
+        });
+    }
+
+    /// spec: relay.md:RLY-029 partial
+    /// spec: relay.md:RLY-032 partial
+    #[tokio::test(start_paused = true)]
+    async fn ticket_mismatch_preserves_waiter_and_exact_id_match_then_succeeds() {
+        for role in [Role::Viewer, Role::Server] {
+            let harness = Harness::new(4, 3, 8, &[]);
+            let opposite = if role == Role::Viewer {
+                Role::Server
+            } else {
+                Role::Viewer
+            };
+            let (waiting, _peer, _) = harness.prepare(opposite, "ID:123", b"").await;
+            let waiting_id = waiting.context.conn_id;
+            let waiter = harness.start(waiting);
+            settle().await;
+            let (mut wrong, _peer, actions) = harness.prepare(role, "ID:123", b"").await;
+            bind_ticket(&mut wrong, "0123", None);
+            let wrong_context = wrong.context;
+            assert!(matches!(
+                harness.service.dispatch(wrong, &harness.runtime).await,
+                Err(RelayDispatchError::Rejected(
+                    RejectReason::TicketRelayMismatch
+                ))
+            ));
+            assert_eq!(
+                *actions.lock().expect("actions"),
+                [RelayCloseAction::TicketRelayMismatch]
+            );
+            assert_eq!(harness.snapshot().waiting.len(), 1);
+            assert_eq!(harness.snapshot().waiting[0].context.conn_id, waiting_id);
+            let rejected = harness
+                .events()
+                .into_iter()
+                .filter(|event| matches!(event, Event::TicketRelayMismatch { .. }))
+                .collect::<Vec<_>>();
+            assert_eq!(rejected.len(), 1);
+            assert_eq!(rejected[0].level(), crate::events::Level::Warn);
+            assert!(matches!(&rejected[0], Event::TicketRelayMismatch {
+                conn_id, entry_point, peer_ip, forwarded_ip: None,
+                mode: Mode::Mode2, relay_id_ref: Some(reference), ticket_jti,
+            } if *conn_id == wrong_context.conn_id
+                && *entry_point == wrong_context.entry_point
+                && *peer_ip == wrong_context.peer_ip
+                && *reference == RelayIdRef::from_hash_prefix([7; 8])
+                && ticket_jti == "relay-ticket"));
+            let (mut correct, _peer, _) = harness.prepare(role, "ID:123", b"").await;
+            bind_ticket(&mut correct, "123", None);
+            let active = harness.start(correct);
+            settle().await;
+            assert_eq!(harness.snapshot().active.len(), 1);
+            assert!(harness.snapshot().waiting.is_empty());
+            harness.stop();
+            waiter.await.expect("waiter").expect("handoff");
+            active.await.expect("active").expect("cleanup");
+        }
+    }
+
+    /// spec: relay.md:RLY-030 partial
+    #[tokio::test(start_paused = true)]
+    async fn ticket_viewer_mode_one_never_connects_or_registers() {
+        let harness = Harness::new(2, 1, 8, &["192.0.2.1:5900"]);
+        let (mut prepared, _peer, actions) =
+            harness.prepare(Role::Viewer, "192.0.2.1:5900", b"").await;
+        bind_ticket(&mut prepared, "123", None);
+        assert!(matches!(
+            harness.service.dispatch(prepared, &harness.runtime).await,
+            Err(RelayDispatchError::Rejected(
+                RejectReason::TicketRelayMismatch
+            ))
+        ));
+        assert_eq!(
+            *actions.lock().expect("actions"),
+            [RelayCloseAction::TicketRelayMismatch]
+        );
+        assert!(
+            harness
+                .runtime
+                .connector
+                .calls
+                .lock()
+                .expect("calls")
+                .is_empty()
+        );
+        assert!(harness.snapshot().waiting.is_empty());
+        assert!(matches!(&harness.events()[0], Event::TicketRelayMismatch {
+            mode: Mode::Mode1, relay_id_ref: None, ticket_jti, ..
+        } if ticket_jti == "relay-ticket"));
+    }
+
+    /// spec: relay.md:RLY-031 partial
+    #[tokio::test(start_paused = true)]
+    async fn ticket_waiting_uses_earlier_sx_or_w_and_w_wins_ties() {
+        for (sx, elapsed) in [
+            (Some(4), 4),
+            (Some(4), 11),
+            (Some(10), 10),
+            (Some(11), 10),
+            (None, 10),
+        ] {
+            let harness = Harness::new(2, 1, 8, &[]);
+            harness
+                .settings
+                .change(|settings| settings.timeouts.wait = Duration::from_secs(10));
+            let (mut prepared, _peer, actions) = harness.prepare(Role::Server, "ID:123", b"").await;
+            bind_ticket(
+                &mut prepared,
+                "123",
+                sx.map(|secs| harness.clock.monotonic() + Duration::from_secs(secs)),
+            );
+            let waiter = harness.start(prepared);
+            settle().await;
+            harness.settings.change(|settings| {
+                settings.timeouts.wait = Duration::from_secs(1);
+                settings.relay.ticket.server.enabled = false;
+            });
+            tokio::time::advance(Duration::from_secs(elapsed)).await;
+            waiter.await.expect("waiter").expect("cleanup");
+            let session_expired = sx == Some(4);
+            assert_eq!(
+                *actions.lock().expect("actions"),
+                [if session_expired {
+                    RelayCloseAction::SessionExpired
+                } else {
+                    RelayCloseAction::WaitingExpired
+                }]
+            );
+            let events = harness.events();
+            assert_eq!(events.len(), 2);
+            assert!(
+                matches!(
+                    &events[1],
+                    Event::WaitingRemoved {
+                        reason: crate::events::WaitingRemovalReason::SessionExpired,
+                        ..
+                    }
+                ) == session_expired
+            );
+            if session_expired {
+                assert_eq!(events[1].level(), crate::events::Level::Info);
+            } else {
+                assert!(matches!(&events[1], Event::WaitingExpired { .. }));
+            }
+            assert!(harness.snapshot().waiting.is_empty());
+            assert_eq!(harness.waiting.current(), 0);
+            assert_eq!(harness.budget.current(), 0);
+        }
+    }
+
+    /// spec: relay.md:RLY-031 partial
+    #[tokio::test(start_paused = true)]
+    async fn ticket_arrival_removes_expired_waiter_before_claiming() {
+        let harness = Harness::new(3, 2, 8, &[]);
+        let (mut prepared, _server, actions) = harness.prepare(Role::Server, "ID:123", b"").await;
+        bind_ticket(
+            &mut prepared,
+            "123",
+            Some(harness.clock.monotonic() + Duration::from_secs(4)),
+        );
+        let mut waiter = pin!(harness.service.dispatch(prepared, &harness.runtime));
+        poll_fn(|cx| {
+            assert!(waiter.as_mut().poll(cx).is_pending());
+            Poll::Ready(())
+        })
+        .await;
+        let (incoming, _viewer, _) = harness.prepare(Role::Viewer, "ID:123", b"").await;
+        harness.clock.offset.fetch_add(4_000, Ordering::Relaxed);
+        let mut incoming = pin!(harness.service.dispatch(incoming, &harness.runtime));
+        poll_fn(|cx| {
+            assert!(incoming.as_mut().poll(cx).is_pending());
+            Poll::Ready(())
+        })
+        .await;
+        assert_eq!(harness.snapshot().waiting.len(), 1);
+        assert!(harness.snapshot().active.is_empty());
+        assert!(
+            actions
+                .lock()
+                .expect("actions")
+                .contains(&RelayCloseAction::SessionExpired)
+        );
+        waiter.await.expect("old waiter removed");
+        harness.stop();
+        incoming.await.expect("new waiter removed");
+    }
+
+    /// spec: relay.md:RLY-031 partial
+    /// spec: management.md:MGT-052 partial
+    #[tokio::test(start_paused = true)]
+    async fn ticket_active_session_uses_earliest_endpoint_and_records_recent_close() {
+        for (viewer_sx, server_sx) in [
+            (Some(4), None),
+            (None, Some(4)),
+            (Some(4), Some(8)),
+            (Some(8), Some(4)),
+            (Some(4), Some(4)),
+            (None, None),
+        ] {
+            let harness = Harness::new(3, 2, 8, &[]);
+            let now = harness.clock.monotonic();
+            let (mut server, _server_peer, server_actions) =
+                harness.prepare(Role::Server, "ID:123", b"").await;
+            bind_ticket(
+                &mut server,
+                "123",
+                server_sx.map(|secs| now + Duration::from_secs(secs)),
+            );
+            let waiter = harness.start(server);
+            settle().await;
+            let (mut viewer, _viewer_peer, viewer_actions) =
+                harness.prepare(Role::Viewer, "ID:123", b"").await;
+            bind_ticket(
+                &mut viewer,
+                "123",
+                viewer_sx.map(|secs| now + Duration::from_secs(secs)),
+            );
+            let active = harness.start(viewer);
+            settle().await;
+            assert_eq!(harness.snapshot().active.len(), 1);
+            harness.settings.change(|settings| {
+                settings.relay.ticket.viewer.enabled = false;
+                settings.relay.ticket.server.enabled = false;
+            });
+            tokio::time::advance(Duration::from_secs(4)).await;
+            settle().await;
+            if viewer_sx.is_none() && server_sx.is_none() {
+                assert_eq!(harness.snapshot().active.len(), 1);
+                harness.stop();
+            }
+            waiter.await.expect("waiter").expect("handoff");
+            active.await.expect("active").expect("closed");
+            let snapshot = harness.snapshot();
+            assert!(snapshot.active.is_empty());
+            assert_eq!(snapshot.recent_closed.len(), 1);
+            let cause = if viewer_sx.is_some() || server_sx.is_some() {
+                CloseCause::SessionExpired
+            } else {
+                CloseCause::ServerShutdown
+            };
+            assert_eq!(snapshot.recent_closed[0].close_cause, cause);
+            if cause == CloseCause::SessionExpired {
+                for actions in [viewer_actions, server_actions] {
+                    assert!(
+                        actions
+                            .lock()
+                            .expect("actions")
+                            .contains(&RelayCloseAction::SessionExpired)
+                    );
+                }
+                let event = harness
+                    .events()
+                    .into_iter()
+                    .find(|event| matches!(event, Event::SessionClosed { .. }))
+                    .expect("closed event");
+                assert_eq!(event.level(), crate::events::Level::Info);
+                assert!(matches!(
+                    event,
+                    Event::SessionClosed {
+                        close_cause: CloseCause::SessionExpired,
+                        side: None,
+                        admin_account: None,
+                        ..
+                    }
+                ));
+            }
+        }
     }
 
     /// spec: operations.md:OPS-050 partial
@@ -3027,6 +3425,68 @@ mod tests {
                 .count(),
             1
         );
+    }
+
+    /// spec: relay.md:RLY-031 partial
+    #[tokio::test(start_paused = true)]
+    async fn ticket_sx_crossed_during_claim_never_activates_even_after_w() {
+        struct JumpSource(Arc<TestClock>);
+        impl SessionIdSource for JumpSource {
+            fn session_id(&self, counter: u128) -> SessionId {
+                self.0.offset.fetch_add(11_000, Ordering::Relaxed);
+                SessionId::from_block(counter.to_be_bytes())
+            }
+        }
+        for role in [Role::Viewer, Role::Server] {
+            let mut harness = Harness::new(3, 1, 8, &[]);
+            let clock = harness.clock.clone();
+            Arc::get_mut(&mut harness)
+                .expect("unique harness")
+                .runtime
+                .session_ids = Arc::new(JumpSource(clock));
+            let (mut prepared, _peer, actions) = harness.prepare(role, "ID:123", b"").await;
+            bind_ticket(
+                &mut prepared,
+                "123",
+                Some(harness.clock.monotonic() + Duration::from_secs(4)),
+            );
+            let waiter = harness.start(prepared);
+            settle().await;
+            let opposite = if role == Role::Viewer {
+                Role::Server
+            } else {
+                Role::Viewer
+            };
+            let (prepared, _peer, _) = harness.prepare(opposite, "ID:123", b"").await;
+            assert!(matches!(
+                harness.service.dispatch(prepared, &harness.runtime).await,
+                Err(RelayDispatchError::WaitingSessionExpired)
+            ));
+            waiter.await.expect("waiter").expect("handoff");
+            assert_eq!(harness.runtime.lock().next_session, Some(0));
+            assert!(harness.snapshot().active.is_empty());
+            assert!(
+                actions
+                    .lock()
+                    .expect("actions")
+                    .contains(&RelayCloseAction::SessionExpired)
+            );
+            assert_eq!(
+                harness
+                    .events()
+                    .iter()
+                    .filter(|event| matches!(
+                        event,
+                        Event::WaitingRemoved {
+                            reason: crate::events::WaitingRemovalReason::SessionExpired,
+                            ..
+                        }
+                    ))
+                    .count(),
+                1
+            );
+            assert_eq!(harness.budget.current(), 0);
+        }
     }
 
     /// spec: relay.md:RLY-009 partial

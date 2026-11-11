@@ -146,6 +146,11 @@ pub enum RelayCloseAction {
     DeadConnection,
     AdminTerminated,
     ServerShutdown,
+    /// Close 4012: the initial request does not match the access ticket
+    /// (websocket-relay-v2 §1.9.5).
+    TicketRelayMismatch,
+    /// Close 4013: the access ticket's `sx` was reached (websocket-relay-v2 §1.9.5).
+    SessionExpired,
 }
 
 /// Bounded payload stream with explicit half-close and terminal-close intent.

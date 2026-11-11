@@ -63,8 +63,10 @@ const RULES: &[Rule] = &[
         package: "vnc-relay",
         internal: &["vnc-relay-domain", "vnc-relay-app", "vnc-relay-adapters"],
         // Browser CDP reuses the approved JSON and WebSocket crates only in
-        // tests (Q112). rustls and windows-sys are also dev-dependencies.
+        // tests (Q112). aws-lc-rs signs access tickets only in real-binary
+        // tests. rustls and windows-sys are also dev-dependencies.
         external: External::Only(&[
+            "aws-lc-rs",
             "clap",
             "rustls",
             "serde_json",

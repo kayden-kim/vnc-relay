@@ -10,6 +10,7 @@ use vnc_relay_domain::allow_list::{AllowList, IpItem};
 use vnc_relay_domain::entry_point::{EntryPoint, Listener, Role};
 use vnc_relay_domain::origin::Origin;
 use vnc_relay_domain::target_policy::{TargetItem, TargetPolicy};
+use vnc_relay_domain::ticket::TicketKeyList;
 
 /// Validated settings. Omitted keys hold their defaults. Equality compares
 /// values only, so notation, comments, key order, and explicit defaults do not
@@ -62,6 +63,9 @@ pub struct RelaySettings {
     pub tcp_server: EntryPointSettings,
     pub ws: WsListenerSettings,
     pub wss: WsListenerSettings,
+    /// `[relay.ticket.viewer]` and `[relay.ticket.server]`; they apply to the
+    /// role on both WS and WSS (config-v4 §1.2).
+    pub ticket: TicketSettings,
 }
 
 impl RelaySettings {
@@ -154,6 +158,73 @@ pub struct WsRoleSettings {
     pub enabled: bool,
     pub allow: Option<AllowList>,
     pub allowed_origins: Vec<Origin>,
+}
+
+/// The opt-in access ticket check of each role (websocket-relay-v2 §1.9.6).
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct TicketSettings {
+    pub viewer: TicketRoleSettings,
+    pub server: TicketRoleSettings,
+}
+
+impl TicketSettings {
+    pub fn role(&self, role: Role) -> &TicketRoleSettings {
+        match role {
+            Role::Viewer => &self.viewer,
+            Role::Server => &self.server,
+        }
+    }
+
+    pub fn role_mut(&mut self, role: Role) -> &mut TicketRoleSettings {
+        match role {
+            Role::Viewer => &mut self.viewer,
+            Role::Server => &mut self.server,
+        }
+    }
+
+    /// Config table of a role, also the prefix of its keys.
+    pub fn table(role: Role) -> &'static str {
+        match role {
+            Role::Viewer => "relay.ticket.viewer",
+            Role::Server => "relay.ticket.server",
+        }
+    }
+}
+
+/// One role's ticket settings. When `enabled`, the loader guarantees `issuer`,
+/// `relay_host`, and `public_keys_file` (config-v4 §1.7).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TicketRoleSettings {
+    pub enabled: bool,
+    pub issuer: Option<String>,
+    pub relay_host: Option<String>,
+    /// Resolved against the config file directory, like `cert_file`.
+    pub public_keys_file: Option<PathBuf>,
+    /// `max_lifetime_secs`: 10 to 600 seconds, default 60.
+    pub max_lifetime: Duration,
+    /// Keys read from `public_keys_file`. The config loader leaves this empty;
+    /// startup and reload fill it for enabled roles only
+    /// (docs/architectures/relay-access-ticket.md §3).
+    pub keys: TicketKeyList,
+}
+
+impl TicketRoleSettings {
+    pub const DEFAULT_MAX_LIFETIME: Duration = Duration::from_secs(60);
+    pub const MIN_MAX_LIFETIME_SECS: u64 = 10;
+    pub const MAX_MAX_LIFETIME_SECS: u64 = 600;
+}
+
+impl Default for TicketRoleSettings {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            issuer: None,
+            relay_host: None,
+            public_keys_file: None,
+            max_lifetime: Self::DEFAULT_MAX_LIFETIME,
+            keys: TicketKeyList::default(),
+        }
+    }
 }
 
 /// Certificate chain and private key paths, resolved against the config
@@ -317,6 +388,30 @@ impl Settings {
                 listen: self.status.listen,
             });
         }
+        warnings.extend(self.ticket_warnings());
+        warnings
+    }
+
+    /// `ticket_tcp_bypass` and `ticket_plaintext_ws` of each enabled ticket role
+    /// (websocket-relay-v2 §1.9.6). Reload reports them only for roles whose
+    /// `enabled` key changed.
+    pub fn ticket_warnings(&self) -> Vec<ConfigWarning> {
+        let mut warnings = Vec::new();
+        for role in [Role::Viewer, Role::Server] {
+            if !self.relay.ticket.role(role).enabled {
+                continue;
+            }
+            let (tcp, ws) = match role {
+                Role::Viewer => (&self.relay.tcp_viewer, &self.relay.ws.viewer),
+                Role::Server => (&self.relay.tcp_server, &self.relay.ws.server),
+            };
+            if tcp.enabled {
+                warnings.push(ConfigWarning::TicketTcpBypass { role });
+            }
+            if ws.enabled {
+                warnings.push(ConfigWarning::TicketPlaintextWs { role });
+            }
+        }
         warnings
     }
 
@@ -405,6 +500,8 @@ pub enum ConfigError {
     PlaintextManagementNotLoopback,
     TlsPairIncomplete,
     TlsFileInvalid,
+    /// A ticket public key file breaks config-v4 §1.11, or both roles share a key.
+    TicketKeysInvalid,
 }
 
 impl ConfigError {
@@ -428,6 +525,7 @@ impl ConfigError {
             Self::PlaintextManagementNotLoopback => "config_plaintext_management_not_loopback",
             Self::TlsPairIncomplete => "config_tls_pair_incomplete",
             Self::TlsFileInvalid => "tls_file_invalid",
+            Self::TicketKeysInvalid => "ticket_keys_invalid",
         }
     }
 }
@@ -470,6 +568,15 @@ pub enum ConfigWarning {
     StatusListenNotLoopback {
         listen: SocketAddr,
     },
+    /// The role's ticket check is on but its TCP entry point is enabled
+    /// (websocket-relay-v2 §1.9.6, Q198).
+    TicketTcpBypass {
+        role: Role,
+    },
+    /// The role's ticket check is on and the role is enabled on plaintext WS (Q199).
+    TicketPlaintextWs {
+        role: Role,
+    },
 }
 
 impl ConfigWarning {
@@ -481,6 +588,8 @@ impl ConfigWarning {
             Self::TrustAllProxies { .. } => "trust_all_proxies",
             Self::AllowAllTarget { .. } => "allow_all_target",
             Self::StatusListenNotLoopback { .. } => "status_listen_not_loopback",
+            Self::TicketTcpBypass { .. } => "ticket_tcp_bypass",
+            Self::TicketPlaintextWs { .. } => "ticket_plaintext_ws",
         }
     }
 }

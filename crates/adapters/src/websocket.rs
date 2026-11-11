@@ -6,9 +6,9 @@
 
 use std::io;
 use std::pin::Pin;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll};
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 
 use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt, ReadBuf};
 use tokio::net::{TcpListener, TcpStream};
@@ -16,17 +16,18 @@ use tokio::sync::watch;
 use tokio::time::Instant;
 use vnc_relay_app::events::{AbortReason, ConnectionErrorKind, Event, Stage};
 use vnc_relay_app::ports::{Clock, EventSink};
-use vnc_relay_app::relay::{ConnectionContext, RelayRuntime, RelayService};
+use vnc_relay_app::relay::{ConnectionContext, RelayRuntime, RelayService, TicketBinding};
 use vnc_relay_domain::budget::BudgetPermit;
 use vnc_relay_domain::entry_point::{EntryPoint, Listener, Role};
 use vnc_relay_domain::peer_ip::PeerIp;
+use vnc_relay_domain::ticket::{TicketClaims, TicketError, TicketPolicy, TicketUseTable};
 
 use crate::listener::Listener as SocketListener;
 use crate::net::{AcceptPolicy, Accepted, accept_connections};
 use crate::target::TcpTargetConnector;
 use crate::tls::TlsSource;
 use crate::tls_listener::{HandshakeFailure, TlsIo};
-use crate::upgrade::{HeadRead, Refusal, check, read_head, switching_protocols};
+use crate::upgrade::{HeadRead, Refusal, TicketOffer, check, read_head, switching_protocols};
 use crate::websocket_stream::WsRelayStream;
 
 /// What a WS or WSS entry point applies to each connection.
@@ -35,6 +36,12 @@ pub struct WsPolicy {
     /// Live settings source and the count-only L budget. Accept fixes B/U/K;
     /// upgrade fixes M/Kw, then initial exchange fixes H after the 101 flush.
     pub accept: AcceptPolicy,
+    /// Ticket use records of both roles. WS and WSS share one table
+    /// (websocket-relay-v2 §1.9.4).
+    pub ticket_uses: Arc<Mutex<TicketUseTable>>,
+    /// Process start time; tickets issued at or before it plus 5 seconds are
+    /// refused (websocket-relay-v2 §1.9.3 step 11).
+    pub started_at: SystemTime,
 }
 
 /// A shared WS or WSS listener. `tls` is the WSS acceptor source and is
@@ -231,6 +238,7 @@ async fn connection(
             settings,
             handshake,
             entry_point,
+            ticket,
         })) => {
             let context = ConnectionContext {
                 conn_id: conn.conn_id,
@@ -257,7 +265,13 @@ async fn connection(
             let _handshaking = shared.runtime.track_handshaking();
             let prepared = shared
                 .service
-                .handle_connection(stream, context, permit, lifecycle)
+                .handle_connection(
+                    stream,
+                    context,
+                    ticket.map(|ticket| *ticket),
+                    permit,
+                    lifecycle,
+                )
                 .await;
             drop(_handshaking);
             if let Ok(prepared) = prepared {
@@ -288,6 +302,8 @@ enum Step {
         settings: UpgradedSettings,
         handshake: Duration,
         entry_point: EntryPoint,
+        /// Boxed: the binding holds a whole relay ID and is rare.
+        ticket: Option<Box<TicketBinding>>,
     },
     /// A refusal was logged and answered. The connection is closed.
     Refused,
@@ -311,27 +327,97 @@ fn check_upgrade(
     policy: &WsPolicy,
     role: &mut Option<Role>,
     forwarded_ip: &mut Option<PeerIp>,
-) -> Result<(crate::upgrade::ValidUpgrade, UpgradedSettings), Refusal> {
+    wall: SystemTime,
+) -> Result<
+    (
+        crate::upgrade::ValidUpgrade,
+        UpgradedSettings,
+        Option<TicketClaims>,
+    ),
+    Refusal,
+> {
     let mut decision = Err(Refusal::Invalid);
     policy.accept.allow.with_current(&mut |settings| {
         let Some(listener) = settings.relay.websocket(policy.accept.allow.listener()) else {
             return;
         };
         decision = check(head, listener, role, peer_ip, forwarded_ip).and_then(|upgrade| {
+            let ticket_settings = settings.relay.ticket.role(upgrade.role);
+            let now_secs = wall
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs();
+            let ticket = if ticket_settings.enabled {
+                let compact = match &upgrade.ticket {
+                    TicketOffer::None => {
+                        return Err(Refusal::Ticket {
+                            reason: TicketError::Missing,
+                            jti: None,
+                        });
+                    }
+                    TicketOffer::Many => {
+                        return Err(Refusal::Ticket {
+                            reason: TicketError::Invalid,
+                            jti: None,
+                        });
+                    }
+                    TicketOffer::One(compact) => compact,
+                };
+                let ticket_policy = TicketPolicy {
+                    role: upgrade.role,
+                    issuer: ticket_settings.issuer.as_deref().unwrap_or_default(),
+                    relay_host: ticket_settings.relay_host.as_deref().unwrap_or_default(),
+                    max_lifetime_secs: ticket_settings.max_lifetime.as_secs(),
+                    started_at_secs: policy
+                        .started_at
+                        .duration_since(SystemTime::UNIX_EPOCH)
+                        .unwrap_or_default()
+                        .as_secs(),
+                };
+                Some(
+                    crate::ticket::jws::verify(
+                        compact,
+                        &ticket_settings.keys,
+                        ticket_policy,
+                        now_secs,
+                    )
+                    .map_err(|error| Refusal::Ticket {
+                        reason: error.reason,
+                        jti: error.jti,
+                    })?,
+                )
+            } else {
+                None
+            };
             let entry = EntryPoint::from_parts(policy.accept.allow.listener(), upgrade.role);
             if entry
                 .and_then(|entry| settings.relay.allow(entry))
                 .is_some_and(|allow| allow.permits(forwarded_ip.unwrap_or(peer_ip)))
             {
+                if let Some(claims) = &ticket {
+                    let mut uses = policy
+                        .ticket_uses
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner);
+                    if !uses.try_record(upgrade.role, &claims.jti, claims.exp, now_secs) {
+                        return Err(Refusal::Ticket {
+                            reason: TicketError::Reused,
+                            jti: Some(claims.jti.clone()),
+                        });
+                    }
+                }
                 Ok((
                     upgrade,
                     UpgradedSettings {
                         message_bytes: settings.limits.ws_message_bytes as usize,
                         keepalive: settings.keepalive,
                     },
+                    ticket,
                 ))
             } else {
-                Err(Refusal::IpNotAllowed)
+                // The ticket already passed every check, so its jti is logged
+                // (contract §1.9.3); it stays unconsumed.
+                Err(Refusal::IpNotAllowed(ticket.map(|claims| claims.jti)))
             }
         });
     });
@@ -351,7 +437,14 @@ async fn upgrade(
     let read = read_head(wire).await?;
     let (decision, suffix) = match read {
         HeadRead::Complete { head, suffix } => {
-            let decision = check_upgrade(&head, conn.peer_ip, &shared.policy, role, forwarded_ip);
+            let decision = check_upgrade(
+                &head,
+                conn.peer_ip,
+                &shared.policy,
+                role,
+                forwarded_ip,
+                shared.clock.wall(),
+            );
             (decision, suffix)
         }
         HeadRead::TooLarge => (Err(Refusal::Invalid), Vec::new()),
@@ -361,20 +454,46 @@ async fn upgrade(
     // The answer bytes are built before the last U check, so only the refusal
     // log line runs between that check and the write.
     let (answer, refusal) = match decision {
-        Ok((upgrade, settings)) => (switching_protocols(&upgrade), Ok((upgrade.role, settings))),
+        Ok((upgrade, settings, ticket)) => {
+            if let Some(claims) = &ticket {
+                shared.log.record(&Event::TicketAccepted {
+                    conn_id: conn.conn_id,
+                    listener: conn.listener,
+                    role: upgrade.role,
+                    peer_ip: conn.peer_ip,
+                    forwarded_ip: *forwarded_ip,
+                    ticket_jti: claims.jti.clone(),
+                    ticket_sub: claims.sub.clone(),
+                    session_expires_at: claims.sx.and_then(session_expires_at),
+                });
+            }
+            (
+                switching_protocols(&upgrade),
+                Ok((upgrade.role, settings, ticket)),
+            )
+        }
         Err(refusal) => (refusal.answer(), Err(refusal)),
     };
     if expired(conn) {
         return Ok(Step::TimedOut);
     }
     match refusal {
-        Ok((selected_role, settings)) => {
+        Ok((selected_role, settings, ticket)) => {
             let Some(entry_point) = EntryPoint::from_parts(conn.listener, selected_role) else {
                 return Err(io::Error::other("WebSocket listener has no selected role"));
             };
             wire.write_all(&answer).await?;
             wire.flush().await?;
             let exchange_at = shared.clock.monotonic();
+            let ticket = ticket.map(|claims| {
+                Box::new(TicketBinding {
+                    jti: claims.jti,
+                    relay_id: claims.rid,
+                    session_deadline: claims
+                        .sx
+                        .map(|sx| session_deadline(exchange_at, shared.clock.wall(), sx)),
+                })
+            });
             let handshake = exchange_handshake(&shared.policy);
             Ok(Step::Switched {
                 suffix,
@@ -382,6 +501,7 @@ async fn upgrade(
                 settings,
                 handshake,
                 entry_point,
+                ticket,
             })
         }
         Err(refusal) => {
@@ -389,6 +509,25 @@ async fn upgrade(
             Ok(Step::Refused)
         }
     }
+}
+
+/// Four-digit UTC years are the range of the operational timestamp contract.
+fn session_expires_at(sx: u64) -> Option<SystemTime> {
+    (sx <= 253_402_300_799)
+        .then(|| SystemTime::UNIX_EPOCH.checked_add(Duration::from_secs(sx)))
+        .flatten()
+}
+
+/// `sx` on the Clock's monotonic scale (websocket-relay-v2 §1.9.5): the 101
+/// time plus the wall-clock time left, or the 101 time once `sx` has passed.
+/// The sum saturates rather than dropping the deadline, so every `sx` ends the
+/// connection. Waits take the earlier H or W, or re-read the Clock before
+/// acting, so a far deadline never fires early.
+fn session_deadline(exchange_at: Duration, wall: SystemTime, sx: u64) -> Duration {
+    let wall = wall
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap_or_default();
+    exchange_at.saturating_add(Duration::from_secs(sx).saturating_sub(wall))
 }
 
 /// Whether U has passed since accept (websocket-relay-v2 §1.1).
@@ -423,6 +562,7 @@ async fn refuse(
         peer_ip: conn.peer_ip,
         forwarded_ip,
         origin: refusal.origin().map(str::to_owned),
+        ticket_jti: refusal.ticket_jti().map(str::to_owned),
     });
     let _ = wire.write_all(answer).await;
     let _ = wire.shutdown().await;
@@ -473,6 +613,39 @@ mod tests {
     };
     use vnc_relay_domain::budget::ConnectionBudget;
 
+    #[test]
+    fn omits_unrepresentable_session_expiry_log_timestamp() {
+        assert_eq!(
+            session_expires_at(100),
+            Some(SystemTime::UNIX_EPOCH + Duration::from_secs(100))
+        );
+        assert_eq!(
+            session_expires_at(253_402_300_799),
+            Some(SystemTime::UNIX_EPOCH + Duration::from_secs(253_402_300_799))
+        );
+        assert_eq!(session_expires_at(253_402_300_800), None);
+        assert_eq!(session_expires_at(u64::MAX), None);
+    }
+
+    #[test]
+    fn session_deadline_counts_from_101_and_saturates_instead_of_vanishing() {
+        let at = Duration::from_secs(7);
+        let wall = SystemTime::UNIX_EPOCH + Duration::from_millis(1_000_500);
+        assert_eq!(
+            session_deadline(at, wall, 1_060),
+            Duration::from_millis(66_500)
+        );
+        assert_eq!(
+            session_deadline(at, wall, 900),
+            at,
+            "a passed sx ends at once"
+        );
+        assert_eq!(
+            session_deadline(at, SystemTime::UNIX_EPOCH, u64::MAX),
+            Duration::MAX
+        );
+    }
+
     const HEAD: &[u8] = b"GET /relay/viewer HTTP/1.1\r\nHost: localhost\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nOrigin: https://old.example\r\n\r\n";
 
     fn candidate(settings: vnc_relay_app::settings::Settings) -> ConfigCandidate {
@@ -514,9 +687,19 @@ mod tests {
                     },
                     relay_budget: ConnectionBudget::new(),
                 },
+                ticket_uses: Arc::default(),
+                started_at: SystemTime::UNIX_EPOCH,
             };
             let peer = vnc_relay_domain::peer_ip::PeerIp::new("127.0.0.1".parse().unwrap());
-            let (_, previous) = check_upgrade(HEAD, peer, &policy, &mut None, &mut None).unwrap();
+            let (_, previous, _) = check_upgrade(
+                HEAD,
+                peer,
+                &policy,
+                &mut None,
+                &mut None,
+                SystemTime::UNIX_EPOCH,
+            )
+            .unwrap();
             settings.limits.buffer_bytes *= 2;
             settings.limits.ws_message_bytes *= 2;
             settings.timeouts.handshake = Duration::from_secs(21);
@@ -525,7 +708,15 @@ mod tests {
             settings.keepalive.ws_ping = Duration::from_secs(41);
             settings.keepalive.ws_pong_timeout = Duration::from_secs(42);
             cell.replace(ReloadSnapshot::new(candidate(settings.clone()), None, None));
-            let (_, upgraded) = check_upgrade(HEAD, peer, &policy, &mut None, &mut None).unwrap();
+            let (_, upgraded, _) = check_upgrade(
+                HEAD,
+                peer,
+                &policy,
+                &mut None,
+                &mut None,
+                SystemTime::UNIX_EPOCH,
+            )
+            .unwrap();
             assert_eq!(
                 accepted.buffer_bytes * 2,
                 settings.limits.buffer_bytes as usize
@@ -548,7 +739,14 @@ mod tests {
             cell.replace(ReloadSnapshot::new(candidate(settings), None, None));
             assert_eq!(exchange_handshake(&policy), Duration::from_secs(31));
             assert!(matches!(
-                check_upgrade(HEAD, peer, &policy, &mut None, &mut None),
+                check_upgrade(
+                    HEAD,
+                    peer,
+                    &policy,
+                    &mut None,
+                    &mut None,
+                    SystemTime::UNIX_EPOCH
+                ),
                 Err(Refusal::OriginNotAllowed(_))
             ));
             assert_eq!(upgraded.keepalive.ws_ping, Duration::from_secs(41));

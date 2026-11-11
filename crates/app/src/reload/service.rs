@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::SystemTime;
 
-use vnc_relay_domain::entry_point::{EntryPoint, Listener};
+use vnc_relay_domain::entry_point::{EntryPoint, Listener, Role};
 
 use super::{
     ConfigCandidate, ConfigFileState, ConfigPresence, FileClassification, LastReload,
@@ -14,9 +14,11 @@ use super::{
 };
 use crate::events::{Event, Phase};
 use crate::ports::EventSink;
-use crate::reload::ports::{ReloadFileStore, ReloadTlsStore, TlsBuildError};
+use crate::reload::ports::{ReloadFileStore, ReloadTicketKeyStore, ReloadTlsStore, TlsBuildError};
 use crate::reload::snapshot::{ReloadCell, ReloadSnapshot};
-use crate::settings::{ConfigDiagnostic, ConfigError, ConfigWarning, Settings, TlsFiles};
+use crate::settings::{
+    ConfigDiagnostic, ConfigError, ConfigWarning, Settings, TicketSettings, TlsFiles,
+};
 
 /// `tls_file_invalid` detail for a certificate or key file that cannot be read.
 const UNREADABLE_DETAIL: &str = "file unreadable";
@@ -54,8 +56,10 @@ pub struct ReloadService<A> {
     cell: Arc<ReloadCell<A>>,
     files: Arc<dyn ReloadFileStore>,
     tls: Arc<dyn ReloadTlsStore<A>>,
+    /// Parses ticket public key files of enabled roles (config-v4 §1.11).
+    ticket_keys: Arc<dyn ReloadTicketKeyStore>,
     events: Arc<dyn EventSink>,
-    /// Certificate and key paths of the last candidate that parsed (enabled TLS listeners).
+    /// File paths of the last candidate that parsed (enabled TLS and ticket roles).
     candidate_paths: Vec<PathBuf>,
     /// Content hashes of the running WSS certificate and key. `None` when they could not be
     /// read at the last check, so the next check counts them as changed.
@@ -77,6 +81,7 @@ impl<A> ReloadService<A> {
         cell: Arc<ReloadCell<A>>,
         files: Arc<dyn ReloadFileStore>,
         tls: Arc<dyn ReloadTlsStore<A>>,
+        ticket_keys: Arc<dyn ReloadTicketKeyStore>,
         events: Arc<dyn EventSink>,
     ) -> Self {
         let ConfigCandidate {
@@ -93,6 +98,7 @@ impl<A> ReloadService<A> {
             cell,
             files,
             tls,
+            ticket_keys,
             events,
             candidate_paths: Vec::new(),
             wss_hashes,
@@ -112,10 +118,10 @@ impl<A> ReloadService<A> {
     pub fn last_reload(&self) -> Option<&LastReload> {
         self.last_reload.as_ref()
     }
-    /// Paths to watch besides the config file (file-watch-v1 §9 item 9): the running TLS
-    /// files and those of the last candidate that parsed, without duplicates.
+    /// Files of enabled TLS listeners and ticket roles, including the last parsed candidate
+    /// (config-v4 §1.8), without duplicates.
     pub fn watched_paths(&self) -> Vec<PathBuf> {
-        let mut paths = tls_paths(&self.running);
+        let mut paths = reload_paths(&self.running);
         for path in &self.candidate_paths {
             if !paths.contains(path) {
                 paths.push(path.clone());
@@ -151,7 +157,7 @@ impl<A> PreparedReload<A> {
 impl<A: Clone> ReloadService<A> {
     pub fn prepare_candidate(
         &self,
-        candidate: ConfigCandidate,
+        mut candidate: ConfigCandidate,
     ) -> Result<PreparedReload<A>, PrepareReloadError> {
         let tls = self.load_tls(&candidate.settings).map_err(|rejection| {
             PrepareReloadError::Invalid(vec![ConfigDiagnostic {
@@ -160,6 +166,12 @@ impl<A: Clone> ReloadService<A> {
                 message: rejection.detail.to_owned(),
             }])
         })?;
+        super::ticket_keys::load(
+            &mut candidate.settings,
+            self.files.as_ref(),
+            self.ticket_keys.as_ref(),
+        )
+        .map_err(PrepareReloadError::Invalid)?;
         let restart = restart_required_keys(&self.running, &candidate.settings);
         if !restart.is_empty() {
             return Err(PrepareReloadError::RestartRequired(restart));
@@ -168,6 +180,19 @@ impl<A: Clone> ReloadService<A> {
         for key in tls.changed {
             if !applied.iter().any(|existing| existing == key) {
                 applied.push(key.to_owned());
+            }
+        }
+        for role in [Role::Viewer, Role::Server] {
+            let before = self.running.relay.ticket.role(role);
+            let after = candidate.settings.relay.ticket.role(role);
+            let key = super::ticket_keys::file_key(role);
+            if before.enabled
+                && after.enabled
+                && before.public_keys_file == after.public_keys_file
+                && before.keys != after.keys
+                && !applied.contains(&key)
+            {
+                applied.push(key);
             }
         }
         applied.sort_by_key(|key| DYNAMIC_KEYS.iter().position(|known| known == key));
@@ -185,6 +210,10 @@ impl<A: Clone> ReloadService<A> {
                 ConfigWarning::AllowAllTarget { .. } => {
                     applied.iter().any(|key| key == "mode1.allow_targets")
                 }
+                ConfigWarning::TicketTcpBypass { role }
+                | ConfigWarning::TicketPlaintextWs { role } => applied
+                    .iter()
+                    .any(|key| key == &format!("{}.enabled", TicketSettings::table(*role))),
                 _ => false,
             })
             .collect();
@@ -224,10 +253,20 @@ impl<A: Clone> ReloadService<A> {
                 Err(PrepareReloadError::RestartRequired(keys)) => {
                     (ConfigFileState::RestartRequired, keys, Vec::new())
                 }
-                Ok(prepared) if prepared.applied.is_empty() => {
-                    (ConfigFileState::InEffect, Vec::new(), Vec::new())
+                Ok(prepared) => {
+                    // File state describes config values, not key-file-only rotations.
+                    let keys = dynamic_changed_keys(&self.running, &prepared.snapshot.settings);
+                    let applied: Vec<_> = prepared
+                        .applied
+                        .into_iter()
+                        .filter(|key| !key.starts_with("relay.ticket.") || keys.contains(key))
+                        .collect();
+                    if applied.is_empty() {
+                        (ConfigFileState::InEffect, Vec::new(), Vec::new())
+                    } else {
+                        (ConfigFileState::Pending, applied, Vec::new())
+                    }
                 }
-                Ok(prepared) => (ConfigFileState::Pending, prepared.applied, Vec::new()),
             },
         };
         FileClassification {
@@ -300,7 +339,7 @@ impl<A: Clone> ReloadService<A> {
         let paths = parsed
             .as_ref()
             .ok()
-            .map(|candidate| tls_paths(&candidate.settings));
+            .map(|candidate| reload_paths(&candidate.settings));
         let prepared = match parsed {
             Ok(candidate) => self.prepare_candidate(candidate),
             Err(diagnostics) => Err(PrepareReloadError::Invalid(diagnostics)),
@@ -329,7 +368,12 @@ impl<A: Clone> ReloadService<A> {
                 let (reason, config_key) = rejection_of(&diagnostics);
                 let detail = diagnostics
                     .first()
-                    .filter(|d| d.error == ConfigError::TlsFileInvalid)
+                    .filter(|d| {
+                        matches!(
+                            d.error,
+                            ConfigError::TlsFileInvalid | ConfigError::TicketKeysInvalid
+                        )
+                    })
                     .map(|d| d.message.clone());
                 self.events.record(&Event::ReloadRejected {
                     reason: reason.to_owned(),
@@ -594,6 +638,21 @@ fn tls_paths(settings: &Settings) -> Vec<PathBuf> {
         .collect()
 }
 
+/// All files that participate in candidate verification (config-v4 §1.8).
+fn reload_paths(settings: &Settings) -> Vec<PathBuf> {
+    let mut paths = tls_paths(settings);
+    for role in [Role::Viewer, Role::Server] {
+        let ticket = settings.relay.ticket.role(role);
+        if ticket.enabled
+            && let Some(path) = &ticket.public_keys_file
+            && !paths.contains(path)
+        {
+            paths.push(path.clone());
+        }
+    }
+    paths
+}
+
 /// Config key of an allow list (config-v4 §1.8).
 fn allow_key(entry_point: EntryPoint) -> &'static str {
     match entry_point {
@@ -613,7 +672,7 @@ fn push_if(keys: &mut Vec<String>, differs: bool, key: &str) {
 }
 
 /// Canonical config-v4 key order, including TLS content changes.
-const DYNAMIC_KEYS: [&str; 33] = [
+const DYNAMIC_KEYS: [&str; 43] = [
     "relay.tcp_viewer.allow",
     "relay.tcp_server.allow",
     "relay.ws.trusted_proxies",
@@ -628,6 +687,16 @@ const DYNAMIC_KEYS: [&str; 33] = [
     "relay.wss.viewer.allowed_origins",
     "relay.wss.server.allow",
     "relay.wss.server.allowed_origins",
+    "relay.ticket.viewer.enabled",
+    "relay.ticket.viewer.issuer",
+    "relay.ticket.viewer.relay_host",
+    "relay.ticket.viewer.public_keys_file",
+    "relay.ticket.viewer.max_lifetime_secs",
+    "relay.ticket.server.enabled",
+    "relay.ticket.server.issuer",
+    "relay.ticket.server.relay_host",
+    "relay.ticket.server.public_keys_file",
+    "relay.ticket.server.max_lifetime_secs",
     "mode1.allow_targets",
     "limits.relay_connections",
     "limits.admin_connections",
@@ -682,6 +751,26 @@ pub fn dynamic_changed_keys(a: &Settings, b: &Settings) -> Vec<String> {
             before.enabled() && after.enabled() && before.trusted_proxies != after.trusted_proxies,
             &format!("relay.{}.trusted_proxies", listener.name()),
         );
+    }
+    for role in [Role::Viewer, Role::Server] {
+        let before = a.relay.ticket.role(role);
+        let after = b.relay.ticket.role(role);
+        let table = TicketSettings::table(role);
+        for (name, differs) in [
+            ("enabled", before.enabled != after.enabled),
+            ("issuer", before.issuer != after.issuer),
+            ("relay_host", before.relay_host != after.relay_host),
+            (
+                "public_keys_file",
+                before.public_keys_file != after.public_keys_file,
+            ),
+            (
+                "max_lifetime_secs",
+                before.max_lifetime != after.max_lifetime,
+            ),
+        ] {
+            push_if(&mut keys, differs, &format!("{table}.{name}"));
+        }
     }
     push_if(
         &mut keys,
@@ -943,7 +1032,8 @@ mod tests {
         AdminSessionSettings, AdminSettings, Argon2Settings, DashboardSettings, EntryPointSettings,
         KeepaliveSettings, LimitSettings, LogOutput, LogSettings, LoginLimitSettings,
         Mode1Settings, Mode2Settings, RecentClosedSettings, RecentLogsSettings, RelaySettings,
-        ReloadSettings, StatusSettings, TimeoutSettings, WsListenerSettings, WsRoleSettings,
+        ReloadSettings, StatusSettings, TicketSettings, TimeoutSettings, WsListenerSettings,
+        WsRoleSettings,
     };
 
     /// In-memory file store. Tests change file contents through `put`.
@@ -1039,6 +1129,7 @@ mod tests {
             Arc::clone(&cell),
             files.clone(),
             Arc::new(FakeTls),
+            Arc::new(crate::reload::ticket_keys::FakeTicketKeys),
             sink.clone(),
         );
         Harness {
@@ -1076,6 +1167,7 @@ mod tests {
                 },
                 ws: WsListenerSettings::default(),
                 wss: WsListenerSettings::default(),
+                ticket: TicketSettings::default(),
             },
             mode1: Mode1Settings::default(),
             mode2: Mode2Settings::default(),
@@ -1730,5 +1822,189 @@ mod tests {
             AllowList::new(vec![IpItem::Single(IpAddr::from([10, 0, 0, 1]))]);
         assert!(dynamic_changed_keys(&running, &next).is_empty());
         assert!(restart_required_keys(&running, &next).is_empty());
+    }
+    fn enable_ticket(settings: &mut Settings, role: Role, path: &str) {
+        let ticket = settings.relay.ticket.role_mut(role);
+        ticket.enabled = true;
+        ticket.issuer = Some("issuer.example".to_owned());
+        ticket.relay_host = Some("relay.example".to_owned());
+        ticket.public_keys_file = Some(PathBuf::from(path));
+    }
+
+    /// spec: operations.md:OPS-072 partial
+    #[test]
+    fn ticket_rotation_rejects_invalid_keys_and_publishes_valid_keys_atomically() {
+        let mut running = settings();
+        enable_ticket(&mut running, Role::Viewer, "viewer.jwks");
+        running.relay.ticket.viewer.keys = crate::reload::ticket_keys::FakeTicketKeys
+            .parse(b"old 1")
+            .unwrap();
+        let mut h = harness(running.clone(), None);
+        assert_eq!(h.service.watched_paths(), [PathBuf::from("viewer.jwks")]);
+        let before = h.cell.current();
+        h.files.put("viewer.jwks", b"invalid");
+        assert_eq!(
+            h.service.handle_config(
+                Ok(candidate(running.clone())),
+                &|| true,
+                SystemTime::UNIX_EPOCH
+            ),
+            ReloadOutcome::Rejected
+        );
+        assert!(Arc::ptr_eq(&before, &h.cell.current()));
+        assert!(matches!(&h.sink.events()[0], Event::ReloadRejected {
+            reason, config_key: Some(key), detail: Some(detail)
+        } if reason == "ticket_keys_invalid"
+            && key == "relay.ticket.viewer.public_keys_file"
+            && detail == vnc_relay_domain::ticket::TicketKeyError::Format.detail()));
+        h.files.put("viewer.jwks", b"new 2");
+        assert_eq!(
+            h.service
+                .classify_file(Some(Ok(candidate(running.clone()))))
+                .state,
+            ConfigFileState::InEffect
+        );
+        let prepared = h
+            .service
+            .prepare_candidate(candidate(running.clone()))
+            .unwrap();
+        assert_eq!(
+            prepared.applied_keys(),
+            ["relay.ticket.viewer.public_keys_file"]
+        );
+        h.service
+            .commit_prepared(prepared, ReloadTrigger::ConfigEdit, SystemTime::UNIX_EPOCH);
+        assert!(
+            h.service
+                .running()
+                .relay
+                .ticket
+                .viewer
+                .keys
+                .find("new")
+                .is_some()
+        );
+        assert!(
+            before
+                .settings
+                .relay
+                .ticket
+                .viewer
+                .keys
+                .find("old")
+                .is_some()
+        );
+        assert_eq!(
+            h.service
+                .handle_config(Ok(candidate(running)), &|| true, SystemTime::UNIX_EPOCH),
+            ReloadOutcome::Unchanged
+        );
+        assert!(
+            h.cell
+                .current()
+                .settings
+                .relay
+                .ticket
+                .viewer
+                .keys
+                .find("new")
+                .is_some()
+        );
+    }
+
+    /// spec: operations.md:OPS-072 partial
+    #[test]
+    fn all_ten_ticket_values_are_dynamic_and_failed_candidate_files_remain_watched() {
+        let running = settings();
+        let mut next = running.clone();
+        enable_ticket(&mut next, Role::Viewer, "viewer.jwks");
+        enable_ticket(&mut next, Role::Server, "server.jwks");
+        next.relay.ticket.viewer.max_lifetime = Duration::from_secs(10);
+        next.relay.ticket.server.max_lifetime = Duration::from_secs(600);
+        let expected = &DYNAMIC_KEYS[14..24];
+        assert_eq!(DYNAMIC_KEYS.len(), 43);
+        assert_eq!(dynamic_changed_keys(&running, &next), expected);
+        assert!(restart_required_keys(&running, &next).is_empty());
+        let mut h = harness(running, None);
+        assert_eq!(
+            h.service.handle_config(
+                Ok(candidate(next.clone())),
+                &|| true,
+                SystemTime::UNIX_EPOCH
+            ),
+            ReloadOutcome::Rejected
+        );
+        assert_eq!(
+            h.service.watched_paths(),
+            [PathBuf::from("viewer.jwks"), PathBuf::from("server.jwks")]
+        );
+        h.files.put("viewer.jwks", b"viewer 1");
+        h.files.put("server.jwks", b"server 2");
+        let prepared = h.service.prepare_candidate(candidate(next)).unwrap();
+        assert_eq!(prepared.applied_keys(), expected);
+        h.service
+            .commit_prepared(prepared, ReloadTrigger::FileWatch, SystemTime::UNIX_EPOCH);
+        assert_eq!(h.cell.current().settings.relay.ticket.viewer.keys.len(), 1);
+        assert_eq!(h.cell.current().settings.relay.ticket.server.keys.len(), 1);
+    }
+
+    /// spec: operations.md:OPS-071 partial
+    #[test]
+    fn ticket_reload_warnings_only_repeat_for_the_role_being_enabled() {
+        let mut running = settings();
+        running.relay.ws.viewer.enabled = true;
+        running.relay.ws.server.enabled = true;
+        let mut h = harness(running.clone(), None);
+        h.files.put("viewer.jwks", b"viewer 1");
+        h.files.put("server.jwks", b"server 2");
+        for role in [Role::Viewer, Role::Server] {
+            enable_ticket(
+                &mut running,
+                role,
+                if role == Role::Viewer {
+                    "viewer.jwks"
+                } else {
+                    "server.jwks"
+                },
+            );
+            let prepared = h
+                .service
+                .prepare_candidate(candidate(running.clone()))
+                .unwrap();
+            h.service
+                .commit_prepared(prepared, ReloadTrigger::FileWatch, SystemTime::UNIX_EPOCH);
+            let warnings: Vec<_> = h
+                .sink
+                .events()
+                .into_iter()
+                .filter_map(|event| match event {
+                    Event::ConfigWarning {
+                        warning,
+                        phase: Phase::Reload,
+                    } => Some(warning),
+                    _ => None,
+                })
+                .collect();
+            assert!(warnings.contains(&ConfigWarning::TicketTcpBypass { role }));
+            assert!(warnings.contains(&ConfigWarning::TicketPlaintextWs { role }));
+        }
+        let warning_count = h
+            .sink
+            .events()
+            .iter()
+            .filter(|event| matches!(event, Event::ConfigWarning { .. }))
+            .count();
+        running.relay.ticket.viewer.issuer = Some("other-issuer.example".to_owned());
+        let prepared = h.service.prepare_candidate(candidate(running)).unwrap();
+        h.service
+            .commit_prepared(prepared, ReloadTrigger::FileWatch, SystemTime::UNIX_EPOCH);
+        assert_eq!(
+            h.sink
+                .events()
+                .iter()
+                .filter(|event| matches!(event, Event::ConfigWarning { .. }))
+                .count(),
+            warning_count
+        );
     }
 }

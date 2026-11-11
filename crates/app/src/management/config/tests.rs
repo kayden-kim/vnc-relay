@@ -15,8 +15,8 @@ use crate::settings::{
     AdminSessionSettings, AdminSettings, Argon2Settings, ConfigError, DashboardSettings,
     EntryPointSettings, KeepaliveSettings, LimitSettings, LogOutput, LogSettings,
     LoginLimitSettings, ManagementSettings, Mode1Settings, Mode2Settings, RecentClosedSettings,
-    RecentLogsSettings, RelaySettings, ReloadSettings, Settings, StatusSettings, TimeoutSettings,
-    TlsFiles, WsListenerSettings, WsRoleSettings,
+    RecentLogsSettings, RelaySettings, ReloadSettings, Settings, StatusSettings, TicketSettings,
+    TimeoutSettings, TlsFiles, WsListenerSettings, WsRoleSettings,
 };
 
 type Trace = Arc<Mutex<Vec<String>>>;
@@ -56,6 +56,7 @@ fn settings() -> Settings {
             },
             ws: WsListenerSettings::default(),
             wss: WsListenerSettings::default(),
+            ticket: TicketSettings::default(),
         },
         mode1: Mode1Settings::default(),
         mode2: Mode2Settings::default(),
@@ -385,6 +386,7 @@ impl Harness {
             cell.clone(),
             tls.clone(),
             tls.clone(),
+            Arc::new(crate::reload::ticket_keys::FakeTicketKeys),
             sink.clone(),
         )));
         let files = Arc::new(FakeFiles {
@@ -1259,6 +1261,8 @@ relay.tcp_viewer.enabled relay.tcp_viewer.listen relay.tcp_viewer.allow
 relay.tcp_server.enabled relay.tcp_server.listen relay.tcp_server.allow
 relay.ws.listen relay.ws.trusted_proxies relay.ws.viewer.enabled relay.ws.viewer.allow relay.ws.viewer.allowed_origins relay.ws.server.enabled relay.ws.server.allow relay.ws.server.allowed_origins
 relay.wss.listen relay.wss.trusted_proxies relay.wss.cert_file relay.wss.key_file relay.wss.viewer.enabled relay.wss.viewer.allow relay.wss.viewer.allowed_origins relay.wss.server.enabled relay.wss.server.allow relay.wss.server.allowed_origins
+relay.ticket.viewer.enabled relay.ticket.viewer.issuer relay.ticket.viewer.relay_host relay.ticket.viewer.public_keys_file relay.ticket.viewer.max_lifetime_secs
+relay.ticket.server.enabled relay.ticket.server.issuer relay.ticket.server.relay_host relay.ticket.server.public_keys_file relay.ticket.server.max_lifetime_secs
 mode1.enabled mode1.allow_targets mode2.enabled
 limits.relay_connections limits.admin_connections limits.waiting limits.buffer_bytes limits.ws_message_bytes
 timeouts.handshake_secs timeouts.tls_upgrade_secs timeouts.wait_secs timeouts.connect_secs timeouts.close_secs timeouts.shutdown_grace_secs
@@ -1270,7 +1274,9 @@ status.listen log.output reload.settle_secs reload.poll_secs";
 
 const DYNAMIC_KEYS: &str = "
 relay.tcp_viewer.allow relay.tcp_server.allow relay.ws.trusted_proxies relay.ws.viewer.allow relay.ws.viewer.allowed_origins relay.ws.server.allow relay.ws.server.allowed_origins
-relay.wss.trusted_proxies relay.wss.cert_file relay.wss.key_file relay.wss.viewer.allow relay.wss.viewer.allowed_origins relay.wss.server.allow relay.wss.server.allowed_origins mode1.allow_targets
+relay.wss.trusted_proxies relay.wss.cert_file relay.wss.key_file relay.wss.viewer.allow relay.wss.viewer.allowed_origins relay.wss.server.allow relay.wss.server.allowed_origins
+relay.ticket.viewer.enabled relay.ticket.viewer.issuer relay.ticket.viewer.relay_host relay.ticket.viewer.public_keys_file relay.ticket.viewer.max_lifetime_secs
+relay.ticket.server.enabled relay.ticket.server.issuer relay.ticket.server.relay_host relay.ticket.server.public_keys_file relay.ticket.server.max_lifetime_secs mode1.allow_targets
 limits.relay_connections limits.admin_connections limits.waiting limits.buffer_bytes limits.ws_message_bytes
 timeouts.handshake_secs timeouts.tls_upgrade_secs timeouts.wait_secs timeouts.connect_secs timeouts.close_secs timeouts.shutdown_grace_secs
 keepalive.tcp_idle_secs keepalive.tcp_interval_secs keepalive.tcp_probes keepalive.ws_ping_secs keepalive.ws_pong_timeout_secs management.cert_file management.key_file";
@@ -1284,8 +1290,11 @@ fn item_named<'a>(items: &'a [ConfigItem], key: &str) -> &'a ConfigItem {
 
 /// spec: management.md:MGT-028 partial
 /// spec: management.md:MGT-037 partial
+/// spec: operations.md:OPS-063 partial
+/// spec: operations.md:OPS-064 partial
+/// spec: operations.md:OPS-072 partial
 #[test]
-fn descriptors_follow_contract_order_with_33_dynamic_and_29_enabled_editable_keys() {
+fn descriptors_follow_contract_order_with_43_dynamic_and_37_enabled_editable_keys() {
     let mut all = transaction_settings();
     let role = WsRoleSettings {
         enabled: true,
@@ -1317,6 +1326,8 @@ fn descriptors_follow_contract_order_with_33_dynamic_and_29_enabled_editable_key
         "relay.wss.key_file",
         "management.cert_file",
         "management.key_file",
+        "relay.ticket.viewer.public_keys_file",
+        "relay.ticket.server.public_keys_file",
     ];
     for edit_switch in [true, false] {
         all.management.config_edit = edit_switch;
@@ -1328,14 +1339,14 @@ fn descriptors_follow_contract_order_with_33_dynamic_and_29_enabled_editable_key
                 .collect::<Vec<_>>(),
             ORDERED_KEYS.split_whitespace().collect::<Vec<_>>()
         );
-        assert_eq!(items.len(), 65);
+        assert_eq!(items.len(), 75);
         let dynamic = items
             .iter()
             .filter(|item| item.reload == ConfigReloadKind::Dynamic)
             .map(|item| item.key.as_str())
             .collect::<Vec<_>>();
         assert_eq!(dynamic, DYNAMIC_KEYS.split_whitespace().collect::<Vec<_>>());
-        assert_eq!(dynamic.len(), 33);
+        assert_eq!(dynamic.len(), 43);
         let editable = items
             .iter()
             .filter(|item| item.editable)
@@ -1349,7 +1360,7 @@ fn descriptors_follow_contract_order_with_33_dynamic_and_29_enabled_editable_key
                 .filter(|key| !tls_paths.contains(key))
                 .collect::<Vec<_>>()
         );
-        assert_eq!(editable.len(), 29);
+        assert_eq!(editable.len(), 37);
         assert!(items.iter().all(|item| item.editable
             == (item.reload == ConfigReloadKind::Dynamic
                 && !tls_paths.contains(&item.key.as_str()))));
@@ -1367,7 +1378,7 @@ fn descriptors_follow_contract_order_with_33_dynamic_and_29_enabled_editable_key
             .iter()
             .filter(|item| item.reload == ConfigReloadKind::Dynamic)
             .count(),
-        33
+        43
     );
     assert_eq!(items.iter().filter(|item| item.editable).count(), 16);
     for key in [
@@ -1383,9 +1394,69 @@ fn descriptors_follow_contract_order_with_33_dynamic_and_29_enabled_editable_key
         "relay.wss.viewer.allowed_origins",
         "relay.wss.server.allow",
         "relay.wss.server.allowed_origins",
+        "relay.ticket.viewer.enabled",
+        "relay.ticket.viewer.issuer",
+        "relay.ticket.viewer.relay_host",
+        "relay.ticket.viewer.max_lifetime_secs",
+        "relay.ticket.server.enabled",
+        "relay.ticket.server.issuer",
+        "relay.ticket.server.relay_host",
+        "relay.ticket.server.max_lifetime_secs",
         "mode1.allow_targets",
     ] {
         assert!(!item_named(&items, key).editable, "{key}");
+    }
+}
+
+/// spec: management.md:MGT-053 partial
+/// spec: operations.md:OPS-072 partial
+#[test]
+fn ticket_editability_depends_on_either_transport_role_not_ticket_switch() {
+    for (viewer_ws, viewer_wss, server_ws, server_wss) in [
+        (true, false, false, true),
+        (false, true, true, false),
+        (false, false, false, false),
+    ] {
+        for ticket_enabled in [false, true] {
+            let mut settings = settings();
+            settings.relay.ws.viewer.enabled = viewer_ws;
+            settings.relay.wss.viewer.enabled = viewer_wss;
+            settings.relay.ws.server.enabled = server_ws;
+            settings.relay.wss.server.enabled = server_wss;
+            settings.relay.ticket.viewer.enabled = ticket_enabled;
+            settings.relay.ticket.server.enabled = ticket_enabled;
+            let items = config_items(&settings, &ConfigPresence::default());
+            for (role, editable) in [
+                ("viewer", viewer_ws || viewer_wss),
+                ("server", server_ws || server_wss),
+            ] {
+                for (key, value) in [
+                    ("enabled", ConfigValue::Bool(!ticket_enabled)),
+                    ("issuer", ConfigValue::String("issuer.example".to_owned())),
+                    (
+                        "relay_host",
+                        ConfigValue::String("relay.example".to_owned()),
+                    ),
+                    ("max_lifetime_secs", ConfigValue::Integer(90)),
+                ] {
+                    let key = format!("relay.ticket.{role}.{key}");
+                    assert_eq!(item_named(&items, &key).editable, editable, "{key}");
+                    assert_eq!(
+                        items::accepts_change(&settings, &ConfigChange { key, value }),
+                        editable
+                    );
+                }
+                let key = format!("relay.ticket.{role}.public_keys_file");
+                assert!(!item_named(&items, &key).editable);
+                assert!(!items::accepts_change(
+                    &settings,
+                    &ConfigChange {
+                        key,
+                        value: ConfigValue::String("keys.jwks".to_owned()),
+                    }
+                ));
+            }
+        }
     }
 }
 
@@ -1481,6 +1552,8 @@ fn descriptors_expose_all_integer_ranges_and_no_bounds_for_other_types() {
         ("admin.argon2.memory_kib", 19_456, 1_048_576),
         ("admin.argon2.iterations", 2, 10),
         ("admin.argon2.parallelism", 1, 16),
+        ("relay.ticket.viewer.max_lifetime_secs", 10, 600),
+        ("relay.ticket.server.max_lifetime_secs", 10, 600),
         ("limits.relay_connections", 2, 65_535),
         ("limits.admin_connections", 1, 1024),
         ("limits.waiting", 1, 65_535),

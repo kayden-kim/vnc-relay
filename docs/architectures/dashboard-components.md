@@ -64,7 +64,7 @@ flowchart LR
 | `app/session.js` `mountSession` | SCR-002를 조립한다. 양쪽 전송 경로와 값이 있는 전달 주소, 세션 필터 로그 링크를 표시한다. 세션 확인·상세 조회·종료 확인·결과 분류·대상 소멸을 맡는다. | `components/alert.js`, `button.js`, `dialog.js`, `link.js`, `stat.js`, `api.js`, `copy.js`, `format.js`, `language.js`, `model.js`, `panels.js`, `query.js`, `shell.js` |
 | `app/router.js` `mountRouter`, `routeOf` | `#/sessions/{id}`는 SCR-002, `#/settings`·`#/settings/edit`는 SCR-004·005, `#/logs`와 선택 `session_id`는 SCR-006, 그 밖은 SCR-001로 보낸다. 이전 화면을 `dispose`한다. 저장 적용 개수는 한 번 쓰는 메모리 값으로 전달한다. | `operations.js`, `session.js`, `settings.js`, `logs.js` |
 | `app/settings.js` `mountSettings` | SCR-004·005를 조립한다. 진입·명시적 GET, 편집 가능 상태, 입력 보존, 변경 확인, PATCH 결과·복구, 언어·로그아웃을 맡는다. 폴링하지 않는다. | 공통 컴포넌트, `api.js`, `settings-model.js`, `copy.js`, `format.js`, `language.js`, `model.js`, `panels.js`, `shell.js` |
-| `app/settings-model.js` `parseConfig`, `canEdit`, `editableItems`, `initialInputs`, `inspectInputs`, `mapDiagnostics` | v4 설정 응답과 29개 편집 입력을 다룬다. `editableItems`가 다섯 구역과 구역 안 순서를 정한다. 렌더·검사·진단 초점 순서는 같은 목록을 쓴다. | `format.js` |
+| `app/settings-model.js` `parseConfig`, `canEdit`, `editableItems`, `initialInputs`, `inspectInputs`, `mapDiagnostics` | v4 설정 응답과 37개 편집 대상 입력을 다룬다. `editableItems`가 여섯 구역과 구역 안 순서를 정한다. 마지막은 접속 ticket 구역이다. 렌더·검사·진단 초점 순서는 같은 목록을 쓴다. 목록·정수·불리언·문자열을 변환하며 문자열은 공백을 자르지 않고 UTF-8 바이트 길이를 검사한다. 실행 값이 `null`인 빈 문자열 입력은 변경에서 제외한다. | `format.js` |
 | `app/logs.js` `mountLogs` | SCR-006의 필터·증분 폴링·이전 페이지·행 상세·JSON Lines 수집과 세션 종료 시 정리를 맡는다. 현재 필터의 첫 스냅숏 성공 전에는 증분 병합을 막는다. 자동 복구도 폴링으로 표시한다. 렌더는 조작 요소 ID·상세 행 ID·링크 목적지로 초점을 복원한다. [최근 로그 데이터 흐름](dashboard-operations-overview.md#16-최근-로그-scr-006)을 따른다. | 공통 컴포넌트, `api.js`, `model.js`, `shell.js`, `copy.js`, `format.js`, `language.js`, `panels.js` |
 
 ## 3. 데이터 모델
@@ -151,7 +151,7 @@ flowchart LR
 
 `mountSettings(root, deps, {edit, applied})`는 기존 화면과 같은 `request`·`storage`·`preferredLanguages`·`navigate` 의존성을 받는다. `edit`는 두 설정 화면을 고르고, `applied`는 성공 안내에만 쓴다. PATCH는 `api.js`의 `patchConfig`를 통해 `{revision, changes}`와 CSRF를 보낸다. 오류의 `details`는 키별 진단과 재시작 필요 키를 보존한다. 제한 시간은 `parseSession`이 읽은 `query_timeout_secs`다.
 
-`app.css`의 `.config-*`는 키·값 3열 목록, 다섯 입력 구역, 변경 목록과 스크롤 가능한 확인 대화상자를 그린다. `styles/components.css`의 기존 단일 중단점은 이 목록과 입력 격자를 한 열로 바꾼다. 목록 입력은 `typography.input-data`, 숫자 입력은 `typography.input`을 쓴다. 두 입력 모두 16px 이상이다. 키·문자열 보기 값은 기존 `typography.data`를 유지한다.
+`app.css`의 `.config-*`는 키·값 3열 목록, 여섯 입력 구역, 변경 목록과 스크롤 가능한 확인 대화상자를 그린다. `styles/components.css`의 기존 단일 중단점은 이 목록과 입력 격자를 한 열로 바꾼다. 목록 입력은 `typography.input-data`, 숫자·문자열 입력은 `typography.input`을 쓴다. 두 단계 모두 16px 이상이다. 불리언 입력은 로그 수준의 `.check` 상자를 재사용하고 키 이름을 label로 둔다. 키·문자열 보기 값은 기존 `typography.data`를 유지한다.
 
 `tests/settings.html`·`settings-scenarios.js`는 기존 `operations`·`session` 시험 페이지와 같은 가짜 API 패턴이다. 읽기 행과 입력에는 `data-config-key`를 두어 같은 키의 값·진단·배지와 연결한다. 실서버에 대한 파일 기록·기존 연결 유지 증거는 이 시험의 범위가 아니다. 그 증거는 `tests/dashboard_live/settings_view.rs`·`settings_edit.rs`·`settings_recovery.rs`가 실제 설정 파일·파일 변경 감지·`/api/v1/config`로 확인한다. 시험 쪽 주입 범위는 [프런트엔드 컨벤션 검증 표](../conventions/frontend.md)의 사용자 결정 2026-11-05(Q113)·2026-11-08(Q180)을 따른다.
 

@@ -115,7 +115,7 @@ flowchart LR
 | 연결 수·사용량 | 서버 요약의 초기 교환 중 연결 수, Mode I 대상 연결 중 연결 수, 중계 연결(L)·관리 연결(Lm)의 현재 사용량과 상한. 화면에는 기호 L·Lm 대신 "중계 연결"·"관리 연결" 이름과 무엇을 세는지 한 줄 설명을 쓴다. 의미는 [관리 스펙 2절](management.md#2-조회-대상과-상태)을 따른다 | 읽기 | 관리 스펙 값과 일치, 확인하지 못한 값은 0으로 표시하지 않음 | DASH-021 |
 | 대기 연결 목록 | 역할, 중계 ID, 접속 시각, 대기 시간. 빈 목록은 "대기 없음" | 읽기 | 대기 연결에는 상세·종료 행동 없음 | DASH-001·DASH-002 |
 | 활성 세션 목록 | 세션 식별자, 모드, 양쪽 전송 경로(`viewer_transport → target_transport`), 시작 시각, 방향별 바이트, 상대 주소. 전송 경로는 TCP·WS·WSS이며 Mode I 대상은 TCP다. 빈 목록은 "활성 없음" | 상세 열기 | 선택한 식별자의 SCR-002로 이동. 사용자 결정 2026-11-08(Q190)으로 채택한 CPY-187 적용 | DASH-001·DASH-002·DASH-006·DASH-062 |
-| 최근 종료 목록 | 세션 식별자, 종료 원인, 종료 시각, 방향별 바이트([관리 스펙 2.3절](management.md#23-최근-종료-목록)). 빈 목록은 "최근 종료 없음" | 읽기 | 종료·상세 행동 없음 | DASH-020 |
+| 최근 종료 목록 | 세션 식별자, 종료 원인, 종료 시각, 방향별 바이트([관리 스펙 2.3절](management.md#23-최근-종료-목록)). 빈 목록은 "최근 종료 없음". 종료 원인 `session_expired`는 CPY-190과 중립 배지로 표시(사용자 결정 2026-11-11(Q217)) | 읽기 | 종료·상세 행동 없음 | DASH-020 |
 | 목록 개수 배지 | 대기 연결·활성 세션·최근 종료 목록의 제목 옆에 해당 목록의 표시 중인 응답 항목 수를 쓴다. 문구는 CPY-084·085다. 성공한 빈 목록은 0건이다. 첫 성공 전에는 배지를 숨긴다. 갱신 실패로 이전 목록을 유지하면 그 목록의 개수도 유지한다. 서버 요약의 수를 대신 쓰지 않는다. | 읽기 | 목록별 개수와 보이는 데이터가 같은 응답을 따른다. 언어 변경 때 개수 문구도 즉시 바뀐다. | DASH-001~004·DASH-020·DASH-025 |
 | 방향별 바이트 | 관리 스펙 2.1절의 누적 바이트(정수)를 KiB/MiB로 표시. 표는 방향을 Viewer->대상, 대상->Viewer로 줄여 쓴다 | 읽기 | 전송량 의미를 바꾸지 않음 | DASH-001·DASH-020 |
 | 목록별 조회 상태 | 조회 중·실패·오래된 성공 데이터 구분 | 재조회 | 실패를 빈 목록으로 표시하지 않음 | DASH-003·DASH-004 |
@@ -198,7 +198,7 @@ flowchart LR
 | 파일 상태 안내 | `file.state` 5종, `file.config_keys`, `file.diagnostics` | 읽기 | 실행 값과 파일의 차이를 구분. 진단은 5.1절의 `code`별 한영 문구와 `key`를 표시. 목록에 없는 코드만 서버 `message`와 `code`를 표시 | DASH-030~032 |
 | 마지막 재로드 | `last_reload.at`·`result`·`trigger`·`config_keys`. `null`이면 이력 없음 | 읽기 | 현재 파일 상태와 별도로 표시. 결과는 적용·거절·재시작 필요, 계기는 파일 변경 감지·설정 편집으로 번역. 시각은 조회 시각과 같은 현지 시각·시간대 형식. 키는 데이터 그대로 | DASH-029·033 |
 | 구역별 키·값 | `items`의 모든 키를 설정 계약 1.2절 순서와 테이블별로 묶음. `value`는 실행 중 유효 값이며 기본값 포함. 불리언은 `true`·`false`, 정수는 정확한 십진 값, 문자열은 그대로, 배열은 항목별 줄, `[]`는 빈 목록, `null`은 값 없음으로 표시 | 읽기 | 파일에만 있는 미적용 값을 실행 값처럼 표시하지 않음. 파일 차이는 `file.config_keys`에 든 키에 글씨로 표시 | DASH-029~032 |
-| 적용 구분 | `items.reload = dynamic`은 재시작 없이 적용, `restart`는 재시작 필요. v4의 재로드 대상은 33개다 | 읽기 | 인증서·개인키 경로 4개는 보이지만 파일 내용과 편집 입력은 없음. `recent_logs.max_entries`는 재시작 필요이며 `recent_closed.max_entries` 옆에 표시 | DASH-029·035 |
+| 적용 구분 | `items.reload = dynamic`은 재시작 없이 적용, `restart`는 재시작 필요. v4의 재로드 대상은 43개다(접속 ticket 키 10개 포함) | 읽기 | 인증서·개인키 경로 4개와 접속 ticket 공개 키 파일 경로 2개는 경로만 보이며 파일 내용과 편집 입력은 없음. `recent_logs.max_entries`는 재시작 필요이며 `recent_closed.max_entries` 옆에 표시 | DASH-029·035 |
 | 편집 | `edit_enabled = true`이며 `file.state`가 `in_effect`·`pending`일 때 활성 | 편집 | SCR-005 이동. 꺼짐이면 `management.config_edit = true`와 재시작 안내. 막힘이면 파일 수정·재시작 등 이유 안내 | DASH-031·032·034 |
 | 저장 성공 안내 | PATCH `applied`의 길이. 빈 배열은 0개 | 읽기 | SCR-004에서 현재 실행 값을 다시 조회하고 성공 안내. 조회 실패가 저장 성공 사실을 취소하지 않음 | DASH-039·052 |
 
@@ -226,17 +226,19 @@ flowchart LR
 | --- | --- | --- | --- | --- |
 | 상단 막대 | SCR-004와 같다 | 이동·언어 선택·로그아웃 | 저장하지 않은 입력은 버림. 이탈 확인 없음 | DASH-028·050·051·053 |
 | 준비 조회 | 진입 때 `GET /api/v1/config`. 그 응답의 `revision`과 실행 값 보관 | 조회 완료 대기·명시적 재조회 | 폴링 없음. `revision = null`이면 편집하지 않음 | DASH-032·035·048·049 |
-| 입력 구역 | 출발지 IP 허용 목록 / 접근 정책 / 연결 상한 / 시간 제한 / 연결 유지. 전체 편집 대상 29개 중 `items.editable = true`인 키만 입력란으로 제공. 꺼진 역할·리스너·Mode I 키와 TLS 경로 4개는 입력란 없음 | 입력 | `management.config_edit`와 재시작 필요 키도 편집하지 않음. 기존 다섯 구역 유지(사용자 결정 2026-11-08(Q170·Q172·Q184·Q188)) | DASH-035 |
+| 입력 구역 | 출발지 IP 허용 목록 / 접근 정책 / 연결 상한 / 시간 제한 / 연결 유지 / 접속 ticket(CPY-191). 전체 편집 대상 37개 중 `items.editable = true`인 키만 입력란으로 제공. 꺼진 역할·리스너·Mode I 키, TLS 경로 4개, 접속 ticket 공개 키 파일 경로 2개는 입력란 없음 | 입력 | `management.config_edit`와 재시작 필요 키도 편집하지 않음. 기존 다섯 구역(사용자 결정 2026-11-08(Q170·Q172·Q184·Q188)) 뒤 마지막에 여섯째 구역 "접속 ticket"을 둔다(사용자 결정 2026-11-11(Q215)). 구역 안 순서는 설정 계약 1.2절의 키 순서다. 따라서 Viewer 키 다음 Server 키이며 키마다 `enabled`, `issuer`, `relay_host`, `max_lifetime_secs` 순서다 | DASH-035 |
 | 여러 줄 목록 | 한 줄에 항목 하나, 빈 줄 무시, 항목 안·앞뒤 공백 금지. 원래 줄 번호와 전송 배열 첨자의 연결을 유지 | 입력 수정 | 서버 진단의 `key[i]`를 해당 입력란과 원래 줄에 연결. 진단 문구는 5.1절의 코드별 한영 대응을 사용 | DASH-036·040 |
 | 정수 | 서버의 `min`·`max` 표시. 초·바이트 단위, 연결·대기·probe 개수는 개수 단위 | 입력 수정 | 정수·범위·Lw ≤ L 화면 검사 | DASH-036 |
-| 변경 내용 확인 | 화면 검사 통과 후에만 열기 | 선택 | 바뀐 키별 이전·새 값. 목록은 추가·삭제 항목. 빈 목록은 키별 의미를 경고(CPY-105·183·184). 바뀐 값이 없어도 0개를 확인할 수 있음 | DASH-037·052 |
+| 불리언 | `relay.ticket.viewer.enabled`·`relay.ticket.server.enabled`. SCR-006 수준 체크 그룹과 같은 체크박스이며 label은 키 이름(사용자 결정 2026-11-11(Q216)) | 선택·해제 | 바뀐 값만 `true`·`false`로 전송 | DASH-035·036 |
+| 문자열 | `issuer`·`relay_host`. 한 줄 입력이며 앞뒤 공백을 자르지 않음. UTF-8 1~256바이트 | 입력 수정 | 범위를 벗어나면 CPY-193. 실행 값이 `null`이고 입력이 비어 있으면 바꾸지 않은 값으로 보고 전송하지 않음(이 문서의 판단, 사용자 결정 없음) | DASH-036 |
+| 변경 내용 확인 | 화면 검사 통과 후에만 열기 | 선택 | 바뀐 키별 이전·새 값. 목록은 추가·삭제 항목. 빈 목록은 키별 의미를 경고(CPY-105·183·192). ticket `enabled`를 `false`에서 `true`로 바꾸면 그 키의 변경 항목 안에 CPY-194 경고(사용자 결정 2026-11-11(Q218)). 바뀐 값이 없어도 0개를 확인할 수 있음 | DASH-037·052 |
 | 확인 대화상자 | 키별 다음 검사·요청부터 적용되며 이미 끝난 검사·시작한 타이머·소켓 옵션은 유지한다는 안내(CPY-189, 사용자 결정 2026-11-08(Q190)). 정확한 적용 시점은 [설정 계약 1.8절](../contracts/config-v4.md#18-재로드-구분) | 취소·닫기 또는 적용 | 취소·닫기는 요청 없음·입력 유지·호출 버튼 초점 복귀. 적용은 보관한 `revision`과 바뀐 키만 `changes`로 PATCH. 변경이 없으면 PATCH 없이 보기로 이동 | DASH-037~039·052 |
 | 오류 안내 | 5.1절의 코드별 안내, 입력란 진단 또는 화면 상단 안내. SCR-004 `file.diagnostics`와 `config_file_invalid`도 같은 진단 번역 사용 | 수정·다시 불러오기·명시적 재시도·설정 보기 | 실패·결과 불명·저장 성공을 구분. 자동 재전송 없음 | DASH-040~049 |
 | 취소 | 저장하지 않음 | 선택 | SCR-004로 이동, 이탈 확인 없음 | DASH-053 |
 
-SCR-004는 [설정 v4 계약 1.2절](../contracts/config-v4.md#12-키-표)의 리스너·역할 테이블을 그대로 구분해야 한다. `relay.ws_viewer.*`·`relay.wss_viewer.*`는 표시하거나 전송하지 않는다. SCR-005는 현재 `settings-model.js`의 `fieldGroup` 분류를 재사용한다. 새 편집 구역은 만들지 않는다.
+SCR-004는 [설정 v4 계약 1.2절](../contracts/config-v4.md#12-키-표)의 리스너·역할 테이블을 그대로 구분해야 한다. `relay.ws_viewer.*`·`relay.wss_viewer.*`는 표시하거나 전송하지 않는다. SCR-005는 `settings-model.js`의 `fieldGroup` 분류를 재사용한다. 접속 ticket 키 8개만 새 마지막 구역에 둔다(사용자 결정 2026-11-11(Q215)).
 
-| v4 키 | SCR-004 표시 위치·적용 구분 | SCR-005의 기존 구역 |
+| v4 키 | SCR-004 표시 위치·적용 구분 | SCR-005 구역 |
 | --- | --- | --- |
 | `relay.ws.viewer.allow`·`relay.ws.server.allow`·`relay.wss.viewer.allow`·`relay.wss.server.allow` | 각 역할 테이블, 재로드 가능 | 출발지 IP 허용 목록(`sourceAllowLists`) |
 | `relay.ws.viewer.allowed_origins`·`relay.ws.server.allowed_origins`·`relay.wss.viewer.allowed_origins`·`relay.wss.server.allowed_origins` | 각 역할 테이블, 재로드 가능 | 접근 정책(`accessPolicies`) |
@@ -244,9 +246,11 @@ SCR-004는 [설정 v4 계약 1.2절](../contracts/config-v4.md#12-키-표)의 �
 | `relay.ws.viewer.enabled`·`relay.ws.server.enabled`·`relay.wss.viewer.enabled`·`relay.wss.server.enabled` | 각 역할 테이블, 재시작 필요 | 입력 없음 |
 | `relay.ws.listen`·`relay.wss.listen` | 각 리스너 테이블, 재시작 필요 | 입력 없음 |
 | `relay.wss.cert_file`·`relay.wss.key_file` | WSS 리스너 테이블, 재로드 가능 | 입력 없음. `management.cert_file`·`management.key_file`도 동일 |
+| `relay.ticket.viewer.enabled`·`issuer`·`relay_host`·`max_lifetime_secs`, `relay.ticket.server`의 같은 키 | `[relay.ticket.viewer]`·`[relay.ticket.server]` 테이블, 재로드 가능 | 접속 ticket(`accessTickets`). 그 역할이 WS 또는 WSS에서 켜져 있을 때만 `editable = true` |
+| `relay.ticket.viewer.public_keys_file`·`relay.ticket.server.public_keys_file` | 각 ticket 테이블, 재로드 가능. 경로만 표시 | 입력 없음 |
 | `recent_logs.max_entries` | `recent_closed.max_entries` 옆, 재시작 필요 | 입력 없음 |
 
-`trusted_proxies = []`는 전달 헤더를 신뢰하지 않는다는 뜻이다. 역할의 `allow = []`처럼 모든 새 접속을 거절하는 목록이 아니다. 확인 대화상자는 이 키에 CPY-105를 쓰지 않고 CPY-183을 써야 한다. 역할의 `allowed_origins = []`는 Origin이 있는 요청을 거절한다. Origin이 없는 요청은 Origin 비교를 생략하고 IP 검사를 한다. 그 역할에 접속 ticket 확인을 켰으면 ticket 확인도 한다([WebSocket 계약](../contracts/websocket-relay-v2.md), 사용자 결정 2026-11-11(Q196)). 이 키에도 CPY-105 대신 CPY-184를 써야 한다.
+`trusted_proxies = []`는 전달 헤더를 신뢰하지 않는다는 뜻이다. 역할의 `allow = []`처럼 모든 새 접속을 거절하는 목록이 아니다. 확인 대화상자는 이 키에 CPY-105를 쓰지 않고 CPY-183을 써야 한다. 역할의 `allowed_origins = []`는 Origin이 있는 요청을 거절한다. Origin이 없는 요청은 Origin 비교를 생략하고 IP 검사를 한다. 그 역할에 접속 ticket 확인을 켰으면 ticket 확인도 한다([WebSocket 계약](../contracts/websocket-relay-v2.md), 사용자 결정 2026-11-11(Q196)). 이 키에도 CPY-105 대신 CPY-192를 써야 한다. CPY-192는 CPY-184를 대체한다(사용자 결정 2026-11-11(Q217)).
 `trusted_proxies`에는 프록시 주소만 넣어야 하며 클라이언트 범위를 넣어서는 안 된다. 모든 전달 주소가 신뢰 프록시에 속하면 요청을 거절한다. 이 입력 도움말은 CPY-185로 표시한다. IP·CIDR·범위의 문법과 진단은 기존 출발지 IP 목록과 같다.
 `trusted_proxies` 변경은 다음 수락 검사 또는 업그레이드 검사에 적용한다. 역할 `allow` 변경은 다음 수락 시의 합집합 검사와 업그레이드 시의 역할 검사에 적용한다. `allowed_origins` 변경은 다음 업그레이드 요청에 적용한다. 이미 끝난 검사의 결과는 유지한다. 수락됐지만 아직 업그레이드하지 않은 연결도 새 값으로 업그레이드 검사를 할 수 있다. CPY-100의 채택 원문은 보존하고 이 차이를 담은 CPY-189를 교체안으로 둔다.
 
@@ -388,7 +392,7 @@ SCR-004는 [설정 v4 계약 1.2절](../contracts/config-v4.md#12-키-표)의 �
 - 정수는 소수·지수 표기 없이 십진 정수로 입력한다. 빈 값·정수가 아닌 값은 보내지 않는다. 각 정수는 GET 항목의 `min` 이상 `max` 이하다. `limits.waiting ≤ limits.relay_connections`를 함께 검사한다. 범위는 [설정 계약 1.2·1.6절](../contracts/config-v4.md)을 바꾸지 않는다.
 - 화면 검사는 서버 검증을 대신하지 않는다. 오류 목록의 순서는 화면 입력 순서다. 목록 전송 전에 빈 줄을 제외한 배열 인덱스와 화면의 1부터 세는 원래 줄 번호를 연결한다. 예를 들어 원래 1·3·4줄을 전송했을 때 `relay.tcp_viewer.allow[2]`는 그 입력란의 4줄 오류다. 첨자는 0부터 센다. 진단 첨자가 없으면 입력란 전체 오류다. 입력란으로 연결할 수 없는 진단은 화면 상단에 키와 같은 번역 규칙의 문구로 표시한다.
 - 화면 검사 실패와 서버 `config_invalid` 응답은 오류 요약을 알리고 첫 오류 입력란으로 초점을 옮긴다. 목록 줄 오류에는 해당 줄 범위도 선택한다. 진단은 안정된 `code`로 판정한다. 아래 표에 있는 코드는 서버 `message`를 보여 주지 않고 현재 화면 언어의 CPY 문구를 쓴다. 목록 줄에는 CPY-117의 `{diagnostic}` 자리에 그 문구를 넣는다. 입력값을 오류 안내에 따로 반복하지 않는다.
-- 아래 표는 편집 대상 29개 키의 필수 여부·자료형·범위·관계·목록 문법에서 생길 수 있는 모든 진단 코드를 포함한다([설정 계약 2.1절](../contracts/config-v4.md#21-설정-오류와-준비-실패)). 화면 검사로 막는 오류도 서버가 보낼 수 있으므로 번역한다. `GET file.diagnostics`, `400 config_invalid`, `409 config_file_invalid`에 모두 같은 대응을 쓴다. 파일 자체·편집 범위 밖 오류 등 표에 없는 코드만 서버 `message`를 받은 그대로 표시하고 `code`를 함께 보인다. 알 수 없는 문구가 현재 화면 언어와 다를 수 있음을 허용한다.
+- 아래 표는 편집 대상 37개 키의 필수 여부·자료형·범위·관계·목록 문법에서 생길 수 있는 진단 코드를 포함한다([설정 계약 2.1절](../contracts/config-v4.md#21-설정-오류와-준비-실패)). 화면 검사로 막는 오류도 서버가 보낼 수 있으므로 번역한다. `GET file.diagnostics`, `400 config_invalid`, `409 config_file_invalid`에 모두 같은 대응을 쓴다. 파일 자체·편집 범위 밖 오류 등 표에 없는 코드만 서버 `message`를 받은 그대로 표시하고 `code`를 함께 보인다. 공개 키 파일을 읽은 결과인 `ticket_keys_invalid`도 표에 없는 코드로 처리한다. 채택한 문구가 없기 때문이다(이 문서의 판단, 사용자 결정 없음). 알 수 없는 문구가 현재 화면 언어와 다를 수 있음을 허용한다.
 
 | 진단 `code` | 화면 문구 | 적용 대상 |
 | --- | --- | --- |
@@ -488,7 +492,7 @@ SCR-004는 [설정 v4 계약 1.2절](../contracts/config-v4.md#12-키-표)의 �
 | DASH-017 | FR-06 | SCR-003 | 올바른 계정명·비밀번호로 로그인 | 인증 성공 뒤 SCR-001, 관리 조회 가능 |
 | DASH-018 | FR-06 | SCR-003 | 빈 입력, 틀린 자격 증명, 또는 실패 기준 초과 뒤 로그인 | 빈 입력 전송 없음, 실패는 공통 안내·비밀번호 제거, 보호 데이터 없음, 실패 기준 초과 시에도 같은 공통 안내 |
 | DASH-019 | FR-06 | SCR-001·SCR-002 | 로그아웃 성공 또는 응답 유실 후 이전 화면 접근 | 성공 시 데이터 제거·로그인 이동, 유실 시 완료 오표시 없음과 SCR-003의 결과 확인 필요 안내(CPY-076), 중계 세션은 유지 |
-| DASH-020 | FR-06 | SCR-001 | 최근 종료 목록 조회: 정상 EOF·연결 오류·관리자 종료로 끝난 세션, 빈 목록 | 원인·종료 시각·방향별 바이트 표시, 종료 시각은 현지 시각과 시간대, 바이트는 KiB/MiB로 표시, 빈 목록은 "최근 종료 없음", 개수 배지는 응답 항목 수(빈 목록은 0건/0 items), 종료 항목에 종료 행동 없음 |
+| DASH-020 | FR-06 | SCR-001 | 최근 종료 목록 조회: 정상 EOF·연결 오류·관리자 종료·접속 ticket 세션 만료(`session_expired`)로 끝난 세션, 빈 목록 | 원인·종료 시각·방향별 바이트 표시, `session_expired`는 CPY-190과 중립 배지, 종료 시각은 현지 시각과 시간대, 바이트는 KiB/MiB로 표시, 빈 목록은 "최근 종료 없음", 개수 배지는 응답 항목 수(빈 목록은 0건/0 items), 종료 항목에 종료 행동 없음 |
 | DASH-021 | FR-06 | SCR-001 | 초기 교환 중 연결·Mode I 대상 연결 중 연결을 만들고 L·Lm 사용량이 알려진 상태에서 서버 요약 표시, 값을 확인하지 못한 경우 | 연결 수와 L·Lm 사용량이 관리 스펙(MGT-026) 값과 일치, 확인하지 못한 값은 0으로 표시하지 않음 |
 | DASH-022 | FR-06 | SCR-001·SCR-002 | P를 기본값과 다른 값으로 설정한 서버와 P를 설정하지 않은 서버에서 각각 폴링 관찰 | 설정한 서버는 설정한 P 주기, 설정하지 않은 서버는 2초 주기로 조회, 같은 조회 중첩 없음 |
 | DASH-023 | FR-06 | SCR-001·SCR-002·SCR-003·SCR-006 | 데스크톱 폭과 모바일 폭에서 최신 Chrome·Edge·Firefox·Safari로 각 화면을 사용 | 필수 정보와 상세 이동·종료 확인·취소·로그인·로그아웃·로그 필터·상세·더 보기·다운로드 행동이 가려지지 않고 동작 |
@@ -497,15 +501,15 @@ SCR-004는 [설정 v4 계약 1.2절](../contracts/config-v4.md#12-키-표)의 �
 | DASH-026 | FR-06 | SCR-002 | 상세 화면 URL의 세션 식별자 형식이 틀려 진입([4절 잘못된 세션 식별자 행](#4-화면-상태와-갱신)) | 요청을 보내지 않고 잘못된 세션 식별자 안내(CPY-067) 표시, 종료 행동 없음, 대상 없음 안내와 구분. 사용자 결정 2026-10-22(Q51) |
 | DASH-027 | FR-06 | SCR-003 | 로그인 요청 뒤 서버 오류 응답 또는 응답 없음([4절 로그인 요청 실패 행](#4-화면-상태와-갱신)) | 로그인 요청 실패 안내(CPY-077) 표시, 인증 실패 안내(CPY-074)와 다른 문구, 중복 전송 비활성. 사용자 결정 2026-10-22(Q51) |
 | DASH-028 | FR-06 | SCR-001·002·004·005·006 | 세 내비게이션 선택, 보호된 설정·로그 URL 직접 진입 | 운영 현황·로그·설정 이동과 활성 항목 일치. 상세에서는 운영 현황, 편집에서는 설정 활성. 관리 세션 없으면 로그인, 보호 데이터 없음. 세 항목의 순서는 채택 뒤 시안과 대조 |
-| DASH-029 | FR-06 | SCR-004 | v4의 기본값·null·빈 배열·긴 경로·재로드 33개가 있는 설정 조회 | 모든 키가 계약 순서로 리스너·역할 구역별 표시. 실행 값·파일 차이 구분. 재시작 없이 적용·재시작 필요, TLS 경로 4개는 경로만 표시하고 파일 내용 없음. recent_logs.max_entries는 recent_closed.max_entries 옆에 재시작 필요로 표시 |
+| DASH-029 | FR-06 | SCR-004 | v4의 기본값·null·빈 배열·긴 경로·재로드 43개가 있는 설정 조회 | 모든 키가 계약 순서로 리스너·역할 구역별 표시. 실행 값·파일 차이 구분. 재시작 없이 적용·재시작 필요, TLS 경로 4개와 ticket 공개 키 파일 경로 2개는 경로만 표시하고 파일 내용 없음. ticket 키 10개는 `[relay.ticket.viewer]`·`[relay.ticket.server]` 구역에 재시작 없이 적용으로 표시. recent_logs.max_entries는 recent_closed.max_entries 옆에 재시작 필요로 표시 |
 | DASH-030 | FR-06 | SCR-004 | 파일 상태가 in_effect 또는 pending | 각 안내·차이 키 표시. 기능 켜짐이면 편집 가능. 진입·새로고침 GET만 있고 자동 폴링 없음 |
 | DASH-031 | FR-06 | SCR-004 | 재시작 필요 차이가 남은 파일 | restart_required와 해당 키, 실행 값 표시. 편집 불가 |
 | DASH-032 | FR-06 | SCR-004·005 | 검증 실패 또는 읽지 못한 파일. 두 언어에서 file.diagnostics 표시 | invalid 진단·unreadable 안내 구분. 알려진 진단 코드는 CPY-140~148, 모르는 코드만 원문·코드 표시. 실행 값 유지, 편집·적용 불가 |
 | DASH-033 | FR-06 | SCR-004 | last_reload가 null | 이 프로세스 재로드 이력 없음. 실패·0 시각으로 표시하지 않음 |
 | DASH-034 | FR-06 | SCR-004·005 | 편집 꺼짐 서버에서 보기·편집 직접 URL 진입 | 보기는 제공. 입력·적용 없음. management.config_edit와 재시작 안내 |
-| DASH-035 | FR-06 | SCR-005 | 일부 역할·리스너·Mode I가 꺼진 v4 서버에서 편집 진입. 신뢰 프록시·각 역할 목록 수정 | 편집 대상 29개 중 editable 키만 다섯 구역 입력. 역할 allow는 출발지 IP 허용 목록, 역할 allowed_origins와 리스너 trusted_proxies는 접근 정책. TLS 경로 4개·enabled·listen·recent_logs.max_entries 등 재시작 필요 키 입력 없음 |
-| DASH-036 | FR-06 | SCR-005 | 목록 빈 줄·공백, 빈 수·소수·범위 밖·Lw > L 입력 후 확인 | 빈 줄만 제외, 공백은 오류. 나머지 오류도 필드 연결, 첫 오류 초점, PATCH 없음 |
-| DASH-037 | FR-06 | SCR-005 | 유효한 목록·숫자를 바꾸고 확인. allow·allowed_origins·trusted_proxies를 각각 빈 목록으로 바꿈 | 바뀐 키·이전→새 값·추가/삭제 항목. 키별 빈 목록 경고(CPY-105·183·184)를 구분하고 trusted_proxies를 접속 전부 거절로 표시하지 않음. 기존 연결·타이머·소켓 옵션 유지 안내 |
+| DASH-035 | FR-06 | SCR-005 | 일부 역할·리스너·Mode I가 꺼지고 한 역할만 WS·WSS에서 켜진 v4 서버에서 편집 진입. 신뢰 프록시·각 역할 목록·켜진 역할의 ticket 키 수정 | 편집 대상 37개 중 editable 키만 여섯 구역 입력. 역할 allow는 출발지 IP 허용 목록, 역할 allowed_origins와 리스너 trusted_proxies는 접근 정책, 켜진 역할의 ticket 키 4개는 마지막 접속 ticket 구역. 꺼진 역할의 ticket 키·ticket 공개 키 파일 경로 2개·TLS 경로 4개·enabled·listen·recent_logs.max_entries 등 재시작 필요 키 입력 없음 |
+| DASH-036 | FR-06 | SCR-005 | 목록 빈 줄·공백, 빈 수·소수·범위 밖·Lw > L, 빈 issuer·257바이트 relay_host 입력 후 확인. ticket enabled 체크박스 선택 | 빈 줄만 제외, 공백은 오류. 문자열 길이 오류는 CPY-193. 나머지 오류도 필드 연결, 첫 오류 초점, PATCH 없음. 체크박스 변경은 불리언 값으로 확인 대화상자에 표시 |
+| DASH-037 | FR-06 | SCR-005 | 유효한 목록·숫자·ticket 값을 바꾸고 확인. allow·allowed_origins·trusted_proxies를 각각 빈 목록으로 바꿈. ticket enabled를 false에서 true로 바꿈 | 바뀐 키·이전→새 값·추가/삭제 항목. 키별 빈 목록 경고(CPY-105·183·192)를 구분하고 trusted_proxies를 접속 전부 거절로 표시하지 않음. enabled 변경 항목 안에 CPY-194 경고. 기존 연결·타이머·소켓 옵션 유지 안내 |
 | DASH-038 | FR-06 | SCR-005 | 확인 대화상자 취소·Escape | PATCH 없음, 입력 유지, 호출 버튼 초점 복귀 |
 | DASH-039 | FR-06 | SCR-005·004 | 확인 뒤 적용·200 응답 | revision·변경 키와 CSRF 전송, 중복 저장 없음. 보기 이동·GET·실제 applied 키 수 안내 |
 | DASH-040 | FR-06 | SCR-005 | 두 언어에서 서버 config_invalid. 5.1절 진단 코드 9종과 모르는 코드를 각각 반환하고, 빈 줄을 끼운 목록에는 key[2] 진단 | 입력 유지, 전송 첨자를 원래 줄 번호로 바꿔 표시·선택. 알려진 코드는 현재 언어의 CPY-140~148을 CPY-117에 넣고 서버 원문은 표시하지 않음. 모르는 코드만 원문과 코드 표시. 첫 오류 초점. 파일 변경 성공으로 표시하지 않음 |
@@ -535,6 +539,8 @@ SCR-004는 [설정 v4 계약 1.2절](../contracts/config-v4.md#12-키-표)의 �
 
 2026-11-08 추가·변경분(DASH-054~063, DASH-023·028·029·035·037)은 미실행 (구현 전)이다. 기존 실행 기록은 당시 범위의 증거이며 이번 확장분의 통과를 뜻하지 않는다. 후속: 구현은 커밋 `3df0693`이며, DASH-054~063과 확장한 DASH-028·029·035·037은 커밋 `51bd747`의 두 OS 게이트에서 통과했다. DASH-023은 보고서에서 미연결(수동)이며, [검증 4.32절](../how-to/verify-dashboard-frontend.md#432-로그-화면-네-엔진-확인-2026-11-08)의 네 엔진 16회 확인으로 통과로 판정했다([WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)).
 
+2026-11-11 접속 ticket 변경분(DASH-020·029·035·036·037)은 사용자 결정 2026-11-11(Q215~Q219)을 따른다. 기존 실행 기록은 변경 전 조건의 증거다.
+
 ## 8. 미결정 사항
 
 시각 기준과 모바일 폭 배치는 [디자인 기준](../design/DESIGN.md)(Accepted)이 정한다. 토큰·스타일·컴포넌트는 이 문서에서 만들지 않는다.
@@ -544,19 +550,7 @@ DASH-TBD-003(로그인·세션 오류의 화면 메시지 문구)은 사용자 �
 - 설정 화면은 커밋 `7ce077f`에서 구현했다. DASH-028~053 시험은 커밋 `eae442f`의 두 OS 게이트에서 통과했다([검증 4.27~4.29절](../how-to/verify-dashboard-frontend.md#427-설정-화면-구현과-시안-대조-작업-66-2026-11-08), [작업 6.9 판정표](../how-to/set-up-and-verify.md#42-작업-69-판정표)). 이 시안 확인을 구현 검증으로 보지 않는다.
   후속: 2026-11-08에 로그 화면·v4 범위로 확장한 DASH-028·029·035·037은 미실행 (구현 전)이다. 위 통과 기록은 확장 전 조건에만 적용한다. 후속: 구현은 커밋 `3df0693`이며, 시험은 커밋 `51bd747`의 두 OS 게이트에서 통과했다([WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)).
 
-DASH-TBD-001은 결정되어 4.1절과 설정 계약에 반영했으며 재사용하지 않는다. DASH-TBD-002는 [관리 API v1](../contracts/management-api-v1.md) 채택(2026-10-16)으로 결정되어 계약 1.8·1.11절에 반영했으며 재사용하지 않는다. DASH-TBD-004(시각 기준·모바일 배치·표시 자릿수)는 [디자인 기준](../design/DESIGN.md) 채택(2026-10-20)으로 결정했으며 재사용하지 않는다. DASH-TBD-005(설정 보기·편집의 이름·문구·시각 기준)는 사용자 결정 2026-11-08(Q174~Q176)으로 결정되어 이 문서 1·9절과 [관리 API 계약](../contracts/management-api-v1.md)·[디자인 기준](../design/DESIGN.md)·[설정 시안](../design/mockups/dashboard.html)에 반영했으며 재사용하지 않는다.
-
-| ID | 항목 | 영향과 제약 | 확정 위치 |
-| --- | --- | --- | --- |
-| DASH-TBD-006 | 접속 ticket 키 표시·편집과 종료 원인 `session_expired`의 문구 | 사용자 결정 2026-11-11(Q214)로 시안·문구(CPY)는 구현 작업에서 정한다. 그 전까지 아래의 기존 규칙 해석을 따른다. 구현·계약 테스트는 미실행(구현 전)이다. | 구현 작업에서 [이 스펙 9절](#9-화면-문구)과 [HTML 시안](../design/mockups/dashboard.html)에 확정한다. |
-
-DASH-TBD-006의 확정 전에는 다음과 같이 해석한다. 기존 SCR 문장·시나리오·CPY 원문은 이번 변경에서 바꾸지 않는다.
-
-- SCR-004는 `items`의 모든 키를 [설정 계약 1.2절](../contracts/config-v4.md#12-키-표) 순서와 테이블별로 묶는 규칙을 따른다. 따라서 API가 보낸 ticket 키 10개도 `[relay.ticket.viewer]`와 `[relay.ticket.server]`로 나누어 보인다. 기본값을 포함한 실행 값을 기존 자료형 표시 규칙으로 보인다. 별도 통합 구역이나 편집 입력을 뜻하지 않는다. DASH-029의 모든 키 표시 규칙도 이 범위에 적용한다.
-- 설정 계약 4.1.0의 재로드 대상은 43개이며 관리 API 편집 대상은 37개다. SCR-004의 `items.reload = dynamic` 표시 규칙에 따라 ticket 키 10개는 재시작 없이 적용으로 보인다. `public_keys_file` 2개는 경로만 보이며 파일 내용·편집 입력은 없다. SCR-004와 DASH-029에 남긴 33개 표기는 ticket 추가 전 범위다. 새 키의 표시·시안 대조는 이 미결정 사항에서 다룬다.
-- SCR-005와 DASH-035는 기존 다섯 구역의 29개 키 가운데 `items.editable = true`인 키만 입력란으로 둔다. 관리 API가 ticket 키 8개를 편집 가능으로 보내더라도 화면 입력란은 아직 추가하지 않는다. 새 불리언·문자열·정수 입력과 구역 배치·문구는 구현 작업에서 함께 정한다.
-- 최근 종료 목록의 `session_expired`에는 아직 CPY가 없다. CPY-045~050·083의 기존 종료 원인 문구를 대신 쓰지 않는다. 3절의 번역 범위 규칙에 따라 한국어·English 화면 모두 받은 값 `session_expired`를 그대로 보인다. SCR-006의 로그 `entry`도 기존 규칙대로 값을 번역·변경하지 않는다.
-- CPY-184의 "Origin이 없는 요청은 IP 검사만 합니다"는 ticket을 켜지 않은 역할의 동작이다. ticket을 켠 역할에서는 Origin이 없는 요청도 ticket 확인을 거친다. CPY-184의 채택 원문은 이번 변경에서 바꾸지 않는다. 고칠 문구는 이 미결정 사항에서 함께 정한다.
+DASH-TBD-001은 결정되어 4.1절과 설정 계약에 반영했으며 재사용하지 않는다. DASH-TBD-002는 [관리 API v1](../contracts/management-api-v1.md) 채택(2026-10-16)으로 결정되어 계약 1.8·1.11절에 반영했으며 재사용하지 않는다. DASH-TBD-004(시각 기준·모바일 배치·표시 자릿수)는 [디자인 기준](../design/DESIGN.md) 채택(2026-10-20)으로 결정했으며 재사용하지 않는다. DASH-TBD-005(설정 보기·편집의 이름·문구·시각 기준)는 사용자 결정 2026-11-08(Q174~Q176)으로 결정되어 이 문서 1·9절과 [관리 API 계약](../contracts/management-api-v1.md)·[디자인 기준](../design/DESIGN.md)·[설정 시안](../design/mockups/dashboard.html)에 반영했으며 재사용하지 않는다. DASH-TBD-006(접속 ticket 키 표시·편집과 종료 원인 `session_expired`의 문구)은 사용자 결정 2026-11-11(Q215~Q219)으로 결정되어 SCR-001·004·005, DASH-020·029·035~037, 9절의 CPY-190~194와 [HTML 시안](../design/mockups/dashboard.html)에 반영했으며 재사용하지 않는다.
 
 | 항목 | 상태 | 채택한 내용 |
 | --- | --- | --- |
@@ -566,6 +560,7 @@ DASH-TBD-006의 확정 전에는 다음과 같이 해석한다. 기존 SCR 문�
 | 세션 필터 URL | (해결) 사용자 결정 2026-11-08(Q191)으로 채택했다. | `/#/logs?session_id={session_id}` 형식 |
 | 최근 로그 API 이름 | (해결) 사용자 결정 2026-11-08(Q191)으로 채택했다. | level·event·q·session_id·before·after·limit와 as_of·max_entries·oldest_seq·latest_seq·has_more·items[].seq·items[].entry |
 | 신뢰 프록시 전체 범위 경고 | (해결) 사용자 결정 2026-11-08(Q191)으로 채택했다. | ops-info의 사건·경고 코드 `trust_all_proxies` 이름. 로그 사건 선택 목록도 채택된 ops-info 이름을 따라야 함 |
+| 접속 ticket 화면·문구 | (해결) 사용자 결정 2026-11-11(Q215~Q219)으로 채택했다. | SCR-005 마지막 구역 "접속 ticket", 불리언 체크박스, CPY-190~194, SCR-001·004·005 시안 |
 
 SCR-006 경로·세 번째 내비게이션·CPY-149~189와 v4 설정 화면은 커밋 `3df0693`에서 구현했다. 시안 채택은 사용자 결정 2026-11-08(Q189)에 따른다. 구현·시험 판정은 [WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)를 따른다.
 
@@ -575,6 +570,7 @@ SCR-006 경로·세 번째 내비게이션·CPY-149~189와 v4 설정 화면은 �
 - 설정 보기·편집의 CPY-086~148은 사용자 결정 2026-11-08(Q175)으로 한국어·English 문구 전체를 채택했다. 코드별 진단 문구 CPY-140~148도 포함한다.
 - CPY-083은 사용자 결정 2026-11-02(Q94)의 내부 오류 종료 원인을 표시한다.
 - CPY-149~189는 사용자 지시 2026-11-08과 사용자 결정 2026-11-08(Q184·Q185·Q186·Q187·Q188)에 따른 문구이며 사용자 결정 2026-11-08(Q190)으로 모두 채택했다. 기존 CPY-040·058·100 원문은 유지하고 대체 문구를 CPY-187·188·189에 따로 둔다.
+- CPY-190~194는 사용자 결정 2026-11-11(Q217·Q218)으로 채택했다. CPY-192는 CPY-184를 대체하며 CPY-184 원문은 이력으로 유지한다.
 
 ### 9.1 상태와 읽는 법
 
@@ -659,6 +655,7 @@ SCR-006 경로·세 번째 내비게이션·CPY-149~189와 v4 설정 화면은 �
 | CPY-049 | 종료 원인 `close_timeout` | 정리 제한 시간 초과 | Cleanup time limit exceeded | 관리 스펙 §2.3 |
 | CPY-050 | 종료 원인 `server_shutdown` | 서버 종료 | Server shutdown | 관리 스펙 §2.3, 용어집 |
 | CPY-083 | 종료 원인 `internal_error` | 내부 오류 | Internal error | 관리 스펙 §2.3, Q94 |
+| CPY-190 | 종료 원인 `session_expired`(중립 배지) | 세션 만료 | Session expired | 사용자 결정 2026-11-11(Q217), 관리 스펙 MGT-052 |
 | CPY-079 | 연결 사용량 상한 | 상한 {n} | Limit {n} | 디자인 기준 Gauge("상한 n"). 사용자 결정 2026-10-23(Q55) |
 | CPY-080 | 연결 사용량 상한을 읽지 못함 | 상한 확인 불가 | Limit unavailable | 관리 스펙 §2 (확인 불가, 0으로 표시하지 않음). 사용자 결정 2026-10-23(Q55) |
 | CPY-084 | 세 목록 제목의 개수, n=0 또는 n≥2 | {n}건 | {n} items | DESIGN 개수 배지. 사용자 결정 2026-11-05(Q115) |
@@ -814,12 +811,16 @@ SCR-006 경로·세 번째 내비게이션·CPY-149~189와 v4 설정 화면은 �
 | CPY-181 | SCR-002 대상 전달 주소 라벨 | Server/대상 전달 주소 | Server/target forwarded address | 사용자 결정 2026-11-08(Q190), 사용자 결정 2026-11-08(Q187) |
 | CPY-182 | SCR-002 세션 필터 로그 이동 | 로그 보기 | View logs | 사용자 결정 2026-11-08(Q190), 사용자 결정 2026-11-08(Q186) |
 | CPY-183 | SCR-005 빈 신뢰 프록시 목록 경고 | 빈 trusted_proxies 목록은 전달 헤더를 신뢰하지 않습니다. 소켓 상대 IP로 클라이언트 주소를 검사합니다. | An empty trusted_proxies list does not trust forwarded headers. The socket peer IP is used as the client address. | 사용자 결정 2026-11-08(Q190), 스펙 SCR-005 |
-| CPY-184 | SCR-005 빈 Origin 목록 경고 | 빈 allowed_origins 목록은 Origin이 있는 요청을 거절합니다. Origin이 없는 요청은 IP 검사만 합니다. | An empty allowed_origins list rejects requests with Origin. Requests without Origin use only the IP check. | 사용자 결정 2026-11-08(Q190), WebSocket 계약 |
+| CPY-184 | SCR-005 빈 Origin 목록 경고. CPY-192가 대체하며 원문은 이력으로 유지 | 빈 allowed_origins 목록은 Origin이 있는 요청을 거절합니다. Origin이 없는 요청은 IP 검사만 합니다. | An empty allowed_origins list rejects requests with Origin. Requests without Origin use only the IP check. | 사용자 결정 2026-11-08(Q190), WebSocket 계약 |
 | CPY-185 | SCR-005 신뢰 프록시 도움말 | trusted_proxies에는 프록시 주소만 입력하십시오. 클라이언트 범위는 넣지 마십시오. 전달 주소가 모두 신뢰 프록시에 속하면 요청을 거절합니다. | Enter only proxy addresses in trusted_proxies. Do not include client ranges. A request is rejected when all forwarded addresses belong to trusted proxies. | 사용자 결정 2026-11-08(Q190), WebSocket 계약 1.8절 |
 | CPY-186 | 세션 필터 보관 범위 안내 | 보관 중인 로그만 검색합니다. 세션 시작 로그가 제거됐으면 연결별 로그 일부는 포함되지 않을 수 있습니다. | Only retained logs are searched. Some connection logs may be excluded if the session start log has been removed. | 사용자 결정 2026-11-08(Q190), 관리 API 계약 1.15절 |
 | CPY-187 | CPY-040 대체 문구. 원문은 9.3.2절에 유지 | 세션, 모드, 전송 경로(Viewer → 대상), 시작, Viewer->대상 / 대상->Viewer, 상대 주소, 상세 | Session, Mode, Transport (Viewer → target), Started, Viewer->target / target->Viewer, Peer address, Details | 사용자 결정 2026-11-08(Q190), 스펙 SCR-001·DASH-062 |
 | CPY-188 | CPY-058 대체 문구. 원문은 9.3.3절에 유지 | 주소는 소켓 상대 주소입니다. 신뢰 프록시를 거쳤으면 전달 주소를 따로 표시합니다. | Addresses are socket peer addresses. Forwarded addresses are shown separately when a trusted proxy is used. | 사용자 결정 2026-11-08(Q190), 스펙 SCR-002·DASH-062 |
 | CPY-189 | CPY-100 대체 문구. 원문은 9.3.5절에 유지 | 바뀐 값은 키별 다음 검사·요청부터 적용됩니다. 이미 끝난 검사·시작한 타이머·설정한 소켓 옵션은 이전 결과를 유지합니다. 기존 중계 세션은 계속 동작합니다. | Changed values apply from the next check or request for each key. Completed checks, started timers, and configured socket options keep their previous results. Existing relay sessions continue. | 사용자 결정 2026-11-08(Q190), 설정 계약 1.8절·사용자 결정 2026-11-08(Q184) |
+| CPY-191 | SCR-005 접속 ticket 구역 제목 | 접속 ticket | Access tickets | 사용자 결정 2026-11-11(Q217), 스펙 SCR-005 |
+| CPY-192 | CPY-184 대체 문구. SCR-005 빈 Origin 목록 경고 | 빈 allowed_origins 목록은 Origin이 있는 요청을 거절합니다. Origin이 없는 요청은 IP 검사를 하고, 그 역할에 접속 ticket 확인을 켰으면 ticket도 확인합니다. | An empty allowed_origins list rejects requests with Origin. Requests without Origin use the IP check, and also the ticket check when access tickets are on for the role. | 사용자 결정 2026-11-11(Q217), WebSocket 계약 1.9절 |
+| CPY-193 | SCR-005 문자열 길이 오류(`issuer`·`relay_host`) | 1바이트 이상 256바이트 이하로 입력하십시오. | Enter 1 to 256 bytes. | 사용자 결정 2026-11-11(Q217), 설정 계약 1.2절 |
+| CPY-194 | SCR-005 확인 대화상자의 ticket `enabled` false→true 경고 | 접속 ticket 확인을 켜면 이 역할의 WS·WSS 업그레이드 요청 가운데 유효한 ticket이 없는 요청을 거절합니다. 기존 중계 세션은 계속 동작합니다. | Turning on access ticket checks rejects this role's WS and WSS upgrade requests that have no valid ticket. Existing relay sessions continue. | 사용자 결정 2026-11-11(Q218), WebSocket 계약 1.9.6절 |
 
 ### 9.4 근거 문서
 
@@ -852,5 +853,6 @@ SCR-006 경로·세 번째 내비게이션·CPY-149~189와 v4 설정 화면은 �
 17. 최근 로그와 v4 화면 확장. 사용자 지시 2026-11-08과 사용자 결정 2026-11-08(Q185)으로 메모리의 최근 로그·설정 범위를, 사용자 결정 2026-11-08(Q186)으로 SCR-006과 다섯 기능을 반영했다. 사용자 결정 2026-11-08(Q187)으로 로그 API·전달 주소·대상 전송 경로 이름을, 사용자 결정 2026-11-08(Q188)으로 공유 WS·WSS 리스너의 v4 키를 반영했다. CPY-149~188, 새 시안·순서·세션 필터 URL·API 필드 이름은 당시 미채택이었다. CPY-040·058의 기존 채택 원문은 유지했다. DASH-054~063을 추가하고 DASH-023·028·029·035·037은 기존 ID로 확장했다. DASH-023에 로그·SCR-006을, DASH-028에 세 항목을, DASH-029·035에 33/29개 키와 구역을, DASH-037에 빈 trusted_proxies의 다른 의미를 더했다. 기존 실행 기록은 바꾸지 않았다. 추가·변경분 구현과 검증은 미실행 (구현 전)이다. 후속: 사용자 결정 2026-11-08(Q189~Q191)으로 채택했다(18항). 후속: 구현은 커밋 `3df0693`이며, 시험은 커밋 `51bd747`의 두 OS 게이트와 DASH-023의 네 엔진 확인으로 통과로 판정했다([WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)).
    후속: 같은 변경에서 CPY-189를 CPY-100의 교체안으로 더했다. 새 연결뿐 아니라 아직 끝나지 않은 WS·WSS 업그레이드 검사에도 새 정책을 적용하므로 검사별 적용 시점으로 설명한다. 기존 CPY-100은 덮지 않았으며 교체안은 당시 미채택이었다. 후속: 사용자 결정 2026-11-08(Q190)으로 CPY-189를 채택해 CPY-100을 대체했다.
 18. 로그 화면 확장 채택. 사용자 결정 2026-11-08(Q189)으로 [HTML 시안](../design/mockups/dashboard.html)과 [디자인 기준의 로그 화면 확장](../design/DESIGN.md#로그-화면-확장)을 채택했다. 범위는 SCR-006의 16개 상태 × ko·en, SCR-001·002·004·005 변경과 상단 막대 순서 운영 현황 · 로그 · 설정이다. 사용자 결정 2026-11-08(Q190)으로 이 절의 CPY-149~189 ko/en 원문을 모두 채택했다. CPY-187·188·189는 CPY-040·058·100을 각각 대체하며 기존 행과 원문은 이력으로 유지한다. 시안의 "마지막 성공 갱신: 아직 없음 / None yet"은 채택한 문구가 아니며 SCR-006의 첫 성공 전 시각 자리에는 4절에 따라 CPY-035를 쓴다. 사용자 결정 2026-11-08(Q191)으로 [관리 API 계약 1.15절](../contracts/management-api-v1.md#115-최근-로그-get-apiv1logs)의 매개변수 `level`·`event`·`q`·`session_id`·`before`·`after`·`limit`, 응답 필드 `as_of`·`max_entries`·`oldest_seq`·`latest_seq`·`has_more`·`items[].seq`·`items[].entry`, 화면 URL `/#/logs?session_id={session_id}`와 경고 사건 `trust_all_proxies` 및 필드 `listener`·`item`·`phase`를 채택했다. 채택과 구현·검증 완료는 구분한다.
+19. 접속 ticket 화면. 사용자 결정 2026-11-11(Q214)로 시안·문구를 구현 작업에서 정하기로 했다. 사용자 결정 2026-11-11(Q215)로 SCR-005의 마지막 여섯째 구역 "접속 ticket"과 키 순서를, Q216으로 불리언 체크박스를, Q217로 CPY-190~193을, Q218로 CPY-194와 그 표시 위치를, Q219로 [HTML 시안](../design/mockups/dashboard.html)을 채택했다. 기존 DASH-020·029·035·036·037은 ID를 유지하고 기대 결과를 넓혔다. 빈 문자열 처리와 `ticket_keys_invalid`의 원문 표시는 이 문서의 판단이다(사용자 결정 없음).
 
 구현 판단(사용자 결정 없음): 4절에 SCR-003 '로그아웃 결과 확인 필요' 행을 따로 둔 것과, 4절 신규 행 세 개(SCR-002 잘못된 세션 식별자, SCR-003 로그아웃 결과 확인 필요, SCR-003 로그인 요청 실패)의 진입 조건과 보이는 내용 문장은 이 문서가 정했다.

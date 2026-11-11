@@ -15,7 +15,8 @@ use vnc_relay_app::settings::{
     DashboardSettings, EntryPointSettings, KeepaliveSettings, LimitSettings, LogOutput,
     LogSettings, LoginLimitSettings, ManagementSettings, Mode1Settings, Mode2Settings,
     RecentClosedSettings, RecentLogsSettings, RelaySettings, ReloadSettings, Settings,
-    StatusSettings, TimeoutSettings, TlsFiles, WsListenerSettings, WsRoleSettings,
+    StatusSettings, TicketRoleSettings, TicketSettings, TimeoutSettings, TlsFiles,
+    WsListenerSettings, WsRoleSettings,
 };
 use vnc_relay_domain::account::Argon2Params;
 use vnc_relay_domain::allow_list::{AllowList, IpItem, IpItemError};
@@ -260,12 +261,82 @@ fn read_relay(
     let tcp_server = read_tcp_listener(&mut relay, Listener::TcpServer, d);
     let ws = read_websocket_listener(&mut relay, Listener::Ws, base_dir, d);
     let wss = read_websocket_listener(&mut relay, Listener::Wss, base_dir, d);
+    let ticket = read_ticket(&mut relay, base_dir, d);
     relay.finish(d);
     Some(RelaySettings {
         tcp_viewer: tcp_viewer?,
         tcp_server: tcp_server?,
         ws: ws?,
         wss: wss?,
+        ticket: ticket?,
+    })
+}
+
+fn read_ticket(
+    relay: &mut Section<'_>,
+    base_dir: &Path,
+    d: &mut Diagnostics,
+) -> Option<TicketSettings> {
+    let mut table = relay.section("ticket", d);
+    let viewer = read_ticket_role(&mut table, "viewer", base_dir, d);
+    let server = read_ticket_role(&mut table, "server", base_dir, d);
+    table.finish(d);
+    Some(TicketSettings {
+        viewer: viewer?,
+        server: server?,
+    })
+}
+
+fn read_ticket_role(
+    ticket: &mut Section<'_>,
+    role: &'static str,
+    base_dir: &Path,
+    d: &mut Diagnostics,
+) -> Option<TicketRoleSettings> {
+    let mut table = ticket.section(role, d);
+    let enabled = table.bool("enabled", d).or(false);
+    let issuer = read_ticket_name(&mut table, "issuer", d);
+    let relay_host = read_ticket_name(&mut table, "relay_host", d);
+    let public_keys_file = read_path(&mut table, "public_keys_file", base_dir, d);
+    let max_lifetime = secs(&mut table, "max_lifetime_secs", 60, 10..=600, d);
+    let (issuer, relay_host, public_keys_file) = if enabled == Some(true) {
+        let condition = format!("{} = true", table.key_path("enabled"));
+        (
+            required(&table, "issuer", issuer, &condition, d).map(Some),
+            required(&table, "relay_host", relay_host, &condition, d).map(Some),
+            required(&table, "public_keys_file", public_keys_file, &condition, d).map(Some),
+        )
+    } else {
+        (
+            optional(issuer),
+            optional(relay_host),
+            optional(public_keys_file),
+        )
+    };
+    table.finish(d);
+    Some(TicketRoleSettings {
+        enabled: enabled?,
+        issuer: issuer?,
+        relay_host: relay_host?,
+        public_keys_file: public_keys_file?,
+        max_lifetime: max_lifetime?,
+        keys: Default::default(),
+    })
+}
+
+fn read_ticket_name(
+    table: &mut Section<'_>,
+    key: &'static str,
+    d: &mut Diagnostics,
+) -> Field<String> {
+    let path = table.key_path(key);
+    table.string(key, d).map(|text| {
+        if (1..=256).contains(&text.len()) {
+            Some(text.to_owned())
+        } else {
+            out_of_range(d, path, 1, 256);
+            None
+        }
     })
 }
 

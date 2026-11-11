@@ -48,6 +48,7 @@ const COPY = {
     causeTimeout: '정리 제한 시간 초과',
     causeShutdown: '서버 종료',
     causeInternalError: '내부 오류',
+    causeSessionExpired: '세션 만료',
     bytesHeader: 'Viewer->대상 / 대상->Viewer',
     details: '상세',
   },
@@ -89,6 +90,7 @@ const COPY = {
     causeTimeout: 'Cleanup time limit exceeded',
     causeShutdown: 'Server shutdown',
     causeInternalError: 'Internal error',
+    causeSessionExpired: 'Session expired',
     bytesHeader: 'Viewer->target / target->Viewer',
     details: 'Details',
   },
@@ -845,6 +847,7 @@ async function caseDash020() {
             closedItem({ session_id: 'sess_7', close_cause: 'close_timeout' }),
             closedItem({ session_id: 'sess_8', close_cause: 'server_shutdown' }),
             closedItem({ session_id: 'sess_9', close_cause: 'internal_error' }),
+            closedItem({ session_id: 'sess_10', close_cause: 'session_expired' }),
           ],
         }),
     }),
@@ -852,7 +855,8 @@ async function caseDash020() {
   await waitFor(() => settled(root));
   const card = cardOf(root, t.closedTitle);
   const rows = dataRowsOf(card);
-  check('DASH-020: all known causes and an unknown cause have rows', rows.length === 8);
+  check('DASH-020: all known causes and an unknown cause have rows', rows.length === 9);
+  checkListCount('DASH-020 closed causes', card, 9);
   check('DASH-020: normal EOF cause shown', rows[0]?.textContent.includes(t.causePeerEof));
   check('DASH-020: administrator termination shown', rows[1]?.textContent.includes(t.causeAdmin));
   check('DASH-020: connection error shown', rows[2]?.textContent.includes(t.causeConnectionError));
@@ -866,6 +870,7 @@ async function caseDash020() {
     [5, t.causeTimeout, 'warning', 'warning'],
     [6, t.causeShutdown, 'neutral', null],
     [7, t.causeInternalError, 'destructive', 'alert'],
+    [8, t.causeSessionExpired, 'neutral', null],
   ]) {
     const badge = rows[index]?.cells[1].querySelector('.badge');
     const svg = badge?.querySelector('svg');
@@ -888,6 +893,7 @@ async function caseDash020() {
   );
   await waitFor(() => settled(empty.root));
   check('DASH-020: empty closed list text', emptyOf(cardOf(empty.root, t.closedTitle)) === t.closedEmpty);
+  checkListCount('DASH-020 empty closed list', cardOf(empty.root, t.closedTitle), 0);
   checkTableRoles('DASH-020 empty closed table', cardOf(empty.root, t.closedTitle));
   // Byte formats follow DESIGN.md and match in every language (format.js).
   check('DASH-020 format: 0 bytes', formatBytes(0) === '0.0 KiB');
@@ -1106,6 +1112,10 @@ async function shot(state) {
       if (state === 'empty') return path === '/api/v1/summary'
         ? ok(summaryBody({ counts: { waiting: 0, active: 0, handshaking: 0, target_connecting: 0 } }))
         : ok({ as_of: AS_OF, max_entries: 100, items: [] });
+      if (state === 'normal' && path === '/api/v1/closed-sessions') return ok({
+        as_of: AS_OF, max_entries: 100,
+        items: [closedItem(), closedItem({ session_id: 'sess_expired', close_cause: 'session_expired' })],
+      });
       return normal();
     };
   }
