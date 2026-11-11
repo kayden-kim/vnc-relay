@@ -263,6 +263,8 @@ ticket을 켠 역할의 값 개수와 `binary` 유무 판정은 1.2절을 따른
 
 1.1절 9단계에서 기록을 쓴다. 이미 있으면 HTTP 401 `ticket_reused`로 거절한다. `WWW-Authenticate: VncRelayTicket`과 `connection_rejected(stage=upgrade, reason=ticket_reused)`를 남긴다. 서명을 확인했으므로 `ticket_jti`도 기록한다. 성공하면 101 전에 `ticket_accepted`(`info`)를 기록한다. 필드는 `conn_id`, `listener`(`ws`·`wss`), `role`, `peer_ip`, `forwarded_ip`(있으면), `ticket_jti`, `ticket_sub`(있으면), `session_expires_at`(있으면)이다. `session_expires_at`은 `sx`를 UTC ISO 8601 문자열로 나타낸 값이다([운영 정보 계약](ops-info-v2.md), 사용자 결정 2026-11-11(Q213)).
 
+같은 (역할, `jti`)로 동시에 온 요청도 하나만 기록을 쓴다. 기록이 있는지 확인하는 일과 기록을 쓰는 일 사이에 다른 요청이 끼어들 수 없어야 한다. 기록을 쓰지 못한 요청은 위와 같이 HTTP 401 `ticket_reused`로 거절한다(이 문서의 판단, 사용자 결정 없음).
+
 기록은 `exp + 5`초에 지운다. 한 기록은 길어야 `max_lifetime_secs` + 10초 남는다. 기록은 서명을 확인한 ticket만 담는다. 개수 상한은 두지 않는다.
 
 재로드, `enabled` 끄고 켜기, 공개 키 교체는 기록을 지우지 않는다. 재시작하면 기록이 사라진다. 1.9.3절 11번이 기동 전에 발급한 ticket을 거절해 이를 메운다(사용자 결정 2026-11-11(Q201)).
@@ -466,7 +468,7 @@ Content-Length: 0
 | --- | --- | --- | --- |
 | Producer: WS·WSS Viewer·Server 시험 클라이언트 / Consumer: WS·WSS 리스너. 테스트 미연결 | 1.2·1.9.1절 기본 꺼짐, 유효한 역할별 ticket, `binary`만 선택, ticket 원문 비기록. WS-037·038·045 | 미실행(구현 전) | 없음 |
 | Producer: ticket 오류·경계 시험 클라이언트 / Consumer: WS·WSS 리스너. 테스트 미연결 | 1.1·1.9.2·1.9.3절 형식·서명·클레임·시각·기동 기준과 401, 검사 우선순위. WS-039~041·043~045 | 미실행(구현 전) | 없음 |
-| Producer: 재사용·재로드 시험 클라이언트와 설정 편집 / Consumer: WS·WSS 리스너. 테스트 미연결 | 1.9.4·1.9.6절 검사 뒤 사용 기록 쓰기, 403에서 미소비, 보관·재사용 거절, 교체 뒤 기존 연결·타이머·기록 유지. WS-042·046 | 미실행(구현 전) | 없음 |
+| Producer: 재사용·재로드 시험 클라이언트와 설정 편집 / Consumer: WS·WSS 리스너. 테스트 미연결 | 1.9.4·1.9.6절 검사 뒤 사용 기록 쓰기, 403에서 미소비, 보관·재사용·동시 재사용 거절, 교체 뒤 기존 연결·타이머·기록 유지. WS-042·046 | 미실행(구현 전) | 없음 |
 | Producer: ticket 연결의 초기 요청·세션 상대 / Consumer: 공통 중계. 테스트 미연결 | 1.9.5절 `rid` 대조, 기존 초기 검사 우선, Mode I 거절, Close 4012, 상대 대기 연결 유지. RLY-029·030·032 | 미실행(구현 전) | 없음 |
 | Producer·Consumer: `sx`가 있는 ticket 연결과 TCP·WS·WSS 상대. 테스트 미연결 | 1.6·1.9.5절 초기 교환·대기·활성 상태의 `sx`, 이른 만료 시각, Close 4013, `session_expired` 로그·최근 종료 목록. RLY-031 | 미실행(구현 전) | 없음 |
 
