@@ -11,15 +11,17 @@
 | 호환 값 추가 | 2026-11-02, 1.1.0 유지: `close_cause`에 `internal_error`를 더했다(사용자 결정 2026-11-02(Q94)). 기존 값과 필드는 바뀌지 않는다. 1.10·3절에 따라 Consumer는 알 수 없는 값을 받은 그대로 표시하므로 호환 변경이다. |
 | 설정 보기·편집 호환 추가 | 2026-11-08, 1.1.0 유지: 설정 보기·편집 경로와 메서드, 응답 필드, 오류 코드 6개를 더한다. 새 409도 2.3절의 4xx 범주에 속한다. 기존 경로의 요구를 약하게 바꾸지 않는다(3절). 설정 파일 기록·재로드 확대·관리 권한·편집 기본 꺼짐은 사용자 결정 2026-11-08(Q167~Q172)이다. 새 이름과 상태 코드, PATCH의 `query_timeout_secs` 재사용은 사용자 결정 2026-11-08(Q176)으로 채택했다. 구현·계약 테스트는 미실행(구현 전)이다. 후속: 커밋 `eae442f`의 두 OS 게이트에서 구현과 계약 테스트가 통과했다(5절). |
 | 최근 로그·세션 필드 호환 추가 | 2026-11-08, 1.1.0 유지: 최근 로그 조회 경로와 세션의 대상 전송 경로·전달 주소 필드를 더한다(사용자 결정 2026-11-08(Q185), 사용자 결정 2026-11-08(Q186), 사용자 결정 2026-11-08(Q187)). 기존 경로·필드·인증·CSRF 요구는 바꾸지 않는다. 매개변수·응답 필드 이름과 세션 필터 화면 URL은 사용자 결정 2026-11-08(Q191)으로 채택했다(6절). 구현·계약 테스트는 미실행(구현 전)이다. 후속: 구현은 커밋 `3df0693`이며, 시험은 커밋 `51bd747`의 두 OS 게이트에서 통과했다([WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)). |
+| 접속 ticket 호환 추가 | 2026-11-11, 1.1.0 유지: `close_cause`에 `session_expired`를 더하고 설정 보기·편집에 ticket 키를 더한다(사용자 결정 2026-11-11(Q200·Q213)). 3절의 허용 값·필드 추가 규칙에 따른 호환 변경이며, 기존 선례대로 1.1.0을 유지한다. 구현·계약 테스트는 미실행(구현 전)이다. |
 | 소유자 | vnc-relay 프로젝트 관리자 |
 | 만드는 쪽(Producer) | `vnc-relay` 관리 리스너(서버) |
 | 사용하는 쪽(Consumer) | 같은 실행파일에 내장된 대시보드(정적 HTML·JS). 같은 규칙으로 호출하는 외부 HTTP 클라이언트도 Consumer로 본다. |
 | 방향 | 요청/응답. 브라우저 → 관리 리스너. HTTPS가 원칙이며 평문 HTTP는 루프백 관리 리스너에서만 쓴다. |
 | 스키마 기준 파일 | 없음. 스키마 파일을 만들지 않는다. 1절의 표가 형식의 기준이다. |
 | 기준 스펙 | [관리 조회와 세션 종료](../specs/management.md), [운영 대시보드 화면](../specs/dashboard.md). L·Lm·E·P 등 매개변수 정의는 [운영 스펙 2절](../specs/operations.md#2-상태와-검증-매개변수)을 따른다. |
-| 관련 요구사항 | [PRD](../requirements/PRD.md) FR-06·FR-07·FR-08(비밀 비노출), 7절 보안 경계, AC-09·AC-10·AC-19~AC-21 |
+| 관련 요구사항 | [PRD](../requirements/PRD.md) FR-06·FR-07·FR-08(비밀 비노출), 7절 보안 경계, AC-09·AC-10·AC-19~AC-21·AC-52 |
 | 호환성 범위 | 경로 접두사 `/api/v1/`. 같은 릴리스의 서버와 내장 대시보드. HTTPS 관리 리스너와 평문 HTTP 루프백 관리 리스너. |
 | 관련 테스트 | [관리 스펙 7절](../specs/management.md#7-수용-테스트) MGT-001~MGT-051, [화면 스펙 7절](../specs/dashboard.md#7-수용-테스트), [운영 스펙 7절](../specs/operations.md#7-수용-테스트) OPS-043. 계약 테스트는 5절에 연결한다. 기존 범위는 `ee0314f`의 두 OS 전체 게이트가 통과했다. 설정 보기·편집 범위(MGT-028~045)는 `eae442f`의 두 OS 전체 게이트가 통과했다. MGT-046~051은 커밋 `51bd747`의 두 OS 게이트에서 통과했다([WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)). 기존 범위의 지원 판정과 브라우저별 수동 확인 범위는 [작업 5.9 판정표](../how-to/set-up-and-verify.md#41-작업-59-판정표)와 [작업 6.9 판정표](../how-to/set-up-and-verify.md#42-작업-69-판정표)를 따른다. |
+| 접속 ticket 관련 테스트 | [관리 스펙 7절](../specs/management.md#7-수용-테스트) MGT-052~053. 구현·계약 테스트는 미실행(구현 전)이다. |
 
 관련 문서: [설정 계약](config-v4.md)(`[dashboard]`·`[limits]`·`[recent_closed]`·`[recent_logs]`·`[timeouts]`·`[management]` 키와 기본값·범위), [CLI·계정 파일 계약](cli-v1.md)(계정명 규칙), [운영 정보 계약](ops-info-v2.md)(`session_id`·종료 사건 로그, 상태 리스너), [WebSocket 중계 계약](websocket-relay-v2.md)(관리자 종료의 Close 4005), [ADR-0001 내장 TLS](../decisions/ADR-0001-built-in-tls.md), [ADR-0003 단일 인스턴스·메모리 상태](../decisions/ADR-0003-single-instance-memory-state.md).
 
@@ -311,6 +313,7 @@
 | `close_timeout` | 정리 제한 시간 E 초과. E 안에 정리가 끝나지 않아 강제로 정리했다. |
 | `server_shutdown` | 정상 종료 유예 G가 지나거나 유예 중 두 번째 종료 요청을 받아 강제로 정리했다. 정상 종료 중(Grace·Force)에 세션 소유 작업이 취소된 경우도 포함한다. 기존 종료 원인이 없는 세션에만 기록한다. Running 중 소유 작업이 버그로 끝난 경우는 포함하지 않는다(사용자 결정 2026-11-01(Q82), 2026-11-02(Q94)). |
 | `internal_error` | 내부 오류. 서버가 Running일 때 세션 소유 작업이 panic 등 버그로 끝났고 기존 종료 원인이 없었다. 기존 원인은 이 값으로 바꾸지 않는다(사용자 결정 2026-11-02(Q94)). |
+| `session_expired` | 접속 ticket의 세션 만료 시각(`sx`)이 되어 서버가 세션을 끝냈다([WebSocket 계약 1.9.5절](websocket-relay-v2.md#195-101-뒤의-중계-id-대조와-세션-만료), 사용자 결정 2026-11-11(Q213)). |
 
 - Consumer는 목록에 없는 값을 받으면 받은 그대로 표시하고 오류로 처리하지 않는다.
 - 목록은 보관 개수 R을 넘으면 가장 오래된 항목부터 제거한다(MGT-024).
@@ -381,6 +384,8 @@
 | `items[].editable` | 불리언 | 필수, null 불가 | 편집 대상이고 해당 진입점·모드가 켜져 있으면 `true`. `edit_enabled`와는 별개다. |
 | `items[].min`·`items[].max` | 정수 | 정수 키에 필수, null 불가. 그 밖의 키에는 없음 | 설정 계약의 정적 범위. Lw의 `max`는 65535이며 Lw ≤ L 관계 검사는 따로 한다. |
 
+`items`에는 접속 ticket 키 10개도 포함한다. Viewer는 `relay.ticket.viewer.enabled`·`relay.ticket.viewer.issuer`·`relay.ticket.viewer.relay_host`·`relay.ticket.viewer.public_keys_file`·`relay.ticket.viewer.max_lifetime_secs`다. Server는 `relay.ticket.server.enabled`·`relay.ticket.server.issuer`·`relay.ticket.server.relay_host`·`relay.ticket.server.public_keys_file`·`relay.ticket.server.max_lifetime_secs`다. 모두 `reload = dynamic`이다. `public_keys_file` 2개는 항상 `editable = false`다. 나머지 8개는 그 역할이 WS 또는 WSS 리스너에서 하나라도 켜져 있을 때만 `editable = true`다. `enabled`의 기본값은 `false`다. `max_lifetime_secs`의 기본값은 60이며 `min = 10`, `max = 600`이다([설정 계약 1.2절](config-v4.md#12-키-표), 사용자 결정 2026-11-11(Q200·Q212·Q213)).
+
 | `file.state` | 뜻 |
 | --- | --- |
 | `in_effect` | 파일과 실행 중 유효 설정에 차이가 없다. |
@@ -405,13 +410,13 @@
 | 헤더 `X-CSRF-Token` | 문자열 | 필수 | 1.4.3절의 관리 세션 토큰 |
 | `revision` | 문자열 | 필수, null 불가 | 조회한 파일의 리비전. `sha256:` 뒤 소문자 16진수 64자다. |
 | `changes` | 객체 | 필수, null 불가 | 바꿀 설정 키를 속성 이름으로, 새 값을 속성 값으로 담는다. 빈 객체는 거절한다. |
-| `changes.<설정 키>` | 정수·문자열 배열 | 하나 이상 필수, null 불가 | 해당 설정 자료형과 맞아야 한다. JSON 자료형 오류는 `invalid_request`, 설정 범위·항목 문법·관계 오류는 `config_invalid`다. |
+| `changes.<설정 키>` | 불리언·정수·문자열·문자열 배열 | 하나 이상 필수, null 불가 | 해당 설정 자료형과 맞아야 한다. JSON 자료형 오류는 `invalid_request`, 설정 범위·항목 문법·관계 오류는 `config_invalid`다. |
 
 PATCH 본문은 64 KiB(65536바이트) 이하여야 한다. 초과하면 `400 invalid_request`이며 파일·실행 중 값을 바꾸거나 편집 사건을 기록하지 않는다. 로그인의 기존 16 KiB 상한은 그대로다(이 문서의 판단, 사용자 결정 없음).
 
 JSON 정수는 `i64`나 `u64`로 읽을 수 있으면 정수로 받아 7단계에서 설정 범위를 검사한다. 범위를 벗어나면 `config_invalid`다. 이보다 큰 정수 표기는 JSON 수 해석 한계 때문에 지수 표기 실수와 구분하지 않으므로 1단계에서 `invalid_request`로 거절한다(이 문서의 판단, 사용자 결정 없음).
 
-편집 대상은 출발지 IP 허용 목록 6개, WS·WSS 역할별 Origin 허용 목록 4개, 리스너별 `trusted_proxies` 2개, `mode1.allow_targets`, `[limits]` 5개, `[timeouts]` 6개, `[keepalive]` 5개인 총 29개 키다(사용자 결정 2026-11-08(Q184), 사용자 결정 2026-11-08(Q188)). 목록과 적용 시점은 [설정 계약 1.8절](config-v4.md#18-재로드-구분)이 기준이다. 인증서·개인키 경로 4개는 재로드 대상 33개에 포함하지만 편집 대상이 아니다(사용자 결정 2026-11-08(Q172)). 역할별 키는 그 역할이 켜져 있을 때만, `trusted_proxies`는 해당 리스너의 역할 중 하나 이상이 켜져 있을 때만 편집할 수 있다. `mode1.allow_targets`는 `mode1.enabled = true`일 때만 편집할 수 있다. `management.config_edit`와 `recent_logs.max_entries`를 비롯한 재시작 필요 키는 편집할 수 없다.
+편집 대상은 출발지 IP 허용 목록 6개, WS·WSS 역할별 Origin 허용 목록 4개, 리스너별 `trusted_proxies` 2개, `mode1.allow_targets`, `[limits]` 5개, `[timeouts]` 6개, `[keepalive]` 5개와 접속 ticket 8개인 총 37개 키다. 기존 29개는 사용자 결정 2026-11-08(Q184), 사용자 결정 2026-11-08(Q188)을 따른다. ticket 편집 대상은 `relay.ticket.viewer.enabled`·`relay.ticket.viewer.issuer`·`relay.ticket.viewer.relay_host`·`relay.ticket.viewer.max_lifetime_secs`·`relay.ticket.server.enabled`·`relay.ticket.server.issuer`·`relay.ticket.server.relay_host`·`relay.ticket.server.max_lifetime_secs`다(사용자 결정 2026-11-11(Q200·Q213)). 목록과 적용 시점은 [설정 계약 1.8절](config-v4.md#18-재로드-구분)이 기준이다. 인증서·개인키 경로 4개는 기존 결정대로 편집 대상이 아니다(사용자 결정 2026-11-08(Q172)). 접속 ticket 공개 키 파일 경로 2개도 편집할 수 없다. 이 경로 6개를 포함한 재로드 대상은 총 43개다. 공개 키 교체는 같은 경로의 파일 내용을 바꾸는 방식을 따른다([설정 계약 1.11절](config-v4.md#111-접속-ticket-공개-키-파일-형식)). 기존 역할별 키는 그 역할이 켜져 있을 때만, `trusted_proxies`는 해당 리스너의 역할 중 하나 이상이 켜져 있을 때만 편집할 수 있다. ticket 키는 그 역할이 WS 또는 WSS 리스너에서 하나라도 켜져 있을 때만 편집할 수 있다. `mode1.allow_targets`는 `mode1.enabled = true`일 때만 편집할 수 있다. `management.config_edit`와 `recent_logs.max_entries`를 비롯한 재시작 필요 키는 편집할 수 없다.
 
 서버는 재로드 서비스와 직렬화하여 다음 10단계를 순서대로 처리한다. 앞 단계에서 거절하면 뒤 단계는 하지 않는다.
 
@@ -421,7 +426,7 @@ JSON 정수는 `i64`나 `u64`로 읽을 수 있으면 정수로 받아 7단계�
 4. 요청 `revision`이 지금 파일 바이트의 리비전과 다르면 `409 config_conflict`로 거절한다.
 5. 지금 파일이 검증에 실패하면 `409 config_file_invalid`와 `diagnostics`를 반환한다. 재시작 필요 키의 차이가 남아 있으면 `409 config_restart_pending`과 그 키의 `config_keys`를 반환한다.
 6. `toml_edit`로 요청 `changes` 중 파일값이 바뀐 키의 값만 고친다. 나머지 주석·공백·키 순서·다른 값은 보존한다(사용자 결정 2026-11-08(Q167·Q173)). 없는 키는 기존 테이블에 넣는다. 테이블도 없으면 파일 끝에 새 테이블로 더한다. 새 줄은 파일의 기존 줄바꿈 방식을 따른다. 지금 파일이 `pending`이면 그 미적용 변경에 이번 편집을 얹은 후보 전체를 만든다(이 문서의 판단, 사용자 결정 없음).
-7. 고친 후보 전체를 시작·재로드와 같은 규칙으로 검증한다. 실패하면 `400 config_invalid`와 `diagnostics`를 반환한다. 진단의 `key`는 `relay.tcp_viewer.allow[2]`처럼 첨자를 포함할 수 있다. 파일은 바꾸지 않는다.
+7. 고친 후보 전체를 시작·재로드와 같은 규칙으로 검증한다. 실패하면 `400 config_invalid`와 `diagnostics`를 반환한다. 진단의 `key`는 `relay.tcp_viewer.allow[2]`처럼 첨자를 포함할 수 있다. ticket의 `enabled = true`로 바꾸는 후보에 그 역할의 `issuer`·`relay_host`·`public_keys_file`이 빠져 있으면 `400 config_invalid`와 `config_missing_key` 진단을 반환한다([설정 계약 1.7절](config-v4.md#17-시작-때-필수-키), 사용자 결정 2026-11-11(Q200·Q213)). 파일은 바꾸지 않는다.
 8. 편집 전후 파일 바이트가 같으면 쓰기·교체·실행 중 값 적용 없이 `200`으로 응답한다. `applied`는 빈 배열이며 `revision`은 그대로다. `reload_applied`·`config_edited`를 기록하거나 `last_reload`를 갱신하지 않는다. 파일에 이미 남아 있던 `pending` 변경은 파일 변경 감지가 적용한다(이 문서의 판단, 사용자 결정 없음).
 9. 공유 잠금 안에서 같은 디렉터리의 임시 파일을 쓰고 flush한다. 원자 교체 바로 전에 현재 파일을 다시 읽어 `revision`을 비교한다. 다르면 임시 파일을 지우고 `409 config_conflict`로 거절하며 이번 요청은 파일·실행 중 값을 바꾸지 않는다. 같으면 원자 교체한 뒤 같은 후보를 적용한다. 마지막 재확인과 교체 사이의 아주 짧은 틈은 보장 범위가 아니다(사용자 결정 2026-11-08(Q178)). 재확인 읽기 실패도 임시 파일을 지우고 `409 config_conflict`로 거절하며 `config_edit_rejected.reason = config_conflict`를 기록한다(이 문서의 판단, 사용자 결정 없음). 쓰기·교체 자체에 실패하면 `500 config_write_failed`이며 파일과 실행 중 값은 이전 그대로다.
 10. 같은 후보의 재로드 대상 값을 한 번에 교체한다. `pending`에 있던 변경도 함께 적용한다. 응답과 `reload_applied`의 `applied`는 실제 실행 중 값이 바뀐 모든 키다. `config_edited.config_keys`는 요청 `changes` 중 파일값이 바뀐 키만이다(이 문서의 판단, 사용자 결정 없음). 실행 중 값이 바뀌면 `reload_applied`(`trigger = config_edit`)를 기록하고 `last_reload`를 갱신한다. 그 뒤 `config_edited`를 기록한다([운영 정보 계약 1.5절](ops-info-v2.md#15-사건-목록)). 실행 중 값의 차이가 없으면 `reload_applied`와 이력 갱신 없이 `config_edited`만 기록한다. 이후 파일 변경 감지가 같은 내용을 읽으면 다시 교체하거나 성공 사건·이력을 추가하지 않는다. `reload_change_detected`는 기록될 수 있다.
@@ -436,6 +441,8 @@ JSON 정수는 `i64`나 `u64`로 읽을 수 있으면 정수로 받아 7단계�
 | `applied` | 문자열 배열 | 필수, null 불가 | 후보 전체에서 실제 실행 중 값이 바뀐 모든 키. 파일에 이미 남아 있던 `pending` 변경도 포함한다. 요청 `changes` 중 파일값이 바뀐 키만 담는 `config_edited.config_keys`와 구분한다. 편집 전후 파일 바이트가 같으면 빈 배열이다(이 문서의 판단, 사용자 결정 없음). |
 
 편집은 파일에 남아 재시작 뒤에도 유지된다. 이미 맺은 연결·시작한 타이머·설정한 소켓 옵션은 이전 값을 유지한다. 바뀐 값은 [설정 계약 1.8절](config-v4.md#18-재로드-구분)의 시점부터 적용한다. 정상 종료 유예 중에도 다른 관리 요청처럼 처리한다. 특별히 거절하지 않는다.
+
+ticket 설정 변경은 새 업그레이드 요청부터 적용한다. 이미 101을 보낸 연결의 중계 ID 대조와 `sx` 타이머, 사용 기록은 유지한다([WebSocket 계약 1.9.6절](websocket-relay-v2.md#196-설정과-적용-시점), 사용자 결정 2026-11-11(Q200)).
 
 인증·CSRF를 통과한 편집 거절은 `invalid_request`를 제외하고 `config_edit_rejected`로 기록한다. PATCH 거절은 `last_reload`를 갱신하지 않는다(이 문서의 판단, 사용자 결정 없음). 편집 사건의 `admin_account`는 필수다. 키와 리비전 등 사건별 메타 정보는 기록하되 설정값(IP·Origin·대상 항목·수치)은 기록하지 않는다. 필드·사건 형식은 [운영 정보 계약 1.5절](ops-info-v2.md#15-사건-목록)과 [1.8절](ops-info-v2.md#18-관리자-계정명-기록-규칙)을 따른다.
 
@@ -531,7 +538,7 @@ JSON Lines 다운로드는 Consumer가 만든다. 같은 필터로 커서 없이
 | `invalid_request` | `400`(본문·필드·`session_id` 형식·`X-Relay-Poll` 값 오류. `POST`·`PATCH`·`DELETE`의 `X-Relay-Poll`, 빈 `changes`·편집 불가 키·잘못된 JSON 자료형 포함. PATCH 본문 64 KiB(65536바이트) 초과도 포함하며 파일·실행 중 값 변경과 편집 사건이 없다. 로그인 상한은 기존 16 KiB 그대로다. 본문 상한은 이 문서의 판단, 사용자 결정 없음), `405`(경로는 있으나 메서드가 다름, `Allow` 헤더 포함), `415`(본문이 있고 `Content-Type`이 `application/json`이 아님. 단, 1.9절의 terminate 본문은 항상 400). 잘못된 대상을 대상 없음(`not_found`)과 구분한다. 로그인 실패 횟수에 세지 않는다. | [화면 5절](../specs/dashboard.md#5-입력-검증과-종료-오류), [관리: MGT-025·MGT-013·MGT-037](../specs/management.md#7-수용-테스트) |
 | `terminate_failed` | `500`. 종료 요청은 유효했지만 양 끝점 정리에 실패해 종료를 확인하지 못했다. 완료로 표시하지 않는다. 재조회로 실제 상태를 확인한다. | [관리: MGT-012](../specs/management.md#7-수용-테스트), [화면: DASH-012](../specs/dashboard.md#7-수용-테스트), [관리 4절](../specs/management.md#4-오류와-복구) "종료 처리 실패" |
 | `internal` | `500`. 조회 처리 중 서버 내부 오류. 빈 성공 목록과 구분한다. 중계 영향은 없다. | [관리: MGT-004](../specs/management.md#7-수용-테스트), [화면: DASH-003](../specs/dashboard.md#7-수용-테스트), [관리 4절](../specs/management.md#4-오류와-복구) "조회 처리·통신 실패" |
-| `config_invalid` | `400`. 고친 후보가 설정 검증에 실패했다. `diagnostics`를 포함한다. 파일·실행 중 값을 바꾸지 않는다. | [관리: MGT-036](../specs/management.md#7-수용-테스트) |
+| `config_invalid` | `400`. 고친 후보가 설정 검증에 실패했다. `diagnostics`를 포함한다. ticket을 켜는 후보의 필수 키 누락은 `config_missing_key` 진단으로 구분한다. 파일·실행 중 값을 바꾸지 않는다. | [관리: MGT-036·MGT-053](../specs/management.md#7-수용-테스트) |
 | `config_edit_disabled` | `403`. 실행 중 `management.config_edit = false`다. | [관리: MGT-030](../specs/management.md#7-수용-테스트) |
 | `config_conflict` | `409`. 요청의 `revision`이 지금 파일과 다르다. | [관리: MGT-033·MGT-043](../specs/management.md#7-수용-테스트) |
 | `config_restart_pending` | `409`. 파일에 재시작 필요 차이가 남아 있다. `config_keys`를 포함한다. | [관리: MGT-034·MGT-044](../specs/management.md#7-수용-테스트) |
@@ -592,6 +599,7 @@ JSON Lines 다운로드는 Consumer가 만든다. 같은 필터로 커서 없이
 - 호환 변경(v1.x): 응답에 필드를 추가한다. 허용 값 목록에 값을 추가한다. 새 경로를 추가한다. 요청에 선택 필드를 추가한다. 새 오류 코드를 기존 상태 코드 범주 안에 추가한다. 확인 불가 사유 값을 추가한다. 성능·내부 동작을 바꾼다.
 - 설정 보기·편집 추가(2026-11-08)는 새 경로·메서드·응답 필드·오류 코드의 호환 변경이다. 새 상태 코드 `409`도 2.3절의 기존 `4xx` 요청 오류 범주에 속한다. 머리 표의 호환 값 추가 선례대로 1.1.0을 유지한다.
 - 최근 로그 경로·세션 필드 추가(2026-11-08)도 새 경로·선택 매개변수·응답 필드의 호환 변경이다. 같은 선례대로 1.1.0을 유지한다. 새 매개변수·응답 필드 이름과 세션 필터 URL은 사용자 결정 2026-11-08(Q191)으로 채택했다(6절).
+- 접속 ticket의 `session_expired`와 설정 키 추가(2026-11-11)는 허용 값·설정 보기 항목의 추가다. ticket 편집은 새 편집 대상 8개에 적용한다. 기존 선례대로 1.1.0을 유지한다(사용자 결정 2026-11-11(Q200·Q213)).
 - 호환성을 깨는 변경(Breaking change): 필드나 경로를 삭제·이름 변경한다. 자료형·단위·시각 형식·`null` 의미를 바꾼다. 기존 조건의 HTTP 상태 코드나 오류 코드를 바꾼다. 요청 필드를 필수로 바꾼다. 쿠키 이름이나 헤더 이름·의미를 바꾼다. 쿠키 보안 속성을 약하게 바꾼다. 인증·CSRF 요구를 약하게 바꾼다. 위 변경은 새 major 버전(`/api/v2/`)으로 낸다.
 - 마이그레이션: 새 major 버전은 새 접두사로 제공하고, 같은 릴리스에서 대시보드를 새 버전으로 옮긴다. 대시보드는 같은 실행파일에 들어 있으므로 서버와 대시보드의 버전이 어긋나지 않는다. 외부 클라이언트가 있으면 이전 major를 한동안 함께 제공한다. 기간은 새 major 채택 때 정한다.
 - 롤백: 이전 릴리스 실행파일로 되돌리면 이전 major와 대시보드가 함께 돌아온다. 관리 세션은 서버 메모리에만 있으므로 되돌리는 시점에 모두 무효가 되고, 관리자는 다시 로그인한다. 최근 종료 목록도 비워진다.
@@ -814,6 +822,8 @@ X-Relay-Poll: 1
 | Producer / 최근 로그 계약 시험 | 1.15절의 최신 항목 선택·순번·원본 사건 객체·필터 결합·세션 연결 관계·양방향 커서·`has_more`·잘못된 값·빈 목록·보관 꺼짐·폴링 유휴 만료·401. MGT-046~050 | 통과 | `crates/adapters/tests/management.rs`의 `recent_logs_query_basics_limit_order_and_bounds`·`recent_logs_filters_alone_and_combined_and_session_relation`·`recent_logs_cursors_has_more_and_validation`·`recent_logs_zero_max_entries_and_empty_buffer_responses`·`recent_logs_polling_idle_timeout_and_unauthenticated_guard`. 실행 결과는 아래 실행 기록을 따른다. |
 | Producer / 세션 필드 계약 시험 | 1.8·1.10절의 `target_transport`·전달 주소·`null`·실제 소켓 주소. Mode I/II, TCP/WS/WSS, 프록시 유무. MGT-051 | 통과 | `tests/serve.rs`의 `real_mode_i_and_proxied_ws_wss_sessions_expose_transport_and_forwarded_addresses`. 실행 결과는 아래 실행 기록을 따른다. |
 | Consumer / 최근 로그 계약 시험 | SCR-006의 필터·폴링·이전 페이지·세션 URL 형식 검사·UTF-8 LF JSON Lines 다운로드. DASH-054~063 | 통과 | `tests/dashboard_live.rs`의 실서버 실행기 10개(`dashboard_054_…`~`dashboard_063_…`)와 `tests/dashboard_browser.rs`의 로그 가짜 API 시험 9개(부분 표식)를 연결한다. 실서버 시험의 출처와 확인 범위는 [대시보드 검증 4.31절](../how-to/verify-dashboard-frontend.md#431-로그-화면-실서버-시험-dash-054063-2026-11-08)을 따른다. 실행 결과는 아래 실행 기록을 따른다. |
+| Producer / 접속 ticket 종료 원인 계약 시험 계획 | 1.10절의 `session_expired`, 기존 최근 종료 필드 의미 유지, 관리자 종료와 구분. [MGT-052](../specs/management.md#7-수용-테스트) | 미실행(구현 전) | 사용자 결정 2026-11-11(Q211·Q213)에 따른 문서 반영이다. 구현·계약 테스트는 미실행(구현 전)이다. 테스트 연결 전에는 시나리오 보고서에서 미연결로 표시한다. |
+| Producer / 접속 ticket 설정 계약 시험 계획 | 1.13·1.14절의 ticket 키 10개 보기, `dynamic`, 경로 2개 편집 불가, 전체 37개 편집 대상, 역할별 편집 조건, 불리언·문자열 요청, 필수 키 누락의 `400 config_invalid`·`config_missing_key`, 새 업그레이드부터 적용. [MGT-053](../specs/management.md#7-수용-테스트) | 미실행(구현 전) | 사용자 결정 2026-11-11(Q200·Q211·Q213)에 따른 문서 반영이다. 구현·계약 테스트는 미실행(구현 전)이다. 테스트 연결 전에는 시나리오 보고서에서 미연결로 표시한다. |
 
 2026-11-05 Consumer 시험의 출처 구분: `tests/dashboard_live.rs`의 25개 행은 일반 로그인·조회·종료 데이터를 실제 실행파일에서 얻는다. DASH-001·021의 확인 불가 상태는 실제 조회 전달 실패로 만든다. DASH-025의 미래 enum 값만 제품 파서와 표 컴포넌트에 직접 주는 별도 Consumer 계약 입력이다. 현재의 타입화된 Producer는 그 값을 낼 수 없다. 프록시가 정상 응답을 위조하지 않으며 이 입력을 실제 서버 데이터라고 주장하지 않는다. 기존 부분 시험과 아래 과거 실행 기록은 그대로 보존한다.
 
@@ -855,6 +865,7 @@ WSS Server·프록시 TLS 종료·최근 로그 기록(커밋 `51bd747`. 구현 
 - (해결) 사용자 결정 2026-11-08(Q191)으로 채택했다: `GET /api/v1/logs`의 매개변수 이름 `level`·`event`·`q`·`session_id`·`before`·`after`·`limit`와 응답 필드 이름 `as_of`·`max_entries`·`oldest_seq`·`latest_seq`·`has_more`·`items[].seq`·`items[].entry`. 기준은 1.15절이다. 경로 자체는 사용자 결정 2026-11-08(Q187)으로 채택했다.
 - (해결) 사용자 결정 2026-11-08(Q191)으로 채택했다: SCR-002에서 SCR-006으로 이동하는 세션 필터 URL `/#/logs?session_id={session_id}` 형식. SCR-006 기본 URL `/#/logs`는 사용자 결정 2026-11-08(Q187)으로 채택했다. 화면 시안·탐색 순서·문구의 채택 기록은 [화면 스펙](../specs/dashboard.md#8-미결정-사항)이 관리한다.
 - (해결) 사용자 결정 2026-11-08(Q191)으로 채택했다: 운영 로그의 경고 사건 이름 `trust_all_proxies`. 최근 로그의 사건 목록에도 영향을 준다. 경고 이름과 형식의 채택은 [운영 정보 계약](ops-info-v2.md)이 관리한다.
+- 접속 ticket의 `session_expired`와 설정 키 이름은 사용자 결정 2026-11-11(Q213)으로 채택했다. 1.10·1.13·1.14절에 반영했다. 구현·계약 테스트는 미실행(구현 전)이다. 대시보드의 ticket 편집 입력과 `session_expired` 표시 문구는 사용자 결정 2026-11-11(Q214)에 따라 [화면 스펙 8절](../specs/dashboard.md#8-미결정-사항)에서 관리한다.
 
 - 이 계약의 이름·코드 선택은 2026-10-16에 사용자가 채택했다. 채택 범위는 `/api/v1/` 아래 경로 이름과 메서드, 필드 이름, 오류 코드 일곱 개, `X-Relay-Poll`·`X-CSRF-Token` 값 규칙, 종료 원인 값 이름, 화면 URL이다. 쿠키 이름 `relay_admin_session`과 헤더 이름은 공유 인터페이스 이름이다. 사용자가 앞서 확정한 값은 이 문서 앞부분에 따로 적었다.
 - (해결) 설정 보기·편집의 이름과 상태 코드는 사용자 결정 2026-11-08(Q176)으로 채택했다. `GET`·`PATCH /api/v1/config`와 모든 요청·응답 필드, `config_invalid`·`config_edit_disabled`·`config_conflict`·`config_restart_pending`·`config_file_invalid`·`config_write_failed`의 6개 오류 코드와 상태 코드, `/#/settings`·`/#/settings/edit` 경로, SCR-004·SCR-005 화면 ID, PATCH의 `query_timeout_secs` 재사용이 해당한다. 기준은 1.11~1.14절과 2절이다. 사건·설정 키 이름은 [운영 정보 계약](ops-info-v2.md)·[설정 계약](config-v4.md)에 같은 결정으로 반영했다. 구현·계약 테스트는 미실행(구현 전)이다. 후속: 커밋 `eae442f`의 두 OS 게이트에서 구현과 계약 테스트가 통과했다(5절).
@@ -870,5 +881,5 @@ WSS Server·프록시 TLS 종료·최근 로그 기록(커밋 `51bd747`. 구현 
 - (해결) 로그인 응답 시간으로 계정 존재 여부를 알 수 없는지는 구조 시험으로 판정한다. 사용자 결정 2026-10-22(Q31)로 해결했다. 모든 로그인 시도가 비밀번호 검증을 정확히 한 번 하는지를 `CountingVerifier`로 센다. 자동 시간 측정은 하지 않는다. 계정 해시와 더미 해시의 Argon2 매개변수가 같은지는 확인하지 않았다 [INFERENCE: 다를 수 있다].
 - 계정명의 허용 문자와 길이는 [CLI 계약 1.2절](cli-v1.md#12-계정-이름과-비밀번호-규칙)이 정한다. 로그인 본문 한도 16 KiB와 종료 대기 여유 5초도 채택 범위다.
 - 스펙 시나리오가 직접 다루지 않는 오류가 있다. 형식이 잘못된 요청(`invalid_request` 중 본문·필드 오류), 알 수 없는 경로와 허용되지 않는 메서드(`404`·`405`)다. 이 계약은 가장 가까운 시나리오(DASH-018·MGT-013·MGT-025)와 화면 스펙 5절에 연결했다. 대응 시나리오는 스펙에 없으며 사용자가 추가하지 않기로 했다(2026-10-16). 계약 본문의 해당 응답 정의는 유지한다.
-- 종료 원인 `close_cause`의 값은 일곱 개다. 사용자 결정 2026-11-02(Q94)으로 추가한 `internal_error`를 포함하며 [관리 스펙 2.3절](../specs/management.md#23-최근-종료-목록)·PRD FR-06의 종료 원인 목록과 같다. `server_shutdown` 항목의 실제 API 조회는 `crates/adapters/tests/management.rs`의 `completion_mgt023_shutdown_history_is_queryable_and_preserves_prior_eof_cause`가 확인했다. Grace → Force 뒤 관리 리스너를 유지해 `GET /api/v1/closed-sessions`에서 해당 원인과 기존 `peer_eof` 보존을 확인했으며 두 OS에서 통과했다(5절). 프로세스가 끝난 뒤에는 목록도 사라진다.
+- 종료 원인 `close_cause`의 값은 여덟 개다. 사용자 결정 2026-11-02(Q94)으로 추가한 `internal_error`와 사용자 결정 2026-11-11(Q213)으로 추가한 `session_expired`를 포함하며 [관리 스펙 2.3절](../specs/management.md#23-최근-종료-목록)·PRD FR-06의 종료 원인 목록과 같다. `session_expired`의 구현·계약 테스트는 미실행(구현 전)이다. `server_shutdown` 항목의 실제 API 조회는 `crates/adapters/tests/management.rs`의 `completion_mgt023_shutdown_history_is_queryable_and_preserves_prior_eof_cause`가 확인했다. Grace → Force 뒤 관리 리스너를 유지해 `GET /api/v1/closed-sessions`에서 해당 원인과 기존 `peer_eof` 보존을 확인했으며 두 OS에서 통과했다(5절). 프로세스가 끝난 뒤에는 목록도 사라진다.
 - 계약 테스트는 `crates/adapters/tests/management.rs`, `tests/dashboard_assets.rs`, `tests/dashboard_browser.rs`, `tests/dashboard_live.rs`, `tests/serve.rs`의 `refuses_public_plaintext_and_answers_login_less_queries_with_401_on_loopback`·`real_mode_i_and_proxied_ws_wss_sessions_expose_transport_and_forwarded_addresses`, 단위 시험(`crates/app/src/management/login.rs`·`session.rs`·`query.rs`·`terminate.rs`·`config/tests.rs`, `crates/adapters/src/management_http/terminate_api.rs`), `tests/management_session.rs`, `tests/management_query.rs`, `tests/management_terminate.rs`다. 현재 결과는 5절 표, `ee0314f`의 [작업 5.9 판정표](../how-to/set-up-and-verify.md#41-작업-59-판정표), `eae442f`의 [작업 6.9 판정표](../how-to/set-up-and-verify.md#42-작업-69-판정표), `51bd747`의 [WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)를 따른다. CI 실행 기록은 없다.

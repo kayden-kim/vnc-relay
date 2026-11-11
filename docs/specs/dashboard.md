@@ -246,7 +246,7 @@ SCR-004는 [설정 v4 계약 1.2절](../contracts/config-v4.md#12-키-표)의 �
 | `relay.wss.cert_file`·`relay.wss.key_file` | WSS 리스너 테이블, 재로드 가능 | 입력 없음. `management.cert_file`·`management.key_file`도 동일 |
 | `recent_logs.max_entries` | `recent_closed.max_entries` 옆, 재시작 필요 | 입력 없음 |
 
-`trusted_proxies = []`는 전달 헤더를 신뢰하지 않는다는 뜻이다. 역할의 `allow = []`처럼 모든 새 접속을 거절하는 목록이 아니다. 확인 대화상자는 이 키에 CPY-105를 쓰지 않고 CPY-183을 써야 한다. 역할의 `allowed_origins = []`는 Origin이 있는 요청을 거절하며 Origin이 없는 요청은 IP 검사만 한다([WebSocket 계약](../contracts/websocket-relay-v2.md)). 이 키에도 CPY-105 대신 CPY-184를 써야 한다.
+`trusted_proxies = []`는 전달 헤더를 신뢰하지 않는다는 뜻이다. 역할의 `allow = []`처럼 모든 새 접속을 거절하는 목록이 아니다. 확인 대화상자는 이 키에 CPY-105를 쓰지 않고 CPY-183을 써야 한다. 역할의 `allowed_origins = []`는 Origin이 있는 요청을 거절한다. Origin이 없는 요청은 Origin 비교를 생략하고 IP 검사를 한다. 그 역할에 접속 ticket 확인을 켰으면 ticket 확인도 한다([WebSocket 계약](../contracts/websocket-relay-v2.md), 사용자 결정 2026-11-11(Q196)). 이 키에도 CPY-105 대신 CPY-184를 써야 한다.
 `trusted_proxies`에는 프록시 주소만 넣어야 하며 클라이언트 범위를 넣어서는 안 된다. 모든 전달 주소가 신뢰 프록시에 속하면 요청을 거절한다. 이 입력 도움말은 CPY-185로 표시한다. IP·CIDR·범위의 문법과 진단은 기존 출발지 IP 목록과 같다.
 `trusted_proxies` 변경은 다음 수락 검사 또는 업그레이드 검사에 적용한다. 역할 `allow` 변경은 다음 수락 시의 합집합 검사와 업그레이드 시의 역할 검사에 적용한다. `allowed_origins` 변경은 다음 업그레이드 요청에 적용한다. 이미 끝난 검사의 결과는 유지한다. 수락됐지만 아직 업그레이드하지 않은 연결도 새 값으로 업그레이드 검사를 할 수 있다. CPY-100의 채택 원문은 보존하고 이 차이를 담은 CPY-189를 교체안으로 둔다.
 
@@ -545,6 +545,18 @@ DASH-TBD-003(로그인·세션 오류의 화면 메시지 문구)은 사용자 �
   후속: 2026-11-08에 로그 화면·v4 범위로 확장한 DASH-028·029·035·037은 미실행 (구현 전)이다. 위 통과 기록은 확장 전 조건에만 적용한다. 후속: 구현은 커밋 `3df0693`이며, 시험은 커밋 `51bd747`의 두 OS 게이트에서 통과했다([WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)).
 
 DASH-TBD-001은 결정되어 4.1절과 설정 계약에 반영했으며 재사용하지 않는다. DASH-TBD-002는 [관리 API v1](../contracts/management-api-v1.md) 채택(2026-10-16)으로 결정되어 계약 1.8·1.11절에 반영했으며 재사용하지 않는다. DASH-TBD-004(시각 기준·모바일 배치·표시 자릿수)는 [디자인 기준](../design/DESIGN.md) 채택(2026-10-20)으로 결정했으며 재사용하지 않는다. DASH-TBD-005(설정 보기·편집의 이름·문구·시각 기준)는 사용자 결정 2026-11-08(Q174~Q176)으로 결정되어 이 문서 1·9절과 [관리 API 계약](../contracts/management-api-v1.md)·[디자인 기준](../design/DESIGN.md)·[설정 시안](../design/mockups/dashboard.html)에 반영했으며 재사용하지 않는다.
+
+| ID | 항목 | 영향과 제약 | 확정 위치 |
+| --- | --- | --- | --- |
+| DASH-TBD-006 | 접속 ticket 키 표시·편집과 종료 원인 `session_expired`의 문구 | 사용자 결정 2026-11-11(Q214)로 시안·문구(CPY)는 구현 작업에서 정한다. 그 전까지 아래의 기존 규칙 해석을 따른다. 구현·계약 테스트는 미실행(구현 전)이다. | 구현 작업에서 [이 스펙 9절](#9-화면-문구)과 [HTML 시안](../design/mockups/dashboard.html)에 확정한다. |
+
+DASH-TBD-006의 확정 전에는 다음과 같이 해석한다. 기존 SCR 문장·시나리오·CPY 원문은 이번 변경에서 바꾸지 않는다.
+
+- SCR-004는 `items`의 모든 키를 [설정 계약 1.2절](../contracts/config-v4.md#12-키-표) 순서와 테이블별로 묶는 규칙을 따른다. 따라서 API가 보낸 ticket 키 10개도 `[relay.ticket.viewer]`와 `[relay.ticket.server]`로 나누어 보인다. 기본값을 포함한 실행 값을 기존 자료형 표시 규칙으로 보인다. 별도 통합 구역이나 편집 입력을 뜻하지 않는다. DASH-029의 모든 키 표시 규칙도 이 범위에 적용한다.
+- 설정 계약 4.1.0의 재로드 대상은 43개이며 관리 API 편집 대상은 37개다. SCR-004의 `items.reload = dynamic` 표시 규칙에 따라 ticket 키 10개는 재시작 없이 적용으로 보인다. `public_keys_file` 2개는 경로만 보이며 파일 내용·편집 입력은 없다. SCR-004와 DASH-029에 남긴 33개 표기는 ticket 추가 전 범위다. 새 키의 표시·시안 대조는 이 미결정 사항에서 다룬다.
+- SCR-005와 DASH-035는 기존 다섯 구역의 29개 키 가운데 `items.editable = true`인 키만 입력란으로 둔다. 관리 API가 ticket 키 8개를 편집 가능으로 보내더라도 화면 입력란은 아직 추가하지 않는다. 새 불리언·문자열·정수 입력과 구역 배치·문구는 구현 작업에서 함께 정한다.
+- 최근 종료 목록의 `session_expired`에는 아직 CPY가 없다. CPY-045~050·083의 기존 종료 원인 문구를 대신 쓰지 않는다. 3절의 번역 범위 규칙에 따라 한국어·English 화면 모두 받은 값 `session_expired`를 그대로 보인다. SCR-006의 로그 `entry`도 기존 규칙대로 값을 번역·변경하지 않는다.
+- CPY-184의 "Origin이 없는 요청은 IP 검사만 합니다"는 ticket을 켜지 않은 역할의 동작이다. ticket을 켠 역할에서는 Origin이 없는 요청도 ticket 확인을 거친다. CPY-184의 채택 원문은 이번 변경에서 바꾸지 않는다. 고칠 문구는 이 미결정 사항에서 함께 정한다.
 
 | 항목 | 상태 | 채택한 내용 |
 | --- | --- | --- |

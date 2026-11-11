@@ -59,6 +59,8 @@ UltraVNC Viewer·Server와 외부 WebSocket 클라이언트가 VNC Relay에 접�
 
 후속: 사용자 결정 2026-11-08(Q181·Q188)에 따라 위 TCP Server 검사 순서를 WS·WSS Server에도 적용한다. Server의 Mode I 요청은 `handshake_invalid`다. Mode II가 꺼져 있어도 `ID:`가 아닌 값은 먼저 형식 오류로 거절한다.
 
+후속: WS·WSS에서 접속 ticket을 켠 역할은 위 검사를 모두 통과한 뒤 ticket의 `rid`와 중계 ID를 대조한다([WebSocket 계약 1.9.5절](websocket-relay-v2.md#195-101-뒤의-중계-id-대조와-세션-만료), 사용자 결정 2026-11-11(Q203)). 이 계약의 바이트 형식과 검사 순서는 바뀌지 않는다.
+
 ### 1.3 Mode I 대상 문법
 
 값은 `<호스트>` 또는 `<호스트>:<포트>`다. 공백과 그 밖의 구분 문자는 받지 않는다. 규칙에 맞지 않으면 `handshake_invalid`다.

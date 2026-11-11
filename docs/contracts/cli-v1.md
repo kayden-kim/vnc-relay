@@ -6,7 +6,7 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 이름과 버전 | `vnc-relay-cli` 1.6.0. 1.1.0은 오류 코드 `runtime_unavailable`을 더했다. 1.2.0은 오류 코드 `log_file_unavailable`(종료 코드 3)과 경고 코드 `log_write_failed`를 더했다. 1.3.0은 경고 코드 `accounts_file_cleanup_failed`를 더하고 `runtime_unavailable`을 `admin` 명령에도 쓰게 했다. 1.3.0의 두 변경은 사용자가 결정했다(2026-10-20). 1.4.0은 Windows 숨김 입력의 콘솔 입력 모드 저장·복원과 입력 끝 키 설명(1.5절), 교체 실패 뒤 잠금 파일 삭제 실패 경고(1.6절)를 적었다. 이 세 가지는 사용자가 결정했다(2026-10-21). 콘솔 모드를 읽거나 되돌리지 못할 때의 `runtime_unavailable` 경우는 구현 판단이다(6절). 1.5.0은 운영체제 난수원으로 시작 키(RelayIdKey·SessionIdKey)를 만들 수 없을 때의 `serve` 실패를 `runtime_unavailable`(종료 코드 1)로 다루도록 추가했다(사용자 결정 2026-11-01(Q76)). 1.6.0은 Windows 콘솔 창 닫기를 G 없이 즉시 강제 정리하는 종료 요청으로 정하고, Windows 로그오프·시스템 종료를 강제 종료로 적었다(1.8절, 사용자 결정 2026-11-04(Q102)). 모두 호환 변경이다. |
+| 이름과 버전 | `vnc-relay-cli` 1.7.0. 1.1.0은 오류 코드 `runtime_unavailable`을 더했다. 1.2.0은 오류 코드 `log_file_unavailable`(종료 코드 3)과 경고 코드 `log_write_failed`를 더했다. 1.3.0은 경고 코드 `accounts_file_cleanup_failed`를 더하고 `runtime_unavailable`을 `admin` 명령에도 쓰게 했다. 1.3.0의 두 변경은 사용자가 결정했다(2026-10-20). 1.4.0은 Windows 숨김 입력의 콘솔 입력 모드 저장·복원과 입력 끝 키 설명(1.5절), 교체 실패 뒤 잠금 파일 삭제 실패 경고(1.6절)를 적었다. 이 세 가지는 사용자가 결정했다(2026-10-21). 콘솔 모드를 읽거나 되돌리지 못할 때의 `runtime_unavailable` 경우는 구현 판단이다(6절). 1.5.0은 운영체제 난수원으로 시작 키(RelayIdKey·SessionIdKey)를 만들 수 없을 때의 `serve` 실패를 `runtime_unavailable`(종료 코드 1)로 다루도록 추가했다(사용자 결정 2026-11-01(Q76)). 1.6.0은 Windows 콘솔 창 닫기를 G 없이 즉시 강제 정리하는 종료 요청으로 정하고, Windows 로그오프·시스템 종료를 강제 종료로 적었다(1.8절, 사용자 결정 2026-11-04(Q102)). 1.7.0(2026-11-11)은 접속 ticket 공개 키 파일 오류 `ticket_keys_invalid`를 기존 종료 코드 3에 더했다(사용자 결정 2026-11-11(Q207·Q213)). 모두 3절의 규칙에 따른 호환 변경이다. |
 | 상태 | Active(2026-10-16 채택) |
 | 소유자 | vnc-relay 프로젝트 관리자 |
 | 만드는 쪽(Producer) | `vnc-relay` 실행파일. 명령행 출력·종료 코드·계정 파일을 만든다. |
@@ -17,6 +17,7 @@
 | 관련 요구사항 | [PRD](../requirements/PRD.md) FR-06·FR-07, [7절 보안 및 신뢰 경계](../requirements/PRD.md#7-보안-및-신뢰-경계) |
 | 호환성 범위 | Windows 11 x64·Ubuntu 24.04 LTS x64의 `vnc-relay` 1.x. Windows Server는 제외한다. 계정 파일 `version = 1`. |
 | 관련 테스트 | [운영 스펙 수용 테스트](../specs/operations.md#7-수용-테스트) OPS-001~002·OPS-007~010·OPS-019·OPS-029~031·OPS-039·OPS-042·OPS-044. 계약 테스트는 5절에 연결한다. `serve` 시작·종료, 계정 파일 읽기와 `admin` 명령은 두 OS에서 통과했다. Ubuntu는 PTY, Windows는 ConPTY로 숨김 입력을 확인했다. 종료 유예의 실행파일 시험은 `tests/unix_shutdown.rs`와 `tests/windows_console.rs`에서 통과했다(커밋 `de693ad`). 현재 지원 판정은 `ee0314f`의 두 OS 전체 게이트와 [작업 5.9 판정표](../how-to/set-up-and-verify.md#41-작업-59-판정표)를 따른다. 계정 파일 내용 변경은 두 OS의 대상 시험에서 실행 중 미반영·재시작 뒤 반영을 확인했다. OS 전용 시험과 대상 시험의 실행 기록은 5절에 구분한다. |
+| 접속 ticket 구현 상태 | 1.7.0의 접속 ticket 공개 키 파일 검사와 OPS-070 구현·계약 테스트는 미실행(구현 전)이다(사용자 결정 2026-11-11(Q211)). 이전 실행 기록은 이 변경의 증거가 아니다. |
 
 용어는 [VNC Relay 용어집](../../GLOSSARY.md)을 따른다. 설정 파일 키는 [설정 파일 계약](config-v4.md)을 따른다. 이 문서에서 "계정"은 관리자 계정이다.
 
@@ -159,7 +160,7 @@ $argon2id$v=19$m=<memory_kib>,t=<iterations>,p=<parallelism>$<솔트>$<해시>
 | 항목 | 규칙 |
 | --- | --- |
 | 시작 | 터미널에서 `vnc-relay serve --config <path>`를 실행한다. 프로세스는 종료 때까지 돌아오지 않는다. 백그라운드 전환(daemon), PID 파일, OS 서비스 등록은 하지 않는다. |
-| 시작 순서 | (1) 설정 읽기·검증과 로그 출력 열기, (2) 계정 파일 읽기·검증, (3) 파일 변경 감지 준비, (4) 리스너·TLS 준비. 다음 단계는 앞 단계가 성공해야 한다. 처음 실패한 단계에서 멈추고 확보한 자원을 회수한다. 1단계는 설정 검증이 끝난 뒤 `log.output`의 로그 파일을 연다. 열지 못하면 `log_file_unavailable`(종료 코드 3)로 멈춘다. 4단계는 먼저 비동기 런타임과 종료 신호 처리기를 준비하고, 시작 키(RelayIdKey·SessionIdKey)를 운영체제 난수원으로 생성한다. 둘 중 하나라도 준비하거나 생성하지 못하면 `runtime_unavailable`(종료 코드 1)로 멈춘다(사용자 결정 2026-11-01(Q76)). 이어 인증서·개인키 파일 검사(`tls_file_invalid`, 종료 코드 3)를 리스너 바인드(`listener_bind_failed`, 종료 코드 4)보다 먼저 한다. 인증서·개인키 파일 오류가 있으면 종료 코드는 3이고, 그 오류가 없을 때의 바인드 실패만 4다. 모두 성공하면 준비됨이다([운영 스펙 2절](../specs/operations.md#2-상태와-검증-매개변수)). 각 단계의 실패는 stderr의 오류 줄과 함께 운영 로그의 `startup_failed`로도 기록한다([운영 정보 계약 1.5절](ops-info-v2.md#15-사건-목록)). |
+| 시작 순서 | (1) 설정 읽기·검증과 로그 출력 열기, (2) 계정 파일 읽기·검증, (3) 파일 변경 감지 준비, (4) 리스너·TLS 준비. 다음 단계는 앞 단계가 성공해야 한다. 처음 실패한 단계에서 멈추고 확보한 자원을 회수한다. 1단계는 설정 검증이 끝난 뒤 `log.output`의 로그 파일을 연다. 열지 못하면 `log_file_unavailable`(종료 코드 3)로 멈춘다. 4단계는 먼저 비동기 런타임과 종료 신호 처리기를 준비하고, 시작 키(RelayIdKey·SessionIdKey)를 운영체제 난수원으로 생성한다. 둘 중 하나라도 준비하거나 생성하지 못하면 `runtime_unavailable`(종료 코드 1)로 멈춘다(사용자 결정 2026-11-01(Q76)). 이어 인증서·개인키 파일 검사(`tls_file_invalid`, 종료 코드 3)와 접속 ticket 공개 키 파일 검사(`ticket_keys_invalid`, 종료 코드 3)를 리스너 바인드(`listener_bind_failed`, 종료 코드 4)보다 먼저 한다. 접속 ticket 공개 키 파일 검사는 [설정 파일 계약 1.11절](config-v4.md#111-접속-ticket-공개-키-파일-형식)을 따른다(사용자 결정 2026-11-11(Q207·Q213)). 인증서·개인키·접속 ticket 공개 키 파일 오류가 있으면 종료 코드는 3이고, 그 오류가 없을 때의 바인드 실패만 4다. 모두 성공하면 준비됨이다([운영 스펙 2절](../specs/operations.md#2-상태와-검증-매개변수)). 각 단계의 실패는 stderr의 오류 줄과 함께 운영 로그의 `startup_failed`로도 기록한다([운영 정보 계약 1.5절](ops-info-v2.md#15-사건-목록)). |
 | 종료 요청 | Ctrl+C와 SIGTERM을 정상 종료 요청으로 처리한다. Ubuntu는 SIGINT(Ctrl+C)와 SIGTERM이다. Windows 11은 Ctrl+C와 Ctrl+Break다. Windows에는 SIGTERM이 없다. Windows 콘솔 창 닫기는 종료 요청과 두 번째 종료 요청을 함께 받은 것으로 처리한다. G 없이 남은 세션을 즉시 강제 정리하고, OS가 창을 닫은 뒤 기본 5초 안에 프로세스를 끝내기 전에 종료 기록을 마친다([운영 스펙 3.4절](../specs/operations.md#34-정상-종료와-재시작), 사용자 결정 2026-11-04(Q102)). |
 | 종료 절차 | 정상 종료 요청을 받으면 [운영 스펙 3.4절](../specs/operations.md#34-정상-종료와-재시작)을 따른다. 유예 시간은 `timeouts.shutdown_grace_secs`다. 유예가 끝나 남은 세션을 강제 정리하는 경우도 정상 종료 요청에 따른 종료이며 종료 코드 0이다. 이때 세션의 종료 원인은 아직 정리를 시작하지 않은 세션에만 `server_shutdown`을 기록하고, 이미 정리를 시작한 세션은 최초 정리 시작 원인을 유지한다(사용자 결정 2026-11-01(Q82)). |
 | 실행 중 리스너 장애 | 복구 불가능 수락 오류는 `shutdown_started(trigger=fatal_error)`와 기존 G·정리 절차로 끝낸다. 종료 코드는 1이다. stderr에는 `error[listener_failed]`와 해당 `listen` 키를 쓴다. 바인드 실패(4)나 `startup_failed`가 아니다. [운영 정보 계약 1.12절](ops-info-v2.md#112-상태-리스너와-엔드포인트)을 따른다. 사용자 결정 2026-11-05(Q114). |
@@ -182,7 +183,7 @@ error[listener_bind_failed] key=relay.tcp_viewer.listen: 0.0.0.0:15901에 바인
 | `0` | 성공 | 명령이 끝났다. `serve`는 정상 종료 요청의 정리가 끝났다(유예 만료·두 번째 종료 요청으로 강제 정리한 경우 포함). `--help`·`--version`·`admin list`(계정 0개 포함)도 해당한다. |
 | `1` | 실행 중 오류 | 명령을 실행하는 중에 실패했다. 입력 취소, 비밀번호 검사 실패, 계정 중복·없음, 변경 감지 준비 불가, 비동기 런타임·종료 신호 처리기 준비 불가, 서버가 계속 운영할 수 없는 실패, 정리 실패가 해당한다. |
 | `2` | 사용법 오류 | 알 수 없는 하위 명령·옵션, `--config` 누락·중복, 인수 개수 오류, 계정 이름 규칙 위반, 터미널이 아닌 입력. 사용법은 `usage_error`일 때만 stderr에 쓴다(사용자 결정 2026-10-20). |
-| `3` | 설정 오류 | 설정 파일의 읽기·구문·키·값 오류 전체, 인증서·개인키 파일 오류(경로·형식 오류, 인증서와 개인키가 맞지 않음), 로그 파일을 열 수 없음. 시작 실패 포함. 코드는 [설정 파일 계약 2.1절](config-v4.md#21-설정-오류와-준비-실패)의 `config_*`·`tls_file_invalid`·`log_file_unavailable`이다. |
+| `3` | 설정 오류 | 설정 파일의 읽기·구문·키·값 오류 전체, 인증서·개인키 파일 오류(경로·형식 오류, 인증서와 개인키가 맞지 않음), 접속 ticket 공개 키 파일 오류, 로그 파일을 열 수 없음. 시작 실패 포함. 코드는 [설정 파일 계약 2.1절](config-v4.md#21-설정-오류와-준비-실패)의 `config_*`·`tls_file_invalid`·`ticket_keys_invalid`·`log_file_unavailable`이다. |
 | `4` | 리스너 준비 실패 | 리스너 바인드 실패(이미 사용 중인 주소 포함). |
 | `5` | 계정 파일 오류 | 계정 파일을 읽을 수 없거나 형식·해시 하한이 맞지 않거나, 파일이 없거나(`serve`), 계정이 하나도 없거나, 잠금·저장에 실패했다. |
 
@@ -210,6 +211,7 @@ error[listener_bind_failed] key=relay.tcp_viewer.listen: 0.0.0.0:15901에 바인
 | `listener_bind_failed` | 리스너 주소에 바인드하지 못했다. 이미 사용 중인 경우를 포함한다. `key`는 해당 `listen` 키다. | 4 | OPS-002, OPS-039 |
 | `listener_failed` | `serve`: 실행 중 필수 리스너의 복구 불가능 수락 오류. `key`는 해당 `listen` 키다. 원시 OS 코드와 리스너 이름만 진단에 넣는다. | 1 | OPS-046 |
 | `tls_file_invalid` | 인증서·개인키 경로·형식 오류. 의미는 [설정 파일 계약 2.1절](config-v4.md#21-설정-오류와-준비-실패)이 정한다. 시작 때 4단계에서 보고하지만 종료 코드는 설정 오류와 같다. | 3 | OPS-002 |
+| `ticket_keys_invalid` | 접속 ticket 공개 키 파일 오류. 의미는 [설정 파일 계약 2.1절](config-v4.md#21-설정-오류와-준비-실패)이 정한다. 시작 때 4단계에서 보고하지만 종료 코드는 설정 오류와 같다. | 3 | OPS-070 |
 | `log_file_unavailable` | `serve`: `log.output`의 로그 파일을 열 수 없다. 의미는 [설정 파일 계약 2.1절](config-v4.md#21-설정-오류와-준비-실패)이 정한다. `key`는 `log.output`이다. | 3 | 없음 |
 | `config_*` | 설정 오류. 이름은 [설정 파일 계약](config-v4.md#21-설정-오류와-준비-실패)을 따른다. | 3 | OPS-001 |
 
@@ -227,7 +229,7 @@ error[listener_bind_failed] key=relay.tcp_viewer.listen: 0.0.0.0:15901에 바인
 | 상태 | 조건 | 지원 종료·대체 |
 | --- | --- | --- |
 | Draft | 채택 전 상태. 이 계약은 2026-10-16에 채택해 Draft를 지났다. | 해당 없음 |
-| Active | 현재. 사용자 채택(2026-10-16). 구현과 양 OS의 계약 테스트 통과·검증 기록은 5절 표가 관리하며, 통과하기 전에는 지원 완료로 표시하지 않는다. | v2가 Active가 된 뒤 Deprecated로 바꾼다. |
+| Active | 현재 1.7.0. 사용자 채택(2026-10-16). 접속 ticket 오류 추가는 사용자 결정 2026-11-11(Q207·Q213)을 따른다. 구현과 양 OS의 계약 테스트 통과·검증 기록은 5절 표가 관리하며, 통과하기 전에는 지원 완료로 표시하지 않는다. 1.7.0의 구현·계약 테스트는 미실행(구현 전)이다. | v2가 Active가 된 뒤 Deprecated로 바꾼다. |
 | Deprecated | 대체 계약이 Active이다. | 지원 종료 날짜는 대체 계약에서 정한다. |
 | Retired | 지원 종료. | 새 구현의 근거로 쓰지 않는다. |
 
@@ -286,6 +288,7 @@ error[account_name_invalid]: 계정 이름은 소문자 영문·숫자·점·밑
 | Consumer·`tests/unix_shutdown.rs`와 `tests/windows_console.rs`의 `stop_unfinished_work`·`active_session_finishes_in_grace`·`grace_expiry_cleans_session`·`restart_has_fresh_state`·`second_request_forces_cleanup`. Windows는 `ctrl_c_stops_gracefully_with_exit_code_zero`·`ctrl_break_stops_gracefully_with_exit_code_zero`·`console_close_forces_cleanup`도 확인한다. | 유예 안 자발 종료·유예 만료, 유예 중 두 번째 종료 요청의 즉시 강제 정리, Windows의 Ctrl+C·Ctrl+Break, Windows 콘솔 창 닫기의 즉시 강제 정리(1.8절). [OPS-007](../specs/operations.md#7-수용-테스트)~[OPS-010](../specs/operations.md#7-수용-테스트), [OPS-042](../specs/operations.md#7-수용-테스트), [OPS-044](../specs/operations.md#7-수용-테스트). [OPS-019](../specs/operations.md#7-수용-테스트)는 두 OS의 종료 부분만 이 행에 해당한다. OPS-019 전체도 아래 배포 시험과 [작업 5.9 판정표](../how-to/set-up-and-verify.md#41-작업-59-판정표)에서 통과로 판정했다. | 통과 | 공통 시나리오 본문은 `tests/common/shutdown.rs`다. 콘솔 창 닫기는 `ShutdownSignal::wait`가 `ShutdownRequest::ConsoleClosed`로 돌려주고, `begin_relay_shutdown`이 G로 유예를 시작한 뒤 곧바로 `Duration::ZERO`로 강제 정리를 요청한다(사용자 결정 2026-11-04(Q102)). 커밋 `de693ad` 게이트에서 Linux(SIGTERM)와 Windows(ConPTY 신호·창 닫기) 모두 통과했다. 창 닫기 시 5초 이내 프로세스 종료를 단언한다. |
 | Consumer·`tests/reload.rs` `restart_only_change_applies_at_the_next_start`(계정 파일 경로 변경), `tests/management_session.rs` `account_file_content_changes_apply_only_after_restart`(같은 경로의 내용 변경) | 실행 중 계정 파일 변경이 서버에 반영되지 않고 재시작 뒤 반영(1.7절). [OPS-003](../specs/operations.md#7-수용-테스트), [OPS-029](../specs/operations.md#7-수용-테스트) | 통과(Windows·WSL) | 경로 변경은 `ee0314f`의 두 OS 전체 게이트에서 통과했다. 내용 변경은 2026-11-07 작업 트리의 `cargo test --test management_session account_file_content_changes_apply_only_after_restart`로 확인했다. Windows: 1통과·0실패, 12.19초. WSL: 1통과·0실패, 11.70초. 기존 비밀번호 유지, 새 비밀번호·추가 계정 거절, `reload_applied` 없음, 재시작 뒤 새 비밀번호·추가 계정 허용과 기존 비밀번호 거절을 확인한다. 변경 뒤 7초를 기다린다(Dp 5초 + D 1초 + 여유 1초). 전체 명령과 lint·서식 결과는 [실행 기록](#계약-테스트-실행-기록)에 있다. |
 | Producer·`tests/distribution.rs` `repository_example_loads_without_secrets`, `example_cli_account_relay_reload_and_graceful_stop`(Linux), `tests/windows_console.rs`의 같은 실행파일 시험(Windows), [수동 운영 안내](../how-to/operate-relay.md) 두 OS 실행 기록 | 배포 예시에 실제 비밀값·기본 비밀번호가 없다. 실제 터미널의 숨김 입력으로 `admin add`를 실행한 뒤 예시 복사본으로 시작·중계·재로드·정상 종료한다. 자동 시험은 debug 실행파일의 부분 증거다. release 묶음과 안내 전체는 두 OS 수동 기록으로 판정한다. [OPS-031](../specs/operations.md#7-수용-테스트) | 통과 | 커밋 `1c7c7a9`의 두 OS 게이트와 두 OS 수동 실행(2026-11-05). [실행 기록](#계약-테스트-실행-기록) |
+| Consumer / 접속 ticket 시작 실패 계약 시험 계획 | 접속 ticket 공개 키 파일 오류를 리스너 바인드 전에 `ticket_keys_invalid`와 종료 코드 3으로 보고한다(1.8·2.1·2.2절). 파일 내용은 진단에 넣지 않는다. [OPS-070](../specs/operations.md#7-수용-테스트) | 미실행(구현 전) | 테스트 미연결. 이전 실행 기록은 이 변경의 증거가 아니다. |
 
 ### 계약 테스트 실행 기록
 
@@ -332,6 +335,7 @@ error[account_name_invalid]: 계정 이름은 소문자 영문·숫자·점·밑
 
 ## 6. 초안을 확정하기 전에 해결할 사항
 
+- 1.7.0의 접속 ticket 공개 키 파일 검사와 `ticket_keys_invalid`는 사용자 결정 2026-11-11(Q207·Q213)을 따른다. 구현·계약 테스트는 미실행(구현 전)이다(사용자 결정 2026-11-11(Q211)). 5절의 OPS-070 계획으로 확인해야 한다.
 - 이 계약의 이름·코드 선택(하위 명령 옵션 `--yes`·`--help`·`--version`, 오류·경고 코드, 계정 파일 TOML 형식과 필드 이름, 잠금 파일 이름)은 2026-10-16에 사용자가 채택했다. 하위 명령 이름 `serve`·`admin add|passwd|remove|list`와 `--config`는 공유 인터페이스 이름을 따른다.
 - 계정 이름·비밀번호 규칙(1.2절), 솔트·해시 길이(1.4절), 성공 문장과 `notice`, 마지막 계정 삭제 허용도 채택 범위다.
 - 종료 코드는 확정했다(2026-10-16). 준비된 계정이 없을 때(`accounts_none`)와 계정 파일이 없을 때(`accounts_file_missing`)는 5다. 인증서·개인키 파일 오류(`tls_file_invalid`)는 설정 오류와 같은 3이다. 리스너 바인드 실패는 4다.

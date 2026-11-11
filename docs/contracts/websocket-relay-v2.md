@@ -6,11 +6,13 @@
 
 2026-11-10에 Viewer 경로를 `/relay`에서 `/relay/viewer`로 바꿔 2.0.0으로 올렸다(사용자 결정 2026-11-10). 3절의 호환성을 깨는 변경이다. 1.x 클라이언트의 이전과 롤백은 [3.1절](#31-1x-클라이언트를-200으로-옮기기)을 따른다.
 
+2.1.0은 설정으로 켠 역할의 접속 ticket 확인을 더한다(사용자 결정 2026-11-11(Q192·Q195)). 기본은 꺼짐이다. 구현·계약 테스트는 미실행(구현 전)이다.
+
 | 항목 | 값 |
 | --- | --- |
-| 이전 버전 이력 | `websocket-relay` 1.2.0(2026-11-08). 공유 WS·WSS 리스너의 경로별 Server 역할 `/relay/server`와 신뢰 프록시의 `X-Forwarded-For` 처리를 더했다(사용자 결정 2026-11-08(Q181), 사용자 결정 2026-11-08(Q182), 사용자 결정 2026-11-08(Q188)). Viewer 경로 `/relay`를 유지한 3절의 호환 추가였다. 구현은 커밋 `3df0693`이며, 커밋 `51bd747`의 두 OS 게이트에서 통과했다([WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)). 1.1.0은 새 close 코드 4011 `relay_connection_limit`을 더하고(사용자 결정 2026-11-01(Q79)), 클라이언트 Close 수신 시 전송 중 프레임 마무리 규칙(1.6절 1행, 사용자 결정 2026-11-01(Q83))과 강제 정리 시 1001 발송 및 종료 원인 보존 규칙(1.5·1.6·2.2절, 사용자 결정 2026-11-01(Q82))을 명시했다. 3절에 따른 호환 변경이다. 명확화(2026-11-07, 1.1.0 유지): 1011을 예약 코드로 적었다. 현재 구현은 1011을 보내지 않는다(사용자 결정 2026-11-07(Q152)). 요청 머리의 16 KiB 상한과 HTTP 400 경계를 명시했다(사용자 결정 2026-11-07(Q156)). 종료 시 새 접속은 TCP에서 거절하고 101 전 연결은 HTTP 응답 없이 닫는다(사용자 결정 2026-11-07(Q160)). 기존 구현은 503을 보내지 않았으므로 클라이언트가 보는 동작은 바뀌지 않는다. 1.0.0 이력: H 시작점과 검사 순서의 명확화(사용자 결정 2026-10-22(Q22), 2026-10-22(Q24)), Repeater 초기 교환 계약 채택에 따른 4008 문장·시작 바이트 반영(사용자 결정 2026-11-01(Q71~Q73)), noVNC 1.7.0 관찰 결과 반영(2026-11-01). |
-| 이름과 버전 | `websocket-relay` 2.0.0(2026-11-10). Viewer 경로를 `/relay`에서 `/relay/viewer`로 바꿨다(사용자 결정 2026-11-10). 3절의 호환성을 깨는 변경이다. 2.0.0 서버는 `/relay`를 그 밖의 경로와 같이 404로 거절한다. Server 경로와 나머지 규칙은 1.2.0과 같다. |
-| 상태 | Active(2026-10-16 채택. 2.0.0은 사용자 결정 2026-11-10) |
+| 이전 버전 이력 | `websocket-relay` 2.0.0(2026-11-10). Viewer 경로를 `/relay`에서 `/relay/viewer`로 바꿨다(사용자 결정 2026-11-10). 3절의 호환성을 깨는 변경이다. 2.0.0 서버는 `/relay`를 그 밖의 경로와 같이 404로 거절한다. Server 경로와 나머지 규칙은 1.2.0과 같다. 1.2.0(2026-11-08)은 공유 WS·WSS 리스너의 경로별 Server 역할 `/relay/server`와 신뢰 프록시의 `X-Forwarded-For` 처리를 더했다(사용자 결정 2026-11-08(Q181), 사용자 결정 2026-11-08(Q182), 사용자 결정 2026-11-08(Q188)). Viewer 경로 `/relay`를 유지한 3절의 호환 추가였다. 구현은 커밋 `3df0693`이며, 커밋 `51bd747`의 두 OS 게이트에서 통과했다([WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)). 1.1.0은 새 close 코드 4011 `relay_connection_limit`을 더하고(사용자 결정 2026-11-01(Q79)), 클라이언트 Close 수신 시 전송 중 프레임 마무리 규칙(1.6절 1행, 사용자 결정 2026-11-01(Q83))과 강제 정리 시 1001 발송 및 종료 원인 보존 규칙(1.5·1.6·2.2절, 사용자 결정 2026-11-01(Q82))을 명시했다. 3절에 따른 호환 변경이다. 명확화(2026-11-07, 1.1.0 유지): 1011을 예약 코드로 적었다. 현재 구현은 1011을 보내지 않는다(사용자 결정 2026-11-07(Q152)). 요청 머리의 16 KiB 상한과 HTTP 400 경계를 명시했다(사용자 결정 2026-11-07(Q156)). 종료 시 새 접속은 TCP에서 거절하고 101 전 연결은 HTTP 응답 없이 닫는다(사용자 결정 2026-11-07(Q160)). 기존 구현은 503을 보내지 않았으므로 클라이언트가 보는 동작은 바뀌지 않는다. 1.0.0 이력: H 시작점과 검사 순서의 명확화(사용자 결정 2026-10-22(Q22), 2026-10-22(Q24)), Repeater 초기 교환 계약 채택에 따른 4008 문장·시작 바이트 반영(사용자 결정 2026-11-01(Q71~Q73)), noVNC 1.7.0 관찰 결과 반영(2026-11-01). |
+| 이름과 버전 | `websocket-relay` 2.1.0(2026-11-11). 명시적으로 켠 역할의 접속 ticket 확인을 더하는 3절의 호환 변경이다(사용자 결정 2026-11-11(Q192·Q195)). |
+| 상태 | Active(2026-10-16 채택. 2.1.0은 사용자 결정 2026-11-11(Q192·Q195)). 접속 ticket 구현·계약 테스트는 미실행(구현 전)이다. |
 | 소유자 | vnc-relay 프로젝트 관리자 |
 | 만드는 쪽(Producer) | 외부 WebSocket 클라이언트(요청·바이너리 메시지·Close 송신), `vnc-relay` WS·WSS 리스너(응답·바이너리 메시지·ping·Close 송신). 방향마다 만드는 쪽이 다르며, 각 절에 방향을 적는다. |
 | 사용하는 쪽(Consumer) | `vnc-relay` WS·WSS 리스너(요청 수신), 외부 WebSocket 클라이언트(응답 수신) |
@@ -18,11 +20,11 @@
 | 스키마 기준 파일 | 없음. 아래 Markdown 표가 형식의 기준이다. WebSocket 프레임 형식은 [RFC 6455](https://www.rfc-editor.org/rfc/rfc6455)를 따른다. |
 | 기준 스펙 | [WS·WSS 전송](../specs/websocket.md), [TCP 중계와 연결 매칭](../specs/relay.md) |
 | 관련 요구사항 | [PRD](../requirements/PRD.md) FR-05, 7절 보안 경계, AC-05~08, AC-16~17 |
-| 호환성 범위 | WS(`ws://`)와 WSS(`wss://`)의 Viewer·Server 진입점. Viewer는 Mode I·II, Server는 Mode II만 지원한다. 공유 리스너의 요청 경로가 역할을 정한다(1.7절). 1.x의 Viewer 클라이언트는 3.1절에 따라 경로를 옮겨야 한다. 외부 RFC 6455 클라이언트가 대상이며, 고정 버전 noVNC의 `repeaterID` 옵션은 Viewer 검증 대상이다([WS-025](../specs/websocket.md#7-수용-테스트)). |
-| 관련 테스트 | [WS-001~027](../specs/websocket.md#7-수용-테스트). 연결은 2절과 5절에 있다. `ee0314f`의 두 OS 전체 게이트가 통과했다. 고정 버전 noVNC 시험은 두 OS에서 `--include-ignored`로 별도 통과했다(커밋 `d4c5678`). 현재 지원 판정은 [작업 5.9 판정표](../how-to/set-up-and-verify.md#41-작업-59-판정표)를 따른다. 1011은 예약 코드라 시험 대상이 아니다(사용자 결정 2026-11-07(Q152)). |
-| 후속 테스트 범위 | WS-028~036과 RLY-028, 변경된 WS-012·014·022·023·024는 커밋 `51bd747`의 두 OS 게이트에서 통과했다([WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)). 2.0.0의 Viewer 경로와 이전 경로 `/relay`의 404는 WS-012·WS-029로 확인한다. 두 시나리오는 커밋 `41dda1f`의 두 OS 게이트에서 통과했다([Viewer 경로 이전 판정표](../how-to/set-up-and-verify.md#44-viewer-경로-이전-판정표)). 계약 테스트는 5절을 따른다. |
+| 호환성 범위 | WS(`ws://`)와 WSS(`wss://`)의 Viewer·Server 진입점. ticket을 켜지 않은 Viewer는 Mode I·II, Server는 Mode II만 지원한다. ticket을 켠 Viewer의 Mode I 거절은 1.9.5절을 따른다. 공유 리스너의 요청 경로가 역할을 정한다(1.7절). 1.x의 Viewer 클라이언트는 3.1절에 따라 경로를 옮겨야 한다. 외부 RFC 6455 클라이언트가 대상이며, 고정 버전 noVNC의 `repeaterID` 옵션은 Viewer 검증 대상이다([WS-025](../specs/websocket.md#7-수용-테스트)). |
+| 관련 테스트 | [WS-001~027](../specs/websocket.md#7-수용-테스트). 연결은 2절과 5절에 있다. `ee0314f`의 두 OS 전체 게이트가 통과했다. 고정 버전 noVNC 시험은 두 OS에서 `--include-ignored`로 별도 통과했다(커밋 `d4c5678`). 현재 지원 판정은 [작업 5.9 판정표](../how-to/set-up-and-verify.md#41-작업-59-판정표)를 따른다. 1011은 예약 코드라 시험 대상이 아니다(사용자 결정 2026-11-07(Q152)). 2.1.0의 WS-037~046·RLY-029~032는 미연결이다. 접속 ticket 구현·계약 테스트는 미실행(구현 전)이다. |
+| 후속 테스트 범위 | WS-028~036과 RLY-028, 변경된 WS-012·014·022·023·024는 커밋 `51bd747`의 두 OS 게이트에서 통과했다([WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)). 2.0.0의 Viewer 경로와 이전 경로 `/relay`의 404는 WS-012·WS-029로 확인한다. 두 시나리오는 커밋 `41dda1f`의 두 OS 게이트에서 통과했다([Viewer 경로 이전 판정표](../how-to/set-up-and-verify.md#44-viewer-경로-이전-판정표)). 2.1.0의 WS-037~046·RLY-029~032는 미연결이다. 접속 ticket 구현·계약 테스트는 미실행(구현 전)이다. 계약 테스트는 5절을 따른다. |
 
-관련 문서: [Repeater 초기 교환 계약](repeater-handshake-v1.md), [설정 계약](config-v4.md)(키 이름·값 범위, Origin 값 문법과 정규화), [관리 API 계약](management-api-v1.md)(관리자 종료·종료 원인 `close_cause`), [운영 정보 계약](ops-info-v2.md)(종료 원인·로그), [ADR-0001 내장 TLS](../decisions/ADR-0001-built-in-tls.md), [ADR-0002 출발지 IP 허용 목록](../decisions/ADR-0002-source-ip-allowlist.md).
+관련 문서: [Repeater 초기 교환 계약](repeater-handshake-v1.md), [설정 계약](config-v4.md)(키 이름·값 범위, Origin 값 문법과 정규화), [관리 API 계약](management-api-v1.md)(관리자 종료·종료 원인 `close_cause`), [운영 정보 계약](ops-info-v2.md)(종료 원인·로그), [ADR-0001 내장 TLS](../decisions/ADR-0001-built-in-tls.md), [ADR-0002 출발지 IP 허용 목록](../decisions/ADR-0002-source-ip-allowlist.md), [ADR-0009 선택형 접속 ticket](../decisions/ADR-0009-optional-relay-access-ticket.md).
 
 ## 1. 형식과 의미
 
@@ -43,7 +45,7 @@
 | `Sec-WebSocket-Key` | 필수. base64 값이며 디코드하면 16바이트여야 한다([RFC 6455 4.2.1절](https://www.rfc-editor.org/rfc/rfc6455#section-4.2.1)). | HTTP 400 |
 | `Sec-WebSocket-Version` | 필수. 값 `13`. | HTTP 426, 응답 헤더 `Sec-WebSocket-Version: 13` ([RFC 6455 4.2.2절](https://www.rfc-editor.org/rfc/rfc6455#section-4.2.2)) |
 | `Origin` | 선택. 비교와 처리는 1.3절이 정한다. | 불일치 HTTP 403, 중복 HTTP 400 |
-| `Sec-WebSocket-Protocol` | 선택. 1.2절 규칙을 따른다. | HTTP 400 |
+| `Sec-WebSocket-Protocol` | 선택. 1.2절 규칙을 따른다. ticket을 켠 역할에서는 1.9절의 값이 필수다. | HTTP 400. ticket을 켠 역할의 ticket 실패는 HTTP 401(1.9절) |
 | `Sec-WebSocket-Extensions` | 선택. 서버는 어떤 확장도 수락하지 않는다. 요청에 있어도 거절하지 않고, 응답에 이 헤더를 넣지 않는다. | 해당 없음 |
 | 그 밖의 헤더 | 신뢰 프록시의 `X-Forwarded-For`만 1.8절에 따라 읽는다. 신뢰하지 않는 상대의 `X-Forwarded-For`는 무시한다([WS-014](../specs/websocket.md#7-수용-테스트)). `Cookie`, `Authorization`, `Forwarded`, `X-Real-IP`와 나머지 헤더는 접근 판정에 쓰지 않는다. | 해당 없음 |
 
@@ -59,9 +61,13 @@
    - 마. `Sec-WebSocket-Key`(400).
 4. 클라이언트 주소 판정. 소켓 상대가 당시 유효한 `trusted_proxies`에 있으면 1.8절로 전달 주소를 얻는다. 실패하면 HTTP 400과 `connection_rejected(stage=upgrade, reason=forwarded_for_invalid)`를 기록한다. 신뢰하지 않는 상대이면 클라이언트 주소는 소켓 상대 IP다.
 5. `Origin`과 해당 역할의 `allowed_origins` 비교. 불일치면 403이다.
-6. 서브프로토콜. 위반이면 400이다.
-7. 업그레이드 직전 두 번째 IP 검사. 클라이언트 주소를 해당 역할의 그 순간 유효한 `allow`와 비교한다. 실패하면 HTTP 403과 `ip_not_allowed`를 기록한다.
-8. 모두 통과하면 `101`을 보낸다.
+6. 서브프로토콜(1.2절). 위반이면 400이다.
+7. ticket 확인(1.9.3절). ticket을 켠 역할만 한다. 실패하면 401이다.
+8. 업그레이드 직전 두 번째 IP 검사. 클라이언트 주소를 해당 역할의 그 순간 유효한 `allow`와 비교한다. 실패하면 HTTP 403과 `ip_not_allowed`를 기록한다.
+9. 사용 기록 쓰기(1.9.4절). ticket을 켠 역할만 한다. 이미 있으면 401(`ticket_reused`)이다. 성공하면 `ticket_accepted`를 기록한다.
+10. 모두 통과하면 `101`을 보낸다.
+
+사용 기록은 실패할 수 있는 검사를 모두 마친 뒤에 쓴다. 앞 검사에서 거절된 요청은 ticket을 소비하지 않는다.
 
 TLS 협상과 업그레이드 단계에는 제한 시간 U(`tls_upgrade_secs`)가 적용된다. `101` 전에 U가 지나면 HTTP 응답 없이 연결을 닫는다. 출발지 IP 허용 목록과 `trusted_proxies` 값의 형식은 [설정 계약](config-v4.md)이 정한다.
 
@@ -73,6 +79,8 @@ H(`handshake_secs`)는 초기 교환 제한 시간이다. WS·WSS에서는 `101`
 
 서브프로토콜은 클라이언트가 제시한 값 목록(여러 헤더면 합친 목록)으로 정한다. 값은 정확히 일치하는지만 본다(대소문자 구분).
 
+아래 표는 ticket을 켜지 않은 역할의 규칙이다. `binary`와 ticket 값을 함께 보내도 `binary`를 포함하므로 수락한다. ticket 값은 확인·기록하지 않는다. ticket을 켠 역할은 `binary`가 없는데 값이 있으면 먼저 HTTP 400(`subprotocol_not_supported`)으로 거절한다. 헤더가 없거나 `ticket.`으로 시작하는 값이 없으면 HTTP 401 `ticket_missing`이다. `ticket.`으로 시작하는 값이 둘 이상이면 HTTP 401 `ticket_invalid`다. 그 밖의 값은 무시한다. 수락 응답은 항상 `Sec-WebSocket-Protocol: binary`다([1.9.1절](#191-서브프로토콜에-싣는-값), 사용자 결정 2026-11-11(Q196·Q202·Q213)).
+
 | 클라이언트가 제시한 값 | 서버 처리 |
 | --- | --- |
 | `binary`를 포함 | 응답에 `Sec-WebSocket-Protocol: binary`를 넣고 수락한다. |
@@ -81,7 +89,7 @@ H(`handshake_secs`)는 초기 교환 제한 시간이다. WS·WSS에서는 `101`
 
 [RFC 6455 4.2.2절](https://www.rfc-editor.org/rfc/rfc6455#section-4.2.2)은 서버가 응답에 클라이언트가 제시하지 않은 서브프로토콜을 넣지 못하게 한다. 위 규칙은 그에 맞다.
 
-noVNC 호환: 고정 버전 noVNC 1.7.0([호환성 검증 기록](repeater-compat-record.md) 2.4절)은 WS와 WSS 모두 요청에 `Sec-WebSocket-Protocol` 헤더를 넣지 않았다(같은 기록 3.4절 W-02·W-03b, 2026-11-01 관찰). 위 표의 "헤더 없음" 행에 해당하므로 서버는 응답에 이 헤더를 넣지 않고 수락한다. 이 결과는 noVNC 1.7.0의 `vnc.html`을 `wsProtocols` 설정 없이 쓴 경우에 한정한다. 다른 버전이나 다른 설정의 noVNC는 관찰하지 않았다.
+noVNC 호환: 고정 버전 noVNC 1.7.0([호환성 검증 기록](repeater-compat-record.md) 2.4절)은 WS와 WSS 모두 요청에 `Sec-WebSocket-Protocol` 헤더를 넣지 않았다(같은 기록 3.4절 W-02·W-03b, 2026-11-01 관찰). ticket을 켜지 않은 역할에서는 위 표의 "헤더 없음" 행에 해당하므로 서버는 응답에 이 헤더를 넣지 않고 수락한다. 이 결과는 noVNC 1.7.0의 `vnc.html`을 `wsProtocols` 설정 없이 쓴 경우에 한정한다. 다른 버전이나 다른 설정의 noVNC는 관찰하지 않았다.
 
 응답 본문은 중계 ID, 허용 목록, 내부 정보를 담지 않는다.
 
@@ -91,7 +99,7 @@ noVNC 호환: 고정 버전 noVNC 1.7.0([호환성 검증 기록](repeater-compa
 
 | 비교 결과 | 처리 |
 | --- | --- |
-| `Origin` 헤더 없음 | Origin 검사를 건너뛰고 출발지 IP 검사만 한다. |
+| `Origin` 헤더 없음 | Origin 검사를 건너뛰고 다음 업그레이드 검사로 넘어간다. |
 | 하나이며 허용 값과 일치 | 다음 검사로 넘어간다. |
 | 하나이며 허용 값과 불일치(`allowed_origins`가 빈 배열이어서 모든 값이 불일치인 경우 포함) | HTTP 403(2.1절). |
 | 둘 이상 | HTTP 400(2.1절). |
@@ -142,6 +150,8 @@ WS·WSS 하부 TCP 소켓에는 TCP keepalive(K)도 적용한다. 값은 이 계
 | 4009 | 초기 교환 시간 초과 | `handshake_timeout` | 초기 교환이 H 안에 끝나지 않음. |
 | 4010 | 대기 상한 도달 | `waiting_full` | 대기 연결 상한 Lw 때문에 새 대기 등록을 거절. |
 | 4011 | 중계 연결 상한 도달 | `relay_connection_limit` | Mode I에서 101 성공 후 대상 연결을 위한 중계 연결 상한 L 슬롯이 없음(사용자 결정 2026-11-01(Q79)). |
+| 4012 | ticket 중계 ID 불일치 | `ticket_relay_mismatch` | ticket으로 업그레이드한 연결의 초기 요청이 ticket의 `rid`와 다르거나 Viewer Mode I 요청임(1.9.5절, 사용자 결정 2026-11-11(Q203·Q213)). |
+| 4013 | 세션 만료 | `session_expired` | ticket의 세션 만료 시각 `sx`에 도달함(1.9.5절, 사용자 결정 2026-11-11(Q213)). |
 
 reason 문자열은 UTF-8의 고정 식별자만 쓴다. Close 본문은 코드 2바이트와 reason을 합쳐 125바이트 이하다([RFC 6455 5.5절](https://www.rfc-editor.org/rfc/rfc6455#section-5.5)). reason은 중계 ID, 주소, 내부 오류 문장을 담지 않는다. 클라이언트는 reason을 사용자에게 보이지 않아야 한다([RFC 6455 5.5.1절](https://www.rfc-editor.org/rfc/rfc6455#section-5.5.1)). 예약 코드(1005·1006·1015)는 서버가 보내지 않는다.
 
@@ -157,6 +167,7 @@ WebSocket에는 TCP 같은 독립적인 양방향 half-close가 없다. 그래�
 | 상대 TCP의 정상 EOF | 1. 이미 받은 TCP 데이터를 모두 바이너리 메시지로 전달한다. 2. Close 1000을 보낸다. 3. 클라이언트의 Close를 E까지 기다리는 동안 클라이언트가 보낸 데이터 메시지는 계속 TCP로 전달한다. 4. 클라이언트의 Close를 받거나 E가 지나면 TCP를 닫고 정리한다. | 받은 데이터를 소진하지 못하면 Close 4007로 중단하고 원인을 기록한다. |
 | 상대 TCP 오류 | 즉시 Close 4007을 보낸다. 남은 데이터 전달을 보장하지 않는다. | 최선 노력. |
 | 관리자 종료 | 새 데이터 수락을 멈추고 Close 4005를 보낸다. 상대 TCP를 즉시 닫는다. 클라이언트의 Close를 E까지 기다린 뒤 정리를 마치고 관리 API 응답을 한다. | 남은 데이터 전달을 보장하지 않는다. |
+| 세션 만료(`sx`) | 새 데이터 수락을 멈추고 Close 4013을 보낸다. 상대 TCP를 즉시 닫는다. 클라이언트의 Close를 E까지 기다린 뒤 정리한다. | 남은 데이터 전달을 보장하지 않는다. |
 | 서버 종료 | 유예 중 자발적으로 끝나는 세션은 위 정상 흐름을 따른다. 초기 교환·대기 중인 연결과, 유예 만료 뒤(또는 유예 중 두 번째 종료 요청으로 남은 유예를 건너뛴 뒤) 아직 정리를 시작하지 않은 남은 세션에는 Close 1001을 보내고 정리한다(이미 Close를 교환했거나 보낸 세션에는 1001을 다시 보내지 않는다, 사용자 결정 2026-11-01(Q82)). | 유예 만료·즉시 강제 정리 때 남은 데이터 전달을 보장하지 않는다. |
 | 상대 TCP가 끊긴 연결로 판정됨 | Close 4006을 보내고 정리한다. 반대쪽도 같은 세션에서 종료한다. | 최선 노력. |
 | pong 제한 초과 | 클라이언트가 끊긴 연결이다. Close 프레임의 응답을 기다리지 않고 TCP 소켓을 닫고, 상대 TCP와 등록 자원을 회수한다. 클라이언트가 보는 종료는 코드 없는 비정상 종료다(RFC 6455의 1006은 클라이언트 쪽에서 붙이는 값이며 서버가 보내지 않는다). | 비정상 종료. |
@@ -194,6 +205,108 @@ Close를 보낸 뒤에는 데이터 메시지를 보내지 않는다([RFC 6455 5
 
 `trusted_proxies`에는 프록시 주소만 넣어야 한다. 클라이언트 범위를 넣어서는 안 된다. 신뢰 프록시는 accept 단계의 역할 허용 목록 검사를 건너뛰므로, 프록시 주소로 클라이언트를 대신하면 접근 정책을 우회할 수 있다. 신뢰 프록시 호스트나 그 범위 안의 클라이언트에서 시작한 요청은 프록시를 거치면 거절될 수 있다. 같은 출발지에서 이 리스너에 직접 접속해도 신뢰 프록시 연결로 취급해 이 절의 전달 헤더 검사를 적용한다. 그래서 유효한 전달 헤더가 없으면 거절되고, 있으면 같은 전달 주소 판정과 역할 허용 목록 검사를 받는다. 전달 헤더 없이 직접 접속하려면 출발지가 이 리스너의 `trusted_proxies` 밖에 있고 해당 역할의 허용 목록에 들어야 한다. 모든 요소가 신뢰 프록시인 체인의 회귀 시나리오는 WS-036이다.
 
+### 1.9 접속 ticket
+
+접속 ticket 확인은 역할마다 설정으로 켠다. 기본은 꺼짐이다(사용자 결정 2026-11-11(Q192·Q197)). 켠 역할은 유효한 ticket 하나를 요구한다. ticket이 있을 때만 확인하는 방식은 없다(사용자 결정 2026-11-11(Q196)). 형식과 클레임은 이 계약이 정한다(사용자 결정 2026-11-11(Q204·Q213)). 구현·계약 테스트는 미실행(구현 전)이다.
+
+#### 1.9.1 서브프로토콜에 싣는 값
+
+클라이언트는 `Sec-WebSocket-Protocol`에 `binary`와 `ticket.` 뒤에 JWS 압축 형식을 붙인 값 하나를 함께 보낸다. 접두어는 정확히 소문자 `ticket.`이다. 나머지가 JWS다. JWS의 base64url 문자와 `.`은 [RFC 6455 4.1절](https://www.rfc-editor.org/rfc/rfc6455#section-4.1)의 서브프로토콜 값 문자 규칙에 맞는다. 길이 제한은 요청 머리 16 KiB 상한을 따른다.
+
+ticket을 켠 역할의 값 개수와 `binary` 유무 판정은 1.2절을 따른다. 응답은 `binary`만 고른다. ticket 값은 응답에 넣지 않는다. ticket을 켜지 않은 역할은 1.2절 표를 그대로 따르며 ticket 값을 확인·기록하지 않는다(사용자 결정 2026-11-11(Q192·Q213)).
+
+#### 1.9.2 ticket 형식과 클레임
+
+형식은 [JWS 압축 형식(RFC 7515 7.1절)](https://www.rfc-editor.org/rfc/rfc7515#section-7.1)인 `BASE64URL(헤더).BASE64URL(내용).BASE64URL(서명)`이다. base64url에는 패딩이 없다([RFC 7515 2절](https://www.rfc-editor.org/rfc/rfc7515#section-2)).
+
+헤더는 JSON 객체다. `alg`는 `"ES256"`만 받는다. `kid`는 1~128바이트 문자열이며 필수다. `crit`가 있으면 거절한다. `typ`과 그 밖의 멤버는 무시한다. `jku`·`jwk`·`x5u`·`x5c`로 키를 가져오지 않는다.
+
+서명은 [ES256(RFC 7518 3.4절)](https://www.rfc-editor.org/rfc/rfc7518#section-3.4)의 P-256·SHA-256을 쓴다. 서명 값은 R‖S 64바이트다. DER 서명은 거절한다. 공개 키 파일은 [JWKS(RFC 7517 5절)](https://www.rfc-editor.org/rfc/rfc7517#section-5)이며 세부 형식은 [설정 계약 1.11절](config-v4.md#111-접속-ticket-공개-키-파일-형식)을 따른다. 헤더와 내용 JSON에서 멤버 이름이 중복되면 거절한다(사용자 결정 2026-11-11(Q213)).
+
+| 클레임 | 필수 | 자료형·제약 | vnc-relay가 대조하는 값 |
+| --- | --- | --- | --- |
+| `iss` | 필수 | 문자열 | 역할의 `issuer`와 바이트 단위로 같아야 한다. |
+| `aud` | 필수 | 문자열 하나. 배열은 거절 | 경로로 고른 역할의 고정 값. Viewer `vnc-relay/viewer`, Server `vnc-relay/server`(사용자 결정 2026-11-10). |
+| `rh` | 필수 | 문자열 | 역할의 `relay_host`와 같아야 한다. 요청의 `Host`는 쓰지 않는다. |
+| `rid` | 필수 | 문자열. 중계 ID 문법(ASCII 숫자 1~247자리, [Repeater 초기 교환 계약 1.2절](repeater-handshake-v1.md#12-초기-요청-250바이트)) | 101 뒤 초기 요청의 중계 ID(1.9.5절) |
+| `jti` | 필수 | 1~128바이트 문자열 | 사용 기록의 키(1.9.4절) |
+| `iat` | 필수 | 0 이상 정수(Unix 초) | 시각 검사, 기동 기준 |
+| `exp` | 필수 | 0 이상 정수(Unix 초). `iat < exp`, `exp − iat ≤ max_lifetime_secs` | 시각 검사 |
+| `sx` | 선택 | 0 이상 정수(Unix 초). 세션 만료 시각 | 업그레이드 때 현재 시각(오차 없음), 101 뒤 종료 시각 |
+| `sub` | 선택 | 1~128바이트 문자열. 발급 쪽의 세션 식별자 | 대조하지 않는다. 운영 로그 `ticket_sub`에 남긴다. |
+
+알 수 없는 클레임은 무시한다. 숫자 클레임에 소수·문자열을 쓰면 거절한다. 최대 수명은 역할의 `max_lifetime_secs`로 정한다(기본 60, 범위 10~600, 사용자 결정 2026-11-11(Q212·Q213)).
+
+#### 1.9.3 확인 순서와 거절
+
+시각은 vnc-relay 호스트의 시스템 시각을 Unix 초로 내림한 값(현재 시각)이다. 시계 오차 허용은 5초로 고정이다. 기동 시각은 `serve` 프로세스가 시작한 시각이다. 재로드로 바뀌지 않는다.
+
+| 순서 | 검사 | 실패 `reason` |
+| --- | --- | --- |
+| 1 | ticket 값 개수: 0개 / 2개 이상 | `ticket_missing` / `ticket_invalid` |
+| 2 | JWS 구문: 세 부분, base64url, JSON 객체, 중복 멤버 없음 | `ticket_invalid` |
+| 3 | 헤더: `alg = ES256`, `kid` 있음, `crit` 없음 | `ticket_invalid` |
+| 4 | 역할 공개 키 집합에서 `kid`가 같은 키 | `ticket_invalid` |
+| 5 | 서명 | `ticket_invalid` |
+| 6 | 필수 클레임, 자료형, `rid`·`jti`·`sub` 문법 | `ticket_invalid` |
+| 7 | `iss`·`aud`·`rh` 대조 | `ticket_invalid` |
+| 8 | `iat < exp`, `exp − iat ≤ max_lifetime_secs` | `ticket_invalid` |
+| 9 | `iat ≤ 현재 + 5` | `ticket_invalid` |
+| 10 | `현재 < exp + 5`, `sx`가 있으면 `현재 < sx` | `ticket_expired` |
+| 11 | `iat > 기동 시각 + 5`(사용자 결정 2026-11-11(Q201)) | `ticket_issued_before_start` |
+
+모든 실패는 HTTP 401이며 `WWW-Authenticate: VncRelayTicket`을 보낸다(사용자 결정 2026-11-11(Q202·Q213)). 응답 본문은 비우거나 고정 문장만 쓴다. `connection_rejected(stage=upgrade, reason=…)`를 기록한다. 서명 확인(5번)을 통과한 뒤의 거절이면 `ticket_jti`도 기록한다. 대기 등록·대상 연결·사용 기록은 없다.
+
+#### 1.9.4 사용 기록
+
+사용 기록의 키는 (역할, `jti`)다. 기록은 프로세스 메모리에만 둔다([ADR-0003](../decisions/ADR-0003-single-instance-memory-state.md)).
+
+1.1절 9단계에서 기록을 쓴다. 이미 있으면 HTTP 401 `ticket_reused`로 거절한다. `WWW-Authenticate: VncRelayTicket`과 `connection_rejected(stage=upgrade, reason=ticket_reused)`를 남긴다. 서명을 확인했으므로 `ticket_jti`도 기록한다. 성공하면 101 전에 `ticket_accepted`(`info`)를 기록한다. 필드는 `conn_id`, `listener`(`ws`·`wss`), `role`, `peer_ip`, `forwarded_ip`(있으면), `ticket_jti`, `ticket_sub`(있으면), `session_expires_at`(있으면)이다. `session_expires_at`은 `sx`를 UTC ISO 8601 문자열로 나타낸 값이다([운영 정보 계약](ops-info-v2.md), 사용자 결정 2026-11-11(Q213)).
+
+기록은 `exp + 5`초에 지운다. 한 기록은 길어야 `max_lifetime_secs` + 10초 남는다. 기록은 서명을 확인한 ticket만 담는다. 개수 상한은 두지 않는다.
+
+재로드, `enabled` 끄고 켜기, 공개 키 교체는 기록을 지우지 않는다. 재시작하면 기록이 사라진다. 1.9.3절 11번이 기동 전에 발급한 ticket을 거절해 이를 메운다(사용자 결정 2026-11-11(Q201)).
+
+기록 쓰기와 101 전송은 하나의 원자적 작업이 아니다. 기록 뒤 101 전송이 실패해도 그 ticket은 쓰인 것으로 남는다. 클라이언트는 새 ticket으로 다시 시작해야 한다.
+
+#### 1.9.5 101 뒤의 중계 ID 대조와 세션 만료
+
+ticket으로 업그레이드한 연결은 기존 초기 요청 검사를 모두 통과한 뒤, 대기 등록·대상 연결 전에 중계 ID를 대조한다. 기존 검사는 [Repeater 초기 교환 계약 1.2절](repeater-handshake-v1.md)의 순서를 유지한다. Server의 `ID:` 접두어 → 모드 판정 → 꺼진 모드 `mode_disabled`(1008) → 값 문법 `handshake_invalid`(4008) 순서다. 시간 초과(4009)도 지금과 같다(이 문서의 판단, 사용자 결정 없음).
+
+Viewer Mode I 요청에서 `mode1.enabled = false`이면 기존 `mode_disabled`(1008)가 먼저다. `mode1.enabled = true`이면 기존 문법 검사를 통과한 뒤 Close 4012로 거절한다. 두 경우 모두 대상 연결을 시도하지 않는다. 이 우선순위는 기존 초기 요청 검사와 Q203의 Mode I 거절을 함께 유지한다(이 문서의 판단, 사용자 결정 없음).
+
+- Viewer는 Mode II 초기 요청의 중계 ID가 `rid`와 바이트 단위로 같아야 한다. `0123`과 `123`은 다르다. Mode I 요청은 대조할 중계 ID가 없으므로 거절한다(사용자 결정 2026-11-11(Q203)).
+- Server는 `ID:` 초기 요청의 중계 ID가 `rid`와 같아야 한다.
+- 어긋나거나 Viewer Mode I 요청이면 Close 4012(`ticket_relay_mismatch`)로 닫는다. 대기 등록·대상 연결은 없다. 같은 중계 ID로 기다리던 상대 연결은 영향을 받지 않는다. `connection_rejected(stage=initial_exchange, reason=ticket_relay_mismatch)`를 기록한다. 필드는 `ticket_jti`, `mode`, Mode II이면 `relay_id_ref`다.
+
+`sx`가 있는 ticket으로 연 연결은 `sx`에 끝낸다. 타이머는 101 때 정하며 재로드로 바뀌지 않는다(사용자 결정 2026-11-11(Q200·Q213)).
+
+| 만료 시 상태 | 종료와 기록 |
+| --- | --- |
+| 초기 교환 중 | Close 4013. `connection_aborted(stage=initial_exchange, reason=session_expired)`를 `info`로 기록한다. |
+| 대기 중 | Close 4013. `waiting_removed(reason=session_expired)`를 `info`로 기록한다. |
+| 활성 세션 | 관리자 종료(1.6절)와 같은 정리 순서를 쓴다. WS·WSS 쪽에는 Close 4013을 보내고 TCP 쪽은 소켓을 닫는다. 종료 원인은 `session_expired`다. `session_closed`는 `info`이며 `side`가 없다. 최근 종료 목록에 오른다. |
+
+양쪽 연결이 모두 `sx`를 가지면 이른 시각에 끝낸다. `sx`가 없는 ticket은 종료 시각을 정하지 않는다. ticket 없이 받은 상대와도 짝을 이룰 수 있다.
+
+#### 1.9.6 설정과 적용 시점
+
+`[relay.ticket.viewer]`·`[relay.ticket.server]`는 그 역할의 WS·WSS 업그레이드에 함께 적용한다([설정 계약 1.2절](config-v4.md#12-키-표), 사용자 결정 2026-11-11(Q197)). 역할마다 `enabled`, `issuer`, `relay_host`, `public_keys_file`, `max_lifetime_secs`를 둔다. `enabled` 기본값은 `false`다. 시계 오차는 5초 고정이며 설정 키가 없다.
+
+TCP 진입점은 ticket을 받지 못한다. ticket을 켠 역할의 TCP 진입점이 켜져 있으면 시작·재로드 때 `ticket_tcp_bypass`를 경고한다. 경고로 시작·재로드를 거절하지 않는다(사용자 결정 2026-11-11(Q198)).
+
+평문 WS에서는 ticket 원문이 암호화되지 않는다. 켤 수 있지만 그 구간은 믿을 수 있는 망 안에 있어야 한다. ticket을 켠 역할이 `[relay.ws]`에서 켜져 있으면 시작·재로드 때 `ticket_plaintext_ws`를 경고한다(사용자 결정 2026-11-11(Q199)).
+
+10개 키 모두 재로드 대상이다. 관리 API에서는 `public_keys_file` 2개를 뺀 8개를 편집할 수 있다. 교체는 새 업그레이드 요청부터 적용한다. 이미 101을 보낸 연결의 중계 ID 대조와 `sx` 타이머, 사용 기록은 유지한다(사용자 결정 2026-11-11(Q200)). 공개 키 파일 형식·검증·교체는 [설정 계약 1.11절](config-v4.md#111-접속-ticket-공개-키-파일-형식)을 따른다.
+
+#### 1.9.7 발급 쪽과 클라이언트의 의무
+
+발급 쪽은 역할마다 다른 P-256 서명 키로 서명해야 한다. vnc-relay는 두 역할을 켰을 때 두 공개 키 파일에 같은 공개 키가 있으면 거절한다(사용자 결정 2026-11-11(Q207)). 발급 쪽은 `jti`를 ticket마다 128비트 이상 난수로 만들어야 한다. `exp − iat`는 그 역할의 `max_lifetime_secs` 이하여야 한다(사용자 결정 2026-11-11(Q212)). `sub`에 비밀이나 개인정보를 넣으면 안 된다. 발급 쪽과 vnc-relay의 시계는 5초 안으로 맞춰야 한다.
+
+클라이언트는 재시도를 포함한 연결 시도마다 새 ticket을 써야 한다. `binary`를 함께 제시해야 한다. 401을 받으면 같은 ticket을 다시 보내지 않고 새 ticket을 받아야 한다. 평문 WS는 믿을 수 있는 망 안에서만 써야 한다. 브라우저 noVNC는 `wsProtocols` 옵션으로 두 값을 보낸다.
+
+ticket 원문(JWS 전체·서명 부분)과 공개 키 파일 내용은 운영 로그·진단·상태 응답·관리 API 응답에 넣지 않는다([운영 정보 계약](ops-info-v2.md), 사용자 결정 2026-11-11(Q213)). ticket 값은 업그레이드 응답에도 넣지 않는다.
+
 ## 2. 오류
 
 ### 2.1 HTTP 단계의 거절
@@ -207,6 +320,7 @@ Close를 보낸 뒤에는 데이터 메시지를 보내지 않는다([RFC 6455 5
 | TLS 협상 실패(HTTP 응답 없음) | 인증서 검증 실패, TLS 1.2 미만. 평문 WS로 전환하지 않는다. | [WS-013](../specs/websocket.md#7-수용-테스트), [OPS-036](../specs/operations.md#7-수용-테스트), [websocket.md 4절](../specs/websocket.md#4-오류와-종료) 첫·둘째 행 |
 | `HTTP 400` | 요청 구문 오류, 요청 머리가 16,384바이트 안에서 끝나지 않음, HTTP/1.0, 필수 헤더 누락·잘못된 값, `Origin` 중복, 허용되지 않는 서브프로토콜. 중계 등록·대상 연결 없음. | [WS-012](../specs/websocket.md#7-수용-테스트), [websocket.md 4절](../specs/websocket.md#4-오류와-종료) |
 | `HTTP 400` | 신뢰 프록시의 `X-Forwarded-For`가 없거나 비어 있음, 검사 대상 요소가 잘못됨, 또는 모든 요소가 신뢰 프록시 주소임. `forwarded_for_invalid`, 중계 등록·대상 연결·`forwarded_ip` 없음. | [WS-033](../specs/websocket.md#7-수용-테스트), [WS-036](../specs/websocket.md#7-수용-테스트) |
+| `HTTP 401` | ticket을 켠 역할에서 없음·무효·만료·기동 전 발급·재사용을 거절한다. `WWW-Authenticate: VncRelayTicket`을 보낸다. reason은 `ticket_missing`, `ticket_invalid`, `ticket_expired`, `ticket_issued_before_start`, `ticket_reused`다. 대기 등록·대상 연결 없음(1.9절). | [WS-039~045](../specs/websocket.md#7-수용-테스트) |
 | `HTTP 404` | 알 수 없는 경로 또는 해당 리스너에서 꺼진 역할의 경로. `/api/` 요청과 1.x의 Viewer 경로 `/relay`를 포함한다. `invalid_upgrade`를 기록한다. | [WS-012](../specs/websocket.md#7-수용-테스트), [WS-029](../specs/websocket.md#7-수용-테스트) |
 | `HTTP 405` | `GET`이 아닌 메서드. `Allow: GET`. | [WS-012](../specs/websocket.md#7-수용-테스트) |
 | `HTTP 426` | `Sec-WebSocket-Version`이 13이 아님. `Sec-WebSocket-Version: 13`을 함께 보낸다. | [WS-012](../specs/websocket.md#7-수용-테스트) |
@@ -238,6 +352,8 @@ Close를 보낸 뒤에는 데이터 메시지를 보내지 않는다([RFC 6455 5
 | 4009 | 초기 교환 시간 초과. | [relay.md 4절](../specs/relay.md#4-오류와-복구) '초기 교환 미완료·시간 초과' 행, [RLY-005](../specs/relay.md#7-수용-테스트), [OPS-006](../specs/operations.md#7-수용-테스트) | 해당 없음. 운영 로그는 `connection_aborted`(`handshake_timeout`, `stage` `initial_exchange`)다. 101 뒤 H가 지나 이 코드를 보내는 연결은 활성 세션이 아니다. |
 | 4010 | 대기 상한 도달. | [operations.md 5절](../specs/operations.md#5-오류와-복구) 'Lw 상한 도달' 행, [OPS-005](../specs/operations.md#7-수용-테스트) | 해당 없음 |
 | 4011 | 중계 연결 상한 도달. | [operations.md 5절](../specs/operations.md#5-오류와-복구) 'L 상한 도달' 행, [OPS-023](../specs/operations.md#7-수용-테스트) | 해당 없음 |
+| 4012 | ticket 중계 ID 불일치. Viewer Mode I 요청도 포함한다. | [RLY-029](../specs/relay.md#7-수용-테스트), [RLY-030](../specs/relay.md#7-수용-테스트), [RLY-032](../specs/relay.md#7-수용-테스트) | 해당 없음 |
+| 4013 | ticket의 세션 만료 시각 `sx` 도달. | [RLY-031](../specs/relay.md#7-수용-테스트) | 활성 세션이면 `session_expired`. 아니면 해당 없음 |
 
 코드를 받을 수 없는 종료(클라이언트의 pong 제한 초과, 네트워크 단절)는 서버가 코드를 보내지 않는다. 이 경우의 종료 원인은 `dead_connection`이며 테스트는 [WS-017](../specs/websocket.md#7-수용-테스트), [WS-026](../specs/websocket.md#7-수용-테스트)이다. Close 교환 중 E 초과의 종료 원인은 `close_timeout`이다.
 
@@ -247,8 +363,8 @@ Close를 보낸 뒤에는 데이터 메시지를 보내지 않는다([RFC 6455 5
 
 - 서버는 알 수 없는 요청 헤더와 확장 요청을 무시하며 업그레이드를 막지 않는다. 필수 헤더의 잘못된 값은 거절한다.
 - 클라이언트는 알 수 없는 4000번대 코드를 받으면 중계 사유를 알 수 없는 종료로 처리해야 한다. reason 문자열은 사람이 읽는 문장이 아니므로 화면 문구로 쓰지 않는다.
-- 호환 변경: 새 4000번대 코드·reason 추가, 새 선택 요청 헤더 처리, 기존 경로를 유지하는 새 역할 경로 추가, 명시적으로 설정한 신뢰 프록시의 전달 헤더 처리, 서버 메시지 분할 크기 조정. 이때 minor 버전(`2.x.0`)을 올린다. 기존 코드의 번호나 뜻은 바꾸지 않는다. 1.2.0의 `/relay/server`와 `trusted_proxies`는 이 범위였다. 기본 `trusted_proxies = []`에서는 기존 Viewer 클라이언트의 판정이 바뀌지 않았다.
-- 호환성을 깨는 변경(Breaking change): 업그레이드 경로 변경, 서브프로토콜 규칙 변경, 기존 close 코드의 번호·뜻 변경, Origin 비교 규칙 변경, 종료 의미(1.6절) 변경. 새 major 버전과 마이그레이션·롤백 계획이 필요하다. 2.0.0의 Viewer 경로 변경이 이 범위이며, 계획은 3.1절이다.
+- 호환 변경: 새 4000번대 코드·reason 추가, 새 선택 요청 헤더 처리, 기존 경로를 유지하는 새 역할 경로 추가, 명시적으로 설정한 신뢰 프록시의 전달 헤더 처리, 서버 메시지 분할 크기 조정, 명시적으로 켠 역할의 접속 ticket 확인(그 역할의 서브프로토콜 규칙, HTTP 401과 `WWW-Authenticate`, close 4012·4013을 포함한다). 이때 minor 버전(`2.x.0`)을 올린다. 기존 코드의 번호나 뜻은 바꾸지 않는다. 1.2.0의 `/relay/server`와 `trusted_proxies`는 이 범위였다. 기본 `trusted_proxies = []`에서는 기존 Viewer 클라이언트의 판정이 바뀌지 않았다. 2.1.0의 접속 ticket 확인은 이 범위다(사용자 결정 2026-11-11(Q195)). 기본 `enabled = false`에서는 기존 클라이언트의 판정이 바뀌지 않는다.
+- 호환성을 깨는 변경(Breaking change): 업그레이드 경로 변경, 서브프로토콜 규칙 변경(위 호환 항목의 ticket 확인은 제외), 기존 close 코드의 번호·뜻 변경, Origin 비교 규칙 변경, 종료 의미(1.6절) 변경. 새 major 버전과 마이그레이션·롤백 계획이 필요하다. 2.0.0의 Viewer 경로 변경이 이 범위이며, 계획은 3.1절이다.
 
 ### 3.1 1.x 클라이언트를 2.0.0으로 옮기기
 
@@ -261,12 +377,22 @@ Close를 보낸 뒤에는 데이터 메시지를 보내지 않는다([RFC 6455 5
 | 롤백 | 이전 서버(릴리스 `2026.11.2` 이하)로 되돌릴 때 Viewer 클라이언트의 URL도 `/relay`로 되돌린다. 설정 파일은 그대로 쓴다. |
 | 지원 기간 | 두지 않는다. 2.0.0 서버는 `/relay`를 Viewer로 받지 않는다. 지원 기간은 사용자 결정이 아니라 이 문서를 쓰며 정한 판단이다. 판단 근거: 사용자가 고른 변경은 경로 이름 바꾸기이며 이전 경로의 별칭을 정하지 않았다. Viewer 경로는 클라이언트 접속 URL의 일부라서 서버 교체와 같은 때에 바꿀 수 있다. |
 
+### 3.2 ticket 확인을 켜고 끄기
+
+2.0.0 서버도 `binary`와 ticket 값을 함께 받으면 수락하고 ticket을 무시한다. ticket 확인을 켤 때는 다음 순서를 따른다.
+
+1. 서버를 2.1.0으로 올린다. ticket 확인은 꺼 둔다.
+2. 발급 쪽과 클라이언트가 요청에 ticket과 `binary`를 싣게 한다.
+3. 역할의 `enabled`를 켜고 재로드한다.
+
+끄려면 `enabled = false`로 바꾸고 재로드한다. 이미 맺은 연결은 이전 값을 유지한다(사용자 결정 2026-11-11(Q200)). 실행파일을 2.0.0(설정 4.0.0)으로 되돌릴 때는 먼저 `[relay.ticket.*]` 표를 지운다. 지원 기간은 해당 없음이다. 3절의 호환 변경이기 때문이다(사용자 결정 2026-11-11(Q195)).
+
 ## 4. 버전과 지원 단계
 
 | 상태 | 조건 | 지원 종료·대체 |
 | --- | --- | --- |
 | Draft | 채택 전 상태. 이 계약은 2026-10-16에 채택해 Draft를 지났다. | 해당 없음 |
-| Active | 현재 2.0.0. 사용자 채택(2026-10-16), 2.0.0은 사용자 결정 2026-11-10. 계약 테스트 통과 기록은 5절 표가 관리하며, 통과하기 전에는 지원 완료로 표시하지 않는다. | 1.x는 2.0.0이 대체했다. 지원 기간은 두지 않는다(3.1절). |
+| Active | 현재 2.1.0. 사용자 채택(2026-10-16), 2.1.0은 사용자 결정 2026-11-11(Q192·Q195). 접속 ticket 구현·계약 테스트는 미실행(구현 전)이다. 계약 테스트 통과 기록은 5절 표가 관리하며, 통과하기 전에는 지원 완료로 표시하지 않는다. | 1.x는 2.0.0이 대체했다. 지원 기간은 두지 않는다(3.1절). 2.1.0의 ticket 확인은 호환 변경이다(3.2절). |
 
 ## 5. 예제와 계약 테스트
 
@@ -312,6 +438,37 @@ Sec-WebSocket-Version: 13
 X-Forwarded-For: unknown, 198.51.100.10
 X-Forwarded-For: 192.0.2.21
 ```
+
+ticket 요청 예. 아래 token은 서명이 맞지 않는 문서용 값이다. 헤더는 `{"alg":"ES256","kid":"example"}`이며 내용은 `{"example":true}`다. 필수 클레임을 갖춘 유효한 ticket이 아니므로 성공 예로 쓰지 않는다.
+
+```text
+GET /relay/viewer HTTP/1.1
+Host: relay.example:8080
+Upgrade: websocket
+Connection: Upgrade
+Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==
+Sec-WebSocket-Version: 13
+Sec-WebSocket-Protocol: binary, ticket.eyJhbGciOiJFUzI1NiIsImtpZCI6ImV4YW1wbGUifQ.eyJleGFtcGxlIjp0cnVlfQ.c2lnbmF0dXJl
+```
+
+401 응답 예. ticket을 켠 역할이 ticket 없는 요청이나 유효하지 않은 ticket을 거절할 때의 형식이다. reason은 응답 본문이 아니라 운영 로그에 남긴다.
+
+```text
+HTTP/1.1 401 Unauthorized
+WWW-Authenticate: VncRelayTicket
+Content-Length: 0
+
+```
+
+2.1.0의 계약 테스트 계획은 아래와 같다. 구현·계약 테스트는 미실행(구현 전)이다. 시나리오는 미연결이며 기존 버전의 통과 기록은 이 규칙의 증거가 아니다.
+
+| 주체·테스트 위치 | 확인할 계약 규칙 | 결과 | 실행 기록 |
+| --- | --- | --- | --- |
+| Producer: WS·WSS Viewer·Server 시험 클라이언트 / Consumer: WS·WSS 리스너. 테스트 미연결 | 1.2·1.9.1절 기본 꺼짐, 유효한 역할별 ticket, `binary`만 선택, ticket 원문 비기록. WS-037·038·045 | 미실행(구현 전) | 없음 |
+| Producer: ticket 오류·경계 시험 클라이언트 / Consumer: WS·WSS 리스너. 테스트 미연결 | 1.1·1.9.2·1.9.3절 형식·서명·클레임·시각·기동 기준과 401, 검사 우선순위. WS-039~041·043~045 | 미실행(구현 전) | 없음 |
+| Producer: 재사용·재로드 시험 클라이언트와 설정 편집 / Consumer: WS·WSS 리스너. 테스트 미연결 | 1.9.4·1.9.6절 검사 뒤 사용 기록 쓰기, 403에서 미소비, 보관·재사용 거절, 교체 뒤 기존 연결·타이머·기록 유지. WS-042·046 | 미실행(구현 전) | 없음 |
+| Producer: ticket 연결의 초기 요청·세션 상대 / Consumer: 공통 중계. 테스트 미연결 | 1.9.5절 `rid` 대조, 기존 초기 검사 우선, Mode I 거절, Close 4012, 상대 대기 연결 유지. RLY-029·030·032 | 미실행(구현 전) | 없음 |
+| Producer·Consumer: `sx`가 있는 ticket 연결과 TCP·WS·WSS 상대. 테스트 미연결 | 1.6·1.9.5절 초기 교환·대기·활성 상태의 `sx`, 이른 만료 시각, Close 4013, `session_expired` 로그·최근 종료 목록. RLY-031 | 미실행(구현 전) | 없음 |
 
 아래는 1.2.0에서 더한 계약 테스트다. 1.2.0 규칙은 커밋 `51bd747`의 두 OS 게이트에서 통과했다. 2.0.0의 Viewer 경로 변경은 첫 행의 시험을 고쳐 확인한다. `/relay/viewer`는 Viewer를 고르고 이전 경로 `/relay`는 404다. 이전 버전의 날짜별 실행 기록은 그대로 유지하며 새 규칙의 증거로 쓰지 않는다.
 
@@ -381,3 +538,5 @@ Close 예: 대기 시간이 W를 넘으면 서버는 코드 `4001`과 reason `wa
 - 후속: 2.0.0(사용자 결정 2026-11-10)은 Viewer 경로만 `/relay/viewer`로 바꿨다. 구현은 커밋 `41dda1f`다. 시험은 같은 커밋의 두 OS 게이트에서 통과했다([Viewer 경로 이전 판정표](../how-to/set-up-and-verify.md#44-viewer-경로-이전-판정표)). 이전과 롤백은 3.1절을 따른다.
 - 후속: 2026-11-07(Q160) 이후 종료 시 503을 보내지 않는다(2.1절). 위 2026-10-16 채택 기록의 “종료 유예 503”은 과거 기록이다.
 - (해결) 사용자 결정 2026-11-08(Q191)으로 채택했다: `trusted_proxies` 전체 허용 경고 코드·사건명 `trust_all_proxies`. 이름과 필드의 채택은 [운영 정보 계약](ops-info-v2.md)의 결정 기록에서 관리한다.
+- 2.1.0의 접속 ticket은 사용자 결정 2026-11-11(Q192~Q204·Q207·Q212·Q213)으로 채택했다. 구현·계약 테스트는 미실행(구현 전)이다. WS-037~046·RLY-029~032는 미연결이며 5절의 계약 테스트 계획으로 확인해야 한다.
+- 접속 ticket 설정 입력과 `session_expired` 표시 문구는 [대시보드 스펙의 DASH-TBD-006](../specs/dashboard.md#8-미결정-사항)에 남긴다. 구현 작업에서 시안·문구(CPY)를 함께 정한다(사용자 결정 2026-11-11(Q214)).

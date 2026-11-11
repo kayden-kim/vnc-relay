@@ -32,12 +32,12 @@
 
 ## 프로젝트 작업 안내
 
-제품 요구사항은 [PRD.md](requirements/PRD.md)에서 관리한다. 현재 문서 상태는 초안 0.8이며, [사용자 확정 기준](requirements/PRD.md#확정-기준)과 나머지 제안·미확정 사항을 구분한다. 명령과 규칙은 연결한 문서 한 곳에서 관리한다.
+제품 요구사항은 [PRD.md](requirements/PRD.md)에서 관리한다. 현재 문서 상태는 초안 0.9이며, [사용자 확정 기준](requirements/PRD.md#확정-기준)과 나머지 제안·미확정 사항을 구분한다. 명령과 규칙은 연결한 문서 한 곳에서 관리한다.
 
 | 확인할 내용 | 프로젝트의 기준 문서 |
 | --- | --- |
 | 외부 동작과 수용 시나리오 | [스펙 목록](specs/README.md) — Active 5건(사용자 결정 2026-11-07(Q150)). 채택과 검증 완료는 구분한다. |
-| 교환 형식(계약)과 기술 결정 | [계약 목록](contracts/README.md) — Active 6건. 설정은 [vnc-relay-config 4.0.0](contracts/config-v4.md), 운영 정보는 [ops-info 2.0.0](contracts/ops-info-v2.md)(사용자 결정 2026-11-08(Q188)). WebSocket 중계는 [websocket-relay 2.0.0](contracts/websocket-relay-v2.md)(Viewer 경로 `/relay/viewer`, 사용자 결정 2026-11-10). [ADR 목록](decisions/README.md) — Accepted 7건·Superseded 1건. [ADR-0007](decisions/ADR-0007-proxy-tls-termination.md)은 중계 프록시 TLS 종료, [ADR-0008](decisions/ADR-0008-shared-ws-listener-path-roles.md)은 공유 리스너와 경로별 역할을 정함 |
+| 교환 형식(계약)과 기술 결정 | [계약 목록](contracts/README.md) — Active 6건. 설정은 [vnc-relay-config 4.1.0](contracts/config-v4.md), 운영 정보는 [ops-info 2.1.0](contracts/ops-info-v2.md)(사용자 결정 2026-11-08(Q188). 접속 ticket 추가: 사용자 결정 2026-11-11(Q213)). WebSocket 중계는 [websocket-relay 2.1.0](contracts/websocket-relay-v2.md)(Viewer 경로 `/relay/viewer`, 사용자 결정 2026-11-10. 접속 ticket: 사용자 결정 2026-11-11(Q195)). [ADR 목록](decisions/README.md) — Accepted 8건·Superseded 1건. [ADR-0007](decisions/ADR-0007-proxy-tls-termination.md)은 중계 프록시 TLS 종료, [ADR-0008](decisions/ADR-0008-shared-ws-listener-path-roles.md)은 공유 리스너와 경로별 역할, [ADR-0009](decisions/ADR-0009-optional-relay-access-ticket.md)는 선택형 접속 ticket 확인을 정함 |
 | 코드 지도(변경 대상의 코드 위치와 연결 관계) | [코드 지도](architectures/code-map.md) — Current, Draft, Verified. 현재 코드는 `serve` 시작과 CLI 골격([`serve` 시작 모듈 설계](architectures/serve-startup.md): `src/`와 계정 파일·리스너 모듈), 설정 로더([설정 로딩 모듈 설계](architectures/config-loading.md): `crates/domain`·`crates/app`·`crates/adapters`), 운영 로그([운영 로그 모듈 설계](architectures/ops-log.md): 사건 타입·JSON Lines 출력·`relay_id_ref`), TCP 진입점([TCP 진입점 모듈 설계](architectures/tcp-entry-point.md): 접속 수락·출발지 IP 검사), 연결 상한과 시간 제한([연결 상한과 시간 제한 모듈 설계](architectures/connection-limits.md): 연결 예산·L·H·TCP keepalive), 상태 리스너와 준비 상태([상태 리스너와 준비 상태 모듈 설계](architectures/status-listener.md): `/livez`·`/readyz`·Lm·`server_ready`), 대시보드 공통 컴포넌트([대시보드 공통 컴포넌트 모듈 설계](architectures/dashboard-components.md): 조각 DOM·옵션·상태 속성과 미리보기), 개발 도구 [`xtask/`](architectures/xtask.md)다 |
 | 적용할 컨벤션 | [컨벤션 목록](conventions/README.md) — [Rust 코드 컨벤션](conventions/rust.md)(Active, 2026-10-20), [테스트 컨벤션](conventions/testing.md)(Active, 2026-10-20), [프런트엔드 컨벤션](conventions/frontend.md)(Active, 2026-10-22, 사용자 결정 2026-10-22(Q32~Q39)). 디자인 시스템은 [디자인 목록](design/README.md)의 [운영 대시보드 디자인 시스템](design/DESIGN.md)(Accepted, 2026-10-20)과 채택된 [대시보드 HTML 시안](design/mockups/dashboard.html) |
 | 개발 환경 준비와 실행 방법 | [개발 환경을 준비하고 변경을 검증하는 방법](how-to/set-up-and-verify.md) — Draft. 빌드와 전체 완료 검증은 Ubuntu와 Windows에서 확인했다. rustup 설치 단계는 두 OS 모두 미실행이다 |
@@ -46,6 +46,8 @@
 | 변경 범위별 테스트와 전체 완료 검증 | [개발 환경·검증 how-to 3.3·3.4절](how-to/set-up-and-verify.md#33-변경-범위별-검증). 시나리오 표식과 보고 명령은 [테스트 컨벤션](conventions/testing.md)이 정한다. 의존성을 바꾸면 [의존성 라이선스 검사](how-to/check-dependency-licenses.md)를 실행한다. [스펙 문서 검증 기록](specs/README.md#문서-검증-기록)은 문서 구조 확인만 포함 |
 
 사용자 지시 2026-11-08로 더한 WS·WSS Server·프록시 TLS 종료·최근 로그 화면의 구현은 커밋 `3df0693`이다. 시험은 커밋 `51bd747`의 두 OS 게이트에서 통과했다([WSS Server·프록시·최근 로그 판정표](how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)). 공유 WS·WSS 리스너와 v4 설정의 재로드 33개·편집 29개 키는 사용자 결정 2026-11-08(Q181~Q188)을 따른다. 새 수용 범위는 [PRD AC-44~48](requirements/PRD.md#10-검증-및-수용-기준)과 [스펙 추적](specs/README.md#적용-범위와-추적)을 참조한다. 로그 화면 시안·기존 화면 변경·상단 순서는 사용자 결정 2026-11-08(Q189)으로, CPY-149~189는 사용자 결정 2026-11-08(Q190)으로, 로그 API 이름·세션 필터 URL·`trust_all_proxies` 이름과 필드는 사용자 결정 2026-11-08(Q191)으로 채택했다. 기준과 범위는 해당 문서의 결정 기록을 따른다.
+
+사용자 결정 2026-11-11(Q192~Q214)로 WS·WSS 역할의 선택형 접속 ticket 확인을 채택했다. 이 확인은 기본으로 꺼져 있고, 설정으로 켠 역할에서만 한다. 결정 이유는 [ADR-0009](decisions/ADR-0009-optional-relay-access-ticket.md)에, 형식과 확인 규칙은 [WebSocket 계약 1.9절](contracts/websocket-relay-v2.md#19-접속-ticket)에 있다. 설정 키는 [설정 계약](contracts/config-v4.md)을 따른다. 재로드 대상은 43개, 편집 대상은 37개다. 구현·테스트는 미실행(구현 전)이다. 새 수용 범위는 [PRD AC-49~52](requirements/PRD.md#10-검증-및-수용-기준)와 [스펙 추적](specs/README.md#적용-범위와-추적)을 참조한다. 대시보드의 ticket 키 편집 입력과 `session_expired` 표시 문구는 구현 작업에서 시안·문구와 함께 정한다(사용자 결정 2026-11-11(Q214)).
 
 프런트엔드 프로젝트는 위 표에 실제 디자인 기준·컨벤션·검증 절차를 연결한다. 작업은 [frontend-workflow 스킬](../.agents/skills/frontend-workflow/SKILL.md)을 따른다.
 
