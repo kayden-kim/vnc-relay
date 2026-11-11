@@ -7,6 +7,7 @@ import { icon } from '../app/components/icons.js';
 import { activeTable } from '../app/panels.js';
 import { COPY as PANEL_COPY } from '../app/copy.js';
 import { STORAGE_KEY } from '../app/language.js';
+import { checkHelpLanguageChange } from './help-link-checks.js';
 
 // Exact copy from dashboard.md §9.3.1 and §9.3.2. {시각} and {time} are the time placeholders.
 const COPY = {
@@ -140,7 +141,7 @@ function checkLayout(label) {
   const page = document.documentElement;
   check(`${label}: no horizontal scroll`, page.scrollWidth <= page.clientWidth);
   for (const navbar of host.querySelectorAll('.navbar')) {
-    const links = [...navbar.querySelectorAll('.navbar-item')];
+    const links = [...navbar.querySelectorAll('.navbar-nav .navbar-item')];
     const copy = PANEL_COPY[document.documentElement.lang];
     check(`${label}: three navigation links remain available`, links.length === 3
       && links[0].textContent === copy.operations && links[1].textContent === copy.logs && links[2].textContent === copy.settings
@@ -1134,6 +1135,14 @@ async function shot(state) {
   }
 }
 
+async function caseDash064() {
+  const m = await mount(fakeApi());
+  await waitFor(() => settled(m.root));
+  checkHelpLanguageChange(m.root, lang, check);
+  check('DASH-064: no help API requests', m.api.calls.every((call) => call.key.startsWith('GET /api/v1/')));
+  check('DASH-064: current screen remains mounted', m.navigations.length === 0);
+}
+
 const CASES = {
   'dash-001': caseDash001,
   'dash-002': caseDash002,
@@ -1149,6 +1158,7 @@ const CASES = {
   'dash-024': caseDash024,
   'dash-025': caseDash025,
   'dash-062': caseDash062,
+  'dash-064': caseDash064,
 };
 
 const caseName = new URLSearchParams(location.search).get('case');

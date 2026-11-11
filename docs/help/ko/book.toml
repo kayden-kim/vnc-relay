@@ -1,0 +1,27 @@
+# 한국어 도움말 책. 빌드는 `cargo xtask help-site`로 한다(docs/how-to/publish-help.md).
+# 테마(`theme/`)는 빌드할 때 web/help/theme/에서 복사한다.
+
+[book]
+title = "VNC Relay 도움말"
+language = "ko"
+src = "src"
+
+[build]
+create-missing = false
+
+[output.html]
+theme = "theme"
+default-theme = "light"
+preferred-dark-theme = "light"
+additional-css = ["theme/help.css"]
+additional-js = ["theme/help.js"]
+no-section-label = true
+
+[output.html.search]
+enable = false
+
+[output.html.print]
+enable = false
+
+[output.html.playground]
+copyable = false

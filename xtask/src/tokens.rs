@@ -1,10 +1,11 @@
 //! `cargo xtask tokens [--check]`: makes the token CSS from DESIGN.md.
 //!
 //! Writes `web/dashboard/login/tokens.css`, `web/dashboard/app/tokens.css`, and
-//! the token block of the mockup between its markers. It also writes the copies
+//! the token block of each mockup between its markers. It also writes the copies
 //! of app components and styles that the sign-in page loads (see `shared`) and
 //! the copies of the font files (see `fonts`). `--check` compares those files
-//! and runs the screen CSS check (docs/conventions/frontend.md section 2).
+//! and runs the screen CSS check over `web/dashboard/` and `web/help/`
+//! (docs/conventions/frontend.md section 2).
 
 pub(crate) mod fonts;
 mod front_matter;
@@ -22,12 +23,18 @@ use crate::Error;
 use crate::cargo;
 
 const DESIGN_PATH: &str = "docs/design/DESIGN.md";
-const MOCKUP_PATH: &str = "docs/design/mockups/dashboard.html";
+/// HTML mockups that carry the generated token block between the markers.
+const MOCKUP_PATHS: [&str; 2] = [
+    "docs/design/mockups/dashboard.html",
+    "docs/design/mockups/help-site.html",
+];
 const OUTPUT_PATHS: [&str; 2] = [
     "web/dashboard/login/tokens.css",
     "web/dashboard/app/tokens.css",
 ];
 const DASHBOARD_DIR: &str = "web/dashboard";
+/// The help site theme and root files. Their CSS follows the same screen CSS rules.
+const HELP_DIR: &str = "web/help";
 const MOCKUP_START: &str = "/* DESIGN-TOKENS:START */";
 const MOCKUP_END: &str = "/* DESIGN-TOKENS:END */";
 /// Top-level keys that are read from DESIGN.md but never exported to CSS.
@@ -68,6 +75,13 @@ pub fn run(check: bool) -> Result<bool, Error> {
         write_outputs(&root, &css, &mockup_css)?;
         Ok(true)
     }
+}
+
+/// The token file CSS, with the font files in `fonts/` next to it. The help site
+/// build writes it as `assets/tokens.css`.
+pub(crate) fn token_css(root: &Path) -> Result<String, Error> {
+    let design = read_text(&root.join(DESIGN_PATH))?;
+    Ok(render_css(&tokens_from(&design)?, fonts::TOKEN_FILE_BASE))
 }
 
 /// Reads the exported keys of the DESIGN.md front matter into tokens, in source order.
@@ -179,16 +193,18 @@ fn write_outputs(root: &Path, css: &str, mockup_css: &str) -> Result<(), Error> 
     }
     shared::write(root)?;
     fonts::write(root)?;
-    let mockup_path = root.join(MOCKUP_PATH);
-    let mockup = read_text(&mockup_path)?;
-    let updated = replace_mockup_block(&mockup, mockup_css)?;
-    if updated != mockup {
-        std::fs::write(&mockup_path, updated)?;
+    for relative in MOCKUP_PATHS {
+        let path = root.join(relative);
+        let mockup = read_text(&path)?;
+        let updated = replace_mockup_block(relative, &mockup, mockup_css)?;
+        if updated != mockup {
+            std::fs::write(&path, updated)?;
+        }
     }
     Ok(())
 }
 
-/// Compares the generated CSS with both token files and the mockup block, the
+/// Compares the generated CSS with both token files and the mockup blocks, the
 /// copies with their sources, and runs the screen CSS rules. Every difference
 /// is printed. Returns `Ok(false)` if any exists.
 fn check_outputs(
@@ -205,13 +221,16 @@ fn check_outputs(
             problems.push(message);
         }
     }
-    let mockup = read_text(&root.join(MOCKUP_PATH))?;
-    let block = mockup_block(&mockup)?;
-    if let Some(message) = first_difference(MOCKUP_PATH, mockup_css, &block) {
-        problems.push(message);
+    for relative in MOCKUP_PATHS {
+        let mockup = read_text(&root.join(relative))?;
+        let block = mockup_block(relative, &mockup)?;
+        if let Some(message) = first_difference(relative, mockup_css, &block) {
+            problems.push(message);
+        }
     }
     let mut files = Vec::new();
     collect_screen_css(&root.join(DASHBOARD_DIR), root, &mut files)?;
+    collect_screen_css(&root.join(HELP_DIR), root, &mut files)?;
     let defined: BTreeSet<String> = tokens.iter().map(|token| token.name.clone()).collect();
     problems.extend(shared::check(root)?);
     problems.extend(fonts::check(root)?);
@@ -252,8 +271,9 @@ fn first_difference(label: &str, expected: &str, actual: &str) -> Option<String>
     None
 }
 
-/// Positions of the start and end marker lines in the mockup.
-fn marker_lines(mockup: &str) -> Result<(usize, usize), Error> {
+/// Positions of the start and end marker lines in the mockup. `label` names
+/// the mockup in the error message.
+fn marker_lines(label: &str, mockup: &str) -> Result<(usize, usize), Error> {
     let lines: Vec<&str> = mockup.split('\n').collect();
     let starts: Vec<usize> = lines
         .iter()
@@ -270,21 +290,21 @@ fn marker_lines(mockup: &str) -> Result<(usize, usize), Error> {
     match (starts.as_slice(), ends.as_slice()) {
         ([start], [end]) if start < end => Ok((*start, *end)),
         _ => Err(Error::new(format!(
-            "{MOCKUP_PATH}: 토큰 표식 `{MOCKUP_START}`과 `{MOCKUP_END}`이 한 번씩 있어야 한다"
+            "{label}: 토큰 표식 `{MOCKUP_START}`과 `{MOCKUP_END}`이 한 번씩 있어야 한다"
         ))),
     }
 }
 
 /// The text between the mockup markers, with a final newline.
-fn mockup_block(mockup: &str) -> Result<String, Error> {
-    let (start, end) = marker_lines(mockup)?;
+fn mockup_block(label: &str, mockup: &str) -> Result<String, Error> {
+    let (start, end) = marker_lines(label, mockup)?;
     let lines: Vec<&str> = mockup.split('\n').collect();
     Ok(format!("{}\n", lines[start + 1..end].join("\n")))
 }
 
 /// Replaces the lines between the mockup markers with the generated CSS.
-fn replace_mockup_block(mockup: &str, css: &str) -> Result<String, Error> {
-    let (start, end) = marker_lines(mockup)?;
+fn replace_mockup_block(label: &str, mockup: &str, css: &str) -> Result<String, Error> {
+    let (start, end) = marker_lines(label, mockup)?;
     let lines: Vec<&str> = mockup.split('\n').collect();
     let css_lines: Vec<&str> = css.trim_end_matches('\n').split('\n').collect();
     let mut updated: Vec<&str> = lines[..=start].to_vec();

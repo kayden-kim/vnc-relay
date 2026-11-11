@@ -2,6 +2,7 @@
 // One page load runs one case, ?case=dash-0xx, with fake services. The result goes to <main id="result">.
 import { mountLogin } from '../login/login.js';
 import { STORAGE_KEY } from '../login/language.js';
+import { checkHelpLanguageChange } from './help-link-checks.js';
 
 // Exact copy from dashboard.md §9.3.
 const COPY = {
@@ -388,6 +389,23 @@ async function caseDash019() {
   checkLayout('DASH-019');
 }
 
+async function caseDash064() {
+  const lang = new URLSearchParams(location.search).get('lang') === 'en' ? 'en' : 'ko';
+  const sent = [];
+  const navigations = [];
+  const root = await mount({
+    storage: memoryStorage(),
+    preferredLanguages: [lang],
+    request: async (url) => { sent.push(url); return jsonResponse(401); },
+    navigate: (url) => navigations.push(url),
+  });
+  fill(root, 'admin', 'unsent-password');
+  checkHelpLanguageChange(root, lang, check, { login: true });
+  check('DASH-064: account and password preserved', refs(root).account.value === 'admin' && refs(root).password.value === 'unsent-password');
+  check('DASH-064: no API request or navigation', sent.length === 0 && navigations.length === 0);
+  checkLayout('DASH-064');
+}
+
 const CASES = {
   'dash-017': caseDash017,
   'dash-018': caseDash018,
@@ -395,6 +413,7 @@ const CASES = {
   'dash-024': caseDash024,
   'dash-025': caseDash025,
   'dash-027': caseDash027,
+  'dash-064': caseDash064,
 };
 
 const caseName = new URLSearchParams(location.search).get('case') ?? '';

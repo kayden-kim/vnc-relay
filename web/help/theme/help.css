@@ -1,0 +1,189 @@
+/* VNC Relay help theme for mdBook 0.5.4.
+   Design: docs/design/DESIGN.md "도움말 사이트 확장" (사용자 결정 2026-11-12(Q228)).
+   Behavior: docs/specs/help-site.md. The mdBook front-end files ship unmodified
+   (사용자 결정 2026-11-11(Q227)); this file loads last and overrides them.
+   Values come from ../assets/tokens.css only (docs/conventions/frontend.md 2.2).
+   Selectors start with an id where mdBook's own rule would otherwise win. */
+
+/* Base */
+:root{color-scheme:light;--mono-font:var(--type-code-family);--code-font-size:var(--type-code-size)}
+*,*::before,*::after{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%;text-size-adjust:100%;font-family:var(--type-body-family);color:var(--color-foreground);background:var(--color-background)}
+body{margin:0;overflow-x:visible;background:var(--color-background);color:var(--color-foreground);font-family:var(--type-body-family);font-size:var(--type-body-size);font-weight:var(--type-body-weight);line-height:var(--type-body-line);letter-spacing:var(--type-body-tracking);word-break:keep-all}
+:focus-visible{outline:var(--space-focus-ring-width) solid var(--color-ring);outline-offset:var(--space-focus-ring-offset)}
+.t-card{font-family:var(--type-heading-card-family);font-size:var(--type-heading-card-size);font-weight:var(--type-heading-card-weight);line-height:var(--type-heading-card-line);letter-spacing:var(--type-heading-card-tracking)}
+.label{font-family:var(--type-label-family);font-size:var(--type-label-size);font-weight:var(--type-label-weight);line-height:var(--type-label-line);letter-spacing:var(--type-label-tracking)}
+.muted{color:var(--color-muted-foreground)}
+.ico{flex:none;width:var(--space-icon-size);height:var(--space-icon-size);fill:none;stroke:currentColor;stroke-width:var(--space-icon-stroke);stroke-linecap:round;stroke-linejoin:round}
+
+/* Shared components: the subset of the dashboard rules that the help pages use */
+.brand-mark{display:inline-flex;flex:none;align-items:center;justify-content:center;width:var(--space-brand-size);height:var(--space-brand-size);border-radius:var(--radius-md);background:var(--color-navbar-accent);color:var(--color-navbar-brand)}
+.brand-mark .ico{width:calc(var(--space-icon-size) * 1.25);height:calc(var(--space-icon-size) * 1.25)}
+.brand-name{font-family:var(--type-body-strong-family);font-size:var(--type-body-strong-size);font-weight:var(--type-body-strong-weight);line-height:var(--type-body-strong-line);letter-spacing:var(--type-body-strong-tracking);white-space:nowrap}
+.card{background:var(--color-card);border:var(--space-border-width) solid var(--color-border);border-radius:var(--radius-xl);box-shadow:0 var(--space-shadow-y) var(--space-shadow-blur) var(--color-shadow);min-width:0;display:flex;flex-direction:column}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:var(--space-sm);height:var(--space-control-height);min-width:var(--space-target-min);margin:0;padding:0 var(--space-lg);border-radius:var(--radius-md);border:var(--space-border-width) solid transparent;font-family:var(--type-button-family);font-size:var(--type-button-size);font-weight:var(--type-button-weight);line-height:var(--type-button-line);letter-spacing:var(--type-button-tracking);cursor:pointer;text-decoration:none;white-space:nowrap}
+.btn.sm{height:var(--space-control-height-sm);padding:0 var(--space-md)}
+.btn-outline,.btn-outline:hover{color:var(--color-foreground)}
+.btn-outline{background:var(--color-card);border-color:var(--color-border)}
+.btn-outline:hover{background:var(--color-muted)}
+.input{height:var(--space-control-height);margin:0;padding:0 var(--space-md);background:var(--color-card);color:var(--color-foreground);border:var(--space-border-width) solid var(--color-input);border-radius:var(--radius-md);font-family:var(--type-input-family);font-size:var(--type-input-size);font-weight:var(--type-input-weight);line-height:var(--type-input-line);letter-spacing:var(--type-input-tracking);width:100%}
+.alert{display:flex;flex-wrap:wrap;align-items:flex-start;gap:var(--space-sm) var(--space-md);padding:var(--space-md) var(--space-lg);border-radius:var(--radius-lg);border:var(--space-border-width) solid;color:var(--color-foreground)}
+.alert>.ico{margin-top:calc((var(--type-body-line) * var(--type-body-size) - var(--space-icon-size)) / 2)}
+.alert .alert-body{flex:1 1 var(--space-alert-text-min);min-width:0;display:flex;flex-direction:column;gap:calc(var(--space-xs) / 2)}
+.alert p{margin:0}
+.a-info{background:var(--color-info-bg);border-color:var(--color-info-border)}
+.a-warning{background:var(--color-warning-bg);border-color:var(--color-warning-border)}
+.a-destructive{background:var(--color-destructive-bg);border-color:var(--color-destructive-border)}
+.a-neutral{background:var(--color-neutral-bg);border-color:var(--color-neutral-border)}
+.a-info>.ico{color:var(--color-info)}
+.a-warning>.ico{color:var(--color-warning)}
+.a-destructive>.ico{color:var(--color-destructive)}
+.a-neutral>.ico{color:var(--color-neutral)}
+
+/* Page frame: top bar, contents column, text column. The breakpoint is 1080px,
+   the value mdBook's template uses for the first contents state (DESIGN.md 예외). */
+#mdbook-body-container{display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:auto 1fr;grid-template-areas:"top" "col";min-height:100vh;overflow-x:visible}
+html.sidebar-visible #mdbook-body-container{grid-template-columns:var(--space-sidebar-width) minmax(0,1fr);grid-template-areas:"top top" "toc col"}
+#mdbook-page-wrapper,#mdbook-page-wrapper>.page{display:contents}
+html:not(.js) .help-toc-toggle,html:not(.js) .help-search-toggle{display:none}
+#mdbook-menu-bar,#mdbook-menu-bar-hover-placeholder,#mdbook-body-container #mdbook-content>.nav-wrapper,#mdbook-body-container #mdbook-page-wrapper>.nav-wide-wrapper,#mdbook-sidebar-resize-handle,#mdbook-sidebar .on-this-page,#mdbook-sidebar .chapter-fold-toggle,#mdbook-sidebar .chapter li.chapter-item:empty{display:none}
+
+/* Top bar. It scrolls with the page and is never fixed over the text. */
+.help-top{grid-area:top;display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-xs);min-height:var(--space-appbar-height);padding:0 var(--space-xl);background:var(--color-navbar);color:var(--color-navbar-muted-foreground)}
+.help-top :focus-visible{outline-color:var(--color-navbar-ring)}
+.help-top .nav-item{position:relative;display:inline-flex;align-items:center;gap:var(--space-sm);height:var(--space-control-height);margin:0;padding:0 var(--space-md);border:0;border-radius:var(--radius-md);background:var(--color-navbar);color:var(--color-navbar-muted-foreground);font-family:var(--type-button-family);font-size:var(--type-button-size);font-weight:var(--type-button-weight);line-height:var(--type-button-line);letter-spacing:var(--type-button-tracking);text-decoration:none;cursor:pointer;white-space:nowrap}
+.help-top .nav-item:hover,.help-top .help-toc-toggle[aria-expanded=true]{background:var(--color-navbar-accent);color:var(--color-navbar-foreground)}
+.help-top .help-brand{display:inline-flex;align-items:center;gap:var(--space-sm);margin-left:var(--space-sm);color:var(--color-navbar-foreground);text-decoration:none}
+.help-top .help-brand:hover{color:var(--color-navbar-foreground)}
+.help-top .help-base{margin-left:var(--space-sm);color:var(--color-navbar-muted-foreground);text-decoration:underline}
+.help-top .help-base:hover{color:var(--color-navbar-foreground)}
+.help-tools{display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:var(--space-xs);margin-left:auto}
+
+/* Contents (mdBook sidebar). book.js hides it only after a transition, and the
+   theme has none, so the class on the root element decides. */
+#mdbook-sidebar{grid-area:toc;position:relative;top:auto;bottom:auto;left:auto;width:auto;font-size:inherit;transition:none;background:var(--color-card);color:var(--color-foreground);border-right:var(--space-border-width) solid var(--color-border)}
+#mdbook-sidebar-toggle-anchor~#mdbook-sidebar{transform:none}
+html:not(.sidebar-visible) #mdbook-sidebar{display:none}
+#mdbook-sidebar .sidebar-scrollbox{display:block;position:sticky;inset:0 auto auto;max-height:100vh;overflow-y:auto;padding:var(--space-lg) var(--space-md)}
+#mdbook-sidebar .chapter{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:calc(var(--space-xs) / 2);line-height:inherit}
+#mdbook-sidebar .chapter li{margin:0;color:var(--color-foreground)}
+#mdbook-sidebar .chapter-link-wrapper{display:block}
+#mdbook-sidebar .chapter a{position:relative;display:block;padding:var(--space-sm) var(--space-md);border-radius:var(--radius-md);color:var(--color-foreground);text-decoration:none;overflow-wrap:anywhere}
+#mdbook-sidebar .chapter a:hover{background:var(--color-muted);color:var(--color-foreground);text-decoration:none}
+#mdbook-sidebar .chapter a[aria-current=page]{background:var(--color-muted);color:var(--color-foreground);font-weight:var(--type-body-strong-weight)}
+#mdbook-sidebar .chapter a[aria-current=page]::before{content:"";position:absolute;left:0;top:var(--space-sm);bottom:var(--space-sm);width:var(--space-indicator-width);border-radius:0 var(--radius-mark) var(--radius-mark) 0;background:var(--color-primary)}
+#mdbook-sidebar .chapter li.spacer{width:auto;height:var(--space-border-width);margin:var(--space-sm) var(--space-md);background:var(--color-border)}
+#mdbook-sidebar .sidebar-iframe-outer{position:absolute;inset:0;width:100%;height:100%;border:0}
+
+/* Text column */
+#mdbook-content{grid-area:col;min-width:0;overflow:visible;display:flex;flex-direction:column;align-items:center;gap:var(--space-lg);padding:var(--space-2xl) var(--space-xl)}
+#mdbook-content>*{width:100%;max-width:var(--space-prose-max)}
+#mdbook-content a:is(:link,:visited){color:var(--color-link);text-decoration:underline}
+#mdbook-content a:hover{color:var(--color-foreground)}
+#mdbook-content :target{scroll-margin-top:var(--space-lg)}
+#mdbook-content :is(h1,h2,h3,h4,h5,h6,dt):target::before{content:none;display:none}
+
+/* Article */
+#mdbook-content>main{margin:0;background:var(--color-card);border:var(--space-border-width) solid var(--color-border);border-radius:var(--radius-xl);box-shadow:0 var(--space-shadow-y) var(--space-shadow-blur) var(--color-shadow);padding:var(--space-2xl);font-family:var(--type-prose-family);font-size:var(--type-prose-size);font-weight:var(--type-prose-weight);line-height:var(--type-prose-line);letter-spacing:var(--type-prose-tracking);overflow-wrap:break-word}
+#mdbook-content main :where(h1,h2,h3,h4,h5,h6,p,ul,ol,dl,dd,figure,blockquote,pre,table){margin:0}
+#mdbook-content main :is(p,ul,ol){line-height:inherit}
+#mdbook-content main>*+*{margin-top:var(--space-lg)}
+#mdbook-content main h1{font-family:var(--type-heading-page-family);font-size:var(--type-heading-page-size);font-weight:var(--type-heading-page-weight);line-height:var(--type-heading-page-line);letter-spacing:var(--type-heading-page-tracking);overflow-wrap:anywhere}
+#mdbook-content main>h1+*{margin-top:var(--space-md)}
+#mdbook-content main h2{font-family:var(--type-heading-section-family);font-size:var(--type-heading-section-size);font-weight:var(--type-heading-section-weight);line-height:var(--type-heading-section-line);letter-spacing:var(--type-heading-section-tracking);margin-top:var(--space-2xl);padding-bottom:var(--space-sm);border-bottom:var(--space-border-width) solid var(--color-border)}
+#mdbook-content main h3{font-family:var(--type-heading-card-family);font-size:var(--type-heading-card-size);font-weight:var(--type-heading-card-weight);line-height:var(--type-heading-card-line);letter-spacing:var(--type-heading-card-tracking);margin-top:var(--space-xl)}
+#mdbook-content main h4{font-family:var(--type-body-strong-family);font-size:var(--type-body-strong-size);font-weight:var(--type-body-strong-weight);line-height:var(--type-body-strong-line);letter-spacing:var(--type-body-strong-tracking);margin-top:var(--space-lg)}
+#mdbook-content main>:is(h2,h3,h4)+*{margin-top:var(--space-md)}
+#mdbook-content main a.header:is(:link,:visited){color:inherit;text-decoration:none}
+#mdbook-content main a.header:hover{text-decoration:underline}
+/* mdBook 0.5.4 wraps each image in a zoom checkbox and a second copy. The adopted
+   design has no zoom state, so only the first image shows and the checkbox is gone. */
+#mdbook-content main .checkbox-img,#mdbook-content main .img-wrapper{display:none}
+#mdbook-content main .checkbox-label{display:block;max-width:100%}
+#mdbook-content main .checkbox-label img{cursor:auto}
+#mdbook-content main :is(ul,ol){padding-left:var(--space-xl)}
+#mdbook-content main li+li{margin-top:var(--space-xs)}
+#mdbook-content main li>:is(ul,ol),#mdbook-content main li>p+*{margin-top:var(--space-xs)}
+#mdbook-content main strong{font-weight:var(--type-body-strong-weight)}
+#mdbook-content main :not(pre)>code{display:inline;font-family:var(--type-code-family);font-size:var(--type-code-size);font-weight:var(--type-code-weight);letter-spacing:var(--type-code-tracking);color:inherit;background:var(--color-muted);border-radius:var(--radius-sm);padding:0 var(--space-xs);overflow-wrap:anywhere}
+#mdbook-content main img{display:block;max-width:100%;height:auto;border:var(--space-border-width) solid var(--color-border);border-radius:var(--radius-lg)}
+
+/* Code blocks and copy */
+#mdbook-content main pre{position:relative;padding:var(--space-md) var(--space-lg);overflow-x:auto;font-family:var(--type-code-family);font-size:var(--type-code-size);font-weight:var(--type-code-weight);line-height:var(--type-code-line);letter-spacing:var(--type-code-tracking);background:var(--color-muted);border:var(--space-border-width) solid var(--color-border);border-radius:var(--radius-lg)}
+#mdbook-content main pre>code{display:block;width:max-content;min-width:100%;padding:0;background:transparent;color:inherit;font:inherit;letter-spacing:inherit;white-space:pre;overflow-wrap:normal;overflow:visible}
+#mdbook-content main pre [class*=hljs-]{color:inherit;background:transparent;font-style:normal;font-weight:inherit;text-decoration:none}
+#mdbook-content main pre :is(.hljs-comment,.hljs-quote){color:var(--color-muted-foreground)}
+#mdbook-content main pre>.buttons{display:none}
+.help-code{background:var(--color-muted);border:var(--space-border-width) solid var(--color-border);border-radius:var(--radius-lg);overflow:hidden}
+#mdbook-content main .help-code>pre{background:transparent;border:0;border-radius:0}
+.help-code-bar{display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:var(--space-xs) var(--space-sm);padding:var(--space-xs) var(--space-sm);border-bottom:var(--space-border-width) solid var(--color-border)}
+.help-copy-live{flex:1 1 0;min-width:0;display:flex;justify-content:flex-end}
+.help-copy-status{display:inline-flex;align-items:flex-start;gap:var(--space-xs);font-family:var(--type-label-family);font-size:var(--type-label-size);font-weight:var(--type-label-weight);line-height:var(--type-label-line);letter-spacing:var(--type-label-tracking)}
+.help-copy-status .ico{margin-top:calc((var(--type-label-line) * var(--type-label-size) - var(--space-icon-size)) / 2)}
+.help-copy-status.ok{color:var(--color-success)}
+.help-copy-status.fail{color:var(--color-destructive)}
+
+/* Notes and warnings (blockquotes that help.js turns into alerts) */
+#mdbook-content main blockquote.help-callout{font-family:var(--type-prose-family);font-size:var(--type-prose-size);font-weight:var(--type-prose-weight);line-height:var(--type-prose-line);letter-spacing:var(--type-prose-tracking)}
+#mdbook-content main blockquote.help-callout>.ico{margin-top:calc((var(--type-prose-line) * var(--type-prose-size) - var(--space-icon-size)) / 2)}
+#mdbook-content main .alert-body>*+*{margin-top:var(--space-sm)}
+.a-info .help-callout-label{color:var(--color-info)}
+.a-warning .help-callout-label{color:var(--color-warning)}
+
+/* Tables. They scroll inside their own box; the page never scrolls sideways. */
+#mdbook-content main .table-wrapper{overflow-x:auto;border:var(--space-border-width) solid var(--color-border);border-radius:var(--radius-lg)}
+#mdbook-content main table{width:100%;margin:0;border-collapse:collapse;font-family:var(--type-body-family);font-size:var(--type-body-size);font-weight:var(--type-body-weight);line-height:var(--type-body-line);letter-spacing:var(--type-body-tracking)}
+#mdbook-content main thead,#mdbook-content main thead tr,#mdbook-content main tbody tr:nth-child(2n){background:transparent;border:0}
+#mdbook-content main th{color:var(--color-muted-foreground);text-align:left;vertical-align:bottom;padding:var(--space-sm) var(--space-md);border:0;border-bottom:var(--space-border-width) solid var(--color-border);font-family:var(--type-label-family);font-size:var(--type-label-size);font-weight:var(--type-label-weight);line-height:var(--type-label-line);letter-spacing:var(--type-label-tracking)}
+#mdbook-content main td{padding:var(--space-sm) var(--space-md);border:0;border-bottom:var(--space-border-width) solid var(--color-border);vertical-align:top;min-width:calc(var(--space-label-col) * 1.5)}
+#mdbook-content main tbody tr:last-child td{border-bottom:0}
+#mdbook-content main td code{overflow-wrap:normal}
+
+/* Previous and next chapter */
+.help-pager{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space-md)}
+#mdbook-content a.help-pager-link{display:flex;flex-direction:column;gap:var(--space-xs);padding:var(--space-md) var(--space-lg);background:var(--color-card);color:var(--color-foreground);border:var(--space-border-width) solid var(--color-border);border-radius:var(--radius-md);text-decoration:none}
+#mdbook-content a.help-pager-link:hover{background:var(--color-muted)}
+#mdbook-content a.help-pager-link.next{grid-column:2;align-items:flex-end;text-align:right}
+.help-pager-dir{display:inline-flex;align-items:center;gap:var(--space-xs);color:var(--color-muted-foreground)}
+.help-pager-title{font-family:var(--type-body-strong-family);font-size:var(--type-body-strong-size);font-weight:var(--type-body-strong-weight);line-height:var(--type-body-strong-line);letter-spacing:var(--type-body-strong-tracking);color:var(--color-link);text-decoration:underline;overflow-wrap:anywhere}
+#mdbook-content a.help-pager-link:hover .help-pager-title{color:var(--color-foreground)}
+
+/* Search panel */
+.help-search{padding:var(--space-xl);gap:var(--space-sm)}
+.help-search[hidden]{display:none}
+.help-search-head{display:flex;align-items:center;justify-content:space-between;gap:var(--space-md);margin-bottom:var(--space-xs)}
+.help-search p{margin:0}
+.help-status:empty{display:none}
+.help-status>p{font-family:var(--type-body-family);font-size:var(--type-body-size);font-weight:var(--type-body-weight);line-height:var(--type-body-line);letter-spacing:var(--type-body-tracking)}
+.help-results{list-style:none;margin:var(--space-xs) 0 0;padding:0}
+.help-results:empty{display:none}
+.help-results li{display:flex;flex-direction:column;gap:var(--space-xs);padding:var(--space-md) 0;border-top:var(--space-border-width) solid var(--color-border)}
+#mdbook-content .help-results a{font-family:var(--type-body-strong-family);font-size:var(--type-body-strong-size);font-weight:var(--type-body-strong-weight);line-height:var(--type-body-strong-line);letter-spacing:var(--type-body-strong-tracking);overflow-wrap:anywhere}
+.help-results p{color:var(--color-muted-foreground);overflow-wrap:anywhere}
+.help-results mark{margin:0;padding:0;background:var(--color-warning-bg);color:var(--color-foreground);border-radius:var(--radius-sm);transition:none}
+
+/* Keyboard shortcuts (mdBook's help popup with the page-language text) */
+#mdbook-help-container{align-items:flex-start;justify-content:center;padding:calc(var(--space-2xl) * 3) var(--space-md) 0;background:var(--color-overlay)}
+#mdbook-help-popup{width:100%;min-width:0;max-width:var(--space-dialog-max);align-items:stretch;gap:var(--space-md);padding:var(--space-xl);background:var(--color-card);color:var(--color-foreground);border:var(--space-border-width) solid var(--color-border);border-radius:var(--radius-xl);box-shadow:0 calc(var(--space-shadow-y) * 4) calc(var(--space-shadow-blur) * 4) var(--color-shadow)}
+#mdbook-help-popup:focus{outline:none}
+#mdbook-help-popup h2{margin:0}
+.help-keys-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:var(--space-sm)}
+.help-keys-list li{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-sm) var(--space-md)}
+.help-keys{display:inline-flex;align-items:center;gap:var(--space-xs)}
+kbd{display:inline-block;min-width:var(--space-icon-size-sm);padding:0 var(--space-xs);font-family:var(--type-code-family);font-size:var(--type-code-size);line-height:var(--type-code-line);text-align:center;vertical-align:baseline;background:var(--color-muted);border:var(--space-border-width) solid var(--color-border);border-radius:var(--radius-sm);box-shadow:none}
+
+@media (max-width: 1079.98px){
+  html.sidebar-visible #mdbook-body-container{grid-template-columns:minmax(0,1fr);grid-template-rows:auto auto 1fr;grid-template-areas:"top" "toc" "col"}
+  .help-top{padding:var(--space-sm) var(--space-lg)}
+  .help-top .nav-item{height:var(--space-control-height-touch)}
+  .help-top .brand-name,.help-top .help-base:not(:focus){position:absolute;width:var(--space-border-width);height:var(--space-border-width);overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+  #mdbook-sidebar{border-right:0;border-bottom:var(--space-border-width) solid var(--color-border)}
+  #mdbook-sidebar .sidebar-scrollbox{position:static;max-height:none;overflow:visible}
+  #mdbook-sidebar .chapter a{display:flex;align-items:center;min-height:var(--space-control-height-touch)}
+  #mdbook-content{padding:var(--space-lg)}
+  #mdbook-content>main,.help-search{padding:var(--space-lg)}
+  .help-pager{grid-template-columns:minmax(0,1fr)}
+  #mdbook-content a.help-pager-link.next{grid-column:auto}
+  .btn,.btn.sm,.input{height:var(--space-control-height-touch)}
+  #mdbook-help-popup{padding:var(--space-lg)}
+}

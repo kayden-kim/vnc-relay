@@ -1,0 +1,34 @@
+/* Help site root pages: language choice (HLP-002) and not found (HLP-003).
+   Design: docs/design/DESIGN.md "도움말 사이트 확장" (사용자 결정 2026-11-12(Q228)).
+   Values come from tokens.css only (docs/conventions/frontend.md 2.2). These are the
+   same base and component rules as web/help/theme/help.css, limited to what these
+   two pages use. */
+
+:root{color-scheme:light}
+*,*::before,*::after{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
+body{margin:0;background:var(--color-background);color:var(--color-foreground);font-family:var(--type-body-family);font-size:var(--type-body-size);font-weight:var(--type-body-weight);line-height:var(--type-body-line);letter-spacing:var(--type-body-tracking);word-break:keep-all}
+h1,p{margin:0}
+:focus-visible{outline:var(--space-focus-ring-width) solid var(--color-ring);outline-offset:var(--space-focus-ring-offset)}
+.t-page{font-family:var(--type-heading-page-family);font-size:var(--type-heading-page-size);font-weight:var(--type-heading-page-weight);line-height:var(--type-heading-page-line);letter-spacing:var(--type-heading-page-tracking);overflow-wrap:anywhere}
+.ico{flex:none;width:var(--space-icon-size);height:var(--space-icon-size);fill:none;stroke:currentColor;stroke-width:var(--space-icon-stroke);stroke-linecap:round;stroke-linejoin:round}
+.brand-mark{display:inline-flex;flex:none;align-items:center;justify-content:center;width:var(--space-brand-size);height:var(--space-brand-size);border-radius:var(--radius-md);background:var(--color-navbar-accent);color:var(--color-navbar-brand)}
+.brand-mark .ico{width:calc(var(--space-icon-size) * 1.25);height:calc(var(--space-icon-size) * 1.25)}
+.card{background:var(--color-card);border:var(--space-border-width) solid var(--color-border);border-radius:var(--radius-xl);box-shadow:0 var(--space-shadow-y) var(--space-shadow-blur) var(--color-shadow);min-width:0;display:flex;flex-direction:column}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:var(--space-sm);height:var(--space-control-height);min-width:var(--space-target-min);padding:0 var(--space-lg);border-radius:var(--radius-md);border:var(--space-border-width) solid transparent;font-family:var(--type-button-family);font-size:var(--type-button-size);font-weight:var(--type-button-weight);line-height:var(--type-button-line);letter-spacing:var(--type-button-tracking);cursor:pointer;text-decoration:none;white-space:nowrap}
+.btn-outline,.btn-outline:hover{color:var(--color-foreground)}
+.btn-outline{background:var(--color-card);border-color:var(--color-border)}
+.btn-outline:hover{background:var(--color-muted)}
+
+.help-center{display:flex;flex-direction:column;align-items:center;gap:var(--space-lg);padding:var(--space-2xl) var(--space-lg)}
+.help-center>.brand-mark{background:var(--color-navbar)}
+.help-choose{width:100%;max-width:var(--space-login-max);padding:var(--space-xl);gap:var(--space-md)}
+.help-choose h1>span,.help-choose p>span{display:block}
+.help-choices{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space-sm);margin-top:var(--space-sm)}
+.help-choices .btn{white-space:normal;height:auto;min-height:var(--space-control-height);text-align:center}
+
+@media (max-width: 1079.98px){
+  .help-choices{grid-template-columns:minmax(0,1fr)}
+  .help-choices .btn{min-height:var(--space-control-height-touch)}
+  .help-choose{padding:var(--space-lg)}
+}

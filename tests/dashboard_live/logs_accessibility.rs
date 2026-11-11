@@ -46,7 +46,7 @@ fn activate(browser: &mut Browser, selector: &str) {
 
 fn layout(browser: &mut Browser) {
     assert_eq!(browser.eval(r#"(()=>{
-        const links=[...document.querySelectorAll('.navbar-item')];
+        const links=[...document.querySelectorAll('.navbar-nav .navbar-item')];
         return document.documentElement.scrollWidth<=innerWidth && links.length===3 &&
             [...document.querySelectorAll('input,select')].every(e=>!!document.querySelector('label[for="'+e.id+'"]')||!!e.closest('label')) &&
             [...document.querySelectorAll('[aria-describedby]')].every(e=>e.getAttribute('aria-describedby').split(' ').every(id=>document.getElementById(id))) &&

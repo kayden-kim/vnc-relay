@@ -13,7 +13,7 @@
 - 제품 요구사항은 [docs/requirements/PRD.md](docs/requirements/PRD.md)에서 관리한다.
 - PRD는 초안이다. [사용자 확정 기준](docs/requirements/PRD.md#확정-기준)은 적용하고, 나머지 제안·미확정 사항과 구현·테스트 완료 여부를 구분한다.
 - 구현은 Rust를 사용하며, 기존 UltraVNC·websockify 소스를 복사·번역·포팅하지 않는다. noVNC 클라이언트는 구현·번들링·배포 범위에서 제외한다.
-- 현재 구현 코드는 실행파일의 `serve` 시작·종료 골격과 CLI(`src/`), 설정 파일 로더와 계정 파일 읽기·리스너 바인드·운영 로그 출력·TCP 진입점의 출발지 IP 검사·연결 상한 L과 초기 교환 시간 H·TCP keepalive·상태 리스너(`/livez`·`/readyz`, Lm, 준비 상태), 내장 TLS 파일 검사와 acceptor, 관리 리스너(HTTPS와 루프백 평문 HTTP, 세션 없는 API 요청 거절), 중계 구현(Repeater 초기 교환, Mode I 대상 연결, Mode II 매칭, 양방향 중계와 종료, WS·WSS 업그레이드와 스트림 어댑터의 공통 중계 연결)(`crates/domain`·`crates/app`·`crates/adapters`), 개발 도구 `xtask`(배포 묶음 `cargo xtask package` 포함), GitHub Actions 워크플로 `.github/workflows/ci.yml`이다. 개발 환경 준비와 검증 명령은 [개발 환경·검증 how-to](docs/how-to/set-up-and-verify.md)를, 버전 규칙과 릴리스는 [릴리스 how-to](docs/how-to/release.md)를 따른다.
+- 현재 구현 코드는 실행파일의 `serve` 시작·종료 골격과 CLI(`src/`), 설정 파일 로더와 계정 파일 읽기·리스너 바인드·운영 로그 출력·TCP 진입점의 출발지 IP 검사·연결 상한 L과 초기 교환 시간 H·TCP keepalive·상태 리스너(`/livez`·`/readyz`, Lm, 준비 상태), 내장 TLS 파일 검사와 acceptor, 관리 리스너(HTTPS와 루프백 평문 HTTP, 세션 없는 API 요청 거절), 중계 구현(Repeater 초기 교환, Mode I 대상 연결, Mode II 매칭, 양방향 중계와 종료, WS·WSS 업그레이드와 스트림 어댑터의 공통 중계 연결)(`crates/domain`·`crates/app`·`crates/adapters`), 개발 도구 `xtask`(배포 묶음 `cargo xtask package`, 도움말 사이트 빌드·검사 `cargo xtask help-site`와 미리보기 `cargo xtask help-serve` 포함), 운영자 도움말 사이트의 책(`docs/help/`)과 테마·사이트 루트(`web/help/`), GitHub Actions 워크플로 `.github/workflows/ci.yml`·`.github/workflows/help.yml`이다. 개발 환경 준비와 검증 명령은 [개발 환경·검증 how-to](docs/how-to/set-up-and-verify.md)를, 버전 규칙과 릴리스는 [릴리스 how-to](docs/how-to/release.md)를, 도움말 빌드와 게시는 [도움말 게시 how-to](docs/how-to/publish-help.md)를 따른다.
 
 ## 작업 순서와 필수 참조
 

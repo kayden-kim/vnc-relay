@@ -12,6 +12,7 @@ import { createLanguageSelect } from "../app/components/language-select.js";
 import { createDataTable } from "../app/components/data-table.js";
 import { createLink } from "../app/components/link.js";
 import { createDialog } from "../app/components/dialog.js";
+import { COPY } from "../app/copy.js";
 
 // Counts CSP violations. Registered at module top so no early violation is missed.
 let cspViolations = 0;
@@ -205,6 +206,7 @@ const REQUIRED_SAMPLES = [
   "language-select-navbar", "language-select-form", "language-select-long-ko", "language-select-long-en",
   "data-table-default", "data-table-empty", "data-table-long-ko", "data-table-long-en", "data-table-long-numbers",
   "link-default", "link-hover", "link-focus", "link-long-ko", "link-long-en",
+  "link-help-login",
   "dialog-closed", "dialog-default", "dialog-destructive", "dialog-long-ko", "dialog-long-en",
 ];
 
@@ -345,6 +347,18 @@ function languageSelect(sid, variant, label) {
   });
 }
 
+function helpLink(className) {
+  const help = createLink({
+    href: `https://kayden-kim.github.io/vnc-relay/${lang}/`,
+    label: COPY[lang].help,
+    icon: "help",
+    iconSize: "md",
+    newTabText: COPY[lang].opensInNewTab,
+  });
+  help.className = className;
+  return help;
+}
+
 function navbar(sid, itemLabel) {
   return createNavbar({
     brand: "VNC Relay",
@@ -352,6 +366,7 @@ function navbar(sid, itemLabel) {
       { label: itemLabel, href: `#${sid}`, current: true, icon: "grid" },
       { label: t.navSettings, href: `#${sid}-settings`, icon: "settings" },
     ],
+    help: helpLink("navbar-item help-link"),
     language: languageSelect(`${sid}-language`, "navbar", t.languageLabel),
     action: createButton({ variant: "navbar", label: t.logout, icon: "logout" }),
     label: t.navLabel,
@@ -572,6 +587,7 @@ function buildGroups() {
         sample("link-long-ko", cap(t.link, t.longKo), (sid) => link(sid, LONG_KO_LABEL)),
         sample("link-long-en", cap(t.link, t.longEn), (sid) => link(sid, LONG_ID_EN)),
       ],
+      [sample("link-help-login", COPY[lang].help, () => helpLink("help-link-login"))],
     ]),
     group(t.dialog, [
       [

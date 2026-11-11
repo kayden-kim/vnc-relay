@@ -68,6 +68,20 @@ pub(super) fn write(root: &Path) -> Result<(), Error> {
     Ok(())
 }
 
+/// Writes every font file and the license into `dir`. The help site build uses
+/// it for `assets/fonts/`, which its token CSS names as `fonts`.
+pub(crate) fn copy_into(root: &Path, dir: &Path) -> Result<(), Error> {
+    std::fs::create_dir_all(dir)?;
+    for (file, _) in FONT_FACES {
+        std::fs::write(dir.join(file), read_bytes(&source_path(root, file))?)?;
+    }
+    std::fs::write(
+        dir.join("LICENSE.txt"),
+        read_bytes(&root.join(LICENSE_PATH))?,
+    )?;
+    Ok(())
+}
+
 /// Compares every copy with its source and reports files that the list does
 /// not name. Each problem is one line.
 pub(super) fn check(root: &Path) -> Result<Vec<String>, Error> {

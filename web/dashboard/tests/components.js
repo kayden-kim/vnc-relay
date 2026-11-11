@@ -102,6 +102,7 @@ const BUTTON_VARIANTS = ["primary", "outline", "ghost", "destructive", "navbar"]
 const ICON_NAMES = [
   "check", "clock", "warning", "alert", "refresh", "logout", "back",
   "chevron-right", "chevron-down", "cancel", "globe", "grid", "settings", "brand",
+  "help", "external-link",
 ];
 const LANGUAGE_OPTIONS = [
   { value: "ko", label: "한국어" },
@@ -376,6 +377,15 @@ function runChecks() {
     }
   });
 
+  check("navbar-help-slot", () => {
+    const help = createLink({ href: "#test-help", label: "Help", icon: "help", iconSize: "md", newTabText: "opens in a new tab" });
+    const navbar = makeNavbar("test-help-slot", { help });
+    const tools = navbar.querySelector(".navbar-tools");
+    expect(tools.firstElementChild === help);
+    expect(help.nextElementSibling.classList.contains("language-select"));
+    expect(tools.lastElementChild.tagName === "BUTTON");
+  });
+
   check("create-language-select", () => {
     const form = mount(createLanguageSelect({
       id: "test-language-form", label: t.languageLabel, value: "ko", options: LANGUAGE_OPTIONS, variant: "form",
@@ -474,6 +484,18 @@ function runChecks() {
     const link = mount(createLink({ href: "#test-link", label: t.linkLabel, icon: "chevron-right" }));
     expect(link instanceof HTMLAnchorElement && link.getAttribute("href") === "#test-link");
     expect(link.textContent.includes(t.linkLabel));
+    expect(!link.hasAttribute("target") && !link.hasAttribute("rel"));
+  });
+
+  check("create-new-tab-link", () => {
+    const link = mount(createLink({
+      href: "#test-help", label: "Help", icon: "help", iconSize: "md", newTabText: "opens in a new tab",
+    }));
+    expect(link.target === "_blank" && link.rel === "noopener noreferrer");
+    expect(link.textContent === "Help (opens in a new tab)");
+    expect(link.querySelector(".sr-only").textContent === " (opens in a new tab)");
+    const icons = link.querySelectorAll("svg");
+    expect(icons.length === 2 && icons[0].classList.contains("icon-md") && icons[1].classList.contains("icon-sm"));
   });
 
   check("create-icon", () => {

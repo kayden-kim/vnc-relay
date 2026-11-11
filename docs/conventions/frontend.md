@@ -5,7 +5,7 @@
 | 항목 | 값 |
 | --- | --- |
 | 상태 | Active (2026-10-22. 사용자 결정 2026-10-22(Q09·Q32~Q39) 반영. FE-TBD-016은 사용자 결정 2026-11-07(Q159)로 닫았다) |
-| 적용 대상 | `web/dashboard/` 아래 HTML·CSS·JavaScript, 토큰 생성·대조 코드(`xtask/`), 테스트 페이지(`web/dashboard/tests/`), 미리보기(`web/dashboard/preview/`), 시안의 토큰 블록(`docs/design/mockups/dashboard.html`) |
+| 적용 대상 | `web/dashboard/` 아래 HTML·CSS·JavaScript, 토큰 생성·대조 코드(`xtask/`), 테스트 페이지(`web/dashboard/tests/`), 미리보기(`web/dashboard/preview/`), 시안의 토큰 블록(`docs/design/mockups/dashboard.html`·`help-site.html`), 도움말 사이트의 테마와 사이트 루트(`web/help/theme/`·`web/help/site/`. 예외는 5절) |
 | 기준 버전 | Rust 1.99.1(`rust-toolchain.toml`). 대시보드 런타임 의존성 없음. 브라우저 검증에 쓴 Chromium 버전은 검증 기록에 적는다 |
 | 관련 디자인 기준 | [운영 대시보드 디자인 시스템](../design/DESIGN.md) (Accepted, 2026-10-20) |
 | 관련 아키텍처 문서 | [코드 지도](../architectures/code-map.md), [xtask 모듈 설계](../architectures/xtask.md) |
@@ -99,7 +99,7 @@ web/dashboard/
 
 - HTML 루트에 `lang`을 둔다. 언어 선택에 따라 값을 바꾼다([화면 언어](../specs/dashboard.md#화면-언어)).
 - 스크립트는 `<script type="module" src="…">`로만 불러온다. 인라인 스크립트, `on…` 이벤트 속성, `javascript:` 주소를 쓰지 않는다.
-- 스타일은 `<link rel="stylesheet">`로 같은 출처의 파일만 불러온다. `<style>` 요소와 `style` 속성을 쓰지 않는다(사용자 결정 2026-10-22(Q37)). 시안(`docs/design/mockups/dashboard.html`)의 `<style>`은 시안 파일 안에서만 쓴다.
+- 스타일은 `<link rel="stylesheet">`로 같은 출처의 파일만 불러온다. `<style>` 요소와 `style` 속성을 쓰지 않는다(사용자 결정 2026-10-22(Q37)). 시안(`docs/design/mockups/*.html`)의 `<style>`은 시안 파일 안에서만 쓴다.
 - 스크립트로 값을 넣을 때는 `element.style.setProperty()`를 쓴다. 이 방식이 CSP에서 막히는지는 브라우저 테스트로 확인한다.
 - 외부 자원을 쓰지 않는다. CDN, 외부 글꼴, 외부 이미지, 외부 스크립트, 외부 `@import`를 금지한다. 요청은 같은 출처의 제공 경로와 `/api/v1/`만 보낸다.
 - API에서 받은 값은 `textContent`나 속성으로 넣는다. `innerHTML`에 API 값을 넣지 않는다.
@@ -146,7 +146,7 @@ web/dashboard/
 
 ### 2.2 화면 CSS 검사
 
-`cargo xtask tokens --check`는 토큰 파일을 뺀 화면 CSS도 검사한다. 다음 항목이 있으면 실패한다.
+`cargo xtask tokens --check`는 토큰 파일을 뺀 화면 CSS도 검사한다. 대상은 `web/dashboard/`와 `web/help/` 아래 CSS다. 다음 항목이 있으면 실패한다.
 
 - 16진수 색(`#`과 3·4·6·8자리 수), `rgb(`, `hsl(`
 - `url(`, `@import`
@@ -228,8 +228,14 @@ web/dashboard/
 
 ## 5. 예외와 외부 자료
 
-- 시각 예외는 [DESIGN.md 예외 절](../design/DESIGN.md#예외)을 따른다. 현재 예외가 없다.
-- 코드 예외가 생기면 `FE-EX-001`부터 번호를 매기고, 범위·근거·재검토 조건을 이 절에 적는다. 현재 예외가 없다.
+- 시각 예외는 [DESIGN.md 예외 절](../design/DESIGN.md#예외)을 따른다. 현재 도움말 사이트의 세 항목(중단점 1080px, 본문 표·코드 블록의 자기 영역 가로 스크롤, 데스크톱 목차의 sticky)이 있다.
+- 코드 예외는 `FE-EX-001`부터 번호를 매기고 범위·근거·재검토 조건을 아래 표에 적는다. 두 예외 모두 이 문서의 판단이다(사용자 결정 없음).
+
+| ID | 범위 | 예외 내용 | 근거 | 재검토 조건 |
+| --- | --- | --- | --- | --- |
+| FE-EX-001 | 도움말 사이트 전체(`web/help/`) | CSP를 응답 헤더가 아니라 `meta` 요소로 둔다. `meta` CSP는 `frame-ancestors`를 적용하지 않는다. 책 페이지(`web/help/theme/head.hbs`)는 `script-src`와 `style-src`에 `'unsafe-inline'`을 더한다. 사이트 루트(`web/help/site/`)는 `'unsafe-inline'` 없이 1.3절을 따른다 | GitHub Pages는 응답 헤더를 정할 수 없다. 고치지 않고 싣는 mdBook 0.5.4 템플릿(사용자 결정 2026-11-11(Q227))에 인라인 스크립트와 `style` 속성이 있다. 사이트는 공개 문서이며 관리 세션·비밀 값·사용자 입력 저장이 없다. 외부 출처 요청은 `default-src 'self'`가 계속 막는다 | mdBook 템플릿을 직접 관리하거나, 응답 헤더를 정할 수 있는 호스팅으로 옮기면 다시 정한다 |
+| FE-EX-002 | 도움말 책 스크립트(`web/help/theme/help.js`) | ES 모듈이 아닌 classic 스크립트다. mdBook이 만든 DOM을 고친다. 상단 막대(`.help-top`)를 본문 컨테이너 맨 앞으로 옮겨 Tab 순서를 화면 순서(상단 막대 → 목차 → 본문)와 맞춘다 | mdBook의 `additional-js`는 classic `<script src>`로만 싣는다. 템플릿은 목차를 상단 막대보다 앞에 두며, 템플릿을 고치지 않는다(Q227). 초점 순서는 [HELP-010](../specs/help-site.md#7-수용-테스트)이 확인한다 | FE-EX-001과 같다 |
+
 - DESIGN.md는 shadcn/ui의 시각 관례만 참고했다. shadcn/ui와 Tailwind CSS 패키지는 쓰지 않는다([참고 자료](../design/DESIGN.md#참고-자료), [정적 파일 원칙](../design/DESIGN.md#정적-파일-원칙)).
 - 참고 이미지는 시각 방향만 참고한다. 이미지 자산과 문구는 복제하지 않는다([DESIGN.md 참고 자료](../design/DESIGN.md#참고-자료)).
 
@@ -248,6 +254,7 @@ web/dashboard/
 | 컴포넌트·스타일 | 브라우저 테스트(`tests/dashboard_browser.rs`, 사용자 결정 2026-10-22(Q35))와 화면 CSS 검사(2.2절) | 테스트 페이지의 `data-result`가 `pass`다 | [검증 how-to 3.3절](../how-to/verify-dashboard-frontend.md) |
 | 사용자 동작 | 브라우저 테스트와 `cargo xtask scenarios` | 시나리오의 모든 기대 결과를 확인해야 비부분 표식을 붙인다. 실서버 시험은 실제 로그인·조회·중계·종료 경로를 연결한다. 실패·지연·응답 유실은 시험용 전달 프록시로 만든다(사용자 결정 2026-11-05(Q113)). 일반 데이터는 실서버 응답을 쓰며, 주입한 오류 응답을 제품에서 발생한 오류로 보고하지 않는다. 설정 화면 시험은 정상 화면 흐름에서 실서버가 만들 수 없는 계약 모양 4xx 응답도 주입할 수 있다. DASH-040의 PATCH 진단 코드와 DASH-043의 `409`·`403`이 해당한다. DASH-043은 같은 실서버에 원시 요청을 보내 얻은 실제 본문을 재생한다. 주입 수를 기록하고 제품에서 발생한 증거로 세지 않는다(사용자 결정 2026-11-08(Q180)). 정상 응답 본문은 바꾸지 않는다. 브라우저별 호환성과 사람의 접근성 확인은 DASH-015·DASH-023의 별도 확인 범위다 | [테스트 컨벤션 7절](testing.md#7-테스트와-스펙-시나리오-연결), `target/scenario-report.md` |
 | 시각 결과·접근성 | 폭별 스크린샷, 시안과 나란히 대조, 키보드·스크린 리더 수동 확인 | 스펙과 DESIGN.md 기준을 만족한다. 검토자가 기록한다 | [검증 how-to 3.4~3.7절](../how-to/verify-dashboard-frontend.md) |
+| 도움말 사이트 | `cargo xtask help-site`(mdBook 0.5.4, 환경 변수 `MDBOOK` 또는 `PATH`)와 브라우저 시험(`tests/help_site.rs`), 시안 대조 | 빌드·검사의 종료 코드 0. HELP-001~018 시험 통과. 시안과의 차이는 기준에 맞게 고치거나 기록한다 | [도움말 게시 how-to 3~4절](../how-to/publish-help.md) |
 | 전체 완료 | [개발 환경·검증 how-to 3.4절](../how-to/set-up-and-verify.md)의 명령과 위 명령 | 모든 필수 검사가 종료 코드 0이다 | [개발 환경·검증 how-to](../how-to/set-up-and-verify.md) |
 
 시행하지 않은 검사는 성공으로 표시하지 않는다. 미실행 사유와 영향을 검증 기록에 적는다.

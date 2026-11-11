@@ -26,6 +26,7 @@
   - 토큰 값 정의: [DESIGN.md](../design/DESIGN.md) YAML과 `cargo xtask tokens`가 맡는다.
   - 정적 파일 제공: 작업 4.6이 맡는다. `cargo xtask dashboard-serve`는 로컬 미리보기 전용이다.
   - 언어 선택 저장과 문구 번역: 화면 모듈이 맡는다.
+  - 도움말 주소 선택과 문구 갱신: 보호 화면은 `app/shell.js`의 `buildNavbar`, 로그인은 `login/login.js`의 `update`가 맡는다. 공통 컴포넌트는 도움말 사이트에 요청하지 않는다([DASH-064](../specs/dashboard.md#7-수용-테스트)).
 - 다른 모듈에 공개하는 기능: `web/dashboard/app/components/` 아래 모듈의 함수. 아래 2절 표.
 
 ## 2. 내부 구조
@@ -60,7 +61,7 @@ flowchart LR
 | `app/styles/base.css` | `color-scheme`, 본문 글꼴, 포커스 링, 화면 밖 글 클래스 | `tokens.css` |
 | `app/styles/components.css` | 조각별 클래스와 상태 선택자. 화면 배치 클래스(`.grid`, `.span-3`·`.span-4`·`.span-6`·`.span-8`·`.span-12`, `.fact-list`·`.fact`, `.page-actions`)와 단일 중단점 `max-width: 1023.98px` 블록. `app.css`에는 `@media`가 없다 | `tokens.css` |
 | `app/query.js` `newQuery`, `clearTimer`, `viewOf`, `contentKey` | 조회 상태(진행 중, 세대, 데이터, 오류)와 갱신 타이머를 DOM 없이 다룬다. 운영 현황과 세션 상세가 같이 쓴다. | 없음 |
-| `app/shell.js` `buildNavbar`, `signOutUrl`, `defaultStorage`, `LOGIN_URL` | 모든 보호 화면의 운영 현황·로그·설정 상단 막대와 로그아웃 결과 판정을 만든다. `active`로 현재 항목을 고른다. 모바일에서도 세 항목을 숨기지 않는다. | `components/navbar.js`, `components/language-select.js`, `components/button.js`, `api.js`, `model.js`, `copy.js`, `language.js` |
+| `app/shell.js` `buildNavbar`, `signOutUrl`, `defaultStorage`, `LOGIN_URL` | 모든 보호 화면의 운영 현황·로그·설정 상단 막대와 로그아웃 결과 판정을 만든다. `active`로 현재 항목을 고른다. `lang`과 번역 문구로 도움말 링크를 만들고 `createNavbar`의 `help` 슬롯에 넘긴다. | `components/navbar.js`, `components/link.js`, `components/language-select.js`, `components/button.js`, `api.js`, `model.js`, `copy.js`, `language.js` |
 | `app/session.js` `mountSession` | SCR-002를 조립한다. 양쪽 전송 경로와 값이 있는 전달 주소, 세션 필터 로그 링크를 표시한다. 세션 확인·상세 조회·종료 확인·결과 분류·대상 소멸을 맡는다. | `components/alert.js`, `button.js`, `dialog.js`, `link.js`, `stat.js`, `api.js`, `copy.js`, `format.js`, `language.js`, `model.js`, `panels.js`, `query.js`, `shell.js` |
 | `app/router.js` `mountRouter`, `routeOf` | `#/sessions/{id}`는 SCR-002, `#/settings`·`#/settings/edit`는 SCR-004·005, `#/logs`와 선택 `session_id`는 SCR-006, 그 밖은 SCR-001로 보낸다. 이전 화면을 `dispose`한다. 저장 적용 개수는 한 번 쓰는 메모리 값으로 전달한다. | `operations.js`, `session.js`, `settings.js`, `logs.js` |
 | `app/settings.js` `mountSettings` | SCR-004·005를 조립한다. 진입·명시적 GET, 편집 가능 상태, 입력 보존, 변경 확인, PATCH 결과·복구, 언어·로그아웃을 맡는다. 폴링하지 않는다. | 공통 컴포넌트, `api.js`, `settings-model.js`, `copy.js`, `format.js`, `language.js`, `model.js`, `panels.js`, `shell.js` |
@@ -76,7 +77,7 @@ flowchart LR
 | `tone` | `success`, `info`, `warning`, `destructive`, `neutral` | 다른 값이면 `TypeError`. 요소에 `data-tone`으로 쓴다. |
 | `variant`(버튼) | `primary`, `outline`, `ghost`, `destructive`, `navbar` | 다른 값이면 `TypeError`. `navbar`는 상단 막대의 항목형(로그아웃) 버튼이다. |
 | `variant`(언어 선택) | `navbar`, `form` | 다른 값이면 `TypeError` |
-| 아이콘 이름 | `check`, `clock`, `warning`, `alert`, `refresh`, `logout`, `back`, `chevron-right`, `chevron-down`, `chevron-up`, `cancel`, `globe`, `grid`, `settings`, `brand`, `log`, `search`, `download`, `close`, `pause`, `arrow-right` | 다른 값이면 `TypeError`. 로그인 복사본은 `cargo xtask tokens`로 생성한다. |
+| 아이콘 이름 | `check`, `clock`, `warning`, `alert`, `refresh`, `logout`, `back`, `chevron-right`, `chevron-down`, `chevron-up`, `cancel`, `globe`, `grid`, `settings`, `brand`, `log`, `search`, `download`, `close`, `pause`, `arrow-right`, `help`, `external-link` | 다른 값이면 `TypeError`. 로그인 복사본은 `cargo xtask tokens`로 생성한다. |
 | 아이콘 크기 | `md`(`--space-icon-size`), `sm`(`--space-icon-size-sm`) | 기본값 `md` |
 | 상태 클래스 | `is-hover`, `is-focus` | 미리보기가 상태를 고정할 때만 붙인다. 화면 코드는 붙이지 않는다. |
 | 상태 속성 | `disabled`, `aria-busy`, `aria-invalid`, `aria-current`, `aria-describedby` | 상태 표현은 이 속성으로 한다. |
@@ -94,10 +95,10 @@ flowchart LR
 | `createCard({title, headingLevel, description, count, actions, body, footer})` | `title` 필수. `headingLevel` 기본 2(1~6의 정수). `description`은 선택 문자열이다. 카드 머리(`.card-head`)의 제목 아래 `p.card-description`에 넣는다(DESIGN 527·638행). `count`는 `createBadge`로 붙인다. SCR-001 개수 문구는 CPY-084·085(Q115)를 따르며 목록별 성공 데이터와 함께 갱신한다. | `HTMLElement`(`section`). `aria-labelledby`로 제목과 묶는다. |
 | `createStat({label, value, unit, tone, badge})` | `label` 필수. 값은 문자열 또는 숫자다. `badge` 기본값은 `false`이며, 기본 값은 `metric` 글꼴과 `tnum`을 쓴다. `badge: true`이면 `createBadge`에 값과 `tone`을 넘긴다. 실행 상태와 확인 불가·조회 중 값에 쓴다(DESIGN.md Stat). | `HTMLDivElement` |
 | `createGauge({label, value, max, valueText, limitText, unknownText, unknownTone})` | `value`는 `0`~`max`. `label`과 `limitText`는 필수다. 알려진 값은 가운데에 `valueText`(없으면 값)를 크게 보이고, 아래 줄에 `limitText`(상한 줄)를 보인다. `value`가 `null`이면 알 수 없음이며 링을 그리지 않고 `unknownText`(필수)를 `createBadge`의 배지로 쓴다. `unknownTone`은 그 배지의 톤이며 기본값은 `neutral`(확인 불가)이다. 첫 조회 전에는 호출자가 `info`(조회 중)를 넘긴다(DESIGN 상태 색). `value`가 `null`일 때 톤이 잘못되면 `TypeError`다. 알려진 값에서는 배지를 만들지 않으므로 `unknownTone`을 쓰지 않는다. 채움 길이는 `style.setProperty`로 쓴다. | `HTMLDivElement`. `role="progressbar"`, `aria-label`, `aria-valuemin`, `aria-valuemax`, `aria-valuenow`, `aria-valuetext`. 알려진 값의 `aria-valuetext`는 `valueText, limitText`다. |
-| `createNavbar({brand, items, language, action, label})` | `label`은 필수다(기본값 없음, 호출자가 준다). `items`는 `{label, href, current, icon}`. 화면이 활성 항목을 고르며 모든 항목은 모바일에서도 보인다. | `HTMLElement`(`header`). 안에 `nav`를 둔다. 현재 항목은 `aria-current="page"`. |
+| `createNavbar({brand, items, help, language, action, label})` | `label`은 필수다(기본값 없음, 호출자가 준다). `items`는 `{label, href, current, icon}`. `help`·`language`·`action`은 선택 DOM 노드다. 도구 묶음에 이 순서로 넣는다. 화면이 활성 항목을 고르며 모든 항목은 모바일에서도 보인다. | `HTMLElement`(`header`). 안에 `nav`를 둔다. 현재 항목은 `aria-current="page"`. |
 | `createLanguageSelect({id, label, value, options, variant})` | `id`, `label`, `options`(`{value, label}` 배열, 빈 배열이면 `TypeError`)는 필수. `variant` 기본 `form`(`navbar`·`form`). | `HTMLDivElement`. 안에 `label`과 `select`. |
 | `createDataTable({caption, columns, rows, emptyText, numericColumns})` | `columns`는 `{key, label, mobileHead?}` 배열이다. `key`·`label`은 문자열이다. 배열이 아니거나 비었거나 열 값이 잘못되면 `TypeError`다. `mobileHead`는 생략 또는 `'primary'`·`'secondary'`만 허용한다. 다른 값이면 `TypeError`다. 생략한 열은 모바일에서 일반 레이블·값 쌍이다. `rows`는 값 배열의 배열이다. 셀 값이 `Node`면 그대로 넣고, 그 밖의 값은 문자열로 쓴다. `emptyText`는 문자열 또는 `Node`다. 조회 중 행은 호출자가 정보 배지를 넘긴다. `numericColumns`의 각 항목은 `columns`의 `key`여야 한다(아니면 `TypeError`). | `HTMLTableElement`. 열 머리글은 `scope="col"`이고, 숫자 열은 `data-table-num` 클래스를 쓴다. 행이 없으면 `emptyText`를 한 행으로 쓴다. 아래 표 역할과 모바일 첫 줄 규칙을 따른다. |
-| `createLink({href, label, icon})` | `icon`은 아이콘 이름 | `HTMLAnchorElement` |
+| `createLink({href, label, icon, iconSize, newTabText})` | `icon`은 앞 아이콘 이름이다. `iconSize` 기본값은 `sm`이다. `newTabText`를 주면 `target="_blank"`·`rel="noopener noreferrer"`를 붙인다. 문구 뒤에 장식용 `external-link` 아이콘과 `.sr-only`의 ` (newTabText)`를 넣는다. | `HTMLAnchorElement`. 보이는 문구는 `span`에 넣는다. |
 | `createDialog({title, description, confirmLabel, cancelLabel, destructive, onConfirm, onCancel, returnFocus})` | `title`, `confirmLabel`, `cancelLabel`은 필수. 확인 버튼은 `destructive`면 위험 스타일. `returnFocus`는 대화상자를 여는 요소이며 선택 옵션이다. 닫힌 대화상자는 CSS가 숨긴다(`display`는 `.dialog[open]`에만 준다). 미리보기는 열린 견본을 비모달 `open` 속성으로 프레임 안에 둔다(미리보기 전용). | `{element, show(), hide()}`. `show`는 `showModal()`을 부른다. 취소 단추는 `close()` 직후 `returnFocus`로 포커스를 옮긴다. Escape는 브라우저가 닫으므로 `close` 이벤트에서 옮긴다. 요소가 문서에 없거나 비활성이면 옮기지 않는다. 확인과 `hide()`는 포커스를 호출한 쪽에 맡긴다. Tab과 Shift+Tab은 두 단추 사이에서 돌도록 keydown으로 처리한다(DASH-015, 7절). |
 
 모든 함수는 API 값을 `textContent`나 속성 값으로만 넣는다. `innerHTML`에는 정적 문자열만 넣는다.
@@ -109,6 +110,17 @@ flowchart LR
 - 일반 셀은 `data-label`과 CSS 가상 요소로 열 이름을 보인다. 가상 요소의 대체 텍스트는 비워 중복 읽기를 막는다(DESIGN 566행). 열 머리글은 화면에서만 숨기고 접근성 트리에는 남긴다.
 
 4.12 API 반영의 실행 검증과 캡처 결과는 별도 검증 기록에서 관리한다. 아래 날짜가 있는 대조 기록은 당시 결과다.
+
+### 도움말 링크 조립
+
+보호 화면은 언어 변경 때 기존 렌더 흐름으로 `buildNavbar`를 다시 부른다. 이 함수는 현재 `lang`의 도움말 주소와 `copy.js`의 CPY-195·196을 `createLink`에 넘긴다. 도움말은 `help` 슬롯에 들어가므로 주 메뉴의 현재 항목 판정과 분리된다.
+
+로그인은 보호된 `app/` 파일을 직접 읽을 수 없다. `login/login.js`가 같은 두 장식 아이콘과 글씨 노드를 조립한다. `update`는 링크 주소와 두 문구를 제자리에서 바꾼다. 입력란은 다시 만들지 않는다. 아이콘과 공통 스타일은 기존 생성 복사본을 쓴다.
+
+`styles/components.css`는 도움말의 두 변형과 모바일 도구 줄바꿈을 맡는다. 로그인 전용 `login.css`는 도움말과 언어 선택의 간격을 맡는다. 새 토큰은 없다. `preview.js`는 상단 막대와 로그인형 링크를 함께 보여 준다.
+
+`tests/help-link-checks.js`의 `checkHelpLink`·`checkHelpLanguageChange`는 다섯 화면 시험 페이지에서 주소·문구·접근 가능한 이름의 구성·새 탭 속성·배치·즉시 언어 변경을 확인한다. 설정 페이지는 보기와 편집을 모두 확인한다. `tests/dashboard_browser.rs`의 `every_screen_localizes_safe_help_links_without_requesting_the_help_site_in_browser`는 두 언어와 1280·390px을 실행하도록 연결한다. 링크를 누르거나 도움말 주소로 이동하지 않는다. 실행 결과는 이 문서에 선언하지 않는다.
+
 
 ## 4. 처리 순서
 

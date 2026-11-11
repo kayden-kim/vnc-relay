@@ -6,6 +6,7 @@ import { mountSettings } from '../app/settings.js';
 import { BRAND_NAME, COPY } from '../app/copy.js';
 import { formatTime } from '../app/format.js';
 import { STORAGE_KEY } from '../app/language.js';
+import { checkHelpLanguageChange } from './help-link-checks.js';
 
 const host = document.getElementById('host');
 const result = document.getElementById('result');
@@ -1224,6 +1225,19 @@ async function shot(frame) {
   }
 }
 
+async function case064() {
+  for (const edit of [false, true]) {
+    const m = mount(fakeApi(), { edit });
+    await ready(m, edit);
+    if (edit) setValue(m.root, WAITING, '250');
+    checkHelpLanguageChange(m.root, lang, check);
+    check('DASH-064: no help API requests', m.api.calls.every((call) => call.key.startsWith('GET /api/v1/')));
+    check('DASH-064: current screen remains mounted', m.navigations.length === 0);
+    if (edit) check('DASH-064: draft preserved', inputOf(m.root, WAITING)?.value === '250');
+  }
+  current.handle.dispose();
+}
+
 const CASES = {
   'dash-028': case028, 'dash-029': case029, 'dash-030': case030, 'dash-031': case031,
   'dash-032': case032, 'dash-033': case033, 'dash-034': case034, 'dash-035': case035,
@@ -1232,6 +1246,7 @@ const CASES = {
   'dash-044': case044, 'dash-045': case045, 'dash-046': case046, 'dash-047': case047,
   'dash-048': case048, 'dash-049': case049, 'dash-050': case050, 'dash-051': case051,
   'dash-052': case052, 'dash-053': case053,
+  'dash-064': case064,
 };
 const caseName = params.get('case');
 try {

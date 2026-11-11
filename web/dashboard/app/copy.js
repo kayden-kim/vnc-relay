@@ -9,6 +9,8 @@ export const LANGUAGE_NAMES = { ko: '한국어', en: 'English' }; // CPY-002
 export const COPY = {
   ko: {
     navLabel: '주 메뉴', // CPY-078
+    help: '도움말', // CPY-195
+    opensInNewTab: '새 탭에서 열림', // CPY-196
     operations: '운영 현황', // CPY-004
     signOut: '로그아웃', // CPY-007
     refresh: '새로고침', // CPY-008
@@ -197,6 +199,8 @@ export const COPY = {
   },
   en: {
     navLabel: 'Main menu', // CPY-078
+    help: 'Help', // CPY-195
+    opensInNewTab: 'opens in a new tab', // CPY-196
     operations: 'Operations overview', // CPY-004
     signOut: 'Sign out', // CPY-007
     refresh: 'Refresh', // CPY-008

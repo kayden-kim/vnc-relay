@@ -45,6 +45,7 @@ Windows 11 x64 또는 Ubuntu 24.04 LTS x64에서 고정된 Rust 툴체인으로 
   ```
 
   기대 결과: 마지막 명령이 `Google Chrome 156.0.8078.47`처럼 버전을 출력한다.
+- [ ] mdBook 0.5.4가 설치되어 있다. Windows와 Ubuntu 모두 필수이며, 도움말 사이트 빌드(`cargo xtask help-site`)와 도움말 브라우저 시험(`tests/help_site.rs`)에 쓴다(사용자 결정 2026-11-11(Q223)). 실행 파일 경로는 환경 변수 `MDBOOK`으로 주거나 `PATH`에 둔다. 내려받기와 SHA-256 확인은 [도움말 게시 how-to 2.1절](publish-help.md#21-mdbook-054-설치)을 따른다.
 - [ ] Windows: 설치 승인(UAC)을 할 수 있는 사용자가 컴퓨터 앞에 있다.
 - [ ] WSL에서 Windows 드라이브(`/mnt/<드라이브>/`)의 작업 트리를 쓰면 `CARGO_TARGET_DIR`을 Linux 홈 아래로 정하는 것을 권장한다. 예: `export CARGO_TARGET_DIR="$HOME/vnc-relay-target"`. Windows 쪽 Cargo와 빌드 결과가 섞이지 않는다. 검증 기록은 이 설정으로 실행했다.
 
@@ -206,6 +207,7 @@ Linux 전용 `tests/relay_dead_peer_linux.rs`는 사용자·네트워크 네임�
    | 시나리오 테스트(표식 추가·변경), 스펙 수용 테스트 표 | `cargo xtask scenarios` | 종료 코드 0, 보고서에 `오류`·`실패` 없음([테스트 컨벤션 5절](../conventions/testing.md#5-검증-명령과-통과-기준)) |
    | `Cargo.toml` 의존성, crate 추가 | `cargo xtask layers`, `cargo deny check licenses`([의존성 라이선스 검사](check-dependency-licenses.md)) | `레이어 검사: 통과`, `licenses ok` |
    | `docs/design/DESIGN.md` YAML, `web/dashboard/` | `cargo xtask tokens --check`, 브라우저 테스트는 `cargo xtask scenarios`가 함께 실행한다([대시보드 프런트엔드 검증 how-to](verify-dashboard-frontend.md)) | `tokens --check: 통과`, 종료 코드 0 |
+   | `docs/help/`, `web/help/`, 도움말 도구(`xtask/src/help_site.rs`·`help_site/`·`help_serve.rs`·`static_server.rs`), `.github/workflows/help.yml` | `cargo xtask help-site`, `cargo test --test help_site`, `web/help/` CSS를 바꾸면 `cargo xtask tokens --check`. 워크플로를 바꾸면 push 뒤 `help` 실행 결과를 확인한다([도움말 게시 how-to](publish-help.md)) | `help-site: 통과`, 시험 18개 통과, `help` 결론 `success` |
    | 배포 묶음(`xtask/src/package.rs`), GitHub Actions 워크플로(`.github/workflows/`), 작업 공간 버전 | `cargo xtask package`, `cargo test --package xtask`. 워크플로를 바꾸면 push 뒤 `ci` 실행 결과를 확인한다([릴리스 how-to](release.md)) | 종료 코드 0, `package:`·`sha256:` 줄, `ci` 결론 `success` |
    | 문서만 | 이 절차의 명령은 필요 없다. 문서 유형별 작성 규칙과 링크를 확인한다. | — |
 
@@ -226,7 +228,7 @@ Linux 전용 `tests/relay_dead_peer_linux.rs`는 사용자·네트워크 네임�
    cargo deny check licenses
    ```
 
-   기대 결과: 여섯 명령 모두 종료 코드 0. `cargo xtask scenarios`가 `cargo test --workspace --no-fail-fast`를 함께 실행하므로 따로 실행하지 않는다. 대시보드 브라우저 테스트도 이때 실행되며 Chromium이 없으면 실패한다(2절). 출력 마지막에 `판정: 통과`, 라이선스 검사 마지막 줄에 `licenses ok`가 나온다. 단계를 마칠 때(작업 5.9)는 보고서에 남은 `부분`·`미실행`·`미연결` 시나리오를 [4.1절 판정표](#41-작업-59-판정표)에서 판정한다(사용자 결정 2026-11-06(Q132)). `cargo xtask scenarios --require-all`은 완료 명령이 아니다. 남은 시나리오 수를 세는 진단용이며, 그런 시나리오가 하나라도 있으면 판정 실패와 종료 코드 1로 끝난다([테스트 컨벤션 5절](../conventions/testing.md#5-검증-명령과-통과-기준)).
+   기대 결과: 여섯 명령 모두 종료 코드 0. `cargo xtask scenarios`가 `cargo test --workspace --no-fail-fast`를 함께 실행하므로 따로 실행하지 않는다. 대시보드 브라우저 테스트도 이때 실행되며 Chromium이 없으면 실패한다(2절). 도움말 브라우저 시험도 이때 실행되며 mdBook 0.5.4가 없으면 실패한다(2절). 출력 마지막에 `판정: 통과`, 라이선스 검사 마지막 줄에 `licenses ok`가 나온다. 단계를 마칠 때(작업 5.9)는 보고서에 남은 `부분`·`미실행`·`미연결` 시나리오를 [4.1절 판정표](#41-작업-59-판정표)에서 판정한다(사용자 결정 2026-11-06(Q132)). `cargo xtask scenarios --require-all`은 완료 명령이 아니다. 남은 시나리오 수를 세는 진단용이며, 그런 시나리오가 하나라도 있으면 판정 실패와 종료 코드 1로 끝난다([테스트 컨벤션 5절](../conventions/testing.md#5-검증-명령과-통과-기준)).
 
 7. 결과를 기록한다. 시나리오 보고서는 Cargo 대상 디렉터리의 `scenario-report.md`다. 완료 보고에는 대상 커밋, OS, 명령, 판정을 적는다([검증 기록](../AGENTS.md#검증-기록)).
 

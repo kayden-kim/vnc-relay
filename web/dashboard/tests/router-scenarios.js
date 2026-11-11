@@ -138,7 +138,7 @@ const enabled = (root) => terminateOf(root) !== null && !terminateOf(root).disab
 function checkLayout(label) {
   const page = document.documentElement;
   check(`${label}: no horizontal scroll`, page.scrollWidth <= page.clientWidth);
-  const links = [...host.querySelectorAll('.navbar-item')];
+  const links = [...host.querySelectorAll('.navbar-nav .navbar-item')];
   const route = routeOf(location.hash).name;
   const currentIndex = route === 'settings' ? 2 : route === 'logs' ? 1 : 0;
   const copy = COPY[document.documentElement.lang];
@@ -220,7 +220,7 @@ async function caseDash006() {
   // The test document is under /tests/. Adapt the root-relative link destination to
   // its hash while still exercising the actual visible navigation link's click.
   function clickNav(index) {
-    const link = host.querySelectorAll('.navbar-item')[index];
+    const link = host.querySelectorAll('.navbar-nav .navbar-item')[index];
     link.addEventListener('click', (event) => {
       event.preventDefault();
       location.hash = new URL(link.href).hash;
@@ -342,7 +342,7 @@ async function caseDash028() {
   const router = mountRouter(host, { request: api.request, storage: { getItem: () => lang, setItem() {} } });
   await waitFor(() => linkNamed(host, t.details) !== null);
 
-  const navItems = [...host.querySelectorAll('.nav-item.nav, a.navbar-item')];
+  const navItems = [...host.querySelectorAll('.navbar-nav .navbar-item')];
   check('DASH-028: three nav items present', navItems.length === 3);
   check('DASH-028: nav order is operations, logs, settings',
     navItems[0]?.textContent.includes(t.operations) &&
@@ -353,7 +353,7 @@ async function caseDash028() {
   // Navigate to logs
   location.hash = '#/logs';
   await waitFor(() => host.querySelector('h1.page-title')?.textContent === t.logs);
-  const logsNavItems = [...host.querySelectorAll('.nav-item.nav, a.navbar-item')];
+  const logsNavItems = [...host.querySelectorAll('.navbar-nav .navbar-item')];
   check('DASH-028: logs item is current on #/logs', logsNavItems[1]?.getAttribute('aria-current') === 'page');
 
   checkLayout('DASH-028');

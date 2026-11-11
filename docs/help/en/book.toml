@@ -1,0 +1,27 @@
+# English help book. Build it with `cargo xtask help-site` (docs/how-to/publish-help.md).
+# The theme (`theme/`) is copied from web/help/theme/ at build time.
+
+[book]
+title = "VNC Relay Help"
+language = "en"
+src = "src"
+
+[build]
+create-missing = false
+
+[output.html]
+theme = "theme"
+default-theme = "light"
+preferred-dark-theme = "light"
+additional-css = ["theme/help.css"]
+additional-js = ["theme/help.js"]
+no-section-label = true
+
+[output.html.search]
+enable = false
+
+[output.html.print]
+enable = false
+
+[output.html.playground]
+copyable = false

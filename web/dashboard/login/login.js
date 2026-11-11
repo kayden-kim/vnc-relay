@@ -31,6 +31,8 @@ const STRINGS = {
     logoutUnconfirmed: '로그아웃이 끝났는지 확인하지 못했습니다. 이 화면의 관리 데이터는 숨겼습니다.', // CPY-076
     submit: '로그인', // CPY-012
     submitBusy: '로그인 중…', // CPY-013
+    help: '도움말', // CPY-195
+    opensInNewTab: '새 탭에서 열림', // CPY-196
   },
   en: {
     title: 'VNC Relay administrator sign in',
@@ -45,6 +47,8 @@ const STRINGS = {
     logoutUnconfirmed: 'Could not confirm that sign-out finished. Management data is hidden in this screen.',
     submit: 'Sign in',
     submitBusy: 'Signing in…',
+    help: 'Help', // CPY-195
+    opensInNewTab: 'opens in a new tab', // CPY-196
   },
 };
 
@@ -205,8 +209,14 @@ export function mountLogin(root, deps = {}) {
   const brand = el('div', 'login-brand');
   brand.append(brandMark);
 
+  const help = el('a', 'help-link-login');
+  help.target = '_blank';
+  help.rel = 'noopener noreferrer';
+  const helpText = el('span');
+  const helpNotice = el('span', 'sr-only');
+  help.append(icon('help'), helpText, icon('external-link', { size: 'sm' }), helpNotice);
   const top = el('div', 'login-top');
-  top.append(languageSelect);
+  top.append(help, languageSelect);
 
   // The title row has a divider below it, as in the mockup. The body holds the notice and the form.
   const head = el('header', 'card-head');
@@ -254,6 +264,9 @@ export function mountLogin(root, deps = {}) {
     doc.title = copy.title;
     select.value = state.lang;
     title.textContent = copy.title;
+    help.href = `https://kayden-kim.github.io/vnc-relay/${state.lang}/`;
+    helpText.textContent = copy.help;
+    helpNotice.textContent = ` (${copy.opensInNewTab})`;
     accountField.querySelector('.text-field-label').textContent = copy.accountLabel;
     passwordField.querySelector('.text-field-label').textContent = copy.passwordLabel;
     setTextFieldError(accountField, state.accountError ? copy.accountRequired : undefined);

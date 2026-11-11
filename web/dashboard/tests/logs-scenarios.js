@@ -3,6 +3,7 @@ import { mountLogs } from '../app/logs.js';
 import { COPY } from '../app/copy.js';
 import { mountLogin } from '../login/login.js';
 import { STORAGE_KEY } from '../app/language.js';
+import { checkHelpLanguageChange } from './help-link-checks.js';
 
 const host = document.getElementById('host');
 const result = document.getElementById('result');
@@ -83,7 +84,7 @@ async function submit(value) {
 }
 function checkLayout(label) {
   check(`${label}: no horizontal scroll`, document.documentElement.scrollWidth <= document.documentElement.clientWidth);
-  check(`${label}: three navigation items`, host.querySelectorAll('.navbar-item').length === 3);
+  check(`${label}: three navigation items`, host.querySelectorAll('.navbar-nav .navbar-item').length === 3);
   for (const control of host.querySelectorAll('button, input, select')) {
     const box = control.getBoundingClientRect();
     if (box.width && box.height) check(`${label}: control inside viewport`, box.left >= 0 && box.right <= innerWidth + 1);
@@ -461,7 +462,17 @@ async function shot(state) {
   if (state === 'failed') await waitFor(() => host.querySelector('.alert[data-tone="destructive"]'));
   if (state === 'download-failed') await waitFor(() => text().includes(t.downloadFailed));
 }
-const CASES = { 'dash-054': case054, 'dash-055': case055, 'dash-056': case056, 'dash-057': case057, 'dash-058': case058, 'dash-059': case059, 'dash-060': case060, 'dash-061': case061, 'dash-063': case063 };
+async function case064() {
+  const m = mount();
+  await waitFor(ready);
+  pause();
+  checkHelpLanguageChange(host, lang, check);
+  check('DASH-064: no help API requests', m.api.calls.every((call) => new URL(call.path, location.origin).origin === location.origin));
+  check('DASH-064: current screen remains mounted', m.navigations.length === 0);
+  m.handle.dispose();
+}
+
+const CASES = { 'dash-054': case054, 'dash-055': case055, 'dash-056': case056, 'dash-057': case057, 'dash-058': case058, 'dash-059': case059, 'dash-060': case060, 'dash-061': case061, 'dash-063': case063, 'dash-064': case064 };
 const caseName = params.get('case');
 try {
   if (caseName?.startsWith('shot-')) await shot(caseName.slice(5));

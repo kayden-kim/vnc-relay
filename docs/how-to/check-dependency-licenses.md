@@ -28,6 +28,8 @@ Rust 의존성이 승인된 라이선스 허용 목록을 지키는지 검사하
 
 대시보드 글꼴 Pretendard 1.3.9는 Rust crate가 아니어서 `cargo deny` 검사 대상이 아니다. 라이선스는 SIL Open Font License 1.1(OFL-1.1)이고 위 허용 목록에 없다. 사용자가 이 글꼴 파일을 OFL 전문과 함께 실행파일에 넣는 것을 승인했다(사용자 결정 2026-11-07(Q139)). 이 승인은 이 글꼴에만 적용하며 crate 허용 목록을 넓히지 않는다. OFL-1.1은 저작권 고지와 라이선스 전문을 함께 배포하도록 요구한다. 글꼴 파일을 고쳐 배포하면 예약 글꼴 이름 `Pretendard`를 쓸 수 없으므로 배포본 파일을 바꾸지 않고 넣는다([프런트엔드 컨벤션 2.4절](../conventions/frontend.md#24-글꼴-파일)).
 
+운영자 도움말 사이트는 실행파일과 따로 GitHub Pages로 게시한다. 이 사이트에만 수정하지 않은 mdBook 프런트엔드 파일(MPL-2.0)과 Font Awesome Free 6.2.0 아이콘(CC BY 4.0)을 싣는다. Pretendard(OFL-1.1), highlight.js 10.1.1(BSD-3-Clause), clipboard.js 2.0.4(MIT)도 함께 싣는다(사용자 결정 2026-11-11(Q227)). 이 승인은 도움말 사이트에만 적용하며 crate 허용 목록을 넓히지 않는다. 구성요소마다 이름·버전·라이선스·출처를 사이트의 고지 페이지(`docs/help/ko/src/notices.md`, `docs/help/en/src/notices.md`)에 적는다. [HELP-017](../specs/help-site.md#7-수용-테스트)이 이 페이지를 확인한다. 실행파일의 `THIRD-PARTY-NOTICES.txt`에는 넣지 않는다.
+
 ## 2. 전제 조건
 
 - [ ] Rust 툴체인을 설치했다. 버전은 저장소 루트의 `rust-toolchain.toml`이 정한다.

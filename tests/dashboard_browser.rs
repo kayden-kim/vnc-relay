@@ -503,6 +503,23 @@ fn logs_supports_keyboard_aria_and_language_change_in_browser() {
     check_localized_case("/tests/logs.html", "dash-063");
 }
 
+/// spec: dashboard.md:DASH-064
+#[test]
+fn every_screen_localizes_safe_help_links_without_requesting_the_help_site_in_browser() {
+    let mut runs = Vec::new();
+    for page in ["operations", "session", "login", "settings", "logs"] {
+        for lang in LANGS {
+            for width in [1280, 390] {
+                runs.push((
+                    format!("/tests/{page}.html?case=dash-064&lang={lang}"),
+                    width,
+                ));
+            }
+        }
+    }
+    check_runs(&runs);
+}
+
 /// Runs one page at every width and language, then reports all failing runs at once.
 fn check_page(page: &str) {
     let mut runs = Vec::new();

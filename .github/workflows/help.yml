@@ -1,0 +1,64 @@
+# Operator help site on GitHub Pages (docs/how-to/publish-help.md section 3.5).
+# Pull requests only build and check the site. A push to main also publishes it
+# (user decision 2026-11-11 (Q221)). The browser tests stay in the local gates.
+name: help
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      CARGO_TERM_COLOR: always
+      # The only mdBook release the theme is made for (user decision 2026-11-11 (Q223)).
+      # The hash is the one GitHub records for the release asset.
+      MDBOOK_ASSET: mdbook-v0.5.4-x86_64-unknown-linux-gnu.tar.gz
+      MDBOOK_SHA256: 3f28de05dafca9d0f2eab99c662116b0e37b89b1d96a08f8f430b9eeae958cd7
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install mdBook 0.5.4 and check its hash
+        run: |
+          curl -fsSLO "https://github.com/rust-lang/mdBook/releases/download/v0.5.4/$MDBOOK_ASSET"
+          echo "$MDBOOK_SHA256  $MDBOOK_ASSET" | sha256sum -c -
+          mkdir -p "$RUNNER_TEMP/mdbook"
+          tar -xzf "$MDBOOK_ASSET" -C "$RUNNER_TEMP/mdbook"
+          echo "MDBOOK=$RUNNER_TEMP/mdbook/mdbook" >> "$GITHUB_ENV"
+
+      - name: Install the pinned toolchain (rust-toolchain.toml)
+        run: rustup toolchain install
+
+      - name: Build and check the help site
+        run: cargo xtask help-site
+
+      - if: github.ref == 'refs/heads/main'
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: target/help-site
+
+  deploy:
+    if: github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      pages: write
+      id-token: write
+    # One publish at a time. A running publish finishes before the next one starts.
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5

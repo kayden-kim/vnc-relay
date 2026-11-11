@@ -5,6 +5,7 @@ import { mountSession } from '../app/session.js';
 import { BRAND_NAME, COPY } from '../app/copy.js';
 import { formatAddress, formatMode, formatTransport } from '../app/format.js';
 import { STORAGE_KEY } from '../app/language.js';
+import { checkHelpLanguageChange } from './help-link-checks.js';
 
 const host = document.getElementById('host');
 const result = document.getElementById('result');
@@ -189,7 +190,7 @@ function checkLayout(label) {
   const page = document.documentElement;
   check(`${label}: no horizontal scroll`, page.scrollWidth <= page.clientWidth);
   for (const navbar of host.querySelectorAll('.navbar')) {
-    const links = [...navbar.querySelectorAll('.navbar-item')];
+    const links = [...navbar.querySelectorAll('.navbar-nav .navbar-item')];
     const copy = COPY[document.documentElement.lang];
     check(`${label}: three navigation links remain available`, links.length === 3
       && links[0].textContent === copy.operations && links[1].textContent === copy.logs && links[2].textContent === copy.settings
@@ -720,6 +721,15 @@ async function caseDash062() {
   checkLayout('DASH-062', root);
 }
 
+async function caseDash064() {
+  const m = mount(fakeApi());
+  await waitFor(() => enabled(m.root));
+  checkHelpLanguageChange(m.root, lang, check);
+  check('DASH-064: no help API requests', m.api.calls.every((call) => call.key.startsWith('GET /api/v1/')));
+  check('DASH-064: current screen remains mounted', m.navigations.length === 0);
+  m.handle.dispose();
+}
+
 const CASES = {
   'dash-006': caseDash006,
   'dash-007': caseDash007,
@@ -736,6 +746,7 @@ const CASES = {
   'dash-025': caseDash025,
   'dash-026': caseDash026,
   'dash-062': caseDash062,
+  'dash-064': caseDash064,
   'shot-loading': async () => { mount(fakeApi({ [DETAIL]: () => new Promise(() => {}) })); },
   'shot-normal': async () => {
     const { root } = mount(fakeApi({ [DETAIL]: () => ok({ as_of: AS_OF, session: activeSession({ mode: 'mode2', target_transport: 'ws', target_forwarded_ip: '198.51.100.22' }) }) }));

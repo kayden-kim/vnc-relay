@@ -128,6 +128,25 @@ typography:
     lineHeight: 1.5
     letterSpacing: -0.03em
     fontFeature: "'tnum'"
+  # 채택(사용자 결정 2026-11-12(Q228)): 도움말 사이트의 본문·절 제목·코드 단계.
+  prose:
+    fontFamily: "Pretendard, 'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans KR', system-ui, -apple-system, 'Segoe UI', sans-serif"
+    fontSize: 16px
+    fontWeight: 400
+    lineHeight: 1.75
+    letterSpacing: -0.01em
+  heading-section:
+    fontFamily: "Pretendard, 'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans KR', system-ui, -apple-system, 'Segoe UI', sans-serif"
+    fontSize: 20px
+    fontWeight: 700
+    lineHeight: 1.5
+    letterSpacing: -0.03em
+  code:
+    fontFamily: "ui-monospace, 'SF Mono', 'Cascadia Mono', Consolas, 'Liberation Mono', monospace"
+    fontSize: 14px
+    fontWeight: 400
+    lineHeight: 1.6
+    letterSpacing: 0
 spacing:
   xs: 4px
   sm: 8px
@@ -160,6 +179,9 @@ spacing:
   index-min: 240px
   login-max: 400px
   dialog-max: 480px
+  # 채택(사용자 결정 2026-11-12(Q228)): 도움말 사이트의 목차 폭과 본문 최대 폭.
+  sidebar-width: 280px
+  prose-max: 760px
 rounded:
   sm: 6px
   md: 8px
@@ -317,7 +339,7 @@ components:
 | 적용 시작일 | 2026-10-20 |
 | 관련 PRD·스펙 | [PRD](../requirements/PRD.md) FR-06·AC-31, [대시보드 화면 스펙](../specs/dashboard.md) DASH-015·DASH-021·DASH-023 |
 | 관련 아키텍처 문서·ADR | 없음. 정적 HTML·JS 선택은 [PRD 확정 기준](../requirements/PRD.md#확정-기준)이 정한다 |
-| 기준 시안 | [dashboard.html](mockups/dashboard.html). 기존 범위는 2026-10-20 사용자 채택. 설정 내비게이션·SCR-004·005 추가분 62개 프레임(한국어·English)은 사용자 결정 2026-11-08(Q174)으로 채택 |
+| 기준 시안 | [dashboard.html](mockups/dashboard.html). 기존 범위는 2026-10-20 사용자 채택. 설정 내비게이션·SCR-004·005 추가분 62개 프레임(한국어·English)은 사용자 결정 2026-11-08(Q174)으로 채택. 도움말 사이트 확장의 시안 [help-site.html](mockups/help-site.html)과 dashboard.html의 도움말 링크는 사용자 결정 2026-11-12(Q228·Q229)으로 채택 |
 | 토큰 원본 | 이 파일의 YAML 머리말 |
 | 컴포넌트 미리보기 | `web/dashboard/preview/`. `cargo xtask dashboard-serve`로 띄운다. 로컬 전용이며 실행 파일에 넣지 않는다. 명세의 컴포넌트를 상태별로 보여 준다(작업 4.8). |
 | 명세·도구 버전 | [DESIGN.md 명세](https://github.com/google-labs-code/design.md/blob/main/docs/spec.md) `version: alpha`(2026-10-16 확인). 검사 도구 버전은 [검증](#검증)에 기록한다 |
@@ -731,6 +753,39 @@ shadcn/ui처럼 경계선과 얕은 그림자로 층을 나눈다.
 
 접근성 요약: 수준 체크박스는 보이는 그룹 이름을 가진 `fieldset`이다. 사건 선택·검색·자동 갱신은 보이는 label이 있다. 검색 도움말·오류는 `aria-describedby`로 연결한다. 목록 본문은 라이브 영역이 아니며 상태 변화만 알린다. 포커스 링은 기존 `ring` 2px을 그대로 쓴다. 입력은 모두 16px 이상이다.
 
+### 도움말 사이트 확장
+
+**Accepted. 사용자 결정 2026-11-12(Q228).** 이 절은 [도움말 사이트 스펙](../specs/help-site.md)의 HLP-001~003과 대시보드 도움말 링크(DASH-064)의 시각 기준이다. 시안은 [help-site.html](mockups/help-site.html)과 [dashboard.html](mockups/dashboard.html)의 도움말 링크 프레임이다. 도움말 링크의 위치는 사용자 결정 2026-11-12(Q229)를 따른다. 도움말 사이트는 mdBook 0.5.4로 만든다(사용자 결정 2026-11-11(Q223)). mdBook 기본 테마의 색·글꼴·간격은 쓰지 않고 이 문서의 토큰으로 바꾼다. 아래 표의 새 토큰 다섯 개를 더했다. 나머지는 기존 토큰과 컴포넌트를 재사용한다.
+
+| 새 토큰 | 값 | 쓰임 | 이유 |
+| --- | --- | --- | --- |
+| `typography.prose` | Pretendard 16px, 400, 행간 1.75, 자간 -0.01em | 도움말 본문의 문단·목록·인용 | 도움말은 긴 글을 읽는 화면이다. 대시보드 본문(`typography.body` 14px, 자간 -0.03em)은 짧은 레이블·값에 맞춘 단계다 |
+| `typography.heading-section` | Pretendard 20px, 700, 행간 1.5, 자간 -0.03em | 장 안의 절 제목(`h2`) | 장 제목(`typography.heading-page` 24px)과 소절 제목(`typography.heading-card` 16px) 사이 단계가 없다 |
+| `typography.code` | 고정폭 14px, 400, 행간 1.6, 자간 0 | 코드 블록과 본문 안 코드 | `typography.data`(12px)는 표 값용이라 긴 명령·설정 예시에는 작다 |
+| `spacing.sidebar-width` | 280px | 데스크톱 폭의 목차 폭 | 가장 긴 장 이름(ko·en)을 한 줄에 담고 본문 폭을 `spacing.prose-max`로 남긴다 |
+| `spacing.prose-max` | 760px | 본문 글 상자의 최대 폭 | 한 줄 길이를 한국어 약 45자, 영어 약 90자로 묶어 읽기 쉽게 한다 |
+
+| 구성 | 토큰·구성 | 폭·상태·사용 조건 | 관계·이유 | 상태 |
+| --- | --- | --- | --- | --- |
+| 페이지 틀 | 바탕 `colors.background`. 위에 상단 막대(전체 폭), 아래 왼쪽 목차와 오른쪽 본문 열 | 데스크톱 폭은 목차 열 `spacing.sidebar-width`와 본문 열. 목차를 접으면 본문 열이 전체 폭을 쓴다. 모바일 폭은 상단 막대·목차·본문을 한 열로 쌓는다 | 대시보드 앱 틀(상단 막대 + 바탕 위 카드)과 같은 층 구조다 | Accepted. 사용자 결정 2026-11-12(Q228) |
+| 상단 막대 | Navbar 재사용: `navbar` 바탕, 높이 `spacing.appbar-height`, 가로 안쪽 `spacing.xl`(모바일 `spacing.lg`). 왼쪽부터 목차 단추(`navbar-item`, 목차 아이콘 + HCP-003), 브랜드 표식과 사이트 이름(HCP-001, `typography.body-strong`, 첫 페이지 링크), 기준 표시(HCP-002, `typography.label`, `navbar-muted-foreground`, 밑줄 링크). 오른쪽에 검색 단추(`navbar-item`, 검색 아이콘 + HCP-004)와 언어 링크(`navbar-item`, 언어 아이콘 + HCP-012) | 페이지와 함께 스크롤하며 고정하지 않는다. 목차 단추는 목차가 펼쳐져 있으면 `navbar-item-active` 바탕이다. 모바일 폭에서는 사이트 이름과 기준 표시를 화면에서만 감추고 항목 높이를 `spacing.control-height-touch`로 키운다. 오른쪽 묶음이 한 줄에 들어가지 않으면 다음 줄로 넘기고 숨기지 않는다 | 대시보드 상단 막대 규칙을 그대로 쓴다. 목차 단추를 활성 바탕으로 둬 상태를 색 외에 `aria-expanded`와 함께 알린다 | Accepted. 사용자 결정 2026-11-12(Q228) |
+| 목차 | `card` 바탕, 오른쪽 `spacing.border-width` `colors.border` 선. 안쪽 `spacing.lg`(세로)·`spacing.md`(가로). 항목은 `typography.body`, `foreground`, 안쪽 `spacing.sm`·`spacing.md`, `rounded.md`. hover는 `muted` 바탕. 현재 장은 `muted` 바탕, `typography.body-strong`, 왼쪽 `spacing.indicator-width` `primary` 표시 막대, `aria-current="page"`. 고지 앞 구분선은 `colors.border` | 데스크톱 폭에서는 목차 열의 `card` 바탕과 오른쪽 선이 본문 열 높이만큼 이어진다. 열 안의 항목 목록은 세로로 스크롤해도 화면 안에 남고(sticky), 화면보다 길면 목록 안에서 스크롤한다. 모바일 폭에서는 상단 막대 바로 아래 전체 폭으로 펼치고 아래 `colors.border` 선을 둔다. 닫으면 보이지 않는다 | 상단 막대 항목형 표시(바탕 + 표시 막대)를 밝은 바탕에 맞게 옮겼다. 목차는 본문과 다른 열이라 본문·초점을 가리지 않는다([예외](#예외)) | Accepted. 사용자 결정 2026-11-12(Q228) |
+| 본문 글 상자 | Card 재사용(`card`, `colors.border` 경계, 카드 그림자, `rounded.xl`). 최대 폭 `spacing.prose-max`, 안쪽 `spacing.2xl`(모바일 `spacing.lg`). 본문 열 안 바깥 여백은 대시보드 본문과 같다 | 장 제목 `h1`은 `typography.heading-page`. `h2`는 `typography.heading-section`, 위 간격 `spacing.2xl`, 아래 `colors.border` 선과 `spacing.sm` 간격. `h3`는 `typography.heading-card`. 문단·목록은 `typography.prose`, 문단 사이 `spacing.lg`. 링크는 `colors.link` 밑줄. 제목의 절 링크는 `foreground`이며 hover 때만 밑줄 | 대시보드의 Card·Link 규칙을 긴 글에 적용했다. 새 색은 없다 | Accepted. 사용자 결정 2026-11-12(Q228) |
+| 본문 안 코드 | `typography.code`, `muted` 바탕, `rounded.sm`, 가로 안쪽 `spacing.xs` | 줄바꿈을 허용한다(`overflow-wrap:anywhere`) | 값 표시(`typography.data`)와 같은 고정폭 계열 | Accepted. 사용자 결정 2026-11-12(Q228) |
+| 코드 블록과 복사 | `muted` 바탕, `colors.border` 경계, `rounded.lg`. 위 막대(`colors.border` 아래 선, 안쪽 `spacing.xs`·`spacing.sm`)에 복사 단추(`button-outline`, 높이 `spacing.control-height-sm`, 복사 아이콘 + HCP-015)와 그 왼쪽 결과 글씨(`typography.label`. 성공은 `success` 색과 성공 아이콘 + HCP-016, 실패는 `destructive` 색과 위험 아이콘 + HCP-017). 코드는 `typography.code`, 안쪽 `spacing.md`·`spacing.lg` | 코드 줄은 줄바꿈하지 않고 블록 안에서만 가로 스크롤한다([예외](#예외)). 결과 글씨는 `role="status"`로 알린다. 모바일에서 복사 단추 높이는 `spacing.control-height-touch` | Button outline `sm`과 상태 색 글씨의 조합이다 | Accepted. 사용자 결정 2026-11-12(Q228) |
+| 인용(참고·주의) | Alert 재사용. "참고"·"Note"는 `alert-info`와 정보 아이콘, "주의"·"Warning"은 `alert-warning`과 경고 아이콘. 그 밖의 인용은 `alert-neutral`. 글씨는 `typography.prose`. 원문 첫 낱말(`**참고:**` 등 굵은 글씨)은 Alert 제목처럼 상태 색(`info`·`warning`)이고 나머지는 `foreground`다 | 원문 첫 낱말을 그대로 보여 주며 색 외에 글씨로 구분한다 | 새 변형 없이 Alert 색 쌍과 제목 색 규칙을 쓴다 | Accepted. 사용자 결정 2026-11-12(Q228) |
+| 문서 표 | Data table 재사용: 바깥 틀은 `colors.border` 경계와 `rounded.lg`. 머리글 `typography.label`·`muted-foreground`, 행 사이 `colors.border` 선, 칸 안쪽 `spacing.sm`·`spacing.md`, 칸 최소 폭 `spacing.label-col`의 1.5배, 글씨 `typography.body` | 모든 폭에서 표 모양을 유지하고, 넓으면 표 틀 안에서만 가로 스크롤한다([예외](#예외)). 칸 안 코드는 낱말 중간에서 줄을 바꾸지 않고 항목 사이에서만 바꾼다 | 대시보드 표와 같은 모양. 바깥 틀은 스크롤 영역의 경계를 보인다 | Accepted. 사용자 결정 2026-11-12(Q228) |
+| 그림 | 최대 폭 100%, `colors.border` 경계, `rounded.lg`, 위아래 `spacing.lg` | 대체 텍스트 필수. 화면 캡처는 실제 대시보드의 데스크톱 폭 화면이다(사용자 결정 2026-11-11(Q224)) | 카드 안 이미지에 Card 경계 규칙을 적용 | Accepted. 사용자 결정 2026-11-12(Q228) |
+| 이전·다음 | 링크 두 개. `card` 바탕, `colors.border` 경계, `rounded.md`, 안쪽 `spacing.md`·`spacing.lg`. 첫 줄은 꺾쇠 아이콘과 HCP-013·HCP-014(`typography.label`·`muted-foreground`), 둘째 줄은 장 이름(`typography.body-strong`, `colors.link`, 밑줄) | 본문 글 상자 아래. 데스크톱은 이전 왼쪽·다음 오른쪽, 각 절반 폭. 모바일은 전체 폭으로 이전 위·다음 아래. 첫 장에는 이전, 마지막 장에는 다음이 없다 | Button outline 모양의 링크. 글씨 레이블이 있어 아이콘만으로 뜻을 전하지 않는다 | Accepted. 사용자 결정 2026-11-12(Q228) |
+| 검색 패널 | Card 재사용. 본문 열 맨 위, 최대 폭 `spacing.prose-max`. 제목 줄은 `typography.heading-card` 제목(HCP-005, 입력 `label`)과 오른쪽 닫기(`button-outline` `sm`, 닫기 아이콘 + HCP-011). 입력은 Input(`typography.input`, 전체 폭). 도움말 HCP-006은 `typography.label`·`muted-foreground`. 상태(HCP-007~HCP-010)는 `typography.body`. 결과는 항목마다 위 `colors.border` 선, 안쪽 `spacing.md`(세로). 첫 줄 장 이름 › 절 이름(`typography.body-strong`, `colors.link`, 밑줄), 둘째 줄 발췌(`typography.body`, `muted-foreground`). 일치 부분은 `<mark>`, `warning-bg` 바탕과 `foreground` 글씨 | 결과 수가 많아도 패널 안에서 줄이지 않고 페이지가 스크롤된다. 실패 상태는 `alert-destructive`, 불러오는 중은 `alert-info`. 모바일에서 입력·단추 높이 `spacing.control-height-touch` | 로그 화면의 검색(Input + 도움말 + 상태 Alert)과 같은 조합. 강조색은 상태 색 가운데 뜻이 겹치지 않는 경고 바탕만 빌린다 | Accepted. 사용자 결정 2026-11-12(Q228) |
+| 단축키 도움말 | Dialog 모양: `card`, `rounded.xl`, 대화상자 그림자, 뒤에 `colors.overlay`. 제목 `typography.heading-card`, 줄마다 키(`kbd`: `typography.code`, `muted` 바탕, `colors.border` 경계, `rounded.sm`, 안쪽 `spacing.xs`)와 설명(`typography.body`) | 폭은 `spacing.dialog-max` 이하, 가운데 | 대시보드 Dialog 모양 재사용 | Accepted. 사용자 결정 2026-11-12(Q228) |
+| 언어 선택(HLP-002)·없는 페이지(HLP-003) | 로그인 화면 배치 재사용: 바탕 가운데, 위에 브랜드 표식, 아래 최대 폭 `spacing.login-max` 카드. 제목 `typography.heading-page`, 안내 `typography.body`. 두 언어 글씨는 각자 `lang`을 가진 줄로 쌓는다. 언어 링크는 `button-outline` 모양(높이 `spacing.control-height`, 모바일 `spacing.control-height-touch`) | 링크 두 개를 데스크톱에서는 한 줄 같은 폭, 모바일에서는 전체 폭으로 쌓는다 | 로그인 카드와 같은 첫 화면 모양. 두 선택이 같은 무게라 primary를 쓰지 않는다 | Accepted. 사용자 결정 2026-11-12(Q228) |
+| 대시보드 도움말 링크 | 상단 막대형: 상단 막대 항목형 링크(`navbar-item`), 도움말 아이콘 + CPY-195 + 새 탭 아이콘(`spacing.icon-size-sm`, 글씨와 간격 `spacing.xs`). 로그인형: Link 재사용(`colors.link`, 밑줄, `typography.body`), 같은 두 아이콘(간격 `spacing.xs`), 높이 `spacing.control-height`(모바일 `spacing.control-height-touch`), 언어 선택과 간격 `spacing.md` | 상단 막대에서는 오른쪽 도구 맨 앞(언어 선택 앞), SCR-003에서는 언어 선택 앞. 모바일 상단 막대 첫 줄에 들어가지 않으면 도구 묶음 안에서 오른쪽 정렬로 다음 줄에 넘기고 숨기지 않는다. 이때 브랜드 표식은 첫 줄 높이(`spacing.control-height-touch`)에 맞춘다. 새 탭 아이콘은 장식이며 CPY-196이 접근 가능한 이름에 들어간다 | 로그아웃과 같은 항목형이다. 로그인 화면은 밝은 바탕이라 Link 규칙을 쓴다 | Accepted. 사용자 결정 2026-11-12(Q228·Q229) |
+
+새 아이콘은 기존 규칙(`viewBox="0 0 16 16"`, `currentColor`, 선 굵기 `spacing.icon-stroke`, 둥근 끝·꺾임, `aria-hidden="true"`·`focusable="false"`)으로 직접 그린다: 도움말(원 안 물음표), 새 탭(오른쪽 위 화살표와 열린 상자), 목차(점 셋과 가로줄 셋), 복사(겹친 사각형 둘), 이전·다음(왼쪽·오른쪽 꺾쇠). 이전·다음은 기존 상세 아이콘(오른쪽 꺾쇠)과 그 반전이다. 글씨 레이블을 항상 함께 둔다. mdBook이 싣는 Font Awesome 아이콘은 이 사이트의 조작 요소에 보이지 않게 한다. 이 프로젝트가 더하는 요소는 위 아이콘만 쓴다.
+
+도움말 사이트는 라이트 테마만 쓴다. mdBook의 테마 선택·검색·인쇄·목차 폭 조절 손잡이·Font Awesome 메뉴 막대는 쓰지 않거나 보이지 않게 한다. mdBook의 전환 효과는 끈다([모션](#모션)). 포커스 링은 상단 막대 안에서 `navbar-ring`, 밖에서 `ring`이다.
+
 
 ### 모션
 
@@ -760,7 +815,13 @@ shadcn/ui처럼 경계선과 얕은 그림자로 층을 나눈다.
 
 ### 예외
 
-현재 화면 전용 예외는 없다. 화면별 예외가 생기면 이 절에 범위·이유·재검토 조건을 기록한다.
+화면별 예외는 범위·이유·재검토 조건을 함께 적는다. 아래 세 항목은 [도움말 사이트 확장](#도움말-사이트-확장)의 예외이며 사용자 결정 2026-11-12(Q228)으로 채택했다. 대시보드 화면 전용 예외는 없다.
+
+| 범위 | 예외 | 이유 | 재검토 조건 |
+| --- | --- | --- | --- |
+| 도움말 사이트(HLP-001~003) | 중단점이 1080px(`@media (max-width: 1079.98px)`)다. 대시보드는 1024px다 | mdBook 0.5.4 템플릿의 인라인 스크립트가 폭 1080px로 목차의 처음 상태를 정한다. 그 파일은 수정하지 않고 싣는다(사용자 결정 2026-11-11(Q227)). 다른 값을 쓰면 1024~1079px에서 목차 상태와 배치가 어긋난다 | mdBook 버전을 바꾸거나 템플릿을 직접 관리하게 되면 1024px로 맞출지 다시 정한다 |
+| 도움말 사이트 본문의 표·코드 블록 | 표를 카드 목록으로 바꾸지 않고 코드 줄을 줄바꿈하지 않는다. 둘 다 자기 영역 안에서만 가로로 스크롤한다. 페이지 가로 스크롤은 여전히 없다 | 문서 표는 Markdown에서 만들어져 카드 변환 규칙에 쓸 열 구조 정보가 없다. 코드 줄을 바꾸면 명령·설정이 바뀐 것처럼 보인다 | 넓은 표가 읽기 어렵다는 확인이 나오면 표를 나누는 작성 규칙을 [도움말 작성 규칙](../help/AGENTS.md)에 더한다 |
+| 도움말 사이트 데스크톱 목차 | 목차 열의 항목 목록이 화면 안에 남는다(sticky) | 목차는 본문과 다른 열이라 본문과 키보드 초점을 가리지 않는다. [접근성 기준](#접근성-기준)의 포커스 가림 항목은 본문 위에 겹치는 머리글·바닥글을 막는 규칙이다 | 목차가 본문 위에 겹치는 배치로 바뀌면 다시 정한다 |
 
 ### 검증
 
@@ -803,6 +864,8 @@ shadcn/ui처럼 경계선과 얕은 그림자로 층을 나눈다.
 | 로그 화면 구현과 시안 대조 | SCR-001·002·004·005·006의 채택 시안 115개 프레임, 세 항목 상단 막대 | 2026-11-08. Windows, Chrome 157.0.8103.38. 실제 제품 모듈·CSS와 계약 모양 가짜 API를 사용해 1280·390px에서 230쌍·양쪽 PNG 460장을 대조했다. 기준 `f001385` 위 작업 트리이며 구현은 커밋 `3df0693`에 포함됐다 | 통과(확인 범위 한정). 차이 34건 중 구현 결함 15건은 고쳤고, 스펙·디자인 우선 차이 17건과 예시 데이터 차이 2건은 유지했다. 구현 가로 넘침·CSP 위반·페이지 오류 0건. 콘솔 오류는 favicon 404 한 건이다. 에이전트 대조이며 사람의 비교는 미실행이다. 위 2026-11-08 시안 행의 후속 기록이다 | [검증 4.30절](../how-to/verify-dashboard-frontend.md#430-로그-화면-구현과-시안-대조-2026-11-08) |
 | 로그 화면 실제 동작·시나리오 연결 | DASH-054~063, 확장한 DASH-028·029·035·037과 양쪽 전송 경로 | 2026-11-08. `tests/dashboard_live.rs`에 로그 실행기 10개와 전체 행 표식을 더했다. Windows·WSL에서 전체 실서버 시험 62개씩을 실행했다. 실제 300초 유휴 만료를 포함한다. 최종 판정은 커밋 `51bd747`의 두 OS 전체 게이트다 | 통과. 최근 로그 조회·필터·검색·갱신·다운로드·오류·만료·키보드와 실제 전송 조합을 확인했다. 가짜 API의 부분 표식과 시험 쪽 오류 주입은 실서버 정상 응답의 증거와 구분한다. 위 2026-11-08 시안 행의 후속 기록이다 | [검증 4.31절](../how-to/verify-dashboard-frontend.md#431-로그-화면-실서버-시험-dash-054063-2026-11-08), [WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표) |
 | 로그 화면 네 엔진 확인 | 실서버의 최근 로그 흐름과 SCR-001·002·004·005 변경 | 기록 제목 날짜 2026-11-08, 최종 실행 2026-11-09. Windows Chrome 157.0.8103.38·Edge 156.0.4314.58·WebKit 27.2, WSL Ubuntu Firefox 159.0. WebKit은 Safari 대체다(사용자 결정 2026-11-07(Q135)). 1280·390px × ko·en, 실제 키 입력 | 통과(16회). 240개 관찰점·720개 요소에서 가림·화면 밖·크기 0은 0건이며 가로 넘침·페이지 오류도 0건이다. WebKit의 네이티브 select·캡처 도구 CSP 보고와 종료 확인 GET의 예상된 404는 증거에 따로 기록했다. 실제 Safari·실기기·스크린 리더·사람의 시안 비교·키보드 판정은 미실행이다. 위 2026-11-08 시안 행의 후속 기록이다 | [검증 4.32절](../how-to/verify-dashboard-frontend.md#432-로그-화면-네-엔진-확인-2026-11-08) |
+| 도움말 사이트 구현과 시안 대조 | [help-site.html](mockups/help-site.html)의 21개 프레임(HLP-001~003), [도움말 사이트 확장](#도움말-사이트-확장) | 2026-11-12. Windows, 헤드리스 Chrome(CDP). `cargo xtask help-serve`로 띄운 사이트를 같은 상태로 만들어 데스크톱 1080px, 좁은 폭 400px(모바일 목차 펼침만 390px)에서 캡처했다 | 통과(확인 범위 한정). 차이 5건 가운데 검색 단추 강조 1건은 고쳤다. 브라우저 기본 지우기 단추, 본문 없는 절의 검색 결과, 포인터 흔적, 실제 내용 4건은 유지했다. 에이전트의 대조이며 사람의 비교, 다른 브라우저, 실기기, 스크린 리더, 대비 재측정은 미실행이다 | [도움말 게시 how-to 4.1절](../how-to/publish-help.md#41-시안-대조) |
+| 대시보드 도움말 링크 구현과 시안 대조(DASH-064) | [dashboard.html](mockups/dashboard.html)의 SCR-001 정상·SCR-003 프레임, ko·en | 2026-11-12. Windows, 헤드리스 Chrome. 폭 1280·1024·1023·768·390·320px에서 24쌍을 캡처했다 | 통과(확인 범위 한정). 가로 넘침 0건, 링크는 모두 뷰포트 안이다. 차이는 기존 로그인 제목 차이와 예시 데이터뿐이다. 사람의 비교는 미실행이다 | [검증 4.35절](../how-to/verify-dashboard-frontend.md#435-대시보드-도움말-링크-구현과-시안-대조-dash-064-2026-11-12) |
 
 ### 미결정 사항
 
@@ -813,3 +876,5 @@ DESIGN-TBD-002(다크 테마)는 사용자 결정(2026-10-20)으로 라이트 �
 DESIGN-TBD-005도 사용자 결정 2026-10-22(Q32~Q38)로 해소했으며, 이 ID도 재사용하지 않는다. DESIGN-TBD-006(설정 화면 확장·시안·이름)은 사용자 결정 2026-11-08(Q174·Q176)으로 결정되어 [설정 화면 확장](#설정-화면-확장)·[설정 시안](mockups/dashboard.html)·[화면 스펙](../specs/dashboard.md)·[관리 API 계약](../contracts/management-api-v1.md)에 반영했으며 재사용하지 않는다. 구현·컴포넌트 API 갱신과 테스트는 미실행(구현 전)이다. 후속: 구현은 커밋 `7ce077f`이며 조립·스타일은 [공통 컴포넌트 설계의 설정 화면 조립과 스타일](../architectures/dashboard-components.md#설정-화면-조립과-스타일)에 있다. 시험은 커밋 `eae442f`의 두 OS 게이트에서 통과했다([검증](#검증) 표).
 
 결정 기록: 사용자 결정 2026-11-08(Q189)으로 [로그 화면 확장](#로그-화면-확장)을 채택했다. 범위는 [dashboard.html](mockups/dashboard.html)의 SCR-006 시안 32개 프레임(16개 상태 × ko·en), SCR-001·002·004·005 변경과 운영 현황 · 로그 · 설정 내비게이션 순서다. 위 Accepted 절의 두 항목 문구와 아이콘 목록도 같은 결정으로 갱신했다. CPY-149~189 ko/en 원문은 사용자 결정 2026-11-08(Q190)으로 채택했다. CPY-187·188·189는 CPY-040·058·100을 각각 대체하며 기존 원문은 이력으로 유지한다. 시안의 "마지막 성공 갱신: 아직 없음 / None yet"은 채택한 문구가 아니다. SCR-006의 첫 성공 전 시각 자리에는 화면 스펙 4절에 따라 CPY-035를 쓴다. 로그 API 이름·세션 필터 URL·`trust_all_proxies` 이름과 필드는 사용자 결정 2026-11-08(Q191)으로 채택했다. 채택은 구현·시험 완료를 뜻하지 않는다.
+
+결정 기록: 사용자 결정 2026-11-12(Q228)으로 [도움말 사이트 확장](#도움말-사이트-확장)과 새 토큰 다섯 개, [예외](#예외) 세 항목, [help-site.html](mockups/help-site.html)의 21개 프레임, [dashboard.html](mockups/dashboard.html)의 도움말 링크 프레임을 채택했다. 도움말 링크의 위치(상단 막대 도구 맨 앞, SCR-003 언어 선택 앞)는 사용자 결정 2026-11-12(Q229)로, 사이트 문구 HCP-001~028과 CPY-195·196은 사용자 결정 2026-11-12(Q230)으로 채택했다. 이 결정으로 HELP-TBD-001·002와 DASH-TBD-007을 닫았다. 채택은 구현·시험 완료를 뜻하지 않는다.

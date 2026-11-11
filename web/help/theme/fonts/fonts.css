@@ -1,0 +1,3 @@
+/* The help site does not load the mdBook default fonts (Open Sans, Source Code Pro).
+   This empty file replaces mdBook's fonts.css. The Pretendard faces come from
+   ../assets/tokens.css, which `cargo xtask help-site` writes from DESIGN.md. */

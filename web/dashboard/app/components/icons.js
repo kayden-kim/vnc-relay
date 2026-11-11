@@ -24,6 +24,8 @@ const PATHS = {
   pause: '<path d="M5.75 3.75v8.5M10.25 3.75v8.5"/>',
   'chevron-up': '<path d="M4.5 9.75 8 6.25l3.5 3.5"/>',
   'arrow-right': '<path d="M2.75 8h10.5M9.5 4.25 13.25 8 9.5 11.75"/>',
+  help: '<circle cx="8" cy="8" r="6.25"/><path d="M6.25 6.25a1.75 1.75 0 1 1 2.5 1.6c-.5.25-.75.6-.75 1.15v.5"/><path d="M8 11.25h.01"/>',
+  'external-link': '<path d="M9.5 2.75h3.75v3.75"/><path d="M13.25 2.75 7.5 8.5"/><path d="M11.25 9.5v2.75a1 1 0 0 1-1 1h-6.5a1 1 0 0 1-1-1v-6.5a1 1 0 0 1 1-1h2.75"/>',
 };
 
 const SIZE_CLASS = { md: 'icon-md', sm: 'icon-sm' };

@@ -1,8 +1,9 @@
-// Shared page chrome for protected screens: the navigation bar (language select, sign-out) and the sign-out request.
+// Shared page chrome for protected screens: the navigation bar (help, language, sign-out) and the sign-out request.
 
 import { createButton } from './components/button.js';
 import { createLanguageSelect } from './components/language-select.js';
 import { createNavbar } from './components/navbar.js';
+import { createLink } from './components/link.js';
 import { LOGOUT_TIMEOUT_MS, deleteSession, getSession, isUnauthorized } from './api.js';
 import { BRAND_NAME, LANGUAGE_LABEL, LANGUAGE_NAMES } from './copy.js';
 import { LANGUAGES } from './language.js';
@@ -38,6 +39,15 @@ export function buildNavbar({ t, lang, idPrefix, active = 'operations', onLangua
   logout.id = `${idPrefix}-logout`;
   logout.addEventListener('click', () => void onSignOut());
 
+  const help = createLink({
+    href: `https://kayden-kim.github.io/vnc-relay/${lang}/`,
+    label: t.help,
+    icon: 'help',
+    iconSize: 'md',
+    newTabText: t.opensInNewTab,
+  });
+  help.className = 'navbar-item help-link';
+
   const navbar = createNavbar({
     brand: BRAND_NAME,
     items: [
@@ -45,6 +55,7 @@ export function buildNavbar({ t, lang, idPrefix, active = 'operations', onLangua
       { label: t.logs, href: '/#/logs', current: active === 'logs', icon: 'log' },
       { label: t.settings, href: '/#/settings', current: active === 'settings', icon: 'settings' },
     ],
+    help,
     language,
     action: logout,
     label: t.navLabel,

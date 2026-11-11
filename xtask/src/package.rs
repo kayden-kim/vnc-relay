@@ -158,7 +158,9 @@ fn archive_command(archive: &str, dir: &str) -> Command {
     command
 }
 
-fn copy_dir(from: &Path, to: &Path) -> Result<(), Error> {
+/// Copies `from` into `to` recursively and sets the Unix modes below. Files
+/// that already exist in `to` are overwritten. The help site build uses it too.
+pub(crate) fn copy_dir(from: &Path, to: &Path) -> Result<(), Error> {
     make_dir(to)?;
     for entry in fs::read_dir(from)? {
         let entry = entry?;

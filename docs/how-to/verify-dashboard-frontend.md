@@ -14,7 +14,7 @@
 
 ## 1. 대상과 영향
 
-- 대상: `web/dashboard/` 정적 파일, `docs/design/DESIGN.md`의 YAML 토큰, `docs/design/mockups/dashboard.html`의 토큰 블록, `tests/dashboard_assets.rs`·`tests/dashboard_browser.rs`·`tests/dashboard_live.rs`와 그 공통·화면별 본문.
+- 대상: `web/dashboard/` 정적 파일, `docs/design/DESIGN.md`의 YAML 토큰, `docs/design/mockups/dashboard.html`·`help-site.html`의 토큰 블록, `tests/dashboard_assets.rs`·`tests/dashboard_browser.rs`·`tests/dashboard_live.rs`와 그 공통·화면별 본문.
 - 예상 사용자 영향: 운영 서버를 멈추지 않는다. 실서버 시험은 OS 임시 폴더에 계정·설정·브라우저 프로필을 만들고, 임의 루프백 포트에 시험용 서버·전달 프록시·TCP 중계를 연다. 자신이 시작한 프로세스와 소켓만 종료한다. 기존 토큰·정적 검사는 파일을 읽고 `target/` 아래에 결과를 쓴다.
 - 작업 허용 시간: 자동 검사는 서버 중단이 필요 없다. 수동 검토(3.4~3.7절)는 검토자의 시간이 필요하다.
 - 이 문서는 사용자 결정 2026-10-22(Q09)에 따라 작업 0.9와 함께 작성했다. 절차는 사용자 결정 2026-10-22(Q32)~(Q38)를 따른다.
@@ -1794,6 +1794,28 @@ Ubuntu 첫 실행이 이전 빌드를 다시 쓴 원인은 시계 차이다. WSL
 | 예시 데이터 | 시안: 임의의 도메인·키 경로. 구현: 계약 및 가짜 API의 안정된 fixture 값 | 4.27절 C01 | 데이터 차이, 해당 없음 |
 
 - 증거: `target/ticket-dashboard-compare/`에 시안 캡처(`mock/`, 20장), 구현 캡처(`impl/`, 20장), 비교 측정(`mock-results.json`, `impl-results.json`, `checkbox-results.json`, `confirm-results.json`)을 남겼다.
+
+### 4.35 대시보드 도움말 링크 구현과 시안 대조 (DASH-064, 2026-11-12)
+
+- 기록자: 에이전트. 구현과 가짜 API 시험은 에이전트 DashboardHelpLink가, 시안 대조는 주 에이전트가 맡았다. 사람의 검토가 아닌 에이전트의 대조다.
+- 대상: `web/dashboard/app/components/link.js`(새 탭 속성, 화면 낭독용 안내 `sr-only`, 새 탭 아이콘)·`navbar.js`(도구 영역의 도움말 자리)·`icons.js`(`help`·`external-link` 아이콘), `app/copy.js`·`login/login.js`(CPY-195·196), `app/shell.js`(화면 언어의 도움말 주소), `login/login.js`·`login.css`(로그인 상단 묶음), `app/styles/components.css`(`cargo xtask tokens`로 로그인 복사본 동기화), `web/dashboard/tests/help-link-checks.js`와 다섯 시나리오 파일, `tests/dashboard_browser.rs`. `tests/dashboard_live/logs_accessibility.rs`는 주 메뉴 항목을 `.navbar-nav .navbar-item`으로 좁혀 셌다. 도움말 링크도 `navbar-item`을 쓰기 때문이다.
+- 가짜 API 시험: `cargo test --test dashboard_browser`로 75개 브라우저 시험을 실행했고 모두 통과했다. DASH-064 시험은 운영 현황·세션 상세·로그인·설정·최근 로그 다섯 페이지를 1280px와 390px 폭, ko·en에서 연다. 링크의 주소·새 탭 속성·이름 구성·배치·언어 갱신과 도움말 사이트에 요청을 보내지 않는지를 확인한다.
+
+#### 시안 대조
+
+채택 시안(`docs/design/mockups/dashboard.html`의 `#scr001-normal`·`#scr001-normal-en`·`#scr003-invalid`·`#scr003-input-en`, 사용자 결정 2026-11-12(Q228·Q229))과 구현을 같은 폭·같은 상태에서 대조했다. 구현은 운영 현황 가짜 API 페이지(`/tests/operations.html?case=shot-normal&lang=<언어>`)와 실제 로그인 페이지(ko는 빈 값 제출, en은 입력 상태)를 `cargo xtask dashboard-serve`로 열었다. 폭은 1280·1024·1023·768·390·320px이며 화면 2개 × 언어 2개 × 폭 6개, 24쌍을 캡처했다.
+
+- 공통 결과: 24장 모두 가로 넘침이 없고 링크가 뷰포트 안에 있다. 주소는 화면 언어의 `https://kayden-kim.github.io/vnc-relay/ko/` 또는 `…/en/`이다. 접근 가능한 이름은 "도움말 (새 탭에서 열림)"·"Help (opens in a new tab)"다. 링크 높이는 1024px 이상에서 36px, 1023px 이하에서 44px다.
+- 320px에서는 상단 도구 영역이 두 줄로 접힌다. 시안도 같다.
+- 1280·390·320px의 링크 위치와 모양은 시안과 같다.
+
+| 차이·분류 | 시안과 구현의 차이 | 근거 | 처리 |
+| --- | --- | --- | --- |
+| 로그인 제목 | 시안: 카드 머리의 작은 제목 "VNC Relay admin sign-in". 구현: CPY-006 "VNC Relay administrator sign in", 24px 페이지 제목 | [4.11절](#411-검토-기록-작업-412-2026-10-22)의 기존 차이(1280·en, 320·ko 행) | 이번 변경과 무관한 기존 차이. 유지 |
+| 예시 데이터 | 시안: 임의의 세션·수치. 구현: 가짜 API의 고정 값 | 4.27절 C01 | 데이터 차이, 해당 없음 |
+
+- 증거: `target/dashboard-shots/<폭>/`에 시안 캡처(`mock-scr001-<언어>.png`, `mock-scr003-<언어>.png`)와 구현 캡처(`scr001-<언어>.png`, `scr003-<언어>.png`)를 남겼다. 나란히 놓은 비교 그림은 `target/dashboard-shots/pair-{1280,390,320}-{scr001-ko,scr003-en}.png`이다.
+- 두 OS 게이트 결과는 [도움말 게시 how-to 4절](publish-help.md#4-검증)에 적는다.
 
 ## 5. 중단 조건
 

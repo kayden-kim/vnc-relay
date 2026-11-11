@@ -8,6 +8,9 @@ use std::sync::{Mutex, PoisonError};
 mod cross;
 #[path = "dashboard_live/detail.rs"]
 mod detail;
+#[cfg(target_os = "linux")]
+#[path = "dashboard_live/help_screenshots.rs"]
+mod help_screenshots;
 #[path = "common/dashboard_live.rs"]
 mod live;
 #[path = "dashboard_live/login.rs"]
@@ -446,4 +449,13 @@ fn dashboard_proxy_preserves_an_idle_browser_preconnection() {
             })
         });
     });
+}
+
+// Not a scenario. Rewrites the dashboard pictures of the operator help
+// (docs/how-to/publish-help.md section 3.4). Linux only: see the module.
+#[cfg(target_os = "linux")]
+#[test]
+#[ignore = "rewrites docs/help/*/src/images; run on request"]
+fn capture_help_screenshots() {
+    run(help_screenshots::capture);
 }

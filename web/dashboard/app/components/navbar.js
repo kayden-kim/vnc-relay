@@ -1,15 +1,15 @@
-// Navbar: top bar with a brand, a labelled nav of links, and optional language and action slots.
+// Navbar: top bar with a brand, a labelled nav, and optional help, language and action slots.
 import { icon } from './icons.js';
 import { createLink } from './link.js';
 
 /**
  * @param {{brand?: string, items?: Array<{label: string, href: string, current?: boolean,
  *   icon?: string}>,
- *   language?: Node, action?: Node, label: string}} options
+ *   help?: Node, language?: Node, action?: Node, label: string}} options
  * @returns {HTMLElement}
  */
 export function createNavbar({
-  brand, items = [], language, action, label,
+  brand, items = [], help, language, action, label,
 } = {}) {
   if (typeof label !== 'string' || label === '') {
     throw new TypeError('navbar label is required');
@@ -49,9 +49,10 @@ export function createNavbar({
   }
   header.append(nav);
 
-  if (language || action) {
+  if (help || language || action) {
     const tools = document.createElement('div');
     tools.className = 'navbar-tools';
+    if (help) tools.append(help);
     if (language) tools.append(language);
     if (action) tools.append(action);
     header.append(tools);
