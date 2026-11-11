@@ -1,6 +1,6 @@
 # VNC Relay 용어집
 
-VNC Relay 제품 전체를 하나의 맥락으로 보고, [PRD](docs/requirements/PRD.md)·스펙·ADR·계약·코드가 함께 쓰는 업무 용어를 정의한다. 용어의 정의는 기능의 채택 상태나 구현 완료를 뜻하지 않는다. 접속 ticket의 구현·계약 테스트는 미실행(구현 전)이다.
+VNC Relay 제품 전체를 하나의 맥락으로 보고, [PRD](docs/requirements/PRD.md)·스펙·ADR·계약·코드가 함께 쓰는 업무 용어를 정의한다. 용어의 정의는 기능의 채택 상태나 구현 완료를 뜻하지 않는다.
 
 ## 용어
 

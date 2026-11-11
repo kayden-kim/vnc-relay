@@ -125,6 +125,7 @@ Rust 의존성이 승인된 라이선스 허용 목록을 지키는지 검사하
 | windows-sys 직접 의존성(작업 4.1, Windows 전용) | `licenses ok`, 종료 코드 0. 새로 들어온 패키지마다 라이선스 파일이 있다. `NOTICE` 파일 유무를 안다. | 3단계 명령, 잠금 파일 변화와 패키지 디렉터리에서 파일 이름 확인 | 통과(2026-10-21). 잠금 파일에 새 패키지는 없다. windows-sys 0.61.2는 MIT OR Apache-2.0이고 `license-mit`·`license-apache-2.0`이 있으며 `NOTICE` 파일은 없다. Windows와 Ubuntu 모두 deny 단계를 통과했다. | 아래 실행 기록 7 |
 | 작업 3.2 직접 의존성(tokio-tungstenite 0.30.0, adapters, WS·WSS 업그레이드) | `licenses ok`, 종료 코드 0. 새로 들어온 패키지마다 라이선스 파일이 있다. `NOTICE` 파일 유무를 안다. | 3단계 명령, 잠금 파일 변화와 패키지 디렉터리에서 파일 이름 확인 | 통과(2026-10-21). 새 패키지 12개 모두 라이선스 파일이 있고 `NOTICE` 파일은 없다. Windows와 Ubuntu 모두 deny 단계가 `licenses ok`였다. | 아래 실행 기록 8 |
 | 작업 6 설정 편집 직접 의존성(toml_edit 0.25, adapters) | `licenses ok`, 종료 코드 0. 라이선스·NOTICE 확인과 배포 고지 재생성·대조 | 3·3.1절 명령, 패키지 메타데이터·라이선스 파일 확인 | 통과(2026-11-08). 새 패키지는 `toml_edit 0.25.17+spec-1.1.0` 하나이고 `LICENSE-MIT`·`LICENSE-APACHE`가 있으며 `NOTICE` 파일은 없다. Windows와 Ubuntu 모두 deny 단계가 `licenses ok`였고 고지 대조 시험이 통과했다. | 아래 실행 기록 9 |
+| 접속 ticket 시험 개발 의존성(루트 `vnc-relay`의 `aws-lc-rs` dev-dependency) | `licenses ok`, 종료 코드 0. 잠금 파일의 새 패키지 유무를 안다. 배포 고지 재생성·대조 | 3·3.1절 명령, 잠금 파일 변화 확인 | 통과(2026-11-11). 새 패키지는 없다. 이미 adapters가 쓰는 `aws-lc-rs 1.18.2`를 루트 시험이 함께 쓴다. Windows와 Ubuntu 모두 deny 단계가 `licenses ok`였고 고지 대조 시험이 통과했다. | 아래 실행 기록 10 |
 
 실행 기록 1: 의존성을 추가하기 전에 [PRD "구현 기술" 행](../requirements/PRD.md#확정-기준)의 라이브러리를 검토했다.
 
@@ -183,6 +184,10 @@ ring 0.17.14는 rustls-webpki의 `alloc` 기능이 `ring?/alloc`으로 켜는 �
 Windows Cargo 캐시의 해당 패키지 `Cargo.toml`에서 `license = "MIT OR Apache-2.0"`을 확인했다. 파일 목록은 `LICENSE-MIT`·`LICENSE-APACHE`를 포함하며 별도 `NOTICE`는 없다. 허용 목록은 넓히지 않았다. MIT 저작권·전문과 Apache 전문은 기존 생성기로 배포 고지에 포함한다. 이 파일 확인은 `cargo deny`와 `notices --check` 실행 결과를 대신하지 않는다.
 
 명령 결과(커밋 `eae442f`, 2026-11-08): 두 OS 전체 게이트의 deny 단계(`cargo deny check licenses`)가 `licenses ok`, 종료 코드 0이었다. 같은 게이트의 `tests/dependency_notices.rs`(`notices --check`)도 두 OS에서 통과했다. 루트 `THIRD-PARTY-NOTICES.txt`는 `toml_edit 0.25.17+spec-1.1.0`의 라이선스 식과 고지 전문을 담는다. 판정은 [개발 환경·검증 4.2절](set-up-and-verify.md#42-작업-69-판정표)에 있다.
+
+실행 기록 10(2026-11-11): 접속 ticket 작업에서 루트 `vnc-relay`의 `[dev-dependencies]`에 `aws-lc-rs.workspace = true`를 더했다. 실제 실행파일 시험이 P-256 시험 키로 ticket에 서명하는 데만 쓴다. workspace 버전 `1.18.2`는 adapters의 기존 직접 의존성과 같다. `Cargo.lock`은 루트 패키지의 의존성 목록에 `"aws-lc-rs"` 한 줄만 늘었고 새 패키지는 없다. 허용 목록은 넓히지 않았다. 레이어 검사의 루트 허용 목록에 `aws-lc-rs`를 더했다([코드 지도](../architectures/code-map.md)).
+
+명령 결과(커밋 `4be8e0e`, 2026-11-11): 두 OS 전체 게이트의 deny 단계(`cargo deny check licenses`)가 `licenses ok`, 종료 코드 0이었다. `cargo xtask notices`로 루트 `THIRD-PARTY-NOTICES.txt`를 다시 만들었다. 바뀐 줄은 고지 파일에 담긴 잠금 파일의 같은 `"aws-lc-rs"` 한 줄이다. 같은 게이트의 `tests/dependency_notices.rs`(`notices --check`)도 두 OS에서 통과했다. 판정은 [개발 환경·검증 4.5절](set-up-and-verify.md#45-접속-ticket-판정표)에 있다.
 
 ### 4.1 출처 검토 기록 (2026-11-04)
 

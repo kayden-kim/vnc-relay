@@ -13,7 +13,7 @@
 
 설정 v4, ops-info v2, WebSocket 중계 v2는 호환성을 깨는 변경이다. 이전·롤백은 각 계약 3절을 따른다. 사용자 지시 2026-11-08로 더한 WS·WSS Server·프록시 TLS 종료·최근 로그의 구현은 커밋 `3df0693`이다. 시험은 커밋 `51bd747`의 두 OS 게이트에서 통과했다([WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)). `trust_all_proxies`, 최근 로그 API의 질의·응답 필드 이름과 세션 필터 URL은 사용자 결정 2026-11-08(Q191)으로 채택했다. 이름과 필드의 기준은 관련 계약을 따른다.
 
-후속: 2026-11-11. 사용자 결정 2026-11-11(Q192~Q214)로 WS·WSS 역할의 선택형 접속 ticket 확인을 더했다. 설정 4.1.0, WebSocket 중계 2.1.0, ops-info 2.1.0, CLI 계약 1.7.0은 각 계약 3절의 호환 변경이다. 관리 API는 같은 절의 허용 값 추가 규칙에 따라 1.1.0을 유지한다. 기본값(`enabled = false`)에서는 기존 설정 파일과 클라이언트의 판정이 바뀌지 않는다. 결정 이유는 [ADR-0009](../decisions/ADR-0009-optional-relay-access-ticket.md)에 있다. 구현·계약 테스트는 미실행(구현 전)이다.
+후속: 2026-11-11. 사용자 결정 2026-11-11(Q192~Q214)로 WS·WSS 역할의 선택형 접속 ticket 확인을 더했다. 설정 4.1.0, WebSocket 중계 2.1.0, ops-info 2.1.0, CLI 계약 1.7.0은 각 계약 3절의 호환 변경이다. 관리 API는 같은 절의 허용 값 추가 규칙에 따라 1.1.0을 유지한다. 기본값(`enabled = false`)에서는 기존 설정 파일과 클라이언트의 판정이 바뀌지 않는다. 결정 이유는 [ADR-0009](../decisions/ADR-0009-optional-relay-access-ticket.md)에 있다. 구현은 커밋 `4be8e0e`이며, 계약 테스트는 같은 커밋의 두 OS 전체 게이트에서 통과했다([접속 ticket 판정표](../how-to/set-up-and-verify.md#45-접속-ticket-판정표)).
 
 ## 호환성 검증 기록
 

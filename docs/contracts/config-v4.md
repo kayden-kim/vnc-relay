@@ -9,7 +9,7 @@
 | 항목 | 값 |
 | --- | --- |
 | 이름과 버전 | `vnc-relay-config` 4.1.0(2026-11-11). 기본으로 꺼진 역할별 접속 ticket 표와 공개 키 파일 형식, 재로드·편집 구분을 더한 호환 변경이다(사용자 결정 2026-11-11(Q197·Q200·Q207·Q212·Q213)). |
-| 상태 | Active. 4.1.0 채택 근거는 사용자 결정 2026-11-11(Q197·Q200·Q207·Q212·Q213)이다. 구현·계약 테스트는 미실행(구현 전)이다. 4.0.0까지의 실행 기록은 이전 버전의 증거로 보존한다. |
+| 상태 | Active. 4.1.0 채택 근거는 사용자 결정 2026-11-11(Q197·Q200·Q207·Q212·Q213)이다. 구현은 커밋 `4be8e0e`이며, 계약 테스트는 같은 커밋의 두 OS 전체 게이트에서 통과했다([접속 ticket 판정표](../how-to/set-up-and-verify.md#45-접속-ticket-판정표)). 4.0.0까지의 실행 기록은 이전 버전의 증거로 보존한다. |
 | 이전 버전 이력 | 4.0.0은 WS·WSS의 리스너 표와 역할 표를 분리한 호환성을 깨는 변경이다(사용자 결정 2026-11-08(Q181), 사용자 결정 2026-11-08(Q188)). 새 키의 재로드·편집 구분과 최근 로그 보관을 더했다(사용자 결정 2026-11-08(Q184), 사용자 결정 2026-11-08(Q185)). 이전 3.0.0은 재로드 대상을 8개에서 27개로 넓히고 `management.config_edit`와 관리 API 파일 쓰기를 더했다(사용자 결정 2026-11-08(Q167·Q168·Q170·Q171)). 이전 2.0.0은 `limits.initial_message_bytes`(I)와 관계 I ≤ B를 지웠다(사용자 결정 2026-11-01(Q71)). B와 M 사이에는 대소 제약이 없다(사용자 결정 2026-11-01(Q78)). 이전 1.1.0은 `log_file_unavailable`, 1.2.0은 관리 TLS·첫 요청 머리 읽기의 U 적용을 더했다. 감시 대상 명확화는 사용자 결정 2026-10-22(Q50)를 따른다. |
 | 소유자 | vnc-relay 프로젝트 관리자 |
 | 만드는 쪽(Producer) | 운영자(설정 파일 작성자), 편집 기능을 켰을 때의 관리 API |
@@ -19,7 +19,7 @@
 | 기준 스펙 | [설정·프로세스 수명·운영 보안 스펙](../specs/operations.md) |
 | 관련 요구사항 | [PRD](../requirements/PRD.md) FR-02·FR-05·FR-06·FR-07·FR-08, [7절 보안 및 신뢰 경계](../requirements/PRD.md#7-보안-및-신뢰-경계). 설정 편집과 확대 재로드의 근거는 사용자 결정 2026-11-08(Q167~Q172)다. |
 | 호환성 범위 | 설정 파일 v4(`vnc-relay-config` 4.1.0). Windows 11 x64·Ubuntu 24.04 LTS x64. 파일 안에 형식 버전 키는 없다. v1→v2는 3.1절, v2→v3는 3.2절, v3→v4와 롤백은 3.3절을 따른다. v4 서버는 v3 표를 읽지 않는다. ticket 표를 쓴 파일의 4.0.0 롤백은 3절을 따른다. |
-| 관련 테스트 | [운영 스펙 수용 테스트](../specs/operations.md#7-수용-테스트) OPS-001~006·OPS-016·OPS-023~027·OPS-031·OPS-034~042·OPS-047~073, [WS·WSS 스펙](../specs/websocket.md#7-수용-테스트) WS-015·WS-022·WS-024·WS-027~046, [중계 스펙](../specs/relay.md#7-수용-테스트) RLY-007·RLY-008·RLY-022~027. 계약 테스트는 5절에 연결한다. 3.0.0의 증거는 커밋 `eae442f`의 두 OS 전체 게이트와 [작업 6.9 판정표](../how-to/set-up-and-verify.md#42-작업-69-판정표)다. 4.0.0의 새 규칙은 커밋 `51bd747`의 두 OS 게이트에서 통과했다([WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)). 4.1.0의 접속 ticket 구현·계약 테스트는 미실행(구현 전)이다. |
+| 관련 테스트 | [운영 스펙 수용 테스트](../specs/operations.md#7-수용-테스트) OPS-001~006·OPS-016·OPS-023~027·OPS-031·OPS-034~042·OPS-047~073, [WS·WSS 스펙](../specs/websocket.md#7-수용-테스트) WS-015·WS-022·WS-024·WS-027~046, [중계 스펙](../specs/relay.md#7-수용-테스트) RLY-007·RLY-008·RLY-022~027. 계약 테스트는 5절에 연결한다. 3.0.0의 증거는 커밋 `eae442f`의 두 OS 전체 게이트와 [작업 6.9 판정표](../how-to/set-up-and-verify.md#42-작업-69-판정표)다. 4.0.0의 새 규칙은 커밋 `51bd747`의 두 OS 게이트에서 통과했다([WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)). 4.1.0의 접속 ticket 구현은 커밋 `4be8e0e`이며, 계약 테스트는 같은 커밋의 두 OS 전체 게이트에서 통과했다([접속 ticket 판정표](../how-to/set-up-and-verify.md#45-접속-ticket-판정표)). |
 
 용어는 [VNC Relay 용어집](../../GLOSSARY.md)을 따른다. 테스트·검증 기호 L~Dp 등은 [운영 스펙 2절](../specs/operations.md#2-상태와-검증-매개변수)의 기호이며, 이 계약이 각 기호를 키에 연결한다.
 
@@ -526,7 +526,7 @@ UTF-8이 아닌 파일도 `config_file_unreadable` 진단에 해당한다. 관�
 | 상태 | 조건 | 지원 종료·대체 |
 | --- | --- | --- |
 | Draft | 채택 전 상태. 이 계약은 2026-10-16에 채택해 Draft를 지났다. | 해당 없음 |
-| Active | 현재 4.1.0. 채택 근거는 사용자 결정 2026-11-11(Q197·Q200·Q207·Q212·Q213)이다. 구현·계약 테스트는 미실행(구현 전)이다. 4.0.0까지의 실행 기록은 4.1.0 접속 ticket의 증거가 아니다. | v1은 3.1절, v2는 3.2절, v3는 3.3절의 지원 기간 규칙대로 대체한다. |
+| Active | 현재 4.1.0. 채택 근거는 사용자 결정 2026-11-11(Q197·Q200·Q207·Q212·Q213)이다. 구현은 커밋 `4be8e0e`이며, 계약 테스트는 같은 커밋의 두 OS 전체 게이트에서 통과했다([접속 ticket 판정표](../how-to/set-up-and-verify.md#45-접속-ticket-판정표)). 4.0.0까지의 실행 기록은 4.1.0 접속 ticket의 증거가 아니다. | v1은 3.1절, v2는 3.2절, v3는 3.3절의 지원 기간 규칙대로 대체한다. |
 | Deprecated | 대체 계약이 Active이다. | 지원 종료 날짜는 대체 계약에서 정한다. |
 | Retired | 지원 종료. | 새 구현의 근거로 쓰지 않는다. |
 
@@ -618,7 +618,7 @@ public_keys_file = "keys/viewer-ticket.jwks"
 max_lifetime_secs = 60
 ```
 
-결과와 증거는 [검증 기록](../AGENTS.md#검증-기록)을 따른다. 첫 시험 표와 `eae442f`까지의 실행 기록은 v1~v3 구현의 이력이다. 4.0.0 예제와 새 규칙의 통과 증거가 아니다. 설정 로더의 테스트는 `crates/adapters/tests/config_contract.rs`(아래 표에서 "계약 테스트 파일")와 domain 단위 테스트에 있다. 4.0.0 계약 테스트는 아래에서 따로 관리한다. 커밋 `51bd747`의 두 OS 게이트에서 통과했으며 [WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)를 따른다. 과거 지원 판정은 `ee0314f`의 두 OS 전체 게이트와 [작업 5.9 판정표](../how-to/set-up-and-verify.md#41-작업-59-판정표), v3 확대 재로드·설정 편집은 `eae442f`의 [작업 6.9 판정표](../how-to/set-up-and-verify.md#42-작업-69-판정표)를 따른다. 4.1.0 접속 ticket의 구현·계약 테스트는 미실행(구현 전)이다.
+결과와 증거는 [검증 기록](../AGENTS.md#검증-기록)을 따른다. 첫 시험 표와 `eae442f`까지의 실행 기록은 v1~v3 구현의 이력이다. 4.0.0 예제와 새 규칙의 통과 증거가 아니다. 설정 로더의 테스트는 `crates/adapters/tests/config_contract.rs`(아래 표에서 "계약 테스트 파일")와 domain 단위 테스트에 있다. 4.0.0 계약 테스트는 아래에서 따로 관리한다. 커밋 `51bd747`의 두 OS 게이트에서 통과했으며 [WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)를 따른다. 과거 지원 판정은 `ee0314f`의 두 OS 전체 게이트와 [작업 5.9 판정표](../how-to/set-up-and-verify.md#41-작업-59-판정표), v3 확대 재로드·설정 편집은 `eae442f`의 [작업 6.9 판정표](../how-to/set-up-and-verify.md#42-작업-69-판정표)를 따른다. 4.1.0 접속 ticket의 구현은 커밋 `4be8e0e`이며, 계약 테스트는 같은 커밋의 두 OS 전체 게이트에서 통과했다([접속 ticket 판정표](../how-to/set-up-and-verify.md#45-접속-ticket-판정표)).
 
 | 주체·테스트 위치 | 확인할 계약 규칙 | 결과 | 실행 기록 |
 | --- | --- | --- | --- |
@@ -654,14 +654,14 @@ max_lifetime_secs = 60
 | Consumer / 설정 경고·사건 계약 시험 | ops-info 2.0.0의 `ws`·`wss` 리스너 값, 역할 확정 전 `role` 없음, `allow_all_source.role`, `plaintext_ws_enabled.listener = ws`. [OPS-069](../specs/operations.md#7-수용-테스트) | 통과 | `tests/serve.rs`의 `server_only_websocket_roles_open_each_shared_listener`와 `crates/adapters/tests/ops_info_contract.rs`의 `shared_listener_logs_resolve_role_only_after_the_path`·`writes_each_config_warning_with_its_contract_fields`. 실행 결과는 아래 실행 기록을 따른다. |
 | Consumer / WS·WSS 역할·프록시 계약 시험 | Server 경로·Mode II, 경로별 역할·IP·Origin, 신뢰 프록시의 전달 주소, 잘못된 헤더와 모든 요소가 신뢰 프록시인 체인의 400, 비신뢰 헤더 무시, 프록시 TLS 종료 배치. [WS-028~036](../specs/websocket.md#7-수용-테스트) | 통과 | `crates/adapters/tests/websocket_scenarios.rs`의 `websocket_servers_pair_with_every_viewer_transport_in_both_orders`·`exact_enabled_paths_select_roles_and_rejections_never_register`·`accept_union_does_not_replace_server_role_ip_check`·`server_path_uses_only_server_origin_policy_on_ws_and_wss`·`trusted_proxy_uses_rightmost_untrusted_canonical_address_on_both_paths`·`derived_address_survives_origin_rejection_abort_and_target_connect_failure`·`invalid_or_all_trusted_forwarded_chains_fail_before_origin_and_registration`·`untrusted_peer_headers_neither_grant_access_nor_supply_forwarded_metadata`·`tls_terminating_proxy_adds_each_client_address_and_pipes_mode_two_both_ways`. TLS 종료 증거는 시험 코드의 rustls 프록시이며 Nginx 실제 배치는 미실행이다. 실행 결과는 아래 실행 기록을 따른다. |
 
-4.1.0 접속 ticket의 구현·계약 테스트는 미실행(구현 전)이다. 위 실행 기록은 아래 계획의 증거가 아니다.
+4.1.0 접속 ticket의 구현은 커밋 `4be8e0e`이며, 계약 테스트는 같은 커밋의 두 OS 전체 게이트에서 통과했다([접속 ticket 판정표](../how-to/set-up-and-verify.md#45-접속-ticket-판정표)). 이전 버전의 실행 기록은 이 추가 범위의 증거가 아니다.
 
 | 주체·테스트 위치 | 확인할 계약 규칙 | 결과 | 실행 기록 |
 | --- | --- | --- | --- |
-| Producer·Consumer / 접속 ticket 설정 로더·시작 계약 시험 계획 | ticket 표의 기본값·형식·필수 키·수명 경계, JWKS 형식·크기·`kid` 중복·개인키 금지, 역할 간 같은 공개 키 거절, 시작 종료 코드 3과 리스너 미바인드(1.2·1.6·1.7·1.11·2.1절). [OPS-070](../specs/operations.md#7-수용-테스트) | 미실행(구현 전) | 테스트 미연결. 구현 후 확인한다. |
-| Consumer / 접속 ticket 설정 경고 계약 시험 계획 | 같은 역할의 TCP 진입점·평문 WS를 함께 켰을 때 시작·재로드 경고와 계속 진행(2.2절). [OPS-071](../specs/operations.md#7-수용-테스트) | 미실행(구현 전) | 테스트 미연결. 구현 후 확인한다. |
-| Producer·Consumer / 접속 ticket 재로드·편집 계약 시험 계획 | ticket 키 10개 재로드, 경로 2개 편집 불가, 43개 재로드·37개 편집 대상, 공개 키 파일 내용 감시·교체, 실패 시 기존 설정·공개 키·연결 유지(1.8절). [OPS-072](../specs/operations.md#7-수용-테스트), [WS-046](../specs/websocket.md#7-수용-테스트) | 미실행(구현 전) | 테스트 미연결. 구현 후 확인한다. |
-| Consumer / 접속 ticket 비노출 계약 시험 계획 | 진단·운영 로그·상태 응답·관리 API 응답에 ticket 원문과 공개 키 파일 내용 없음(2.1절). [OPS-073](../specs/operations.md#7-수용-테스트) | 미실행(구현 전) | 테스트 미연결. 구현 후 확인한다. |
+| Producer·Consumer / 접속 ticket 설정 로더·시작 계약 시험 | ticket 표의 기본값·형식·필수 키·수명 경계, JWKS 형식·크기·`kid` 중복·개인키 금지, 역할 간 같은 공개 키 거절, 시작 종료 코드 3과 리스너 미바인드(1.2·1.6·1.7·1.11·2.1절). [OPS-070](../specs/operations.md#7-수용-테스트) | 통과(2026-11-11) | `tests/reload.rs`의 `full_ticket_validation_at_startup_and_reload_preserves_the_last_valid_generation`. 구현은 커밋 `4be8e0e`이며, 계약 테스트는 같은 커밋의 두 OS 전체 게이트에서 통과했다([판정표](../how-to/set-up-and-verify.md#45-접속-ticket-판정표)). |
+| Consumer / 접속 ticket 설정 경고 계약 시험 | 같은 역할의 TCP 진입점·평문 WS를 함께 켰을 때 시작·재로드 경고와 계속 진행(2.2절). [OPS-071](../specs/operations.md#7-수용-테스트) | 통과(2026-11-11) | `tests/reload.rs`의 `ticket_tcp_and_plaintext_warnings_cover_both_roles_at_start_and_reload`. 구현은 커밋 `4be8e0e`이며, 계약 테스트는 같은 커밋의 두 OS 전체 게이트에서 통과했다([판정표](../how-to/set-up-and-verify.md#45-접속-ticket-판정표)). |
+| Producer·Consumer / 접속 ticket 재로드·편집 계약 시험 | ticket 키 10개 재로드, 경로 2개 편집 불가, 43개 재로드·37개 편집 대상, 공개 키 파일 내용 감시·교체, 실패 시 기존 설정·공개 키·연결 유지(1.8절). [OPS-072](../specs/operations.md#7-수용-테스트), [WS-046](../specs/websocket.md#7-수용-테스트) | 통과(2026-11-11) | `tests/reload.rs`의 `full_ticket_dynamic_reload_rotation_and_management_capabilities`와 `tests/ticket_system.rs`의 `watched_and_api_ticket_reconfiguration_preserves_existing_bindings_timers_and_use_records`. 구현은 커밋 `4be8e0e`이며, 계약 테스트는 같은 커밋의 두 OS 전체 게이트에서 통과했다([판정표](../how-to/set-up-and-verify.md#45-접속-ticket-판정표)). |
+| Consumer / 접속 ticket 비노출 계약 시험 | 진단·운영 로그·상태 응답·관리 API 응답에 ticket 원문과 공개 키 파일 내용 없음(2.1절). [OPS-073](../specs/operations.md#7-수용-테스트) | 통과(2026-11-11) | `tests/ticket_system.rs`의 `viewer_ws_wss_tickets_match_and_all_observable_surfaces_keep_secrets_private`. 구현은 커밋 `4be8e0e`이며, 계약 테스트는 같은 커밋의 두 OS 전체 게이트에서 통과했다([판정표](../how-to/set-up-and-verify.md#45-접속-ticket-판정표)). |
 
 
 ### 계약 테스트 실행 기록
@@ -681,10 +681,12 @@ max_lifetime_secs = 60
 | 커밋 `eae442f`(작업 6 설정 편집 기록. 구현 `7ce077f`, 시험 수정 `0bc9a47`, 수락 쪽 K 시험 `eae442f`). Windows 작업 트리 깨끗함, Ubuntu 보고의 `+ 미커밋 변경`은 줄 끝 차이 | Ubuntu 24.04.4(WSL2), Rust 1.99.1 · Windows 11 Pro 10.0.26200 x64, Rust 1.99.1(`x86_64-pc-windows-msvc`) | `wsl -d Ubuntu -- bash /mnt/d/vr-tools/vr-full.sh` · `powershell -NoProfile -ExecutionPolicy Bypass -File D:/vr-tools/vr-win.ps1 -Only all` | Ubuntu `ALL PASSED`(보고 2026-11-08T09:59:46Z, 215건: 통과 201, 부분 8, 실패 0, 미실행 4, 미연결 2), Windows `ALL PASSED (all)`(보고 2026-11-08T09:56:59Z, 215건: 통과 198, 부분 12, 실패 0, 미실행 3, 미연결 2). 두 실행 모두 전체 `cargo test --workspace`를 포함하며, 위 확대 재로드·설정 편집 계약 시험이 통과했다. OPS-047~064 가운데 OPS-050을 뺀 17건은 두 OS에서 통과다. OPS-050은 두 OS에서 부분이며 [작업 6.9 판정표](../how-to/set-up-and-verify.md#42-작업-69-판정표)의 조항별 시험으로 통과로 판정했다. 같은 구현의 첫 게이트(`7ce077f`)는 시험 결함 두 개로 실패했고 `0bc9a47`이 고쳤다. |
 | 커밋 `51bd747`(WSS Server·프록시 TLS 종료·최근 로그. 구현 `3df0693`, 시험 수정 `f772408`·`51bd747`) | Windows 11 Pro 10.0.26200 x64, Rust 1.99.1 | `powershell -NoProfile -ExecutionPolicy Bypass -File D:/vr-tools/vr-win.ps1 -Only all` | 통과(`ALL PASSED (all)`). 시나리오 246건: 통과 229, 부분 12, 실패 0, 미실행 3, 미연결 2, 오류 0, 판정 통과(보고 2026-11-09T00:32:47Z). 작업 트리는 깨끗했다. v4 계약 시험의 판정은 [WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)를 따른다. |
 | 같은 커밋 `51bd747` | Ubuntu 24.04.4 LTS x64(WSL2), Rust 1.99.1 | `wsl -d Ubuntu -- bash /mnt/d/vr-tools/vr-full.sh` | 통과(`ALL PASSED`). 시나리오 246건: 통과 232, 부분 8, 실패 0, 미실행 4, 미연결 2, 오류 0, 판정 통과(보고 2026-11-09T01:05:57Z). `+ 미커밋 변경`은 줄 끝 차이다. 같은 구현의 앞선 게이트(`3df0693`, `f772408`)는 Ubuntu에서 시험 결함으로 실패했고 `f772408`·`51bd747`이 고쳤다. v4 계약 시험의 판정은 [WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)를 따른다. |
+| 커밋 `4be8e0e`(4.1.0 접속 ticket), 작업 트리 깨끗함 | Windows 11 Pro 10.0.26200 x64, Rust 1.99.1 | `powershell -NoProfile -ExecutionPolicy Bypass -File D:/vr-tools/vr-win.ps1 -Only all` | 통과(`ALL PASSED (all)`). 시나리오 266건: 통과 249, 부분 12, 실패 0, 미실행 3, 미연결 2, 오류 0, 판정 통과(보고 2026-11-11T12:54:30Z). OPS-070~073과 범위를 넓힌 OPS-059·063·064 통과. 판정은 [접속 ticket 판정표](../how-to/set-up-and-verify.md#45-접속-ticket-판정표)를 따른다. |
+| 같은 커밋 `4be8e0e` | Ubuntu 24.04.4 LTS x64(WSL2), Rust 1.99.1 | `wsl -d Ubuntu -- bash /mnt/d/vr-tools/vr-full.sh` | 통과(`ALL PASSED`). 시나리오 266건: 통과 252, 부분 8, 실패 0, 미실행 4, 미연결 2, 오류 0, 판정 통과(보고 2026-11-11T13:31:18Z). `+ 미커밋 변경`은 줄 끝 차이다. OPS-070~073과 범위를 넓힌 OPS-059·063·064 통과. |
 
 ## 6. 초안을 확정하기 전에 해결할 사항
 
-- 4.1.0 접속 ticket의 구현·계약 테스트는 미실행(구현 전)이다(사용자 결정 2026-11-11(Q211)). 5절의 OPS-070~073·WS-046 계약 시험 계획으로 확인해야 한다. 기존 실행 기록은 이전 버전의 증거로 보존한다.
+- 4.1.0 접속 ticket은 사용자 결정 2026-11-11(Q211)의 후속 구현이다. 구현은 커밋 `4be8e0e`이며, 계약 테스트는 같은 커밋의 두 OS 전체 게이트에서 통과했다([접속 ticket 판정표](../how-to/set-up-and-verify.md#45-접속-ticket-판정표)). OPS-070~073·WS-046 계약 시험은 5절을 따른다. 기존 실행 기록은 이전 버전의 증거로 보존한다.
 - (해결) 전체 범위 신뢰 프록시 경고 코드·사건 이름 `trust_all_proxies`와 필드 `listener`, `item`, `phase`. 사용자 결정 2026-11-08(Q191)으로 이름과 필드를 채택했다. 시작·재로드 때 기록한다. `trusted_proxies` 키 자체와 재로드·편집 구분은 채택됐다(사용자 결정 2026-11-08(Q184), 사용자 결정 2026-11-08(Q187)).
 - v4 구현·계약 테스트는 미실행(구현 전)이다. 5절의 v4 시험 계획으로 확인해야 한다. 기존 실행 기록은 그대로 보존하며 v4의 증거로 쓰지 않는다. 후속: 구현은 커밋 `3df0693`이며, 시험은 커밋 `51bd747`의 두 OS 게이트에서 통과했다([WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)).
 - (해결) 설정 보기·편집의 설정 키 `management.config_edit`는 사용자 결정 2026-11-08(Q176)으로 채택해 1.2절에 반영했다. 관련 API·사건 이름은 [관리 API 계약](management-api-v1.md)·[운영 정보 계약](ops-info-v2.md)에 같은 결정으로 반영했다. 구현·계약 테스트는 미실행(구현 전)이다. 후속: 커밋 `eae442f`의 두 OS 게이트에서 구현과 계약 테스트가 통과했다(5절).

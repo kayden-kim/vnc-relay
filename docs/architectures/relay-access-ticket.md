@@ -6,7 +6,7 @@
 | --- | --- |
 | 구조 시점 | Current |
 | 문서 상태 | Draft |
-| 구현 대조 | 미대조 |
+| 구현 대조 | Verified — [2026-11-11 대조 기록](#2026-11-11-대조-기록). 구현은 커밋 `4be8e0e`이다. 시험은 같은 커밋의 두 OS 게이트에서 통과했다([접속 ticket 판정표](../how-to/set-up-and-verify.md#45-접속-ticket-판정표)). |
 | 코드 위치 | `crates/domain/src/ticket.rs`, `crates/app/src/settings.rs`, `crates/app/src/reload/`, `crates/app/src/relay.rs`·`relay/`, `crates/adapters/src/ticket.rs`·`ticket/`, `crates/adapters/src/upgrade.rs`·`websocket.rs`, `src/serve.rs` |
 | 코드 지도 | [코드 지도](code-map.md) |
 | 관련 스펙 | [WS·WSS 스펙](../specs/websocket.md) WS-037~046, [중계 스펙](../specs/relay.md) RLY-029~032, [운영 스펙](../specs/operations.md) OPS-070~073, [관리 스펙](../specs/management.md) MGT-052~053, [화면 스펙](../specs/dashboard.md) DASH-020·029·035~037 |
@@ -194,6 +194,16 @@ flowchart LR
 ## 8. 현재 코드와의 차이
 
 2026-11-11 구현으로 2~5절의 설계가 현재 코드가 됐다. 남은 차이는 없다. 새 파일은 `crates/domain/src/ticket.rs`, `crates/app/src/reload/ticket_keys.rs`, `crates/adapters/src/ticket.rs`·`ticket/jwks.rs`·`ticket/jws.rs`다. 재로드 대상은 43개, 편집 대상은 37개, 운영 로그는 `ops-info/2.1.0`이다.
+
+### 2026-11-11 대조 기록
+
+- 기준: 커밋 `4be8e0e`.
+- 방법: 2~6절의 파일·심볼·처리 순서를 `crates/domain/src/ticket.rs`, `crates/app/src/settings.rs`·`reload/ticket_keys.rs`·`relay.rs`·`relay/handshake.rs`·`relay/matching.rs`·`relay/session.rs`, `crates/adapters/src/ticket.rs`·`ticket/jwks.rs`·`ticket/jws.rs`·`upgrade.rs`·`websocket.rs`, `src/serve.rs`와 읽어 대조했다. [코드 지도](code-map.md)의 경로·심볼 검사(`tests/code_map.rs`)를 함께 쓴다.
+- 정적 검토: 커밋 전 코드 검토에서 세 가지를 찾아 같은 커밋에서 고쳤다. `TicketParts`의 `Debug`가 ticket 부분을 그대로 출력했다. 업그레이드 직전 IP 재검사의 403에 확인을 통과한 ticket의 `ticket_jti`가 빠졌다. 활성 세션 타이머가 30년 상한으로 깬 시각을 먼 `sx` 도달로 보았다. 고친 동작은 4.2절 4·7행과 7절에 있다.
+- 결과: 2~6절과 코드 사이에 남은 차이가 없다.
+- 남은 한계: 사용 기록에는 개수 상한이 없다(3절 `TicketUseTable` 행). 실제 발급 쪽과 클라이언트의 연동은 이 저장소에서 실행하지 않았다.
+- 구조 판정: `Current`·`Verified`. **이 문서의 판단, 사용자 결정 없음**.
+- 이번 검증: 커밋 `4be8e0e`의 두 OS 전체 게이트에서 연결된 시나리오가 모두 통과했다([접속 ticket 판정표](../how-to/set-up-and-verify.md#45-접속-ticket-판정표)).
 
 ## 9. 미결정 사항
 

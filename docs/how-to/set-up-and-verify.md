@@ -512,6 +512,70 @@ WS-025는 두 게이트에서 `미실행`(무시 표시 시험)이며 4.3절 표
 - [수동 운영 안내 3.2.3절](operate-relay.md#323-viewer-경로를-relayviewer로-옮기기)의 Viewer 경로 이전·롤백을 두 OS에서 실행하는 일.
 - 사용처 페이지의 접속 URL 변경과 실제 연결 확인. 이 저장소 밖의 일이다.
 
+### 4.5 접속 ticket 판정표
+
+결론: 커밋 `4be8e0e`의 두 OS 전체 게이트에서 `오류`와 `실패`는 0건이다. 새 시나리오 20개(WS-037~046, RLY-029~032, OPS-070~073, MGT-052~053)는 두 OS 보고서에서 모두 `통과`다. 기존 ID로 범위를 넓힌 OPS-059·063·064·069와 DASH-020·029·035~037도 두 OS에서 `통과`다. 시나리오는 266건이다. `통과`가 아닌 시나리오는 Windows 17개, Ubuntu 14개이고, 두 보고서를 합치면 4.3절 표의 18개와 같다. 시나리오마다 OS별 보고서 상태도 4.3절과 같다. 이 18개는 4.3절과 같은 근거로 통과로 판정한다. 새 AC-49~52, 넓힌 AC-13, 기존 AC-01~48을 모두 충족했다. 고치기 전 구현 커밋의 첫 Windows 실행은 기존 시험 5개의 기대값 때문에 실패했다. 원인과 수정은 아래에 있다.
+
+이 절의 위치와 형식은 이 문서의 판단, 사용자 결정 없음이다. 범위는 사용자 결정 2026-11-11(Q192~Q219)로 채택했고 사용자 지시 2026-11-11로 구현했다. 판정 기준은 [PRD AC-49~52](../requirements/PRD.md#10-검증-및-수용-기준), 각 스펙 7절, [테스트 컨벤션 5절](../conventions/testing.md#5-검증-명령과-통과-기준)(사용자 결정 2026-11-06(Q132)), 사용자 결정 2026-11-04(Q99)다. 새 시나리오는 이전 판정으로 대체하지 않는다.
+
+첫 Windows 전체 게이트는 고치기 전의 구현 커밋에서 실행했다. 그 커밋은 아래 수정을 합쳐 `4be8e0e`로 다시 만들었으므로 공개 이력에는 없다. 기존 시험 5개가 ticket 이전의 기대값 때문에 실패했고, 제품 동작은 계약과 같았다.
+
+1. DASH-039는 `applied`를 알파벳 순서로 기대했다. 관리 API 계약은 키 집합만 정하고 순서는 정하지 않는다. 시험을 순서와 무관하게 비교하도록 고쳤다.
+2. DASH-050은 모든 입력에 `aria-describedby`가 있다고 보았다. 도움말·오류가 없는 ticket 문자열 입력에는 연결할 설명이 없다. 스펙의 "라벨·도움말·오류 연결"에 맞춰, 설명이 없는 입력을 허용하고 그려진 도움말이 입력에 연결되는지 확인하도록 고쳤다.
+3. MGT-028은 ticket 키 10개가 빠진 65개 키 목록을 기대했다. 설정 계약 1.2절 순서의 75개 키로 고쳤다.
+4. `tests/serve.rs`의 두 시험(OPS-065·OPS-069·WS-024)은 `ops-info/2.0.0`을 기대했다. `ops-info/2.1.0`으로 고쳤다. 같은 원인의 Unix 전용 시험 `writes_the_log_to_the_configured_file_from_start_to_stop`도 함께 고쳤다.
+
+이 실행 도중 위 수정을 작업 트리에 시작해 보고서 대상에 `+ 미커밋 변경`이 붙었다. 실행된 시험 바이너리는 수정 전 소스로 만든 것이다. 최종 판정은 `4be8e0e`에서 Windows, Ubuntu 순서로 다시 실행한 두 OS 게이트를 기준으로 한다(이 문서의 판단, 사용자 결정 없음).
+
+| 확인 대상 | 기준 | 환경 | 결과 | 증거 |
+| --- | --- | --- | --- | --- |
+| Windows 첫 실행 | `오류`·`실패` 0건 | Windows 11 Pro 10.0.26200 x64, Rust 1.99.1 | 실패. `FAILED (all): scenarios`. 266건: 통과 243, 부분 12, 실패 6(DASH-039·050, MGT-028, OPS-065·069, WS-024), 미실행 3, 미연결 2, 오류 0. `cargo test` 실패 대상은 `dashboard_live`·`management_query`·`serve`다. 새 시나리오 20개는 모두 통과였다. deny 단계는 `licenses ok`였다. 원인은 위 1~4번이다 | `target/scenario-report.md`(고치기 전 구현 커밋, 2026-11-11T12:10:30Z) |
+| Windows 최종 | 같음 | Windows 11 Pro 10.0.26200 x64, Rust 1.99.1 | 통과. `ALL PASSED (all)`. 266건: 통과 249, 부분 12, 실패 0, 미실행 3, 미연결 2, 오류 0. 작업 트리는 깨끗했다. deny 단계는 `licenses ok`였다 | `target/scenario-report.md`(`4be8e0e`, 2026-11-11T12:54:30Z) |
+| Ubuntu 최종 | 같음 | Ubuntu 24.04.4 LTS x64(WSL2), Rust 1.99.1 | 통과. `ALL PASSED`. 266건: 통과 252, 부분 8, 실패 0, 미실행 4, 미연결 2, 오류 0. `+ 미커밋 변경`은 줄 끝 차이다(`git diff --ignore-cr-at-eol` 출력 없음). deny 단계는 `licenses ok`였다 | `~/vnc-relay-target/scenario-report.md`(`4be8e0e`, 2026-11-11T13:31:18Z) |
+| noVNC 1.7.0 | 무시 표시 시험을 포함한 실행에서 WS-025 시험 통과 | 두 OS, 고정 noVNC 압축 파일 | 통과. Windows 2 passed(43.64초), Ubuntu 2 passed(42.22초). ticket을 끈 기본 설정에서 noVNC `vnc.html`이 WS·WSS와 두 접속 순서로 Viewer 등록과 RFB 교환을 마쳤다 | [WebSocket 계약 실행 기록](../contracts/websocket-relay-v2.md#계약-테스트-실행-기록) |
+
+새 시나리오 20개의 판정은 다음과 같다. 보고서 열은 Windows / Ubuntu 순서다.
+
+| 시나리오 | 보고서 | 판정 | 근거 |
+| --- | --- | --- | --- |
+| WS-037, WS-039~045 | 통과 / 통과 | 통과 | `crates/adapters/tests/websocket_ticket.rs`의 실제 WS·WSS 리스너 시험 8개다. 꺼진 역할의 기존 서브프로토콜 동작(WS-037), ticket·`binary` 요구와 400·401 구분(WS-039), 형식·헤더·서명·클레임 오류(WS-040), `exp + 5`와 `sx` 경계(WS-041), 사용 기록의 원자성·WS·WSS 공유·`exp + 5` 만료(WS-042), 기동 시각 + 5초 기준(WS-043), Origin → 서브프로토콜 → ticket → IP 재검사 순서와 거절 때 미소비(WS-044), 역할별 발급자·키·대상(WS-045)을 확인한다 |
+| WS-038, OPS-073 | 통과 / 통과 | 통과 | 실제 실행파일 시험 `tests/ticket_system.rs`의 `viewer_ws_wss_tickets_match_and_all_observable_surfaces_keep_secrets_private`다. WS·WSS Viewer ticket의 101과 응답 `binary`, `ticket_accepted` 필드, 같은 중계 ID의 Mode II 매칭을 확인한다. 성공·서명 실패·재사용·공개 키 파일 오류 뒤 운영 로그·stderr·`/livez`·`/readyz`·관리 API 응답에 ticket 원문·서명 부분·공개 키 좌표가 없는지 확인한다 |
+| WS-046 | 통과 / 통과 | 통과 | 같은 파일의 `watched_and_api_ticket_reconfiguration_preserves_existing_bindings_timers_and_use_records`다. 파일 감시와 관리 API 편집으로 켜기·끄기·키 교체·값 교체를 한 뒤에도 기존 연결의 `rid` 결속(4012)·`sx` 타이머(4013)·사용 기록이 유지되는지 확인한다 |
+| RLY-029, RLY-032 | 통과 / 통과 | 통과 | 같은 파일의 `both_ticket_roles_compare_rid_bytes_and_leave_the_waiting_opposite_peer_intact`다. 두 역할에서 `0123`과 `123`을 다른 중계 ID로 보고 Close 4012와 `ticket_relay_mismatch`를 남기는지 확인한다. 기다리던 상대 연결이 그대로 남아 맞는 ticket과 매칭되는지도 본다 |
+| RLY-030 | 통과 / 통과 | 통과 | 같은 파일의 `ticket_mode_one_rejection_precedes_target_connect_but_not_disabled_mode_or_syntax`다. ticket 연결의 Mode I 요청이 대상 연결 없이 4012인지 확인한다. `mode1.enabled = false`의 1008과 구문 오류의 4008이 먼저인지도 본다 |
+| RLY-031, MGT-052 | 통과 / 통과 | 통과 | 같은 파일의 `sx_expires_every_lifecycle_state_and_earliest_side_with_distinct_management_cause`다. 초기 교환·대기·활성 상태의 `sx` 만료, 두 쪽 가운데 이른 `sx`, TCP 상대의 종료를 확인한다. 최근 종료 목록에 `session_expired`가 관리자 종료와 구분되어 남는지도 본다 |
+| OPS-070, OPS-072 | 통과 / 통과 | 통과 | `tests/reload.rs`의 `full_ticket_validation_at_startup_and_reload_preserves_the_last_valid_generation`과 `full_ticket_dynamic_reload_rotation_and_management_capabilities`다. 시작 때 진단·종료 코드 3·리스너 미바인드, 같은 후보의 재로드 거절과 기존 세대 유지, ticket 키 10개의 재로드·편집 구분, 공개 키 파일 교체 감지를 확인한다 |
+| OPS-071 | 통과 / 통과 | 통과 | 같은 파일의 `ticket_tcp_and_plaintext_warnings_cover_both_roles_at_start_and_reload`다 |
+| MGT-053 | 통과 / 통과 | 통과 | Producer 계약 시험 `crates/adapters/tests/management.rs`의 `ticket_config_view_edits_and_refusals_follow_management_contract`다 |
+
+기존 ID로 범위를 넓힌 시나리오는 다음과 같다.
+
+| 시나리오 | 보고서 | 판정 | 근거 |
+| --- | --- | --- | --- |
+| OPS-059·063·064·069 | 통과 / 통과 | 통과 | 재로드 43개·편집 37개와 `ops-info/2.1.0`을 기대하는 비부분 시험이다 |
+| DASH-020·029·035~037 | 통과 / 통과 | 통과 | `tests/dashboard_live.rs`의 실서버 실행기 5개다. DASH-020은 실제 `sx` 만료 세션의 CPY-190 중립 배지를 확인한다. 가짜 API 브라우저 시험(부분 표식)과 시안 대조는 [대시보드 검증 4.34절](verify-dashboard-frontend.md#434-접속-ticket-화면-구현과-시안-대조-2026-11-11)에 있다 |
+
+WS-025는 두 게이트에서 `미실행`(무시 표시 시험)이며 4.3절 표와 같다. 별도 실행 결과는 위 noVNC 행에 있다.
+
+[PRD 10절](../requirements/PRD.md#10-검증-및-수용-기준)의 AC를 같은 기준으로 대조했다. 각 AC 행이 링크한 시나리오 ID를 두 보고서와 위 표에 맞춰 보았다.
+
+| AC | 연결 시나리오 | 판정 |
+| --- | --- | --- |
+| AC-49 | WS-037~046 | 충족 |
+| AC-50 | RLY-029~032 | 충족 |
+| AC-51 | OPS-070~073 | 충족 |
+| AC-52 | MGT-052~053 | 충족 |
+| AC-13(넓힌 범위) | OPS-072, WS-046과 기존 연결 시나리오 | 충족 |
+| AC-01~48(회귀) | 4.1~4.4절과 같은 연결 | 충족. 기존 시나리오는 두 보고서에서 통과이거나 4.3절 표에서 통과다 |
+
+라이선스: 두 OS 게이트의 deny 단계가 `licenses ok`, 종료 코드 0이었다. 루트 `vnc-relay`에 시험 전용 dev-dependency `aws-lc-rs`를 더했고 잠금 파일의 새 패키지는 없다. 고지 대조 시험(`tests/dependency_notices.rs`)도 두 OS에서 통과했다([의존성 라이선스 확인 4절](check-dependency-licenses.md#4-검증) 실행 기록 10).
+
+다음 확인은 미실행이며 이 판정에 포함하지 않는다.
+
+- [수동 운영 안내 3.10절](operate-relay.md#310-접속-ticket-켜기와-공개-키-교체)의 켜기·공개 키 교체·끄기를 두 OS에서 실행하는 일.
+- 실제 발급 쪽과 noVNC·VNC Server 클라이언트가 ticket을 보내는 연결 확인. 사용처 저장소의 일이다.
+- 접속 ticket 화면의 실제 Safari·Edge·Firefox·실기기·스크린 리더 확인과 사람의 시안 비교.
+
 ## 5. 중단 조건
 
 - 1단계 Build Tools 설치가 1602로 끝나면 이후 단계를 진행하지 않는다. UAC를 승인할 수 있을 때 다시 실행한다.

@@ -23,7 +23,7 @@
 - URL로 대상 주소나 중계 ID를 직접 지정하는 별도 중계 API를 만들지 않는다.
 - 릴레이 WS·WSS 리스너의 역방향 프록시 TLS 종료를 지원한다(사용자 지시 2026-11-08). 해당 리스너의 `trusted_proxies`와 `X-Forwarded-For`로 클라이언트 주소를 판정한다(사용자 결정 2026-11-08(Q182)). 관리 리스너의 TLS·전달 헤더 정책은 바꾸지 않는다(사용자 결정 2026-11-08(Q183)).
 - 후속: 위 2026-11-08 추가 범위의 구현은 커밋 `3df0693`이다. 시험은 커밋 `51bd747`의 두 OS 게이트에서 통과했다([WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)).
-- 접속 ticket의 형식과 확인은 [WebSocket 계약 1.9절](../contracts/websocket-relay-v2.md#19-접속-ticket)을 따른다. 기본으로 꺼져 있고, 역할마다 WS·WSS에 함께 적용한다(사용자 결정 2026-11-11(Q192·Q197)). 결정 이유는 [ADR-0009](../decisions/ADR-0009-optional-relay-access-ticket.md)를 따른다. 이 추가 범위의 구현·계약 테스트는 미실행(구현 전)이다(사용자 결정 2026-11-11(Q211)).
+- 접속 ticket의 형식과 확인은 [WebSocket 계약 1.9절](../contracts/websocket-relay-v2.md#19-접속-ticket)을 따른다. 기본으로 꺼져 있고, 역할마다 WS·WSS에 함께 적용한다(사용자 결정 2026-11-11(Q192·Q197)). 결정 이유는 [ADR-0009](../decisions/ADR-0009-optional-relay-access-ticket.md)를 따른다. 사용자 결정 2026-11-11(Q211)의 후속 구현은 커밋 `4be8e0e`다. 계약 테스트는 같은 커밋의 두 OS 전체 게이트에서 통과했다([접속 ticket 판정표](../how-to/set-up-and-verify.md#45-접속-ticket-판정표)).
 
 ## 2. 상태와 리스너 책임
 
@@ -203,7 +203,7 @@ WS-007 이후의 공통 중계 테스트는 WS·WSS 각각에 적용한다. 내�
 
 확정 책임은 프로젝트 요구사항·운영 결정 담당자에게 있다. 외부 URL·HTTP 상태·종료 코드는 Active 계약이 기준이다. 구현과 테스트의 지원 판정은 [작업 5.9 판정표](../how-to/set-up-and-verify.md#41-작업-59-판정표)를 따른다.
 
-접속 ticket 범위는 사용자 결정 2026-11-11(Q192~Q204·Q207·Q212·Q213)으로 채택했다. 구현·계약 테스트는 미실행(구현 전)이다. 새 시나리오는 테스트 연결 전이며 보고서에서는 `미연결`로 추적한다. 계약 테스트 계획은 [WebSocket 계약 5절](../contracts/websocket-relay-v2.md#5-예제와-계약-테스트)을 따른다.
+접속 ticket 범위는 사용자 결정 2026-11-11(Q192~Q204·Q207·Q212·Q213)으로 채택했다. 구현은 커밋 `4be8e0e`이며, 계약 테스트는 같은 커밋의 두 OS 전체 게이트에서 통과했다([접속 ticket 판정표](../how-to/set-up-and-verify.md#45-접속-ticket-판정표)). 계약 테스트는 [WebSocket 계약 5절](../contracts/websocket-relay-v2.md#5-예제와-계약-테스트)을 따른다.
 
 (해결) 사용자 결정 2026-11-08(Q191)으로 채택했다: `trusted_proxies` 전체 허용 경고 코드·사건명 `trust_all_proxies`. 이름과 필드의 채택은 [운영 정보 계약](../contracts/ops-info-v2.md)의 결정 기록을 따른다. WS-028~036과 변경된 WS-012·014·022·023·024는 미실행 (구현 전)이며 계약 테스트 계획은 [WebSocket 계약 5절](../contracts/websocket-relay-v2.md#5-예제와-계약-테스트)에 있다. 후속: 구현은 커밋 `3df0693`이며, 시험은 커밋 `51bd747`의 두 OS 게이트에서 통과했다([WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)).
 WS-TBD-001은 결번이며 재사용하지 않는다. WS-TBD-002는 [WebSocket 중계 v1](../contracts/websocket-relay-v2.md) 채택(2026-10-16)으로 결정되어 4절과 계약에 반영했으며 재사용하지 않는다. WS-TBD-003은 [설정 파일 v3](../contracts/config-v4.md) 1.4절의 정규화 규칙 채택으로 결정되어 2절과 계약에 반영했으며 재사용하지 않는다. WS-TBD-006은 결정되어 1절에 반영했으며 재사용하지 않는다. WS-TBD-005는 2026-11-01에 해소되어 이 표에서 뺐다. noVNC 1.7.0을 [호환성 검증 기록](../contracts/repeater-compat-record.md) 2.4절에 고정했고(버전·해시·받은 주소·날짜), 같은 기록 3.4절에 WS·WSS 관찰 결과를 남겼다. 이 버전은 `Sec-WebSocket-Protocol` 헤더를 보내지 않았고, 이는 [WebSocket 중계 v1](../contracts/websocket-relay-v2.md) 1.2절 규칙과 같다. 재사용하지 않는다.

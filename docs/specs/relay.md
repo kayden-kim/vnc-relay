@@ -19,7 +19,7 @@ Viewer와 Server가 VNC Relay에 접속했을 때 관찰하는 연결 수명, �
 - TLS·WebSocket 프레임 처리는 WS·WSS 스펙이 소유한다. 관리 API와 프로세스 종료는 관련 스펙이 소유한다.
 - RFB 화면·인증·입력 내용을 해석하거나 변환하지 않는다. 원격 화면·입력 검증은 실제 끝점의 호환성 테스트에서 수행한다.
 - 후속: 2026-11-08 추가한 WS·WSS Server는 기준 문서만 반영했다. 새 조합의 구현·검증은 아직 없다. 이전 지원 판정은 그 당시 조합의 증거로 유지한다. 후속: 구현은 커밋 `3df0693`이며, 시험은 커밋 `51bd747`의 두 OS 게이트에서 통과했다([WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)).
-- WS·WSS의 접속 ticket 연결은 중계 ID 대조와 세션 만료를 더 적용한다([WebSocket 계약 1.9절](../contracts/websocket-relay-v2.md#19-접속-ticket), [ADR-0009](../decisions/ADR-0009-optional-relay-access-ticket.md), 사용자 결정 2026-11-11(Q192·Q203·Q213)). 이 추가 범위의 구현·계약 테스트는 미실행(구현 전)이다(사용자 결정 2026-11-11(Q211)).
+- WS·WSS의 접속 ticket 연결은 중계 ID 대조와 세션 만료를 더 적용한다([WebSocket 계약 1.9절](../contracts/websocket-relay-v2.md#19-접속-ticket), [ADR-0009](../decisions/ADR-0009-optional-relay-access-ticket.md), 사용자 결정 2026-11-11(Q192·Q203·Q213)). 사용자 결정 2026-11-11(Q211)의 후속 구현은 커밋 `4be8e0e`다. 계약 테스트는 같은 커밋의 두 OS 전체 게이트에서 통과했다([접속 ticket 판정표](../how-to/set-up-and-verify.md#45-접속-ticket-판정표)).
 
 ## 2. 상태와 경계
 
@@ -185,7 +185,7 @@ IP 목록 재로드는 [운영 스펙](operations.md#33-파일-변경-자동-감
 
 현재 남은 미결정 사항은 없다.
 
-접속 ticket 범위는 사용자 결정 2026-11-11(Q192·Q203·Q213)으로 채택했다. 구현·계약 테스트는 미실행(구현 전)이다. 새 시나리오는 테스트 연결 전이며 보고서에서는 `미연결`로 추적한다. 계약 테스트 계획은 [WebSocket 계약 5절](../contracts/websocket-relay-v2.md#5-예제와-계약-테스트)을 따른다.
+접속 ticket 범위는 사용자 결정 2026-11-11(Q192·Q203·Q213)으로 채택했다. 구현은 커밋 `4be8e0e`이며, 계약 테스트는 같은 커밋의 두 OS 전체 게이트에서 통과했다([접속 ticket 판정표](../how-to/set-up-and-verify.md#45-접속-ticket-판정표)). 계약 테스트는 [WebSocket 계약 5절](../contracts/websocket-relay-v2.md#5-예제와-계약-테스트)을 따른다.
 
 후속: RLY-028과 변경된 RLY-023·024의 2026-11-08 추가 범위는 미실행 (구현 전)이다. 계약 테스트 계획은 [WebSocket 계약 5절](../contracts/websocket-relay-v2.md#5-예제와-계약-테스트)을 따른다. 이 스펙에서 새로 채택을 기다리는 이름은 없다. 신뢰 프록시 경고 이름과 필드는 사용자 결정 2026-11-08(Q191)으로 채택했으며 [WebSocket 스펙 8절](websocket.md#8-미결정-사항)에서 기록한다. 후속: 구현은 커밋 `3df0693`이며, 시험은 커밋 `51bd747`의 두 OS 게이트에서 통과했다([WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)).
 

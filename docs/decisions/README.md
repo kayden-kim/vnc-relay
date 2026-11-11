@@ -12,6 +12,6 @@ ADR(Architecture Decision Record, 기술 결정 기록)은 중요하고 되돌�
 | [ADR-0006](ADR-0006-config-edit-through-file.md) | Accepted(사용자 결정 2026-11-08(Q177)으로 전체 채택) | 대시보드 편집을 같은 설정 파일에 서식을 보존해 기록하고 같은 재로드 규칙으로 적용한다. |
 | [ADR-0007](ADR-0007-proxy-tls-termination.md) | Accepted(사용자 결정 2026-11-08(Q182·Q183)) | 내장 TLS를 유지하고 중계 WS·WSS 앞의 프록시 TLS 종료와 신뢰 프록시 전달 주소를 지원한다. 관리 리스너는 제외한다. |
 | [ADR-0008](ADR-0008-shared-ws-listener-path-roles.md) | Accepted(사용자 결정 2026-11-08(Q181·Q188)) | WS·WSS 리스너를 공유하고 경로로 Viewer·Server 역할을 고른다. 설정 4.0.0·ops-info 2.0.0으로 이전한다. |
-| [ADR-0009](ADR-0009-optional-relay-access-ticket.md) | Accepted(사용자 결정 2026-11-11(Q192·Q194)) | 진입점별 출발지 IP 허용 목록 위에 WS·WSS 역할별 선택형 접속 ticket 확인을 더한다. TCP에는 적용하지 않는다. 구현·계약 테스트는 미실행(구현 전)이다. |
+| [ADR-0009](ADR-0009-optional-relay-access-ticket.md) | Accepted(사용자 결정 2026-11-11(Q192·Q194)) | 진입점별 출발지 IP 허용 목록 위에 WS·WSS 역할별 선택형 접속 ticket 확인을 더한다. TCP에는 적용하지 않는다. 구현은 커밋 `4be8e0e`이며, 계약 테스트는 같은 커밋의 두 OS 전체 게이트에서 통과했다([접속 ticket 판정표](../how-to/set-up-and-verify.md#45-접속-ticket-판정표)). |
 
 작성 규칙은 [AGENTS.md](AGENTS.md)를 따른다.
