@@ -578,6 +578,43 @@ WS-025는 두 게이트에서 `미실행`(무시 표시 시험)이며 4.3절 표
 - 실제 발급 쪽과 noVNC·VNC Server 클라이언트가 ticket을 보내는 연결 확인. 사용처 저장소의 일이다.
 - 접속 ticket 화면의 실제 Safari·Edge·Firefox·실기기·스크린 리더 확인과 사람의 시안 비교.
 
+### 4.6 운영 도움말 판정표
+
+결론: 커밋 `92749c8`의 두 OS 전체 게이트에서 `오류`와 `실패`는 0건이다. 새 시나리오 19개(HELP-001~018, DASH-064)는 두 OS 보고서에서 모두 `통과`다. 시나리오는 285건이며 4.5절의 266건보다 19건 많다. `통과`가 아닌 시나리오는 Windows 17개, Ubuntu 14개이고, 두 보고서를 합치면 4.3절 표의 18개와 같다. 시나리오마다 OS별 보고서 상태도 4.3절과 같으므로 같은 근거로 통과로 판정한다. `main`에 push한 뒤 GitHub Pages 게시까지 마쳤다. 새 AC-53~55와 기존 AC-01~52를 모두 충족했다.
+
+이 절의 위치와 형식은 이 문서의 판단, 사용자 결정 없음이다. 범위는 사용자 결정 2026-11-11(Q220~Q227)과 2026-11-12(Q228~Q231)로 채택했다. 판정 기준은 [PRD AC-53~55](../requirements/PRD.md#10-검증-및-수용-기준), 각 스펙 7절, [테스트 컨벤션 5절](../conventions/testing.md#5-검증-명령과-통과-기준)(사용자 결정 2026-11-06(Q132))이다.
+
+| 확인 대상 | 기준 | 환경 | 결과 | 증거 |
+| --- | --- | --- | --- | --- |
+| Windows 최종 | `오류`·`실패` 0건 | Windows 11 Pro 10.0.26200 x64, Rust 1.99.1, mdBook 0.5.4 | 통과. `ALL PASSED (all)`. 285건: 통과 268, 부분 12, 실패 0, 미실행 3, 미연결 2, 오류 0. 작업 트리는 깨끗했다. deny 단계 종료 코드 0 | `target/scenario-report.md`(`92749c8`, 2026-11-12T00:21:05Z) |
+| Ubuntu 최종 | 같음 | Ubuntu 24.04.4 LTS x64(WSL2), Rust 1.99.1, mdBook 0.5.4 | 통과. `ALL PASSED`. 285건: 통과 271, 부분 8, 실패 0, 미실행 4, 미연결 2, 오류 0. `+ 미커밋 변경`은 줄 끝 차이다(`git diff --ignore-cr-at-eol` 출력 없음). deny 단계 종료 코드 0 | `~/vnc-relay-target/scenario-report.md`(`92749c8`, 2026-11-12T00:55:53Z) |
+| GitHub Actions `ci` | 결론 `success` | `ci` 실행 43131018506(`windows-2025`·`ubuntu-24.04`) | 통과. 두 `check` 작업이 형식·clippy·xtask 단위 시험·`layers`·`tokens --check`·`deny`·`cargo xtask package`를 마쳤다. `release`는 태그 push가 아니어서 건너뛰었다 | GitHub Actions 실행 기록 |
+| 게시 | AC-55 | GitHub Actions `help` 실행 43131018701(`ubuntu-24.04`) | 통과. mdBook 자산 해시 `OK`, `help-site: 통과 (target/help-site)`, `deploy` 성공. 게시 주소가 HLP-002를 응답하고 저장소 About의 웹사이트가 같은 주소다 | [도움말 게시 how-to 4절](publish-help.md#4-검증) |
+
+새 시나리오 19개의 판정은 다음과 같다. 보고서 열은 Windows / Ubuntu 순서다.
+
+| 시나리오 | 보고서 | 판정 | 근거 |
+| --- | --- | --- | --- |
+| HELP-001~018 | 통과 / 통과 | 통과 | `tests/help_site.rs`의 18개 시험이다. `cargo xtask help-site`로 만든 사이트를 시험 안의 정적 서버(`/vnc-relay/` 마운트)에 올리고 헤드리스 Chromium으로 언어 선택·목차·검색·키보드·코드 복사·없는 페이지·고지·링크·좁은 폭을 확인한다. 시안 대조는 [도움말 게시 how-to 4.1절](publish-help.md#41-시안-대조)에 있다 |
+| DASH-064 | 통과 / 통과 | 통과 | `tests/dashboard_browser.rs`의 `every_screen_localizes_safe_help_links_without_requesting_the_help_site_in_browser`다. 다섯 화면 페이지를 1280·390px와 ko·en에서 연다. 시안 대조는 [대시보드 검증 4.35절](verify-dashboard-frontend.md#435-대시보드-도움말-링크-구현과-시안-대조-dash-064-2026-11-12)에 있다 |
+
+[PRD 10절](../requirements/PRD.md#10-검증-및-수용-기준)의 AC를 같은 기준으로 대조했다.
+
+| AC | 연결 시나리오·절차 | 판정 |
+| --- | --- | --- |
+| AC-53 | HELP-001~018 | 충족 |
+| AC-54 | DASH-064 | 충족 |
+| AC-55 | [도움말 게시 how-to](publish-help.md) 3.5절 | 충족. 위 게시 행 |
+| AC-01~52(회귀) | 4.1~4.5절과 같은 연결 | 충족. 기존 시나리오는 두 보고서에서 통과이거나 4.3절 표에서 통과다 |
+
+라이선스: 두 OS 게이트의 deny 단계는 종료 코드 0이었다. 이 변경은 `Cargo.lock`과 `Cargo.toml`을 바꾸지 않았다. 도움말 사이트에 싣는 제3자 파일은 사이트의 고지 페이지가 다루며 HELP-017이 두 OS에서 통과했다([의존성 라이선스 검사 1절](check-dependency-licenses.md#1-대상과-영향)).
+
+다음 확인은 미실행이며 이 판정에 포함하지 않는다.
+
+- 도움말 사이트와 대시보드 도움말 링크의 실제 Safari·Edge·Firefox·실기기·스크린 리더 확인과 사람의 시안 비교.
+- pull request에서 `help` 워크플로가 빌드·검사만 하고 게시하지 않는지 확인하는 일. 아직 pull request가 없다.
+- [도움말 게시 how-to 6절](publish-help.md#6-롤백-또는-복구)의 Pages 끄기. 게시 중인 사이트를 내리는 일이라 실행하지 않았다.
+
 ## 5. 중단 조건
 
 - 1단계 Build Tools 설치가 1602로 끝나면 이후 단계를 진행하지 않는다. UAC를 승인할 수 있을 때 다시 실행한다.

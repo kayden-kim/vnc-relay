@@ -4,7 +4,7 @@
 
 | 책 | 상태 | 게시 주소 | 장 구성 |
 | --- | --- | --- | --- |
-| [한국어 도움말](ko/src/SUMMARY.md) | Draft. 게시 전 | `https://kayden-kim.github.io/vnc-relay/ko/` | 소개, 설치, 빠른 시작, VNC 연결 구성, 설정, 대시보드, 접속 ticket, 운영, 문제 해결, 참조, 고지 |
-| [English help](en/src/SUMMARY.md) | Draft. 게시 전 | `https://kayden-kim.github.io/vnc-relay/en/` | 한국어 책과 같은 파일 이름·순서의 영어판 |
+| [한국어 도움말](ko/src/SUMMARY.md) | 게시. 첫 게시 2026-11-12(커밋 `92749c8`) | `https://kayden-kim.github.io/vnc-relay/ko/` | 소개, 설치, 빠른 시작, VNC 연결 구성, 설정, 대시보드, 접속 ticket, 운영, 문제 해결, 참조, 고지 |
+| [English help](en/src/SUMMARY.md) | 게시. 첫 게시 2026-11-12(커밋 `92749c8`) | `https://kayden-kim.github.io/vnc-relay/en/` | 한국어 책과 같은 파일 이름·순서의 영어판 |
 
 작성 규칙은 [AGENTS.md](AGENTS.md)를 따른다.

@@ -209,6 +209,7 @@ flowchart LR
 | 토큰 CSS와 미리보기 명령(기준 커밋 `c96b948`~`75d7906`) | Windows 10.0.26200 | 2·4·6·7절의 파일·함수·오류 경로를 실제 코드와 대조했다. `cargo xtask tokens --check`는 `tokens --check: 통과`, 종료 코드 0이었다. DESIGN.md 6행(`colors`)의 `#f4f6f5`를 `#f4f6f6`으로 바꾸면 `tokens --check: 실패 (3건)`, 종료 코드 1이었고 되돌려 다시 통과했다. `cargo xtask dashboard-serve`로 띄운 미리보기를 6폭 × ko/en 12회 캡처해 콘솔 오류와 CSP 위반이 없었다. | 통과 |
 | 배포 고지 생성·대조와 루트 부분 시험(2026-11-04 작업 트리) | WSL Ubuntu·Windows, Rust 1.99.1 | `cargo test --offline --locked --test code_map --test dependency_notices`, WSL `cargo test --offline --locked -p xtask`. [출처·라이선스 실행 기록](../how-to/check-dependency-licenses.md#43-실행-기록-2026-11-04) | 통과. 두 OS에서 코드 지도 4개·고지 대조 1개. WSL 도구 단위 시험 14개. 제품 MIT LICENSE는 별도 미완료다. |
 | 배포 묶음 명령(커밋 `7859b5d`) | Windows 11 Pro 10.0.26200, WSL2 Ubuntu 24.04.4, Rust 1.99.1, GitHub Actions `windows-2025`·`ubuntu-24.04` | 2·4·6·7절의 `package.rs` 심볼과 처리 순서를 실제 코드와 대조했다. xtask 단위 시험 16건(SHA-256 FIPS 180-4 예제 4개, 버전 형식 규칙 포함)이 통과했다. 두 OS와 Actions에서 `cargo xtask package`를 실행했다. [릴리스 how-to 4절](../how-to/release.md#4-검증) | 통과 |
+| 도움말 사이트 도구(커밋 `92749c8`) | Windows 11 Pro 10.0.26200, WSL2 Ubuntu 24.04.4, Rust 1.99.1, mdBook 0.5.4, GitHub Actions `ubuntu-24.04` | 도움말 도구 행(`help_site.rs`·`help_site/checks.rs`·`help_site/html.rs`·`help_serve.rs`·`static_server.rs`)에 적은 심볼 25개가 모두 해당 파일에 정의되어 있음을 확인했다. `cargo xtask help-site`를 두 OS와 Actions에서 실행했다. 루트 시험 `tests/help_site.rs`(HELP-001~018)와 xtask 단위 시험이 두 OS 전체 게이트에서 통과했다. [도움말 게시 how-to 4절](../how-to/publish-help.md#4-검증) | 통과 |
 
 ## 8. 미결정 사항
 

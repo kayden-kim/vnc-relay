@@ -1815,7 +1815,7 @@ Ubuntu 첫 실행이 이전 빌드를 다시 쓴 원인은 시계 차이다. WSL
 | 예시 데이터 | 시안: 임의의 세션·수치. 구현: 가짜 API의 고정 값 | 4.27절 C01 | 데이터 차이, 해당 없음 |
 
 - 증거: `target/dashboard-shots/<폭>/`에 시안 캡처(`mock-scr001-<언어>.png`, `mock-scr003-<언어>.png`)와 구현 캡처(`scr001-<언어>.png`, `scr003-<언어>.png`)를 남겼다. 나란히 놓은 비교 그림은 `target/dashboard-shots/pair-{1280,390,320}-{scr001-ko,scr003-en}.png`이다.
-- 두 OS 게이트 결과는 [도움말 게시 how-to 4절](publish-help.md#4-검증)에 적는다.
+- 두 OS 게이트: 커밋 `92749c8`의 Windows·Ubuntu 전체 게이트가 통과했고, 두 보고서에서 DASH-064가 `통과`다([개발 환경·검증 4.6절](set-up-and-verify.md#46-운영-도움말-판정표)).
 
 ## 5. 중단 조건
 

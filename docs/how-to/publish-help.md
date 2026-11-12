@@ -5,9 +5,9 @@
 | 항목 | 값 |
 | --- | --- |
 | 대상 독자 | 도움말 작성자와 저장소 관리자 |
-| 검증 상태 | Draft — 실행 결과는 [4절](#4-검증)에 기록한다 |
-| 검증 환경·버전 | Windows 11 Pro 10.0.26200 x64, WSL2 Ubuntu 24.04.4 LTS x64, mdBook 0.5.4, Rust 1.99.1, GitHub Actions `ubuntu-24.04` |
-| 최종 검증일 | 없음(Draft 2026-11-12) |
+| 검증 상태 | Verified — 2.1절 설치(Windows 자산 해시·버전, Linux 자산 해시는 GitHub Actions, WSL 설치본 버전)와 3.1~3.5절을 Windows·WSL2 Ubuntu·GitHub Actions에서 실행해 확인했다([4절](#4-검증)). 6절 롤백은 게시 중인 사이트를 내리므로 실행하지 않았다 |
+| 검증 환경·버전 | Windows 11 Pro 10.0.26200 x64(PowerShell 7.6.9), WSL2 Ubuntu 24.04.4 LTS x64, mdBook 0.5.4, Rust 1.99.1, GitHub Actions `ubuntu-24.04` |
+| 최종 검증일 | 2026-11-12 |
 | 관련 기준 문서 | [도움말 사이트 화면 스펙](../specs/help-site.md), [도움말 작성 규칙](../help/AGENTS.md), [xtask 모듈 설계](../architectures/xtask.md), [디자인 기준의 도움말 사이트 확장](../design/DESIGN.md#도움말-사이트-확장), [프런트엔드 컨벤션](../conventions/frontend.md) |
 
 ## 1. 대상과 영향
@@ -105,7 +105,7 @@ Ubuntu(bash):
    cargo xtask help-site
    ```
 
-   기대 결과: 종료 코드 0이고 마지막 줄이 `help-site: 통과 (target/help-site)`다. 이 명령은 `target/help-stage/`와 `target/help-site/`를 지우고 다시 만든다.
+   기대 결과: 종료 코드 0이고 마지막 줄이 `help-site: 통과 (target/help-site)`다. 환경 변수 `CARGO_TARGET_DIR`을 정했으면 괄호 안은 그 디렉터리 아래의 `help-site`다. 이 명령은 Cargo 대상 디렉터리(기본 `target/`)의 `help-stage/`와 `help-site/`를 지우고 다시 만든다.
 
    검사 문제가 있으면 문제마다 `<경로>: <내용>` 한 줄을 출력하고, 마지막 줄이 `help-site: 실패 (N건)`, 종료 코드 1이다. 경로는 `target/help-site/` 기준 경로다. 목차 비교만 저장소 기준 `SUMMARY.md` 경로를 쓴다. 검사 항목은 [xtask 모듈 설계](../architectures/xtask.md)의 `help_site/checks.rs` 행이다.
 
@@ -217,13 +217,14 @@ cargo test --test help_site
 
 | 관찰 대상 | 성공 조건 | 확인 명령·방법 | 실제 결과 | 실행 증거 위치 |
 | --- | --- | --- | --- | --- |
+| mdBook 설치 | 2.1절 기대 결과 | 2.1절. Windows는 PowerShell 7.6.9, Linux 자산은 GitHub Actions `help` 실행, 설치본 버전은 WSL2 Ubuntu | 통과(2026-11-12). Windows 자산의 SHA-256이 표의 값과 같고 설치본이 `mdbook v0.5.4`다. Linux 자산은 Actions에서 `sha256sum -c`가 `OK`였고 WSL 설치본이 `mdbook v0.5.4`다 | 이 표 |
 | Windows 빌드와 검사 | 3.1절 기대 결과 | 3.1절. Windows 11 Pro 10.0.26200 x64, `MDBOOK`에 mdBook 0.5.4 경로 | 통과(2026-11-12). 종료 코드 0, 마지막 줄 `help-site: 통과 (target/help-site)` | 이 표 |
-| Ubuntu 빌드와 검사 | 3.1절 기대 결과 | 3.1절. WSL2 Ubuntu, `MDBOOK=$HOME/tools/mdbook-0.5.4/mdbook` | 미실행 | 이 표 |
+| Ubuntu 빌드와 검사 | 3.1절 기대 결과 | 3.1절. WSL2 Ubuntu, `MDBOOK=$HOME/tools/mdbook-0.5.4/mdbook`, `CARGO_TARGET_DIR`은 Linux 홈 아래 | 통과(2026-11-12). 종료 코드 0, 마지막 줄 `help-site: 통과 (…/help-site)`. 괄호 안은 `CARGO_TARGET_DIR` 아래 경로다 | 이 표 |
 | Windows 브라우저 시험 | 3.3절 기대 결과 | 3.3절. Windows 11 Pro 10.0.26200 x64, Chrome | 통과(2026-11-12). 18개 통과, 실패 0 | 이 표 |
-| 두 OS 전체 완료 검증 | [개발 환경·검증 3.4절](set-up-and-verify.md#34-전체-완료-검증) 기대 결과. 도움말 시험 18개 포함 | 같은 절 6단계 | 미실행 | 이 표 |
+| 두 OS 전체 완료 검증 | [개발 환경·검증 3.4절](set-up-and-verify.md#34-전체-완료-검증) 기대 결과. 도움말 시험 18개 포함 | 같은 절 6단계, 커밋 `92749c8` | 통과(2026-11-12). Windows `ALL PASSED (all)`, Ubuntu `ALL PASSED`. 두 보고서에서 HELP-001~018과 DASH-064가 `통과`다 | [개발 환경·검증 4.6절](set-up-and-verify.md#46-운영-도움말-판정표) |
 | 화면 캡처 | 3.4절 2·3단계 기대 결과 | 3.4절. WSL2 Ubuntu 24.04.4, `TMPDIR` 없음 | 통과(2026-11-12). 시험 1개 통과, 두 책에 PNG 여섯 장씩. 열두 장 모두 열어 확인했다. 보이는 값은 루프백 주소, 시험 계정 `alice`, `/tmp/vnc-relay-dashboard-live-…` 시험 경로뿐이다 | `docs/help/*/src/images/`. 로컬 묶음 그림 `target/help-shots/captures-{ko,en}.png` |
 | 시안 대조 | [4.1절](#41-시안-대조) | 4.1절 | 통과. 고친 차이 1건, 유지한 차이 4건 | 4.1절 |
-| 게시 | 3.5절 3~5단계 기대 결과 | 3.5절 | 미실행 | 이 표 |
+| 게시 | 3.5절 1~5단계 기대 결과 | 3.5절. Pages를 켜고 커밋 `92749c8`을 `main`에 push했다 | 통과(2026-11-12). 1단계 응답의 `build_type`이 `workflow`, `html_url`이 Pages 주소다. `help` 실행 43131018701은 `success`다: `build`(22초)에서 해시 `OK`와 `help-site: 통과 (target/help-site)`, `deploy`(8초) 성공. 루트는 200과 HLP-002이며, 브라우저(영어)로 열면 `/vnc-relay/en/`로 이동한다. `ko/`·`en/`·장 페이지·`assets/`는 200, 없는 경로는 404와 HLP-003이다. 게시된 한국어 책에서 "ticket 공개 키" 검색이 17건을 보였고 콘솔 오류는 없었다. `homepageUrl`이 Pages 주소다 | 이 표 |
 
 ### 4.1 시안 대조
 
