@@ -58,6 +58,8 @@ noVNC 클라이언트는 포함하지 않는다. noVNC는 외부 클라이언트
 
 Windows PowerShell에서는 `./vnc-relay`를 `.\vnc-relay.exe`로, `curl`을 `curl.exe`로 바꾼다.
 
+운영 로그를 터미널(표준 출력)에서 보려면 서버를 시작하기 전에 `relay.toml`의 `[log]`에서 `output`을 `"stdout"`으로 바꾼다.
+
 ## 연결 구성 예
 
 Viewer와 Server는 서로 직접 연결하지 않는다. 둘 다 vnc-relay에 접속하고, vnc-relay가 같은 중계 ID로 들어온 둘을 짝지어 중계한다(Mode II). 어느 쪽이 먼저 접속해도 된다.
