@@ -12,9 +12,9 @@ on:
 permissions:
   contents: read
 
-# Runs of the same branch or pull request wait for each other, so builds and
-# publishes of main finish in push order. A newer run replaces a queued run;
-# a running publish is never cancelled.
+# One concurrency group per branch or pull request: its runs go one at a
+# time. A newer run replaces a waiting one, and a running publish is never
+# cancelled, so main publishes in the order its runs joined the group.
 concurrency:
   group: help-${{ github.ref }}
   cancel-in-progress: false

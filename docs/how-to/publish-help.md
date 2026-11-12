@@ -188,7 +188,7 @@ cargo test --test help_site
    | `build` | PR, `main` push, 수동 실행 | mdBook 0.5.4를 내려받아 2.1절 SHA-256으로 확인한다. `rustup toolchain install` 뒤 `cargo xtask help-site`를 실행한다. `main`이면 `target/help-site/`를 Pages 산출물로 올린다 |
    | `deploy` | `main` push와 `main`의 수동 실행 | 산출물을 환경 `github-pages`에 게시한다 |
 
-   같은 브랜치나 같은 PR의 `help` 실행은 차례로 진행한다. 진행 중인 실행은 취소하지 않고, 기다리던 실행은 더 새 실행으로 바뀐다. 그래서 `main`은 push 순서대로 게시되고, 마지막에는 가장 새 커밋의 사이트가 남는다(이 문서의 판단, 사용자 결정 없음).
+   워크플로 `help`는 ref(브랜치나 PR)마다 동시 실행 그룹 하나를 쓴다. 그래서 같은 ref의 실행은 한 번에 하나만 진행한다. 진행 중인 실행은 취소하지 않고, 기다리던 실행은 더 새 실행으로 바뀐다. `main`에는 실행이 그룹에서 기다리기 시작한 순서대로 게시된다(이 문서의 판단, 사용자 결정 없음). 거의 같은 시각에 들어온 실행의 순서는 GitHub가 보장하지 않는다([GitHub 동시 실행 문서](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/control-workflow-concurrency)).
 
 3. 실행 결과를 확인한다.
 
@@ -224,10 +224,11 @@ cargo test --test help_site
 | Windows 빌드와 검사 | 3.1절 기대 결과 | 3.1절. Windows 11 Pro 10.0.26200 x64, `MDBOOK`에 mdBook 0.5.4 경로 | 통과(2026-11-12). 종료 코드 0, 마지막 줄 `help-site: 통과 (target/help-site)` | 이 표 |
 | Ubuntu 빌드와 검사 | 3.1절 기대 결과 | 3.1절. WSL2 Ubuntu, `MDBOOK=$HOME/tools/mdbook-0.5.4/mdbook`, `CARGO_TARGET_DIR`은 Linux 홈 아래 | 통과(2026-11-12). 종료 코드 0, 마지막 줄 `help-site: 통과 (…/help-site)`. 괄호 안은 `CARGO_TARGET_DIR` 아래 경로다 | 이 표 |
 | Windows 브라우저 시험 | 3.3절 기대 결과 | 3.3절. Windows 11 Pro 10.0.26200 x64, Chrome | 통과(2026-11-12). 18개 통과, 실패 0 | 이 표 |
-| 두 OS 전체 완료 검증 | [개발 환경·검증 3.4절](set-up-and-verify.md#34-전체-완료-검증) 기대 결과. 도움말 시험 18개 포함 | 같은 절 6단계, 커밋 `92749c8` | 통과(2026-11-12). Windows `ALL PASSED (all)`, Ubuntu `ALL PASSED`. 두 보고서에서 HELP-001~018과 DASH-064가 `통과`다 | [개발 환경·검증 4.6절](set-up-and-verify.md#46-운영-도움말-판정표) |
+| 두 OS 전체 완료 검증 | [개발 환경·검증 3.4절](set-up-and-verify.md#34-전체-완료-검증) 기대 결과. 도움말 시험 18개 포함 | 같은 절 6단계, 커밋 `92749c8`과 후속 수정 커밋 `8f99434` | 통과(2026-11-12). 두 커밋 모두 Windows `ALL PASSED (all)`, Ubuntu `ALL PASSED`. 두 커밋의 보고서에서 HELP-001~018과 DASH-064가 `통과`다 | [개발 환경·검증 4.6절](set-up-and-verify.md#46-운영-도움말-판정표) |
 | 화면 캡처 | 3.4절 2·3단계 기대 결과 | 3.4절. WSL2 Ubuntu 24.04.4, `TMPDIR` 없음 | 통과(2026-11-12). 시험 1개 통과, 두 책에 PNG 여섯 장씩. 열두 장 모두 열어 확인했다. 보이는 값은 루프백 주소, 시험 계정 `alice`, `/tmp/vnc-relay-dashboard-live-…` 시험 경로뿐이다 | `docs/help/*/src/images/`. 로컬 묶음 그림 `target/help-shots/captures-{ko,en}.png` |
 | 시안 대조 | [4.1절](#41-시안-대조) | 4.1절 | 통과. 고친 차이 1건, 유지한 차이 4건 | 4.1절 |
 | 게시 | 3.5절 1~5단계 기대 결과 | 3.5절. Pages를 켜고 커밋 `92749c8`을 `main`에 push했다 | 통과(2026-11-12). 1단계 응답의 `build_type`이 `workflow`, `html_url`이 Pages 주소다. `help` 실행 43131018701은 `success`다: `build`(22초)에서 해시 `OK`와 `help-site: 통과 (target/help-site)`, `deploy`(8초) 성공. 루트는 200과 HLP-002이며, 브라우저(영어)로 열면 `/vnc-relay/en/`로 이동한다. `ko/`·`en/`·장 페이지·`assets/`는 200, 없는 경로는 404와 HLP-003이다. 게시된 한국어 책에서 "ticket 공개 키" 검색이 17건을 보였고 콘솔 오류는 없었다. `homepageUrl`이 Pages 주소다 | 이 표 |
+| 게시 순서 | 3.5절 2단계의 실행 순서 설명 | 커밋 `8f99434`를 push한 뒤 `main`에서 `gh workflow run help.yml --ref main`을 연달아 세 번 실행했다 | 통과(2026-11-12). 첫 실행 43142798327이 도는 동안 셋째 실행 43142807912는 `pending`이었다. 둘째 실행 43142803199는 작업을 하나도 시작하지 않은 채 셋째가 들어온 뒤 `cancelled`가 되었다(생성 02:38:23Z, 취소 02:38:28Z). 셋째의 `build`는 첫 실행이 끝난 뒤(02:38:59Z) 시작했다. 첫째와 셋째는 `success`이며, 진행 중에 취소된 실행은 없다 | GitHub Actions 실행 기록 |
 
 ### 4.1 시안 대조
 

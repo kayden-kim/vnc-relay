@@ -615,6 +615,25 @@ WS-025는 두 게이트에서 `미실행`(무시 표시 시험)이며 4.3절 표
 - pull request에서 `help` 워크플로가 빌드·검사만 하고 게시하지 않는지 확인하는 일. 아직 pull request가 없다.
 - [도움말 게시 how-to 6절](publish-help.md#6-롤백-또는-복구)의 Pages 끄기. 게시 중인 사이트를 내리는 일이라 실행하지 않았다.
 
+#### 후속 수정 확인(커밋 `8f99434`)
+
+결론: 검토 의견에 따라 고친 커밋 `8f99434`의 두 OS 전체 게이트에서 `오류`와 `실패`는 0건이다. HELP-001~018과 DASH-064는 두 OS 보고서에서 모두 `통과`다. 시나리오는 285건 그대로이고, 상태별 건수와 `통과`가 아닌 시나리오의 OS별 상태도 위와 같다. 그래서 위 판정과 AC 대조는 바뀌지 않는다.
+
+| 고친 내용 | 관련 시나리오·AC | 확인 |
+| --- | --- | --- |
+| 워크플로 `help`의 동시 실행 그룹을 작업 `deploy`에서 실행 전체로 옮기고 ref마다 나눴다. 같은 ref의 실행은 하나씩 진행한다. 기다리던 실행은 더 새 실행으로 바뀌고, 진행 중인 실행은 취소하지 않는다 | AC-55 | 아래 게시 행과 [도움말 게시 how-to 4절](publish-help.md#4-검증)의 게시 순서 행 |
+| `cargo xtask help-site` 검사가 빈 주소(공백뿐인 값 포함)를 문제로 보고한다 | HELP-016 | xtask 단위 시험 `empty_addresses_are_reported`, 두 게이트의 HELP-016 |
+| HELP-007 시험이 제목에만 있는 단어(`엔드포인트`·`endpoints`)의 결과와 본문 없는 절의 결과를 확인한다 | HELP-007 | 두 게이트 |
+| HELP-010 시험이 `ko/configure.html`의 탭 순회가 코드 복사 단추와 이전·다음 장 링크에 닿는지 확인한다 | HELP-010 | 두 게이트 |
+
+| 확인 대상 | 기준 | 환경 | 결과 | 증거 |
+| --- | --- | --- | --- | --- |
+| Windows 최종 | `오류`·`실패` 0건 | 위 Windows 최종 행과 같음 | 통과. `ALL PASSED (all)`. 285건: 통과 268, 부분 12, 실패 0, 미실행 3, 미연결 2, 오류 0. 작업 트리는 깨끗했다. deny 단계 종료 코드 0 | `target/scenario-report.md`(`8f99434`, 2026-11-12T02:01:59Z) |
+| Ubuntu 최종 | 같음 | 위 Ubuntu 최종 행과 같음 | 통과. `ALL PASSED`. 285건: 통과 271, 부분 8, 실패 0, 미실행 4, 미연결 2, 오류 0. `+ 미커밋 변경`은 줄 끝 차이다(`git diff --ignore-cr-at-eol` 출력 없음). deny 단계 종료 코드 0 | `~/vnc-relay-target/scenario-report.md`(`8f99434`, 2026-11-12T02:36:53Z) |
+| 배포 묶음 | [3.3절](#33-변경-범위별-검증)의 워크플로 행 | Windows 11 Pro 10.0.26200 x64, Ubuntu 24.04.4 LTS x64(WSL2) | 통과. 두 OS에서 종료 코드 0이고 `notices --check: 통과`, `package:`·`sha256:` 줄이 나왔다(`vnc-relay-2026.11.2-windows-x64.zip`, `vnc-relay-2026.11.2-linux-x64.tar.gz`) | 이 표 |
+| GitHub Actions `ci` | 결론 `success` | `ci` 실행 43142697338(`windows-2025`·`ubuntu-24.04`) | 통과. 두 `check` 작업이 형식·clippy·xtask 단위 시험·`layers`·`tokens --check`·`deny`·`cargo xtask package`를 마쳤다. `release`는 태그 push가 아니어서 건너뛰었다 | GitHub Actions 실행 기록 |
+| 게시 | AC-55 | GitHub Actions `help` 실행 43142697359(`ubuntu-24.04`) | 통과. mdBook 자산 해시 `OK`, `help-site: 통과 (target/help-site)`, `build`(23초) 뒤 `deploy`(10초) 성공. 게시 주소의 루트·`ko/`·`en/`·장 페이지·글꼴 라이선스는 200, `/vnc-relay/ko`는 `/vnc-relay/ko/`로 301, 없는 경로는 404와 HLP-003이다 | [도움말 게시 how-to 4절](publish-help.md#4-검증) |
+
 ## 5. 중단 조건
 
 - 1단계 Build Tools 설치가 1602로 끝나면 이후 단계를 진행하지 않는다. UAC를 승인할 수 있을 때 다시 실행한다.
