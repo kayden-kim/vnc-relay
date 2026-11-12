@@ -151,6 +151,6 @@ WS와 WSS는 같은 경로를 쓴다. 쿼리는 대상이나 중계 ID를 선택
 - 계약: [설정](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/config-v4.md), [CLI·계정 파일](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/cli-v1.md), [WebSocket](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/websocket-relay-v2.md), [운영 정보](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/ops-info-v2.md), [관리 API](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/management-api-v1.md), [Repeater 초기 교환](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/repeater-handshake-v1.md).
 - 호환성 근거: [Repeater 호환성 검증 기록](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/repeater-compat-record.md).
 - 운영 절차: [수동 운영 안내](https://github.com/kayden-kim/vnc-relay/blob/main/docs/how-to/operate-relay.md), [릴리스 안내](https://github.com/kayden-kim/vnc-relay/blob/main/docs/how-to/release.md), [소스 빌드·검증](https://github.com/kayden-kim/vnc-relay/blob/main/docs/how-to/set-up-and-verify.md), [UltraVNC 수동 확인](https://github.com/kayden-kim/vnc-relay/blob/main/docs/how-to/verify-ultravnc-manually.md).
-- 설정 예시: [examples/relay.toml](https://github.com/kayden-kim/vnc-relay/blob/main/examples/relay.toml).
+- 설정 예시: [examples/relay.toml](https://github.com/kayden-kim/vnc-relay/blob/main/examples/relay.toml). 모든 설정 키를 담는다.
 - 용어: [GLOSSARY.md](https://github.com/kayden-kim/vnc-relay/blob/main/GLOSSARY.md).
 - 배포 묶음: [GitHub Releases](https://github.com/kayden-kim/vnc-relay/releases).

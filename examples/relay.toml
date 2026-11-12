@@ -1,9 +1,27 @@
-# Local Mode II example. Relative paths start at this file's directory.
+# vnc-relay configuration reference. Every configuration key appears once.
+# Active lines are the values of this example: a local Mode II relay that
+# accepts TCP connections on loopback only, with loopback management HTTP.
+# A "# key = value" line shows the default value. Keys without a default show
+# a sample value. To set a key, remove "# " from its line.
+# Relative paths start at this file's directory.
+# Rules for each key: docs/contracts/config-v4.md. Its section 1.8 lists the
+# keys that apply without a restart.
 # Create the account file with the admin CLI before starting the server.
 [admin]
 accounts_file = "admin-accounts.toml"
 
+# Argon2id cost for new password hashes.
+[admin.argon2]
+# Memory in KiB, 19456-1048576.
+# memory_kib = 19456
+# Iterations, 2-10.
+# iterations = 2
+# Parallel lanes, 1-16.
+# parallelism = 1
+
 # Accept only local TCP Viewer connections. Change both listen and allow deliberately.
+# A listen address without a port uses 5901 for tcp_viewer and 5500 for tcp_server.
+# allow takes single IPs, CIDR blocks, and ranges such as "192.0.2.10-192.0.2.20".
 [relay.tcp_viewer]
 enabled = true
 listen = "127.0.0.1:5901"
@@ -16,39 +34,113 @@ listen = "127.0.0.1:5500"
 allow = ["127.0.0.1"]
 
 # Plaintext WebSocket is off. Use it only on protected networks.
+# One listener serves /relay/viewer and /relay/server. It opens when a role is on.
 [relay.ws]
+# Address with a port. Required when a role is on.
+# listen = "127.0.0.1:15902"
+# Proxy addresses whose X-Forwarded-For header is read. [] reads none.
 trusted_proxies = []
 
 [relay.ws.viewer]
 enabled = false
+# Source IPs. Required when the role is on. [] rejects all.
+# allow = ["127.0.0.1"]
+# Origins such as "https://viewer.example". [] rejects requests that send Origin.
+# allowed_origins = []
 
 [relay.ws.server]
 enabled = false
+# allow = ["127.0.0.1"]
+# allowed_origins = []
 
 # For public WebSocket access, enable a WSS role and provide certificate files.
 [relay.wss]
 # listen = "127.0.0.1:15903"
 trusted_proxies = []
+# PEM certificate chain and private key. Required when a role is on.
 # cert_file = "certs/relay.pem"
 # key_file = "certs/relay.key"
 
 [relay.wss.viewer]
 enabled = false
 # allow = ["127.0.0.1"]
-# allowed_origins = ["https://viewer.example"]
+# allowed_origins = []
 
 [relay.wss.server]
 enabled = false
 # allow = ["127.0.0.1"]
 # allowed_origins = []
 
+# Access tickets for WS and WSS upgrades are off. TCP entry points never use them.
+# When a role is on, issuer, relay_host, and public_keys_file are required.
+[relay.ticket.viewer]
+enabled = false
+# Expected ticket issuer, 1-256 bytes.
+# issuer = "issuer.example/prod"
+# Expected relay host in the ticket, 1-256 bytes.
+# relay_host = "relay.example"
+# JWKS file with the issuer's public keys.
+# public_keys_file = "keys/viewer-ticket.jwks"
+# Longest accepted ticket lifetime in seconds, 10-600.
+# max_lifetime_secs = 60
+
+[relay.ticket.server]
+enabled = false
+# issuer = "issuer.example/prod"
+# relay_host = "relay.example"
+# Use keys that differ from the Viewer keys.
+# public_keys_file = "keys/server-ticket.jwks"
+# max_lifetime_secs = 60
+
 # Mode I target connections are off.
 [mode1]
 enabled = false
+# Allowed "target:port" items. Required when Mode I is on. [] rejects all targets.
+# allow_targets = ["127.0.0.1:5900"]
 
 # Match a Viewer and a Server with the same relay ID.
 [mode2]
 enabled = true
+
+[limits]
+# Relay connection sockets (L), 2-65535.
+# relay_connections = 1000
+# Management and status connection sockets (Lm), 1-1024.
+# admin_connections = 64
+# Mode II waiting connections (Lw), 1 to relay_connections.
+# waiting = 200
+# Relay buffer per connection in bytes (B), 16384-4194304.
+# buffer_bytes = 131072
+# WebSocket message size in bytes (M), 65536-16777216.
+# ws_message_bytes = 1048576
+
+# Time limits in seconds.
+[timeouts]
+# Repeater handshake (H), 1-120.
+# handshake_secs = 10
+# WSS TLS and WS or WSS HTTP upgrade (U), 1-120.
+# tls_upgrade_secs = 10
+# Mode II wait for the peer (W), 10-86400.
+# wait_secs = 3600
+# Mode I target connection (C), 1-120.
+# connect_secs = 10
+# Close exchange after end of stream (E), 1-120.
+# close_secs = 10
+# Grace for active sessions at shutdown (G), 0-600. 0 closes them at once.
+# shutdown_grace_secs = 30
+
+# Dead connection detection. TCP keepalive also covers WS and WSS.
+[keepalive]
+# Idle seconds before the first TCP probe, 10-3600.
+# tcp_idle_secs = 60
+# Seconds between TCP probes, 1-300.
+# tcp_interval_secs = 10
+# Unanswered TCP probes before the connection is dropped, 1-20.
+# tcp_probes = 6
+# WS and WSS ping interval in seconds, 5-300.
+# ws_ping_secs = 30
+# Seconds to wait for a pong, 5-300.
+# ws_pong_timeout_secs = 30
 
 # Plaintext management is allowed only on loopback; login is still required.
 [management]
@@ -56,16 +148,44 @@ listen = "127.0.0.1:18080"
 # For HTTPS, provide both files. Public management must use HTTPS.
 # cert_file = "certs/admin.pem"
 # key_file = "certs/admin.key"
+# Editing settings from the dashboard and management API is off.
+config_edit = false
+
+# Failed sign-in limits.
+[management.login_limit]
+# Failures per account within window_secs, 1-100.
+# per_account = 5
+# Failures per source IP within window_secs, 1-100.
+# per_source = 20
+# Counting window in seconds, 60-86400.
+# window_secs = 900
+# Sign-in block after a limit is reached, in seconds, 60-86400.
+# lockout_secs = 900
+
+# Administrator session limits in seconds. idle_secs must not exceed max_lifetime_secs.
+[management.session]
+# Idle expiry, 300-28800.
+# idle_secs = 1800
+# Absolute lifetime, 3600-259200.
+# max_lifetime_secs = 43200
+
+[dashboard]
+# Polling interval in seconds (P), 1-60.
+# poll_secs = 2
+# Polling request timeout in seconds, 1-60.
+# query_timeout_secs = 5
+
+# Recently closed sessions kept in memory, 0-10000. 0 keeps none.
+[recent_closed]
+max_entries = 100
+
+# Recent log events kept in memory for the dashboard, 0-10000. 0 keeps none.
+[recent_logs]
+max_entries = 1000
 
 # Unauthenticated health endpoints are separate from management.
 [status]
 listen = "127.0.0.1:18081"
-
-[recent_closed]
-max_entries = 100
-
-[recent_logs]
-max_entries = 1000
 
 # Append one JSON event per line. The parent directory must already exist.
 # To write the log to standard output, set output = "stdout" or omit output.

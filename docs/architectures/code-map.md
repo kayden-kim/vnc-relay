@@ -210,7 +210,7 @@ flowchart LR
 | `crates/adapters/tests/tls.rs`; `crates/adapters/tests/websocket.rs` | TLS: operations.md OPS-036, websocket.md WS-013. WS 진입점: websocket.md 업그레이드·Origin·IP·TLS, operations.md U·종료·TLS·허용 목록, relay.md RLY-005 |
 | `crates/adapters/tests/websocket_relay.rs`; `crates/adapters/tests/websocket_scenarios.rs` | websocket.md: 실제 중계·M/B·제어·Close·Kw·인증 경계. relay.md: 초기 교환·중계·half-close·E·모드. operations.md: OPS-006·023 |
 | `tests/log_reopen.rs`; `tests/common/log_reopen.rs`; `tests/windows_console.rs`; `crates/adapters/src/file_watch/reopen_tests.rs` | operations.md OPS-045: 실제 바이너리의 회전 전후 줄 보존·첫 실패 진단·복구·정상 종료, 주입한 알림·시계의 Dp·실패 연속 구간 |
-| `examples/relay.toml`; `tests/distribution.rs`; `tests/common/distribution.rs`; `tests/windows_console.rs` | operations.md OPS-019·OPS-031: 실제 설정 로더의 비밀 없는 예시, Linux PTY·Windows ConPTY의 계정 준비→시작→중계→재로드→종료 |
+| `examples/relay.toml`; `tests/distribution.rs`; `tests/common/distribution.rs`; `tests/windows_console.rs` | operations.md OPS-019·OPS-031: 실제 설정 로더의 비밀 없는 예시, 예시의 모든 키·기본값 주석과 `config_items` 목록 대조, Linux PTY·Windows ConPTY의 계정 준비→시작→중계→재로드→종료 |
 | `tests/performance.rs` | operations.md OPS-017·OPS-018(`#[ignore]`, 작업 5.4): 실제 실행파일의 TCP·WS·WSS 활성 100세션 측정, 느린 수신자 부하와 새 서버의 예열·접속·종료 수명 반복의 자원 판정. 기준은 운영 스펙 6절(Q98·Q118~Q127·Q148)이다. Windows 전용 `handle_snapshot` 모듈은 중계 프로세스의 핸들 목록에서 Event 핸들을 따로 센다(`unsafe` 예외, Q149). |
 
 ## 3. 진입점

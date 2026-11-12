@@ -82,7 +82,7 @@ Windows 11 x64와 Ubuntu 24.04 LTS x64에서 release 실행파일을 만들고 �
 
 2. `relay.toml`을 대상 배치에 맞게 편집한다.
 
-   로컬 검증에서는 예시 그대로 쓴다. 공개 배치에서는 리스너 주소와 역할별 출발지 `allow`를 의도한 값으로 정한다. `[]`는 모두 거절이며 켠 역할의 목록 생략은 시작 실패다. `0.0.0.0/0`·`::/0`는 전체 허용과 경고를 뜻한다. Mode I을 켜면 `mode1.allow_targets`도 명시해야 한다. WSS의 공통 `listen`·`cert_file`·`key_file`은 `[relay.wss]`에 둔다. `enabled`·`allow`·`allowed_origins`는 `[relay.wss.viewer]`와 `[relay.wss.server]`에 둔다. 브라우저 Origin은 IP 제한을 대신하지 않는다.
+   예시는 모든 설정 키를 담는다. 쓰지 않는 키는 `# 키 = 값` 주석 줄로 기본값이나 예시 값을 보여 준다. 그 키를 설정하려면 줄 앞의 `#`과 공백을 지우고 값을 정한다. 로컬 검증에서는 예시 그대로 쓴다. 공개 배치에서는 리스너 주소와 역할별 출발지 `allow`를 의도한 값으로 정한다. `[]`는 모두 거절이며 켠 역할의 목록 생략은 시작 실패다. `0.0.0.0/0`·`::/0`는 전체 허용과 경고를 뜻한다. Mode I을 켜면 `mode1.allow_targets`도 명시해야 한다. WSS의 공통 `listen`·`cert_file`·`key_file`은 `[relay.wss]`에 둔다. `enabled`·`allow`·`allowed_origins`는 `[relay.wss.viewer]`와 `[relay.wss.server]`에 둔다. 브라우저 Origin은 IP 제한을 대신하지 않는다.
 
 3. 대화형 터미널에서 관리자 계정을 추가한다.
 

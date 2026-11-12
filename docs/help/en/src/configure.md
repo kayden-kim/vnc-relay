@@ -8,7 +8,7 @@ Settings come from one UTF-8 TOML file. Select it with `--config` when starting 
 
 Relative paths start at the configuration file's directory, not the working directory. On Windows, `/` or TOML single-quoted strings are recommended for paths. Write times as integer seconds and sizes as integer bytes. Unknown keys and incorrect types are errors.
 
-The [distribution example](https://github.com/kayden-kim/vnc-relay/blob/main/examples/relay.toml) is a starting point. The examples below are excerpts, not complete files. For required keys, defaults, and ranges, use the [configuration contract, §§1.1–1.2](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/config-v4.md).
+The [distribution example](https://github.com/kayden-kim/vnc-relay/blob/main/examples/relay.toml) is a starting point. It lists every configuration key. Keys it does not use appear as `# key = value` comment lines with the default or a sample value. To set such a key, delete the leading `#` and space, then choose the value. The examples below are excerpts, not complete files. For required keys, defaults, and ranges, use the [configuration contract, §§1.1–1.2](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/config-v4.md).
 
 | Table | Controls |
 | --- | --- |

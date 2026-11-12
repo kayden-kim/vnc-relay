@@ -134,7 +134,7 @@ noVNC는 `repeaterID` 값 앞에 `ID:`를 붙여 보낸다. 같은 ID를 다른 
 - WebSocket으로 접속하는 Server: `[relay.wss.server]`에 `enabled = true`와 `allow = ["192.0.2.30"]`을 넣는다. Server는 `wss://relay.example.test:8443/relay/server`로 접속하고, 이 경로는 Mode II만 받는다.
 - Mode I(Viewer가 대상을 지정): `[mode1]`에 `enabled = true`와 `allow_targets = ["192.0.2.30:5900"]`을 넣는다. Viewer가 `vncviewer.exe -connect 192.0.2.30::5900 -proxy 192.0.2.20:5901`로 접속하면 vnc-relay가 그 대상에 연결한다. 이때 Server는 vnc-relay에 접속하지 않고 대상 포트에서 기다린다.
 
-설정 키 전체는 [설정 계약 v4](docs/contracts/config-v4.md)에, 운영 배치 절차는 [실행파일을 묶고 수동 운영하는 방법](docs/how-to/operate-relay.md)에 있다.
+[예시 설정](examples/relay.toml)은 모든 설정 키를 담는다. 쓰지 않는 키는 주석 줄로 기본값이나 예시 값을 보여 준다. 키별 규칙은 [설정 계약 v4](docs/contracts/config-v4.md)에, 운영 배치 절차는 [실행파일을 묶고 수동 운영하는 방법](docs/how-to/operate-relay.md)에 있다.
 
 ## 명령
 
@@ -175,7 +175,7 @@ cargo deny check licenses
 | `web/dashboard/` | 정적 HTML·CSS·JS 대시보드. 빌드 단계와 JS 외부 의존성 없음 |
 | `xtask/` | 시나리오 보고·레이어 검사·토큰 생성·배포 고지 생성 도구 |
 | `tests/` | 실행파일 수준의 통합·시스템 시험 |
-| `examples/` | 비밀 값 없는 예시 설정 |
+| `examples/` | 모든 설정 키를 담은 비밀 값 없는 예시 설정 |
 | `docs/` | 요구사항·스펙·계약·설계·절차 문서 |
 
 코드 위치와 호출 흐름은 [코드 지도](docs/architectures/code-map.md)에 있다.

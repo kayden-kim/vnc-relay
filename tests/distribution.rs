@@ -1,9 +1,12 @@
 //! Distribution example contract and Linux real-binary operations evidence.
 
+use std::collections::BTreeSet;
 use std::fs;
 use std::path::Path;
 
-use vnc_relay_adapters::config_file::load;
+use vnc_relay_adapters::config_file::{load, parse};
+use vnc_relay_app::management::config::{ConfigItem, ConfigValue, config_items};
+use vnc_relay_app::reload::ConfigPresence;
 use vnc_relay_app::settings::LogOutput;
 
 #[cfg(target_os = "linux")]
@@ -59,6 +62,83 @@ fn repository_example_loads_without_secrets() {
             assert!(!key.contains("hash"), "hash key in example");
         }
     }
+}
+
+/// spec: operations.md:OPS-031 partial
+#[test]
+fn repository_example_lists_every_key_once_with_its_default() {
+    let example = Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/relay.toml");
+    let text = fs::read_to_string(&example).unwrap_or_else(|e| panic!("read exact example: {e}"));
+    let base = example
+        .parent()
+        .unwrap_or_else(|| panic!("example has no parent"));
+    let mut table = "";
+    let mut listed = Vec::new();
+    for line in text.lines() {
+        if let Some(name) = line
+            .strip_prefix('[')
+            .and_then(|rest| rest.strip_suffix(']'))
+        {
+            table = name;
+        } else if let Some(key) = setting_key(line) {
+            listed.push((format!("{table}.{key}"), false));
+        } else if let Some(key) = line.strip_prefix("# ").and_then(setting_key) {
+            listed.push((format!("{table}.{key}"), true));
+        }
+    }
+    let mut keys = BTreeSet::new();
+    for (key, _) in &listed {
+        assert!(keys.insert(key.clone()), "{key} is listed twice");
+    }
+    // Presence of every key makes list defaults visible on disabled roles too.
+    let presence = ConfigPresence {
+        keys: keys.clone(),
+        ..ConfigPresence::default()
+    };
+    let example_settings =
+        parse(&text, base).unwrap_or_else(|e| panic!("parse exact example: {e:?}"));
+    let defaults = config_items(&example_settings, &presence);
+    let catalog: BTreeSet<_> = defaults.iter().map(|item| item.key.clone()).collect();
+    assert_eq!(keys, catalog, "example keys differ from config-v4 1.2");
+    let every_key_set = text
+        .lines()
+        .map(|line| {
+            line.strip_prefix("# ")
+                .filter(|rest| setting_key(rest).is_some())
+                .unwrap_or(line)
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    let set_settings = parse(&every_key_set, base)
+        .unwrap_or_else(|e| panic!("parse example with every comment removed: {e:?}"));
+    let set = config_items(&set_settings, &presence);
+    for (key, commented) in &listed {
+        let default = value(&defaults, key);
+        if *commented && *default != ConfigValue::Null {
+            assert_eq!(
+                value(&set, key),
+                default,
+                "{key} comment is not the default"
+            );
+        }
+    }
+}
+
+/// The key of a `key = value` line. Tables, prose comments, and blanks have none.
+fn setting_key(line: &str) -> Option<&str> {
+    let (key, _) = line.split_once(" = ")?;
+    let mut chars = key.chars();
+    (chars.next().is_some_and(|c| c.is_ascii_lowercase())
+        && chars.all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_'))
+    .then_some(key)
+}
+
+fn value<'a>(items: &'a [ConfigItem], key: &str) -> &'a ConfigValue {
+    &items
+        .iter()
+        .find(|item| item.key == key)
+        .unwrap_or_else(|| panic!("no setting {key}"))
+        .value
 }
 
 #[cfg(target_os = "linux")]

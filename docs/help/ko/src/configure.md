@@ -8,7 +8,7 @@
 
 상대 경로는 실행 위치가 아니라 설정 파일이 있는 디렉터리를 기준으로 한다. Windows 경로는 `/` 또는 TOML 작은따옴표 문자열을 쓰기를 권장한다. 시간은 정수 초, 크기는 정수 바이트로 적는다. 알 수 없는 키나 잘못된 자료형은 오류다.
 
-[배포 예시](https://github.com/kayden-kim/vnc-relay/blob/main/examples/relay.toml)를 출발점으로 쓸 수 있다. 아래 예시는 필요한 부분만 보여 준다. 완전한 파일을 대신하지 않는다. 키별 필수 여부·기본값·범위는 [설정 계약 1.1~1.2절](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/config-v4.md)을 따른다.
+[배포 예시](https://github.com/kayden-kim/vnc-relay/blob/main/examples/relay.toml)를 출발점으로 쓸 수 있다. 배포 예시는 모든 설정 키를 담는다. 쓰지 않는 키는 `# 키 = 값` 주석 줄로 기본값이나 예시 값을 보여 준다. 그 키를 설정하려면 줄 앞의 `#`과 공백을 지우고 값을 정한다. 아래 예시는 필요한 부분만 보여 준다. 완전한 파일을 대신하지 않는다. 키별 필수 여부·기본값·범위는 [설정 계약 1.1~1.2절](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/config-v4.md)을 따른다.
 
 | 테이블 | 제어하는 내용 |
 | --- | --- |
