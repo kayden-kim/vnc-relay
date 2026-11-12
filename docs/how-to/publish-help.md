@@ -117,6 +117,7 @@ Ubuntu(bash):
    | `en/dashboard.html: 그림 파일이 없다: images/login.png` | 3.4절로 화면 캡처를 만든다 |
    | `ko/reference.html: 허용 목록 밖 외부 링크: https://…` | [도움말 작성 규칙의 링크](../help/AGENTS.md#링크)를 따른다 |
    | `ko/index.html: 저장소에 없는 경로: https://github.com/kayden-kim/vnc-relay/blob/main/docs/…` | `blob/main/` 링크가 가리키는 파일 이름을 고친다 |
+   | `ko/dashboard.html: 빈 주소: <img>` | 링크나 그림의 주소가 비어 있다. 원본의 `[글자]()`·`![대체 텍스트]()`에 주소를 넣는다 |
 
 ### 3.2 로컬 미리보기
 
@@ -128,7 +129,7 @@ Ubuntu(bash):
 
    기대 결과: `도움말: http://127.0.0.1:8090/vnc-relay/`와 `종료하려면 Ctrl+C를 누른다.`가 출력된다.
 
-2. 출력된 주소를 브라우저로 연다. 서버는 GitHub Pages처럼 `/vnc-relay/` 아래에 사이트를 두고, 없는 경로에는 HTTP 404와 HLP-003을 준다.
+2. 출력된 주소를 브라우저로 연다. 서버는 GitHub Pages처럼 `/vnc-relay/` 아래에 사이트를 두고, 없는 경로에는 HTTP 404와 HLP-003을 준다. 서버가 도는 동안 3.1절이나 3.3절을 실행하면 사이트를 지우고 다시 만든다. 그동안에는 페이지가 열리지 않을 수 있다.
 3. 확인을 마치면 Ctrl+C로 서버를 멈춘다.
 
 ### 3.3 브라우저 시험
@@ -186,6 +187,8 @@ cargo test --test help_site
    | --- | --- | --- |
    | `build` | PR, `main` push, 수동 실행 | mdBook 0.5.4를 내려받아 2.1절 SHA-256으로 확인한다. `rustup toolchain install` 뒤 `cargo xtask help-site`를 실행한다. `main`이면 `target/help-site/`를 Pages 산출물로 올린다 |
    | `deploy` | `main` push와 `main`의 수동 실행 | 산출물을 환경 `github-pages`에 게시한다 |
+
+   같은 브랜치나 같은 PR의 `help` 실행은 차례로 진행한다. 진행 중인 실행은 취소하지 않고, 기다리던 실행은 더 새 실행으로 바뀐다. 그래서 `main`은 push 순서대로 게시되고, 마지막에는 가장 새 커밋의 사이트가 남는다(이 문서의 판단, 사용자 결정 없음).
 
 3. 실행 결과를 확인한다.
 

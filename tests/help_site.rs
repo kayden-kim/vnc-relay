@@ -376,9 +376,24 @@ fn mobile_contents_open_below_the_top_bar_and_push_the_text_down() {
 /// spec: help-site.md:HELP-007
 #[test]
 fn search_finds_sections_with_every_word_and_opens_the_first_result() {
-    for (copy, word, both) in [
-        (&KO, "인증서", ["relay.toml", "계정"]),
-        (&EN, "certificate", ["relay.toml", "account"]),
+    // `bodyless` is the one section of each book whose heading comes right before
+    // a subsection. `heading_only` is a word in one section's heading that its
+    // body does not contain (search rules: result items).
+    for (copy, word, both, bodyless, heading_only) in [
+        (
+            &KO,
+            "인증서",
+            ["relay.toml", "계정"],
+            "운영 › 인증서와 공개 키 파일 교체",
+            ("엔드포인트", "참조 › HTTP 엔드포인트"),
+        ),
+        (
+            &EN,
+            "certificate",
+            ["relay.toml", "account"],
+            "Operations › Replace certificate and public key files",
+            ("endpoints", "Reference › HTTP endpoints"),
+        ),
     ] {
         browse(
             &format!("search-{}", copy.language),
@@ -395,14 +410,47 @@ fn search_finds_sections_with_every_word_and_opens_the_first_result() {
                         item.marks.iter().any(|mark| mark.to_lowercase() == word),
                         "{word}: result without a marked match: {item:?}"
                     );
+                    assert_eq!(
+                        item.excerpt.is_none(),
+                        item.label == bodyless,
+                        "{word}: only the section without body text shows no excerpt: {item:?}"
+                    );
                 }
                 assert!(
                     found.iter().any(|item| item.label.contains(" › ")),
                     "{word}: no chapter › section label: {found:?}"
                 );
                 assert!(
-                    found.iter().any(|item| item.excerpt),
+                    found.iter().any(|item| item.label == bodyless),
+                    "{word}: no result for {bodyless}: {found:?}"
+                );
+                assert!(
+                    found.iter().any(|item| item.excerpt.is_some()),
                     "{word}: no excerpt: {found:?}"
+                );
+
+                // A word only in a heading is marked in the label, and the
+                // excerpt is the unmarked start of the body.
+                let (heading_word, heading_label) = heading_only;
+                let headed = browser.results(copy, heading_word);
+                let item = headed
+                    .iter()
+                    .find(|item| item.label == heading_label)
+                    .unwrap_or_else(|| {
+                        panic!("{heading_word}: no result for {heading_label}: {headed:?}")
+                    });
+                assert!(
+                    item.label_marks
+                        .iter()
+                        .any(|mark| mark.to_lowercase() == heading_word),
+                    "{heading_word}: heading match not marked in the label: {item:?}"
+                );
+                assert!(
+                    item.excerpt
+                        .as_deref()
+                        .is_some_and(|text| !text.is_empty() && !text.starts_with('…'))
+                        && item.excerpt_marks.is_empty(),
+                    "{heading_word}: excerpt must be the unmarked start of the body: {item:?}"
                 );
 
                 let upper = browser.results(copy, "TOML");
@@ -542,6 +590,7 @@ fn keyboard_reaches_every_control_with_a_ring_and_moves_between_chapters() {
         // A fresh page starts the tab order at the top of the document. The walk
         // ends when focus leaves the page or comes back to the first control.
         let mut areas = Vec::new();
+        let mut names = Vec::new();
         for _ in 0..400 {
             browser.press("Tab");
             let focus = browser.focus();
@@ -564,6 +613,7 @@ fn keyboard_reaches_every_control_with_a_ring_and_moves_between_chapters() {
                 );
             }
             areas.push(focus["area"].as_str().unwrap_or("other").to_owned());
+            names.push(focus["name"].as_str().unwrap_or_default().to_owned());
         }
         assert!(areas.len() < 400, "focus never left the page");
         let first = |name: &str| areas.iter().position(|area| area == name);
@@ -572,6 +622,24 @@ fn keyboard_reaches_every_control_with_a_ring_and_moves_between_chapters() {
             first("main").is_some() && last("top") < first("toc") && last("toc") < first("main"),
             "tab order must go top bar, contents, text: {areas:?}"
         );
+        // The walk also reaches the controls inside the text: a code copy button
+        // and both chapter links of the pager.
+        for (control, start) in [
+            (
+                "code copy button",
+                format!("BUTTON.btn btn-outline sm {}", KO.copy),
+            ),
+            (
+                "previous chapter link",
+                "A.help-pager-link prev ".to_owned(),
+            ),
+            ("next chapter link", "A.help-pager-link next ".to_owned()),
+        ] {
+            assert!(
+                names.iter().any(|name| name.starts_with(&start)),
+                "the tab walk never reached the {control}: {names:?}"
+            );
+        }
 
         browser.press("/");
         browser.wait("document.activeElement?.id === 'help-search-input'");
@@ -1038,13 +1106,19 @@ fn narrow_and_zoomed_pages_scroll_only_inside_code_and_tables() {
     });
 }
 
-/// One search result: link, label, and marked words.
+/// One search result: link, label, marked words, and excerpt.
 #[derive(Debug)]
 struct Found {
     href: String,
     label: String,
+    /// Marked words of the label and the excerpt.
     marks: Vec<String>,
-    excerpt: bool,
+    /// Marked words of the label only.
+    label_marks: Vec<String>,
+    /// Excerpt text. `None` when the result shows only its link.
+    excerpt: Option<String>,
+    /// Marked words of the excerpt only.
+    excerpt_marks: Vec<String>,
 }
 
 fn hrefs(found: &[Found]) -> Vec<String> {
@@ -1156,11 +1230,22 @@ impl Browser {
         ));
         let found = self.eval(
             "({ status: document.querySelector('#help-search-status').textContent,
-               items: [...document.querySelectorAll('.help-results li')].map((li) => ({
-                 href: li.querySelector('a').href, label: li.querySelector('a').textContent,
-                 marks: [...li.querySelectorAll('mark')].map((m) => m.textContent),
-                 excerpt: !!li.querySelector('p') })) })",
+               items: [...document.querySelectorAll('.help-results li')].map((li) => {
+                 const link = li.querySelector('a');
+                 const excerpt = li.querySelector('p');
+                 const marks = (node) => node ? [...node.querySelectorAll('mark')].map((m) => m.textContent) : [];
+                 return { href: link.href, label: link.textContent, marks: marks(li),
+                   labelMarks: marks(link), excerpt: excerpt ? excerpt.textContent : null,
+                   excerptMarks: marks(excerpt) }; }) })",
         );
+        let strings = |value: &serde_json::Value| -> Vec<String> {
+            value
+                .as_array()
+                .into_iter()
+                .flatten()
+                .map(|text| text.as_str().unwrap_or_default().to_owned())
+                .collect()
+        };
         let items: Vec<Found> = found["items"]
             .as_array()
             .into_iter()
@@ -1168,13 +1253,10 @@ impl Browser {
             .map(|item| Found {
                 href: item["href"].as_str().unwrap_or_default().to_owned(),
                 label: item["label"].as_str().unwrap_or_default().to_owned(),
-                marks: item["marks"]
-                    .as_array()
-                    .into_iter()
-                    .flatten()
-                    .map(|mark| mark.as_str().unwrap_or_default().to_owned())
-                    .collect(),
-                excerpt: item["excerpt"] == json!(true),
+                marks: strings(&item["marks"]),
+                label_marks: strings(&item["labelMarks"]),
+                excerpt: item["excerpt"].as_str().map(str::to_owned),
+                excerpt_marks: strings(&item["excerptMarks"]),
             })
             .collect();
         let status = found["status"].as_str().unwrap_or_default();

@@ -261,6 +261,10 @@ fn check_url(
     tag: &Tag,
     url: &str,
 ) -> Option<String> {
+    // An empty address names no file: `[text]()` or `![alt]()` in a chapter.
+    if url.trim().is_empty() {
+        return Some(format!("빈 주소: <{}>", tag.name));
+    }
     if is_external(url) {
         if tag.name != "a" {
             return Some(format!("외부 자원: <{}> {url}", tag.name));
@@ -498,6 +502,25 @@ mod tests {
                 "ko/index.html: 사이트 밖을 가리킨다: /other/",
                 "ko/index.html: 그림의 대체 텍스트가 비어 있다: images/none.png",
                 "ko/index.html: 그림 파일이 없다: images/none.png",
+            ]
+        );
+    }
+
+    #[test]
+    fn empty_addresses_are_reported() {
+        let inventory = site(
+            &[(
+                "ko/index.html",
+                "<img src=\"\" alt=\"화면\"><a href=\" \">a</a><script src=\"\"></script>",
+            )],
+            &[],
+        );
+        assert_eq!(
+            problems(&inventory),
+            [
+                "ko/index.html: 빈 주소: <img>",
+                "ko/index.html: 빈 주소: <a>",
+                "ko/index.html: 빈 주소: <script>",
             ]
         );
     }
