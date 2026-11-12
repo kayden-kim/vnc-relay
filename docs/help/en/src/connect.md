@@ -101,6 +101,8 @@ output = "relay.log"
 
 `cert_file` and `key_file` point to a certificate chain and private key for `relay.example.test`. You must provide a certificate that the browser trusts. Paths resolve from the directory containing `relay.toml`. Do not put the private key contents in the configuration file.
 
+`output` is the file that receives appended operations logs. To write them to standard output, change the value to `"stdout"`. Omitting `output` also selects standard output. See [Configuration](configure.md#management-status-and-records) for details.
+
 1. Prepare `relay.toml` in the operational directory.
 2. Provide the certificate chain and private key files specified in the configuration.
 3. Create an administrator account using [Quick start](quick-start.md).

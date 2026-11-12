@@ -16,7 +16,7 @@
 | TLS | WSS와 관리 HTTPS의 TLS를 서버가 직접 처리한다. 내장 TLS는 TLS 1.2 미만을 거절한다. 인증서는 운영자가 준비한다. 중계 WS·WSS 앞에서 역방향 프록시가 TLS를 끝내는 배치도 지원한다. 관리 리스너는 이 배치에서 제외한다([ADR-0007](docs/decisions/ADR-0007-proxy-tls-termination.md)). |
 | 접근 제한 | 진입점마다 출발지 IP 허용 목록(단일 IP·CIDR·범위)을 둔다. WS·WSS는 역할마다 IP·`Origin` 허용 목록을 따로 둔다. 연결을 받을 때는 켠 역할 목록의 합집합으로, 업그레이드 때는 고른 역할의 목록으로 검사한다. 신뢰 프록시(`trusted_proxies`)를 거친 요청은 `X-Forwarded-For`의 전달 주소로 판정한다. |
 | 관리 | 내장 로그인(Argon2id 해시)이 있는 대시보드와 관리 API(`/api/v1/`). 서버·대기 연결·활성 세션·최근 종료 목록·최근 로그·설정을 조회한다. 활성 세션 종료와 동적 설정 편집도 제공한다. 로그 화면(`/#/logs`)에서는 최근 운영 로그를 필터·검색·자동 갱신하고 JSON Lines로 내려받는다. 화면은 한국어·영어다. |
-| 운영 | 인증 없는 상태 리스너(`/livez`, `/readyz`), JSON Lines 운영 로그, 메모리의 최근 로그(기본 1000건, 0~10000, 바꾸면 재시작), 43개 키 자동 재로드·37개 키 편집, 종료 유예 G. |
+| 운영 | 인증 없는 상태 리스너(`/livez`, `/readyz`), JSON Lines 운영 로그(표준 출력 또는 파일), 메모리의 최근 로그(기본 1000건, 0~10000, 바꾸면 재시작), 43개 키 자동 재로드·37개 키 편집, 종료 유예 G. |
 | 계약 버전 | 현재 소스가 구현한 버전은 설정 [vnc-relay-config 4.1.0](docs/contracts/config-v4.md), 운영 로그 [ops-info 2.1.0](docs/contracts/ops-info-v2.md), WebSocket [websocket-relay 2.1.0](docs/contracts/websocket-relay-v2.md)이다. 접속 ticket은 기본으로 꺼져 있다. |
 
 noVNC 클라이언트는 포함하지 않는다. noVNC는 외부 클라이언트로 접속할 수 있고, 상호운용 시험에만 쓴다.
@@ -113,6 +113,7 @@ output = "relay.log"
 - `allow`에는 해당 진입점에 접속할 PC의 IP를 넣는다. 목록 밖의 출발지는 거절한다.
 - `cert_file`·`key_file`은 `relay.example.test`용 인증서 체인과 개인키다. 브라우저가 신뢰하는 인증서여야 한다.
 - `allowed_origins`에는 noVNC 페이지를 제공하는 사이트의 origin을 넣는다. 브라우저는 WebSocket 요청에 이 값을 `Origin` 헤더로 보낸다. 목록이 비어 있으면 브라우저의 접속은 모두 거절된다.
+- `output`은 운영 로그를 이어 쓸 파일이다. 표준 출력으로 쓰려면 값을 `"stdout"`으로 바꾼다. `output`을 생략해도 표준 출력이다. 출력 위치를 바꾸면 재시작해야 적용된다.
 
 각 PC에서는 다음과 같이 접속한다. UltraVNC 명령은 UltraVNC 1.8.3.0에서 확인한 형식이다([호환성 검증 기록 6절](docs/contracts/repeater-compat-record.md#6-모드전송-조합-검증-todo-55)).
 

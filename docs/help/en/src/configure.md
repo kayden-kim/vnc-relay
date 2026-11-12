@@ -120,7 +120,7 @@ The management listener serves the dashboard and management API. HTTPS is the ru
 
 The status listener serves only `/livez` and `/readyz` over plain HTTP. It has no authentication. It does not return sessions, relay IDs, or peer addresses. Loopback is recommended. The distribution example uses management `127.0.0.1:18080` and status `127.0.0.1:18081`. These are example addresses, not defaults.
 
-`log.output` is `"stdout"` or a file path. Operations logs use JSON Lines. Files are appended to. When an operator replaces the file, the same path is reopened. Rotation and long-term retention are the operator's responsibility.
+`log.output` is `"stdout"` or a file path. The default is `"stdout"`. Operations logs use JSON Lines. Files are appended to. When an operator replaces the file, the same path is reopened. Rotation and long-term retention are the operator's responsibility.
 
 `recent_logs.max_entries` controls a separate in-memory list. `0` disables retention. Restarting clears the list. The list is independent of the output destination and output success. Recent logs are not long-term storage. `[recent_closed]` controls the list of active sessions whose cleanup has completed.
 

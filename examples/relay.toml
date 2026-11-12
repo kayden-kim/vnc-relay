@@ -68,6 +68,7 @@ max_entries = 100
 max_entries = 1000
 
 # Append one JSON event per line. The parent directory must already exist.
+# To write the log to standard output, set output = "stdout" or omit output.
 [log]
 output = "relay.log"
 
