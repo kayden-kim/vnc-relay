@@ -8,9 +8,11 @@
 
 | 기능 | 사용 방법 |
 | --- | --- |
-| Mode I | Viewer가 대상 주소를 지정하면 VNC Relay가 허용된 VNC Server에 연결한다. |
-| Mode II | Viewer와 Server가 각각 VNC Relay에 연결한다. VNC Relay는 같은 중계 ID로 들어온 두 역할을 짝지어 중계한다. |
+| Mode I | Viewer가 대상 주소를 지정하면 VNC Relay가 허용된 VNC Server에 연결한다. VNC Relay에서 Server의 VNC 포트에 연결할 수 있어야 한다. |
+| Mode II | Viewer와 Server가 각각 VNC Relay에 연결한다. VNC Relay는 같은 중계 ID로 들어온 두 역할을 짝지어 중계한다. Server가 바깥에서 들어오는 연결을 받을 수 없어도 쓸 수 있다. |
 | 대시보드 | 관리자 계정으로 로그인해 대기 연결·활성 세션·최근 종료 목록·최근 로그·설정을 확인한다. 활성 세션의 관리자 종료와 동적 설정 편집도 할 수 있다. |
+
+상황에 맞는 방식은 [연결 방식 고르기](connect.md#연결-방식-고르기)에서 고른다.
 
 Rust로 독립 구현했다. UltraVNC·websockify·noVNC 소스를 복사·번역·포팅하지 않았다. 프로젝트는 [MIT 라이선스](https://github.com/kayden-kim/vnc-relay/blob/main/LICENSE)를 따른다.
 

@@ -1,19 +1,52 @@
 # Connecting VNC clients
 
-Use this page to configure UltraVNC over TCP, noVNC over WSS, WS and WSS Server roles, and Mode I target connections.
+Use this page to choose a connection mode for your situation and to configure UltraVNC over TCP, noVNC over WSS, WS and WSS Server roles, and Mode I target connections.
 
 ## Choose a connection mode
+
+The two modes differ in which side opens the connection between VNC Relay and the Server. In Mode II, the Server connects to VNC Relay (a reverse connection). In Mode I, VNC Relay connects to the Server.
+
+```text
+Mode II: Viewer --> VNC Relay <-- Server
+Mode I:  Viewer --> VNC Relay --> Server
+```
 
 | Mode | Viewer action | Server action |
 | --- | --- | --- |
 | Mode II | Connects to VNC Relay's Viewer entry point with a relay ID. | Connects back to the Server entry point with the same relay ID. |
 | Mode I | Sends a target address to VNC Relay's Viewer entry point. | Listens on the target VNC port. Does not connect back to VNC Relay. |
 
-In Mode II, the Viewer and Server do not connect directly to each other. Either role can connect first. A relay ID is not a secret that proves permission to connect.
+### Choose by situation
 
-These examples follow `main` and leave access ticket checks disabled. To enable tickets, prepare the separate client integration in [Access tickets](access-ticket.md). The noVNC URL below does not send a ticket by itself.
+| Situation | Mode | Reason |
+| --- | --- | --- |
+| As in remote support, the Server PC is behind a NAT router or firewall and cannot accept incoming connections from outside. | Mode II | The Viewer and the Server both connect to VNC Relay. The Server does not need to accept incoming connections. |
+| VNC Relay can connect to the Server's VNC port. For example, VNC Relay and the Server are on the same internal network, and only the Viewer is outside. | Mode I | The Server listens on its VNC port without reverse connection settings. VNC Relay connects to the target that the Viewer sends only if the target allow policy permits it. |
+| You connect with noVNC in a browser. | Mode II | The verified noVNC 1.7.0 sends the relay ID from `repeaterID`. It does not send a Mode I request with a target address. |
+| A Server-side client connects over WS or WSS. | Mode II | The Server role accepts only Mode II on every transport. |
+| You enable access ticket checks for Viewer WS or WSS connections. | Mode II | A Viewer role with ticket checks enabled rejects Mode I requests. |
+
+See section 5 of the [PRD](https://github.com/kayden-kim/vnc-relay/blob/main/docs/requirements/PRD.md) for the usage scenarios.
+
+### Before you use Mode II
+
+Place VNC Relay where both the Viewer and the Server can reach it. The Viewer and Server do not connect directly to each other. Either role can connect first. If no peer arrives, the waiting connection ends after `timeouts.wait_secs`.
+
+Agree on the relay ID for both roles in advance. A relay ID is not a secret that proves permission to connect. You must restrict the source IP allow list of each entry point to the intended scope. You can enable [access ticket](access-ticket.md) checks for WS and WSS roles.
+
+One relay ID can pair only one Viewer with one Server at a time. A connection that uses a relay ID already held by the same role is rejected. See [Understand duplicate ID rejection](#understand-duplicate-id-rejection) for details.
+
+### Before you use Mode I
+
+VNC Relay must be able to connect to the target Server's VNC port. The Server must listen on that port. If VNC Relay cannot connect to the target within `timeouts.connect_secs`, it closes the Viewer connection.
+
+When Mode I is enabled, any client that can reach the Viewer entry point can connect to allowed targets through VNC Relay. Therefore, you must list only the required targets and ports in `mode1.allow_targets`. You must also restrict the source IP allow list of the Viewer entry point to the intended scope. For targets given by name, follow [Mode I target allow policy](configure.md#mode-i-target-allow-policy).
+
+To use Mode I over WS or WSS, you need a WebSocket client that sends the target address in the initial request. UltraVNC Viewer does not use WebSocket.
 
 ## Mode II example configuration
+
+These examples follow `main` and leave access ticket checks disabled. To enable tickets, prepare the separate client integration in [Access tickets](access-ticket.md). The noVNC URL below does not send a ticket by itself.
 
 The example addresses are for documentation. For your deployment, you must replace the hosts, IPs, source IP allow lists, Origin, and certificate paths.
 

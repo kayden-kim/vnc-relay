@@ -11,7 +11,7 @@
 
 | 기능 | 내용 |
 | --- | --- |
-| 중계 모드 | Mode I: Viewer가 대상 주소를 보내면 서버가 그 대상에 연결한다. 대상은 허용 목록 안에서만 연다. Mode II: 같은 중계 ID로 들어온 Viewer와 Server를 짝지어 중계한다. |
+| 중계 모드 | Mode I: Viewer가 대상 주소를 보내면 vnc-relay가 그 대상에 연결한다. 대상은 허용 목록 안에서만 연다. vnc-relay에서 내부망의 VNC Server에 연결할 수 있고 Viewer만 바깥에 있을 때 쓴다. Mode II: 같은 중계 ID로 들어온 Viewer와 Server를 짝지어 중계한다. 원격 지원처럼 Server가 NAT·방화벽 뒤에 있어 들어오는 연결을 받을 수 없을 때 쓴다. 상황별 시나리오는 [PRD 5절](docs/requirements/PRD.md#5-사용자와-주요-시나리오)에 있다. |
 | 진입점 | TCP·WS·WSS의 Viewer·Server(역접속). TCP는 역할마다 리스너가 따로 있다. WS·WSS는 리스너 하나에서 요청 경로로 역할을 나눈다. `/relay/viewer`는 Viewer, `/relay/server`는 Server(Mode II만) 역할이다([ADR-0008](docs/decisions/ADR-0008-shared-ws-listener-path-roles.md)). 평문 WS는 기본으로 꺼져 있다. |
 | TLS | WSS와 관리 HTTPS의 TLS를 서버가 직접 처리한다. 내장 TLS는 TLS 1.2 미만을 거절한다. 인증서는 운영자가 준비한다. 중계 WS·WSS 앞에서 역방향 프록시가 TLS를 끝내는 배치도 지원한다. 관리 리스너는 이 배치에서 제외한다([ADR-0007](docs/decisions/ADR-0007-proxy-tls-termination.md)). |
 | 접근 제한 | 진입점마다 출발지 IP 허용 목록(단일 IP·CIDR·범위)을 둔다. WS·WSS는 역할마다 IP·`Origin` 허용 목록을 따로 둔다. 연결을 받을 때는 켠 역할 목록의 합집합으로, 업그레이드 때는 고른 역할의 목록으로 검사한다. 신뢰 프록시(`trusted_proxies`)를 거친 요청은 `X-Forwarded-For`의 전달 주소로 판정한다. |

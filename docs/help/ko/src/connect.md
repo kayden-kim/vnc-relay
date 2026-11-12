@@ -1,19 +1,52 @@
 # VNC 연결 구성
 
-이 페이지로 UltraVNC의 TCP 연결, noVNC의 WSS 연결, WS·WSS Server 역할, Mode I 대상 연결을 구성할 수 있다.
+이 페이지로 상황에 맞는 연결 방식을 고르고 UltraVNC의 TCP 연결, noVNC의 WSS 연결, WS·WSS Server 역할, Mode I 대상 연결을 구성할 수 있다.
 
 ## 연결 방식 고르기
+
+두 방식은 VNC Relay와 Server 사이의 연결을 누가 여는지가 다르다. Mode II에서는 Server가 VNC Relay에 연결한다(역접속). Mode I에서는 VNC Relay가 Server에 연결한다.
+
+```text
+Mode II: Viewer --> VNC Relay <-- Server
+Mode I:  Viewer --> VNC Relay --> Server
+```
 
 | 방식 | Viewer가 하는 일 | Server가 하는 일 |
 | --- | --- | --- |
 | Mode II | VNC Relay의 Viewer 진입점에 중계 ID로 접속한다. | 같은 중계 ID로 Server 진입점에 역접속한다. |
 | Mode I | VNC Relay의 Viewer 진입점에 대상 주소를 보낸다. | 대상 VNC 포트에서 기다린다. VNC Relay에 역접속하지 않는다. |
 
-Mode II에서는 Viewer와 Server가 서로 직접 연결하지 않는다. 두 역할 가운데 어느 쪽이 먼저 접속해도 된다. 중계 ID는 접속 권한을 증명하는 비밀값이 아니다.
+### 상황별 선택
 
-아래 예시는 `main` 기준이며 접속 ticket 확인은 꺼져 있다. ticket을 켜려면 [접속 ticket](access-ticket.md)의 별도 클라이언트 연동을 준비해야 한다. 아래 noVNC URL만으로는 ticket을 보내지 않는다.
+| 상황 | 방식 | 이유 |
+| --- | --- | --- |
+| 원격 지원처럼 Server PC가 공유기(NAT)나 방화벽 뒤에 있어 바깥에서 들어오는 연결을 받을 수 없다. | Mode II | Viewer와 Server가 모두 VNC Relay에 연결한다. Server는 들어오는 연결을 받지 않아도 된다. |
+| VNC Relay에서 Server의 VNC 포트에 연결할 수 있다. 예를 들어 VNC Relay와 Server는 같은 내부망에 있고 Viewer만 바깥에 있다. | Mode I | Server는 역접속 설정 없이 VNC 포트에서 기다린다. VNC Relay는 Viewer가 보낸 대상이 대상 허용 정책에 있을 때만 연결한다. |
+| 브라우저의 noVNC로 접속한다. | Mode II | 검증한 noVNC 1.7.0은 `repeaterID`의 중계 ID를 보낸다. 대상 주소를 보내는 Mode I 요청은 보내지 않는다. |
+| Server 쪽 클라이언트가 WS·WSS로 접속한다. | Mode II | Server 역할은 전송과 관계없이 Mode II만 받는다. |
+| Viewer의 WS·WSS 접속에 접속 ticket 확인을 켠다. | Mode II | ticket 확인을 켠 Viewer 역할은 Mode I 요청을 거절한다. |
+
+사용 시나리오의 기준은 [PRD](https://github.com/kayden-kim/vnc-relay/blob/main/docs/requirements/PRD.md) 5절에 있다.
+
+### Mode II를 쓸 때 확인할 것
+
+VNC Relay는 Viewer와 Server가 모두 접속할 수 있는 곳에 두어야 한다. Viewer와 Server는 서로 직접 연결하지 않는다. 두 역할 가운데 어느 쪽이 먼저 접속해도 된다. 상대가 오지 않으면 대기 연결은 `timeouts.wait_secs`가 지난 뒤 끝난다.
+
+두 역할이 쓸 중계 ID는 미리 정해 두어야 한다. 중계 ID는 접속 권한을 증명하는 비밀값이 아니다. 진입점마다 출발지 IP 허용 목록을 의도한 범위로 제한해야 한다. WS·WSS 역할에는 [접속 ticket](access-ticket.md) 확인을 켤 수 있다.
+
+한 중계 ID로는 동시에 Viewer 하나와 Server 하나만 짝지을 수 있다. 같은 역할이 이미 쓰는 중계 ID로 접속하면 거절된다. 자세한 동작은 [중복 ID 거절 이해하기](#중복-id-거절-이해하기)에 있다.
+
+### Mode I을 쓸 때 확인할 것
+
+VNC Relay에서 대상 Server의 VNC 포트로 연결할 수 있어야 한다. Server는 그 포트에서 기다려야 한다. VNC Relay가 `timeouts.connect_secs` 안에 대상에 연결하지 못하면 Viewer 연결을 닫는다.
+
+Mode I을 켜면 Viewer 진입점에 접속할 수 있는 클라이언트는 VNC Relay를 거쳐 허용된 대상에 연결할 수 있다. 그래서 `mode1.allow_targets`에는 필요한 대상과 포트만 적어야 한다. Viewer 진입점의 출발지 IP 허용 목록도 의도한 범위로 제한해야 한다. 이름으로 지정한 대상의 규칙은 [Mode I 대상 허용 정책](configure.md#mode-i-대상-허용-정책)을 따른다.
+
+WS·WSS로 Mode I을 쓰려면 대상 주소를 초기 요청으로 보내는 WebSocket 클라이언트가 필요하다. UltraVNC Viewer는 WebSocket을 쓰지 않는다.
 
 ## Mode II 예시 설정
+
+아래 예시는 `main` 기준이며 접속 ticket 확인은 꺼져 있다. ticket을 켜려면 [접속 ticket](access-ticket.md)의 별도 클라이언트 연동을 준비해야 한다. 아래 noVNC URL만으로는 ticket을 보내지 않는다.
 
 예시 주소는 문서용이다. 실제 배치에서는 호스트·IP·출발지 IP 허용 목록·Origin·인증서 경로를 맞게 바꾸어야 한다.
 
