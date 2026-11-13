@@ -556,7 +556,7 @@ WS·WSS 역할마다 접속 ticket 확인을 켤 수 있다. 접속 ticket(ticke
 
 #### 3.10.1 시험용 키와 ticket으로 확인하기
 
-발급 쪽 없이 3.10절을 확인할 때는 개발 전용 명령 `cargo xtask ticket`으로 시험용 키와 ticket을 만들 수 있다(사용자 결정 2026-11-13(Q233)). 이 명령은 저장소 루트에서 실행한다. 먼저 [개발 환경](set-up-and-verify.md)을 준비해야 한다. 배포 묶음과 실행파일에는 이 명령이 없다. 만든 키는 시험에만 쓰고 운영 발급 쪽 키로 쓰지 않는다. 옵션과 파일 형식은 [xtask 모듈 설계](../architectures/xtask.md)에 있다. 아래는 Viewer 예시다. Server를 시험하려면 `viewer`를 `server`로, 경로 `/relay/viewer`를 `/relay/server`로 바꾼다.
+발급 쪽 없이 3.10절을 확인할 때는 개발 전용 명령 `cargo xtask ticket`으로 시험용 키와 ticket을 만들 수 있다(사용자 결정 2026-11-13(Q233)). 이 절을 실행하려면 저장소를 받고 [개발 환경](set-up-and-verify.md)을 준비해야 한다. 명령은 저장소 루트에서 실행한다. 배포 묶음과 실행파일에는 이 명령이 없으므로 묶음만으로는 이 절을 실행할 수 없다. 만든 키는 시험에만 쓰고 운영 발급 쪽 키로 쓰지 않는다. 옵션과 파일 형식은 [xtask 모듈 설계](../architectures/xtask.md)에 있다. 아래는 Viewer 예시다. Server를 시험하려면 `viewer`를 `server`로, 경로 `/relay/viewer`를 `/relay/server`로 바꾼다.
 
 1. 저장소 루트에서 역할의 키 쌍을 만든다.
 
@@ -566,7 +566,7 @@ WS·WSS 역할마다 접속 ticket 확인을 켤 수 있다. 접속 ticket(ticke
 
    기대 결과: `공개 키:`·`개인키:`·`kid:` 세 줄이 출력된다. 기본 위치는 Cargo 대상 디렉터리의 `ticket/`이다. 보통 `target/ticket/`이다. 다른 위치는 `--dir <디렉터리>`로 정한다. 같은 이름의 파일이 이미 있으면 아무것도 쓰지 않고 종료 코드 1로 끝난다.
 
-2. 공개 키 파일 `viewer-ticket.jwks`를 운영 디렉터리의 `keys/viewer-ticket.jwks`로 복사한다. 개인키 파일 `viewer-ticket.private.jwk`는 복사하지 않는다.
+2. 운영 디렉터리에 `keys` 디렉터리가 없으면 만든다. 배포 묶음에는 이 디렉터리가 없다. 이어 공개 키 파일 `viewer-ticket.jwks`를 `keys/viewer-ticket.jwks`로 복사한다. 개인키 파일 `viewer-ticket.private.jwk`는 복사하지 않는다.
 
 3. 서버를 멈춘 상태에서 `relay.toml`의 WS 역할과 ticket 표를 켠다. 리스너 주소와 역할의 `enabled`는 재시작해야 적용되기 때문이다. 예시 설정에서는 다음 줄의 `# `를 지우고 `enabled`를 `true`로 바꾼다.
 
@@ -602,7 +602,12 @@ WS·WSS 역할마다 접속 ticket 확인을 켤 수 있다. 접속 ticket(ticke
 
 공개 키 교체를 확인할 때는 `--dir`로 다른 디렉터리에 같은 역할의 키를 하나 더 만든다. 그 JWKS 파일의 `keys` 배열에 있는 키 객체를 운영 디렉터리 공개 키 파일의 `keys` 배열에 더한다. `kid`는 키마다 다르므로 겹치지 않는다. 이후 `issue`에 같은 `--dir`를 주면 새 키로 서명한다. 나머지 순서는 3.10절의 교체 절차를 따른다.
 
-시험이 끝나면 키 디렉터리를 지우기를 권장한다. 기본 위치는 `cargo clean`으로도 지워진다.
+시험용 공개 키를 운영 디렉터리에 남겨 두지 않는다. 남겨 두면 시험용 개인키를 가진 사람이 받아들여지는 ticket을 만들 수 있다. `enabled`를 `false`로 되돌려도 파일이 남아 있으면 나중에 다시 켤 때 시험용 키가 다시 쓰인다. 그래서 시험을 마치면 다음 가운데 하나를 한다.
+
+- ticket을 계속 쓰면 공개 키 파일의 내용을 실제 발급 쪽 공개 키로 바꾸고, `issuer`·`relay_host`도 실제 값으로 맞춘다(3.10절 2·3단계). 이어 `reload_applied`를 확인한다.
+- ticket을 쓰지 않으면 `[relay.ticket.viewer]`의 `enabled`를 `false`로 바꾸고 `reload_applied`를 확인한다. 이어 시험용 공개 키 파일을 지운다.
+
+키 디렉터리도 지우기를 권장한다. 기본 위치는 `cargo clean`으로도 지워진다.
 
 ## 4. 검증
 
