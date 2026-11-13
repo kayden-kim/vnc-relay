@@ -202,8 +202,8 @@ struct KeyFiles {
     kid: String,
 }
 
-/// Writes a new P-256 key pair for `role`. Existing files are never replaced,
-/// and a failed run leaves neither new file behind.
+/// Writes a new P-256 key pair for `role`. Existing files are never replaced.
+/// A failed run removes the files it created and names any file it could not remove.
 fn write_keys(dir: &Path, role: Role) -> Result<KeyFiles, Error> {
     let public = dir.join(role.public_file());
     let private = dir.join(role.private_file());
@@ -253,8 +253,7 @@ fn write_keys(dir: &Path, role: Role) -> Result<KeyFiles, Error> {
     let mut shared = OpenOptions::new();
     shared.write(true).create_new(true);
     if let Err(error) = write_new(&shared, &public, &Value::Object(jwks)) {
-        let _ = fs::remove_file(&private);
-        return Err(error);
+        return Err(discard(&private, error));
     }
     Ok(KeyFiles {
         public,
@@ -272,10 +271,21 @@ fn write_new(options: &OpenOptions, path: &Path, value: &Value) -> Result<(), Er
         .map_err(|error| path_error(path, &error))?;
     if let Err(error) = file.write_all(text.as_bytes()) {
         drop(file);
-        let _ = fs::remove_file(path);
-        return Err(path_error(path, &error));
+        return Err(discard(path, path_error(path, &error)));
     }
     Ok(())
+}
+
+/// Removes a file this run created after `error`. A file that stays is named in the result.
+fn discard(path: &Path, error: Error) -> Error {
+    match fs::remove_file(path) {
+        Ok(()) => error,
+        Err(remove) if remove.kind() == ErrorKind::NotFound => error,
+        Err(remove) => Error::new(format!(
+            "{error}. 이 실행이 만든 {}도 지우지 못했다({remove}). 직접 지운다",
+            path.display()
+        )),
+    }
 }
 
 fn path_error(path: &Path, error: &std::io::Error) -> Error {
