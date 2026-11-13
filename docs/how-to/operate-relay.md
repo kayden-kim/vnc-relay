@@ -5,7 +5,7 @@ Windows 11 x64와 Ubuntu 24.04 LTS x64에서 release 실행파일을 만들고 �
 | 항목 | 값 |
 | --- | --- |
 | 대상 독자 | 배포 담당자와 서버를 직접 실행하는 운영자 |
-| 검증 상태 | Draft — 과거 두 OS 수동 기록은 4절에 보존한다. v4 이관(3.2.2절)은 2026-11-09 Windows 실제 배치에서 관리 재로그인을 빼고 실행했다(4절). v4 롤백·Ubuntu 이관과 공유 WSS 역할·프록시 TLS 종료·최근 로그의 새 절차는 미실행이다. 이 기능들의 구현과 자동 시험은 커밋 `51bd747`의 두 OS 게이트에서 통과했다([WSS Server·프록시·최근 로그 판정표](set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)). 자동 시험만으로 안내 전체를 검증했다고 표시하지 않는다. |
+| 검증 상태 | Draft — 과거 두 OS 수동 기록은 4절에 보존한다. v4 이관(3.2.2절)은 2026-11-09 Windows 실제 배치에서 관리 재로그인을 빼고 실행했다(4절). Viewer 경로 이전(3.2.3절)은 2026-11-14 Windows 실제 배치에서 1단계와 새 실행파일의 검증 사본 확인까지만 실행했다(4절). v4 롤백·Ubuntu 이관과 공유 WSS 역할·프록시 TLS 종료·최근 로그의 새 절차는 미실행이다. 이 기능들의 구현과 자동 시험은 커밋 `51bd747`의 두 OS 게이트에서 통과했다([WSS Server·프록시·최근 로그 판정표](set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)). 자동 시험만으로 안내 전체를 검증했다고 표시하지 않는다. |
 | 검증 환경·버전 | Windows 11 x64의 PowerShell, Ubuntu 24.04 LTS x64의 bash. Rust 버전은 `rust-toolchain.toml`을 따른다. 실제 OS·Rust·실행파일 버전은 실행 기록에 적는다. |
 | 최종 검증일 | 없음(Draft 2026-11-04) |
 | 관련 기준 문서 | [운영 스펙](../specs/operations.md), [설정 계약 v4](../contracts/config-v4.md), [CLI 계약](../contracts/cli-v1.md), [운영 정보 계약 v2](../contracts/ops-info-v2.md), [WebSocket 계약](../contracts/websocket-relay-v2.md), [ADR-0001](../decisions/ADR-0001-built-in-tls.md) |
@@ -630,7 +630,7 @@ WS·WSS 역할마다 접속 ticket 확인을 켤 수 있다. 접속 ticket(ticke
 | 공유 WSS Viewer·Server | 같은 리스너의 두 경로로 Mode II 양방향 중계, 역할별 IP·Origin | 3.2.1절 | 미실행 | 두 OS 수동 실행 기록 필요. 자동 증거 OPS-065·OPS-069, WS-028~031은 통과([판정표](set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)) |
 | 프록시 TLS 종료 | 외부 WSS→평문 WS, 오른쪽 첫 비신뢰 주소의 역할별 허용 판정, 잘못된·모두 신뢰하는 체인 거절 | 3.9절, Nginx 버전·`nginx -t`·양쪽 주소·비밀 없는 로그 기록 | 미실행, Nginx 예시 추정 | 실제 배치 기록 필요. 자동 증거 WS-032~036은 통과([판정표](set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)) |
 | 최근 로그 | 설정 상한·오래된 항목 제거·재시작·0 보관·필터·JSON Lines 내려받기 | 3.7.1절 | 미실행 | 두 OS 수동 실행 기록 필요. 자동 증거 OPS-068, MGT-046~050, DASH-054~063은 통과([판정표](set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)) |
-| Viewer 경로 이전·롤백 | `/relay/viewer` 중계 성공, 이전 경로 `/relay`는 404, 롤백 때 이전 실행파일과 `/relay` URL을 함께 복구 | 3.2.3절 | 미실행 | 두 OS 수동 실행 기록 필요. 자동 증거 WS-012·WS-029는 통과([판정표](set-up-and-verify.md#44-viewer-경로-이전-판정표)) |
+| Viewer 경로 이전·롤백 | `/relay/viewer` 중계 성공, 이전 경로 `/relay`는 404, 롤백 때 이전 실행파일과 `/relay` URL을 함께 복구 | 3.2.3절 | 부분 — Windows 검증 사본에서 Release `v2026.11.3` 실행파일의 `/relay/viewer` 중계와 `/relay` 404를 확인(2026-11-14). 실제 배치 교체·클라이언트 URL 변경·롤백·Ubuntu 미실행 | Windows는 아래 2026-11-14 기록. 두 OS 실제 배치 기록 필요. 자동 증거 WS-012·WS-029는 통과([판정표](set-up-and-verify.md#44-viewer-경로-이전-판정표)) |
 | 접속 ticket | ticket이 있는 WS·WSS 업그레이드의 101(`binary`), 없거나 맞지 않는 ticket의 401, 공개 키 교체 뒤 새 키의 ticket 통과, 끄기 | 3.10절. ticket 원문과 공개 키 파일 내용은 기록하지 않음 | 미실행 | 두 OS 수동 실행 기록 필요. 자동 증거는 [접속 ticket 판정표](set-up-and-verify.md#45-접속-ticket-판정표). 시험 도구로 3.10.1절을 실행한 기록은 [xtask 대조 기록](../architectures/xtask.md#대조-기록)에 있다. 배포 묶음 기록을 대신하지 않는다 |
 
 2026-11-07 갱신: 위 2026-11-05·커밋 `1c7c7a9` 묶음의 `LICENSE 없음(Q97 대기)`는 당시 기록으로 보존한다. 루트 `LICENSE` 작성·검토는 마쳤다(사용자 결정 2026-11-07(Q97), [검토 기록](check-dependency-licenses.md#42-프로젝트-license-검토-기록2026-11-07)). 앞으로 만드는 두 OS 배포 묶음에는 3.1절에 따라 루트 `LICENSE`를 포함한다. 과거 묶음을 다시 만들거나 LICENSE 포함을 재확인했다는 뜻은 아니다.
@@ -663,6 +663,17 @@ WS·WSS 역할마다 접속 ticket 확인을 켤 수 있다. 접속 ticket(ticke
 시험 Viewer·Server는 RFB 버전 문자열과 시험 바이트만 주고받는 Python 클라이언트다. ID는 `99`로 시작하는 12자리를 썼다. `server_ready`부터 확인을 마칠 때까지 기록된 경고 수준 사건 9건은 모두 이 확인에서 나왔다. 연결 경고 7건은 TLS만 맺고 닫은 연결, 다른 Origin과 `/relay/server` 거절, 연결만 하고 닫은 도달성 확인이다. 나머지 2건은 8번의 재로드마다 다시 기록된 `allow_all_source`다. 확인을 마친 뒤 활성 세션과 대기 연결은 0건이었다. 검증 사본의 출력은 저장소 밖에 보관하고 사본은 지웠다.
 
 이 기록은 3.2.2절 이관을 Windows에서 한 번 실행한 것이다. 3.2.2절 8단계의 관리 재로그인은 계정 비밀번호가 필요해 실행하지 않았다. 6절 v4→v3 롤백, Ubuntu 이관, 3.5.1절 설정 편집, 실제 noVNC·UltraVNC·부스 기기의 중계도 실행하지 않았다. 이관 전 파일과 이전 실행파일은 복구 디렉터리와 보존한 설치 디렉터리에 남겨 두었다.
+
+2026-11-14 실제 배치 교체 준비 기록(Windows 11 Pro 10.0.26200 x64, PowerShell 7): 운영 중인 `2026.11.2` 서버를 [Release `v2026.11.3`](https://github.com/kayden-kim/vnc-relay/releases/tag/v2026.11.3)의 Windows 묶음으로 바꾸려고 3.2.3절을 시작했다. 1단계에서 이 배치의 WSS Viewer 클라이언트를 찾았다. 외부 웹 서비스 하나가 개발·운영 두 환경의 설정으로 noVNC에 이전 경로 `/relay`의 URL을 넘긴다. 서버를 먼저 바꾸면 그 URL을 `/relay/viewer`로 바꿔 배포할 때까지 브라우저 Viewer 접속이 404로 실패한다. 그래서 프로젝트 소유자는 교체 준비와 검증 사본 확인만 하고, 서버 교체는 그 URL 변경 일정에 맞추기로 했다(2026-11-14). 운영 서버는 `2026.11.2`로 계속 실행 중이고, 설치 디렉터리와 `relay.toml`은 바꾸지 않았다.
+
+1. Release에서 내려받은 묶음을 설치 디렉터리 옆의 준비 디렉터리에 풀었다. 실행파일 SHA-256은 `90880e8dce547503220d2bf70e8bc48c4845618d72a41c97d2e3ad88e4743a7d`이고, `--version`은 `vnc-relay 2026.11.3`이다.
+2. 운영 `relay.toml`(v4 형식)과 같은 디렉터리에 검증 사본을 만들었다. 리스너 다섯 개를 서로 다른 루프백 대체 포트로, 로그 출력을 표준 출력으로 바꿨다. 다른 설정은 그대로 두었다. 사본을 만들고 지우는 동안 운영 서버의 로그에 재로드 사건은 없었다.
+3. 새 실행파일로 검증 사본을 시작했다. `server_starting.log_contract`는 `ops-info/2.1.0`이었고, 시작 0.16초 뒤 `server_ready`가 리스너 다섯 개를 보고했다. `/livez`·`/readyz` 200, 관리 `/login/` 200, `/` 303(`/login/`)이었다. WSS는 두 이름 모두 TLS 1.3이고 인증서 검증을 통과했으며, SAN에 각 이름이 있었다. 두 허용 Origin의 WSS Viewer(`/relay/viewer`)와 TCP Server, TCP Viewer와 TCP Server를 각각 짝지어 양방향 시험 바이트가 일치했다. 다른 Origin은 403, 이전 경로 `/relay`와 `/relay/server`는 404였다(Server 역할 꺼짐).
+4. Ctrl+Break로 멈췄다. `shutdown_started`(`active_sessions` 0)와 `server_stopped`가 기록됐고, 종료 코드는 0이었다.
+
+시험 Viewer·Server는 RFB 버전 문자열과 시험 바이트만 주고받는 Python 클라이언트다. ID는 `99`로 시작하는 12자리를 썼다. 검증 사본의 경고 수준 사건 8건은 모두 이 확인에서 나왔다. `allow_all_source` 3건은 출발지를 모두 허용하는 세 역할의 시작 경고다. 연결 경고 5건은 TLS만 맺고 닫은 연결 2건(`connection_aborted`), 다른 Origin 거절 1건(`origin_not_allowed`), `/relay`·`/relay/server` 거절 2건(`invalid_upgrade`)이다. 검증 사본의 출력은 저장소 밖에 보관하고 사본은 지웠다.
+
+이 기록은 3.2.3절 1단계와 새 실행파일의 서버 쪽 동작만 확인한 것이다. 2단계 이후의 복구본 복사, 이전 서버 정지, 실제 배치 교체, 클라이언트 URL 변경, 바꾼 URL의 실제 중계, 롤백과 Ubuntu는 실행하지 않았다. 교체할 때는 2단계부터 진행한다.
 
 ## 5. 중단 조건
 
