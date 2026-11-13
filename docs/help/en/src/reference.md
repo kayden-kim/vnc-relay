@@ -56,7 +56,7 @@ Status checks need no authentication. The status listener uses plain HTTP. Manag
 
 WS and WSS use the same paths. Queries do not select a target or relay ID. Disabled roles and other paths return HTTP 404. A trailing slash is a different path. `main` also rejects the old Viewer path `/relay` with 404.
 
-> **Note:** The latest Release, `v2026.11.2`, uses Viewer path `/relay`. This table describes `main`. See [Introduction](index.md) for version differences and [Connecting VNC clients](connect.md) for client configuration.
+> **Note:** Releases `v2026.11.2` and earlier use Viewer path `/relay`. See [Introduction](index.md) for version differences and [Connecting VNC clients](connect.md) for client configuration.
 
 For upgrades and all close codes, use the [WebSocket contract, §§1.1, 1.5, and 1.7](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/websocket-relay-v2.md). For additional rules on ticket-enabled roles, see [Access tickets](access-ticket.md).
 

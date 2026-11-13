@@ -16,10 +16,10 @@ You do not need Rust build tools to run a release bundle. Prepare a build enviro
 
 | OS | Bundle | Hash file |
 | --- | --- | --- |
-| Windows 11 x64 | `vnc-relay-2026.11.2-windows-x64.zip` | `vnc-relay-2026.11.2-windows-x64.zip.sha256` |
-| Ubuntu 24.04 LTS x64 | `vnc-relay-2026.11.2-linux-x64.tar.gz` | `vnc-relay-2026.11.2-linux-x64.tar.gz.sha256` |
+| Windows 11 x64 | `vnc-relay-2026.11.3-windows-x64.zip` | `vnc-relay-2026.11.3-windows-x64.zip.sha256` |
+| Ubuntu 24.04 LTS x64 | `vnc-relay-2026.11.3-linux-x64.tar.gz` | `vnc-relay-2026.11.3-linux-x64.tar.gz.sha256` |
 
-The commands below use `v2026.11.2`. If you download another version, change the version in every file name. See [Introduction](index.md) for differences between the Release and `main`.
+The commands below use `v2026.11.3`. If you download another version, change the version in every file name. See [Introduction](index.md) for differences between the Release and `main`.
 
 ## Verify SHA-256
 
@@ -30,13 +30,13 @@ Run these commands in the download directory before extracting the bundle.
 1. Calculate the bundle's SHA-256 hash.
 
    ```powershell
-   Get-FileHash .\vnc-relay-2026.11.2-windows-x64.zip -Algorithm SHA256
+   Get-FileHash .\vnc-relay-2026.11.3-windows-x64.zip -Algorithm SHA256
    ```
 
 2. Display the hash file.
 
    ```powershell
-   Get-Content .\vnc-relay-2026.11.2-windows-x64.zip.sha256
+   Get-Content .\vnc-relay-2026.11.3-windows-x64.zip.sha256
    ```
 
 3. Compare the `Hash` from `Get-FileHash` with the first word in the hash file. The values must match, ignoring letter case.
@@ -46,7 +46,7 @@ Run these commands in the download directory before extracting the bundle.
 1. Verify the bundle with the hash file.
 
    ```shell
-   sha256sum -c vnc-relay-2026.11.2-linux-x64.tar.gz.sha256
+   sha256sum -c vnc-relay-2026.11.3-linux-x64.tar.gz.sha256
    ```
 
 2. Check that the result is `OK`.
@@ -62,13 +62,13 @@ Choose a directory for the operational files. These commands run in the download
 1. Extract the bundle.
 
    ```powershell
-   Expand-Archive -Path .\vnc-relay-2026.11.2-windows-x64.zip -DestinationPath .
+   Expand-Archive -Path .\vnc-relay-2026.11.3-windows-x64.zip -DestinationPath .
    ```
 
 2. Enter the extracted directory.
 
    ```powershell
-   Set-Location .\vnc-relay-2026.11.2-windows-x64
+   Set-Location .\vnc-relay-2026.11.3-windows-x64
    ```
 
 ### Ubuntu bash
@@ -76,13 +76,13 @@ Choose a directory for the operational files. These commands run in the download
 1. Extract the bundle.
 
    ```shell
-   tar -xzf vnc-relay-2026.11.2-linux-x64.tar.gz
+   tar -xzf vnc-relay-2026.11.3-linux-x64.tar.gz
    ```
 
 2. Enter the extracted directory.
 
    ```shell
-   cd vnc-relay-2026.11.2-linux-x64
+   cd vnc-relay-2026.11.3-linux-x64
    ```
 
 Run subsequent commands in this directory, which contains the executable and `relay.toml`.

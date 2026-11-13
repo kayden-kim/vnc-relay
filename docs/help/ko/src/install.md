@@ -16,10 +16,10 @@
 
 | OS | 묶음 | 해시 파일 |
 | --- | --- | --- |
-| Windows 11 x64 | `vnc-relay-2026.11.2-windows-x64.zip` | `vnc-relay-2026.11.2-windows-x64.zip.sha256` |
-| Ubuntu 24.04 LTS x64 | `vnc-relay-2026.11.2-linux-x64.tar.gz` | `vnc-relay-2026.11.2-linux-x64.tar.gz.sha256` |
+| Windows 11 x64 | `vnc-relay-2026.11.3-windows-x64.zip` | `vnc-relay-2026.11.3-windows-x64.zip.sha256` |
+| Ubuntu 24.04 LTS x64 | `vnc-relay-2026.11.3-linux-x64.tar.gz` | `vnc-relay-2026.11.3-linux-x64.tar.gz.sha256` |
 
-아래 명령은 `v2026.11.2`를 예로 든다. 다른 버전을 받으면 모든 파일 이름의 버전을 함께 바꾼다. Release와 `main`의 차이는 [소개](index.md)에 있다.
+아래 명령은 `v2026.11.3`을 예로 든다. 다른 버전을 받으면 모든 파일 이름의 버전을 함께 바꾼다. Release와 `main`의 차이는 [소개](index.md)에 있다.
 
 ## SHA-256 확인하기
 
@@ -30,13 +30,13 @@
 1. 묶음의 SHA-256을 계산한다.
 
    ```powershell
-   Get-FileHash .\vnc-relay-2026.11.2-windows-x64.zip -Algorithm SHA256
+   Get-FileHash .\vnc-relay-2026.11.3-windows-x64.zip -Algorithm SHA256
    ```
 
 2. 해시 파일의 내용을 표시한다.
 
    ```powershell
-   Get-Content .\vnc-relay-2026.11.2-windows-x64.zip.sha256
+   Get-Content .\vnc-relay-2026.11.3-windows-x64.zip.sha256
    ```
 
 3. `Get-FileHash`의 `Hash`와 해시 파일의 첫 낱말을 비교한다. 영문 대소문자는 무시하고 같은 값인지 확인한다.
@@ -46,7 +46,7 @@
 1. 해시 파일로 묶음을 확인한다.
 
    ```shell
-   sha256sum -c vnc-relay-2026.11.2-linux-x64.tar.gz.sha256
+   sha256sum -c vnc-relay-2026.11.3-linux-x64.tar.gz.sha256
    ```
 
 2. 결과가 `OK`인지 확인한다.
@@ -62,13 +62,13 @@
 1. 묶음을 푼다.
 
    ```powershell
-   Expand-Archive -Path .\vnc-relay-2026.11.2-windows-x64.zip -DestinationPath .
+   Expand-Archive -Path .\vnc-relay-2026.11.3-windows-x64.zip -DestinationPath .
    ```
 
 2. 풀린 디렉터리로 이동한다.
 
    ```powershell
-   Set-Location .\vnc-relay-2026.11.2-windows-x64
+   Set-Location .\vnc-relay-2026.11.3-windows-x64
    ```
 
 ### Ubuntu bash
@@ -76,13 +76,13 @@
 1. 묶음을 푼다.
 
    ```shell
-   tar -xzf vnc-relay-2026.11.2-linux-x64.tar.gz
+   tar -xzf vnc-relay-2026.11.3-linux-x64.tar.gz
    ```
 
 2. 풀린 디렉터리로 이동한다.
 
    ```shell
-   cd vnc-relay-2026.11.2-linux-x64
+   cd vnc-relay-2026.11.3-linux-x64
    ```
 
 이후 명령은 실행파일과 `relay.toml`이 있는 이 디렉터리에서 실행한다.

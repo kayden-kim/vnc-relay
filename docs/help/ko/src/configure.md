@@ -39,7 +39,7 @@ WS와 WSS는 리스너 하나에서 두 역할을 함께 받는다. `[relay.ws]`
 
 두 역할은 같은 주소·포트를 쓰지만 접근 정책은 따로 둔다. WS·WSS의 `listen`에는 포트를 반드시 적어야 한다. [VNC 연결 구성](connect.md)에서 클라이언트 구성을 확인할 수 있다.
 
-> **주의:** 이 도움말은 `main` 기준이다. 최신 Release `v2026.11.2`의 Viewer 경로는 `/relay`이며, `main`은 `/relay/viewer`를 쓴다. Release에는 접속 ticket 확인이 없다. 버전 차이는 [소개](index.md)를 따른다.
+> **참고:** `v2026.11.2` 이하의 Viewer 경로는 `/relay`이고 접속 ticket 확인이 없다. 버전 차이는 [소개](index.md)를 따른다.
 
 ## 출발지 IP 허용 목록
 

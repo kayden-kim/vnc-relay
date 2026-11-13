@@ -41,14 +41,20 @@ This help is for operators who deploy the executable and configuration files dir
 
 ## Baseline
 
-This help follows the repository's `main` branch. The [latest Release](https://github.com/kayden-kim/vnc-relay/releases/latest) is `v2026.11.2`, published on 2026-11-09. Download bundles from [GitHub Releases](https://github.com/kayden-kim/vnc-relay/releases).
+This help follows the repository's `main` branch. The [latest Release](https://github.com/kayden-kim/vnc-relay/releases/latest) is `v2026.11.3`, published on 2026-11-14. Download bundles from [GitHub Releases](https://github.com/kayden-kim/vnc-relay/releases).
 
-A build from the current `main` still reports version `2026.11.2` until the next release. Do not use the version output alone to distinguish the two behaviors below.
+`main` currently behaves the same as the latest Release. If `main` changes behavior before the next release, the table below lists the change. A build from `main` still reports version `2026.11.3` until the next release.
 
-| Difference | Behavior on `main` | For users of Release `v2026.11.2` |
+| Difference | Behavior on `main` | For users of Release `v2026.11.3` |
 | --- | --- | --- |
-| WS and WSS Viewer path | Uses `/relay/viewer`. Does not accept the old `/relay` path. | You must use `/relay`. In this help's noVNC URLs, change `path=relay/viewer` to `path=relay`. Do not change TCP or `/relay/server`. |
-| Opt-in access ticket checks | Enable separately for each role in `[relay.ticket.viewer]` or `[relay.ticket.server]`. Checks apply to both WS and WSS for that role, not TCP. Checks are off by default. Related operations logs, dashboard ticket configuration inputs, and display of the `session_expired` close reason are also available. | This feature is unavailable. Do not add the ticket configuration tables. Build a bundle from `main` to use it. |
+| None | Same as the latest Release. | Follow this help as written. |
+
+Upgrading from `v2026.11.2` or earlier changes these behaviors.
+
+| Behavior | From `v2026.11.3` | `v2026.11.2` and earlier |
+| --- | --- | --- |
+| WS and WSS Viewer path | Uses `/relay/viewer`. Does not accept the old `/relay` path. | Uses `/relay`. In this help's noVNC URLs, change `path=relay/viewer` to `path=relay`. When you upgrade, migrate the server and all Viewer URLs together ([Upgrade and roll back](operate.md#upgrade-and-roll-back)). Do not change TCP or `/relay/server`. |
+| Opt-in access ticket checks | Enable separately for each role in `[relay.ticket.viewer]` or `[relay.ticket.server]`. Checks apply to both WS and WSS for that role, not TCP. Checks are off by default. Related operations logs, dashboard ticket configuration inputs, and display of the `session_expired` close reason are also available. | This feature is unavailable. Do not add the ticket configuration tables. |
 
 The Viewer path follows sections 1.7 and 3.1 of the [WebSocket contract](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/websocket-relay-v2.md). Access tickets follow section 1.9 of that contract and section 1.2 of the [configuration contract](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/config-v4.md). Related logs follow the [operations information contract](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/ops-info-v2.md).
 

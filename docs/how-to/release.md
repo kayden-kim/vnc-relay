@@ -107,7 +107,7 @@ Windows 11 x64와 Ubuntu 24.04 LTS x64용 배포 묶음을 만들고, 버전 태
 ### 3.3 버전을 올리고 Release 내기
 
 1. 새 버전을 정한다. 1.1절 규칙을 따른다. 이미 낸 버전은 `git tag --list "v*"`로 확인한다.
-2. 루트 `Cargo.toml`의 `[workspace.package] version`을 새 버전으로 바꾼다. 루트 `README.md`의 "버전" 줄도 같은 값으로 바꾼다. README의 "기준" 줄과 "연결 구성 예" 절에 이전 공개 묶음과 다른 동작을 적은 문장이 있으면 지운다. 새 묶음은 현재 소스와 같기 때문이다.
+2. 루트 `Cargo.toml`의 `[workspace.package] version`을 새 버전으로 바꾼다. 루트 `README.md`의 "버전" 줄도 같은 값으로 바꾼다. README의 "기준" 줄과 "연결 구성 예" 절에 이전 공개 묶음과 다른 동작을 적은 문장이 있으면 지운다. 새 묶음은 현재 소스와 같기 때문이다. 도움말 두 책도 같은 변경에서 고친다(사용자 결정 2026-11-11(Q221), [도움말 작성 규칙](../help/AGENTS.md)). 첫 페이지 `index.md`의 기준 버전 절에 새 최신 Release와 공개 날짜를 적고, 최신 Release와 다른 동작 목록을 다시 쓴다. 설치 페이지의 예시 파일 이름과 다른 페이지의 Release 안내도 새 버전에 맞춘다.
 3. `Cargo.lock`을 갱신하고 버전을 확인한다.
 
    ```shell
@@ -123,7 +123,7 @@ Windows 11 x64와 Ubuntu 24.04 LTS x64용 배포 묶음을 만들고, 버전 태
    cargo xtask notices
    ```
 
-   기대 결과: `notices: 통과 (THIRD-PARTY-NOTICES.txt)`. 이어 두 OS의 [전체 완료 검증](set-up-and-verify.md#34-전체-완료-검증)을 실행한다.
+   기대 결과: `notices: 통과 (THIRD-PARTY-NOTICES.txt)`. 이어 `cargo xtask help-site`로 고친 도움말을 검사한다. 기대 결과는 `help-site: 통과`로 시작하는 줄이다([도움말 게시 how-to](publish-help.md)). 그다음 두 OS의 [전체 완료 검증](set-up-and-verify.md#34-전체-완료-검증)을 실행한다.
 
 5. 변경을 커밋하고 `main`에 push한다. 커밋 메시지는 `chore(release): <버전>`이다.
 6. 3.2절의 `ci` 실행이 두 OS 모두 통과했는지 확인한다.

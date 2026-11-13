@@ -41,14 +41,20 @@ noVNC는 포함하지 않는다. 운영자가 별도로 준비하는 외부 View
 
 ## 기준 버전
 
-이 도움말은 저장소의 `main`을 따른다. [최신 Release](https://github.com/kayden-kim/vnc-relay/releases/latest)는 `v2026.11.2`이며 2026-11-09에 공개됐다. 배포 묶음은 [GitHub Releases](https://github.com/kayden-kim/vnc-relay/releases)에서 받는다.
+이 도움말은 저장소의 `main`을 따른다. [최신 Release](https://github.com/kayden-kim/vnc-relay/releases/latest)는 `v2026.11.3`이며 2026-11-14에 공개됐다. 배포 묶음은 [GitHub Releases](https://github.com/kayden-kim/vnc-relay/releases)에서 받는다.
 
-현재 `main`으로 빌드해도 다음 릴리스 전까지 버전은 `2026.11.2`로 표시된다. 버전 출력만으로 아래 두 동작을 구분하지 않는다.
+현재 `main`의 동작은 최신 Release와 같다. 다음 릴리스 전에 `main`의 동작이 달라지면 아래 표에 적는다. `main`으로 빌드해도 다음 릴리스 전까지 버전은 `2026.11.3`으로 표시된다.
 
-| 차이 | `main`의 동작 | `v2026.11.2` Release 사용자 |
+| 차이 | `main`의 동작 | `v2026.11.3` Release 사용자 |
 | --- | --- | --- |
-| WS·WSS Viewer 경로 | `/relay/viewer`를 쓴다. 이전 `/relay` 경로는 받지 않는다. | `/relay`를 써야 한다. 이 도움말의 noVNC URL에서 `path=relay/viewer`를 `path=relay`로 바꾼다. TCP와 `/relay/server`는 바꾸지 않는다. |
-| 선택형 접속 ticket 확인 | `[relay.ticket.viewer]`·`[relay.ticket.server]`에서 역할마다 켠다. 해당 역할의 WS·WSS에 함께 적용하며 TCP에는 적용하지 않는다. 기본은 꺼짐이다. 관련 운영 로그, 대시보드의 ticket 설정 입력과 종료 원인 `session_expired` 표시도 제공한다. | 이 기능을 쓸 수 없다. ticket 설정 테이블을 넣지 않는다. 사용하려면 `main`으로 묶음을 만들어야 한다. |
+| 없음 | 최신 Release와 같다. | 이 도움말을 그대로 따른다. |
+
+`v2026.11.2` 이하에서 올리면 다음 동작이 바뀐다.
+
+| 동작 | `v2026.11.3`부터 | `v2026.11.2` 이하 |
+| --- | --- | --- |
+| WS·WSS Viewer 경로 | `/relay/viewer`를 쓴다. 이전 `/relay` 경로는 받지 않는다. | `/relay`를 쓴다. 이 도움말의 noVNC URL에서 `path=relay/viewer`를 `path=relay`로 바꾼다. 올릴 때는 서버와 모든 Viewer URL을 함께 옮긴다([업그레이드와 롤백](operate.md#업그레이드와-롤백)). TCP와 `/relay/server`는 바꾸지 않는다. |
+| 선택형 접속 ticket 확인 | `[relay.ticket.viewer]`·`[relay.ticket.server]`에서 역할마다 켠다. 해당 역할의 WS·WSS에 함께 적용하며 TCP에는 적용하지 않는다. 기본은 꺼짐이다. 관련 운영 로그, 대시보드의 ticket 설정 입력과 종료 원인 `session_expired` 표시도 제공한다. | 이 기능을 쓸 수 없다. ticket 설정 테이블을 넣지 않는다. |
 
 Viewer 경로는 [WebSocket 계약](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/websocket-relay-v2.md) 1.7절·3.1절을 따른다. 접속 ticket은 같은 계약 1.9절과 [설정 계약](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/config-v4.md) 1.2절을 따른다. 관련 로그는 [운영 정보 계약](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/ops-info-v2.md)을 따른다.
 

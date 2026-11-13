@@ -56,7 +56,7 @@ Ubuntu bash:
 
 WS와 WSS는 같은 경로를 쓴다. 쿼리는 대상이나 중계 ID를 선택하지 않는다. 꺼진 역할과 다른 경로는 HTTP 404다. 끝 슬래시는 다른 경로다. `main`은 이전 Viewer 경로 `/relay`도 404로 거절한다.
 
-> **참고:** 최신 Release `v2026.11.2`는 Viewer 경로 `/relay`를 쓴다. 이 표는 `main` 기준이다. 버전 차이는 [소개](index.md), 클라이언트 구성은 [VNC 연결 구성](connect.md)을 따른다.
+> **참고:** `v2026.11.2` 이하 Release는 Viewer 경로 `/relay`를 쓴다. 버전 차이는 [소개](index.md), 클라이언트 구성은 [VNC 연결 구성](connect.md)을 따른다.
 
 업그레이드와 종료 코드 전체는 [WebSocket 계약 1.1·1.5·1.7절](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/websocket-relay-v2.md)을 따른다. ticket을 켠 역할의 추가 규칙은 [접속 ticket](access-ticket.md)을 따른다.
 

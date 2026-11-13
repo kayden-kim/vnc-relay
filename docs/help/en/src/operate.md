@@ -194,7 +194,7 @@ Restarting ends all connections and management sessions. Work during an approved
 
 There is no configuration-validation-only CLI. Starting on alternate ports does not validate operational ports, the firewall, or actual client relays. See the [Operations how-to](https://github.com/kayden-kim/vnc-relay/blob/main/docs/how-to/operate-relay.md) for source builds and detailed deployment procedures.
 
-> **Warning:** This help describes `main`. The latest Release, `v2026.11.2`, uses `/relay` for WS/WSS Viewers; `main` uses `/relay/viewer`. Access tickets also exist only on `main`. A `main` build can print the same version, so `--version` alone cannot distinguish these behaviors. Record the deployment source and commit too.
+> **Warning:** Upgrading from `v2026.11.2` or earlier changes the WS/WSS Viewer path from `/relay` to `/relay/viewer`. Migrate the server and all Viewer URLs together. A `main` build prints the latest Release version until the next release, so `--version` alone cannot distinguish them. Record the deployment source and commit too.
 
 For rollback, stop the new server gracefully and restore the previous executable together with configuration compatible with it. Restore client URLs too when crossing Viewer path versions. Do not leave `[relay.ticket.*]` tables in configuration for a version without access ticket support. Restoring the protected v3 configuration is recommended when rolling back from v4 to v3. Before returning to a version without forwarded address checks, stop proxy access or switch to direct built-in WSS and actual socket IP policies. Do not allow the proxy IP as a substitute for every client.
 

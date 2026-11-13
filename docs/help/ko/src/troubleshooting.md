@@ -92,7 +92,7 @@ Ubuntu:
 
 HTTP 404이면 URL 경로와 역할의 `enabled`를 확인한다. `main`의 Viewer 경로는 `/relay/viewer`, Server 경로는 `/relay/server`다. 끝에 `/`를 붙이지 않는다. 꺼진 역할도 404다.
 
-최신 Release `v2026.11.2`의 Viewer 경로는 `/relay`다. 이 도움말은 `main` 기준이며 이전 경로를 함께 받지 않는다. `main` 빌드도 버전 `2026.11.2`를 출력할 수 있다. 버전 문자열뿐 아니라 묶음 출처나 빌드 커밋을 확인해야 한다. 서버와 모든 Viewer URL을 함께 옮긴다.
+`v2026.11.2` 이하 Release의 Viewer 경로는 `/relay`다. `v2026.11.3`과 `main`은 이전 경로를 함께 받지 않는다. `main` 빌드는 다음 릴리스 전까지 최신 Release와 같은 버전을 출력한다. 버전 문자열뿐 아니라 묶음 출처나 빌드 커밋을 확인해야 한다. 서버와 모든 Viewer URL을 함께 옮긴다.
 
 `connection_rejected`의 `reason = invalid_upgrade`는 다른 잘못된 요청에도 쓰인다. 로그에 요청 경로가 없으므로 이 원인만으로 이전 URL 사용을 단정하지 않는다. [VNC 연결 구성](connect.md)과 [운영](operate.md)의 이관 안내를 따른다.
 

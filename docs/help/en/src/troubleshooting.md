@@ -92,7 +92,7 @@ For `origin_not_allowed` and HTTP 403, compare the browser's Origin with that ro
 
 For HTTP 404, check the URL path and the role's `enabled` setting. On `main`, Viewers use `/relay/viewer` and Servers use `/relay/server`. Do not add a trailing `/`. Disabled roles also return 404.
 
-The latest Release, `v2026.11.2`, uses `/relay` for Viewers. This help describes `main`, which does not also accept the old path. A `main` build can still print version `2026.11.2`. Check the package source or build commit, not just the version string. Migrate the server and all Viewer URLs together.
+Releases `v2026.11.2` and earlier use `/relay` for Viewers. `v2026.11.3` and `main` do not also accept the old path. A `main` build prints the latest Release version until the next release. Check the package source or build commit, not just the version string. Migrate the server and all Viewer URLs together.
 
 The `connection_rejected` reason `invalid_upgrade` also covers other invalid requests. Logs do not contain the request path, so this reason alone does not prove use of the old URL. Follow [Connecting VNC clients](connect.md) and migration guidance in [Operations](operate.md).
 

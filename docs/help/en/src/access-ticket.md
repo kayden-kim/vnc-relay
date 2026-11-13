@@ -2,7 +2,7 @@
 
 Use this page to enable access ticket checks for WS and WSS roles, prepare the issuer and clients, and rotate public keys.
 
-> **Note:** Access ticket checks exist only in `main`. They are not in the latest Release, `v2026.11.2`. Checks are off by default. See [Introduction](index.md) for the version baseline.
+> **Note:** Access ticket checks are available from `v2026.11.3`. They are not in `v2026.11.2` or earlier. Checks are off by default. See [Introduction](index.md) for the version baseline.
 
 ## What an access ticket does
 

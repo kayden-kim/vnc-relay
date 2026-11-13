@@ -194,7 +194,7 @@ Ubuntu:
 
 별도 설정 검증 전용 CLI는 없다. 대체 포트 시작은 운영 포트, 방화벽과 실제 클라이언트 중계를 대신 검증하지 않는다. 소스 빌드와 배포 묶음은 [운영 how-to](https://github.com/kayden-kim/vnc-relay/blob/main/docs/how-to/operate-relay.md)의 상세 절차를 따른다.
 
-> **주의:** 이 도움말은 `main` 기준이다. 최신 Release `v2026.11.2`의 WS·WSS Viewer 경로는 `/relay`지만 `main`은 `/relay/viewer`다. 접속 ticket도 `main`에만 있다. `main` 빌드가 같은 버전을 출력할 수 있으므로 `--version`만으로 두 동작을 구분하지 않는다. 배포 출처와 커밋도 기록한다.
+> **주의:** `v2026.11.2` 이하에서 올리면 WS·WSS Viewer 경로가 `/relay`에서 `/relay/viewer`로 바뀐다. 서버와 모든 Viewer URL을 함께 옮긴다. `main` 빌드는 다음 릴리스 전까지 최신 Release와 같은 버전을 출력하므로 `--version`만으로 둘을 구분하지 않는다. 배포 출처와 커밋도 기록한다.
 
 롤백할 때는 새 서버를 정상 종료하고 이전 실행파일과 그 버전에 맞는 설정을 함께 복원한다. Viewer 경로가 다른 버전 사이에서는 클라이언트 URL도 함께 되돌린다. 접속 ticket을 지원하지 않는 버전에는 `[relay.ticket.*]` 테이블을 남기지 않는다. v4에서 v3로 되돌릴 때는 보호한 v3 설정을 복원하는 방법을 권장한다. 전달 주소 검사가 없는 버전으로 되돌릴 때는 프록시 경유 접근을 중지하거나 직접 내장 WSS와 실제 소켓 IP 정책으로 먼저 바꿔야 한다. 프록시 IP를 모든 클라이언트 대신 허용해서는 안 된다.
 
