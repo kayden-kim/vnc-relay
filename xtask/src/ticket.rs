@@ -202,7 +202,8 @@ struct KeyFiles {
     kid: String,
 }
 
-/// Writes a new P-256 key pair for `role`. Existing files are never replaced.
+/// Writes a new P-256 key pair for `role`. Existing files are never replaced,
+/// and a failed run leaves neither new file behind.
 fn write_keys(dir: &Path, role: Role) -> Result<KeyFiles, Error> {
     let public = dir.join(role.public_file());
     let private = dir.join(role.private_file());
@@ -262,13 +263,19 @@ fn write_keys(dir: &Path, role: Role) -> Result<KeyFiles, Error> {
     })
 }
 
+/// Creates `path` and writes `value`. A failed write removes the new file.
 fn write_new(options: &OpenOptions, path: &Path, value: &Value) -> Result<(), Error> {
     let mut text = serde_json::to_string_pretty(value)?;
     text.push('\n');
-    options
+    let mut file = options
         .open(path)
-        .and_then(|mut file| file.write_all(text.as_bytes()))
-        .map_err(|error| path_error(path, &error))
+        .map_err(|error| path_error(path, &error))?;
+    if let Err(error) = file.write_all(text.as_bytes()) {
+        drop(file);
+        let _ = fs::remove_file(path);
+        return Err(path_error(path, &error));
+    }
+    Ok(())
 }
 
 fn path_error(path: &Path, error: &std::io::Error) -> Error {
@@ -595,7 +602,7 @@ mod tests {
             assert_eq!(encode(bytes), text);
             assert_eq!(decode(text).as_deref(), Some(bytes));
         }
-        for text in ["Zg==", "Z", "Zh", "Zm+v", "Zm/v"] {
+        for text in ["Zg==", "Z", "Zh", "Zm9", "Zm+v", "Zm/v"] {
             assert_eq!(decode(text), None, "{text}");
         }
     }
