@@ -34,6 +34,36 @@ pub fn lock() -> MutexGuard<'static, ()> {
 pub fn now() -> u64 {
     must(SystemTime::now().duration_since(UNIX_EPOCH)).as_secs()
 }
+/// Monotonic instant at which the relay ends a connection whose ticket has `sx`.
+/// Call it right after the 101: the relay turns `sx` into a monotonic deadline
+/// from its wall clock at that moment. A later wall-clock step (WSL2 corrects
+/// its clock forward by seconds) moves neither that deadline nor this one.
+pub fn sx_deadline(sx: u64) -> Instant {
+    let start = Instant::now();
+    let remaining = (UNIX_EPOCH + Duration::from_secs(sx))
+        .duration_since(SystemTime::now())
+        .unwrap_or_default();
+    start + remaining
+}
+/// Lateness the former wall-clock check `now() <= sx + 2` accepted: `now()`
+/// rounds down to whole seconds, so any close before `sx + 3` passed.
+pub const SX_LATE: Duration = Duration::from_secs(3);
+/// Asserts that a `session_expired` close arrived in `[earliest, latest)`,
+/// both built from [`sx_deadline`]. The close may come up to 50 ms before
+/// `earliest` because the relay and this test read their clocks a moment apart.
+pub fn assert_closed_between(earliest: Instant, latest: Instant, context: &str) {
+    let closed = Instant::now();
+    assert!(
+        closed + Duration::from_millis(50) >= earliest,
+        "{context}: closed {:?} before the deadline",
+        earliest.saturating_duration_since(closed)
+    );
+    assert!(
+        closed < latest,
+        "{context}: closed {:?} after the deadline",
+        closed.saturating_duration_since(earliest)
+    );
+}
 pub fn wait(mut ready: impl FnMut() -> bool) {
     let deadline = Instant::now() + LIMIT;
     while !ready() {

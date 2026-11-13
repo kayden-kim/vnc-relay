@@ -223,6 +223,7 @@ fn watched_and_api_ticket_reconfiguration_preserves_existing_bindings_timers_and
         let sx = now() + 4;
         let old_ticket = original.sign(&claims("viewer", "old-101", "0123", Some(sx)));
         let mut old = server.ws(false, "viewer", &old_ticket);
+        let old_end = sx_deadline(sx);
         let mismatch_ticket = original.sign(&claims("viewer", "old-mismatch", "0123", None));
         let mut mismatch = server.ws(true, "viewer", &mismatch_ticket);
         server.rotate("viewer", &rotated.jwks());
@@ -238,10 +239,10 @@ fn watched_and_api_ticket_reconfiguration_preserves_existing_bindings_timers_and
         old.send(&request("ID:0123"));
         exchange(&mut old, &mut peer);
         old.close(4013, "session_expired");
-        assert!(now() >= sx, "old timer must not expire early");
-        assert!(
-            now() <= sx + 2,
-            "old sx must survive reload and key rotation"
+        assert_closed_between(
+            old_end,
+            old_end + SX_LATE,
+            "old sx must survive reload and key rotation",
         );
         tcp_closed(&mut peer);
         change_ticket_settings(&server, api, true, true);
@@ -482,12 +483,13 @@ fn sx_expires_every_lifecycle_state_and_earliest_side_with_distinct_management_c
         let sx = now() + 2;
         let ticket = signer.sign(&claims(role, &jti, "311", Some(sx)));
         let mut ws = server.ws(secure, role, &ticket);
+        let end = sx_deadline(sx);
         let mut tcp = server.tcp_peer(opposite, "311");
         ws.send(&request("ID:311"));
         exchange(&mut ws, &mut tcp);
         let active = active_item(&server);
         ws.close(4013, "session_expired");
-        assert!(now() >= sx && now() <= sx + 2);
+        assert_closed_between(end, end + SX_LATE, "active session ends at sx");
         tcp_closed(&mut tcp);
         assert_expired_session(&server, &active);
     }
@@ -509,7 +511,9 @@ fn sx_expires_every_lifecycle_state_and_earliest_side_with_distinct_management_c
             Some(if viewer_first { late } else { early }),
         ));
         let mut v = server.ws(false, "viewer", &viewer_ticket);
+        let viewer_end = sx_deadline(if viewer_first { early } else { late });
         let mut s = server.ws(true, "server", &server_ticket);
+        let server_end = sx_deadline(if viewer_first { late } else { early });
         v.send(&request("ID:312"));
         s.send(&request("ID:312"));
         v.send(b"viewer-data");
@@ -519,10 +523,10 @@ fn sx_expires_every_lifecycle_state_and_earliest_side_with_distinct_management_c
         let active = active_item(&server);
         v.close(4013, "session_expired");
         s.close(4013, "session_expired");
-        assert!(now() >= early, "session must not expire early");
-        assert!(
-            now() < late,
-            "earlier sx, not later sx, controls the session"
+        assert_closed_between(
+            viewer_end.min(server_end),
+            viewer_end.max(server_end),
+            "earlier sx, not later sx, controls the session",
         );
         assert_expired_session(&server, &active);
     }
