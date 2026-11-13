@@ -1303,6 +1303,7 @@ dependencies = [
 name = "xtask"
 version = "0.0.0"
 dependencies = [
+ "aws-lc-rs",
  "serde_json",
 ]
 

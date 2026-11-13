@@ -1,6 +1,6 @@
 # xtask 개발 도구 모듈 설계
 
-`xtask`는 개발 전용 crate다. `cargo xtask scenarios`는 스펙 수용 테스트 표, 테스트 코드의 시나리오 표식, `cargo test` 결과를 대조해 시나리오별 상태 보고서를 만든다. `cargo xtask layers`는 `cargo metadata`의 crate 의존을 코드 지도의 레이어 표와 대조한다. 이 두 명령은 Cargo가 주는 정보(`cargo metadata`, 테스트 빌드 JSON 메시지, 테스트 출력)만 읽고 제품 crate를 링크하지 않는다. `cargo xtask tokens`는 DESIGN.md 머리말에서 토큰 CSS를 만들고 저장된 파일과 대조한다. `cargo xtask dashboard-serve`는 `web/dashboard/`를 `127.0.0.1`에서 제공하는 로컬 미리보기 서버다. `cargo xtask help-site`는 운영자 도움말 사이트를 만들고 검사한다. `cargo xtask help-serve`는 만든 도움말 사이트를 GitHub Pages와 같은 경로로 제공하는 로컬 미리보기 서버다.
+`xtask`는 개발 전용 crate다. `cargo xtask scenarios`는 스펙 수용 테스트 표, 테스트 코드의 시나리오 표식, `cargo test` 결과를 대조해 시나리오별 상태 보고서를 만든다. `cargo xtask layers`는 `cargo metadata`의 crate 의존을 코드 지도의 레이어 표와 대조한다. 이 두 명령은 Cargo가 주는 정보(`cargo metadata`, 테스트 빌드 JSON 메시지, 테스트 출력)만 읽고 제품 crate를 링크하지 않는다. `cargo xtask tokens`는 DESIGN.md 머리말에서 토큰 CSS를 만들고 저장된 파일과 대조한다. `cargo xtask dashboard-serve`는 `web/dashboard/`를 `127.0.0.1`에서 제공하는 로컬 미리보기 서버다. `cargo xtask help-site`는 운영자 도움말 사이트를 만들고 검사한다. `cargo xtask help-serve`는 만든 도움말 사이트를 GitHub Pages와 같은 경로로 제공하는 로컬 미리보기 서버다. `cargo xtask ticket`은 접속 ticket을 손으로 확인할 때 외부 발급 쪽을 대신해 시험용 키와 ticket을 만든다.
 
 작업 0.9의 결정에 따라 `cargo xtask tokens`와 `cargo xtask dashboard-serve`를 추가했다(사용자 결정 2026-10-22(Q32)·(Q34)). 두 명령은 작업 4.8에서 구현했다.
 
@@ -10,6 +10,8 @@
 
 `cargo xtask package`는 실행한 OS(Windows x64 또는 Linux x64)용 배포 묶음을 만든다. release 빌드와 `notices --check`를 거친 뒤 [수동 운영 안내 3.1절](../how-to/operate-relay.md#31-release-빌드와-묶음)의 파일을 모아 Windows는 zip, Linux는 tar.gz로 압축하고 SHA-256 파일을 쓴다(사용자 결정 2026-11-08(Q161·Q164)). 버전이 `연.월.순서` 규칙(Q165)이 아니면 빌드 전에 실패한다. 절차는 [릴리스 how-to](../how-to/release.md)에 있다.
 
+`cargo xtask ticket keys`와 `cargo xtask ticket issue`는 접속 ticket을 손으로 확인하는 시험 도구다. 제품은 외부 발급 쪽이 서명한 ticket을 확인만 하고 발급하지 않는다([ADR-0009](../decisions/ADR-0009-optional-relay-access-ticket.md)). 시험용 발급은 개발 전용 xtask 명령으로 두고 실행파일과 배포 묶음에는 넣지 않는다(사용자 결정 2026-11-13(Q233)). `keys`는 역할의 P-256 키 쌍을 만들어 공개 키 JWKS 파일과 개인 JWK 파일을 쓴다. `issue`는 그 개인키로 ES256 ticket 하나를 서명해 표준 출력에 쓴다. 형식은 [WebSocket 계약 1.9.2절](../contracts/websocket-relay-v2.md#192-ticket-형식과-클레임)과 [설정 계약 1.11절](../contracts/config-v4.md#111-접속-ticket-공개-키-파일-형식)을 따른다. 사용 절차는 [수동 운영 안내 3.10.1절](../how-to/operate-relay.md#3101-시험용-키와-ticket으로-확인하기)에 있다.
+
 | 항목 | 값 |
 | --- | --- |
 | 구조 시점 | Current |
@@ -18,8 +20,8 @@
 | 코드 위치 | `xtask/` |
 | 코드 지도 | [코드 지도 2절](code-map.md#2-코드-위치와-구성요소) |
 | 관련 스펙 | 없음. 모든 스펙의 수용 테스트 표를 읽는다. `help-site`의 검사는 [도움말 사이트 화면 스펙](../specs/help-site.md) HELP-004·HELP-016의 정적 부분을 맡는다. |
-| 관련 계약 | 없음 |
-| 관련 ADR | 없음 |
+| 관련 계약 | `ticket`만 해당한다. [WebSocket 계약 1.9.2절](../contracts/websocket-relay-v2.md#192-ticket-형식과-클레임)의 ticket 형식과 [설정 계약 1.11절](../contracts/config-v4.md#111-접속-ticket-공개-키-파일-형식)의 공개 키 파일 형식을 따른다. |
+| 관련 ADR | `ticket`만 해당한다. [ADR-0009](../decisions/ADR-0009-optional-relay-access-ticket.md)의 외부 발급 쪽을 시험에서 대신한다. |
 
 ## 1. 책임과 경계
 
@@ -30,12 +32,14 @@
   - 실행한 OS의 배포 묶음 생성과 버전 형식 검사
   - 도움말 사이트 생성과 정적 검사: 두 책을 mdBook으로 빌드하고 사이트 루트·토큰 CSS·글꼴을 더한 뒤 목차·제목·언어·링크·그림·외부 주소를 검사한다.
   - 로컬 미리보기 서버: 대시보드 파일과 만든 도움말 사이트를 `127.0.0.1`에서 제공한다. 두 명령은 한 정적 서버 구현(`static_server.rs`)을 함께 쓴다.
+  - 접속 ticket 시험 도구: 역할의 P-256 키 쌍, 공개 키 JWKS 파일, 개인 JWK 파일, ES256 ticket을 만든다(사용자 결정 2026-11-13(Q233)).
 - 맡지 않는 책임:
   - 라이선스 검사. [의존성 라이선스 검사](../how-to/check-dependency-licenses.md)의 `cargo deny`가 맡는다.
   - 모듈 안의 입출력 타입 금지. `crates/app/clippy.toml`과 `cargo clippy`가 맡는다.
   - 대시보드 테스트 결과 수집. 대시보드 브라우저 테스트는 Rust 통합 테스트라서 기존 스캐너가 읽는다(사용자 결정 2026-10-22(Q35)). 이 명령이 따로 모으지 않는다.
   - mdBook 설치와 GitHub Pages 게시. mdBook은 [도움말 how-to](../how-to/publish-help.md)의 절차로 설치하고, 게시는 `.github/workflows/help.yml`이 맡는다. 도움말 사이트의 브라우저 동작 검사는 루트 `tests/help_site.rs`가 맡는다.
-- 다른 모듈에 공개하는 기능: 없음. 명령행은 `cargo xtask scenarios [--require-all]`, `cargo xtask layers`, `cargo xtask tokens [--check]`(사용자 결정 2026-10-22(Q32)), `cargo xtask dashboard-serve [--port N]`(사용자 결정 2026-10-22(Q34), 기본 포트 8080), `cargo xtask notices [--check]`, `cargo xtask package`(사용자 결정 2026-11-08(Q161)), `cargo xtask help-site`, `cargo xtask help-serve [--port N]`(기본 포트 8090)이다. 두 미리보기 명령은 포트 `0`을 받으면 OS가 고른 빈 포트를 쓰고 그 주소를 출력한다. 별칭은 `.cargo/config.toml`의 `[alias] xtask`다.
+  - 운영 ticket 발급과 운영 서명 키 보관. 외부 발급 쪽이 맡는다. `ticket`이 만든 키는 시험에만 쓴다. 거절을 일으키는 잘못된 ticket(DER 서명, 잘못된 클레임 등)도 만들지 않는다. 그런 거절은 자동 시험(WS-037~046)이 확인한다.
+- 다른 모듈에 공개하는 기능: 없음. 명령행은 `cargo xtask scenarios [--require-all]`, `cargo xtask layers`, `cargo xtask tokens [--check]`(사용자 결정 2026-10-22(Q32)), `cargo xtask dashboard-serve [--port N]`(사용자 결정 2026-10-22(Q34), 기본 포트 8080), `cargo xtask notices [--check]`, `cargo xtask package`(사용자 결정 2026-11-08(Q161)), `cargo xtask help-site`, `cargo xtask help-serve [--port N]`(기본 포트 8090), `cargo xtask ticket keys <viewer|server> [--dir <디렉터리>]`, `cargo xtask ticket issue <viewer|server> <중계 ID> [--dir <디렉터리>] [--issuer <값>] [--relay-host <값>] [--lifetime <초>] [--session <초>] [--subject <값>]`(사용자 결정 2026-11-13(Q233))이다. 두 미리보기 명령은 포트 `0`을 받으면 OS가 고른 빈 포트를 쓰고 그 주소를 출력한다. 별칭은 `.cargo/config.toml`의 `[alias] xtask`다.
 
 ## 2. 내부 구조
 
@@ -74,11 +78,13 @@ flowchart LR
     HST -->|"호출"| HCK["help_site/checks.rs<br/>check"]
     HCK -->|"호출"| HTM["help_site/html.rs<br/>start_tags"]
     HCK -->|"percent_decode 호출"| SRV
+    MAIN -->|"호출"| TKT["ticket.rs<br/>parse, run"]
+    TKT -->|"key_dir 호출"| META
 ```
 
 | 요소(파일·심볼) | 역할 | 만들어지는 시점과 소유자 | 의존 대상 |
 | --- | --- | --- | --- |
-| `xtask/src/main.rs` `main`, `Error` | 하위 명령 선택, 사용법 오류(종료 코드 2), 오류 출력 | 명령 실행마다 | `scenarios`, `layers`, `tokens`, `dashboard_serve`, `notices`, `package`, `help_site`, `help_serve` |
+| `xtask/src/main.rs` `main`, `Error` | 하위 명령 선택, 사용법 오류(종료 코드 2. `ticket`은 이유를 먼저 출력), 오류 출력 | 명령 실행마다 | `scenarios`, `layers`, `tokens`, `dashboard_serve`, `notices`, `package`, `help_site`, `help_serve`, `ticket` |
 | `xtask/src/cargo.rs` `metadata`, `Workspace`, `command` | `cargo metadata --no-deps`를 읽어 패키지(이름·버전)·대상·의존 목록을 만든다. 하위 Cargo 명령은 환경 변수 `CARGO`의 Cargo로 실행한다. | 명령마다 한 번 | serde_json |
 | `xtask/src/scenarios.rs` `run`, `locate`, `link` | 보고 순서 조정, 표식 파일을 테스트 대상과 모듈 경로로 바꾸기, 시나리오별 테스트 연결 | `scenarios` 실행마다 | 하위 모듈, `cargo` |
 | `xtask/src/scenarios/spec.rs` `parse` | `## ` 제목에 "수용 테스트"가 들어간 절의 표에서 첫 칸이 `<접두어>-<숫자>`인 행을 시나리오로 읽는다. | 스펙 파일마다 | 없음 |
@@ -99,6 +105,7 @@ flowchart LR
 | `xtask/src/help_serve.rs` `run`, `MOUNT` | `<대상 디렉터리>/help-site/`를 `Site`로 정한다. 마운트와 `/`의 이동 위치는 `/vnc-relay/`, CSP 헤더는 없다(GitHub Pages처럼 페이지의 `meta` CSP가 적용된다). 없는 경로는 사이트 루트의 `404.html`을 404로 준다. 사이트가 없으면 `help-site`를 먼저 실행하라는 오류로 멈춘다. | 명령마다, 프로세스를 끝낼 때까지 | `cargo::metadata`, `static_server` |
 | `xtask/src/notices.rs` `run`, `render`, `tree_packages`, `collect_texts` | 두 대상의 `cargo tree --edges normal,build` 합집합을 `cargo metadata`의 이름·버전·라이선스·패키지 경로와 연결한다. 고지 파일을 재귀 수집하고 정렬해 저장하거나 대조한다. crate 고지 뒤에 `tokens/fonts.rs`의 `LICENSE_PATH` 전문을 붙인다. | 명령마다 | std, serde_json, `cargo::command`·`cargo::display_path`, `tokens/fonts.rs`의 상수 |
 | `xtask/src/package.rs` `run`, `check_version`, `archive_command`, `copy_dir`, `sha256` | 버전 형식 검사, `cargo fetch --locked`, release 빌드, `notices::run(true)`, 묶음 디렉터리 구성, OS `tar`로 압축, SHA-256 파일 쓰기. Windows는 `%SystemRoot%\System32\tar.exe -a`(zip), Linux는 GNU `tar`(소유자 0)다. SHA-256은 FIPS 180-4를 직접 구현했다. `copy_dir`는 디렉터리를 재귀 복사하고 Unix 권한을 디렉터리 `0755`, 파일 `0644`로 맞춘다. `help_site`도 이 함수를 쓴다. | `package` 실행마다 | std, `cargo::metadata`·`command`·`display_path`, `notices::run` |
+| `xtask/src/ticket.rs` `parse`, `run`, `key_dir`, `write_keys`, `load_key`, `issue`, `Role`, `Claims` | 인자 검사와 기본값, 키 디렉터리 결정, P-256 키 쌍 생성과 두 키 파일 쓰기, 개인 JWK 읽기, 클레임 구성과 ES256 서명, base64url 인코딩·디코딩, RFC 7638 지문 | `ticket` 실행마다 | aws-lc-rs(키 생성·서명·SHA-256·난수), serde_json, `cargo::metadata` |
 
 ## 3. 데이터 모델
 
@@ -113,6 +120,10 @@ flowchart LR
 | 보고서 | Markdown | `<Cargo 대상 디렉터리>/scenario-report.md` | 저장소에 넣지 않는다. 실행마다 덮어쓴다. |
 | `Site` | `root`(정규화한 디렉터리), `mount`(`/`로 시작하고 끝나는 URL 경로), `home`(`/`의 이동 위치), `csp`(CSP 헤더 값 또는 없음), `not_found`(404 본문 파일 또는 없음) | 메모리 | `root` 밖의 파일은 제공하지 않는다. |
 | 도움말 사이트 | `index.html`·`404.html`(사이트 루트), `assets/`(`tokens.css`·`site.css`·`lang.js`·`favicon.svg`·`fonts/`), `ko/`·`en/`(mdBook 출력) | `<Cargo 대상 디렉터리>/help-site/`. 모으는 중간 파일은 `help-stage/` | 저장소에 넣지 않는다. 실행마다 지우고 다시 만든다. GitHub Pages에는 이 디렉터리를 그대로 올린다. |
+| 키 디렉터리 | `--dir` 값 또는 `<Cargo 대상 디렉터리>/ticket/` | 파일 시스템 | 기본 위치는 저장소에 넣지 않는 대상 디렉터리 안이다. 같은 이름의 파일이 있으면 `keys`가 쓰지 않는다. |
+| 시험 공개 키 파일 | `{"keys":[{"alg","crv","kid","kty","use","x","y"}]}` | `<키 디렉터리>/<역할>-ticket.jwks` | [설정 계약 1.11절](../contracts/config-v4.md#111-접속-ticket-공개-키-파일-형식) 형식이다. 키 하나, `d` 없음. `kid`는 공개 키의 RFC 7638 JWK 지문(SHA-256, base64url 43자)이다. |
+| 시험 개인 JWK | 공개 키의 멤버와 `d`(개인 스칼라 32바이트, base64url) | `<키 디렉터리>/<역할>-ticket.private.jwk` | Unix에서는 권한 `0600`으로 만든다. Windows에서는 디렉터리 권한을 따른다. 저장소와 배포 묶음에 넣지 않는다. |
+| 시험 ticket | 헤더 `{"alg":"ES256","kid"}`, 클레임 `iss`·`aud`·`rh`·`rid`·`jti`·`iat`·`exp`와 선택 `sx`·`sub`, R‖S 64바이트 서명 | 표준 출력 한 줄 | `aud`는 역할의 고정 값이다. `jti`는 16바이트 난수, `iat`는 현재 Unix 초, `exp = iat + 수명`, `sx = iat + --session`이다. |
 
 ## 4. 처리 순서
 
@@ -143,10 +154,14 @@ flowchart LR
 
 `cargo xtask package`는 다음 순서로 진행한다. ① `cargo metadata`로 루트·대상 디렉터리·`vnc-relay` 버전을 읽고 `check_version`으로 형식을 검사한다. ② `cargo fetch --locked`로 두 대상의 의존성 소스를 받는다. `notices --check`가 오프라인으로 두 대상의 고지 파일을 읽기 때문이다. ③ `cargo build --release --locked --package vnc-relay`. ④ `notices::run(true)`. 대조가 실패하면 묶음을 만들지 않고 종료 코드 1이다. ⑤ `<대상 디렉터리>/package/vnc-relay-<버전>-<os>-x64/`를 지우고 다시 만든 뒤 실행파일, `examples/relay.toml`(`relay.toml`로), `README.md`·`LICENSE`·`THIRD-PARTY-NOTICES.txt`·`GLOSSARY.md`, `docs/` 전체를 복사한다. Unix에서는 원본 권한과 관계없이 디렉터리·실행파일을 `0755`, 나머지 파일을 `0644`로 맞춘다. WSL에서 Windows 드라이브(`/mnt/d`)의 파일은 모두 `0777`로 보이기 때문이다. ⑥ 같은 이름의 묶음 파일을 지우고 `package/`에서 OS `tar`로 디렉터리 하나를 압축한다. ⑦ 묶음 바이트의 SHA-256을 `<묶음>.sha256`에 `sha256sum` 형식으로 쓰고, 표준 출력에 `package: <경로>`와 `sha256: <값>`을 쓴다. 경로는 저장소 안이면 상대 경로, 밖이면 절대 경로다.
 
+`cargo xtask ticket keys <역할>`은 다음 순서로 진행한다. ① 인자를 검사한다. ② `--dir`가 없으면 `cargo metadata`의 대상 디렉터리 아래 `ticket/`을 키 디렉터리로 쓴다(`key_dir`). ③ `<역할>-ticket.jwks`나 `<역할>-ticket.private.jwk`가 이미 있으면 아무것도 쓰지 않고 멈춘다. ④ `EcdsaKeyPair::generate`로 P-256 키를 만든다. 공개 점에서 `x`·`y`를, 개인 스칼라에서 `d`를, `x`·`y`의 RFC 7638 지문에서 `kid`를 구한다. ⑤ 디렉터리를 만들고 개인 JWK, 공개 키 JWKS 순서로 새 파일을 쓴다. 공개 키 파일을 쓰지 못하면 방금 쓴 개인 JWK를 지운다. ⑥ 두 파일 경로와 `kid`를 출력한다.
+
+`cargo xtask ticket issue <역할> <중계 ID>`는 다음 순서로 진행한다. ① 인자를 검사하고 기본값을 채운다. 발급자는 `issuer.example/prod`, 중계 호스트는 `relay.example`, 수명은 60초다. 이 값은 `examples/relay.toml`의 주석 예시와 [수동 운영 안내 3.10절](../how-to/operate-relay.md#310-접속-ticket-켜기와-공개-키-교체) 3단계의 값과 같다. ② 키 디렉터리의 `<역할>-ticket.private.jwk`를 읽는다. `from_private_key_and_public_key`가 개인 스칼라와 공개 점이 맞는지 확인한다. ③ 시스템 시각의 Unix 초를 `iat`로 쓰고 클레임을 만든다. `jti`는 OS 난수 16바이트다. ④ `ECDSA_P256_SHA256_FIXED_SIGNING`으로 서명하고 JWS 압축 형식 한 줄을 표준 출력에 쓴다. 표준 출력에는 ticket만 쓰므로 셸 변수에 바로 담을 수 있다.
+
 ## 5. 상태와 초기화
 
 - 초기화·로딩 시점: 명령 실행마다 처음부터 읽는다. 캐시는 없다.
-- 상태 소유자와 제거 시점: 모든 상태는 명령 실행 동안 메모리에만 있다. 보고서 파일과 도움말 사이트(`help-stage/`·`help-site/`)만 남는다. 다음 `help-site` 실행이 둘을 지우고 다시 만든다.
+- 상태 소유자와 제거 시점: 모든 상태는 명령 실행 동안 메모리에만 있다. 보고서 파일, 도움말 사이트(`help-stage/`·`help-site/`), `ticket`의 키 파일만 남는다. 다음 `help-site` 실행이 도움말 사이트를 지우고 다시 만든다. 키 파일은 사용자가 지울 때까지 남는다.
 - 동시 실행과 순서: 같은 대상 디렉터리에서 두 번 동시에 실행하면 Cargo 빌드 잠금을 기다리고 보고서는 나중에 끝난 실행이 덮어쓴다. `help-site`가 `help-stage/`·`help-site/`를 지우고 다시 만드는 일은 이 잠금 밖에서 일어난다. 그래서 `help-site`를 동시에 두 번 실행하거나, `help-serve`나 도움말 시험(`tests/help_site.rs`)이 같은 대상 디렉터리의 사이트를 쓰는 동안 실행하면 서로의 산출물을 지울 수 있다. 이런 실행은 차례로 한다(이 문서의 판단, 사용자 결정 없음).
 
 ## 6. 오류 처리
@@ -169,6 +184,9 @@ flowchart LR
 | `xtask/src/help_site/checks.rs` `check` | 검사 문제는 모두 모아 한 줄씩 출력하고 `help-site: 실패 (N건)`, 종료 코드 1이다. 같은 문제 줄이 이어지면 한 번만 출력한다. mdBook은 그림마다 확대용 사본을 하나 더 쓰므로 그림 문제가 두 번 나오기 때문이다. 검사할 파일을 읽지 못하면 그 자리에서 중단한다. | 만든 사이트는 남는다. 게시 워크플로는 실패한 사이트를 올리지 않는다. | [HELP-004](../specs/help-site.md#7-수용-테스트), [HELP-016](../specs/help-site.md#7-수용-테스트) |
 | `xtask/src/help_serve.rs` `run` | `help-site/index.html`이 없으면 `cargo xtask help-site`를 먼저 실행하라는 오류로 중단, 종료 코드 1 | 없음 | 없음 |
 | `xtask/src/package.rs` `run` | Windows x64·Linux x64가 아닌 OS, 버전 형식 오류, `cargo fetch`·`cargo build` 실패, `tar` 실패, 읽기·쓰기 오류면 중단, 종료 코드 1. `notices --check` 불일치도 종료 코드 1이다. | 실패 지점까지 만든 묶음 디렉터리나 묶음 파일이 `<대상 디렉터리>/package/`에 남는다. 다음 실행이 지우고 다시 만든다. | 없음 |
+| `xtask/src/ticket.rs` `parse` | 역할이 `viewer`·`server`가 아니거나, 중계 ID가 ASCII 숫자 1~247자리가 아니거나, 알 수 없는·값 없는·두 번 준 옵션이면 이유와 사용법을 출력하고 종료 코드 2다. 값 범위는 `--issuer`·`--relay-host` 1~256바이트, `--subject` 1~128바이트, `--lifetime` 1~600초, `--session` 1초 이상이다. | 없음 | 없음 |
+| `xtask/src/ticket.rs` `write_keys` | 같은 이름의 파일이 있으면 덮어쓰지 않고 종료 코드 1이다. 쓰기 실패도 종료 코드 1이다. 공개 키 파일을 쓰지 못하면 같은 실행에서 만든 개인 JWK를 지운다. | 기존 파일은 그대로다. | 없음 |
+| `xtask/src/ticket.rs` `load_key`, `issue` | 개인 JWK가 없으면 `keys`를 먼저 실행하라는 오류, 형식이나 좌표가 맞지 않으면 형식 오류로 종료 코드 1이다. 오류에 파일 내용을 넣지 않는다. `iat`에 수명이나 `--session`을 더한 값이 2^64 − 1을 넘어도 종료 코드 1이다. | 없음 | 없음 |
 
 ## 7. 설계 선택
 
@@ -198,6 +216,13 @@ flowchart LR
 | 두 미리보기 명령이 `static_server.rs` 하나를 쓴다 | 두 사이트는 마운트, `/`의 이동 위치, CSP, 404 본문만 다르다. 요청 해석과 경로 검사를 한 곳에서 고친다. | 명령마다 서버를 따로 둔다. 같은 경로 검사 코드가 둘이 된다. | **이 문서의 판단, 사용자 결정 없음** |
 | `help-serve`는 GitHub Pages처럼 `/vnc-relay/` 아래에 제공하고 없는 경로에 루트 `404.html`을 준다. CSP 헤더는 보내지 않는다 | 게시 주소와 같은 경로에서 404 페이지의 절대 경로와 언어 이동을 확인한다. GitHub Pages는 CSP 헤더를 보내지 않으므로 페이지의 `meta` CSP만 적용되는 상태를 그대로 본다. | 대시보드처럼 `/`에 제공한다. 404 페이지의 `/vnc-relay/` 경로를 확인할 수 없다. | **이 문서의 판단, 사용자 결정 없음** |
 | 끝 `/`가 빠진 디렉터리 주소는 `/`를 붙여 302 보낸다 | 디렉터리의 `index.html`이 상대 경로로 다른 파일을 읽으려면 주소가 `/`로 끝나야 한다. GitHub Pages도 같은 주소로 보낸다. 대시보드 미리보기에도 같이 적용된다. | `index.html`을 바로 준다. 상대 경로가 한 단계 위를 가리킨다. | **이 문서의 판단, 사용자 결정 없음** |
+| 시험용 발급을 개발 전용 xtask 명령으로 둔다 | 제품은 외부 발급 쪽이 서명한 ticket만 확인한다. 서명 개인키 처리가 실행파일과 배포 묶음에 들어가지 않는다. 저장소가 있으면 두 OS에서 같은 명령으로 시험한다. | 실행파일 하위 명령. 개인키 처리가 제품에 들어간다. 관리 API 발급. ADR-0009의 발급 쪽 분리와 충돌한다. 저장소 밖 스크립트. Node·Python 실행 환경이 더 필요하다. | 사용자 결정 2026-11-13(Q233) |
+| 키 생성·서명·지문·난수는 aws-lc-rs를 쓴다 | adapters가 ticket 확인에 쓰는 승인 crate다. 새 crate가 없으므로 PRD 승인 목록과 `layers.rs` `APPROVED`를 바꾸지 않는다. | 암호 연산을 직접 구현한다. 잘못 구현할 위험이 크다. | **이 문서의 판단, 사용자 결정 없음** |
+| 개인키는 개인 JWK 파일로 둔다 | 키와 `kid`를 한 파일에 담으므로 `issue`가 `kid`를 따로 받지 않는다. 기존 serde_json으로 읽고 쓴다. 이 파일을 공개 키 파일 자리에 잘못 두면 vnc-relay가 `d` 멤버 때문에 거절한다. | PKCS#8 PEM. `kid`를 따로 관리하고 PEM 인코더를 더 만들어야 한다. | **이 문서의 판단, 사용자 결정 없음** |
+| `kid`는 RFC 7638 JWK 지문이다 | 키마다 다르므로 공개 키 교체 시험에서 두 키를 한 파일에 넣어도 `kid`가 겹치지 않는다. | 역할별 고정 이름. 교체 시험에서 `kid`가 겹쳐 `ticket_keys_invalid`가 된다. | **이 문서의 판단, 사용자 결정 없음** |
+| 기본 키 디렉터리는 Cargo 대상 디렉터리 안이고 기존 파일을 덮어쓰지 않는다 | 개인키가 저장소 추적 파일이 되지 않는다. 이미 배치한 공개 키와 짝인 개인키를 실수로 바꾸지 않는다. | 현재 디렉터리에 쓴다. 저장소 루트에 개인키가 생긴다. 덮어쓴다. 배치한 공개 키와 맞지 않게 된다. | **이 문서의 판단, 사용자 결정 없음** |
+| 기본 발급자·중계 호스트·수명은 예시 설정의 주석 값이다 | 예시 설정의 주석만 풀면 옵션 없이 시험할 수 있다. | 필수 옵션. 매번 같은 값을 입력해야 한다. | **이 문서의 판단, 사용자 결정 없음** |
+| 올바른 ticket만 만든다 | 손으로 확인할 거절(재사용, ticket 없음, 중계 ID 불일치, 기동 전 발급, 만료)은 올바른 ticket과 시간 경과로 만들 수 있다. 나머지 거절은 자동 시험이 맡는다. | DER 서명·잘못된 클레임을 만드는 옵션. 도구와 시험이 커진다. | **이 문서의 판단, 사용자 결정 없음** |
 
 ## 대조 기록
 

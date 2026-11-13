@@ -173,7 +173,7 @@ cargo deny check licenses
 | `crates/app/` | 중계·관리·재로드·준비 상태 사용 사례. 외부 기능은 포트로 정의 |
 | `crates/adapters/` | 네트워크·TLS·WebSocket·관리 HTTP·파일·로그 구현 |
 | `web/dashboard/` | 정적 HTML·CSS·JS 대시보드. 빌드 단계와 JS 외부 의존성 없음 |
-| `xtask/` | 시나리오 보고·레이어 검사·토큰 생성·배포 고지 생성 도구 |
+| `xtask/` | 시나리오 보고·레이어 검사·토큰 생성·배포 고지 생성·시험용 접속 ticket 발급 도구 |
 | `tests/` | 실행파일 수준의 통합·시스템 시험 |
 | `examples/` | 모든 설정 키를 담은 비밀 값 없는 예시 설정 |
 | `docs/` | 요구사항·스펙·계약·설계·절차 문서 |

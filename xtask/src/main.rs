@@ -14,6 +14,8 @@
 //!   (docs/how-to/publish-help.md).
 //! - `cargo xtask help-serve [--port N]`: local preview server for the built help site
 //!   (docs/architectures/xtask.md).
+//! - `cargo xtask ticket keys|issue ...`: test keys and access tickets for checking a relay
+//!   by hand (docs/how-to/operate-relay.md section 3.10.1).
 
 mod cargo;
 mod dashboard_serve;
@@ -24,13 +26,14 @@ mod notices;
 mod package;
 mod scenarios;
 mod static_server;
+mod ticket;
 mod tokens;
 
 use std::fmt;
 use std::io::Write;
 use std::process::ExitCode;
 
-const USAGE: &str = "usage: cargo xtask scenarios [--require-all] | cargo xtask layers | cargo xtask tokens [--check] | cargo xtask dashboard-serve [--port N] | cargo xtask notices [--check] | cargo xtask package | cargo xtask help-site | cargo xtask help-serve [--port N]";
+const USAGE: &str = "usage: cargo xtask scenarios [--require-all] | cargo xtask layers | cargo xtask tokens [--check] | cargo xtask dashboard-serve [--port N] | cargo xtask notices [--check] | cargo xtask package | cargo xtask help-site | cargo xtask help-serve [--port N] | cargo xtask ticket keys <viewer|server> [--dir DIR] | cargo xtask ticket issue <viewer|server> <RELAY-ID> [--dir DIR] [--issuer TEXT] [--relay-host TEXT] [--lifetime SECS] [--session SECS] [--subject TEXT]";
 
 /// Exit code for a usage error, same as the product CLI (cli-v1 §2.1).
 const EXIT_USAGE: u8 = 2;
@@ -43,6 +46,12 @@ const DEFAULT_HELP_PORT: u16 = 8090;
 fn usage() -> ExitCode {
     let _ = writeln!(std::io::stderr(), "{USAGE}");
     ExitCode::from(EXIT_USAGE)
+}
+
+/// Usage error with its reason first.
+fn invalid(reason: &str) -> ExitCode {
+    let _ = writeln!(std::io::stderr(), "xtask: {reason}");
+    usage()
 }
 
 fn main() -> ExitCode {
@@ -67,6 +76,10 @@ fn main() -> ExitCode {
         ["help-serve", "--port", port] => match port.parse::<u16>() {
             Ok(port) => help_serve::run(port),
             Err(_) => return usage(),
+        },
+        ["ticket", rest @ ..] => match ticket::parse(rest) {
+            Ok(command) => ticket::run(command),
+            Err(reason) => return invalid(&reason),
         },
         _ => return usage(),
     };

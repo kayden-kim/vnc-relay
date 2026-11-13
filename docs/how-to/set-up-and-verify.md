@@ -209,6 +209,7 @@ Linux 전용 `tests/relay_dead_peer_linux.rs`는 사용자·네트워크 네임�
    | `docs/design/DESIGN.md` YAML, `web/dashboard/` | `cargo xtask tokens --check`, 브라우저 테스트는 `cargo xtask scenarios`가 함께 실행한다([대시보드 프런트엔드 검증 how-to](verify-dashboard-frontend.md)) | `tokens --check: 통과`, 종료 코드 0 |
    | `docs/help/`, `web/help/`, 도움말 도구(`xtask/src/help_site.rs`·`help_site/`·`help_serve.rs`·`static_server.rs`), `.github/workflows/help.yml` | `cargo xtask help-site`, `cargo test --test help_site`, `web/help/` CSS를 바꾸면 `cargo xtask tokens --check`. 워크플로를 바꾸면 push 뒤 `help` 실행 결과를 확인한다([도움말 게시 how-to](publish-help.md)) | `help-site: 통과`, 시험 18개 통과, `help` 결론 `success` |
    | 배포 묶음(`xtask/src/package.rs`), GitHub Actions 워크플로(`.github/workflows/`), 작업 공간 버전 | `cargo xtask package`, `cargo test --package xtask`. 워크플로를 바꾸면 push 뒤 `ci` 실행 결과를 확인한다([릴리스 how-to](release.md)) | 종료 코드 0, `package:`·`sha256:` 줄, `ci` 결론 `success` |
+   | 시험용 접속 ticket 도구(`xtask/src/ticket.rs`) | `cargo test --package xtask`. 실제 서버로 확인할 때는 [수동 운영 안내 3.10.1절](operate-relay.md#3101-시험용-키와-ticket으로-확인하기)을 따른다 | 종료 코드 0, 3.10.1절의 기대 결과 |
    | 문서만 | 이 절차의 명령은 필요 없다. 문서 유형별 작성 규칙과 링크를 확인한다. | — |
 
    한 crate만 빠르게 확인할 때는 `cargo test --package <패키지 이름>`을 쓸 수 있다. 완료 보고 전에는 6단계를 실행해야 한다.

@@ -502,7 +502,7 @@ WS·WSS 역할마다 접속 ticket 확인을 켤 수 있다. 접속 ticket(ticke
 - 평문 `[relay.ws]`에서 그 역할을 켜면 `ticket_plaintext_ws` 경고가 남는다. ticket 원문이 암호화되지 않은 구간을 지나기 때문이다. WSS 또는 보호된 구간을 쓴다.
 - 서버와 발급 쪽의 시계를 맞춘다. 허용 오차는 5초로 고정이다.
 
-1. 발급 쪽에서 역할마다 다른 P-256 서명 키 쌍을 만든다. vnc-relay에는 공개 키만 둔다.
+1. 발급 쪽에서 역할마다 다른 P-256 서명 키 쌍을 만든다. vnc-relay에는 공개 키만 둔다. 발급 쪽 없이 시험할 때는 3.10.1절의 개발 전용 명령으로 만들 수 있다.
 
    기대 결과: 두 역할을 함께 켜면 두 공개 키 파일의 키가 서로 다르다. 같은 키가 있으면 `ticket_keys_invalid`로 거절한다.
 
@@ -553,6 +553,56 @@ WS·WSS 역할마다 접속 ticket 확인을 켤 수 있다. 접속 ticket(ticke
 `enabled = false`로 바꾸면 다음 업그레이드부터 ticket 없이 받는다. 이미 101을 보낸 연결의 중계 ID 대조와 세션 만료 타이머는 유지한다. 사용 기록도 지우지 않는다. 그 역할이 WS 또는 WSS에서 켜져 있으면 `enabled`·`issuer`·`relay_host`·`max_lifetime_secs`를 설정 편집 화면의 마지막 구역 "접속 ticket"에서도 바꿀 수 있다(3.5.1절). `enabled`를 켜는 변경의 확인 대화상자는 ticket 없는 요청을 거절한다고 경고한다.
 
 101 뒤 초기 요청의 중계 ID가 ticket의 `rid`와 다르면 Close 4012(`ticket_relay_mismatch`)로 끝낸다. Viewer ticket으로는 Mode I을 쓸 수 없다. ticket에 세션 만료 시각 `sx`가 있으면 그 시각에 연결을 끝낸다. 활성 세션에서는 WS·WSS 쪽을 Close 4013으로 닫고 TCP 쪽은 소켓을 닫는다. 최근 종료 목록의 원인은 `session_expired`이고 대시보드는 "세션 만료"로 표시한다.
+
+#### 3.10.1 시험용 키와 ticket으로 확인하기
+
+발급 쪽 없이 3.10절을 확인할 때는 개발 전용 명령 `cargo xtask ticket`으로 시험용 키와 ticket을 만들 수 있다(사용자 결정 2026-11-13(Q233)). 이 명령은 저장소 루트에서 실행한다. 먼저 [개발 환경](set-up-and-verify.md)을 준비해야 한다. 배포 묶음과 실행파일에는 이 명령이 없다. 만든 키는 시험에만 쓰고 운영 발급 쪽 키로 쓰지 않는다. 옵션과 파일 형식은 [xtask 모듈 설계](../architectures/xtask.md)에 있다. 아래는 Viewer 예시다. Server를 시험하려면 `viewer`를 `server`로, 경로 `/relay/viewer`를 `/relay/server`로 바꾼다.
+
+1. 저장소 루트에서 역할의 키 쌍을 만든다.
+
+   ```shell
+   cargo xtask ticket keys viewer
+   ```
+
+   기대 결과: `공개 키:`·`개인키:`·`kid:` 세 줄이 출력된다. 기본 위치는 Cargo 대상 디렉터리의 `ticket/`이다. 보통 `target/ticket/`이다. 다른 위치는 `--dir <디렉터리>`로 정한다. 같은 이름의 파일이 이미 있으면 아무것도 쓰지 않고 종료 코드 1로 끝난다.
+
+2. 공개 키 파일 `viewer-ticket.jwks`를 운영 디렉터리의 `keys/viewer-ticket.jwks`로 복사한다. 개인키 파일 `viewer-ticket.private.jwk`는 복사하지 않는다.
+
+3. 서버를 멈춘 상태에서 `relay.toml`의 WS 역할과 ticket 표를 켠다. 리스너 주소와 역할의 `enabled`는 재시작해야 적용되기 때문이다. 예시 설정에서는 다음 줄의 `# `를 지우고 `enabled`를 `true`로 바꾼다.
+
+   - `[relay.ws]`의 `listen`
+   - `[relay.ws.viewer]`의 `enabled`와 `allow`
+   - `[relay.ticket.viewer]`의 `enabled`, `issuer`, `relay_host`, `public_keys_file`
+
+   `issuer`·`relay_host`의 예시 값은 `issue` 명령의 기본값(`issuer.example/prod`, `relay.example`)과 같다. 값을 바꾸면 4단계에서 `--issuer`·`--relay-host`로 같은 값을 준다.
+
+4. 서버를 시작하고(3.3절) 5초 넘게 기다린다. 이어 저장소 루트에서 ticket을 만들고 업그레이드 요청을 보낸다. `1234`는 시험용 중계 ID다.
+
+   Windows:
+
+   ```powershell
+   $t = cargo xtask ticket issue viewer 1234
+   curl.exe -i --max-time 2 http://127.0.0.1:15902/relay/viewer -H "Connection: Upgrade" -H "Upgrade: websocket" -H "Sec-WebSocket-Version: 13" -H "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==" -H "Sec-WebSocket-Protocol: binary, ticket.$t"
+   ```
+
+   Ubuntu:
+
+   ```shell
+   t=$(cargo xtask ticket issue viewer 1234)
+   curl -i --max-time 2 http://127.0.0.1:15902/relay/viewer -H "Connection: Upgrade" -H "Upgrade: websocket" -H "Sec-WebSocket-Version: 13" -H "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==" -H "Sec-WebSocket-Protocol: binary, ticket.$t"
+   ```
+
+   기대 결과: `HTTP/1.1 101`과 `Sec-WebSocket-Protocol: binary`가 출력된다. 그 뒤에 서버가 보낸 첫 WebSocket 프레임이 `RFB 000.000`과 함께 보인다. `relay.log`에 `ticket_accepted`가 남는다. curl은 WebSocket 통신을 이어 가지 않으므로 2초 뒤 시간 초과(종료 코드 28)로 끝난다.
+
+5. 같은 `curl` 줄을 한 번 더 실행한다.
+
+   기대 결과: HTTP 401과 `WWW-Authenticate: VncRelayTicket`이 출력된다. `relay.log`의 `connection_rejected`에 `ticket_reused`가 남는다. 연결 시도마다 `issue`로 새 ticket을 만들어야 한다.
+
+수명은 `--lifetime <초>`(기본 60, 1~600)로 정한다. 설정의 `max_lifetime_secs`보다 길면 거절된다. 세션 만료 시각 `sx`는 `--session <초>`, 발급 쪽 세션 식별자 `sub`는 `--subject <값>`으로 더한다. 실제 VNC 클라이언트로 확인할 때는 출력한 ticket을 클라이언트에 넘긴다.
+
+공개 키 교체를 확인할 때는 `--dir`로 다른 디렉터리에 같은 역할의 키를 하나 더 만든다. 그 JWKS 파일의 `keys` 배열에 있는 키 객체를 운영 디렉터리 공개 키 파일의 `keys` 배열에 더한다. `kid`는 키마다 다르므로 겹치지 않는다. 이후 `issue`에 같은 `--dir`를 주면 새 키로 서명한다. 나머지 순서는 3.10절의 교체 절차를 따른다.
+
+시험이 끝나면 키 디렉터리를 지우기를 권장한다. 기본 위치는 `cargo clean`으로도 지워진다.
 
 ## 4. 검증
 
