@@ -551,6 +551,8 @@ WS-025는 두 게이트에서 `미실행`(무시 표시 시험)이며 4.3절 표
 | OPS-071 | 통과 / 통과 | 통과 | 같은 파일의 `ticket_tcp_and_plaintext_warnings_cover_both_roles_at_start_and_reload`다 |
 | MGT-053 | 통과 / 통과 | 통과 | Producer 계약 시험 `crates/adapters/tests/management.rs`의 `ticket_config_view_edits_and_refusals_follow_management_contract`다 |
 
+후속(2026-11-13): 두 번의 WSL 전체 게이트에서 RLY-031·MGT-052의 시험이 실패했다. 게이트와 따로 실행한 시험 파일 전체 실행에서는 WS-046의 시험도 한 번 실패했다. 원인은 WSL 벽시계 보정으로 추정한다. `sx` 만료 확인을 단조 시계로 재도록 시험만 고쳤다(커밋 `edd66fa`). 위 표의 2026-11-11 판정은 그대로 둔다. 실패 기록, 수정, 두 OS 게이트 결과는 [접속 ticket 모듈 설계의 수정 기록](../architectures/relay-access-ticket.md#세션-만료-시스템-시험의-시간-측정-수정)에 있다.
+
 기존 ID로 범위를 넓힌 시나리오는 다음과 같다.
 
 | 시나리오 | 보고서 | 판정 | 근거 |

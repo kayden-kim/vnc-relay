@@ -6,7 +6,7 @@
 | --- | --- |
 | 구조 시점 | Current |
 | 문서 상태 | Draft |
-| 구현 대조 | Verified — [2026-11-11 대조 기록](#2026-11-11-대조-기록). 구현은 커밋 `4be8e0e`이다. 시험은 같은 커밋의 두 OS 게이트에서 통과했다([접속 ticket 판정표](../how-to/set-up-and-verify.md#45-접속-ticket-판정표)). |
+| 구현 대조 | Verified — [2026-11-11 대조 기록](#2026-11-11-대조-기록). 구현은 커밋 `4be8e0e`이다. 시험은 같은 커밋의 두 OS 게이트에서 통과했다([접속 ticket 판정표](../how-to/set-up-and-verify.md#45-접속-ticket-판정표)). 2026-11-13에 세션 만료 시스템 시험의 시간 측정만 고쳤다([수정 기록](#세션-만료-시스템-시험의-시간-측정-수정)). |
 | 코드 위치 | `crates/domain/src/ticket.rs`, `crates/app/src/settings.rs`, `crates/app/src/reload/`, `crates/app/src/relay.rs`·`relay/`, `crates/adapters/src/ticket.rs`·`ticket/`, `crates/adapters/src/upgrade.rs`·`websocket.rs`, `src/serve.rs` |
 | 코드 지도 | [코드 지도](code-map.md) |
 | 관련 스펙 | [WS·WSS 스펙](../specs/websocket.md) WS-037~046, [중계 스펙](../specs/relay.md) RLY-029~032, [운영 스펙](../specs/operations.md) OPS-070~073, [관리 스펙](../specs/management.md) MGT-052~053, [화면 스펙](../specs/dashboard.md) DASH-020·029·035~037 |
@@ -204,6 +204,22 @@ flowchart LR
 - 남은 한계: 사용 기록에는 개수 상한이 없다(3절 `TicketUseTable` 행). 실제 발급 쪽과 클라이언트의 연동은 이 저장소에서 실행하지 않았다.
 - 구조 판정: `Current`·`Verified`. **이 문서의 판단, 사용자 결정 없음**.
 - 이번 검증: 커밋 `4be8e0e`의 두 OS 전체 게이트에서 연결된 시나리오가 모두 통과했다([접속 ticket 판정표](../how-to/set-up-and-verify.md#45-접속-ticket-판정표)).
+
+### 세션 만료 시스템 시험의 시간 측정 수정
+
+- 이유: 2026-11-13의 WSL 전체 게이트 두 번이 `tests/ticket_system.rs`의 `sx_expires_every_lifecycle_state_and_earliest_side_with_distinct_management_cause` 실패로 끝났다. 보고서는 이 시험에 연결된 RLY-031·MGT-052를 실패로 표시했다. 대상은 커밋 `2d8de7b`(보고 2026-11-13T12:34:29Z)와 `84e208e`(보고 2026-11-13T13:16:37Z)이고, 두 커밋은 xtask와 문서만 바꿨다. 두 보고서 모두 시나리오 285건 가운데 통과 269, 부분 8, 실패 2, 미실행 4, 미연결 2, 오류 0이었다. 게이트 스크립트가 시험 출력을 지워 실패 메시지는 남지 않았다. 같은 시험만 단독으로 세 번 실행하면 모두 통과했다. 게이트와 따로 시험 파일 전체(5건)를 두 번 실행했다. 첫 번째에서 `watched_and_api_ticket_reconfiguration_preserves_existing_bindings_timers_and_use_records`(WS-046)가 `tests/ticket_system.rs:242`의 `old sx must survive reload and key rotation`으로 실패했고, 두 번째는 모두 통과했다.
+- 원인: 실패한 확인은 모두 Close 4013을 받은 뒤 벽시계 초(`now()`)를 `sx`와 비교한다. 서버는 101 직후 `sx`를 단조 시각 기한으로 바꾸고, 그 기한에는 벽시계를 다시 보지 않는다(4.2절 7행, 5절). WSL에서 벽시계와 단조 시계의 차이를 따로 쟀다. 90초 동안 +5.314초 보정이 한 번 있었다. 아래 반복 실행 동안에는 약 32초마다 약 +2.9초 보정이 있었다. 보정이 101과 Close 사이에 들면 서버가 제때 닫아도 벽시계로는 늦게 닫은 것으로 보인다. 실패한 실행 안에서 보정을 직접 관찰하지는 않았다([INFERENCE]).
+- 변경: 시험 코드만 바꿨다(`tests/ticket_system.rs`, `tests/common/ticket_server.rs`, 커밋 `edd66fa`). 운영 코드는 바꾸지 않았다.
+  - `sx_deadline`은 101을 받은 직후 `sx`까지 남은 벽시계 시간을 그때의 `Instant`에 더한다. 서버가 101 직후 기한을 정하는 계산과 같다. ticket의 `sx` 값은 그대로 벽시계 Unix 초다.
+  - `assert_closed_between`은 Close를 받은 `Instant`가 정한 범위 안인지 확인한다. `sx`가 하나면 기한부터 기한 + 3초 전까지다(`SX_LATE`). 예전 확인 `now() <= sx + 2`가 초 단위 내림 때문에 받아들이던 범위와 같다. 두 쪽 모두 `sx`가 있으면 이른 기한부터 늦은 기한 전까지다. 예전 확인 `now() >= early`, `now() < late`와 같다.
+  - 서버와 시험이 시계를 읽는 순간이 조금 다르므로 기한보다 50ms 이른 Close까지 받는다. 이 측정 방식은 이 문서의 판단이며 사용자 결정은 없다.
+- 확인:
+  - 상한을 2초로 둔 중간 버전으로 WSL에서 시험 파일 전체를 5회 반복했다. 25건이 모두 통과했다. 그동안 벽시계 보정이 9번(약 +2.95초, 약 32.5초 간격) 있었다.
+  - 최종 버전(`edd66fa`)은 Windows에서 `cargo fmt --all --check`, `cargo clippy --package vnc-relay --all-targets -- -D warnings`, 시험 파일 전체 5건이 통과했다. WSL에서는 5회 반복 25건이 통과했고, 그동안 보정이 8번(약 +2.93초, 약 32.2초 간격) 있었다.
+- 게이트: 커밋 `39d9738`(`edd66fa` 위에 수동 운영 안내 3.10.1절 문구만 바꾼 문서 커밋).
+  - Ubuntu 24.04.4 LTS x64(WSL2), Rust 1.99.1: `ALL PASSED`. 시나리오 보고 2026-11-13T14:15:35Z: 285건 가운데 통과 271, 부분 8, 실패 0, 미실행 4, 미연결 2, 오류 0. `+ 미커밋 변경`은 줄 끝 차이다(`git diff --ignore-cr-at-eol` 출력 없음).
+  - Windows 11 Pro 10.0.26200 x64, Rust 1.99.1: `ALL PASSED (all)`. 시나리오 보고 2026-11-13T14:55:58Z(대상 커밋 `39d9738`, 미커밋 변경 없음): 통과 268, 부분 12, 실패 0, 미실행 3, 미연결 2, 오류 0.
+- 판정: RLY-031·MGT-052·WS-046은 두 OS에서 통과다. 바뀐 것은 시험의 측정 방법뿐이다. 받아들이는 늦음의 범위는 그대로다.
 
 ## 9. 미결정 사항
 

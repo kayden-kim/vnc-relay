@@ -202,7 +202,7 @@ flowchart LR
 | `tests/relay_matching_scenarios.rs` | relay.md: RLY-012~016. operations.md: OPS-005 |
 | `tests/relay_log_scenarios.rs`; `tests/relay_dead_peer_linux.rs` | 로그: operations.md OPS-011·012, relay.md RLY-027. 단절: relay.md RLY-025·026 |
 | `tests/reload.rs` | operations.md: OPS-003·024~026·035·038·040·070~072. websocket.md: WS-022 |
-| `tests/ticket_system.rs`; `tests/common/ticket_server.rs` `Server` `Ws` | 실제 실행파일의 접속 ticket. websocket.md: WS-038·046. relay.md: RLY-029~032. management.md: MGT-052. operations.md: OPS-073. `common/ticket_server.rs`는 ticket을 켠 실서버·WS 클라이언트·관리 API 도우미이며 표식이 없다. 서명은 `crates/adapters/tests/common/ticket.rs`를 경로로 가져와 쓴다 |
+| `tests/ticket_system.rs`; `tests/common/ticket_server.rs` `Server` `Ws` | 실제 실행파일의 접속 ticket. websocket.md: WS-038·046. relay.md: RLY-029~032. management.md: MGT-052. operations.md: OPS-073. `common/ticket_server.rs`는 ticket을 켠 실서버·WS 클라이언트·관리 API 도우미와 `sx` 만료를 단조 시계로 재는 `sx_deadline`·`assert_closed_between`을 두며 표식이 없다. 서명은 `crates/adapters/tests/common/ticket.rs`를 경로로 가져와 쓴다 |
 | `crates/adapters/tests/config_contract.rs` | operations.md: OPS-001·034·038·040·070 |
 | `crates/adapters/tests/management.rs` | operations.md: OPS-006·029·033·034·036·072. management.md: MGT-012~014·017~020·022·025·027·053. dashboard.md: DASH-014 |
 | `crates/adapters/tests/ops_info_contract.rs` | relay.md: 초기 교환·대상·대기·세션 사건. operations.md: 상한·정리·로그·상태·종료 원인. management.md: MGT-009·023. websocket.md: WS-008·010·019·038~043·045 |

@@ -558,6 +558,8 @@ WS·WSS 역할마다 접속 ticket 확인을 켤 수 있다. 접속 ticket(ticke
 
 발급 쪽 없이 3.10절을 확인할 때는 개발 전용 명령 `cargo xtask ticket`으로 시험용 키와 ticket을 만들 수 있다(사용자 결정 2026-11-13(Q233)). 이 절을 실행하려면 저장소를 받고 [개발 환경](set-up-and-verify.md)을 준비해야 한다. 명령은 저장소 루트에서 실행한다. 배포 묶음과 실행파일에는 이 명령이 없으므로 묶음만으로는 이 절을 실행할 수 없다. 만든 키는 시험에만 쓰고 운영 발급 쪽 키로 쓰지 않는다. 옵션과 파일 형식은 [xtask 모듈 설계](../architectures/xtask.md)에 있다. 아래는 Viewer 예시다. Server를 시험하려면 `viewer`를 `server`로, 경로 `/relay/viewer`를 `/relay/server`로 바꾼다.
 
+2026-11-13에 Windows와 Ubuntu(WSL)에서 저장소의 debug 실행파일과 예시 설정(포트만 바꿈)으로 1~5단계를 실행했다. 결과는 [xtask 대조 기록](../architectures/xtask.md#대조-기록)에 있다. 이 실행은 4절의 두 OS 수동 실행 기록을 대신하지 않는다.
+
 1. 저장소 루트에서 역할의 키 쌍을 만든다.
 
    ```shell
@@ -629,7 +631,7 @@ WS·WSS 역할마다 접속 ticket 확인을 켤 수 있다. 접속 ticket(ticke
 | 프록시 TLS 종료 | 외부 WSS→평문 WS, 오른쪽 첫 비신뢰 주소의 역할별 허용 판정, 잘못된·모두 신뢰하는 체인 거절 | 3.9절, Nginx 버전·`nginx -t`·양쪽 주소·비밀 없는 로그 기록 | 미실행, Nginx 예시 추정 | 실제 배치 기록 필요. 자동 증거 WS-032~036은 통과([판정표](set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)) |
 | 최근 로그 | 설정 상한·오래된 항목 제거·재시작·0 보관·필터·JSON Lines 내려받기 | 3.7.1절 | 미실행 | 두 OS 수동 실행 기록 필요. 자동 증거 OPS-068, MGT-046~050, DASH-054~063은 통과([판정표](set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)) |
 | Viewer 경로 이전·롤백 | `/relay/viewer` 중계 성공, 이전 경로 `/relay`는 404, 롤백 때 이전 실행파일과 `/relay` URL을 함께 복구 | 3.2.3절 | 미실행 | 두 OS 수동 실행 기록 필요. 자동 증거 WS-012·WS-029는 통과([판정표](set-up-and-verify.md#44-viewer-경로-이전-판정표)) |
-| 접속 ticket | ticket이 있는 WS·WSS 업그레이드의 101(`binary`), 없거나 맞지 않는 ticket의 401, 공개 키 교체 뒤 새 키의 ticket 통과, 끄기 | 3.10절. ticket 원문과 공개 키 파일 내용은 기록하지 않음 | 미실행 | 두 OS 수동 실행 기록 필요. 자동 증거는 [접속 ticket 판정표](set-up-and-verify.md#45-접속-ticket-판정표) |
+| 접속 ticket | ticket이 있는 WS·WSS 업그레이드의 101(`binary`), 없거나 맞지 않는 ticket의 401, 공개 키 교체 뒤 새 키의 ticket 통과, 끄기 | 3.10절. ticket 원문과 공개 키 파일 내용은 기록하지 않음 | 미실행 | 두 OS 수동 실행 기록 필요. 자동 증거는 [접속 ticket 판정표](set-up-and-verify.md#45-접속-ticket-판정표). 시험 도구로 3.10.1절을 실행한 기록은 [xtask 대조 기록](../architectures/xtask.md#대조-기록)에 있다. 배포 묶음 기록을 대신하지 않는다 |
 
 2026-11-07 갱신: 위 2026-11-05·커밋 `1c7c7a9` 묶음의 `LICENSE 없음(Q97 대기)`는 당시 기록으로 보존한다. 루트 `LICENSE` 작성·검토는 마쳤다(사용자 결정 2026-11-07(Q97), [검토 기록](check-dependency-licenses.md#42-프로젝트-license-검토-기록2026-11-07)). 앞으로 만드는 두 OS 배포 묶음에는 3.1절에 따라 루트 `LICENSE`를 포함한다. 과거 묶음을 다시 만들거나 LICENSE 포함을 재확인했다는 뜻은 아니다.
 
