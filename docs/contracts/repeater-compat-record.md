@@ -169,6 +169,7 @@
 - 파일 반입·반출: 호스트에서 PowerShell Direct(`New-PSSession -VMName`, `Copy-Item -ToSession`·`-FromSession`)를 쓴다. PowerShell Direct는 네트워크가 아닌 VMBus로 통신하므로 분리 상태를 깨지 않는다.
 - 회차 독립성: 구성과 스모크 확인을 마친 뒤 VM 세 대를 끄고 체크포인트 `baseline`을 만든다. 시나리오 회차마다 이 체크포인트로 되돌린다.
 - 구성 스크립트: `D:\vr-lab\scripts\`에 둔다. 실행 기록은 `D:\vr-lab\logs\`에 남는다.
+- 2026-11-14 정리: VM 세 대의 Hyper-V 등록과 `vr-lab` 스위치를 지웠다. 기본·차등 VHDX와 체크포인트, 평가판 ISO도 지웠다. 구성 스크립트, 실행 기록, 반입 파일, 인증 정보 파일은 같은 위치에 남겼다. 다시 검증하려면 아래 표의 ISO를 받아 해시를 확인하고 VM을 새로 만들어야 한다. 남은 구성 스크립트로 다시 만드는 과정은 확인하지 않았다.
 
 #### 게스트 이미지와 반입 파일
 
