@@ -132,12 +132,35 @@ fn missing(key: &str) -> Error {
     Error::new(format!("`cargo metadata` output has no `{key}`"))
 }
 
-/// Path relative to `root` with `/` separators, for reports.
+/// Path relative to `root` with `/` separators, for reports. A path outside
+/// `root`, such as a `CARGO_TARGET_DIR` elsewhere, is shown as it is.
 pub fn display_path(root: &Path, path: &Path) -> String {
-    let relative = path.strip_prefix(root).unwrap_or(path);
-    relative
-        .components()
-        .map(|component| component.as_os_str().to_string_lossy())
-        .collect::<Vec<_>>()
-        .join("/")
+    match path.strip_prefix(root) {
+        Ok(relative) => relative
+            .components()
+            .map(|component| component.as_os_str().to_string_lossy())
+            .collect::<Vec<_>>()
+            .join("/"),
+        Err(_) => path.display().to_string(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::display_path;
+
+    #[test]
+    fn display_path_joins_inside_root_with_slashes() {
+        let root = std::env::temp_dir().join("repo");
+        let path = root.join("target").join("help-site");
+        assert_eq!(display_path(&root, &path), "target/help-site");
+    }
+
+    #[test]
+    fn display_path_keeps_paths_outside_root_as_they_are() {
+        let base = std::env::temp_dir();
+        let root = base.join("repo");
+        let outside = base.join("vnc-relay-target").join("help-site");
+        assert_eq!(display_path(&root, &outside), outside.display().to_string());
+    }
 }

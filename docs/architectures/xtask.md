@@ -85,7 +85,7 @@ flowchart LR
 | 요소(파일·심볼) | 역할 | 만들어지는 시점과 소유자 | 의존 대상 |
 | --- | --- | --- | --- |
 | `xtask/src/main.rs` `main`, `Error` | 하위 명령 선택, 사용법 오류(종료 코드 2. `ticket`은 이유를 먼저 출력), 오류 출력 | 명령 실행마다 | `scenarios`, `layers`, `tokens`, `dashboard_serve`, `notices`, `package`, `help_site`, `help_serve`, `ticket` |
-| `xtask/src/cargo.rs` `metadata`, `Workspace`, `command` | `cargo metadata --no-deps`를 읽어 패키지(이름·버전)·대상·의존 목록을 만든다. 하위 Cargo 명령은 환경 변수 `CARGO`의 Cargo로 실행한다. | 명령마다 한 번 | serde_json |
+| `xtask/src/cargo.rs` `metadata`, `Workspace`, `command`, `display_path` | `cargo metadata --no-deps`를 읽어 패키지(이름·버전)·대상·의존 목록을 만든다. 하위 Cargo 명령은 환경 변수 `CARGO`의 Cargo로 실행한다. `display_path`는 보고·출력에 쓸 경로를 만든다. 기준 디렉터리 안의 경로는 `/`로 이은 상대 경로로, 밖의 경로(예: 저장소 밖 `CARGO_TARGET_DIR`)는 OS 표기 그대로 보인다. | 명령마다 한 번 | serde_json |
 | `xtask/src/scenarios.rs` `run`, `locate`, `link` | 보고 순서 조정, 표식 파일을 테스트 대상과 모듈 경로로 바꾸기, 시나리오별 테스트 연결 | `scenarios` 실행마다 | 하위 모듈, `cargo` |
 | `xtask/src/scenarios/spec.rs` `parse` | `## ` 제목에 "수용 테스트"가 들어간 절의 표에서 첫 칸이 `<접두어>-<숫자>`인 행을 시나리오로 읽는다. | 스펙 파일마다 | 없음 |
 | `xtask/src/scenarios/markers.rs` `scan`, `Marker` | 주석·문자열·문자 리터럴을 건너뛰는 작은 어휘 분석기로 `/// spec:` 표식, 테스트 속성, 인라인 `mod` 중첩, 함수 이름을 찾는다. 표식 끝의 ` partial`은 `Marker::partial`이 된다. 다른 낱말이 붙으면 표식 오류다. | `.rs` 파일마다 | `spec::is_scenario_id` |

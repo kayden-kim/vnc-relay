@@ -112,12 +112,7 @@ pub fn run() -> Result<bool, Error> {
         out.join(format!("{archive_name}.sha256")),
         format!("{digest}  {archive_name}\n"),
     )?;
-    // A CARGO_TARGET_DIR outside the repository is shown as it is.
-    let shown = if archive.starts_with(root) {
-        cargo::display_path(root, &archive)
-    } else {
-        archive.display().to_string()
-    };
+    let shown = cargo::display_path(root, &archive);
     let mut stdout = std::io::stdout().lock();
     writeln!(stdout, "package: {shown}")?;
     writeln!(stdout, "sha256: {digest}")?;
