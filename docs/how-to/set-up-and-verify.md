@@ -575,7 +575,7 @@ WS-025는 두 게이트에서 `미실행`(무시 표시 시험)이며 4.3절 표
 
 라이선스: 두 OS 게이트의 deny 단계가 `licenses ok`, 종료 코드 0이었다. 루트 `vnc-relay`에 시험 전용 dev-dependency `aws-lc-rs`를 더했고 잠금 파일의 새 패키지는 없다. 고지 대조 시험(`tests/dependency_notices.rs`)도 두 OS에서 통과했다([의존성 라이선스 확인 4절](check-dependency-licenses.md#4-검증) 실행 기록 10).
 
-다음 확인은 미실행이며 이 판정에 포함하지 않는다.
+다음 확인은 판정 때 미실행이었으며 이 판정에 포함하지 않는다.
 
 - [수동 운영 안내 3.10절](operate-relay.md#310-접속-ticket-켜기와-공개-키-교체)의 켜기·공개 키 교체·끄기를 두 OS에서 실행하는 일. 후속: 2026-11-14에 두 OS의 Release `v2026.11.3` 묶음으로 실행했다([수동 운영 안내 4절의 기록](operate-relay.md#4-검증)). 위 판정은 바꾸지 않는다.
 - 실제 발급 쪽과 noVNC·VNC Server 클라이언트가 ticket을 보내는 연결 확인. 사용처 저장소의 일이다.

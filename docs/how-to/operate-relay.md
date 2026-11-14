@@ -700,7 +700,7 @@ WS·WSS 역할마다 접속 ticket 확인을 켤 수 있다. 접속 ticket(ticke
 5. 거절: 다음은 모두 HTTP 401과 `WWW-Authenticate: VncRelayTicket`이었다. `connection_rejected`(`stage = upgrade`)의 `reason`은 같은 ticket 재사용이 `ticket_reused`, ticket 없는 WS Viewer와 WSS Server가 `ticket_missing`, Viewer 경로에 보낸 Server ticket이 `ticket_invalid`, 수명 1초 ticket을 7초 뒤 보낸 경우가 `ticket_expired`였다.
 6. 공개 키 교체: 3.10.1절의 방법으로 Viewer 키를 하나 더 만들어 공개 키 파일에 더했다. 저장 0.5초 뒤 `reload_applied`(`trigger = file_watch`, `applied = ["relay.ticket.viewer.public_keys_file"]`)가 남았다. 새 키와 옛 키의 ticket이 모두 101이었다. 옛 키로 마지막 ticket을 만든 뒤 70초(`max_lifetime_secs` + 10초)를 기다려 옛 키를 지웠다. 같은 `reload_applied`가 다시 남았다. 그 뒤 옛 키의 ticket은 401 `ticket_invalid`, 새 키의 ticket은 101이었다.
 7. 끄기: `[relay.ticket.viewer]`의 `enabled`를 `false`로 저장했다. 0.5초 뒤 `reload_applied`(`applied = ["relay.ticket.viewer.enabled"]`)가 남았다. ticket 없는 WS Viewer가 101(`binary`, `RFB 000.000`)이었고 `ticket_accepted`는 남지 않았다. Server 역할은 켠 채였으므로 ticket 없는 WSS Server는 계속 401 `ticket_missing`이었다.
-8. 종료와 정리: Windows는 Ctrl+Break, Ubuntu는 SIGINT로 멈췄다. 둘 다 `server_stopped`가 남았고 종료 코드는 0이었다. 발급한 ticket 10개의 원문과 서명 부분은 `relay.log`와 표준 오류에 없었다. 새 공개 키의 좌표도 로그에 없었다. 3.10.1절 마지막 문단에 따라 시험 디렉터리(공개 키 파일 포함)와 키 디렉터리를 지웠다.
+8. 종료와 정리: Windows는 Ctrl+Break, Ubuntu는 SIGINT로 멈췄다. 둘 다 `server_stopped`가 남았고 종료 코드는 0이었다. 발급한 ticket 10개의 원문과 서명 부분은 `relay.log`와 표준 오류에 없었다. `relay.log`에는 공개 키 좌표 길이(43자)의 base64url 값과 JWS 형태의 값도 없었다. 3.10.1절 마지막 문단에 따라 시험 디렉터리(공개 키 파일 포함)와 키 디렉터리를 지웠다.
 
 이 기록은 시험용 발급과 curl로 서버 쪽 동작을 확인한 것이다. 실제 발급 쪽, noVNC·VNC Server 클라이언트의 ticket 전송, 101 뒤 중계 ID 대조와 세션 만료, 공개 키 파일 오류의 거절(`ticket_keys_invalid`), 교체 중 이미 101을 보낸 연결의 유지, 대시보드 설정 편집 경로, 운영 배치에서 켜는 일은 실행하지 않았다.
 
