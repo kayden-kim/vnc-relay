@@ -5,7 +5,7 @@ Windows 11 x64와 Ubuntu 24.04 LTS x64에서 release 실행파일을 만들고 �
 | 항목 | 값 |
 | --- | --- |
 | 대상 독자 | 배포 담당자와 서버를 직접 실행하는 운영자 |
-| 검증 상태 | Draft — 과거 두 OS 수동 기록은 4절에 보존한다. v4 이관(3.2.2절)은 2026-11-09 Windows 실제 배치에서 관리 재로그인을 빼고 실행했다(4절). Viewer 경로 이전(3.2.3절)은 2026-11-14 Windows 실제 배치에서 서버 교체와 서버 쪽 확인까지 실행했다. 클라이언트 URL 변경과 바꾼 URL의 실제 중계는 미실행이다(4절). v4 롤백·Ubuntu 이관과 공유 WSS 역할·프록시 TLS 종료·최근 로그의 새 절차는 미실행이다. 이 기능들의 구현과 자동 시험은 커밋 `51bd747`의 두 OS 게이트에서 통과했다([WSS Server·프록시·최근 로그 판정표](set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)). 자동 시험만으로 안내 전체를 검증했다고 표시하지 않는다. |
+| 검증 상태 | Draft — 과거 두 OS 수동 기록은 4절에 보존한다. v4 이관(3.2.2절)은 2026-11-09 Windows 실제 배치에서 관리 재로그인을 빼고 실행했다(4절). Viewer 경로 이전(3.2.3절)은 2026-11-14 Windows 실제 배치에서 서버 교체와 서버 쪽 확인까지 실행했고, 같은 날 외부 웹 서비스가 클라이언트 URL을 바꿨다. 바꾼 URL의 실제 중계는 아직 확인하지 못했다(4절). v4 롤백·Ubuntu 이관과 공유 WSS 역할·프록시 TLS 종료·최근 로그의 새 절차는 미실행이다. 이 기능들의 구현과 자동 시험은 커밋 `51bd747`의 두 OS 게이트에서 통과했다([WSS Server·프록시·최근 로그 판정표](set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)). 자동 시험만으로 안내 전체를 검증했다고 표시하지 않는다. |
 | 검증 환경·버전 | Windows 11 x64의 PowerShell, Ubuntu 24.04 LTS x64의 bash. Rust 버전은 `rust-toolchain.toml`을 따른다. 실제 OS·Rust·실행파일 버전은 실행 기록에 적는다. |
 | 최종 검증일 | 없음(Draft 2026-11-04) |
 | 관련 기준 문서 | [운영 스펙](../specs/operations.md), [설정 계약 v4](../contracts/config-v4.md), [CLI 계약](../contracts/cli-v1.md), [운영 정보 계약 v2](../contracts/ops-info-v2.md), [WebSocket 계약](../contracts/websocket-relay-v2.md), [ADR-0001](../decisions/ADR-0001-built-in-tls.md) |
@@ -630,7 +630,7 @@ WS·WSS 역할마다 접속 ticket 확인을 켤 수 있다. 접속 ticket(ticke
 | 공유 WSS Viewer·Server | 같은 리스너의 두 경로로 Mode II 양방향 중계, 역할별 IP·Origin | 3.2.1절 | 미실행 | 두 OS 수동 실행 기록 필요. 자동 증거 OPS-065·OPS-069, WS-028~031은 통과([판정표](set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)) |
 | 프록시 TLS 종료 | 외부 WSS→평문 WS, 오른쪽 첫 비신뢰 주소의 역할별 허용 판정, 잘못된·모두 신뢰하는 체인 거절 | 3.9절, Nginx 버전·`nginx -t`·양쪽 주소·비밀 없는 로그 기록 | 미실행, Nginx 예시 추정 | 실제 배치 기록 필요. 자동 증거 WS-032~036은 통과([판정표](set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)) |
 | 최근 로그 | 설정 상한·오래된 항목 제거·재시작·0 보관·필터·JSON Lines 내려받기 | 3.7.1절 | 미실행 | 두 OS 수동 실행 기록 필요. 자동 증거 OPS-068, MGT-046~050, DASH-054~063은 통과([판정표](set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)) |
-| Viewer 경로 이전·롤백 | `/relay/viewer` 중계 성공, 이전 경로 `/relay`는 404, 롤백 때 이전 실행파일과 `/relay` URL을 함께 복구 | 3.2.3절 | 부분 — Windows 실제 배치를 Release `v2026.11.3` 실행파일로 바꾸고, 운영 포트에서 시험 클라이언트로 `/relay/viewer` 중계와 `/relay` 404를 확인(2026-11-14). 클라이언트 URL 변경·바꾼 URL의 실제 중계·롤백·Ubuntu 미실행 | Windows는 아래 2026-11-14 기록. 두 OS 실제 배치 기록 필요. 자동 증거 WS-012·WS-029는 통과([판정표](set-up-and-verify.md#44-viewer-경로-이전-판정표)) |
+| Viewer 경로 이전·롤백 | `/relay/viewer` 중계 성공, 이전 경로 `/relay`는 404, 롤백 때 이전 실행파일과 `/relay` URL을 함께 복구 | 3.2.3절 | 부분 — Windows 실제 배치를 Release `v2026.11.3` 실행파일로 바꾸고, 운영 포트에서 시험 클라이언트로 `/relay/viewer` 중계와 `/relay` 404를 확인(2026-11-14). 같은 날 외부 웹 서비스가 클라이언트 URL을 바꿨다. 바꾼 URL의 실제 중계는 미확인, 롤백·Ubuntu 미실행 | Windows는 아래 2026-11-14 기록과 후속 기록. 두 OS 실제 배치 기록 필요. 자동 증거 WS-012·WS-029는 통과([판정표](set-up-and-verify.md#44-viewer-경로-이전-판정표)) |
 | 접속 ticket | ticket이 있는 WS·WSS 업그레이드의 101(`binary`), 없거나 맞지 않는 ticket의 401, 공개 키 교체 뒤 새 키의 ticket 통과, 끄기 | 3.10절. ticket 원문과 공개 키 파일 내용은 기록하지 않음 | 미실행 | 두 OS 수동 실행 기록 필요. 자동 증거는 [접속 ticket 판정표](set-up-and-verify.md#45-접속-ticket-판정표). 시험 도구로 3.10.1절을 실행한 기록은 [xtask 대조 기록](../architectures/xtask.md#대조-기록)에 있다. 배포 묶음 기록을 대신하지 않는다 |
 
 2026-11-07 갱신: 위 2026-11-05·커밋 `1c7c7a9` 묶음의 `LICENSE 없음(Q97 대기)`는 당시 기록으로 보존한다. 루트 `LICENSE` 작성·검토는 마쳤다(사용자 결정 2026-11-07(Q97), [검토 기록](check-dependency-licenses.md#42-프로젝트-license-검토-기록2026-11-07)). 앞으로 만드는 두 OS 배포 묶음에는 3.1절에 따라 루트 `LICENSE`를 포함한다. 과거 묶음을 다시 만들거나 LICENSE 포함을 재확인했다는 뜻은 아니다.
@@ -686,6 +686,8 @@ WS·WSS 역할마다 접속 ticket 확인을 켤 수 있다. 접속 ticket(ticke
 시험 클라이언트와 ID 규칙은 위 준비 기록과 같다. 새 서버의 대기 등록 6건은 모두 TCP Server 쪽 연결이었고, 각각 같은 연결의 세션 시작으로 이어졌다. 세션 6건은 모두 종료됐다(`close_cause = peer_eof`). 확인을 마친 뒤 새 서버 프로세스의 수립된 TCP 연결은 0건이었다.
 
 이 기록은 3.2.3절 2·4단계와 6단계의 서버 쪽 확인을 Windows에서 한 번 실행한 것이다. 5단계의 클라이언트 URL 변경, 바꾼 URL로 하는 실제 noVNC 중계, 롤백과 Ubuntu는 실행하지 않았다. URL 변경은 외부 웹 서비스의 배포 절차로 하고, 그 배포 뒤 실제 접속으로 6단계를 마친다. 이전 실행파일과 설정은 복구 디렉터리와 보존한 설치 디렉터리에 있다. 되돌릴 때는 3.2.3절의 롤백 문단을 따른다.
+
+2026-11-14 후속 기록(같은 환경): 외부 웹 서비스가 같은 날 3.2.3절 5단계를 마쳤다. 그 서비스의 배포 기록에 따르면 개발·운영 두 환경의 설정에서 Viewer 접속 URL의 경로를 `/relay/viewer`로 바꿔 배포했다. 배포 뒤 그 서비스가 확인한 결과는 두 이름 모두 `/relay` 404, `/relay/viewer` 101이었다. 이 결과는 그 서비스의 기록이며, 이 저장소에서 다시 실행하지 않았다. 운영 로그에는 위 교체 확인을 마친 뒤부터 2026-11-14T03:40Z까지 `waiting_registered`와 `session_started`가 없었다. 따라서 6단계의 바꾼 URL 실제 중계는 아직 확인하지 못했다. 첫 실제 원격 지원 접속에서 WSS Viewer가 참여한 `session_started`와 그 세션의 `session_closed`를 확인하면 6단계를 마친다.
 
 ## 5. 중단 조건
 
