@@ -493,7 +493,7 @@ Windows 로그오프·시스템 종료는 강제 종료다. 대화형 콘솔 프
 
 ### 3.10 접속 ticket 켜기와 공개 키 교체
 
-WS·WSS 역할마다 접속 ticket 확인을 켤 수 있다. 접속 ticket(ticket)은 발급 쪽이 ES256으로 서명한 짧은 수명의 JWS다. 켠 역할의 WS·WSS 업그레이드는 유효한 ticket이 있을 때만 101로 답한다. 기본값은 꺼짐이다. 형식과 확인 순서는 [WebSocket 계약 1.9절](../contracts/websocket-relay-v2.md#19-접속-ticket)을, 설정 키는 [설정 계약 1.2절](../contracts/config-v4.md#12-키-표)과 [1.11절](../contracts/config-v4.md#111-접속-ticket-공개-키-파일-형식)을 따른다. 이 절차는 **추정 / 미실행**이다. 자동 증거는 4절 표에 있다.
+WS·WSS 역할마다 접속 ticket 확인을 켤 수 있다. 접속 ticket(ticket)은 발급 쪽이 ES256으로 서명한 짧은 수명의 JWS다. 켠 역할의 WS·WSS 업그레이드는 유효한 ticket이 있을 때만 101로 답한다. 기본값은 꺼짐이다. 형식과 확인 순서는 [WebSocket 계약 1.9절](../contracts/websocket-relay-v2.md#19-접속-ticket)을, 설정 키는 [설정 계약 1.2절](../contracts/config-v4.md#12-키-표)과 [1.11절](../contracts/config-v4.md#111-접속-ticket-공개-키-파일-형식)을 따른다. 2026-11-14에 두 OS의 Release `v2026.11.3` 묶음과 3.10.1절의 시험용 키로 이 절의 켜기·업그레이드 확인·재시작 규칙·공개 키 교체·끄기를 실행했다(4절의 기록). 실제 발급 쪽과 클라이언트로는 실행하지 않았다. 자동 증거는 4절 표에 있다.
 
 먼저 다음 조건을 확인한다.
 
@@ -558,7 +558,7 @@ WS·WSS 역할마다 접속 ticket 확인을 켤 수 있다. 접속 ticket(ticke
 
 발급 쪽 없이 3.10절을 확인할 때는 개발 전용 명령 `cargo xtask ticket`으로 시험용 키와 ticket을 만들 수 있다(사용자 결정 2026-11-13(Q233)). 이 절을 실행하려면 저장소를 받고 [개발 환경](set-up-and-verify.md)을 준비해야 한다. 명령은 저장소 루트에서 실행한다. 배포 묶음과 실행파일에는 이 명령이 없으므로 묶음만으로는 이 절을 실행할 수 없다. 만든 키는 시험에만 쓰고 운영 발급 쪽 키로 쓰지 않는다. 옵션과 파일 형식은 [xtask 모듈 설계](../architectures/xtask.md)에 있다. 아래는 Viewer 예시다. Server를 시험하려면 `viewer`를 `server`로, 경로 `/relay/viewer`를 `/relay/server`로 바꾼다.
 
-2026-11-13에 Windows와 Ubuntu(WSL)에서 저장소의 debug 실행파일과 예시 설정(포트만 바꿈)으로 1~5단계를 실행했다. 결과는 [xtask 대조 기록](../architectures/xtask.md#대조-기록)에 있다. 이 실행은 4절의 두 OS 수동 실행 기록을 대신하지 않는다.
+2026-11-13에 Windows와 Ubuntu(WSL)에서 저장소의 debug 실행파일과 예시 설정(포트만 바꿈)으로 1~5단계를 실행했다. 결과는 [xtask 대조 기록](../architectures/xtask.md#대조-기록)에 있다. 이 실행은 4절의 두 OS 수동 실행 기록을 대신하지 않는다. 2026-11-14에는 두 OS의 Release 묶음으로 같은 단계와 공개 키 교체·끄기를 실행했다(4절의 기록).
 
 1. 저장소 루트에서 역할의 키 쌍을 만든다.
 
@@ -631,7 +631,7 @@ WS·WSS 역할마다 접속 ticket 확인을 켤 수 있다. 접속 ticket(ticke
 | 프록시 TLS 종료 | 외부 WSS→평문 WS, 오른쪽 첫 비신뢰 주소의 역할별 허용 판정, 잘못된·모두 신뢰하는 체인 거절 | 3.9절, Nginx 버전·`nginx -t`·양쪽 주소·비밀 없는 로그 기록 | 미실행, Nginx 예시 추정 | 실제 배치 기록 필요. 자동 증거 WS-032~036은 통과([판정표](set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)) |
 | 최근 로그 | 설정 상한·오래된 항목 제거·재시작·0 보관·필터·JSON Lines 내려받기 | 3.7.1절 | 미실행 | 두 OS 수동 실행 기록 필요. 자동 증거 OPS-068, MGT-046~050, DASH-054~063은 통과([판정표](set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)) |
 | Viewer 경로 이전·롤백 | `/relay/viewer` 중계 성공, 이전 경로 `/relay`는 404, 롤백 때 이전 실행파일과 `/relay` URL을 함께 복구 | 3.2.3절 | 부분 — Windows 실제 배치를 Release `v2026.11.3` 실행파일로 바꾸고, 운영 포트에서 시험 클라이언트로 `/relay/viewer` 중계와 `/relay` 404를 확인(2026-11-14). 같은 날 외부 웹 서비스가 클라이언트 URL을 바꿨다. 바꾼 URL의 실제 중계는 미확인, 롤백·Ubuntu 미실행 | Windows는 아래 2026-11-14 기록과 후속 기록. 두 OS 실제 배치 기록 필요. 자동 증거 WS-012·WS-029는 통과([판정표](set-up-and-verify.md#44-viewer-경로-이전-판정표)) |
-| 접속 ticket | ticket이 있는 WS·WSS 업그레이드의 101(`binary`), 없거나 맞지 않는 ticket의 401, 공개 키 교체 뒤 새 키의 ticket 통과, 끄기 | 3.10절. ticket 원문과 공개 키 파일 내용은 기록하지 않음 | 미실행 | 두 OS 수동 실행 기록 필요. 자동 증거는 [접속 ticket 판정표](set-up-and-verify.md#45-접속-ticket-판정표). 시험 도구로 3.10.1절을 실행한 기록은 [xtask 대조 기록](../architectures/xtask.md#대조-기록)에 있다. 배포 묶음 기록을 대신하지 않는다 |
+| 접속 ticket | ticket이 있는 WS·WSS 업그레이드의 101(`binary`), 없거나 맞지 않는 ticket의 401, 공개 키 교체 뒤 새 키의 ticket 통과, 끄기 | 3.10절. ticket 원문과 공개 키 파일 내용은 기록하지 않음 | 통과 — Windows·Ubuntu에서 Release `v2026.11.3` 묶음과 3.10.1절의 시험용 키로 확인(2026-11-14). 실제 발급 쪽·클라이언트와 공개 키 파일 오류의 거절은 미실행 | 아래 2026-11-14 접속 ticket 수동 실행 기록. 자동 증거는 [접속 ticket 판정표](set-up-and-verify.md#45-접속-ticket-판정표). 시험 도구로 3.10.1절을 실행한 기록은 [xtask 대조 기록](../architectures/xtask.md#대조-기록)에 있다 |
 
 2026-11-07 갱신: 위 2026-11-05·커밋 `1c7c7a9` 묶음의 `LICENSE 없음(Q97 대기)`는 당시 기록으로 보존한다. 루트 `LICENSE` 작성·검토는 마쳤다(사용자 결정 2026-11-07(Q97), [검토 기록](check-dependency-licenses.md#42-프로젝트-license-검토-기록2026-11-07)). 앞으로 만드는 두 OS 배포 묶음에는 3.1절에 따라 루트 `LICENSE`를 포함한다. 과거 묶음을 다시 만들거나 LICENSE 포함을 재확인했다는 뜻은 아니다.
 
@@ -690,6 +690,19 @@ WS·WSS 역할마다 접속 ticket 확인을 켤 수 있다. 접속 ticket(ticke
 2026-11-14 후속 기록(같은 환경): 외부 웹 서비스가 같은 날 3.2.3절 5단계를 마쳤다. 그 서비스의 배포 기록에 따르면 개발·운영 두 환경의 설정에서 Viewer 접속 URL의 경로를 `/relay/viewer`로 바꿔 배포했다. 배포 뒤 그 서비스가 확인한 결과는 두 이름 모두 `/relay` 404, `/relay/viewer` 101이었다. 이 결과는 그 서비스의 기록이며, 이 저장소에서 다시 실행하지 않았다. 운영 로그에는 위 교체 확인을 마친 뒤부터 2026-11-14T03:40Z까지 `waiting_registered`와 `session_started`가 없었다. 따라서 6단계의 바꾼 URL 실제 중계는 아직 확인하지 못했다. 첫 실제 원격 지원 접속에서 WSS Viewer가 참여한 `session_started`와 그 세션의 `session_closed`를 확인하면 6단계를 마친다.
 
 2026-11-14 로컬 정리: 2026-11-09 기록과 2026-11-14 준비 기록이 저장소 밖에 보관한다고 적은 검증 사본 출력은 지웠다. 2026-11-08 기록에서 보존한 `2026.11.0` 설치 디렉터리, 2026-11-09 기록의 복구 디렉터리와 보존한 `2026.11.1` 설치 디렉터리도 지웠다. 두 실행파일은 각 Release 묶음으로 다시 받을 수 있다. 다만 이 배치의 보호된 v3 설정 사본도 함께 지웠다. 그래서 v3로 되돌리려면 [설정 계약 3.3절](../contracts/config-v4.md#33-v3-파일을-v4로-옮기기)의 표를 역으로 적용해야 한다. 기록의 관찰값은 당시 기록으로 유지한다. 위 2026-11-14 교체 기록의 복구 디렉터리와 보존한 `2026.11.2` 설치 디렉터리는 남겨 두었다.
+
+2026-11-14 접속 ticket 수동 실행 기록(Windows 11 Pro 10.0.26200 x64, Ubuntu 24.04.4 LTS x64(WSL2, 커널 6.6.87.2)): [Release `v2026.11.3`](https://github.com/kayden-kim/vnc-relay/releases/tag/v2026.11.3)의 두 묶음으로 3.10절을 실행했다. 시험용 키와 ticket은 저장소 커밋 `eaab500`의 `cargo xtask ticket`(Rust 1.99.1)으로 만들었다(3.10.1절). ticket 원문, 키 파일 내용, `ticket_jti` 값은 기록하지 않았다. 두 OS의 단계와 관찰값은 같았다.
+
+1. 준비: 묶음과 `.sha256` 파일을 `gh release download`로 받았다. 묶음의 SHA-256이 `.sha256` 파일과 같을 때만 풀었다. 두 값은 [릴리스 how-to 4절](release.md#4-검증)의 값과 같다. 실행파일 SHA-256은 Windows `90880e8dce547503220d2bf70e8bc48c4845618d72a41c97d2e3ad88e4743a7d`, Ubuntu `dfd49854a7d1a09737720f78835a5eb5a12ab61cbada6d3455d769aa0fad2148`이다. `--version`은 둘 다 `vnc-relay 2026.11.3`이다.
+2. 설정: 묶음의 `relay.toml`에서 다음만 바꿨다. 리스너 여섯 개를 다른 루프백 포트로 옮겼다. `[relay.ws.viewer]`·`[relay.wss.viewer]`·`[relay.wss.server]`를 켜고 `allow = ["127.0.0.1"]`을 넣었다. WSS에는 이 시험을 위해 만든 자체 서명 P-256 인증서를 썼다. 두 역할의 `[relay.ticket.*]`를 예시 값(`issuer.example/prod`, `relay.example`, `max_lifetime_secs = 60`)으로 켰다. 공개 키 파일은 `cargo xtask ticket keys <역할> --dir <시험 디렉터리>`가 만든 파일을 `keys/`에 복사했다. TCP 두 진입점은 예시대로 켜 두었다. 계정 파일은 로그인하지 않는 시험용 파일을 복사했다.
+3. 시작: `server_ready`와 `/readyz` 200을 확인했다. 시작 경고는 `plaintext_ws_enabled`, `ticket_plaintext_ws`(Viewer, `ws`), `ticket_tcp_bypass`(Viewer와 `tcp_viewer`, Server와 `tcp_server`)였다. 서버를 시작하기 전에 발급한 ticket은 시작 뒤 7초를 기다려 보내도 401 `ticket_issued_before_start`였다(6단계의 규칙).
+4. 업그레이드: 3.10.1절 4단계의 curl 형식을 썼다. WSS에는 `-k --http1.1`을 더했다. ticket이 있는 WS Viewer와 WSS Viewer는 101, `Sec-WebSocket-Protocol: binary`, `RFB 000.000` 프레임을 받은 뒤 curl 종료 코드 28로 끝났다. ticket이 있는 WSS Server도 101(`binary`)이었다. 세 경우 모두 `ticket_accepted`가 맞는 `listener`·`role`과 `ticket_jti`를 담아 남았다.
+5. 거절: 다음은 모두 HTTP 401과 `WWW-Authenticate: VncRelayTicket`이었다. `connection_rejected`(`stage = upgrade`)의 `reason`은 같은 ticket 재사용이 `ticket_reused`, ticket 없는 WS Viewer와 WSS Server가 `ticket_missing`, Viewer 경로에 보낸 Server ticket이 `ticket_invalid`, 수명 1초 ticket을 7초 뒤 보낸 경우가 `ticket_expired`였다.
+6. 공개 키 교체: 3.10.1절의 방법으로 Viewer 키를 하나 더 만들어 공개 키 파일에 더했다. 저장 0.5초 뒤 `reload_applied`(`trigger = file_watch`, `applied = ["relay.ticket.viewer.public_keys_file"]`)가 남았다. 새 키와 옛 키의 ticket이 모두 101이었다. 옛 키로 마지막 ticket을 만든 뒤 70초(`max_lifetime_secs` + 10초)를 기다려 옛 키를 지웠다. 같은 `reload_applied`가 다시 남았다. 그 뒤 옛 키의 ticket은 401 `ticket_invalid`, 새 키의 ticket은 101이었다.
+7. 끄기: `[relay.ticket.viewer]`의 `enabled`를 `false`로 저장했다. 0.5초 뒤 `reload_applied`(`applied = ["relay.ticket.viewer.enabled"]`)가 남았다. ticket 없는 WS Viewer가 101(`binary`, `RFB 000.000`)이었고 `ticket_accepted`는 남지 않았다. Server 역할은 켠 채였으므로 ticket 없는 WSS Server는 계속 401 `ticket_missing`이었다.
+8. 종료와 정리: Windows는 Ctrl+Break, Ubuntu는 SIGINT로 멈췄다. 둘 다 `server_stopped`가 남았고 종료 코드는 0이었다. 발급한 ticket 10개의 원문과 서명 부분은 `relay.log`와 표준 오류에 없었다. 새 공개 키의 좌표도 로그에 없었다. 3.10.1절 마지막 문단에 따라 시험 디렉터리(공개 키 파일 포함)와 키 디렉터리를 지웠다.
+
+이 기록은 시험용 발급과 curl로 서버 쪽 동작을 확인한 것이다. 실제 발급 쪽, noVNC·VNC Server 클라이언트의 ticket 전송, 101 뒤 중계 ID 대조와 세션 만료, 공개 키 파일 오류의 거절(`ticket_keys_invalid`), 교체 중 이미 101을 보낸 연결의 유지, 대시보드 설정 편집 경로, 운영 배치에서 켜는 일은 실행하지 않았다.
 
 ## 5. 중단 조건
 
