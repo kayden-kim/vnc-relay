@@ -20,7 +20,7 @@ VNC Relay는 TCP·WS·WSS Viewer를 Mode I 대상이나 TCP·WS·WSS Mode II Ser
 
 구조 시점은 R2 소스 반영 범위의 Current다. 아래 과거 대조·통과 기록은 R2 실행 증거가 아니다. 이번 문서 작업에서는 빌드·시험·포매터를 실행하지 않았다. 후속: 구현은 커밋 `3df0693`이며, 시험은 커밋 `51bd747`의 두 OS 게이트에서 통과했다([WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)).
 
-Windows 서비스·트레이와 DASH-067은 2026-11-18 미커밋 작업 트리의 소스로 대조했다. 서비스·트레이의 실행 결과와 미실행 범위는 [Windows 서비스 시험](../how-to/set-up-and-verify.md#windows-서비스-시험)에 둔다. 이 추가 범위의 대조는 과거 커밋 시험의 통과를 뜻하지 않는다.
+Windows 서비스·트레이와 DASH-067은 2026-11-18 미커밋 작업 트리의 소스로 대조했다. 대조한 소스는 이후 커밋 `9529f19`(DASH-067)와 `9c2a78b`(서비스·트레이)에 들어갔다. 서비스·트레이의 실행 결과와 미실행 범위는 [Windows 서비스 시험](../how-to/set-up-and-verify.md#windows-서비스-시험)에, 커밋 `738d068`의 두 OS 전체 게이트 결과와 시나리오별 판정은 [판정표](../how-to/set-up-and-verify.md#48-windows-서비스트레이-판정표)에 둔다. 이 추가 범위의 대조는 과거 커밋 시험의 통과를 뜻하지 않는다.
 
 ## 1. 전체 구조
 

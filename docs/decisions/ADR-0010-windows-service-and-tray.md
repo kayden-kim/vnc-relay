@@ -21,7 +21,7 @@ Windows 11에서는 VNC Relay를 Windows 서비스로 실행할 수 있게 한�
 
 트레이 앱은 별도 GUI 실행파일 `vnc-relay-tray.exe`다(Q240). 메뉴 구성(Q252·Q253), 확인 없는 중지(Q254), 서비스 없음 표시(Q250), 대시보드 주소 규칙(Q251), 메뉴 언어(Q255), 로그인할 때 시작(Q252)을 정했다. 서비스는 windows-service, 트레이 아이콘·메뉴는 tray-icon, 로그인할 때 시작의 레지스트리 값은 windows-registry로 구현한다(Q241·Q256). `unsafe`는 두 파일에만 더한다. 하나는 트레이 메시지 루프 파일(Q241)이고, 다른 하나는 서비스 접근 권한 설정 파일(Q245)이다.
 
-서비스 명령과 서비스 실행 경로, 트레이 앱은 작업 트리에 구현했다. 세부 동작은 [운영 스펙 3.7절](../specs/operations.md#37-windows-서비스-실행), [Windows 트레이 앱 스펙](../specs/windows-tray.md), [CLI 계약 1.9절](../contracts/cli-v1.md#19-windows-서비스-실행)이 정한다. 확인 범위와 남은 시험은 [Windows 서비스 시험](../how-to/set-up-and-verify.md#windows-서비스-시험)을 따른다.
+서비스 명령과 서비스 실행 경로, 트레이 앱은 커밋 `9c2a78b`에 구현했다. 세부 동작은 [운영 스펙 3.7절](../specs/operations.md#37-windows-서비스-실행), [Windows 트레이 앱 스펙](../specs/windows-tray.md), [CLI 계약 1.9절](../contracts/cli-v1.md#19-windows-서비스-실행)이 정한다. 확인 범위와 남은 시험은 [Windows 서비스 시험](../how-to/set-up-and-verify.md#windows-서비스-시험)을 따른다.
 
 ## 2. 배경
 
@@ -86,7 +86,7 @@ Windows 11에서는 VNC Relay를 Windows 서비스로 실행할 수 있게 한�
 
 ### 후속 작업
 
-- `service` 하위 명령과 서비스 실행 경로, 트레이 실행파일은 작업 트리에 구현했다. OPS-074~081과 TRAY-001~013의 확인 범위와 남은 시험은 [Windows 서비스 시험](../how-to/set-up-and-verify.md#windows-서비스-시험)을 따른다.
+- `service` 하위 명령과 서비스 실행 경로, 트레이 실행파일은 커밋 `9c2a78b`에 구현했다. OPS-074~081과 TRAY-001~013의 확인 범위와 남은 시험은 [Windows 서비스 시험](../how-to/set-up-and-verify.md#windows-서비스-시험)을 따른다.
 - 현재 코드 위치와 흐름은 [코드 지도](../architectures/code-map.md), [Windows 서비스 모듈 설계](../architectures/windows-service.md), [Windows 트레이 앱 모듈 설계](../architectures/windows-tray.md)에 연결한다.
 - 두 `unsafe` 예외 파일은 `crates/adapters/src/windows_service/security.rs`와 `crates/tray/src/message_loop.rs`로 구현했다. 적용 범위는 [Rust 코드 컨벤션](../conventions/rust.md)을 따른다.
 - `cargo xtask layers`에 트레이 패키지의 계층 규칙을 더했다. `cargo xtask package`의 Windows 묶음에 트레이 실행파일을 더했다.
@@ -101,7 +101,7 @@ Windows 11에서는 VNC Relay를 Windows 서비스로 실행할 수 있게 한�
 
 | 가설·결정 요인 | 검증 방법 | 합격 기준 | 증거 |
 | --- | --- | --- | --- |
-| 설치·해제 규칙(요인 2·3) | [OPS-074·075·080·081](../specs/operations.md#7-수용-테스트) | 시나리오의 기대 결과 | 작업 트리에 구현했다. 확인 범위와 남은 시험은 [Windows 서비스 시험](../how-to/set-up-and-verify.md#windows-서비스-시험)을 따른다. |
+| 설치·해제 규칙(요인 2·3) | [OPS-074·075·080·081](../specs/operations.md#7-수용-테스트) | 시나리오의 기대 결과 | 커밋 `9c2a78b`에 구현했다. 확인 범위와 남은 시험은 [Windows 서비스 시험](../how-to/set-up-and-verify.md#windows-서비스-시험)을 따른다. |
 | 실행과 종료(요인 1·3) | [OPS-076~078](../specs/operations.md#7-수용-테스트) | 시나리오의 기대 결과 | 부분 검증이다. OPS-078은 로그오프·재시작이 필요해 미실행이다([확인 기록](../how-to/set-up-and-verify.md#windows-서비스-시험)). |
 | 시작·중지 권한(요인 2·5) | [OPS-079](../specs/operations.md#7-수용-테스트), [TRAY-006](../specs/windows-tray.md#7-수용-테스트) | 시나리오의 기대 결과 | 부분 검증이다. 실제 표준 사용자 계정은 이 PC에 없어 미실행이다([확인 기록](../how-to/set-up-and-verify.md#windows-서비스-시험)). |
 | 트레이 동작(요인 5) | [TRAY-001~013](../specs/windows-tray.md#7-수용-테스트) | 시나리오의 기대 결과 | 부분 검증이다. 설치 반영 시간(TRAY-007)은 판정을 보류했다. 실제 브라우저 열기(TRAY-008), 다시 로그인(TRAY-011), 표시 언어 변경(TRAY-012)과 일부 오류·파일 관찰은 남아 있다([확인 기록](../how-to/set-up-and-verify.md#windows-서비스-시험)). |

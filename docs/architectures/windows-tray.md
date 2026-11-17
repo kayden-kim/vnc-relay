@@ -6,7 +6,7 @@
 | --- | --- |
 | 구조 시점 | Current |
 | 문서 상태 | Draft. ADR의 채택 범위를 구현한다. 아래 구현 판단은 사용자 채택을 뜻하지 않는다. |
-| 구현 대조 | 2026-11-18 작업 트리의 `crates/tray/src/*.rs`와 시험 소스를 대조했다. 구현은 미커밋 상태다. 실행 결과는 [Windows 서비스 시험](../how-to/set-up-and-verify.md#windows-서비스-시험)에 둔다. |
+| 구현 대조 | 2026-11-18 작업 트리의 `crates/tray/src/*.rs`와 시험 소스를 대조했다. 구현은 커밋 `9c2a78b`에 들어갔다. 실행 결과는 [Windows 서비스 시험](../how-to/set-up-and-verify.md#windows-서비스-시험)에, 두 OS 전체 게이트의 시나리오별 판정은 [판정표](../how-to/set-up-and-verify.md#48-windows-서비스트레이-판정표)에 둔다. |
 | 코드 위치 | `crates/tray/src/`, `crates/tray/tests/single_instance.rs` |
 | 코드 지도 | [코드 지도](code-map.md) |
 | 관련 스펙 | [Windows 트레이 앱 스펙](../specs/windows-tray.md), TRAY-001~013 |

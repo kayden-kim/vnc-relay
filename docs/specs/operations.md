@@ -6,7 +6,7 @@
 | --- | --- |
 | 상태 | Active(2026-11-07 채택, 사용자 결정 2026-11-07(Q150)). 공유 WS·WSS 역할·프록시 TLS 종료·최근 로그는 사용자 지시 2026-11-08과 사용자 결정 2026-11-08(Q181~Q188)을 반영했다. 구현은 커밋 `3df0693`이며, 시험은 커밋 `51bd747`의 두 OS 게이트에서 통과했다([WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)). |
 | 접속 ticket 추가 범위 | 사용자 결정 2026-11-11(Q192~Q204·Q207·Q212·Q213)을 반영한 기준이다. OPS-R37~OPS-R40·OPS-070~OPS-073의 구현은 커밋 `4be8e0e`이며, 계약 테스트는 같은 커밋의 두 OS 전체 게이트에서 통과했다([접속 ticket 판정표](../how-to/set-up-and-verify.md#45-접속-ticket-판정표)). 기존 통과 기록은 이 범위의 증거가 아니다. 결정 근거는 [ADR-0009](../decisions/ADR-0009-optional-relay-access-ticket.md), 형식은 [WebSocket 계약 1.9절](../contracts/websocket-relay-v2.md#19-접속-ticket)을 따른다. |
-| Windows 서비스 추가 범위 | 사용자 결정 2026-11-17(Q239·Q242~Q249·Q257)을 반영한 기준이다. [3.7절](#37-windows-서비스-실행), OPS-R41~OPS-R46, OPS-074~OPS-081의 동작은 작업 트리에 구현했다. 확인 범위와 남은 시험은 [Windows 서비스 시험](../how-to/set-up-and-verify.md#windows-서비스-시험)을 따른다. 결정 근거는 [ADR-0010](../decisions/ADR-0010-windows-service-and-tray.md), 명령 형식은 [CLI 계약 1.9절](../contracts/cli-v1.md#19-windows-서비스-실행), 트레이 앱 동작은 [Windows 트레이 앱 스펙](windows-tray.md)을 따른다. |
+| Windows 서비스 추가 범위 | 사용자 결정 2026-11-17(Q239·Q242~Q249·Q257)을 반영한 기준이다. [3.7절](#37-windows-서비스-실행), OPS-R41~OPS-R46, OPS-074~OPS-081의 동작은 커밋 `9c2a78b`에 구현했다. 확인 범위와 남은 시험은 [Windows 서비스 시험](../how-to/set-up-and-verify.md#windows-서비스-시험)을, 두 OS 전체 게이트의 시나리오별 판정은 [판정표](../how-to/set-up-and-verify.md#48-windows-서비스트레이-판정표)를 따른다. 결정 근거는 [ADR-0010](../decisions/ADR-0010-windows-service-and-tray.md), 명령 형식은 [CLI 계약 1.9절](../contracts/cli-v1.md#19-windows-서비스-실행), 트레이 앱 동작은 [Windows 트레이 앱 스펙](windows-tray.md)을 따른다. |
 | 관련 요구사항 | [PRD](../requirements/PRD.md) FR-06·FR-07·FR-08·FR-10, 7절 보안, 8절 비기능, 9절 독립 구현, AC-07·AC-08·AC-11~14, AC-32·AC-34·AC-35·AC-51·AC-57·AC-58 |
 | 용어 | [VNC Relay 용어집](../../GLOSSARY.md) |
 | 관련 스펙 | [중계와 매칭](relay.md), [WS·WSS](websocket.md), [관리 기능](management.md), [화면](dashboard.md), [Windows 트레이 앱](windows-tray.md) |
@@ -463,7 +463,7 @@ OPS-015는 제거한 프록시 배치 전용 시나리오 ID다. 다시 사용�
 
 접속 ticket 기준(2026-11-11): OPS-R37~OPS-R40·OPS-070~OPS-073을 추가했다. OPS-R30·OPS-059·OPS-063·OPS-064의 현재 재로드·편집 개수는 43·37개로 바꿨다. OPS-069의 운영 정보 버전은 2.1.0으로 바꿨다. 근거는 사용자 결정 2026-11-11(Q198·Q199·Q200·Q207·Q212·Q213)이다. 이 추가·변경 범위의 구현은 커밋 `4be8e0e`이며, 계약 테스트는 같은 커밋의 두 OS 전체 게이트에서 통과했다([접속 ticket 판정표](../how-to/set-up-and-verify.md#45-접속-ticket-판정표)).
 
-Windows 서비스 기준(2026-11-17): 사용자 결정 2026-11-17(Q239·Q242~Q249·Q257)에 따라 OPS-R41~OPS-R46·OPS-074~OPS-081을 추가했다. 동작은 작업 트리에 구현했다. 확인 범위와 남은 시험은 [Windows 서비스 시험](../how-to/set-up-and-verify.md#windows-서비스-시험)을 따른다. OPS-031의 "외부 서비스 등록·컨테이너 없이"는 수동 실행 판정 조건이므로 그대로 둔다.
+Windows 서비스 기준(2026-11-17): 사용자 결정 2026-11-17(Q239·Q242~Q249·Q257)에 따라 OPS-R41~OPS-R46·OPS-074~OPS-081을 추가했다. 동작은 커밋 `9c2a78b`에 구현했다. 확인 범위와 남은 시험은 [Windows 서비스 시험](../how-to/set-up-and-verify.md#windows-서비스-시험)을, 두 OS 전체 게이트의 시나리오별 판정은 [판정표](../how-to/set-up-and-verify.md#48-windows-서비스트레이-판정표)를 따른다. OPS-031의 "외부 서비스 등록·컨테이너 없이"는 수동 실행 판정 조건이므로 그대로 둔다.
 
 ## 8. 미결정 사항
 

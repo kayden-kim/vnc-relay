@@ -6,7 +6,7 @@ Windows 서비스는 같은 서버 시작 경로를 터미널 대신 서비스 �
 | --- | --- |
 | 구조 시점 | Current |
 | 문서 상태 | Draft. ADR-0010의 채택 범위를 구현한다. 구현 판단은 사용자 채택과 구분한다. |
-| 구현 대조 | 2026-11-18 작업 트리의 서비스 구현과 테스트 소스를 대조했다. 구현은 미커밋 상태다. 실행 결과는 [Windows 서비스 시험](../how-to/set-up-and-verify.md#windows-서비스-시험)에 둔다. |
+| 구현 대조 | 2026-11-18 작업 트리의 서비스 구현과 테스트 소스를 대조했다. 구현은 커밋 `9c2a78b`에 들어갔다. 실행 결과는 [Windows 서비스 시험](../how-to/set-up-and-verify.md#windows-서비스-시험)에, 두 OS 전체 게이트의 시나리오별 판정은 [판정표](../how-to/set-up-and-verify.md#48-windows-서비스트레이-판정표)에 둔다. |
 | 코드 위치 | `src/main.rs`, `src/cli.rs`, `src/service.rs`, `src/serve.rs`, `crates/adapters/src/windows_service.rs`, `crates/adapters/src/windows_service/security.rs` |
 | 코드 지도 | [코드 지도 2절](code-map.md#2-코드-위치와-구성요소) |
 | 관련 스펙 | [운영 스펙 3.7절](../specs/operations.md#37-windows-서비스-실행), OPS-074~081 |
