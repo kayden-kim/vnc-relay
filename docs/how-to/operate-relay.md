@@ -704,6 +704,22 @@ WS·WSS 역할마다 접속 ticket 확인을 켤 수 있다. 접속 ticket(ticke
 
 이 기록은 시험용 발급과 curl로 서버 쪽 동작을 확인한 것이다. 실제 발급 쪽, noVNC·VNC Server 클라이언트의 ticket 전송, 101 뒤 중계 ID 대조와 세션 만료, 공개 키 파일 오류의 거절(`ticket_keys_invalid`), 교체 중 이미 101을 보낸 연결의 유지, 대시보드 설정 편집 경로, 운영 배치에서 켜는 일은 실행하지 않았다.
 
+2026-11-17 실제 배치 교체 기록(Windows 11 Pro 10.0.26200 x64, PowerShell 7): 운영 중인 `2026.11.3` 서버를 [Release `v2026.11.4`](https://github.com/kayden-kim/vnc-relay/releases/tag/v2026.11.4)의 Windows 묶음으로 바꿨다. 설정·계정·TLS·공개 키 파일과 실행 명령은 바꾸지 않았다. 교체 전 설정은 TCP Server 진입점, WSS 진입점(내장 TLS, Viewer·Server 역할), 루프백 평문 관리 리스너, 상태 리스너, 파일 로그를 썼다. WSS 두 역할의 접속 ticket 확인(3.10절)은 이미 켠 상태였고, TCP Viewer 진입점은 꺼져 있었다. 이 서버는 보이는 터미널 없이 숨긴 콘솔에서 실행 중이었다. 그래서 3.8절의 Ctrl+C는 그 콘솔에 붙어 신호를 보내는 보조 스크립트(Windows API `AttachConsole`·`GenerateConsoleCtrlEvent`)로 보냈다.
+
+1. 준비: 묶음과 `.sha256` 파일을 `gh release download`로 받았다. 묶음의 SHA-256이 `.sha256` 파일과 같은 것을 확인하고 설치 디렉터리 옆의 준비 디렉터리에 풀었다. 실행파일 SHA-256은 `6155ff8c58d4c4fc55e023b1aec12433bec6f701768fef1d9739d45823272181`이고, `--version`은 `vnc-relay 2026.11.4`다.
+2. 복구본: 이전 실행파일(`2026.11.3`, SHA-256 `90880e8dce547503220d2bf70e8bc48c4845618d72a41c97d2e3ad88e4743a7d`), `relay.toml`, 계정 파일, TLS 파일 쌍, 두 역할의 공개 키 파일을 새 복구 디렉터리에 복사했다. 디렉터리 권한과 목록 파일은 2026-11-09 기록 1번과 같은 방식이다. 일곱 파일 모두 복사본과 원본의 SHA-256이 같았다. 정지 직전에 다시 대조했을 때도 같았다.
+3. 검증 사본: 운영 `relay.toml`과 같은 디렉터리에 검증 사본을 만들었다. 켜진 리스너 네 개를 서로 다른 루프백 대체 포트로 옮겼다. 짝 시험을 위해 TCP Viewer 진입점도 루프백 대체 포트와 `allow = ["127.0.0.1"]`로 켰다. 로그는 저장소 밖의 파일로 보냈고, 다른 설정은 그대로 두었다.
+4. 새 실행파일로 검증 사본을 시작했다. `server_starting.log_contract`는 `ops-info/2.1.0`이었고, 0.07초 뒤 `server_ready`가 리스너 다섯 개를 보고했다. `/livez`·`/readyz` 200, 관리 `/login/` 200, `/` 303(`/login/`)이었다. WSS는 두 이름 모두 TLS 1.3이고 인증서 검증을 통과했다. ticket 없는 WSS Viewer(`/relay/viewer`, 허용 Origin)와 WSS Server(`/relay/server`)는 401과 `WWW-Authenticate: VncRelayTicket`이었다(`ticket_missing`). 다른 Origin은 403, 이전 경로 `/relay`는 404였다. TCP Viewer와 TCP Server를 짝지어 보낸 양방향 시험 바이트(방향마다 4,096바이트)가 일치했다. Ctrl+C 뒤 `shutdown_started`(`active_sessions` 0)와 `server_stopped`가 기록됐고 종료 코드는 0이었다. 사본은 지웠다. 사본을 만들고 지우는 동안 운영 서버의 로그에 재로드 사건은 없었다.
+5. 정지: 정지 직전에 현재 서버의 시작 이후 로그를 연결·세션 ID로 대조했다. 대기 등록 5건은 세션 시작 3건과 대기 제거 2건으로 모두 끝났고, 세션 3건은 모두 종료됐다. 그 서버가 중계 포트에서 수립한 TCP 연결도 없었다. Ctrl+C를 보내자 `shutdown_started`(`trigger = requested`, `grace_secs` 30, `active_sessions` 0)와 `server_stopped`가 기록됐고 종료 코드는 0이었다.
+6. 교체와 시작: 이전 설치 디렉터리는 다른 이름으로 옮겨 보존하고, 준비 디렉터리를 같은 경로로 옮겼다. 같은 실행파일 경로와 인수로 다시 시작했다. `server_stopped`부터 `server_ready`까지 1.09초였다. `server_starting.log_contract`는 `ops-info/2.1.0`이었다. 리스너 네 개의 주소와 시작 경고 네 건(`allow_all_source` 세 건, `ticket_tcp_bypass` 한 건)이 이전 시작과 같았다.
+7. 운영 포트 확인: 위 4번의 확인 가운데 TCP 짝 시험을 뺀 항목을 운영 포트에서 다시 했고 모두 통과했다. 운영 설정은 TCP Viewer 진입점이 꺼져 있고 WSS 두 역할에 ticket이 필요하다. 그래서 운영 포트의 짝 시험은 하지 않았다.
+
+교체 스크립트는 정상 종료(종료 코드 0, `shutdown_started`의 `trigger = requested`, `server_stopped`)를 확인한 뒤에만 디렉터리를 옮기게 했다. 새 서버가 30초 안에 준비되지 않으면 디렉터리를 되돌리고 이전 실행파일을 다시 시작하게 했다. 교체 전에 이 스크립트를 이전 실행파일의 시험용 사본과 다른 루프백 포트로 실행해, 교체가 성공하는 경우와 되돌리는 경우를 확인했다. 운영 교체에서는 되돌림이 일어나지 않았다.
+
+시험 클라이언트는 2026-11-14 준비 기록과 같은 방식의 Python 클라이언트다. ID는 `99`로 시작하는 12자리를 썼다. 교체 뒤 운영 로그의 경고 수준 사건 10건은 시작 경고 4건과 이 확인에서 나온 6건이다. 6건은 TLS만 맺고 닫은 연결 2건(`connection_aborted`), `ticket_missing` 2건, `origin_not_allowed` 1건, `/relay` 거절 1건(`invalid_upgrade`)이다. 대시보드 정적 파일은 로그인해야 받을 수 있어 운영 서버에서 직접 받지 않았다. 대신 새 실행파일에는 최근 종료 행의 로그 링크 코드(`logsLink`)가 들어 있고 이전 실행파일에는 없음을 확인했다.
+
+이 기록은 3.8절 정상 종료와 실행파일 교체, 새 실행파일의 서버 쪽 확인을 Windows에서 한 번 실행한 것이다. 관리 로그인이 필요한 확인(대기·최근 종료 목록의 새 필드 응답, 대시보드 화면)은 계정 비밀번호가 필요해 실행하지 않았다. 실제 noVNC·VNC Server 클라이언트의 ticket 접속과 중계, 롤백과 Ubuntu도 실행하지 않았다. 이전 실행파일과 설정은 복구 디렉터리와 보존한 설치 디렉터리에 있다.
+
 ## 5. 중단 조건
 
 - 설정·계정·TLS·리스너 준비 실패이면 운영을 시작하지 않는다. 진단 `error[<code>]`와 종료 코드를 확인한다.
