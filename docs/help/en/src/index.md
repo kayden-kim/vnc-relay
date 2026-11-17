@@ -41,15 +41,23 @@ This help is for operators who deploy the executable and configuration files dir
 
 ## Baseline
 
-This help follows the repository's `main` branch. The [latest Release](https://github.com/kayden-kim/vnc-relay/releases/latest) is `v2026.11.3`, published on 2026-11-14. Download bundles from [GitHub Releases](https://github.com/kayden-kim/vnc-relay/releases).
+This help follows the repository's `main` branch. The [latest Release](https://github.com/kayden-kim/vnc-relay/releases/latest) is `v2026.11.4`, published on 2026-11-17. Download bundles from [GitHub Releases](https://github.com/kayden-kim/vnc-relay/releases).
 
-`main` currently behaves the same as the latest Release. If `main` changes behavior before the next release, the table below lists the change. A build from `main` still reports version `2026.11.3` until the next release.
+`main` currently behaves the same as the latest Release. If `main` changes behavior before the next release, the table below lists the change. A build from `main` still reports version `2026.11.4` until the next release.
 
-| Difference | Behavior on `main` | For users of Release `v2026.11.3` |
+| Difference | Behavior on `main` | For users of Release `v2026.11.4` |
 | --- | --- | --- |
 | None | Same as the latest Release. | Follow this help as written. |
 
-Upgrading from `v2026.11.2` or earlier changes these behaviors.
+Upgrading from `v2026.11.3` or earlier changes these behaviors.
+
+| Behavior | From `v2026.11.4` | `v2026.11.3` and earlier |
+| --- | --- | --- |
+| Waiting and recently closed list details | Waiting entries in the management API include the transport, peer address, and forwarded address. Recently closed entries and the administrator termination response include the duration and the peer and forwarded addresses of both ends. Both tables on the dashboard operations overview show these values, and each recently closed row opens that session's logs. | These values and the "View logs" link on recently closed rows are not available. The [Dashboard](dashboard.md) descriptions and pictures of the waiting and recently closed tables differ from the screen. |
+
+The list details follow sections 1.7, 1.9, and 1.10 of the [management API contract](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/management-api-v1.md) and SCR-001 in the [dashboard specification](https://github.com/kayden-kim/vnc-relay/blob/main/docs/specs/dashboard.md).
+
+Upgrading from `v2026.11.2` or earlier also changes these behaviors.
 
 | Behavior | From `v2026.11.3` | `v2026.11.2` and earlier |
 | --- | --- | --- |

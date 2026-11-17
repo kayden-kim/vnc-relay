@@ -92,7 +92,7 @@ Ubuntu:
 
 HTTP 404이면 URL 경로와 역할의 `enabled`를 확인한다. `main`의 Viewer 경로는 `/relay/viewer`, Server 경로는 `/relay/server`다. 끝에 `/`를 붙이지 않는다. 꺼진 역할도 404다.
 
-`v2026.11.2` 이하 Release의 Viewer 경로는 `/relay`다. `v2026.11.3`과 `main`은 이전 경로를 함께 받지 않는다. `main` 빌드는 다음 릴리스 전까지 최신 Release와 같은 버전을 출력한다. 버전 문자열뿐 아니라 묶음 출처나 빌드 커밋을 확인해야 한다. 서버와 모든 Viewer URL을 함께 옮긴다.
+`v2026.11.2` 이하 Release의 Viewer 경로는 `/relay`다. `v2026.11.3` 이상 Release와 `main`은 이전 경로를 함께 받지 않는다. `main` 빌드는 다음 릴리스 전까지 최신 Release와 같은 버전을 출력한다. 버전 문자열뿐 아니라 묶음 출처나 빌드 커밋을 확인해야 한다. 서버와 모든 Viewer URL을 함께 옮긴다.
 
 `connection_rejected`의 `reason = invalid_upgrade`는 다른 잘못된 요청에도 쓰인다. 로그에 요청 경로가 없으므로 이 원인만으로 이전 URL 사용을 단정하지 않는다. [VNC 연결 구성](connect.md)과 [운영](operate.md)의 이관 안내를 따른다.
 
@@ -116,7 +116,7 @@ close 4010(`waiting_full`)이면 새 대기 등록 상한에 걸린 것이다. �
 
 ### 접속 ticket이 HTTP 401로 거절된다
 
-이 기능은 `main`에만 있으며 기본은 꺼져 있다. 켠 역할에서는 유효한 접속 ticket이 필수다. `connection_rejected`의 ticket 관련 `reason`을 확인한다. 없음, 형식·서명·클레임 불일치, 만료, 재사용과 기동 시각 조건 위반을 구분한다. `ticket_issued_before_start`는 `iat`가 서버 기동 시각 + 5초 이하일 때다. 기동 직후 발급한 ticket도 이 조건에 걸릴 수 있다.
+이 기능은 `v2026.11.3`부터 있으며 기본은 꺼져 있다. 켠 역할에서는 유효한 접속 ticket이 필수다. `connection_rejected`의 ticket 관련 `reason`을 확인한다. 없음, 형식·서명·클레임 불일치, 만료, 재사용과 기동 시각 조건 위반을 구분한다. `ticket_issued_before_start`는 `iat`가 서버 기동 시각 + 5초 이하일 때다. 기동 직후 발급한 ticket도 이 조건에 걸릴 수 있다.
 
 발급 쪽과 서버의 시계, 역할별 설정과 공개 키를 확인한다. 재시작 뒤에는 새 ticket이 필요하다. 같은 ticket을 다시 보내지 말고 발급 쪽에서 새 값을 받아야 한다. 관리자 로그인을 해도 중계용 ticket 실패는 해결되지 않는다.
 

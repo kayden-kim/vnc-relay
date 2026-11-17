@@ -92,7 +92,7 @@ For `origin_not_allowed` and HTTP 403, compare the browser's Origin with that ro
 
 For HTTP 404, check the URL path and the role's `enabled` setting. On `main`, Viewers use `/relay/viewer` and Servers use `/relay/server`. Do not add a trailing `/`. Disabled roles also return 404.
 
-Releases `v2026.11.2` and earlier use `/relay` for Viewers. `v2026.11.3` and `main` do not also accept the old path. A `main` build prints the latest Release version until the next release. Check the package source or build commit, not just the version string. Migrate the server and all Viewer URLs together.
+Releases `v2026.11.2` and earlier use `/relay` for Viewers. Releases `v2026.11.3` and later, and `main`, do not also accept the old path. A `main` build prints the latest Release version until the next release. Check the package source or build commit, not just the version string. Migrate the server and all Viewer URLs together.
 
 The `connection_rejected` reason `invalid_upgrade` also covers other invalid requests. Logs do not contain the request path, so this reason alone does not prove use of the old URL. Follow [Connecting VNC clients](connect.md) and migration guidance in [Operations](operate.md).
 
@@ -116,7 +116,7 @@ Close 4010 (`waiting_full`) means that new waiting registration reached its limi
 
 ### An access ticket is rejected with HTTP 401
 
-This feature exists only on `main` and is off by default. An enabled role requires a valid access ticket. Check ticket-related `reason` values in `connection_rejected`. They distinguish missing tickets, invalid format/signature/claims, expiry, reuse, and failure of the startup-time condition. `ticket_issued_before_start` means that `iat` is at or before server startup time + 5 seconds. A ticket issued just after startup can also fail this condition.
+This feature is available from `v2026.11.3` and is off by default. An enabled role requires a valid access ticket. Check ticket-related `reason` values in `connection_rejected`. They distinguish missing tickets, invalid format/signature/claims, expiry, reuse, and failure of the startup-time condition. `ticket_issued_before_start` means that `iat` is at or before server startup time + 5 seconds. A ticket issued just after startup can also fail this condition.
 
 Check issuer and server clocks, role settings, and public keys. A new ticket is needed after restart. Obtain a new value from the issuer instead of resending the same ticket. Administrator sign-in does not resolve a relay ticket failure.
 
