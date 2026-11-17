@@ -637,6 +637,44 @@ WS-025는 두 게이트에서 `미실행`(무시 표시 시험)이며 4.3절 표
 | GitHub Actions `ci` | 결론 `success` | `ci` 실행 43142697338(`windows-2025`·`ubuntu-24.04`) | 통과. 두 `check` 작업이 형식·clippy·xtask 단위 시험·`layers`·`tokens --check`·`deny`·`cargo xtask package`를 마쳤다. `release`는 태그 push가 아니어서 건너뛰었다 | GitHub Actions 실행 기록 |
 | 게시 | AC-55 | GitHub Actions `help` 실행 43142697359(`ubuntu-24.04`) | 통과. mdBook 자산 해시 `OK`, `help-site: 통과 (target/help-site)`, `build`(23초) 뒤 `deploy`(10초) 성공. 게시 주소의 루트·`ko/`·`en/`·장 페이지·글꼴 라이선스는 200, `/vnc-relay/ko`는 `/vnc-relay/ko/`로 301, 없는 경로는 404와 HLP-003이다 | [도움말 게시 how-to 4절](publish-help.md#4-검증) |
 
+### 4.7 목록 정보 확대 판정표
+
+결론: 커밋 `a94058d`의 두 OS 전체 게이트에서 `오류`와 `실패`는 0건이다. 새 시나리오 4개(MGT-054·055, DASH-065·066)는 두 OS 보고서에서 모두 `통과`다. 시나리오는 289건이며 4.6절의 285건보다 4건 많다. `통과`가 아닌 시나리오는 Windows 17개, Ubuntu 14개다. 두 보고서를 합치면 4.3절 표의 18개와 같고, 시나리오마다 OS별 보고서 상태도 4.3절 표와 같다. 그래서 같은 근거로 통과로 판정한다. `main`에 push한 뒤 CI와 도움말 게시도 성공했다. 새 AC-56과 기존 AC-01~55를 모두 충족했다.
+
+이 절의 위치와 형식은 4.6절을 따른다(이 문서의 판단, 사용자 결정 없음). 범위는 사용자 결정 2026-11-17(Q234·Q235)로 채택했다. 판정 기준은 [PRD AC-56](../requirements/PRD.md#10-검증-및-수용-기준), 각 스펙 7절, [테스트 컨벤션 5절](../conventions/testing.md#5-검증-명령과-통과-기준)(사용자 결정 2026-11-06(Q132))이다.
+
+먼저 구현 커밋 `8169bbf`의 Windows 게이트가 실패했다. 289건 가운데 통과 262, 부분 12, 실패 10, 미실행 3, 미연결 2, 오류 0이었다. 실패한 10건은 MGT-009·010·011·013·014·023·052, OPS-011, RLY-020·031이다. 원인은 기존 시험 두 곳이 Q234 전의 "주소 필드 없음"을 기대한 것이다. `tests/management_terminate.rs`의 종료 요약 검사(`summary`)를 쓰는 시험 5개와 `tests/ticket_system.rs`의 `session_expired` 항목 검사(`assert_expired_session`)를 쓰는 시험 1개가 실패했다. 변경 범위 시험에는 이 두 파일이 없었다. 두 검사를 새 계약에 맞게 고친 커밋이 `a94058d`이며 제품 코드는 바꾸지 않았다. 고친 뒤 Windows에서 두 파일의 시험 12개가 통과했다. 실패한 게이트의 보고서는 다음 게이트가 덮어썼다. 위 수치는 게이트 출력에서, 실패 시나리오는 덮어쓰기 전 보고서에서 옮겼다.
+
+| 확인 대상 | 기준 | 환경 | 결과 | 증거 |
+| --- | --- | --- | --- | --- |
+| Windows 최초 | `오류`·`실패` 0건 | Windows 11 Pro 10.0.26200 x64, Rust 1.99.1, mdBook 0.5.4 | 실패. `FAILED (all): scenarios`. 실패 시나리오는 위 문단의 10건이다. 빌드·형식·clippy·`layers`·`tokens`·deny 단계는 종료 코드 0 | 게이트 출력(`8169bbf`) |
+| Windows 최종 | 같음 | 같음 | 통과. `ALL PASSED (all)`. 289건: 통과 272, 부분 12, 실패 0, 미실행 3, 미연결 2, 오류 0. 작업 트리는 깨끗했다. deny 단계 종료 코드 0 | `target/scenario-report.md`(`a94058d`, 2026-11-17T01:32:53Z) |
+| Ubuntu 최종 | 같음 | Ubuntu 24.04.4 LTS x64(WSL2), Rust 1.99.1, mdBook 0.5.4 | 통과. `ALL PASSED`. 289건: 통과 275, 부분 8, 실패 0, 미실행 4, 미연결 2, 오류 0. `+ 미커밋 변경`은 줄 끝 차이다(`git diff --ignore-cr-at-eol` 출력 없음). deny 단계 종료 코드 0 | `~/vnc-relay-target/scenario-report.md`(`a94058d`, 2026-11-17T02:09:30Z) |
+| GitHub Actions `ci` | 결론 `success` | `ci` 실행 44001001684(`windows-2025`·`ubuntu-24.04`) | 통과. 두 `check` 작업이 성공했다. `release`는 태그 push가 아니어서 건너뛰었다 | GitHub Actions 실행 기록 |
+| 게시 | AC-55 | GitHub Actions `help` 실행 44001001602(`ubuntu-24.04`) | 통과. `build`(47초)와 `deploy`(9초)가 성공했다. 게시된 `ko/`·`en/`은 200이다. 두 언어의 `images/operations.png`는 200이고 저장소 파일과 SHA-256이 같다 | [도움말 게시 how-to 4절](publish-help.md#4-검증) |
+
+새 시나리오 4개의 판정은 다음과 같다. 보고서 열은 Windows / Ubuntu 순서다.
+
+| 시나리오 | 보고서 | 판정 | 근거 |
+| --- | --- | --- | --- |
+| MGT-054 | 통과 / 통과 | 통과 | `tests/serve.rs`의 `real_waiting_lists_preserve_all_entry_transports_and_proxy_addresses`다. 실제 실행파일에서 모든 진입 전송 경로의 대기 항목과 프록시 전달 주소를 확인한다 |
+| MGT-055 | 통과 / 통과 | 통과 | `tests/serve.rs`의 `real_closed_lists_and_termination_preserve_addresses_and_logged_monotonic_duration`다. 최근 종료 항목과 관리자 종료 응답의 주소를 확인하고, `duration_ms`를 `session_closed` 로그 값과 비교한다 |
+| DASH-065 | 통과 / 통과 | 통과 | `tests/dashboard_browser.rs`의 `operations_waiting_rows_show_transport_and_peer_addresses_in_browser`다. 실서버 시험 `dashboard_065_066_real_waiting_and_closed_rows_with_forwarded_addresses`(부분 표식)도 통과했다. 시안 대조는 [대시보드 검증 4.36절](verify-dashboard-frontend.md#436-목록-정보-확대-q234q235-2026-11-17)에 있다 |
+| DASH-066 | 통과 / 통과 | 통과 | `tests/dashboard_browser.rs`의 `operations_closed_rows_show_times_addresses_and_open_session_logs_in_browser`다. 이 시험의 키보드 선택은 초점과 해시 변경으로 대신하고, 실제 Enter 키는 위 실서버 시험이 확인한다. 시안 대조는 4.36절에 있다 |
+
+[PRD 10절](../requirements/PRD.md#10-검증-및-수용-기준)의 AC를 같은 기준으로 대조했다.
+
+| AC | 연결 시나리오·절차 | 판정 |
+| --- | --- | --- |
+| AC-56 | MGT-054·055, DASH-065·066 | 충족 |
+| AC-01~55(회귀) | 4.1~4.6절과 같은 연결 | 충족. 기존 시나리오는 두 보고서에서 통과이거나 4.3절 표에서 통과다. AC-55의 게시는 위 게시 행에서 다시 성공했다 |
+
+라이선스: 두 OS 게이트의 deny 단계는 종료 코드 0이었다. 이 변경은 `Cargo.lock`과 `Cargo.toml`을 바꾸지 않았다.
+
+다음 확인은 미실행이며 이 판정에 포함하지 않는다.
+
+- 대기 연결·최근 종료 표의 실제 Safari·Edge·Firefox·실기기·스크린 리더 확인과 사람의 시안 비교.
+
 ## 5. 중단 조건
 
 - 1단계 Build Tools 설치가 1602로 끝나면 이후 단계를 진행하지 않는다. UAC를 승인할 수 있을 때 다시 실행한다.

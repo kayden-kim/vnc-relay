@@ -6,7 +6,7 @@
 | --- | --- |
 | 구조 시점 | Current |
 | 문서 상태 | Active — 작업 4.5 사용자 지시와 Q89~Q92 적용 |
-| 구현 대조 | Verified — 작업 4.5 완료 대조(2026-11-04, 커밋 `b0c25f9`의 두 OS 게이트). 범위와 실행 기록은 8절. 종료 요약의 Server 전송 범위의 구현은 커밋 `3df0693`이다. 시험은 커밋 `51bd747`의 두 OS 게이트에서 통과했다([WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)). |
+| 구현 대조 | Verified — 작업 4.5 완료 대조(2026-11-04, 커밋 `b0c25f9`의 두 OS 게이트). 범위와 실행 기록은 8절. 종료 요약의 Server 전송 범위의 구현은 커밋 `3df0693`이다. 시험은 커밋 `51bd747`의 두 OS 게이트에서 통과했다([WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)). 종료 요약의 주소·지속 시간(Q234) 구현은 커밋 `8169bbf`이며, 시험은 커밋 `a94058d`의 두 OS 게이트에서 통과했다([목록 정보 확대 판정표](../how-to/set-up-and-verify.md#47-목록-정보-확대-판정표)). |
 | 코드 위치 | `crates/app/src/management/terminate.rs`, `crates/adapters/src/management_http/terminate_api.rs`, `crates/app/src/ports.rs`, `crates/app/src/relay.rs`, `crates/app/src/relay/session.rs`, `crates/app/src/events.rs`, `crates/adapters/src/ops_log.rs`, `crates/adapters/src/request_deadline.rs`, `src/serve.rs` |
 | 코드 지도 | [코드 지도](code-map.md#2-코드-위치와-구성요소) |
 | 관련 스펙 | [관리 3.2·4·7절](../specs/management.md#32-관리자-종료) MGT-008~012, MGT-013·014·023·055; [운영](../specs/operations.md#7-수용-테스트) OPS-011·043; [중계](../specs/relay.md#7-수용-테스트) RLY-020 |

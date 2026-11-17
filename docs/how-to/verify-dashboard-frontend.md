@@ -1847,6 +1847,7 @@ Ubuntu 첫 실행이 이전 빌드를 다시 쓴 원인은 시계 차이다. WSL
 - 가짜 API 시험: 시각 줄 수정 전 `cargo test --test dashboard_browser` 전체 77개가 통과했다(563초). 시각 줄 수정 뒤 `cargo test --test dashboard_browser -- operations_ router_` 19개가 통과했다(135초). 그 수정은 최근 종료 시각 줄에만 붙는 `cell-line-flow` 규칙, `panels.js`의 `timeLine`, 운영 현황 시험만 바꿨으므로 나머지 58개는 다시 실행하지 않았다. 두 OS 게이트가 전체를 다시 실행한다.
 - 키보드 선택: 가짜 API 시험의 DASH-066은 로그 보기 링크에 초점을 둔 뒤 해시를 바꿔 선택을 대신한다(DASH-006과 같은 방식). 실제 Enter 키는 실서버 시험이 확인한다.
 - 실서버 시험: 시각 줄 수정 뒤 `cargo test --test dashboard_live -- dashboard_065_066 dashboard_001 dashboard_020 dashboard_062` 4개가 통과했다(29초).
+- 두 OS 게이트: 커밋 `8169bbf`의 Windows 게이트는 DASH-065·066과 무관한 기존 종료·ticket 시험 두 파일의 낡은 기대(주소 없음) 때문에 실패했다. 그 검사를 고친 커밋 `a94058d`의 Windows·Ubuntu 전체 게이트가 통과했고, 두 보고서에서 DASH-065·066이 `통과`다([개발 환경·검증 4.7절](set-up-and-verify.md#47-목록-정보-확대-판정표)).
 
 ## 5. 중단 조건
 

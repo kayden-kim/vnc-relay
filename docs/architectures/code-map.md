@@ -318,7 +318,7 @@ PATCH의 `ConfigEditService::patch`는 같은 잠금으로 편집 허용→원�
 
 - 범위: `relay.rs`의 `ClosedMetadata`·`ClosedSessionSnapshot`과 두 정리 경로(`run_pair`의 정상 정리, `ActiveGuard`의 소유자 소실 정리), `management/query.rs`·`terminate.rs`의 대기·최근 종료 뷰, `query_api.rs`·`terminate_api.rs`의 직렬화, 대시보드 `panels.js`의 `waitingTable`·`closedTable`·`waitingAddressCell`·`closedAddressCell`·`closedTimeCell`·`logsLink`, 공통 컴포넌트 `data-table.js`의 `wrapLabel`이다.
 - 새 파일과 새 진입점은 없다. 기존 관리 조회 흐름(`query_api::answer` → `ManagementQueryService` → `RelayStateSource::snapshot`)과 `operations.js` → `panels.js` 경로에 필드를 더했다. 최근 종료 항목의 주소는 활성 등록 때 만든 `ClosedMetadata`에서 오며 `recent_metadata`가 `RecentClosedList`와 같은 항목을 보관한다.
-- 근거는 소스 읽기와 변경 범위 시험이다. 두 OS 게이트 결과는 [대시보드 검증 4.36절](../how-to/verify-dashboard-frontend.md#436-목록-정보-확대-q234q235-2026-11-17)에 기록한다.
+- 근거는 소스 읽기와 변경 범위 시험, 커밋 `a94058d`의 두 OS 전체 게이트다([목록 정보 확대 판정표](../how-to/set-up-and-verify.md#47-목록-정보-확대-판정표), [대시보드 검증 4.36절](../how-to/verify-dashboard-frontend.md#436-목록-정보-확대-q234q235-2026-11-17)).
 
 ### R1 리스너·역할 전환 후속(2026-11-08)
 
