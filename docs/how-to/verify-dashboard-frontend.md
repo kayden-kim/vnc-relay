@@ -1876,17 +1876,18 @@ Ubuntu 첫 실행이 이전 빌드를 다시 쓴 원인은 시계 차이다. WSL
 | 그 밖의 차이 | 바이트 열 머리글(CPY-040)은 4.15절, 예시 데이터는 4.27절 C01과 같다 | 이전 기록 | 해당 없음 |
 
 - 증거: `target/dashboard-shots/q236/`의 `mock/`(시안 8장)과 `impl/`(구현 20장, `<waiting|active|closed>-<언어>-<폭>.png`)이다. 커밋하지 않는다.
-- 가짜 API 시험: `cargo test --test dashboard_browser -- operations_ router_` 19개가 통과했다(149초). 그 뒤 `timeStacked`가 날짜와 시각 조각의 글씨를 따로 비교하게 고쳤다. 이 확인을 쓰는 두 시험(`operations_shows_the_overview_in_browser`, `operations_waiting_rows_show_transport_and_peer_addresses_in_browser`)을 다시 실행해 통과했다(20초). 나머지 58개는 운영 현황 표를 그리지 않으므로 다시 실행하지 않았다. 아래 두 OS 게이트도 실행하지 않았으므로 이 58개는 이 변경에서 실행하지 않았다.
+- 가짜 API 시험: `cargo test --test dashboard_browser -- operations_ router_` 19개가 통과했다(149초). 그 뒤 `timeStacked`가 날짜와 시각 조각의 글씨를 따로 비교하게 고쳤다. 이 확인을 쓰는 두 시험(`operations_shows_the_overview_in_browser`, `operations_waiting_rows_show_transport_and_peer_addresses_in_browser`)을 다시 실행해 통과했다(20초). 나머지 58개는 운영 현황 표를 그리지 않으므로 따로 다시 실행하지 않았다. 77개 전체는 아래 Windows 게이트의 `scenarios` 단계에서 통과했다(521.93초).
 - 실서버 시험: `cargo test --test dashboard_live -- dashboard_001 dashboard_020 dashboard_062 dashboard_065_066` 4개가 통과했다(33초). `tests/dashboard_live/overview.rs`의 활성 시작 시각 글씨와 주소 값 비교는 바꾸지 않았다.
 - 도움말 캡처: [도움말 게시 how-to 3.4절](publish-help.md#34-화면-캡처-갱신)에 따라 Ubuntu에서 다시 만들었고, 시험 1개가 통과했다. 열두 장을 모두 열어 확인했다. 그림에는 시험 계정 `alice`, 루프백 주소, `/tmp` 아래 시험 경로, 시험 세션 식별자만 보였다.
   - `operations.png` 두 장은 새 배치를 담는다.
   - `logs`·`session`·`settings`·`settings-edit` 여덟 장은 시각·세션 식별자·시험 경로의 번호처럼 실행마다 바뀌는 값만 달라졌다.
   - `login` 두 장은 바이트가 같다.
   - 같은 실행의 그림끼리 값이 맞도록 바뀐 열 장을 모두 커밋한다. 그 뒤 `cargo xtask help-site`가 통과했다.
-- 두 OS 게이트: 미실행. 사용자 지시(2026-11-17)로 생략했다.
-  - 커밋 `9d43e3e`의 Windows 게이트는 검사 단계(`versions`·`build`·`version`·`fmt`·`clippy`·`layers`·`tokens`)를 모두 종료 코드 0으로 마쳤다. 그 뒤 `scenarios` 단계 도중 중단했다. 그래서 이 커밋의 시나리오 보고서와 `deny` 단계 결과는 없다.
-  - Ubuntu 게이트는 시작하지 않았다.
-  - [테스트 컨벤션 5절](../conventions/testing.md#5-검증-명령과-통과-기준)의 통과 기준(시나리오 보고서와 `cargo test` 전체)은 이 변경에서 확인하지 않았다. 확인한 범위는 위 시험과 대조뿐이다.
+- 두 OS 게이트: 끝까지 실행하지 않았다. 사용자 지시(2026-11-17)로 중단·생략했다.
+  - 커밋 `9d43e3e`의 Windows 게이트는 검사 단계(`versions`·`build`·`version`·`fmt`·`clippy`·`layers`·`tokens`)를 모두 종료 코드 0으로 마쳤다.
+  - 이어진 `scenarios` 단계는 `dashboard_live` 시험 도중 중단했다. 그 전에 끝난 시험 실행 파일은 모두 통과했다. `src/main.rs` 단위 시험 16개, `admin` 14개, `cli` 2개, `code_map` 4개, `dashboard_assets` 2개, `dashboard_browser` 77개다.
+  - 이 커밋의 시나리오 보고서와 `deny` 단계 결과는 없다. Ubuntu 게이트는 시작하지 않았다.
+  - 그래서 [테스트 컨벤션 5절](../conventions/testing.md#5-검증-명령과-통과-기준)의 통과 기준(시나리오 보고서와 `cargo test` 전체)은 이 변경에서 확인하지 않았다.
 
 ## 5. 중단 조건
 
