@@ -2,7 +2,7 @@
 
 `vnc-relay` 실행파일의 하위 명령·옵션·종료 코드·출력 규칙과, `vnc-relay admin` 명령이 쓰고 `vnc-relay serve`가 읽는 관리자 계정 파일 형식을 정한다. 서버 실행과 관리자 계정 준비는 같은 실행파일의 서로 다른 하위 명령이다. Windows 11의 서비스 설치·해제·실행 하위 명령도 정한다(1.9절). 외부 동작은 [운영 스펙](../specs/operations.md)이 정하고, 설정 파일 키는 [설정 파일 계약](config-v4.md)이 정한다.
 
-이 계약은 2026-10-16에 사용자가 채택했다(상태 Active). 하위 명령·옵션, 비밀번호 숨김 입력, 해시 형식, 계정 이름·비밀번호 규칙, 계정 파일 형식, 오류·경고 코드, 종료 코드가 모두 채택 범위다. 해시는 Argon2id이고 승인된 범위는 설정 계약이 정한다. 같은 날 사용자가 종료 코드를 확정했다. 설정 오류는 3, 인증서·개인키 파일 오류는 3, 리스너 바인드 실패는 4, 계정 파일 오류(파일 없음·계정 없음 포함)는 5다. 정상 종료 유예 중 두 번째 종료 요청의 처리도 확정했다. 6절에 관찰·구현에서 확인한다고 남긴 항목은 채택으로 해소되지 않았다. 지금 실행할 수 있는 명령은 `serve`(시작·종료 골격), `admin add|passwd|remove|list`, `--help`·`--version`이다. `service install|uninstall|run`(1.9절)은 1.8.0에서 더했으며 아직 구현하지 않았다.
+이 계약은 2026-10-16에 사용자가 채택했다(상태 Active). 하위 명령·옵션, 비밀번호 숨김 입력, 해시 형식, 계정 이름·비밀번호 규칙, 계정 파일 형식, 오류·경고 코드, 종료 코드가 모두 채택 범위다. 해시는 Argon2id이고 승인된 범위는 설정 계약이 정한다. 같은 날 사용자가 종료 코드를 확정했다. 설정 오류는 3, 인증서·개인키 파일 오류는 3, 리스너 바인드 실패는 4, 계정 파일 오류(파일 없음·계정 없음 포함)는 5다. 정상 종료 유예 중 두 번째 종료 요청의 처리도 확정했다. 6절에 관찰·구현에서 확인한다고 남긴 항목은 채택으로 해소되지 않았다. 지금 실행할 수 있는 명령은 `serve`, `admin add|passwd|remove|list`, `--help`·`--version`이다. Windows 전용 `service install|uninstall|run`(1.9절)은 1.8.0에서 더했으며 작업 트리에 구현했다.
 
 | 항목 | 값 |
 | --- | --- |
@@ -16,9 +16,9 @@
 | 기준 스펙 | [운영 스펙 3.1절](../specs/operations.md#31-설정-검증과-시작), [3.2절](../specs/operations.md#32-로컬-cli-계정-준비), [3.4절](../specs/operations.md#34-정상-종료와-재시작), [3.7절](../specs/operations.md#37-windows-서비스-실행), [Windows 트레이 앱 스펙](../specs/windows-tray.md) |
 | 관련 요구사항 | [PRD](../requirements/PRD.md) FR-06·FR-07·FR-10, [7절 보안 및 신뢰 경계](../requirements/PRD.md#7-보안-및-신뢰-경계) |
 | 호환성 범위 | Windows 11 x64·Ubuntu 24.04 LTS x64의 `vnc-relay` 1.x. Windows Server는 제외한다. 계정 파일 `version = 1`. `service` 하위 명령은 Windows 11 x64에만 있다. |
-| 관련 테스트 | [운영 스펙 수용 테스트](../specs/operations.md#7-수용-테스트) OPS-001~002·OPS-007~010·OPS-019·OPS-029~031·OPS-039·OPS-042·OPS-044. 계약 테스트는 5절에 연결한다. `serve` 시작·종료, 계정 파일 읽기와 `admin` 명령은 두 OS에서 통과했다. Ubuntu는 PTY, Windows는 ConPTY로 숨김 입력을 확인했다. 종료 유예의 실행파일 시험은 `tests/unix_shutdown.rs`와 `tests/windows_console.rs`에서 통과했다(커밋 `de693ad`). 현재 지원 판정은 `ee0314f`의 두 OS 전체 게이트와 [작업 5.9 판정표](../how-to/set-up-and-verify.md#41-작업-59-판정표)를 따른다. 계정 파일 내용 변경은 두 OS의 대상 시험에서 실행 중 미반영·재시작 뒤 반영을 확인했다. OS 전용 시험과 대상 시험의 실행 기록은 5절에 구분한다. Windows 서비스 하위 명령은 OPS-074~OPS-081에 연결하며 미실행(구현 전)이다. |
+| 관련 테스트 | [운영 스펙 수용 테스트](../specs/operations.md#7-수용-테스트) OPS-001~002·OPS-007~010·OPS-019·OPS-029~031·OPS-039·OPS-042·OPS-044·OPS-074~081. 기존 계약 테스트의 연결과 실행 기록은 5절을 따른다. Windows 서비스의 확인 범위와 남은 시험은 [Windows 서비스 시험](../how-to/set-up-and-verify.md#windows-서비스-시험)을 따른다. |
 | 접속 ticket 구현 상태 | 1.7.0의 접속 ticket 공개 키 파일 검사와 OPS-070은 사용자 결정 2026-11-11(Q211)의 후속 구현이다. 구현은 커밋 `4be8e0e`이며, 계약 테스트는 같은 커밋의 두 OS 전체 게이트에서 통과했다([접속 ticket 판정표](../how-to/set-up-and-verify.md#45-접속-ticket-판정표)). 이전 실행 기록은 이 변경의 증거가 아니다. |
-| Windows 서비스 구현 상태 | 1.8.0의 1.9절과 서비스 오류 코드는 사용자 결정 2026-11-17(Q244·Q245·Q247)에 따른 기준이다. 구현 전이며 계약 테스트는 미실행이다. |
+| Windows 서비스 구현 상태 | 1.8.0의 1.9절과 서비스 오류 코드는 사용자 결정 2026-11-17(Q244·Q245·Q247)에 따른 기준이다. 작업 트리에 구현했다. 확인 범위와 남은 시험은 [Windows 서비스 시험](../how-to/set-up-and-verify.md#windows-서비스-시험)을 따른다. |
 
 용어는 [VNC Relay 용어집](../../GLOSSARY.md)을 따른다. 설정 파일 키는 [설정 파일 계약](config-v4.md)을 따른다. 이 문서에서 "계정"은 관리자 계정이다.
 
@@ -182,7 +182,7 @@ error[listener_bind_failed] key=relay.tcp_viewer.listen: 0.0.0.0:15901에 바인
 
 ### 1.9 Windows 서비스 실행
 
-Windows 11에서 `vnc-relay`를 Windows 서비스로 등록하고 실행하는 규칙이다. 외부 동작은 [운영 스펙 3.7절](../specs/operations.md#37-windows-서비스-실행)이 정한다. 표의 Q 번호는 사용자 결정 2026-11-17이다. "이 문서의 판단"으로 표시한 규칙은 사용자 결정이 없으며 6절에서 채택을 기다린다.
+Windows 11에서 `vnc-relay`를 Windows 서비스로 등록하고 실행하는 규칙이다. 이 절의 명령은 작업 트리에 구현했다. 외부 동작은 [운영 스펙 3.7절](../specs/operations.md#37-windows-서비스-실행)이 정한다. 표의 Q 번호는 사용자 결정 2026-11-17이다. "이 문서의 판단"으로 표시한 규칙은 사용자 결정이 없으며 6절에서 채택을 기다린다.
 
 | 항목 | 규칙 |
 | --- | --- |
@@ -190,14 +190,14 @@ Windows 11에서 `vnc-relay`를 Windows 서비스로 등록하고 실행하는 �
 | 실행 계정 | 가상 계정 `NT SERVICE\vnc-relay`(Q243). |
 | 시작 유형 | 자동(지연 시작)(Q246). |
 | 복구 동작 | 없음. 실패 뒤 다시 시작하지 않는다(Q249). |
-| 등록 명령 | `"<vnc-relay.exe 절대 경로>" service run --config "<설정 파일 절대 경로>"`. 설치는 `--config`를 절대 경로로 바꿔 등록한다. 트레이 앱은 이 명령의 `--config` 값으로 설정 파일을 찾는다(이 문서의 판단). |
-| 접근 권한 | 기본 접근 권한은 그대로 두고, `--operator`로 지정한 사용자·그룹마다 시작·중지 권한을 더한다(Q242·Q245). 트레이 앱이 상태와 등록 명령을 읽도록 같은 사용자·그룹에 상태 조회·구성 조회 권한도 더한다(이 문서의 판단). 지정하지 않은 사용자가 상태를 조회할 수 있는지는 Windows가 서비스에 주는 기본 접근 권한을 따른다. Windows 11의 기본값은 확인하지 않았으며 OPS-074에서 조회해 기록한다. 승격한 관리자는 기본 권한으로 시작·중지할 수 있다. UAC 때문에 승격하지 않은 관리자 터미널은 Administrators 그룹 권한을 쓰지 못한다. 그런 사용자가 승격 없이 시작·중지하려면 그 사용자나 그 사용자가 속한 일반 그룹을 `--operator`로 지정해야 한다. |
-| 설치 순서 | (1) SCM을 서비스 만들기 권한으로 연다. 실패하면 `service_access_denied`다. (2) 같은 이름의 서비스가 있으면 `service_exists`다. (3) `--operator` 이름을 Windows 계정으로 바꾼다. 찾지 못하면 `service_operator_unknown`이다. (4) `--config` 경로를 절대 경로로 바꾸고 파일을 검사한다. 검사는 1.8절 시작 순서의 1·2단계와 4단계의 인증서·개인키·접속 ticket 공개 키 파일 검사이며 오류 코드도 같다. 로그 파일은 열지 않는다. `log.output = "stdout"`이면 1단계의 설정 오류로 `service_log_stdout`을 함께 보고한다(Q244·Q247). (5) 서비스를 등록하고 지연 시작을 설정한다. (6) 서비스 운영자 권한을 더한다. (7) 성공 문장을 쓴다. 5단계 뒤에 실패하면 만든 서비스를 지우고 `service_failed`를 보고한다. 설치는 서비스를 시작하지 않는다. 검사 범위·되돌리기·시작하지 않음은 이 문서의 판단이다. |
+| 등록 명령 | `<vnc-relay.exe 절대 경로> service run --config <설정 파일 절대 경로>`. 설치는 `--config`를 절대 경로로 바꿔 등록한다. 인수가 비어 있거나 공백·탭·줄 바꿈(LF)·수직 탭(VT)·큰따옴표를 포함할 때만 그 인수를 큰따옴표로 감싼다. 감싼 인수 안에서는 큰따옴표 앞의 역슬래시를 두 배로 쓰고 큰따옴표를 `\"`로 쓴다. 인수 끝의 역슬래시도 두 배로 쓴다. 따라서 공백 등이 없는 경로에는 따옴표가 없다. 트레이 앱은 따옴표가 있는 형식과 없는 형식 모두에서 `--config` 값을 읽는다. 경로 처리·인용 규칙과 트레이 앱의 경로 추출은 구현 판단이다(이 문서의 판단, 사용자 결정 없음). |
+| 접근 권한 | 기본 접근 권한은 그대로 두고, `--operator`로 지정한 사용자·그룹마다 시작·중지 권한을 더한다(Q242·Q245). 트레이 앱이 상태와 등록 명령을 읽도록 같은 사용자·그룹에 상태 조회·구성 조회 권한도 더한다(이 문서의 판단, 사용자 결정 없음). Windows 11의 기본 서비스 보안 설명자와 대화형 사용자의 조회 권한은 [운영 스펙 3.7절](../specs/operations.md#37-windows-서비스-실행)을 따른다. 승격한 관리자는 기본 권한으로 시작·중지할 수 있다. UAC 때문에 승격하지 않은 관리자 터미널은 Administrators 그룹 권한을 쓰지 못한다. 그런 사용자가 승격 없이 시작·중지하려면 그 사용자나 그 사용자가 속한 일반 그룹을 `--operator`로 지정해야 한다. |
+| 설치 순서 | (1) SCM을 서비스 만들기 권한으로 연다. 권한이 없으면 `service_access_denied`다. (2) 같은 이름의 서비스가 있으면 `service_exists`다. (3) `--operator` 이름을 Windows 계정으로 바꾼다. 찾지 못하면 `service_operator_unknown`이다. (4) `--config` 경로를 절대 경로로 바꾸고 파일을 검사한다. 검사는 1.8절 시작 순서의 1·2단계와 4단계의 인증서·개인키·접속 ticket 공개 키 파일 검사이며 오류 코드도 같다. 로그 파일은 열지 않는다. `log.output = "stdout"`이면 1단계의 설정 오류로 `service_log_stdout`을 함께 보고한다(Q244·Q247). (5) 서비스를 등록하고 지연 시작을 설정한다. (6) 서비스 운영자 권한을 더한다. (7) 성공 문장을 쓴다. 등록 뒤 설정 단계가 실패하면 만든 서비스를 지우고 `service_failed`를 보고한다. 지우기도 실패하면 같은 오류에 그 OS 오류 번호와 관리자 권한 터미널에서 `sc.exe delete vnc-relay`로 지우라는 안내를 더한다. 설치는 서비스를 시작하지 않는다. 검사 범위·되돌리기·시작하지 않음은 구현 판단이다(이 문서의 판단, 사용자 결정 없음). |
 | 해제 순서 | (1) SCM을 연다. (2) 서비스가 없으면 `service_not_found`, 지울 권한이 없으면 `service_access_denied`다. (3) 서비스가 중지됨이 아니면 `service_running`이다. (4) 서비스를 지우고 성공 문장을 쓴다. 다른 프로그램이 서비스 핸들을 열고 있으면 Windows는 그 핸들이 닫힌 뒤 등록을 지운다. 그 사이에 다시 설치하면 `service_failed`다. 설정·계정·로그 파일은 지우지 않는다. 중지됨만 지우는 규칙은 이 문서의 판단이다. |
-| `service run` | SCM이 시작한 프로세스에서만 동작한다. SCM에 연결하지 못하면(터미널에서 직접 실행) 리스너를 열지 않고 stderr에 `error[service_controller_unavailable]`을 쓰고 끝난다. SCM 아래에서는 stdout·stderr를 쓰지 않는다. 종료 요청은 SCM의 중지·시스템 종료 제어로만 받는다. 1.8절의 콘솔 종료 신호(Ctrl+C·Ctrl+Break·콘솔 창 닫기)는 종료 요청으로 쓰지 않는다(이 문서의 판단). 그 밖의 시작 순서는 1.8절과 같다. |
+| `service run` | SCM이 시작한 프로세스에서만 동작한다. SCM이 시작한 프로세스가 아니면(터미널에서 직접 실행) 리스너를 열지 않고 stderr에 `error[service_controller_unavailable]`을 쓰고 종료 코드 2로 끝난다. 그 밖의 서비스 디스패처 실패는 stdout·stderr를 쓰지 않고 종료 코드 1로 끝난다. SCM 아래에서는 stdout·stderr를 쓰지 않는다. 종료 요청은 SCM의 중지·시스템 종료 제어로만 받는다. 1.8절의 콘솔 종료 신호(Ctrl+C·Ctrl+Break·콘솔 창 닫기)는 종료 요청으로 쓰지 않는다(이 문서의 판단, 사용자 결정 없음). 그 밖의 시작 순서는 1.8절과 같다. |
 | 상태 보고 | 시작 순서 동안 시작 중, 준비됨에 들어간 뒤 실행 중, 종료 유예와 정리 동안 중지 중, 프로세스가 끝나기 직전 중지됨을 보고한다. 관리자 종료나 리스너 장애로 서버가 스스로 종료를 시작해도 중지 중을 보고한다. 일시 중지는 받지 않는다. 시작 중·중지 중에는 1초마다 진행 표시(checkpoint)를 올린다. 이 행은 이 문서의 판단이다. |
 | 서비스 종료 코드 | 2.1절의 CLI 종료 코드가 0이면 오류 없음으로, 0이 아니면 그 값을 서비스 고유 종료 코드로 보고한다. `sc.exe query vnc-relay`의 `SERVICE_EXIT_CODE`에서 볼 수 있다(이 문서의 판단). |
-| 중지 요청 | 정상 종료 요청이다. `shutdown_started(trigger=requested)`를 쓰고 `timeouts.shutdown_grace_secs`(G)를 적용한다(Q248). 중지 중의 두 번째 중지 요청은 [운영 스펙 OPS-TBD-013](../specs/operations.md#8-미결정-사항)이다. |
+| 중지 요청 | 정상 종료 요청이다. `shutdown_started(trigger=requested)`를 쓰고 `timeouts.shutdown_grace_secs`(G)를 적용한다(Q248). 중지 중에는 시스템 종료 제어만 받는다. 두 번째 중지 요청은 SCM이 오류 1061(`ERROR_SERVICE_CANNOT_ACCEPT_CTRL`)로 거절하므로 서비스에 전달되지 않는다. 따라서 서비스 중지에는 1.8절의 "두 번째 종료 요청"이 없다. 시스템 종료 알림이 없으면 유예는 활성 세션 종료나 G 경과로 끝난다. |
 | 시스템 종료 알림 | 1.8절의 콘솔 창 닫기와 같다. G 없이 남은 세션을 즉시 강제 정리하고, OS가 프로세스를 끝내기 전에 종료 기록을 마친다(Q248). 사건 순서는 [운영 정보 계약 1.5절](ops-info-v2.md#15-사건-목록)의 순서 규칙을 따른다. 시간 한도는 [운영 스펙 OPS-TBD-014](../specs/operations.md#8-미결정-사항)다. 사용자 로그오프는 서비스를 멈추지 않는다(이 문서의 판단). |
 | 로그 | `log.output`은 파일 경로여야 한다. `stdout`이면 `service_log_stdout`(종료 코드 3)으로 시작하지 않는다(Q247). 로그 파일을 열기 전의 오류는 서비스 종료 코드로만 남는다. |
 | 출력 | `service install`은 성공하면 stdout에 `서비스 'vnc-relay'를 설치했다.`를 쓴다. `service uninstall`은 `서비스 'vnc-relay'를 제거했다.`를 쓴다(이 문서의 판단). 오류는 1.5절의 오류 줄 형식으로 stderr에 쓴다. |
@@ -249,7 +249,7 @@ Windows 11에서 `vnc-relay`를 Windows 서비스로 등록하고 실행하는 �
 | `service_operator_unknown` | `service install`: `--operator` 이름을 Windows 사용자나 그룹으로 찾지 못했다. 메시지에 그 이름을 넣는다. | 2 | OPS-075 |
 | `service_log_stdout` | `service install`·`service run`: `log.output`이 `stdout`이다. 서비스 실행에는 로그 파일이 필요하다(사용자 결정 2026-11-17(Q247)). `key`는 `log.output`이다. | 3 | OPS-075, OPS-077 |
 | `service_controller_unavailable` | `service run`: SCM이 시작한 프로세스가 아니다. 리스너를 열지 않는다. | 2 | OPS-081 |
-| `service_failed` | 위 코드에 해당하지 않는 SCM 호출 실패. 원시 OS 오류 번호를 메시지에 넣는다. 설치 중이면 만든 등록을 지운다. | 1 | OPS-075 |
+| `service_failed` | 위 코드에 해당하지 않는 SCM 호출 실패. 원시 OS 오류 번호를 메시지에 넣는다. 설치의 등록 뒤 설정 단계에서 실패하면 만든 등록을 지운다. 지우기도 실패하면 그 오류 번호와 `sc.exe delete vnc-relay` 안내를 더한다. | 1 | OPS-075 |
 
 경고(종료 코드에 영향 없음): `accounts_file_permissive`, `last_account_removed`, `accounts_file_cleanup_failed`(`admin`: 계정 파일을 교체한 뒤 디렉터리 반영이나 잠금 파일 삭제에 실패했다. 교체가 실패한 뒤 잠금 파일 삭제에 실패해도 오류와 함께 나온다. 1.6절), `log_write_failed`(`serve`: 운영 로그 줄을 쓰지 못했다. 처음 한 번만 쓴다. `key`는 `log.output`이다. [운영 정보 계약 1.1절](ops-info-v2.md#11-로그-일반-규칙)). 설정 경고는 [설정 파일 계약 2.2절](config-v4.md#22-경고)을 따른다.
 
@@ -383,4 +383,4 @@ error[account_name_invalid]: 계정 이름은 소문자 영문·숫자·점·밑
 - 비밀번호 입력의 정규화(1.2절)는 입력 바이트 그대로 쓰기로 채택했다. Windows 11에서 한글 비밀번호 한 개를 UTF-8 바이트로 저장한 것을 관찰했다. 다른 입력기의 바이트는 관찰하지 않았다.
 - 로그 파일 이름을 바꾼 뒤 다시 여는 동작은 `tests/log_reopen.rs`의 `renamed_log_is_recreated_without_lost_or_duplicate_lines`와 두 OS 수동 운영 기록에서 통과했다. 실패 뒤 이전 파일 유지·복구도 두 OS에서 확인했다([운영 정보 계약 5절](ops-info-v2.md#5-예제와-계약-테스트)).
 - 구현 판단(사용자 결정 없음): Windows에서 숨김 입력 전에 콘솔 입력 모드를 읽지 못하거나 입력 뒤에 되돌리지 못하면 `runtime_unavailable`(종료 코드 1)로 끝난다. 계정 파일은 바뀌지 않는다(2.2절). 이 경우에 다른 코드를 쓸지는 사용자가 정한다.
-- 1.8.0의 Windows 서비스 규칙은 사용자 결정 2026-11-17(Q239·Q242~Q249·Q257)을 따른다. 다음은 이 문서의 판단이며 사용자 채택을 기다린다: 하위 명령 이름 `service run`, 오류 코드 8개(`service_access_denied`·`service_exists`·`service_not_found`·`service_running`·`service_operator_unknown`·`service_log_stdout`·`service_controller_unavailable`·`service_failed`)와 종료 코드 배정, 표시 이름 `VNC Relay`, 성공 문장, 설치 검사 범위와 되돌리기, 설치가 서비스를 시작하지 않는 것, 중지됨만 해제하는 것, 상태 보고와 진행 표시 주기, 서비스 종료 코드 보고 방식. 중지 중 두 번째 중지 요청은 [운영 스펙 OPS-TBD-013](../specs/operations.md#8-미결정-사항)이다.
+- 1.8.0의 Windows 서비스 규칙은 사용자 결정 2026-11-17(Q239·Q242~Q249·Q257)을 따른다. 다음은 이 문서의 판단이며 사용자 채택을 기다린다: 하위 명령 이름 `service run`, 오류 코드 8개(`service_access_denied`·`service_exists`·`service_not_found`·`service_running`·`service_operator_unknown`·`service_log_stdout`·`service_controller_unavailable`·`service_failed`)와 종료 코드 배정, 표시 이름 `VNC Relay`, 성공 문장, 등록 명령의 경로 처리·인용 규칙, 트레이 앱의 설정 경로 추출, 설치 검사 범위와 되돌리기, 설치가 서비스를 시작하지 않는 것, 중지됨만 해제하는 것, 상태 보고와 진행 표시 주기, 서비스 종료 코드 보고 방식. 중지 중 두 번째 중지 요청은 SCM이 1061로 거절하므로 서비스에 전달되지 않는다(1.9절). 시스템 종료의 시간 한도는 [운영 스펙 OPS-TBD-014](../specs/operations.md#8-미결정-사항)로 남아 있다.

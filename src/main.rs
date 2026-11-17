@@ -3,6 +3,8 @@
 mod admin;
 mod cli;
 mod serve;
+#[cfg(windows)]
+mod service;
 
 use std::io::Write;
 use std::process::ExitCode;
@@ -11,10 +13,12 @@ use cli::Command;
 
 fn main() -> ExitCode {
     match cli::parse(std::env::args_os()) {
-        Ok(Command::Help) => write_stdout(cli::HELP),
+        Ok(Command::Help) => write_stdout(&cli::help()),
         Ok(Command::Version) => write_stdout(&format!("vnc-relay {}\n", env!("CARGO_PKG_VERSION"))),
         Ok(Command::Serve { config }) => serve::run(&config),
         Ok(Command::Admin { config, action }) => admin::run(&config, &action),
+        #[cfg(windows)]
+        Ok(Command::Service(action)) => service::run(action),
         Err(error) => {
             cli::report_usage(&error);
             ExitCode::from(cli::EXIT_USAGE)

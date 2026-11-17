@@ -22,7 +22,7 @@ noVNC는 포함하지 않는다. 운영자가 별도로 준비하는 외부 View
 
 ## 대상 독자
 
-이 도움말은 실행파일과 설정 파일을 직접 배치하는 운영자를 위한 안내서다. Windows 11 x64와 Ubuntu 24.04 LTS x64를 대상으로 한다. OS 서비스 등록과 컨테이너 배치는 다루지 않는다.
+이 도움말은 실행파일과 설정 파일을 직접 배치하는 운영자를 위한 안내서다. Windows 11 x64와 Ubuntu 24.04 LTS x64를 대상으로 한다. Windows 서비스·트레이 운영도 다룬다. 컨테이너 배치는 다루지 않는다.
 
 ## 읽는 순서
 
@@ -43,11 +43,11 @@ noVNC는 포함하지 않는다. 운영자가 별도로 준비하는 외부 View
 
 이 도움말은 저장소의 `main`을 따른다. [최신 Release](https://github.com/kayden-kim/vnc-relay/releases/latest)는 `v2026.11.4`이며 2026-11-17에 공개됐다. 배포 묶음은 [GitHub Releases](https://github.com/kayden-kim/vnc-relay/releases)에서 받는다.
 
-현재 `main`의 동작은 최신 Release와 같다. 다음 릴리스 전에 `main`의 동작이 달라지면 아래 표에 적는다. `main`으로 빌드해도 다음 릴리스 전까지 버전은 `2026.11.4`로 표시된다.
+현재 `main`에는 최신 Release에 없는 Windows 서비스와 트레이 앱이 있다. 아래 표에서 차이를 확인한다. `main`으로 빌드해도 다음 릴리스 전까지 버전은 `2026.11.4`로 표시된다.
 
 | 차이 | `main`의 동작 | `v2026.11.4` Release 사용자 |
 | --- | --- | --- |
-| 없음 | 최신 Release와 같다. | 이 도움말을 그대로 따른다. |
+| Windows 서비스·트레이 앱 | `service install`·`service uninstall`·SCM 전용 `service run`과 Windows 묶음의 `vnc-relay-tray.exe`를 제공한다. [설치](install.md#windows-서비스-설치와-해제)와 [운영](operate.md#windows-서비스와-트레이)을 따른다. | 이 기능과 트레이 실행파일이 없다. `serve`로 수동 실행하거나 `main`에서 묶음을 만든다. |
 
 `v2026.11.3` 이하에서 올리면 다음 동작이 바뀐다.
 

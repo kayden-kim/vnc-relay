@@ -4,7 +4,7 @@
 
 ## 요구 환경
 
-지원 OS는 Windows 11 x64와 Ubuntu 24.04 LTS x64다. Windows Server와 다른 OS·아키텍처는 검증 범위가 아니다. 이 안내는 수동 실행을 다룬다. OS 서비스 등록과 컨테이너는 다루지 않는다.
+지원 OS는 Windows 11 x64와 Ubuntu 24.04 LTS x64다. Windows Server와 다른 OS·아키텍처는 검증 범위가 아니다. 수동 실행과 Windows 서비스 등록을 다룬다. 컨테이너는 다루지 않는다.
 
 배포 묶음을 실행할 때 Rust 빌드 도구는 필요하지 않다. 소스에서 직접 묶음을 만들 때만 빌드 환경을 준비한다.
 
@@ -92,6 +92,7 @@
 | 파일·디렉터리 | 용도 |
 | --- | --- |
 | `vnc-relay.exe` 또는 `vnc-relay` | 해당 OS의 실행파일 |
+| `vnc-relay-tray.exe` | Windows 서비스 상태·시작·중지용 트레이 앱. `main`의 Windows 묶음에만 있으며 `v2026.11.4` Release에는 없다 |
 | `relay.toml` | 저장소 `examples/relay.toml`의 루프백 설정 |
 | `README.md` | 제품 소개와 빠른 시작 |
 | `docs/`, `GLOSSARY.md` | 오프라인으로 읽을 수 있는 운영 안내·기준 문서·용어집 |
@@ -103,6 +104,41 @@
 설정 파일 안의 상대 경로는 터미널 위치가 아니라 `relay.toml`의 디렉터리를 기준으로 푼다. 예시의 계정 파일과 로그는 이 디렉터리에 둔다. TLS를 켜면 인증서와 개인키를 별도로 준비하고 설정에서 그 경로를 지정해야 한다.
 
 계정 파일·개인키·로그 디렉터리의 접근 권한을 제한해야 한다. Windows에서는 서버 실행 OS 계정과 관리자만 읽고 쓰도록 ACL을 제한하기를 권장한다. Ubuntu에서는 계정 파일·개인키에 `0600`을 권장한다. 자세한 절차는 [수동 운영 안내](https://github.com/kayden-kim/vnc-relay/blob/main/docs/how-to/operate-relay.md) 3.2절에 있다.
+
+## Windows 서비스 설치와 해제
+
+이 기능은 `main`으로 만든 Windows 묶음에 있다. `v2026.11.4` Release에는 없다. 먼저 [빠른 시작](quick-start.md)에 따라 설정과 관리자 계정을 준비한다. 서비스의 `log.output`은 파일 경로여야 한다. `%ProgramData%\vnc-relay\`에 운영 파일을 두기를 권장한다. 설치·해제에는 관리자 권한 PowerShell을 쓴다.
+
+1. 준비한 설정·계정·사용 중인 TLS·키 파일을 `%ProgramData%\vnc-relay\`에 배치한다. 상대 경로도 이 위치를 기준으로 맞춘다.
+2. 관리자 권한 PowerShell에서 실행파일 디렉터리로 이동한다.
+3. 서비스를 설치한다. `<사용자>`·`<그룹>`은 UAC 없이 시작·중지할 실제 Windows 사용자나 그룹으로 바꾼다. `--operator`는 필요한 수만큼 반복한다.
+
+   ```powershell
+   .\vnc-relay.exe service install --config "$env:ProgramData\vnc-relay\relay.toml" --operator "<사용자>" --operator "<그룹>"
+   ```
+
+4. 서비스 계정 `NT SERVICE\vnc-relay`의 파일 접근 권한을 확인한다.
+
+설치는 설정과 계정·TLS 등 사용 중인 파일을 검사하고 자동(지연 시작) 서비스를 등록한다. 복구 동작은 설정하지 않는다. 설치만으로 서비스를 시작하지 않는다. 설치 검사는 관리자 권한으로 실행하므로 서비스 계정의 파일 접근까지 보장하지 않는다.
+
+서비스는 설정·계정·사용 중인 키 파일을 읽고 로그 디렉터리에 쓸 수 있어야 한다. 계정 파일과 개인키는 Administrators, SYSTEM, `NT SERVICE\vnc-relay`만 읽도록 제한하기를 권장한다. 트레이 사용자는 설정 파일 읽기 권한만 필요하다. 기본 `%ProgramData%` 권한에 의존하지 않는다. ACL 명령과 관리 API 설정 편집 권한은 [운영 안내 3.3.1절](https://github.com/kayden-kim/vnc-relay/blob/main/docs/how-to/operate-relay.md#331-windows-서비스와-트레이-앱)을 따른다.
+
+서비스 시작·중지는 [Windows 서비스와 트레이 운영](operate.md#windows-서비스와-트레이)을 따른다. 해제할 때는 다음 순서를 쓴다.
+
+1. 서비스 운영자 터미널에서 중지를 요청한다.
+
+   ```powershell
+   sc.exe stop vnc-relay
+   ```
+
+2. `sc.exe query vnc-relay`로 `STOPPED`가 될 때까지 기다린다.
+3. 관리자 권한 PowerShell에서 등록을 해제한다.
+
+   ```powershell
+   .\vnc-relay.exe service uninstall
+   ```
+
+해제는 실행파일·설정·계정·인증서·로그를 지우지 않는다. 트레이 앱은 Windows 묶음의 `vnc-relay-tray.exe`를 일반 사용자로 실행한다. 트레이 앱은 서비스를 설치·해제하지 않는다. 명령과 오류의 기준은 [CLI 계약 1.9절](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/cli-v1.md#19-windows-서비스-실행)이다.
 
 ## 대안: 소스에서 묶음 만들기
 

@@ -25,21 +25,26 @@ const ROOT_FILES: [&str; 4] = [
 struct Platform {
     os: &'static str,
     extension: &'static str,
-    executable: &'static str,
+    /// Package and executable file name of each program in the bundle.
+    executables: &'static [(&'static str, &'static str)],
 }
 
+/// The Windows bundle also carries the tray app (ADR-0010).
 #[cfg(all(windows, target_arch = "x86_64"))]
 const PLATFORM: Option<Platform> = Some(Platform {
     os: "windows",
     extension: "zip",
-    executable: "vnc-relay.exe",
+    executables: &[
+        (PRODUCT, "vnc-relay.exe"),
+        ("vnc-relay-tray", "vnc-relay-tray.exe"),
+    ],
 });
 
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 const PLATFORM: Option<Platform> = Some(Platform {
     os: "linux",
     extension: "tar.gz",
-    executable: "vnc-relay",
+    executables: &[(PRODUCT, "vnc-relay")],
 });
 
 #[cfg(not(any(
@@ -63,10 +68,11 @@ pub fn run() -> Result<bool, Error> {
 
     // The notices check reads the sources of both targets offline, so fetch them all.
     cargo_step(root, &["fetch", "--locked"])?;
-    cargo_step(
-        root,
-        &["build", "--release", "--locked", "--package", PRODUCT],
-    )?;
+    let mut build = vec!["build", "--release", "--locked"];
+    for (package, _) in platform.executables {
+        build.extend(["--package", package]);
+    }
+    cargo_step(root, &build)?;
     if !notices::run(true)? {
         return Ok(false);
     }
@@ -78,14 +84,13 @@ pub fn run() -> Result<bool, Error> {
         fs::remove_dir_all(&stage)?;
     }
     make_dir(&stage)?;
-    copy_file(
-        &workspace
-            .target_dir
-            .join("release")
-            .join(platform.executable),
-        &stage.join(platform.executable),
-        EXECUTABLE_MODE,
-    )?;
+    for (_, executable) in platform.executables {
+        copy_file(
+            &workspace.target_dir.join("release").join(executable),
+            &stage.join(executable),
+            EXECUTABLE_MODE,
+        )?;
+    }
     copy_file(
         &root.join("examples").join("relay.toml"),
         &stage.join("relay.toml"),

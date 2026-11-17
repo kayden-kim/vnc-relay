@@ -241,6 +241,7 @@ fn source_index(root: &Path) -> Vec<SourceFile> {
         "crates/domain/src",
         "crates/app/src",
         "crates/adapters/src",
+        "crates/tray/src",
     ]
     .into_iter()
     .flat_map(|dir| rust_files(&root.join(dir)))

@@ -10,6 +10,8 @@
 
 `cargo xtask package`는 실행한 OS(Windows x64 또는 Linux x64)용 배포 묶음을 만든다. release 빌드와 `notices --check`를 거친 뒤 [수동 운영 안내 3.1절](../how-to/operate-relay.md#31-release-빌드와-묶음)의 파일을 모아 Windows는 zip, Linux는 tar.gz로 압축하고 SHA-256 파일을 쓴다(사용자 결정 2026-11-08(Q161·Q164)). 버전이 `연.월.순서` 규칙(Q165)이 아니면 빌드 전에 실패한다. 절차는 [릴리스 how-to](../how-to/release.md)에 있다.
 
+Windows의 `Platform.executables`는 `vnc-relay`·`vnc-relay-tray` 패키지와 `vnc-relay.exe`·`vnc-relay-tray.exe` 파일을 함께 나열한다. `package::run`은 이 목록으로 release 빌드 인수와 복사할 실행파일을 정한다. Linux 목록에는 `vnc-relay`만 있다([ADR-0010](../decisions/ADR-0010-windows-service-and-tray.md)).
+
 `cargo xtask ticket keys`와 `cargo xtask ticket issue`는 접속 ticket을 손으로 확인하는 시험 도구다. 제품은 외부 발급 쪽이 서명한 ticket을 확인만 하고 발급하지 않는다([ADR-0009](../decisions/ADR-0009-optional-relay-access-ticket.md)). 시험용 발급은 개발 전용 xtask 명령으로 두고 실행파일과 배포 묶음에는 넣지 않는다(사용자 결정 2026-11-13(Q233)). `keys`는 역할의 P-256 키 쌍을 만들어 공개 키 JWKS 파일과 개인 JWK 파일을 쓴다. `issue`는 그 개인키로 ES256 ticket 하나를 서명해 표준 출력에 쓴다. 형식은 [WebSocket 계약 1.9.2절](../contracts/websocket-relay-v2.md#192-ticket-형식과-클레임)과 [설정 계약 1.11절](../contracts/config-v4.md#111-접속-ticket-공개-키-파일-형식)을 따른다. 사용 절차는 [수동 운영 안내 3.10.1절](../how-to/operate-relay.md#3101-시험용-키와-ticket으로-확인하기)에 있다.
 
 | 항목 | 값 |
@@ -91,7 +93,7 @@ flowchart LR
 | `xtask/src/scenarios/markers.rs` `scan`, `Marker` | 주석·문자열·문자 리터럴을 건너뛰는 작은 어휘 분석기로 `/// spec:` 표식, 테스트 속성, 인라인 `mod` 중첩, 함수 이름을 찾는다. 표식 끝의 ` partial`은 `Marker::partial`이 된다. 다른 낱말이 붙으면 표식 오류다. | `.rs` 파일마다 | `spec::is_scenario_id` |
 | `xtask/src/scenarios/test_run.rs` `run` | 테스트 빌드 JSON에서 실행파일과 대상 소스 파일을 짝짓고, `cargo test` 출력에서 테스트별 결과를 읽는다. | `scenarios` 실행마다 | `cargo` |
 | `xtask/src/scenarios/report.rs` `Report`, `Status` | 시나리오 상태 판정, 판정 사유, Markdown 보고서 작성 | `scenarios` 실행마다 | 없음 |
-| `xtask/src/layers.rs` `RULES`, `APPROVED`, `check` | 패키지별 허용 내부 crate·외부 crate 규칙, 같은 외부 crate의 버전 요구 일치 검사 | `layers` 실행마다 | `cargo` |
+| `xtask/src/layers.rs` `RULES`, `APPROVED`, `check` | 패키지별 허용 내부 crate·외부 crate 규칙, 같은 외부 crate의 버전 요구 일치 검사. 트레이 패키지는 app·adapters와 tray-icon·windows-registry·windows-service·windows-sys만 허용한다. | `layers` 실행마다 | `cargo` |
 | `xtask/src/tokens.rs` `run`, `tokens_from`, `render_css`, `write_outputs`, `check_outputs`, `token_css`, `MOCKUP_PATHS` | DESIGN.md 머리말의 `colors`·`spacing`·`rounded`·`typography`를 CSS 사용자 정의 속성 목록으로 바꾸고 `:root` 블록과 글꼴 `@font-face` 규칙을 만든다. `@font-face`의 `url()` 기준만 토큰 파일(`fonts`)과 목업(`../../../web/dashboard/fonts`)이 다르다. 기본 실행은 토큰 CSS 두 파일, `MOCKUP_PATHS`의 목업 두 개(`dashboard.html`·`help-site.html`)의 표식 사이 블록, 로그인 공통 복사본(`tokens/shared.rs`), 글꼴 복사본(`tokens/fonts.rs`)을 쓴다. `--check`는 같은 곳을 비교하고 화면 CSS 검사를 더한다. `token_css`는 토큰 파일과 같은 CSS를 돌려준다. `help_site`가 도움말 사이트의 `assets/tokens.css`로 쓴다. | 명령마다 | `tokens/front_matter.rs`, `tokens/screen_css.rs`, `tokens/shared.rs`, `tokens/fonts.rs`, `cargo.rs`의 `metadata` |
 | `xtask/src/tokens/front_matter.rs` `parse_document`, `Value` | 머리말의 YAML 부분집합(들여쓰기 맵, 한 줄 스칼라)만 읽는다. 지원하지 않는 문법은 `DESIGN.md:줄번호:` 형식의 오류로 보고한다. | 명령마다 | 없음 |
 | `xtask/src/tokens/screen_css.rs` `check` | 토큰 CSS 파일을 뺀 `web/dashboard/`와 `web/help/` 아래 `.css`에서 `#` 색, `rgb(`·`hsl(`·`url(`·`@import`, `@media` 밖의 `px`·`em`·`rem`, `font-weight` 값, 정의되지 않은 `var(--…)`를 찾는다. | `--check` 실행마다 | 없음 |
@@ -103,7 +105,7 @@ flowchart LR
 | `xtask/src/help_site/checks.rs` `check`, `ALLOWED_LINKS`, `REPOSITORY_BLOB` | 만든 사이트를 검사한다. ① 두 `SUMMARY.md`의 장 파일 목록과 순서가 같다. ② 장마다 `<언어>/<이름>.html`이 있고, `html`의 `lang`이 책 언어이며, `main` 안 `h1`이 하나다. ③ `<언어>/404.html`이 없다. ④ 모든 HTML의 `a`·`link`의 `href`와 `script`·`img`·`iframe`·`source`·`audio`·`video`·`embed`·`object`의 주소를 검사한다. 빈 주소(공백뿐인 값 포함)는 실패다. 사이트 안 상대 경로와 `/vnc-relay/` 절대 경로는 출력 디렉터리 안의 파일을 가리켜야 하고, `#절`은 대상 HTML의 `id`여야 한다(퍼센트 디코딩 후 비교). `http(s)://`·`//` 주소는 `a`에서만 허용 목록 `ALLOWED_LINKS` 안일 때 통과하고, 그 밖의 요소는 외부 자원이라 실패다. `REPOSITORY_BLOB` 아래 링크는 저장소에 그 경로가 있어야 한다. 그 밖의 주소 형식(`mailto:`·`javascript:`·`data:` 등)은 실패다. ⑤ `img`의 `alt`가 비어 있지 않다. ⑥ 모든 CSS의 `url(…)`·`@import`가 외부 주소가 아니고, 상대 경로의 대상 파일이 있다. `data:` 주소는 외부 요청이 없으므로 통과한다. | `help-site` 실행마다 | `help_site/html.rs`, `static_server::percent_decode` |
 | `xtask/src/help_site/html.rs` `start_tags`, `Tag` | 주석, `<!…>`·`<?…>`, `script`·`style`의 내용을 건너뛰고 시작 태그의 이름과 속성(큰따옴표·작은따옴표·따옴표 없는 값, 값 없는 속성)을 읽는다. 속성 값의 문자 참조는 `&amp;`·`&quot;`·`&#39;`·`&lt;`·`&gt;`와 숫자 참조만 푼다. | 검사할 HTML 파일마다 | 없음 |
 | `xtask/src/help_serve.rs` `run`, `MOUNT` | `<대상 디렉터리>/help-site/`를 `Site`로 정한다. 마운트와 `/`의 이동 위치는 `/vnc-relay/`, CSP 헤더는 없다(GitHub Pages처럼 페이지의 `meta` CSP가 적용된다). 없는 경로는 사이트 루트의 `404.html`을 404로 준다. 사이트가 없으면 `help-site`를 먼저 실행하라는 오류로 멈춘다. | 명령마다, 프로세스를 끝낼 때까지 | `cargo::metadata`, `static_server` |
-| `xtask/src/notices.rs` `run`, `render`, `tree_packages`, `collect_texts` | 두 대상의 `cargo tree --edges normal,build` 합집합을 `cargo metadata`의 이름·버전·라이선스·패키지 경로와 연결한다. 고지 파일을 재귀 수집하고 정렬해 저장하거나 대조한다. crate 고지 뒤에 `tokens/fonts.rs`의 `LICENSE_PATH` 전문을 붙인다. | 명령마다 | std, serde_json, `cargo::command`·`cargo::display_path`, `tokens/fonts.rs`의 상수 |
+| `xtask/src/notices.rs` `run`, `render`, `tree_packages`, `collect_texts` | 두 대상에서 `-p vnc-relay -p vnc-relay-tray`의 `cargo tree --edges normal,build` 합집합을 메타데이터와 연결한다. 고지 파일을 재귀 수집하고 정렬해 저장하거나 대조한다. crate 고지 뒤에 `tokens/fonts.rs`의 `LICENSE_PATH` 전문을 붙인다. | 명령마다 | std, serde_json, `cargo::command`·`cargo::display_path`, `tokens/fonts.rs`의 상수 |
 | `xtask/src/package.rs` `run`, `check_version`, `archive_command`, `copy_dir`, `sha256` | 버전 형식 검사, `cargo fetch --locked`, release 빌드, `notices::run(true)`, 묶음 디렉터리 구성, OS `tar`로 압축, SHA-256 파일 쓰기. Windows는 `%SystemRoot%\System32\tar.exe -a`(zip), Linux는 GNU `tar`(소유자 0)다. SHA-256은 FIPS 180-4를 직접 구현했다. `copy_dir`는 디렉터리를 재귀 복사하고 Unix 권한을 디렉터리 `0755`, 파일 `0644`로 맞춘다. `help_site`도 이 함수를 쓴다. | `package` 실행마다 | std, `cargo::metadata`·`command`·`display_path`, `notices::run` |
 | `xtask/src/ticket.rs` `parse`, `run`, `key_dir`, `write_keys`, `load_key`, `issue`, `Role`, `Claims` | 인자 검사와 기본값, 키 디렉터리 결정, P-256 키 쌍 생성과 두 키 파일 쓰기, 개인 JWK 읽기, 클레임 구성과 ES256 서명, base64url 인코딩·디코딩, RFC 7638 지문 | `ticket` 실행마다 | aws-lc-rs(키 생성·서명·SHA-256·난수), serde_json, `cargo::metadata` |
 
@@ -140,6 +142,8 @@ flowchart LR
 
 `cargo xtask layers`는 1단계 다음에 `layers::check`를 실행한다. 패키지마다 `RULES`의 허용 내부 crate와 외부 crate 규칙을 적용하고, 같은 외부 crate의 버전 요구가 패키지마다 다르면 위반으로 본다. `RULES`에 없는 패키지도 위반이다.
 
+`RULES`의 `vnc-relay-tray` 행은 내부 의존성을 `vnc-relay-app`·`vnc-relay-adapters`로 제한한다. 외부 의존성은 tray-icon·windows-registry·windows-service·windows-sys만 받는다. 새 세 라이브러리는 `APPROVED`에도 있다. 규칙은 [코드 지도 레이어 표](code-map.md#레이어와-의존-방향)와 같은 변경에서 맞춘다.
+
 `cargo xtask tokens`와 `cargo xtask tokens --check`는 앞부분이 같다. `cargo metadata`로 루트를 찾고, DESIGN.md 머리말을 `parse_document`로 읽어 `tokens_from`으로 토큰 목록을 만든다(`version`·`name`·`description`·`components`는 뺀다). `render_css`가 `:root` 블록을 만든다. 기본 실행(`write_outputs`)은 토큰 CSS 두 파일과 `MOCKUP_PATHS`의 목업마다 `DESIGN-TOKENS:START`·`END` 표식 사이 블록을 쓴다(`replace_mockup_block`). `shared::write`가 로그인 공통 복사본도 함께 쓴다. `--check`(`check_outputs`)는 같은 곳을 비교하고 화면 CSS 검사를 더한다. 목업의 차이는 목업 파일 경로와 표식 사이 블록 안의 줄 번호로 알린다. 복사본은 `shared::check`가 원본과 비교하고, 복사 디렉터리에서 목록에 없는 파일을 찾는다. 차이는 한 건씩 출력하고 `tokens --check: 실패 (N건)`, 종료 코드 1이다. 차이가 없으면 `통과`, 종료 코드 0이다.
 
 `cargo xtask dashboard-serve`는 `web/dashboard/`의 `Site`를 정하고 `static_server::run`을 실행한다. 서버는 `127.0.0.1:포트`에 연결한 뒤 연결마다 요청 하나를 처리한다. 요청 머리는 8KiB까지 읽고(`MAX_HEAD`), 읽기와 쓰기 제한 시간은 5초(`IO_TIMEOUT`)다.
@@ -150,9 +154,11 @@ flowchart LR
 
 `cargo xtask notices`는 Cargo 메타데이터에서 루트를 찾는다. Windows·Linux 대상의 메타데이터와 일반·빌드 의존성 트리를 오프라인으로 각각 읽는다. 타깃 필터는 호스트 빌드 의존성을 빠뜨릴 수 있으므로 두 메타데이터를 먼저 합친다. 트리 합집합과 메타데이터의 빌드 의존성 하위 그래프에 있는 외부 crate를 고른다. 이 추가 합집합은 호스트별 빌드 간선 차이를 보수적으로 포함해 두 OS에서 같은 고지를 만든다. `collect_texts`는 패키지 안의 `LICENSE*`·`LICENCE*`·`COPYING*`·`NOTICE*`·`UNLICENSE*`·`COPYRIGHT*` 파일과 명시된 `license_file`을 모은다. crate·상대 경로 순으로 전문을 넣고 마지막에 Cargo.lock 입력 전체를 넣는다. 줄 끝만 LF로 통일한다. `--check`는 이 결과 전체가 같을 때만 통과한다. 경로·시각·대상 디렉터리는 산출물에 넣지 않는다.
 
+각 대상의 트리 명령은 `cargo tree --offline --locked -p vnc-relay -p vnc-relay-tray --target <대상> --edges normal,build`를 쓴다. 따라서 Windows 트레이 의존성도 배포 고지에 포함한다. 대상별 `cfg` 때문에 Linux에서 트레이의 Windows 라이브러리를 제품 실행파일에 넣는 것은 아니다.
+
 고지 파일이 없거나 crate를 메타데이터에 연결하지 못하면 종료 코드 1로 중단한다. 읽기·쓰기 오류와 패키지 안 심볼릭 링크도 오류다. `--check`는 저장소를 바꾸지 않는다. 생성 도중 실패하면 기존 고지 파일을 덮어쓰지 않는다. 마지막 파일 쓰기 자체의 오류는 파일을 일부 바꿀 수 있으므로 다시 생성한다.
 
-`cargo xtask package`는 다음 순서로 진행한다. ① `cargo metadata`로 루트·대상 디렉터리·`vnc-relay` 버전을 읽고 `check_version`으로 형식을 검사한다. ② `cargo fetch --locked`로 두 대상의 의존성 소스를 받는다. `notices --check`가 오프라인으로 두 대상의 고지 파일을 읽기 때문이다. ③ `cargo build --release --locked --package vnc-relay`. ④ `notices::run(true)`. 대조가 실패하면 묶음을 만들지 않고 종료 코드 1이다. ⑤ `<대상 디렉터리>/package/vnc-relay-<버전>-<os>-x64/`를 지우고 다시 만든 뒤 실행파일, `examples/relay.toml`(`relay.toml`로), `README.md`·`LICENSE`·`THIRD-PARTY-NOTICES.txt`·`GLOSSARY.md`, `docs/` 전체를 복사한다. Unix에서는 원본 권한과 관계없이 디렉터리·실행파일을 `0755`, 나머지 파일을 `0644`로 맞춘다. WSL에서 Windows 드라이브(`/mnt/d`)의 파일은 모두 `0777`로 보이기 때문이다. ⑥ 같은 이름의 묶음 파일을 지우고 `package/`에서 OS `tar`로 디렉터리 하나를 압축한다. ⑦ 묶음 바이트의 SHA-256을 `<묶음>.sha256`에 `sha256sum` 형식으로 쓰고, 표준 출력에 `package: <경로>`와 `sha256: <값>`을 쓴다. 경로는 저장소 안이면 상대 경로, 밖이면 절대 경로다.
+`cargo xtask package`는 다음 순서로 진행한다. ① `cargo metadata`로 루트·대상 디렉터리·`vnc-relay` 버전을 읽고 `check_version`으로 형식을 검사한다. ② `cargo fetch --locked`로 두 대상의 의존성 소스를 받는다. `notices --check`가 오프라인으로 두 대상의 고지 파일을 읽기 때문이다. ③ `Platform.executables`의 패키지마다 `--package`를 붙여 `cargo build --release --locked`를 실행한다. Windows는 `vnc-relay`·`vnc-relay-tray`, Linux는 `vnc-relay`만 빌드한다. ④ `notices::run(true)`가 실패하면 묶음을 만들지 않고 종료 코드 1이다. ⑤ `<대상 디렉터리>/package/vnc-relay-<버전>-<os>-x64/`를 지우고 다시 만든다. 같은 실행파일 목록, `examples/relay.toml`(`relay.toml`로), `README.md`·`LICENSE`·`THIRD-PARTY-NOTICES.txt`·`GLOSSARY.md`, `docs/` 전체를 복사한다. Unix에서는 디렉터리·실행파일을 `0755`, 나머지 파일을 `0644`로 맞춘다. ⑥ 같은 이름의 묶음 파일을 지우고 OS `tar`로 디렉터리 하나를 압축한다. ⑦ 묶음 바이트의 SHA-256을 `<묶음>.sha256`에 `sha256sum` 형식으로 쓴다. 표준 출력에 `package: <경로>`와 `sha256: <값>`을 쓴다. 경로는 저장소 안이면 상대 경로, 밖이면 절대 경로다.
 
 `cargo xtask ticket keys <역할>`은 다음 순서로 진행한다. ① 인자를 검사한다. ② `--dir`가 없으면 `cargo metadata`의 대상 디렉터리 아래 `ticket/`을 키 디렉터리로 쓴다(`key_dir`). ③ `<역할>-ticket.jwks`나 `<역할>-ticket.private.jwk`가 이미 있으면 아무것도 쓰지 않고 멈춘다. ④ `EcdsaKeyPair::generate`로 P-256 키를 만든다. 공개 점에서 `x`·`y`를, 개인 스칼라에서 `d`를, `x`·`y`의 RFC 7638 지문에서 `kid`를 구한다. ⑤ 디렉터리를 만들고 개인 JWK, 공개 키 JWKS 순서로 새 파일을 쓴다(`write_new`, 이미 있으면 열기 실패). 내용을 쓰다 실패하면 그 파일을 지운다. 공개 키 파일을 만들거나 쓰지 못하면 이 실행에서 쓴 개인 JWK도 지운다. 지우지 못한 파일은 오류에 경로를 붙여 알린다(`discard`). ⑥ 두 파일 경로와 `kid`를 출력한다.
 
@@ -225,6 +231,8 @@ flowchart LR
 | 올바른 ticket만 만든다 | 손으로 확인할 거절(재사용, ticket 없음, 중계 ID 불일치, 기동 전 발급, 만료)은 올바른 ticket과 시간 경과로 만들 수 있다. 나머지 거절은 자동 시험이 맡는다. | DER 서명·잘못된 클레임을 만드는 옵션. 도구와 시험이 커진다. | **이 문서의 판단, 사용자 결정 없음** |
 
 ## 대조 기록
+
+2026-11-18 작업 트리의 `package.rs` `Platform.executables`·`run`, `notices.rs` `render`, `layers.rs` `RULES`·`APPROVED`를 읽고 Windows 트레이 범위를 대조했다. 이번 문서 개정은 빌드·시험·묶음 생성을 실행하지 않았다. 아래 이전 배포 묶음 기록은 트레이가 추가된 묶음의 실행 증거가 아니다.
 
 | 대조 범위 | 환경 | 확인 방법 | 결과 |
 | --- | --- | --- | --- |

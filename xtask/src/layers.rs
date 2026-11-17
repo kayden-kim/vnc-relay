@@ -26,6 +26,9 @@ const APPROVED: &[&str] = &[
     "tokio-tungstenite",
     "toml",
     "toml_edit",
+    "tray-icon",
+    "windows-registry",
+    "windows-service",
     "windows-sys",
 ];
 
@@ -72,6 +75,16 @@ const RULES: &[Rule] = &[
             "serde_json",
             "tokio",
             "tokio-tungstenite",
+            "windows-sys",
+        ]),
+    },
+    Rule {
+        package: "vnc-relay-tray",
+        internal: &["vnc-relay-app", "vnc-relay-adapters"],
+        external: External::Only(&[
+            "tray-icon",
+            "windows-registry",
+            "windows-service",
             "windows-sys",
         ]),
     },

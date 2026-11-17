@@ -69,6 +69,8 @@ Rust 의존성이 승인된 라이선스 허용 목록을 지키는지 검사하
 
    기대 결과: 종료 코드 0과 마지막 줄 `licenses ok`
 
+   이 통합 검사는 작업 공간의 `vnc-relay-tray`도 포함한다. Windows 서비스·트레이 변경의 검사 결과는 `licenses ok`였다([2026-11-18 검증 기록](set-up-and-verify.md#84-검증-기록2026-11-18)). `deny.toml`의 `[graph] targets`가 Windows와 Linux 두 대상을 모두 지정하므로 통합 검사는 두 대상 의존성 그래프의 합집합을 검사한다. 검사 범위가 각 대상별 검사보다 넓으므로 통합 검사가 통과하면 대상별 검사도 통과한다. 또 `tray-icon`은 `default-features = false`이므로 Linux용 `libappindicator` 기능과 그 `dirs` 의존성을 켜지 않는다. 그래서 [ADR-0010](../decisions/ADR-0010-windows-service-and-tray.md)이 통합 검사 실패 원인으로 예상했던 `option-ext`도 현재 그래프에 없다. 트레이만을 위한 대상별 추가 검사는 필요하지 않다(이 문서의 판단, 사용자 결정 없음).
+
 ### 3.1 배포 고지 생성과 대조
 
 루트 [`THIRD-PARTY-NOTICES.txt`](../../THIRD-PARTY-NOTICES.txt)는 두 대상의 일반·빌드 의존성 합집합이다. 각 crate의 이름·버전·라이선스 식과 고지 전문을 담는다. crate 고지 뒤에는 실행파일에 넣는 글꼴의 `web/dashboard/fonts/LICENSE.txt` 전문을 담는다. Windows·Linux 배포물에는 같은 파일 전체와 루트 [`LICENSE`](../../LICENSE)를 별도로 넣는다. `LICENSE`는 MIT 전문과 `Copyright (c) 2026 vnc-relay contributors`를 담는다(사용자 결정 2026-11-07(Q97)). 의존성 고지는 프로젝트 자체 MIT 고지를 대신하지 않는다.
@@ -104,7 +106,7 @@ Rust 의존성이 승인된 라이선스 허용 목록을 지키는지 검사하
 
    기대 결과: 받는 사람이 crate별 라이선스 식·저작권 고지·라이선스 전문·존재하는 NOTICE를 오프라인으로 읽을 수 있다. 고지 파일만 배포하고 프로그램의 MIT LICENSE를 빼도 된다는 뜻은 아니다.
 
-고지 범위는 `cargo tree -p vnc-relay --target <대상> --edges normal,build --prefix none --format "{p}" --charset ascii`로 고른다. 두 대상의 `cargo metadata --format-version 1 --filter-platform <대상>`를 합쳐 이름·버전·라이선스와 패키지 위치를 찾는다. 위 내부 명령에는 모두 `--offline --locked`를 붙인다. 호스트 전용 빌드 간선은 Cargo 트리가 OS마다 다를 수 있으므로 메타데이터의 빌드 의존성과 그 하위 일반·빌드 의존성도 합친다. 실행파일에 링크되지 않는 빌드 도구·절차 매크로까지 보수적으로 고지한다. 개발 전용 의존성과 xtask 자체는 배포 목록의 시작점이 아니다. 제품 기능이 바뀌면 다시 생성해야 한다.
+고지 범위는 `cargo tree -p vnc-relay -p vnc-relay-tray --target <대상> --edges normal,build --prefix none --format "{p}" --charset ascii`로 고른다. 두 대상의 `cargo metadata --format-version 1 --filter-platform <대상>`를 합쳐 이름·버전·라이선스와 패키지 위치를 찾는다. 위 내부 명령에는 모두 `--offline --locked`를 붙인다. 호스트 전용 빌드 간선은 Cargo 트리가 OS마다 다를 수 있으므로 메타데이터의 빌드 의존성과 그 하위 일반·빌드 의존성도 합친다. 실행파일에 링크되지 않는 빌드 도구·절차 매크로까지 보수적으로 고지한다. 개발 전용 의존성과 xtask 자체는 배포 목록의 시작점이 아니다. 제품 기능이 바뀌면 다시 생성해야 한다.
 
 생성기는 각 crate 안의 `LICENSE*`·`LICENCE*`·`COPYING*`·`NOTICE*`·`UNLICENSE*`·`COPYRIGHT*` 파일을 대소문자 구분 없이 재귀 수집한다. Cargo의 `license_file`도 포함한다. 하위 고지를 놓치지 않기 위해 배포에 쓰이지 않는 고지까지 들어갈 수 있다. 해당 파일을 넣었다고 선택적 라이선스의 모든 가지를 채택하는 것은 아니다. 고지 파일 누락·읽기 실패·심볼릭 링크·메타데이터 연결 실패는 성공으로 숨기지 않고 중단한다. 구현 소스의 코드 본문은 고지 파일에 복사하지 않는다.
 

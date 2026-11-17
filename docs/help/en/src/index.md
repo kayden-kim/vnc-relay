@@ -22,7 +22,7 @@ See the [repository README](https://github.com/kayden-kim/vnc-relay/blob/main/RE
 
 ## Intended readers
 
-This help is for operators who deploy the executable and configuration files directly. It covers Windows 11 x64 and Ubuntu 24.04 LTS x64. It does not cover OS service registration or containers.
+This help is for operators who deploy the executable and configuration files directly. It covers Windows 11 x64 and Ubuntu 24.04 LTS x64, including Windows service and tray operations. It does not cover containers.
 
 ## Where to start
 
@@ -43,11 +43,11 @@ This help is for operators who deploy the executable and configuration files dir
 
 This help follows the repository's `main` branch. The [latest Release](https://github.com/kayden-kim/vnc-relay/releases/latest) is `v2026.11.4`, published on 2026-11-17. Download bundles from [GitHub Releases](https://github.com/kayden-kim/vnc-relay/releases).
 
-`main` currently behaves the same as the latest Release. If `main` changes behavior before the next release, the table below lists the change. A build from `main` still reports version `2026.11.4` until the next release.
+`main` now includes a Windows service and tray app that are absent from the latest Release. Check the differences below. A build from `main` still reports version `2026.11.4` until the next release.
 
 | Difference | Behavior on `main` | For users of Release `v2026.11.4` |
 | --- | --- | --- |
-| None | Same as the latest Release. | Follow this help as written. |
+| Windows service and tray app | Provides `service install`, `service uninstall`, SCM-only `service run`, and `vnc-relay-tray.exe` in Windows bundles. Follow [Installation](install.md#install-and-uninstall-the-windows-service) and [Operations](operate.md#windows-service-and-tray). | These features and the tray executable are absent. Run manually with `serve`, or build a bundle from `main`. |
 
 Upgrading from `v2026.11.3` or earlier changes these behaviors.
 

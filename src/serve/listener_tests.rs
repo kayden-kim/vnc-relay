@@ -112,7 +112,7 @@ struct Running {
     admin_budget: Arc<ConnectionBudget>,
     clock: Arc<dyn Clock>,
     events: Arc<Recorder>,
-    done: JoinHandle<ExitCode>,
+    done: JoinHandle<u8>,
     abort: Vec<AbortHandle>,
 }
 
@@ -358,7 +358,7 @@ enabled = true
         String::from_utf8(bytes).unwrap_or_else(|error| panic!("HTTP utf8: {error}"))
     }
 
-    async fn finished(&mut self, exit: ExitCode) {
+    async fn finished(&mut self, exit: u8) {
         assert_eq!(
             bounded(&mut self.done)
                 .await
@@ -482,7 +482,7 @@ async fn listener_failures_retry_then_drive_fatal_grace_cleanup_and_preserve_req
         0
     );
     drop((viewer, server));
-    running.finished(ExitCode::from(EXIT_RUNTIME)).await;
+    running.finished(EXIT_RUNTIME).await;
     let lines = running.events.lines();
     let at = |name: &str| {
         lines
@@ -523,7 +523,7 @@ async fn listener_failures_retry_then_drive_fatal_grace_cleanup_and_preserve_req
         .requests
         .send(ShutdownRequest::Requested)
         .unwrap_or_else(|_| panic!("OS request during fatal G"));
-    running.finished(ExitCode::from(EXIT_RUNTIME)).await;
+    running.finished(EXIT_RUNTIME).await;
     assert!(forced_at.elapsed() < Duration::from_secs(2));
     assert_eq!(
         running.events.event("shutdown_started").await["trigger"],
@@ -543,7 +543,7 @@ async fn listener_failures_retry_then_drive_fatal_grace_cleanup_and_preserve_req
         faults
             .send(fatal_code())
             .unwrap_or_else(|error| panic!("inject idle fatal: {error}"));
-        running.finished(ExitCode::from(EXIT_RUNTIME)).await;
+        running.finished(EXIT_RUNTIME).await;
         assert!(
             started.elapsed() < Duration::from_secs(2),
             "idle shutdown did not dwell for G"
@@ -589,10 +589,10 @@ async fn listener_failures_retry_then_drive_fatal_grace_cleanup_and_preserve_req
         .send(ShutdownRequest::Requested)
         .unwrap_or_else(|_| panic!("second shutdown"));
     drop((viewer, server));
-    running.finished(ExitCode::SUCCESS).await;
+    running.finished(EXIT_SUCCESS).await;
 
     // A ready console request wins simultaneous reports; the supervisor does not
-    // reinterpret a listener error as ConsoleClosed or as a second OS signal.
+    // reinterpret a listener error as CloseNow or as a second OS signal.
     let (sender, mut failed) = watch::channel(Some(ListenerFailure {
         listener: "status",
         os_error: fatal_code(),

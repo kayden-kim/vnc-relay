@@ -7,7 +7,7 @@
 | 결정자 | 프로젝트 소유자(사용자) |
 | 관련 요구사항 | [PRD 확정 기준](../requirements/PRD.md#확정-기준), [FR-10](../requirements/PRD.md#fr-10-windows-서비스와-트레이-앱), [7절](../requirements/PRD.md#7-보안-및-신뢰-경계), [AC-57~59](../requirements/PRD.md#10-검증-및-수용-기준) |
 | 관련 스펙·계약 | [운영 스펙 3.7절](../specs/operations.md#37-windows-서비스-실행), [Windows 트레이 앱 스펙](../specs/windows-tray.md), [CLI 계약 1.9절](../contracts/cli-v1.md#19-windows-서비스-실행), [운영 정보 계약](../contracts/ops-info-v2.md), [설정 계약](../contracts/config-v4.md) |
-| 관련 아키텍처 문서 | [코드 지도 8절](../architectures/code-map.md#8-계획과-문서-정리target)의 계획 위치. 모듈 설계는 구현할 때 작성한다. |
+| 관련 아키텍처 문서 | [코드 지도](../architectures/code-map.md), [Windows 서비스 모듈 설계](../architectures/windows-service.md), [Windows 트레이 앱 모듈 설계](../architectures/windows-tray.md) |
 | 이 ADR이 대체하는 이전 ADR | 없음 |
 | 이 ADR을 대체한 새 ADR | 없음 |
 
@@ -21,7 +21,7 @@ Windows 11에서는 VNC Relay를 Windows 서비스로 실행할 수 있게 한�
 
 트레이 앱은 별도 GUI 실행파일 `vnc-relay-tray.exe`다(Q240). 메뉴 구성(Q252·Q253), 확인 없는 중지(Q254), 서비스 없음 표시(Q250), 대시보드 주소 규칙(Q251), 메뉴 언어(Q255), 로그인할 때 시작(Q252)을 정했다. 서비스는 windows-service, 트레이 아이콘·메뉴는 tray-icon, 로그인할 때 시작의 레지스트리 값은 windows-registry로 구현한다(Q241·Q256). `unsafe`는 두 파일에만 더한다. 하나는 트레이 메시지 루프 파일(Q241)이고, 다른 하나는 서비스 접근 권한 설정 파일(Q245)이다.
 
-이번에는 기준 문서만 바꾼다. 구현과 시험은 미실행(구현 전)이다. 세부 동작은 [운영 스펙 3.7절](../specs/operations.md#37-windows-서비스-실행), [Windows 트레이 앱 스펙](../specs/windows-tray.md), [CLI 계약 1.9절](../contracts/cli-v1.md#19-windows-서비스-실행)이 정한다.
+서비스 명령과 서비스 실행 경로, 트레이 앱은 작업 트리에 구현했다. 세부 동작은 [운영 스펙 3.7절](../specs/operations.md#37-windows-서비스-실행), [Windows 트레이 앱 스펙](../specs/windows-tray.md), [CLI 계약 1.9절](../contracts/cli-v1.md#19-windows-서비스-실행)이 정한다. 확인 범위와 남은 시험은 [Windows 서비스 시험](../how-to/set-up-and-verify.md#windows-서비스-시험)을 따른다.
 
 ## 2. 배경
 
@@ -46,7 +46,7 @@ Windows 11에서는 VNC Relay를 Windows 서비스로 실행할 수 있게 한�
 - 가상 계정은 Windows가 서비스마다 만들고 암호를 관리한다. 운영자는 이 계정에 필요한 파일 권한만 준다. LocalSystem보다 권한이 작다(요인 2).
 - 설치 때 서비스 접근 권한에 서비스 운영자를 더하면 시작·중지할 때 UAC 확인이 필요 없다. 권한은 관리자가 설치 때 정하므로 통제는 유지된다(요인 2·5).
 - 트레이 앱을 별도 GUI 실행파일로 두면 서버 실행파일의 콘솔 동작(숨김 입력, stdout 로그, 콘솔 창 닫기 처리)을 바꾸지 않는다(요인 3).
-- windows-service 0.8.1·tray-icon 0.26.1·windows-registry 0.100.0은 모두 MIT OR Apache-2.0이다. 2026-11-17에 세 라이브러리를 Windows 대상 의존성으로만 담은 임시 crate에서 라이선스 식을 대상별로 검사했다. Windows 대상 검사는 세 라이브러리와 하위 의존성을 포함했고 `licenses ok`였다. Ubuntu 대상 그래프에는 세 라이브러리가 들어가지 않으며, 이 검사도 `licenses ok`였다(7절). 라이선스 파일·`NOTICE` 확인과 배포 고지 갱신은 구현할 때 한다. windows-service 0.8.1에는 서비스 접근 권한 설정과 계정 이름 조회 기능이 없다. 그래서 그 Win32 호출만 windows-sys로 직접 쓰고 `unsafe`를 한 파일에 둔다(Q245). tray-icon은 Windows에서 같은 스레드의 메시지 루프가 필요하다. 그 루프만 다른 `unsafe` 파일에 둔다(Q241)(요인 4).
+- windows-service 0.8.1·tray-icon 0.26.1·windows-registry 0.100.0은 모두 MIT OR Apache-2.0이다. 2026-11-17에 세 라이브러리를 Windows 대상 의존성으로만 담은 임시 crate에서 라이선스 식을 대상별로 검사했다. Windows 대상 검사는 세 라이브러리와 하위 의존성을 포함했고 `licenses ok`였다. Ubuntu 대상 그래프에는 세 라이브러리가 들어가지 않으며, 이 검사도 `licenses ok`였다(7절). 실제 작업 트리에서는 통합 라이선스 검사가 통과하므로 대상별 검사로 바꿀 필요가 없다(7절). windows-service 0.8.1에는 서비스 접근 권한 설정과 계정 이름 조회 기능이 없다. 그래서 그 Win32 호출만 windows-sys로 직접 쓰고 `unsafe`를 한 파일에 둔다(Q245). tray-icon은 Windows에서 같은 스레드의 메시지 루프가 필요하다. 그 루프만 다른 `unsafe` 파일에 둔다(Q241)(요인 4).
 - 시스템 종료를 콘솔 창 닫기와 같이 처리하면 새 종료 규칙을 만들지 않는다. 운영 로그 계약도 새 사건·값 없이 2.1.0을 유지한다(요인 3).
 - 복구 동작을 두지 않으면 설정 오류 때문에 서비스가 계속 다시 시작하는 일이 없다. 실패는 서비스 종료 코드와 트레이 상태로 드러난다(요인 6).
 
@@ -83,31 +83,30 @@ Windows 11에서는 VNC Relay를 Windows 서비스로 실행할 수 있게 한�
 - 로그 파일을 열기 전의 시작 실패는 서비스 종료 코드로만 보인다.
 - 설치·권한·시스템 종료 시험에는 관리자 권한과 실제 재시작이 필요해 자동 게이트에 넣기 어렵다.
 - `unsafe` 예외 파일이 둘 늘어난다.
-- tray-icon의 Linux 전용 하위 의존성 때문에 두 대상을 한 번에 검사하는 지금의 라이선스 검사가 실패한다. 검사 절차를 대상별로 바꿔야 한다.
 
 ### 후속 작업
 
-- `service` 하위 명령과 서비스 실행 경로, 트레이 실행파일을 구현한다. OPS-074~081과 TRAY-001~013을 시험한다.
-- 코드 지도와 모듈 설계를 작성한다. [코드 지도 8절](../architectures/code-map.md#8-계획과-문서-정리target)의 계획 위치를 현재 구조로 옮긴다.
-- [Rust 코드 컨벤션](../conventions/rust.md)의 `unsafe` 예외 목록에서 계획한 두 파일의 실제 경로를 확정한다.
-- `cargo xtask layers`의 계층 규칙과 `cargo xtask package`의 Windows 묶음에 트레이 실행파일을 더한다.
-- [의존성 라이선스 검사](../how-to/check-dependency-licenses.md)·CI·로컬 게이트의 라이선스 검사를 대상별 검사로 바꾼다. 새 패키지의 라이선스 파일·`NOTICE`를 확인하고 `cargo xtask notices`로 배포 고지를 다시 만든다. 허용 목록은 바꾸지 않는다(이 문서의 판단, 사용자 결정 없음).
-- [수동 운영 안내](../how-to/operate-relay.md)와 운영 도움말(한국어·영어)에 서비스 설치·파일 권한·트레이 사용을 더한다. 지금 안내와 도움말은 출시한 동작을 설명하므로 구현할 때 바꾼다.
-- 트레이 앱의 `/readyz` 조회는 표준 라이브러리 TCP로 하고 HTTP 라이브러리를 더하지 않는다(이 문서의 판단, 사용자 결정 없음).
-- 서비스 실행(`service run`)의 종료 요청은 windows-service의 서비스 제어 처리기가 받은 중지·시스템 종료 제어로만 만든다. 터미널 `serve`의 콘솔 종료 신호(Ctrl+C·Ctrl+Break·콘솔 창 닫기)는 서비스 실행에서 종료 요청으로 쓰지 않는다. 사용자 로그오프로 서비스가 멈추지 않는지는 OPS-078로 확인한다([CLI 계약 1.9절](../contracts/cli-v1.md#19-windows-서비스-실행), 이 문서의 판단, 사용자 결정 없음).
-- 미결정: Windows 표시 언어를 읽는 방법. (1) `GetUserPreferredUILanguages` 같은 Win32 호출은 `unsafe`가 필요하며 Q241·Q245의 `unsafe` 범위 밖이다. (2) windows-registry로 사용자 언어 설정 값을 읽으면 `unsafe`가 없지만 값의 위치와 기본값 처리를 관찰해야 한다. 권장은 (1)을 트레이 메시지 루프 파일에 함께 두는 것이다(이 문서의 판단, 사용자 결정 없음). 사용자가 정한다.
-- 미결정: 트레이 문구와 아이콘([TRAY-TBD-001·002](../specs/windows-tray.md#8-미결정-사항)), 서비스 중지 중 두 번째 중지 요청과 시스템 종료 때의 시간 한도([OPS-TBD-013·014](../specs/operations.md#8-미결정-사항)), CLI 이름과 오류 코드의 채택([CLI 계약 6절](../contracts/cli-v1.md#6-초안을-확정하기-전에-해결할-사항)).
+- `service` 하위 명령과 서비스 실행 경로, 트레이 실행파일은 작업 트리에 구현했다. OPS-074~081과 TRAY-001~013의 확인 범위와 남은 시험은 [Windows 서비스 시험](../how-to/set-up-and-verify.md#windows-서비스-시험)을 따른다.
+- 현재 코드 위치와 흐름은 [코드 지도](../architectures/code-map.md), [Windows 서비스 모듈 설계](../architectures/windows-service.md), [Windows 트레이 앱 모듈 설계](../architectures/windows-tray.md)에 연결한다.
+- 두 `unsafe` 예외 파일은 `crates/adapters/src/windows_service/security.rs`와 `crates/tray/src/message_loop.rs`로 구현했다. 적용 범위는 [Rust 코드 컨벤션](../conventions/rust.md)을 따른다.
+- `cargo xtask layers`에 트레이 패키지의 계층 규칙을 더했다. `cargo xtask package`의 Windows 묶음에 트레이 실행파일을 더했다.
+- tray-icon은 `default-features = false`로 사용해 Linux 전용 하위 의존성을 그래프에 넣지 않는다. 통합 `cargo deny check licenses`가 통과하므로 [의존성 라이선스 검사](../how-to/check-dependency-licenses.md)·CI·로컬 게이트를 대상별 검사로 바꾸지 않는다. 실제 작업 트리의 결과에 따른 판단이며 라이선스 허용 목록은 바꾸지 않는다(이 문서의 판단, 사용자 결정 없음). `cargo xtask notices`의 수집 대상을 서버·트레이 두 패키지의 의존성으로 넓혔다. 이 도구는 각 의존성 디렉터리의 `LICENSE*`·`NOTICE*` 텍스트를 모아 배포 고지에 넣는다. 도구로 고지를 갱신했고 검사가 통과했다. 사람이 원문을 한 줄씩 대조하지는 않았다.
+- 서비스 설치·파일 권한·트레이 사용은 [운영 안내](../how-to/operate-relay.md)와 운영 도움말(한국어·영어)에 연결한다.
+- 트레이 앱의 `/readyz` 조회는 표준 라이브러리 TCP로 구현했다. HTTP 라이브러리를 더하지 않았다(이 문서의 판단, 사용자 결정 없음).
+- 서비스 실행(`service run`)의 종료 요청은 windows-service의 서비스 제어 처리기가 받은 중지·시스템 종료 제어로만 만들도록 구현했다. 터미널 `serve`의 콘솔 종료 신호(Ctrl+C·Ctrl+Break·콘솔 창 닫기)는 서비스 실행에서 종료 요청으로 쓰지 않는다. 사용자 로그오프로 서비스가 멈추지 않는지는 재시작이 필요한 OPS-078의 확인 범위에 남아 있다([CLI 계약 1.9절](../contracts/cli-v1.md#19-windows-서비스-실행), 이 문서의 판단, 사용자 결정 없음).
+- Windows 표시 언어는 windows-registry로 읽도록 구현했다. 새 `unsafe`는 없다. HKCU `Control Panel\Desktop`의 `PreferredUILanguages`, HKCU `Control Panel\Desktop\MuiCached`의 `MachinePreferredUILanguages` 순서로 읽는다. 각 다중 문자열 값은 첫 항목만 본다. 값을 읽지 못하거나 첫 항목이 없거나 비어 있으면 다음 값으로 넘어간다. 선택한 첫 항목의 기본 언어가 `ko`이면 한국어, 그 밖에는 영어다. 두 값에서 언어를 얻지 못하면 HKLM `SYSTEM\CurrentControlSet\Control\Nls\Language`의 `InstallLanguage`가 `0412`일 때만 한국어를 쓴다. 이 값도 읽지 못하면 영어다. 기존 레지스트리 의존성을 재사용하고 `unsafe` 범위를 늘리지 않기 위한 구현 판단이다(이 문서의 판단, 사용자 결정 없음).
+- 미결정: 트레이 문구와 아이콘([TRAY-TBD-001·002](../specs/windows-tray.md#8-미결정-사항)), 시스템 종료 때의 시간 한도([OPS-TBD-014](../specs/operations.md#8-미결정-사항)), CLI 이름과 오류 코드의 채택([CLI 계약 6절](../contracts/cli-v1.md#6-초안을-확정하기-전에-해결할-사항)). 중지 중 두 번째 중지 요청은 SCM의 1061 거절로 서비스에 전달되지 않으므로 OPS-TBD-013을 해소했다.
 
 ## 7. 검증
 
 | 가설·결정 요인 | 검증 방법 | 합격 기준 | 증거 |
 | --- | --- | --- | --- |
-| 설치·해제 규칙(요인 2·3) | [OPS-074·075·080·081](../specs/operations.md#7-수용-테스트) | 시나리오의 기대 결과 | 미실행(구현 전) |
-| 실행과 종료(요인 1·3) | [OPS-076~078](../specs/operations.md#7-수용-테스트) | 시나리오의 기대 결과 | 미실행(구현 전) |
-| 시작·중지 권한(요인 2·5) | [OPS-079](../specs/operations.md#7-수용-테스트), [TRAY-006](../specs/windows-tray.md#7-수용-테스트) | 시나리오의 기대 결과 | 미실행(구현 전) |
-| 트레이 동작(요인 5) | [TRAY-001~013](../specs/windows-tray.md#7-수용-테스트) | 시나리오의 기대 결과 | 미실행(구현 전) |
-| 의존성 라이선스(요인 4) | windows-service 0.8.1·tray-icon 0.26.1·windows-registry 0.100.0을 Windows 대상 의존성으로만 담은 임시 crate에서 저장소의 `deny.toml`로 `cargo deny --target x86_64-pc-windows-msvc check licenses`와 `cargo deny --target x86_64-unknown-linux-gnu check licenses`를 실행. cargo-deny 0.20.2 | 두 명령 모두 `licenses ok` | 2026-11-17 실행: 두 명령 모두 종료 코드 0과 `licenses ok`. Windows 대상 결과가 세 라이브러리와 하위 의존성의 라이선스 식 확인이다. Ubuntu 대상 결과는 세 라이브러리가 Linux 그래프에 들어가지 않는다는 확인이다. 대상을 고르지 않고 두 대상을 한 번에 검사하면 option-ext 0.2.0(MPL-2.0)과 target-lexicon 0.12.16(Apache-2.0 WITH LLVM-exception)으로 실패했다. 두 crate는 tray-icon의 Linux 전용 의존성 경로에만 있다. 라이선스 파일·`NOTICE` 확인, 배포 고지 대조, 실제 구현의 검사는 미실행이다 |
-| `unsafe` 범위(요인 4) | 구현 뒤 `unsafe` 위치 검색과 clippy | 기존 예외와 계획한 두 파일 밖에 `unsafe`가 없음 | 미실행(구현 전) |
+| 설치·해제 규칙(요인 2·3) | [OPS-074·075·080·081](../specs/operations.md#7-수용-테스트) | 시나리오의 기대 결과 | 작업 트리에 구현했다. 확인 범위와 남은 시험은 [Windows 서비스 시험](../how-to/set-up-and-verify.md#windows-서비스-시험)을 따른다. |
+| 실행과 종료(요인 1·3) | [OPS-076~078](../specs/operations.md#7-수용-테스트) | 시나리오의 기대 결과 | 부분 검증이다. OPS-078은 로그오프·재시작이 필요해 미실행이다([확인 기록](../how-to/set-up-and-verify.md#windows-서비스-시험)). |
+| 시작·중지 권한(요인 2·5) | [OPS-079](../specs/operations.md#7-수용-테스트), [TRAY-006](../specs/windows-tray.md#7-수용-테스트) | 시나리오의 기대 결과 | 부분 검증이다. 실제 표준 사용자 계정은 이 PC에 없어 미실행이다([확인 기록](../how-to/set-up-and-verify.md#windows-서비스-시험)). |
+| 트레이 동작(요인 5) | [TRAY-001~013](../specs/windows-tray.md#7-수용-테스트) | 시나리오의 기대 결과 | 부분 검증이다. 실제 브라우저 열기(TRAY-008), 다시 로그인(TRAY-011), 표시 언어 변경(TRAY-012)과 일부 오류·파일 관찰은 남아 있다([확인 기록](../how-to/set-up-and-verify.md#windows-서비스-시험)). |
+| 의존성 라이선스(요인 4) | windows-service 0.8.1·tray-icon 0.26.1·windows-registry 0.100.0을 Windows 대상 의존성으로만 담은 임시 crate에서 대상별 검사. 실제 작업 트리에서는 통합 `cargo deny check licenses`와 `cargo xtask notices` | `licenses ok`, 라이선스·`NOTICE` 텍스트를 담은 배포 고지 | 2026-11-17 임시 crate의 대상별 검사는 각각 통과했다. 당시 통합 검사는 Linux 전용 하위 의존성 때문에 실패했다. 후속: 2026-11-18 실제 작업 트리는 tray-icon의 기본 기능을 꺼서 이 하위 의존성을 그래프에 넣지 않는다. 통합 검사는 `licenses ok`로 통과했다. 도구가 라이선스·`NOTICE` 텍스트를 모아 두 패키지의 crate 127개를 담은 배포 고지를 갱신했고 검사가 통과했다. 사람의 원문 대조는 하지 않았다([확인 기록](../how-to/set-up-and-verify.md#windows-서비스-시험)). |
+| `unsafe` 범위(요인 4) | 구현 뒤 `unsafe` 위치 검색과 clippy | 기존 예외와 계획한 두 파일 밖에 `unsafe`가 없음 | 새 두 예외 파일의 구현 위치는 6절을 따른다. 실행 검증 범위는 [Windows 서비스 시험](../how-to/set-up-and-verify.md#windows-서비스-시험)을 따른다. |
 
 ## 8. 재검토 조건
 

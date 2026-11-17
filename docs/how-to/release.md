@@ -32,8 +32,8 @@ Windows 11 x64와 Ubuntu 24.04 LTS x64용 배포 묶음을 만들고, 버전 태
 
 | 대상 | 묶음 | 내용 |
 | --- | --- | --- |
-| Windows 11 x64 | `vnc-relay-<버전>-windows-x64.zip` | `vnc-relay-<버전>-windows-x64/` 디렉터리 하나. 그 안에 [수동 운영 안내 3.1절](operate-relay.md#31-release-빌드와-묶음)의 파일 |
-| Ubuntu 24.04 LTS x64 | `vnc-relay-<버전>-linux-x64.tar.gz` | 같은 구성. 실행파일 이름만 `vnc-relay`다 |
+| Windows 11 x64 | `vnc-relay-<버전>-windows-x64.zip` | `vnc-relay-<버전>-windows-x64/` 디렉터리 하나. 그 안에 서버 `vnc-relay.exe`, 트레이 앱 `vnc-relay-tray.exe`와 [수동 운영 안내 3.1절](operate-relay.md#31-release-빌드와-묶음)의 공통 파일 |
+| Ubuntu 24.04 LTS x64 | `vnc-relay-<버전>-linux-x64.tar.gz` | 서버 `vnc-relay`와 같은 공통 파일. 트레이 앱은 넣지 않는다 |
 
 묶음마다 `<묶음 파일 이름>.sha256`이 함께 생긴다. 한 줄에 `<SHA-256 16진수>  <묶음 파일 이름>`을 쓴다. `sha256sum -c`가 읽는 형식이다. 묶음의 형식과 내용은 사용자 결정 2026-11-08(Q161·Q164)을 따른다.
 

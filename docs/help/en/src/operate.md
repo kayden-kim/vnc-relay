@@ -1,8 +1,8 @@
 # Operations
 
-Start and stop the server manually, and check health, logs, and configuration changes. Use this page to replace certificates, public keys, and administrator accounts, and to prepare upgrades or rollbacks.
+Start and stop the server manually or as a Windows service, and check health, logs, and configuration changes. Use this page to replace certificates, public keys, and administrator accounts, and to prepare upgrades or rollbacks.
 
-These procedures target PowerShell on Windows 11 x64 and bash on Ubuntu 24.04 LTS x64. OS service registration and containers are out of scope. Run commands from the extracted deployment directory. First prepare settings and an administrator account as described in [Quick start](quick-start.md).
+These procedures target PowerShell on Windows 11 x64 and bash on Ubuntu 24.04 LTS x64. Containers are out of scope. Run commands from the extracted deployment directory. First prepare settings and an administrator account as described in [Quick start](quick-start.md).
 
 ## Run in the foreground
 
@@ -19,6 +19,42 @@ Ubuntu:
 ```
 
 The process occupies the terminal until it stops. Do not consider it ready before the `server_ready` event. Relative file paths within the configuration resolve from the configuration file directory, not the terminal's working directory.
+
+## Windows service and tray
+
+The Windows service is available in bundles built from `main`, not Release `v2026.11.4`. Complete [service installation](install.md#install-and-uninstall-the-windows-service) first. Users or groups specified with `--operator` can start and stop it without elevation.
+
+1. In normal PowerShell, start the service.
+
+   ```powershell
+   sc.exe start vnc-relay
+   ```
+
+2. Check status with `sc.exe query vnc-relay`.
+3. To stop, request a stop in normal PowerShell.
+
+   ```powershell
+   sc.exe stop vnc-relay
+   ```
+
+4. Wait for `sc.exe query vnc-relay` to show `STOPPED`.
+
+You can send the same requests through Windows Services (`services.msc`) or the tray. Stopping applies the graceful shutdown period G. The SCM rejects a second `stop` while stopping, so it cannot skip the grace period like a second console shutdown request. To restart, wait for the stop to finish, then start. Do not run `service run` directly in a terminal.
+
+To use the tray, run `vnc-relay-tray.exe` as a normal user and click its notification-area icon. The menu has this order.
+
+- Status line: `VNC Relay: <state>`. Shows service and `/readyz` status.
+- `Start`: starts a stopped service.
+- `Stop`: requests graceful shutdown without a confirmation dialog.
+- `Open dashboard`: opens the configured management address in the default browser when ready.
+- `Open log file location`: selects the log file in File Explorer, or opens its folder if the file is absent.
+- `Open config file location`: selects the registered configuration file in File Explorer.
+- `Start at sign-in`: runs the tray app when the current user signs in. Off by default.
+- `Exit tray`: removes the icon and ends only the tray process.
+
+Starting or exiting the tray does not start or stop the service. `Exit tray` also keeps the `Start at sign-in` setting. There is no restart menu item. Tray users need read access to the configuration file, not the account file or private keys.
+
+`Running (not ready)` means that the service process is running but a successful `/readyz` result was not confirmed. `Stopped (exit code N)` can help investigate startup failure ([Troubleshooting](troubleshooting.md#windows-service-or-tray-errors)). For all status and menu-enable rules, see the [Windows tray specification](https://github.com/kayden-kim/vnc-relay/blob/main/docs/specs/windows-tray.md). File permissions and service replacement follow [Operations guide §3.3.1](https://github.com/kayden-kim/vnc-relay/blob/main/docs/how-to/operate-relay.md#331-windows-서비스와-트레이-앱).
 
 ## Check health
 
@@ -66,9 +102,9 @@ A completed graceful shutdown returns exit code 0. New relays stop, and active s
 
 Management sign-in, queries, termination, and configuration viewing and editing remain available during the grace period. New file-watch applications stop, but configuration edit commits remain allowed. Editing G does not change an already started grace period.
 
-A second shutdown request skips the remaining grace period and forces immediate cleanup. Ubuntu accepts SIGINT (Ctrl+C) and SIGTERM. Windows accepts Ctrl+C and Ctrl+Break and has no SIGTERM.
+In console execution, a second shutdown request skips the remaining grace period and forces immediate cleanup. Ubuntu accepts SIGINT (Ctrl+C) and SIGTERM. Windows accepts Ctrl+C and Ctrl+Break and has no SIGTERM. For service stops, follow [Windows service and tray](#windows-service-and-tray).
 
-> **Warning:** Closing a Windows console window forces immediate cleanup without waiting for G. The process must stop within the OS's default 5-second limit. Ctrl+C is recommended for normal operations. Windows sign-out or system shutdown, Task Manager termination, SIGKILL, and power loss do not guarantee a grace period or shutdown records.
+> **Warning:** Closing a Windows console window forces immediate cleanup without waiting for G. The process must stop within the OS's default 5-second limit. Ctrl+C is recommended for normal console operations. Interactive console execution does not guarantee a grace period or shutdown records on Windows sign-out or shutdown. A service does not stop on sign-out. System shutdown and restart follow [Operations specification §3.7](https://github.com/kayden-kim/vnc-relay/blob/main/docs/specs/operations.md#37-windows-서비스-실행). Task Manager termination, SIGKILL, and power loss do not guarantee graceful shutdown.
 
 Run the same `serve` command to restart. Previous sockets, waiting connections, active sessions, and management sessions are not restored. Administrators must sign in again.
 

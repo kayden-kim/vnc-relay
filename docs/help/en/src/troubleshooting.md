@@ -6,7 +6,7 @@ First identify the failing stage. Process startup, administrator sign-in, relay 
 
 ## The server does not start
 
-Check stderr in the server terminal for `error[<code>]` and `key`. Also check `startup_failed` in logs. Failures before configuration is read, or failures to open the log file, can be logged to standard output.
+For a manual `serve` run, check stderr in the server terminal for `error[<code>]` and `key`. Also check `startup_failed` in logs. Failures before configuration is read, or failures to open the log file, can be logged to standard output. A Windows service has no console; follow the service-error procedure below.
 
 Read the exit code in the same terminal after the command returns.
 
@@ -47,6 +47,39 @@ For exit code 3, inspect `config_*`, `tls_file_invalid`, `ticket_keys_invalid`, 
 Plain management HTTP on a non-loopback address prevents startup with `config_plaintext_management_not_loopback`. Configure built-in HTTPS for remote management or keep management HTTP on loopback.
 
 For exit code 2, check command syntax and interactive input requirements. For example, omitting `--config` is a usage error. Exit code 1 also covers execution environment failures such as watcher or runtime preparation. See [CLI contract §2](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/cli-v1.md) for complete meanings and stable diagnostic codes.
+
+## Windows service or tray errors
+
+This section applies to service and tray features on `main`. For all diagnostic codes and exit codes, see [CLI contract §1.9](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/cli-v1.md#19-windows-서비스-실행).
+
+- For `service_access_denied` during installation or removal, use an elevated terminal. For tray messages `Start failed: Access denied` or `Stop failed: Access denied`, ask the administrator to check whether the user or group was specified with `--operator`. Do not rely on running the tray itself elevated.
+- For `service_exists`, inspect the registered `vnc-relay` service. Do not overwrite the same name. To change operators or the executable location, stop and uninstall, then install again.
+- For `service_running`, request a stop first. Wait for `STOPPED`, then uninstall with elevation.
+- For `service_log_stdout`, change `log.output` to a file path. The service account also needs write access to its log directory.
+
+If the tray shows `Stopped (exit code N)`, the start request may have been delivered but service startup failed.
+
+1. In normal PowerShell, query the service exit code.
+
+   ```powershell
+   sc.exe query vnc-relay
+   ```
+
+2. Check `SERVICE_EXIT_CODE` and operations logs. If no service-specific code is available, check the Win32 exit code. The tray does not display 1077, which means the service has not started since boot, as an exit code.
+3. If you need a diagnostic message, confirm that the service is `STOPPED`.
+4. In an interactive terminal in the executable directory, run manually with the same configuration.
+
+   ```powershell
+   .\vnc-relay.exe serve --config "<registered config file path>"
+   ```
+
+5. Correct the diagnosed configuration, path, or permission problem. Also check permissions for `NT SERVICE\vnc-relay`, which reads files as a different account from the terminal user.
+6. If the manual run succeeds, stop it with Ctrl+C.
+7. Start the service again through tray `Start` or `sc.exe start vnc-relay`.
+
+A service can fail before opening its log file, leaving no operations log entry. Tray state `Running (not ready)` is different from process exit. Check configuration-read errors, the status-listener address, and `/readyz` connectivity. For `Cannot read config: Access denied`, `Cannot read config: File not found`, or `Cannot read config: Invalid config`, correct the indicated cause. The tray reads the current configuration file, so after an edit its addresses can differ from the running service.
+
+For installation and ACL recovery, follow [Operations guide §3.3.1](https://github.com/kayden-kim/vnc-relay/blob/main/docs/how-to/operate-relay.md#331-windows-서비스와-트레이-앱). For all display and recovery conditions, see [Windows tray specification §5](https://github.com/kayden-kim/vnc-relay/blob/main/docs/specs/windows-tray.md#5-오류와-복구).
 
 ## Administrator sign-in fails
 

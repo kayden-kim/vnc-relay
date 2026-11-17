@@ -10,7 +10,7 @@ VNC Relay는 TCP·WS·WSS Viewer를 Mode I 대상이나 TCP·WS·WSS Mode II Ser
 | 관련 PRD | [PRD](../requirements/PRD.md), [유지보수성](../requirements/PRD.md#8-비기능-요구사항), [구현 기술](../requirements/PRD.md#확정-기준) |
 | 관련 ADR | [ADR-0001 내장 TLS](../decisions/ADR-0001-built-in-tls.md), [ADR-0003 메모리 상태](../decisions/ADR-0003-single-instance-memory-state.md), [ADR-0004 tokio·rustls](../decisions/ADR-0004-tokio-rustls.md), [ADR-0005 WS 코덱](../decisions/ADR-0005-in-house-ws-streaming-frame-codec.md), [ADR-0006 파일을 통한 설정 편집](../decisions/ADR-0006-config-edit-through-file.md) |
 
-제품은 domain·app·adapters·실행파일 조립의 네 crate로 나뉜다. 개발 도구는 별도 `xtask` crate다. 정적 대시보드는 `web/dashboard/`에 있다. 코드가 있다는 사실과 스펙 시나리오 전체가 검증되었다는 판단은 다르다. 시나리오별 실행 결과는 [테스트 컨벤션](../conventions/testing.md#7-테스트와-스펙-시나리오-연결)의 보고서가 맡는다.
+제품은 domain·app·adapters·서버 실행파일 조립·트레이 실행파일 조립의 다섯 crate로 나뉜다. 개발 도구는 별도 `xtask` crate다. 정적 대시보드는 `web/dashboard/`에 있다. 코드가 있다는 사실과 스펙 시나리오 전체가 검증되었다는 판단은 다르다. 시나리오별 실행 결과는 [테스트 컨벤션](../conventions/testing.md#7-테스트와-스펙-시나리오-연결)의 보고서가 맡는다.
 
 ### R1·R2 적용 범위
 
@@ -20,13 +20,15 @@ VNC Relay는 TCP·WS·WSS Viewer를 Mode I 대상이나 TCP·WS·WSS Mode II Ser
 
 구조 시점은 R2 소스 반영 범위의 Current다. 아래 과거 대조·통과 기록은 R2 실행 증거가 아니다. 이번 문서 작업에서는 빌드·시험·포매터를 실행하지 않았다. 후속: 구현은 커밋 `3df0693`이며, 시험은 커밋 `51bd747`의 두 OS 게이트에서 통과했다([WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)).
 
+Windows 서비스·트레이와 DASH-067은 2026-11-18 미커밋 작업 트리의 소스로 대조했다. 서비스·트레이의 실행 결과와 미실행 범위는 [Windows 서비스 시험](../how-to/set-up-and-verify.md#windows-서비스-시험)에 둔다. 이 추가 범위의 대조는 과거 커밋 시험의 통과를 뜻하지 않는다.
+
 ## 1. 전체 구조
 
 다음 그림은 현재 실행 경로다. 모든 실선 화살표는 호출 또는 값 전달이다. `포트` 표시가 있는 화살표는 app이 정의한 trait를 통한 호출이다. 조립 코드가 adapters 구현체를 주입하므로 app은 adapters 타입을 알지 못한다. 오류 변환과 모듈 안의 보조 함수는 생략했다.
 
 ```mermaid
 flowchart LR
-    CLI["src/main·cli·serve·admin"]
+    CLI["src/main·cli·serve·admin·service"]
     CFG["adapters/config_file·accounts_file·tls"]
     NET["adapters/net·websocket"]
     RELAY["app/relay<br/>초기 교환·대상 연결·매칭·중계"]
@@ -39,6 +41,14 @@ flowchart LR
     RELOAD["app/reload"]
     LOG["adapters/ops_log"]
     DOM["domain 업무 규칙"]
+    SCM["adapters/windows_service"]
+    TRAY["crates/tray<br/>UI·작업 스레드"]
+    CLI -->|"서비스 등록·해제·dispatcher"| SCM
+    SCM -->|"제어 채널·상태 보고자"| CLI
+    TRAY -->|"SCM 상태 조회·시작·중지"| SCMOS["Windows SCM"]
+    SCM -->|"등록·제어 처리기·상태"| SCMOS
+    TRAY -->|"설정 parse"| CFG
+    TRAY -->|"GET /readyz"| STATUS
     CLI -->|"설정·계정·TLS 준비"| CFG
     CLI -->|"리스너 시작"| NET
     CLI -->|"관리 서비스 주입·시작"| HTTP
@@ -73,6 +83,7 @@ flowchart LR
 | app | `crates/app` (`vnc-relay-app`) | 중계·관리·재로드·준비 상태·계정 준비 사용 사례. 외부 기능은 포트로 정의한다. | domain. tokio의 동기화·시간·입출력 trait | 컴파일, `cargo xtask layers`, `crates/app/clippy.toml`의 입출력 금지 목록과 `cargo clippy` |
 | adapters | `crates/adapters` (`vnc-relay-adapters`) | TCP·TLS·WS·HTTP·파일·운영 로그·난수·터미널. app 포트를 구현한다. | domain, app, [PRD 승인 라이브러리](../requirements/PRD.md#확정-기준) | `cargo xtask layers`, [라이선스 검사](../how-to/check-dependency-licenses.md) |
 | 실행파일 조립 | 루트 crate `vnc-relay`의 `src/` | CLI·종료 코드·런타임·OS 신호·객체 연결. 업무 규칙은 두지 않는다. | domain, app, adapters, clap, tokio. rustls는 개발 의존성이다. serde_json·tokio-tungstenite는 실서버 대시보드 시험의 CDP 통신에 쓴다(Q112). aws-lc-rs는 개발 의존성이며 실서버 접속 ticket 시험의 ES256 서명에만 쓴다. adapters가 이미 쓰는 [PRD 승인 라이브러리](../requirements/PRD.md#확정-기준)다(이 문서의 판단, 사용자 결정 없음). windows-sys는 Windows 전용 개발 의존성이며 ConPTY 시험만 쓴다(Q103, [Rust 컨벤션 2절](../conventions/rust.md#2-규칙) "unsafe" 행). | 코드 리뷰, 컴파일, `cargo xtask layers` |
+| 트레이 실행파일 조립 | `crates/tray` (`vnc-relay-tray`) | Windows GUI·메뉴·SCM 제어·설정 읽기·준비 상태 조회·사용자 Run 값. | app, adapters. 외부 crate는 tray-icon, windows-registry, windows-service, windows-sys만 허용한다. | `cargo xtask layers`, [트레이 모듈 설계](windows-tray.md) |
 | 개발 도구 | `xtask/` | 시나리오 보고·레이어 검사·배포 고지 생성과 대조·토큰 생성과 대조·로컬 미리보기·시험용 접속 ticket 발급 | 제품 crate에 의존하지 않는다. | `cargo xtask layers` |
 | 정적 대시보드 | `web/dashboard/` | HTML·CSS·JS 화면·공통 컴포넌트·생성 복사본·미리보기·브라우저 시험 페이지 | 관리 API만 HTTP로 호출한다. JS 외부 의존성이 없다. | [프런트엔드 컨벤션](../conventions/frontend.md), [대시보드 검증](../how-to/verify-dashboard-frontend.md), `cargo xtask tokens --check` |
 
@@ -81,6 +92,8 @@ flowchart LR
     BIN["실행파일 조립"] -->|"의존"| ADP["adapters"]
     BIN -->|"의존"| APP["app"]
     BIN -->|"의존"| DOM["domain"]
+    TRAYBIN["트레이 실행파일 조립"] -->|"의존"| ADP
+    TRAYBIN -->|"의존"| APP
     ADP -->|"의존"| APP
     ADP -->|"의존"| DOM
     APP -->|"의존"| DOM
@@ -150,9 +163,16 @@ flowchart LR
 | `crates/adapters/src/file_watch.rs` `ReloadWatcher` `FsReloadFileStore` `SystemReloadClock`; `crates/adapters/src/file_watch/feed.rs` `ChangeQueue` `NotifyFeed` | 변경 감지 | OS 알림·유실 재검사·주기 확인·안정화·세대 관리·후보 읽기 | 후보 수용 판정 | notify·tokio·app 재로드 | [파일 감지](file-watch.md) |
 | `crates/adapters/src/ops_log.rs` `JsonLinesEventSink` `LogEntry` `RecentLogs` `format_line`; `crates/adapters/src/clock.rs` `SystemClock` `timestamp`; `crates/adapters/src/crypto.rs` `RelayIdKey` `SessionIdKey` `SystemTokenSource` | 운영 기반 | 사건 JSON Lines와 순서 있는 필드 목록, 최근 로그 메모리 링 버퍼, UTC와 단조 시각, ID HMAC·세션 ID 순열·토큰 난수. 같은 출력 잠금 안에서 보관 순번과 줄 순서를 정한다. | 사건 의미·매칭 정책 | app 포트·serde_json·aws-lc-rs | [운영 로그](ops-log.md), [중계 수명](relay-session.md) |
 | `crates/adapters/src/terminal.rs`; `crates/adapters/src/terminal/windows_console.rs` | 터미널 | 숨김 입력·확인·Ctrl+C, Windows 콘솔 모드 저장·복구 | 비밀번호 규칙 | rpassword·tokio signal·windows-sys | [계정 준비](admin-accounts.md) |
+| `crates/adapters/src/windows_service.rs` `Scm` `Installed` `run` `ServiceSession` `StatusReporter` `StopControl` | Windows SCM | 서비스 등록·해제·제어 처리기·상태와 checkpoint 보고 | G 계산·서버 시작 순서 | windows-service·tokio·security | [Windows 서비스](windows-service.md) |
+| `crates/adapters/src/windows_service/security.rs` `Operator` `lookup` `grant` `LocalMemory` | 서비스 접근 권한 | 운영자 계정 SID 조회·서비스 DACL에 권한 추가·Win32 메모리 해제. 서비스의 직접 unsafe 경계다. | 파일 ACL 변경·트레이 메뉴 | windows-sys | [Windows 서비스](windows-service.md), [Rust 컨벤션](../conventions/rust.md#21-unsafe-예외) |
 | `src/main.rs` `main`; `src/cli.rs` `parse`; `src/admin.rs` `run` | CLI 조립 | 명령·옵션·진단·종료 코드, admin 포트 주입 | 계정 규칙 | clap·app·adapters | [시작](serve-startup.md), [계정 준비](admin-accounts.md) |
-| `src/serve.rs` `run` `listen_until_shutdown` `config_management` `generate_startup_keys` `ShutdownRequest` `wait_for_shutdown` `begin_process_shutdown` `begin_relay_shutdown` `finish_relay_shutdown` | 서버 조립 | 설정·로그·계정·키·TLS·감지·리스너를 준비한다. 같은 reload cell/source와 SharedReload를 실행 reader·watcher·설정 서비스에 주입한다. 종료 시작의 현재 G, 첫 원인·두 번째 신호·Windows 콘솔 닫기·작업 회수·종료 코드를 연결한다. | 매칭·바이트 전달·OS 오류 분류 | 제품 crate·tokio | [시작](serve-startup.md), [파일 감지](file-watch.md), [설정 편집](config-edit.md), [중계 수명](relay-session.md) |
+| `src/serve.rs` `run` `start` `Host` `check_service_files` `listen_until_shutdown` `config_management` `generate_startup_keys` `ShutdownRequest` `Requests` `HostStatus` `wait_for_shutdown` `begin_process_shutdown` `begin_relay_shutdown` `finish_relay_shutdown` | 서버 조립 | 터미널·서비스의 같은 시작 경로와 설치 전 파일 검사. 같은 reload cell/source와 SharedReload를 reader·watcher·설정 서비스에 주입한다. 현재 G·첫 원인·종료 요청·SCM 상태·작업 회수를 연결한다. | 매칭·바이트 전달·OS 오류 분류 | 제품 crate·tokio | [시작](serve-startup.md), [Windows 서비스](windows-service.md), [파일 감지](file-watch.md), [설정 편집](config-edit.md), [중계 수명](relay-session.md) |
 | `crates/adapters/src/file_watch.rs` `reopen_log`; `crates/adapters/src/ops_log.rs` `JsonLinesEventSink::reopen` `file_path` | 로그 파일 교체 | 재로드와 분리한 로그 알림·Dp 재열기, 같은 줄 쓰기 잠금의 핸들 교체, 실패 연속 구간 첫 경고·사건 | 로그 보관·압축·삭제 | notify·tokio·app 사건 | [운영 로그](ops-log.md), [파일 감지](file-watch.md) |
+| `src/service.rs` `run` `install` `install_with` `Installer` `uninstall` `run_service` `Failure` | 서비스 명령 조립 | 설치 전 검사·등록 순서·되돌림·진단·종료 코드를 연결한다. `Installer`의 제품 구현은 Scm이다. | SCM 직접 호출·중계 규칙 | cli·serve·adapters | [Windows 서비스](windows-service.md) |
+| `crates/tray/Cargo.toml`; `crates/tray/src/main.rs` `main` `run`; `crates/tray/src/single_instance.rs` `acquire` | 트레이 진입·단일 인스턴스 | Windows GUI 실행파일과 사용자별 파일 잠금. 중복 프로세스는 UI 생성 전에 성공 종료한다. | 서비스 설치·해제 | std·ui | [Windows 트레이](windows-tray.md) |
+| `crates/tray/src/ui.rs` `run` `Items` `icon`; `crates/tray/src/message_loop.rs` `run` | 트레이 UI | 한 스레드의 아이콘·기본 메뉴·응답 반영·Win32 메시지 펌프. message_loop만 이 crate의 직접 unsafe 파일이다. | 느린 외부 I/O | tray-icon·windows-sys·worker·rules·copy | [Windows 트레이](windows-tray.md) |
+| `crates/tray/src/worker.rs` `spawn` `refresh` `perform` `read_config` `probe_readyz` `Snapshot` `Request` `Reply` | 트레이 작업 | 직렬 SCM 조회·시작·중지, 설정 읽기, 1초 readyz, 탐색기 열기·Run 토글. 2초 주기와 동작 직후 조회 | GUI 객체·관리 API | app·adapters·windows-service·std·registry·rules | [Windows 트레이](windows-tray.md) |
+| `crates/tray/src/rules.rs` `State` `Reason` `config_path` `dashboard_url` `connect_address` `language_tag` `run_value_matches`; `crates/tray/src/copy.rs` `Language` `Text`; `crates/tray/src/registry.rs` `language` `sign_in` `toggle_sign_in` | 트레이 규칙·문구·레지스트리 | 상태·1077 생략·활성 표·등록 명령 해석·주소·언어·Run 값 판정과 안전한 레지스트리 접근 | SCM 상태 소유·GUI | std·windows-service 값·windows-registry | [Windows 트레이](windows-tray.md) |
 
 ### 2.4 개발 도구와 정적 대시보드
 
@@ -181,13 +201,16 @@ flowchart LR
 
 | 코드 위치 | 표식의 스펙·시나리오 영역 |
 | --- | --- |
-| `tests/cli.rs`; `tests/dashboard_assets.rs`; `crates/adapters/tests/accounts_contract.rs` | 표식 없음. CLI·정적 파일 표·계정 계약 내부 검사 |
+| `tests/cli.rs` `service_commands_are_usage_errors_outside_windows`; `tests/dashboard_assets.rs`; `crates/adapters/tests/accounts_contract.rs` | CLI의 Windows 외 서비스 명령은 operations.md: OPS-081 partial이다. 나머지 CLI·정적 파일 표·계정 계약 내부 검사는 표식이 없다. |
 | `tests/code_map.rs` `code_map_paths_and_symbols_resolve_to_current_code` | operations.md: OPS-022. §2 경로·정의와 §3·§4 파일 단위 연결 근거 |
 | `tests/dependency_notices.rs` `distribution_notices_match_locked_dependencies_and_license_texts` | operations.md: OPS-021 partial. 오프라인 고지 대조만 확인하며 프로젝트 LICENSE는 확인하지 않는다. |
 | `tests/admin.rs` | operations.md: OPS-029·030 |
+| `tests/windows_service.rs` `service_run_from_a_terminal_exits_2_without_opening_anything` `install_registers_a_stopped_service_and_uninstall_keeps_the_files` `install_refuses_bad_input_and_leaves_no_registration` `the_scm_runs_the_server_and_a_stop_request_applies_the_grace` `a_start_failure_stops_the_service_with_the_serve_exit_code` | operations.md: OPS-074·075·076·077·080·081. 터미널 직접 run만 기본 실행한다. 실제 등록·해제·시작·G·시작 실패 시험 네 개는 승격이 필요한 `#[ignore]`다. |
+| `src/service.rs` `install_runs_the_steps_in_order_and_grants_every_operator` `install_refuses_before_registering_anything` `install_deletes_its_registration_when_a_later_step_fails` `uses_the_start_checks_and_needs_a_log_file` | operations.md: OPS-074·075 partial. 주입한 설치 경계의 순서·실패·되돌림과 실제 파일 검사다. |
+| `crates/tray/tests/single_instance.rs` `second_process_exits_successfully_before_creating_an_icon`; `crates/tray/src/rules.rs`; `crates/tray/src/single_instance.rs`; `crates/tray/src/worker.rs` | windows-tray.md: TRAY-002·003·007~012 partial. 잠금·상태·주소·설정 명령·언어·Run 비교·readyz 규칙이다. 실제 메뉴·SCM·로그인 전체의 실행 증거는 아니다. |
 | `tests/serve.rs` | operations.md: 시작·종료·L/H·상태·관리 보안·IP·중복 시작. `every_relay_entry_point_accepts_only_its_own_source_ip`는 여섯 역할×여섯 IP의 36쌍과 공유 수락 뒤 역할별 403을 다룬다. `server_only_websocket_roles_open_each_shared_listener`는 Server만 켠 공유 소켓·role 없는 수락 사건을 다룬다. `enabled_websocket_roles_require_their_policy_and_shared_tls_at_startup`는 역할 allow·부모 TLS 필수를 다룬다. 기한 시험은 U/H와 경로 판정 전후 role을 구분한다. R1 실행 결과는 이 표에서 판정하지 않는다. |
 | `tests/unix_shutdown.rs`; `tests/windows_console.rs`; `tests/common/shutdown.rs` `ServerProcess` | operations.md: OPS-007~010·042·043(양 OS), OPS-044(Windows). Windows는 MGT-027·OPS-029·OPS-030과 Ctrl+C·Ctrl+Break도 확인한다. OPS-030 시험은 ConPTY 출력에서 제어 순서를 뺀 화면 문자로 비교한다(`tests/common/log_reopen.rs` `plain`). 공통 본문에는 표식이 없다. |
-| `tests/dashboard_browser.rs` | dashboard.md: 컴포넌트·목 응답을 쓰는 DASH-001~022·024~064 부분 증거. 설정 화면(DASH-028~053)은 `web/dashboard/tests/settings.html`, 최근 로그 화면(DASH-054~061·063)은 `web/dashboard/tests/logs.html`의 계약 기반 가짜 API를 쓴다. |
+| `tests/dashboard_browser.rs` | dashboard.md: 컴포넌트·목 응답을 쓰는 DASH-001~022·024~067 부분 또는 전체 표식. 설정 화면(DASH-028~053)은 `web/dashboard/tests/settings.html`, 최근 로그 화면(DASH-054~061·063)은 `web/dashboard/tests/logs.html`의 계약 기반 가짜 API를 쓴다. `automatic_polls_under_one_second_keep_the_status_marks_in_browser`는 DASH-067이다. 운영 현황·세션·로그의 빠른 자동 조회·느린 조회·수동 조회 상태 표식을 `web/dashboard/tests/operations-scenarios.js`·`session-scenarios.js`·`logs-scenarios.js`로 확인한다. |
 | `tests/dashboard_live.rs`; `tests/dashboard_live/login.rs`; `tests/dashboard_live/overview.rs`; `tests/dashboard_live/detail.rs`; `tests/dashboard_live/cross.rs`; `tests/dashboard_live/settings.rs`; `tests/dashboard_live/settings_view.rs`; `tests/dashboard_live/settings_edit.rs`; `tests/dashboard_live/settings_recovery.rs`; `tests/dashboard_live/help_screenshots.rs` `capture` | dashboard.md: 실제 로그인·중계·관리 조회·상세·종료·언어·폴링·Si 만료의 DASH-001~014·016~022·024~027, 실제 설정 파일·감시기·`GET`·`PATCH /api/v1/config`를 쓰는 설정 보기·편집의 DASH-028~053. management.md: MGT-040·042·043. `settings.rs`는 세 설정 모듈의 공통 도우미다. 표식은 최상위 Rust 테스트 함수에만 둔다. `help_screenshots.rs`는 표식 없는 Linux 전용 `#[ignore]` 캡처 도구(`capture_help_screenshots`)다. 실서버 화면 12장을 도움말 그림으로 다시 만든다. |
 | `tests/dashboard_live/logs.rs`; `tests/dashboard_live/logs_download.rs`; `tests/dashboard_live/logs_states.rs`; `tests/dashboard_live/logs_accessibility.rs`; `tests/dashboard_live/transports.rs` | dashboard.md: DASH-054~063. 실제 사건·로그 GET과 화면 필드·필터·검색·커서·증분을 대조한다. 다운로드는 CDP가 정한 폴더의 파일과 완료 사건을 읽는다. 실패·실제 300초 유휴 만료, 두 폭·두 언어의 키 입력, TCP·WS·WSS 양쪽 조합과 전달 주소를 확인한다. 실행 함수와 전체 표식은 `tests/dashboard_live.rs`에만 있다. |
 | `tests/help_site.rs` | help-site.md: HELP-001~018. `cargo xtask help-site`로 만든 사이트를 시험 안의 정적 서버(`/vnc-relay/` 마운트, 없는 경로에 `404.html`)에 올리고 CDP 헤드리스 브라우저로 연다. mdBook 0.5.4가 필요하다(`MDBOOK` 또는 `PATH`). |
@@ -218,7 +241,11 @@ flowchart LR
 
 | 진입점 종류 | 코드 위치(파일·심볼) | 시작 조건 | 다음으로 호출하는 곳 |
 | --- | --- | --- | --- |
-| CLI | `src/main.rs` `main` | 프로세스 실행 | `cli::parse` → `serve::run` 또는 `cli::parse` → `admin::run` |
+| CLI | `src/main.rs` `main` | 프로세스 실행 | `cli::parse` → `serve::run` 또는 `cli::parse` → `admin::run` 또는 `cli::parse` → `service::run` |
+| 서비스 설치·해제 | `src/service.rs` `run` | Windows의 service 명령 | `install` → `install_with` 또는 `uninstall` → `Scm::uninstall` |
+| 서비스 실행 | `src/service.rs` `run_service` | SCM의 service run 시작 | `windows_service::run` → `serve::start` |
+| SCM 제어 | `crates/adapters/src/windows_service.rs` `service_main`; `src/serve.rs` `Requests::wait` | Stop·Shutdown 제어 채널 | `wait_for_shutdown` → `begin_process_shutdown` |
+| 트레이 | `crates/tray/src/main.rs` `main` | Windows GUI 실행파일 시작 | `single_instance::acquire` → `ui::run` → `worker::spawn` |
 | TCP | `crates/adapters/src/net.rs` `TcpEntryPoint::run` | Viewer·Server 수락 | `accept_connections` → `RelayService::handle_connection` → `RelayService::dispatch` |
 | WS·WSS | `crates/adapters/src/websocket.rs` `WsEntryPoint::run` | 공유 리스너 수락·TLS·경로별 역할/정책 검사와 101 flush 성공 | `WsRelayStream::new` → `RelayService::handle_connection` → `RelayService::dispatch` |
 | 관리 HTTP | `crates/adapters/src/management_http.rs` `answer` | 관리 요청 | `session_api` → `query_api` 또는 `session_api` → `terminate_api` 또는 `session_api` → `config_api` 또는 `session_api` → `logs_api` 또는 `static_answer` |
@@ -278,6 +305,16 @@ PATCH의 `ConfigEditService::patch`는 같은 잠금으로 편집 허용→원�
 
 `management_http::answer` → `session_api::answer` → `logs_api::answer`가 `/api/v1/logs`를 처리한다. 세션 인증이 선행되며 CSRF 검증은 필요하지 않다. `X-Relay-Poll: 1` 자동 갱신 요청은 유휴 만료를 연장하지 않는다. `logs_api`는 쿼리 매개변수를 검증하고 `RecentLogs::query`를 부른다. 버퍼 잠금 안에서 커서 범위를 좁히고 그 범위의 `Arc<LogEntry>`를 복제한다. 세션 필터는 범위 밖의 `session_started` 참조도 확보해 연결 식별자 연계를 보존한다. 일치 검사와 페이지 선택은 잠금 밖에서 한다. `src/serve.rs::run`은 기록 싱크와 관리 서비스에 같은 `Arc<RecentLogs>`를 직접 전달한다.
 
+### Windows 서비스·트레이 흐름(Current)
+
+`src/main.rs`의 `main`은 `cli::parse`가 만든 `ServiceAction`을 `src/service.rs`의 `run`에 넘긴다. 설치는 `install_with`에서 기존 등록→운영자 조회→`serve::check_service_files`→현재 실행파일→등록→지연 시작·권한 부여 순서다. 등록 뒤 실패하면 새 등록을 삭제한다. 실행은 adapters의 `windows_service::run`이 받은 `ServiceSession`을 `serve::start`의 `Host::Service`에 전달한다. SCM 상태·종료 요청만 바꾸고 서버 조립은 공유한다([서비스 모듈](windows-service.md)).
+
+트레이의 `crates/tray/src/main.rs` `run`은 파일 잠금을 보유한 채 `ui::run`을 부른다. UI는 `worker::spawn`이 만든 채널로 동작을 보내고 snapshot을 받는다. 작업 스레드는 SCM 조회·설정 읽기·readyz를 차례로 수행한다. UI 스레드만 메뉴·아이콘을 바꾸며, `message_loop::run`이 메시지를 전달한다([트레이 모듈](windows-tray.md)).
+
+### 자동 조회 상태 표식(Current)
+
+`web/dashboard/app/query.js`의 `beginQuery`는 자동 조회의 busy 표시를 1000 ms 늦춘다. 그 전에 끝나면 `endQuery`가 타이머를 지운다. `viewOf`는 그동안 마지막 성공·실패 상태를 유지한다. `operations.js`·`session.js`·`logs.js`가 이 경계를 재사용한다. 수동 조회는 즉시 표시하고 진행 중 자동 조회의 수동 갱신은 `showBusy`로 표시만 바꾼다(DASH-067).
+
 
 
 ## 5. 시작과 연결
@@ -312,19 +349,6 @@ PATCH의 `ConfigEditService::patch`는 같은 잠금으로 편집 허용→원�
 
 `LifecycleService::request_shutdown`이라는 API는 현재 없다. 준비 상태 전이는 `LifecycleService::begin_shutdown`이, 중계 수명 전이는 `RelayService::request_shutdown`이 맡는다. 이 이름을 전제로 한 설계·TODO 문구는 실제 책임 분리와 대조해야 한다. 이 지도는 향후 API 이동을 결정하지 않는다. **이 문서의 판단, 사용자 결정 없음**이다.
 
-### Windows 서비스와 트레이 앱(Target)
-
-[ADR-0010](../decisions/ADR-0010-windows-service-and-tray.md)을 구현할 때 쓸 계획 위치다. 아직 코드가 없으므로 2~4절의 Current 지도에 넣지 않는다. 아래 경로·패키지 이름·책임 분리는 **이 문서의 판단, 사용자 결정 없음**이다. 사용자가 정한 것은 별도 트레이 실행파일(Q240), 사용할 라이브러리와 `unsafe` 파일 두 곳의 범위(Q241·Q245·Q256)다(사용자 결정 2026-11-17). 구현하면 이 표의 내용을 Current 지도와 모듈 설계로 옮기고 이 절에서 지운다.
-
-| 계획 위치 | 책임 | 근거 |
-| --- | --- | --- |
-| `src/service.rs` | `service install`·`service uninstall`·`service run` 명령을 조립한다. 설치 전 설정 검사와 `serve` 시작 순서를 재사용하고, 시작 결과를 SCM 상태 보고에 잇는다. | [CLI 계약 1.9절](../contracts/cli-v1.md#19-windows-서비스-실행), [운영 스펙 3.7절](../specs/operations.md#37-windows-서비스-실행) |
-| `crates/adapters/src/windows_service.rs` | windows-service로 서비스를 등록·해제하고, 서비스 제어 처리기와 상태 보고를 맡는다. 중지 요청과 시스템 종료 알림을 서버의 종료 요청으로 바꾼다. 서비스 실행에서는 콘솔 종료 신호를 종료 요청으로 쓰지 않는다. | Q241·Q244·Q246·Q248·Q249, [CLI 계약 1.9절](../contracts/cli-v1.md#19-windows-서비스-실행) |
-| `crates/adapters/src/windows_service/security.rs` | `--operator` 이름을 계정으로 바꾸고 서비스 운영자에게 시작·중지·상태 조회·구성 조회 권한을 준다. `unsafe` 예외 파일이다. | Q245, [CLI 계약 1.9절](../contracts/cli-v1.md#19-windows-서비스-실행), [Rust 코드 컨벤션](../conventions/rust.md) |
-| `crates/tray`(패키지 `vnc-relay-tray`, 실행파일 `vnc-relay-tray.exe`) | GUI 서브시스템 실행파일을 조립한다. 메뉴, SCM 상태 조회와 시작·중지 요청, `/readyz` 조회, 로그인할 때 시작을 맡는다. 설정 파일은 `crates/adapters/src/config_file.rs`의 설정 로더로 읽는다. | Q240·Q250~Q256, [Windows 트레이 앱 스펙](../specs/windows-tray.md) |
-| `crates/tray/src/message_loop.rs` | tray-icon이 Windows에서 요구하는 메시지 루프를 돌린다. `unsafe` 예외 파일이다. | Q241, [Rust 코드 컨벤션](../conventions/rust.md) |
-
-`cargo xtask layers`의 패키지별 허용 목록과 `cargo xtask package`의 Windows 묶음은 구현할 때 함께 바꾼다([xtask 모듈 설계](xtask.md)). crate 이름 규칙 `vnc-relay-<레이어>`에서 `tray`는 트레이 실행파일 조립 레이어로 본다. **이 문서의 판단, 사용자 결정 없음**이다.
 
 ## 대조 기록
 

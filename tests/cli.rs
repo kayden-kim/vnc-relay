@@ -57,3 +57,24 @@ fn usage_errors_exit_with_code_2_and_usage_on_stderr() {
         );
     }
 }
+
+/// spec: operations.md:OPS-081 partial
+#[cfg(not(windows))]
+#[test]
+fn service_commands_are_usage_errors_outside_windows() {
+    for args in [
+        &["service", "install", "--config", "relay.toml"][..],
+        &["service", "run", "--config", "relay.toml"],
+        &["service", "uninstall"],
+    ] {
+        let output = run(args);
+        assert_eq!(output.status.code(), Some(2), "{args:?}");
+        assert_eq!(text(&output.stdout), "", "{args:?}");
+        let stderr = text(&output.stderr);
+        assert!(
+            stderr.starts_with("error[usage_error]: "),
+            "{args:?}: {stderr}"
+        );
+        assert!(!stderr.contains("vnc-relay service"), "{stderr}");
+    }
+}

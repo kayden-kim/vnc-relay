@@ -4,7 +4,7 @@ Use this page to download the bundle for your OS, verify its hash, and prepare t
 
 ## Requirements
 
-Supported systems are Windows 11 x64 and Ubuntu 24.04 LTS x64. Windows Server and other operating systems or architectures are outside the verified scope. This guide covers manual execution. It does not cover OS service registration or containers.
+Supported systems are Windows 11 x64 and Ubuntu 24.04 LTS x64. Windows Server and other operating systems or architectures are outside the verified scope. This guide covers manual execution and Windows service registration. It does not cover containers.
 
 You do not need Rust build tools to run a release bundle. Prepare a build environment only if you build the bundle from source.
 
@@ -92,6 +92,7 @@ Run subsequent commands in this directory, which contains the executable and `re
 | File or directory | Purpose |
 | --- | --- |
 | `vnc-relay.exe` or `vnc-relay` | Executable for the target OS |
+| `vnc-relay-tray.exe` | Tray app for Windows service status, start, and stop. Included only in Windows bundles built from `main`, not Release `v2026.11.4` |
 | `relay.toml` | Loopback configuration from the repository's `examples/relay.toml` |
 | `README.md` | Product introduction and quick start |
 | `docs/`, `GLOSSARY.md` | Operations guide, contracts, and glossary for offline reading |
@@ -103,6 +104,41 @@ The bundle contains no account file, private key, password, or operations log. W
 Relative paths inside the configuration resolve from the directory containing `relay.toml`, not the terminal's current directory. The example account file and log belong in that directory. If you enable TLS, you must provide the certificate and private key separately and set their paths in the configuration.
 
 You must restrict access to the account file, private key, and log directory. On Windows, it is recommended to restrict ACLs to the server's OS account and administrators. On Ubuntu, mode `0600` is recommended for account files and private keys. See section 3.2 of the [manual operations guide](https://github.com/kayden-kim/vnc-relay/blob/main/docs/how-to/operate-relay.md).
+
+## Install and uninstall the Windows service
+
+This feature is in Windows bundles built from `main`. Release `v2026.11.4` does not include it. First prepare settings and an administrator account with [Quick start](quick-start.md). The service requires a file path for `log.output`. Keeping operational files under `%ProgramData%\vnc-relay\` is recommended. Use elevated PowerShell for installation and removal.
+
+1. Place the prepared configuration, accounts, and TLS or key files in use under `%ProgramData%\vnc-relay\`. Adjust relative paths for this location.
+2. In elevated PowerShell, enter the executable directory.
+3. Install the service. Replace `<user>` and `<group>` with Windows users or groups that will start and stop it without UAC. Repeat `--operator` as needed.
+
+   ```powershell
+   .\vnc-relay.exe service install --config "$env:ProgramData\vnc-relay\relay.toml" --operator "<user>" --operator "<group>"
+   ```
+
+4. Check file access for the service account, `NT SERVICE\vnc-relay`.
+
+Installation checks the configuration and files in use, including accounts and TLS files. It registers a delayed automatic-start service without recovery actions. Installation does not start the service. File checks run as the installing administrator, so they do not guarantee service-account access.
+
+The service must read its configuration, accounts, and keys in use, and write to its log directory. Restricting account files and private keys to Administrators, SYSTEM, and `NT SERVICE\vnc-relay` is recommended. Tray users need read access to the configuration file only. Do not rely on default `%ProgramData%` permissions. For ACL commands and configuration-directory access when management API editing is enabled, follow [Operations guide §3.3.1](https://github.com/kayden-kim/vnc-relay/blob/main/docs/how-to/operate-relay.md#331-windows-서비스와-트레이-앱).
+
+For start and stop, follow [Windows service and tray](operate.md#windows-service-and-tray). To uninstall, use this sequence.
+
+1. In a service operator's terminal, request a stop.
+
+   ```powershell
+   sc.exe stop vnc-relay
+   ```
+
+2. Wait for `sc.exe query vnc-relay` to show `STOPPED`.
+3. In elevated PowerShell, remove the registration.
+
+   ```powershell
+   .\vnc-relay.exe service uninstall
+   ```
+
+Uninstalling keeps the executable, configuration, accounts, certificates, and logs. Run `vnc-relay-tray.exe` from the Windows bundle as a normal user. The tray app does not install or uninstall the service. Commands and errors follow [CLI contract §1.9](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/cli-v1.md#19-windows-서비스-실행).
 
 ## Alternative: build a bundle from source
 

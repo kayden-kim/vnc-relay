@@ -1,6 +1,8 @@
-//! `serve` start sequence and shutdown wait (cli-v1 §1.8).
+//! `serve` start sequence and shutdown wait (cli-v1 §1.8), shared with the
+//! Windows service run (cli-v1 §1.9).
 //! Design: docs/architectures/serve-startup.md, docs/architectures/ops-log.md,
-//! docs/architectures/tcp-entry-point.md, docs/architectures/status-listener.md.
+//! docs/architectures/tcp-entry-point.md, docs/architectures/status-listener.md,
+//! docs/architectures/windows-service.md.
 
 use std::fmt::Display;
 use std::io;
@@ -47,32 +49,60 @@ use vnc_relay_domain::handshake::HandshakePolicy;
 use vnc_relay_domain::login_limit::LoginLimitPolicy;
 use vnc_relay_domain::ticket::TicketUseTable;
 
-use crate::cli::{self, EXIT_ACCOUNTS, EXIT_CONFIG, EXIT_LISTENER, EXIT_RUNTIME};
+#[cfg(windows)]
+use vnc_relay_adapters::windows_service::{ServiceSession, StatusReporter, StopControl};
+
+use crate::cli::{self, EXIT_ACCOUNTS, EXIT_CONFIG, EXIT_LISTENER, EXIT_RUNTIME, EXIT_SUCCESS};
 
 /// Config key of the log output (config-v3 §1.2).
 const LOG_OUTPUT_KEY: &str = "log.output";
 
-/// Runs the server until the first shutdown request. Each failing stage
-/// writes all its diagnostics to stderr, one `startup_failed` line per
-/// diagnostic to the operation log, and returns its exit code.
+/// Where shutdown requests come from and who hears about the server state
+/// (cli-v1 §1.8, §1.9).
+pub enum Host {
+    /// `serve` in a terminal: console signals. Start failures before the log
+    /// file opens also go to stdout as operation log lines.
+    Terminal,
+    /// `service run` under the SCM: stop and system shutdown controls, and
+    /// status reports. The process writes nothing to stdout or stderr.
+    #[cfg(windows)]
+    Service(ServiceSession),
+}
+
+/// `serve`: runs the server for the terminal.
 pub fn run(config: &Path) -> ExitCode {
+    ExitCode::from(start(config, Host::Terminal))
+}
+
+/// Runs the server until the first shutdown request and returns the exit
+/// code of cli-v1 §2.1. Each failing stage writes all its diagnostics to
+/// stderr, one `startup_failed` line per diagnostic to the operation log, and
+/// returns its exit code.
+pub fn start(config: &Path, host: Host) -> u8 {
     // Process start time of the ticket check (websocket-relay-v2 §1.9.3 step 11).
     let started_at = SystemTime::now();
     // Stage 1: config, then the log output. Until the log is open, events
-    // go to stdout (ops-info-v1 §1.1).
+    // go to stdout (ops-info-v1 §1.1); a service has no stdout.
     let running = match config_file::load_candidate(config) {
         Ok(running) => running,
         Err(diagnostics) => {
-            let log = JsonLinesEventSink::stdout(report_log_write_failure);
+            let early = early_log(&host);
             for d in &diagnostics {
                 cli::report("error", d.error.code(), &d.key, &d.message);
-                let config_key = (!d.key.is_empty()).then(|| d.key.clone());
-                record_failure(&log, d.error.code(), config_key, None, None);
+                if let Some(log) = &early {
+                    let config_key = (!d.key.is_empty()).then(|| d.key.clone());
+                    record_failure(log, d.error.code(), config_key, None, None);
+                }
             }
-            return ExitCode::from(EXIT_CONFIG);
+            return EXIT_CONFIG;
         }
     };
     let settings = &running.settings;
+    #[cfg(windows)]
+    if matches!(host, Host::Service(_)) && matches!(settings.log.output, LogOutput::Stdout) {
+        report_service_log_stdout();
+        return EXIT_CONFIG;
+    }
     let recent_logs = Arc::new(RecentLogs::new(settings.recent_logs.max_entries as usize));
     let output = match JsonLinesEventSink::open(
         &settings.log.output,
@@ -91,15 +121,16 @@ pub fn run(config: &Path) -> ExitCode {
                 LOG_OUTPUT_KEY,
                 &format!("로그 파일을 열 수 없다({path}). {}", error.cause()),
             );
-            let stdout = JsonLinesEventSink::stdout(report_log_write_failure);
-            record_failure(
-                &stdout,
-                error.code(),
-                Some(LOG_OUTPUT_KEY.to_owned()),
-                None,
-                Some(error.cause().to_owned()),
-            );
-            return ExitCode::from(EXIT_CONFIG);
+            if let Some(stdout) = early_log(&host) {
+                record_failure(
+                    &stdout,
+                    error.code(),
+                    Some(LOG_OUTPUT_KEY.to_owned()),
+                    None,
+                    Some(error.cause().to_owned()),
+                );
+            }
+            return EXIT_CONFIG;
         }
     };
     let log: Arc<dyn EventSink> = output.clone();
@@ -116,14 +147,7 @@ pub fn run(config: &Path) -> ExitCode {
         Ok(loaded) => loaded,
         Err(diagnostics) => return accounts_failure(log.as_ref(), &diagnostics),
     };
-    for warning in &loaded.warnings {
-        cli::report(
-            "warning",
-            warning.code(),
-            ACCOUNTS_FILE_KEY,
-            &warning.message(),
-        );
-    }
+    report_accounts_warnings(&loaded.warnings);
     if let Err(diagnostic) = accounts::require_any(&loaded.accounts) {
         return accounts_failure(log.as_ref(), &[diagnostic]);
     }
@@ -177,9 +201,85 @@ pub fn run(config: &Path) -> ExitCode {
         config,
         clock,
         started_at,
+        host,
     ))
 }
 
+/// The file checks of `service install` (cli-v1 §1.9 install step 4): stages
+/// 1 and 2 and the TLS and ticket key files of stage 4, with the same codes.
+/// No log file opens, so the diagnostics go to stderr only.
+#[cfg(windows)]
+pub fn check_service_files(config: &Path) -> Result<(), u8> {
+    let mut running = config_file::load_candidate(config).map_err(|diagnostics| {
+        for d in &diagnostics {
+            cli::report("error", d.error.code(), &d.key, &d.message);
+        }
+        EXIT_CONFIG
+    })?;
+    if matches!(running.settings.log.output, LogOutput::Stdout) {
+        report_service_log_stdout();
+        return Err(EXIT_CONFIG);
+    }
+    let accounts_file = &running.settings.admin.accounts_file;
+    let loaded = accounts_file::load(accounts_file, HashFloor::Reject).map_err(|diagnostics| {
+        report_accounts(&diagnostics);
+        EXIT_ACCOUNTS
+    })?;
+    report_accounts_warnings(&loaded.warnings);
+    accounts::require_any(&loaded.accounts).map_err(|diagnostic| {
+        report_accounts(&[diagnostic]);
+        EXIT_ACCOUNTS
+    })?;
+    let mut failed = false;
+    for check in tls_checks(&running.settings) {
+        if let Err(error) = tls::load_acceptor(&check.files.cert_file, &check.files.key_file) {
+            report_tls(&check, &error);
+            failed = true;
+        }
+    }
+    if let Err(diagnostics) = vnc_relay_app::reload::ticket_keys::load(
+        &mut running.settings,
+        &FsReloadFileStore,
+        &vnc_relay_adapters::ticket::TicketJwksStore,
+    ) {
+        failed = true;
+        for diagnostic in diagnostics {
+            cli::report(
+                "error",
+                diagnostic.error.code(),
+                &diagnostic.key,
+                &diagnostic.message,
+            );
+        }
+    }
+    if failed { Err(EXIT_CONFIG) } else { Ok(()) }
+}
+
+/// The stdout sink for start failures before the log file opens. A service
+/// has no stdout, so its failures stay in the exit code (cli-v1 §1.9).
+fn early_log(host: &Host) -> Option<JsonLinesEventSink> {
+    match host {
+        Host::Terminal => Some(JsonLinesEventSink::stdout(report_log_write_failure)),
+        #[cfg(windows)]
+        Host::Service(_) => None,
+    }
+}
+
+/// A service needs a log file (Q247).
+#[cfg(windows)]
+fn report_service_log_stdout() {
+    cli::report(
+        "error",
+        "service_log_stdout",
+        LOG_OUTPUT_KEY,
+        "서비스로 실행하려면 로그 파일이 필요하다. `log.output`에 파일 경로를 쓴다.",
+    );
+}
+
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the start stages hand over their parts, and the host decides the shutdown source"
+)]
 async fn listen_until_shutdown(
     running: &ConfigCandidate,
     output: Arc<JsonLinesEventSink>,
@@ -188,15 +288,25 @@ async fn listen_until_shutdown(
     config: &Path,
     clock: Arc<dyn Clock>,
     started_at: SystemTime,
-) -> ExitCode {
+    host: Host,
+) -> u8 {
     let mut running = running.clone();
     let settings = &running.settings;
     let log: Arc<dyn EventSink> = output.clone();
-    let mut shutdown = match ShutdownSignal::register() {
-        Ok(shutdown) => shutdown,
-        Err(error) => {
-            return runtime_failure(log.as_ref(), "종료 신호 처리기를 준비할 수 없다", &error);
-        }
+    let (mut requests, status) = match host {
+        Host::Terminal => match ShutdownSignal::register() {
+            Ok(signal) => (Requests::Terminal(signal), HostStatus::default()),
+            Err(error) => {
+                return runtime_failure(log.as_ref(), "종료 신호 처리기를 준비할 수 없다", &error);
+            }
+        },
+        #[cfg(windows)]
+        Host::Service(session) => (
+            Requests::Service(session.controls),
+            HostStatus {
+                service: Some(session.status),
+            },
+        ),
     };
 
     let (relay_key, session_key) = match generate_startup_keys() {
@@ -247,7 +357,7 @@ async fn listen_until_shutdown(
         }
     }
     if files_failed {
-        return ExitCode::from(EXIT_CONFIG);
+        return EXIT_CONFIG;
     }
     let settings = &running.settings;
 
@@ -340,7 +450,7 @@ async fn listen_until_shutdown(
         stop.send_replace(true);
         let _ = watch_task.await;
         report_bind_failures(log.as_ref(), &failures);
-        return ExitCode::from(EXIT_LISTENER);
+        return EXIT_LISTENER;
     }
 
     lifecycle.mark_ready();
@@ -350,6 +460,7 @@ async fn listen_until_shutdown(
         .map(|plan| (plan.name, plan.addr))
         .collect();
     log.record(&Event::ServerReady { listeners: ready });
+    status.ready();
 
     // The TCP and WebSocket entry points accept from here on. Every relay entry
     // point takes places from one L.
@@ -494,7 +605,7 @@ async fn listen_until_shutdown(
         }
     }
 
-    let first_request = wait_for_shutdown(shutdown.wait(), &mut failed_listener).await;
+    let first_request = wait_for_shutdown(requests.wait(), &mut failed_listener).await;
     if let ShutdownRequest::ListenerFailed(failure) = first_request {
         let key = if matches!(failure.listener, "status" | "management") {
             format!("{}.listen", failure.listener)
@@ -503,6 +614,7 @@ async fn listen_until_shutdown(
         };
         cli::report("error", "listener_failed", &key, &failure.detail());
     }
+    status.stopping();
     let exit = begin_process_shutdown(
         first_request,
         &lifecycle,
@@ -516,7 +628,7 @@ async fn listen_until_shutdown(
         &mut entry_points,
         supervisor,
         async {
-            shutdown.wait().await;
+            requests.wait().await;
         },
         || relay_service.request_shutdown(&runtime, Duration::ZERO),
     )
@@ -549,13 +661,14 @@ fn config_management<A: Clone + Send + Sync + 'static>(
     )))
 }
 
-/// A closed Windows console requests Grace and Force in the same turn (Q102).
+/// A closed Windows console (Q102) and a system shutdown of the service
+/// (Q248) request Grace and Force in the same turn.
 #[derive(Clone, Copy)]
 enum ShutdownRequest {
     Requested,
     ListenerFailed(ListenerFailure),
     #[cfg(any(windows, test))]
-    ConsoleClosed,
+    CloseNow,
 }
 
 async fn wait_for_shutdown(
@@ -589,19 +702,19 @@ fn begin_process_shutdown<C>(
     service: &RelayService,
     runtime: &RelayRuntime<C>,
     grace: Duration,
-) -> ExitCode {
+) -> u8 {
     match request {
         ShutdownRequest::ListenerFailed(failure) => {
             lifecycle.listener_failed();
             service.request_fatal_shutdown(runtime, grace, failure.detail());
-            ExitCode::from(EXIT_RUNTIME)
+            EXIT_RUNTIME
         }
         requested => {
             lifecycle.begin_shutdown();
             begin_relay_shutdown(requested, grace, |grace| {
                 service.request_shutdown(runtime, grace)
             });
-            ExitCode::SUCCESS
+            EXIT_SUCCESS
         }
     }
 }
@@ -614,7 +727,7 @@ fn begin_relay_shutdown(
     match request {
         ShutdownRequest::Requested | ShutdownRequest::ListenerFailed(_) => {}
         #[cfg(any(windows, test))]
-        ShutdownRequest::ConsoleClosed => request_shutdown(Duration::ZERO),
+        ShutdownRequest::CloseNow => request_shutdown(Duration::ZERO),
     }
 }
 
@@ -657,7 +770,7 @@ where
     Ok((relay, session))
 }
 
-fn startup_keys_failure(log: &dyn EventSink, error: &dyn Display) -> ExitCode {
+fn startup_keys_failure(log: &dyn EventSink, error: &dyn Display) -> u8 {
     runtime_failure(log, "운영체제 난수원으로 시작 키를 만들 수 없다", error)
 }
 /// Cancels a background task and joins it before releasing its resources.
@@ -737,20 +850,26 @@ fn tls_checks(settings: &Settings) -> Vec<TlsCheck<'_>> {
 /// key names the file that failed. The detail stays empty, so the log never
 /// carries file paths or key material.
 fn tls_failure(log: &dyn EventSink, check: &TlsCheck<'_>, error: &TlsError) {
+    let key = report_tls(check, error);
+    record_failure(log, error.code(), Some(key), Some(check.listener), None);
+}
+
+/// Writes the diagnostic of one TLS file error and returns its config key.
+fn report_tls(check: &TlsCheck<'_>, error: &TlsError) -> String {
     let file = match error.file() {
         TlsFile::Cert => "cert_file",
         TlsFile::Key => "key_file",
     };
     let key = format!("{}.{file}", check.prefix);
     cli::report("error", error.code(), &key, &error.to_string());
-    record_failure(log, error.code(), Some(key), Some(check.listener), None);
+    key
 }
 
 /// Account file diagnostics may quote file paths inside the file, so the log
 /// line carries the config key of the file and no detail (ops-info-v1 §1.11).
-fn accounts_failure(log: &dyn EventSink, diagnostics: &[AccountsDiagnostic]) -> ExitCode {
+fn accounts_failure(log: &dyn EventSink, diagnostics: &[AccountsDiagnostic]) -> u8 {
+    report_accounts(diagnostics);
     for d in diagnostics {
-        cli::report("error", d.error.code(), &d.key, &d.message);
         record_failure(
             log,
             d.error.code(),
@@ -759,10 +878,27 @@ fn accounts_failure(log: &dyn EventSink, diagnostics: &[AccountsDiagnostic]) -> 
             None,
         );
     }
-    ExitCode::from(EXIT_ACCOUNTS)
+    EXIT_ACCOUNTS
 }
 
-fn runtime_failure(log: &dyn EventSink, what: &str, error: &dyn Display) -> ExitCode {
+fn report_accounts(diagnostics: &[AccountsDiagnostic]) {
+    for d in diagnostics {
+        cli::report("error", d.error.code(), &d.key, &d.message);
+    }
+}
+
+fn report_accounts_warnings(warnings: &[accounts::AccountsWarning]) {
+    for warning in warnings {
+        cli::report(
+            "warning",
+            warning.code(),
+            ACCOUNTS_FILE_KEY,
+            &warning.message(),
+        );
+    }
+}
+
+fn runtime_failure(log: &dyn EventSink, what: &str, error: &dyn Display) -> u8 {
     cli::report(
         "error",
         "runtime_unavailable",
@@ -776,12 +912,12 @@ fn runtime_failure(log: &dyn EventSink, what: &str, error: &dyn Display) -> Exit
         None,
         Some(error.to_string()),
     );
-    ExitCode::from(EXIT_RUNTIME)
+    EXIT_RUNTIME
 }
 
 /// A watch that cannot register at start refuses the start (file-watch.md §6, OPS-028): one
 /// `watch_unavailable` diagnostic, one `startup_failed` line, exit code 1.
-fn watch_unavailable(log: &dyn EventSink, detail: &str) -> ExitCode {
+fn watch_unavailable(log: &dyn EventSink, detail: &str) -> u8 {
     cli::report(
         "error",
         "watch_unavailable",
@@ -789,7 +925,7 @@ fn watch_unavailable(log: &dyn EventSink, detail: &str) -> ExitCode {
         &format!("파일 변경 감지를 준비할 수 없다({detail})."),
     );
     record_failure(log, "watch_unavailable", None, None, None);
-    ExitCode::from(EXIT_RUNTIME)
+    EXIT_RUNTIME
 }
 
 /// First failed log write (ops-info-v1 §1.1). Later failures stay silent.
@@ -809,6 +945,56 @@ fn report_log_reopen_failure(error: &vnc_relay_adapters::ops_log::LogFileError) 
         LOG_OUTPUT_KEY,
         &error.to_string(),
     );
+}
+
+/// Shutdown requests of the host.
+enum Requests {
+    Terminal(ShutdownSignal),
+    /// Stop and system shutdown controls of the SCM (cli-v1 §1.9). Console
+    /// signals are not shutdown requests of a service.
+    #[cfg(windows)]
+    Service(tokio::sync::mpsc::UnboundedReceiver<StopControl>),
+}
+
+impl Requests {
+    async fn wait(&mut self) -> ShutdownRequest {
+        match self {
+            Self::Terminal(signal) => signal.wait().await,
+            #[cfg(windows)]
+            Self::Service(controls) => match controls.recv().await {
+                Some(StopControl::Stop) => ShutdownRequest::Requested,
+                Some(StopControl::SystemShutdown) => ShutdownRequest::CloseNow,
+                // The control handler keeps the sender until the process ends.
+                None => std::future::pending().await,
+            },
+        }
+    }
+}
+
+/// State changes that the host hears about: the SCM status of a service run.
+/// A terminal hears nothing.
+#[derive(Default)]
+struct HostStatus {
+    #[cfg(windows)]
+    service: Option<StatusReporter>,
+}
+
+impl HostStatus {
+    /// The server entered ready (cli-v1 §1.9 "상태 보고").
+    fn ready(&self) {
+        #[cfg(windows)]
+        if let Some(status) = &self.service {
+            status.running();
+        }
+    }
+
+    /// The shutdown began, by a request or by a listener failure.
+    fn stopping(&self) {
+        #[cfg(windows)]
+        if let Some(status) = &self.service {
+            status.stopping();
+        }
+    }
 }
 
 /// Shutdown requests of cli-v1 §1.8: SIGINT (Ctrl+C) and SIGTERM.
@@ -862,7 +1048,7 @@ impl ShutdownSignal {
         std::future::poll_fn(|cx| {
             // Close takes priority if an ordinary request is also pending.
             if self.ctrl_close.poll_recv(cx).is_ready() {
-                Poll::Ready(ShutdownRequest::ConsoleClosed)
+                Poll::Ready(ShutdownRequest::CloseNow)
             } else if self.ctrl_c.poll_recv(cx).is_ready()
                 || self.ctrl_break.poll_recv(cx).is_ready()
             {
@@ -932,7 +1118,7 @@ mod tests {
     fn console_close_starts_grace_then_immediately_requests_force() {
         let mut requests = Vec::new();
         begin_relay_shutdown(
-            ShutdownRequest::ConsoleClosed,
+            ShutdownRequest::CloseNow,
             Duration::from_secs(90),
             |grace| requests.push(grace),
         );
@@ -942,7 +1128,7 @@ mod tests {
     #[test]
     fn console_close_with_zero_grace_still_preserves_both_requests() {
         let mut requests = Vec::new();
-        begin_relay_shutdown(ShutdownRequest::ConsoleClosed, Duration::ZERO, |grace| {
+        begin_relay_shutdown(ShutdownRequest::CloseNow, Duration::ZERO, |grace| {
             requests.push(grace);
         });
         assert_eq!(requests, [Duration::ZERO, Duration::ZERO]);
@@ -1038,7 +1224,7 @@ mod tests {
     fn watch_registration_refused_at_start_is_a_startup_failure() {
         let sink = RecordingSink::default();
         let code = watch_unavailable(&sink, "registration refused");
-        assert_eq!(code, ExitCode::from(EXIT_RUNTIME));
+        assert_eq!(code, EXIT_RUNTIME);
         let events = sink.events.lock().expect("sink lock");
         assert_eq!(events.len(), 1);
         assert!(matches!(
@@ -1052,7 +1238,7 @@ mod tests {
         let sink = RecordingSink::default();
         let error = CryptoError;
         let code = startup_keys_failure(&sink, &error);
-        assert_eq!(code, ExitCode::from(EXIT_RUNTIME));
+        assert_eq!(code, EXIT_RUNTIME);
         let events = sink.events.lock().expect("sink lock");
         assert_eq!(events.len(), 1);
         assert!(matches!(

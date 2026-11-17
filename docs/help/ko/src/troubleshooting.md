@@ -6,7 +6,7 @@
 
 ## 서버가 시작하지 않는다
 
-서버를 실행한 터미널의 stderr에서 `error[<code>]`와 `key`를 확인한다. 로그의 `startup_failed`도 확인한다. 설정을 읽기 전이나 로그 파일을 열지 못한 시작 실패는 표준 출력에 기록될 수 있다.
+`serve`로 수동 실행했다면 터미널의 stderr에서 `error[<code>]`와 `key`를 확인한다. 로그의 `startup_failed`도 확인한다. 설정을 읽기 전이나 로그 파일을 열지 못한 시작 실패는 표준 출력에 기록될 수 있다. Windows 서비스에는 콘솔이 없으므로 아래 서비스 오류 절차를 따른다.
 
 명령이 돌아온 같은 터미널에서 종료 코드를 읽는다.
 
@@ -47,6 +47,39 @@ echo $?
 평문 관리 HTTP를 루프백 아닌 주소에 두면 `config_plaintext_management_not_loopback`으로 시작하지 않는다. 외부 관리는 내장 HTTPS로 구성하거나 관리 HTTP를 루프백에 둬야 한다.
 
 종료 코드 2이면 사용법과 대화형 입력 조건을 확인한다. 예를 들어 `--config` 누락은 사용법 오류다. 종료 코드 1은 변경 감지 준비나 런타임 등 실행 환경 실패에도 쓰인다. 전체 의미와 안정적인 진단 코드는 [CLI 계약 2절](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/cli-v1.md)을 따른다.
+
+## Windows 서비스나 트레이에 오류가 나온다
+
+이 절은 `main`의 서비스·트레이 기능에 적용한다. 전체 진단 코드와 종료 코드는 [CLI 계약 1.9절](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/cli-v1.md#19-windows-서비스-실행)을 따른다.
+
+- 설치·해제의 `service_access_denied`이면 관리자 권한 터미널에서 실행한다. 트레이의 `시작 실패: 권한 없음`·`중지 실패: 권한 없음`이면 관리자가 해당 사용자나 그룹을 `--operator`로 지정했는지 확인한다. 트레이 자체를 관리자 권한으로 실행하는 방식에 의존하지 않는다.
+- `service_exists`이면 이미 등록된 `vnc-relay`를 확인한다. 같은 이름으로 덮어쓰지 않는다. 운영자나 실행파일 위치를 바꾸려면 중지·해제 뒤 다시 설치한다.
+- `service_running`이면 먼저 중지를 요청한다. `STOPPED`를 확인한 뒤 관리자 권한으로 해제한다.
+- `service_log_stdout`이면 `log.output`을 파일 경로로 바꾼다. 서비스 계정에 로그 디렉터리 쓰기 권한도 필요하다.
+
+트레이가 `중지됨 (종료 코드 N)`을 보이면 시작 요청은 전달됐지만 서비스 시작이 실패했을 수 있다.
+
+1. 일반 PowerShell에서 서비스 종료 코드를 확인한다.
+
+   ```powershell
+   sc.exe query vnc-relay
+   ```
+
+2. `SERVICE_EXIT_CODE`와 운영 로그를 확인한다. 서비스 고유 코드가 없으면 Win32 종료 코드를 확인한다. 부팅 뒤 아직 시작하지 않았다는 1077은 트레이에 종료 코드로 표시하지 않는다.
+3. 진단 문장이 필요하면 서비스가 `STOPPED`인지 확인한다.
+4. 실행파일 디렉터리의 대화형 터미널에서 같은 설정으로 수동 실행한다.
+
+   ```powershell
+   .\vnc-relay.exe serve --config "<등록된 설정 파일 경로>"
+   ```
+
+5. 진단의 설정·경로·권한 문제를 고친다. 서비스는 터미널 사용자와 다른 `NT SERVICE\vnc-relay` 계정으로 파일을 읽으므로 그 계정의 권한도 확인한다.
+6. 수동 실행이 성공했으면 Ctrl+C로 종료한다.
+7. 트레이의 `시작`이나 `sc.exe start vnc-relay`로 서비스를 다시 시작한다.
+
+서비스는 로그 파일을 열기 전 실패를 운영 로그에 남기지 못할 수 있다. 트레이의 `실행 중(준비 안 됨)`은 프로세스 종료와 다르다. 설정 읽기 오류·상태 리스너 주소·`/readyz` 연결을 확인한다. 설정 줄이 `설정을 읽지 못함: 권한 없음`·`설정을 읽지 못함: 파일 없음`·`설정을 읽지 못함: 설정 오류`이면 그 원인을 복구한다. 트레이는 현재 설정 파일을 읽으므로 파일을 고친 뒤 실행 중 서비스와 주소가 다를 수도 있다.
+
+설치·ACL 복구는 [운영 안내 3.3.1절](https://github.com/kayden-kim/vnc-relay/blob/main/docs/how-to/operate-relay.md#331-windows-서비스와-트레이-앱)을 따른다. 전체 표시·복구 조건은 [Windows 트레이 앱 스펙 5절](https://github.com/kayden-kim/vnc-relay/blob/main/docs/specs/windows-tray.md#5-오류와-복구)을 따른다.
 
 ## 관리자 로그인이 되지 않는다
 
