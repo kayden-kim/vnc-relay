@@ -1889,6 +1889,17 @@ Ubuntu 첫 실행이 이전 빌드를 다시 쓴 원인은 시계 차이다. WSL
   - 이 커밋의 시나리오 보고서와 `deny` 단계 결과는 없다. Ubuntu 게이트는 시작하지 않았다.
   - 그래서 [테스트 컨벤션 5절](../conventions/testing.md#5-검증-명령과-통과-기준)의 통과 기준(시나리오 보고서와 `cargo test` 전체)은 이 변경에서 확인하지 않았다.
 
+### 4.38 자동 갱신 표시 지연 (DASH-067, 2026-11-17)
+
+- 기록자: 에이전트. 사람의 검토가 아닌 에이전트의 확인이다.
+- 범위: 사용자 지시 2026-11-17("대시보드에서 주기적으로 refresh하는데 확인 중(?)이 깜빡이는게 거슬려")에 따라 자동 폴링의 진행 중 표시를 1초 늦춘다([화면 스펙 4.1절](../specs/dashboard.md#41-폴링), DASH-067). 1초 기준은 스펙의 판단이다(사용자 결정 없음).
+- 대시보드 대상: `web/dashboard/app/query.js`(`BUSY_DELAY_MS`·`beginQuery`·`showBusy`·`endQuery`·`viewOf`), `operations.js`·`session.js`·`logs.js`의 조회 시작·끝 처리.
+- 시험 대상: `web/dashboard/tests/operations-scenarios.js`·`session-scenarios.js`·`logs-scenarios.js`의 DASH-067 확인, `tests/dashboard_browser.rs`의 `automatic_polls_under_one_second_keep_the_status_marks_in_browser`.
+- 시안 대조: 하지 않았다. 배지·문구·배치는 바꾸지 않았고, 표시하는 때만 바꿨다.
+- 가짜 API 시험: Windows 작업 트리(기준 커밋 `6e5cb2d`, 미커밋)에서 `cargo test --test dashboard_browser` 78개가 통과했다. 실행 시간은 기록하지 않았다.
+- 남은 영향: 최근 로그 화면(SCR-006)의 새로고침·다운로드 버튼은 조회가 진행 중이면 꺼지는 기존 규칙(`logs.js`의 `state.inFlight`)을 그대로 따른다. 그래서 1초 안에 끝나는 자동 조회 동안에도 이 버튼은 잠깐 꺼진다. 스펙 4.1절은 버튼의 켜짐·꺼짐 규칙을 바꾸지 않는다고 정한다.
+- 두 OS 게이트: 이 변경을 커밋한 뒤 실행한다. 결과는 [개발 환경·검증 문서](set-up-and-verify.md)의 Windows 서비스 시험 기록과 함께 남긴다.
+
 ## 5. 중단 조건
 
 - `cargo xtask tokens --check`의 종료 코드가 0이 아니면 3.2 이후 단계를 실행하지 않는다.

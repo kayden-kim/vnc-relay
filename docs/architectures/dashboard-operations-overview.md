@@ -5,7 +5,7 @@
 | 구조 시점 | Current |
 | 문서 상태 | Draft |
 | 구현 대조 | Partial — [대조 기록](#대조-기록). 최근 로그 화면·설정 v4 범위의 구현은 커밋 `3df0693`이다. 시험은 커밋 `51bd747`의 두 OS 게이트에서 통과했다([WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)). |
-| 코드 위치 | `web/dashboard/app/`의 `main.js`, `router.js`(`mountRouter`, `routeOf`), `operations.js`(`mountOperations`, `endSession`, `signOut`), `session.js`(`mountSession`), `shell.js`(`buildNavbar`, `signOutUrl`), `query.js`(`newQuery`), `model.js`, `api.js`(`getQuery`, `getSession`, `deleteSession`, `terminateSession`), `panels.js`(`statusAlert`, `statusBadge`, `usageGauge`, `waitingTable`, `closedTable`, `logsLink`, `panelCard`, `applyChrome`, `setContent`), `format.js`, `copy.js`, `language.js`, `app.css`. `crates/adapters/src/dashboard_assets.rs`(`ASSETS`), `crates/adapters/src/management_http.rs`(`static_answer`), `xtask/src/tokens/shared.rs`(`SHARED_FILES`) |
+| 코드 위치 | `web/dashboard/app/`의 `main.js`, `router.js`(`mountRouter`, `routeOf`), `operations.js`(`mountOperations`, `endSession`, `signOut`), `session.js`(`mountSession`), `shell.js`(`buildNavbar`, `signOutUrl`), `query.js`(`newQuery`, `beginQuery`, `showBusy`, `endQuery`, `viewOf`), `model.js`, `api.js`(`getQuery`, `getSession`, `deleteSession`, `terminateSession`), `panels.js`(`statusAlert`, `statusBadge`, `usageGauge`, `waitingTable`, `closedTable`, `logsLink`, `panelCard`, `applyChrome`, `setContent`), `format.js`, `copy.js`, `language.js`, `app.css`. `crates/adapters/src/dashboard_assets.rs`(`ASSETS`), `crates/adapters/src/management_http.rs`(`static_answer`), `xtask/src/tokens/shared.rs`(`SHARED_FILES`) |
 | 코드 지도 | [코드 지도](code-map.md) (`web/dashboard/` 행, `dashboard_assets.rs` 행, xtask 행), [컴포넌트 구조](dashboard-components.md) |
 | 관련 스펙 | [화면 스펙](../specs/dashboard.md) 3·4·5·6·9절; [디자인 기준](../design/DESIGN.md) 화면 구성(522~534행), 중단점, 표시 형식(489~492행); [프런트엔드 규약](../conventions/frontend.md) 1.1·1.2·1.3·3·4절; [시험 규약](../conventions/testing.md) 상태 규칙(23·99·100행) |
 | 관련 계약 | [관리 API 계약 v1](../contracts/management-api-v1.md) 1.3·1.4·1.5·1.6~1.12·2.2·2.3절 |
@@ -88,8 +88,13 @@ web/dashboard/app/
 Query = { data,          // 마지막 성공 응답의 값 (없을 수 있음)
           lastSuccessAt, // 이 값을 적용한 클라이언트 시각
           inFlight,      // 요청 진행 중 여부
+          busyShown,     // 진행 중 표시(조회 중·갱신 중)를 보이는지 여부
+          busyTimer,     // 자동 폴링의 진행 중 표시를 늦추는 타이머
           failed }       // 마지막 조회가 실패했는지 여부
 ```
+
+- 진행 중 표시는 `inFlight`와 `busyShown`이 모두 참일 때만 보인다(`query.js`의 `viewOf`). 요청 시작은 `beginQuery`, 끝은 `endQuery`가 맡는다.
+- 사용자가 고른 조회는 `busyShown`을 바로 참으로 둔다. 자동 폴링은 `BUSY_DELAY_MS`(1000ms) 뒤에야 참으로 바꾸고 화면을 다시 그린다. 그 전에 끝나면 직전 상태(정상·오래된 데이터·실패)가 그대로 남는다. 주기 갱신마다 배지가 깜빡이지 않게 하려는 것이다([스펙 4.1절](../specs/dashboard.md#41-폴링), DASH-067).
 
 목록 하나의 표시 규칙:
 
@@ -116,7 +121,7 @@ Query = { data,          // 마지막 성공 응답의 값 (없을 수 있음)
 - P 값은 코드 상수로 두지 않는다 (frontend.md 1.3절, 계약 1.12절).
 - 시간 제한: 조회 요청은 `query_timeout_secs`(세션 응답) 초과 시 중단하고 실패(kind `timeout`)로 처리한다 (계약 1.12절). 로그아웃은 조회가 아니므로 이 값을 쓰지 않는다 (7절).
 - 자동 조회에만 `X-Relay-Poll: 1` 헤더를 붙인다. 계약 1.4절에 따라 이 헤더는 GET에만 쓰며, 자동 조회만 유휴 만료를 연장하지 않는다. 사용자 행동(화면 진입, 새로고침, 로그아웃)은 유휴 만료를 연장한다.
-- 새로고침(CPY-008): 진행 중이 아닌 조회만 즉시 다시 보낸다. 보류 중인 타이머는 취소하고 다시 예약한다. 진행 중인 조회는 건드리지 않는다. 버튼은 로그아웃이 진행 중일 때만 `disabled`로 막는다. 조회가 진행 중일 때 `busy`로 표시하는 동작은 아직 없다 (차이, 대조 기록).
+- 새로고침(CPY-008): 진행 중이 아닌 조회만 즉시 다시 보낸다. 보류 중인 타이머는 취소하고 다시 예약한다. 진행 중인 조회는 다시 보내지 않는다. 그 조회가 아직 진행 중 표시를 보이지 않는 자동 폴링이면 `showBusy`로 바로 갱신 중 배지를 보인다(DASH-067). 버튼은 로그아웃이 진행 중일 때만 `disabled`로 막는다. 조회가 진행 중일 때 버튼 자체를 `busy`로 표시하는 동작은 아직 없다 (차이, 대조 기록).
 - 세대 번호: 세션 상실(`endSession`)과 로그아웃(`signOut`) 때 올린다. 화면이 바뀔 때는 라우터가 이전 화면의 `dispose`를 부르고, `dispose`도 올린다 (4.11, `router.js`). 응답이 돌아왔을 때 세대가 다르면 버린다. 늦은 응답이 최신 값을 덮지 않는다 (DASH-005).
 - 세션 확인 실패(401이 아닌 오류): 페이지에 CPY-018·CPY-021 안내와 [새로고침]을 보여 주고, 새로고침으로 세션 확인을 다시 한다 (구현 판단).
 

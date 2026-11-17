@@ -22,7 +22,7 @@ import { fill, formatAddress, formatBytes, formatMode, formatTime, formatTranspo
 import { LANGUAGES, chooseLanguage, readSavedLanguage, saveLanguage } from './language.js';
 import { isSessionId, parseDetail, parseSession, parseTerminate } from './model.js';
 import { applyChrome, el, logsLink, pageHead, panelCard, setContent, statusBadge } from './panels.js';
-import { clearTimer, contentKey, newQuery, viewOf } from './query.js';
+import { beginQuery, clearBusyTimer, clearTimer, contentKey, endQuery, newQuery, showBusy, viewOf } from './query.js';
 import { LOGIN_URL, buildNavbar, defaultStorage, signOutUrl } from './shell.js';
 
 export function mountSession(root, id, deps = {}) {
@@ -192,7 +192,7 @@ export function mountSession(root, id, deps = {}) {
     generation += 1;
     const run = generation;
     const epoch = state.epoch;
-    query.inFlight = true;
+    beginQuery(query, manual, renderAll);
     renderAll();
     try {
       const body = await getQuery(request, query.path, { poll: !manual, timeoutMs: state.queryTimeoutMs });
@@ -221,7 +221,7 @@ export function mountSession(root, id, deps = {}) {
       query.failed = true;
     } finally {
       if (epoch === state.epoch && run === generation) {
-        query.inFlight = false;
+        endQuery(query);
         renderAll();
         schedule();
       }
@@ -235,7 +235,7 @@ export function mountSession(root, id, deps = {}) {
     }
     state.bootstrapping = true;
     const epoch = state.epoch;
-    query.inFlight = true;
+    beginQuery(query, true, renderAll);
     renderAll();
     try {
       const session = parseSession(await getSession(request, { timeoutMs: BOOTSTRAP_TIMEOUT_MS }));
@@ -247,7 +247,7 @@ export function mountSession(root, id, deps = {}) {
       state.queryTimeoutMs = session.queryTimeoutMs;
       state.terminateTimeoutMs = session.terminateTimeoutMs;
       state.ready = true;
-      query.inFlight = false;
+      endQuery(query);
       void runQuery(true);
     } catch (error) {
       if (epoch !== state.epoch) {
@@ -257,7 +257,7 @@ export function mountSession(root, id, deps = {}) {
         endSession(LOGIN_URL);
         return;
       }
-      query.inFlight = false;
+      endQuery(query);
       query.failed = true;
     } finally {
       state.bootstrapping = false;
@@ -275,6 +275,9 @@ export function mountSession(root, id, deps = {}) {
     }
     if (!query.inFlight) {
       void runQuery(true);
+    } else if (showBusy(query)) {
+      // A refresh during an automatic poll sends nothing new; it shows that poll as refreshing now.
+      renderAll();
     }
   }
 
@@ -334,7 +337,7 @@ export function mountSession(root, id, deps = {}) {
     state.busy = true;
     state.outcome = null;
     generation += 1;
-    query.inFlight = false;
+    endQuery(query);
     clearTimer(query);
     renderAll();
 
@@ -387,6 +390,7 @@ export function mountSession(root, id, deps = {}) {
   function retire() {
     state.outcome = null;
     clearTimer(query);
+    clearBusyTimer(query);
     query.data = null;
     page?.dialog.hide();
   }
@@ -399,7 +403,7 @@ export function mountSession(root, id, deps = {}) {
     state.logoutBusy = true;
     state.epoch += 1;
     generation += 1;
-    query.inFlight = false;
+    endQuery(query);
     clearTimer(query);
     renderAll();
     endSession(await signOutUrl(request, state.csrfToken));
@@ -434,6 +438,7 @@ export function mountSession(root, id, deps = {}) {
     state.ended = true;
     state.epoch += 1;
     clearTimer(query);
+    clearBusyTimer(query);
     page = null;
   }
 

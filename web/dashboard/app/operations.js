@@ -8,7 +8,7 @@ import { BRAND_NAME, COPY } from './copy.js';
 import { fill, formatTime } from './format.js';
 import { LANGUAGES, chooseLanguage, readSavedLanguage, saveLanguage } from './language.js';
 import { parseClosed, parseSession, parseSessions, parseSummary, parseWaiting } from './model.js';
-import { clearTimer, contentKey, newQuery, viewOf } from './query.js';
+import { beginQuery, clearBusyTimer, clearTimer, contentKey, endQuery, newQuery, showBusy, viewOf } from './query.js';
 import {
   activeTable,
   applyChrome,
@@ -164,6 +164,7 @@ export function mountOperations(root, deps = {}) {
   function stopPolling() {
     for (const query of Object.values(queries)) {
       clearTimer(query);
+      clearBusyTimer(query);
     }
   }
 
@@ -202,13 +203,20 @@ export function mountOperations(root, deps = {}) {
   }
 
   // `manual` runs without X-Relay-Poll, so the server counts it as user activity.
+  // A manual run while an automatic poll of the same query runs sends nothing new; it shows that poll as refreshing now.
   async function runQuery(key, manual) {
     const query = queries[key];
-    if (query.inFlight || state.ended || !state.ready) {
+    if (state.ended || !state.ready) {
+      return;
+    }
+    if (query.inFlight) {
+      if (manual && showBusy(query)) {
+        renderAll();
+      }
       return;
     }
     clearTimer(query);
-    query.inFlight = true;
+    beginQuery(query, manual, renderAll);
     const epoch = state.epoch;
     renderAll();
     try {
@@ -233,7 +241,7 @@ export function mountOperations(root, deps = {}) {
       query.failed = true;
     } finally {
       if (epoch === state.epoch) {
-        query.inFlight = false;
+        endQuery(query);
         renderAll();
         schedule(key);
       }
@@ -255,7 +263,7 @@ export function mountOperations(root, deps = {}) {
     state.bootstrapping = true;
     const epoch = state.epoch;
     for (const query of Object.values(queries)) {
-      query.inFlight = true;
+      beginQuery(query, true, renderAll);
     }
     renderAll();
     try {
@@ -268,7 +276,7 @@ export function mountOperations(root, deps = {}) {
       state.queryTimeoutMs = session.queryTimeoutMs;
       state.ready = true;
       for (const query of Object.values(queries)) {
-        query.inFlight = false;
+        endQuery(query);
       }
       refreshAll(true);
     } catch (error) {
@@ -280,7 +288,7 @@ export function mountOperations(root, deps = {}) {
         return;
       }
       for (const query of Object.values(queries)) {
-        query.inFlight = false;
+        endQuery(query);
         query.failed = true;
       }
     } finally {

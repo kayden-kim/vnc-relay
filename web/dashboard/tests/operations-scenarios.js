@@ -1,4 +1,4 @@
-// Scenario checks for the operations overview (dashboard.md §7: DASH-001 to 005, 008, 016, 019 to 022).
+// Scenario checks for the operations overview (dashboard.md §7: DASH-001 to 005, 008, 016, 019 to 022, 067).
 // One page load runs one case, ?case=dash-0xx&lang=ko|en, against a fake management API.
 // The result goes to <main id="result">.
 import { mountOperations } from '../app/operations.js';
@@ -17,6 +17,7 @@ const COPY = {
     signOut: '로그아웃',
     lastSuccess: '마지막 성공 갱신: {시각}',
     loading: '조회 중',
+    refreshing: '갱신 중',
     failed: '조회 실패',
     stale: '오래된 데이터',
     staleMessage: '조회에 실패했습니다. 아래 값은 마지막 성공 시각 {시각}의 이전 데이터입니다.',
@@ -71,6 +72,7 @@ const COPY = {
     signOut: 'Sign out',
     lastSuccess: 'Last successful update: {time}',
     loading: 'Loading',
+    refreshing: 'Updating',
     failed: 'Failed to load',
     stale: 'Stale data',
     staleMessage: 'Loading failed. The values below are from the last successful update at {time}.',
@@ -1403,6 +1405,81 @@ async function caseDash064() {
   check('DASH-064: current screen remains mounted', m.navigations.length === 0);
 }
 
+// DASH-067: an automatic poll that settles within 1 s changes no status mark. A slower poll shows the updating mark
+// after 1 s. Refresh during an automatic poll shows that poll as updating at once and sends no second request for it.
+const SUMMARY = 'GET /api/v1/summary';
+const busyMarks = (root) => [...root.querySelectorAll('.card-status .badge')]
+  .map((node) => node.textContent.trim())
+  .filter((text) => text === t.refreshing || text === t.loading);
+const callsOf = (api, key) => api.calls.filter((call) => call.key === key);
+
+async function caseDash067() {
+  // Each automatic poll of the summary settles in 300 ms.
+  const fast = await mount(fakeApi({
+    'GET /api/v1/session': () => session(1),
+    [SUMMARY]: (n) => (n === 1 ? ok(summaryBody()) : wait(300).then(() => ok(summaryBody()))),
+  }));
+  await waitFor(() => settled(fast.root));
+  let busySeen = false;
+  for (let steps = 130; steps > 0; steps -= 1) {
+    busySeen ||= busyMarks(fast.root).length > 0;
+    await wait(20);
+  }
+  check('DASH-067 fast: two automatic polls ran', callsOf(fast.api, SUMMARY).filter((call) => call.poll).length >= 2);
+  check('DASH-067 fast: no loading or updating mark during polls under 1 s', !busySeen);
+
+  // Stale data: every later poll of the waiting list fails within 200 ms.
+  const stale = await mount(fakeApi({
+    'GET /api/v1/session': () => session(1),
+    'GET /api/v1/waiting': (n) => (n === 1
+      ? ok({ as_of: AS_OF, items: [waitingItem()] })
+      : wait(200).then(() => fail(500))),
+  }));
+  await waitFor(() => badgeOf(cardOf(stale.root, t.waitingTitle)) === t.stale, 3000);
+  const before = stale.api.count('GET /api/v1/waiting');
+  let staleKept = true;
+  for (let steps = 70; steps > 0; steps -= 1) {
+    const card = cardOf(stale.root, t.waitingTitle);
+    staleKept &&= badgeOf(card) === t.stale && alertOf(card)?.title === t.failed;
+    await wait(20);
+  }
+  check('DASH-067 stale: a later poll ran', stale.api.count('GET /api/v1/waiting') > before);
+  check('DASH-067 stale: stale badge and failure alert stay during a poll under 1 s', staleKept);
+  checkLayout('DASH-067');
+}
+
+async function caseDash067Slow() {
+  // The second summary request is an automatic poll that takes 1.6 s.
+  const slowApi = () => fakeApi({
+    'GET /api/v1/session': () => session(1),
+    [SUMMARY]: (n) => (n === 2 ? wait(1600).then(() => ok(summaryBody())) : ok(summaryBody())),
+  });
+  const slow = await mount(slowApi());
+  const summaryBadge = () => badgeOf(cardOf(slow.root, t.summaryTitle));
+  await waitFor(() => settled(slow.root));
+  await waitFor(() => slow.api.count(SUMMARY) === 2, 3000);
+  const startedAt = callsOf(slow.api, SUMMARY).at(-1)?.at ?? NaN;
+  await wait(500);
+  check('DASH-067 slow: no updating mark 0.5 s into the poll', summaryBadge() === null);
+  await waitFor(() => summaryBadge() === t.refreshing, 1500);
+  const shownAfter = performance.now() - startedAt;
+  check('DASH-067 slow: updating mark shown while the poll runs', summaryBadge() === t.refreshing);
+  check('DASH-067 slow: updating mark waits 1 s', shownAfter >= 980 && shownAfter < 1300);
+  await waitFor(() => summaryBadge() === null, 1500);
+  check('DASH-067 slow: updating mark removed when the poll settles', summaryBadge() === null);
+
+  const manual = await mount(slowApi());
+  await waitFor(() => settled(manual.root));
+  await waitFor(() => manual.api.count(SUMMARY) === 2, 3000);
+  manual.root.querySelector('#operations-refresh').click();
+  await wait(100);
+  check(
+    'DASH-067 manual: refresh shows the running poll as updating at once',
+    badgeOf(cardOf(manual.root, t.summaryTitle)) === t.refreshing,
+  );
+  check('DASH-067 manual: no second summary request while one runs', manual.api.count(SUMMARY) === 2);
+}
+
 const CASES = {
   'dash-001': caseDash001,
   'dash-002': caseDash002,
@@ -1421,6 +1498,8 @@ const CASES = {
   'dash-064': caseDash064,
   'dash-065': caseDash065,
   'dash-066': caseDash066,
+  'dash-067': caseDash067,
+  'dash-067-slow': caseDash067Slow,
 };
 
 const caseName = new URLSearchParams(location.search).get('case');

@@ -456,6 +456,25 @@ fn operations_closed_rows_show_times_addresses_and_open_session_logs_in_browser(
     check_localized_case("/tests/router.html", "dash-066");
 }
 
+/// spec: dashboard.md:DASH-067
+#[test]
+fn automatic_polls_under_one_second_keep_the_status_marks_in_browser() {
+    let mut runs = Vec::new();
+    for (page, case) in [
+        ("operations", "dash-067"),
+        ("operations", "dash-067-slow"),
+        ("session", "dash-067"),
+        ("logs", "dash-067"),
+    ] {
+        for lang in LANGS {
+            for width in [1280, 390] {
+                runs.push((format!("/tests/{page}.html?case={case}&lang={lang}"), width));
+            }
+        }
+    }
+    check_runs(&runs);
+}
+
 /// spec: dashboard.md:DASH-028 partial
 #[test]
 fn router_navigates_between_three_menu_items_in_browser() {

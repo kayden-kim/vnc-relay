@@ -471,8 +471,38 @@ async function case064() {
   check('DASH-064: current screen remains mounted', m.navigations.length === 0);
   m.handle.dispose();
 }
+// DASH-067: an automatic poll that settles within 1 s leaves the refresh label and the list title as they were.
+// A slower poll shows the updating mark on both after 1 s.
+const refreshLabel = () => host.querySelector('#logs-refresh .button-label')?.textContent.trim() ?? null;
+const listMark = () => host.querySelector('.log-list .card-title .badge')?.textContent.trim() ?? null;
+const isPoll = (call) => call.init.headers?.['X-Relay-Poll'] === '1';
+async function case067() {
+  const fast = mount(fakeApi((call, n) => (n === 1 ? ok(page()) : wait(300).then(() => ok(page([])))), { pollSecs: 1, timeoutSecs: 5 }));
+  await waitFor(ready);
+  let busySeen = false;
+  for (let steps = 130; steps > 0; steps -= 1) {
+    busySeen ||= refreshLabel() !== t.refresh || listMark() !== null;
+    await wait(20);
+  }
+  check('DASH-067 fast: two automatic polls ran', fast.api.calls.filter(isPoll).length >= 2);
+  check('DASH-067 fast: refresh label and list title unchanged during polls under 1 s', !busySeen);
 
-const CASES = { 'dash-054': case054, 'dash-055': case055, 'dash-056': case056, 'dash-057': case057, 'dash-058': case058, 'dash-059': case059, 'dash-060': case060, 'dash-061': case061, 'dash-063': case063, 'dash-064': case064 };
+  // The second request is an automatic poll that takes 1.6 s.
+  const slow = mount(fakeApi((call, n) => (n === 2 ? wait(1600).then(() => ok(page([]))) : ok(page(n === 1 ? ITEMS : []))), { pollSecs: 1, timeoutSecs: 5 }));
+  await waitFor(ready);
+  await waitFor(() => slow.api.calls.length === 2, 3000);
+  const startedAt = slow.api.calls.at(-1)?.at ?? NaN;
+  await wait(500);
+  check('DASH-067 slow: refresh label and list title unchanged 0.5 s into the poll', refreshLabel() === t.refresh && listMark() === null);
+  await waitFor(() => listMark() === t.refreshing, 1500);
+  const shownAfter = performance.now() - startedAt;
+  check('DASH-067 slow: updating shown on the list title and the refresh button', listMark() === t.refreshing && refreshLabel() === t.refreshing);
+  check('DASH-067 slow: updating waits 1 s', shownAfter >= 980 && shownAfter < 1300);
+  await waitFor(() => listMark() === null, 1500);
+  check('DASH-067 slow: updating removed when the poll settles', listMark() === null && refreshLabel() === t.refresh);
+}
+
+const CASES = { 'dash-054': case054, 'dash-055': case055, 'dash-056': case056, 'dash-057': case057, 'dash-058': case058, 'dash-059': case059, 'dash-060': case060, 'dash-061': case061, 'dash-063': case063, 'dash-064': case064, 'dash-067': case067 };
 const caseName = params.get('case');
 try {
   if (caseName?.startsWith('shot-')) await shot(caseName.slice(5));

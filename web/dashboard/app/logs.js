@@ -43,6 +43,11 @@ import {
   LOGIN_URL,
 } from './shell.js';
 import {
+  beginQuery,
+  clearBusyTimer,
+  endQuery,
+} from './query.js';
+import {
   el,
   statusBadge,
 } from './panels.js';
@@ -139,6 +144,9 @@ export function mountLogs(root, deps = {}, { sessionId = null } = {}) {
     pausedNotice: false,
     pollTimer: null,
     inFlight: false,
+    // The busy state of an automatic poll shows only after BUSY_DELAY_MS (dashboard.md §4.1).
+    busyShown: false,
+    busyTimer: null,
     // Data
     logs: [],
     expandedSeqs: new Set(),
@@ -164,6 +172,11 @@ export function mountLogs(root, deps = {}, { sessionId = null } = {}) {
 
   function t() {
     return COPY[state.lang];
+  }
+
+  // Renders when the busy state of a running poll becomes visible. A disposed screen renders nothing.
+  function renderIfLive() {
+    if (!state.ended) render();
   }
 
   function applyDocumentLanguage() {
@@ -241,13 +254,16 @@ export function mountLogs(root, deps = {}, { sessionId = null } = {}) {
     state.queryController?.abort();
     state.queryController = new AbortController();
     const epoch = ++state.epoch;
-    state.inFlight = true;
+    beginQuery(state, !poll, renderIfLive);
     state.loadingOlder = false;
     state.hasMoreOlder = false;
     state.snapshotReady = false;
     state.gapNotice = false;
-    state.queryFailed = false;
-    state.lastError = null;
+    // An automatic retry keeps the failure on screen until its own result arrives (dashboard.md §4.1).
+    if (!poll) {
+      state.queryFailed = false;
+      state.lastError = null;
+    }
     render();
 
     try {
@@ -266,7 +282,7 @@ export function mountLogs(root, deps = {}, { sessionId = null } = {}) {
       if (epoch !== state.epoch || state.ended) return;
 
       state.initialLoading = false;
-      state.inFlight = false;
+      endQuery(state);
       state.queryFailed = false;
       state.lastError = null;
       state.maxEntries = res.maxEntries;
@@ -293,7 +309,7 @@ export function mountLogs(root, deps = {}, { sessionId = null } = {}) {
     } catch (err) {
       if (epoch !== state.epoch || state.ended) return;
       state.initialLoading = false;
-      state.inFlight = false;
+      endQuery(state);
       if (isUnauthorized(err)) {
         leave(LOGIN_URL);
         return;
@@ -323,7 +339,7 @@ export function mountLogs(root, deps = {}, { sessionId = null } = {}) {
       return;
     }
 
-    state.inFlight = true;
+    beginQuery(state, false, renderIfLive);
     state.queryController = new AbortController();
     const epoch = state.epoch;
     render();
@@ -350,7 +366,7 @@ export function mountLogs(root, deps = {}, { sessionId = null } = {}) {
           state.logs = [];
           state.expandedSeqs.clear();
           state.lastSeenSeq = null;
-          state.inFlight = false;
+          endQuery(state);
           await fetchInitialLogs({ poll: true });
           return;
         }
@@ -388,13 +404,13 @@ export function mountLogs(root, deps = {}, { sessionId = null } = {}) {
         state.logs = Array.from(existingMap.values()).sort((a, b) => b.seq - a.seq);
       }
 
-      state.inFlight = false;
+      endQuery(state);
       state.queryFailed = false;
       state.lastError = null;
       render();
     } catch (err) {
       if (epoch !== state.epoch || state.ended) return;
-      state.inFlight = false;
+      endQuery(state);
       if (isUnauthorized(err)) {
         leave(LOGIN_URL);
         return;
@@ -415,7 +431,7 @@ export function mountLogs(root, deps = {}, { sessionId = null } = {}) {
     if (oldestLoadedSeq === null) return;
 
     state.loadingOlder = true;
-    state.inFlight = true;
+    beginQuery(state, true, renderIfLive);
     clearTimeout(state.pollTimer);
     state.queryController = new AbortController();
     const epoch = state.epoch;
@@ -446,14 +462,14 @@ export function mountLogs(root, deps = {}, { sessionId = null } = {}) {
       }
 
       state.loadingOlder = false;
-      state.inFlight = false;
+      endQuery(state);
       state.queryFailed = false;
       state.lastError = null;
       render();
     } catch (err) {
       if (state.ended || epoch !== state.epoch) return;
       state.loadingOlder = false;
-      state.inFlight = false;
+      endQuery(state);
       if (isUnauthorized(err)) {
         leave(LOGIN_URL);
         return;
@@ -551,6 +567,7 @@ export function mountLogs(root, deps = {}, { sessionId = null } = {}) {
 
   function render() {
     const copyObj = t();
+    const busy = state.inFlight && state.busyShown;
     const focused = root.contains(document.activeElement) ? document.activeElement : null;
     const focusId = focused?.id;
     const focusDetail = focused?.closest('.log-row')?.id;
@@ -637,7 +654,7 @@ export function mountLogs(root, deps = {}, { sessionId = null } = {}) {
 
     const refreshBtn = createButton({
       variant: 'outline',
-      label: state.inFlight ? (state.initialLoading ? copyObj.loading : copyObj.refreshing) : copyObj.refresh,
+      label: busy ? (state.initialLoading ? copyObj.loading : copyObj.refreshing) : copyObj.refresh,
       icon: 'refresh',
       disabled: !state.validSession || state.levelError || state.inFlight || state.downloading,
     });
@@ -697,7 +714,7 @@ export function mountLogs(root, deps = {}, { sessionId = null } = {}) {
           state.levelError = true;
           ++state.epoch;
           state.queryController?.abort();
-          state.inFlight = false;
+          endQuery(state);
           clearTimeout(state.pollTimer);
           render();
         } else {
@@ -924,7 +941,7 @@ export function mountLogs(root, deps = {}, { sessionId = null } = {}) {
     const listTitle = el('h2', 'card-heading', copyObj.recentLogsTitle);
     listTitle.id = 'logs-list-heading';
     listTitleWrap.append(listTitle);
-    if (state.inFlight && state.lastSuccessAt !== null) listTitleWrap.append(statusBadge(copyObj, 'refreshing'));
+    if (busy && state.lastSuccessAt !== null) listTitleWrap.append(statusBadge(copyObj, 'refreshing'));
 
     const listActs = el('div', 'page-actions');
     const dlBtn = createButton({
@@ -1150,6 +1167,7 @@ export function mountLogs(root, deps = {}, { sessionId = null } = {}) {
       state.downloadController.abort();
     }
     clearTimeout(state.pollTimer);
+    clearBusyTimer(state);
     clearProtected();
   }
 

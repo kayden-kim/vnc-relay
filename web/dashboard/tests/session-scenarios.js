@@ -1,4 +1,4 @@
-// Scenario checks for the session detail screen (dashboard.md SCR-002: DASH-006, 007, 009 to 014, 016, 019, 022, 024, 025, 026).
+// Scenario checks for the session detail screen (dashboard.md SCR-002: DASH-006, 007, 009 to 014, 016, 019, 022, 024, 025, 026, 067).
 // One page load runs one case, ?case=dash-0xx&lang=ko|en, against a fake management API.
 // The result goes to <main id="result">. Wording comes from app/copy.js, which holds the spec §9.3 CPY table.
 import { mountSession } from '../app/session.js';
@@ -735,6 +735,55 @@ async function caseDash064() {
   m.handle.dispose();
 }
 
+// DASH-067: an automatic poll that settles within 1 s shows no status mark. A slower poll shows the updating mark
+// after 1 s. Refresh during an automatic poll shows that poll as updating at once and sends no second request.
+const statusMarkOf = (root) => root.querySelector('section.card .card-status .badge')?.textContent.trim() ?? null;
+const detail = () => ok({ as_of: AS_OF, session: activeSession() });
+
+async function caseDash067() {
+  const fast = mount(fakeApi({
+    'GET /api/v1/session': () => session(1),
+    [DETAIL]: (n) => (n === 1 ? detail() : delayed(300, detail())),
+  }));
+  await waitFor(() => enabled(fast.root));
+  let markSeen = false;
+  for (let steps = 130; steps > 0; steps -= 1) {
+    markSeen ||= statusMarkOf(fast.root) !== null;
+    await wait(20);
+  }
+  check('DASH-067 fast: two automatic polls ran', fast.api.calls.filter((call) => call.key === DETAIL && call.poll).length >= 2);
+  check('DASH-067 fast: no status mark during polls under 1 s', !markSeen);
+  fast.handle.dispose();
+
+  // The second detail read is an automatic poll that takes 1.6 s.
+  const slowApi = () => fakeApi({
+    'GET /api/v1/session': () => session(1),
+    [DETAIL]: (n) => (n === 2 ? delayed(1600, detail()) : detail()),
+  });
+  const slow = mount(slowApi());
+  await waitFor(() => enabled(slow.root));
+  await waitFor(() => slow.api.count(DETAIL) === 2, 3000);
+  const startedAt = slow.api.calls.filter((call) => call.key === DETAIL).at(-1)?.at ?? NaN;
+  await wait(500);
+  check('DASH-067 slow: no updating mark 0.5 s into the poll', statusMarkOf(slow.root) === null);
+  await waitFor(() => statusMarkOf(slow.root) === t.refreshing, 1500);
+  const shownAfter = performance.now() - startedAt;
+  check('DASH-067 slow: updating mark shown while the poll runs', statusMarkOf(slow.root) === t.refreshing);
+  check('DASH-067 slow: updating mark waits 1 s', shownAfter >= 980 && shownAfter < 1300);
+  await waitFor(() => statusMarkOf(slow.root) === null, 1500);
+  check('DASH-067 slow: updating mark removed when the poll settles', statusMarkOf(slow.root) === null);
+  slow.handle.dispose();
+
+  const manual = mount(slowApi());
+  await waitFor(() => enabled(manual.root));
+  await waitFor(() => manual.api.count(DETAIL) === 2, 3000);
+  refreshOf(manual.root).click();
+  await wait(100);
+  check('DASH-067 manual: refresh shows the running poll as updating at once', statusMarkOf(manual.root) === t.refreshing);
+  check('DASH-067 manual: no second detail request while one runs', manual.api.count(DETAIL) === 2);
+  manual.handle.dispose();
+}
+
 const CASES = {
   'dash-006': caseDash006,
   'dash-007': caseDash007,
@@ -752,6 +801,7 @@ const CASES = {
   'dash-026': caseDash026,
   'dash-062': caseDash062,
   'dash-064': caseDash064,
+  'dash-067': caseDash067,
   'shot-loading': async () => { mount(fakeApi({ [DETAIL]: () => new Promise(() => {}) })); },
   'shot-normal': async () => {
     const { root } = mount(fakeApi({ [DETAIL]: () => ok({ as_of: AS_OF, session: activeSession({ mode: 'mode2', target_transport: 'ws', target_forwarded_ip: '198.51.100.22' }) }) }));
