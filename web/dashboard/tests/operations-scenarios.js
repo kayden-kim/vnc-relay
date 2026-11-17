@@ -522,6 +522,10 @@ async function caseDash001() {
     check(`DASH-001 active row ${index}: both addresses use data typography`, addresses.length === 2);
     checkDataValue(`DASH-001 active row ${index} viewer address`, addresses[0], '192.0.2.10:51000');
     checkDataValue(`DASH-001 active row ${index} target address`, addresses[1], '198.51.100.5:5900');
+    check(`DASH-001 active row ${index}: CPY-056·057 address labels sit above their values`,
+      same(linesOf(row.cells[5]), [[t.viewerAddress, '192.0.2.10:51000'], [t.targetAddress, '198.51.100.5:5900']])
+        && labelsAbove(row.cells[5]));
+    check(`DASH-001 active row ${index}: start time puts the clock below the date`, timeStacked(row.cells[3], formatTime(STARTED)));
     check(`DASH-001 active row ${index}: no closing state badge`, row.querySelectorAll('.badge').length === 3);
   }
 
@@ -1162,6 +1166,20 @@ function labelsAbove(cell) {
   });
 }
 
+// A waiting connect time or an active start time: the date, then the clock with its zone on the line below, each
+// whole (Q236 mockup `.wd`·`.wt`). Narrow screens may break the clock only between words. The cell text stays the
+// formatted time.
+function timeStacked(cell, expected) {
+  const parts = [...(cell?.querySelectorAll('.cell-time-stack > .data-table-nowrap') ?? [])];
+  const [date, clock] = parts;
+  const split = expected.indexOf(' ');
+  const clockLimit = window.innerWidth >= 1024 ? 1 : expected.slice(split + 1).split(' ').length;
+  return cell?.textContent === expected && parts.length === 2
+    && date.textContent === expected.slice(0, split) && clock.textContent === expected.slice(split + 1)
+    && textLines(date) === 1 && textLines(clock) <= clockLimit
+    && date.getBoundingClientRect().bottom <= clock.getBoundingClientRect().top + 0.5;
+}
+
 // Header copy, one cell per column, and the column header as each cell's mobile label.
 function checkColumns(label, card, rows, headers) {
   check(`${label}: header copy`, same([...(card?.querySelectorAll('thead th') ?? [])].map((cell) => cell.textContent), headers));
@@ -1215,6 +1233,8 @@ async function caseDash065() {
     check(`DASH-065 row ${index}: address labels sit above their values`, labelsAbove(cell));
     check(`DASH-065 row ${index}: connect time and waiting time stay`, TIME_ONLY.test(row?.cells[4].textContent ?? '')
       && row?.cells[5].textContent === '00:01:02');
+    check(`DASH-065 row ${index}: connect time puts the clock below the date`,
+      timeStacked(row?.cells[4], formatTime(items[index].connected_at)));
   }
   check('DASH-065: waiting rows have no actions', (card?.querySelectorAll('button, a').length ?? -1) === 0);
   checkLayout('DASH-065');

@@ -180,11 +180,18 @@
   display: inline-block;
 }
 
-/* Waiting and closed address lines put the label above the value (Q235 mockup). */
+/* Waiting, active and closed address lines put the label above the value (Q235·Q237 mockup `.addr .k`). */
 .cell-line-stacked {
   flex-direction: column;
   align-items: stretch;
   gap: 0;
+}
+
+/* Waiting and active times put the clock with its zone below the date at every width (Q236 mockup `.wd`·`.wt`).
+   A flex column also drops the space between the two parts from the layout. */
+.cell-time-stack {
+  display: flex;
+  flex-direction: column;
 }
 
 /* Settings reuse cards, fields, badges, alerts and the protected application shell. */

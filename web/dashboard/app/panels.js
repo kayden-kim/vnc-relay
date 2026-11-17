@@ -177,14 +177,13 @@ function bytesCell(t, item) {
 function peerCell(t, item) {
   const cell = el('div', 'cell-peer');
   cell.append(
-    cellLine(t.viewerAddressLabel, formatAddress(item.viewerAddress)),
-    cellLine(t.targetAddressLabel, formatAddress(item.targetAddress)),
+    addressLine(t.viewerAddressLabel, formatAddress(item.viewerAddress)),
+    addressLine(t.targetAddressLabel, formatAddress(item.targetAddress)),
   );
-  for (const value of cell.querySelectorAll('.cell-value')) value.classList.add('fact-address');
   return cell;
 }
 
-// A labeled address line whose label sits above the value (Q235 waiting and closed tables).
+// A labeled address line whose label sits above the value (Q235 waiting and closed tables, Q237 active table).
 function addressLine(label, value) {
   const line = cellLine(label, value);
   line.classList.add('cell-line-stacked');
@@ -218,21 +217,32 @@ function waitingAddressCell(t, item) {
   return cell;
 }
 
+// A formatted time as two whole parts: the date, then the clock with its zone. A space stays between them, so the
+// text is still the formatted string.
+function timeParts(value) {
+  const split = value.indexOf(' ');
+  return [
+    el('span', 'data-table-nowrap', value.slice(0, split)),
+    document.createTextNode(' '),
+    el('span', 'data-table-nowrap', value.slice(split + 1)),
+  ];
+}
+
 // A time line flows as text: label, date, then the clock with its zone. It breaks only between them, so the clock
-// moves to the next line first (DESIGN: a narrow time value takes two lines; Q235 mockup `.tl`). The value text
-// stays the formatted string.
+// moves to the next line first (DESIGN: a narrow time value takes two lines; Q235 mockup `.tl`).
 function timeLine(label, value) {
   const line = cellLine(label, value);
-  const split = value.indexOf(' ');
-  if (split > 0) {
-    line.classList.add('cell-line-flow');
-    line.querySelector('.cell-value').replaceChildren(
-      el('span', 'data-table-nowrap', value.slice(0, split)),
-      document.createTextNode(' '),
-      el('span', 'data-table-nowrap', value.slice(split + 1)),
-    );
-  }
+  line.classList.add('cell-line-flow');
+  line.querySelector('.cell-value').replaceChildren(...timeParts(value));
   return line;
+}
+
+// Waiting connect time and active start time: the date, then the clock with its zone below it at every width
+// (Q236 mockup `.wd`·`.wt`).
+function timeStack(value) {
+  const cell = el('div', 'cell-time-stack');
+  cell.append(...timeParts(value));
+  return cell;
 }
 
 // Start, end, and duration lines of a closed session. The duration is the server's duration_ms.
@@ -287,7 +297,7 @@ export function waitingTable(t, items, emptyText) {
       el('span', 'session-id', item.relayId),
       createBadge({ label: formatTransport(item.transport) }),
       waitingAddressCell(t, item),
-      formatTime(item.connectedAt),
+      timeStack(formatTime(item.connectedAt)),
       formatDuration(item.waitedMs, t.dayUnit),
     ]),
     emptyText,
@@ -302,7 +312,7 @@ export function activeTable(t, items, emptyText) {
       createLink({ href: `/#/sessions/${encodeURIComponent(item.sessionId)}`, label: item.sessionId }),
       createBadge({ label: formatMode(item.mode) }),
       transportCell(item),
-      formatTime(item.startedAt),
+      timeStack(formatTime(item.startedAt)),
       bytesCell(t, item),
       peerCell(t, item),
       detailsLink(t, item.sessionId),
