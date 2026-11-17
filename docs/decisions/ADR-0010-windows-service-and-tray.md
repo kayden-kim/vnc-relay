@@ -46,7 +46,7 @@ Windows 11에서는 VNC Relay를 Windows 서비스로 실행할 수 있게 한�
 - 가상 계정은 Windows가 서비스마다 만들고 암호를 관리한다. 운영자는 이 계정에 필요한 파일 권한만 준다. LocalSystem보다 권한이 작다(요인 2).
 - 설치 때 서비스 접근 권한에 서비스 운영자를 더하면 시작·중지할 때 UAC 확인이 필요 없다. 권한은 관리자가 설치 때 정하므로 통제는 유지된다(요인 2·5).
 - 트레이 앱을 별도 GUI 실행파일로 두면 서버 실행파일의 콘솔 동작(숨김 입력, stdout 로그, 콘솔 창 닫기 처리)을 바꾸지 않는다(요인 3).
-- windows-service 0.8.1·tray-icon 0.26.1·windows-registry 0.100.0은 모두 MIT OR Apache-2.0이다. 2026-11-17에 세 라이브러리만 담은 임시 crate로 하위 의존성 라이선스를 대상별로 검사했고, Windows·Ubuntu 모두 `licenses ok`였다(7절). windows-service 0.8.1에는 서비스 접근 권한 설정과 계정 이름 조회 기능이 없다. 그래서 그 Win32 호출만 windows-sys로 직접 쓰고 `unsafe`를 한 파일에 둔다(Q245). tray-icon은 Windows에서 같은 스레드의 메시지 루프가 필요하다. 그 루프만 다른 `unsafe` 파일에 둔다(Q241)(요인 4).
+- windows-service 0.8.1·tray-icon 0.26.1·windows-registry 0.100.0은 모두 MIT OR Apache-2.0이다. 2026-11-17에 세 라이브러리를 Windows 대상 의존성으로만 담은 임시 crate에서 라이선스 식을 대상별로 검사했다. Windows 대상 검사는 세 라이브러리와 하위 의존성을 포함했고 `licenses ok`였다. Ubuntu 대상 그래프에는 세 라이브러리가 들어가지 않으며, 이 검사도 `licenses ok`였다(7절). 라이선스 파일·`NOTICE` 확인과 배포 고지 갱신은 구현할 때 한다. windows-service 0.8.1에는 서비스 접근 권한 설정과 계정 이름 조회 기능이 없다. 그래서 그 Win32 호출만 windows-sys로 직접 쓰고 `unsafe`를 한 파일에 둔다(Q245). tray-icon은 Windows에서 같은 스레드의 메시지 루프가 필요하다. 그 루프만 다른 `unsafe` 파일에 둔다(Q241)(요인 4).
 - 시스템 종료를 콘솔 창 닫기와 같이 처리하면 새 종료 규칙을 만들지 않는다. 운영 로그 계약도 새 사건·값 없이 2.1.0을 유지한다(요인 3).
 - 복구 동작을 두지 않으면 설정 오류 때문에 서비스가 계속 다시 시작하는 일이 없다. 실패는 서비스 종료 코드와 트레이 상태로 드러난다(요인 6).
 
@@ -91,9 +91,10 @@ Windows 11에서는 VNC Relay를 Windows 서비스로 실행할 수 있게 한�
 - 코드 지도와 모듈 설계를 작성한다. [코드 지도 8절](../architectures/code-map.md#8-계획과-문서-정리target)의 계획 위치를 현재 구조로 옮긴다.
 - [Rust 코드 컨벤션](../conventions/rust.md)의 `unsafe` 예외 목록에서 계획한 두 파일의 실제 경로를 확정한다.
 - `cargo xtask layers`의 계층 규칙과 `cargo xtask package`의 Windows 묶음에 트레이 실행파일을 더한다.
-- [의존성 라이선스 검사](../how-to/check-dependency-licenses.md)·CI·로컬 게이트의 라이선스 검사를 대상별 검사로 바꾸고, 고지 파일에 새 의존성을 더한다. 허용 목록은 바꾸지 않는다(이 문서의 판단, 사용자 결정 없음).
+- [의존성 라이선스 검사](../how-to/check-dependency-licenses.md)·CI·로컬 게이트의 라이선스 검사를 대상별 검사로 바꾼다. 새 패키지의 라이선스 파일·`NOTICE`를 확인하고 `cargo xtask notices`로 배포 고지를 다시 만든다. 허용 목록은 바꾸지 않는다(이 문서의 판단, 사용자 결정 없음).
 - [수동 운영 안내](../how-to/operate-relay.md)와 운영 도움말(한국어·영어)에 서비스 설치·파일 권한·트레이 사용을 더한다. 지금 안내와 도움말은 출시한 동작을 설명하므로 구현할 때 바꾼다.
 - 트레이 앱의 `/readyz` 조회는 표준 라이브러리 TCP로 하고 HTTP 라이브러리를 더하지 않는다(이 문서의 판단, 사용자 결정 없음).
+- 서비스 실행(`service run`)의 종료 요청은 windows-service의 서비스 제어 처리기가 받은 중지·시스템 종료 제어로만 만든다. 터미널 `serve`의 콘솔 종료 신호(Ctrl+C·Ctrl+Break·콘솔 창 닫기)는 서비스 실행에서 종료 요청으로 쓰지 않는다. 사용자 로그오프로 서비스가 멈추지 않는지는 OPS-078로 확인한다([CLI 계약 1.9절](../contracts/cli-v1.md#19-windows-서비스-실행), 이 문서의 판단, 사용자 결정 없음).
 - 미결정: Windows 표시 언어를 읽는 방법. (1) `GetUserPreferredUILanguages` 같은 Win32 호출은 `unsafe`가 필요하며 Q241·Q245의 `unsafe` 범위 밖이다. (2) windows-registry로 사용자 언어 설정 값을 읽으면 `unsafe`가 없지만 값의 위치와 기본값 처리를 관찰해야 한다. 권장은 (1)을 트레이 메시지 루프 파일에 함께 두는 것이다(이 문서의 판단, 사용자 결정 없음). 사용자가 정한다.
 - 미결정: 트레이 문구와 아이콘([TRAY-TBD-001·002](../specs/windows-tray.md#8-미결정-사항)), 서비스 중지 중 두 번째 중지 요청과 시스템 종료 때의 시간 한도([OPS-TBD-013·014](../specs/operations.md#8-미결정-사항)), CLI 이름과 오류 코드의 채택([CLI 계약 6절](../contracts/cli-v1.md#6-초안을-확정하기-전에-해결할-사항)).
 
@@ -105,7 +106,7 @@ Windows 11에서는 VNC Relay를 Windows 서비스로 실행할 수 있게 한�
 | 실행과 종료(요인 1·3) | [OPS-076~078](../specs/operations.md#7-수용-테스트) | 시나리오의 기대 결과 | 미실행(구현 전) |
 | 시작·중지 권한(요인 2·5) | [OPS-079](../specs/operations.md#7-수용-테스트), [TRAY-006](../specs/windows-tray.md#7-수용-테스트) | 시나리오의 기대 결과 | 미실행(구현 전) |
 | 트레이 동작(요인 5) | [TRAY-001~013](../specs/windows-tray.md#7-수용-테스트) | 시나리오의 기대 결과 | 미실행(구현 전) |
-| 의존성 라이선스(요인 4) | windows-service 0.8.1·tray-icon 0.26.1·windows-registry 0.100.0을 Windows 대상 의존성으로만 담은 임시 crate에서 저장소의 `deny.toml`로 `cargo deny --target x86_64-pc-windows-msvc check licenses`와 `cargo deny --target x86_64-unknown-linux-gnu check licenses`를 실행. cargo-deny 0.20.2 | 두 명령 모두 `licenses ok` | 2026-11-17 실행: 두 명령 모두 종료 코드 0과 `licenses ok`. 대상을 고르지 않고 두 대상을 한 번에 검사하면 option-ext 0.2.0(MPL-2.0)과 target-lexicon 0.12.16(Apache-2.0 WITH LLVM-exception)으로 실패했다. 두 crate는 tray-icon의 Linux 전용 의존성 경로에만 있다. 실제 구현의 검사는 미실행이다 |
+| 의존성 라이선스(요인 4) | windows-service 0.8.1·tray-icon 0.26.1·windows-registry 0.100.0을 Windows 대상 의존성으로만 담은 임시 crate에서 저장소의 `deny.toml`로 `cargo deny --target x86_64-pc-windows-msvc check licenses`와 `cargo deny --target x86_64-unknown-linux-gnu check licenses`를 실행. cargo-deny 0.20.2 | 두 명령 모두 `licenses ok` | 2026-11-17 실행: 두 명령 모두 종료 코드 0과 `licenses ok`. Windows 대상 결과가 세 라이브러리와 하위 의존성의 라이선스 식 확인이다. Ubuntu 대상 결과는 세 라이브러리가 Linux 그래프에 들어가지 않는다는 확인이다. 대상을 고르지 않고 두 대상을 한 번에 검사하면 option-ext 0.2.0(MPL-2.0)과 target-lexicon 0.12.16(Apache-2.0 WITH LLVM-exception)으로 실패했다. 두 crate는 tray-icon의 Linux 전용 의존성 경로에만 있다. 라이선스 파일·`NOTICE` 확인, 배포 고지 대조, 실제 구현의 검사는 미실행이다 |
 | `unsafe` 범위(요인 4) | 구현 뒤 `unsafe` 위치 검색과 clippy | 기존 예외와 계획한 두 파일 밖에 `unsafe`가 없음 | 미실행(구현 전) |
 
 ## 8. 재검토 조건

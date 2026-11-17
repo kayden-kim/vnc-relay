@@ -319,8 +319,8 @@ PATCH의 `ConfigEditService::patch`는 같은 잠금으로 편집 허용→원�
 | 계획 위치 | 책임 | 근거 |
 | --- | --- | --- |
 | `src/service.rs` | `service install`·`service uninstall`·`service run` 명령을 조립한다. 설치 전 설정 검사와 `serve` 시작 순서를 재사용하고, 시작 결과를 SCM 상태 보고에 잇는다. | [CLI 계약 1.9절](../contracts/cli-v1.md#19-windows-서비스-실행), [운영 스펙 3.7절](../specs/operations.md#37-windows-서비스-실행) |
-| `crates/adapters/src/windows_service.rs` | windows-service로 서비스를 등록·해제하고, 서비스 제어 처리기와 상태 보고를 맡는다. 중지 요청과 시스템 종료 알림을 서버의 종료 요청으로 바꾼다. | Q241·Q244·Q246·Q248·Q249 |
-| `crates/adapters/src/windows_service/security.rs` | `--operator` 이름을 계정으로 바꾸고 서비스 시작·중지 권한을 준다. `unsafe` 예외 파일이다. | Q245, [Rust 코드 컨벤션](../conventions/rust.md) |
+| `crates/adapters/src/windows_service.rs` | windows-service로 서비스를 등록·해제하고, 서비스 제어 처리기와 상태 보고를 맡는다. 중지 요청과 시스템 종료 알림을 서버의 종료 요청으로 바꾼다. 서비스 실행에서는 콘솔 종료 신호를 종료 요청으로 쓰지 않는다. | Q241·Q244·Q246·Q248·Q249, [CLI 계약 1.9절](../contracts/cli-v1.md#19-windows-서비스-실행) |
+| `crates/adapters/src/windows_service/security.rs` | `--operator` 이름을 계정으로 바꾸고 서비스 운영자에게 시작·중지·상태 조회·구성 조회 권한을 준다. `unsafe` 예외 파일이다. | Q245, [CLI 계약 1.9절](../contracts/cli-v1.md#19-windows-서비스-실행), [Rust 코드 컨벤션](../conventions/rust.md) |
 | `crates/tray`(패키지 `vnc-relay-tray`, 실행파일 `vnc-relay-tray.exe`) | GUI 서브시스템 실행파일을 조립한다. 메뉴, SCM 상태 조회와 시작·중지 요청, `/readyz` 조회, 로그인할 때 시작을 맡는다. 설정 파일은 `crates/adapters/src/config_file.rs`의 설정 로더로 읽는다. | Q240·Q250~Q256, [Windows 트레이 앱 스펙](../specs/windows-tray.md) |
 | `crates/tray/src/message_loop.rs` | tray-icon이 Windows에서 요구하는 메시지 루프를 돌린다. `unsafe` 예외 파일이다. | Q241, [Rust 코드 컨벤션](../conventions/rust.md) |
 
