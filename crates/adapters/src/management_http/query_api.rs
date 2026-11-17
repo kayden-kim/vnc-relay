@@ -36,7 +36,7 @@ fn format_ip(addr: &SocketAddr) -> String {
     addr.ip().to_canonical().to_string()
 }
 
-fn format_address(addr: &SocketAddr) -> serde_json::Value {
+pub(super) fn format_address(addr: &SocketAddr) -> serde_json::Value {
     json!({
         "ip": format_ip(addr),
         "port": addr.port(),
@@ -158,6 +158,9 @@ fn waiting_response(view: &WaitingListView) -> Response {
                 "relay_id": item.relay_id,
                 "connected_at": timestamp(item.connected_at),
                 "waited_ms": item.waited_ms,
+                "transport": item.transport,
+                "address": format_address(&item.address),
+                "forwarded_ip": item.forwarded_ip.map(|ip| ip.to_string()),
             })
         })
         .collect();
@@ -214,8 +217,13 @@ fn closed_sessions_response(view: &ClosedSessionsView) -> Response {
                 "target_transport": item.target_transport,
                 "started_at": timestamp(item.started_at),
                 "ended_at": timestamp(item.ended_at),
+                "duration_ms": item.duration_ms,
                 "bytes_viewer_to_target": item.bytes_viewer_to_target,
                 "bytes_target_to_viewer": item.bytes_target_to_viewer,
+                "viewer_address": format_address(&item.viewer_address),
+                "target_address": format_address(&item.target_address),
+                "viewer_forwarded_ip": item.viewer_forwarded_ip.map(|ip| ip.to_string()),
+                "target_forwarded_ip": item.target_forwarded_ip.map(|ip| ip.to_string()),
                 "close_cause": item.close_cause,
             })
         })
@@ -260,7 +268,47 @@ mod tests {
         assert!(item.get("target_forwarded_ip_unavailable_reason").is_none());
     }
 
+    /// spec: management.md:MGT-054 partial
+    #[tokio::test]
+    async fn waiting_outputs_transport_canonical_socket_and_required_forwarded_ip() {
+        use vnc_relay_app::management::query::WaitingItemView;
+        for role in ["viewer", "server"] {
+            for transport in ["tcp", "ws", "wss"] {
+                for forwarded_ip in [None, Some(PeerIp::new("2001:0DB8::7".parse().unwrap()))] {
+                    if transport == "tcp" && forwarded_ip.is_some() {
+                        continue;
+                    }
+                    let list = response_json(waiting_response(&WaitingListView {
+                        as_of: SystemTime::UNIX_EPOCH,
+                        items: vec![WaitingItemView {
+                            role,
+                            relay_id: "00123".to_owned(),
+                            connected_at: SystemTime::UNIX_EPOCH,
+                            waited_ms: 42,
+                            transport,
+                            address: "[::ffff:192.0.2.1]:5000".parse().unwrap(),
+                            forwarded_ip,
+                        }],
+                    }))
+                    .await;
+                    let item = &list["items"][0];
+                    assert_eq!(item["role"], role);
+                    assert_eq!(item["relay_id"], "00123");
+                    assert_eq!(item["connected_at"], timestamp(SystemTime::UNIX_EPOCH));
+                    assert_eq!(item["waited_ms"], 42);
+                    assert_eq!(item["transport"], transport);
+                    assert_eq!(item["address"], json!({"ip": "192.0.2.1", "port": 5000}));
+                    assert_eq!(
+                        item.get("forwarded_ip"),
+                        Some(&json!(forwarded_ip.map(|ip| ip.to_string())))
+                    );
+                }
+            }
+        }
+    }
+
     /// spec: management.md:MGT-051 partial
+    /// spec: management.md:MGT-055 partial
     /// spec: websocket.md:WS-032 partial
     #[tokio::test]
     async fn session_outputs_keep_socket_addresses_and_required_nullable_forwarded_ips() {
@@ -324,15 +372,23 @@ mod tests {
                             target_transport,
                             started_at: SystemTime::UNIX_EPOCH,
                             ended_at: SystemTime::UNIX_EPOCH,
+                            duration_ms: 1234,
                             bytes_viewer_to_target: 10,
                             bytes_target_to_viewer: 20,
+                            viewer_address: "[::ffff:198.51.100.1]:5901".parse().unwrap(),
+                            target_address: "[2001:db8::2]:5902".parse().unwrap(),
+                            viewer_forwarded_ip: viewer_ip,
+                            target_forwarded_ip: target_ip,
                             close_cause: "peer_eof",
                         }],
                     }))
                     .await;
                     assert_eq!(closed["items"][0]["target_transport"], target_transport);
-                    assert!(closed["items"][0].get("viewer_forwarded_ip").is_none());
-                    assert!(closed["items"][0].get("target_forwarded_ip").is_none());
+                    let closed = &closed["items"][0];
+                    assert_forwarded_fields(closed, viewer_ip, target_ip);
+                    assert_eq!(closed["duration_ms"], 1234);
+                    assert_eq!(closed["viewer_address"], active["viewer_address"]);
+                    assert_eq!(closed["target_address"], active["target_address"]);
                 }
             }
         }

@@ -15,8 +15,8 @@ function emptyRow(span, content) {
 }
 
 /**
- * @param {{caption?: string, columns: Array<{key: string, label: string, mobileHead?: 'primary' | 'secondary'}>,
- *   rows?: Array<Array<unknown>>, emptyText?: string | Node, numericColumns?: string[]}} options
+ * @param {{caption?: string, columns: Array<{key: string, label: string, mobileHead?: 'primary' | 'secondary',
+ *   wrapLabel?: boolean}>, rows?: Array<Array<unknown>>, emptyText?: string | Node, numericColumns?: string[]}} options
  * @returns {HTMLTableElement}
  */
 export function createDataTable({
@@ -31,6 +31,9 @@ export function createDataTable({
     }
     if (column.mobileHead !== undefined && !['primary', 'secondary'].includes(column.mobileHead)) {
       throw new TypeError(`unknown mobile head: ${String(column.mobileHead)}`);
+    }
+    if (column.wrapLabel !== undefined && typeof column.wrapLabel !== 'boolean') {
+      throw new TypeError(`wrapLabel must be a boolean: ${String(column.wrapLabel)}`);
     }
   }
   const keys = new Set(columns.map((column) => column.key));
@@ -57,6 +60,17 @@ export function createDataTable({
     th.scope = 'col';
     th.textContent = column.label;
     if (numeric.has(column.key)) th.className = 'data-table-num';
+    // A long header may wrap so that the column can shrink to its data. It wraps only between words,
+    // so a word such as "대상->Viewer" never breaks after its hyphen.
+    if (column.wrapLabel) {
+      th.classList.add('data-table-wrap');
+      th.replaceChildren(...column.label.split(' ').flatMap((word, index) => {
+        const part = document.createElement('span');
+        part.className = 'data-table-nowrap';
+        part.textContent = word;
+        return index === 0 ? [part] : [document.createTextNode(' '), part];
+      }));
+    }
     headRow.append(th);
   }
   const thead = document.createElement('thead');

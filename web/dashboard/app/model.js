@@ -124,6 +124,9 @@ export function parseWaiting(body) {
         relayId: text(item.relay_id),
         connectedAt: timestamp(item.connected_at),
         waitedMs: integer(item.waited_ms),
+        transport: text(item.transport),
+        address: address(item.address),
+        forwardedIp: nullableText(item.forwarded_ip),
       };
     }),
   };
@@ -163,8 +166,14 @@ function closedItem(raw) {
     targetTransport: text(item.target_transport),
     startedAt,
     endedAt,
+    // Monotonic length from the server (contract 1.10), not ended_at minus started_at.
+    durationMs: integer(item.duration_ms),
     bytesViewerToTarget: integer(item.bytes_viewer_to_target),
     bytesTargetToViewer: integer(item.bytes_target_to_viewer),
+    viewerAddress: address(item.viewer_address),
+    targetAddress: address(item.target_address),
+    viewerForwardedIp: nullableText(item.viewer_forwarded_ip),
+    targetForwardedIp: nullableText(item.target_forwarded_ip),
     closeCause: text(item.close_cause),
   };
 }

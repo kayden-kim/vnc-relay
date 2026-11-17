@@ -9,6 +9,7 @@ use vnc_relay_app::management::query::ManagementQueryService;
 use vnc_relay_app::management::session::AuthorizedAdmin;
 use vnc_relay_app::management::terminate::{TerminateError, TerminateView};
 
+use super::query_api::format_address;
 use super::{PeerAddr, Shared, json_error, json_response, method_not_allowed};
 use crate::clock::timestamp;
 
@@ -98,8 +99,13 @@ fn success(view: &TerminateView) -> Response {
                 "target_transport": closed.target_transport.as_str(),
                 "started_at": timestamp(closed.started_at),
                 "ended_at": timestamp(closed.ended_at),
+                "duration_ms": u64::try_from(closed.duration.as_millis()).unwrap_or(u64::MAX),
                 "bytes_viewer_to_target": closed.bytes_viewer_to_target,
                 "bytes_target_to_viewer": closed.bytes_target_to_viewer,
+                "viewer_address": format_address(&closed.viewer_address),
+                "target_address": format_address(&closed.target_address),
+                "viewer_forwarded_ip": closed.viewer_forwarded_ip.map(|ip| ip.to_string()),
+                "target_forwarded_ip": closed.target_forwarded_ip.map(|ip| ip.to_string()),
                 "close_cause": closed.close_cause.as_str(),
             },
         }),
@@ -144,6 +150,7 @@ mod tests {
     }
 
     /// spec: management.md:MGT-051 partial
+    /// spec: management.md:MGT-055 partial
     #[tokio::test]
     async fn success_response_serializes_closed_session_target_transport() {
         use std::sync::Arc;
@@ -170,6 +177,10 @@ mod tests {
                     duration: Duration::from_secs(1),
                     bytes_viewer_to_target: 10,
                     bytes_target_to_viewer: 20,
+                    viewer_address: "[::ffff:192.0.2.1]:5000".parse().unwrap(),
+                    target_address: "[2001:db8::2]:5900".parse().unwrap(),
+                    viewer_forwarded_ip: None,
+                    target_forwarded_ip: None,
                     close_cause: CloseCause::AdminTerminated,
                     relay_id_ref: None,
                     side: None,
@@ -184,8 +195,17 @@ mod tests {
             assert_eq!(closed["mode"], mode.as_str());
             assert_eq!(closed["viewer_transport"], viewer_transport.as_str());
             assert_eq!(closed["target_transport"], target_transport.as_str());
-            assert!(closed.get("viewer_forwarded_ip").is_none());
-            assert!(closed.get("target_forwarded_ip").is_none());
+            assert_eq!(closed.get("viewer_forwarded_ip"), Some(&json!(null)));
+            assert_eq!(closed.get("target_forwarded_ip"), Some(&json!(null)));
+            assert_eq!(closed["duration_ms"], 1000);
+            assert_eq!(
+                closed["viewer_address"],
+                json!({"ip": "192.0.2.1", "port": 5000})
+            );
+            assert_eq!(
+                closed["target_address"],
+                json!({"ip": "2001:db8::2", "port": 5900})
+            );
             assert!(
                 closed
                     .get("viewer_forwarded_ip_unavailable_reason")

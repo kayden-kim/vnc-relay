@@ -29,9 +29,9 @@ Check "Server state" and "Uptime" in "Server summary". "Ready" means that the se
 - "Relay connections" shows the current number and limit of relay-side sockets. It is not the session count.
 - "Management connections" shows the current number and limit of management and status listener sockets. This count is independent of relay connections.
 
-"Waiting connections" lists the role, relay ID, connection time, and waiting time. Waiting connections have no details or termination action. "Active sessions" lists the mode, both transports, start time, directional transfer counts, and peer addresses. Select "Details" to open a session.
+"Waiting connections" lists the role, relay ID, transport, peer address, connection time, and waiting time. The peer address is the actual socket address. A forwarded address from a trusted proxy is shown separately. Waiting connections have no details or termination action. "Active sessions" lists the mode, both transports, start time, directional transfer counts, and peer addresses. Select "Details" to open a session.
 
-"Recently closed sessions" shows the close reason and final transfer counts of active sessions after cleanup. Find waiting timeouts in logs instead. Recently closed sessions are retained only in memory. Older entries are removed when the limit is exceeded, and restarting clears the list. Closed sessions have no historical details page.
+"Recently closed sessions" shows the close reason, mode, both transports, start and close times, duration, final transfer counts, and peer addresses of active sessions after cleanup. The server measures the duration independently of system clock changes, so it can differ from the difference between the start and close times. Select "View logs" to open recent logs with that session's filter. Find waiting timeouts in logs instead. Recently closed sessions are retained only in memory. Older entries are removed when the limit is exceeded, and restarting clears the list. Closed sessions have no historical details page.
 
 Times use the browser's local time and show the time zone. Transfer counts use KiB/MiB. These counts measure bytes successfully written to the peer transport. They do not prove that the peer application read the data or displayed the screen.
 
@@ -61,7 +61,7 @@ If no response arrives, do not assume success. Select "Check status again" first
 
 ## Recent logs
 
-Select "Logs" in the top bar to inspect recent operations log events retained in memory. Select "View logs" in session details to open logs with that session's filter.
+Select "Logs" in the top bar to inspect recent operations log events retained in memory. Select "View logs" in session details or in recently closed sessions to open logs with that session's filter.
 
 ![Recent logs with level and event filters, value search, auto refresh, and JSON Lines download](images/logs.png)
 

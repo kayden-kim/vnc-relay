@@ -77,8 +77,13 @@ const closedSession = (overrides = {}) => ({
   target_transport: 'tcp',
   started_at: STARTED,
   ended_at: ENDED,
+  duration_ms: 900000,
   bytes_viewer_to_target: 1536,
   bytes_target_to_viewer: 1048575,
+  viewer_address: { ip: '192.0.2.10', port: 51000 },
+  target_address: { ip: '198.51.100.5', port: 5900 },
+  viewer_forwarded_ip: null,
+  target_forwarded_ip: null,
   close_cause: 'peer_eof',
   ...overrides,
 });

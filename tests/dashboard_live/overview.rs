@@ -18,7 +18,7 @@ const MIB_BYTES: usize = 1_572_864;
 
 // These expectations use the public display contract, not the application's
 // formatter/model or a replacement fetch implementation.
-const LOCAL_TIME: &str = r#"
+pub const LOCAL_TIME: &str = r#"
 const localTime = value => {
   const d = new Date(value);
   const pad = n => String(n).padStart(2, '0');
@@ -210,11 +210,13 @@ pub fn overview_known_data() {
           const row = waitingRows.find(r => cells(r)[1]?.textContent === item.relay_id);
           if (!row) return false;
           const c = cells(row);
-          const clock = c[3].textContent;
+          const clock = c[5].textContent;
           const parts = clock.split(':').map(Number);
           const elapsed = (parts[0]*3600 + parts[1]*60 + parts[2])*1000;
           return c[0].textContent === (item.role === 'viewer' ? 'Viewer' : 'Server') &&
-            c[2].textContent === localTime(item.connected_at) && /^\d{{2}}:\d{{2}}:\d{{2}}$/.test(clock) &&
+            c[2].textContent === item.transport.toUpperCase() &&
+            JSON.stringify(values(c[3], '.cell-value')) === JSON.stringify([address(item.address)]) &&
+            c[4].textContent === localTime(item.connected_at) && /^\d{{2}}:\d{{2}}:\d{{2}}$/.test(clock) &&
             elapsed >= 0 && elapsed <= item.waited_ms && item.waited_ms - elapsed < 10000 &&
             !row.querySelector('a,button,[role=button]');
         }});
@@ -552,15 +554,17 @@ pub fn overview_recent_closed() {
               if (!row) return false;
               const c = row.querySelectorAll('td');
               const badge = c[1].querySelector('.badge');
-              return c.length === 4 && c[1].textContent === causes[item.close_cause] &&
-                c[2].textContent === localTime(item.ended_at) &&
+              const links = row.querySelectorAll('a');
+              return c.length === 8 && c[1].textContent === causes[item.close_cause] &&
+                [...c[4].querySelectorAll('.cell-line')][1]?.textContent === '종료 시각 ' + localTime(item.ended_at) &&
                 badge !== null && badge.dataset.tone === (['peer_eof','admin_terminated','session_expired'].includes(item.close_cause) ? 'neutral' : 'destructive') &&
                 (item.close_cause === 'session_expired' ? !badge.querySelector('svg') : true) &&
-                JSON.stringify([...row.querySelectorAll('.cell-value')].map(n => n.textContent)) ===
+                JSON.stringify([...row.querySelectorAll('.cell-bytes .cell-value')].map(n => n.textContent)) ===
                   JSON.stringify([bytes(item.bytes_viewer_to_target),bytes(item.bytes_target_to_viewer)]) &&
-                JSON.stringify([...row.querySelectorAll('.cell-label')].map(n => n.textContent)) ===
+                JSON.stringify([...row.querySelectorAll('.cell-bytes .cell-label')].map(n => n.textContent)) ===
                   JSON.stringify(['Viewer->대상','대상->Viewer']) &&
-                !row.querySelector('a,button,[role=button]');
+                !row.querySelector('button,[role=button]') && links.length === 1 &&
+                links[0].getAttribute('href') === '/#/logs?session_id=' + item.session_id;
             }});
             }})()"#,
         )),
@@ -581,15 +585,17 @@ pub fn overview_recent_closed() {
               if (!row) return false;
               const c = row.querySelectorAll('td');
               const badge = c[1].querySelector('.badge');
-              return c.length === 4 && c[1].textContent === causes[item.close_cause] &&
-                c[2].textContent === localTime(item.ended_at) &&
+              const links = row.querySelectorAll('a');
+              return c.length === 8 && c[1].textContent === causes[item.close_cause] &&
+                [...c[4].querySelectorAll('.cell-line')][1]?.textContent === 'Closed at ' + localTime(item.ended_at) &&
                 badge !== null && badge.dataset.tone === (['peer_eof','admin_terminated','session_expired'].includes(item.close_cause) ? 'neutral' : 'destructive') &&
                 (item.close_cause === 'session_expired' ? !badge.querySelector('svg') : true) &&
-                JSON.stringify([...row.querySelectorAll('.cell-value')].map(n => n.textContent)) ===
+                JSON.stringify([...row.querySelectorAll('.cell-bytes .cell-value')].map(n => n.textContent)) ===
                   JSON.stringify([bytes(item.bytes_viewer_to_target),bytes(item.bytes_target_to_viewer)]) &&
-                JSON.stringify([...row.querySelectorAll('.cell-label')].map(n => n.textContent)) ===
+                JSON.stringify([...row.querySelectorAll('.cell-bytes .cell-label')].map(n => n.textContent)) ===
                   JSON.stringify(['Viewer->target','target->Viewer']) &&
-                !row.querySelector('a,button,[role=button]');
+                !row.querySelector('button,[role=button]') && links.length === 1 &&
+                links[0].getAttribute('href') === '/#/logs?session_id=' + item.session_id;
             }});
             }})()"#,
         )),

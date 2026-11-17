@@ -12,6 +12,7 @@
 | 설정 보기·편집 호환 추가 | 2026-11-08, 1.1.0 유지: 설정 보기·편집 경로와 메서드, 응답 필드, 오류 코드 6개를 더한다. 새 409도 2.3절의 4xx 범주에 속한다. 기존 경로의 요구를 약하게 바꾸지 않는다(3절). 설정 파일 기록·재로드 확대·관리 권한·편집 기본 꺼짐은 사용자 결정 2026-11-08(Q167~Q172)이다. 새 이름과 상태 코드, PATCH의 `query_timeout_secs` 재사용은 사용자 결정 2026-11-08(Q176)으로 채택했다. 구현·계약 테스트는 미실행(구현 전)이다. 후속: 커밋 `eae442f`의 두 OS 게이트에서 구현과 계약 테스트가 통과했다(5절). |
 | 최근 로그·세션 필드 호환 추가 | 2026-11-08, 1.1.0 유지: 최근 로그 조회 경로와 세션의 대상 전송 경로·전달 주소 필드를 더한다(사용자 결정 2026-11-08(Q185), 사용자 결정 2026-11-08(Q186), 사용자 결정 2026-11-08(Q187)). 기존 경로·필드·인증·CSRF 요구는 바꾸지 않는다. 매개변수·응답 필드 이름과 세션 필터 화면 URL은 사용자 결정 2026-11-08(Q191)으로 채택했다(6절). 구현·계약 테스트는 미실행(구현 전)이다. 후속: 구현은 커밋 `3df0693`이며, 시험은 커밋 `51bd747`의 두 OS 게이트에서 통과했다([WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)). |
 | 접속 ticket 호환 추가 | 2026-11-11, 1.1.0 유지: `close_cause`에 `session_expired`를 더하고 설정 보기·편집에 ticket 키를 더한다(사용자 결정 2026-11-11(Q200·Q213)). 3절의 허용 값·필드 추가 규칙에 따른 호환 변경이며, 기존 선례대로 1.1.0을 유지한다. 구현은 커밋 `4be8e0e`이며, 계약 테스트는 같은 커밋의 두 OS 전체 게이트에서 통과했다([접속 ticket 판정표](../how-to/set-up-and-verify.md#45-접속-ticket-판정표)). |
+| 대기·최근 종료 목록 필드 호환 추가 | 2026-11-17, 1.1.0 유지: 1.7절 대기 항목에 `transport`·`address`·`forwarded_ip`를 더한다. 1.10절 최근 종료 항목과 1.9절 `closed_session`에는 `duration_ms`·`viewer_address`·`target_address`·`viewer_forwarded_ip`·`target_forwarded_ip`를 더한다(사용자 결정 2026-11-17(Q234)). 1.1.1절 노출 범위도 이 결정에 맞춰 넓혔다. 필드 이름과 자료형은 1.1·1.8절의 기존 이름을 따른다. 3절의 응답 필드 추가 규칙에 따른 호환 변경이며, 기존 선례대로 1.1.0을 유지한다. 구현과 계약 테스트를 더했다. 두 OS 전체 게이트는 미실행이다(5절). |
 | 소유자 | vnc-relay 프로젝트 관리자 |
 | 만드는 쪽(Producer) | `vnc-relay` 관리 리스너(서버) |
 | 사용하는 쪽(Consumer) | 같은 실행파일에 내장된 대시보드(정적 HTML·JS). 같은 규칙으로 호출하는 외부 HTTP 클라이언트도 Consumer로 본다. |
@@ -22,6 +23,7 @@
 | 호환성 범위 | 경로 접두사 `/api/v1/`. 같은 릴리스의 서버와 내장 대시보드. HTTPS 관리 리스너와 평문 HTTP 루프백 관리 리스너. |
 | 관련 테스트 | [관리 스펙 7절](../specs/management.md#7-수용-테스트) MGT-001~MGT-051, [화면 스펙 7절](../specs/dashboard.md#7-수용-테스트), [운영 스펙 7절](../specs/operations.md#7-수용-테스트) OPS-043. 계약 테스트는 5절에 연결한다. 기존 범위는 `ee0314f`의 두 OS 전체 게이트가 통과했다. 설정 보기·편집 범위(MGT-028~045)는 `eae442f`의 두 OS 전체 게이트가 통과했다. MGT-046~051은 커밋 `51bd747`의 두 OS 게이트에서 통과했다([WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)). 기존 범위의 지원 판정과 브라우저별 수동 확인 범위는 [작업 5.9 판정표](../how-to/set-up-and-verify.md#41-작업-59-판정표)와 [작업 6.9 판정표](../how-to/set-up-and-verify.md#42-작업-69-판정표)를 따른다. |
 | 접속 ticket 관련 테스트 | [관리 스펙 7절](../specs/management.md#7-수용-테스트) MGT-052~053. 구현은 커밋 `4be8e0e`이며, 계약 테스트는 같은 커밋의 두 OS 전체 게이트에서 통과했다([접속 ticket 판정표](../how-to/set-up-and-verify.md#45-접속-ticket-판정표)). |
+| 목록 필드 관련 테스트 | [관리 스펙 7절](../specs/management.md#7-수용-테스트) MGT-054~055, [화면 스펙 7절](../specs/dashboard.md#7-수용-테스트) DASH-065~066. 시험 위치와 결과는 [5절](#5-예제와-계약-테스트) 표를 따른다. |
 
 관련 문서: [설정 계약](config-v4.md)(`[dashboard]`·`[limits]`·`[recent_closed]`·`[recent_logs]`·`[timeouts]`·`[management]` 키와 기본값·범위), [CLI·계정 파일 계약](cli-v1.md)(계정명 규칙), [운영 정보 계약](ops-info-v2.md)(`session_id`·종료 사건 로그, 상태 리스너), [WebSocket 중계 계약](websocket-relay-v2.md)(관리자 종료의 Close 4005), [ADR-0001 내장 TLS](../decisions/ADR-0001-built-in-tls.md), [ADR-0003 단일 인스턴스·메모리 상태](../decisions/ADR-0003-single-instance-memory-state.md).
 
@@ -65,7 +67,7 @@
 | --- | --- | --- |
 | 중계 ID(`relay_id`) | `GET /api/v1/waiting`의 항목만 | 활성 세션 목록·상세, 최근 종료 목록, 오류 본문, 쿠키 |
 | 세션 식별자(`session_id`) | 활성 세션 목록·상세, 최근 종료 목록, 종료 응답, 최근 로그의 해당 사건 | 대기 연결 목록(세션이 아직 없음) |
-| 상대 주소(`viewer_address`·`target_address`)와 전달 주소 | 활성 세션 목록·상세. 최근 로그에는 운영 정보 계약이 정한 주소 필드가 나옴 | 대기 연결 목록, 최근 종료 목록, 오류 본문 |
+| 상대 주소(`viewer_address`·`target_address`·`address`)와 전달 주소 | 활성 세션 목록·상세, 대기 연결 목록, 최근 종료 목록, 종료 응답의 `closed_session`(대기·최근 종료·`closed_session`은 사용자 결정 2026-11-17(Q234)). 최근 로그에는 운영 정보 계약이 정한 주소 필드가 나옴 | 오류 본문 |
 | 관리자 비밀번호·비밀번호 해시·관리 세션 쿠키 값 | 어디에도 없음. 비밀번호는 로그인 요청 본문에만 있다. | 모든 응답·오류·로그 |
 | CSRF 토큰 | 로그인 응답과 `GET /api/v1/session` 응답만 | 그 밖의 모든 응답 |
 | 원시 중계 데이터(RFB 스트림) | 어디에도 없음 | 모든 응답 |
@@ -216,6 +218,11 @@
 | `relay_id` | 문자열 | 필수, null 불가 | 중계 ID. 운영 정보이며 인증 비밀이 아니다. 값은 [Repeater 초기 교환 계약 1.2절](repeater-handshake-v1.md#12-초기-요청-250바이트)의 중계 ID 바이트열을 그대로 담는다. ASCII 숫자(`0`~`9`) 1~247자이므로 JSON 이스케이프가 필요 없다. 앞자리 0을 지우거나 수로 바꾸지 않는다(`0123`과 `123`은 다른 값). Consumer도 수로 바꾸지 않고 받은 문자열 그대로 표시한다. 긴 ID는 JavaScript 수로 정확히 나타낼 수 없다. |
 | `connected_at` | `timestamp` | 필수, null 불가 | 접속 시각 |
 | `waited_ms` | `duration_ms` | 필수, null 불가 | `as_of` 시점까지의 대기 시간 |
+| `transport` | 문자열 | 필수, null 불가 | 대기 연결이 들어온 전송 경로. `tcp`, `ws`, `wss`. |
+| `address` | `address` | 필수, null 불가 | 대기 연결의 실제 소켓 상대 주소 |
+| `forwarded_ip` | 문자열 | 필수, null 허용 | 대기 연결이 신뢰 프록시를 거친 WS·WSS 연결이면 전달 주소다. TCP 연결이거나 전달 주소가 없으면 `null`이다. |
+
+- 주소와 전달 주소의 의미·IP 표기·`null` 규칙은 1.8절의 `viewer_address`·`viewer_forwarded_ip`와 같다(사용자 결정 2026-11-17(Q234)).
 
 ### 1.8 활성 세션 `GET /api/v1/sessions`, `GET /api/v1/sessions/{session_id}`
 
@@ -298,8 +305,13 @@
 | `items[].target_transport` | 문자열 | 필수, null 불가 | `tcp`, `ws`, `wss`. Mode I은 `tcp`, Mode II는 Server의 전송 경로다. |
 | `items[].started_at` | `timestamp` | 필수, null 불가 | 중계 시작 시각 |
 | `items[].ended_at` | `timestamp` | 필수, null 불가 | 정리 완료 시각. `started_at` 이상이다. |
+| `items[].duration_ms` | `duration_ms` | 필수, null 불가 | 중계 시작부터 정리 완료까지의 경과 시간. 같은 세션의 운영 로그 `session_closed`의 `duration_ms`와 같다. 단조 시계 값이므로 `ended_at`과 `started_at`의 차이와 다를 수 있다. |
 | `items[].bytes_viewer_to_target` | `bytes` | 필수, null 불가 | Viewer → Server/Mode I 대상 방향의 최종 누적 바이트 |
 | `items[].bytes_target_to_viewer` | `bytes` | 필수, null 불가 | Server/Mode I 대상 → Viewer 방향의 최종 누적 바이트 |
+| `items[].viewer_address` | `address` | 필수, null 불가 | 종료 전 Viewer 쪽 상대 주소. 의미는 1.8절과 같다. |
+| `items[].target_address` | `address` | 필수, null 불가 | 종료 전 Server(Mode II) 또는 Mode I 대상 쪽 상대 주소. 의미는 1.8절과 같다. |
+| `items[].viewer_forwarded_ip` | 문자열 | 필수, null 허용 | 종료 전 Viewer의 전달 주소. 없으면 `null`이다. 의미는 1.8절과 같다. |
+| `items[].target_forwarded_ip` | 문자열 | 필수, null 허용 | 종료 전 Mode II Server의 전달 주소. Mode I 또는 전달 주소가 없으면 `null`이다. 의미는 1.8절과 같다. |
 | `items[].close_cause` | 문자열 | 필수, null 불가 | 종료 원인. 아래 표를 따른다. |
 
 종료 원인 `close_cause`의 값 목록은 [관리 스펙 2.3절](../specs/management.md#23-최근-종료-목록)을 따른다. 운영 로그·WebSocket close 사유 설명과 같은 이름을 쓴다. 한 세션의 `close_cause`는 정리를 시작하게 한 첫 원인이다. 강제 정리 시점에 이미 정리를 시작한 세션은 최초 원인을 유지한다(사용자 결정 2026-11-01(Q82)). 기존 원인 없이 소유 작업이 끝나면 서버가 Running일 때는 `internal_error`, 정상 종료 중(Grace·Force)의 취소일 때는 `server_shutdown`을 쓴다(사용자 결정 2026-11-02(Q94)).
@@ -594,12 +606,13 @@ JSON Lines 다운로드는 Consumer가 만든다. 같은 필터로 커서 없이
 
 ## 3. 호환성 규칙
 
-- 데이터를 사용하는 쪽(Consumer)은 응답의 알 수 없는 필드를 무시해야 한다. 허용 값 목록에 없는 문자열 값(`server.state`·`state`·`mode`·`viewer_transport`·`target_transport`·`close_cause`·`role`·`*_unavailable_reason`)은 받은 그대로 표시하고 오류로 처리하지 않아야 한다. 모르는 `result` 값은 결과 불명으로 보고 재조회해야 한다. 모르는 오류 코드는 2.3절대로 HTTP 상태 코드 범주로 처리해야 한다.
+- 데이터를 사용하는 쪽(Consumer)은 응답의 알 수 없는 필드를 무시해야 한다. 허용 값 목록에 없는 문자열 값(`server.state`·`state`·`mode`·`transport`·`viewer_transport`·`target_transport`·`close_cause`·`role`·`*_unavailable_reason`)은 받은 그대로 표시하고 오류로 처리하지 않아야 한다. 모르는 `result` 값은 결과 불명으로 보고 재조회해야 한다. 모르는 오류 코드는 2.3절대로 HTTP 상태 코드 범주로 처리해야 한다.
 - 데이터를 만드는 쪽(Producer)은 요청의 알 수 없는 필드를 무시해야 한다. 헤더·쿠키·경로는 이 계약이 정한 것만 해석한다.
 - 호환 변경(v1.x): 응답에 필드를 추가한다. 허용 값 목록에 값을 추가한다. 새 경로를 추가한다. 요청에 선택 필드를 추가한다. 새 오류 코드를 기존 상태 코드 범주 안에 추가한다. 확인 불가 사유 값을 추가한다. 성능·내부 동작을 바꾼다.
 - 설정 보기·편집 추가(2026-11-08)는 새 경로·메서드·응답 필드·오류 코드의 호환 변경이다. 새 상태 코드 `409`도 2.3절의 기존 `4xx` 요청 오류 범주에 속한다. 머리 표의 호환 값 추가 선례대로 1.1.0을 유지한다.
 - 최근 로그 경로·세션 필드 추가(2026-11-08)도 새 경로·선택 매개변수·응답 필드의 호환 변경이다. 같은 선례대로 1.1.0을 유지한다. 새 매개변수·응답 필드 이름과 세션 필터 URL은 사용자 결정 2026-11-08(Q191)으로 채택했다(6절).
 - 접속 ticket의 `session_expired`와 설정 키 추가(2026-11-11)는 허용 값·설정 보기 항목의 추가다. ticket 편집은 새 편집 대상 8개에 적용한다. 기존 선례대로 1.1.0을 유지한다(사용자 결정 2026-11-11(Q200·Q213)).
+- 대기·최근 종료 목록 필드 추가(2026-11-17)는 응답 필드의 추가다. 기존 필드의 이름·자료형·의미는 바꾸지 않는다. 기존 선례대로 1.1.0을 유지한다(사용자 결정 2026-11-17(Q234)).
 - 호환성을 깨는 변경(Breaking change): 필드나 경로를 삭제·이름 변경한다. 자료형·단위·시각 형식·`null` 의미를 바꾼다. 기존 조건의 HTTP 상태 코드나 오류 코드를 바꾼다. 요청 필드를 필수로 바꾼다. 쿠키 이름이나 헤더 이름·의미를 바꾼다. 쿠키 보안 속성을 약하게 바꾼다. 인증·CSRF 요구를 약하게 바꾼다. 위 변경은 새 major 버전(`/api/v2/`)으로 낸다.
 - 마이그레이션: 새 major 버전은 새 접두사로 제공하고, 같은 릴리스에서 대시보드를 새 버전으로 옮긴다. 대시보드는 같은 실행파일에 들어 있으므로 서버와 대시보드의 버전이 어긋나지 않는다. 외부 클라이언트가 있으면 이전 major를 한동안 함께 제공한다. 기간은 새 major 채택 때 정한다.
 - 롤백: 이전 릴리스 실행파일로 되돌리면 이전 major와 대시보드가 함께 돌아온다. 관리 세션은 서버 메모리에만 있으므로 되돌리는 시점에 모두 무효가 되고, 관리자는 다시 로그인한다. 최근 종료 목록도 비워진다.
@@ -735,6 +748,18 @@ X-Relay-Poll: 1
 }
 ```
 
+대기 연결 목록(두 번째 항목은 신뢰 프록시를 거친 WSS 연결이다):
+
+```json
+{
+  "as_of": "2026-10-16T09:00:02.000Z",
+  "items": [
+    {"role": "viewer", "relay_id": "48213", "connected_at": "2026-10-16T08:59:28.000Z", "waited_ms": 34000, "transport": "tcp", "address": {"ip": "198.51.100.7", "port": 51234}, "forwarded_ip": null},
+    {"role": "server", "relay_id": "0123", "connected_at": "2026-10-16T08:59:50.500Z", "waited_ms": 11500, "transport": "wss", "address": {"ip": "192.0.2.10", "port": 443}, "forwarded_ip": "192.0.2.42"}
+  ]
+}
+```
+
 관리자 종료 요청과 응답:
 
 ```http
@@ -753,8 +778,13 @@ X-CSRF-Token: <csrf-token>
     "target_transport": "ws",
     "started_at": "2026-10-16T08:40:10.120Z",
     "ended_at": "2026-10-16T09:00:05.380Z",
+    "duration_ms": 1195260,
     "bytes_viewer_to_target": 1049600,
     "bytes_target_to_viewer": 73500000,
+    "viewer_address": {"ip": "198.51.100.7", "port": 51234},
+    "target_address": {"ip": "192.0.2.20", "port": 40022},
+    "viewer_forwarded_ip": null,
+    "target_forwarded_ip": "192.0.2.42",
     "close_cause": "admin_terminated"
   }
 }
@@ -824,6 +854,8 @@ X-Relay-Poll: 1
 | Consumer / 최근 로그 계약 시험 | SCR-006의 필터·폴링·이전 페이지·세션 URL 형식 검사·UTF-8 LF JSON Lines 다운로드. DASH-054~063 | 통과 | `tests/dashboard_live.rs`의 실서버 실행기 10개(`dashboard_054_…`~`dashboard_063_…`)와 `tests/dashboard_browser.rs`의 로그 가짜 API 시험 9개(부분 표식)를 연결한다. 실서버 시험의 출처와 확인 범위는 [대시보드 검증 4.31절](../how-to/verify-dashboard-frontend.md#431-로그-화면-실서버-시험-dash-054063-2026-11-08)을 따른다. 실행 결과는 아래 실행 기록을 따른다. |
 | Producer / 접속 ticket 종료 원인 계약 시험 | 1.10절의 `session_expired`, 기존 최근 종료 필드 의미 유지, 관리자 종료와 구분. [MGT-052](../specs/management.md#7-수용-테스트) | 통과(2026-11-11) | `tests/ticket_system.rs`의 `sx_expires_every_lifecycle_state_and_earliest_side_with_distinct_management_cause`. 구현은 커밋 `4be8e0e`이며, 계약 테스트는 같은 커밋의 두 OS 전체 게이트에서 통과했다([판정표](../how-to/set-up-and-verify.md#45-접속-ticket-판정표)). |
 | Producer / 접속 ticket 설정 계약 시험 | 1.13·1.14절의 ticket 키 10개 보기, `dynamic`, 경로 2개 편집 불가, 전체 37개 편집 대상, 역할별 편집 조건, 불리언·문자열 요청, 필수 키 누락의 `400 config_invalid`·`config_missing_key`, 새 업그레이드부터 적용. [MGT-053](../specs/management.md#7-수용-테스트) | 통과(2026-11-11) | `crates/adapters/tests/management.rs`의 `ticket_config_view_edits_and_refusals_follow_management_contract`. 구현은 커밋 `4be8e0e`이며, 계약 테스트는 같은 커밋의 두 OS 전체 게이트에서 통과했다([판정표](../how-to/set-up-and-verify.md#45-접속-ticket-판정표)). |
+| Producer / 대기·최근 종료 목록 필드 계약 시험 | 1.7절의 `transport`·`address`·`forwarded_ip`, 1.9·1.10절의 `duration_ms`·양 끝 소켓 주소·전달 주소와 `null`. TCP/WS/WSS, Mode I/II, 프록시 유무. [MGT-054](../specs/management.md#7-수용-테스트)·[MGT-055](../specs/management.md#7-수용-테스트) | 미실행(두 OS 게이트 전) | `tests/serve.rs`의 `real_waiting_lists_preserve_all_entry_transports_and_proxy_addresses`(MGT-054)와 `real_closed_lists_and_termination_preserve_addresses_and_logged_monotonic_duration`(MGT-055). 둘 다 실제 실행파일의 전체 표식이다. 부분 표식 시험은 `crates/app/src/management/query.rs`, `crates/adapters/src/management_http/query_api.rs`·`terminate_api.rs`의 단위 시험과 `crates/adapters/tests/management.rs`의 `session_queries_and_termination_provide_full_transport_and_forwarded_ip_coverage`다. 2026-11-17 Windows 작업 트리의 변경 범위 실행은 통과했다. |
+| Consumer / 대기·최근 종료 목록 화면 계약 시험 | 새 필드의 표시, 있는 전달 주소만 표시, 지속 시간 형식, 최근 종료 항목의 세션 필터 로그 이동. DASH-065·066 | 미실행(두 OS 게이트 전) | `tests/dashboard_browser.rs`의 `operations_waiting_rows_show_transport_and_peer_addresses_in_browser`(DASH-065)와 `operations_closed_rows_show_times_addresses_and_open_session_logs_in_browser`(DASH-066)는 가짜 API 응답으로 모든 기대 결과를 확인한다. 이 시험의 키보드 선택은 링크에 초점을 둔 뒤 해시를 바꿔 대신한다(DASH-006과 같은 방식). `tests/dashboard_live.rs`의 `dashboard_065_066_real_waiting_and_closed_rows_with_forwarded_addresses`(부분 표식)는 실제 실행파일의 목록과 키보드 Enter로 여는 세션 로그를 확인한다. 2026-11-17 Windows 작업 트리의 변경 범위 실행은 통과했다. |
 
 2026-11-05 Consumer 시험의 출처 구분: `tests/dashboard_live.rs`의 25개 행은 일반 로그인·조회·종료 데이터를 실제 실행파일에서 얻는다. DASH-001·021의 확인 불가 상태는 실제 조회 전달 실패로 만든다. DASH-025의 미래 enum 값만 제품 파서와 표 컴포넌트에 직접 주는 별도 Consumer 계약 입력이다. 현재의 타입화된 Producer는 그 값을 낼 수 없다. 프록시가 정상 응답을 위조하지 않으며 이 입력을 실제 서버 데이터라고 주장하지 않는다. 기존 부분 시험과 아래 과거 실행 기록은 그대로 보존한다.
 
@@ -884,4 +916,4 @@ WSS Server·프록시 TLS 종료·최근 로그 기록(커밋 `51bd747`. 구현 
 - 계정명의 허용 문자와 길이는 [CLI 계약 1.2절](cli-v1.md#12-계정-이름과-비밀번호-규칙)이 정한다. 로그인 본문 한도 16 KiB와 종료 대기 여유 5초도 채택 범위다.
 - 스펙 시나리오가 직접 다루지 않는 오류가 있다. 형식이 잘못된 요청(`invalid_request` 중 본문·필드 오류), 알 수 없는 경로와 허용되지 않는 메서드(`404`·`405`)다. 이 계약은 가장 가까운 시나리오(DASH-018·MGT-013·MGT-025)와 화면 스펙 5절에 연결했다. 대응 시나리오는 스펙에 없으며 사용자가 추가하지 않기로 했다(2026-10-16). 계약 본문의 해당 응답 정의는 유지한다.
 - 종료 원인 `close_cause`의 값은 여덟 개다. 사용자 결정 2026-11-02(Q94)으로 추가한 `internal_error`와 사용자 결정 2026-11-11(Q213)으로 추가한 `session_expired`를 포함하며 [관리 스펙 2.3절](../specs/management.md#23-최근-종료-목록)·PRD FR-06의 종료 원인 목록과 같다. `session_expired`의 구현은 커밋 `4be8e0e`이며, 계약 테스트는 같은 커밋의 두 OS 전체 게이트에서 통과했다([접속 ticket 판정표](../how-to/set-up-and-verify.md#45-접속-ticket-판정표)). `server_shutdown` 항목의 실제 API 조회는 `crates/adapters/tests/management.rs`의 `completion_mgt023_shutdown_history_is_queryable_and_preserves_prior_eof_cause`가 확인했다. Grace → Force 뒤 관리 리스너를 유지해 `GET /api/v1/closed-sessions`에서 해당 원인과 기존 `peer_eof` 보존을 확인했으며 두 OS에서 통과했다(5절). 프로세스가 끝난 뒤에는 목록도 사라진다.
-- 계약 테스트는 `crates/adapters/tests/management.rs`, `tests/dashboard_assets.rs`, `tests/dashboard_browser.rs`, `tests/dashboard_live.rs`, `tests/serve.rs`의 `refuses_public_plaintext_and_answers_login_less_queries_with_401_on_loopback`·`real_mode_i_and_proxied_ws_wss_sessions_expose_transport_and_forwarded_addresses`, 단위 시험(`crates/app/src/management/login.rs`·`session.rs`·`query.rs`·`terminate.rs`·`config/tests.rs`, `crates/adapters/src/management_http/terminate_api.rs`), `tests/management_session.rs`, `tests/management_query.rs`, `tests/management_terminate.rs`, `tests/ticket_system.rs`다. 현재 결과는 5절 표, `ee0314f`의 [작업 5.9 판정표](../how-to/set-up-and-verify.md#41-작업-59-판정표), `eae442f`의 [작업 6.9 판정표](../how-to/set-up-and-verify.md#42-작업-69-판정표), `51bd747`의 [WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표), `4be8e0e`의 [접속 ticket 판정표](../how-to/set-up-and-verify.md#45-접속-ticket-판정표)를 따른다. CI 실행 기록은 없다.
+- 계약 테스트는 `crates/adapters/tests/management.rs`, `tests/dashboard_assets.rs`, `tests/dashboard_browser.rs`, `tests/dashboard_live.rs`, `tests/serve.rs`의 `refuses_public_plaintext_and_answers_login_less_queries_with_401_on_loopback`·`real_mode_i_and_proxied_ws_wss_sessions_expose_transport_and_forwarded_addresses`·`real_waiting_lists_preserve_all_entry_transports_and_proxy_addresses`·`real_closed_lists_and_termination_preserve_addresses_and_logged_monotonic_duration`, 단위 시험(`crates/app/src/management/login.rs`·`session.rs`·`query.rs`·`terminate.rs`·`config/tests.rs`, `crates/adapters/src/management_http/query_api.rs`·`terminate_api.rs`), `tests/management_session.rs`, `tests/management_query.rs`, `tests/management_terminate.rs`, `tests/ticket_system.rs`다. 현재 결과는 5절 표, `ee0314f`의 [작업 5.9 판정표](../how-to/set-up-and-verify.md#41-작업-59-판정표), `eae442f`의 [작업 6.9 판정표](../how-to/set-up-and-verify.md#42-작업-69-판정표), `51bd747`의 [WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표), `4be8e0e`의 [접속 ticket 판정표](../how-to/set-up-and-verify.md#45-접속-ticket-판정표)를 따른다. CI 실행 기록은 없다.

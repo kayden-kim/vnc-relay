@@ -480,6 +480,12 @@ function runChecks() {
     }
   });
 
+  check("invalid-data-table-wrap-label", () => {
+    for (const wrapLabel of ["yes", 1, null]) {
+      expect(throwsTypeError(() => createDataTable({ columns: [{ key: "session", label: t.colSession, wrapLabel }] })));
+    }
+  });
+
   check("create-link", () => {
     const link = mount(createLink({ href: "#test-link", label: t.linkLabel, icon: "chevron-right" }));
     expect(link instanceof HTMLAnchorElement && link.getAttribute("href") === "#test-link");

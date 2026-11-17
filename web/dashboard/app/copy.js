@@ -41,13 +41,16 @@ export const COPY = {
     adminTitle: '관리 연결', // CPY-033
     adminNote: '관리·상태 리스너의 연결 소켓 현재 수와 상한입니다.', // CPY-034
     waitingTitle: '대기 연결', // CPY-036
-    waitingColumns: ['역할', '중계 ID', '접속 시각', '대기 시간'], // CPY-037
+    waitingColumns: ['역할', '중계 ID', '전송 경로', '상대 주소', '접속 시각', '대기 시간'], // CPY-197 (replaces CPY-037)
+    forwardedAddressLabel: '전달 주소', // CPY-199
     waitingEmpty: '대기 없음', // CPY-038
     activeTitle: '활성 세션', // CPY-039
     activeColumns: ['세션', '모드', '전송 경로(Viewer → 대상)', '시작', 'Viewer->대상 / 대상->Viewer', '상대 주소', '상세'], // CPY-187 (replaces CPY-040)
     activeEmpty: '활성 없음', // CPY-041
     closedTitle: '최근 종료 목록', // CPY-042
-    closedColumns: ['세션', '종료 원인', '종료 시각', 'Viewer->대상 / 대상->Viewer'], // CPY-043
+    closedColumns: ['세션', '종료 원인', '모드', '전송 경로(Viewer → 대상)', '시각', 'Viewer->대상 / 대상->Viewer', '상대 주소', '로그'], // CPY-198 (replaces CPY-043)
+    closedAtLabel: '종료 시각', // CPY-200
+    durationLabel: '지속 시간', // CPY-201
     closedEmpty: '최근 종료 없음', // CPY-044
     closeCause: {
       peer_eof: '정상 EOF', // CPY-045
@@ -231,13 +234,16 @@ export const COPY = {
     adminTitle: 'Management connections', // CPY-033
     adminNote: 'Current count and limit of management and status listener sockets.', // CPY-034
     waitingTitle: 'Waiting connections', // CPY-036
-    waitingColumns: ['Role', 'Relay ID', 'Connected at', 'Waiting time'], // CPY-037
+    waitingColumns: ['Role', 'Relay ID', 'Transport', 'Peer address', 'Connected at', 'Waiting time'], // CPY-197 (replaces CPY-037)
+    forwardedAddressLabel: 'Forwarded address', // CPY-199
     waitingEmpty: 'No waiting connections', // CPY-038
     activeTitle: 'Active sessions', // CPY-039
     activeColumns: ['Session', 'Mode', 'Transport (Viewer → target)', 'Started', 'Viewer->target / target->Viewer', 'Peer address', 'Details'], // CPY-187 (replaces CPY-040)
     activeEmpty: 'No active sessions', // CPY-041
     closedTitle: 'Recently closed sessions', // CPY-042
-    closedColumns: ['Session', 'Close reason', 'Closed at', 'Viewer->target / target->Viewer'], // CPY-043
+    closedColumns: ['Session', 'Close reason', 'Mode', 'Transport (Viewer → target)', 'Time', 'Viewer->target / target->Viewer', 'Peer address', 'Logs'], // CPY-198 (replaces CPY-043)
+    closedAtLabel: 'Closed at', // CPY-200
+    durationLabel: 'Duration', // CPY-201
     closedEmpty: 'No recently closed sessions', // CPY-044
     closeCause: {
       peer_eof: 'Normal EOF', // CPY-045

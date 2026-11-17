@@ -13,7 +13,7 @@ use vnc_relay_domain::peer_ip::PeerIp;
 use vnc_relay_domain::session::SessionState;
 
 use crate::ports::{Clock, RelayLifecycle, RelayStateSource};
-use crate::relay::{ActiveSessionSnapshot, RelaySnapshot};
+use crate::relay::{ActiveSessionSnapshot, RelaySnapshot, milliseconds};
 
 /// One point-in-time server summary (management-api-v1 §1.6).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -63,6 +63,9 @@ pub struct WaitingItemView {
     pub relay_id: String,
     pub connected_at: SystemTime,
     pub waited_ms: u64,
+    pub transport: &'static str,
+    pub address: SocketAddr,
+    pub forwarded_ip: Option<PeerIp>,
 }
 
 /// A point-in-time snapshot of active sessions (management-api-v1 §1.8).
@@ -112,8 +115,13 @@ pub struct ClosedSessionItemView {
     pub target_transport: &'static str,
     pub started_at: SystemTime,
     pub ended_at: SystemTime,
+    pub duration_ms: u64,
     pub bytes_viewer_to_target: u64,
     pub bytes_target_to_viewer: u64,
+    pub viewer_address: SocketAddr,
+    pub target_address: SocketAddr,
+    pub viewer_forwarded_ip: Option<PeerIp>,
+    pub target_forwarded_ip: Option<PeerIp>,
     pub close_cause: &'static str,
 }
 
@@ -213,6 +221,9 @@ impl ManagementQueryService {
                 relay_id: entry.relay_id.as_str().to_owned(),
                 connected_at: entry.context.accepted_wall,
                 waited_ms: entry.waited.as_millis() as u64,
+                transport: entry.context.entry_point.transport().as_str(),
+                address: entry.context.peer_addr,
+                forwarded_ip: entry.context.forwarded_ip,
             })
             .collect();
 
@@ -261,8 +272,13 @@ impl ManagementQueryService {
                 target_transport: closed.target_transport.as_str(),
                 started_at: closed.started_at,
                 ended_at: closed.ended_at,
+                duration_ms: milliseconds(closed.duration),
                 bytes_viewer_to_target: closed.bytes_viewer_to_target,
                 bytes_target_to_viewer: closed.bytes_target_to_viewer,
+                viewer_address: closed.viewer_address,
+                target_address: closed.target_address,
+                viewer_forwarded_ip: closed.viewer_forwarded_ip,
+                target_forwarded_ip: closed.target_forwarded_ip,
                 close_cause: closed.close_cause.as_str(),
             })
             .collect();
@@ -410,6 +426,10 @@ mod tests {
                 duration: Duration::from_secs(10),
                 bytes_viewer_to_target: 1024,
                 bytes_target_to_viewer: 2048,
+                viewer_address: "192.0.2.1:5000".parse().unwrap(),
+                target_address: "192.0.2.2:5900".parse().unwrap(),
+                viewer_forwarded_ip: None,
+                target_forwarded_ip: None,
                 close_cause: CloseCause::PeerEof,
                 relay_id_ref: None,
                 side: None,
@@ -575,7 +595,49 @@ mod tests {
         );
     }
 
+    /// spec: management.md:MGT-054 partial
+    #[test]
+    fn waiting_projection_preserves_entry_transport_and_peer_addresses() {
+        for entry_point in [
+            EntryPoint::TcpViewer,
+            EntryPoint::TcpServer,
+            EntryPoint::WsViewer,
+            EntryPoint::WsServer,
+            EntryPoint::WssViewer,
+            EntryPoint::WssServer,
+        ] {
+            for proxied in [false, true] {
+                if proxied && entry_point.transport() == Transport::Tcp {
+                    continue;
+                }
+                let mut snapshot = sample_snapshot();
+                let context = &mut snapshot.waiting[0].context;
+                context.entry_point = entry_point;
+                context.forwarded_ip =
+                    proxied.then(|| PeerIp::new("::ffff:198.51.100.7".parse().unwrap()));
+                let expected = *context;
+                let service = ManagementQueryService::new(
+                    Arc::new(DummyRelaySource::new(snapshot)),
+                    ConnectionBudget::new(),
+                    ConnectionBudget::new(),
+                    Arc::new(TestClock::new()),
+                    TestSettings::new(),
+                );
+                let list = service.waiting();
+                let item = &list.items[0];
+                assert_eq!(item.role, entry_point.role().as_str());
+                assert_eq!(item.relay_id, "123");
+                assert_eq!(item.connected_at, expected.accepted_wall);
+                assert_eq!(item.waited_ms, 1500);
+                assert_eq!(item.transport, entry_point.transport().as_str());
+                assert_eq!(item.address, expected.peer_addr);
+                assert_eq!(item.forwarded_ip, expected.forwarded_ip);
+            }
+        }
+    }
+
     /// spec: management.md:MGT-051 partial
+    /// spec: management.md:MGT-055 partial
     #[test]
     fn recent_closed_projection_preserves_target_transport() {
         for (mode, viewer_transport, target_transport) in [
@@ -591,6 +653,15 @@ mod tests {
             closed.mode = mode;
             closed.viewer_transport = viewer_transport;
             closed.target_transport = target_transport;
+            // Wall-clock timestamps span ten seconds; elapsed time is independent.
+            closed.duration = Duration::from_millis(1234);
+            closed.viewer_forwarded_ip = (viewer_transport != Transport::Tcp)
+                .then(|| PeerIp::new("198.51.100.7".parse().unwrap()));
+            closed.target_forwarded_ip = (mode == Mode::Mode2
+                && target_transport != Transport::Tcp)
+                .then(|| PeerIp::new("2001:db8::8".parse().unwrap()));
+            let expected_viewer_ip = closed.viewer_forwarded_ip;
+            let expected_target_ip = closed.target_forwarded_ip;
             let service = ManagementQueryService::new(
                 Arc::new(DummyRelaySource::new(snapshot)),
                 ConnectionBudget::new(),
@@ -604,6 +675,11 @@ mod tests {
             assert_eq!(closed.mode, mode.as_str());
             assert_eq!(closed.viewer_transport, viewer_transport.as_str());
             assert_eq!(closed.target_transport, target_transport.as_str());
+            assert_eq!(closed.duration_ms, 1234);
+            assert_eq!(closed.viewer_address, "192.0.2.1:5000".parse().unwrap());
+            assert_eq!(closed.target_address, "192.0.2.2:5900".parse().unwrap());
+            assert_eq!(closed.viewer_forwarded_ip, expected_viewer_ip);
+            assert_eq!(closed.target_forwarded_ip, expected_target_ip);
         }
     }
 }

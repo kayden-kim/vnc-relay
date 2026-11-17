@@ -723,6 +723,10 @@
   white-space: nowrap;
 }
 
+.data-table th.data-table-wrap {
+  white-space: normal;
+}
+
 .data-table td {
   padding: var(--space-sm) var(--space-md);
   border-bottom: var(--space-border-width) solid var(--color-border);
@@ -751,6 +755,13 @@
 
 .data-table .button {
   min-height: var(--space-control-height-sm);
+  white-space: nowrap;
+}
+
+/* DESIGN keeps a badge on one line. A time value wraps only between its date and its clock,
+   and a wrapping header only between its words. Narrow screens let these wrap again. */
+.data-table td > .badge,
+.data-table .data-table-nowrap {
   white-space: nowrap;
 }
 
@@ -1078,6 +1089,11 @@
 
   .data-table td > .badge {
     justify-self: start;
+    white-space: normal;
+  }
+
+  .data-table .data-table-nowrap {
+    white-space: normal;
   }
 
   .data-table .button {

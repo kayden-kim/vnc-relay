@@ -9,11 +9,13 @@
 | 구현 대조 | Verified — 작업 4.5 완료 대조(2026-11-04, 커밋 `b0c25f9`의 두 OS 게이트). 범위와 실행 기록은 8절. 종료 요약의 Server 전송 범위의 구현은 커밋 `3df0693`이다. 시험은 커밋 `51bd747`의 두 OS 게이트에서 통과했다([WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)). |
 | 코드 위치 | `crates/app/src/management/terminate.rs`, `crates/adapters/src/management_http/terminate_api.rs`, `crates/app/src/ports.rs`, `crates/app/src/relay.rs`, `crates/app/src/relay/session.rs`, `crates/app/src/events.rs`, `crates/adapters/src/ops_log.rs`, `crates/adapters/src/request_deadline.rs`, `src/serve.rs` |
 | 코드 지도 | [코드 지도](code-map.md#2-코드-위치와-구성요소) |
-| 관련 스펙 | [관리 3.2·4·7절](../specs/management.md#32-관리자-종료) MGT-008~012, MGT-013·014·023; [운영](../specs/operations.md#7-수용-테스트) OPS-011·043; [중계](../specs/relay.md#7-수용-테스트) RLY-020 |
+| 관련 스펙 | [관리 3.2·4·7절](../specs/management.md#32-관리자-종료) MGT-008~012, MGT-013·014·023·055; [운영](../specs/operations.md#7-수용-테스트) OPS-011·043; [중계](../specs/relay.md#7-수용-테스트) RLY-020 |
 | 관련 계약 | [관리 API 1.9절](../contracts/management-api-v1.md#19-관리자-종료-post-apiv1sessionssession_idterminate), 1.1~1.4·2.1·6절; [운영 정보 1.8절](../contracts/ops-info-v2.md#18-관리자-계정명-기록-규칙) |
 | 관련 ADR | [ADR-0003 메모리 상태](../decisions/ADR-0003-single-instance-memory-state.md), [ADR-0004 tokio·rustls](../decisions/ADR-0004-tokio-rustls.md) |
 
 후속: R1은 종료 응답의 `closed_session.target_transport`를 활성·최근 종료 조회와 같은 자료에서 직렬화한다. `Session`→`ClosedSession`→`ClosedSessionSnapshot`→완료 핸들→`terminate_api`의 흐름으로 보존한다. Mode I은 `tcp`, Mode II는 실제 Server의 `tcp`·`ws`·`wss`다. R=0이나 최근 종료 목록 축출 뒤에도 완료 요약의 두 전송 값은 유지한다. 관리 API 계약 1.9·1.10절에 따라 종료 요약에는 주소 필드를 넣지 않는다. 최근 로그 API는 R3 범위다. 이전 실행 기록은 R1의 증거가 아니며 이번 문서 작업에서는 빌드·시험·포매터를 실행하지 않았다. 후속: 구현은 커밋 `3df0693`이며, 시험은 커밋 `51bd747`의 두 OS 게이트에서 통과했다([WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)).
+
+후속: 사용자 결정 2026-11-17(Q234)으로 종료 요약 `closed_session`에 `duration_ms`, 양 끝 소켓 주소(`viewer_address`, `target_address`), 전달 주소(`viewer_forwarded_ip`, `target_forwarded_ip`)를 더했다. 위 R1 문단의 "종료 요약에는 주소 필드를 넣지 않는다"는 이 결정으로 바뀌었다. 값은 최근 종료 목록과 같은 `ClosedSessionSnapshot`에서 직렬화한다([관리 조회 설계 R4](management-query.md)). 시험은 MGT-055다.
 
 
 ## 1. 책임과 경계
@@ -63,7 +65,7 @@ flowchart LR
 | 완료 상태 | `watch<Option<Result<Arc<ClosedSessionSnapshot>, ()>>>` | 세션별 `SessionControl.completion` | 알림 전에 완료돼도 결과를 읽는다. 성공 요약은 R=0·목록 축출과 무관하게 보유한다. |
 | `TerminateView` | `as_of`, `result`, `closed_session` | 응답 생성 때 | 성공의 요약은 필수·non-null이다. R=0·목록 축출·동시 다른 종료에도 요약을 잃지 않는다. |
 
-`closed_session`에는 `session_id`, `mode`, `viewer_transport`, `target_transport`, `started_at`, `ended_at`, 두 방향 최종 바이트 정수, 실제 `close_cause`를 넣는다. 시각은 UTC 밀리초 3자리이고 `ended_at >= started_at`이다. 주소·관리자 계정·CSRF·원시 데이터·중계 ID를 넣지 않는다. `as_of`는 응답을 만드는 시점이다. 이는 계약 1.1.1·1.9·1.10절에 따른 **이 문서의 판단**이다.
+`closed_session`에는 `session_id`, `mode`, `viewer_transport`, `target_transport`, `started_at`, `ended_at`, `duration_ms`, 두 방향 최종 바이트 정수, 양 끝 소켓 주소, 전달 주소(없으면 `null`), 실제 `close_cause`를 넣는다. 시각은 UTC 밀리초 3자리이고 `ended_at >= started_at`이다. `duration_ms`는 `session_closed` 로그와 같은 단조 시계 값이며 두 시각의 차이로 계산하지 않는다. 관리자 계정·CSRF·원시 데이터·중계 ID는 넣지 않는다. `as_of`는 응답을 만드는 시점이다. 주소·전달 주소·`duration_ms`는 사용자 결정 2026-11-17(Q234)을 따르고, 나머지 구성은 계약 1.1.1·1.9·1.10절에 따른 **이 문서의 판단**이다.
 
 ## 4. 처리 순서
 
@@ -162,6 +164,7 @@ flowchart LR
 | OPS-011 | `crates/adapters/tests/ops_info_contract.rs`, `tests/management_terminate.rs` | 실제 수행 계정·실제 peer·level·결과·식별자 생략과 한 줄 JSON. 성공·terminate_failed 모두 활성 제거 시 `session_closed` 1회가 감사보다 먼저임을 확인. `already_closed`의 info·session_id(Q90), 관리자 E 만료의 close_timeout·EOF 없으면 side 생략·종료 사건 계정 생략과 감사 계정 추적(Q91). 이미 있는 중계 사건 증거와 합쳐 전체 행을 판단 |
 | RLY-020 관리자 종료 부분 | `relay/session.rs` 단위·시스템 | `duplex`와 제어 가능한 `poll_close`·멈춘 시계로 E 직전·동일 시각·오류·계속 Pending을 관찰. 한 세션 회수·활성 수·원인 확인. EOF·연결 오류의 기존 증거도 유지 |
 | MGT-013·014·023 | 어댑터·시스템 | 종료 실패의 비밀 비노출, CSRF 거절의 상태 유지, 관리자 종료의 최근 종료 기록·옛 ID 상세/종료 404를 보충 |
+| MGT-055 종료 응답 부분 | `tests/serve.rs`, `terminate_api.rs` 단위, `crates/adapters/tests/management.rs` | 관리자 종료 응답의 `closed_session`이 같은 세션의 최근 종료 항목과 같은지 확인한다. `duration_ms`는 `session_closed` 로그 값과 같고, 주소는 종료 전 활성 항목과 같으며, 없는 전달 주소는 `null`이다 |
 | OPS-043 | 종료 유예 시스템·소유자 단위 | Grace 중 로그인·요약·관리자 종료·readyz를 함께 확인. G<E·두 번째 신호·Force 경합은 원인 보존과 시한 불연장 확인 |
 | 계약 순서·경계(시나리오를 억지로 연결하지 않음) | 어댑터 단위·계약 | 잘못된 POST·DELETE 경로+CSRF 없음은 403, 비변경 메서드는 CSRF 생략 뒤 404/405. 폴링 헤더 오류가 ID·본문보다 먼저임을 확인. ID 오류+본문, JSON/비JSON/chunked 본문은 모두 400(Q89), 빈 본문, R=0·축출, 늦은 수신자·소유자 소멸. E>U여도 검증·수락된 완료 대기 연결은 유지하고 응답 쓰기부터 U 재개(Q92), 대기 중 관리 만료·로그아웃 |
 
@@ -208,4 +211,4 @@ Q89~Q92는 모두 해결했다. 아래 표는 결정 근거다. 구현·시험 �
 | (해결) Q91: 관리자 E 초과의 원인·side·계정 | `close_cause=close_timeout`. EOF가 없으면 `side` 생략. `session_closed.admin_account`는 생략하며 계정은 `admin_terminate`로 추적한다. | A | 사용자 결정 2026-11-02(Q91), 관리 API 1.9절·운영 정보 1.6절 |
 | (해결) Q92: 관리 연결 U와 E 대기 | 검증·수락된 terminate의 완료 대기 중에만 U를 멈추고 응답 쓰기부터 다시 잰다. Q25의 예외다. | A | 사용자 결정 2026-11-02(Q92), 설정 계약 1.2절·관리 리스너 설계 4절·E>U 시험(TODO 4.5) |
 
-관리 API 6절의 Q88 주소 표기는 사용자 결정 2026-11-02(Q88)으로 해결했다. 로그인 CSRF 브라우저 관찰과 기본 인증 창 관찰은 2026-11-04에 Safari를 빼고 해결했다([관리 로그인과 세션 대조 기록](management-session.md#작업-43-증거-보강과-브라우저-관찰2026-11-04)). 종료 응답에는 주소가 없고 로그인 구현도 바꾸지 않으므로 이 작업에서 새 선택을 하지 않는다. `server_shutdown` 종료 항목의 외부 조회는 2026-11-04에 실제 Grace → Force 시험으로 확인했다([관리 조회 대조 기록](management-query.md#작업-44-완료-대조2026-11-04)).
+관리 API 6절의 Q88 주소 표기는 사용자 결정 2026-11-02(Q88)으로 해결했다. 로그인 CSRF 브라우저 관찰과 기본 인증 창 관찰은 2026-11-04에 Safari를 빼고 해결했다([관리 로그인과 세션 대조 기록](management-session.md#작업-43-증거-보강과-브라우저-관찰2026-11-04)). 작업 4.5 당시 종료 응답에는 주소가 없었고 로그인 구현도 바꾸지 않았으므로 새 선택을 하지 않았다. 사용자 결정 2026-11-17(Q234)으로 더한 종료 응답의 주소도 Q88 표기를 따른다. `server_shutdown` 종료 항목의 외부 조회는 2026-11-04에 실제 Grace → Force 시험으로 확인했다([관리 조회 대조 기록](management-query.md#작업-44-완료-대조2026-11-04)).

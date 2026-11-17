@@ -3199,6 +3199,358 @@ fn upgrade_forwarded(peer: &mut dyn TestPeer, server: bool, forwarded: &str) {
     );
 }
 
+fn list_fields_config(ports: Ports, ws: u16, wss: u16) -> String {
+    entry_config(ports, r#"["127.0.0.0/8"]"#, r#"["127.0.0.0/8"]"#)
+        + &format!(
+            "\n[mode1]\nenabled=true\nallow_targets=['127.0.0.1:1-65535']\n\
+             [mode2]\nenabled=true\n[timeouts]\nclose_secs=1\nwait_secs=120\n\
+             [relay.ws]\nlisten='127.0.0.1:{ws}'\ntrusted_proxies=['127.0.0.1']\n\
+             [relay.ws.viewer]\nenabled=true\nallow=['127.0.0.0/8','198.51.100.7']\n\
+             [relay.ws.server]\nenabled=true\nallow=['127.0.0.0/8','2001:db8::8']\n\
+             [relay.wss]\nlisten='127.0.0.1:{wss}'\ntrusted_proxies=['127.0.0.1']\ncert_file='{}'\nkey_file='{}'\n\
+             [relay.wss.viewer]\nenabled=true\nallow=['127.0.0.0/8','198.51.100.7']\n\
+             [relay.wss.server]\nenabled=true\nallow=['127.0.0.0/8','2001:db8::8']\n",
+            tls_file("server-chain.pem"),
+            tls_file("server-key-p256.pem")
+        )
+}
+
+fn list_fields_peer(
+    port: u16,
+    transport: &str,
+    server: bool,
+    proxied: bool,
+) -> (Box<dyn TestPeer>, SocketAddr, TcpStream) {
+    let tcp = connect_from([127, 0, 0, if proxied { 1 } else { 2 }], port);
+    let address = tcp
+        .local_addr()
+        .unwrap_or_else(|error| panic!("local peer address: {error}"));
+    let socket = tcp
+        .try_clone()
+        .unwrap_or_else(|error| panic!("clone peer socket: {error}"));
+    let mut peer: Box<dyn TestPeer> = if transport == "wss" {
+        Box::new(tls_peer(tcp))
+    } else {
+        Box::new(tcp)
+    };
+    if transport != "tcp" {
+        if proxied {
+            upgrade_forwarded(
+                peer.as_mut(),
+                server,
+                if server {
+                    "2001:0DB8::8, 127.0.0.1"
+                } else {
+                    "::ffff:198.51.100.7, 127.0.0.1"
+                },
+            );
+        } else {
+            upgrade_peer_path(
+                peer.as_mut(),
+                if server {
+                    "/relay/server"
+                } else {
+                    "/relay/viewer"
+                },
+            );
+        }
+    }
+    if !server {
+        assert_peer_greeting(peer.as_mut(), transport != "tcp");
+    }
+    (peer, address, socket)
+}
+
+/// spec: management.md:MGT-054
+#[test]
+fn real_waiting_lists_preserve_all_entry_transports_and_proxy_addresses() {
+    let _lock = lock_ports();
+    let (ports, ws, wss) = four_entry_ports();
+    let config = setup_authenticated("real-waiting-fields", &list_fields_config(ports, ws, wss));
+    let log = config.with_file_name("relay.log");
+    let _guard = Guard(Some(spawn(&config)));
+    wait_for_line(&log, |line| field(line, "event") == Some("server_ready"));
+    let (cookie, _) = process_login(ports.management);
+    let mut peers = Vec::new();
+    let mut expected = Vec::new();
+    for (transport, proxied) in [
+        ("tcp", false),
+        ("ws", false),
+        ("ws", true),
+        ("wss", false),
+        ("wss", true),
+    ] {
+        for server in [false, true] {
+            let port = match transport {
+                "tcp" if server => ports.tcp_server,
+                "tcp" => ports.tcp_viewer,
+                "ws" => ws,
+                _ => wss,
+            };
+            let (mut peer, address, _) = list_fields_peer(port, transport, server, proxied);
+            // Leading zeros must survive the waiting projection.
+            let relay_id = format!("00{}", 61000 + expected.len());
+            send_peer_request(
+                peer.as_mut(),
+                &make_request(format!("ID:{relay_id}").as_bytes()),
+                transport != "tcp",
+            );
+            peers.push(peer);
+            expected.push((relay_id, transport, server, proxied, address));
+        }
+    }
+    let deadline = Instant::now() + EXIT_LIMIT;
+    let list = loop {
+        let list = process_query(ports.management, "/api/v1/waiting", &cookie);
+        if list["items"].as_array().unwrap().len() == expected.len() {
+            break list;
+        }
+        assert!(Instant::now() < deadline, "waiting entries missing: {list}");
+        std::thread::sleep(Duration::from_millis(10));
+    };
+    for (relay_id, transport, server, proxied, address) in expected {
+        let item = list["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|item| item["relay_id"] == relay_id)
+            .unwrap();
+        assert_eq!(item["role"], if server { "server" } else { "viewer" });
+        assert_eq!(item["relay_id"], relay_id);
+        assert!(item["connected_at"].as_str().is_some());
+        assert!(item["waited_ms"].as_u64().is_some());
+        assert_eq!(item["transport"], transport);
+        assert_eq!(
+            item["address"],
+            serde_json::json!({"ip": address.ip().to_canonical().to_string(), "port": address.port()})
+        );
+        assert_eq!(
+            item.get("forwarded_ip"),
+            Some(&if proxied {
+                serde_json::json!(if server {
+                    "2001:db8::8"
+                } else {
+                    "198.51.100.7"
+                })
+            } else {
+                serde_json::Value::Null
+            })
+        );
+    }
+    drop(peers);
+}
+
+/// spec: management.md:MGT-055
+#[test]
+fn real_closed_lists_and_termination_preserve_addresses_and_logged_monotonic_duration() {
+    let _lock = lock_ports();
+    let (ports, ws, wss) = four_entry_ports();
+    let config = setup_authenticated("real-closed-fields", &list_fields_config(ports, ws, wss));
+    let log = config.with_file_name("relay.log");
+    let _guard = Guard(Some(spawn(&config)));
+    wait_for_line(&log, |line| field(line, "event") == Some("server_ready"));
+    let (cookie, csrf) = process_login(ports.management);
+    let mut relay_id = 62000;
+    for (transport, proxied) in [
+        ("tcp", false),
+        ("ws", false),
+        ("ws", true),
+        ("wss", false),
+        ("wss", true),
+    ] {
+        for mode1 in [true, false] {
+            for terminate in [false, true] {
+                relay_id += 1;
+                let port = match transport {
+                    "tcp" => ports.tcp_viewer,
+                    "ws" => ws,
+                    _ => wss,
+                };
+                let (mut viewer, viewer_address, viewer_socket) =
+                    list_fields_peer(port, transport, false, proxied);
+                let target = TcpListener::bind("127.0.0.1:0").unwrap();
+                target.set_nonblocking(true).unwrap();
+                let (mut server, target_address, server_socket): (
+                    Box<dyn TestPeer>,
+                    SocketAddr,
+                    TcpStream,
+                ) = if mode1 {
+                    send_peer_request(
+                        viewer.as_mut(),
+                        &make_request(target.local_addr().unwrap().to_string().as_bytes()),
+                        transport != "tcp",
+                    );
+                    let deadline = Instant::now() + EXIT_LIMIT;
+                    let peer = loop {
+                        match target.accept() {
+                            Ok((peer, _)) => break peer,
+                            Err(error)
+                                if error.kind() == ErrorKind::WouldBlock
+                                    && Instant::now() < deadline =>
+                            {
+                                std::thread::sleep(Duration::from_millis(10));
+                            }
+                            Err(error) => panic!("Mode I accept: {error}"),
+                        }
+                    };
+                    peer.set_read_timeout(Some(EXIT_LIMIT)).unwrap();
+                    let socket = peer.try_clone().unwrap();
+                    (Box::new(peer), target.local_addr().unwrap(), socket)
+                } else {
+                    send_peer_request(
+                        viewer.as_mut(),
+                        &make_request(format!("ID:{relay_id}").as_bytes()),
+                        transport != "tcp",
+                    );
+                    let (mut server, address, socket) = list_fields_peer(
+                        if transport == "tcp" {
+                            ports.tcp_server
+                        } else {
+                            port
+                        },
+                        transport,
+                        true,
+                        proxied,
+                    );
+                    send_peer_request(
+                        server.as_mut(),
+                        &make_request(format!("ID:{relay_id}").as_bytes()),
+                        transport != "tcp",
+                    );
+                    (server, address, socket)
+                };
+                let deadline = Instant::now() + EXIT_LIMIT;
+                let active = loop {
+                    let list = process_query(ports.management, "/api/v1/sessions", &cookie);
+                    if let Some(item) = list["items"].as_array().unwrap().first() {
+                        break item.clone();
+                    }
+                    assert!(Instant::now() < deadline, "session did not activate");
+                    std::thread::sleep(Duration::from_millis(10));
+                };
+                let session_id = active["session_id"].as_str().unwrap();
+                assert_eq!(active["mode"], if mode1 { "mode1" } else { "mode2" });
+                assert_eq!(
+                    active["viewer_address"],
+                    serde_json::json!({"ip": viewer_address.ip().to_string(), "port": viewer_address.port()})
+                );
+                assert_eq!(
+                    active["target_address"],
+                    serde_json::json!({"ip": target_address.ip().to_string(), "port": target_address.port()})
+                );
+                assert_eq!(
+                    active.get("viewer_forwarded_ip"),
+                    Some(&if proxied {
+                        serde_json::json!("198.51.100.7")
+                    } else {
+                        serde_json::Value::Null
+                    })
+                );
+                assert_eq!(
+                    active.get("target_forwarded_ip"),
+                    Some(&if proxied && !mode1 {
+                        serde_json::json!("2001:db8::8")
+                    } else {
+                        serde_json::Value::Null
+                    })
+                );
+                let terminated = if terminate {
+                    let (status, _, response) = management_exchange(
+                        ports.management,
+                        "POST",
+                        &format!("/api/v1/sessions/{session_id}/terminate"),
+                        &cookie,
+                        &csrf,
+                        "",
+                    );
+                    assert_eq!(status, 200, "{response}");
+                    assert_eq!(response["result"], "terminated");
+                    Some(response["closed_session"].clone())
+                } else {
+                    if transport != "tcp" {
+                        // Masked empty close frame ends the Viewer stream normally.
+                        viewer.write_all(&[0x88, 0x80, 1, 2, 3, 4]).unwrap();
+                        viewer.flush().unwrap();
+                        if !mode1 {
+                            server.write_all(&[0x88, 0x80, 1, 2, 3, 4]).unwrap();
+                            server.flush().unwrap();
+                        }
+                    } else {
+                        viewer_socket.shutdown(std::net::Shutdown::Write).unwrap();
+                    }
+                    if mode1 || transport == "tcp" {
+                        server_socket.shutdown(std::net::Shutdown::Write).unwrap();
+                    }
+                    // Consume the relay's EOF/close reply before releasing sockets;
+                    // dropping an unread TCP socket can turn a normal EOF into RST.
+                    for peer in [&mut viewer, &mut server] {
+                        let mut reply = Vec::new();
+                        if let Err(error) = peer.read_to_end(&mut reply) {
+                            // rustls reports transport EOF without close_notify this way.
+                            assert_eq!(
+                                error.kind(),
+                                ErrorKind::UnexpectedEof,
+                                "{transport}: {error}"
+                            );
+                        }
+                    }
+                    None
+                };
+                drop(viewer);
+                drop(server);
+                let closed_log = wait_for_line(&log, |line| {
+                    field(line, "event") == Some("session_closed")
+                        && field(line, "session_id") == Some(session_id)
+                });
+                let logged: serde_json::Value = serde_json::from_str(&closed_log).unwrap();
+                let deadline = Instant::now() + EXIT_LIMIT;
+                let closed = loop {
+                    let list = process_query(ports.management, "/api/v1/closed-sessions", &cookie);
+                    if let Some(item) = list["items"]
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .find(|item| item["session_id"] == session_id)
+                    {
+                        break item.clone();
+                    }
+                    assert!(Instant::now() < deadline, "closed session missing: {list}");
+                    std::thread::sleep(Duration::from_millis(10));
+                };
+                assert!(closed["duration_ms"].as_u64().is_some());
+                assert_eq!(closed["duration_ms"], logged["duration_ms"]);
+                for name in [
+                    "viewer_address",
+                    "target_address",
+                    "viewer_forwarded_ip",
+                    "target_forwarded_ip",
+                    "mode",
+                    "viewer_transport",
+                    "target_transport",
+                    "started_at",
+                ] {
+                    assert_eq!(closed[name], active[name], "{session_id}: {name}");
+                }
+                if mode1 {
+                    assert_eq!(
+                        closed.get("target_forwarded_ip"),
+                        Some(&serde_json::Value::Null)
+                    );
+                }
+                if let Some(terminated) = terminated {
+                    assert_eq!(closed, terminated);
+                    assert_eq!(closed["close_cause"], logged["close_cause"]);
+                } else {
+                    assert_eq!(
+                        closed["close_cause"], "peer_eof",
+                        "{transport}, mode1={mode1}, proxied={proxied}"
+                    );
+                }
+            }
+        }
+    }
+}
+
 /// spec: management.md:MGT-051
 #[test]
 fn real_mode_i_and_proxied_ws_wss_sessions_expose_transport_and_forwarded_addresses() {
@@ -3326,8 +3678,14 @@ fn real_mode_i_and_proxied_ws_wss_sessions_expose_transport_and_forwarded_addres
         for item in [&closed["closed_session"], &history["items"][0]] {
             assert_eq!(item["target_transport"], transport);
             assert_eq!(item["session_id"], session_id);
-            assert!(item.get("viewer_forwarded_ip").is_none());
-            assert!(item.get("target_forwarded_ip").is_none());
+            for name in [
+                "viewer_address",
+                "target_address",
+                "viewer_forwarded_ip",
+                "target_forwarded_ip",
+            ] {
+                assert_eq!(item[name], detail["session"][name]);
+            }
         }
         drop(viewer);
         drop(server);

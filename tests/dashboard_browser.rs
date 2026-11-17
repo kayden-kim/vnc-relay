@@ -443,6 +443,19 @@ fn operations_and_session_show_forwarded_and_target_transports_in_browser() {
     check_localized_case("/tests/session.html", "dash-062");
 }
 
+/// spec: dashboard.md:DASH-065
+#[test]
+fn operations_waiting_rows_show_transport_and_peer_addresses_in_browser() {
+    check_localized_case("/tests/operations.html", "dash-065");
+}
+
+/// spec: dashboard.md:DASH-066
+#[test]
+fn operations_closed_rows_show_times_addresses_and_open_session_logs_in_browser() {
+    check_localized_case("/tests/operations.html", "dash-066");
+    check_localized_case("/tests/router.html", "dash-066");
+}
+
 /// spec: dashboard.md:DASH-028 partial
 #[test]
 fn router_navigates_between_three_menu_items_in_browser() {

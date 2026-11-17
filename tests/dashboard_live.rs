@@ -408,6 +408,13 @@ fn dashboard_062_real_transport_matrix_and_forwarded_addresses() {
     run(transports::real_transport_matrix_and_forwarded_addresses);
 }
 
+/// spec: dashboard.md:DASH-065 partial
+/// spec: dashboard.md:DASH-066 partial
+#[test]
+fn dashboard_065_066_real_waiting_and_closed_rows_with_forwarded_addresses() {
+    run(transports::real_waiting_and_closed_rows_with_forwarded_addresses);
+}
+
 /// spec: dashboard.md:DASH-063
 #[test]
 fn dashboard_063_real_logs_keyboard_languages_widths_and_preservation() {

@@ -537,6 +537,10 @@ pub struct ClosedSessionSnapshot {
     pub duration: Duration,
     pub bytes_viewer_to_target: u64,
     pub bytes_target_to_viewer: u64,
+    pub viewer_address: SocketAddr,
+    pub target_address: SocketAddr,
+    pub viewer_forwarded_ip: Option<PeerIp>,
+    pub target_forwarded_ip: Option<PeerIp>,
     pub close_cause: CloseCause,
     pub relay_id_ref: Option<RelayIdRef>,
     pub side: Option<vnc_relay_domain::session::Side>,
@@ -545,17 +549,21 @@ pub struct ClosedSessionSnapshot {
 #[derive(Clone)]
 struct ClosedMetadata {
     relay_id_ref: Option<RelayIdRef>,
+    viewer_address: SocketAddr,
+    target_address: SocketAddr,
+    viewer_forwarded_ip: Option<PeerIp>,
+    target_forwarded_ip: Option<PeerIp>,
 }
 
 impl ClosedMetadata {
     fn from_active(active: &ActiveSessionSnapshot) -> Self {
         Self {
             relay_id_ref: active.relay_id_ref.clone(),
+            viewer_address: active.viewer.peer_addr,
+            target_address: active.peer.target_address(),
+            viewer_forwarded_ip: active.viewer_forwarded_ip,
+            target_forwarded_ip: active.target_forwarded_ip,
         }
-    }
-
-    fn apply(&self, snapshot: &mut ClosedSessionSnapshot) {
-        snapshot.relay_id_ref = self.relay_id_ref.clone();
     }
 }
 
@@ -574,8 +582,8 @@ struct SessionControl {
     completed: bool,
 }
 
-impl From<&ClosedSession> for ClosedSessionSnapshot {
-    fn from(closed: &ClosedSession) -> Self {
+impl ClosedSessionSnapshot {
+    fn from_closed(closed: &ClosedSession, metadata: &ClosedMetadata) -> Self {
         Self {
             session_id: closed.id().clone(),
             mode: closed.mode(),
@@ -586,8 +594,12 @@ impl From<&ClosedSession> for ClosedSessionSnapshot {
             duration: closed.duration(),
             bytes_viewer_to_target: closed.bytes(Direction::ViewerToTarget),
             bytes_target_to_viewer: closed.bytes(Direction::TargetToViewer),
+            viewer_address: metadata.viewer_address,
+            target_address: metadata.target_address,
+            viewer_forwarded_ip: metadata.viewer_forwarded_ip,
+            target_forwarded_ip: metadata.target_forwarded_ip,
             close_cause: closed.close_cause(),
-            relay_id_ref: None,
+            relay_id_ref: metadata.relay_id_ref.clone(),
             side: closed.close_side(),
         }
     }
@@ -679,12 +691,14 @@ impl<C> RelayRuntime<C> {
             recent_closed: state
                 .recent
                 .iter()
-                .map(|closed| {
-                    let mut snapshot = ClosedSessionSnapshot::from(closed);
-                    if let Some(metadata) = state.recent_metadata.get(closed.id()) {
-                        metadata.apply(&mut snapshot);
-                    }
-                    snapshot
+                .filter_map(|closed| {
+                    // Both closing paths insert the metadata before they push the closed session.
+                    let metadata = state.recent_metadata.get(closed.id());
+                    debug_assert!(
+                        metadata.is_some(),
+                        "recent closed session without endpoint metadata"
+                    );
+                    metadata.map(|metadata| ClosedSessionSnapshot::from_closed(closed, metadata))
                 })
                 .collect(),
         }
@@ -871,6 +885,8 @@ struct ActiveGuard<'a, C> {
     clock: &'a dyn Clock,
     events: &'a dyn EventSink,
     model: Session,
+    // Endpoint values of the active entry. They do not change while the session runs.
+    metadata: ClosedMetadata,
     error_kind: Mutex<Option<crate::events::ConnectionErrorKind>>,
 }
 
@@ -1232,29 +1248,28 @@ impl RelayService {
                         self.clock.wall(),
                         started_mono,
                     );
-                    state.active.insert(
-                        id.clone(),
-                        ActiveSessionSnapshot {
-                            session_id: id,
-                            mode,
-                            viewer_transport: transport,
-                            target_transport,
-                            viewer_forwarded_ip: pair.viewer.context.forwarded_ip,
-                            target_forwarded_ip: pair.peer.server().and_then(|c| c.forwarded_ip),
-                            started_at: session.started_at(),
-                            started_mono,
-                            duration: Duration::ZERO,
-                            state: SessionState::Active,
-                            viewer: pair.viewer.context,
-                            peer: pair.peer.clone(),
-                            relay_id_ref: pair
-                                .relay
-                                .as_ref()
-                                .map(|(_, reference, _)| reference.clone()),
-                            bytes_viewer_to_target: 0,
-                            bytes_target_to_viewer: 0,
-                        },
-                    );
+                    let active = ActiveSessionSnapshot {
+                        session_id: id.clone(),
+                        mode,
+                        viewer_transport: transport,
+                        target_transport,
+                        viewer_forwarded_ip: pair.viewer.context.forwarded_ip,
+                        target_forwarded_ip: pair.peer.server().and_then(|c| c.forwarded_ip),
+                        started_at: session.started_at(),
+                        started_mono,
+                        duration: Duration::ZERO,
+                        state: SessionState::Active,
+                        viewer: pair.viewer.context,
+                        peer: pair.peer.clone(),
+                        relay_id_ref: pair
+                            .relay
+                            .as_ref()
+                            .map(|(_, reference, _)| reference.clone()),
+                        bytes_viewer_to_target: 0,
+                        bytes_target_to_viewer: 0,
+                    };
+                    let metadata = ClosedMetadata::from_active(&active);
+                    state.active.insert(id, active);
                     state
                         .controls
                         .insert(session.id().clone(), Arc::clone(&control));
@@ -1293,7 +1308,7 @@ impl RelayService {
                         },
                         target_host: pair.target_host.take(),
                     });
-                    Ok(session)
+                    Ok((session, metadata))
                 }
             } else {
                 if let Some((id, _, claim)) = &pair.relay {
@@ -1302,8 +1317,8 @@ impl RelayService {
                 Err(RelayDispatchError::SessionIdsExhausted)
             }
         };
-        let model = match activation {
-            Ok(model) => model,
+        let (model, metadata) = match activation {
+            Ok(started) => started,
             Err(error) => {
                 let viewer = pair.viewer.context;
                 let server = match &pair.peer {
@@ -1411,6 +1426,7 @@ impl RelayService {
             clock: self.clock.as_ref(),
             events: self.events.as_ref(),
             model,
+            metadata,
             error_kind: Mutex::new(None),
         };
         // Declare stream ownership after its registry guard: cancellation drops
@@ -1508,10 +1524,8 @@ impl RelayService {
             state.matching.begin_closing(id, closed.id());
             state.matching.release(id, closed.id());
         }
-        let metadata = state
-            .active
-            .remove(closed.id())
-            .map(|active| ClosedMetadata::from_active(&active));
+        state.active.remove(closed.id());
+        let metadata = active_guard.metadata.clone();
         state.controls.remove(closed.id());
         let reference = relay.map(|(_, reference, _)| reference);
         self.events.record(&Event::SessionClosed {
@@ -1532,11 +1546,8 @@ impl RelayService {
                 .filter(|_| closed.close_cause() == CloseCause::AdminTerminated)
                 .map(|admin| admin.account.clone()),
         });
-        let mut snapshot = ClosedSessionSnapshot::from(&closed);
-        if let Some(metadata) = metadata {
-            metadata.apply(&mut snapshot);
-            state.recent_metadata.insert(closed.id().clone(), metadata);
-        }
+        let snapshot = ClosedSessionSnapshot::from_closed(&closed, &metadata);
+        state.recent_metadata.insert(closed.id().clone(), metadata);
         if let Some(evicted) = state.recent.push(closed) {
             state.recent_metadata.remove(evicted.id());
         }
@@ -1556,7 +1567,7 @@ impl RelayService {
     }
 }
 
-fn milliseconds(duration: Duration) -> u64 {
+pub(crate) fn milliseconds(duration: Duration) -> u64 {
     u64::try_from(duration.as_millis()).unwrap_or(u64::MAX)
 }
 

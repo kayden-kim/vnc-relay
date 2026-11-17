@@ -5334,6 +5334,7 @@ fn management_runtime(
 }
 
 /// spec: management.md:MGT-051 partial
+/// spec: management.md:MGT-055 partial
 #[tokio::test]
 async fn session_queries_and_termination_provide_full_transport_and_forwarded_ip_coverage() {
     use std::collections::HashMap;
@@ -5527,6 +5528,10 @@ async fn session_queries_and_termination_provide_full_transport_and_forwarded_ip
             duration: Duration::from_secs(10),
             bytes_viewer_to_target: 100,
             bytes_target_to_viewer: 200,
+            viewer_address: tc.viewer_sock,
+            target_address: tc.target_sock,
+            viewer_forwarded_ip: tc.viewer_fwd,
+            target_forwarded_ip: tc.target_fwd,
             close_cause: CloseCause::AdminTerminated,
             relay_id_ref: None,
             side: None,
@@ -5645,8 +5650,23 @@ async fn session_queries_and_termination_provide_full_transport_and_forwarded_ip
         assert_eq!(closed["mode"], tc.mode.as_str());
         assert_eq!(closed["viewer_transport"], tc.viewer_transport.as_str());
         assert_eq!(closed["target_transport"], tc.target_transport.as_str());
-        assert!(closed.get("viewer_forwarded_ip").is_none());
-        assert!(closed.get("target_forwarded_ip").is_none());
+        assert_eq!(closed["duration_ms"], 10_000);
+        for field in [
+            "viewer_address",
+            "target_address",
+            "viewer_forwarded_ip",
+            "target_forwarded_ip",
+        ] {
+            assert_eq!(closed[field], item[field]);
+        }
+        let history = authenticated_query(&running, &cookie, "/api/v1/closed-sessions").await;
+        let recorded = history["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|entry| entry["session_id"] == tc.id)
+            .unwrap();
+        assert_eq!(recorded, closed);
         assert!(
             closed
                 .get("viewer_forwarded_ip_unavailable_reason")
@@ -5671,8 +5691,23 @@ async fn session_queries_and_termination_provide_full_transport_and_forwarded_ip
         assert_eq!(item["mode"], tc.mode.as_str());
         assert_eq!(item["viewer_transport"], tc.viewer_transport.as_str());
         assert_eq!(item["target_transport"], tc.target_transport.as_str());
-        assert!(item.get("viewer_forwarded_ip").is_none());
-        assert!(item.get("target_forwarded_ip").is_none());
+        assert_eq!(item["duration_ms"], 10_000);
+        assert_eq!(
+            item.get("viewer_forwarded_ip"),
+            Some(&json!(tc.viewer_fwd.map(|ip| ip.to_string())))
+        );
+        assert_eq!(
+            item.get("target_forwarded_ip"),
+            Some(&json!(tc.target_fwd.map(|ip| ip.to_string())))
+        );
+        assert_eq!(
+            item["viewer_address"],
+            json!({"ip": tc.viewer_sock.ip().to_string(), "port": tc.viewer_sock.port()})
+        );
+        assert_eq!(
+            item["target_address"],
+            json!({"ip": tc.target_sock.ip().to_string(), "port": tc.target_sock.port()})
+        );
         assert_eq!(item["close_cause"], "admin_terminated");
         assert!(item.get("viewer_forwarded_ip_unavailable_reason").is_none());
         assert!(item.get("target_forwarded_ip_unavailable_reason").is_none());

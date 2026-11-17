@@ -21,9 +21,9 @@ import {
   formatTransport,
 } from './format.js';
 
-const WAITING_KEYS = ['role', 'relayId', 'connectedAt', 'waited'];
+const WAITING_KEYS = ['role', 'relayId', 'transport', 'address', 'connectedAt', 'waited'];
 const ACTIVE_KEYS = ['session', 'mode', 'transport', 'started', 'bytes', 'peer', 'details'];
-const CLOSED_KEYS = ['session', 'cause', 'endedAt', 'bytes'];
+const CLOSED_KEYS = ['session', 'cause', 'mode', 'transport', 'time', 'bytes', 'peer', 'logs'];
 
 export function el(tag, className, text) {
   const node = document.createElement(tag);
@@ -184,6 +184,68 @@ function peerCell(t, item) {
   return cell;
 }
 
+// A labeled address line whose label sits above the value (Q235 waiting and closed tables).
+function addressLine(label, value) {
+  const line = cellLine(label, value);
+  line.classList.add('cell-line-stacked');
+  line.querySelector('.cell-value').classList.add('fact-address');
+  return line;
+}
+
+// Closed session addresses: each socket address, then its forwarded IP when there is one.
+function closedAddressCell(t, item) {
+  const cell = el('div', 'cell-peer');
+  cell.append(addressLine(t.viewerAddressLabel, formatAddress(item.viewerAddress)));
+  if (item.viewerForwardedIp !== null) {
+    cell.append(addressLine(t.viewerForwardedAddressLabel, item.viewerForwardedIp));
+  }
+  cell.append(addressLine(t.targetAddressLabel, formatAddress(item.targetAddress)));
+  if (item.targetForwardedIp !== null) {
+    cell.append(addressLine(t.targetForwardedAddressLabel, item.targetForwardedIp));
+  }
+  return cell;
+}
+
+// Waiting connection address: the socket address, then the forwarded IP on its own labeled line when there is one.
+function waitingAddressCell(t, item) {
+  const cell = el('div', 'cell-peer');
+  const socket = el('div', 'cell-line');
+  socket.append(el('span', 'cell-value fact-address', formatAddress(item.address)));
+  cell.append(socket);
+  if (item.forwardedIp !== null) {
+    cell.append(addressLine(t.forwardedAddressLabel, item.forwardedIp));
+  }
+  return cell;
+}
+
+// A time line flows as text: label, date, then the clock with its zone. It breaks only between them, so the clock
+// moves to the next line first (DESIGN: a narrow time value takes two lines; Q235 mockup `.tl`). The value text
+// stays the formatted string.
+function timeLine(label, value) {
+  const line = cellLine(label, value);
+  const split = value.indexOf(' ');
+  if (split > 0) {
+    line.classList.add('cell-line-flow');
+    line.querySelector('.cell-value').replaceChildren(
+      el('span', 'data-table-nowrap', value.slice(0, split)),
+      document.createTextNode(' '),
+      el('span', 'data-table-nowrap', value.slice(split + 1)),
+    );
+  }
+  return line;
+}
+
+// Start, end, and duration lines of a closed session. The duration is the server's duration_ms.
+function closedTimeCell(t, item) {
+  const cell = el('div', 'cell-time');
+  cell.append(
+    timeLine(t.startedLabel, formatTime(item.startedAt)),
+    timeLine(t.closedAtLabel, formatTime(item.endedAt)),
+    cellLine(t.durationLabel, formatDuration(item.durationMs, t.dayUnit)),
+  );
+  return cell;
+}
+
 // Link to the session detail screen (SCR-002).
 function detailsLink(t, sessionId) {
   const link = el('a', 'button button-outline');
@@ -192,12 +254,22 @@ function detailsLink(t, sessionId) {
   return link;
 }
 
-function columns(labels, keys, primary, secondary) {
+// Link to the recent logs screen (SCR-006) with the session filter. SCR-001 closed rows and SCR-002 use it.
+export function logsLink(t, sessionId) {
+  const link = el('a', 'button button-outline');
+  link.href = `/#/logs?session_id=${encodeURIComponent(sessionId)}`;
+  link.append(icon('log'), el('span', 'button-label', t.viewLogs));
+  return link;
+}
+
+// `wrapped` lists the columns whose long header may wrap (the adopted mockup's wrapping headers).
+function columns(labels, keys, primary, secondary, wrapped = []) {
   return keys.map((key, index) => ({
     key,
     label: labels[index],
     ...(key === primary ? { mobileHead: 'primary' } : {}),
     ...(key === secondary ? { mobileHead: 'secondary' } : {}),
+    ...(wrapped.includes(key) ? { wrapLabel: true } : {}),
   }));
 }
 
@@ -213,6 +285,8 @@ export function waitingTable(t, items, emptyText) {
     rows: items.map((item) => [
       createBadge({ label: formatRole(item.role) }),
       el('span', 'session-id', item.relayId),
+      createBadge({ label: formatTransport(item.transport) }),
+      waitingAddressCell(t, item),
       formatTime(item.connectedAt),
       formatDuration(item.waitedMs, t.dayUnit),
     ]),
@@ -259,12 +333,16 @@ function closeCauseBadge(t, cause) {
 
 export function closedTable(t, items, emptyText) {
   return tableBlock({
-    columns: columns(t.closedColumns, CLOSED_KEYS, 'session', 'cause'),
+    columns: columns(t.closedColumns, CLOSED_KEYS, 'session', 'cause', ['transport', 'bytes']),
     rows: items.map((item) => [
       el('span', 'session-id', item.sessionId),
       closeCauseBadge(t, item.closeCause),
-      formatTime(item.endedAt),
+      createBadge({ label: formatMode(item.mode) }),
+      transportCell(item),
+      closedTimeCell(t, item),
       bytesCell(t, item),
+      closedAddressCell(t, item),
+      logsLink(t, item.sessionId),
     ]),
     emptyText,
     numericColumns: ['bytes'],

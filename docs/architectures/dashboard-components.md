@@ -55,7 +55,7 @@ flowchart LR
 | `app/components/gauge.js` `createGauge` | 원형 게이지를 `progressbar` 역할로 만든다. 값을 모르면 가운데에 공통 배지를 둔다. | `badge.js` |
 | `app/components/navbar.js` `createNavbar` | 상단 막대와 호출자가 준 레이블의 `nav`를 만든다. | `link.js`, `icons.js` |
 | `app/components/language-select.js` `createLanguageSelect` | 레이블이 있는 네이티브 `select`를 만든다. 지구본과 화살표 아이콘을 붙인다. | `icons.js` |
-| `app/components/data-table.js` `createDataTable` | 명시적 표 역할을 가진 네이티브 표를 만든다. `mobileHead`로 모바일 첫 줄을 지정한다. 나머지 셀은 `data-label`을 레이블로 쓴다. | 없음 |
+| `app/components/data-table.js` `createDataTable` | 명시적 표 역할을 가진 네이티브 표를 만든다. `mobileHead`로 모바일 첫 줄을, `wrapLabel`로 줄바꿈할 열 머리글을 지정한다. 나머지 셀은 `data-label`을 레이블로 쓴다. | 없음 |
 | `app/components/link.js` `createLink` | 링크 `a`를 만든다. | `icons.js` |
 | `app/components/dialog.js` `createDialog` | 네이티브 `dialog`로 확인 대화상자를 만든다. | `button.js` |
 | `app/styles/base.css` | `color-scheme`, 본문 글꼴, 포커스 링, 화면 밖 글 클래스 | `tokens.css` |
@@ -97,7 +97,7 @@ flowchart LR
 | `createGauge({label, value, max, valueText, limitText, unknownText, unknownTone})` | `value`는 `0`~`max`. `label`과 `limitText`는 필수다. 알려진 값은 가운데에 `valueText`(없으면 값)를 크게 보이고, 아래 줄에 `limitText`(상한 줄)를 보인다. `value`가 `null`이면 알 수 없음이며 링을 그리지 않고 `unknownText`(필수)를 `createBadge`의 배지로 쓴다. `unknownTone`은 그 배지의 톤이며 기본값은 `neutral`(확인 불가)이다. 첫 조회 전에는 호출자가 `info`(조회 중)를 넘긴다(DESIGN 상태 색). `value`가 `null`일 때 톤이 잘못되면 `TypeError`다. 알려진 값에서는 배지를 만들지 않으므로 `unknownTone`을 쓰지 않는다. 채움 길이는 `style.setProperty`로 쓴다. | `HTMLDivElement`. `role="progressbar"`, `aria-label`, `aria-valuemin`, `aria-valuemax`, `aria-valuenow`, `aria-valuetext`. 알려진 값의 `aria-valuetext`는 `valueText, limitText`다. |
 | `createNavbar({brand, items, help, language, action, label})` | `label`은 필수다(기본값 없음, 호출자가 준다). `items`는 `{label, href, current, icon}`. `help`·`language`·`action`은 선택 DOM 노드다. 도구 묶음에 이 순서로 넣는다. 화면이 활성 항목을 고르며 모든 항목은 모바일에서도 보인다. | `HTMLElement`(`header`). 안에 `nav`를 둔다. 현재 항목은 `aria-current="page"`. |
 | `createLanguageSelect({id, label, value, options, variant})` | `id`, `label`, `options`(`{value, label}` 배열, 빈 배열이면 `TypeError`)는 필수. `variant` 기본 `form`(`navbar`·`form`). | `HTMLDivElement`. 안에 `label`과 `select`. |
-| `createDataTable({caption, columns, rows, emptyText, numericColumns})` | `columns`는 `{key, label, mobileHead?}` 배열이다. `key`·`label`은 문자열이다. 배열이 아니거나 비었거나 열 값이 잘못되면 `TypeError`다. `mobileHead`는 생략 또는 `'primary'`·`'secondary'`만 허용한다. 다른 값이면 `TypeError`다. 생략한 열은 모바일에서 일반 레이블·값 쌍이다. `rows`는 값 배열의 배열이다. 셀 값이 `Node`면 그대로 넣고, 그 밖의 값은 문자열로 쓴다. `emptyText`는 문자열 또는 `Node`다. 조회 중 행은 호출자가 정보 배지를 넘긴다. `numericColumns`의 각 항목은 `columns`의 `key`여야 한다(아니면 `TypeError`). | `HTMLTableElement`. 열 머리글은 `scope="col"`이고, 숫자 열은 `data-table-num` 클래스를 쓴다. 행이 없으면 `emptyText`를 한 행으로 쓴다. 아래 표 역할과 모바일 첫 줄 규칙을 따른다. |
+| `createDataTable({caption, columns, rows, emptyText, numericColumns})` | `columns`는 `{key, label, mobileHead?, wrapLabel?}` 배열이다. `key`·`label`은 문자열이다. 배열이 아니거나 비었거나 열 값이 잘못되면 `TypeError`다. `mobileHead`는 생략 또는 `'primary'`·`'secondary'`만 허용한다. 다른 값이면 `TypeError`다. 생략한 열은 모바일에서 일반 레이블·값 쌍이다. `wrapLabel`은 생략 또는 불리언이며, 다른 값이면 `TypeError`다. `true`면 그 열 머리글이 낱말 사이에서만 줄바꿈할 수 있다. `rows`는 값 배열의 배열이다. 셀 값이 `Node`면 그대로 넣고, 그 밖의 값은 문자열로 쓴다. `emptyText`는 문자열 또는 `Node`다. 조회 중 행은 호출자가 정보 배지를 넘긴다. `numericColumns`의 각 항목은 `columns`의 `key`여야 한다(아니면 `TypeError`). | `HTMLTableElement`. 열 머리글은 `scope="col"`이고, 숫자 열은 `data-table-num` 클래스를 쓴다. `wrapLabel: true`인 머리글은 `data-table-wrap` 클래스를 쓰고, 공백으로 나눈 낱말마다 `data-table-nowrap` `span`에 넣는다. 머리글 글씨(`textContent`)는 `label`과 같다. 행이 없으면 `emptyText`를 한 행으로 쓴다. 아래 표 역할과 모바일 첫 줄 규칙을 따른다. |
 | `createLink({href, label, icon, iconSize, newTabText})` | `icon`은 앞 아이콘 이름이다. `iconSize` 기본값은 `sm`이다. `newTabText`를 주면 `target="_blank"`·`rel="noopener noreferrer"`를 붙인다. 문구 뒤에 장식용 `external-link` 아이콘과 `.sr-only`의 ` (newTabText)`를 넣는다. | `HTMLAnchorElement`. 보이는 문구는 `span`에 넣는다. |
 | `createDialog({title, description, confirmLabel, cancelLabel, destructive, onConfirm, onCancel, returnFocus})` | `title`, `confirmLabel`, `cancelLabel`은 필수. 확인 버튼은 `destructive`면 위험 스타일. `returnFocus`는 대화상자를 여는 요소이며 선택 옵션이다. 닫힌 대화상자는 CSS가 숨긴다(`display`는 `.dialog[open]`에만 준다). 미리보기는 열린 견본을 비모달 `open` 속성으로 프레임 안에 둔다(미리보기 전용). | `{element, show(), hide()}`. `show`는 `showModal()`을 부른다. 취소 단추는 `close()` 직후 `returnFocus`로 포커스를 옮긴다. Escape는 브라우저가 닫으므로 `close` 이벤트에서 옮긴다. 요소가 문서에 없거나 비활성이면 옮기지 않는다. 확인과 `hide()`는 포커스를 호출한 쪽에 맡긴다. Tab과 Shift+Tab은 두 단추 사이에서 돌도록 keydown으로 처리한다(DASH-015, 7절). |
 
@@ -108,6 +108,7 @@ flowchart LR
 - 네이티브 `table`에는 `role="table"`, `thead`·`tbody`에는 `role="rowgroup"`을 붙인다. 머리글·본문·빈 행의 `tr`에는 `role="row"`, `th`에는 `role="columnheader"`, 일반·빈 셀의 `td`에는 `role="cell"`을 붙인다. CSS가 `display`를 바꿔도 역할을 생략하지 않는다.
 - `mobileHead: 'primary'` 셀에는 `.data-table-head-primary`, `'secondary'` 셀에는 `.data-table-head-secondary`를 붙인다. 두 셀은 모바일 격자의 첫 행(`grid-row: 1`)을 공유한다. 첫 줄 셀은 `::before` 레이블 없이 값만 보인다.
 - 일반 셀은 `data-label`과 CSS 가상 요소로 열 이름을 보인다. 가상 요소의 대체 텍스트는 비워 중복 읽기를 막는다(DESIGN 566행). 열 머리글은 화면에서만 숨기고 접근성 트리에는 남긴다.
+- 데스크톱 폭의 열 머리글은 한 줄이다. `data-table-wrap` 머리글만 낱말 사이에서 줄바꿈한다. 그래서 "대상->Viewer" 같은 낱말은 하이픈 뒤에서 끊기지 않는다. 칸 바로 아래의 배지(`td > .badge`)와 `data-table-nowrap` 클래스를 붙인 글씨도 한 줄을 유지한다(DESIGN의 배지 한 줄 규칙과 시각 값의 날짜·시각 두 줄 규칙). 호출자도 셀 값에 이 클래스를 쓸 수 있다. 모바일 폭에서는 320px 넘침을 막으려고 배지와 `data-table-nowrap` 글씨를 다시 줄바꿈한다.
 
 4.12 API 반영의 실행 검증과 캡처 결과는 별도 검증 기록에서 관리한다. 아래 날짜가 있는 대조 기록은 당시 결과다.
 
@@ -125,7 +126,7 @@ flowchart LR
 ## 4. 처리 순서
 
 1. 호출자가 함수를 `import`하고 옵션 객체를 넘긴다.
-2. 함수가 옵션을 검사한다. 허용하지 않는 `tone`·`variant`·아이콘 이름·열의 `mobileHead`, 빠진 필수 `label`이면 `TypeError`를 던진다. 이 오류는 개발 중 실수를 알리며 화면 오류로 바꾸지 않는다.
+2. 함수가 옵션을 검사한다. 허용하지 않는 `tone`·`variant`·아이콘 이름·열의 `mobileHead`·`wrapLabel`, 빠진 필수 `label`이면 `TypeError`를 던진다. 이 오류는 개발 중 실수를 알리며 화면 오류로 바꾸지 않는다.
 3. 함수가 요소를 만든다. 아이콘은 `icon`의 캐시 템플릿에서 복제한다.
 4. 상태 속성과 클래스를 붙인다. 호출자는 반환된 요소를 DOM에 넣는다.
 5. 상태가 바뀌면 호출자가 같은 요소의 속성을 바꾼다. 모듈은 다시 만들지 않는다. 대화상자는 `show()`와 `hide()`로 열고 닫는다.
@@ -195,5 +196,6 @@ flowchart LR
 | 로그인 복사본(4.9 재작업) | `cargo xtask tokens --check`, 복사본 변조·원본 변조·복사 목록 밖 파일 시험 | 통과. 깨끗한 상태는 통과. 복사본 변조, 원본 변조, 복사 목록 밖 파일 각각 `생성 결과와 다르다` 또는 `복사 목록에 없는 파일이다`로 실패하고 종료 코드 1이었다. 되돌린 뒤 다시 통과했다. |
 | 대화상자 Tab 순환(4.11, DASH-015) | 탐침: 열린 대화상자에서 `종료 확인`의 Tab이 어디로 가는지 확인. `session-scenarios.js`의 `DASH-015` 시험 두 건 | 차이 1건을 고쳤다. 네이티브 `showModal()`에서 Tab이 `body`로 빠졌다. `dialog.js` keydown으로 두 단추 사이를 돌게 했다. 시험은 합성 keydown이라 핸들러만 확인한다. 검증 기록 4.7절 |
 | SCR-001 표·카드 대조(4.12, 2026-10-23) | `mobileHead` 옵션·잘못된 값의 `TypeError`, 빈 행까지 명시한 표 역할, `description` 옵션을 구현·브라우저 DOM과 대조했다 | DESIGN 554~566·638행 반영. Chrome ko 1280·1023·390·320, en 1280·320에서 첫 줄 배치·설명 위치·넘침을 확인했다. 시험·명령 결과와 미실행 항목은 검증 기록 4.15절에 있다 |
+| SCR-001 목록 정보 확대 대조(Q234·Q235, 2026-11-17) | 최근 종료 표 8열을 시안 `th.wrap`·`.badge`·`.t`와 대조했다. `wrapLabel` 옵션, 배지와 `data-table-nowrap`의 데스크톱 한 줄 규칙을 더했다 | 차이 4건을 고쳤다. 배지 줄바꿈("Mode / II"), en 1024에서 시각 열이 날짜 중간까지 좁아짐, 머리글이 줄바꿈하지 않아 표가 카드 폭을 넘을 위험, 줄바꿈을 허용한 머리글이 하이픈 뒤에서 끊김("대상-" / ">Viewer")이다. 확인 방법과 남은 차이는 검증 기록 4.36절에 있다 |
 
 3.1 표에 없는 문자열 필수 옵션(`button`의 `label`, `badge`의 `label`, `link`의 `href`·`label`, `text-field`의 `id`·`label`, `alert`의 `title`)도 빈 값이면 `TypeError`를 던진다.

@@ -360,10 +360,62 @@ async function caseDash028() {
   router.dispose();
 }
 
+// DASH-066: the log link of a closed row opens SCR-006 with that session's filter. The hash change stands in for
+// activating the link, as in DASH-006, because the root-relative link would leave this page.
+async function caseDash066() {
+  const closedId = 'sess_closed_1';
+  const api = fakeApi({
+    'GET /api/v1/closed-sessions': () => ok({
+      as_of: AS_OF,
+      max_entries: 100,
+      items: [{
+        session_id: closedId, mode: 'mode2', viewer_transport: 'ws', target_transport: 'tcp',
+        started_at: STARTED, ended_at: AS_OF, duration_ms: 1923000,
+        bytes_viewer_to_target: 0, bytes_target_to_viewer: 0,
+        viewer_address: { ip: '192.0.2.10', port: 51000 }, target_address: { ip: '198.51.100.5', port: 5900 },
+        viewer_forwarded_ip: null, target_forwarded_ip: null, close_cause: 'peer_eof',
+      }],
+    }),
+  });
+  // Log reads carry a query string, so they are answered here and their paths are kept.
+  const logPaths = [];
+  const request = (path, init) => {
+    if (!path.startsWith('/api/v1/logs?')) return api.request(path, init);
+    logPaths.push(path);
+    return Promise.resolve(ok({
+      as_of: AS_OF, max_entries: 1000, oldest_seq: 1, latest_seq: 1, has_more: false,
+      items: [{ seq: 1, entry: { ts: AS_OF, level: 'info', event: 'session_started', session_id: closedId } }],
+    }));
+  };
+  location.hash = '';
+  const navigations = [];
+  const router = mountRouter(host, {
+    request,
+    storage: { getItem: () => lang, setItem() {} },
+    navigate: (url) => navigations.push(url),
+  });
+  await waitFor(() => linkNamed(host, t.viewLogs) !== null);
+  const link = linkNamed(host, t.viewLogs);
+  check('DASH-066: closed row log link names the session filter', link?.getAttribute('href') === `/#/logs?session_id=${closedId}`);
+  link?.focus();
+  check('DASH-066: log link takes keyboard focus', !!link && document.activeElement === link);
+  location.hash = new URL(link?.href ?? location.href).hash;
+  await waitFor(() => titleOf(host) === t.logs && logPaths.length > 0 && host.querySelector('.chip') !== null);
+  check('DASH-066: SCR-006 opens', titleOf(host) === t.logs);
+  check('DASH-066: log reads carry the session filter', logPaths.length > 0
+    && logPaths.every((path) => new URLSearchParams(path.split('?')[1]).get('session_id') === closedId));
+  check('DASH-066: session filter chip names the session', host.querySelector('.chip')?.textContent.includes(closedId) === true);
+  check('DASH-066: router stayed on this page', navigations.length === 0);
+  checkLayout('DASH-066');
+  router.dispose();
+  location.hash = '';
+}
+
 const CASES = {
   'dash-006': caseDash006,
   'dash-025': caseDash025,
   'dash-028': caseDash028,
+  'dash-066': caseDash066,
 };
 
 const caseName = new URLSearchParams(location.search).get('case');

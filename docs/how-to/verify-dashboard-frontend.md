@@ -1817,6 +1817,37 @@ Ubuntu 첫 실행이 이전 빌드를 다시 쓴 원인은 시계 차이다. WSL
 - 증거: `target/dashboard-shots/<폭>/`에 시안 캡처(`mock-scr001-<언어>.png`, `mock-scr003-<언어>.png`)와 구현 캡처(`scr001-<언어>.png`, `scr003-<언어>.png`)를 남겼다. 나란히 놓은 비교 그림은 `target/dashboard-shots/pair-{1280,390,320}-{scr001-ko,scr003-en}.png`이다.
 - 두 OS 게이트: 커밋 `92749c8`의 Windows·Ubuntu 전체 게이트가 통과했고, 두 보고서에서 DASH-064가 `통과`다([개발 환경·검증 4.6절](set-up-and-verify.md#46-운영-도움말-판정표)).
 
+### 4.36 목록 정보 확대 (Q234·Q235, 2026-11-17)
+
+- 기록자: 에이전트. Producer 필드 구현과 Rust 시험은 하위 에이전트 ProducerListFields가, 대시보드 구현·시험과 시안 대조는 주 에이전트가 맡았다. 사람의 검토가 아닌 에이전트의 대조다.
+- 서버 대상: `crates/app/src/relay.rs`(`ClosedMetadata`, `recent_metadata`), `crates/app/src/management/query.rs`·`terminate.rs`, `crates/adapters/src/management_http/query_api.rs`·`terminate_api.rs`.
+- 대시보드 대상: `web/dashboard/app/model.js`·`copy.js`(CPY-197~201)·`panels.js`(`waitingAddressCell`·`closedAddressCell`·`closedTimeCell`·`timeLine`·`logsLink`)·`session.js`·`app.css`, `app/components/data-table.js`(`wrapLabel`), `app/styles/components.css`(배지와 `data-table-nowrap`의 한 줄 규칙, `data-table-wrap` 머리글). 로그인 복사본은 `cargo xtask tokens`로 동기화했다.
+- 시험 대상: `web/dashboard/tests/operations-scenarios.js`·`router-scenarios.js`·`session-scenarios.js`·`components.js`, `tests/dashboard_browser.rs`, `tests/dashboard_live.rs`와 `tests/dashboard_live/transports.rs`·`overview.rs`, `tests/serve.rs`, `crates/adapters/tests/management.rs`.
+
+#### 시안 대조
+
+채택 시안(`docs/design/mockups/dashboard.html`의 `#scr001-normal`·`#scr001-normal-en`, 사용자 결정 2026-11-17(Q235))의 대기 연결·최근 종료 카드와 구현을 대조했다. 구현은 `cargo xtask dashboard-serve`로 가짜 API 시험 페이지(`/tests/operations.html?case=<dash-065|dash-066>&lang=<언어>`)를 열었다. 브라우저는 Windows에서 에이전트가 조작한 Chromium 탭이다.
+
+- 판정: 최종 CSS에서 1280·1100·1024·1023·768·390·320px × ko·en × 두 사례, 28회 모두 `data-result=pass`이고 페이지 가로 넘침이 0이었다. 시각 줄의 날짜가 레이블 아래 줄로 넘어가는 경우는 en 1024px과 두 언어의 320px이다. 나머지 폭에서는 레이블 옆에 온다.
+- 캡처: 구현은 1280·1024·390·320px의 두 카드 × 두 언어 16장, 시안은 1280·390px 8장이다.
+
+| 차이·분류 | 시안과 구현의 차이 | 근거 | 처리 |
+| --- | --- | --- | --- |
+| 배지 줄바꿈 | 시안: `.badge`는 한 줄. 첫 구현: en 1024px에서 "Mode / II"처럼 두 줄 | DESIGN 520행 "한 줄이다" | 고침. `.data-table td > .badge`를 데스크톱에서 한 줄로 둔다. 모바일은 320px의 긴 레이블을 위해 다시 줄바꿈한다 |
+| 시각 열 폭 | 시안: 날짜·시각 조각(`.t`)은 줄바꿈하지 않는다. 첫 구현: en 1024px에서 시각 열이 50px로 좁아져 날짜 중간에서 끊겼다. 열 폭은 `[63,181,77,164,50,185,91,139]`였다 | DESIGN 591행 | 고침. `timeLine`이 날짜와 시각·시간대를 `data-table-nowrap` 두 조각으로 나눈다. 시각 줄(`cell-line-flow`)은 글처럼 이어 써서 폭이 되면 날짜가 레이블 옆에 온다(시안 `.tl`). en 1024px 열 폭은 `[69,181,77,88,149,126,121,139]`이고, 이 폭에서는 날짜가 레이블 아래 줄로 넘어간다. 시안의 `.tl`도 줄바꿈하는 flex라 같은 규칙이다 |
+| 좁은 폭의 날짜 끊김 | 시안: 390px에서도 날짜는 한 덩어리다. 중간 구현: 두 조각을 일반 인라인으로 두자 en 320px에서 "2026-10-" / "22"처럼 하이픈 뒤에서 끊겼다 | DESIGN 591·612행 | 고침. 두 조각을 인라인 블록으로 두어 조각 단위로 줄을 바꾼다. DASH-066이 모든 폭에서 날짜가 한 줄인지 확인한다. 같은 페이지에서 조각을 일반 인라인으로 되돌리면 en 320px의 날짜 6개가 모두 두 줄로 측정되어 이 확인이 실패한다 |
+| 머리글 줄바꿈 | 시안: 전송 경로·바이트 머리글은 `th.wrap`. 첫 구현: 모든 머리글이 한 줄이었다. 시각 열만 넓히는 CSSOM 시험에서 en 1024px 표 폭 979px이 카드 안 950px을 넘었다 | DESIGN 612·744행 | 고침. `createDataTable`의 `wrapLabel`로 두 머리글만 줄바꿈한다. 처음에는 "대상->Viewer"가 하이픈 뒤에서 끊겨 낱말마다 `data-table-nowrap`으로 묶었다 |
+| 주소 레이블 위치 | 시안: 레이블이 값 위 줄(`.addr .k`). 첫 구현: 레이블과 값이 같은 줄 | 채택 시안(Q235) | 고침. 대기·최근 종료 주소 줄은 `addressLine`으로 레이블을 위에 둔다. DASH-065·066이 레이블 아래 끝과 값 위 끝을 비교한다 |
+| 활성 표 주소 레이블 | 시안: 값 위 줄. 구현: 같은 줄(`peerCell`) | Q234 전부터 있던 차이 | 이번 범위 밖. 유지 |
+| 대기·활성 시각 칸 | 시안: 날짜와 시각을 두 줄(`.wd`·`.wt`). 구현: 폭이 충분하면 한 줄 | Q234 전부터 있던 차이 | 이번 범위 밖. 유지 |
+| en 1024px 주소 열 | 가장 긴 종료 원인 CPY-047 "Terminated by administrator"가 있으면 주소 열이 121px로 좁아진다. IPv4 주소도 값 안에서 줄바꿈한다. 시안의 영어 표본은 더 짧은 "Admin terminated"다 | DESIGN 591행(자르지 않고 줄바꿈) | 허용. 넘침 없이 모든 값이 보인다 |
+| 예시 데이터 | 시안: 8행, 긴 세션 ID. 구현: 가짜 API의 3~4행 | 4.27절 C01 | 데이터 차이, 해당 없음 |
+
+- 증거: `target/dashboard-shots/q235/`의 `mock/`(시안 8장)과 `impl/`(구현 16장, `<waiting|closed>-<언어>-<폭>.png`)이다. 커밋하지 않는다.
+- 가짜 API 시험: 시각 줄 수정 전 `cargo test --test dashboard_browser` 전체 77개가 통과했다(563초). 시각 줄 수정 뒤 `cargo test --test dashboard_browser -- operations_ router_` 19개가 통과했다(135초). 그 수정은 최근 종료 시각 줄에만 붙는 `cell-line-flow` 규칙, `panels.js`의 `timeLine`, 운영 현황 시험만 바꿨으므로 나머지 58개는 다시 실행하지 않았다. 두 OS 게이트가 전체를 다시 실행한다.
+- 키보드 선택: 가짜 API 시험의 DASH-066은 로그 보기 링크에 초점을 둔 뒤 해시를 바꿔 선택을 대신한다(DASH-006과 같은 방식). 실제 Enter 키는 실서버 시험이 확인한다.
+- 실서버 시험: 시각 줄 수정 뒤 `cargo test --test dashboard_live -- dashboard_065_066 dashboard_001 dashboard_020 dashboard_062` 4개가 통과했다(29초).
+
 ## 5. 중단 조건
 
 - `cargo xtask tokens --check`의 종료 코드가 0이 아니면 3.2 이후 단계를 실행하지 않는다.

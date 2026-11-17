@@ -21,7 +21,7 @@ import { BRAND_NAME, COPY } from './copy.js';
 import { fill, formatAddress, formatBytes, formatMode, formatTime, formatTransport } from './format.js';
 import { LANGUAGES, chooseLanguage, readSavedLanguage, saveLanguage } from './language.js';
 import { isSessionId, parseDetail, parseSession, parseTerminate } from './model.js';
-import { applyChrome, el, pageHead, panelCard, setContent, statusBadge } from './panels.js';
+import { applyChrome, el, logsLink, pageHead, panelCard, setContent, statusBadge } from './panels.js';
 import { clearTimer, contentKey, newQuery, viewOf } from './query.js';
 import { LOGIN_URL, buildNavbar, defaultStorage, signOutUrl } from './shell.js';
 
@@ -111,10 +111,8 @@ export function mountSession(root, id, deps = {}) {
     listAction.href = '/';
     listAction.append(icon('back'), el('span', 'button-label', t.back));
 
-    const viewLogs = el('a', 'button button-outline');
+    const viewLogs = logsLink(t, state.id);
     viewLogs.id = 'session-view-logs';
-    viewLogs.href = `/#/logs?session_id=${encodeURIComponent(state.id)}`;
-    viewLogs.append(icon('log'), el('span', 'button-label', t.viewLogs));
 
     const terminate = createButton({ variant: 'destructive', label: t.terminate, icon: 'cancel' });
     terminate.id = 'session-terminate';

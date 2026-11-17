@@ -2,7 +2,7 @@
 // One page load runs one case, ?case=dash-0xx&lang=ko|en, against a fake management API.
 // The result goes to <main id="result">.
 import { mountOperations } from '../app/operations.js';
-import { formatBytes } from '../app/format.js';
+import { formatBytes, formatTime } from '../app/format.js';
 import { icon } from '../app/components/icons.js';
 import { activeTable } from '../app/panels.js';
 import { COPY as PANEL_COPY } from '../app/copy.js';
@@ -52,6 +52,18 @@ const COPY = {
     causeSessionExpired: '세션 만료',
     bytesHeader: 'Viewer->대상 / 대상->Viewer',
     details: '상세',
+    waitingHeaders: ['역할', '중계 ID', '전송 경로', '상대 주소', '접속 시각', '대기 시간'],
+    closedHeaders: ['세션', '종료 원인', '모드', '전송 경로(Viewer → 대상)', '시각', 'Viewer->대상 / 대상->Viewer', '상대 주소', '로그'],
+    forwardedAddress: '전달 주소',
+    startedAt: '시작 시각',
+    closedAt: '종료 시각',
+    duration: '지속 시간',
+    viewerAddress: 'Viewer 주소',
+    targetAddress: 'Server/대상 주소',
+    viewerForwarded: 'Viewer 전달 주소',
+    targetForwarded: 'Server/대상 전달 주소',
+    viewLogs: '로그 보기',
+    dayDuration: '1일 02:02:00',
   },
   en: {
     operations: 'Operations overview',
@@ -94,6 +106,18 @@ const COPY = {
     causeSessionExpired: 'Session expired',
     bytesHeader: 'Viewer->target / target->Viewer',
     details: 'Details',
+    waitingHeaders: ['Role', 'Relay ID', 'Transport', 'Peer address', 'Connected at', 'Waiting time'],
+    closedHeaders: ['Session', 'Close reason', 'Mode', 'Transport (Viewer → target)', 'Time', 'Viewer->target / target->Viewer', 'Peer address', 'Logs'],
+    forwardedAddress: 'Forwarded address',
+    startedAt: 'Started at',
+    closedAt: 'Closed at',
+    duration: 'Duration',
+    viewerAddress: 'Viewer address',
+    targetAddress: 'Server/target address',
+    viewerForwarded: 'Viewer forwarded address',
+    targetForwarded: 'Server/target forwarded address',
+    viewLogs: 'View logs',
+    dayDuration: '1d 02:02:00',
   },
 };
 
@@ -305,6 +329,9 @@ const waitingItem = (overrides = {}) => ({
   relay_id: 'relay-7',
   connected_at: CONNECTED,
   waited_ms: 62000,
+  transport: 'tcp',
+  address: { ip: '198.51.100.7', port: 51234 },
+  forwarded_ip: null,
   ...overrides,
 });
 
@@ -331,8 +358,13 @@ const closedItem = (overrides = {}) => ({
   target_transport: 'tcp',
   started_at: STARTED,
   ended_at: ENDED,
+  duration_ms: 900000,
   bytes_viewer_to_target: 0,
   bytes_target_to_viewer: 1572864,
+  viewer_address: { ip: '192.0.2.10', port: 51000 },
+  target_address: { ip: '198.51.100.5', port: 5900 },
+  viewer_forwarded_ip: null,
+  target_forwarded_ip: null,
   close_cause: 'peer_eof',
   ...overrides,
 });
@@ -512,8 +544,8 @@ async function caseDash001() {
     checkHeadCells(`DASH-001 ${title}`, rows, primary, secondary);
     checkListCount(`DASH-001 ${title}`, card, rows.length);
   }
-  for (const [title, rows, bytesIndex] of [[t.activeTitle, activeRows, 4], [t.closedTitle, closedRows, 3]]) {
-    check(`DASH-001 ${title}: byte column keeps CPY-040/043 copy`, cardOf(root, title)?.querySelectorAll('th')[bytesIndex]?.textContent === t.bytesHeader);
+  for (const [title, rows, bytesIndex] of [[t.activeTitle, activeRows, 4], [t.closedTitle, closedRows, 5]]) {
+    check(`DASH-001 ${title}: byte column keeps CPY-187/198 copy`, cardOf(root, title)?.querySelectorAll('th')[bytesIndex]?.textContent === t.bytesHeader);
     for (const [index, row] of rows.entries()) {
       const lines = row.querySelectorAll('.cell-bytes .cell-line');
       check(`DASH-001 ${title} row ${index}: two byte directions`, lines.length === 2);
@@ -887,7 +919,9 @@ async function caseDash020() {
   check('DASH-020: viewer-to-target bytes in KiB', rows[1]?.textContent.includes('2.0 KiB'));
   check('DASH-020: target-to-viewer bytes in MiB', rows[0]?.textContent.includes('1.5 MiB'));
   check('DASH-020: end time shown in local time', TIME_IN.test(rows[0]?.textContent ?? ''));
-  check('DASH-020: closed card has no buttons or links', (card?.querySelectorAll('button, a').length ?? -1) === 0);
+  check('DASH-020: closed card has no buttons', (card?.querySelectorAll('button').length ?? -1) === 0);
+  check('DASH-020: the only links are one log link per row', !!card && card.querySelectorAll('a').length === rows.length
+    && rows.every((row) => row.querySelectorAll('a').length === 1 && row.querySelector('a').textContent === t.viewLogs));
 
   const empty = await mount(
     fakeApi({ 'GET /api/v1/closed-sessions': () => ok({ as_of: AS_OF, max_entries: 100, items: [] }) }),
@@ -1097,6 +1131,212 @@ async function caseDash062() {
   checkLayout('DASH-062', m.root);
 }
 
+// Label and value text of each `.cell-line` in a cell. A line without a label gives null for the label.
+function linesOf(cell) {
+  return [...(cell?.querySelectorAll('.cell-line') ?? [])].map((line) => [
+    line.querySelector('.cell-label')?.textContent ?? null,
+    line.querySelector('.cell-value')?.textContent ?? null,
+  ]);
+}
+
+// Number of rendered text lines in a node, counted from the line boxes of its text (icons are not text).
+function textLines(node) {
+  const tops = new Set();
+  const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
+  for (let text = walker.nextNode(); text; text = walker.nextNode()) {
+    if (!text.textContent.trim()) continue;
+    const range = document.createRange();
+    range.selectNodeContents(text);
+    for (const rect of range.getClientRects()) tops.add(Math.round(rect.top));
+  }
+  return tops.size;
+}
+
+// Every labeled line in the cell puts its label above its value (Q235 mockup: address labels sit on their own line).
+function labelsAbove(cell) {
+  const lines = [...(cell?.querySelectorAll('.cell-line') ?? [])];
+  return lines.length > 0 && lines.every((line) => {
+    const label = line.querySelector('.cell-label');
+    const value = line.querySelector('.cell-value');
+    return !label || (!!value && label.getBoundingClientRect().bottom <= value.getBoundingClientRect().top + 0.5);
+  });
+}
+
+// Header copy, one cell per column, and the column header as each cell's mobile label.
+function checkColumns(label, card, rows, headers) {
+  check(`${label}: header copy`, same([...(card?.querySelectorAll('thead th') ?? [])].map((cell) => cell.textContent), headers));
+  for (const [index, row] of rows.entries()) {
+    check(`${label} row ${index}: one cell per column`, row.cells.length === headers.length);
+    check(`${label} row ${index}: mobile labels are the headers`, [...row.cells].every((cell, column) => cell.dataset.label === headers[column]));
+  }
+}
+
+// DASH-065: waiting rows show the transport and the socket address, and a forwarded IP on its own line only when present.
+async function caseDash065() {
+  const longIp = '2001:db8:85a3:8d3:1319:8a2e:370:7348';
+  const items = [
+    waitingItem({ relay_id: 'relay-tcp' }),
+    waitingItem({ role: 'server', relay_id: 'relay-ws', transport: 'ws', address: { ip: '192.0.2.10', port: 44310 }, forwarded_ip: '203.0.113.195' }),
+    waitingItem({ role: 'server', relay_id: 'relay-wss', transport: 'wss', address: { ip: longIp, port: 44322 }, forwarded_ip: longIp }),
+    waitingItem({ relay_id: 'relay-future', transport: 'quic', address: { ip: '198.51.100.23', port: 40001 } }),
+  ];
+  const { root } = await mount(fakeApi({ 'GET /api/v1/waiting': () => ok({ as_of: AS_OF, items }) }));
+  await waitFor(() => settled(root));
+  const card = cardOf(root, t.waitingTitle);
+  const rows = dataRowsOf(card);
+  check('DASH-065: one row per waiting item', rows.length === 4);
+  checkListCount('DASH-065', card, 4);
+  checkColumns('DASH-065', card, rows, t.waitingHeaders);
+  checkTableRoles('DASH-065', card);
+  checkHeadCells('DASH-065', rows, 1, 0);
+  for (const [index, transport, socket, forwarded] of [
+    [0, 'TCP', '198.51.100.7:51234', null],
+    [1, 'WS', '192.0.2.10:44310', '203.0.113.195'],
+    [2, 'WSS', `[${longIp}]:44322`, longIp],
+    [3, 'quic', '198.51.100.23:40001', null],
+  ]) {
+    const row = rows[index];
+    const badge = row?.cells[2].querySelector('.badge');
+    check(`DASH-065 row ${index}: transport badge shows the received value`, badge?.textContent === transport
+      && badge.dataset.tone === 'neutral' && badge.querySelector('svg') === null);
+    const cell = row?.cells[3];
+    const lines = linesOf(cell);
+    const values = cell?.querySelectorAll('.fact-address') ?? [];
+    check(`DASH-065 row ${index}: socket address comes first without a label`, lines[0]?.[0] === null && lines[0]?.[1] === socket);
+    checkDataValue(`DASH-065 row ${index} socket address`, values[0], socket);
+    if (forwarded === null) {
+      check(`DASH-065 row ${index}: no forwarded line without a forwarded IP`, lines.length === 1 && values.length === 1);
+    } else {
+      check(`DASH-065 row ${index}: forwarded IP on its own labeled line`, lines.length === 2
+        && lines[1][0] === t.forwardedAddress && lines[1][1] === forwarded);
+      checkDataValue(`DASH-065 row ${index} forwarded address`, values[1], forwarded);
+    }
+    check(`DASH-065 row ${index}: long addresses wrap inside the cell`, !!cell && cell.scrollWidth <= cell.clientWidth);
+    check(`DASH-065 row ${index}: address labels sit above their values`, labelsAbove(cell));
+    check(`DASH-065 row ${index}: connect time and waiting time stay`, TIME_ONLY.test(row?.cells[4].textContent ?? '')
+      && row?.cells[5].textContent === '00:01:02');
+  }
+  check('DASH-065: waiting rows have no actions', (card?.querySelectorAll('button, a').length ?? -1) === 0);
+  checkLayout('DASH-065');
+}
+
+// DASH-066: closed rows show mode, both transports, start, end and duration, both socket addresses with the
+// forwarded IPs that are present, and a log link with the session filter.
+async function caseDash066() {
+  const longIp = '2001:db8:85a3:8d3:1319:8a2e:370:7348';
+  const items = [
+    closedItem({
+      session_id: 'sess_ws', viewer_transport: 'wss', target_transport: 'ws', duration_ms: 590000,
+      started_at: '2026-10-22T00:35:10.000Z', ended_at: ENDED,
+      viewer_address: { ip: '192.0.2.10', port: 44310 }, target_address: { ip: '192.0.2.20', port: 40022 },
+      target_forwarded_ip: '192.0.2.42',
+    }),
+    closedItem({
+      session_id: 'sess_mode1', mode: 'mode1', close_cause: 'connection_error', duration_ms: 360000,
+      started_at: '2026-10-22T00:39:00.000Z', ended_at: ENDED,
+      viewer_address: { ip: '198.51.100.8', port: 50100 }, target_address: { ip: '192.0.2.30', port: 5900 },
+    }),
+    // ended_at minus started_at is one second longer than duration_ms. The screen shows duration_ms.
+    closedItem({
+      session_id: 'sess_day', viewer_transport: 'wss', target_transport: 'wss', close_cause: 'admin_terminated',
+      duration_ms: 93720000, started_at: '2026-10-20T22:43:00.000Z', ended_at: '2026-10-22T00:45:01.000Z',
+      viewer_address: { ip: '192.0.2.10', port: 44311 }, target_address: { ip: '192.0.2.10', port: 44322 },
+      viewer_forwarded_ip: longIp, target_forwarded_ip: '198.51.100.40',
+    }),
+  ];
+  const { root } = await mount(fakeApi({
+    'GET /api/v1/closed-sessions': () => ok({ as_of: AS_OF, max_entries: 100, items }),
+  }));
+  await waitFor(() => settled(root));
+  const card = cardOf(root, t.closedTitle);
+  const rows = dataRowsOf(card);
+  check('DASH-066: one row per closed item', rows.length === 3);
+  checkListCount('DASH-066', card, 3);
+  checkColumns('DASH-066', card, rows, t.closedHeaders);
+  checkTableRoles('DASH-066', card);
+  checkHeadCells('DASH-066', rows, 0, 1);
+  for (const [index, mode, transports, duration, peers] of [
+    [0, 'Mode II', ['WSS', 'WS'], '00:09:50',
+      [[t.viewerAddress, '192.0.2.10:44310'], [t.targetAddress, '192.0.2.20:40022'], [t.targetForwarded, '192.0.2.42']]],
+    [1, 'Mode I', ['TCP', 'TCP'], '00:06:00', [[t.viewerAddress, '198.51.100.8:50100'], [t.targetAddress, '192.0.2.30:5900']]],
+    [2, 'Mode II', ['WSS', 'WSS'], t.dayDuration, [[t.viewerAddress, '192.0.2.10:44311'], [t.viewerForwarded, longIp],
+      [t.targetAddress, '192.0.2.10:44322'], [t.targetForwarded, '198.51.100.40']]],
+  ]) {
+    const row = rows[index];
+    const item = items[index];
+    checkDataValue(`DASH-066 row ${index} session ID`, row?.cells[0].querySelector('.session-id'), item.session_id);
+    const modeBadge = row?.cells[2].querySelector('.badge');
+    check(`DASH-066 row ${index}: mode badge`, modeBadge?.textContent === mode && modeBadge.dataset.tone === 'neutral');
+    const xport = row?.cells[3].querySelector('.xport');
+    check(`DASH-066 row ${index}: Viewer transport, arrow, target transport`,
+      same([...(xport?.querySelectorAll('.badge') ?? [])].map((badge) => badge.textContent), transports)
+        && xport?.querySelector('svg')?.getAttribute('aria-hidden') === 'true');
+    const start = formatTime(item.started_at);
+    const end = formatTime(item.ended_at);
+    check(`DASH-066 row ${index}: local start and end times`, TIME_ONLY.test(start) && TIME_ONLY.test(end));
+    check(`DASH-066 row ${index}: start, end, and duration_ms lines`,
+      same(linesOf(row?.cells[4]), [[t.startedAt, start], [t.closedAt, end], [t.duration, duration]]));
+    check(`DASH-066 row ${index}: two byte directions`, row?.cells[5].querySelectorAll('.cell-bytes .cell-line').length === 2);
+    const peer = row?.cells[6];
+    check(`DASH-066 row ${index}: socket addresses and only the present forwarded IPs`, same(linesOf(peer), peers));
+    for (const [line, value] of [...(peer?.querySelectorAll('.fact-address') ?? [])].entries()) {
+      checkDataValue(`DASH-066 row ${index} address ${line}`, value, peers[line][1]);
+    }
+    check(`DASH-066 row ${index}: long addresses wrap inside the cell`, !!peer && peer.scrollWidth <= peer.clientWidth);
+    check(`DASH-066 row ${index}: address labels sit above their values`, labelsAbove(peer));
+    const link = row?.cells[7].querySelector('a.button');
+    check(`DASH-066 row ${index}: log link CPY-182 opens the session filter`, link?.textContent === t.viewLogs
+      && link.getAttribute('href') === `/#/logs?session_id=${encodeURIComponent(item.session_id)}`);
+    const svg = link?.querySelector('svg');
+    check(`DASH-066 row ${index}: decorative log icon`, svg?.innerHTML === icon('log').innerHTML && svg.getAttribute('aria-hidden') === 'true');
+    link?.focus();
+    check(`DASH-066 row ${index}: log link takes keyboard focus`, !!link && document.activeElement === link);
+  }
+  check('DASH-066: closed rows have no other actions', (card?.querySelectorAll('button').length ?? -1) === 0
+    && card?.querySelectorAll('a').length === rows.length);
+  // The 8-column table must fit its card without squeezing values below a word (DESIGN: closed table fits at 1024px).
+  const table = card?.querySelector('table');
+  const area = card?.querySelector('.table-scroll');
+  check('DASH-066: the closed table fits its card', !!table && !!area
+    && table.getBoundingClientRect().width <= area.clientWidth + 0.5);
+  const desktop = window.innerWidth >= 1024;
+  for (const cell of card?.querySelectorAll('.cell-time') ?? []) {
+    for (const [index, line] of [...cell.querySelectorAll('.cell-line')].entries()) {
+      const value = line.querySelector('.cell-value');
+      const parts = [...(value?.querySelectorAll('.data-table-nowrap') ?? [])];
+      if (index < 2) {
+        // A start or end time keeps its date whole. Desktop also keeps the clock with its zone whole, so a time
+        // takes at most two lines (DESIGN). Narrow screens may break the clock only between words.
+        const [date, clock] = parts;
+        const clockLimit = desktop ? 1 : (clock?.textContent.split(' ').length ?? 0);
+        check(`DASH-066: time "${value?.textContent}" keeps its date whole and breaks only between parts`,
+          parts.length === 2 && textLines(date) === 1 && textLines(clock) <= clockLimit && (!desktop || textLines(value) <= 2));
+      } else {
+        // A duration breaks only between words.
+        const words = value?.textContent.trim().split(/\s+/).length ?? 0;
+        check(`DASH-066: duration "${value?.textContent}" breaks only between words`, !!value && textLines(value) <= words);
+      }
+      if (window.innerWidth >= 1280 && index < 2) {
+        // At 1280px the date follows its label on the same line (Q235 mockup `.tl`).
+        const label = line.querySelector('.cell-label')?.getBoundingClientRect();
+        const date = parts[0]?.getClientRects()[0];
+        check(`DASH-066: date "${parts[0]?.textContent}" follows its label`, !!label && !!date
+          && date.top < label.bottom && label.top < date.bottom);
+      }
+    }
+  }
+  if (desktop) {
+    for (const badge of card?.querySelectorAll('tbody td > .badge') ?? []) {
+      check(`DASH-066: badge "${badge.textContent}" stays on one line`, textLines(badge) === 1);
+    }
+    // The transport and bytes headers may wrap, but only between words ("대상->Viewer" stays whole).
+    const words = [...(card?.querySelectorAll('thead th .data-table-nowrap') ?? [])];
+    check('DASH-066: wrapping headers break only between words',
+      words.length > 0 && words.every((word) => textLines(word) === 1));
+  }
+  checkLayout('DASH-066');
+}
+
 async function shot(state) {
   const pending = new Promise(() => {});
   const paths = ['/api/v1/summary', '/api/v1/waiting', '/api/v1/sessions', '/api/v1/closed-sessions'];
@@ -1159,6 +1399,8 @@ const CASES = {
   'dash-025': caseDash025,
   'dash-062': caseDash062,
   'dash-064': caseDash064,
+  'dash-065': caseDash065,
+  'dash-066': caseDash066,
 };
 
 const caseName = new URLSearchParams(location.search).get('case');
