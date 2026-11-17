@@ -312,6 +312,20 @@ PATCH의 `ConfigEditService::patch`는 같은 잠금으로 편집 허용→원�
 
 `LifecycleService::request_shutdown`이라는 API는 현재 없다. 준비 상태 전이는 `LifecycleService::begin_shutdown`이, 중계 수명 전이는 `RelayService::request_shutdown`이 맡는다. 이 이름을 전제로 한 설계·TODO 문구는 실제 책임 분리와 대조해야 한다. 이 지도는 향후 API 이동을 결정하지 않는다. **이 문서의 판단, 사용자 결정 없음**이다.
 
+### Windows 서비스와 트레이 앱(Target)
+
+[ADR-0010](../decisions/ADR-0010-windows-service-and-tray.md)을 구현할 때 쓸 계획 위치다. 아직 코드가 없으므로 2~4절의 Current 지도에 넣지 않는다. 아래 경로·패키지 이름·책임 분리는 **이 문서의 판단, 사용자 결정 없음**이다. 사용자가 정한 것은 별도 트레이 실행파일(Q240), 사용할 라이브러리와 `unsafe` 파일 두 곳의 범위(Q241·Q245·Q256)다(사용자 결정 2026-11-17). 구현하면 이 표의 내용을 Current 지도와 모듈 설계로 옮기고 이 절에서 지운다.
+
+| 계획 위치 | 책임 | 근거 |
+| --- | --- | --- |
+| `src/service.rs` | `service install`·`service uninstall`·`service run` 명령을 조립한다. 설치 전 설정 검사와 `serve` 시작 순서를 재사용하고, 시작 결과를 SCM 상태 보고에 잇는다. | [CLI 계약 1.9절](../contracts/cli-v1.md#19-windows-서비스-실행), [운영 스펙 3.7절](../specs/operations.md#37-windows-서비스-실행) |
+| `crates/adapters/src/windows_service.rs` | windows-service로 서비스를 등록·해제하고, 서비스 제어 처리기와 상태 보고를 맡는다. 중지 요청과 시스템 종료 알림을 서버의 종료 요청으로 바꾼다. | Q241·Q244·Q246·Q248·Q249 |
+| `crates/adapters/src/windows_service/security.rs` | `--operator` 이름을 계정으로 바꾸고 서비스 시작·중지 권한을 준다. `unsafe` 예외 파일이다. | Q245, [Rust 코드 컨벤션](../conventions/rust.md) |
+| `crates/tray`(패키지 `vnc-relay-tray`, 실행파일 `vnc-relay-tray.exe`) | GUI 서브시스템 실행파일을 조립한다. 메뉴, SCM 상태 조회와 시작·중지 요청, `/readyz` 조회, 로그인할 때 시작을 맡는다. 설정 파일은 `crates/adapters/src/config_file.rs`의 설정 로더로 읽는다. | Q240·Q250~Q256, [Windows 트레이 앱 스펙](../specs/windows-tray.md) |
+| `crates/tray/src/message_loop.rs` | tray-icon이 Windows에서 요구하는 메시지 루프를 돌린다. `unsafe` 예외 파일이다. | Q241, [Rust 코드 컨벤션](../conventions/rust.md) |
+
+`cargo xtask layers`의 패키지별 허용 목록과 `cargo xtask package`의 Windows 묶음은 구현할 때 함께 바꾼다([xtask 모듈 설계](xtask.md)). crate 이름 규칙 `vnc-relay-<레이어>`에서 `tray`는 트레이 실행파일 조립 레이어로 본다. **이 문서의 판단, 사용자 결정 없음**이다.
+
 ## 대조 기록
 
 ### 목록 정보 확대 Q234 소스 대조(2026-11-17)

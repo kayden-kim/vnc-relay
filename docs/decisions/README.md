@@ -13,5 +13,6 @@ ADR(Architecture Decision Record, 기술 결정 기록)은 중요하고 되돌�
 | [ADR-0007](ADR-0007-proxy-tls-termination.md) | Accepted(사용자 결정 2026-11-08(Q182·Q183)) | 내장 TLS를 유지하고 중계 WS·WSS 앞의 프록시 TLS 종료와 신뢰 프록시 전달 주소를 지원한다. 관리 리스너는 제외한다. |
 | [ADR-0008](ADR-0008-shared-ws-listener-path-roles.md) | Accepted(사용자 결정 2026-11-08(Q181·Q188)) | WS·WSS 리스너를 공유하고 경로로 Viewer·Server 역할을 고른다. 설정 4.0.0·ops-info 2.0.0으로 이전한다. |
 | [ADR-0009](ADR-0009-optional-relay-access-ticket.md) | Accepted(사용자 결정 2026-11-11(Q192·Q194)) | 진입점별 출발지 IP 허용 목록 위에 WS·WSS 역할별 선택형 접속 ticket 확인을 더한다. TCP에는 적용하지 않는다. 구현은 커밋 `4be8e0e`이며, 계약 테스트는 같은 커밋의 두 OS 전체 게이트에서 통과했다([접속 ticket 판정표](../how-to/set-up-and-verify.md#45-접속-ticket-판정표)). |
+| [ADR-0010](ADR-0010-windows-service-and-tray.md) | Accepted(사용자 결정 2026-11-17(Q239~Q257)) | Windows 11에서 같은 실행파일의 `service` 하위 명령으로 서비스를 설치·실행하고, 별도 GUI 실행파일인 트레이 앱으로 상태 확인과 시작·중지를 한다. Ubuntu는 수동 실행을 유지한다. 구현 전이다. |
 
 작성 규칙은 [AGENTS.md](AGENTS.md)를 따른다.

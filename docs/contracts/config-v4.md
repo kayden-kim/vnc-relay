@@ -13,7 +13,7 @@
 | 이전 버전 이력 | 4.0.0은 WS·WSS의 리스너 표와 역할 표를 분리한 호환성을 깨는 변경이다(사용자 결정 2026-11-08(Q181), 사용자 결정 2026-11-08(Q188)). 새 키의 재로드·편집 구분과 최근 로그 보관을 더했다(사용자 결정 2026-11-08(Q184), 사용자 결정 2026-11-08(Q185)). 이전 3.0.0은 재로드 대상을 8개에서 27개로 넓히고 `management.config_edit`와 관리 API 파일 쓰기를 더했다(사용자 결정 2026-11-08(Q167·Q168·Q170·Q171)). 이전 2.0.0은 `limits.initial_message_bytes`(I)와 관계 I ≤ B를 지웠다(사용자 결정 2026-11-01(Q71)). B와 M 사이에는 대소 제약이 없다(사용자 결정 2026-11-01(Q78)). 이전 1.1.0은 `log_file_unavailable`, 1.2.0은 관리 TLS·첫 요청 머리 읽기의 U 적용을 더했다. 감시 대상 명확화는 사용자 결정 2026-10-22(Q50)를 따른다. |
 | 소유자 | vnc-relay 프로젝트 관리자 |
 | 만드는 쪽(Producer) | 운영자(설정 파일 작성자), 편집 기능을 켰을 때의 관리 API |
-| 사용하는 쪽(Consumer) | `vnc-relay serve`(시작 검증·자동 재로드·관리 API 편집 적용). `vnc-relay admin` 하위 명령은 `[admin]` 테이블만 읽는다. |
+| 사용하는 쪽(Consumer) | `vnc-relay serve`(시작 검증·자동 재로드·관리 API 편집 적용). Windows의 `vnc-relay service run`도 `serve`와 같이 읽고, `vnc-relay service install`은 등록 전에 같은 검증을 한다([CLI 계약 1.9절](cli-v1.md#19-windows-서비스-실행)). `vnc-relay admin` 하위 명령은 `[admin]` 테이블만 읽는다. Windows 트레이 앱은 `management.listen`·`management.cert_file`·`status.listen`·`log.output`만 쓴다([Windows 트레이 앱 스펙](../specs/windows-tray.md)). |
 | 방향 | 운영자가 쓴 파일을 서버가 읽는다. `management.config_edit = true`이면 관리 API도 같은 파일을 쓴다(1.10절). |
 | 스키마 기준 파일 | 없음. 이 문서의 Markdown 표가 형식의 기준이다. |
 | 기준 스펙 | [설정·프로세스 수명·운영 보안 스펙](../specs/operations.md) |
@@ -199,7 +199,7 @@ K의 감지 시간은 `tcp_idle_secs + tcp_interval_secs × tcp_probes`다. 기�
 | `recent_closed.max_entries`(R) | 정수 | 아님 | 100 | 0~10000. 최근 종료 목록의 최대 항목 수. 0이면 목록을 보관하지 않는다. |
 | `recent_logs.max_entries` | 정수 | 아님 | 1000 | 0~10000. 메모리에 보관할 최근 운영 로그 사건 수. 0이면 보관하지 않는다. 재시작하면 목록이 빈다. `log.output`이나 출력 쓰기 성공 여부와 무관하다(사용자 결정 2026-11-08(Q185)). |
 | `status.listen` | 문자열(주소) | 필수 | 없음 | 상태 리스너 주소(1.1절). 포트까지 필수다. 루프백을 쓰기를 권장한다. 루프백이 아니면 경고 `status_listen_not_loopback`을 기록한다. |
-| `log.output` | 문자열 | 아님 | `"stdout"` | `"stdout"`(표준 출력) 또는 로그 파일 경로. 파일이면 이어 쓴다. 파일이 없으면 만든다. 이름이 `stdout`인 파일은 `"./stdout"`으로 쓴다. 운영자가 파일을 교체하면 같은 경로를 다시 연다([운영 정보 계약 1.1절](ops-info-v2.md#11-로그-일반-규칙) "파일 다시 열기", 사용자 결정 2026-11-04(Q104)). 회전 시점·보관은 운영자 책임이다. |
+| `log.output` | 문자열 | 아님 | `"stdout"` | `"stdout"`(표준 출력) 또는 로그 파일 경로. 파일이면 이어 쓴다. 파일이 없으면 만든다. 이름이 `stdout`인 파일은 `"./stdout"`으로 쓴다. 운영자가 파일을 교체하면 같은 경로를 다시 연다([운영 정보 계약 1.1절](ops-info-v2.md#11-로그-일반-규칙) "파일 다시 열기", 사용자 결정 2026-11-04(Q104)). 회전 시점·보관은 운영자 책임이다. Windows 서비스 실행(`service install`·`service run`)에서는 파일 경로여야 한다. `"stdout"`이면 `service_log_stdout`이다([CLI 계약 1.9절](cli-v1.md#19-windows-서비스-실행), 사용자 결정 2026-11-17(Q247)). |
 | `reload.settle_secs`(D) | 정수(초) | 아님 | 5 | 1~60. 마지막 변경을 감지한 뒤 적용·실패 결과를 확인할 때까지의 최대 시간. |
 | `reload.poll_secs`(Dp) | 정수(초) | 아님 | 30 | 5~600. OS 파일 알림을 놓친 변경을 찾는 주기 확인 간격. 로그 파일을 다시 여는 주기도 이 값이다(사용자 결정 2026-11-04(Q109)). |
 

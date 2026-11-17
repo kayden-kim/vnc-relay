@@ -15,10 +15,11 @@ VNC Relay가 운영자에게 내보내는 두 가지 정보의 교환 형식을 
 | 호환 사건 추가 | 2026-11-04, 1.3.0 유지: 로그 파일을 다시 열지 못했을 때의 `log_reopen_failed`를 더했다(1.1절 "파일 다시 열기", 사용자 결정 2026-11-04(Q104·Q109·Q110)). 3절의 사건 추가 규칙을 따른다. |
 | 장애 조건 확정 | 2026-11-05, 1.3.0 유지: 필수 리스너의 복구 불가능 수락 오류·감독 경계와 장애 종료 동안 `listener_failed` 보존을 1.12절에 정했다. 기존 `fatal_error`·`detail` 형식은 유지한다. 사용자 결정 2026-11-05(Q114). |
 | 호환 설정 편집 추가 | 2026-11-08, 1.3.0 유지: `config_edited`·`config_edit_rejected`와 `revision`을 더했다. `reload_applied`의 대상 값은 27개로 넓히고 `trigger`(`file_watch`·`config_edit`)를 더했다. `allow_all_target.phase`에 `reload`를 허용한다. 3절의 새 사건·선택 필드·값 추가 규칙을 따른다. 편집 계정·키 기록은 사용자 결정 2026-11-08(Q169), 대상 확대는 Q168·Q171을 따른다. 이름 채택·구현 여부는 5·6절에서 구분한다. |
+| 호환 조건 추가 | 2026-11-17, 2.1.0 유지: Windows 서비스의 중지 요청은 `shutdown_started`(`trigger` = `requested`)이며 G를 적용한다. 서비스로 실행 중의 Windows 시스템 종료 알림은 콘솔 창 닫기처럼 `requested`를 쓰고 G 없이 남은 세션이 있으면 `shutdown_forced`를 쓴다(사용자 결정 2026-11-17(Q248)). 서비스 실행의 로그 출력은 파일만이다(사용자 결정 2026-11-17(Q247)). 새 사건·필드·값은 없다. 구현 전이며 계약 테스트는 미실행이다. |
 | 상태 | Active(2.1.0, 사용자 결정 2026-11-11(Q198·Q199·Q213)). 접속 ticket의 구현은 커밋 `4be8e0e`이며, 계약 테스트는 같은 커밋의 두 OS 전체 게이트에서 통과했다([접속 ticket 판정표](../how-to/set-up-and-verify.md#45-접속-ticket-판정표)). 2.0.0의 구현은 커밋 `3df0693`이며, 계약 테스트는 커밋 `51bd747`의 두 OS 게이트에서 통과했다([WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)). 이 기록은 2.1.0의 통과 증거가 아니다. |
 | 소유자 | vnc-relay 프로젝트 관리자 |
-| 만드는 쪽(Producer) | `vnc-relay` (`vnc-relay serve` 프로세스) |
-| 사용하는 쪽(Consumer) | 운영자의 로그 수집 도구, 운영자의 상태 확인 도구(상태 점검·감시 도구) |
+| 만드는 쪽(Producer) | `vnc-relay` (`vnc-relay serve` 프로세스와 Windows 서비스로 실행한 `vnc-relay service run` 프로세스) |
+| 사용하는 쪽(Consumer) | 운영자의 로그 수집 도구, 운영자의 상태 확인 도구(상태 점검·감시 도구), Windows 트레이 앱(`/readyz`만, [Windows 트레이 앱 스펙](../specs/windows-tray.md)) |
 | 방향 | 로그: 발행(Producer가 표준 출력 또는 지정한 파일에 한 줄씩 씀). 상태: 요청/응답(Consumer가 상태 리스너에 `GET`) |
 | 스키마 기준 파일 | 없음. 1절의 Markdown 표가 형식의 기준이다. |
 | 기준 스펙 | [운영 스펙 3.5절](../specs/operations.md#35-운영-정보), [4절](../specs/operations.md#4-보안과-신뢰-경계), [5절](../specs/operations.md#5-오류와-복구), [중계 스펙](../specs/relay.md), [WS·WSS 스펙](../specs/websocket.md), [관리 스펙](../specs/management.md) |
@@ -120,8 +121,8 @@ VNC Relay가 운영자에게 내보내는 두 가지 정보의 교환 형식을 
 | `server_starting` | `info` | 설정이 유효하고 로그 출력을 연 뒤 시작 중 상태로 들어갔을 때 | `log_contract`: 문자열. 2.1.0 Producer의 값은 `ops-info/2.1.0`이다. | OPS-001, OPS-010, OPS-069 |
 | `server_ready` | `info` | 필수 리스너와 접근 경계가 모두 준비돼 준비됨 상태로 들어갔을 때 | `listeners`: 객체 배열. 각 객체는 `name`(1.4절의 `listener` 값)과 `listen`(바인딩 주소 문자열)을 가진다. 공유 WS·WSS 리스너는 역할별로 나누지 않는다. | OPS-002, OPS-013, OPS-032, OPS-069 |
 | `startup_failed` | `error` | 시작 실패가 확정됐을 때. 자원을 회수한 뒤 프로세스가 끝난다. | `reason`(시작을 막은 오류 코드, 1.6절), `config_key?`, `listener?`, `detail?`. | OPS-001, OPS-002, OPS-028, OPS-034, OPS-038, OPS-039, OPS-040, OPS-070 |
-| `shutdown_started` | `info`. `trigger`가 `fatal_error`이면 `error` | 종료 유예 중 상태로 들어갔을 때. 이후 신규 중계 접속을 받지 않는다. Windows 콘솔 창 닫기도 `requested`로 쓴다. | `trigger`: `requested` 또는 `fatal_error`. `grace_secs`: 정수(G). `active_sessions`: 정수. `detail?` | OPS-007, OPS-008, OPS-044 |
-| `shutdown_forced` | `warn` | G가 지나거나, 유예 중 두 번째 종료 요청을 받거나, Windows 콘솔 창이 닫혀 남은 활성 세션을 강제 정리하기 시작했을 때. 남은 세션이 없으면 기록하지 않는다. | `remaining_sessions`: 정수. | OPS-009, OPS-042, OPS-044 |
+| `shutdown_started` | `info`. `trigger`가 `fatal_error`이면 `error` | 종료 유예 중 상태로 들어갔을 때. 이후 신규 중계 접속을 받지 않는다. Windows 콘솔 창 닫기도 `requested`로 쓴다. Windows 서비스의 중지 요청과 서비스로 실행 중의 시스템 종료 알림도 `requested`로 쓴다(사용자 결정 2026-11-17(Q248)). | `trigger`: `requested` 또는 `fatal_error`. `grace_secs`: 정수(G). `active_sessions`: 정수. `detail?` | OPS-007, OPS-008, OPS-044, OPS-076, OPS-078 |
+| `shutdown_forced` | `warn` | G가 지나거나, 유예 중 두 번째 종료 요청을 받거나, Windows 콘솔 창이 닫히거나, 서비스로 실행 중 시스템 종료 알림을 받아 남은 활성 세션을 강제 정리하기 시작했을 때. 남은 세션이 없으면 기록하지 않는다. | `remaining_sessions`: 정수. | OPS-009, OPS-042, OPS-044, OPS-078 |
 | `server_stopped` | `info` | 자원 정리를 마치고 프로세스가 끝나기 직전 | 없음 | OPS-010 |
 
 순서 규칙: `server_starting`은 시작 단계의 첫 사건이다. 시작 경고(아래 "설정 경고"의 사건)는 `server_starting` 뒤, `server_ready` 앞에 쓴다. `shutdown_forced`는 `server_shutdown` 원인의 `session_closed`보다 앞에 쓴다. `server_stopped`는 마지막 줄이다.
