@@ -886,15 +886,20 @@ fn summary(
         closed.get("bytes_target_to_viewer").number(),
         12 * transfers
     );
-    for key in [
-        "admin_account",
-        "relay_id",
-        "viewer_address",
-        "target_address",
-        "csrf_token",
-    ] {
+    for key in ["admin_account", "relay_id", "csrf_token"] {
         assert_eq!(closed.get(key), &Json::Null, "unexpected {key}");
     }
+    // Q234: the summary carries both socket addresses, both forwarded IPs
+    // (null without a trusted proxy) and the required integer duration_ms.
+    for key in ["viewer_address", "target_address"] {
+        let address = closed.get(key);
+        assert!(!address.get("ip").text().is_empty(), "{key} ip");
+        assert!(address.get("port").number() > 0, "{key} port");
+    }
+    for key in ["viewer_forwarded_ip", "target_forwarded_ip"] {
+        assert_eq!(closed.get(key), &Json::Null, "{key} without a proxy");
+    }
+    let _ = closed.get("duration_ms").number();
     closed.clone()
 }
 

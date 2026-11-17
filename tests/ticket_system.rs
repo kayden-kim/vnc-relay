@@ -407,17 +407,23 @@ fn assert_expired_session(server: &Server, active: &Value) {
         "viewer_transport",
         "target_transport",
         "started_at",
+        "viewer_address",
+        "target_address",
+        "viewer_forwarded_ip",
+        "target_forwarded_ip",
     ] {
         assert_eq!(
             closed[key], active[key],
             "closed field {key} retains its meaning"
         );
     }
+    // Q234: closed items carry the active item's socket addresses and a duration.
+    assert!(closed["viewer_address"]["port"].is_u64());
+    assert!(closed["target_address"]["port"].is_u64());
+    assert!(closed["duration_ms"].is_u64());
     assert_eq!(closed["bytes_viewer_to_target"], 11);
     assert_eq!(closed["bytes_target_to_viewer"], 11);
     assert!(some(closed["ended_at"].as_str()) >= some(closed["started_at"].as_str()));
-    assert!(closed.get("viewer_address").is_none());
-    assert!(closed.get("target_address").is_none());
     let event = server.event(0, |e| {
         e["event"] == "session_closed" && e["session_id"] == id
     });
