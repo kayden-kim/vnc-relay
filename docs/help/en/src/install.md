@@ -110,14 +110,29 @@ You must restrict access to the account file, private key, and log directory. On
 This feature is in Windows bundles built from `main`. Release `v2026.11.4` does not include it. First prepare settings and an administrator account with [Quick start](quick-start.md). The service requires a file path for `log.output`. Keeping operational files under `%ProgramData%\vnc-relay\` is recommended. Use elevated PowerShell for installation and removal.
 
 1. Place the prepared configuration, accounts, and TLS or key files in use under `%ProgramData%\vnc-relay\`. Adjust relative paths for this location.
-2. In elevated PowerShell, enter the executable directory.
-3. Install the service. Replace `<user>` and `<group>` with Windows users or groups that will start and stop it without UAC. Repeat `--operator` as needed.
+2. In elevated PowerShell, enter the extracted bundle directory.
+3. Copy the bundle files to a folder that only administrators can modify.
+
+   ```powershell
+   New-Item -ItemType Directory -Force -Path "$env:ProgramFiles\vnc-relay"
+   Copy-Item -Path .\* -Destination "$env:ProgramFiles\vnc-relay" -Recurse
+   ```
+
+   Do not register the service with an executable in a folder that normal users can write to, such as a download folder. If such a user replaces the executable, the replaced file runs as the service account at the next start. Keep the executable in this location after installation.
+
+4. Enter the copied folder.
+
+   ```powershell
+   Set-Location "$env:ProgramFiles\vnc-relay"
+   ```
+
+5. Install the service. Replace `<user>` and `<group>` with Windows users or groups that will start and stop it without UAC. Repeat `--operator` as needed.
 
    ```powershell
    .\vnc-relay.exe service install --config "$env:ProgramData\vnc-relay\relay.toml" --operator "<user>" --operator "<group>"
    ```
 
-4. Check file access for the service account, `NT SERVICE\vnc-relay`.
+6. Check file access for the service account, `NT SERVICE\vnc-relay`.
 
 Installation checks the configuration and files in use, including accounts and TLS files. It registers a delayed automatic-start service without recovery actions. Installation does not start the service. File checks run as the installing administrator, so they do not guarantee service-account access.
 

@@ -110,14 +110,29 @@
 이 기능은 `main`으로 만든 Windows 묶음에 있다. `v2026.11.4` Release에는 없다. 먼저 [빠른 시작](quick-start.md)에 따라 설정과 관리자 계정을 준비한다. 서비스의 `log.output`은 파일 경로여야 한다. `%ProgramData%\vnc-relay\`에 운영 파일을 두기를 권장한다. 설치·해제에는 관리자 권한 PowerShell을 쓴다.
 
 1. 준비한 설정·계정·사용 중인 TLS·키 파일을 `%ProgramData%\vnc-relay\`에 배치한다. 상대 경로도 이 위치를 기준으로 맞춘다.
-2. 관리자 권한 PowerShell에서 실행파일 디렉터리로 이동한다.
-3. 서비스를 설치한다. `<사용자>`·`<그룹>`은 UAC 없이 시작·중지할 실제 Windows 사용자나 그룹으로 바꾼다. `--operator`는 필요한 수만큼 반복한다.
+2. 관리자 권한 PowerShell에서 묶음을 푼 디렉터리로 이동한다.
+3. 묶음의 파일을 관리자만 고칠 수 있는 폴더에 복사한다.
+
+   ```powershell
+   New-Item -ItemType Directory -Force -Path "$env:ProgramFiles\vnc-relay"
+   Copy-Item -Path .\* -Destination "$env:ProgramFiles\vnc-relay" -Recurse
+   ```
+
+   일반 사용자가 쓸 수 있는 폴더(예: 다운로드 폴더)의 실행파일로 서비스를 등록하지 않는다. 그 사용자가 실행파일을 바꾸면 다음 시작 때 바뀐 파일이 서비스 계정으로 실행된다. 설치 뒤에도 실행파일을 이 위치에 유지한다.
+
+4. 복사한 폴더로 이동한다.
+
+   ```powershell
+   Set-Location "$env:ProgramFiles\vnc-relay"
+   ```
+
+5. 서비스를 설치한다. `<사용자>`·`<그룹>`은 UAC 없이 시작·중지할 실제 Windows 사용자나 그룹으로 바꾼다. `--operator`는 필요한 수만큼 반복한다.
 
    ```powershell
    .\vnc-relay.exe service install --config "$env:ProgramData\vnc-relay\relay.toml" --operator "<사용자>" --operator "<그룹>"
    ```
 
-4. 서비스 계정 `NT SERVICE\vnc-relay`의 파일 접근 권한을 확인한다.
+6. 서비스 계정 `NT SERVICE\vnc-relay`의 파일 접근 권한을 확인한다.
 
 설치는 설정과 계정·TLS 등 사용 중인 파일을 검사하고 자동(지연 시작) 서비스를 등록한다. 복구 동작은 설정하지 않는다. 설치만으로 서비스를 시작하지 않는다. 설치 검사는 관리자 권한으로 실행하므로 서비스 계정의 파일 접근까지 보장하지 않는다.
 
