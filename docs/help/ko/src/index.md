@@ -41,15 +41,25 @@ noVNC는 포함하지 않는다. 운영자가 별도로 준비하는 외부 View
 
 ## 기준 버전
 
-이 도움말은 저장소의 `main`을 따른다. [최신 Release](https://github.com/kayden-kim/vnc-relay/releases/latest)는 `v2026.11.4`이며 2026-11-17에 공개됐다. 배포 묶음은 [GitHub Releases](https://github.com/kayden-kim/vnc-relay/releases)에서 받는다.
+이 도움말은 저장소의 `main`을 따른다. [최신 Release](https://github.com/kayden-kim/vnc-relay/releases/latest)는 `v2026.11.5`이며 2026-11-18에 공개됐다. 배포 묶음은 [GitHub Releases](https://github.com/kayden-kim/vnc-relay/releases)에서 받는다.
 
-현재 `main`에는 최신 Release에 없는 Windows 서비스와 트레이 앱이 있다. 아래 표에서 차이를 확인한다. `main`으로 빌드해도 다음 릴리스 전까지 버전은 `2026.11.4`로 표시된다.
+현재 `main`의 동작은 최신 Release와 같다. 다음 릴리스 전에 `main`의 동작이 달라지면 아래 표에 적는다. `main`으로 빌드해도 다음 릴리스 전까지 버전은 `2026.11.5`로 표시된다.
 
-| 차이 | `main`의 동작 | `v2026.11.4` Release 사용자 |
+| 차이 | `main`의 동작 | `v2026.11.5` Release 사용자 |
 | --- | --- | --- |
-| Windows 서비스·트레이 앱 | `service install`·`service uninstall`·SCM 전용 `service run`과 Windows 묶음의 `vnc-relay-tray.exe`를 제공한다. [설치](install.md#windows-서비스-설치와-해제)와 [운영](operate.md#windows-서비스와-트레이)을 따른다. | 이 기능과 트레이 실행파일이 없다. `serve`로 수동 실행하거나 `main`에서 묶음을 만든다. |
+| 없음 | 최신 Release와 같다. | 이 도움말을 그대로 따른다. |
 
-`v2026.11.3` 이하에서 올리면 다음 동작이 바뀐다.
+`v2026.11.4` 이하에서 올리면 다음 동작이 바뀐다.
+
+| 동작 | `v2026.11.5`부터 | `v2026.11.4` 이하 |
+| --- | --- | --- |
+| Windows 서비스·트레이 앱 | `service install`·`service uninstall`·SCM 전용 `service run`과 Windows 묶음의 `vnc-relay-tray.exe`를 제공한다. [설치](install.md#windows-서비스-설치와-해제)와 [운영](operate.md#windows-서비스와-트레이)을 따른다. | 이 기능과 트레이 실행파일이 없다. `serve`로 수동 실행한다. |
+| 대시보드 대기 연결·활성 세션 표 | 접속 시각과 시작 시각을 날짜와 시각 두 줄로 보인다. 활성 세션 상대 주소의 레이블은 값 위 줄에 있다. | 폭이 넉넉하면 시각을 한 줄로 보이고, 활성 세션 주소의 레이블이 값과 같은 줄에 있다. [대시보드](dashboard.md)의 그림이 화면과 다르다. |
+| 대시보드 자동 갱신 표시 | 자동 갱신이 1초 안에 끝나면 `갱신 중`·`조회 중` 배지와 새로고침 버튼 문구를 바꾸지 않는다. 1초가 지나도 끝나지 않으면 `갱신 중`을 보인다. | 자동 갱신 때마다 `갱신 중`·`조회 중` 배지와 새로고침 버튼 문구가 잠깐 바뀐다. |
+
+서비스는 [운영 스펙 3.7절](https://github.com/kayden-kim/vnc-relay/blob/main/docs/specs/operations.md#37-windows-서비스-실행)과 [CLI 계약 1.9절](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/cli-v1.md#19-windows-서비스-실행)을, 트레이는 [Windows 트레이 앱 스펙](https://github.com/kayden-kim/vnc-relay/blob/main/docs/specs/windows-tray.md)을 따른다. 대시보드 표시는 [대시보드 스펙](https://github.com/kayden-kim/vnc-relay/blob/main/docs/specs/dashboard.md)의 SCR-001과 4.1절을 따른다.
+
+`v2026.11.3` 이하에서 올리면 다음 동작도 바뀐다.
 
 | 동작 | `v2026.11.4`부터 | `v2026.11.3` 이하 |
 | --- | --- | --- |

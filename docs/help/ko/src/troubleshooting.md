@@ -50,7 +50,7 @@ echo $?
 
 ## Windows 서비스나 트레이에 오류가 나온다
 
-이 절은 `main`의 서비스·트레이 기능에 적용한다. 전체 진단 코드와 종료 코드는 [CLI 계약 1.9절](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/cli-v1.md#19-windows-서비스-실행)을 따른다.
+이 절은 `v2026.11.5`부터 있는 서비스·트레이 기능에 적용한다. 전체 진단 코드와 종료 코드는 [CLI 계약 1.9절](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/cli-v1.md#19-windows-서비스-실행)을 따른다.
 
 - 설치·해제의 `service_access_denied`이면 관리자 권한 터미널에서 실행한다. 트레이의 `시작 실패: 권한 없음`·`중지 실패: 권한 없음`이면 관리자가 해당 사용자나 그룹을 `--operator`로 지정했는지 확인한다. 트레이 자체를 관리자 권한으로 실행하는 방식에 의존하지 않는다.
 - `service_exists`이면 이미 등록된 `vnc-relay`를 확인한다. 같은 이름으로 덮어쓰지 않는다. 운영자나 실행파일 위치를 바꾸려면 중지·해제 뒤 다시 설치한다.

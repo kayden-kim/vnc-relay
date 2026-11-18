@@ -16,10 +16,10 @@ You do not need Rust build tools to run a release bundle. Prepare a build enviro
 
 | OS | Bundle | Hash file |
 | --- | --- | --- |
-| Windows 11 x64 | `vnc-relay-2026.11.4-windows-x64.zip` | `vnc-relay-2026.11.4-windows-x64.zip.sha256` |
-| Ubuntu 24.04 LTS x64 | `vnc-relay-2026.11.4-linux-x64.tar.gz` | `vnc-relay-2026.11.4-linux-x64.tar.gz.sha256` |
+| Windows 11 x64 | `vnc-relay-2026.11.5-windows-x64.zip` | `vnc-relay-2026.11.5-windows-x64.zip.sha256` |
+| Ubuntu 24.04 LTS x64 | `vnc-relay-2026.11.5-linux-x64.tar.gz` | `vnc-relay-2026.11.5-linux-x64.tar.gz.sha256` |
 
-The commands below use `v2026.11.4`. If you download another version, change the version in every file name. See [Introduction](index.md) for differences between the Release and `main`.
+The commands below use `v2026.11.5`. If you download another version, change the version in every file name. See [Introduction](index.md) for differences between the Release and `main`.
 
 ## Verify SHA-256
 
@@ -30,13 +30,13 @@ Run these commands in the download directory before extracting the bundle.
 1. Calculate the bundle's SHA-256 hash.
 
    ```powershell
-   Get-FileHash .\vnc-relay-2026.11.4-windows-x64.zip -Algorithm SHA256
+   Get-FileHash .\vnc-relay-2026.11.5-windows-x64.zip -Algorithm SHA256
    ```
 
 2. Display the hash file.
 
    ```powershell
-   Get-Content .\vnc-relay-2026.11.4-windows-x64.zip.sha256
+   Get-Content .\vnc-relay-2026.11.5-windows-x64.zip.sha256
    ```
 
 3. Compare the `Hash` from `Get-FileHash` with the first word in the hash file. The values must match, ignoring letter case.
@@ -46,7 +46,7 @@ Run these commands in the download directory before extracting the bundle.
 1. Verify the bundle with the hash file.
 
    ```shell
-   sha256sum -c vnc-relay-2026.11.4-linux-x64.tar.gz.sha256
+   sha256sum -c vnc-relay-2026.11.5-linux-x64.tar.gz.sha256
    ```
 
 2. Check that the result is `OK`.
@@ -62,13 +62,13 @@ Choose a directory for the operational files. These commands run in the download
 1. Extract the bundle.
 
    ```powershell
-   Expand-Archive -Path .\vnc-relay-2026.11.4-windows-x64.zip -DestinationPath .
+   Expand-Archive -Path .\vnc-relay-2026.11.5-windows-x64.zip -DestinationPath .
    ```
 
 2. Enter the extracted directory.
 
    ```powershell
-   Set-Location .\vnc-relay-2026.11.4-windows-x64
+   Set-Location .\vnc-relay-2026.11.5-windows-x64
    ```
 
 ### Ubuntu bash
@@ -76,13 +76,13 @@ Choose a directory for the operational files. These commands run in the download
 1. Extract the bundle.
 
    ```shell
-   tar -xzf vnc-relay-2026.11.4-linux-x64.tar.gz
+   tar -xzf vnc-relay-2026.11.5-linux-x64.tar.gz
    ```
 
 2. Enter the extracted directory.
 
    ```shell
-   cd vnc-relay-2026.11.4-linux-x64
+   cd vnc-relay-2026.11.5-linux-x64
    ```
 
 Run subsequent commands in this directory, which contains the executable and `relay.toml`.
@@ -92,7 +92,7 @@ Run subsequent commands in this directory, which contains the executable and `re
 | File or directory | Purpose |
 | --- | --- |
 | `vnc-relay.exe` or `vnc-relay` | Executable for the target OS |
-| `vnc-relay-tray.exe` | Tray app for Windows service status, start, and stop. Included only in Windows bundles built from `main`, not Release `v2026.11.4` |
+| `vnc-relay-tray.exe` | Tray app for Windows service status, start, and stop. Included only in Windows bundles from `v2026.11.5` |
 | `relay.toml` | Loopback configuration from the repository's `examples/relay.toml` |
 | `README.md` | Product introduction and quick start |
 | `docs/`, `GLOSSARY.md` | Operations guide, contracts, and glossary for offline reading |
@@ -107,7 +107,7 @@ You must restrict access to the account file, private key, and log directory. On
 
 ## Install and uninstall the Windows service
 
-This feature is in Windows bundles built from `main`. Release `v2026.11.4` does not include it. First prepare settings and an administrator account with [Quick start](quick-start.md). The service requires a file path for `log.output`. Keeping operational files under `%ProgramData%\vnc-relay\` is recommended. Use elevated PowerShell for installation and removal.
+This feature is in Windows bundles from `v2026.11.5`. First prepare settings and an administrator account with [Quick start](quick-start.md). The service requires a file path for `log.output`. Keeping operational files under `%ProgramData%\vnc-relay\` is recommended. Use elevated PowerShell for installation and removal.
 
 1. Place the prepared configuration, accounts, and TLS or key files in use under `%ProgramData%\vnc-relay\`. Adjust relative paths for this location.
 2. In elevated PowerShell, enter the extracted bundle directory.

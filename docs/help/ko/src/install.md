@@ -16,10 +16,10 @@
 
 | OS | 묶음 | 해시 파일 |
 | --- | --- | --- |
-| Windows 11 x64 | `vnc-relay-2026.11.4-windows-x64.zip` | `vnc-relay-2026.11.4-windows-x64.zip.sha256` |
-| Ubuntu 24.04 LTS x64 | `vnc-relay-2026.11.4-linux-x64.tar.gz` | `vnc-relay-2026.11.4-linux-x64.tar.gz.sha256` |
+| Windows 11 x64 | `vnc-relay-2026.11.5-windows-x64.zip` | `vnc-relay-2026.11.5-windows-x64.zip.sha256` |
+| Ubuntu 24.04 LTS x64 | `vnc-relay-2026.11.5-linux-x64.tar.gz` | `vnc-relay-2026.11.5-linux-x64.tar.gz.sha256` |
 
-아래 명령은 `v2026.11.4`를 예로 든다. 다른 버전을 받으면 모든 파일 이름의 버전을 함께 바꾼다. Release와 `main`의 차이는 [소개](index.md)에 있다.
+아래 명령은 `v2026.11.5`를 예로 든다. 다른 버전을 받으면 모든 파일 이름의 버전을 함께 바꾼다. Release와 `main`의 차이는 [소개](index.md)에 있다.
 
 ## SHA-256 확인하기
 
@@ -30,13 +30,13 @@
 1. 묶음의 SHA-256을 계산한다.
 
    ```powershell
-   Get-FileHash .\vnc-relay-2026.11.4-windows-x64.zip -Algorithm SHA256
+   Get-FileHash .\vnc-relay-2026.11.5-windows-x64.zip -Algorithm SHA256
    ```
 
 2. 해시 파일의 내용을 표시한다.
 
    ```powershell
-   Get-Content .\vnc-relay-2026.11.4-windows-x64.zip.sha256
+   Get-Content .\vnc-relay-2026.11.5-windows-x64.zip.sha256
    ```
 
 3. `Get-FileHash`의 `Hash`와 해시 파일의 첫 낱말을 비교한다. 영문 대소문자는 무시하고 같은 값인지 확인한다.
@@ -46,7 +46,7 @@
 1. 해시 파일로 묶음을 확인한다.
 
    ```shell
-   sha256sum -c vnc-relay-2026.11.4-linux-x64.tar.gz.sha256
+   sha256sum -c vnc-relay-2026.11.5-linux-x64.tar.gz.sha256
    ```
 
 2. 결과가 `OK`인지 확인한다.
@@ -62,13 +62,13 @@
 1. 묶음을 푼다.
 
    ```powershell
-   Expand-Archive -Path .\vnc-relay-2026.11.4-windows-x64.zip -DestinationPath .
+   Expand-Archive -Path .\vnc-relay-2026.11.5-windows-x64.zip -DestinationPath .
    ```
 
 2. 풀린 디렉터리로 이동한다.
 
    ```powershell
-   Set-Location .\vnc-relay-2026.11.4-windows-x64
+   Set-Location .\vnc-relay-2026.11.5-windows-x64
    ```
 
 ### Ubuntu bash
@@ -76,13 +76,13 @@
 1. 묶음을 푼다.
 
    ```shell
-   tar -xzf vnc-relay-2026.11.4-linux-x64.tar.gz
+   tar -xzf vnc-relay-2026.11.5-linux-x64.tar.gz
    ```
 
 2. 풀린 디렉터리로 이동한다.
 
    ```shell
-   cd vnc-relay-2026.11.4-linux-x64
+   cd vnc-relay-2026.11.5-linux-x64
    ```
 
 이후 명령은 실행파일과 `relay.toml`이 있는 이 디렉터리에서 실행한다.
@@ -92,7 +92,7 @@
 | 파일·디렉터리 | 용도 |
 | --- | --- |
 | `vnc-relay.exe` 또는 `vnc-relay` | 해당 OS의 실행파일 |
-| `vnc-relay-tray.exe` | Windows 서비스 상태·시작·중지용 트레이 앱. `main`의 Windows 묶음에만 있으며 `v2026.11.4` Release에는 없다 |
+| `vnc-relay-tray.exe` | Windows 서비스 상태·시작·중지용 트레이 앱. `v2026.11.5`부터 Windows 묶음에만 있다 |
 | `relay.toml` | 저장소 `examples/relay.toml`의 루프백 설정 |
 | `README.md` | 제품 소개와 빠른 시작 |
 | `docs/`, `GLOSSARY.md` | 오프라인으로 읽을 수 있는 운영 안내·기준 문서·용어집 |
@@ -107,7 +107,7 @@
 
 ## Windows 서비스 설치와 해제
 
-이 기능은 `main`으로 만든 Windows 묶음에 있다. `v2026.11.4` Release에는 없다. 먼저 [빠른 시작](quick-start.md)에 따라 설정과 관리자 계정을 준비한다. 서비스의 `log.output`은 파일 경로여야 한다. `%ProgramData%\vnc-relay\`에 운영 파일을 두기를 권장한다. 설치·해제에는 관리자 권한 PowerShell을 쓴다.
+이 기능은 `v2026.11.5`부터 Windows 묶음에 있다. 먼저 [빠른 시작](quick-start.md)에 따라 설정과 관리자 계정을 준비한다. 서비스의 `log.output`은 파일 경로여야 한다. `%ProgramData%\vnc-relay\`에 운영 파일을 두기를 권장한다. 설치·해제에는 관리자 권한 PowerShell을 쓴다.
 
 1. 준비한 설정·계정·사용 중인 TLS·키 파일을 `%ProgramData%\vnc-relay\`에 배치한다. 상대 경로도 이 위치를 기준으로 맞춘다.
 2. 관리자 권한 PowerShell에서 묶음을 푼 디렉터리로 이동한다.

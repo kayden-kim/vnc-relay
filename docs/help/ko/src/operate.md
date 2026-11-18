@@ -22,7 +22,7 @@ Ubuntu:
 
 ## Windows 서비스와 트레이
 
-Windows 서비스는 `main`으로 만든 묶음에서 쓸 수 있다. `v2026.11.4` Release에는 없다. 먼저 [서비스 설치](install.md#windows-서비스-설치와-해제)를 마친다. 설치 때 `--operator`로 지정한 사용자나 그룹은 관리자 권한 없이 시작·중지할 수 있다.
+Windows 서비스는 `v2026.11.5`부터 Windows 묶음에서 쓸 수 있다. 먼저 [서비스 설치](install.md#windows-서비스-설치와-해제)를 마친다. 설치 때 `--operator`로 지정한 사용자나 그룹은 관리자 권한 없이 시작·중지할 수 있다.
 
 1. 일반 PowerShell에서 서비스를 시작한다.
 

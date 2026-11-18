@@ -241,7 +241,7 @@ v4 서버는 v3의 WS·WSS 테이블을 읽지 않는다. 호환 지원 기간�
 
 #### 3.3.1 Windows 서비스와 트레이 앱
 
-이 절은 Windows 11 x64에만 적용한다. `main`의 이번 변경에 서비스와 트레이 앱이 구현되어 있다. 최신 Release `v2026.11.4`에는 없다. 설치·해제에는 관리자 권한 터미널이 필요하다. 서비스 시작·중지에는 설치 때 지정한 서비스 운영자의 일반 터미널을 쓸 수 있다. 기준은 [운영 스펙 3.7절](../specs/operations.md#37-windows-서비스-실행)과 [CLI 계약 1.9절](../contracts/cli-v1.md#19-windows-서비스-실행)이다. 시험 절차와 실제 확인 범위는 [Windows 서비스 시험](set-up-and-verify.md#8-windows-서비스-시험)에 있다.
+이 절은 Windows 11 x64에만 적용한다. 서비스와 트레이 앱은 `2026.11.5`부터 Windows 묶음에 있다. 설치·해제에는 관리자 권한 터미널이 필요하다. 서비스 시작·중지에는 설치 때 지정한 서비스 운영자의 일반 터미널을 쓸 수 있다. 기준은 [운영 스펙 3.7절](../specs/operations.md#37-windows-서비스-실행)과 [CLI 계약 1.9절](../contracts/cli-v1.md#19-windows-서비스-실행)이다. 시험 절차와 실제 확인 범위는 [Windows 서비스 시험](set-up-and-verify.md#8-windows-서비스-시험)에 있다.
 
 ##### 설치
 

@@ -22,7 +22,7 @@ The process occupies the terminal until it stops. Do not consider it ready befor
 
 ## Windows service and tray
 
-The Windows service is available in bundles built from `main`, not Release `v2026.11.4`. Complete [service installation](install.md#install-and-uninstall-the-windows-service) first. Users or groups specified with `--operator` can start and stop it without elevation.
+The Windows service is available in Windows bundles from `v2026.11.5`. Complete [service installation](install.md#install-and-uninstall-the-windows-service) first. Users or groups specified with `--operator` can start and stop it without elevation.
 
 1. In normal PowerShell, start the service.
 

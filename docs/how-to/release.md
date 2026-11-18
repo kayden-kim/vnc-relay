@@ -115,7 +115,7 @@ Windows 11 x64와 Ubuntu 24.04 LTS x64용 배포 묶음을 만들고, 버전 태
    cargo run --quiet -- --version
    ```
 
-   기대 결과: `vnc-relay <버전>`. `Cargo.lock`에서 작업 공간 패키지 네 개(`vnc-relay`, `vnc-relay-domain`, `vnc-relay-app`, `vnc-relay-adapters`)의 버전이 바뀐다.
+   기대 결과: `vnc-relay <버전>`. `Cargo.lock`에서 작업 공간 패키지 다섯 개(`vnc-relay`, `vnc-relay-domain`, `vnc-relay-app`, `vnc-relay-adapters`, `vnc-relay-tray`)의 버전이 바뀐다.
 
 4. 배포 고지를 다시 만든다. `THIRD-PARTY-NOTICES.txt`는 `Cargo.lock` 전체를 담으므로 버전을 바꾸면 반드시 달라진다.
 

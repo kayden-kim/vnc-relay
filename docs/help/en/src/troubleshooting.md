@@ -50,7 +50,7 @@ For exit code 2, check command syntax and interactive input requirements. For ex
 
 ## Windows service or tray errors
 
-This section applies to service and tray features on `main`. For all diagnostic codes and exit codes, see [CLI contract §1.9](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/cli-v1.md#19-windows-서비스-실행).
+This section applies to the service and tray features available from `v2026.11.5`. For all diagnostic codes and exit codes, see [CLI contract §1.9](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/cli-v1.md#19-windows-서비스-실행).
 
 - For `service_access_denied` during installation or removal, use an elevated terminal. For tray messages `Start failed: Access denied` or `Stop failed: Access denied`, ask the administrator to check whether the user or group was specified with `--operator`. Do not rely on running the tray itself elevated.
 - For `service_exists`, inspect the registered `vnc-relay` service. Do not overwrite the same name. To change operators or the executable location, stop and uninstall, then install again.

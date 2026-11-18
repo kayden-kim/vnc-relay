@@ -41,15 +41,25 @@ This help is for operators who deploy the executable and configuration files dir
 
 ## Baseline
 
-This help follows the repository's `main` branch. The [latest Release](https://github.com/kayden-kim/vnc-relay/releases/latest) is `v2026.11.4`, published on 2026-11-17. Download bundles from [GitHub Releases](https://github.com/kayden-kim/vnc-relay/releases).
+This help follows the repository's `main` branch. The [latest Release](https://github.com/kayden-kim/vnc-relay/releases/latest) is `v2026.11.5`, published on 2026-11-18. Download bundles from [GitHub Releases](https://github.com/kayden-kim/vnc-relay/releases).
 
-`main` now includes a Windows service and tray app that are absent from the latest Release. Check the differences below. A build from `main` still reports version `2026.11.4` until the next release.
+`main` currently behaves the same as the latest Release. If `main` changes behavior before the next release, the table below lists the change. A build from `main` still reports version `2026.11.5` until the next release.
 
-| Difference | Behavior on `main` | For users of Release `v2026.11.4` |
+| Difference | Behavior on `main` | For users of Release `v2026.11.5` |
 | --- | --- | --- |
-| Windows service and tray app | Provides `service install`, `service uninstall`, SCM-only `service run`, and `vnc-relay-tray.exe` in Windows bundles. Follow [Installation](install.md#install-and-uninstall-the-windows-service) and [Operations](operate.md#windows-service-and-tray). | These features and the tray executable are absent. Run manually with `serve`, or build a bundle from `main`. |
+| None | Same as the latest Release. | Follow this help as written. |
 
-Upgrading from `v2026.11.3` or earlier changes these behaviors.
+Upgrading from `v2026.11.4` or earlier changes these behaviors.
+
+| Behavior | From `v2026.11.5` | `v2026.11.4` and earlier |
+| --- | --- | --- |
+| Windows service and tray app | Provides `service install`, `service uninstall`, SCM-only `service run`, and `vnc-relay-tray.exe` in Windows bundles. Follow [Installation](install.md#install-and-uninstall-the-windows-service) and [Operations](operate.md#windows-service-and-tray). | These features and the tray executable are absent. Run manually with `serve`. |
+| Dashboard waiting and active tables | Connection and start times show the date and the time on two lines. Address labels of active sessions sit above their values. | Times fit on one line when space allows, and address labels of active sessions share a line with their values. The [Dashboard](dashboard.md) pictures differ from the screen. |
+| Dashboard automatic refresh display | When an automatic refresh finishes within 1 second, the `Updating` and `Loading` badges and the refresh button text do not change. If it is still running after 1 second, `Updating` appears. | Each automatic refresh briefly changes the `Updating` and `Loading` badges and the refresh button text. |
+
+The service follows [Operations specification §3.7](https://github.com/kayden-kim/vnc-relay/blob/main/docs/specs/operations.md#37-windows-서비스-실행) and [CLI contract §1.9](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/cli-v1.md#19-windows-서비스-실행). The tray follows the [Windows tray specification](https://github.com/kayden-kim/vnc-relay/blob/main/docs/specs/windows-tray.md). The dashboard display follows SCR-001 and section 4.1 of the [dashboard specification](https://github.com/kayden-kim/vnc-relay/blob/main/docs/specs/dashboard.md).
+
+Upgrading from `v2026.11.3` or earlier also changes these behaviors.
 
 | Behavior | From `v2026.11.4` | `v2026.11.3` and earlier |
 | --- | --- | --- |
