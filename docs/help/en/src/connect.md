@@ -326,7 +326,7 @@ If the key management service returns ECDSA signatures in DER format, convert th
 | `rid` | Relay ID of the remote support session. This case uses six random digits. |
 | `iat`, `exp` | The issue time and 60 seconds after it. |
 | `sx` | Expiry time of the remote support session. |
-| `sub` | Remote support session ID. It is neither a secret nor personal information. Use `ticket_sub` in the operations log to match it with the backend session. |
+| `sub` | Remote support session ID. It appears in the operations log as `ticket_sub`, so it must be an identifier that contains no secrets or personal information. Use it to match the operations log with the backend session. |
 
 `iss` and `rh` hold fixed names that match `issuer` and `relay_host` for both roles. For the other claim rules, follow [Access tickets](access-ticket.md#prepare-the-issuer-and-clients).
 
