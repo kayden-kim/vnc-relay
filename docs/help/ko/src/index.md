@@ -41,15 +41,23 @@ noVNC는 포함하지 않는다. 운영자가 별도로 준비하는 외부 View
 
 ## 기준 버전
 
-이 도움말은 저장소의 `main`을 따른다. [최신 Release](https://github.com/kayden-kim/vnc-relay/releases/latest)는 `v2026.11.5`이며 2026-11-18에 공개됐다. 배포 묶음은 [GitHub Releases](https://github.com/kayden-kim/vnc-relay/releases)에서 받는다.
+이 도움말은 저장소의 `main`을 따른다. [최신 Release](https://github.com/kayden-kim/vnc-relay/releases/latest)는 `v2026.11.6`이며 2026-11-18에 공개됐다. 배포 묶음은 [GitHub Releases](https://github.com/kayden-kim/vnc-relay/releases)에서 받는다.
 
-현재 `main`의 동작은 최신 Release와 같다. 다음 릴리스 전에 `main`의 동작이 달라지면 아래 표에 적는다. `main`으로 빌드해도 다음 릴리스 전까지 버전은 `2026.11.5`로 표시된다.
+현재 `main`의 동작은 최신 Release와 같다. 다음 릴리스 전에 `main`의 동작이 달라지면 아래 표에 적는다. `main`으로 빌드해도 다음 릴리스 전까지 버전은 `2026.11.6`으로 표시된다.
 
-| 차이 | `main`의 동작 | `v2026.11.5` Release 사용자 |
+| 차이 | `main`의 동작 | `v2026.11.6` Release 사용자 |
 | --- | --- | --- |
 | 없음 | 최신 Release와 같다. | 이 도움말을 그대로 따른다. |
 
-`v2026.11.4` 이하에서 올리면 다음 동작이 바뀐다.
+`v2026.11.5`에서 올리면 다음 동작이 바뀐다.
+
+| 동작 | `v2026.11.6`부터 | `v2026.11.5` |
+| --- | --- | --- |
+| 트레이 아이콘 | 대시보드 상단 막대의 브랜드 표식과 같은 그림이다. 어두운 둥근 사각형 안에 서로 반대 방향을 가리키는 흰 화살표 두 개가 있다. | 짙은 녹색 둥근 사각형 안에 흰 사각형 틀이 있다. |
+
+트레이 아이콘은 [Windows 트레이 앱 스펙](https://github.com/kayden-kim/vnc-relay/blob/main/docs/specs/windows-tray.md)의 공통 시각 기준을 따른다.
+
+`v2026.11.4` 이하에서 올리면 다음 동작도 바뀐다.
 
 | 동작 | `v2026.11.5`부터 | `v2026.11.4` 이하 |
 | --- | --- | --- |

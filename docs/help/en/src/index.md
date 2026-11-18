@@ -41,15 +41,23 @@ This help is for operators who deploy the executable and configuration files dir
 
 ## Baseline
 
-This help follows the repository's `main` branch. The [latest Release](https://github.com/kayden-kim/vnc-relay/releases/latest) is `v2026.11.5`, published on 2026-11-18. Download bundles from [GitHub Releases](https://github.com/kayden-kim/vnc-relay/releases).
+This help follows the repository's `main` branch. The [latest Release](https://github.com/kayden-kim/vnc-relay/releases/latest) is `v2026.11.6`, published on 2026-11-18. Download bundles from [GitHub Releases](https://github.com/kayden-kim/vnc-relay/releases).
 
-`main` currently behaves the same as the latest Release. If `main` changes behavior before the next release, the table below lists the change. A build from `main` still reports version `2026.11.5` until the next release.
+`main` currently behaves the same as the latest Release. If `main` changes behavior before the next release, the table below lists the change. A build from `main` still reports version `2026.11.6` until the next release.
 
-| Difference | Behavior on `main` | For users of Release `v2026.11.5` |
+| Difference | Behavior on `main` | For users of Release `v2026.11.6` |
 | --- | --- | --- |
 | None | Same as the latest Release. | Follow this help as written. |
 
-Upgrading from `v2026.11.4` or earlier changes these behaviors.
+Upgrading from `v2026.11.5` changes this behavior.
+
+| Behavior | From `v2026.11.6` | `v2026.11.5` |
+| --- | --- | --- |
+| Tray icon | Uses the same picture as the brand mark in the dashboard top bar: two white arrows that point in opposite directions on a dark rounded square. | Shows a white rectangular frame on a dark green rounded square. |
+
+The tray icon follows the common visual rule in the [Windows tray specification](https://github.com/kayden-kim/vnc-relay/blob/main/docs/specs/windows-tray.md).
+
+Upgrading from `v2026.11.4` or earlier also changes these behaviors.
 
 | Behavior | From `v2026.11.5` | `v2026.11.4` and earlier |
 | --- | --- | --- |
