@@ -19,7 +19,7 @@ You do not need Rust build tools to run a release bundle. Prepare a build enviro
 | Windows 11 x64 | `vnc-relay-2026.11.6-windows-x64.zip` | `vnc-relay-2026.11.6-windows-x64.zip.sha256` |
 | Ubuntu 24.04 LTS x64 | `vnc-relay-2026.11.6-linux-x64.tar.gz` | `vnc-relay-2026.11.6-linux-x64.tar.gz.sha256` |
 
-The commands below use `v2026.11.6`. If you download another version, change the version in every file name. See [Introduction](index.md) for differences between the Release and `main`.
+The commands below use `v2026.11.6`. If you download another version, change the version in every file name.
 
 ## Verify SHA-256
 
@@ -92,7 +92,7 @@ Run subsequent commands in this directory, which contains the executable and `re
 | File or directory | Purpose |
 | --- | --- |
 | `vnc-relay.exe` or `vnc-relay` | Executable for the target OS |
-| `vnc-relay-tray.exe` | Tray app for Windows service status, start, and stop. Included only in Windows bundles from `v2026.11.5` |
+| `vnc-relay-tray.exe` | Tray app for Windows service status, start, and stop. Included only in Windows bundles |
 | `relay.toml` | Loopback configuration from the repository's `examples/relay.toml` |
 | `README.md` | Product introduction and quick start |
 | `docs/`, `GLOSSARY.md` | Operations guide, contracts, and glossary for offline reading |
@@ -107,7 +107,7 @@ You must restrict access to the account file, private key, and log directory. On
 
 ## Install and uninstall the Windows service
 
-This feature is in Windows bundles from `v2026.11.5`. First prepare settings and an administrator account with [Quick start](quick-start.md). The service requires a file path for `log.output`. Keeping operational files under `%ProgramData%\vnc-relay\` is recommended. Use elevated PowerShell for installation and removal.
+First prepare settings and an administrator account with [Quick start](quick-start.md). The service requires a file path for `log.output`. Keeping operational files under `%ProgramData%\vnc-relay\` is recommended. Use elevated PowerShell for installation and removal.
 
 1. Place the prepared configuration, accounts, and TLS or key files in use under `%ProgramData%\vnc-relay\`. Adjust relative paths for this location.
 2. In elevated PowerShell, enter the extracted bundle directory.

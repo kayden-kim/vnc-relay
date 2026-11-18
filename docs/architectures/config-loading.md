@@ -1,26 +1,19 @@
 # 설정 로딩 모듈 설계
 
-<a id="설정-v3-실행값과-보기용-생략-정보-current--active"></a>
-## 설정 v4 실행값과 보기용 생략 정보 (Current / Active)
 
-`ManagementSettings.config_edit: bool`은 `read_management`가 기본 `false`로 읽는다. 이 키의 변경은 `reload::service::restart_required_keys`에서 재시작 필요로 분류한다. `config_file::parse_candidate(bytes, base_dir)`는 `parse`와 공통인 `settings_from_table`로 전체 검증한 뒤 명시된 leaf 키를 `ConfigPresence.keys`에 담아 `ConfigCandidate { settings, presence }`를 반환한다. 배열 원소는 별도 키로 넣지 않는다. 꺼진 WSS의 인증서/개인키 경로가 한쪽만 명시되어 `TlsFiles`에 담기지 않는 경우 `presence.inactive_paths`에 base_dir 기준 경로를 보관한다. GET·PATCH·watcher는 이 후보를 사용하며 실행 스냅샷에 presence를 함께 보관한다. 꺼진 기능에서 생략한 `null`과 명시한 `[]`·단독 경로를 구별하기 위해서다. 원시 TOML이나 비밀 파일 내용은 presence에 담지 않는다([설정 계약 §3.2](../contracts/config-v4.md#32-v2-파일을-v3로-옮기기), [설정 보기·편집](config-edit.md#3-데이터-모델과-get)).
-
-설정 로딩은 TOML 설정 파일 하나를 읽어 [설정 계약](../contracts/config-v4.md)의 모든 검사를 한 번에 수행한다. 결과는 둘 중 하나다. 검증을 마친 유효 설정 `Settings`이거나, 발견한 모든 진단(`code`·`key`·`message`) 목록이다. TOML 해석과 키 검사는 adapters가, 항목 문법(IP 항목·Origin·Mode I 대상)은 domain이, 유효 설정 타입과 오류·경고 코드는 app이 맡는다. 시작(작업 2.2)과 재로드(작업 5.2)가 같은 함수를 부른다.
+설정 로딩은 TOML 설정 파일 하나를 읽어 [설정 계약](../contracts/config-v4.md)의 모든 검사를 한 번에 수행한다. 결과는 둘 중 하나다. 검증을 마친 유효 설정 `Settings`이거나, 발견한 모든 진단(`code`·`key`·`message`) 목록이다. TOML 해석과 키 검사는 adapters가, 항목 문법(IP 항목·Origin·Mode I 대상)은 domain이, 유효 설정 타입과 오류·경고 코드는 app이 맡는다. 시작과 재로드가 같은 함수를 부른다.
 
 | 항목 | 값 |
 | --- | --- |
 | 구조 시점 | Current |
 | 문서 상태 | Draft |
-| 구현 대조 | 2026-11-08 작업 트리의 `read_management`·`parse_candidate`·`collect_presence`를 소스 읽기로 대조. 새 동작 시험은 커밋 `eae442f`의 두 OS 게이트에서 통과([작업 6.9 판정표](../how-to/set-up-and-verify.md#42-작업-69-판정표)). 이전 범위의 기록은 [대조 기록](#대조-기록). 설정 v4 로딩·검증 범위의 구현은 커밋 `3df0693`이다. 시험은 커밋 `51bd747`의 두 OS 게이트에서 통과했다([WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)). |
+| 구현 대조 | 소스 대조 범위는 [대조 기록](#대조-기록)을 따른다. |
 | 코드 위치 | `crates/domain/src/{allow_list,entry_point,origin,target_policy}.rs`, `crates/app/src/settings.rs`, `crates/adapters/src/config_file.rs`, `crates/adapters/src/config_file/` |
 | 코드 지도 | [코드 지도 2절](code-map.md#2-코드-위치와-구성요소) |
 | 관련 스펙 | [운영 스펙 3.1절](../specs/operations.md#31-설정-검증과-시작), OPS-001(일부), OPS-038(일부), OPS-040(일부) |
 | 관련 계약 | [설정 계약](../contracts/config-v4.md) 1·2절, [운영 정보 계약 1.5절](../contracts/ops-info-v2.md#15-사건-목록)(경고 사건 필드) |
 | 관련 ADR | [ADR-0002 출발지 IP 허용 목록](../decisions/ADR-0002-source-ip-allowlist.md) |
 | 관련 문서 | [접속 ticket 모듈 설계](relay-access-ticket.md) |
-
-후속: R1은 [설정 v4](../contracts/config-v4.md)의 리스너·역할 모델과 모든 새 키의 해석·검증을 반영한다(사용자 결정 2026-11-08(Q181·Q184·Q185·Q188)). 이전 대조 기록은 v3 범위의 증거다. R1의 빌드·시험·포매터는 이 문서 작업에서 실행하지 않았다. `trusted_proxies`의 전달 헤더 판정과 `trust_all_proxies` 경고는 R2, 최근 로그 보관·조회는 R3 범위다. 후속: 구현은 커밋 `3df0693`이며, 시험은 커밋 `51bd747`의 두 OS 게이트에서 통과했다([WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)).
-
 
 ## 1. 책임과 경계
 
@@ -34,11 +27,11 @@
   - 경고 대상 계산(2.2절)
   - 모든 진단을 모아 한 번에 돌려주기(2.1절)
 - 맡지 않는 책임:
-  - 인증서·개인키 파일 내용 검사(`tls_file_invalid`). TLS 작업(3.1)이 맡는다.
+  - 인증서·개인키 파일 내용 검사(`tls_file_invalid`). TLS 어댑터가 맡는다.
   - 접속 ticket 공개 키 파일 내용 검사(`ticket_keys_invalid`). 시작·재로드의 `reload::ticket_keys::load`와 `TicketJwksStore`가 맡는다([접속 ticket 모듈 설계](relay-access-ticket.md#41-시작)).
-  - 경고·진단의 출력. 진단 출력 형식은 `serve` 골격(작업 2.2), 경고 사건 기록은 운영 로그(작업 2.3)가 맡는다.
-  - 상대 IP의 허용 판정(`AllowList::permits`), Mode I 최종 IP 판정(`TargetPolicy::permits_ip`), 요청 Origin 비교의 사용. 각각 작업 2.4·2.8·3.2에서 구현했다. domain의 `allow_list`·`target_policy`·`origin` 모듈을 쓴다.
-  - 재로드 대상과 재시작 필요 값의 비교. 재로드 작업(5.2)이 `Settings`의 값 비교로 한다(`crates/app/src/reload/service.rs` `restart_required_keys`).
+  - 경고·진단의 출력. 진단 출력 형식은 `serve`, 경고 사건 기록은 운영 로그가 맡는다.
+  - 상대 IP의 허용 판정(`AllowList::permits`), Mode I 최종 IP 판정(`TargetPolicy::permits_ip`), 요청 Origin 비교의 사용. domain의 `allow_list`·`target_policy`·`origin` 모듈을 각 연결 경계에서 사용한다.
+  - 재로드 대상과 재시작 필요 값의 비교. `crates/app/src/reload/service.rs`의 `restart_required_keys`가 `Settings` 값을 비교한다.
 - 다른 모듈에 공개하는 기능:
   - `vnc_relay_adapters::config_file::load(path) -> Result<Settings, Vec<ConfigDiagnostic>>`
   - `vnc_relay_adapters::config_file::parse(text, base_dir) -> Result<Settings, Vec<ConfigDiagnostic>>`
@@ -65,7 +58,7 @@ flowchart LR
 
 | 요소(파일·심볼) | 역할 | 만들어지는 시점과 소유자 | 의존 대상 |
 | --- | --- | --- | --- |
-| `crates/domain/src/entry_point.rs` `EntryPoint` | 진입점 네 종류, 설정·사건 이름(`tcp_viewer` 등), 기본 포트(5901·5500) | 값 타입 | 없음 |
+| `crates/domain/src/entry_point.rs` `EntryPoint`·`Listener` | 진입점 여섯 종류와 리스너 네 종류, 설정·사건 이름(`tcp_viewer` 등), 기본 포트(5901·5500) | 값 타입 | 없음 |
 | `crates/domain/src/allow_list.rs` `IpItem`, `IpItemError`, `AllowList` | IP 항목 해석(단일·CIDR·범위), 오류 3종 구분, 한 체계 전체를 덮는 항목 판정, 표준 표기 출력 | 설정을 읽을 때 만들고 `Settings`가 소유 | 없음 |
 | `crates/domain/src/origin.rs` `Origin`, `OriginError` | Origin 해석과 정규화. 같은 함수가 설정 값과 요청 헤더를 읽는다. 같음 비교가 1.4절의 일치 규칙이다. | 설정을 읽을 때 | 없음 |
 | `crates/domain/src/target_policy.rs` `TargetItem`, `TargetItemError`, `TargetPolicy` | Mode I 대상 항목 해석(1.5절 구분 순서), 세부 원인 구분, 전체 덮는 IP 항목 판정 | 설정을 읽을 때 | `allow_list`, `origin::is_dns_name` |
@@ -82,6 +75,11 @@ v4의 `config_file.rs`는 `read_tcp_listener(Listener)`와 `read_websocket_liste
 
 `read_relay`는 `[relay.ticket.viewer]`·`[relay.ticket.server]`도 읽는다. 각 역할의 `enabled`는 기본 `false`다. `issuer`·`relay_host`는 1~256바이트 문자열이다. `max_lifetime_secs`는 10~600초이며 기본 60초다. `enabled = true`이면 `issuer`·`relay_host`·`public_keys_file`이 필수다. 빠진 값은 `config_missing_key`다. 공개 키 경로는 설정 파일 디렉터리 기준으로 푼다. 꺼진 역할도 명시한 값의 자료형·범위를 검사한다. 로더는 키 파일을 읽지 않는다([접속 ticket 모듈 설계](relay-access-ticket.md#41-시작)).
 
+<a id="설정-v3-실행값과-보기용-생략-정보-current--active"></a>
+### 설정 v4 실행값과 보기용 생략 정보 (Current / Active)
+
+`ManagementSettings.config_edit: bool`은 `read_management`가 기본 `false`로 읽는다. 이 키의 변경은 `reload::service::restart_required_keys`에서 재시작 필요로 분류한다. `config_file::parse_candidate(bytes, base_dir)`는 `parse`와 공통인 `settings_from_table`로 전체 검증한 뒤 명시된 leaf 키를 `ConfigPresence.keys`에 담아 `ConfigCandidate { settings, presence }`를 반환한다. 배열 원소는 별도 키로 넣지 않는다. 꺼진 WSS의 인증서/개인키 경로가 한쪽만 명시되어 `TlsFiles`에 담기지 않는 경우 `presence.inactive_paths`에 base_dir 기준 경로를 보관한다. GET·PATCH·watcher는 이 후보를 사용하며 실행 스냅샷에 presence를 함께 보관한다. 꺼진 기능에서 생략한 `null`과 명시한 `[]`·단독 경로를 구별하기 위해서다. 원시 TOML이나 비밀 파일 내용은 presence에 담지 않는다([설정 계약 §3.2](../contracts/config-v4.md#32-v2-파일을-v3로-옮기기), [설정 보기·편집](config-edit.md#3-데이터-모델과-get)).
+
 
 ## 3. 데이터 모델
 
@@ -95,7 +93,7 @@ v4의 `config_file.rs`는 `read_tcp_listener(Listener)`와 `read_websocket_liste
 | `WsListenerSettings` | `listen`, `trusted_proxies: AllowList`, `tls: Option<TlsFiles>`, `viewer`, `server`: `WsRoleSettings` | WS·WSS 두 칸 | `enabled()`는 두 역할의 OR다. 어느 역할이든 켜면 부모의 `listen`이 필수다. WSS는 부모 TLS 두 경로도 필수다. WS에는 TLS 키를 받지 않는다. |
 | `WsRoleSettings` | `enabled`, `allow: Option<AllowList>`, `allowed_origins: Vec<Origin>` | 공유 리스너 아래 역할 두 칸 | 켜진 역할의 `allow`만 필수다. 꺼진 역할도 명시한 값의 형식·범위를 검사한다. |
 | `TicketSettings`·`TicketRoleSettings` | Viewer·Server별 `enabled`, `issuer`, `relay_host`, `public_keys_file`, `max_lifetime`, `keys` | `Settings.relay.ticket` | 로더는 빈 키 목록을 만든다. 시작·재로드가 파일을 검사해 실행 스냅샷의 키 목록을 채운다. |
-| `RecentLogsSettings` | `max_entries: u32` | `Settings.recent_logs` | 기본 1000, 범위 0~10000. 변경은 재시작 필요다. R1은 값을 읽고 검증하며 버퍼를 만들지 않는다. |
+| `RecentLogsSettings` | `max_entries: u32` | `Settings.recent_logs` | 기본 1000, 범위 0~10000. 변경은 재시작 필요다. 버퍼 생성은 `serve`와 운영 로그가 맡는다. |
 | `Mode1Settings` | `enabled`, `allow_targets: Option<TargetPolicy>` | `Settings.mode1` | `enabled = true`이면 `allow_targets`가 있다. |
 | `LimitSettings` 등 수치 | `u32`(개수·바이트), `Duration`(초 단위 키) | 각 하위 설정 | 1.2절 범위 안. Lw ≤ L, Si ≤ Sa |
 | `ManagementSettings` | `listen`, `tls: Option<TlsFiles>`, `config_edit: bool`, `login_limit`, `session` | `Settings.management` | `config_edit` 기본값은 false이고 재시작 필요다. `tls`가 없으면 `listen`이 루프백(127.0.0.0/8, ::1)이다. |
@@ -117,7 +115,7 @@ v3의 `[relay.ws_viewer]`·`[relay.wss_viewer]`는 `config_unknown_key`다. 자�
 | 3 | `reader.rs` `Section`, `config_file.rs`의 `read_admin`~`read_reload` | 최상위부터 테이블마다 키를 읽는다. 자료형이 다르면 `config_type_mismatch`, 범위 밖이면 `config_value_out_of_range`를 남기고 그 값은 "무효"로 둔다. 테이블을 다 읽으면 읽지 않은 키를 `config_unknown_key`로 남긴다. | 진단 목록, 키별 값(유효·무효·생략) | 4단계 |
 | 4 | `listen.rs` `parse_listen`, domain 각 `parse` | 주소·항목 문자열을 해석한다. 배열 원소 오류는 `key[i]`에 남긴다. | 진단 목록 | 5단계 |
 | 5 | `config_file.rs` `required`, `read_limits`, `read_management`, `check_listen_conflicts` | 필수 키(1.7절)는 각 테이블을 읽으면서 `required`로, 값 관계(1.6절)는 해당 테이블 함수에서 검사한다. 리스너 주소 중복은 모든 테이블을 읽은 뒤 검사한다. 관계에 쓰는 값 중 하나라도 무효면 그 관계는 검사하지 않는다(같은 원인을 두 번 보고하지 않기 위해서). | 진단 목록 | 6단계 |
-| 6 | `config_file.rs` `parse` | 진단이 하나라도 있으면 전체 목록을 `Err`로 돌려준다. 없으면 `Settings`를 조립해 `Ok`로 돌려준다. | 없음 | 호출한 쪽(작업 2.2 `serve`, 재로드) |
+| 6 | `config_file.rs` `parse` | 진단이 하나라도 있으면 전체 목록을 `Err`로 돌려준다. 없으면 `Settings`를 조립해 `Ok`로 돌려준다. | 없음 | 호출한 쪽(`serve`, 재로드) |
 
 경고는 7단계로 호출한 쪽이 `Settings::warnings`를 불러 얻는다. 시작과 재로드가 같은 함수를 쓰고 사건의 `phase`는 호출한 쪽이 정한다.
 
@@ -157,14 +155,10 @@ ticket을 켠 역할에 TCP 진입점도 켜져 있으면 `ticket_tcp_bypass` �
 
 ## 대조 기록
 
-| 대조 범위 | 환경 | 확인 방법 | 결과 |
-| --- | --- | --- | --- |
-| 작업 2.1 변경(기준 커밋 `80267b2` + `crates/` 추가) | Ubuntu 24.04.4(WSL2), Rust 1.99.1 | 2·4절의 파일·심볼과 실제 코드를 대조했다. 처리 순서는 [설정 계약의 계약 테스트 실행 기록](../contracts/config-v4.md#계약-테스트-실행-기록)으로 확인했다. app의 입출력 금지는 `SystemTime::now` 호출을 임시로 넣어 `cargo clippy -p vnc-relay-app`가 `disallowed method` 오류를 내는 것을 확인하고 되돌렸다. | 통과 |
-| Windows 실행(기준 커밋 `e1cfc4f` + Windows 경고 수정) | Windows 11 Pro 10.0.26200, Rust 1.99.1(`x86_64-pc-windows-msvc`) | `cargo xtask scenarios`에서 `config_contract` 21건이 통과했다. 테스트의 Windows 절대 경로 분기(`C:\relay`, `D:\logs\relay.log`)와 상대 경로 풀이를 실행했다([설정 계약의 계약 테스트 실행 기록](../contracts/config-v4.md#계약-테스트-실행-기록)). | 통과 |
-| 작업 1.5 변경(기준 커밋 `553b549` + 작업 트리. `limits.initial_message_bytes`와 관계 I ≤ B 제거) | Ubuntu 24.04.4(WSL2)·Windows 11 Pro 10.0.26200, Rust 1.99.1 | `read_limits`·`LimitSettings`·재로드의 재시작 필요 키 목록에서 I가 빠졌는지 코드와 대조했다. 두 OS 전체 완료 검증에서 `config_contract` 21건이 통과했다([설정 계약의 계약 테스트 실행 기록](../contracts/config-v4.md#계약-테스트-실행-기록)). | 통과 |
+- 날짜·대상: 2026-11-08 작업 트리의 `read_management`·`parse_candidate`·`collect_presence`.
+- 환경·방법: 저장소 소스를 읽고 설정 실행값·보기용 생략 정보의 수집 경계를 대조했다.
+- 결과: 본문의 공통 검증·presence 수집 경계와 일치한다. 시나리오별 현재 결과는 `cargo xtask scenarios`가 만드는 `scenario-report.md`와 CI에서 확인한다([테스트 컨벤션](../conventions/testing.md#7-테스트와-스펙-시나리오-연결)).
 
 ## 9. 미결정 사항
 
-| 항목 | 영향 | 확정 위치 |
-| --- | --- | --- |
-| 재로드 때 `tls_file_invalid` 검사 위치 | 시작 때 내용 검사는 작업 3.1에서 TLS 어댑터(`tls::load_acceptor`)가 한다([`serve` 시작 모듈 설계 4절](serve-startup.md)). 재로드 후보는 `RustlsTlsStore`가 `acceptor_from_pem`으로 검사한다. 실패하면 `reload_rejected`(`tls_file_invalid`)로 거절한다. 구현 판단(사용자 결정 없음). | 작업 5.2에서 구현했다 |
+없다. TLS 내용 검사는 시작의 `tls::load_acceptor`와 재로드의 `RustlsTlsStore::acceptor_from_pem`이 맡는다. 재로드 검사 실패는 `reload_rejected(tls_file_invalid)`다.

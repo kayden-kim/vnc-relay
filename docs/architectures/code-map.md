@@ -6,21 +6,11 @@ VNC Relay는 TCP·WS·WSS Viewer를 Mode I 대상이나 TCP·WS·WSS Mode II Ser
 | --- | --- |
 | 구조 시점 | Current |
 | 문서 상태 | Draft |
-| 구현 대조 | 설정 보기·편집과 실행 값 재로드는 [2026-11-08 소스 대조](#2026-11-08-설정-보기편집과-실행-값-재로드-소스-대조). 이번 변경의 자동 검사(`tests/code_map.rs` 포함)는 커밋 `eae442f`의 두 OS 게이트에서 통과했다([작업 6.9 판정표](../how-to/set-up-and-verify.md#42-작업-69-판정표)). 이전 실행 증거는 [2026-11-04 대조 기록](#2026-11-04-구조-대조)에 있다. WSS Server·프록시 TLS 종료·최근 로그 범위의 구현은 커밋 `3df0693`이다. 시험은 커밋 `51bd747`의 두 OS 게이트에서 통과했다([WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)). |
+| 구현 대조 | Verified — [대조 기록](#대조-기록) |
 | 관련 PRD | [PRD](../requirements/PRD.md), [유지보수성](../requirements/PRD.md#8-비기능-요구사항), [구현 기술](../requirements/PRD.md#확정-기준) |
 | 관련 ADR | [ADR-0001 내장 TLS](../decisions/ADR-0001-built-in-tls.md), [ADR-0003 메모리 상태](../decisions/ADR-0003-single-instance-memory-state.md), [ADR-0004 tokio·rustls](../decisions/ADR-0004-tokio-rustls.md), [ADR-0005 WS 코덱](../decisions/ADR-0005-in-house-ws-streaming-frame-codec.md), [ADR-0006 파일을 통한 설정 편집](../decisions/ADR-0006-config-edit-through-file.md) |
 
 제품은 domain·app·adapters·서버 실행파일 조립·트레이 실행파일 조립의 다섯 crate로 나뉜다. 개발 도구는 별도 `xtask` crate다. 정적 대시보드는 `web/dashboard/`에 있다. 코드가 있다는 사실과 스펙 시나리오 전체가 검증되었다는 판단은 다르다. 시나리오별 실행 결과는 [테스트 컨벤션](../conventions/testing.md#7-테스트와-스펙-시나리오-연결)의 보고서가 맡는다.
-
-### R1·R2 적용 범위
-
-후속: 2026-11-08 R1은 [설정 v4](../contracts/config-v4.md)·[ops-info 2.0.0](../contracts/ops-info-v2.md)의 리스너·역할 분리, WS·WSS Server, 양쪽 전송 메타데이터, 재로드 33개·편집 29개를 반영했다.
-
-후속: 2026-11-08 R2는 WS·WSS 리스너의 공식 역방향 프록시 TLS 종료 및 `X-Forwarded-For` 기반 전달 주소 판정을 반영한다(사용자 결정 2026-11-08(Q182·Q188), [ADR-0007](../decisions/ADR-0007-proxy-tls-termination.md)). `trusted_proxies`에 있는 소켓 상대는 accept의 역할 allow 검사를 건너뛰고, upgrade에서 전달 주소(`forwarded_ip`)를 도출해 역할 allow 검사에 적용한다. 잘못된 헤더나 신뢰 프록시로만 이뤄진 체인은 400 `forwarded_for_invalid`로 거절된다. 전체 주소 신뢰 프록시 항목은 시작·재로드 시 `trust_all_proxies` 경고를 낸다. 관리 API 세션 객체(활성 목록 및 상세)에 `viewer_forwarded_ip`·`target_forwarded_ip`를 제공한다.
-
-구조 시점은 R2 소스 반영 범위의 Current다. 아래 과거 대조·통과 기록은 R2 실행 증거가 아니다. 이번 문서 작업에서는 빌드·시험·포매터를 실행하지 않았다. 후속: 구현은 커밋 `3df0693`이며, 시험은 커밋 `51bd747`의 두 OS 게이트에서 통과했다([WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)).
-
-Windows 서비스·트레이와 DASH-067은 2026-11-18 미커밋 작업 트리의 소스로 대조했다. 대조한 소스는 이후 커밋 `9529f19`(DASH-067)와 `9c2a78b`(서비스·트레이)에 들어갔다. 서비스·트레이의 실행 결과와 미실행 범위는 [Windows 서비스 시험](../how-to/set-up-and-verify.md#windows-서비스-시험)에, 커밋 `738d068`의 두 OS 전체 게이트 결과와 시나리오별 판정은 [판정표](../how-to/set-up-and-verify.md#48-windows-서비스트레이-판정표)에 둔다. 이 추가 범위의 대조는 과거 커밋 시험의 통과를 뜻하지 않는다.
 
 ## 1. 전체 구조
 
@@ -82,7 +72,7 @@ flowchart LR
 | domain | `crates/domain` (`vnc-relay-domain`) | 초기 교환·매칭·세션·주소·예산·계정 규칙. 입출력·시계·난수 결과는 값으로 받는다. | 없음. 외부 crate도 쓰지 않는다. | 컴파일과 `cargo xtask layers` |
 | app | `crates/app` (`vnc-relay-app`) | 중계·관리·재로드·준비 상태·계정 준비 사용 사례. 외부 기능은 포트로 정의한다. | domain. tokio의 동기화·시간·입출력 trait | 컴파일, `cargo xtask layers`, `crates/app/clippy.toml`의 입출력 금지 목록과 `cargo clippy` |
 | adapters | `crates/adapters` (`vnc-relay-adapters`) | TCP·TLS·WS·HTTP·파일·운영 로그·난수·터미널. app 포트를 구현한다. | domain, app, [PRD 승인 라이브러리](../requirements/PRD.md#확정-기준) | `cargo xtask layers`, [라이선스 검사](../how-to/check-dependency-licenses.md) |
-| 실행파일 조립 | 루트 crate `vnc-relay`의 `src/` | CLI·종료 코드·런타임·OS 신호·객체 연결. 업무 규칙은 두지 않는다. | domain, app, adapters, clap, tokio. rustls는 개발 의존성이다. serde_json·tokio-tungstenite는 실서버 대시보드 시험의 CDP 통신에 쓴다(Q112). aws-lc-rs는 개발 의존성이며 실서버 접속 ticket 시험의 ES256 서명에만 쓴다. adapters가 이미 쓰는 [PRD 승인 라이브러리](../requirements/PRD.md#확정-기준)다(이 문서의 판단, 사용자 결정 없음). windows-sys는 Windows 전용 개발 의존성이며 ConPTY 시험만 쓴다(Q103, [Rust 컨벤션 2절](../conventions/rust.md#2-규칙) "unsafe" 행). | 코드 리뷰, 컴파일, `cargo xtask layers` |
+| 실행파일 조립 | 루트 crate `vnc-relay`의 `src/` | CLI·종료 코드·런타임·OS 신호·객체 연결. 업무 규칙은 두지 않는다. | domain, app, adapters, clap, tokio. rustls는 개발 의존성이다. serde_json·tokio-tungstenite는 실서버 대시보드 시험의 CDP 통신에 쓴다. aws-lc-rs는 개발 의존성이며 실서버 접속 ticket 시험의 ES256 서명에만 쓴다. adapters가 이미 쓰는 [PRD 승인 라이브러리](../requirements/PRD.md#확정-기준)다. windows-sys는 Windows 전용 개발 의존성이며 ConPTY 시험만 쓴다([Rust 컨벤션 2절](../conventions/rust.md#2-규칙) "unsafe" 행). | 코드 리뷰, 컴파일, `cargo xtask layers` |
 | 트레이 실행파일 조립 | `crates/tray` (`vnc-relay-tray`) | Windows GUI·메뉴·SCM 제어·설정 읽기·준비 상태 조회·사용자 Run 값. | app, adapters. 외부 crate는 tray-icon, windows-registry, windows-service, windows-sys만 허용한다. | `cargo xtask layers`, [트레이 모듈 설계](windows-tray.md) |
 | 개발 도구 | `xtask/` | 시나리오 보고·레이어 검사·배포 고지 생성과 대조·토큰 생성과 대조·로컬 미리보기·시험용 접속 ticket 발급 | 제품 crate에 의존하지 않는다. | `cargo xtask layers` |
 | 정적 대시보드 | `web/dashboard/` | HTML·CSS·JS 화면·공통 컴포넌트·생성 복사본·미리보기·브라우저 시험 페이지 | 관리 API만 HTTP로 호출한다. JS 외부 의존성이 없다. | [프런트엔드 컨벤션](../conventions/frontend.md), [대시보드 검증](../how-to/verify-dashboard-frontend.md), `cargo xtask tokens --check` |
@@ -106,7 +96,7 @@ flowchart LR
 
 ## 2. 코드 위치와 구성요소
 
-모든 행은 현재 파일이다. 작은 보조 모듈은 함께 묶었다. `코드 위치` 칸에서는 경로 뒤에 그 경로가 정의하는 심볼을 쓴다. `tests/code_map.rs`는 §2의 경로·심볼, §3의 모든 진입점 호출 체인, §4의 모든 인접 단계 사이에 있는 파일 단위 사용 근거를 검사한다. 주석·문자열과 정의 자체는 호출 근거가 아니다. 책임 문장의 의미와 실제 소유권은 사람이 대조한다. 이 표 구성과 검사 방법은 **이 문서의 판단, 사용자 결정 없음**이다.
+모든 행은 현재 파일이다. 작은 보조 모듈은 함께 묶었다. `코드 위치` 칸에서는 경로 뒤에 그 경로가 정의하는 심볼을 쓴다. `tests/code_map.rs`는 §2의 경로·심볼, §3의 모든 진입점 호출 체인, §4의 모든 인접 단계 사이에 있는 파일 단위 사용 근거를 검사한다. 주석·문자열과 정의 자체는 호출 근거가 아니다. 책임 문장의 의미와 실제 소유권은 사람이 대조한다.
 
 ### 2.1 domain
 
@@ -185,7 +175,7 @@ flowchart LR
 | `xtask/src/package.rs` `run` `check_version` `sha256` | 배포 묶음 | 실행한 OS의 release 빌드·고지 대조·묶음 압축·SHA-256 파일, 버전 형식 검사 | Release 게시(GitHub Actions `release` 작업) | Cargo·OS `tar`·std | [xtask](xtask.md), [릴리스 how-to](../how-to/release.md) |
 | `xtask/src/static_server.rs` `Site` `bind` `run` `percent_decode` | 로컬 정적 서버 | 두 미리보기 명령의 루프백 바인드, 요청 해석, 마운트 아래 경로 검사, 이동·404·응답 헤더 | 제품 HTTP 제공, 동시 요청 처리 | std | [xtask](xtask.md) |
 | `xtask/src/help_site.rs` `run` `LANGUAGES`; `xtask/src/help_site/checks.rs` `check` `chapters` `check_book` `check_references`; `xtask/src/help_site/html.rs` `start_tags` `Tag`; `xtask/src/help_serve.rs` `run` | 도움말 사이트 도구 | mdBook 0.5.4 확인, 책 모으기와 빌드, 사이트 루트·토큰·글꼴 복사, 장 목록·제목·링크·그림·외부 자원 검사, `/vnc-relay/` 미리보기 | Pages 게시(GitHub Actions `help` 워크플로), 브라우저 동작 시험 | mdBook·std·토큰 생성·배포 묶음 복사·로컬 정적 서버 | [xtask](xtask.md), [도움말 게시](../how-to/publish-help.md) |
-| `xtask/src/ticket.rs` `parse` `run` `write_keys` `load_key` `issue` | 시험용 접속 ticket | 역할별 P-256 키 쌍과 공개 키 JWKS·개인 JWK 파일 생성, ES256 ticket 서명(사용자 결정 2026-11-13(Q233)) | 운영 발급·운영 키 보관, ticket 확인 | aws-lc-rs·serde_json·std | [xtask](xtask.md), [수동 운영 3.10.1절](../how-to/operate-relay.md#3101-시험용-키와-ticket으로-확인하기) |
+| `xtask/src/ticket.rs` `parse` `run` `write_keys` `load_key` `issue` | 시험용 접속 ticket | 역할별 P-256 키 쌍과 공개 키 JWKS·개인 JWK 파일 생성, ES256 ticket 서명 | 운영 발급·운영 키 보관, ticket 확인 | aws-lc-rs·serde_json·std | [xtask](xtask.md), [수동 운영 3.10.1절](../how-to/operate-relay.md#3101-시험용-키와-ticket으로-확인하기) |
 | `docs/help/ko/`; `docs/help/en/`; `web/help/theme/`; `web/help/site/` | 도움말 원본 | 언어별 책 원문·그림·책 설정, 두 책이 함께 쓰는 테마(머리·상단 막대·CSS·스크립트), 사이트 루트(언어 선택·없는 페이지·공통 자원) | 기준 문서, 대시보드 화면 | mdBook·브라우저 | [도움말 사이트 스펙](../specs/help-site.md), [도움말 작성 규칙](../help/AGENTS.md) |
 | `web/dashboard/app/index.html`; `web/dashboard/app/main.js`; `web/dashboard/app/router.js`; `web/dashboard/app/shell.js`; `web/dashboard/app/operations.js`; `web/dashboard/app/session.js`; `web/dashboard/app/settings.js`; `web/dashboard/app/logs.js` | 화면·라우팅 | 부팅·세 항목 셸·운영 현황·세션 상세·설정 보기·동적 설정 편집·최근 로그·화면 전환 | 서버 규칙 | 공통 JS·관리 API | [대시보드 컴포넌트](dashboard-components.md) |
 | `web/dashboard/app/api.js`; `web/dashboard/app/query.js`; `web/dashboard/app/model.js`; `web/dashboard/app/settings-model.js`; `web/dashboard/app/panels.js`; `web/dashboard/app/format.js`; `web/dashboard/app/copy.js`; `web/dashboard/app/language.js` | 화면 공통 상태 | API 통신·조회 모델·v4 편집 구역 순서·줄 진단 대응·양쪽 전송 경로·전달 주소·목록별 성공 개수·문구·언어. 대기·최근 종료 목록의 주소·시각 셀과 세션 로그 링크(`logsLink`)를 만든다. 최근 로그는 필터·증분·이전 커서와 다운로드 요청을 분리한다 | 중계 상태 소유 | 관리 API·브라우저 | [대시보드 컴포넌트](dashboard-components.md), [운영 현황 필드 매핑](dashboard-operations-overview.md#10-계약-필드-매핑), [최근 로그 흐름](dashboard-operations-overview.md#16-최근-로그-scr-006) |
@@ -197,7 +187,7 @@ flowchart LR
 
 ### 2.5 통합·시스템 시험
 
-아래 영역은 실제 `/// spec:` 표식에서 모았다. `부분` 여부와 이번 실행 결과는 이 목록에서 판정하지 않는다. domain·app·adapters의 단위 시험은 위 소스 파일 안에도 있다. 표식이 없는 시험은 내부 규칙을 확인한다.
+아래 영역은 실제 `/// spec:` 표식에서 모았다. `부분` 여부와 실행 결과는 이 목록에서 판정하지 않는다. domain·app·adapters의 단위 시험은 위 소스 파일 안에도 있다. 표식이 없는 시험은 내부 규칙을 확인한다.
 
 | 코드 위치 | 표식의 스펙·시나리오 영역 |
 | --- | --- |
@@ -208,12 +198,12 @@ flowchart LR
 | `tests/windows_service.rs` `service_run_from_a_terminal_exits_2_without_opening_anything` `install_registers_a_stopped_service_and_uninstall_keeps_the_files` `install_refuses_bad_input_and_leaves_no_registration` `the_scm_runs_the_server_and_a_stop_request_applies_the_grace` `a_start_failure_stops_the_service_with_the_serve_exit_code` | operations.md: OPS-074·075·076·077·080·081. 터미널 직접 run만 기본 실행한다. 실제 등록·해제·시작·G·시작 실패 시험 네 개는 승격이 필요한 `#[ignore]`다. |
 | `src/service.rs` `install_runs_the_steps_in_order_and_grants_every_operator` `install_refuses_before_registering_anything` `install_deletes_its_registration_when_a_later_step_fails` `uses_the_start_checks_and_needs_a_log_file` | operations.md: OPS-074·075 partial. 주입한 설치 경계의 순서·실패·되돌림과 실제 파일 검사다. |
 | `crates/tray/tests/single_instance.rs` `second_process_exits_successfully_before_creating_an_icon`; `crates/tray/src/rules.rs`; `crates/tray/src/single_instance.rs`; `crates/tray/src/worker.rs` | windows-tray.md: TRAY-002·003·007~012 partial. 잠금·상태·주소·설정 명령·언어·Run 비교·readyz 규칙이다. 실제 메뉴·SCM·로그인 전체의 실행 증거는 아니다. |
-| `tests/serve.rs` | operations.md: 시작·종료·L/H·상태·관리 보안·IP·중복 시작. `every_relay_entry_point_accepts_only_its_own_source_ip`는 여섯 역할×여섯 IP의 36쌍과 공유 수락 뒤 역할별 403을 다룬다. `server_only_websocket_roles_open_each_shared_listener`는 Server만 켠 공유 소켓·role 없는 수락 사건을 다룬다. `enabled_websocket_roles_require_their_policy_and_shared_tls_at_startup`는 역할 allow·부모 TLS 필수를 다룬다. 기한 시험은 U/H와 경로 판정 전후 role을 구분한다. R1 실행 결과는 이 표에서 판정하지 않는다. |
+| `tests/serve.rs` | operations.md: 시작·종료·L/H·상태·관리 보안·IP·중복 시작. `every_relay_entry_point_accepts_only_its_own_source_ip`는 여섯 역할×여섯 IP의 36쌍과 공유 수락 뒤 역할별 403을 다룬다. `server_only_websocket_roles_open_each_shared_listener`는 Server만 켠 공유 소켓·role 없는 수락 사건을 다룬다. `enabled_websocket_roles_require_their_policy_and_shared_tls_at_startup`는 역할 allow·부모 TLS 필수를 다룬다. 기한 시험은 U/H와 경로 판정 전후 role을 구분한다. |
 | `tests/unix_shutdown.rs`; `tests/windows_console.rs`; `tests/common/shutdown.rs` `ServerProcess` | operations.md: OPS-007~010·042·043(양 OS), OPS-044(Windows). Windows는 MGT-027·OPS-029·OPS-030과 Ctrl+C·Ctrl+Break도 확인한다. OPS-030 시험은 ConPTY 출력에서 제어 순서를 뺀 화면 문자로 비교한다(`tests/common/log_reopen.rs` `plain`). 공통 본문에는 표식이 없다. |
 | `tests/dashboard_browser.rs` | dashboard.md: 컴포넌트·목 응답을 쓰는 DASH-001~022·024~067 부분 또는 전체 표식. 설정 화면(DASH-028~053)은 `web/dashboard/tests/settings.html`, 최근 로그 화면(DASH-054~061·063)은 `web/dashboard/tests/logs.html`의 계약 기반 가짜 API를 쓴다. `automatic_polls_under_one_second_keep_the_status_marks_in_browser`는 DASH-067이다. 운영 현황·세션·로그의 빠른 자동 조회·느린 조회·수동 조회 상태 표식을 `web/dashboard/tests/operations-scenarios.js`·`session-scenarios.js`·`logs-scenarios.js`로 확인한다. |
 | `tests/dashboard_live.rs`; `tests/dashboard_live/login.rs`; `tests/dashboard_live/overview.rs`; `tests/dashboard_live/detail.rs`; `tests/dashboard_live/cross.rs`; `tests/dashboard_live/settings.rs`; `tests/dashboard_live/settings_view.rs`; `tests/dashboard_live/settings_edit.rs`; `tests/dashboard_live/settings_recovery.rs`; `tests/dashboard_live/help_screenshots.rs` `capture` | dashboard.md: 실제 로그인·중계·관리 조회·상세·종료·언어·폴링·Si 만료의 DASH-001~014·016~022·024~027, 실제 설정 파일·감시기·`GET`·`PATCH /api/v1/config`를 쓰는 설정 보기·편집의 DASH-028~053. management.md: MGT-040·042·043. `settings.rs`는 세 설정 모듈의 공통 도우미다. 표식은 최상위 Rust 테스트 함수에만 둔다. `help_screenshots.rs`는 표식 없는 Linux 전용 `#[ignore]` 캡처 도구(`capture_help_screenshots`)다. 실서버 화면 12장을 도움말 그림으로 다시 만든다. |
 | `tests/dashboard_live/logs.rs`; `tests/dashboard_live/logs_download.rs`; `tests/dashboard_live/logs_states.rs`; `tests/dashboard_live/logs_accessibility.rs`; `tests/dashboard_live/transports.rs` | dashboard.md: DASH-054~063. 실제 사건·로그 GET과 화면 필드·필터·검색·커서·증분을 대조한다. 다운로드는 CDP가 정한 폴더의 파일과 완료 사건을 읽는다. 실패·실제 300초 유휴 만료, 두 폭·두 언어의 키 입력, TCP·WS·WSS 양쪽 조합과 전달 주소를 확인한다. 실행 함수와 전체 표식은 `tests/dashboard_live.rs`에만 있다. |
-| `tests/help_site.rs` | help-site.md: HELP-001~018. `cargo xtask help-site`로 만든 사이트를 시험 안의 정적 서버(`/vnc-relay/` 마운트, 없는 경로에 `404.html`)에 올리고 CDP 헤드리스 브라우저로 연다. mdBook 0.5.4가 필요하다(`MDBOOK` 또는 `PATH`). |
+| `tests/help_site.rs` | help-site.md: HELP-001~012·014~018. `cargo xtask help-site`로 만든 사이트를 시험 안의 정적 서버(`/vnc-relay/` 마운트, 없는 경로에 `404.html`)에 올리고 CDP 헤드리스 브라우저로 연다. mdBook 0.5.4가 필요하다(`MDBOOK` 또는 `PATH`). |
 | `tests/common/dashboard_live.rs` `Server` `Pair`; `tests/common/cdp.rs` `Browser`; `tests/common/dashboard_cdp.rs`; `tests/common/dashboard_proxy.rs` `Proxy` `Fault` `Traffic` | 실서버·중계 소켓·CDP 브라우저·전달 프록시의 시험 자원 소유자. `cdp.rs`는 브라우저 실행·CDP 명령·탐색·조건 대기와 네트워크·다운로드 사건 수집을 맡는다. `dashboard_cdp.rs`는 같은 `Browser`에 대시보드 입력·로그인 동작을 더한다. Enter는 CDP 문자 값 `\r`도 보내 실제 폼 기본 동작을 실행한다. 일반 데이터는 실서버에서 받고, 프록시가 주입한 지연·실패·유실은 별도로 기록한다. 공통 모듈에는 표식이 없다. |
 | `tests/websocket_browser.rs` `browser_websocket_relays_mode_i_and_ii_over_ws_and_wss_without_novnc_or_websockify` `novnc_repeater_id_completes_rfb_through_ws_and_wss_in_both_server_orders` | websocket.md: WS-020(Chromium 내장 WebSocket과 실제 실행파일의 WS·WSS Mode I·II), WS-025(고정 noVNC 1.7.0 `repeaterID`와 시험 쪽 최소 RFB 서버, `#[ignore]`). 시험 쪽 정적 HTTP 서버가 빈 페이지와 noVNC 파일을 제공한다. |
 | `src/serve/listener_tests.rs` `listener_failures_retry_then_drive_fatal_grace_cleanup_and_preserve_requested_races`; `crates/adapters/src/listener.rs` | operations.md OPS-046: 실제 감독 함수·TCP 중계·상태 HTTP에 수락 포트를 연결한 시험, 일시 오류 재시도·치명 오류·최초 종료 원인·G 정리. 어댑터 내부 시험은 실제 OS 수락 오류와 분류를 확인한다. |
@@ -235,7 +225,7 @@ flowchart LR
 | `crates/adapters/tests/websocket_relay.rs`; `crates/adapters/tests/websocket_scenarios.rs` | websocket.md: 실제 중계·M/B·제어·Close·Kw·인증 경계. relay.md: 초기 교환·중계·half-close·E·모드. operations.md: OPS-006·023 |
 | `tests/log_reopen.rs`; `tests/common/log_reopen.rs`; `tests/windows_console.rs`; `crates/adapters/src/file_watch/reopen_tests.rs` | operations.md OPS-045: 실제 바이너리의 회전 전후 줄 보존·첫 실패 진단·복구·정상 종료, 주입한 알림·시계의 Dp·실패 연속 구간 |
 | `examples/relay.toml`; `tests/distribution.rs`; `tests/common/distribution.rs`; `tests/windows_console.rs` | operations.md OPS-019·OPS-031: 실제 설정 로더의 비밀 없는 예시, 예시의 모든 키·기본값 주석과 `config_items` 목록 대조, Linux PTY·Windows ConPTY의 계정 준비→시작→중계→재로드→종료 |
-| `tests/performance.rs` | operations.md OPS-017·OPS-018(`#[ignore]`, 작업 5.4): 실제 실행파일의 TCP·WS·WSS 활성 100세션 측정, 느린 수신자 부하와 새 서버의 예열·접속·종료 수명 반복의 자원 판정. 기준은 운영 스펙 6절(Q98·Q118~Q127·Q148)이다. Windows 전용 `handle_snapshot` 모듈은 중계 프로세스의 핸들 목록에서 Event 핸들을 따로 센다(`unsafe` 예외, Q149). |
+| `tests/performance.rs` | operations.md OPS-017·OPS-018(`#[ignore]`): 실제 실행파일의 TCP·WS·WSS 활성 100세션 측정, 느린 수신자 부하와 새 서버의 예열·접속·종료 수명 반복의 자원 판정. 기준은 운영 스펙 6절이다. Windows 전용 `handle_snapshot` 모듈은 중계 프로세스의 핸들 목록에서 Event 핸들을 따로 센다(`unsafe` 예외). |
 
 ## 3. 진입점
 
@@ -316,7 +306,6 @@ PATCH의 `ConfigEditService::patch`는 같은 잠금으로 편집 허용→원�
 `web/dashboard/app/query.js`의 `beginQuery`는 자동 조회의 busy 표시를 1000 ms 늦춘다. 그 전에 끝나면 `endQuery`가 타이머를 지운다. `viewOf`는 그동안 마지막 성공·실패 상태를 유지한다. `operations.js`·`session.js`·`logs.js`가 이 경계를 재사용한다. 수동 조회는 즉시 표시하고 진행 중 자동 조회의 수동 갱신은 `showBusy`로 표시만 바꾼다(DASH-067).
 
 
-
 ## 5. 시작과 연결
 
 - `src/serve.rs` `run`은 설정·로그·계정을 준비한다. 비동기 런타임과 종료 신호 처리기를 준비한 뒤 `listen_until_shutdown`이 두 시작 키·TLS·재로드 스냅샷·감지기를 준비한다. 감지 준비 실패는 리스너 바인드 전에 끝난다.
@@ -326,6 +315,8 @@ PATCH의 `ConfigEditService::patch`는 같은 잠금으로 편집 허용→원�
 - 필수 리스너의 `SupervisedListener`는 첫 복구 불가 수락 오류를 `ListenerFailure`로 알린다. `wait_for_shutdown`이 종료 신호와 이 사건을 함께 기다린다. `begin_process_shutdown`은 리스너 장애에 `LifecycleService::listener_failed`와 `RelayService::request_fatal_shutdown`을 적용한다. 같은 G·자원 정리 경로를 거친 뒤 종료 코드 1을 반환한다. 먼저 선택된 정상 종료 원인은 나중 리스너 오류로 바꾸지 않는다.
 - `finish_relay_shutdown`은 모든 진입점 소유자가 끝날 때까지 감독 작업을 유지한다. 그 뒤 관리·상태·감지 작업을 거두고 `server_stopped`를 쓴다.
 - 설정은 `config_file`이 읽는다. 객체 연결은 `src/serve.rs`와 `src/admin.rs`의 인수·Arc로 한다. DI 프레임워크는 없다.
+- 준비 상태의 종료 전이는 `LifecycleService::begin_shutdown`이, 중계 수명 전이는 `RelayService::request_shutdown`이 맡는다.
+- WS·WSS의 전체 주소 신뢰 프록시 항목은 시작·재로드 때 `trust_all_proxies` 경고를 만든다. 관리 활성 세션 목록·상세는 `viewer_forwarded_ip`·`target_forwarded_ip`를 제공한다.
 - 파일 로그의 원래 경로는 재로드 후보와 분리해 감시한다. 생성·삭제·이름 변경 알림과 독립 Dp 작업이 `JsonLinesEventSink::reopen`으로 핸들을 교체한다. 같은 출력 잠금이 줄 경계를 보존한다. 실패하면 이전 핸들에 계속 쓰고 실패 연속 구간의 첫 실패만 알린다.
 
 ## 6. 처음 읽을 코드
@@ -340,72 +331,14 @@ PATCH의 `ConfigEditService::patch`는 같은 잠금으로 편집 허용→원�
 | 항목 | 확인하지 못한 이유 | 확인 방법 |
 | --- | --- | --- |
 | 책임 문장의 의미 전체 | 파일 단위 식별자 사용은 호출 근거다. 다만 업무 책임·실행 순서·소유권의 의미를 완전히 판정하지는 못한다. | 자동 위치·연결 검사와 아래 수동 대조를 함께 유지한다. OPS-022는 비부분 표식이다. |
-| 모듈 설계 본문의 남은 계획·이전 설명 | 이번 변경은 설계 머리말과 차이 절만 갱신한다. 초기 교환·중계 수명·WS 스트림 본문에 실제 API와 다른 설명이 남는다. | 각 문서의 현재 코드와의 차이 절을 따른다. Target을 유지하며 Current 지도와 구분한다. |
-| 외부 VNC 상호운용·OS별 단절·전체 수용 완료 | 이번 구조 대조는 제품 동작 전체를 실행하지 않는다. | [테스트 컨벤션](../conventions/testing.md)과 [개발 환경 검증](../how-to/set-up-and-verify.md)의 별도 증거를 따른다. |
-
-## 8. 계획과 문서 정리(Target)
-
-이 절은 현재 구조 그림에 포함하지 않는다. [TODO 5.3](https://github.com/kayden-kim/vnc-relay/blob/556fab23d15e77125ca2ad5c575089857b312049/docs/TODO.md)의 완료 판정은 별도다. 현재 코드에는 이미 RelayService의 G·두 번째 종료 요청과 serve의 감독 조립이 있다. 이를 미구현 경로로 나열하지 않는다.
-
-`LifecycleService::request_shutdown`이라는 API는 현재 없다. 준비 상태 전이는 `LifecycleService::begin_shutdown`이, 중계 수명 전이는 `RelayService::request_shutdown`이 맡는다. 이 이름을 전제로 한 설계·TODO 문구는 실제 책임 분리와 대조해야 한다. 이 지도는 향후 API 이동을 결정하지 않는다. **이 문서의 판단, 사용자 결정 없음**이다.
-
+| 외부 VNC 상호운용·OS별 단절·전체 수용 완료 | 구조 대조는 제품 동작 전체를 실행하지 않는다. | [테스트 컨벤션](../conventions/testing.md)과 [개발 환경 검증](../how-to/set-up-and-verify.md)의 별도 증거를 따른다. |
 
 ## 대조 기록
 
-### 목록 정보 확대 Q234 소스 대조(2026-11-17)
+- 날짜·대상: 2026-11-19, 커밋 `c0fa253`과 이 문서의 현재 상태 정리 작업 트리다. 제품 코드는 변경하지 않았다.
+- 환경: Windows 10.0.26200 x64의 저장소 소스다.
+- 방법: 수락·초기 교환·대상 dispatch·방향 엔진의 현재 설정 읽기와 인계 경계를 소스로 대조했다. 코드 위치 표와 흐름 설명의 역할별 전송·전달 주소·runtime 생성자 경계를 확인했다.
+- 결과: 현재 구조는 공통 중계 서비스와 공유 메모리 runtime, 리스너별 수락과 역할별 업그레이드 경계로 나뉜다. 경로·심볼·파일 단위 호출 연결의 자동 검사는 `tests/code_map.rs`가 맡고 책임·실행 순서·소유권 의미는 수동 대조 범위다. 구조 대조는 동작 시험의 통과를 뜻하지 않는다.
 
-- 범위: `relay.rs`의 `ClosedMetadata`·`ClosedSessionSnapshot`과 두 정리 경로(`run_pair`의 정상 정리, `ActiveGuard`의 소유자 소실 정리), `management/query.rs`·`terminate.rs`의 대기·최근 종료 뷰, `query_api.rs`·`terminate_api.rs`의 직렬화, 대시보드 `panels.js`의 `waitingTable`·`closedTable`·`waitingAddressCell`·`closedAddressCell`·`closedTimeCell`·`logsLink`, 공통 컴포넌트 `data-table.js`의 `wrapLabel`이다.
-- 새 파일과 새 진입점은 없다. 기존 관리 조회 흐름(`query_api::answer` → `ManagementQueryService` → `RelayStateSource::snapshot`)과 `operations.js` → `panels.js` 경로에 필드를 더했다. 최근 종료 항목의 주소는 활성 등록 때 만든 `ClosedMetadata`에서 오며 `recent_metadata`가 `RecentClosedList`와 같은 항목을 보관한다.
-- 근거는 소스 읽기와 변경 범위 시험, 커밋 `a94058d`의 두 OS 전체 게이트다([목록 정보 확대 판정표](../how-to/set-up-and-verify.md#47-목록-정보-확대-판정표), [대시보드 검증 4.36절](../how-to/verify-dashboard-frontend.md#436-목록-정보-확대-q234q235-2026-11-17)).
+현재 시나리오 결과는 [테스트 컨벤션](../conventions/testing.md#7-테스트와-스펙-시나리오-연결)에 따라 `cargo xtask scenarios`로 생성하는 `scenario-report.md`와 CI에서 확인한다.
 
-### R1 리스너·역할 전환 후속(2026-11-08)
-
-- 범위: `entry_point.rs`의 Listener·EntryPoint, `session.rs`의 Transport·양쪽 전송, settings의 리스너·역할 타입과 계획, config_file의 v4 reader, config_edit의 중첩 source span 편집, net의 enabled-role 합집합, upgrade의 경로·역할 보존, 공통 relay·관리 query·ops 사건의 전송 메타데이터다. 기존 파일에서 바꾸며 R2 전달 주소 모듈이나 R3 로그 API 파일을 현재 코드로 추가하지 않는다.
-- `Listener` 타입은 두 경계에 있다. domain의 enum은 소켓 종류의 값이고 adapters `listener.rs`의 trait는 수락 I/O 포트다. 두 타입의 이름이 같아도 책임과 의존 방향은 다르다.
-- 현재 흐름 설명은 소스 읽기와 작업별 공유 인터페이스를 근거로 갱신했다. 테스트 소스의 존재와 실행 결과를 구분한다. R1 빌드·시험·포매터는 이 문서 작업에서 미실행이며 통합 담당자의 실행 기록으로 판정한다. 이전 기록은 보존한다. 후속: 구현은 커밋 `3df0693`이며, 시험은 커밋 `51bd747`의 두 OS 게이트에서 통과했다([WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)).
-
-
-### 2026-11-08 설정 보기·편집과 실행 값 재로드 소스 대조
-
-- 범위: 작업 트리의 `management/config.rs`·`items.rs`, `config_edit.rs`·`config_api.rs`·`config_file.rs`, reload service/snapshot/ports, watcher 최종 read, serve의 공유 객체·종료 G 조립과 runtime reader다.
-- §2에 설정 서비스·포트·descriptor·파일 어댑터·HTTP 경계와 실제 reload 타입을 반영했다. 중복 `RelayAllow`는 제거된 코드에 맞춰 지웠다. §3은 관리 HTTP에 `session_api` → `config_api` 대안을 추가했다. §4의 설정 흐름은 문단으로 분리했다. 숫자 단계 표는 기존 Mode II 한 흐름을 유지한다.
-- `tests/code_map.rs`의 정의·진입점·인접 단계 해석 규칙을 읽고 실제 정의·사용 경로에 맞춰 적었다. 이번 개정에서는 테스트·빌드·포매터를 실행하지 않았다. 과거 실행 기록은 이번 작업 트리의 자동 검사 통과를 뜻하지 않는다. 후속: 커밋 `eae442f`의 두 OS 게이트에서 `tests/code_map.rs`를 포함한 자동 검사가 통과했다([작업 6.9 판정표](../how-to/set-up-and-verify.md#42-작업-69-판정표)).
-
-### 2026-11-05 리스너 감독과 실서버 대시보드 시험 대조
-
-- 대상: `b5dc9b5`의 `Listener`·`SupervisedListener`와 serve 조립, `tests/dashboard_live.rs`·공통 CDP·전달 프록시·화면별 하위 본문이다. `9cdebc6`에서 Windows 수락 소켓의 차단 모드와 지연 요청 회귀 시험을 보강했다.
-- §2의 새 코드 위치와 루트 개발 의존성, §3의 리스너 오류→종료 진입점, §4·§5의 감독·상태·중계 정리 연결을 실제 구현과 대조했다. 리스너 오류 분류와 최초 종료 원인의 보존은 Q114를 따른다. CDP와 시험용 장애 주입은 Q112·Q113을 따른다.
-- `9cdebc6`의 Windows·WSL 전체 게이트에서 `tests/code_map.rs` 4건이 모두 통과했다. OPS-022·OPS-046과 실서버 대시보드 26건도 두 OS에서 통과했다. 전체 집계와 증거 범위는 [대시보드 검증 4.19절](../how-to/verify-dashboard-frontend.md#419-실서버-대시보드-시험과-수동-스모크-2026-11-05), [운영 정보 계약 실행 기록](../contracts/ops-info-v2.md#계약-테스트-실행-기록)에 있다.
-- WSL 보고서는 `9cdebc6 + 미커밋 변경`으로 표시됐다. 게이트 실행 중 코드·문서를 수정하지 않았다. 이 실행에서 접미사 원인은 별도로 확인하지 않았다. 구조 대조는 외부 VNC 호환성과 사람의 화면 검토 완료를 뜻하지 않는다.
-- 후속 Q115는 기존 `operations.js` → `panels.js` 경로에 목록별 성공 응답의 개수 갱신을 연결했다. 새 파일·공통 컴포넌트 API는 없다. `177040d`의 두 OS 전체 게이트에서 코드 지도 4건과 브라우저·실서버 시험이 통과했다([검증 4.20절](../how-to/verify-dashboard-frontend.md#420-목록-개수-배지-q115-2026-11-05)).
-
-### 2026-11-04 구조 대조
-
-| 항목 | 기록 |
-| --- | --- |
-| 날짜·대상 | 2026-11-04, HEAD `ad5cfb2`와 이 작업의 미커밋 변경. 지도 전체 정리와 `tests/code_map.rs` 추가, 모듈 설계의 머리말·차이 절 변경 |
-| 방법 | §2의 경로·Rust 정의, §3 모든 진입점 체인, §4 모든 인접 단계의 파일 단위 사용 근거를 자동 검사한다. Type::method는 method 정의를 찾는다. `a → b`는 진입점 파일이나 a 정의 파일에 b의 사용 토큰이 있어야 한다. 첫 호출은 진입점 파일에 있어야 한다. 핵심 흐름의 다음 단계 심볼 중 하나는 이전 단계 파일이나 흐름 진입점 파일에 사용되어야 한다. 주석·문자열·정의 자체는 사용 근거에서 뺀다. 책임 문장의 의미와 소유권은 수동 리뷰한다. **이 문서의 판단, 사용자 결정 없음** |
-| 수동 대조 | net·websocket → handle_connection → dispatch → target/matching → run_pair/session을 읽었다. WaitingTable은 메타데이터, RelayState는 스트림·permit·활성 제어를 소유한다. management의 인증→조회/종료→런타임 포트, serve의 실제 주입, file_watch→reload의 후보 적용, 첫 신호·G 감독·두 번째 신호 조립을 대조했다. |
-| 결과 | 구조 대조 완료. stale Target 행과 혼합 그림을 현재 코드로 바꿨다. 빠졌던 모듈·테스트·개발 도구·대시보드 파일을 추가했다. 구조 Verified는 문서 채택이나 전체 동작 통과를 뜻하지 않는다. |
-| 표식 연결 | `tests/code_map.rs`의 `/// spec: operations.md:OPS-022`. testing.md §7과 scenarios.rs는 루트 패키지 tests를 수집한다. xtask 자신은 기존 제외를 유지한다. |
-| 검사 선택 | 루트 std-only 통합 시험으로 둔다. 기존 scenarios가 읽는 위치이므로 새 xtask 명령이나 예외는 없다. layers는 crate 의존, 이 시험은 문서 경로·정의·파일 단위 연결을 검사한다. 책임 문장의 의미는 사람이 확인한다. **이 문서의 판단, 사용자 결정 없음** |
-| 실행 증거 | 아래 실행 기록에 기록한다. |
-| 남은 차이 | 초기 교환·중계 수명·WS 스트림 본문의 옛 API·계획 표현. 경로·정의 존재 밖의 책임 의미와 전체 동작은 자동 검사 범위가 아니다. 5.3 완료 여부와 외부 상호운용은 이 기록으로 판정하지 않는다. |
-
-### 실행 기록
-
-대상은 위 HEAD와 미커밋 문서·`tests/code_map.rs` 변경이다. Windows는 `AWS_LC_SYS_PREBUILT_NASM=1`, `TEMP=TMP=D:/vr-tools/tmp`, `CARGO_TARGET_DIR=D:/Workspace/vnc-relay/target`을 썼다. WSL Ubuntu는 `CARGO_TARGET_DIR=$HOME/vnc-relay-target`을 썼다.
-
-| 환경·방법 | 명령 또는 확인 | 결과 |
-| --- | --- | --- |
-| Windows | `rustfmt --edition 2024 --config skip_children=true tests/code_map.rs` | 통과. 수정한 Rust 파일만 포맷했다. |
-| WSL Ubuntu | `cargo test -p xtask` | 통과. 12 passed, 0 failed |
-| WSL Ubuntu, 연결 검사 확장 뒤 | `cargo test --test code_map` | 통과. 4 passed, 0 failed. 진입점 13행과 핵심 흐름 7단계의 정의·연결 및 검사기 회귀 시험을 확인했다. |
-| WSL Ubuntu | `cargo clippy -p xtask --all-targets -- -D warnings`와 `cargo clippy -p vnc-relay --all-targets -- -D warnings` | 통과. 두 명령 모두 종료 코드 0, 경고 없음 |
-| Windows PowerShell | `cargo test -p xtask`와 연결 확장 뒤 `cargo test --test code_map` | 통과. 각각 12 passed와 4 passed, 0 failed |
-| 드리프트 주입·복구 | §2의 lib.rs 행에 없는 심볼 `NonexistentCodeMapProbe`를 임시 추가하고 WSL에서 해당 테스트만 실행했다. | 기대한 실패. 종료 코드 101. `line 92: crates/domain/src/lib.rs has no definition for NonexistentCodeMapProbe`를 보고했다. 원래 행 복구 뒤 code_map 시험 3개가 다시 통과했다. |
-| Windows 문서 검사 | `python D:/vr-tools/tmp/doc_check.py` | `errors_total=4 known=4 other=0`. 기존 오류만 남았다: dashboard-operations-overview.md:73, tls.md:126, verify-dashboard-frontend.md:179·873. |
-| 진입점·핵심 흐름 드리프트 주입·복구 | §3의 첫 호출을 `cli::nonexistent_entry_callee`로, §4 마지막 심볼을 `JsonLinesEventSink::nonexistent_flow_callee`로 임시 바꿨다. 같은 OPS-022 시험을 실행했다. | 기대한 실패, 종료 코드 101. `line 183: unresolved callee`, `line 183: missing entry link`, `line 209: unresolved flow symbol`, `line 208 → 209: missing flow link`를 모두 보고했다. 두 행 복구 뒤 WSL·Windows의 시험 4개가 통과했다. |
-| 연결 검사 확장 뒤 lint | WSL `cargo clippy -p vnc-relay --all-targets -- -D warnings` | 통과. 종료 코드 0, 경고 없음 |
-
-진입점 체인은 `또는`으로 대안을 나눈다. `→`와 `·`·쉼표는 순차 연결이다. 식별자가 아닌 설명은 건너뛴다. 각 식별자는 정의 파일이나 같은 이름의 모듈 파일로 해석한다. 파일 단위 사용 근거는 호출 위치의 존재를 확인하지만 함수 안의 실행 순서까지 증명하지는 않는다. 그 의미는 수동 리뷰에 남긴다. **이 문서의 판단, 사용자 결정 없음**이다.

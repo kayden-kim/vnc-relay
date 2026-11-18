@@ -50,7 +50,7 @@ For exit code 2, check command syntax and interactive input requirements. For ex
 
 ## Windows service or tray errors
 
-This section applies to the service and tray features available from `v2026.11.5`. For all diagnostic codes and exit codes, see [CLI contract §1.9](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/cli-v1.md#19-windows-서비스-실행).
+For all service and tray diagnostic codes and exit codes, see [CLI contract §1.9](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/cli-v1.md#19-windows-서비스-실행).
 
 - For `service_access_denied` during installation or removal, use an elevated terminal. For tray messages `Start failed: Access denied` or `Stop failed: Access denied`, ask the administrator to check whether the user or group was specified with `--operator`. Do not rely on running the tray itself elevated.
 - For `service_exists`, inspect the registered `vnc-relay` service. Do not overwrite the same name. To change operators or the executable location, stop and uninstall, then install again.
@@ -125,7 +125,7 @@ For `origin_not_allowed` and HTTP 403, compare the browser's Origin with that ro
 
 For HTTP 404, check the URL path and the role's `enabled` setting. On `main`, Viewers use `/relay/viewer` and Servers use `/relay/server`. Do not add a trailing `/`. Disabled roles also return 404.
 
-Releases `v2026.11.2` and earlier use `/relay` for Viewers. Releases `v2026.11.3` and later, and `main`, do not also accept the old path. A `main` build prints the latest Release version until the next release. Check the package source or build commit, not just the version string. Migrate the server and all Viewer URLs together.
+Viewer requests to `/relay` are also rejected. A `main` build prints the latest Release version until the next release. Check the package source or build commit, not just the version string. Match the server and all Viewer URLs.
 
 The `connection_rejected` reason `invalid_upgrade` also covers other invalid requests. Logs do not contain the request path, so this reason alone does not prove use of the old URL. Follow [Connecting VNC clients](connect.md) and migration guidance in [Operations](operate.md).
 
@@ -149,7 +149,7 @@ Close 4010 (`waiting_full`) means that new waiting registration reached its limi
 
 ### An access ticket is rejected with HTTP 401
 
-This feature is available from `v2026.11.3` and is off by default. An enabled role requires a valid access ticket. Check ticket-related `reason` values in `connection_rejected`. They distinguish missing tickets, invalid format/signature/claims, expiry, reuse, and failure of the startup-time condition. `ticket_issued_before_start` means that `iat` is at or before server startup time + 5 seconds. A ticket issued just after startup can also fail this condition.
+Access ticket checks are off by default. An enabled role requires a valid access ticket. Check ticket-related `reason` values in `connection_rejected`. They distinguish missing tickets, invalid format/signature/claims, expiry, reuse, and failure of the startup-time condition. `ticket_issued_before_start` means that `iat` is at or before server startup time + 5 seconds. A ticket issued just after startup can also fail this condition.
 
 Check issuer and server clocks, role settings, and public keys. A new ticket is needed after restart. Obtain a new value from the issuer instead of resending the same ticket. Administrator sign-in does not resolve a relay ticket failure. To check a signature with the public keys file and view the claims, you can use the [ticket verification example](recommended-setup.md#ticket-verification-example).
 

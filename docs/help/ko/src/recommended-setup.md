@@ -359,7 +359,7 @@ const rfb = new RFB(screen, connection.relayUrl, {
 
 ## Server 쪽: droidVNC-NG 수정판과 기기 앱
 
-원본 droidVNC-NG는 Repeater에 TCP로만 역접속한다. [droidVNC-NG 수정판](https://github.com/kayden-kim/droidVNC-NG)은 droidVNC-NG 2.22.3에 다음 기능을 더했다.
+원본 droidVNC-NG는 Repeater에 TCP로만 역접속한다. [droidVNC-NG 수정판](https://github.com/kayden-kim/droidVNC-NG)은 droidVNC-NG 2.22.3 기반이며 다음 기능을 제공한다.
 
 - `ws://` 또는 `wss://` 주소를 받으면 WebSocket으로 접속한다. 경로가 없으면 `/relay/server`를 쓴다.
 - `Sec-WebSocket-Protocol`에 `binary`를 보낸다. ticket을 받으면 `ticket.<JWS>`를 함께 보낸다.
@@ -369,7 +369,7 @@ const rfb = new RFB(screen, connection.relayUrl, {
 - ticket을 쓴 연결은 끊겨도 자동으로 다시 접속하지 않는다. 같은 ticket은 다시 쓸 수 없기 때문이다.
 - ticket을 TCP 주소와 함께 받으면 연결하지 않는다. ticket 없는 TCP 연결로 조용히 바뀌는 일을 막는다.
 
-매개변수는 droidVNC-NG의 Intent 인터페이스(`ACTION_CONNECT_REPEATER`)로 받는다. 기존 호스트 값에 WSS 주소를 넣고, ticket은 새로 더한 값으로 넘긴다. 앱 안의 WebSocket 클라이언트와 기존 VNC 서버 엔진은 소켓 쌍(socket pair)으로 잇는다. 루프백 포트를 열지 않으므로 기기 안의 다른 앱이 이 연결에 끼어들 수 없다. 값 이름과 `adb` 명령 예는 수정판의 [Intent 인터페이스 문서](https://github.com/kayden-kim/droidVNC-NG/blob/master/doc/Intent-Interface.md)에, 설계 이유는 [ADR 0006](https://github.com/kayden-kim/droidVNC-NG/blob/master/doc/adr/0006-bridge-websocket-repeaters-via-socket-pair.md)에 있다.
+매개변수는 droidVNC-NG의 Intent 인터페이스(`ACTION_CONNECT_REPEATER`)로 받는다. 호스트 값에 WSS 주소를 넣고, ticket은 별도 값으로 넘긴다. 앱 안의 WebSocket 클라이언트와 VNC 서버 엔진은 소켓 쌍(socket pair)으로 잇는다. 루프백 포트를 열지 않으므로 기기 안의 다른 앱이 이 연결에 끼어들 수 없다. 값 이름과 `adb` 명령 예는 수정판의 [Intent 인터페이스 문서](https://github.com/kayden-kim/droidVNC-NG/blob/master/doc/Intent-Interface.md)에, 설계 이유는 [ADR 0006](https://github.com/kayden-kim/droidVNC-NG/blob/master/doc/adr/0006-bridge-websocket-repeaters-via-socket-pair.md)에 있다.
 
 기기 앱은 다음 일을 맡는다.
 

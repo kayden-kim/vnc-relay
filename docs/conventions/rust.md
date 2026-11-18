@@ -4,12 +4,11 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 상태 | Active(2026-10-20 사용자 채택) |
+| 상태 | Active |
 | 적용 대상 | 사람이 작성한 Rust 소스 코드와 테스트 코드, `Cargo.toml`, `clippy.toml` |
 | 기준 버전 | Rust 1.99.1(`rust-toolchain.toml`), edition 2024, [Rust API Guidelines](https://rust-lang.github.io/api-guidelines/naming.html) |
 | 관련 아키텍처 문서 | [코드 지도](../architectures/code-map.md) |
 | 관련 ADR | [ADR-0004 tokio·rustls](../decisions/ADR-0004-tokio-rustls.md) |
-| 적용 시작일 | 2026-10-20 |
 | 규칙 준수 확인 방법 | `cargo fmt`, `cargo clippy`(작업 공간 lint), `cargo xtask layers`, 코드 리뷰 |
 
 ## 1. 규칙 우선순위
@@ -26,7 +25,7 @@
 | 유형 suffix | 역할이 있는 타입은 7절 suffix 목록의 suffix로 끝낸다. 업무 값 자체인 타입(`CloseCause`, `Role`, `Mode`, `ViewerTransport`)은 suffix 없이 용어집 이름만 쓴다. | 목록에 없는 suffix(`Manager`, `Helper`, `Util`) | 리뷰 |
 | 모듈 파일 | 하위 모듈이 있으면 `foo.rs`와 `foo/` 디렉터리를 쓴다. | `foo/mod.rs` | clippy `mod_module_files`(deny) |
 | 모듈 위치 | 코드 지도의 레이어와 위치에 둔다. 새 모듈이 생기면 같은 변경에서 코드 지도를 고친다. | domain·app에서 소켓·파일·TLS·HTTP 라이브러리 사용 | `cargo xtask layers`, `crates/app/clippy.toml`, 리뷰 |
-| 주석 언어 | 주석과 문서 주석은 영어로 쓴다(사용자 결정, 2026-10-20). 용어는 용어집의 코드 영어 이름을 쓴다. | 한국어 주석, 용어집과 다른 영어 표현 | 리뷰 |
+| 주석 언어 | 주석과 문서 주석은 영어로 쓴다. 용어는 용어집의 코드 영어 이름을 쓴다. | 한국어 주석, 용어집과 다른 영어 표현 | 리뷰 |
 | 문서 주석 | domain·app의 공개 항목에는 `///`로 무엇을 보장하는지 쓴다. 근거가 되는 스펙·계약 절을 적는다(예: `/// See cli-v1 §1.2.`). | 코드를 다시 읽어 주는 주석 | 리뷰 |
 | 오류 | 모듈마다 `Error` suffix enum을 두고 `std::fmt::Display`와 `std::error::Error`를 직접 구현한다. 계약의 오류 코드가 있으면 enum 값에서 그 코드 문자열을 얻는 함수를 둔다. | PRD 목록에 없는 오류 crate(`anyhow`, `thiserror`) 직접 의존, 문자열 오류 | 리뷰, [의존성 라이선스 검사](../how-to/check-dependency-licenses.md) |
 | 실패 처리 | 테스트 밖 코드에서 `unwrap`·`expect`를 쓰지 않는다. 오류를 반환하거나 연결 하나만 정리한다. | 연결 오류로 프로세스가 끝나는 코드 | clippy `unwrap_used`·`expect_used`(deny, 테스트 허용) |
@@ -41,13 +40,13 @@
 
 | 허용 파일·모듈 | 이유와 범위 | 예외 선언 위치·근거 |
 | --- | --- | --- |
-| `crates/adapters/src/terminal/windows_console.rs` | Win32 콘솔 모드를 읽고 바꾸며 복구한다. | `crates/adapters/src/terminal.rs`. 사용자 결정 2026-10-21 |
-| `crates/adapters/src/windows_service/security.rs` | Windows 서비스 운영자 이름을 계정 SID로 바꾸고 서비스 DACL에 시작·중지·상태 조회·구성 조회 권한을 더한다. windows-service에는 이 기능이 없다. | `crates/adapters/src/windows_service.rs`의 `mod security`. reason은 `Win32 account lookup and service DACL change; see docs/conventions/rust.md`다. 사용자 결정 2026-11-17(Q245), [서비스 모듈 설계](../architectures/windows-service.md) |
-| `crates/tray/src/message_loop.rs` | tray-icon이 Windows에서 요구하는 같은 스레드의 Win32 메시지 루프를 돌린다. 다른 트레이 기능은 직접 `unsafe`를 쓰지 않는다. | `crates/tray/src/main.rs`의 `mod message_loop`. reason은 `Win32 message loop that tray-icon needs; see docs/conventions/rust.md`다. 사용자 결정 2026-11-17(Q241), [트레이 모듈 설계](../architectures/windows-tray.md) |
-| `tests/windows_console.rs`의 의사 콘솔 모듈 | 실제 실행파일을 ConPTY에서 띄우고 제어 신호·숨김 입력·콘솔 닫기를 시험한다. 표준 라이브러리에는 다른 프로세스의 콘솔을 만들고 제어하는 API가 없다. | 같은 파일의 모듈 선언. 사용자 결정 2026-11-04(Q103) |
-| `tests/performance.rs`의 Windows 핸들 표본 모듈 | 중계 프로세스의 핸들 목록에서 Event 핸들을 따로 센다. 표준 라이브러리와 `Get-Process`는 종류별 핸들 수를 주지 않는다. | 같은 파일의 모듈 선언. 사용자 결정 2026-11-07(Q148·Q149) |
+| `crates/adapters/src/terminal/windows_console.rs` | Win32 콘솔 모드를 읽고 바꾸며 복구한다. | `crates/adapters/src/terminal.rs` |
+| `crates/adapters/src/windows_service/security.rs` | Windows 서비스 운영자 이름을 계정 SID로 바꾸고 서비스 DACL에 시작·중지·상태 조회·구성 조회 권한을 더한다. windows-service에는 이 기능이 없다. | `crates/adapters/src/windows_service.rs`의 `mod security`. reason은 `Win32 account lookup and service DACL change; see docs/conventions/rust.md`다. [서비스 모듈 설계](../architectures/windows-service.md) |
+| `crates/tray/src/message_loop.rs` | tray-icon이 Windows에서 요구하는 같은 스레드의 Win32 메시지 루프를 돌린다. 다른 트레이 기능은 직접 `unsafe`를 쓰지 않는다. | `crates/tray/src/main.rs`의 `mod message_loop`. reason은 `Win32 message loop that tray-icon needs; see docs/conventions/rust.md`다. [트레이 모듈 설계](../architectures/windows-tray.md) |
+| `tests/windows_console.rs`의 의사 콘솔 모듈 | 실제 실행파일을 ConPTY에서 띄우고 제어 신호·숨김 입력·콘솔 닫기를 시험한다. 표준 라이브러리에는 다른 프로세스의 콘솔을 만들고 제어하는 API가 없다. | 같은 파일의 모듈 선언 |
+| `tests/performance.rs`의 Windows 핸들 표본 모듈 | 중계 프로세스의 핸들 목록에서 Event 핸들을 따로 센다. 표준 라이브러리와 `Get-Process`는 종류별 핸들 수를 주지 않는다. | 같은 파일의 모듈 선언 |
 
-Win32 호출은 작업 공간의 `windows-sys`를 쓴다. 시험 쪽은 개발 의존성이다. 제품의 서비스 접근 권한·트레이 메시지 루프도 커밋 `9c2a78b`에 구현되었으며 계획 위치가 아니다. 허용 파일을 넓힐 때는 컨벤션과 작업 공간 `Cargo.toml`의 lint 설명을 함께 바꾼다.
+Win32 호출은 작업 공간의 `windows-sys`를 쓴다. 시험 쪽은 개발 의존성이다. 허용 파일을 넓힐 때는 컨벤션과 작업 공간 `Cargo.toml`의 lint 설명을 함께 바꾼다.
 
 ## 3. 예제
 
@@ -95,10 +94,6 @@ cargo xtask layers
 
 `cargo xtask layers`는 패키지마다 허용한 내부 crate·외부 crate만 쓰는지, 같은 외부 crate의 버전 요구가 하나인지 검사한다([xtask 모듈 설계](../architectures/xtask.md)). 전체 검증 절차는 [개발 환경·검증 how-to](../how-to/set-up-and-verify.md)가 정한다.
 
-## 6. 기존 코드 마이그레이션
-
-이 컨벤션을 만들 때 있던 코드는 `src/main.rs` 하나다. 같은 변경에서 주석을 영어로 바꾸고, `println!`·`eprintln!`을 `std::io::Write`로 바꾸고, 작업 공간 lint를 켰다. 그 밖에 옮길 코드는 없다.
-
 ## 7. 이름 짓기 목록
 
 규칙은 [이름 짓기 기본 규칙](../conventions/AGENTS.md#이름-짓기-기본-규칙)을 따른다. Rust에서는 타입·trait 이름과 모듈 파일 이름에 적용한다. 함수 이름에는 적용하지 않는다. 모듈 이름이 이미 prefix를 담으면 타입에서 반복하지 않아도 된다(`matching::WaitingTable`).
@@ -127,27 +122,27 @@ cargo xtask layers
 
 suffix 목록:
 
-| suffix | 레이어 | 역할 | 추가 근거 |
+| suffix | 레이어 | 역할 | 근거 |
 | --- | --- | --- | --- |
-| `Id` | domain | 식별자 값 타입(`RelayId`, `SessionId`, `ConnId`) | 최초 채택. 계약의 `*_id` 필드와 대응한다. |
-| `Parser` | domain | 바이트·문자열을 점진적으로 해석하는 상태 기계(`HandshakeParser`) | 최초 채택. 분할 수신을 다루는 해석기다. |
-| `Table` | domain | 키로 찾는 메모리 상태 모음(`WaitingTable`) | 최초 채택 |
-| `List` | domain | 순서가 있는 값 목록(`AllowList`, `RecentClosedList`) | 최초 채택. 설정 키 `allow`와 최근 종료 목록에 대응한다. |
-| `Policy` | domain | 허용·거절을 판정하는 규칙(`TargetPolicy`) | 최초 채택 |
-| `Budget` | domain | 상한이 있는 자원 수 집계(`ConnectionBudget`) | 최초 채택. L·Lm·Lw를 센다. |
-| `Settings` | app | 검증을 마친 설정 값(`RelaySettings`) | 최초 채택. 파일 형식과 무관한 값이다. |
-| `Service` | app | adapters가 부르는 사용 사례의 입구(`RelayService`, `ManagementService`, `ReloadService`, `LifecycleService`) | 최초 채택 |
-| `Store` | app(trait), adapters(구현) | 메모리 밖에 두는 상태의 읽기·저장 포트(`AccountStore`) | 최초 채택 |
-| `Sink` | app(trait), adapters(구현) | 사건을 받아 내보내는 포트(`EventSink`) | 최초 채택 |
-| `Connector` | app(trait), adapters(구현) | 바깥으로 연결을 여는 포트(`TargetConnector`) | 최초 채택. Mode I 대상 연결이다. |
-| `Clock` | app(trait), adapters(구현) | 현재 시각을 주는 포트(`SystemClock`) | 최초 채택. 테스트에서 시각을 바꾸기 위해 둔다. |
-| `EntryPoint` | adapters | 중계 접속을 받는 리스너(`TcpEntryPoint`, `WebSocketEntryPoint`) | 최초 채택. 용어집 "진입점"과 같다. |
-| `Listener` | adapters | 진입점이 아닌 HTTP 리스너(`ManagementListener`, `StatusListener`) | 최초 채택. 용어집 "관리 리스너"·"상태 리스너"와 같다. |
-| `Watcher` | adapters | 파일 변경을 감지하는 작업(`ReloadWatcher`) | 최초 채택 |
-| `Error` | 모든 레이어 | 모듈의 오류 enum(`ConfigError`) | 최초 채택 |
-| `Diagnostic` | app | 사용자에게 보여 줄 진단 한 건(오류 코드·키·문장)(`ConfigDiagnostic`) | 작업 2.1. [설정 계약 2.1절](../contracts/config-v4.md#21-설정-오류와-준비-실패)의 진단 형식이다. 오류 enum 하나로는 키와 문장을 담을 수 없다. |
-| `Warning` | app | 시작·재로드를 막지 않는 경고 enum(`ConfigWarning`) | 작업 2.1. [설정 계약 2.2절](../contracts/config-v4.md#22-경고)의 경고 코드와 대응한다. |
-| `Claims` | domain | 서명을 확인한 접속 ticket의 클레임 값 묶음(`TicketClaims`) | 접속 ticket 구현(2026-11-11). [RFC 7519 4절](https://www.rfc-editor.org/rfc/rfc7519#section-4)의 클레임 집합과 대응한다. `Policy`는 판정 규칙이고 `List`는 순서 있는 목록이라 값 묶음을 나타내지 못한다. |
-| `Key` | domain·adapters | 서명 확인·HMAC 계산에 쓰는 키 값(`TicketKey`, `RelayIdKey`, `SessionIdKey`) | 접속 ticket 구현(2026-11-11)에서 목록에 올렸다. 기존 `RelayIdKey`·`SessionIdKey`가 이미 쓰던 suffix다. |
-| `Parts` | domain | 한 입력 문자열을 나눈 부분의 빌린 참조(`TicketParts`) | 접속 ticket 구현(2026-11-11). JWS 압축 직렬화의 세 부분과 서명 입력을 복사하지 않고 가리킨다. `Parser`는 분할 수신을 다루는 상태 기계라 맞지 않는다. |
-| `Binding` | app | 업그레이드 검사가 101 뒤 연결에 묶어 넘기는 확인 결과(`TicketBinding`) | 접속 ticket 구현(2026-11-11). ticket의 `jti`·`rid`·`sx`를 초기 교환과 세션 만료까지 전달한다. 설정 값(`Settings`)이나 정책(`Policy`)이 아니다. |
+| `Id` | domain | 식별자 값 타입(`RelayId`, `SessionId`, `ConnId`) | 계약의 `*_id` 필드와 대응한다. |
+| `Parser` | domain | 바이트·문자열을 점진적으로 해석하는 상태 기계(`HandshakeParser`) | 분할 수신을 다루는 해석기다. |
+| `Table` | domain | 키로 찾는 메모리 상태 모음(`WaitingTable`) | 키별 조회와 갱신을 나타낸다. |
+| `List` | domain | 순서가 있는 값 목록(`AllowList`, `RecentClosedList`) | 설정 키 `allow`와 최근 종료 목록에 대응한다. |
+| `Policy` | domain | 허용·거절을 판정하는 규칙(`TargetPolicy`) | 판정 규칙을 나타낸다. |
+| `Budget` | domain | 상한이 있는 자원 수 집계(`ConnectionBudget`) | L·Lm·Lw를 센다. |
+| `Settings` | app | 검증을 마친 설정 값(`RelaySettings`) | 파일 형식과 무관한 값이다. |
+| `Service` | app | adapters가 부르는 사용 사례의 입구(`RelayService`, `ManagementService`, `ReloadService`, `LifecycleService`) | 사용 사례의 입구를 나타낸다. |
+| `Store` | app(trait), adapters(구현) | 메모리 밖에 두는 상태의 읽기·저장 포트(`AccountStore`) | 상태 저장 포트를 나타낸다. |
+| `Sink` | app(trait), adapters(구현) | 사건을 받아 내보내는 포트(`EventSink`) | 사건 출력 포트를 나타낸다. |
+| `Connector` | app(trait), adapters(구현) | 바깥으로 연결을 여는 포트(`TargetConnector`) | Mode I 대상 연결이다. |
+| `Clock` | app(trait), adapters(구현) | 현재 시각을 주는 포트(`SystemClock`) | 테스트에서 시각을 바꾸기 위해 둔다. |
+| `EntryPoint` | adapters | 중계 접속을 받는 리스너(`TcpEntryPoint`, `WebSocketEntryPoint`) | 용어집 "진입점"과 같다. |
+| `Listener` | adapters | 진입점이 아닌 HTTP 리스너(`ManagementListener`, `StatusListener`) | 용어집 "관리 리스너"·"상태 리스너"와 같다. |
+| `Watcher` | adapters | 파일 변경을 감지하는 작업(`ReloadWatcher`) | 변경 감지를 나타낸다. |
+| `Error` | 모든 레이어 | 모듈의 오류 enum(`ConfigError`) | 모듈 오류를 나타낸다. |
+| `Diagnostic` | app | 사용자에게 보여 줄 진단 한 건(오류 코드·키·문장)(`ConfigDiagnostic`) | [설정 계약 2.1절](../contracts/config-v4.md#21-설정-오류와-준비-실패)의 진단 형식이다. 오류 enum 하나로는 키와 문장을 담을 수 없다. |
+| `Warning` | app | 시작·재로드를 막지 않는 경고 enum(`ConfigWarning`) | [설정 계약 2.2절](../contracts/config-v4.md#22-경고)의 경고 코드와 대응한다. |
+| `Claims` | domain | 서명을 확인한 접속 ticket의 클레임 값 묶음(`TicketClaims`) | [RFC 7519 4절](https://www.rfc-editor.org/rfc/rfc7519#section-4)의 클레임 집합과 대응한다. `Policy`는 판정 규칙이고 `List`는 순서 있는 목록이라 값 묶음을 나타내지 못한다. |
+| `Key` | domain·adapters | 서명 확인·HMAC 계산에 쓰는 키 값(`TicketKey`, `RelayIdKey`, `SessionIdKey`) | 서명 확인·HMAC 계산용 키를 나타낸다. |
+| `Parts` | domain | 한 입력 문자열을 나눈 부분의 빌린 참조(`TicketParts`) | JWS 압축 직렬화의 세 부분과 서명 입력을 복사하지 않고 가리킨다. `Parser`는 분할 수신을 다루는 상태 기계라 맞지 않는다. |
+| `Binding` | app | 업그레이드 검사가 101 뒤 연결에 묶어 넘기는 확인 결과(`TicketBinding`) | ticket의 `jti`·`rid`·`sx`를 초기 교환과 세션 만료까지 전달한다. 설정 값(`Settings`)이나 정책(`Policy`)이 아니다. |

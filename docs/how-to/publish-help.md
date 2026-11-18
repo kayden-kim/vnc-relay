@@ -5,15 +5,15 @@
 | 항목 | 값 |
 | --- | --- |
 | 대상 독자 | 도움말 작성자와 저장소 관리자 |
-| 검증 상태 | Verified — 2.1절 설치(Windows 자산 해시·버전, Linux 자산 해시는 GitHub Actions, WSL 설치본 버전)와 3.1~3.5절을 Windows·WSL2 Ubuntu·GitHub Actions에서 실행해 확인했다([4절](#4-검증)). 6절 롤백은 게시 중인 사이트를 내리므로 실행하지 않았다 |
+| 검증 상태 | Verified — mdBook 설치·미리보기·화면 대조·공개 사이트의 수동 확인은 4절에 기록한다. 빌드와 브라우저 시험의 현재 결과는 3.1·3.3절로 확인한다. 6절 롤백은 미실행이다 |
 | 검증 환경·버전 | Windows 11 Pro 10.0.26200 x64(PowerShell 7.6.9), WSL2 Ubuntu 24.04.4 LTS x64, mdBook 0.5.4, Rust 1.99.1, GitHub Actions `ubuntu-24.04` |
-| 최종 검증일 | 2026-11-12 |
+| 최종 검증일 | 2026-11-18 |
 | 관련 기준 문서 | [도움말 사이트 화면 스펙](../specs/help-site.md), [도움말 작성 규칙](../help/AGENTS.md), [xtask 모듈 설계](../architectures/xtask.md), [디자인 기준의 도움말 사이트 확장](../design/DESIGN.md#도움말-사이트-확장), [프런트엔드 컨벤션](../conventions/frontend.md) |
 
 ## 1. 대상과 영향
 
 - 대상: 책 원본 `docs/help/ko/`·`docs/help/en/`, 테마와 사이트 루트 `web/help/`, `cargo xtask help-site`가 만드는 `target/help-site/`, 워크플로 `.github/workflows/help.yml`, 저장소 `kayden-kim/vnc-relay`의 GitHub Pages 사이트다.
-- 예상 사용자 영향: 사이트는 공개 사이트다. `main`에 push하면 워크플로가 바로 다시 게시한다(사용자 결정 2026-11-11(Q221)). 게시 중에도 이전 사이트가 계속 열린다.
+- 예상 사용자 영향: 사이트는 공개 사이트다. `main`에 push하면 워크플로가 바로 다시 게시한다. 게시 중에도 이전 사이트가 계속 열린다.
 - 작업 허용 시간: 제한 없다.
 
 ### 1.1 사이트 구성
@@ -36,7 +36,7 @@
 
 ### 2.1 mdBook 0.5.4 설치
 
-mdBook은 공식 GitHub Release의 실행파일을 쓴다. 아래 SHA-256은 Release 자산에 GitHub가 기록한 값이다(2026-11-12 확인).
+mdBook은 공식 GitHub Release의 실행파일을 쓴다. 아래 SHA-256은 Release 자산에 GitHub가 기록한 값이다.
 
 | OS | 자산 | SHA-256 |
 | --- | --- | --- |
@@ -95,7 +95,7 @@ Ubuntu(bash):
 - 실행 환경: Windows PowerShell 또는 Ubuntu bash다.
 - 실행 위치: 저장소 루트다.
 - 바꿔 넣을 값: 없다. `CARGO_TARGET_DIR`을 정했으면 아래의 `target` 대신 그 경로다.
-- 최대 대기 시간: `cargo xtask help-site`는 처음 xtask를 빌드할 때 3분, 그 뒤 30초로 둔다. 브라우저 시험은 10분, GitHub Actions 한 번은 20분으로 둔다(이 문서의 판단, 사용자 결정 없음). 넘으면 로컬은 Ctrl+C로, Actions는 실행 화면의 Cancel로 중단한다.
+- 최대 대기 시간: `cargo xtask help-site`는 처음 xtask를 빌드할 때 3분, 그 뒤 30초로 둔다. 브라우저 시험은 10분, GitHub Actions 한 번은 20분으로 둔다. 넘으면 로컬은 Ctrl+C로, Actions는 실행 화면의 Cancel로 중단한다.
 
 ### 3.1 빌드와 검사
 
@@ -146,7 +146,7 @@ cargo test --test help_site
 
 대시보드 화면이 바뀌면 두 책의 `src/images/`에 있는 캡처 여섯 장(`login`, `operations`, `session`, `logs`, `settings`, `settings-edit`)을 다시 만든다. 캡처 도구는 실서버 대시보드 시험의 하네스로 서버를 띄운다. 서버는 루프백 주소와 시험 계정(`alice`)만 쓰고, 종료한 세션 1개·활성 세션 2개·대기 연결 1개를 만든다. 화면 언어마다 1280×800 크기로 찍는다.
 
-캡처는 Ubuntu에서만 실행한다. 설정 보기 화면이 서버 디렉터리의 절대 경로(`admin.accounts_file`)를 보여 주기 때문이다. Windows의 기본 임시 디렉터리 경로에는 사용자 이름이 들어간다. Ubuntu에서 `TMPDIR`을 정하지 않으면 그림에는 `/tmp/vnc-relay-dashboard-live-…/accounts.toml` 같은 시험 경로만 보인다(이 문서의 판단, 사용자 결정 없음).
+캡처는 Ubuntu에서만 실행한다. 설정 보기 화면이 서버 디렉터리의 절대 경로(`admin.accounts_file`)를 보여 주기 때문이다. Windows의 기본 임시 디렉터리 경로에는 사용자 이름이 들어간다. Ubuntu에서 `TMPDIR`을 정하지 않으면 그림에는 `/tmp/vnc-relay-dashboard-live-…/accounts.toml` 같은 시험 경로만 보인다.
 
 1. Ubuntu bash에서 `TMPDIR`이 비어 있는지 확인한다.
 
@@ -188,7 +188,7 @@ cargo test --test help_site
    | `build` | PR, `main` push, 수동 실행 | mdBook 0.5.4를 내려받아 2.1절 SHA-256으로 확인한다. `rustup toolchain install` 뒤 `cargo xtask help-site`를 실행한다. `main`이면 `target/help-site/`를 Pages 산출물로 올린다 |
    | `deploy` | `main` push와 `main`의 수동 실행 | 산출물을 환경 `github-pages`에 게시한다 |
 
-   워크플로 `help`는 ref(브랜치나 PR)마다 동시 실행 그룹 하나를 쓴다. 그래서 같은 ref의 실행은 한 번에 하나만 진행한다. 진행 중인 실행은 취소하지 않고, 기다리던 실행은 더 새 실행으로 바뀐다. `main`에는 실행이 그룹에서 기다리기 시작한 순서대로 게시된다(이 문서의 판단, 사용자 결정 없음). 거의 같은 시각에 들어온 실행의 순서는 GitHub가 보장하지 않는다([GitHub 동시 실행 문서](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/control-workflow-concurrency)).
+   워크플로 `help`는 ref(브랜치나 PR)마다 동시 실행 그룹 하나를 쓴다. 그래서 같은 ref의 실행은 한 번에 하나만 진행한다. 진행 중인 실행은 취소하지 않고, 기다리던 실행은 더 새 실행으로 바뀐다. `main`에는 실행이 그룹에서 기다리기 시작한 순서대로 게시된다. 거의 같은 시각에 들어온 실행의 순서는 GitHub가 보장하지 않는다([GitHub 동시 실행 문서](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/control-workflow-concurrency)).
 
 3. 실행 결과를 확인한다.
 
@@ -206,7 +206,7 @@ cargo test --test help_site
 
    기대 결과: `200`. 브라우저로 `https://kayden-kim.github.io/vnc-relay/`를 열면 언어에 맞는 첫 페이지로 이동한다.
 
-5. 처음 게시했으면 저장소 About의 웹사이트 주소를 정한다(사용자 결정 2026-11-11(Q225)).
+5. 처음 게시했으면 저장소 About의 웹사이트 주소를 정한다.
 
    ```shell
    gh repo edit kayden-kim/vnc-relay --homepage https://kayden-kim.github.io/vnc-relay/
@@ -218,25 +218,23 @@ cargo test --test help_site
 
 [검증 기록](../AGENTS.md#검증-기록)에 따라 실제 결과와 성공 조건을 대조한다.
 
+빌드·브라우저 시험의 현재 결과는 3.1·3.3절과 `cargo xtask scenarios`가 만드는 `scenario-report.md`로 확인한다. 아래 표에는 수동 설치·화면 확인·예시 실행의 최신 증거를 남긴다.
+
 | 관찰 대상 | 성공 조건 | 확인 명령·방법 | 실제 결과 | 실행 증거 위치 |
 | --- | --- | --- | --- | --- |
 | mdBook 설치 | 2.1절 기대 결과 | 2.1절. Windows는 PowerShell 7.6.9, Linux 자산은 GitHub Actions `help` 실행, 설치본 버전은 WSL2 Ubuntu | 통과(2026-11-12). Windows 자산의 SHA-256이 표의 값과 같고 설치본이 `mdbook v0.5.4`다. Linux 자산은 Actions에서 `sha256sum -c`가 `OK`였고 WSL 설치본이 `mdbook v0.5.4`다 | 이 표 |
-| Windows 빌드와 검사 | 3.1절 기대 결과 | 3.1절. Windows 11 Pro 10.0.26200 x64, `MDBOOK`에 mdBook 0.5.4 경로 | 통과(2026-11-12). 종료 코드 0, 마지막 줄 `help-site: 통과 (target/help-site)` | 이 표 |
-| Ubuntu 빌드와 검사 | 3.1절 기대 결과 | 3.1절. WSL2 Ubuntu, `MDBOOK=$HOME/tools/mdbook-0.5.4/mdbook`, `CARGO_TARGET_DIR`은 Linux 홈 아래 | 통과(2026-11-12). 종료 코드 0, 마지막 줄 `help-site: 통과 (…/help-site)`. 괄호 안은 `CARGO_TARGET_DIR` 아래 경로다 | 이 표 |
-| Windows 브라우저 시험 | 3.3절 기대 결과 | 3.3절. Windows 11 Pro 10.0.26200 x64, Chrome | 통과(2026-11-12). 18개 통과, 실패 0 | 이 표 |
-| 두 OS 전체 완료 검증 | [개발 환경·검증 3.4절](set-up-and-verify.md#34-전체-완료-검증) 기대 결과. 도움말 시험 18개 포함 | 같은 절 6단계, 커밋 `92749c8`과 후속 수정 커밋 `8f99434` | 통과(2026-11-12). 두 커밋 모두 Windows `ALL PASSED (all)`, Ubuntu `ALL PASSED`. 두 커밋의 보고서에서 HELP-001~018과 DASH-064가 `통과`다 | [개발 환경·검증 4.6절](set-up-and-verify.md#46-운영-도움말-판정표) |
-| 화면 캡처 | 3.4절 2·3단계 기대 결과 | 3.4절. WSL2 Ubuntu 24.04.4, `TMPDIR` 없음 | 통과(2026-11-12). 시험 1개 통과, 두 책에 PNG 여섯 장씩. 열두 장 모두 열어 확인했다. 보이는 값은 루프백 주소, 시험 계정 `alice`, `/tmp/vnc-relay-dashboard-live-…` 시험 경로뿐이다 | `docs/help/*/src/images/`. 로컬 묶음 그림 `target/help-shots/captures-{ko,en}.png` |
 | 시안 대조 | [4.1절](#41-시안-대조) | 4.1절 | 통과. 고친 차이 1건, 유지한 차이 4건 | 4.1절 |
-| 게시 | 3.5절 1~5단계 기대 결과 | 3.5절. Pages를 켜고 커밋 `92749c8`을 `main`에 push했다 | 통과(2026-11-12). 1단계 응답의 `build_type`이 `workflow`, `html_url`이 Pages 주소다. `help` 실행 43131018701은 `success`다: `build`(22초)에서 해시 `OK`와 `help-site: 통과 (target/help-site)`, `deploy`(8초) 성공. 루트는 200과 HLP-002이며, 브라우저(영어)로 열면 `/vnc-relay/en/`로 이동한다. `ko/`·`en/`·장 페이지·`assets/`는 200, 없는 경로는 404와 HLP-003이다. 게시된 한국어 책에서 "ticket 공개 키" 검색이 17건을 보였고 콘솔 오류는 없었다. `homepageUrl`이 Pages 주소다 | 이 표 |
 | 게시 순서 | 3.5절 2단계의 실행 순서 설명 | 커밋 `8f99434`를 push한 뒤 `main`에서 `gh workflow run help.yml --ref main`을 연달아 세 번 실행했다 | 통과(2026-11-12). 첫 실행 43142798327이 도는 동안 셋째 실행 43142807912는 `pending`이었다. 둘째 실행 43142803199는 작업을 하나도 시작하지 않은 채 셋째가 들어온 뒤 `cancelled`가 되었다(생성 02:38:23Z, 취소 02:38:28Z). 셋째의 `build`는 첫 실행이 끝난 뒤(02:38:59Z) 시작했다. 첫째와 셋째는 `success`이며, 진행 중에 취소된 실행은 없다 | GitHub Actions 실행 기록 |
-| 화면 캡처(Q234) | 3.4절 2·3단계 기대 결과 | 3.4절. WSL2 Ubuntu 24.04.4, `TMPDIR` 없음 | 통과(2026-11-17). 시험 1개 통과, 두 책에 PNG 여섯 장씩. 열두 장 모두 열어 확인했다. 보이는 값은 루프백 주소, 시험 계정 `alice`, `/tmp/vnc-relay-dashboard-live-…` 시험 경로뿐이다. 운영 현황 그림의 대기 연결 표에 새 전송 경로·상대 주소 열이 보인다. 이어서 Windows에서 3.1절이 통과했다(`help-site: 통과 (target/help-site)`) | `docs/help/*/src/images/`(커밋 `8169bbf`) |
-| 게시(Q234) | 3.5절 2~4단계 기대 결과 | 커밋 `8169bbf`·`a94058d`를 `main`에 push했다 | 통과(2026-11-17). `help` 실행 44001001602는 `success`다: `build`(47초), `deploy`(9초). 게시된 `ko/`·`en/`은 200이다. 두 언어의 `images/operations.png`는 200이고 저장소 파일과 SHA-256이 같다. 게시된 한국어 대시보드 장에 새 대기 연결 설명이 있다 | 이 표 |
+| 공개 사이트 수동 확인 | 3.5절 4·5단계 기대 결과 | 커밋 `92749c8`의 Pages 사이트. Windows 11 Pro 10.0.26200, 영어 브라우저로 루트·두 책·검색·없는 경로를 열고 `gh repo view --json homepageUrl`로 About 주소를 확인했다 | 통과(2026-11-12). 루트는 200과 HLP-002이며 브라우저에서 `/vnc-relay/en/`로 이동했다. `ko/`·`en/`·장 페이지·`assets/`는 200, 없는 경로는 404와 HLP-003이었다. 한국어 책에서 "ticket 공개 키" 검색 결과는 17건이었고 콘솔 오류는 없었다. `homepageUrl`이 Pages 주소였다 | 이 표 |
+| 게시된 화면 캡처 확인 | 게시한 그림이 저장소의 대상 파일과 같다 | GitHub Pages, 커밋 `8169bbf`·`a94058d`의 게시본. 두 언어의 책과 `images/operations.png`를 내려받아 HTTP 상태와 SHA-256을 저장소 파일과 대조했다 | 통과(2026-11-17). `ko/`·`en/`과 두 언어의 `images/operations.png`는 200이었다. 두 그림의 SHA-256이 저장소 파일과 같았다. 게시된 한국어 대시보드 장에 대기 연결의 전송 경로·상대 주소 설명이 있었다 | 이 표 |
+| 화면 캡처 | 3.4절 2·3단계 기대 결과 | 3.4절. WSL2 Ubuntu, 대기·활성 표 통일 작업 트리(`web/dashboard/app/panels.js`·`app.css`), `TMPDIR` 없음 | 통과(2026-11-17). 시험 1개 통과, 두 책의 PNG 열두 장을 모두 열어 확인했다. 보이는 값은 시험 계정 `alice`, 루프백 주소, `/tmp` 아래 시험 경로, 시험 세션 식별자뿐이다 | `docs/help/*/src/images/`, [대시보드 검증 기록](verify-dashboard-frontend.md) |
 | 추천 구성 사례의 예시 | 두 책 `recommended-setup.md`의 "ticket 발급 예시"·"ticket 확인 예시" 기대 결과 | 한국어 책의 코드 블록을 그대로 꺼내 실행했다. 영어 책의 Python 코드는 한국어 책과 문자열만 다르고(AST 대조) 나머지 코드 블록은 같다. 영어 책의 스크립트도 Windows에서 키 생성·발급·서명 확인을 실행했다. VNC Relay는 페이지의 `relay.toml`에서 리스너를 루프백 시험 포트로 바꾸고 Viewer `allow`에 `127.0.0.1`을 더했다. 인증서는 `relay.example.test`의 자체 서명 인증서다. curl 줄에는 `--resolve`와 `--cacert`를 더했고, 인증서 확인을 끄는 `-k`는 쓰지 않았다. 그 밖에는 진행 표시를 끄는 `-sS`(Ubuntu)와 3단계 바이트를 보기 위한 출력 저장(Windows `-o`, Ubuntu `od`)만 붙였다. Windows 11 Pro 10.0.26200: Windows PowerShell, Python 3.14.6, `cryptography` 50.0.2, curl 8.22.0, `vnc-relay 2026.11.6` 디버그 빌드. WSL2 Ubuntu 24.04.4: Python 3.12.3, `python3-cryptography` 41.0.7, curl 8.5.0, `vnc-relay 2026.11.5` 디버그 빌드(이후 `crates/`·`src/` 변경은 트레이 아이콘뿐) | 통과(2026-11-18). 두 OS에서 키 파일 두 쌍이 생겼고 서명 확인이 `aud = vnc-relay/server`, `rid = 482913`인 클레임을 출력했다. 1단계는 101과 `Sec-WebSocket-Protocol: binary`, curl 종료 코드 28, `ticket_accepted`(server). 2단계는 401과 `WWW-Authenticate: VncRelayTicket`, `ticket_reused`. 3단계는 101 뒤 첫 프레임 `82 0c`와 `RFB 000.000\n`, `ticket_accepted`(viewer). Windows에서 다른 역할의 공개 키 파일, DER 서명, 같은 `kid`의 다른 키는 각각 kid 없음 메시지, 71바이트 서명 메시지, `InvalidSignature`로 끝났다 | 이 표 |
-| 추천 구성 사례 페이지와 구성도 | 3.1절·3.3절 기대 결과, [도움말 작성 규칙](../help/AGENTS.md#구성도)의 구성도 규칙 | Windows 11 Pro 10.0.26200. 3.1절, 3.3절, `cargo test -p xtask`를 실행했다. 3.2절 미리보기(`--port 18790`)를 헤드리스 WebKit으로 열어 두 언어의 새 페이지를 1280px·360px 폭에서 봤다 | 통과(2026-11-18). `help-site: 통과 (target/help-site)`. xtask 시험 31개와 도움말 시험 18개가 통과했다. HELP-016(그림·링크)과 HELP-018(좁은 폭·확대)은 새 페이지를 포함한다. 구성도(760×380)는 1280px에서 692×346, 360px에서 292×146으로 줄었고 페이지 가로 스크롤은 없었다. 두 언어 모두 글씨가 상자 안에 있다. 360px에서는 글씨가 작다. 콘솔 오류는 0건이다 | 이 표. 화면 캡처는 파일로 남기지 않았다 |
+| 추천 구성 사례 페이지와 구성도 | [도움말 작성 규칙](../help/AGENTS.md#구성도)의 구성도 규칙 | Windows 11 Pro 10.0.26200, `vnc-relay 2026.11.6` 작업 트리. 3.2절 미리보기(`--port 18790`)를 헤드리스 WebKit으로 열어 두 언어의 페이지를 1280px·360px 폭에서 봤다 | 통과(2026-11-18). 구성도(760×380)는 1280px에서 692×346, 360px에서 292×146으로 줄었고 페이지 가로 스크롤은 없었다. 두 언어 모두 글씨가 상자 안에 있다. 360px에서는 글씨가 작다. 콘솔 오류는 0건이다 | 이 표. 화면 캡처는 파일로 남기지 않았다 |
+| VNC 연결 구성의 방식 구성도와 상단 막대 | [도움말 작성 규칙](../help/AGENTS.md#구성도)의 구성도 규칙, [도움말 스펙](../specs/help-site.md)의 상단 막대 구성 | Windows 11 Pro 10.0.26200, 커밋 `c0fa253` 위 작업 트리. 3.2절 미리보기(`--port 18093`)를 ego lite 0.6.3.14(DOM 측정)와 헤드리스 Chrome 157.0.8103.79(CDP 폭 지정 캡처)로 열어 두 언어의 `connect.html`·`index.html`을 1280px·360px 폭에서 봤다 | 통과(2026-11-19). 구성도(760×490)는 1280px에서 695×448, 360px에서 279×181로 줄었고 페이지 가로 스크롤은 없었다. 두 언어 모두 글씨가 상자 안에 있다. 360px에서는 글씨가 작다. 상단 막대에는 목차·사이트 이름·검색·언어만 있고 `main 기준` 링크가 없다. 소개 페이지의 절은 세 개이며 기준 버전 절이 없다. 콘솔 오류는 확인하지 않았다 | 이 표. 화면 캡처는 저장소 밖 `D:/vr-tools/tmp/shots/`에 있다 |
 
 ### 4.1 시안 대조
 
-채택 시안 [help-site.html](../design/mockups/help-site.html)의 21개 프레임(사용자 결정 2026-11-12(Q228))과 구현을 같은 상태에서 대조했다. 구현은 `cargo xtask help-serve`로 띄운 사이트다. 데스크톱 프레임은 1080px, 좁은 폭 프레임은 400px에서 캡처했다. 모바일 목차 펼침(ko)만 390px에서 캡처했다. 기록자는 에이전트이며 사람의 검토는 하지 않았다.
+2026-11-12에 커밋 `92749c8`의 구현과 채택 시안 [help-site.html](../design/mockups/help-site.html)의 21개 프레임을 같은 상태에서 대조했다. 구현은 `cargo xtask help-serve`로 띄운 사이트다. 데스크톱 프레임은 1080px, 좁은 폭 프레임은 400px에서 캡처했다. 모바일 목차 펼침(ko)만 390px에서 캡처했다. 기록자는 에이전트이며 사람의 검토는 하지 않았다.
 
 | 확인 대상 | 기준 문서·범위 | 환경·명령·방법 | 실제 결과 | 실행·검토 증거 |
 | --- | --- | --- | --- | --- |
@@ -254,9 +252,9 @@ cargo test --test help_site
 | --- | --- | --- | --- |
 | 1. 검색 입력의 지우기 단추 | 구현: Chrome이 초점 있는 `type="search"` 입력에 기본 ✕ 단추를 그린다. 시안도 같은 입력이지만 프레임에 초점이 없다 | 브라우저 기본 동작 | 유지 |
 | 2. 검색 단추 강조 | 초기 구현: 검색 패널이 열리면 검색 단추도 활성 바탕. 시안: 활성 바탕은 목차 단추에만 | DESIGN 상단 막대 행, 시안 | 고침. `web/help/theme/help.css`의 활성 바탕 규칙에서 검색 단추를 뺐다 |
-| 3. 본문 없는 절의 검색 결과 | 구현: 제목 바로 뒤에 하위 절이 오는 절(예: "Operations › Replace certificate and public key files")은 발췌 없이 링크만 보인다. 시안에는 이런 결과가 없다 | [검색 규칙](../specs/help-site.md#검색-규칙)(이 문서의 판단, 사용자 결정 없음) | 유지. 스펙에 적었다 |
+| 3. 본문 없는 절의 검색 결과 | 구현: 제목 바로 뒤에 하위 절이 오는 절(예: "Operations › Replace certificate and public key files")은 발췌 없이 링크만 보인다. 시안에는 이런 결과가 없다 | [검색 규칙](../specs/help-site.md#검색-규칙) | 유지 |
 | 4. 포인터 흔적 | 구현 캡처의 hover 바탕은 클릭한 위치에서 생긴다 | 캡처 조건 | 해당 없음 |
-| 5. 내용 | 시안의 자리표시 그림 대신 실제 화면 캡처, 검색 결과 수 | 사용자 결정 2026-11-11(Q224) | 데이터 차이, 해당 없음 |
+| 5. 내용 | 시안의 자리표시 그림 대신 실제 화면 캡처, 검색 결과 수 | 도움말의 실제 내용 | 데이터 차이, 해당 없음 |
 
 ## 5. 중단 조건
 

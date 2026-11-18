@@ -54,9 +54,9 @@ Ubuntu bash:
 | `/relay/viewer` | Viewer. ticket을 켜지 않았으면 Mode I·II를 받는다. |
 | `/relay/server` | Server. Mode II만 받는다. |
 
-WS와 WSS는 같은 경로를 쓴다. 쿼리는 대상이나 중계 ID를 선택하지 않는다. 꺼진 역할과 다른 경로는 HTTP 404다. 끝 슬래시는 다른 경로다. `main`은 이전 Viewer 경로 `/relay`도 404로 거절한다.
+WS와 WSS는 같은 경로를 쓴다. 쿼리는 대상이나 중계 ID를 선택하지 않는다. 꺼진 역할과 다른 경로는 HTTP 404다. 끝 슬래시는 다른 경로다. Viewer의 `/relay` 요청도 404로 거절한다.
 
-> **참고:** `v2026.11.2` 이하 Release는 Viewer 경로 `/relay`를 쓴다. 버전 차이는 [소개](index.md), 클라이언트 구성은 [VNC 연결 구성](connect.md)을 따른다.
+클라이언트 구성은 [VNC 연결 구성](connect.md)을 따른다.
 
 업그레이드와 종료 코드 전체는 [WebSocket 계약 1.1·1.5·1.7절](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/websocket-relay-v2.md)을 따른다. ticket을 켠 역할의 추가 규칙은 [접속 ticket](access-ticket.md)을 따른다.
 
@@ -134,7 +134,7 @@ WS와 WSS는 같은 경로를 쓴다. 쿼리는 대상이나 중계 ID를 선택
 
 ## main이 구현한 계약 버전
 
-이 표는 제품 Release 번호가 아니라 외부 형식의 계약 버전이다. 실행파일의 `--version`만으로 `main`의 추가 기능을 구분할 수는 없다. [소개](index.md)의 Release 차이를 함께 확인한다.
+이 표는 제품 Release 번호가 아니라 외부 형식의 계약 버전이다.
 
 | 계약 이름 | 버전 | 기준 문서 |
 | --- | --- | --- |

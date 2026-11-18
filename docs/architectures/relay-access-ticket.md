@@ -6,7 +6,7 @@
 | --- | --- |
 | 구조 시점 | Current |
 | 문서 상태 | Draft |
-| 구현 대조 | Verified — [2026-11-11 대조 기록](#2026-11-11-대조-기록). 구현은 커밋 `4be8e0e`이다. 시험은 같은 커밋의 두 OS 게이트에서 통과했다([접속 ticket 판정표](../how-to/set-up-and-verify.md#45-접속-ticket-판정표)). 2026-11-13에 세션 만료 시스템 시험의 시간 측정만 고쳤다([수정 기록](#세션-만료-시스템-시험의-시간-측정-수정)). |
+| 구현 대조 | Verified — [구조 대조 기록](#구조-대조-기록) |
 | 코드 위치 | `crates/domain/src/ticket.rs`, `crates/app/src/settings.rs`, `crates/app/src/reload/`, `crates/app/src/relay.rs`·`relay/`, `crates/adapters/src/ticket.rs`·`ticket/`, `crates/adapters/src/upgrade.rs`·`websocket.rs`, `src/serve.rs` |
 | 코드 지도 | [코드 지도](code-map.md) |
 | 관련 스펙 | [WS·WSS 스펙](../specs/websocket.md) WS-037~046, [중계 스펙](../specs/relay.md) RLY-029~032, [운영 스펙](../specs/operations.md) OPS-070~073, [관리 스펙](../specs/management.md) MGT-052~053, [화면 스펙](../specs/dashboard.md) DASH-020·029·035~037 |
@@ -177,50 +177,34 @@ flowchart LR
 
 | 선택 | 이유 | 검토한 다른 방법 | 근거 |
 | --- | --- | --- | --- |
-| 공개 키 목록을 `Settings`에 넣는다 | 업그레이드 검사가 설정과 키를 한 세대로 읽는다. 재로드의 원자적 교체를 그대로 쓴다 | TLS처럼 `ReloadSnapshot`의 별도 칸: 검사 경로가 두 원천을 읽어야 한다 | 이 문서의 판단, 사용자 결정 없음 |
+| 공개 키 목록을 `Settings`에 넣는다 | 업그레이드 검사가 설정과 키를 한 세대로 읽는다. 재로드의 원자적 교체를 그대로 쓴다 | TLS처럼 `ReloadSnapshot`의 별도 칸: 검사 경로가 두 원천을 읽어야 한다 | 없음 |
 | 서명 확인은 aws-lc-rs `ECDSA_P256_SHA256_FIXED` | 이미 rustls 암호 모듈로 쓰는 crate다. 고정 길이 R‖S만 받아 DER을 자연히 거절한다 | 새 JWT crate: 의존성·라이선스 검토가 늘고 계약의 엄격한 규칙(중복 멤버, 숫자 형식)을 그대로 쓰기 어렵다 | PRD 1절 "rustls 암호 모듈은 aws-lc-rs" |
-| JSON 중복 멤버는 `serde_json`으로 구문을 확인한 뒤 멤버 이름만 훑어 찾는다 | 새 직접 의존성(`serde`) 없이 이스케이프를 해독한 이름으로 비교한다 | `serde` visitor: adapters 직접 의존성과 레이어 허용 목록이 바뀐다 | 이 문서의 판단, 사용자 결정 없음 |
+| JSON 중복 멤버는 `serde_json`으로 구문을 확인한 뒤 멤버 이름만 훑어 찾는다 | 새 직접 의존성(`serde`) 없이 이스케이프를 해독한 이름으로 비교한다 | `serde` visitor: adapters 직접 의존성과 레이어 허용 목록이 바뀐다 | 없음 |
 | base64url·JWS 나누기·클레임 판정·키 목록·사용 기록은 domain | 외부 crate 없이 시험할 수 있는 계약 규칙이다 | adapters에 모두 두기: 규칙 시험이 I/O 시험에 섞인다 | [코드 지도 레이어 표](code-map.md) |
-| 101 뒤에는 `TicketBinding`만 `handle_connection`의 새 인자로 넘긴다 | 중계 서비스는 JWS를 몰라도 된다. `ConnectionContext`는 `Copy`로 유지한다 | `ConnectionContext`에 넣기: `Copy`가 깨지고 TCP 경로까지 바뀐다 | 이 문서의 판단, 사용자 결정 없음 |
-| 두 역할의 같은 키는 Server 쪽 `relay.ticket.server.public_keys_file` 진단으로 낸다 | 진단 하나가 한 키를 가리켜야 한다. 키 순서상 뒤 키다 | 두 키 모두에 진단: 같은 원인이 두 번 보인다 | 이 문서의 판단, 사용자 결정 없음 |
-| 재로드 경고는 `applied`에 그 역할의 `enabled`가 있을 때만 다시 쓴다 | 기존 `allow_all_target`·`trust_all_proxies`처럼 바뀐 키에만 경고한다 | 재로드마다 쓰기: 바뀌지 않은 설정의 경고가 반복된다 | 이 문서의 판단, 사용자 결정 없음 |
+| 101 뒤에는 `TicketBinding`만 `handle_connection`의 새 인자로 넘긴다 | 중계 서비스는 JWS를 몰라도 된다. `ConnectionContext`는 `Copy`로 유지한다 | `ConnectionContext`에 넣기: `Copy`가 깨지고 TCP 경로까지 바뀐다 | 없음 |
+| 두 역할의 같은 키는 Server 쪽 `relay.ticket.server.public_keys_file` 진단으로 낸다 | 진단 하나가 한 키를 가리켜야 한다. 키 순서상 뒤 키다 | 두 키 모두에 진단: 같은 원인이 두 번 보인다 | 없음 |
+| 재로드 경고는 `applied`에 그 역할의 `enabled`가 있을 때만 다시 쓴다 | 기존 `allow_all_target`·`trust_all_proxies`처럼 바뀐 키에만 경고한다 | 재로드마다 쓰기: 바뀌지 않은 설정의 경고가 반복된다 | 없음 |
 | 세션 만료로 시작한 정리는 E가 지나도 `session_expired`를 유지한다 | 계약이 `close_timeout`으로 바꾸는 예외를 EOF·관리자 종료로만 정했다 | `close_timeout`으로 바꾸기: 계약 문장과 다르다 | [운영 정보 계약](../contracts/ops-info-v2.md) `session_closed` 절 |
-| 이미 정리를 시작한 세션에는 만료가 원인을 바꾸지 않는다 | 첫 원인 규칙을 따른다. 정리는 이미 E로 제한된다 | 즉시 강제 종료: 정리 규칙이 둘이 된다 | 이 문서의 판단, 사용자 결정 없음 |
-| H·W 기한과 세션 만료 기한이 같으면 기존 시간 초과(`connection_aborted(reason=handshake_timeout)`·`waiting_expired`)를 쓴다 | 계약이 같은 시각의 우선순위를 정하지 않았다. ticket을 켜지 않은 연결과 같은 사건을 유지한다 | 세션 만료 우선: 설정 H·W와 같은 시각인데도 사건이 ticket에 따라 달라진다 | 이 문서의 판단, 사용자 결정 없음 |
-| `sx`가 9999-12-31T23:59:59Z보다 늦으면 `session_expires_at`만 생략한다 | 운영 로그 시각은 `ts`와 같은 네 자리 연도 형식이다. 확인과 만료 타이머는 `sx`를 그대로 쓴다 | 확장 연도 표기(`+YYYYYY`): 수집 도구가 같은 형식으로 읽지 못한다. ticket 거절: 계약의 "0 이상 정수" 규칙과 다르다 | [운영 정보 계약 1.4절](../contracts/ops-info-v2.md#14-필드-사전), [WebSocket 계약 1.9.4절](../contracts/websocket-relay-v2.md#194-사용-기록). 이 문서의 판단, 사용자 결정 없음 |
-| 세션 만료 기한은 단조 시각에 포화 덧셈으로 더하고 버리지 않는다 | 계약은 모든 `sx`를 101 뒤 종료 시각으로 정한다. `tokio::time::sleep`은 30년을 넘는 지연을 30년으로 줄인다. 그래서 초기 교환·대기는 유한한 H·W와 비교하고, 활성 세션 타이머는 하루 단위로 잠든 뒤 시계를 다시 읽는다. 30년 뒤의 깨어남을 기한 도달로 보지 않는다(`relay/session.rs` `far_ticket_expiry_outlives_the_tokio_sleep_cap_and_fires_at_sx`) | 넘치면 기한 없음: 계약과 달리 그 연결은 끝나지 않는다. 한 번의 긴 sleep: 30년 뒤에 일찍 만료한다 | [WebSocket 계약 1.9.2·1.9.5절](../contracts/websocket-relay-v2.md#192-ticket-형식과-클레임). 이 문서의 판단, 사용자 결정 없음 |
-| 숫자 클레임은 지수 없는 u64 정수 표기만 받는다 | `serde_json`은 소수점·지수 표기와 2^64 이상 정수를 실수로 읽는다. 두 경우를 구분하지 않고 6단계에서 거절한다. `iat`·`exp`는 어차피 8·9단계에서 같은 원인으로 거절된다 | 큰 정수 원문 해석: 숫자 문법을 직접 다시 구현해야 한다 | [WebSocket 계약 1.9.2절](../contracts/websocket-relay-v2.md#192-ticket-형식과-클레임). 이 문서의 판단, 사용자 결정 없음 |
+| 이미 정리를 시작한 세션에는 만료가 원인을 바꾸지 않는다 | 첫 원인 규칙을 따른다. 정리는 이미 E로 제한된다 | 즉시 강제 종료: 정리 규칙이 둘이 된다 | 없음 |
+| H·W 기한과 세션 만료 기한이 같으면 기존 시간 초과(`connection_aborted(reason=handshake_timeout)`·`waiting_expired`)를 쓴다 | 계약이 같은 시각의 우선순위를 정하지 않았다. ticket을 켜지 않은 연결과 같은 사건을 유지한다 | 세션 만료 우선: 설정 H·W와 같은 시각인데도 사건이 ticket에 따라 달라진다 | 없음 |
+| `sx`가 9999-12-31T23:59:59Z보다 늦으면 `session_expires_at`만 생략한다 | 운영 로그 시각은 `ts`와 같은 네 자리 연도 형식이다. 확인과 만료 타이머는 `sx`를 그대로 쓴다 | 확장 연도 표기(`+YYYYYY`): 수집 도구가 같은 형식으로 읽지 못한다. ticket 거절: 계약의 "0 이상 정수" 규칙과 다르다 | [운영 정보 계약 1.4절](../contracts/ops-info-v2.md#14-필드-사전), [WebSocket 계약 1.9.4절](../contracts/websocket-relay-v2.md#194-사용-기록).  |
+| 세션 만료 기한은 단조 시각에 포화 덧셈으로 더하고 버리지 않는다 | 계약은 모든 `sx`를 101 뒤 종료 시각으로 정한다. `tokio::time::sleep`은 30년을 넘는 지연을 30년으로 줄인다. 그래서 초기 교환·대기는 유한한 H·W와 비교하고, 활성 세션 타이머는 하루 단위로 잠든 뒤 시계를 다시 읽는다. 30년 뒤의 깨어남을 기한 도달로 보지 않는다(`relay/session.rs` `far_ticket_expiry_outlives_the_tokio_sleep_cap_and_fires_at_sx`) | 넘치면 기한 없음: 계약과 달리 그 연결은 끝나지 않는다. 한 번의 긴 sleep: 30년 뒤에 일찍 만료한다 | [WebSocket 계약 1.9.2·1.9.5절](../contracts/websocket-relay-v2.md#192-ticket-형식과-클레임).  |
+| 숫자 클레임은 지수 없는 u64 정수 표기만 받는다 | `serde_json`은 소수점·지수 표기와 2^64 이상 정수를 실수로 읽는다. 두 경우를 구분하지 않고 6단계에서 거절한다. `iat`·`exp`는 어차피 8·9단계에서 같은 원인으로 거절된다 | 큰 정수 원문 해석: 숫자 문법을 직접 다시 구현해야 한다 | [WebSocket 계약 1.9.2절](../contracts/websocket-relay-v2.md#192-ticket-형식과-클레임).  |
 
 ## 8. 현재 코드와의 차이
 
-2026-11-11 구현으로 2~5절의 설계가 현재 코드가 됐다. 남은 차이는 없다. 새 파일은 `crates/domain/src/ticket.rs`, `crates/app/src/reload/ticket_keys.rs`, `crates/adapters/src/ticket.rs`·`ticket/jwks.rs`·`ticket/jws.rs`다. 재로드 대상은 43개, 편집 대상은 37개, 운영 로그는 `ops-info/2.1.0`이다.
+2~5절은 현재 구조다. ticket은 `crates/domain/src/ticket.rs`, `crates/app/src/reload/ticket_keys.rs`, `crates/adapters/src/ticket.rs`·`ticket/jwks.rs`·`ticket/jws.rs`가 맡는다. 재로드 대상은 43개, 편집 대상은 37개, 운영 로그는 `ops-info/2.1.0`이다.
 
-### 2026-11-11 대조 기록
+### 구조 대조 기록
 
-- 기준: 커밋 `4be8e0e`.
-- 방법: 2~6절의 파일·심볼·처리 순서를 `crates/domain/src/ticket.rs`, `crates/app/src/settings.rs`·`reload/ticket_keys.rs`·`relay.rs`·`relay/handshake.rs`·`relay/matching.rs`·`relay/session.rs`, `crates/adapters/src/ticket.rs`·`ticket/jwks.rs`·`ticket/jws.rs`·`upgrade.rs`·`websocket.rs`, `src/serve.rs`와 읽어 대조했다. [코드 지도](code-map.md)의 경로·심볼 검사(`tests/code_map.rs`)를 함께 쓴다.
-- 정적 검토: 커밋 전 코드 검토에서 세 가지를 찾아 같은 커밋에서 고쳤다. `TicketParts`의 `Debug`가 ticket 부분을 그대로 출력했다. 업그레이드 직전 IP 재검사의 403에 확인을 통과한 ticket의 `ticket_jti`가 빠졌다. 활성 세션 타이머가 30년 상한으로 깬 시각을 먼 `sx` 도달로 보았다. 고친 동작은 4.2절 4·7행과 7절에 있다.
+- 날짜·대상: 2026-11-11.
+- 방법: 2~6절의 파일·심볼·처리 순서를 `crates/domain/src/ticket.rs`, `crates/app/src/settings.rs`·`reload/ticket_keys.rs`·`relay.rs`·`relay/handshake.rs`·`relay/matching.rs`·`relay/session.rs`, `crates/adapters/src/ticket.rs`·`ticket/jwks.rs`·`ticket/jws.rs`·`upgrade.rs`·`websocket.rs`, `src/serve.rs`와 읽어 대조했다. 환경은 저장소 소스 대조이며 OS 실행 관찰은 포함하지 않는다.
 - 결과: 2~6절과 코드 사이에 남은 차이가 없다.
 - 남은 한계: 사용 기록에는 개수 상한이 없다(3절 `TicketUseTable` 행). 실제 발급 쪽과 클라이언트의 연동은 이 저장소에서 실행하지 않았다.
-- 구조 판정: `Current`·`Verified`. **이 문서의 판단, 사용자 결정 없음**.
-- 이번 검증: 커밋 `4be8e0e`의 두 OS 전체 게이트에서 연결된 시나리오가 모두 통과했다([접속 ticket 판정표](../how-to/set-up-and-verify.md#45-접속-ticket-판정표)).
+- 구조 판정: `Current`·`Verified`.
+- 실행 결과: 시나리오별 현재 결과는 `cargo xtask scenarios`가 만드는 `scenario-report.md`와 CI에서 확인한다([테스트 컨벤션](../conventions/testing.md#7-테스트와-스펙-시나리오-연결)).
 
-### 세션 만료 시스템 시험의 시간 측정 수정
-
-- 이유: 2026-11-13의 WSL 전체 게이트 두 번이 `tests/ticket_system.rs`의 `sx_expires_every_lifecycle_state_and_earliest_side_with_distinct_management_cause` 실패로 끝났다. 보고서는 이 시험에 연결된 RLY-031·MGT-052를 실패로 표시했다. 대상은 커밋 `2d8de7b`(보고 2026-11-13T12:34:29Z)와 `84e208e`(보고 2026-11-13T13:16:37Z)이고, 두 커밋은 xtask와 문서만 바꿨다. 두 보고서 모두 시나리오 285건 가운데 통과 269, 부분 8, 실패 2, 미실행 4, 미연결 2, 오류 0이었다. 게이트 스크립트가 시험 출력을 지워 실패 메시지는 남지 않았다. 같은 시험만 단독으로 세 번 실행하면 모두 통과했다. 게이트와 따로 시험 파일 전체(5건)를 두 번 실행했다. 첫 번째에서 `watched_and_api_ticket_reconfiguration_preserves_existing_bindings_timers_and_use_records`(WS-046)가 `tests/ticket_system.rs:242`의 `old sx must survive reload and key rotation`으로 실패했고, 두 번째는 모두 통과했다.
-- 원인: 실패한 확인은 모두 Close 4013을 받은 뒤 벽시계 초(`now()`)를 `sx`와 비교한다. 서버는 101 직후 `sx`를 단조 시각 기한으로 바꾸고, 그 기한에는 벽시계를 다시 보지 않는다(4.2절 7행, 5절). WSL에서 벽시계와 단조 시계의 차이를 따로 쟀다. 90초 동안 +5.314초 보정이 한 번 있었다. 아래 반복 실행 동안에는 약 32초마다 약 +2.9초 보정이 있었다. 보정이 101과 Close 사이에 들면 서버가 제때 닫아도 벽시계로는 늦게 닫은 것으로 보인다. 실패한 실행 안에서 보정을 직접 관찰하지는 않았다([INFERENCE]).
-- 변경: 시험 코드만 바꿨다(`tests/ticket_system.rs`, `tests/common/ticket_server.rs`, 커밋 `edd66fa`). 운영 코드는 바꾸지 않았다.
-  - `sx_deadline`은 101을 받은 직후 `sx`까지 남은 벽시계 시간을 그때의 `Instant`에 더한다. 서버가 101 직후 기한을 정하는 계산과 같다. ticket의 `sx` 값은 그대로 벽시계 Unix 초다.
-  - `assert_closed_between`은 Close를 받은 `Instant`가 정한 범위 안인지 확인한다. `sx`가 하나면 기한부터 기한 + 3초 전까지다(`SX_LATE`). 예전 확인 `now() <= sx + 2`가 초 단위 내림 때문에 받아들이던 범위와 같다. 두 쪽 모두 `sx`가 있으면 이른 기한부터 늦은 기한 전까지다. 예전 확인 `now() >= early`, `now() < late`와 같다.
-  - 서버와 시험이 시계를 읽는 순간이 조금 다르므로 기한보다 50ms 이른 Close까지 받는다. 이 측정 방식은 이 문서의 판단이며 사용자 결정은 없다.
-- 확인:
-  - 상한을 2초로 둔 중간 버전으로 WSL에서 시험 파일 전체를 5회 반복했다. 25건이 모두 통과했다. 그동안 벽시계 보정이 9번(약 +2.95초, 약 32.5초 간격) 있었다.
-  - 최종 버전(`edd66fa`)은 Windows에서 `cargo fmt --all --check`, `cargo clippy --package vnc-relay --all-targets -- -D warnings`, 시험 파일 전체 5건이 통과했다. WSL에서는 5회 반복 25건이 통과했고, 그동안 보정이 8번(약 +2.93초, 약 32.2초 간격) 있었다.
-- 게이트: 커밋 `39d9738`(`edd66fa` 위에 수동 운영 안내 3.10.1절 문구만 바꾼 문서 커밋).
-  - Ubuntu 24.04.4 LTS x64(WSL2), Rust 1.99.1: `ALL PASSED`. 시나리오 보고 2026-11-13T14:15:35Z: 285건 가운데 통과 271, 부분 8, 실패 0, 미실행 4, 미연결 2, 오류 0. `+ 미커밋 변경`은 줄 끝 차이다(`git diff --ignore-cr-at-eol` 출력 없음).
-  - Windows 11 Pro 10.0.26200 x64, Rust 1.99.1: `ALL PASSED (all)`. 시나리오 보고 2026-11-13T14:55:58Z(대상 커밋 `39d9738`, 미커밋 변경 없음): 통과 268, 부분 12, 실패 0, 미실행 3, 미연결 2, 오류 0.
-- 판정: RLY-031·MGT-052·WS-046은 두 OS에서 통과다. 바뀐 것은 시험의 측정 방법뿐이다. 받아들이는 늦음의 범위는 그대로다.
 
 ## 9. 미결정 사항
 
-없다. 대시보드 시안(DASH-TBD-006)은 사용자 결정 2026-11-11(Q215~Q219)으로 채택했다([화면 스펙 8절](../specs/dashboard.md#8-미결정-사항)).
+없다.

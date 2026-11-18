@@ -1,9 +1,5 @@
 # `serve` 시작과 CLI 골격 모듈 설계
 
-<a id="작업-62~65-목표-조립-target--active"></a>
-## 실행 값과 설정 편집 조립(Current)
-
-`serve`는 시작 파일의 Settings·presence와 검사한 TLS로 `ReloadCell`을 만들고, `SharedReload` 하나를 watcher와 `ConfigEditService`에 주입한다. 같은 cell의 `RuntimeSettingsSource`는 중계·대상·수락·관리·상태 reader에 전달한다. status에는 U를 넣지 않는다. 종료 시작 때 현재 G를 한 번 읽어 deadline을 고정하고 watcher 적용을 멈춘다. 유예 중 관리 GET/PATCH는 유지한다([파일 감지 §10](file-watch.md#10-target--설정-v3-실행-값과-공유-트랜잭션), [설정 보기·편집 §2](config-edit.md#2-내부-구조와-초기화)).
 
 이 문서는 실행파일의 CLI·진단·종료 코드와 `serve` 조립 순서를 다룬다. `serve`는 설정·계정·TLS·ticket 공개 키·감시를 준비한 뒤 필요한 리스너를 바인드한다. 단계가 실패하면 진단을 모아 stderr와 `startup_failed`로 보고하고 확보한 자원을 회수한다. 구체 종료 코드는 [CLI 계약 2.1절](../contracts/cli-v1.md#21-종료-코드)을 따른다. 수락·TLS·ticket·재로드·설정 편집의 업무 규칙은 각 모듈이 맡고 `serve`는 객체와 수명을 연결한다.
 
@@ -11,7 +7,7 @@
 | --- | --- |
 | 구조 시점 | Current |
 | 문서 상태 | Draft |
-| 구현 대조 | 2026-11-08 작업 트리의 소스 대조. WSS Server·프록시 TLS 종료·최근 로그 범위의 구현은 커밋 `3df0693`이다. 시험은 커밋 `51bd747`의 두 OS 게이트에서 통과했다([WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)). 이전 실행 증거는 [대조 기록](#대조-기록)에 보존한다. |
+| 구현 대조 | 소스 대조 범위는 [대조 기록](#대조-기록)을 따른다. |
 | 코드 위치 | `src/main.rs` `main`, `src/cli.rs` `parse`, `src/serve.rs` `run`·`listen_until_shutdown`·`config_management`·`begin_process_shutdown`, `crates/app/src/reload/snapshot.rs` `ReloadCell`, `crates/app/src/reload/service.rs` `ReloadService`, `crates/app/src/management/config.rs` `ConfigEditService`, `crates/adapters/src/file_watch.rs` `start`·`ReloadWatcher` |
 | 코드 지도 | [코드 지도 2절](code-map.md#2-코드-위치와-구성요소) |
 | 관련 스펙 | [운영 스펙 3.1절](../specs/operations.md#31-설정-검증과-시작), OPS-001, OPS-002(일부), OPS-039(일부) |
@@ -19,15 +15,15 @@
 | 관련 ADR | [ADR-0003 단일 인스턴스·메모리 상태](../decisions/ADR-0003-single-instance-memory-state.md), [ADR-0006 설정 파일을 통한 편집](../decisions/ADR-0006-config-edit-through-file.md) |
 | 관련 문서 | [접속 ticket 모듈 설계](relay-access-ticket.md) |
 
-후속: R1은 중계 리스너 네 개(`tcp_viewer`·`tcp_server`·`ws`·`wss`)와 진입점 여섯 개를 구분한다. `Settings::other_listeners`는 WS·WSS의 역할이 하나라도 켜져 있으면 공유 소켓을 한 번만 계획한다. WS·WSS의 부모 `listen`과 WSS 부모 TLS를 사용한다. `WsEntryPoint::new`에는 `Listener`, `TcpEntryPoint::new`에는 역할이 고정된 `EntryPoint`를 넘긴다. 같은 WSS 수락기를 두 역할이 공유한다.
+중계는 중계 리스너 네 개(`tcp_viewer`·`tcp_server`·`ws`·`wss`)와 진입점 여섯 개를 구분한다. `Settings::other_listeners`는 WS·WSS의 역할이 하나라도 켜져 있으면 공유 소켓을 한 번만 계획한다. WS·WSS의 부모 `listen`과 WSS 부모 TLS를 사용한다. `WsEntryPoint::new`에는 `Listener`, `TcpEntryPoint::new`에는 역할이 고정된 `EntryPoint`를 넘긴다. 같은 WSS 수락기를 두 역할이 공유한다.
 
-`run`은 시작 설정의 `recent_logs.max_entries`로 `Arc<RecentLogs>`를 한 번 만든다. 이 참조를 `JsonLinesEventSink::with_recent_logs`와 `listen_until_shutdown`에 직접 넘긴다. 관리 서비스의 `logs`는 기록 싱크와 같은 버퍼다. `trusted_proxies`는 공유 재로드 설정을 통해 WS·WSS의 수락·업그레이드 검사에 전달한다. 최근 로그 구조와 잠금 순서는 [운영 로그 모듈](ops-log.md)을 따른다.
+`start`는 시작 설정의 `recent_logs.max_entries`로 `Arc<RecentLogs>`를 한 번 만든다. 이 참조를 `JsonLinesEventSink::with_recent_logs`와 `listen_until_shutdown`에 직접 넘긴다. 관리 서비스의 `logs`는 기록 싱크와 같은 버퍼다. `trusted_proxies`는 공유 재로드 설정을 통해 WS·WSS의 수락·업그레이드 검사에 전달한다. 최근 로그 구조와 잠금 순서는 [운영 로그 모듈](ops-log.md)을 따른다.
 
 
 ## 1. 책임과 경계
 
 - 맡는 책임:
-  - 명령행 해석: `serve --config <path>`(`--config=<path>` 포함, 한 번만), `--help`·`-h`, `--version`·`-V`. 그 밖의 하위 명령·옵션은 `usage_error`(종료 코드 2)다. `admin` 하위 명령의 해석은 `cli::parse`가 하고, 실행은 [관리자 계정 준비 CLI 모듈 설계](admin-accounts.md)가 맡는다.
+  - 명령행 해석: `serve --config <path>`(`--config=<path>` 포함, 한 번만), `--help`·`-h`, `--version`·`-V`. `admin`은 [계정 준비 모듈](admin-accounts.md), Windows 전용 `service`는 [서비스 모듈](windows-service.md)에 실행을 넘긴다. 그 밖의 하위 명령·옵션은 `usage_error`(종료 코드 2)다.
   - 진단 출력: `error[<code>] key=<key>: <message>`, `warning[<code>] key=<key>: <message>`. 키가 없으면 ` key=`를 뺀다(1.5절).
   - 종료 코드 매핑: 사용법 2, 설정 3, 리스너 4, 계정 파일 5, 런타임 준비 1, 정상 종료 0.
   - `serve` 시작 순서: 설정·presence 읽기와 로그 열기 → 계정 검증·인증 서비스 → 런타임·종료 신호 → 시작 키 → TLS 검사 → ticket 공개 키 검사 → snapshot·공유 재로드·설정 서비스·감시 등록 → 리스너 바인드. TLS·ticket 공개 키 오류는 함께 모은다([접속 ticket 모듈 설계](relay-access-ticket.md#41-시작)).
@@ -38,9 +34,9 @@
   - ticket을 켠 역할의 공개 키 파일을 TLS 파일 뒤에 검사한다. `ticket_keys_invalid` 진단마다 오류 줄과 `startup_failed`를 쓴다. TLS 오류와 함께 종료 코드 3으로 끝낸다. 어떤 리스너도 바인드하지 않는다.
   - 종료 요청을 받으면 준비 상태·중계 lifecycle을 바꾸고 watcher와 TCP·WS·WSS 수락을 멈춘다. 관리·상태 작업은 중계 소유자 정리 뒤 종료한다.
   - 종료 시작 snapshot의 G를 한 번 읽어 유예를 고정한다. `finish_relay_shutdown`은 소유자가 끝날 때까지 G 감독을 유지한다. 유예 중 GET/PATCH와 G 편집은 이미 시작한 종료를 되돌리거나 연장하지 않는다.
-  - 필수 리스너의 복구 불가능 수락 오류 감독. `SupervisedListener`의 최초 장애 채널과 OS 종료 요청을 `wait_for_shutdown`에서 함께 기다린다. 같은 turn에 둘 다 준비됐으면 요청을 우선한다. `begin_process_shutdown`이 준비 상태·중계 종료를 함께 시작한다. 장애가 먼저이면 `listener_failed`, `request_fatal_shutdown`, 종료 코드 1이다. G와 소유자 정리는 그대로다. 사용자 결정 2026-11-05(Q114).
+  - 필수 리스너의 복구 불가능 수락 오류 감독. `SupervisedListener`의 최초 장애 채널과 OS 종료 요청을 `wait_for_shutdown`에서 함께 기다린다. 같은 turn에 둘 다 준비됐으면 요청을 우선한다. `begin_process_shutdown`이 준비 상태·중계 종료를 함께 시작한다. 장애가 먼저이면 `listener_failed`, `request_fatal_shutdown`, 종료 코드 1이다. G와 소유자 정리는 그대로다. 
 - 맡지 않는 책임:
-  - `admin` 하위 명령의 실행. [관리자 계정 준비 CLI 모듈 설계](admin-accounts.md)가 맡는다.
+  - `admin`·`service` 하위 명령의 실행. [계정 준비 모듈](admin-accounts.md)과 [Windows 서비스 모듈](windows-service.md)이 맡는다.
   - 변경 감지·후보 수용의 내부 동작. 조립은 여기서 하고 [파일 감지 모듈](file-watch.md)이 규칙을 맡는다.
   - 준비 상태·상태 응답은 [상태 리스너](status-listener.md), 관리 API·정적 파일은 [관리 리스너](management-listener.md)가 맡는다.
   - TCP 수락·WS 업그레이드·중계·설정 편집은 각 사용 사례/어댑터가 맡는다. 조립에 업무 규칙을 복제하지 않는다.
@@ -59,36 +55,38 @@
 ```mermaid
 flowchart LR
     MAIN["src/main.rs<br/>main"] -->|"호출"| CLI["src/cli.rs<br/>parse"]
-    MAIN -->|"호출"| SERVE["src/serve.rs<br/>run"]
-    SERVE -->|"1 같은 바이트의 Settings·presence"| CFG["adapters config_file.rs<br/>load_candidate"]
-    SERVE -->|"2 호출"| ACC["adapters accounts_file.rs<br/>load"]
+    MAIN -->|"터미널 실행"| SERVE["src/serve.rs<br/>run → start(Host::Terminal)"]
+    SERVICE["src/service.rs run_service"] -->|"SCM 실행"| START["src/serve.rs start(Host::Service)"]
+    SERVE --> START
+    START -->|"1 같은 바이트의 Settings·presence"| CFG["adapters config_file.rs<br/>load_candidate"]
+    START -->|"2 호출"| ACC["adapters accounts_file.rs<br/>load"]
     ACC -->|"호출"| DACC["domain account.rs<br/>AccountName·PasswordHash"]
-    SERVE -->|"2 호출"| REQ["app accounts.rs<br/>require_any"]
-    SERVE -->|"4 호출"| PLAN["app settings.rs<br/>Settings::status_listener, management_listener, other_listeners"]
-    SERVE -->|"4 호출"| NET["adapters net.rs<br/>bind_one, bind"]
-    SERVE -->|"4 호출"| TLS["adapters tls.rs<br/>load_acceptor"]
-    SERVE -->|"TLS 검사 뒤 생성"| SNAP["app reload<br/>ReloadCell·SharedReload"]
-    SERVE -->|"공유 service 주입"| WATCH["adapters file_watch<br/>start·ReloadWatcher::run"]
-    SERVE -->|"config_management helper"| EDIT["app ConfigEditService<br/>adapters 파일·문서 포트"]
+    START -->|"2 호출"| REQ["app accounts.rs<br/>require_any"]
+    START -->|"4 호출"| PLAN["app settings.rs<br/>Settings::status_listener, management_listener, other_listeners"]
+    START -->|"4 호출"| NET["adapters net.rs<br/>bind_one, bind"]
+    START -->|"4 호출"| TLS["adapters tls.rs<br/>load_acceptor"]
+    START -->|"TLS 검사 뒤 생성"| SNAP["app reload<br/>ReloadCell·SharedReload"]
+    START -->|"공유 service 주입"| WATCH["adapters file_watch<br/>start·ReloadWatcher::run"]
+    START -->|"config_management helper"| EDIT["app ConfigEditService<br/>adapters 파일·문서 포트"]
     SNAP -->|"같은 cell의 runtime source"| EP
     SNAP -->|"같은 cell의 runtime source"| WSEP
-    SERVE -->|"상태 리스너 바인드 뒤 시작"| STATUS["adapters status_http.rs<br/>StatusListener::run"]
-    SERVE -->|"준비됨 뒤 시작"| MGMT["adapters management_http.rs<br/>ManagementListener::run"]
-    SERVE -->|"바인드 뒤 시작, 종료 알림"| EP["adapters net.rs<br/>TcpEntryPoint::run"]
-    SERVE -->|"바인드 뒤 시작, 종료 알림"| WSEP["adapters websocket.rs<br/>WsEntryPoint::run"]
-    SERVE -->|"단계마다 Event"| LOG["adapters ops_log.rs<br/>JsonLinesEventSink"]
-    SERVE -->|"진단 출력"| CLI
+    START -->|"상태 리스너 바인드 뒤 시작"| STATUS["adapters status_http.rs<br/>StatusListener::run"]
+    START -->|"준비됨 뒤 시작"| MGMT["adapters management_http.rs<br/>ManagementListener::run"]
+    START -->|"바인드 뒤 시작, 종료 알림"| EP["adapters net.rs<br/>TcpEntryPoint::run"]
+    START -->|"바인드 뒤 시작, 종료 알림"| WSEP["adapters websocket.rs<br/>WsEntryPoint::run"]
+    START -->|"단계마다 Event"| LOG["adapters ops_log.rs<br/>JsonLinesEventSink"]
+    START -->|"진단 출력"| CLI
 ```
 
 | 요소(파일·심볼) | 역할 | 만들어지는 시점과 소유자 | 의존 대상 |
 | --- | --- | --- | --- |
-| `src/main.rs` `main` | `cli::parse` 결과에 따라 도움말·버전을 쓰거나 `serve::run`을 부르고 `ExitCode`를 돌려준다. | 프로세스마다 한 번 | `cli`, `serve` |
+| `src/main.rs` `main` | `cli::parse` 결과에 따라 도움말·버전을 쓰거나 `serve::run`, `admin::run`, Windows `service::run`을 부르고 `ExitCode`를 돌려준다. | 프로세스마다 한 번 | `cli`, `serve`, `admin`, Windows `service` |
 | `src/cli.rs` `parse`, `Command`, `UsageError` | clap으로 인수를 해석한다. clap 오류를 한국어 `usage_error` 문장으로 바꾼다. `--help`·`--version`이 다른 인수와 함께 오면 사용법 오류다. | 호출마다 | clap |
-| `src/cli.rs` `report`, `report_usage`, `HELP`, `EXIT_*` | 진단 한 줄을 stderr에 쓴다(`report`). 사용법 오류 줄과 사용법 문장을 stderr에 쓴다(`report_usage`). 도움말 문장과 종료 코드 상수를 둔다. | 호출마다 | 없음 |
-| `src/serve.rs` `run`, `listen_until_shutdown` | 시작 순서·오류·종료 코드·사건을 조립한다. Settings/presence/TLS로 만든 cell과 count-only L/Lw/Lm을 공유한다. `AcceptPolicy`·`WsPolicy`에는 현재 실행 값을 읽는 source와 예산을 전달한다. TLS는 `TlsSource::wss`/`management`로 새 협상 때 현재 acceptor를 고른다. | serve 실행마다 | adapters·app·domain·tokio·cli |
+| `src/cli.rs` `report`, `report_usage`, `help`, `silence`, `EXIT_*` | 진단과 사용법은 stderr에, 도움말은 stdout에 쓴다. `help`는 OS별 서비스 명령을 포함한 도움말을 조립한다. 서비스 body의 `silence` 뒤에는 진단 출력을 하지 않는다. | 호출마다 | 없음 |
+| `src/serve.rs` `run`, `start`, `listen_until_shutdown` | 시작 순서·오류·종료 코드·사건을 조립한다. Settings/presence/TLS로 만든 cell과 count-only L/Lw/Lm을 공유한다. `AcceptPolicy`·`WsPolicy`에는 현재 실행 값을 읽는 source와 예산을 전달한다. TLS는 `TlsSource::wss`/`management`로 새 협상 때 현재 acceptor를 고른다. | serve 실행마다 | adapters·app·domain·tokio·cli |
 | `src/serve.rs` `config_management` | 설정 절대 경로와 base_dir를 정하고 `ConfigEditService`에 SharedReload·FsConfigFileStore·TomlConfigDocument·Clock·EventSink를 주입한다. 요청 전 파일을 열지 않는다. | reload 생성 뒤, 리스너 바인드 전 | app config·adapters config_edit |
 | `crates/app/src/reload/snapshot.rs` `ReloadCell`; `crates/app/src/reload.rs` `SharedReload` | cell은 reader, mutex service는 watcher와 설정 GET/PATCH가 공유한다. | TLS 검사 뒤 생성, 프로세스 수명 | Settings·presence·TLS |
-| `src/serve.rs` `ShutdownSignal::register`, `ShutdownSignal::wait` | 종료 요청 처리기. Ubuntu는 SIGINT·SIGTERM, Windows는 Ctrl+C·Ctrl+Break다. 바인드 전에 등록해 시작 중의 요청도 놓치지 않는다. `wait`가 첫 요청을 기다린다. | 4단계 처음 | tokio |
+| `src/serve.rs` `ShutdownSignal::register`, `ShutdownSignal::wait`, `Requests::wait`, `HostStatus` | 터미널은 Ubuntu SIGINT·SIGTERM, Windows Ctrl+C·Ctrl+Break·콘솔 닫기를 처리한다. 바인드 전에 등록한다. 서비스는 콘솔 신호 대신 SCM 제어를 기다리고 준비·종료 상태를 SCM에 보고한다. | 4단계 처음 | tokio, Windows 서비스 어댑터 |
 | `crates/adapters/src/listener.rs` `Listener`, `SupervisedListener`, `ListenerFailure` | TCP 수락 포트와 최초 장애 보고. `serve`는 모든 필수 리스너를 이 래퍼로 감싼다. 분류는 [운영 정보 계약 1.12절](../contracts/ops-info-v2.md#112-상태-리스너와-엔드포인트)을 따른다. | 바인드 직후, 감독 채널은 프로세스마다 하나 | tokio, std |
 | `src/serve.rs` `wait_for_shutdown`, `begin_process_shutdown` | 최초 종료 원인을 선택한다. 정상 요청은 기존 동작이다. 장애는 상태를 바꾸고 `shutdown_started(fatal_error,error)`를 시작한다. | 준비 뒤 감독 단계 | adapters, app |
 | `src/serve.rs` `tls_checks`, `tls_failure` | 활성화된 WSS 진입점과 관리 리스너의 TLS 파일 설정을 검사 목록으로 모은다. 파일 오류 한 건을 stderr 한 줄과 `startup_failed`로 쓴다. | 4단계 | adapters `tls.rs` |
@@ -105,13 +103,18 @@ flowchart LR
 
 `crates/adapters/src/config_file.rs`는 `[admin.argon2]` 범위를 `Argon2Params`의 승인 범위 상수로 검사한다. 설정과 계정 파일이 같은 범위를 쓰게 하기 위해서다.
 
+<a id="작업-62~65-목표-조립-target--active"></a>
+### 실행 값과 설정 편집 조립(Current)
+
+`serve`는 시작 파일의 Settings·presence와 검사한 TLS로 `ReloadCell`을 만들고, `SharedReload` 하나를 watcher와 `ConfigEditService`에 주입한다. 같은 cell의 `RuntimeSettingsSource`는 중계·대상·수락·관리·상태 reader에 전달한다. status에는 U를 넣지 않는다. 종료 시작 때 현재 G를 한 번 읽어 deadline을 고정하고 watcher 적용을 멈춘다. 유예 중 관리 GET/PATCH는 유지한다([파일 감지 §10](file-watch.md#10-target--설정-v3-실행-값과-공유-트랜잭션), [설정 보기·편집 §2](config-edit.md#2-내부-구조와-초기화)).
+
 ## 3. 데이터 모델
 
 계정 파일 형식은 [CLI 계약 1.3·1.4절](../contracts/cli-v1.md#13-계정-파일-형식)이 기준이다. 여기서는 메모리 타입만 정한다.
 
 | 이름 | 필드·형태 | 저장 위치 | 제약과 항상 지켜야 할 조건 |
 | --- | --- | --- | --- |
-| `Command` | `Help`, `Version`, `Serve`, `Admin` | 메모리 | Help·Version은 다른 인수가 없을 때만 만든다. Serve/Admin은 경로와 해석한 하위 명령을 전달한다. |
+| `Command` | `Help`, `Version`, `Serve`, `Admin`, Windows 전용 `Service` | 메모리 | Help·Version은 다른 인수가 없을 때만 만든다. 나머지는 경로와 해석한 하위 명령을 전달한다. |
 | `AccountName` | `String` | `Account` | 1~32자, `a-z0-9._-` |
 | `PasswordHash` | 원문 PHC 문자열, `Argon2Params` | `Account` | 검증된 해시는 AdminAuth의 로그인 검사에 쓴다. Debug·진단에는 원문을 넣지 않는다. |
 | `Argon2Params` | `memory_kib`, `iterations`, `parallelism`: `u32` | `PasswordHash` | 승인 범위: 19456~1048576, 2~10, 1~16([설정 계약 1.2절](../contracts/config-v4.md#12-키-표)) |
@@ -127,18 +130,18 @@ flowchart LR
 | 순서 | 코드 위치(파일·심볼) | 조건·계산 | 바뀌는 상태 | 결과를 쓰는 곳 |
 | --- | --- | --- | --- | --- |
 | 1 | `src/main.rs` `main`, `src/cli.rs` `parse` | 인수를 해석한다. 오류면 `error[usage_error]`와 사용법을 stderr에 쓰고 2로 끝난다. | `Command::Serve { config }` | 2단계 |
-| 2 | `src/serve.rs` `run`, `config_file::load_candidate`, `JsonLinesEventSink::open` | 같은 바이트에서 Settings와 presence를 얻는다. 설정 진단은 모두 출력하고 3으로 끝난다. 로그를 열지 못해도 3이다. 성공하면 server_starting·시작 경고를 쓴다. | ConfigCandidate·로그 출력 | 3단계 |
+| 2 | `src/serve.rs` `start`, `config_file::load_candidate`, `JsonLinesEventSink::open` | 같은 바이트에서 Settings와 presence를 얻는다. 설정 진단은 모두 출력하고 3으로 끝난다. 로그를 열지 못해도 3이다. 성공하면 server_starting·시작 경고를 쓴다. | ConfigCandidate·로그 출력 | 3단계 |
 | 3 | `accounts_file::load`, `accounts::require_any` | `settings.admin.accounts_file`을 읽고 검증한다. 경고는 stderr에 쓴다. 진단이 있거나 계정이 없으면 모두 쓰고, 진단마다 `startup_failed`를 기록하고, 5로 끝난다. | `LoadedAccounts` | 4단계 |
-| 4 | `src/serve.rs` `run`, `ShutdownSignal::register`, `generate_startup_keys`, `tls_checks`, `reload::ticket_keys::load` | 인증 서비스·tokio 런타임·신호·시작 키를 준비한다. 런타임 준비 실패는 1이다. 켜진 WSS·관리 TLS를 모두 검사한 뒤 ticket을 켠 역할의 공개 키 파일을 검사한다. 오류가 있으면 파일별 진단과 `startup_failed`를 남기고 3으로 끝난다. | 인증·런타임·신호·시작 키·검사 통과 acceptor·공개 키를 채운 후보 | 5단계 |
+| 4 | `src/serve.rs` `start`, `ShutdownSignal::register`, `generate_startup_keys`, `tls_checks`, `reload::ticket_keys::load` | 인증 서비스·tokio 런타임·신호·시작 키를 준비한다. 런타임 준비 실패는 1이다. 켜진 WSS·관리 TLS를 모두 검사한 뒤 ticket을 켠 역할의 공개 키 파일을 검사한다. 오류가 있으면 파일별 진단과 `startup_failed`를 남기고 3으로 끝난다. | 인증·런타임·신호·시작 키·검사 통과 acceptor·공개 키를 채운 후보 | 5단계 |
 | 5 | `listen_until_shutdown`, `config_management`, `file_watch::start` | 공개 키를 채운 후보·TLS로 ReloadCell을 만든다. ReloadService에 `TicketJwksStore`를 주입한다. Arc/Mutex로 감싸 설정 서비스와 watcher에 공유한다. 켠 역할의 공개 키 파일도 감시한다. 감시 등록 후 기준 해시를 읽고 watcher를 spawn한다. 감시 시작 실패는 바인드 전 `watch_unavailable`·1이다. | cell·SharedReload·ConfigManagement·감시 작업 | 6단계 |
 | 6 | `Settings::status_listener`, `net::bind_one`, `Settings::management_listener`, `Settings::other_listeners`, `net::bind` | 상태→관리→나머지 순으로 바인드한다. 상태 작업은 바인드 직후 시작한다. 상태와 관리는 같은 count-only Lm과 현재 값 source를 쓴다. 실패는 모두 모아 성공 리스너·상태·감시를 회수하고 listener_bind_failed·4로 끝난다. | 바인드한 리스너·상태 작업 | 7단계 |
 | 7 | `listen_until_shutdown`, `ManagementListener::new`, `TcpEntryPoint::run`, `WsEntryPoint::run` | ready 사건 뒤 count-only L/Lw, source를 가진 TcpTargetConnector·RelayRuntime·RelayService를 만든다. 관리 query/terminate/config와 DashboardHints를 주입하고 관리·중계·G 감독 작업을 실행한다. | 준비 상태·공유 runtime·작업 소유자 | 종료 감독 |
 
-`run` 시작 시 기동 벽시계를 잰다. `serve`는 `TicketUseTable` 하나를 만들고 WS·WSS의 `WsPolicy.ticket_uses`에 같은 `Arc<Mutex<_>>`를 넣는다. `WsPolicy.started_at`에는 기동 시각을 넣는다. 사용 기록은 재로드로 지우지 않는다. 시작의 `ticket_tcp_bypass`·`ticket_plaintext_ws` 경고는 `phase=startup`으로 쓴다([접속 ticket 모듈 설계](relay-access-ticket.md#41-시작)).
+`start` 시작 시 기동 벽시계를 잰다. `serve`는 `TicketUseTable` 하나를 만들고 WS·WSS의 `WsPolicy.ticket_uses`에 같은 `Arc<Mutex<_>>`를 넣는다. `WsPolicy.started_at`에는 기동 시각을 넣는다. 사용 기록은 재로드로 지우지 않는다. 시작의 `ticket_tcp_bypass`·`ticket_plaintext_ws` 경고는 `phase=startup`으로 쓴다([접속 ticket 모듈 설계](relay-access-ticket.md#41-시작)).
 
 ### 4.1 종료 요청 뒤 소유자 정리
 
-`src/serve.rs`의 `finish_relay_shutdown`이 중계 소유자와 G 감독 작업을 정리한다. 아래 조립 방식은 **이 문서의 판단, 사용자 결정 없음**이다. Force에서도 먼저 관찰한 세션 종료 원인은 보존한다(사용자 결정 2026-11-01(Q82)).
+`src/serve.rs`의 `finish_relay_shutdown`이 중계 소유자와 G 감독 작업을 정리한다. Force에서도 먼저 관찰한 세션 종료 원인은 보존한다.
 
 1. `wait_for_shutdown`이 최초 원인을 고른다. `cell.current().settings.timeouts.shutdown_grace`를 한 번 읽어 `begin_process_shutdown`에 넘긴다. 정상 요청은 begin_shutdown/request_shutdown, 리스너 장애는 listener_failed/request_fatal_shutdown이다. `stop.send_replace(true)`는 watcher와 새 중계 수락을 멈춘다. 관리 GET/PATCH는 유예 동안 계속된다.
 2. `finish_relay_shutdown`은 모든 `entry_points`의 완료와 두 번째 종료 요청을 함께 기다린다. 진입점은 자신이 가진 연결 소유자를 join한 뒤 반환한다. 소유자가 남아 있는 동안 `supervisor`를 취소하지 않는다. `drive_shutdown`이 G 만료를 계속 진행한다.
@@ -178,24 +181,24 @@ Force는 종료 교환 완료를 기다리는 새 유예가 아니다. 세션은
 | 선택 | 이유 | 검토한 다른 방법 | 근거 |
 | --- | --- | --- | --- |
 | clap의 자동 도움말·버전·오류 출력을 끄고, 오류 종류(`ErrorKind`)를 한국어 `usage_error` 문장으로 바꾼다. | 계약 1.5절의 `error[<code>]` 형식과 한국어 문장을 지킨다. `--help`가 다른 인수와 함께 오면 거절해야 한다(1.1절). | clap 기본 출력. 영어 문장과 다른 형식이다. 직접 해석. PRD가 CLI에 clap을 정했다. | [PRD "구현 기술" 행](../requirements/PRD.md#확정-기준) |
-| 루트 crate가 tokio에 의존한다(런타임 생성·종료 신호). | 런타임과 종료 신호는 실행파일 조립에 속한다. [코드 지도](code-map.md) 3절이 종료 신호 진입점을 `src/serve.rs`에 두었다. 레이어 표의 루트 외부 crate에 tokio를 더한다. | adapters가 런타임을 만들고 시작 순서를 가진다. 객체 연결 위치가 두 곳으로 나뉜다. | 코드 지도 3·5절 |
+| 루트 crate가 tokio에 의존한다(런타임 생성·종료 신호). | 런타임과 종료 신호는 실행파일 조립에 속한다. [코드 지도](code-map.md) 3절이 종료 신호 진입점을 `src/serve.rs`에 두었다. 레이어 표는 루트 외부 crate로 tokio를 허용한다. | adapters가 런타임을 만들고 시작 순서를 가진다. 객체 연결 위치가 두 곳으로 나뉜다. | 코드 지도 3·5절 |
 | 바인드 실패가 나도 남은 리스너를 계속 시도해 실패를 모두 보고한다. | 1.5절이 같은 단계의 오류를 모두 모으라고 한다. 두 번째 프로세스는 모든 주소의 충돌을 한 번에 본다. | 첫 실패에서 멈춤. 다시 실행해야 다음 충돌을 안다. | [CLI 계약 1.5절](../contracts/cli-v1.md#15-입력과-출력-규칙) |
 | 바인드 순서는 상태, 관리, 진입점 순서다. | 운영 정보 계약 1.12절이 상태 리스너를 다른 필수 리스너보다 먼저 열라고 한다. 고정 순서는 출력도 고정한다. | 설정 파일 순서. TOML 표 순서가 키 정렬에 따라 달라진다. | [운영 정보 계약 1.12절](../contracts/ops-info-v2.md#112-상태-리스너와-엔드포인트) |
-| PHC 해시 문자열은 domain이 직접 해석한다. | 1.4절 형식 검사만 필요하다. domain은 외부 crate를 쓰지 않는다. argon2 crate는 작업 4.x의 해시 생성·검증에서 adapters가 쓴다. | `argon2`의 `PasswordHash` 파서. domain 레이어 규칙을 어기고, `m,t,p` 순서·솔트 길이 규칙은 따로 검사해야 한다. | [코드 지도 레이어 표](code-map.md#레이어와-의존-방향) |
-| 리스너는 tokio 기본 바인드를 쓴다. Unix에서는 `SO_REUSEADDR`를 켜고, Windows에서는 주소 공유 옵션을 켜지 않는다. | Linux의 `SO_REUSEADDR`는 다른 소켓이 듣고 있는 주소의 바인드를 막는다. Ubuntu에서 두 번째 프로세스의 바인드 실패를 테스트로 확인했다. Windows 동작은 관찰하지 않았다(9절). | `SO_EXCLUSIVEADDRUSE`(Windows). tokio 공개 API에 없다. socket2(작업 2.5에서 채택)로 켤 수 있지만 Windows 동작을 관찰하기 전에는 정하지 않는다. | [CLI 계약 1.8절](../contracts/cli-v1.md#18-수동-시작과-종료) "두 번째 인스턴스" |
+| PHC 해시 문자열은 domain이 직접 해석한다. | 1.4절 형식 검사만 필요하다. domain은 외부 crate를 쓰지 않는다. argon2 crate는 해시 생성·검증에 adapters가 쓴다. | `argon2`의 `PasswordHash` 파서. domain 레이어 규칙을 어기고, `m,t,p` 순서·솔트 길이 규칙은 따로 검사해야 한다. | [코드 지도 레이어 표](code-map.md#레이어와-의존-방향) |
+| 리스너는 tokio 기본 바인드를 쓴다. Unix에서는 `SO_REUSEADDR`를 켜고, Windows에서는 주소 공유 옵션을 켜지 않는다. | Linux의 `SO_REUSEADDR`는 다른 소켓이 듣고 있는 주소의 바인드를 막는다. 같은 주소의 두 번째 프로세스는 바인드에 실패한다. | Windows `SO_EXCLUSIVEADDRUSE`. tokio 공개 API에 없고 socket2로 지정할 수 있지만, 다른 프로그램의 주소 공유와의 상호작용은 미대조다. | [CLI 계약 1.8절](../contracts/cli-v1.md#18-수동-시작과-종료) |
 | `--version`도 `--help`처럼 다른 인수와 함께 쓰면 사용법 오류다. | 1.1절은 `--help`만 단독 사용을 적었다. 같은 종류의 옵션을 같은 규칙으로 다루면 `--version serve …` 같은 입력의 뜻이 하나로 정해진다. | `--version`이 있으면 나머지를 무시하고 버전을 쓴다. 잘못 쓴 명령이 성공 종료 코드로 끝난다. | [CLI 계약 1.1절](../contracts/cli-v1.md#11-하위-명령과-옵션) |
 | 계정 파일 권한 경고는 Ubuntu에서만 한다(그룹·기타 권한 비트 `0o077`). | 1.6절이 Ubuntu 경고만 정하고 Windows 권한 경고는 관찰로 확인한다고 했다. | Windows 접근 제어 목록 검사. 판정 규칙이 아직 없다. | [CLI 계약 1.6절](../contracts/cli-v1.md#16-저장과-파일-권한) |
 | 인증서·개인키 검사는 어떤 리스너도 바인드하기 전에 한다. | CLI 계약 1.8절이 바인드 앞에서 검사하고 그 실패의 종료 코드를 3으로 정한다. 바인드 뒤에 검사하면 이미 바인드한 리스너를 닫아야 하고, 파일 오류가 바인드 실패(4)에 가려진다. | 바인드 뒤 검사. 실패 때 리스너를 닫아야 하고, 파일 오류를 바인드 실패로 보고할 수 있다. | [CLI 계약 1.8절](../contracts/cli-v1.md#18-수동-시작과-종료) |
 
 ## 8. 현재 코드와의 차이
 
-본문은 2026-11-08 작업 트리의 `src/serve.rs`·reload·watcher·설정 서비스와 소스로 대조했다. 고정 상한 생성자, 시작 TLS `take()`, 시작값 G 전달 설명을 현재 source 주입·snapshot 선택·종료 시작 G 읽기로 바꿨다. 이번 개정은 테스트·빌드·포매터를 실행하지 않았다.
+본문은 현재 source 주입·snapshot 선택·종료 시작 G 읽기 구조를 설명한다. `Host::Terminal`과 `Host::Service`는 같은 `start`를 사용한다. 서비스 조립 경계는 [Windows 서비스 모듈](windows-service.md)을 따른다.
 
-### 기존 종료 조립 회귀 시험
+### 종료 조립 회귀 시험
 
-아래 네 함수는 `src/serve.rs`에 있다. 모두 `#[tokio::test(start_paused = true)]`를 쓴다. 현재 소스의 표식과 비교 항목을 기록한다. 이번 문서 개정에서는 실행하지 않았다.
+아래 네 함수는 `src/serve.rs`에 있다. 모두 `#[tokio::test(start_paused = true)]`를 쓴다. 표식과 비교 경계를 정리한다. 시나리오별 현재 결과는 `cargo xtask scenarios`가 만드는 `scenario-report.md`와 CI에서 확인한다([테스트 컨벤션](../conventions/testing.md#7-테스트와-스펙-시나리오-연결)).
 
-| 기존 함수 | 실제 표식 | 비교하는 경계 |
+| 함수 | 실제 표식 | 비교하는 경계 |
 | --- | --- | --- |
 | `no_entry_point_owners_cancel_and_join_supervisor_without_waiting_for_g` | `operations.md:OPS-008 partial` | 소유자 0개이면 시각 진행 없이 감독 작업을 취소하고 join. Force 없음 |
 | `last_entry_point_owner_finishing_early_cancels_and_joins_supervisor` | `operations.md:OPS-008 partial` | 마지막 소유자가 G 전에 끝나면 그 시점에 감독 작업도 정리 |
@@ -204,23 +207,12 @@ Force는 종료 교환 완료를 기다리는 새 유예가 아니다. 세션은
 
 ## 대조 기록
 
-| 대조 범위 | 환경 | 확인 방법 | 결과 |
-| --- | --- | --- | --- |
-| 작업 2.2 변경(기준 커밋 `4e594f4` + 작업 트리) | Ubuntu 24.04.4(WSL2), Rust 1.99.1 | 2·4절의 파일·심볼과 실제 코드를 대조했다. 처리 순서와 종료 코드는 [CLI 계약의 계약 테스트 실행 기록](../contracts/cli-v1.md#계약-테스트-실행-기록)으로 확인했다. 레이어 규칙은 `cargo xtask layers`, Windows 분기(`cfg(windows)`)는 `cargo clippy --target x86_64-pc-windows-msvc`의 타입 검사로만 확인했다. | 통과 |
-| 작업 2.3 변경(기준 커밋 `f25983a` + 작업 트리): 로그 출력 열기, 단계별 사건 기록, `BindFailure::cause` | Ubuntu 24.04.4(WSL2), Rust 1.99.1 | 1·2·4·6절과 `src/serve.rs`·`crates/adapters/src/net.rs`를 대조했다. 단계별 로그 줄은 `tests/serve.rs`로 확인했다([운영 정보 계약의 계약 테스트 실행 기록](../contracts/ops-info-v2.md#계약-테스트-실행-기록)). | 통과 |
-| 작업 2.4 변경(기준 커밋 `6d6f789` + 작업 트리): 진입점 작업 시작·종료, `ListenerPlan::entry_point` | Ubuntu 24.04.4(WSL2), Rust 1.99.1 | 1·2·3·4·5절과 `src/serve.rs`·`crates/app/src/settings.rs`를 대조했다. 종료 순서는 `tests/serve.rs`의 `closes_and_logs_every_held_connection_when_stopping`으로 확인했다. | 통과 |
-| 작업 2.5 변경(기준 커밋 `c89beb4` + 작업 트리): L 예산 만들기, `AcceptPolicy` 넘기기 | Ubuntu 24.04.4(WSL2), Rust 1.99.1 | 2·4절과 `src/serve.rs`를 대조했다. `tests/serve.rs`의 진입점 테스트가 모두 통과했다. | 통과 |
-| 작업 2.6 변경(기준 커밋 `b1f2ad5` + 작업 트리): 상태 리스너 먼저 바인드, `Settings::status_listener`·`other_listeners`, `bind_one`, 준비됨·종료 중 전환 | Ubuntu 24.04.4(WSL2), Rust 1.99.1 | 1~6절과 `src/serve.rs`·`crates/app/src/settings.rs`·`crates/adapters/src/net.rs`를 대조했다. 바인드 실패 보고 순서는 `tests/serve.rs`의 `second_instance_fails_with_exit_code_4_and_leaves_the_first_running`, 사건 순서는 `writes_the_log_to_the_configured_file_from_start_to_stop`으로 확인했다. | 통과 |
-| Windows 실행(기준 커밋 `e1cfc4f` + Windows 경고 수정) | Windows 11 Pro 10.0.26200, Rust 1.99.1(`x86_64-pc-windows-msvc`) | `tests/serve.rs` 12건이 통과했다. `second_instance_fails_with_exit_code_4_and_leaves_the_first_running`으로 같은 주소의 두 번째 프로세스가 `listener_bind_failed`·종료 코드 4로 끝나고 첫 프로세스의 리스너가 남는 것을 확인했다. 종료 신호 테스트는 Unix 신호를 쓰므로 실행하지 않았다. | 통과 |
-| 작업 3.1 변경(작업 트리): 시작 때 TLS 파일 검사, `tls::load_acceptor` | Windows 11 Pro 10.0.26200, Rust 1.99.1(`x86_64-pc-windows-msvc`) | 1·4·6절과 `src/serve.rs`의 `listen_until_shutdown`·`tls_checks`·`tls_failure`를 대조했다. `tests/serve.rs`의 `fails_with_exit_code_3_when_wss_key_does_not_match`·`fails_with_exit_code_3_when_management_certificate_is_missing`이 종료 코드 3으로 끝나는 것을 확인했다. `checks_tls_files_before_binding_a_taken_status_port`는 상태 포트가 이미 점유된 상태에서 TLS 파일 오류가 바인드 실패(종료 코드 4)보다 먼저 보고되는 것을 확인했다. 종료 신호 테스트는 Unix 신호를 쓰므로 실행하지 않았다. OPS-007(`closes_and_logs_every_held_connection_when_stopping`)은 `cfg(unix)`라 Windows에서 실행하지 않았다. | 통과 |
-| 작업 3.1 변경(작업 트리): 시작 때 TLS 파일 검사, `tls::load_acceptor` | Ubuntu 24.04.4(WSL2), Rust 1.99.1 | 1·4·6절과 `src/serve.rs`의 `listen_until_shutdown`·`tls_checks`·`tls_failure`를 대조했다. `tests/serve.rs` 21건이 모두 통과했다. 상태 포트가 점유된 경우의 TLS 파일 오류 종료 코드 3은 `checks_tls_files_before_binding_a_taken_status_port`로 확인했다. | 통과 |
-| 작업 4.2 변경(기준 커밋 `ead7be0` + 작업 트리): 관리 리스너 바인드 순서, 준비됨 뒤 수락 시작, 종료 순서 | Ubuntu 24.04.4(WSL2)·Windows 11 Pro 10.0.26200, Rust 1.99.1 | 1·4·5·6절과 `src/serve.rs`의 `listen_until_shutdown`·`stop_task`를 대조했다. `tests/serve.rs`의 `refuses_management_connections_beyond_lm_and_keeps_lm_and_l_apart`·`refuses_to_start_without_a_usable_account_with_exit_code_5`가 두 환경에서 통과했다. | 통과 |
-| 작업 3.2 변경(기준 커밋 `c1c24d2`, 코드 = HEAD `0f63227`): WS·WSS 진입점 시작, `wss_tls.take()`로 TLS 수락기 넘기기, `WsPolicy` | Ubuntu 24.04(WSL2), Rust 1.99.1 | 1·2·4·5·6절과 `src/serve.rs`의 `listen_until_shutdown`을 대조했다. 전체 검증 기록(Main 전달, 재실행 안 함): `vr-full.sh`, `시나리오 148건: 통과 9, 부분 22, 실패 0, 미실행 0, 미연결 117. 오류 0건.`, 마지막 줄 `ALL PASSED`. | 통과 |
-| Windows 실행(기준 커밋 `c1c24d2`, 코드 = HEAD `0f63227`) | Windows 10.0.26200, Rust 1.99.1 | 전체 검증 기록(Main 전달, 재실행 안 함): `vr-win.ps1 -Only all`, `통과 8, 부분 22, 실패 0, 미실행 1, 미연결 117`, 마지막 줄 `ALL PASSED`. 미실행 1건은 [TCP 진입점 모듈 설계](tcp-entry-point.md) §9의 종료 정리 테스트로 보인다([INFERENCE]). | 통과 |
+- 날짜·대상: 2026-11-08 작업 트리의 `src/serve.rs`·reload·watcher·설정 서비스.
+- 환경·방법: 저장소 소스를 읽고 source 주입·snapshot 선택·종료 시작 G 읽기와 소유자 정리를 대조했다.
+- 결과: 본문의 실행 값과 설정 편집 조립 경계와 일치한다. 서비스 호스트 경계의 대조 범위는 [Windows 서비스 모듈](windows-service.md#8-코드-대조와-시험-범위)을 따른다. 실행 결과는 시나리오 보고서와 CI에서 확인한다.
 
 ## 9. 미결정 사항
 
 | 항목 | 영향 | 확정 위치 |
 | --- | --- | --- |
-| Windows의 주소 공유 | 같은 설정의 두 번째 프로세스의 바인드 실패는 아래 이전 실행 기록에 있다. 다른 프로그램이 주소 공유 옵션으로 같은 주소를 공유할 수 있는지는 이 문서에서 확인하지 않았다. | CLI 계약의 중복 시작 기준과 별도 OS 관찰 |
-| Windows 종료 요청 | 현재 ShutdownSignal은 Ctrl+C·Ctrl+Break·콘솔 닫기를 처리한다. 콘솔 닫기는 같은 turn에 Grace/Force를 요청한다. 이번 문서 변경에서 재실행하지 않았다. | CLI 계약, `tests/windows_console.rs`, 중계 수명·종료 문서의 실행 기록 |
+| Windows의 주소 공유 | 다른 프로그램이 주소 공유 옵션으로 같은 주소를 공유할 수 있는지는 미대조다. | 검증 담당자, CLI 계약의 중복 시작 기준과 별도 OS 관찰 |

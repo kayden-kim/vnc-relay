@@ -1,20 +1,15 @@
 # WebSocket 진입점 모듈 설계
 
-## 작업 6.2 업그레이드 경계 (Current / Active)
-
-`WsPolicy`는 `AcceptPolicy`, 공유 사용 기록 `ticket_uses`, 기동 시각 `started_at`을 가진다. `net.rs`의 `admit`가 수락 당시 allow/L/B/U/TCP K를 같은 설정 세대에서 읽는다. `websocket.rs`의 `check_upgrade`는 업그레이드 요청의 Origin·ticket·출발지 IP를 한 callback의 현재 설정으로 검사하고 M/WS ping/pong을 보관한다. 101 flush 뒤 `exchange_handshake`가 현재 H를 읽어 `ConnectionContext`에 넘긴다. `WsRelayStream`은 수락 당시 B와 업그레이드 당시 M/Kw를 받는다. U는 수락값이며 기존 연결·교환 값은 바꾸지 않는다([설정 §1.8](../contracts/config-v4.md#18-재로드-구분), OPS-047~050). ticket의 키·사용 기록·기한은 [접속 ticket 모듈 설계](relay-access-ticket.md)가 정한다.
-
-`reload_separates_accept_upgrade_and_exchange_values` 단위 시험이 각 소비 시점과 Origin 제거를 다룬다. 이 변경의 시험은 커밋 `eae442f`의 두 OS 게이트에서 통과했다([작업 6.9 판정표](../how-to/set-up-and-verify.md#42-작업-69-판정표)). 기존 대조 기록은 과거 범위의 증거다.
 
 이 문서는 공유 WS·WSS 리스너가 Viewer·Server 접속을 받은 뒤의 흐름을 다룬다. 접속을 받고, 켜진 역할 허용 목록의 합집합과 L을 거치고, TLS(WSS)를 협상한다. HTTP 경로로 역할을 정한 뒤 역할별 Origin·서브프로토콜·ticket·IP를 검사하고 101 응답을 보낸다. 101 뒤는 WS 스트림과 공통 서비스가 맡는다. 수락 반복은 TCP와 같은 `accept_connections`다.
 
-**현재 동작:** 101 뒤 연결은 `connection`이 `WsRelayStream`으로 감싸 공통 서비스(`handle_connection` → `dispatch`)에 넘긴다(`638cf09`). H는 101 응답 전송 완료 시각(`ConnectionContext.exchange_at`)부터 잰다. 머리 뒤 바이트는 `suffix`로 보존한다. 보류 방식(Q21)은 제거되었다. 작업 3.2는 남은 OPS-006·OPS-037 실행파일 시험을 더해 커밋 `534d4f7`의 두 OS 게이트에서 완료 조건을 모두 채웠다(2026-11-05).
+101 뒤 연결은 `connection`이 `WsRelayStream`으로 감싸 공통 서비스(`handle_connection` → `dispatch`)에 넘긴다. H는 101 응답 전송 완료 시각(`ConnectionContext.exchange_at`)부터 잰다. 머리 뒤 바이트는 `suffix`로 보존한다.
 
 | 항목 | 값 |
 | --- | --- |
 | 구조 시점 | Current |
 | 문서 상태 | Draft |
-| 구현 대조 | Verified — [대조 기록](#대조-기록) (기준 커밋 `c1c24d2`). 공유 WS·WSS 역할·신뢰 프록시 범위의 구현은 커밋 `3df0693`이다. 시험은 커밋 `51bd747`의 두 OS 게이트에서 통과했다([WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)). |
+| 구현 대조 | Verified — [대조 기록](#대조-기록) |
 | 코드 위치 | `crates/adapters/src/websocket.rs`(`WsPolicy`, `WsEntryPoint`, 연결 처리, 101 뒤 전달), `crates/adapters/src/upgrade.rs`(머리 읽기, 검사, 101 응답, 거절 응답), `crates/adapters/src/net.rs`(`accept_connections`, `AcceptPolicy`), `crates/adapters/src/tls_listener.rs`(`TlsIo`), `crates/adapters/src/websocket_stream.rs`(`WsRelayStream`), `crates/domain/src/origin.rs`(`Origin`), `src/serve.rs`(WS·WSS 진입점 시작) |
 | 코드 지도 | [코드 지도 2절](code-map.md#2-코드-위치와-구성요소), [3절](code-map.md#3-진입점) |
 | 관련 스펙 | [WebSocket 스펙 7절](../specs/websocket.md#7-수용-테스트)의 WS-012(일부), WS-013(일부), WS-014, WS-015(WS·WSS), WS-021(일부), WS-022(일부), WS-023(WSS), WS-027(WS·WSS); [운영 스펙 7절](../specs/operations.md#7-수용-테스트)의 OPS-006(일부), OPS-037(WS·WSS, 일부) |
@@ -22,16 +17,11 @@
 | 관련 ADR | [ADR-0001 내장 TLS](../decisions/ADR-0001-built-in-tls.md), [ADR-0002 출발지 IP 허용 목록](../decisions/ADR-0002-source-ip-allowlist.md) |
 | 관련 문서 | [접속 ticket 모듈 설계](relay-access-ticket.md) |
 
-후속: R1은 [공유 리스너·경로별 역할](../contracts/websocket-relay-v2.md#11-업그레이드-요청)을 반영한다(사용자 결정 2026-11-08(Q181·Q188)). 수락·TLS·경로 판정 전에는 역할이 없다. `/relay/viewer`는 Viewer, `/relay/server`는 Server다. 꺼진 역할이나 다른 경로는 404 `invalid_upgrade`다. Server는 Mode II만 사용하고 시작 바이트를 받지 않는다. 후속: Viewer 경로는 사용자 결정 2026-11-10으로 `/relay`에서 `/relay/viewer`로 바꿨다(`websocket-relay` 2.0.0). 코드의 상수는 `upgrade.rs`의 `VIEWER_PATH`다.
-
-후속: R2는 [신뢰 프록시와 X-Forwarded-For](../contracts/websocket-relay-v2.md#18-신뢰-프록시와-x-forwarded-for) 및 전달 주소 판정을 반영한다(사용자 결정 2026-11-08(Q182·Q188)). 수락 때 소켓 IP가 `trusted_proxies`에 들면 역할 allow 합집합을 건너뛴다. 업그레이드 단계에서 소켓 IP가 `trusted_proxies`에 있으면 헤더를 오른쪽부터 검사해 전달 주소를 얻는다. 헤더가 없거나 비어 있거나 검사 중 잘못된 요소가 있거나 모든 요소가 신뢰 프록시면 HTTP 400 `forwarded_for_invalid`로 거절한다. 비신뢰 상대의 헤더는 무시한다. 역할 allow 검사는 클라이언트 주소(전달 주소 또는 소켓 IP)를 쓰고, `ConnectionContext`와 사건에 `forwarded_ip`를 전달한다. 후속: 구현은 커밋 `3df0693`이며, 시험은 커밋 `51bd747`의 두 OS 게이트에서 통과했다([WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)).
-
-
 ## 1. 책임과 경계
 
 - 맡는 책임:
   - 켠 `ws`·`wss` 공유 리스너에서 접속을 받는다. 데이터 읽기 전에 소켓 IP가 `trusted_proxies` 또는 켜진 역할의 `allow` 합집합에 있는지 판정하고 L 자리를 잡는다. 이 두 단계는 `accept_connections`가 맡는다.
-  - 수락 포트는 `listener::Listener`다. `serve`가 `SupervisedListener`로 감싼다. 일시 오류는 공통 수락 반복이 재시도하고, 복구 불가능 오류는 같은 감독 채널로 전체 종료를 시작한다([상태 리스너 설계](status-listener.md), 사용자 결정 2026-11-05(Q114)).
+  - 수락 포트는 `listener::Listener`다. `serve`가 `SupervisedListener`로 감싼다. 일시 오류는 공통 수락 반복이 재시도하고, 복구 불가능 오류는 같은 감독 채널로 전체 종료를 시작한다([상태 리스너 설계](status-listener.md)).
   - WSS에서는 `TlsIo`로 TLS 협상을 U 안에 끝낸다. 협상 실패는 평문으로 바꾸지 않는다.
   - 업그레이드 요청의 머리를 U 안에 읽고 `check`로 검사한다. 거절하면 사건을 쓰고 HTTP 거절 응답을 보낸 뒤 닫는다.
   - 업그레이드 경로로 켜진 역할을 정한다. 신뢰 프록시 연결이면 전달 주소를 판정한다. 역할별 Origin·서브프로토콜·ticket·클라이언트 주소 IP 순서로 검사한다. 재로드는 새 검사부터 적용한다.
@@ -42,12 +32,16 @@
   - TLS 설정 읽기, 인증서 적재, TLS 1.2 판정 규칙([TLS 모듈 설계](tls.md)).
   - L·H·U의 값과 예산 규칙([연결 상한과 시간 제한 모듈 설계](connection-limits.md)).
   - 평문 WS 시작 경고. 설정 검사가 `ConfigWarning::PlaintextWsEnabled`를 만들고 운영 로그가 쓴다([운영 로그 모듈 설계](ops-log.md)). 이 모듈은 쓰지 않는다.
-  - 허용 목록 재로드(작업 5.2). 이 모듈은 판정 때마다 `AllowSource`로 현재 목록을 읽는다.
+  - 허용 목록 재로드. 이 모듈은 판정 때마다 `AllowSource`로 현재 목록을 읽는다.
 - 다른 모듈에 공개하는 기능:
   - `vnc_relay_adapters::websocket::{WsEntryPoint, WsPolicy}`: `serve`가 진입점을 만들고 띄운다.
   - `vnc_relay_domain::origin::Origin`: 허용 Origin 값과 비교([설정 계약 1.4절](../contracts/config-v4.md#14-origin-값-문법과-비교)).
 
 ## 2. 내부 구조
+
+수락·TLS·경로 판정 전에는 역할이 없다. `upgrade.rs`의 `VIEWER_PATH`는 `/relay/viewer`다. `/relay/server`는 Server이며 Mode II 요청만 받고 시작 바이트를 보내지 않는다. 꺼진 역할이나 다른 경로는 404 `invalid_upgrade`다.
+
+신뢰 프록시의 `X-Forwarded-For`는 오른쪽부터 검사한다. 헤더가 없거나 비었거나 검사 중 잘못된 요소가 있거나 모든 요소가 신뢰 프록시면 400 `forwarded_for_invalid`다. 비신뢰 상대의 헤더는 무시한다. 역할 allow는 클라이언트 주소를 검사한다. 전달 주소는 `ConnectionContext`와 사건의 `forwarded_ip`로 넘긴다.
 
 ```mermaid
 flowchart LR
@@ -70,8 +64,8 @@ flowchart LR
 | `net.rs` `accept_connections`, `AcceptPolicy` | TCP와 WS가 같이 쓰는 접수 반복이다. 출발지 IP 허용 판정, L 자리 확보, keepalive 설정, `connection_accepted` 기록, 연결마다 작업 생성을 맡는다. 멈춤 신호가 오면 리스너를 닫고 연결 작업이 모두 끝날 때까지 기다린다. | `run`이 호출한다. 연결 작업 모음을 소유한다. | `domain`, `app` |
 | `websocket.rs` `Wire` | 연결의 전송 계층이다. `Plain(TcpStream)` 또는 `Tls(Box<TlsIo<TcpStream>>)`. `stage()`는 TLS가 끝나지 않았으면 `tls`, 아니면 `upgrade`를 준다. | `connection`이 만든다. 박싱은 구현 판단이다(7절). | `tls_listener.rs` |
 | `websocket.rs` `connection` | 한 연결의 업그레이드 단계 전체다. 마감은 `accepted_at + U`다. `biased` select로 깨어날 때마다 멈춤 신호, U 마감, `upgrade` 순서로 확인한다. 이미 `upgrade` 안에서 진행 중인 poll은 select가 막지 못한다. 그래서 `upgrade`가 응답 바이트를 만든 뒤 쓰기 직전에 U를 다시 확인한다(`expired`). 그 확인과 쓰기 사이에는 거절 사건 기록만 있다. 결과를 `Switched`(→ `WsRelayStream`, `handle_connection`, `dispatch`), `Refused`(사건 기록 끝), `PeerEof`, I/O 오류(→ `io_reason`), `TimedOut`(U가 지난 뒤 응답 없이 닫음, `tls_upgrade_timeout`), 멈춤(`server_shutdown`)으로 나눈다. | 연결마다 작업 하나. | `upgrade.rs`, `tls_listener.rs` |
-| `upgrade.rs` `read_head` | 빈 줄까지 머리를 읽는다. 빈 줄 뒤 바이트는 `suffix`로 돌려준다. 머리가 `HEAD_LIMIT`(16 KiB) 안에 끝나지 않으면 `TooLarge`, 머리가 끝나기 전에 상대가 닫으면 `Eof`. | 업그레이드 단계 안에서 호출된다. | tokio I/O |
-`upgrade.rs` `check` | 머리 바이트, `WsListenerSettings`, 소켓 `PeerIp`, 판정한 역할을 보관할 `Option<Role>`, 전달 주소를 보관할 `Option<PeerIp>`를 받는다. 정확한 켜진 경로를 찾으면 역할을 먼저 보관한다. 소켓 IP가 `trusted_proxies`에 있으면 `vnc_relay_domain::forwarded_for::client_ip`로 전달 주소를 도출한다. 이후 헤더·역할별 Origin·서브프로토콜 검사 결과로 역할을 포함한 `ValidUpgrade` 또는 `Refusal`을 반환한다. 입출력은 하지 않는다. | 머리마다 한 번. | domain Origin·Role·PeerIp·forwarded_for, app settings, 키 계산 |
+| `upgrade.rs` `read_head` | 빈 줄까지 머리를 읽는다. 빈 줄 뒤 바이트는 `suffix`로 돌려준다. 요청 줄·헤더·끝 빈 줄을 합친 머리는 `HEAD_LIMIT`(16 KiB, 16,384바이트) 이하면 허용한다. 끝 위치가 정확히 16,384바이트여도 허용한다. 그 안에 끝나지 않으면 `TooLarge`, 머리가 끝나기 전에 상대가 닫으면 `Eof`. | 업그레이드 단계 안에서 호출된다. | tokio I/O |
+|`upgrade.rs` `check` | 머리 바이트, `WsListenerSettings`, 소켓 `PeerIp`, 판정한 역할을 보관할 `Option<Role>`, 전달 주소를 보관할 `Option<PeerIp>`를 받는다. 정확한 켜진 경로를 찾으면 역할을 먼저 보관한다. 소켓 IP가 `trusted_proxies`에 있으면 `vnc_relay_domain::forwarded_for::client_ip`로 전달 주소를 도출한다. 이후 헤더·역할별 Origin·서브프로토콜 검사 결과로 역할을 포함한 `ValidUpgrade` 또는 `Refusal`을 반환한다. 입출력은 하지 않는다. | 머리마다 한 번. | domain Origin·Role·PeerIp·forwarded_for, app settings, 키 계산 |
 | `upgrade.rs` `Refusal` | 기존 거절 사유와 `Ticket { reason, jti }`를 담는다. `reason()`은 운영 사유를, `answer()`는 HTTP 응답 머리를 준다(3절 데이터 모델). | `check` 또는 `check_upgrade`가 만든다. | domain ticket |
 | `upgrade.rs` `switching_protocols` | 101 응답 바이트를 만든다. `Upgrade`, `Connection`, `Sec-WebSocket-Accept`를 담고, 요청에 `binary`가 있을 때만 `Sec-WebSocket-Protocol: binary`를 쓴다. 확장은 받지 않는다. | 통과한 머리마다. | `tokio_tungstenite` 키 계산 |
 | `websocket.rs` `refuse` | `connection_rejected`(`stage` = `upgrade`, `conn_id` 있음)를 먼저 기록하고, 거절 응답을 최선으로 보낸 뒤 닫는다. | `connection`이 호출한다. | `app` |
@@ -88,8 +82,8 @@ flowchart LR
 | `Event::UpgradeRejected` | `listener`, `role: Option<Role>`, `conn_id`, `reason`, `peer_ip`, `forwarded_ip: Option<PeerIp>`, `origin`, `ticket_jti` | `listener`, 선택 `role`, `conn_id`, `stage=upgrade`, `reason`, `peer_ip`, 선택 `forwarded_ip`, 선택 `origin`·`ticket_jti` | 경로 판정 전·꺼진 경로는 role이 없다. 켜진 경로 판정 뒤의 거절은 role을 유지한다. 전달 주소 판정 성공 뒤 거절은 `forwarded_ip`를 유지하고, `forwarded_for_invalid`에는 없다. Origin 거절 원문은 문자 경계에서 최대 256바이트만 기록한다. `ticket_jti`는 서명을 확인한 뒤 유효한 값일 때만 쓴다. |
 | `Event::ConnectionAborted` | `conn_id`, `listener: Listener`, `role: Option<Role>`, `stage`, `reason`, `peer_ip`, `elapsed_ms` | 연결 정보, 선택 `role`, `stage`, `reason`, `elapsed_ms`, 선택 `error_kind` | TLS·경로 판정 전에는 role이 없다. 경로 판정 뒤와 101 뒤에는 선택한 role을 보존한다. |
 | `Stage`(WS에서 쓰는 값) | `Accept`, `InitialExchange`, `Tls`, `Upgrade` | `accept`, `initial_exchange`, `tls`, `upgrade` | WS 머리 단계는 `upgrade`, WSS 협상 단계는 `tls`다. |
-| `RejectReason`(WS에서 추가된 값) | `InvalidUpgrade`, `ForwardedForInvalid`, `OriginNotAllowed`, `SubprotocolNotSupported`, `IpNotAllowed`, `TlsVersionUnsupported` | `invalid_upgrade`, `forwarded_for_invalid`, `origin_not_allowed`, `subprotocol_not_supported`, `ip_not_allowed`, `tls_version_unsupported` | `TlsVersionUnsupported`는 `tls` 단계의 거절이다([TLS 모듈 설계](tls.md)). |
-| `AbortReason`(WS에서 추가된 값) | `TlsUpgradeTimeout`, `ServerShutdown`, `HandshakeTimeout`, `PeerEof`, `ConnectionError` | `tls_upgrade_timeout`(warn), `server_shutdown`, `handshake_timeout`, `peer_eof`, `connection_error` | `tls_upgrade_timeout`은 U 마감이다. `handshake_timeout`은 H 마감이다. |
+| `RejectReason`(WS에서 쓰는 값) | `InvalidUpgrade`, `ForwardedForInvalid`, `OriginNotAllowed`, `SubprotocolNotSupported`, `IpNotAllowed`, `TlsVersionUnsupported` | `invalid_upgrade`, `forwarded_for_invalid`, `origin_not_allowed`, `subprotocol_not_supported`, `ip_not_allowed`, `tls_version_unsupported` | `TlsVersionUnsupported`는 `tls` 단계의 거절이다([TLS 모듈 설계](tls.md)). |
+| `AbortReason`(WS에서 쓰는 값) | `TlsUpgradeTimeout`, `ServerShutdown`, `HandshakeTimeout`, `PeerEof`, `ConnectionError` | `tls_upgrade_timeout`(warn), `server_shutdown`, `handshake_timeout`, `peer_eof`, `connection_error` | `tls_upgrade_timeout`은 U 마감이다. `handshake_timeout`은 H 마감이다. |
 | `ConnectionErrorKind` | `IoError`, `TlsFailed` | `io_error`, `tls_failed` | `connection_error`와 함께만 쓴다. WSS 협상 실패는 `tls_failed`, 그 밖의 I/O 오류는 `io_error`다. |
 | `Refusal` | `Invalid`, `NotFound`, `MethodNotAllowed`, `VersionUnsupported`, `ForwardedForInvalid`, `OriginNotAllowed(String)`, `SubprotocolNotSupported`, `IpNotAllowed(Option<String>)`, `Ticket { reason, jti }` | `reason()`: 기존 업그레이드 사유 또는 ticket 오류 코드. `ticket_jti()`: `Ticket`과 `IpNotAllowed`가 담은 서명 확인 뒤의 `jti`. `answer()`: 기존 `400`·`404`·`405`·`426`·`403` 또는 ticket의 `401 Unauthorized` + `WWW-Authenticate: VncRelayTicket` | 응답은 `Content-Length: 0`과 `Connection: close`를 붙인다. 본문이 없다([WebSocket 계약 2.1절](../contracts/websocket-relay-v2.md#21-http-단계의-거절)). ticket 오류는 [접속 ticket 모듈 설계](relay-access-ticket.md#42-업그레이드대표-시나리오-ws-038)를 따른다. |
 | `ValidUpgrade` | `accept_key: String`, `binary: bool`, `role: Role`, `ticket: TicketOffer` | 101 응답 값과 선택한 역할, ticket 제시 개수·값 | `EntryPoint::from_parts(listener, role)`로 공통 서비스 문맥의 진입점을 만든다. ticket 원문을 응답에 넣지 않는다. |
@@ -97,6 +91,8 @@ flowchart LR
 | `WsPolicy` | `accept: AcceptPolicy`, `ticket_uses: Arc<Mutex<TicketUseTable>>`, `started_at: SystemTime` | 접수 정책·현재 설정 원천·공유 사용 기록·기동 시각 | U/B/K는 수락 당시 값, Origin/ticket/IP/M/Kw는 업그레이드 당시 값이다. |
 
 ## 4. 처리 순서
+
+`WsPolicy`는 `AcceptPolicy`, 공유 사용 기록 `ticket_uses`, 기동 시각 `started_at`을 가진다. `net.rs`의 `admit`가 수락 당시 allow/L/B/U/TCP K를 같은 설정 세대에서 읽는다. `websocket.rs`의 `check_upgrade`는 업그레이드 요청의 Origin·ticket·출발지 IP를 한 callback의 현재 설정으로 검사하고 M/WS ping/pong을 보관한다. 101 flush 뒤 `exchange_handshake`가 현재 H를 읽어 `ConnectionContext`에 넘긴다. `WsRelayStream`은 수락 당시 B와 업그레이드 당시 M/Kw를 받는다. U는 수락값이며 기존 연결·교환 값은 바꾸지 않는다([설정 §1.8](../contracts/config-v4.md#18-재로드-구분), OPS-047~050). ticket의 키·사용 기록·기한은 [접속 ticket 모듈 설계](relay-access-ticket.md)가 정한다.
 
 | 순서 | 코드 위치(파일·심볼) | 조건·계산 | 바뀌는 상태 | 결과를 쓰는 곳 |
 | --- | --- | --- | --- | --- |
@@ -132,7 +128,7 @@ flowchart LR
 
 이후 `check_upgrade`는 ticket 확인(401) → 두 번째 IP 검사(403) → 사용 기록 쓰기(재사용은 401) 순서로 진행한다. `upgrade`는 `ticket_accepted` → U 재확인 → 101 순서로 진행한다. Origin 403과 서브프로토콜 400은 ticket 검사보다 먼저다. ticket이 꺼진 역할은 기존 흐름을 유지한다. 세부 순서는 [접속 ticket 모듈 설계](relay-access-ticket.md#42-업그레이드대표-시나리오-ws-038)를 따른다.
 
-업그레이드 검사 순서는 사용자 결정 2026-10-22(Q24)로 확인했다. 구문을 경로보다 먼저, WebSocket 버전(426)을 키(400)보다 먼저 본다. 계약 1.1절 3번이 이 순서를 가~마 항목으로 정한다(9절 항목 3).
+구문을 경로보다 먼저, WebSocket 버전(426)을 키(400)보다 먼저 본다. [계약 1.1절](../contracts/websocket-relay-v2.md#11-업그레이드-요청)이 이 순서를 정한다.
 
 ## 5. 상태와 초기화
 
@@ -140,7 +136,7 @@ flowchart LR
 - 소유자: `WsEntryPoint`가 리스너, TLS 수락기(`Option`), `WsPolicy`를 소유한다. `run`이 만든 공유 상태(로그, 정책, TLS 수락기)를 연결 작업마다 넘긴다.
 - 연결 상태: 연결 작업 하나가 `Wire`, 자리(`BudgetPermit`), 수락 정보(`conn_id`, `peer_ip`, 수락 시각)를 가진다. 자리는 연결 작업이 끝날 때 돌려준다. 101 뒤에도 H가 끝날 때까지 자리를 쥔다.
 - 동시 실행: 진입점마다 접수 반복 하나가 돈다. 연결마다 작업 하나가 돈다. 한 연결의 사건은 그 작업이 순서대로 쓴다. `connection_accepted`는 같은 연결의 다른 사건보다 먼저 나온다.
-- 멈춤: 멈춤 신호를 받으면 새 접수를 멈추고 리스너를 닫는다. 새 접속은 TCP에서 거절되며 HTTP 503은 보내지 않는다. 101 전 연결은 응답 없이 닫고 `connection_aborted`(`reason` = `server_shutdown`)를 쓴다. `Wire::stage`에 따라 WS는 `upgrade`, WSS는 TLS 협상 완료 전 `tls`, 완료 뒤 `upgrade`다(사용자 결정 2026-11-07(Q160)). 101 뒤 연결의 Close 1001 조건은 [WebSocket 계약 1.6절](../contracts/websocket-relay-v2.md#16-종료-의미)을 따른다.
+- 멈춤: 멈춤 신호를 받으면 새 접수를 멈추고 리스너를 닫는다. 새 접속은 TCP에서 거절되며 HTTP 503은 보내지 않는다. 101 전 연결은 응답 없이 닫고 `connection_aborted`(`reason` = `server_shutdown`)를 쓴다. `Wire::stage`에 따라 WS는 `upgrade`, WSS는 TLS 협상 완료 전 `tls`, 완료 뒤 `upgrade`다. 101 뒤 연결의 Close 1001 조건은 [WebSocket 계약 1.6절](../contracts/websocket-relay-v2.md#16-종료-의미)을 따른다.
 - `ConnId`는 TCP 진입점과 같은 프로세스 전역 카운터다([TCP 진입점 모듈 설계 5절](tcp-entry-point.md#5-상태와-초기화)).
 
 ## 6. 오류 처리
@@ -152,83 +148,46 @@ flowchart LR
 | WSS 협상 실패(인증서 만료, 신뢰되지 않음, 호스트 불일치 등) | `connection_aborted`(`stage` = `tls`, `reason` = `connection_error`, `error_kind` = `tls_failed`)를 쓴다. 평문으로 바꾸지 않는다. | 없음 | WS-013(일부, 클라이언트 쪽 실패만 확인) |
 | TLS 1.2 미만 요청 | `TlsIo`가 `connection_rejected`(`tls_version_unsupported`, `stage` = `tls`)를 쓴다. 이 모듈은 줄을 더 쓰지 않는다. | 없음 | OPS-036 |
 | U 안에 TLS 협상 또는 머리 읽기가 끝나지 않음 | 응답 없이 닫고 `connection_aborted`(`tls_upgrade_timeout`)를 쓴다. `stage`는 협상 중이면 `tls`, 아니면 `upgrade`다. | 없음 | OPS-006(일부). 테스트 `stalled_upgrade_request_is_closed_at_u_without_a_reply`, `stalled_tls_handshake_on_wss_is_closed_at_u_without_a_reply` |
-| U가 지난 뒤 머리 읽기가 끝남(상대 닫힘 포함) | 응답 없이 닫고 `connection_aborted`(`tls_upgrade_timeout`)를 쓴다. 읽기 결과가 `Complete`, `Eof`, `TooLarge` 어느 쪽이든 응답하지 않는다. U 뒤 상대 닫힘도 `peer_eof`가 아니다(사용자 결정 2026-10-22(Q28), 9절 항목 12). | 없음 | OPS-006(일부). 테스트 `head_completed_after_u_gets_no_answer` |
-| 머리가 16 KiB 안에 끝나지 않음 | 400으로 거절하고 `connection_rejected`(`invalid_upgrade`)를 쓴다. 상한은 구현 판단이다(9절). | 없음 | WS-012(일부) |
+| U가 지난 뒤 머리 읽기가 끝남(상대 닫힘 포함) | 응답 없이 닫고 `connection_aborted`(`tls_upgrade_timeout`)를 쓴다. 읽기 결과가 `Complete`, `Eof`, `TooLarge` 어느 쪽이든 응답하지 않는다. U 뒤 상대 닫힘도 `peer_eof`가 아니다. | 없음 | OPS-006(일부). 테스트 `head_completed_after_u_gets_no_answer` |
+| 머리가 16 KiB 안에 끝나지 않음 | 400으로 거절하고 `connection_rejected`(`invalid_upgrade`)를 쓴다. 상한은 WebSocket 계약 1.1절을 따른다. | 없음 | WS-012(일부) |
 | 잘못된 요청(구문, 경로, 메서드, HTTP 버전, 헤더, 버전, 키) | 먼저 걸리는 검사 하나의 응답을 쓴다(4절 순서). 426은 버전이 `13`이 아닐 때만 쓴다. `connection_rejected`(`invalid_upgrade`)를 쓴다. | 없음 | WS-012(일부). 단위 테스트 `header_names_must_be_tokens`, `control_characters_in_the_head_are_refused`, `syntax_is_checked_before_the_path`, `wrong_version_is_refused_before_a_bad_key`(`upgrade.rs`); 접속 테스트 `management_paths_and_malformed_upgrades_are_refused_without_upgrade` |
 | Origin이 허용 목록에 없음 | 403으로 거절하고 `connection_rejected`(`origin_not_allowed`, 원문)를 쓴다. | 없음 | WS-015, WS-027 |
 | 서브프로토콜에 `binary`가 없음 | 400으로 거절하고 `connection_rejected`(`subprotocol_not_supported`)를 쓴다. | 없음 | 테스트 있음(표시 없음) |
 | ticket 확인·사용 기록 실패 | 401과 `WWW-Authenticate: VncRelayTicket`로 거절한다. `connection_rejected(stage=upgrade)`에 ticket 오류 사유를 쓴다. | 확인 실패는 사용 기록 없음. 101 전송 실패는 이미 쓴 기록 유지 | WS-039~045 |
-| 업그레이드 직전 IP 재검사 실패 | 403으로 거절하고 `connection_rejected`(`ip_not_allowed`, `stage` = `upgrade`)를 쓴다. ticket을 켠 역할이면 확인을 통과한 ticket의 `ticket_jti`도 쓰고 사용 기록은 쓰지 않는다. | 없음 | WS-022(부분: `tests/reload.rs` `removed_source_is_refused_at_upgrade_on_connections_opened_before_the_removal`, 9절), WS-042·044(`crates/adapters/tests/websocket_ticket.rs`) |
+| 업그레이드 직전 IP 재검사 실패 | 403으로 거절하고 `connection_rejected`(`ip_not_allowed`, `stage` = `upgrade`)를 쓴다. ticket을 켠 역할이면 확인을 통과한 ticket의 `ticket_jti`도 쓰고 사용 기록은 쓰지 않는다. | 없음 | WS-022(부분: `tests/reload.rs` `removed_source_is_refused_at_upgrade_on_connections_opened_before_the_removal`), WS-042·044(`crates/adapters/tests/websocket_ticket.rs`) |
 | 머리 읽기 중 상대가 U 안에 먼저 닫음 | `connection_aborted`(`peer_eof`)를 쓴다. `stage`는 TLS 중이면 `tls`, 아니면 `upgrade`다. | 없음 | 단위 테스트 `read_head_reports_a_closed_peer`(읽기 결과만). 사건 테스트 없음 |
 | 그 밖의 전송 I/O 오류 | `connection_aborted`(`connection_error`, `error_kind` = `io_error`)를 쓴다. TLS 버전 거절이면 줄을 더 쓰지 않는다. | 없음 | 테스트 없음 |
-| 101 뒤 H 만료(9절 항목 11 해결) | 공통 `handle_connection`이 `HandshakeTimeout`을 내고, `websocket_stream.rs`가 Close 4009(`handshake_timeout`)로 보낸다. 사건은 `connection_aborted`(`stage` = `initial_exchange`, `handshake_timeout`). | 없음 | 테스트 없음(WS 경로) |
+| 101 뒤 H 만료 | 공통 `handle_connection`이 `HandshakeTimeout`을 내고, `websocket_stream.rs`가 Close 4009(`handshake_timeout`)로 보낸다. 사건은 `connection_aborted`(`stage` = `initial_exchange`, `handshake_timeout`). | 없음 | 테스트 없음(WS 경로) |
 | 101 뒤 서버 멈춤 | Close 1001(`server_shutdown`)을 보내고 `connection_aborted`(`server_shutdown`)를 쓴다. | 없음 | 테스트 없음(WS 경로) |
-| 101 전 서버 멈춤 | 응답 없이 닫고 `connection_aborted`(`server_shutdown`)를 쓴다. | 없음 | 9절 |
+| 101 전 서버 멈춤 | 응답 없이 닫고 `connection_aborted`(`server_shutdown`)를 쓴다. | 없음 | WebSocket 계약 2.1절 |
 
 ## 7. 설계 선택
 
 | 선택 | 이유 | 검토한 다른 방법 | 근거 |
 | --- | --- | --- | --- |
-| 접수와 허용 판정, L을 TCP와 같은 `accept_connections`로 묶는다. | 순서(허용 판정 → L → `conn_id` → 사건)가 한 곳에 있어 두 진입점이 어긋나지 않는다. | 진입점마다 접수 반복을 따로 쓰기 | 구현 판단(사용자 결정 없음). [TCP 진입점 모듈 설계 2절](tcp-entry-point.md#2-내부-구조) |
-| 101 뒤 H는 101 응답부터 잰다. 101 전의 시간은 U가 맡는다. | 초기 교환 시간은 업그레이드가 끝난 뒤의 시간이다. 수락부터 재면 U와 겹쳐 실제 교환 시간이 짧아진다. | 수락부터 H를 재기 | 사용자 결정 2026-10-22(Q22). H의 정의는 [연결 상한 문서 1절](connection-limits.md#1-책임과-경계)에 적는다. |
-| 101 뒤 프레임은 `WsRelayStream`으로 공통 서비스에 넘긴다. | 프레임의 해석과 초기 교환은 공통 서비스와 스트림 어댑터가 맡는다. 진입점은 읽지 않는다. | 진입점에서 프레임을 읽고 버리기 | 사용자 결정 2026-10-21(Q16)은 중계 시점만 정했다. 보류 방식(Q21, H 뒤 4009)은 `638cf09`에서 제거되었다. |
-| 머리 뒤 바이트를 `suffix`로 보존해 `WsRelayStream`에 넘긴다. | 공통 서비스가 이 바이트를 먼저 소비해야 초기 교환 바이트가 빠지지 않는다. | 머리 뒤 바이트 버리기(이전 방식) | 구현 판단(사용자 결정 없음). 9절 항목 5. |
-| 머리 상한 16 KiB | 계약이 상한을 정하지 않으며, 상한이 없으면 메모리를 무한히 쓸 수 있다. | 상한 없음, 설정 항목 추가 | 구현 판단(사용자 결정 없음). 9절 항목 4. |
-| Key 검사는 16바이트 해독만 본다. 남는 비트는 보지 않는다. | 엄격한 Base64 검사는 계약이 요구하지 않으며 클라이언트 호환 위험만 키운다. | 남는 비트까지 엄격하게 검사 | 구현 판단(사용자 결정 없음). |
-| 버전 검사(426)를 키 검사(400)보다 먼저 한다. | 계약 1.1절 3번의 라·마 항목이 버전(426)을 키(400)보다 먼저 둔다. 키 검사를 먼저 하던 이전 구현은 검토 결함 3번으로 바뀌었다. | 키 검사를 먼저 | 사용자 결정 2026-10-22(Q24). 9절 항목 3. |
-| 구문 검사를 경로 검사보다 먼저 한다. | 계약 1.1절 3번의 가·나 항목이 구문을 경로보다 먼저 둔다. 깨진 요청 줄을 경로 404로 답하면 잘못된 응답이다. 경로를 먼저 보던 이전 구현은 검토 결함 2번으로 바뀌었다. | 경로 검사를 먼저 | 사용자 결정 2026-10-22(Q24). 9절 항목 3. |
-| `Wire::Tls`를 `Box`로 감싼다. | 두 전송 계층의 크기 차이로 `large_enum_variant` 경고를 피하고 `clippy -D warnings`를 통과한다. 비용은 WSS 연결마다 힙 할당 한 번이다. | 박싱 없이 둠(경고 발생) | 구현 판단(사용자 결정 없음). |
+| 접수와 허용 판정, L을 TCP와 같은 `accept_connections`로 묶는다. | 순서(허용 판정 → L → `conn_id` → 사건)가 한 곳에 있어 두 진입점이 어긋나지 않는다. | 진입점마다 접수 반복을 따로 쓰기 | 구현 판단. [TCP 진입점 모듈 설계 2절](tcp-entry-point.md#2-내부-구조) |
+| 101 뒤 H는 101 응답부터 잰다. 101 전의 시간은 U가 맡는다. | 초기 교환 시간은 업그레이드가 끝난 뒤의 시간이다. 수락부터 재면 U와 겹쳐 실제 교환 시간이 짧아진다. | 수락부터 H를 재기 | H의 정의는 [연결 상한 문서 1절](connection-limits.md#1-책임과-경계)에 적는다. |
+| 101 뒤 프레임은 `WsRelayStream`으로 공통 서비스에 넘긴다. | 프레임의 해석과 초기 교환은 공통 서비스와 스트림 어댑터가 맡는다. 진입점은 읽지 않는다. | 진입점에서 프레임을 읽고 버리기 | [WS 스트림 어댑터 설계](websocket-stream.md) |
+| 머리 뒤 바이트를 `suffix`로 보존해 `WsRelayStream`에 넘긴다. | 공통 서비스가 이 바이트를 먼저 소비해야 초기 교환 바이트가 빠지지 않는다. | 머리 뒤 바이트 버리기 | 구현 판단. |
+| 머리 상한 16 KiB | 계약의 최대 머리 크기를 적용해 메모리 사용을 제한한다. | 상한 없음, 설정 항목 추가 | 구현 판단. |
+| Key 검사는 16바이트 해독만 본다. 남는 비트는 보지 않는다. | 엄격한 Base64 검사는 계약이 요구하지 않으며 클라이언트 호환 위험만 키운다. | 남는 비트까지 엄격하게 검사 | 구현 판단. |
+| 버전 검사(426)를 키 검사(400)보다 먼저 한다. | 계약 1.1절 3번의 라·마 항목이 버전(426)을 키(400)보다 먼저 둔다. | 키 검사를 먼저 | [WebSocket 계약 1.1절](../contracts/websocket-relay-v2.md#11-업그레이드-요청) |
+| 구문 검사를 경로 검사보다 먼저 한다. | 계약 1.1절 3번의 가·나 항목이 구문을 경로보다 먼저 둔다. 깨진 요청 줄을 경로 404로 답하면 잘못된 응답이다. | 경로 검사를 먼저 | [WebSocket 계약 1.1절](../contracts/websocket-relay-v2.md#11-업그레이드-요청) |
+| `Wire::Tls`를 `Box`로 감싼다. | 두 전송 계층의 크기 차이로 `large_enum_variant` 경고를 피하고 `clippy -D warnings`를 통과한다. 비용은 WSS 연결마다 힙 할당 한 번이다. | 박싱 없이 둠(경고 발생) | 구현 판단. |
 | WSS 수락기는 WSS 진입점에서만 쓴다. 수락기가 없으면 진입점을 띄우지 않는다. | 협상 없이 평문으로 열리는 일을 구조로 막는다. | 수락기가 없을 때 평문으로 열기 | 계약 1.1절(WSS는 TLS 1.2 이상 뒤에 요청한다), WS-013. [TLS 모듈 설계](tls.md) |
-| 수락은 `trusted_proxies` 및 켜진 역할 allow의 합집합, 업그레이드는 선택한 역할 allow를 쓴다. | 공유 소켓에서는 HTTP 경로를 읽기 전 역할을 알 수 없다. 신뢰 프록시는 수락 허용 검사를 건너뛰고 업그레이드 때 전달 주소를 역할 allow로 검사한다. 한 역할에만 허용된 IP도 다른 역할의 경로에서는 거절한다. 두 검사는 각각 현재 snapshot을 읽는다. | 리스너별 단일 allow로 두 역할을 합치기 | 사용자 결정 2026-11-08(Q181·Q182·Q188), [WS-030](../specs/websocket.md#7-수용-테스트), [WS-032](../specs/websocket.md#7-수용-테스트). |
+| 수락은 `trusted_proxies` 및 켜진 역할 allow의 합집합, 업그레이드는 선택한 역할 allow를 쓴다. | 공유 소켓에서는 HTTP 경로를 읽기 전 역할을 알 수 없다. 신뢰 프록시는 수락 허용 검사를 건너뛰고 업그레이드 때 전달 주소를 역할 allow로 검사한다. 한 역할에만 허용된 IP도 다른 역할의 경로에서는 거절한다. 두 검사는 각각 현재 snapshot을 읽는다. | 리스너별 단일 allow로 두 역할을 합치기 | [WS-030](../specs/websocket.md#7-수용-테스트), [WS-032](../specs/websocket.md#7-수용-테스트). |
 | 거절 사건을 응답보다 먼저 쓴다. | 응답 쓰기가 실패해도 거절 사건이 남는다. | 응답 뒤에 쓰기 | 구현 판단. [TCP 진입점 모듈 설계 4절](tcp-entry-point.md#4-처리-순서)과 같은 방식. |
-| 거절 사건의 `origin`은 256바이트까지 쓰고 문자 경계에서 자른다. 자르기 전 원문은 `Refusal::OriginNotAllowed`에 남는다. | 운영 정보 계약 1.1절이 `origin`의 길이를 256바이트로 정했다. 상한 없이 쓰던 이전 구현은 이 계약과 어긋났다(검토 결함 4번). | 상한 없이 원문 쓰기, 정규화된 값만 쓰기 | 운영 정보 계약 1.1절 기준. 원문을 `Refusal`에 남기는 방식은 구현 판단(사용자 결정 없음). 9절 항목 9. |
-| 서브프로토콜은 `binary`만 받는다. 없으면 400이다. | Repeater 초기 교환은 바이너리 프레임으로 가정한다. 계약 1.2절이 서브프로토콜 응답을 정한다. | 서브프로토콜 없이 받기, 426으로 거절하기 | [WebSocket 계약 1.2절](../contracts/websocket-relay-v2.md#12-업그레이드-응답과-서브프로토콜), [6절](../contracts/websocket-relay-v2.md#6-초안을-확정하기-전에-해결할-사항)의 "서브프로토콜 거절 400" 항목. |
+| 거절 사건의 `origin`은 256바이트까지 쓰고 문자 경계에서 자른다. 자르기 전 원문은 `Refusal::OriginNotAllowed`에 남는다. | 운영 정보 계약 1.1절이 `origin`의 길이를 256바이트로 정했다. | 상한 없이 원문 쓰기, 정규화된 값만 쓰기 | 운영 정보 계약 1.1절 기준. 원문을 `Refusal`에 남기는 방식은 구현 판단. |
+| 서브프로토콜 토큰을 제시했으면 `binary`가 있어야 한다. 없으면 400이다. | Repeater 초기 교환은 바이너리 프레임으로 가정한다. 계약 1.2절이 서브프로토콜 응답을 정한다. | 서브프로토콜 없이 받기, 426으로 거절하기 | [WebSocket 계약 1.2절](../contracts/websocket-relay-v2.md#12-업그레이드-응답과-서브프로토콜). |
 | 서버 멈춤 Close는 1001(`CloseCode::Away`), H 만료는 4009다. | 계약 1.5절의 코드 뜻과 맞춘다. | 다른 코드 | [WebSocket 계약 1.5절](../contracts/websocket-relay-v2.md#15-close-코드) |
 | 평문 WS 시작 경고는 설정 검사가 만든다. | 설정이 평문 WS를 켰는지는 설정 단계에서만 알 수 있다. | 접수 때마다 경고 | 구현 판단. [운영 스펙 OPS-016](../specs/operations.md#7-수용-테스트)·WS-024. |
 
-## 8. 현재 코드와의 차이
-
-2~4절의 파일·심볼과 검사 순서는 결함 수정 커밋(`732f652`, `6c45dc6`, `349c2af`)과 테스트 커밋(`117c687`) 뒤의 코드를 기준으로 고쳤다. 실제 대조 결과는 [대조 기록](#대조-기록)에 적는다. 101 뒤 보류는 `638cf09`에서 제거되었다(9절 항목 1, 5, 11).
-
 ## 대조 기록
 
-| 대조 범위 | 환경 | 확인 방법 | 결과 |
-| --- | --- | --- | --- |
-| 작업 3.2 업그레이드 단계(기준 커밋 `ba80d7b`, 작업 트리 깨끗함. 결함 수정 전 대조) | Ubuntu 24.04.4(WSL2), Rust 1.99.1 | 1~8절의 파일·심볼을 실제 코드와 대조했다. 접속 테스트 `crates/adapters/tests/websocket.rs` 10개(표시 8개, 표시 없음 2개), `tests/tls.rs`의 WS-013 테스트 3개(일부), 검사 단위 테스트(`upgrade.rs`)를 확인했다. `wsl -d Ubuntu -- bash /mnt/d/vr-tools/vr-dev.sh`와 `vr-full.sh`를 실행했다. | `vr-dev.sh` exit=0. `vr-full.sh` ALL PASSED. 시나리오 148건: 통과 7, 부분 22, 실패 0, 미실행 0, 미연결 119. WS-013의 WSS 사건 기록(`tls_failed`)은 테스트가 없다. |
-| 작업 3.2 업그레이드 단계(기준 커밋 `ba80d7b`, 작업 트리 깨끗함. 결함 수정 전 대조) | Windows 11(10.0.26200), Rust 1.99.1(`x86_64-pc-windows-msvc`) | `powershell -NoProfile -ExecutionPolicy Bypass -File D:/vr-tools/vr-win.ps1 -Only all`을 실행했다. | `ALL PASSED (all)`. 시나리오 148건: 통과 6, 부분 22, 실패 0, 미실행 1, 미연결 119. 미실행 1건은 Unix 전용 테스트로 보인다([INFERENCE]). |
-| 작업 3.2 업그레이드 단계(기준 커밋 `c1c24d2`, 문서 커밋 `9c07cf4` 뒤. 검토 결함 5건 수정 뒤. 작업 트리에 `docs/contracts/config-v1.md`의 커밋 안 된 변경 1개가 있었으나 이 작업과 무관하다) | Ubuntu 24.04.4(WSL2), Rust 1.99.1 | 1~8절의 파일·심볼(`WsPolicy`, `WsEntryPoint`, `connection`, `upgrade`, `hold_upgraded`, `refuse`, `read_head`, `check`, `Refusal`, `switching_protocols`, `Wire`, `TlsIo`, `Origin`, `accept_connections`, `AcceptPolicy`, `ORIGIN_MAX_BYTES`, `Event::ConnectionRejected`, `Event::ConnectionAborted`, `AbortReason`, `ConnectionErrorKind::TlsFailed`, `Stage::InitialExchange`, `listen_until_shutdown`)을 실제 코드와 대조했다. 4절의 `check` 검사 순서와 3절의 `Refusal` 응답 표를 코드와 대조했다. 접속 테스트 `crates/adapters/tests/websocket.rs` 14건과 검사 단위 테스트 4건을 확인했다. `wsl -d Ubuntu -- bash /mnt/d/vr-tools/vr-full.sh`를 실행했다. | 불일치 0건. `vr-full.sh` ALL PASSED. 테스트 223건 통과, 실패 0. 시나리오 148건: 통과 9, 부분 22, 실패 0, 미실행 0, 미연결 117. 오류 0건. |
-| 같은 커밋 `c1c24d2`, 같은 작업 트리 | Windows 11(10.0.26200), Rust 1.99.1(`x86_64-pc-windows-msvc`), Visual Studio Build Tools 2022 17.14.37806.7 | `powershell -NoProfile -ExecutionPolicy Bypass -File D:/vr-tools/vr-win.ps1 -Only all`을 실행했다. | 불일치 0건. `ALL PASSED (all)`. 테스트 207건 통과, 실패 0. 시나리오 148건: 통과 8, 부분 22, 실패 0, 미실행 1, 미연결 117. 미실행 1건은 OPS-007(Unix 전용 `closes_and_logs_every_held_connection_when_stopping`)이다. 오류 0건. |
-| 커밋 `c4c7a15`(작업 트리 변경: 이 문서, `connection-limits.md`, `management-listener.md`, `docs/specs/dashboard.md`의 문서만). 결함 1 후속 수정 뒤 | Ubuntu 24.04.4(WSL2)와 Windows 11(10.0.26200), Rust 1.99.1 | `connection`의 select를 코드와 대조했다. `wsl -d Ubuntu -- bash /mnt/d/vr-tools/vr-full.sh`와 `powershell -NoProfile -ExecutionPolicy Bypass -File D:/vr-tools/vr-win.ps1 -Only all`을 실행했다. | 불일치 0건. Ubuntu `ALL PASSED`, 시나리오 148건: 통과 11, 부분 20, 실패 0, 미실행 0, 미연결 117. Windows `ALL PASSED (all)`, 통과 10, 부분 20, 실패 0, 미실행 1(OPS-007), 미연결 117. 두 환경 모두 `licenses ok`. |
-| 커밋 `e1f1ea7`(작업 트리 변경: 이 문서만). 쓰기 직전 U 재확인 뒤 | Ubuntu 24.04.4(WSL2)와 Windows 11(10.0.26200), Rust 1.99.1 | `upgrade`·`expired`·`refuse`를 코드와 대조했다. `wsl -d Ubuntu -- bash /mnt/d/vr-tools/vr-full.sh`와 `powershell -NoProfile -ExecutionPolicy Bypass -File D:/vr-tools/vr-win.ps1 -Only all`을 실행했다. | 불일치 0건. Ubuntu `ALL PASSED`, 시나리오 148건: 통과 11, 부분 20, 실패 0, 미실행 0, 미연결 117. Windows `ALL PASSED (all)`, 통과 10, 부분 20, 실패 0, 미실행 1(OPS-007), 미연결 117. 두 환경 모두 `licenses ok`. |
-| 작업 3.2 완료 대조(커밋 `534d4f7`, 작업 트리 깨끗함) | Windows 11 Pro 10.0.26200 x64·Ubuntu 24.04.4(WSL2), Rust 1.99.1 | 4절의 U·H 적용 순서와 `connection`·`upgrade`의 원인 구분을 `tests/serve.rs` `initial_tls_and_upgrade_deadlines_have_distinct_causes_and_release_capacity`(OPS-006)와 대조했다. 이 시험은 실제 실행파일에서 WSS TLS의 U(`tls`), WS·WSS 업그레이드의 U(`upgrade`), 101 뒤 H(Close 4009)를 연결 ID로 구분하고 L 자리 회수를 확인한다. 업그레이드 전에 H보다 오래 기다려도 H가 101부터 시작함을 확인한다. 진입점별 허용 목록은 `every_relay_entry_point_accepts_only_its_own_source_ip`(OPS-037)로 확인했다. 두 OS 게이트: Windows `ALL PASSED (all)`, Ubuntu `ALL PASSED`. | 불일치 0건. 통과 |
-| 작업 3.5 완료 대조(커밋 `f62f11d`, 작업 트리 깨끗함) | Windows 11 Pro 10.0.26200 x64·Ubuntu 24.04.4(WSL2), Rust 1.99.1, Chrome | 1절의 책임(허용 판정·업그레이드·`check`·101 뒤 공통 중계 연결)을 외부 독립 클라이언트로 대조했다. `tests/websocket_browser.rs` `browser_websocket_relays_mode_i_and_ii_over_ws_and_wss_without_novnc_or_websockify`(WS-020)는 Chromium 내장 WebSocket으로 실제 실행파일의 WS·WSS × Mode I·II 4조합을 왕복시켰다. `novnc_repeater_id_completes_rfb_through_ws_and_wss_in_both_server_orders`(WS-025, `#[ignore]`)는 고정 noVNC 1.7.0의 `repeaterID`로 WS·WSS × Server 선접속·후접속 4조합의 RFB 연결 완료를 확인했다. 두 OS 게이트와 두 OS의 `--include-ignored` 실행 기록은 [WebSocket 중계 계약 실행 기록](../contracts/websocket-relay-v2.md#계약-테스트-실행-기록)에 있다. | 불일치 0건. Windows `ALL PASSED (all)`(통과 134, 부분 14, 미실행 1(WS-025 무시됨), 미연결 4), Ubuntu `ALL PASSED`(통과 138, 부분 9, 미실행 2(OPS-044·WS-025), 미연결 4). WS-001~027 중 WS-025 외 전부 두 OS 게이트에서 통과, WS-025는 두 OS 수동 실행에서 통과 |
+- 날짜·대상: 2026-11-19, 커밋 `c0fa253`과 이 문서의 현재 상태 정리 작업 트리다. 제품 코드는 변경하지 않았다.
+- 환경: Windows 10.0.26200 x64의 저장소 소스다.
+- 방법: `websocket.rs`의 `connection`·`upgrade`·`check_upgrade`, 수락 문맥과 공통 서비스의 `ConnectionContext`를 읽고 101·기한·소유권 인계를 대조했다.
+- 결과: WS·WSS는 역할별 검사 뒤 101을 flush하고 수락 B·업그레이드 M/Kw·초기 교환 H를 공통 스트림과 문맥에 넘긴다. 구조 대조는 동작 시험의 통과를 뜻하지 않는다.
 
-### 검토 결함 기록
+현재 시나리오 결과는 [테스트 컨벤션](../conventions/testing.md#7-테스트와-스펙-시나리오-연결)에 따라 `cargo xtask scenarios`로 생성하는 `scenario-report.md`와 CI에서 확인한다.
 
-리뷰가 찾은 결함 다섯 개의 수정 기록이다. 수정 전 실패는 수정 전 코드에서 같은 테스트를 돌려 관찰한 결과다.
-
-| 번호 | 결함 | 수정 커밋 | 테스트 | 수정 전 실패 확인 | 근거 |
-| --- | --- | --- | --- | --- | --- |
-| 1 | U가 지난 뒤 끝난 머리에도 101을 보냈다. 마감이 `timeout_at`의 poll 순서에만 기대고 있었다. `timeout_at`은 안쪽 작업을 먼저 poll하므로, U 뒤에 준비된 응답 쓰기도 끝날 수 있었다. | `6c45dc6`(머리 읽기 직후 마감 확인), `c4c7a15`(`biased` select로 멈춤 신호와 U를 `upgrade`보다 먼저 확인), `e1f1ea7`(응답 바이트를 만든 뒤 쓰기 직전에 U를 다시 확인. 검사·IP 재검사 중에 U가 지나는 경우) | `head_completed_after_u_gets_no_answer`(`crates/adapters/tests/websocket.rs`) | 확인: `HTTP/1.1 101 Switching Protocols` 응답을 보냈다(관찰, `6c45dc6` 전). 뒤의 두 수정이 막는 경합은 재현하지 않았다. 남은 틈은 쓰기 직전 확인과 쓰기 사이의 거절 사건 기록뿐이다. | 계약 1.1절 U 규칙(`101` 전에 U가 지나면 응답 없이 닫는다). |
-| 2 | 헤더 이름과 제어 문자를 검사하지 않았다. 구문 검사가 경로 검사 뒤에 있었다. | `349c2af` | `header_names_must_be_tokens`, `control_characters_in_the_head_are_refused`, `syntax_is_checked_before_the_path`(`upgrade.rs`) | 확인: `Bad(Name: x` 헤더 이름이 통과했고(`Ok`), 제어 문자는 `NotFound`로, 구문 오류는 경로 404로 답했다(관찰). | 계약 1.1절 3번 '요청 구문, 경로'. |
-| 3 | 키 검사를 버전 검사보다 먼저 했다. | `349c2af` | `wrong_version_is_refused_before_a_bad_key`(`upgrade.rs`) | 확인: `Invalid`(400)를 돌려줬다. 기대값은 `VersionUnsupported`(426)였다(관찰). | 계약 1.1절 3번 '업그레이드 헤더와 버전, 키'. 순서는 구현 판단(9절 항목 3). |
-| 4 | 거절 사건의 `origin`을 길이 상한 없이 썼다. | `732f652` | `cuts_origin_to_256_bytes_on_a_character_boundary`(`ops_log.rs`) | 확인: 257바이트 값이 그대로 기록됐다(관찰). | 운영 정보 계약 1.1절(`origin` 256바이트). |
-| 5 | WSS에서 WS-015와 WS-027을 확인하는 접속 테스트가 없었다(시험 공백). | `117c687` | `origin_must_equal_the_allowed_value_on_wss`, `allowed_source_with_disallowed_origin_is_refused_with_403_on_wss`(`crates/adapters/tests/websocket.rs`) | 해당 없음. 두 테스트는 WS와 같은 `upgrade` 경로를 지나므로 수정 전에도 통과했다(관찰). 코드 결함이 아니라 시험 공백이다. | WS-015, WS-027. |
-
-
-## 9. 미결정 사항
-
-| 항목 | 영향 | 확정 위치 |
-| --- | --- | --- |
-| 1. (해결, 638cf09) 101 뒤 프레임 읽기와 초기 교환 | 이전 상태: 상대 종료(EOF)를 H가 지나기 전에는 알 수 없었고 101 뒤 바이트 처리 규칙이 없었다. 공통 서비스 입력으로 넘기며 해소되었다. | 638cf09 wiring |
-| 2. (해결) 101 전 서버 멈춤 응답 | 종료 신호를 받으면 WS·WSS 리스너를 닫아 새 접속을 TCP에서 거절한다. HTTP 503은 보내지 않는다. 101 전 연결은 응답 없이 닫고 `connection_aborted`(`reason` = `server_shutdown`)를 쓴다. `stage`는 WS에서 `upgrade`, WSS에서 TLS 협상 완료 전 `tls`, 완료 뒤 `upgrade`다(`connection`, `Wire::stage`). | 사용자 결정 2026-11-07(Q160), WebSocket 계약 2.1절 |
-| 3. (해결) 검사 순서 | 구문, 경로, 메서드, HTTP 버전, 헤더, 버전, 키 순서는 계약 1.1절 3번의 가~마 항목을 따른다. 두 결함이 함께 있는 요청은 순서에 따라 응답 코드가 바뀐다(예: 경로 오류와 구문 오류, 버전 오류와 키 오류). | 사용자 결정 2026-10-22(Q24) |
-| 4. (해결) 머리 상한 16 KiB | 요청 줄·헤더·끝 빈 줄을 포함해 최대 16,384바이트다. 끝 위치가 정확히 16,384바이트이면 허용한다. 그 안에서 끝나지 않으면 요청 구문 단계(가)에서 HTTP 400으로 거절한다. 기존 구현을 유지한다. | 사용자 결정 2026-11-07(Q156), WebSocket 계약 1.1절 |
-| 5. (해결, 638cf09) 머리 뒤 바이트 버림 | 이전 상태: 머리 뒤 바이트를 버렸다. `suffix`를 보존해 공통 서비스에 넘긴다. | 638cf09 wiring |
-| 6. (해결) WSS 협상 실패 기록 | WSS의 모든 TLS 협상 실패는 `connection_aborted`(`tls_failed`)로 기록한다. 관리 리스너는 사용자 결정 2026-10-21(Q13)에 따라 TLS 버전 거절만 기록한다. 진입점별로 정한 기록 범위의 차이를 유지한다. | 사용자 결정 2026-11-07(Q157), 사용자 결정 2026-10-21(Q13) |
-| 7. (해결) Close 4009의 종료 원인과 운영 로그 | [WebSocket 계약 2.2절](../contracts/websocket-relay-v2.md#22-close-코드와-스펙-오류의-대응)의 4009 행은 종료 원인 열의 "해당 없음"과 운영 로그 `connection_aborted`(`handshake_timeout`, `stage` `initial_exchange`)를 구분한다. 활성 세션 전의 종료이므로 최근 종료 목록에는 오르지 않는다. | WebSocket 계약 2.2절 4009 행 |
-| 8. (해결) WS-022, WS-024, WS-025 테스트 | WS-022와 OPS-025는 `tests/reload.rs`의 비부분 시험으로 두 OS에서 통과했다([파일 감지 설계의 남은 조건 해소 기록](file-watch.md#작업-52-남은-조건-해소-ops-025ws-022), 게이트 `1a6f93e`). WS-024는 `tests/serve.rs`의 `plaintext_ws_listener_is_off_by_default_and_warns_at_start_when_enabled`가 전부 확인한다. WS-025는 무시된 시험을 `--include-ignored`로 실행해 두 OS에서 통과했다. 기본 보고서에는 미실행으로 남는다([작업 5.9 판정표](../how-to/set-up-and-verify.md#41-작업-59-판정표)). WS-015와 WS-027은 WS와 WSS 모두 접속 테스트가 있다(검토 결함 5번). | TODO 2.7·3.5·5.2 완료, WS-025 실행 커밋 `d4c5678` |
-| 9. Origin 원문 길이 | 사건 줄의 `origin`은 운영 정보 계약 1.1절의 256바이트 상한을 따른다(검토 결함 4번). 자르기 전 원문은 `Refusal`에 남긴다. 원문을 `Refusal`에 남기는 방식은 구현 판단(사용자 결정 없음). | 운영 정보 계약 1.1절(채택됨), 구현 판단 |
-| 10. (해결) H의 시작점 | WS·WSS의 H는 101 응답부터 잰다. 계약이 WS·WSS의 H 시작점을 정한다(websocket-relay-v2 H 문단). 운영 스펙 2절 H 행도 같은 시작점을 적는다. | 사용자 결정 2026-10-22(Q22) |
-| 11. (해결) 101 뒤 보류 방식 | 작업 2.7 전에는 프레임과 Close를 읽지 않고 H 뒤 Close 4009(`handshake_timeout`)로 끝냈다. 사용자 결정 2026-10-22(Q21)은 이 임시 방식을 유지했다. `638cf09`에서 보류를 없애고 공통 중계에 연결했다. TODO 3.2도 완료했다. | 사용자 결정 2026-10-22(Q21), `638cf09`, TODO 3.2 완료 |
-| 12. (해결) U 뒤에 끝난 머리 읽기 | U가 지난 뒤 머리 읽기가 끝나면(상대 닫힘 포함) 응답 없이 `tls_upgrade_timeout`으로 기록한다. U 전에 상대가 닫은 경우만 `peer_eof`다. U 뒤 상대 닫힘도 `tls_upgrade_timeout`으로 기록한다. | 사용자 결정 2026-10-22(Q28) |

@@ -151,8 +151,6 @@ noVNC는 별도로 준비하는 외부 클라이언트다. VNC Relay는 noVNC �
 | `path=relay/viewer` | Viewer 역할의 `/relay/viewer` 경로 |
 | `repeaterID=1234` | Mode II 중계 ID. noVNC가 `ID:`를 붙여 초기 요청으로 보낸다. |
 
-> **참고:** `v2026.11.2` 이하 Release는 Viewer 경로가 `/relay`다. 그 버전에 접속할 때는 위 URL에서 `path=relay/viewer`를 `path=relay`로 바꾼다. 자세한 차이는 [소개](index.md)에 있다.
-
 브라우저는 noVNC 페이지를 제공한 사이트의 origin을 `Origin` 헤더로 보낸다. 이 예시에서는 `https://viewer.example.test`다. WSS 접속 대상인 `relay.example.test`와 혼동하지 않는다.
 
 `allowed_origins`는 역할마다 설정한다. 빈 목록은 `Origin` 헤더가 있는 요청을 모두 거절한다. 헤더가 없는 클라이언트는 Origin 비교만 건너뛴다. IP 검사와 해당 역할에 켠 접속 ticket 확인은 그대로 받는다. Origin은 사용자 인증 수단이 아니며 출발지 IP 허용 목록을 대신하지 않는다.

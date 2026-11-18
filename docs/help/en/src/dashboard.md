@@ -31,6 +31,8 @@ Check "Server state" and "Uptime" in "Server summary". "Ready" means that the se
 
 "Waiting connections" lists the role, relay ID, transport, peer address, connection time, and waiting time. The peer address is the actual socket address. A forwarded address from a trusted proxy is shown separately. Waiting connections have no details or termination action. "Active sessions" lists the mode, both transports, start time, directional transfer counts, and peer addresses. Select "Details" to open a session.
 
+Connection times in waiting connections and start times in active sessions show the date and time on two lines. Address labels of active sessions sit above their values.
+
 "Recently closed sessions" shows the close reason, mode, both transports, start and close times, duration, final transfer counts, and peer addresses of active sessions after cleanup. The server measures the duration independently of system clock changes, so it can differ from the difference between the start and close times. Select "View logs" to open recent logs with that session's filter. Find waiting timeouts in logs instead. Recently closed sessions are retained only in memory. Older entries are removed when the limit is exceeded, and restarting clears the list. Closed sessions have no historical details page.
 
 Times use the browser's local time and show the time zone. Transfer counts use KiB/MiB. These counts measure bytes successfully written to the peer transport. They do not prove that the peer application read the data or displayed the screen.
@@ -38,6 +40,8 @@ Times use the browser's local time and show the time zone. Transfer counts use K
 ### Polling and failed queries
 
 Operations overview and session details poll at the `dashboard.poll_secs` interval. The default is 2 seconds. Select "Refresh" to check immediately. The dashboard does not overlap identical queries.
+
+When an automatic refresh finishes within 1 second, the `Updating` and `Loading` badges and the refresh button text do not change. If it is still running after 1 second, `Updating` appears.
 
 If a query fails, the screen retains the previous successful data and its last successful update time. Do not treat "Stale data" as current data. "Unavailable" does not mean zero. A failed list query is not shown as an empty list.
 

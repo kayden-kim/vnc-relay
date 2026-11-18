@@ -4,12 +4,11 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 상태 | Active(2026-10-20 사용자 채택) |
+| 상태 | Active |
 | 적용 대상 | Rust 테스트 코드(단위·통합·계약·E2E), 시나리오 커버리지 보고서 |
 | 기준 버전 | Rust 1.99.1 기본 테스트 도구(`cargo test`), tokio 테스트 매크로 |
 | 관련 아키텍처 문서 | [코드 지도](../architectures/code-map.md) |
 | 관련 ADR | 없음 |
-| 적용 시작일 | 2026-10-20 |
 | 규칙 준수 확인 방법 | `cargo xtask scenarios`, [Rust 코드 컨벤션](rust.md)의 서식·lint 검사, 코드 리뷰 |
 
 ## 1. 규칙 우선순위
@@ -29,7 +28,7 @@
 | 테스트 이름 | 함수 이름은 확인하는 동작을 `snake_case` 문장으로 쓴다(`rejects_second_server_with_same_relay_id`). | `test1`, 시나리오 ID를 이름에 넣기 | 리뷰 |
 | 판정 | 기대 결과의 관찰값을 직접 비교한다(`assert_eq!`). 오류는 계약의 오류 코드로 비교한다. | 오류 문장(`message`) 비교, 패닉 없음만 확인 | 리뷰 |
 | 비밀 값 | 테스트 비밀번호·키는 테스트 안에서 만든다. 문서용 IP 대역(`192.0.2.0/24` 등)을 쓴다. | 실제 비밀, 공인 주소 | 리뷰 |
-| 대시보드 | 정적 HTML·JS를 검사하는 테스트는 `tests/` 아래 Rust 통합 테스트로 둔다. 브라우저 테스트는 Chromium 헤드리스로 페이지를 열고 `data-result`를 읽는다. 세부 위치와 방법은 [프런트엔드 컨벤션](frontend.md)을 따른다(사용자 결정 2026-10-22(Q35)). 표식 문법은 이 문서를 따른다. | 이 문서와 다른 표식, 브라우저 테스트에 `#[ignore]` 붙이기 | 리뷰, 테스트 실행 |
+| 대시보드 | 정적 HTML·JS를 검사하는 테스트는 `tests/` 아래 Rust 통합 테스트로 둔다. 브라우저 테스트는 Chromium 헤드리스로 페이지를 열고 `data-result`를 읽는다. 세부 위치와 방법은 [프런트엔드 컨벤션](frontend.md)을 따른다. 표식 문법은 이 문서를 따른다. | 이 문서와 다른 표식, 브라우저 테스트에 `#[ignore]` 붙이기 | 리뷰, 테스트 실행 |
 
 ## 3. 예제
 
@@ -70,7 +69,7 @@ fn reports_every_problem_in_one_pass() {
 
 - 실행 환경: Ubuntu 24.04 LTS의 bash 또는 Windows 11의 PowerShell, Rust 1.99.1
 - 실행 위치: 저장소 루트
-- 성공 조건: 종료 코드 0. 보고서에 `오류`와 `실패`가 없고 `cargo test` 전체(표식이 없는 테스트 포함)가 통과한다. `부분`·`미연결`·`미실행`은 단계가 끝날 때까지 남을 수 있다. 작업 5.9는 보고서와 함께 판정표를 쓴다. 보고서에 남은 `부분`·`미연결`·`미실행` 시나리오는 판정표에서 시나리오마다 근거(수동 실행 기록, 무시된 시험의 실행 기록, 사용자 결정)를 링크해 판정한다(사용자 결정 2026-11-06(Q132)). 판정표는 [개발 환경·검증 how-to 4.1절](../how-to/set-up-and-verify.md#41-작업-59-판정표)에 둔다(이 문서의 판단, 사용자 결정 없음). `--require-all`은 남은 시나리오 수를 세는 데 쓸 수 있다.
+- 성공 조건: 종료 코드 0. 보고서에 `오류`와 `실패`가 없고 `cargo test` 전체(표식이 없는 테스트 포함)가 통과한다. `부분`·`미연결`·`미실행`은 보고서에 그대로 표시한다. 수동 확인이 필요한 범위는 최신 수동 실행 기록과 구분해 판단한다. `--require-all`은 남은 시나리오 수를 세는 데 쓸 수 있다.
 - 종료 코드: 0은 통과, 1은 실패 또는 도구 오류(테스트 빌드 실패 포함), 2는 사용법 오류다.
 
 ```shell
@@ -78,19 +77,15 @@ cargo xtask scenarios
 cargo xtask scenarios --require-all
 ```
 
-## 6. 기존 코드 마이그레이션
-
-이 컨벤션을 만들 때 테스트 코드는 없었다. 옮길 코드는 없다.
-
 ## 7. 테스트와 스펙 시나리오 연결
 
 - 메타 정보 방식: 테스트 함수 위 문서 주석의 표식 `/// spec: <specs/ 기준 경로>:<시나리오 ID>`. 한 줄에 하나다. 시나리오의 일부만 확인하는 테스트는 끝에 ` partial`을 붙인다. 그 밖의 낱말이 붙으면 `오류`다.
 - 형식 예: `/// spec: relay.md:RLY-001`, `/// spec: operations.md:OPS-001 partial`
 - 커버리지·결과 보고 명령: `cargo xtask scenarios`. `docs/specs/`의 스펙(`README.md`·`AGENTS.md` 제외)에서 "수용 테스트" 절 표의 시나리오 ID를 모은다. `xtask`를 뺀 작업 공간 패키지의 `src/`·`tests/` 아래 `.rs` 파일에서 표식을 모은다. `cargo test --workspace --no-fail-fast`를 실행해 테스트별 결과를 대조한다. 동작 방식은 [xtask 모듈 설계](../architectures/xtask.md)에 있다.
 - 표식을 둘 수 없는 곳: 여러 통합 테스트가 함께 쓰는 `tests/common/` 같은 하위 모듈은 속한 테스트 대상을 정할 수 없다. 이런 파일의 표식은 `오류`가 된다. 표식은 테스트 함수가 있는 파일에 둔다.
-- 대시보드 브라우저 테스트: `tests/` 아래 Rust 통합 테스트가 Chromium을 헤드리스로 실행한다. 컴포넌트·목 응답 시험은 페이지의 `data-result`를 읽는다(Q35). 실서버 시험은 직접 만든 CDP 클라이언트로 실제 화면을 조작한다(사용자 결정 2026-11-05(Q112)). 실패·지연·응답 유실은 시험용 전달 프록시로 만들며, 관리 세션 Si 만료는 실제 300초를 기다린다(Q113). 설정 화면 시험의 계약 모양 4xx 주입 범위는 사용자 결정 2026-11-08(Q180)을 따른다. 표식은 Rust 테스트 함수에 두며 스캐너는 바꾸지 않는다. Chromium이 없으면 `#[ignore]` 없이 실패한다. Chromium(Chrome 또는 Edge)은 Windows와 Ubuntu 모두 필요하다. 상세 기준은 [프런트엔드 컨벤션](frontend.md)이 정한다.
-- WebSocket 브라우저 테스트: `tests/websocket_browser.rs`가 대시보드 실서버 시험과 같은 CDP 클라이언트(`tests/common/cdp.rs`)로 Chromium을 조작한다. WS-020은 Chromium 내장 WebSocket을 외부 독립 클라이언트로 쓰며, Chromium이 없으면 `#[ignore]` 없이 실패한다. 제품이 업그레이드에 쓰는 `tokio-tungstenite`의 클라이언트는 독립 도구로 세지 않는다. WS-025는 고정한 noVNC 압축 파일이 필요하므로 `#[ignore]`를 붙인다. 이 시험은 `VNC_RELAY_NOVNC_ZIP`의 SHA-256을 확인한 뒤 임시 디렉터리에 풀고, 시험 쪽 정적 HTTP 서버와 최소 RFB 3.8 서버를 상대로 쓴다. 실행 방법은 [noVNC 상호운용 시험 준비](../how-to/set-up-and-verify.md#novnc-상호운용-시험-준비)에 있다(이 문서의 판단, 사용자 결정 없음).
-- 보고서·CI 결과 위치: Cargo 대상 디렉터리의 `scenario-report.md`(4절). 표준 출력에는 상태별 수, 보고서 경로, 판정을 쓴다. CI는 없다. 로컬 실행 기록은 작업의 완료 보고와, 절차를 바꾼 경우 [개발 환경·검증 how-to](../how-to/set-up-and-verify.md#4-검증)의 검증 표에 남긴다.
+- 대시보드 브라우저 테스트: `tests/` 아래 Rust 통합 테스트가 Chromium을 헤드리스로 실행한다. 컴포넌트·목 응답 시험은 페이지의 `data-result`를 읽는다. 실서버 시험은 직접 만든 CDP 클라이언트로 실제 화면을 조작한다. 실패·지연·응답 유실은 시험용 전달 프록시로 만들며, 관리 세션 Si 만료는 실제 300초를 기다린다. 설정 화면 시험의 계약 모양 4xx 주입 범위는 [프런트엔드 컨벤션 6절](frontend.md#6-검증-명령과-통과-기준)을 따른다. 표식은 Rust 테스트 함수에 둔다. Chromium이 없으면 `#[ignore]` 없이 실패한다. Chromium(Chrome 또는 Edge)은 Windows와 Ubuntu 모두 필요하다. 상세 기준은 [프런트엔드 컨벤션](frontend.md)이 정한다.
+- WebSocket 브라우저 테스트: `tests/websocket_browser.rs`가 대시보드 실서버 시험과 같은 CDP 클라이언트(`tests/common/cdp.rs`)로 Chromium을 조작한다. WS-020은 Chromium 내장 WebSocket을 외부 독립 클라이언트로 쓰며, Chromium이 없으면 `#[ignore]` 없이 실패한다. 제품이 업그레이드에 쓰는 `tokio-tungstenite`의 클라이언트는 독립 도구로 세지 않는다. WS-025는 고정한 noVNC 압축 파일이 필요하므로 `#[ignore]`를 붙인다. 이 시험은 `VNC_RELAY_NOVNC_ZIP`의 SHA-256을 확인한 뒤 임시 디렉터리에 풀고, 시험 쪽 정적 HTTP 서버와 최소 RFB 3.8 서버를 상대로 쓴다. 실행 방법은 [noVNC 상호운용 시험 준비](../how-to/set-up-and-verify.md#novnc-상호운용-시험-준비)에 있다.
+- 보고서·CI 결과 위치: Cargo 대상 디렉터리의 `scenario-report.md`(4절). 표준 출력에는 상태별 수, 보고서 경로, 판정을 쓴다. 최신 자동 검증 결과는 `cargo xtask scenarios`로 생성한 보고서와 CI 실행 결과에서 확인한다. 수동 확인은 [개발 환경·검증 how-to](../how-to/set-up-and-verify.md#4-검증)의 검증 기록에 남긴다.
 - 통과 조건: 5절의 성공 조건과 같다.
 
 보고서의 시나리오별 상태는 다음 중 하나다.
@@ -111,14 +106,3 @@ cargo xtask scenarios --require-all
 - 표식이 있는 파일이 속한 테스트 대상을 정할 수 없다.
 - 스펙에 "수용 테스트" 절이 없거나, 표에 시나리오가 없거나, 시나리오 ID가 중복된다.
 
-### 보고 도구 확인 기록
-
-| 대상 | 환경 | 명령 또는 확인 방법 | 결과 |
-| --- | --- | --- | --- |
-| `xtask`를 추가한 커밋(작업 트리 기준 `9c7ddd0` + `xtask/` 추가 변경) | Ubuntu 24.04.4(WSL2), Rust 1.99.1, `CARGO_TARGET_DIR=~/vnc-relay-target` | `cargo xtask scenarios` | 통과. 시나리오 148건(dashboard 25, management 27, operations 42, relay 27, websocket 27)이 모두 `미연결`, 오류 0건, 판정 통과, 종료 코드 0 |
-| 같음 | 같음 | `cargo xtask scenarios --require-all` | 통과. 기대대로 판정 실패(미실행·미연결 148건), 종료 코드 1 |
-| 같음 | 같음 | 저장소를 임시 디렉터리로 복사하고 시험용 테스트를 넣어 `cargo xtask scenarios` 실행. 시험 테스트: 통과·실패·무시·`#[cfg(windows)]`, 없는 ID·없는 스펙·테스트가 아닌 함수의 표식, `tests/` 통합 테스트 | 통과. 기대대로 시나리오 상태 통과 3·실패 1·미실행 2(무시됨, 이번 실행에 없음), 오류 3건(없는 ID, 없는 스펙, 테스트가 아닌 함수), `cargo test` 실패, 종료 코드 1. 임시 디렉터리는 삭제했다. |
-| 같음 | 같음 | `cargo xtask bogus` | 통과. 사용법 출력, 종료 코드 2 |
-| 부분 표식을 추가한 변경(기준 커밋 `4fb7acb` + `xtask/src/scenarios*`·`config_contract.rs` 표식·이 문서 수정) | 같음 | `cargo xtask scenarios` | 통과. 시나리오 148건: 통과 0, 부분 3(OPS-001·OPS-038·OPS-040), 미연결 145, 오류 0건, 판정 통과. OPS-001 행의 테스트마다 `통과 (부분)` 표시 |
-| 같음 | 같음 | `cargo xtask scenarios --require-all` | 통과. 기대대로 판정 `실패 (--require-all: 부분·미실행·미연결 시나리오 148건)`, 종료 코드 1 |
-| 같음 | 같음 | xtask 단위 테스트 `markers::tests::*`(` partial` 인식, `partly`·`partial extra`는 표식 오류), `report::tests::status_prefers_failure_then_full_pass_then_partial_then_not_run` | 통과 |

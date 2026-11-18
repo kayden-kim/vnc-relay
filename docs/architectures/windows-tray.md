@@ -5,8 +5,8 @@
 | 항목 | 값 |
 | --- | --- |
 | 구조 시점 | Current |
-| 문서 상태 | Draft. ADR의 채택 범위를 구현한다. 아래 구현 판단은 사용자 채택을 뜻하지 않는다. |
-| 구현 대조 | 2026-11-18 작업 트리의 `crates/tray/src/*.rs`와 시험 소스를 대조했다. 구현은 커밋 `9c2a78b`에 들어갔다. 실행 결과는 [Windows 서비스 시험](../how-to/set-up-and-verify.md#windows-서비스-시험)에, 두 OS 전체 게이트의 시나리오별 판정은 [판정표](../how-to/set-up-and-verify.md#48-windows-서비스트레이-판정표)에 둔다. |
+| 문서 상태 | Draft |
+| 구현 대조 | [코드 대조 기록](#코드-대조-기록). 수동 실행 결과는 [Windows 서비스 시험](../how-to/set-up-and-verify.md#windows-서비스-시험)을 따른다. |
 | 코드 위치 | `crates/tray/src/`, `crates/tray/tests/single_instance.rs` |
 | 코드 지도 | [코드 지도](code-map.md) |
 | 관련 스펙 | [Windows 트레이 앱 스펙](../specs/windows-tray.md), TRAY-001~013 |
@@ -90,20 +90,20 @@ flowchart LR
 | Run 쓰기·삭제 실패 | 실패 줄, 다음 snapshot의 실제 체크 상태 유지 | TRAY-011 |
 | 잠금·GUI 초기화·메시지 루프 실패 | 콘솔·승격 없이 실패 종료 | TRAY-001 일부 |
 
-직접 `unsafe` 호출은 `crates/tray/src/message_loop.rs` 하나에만 있다(사용자 결정 2026-11-17(Q241)). `main.rs`의 모듈 선언은 `#[expect(unsafe_code, reason = "Win32 message loop that tray-icon needs; see docs/conventions/rust.md")]`로 이 파일에만 작업 공간의 금지를 푼다. `MsgWaitForMultipleObjects`는 메시지나 최대 100 ms 대기를 마치면 반환한다. `PeekMessageW`로 이 스레드의 메시지를 꺼내고 `TranslateMessage`·`DispatchMessageW`로 전달한다. 호출마다 포인터 수명과 스레드 소유권을 `SAFETY` 주석으로 설명한다. `WM_QUIT`을 받으면 끝난다. 레지스트리·서비스·프로그램 실행에는 안전한 라이브러리 API만 쓴다.
+직접 `unsafe` 호출은 `crates/tray/src/message_loop.rs` 하나에만 있다. `main.rs`의 모듈 선언은 `#[expect(unsafe_code, reason = "Win32 message loop that tray-icon needs; see docs/conventions/rust.md")]`로 이 파일에만 작업 공간의 금지를 푼다. `MsgWaitForMultipleObjects`는 메시지나 최대 100 ms 대기를 마치면 반환한다. `PeekMessageW`로 이 스레드의 메시지를 꺼내고 `TranslateMessage`·`DispatchMessageW`로 전달한다. 호출마다 포인터 수명과 스레드 소유권을 `SAFETY` 주석으로 설명한다. `WM_QUIT`을 받으면 끝난다. 레지스트리·서비스·프로그램 실행에는 안전한 라이브러리 API만 쓴다.
 
 ## 6. 구현 판단과 미결정 사항
 
-아래 선택은 모두 **이 문서의 판단, 사용자 결정 없음**이다. 지정 라이브러리·서비스 이름·메뉴 범위·Run 경로 자체의 채택은 ADR과 스펙을 따른다.
+지정 라이브러리·서비스 이름·메뉴 범위·Run 경로는 ADR과 스펙을 따른다. 미채택 문구는 TRAY-TBD-001로 구분한다.
 
 | 판단 | 이유와 대안 | 채택 상태 |
 | --- | --- | --- |
-| 표시 언어: HKCU `Control Panel\Desktop`의 `PreferredUILanguages`, HKCU `Control Panel\Desktop\MuiCached`의 `MachinePreferredUILanguages`, HKLM `SYSTEM\CurrentControlSet\Control\Nls\Language`의 `InstallLanguage` 순서 | 각 MULTI_SZ에서 첫 항목만 본다. 값이 없거나 읽기 실패·빈 목록·빈 첫 항목이면 다음 값으로 넘어간다. 첫 항목의 기본 언어가 대소문자 구분 없이 `ko`이면 한국어이고 그 밖은 영어다. 두 HKCU 값 모두 쓰지 못하면 `InstallLanguage`가 `0412`일 때만 한국어다. windows-registry를 써서 직접 Win32 호출을 늘리지 않는다. | ADR-0010 6절의 구현 판단이다. 사용자 채택과 언어 전환 실행 확인은 별개다. |
+| 표시 언어: HKCU `Control Panel\Desktop`의 `PreferredUILanguages`, HKCU `Control Panel\Desktop\MuiCached`의 `MachinePreferredUILanguages`, HKLM `SYSTEM\CurrentControlSet\Control\Nls\Language`의 `InstallLanguage` 순서 | 각 MULTI_SZ에서 첫 항목만 본다. 값이 없거나 읽기 실패·빈 목록·빈 첫 항목이면 다음 값으로 넘어간다. 첫 항목의 기본 언어가 대소문자 구분 없이 `ko`이면 한국어이고 그 밖은 영어다. 두 HKCU 값 모두 쓰지 못하면 `InstallLanguage`가 `0412`일 때만 한국어다. windows-registry를 써서 직접 Win32 호출을 늘리지 않는다. | ADR-0010 6절. 언어 전환은 수동 확인 대상이다. |
 | 단일 인스턴스: 사용자 LOCALAPPDATA의 파일과 `File::try_lock` | 안전한 표준 API를 쓰며 충돌 후 남은 파일도 재사용한다. Win32 이름 있는 mutex는 직접 호출 범위를 늘린다. | 스펙 3.3절의 구현 선택 |
-| 아이콘: 대시보드 `brand` 아이콘의 경로(화살표 두 개)를 32×32 RGBA로 그린다. 픽셀마다 4×4 표본을 세어 가장자리를 부드럽게 한다. 모든 상태에 동일 | tray-icon은 SVG를 받지 않는다. [디자인 기준](../design/DESIGN.md#아이콘-규칙)의 `navbar-accent` #1c2723, `navbar-brand` #ffffff, `rounded.md` 8px, `spacing.icon-stroke` 1.75와 `brand` 경로 좌표를 `ui.rs` 상수로 옮긴다. 이미지 파일·build 스크립트·외부 의존성을 추가하지 않는다. 대신 `cargo xtask tokens --check`가 이 상수를 검사하지 않으므로 토큰이나 경로를 바꾸면 이 상수도 함께 고쳐야 한다. 메뉴는 Windows 기본 색·글꼴 그대로다. | 그림과 상태별 동일은 사용자 결정 2026-11-18(Q258). 그리는 방식은 이 문서의 판단 |
-| 문구: 스펙 4.1절 TRC-001~023을 `copy.rs`에 모은다 | 미채택 제안을 두 언어로 구현하되 원문 관리 위치를 늘리지 않는다. | TRAY-TBD-001, 사용자 채택 전 |
+| 아이콘: 대시보드 `brand` 아이콘의 경로(화살표 두 개)를 32×32 RGBA로 그린다. 픽셀마다 4×4 표본을 세어 가장자리를 부드럽게 한다. 모든 상태에 동일 | tray-icon은 SVG를 받지 않는다. [디자인 기준](../design/DESIGN.md#아이콘-규칙)의 `navbar-accent` #1c2723, `navbar-brand` #ffffff, `rounded.md` 8px, `spacing.icon-stroke` 1.75와 `brand` 경로 좌표를 `ui.rs` 상수로 둔다. 이미지 파일·build 스크립트·외부 의존성을 추가하지 않는다. 대신 `cargo xtask tokens --check`가 이 상수를 검사하지 않으므로 토큰이나 경로를 바꾸면 이 상수도 함께 고쳐야 한다. 메뉴는 Windows 기본 색·글꼴 그대로다. | 모든 상태에 같은 아이콘 사용 |
+| 문구: 스펙 4.1절 TRC-001~023을 `copy.rs`에 모은다 | 미채택 제안을 두 언어로 구현하되 원문 관리 위치를 늘리지 않는다. | TRAY-TBD-001, 미결정 |
 | 갱신: 작업 스레드 하나·std mpsc·2초 간격·동작 직후 조회·100 ms UI wake | 느린 SCM·설정·HTTP가 메뉴 스레드를 막지 않는다. 비동기 런타임과 추가 이벤트 루프 라이브러리를 넣지 않는다. 실패 세대로 이전 응답이 다음 동작의 실패 줄을 되살리지 않게 한다. | 스펙 2절의 주기·제한 시간 판단 구현 |
-| 초기 tooltip은 상태 없는 `VNC Relay`다. | Windows가 첫 tooltip을 작업 표시줄 설정의 아이콘 이름으로 보관하기 때문이다. 처음부터 상태를 넣으면 그 상태가 이름에 남는다. 첫 조회 뒤의 tooltip에는 현재 상태를 넣는다. `NotifyIconSettings`의 `InitialTooltip` 관찰은 [Windows 서비스 시험](../how-to/set-up-and-verify.md#windows-서비스-시험)에 둔다. | 이 문서의 판단, 사용자 결정 없음 |
+| 초기 tooltip은 상태 없는 `VNC Relay`다. | Windows가 첫 tooltip을 작업 표시줄 설정의 아이콘 이름으로 보관하기 때문이다. 처음부터 상태를 넣으면 그 상태가 이름에 남는다. 첫 조회 뒤의 tooltip에는 현재 상태를 넣는다. `NotifyIconSettings`의 `InitialTooltip` 관찰은 [Windows 서비스 시험](../how-to/set-up-and-verify.md#windows-서비스-시험)에 둔다. | 없음 |
 | HTTP: std TCP, 전체 1초, 최대 128바이트 상태 줄 | HTTP 라이브러리 없이 상태 코드만 얻는다. 각 I/O에 별도 1초를 주면 전체 제한을 넘을 수 있어 남은 시간만 적용한다. 와일드카드 주소는 루프백으로 바꾼다. | ADR-0010 6절·스펙 3.7절의 구현 판단 |
 | 초기화 실패: 오류 대화상자 없이 실패 종료 | 스펙은 오류 대화상자를 정하지 않았다. 서비스·Run 값에 부작용을 남기지 않는다. | 별도 오류 UI는 채택하지 않았다. |
 
@@ -130,6 +130,8 @@ flowchart LR
 
 ### 코드 대조 기록
 
-2026-11-18 작업 트리의 `main.rs`, `single_instance.rs`, `ui.rs`, `message_loop.rs`, `worker.rs`, `registry.rs`, `rules.rs`, `copy.rs`를 읽고 본문과 대조했다. 이 절의 파일은 `crates/tray/src/` 기준이다. 스레드 분리·핸들 수명·상태 매핑·레지스트리 조회 순서는 코드에서 확인한 사실이다. 6절의 선택 이유는 구현 판단으로 구분했다. 이번 문서 변경에서는 빌드·시험·GUI 확인을 실행하지 않았다.
+- 날짜·대상: 2026-11-18 작업 트리의 `main.rs`, `single_instance.rs`, `ui.rs`, `message_loop.rs`, `worker.rs`, `registry.rs`, `rules.rs`, `copy.rs`. 경로는 `crates/tray/src/` 기준이다.
+- 환경·방법: 저장소 소스를 읽고 스레드 분리·핸들 수명·상태 매핑·레지스트리 조회 순서를 본문과 대조했다.
+- 결과: 본문은 대조한 코드 구조와 일치한다. 이 대조는 빌드·시험·GUI 확인의 실행 결과가 아니다.
 
 자동 시험·실제 SCM·메뉴·권한·탐색기·Run 값의 실행 결과와 미실행 이유는 [Windows 서비스 시험](../how-to/set-up-and-verify.md#windows-서비스-시험)에 둔다. 단위 시험의 부분 통과를 TRAY 시나리오 전체 통과로 읽지 않는다.

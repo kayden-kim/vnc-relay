@@ -22,7 +22,7 @@ The process occupies the terminal until it stops. Do not consider it ready befor
 
 ## Windows service and tray
 
-The Windows service is available in Windows bundles from `v2026.11.5`. Complete [service installation](install.md#install-and-uninstall-the-windows-service) first. Users or groups specified with `--operator` can start and stop it without elevation.
+Complete [service installation](install.md#install-and-uninstall-the-windows-service) first. Users or groups specified with `--operator` can start and stop it without elevation.
 
 1. In normal PowerShell, start the service.
 
@@ -41,7 +41,7 @@ The Windows service is available in Windows bundles from `v2026.11.5`. Complete 
 
 You can send the same requests through Windows Services (`services.msc`) or the tray. Stopping applies the graceful shutdown period G. The SCM rejects a second `stop` while stopping, so it cannot skip the grace period like a second console shutdown request. To restart, wait for the stop to finish, then start. Do not run `service run` directly in a terminal.
 
-To use the tray, run `vnc-relay-tray.exe` as a normal user and click its notification-area icon. The menu has this order.
+To use the tray, run `vnc-relay-tray.exe` as a normal user and click its notification-area icon. The icon is the same as the brand mark in the dashboard top bar: two white arrows that point in opposite directions on a dark rounded square. It follows the common visual rule in the [Windows tray specification](https://github.com/kayden-kim/vnc-relay/blob/main/docs/specs/windows-tray.md). The menu has this order.
 
 - Status line: `VNC Relay: <state>`. Shows service and `/readyz` status.
 - `Start`: starts a stopped service.
@@ -230,7 +230,7 @@ Restarting ends all connections and management sessions. Work during an approved
 
 There is no configuration-validation-only CLI. Starting on alternate ports does not validate operational ports, the firewall, or actual client relays. See the [Operations how-to](https://github.com/kayden-kim/vnc-relay/blob/main/docs/how-to/operate-relay.md) for source builds and detailed deployment procedures.
 
-> **Warning:** Upgrading from `v2026.11.2` or earlier changes the WS/WSS Viewer path from `/relay` to `/relay/viewer`. Migrate the server and all Viewer URLs together. A `main` build prints the latest Release version until the next release, so `--version` alone cannot distinguish them. Record the deployment source and commit too.
+> **Warning:** WS/WSS Viewers must use `/relay/viewer`. If clients use `/relay`, migrate the server and all Viewer URLs together. Do not change TCP or `/relay/server`. A `main` build prints the latest Release version until the next release, so `--version` alone cannot distinguish them. Record the deployment source and commit too.
 
 For rollback, stop the new server gracefully and restore the previous executable together with configuration compatible with it. Restore client URLs too when crossing Viewer path versions. Do not leave `[relay.ticket.*]` tables in configuration for a version without access ticket support. Restoring the protected v3 configuration is recommended when rolling back from v4 to v3. Before returning to a version without forwarded address checks, stop proxy access or switch to direct built-in WSS and actual socket IP policies. Do not allow the proxy IP as a substitute for every client.
 

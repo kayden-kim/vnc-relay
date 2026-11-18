@@ -4,22 +4,20 @@ Viewer와 Server가 VNC Relay에 접속했을 때 관찰하는 연결 수명, �
 
 | 항목 | 값 |
 | --- | --- |
-| 상태 | Active(2026-11-07 채택, 사용자 결정 2026-11-07(Q150)) |
+| 상태 | Active |
 | 관련 요구사항 | [PRD](../requirements/PRD.md) FR-01·FR-02·FR-03·FR-04·7절 보안, AC-01~04·AC-06~08·AC-50 |
 | 용어 | [VNC Relay 용어집](../../GLOSSARY.md) |
 | 관련 스펙 | [WS·WSS](websocket.md), [관리 기능](management.md), [설정·운영](operations.md) |
-| 관련 계약 | [Repeater 초기 교환 v1](../contracts/repeater-handshake-v1.md). Active(2026-11-01 채택)이며 초기 요청 형식, Mode I 대상 문법, 중계 ID 비교, 오류 표시의 기준이다. |
-| 관련 아키텍처 문서·ADR | [코드 지도](../architectures/code-map.md), [TCP 진입점 모듈 설계](../architectures/tcp-entry-point.md), [초기 교환 모듈 설계](../architectures/initial-exchange.md), [중계 세션 수명 모듈 설계](../architectures/relay-session.md), [연결 상한과 시간 제한 모듈 설계](../architectures/connection-limits.md), [ADR-0002 출발지 IP 허용 목록](../decisions/ADR-0002-source-ip-allowlist.md), [ADR-0003 단일 인스턴스·메모리 상태](../decisions/ADR-0003-single-instance-memory-state.md). 초기 교환·Mode I 대상 연결·Mode II 매칭·양방향 중계·종료를 구현했다. 지원 판정은 [작업 5.9 판정표](../how-to/set-up-and-verify.md#41-작업-59-판정표)를 따른다. |
+| 관련 계약 | [Repeater 초기 교환 v1](../contracts/repeater-handshake-v1.md). 초기 요청 형식, Mode I 대상 문법, 중계 ID 비교, 오류 표시의 기준이다. |
+| 관련 아키텍처 문서·ADR | [코드 지도](../architectures/code-map.md), [TCP 진입점 모듈 설계](../architectures/tcp-entry-point.md), [초기 교환 모듈 설계](../architectures/initial-exchange.md), [중계 세션 수명 모듈 설계](../architectures/relay-session.md), [연결 상한과 시간 제한 모듈 설계](../architectures/connection-limits.md), [ADR-0002 출발지 IP 허용 목록](../decisions/ADR-0002-source-ip-allowlist.md), [ADR-0003 단일 인스턴스·메모리 상태](../decisions/ADR-0003-single-instance-memory-state.md) |
 
 ## 1. 범위와 적용 상태
 
-- TCP·WS·WSS와 Mode I·II는 사용자 확정 범위다. Viewer는 Mode I·II, Server는 Mode II를 지원한다. WS·WSS Server 추가는 사용자 결정 2026-11-08(Q181), 사용자 결정 2026-11-08(Q188)에 따른다.
-- 아래 종료 세부 정책도 채택했다(사용자 결정 2026-11-07(Q150)). 중복 ID 정책은 사용자 결정 2026-11-01(Q74)로 정했다(3.3절 4항). 모드 지원 확정과 통신 바이트 형식의 검증 여부는 구분한다.
+- TCP·WS·WSS를 지원한다. Viewer는 Mode I·II, Server는 Mode II를 지원한다.
 - 외부 주체는 TCP·WS·WSS의 Viewer·Server, Mode I 대상과 운영자다. WS·WSS에서 들어온 논리적 역할에도 같은 중계 규칙을 적용한다. Server의 Mode I 거절과 전송 경로를 가리지 않는 같은 역할 중복 ID 거절도 같다.
 - TLS·WebSocket 프레임 처리는 WS·WSS 스펙이 소유한다. 관리 API와 프로세스 종료는 관련 스펙이 소유한다.
 - RFB 화면·인증·입력 내용을 해석하거나 변환하지 않는다. 원격 화면·입력 검증은 실제 끝점의 호환성 테스트에서 수행한다.
-- 후속: 2026-11-08 추가한 WS·WSS Server는 기준 문서만 반영했다. 새 조합의 구현·검증은 아직 없다. 이전 지원 판정은 그 당시 조합의 증거로 유지한다. 후속: 구현은 커밋 `3df0693`이며, 시험은 커밋 `51bd747`의 두 OS 게이트에서 통과했다([WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)).
-- WS·WSS의 접속 ticket 연결은 중계 ID 대조와 세션 만료를 더 적용한다([WebSocket 계약 1.9절](../contracts/websocket-relay-v2.md#19-접속-ticket), [ADR-0009](../decisions/ADR-0009-optional-relay-access-ticket.md), 사용자 결정 2026-11-11(Q192·Q203·Q213)). 사용자 결정 2026-11-11(Q211)의 후속 구현은 커밋 `4be8e0e`다. 계약 테스트는 같은 커밋의 두 OS 전체 게이트에서 통과했다([접속 ticket 판정표](../how-to/set-up-and-verify.md#45-접속-ticket-판정표)).
+- WS·WSS의 접속 ticket 연결에는 중계 ID 대조와 세션 만료를 적용한다([WebSocket 계약 1.9절](../contracts/websocket-relay-v2.md#19-접속-ticket), [ADR-0009](../decisions/ADR-0009-optional-relay-access-ticket.md)).
 
 ## 2. 상태와 경계
 
@@ -60,8 +58,8 @@ Viewer와 Server가 VNC Relay에 접속했을 때 관찰하는 연결 수명, �
 | RLY-R18 | FR-04 | 중계 측 TCP 소켓에 TCP keepalive를 적용해, 응답하지 않는 상대의 대기·활성 연결을 K 안에 끊긴 연결로 판정하고 회수해야 한다. |
 | RLY-R19 | FR-04 | keepalive에 응답하는 연결을 데이터가 없다는 이유만으로 종료해서는 안 된다. |
 | RLY-R20 | FR-01·FR-03·FR-05 | WS·WSS Server에도 TCP Server와 같은 초기 교환·Mode II 규칙을 적용해야 한다. Server 역할은 `ID:` 요청만 받고 Mode I을 거절해야 한다. 같은 ID·같은 역할의 중복은 전송 경로와 관계없이 `duplicate_id`로 거절해야 한다. |
-| RLY-R21 | FR-03·7절·AC-50 | ticket으로 업그레이드한 연결은 초기 요청의 중계 ID가 ticket의 `rid`와 바이트 단위로 같을 때만 대기 등록·매칭해야 한다. Mode I 요청과 다른 중계 ID는 close 4012로 닫아야 한다(사용자 결정 2026-11-11(Q203·Q213)). 검사는 기존 초기 요청 검사(Server의 `ID:` 접두어 → 모드 판정 → 꺼진 모드 `mode_disabled`(1008) → 값 문법 `handshake_invalid`(4008))를 모두 통과한 뒤, 대기 등록·대상 연결 전에 해야 한다. Mode I이 꺼져 있으면 기존 1008을 먼저 적용해야 한다(이 문서의 판단, 사용자 결정 없음). |
-| RLY-R22 | FR-03·7절·AC-50 | `sx`를 가진 ticket으로 연 연결은 `sx`에 끝내야 한다. 활성 세션은 양쪽 ticket의 `sx` 가운데 이른 시각에 끝내야 하며, 종료 원인은 `session_expired`여야 한다([WebSocket 계약 1.9.5절](../contracts/websocket-relay-v2.md#195-101-뒤의-중계-id-대조와-세션-만료), 사용자 결정 2026-11-11(Q213)). |
+| RLY-R21 | FR-03·7절·AC-50 | ticket으로 업그레이드한 연결은 초기 요청의 중계 ID가 ticket의 `rid`와 바이트 단위로 같을 때만 대기 등록·매칭해야 한다. Mode I 요청과 다른 중계 ID는 close 4012로 닫아야 한다. 검사는 기존 초기 요청 검사(Server의 `ID:` 접두어 → 모드 판정 → 꺼진 모드 `mode_disabled`(1008) → 값 문법 `handshake_invalid`(4008))를 모두 통과한 뒤, 대기 등록·대상 연결 전에 해야 한다. Mode I이 꺼져 있으면 기존 1008을 먼저 적용해야 한다. |
+| RLY-R22 | FR-03·7절·AC-50 | `sx`를 가진 ticket으로 연 연결은 `sx`에 끝내야 한다. 활성 세션은 양쪽 ticket의 `sx` 가운데 이른 시각에 끝내야 하며, 종료 원인은 `session_expired`여야 한다([WebSocket 계약 1.9.5절](../contracts/websocket-relay-v2.md#195-101-뒤의-중계-id-대조와-세션-만료)). |
 
 ## 3. 정상 흐름
 
@@ -72,9 +70,9 @@ Viewer와 Server가 VNC Relay에 접속했을 때 관찰하는 연결 수명, �
 3. 대상 주소나 중계 ID는 호환 계약이 정한 초기 교환 절차 안에서 얻는다. 별도의 대상 선택 메시지나 URL API를 추가하지 않는다.
 4. 초기 요청 뒤에 이미 수신한 데이터는 스트림의 첫 바이트로 전달한다. 이 데이터도 중계 버퍼 상한에 포함한다.
 
-ticket으로 업그레이드한 연결은 기존 초기 요청 검사를 모두 통과한 뒤, 대기 등록·대상 연결 전에 `rid`를 대조한다. Server는 `ID:` 접두어를 먼저 검사한다. 이어 모드를 판정하고, 꺼진 모드면 `mode_disabled`(1008), 값 문법이 틀리면 `handshake_invalid`(4008)로 거절한다. 이 순서는 [Repeater 초기 교환 계약 1.2절](../contracts/repeater-handshake-v1.md#12-초기-요청-250바이트)의 사용자 결정 2026-11-01(Q80)을 유지한다.
+ticket으로 업그레이드한 연결은 초기 요청 검사를 모두 통과한 뒤, 대기 등록·대상 연결 전에 `rid`를 대조한다. Server는 `ID:` 접두어를 먼저 검사한다. 이어 모드를 판정하고, 꺼진 모드면 `mode_disabled`(1008), 값 문법이 틀리면 `handshake_invalid`(4008)로 거절한다. 검사 순서는 [Repeater 초기 교환 계약 1.2절](../contracts/repeater-handshake-v1.md#12-초기-요청-250바이트)을 따른다.
 
-사용자 결정 2026-11-11(Q203)은 ticket을 켠 Viewer의 Mode I 거절을 정했지만, 꺼진 모드 검사와의 선후는 정하지 않았다. `mode1.enabled = true`이면 문법 검사 뒤 close 4012로 거절한다. `mode1.enabled = false`이면 기존 `mode_disabled`(1008)를 먼저 적용한다. 두 경우 모두 대상 연결을 시도하지 않는다. 이 선후는 기존 Q80 순서를 유지하는 판단이다(이 문서의 판단, 사용자 결정 없음).
+ticket을 켠 Viewer의 Mode I 요청은 `mode1.enabled = true`이면 문법 검사 뒤 close 4012로 거절한다. `mode1.enabled = false`이면 `mode_disabled`(1008)를 먼저 적용한다. 두 경우 모두 대상 연결을 시도하지 않는다.
 
 IP 목록 재로드는 [운영 스펙](operations.md#33-파일-변경-자동-감지와-부분-재로드)에 따른다. 허용 검사를 통과한 TCP 연결과 업그레이드를 완료한 WS·WSS 연결은 이후 목록에서 제거돼도 초기 교환·대기·활성 수명을 유지한다. 기존 대기 연결은 원래의 허용 판정으로 매칭될 수 있다. 새 TCP 연결의 허용 검사와 WS·WSS 업그레이드 검사에는 당시 유효한 목록을 적용한다.
 
@@ -90,11 +88,11 @@ IP 목록 재로드는 [운영 스펙](operations.md#33-파일-변경-자동-감
 
 ### 3.3 Mode II
 
-1. 역할은 TCP 리스너 또는 WS·WSS 요청 경로로, 중계 ID는 [호환 계약 1.2절](../contracts/repeater-handshake-v1.md#12-초기-요청-250바이트)대로 정한다. 중계 ID는 숫자로만 되어 있고, 바이트열이 정확히 같을 때만 같은 ID다(사용자 결정 2026-11-01(Q68)). 앞자리 0 제거·대소문자 변환·공백 제거·숫자 변환으로 서로 다른 ID를 합치지 않는다. 대상 버전 Repeater와 결과가 다른 입력은 [계약 3.1절](../contracts/repeater-handshake-v1.md#31-대상-버전-repeater와-다르게-처리하는-입력)에 있다.
+1. 역할은 TCP 리스너 또는 WS·WSS 요청 경로로, 중계 ID는 [호환 계약 1.2절](../contracts/repeater-handshake-v1.md#12-초기-요청-250바이트)대로 정한다. 중계 ID는 숫자로만 되어 있고, 바이트열이 정확히 같을 때만 같은 ID다. 앞자리 0 제거·대소문자 변환·공백 제거·숫자 변환으로 서로 다른 ID를 합치지 않는다. 대상 버전 Repeater와 결과가 다른 입력은 [계약 3.1절](../contracts/repeater-handshake-v1.md#31-대상-버전-repeater와-다르게-처리하는-입력)에 있다.
 2. 유효한 상대가 없으면 연결을 대기에 등록한다. 양쪽 접속 순서를 모두 허용한다.
 3. 같은 ID의 반대 역할이 도착하면 두 연결을 한 번만 활성 세션으로 전환한다. 대기 시간 초과·단절과 경합하더라도 종료된 연결을 매칭하지 않는다.
-4. **중복 정책:** 대기 중이거나 활성 세션이 점유한 ID에 같은 역할의 연결이 추가되면 후발 연결을 바로 닫아 거절한다. TCP는 FIN으로 닫고, WS·WSS는 close 4004(`duplicate_id`)를 보낸다. 거절한 연결은 대기 등록을 만들지 않으며, 기존 연결과 활성 세션은 유지한다. 활성 세션 종료 정리가 끝난 뒤 ID를 다시 사용할 수 있다. 사용자 결정 2026-11-01(Q74). 대상 버전 Repeater는 후발 연결을 닫지 않고 둔다. 활성 세션이 쓰는 ID의 중복은 대상 버전에서 관찰하지 않았다(Q75). 차이는 [Repeater 초기 교환 계약 3.1절](../contracts/repeater-handshake-v1.md#31-대상-버전-repeater와-다르게-처리하는-입력)에 있다.
-   - 후속: 사용자 결정 2026-11-08(Q181·Q188)에 따라 TCP·WS·WSS Server에도 같은 정책을 적용한다. 대기·활성 ID 점유는 전송 경로별로 나누지 않는다(RLY-R20).
+4. **중복 정책:** 대기 중이거나 활성 세션이 점유한 ID에 같은 역할의 연결이 추가되면 후발 연결을 바로 닫아 거절한다. TCP는 FIN으로 닫고, WS·WSS는 close 4004(`duplicate_id`)를 보낸다. 거절한 연결은 대기 등록을 만들지 않으며, 기존 연결과 활성 세션은 유지한다. 활성 세션 종료 정리가 끝난 뒤 ID를 다시 사용할 수 있다. 대상 버전 Repeater와의 차이는 [Repeater 초기 교환 계약 3.1절](../contracts/repeater-handshake-v1.md#31-대상-버전-repeater와-다르게-처리하는-입력)에 있다.
+   - TCP·WS·WSS Server에 같은 정책을 적용한다. 대기·활성 ID 점유는 전송 경로별로 나누지 않는다(RLY-R20).
 5. 매칭 시 대기 시간이 끝난다. 세션 식별자는 중계 ID와 별도로 부여한다.
 
 ### 3.4 중계와 EOF
@@ -123,7 +121,7 @@ IP 목록 재로드는 [운영 스펙](operations.md#33-파일-변경-자동-감
 | 중계 I/O 오류 | 해당 세션 종료 | 자원 회수, 종료 원인 기록 | 새 세션으로 접속 |
 | 끊긴 연결 감지 | 해당 연결 종료. 활성 세션이면 반대쪽 연결도 종료, 종료 원인은 끊긴 연결 감지 | 대기 등록 해제 또는 세션 정리, 자원 회수, 다른 세션 영향 없음 | 같은 ID로 새 Server·Viewer 접속 |
 
-[Repeater 초기 교환 계약 2절](../contracts/repeater-handshake-v1.md#2-오류)에 따라 오류 응답 바이트를 보내지 않는다. TCP는 연결을 닫아(FIN) 알리고, WS·WSS는 close 코드로 알린다. 대상 버전 Repeater도 오류 바이트를 보내지 않았다.
+[Repeater 초기 교환 계약 2절](../contracts/repeater-handshake-v1.md#2-오류)에 따라 오류 응답 바이트를 보내지 않는다. TCP는 연결을 닫아(FIN) 알리고, WS·WSS는 close 코드로 알린다.
 
 ## 5. 항상 지켜야 할 규칙과 비보장 범위
 
@@ -168,27 +166,17 @@ IP 목록 재로드는 [운영 스펙](operations.md#33-파일-변경-자동-감
 | RLY-020 | FR-04 / RLY-R14 | EOF·연결 오류·관리자 종료를 각각 발생 | 해당 세션 자원 회수, 원인과 활성 수 일치 |
 | RLY-021 | FR-01·FR-04 / RLY-R15 | 한 연결에 오류, 다른 세션에서 지속 전송 | 다른 세션의 바이트와 수명이 유지됨 |
 | RLY-022 | FR-01·FR-03 / RLY-R17 | 비활성 모드에 유효한 요청 | 대상 연결·대기 등록 전에 거절 |
-| RLY-023 | FR-01·7절 / RLY-R16 | TCP Viewer·TCP Server·WS Viewer·WS Server·WSS Viewer·WSS Server에 해당 진입점 비허용 클라이언트 IP로 접속. 허용 IP를 주장하는 비신뢰 데이터·헤더 동봉 | 초기 교환·대기 등록·대상 연결 전에 거절, 기존 세션 유지. TCP는 accept에서, WS·WSS는 accept 합집합 또는 upgrade 역할별 목록에서 거절. 후속: 사용자 결정 2026-11-08(Q181·Q182·Q188)으로 6개 진입점에 적용한다. |
-| RLY-024 | FR-01·7절 / RLY-R16 | 6개 진입점 각각에서 자기 `allow`에만 있는 클라이언트 IP로 다른 진입점도 요청. 공유 WS·WSS는 accept 통과 후 반대 역할 경로를 요청 | 해당 진입점의 목록만 허용하고 다른 목록으로 우회 불가. WS·WSS 반대 역할은 upgrade에서 403. 후속: 사용자 결정 2026-11-08(Q188)으로 리스너와 역할의 진입점을 구분한다. |
+| RLY-023 | FR-01·7절 / RLY-R16 | TCP Viewer·TCP Server·WS Viewer·WS Server·WSS Viewer·WSS Server에 해당 진입점 비허용 클라이언트 IP로 접속. 허용 IP를 주장하는 비신뢰 데이터·헤더 동봉 | 초기 교환·대기 등록·대상 연결 전에 거절, 기존 세션 유지. TCP는 accept에서, WS·WSS는 accept 합집합 또는 upgrade 역할별 목록에서 거절. |
+| RLY-024 | FR-01·7절 / RLY-R16 | 6개 진입점 각각에서 자기 `allow`에만 있는 클라이언트 IP로 다른 진입점도 요청. 공유 WS·WSS는 accept 통과 후 반대 역할 경로를 요청 | 해당 진입점의 목록만 허용하고 다른 목록으로 우회 불가. WS·WSS 반대 역할은 upgrade에서 403. |
 | RLY-025 | FR-03·FR-04 / RLY-R18 | 대기 중인 Server 쪽 네트워크를 응답 없이 끊음 | K 안에 대기 등록 해제·자원 회수, 같은 ID로 새 Server 연결을 대기 등록할 수 있음 |
 | RLY-026 | FR-04 / RLY-R18 | 활성 세션의 한쪽 상대 네트워크를 응답 없이 끊음 | K 안에 세션 정리, 반대쪽 연결도 종료, 종료 원인은 끊긴 연결 감지, 다른 세션 영향 없음 |
 | RLY-027 | FR-04 / RLY-R19 | 양 끝이 살아 있고 데이터가 없는 활성 세션을 K보다 오래 유지 | 세션 유지, 이후 데이터 정상 전달 |
 | RLY-028 | FR-01·FR-03·FR-05 / RLY-R04·RLY-R10·RLY-R20 | WS·WSS Server에서 Mode I 요청. 이어서 TCP·WS·WSS의 같은 ID·같은 역할 중복을 대기·활성 상태에 각각 입력 | Server는 Mode II만 허용하고 Mode I은 `handshake_invalid`로 거절, 등록·대상 연결 없음. 같은 ID·같은 역할 후발 연결은 전송과 관계없이 `duplicate_id`(TCP FIN, WS·WSS close 4004), 기존 연결·세션 유지 |
 | RLY-029 | FR-03·7절·AC-50 / RLY-R21 | Viewer ticket을 켠 역할에서 `101` 뒤 Mode II 초기 요청의 중계 ID를 `rid`와 같게·다르게 전송. `0123`과 `123`도 비교. 같은 요청 ID로 기다리던 Server도 둠 | 같으면 대기 등록·매칭. 다르면 close 4012 `ticket_relay_mismatch`, `connection_rejected(stage=initial_exchange, reason=ticket_relay_mismatch)`에 `ticket_jti`·`mode`·`relay_id_ref` 기록. 대기 등록 없음, 기다리던 Server 연결 유지 |
-| RLY-030 | FR-03·7절·AC-50 / RLY-R21 | Viewer ticket을 켠 역할에서 `101` 뒤 문법에 맞는 Mode I 초기 요청 전송. `mode1.enabled = true`·`false`를 각각 적용 | `true`이면 문법 검사 뒤 close 4012 `ticket_relay_mismatch`, `connection_rejected(stage=initial_exchange, reason=ticket_relay_mismatch)`. `false`이면 기존 close 1008 `mode_disabled`가 먼저 적용됨(이 문서의 판단, 사용자 결정 없음). 두 경우 모두 대상 연결 시도·대기 등록 없음 |
+| RLY-030 | FR-03·7절·AC-50 / RLY-R21 | Viewer ticket을 켠 역할에서 `101` 뒤 문법에 맞는 Mode I 초기 요청 전송. `mode1.enabled = true`·`false`를 각각 적용 | `true`이면 문법 검사 뒤 close 4012 `ticket_relay_mismatch`, `connection_rejected(stage=initial_exchange, reason=ticket_relay_mismatch)`. `false`이면 기존 close 1008 `mode_disabled`가 먼저 적용됨. 두 경우 모두 대상 연결 시도·대기 등록 없음 |
 | RLY-031 | FR-03·7절·AC-50 / RLY-R22 | `sx`가 있는 ticket 연결이 초기 교환 중·대기 중·활성 세션 중 `sx`에 도달. 양쪽 ticket의 `sx`가 다른 세션과 한쪽만 `sx`가 있는 세션, `sx` 없는 ticket 연결도 둠 | 초기 교환 중: close 4013과 `connection_aborted(stage=initial_exchange, reason=session_expired)`. 대기 중: close 4013과 `waiting_removed(reason=session_expired)`. 활성 세션: WS·WSS 쪽 close 4013, TCP 쪽 소켓 닫힘, `session_closed(close_cause=session_expired)`와 최근 종료 목록 `session_expired`. 양쪽에 `sx`가 있으면 이른 시각에 끝나고, 한쪽만 있으면 그 시각에 끝남. `sx` 없는 ticket은 종료 시각 없음 |
 | RLY-032 | FR-03·7절·AC-50 / RLY-R21 | Server ticket을 켠 `/relay/server`에서 `101` 뒤 `ID:` 초기 요청의 중계 ID를 `rid`와 같게·다르게 전송. 그 요청 ID를 기다리던 Viewer도 둠 | 같으면 대기 등록·매칭. 다르면 close 4012 `ticket_relay_mismatch`, `connection_rejected(stage=initial_exchange, reason=ticket_relay_mismatch)`에 `ticket_jti`·`mode`·`relay_id_ref` 기록. 대기 등록 없음, 기다리던 Viewer 연결 유지 |
 
 ## 8. 미결정 사항
 
-확정 책임은 프로젝트 요구사항·운영 결정 담당자에게 있다. 통신 사실은 허가된 관찰과 실행 증거로 확정한다.
-
 현재 남은 미결정 사항은 없다.
-
-접속 ticket 범위는 사용자 결정 2026-11-11(Q192·Q203·Q213)으로 채택했다. 구현은 커밋 `4be8e0e`이며, 계약 테스트는 같은 커밋의 두 OS 전체 게이트에서 통과했다([접속 ticket 판정표](../how-to/set-up-and-verify.md#45-접속-ticket-판정표)). 계약 테스트는 [WebSocket 계약 5절](../contracts/websocket-relay-v2.md#5-예제와-계약-테스트)을 따른다.
-
-후속: RLY-028과 변경된 RLY-023·024의 2026-11-08 추가 범위는 미실행 (구현 전)이다. 계약 테스트 계획은 [WebSocket 계약 5절](../contracts/websocket-relay-v2.md#5-예제와-계약-테스트)을 따른다. 이 스펙에서 새로 채택을 기다리는 이름은 없다. 신뢰 프록시 경고 이름과 필드는 사용자 결정 2026-11-08(Q191)으로 채택했으며 [WebSocket 스펙 8절](websocket.md#8-미결정-사항)에서 기록한다. 후속: 구현은 커밋 `3df0693`이며, 시험은 커밋 `51bd747`의 두 OS 게이트에서 통과했다([WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)).
-
-RLY-TBD-005는 결정되어 RLY-R18·RLY-R19로 옮겼으며 재사용하지 않는다. RLY-TBD-004는 결정되어 3.4절에 반영했으며 재사용하지 않는다. RLY-TBD-002는 [Repeater 초기 교환 v1](../contracts/repeater-handshake-v1.md) 채택(2026-11-01)으로 해소해 3.1·3.3·4절에 반영했으며 재사용하지 않는다. RLY-TBD-003은 사용자 결정 2026-11-01(Q74·Q75)로 해소해 3.3절 4항·4절·RLY-015에 반영했으며 재사용하지 않는다.
-
-RLY-TBD-001은 2026-10-22에 해소되어 이 절에서 뺐다. 고정 대상은 Server·Viewer 1.8.3.0, Repeater(Windows) 1.6.0.0이다(사용자 결정 2026-10-22(Q20)). Repeater(Ubuntu 24.04)는 고정 범위 밖이다(사용자 결정 2026-10-22(Q19)). 근거는 [호환성 검증 기록](../contracts/repeater-compat-record.md) 2절이다. 재사용하지 않는다.

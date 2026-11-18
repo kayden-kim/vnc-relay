@@ -5,7 +5,7 @@ Windows 11 x64와 Ubuntu 24.04 LTS x64용 배포 묶음을 만들고, 버전 태
 | 항목 | 값 |
 | --- | --- |
 | 대상 독자 | 릴리스 담당자 |
-| 검증 상태 | Verified — 1.1·1.2·3.1·3.2절과 3.3절 7·8단계는 첫 버전 `2026.11.0`에서 두 OS와 GitHub Actions로 실행해 확인했다. 그때는 구현 커밋 `7859b5d`가 버전을 바꿨으므로 3.3절 1~6단계를 따로 실행하지 않았다. `2026.11.1`부터 `2026.11.5`까지는 3.3절 1~8단계를 모두 실행했다. `2026.11.6`은 4단계의 두 OS 전체 완료 검증을 사용자 지시(2026-11-18)로 생략하고 나머지 단계를 실행했다. 2단계의 도움말 갱신과 4단계의 `cargo xtask help-site`는 `2026.11.3`에서 처음 실행했다. 1.2절의 Windows 묶음 트레이 앱은 `2026.11.5`에서 처음 확인했다. 3.1절 로컬 묶음은 실행하지 않았고, CI가 만든 Release 묶음 두 개를 내려받아 해시와 버전을 확인했다([4절](#4-검증)). 6절 롤백은 실행하지 않았다. |
+| 검증 상태 | Verified — 두 OS Release 묶음의 해시·내용·버전은 4절의 수동 기록으로 확인했다. 로컬 묶음 생성과 CI의 현재 결과는 3.1·3.2절로 확인한다. 6절 롤백은 미실행이다. |
 | 검증 환경·버전 | Windows 11 Pro 10.0.26200 x64(PowerShell 7, Python 3), WSL2 Ubuntu 24.04.4 LTS x64(GNU coreutils `sha256sum`), Rust 1.99.1, GitHub Actions 호스팅 러너 `windows-2025`·`ubuntu-24.04` |
 | 최종 검증일 | 2026-11-18 |
 | 관련 기준 문서 | [PRD 확정 기준](../requirements/PRD.md#확정-기준)의 "배포 산출물"·"버전 규칙" 행, [수동 운영 안내 3.1절](operate-relay.md#31-release-빌드와-묶음), [xtask 모듈 설계](../architectures/xtask.md), [개발 환경·검증 how-to](set-up-and-verify.md) |
@@ -18,13 +18,12 @@ Windows 11 x64와 Ubuntu 24.04 LTS x64용 배포 묶음을 만들고, 버전 태
 
 ### 1.1 버전 규칙
 
-버전은 `연.월.순서`다(사용자 결정 2026-11-08(Q165)).
+버전은 `연.월.순서`다.
 
-- 연은 네 자리, 월은 1~12다. 앞자리 0을 쓰지 않는다. 4월은 `2026.4.0`이다. Cargo는 버전 숫자의 앞자리 0을 받지 않는다. 그래서 `Cargo.toml`, 묶음 이름, `vnc-relay --version`은 같은 버전 문자열을 쓴다. 태그는 그 앞에 `v`만 붙인다(`v2026.4.0`, 사용자 결정 2026-11-08(Q163)).
+- 연은 네 자리, 월은 1~12다. 앞자리 0을 쓰지 않는다. 4월은 `2026.4.0`이다. Cargo는 버전 숫자의 앞자리 0을 받지 않는다. 그래서 `Cargo.toml`, 묶음 이름, `vnc-relay --version`은 같은 버전 문자열을 쓴다. 태그는 그 앞에 `v`만 붙인다(`v2026.4.0`).
 - 순서는 그 달에 낸 릴리스 수를 0부터 센다. 같은 달의 두 번째 릴리스는 `2026.4.1`이다. 연월이 바뀌면 순서를 0으로 되돌린다.
 - 연월은 릴리스하는 날의 연월이다.
-- 첫 버전은 `2026.11.0`이다(사용자 결정 2026-11-08(Q166)).
-- 한 번 Release에 올린 버전 번호는 다시 쓰지 않는다. 잘못 올린 Release를 지웠으면 순서를 올려 새로 낸다(이 문서의 판단, 사용자 결정 없음). 같은 번호로 다른 내용을 내면 내려받은 사람이 두 묶음을 구분할 수 없다.
+- 한 번 Release에 올린 버전 번호는 다시 쓰지 않는다. 잘못 올린 Release를 지웠으면 순서를 올려 새로 낸다. 같은 번호로 다른 내용을 내면 내려받은 사람이 두 묶음을 구분할 수 없다.
 
 `cargo xtask package`는 버전이 이 형식이 아니면 빌드하기 전에 실패한다. 연월이 오늘 날짜와 같은지는 검사하지 않는다.
 
@@ -35,13 +34,13 @@ Windows 11 x64와 Ubuntu 24.04 LTS x64용 배포 묶음을 만들고, 버전 태
 | Windows 11 x64 | `vnc-relay-<버전>-windows-x64.zip` | `vnc-relay-<버전>-windows-x64/` 디렉터리 하나. 그 안에 서버 `vnc-relay.exe`, 트레이 앱 `vnc-relay-tray.exe`와 [수동 운영 안내 3.1절](operate-relay.md#31-release-빌드와-묶음)의 공통 파일 |
 | Ubuntu 24.04 LTS x64 | `vnc-relay-<버전>-linux-x64.tar.gz` | 서버 `vnc-relay`와 같은 공통 파일. 트레이 앱은 넣지 않는다 |
 
-묶음마다 `<묶음 파일 이름>.sha256`이 함께 생긴다. 한 줄에 `<SHA-256 16진수>  <묶음 파일 이름>`을 쓴다. `sha256sum -c`가 읽는 형식이다. 묶음의 형식과 내용은 사용자 결정 2026-11-08(Q161·Q164)을 따른다.
+묶음마다 `<묶음 파일 이름>.sha256`이 함께 생긴다. 한 줄에 `<SHA-256 16진수>  <묶음 파일 이름>`을 쓴다. `sha256sum -c`가 읽는 형식이다.
 
 ## 2. 전제 조건
 
 - [ ] 빌드 담당자는 [개발 환경 준비](set-up-and-verify.md)에 따라 Rust와 C 빌드 도구를 준비했다. Windows에서 NASM이 없으면 `AWS_LC_SYS_PREBUILT_NASM=1`을 쓴다.
 - [ ] Ubuntu에는 GNU `tar`가, Windows에는 기본 제공 `%SystemRoot%\System32\tar.exe`가 있다.
-- [ ] 릴리스할 커밋에서 두 OS의 [전체 완료 검증](set-up-and-verify.md#34-전체-완료-검증)이 통과했다. GitHub Actions는 전체 시험을 실행하지 않는다(사용자 결정 2026-11-08(Q162)).
+- [ ] 릴리스할 커밋에서 두 OS의 [전체 완료 검증](set-up-and-verify.md#34-전체-완료-검증)이 통과했다. GitHub Actions는 전체 시험을 실행하지 않는다.
 - [ ] 태그를 올리려면 `kayden-kim/vnc-relay`에 push 권한이 있다.
 
 ## 3. 절차
@@ -49,7 +48,7 @@ Windows 11 x64와 Ubuntu 24.04 LTS x64용 배포 묶음을 만들고, 버전 태
 - 실행 환경: Windows PowerShell 또는 Ubuntu bash다.
 - 실행 위치: 저장소 루트다.
 - 바꿔 넣을 값: `<버전>`은 1.1절 규칙에 따른 새 버전이다(예: `2026.11.0`).
-- 최대 대기 시간: 로컬 `cargo xtask package`는 10분으로 둔다. GitHub Actions 한 번은 60분으로 둔다(이 문서의 판단, 사용자 결정 없음). 넘으면 로컬은 Ctrl+C로, Actions는 실행 화면의 Cancel로 중단한다.
+- 최대 대기 시간: 로컬 `cargo xtask package`는 10분으로 둔다. GitHub Actions 한 번은 60분으로 둔다. 넘으면 로컬은 Ctrl+C로, Actions는 실행 화면의 Cancel로 중단한다.
 
 ### 3.1 로컬에서 묶음 만들기
 
@@ -102,12 +101,12 @@ Windows 11 x64와 Ubuntu 24.04 LTS x64용 배포 묶음을 만들고, 버전 태
 
 통과하면 실행 결과의 Artifacts에 `package-Windows`와 `package-Linux`가 생긴다. Artifacts는 GitHub의 보관 기간이 지나면 지워진다. 오래 둘 묶음은 3.3절의 Release로 낸다.
 
-`cargo xtask scenarios`(전체 시험)는 실행하지 않는다. 브라우저·`nftables`·성능 시험의 실행 환경이 로컬 게이트와 다르기 때문이다(사용자 결정 2026-11-08(Q162)). xtask 단위 시험은 실행 환경을 타지 않아 함께 실행한다(이 문서의 판단, 사용자 결정 없음).
+`cargo xtask scenarios`(전체 시험)는 실행하지 않는다. 브라우저·`nftables`·성능 시험의 실행 환경이 로컬 게이트와 다르기 때문이다. xtask 단위 시험은 실행 환경을 타지 않아 함께 실행한다.
 
 ### 3.3 버전을 올리고 Release 내기
 
 1. 새 버전을 정한다. 1.1절 규칙을 따른다. 이미 낸 버전은 `git tag --list "v*"`로 확인한다.
-2. 루트 `Cargo.toml`의 `[workspace.package] version`을 새 버전으로 바꾼다. 루트 `README.md`의 "버전" 줄도 같은 값으로 바꾼다. README의 "기준" 줄과 "연결 구성 예" 절에 이전 공개 묶음과 다른 동작을 적은 문장이 있으면 지운다. 새 묶음은 현재 소스와 같기 때문이다. 도움말 두 책도 같은 변경에서 고친다(사용자 결정 2026-11-11(Q221), [도움말 작성 규칙](../help/AGENTS.md)). 첫 페이지 `index.md`의 기준 버전 절에 새 최신 Release와 공개 날짜를 적고, 최신 Release와 다른 동작 목록을 다시 쓴다. 설치 페이지의 예시 파일 이름과 다른 페이지의 Release 안내도 새 버전에 맞춘다.
+2. 루트 `Cargo.toml`의 `[workspace.package] version`을 새 버전으로 바꾼다. 루트 `README.md`의 "버전" 줄도 같은 값으로 바꾼다. README의 "기준" 줄과 "연결 구성 예" 절에 이전 공개 묶음과 다른 동작을 적은 문장이 있으면 지운다. 새 묶음은 현재 소스와 같기 때문이다. 도움말 두 책도 같은 변경에서 고친다([도움말 작성 규칙](../help/AGENTS.md)). 설치 페이지의 예시 파일 이름과 다른 페이지의 Release 안내를 새 버전에 맞춘다.
 3. `Cargo.lock`을 갱신하고 버전을 확인한다.
 
    ```shell
@@ -125,7 +124,7 @@ Windows 11 x64와 Ubuntu 24.04 LTS x64용 배포 묶음을 만들고, 버전 태
 
    기대 결과: `notices: 통과 (THIRD-PARTY-NOTICES.txt)`. 이어 `cargo xtask help-site`로 고친 도움말을 검사한다. 기대 결과는 `help-site: 통과`로 시작하는 줄이다([도움말 게시 how-to](publish-help.md)). 그다음 두 OS의 [전체 완료 검증](set-up-and-verify.md#34-전체-완료-검증)을 실행한다.
 
-5. 변경을 커밋하고 `main`에 push한다. 커밋 메시지는 `chore(release): <버전>`이다. 이 push로 워크플로 `help`가 도움말 사이트를 다시 게시한다. 이때부터 8단계에서 Release가 생길 때까지 게시된 도움말은 아직 없는 Release를 최신으로 안내한다. 그래서 6단계가 통과하면 7단계를 바로 이어서 한다.
+5. 변경을 커밋하고 `main`에 push한다. 커밋 메시지는 `chore(release): <버전>`이다. 이 push로 워크플로 `help`가 도움말 사이트를 다시 게시한다. 이때부터 8단계에서 Release가 생길 때까지 게시된 도움말의 설치 예시는 아직 없는 Release를 가리킨다. 그래서 6단계가 통과하면 7단계를 바로 이어서 한다.
 6. 3.2절의 `ci` 실행이 두 OS 모두 통과했는지 확인한다.
 
    ```shell
@@ -161,58 +160,13 @@ Windows 11 x64와 Ubuntu 24.04 LTS x64용 배포 묶음을 만들고, 버전 태
 
 [검증 기록](../AGENTS.md#검증-기록)에 따라 실제 결과와 성공 조건을 대조한다.
 
-| 관찰 대상 | 성공 조건 | 확인 명령·방법 | 실제 결과 | 실행 증거 위치 |
-| --- | --- | --- | --- | --- |
-| Windows 로컬 묶음 | 3.1절 기대 결과. 푼 실행파일의 `--version`이 `Cargo.toml` 버전과 같다. SHA-256 파일이 독립 계산값과 같다 | 3.1절. `Expand-Archive`로 임시 디렉터리에 풀어 확인 | 통과(2026-11-08). 커밋 `7859b5d` 직전 작업 트리. 이후 바뀐 코드는 저장소 밖 대상 디렉터리의 경로 표시뿐이다. `vnc-relay-2026.11.0-windows-x64.zip`, SHA-256 `dfd416907d9e6f1a09a97a80a838e58148ea6aa993e857f41b718f40e14a50e7`이 `pwsh` `Get-FileHash`·Python `hashlib` 값과 같았다. 최상위 디렉터리 하나에 3.1절 파일 7종, `docs/` 파일 89개(저장소와 같은 수), `vnc-relay 2026.11.0` | 이 표 |
-| Ubuntu 로컬 묶음 | 같은 조건. SHA-256 파일이 `sha256sum -c`를 통과한다 | 3.1절. `CARGO_TARGET_DIR=$HOME/vnc-relay-target` | 통과(2026-11-08, 커밋 `7859b5d`와 같은 코드). `package: /home/kaydenkim/vnc-relay-target/package/vnc-relay-2026.11.0-linux-x64.tar.gz`, `sha256sum -c` `OK`, 묶음 안 소유자 `0/0`, `docs/` 파일 89개, `vnc-relay 2026.11.0` | 이 표 |
-| `main` push의 `ci` | 두 OS `check` 통과, Artifacts 두 개 | 3.2절 | 통과. [실행 42408213998](https://github.com/kayden-kim/vnc-relay/actions/runs/42408213998)(커밋 `7859b5d`). `check (windows-2025)` 8분 16초, `check (ubuntu-24.04)` 3분 7초, `release`는 태그가 아니어서 건너뜀. Artifacts `package-Windows`·`package-Linux`를 내려받아 계산한 SHA-256이 각 `.sha256` 파일과 같았다(Linux `7fee58dbdd36b3b1135e80773f8c8543a05f957e58fc90a6feb4d59e54b05e7f`, Windows `c2f1c71e2bacddb792462515ff2d22dfd390ec7220a83025801b1f2c2b3b6035`) | 이 표 |
-| 태그 Release | 3.3절 8단계 기대 결과 | 3.3절 7·8단계. 태그 `v2026.11.0`을 커밋 `0b49ae3`에 붙여 push했다(프로젝트 소유자 요청, 2026-11-08) | 통과. [실행 42413077369](https://github.com/kayden-kim/vnc-relay/actions/runs/42413077369)에서 두 OS `check`와 `release`가 성공했다. [Release `vnc-relay 2026.11.0`](https://github.com/kayden-kim/vnc-relay/releases/tag/v2026.11.0)은 초안·사전 릴리스가 아니고, 묶음 2개와 `.sha256` 2개가 붙었다. 내려받은 묶음의 SHA-256이 각 `.sha256`과 같았다(Linux `b31d26178748a09992798b7f2c94c8768ddc8b4380c8e23d0b11f6dc0867e434`, Windows `c273f9cff25fa68676a24e3ee9ec8088609aaa427a1015be1669a9f0fd4ce891`). WSL `sha256sum -c` `OK`. 푼 실행파일은 두 OS에서 `vnc-relay 2026.11.0`을 출력했다 | 이 표 |
+빌드·시험·CI의 현재 결과는 3.1·3.2절과 `cargo xtask scenarios`가 만드는 `scenario-report.md`로 확인한다. 다음 표는 Release 묶음을 직접 내려받아 확인한 최신 수동 기록이다.
 
-같은 커밋 `7859b5d`의 전체 완료 검증은 두 OS에서 통과했다. Windows `vr-win.ps1 -Only all`은 `ALL PASSED (all)`, 시나리오 153건 중 통과 137·부분 11·실패 0·미실행 3·미연결 2·오류 0이다(보고 2026-11-07T20:08:44Z). WSL `vr-full.sh`는 `ALL PASSED`, 통과 140·부분 7·실패 0·미실행 4·미연결 2·오류 0이다(보고 2026-11-07T20:26:57Z). WSL 보고의 `+ 미커밋 변경`은 줄 끝 차이뿐이다(`git -c core.autocrlf=true diff --exit-code` 종료 코드 0).
+| 대상·날짜 | 환경·방법 | 실제 결과 |
+| --- | --- | --- |
+| Release `v2026.11.6`, 커밋 `9ed6083`, 2026-11-18 | Windows 11 Pro 10.0.26200 x64(PowerShell 7, Python 3), WSL2 Ubuntu 24.04.4 LTS x64(GNU coreutils `sha256sum`). [Release](https://github.com/kayden-kim/vnc-relay/releases/tag/v2026.11.6)와 묶음 두 개·`.sha256` 두 개를 확인했다. 내려받은 묶음의 해시를 독립 계산하고, 풀어서 파일 구성·권한·`--version`을 확인했다 | 통과. Linux SHA-256 `342ff7aba32e59f1ac08bd7d858a35124f1ea9d903d219fd55cd77a625fff7f6`, Windows `9423ee97f94babd8dcbd56e98e655025f45f41f7efc8df09630ecd4ed37a9a8b`. 각 `.sha256`과 같고 WSL `sha256sum -c`는 `OK`였다. tar.gz 파일 147개는 `-rw-r--r--`, 실행파일 1개는 `-rwxr-xr-x`, 디렉터리 21개는 `drwxr-xr-x`, 소유자는 `0/0`이다. 두 묶음 모두 최상위 디렉터리 하나와 태그의 저장소와 같은 `docs/` 파일 142개를 담았다. 공통 파일은 Linux 7종, Windows는 트레이 앱을 포함한 8종이다. 두 서버 실행파일은 `vnc-relay 2026.11.6`을 출력했다. 실제 Windows 서비스 교체 기록은 [수동 운영 안내 4절](operate-relay.md#4-검증)에 있다 |
 
-커밋 `aa15af8`에서 묶음 파일 권한을 정규화하고 CI에 `cargo test --package xtask --locked`를 더했다. WSL에서 `/mnt/d` 작업 트리로 만든 tar.gz는 이전에 모든 파일이 `-rwxr-xr-x`였다. 바꾼 뒤에는 파일 94개가 `-rw-r--r--`, 실행파일 `vnc-relay`만 `-rwxr-xr-x`, 디렉터리 14개가 `drwxr-xr-x`였고 `sha256sum -c`는 `OK`였다. 같은 커밋의 [실행 42411305345](https://github.com/kayden-kim/vnc-relay/actions/runs/42411305345)에서 두 OS `check`가 성공했고, 두 OS 모두 xtask 단위 시험 16건이 통과했다. 기록 커밋 `e7eed86`의 실행 42411172978도 성공했다. 전체 완료 검증은 `7859b5d` 기준이다. `aa15af8`은 `xtask/src/package.rs`·워크플로·문서만 바꿨으므로 [개발 환경·검증 how-to 3.3절](set-up-and-verify.md#33-변경-범위별-검증)의 해당 행 명령으로 확인했다.
-
-확인 중 관찰한 도구 차이를 적는다. 검증 PC의 Git Bash에 있는 `sha256sum 0.8.0`은 `-c`에서 CR 바이트가 든 파일을 자기가 쓴 해시 파일로도 `FAILED`로 보고했다. 직접 계산한 값은 맞았다. GNU coreutils `sha256sum`(Ubuntu)은 같은 파일을 `OK`로 판정했다. 이 PC의 Windows PowerShell 5.1은 `PSModulePath` 앞에 PowerShell 7 경로가 있어 `Get-FileHash`를 찾지 못했다. Windows에서는 PowerShell 7의 `Get-FileHash`나 `certutil -hashfile <파일> SHA256`으로 확인하기를 권장한다.
-
-`2026.11.1` 릴리스(2026-11-08)는 3.3절 1~8단계를 모두 실행했다. 1~4단계: 버전을 바꾼 뒤 `cargo run --quiet -- --version`이 `vnc-relay 2026.11.1`을 출력했다. `Cargo.lock`은 작업 공간 패키지 네 개의 버전만 바뀌었고, `cargo xtask notices`는 `notices: 통과 (THIRD-PARTY-NOTICES.txt)`였다. 두 OS의 전체 완료 검증은 `e3fa56f`에 버전 변경을 더한 작업 트리에서 시작했다. 두 보고서의 대상 커밋은 `e3fa56f` + 미커밋 변경이다. Windows `vr-win.ps1 -Only all`은 `ALL PASSED (all)`, 시나리오 215건 중 통과 198·부분 12·실패 0·미실행 3·미연결 2·오류 0이다(보고 2026-11-08T11:22:35Z). WSL `vr-full.sh`는 `ALL PASSED`, 통과 201·부분 8·실패 0·미실행 4·미연결 2·오류 0이다(보고 2026-11-08T11:25:50Z).
-
-게이트가 실행되는 동안 스펙이 아닌 문서 8개의 링크 대상과 문서 안내 행 하나를 바꿨다(아래 커밋 `70aba2d`). 그래서 두 게이트는 커밋 `c9194a8` 자체를 대상으로 하지 않았다. 코드·시험·스펙은 게이트를 시작할 때와 같다. 이 문서 변경은 [변경 범위별 검증](set-up-and-verify.md#33-변경-범위별-검증)의 "문서만" 행에 따라 확인했다. Python 검사로 저장소 Markdown의 상대 링크·앵커 3,007개를 확인했고 문제는 0건이었다. 새 고정 링크는 push 뒤 HTTP 200으로 열렸다. `code-map.md`를 읽는 `tests/code_map.rs`는 게이트 안에서 이 변경보다 먼저 실행됐을 수 있다. 그래서 `c9194a8`과 같은 코드·시험·코드 지도로 두 OS에서 다시 실행했고, 두 OS 모두 4건이 통과했다. "작업 공간 버전" 행의 `cargo xtask package`는 로컬에서 실행하지 않았다. 같은 커밋 `c9194a8`에서 CI가 두 OS로 실행했다(아래 두 실행). `cargo test --package xtask`는 두 게이트와 CI에서 통과했다.
-
-5·6단계: 링크 정리 커밋 `70aba2d`와 `chore(release): 2026.11.1` 커밋 `c9194a8`을 `main`에 push했다. [실행 42475766731](https://github.com/kayden-kim/vnc-relay/actions/runs/42475766731)에서 `check (windows-2025)`(4분 44초)와 `check (ubuntu-24.04)`(3분 10초)가 성공했고, `release`는 태그가 아니어서 건너뛰었다.
-
-7·8단계: 태그 `v2026.11.1`을 커밋 `c9194a8`에 붙여 push했다(프로젝트 소유자 요청, 2026-11-08). [실행 42476169218](https://github.com/kayden-kim/vnc-relay/actions/runs/42476169218)에서 두 OS `check`(Windows 7분 43초, Ubuntu 3분 59초)와 `release`가 성공했다. [Release `vnc-relay 2026.11.1`](https://github.com/kayden-kim/vnc-relay/releases/tag/v2026.11.1)은 초안·사전 릴리스가 아니고, 묶음 2개와 `.sha256` 2개가 붙었다. 내려받은 묶음의 SHA-256이 각 `.sha256`과 같았다(Linux `41b1a6881e76900dcf118228ce5560993988bbc78eecae212c78dd054cd6a378`, Windows `400cffcae4696d840b709fba7a29777e731b917036800ef60f828279b12c421e`). WSL `sha256sum -c`는 `OK`였다. tar.gz 안의 파일 95개는 `-rw-r--r--`, 실행파일 1개는 `-rwxr-xr-x`, 디렉터리 14개는 `drwxr-xr-x`이고 소유자는 `0/0`이다. Windows 묶음은 최상위 디렉터리 하나에 3.1절 파일 7종과 `docs/` 파일 90개(저장소와 같은 수)를 담았다. 푼 실행파일은 두 OS에서 `vnc-relay 2026.11.1`을 출력했다.
-
-`2026.11.2` 릴리스(2026-11-09)도 3.3절 1~8단계를 모두 실행했다. 1~4단계: 버전 커밋 `f520316`(`chore(release): 2026.11.2`)은 네 파일만 바꿨다. `Cargo.toml`과 `README.md`는 버전 줄, `Cargo.lock`은 작업 공간 패키지 네 개의 버전, `THIRD-PARTY-NOTICES.txt`는 그 안에 담긴 같은 네 버전이다. 두 OS의 전체 완료 검증은 먼저 `f520316`에서 실행했다. Windows `vr-win.ps1 -Only all`은 `ALL PASSED (all)`, 시나리오 246건 중 통과 229·부분 12·실패 0·미실행 3·미연결 2·오류 0이었다(보고 2026-11-09T04:31:42Z). WSL `vr-full.sh`는 `FAILED: scenarios`였다. 통과 230·부분 8·실패 2·미실행 4·미연결 2이고, 실패는 DASH-044·056이다.
-
-두 실패의 원인은 시험 쪽에 있었다. 커밋 `0264863`에서 시험만 고쳤고 제품 코드는 바꾸지 않았다([대시보드 검증 4.33절](verify-dashboard-frontend.md#433-실서버-시험-간헐-실패-수정-dash-044056-2026-11-09)). 이 커밋에서 다시 실행한 두 게이트가 통과했다. Windows는 `ALL PASSED (all)`, 통과 229·부분 12·실패 0·미실행 3·미연결 2·오류 0이다(보고 2026-11-09T05:50:15Z). WSL은 `ALL PASSED`, 통과 231·부분 9·실패 0·미실행 4·미연결 2·오류 0이다(보고 2026-11-09T06:23:14Z). WSL 보고의 `+ 미커밋 변경`은 줄 끝 차이뿐이다(`git -c core.autocrlf=true diff --exit-code` 종료 코드 0). 두 게이트의 버전 단계는 `vnc-relay 2026.11.2`를 출력했고, 고지 대조 시험 `distribution_notices_match_locked_dependencies_and_license_texts`가 통과했다.
-
-5·6단계: `f520316`과 `0264863`을 함께 `main`에 push했다. [실행 42572759934](https://github.com/kayden-kim/vnc-relay/actions/runs/42572759934)에서 `check (windows-2025)`(7분 49초)와 `check (ubuntu-24.04)`(4분 3초)가 성공했고, `release`는 태그가 아니어서 건너뛰었다.
-
-7·8단계: 태그 `v2026.11.2`를 커밋 `0264863`에 붙여 push했다(프로젝트 소유자 요청, 2026-11-09). 버전 커밋 `f520316`이 아니라 두 OS 게이트와 CI가 통과한 시험 수정 커밋에 붙였다. 두 커밋의 제품 코드와 버전은 같다. [실행 42573633172](https://github.com/kayden-kim/vnc-relay/actions/runs/42573633172)에서 두 OS `check`(Windows 6분 57초, Ubuntu 4분 2초)와 `release`가 성공했다. [Release `vnc-relay 2026.11.2`](https://github.com/kayden-kim/vnc-relay/releases/tag/v2026.11.2)는 초안·사전 릴리스가 아니고, 묶음 2개와 `.sha256` 2개가 붙었다. 내려받은 묶음의 SHA-256이 각 `.sha256`과 같았다(Linux `beb1f1694851015ec3aebd9d798950aea11dd5ebdfcc35f79b3603e89f82bd52`, Windows `1b0d2f22189a037af66f572304866fc379884a0f0a2367a41b14ba224c563d1d`). WSL `sha256sum -c`는 `OK`였다. tar.gz 안의 파일 97개는 `-rw-r--r--`, 실행파일 1개는 `-rwxr-xr-x`, 디렉터리 14개는 `drwxr-xr-x`이고 소유자는 `0/0`이다. Windows 묶음은 최상위 디렉터리 하나에 3.1절 파일 7종과 `docs/` 파일 92개(저장소와 같은 수)를 담았다. 푼 실행파일은 두 OS에서 `vnc-relay 2026.11.2`를 출력했다. 이 Windows 묶음으로 실제 배치를 바꾼 기록은 [수동 운영 안내 4절](operate-relay.md#4-검증)에 있다.
-
-`2026.11.3` 릴리스(2026-11-14)도 3.3절 1~8단계를 모두 실행했다. 2단계는 이번에 더한 도움말 갱신까지 실행했다. 1~4단계: 버전 커밋 `d713462`(`chore(release): 2026.11.3`)은 파일 21개를 바꿨다. 버전을 담은 네 파일은 `Cargo.toml`·`README.md`의 버전 줄, `Cargo.lock`의 작업 공간 패키지 네 개, `THIRD-PARTY-NOTICES.txt`의 같은 네 버전이다. 나머지는 README에서 이전 공개 묶음과 다른 동작을 적은 문장의 삭제, 도움말 두 책의 기준 버전 절·설치 예시·Release 안내 16개 파일, 이 문서의 2·4단계다. `cargo run --quiet -- --version`은 `vnc-relay 2026.11.3`, `cargo xtask notices`는 `notices: 통과 (THIRD-PARTY-NOTICES.txt)`, `cargo xtask help-site`는 `help-site: 통과 (target/help-site)`였다. 두 OS의 전체 완료 검증은 `d713462`에서 통과했다. Windows `vr-win.ps1 -Only all`은 `ALL PASSED (all)`, 시나리오 285건 중 통과 268·부분 12·실패 0·미실행 3·미연결 2·오류 0이다(보고 2026-11-13T16:18:49Z). WSL `vr-full.sh`는 `ALL PASSED`, 통과 271·부분 8·실패 0·미실행 4·미연결 2·오류 0이다(보고 2026-11-13T23:39:49Z). WSL 보고의 `+ 미커밋 변경`은 줄 끝 차이뿐이다(`git -c core.autocrlf=true diff --exit-code` 종료 코드 0).
-
-5·6단계: `d713462`을 `main`에 push했다. [실행 43528819174](https://github.com/kayden-kim/vnc-relay/actions/runs/43528819174)에서 `check (windows-2025)`(6분 38초)와 `check (ubuntu-24.04)`(3분 19초)가 성공했고, `release`는 태그가 아니어서 건너뛰었다. 같은 push의 `help` [실행 43528819142](https://github.com/kayden-kim/vnc-relay/actions/runs/43528819142)도 `build`·`deploy`가 성공했다. `main` push부터 Release 공개까지 약 14분 동안 게시된 도움말은 아직 없는 Release를 최신으로 안내했다. 이 시간을 줄이려고 5단계에 7단계를 바로 잇는 안내를 더했다.
-
-7·8단계: 6단계가 통과한 직후 태그 `v2026.11.3`을 커밋 `d713462`에 붙여 push했다(프로젝트 소유자 요청, 2026-11-14). [실행 43529725350](https://github.com/kayden-kim/vnc-relay/actions/runs/43529725350)에서 두 OS `check`(Windows 6분 22초, Ubuntu 3분 39초)와 `release`가 성공했다. [Release `vnc-relay 2026.11.3`](https://github.com/kayden-kim/vnc-relay/releases/tag/v2026.11.3)은 2026-11-13T23:54:10Z(한국 시간 2026-11-14 08:54)에 공개됐다. 초안·사전 릴리스가 아니고, 묶음 2개와 `.sha256` 2개가 붙었으며, `releases/latest`가 이 Release를 가리킨다. 내려받은 묶음의 SHA-256이 각 `.sha256`과 같았다(Linux `e73af9911be89b96a26b0bbb94b08515d5594a1a65136edcc1bcb3e8b4f66dfa`, Windows `da01bc7857f9d1ed0068c9e3e28a0501988ef50d432dcc7f1b6ba1983a3fed49`). WSL `sha256sum -c`는 `OK`였다. tar.gz 안의 파일 143개는 `-rw-r--r--`, 실행파일 1개는 `-rwxr-xr-x`, 디렉터리 21개는 `drwxr-xr-x`이고 소유자는 `0/0`이다. 두 묶음 모두 최상위 디렉터리 하나에 3.1절 파일 7종과 `docs/` 파일 138개(저장소와 같은 수)를 담았다. 푼 실행파일은 두 OS에서 `vnc-relay 2026.11.3`을 출력했다. 이 Windows 묶음으로 실제 배치를 바꾼 기록은 [수동 운영 안내 4절](operate-relay.md#4-검증)에 있다.
-
-`2026.11.4` 릴리스(2026-11-17)도 3.3절 1~8단계를 모두 실행했다. 1~4단계: 버전 커밋 `cac4cd0`(`chore(release): 2026.11.4`)은 파일 10개를 바꿨다. 버전을 담은 네 파일은 `Cargo.toml`·`README.md`의 버전 줄, `Cargo.lock`의 작업 공간 패키지 네 개, `THIRD-PARTY-NOTICES.txt`의 같은 네 버전이다. 나머지 여섯 파일은 도움말 두 책의 기준 버전 절·설치 예시·문제 해결이다. 기준 버전 절에는 `v2026.11.3` 이하에서 올리면 바뀌는 동작(대기·최근 종료 목록 정보) 표를 더했다. 이 표는 그 기능을 넣은 커밋 `8169bbf`에서 함께 바꿨어야 했지만 빠져 있었다. 문제 해결에서는 접속 ticket이 `main`에만 있다는 문장과, 이전 Viewer 경로를 받지 않는 Release 범위를 고쳤다. `cargo run --quiet -- --version`은 `vnc-relay 2026.11.4`, `cargo xtask notices`는 `notices: 통과 (THIRD-PARTY-NOTICES.txt)`, `cargo xtask help-site`는 `help-site: 통과 (target/help-site)`였다. 두 OS의 전체 완료 검증은 버전 커밋을 로컬에 만든 뒤 그 커밋 `cac4cd0`에서 실행했고 통과했다. Windows `vr-win.ps1 -Only all`은 `ALL PASSED (all)`, 시나리오 289건 중 통과 272·부분 12·실패 0·미실행 3·미연결 2·오류 0이다(보고 2026-11-17T04:40:21Z). WSL `vr-full.sh`는 `ALL PASSED`, 통과 275·부분 8·실패 0·미실행 4·미연결 2·오류 0이다(보고 2026-11-17T05:15:21Z). WSL 보고의 `+ 미커밋 변경`은 줄 끝 차이뿐이다(`git -c core.autocrlf=true diff --exit-code` 종료 코드 0).
-
-5·6단계: 두 게이트가 통과한 뒤 `cac4cd0`을 `main`에 push했다. [실행 44022856484](https://github.com/kayden-kim/vnc-relay/actions/runs/44022856484)에서 `check (windows-2025)`(8분 11초)와 `check (ubuntu-24.04)`(3분 19초)가 성공했고, `release`는 태그가 아니어서 건너뛰었다. 같은 push의 `help` [실행 44022855860](https://github.com/kayden-kim/vnc-relay/actions/runs/44022855860)도 `build`·`deploy`가 성공했다.
-
-7·8단계: 6단계가 통과한 직후 태그 `v2026.11.4`를 커밋 `cac4cd0`에 붙여 push했다(프로젝트 소유자 요청, 2026-11-17). [실행 44023889900](https://github.com/kayden-kim/vnc-relay/actions/runs/44023889900)에서 두 OS `check`(Windows 8분 29초, Ubuntu 3분 24초)와 `release`가 성공했다. [Release `vnc-relay 2026.11.4`](https://github.com/kayden-kim/vnc-relay/releases/tag/v2026.11.4)는 2026-11-17T05:33:16Z(한국 시간 14:33)에 공개됐다. 도움말 배포가 끝난 05:16:57Z부터 이 시각까지 약 16분 동안, 게시된 도움말은 아직 없는 Release를 최신으로 안내했다. 6단계의 `check`와 태그 실행의 `check`를 차례로 기다린 시간이다. 초안·사전 릴리스가 아니고, 묶음 2개와 `.sha256` 2개가 붙었으며, `releases/latest`가 이 Release를 가리킨다. 내려받은 묶음의 SHA-256이 각 `.sha256`과 같았다(Linux `8a8a43bca5d8eb210daa62988150224225efdaaf6454c9f9681653c33745917d`, Windows `6383b200f3adf0c95102f95de16c60b7463ac7cdc85e687dd52b6f52ba8d47b5`). WSL `sha256sum -c`는 `OK`였다. tar.gz 안의 파일 143개는 `-rw-r--r--`, 실행파일 1개는 `-rwxr-xr-x`, 디렉터리 21개는 `drwxr-xr-x`이고 소유자는 `0/0`이다. 두 묶음 모두 최상위 디렉터리 하나에 3.1절 파일 7종과 `docs/` 파일 138개(태그의 저장소와 같은 수)를 담았다. 푼 실행파일은 두 OS에서 `vnc-relay 2026.11.4`를 출력했다. 이 Windows 묶음으로 실제 배치를 바꾼 기록은 [수동 운영 안내 4절](operate-relay.md#4-검증)에 있다.
-
-`2026.11.5` 릴리스(2026-11-18)도 3.3절 1~8단계를 모두 실행했다. 1~4단계: 버전 커밋 `a802810`(`chore(release): 2026.11.5`)은 파일 14개를 바꿨다. 버전을 담은 네 파일은 `Cargo.toml`·`README.md`의 버전 줄, `Cargo.lock`의 작업 공간 패키지 다섯 개, `THIRD-PARTY-NOTICES.txt`의 같은 다섯 버전이다. 패키지가 다섯 개인 것은 트레이 앱 `vnc-relay-tray`가 더해졌기 때문이다. 나머지 열 파일은 도움말 두 책의 기준 버전 절·설치·운영·문제 해결 8개, [수동 운영 안내 3.3.1절](operate-relay.md#331-windows-서비스와-트레이-앱)의 첫 Release 버전 문장, 이 문서 3단계의 패키지 수다. 기준 버전 절에는 `v2026.11.4` 이하에서 올리면 바뀌는 동작 표를 더했다. 행은 Windows 서비스·트레이 앱, 대시보드 대기·활성 목록의 시간과 이름표 배치, 자동 갱신 표시다. 같은 Release에 들어간 문서 커밋 `7efce1d`는 서비스 실행파일을 관리자만 고칠 수 있는 폴더에 두라는 안내를 더했다. `cargo run --quiet -- --version`은 `vnc-relay 2026.11.5`, `cargo xtask notices`는 `notices: 통과 (THIRD-PARTY-NOTICES.txt)`, `cargo xtask help-site`는 `help-site: 통과 (target/help-site)`였다. 두 OS의 전체 완료 검증은 버전 커밋을 로컬에 만든 뒤 그 커밋 `a802810`에서 실행했고 통과했다. Windows `vr-win.ps1 -Only all`은 `ALL PASSED (all)`, 시나리오 311건 중 통과 273·부분 23·실패 0·미실행 6·미연결 9·오류 0이다(보고 2026-11-18T00:58:05Z). WSL `vr-full.sh`는 `ALL PASSED`, 통과 276·부분 9·실패 0·미실행 17·미연결 9·오류 0이다(보고 2026-11-18T08:42:42Z). WSL 보고의 `+ 미커밋 변경`은 줄 끝 차이뿐이다(`git -c core.autocrlf=true diff --exit-code` 종료 코드 0). 두 게이트의 버전 단계는 `vnc-relay 2026.11.5`를 출력했다.
-
-5·6단계: 두 게이트가 통과한 뒤 `7efce1d`와 `a802810`을 `main`에 push했다. [실행 44269423177](https://github.com/kayden-kim/vnc-relay/actions/runs/44269423177)에서 `check (windows-2025)`(8분 50초)와 `check (ubuntu-24.04)`(3분 24초)가 성공했고, `release`는 태그가 아니어서 건너뛰었다. 같은 push의 `help` [실행 44269423126](https://github.com/kayden-kim/vnc-relay/actions/runs/44269423126)도 `build`·`deploy`가 성공했다.
-
-7·8단계: 6단계가 통과한 직후 태그 `v2026.11.5`를 커밋 `a802810`에 붙여 push했다(프로젝트 소유자 요청, 2026-11-18). [실행 44270747877](https://github.com/kayden-kim/vnc-relay/actions/runs/44270747877)에서 두 OS `check`(Windows 7분 8초, Ubuntu 4분 32초)와 `release`가 성공했다. [Release `vnc-relay 2026.11.5`](https://github.com/kayden-kim/vnc-relay/releases/tag/v2026.11.5)는 2026-11-18T08:59:53Z(한국 시간 17:59)에 공개됐다. 도움말 배포가 끝난 08:44:23Z부터 이 시각까지 약 16분 동안, 게시된 도움말은 아직 없는 Release를 최신으로 안내했다. 초안·사전 릴리스가 아니고, 묶음 2개와 `.sha256` 2개가 붙었으며, `releases/latest`가 이 Release를 가리킨다. 내려받은 묶음의 SHA-256이 각 `.sha256`과 같았다(Linux `fde67df8731b5f521a9fa1be32a89763bbfe161f3572eff4dee9eddb6b6c3d57`, Windows `efdcadde7d9ffa6e35487d7364033b337f61f5c08a03e80981fe60f084d9d6a6`). WSL `sha256sum -c`는 `OK`였다. tar.gz 안의 파일 147개는 `-rw-r--r--`, 실행파일 1개는 `-rwxr-xr-x`, 디렉터리 21개는 `drwxr-xr-x`이고 소유자는 `0/0`이다. 두 묶음 모두 최상위 디렉터리 하나에 3.1절 파일과 `docs/` 파일 142개(태그의 저장소와 같은 수)를 담았다. Linux 묶음은 7종, Windows 묶음은 트레이 앱 `vnc-relay-tray.exe`를 더한 8종이다. 푼 서버 실행파일은 두 OS에서 `vnc-relay 2026.11.5`를 출력했다. 트레이 앱은 버전 출력 옵션이 없고 실행하면 트레이 아이콘을 띄우므로 실행하지 않았다. 묶음 해시로만 확인했다. 이 Windows 묶음으로 실제 배치를 서비스로 바꾼 기록은 [수동 운영 안내 4절](operate-relay.md#4-검증)에 있다.
-
-`2026.11.6` 릴리스(2026-11-18)는 4단계의 두 OS 전체 완료 검증 없이 진행했다. 두 OS 게이트: 미실행. 사용자 지시(2026-11-18)로 생략했다. 그래서 2절의 전제 조건인 두 OS 전체 완료 검증 통과를 채우지 않은 채 태그를 만들었다. 이 Release의 제품 변경은 트레이 아이콘 그림 하나다(커밋 `f44edb4`, 사용자 결정 2026-11-18(Q258)). 1~4단계: 버전 커밋 `9ed6083`(`chore(release): 2026.11.6`)은 파일 8개를 바꿨다. 버전을 담은 네 파일은 `Cargo.toml`·`README.md`의 버전 줄, `Cargo.lock`의 작업 공간 패키지 다섯 개, `THIRD-PARTY-NOTICES.txt`의 같은 다섯 버전이다. 나머지 네 파일은 도움말 두 책의 기준 버전 절과 설치 예시다. 기준 버전 절에는 `v2026.11.5`에서 올리면 바뀌는 동작(트레이 아이콘) 표를 더했다. `cargo run --quiet -- --version`은 `vnc-relay 2026.11.6`, `cargo xtask notices`는 `notices: 통과 (THIRD-PARTY-NOTICES.txt)`, `cargo xtask help-site`는 `help-site: 통과 (target/help-site)`였다. 전체 완료 검증 대신 바뀐 트레이 crate만 Windows에서 확인했다. `cargo fmt --all --check`와 `cargo clippy -p vnc-relay-tray --all-targets --locked -- -D warnings`가 통과했다. `cargo test -p vnc-relay-tray --locked`는 단위 시험 11개와 통합 시험 1개, `cargo test --locked --test code_map`은 시험 4개가 통과했다. 시나리오 보고서(`cargo xtask scenarios`)는 만들지 않았다.
-
-5·6단계: `839836b`·`f44edb4`·`9ed6083`을 `main`에 push했다. [실행 44299622208](https://github.com/kayden-kim/vnc-relay/actions/runs/44299622208)에서 `check (windows-2025)`(8분 20초)와 `check (ubuntu-24.04)`(3분 25초)가 성공했고, `release`는 태그가 아니어서 건너뛰었다. 같은 push의 `help` [실행 44299622252](https://github.com/kayden-kim/vnc-relay/actions/runs/44299622252)도 `build`·`deploy`가 성공했다.
-
-7·8단계: 6단계가 통과한 직후 태그 `v2026.11.6`을 커밋 `9ed6083`에 붙여 push했다(프로젝트 소유자 요청, 2026-11-18). [실행 44301030703](https://github.com/kayden-kim/vnc-relay/actions/runs/44301030703)에서 두 OS `check`(Windows 6분 37초, Ubuntu 4분 19초)와 `release`가 성공했다. [Release `vnc-relay 2026.11.6`](https://github.com/kayden-kim/vnc-relay/releases/tag/v2026.11.6)은 2026-11-18T12:14:57Z(한국 시간 21:14)에 공개됐다. 도움말 배포가 끝난 12:00:11Z부터 이 시각까지 약 15분 동안, 게시된 도움말은 아직 없는 Release를 최신으로 안내했다. 초안·사전 릴리스가 아니고, 묶음 2개와 `.sha256` 2개가 붙었으며, `releases/latest`가 이 Release를 가리킨다. 내려받은 묶음의 SHA-256이 각 `.sha256`과 같았다(Linux `342ff7aba32e59f1ac08bd7d858a35124f1ea9d903d219fd55cd77a625fff7f6`, Windows `9423ee97f94babd8dcbd56e98e655025f45f41f7efc8df09630ecd4ed37a9a8b`). WSL `sha256sum -c`는 `OK`였다. tar.gz 안의 파일 147개는 `-rw-r--r--`, 실행파일 1개는 `-rwxr-xr-x`, 디렉터리 21개는 `drwxr-xr-x`이고 소유자는 `0/0`이다. 두 묶음 모두 최상위 디렉터리 하나에 3.1절 파일과 `docs/` 파일 142개(태그의 저장소와 같은 수)를 담았다. Linux 묶음은 7종, Windows 묶음은 트레이 앱을 더한 8종이다. 푼 서버 실행파일은 두 OS에서 `vnc-relay 2026.11.6`을 출력했다. 이 Windows 묶음으로 설치된 서비스와 트레이 앱을 바꾼 기록은 [수동 운영 안내 4절](operate-relay.md#4-검증)에 있다.
+Windows에서는 PowerShell 7의 `Get-FileHash`나 `certutil -hashfile <파일> SHA256`으로 해시를 확인하기를 권장한다. Git Bash의 `sha256sum 0.8.0`은 CR 바이트가 든 해시 파일을 `-c`로 확인할 때 실제 해시가 같아도 `FAILED`로 보고할 수 있다. Ubuntu의 GNU coreutils `sha256sum`을 쓰거나 해시 값을 직접 비교한다.
 
 ## 5. 중단 조건
 

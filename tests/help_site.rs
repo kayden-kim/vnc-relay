@@ -54,8 +54,6 @@ struct Copy {
     /// Browser language preferences that select this language.
     preferences: [&'static str; 2],
     brand: &'static str,
-    base: &'static str,
-    baseline: &'static str,
     toc: &'static str,
     search: &'static str,
     search_title: &'static str,
@@ -97,8 +95,6 @@ const KO: Copy = Copy {
     language: "ko",
     preferences: ["ko-KR", "ko"],
     brand: "VNC Relay 도움말",
-    base: "main 기준",
-    baseline: "기준-버전",
     toc: "목차",
     search: "검색",
     search_title: "도움말 검색",
@@ -126,8 +122,6 @@ const EN: Copy = Copy {
     language: "en",
     preferences: ["en-US", "en"],
     brand: "VNC Relay Help",
-    base: "Based on main",
-    baseline: "baseline",
     toc: "Contents",
     search: "Search",
     search_title: "Search help",
@@ -690,7 +684,7 @@ fn site_texts_and_shortcut_help_follow_the_page_language() {
                 let texts = browser.eval(
                 "(() => { const t = (s) => document.querySelector(s)?.textContent.trim() ?? null;
                   return {
-                    brand: t('.help-brand'), base: t('.help-base'), toc: t('.help-toc-toggle'),
+                    brand: t('.help-brand'), toc: t('.help-toc-toggle'),
                     tocName: document.querySelector('#mdbook-sidebar').getAttribute('aria-label'),
                     search: t('.help-search-toggle'), language: t('.help-lang'),
                     pager: document.querySelector('nav.help-pager')?.getAttribute('aria-label') ?? null,
@@ -701,7 +695,7 @@ fn site_texts_and_shortcut_help_follow_the_page_language() {
                 assert_eq!(
                     texts,
                     json!({
-                        "brand": copy.brand, "base": copy.base, "toc": copy.toc, "tocName": copy.toc,
+                        "brand": copy.brand, "toc": copy.toc, "tocName": copy.toc,
                         "search": copy.search, "language": copy.other_language, "pager": copy.pager,
                         "previous": copy.previous, "next": copy.next, "copy": copy.copy,
                     })
@@ -812,55 +806,6 @@ fn copy_button_copies_the_code_and_reports_a_refused_clipboard() {
             json!(KO.copy_failed)
         ));
     });
-}
-
-/// spec: help-site.md:HELP-013
-#[test]
-fn baseline_link_opens_the_section_on_main_and_its_release_differences() {
-    for copy in COPIES {
-        browse(
-            &format!("baseline-{}", copy.language),
-            &copy.preferences,
-            |browser, site| {
-                browser.size(1280, 900, 1.0);
-                browser.navigate(&site.url(&format!("{}/install.html", copy.language)));
-                browser.click(".help-base");
-                browser.wait(&format!(
-                    "location.pathname === {} && decodeURIComponent(location.hash) === {} \
-                 && document.readyState === 'complete'",
-                    json!(format!("{MOUNT}{}/index.html", copy.language)),
-                    json!(format!("#{}", copy.baseline))
-                ));
-                let section = browser.eval(&format!(
-                "(() => {{ const parts = [];
-                  for (let node = document.getElementById({})?.nextElementSibling;
-                       node && node.tagName !== 'H2'; node = node.nextElementSibling) parts.push(node);
-                  return {{
-                    main: parts.some((n) => [...n.querySelectorAll('code')].some((c) => c.textContent === 'main')),
-                    latest: parts.some((n) => !!n.querySelector('a[href=\"https://github.com/kayden-kim/vnc-relay/releases/latest\"]')),
-                    differences: parts.reduce((sum, n) => sum + n.querySelectorAll('tbody tr').length, 0) }}; }})()",
-                json!(copy.baseline)
-            ));
-                assert_eq!(
-                    section["main"],
-                    json!(true),
-                    "{}: main baseline missing",
-                    copy.language
-                );
-                assert_eq!(
-                    section["latest"],
-                    json!(true),
-                    "{}: latest Release link missing",
-                    copy.language
-                );
-                assert!(
-                    section["differences"].as_u64().unwrap_or(0) >= 1,
-                    "{}: difference list missing",
-                    copy.language
-                );
-            },
-        );
-    }
 }
 
 /// spec: help-site.md:HELP-014

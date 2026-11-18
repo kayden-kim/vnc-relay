@@ -39,8 +39,6 @@ WS and WSS each accept both roles on one listener. Set `listen` in `[relay.ws]` 
 
 The roles share an address and port but have separate access policies. WS and WSS `listen` values must include a port. See [Connecting VNC clients](connect.md) for client configuration.
 
-> **Note:** In `v2026.11.2` and earlier, the Viewer path is `/relay`, and there is no access ticket check. See [Introduction](index.md) for version differences.
-
 ## Source IP allow lists
 
 Each entry point's `allow` accepts single IPs, CIDRs, and inclusive ranges in `a-b` form. IPv4 and IPv6 are supported. Items must not contain whitespace.

@@ -1,13 +1,13 @@
 # 의존성 라이선스를 검사하는 방법
 
-Rust 의존성이 승인된 라이선스 허용 목록을 지키는지 검사하고, 실행파일과 함께 보낼 고지를 만든다. `cargo deny`의 허용 판정과 배포 고지의 최신 상태는 별도 검사다. 독립 구현의 출처 검토는 [4.1절](#41-출처-검토-기록-2026-11-04)에 기록한다. 프로젝트 자체 MIT 고지는 루트 [`LICENSE`](../../LICENSE)에 있다. 저작권 고지는 `Copyright (c) 2026 vnc-relay contributors`다(사용자 결정 2026-11-07(Q97)). 이 파일은 `THIRD-PARTY-NOTICES.txt`와 별도로 배포한다. 검토 기록은 [4.2절](#42-프로젝트-license-검토-기록2026-11-07)에 있다.
+Rust 의존성이 승인된 라이선스 허용 목록을 지키는지 검사하고, 실행파일과 함께 보낼 고지를 만든다. `cargo deny`의 허용 판정과 배포 고지의 최신 상태는 별도 검사다. 독립 구현의 출처 검토는 [4.1절](#41-출처-검토-기록-2026-11-04)에 기록한다. 프로젝트 자체 MIT 고지는 루트 [`LICENSE`](../../LICENSE)에 있다. 저작권 고지는 `Copyright (c) 2026 vnc-relay contributors`다. 이 파일은 `THIRD-PARTY-NOTICES.txt`와 별도로 배포한다. 검토 기록은 [4.2절](#42-프로젝트-license-검토-기록2026-11-07)에 있다.
 
 | 항목 | 값 |
 | --- | --- |
 | 대상 독자 | 의존성을 추가·갱신하는 개발자, 배포를 준비하는 프로젝트 관리자 |
 | 검증 상태 | Verified |
 | 검증 환경·버전 | Ubuntu 24.04.4 LTS x86_64(WSL2)와 Windows 11 Pro 10.0.26200, Rust 1.99.1, cargo-deny 0.20.2 |
-| 최종 검증일 | 2026-11-07 |
+| 최종 검증일 | 2026-11-08 — 수동 검토 대상별 날짜는 4절에 있다. 자동 검사는 현재 의존성으로 다시 실행한다. |
 | 관련 기준 문서 | [PRD 확정 기준](../requirements/PRD.md#확정-기준) "구현 기술"·"라이선스" 행, [OPS-021](../specs/operations.md#7-수용-테스트), 허용 목록 [`deny.toml`](../../deny.toml) |
 
 ## 1. 대상과 영향
@@ -16,7 +16,7 @@ Rust 의존성이 승인된 라이선스 허용 목록을 지키는지 검사하
 - 예상 사용자 영향: 검사와 `notices --check`는 없다. `cargo xtask notices`는 저장소 루트의 배포 파일 `THIRD-PARTY-NOTICES.txt`를 덮어쓴다. 제품 코드·의존성은 바꾸지 않는다.
 - 작업 허용 시간: 제한 없다.
 
-허용 목록은 사용자가 2026-10-20에 승인했다. MIT, Apache-2.0, ISC, BSD-3-Clause, Unlicense, CC0-1.0, BSL-1.0, Unicode-3.0, MIT-0의 9종이다. GPL·LGPL·MPL 등 copyleft 라이선스는 허용하지 않는다. 목록을 바꾸려면 사용자 승인이 필요하다.
+허용 목록은 MIT, Apache-2.0, ISC, BSD-3-Clause, Unlicense, CC0-1.0, BSL-1.0, Unicode-3.0, MIT-0의 9종이다. GPL·LGPL·MPL 등 copyleft 라이선스는 허용하지 않는다. 목록을 바꾸려면 사용자 승인이 필요하다.
 
 허용 라이선스의 고지 의무는 다음과 같다. [3.1절](#31-배포-고지-생성과-대조)의 파일 전체를 실행파일과 함께 배포한다. `OR`는 선택 가능한 조건, `AND`는 함께 지킬 조건이다. 단순히 MIT 전문 하나만 배포해서는 모든 의존성의 조건을 충족하지 못한다.
 
@@ -26,9 +26,9 @@ Rust 의존성이 승인된 라이선스 허용 목록을 지키는지 검사하
 | Apache-2.0 | 라이선스 전문을 넣는다. 의존성에 `NOTICE` 파일이 있으면 그 내용도 넣는다. |
 | CC0-1.0, Unlicense, MIT-0 | 고지 의무가 없다. |
 
-대시보드 글꼴 Pretendard 1.3.9는 Rust crate가 아니어서 `cargo deny` 검사 대상이 아니다. 라이선스는 SIL Open Font License 1.1(OFL-1.1)이고 위 허용 목록에 없다. 사용자가 이 글꼴 파일을 OFL 전문과 함께 실행파일에 넣는 것을 승인했다(사용자 결정 2026-11-07(Q139)). 이 승인은 이 글꼴에만 적용하며 crate 허용 목록을 넓히지 않는다. OFL-1.1은 저작권 고지와 라이선스 전문을 함께 배포하도록 요구한다. 글꼴 파일을 고쳐 배포하면 예약 글꼴 이름 `Pretendard`를 쓸 수 없으므로 배포본 파일을 바꾸지 않고 넣는다([프런트엔드 컨벤션 2.4절](../conventions/frontend.md#24-글꼴-파일)).
+대시보드 글꼴 Pretendard 1.3.9는 Rust crate가 아니어서 `cargo deny` 검사 대상이 아니다. 라이선스는 SIL Open Font License 1.1(OFL-1.1)이고 위 허용 목록에 없다. 이 글꼴 파일을 OFL 전문과 함께 실행파일에 넣는 것은 승인된 예외다. 이 예외는 이 글꼴에만 적용하며 crate 허용 목록을 넓히지 않는다. OFL-1.1은 저작권 고지와 라이선스 전문을 함께 배포하도록 요구한다. 글꼴 파일을 고쳐 배포하면 예약 글꼴 이름 `Pretendard`를 쓸 수 없으므로 배포본 파일을 바꾸지 않고 넣는다([프런트엔드 컨벤션 2.4절](../conventions/frontend.md#24-글꼴-파일)).
 
-운영자 도움말 사이트는 실행파일과 따로 GitHub Pages로 게시한다. 이 사이트에만 수정하지 않은 mdBook 프런트엔드 파일(MPL-2.0)과 Font Awesome Free 6.2.0 아이콘(CC BY 4.0)을 싣는다. Pretendard(OFL-1.1), highlight.js 10.1.1(BSD-3-Clause), clipboard.js 2.0.4(MIT)도 함께 싣는다(사용자 결정 2026-11-11(Q227)). 이 승인은 도움말 사이트에만 적용하며 crate 허용 목록을 넓히지 않는다. 구성요소마다 이름·버전·라이선스·출처를 사이트의 고지 페이지(`docs/help/ko/src/notices.md`, `docs/help/en/src/notices.md`)에 적는다. [HELP-017](../specs/help-site.md#7-수용-테스트)이 이 페이지를 확인한다. 실행파일의 `THIRD-PARTY-NOTICES.txt`에는 넣지 않는다.
+운영자 도움말 사이트는 실행파일과 따로 GitHub Pages로 게시한다. 이 사이트에만 수정하지 않은 mdBook 프런트엔드 파일(MPL-2.0)과 Font Awesome Free 6.2.0 아이콘(CC BY 4.0)을 싣는다. Pretendard(OFL-1.1), highlight.js 10.1.1(BSD-3-Clause), clipboard.js 2.0.4(MIT)도 함께 싣는다. 이 구성은 승인된 예외이며 도움말 사이트에만 적용한다. crate 허용 목록을 넓히지 않는다. 구성요소마다 이름·버전·라이선스·출처를 사이트의 고지 페이지(`docs/help/ko/src/notices.md`, `docs/help/en/src/notices.md`)에 적는다. [HELP-017](../specs/help-site.md#7-수용-테스트)이 이 페이지를 확인한다. 실행파일의 `THIRD-PARTY-NOTICES.txt`에는 넣지 않는다.
 
 ## 2. 전제 조건
 
@@ -69,13 +69,13 @@ Rust 의존성이 승인된 라이선스 허용 목록을 지키는지 검사하
 
    기대 결과: 종료 코드 0과 마지막 줄 `licenses ok`
 
-   이 통합 검사는 작업 공간의 `vnc-relay-tray`도 포함한다. Windows 서비스·트레이 변경의 검사 결과는 `licenses ok`였다([2026-11-18 검증 기록](set-up-and-verify.md#84-검증-기록2026-11-18)). `deny.toml`의 `[graph] targets`가 Windows와 Linux 두 대상을 모두 지정하므로 통합 검사는 두 대상 의존성 그래프의 합집합을 검사한다. 검사 범위가 각 대상별 검사보다 넓으므로 통합 검사가 통과하면 대상별 검사도 통과한다. 또 `tray-icon`은 `default-features = false`이므로 Linux용 `libappindicator` 기능과 그 `dirs` 의존성을 켜지 않는다. 그래서 [ADR-0010](../decisions/ADR-0010-windows-service-and-tray.md)이 통합 검사 실패 원인으로 예상했던 `option-ext`도 현재 그래프에 없다. 트레이만을 위한 대상별 추가 검사는 필요하지 않다(이 문서의 판단, 사용자 결정 없음).
+   이 통합 검사는 작업 공간의 `vnc-relay-tray`도 포함한다. `deny.toml`의 `[graph] targets`가 Windows와 Linux 두 대상을 모두 지정하므로 통합 검사는 두 대상 의존성 그래프의 합집합을 검사한다. 검사 범위가 각 대상별 검사보다 넓으므로 통합 검사가 통과하면 대상별 검사도 통과한다. `tray-icon`은 `default-features = false`이므로 Linux용 `libappindicator` 기능과 그 `dirs` 의존성을 켜지 않는다. 현재 그래프에는 `option-ext`도 없다. 트레이만을 위한 대상별 추가 검사는 필요하지 않다.
 
 ### 3.1 배포 고지 생성과 대조
 
-루트 [`THIRD-PARTY-NOTICES.txt`](../../THIRD-PARTY-NOTICES.txt)는 두 대상의 일반·빌드 의존성 합집합이다. 각 crate의 이름·버전·라이선스 식과 고지 전문을 담는다. crate 고지 뒤에는 실행파일에 넣는 글꼴의 `web/dashboard/fonts/LICENSE.txt` 전문을 담는다. Windows·Linux 배포물에는 같은 파일 전체와 루트 [`LICENSE`](../../LICENSE)를 별도로 넣는다. `LICENSE`는 MIT 전문과 `Copyright (c) 2026 vnc-relay contributors`를 담는다(사용자 결정 2026-11-07(Q97)). 의존성 고지는 프로젝트 자체 MIT 고지를 대신하지 않는다.
+루트 [`THIRD-PARTY-NOTICES.txt`](../../THIRD-PARTY-NOTICES.txt)는 두 대상의 일반·빌드 의존성 합집합이다. 각 crate의 이름·버전·라이선스 식과 고지 전문을 담는다. crate 고지 뒤에는 실행파일에 넣는 글꼴의 `web/dashboard/fonts/LICENSE.txt` 전문을 담는다. Windows·Linux 배포물에는 같은 파일 전체와 루트 [`LICENSE`](../../LICENSE)를 별도로 넣는다. `LICENSE`는 MIT 전문과 `Copyright (c) 2026 vnc-relay contributors`를 담는다. 의존성 고지는 프로젝트 자체 MIT 고지를 대신하지 않는다.
 
-생성기는 기존 `xtask`의 std·serde_json만 쓴다. 새 crate와 추가 설치 도구를 쓰지 않기 위한 선택이다. cargo-about·cargo-license 추가 설치, Python 스크립트, 수동 목록 편집보다 기존 Rust 실행 환경을 재사용하기 쉽다. **이 문서의 판단, 사용자 결정 없음**이다. 코드 위치와 처리 순서는 [xtask 설계](../architectures/xtask.md)에 있다.
+생성기는 `xtask`의 std·serde_json을 쓴다. 새 crate와 추가 설치 도구는 필요 없다. 코드 위치와 처리 순서는 [xtask 설계](../architectures/xtask.md)에 있다.
 
 1. 네트워크가 있는 준비 단계에서 두 대상의 crate를 캐시에 받는다. 이미 준비된 캐시가 있으면 생략한다.
 
@@ -110,88 +110,18 @@ Rust 의존성이 승인된 라이선스 허용 목록을 지키는지 검사하
 
 생성기는 각 crate 안의 `LICENSE*`·`LICENCE*`·`COPYING*`·`NOTICE*`·`UNLICENSE*`·`COPYRIGHT*` 파일을 대소문자 구분 없이 재귀 수집한다. Cargo의 `license_file`도 포함한다. 하위 고지를 놓치지 않기 위해 배포에 쓰이지 않는 고지까지 들어갈 수 있다. 해당 파일을 넣었다고 선택적 라이선스의 모든 가지를 채택하는 것은 아니다. 고지 파일 누락·읽기 실패·심볼릭 링크·메타데이터 연결 실패는 성공으로 숨기지 않고 중단한다. 구현 소스의 코드 본문은 고지 파일에 복사하지 않는다.
 
-`tests/dependency_notices.rs`는 위 대조를 오프라인으로 실행한다. 내부 명령은 `cargo run --offline --locked --quiet -p xtask -- notices --check`다. Cargo가 위치를 정하므로 `CARGO_TARGET_DIR`의 특정 값에 의존하지 않는다. 개별 실행은 `cargo test --test dependency_notices`다. 기존 Windows·WSL 게이트는 모두 `cargo xtask scenarios`를 호출한다. 이 도구가 `cargo test --workspace --no-fail-fast`로 이 시험도 실행한다. `xtask/src/scenarios.rs`는 xtask 시험을 제외하므로 OPS-021 표식은 루트 시험에만 `partial`로 붙인다. 이 시험은 프로젝트 MIT 고지와 독립 구현의 법적 판정을 확인하지 않는다.
+`tests/dependency_notices.rs`는 위 대조를 오프라인으로 실행한다. 내부 명령은 `cargo run --offline --locked --quiet -p xtask -- notices --check`다. Cargo가 위치를 정하므로 `CARGO_TARGET_DIR`의 특정 값에 의존하지 않는다. 개별 실행은 `cargo test --test dependency_notices`다. Windows·WSL 게이트는 모두 `cargo xtask scenarios`를 호출한다. 이 도구가 `cargo test --workspace --no-fail-fast`로 이 시험도 실행한다. `xtask/src/scenarios.rs`는 xtask 시험을 제외하므로 OPS-021 표식은 루트 시험에만 `partial`로 붙인다. 이 시험은 프로젝트 MIT 고지와 독립 구현의 법적 판정을 확인하지 않는다.
 
 
 ## 4. 검증
 
 [검증 기록](../AGENTS.md#검증-기록)에 따라 실제 결과와 성공 조건을 대조한다.
 
-| 관찰 대상 | 성공 조건 | 확인 명령·방법 | 실제 결과 | 실행 증거 위치 |
-| --- | --- | --- | --- | --- |
-| 채택 라이브러리 묶음의 라이선스 | `licenses ok`, 종료 코드 0 | 아래 묶음으로 만든 임시 crate에서 3단계 명령 | 통과(2026-10-20). 잠금 파일 166개 패키지, 오류·경고 없음 | 아래 실행 기록 1 |
-| 저장소의 현재 의존성 | `licenses ok`, 종료 코드 0 | 3단계 명령 | 통과(2026-10-20). 외부 의존성은 아직 없다. | 아래 실행 기록 2 |
-| 채택 묶음의 고지 파일 | 모든 패키지에 라이선스 파일이 있다. `NOTICE` 파일 유무를 안다. | 두 대상의 의존성 패키지 디렉터리에서 파일 이름 확인 | 통과(2026-10-20). 142개 패키지 모두 라이선스 파일이 있고 `NOTICE` 파일은 없다. | 아래 실행 기록 1 |
-| socket2 직접 의존성(작업 2.5) | `licenses ok`, 종료 코드 0. 라이선스 파일이 있다. `NOTICE` 파일 유무를 안다. | 3단계 명령, 패키지 디렉터리에서 파일 이름 확인 | 통과(2026-10-20). socket2 0.6.5는 `MIT OR Apache-2.0`이고 `LICENSE-MIT`·`LICENSE-APACHE`가 있으며 `NOTICE` 파일은 없다. | 아래 실행 기록 3 |
-| axum 직접 의존성(작업 2.6) | `licenses ok`, 종료 코드 0. 새로 들어온 패키지마다 라이선스 파일이 있다. `NOTICE` 파일 유무를 안다. | 3단계 명령, 패키지 디렉터리에서 파일 이름 확인 | 통과(2026-10-20). 새 패키지 23개 모두 라이선스 파일이 있고 `NOTICE` 파일은 없다. | 아래 실행 기록 4 |
-| argon2·rpassword 직접 의존성(작업 4.1) | `licenses ok`, 종료 코드 0. 새로 들어온 패키지마다 라이선스 파일이 있다. `NOTICE` 파일 유무를 안다. | 3단계 명령, 패키지 디렉터리에서 파일 이름 확인 | 통과(2026-10-20). 새 패키지 15개 모두 라이선스 파일이 있고 `NOTICE` 파일은 없다. | 아래 실행 기록 5 |
-| 작업 3.1 직접 의존성(rustls 0.23.46, rustls-pki-types 1.15.1, tokio-rustls 0.26.6, tokio `io-util`) | `licenses ok`, 종료 코드 0. 새로 들어온 패키지마다 라이선스 파일이 있다. `NOTICE` 파일 유무를 안다. | 3단계 명령, 패키지 디렉터리에서 파일 이름 확인 | 통과(2026-10-21). 새 패키지 19개 모두 라이선스 파일이 있고 `NOTICE` 파일은 없다. Ubuntu와 Windows 모두 `licenses ok`다. | 아래 실행 기록 6 |
-| windows-sys 직접 의존성(작업 4.1, Windows 전용) | `licenses ok`, 종료 코드 0. 새로 들어온 패키지마다 라이선스 파일이 있다. `NOTICE` 파일 유무를 안다. | 3단계 명령, 잠금 파일 변화와 패키지 디렉터리에서 파일 이름 확인 | 통과(2026-10-21). 잠금 파일에 새 패키지는 없다. windows-sys 0.61.2는 MIT OR Apache-2.0이고 `license-mit`·`license-apache-2.0`이 있으며 `NOTICE` 파일은 없다. Windows와 Ubuntu 모두 deny 단계를 통과했다. | 아래 실행 기록 7 |
-| 작업 3.2 직접 의존성(tokio-tungstenite 0.30.0, adapters, WS·WSS 업그레이드) | `licenses ok`, 종료 코드 0. 새로 들어온 패키지마다 라이선스 파일이 있다. `NOTICE` 파일 유무를 안다. | 3단계 명령, 잠금 파일 변화와 패키지 디렉터리에서 파일 이름 확인 | 통과(2026-10-21). 새 패키지 12개 모두 라이선스 파일이 있고 `NOTICE` 파일은 없다. Windows와 Ubuntu 모두 deny 단계가 `licenses ok`였다. | 아래 실행 기록 8 |
-| 작업 6 설정 편집 직접 의존성(toml_edit 0.25, adapters) | `licenses ok`, 종료 코드 0. 라이선스·NOTICE 확인과 배포 고지 재생성·대조 | 3·3.1절 명령, 패키지 메타데이터·라이선스 파일 확인 | 통과(2026-11-08). 새 패키지는 `toml_edit 0.25.17+spec-1.1.0` 하나이고 `LICENSE-MIT`·`LICENSE-APACHE`가 있으며 `NOTICE` 파일은 없다. Windows와 Ubuntu 모두 deny 단계가 `licenses ok`였고 고지 대조 시험이 통과했다. | 아래 실행 기록 9 |
-| 접속 ticket 시험 개발 의존성(루트 `vnc-relay`의 `aws-lc-rs` dev-dependency) | `licenses ok`, 종료 코드 0. 잠금 파일의 새 패키지 유무를 안다. 배포 고지 재생성·대조 | 3·3.1절 명령, 잠금 파일 변화 확인 | 통과(2026-11-11). 새 패키지는 없다. 이미 adapters가 쓰는 `aws-lc-rs 1.18.2`를 루트 시험이 함께 쓴다. Windows와 Ubuntu 모두 deny 단계가 `licenses ok`였고 고지 대조 시험이 통과했다. | 아래 실행 기록 10 |
+자동 검사의 현재 결과는 3·3.1절 명령과 `cargo xtask scenarios`가 만드는 `scenario-report.md`, CI에서 확인한다. 수동 출처·LICENSE·암호 모듈 검토는 아래 절에 보존한다.
 
-실행 기록 1: 의존성을 추가하기 전에 [PRD "구현 기술" 행](../requirements/PRD.md#확정-기준)의 라이브러리를 검토했다.
-
-- 대상: 저장소 밖의 임시 crate(`license = "MIT"`)에 아래 직접 의존성을 넣고 `cargo generate-lockfile`로 잠금 파일을 만들었다. 저장소의 `deny.toml`을 복사해 검사했다. 임시 crate는 남기지 않았다.
-- 직접 의존성: tokio 1.54.0, rustls 0.23.46(`aws_lc_rs`), aws-lc-rs 1.18.2, tokio-rustls 0.26.6, rustls-pki-types 1.15.1, axum 0.8.9, tokio-tungstenite 0.30.0, toml 1.1.8, serde 1.0.229, serde_json 1.0.154, argon2 0.6.0, notify 8.2.0, clap 4.6.7, tracing 0.1.44, tracing-subscriber 0.3.23, rpassword 7.5.4
-- 환경: Ubuntu 24.04.4 LTS x86_64(WSL2), Rust 1.99.1, cargo-deny 0.20.2
-- 결과: `licenses ok`, 종료 코드 0. 발견한 라이선스는 허용 목록 9종뿐이었다.
-- 고지 파일 확인: `cargo metadata --filter-platform`으로 두 대상의 의존성(일반·빌드 의존성, 142개 패키지)과 패키지 경로를 구했다. 각 패키지 디렉터리에서 `LICENSE*`·`COPYING*`·`UNLICENSE*`·`NOTICE*` 파일 이름을 확인했다. 모든 패키지에 라이선스 파일이 있었고, Apache-2.0의 `NOTICE` 파일을 둔 패키지는 없었다.
-- 남은 일: 3단계 검사는 crate의 라이선스 식과 라이선스 파일로만 판정하고 고지 파일을 만들지 않는다. 배포물에 넣을 의존성 고지와 이 프로젝트의 MIT 저작권 고지는 [OPS-021](../specs/operations.md#7-수용-테스트)에서 확인한다.
-
-실행 기록 2: 커밋 `17a9305`에 `deny.toml`을 더한 작업 트리에서 실행했다. 환경은 실행 기록 1과 같다. 결과는 `licenses ok`, 종료 코드 0이다.
-
-실행 기록 3: 커밋 `c89beb4`에 작업 2.5를 더한 작업 트리에서 실행했다. 환경은 실행 기록 1과 같다. socket2 0.6.5는 그 전부터 tokio의 의존성으로 `Cargo.lock`에 있었고, 작업 2.5가 adapters의 직접 의존성(`features = ["all"]`)으로 더했다. 결과는 `licenses ok`, 종료 코드 0이다. `~/.cargo/registry/src/index.crates.io-*/socket2-0.6.5/`의 파일 이름과 `Cargo.toml`의 `license` 값을 확인했다.
-
-실행 기록 4: 커밋 `b1f2ad5`에 작업 2.6을 더한 작업 트리에서 실행했다. 환경은 실행 기록 1과 같다. 작업 2.6이 adapters의 직접 의존성으로 axum 0.8.9(`default-features = false`, `features = ["http1", "tokio"]`)를 더했다. 이 변경으로 `Cargo.lock`에 23개 패키지가 새로 들어왔다. atomic-waker 1.1.2, axum 0.8.9, axum-core 0.5.6, bytes 1.12.1, futures-core·futures-task·futures-util 0.3.34, http 1.5.0, http-body 1.1.0, http-body-util 0.1.5, httparse 1.10.1, httpdate 1.0.3, hyper 1.12.0, hyper-util 0.1.21, matchit 0.8.4, mime 0.3.17, percent-encoding 2.3.2, slab 0.4.12, smallvec 1.16.3, sync_wrapper 1.0.2, tower 0.5.3, tower-layer·tower-service 0.3.3이다. 결과는 `licenses ok`, 종료 코드 0이다. 패키지마다 `~/.cargo/registry/src/index.crates.io-*/<이름>-<버전>/`의 `LICENSE*`·`COPYING*`·`UNLICENSE*`·`NOTICE*` 파일 이름과 `Cargo.toml`의 `license` 값을 확인했다. 라이선스는 `MIT`, `Apache-2.0`, `MIT OR Apache-2.0`, `Apache-2.0 OR MIT`, `MIT AND BSD-3-Clause`(matchit)였다.
-
-실행 기록 5: 커밋 `ed68104`에 작업 4.1을 더한 작업 트리에서 실행했다. 환경은 실행 기록 1과 같다. 같은 실행을 Windows 11 Pro 10.0.26200(cargo-deny 0.20.2)에서도 했다. 작업 4.1이 adapters의 직접 의존성으로 argon2 0.6.0(`default-features = false`, `features = ["alloc", "password-hash"]`)과 rpassword 7.5.4를 더했다. 이 변경으로 `Cargo.lock`에 15개 패키지가 새로 들어왔다. argon2 0.6.0, base64ct 1.8.3, blake2 0.11.0, block-buffer 0.12.1, cmov 0.5.4, cpufeatures 0.3.1, crypto-common 0.2.2, ctutils 0.4.3, digest 0.11.3, hybrid-array 0.4.15, password-hash 0.6.1, phc 0.6.1, rpassword 7.5.4, rtoolbox 0.0.6, typenum 1.20.1이다. 결과는 두 환경 모두 `licenses ok`, 종료 코드 0이다. 패키지마다 레지스트리 디렉터리의 `LICENSE*`·`COPYING*`·`UNLICENSE*`·`NOTICE*` 파일 이름과 `Cargo.toml`의 `license` 값을 확인했다. rpassword와 rtoolbox의 라이선스는 `Apache-2.0`이고 `LICENSE-APACHE`만 있다. 나머지는 `MIT OR Apache-2.0`이고 `LICENSE-MIT`·`LICENSE-APACHE`가 있다. typenum은 `LICENSE` 파일도 있다. `NOTICE` 파일은 없다.
-
-실행 기록 5 재실행(2026-10-21): 커밋 `1aed781`과 작업 트리에서 3단계 명령을 다시 실행했다. 작업 트리의 변경은 `Cargo.toml`·`Cargo.lock`을 건드리지 않았다. 결과는 WSL과 Windows 11 모두 `licenses ok`, 종료 코드 0이다. 고지 파일 확인은 다시 하지 않았다.
-
-실행 기록 6: 커밋 `b7b43cb`에 작업 3.1을 더한 작업 트리에서 실행했다. 환경은 실행 기록 1과 같다. 같은 실행을 Windows 11 Pro 10.0.26200에서도 했다. 작업 3.1이 adapters의 직접 의존성으로 rustls 0.23.46(`default-features = false`, `features = ["std", "tls12", "aws_lc_rs"]`), rustls-pki-types 1.15.1(`std`), tokio-rustls 0.26.6(`tls12`, `aws_lc_rs`)을 더했고, `[dev-dependencies]`에 tokio의 `io-util`을 더했다. 이 변경으로 `Cargo.lock`에 19개 패키지 항목이 새로 들어왔다. 직접 의존성 세 개 외의 패키지는 getrandom 0.2.17, once_cell 1.21.4, ring 0.17.14, rustls-webpki 0.103.16, subtle 2.6.1, untrusted 0.9.0, windows-sys 0.52.0, windows-targets 0.52.6, windows_aarch64_gnullvm·windows_aarch64_msvc·windows_i686_gnu·windows_i686_gnullvm·windows_i686_msvc·windows_x86_64_gnu·windows_x86_64_gnullvm·windows_x86_64_msvc 0.52.6이다.
-
-라이선스는 모두 허용 목록 안에 있다. rustls-pki-types, tokio-rustls, getrandom, once_cell, windows-sys, windows-targets, windows_* 패키지는 MIT OR Apache-2.0이고 `LICENSE-MIT`·`LICENSE-APACHE` 또는 소문자 `license-mit`·`license-apache-2.0`이 있다. rustls는 Apache-2.0 OR ISC OR MIT이고 `LICENSE-APACHE`·`LICENSE-ISC`·`LICENSE-MIT`가 있다. ring은 Apache-2.0 AND ISC이고 `LICENSE`·`LICENSE-BoringSSL`·`LICENSE-other-bits`가 있다. rustls-webpki는 ISC(`LICENSE`), untrusted 0.9.0은 ISC(`LICENSE.txt`), subtle은 BSD-3-Clause(`LICENSE`)다. 19개 패키지 모두 라이선스 파일이 있고 `NOTICE` 파일은 없다. 결과는 Ubuntu와 Windows 모두 `licenses ok`, 종료 코드 0이다.
-
-ring 0.17.14는 rustls-webpki의 `alloc` 기능이 `ring?/alloc`으로 켜는 약한 간선이다. `cargo tree -i ring`에 출력이 없으므로 컴파일되지 않는다. 잠금 파일에는 남는다. 배포 고지 의무는 [OPS-021](../specs/operations.md#7-수용-테스트)에서 확인한다.
-
-실행 기록 7: 커밋 `f21a6bc`에 작업 4.1의 콘솔 입력 모드 복원을 더했다. 측정 커밋은 `ec2e6e6`이다. 환경은 실행 기록 1과 같고, Windows에서는 실행 기록 5의 Windows 환경이다. 이 변경으로 adapters의 Windows 전용 직접 의존성 `windows-sys` 0.61.2(`default-features = false`, `features = ["Win32_Foundation", "Win32_Security", "Win32_Storage_FileSystem", "Win32_System_Console"]`)가 생겼다. `f21a6bc`는 `Cargo.lock`을 바꾸지 않았다. 0.61.2는 그 전부터 잠금 파일에 있었다. 라이선스는 `Cargo.toml`의 `license = "MIT OR Apache-2.0"`과 패키지 디렉터리의 `license-mit`·`license-apache-2.0` 파일로 확인했다. `NOTICE` 파일은 없다. 결과: Windows의 `vr-win.ps1 -Only all`에서 deny 단계가 종료 코드 0이고 `licenses ok`를 출력했다. Ubuntu의 `vr-full.sh`는 `ALL PASSED`로 끝났다. `deny.toml`의 대상에 Windows가 있으므로 이 검사는 Ubuntu에서도 windows-sys를 본다.
-
-실행 기록 8: 커밋 `ba80d7b`에 작업 3.2(WS·WSS 업그레이드, 101 응답까지)를 더했다. 3단계 명령은 커밋 `35cbcb4`(작업 트리 변경 없음)에서 두 OS의 검증 스크립트로 실행했다. Ubuntu `wsl -d Ubuntu -- bash /mnt/d/vr-tools/vr-full.sh`와 Windows 11 Pro 10.0.26200 `vr-win.ps1 -Only all`이다. 두 실행 모두 `licenses ok`, `deny exit=0`이었다.
-
-직접 의존성: 루트 `Cargo.toml`에 워크스페이스 의존성 `tokio-tungstenite = { version = "0.30.0", default-features = false, features = ["handshake"] }`를 더했다. `crates/adapters/Cargo.toml`에는 `tokio-tungstenite.workspace = true`를 더했다.
-
-잠금 파일: `Cargo.lock`에 115줄이 더해졌고 지워진 줄은 없다. 새 패키지 항목 12개는 chacha20 0.10.2, const-oid 0.10.2, data-encoding 2.11.1, futures-sink 0.3.34, log 0.4.34, rand 0.10.3, rand_core 0.10.1, sha1 0.11.0, thiserror 2.0.21, thiserror-impl 2.0.21, tokio-tungstenite 0.30.0, tungstenite 0.30.0다. 기존 패키지 digest, futures-util, getrandom에는 의존 간선만 더해졌다.
-
-라이선스: Windows의 `%USERPROFILE%\.cargo\registry\src\index.crates.io-*\<이름>-<버전>\`에서 `Cargo.toml`의 `license` 값과 `LICENSE*`·`COPYING*`·`NOTICE*` 파일 이름을 확인했다.
-
-| 패키지 | `license` | 라이선스 파일 |
+| 검토 대상·날짜 | 환경·방법 | 실제 결과 |
 | --- | --- | --- |
-| chacha20 0.10.2 | MIT OR Apache-2.0 | `LICENSE-APACHE`, `LICENSE-MIT` |
-| const-oid 0.10.2 | Apache-2.0 OR MIT | `LICENSE-APACHE`, `LICENSE-MIT` |
-| data-encoding 2.11.1 | MIT | `LICENSE` |
-| futures-sink 0.3.34 | MIT OR Apache-2.0 | `LICENSE-APACHE`, `LICENSE-MIT` |
-| log 0.4.34 | MIT OR Apache-2.0 | `LICENSE-APACHE`, `LICENSE-MIT` |
-| rand 0.10.3 | MIT OR Apache-2.0 | `LICENSE-APACHE`, `LICENSE-MIT` |
-| rand_core 0.10.1 | MIT OR Apache-2.0 | `LICENSE-APACHE`, `LICENSE-MIT` |
-| sha1 0.11.0 | MIT OR Apache-2.0 | `LICENSE-APACHE`, `LICENSE-MIT` |
-| thiserror 2.0.21 | MIT OR Apache-2.0 | `LICENSE-APACHE`, `LICENSE-MIT` |
-| thiserror-impl 2.0.21 | MIT OR Apache-2.0 | `LICENSE-APACHE`, `LICENSE-MIT` |
-| tokio-tungstenite 0.30.0 | MIT | `LICENSE` |
-| tungstenite 0.30.0 | MIT OR Apache-2.0 | `LICENSE-APACHE`, `LICENSE-MIT` |
-
-`NOTICE` 파일을 둔 패키지는 없다. 배포물의 의존성 고지는 실행 기록 1과 같이 [OPS-021](../specs/operations.md#7-수용-테스트)에서 확인한다.
-
-실행 기록 9(2026-11-08): 설정 편집 작업 트리에 workspace `toml_edit = { version = "0.25", default-features = false, features = ["parse", "display"] }`와 adapters의 직접 의존성을 더했다(사용자 결정 Q173). 잠금 파일의 새 패키지는 `toml_edit 0.25.17+spec-1.1.0` 하나이며 기존 TOML 파서 의존성을 재사용한다.
-
-Windows Cargo 캐시의 해당 패키지 `Cargo.toml`에서 `license = "MIT OR Apache-2.0"`을 확인했다. 파일 목록은 `LICENSE-MIT`·`LICENSE-APACHE`를 포함하며 별도 `NOTICE`는 없다. 허용 목록은 넓히지 않았다. MIT 저작권·전문과 Apache 전문은 기존 생성기로 배포 고지에 포함한다. 이 파일 확인은 `cargo deny`와 `notices --check` 실행 결과를 대신하지 않는다.
-
-명령 결과(커밋 `eae442f`, 2026-11-08): 두 OS 전체 게이트의 deny 단계(`cargo deny check licenses`)가 `licenses ok`, 종료 코드 0이었다. 같은 게이트의 `tests/dependency_notices.rs`(`notices --check`)도 두 OS에서 통과했다. 루트 `THIRD-PARTY-NOTICES.txt`는 `toml_edit 0.25.17+spec-1.1.0`의 라이선스 식과 고지 전문을 담는다. 판정은 [개발 환경·검증 4.2절](set-up-and-verify.md#42-작업-69-판정표)에 있다.
-
-실행 기록 10(2026-11-11): 접속 ticket 작업에서 루트 `vnc-relay`의 `[dev-dependencies]`에 `aws-lc-rs.workspace = true`를 더했다. 실제 실행파일 시험이 P-256 시험 키로 ticket에 서명하는 데만 쓴다. workspace 버전 `1.18.2`는 adapters의 기존 직접 의존성과 같다. `Cargo.lock`은 루트 패키지의 의존성 목록에 `"aws-lc-rs"` 한 줄만 늘었고 새 패키지는 없다. 허용 목록은 넓히지 않았다. 레이어 검사의 루트 허용 목록에 `aws-lc-rs`를 더했다([코드 지도](../architectures/code-map.md)).
-
-명령 결과(커밋 `4be8e0e`, 2026-11-11): 두 OS 전체 게이트의 deny 단계(`cargo deny check licenses`)가 `licenses ok`, 종료 코드 0이었다. `cargo xtask notices`로 루트 `THIRD-PARTY-NOTICES.txt`를 다시 만들었다. 바뀐 줄은 고지 파일에 담긴 잠금 파일의 같은 `"aws-lc-rs"` 한 줄이다. 같은 게이트의 `tests/dependency_notices.rs`(`notices --check`)도 두 OS에서 통과했다. 판정은 [개발 환경·검증 4.5절](set-up-and-verify.md#45-접속-ticket-판정표)에 있다.
+| `toml_edit 0.25.17+spec-1.1.0`, 커밋 `eae442f`의 설정 편집 범위, 2026-11-08 | Windows Cargo 캐시의 패키지 `Cargo.toml`과 라이선스·NOTICE 파일 목록을 수동 확인했다 | `license = "MIT OR Apache-2.0"`, `LICENSE-MIT`·`LICENSE-APACHE`가 있고 별도 `NOTICE`는 없다. MIT 저작권·전문과 Apache 전문은 배포 고지에 포함한다. 허용 목록은 넓히지 않는다. 이 수동 확인은 `cargo deny`와 `notices --check`의 현재 실행 결과를 대신하지 않는다 |
 
 ### 4.1 출처 검토 기록 (2026-11-04)
 
@@ -208,7 +138,7 @@ Windows Cargo 캐시의 해당 패키지 `Cargo.toml`에서 `license = "MIT OR A
 | 대시보드 `d504667`·`aaca485`·`023d2bd`·`172764a` | 공통 컴포넌트 → 로그인 → 운영 현황 → 세션 상세의 구현 기록이 있다. 해당 reflog 주체도 `kayden.kim`이다. | UI의 유사성·외부 디자인 권리 전체를 판정하는 자료는 아니다. |
 | 초기 교환 `5e53570`·스트림 코덱 `4391b14` | 관찰·계약 채택 뒤 Rust 초기 교환과 RFC 6455 스트림 코덱을 구현한 변경 제목이 있다. | 과거 모든 작업자의 열람 행위나 소스 유사도를 조사한 것은 아니다. |
 | [관찰 기록](../contracts/repeater-compat-record.md) 1·2·3절 | 소유자 허용, 고정 배포본 해시, 분리 VM, 입력·관찰·해석을 분리한 근거가 있다. | 사용 권한의 법률 검토를 완료한 것은 아니다. |
-| [초기 교환 계약](../contracts/repeater-handshake-v1.md) 1절·1.4절 | 250바이트 요청·12바이트 시작 값·ID 규칙이 관찰 증거와 사용자 결정에 연결된다. 계약은 외부 세 프로젝트의 소스를 읽거나 복사·번역하지 않도록 정한다. | 같은 통신 상수는 호환 계약의 결과다. 상수가 같다는 이유로 소스가 같거나 다르다고 단정하지 않는다. |
+| [초기 교환 계약](../contracts/repeater-handshake-v1.md) 1절·1.4절 | 250바이트 요청·12바이트 시작 값·ID 규칙이 관찰 증거와 확정 기준에 연결된다. 계약은 외부 세 프로젝트의 소스를 읽거나 복사·번역하지 않도록 정한다. | 같은 통신 상수는 호환 계약의 결과다. 상수가 같다는 이유로 소스가 같거나 다르다고 단정하지 않는다. |
 | 파일 목록 | 위 네 영역에 vendor·node_modules·외부 세 프로젝트의 소스 트리나 배포 아카이브가 없다. Rust·HTML·CSS·JS와 프로젝트 설정·시험 PEM으로 구성된다. | 이름을 바꿔 넣은 코드의 부재까지 증명하지는 못한다. |
 
 본문 검색은 `(?i)copyright|spdx|license|websockify|ultravnc|novnc`를 위 네 영역 전체에 적용했다. 나온 항목은 아래와 같이 모두 분류했다. 별도 외부 라이선스 머리말은 찾지 못했다.
@@ -230,59 +160,33 @@ Windows Cargo 캐시의 해당 패키지 `Cargo.toml`에서 `license = "MIT OR A
 
 ### 4.2 프로젝트 LICENSE 검토 기록(2026-11-07)
 
-프로젝트 MIT LICENSE의 작성·검토를 마쳤다. 저작권자·적용 연도를 나중에 정하기로 했던 사용자 결정 2026-11-04(Q97)는 사용자 결정 2026-11-07(Q97)로 해소했다. 저작권자는 `vnc-relay contributors`, 적용 연도는 `2026`이다. 아래 2026-11-04 기록의 LICENSE 미완료 상태는 당시 결과이며, 현재 판정은 이 절을 따른다.
+프로젝트 MIT LICENSE의 수동 검토 기록이다. 저작권자는 `vnc-relay contributors`, 적용 연도는 `2026`이다.
 
 대상은 루트 `LICENSE`를 추가한 작업 트리다. `Cargo.toml`의 라이선스 값과 `xtask/src/notices.rs`의 고지 분리 문구는 바꾸지 않았다. LICENSE 전문은 소스 문자열 시험을 새로 만들지 않고 사람이 대조했다.
 
 | 확인 대상 | 기준 | 환경 | 결과 | 증거 |
 | --- | --- | --- | --- | --- |
 | LICENSE 전문 | 표준 MIT License 전문과 일치. 저작권 행만 실제 값으로 채운다 | Windows 11, 2026-11-07. 파일·표준 전문 수동 대조 | 통과. 줄바꿈을 제외한 허가·고지 유지 조건·면책 문구가 같다. 저작권 행만 프로젝트 값이다 | 루트 [`LICENSE`](../../LICENSE), [OSI MIT](https://opensource.org/license/mit), [SPDX `MIT` 전문](https://spdx.org/licenses/MIT.html) |
-| 저작권 고지 | `Copyright (c) 2026 vnc-relay contributors` | 같음 | 통과. `LICENSE` 3행이 사용자 결정 2026-11-07(Q97)과 같다 | [`LICENSE`](../../LICENSE), 사용자 결정 2026-11-07(Q97) |
+| 저작권 고지 | `Copyright (c) 2026 vnc-relay contributors` | 같음 | 통과. `LICENSE` 3행이 기준 값과 같다 | [`LICENSE`](../../LICENSE) |
 | 패키지 라이선스 | `license = "MIT"` | 같음 | 통과. 루트 LICENSE와 패키지 메타데이터가 일치한다 | [`Cargo.toml`](../../Cargo.toml) `[workspace.package]` |
-| LICENSE 추가 뒤 의존성 고지 대조 | `cargo run --offline --locked --quiet -p xtask -- notices --check` 성공 | Windows 11, 2026-11-07 | 통과 (`THIRD-PARTY-NOTICES.txt`). 루트 LICENSE는 의존성 고지에 섞이지 않는다 | LICENSE를 추가한 작업 트리의 실행 출력 `notices --check: 통과 (THIRD-PARTY-NOTICES.txt)`. 스캐너는 workspace crate를 제외한다 |
 | 고지 머리말 | 프로젝트 자체 MIT LICENSE를 별도 파일로 안내한다 | Windows 11, 2026-11-07. 소스 수동 대조 | 통과. 루트 LICENSE를 별도로 배포하는 절차와 일치한다 | [`xtask/src/notices.rs`](../../xtask/src/notices.rs) `render`의 `The project's own MIT LICENSE is separate and is not supplied here.` |
 
-OPS-021은 두 OS에서 통과한 기존 부분 시험 `tests/dependency_notices.rs`, 4.1절의 출처 검토, 아래 의존성·암호 모듈 검토와 이 절의 LICENSE 검토를 합쳐 판정한다. 전체 수용 판정은 [개발 환경·검증 4.1절](set-up-and-verify.md#41-작업-59-판정표)에 있다. 앞으로 만드는 배포 묶음에는 `LICENSE`와 의존성 고지 전체를 넣어야 한다. 기존 배포 아카이브를 다시 만들거나 확인했다는 뜻은 아니다.
+OPS-021의 출처·라이선스 수동 증거는 4.1절의 출처 검토, 이 절의 LICENSE 검토와 4.3절의 의존성·암호 모듈 검토다. 자동 고지 대조 결과는 `cargo xtask scenarios`의 `scenario-report.md`에서 확인한다. 배포 묶음에는 `LICENSE`와 의존성 고지 전체를 넣어야 한다.
 
 ### 4.3 배포 의존성·암호 모듈 검토 (2026-11-04)
 
-현재 고지에는 외부 crate 110개가 있다. 두 대상의 일반·빌드 의존성 합집합이며 Windows 전용 `windows-sys`·Linux 전용 `inotify`·빌드 도구도 포함한다. PRD 승인 기술 중 현재 쓰는 tokio·rustls·tokio-rustls·rustls-pki-types·axum·tokio-tungstenite·toml·serde_json·argon2·rpassword·notify·clap과 암호 모듈 aws-lc-rs·aws-lc-sys가 들어간다. serde는 현재 직접 쓰지 않고 toml 등에서 `serde_core`를 쓴다. 승인된 기술을 아직 직접 의존하지 않는 경우와 배포 고지 누락을 구분한다. 과거 채택 묶음 검사는 이 절 위의 실행 기록 1에 남아 있다.
+2026-11-04에 4.1절의 기준 커밋과 고지 생성기·루트 시험·문서 변경을 포함한 작업 트리를 검토했다. 환경은 WSL2 Ubuntu 24.04.4 LTS x86_64, Rust 1.99.1이다. `cargo metadata --locked --format-version 1 --filter-platform x86_64-pc-windows-msvc`로 메타데이터를 읽고 캐시의 고지 전문과 생성 파일을 수동 대조했다. 당시 고지는 외부 crate 110개를 담았다. 두 대상의 일반·빌드 의존성 합집합이며 Windows 전용 `windows-sys`·Linux 전용 `inotify`·빌드 도구도 포함했다. tokio·rustls·tokio-rustls·rustls-pki-types·axum·tokio-tungstenite·toml·serde_json·argon2·rpassword·notify·clap과 암호 모듈 aws-lc-rs·aws-lc-sys가 있었다. serde는 직접 쓰지 않고 toml 등에서 `serde_core`를 썼다.
 
 | 암호 모듈 | Cargo 메타데이터의 라이선스 식 | 배포 고지에 보존한 내용 |
 | --- | --- | --- |
 | aws-lc-rs 1.18.2 | `ISC AND (Apache-2.0 OR ISC)` | 패키지 LICENSE의 ISC와 Apache-2.0 전문·고지 |
 | aws-lc-sys 0.46.0 | `ISC AND (Apache-2.0 OR ISC) AND Apache-2.0 AND MIT AND BSD-3-Clause AND (Apache-2.0 OR ISC OR MIT) AND (Apache-2.0 OR ISC OR MIT-0)` | 패키지 LICENSE·`aws-lc/LICENSE`·`aws-lc/third_party/fiat/LICENSE`. Amazon·Google·OpenSSL·Eric Young 등 원래 고지와 전문을 유지한다. |
 
-현재 aws-lc-sys의 LICENSE는 OpenSSL 유래 부분을 **Apache-2.0**으로 명시한다. 별도의 구형 `OpenSSL` SPDX 식이라고 추측하거나 허용 목록을 늘리지 않았다. BoringSSL 유래의 기존 부분은 ISC, 새 부분은 Apache-2.0이다. Jitter Entropy 부분은 Amazon이 GPL 가지가 아니라 BSD-3-Clause를 선택했다고 고지한다. 생성 파일은 이 설명과 원래 저작권을 그대로 담는다. `AND`의 의무와 선택된 `OR` 가지의 조건을 지켜야 하며, 암호 모듈 전체를 ISC 하나로만 다루지 않는다. 독립된 NOTICE 파일이 있으면 생성기가 재귀 수집한다.
+검토한 aws-lc-sys의 LICENSE는 OpenSSL 유래 부분을 **Apache-2.0**으로 명시했다. 별도의 구형 `OpenSSL` SPDX 식으로 취급하거나 허용 목록을 늘리지 않았다. BoringSSL 유래의 기존 부분은 ISC, 새 부분은 Apache-2.0이다. Jitter Entropy 부분은 Amazon이 GPL 가지가 아니라 BSD-3-Clause를 선택했다고 고지한다. 생성 파일은 이 설명과 원래 저작권을 그대로 담았다. `AND`의 의무와 선택된 `OR` 가지의 조건을 지켜야 하며, 암호 모듈 전체를 ISC 하나로만 다루지 않는다. 독립된 NOTICE 파일이 있으면 생성기가 재귀 수집한다.
 
-`cargo deny check licenses`는 현재 잠금 파일 전체의 식과 허용 목록을 검사했다. 생성기 대조는 파일이 최신인지 확인할 뿐, 허용 목록 판정이나 법률 검토를 대체하지 않는다. 현재 제품 코드에 외부 구현을 직접 복사하거나 수정한 것으로 분류한 항목은 없다. [INFERENCE] 계약·이력·현재 트리 증거는 독립 구현 주장과 일치한다. 이 추론은 외부 원본과의 소스 대조를 수행했다는 뜻이 아니다.
+검토 결과, 제품 코드에 외부 구현을 직접 복사하거나 수정한 것으로 분류한 항목은 없었다. [INFERENCE] 계약·이력·검토 대상 트리 증거는 독립 구현 주장과 일치했다. 이 추론은 외부 원본과의 소스 대조를 수행했다는 뜻이 아니다. 생성기 대조는 파일이 최신인지 확인할 뿐, 허용 목록 판정이나 법률 검토를 대체하지 않는다.
 
-남은 OPS-021 차단 항목은 Q97의 실제 MIT 저작권자·적용 연도 결정과 LICENSE 작성·검토다. 이번 검토 범위에서 그 밖의 미완료 항목은 발견하지 않았다. 실제 배포 묶음에는 이 고지 전체가 포함되었는지 배포 단계에서 다시 확인해야 한다. 아직 생성되지 않은 배포 아카이브를 검증했다고 주장하지 않는다.
-
-<a id="43-실행-기록-2026-11-04"></a>
-
-### 4.4 실행 기록 (2026-11-04)
-
-대상은 4.1절의 기준 커밋에 이번 `xtask/src/notices.rs`·명령 분기·루트 시험·고지 파일·문서 변경을 더한 작업 트리다. Cargo.toml·Cargo.lock·제품 Rust·대시보드 파일은 이 작업에서 바꾸지 않았다. WSL은 `CARGO_TARGET_DIR=$HOME/vnc-relay-target`, Windows는 Cargo의 기본 대상 디렉터리를 썼다. Windows는 기존 빌드 조건인 `AWS_LC_SYS_PREBUILT_NASM=1`을 썼다.
-
-| 환경 | 명령·확인 방법 | 결과 |
-| --- | --- | --- |
-| Windows 파일 시스템 | 4.1절의 소스 문자열 검색·영역별 전체 파일 목록·로컬 reflog·관찰 계약 대조 | 위 표에 모든 일치 항목을 분류했다. 외부 소스 비교는 하지 않았다. |
-| WSL Ubuntu 24.04.4, Rust 1.99.1 | `cargo metadata --locked --format-version 1 --filter-platform x86_64-pc-windows-msvc` | 종료 코드 0. aws-lc-rs·aws-lc-sys의 버전·식과 캐시 경로 확인. |
-| 같음, cargo-deny 0.20.2 | `cargo deny check licenses` | 통과. 종료 코드 0, `licenses ok`. 두 대상·현재 잠금 파일 전체가 허용 목록을 지킨다. |
-| 같음 | `cargo xtask notices` | 통과. 종료 코드 0. 외부 crate 110개의 목록과 수집한 고지 전문을 생성했다. |
-| Windows 11 Pro 10.0.26200, Rust 1.99.1 | `cargo run --offline --locked --quiet -p xtask -- notices --check` | 통과. 종료 코드 0. WSL에서 생성한 파일을 Windows에서도 그대로 재현했다. |
-| WSL Ubuntu | `cargo test --offline --locked -p xtask` | 통과. 14 passed, 0 failed. 고지 이름 판별·트리 이름/버전 수집 시험 2개 포함. |
-| WSL Ubuntu | `cargo test --offline --locked --test code_map --test dependency_notices` | 통과. 코드 지도 4개, 오프라인 고지 대조 1개. 각 0 failed. |
-| Windows | `cargo test --offline --locked --test code_map --test dependency_notices` | 통과. 코드 지도 4개, 오프라인 고지 대조 1개. 각 0 failed, 종료 코드 0. |
-| WSL Ubuntu | `rustfmt --edition 2024 --config skip_children=true xtask/src/main.rs xtask/src/notices.rs tests/dependency_notices.rs` | 통과. 마지막 수정한 notices.rs도 같은 명령으로 포맷했다. Windows 셸의 `rustfmt`는 PATH에서 찾지 못해 WSL의 고정 도구를 썼다. |
-| Windows | `python D:/vr-tools/tmp/doc_check.py` | `errors_total=4 known=4 other=0`. 기존 오류만 남았다: dashboard-operations-overview.md:73, tls.md:126, verify-dashboard-frontend.md:179·873. 루트 README.md는 기존처럼 검사 대상 밖이다. |
-
-개발 중 첫 메타데이터 연결은 Windows 타깃에서 호스트 빌드 도구 `pkg-config`를 놓쳐 중단했다. 메타데이터 합집합으로 고쳤다. 이어 첫 Windows 대조는 호스트 빌드 간선 차이로 109개와 110개가 달라 실패했다. 메타데이터의 빌드 의존성 하위 그래프를 합친 뒤 위 최종 시험이 두 OS에서 통과했다. 누락을 무시하거나 OS별 정답 파일을 나누지 않았다.
-
-전체 게이트·시나리오 보고서 생성은 이번 작업에서 실행하지 않았다. OPS-021 전체 통과는 MIT LICENSE가 없으므로 주장하지 않는다.
-
-
+실제 배포 묶음에는 고지 전체가 포함되었는지 배포 단계에서 확인해야 한다. 이 검토는 배포 아카이브의 검증을 포함하지 않는다.
 
 ## 5. 중단 조건
 

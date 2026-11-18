@@ -359,7 +359,7 @@ const rfb = new RFB(screen, connection.relayUrl, {
 
 ## Server side: modified droidVNC-NG and the device app
 
-The original droidVNC-NG connects back to a Repeater over TCP only. The [modified droidVNC-NG](https://github.com/kayden-kim/droidVNC-NG) adds these features to droidVNC-NG 2.22.3:
+The original droidVNC-NG connects back to a Repeater over TCP only. The [modified droidVNC-NG](https://github.com/kayden-kim/droidVNC-NG) is based on droidVNC-NG 2.22.3 and provides these features:
 
 - When it receives a `ws://` or `wss://` address, it connects over WebSocket. Without a path, it uses `/relay/server`.
 - It sends `binary` in `Sec-WebSocket-Protocol`. When it receives a ticket, it also sends `ticket.<JWS>`.
@@ -369,7 +369,7 @@ The original droidVNC-NG connects back to a Repeater over TCP only. The [modifie
 - A ticket connection does not reconnect automatically when it drops, because a ticket cannot be used twice.
 - It refuses to connect when it receives a ticket with a TCP address. This prevents a silent switch to a TCP connection without a ticket.
 
-Parameters arrive through the droidVNC-NG Intent interface (`ACTION_CONNECT_REPEATER`). The existing host value carries the WSS address, and a new value carries the ticket. A socket pair connects the WebSocket client in the app to the existing VNC server engine. No loopback port is opened, so other apps on the device cannot intercept the connection. The [Intent interface document](https://github.com/kayden-kim/droidVNC-NG/blob/master/doc/Intent-Interface.md) of the modified build lists the value names and `adb` command examples, and [ADR 0006](https://github.com/kayden-kim/droidVNC-NG/blob/master/doc/adr/0006-bridge-websocket-repeaters-via-socket-pair.md) explains the design.
+Parameters arrive through the droidVNC-NG Intent interface (`ACTION_CONNECT_REPEATER`). The host value carries the WSS address, and a separate value carries the ticket. A socket pair connects the WebSocket client in the app to the VNC server engine. No loopback port is opened, so other apps on the device cannot intercept the connection. The [Intent interface document](https://github.com/kayden-kim/droidVNC-NG/blob/master/doc/Intent-Interface.md) of the modified build lists the value names and `adb` command examples, and [ADR 0006](https://github.com/kayden-kim/droidVNC-NG/blob/master/doc/adr/0006-bridge-websocket-repeaters-via-socket-pair.md) explains the design.
 
 The device app is responsible for these tasks:
 

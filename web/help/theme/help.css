@@ -55,8 +55,6 @@ html:not(.js) .help-toc-toggle,html:not(.js) .help-search-toggle{display:none}
 .help-top .nav-item:hover,.help-top .help-toc-toggle[aria-expanded=true]{background:var(--color-navbar-accent);color:var(--color-navbar-foreground)}
 .help-top .help-brand{display:inline-flex;align-items:center;gap:var(--space-sm);margin-left:var(--space-sm);color:var(--color-navbar-foreground);text-decoration:none}
 .help-top .help-brand:hover{color:var(--color-navbar-foreground)}
-.help-top .help-base{margin-left:var(--space-sm);color:var(--color-navbar-muted-foreground);text-decoration:underline}
-.help-top .help-base:hover{color:var(--color-navbar-foreground)}
 .help-tools{display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:var(--space-xs);margin-left:auto}
 
 /* Contents (mdBook sidebar). book.js hides it only after a transition, and the
@@ -176,7 +174,7 @@ kbd{display:inline-block;min-width:var(--space-icon-size-sm);padding:0 var(--spa
   html.sidebar-visible #mdbook-body-container{grid-template-columns:minmax(0,1fr);grid-template-rows:auto auto 1fr;grid-template-areas:"top" "toc" "col"}
   .help-top{padding:var(--space-sm) var(--space-lg)}
   .help-top .nav-item{height:var(--space-control-height-touch)}
-  .help-top .brand-name,.help-top .help-base:not(:focus){position:absolute;width:var(--space-border-width);height:var(--space-border-width);overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+  .help-top .brand-name{position:absolute;width:var(--space-border-width);height:var(--space-border-width);overflow:hidden;clip-path:inset(50%);white-space:nowrap}
   #mdbook-sidebar{border-right:0;border-bottom:var(--space-border-width) solid var(--color-border)}
   #mdbook-sidebar .sidebar-scrollbox{position:static;max-height:none;overflow:visible}
   #mdbook-sidebar .chapter a{display:flex;align-items:center;min-height:var(--space-control-height-touch)}

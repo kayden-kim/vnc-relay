@@ -151,8 +151,6 @@ noVNC is an external client that you must provide separately. VNC Relay does not
 | `path=relay/viewer` | Viewer role path `/relay/viewer` |
 | `repeaterID=1234` | Mode II relay ID. noVNC adds `ID:` and sends it in the initial request. |
 
-> **Note:** Releases `v2026.11.2` and earlier use `/relay` for the Viewer path. When you connect to one of those versions, change `path=relay/viewer` to `path=relay` in the URL above. See [Introduction](index.md) for the differences.
-
 The browser sends the origin of the site serving the noVNC page in the `Origin` header. In this example, it is `https://viewer.example.test`. Do not confuse it with the WSS destination, `relay.example.test`.
 
 Set `allowed_origins` per role. An empty list rejects every request that has an `Origin` header. A client without that header skips only Origin comparison. IP checks and any access ticket checks enabled for that role still apply. Origin is not user authentication and does not replace the source IP allow list.

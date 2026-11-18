@@ -4,26 +4,25 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 상태 | Active(2026-11-07 채택, 사용자 결정 2026-11-07(Q150)) |
+| 상태 | Active |
 | 관련 요구사항 | [PRD](../requirements/PRD.md) FR-05, 7절 보안 경계, AC-05~08·AC-49 |
 | 용어 | [VNC Relay 용어집](../../GLOSSARY.md) |
 | 관련 스펙 | [중계와 매칭](relay.md), [설정·운영](operations.md) |
-| 관련 계약 | [WebSocket 중계 v2](../contracts/websocket-relay-v2.md), [설정 파일 v4](../contracts/config-v4.md). URL·서브프로토콜·HTTP 상태·종료 코드의 이름·번호와 Origin 정규화는 이 계약이 기준이다. 2026-11-08 추가 범위와 2026-11-10 Viewer 경로 변경은 아래 1절을 따른다. |
+| 관련 계약 | [WebSocket 중계 v2](../contracts/websocket-relay-v2.md), [설정 파일 v4](../contracts/config-v4.md). URL·서브프로토콜·HTTP 상태·종료 코드의 이름·번호와 Origin 정규화는 이 계약이 기준이다. |
 | 관련 아키텍처 문서·ADR | [코드 지도](../architectures/code-map.md), [WS·WSS 진입점 모듈 설계](../architectures/websocket-entry-point.md), [WS 스트림 모듈 설계](../architectures/websocket-stream.md), [TLS 모듈 설계](../architectures/tls.md), [ADR-0001 내장 TLS](../decisions/ADR-0001-built-in-tls.md), [ADR-0002 출발지 IP 허용 목록](../decisions/ADR-0002-source-ip-allowlist.md), [ADR-0004 tokio·rustls](../decisions/ADR-0004-tokio-rustls.md), [ADR-0005 자체 WS 스트리밍 프레임 코덱](../decisions/ADR-0005-in-house-ws-streaming-frame-codec.md). |
 
 ## 1. 범위와 적용 상태
 
-- WS(`ws://`)·WSS(`wss://`) 지원은 사용자 확정 사항이다. 세부 동작도 채택했다(사용자 결정 2026-11-07(Q150)).
-- 공유 WS·WSS 리스너는 Viewer·Server 역할을 제공한다. `/relay/viewer`는 Viewer, `/relay/server`는 Server다(사용자 결정 2026-11-08(Q181), 사용자 결정 2026-11-08(Q188)). 별도 Server 리스너는 만들지 않는다.
-- Viewer 경로는 2026-11-10에 `/relay`에서 `/relay/viewer`로 바꿨다(사용자 결정 2026-11-10). 이전 경로 `/relay`는 다른 경로와 같이 404다. 당시 계약은 `websocket-relay` 2.0.0이며, 이전·롤백은 [WebSocket 계약 3.1절](../contracts/websocket-relay-v2.md#31-1x-클라이언트를-200으로-옮기기)을 따른다. 현재 계약은 접속 ticket 확인을 더한 2.1.0이다(사용자 결정 2026-11-11(Q192·Q195)).
-- Viewer는 Mode I·II, Server는 TCP Server와 같이 Mode II만 지원한다. 접속 ticket을 켠 Viewer 역할은 Mode I을 거절한다(사용자 결정 2026-11-11(Q203)). WS·WSS Server와 TCP·WS·WSS Viewer의 모든 조합을 양 접속 순서로 검증한다.
+- WS(`ws://`)·WSS(`wss://`)를 지원한다.
+- 공유 WS·WSS 리스너는 Viewer·Server 역할을 제공한다. `/relay/viewer`는 Viewer, `/relay/server`는 Server다. 별도 Server 리스너는 만들지 않는다.
+- `/relay`는 다른 미지원 경로와 같이 404다. 현재 `websocket-relay` 계약은 2.1.0이다. 1.x 클라이언트의 이전·롤백은 [WebSocket 계약 3.1절](../contracts/websocket-relay-v2.md#31-1x-클라이언트를-200으로-옮기기)을 따른다.
+- Viewer는 Mode I·II, Server는 TCP Server와 같이 Mode II만 지원한다. 접속 ticket을 켠 Viewer 역할은 Mode I을 거절한다. WS·WSS Server와 TCP·WS·WSS Viewer의 모든 조합을 양 접속 순서로 검증한다.
 - 평문 WS 리스너는 기본 비활성이다. 설정에서 명시적으로 켠 경우에만 연다(WS-R12, WS-024). 테스트에서는 WS 리스너를 켜고 검증한다.
 - noVNC, websockify 실행 파일, 원격 화면 렌더러를 의존성으로 추가하지 않는다. noVNC는 번들·배포물에도 넣지 않고 외부 상호운용 검증 대상으로만 쓴다.
 - 검증 대상은 검증 시작 시 고정한 noVNC 버전의 [`repeaterID` 옵션](https://novnc.com/noVNC/docs/API.html)으로 접속하는 WS·WSS Mode II다(WS-025). Mode I은 대상이 아니다. 수용 판정은 매칭 성립과 noVNC의 RFB 연결 완료 관찰이다. noVNC 화면 렌더링은 수용 기준이 아니다.
 - URL로 대상 주소나 중계 ID를 직접 지정하는 별도 중계 API를 만들지 않는다.
-- 릴레이 WS·WSS 리스너의 역방향 프록시 TLS 종료를 지원한다(사용자 지시 2026-11-08). 해당 리스너의 `trusted_proxies`와 `X-Forwarded-For`로 클라이언트 주소를 판정한다(사용자 결정 2026-11-08(Q182)). 관리 리스너의 TLS·전달 헤더 정책은 바꾸지 않는다(사용자 결정 2026-11-08(Q183)).
-- 후속: 위 2026-11-08 추가 범위의 구현은 커밋 `3df0693`이다. 시험은 커밋 `51bd747`의 두 OS 게이트에서 통과했다([WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)).
-- 접속 ticket의 형식과 확인은 [WebSocket 계약 1.9절](../contracts/websocket-relay-v2.md#19-접속-ticket)을 따른다. 기본으로 꺼져 있고, 역할마다 WS·WSS에 함께 적용한다(사용자 결정 2026-11-11(Q192·Q197)). 결정 이유는 [ADR-0009](../decisions/ADR-0009-optional-relay-access-ticket.md)를 따른다. 사용자 결정 2026-11-11(Q211)의 후속 구현은 커밋 `4be8e0e`다. 계약 테스트는 같은 커밋의 두 OS 전체 게이트에서 통과했다([접속 ticket 판정표](../how-to/set-up-and-verify.md#45-접속-ticket-판정표)).
+- 릴레이 WS·WSS 리스너의 역방향 프록시 TLS 종료를 지원한다. 해당 리스너의 `trusted_proxies`와 `X-Forwarded-For`로 클라이언트 주소를 판정한다. 관리 리스너는 내장 TLS를 사용하며 전달 헤더를 무시한다.
+- 접속 ticket의 형식과 확인은 [WebSocket 계약 1.9절](../contracts/websocket-relay-v2.md#19-접속-ticket)을 따른다. 기본으로 꺼져 있고, 역할마다 WS·WSS에 함께 적용한다. 결정 이유는 [ADR-0009](../decisions/ADR-0009-optional-relay-access-ticket.md)를 따른다.
 
 ## 2. 상태와 리스너 책임
 
@@ -49,7 +48,7 @@ IP 목록·`trusted_proxies`·인증서 재로드는 [운영 스펙](operations.
 
 Origin 정책: Origin 헤더가 있으면 해당 역할의 `allowed_origins`와 일치할 때만 업그레이드한다. 허용 값은 `scheme://host[:port]` 형식이며 정확 일치로 비교한다. 와일드카드는 없다. 스킴·호스트·포트 중 하나라도 다르면 거절한다. 하위 도메인은 다른 호스트다. 정규화 세부는 [설정 계약 1.4절](../contracts/config-v4.md#14-origin-값-문법과-비교)이 정하고, 비교 결과의 처리는 [WebSocket 계약 1.3절](../contracts/websocket-relay-v2.md#13-origin-비교)이 정한다. Origin 헤더가 없어도 클라이언트 주소가 해당 역할의 `allow`에 있어야 한다. Origin은 사용자 인증 수단이 아니다.
 
-접속 ticket은 IP 허용 목록을 대신하지 않는다. `[relay.ticket.viewer]`·`[relay.ticket.server]`로 역할마다 켜며, TCP 진입점에는 적용하지 않는다. 평문 WS에서도 켤 수 있지만 ticket 원문이 암호화되지 않으므로 그 구간은 믿을 수 있는 망 안에 있어야 한다(사용자 결정 2026-11-11(Q197·Q199)). 같은 역할의 TCP 진입점과 평문 WS 경고는 [운영 스펙](operations.md#4-보안과-신뢰-경계)을 따른다.
+접속 ticket은 IP 허용 목록을 대신하지 않는다. `[relay.ticket.viewer]`·`[relay.ticket.server]`로 역할마다 켜며, TCP 진입점에는 적용하지 않는다. 평문 WS에서도 켤 수 있지만 ticket 원문이 암호화되지 않으므로 그 구간은 믿을 수 있는 망 안에 있어야 한다. 같은 역할의 TCP 진입점과 평문 WS 경고는 [운영 스펙](operations.md#4-보안과-신뢰-경계)을 따른다.
 
 ## 3. 정상 흐름과 규칙
 
@@ -59,7 +58,7 @@ Origin 정책: Origin 헤더가 있으면 해당 역할의 `allowed_origins`와 
 4. Viewer에는 `101` 응답 직후 시작 바이트를 보낸다. Server에는 보내지 않으며 Server가 `ID:` 초기 요청을 먼저 보낸다. [중계 스펙](relay.md#3-정상-흐름)의 초기 교환으로 대상 주소 또는 ID를 얻는다. 형식은 [Repeater 초기 교환 계약](../contracts/repeater-handshake-v1.md)을 따른다. 계약 밖의 별도 선택 단계를 만들지 않는다.
 5. 상대 TCP·WS·WSS 스트림은 바이너리 메시지로 전달한다. 출력 메시지 크기나 경계가 입력과 같을 필요는 없다.
 
-ticket을 켠 역할은 `binary`와 `ticket.` 뒤에 JWS 압축 형식을 붙인 값 하나를 함께 받아야 한다. `binary` 없이 다른 값이 있으면 먼저 HTTP 400으로 거절한다. 헤더가 없거나 ticket 값이 없으면 HTTP 401로 거절한다. ticket 값이 둘 이상이어도 HTTP 401로 거절한다. 수락 응답은 `Sec-WebSocket-Protocol: binary`만 고른다. ticket을 켜지 않은 역할은 기존 서브프로토콜 판정을 유지하며 ticket 값을 확인·기록하지 않는다([계약 1.9.1절](../contracts/websocket-relay-v2.md#191-서브프로토콜에-싣는-값), 사용자 결정 2026-11-11(Q196·Q213)).
+ticket을 켠 역할은 `binary`와 `ticket.` 뒤에 JWS 압축 형식을 붙인 값 하나를 함께 받아야 한다. `binary` 없이 다른 값이 있으면 먼저 HTTP 400으로 거절한다. 헤더가 없거나 ticket 값이 없으면 HTTP 401로 거절한다. ticket 값이 둘 이상이어도 HTTP 401로 거절한다. 수락 응답은 `Sec-WebSocket-Protocol: binary`만 고른다. ticket을 켜지 않은 역할은 기존 서브프로토콜 판정을 유지하며 ticket 값을 확인·기록하지 않는다([계약 1.9.1절](../contracts/websocket-relay-v2.md#191-서브프로토콜에-싣는-값)).
 
 | 규칙 ID | PRD 근거 | 동작 |
 | --- | --- | --- |
@@ -81,13 +80,13 @@ ticket을 켠 역할은 `binary`와 `ticket.` 뒤에 JWS 압축 형식을 붙인
 | WS-R16 | FR-05 | 알 수 없는 경로와 해당 리스너에서 꺼진 역할의 경로는 HTTP 404로 거절하고 `invalid_upgrade`를 기록해야 한다. 쿼리 문자열은 무시하고 끝 슬래시는 다른 경로로 보아야 한다. |
 | WS-R17 | 7절 | 신뢰 프록시의 전달 주소 판정 실패는 HTTP 400 `forwarded_for_invalid`로 거절해야 한다. 헤더 누락·빈 값, 잘못된 검사 대상 요소, 모든 요소가 신뢰 프록시인 체인이 해당한다. 등록과 `forwarded_ip`를 남겨서는 안 된다. |
 | WS-R18 | FR-05·7절 | 릴레이 WS·WSS 리스너 앞의 프록시 TLS 종료를 지원해야 한다. 소켓 주소와 전달 주소를 구분하고, 성공한 전달 주소를 역할별 IP 판정·운영 로그·관리 조회에 사용해야 한다. TLS 보호 구간을 프록시 뒤 평문 구간과 구분해야 한다. |
-| WS-R19 | FR-05·7절·AC-49 | 접속 ticket 확인은 역할마다 설정으로 켤 수 있어야 한다. 기본은 꺼짐이어야 한다. 꺼진 역할의 업그레이드 판정은 ticket 값이 있어도 2.0.0과 같아야 한다(사용자 결정 2026-11-11(Q192·Q197)). |
-| WS-R20 | FR-05·7절·AC-49 | ticket을 켠 역할의 업그레이드 요청은 유효한 ticket 하나를 담아야 한다. 없거나 확인에 실패하면 `101` 전에 HTTP 401로 거절해야 한다. 대기 등록·대상 연결을 만들어서는 안 된다(사용자 결정 2026-11-11(Q196·Q202)). |
-| WS-R21 | FR-05·7절·AC-49 | 한 ticket은 한 번만 받아들여야 한다. 사용 기록은 업그레이드 검사를 모두 통과한 뒤에 써야 한다. `iat ≤ 기동 시각 + 5`인 ticket은 거절해야 한다([계약 1.9.3·1.9.4절](../contracts/websocket-relay-v2.md#193-확인-순서와-거절), 사용자 결정 2026-11-11(Q201·Q213)). |
-| WS-R22 | FR-05·7절·AC-49 | ticket을 켠 역할의 `101` 응답은 `binary`만 골라야 한다. ticket 값을 응답·운영 로그·관리 API에 넣어서는 안 된다(사용자 결정 2026-11-11(Q213)). |
-| WS-R23 | FR-05·7절·AC-49 | ticket 설정의 교체는 새 업그레이드 요청부터 적용해야 한다. 이미 `101`을 보낸 연결의 중계 ID 대조와 세션 만료, 사용 기록은 유지해야 한다(사용자 결정 2026-11-11(Q200)). |
+| WS-R19 | FR-05·7절·AC-49 | 접속 ticket 확인은 역할마다 설정으로 켤 수 있어야 한다. 기본은 꺼짐이어야 한다. 꺼진 역할의 업그레이드 판정은 ticket 값이 있어도 2.0.0과 같아야 한다. |
+| WS-R20 | FR-05·7절·AC-49 | ticket을 켠 역할의 업그레이드 요청은 유효한 ticket 하나를 담아야 한다. 없거나 확인에 실패하면 `101` 전에 HTTP 401로 거절해야 한다. 대기 등록·대상 연결을 만들어서는 안 된다. |
+| WS-R21 | FR-05·7절·AC-49 | 한 ticket은 한 번만 받아들여야 한다. 사용 기록은 업그레이드 검사를 모두 통과한 뒤에 써야 한다. `iat ≤ 기동 시각 + 5`인 ticket은 거절해야 한다([계약 1.9.3·1.9.4절](../contracts/websocket-relay-v2.md#193-확인-순서와-거절)). |
+| WS-R22 | FR-05·7절·AC-49 | ticket을 켠 역할의 `101` 응답은 `binary`만 골라야 한다. ticket 값을 응답·운영 로그·관리 API에 넣어서는 안 된다. |
+| WS-R23 | FR-05·7절·AC-49 | ticket 설정의 교체는 새 업그레이드 요청부터 적용해야 한다. 이미 `101`을 보낸 연결의 중계 ID 대조와 세션 만료, 사용 기록은 유지해야 한다. |
 
-메시지 크기 제한 M은 프레임별 크기가 아니라 한 논리 메시지에 적용한다. B와 M 사이에는 대소 제약이 없다(사용자 결정 2026-11-01(Q78)). 프레임 안에서 스트리밍하며 방향당 미전달 보관 바이트는 B 이하다. B보다 큰 유효 프레임도 수락해 스트리밍하며 전체를 저장하지 않는다. 스트리밍 중 제한 초과를 확인할 때까지 일부 바이너리 데이터가 이미 전달될 수 있다. 초과 확인 뒤 추가 데이터 전달을 중지하고 종료 코드 1009로 닫는다. 실패한 메시지 전체를 원자적으로 취소하는 보장은 하지 않는다.
+메시지 크기 제한 M은 프레임별 크기가 아니라 한 논리 메시지에 적용한다. B와 M 사이에는 대소 제약이 없다. 프레임 안에서 스트리밍하며 방향당 미전달 보관 바이트는 B 이하다. B보다 큰 유효 프레임도 수락해 스트리밍하며 전체를 저장하지 않는다. 스트리밍 중 제한 초과를 확인할 때까지 일부 바이너리 데이터가 이미 전달될 수 있다. 초과 확인 뒤 추가 데이터 전달을 중지하고 종료 코드 1009로 닫는다. 실패한 메시지 전체를 원자적으로 취소하는 보장은 하지 않는다.
 
 끊긴 연결은 두 단계로 감지한다. WS·WSS의 하부 TCP 소켓에는 TCP keepalive(K)를 적용한다. WebSocket 계층에는 ping·pong(Kw)을 적용한다. 기본값과 유효 범위는 [설정 계약](../contracts/config-v4.md)이 정한다. pong에 응답하는 연결은 데이터가 없다는 이유만으로 끊지 않는다.
 
@@ -105,16 +104,16 @@ ticket을 켠 역할은 `binary`와 `ticket.` 뒤에 JWS 압축 형식을 붙인
 | 텍스트 메시지 | 지원하지 않는 데이터로 종료 | 텍스트를 TCP에 전달하지 않음 |
 | 잘못된 프레임·논리 메시지 M 초과 | 프로토콜·크기 오류로 종료 | 원인 구분, 추가 전달 중지, 자원 회수 |
 | Repeater 초기 교환 오류·시간 초과 | 호환 계약에 따른 종료 | 해당 대기·대상 연결 정리 |
-| 101 성공 후 Mode I 대상 연결용 L 상한 도달 | 중계 상한 도달(close 4011)로 종료 | 대상 연결을 만들지 않고 해당 연결 정리(사용자 결정 2026-11-01(Q79)) |
+| 101 성공 후 Mode I 대상 연결용 L 상한 도달 | 중계 상한 도달(close 4011)로 종료 | 대상 연결을 만들지 않고 해당 연결 정리 |
 | ticket 연결의 중계 ID 불일치 또는 ticket을 켠 Viewer의 유효한 Mode I 요청 | close 4012 `ticket_relay_mismatch`([계약 1.9.5절](../contracts/websocket-relay-v2.md#195-101-뒤의-중계-id-대조와-세션-만료)) | 기존 초기 요청 검사를 통과한 뒤 거절. 대기 등록·대상 연결 없음, 기다리던 상대 연결 유지 |
 | ticket의 세션 만료 시각(`sx`) 도달 | WS·WSS 쪽 close 4013 `session_expired`. 활성 세션의 TCP 쪽은 소켓 닫힘([계약 1.9.5절](../contracts/websocket-relay-v2.md#195-101-뒤의-중계-id-대조와-세션-만료)) | 해당 연결·대기·세션 정리. 활성 세션의 종료 원인은 `session_expired`. 남은 데이터 전달은 보장하지 않음 |
 | WebSocket close 수신 | 전체 WebSocket 종료 시작 | 상대 TCP에 EOF 의미 전달 후 제한 시간 안에 정리 |
 | TCP 정상 EOF | WebSocket 종료 시작 | 이미 수락한 TCP 데이터 소진 후 close, 소진 불가 시 중단 원인 기록 |
 | 네트워크 오류·종료 교환 시간 초과 | 비정상 종료 | 상대와 등록 자원 회수 |
 | pong 응답 없음 | Kw의 응답 제한이 지난 뒤 비정상 종료. 서버 ping은 TCP 스트림에 전달하지 않음(WS-R05) | 끊긴 연결로 처리해 상대 TCP와 등록 자원 회수, 규칙 WS-R13 |
-| 관리자 종료·프로세스 유예 만료·유예 중 두 번째 종료 요청 | 해당 세션의 양쪽 경로 종료. 두 번째 종료 요청은 남은 유예 없이 바로 종료([운영 스펙 3.4절](operations.md#34-정상-종료와-재시작)). 아직 정리를 시작하지 않은 활성 세션에 close 1001을 보냄(사용자 결정 2026-11-01(Q82)) | 완전한 잔여 데이터 전달은 보장하지 않음 |
+| 관리자 종료·프로세스 유예 만료·유예 중 두 번째 종료 요청 | 해당 세션의 양쪽 경로 종료. 두 번째 종료 요청은 남은 유예 없이 바로 종료([운영 스펙 3.4절](operations.md#34-정상-종료와-재시작)). 아직 정리를 시작하지 않은 활성 세션에 close 1001을 보냄 | 완전한 잔여 데이터 전달은 보장하지 않음 |
 
-WebSocket에는 TCP와 같은 독립적인 양방향 half-close가 없다. 따라서 WS·WSS가 포함된 연결은 한쪽 스트림 EOF 이후 반대 방향을 무기한 유지하지 않는다. 이 종료 의미와 오류별 HTTP 상태·close 코드의 대응은 [WebSocket 계약](../contracts/websocket-relay-v2.md)이 정한다(Active, 2026-10-16 채택). 코드 번호는 이 스펙이 아니라 그 계약이 기준이다.
+WebSocket에는 TCP와 같은 독립적인 양방향 half-close가 없다. 따라서 WS·WSS가 포함된 연결은 한쪽 스트림 EOF 이후 반대 방향을 무기한 유지하지 않는다. 이 종료 의미와 오류별 HTTP 상태·close 코드의 대응은 [WebSocket 계약](../contracts/websocket-relay-v2.md)이 정한다. 코드 번호는 이 스펙이 아니라 그 계약이 기준이다.
 
 서버가 자동으로 세션을 재접속·재매칭하지 않는다. 새 접속은 새로운 연결 수명이다.
 
@@ -148,7 +147,7 @@ WebSocket에는 TCP와 같은 독립적인 양방향 half-close가 없다. 따�
 
 WS-007 이후의 공통 중계 테스트는 WS·WSS 각각에 적용한다. 내장 TLS 전용 테스트는 서버 내장 WSS에 적용하고, 프록시 TLS 종료는 WS-035로 검증한다. WS 테스트는 평문 WS 리스너를 명시적으로 켠 설정에서 실행한다(WS-024). 테스트 코드는 `specs/`를 기준으로 한 이 문서의 상대 경로와 시나리오 ID를 메타 정보에 기록한다(예: `websocket.md:WS-001`). 연결 방식은 [검증 기록](../AGENTS.md#검증-기록)을 따른다. 테스트 위치와 결과는 이 문서에 적지 않는다.
 
-별도 조건이 없는 기존 시나리오는 접속 ticket을 끈 상태에 적용한다(이 문서의 판단, 사용자 결정 없음). 접속 ticket 시나리오는 [PRD AC-49](../requirements/PRD.md)와 [계약 1.9절](../contracts/websocket-relay-v2.md#19-접속-ticket)을 따른다.
+별도 조건이 없는 기존 시나리오는 접속 ticket을 끈 상태에 적용한다. 접속 ticket 시나리오는 [PRD AC-49](../requirements/PRD.md)와 [계약 1.9절](../contracts/websocket-relay-v2.md#19-접속-ticket)을 따른다.
 
 | 시나리오 ID | 요구사항 ID | 조건과 입력 | 기대 결과 |
 | --- | --- | --- | --- |
@@ -163,9 +162,9 @@ WS-007 이후의 공통 중계 테스트는 WS·WSS 각각에 적용한다. 내�
 | WS-009 | FR-05 / WS-R05 | 분할 바이너리 전송 중 ping·pong 삽입 | 제어 교환 처리, 스트림에 제어 바이트 없음 |
 | WS-010 | FR-05 / WS-R06 | M 크기와 M+1 크기 메시지를 분할·비분할로 전송 | 경계 내 수락, 초과는 종료·추가 전달 중지 |
 | WS-011 | FR-05 / WS-R07 | TCP 수신자·WS 수신자를 각각 지연 | 양 방향 버퍼 B 이내, 수신 재개 시 바이트 보존 |
-| WS-012 | FR-05 / WS-R08·WS-R14·WS-R16 | 관리 API·알 수 없는 경로·끝 슬래시 경로 또는 잘못된 업그레이드 요청. `/relay/viewer`·`/relay/server`도 각각 검사 | 잘못된 요청은 중계 업그레이드·대기 등록·대상 연결 없음. 두 유효 경로는 켠 역할로 판정. 후속: 사용자 결정 2026-11-08(Q188)으로 경로별 역할을 추가했다. 후속: 사용자 결정 2026-11-10으로 Viewer 경로를 `/relay/viewer`로 바꿨다. |
+| WS-012 | FR-05 / WS-R08·WS-R14·WS-R16 | 관리 API·알 수 없는 경로·끝 슬래시 경로 또는 잘못된 업그레이드 요청. `/relay/viewer`·`/relay/server`도 각각 검사 | 잘못된 요청은 중계 업그레이드·대기 등록·대상 연결 없음. 두 유효 경로는 켠 역할로 판정. |
 | WS-013 | 7절 / WS-R09 | 만료·신뢰되지 않음·호스트 불일치 인증서에 검증 클라이언트 접속 | 각각 TLS 실패, 평문 자동 전환 없음 |
-| WS-014 | 7절 / WS-R10·WS-R15 | 신뢰하지 않는 상대이며 켠 역할의 `allow` 합집합 밖인 IP에서 유효 관리자 쿠키·허용 IP 주장 XFF를 포함해 접속 | TLS·HTTP 처리 전 연결 종료, 쿠키·헤더로 우회 불가. 후속: 사용자 결정 2026-11-08(Q182·Q188)에 따라 비신뢰 상대에 한정하며 accept는 합집합을 쓴다. |
+| WS-014 | 7절 / WS-R10·WS-R15 | 신뢰하지 않는 상대이며 켠 역할의 `allow` 합집합 밖인 IP에서 유효 관리자 쿠키·허용 IP 주장 XFF를 포함해 접속 | TLS·HTTP 처리 전 연결 종료, 쿠키·헤더로 우회 불가. |
 | WS-015 | 7절 / WS-R10 | 허용 IP에서 비허용 Origin을 포함해 접속 | Origin 정책에 따라 업그레이드 거절 |
 | WS-016 | FR-05 / WS-R11 | 양 끝에서 각각 close·TCP EOF 발생 | 종료 의미에 따라 정리, 수락한 데이터 처리와 원인 일치 |
 | WS-017 | FR-05 / WS-R11 | 전송 중 단절·close 응답 미도착 | 정리 제한 후 자원 회수, 다른 세션 영향 없음 |
@@ -173,14 +172,14 @@ WS-007 이후의 공통 중계 테스트는 WS·WSS 각각에 적용한다. 내�
 | WS-019 | FR-05 / WS-R11 | 잘못된 프레임 순서 또는 유효하지 않은 제어 프레임 | 프로토콜 오류 종료, 등록 자원 회수 |
 | WS-020 | FR-05 | noVNC·websockify 없는 배포에서 중계 테스트 | 선택한 WS·WSS 조합이 외부 독립 검증 도구로 동작 |
 | WS-021 | 7절 / WS-R10 | 허용 IP의 비브라우저 클라이언트가 Origin·관리 세션 없이 접속 | IP 허용 및 호환 절차로 중계 가능, 관리자 로그인 요구 없음 |
-| WS-022 | FR-05·FR-07 / WS-R10 | 역할별 `allow`에서 IP 제거 전 업그레이드 완료한 중계와 업그레이드 전 HTTP·TLS 연결을 유지. accept에서는 켠 역할의 목록 합집합을 통과 | 기존 중계는 계속 전달. 제거 뒤 새 업그레이드는 클라이언트 주소를 요청 역할의 유효 목록으로 재검사해 403. 후속: 사용자 결정 2026-11-08(Q188)에 따라 accept 합집합과 upgrade 역할별 목록을 구분한다. |
-| WS-023 | 7절 / WS-R10 | 신뢰 프록시가 아니며 켠 역할의 `allow` 합집합에도 없는 IP가 WSS에 접속 | TLS 협상 전 연결 종료, U 동안 L을 점유하지 않음. 후속: 사용자 결정 2026-11-08(Q182·Q188)으로 accept 조건을 바꿨다. |
-| WS-024 | 7절 / WS-R12 | 기본 설정 뒤 `[relay.ws.viewer]` 또는 `[relay.ws.server]`의 역할 하나 이상을 명시적으로 켜고 재시작 | 기본: WS 리스너 없음. 하나 이상 켬: 공유 WS 리스너 열림, `plaintext_ws_enabled(listener=ws)` 경고. 후속: 사용자 결정 2026-11-08(Q188)의 공유 리스너 표기로 바꿨다. |
+| WS-022 | FR-05·FR-07 / WS-R10 | 역할별 `allow`에서 IP 제거 전 업그레이드 완료한 중계와 업그레이드 전 HTTP·TLS 연결을 유지. accept에서는 켠 역할의 목록 합집합을 통과 | 기존 중계는 계속 전달. 제거 뒤 새 업그레이드는 클라이언트 주소를 요청 역할의 유효 목록으로 재검사해 403. |
+| WS-023 | 7절 / WS-R10 | 신뢰 프록시가 아니며 켠 역할의 `allow` 합집합에도 없는 IP가 WSS에 접속 | TLS 협상 전 연결 종료, U 동안 L을 점유하지 않음. |
+| WS-024 | 7절 / WS-R12 | 기본 설정 뒤 `[relay.ws.viewer]` 또는 `[relay.ws.server]`의 역할 하나 이상을 명시적으로 켜고 재시작 | 기본: WS 리스너 없음. 하나 이상 켬: 공유 WS 리스너 열림, `plaintext_ws_enabled(listener=ws)` 경고. |
 | WS-025 | FR-05 / WS-R01 | 검증 시작 시 고정한 noVNC 버전의 repeaterID로 WS·WSS Mode II에 접속, TCP Server 선접속·후접속 각각 | 같은 ID로 매칭 성립, noVNC의 RFB 연결 완료 관찰. 화면 렌더링은 수용 기준이 아님 |
 | WS-026 | FR-05 / WS-R13 | pong에 응답하지 않는 WS·WSS 클라이언트와 pong에 응답하는 유휴 클라이언트를 각각 둠 | 응답 없는 클라이언트: Kw 뒤 종료, 상대 TCP와 등록 자원 회수. 응답하는 유휴 클라이언트: 연결 유지. 서버 ping 바이트는 TCP 스트림에 섞이지 않음(WS-R05) |
 | WS-027 | FR-05·7절 / WS-R10 | 허용 Origin 값으로 `https://a.example:8443`을 설정하고 `https://a.example:8443`, 스킴만 다른 Origin, 포트만 다른 Origin, 하위 도메인 `https://x.a.example:8443`으로 각각 업그레이드 요청 | 같은 값은 업그레이드. 스킴만 다름·포트만 다름·하위 도메인은 업그레이드 전에 거절 |
 | WS-028 | FR-03·FR-05 / WS-R01·WS-R14 | WS·WSS `/relay/server`의 Server와 TCP·WS·WSS Viewer를 Mode II로 조합. 각 조합에서 양 접속 순서 | 같은 ID 매칭, 양방향 바이트 일치. 운영 로그 `server_transport`와 관리 API `target_transport`는 Server 전송 경로와 일치 |
-| WS-029 | FR-05 / WS-R14·WS-R16 | `/relay/viewer`, `/relay/server`, 꺼진 역할의 경로와 그 밖의 경로를 요청. 1.x의 Viewer 경로 `/relay`도 요청. 쿼리·끝 슬래시도 비교 | 두 정확한 경로는 각각 Viewer·Server. 쿼리는 무시. 꺼진 역할·다른 경로·`/relay`·끝 슬래시는 404 `invalid_upgrade`, 등록 없음. 후속: 사용자 결정 2026-11-10으로 Viewer 경로를 바꿨다. |
+| WS-029 | FR-05 / WS-R14·WS-R16 | `/relay/viewer`, `/relay/server`, 꺼진 역할의 경로와 그 밖의 경로를 요청. 1.x의 Viewer 경로 `/relay`도 요청. 쿼리·끝 슬래시도 비교 | 두 정확한 경로는 각각 Viewer·Server. 쿼리는 무시. 꺼진 역할·다른 경로·`/relay`·끝 슬래시는 404 `invalid_upgrade`, 등록 없음. |
 | WS-030 | 7절 / WS-R10 | Viewer `allow`에만 있는 비프록시 IP가 accept 뒤 `/relay/server` 요청. 켠 역할 어느 목록에도 없는 비프록시 IP도 접속 | 첫 연결은 accept를 통과하지만 Server 업그레이드에서 403 `ip_not_allowed`. 둘째 연결은 TLS·HTTP 전에 닫힘 |
 | WS-031 | FR-05·7절 / WS-R10·WS-R14 | `/relay/server`에 Server 역할의 허용·비허용 Origin을 보냄. Viewer와 Server의 목록은 다르게 설정 | Server `allowed_origins`만 적용. 허용 값은 진행, 비허용 값은 403, Viewer 목록으로 우회 불가 |
 | WS-032 | 7절 / WS-R10·WS-R15·WS-R18 | 신뢰 프록시가 여러 XFF 필드와 SP·HTAB, 신뢰 중간 프록시, 가장 오른쪽 비신뢰 IP, 그 왼쪽 위조 요소를 전달. IPv4·IPv6·mapped 표기도 비교 | 가장 오른쪽 비신뢰 정규 IP가 클라이언트 주소. 왼쪽 요소는 검사하지 않음. 역할 `allow`에 사용, `peer_ip`는 소켓 주소 유지, `forwarded_ip`와 관리 API의 해당 `*_forwarded_ip`에 전달 주소 표시 |
@@ -201,12 +200,4 @@ WS-007 이후의 공통 중계 테스트는 WS·WSS 각각에 적용한다. 내�
 
 ## 8. 미결정 사항
 
-확정 책임은 프로젝트 요구사항·운영 결정 담당자에게 있다. 외부 URL·HTTP 상태·종료 코드는 Active 계약이 기준이다. 구현과 테스트의 지원 판정은 [작업 5.9 판정표](../how-to/set-up-and-verify.md#41-작업-59-판정표)를 따른다.
-
-접속 ticket 범위는 사용자 결정 2026-11-11(Q192~Q204·Q207·Q212·Q213)으로 채택했다. 구현은 커밋 `4be8e0e`이며, 계약 테스트는 같은 커밋의 두 OS 전체 게이트에서 통과했다([접속 ticket 판정표](../how-to/set-up-and-verify.md#45-접속-ticket-판정표)). 계약 테스트는 [WebSocket 계약 5절](../contracts/websocket-relay-v2.md#5-예제와-계약-테스트)을 따른다.
-
-(해결) 사용자 결정 2026-11-08(Q191)으로 채택했다: `trusted_proxies` 전체 허용 경고 코드·사건명 `trust_all_proxies`. 이름과 필드의 채택은 [운영 정보 계약](../contracts/ops-info-v2.md)의 결정 기록을 따른다. WS-028~036과 변경된 WS-012·014·022·023·024는 미실행 (구현 전)이며 계약 테스트 계획은 [WebSocket 계약 5절](../contracts/websocket-relay-v2.md#5-예제와-계약-테스트)에 있다. 후속: 구현은 커밋 `3df0693`이며, 시험은 커밋 `51bd747`의 두 OS 게이트에서 통과했다([WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)).
-WS-TBD-001은 결번이며 재사용하지 않는다. WS-TBD-002는 [WebSocket 중계 v1](../contracts/websocket-relay-v2.md) 채택(2026-10-16)으로 결정되어 4절과 계약에 반영했으며 재사용하지 않는다. WS-TBD-003은 [설정 파일 v3](../contracts/config-v4.md) 1.4절의 정규화 규칙 채택으로 결정되어 2절과 계약에 반영했으며 재사용하지 않는다. WS-TBD-006은 결정되어 1절에 반영했으며 재사용하지 않는다. WS-TBD-005는 2026-11-01에 해소되어 이 표에서 뺐다. noVNC 1.7.0을 [호환성 검증 기록](../contracts/repeater-compat-record.md) 2.4절에 고정했고(버전·해시·받은 주소·날짜), 같은 기록 3.4절에 WS·WSS 관찰 결과를 남겼다. 이 버전은 `Sec-WebSocket-Protocol` 헤더를 보내지 않았고, 이는 [WebSocket 중계 v1](../contracts/websocket-relay-v2.md) 1.2절 규칙과 같다. 재사용하지 않는다.
-WS-TBD-004는 사용자 결정 2026-11-01(Q78)로 해소되어 이 절에서 뺐다. B와 M 사이에 크기 제약은 없다. 프레임 안에서 스트리밍하며 방향당 미전달 보관 바이트는 B 이하다. M은 분할 프레임을 합친 논리 메시지에 적용되며 M+1부터 1009로 닫고 추가 전달을 멈춘다. B보다 큰 유효 프레임도 수락해 스트리밍하며 전체를 저장하지 않는다. 재사용하지 않는다.
-
-후속: 사용자 결정 2026-11-08(Q188)으로 설정 계약은 v4로 옮겼다. 위 WS-TBD-003의 v3는 당시 채택 기록이며 링크는 현재 계약을 가리킨다. 같은 방식으로, 위 WS-TBD-002·WS-TBD-005의 "WebSocket 중계 v1"은 당시 계약 이름이며 링크는 현재 계약(v2, 사용자 결정 2026-11-10)을 가리킨다.
+현재 남은 미결정 사항은 없다.

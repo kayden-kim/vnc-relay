@@ -6,7 +6,7 @@
 | --- | --- |
 | 구조 시점 | Current |
 | 문서 상태 | Draft |
-| 구현 대조 | 대조함, [대조 기록](#대조-기록). 최근 로그 화면의 공통 컴포넌트 범위의 구현은 커밋 `3df0693`이다. 시험은 커밋 `51bd747`의 두 OS 게이트에서 통과했다([WSS Server·프록시·최근 로그 판정표](../how-to/set-up-and-verify.md#43-wss-server프록시-tls-종료최근-로그-판정표)). |
+| 구현 대조 | Verified — [대조 기록](#대조-기록) |
 | 코드 위치 | `web/dashboard/app/components/`, `web/dashboard/app/styles/`, `web/dashboard/preview/`, `web/dashboard/tests/` |
 | 코드 지도 | [코드 지도 2절](code-map.md#2-코드-위치와-구성요소) |
 | 관련 스펙 | [대시보드 화면 스펙](../specs/dashboard.md)의 화면 상태 표. 이 모듈은 화면이 아니라서 시나리오 ID를 가지지 않는다. |
@@ -21,10 +21,10 @@
   - 상태를 속성(`disabled`, `aria-*`, `data-tone`)과 클래스(`is-hover`, `is-focus`)로 나타낸다.
   - 미리보기와 테스트 페이지가 같은 조각을 쓴다(복제하지 않는다).
 - 맡지 않는 책임:
-  - 관리 API 호출, 폴링, 세션 상태, 오류 분류: 화면 모듈(작업 4.10·4.11)이 맡는다.
-  - 로그인 화면 조립: 작업 4.9가 맡았다. 조립은 `web/dashboard/login/`에 있고, 구성 요소는 `cargo xtask tokens`가 만든 복사본(`login/components/`, `login/styles/`)을 가져온다. 복사본은 직접 고치지 않는다(`login/`과 `app/`은 파일을 공유하지 않는다, 프런트엔드 컨벤션 1.1절).
+  - 관리 API 호출, 폴링, 세션 상태, 오류 분류: 화면 모듈이 맡는다.
+  - 로그인 화면 조립: `web/dashboard/login/`이 맡는다. 구성 요소는 `cargo xtask tokens`가 만든 복사본(`login/components/`, `login/styles/`)을 가져온다. 복사본은 직접 고치지 않는다. `login/`과 `app/`은 파일을 공유하지 않는다(프런트엔드 컨벤션 1.1절).
   - 토큰 값 정의: [DESIGN.md](../design/DESIGN.md) YAML과 `cargo xtask tokens`가 맡는다.
-  - 정적 파일 제공: 작업 4.6이 맡는다. `cargo xtask dashboard-serve`는 로컬 미리보기 전용이다.
+  - 정적 파일 제공: [관리 리스너](management-listener.md)가 맡는다. `cargo xtask dashboard-serve`는 로컬 미리보기 전용이다.
   - 언어 선택 저장과 문구 번역: 화면 모듈이 맡는다.
   - 도움말 주소 선택과 문구 갱신: 보호 화면은 `app/shell.js`의 `buildNavbar`, 로그인은 `login/login.js`의 `update`가 맡는다. 공통 컴포넌트는 도움말 사이트에 요청하지 않는다([DASH-064](../specs/dashboard.md#7-수용-테스트)).
 - 다른 모듈에 공개하는 기능: `web/dashboard/app/components/` 아래 모듈의 함수. 아래 2절 표.
@@ -89,10 +89,10 @@ flowchart LR
 | `icon(name, {size})` | 아이콘 이름, 크기 | `SVGSVGElement`. `aria-hidden="true"`, `focusable="false"`. |
 | `createButton({variant, label, icon, disabled, busy, type})` | `variant` 기본 `primary`. `navbar`는 상단 막대 항목형 버튼이다(DESIGN.md 버튼 변형). `icon`은 아이콘 이름. `busy`는 진행 중 상태다. | `HTMLButtonElement`. `busy`이면 `disabled`와 `aria-busy="true"`를 붙인다. 문구는 호출자가 바꾼다. |
 | `createTextField({id, label, type, value, required, autocomplete, helpText, error})` | `type`은 `text` 또는 `password`. `error`가 있으면 오류 상태다. 비활성 옵션은 없다(DESIGN.md 입력 상태는 기본·포커스·오류). 포커스는 CSS의 `:focus-visible`과 미리보기 클래스 `is-focus`로 나타난다. | `HTMLDivElement`. 오류가 있으면 `aria-invalid="true"`, `aria-describedby`에 오류 문구 id를 쓴다. |
-| `setTextFieldError(field, error)` | `field`는 `createTextField`가 만든 `div`다. `error`가 있으면 오류 문구를 붙이고 `aria-invalid="true"`, `aria-describedby`를 오류 문구 id로 바꾼다. `error`가 빈 값이면 오류 문구를 지우고 `aria-invalid="false"`로 바꾼다. 도움말이 있으면 `aria-describedby`를 도움말 id로 되돌리고, 없으면 지운다. 로그인 화면이 필드를 다시 만들지 않고 오류만 바꾸려고 추가했다(4.9 재작업). | `undefined`. 요소를 새로 만들지 않고 같은 요소를 바꾼다. |
+| `setTextFieldError(field, error)` | `field`는 `createTextField`가 만든 `div`다. 오류가 있으면 문구와 `aria-invalid="true"`·오류 문구 id의 `aria-describedby`를 붙인다. 빈 오류는 문구를 지우고 `aria-invalid="false"`로 바꾼다. 도움말이 있으면 그 id로 복원하고 없으면 속성을 지운다. | `undefined`. 요소를 새로 만들지 않고 바꾼다. |
 | `createBadge({tone, label, icon})` | `icon` 기본값은 `tone`별 아이콘(`neutral`은 없음). `icon: false`로 끈다. | `HTMLSpanElement` |
-| `createAlert({tone, title, message})` | `warning`·`destructive`는 `role="alert"`, 나머지는 `role="status"` | `HTMLDivElement` |
-| `createCard({title, headingLevel, description, count, actions, body, footer})` | `title` 필수. `headingLevel` 기본 2(1~6의 정수). `description`은 선택 문자열이다. 카드 머리(`.card-head`)의 제목 아래 `p.card-description`에 넣는다(DESIGN 527·638행). `count`는 `createBadge`로 붙인다. SCR-001 개수 문구는 CPY-084·085(Q115)를 따르며 목록별 성공 데이터와 함께 갱신한다. | `HTMLElement`(`section`). `aria-labelledby`로 제목과 묶는다. |
+| `createAlert({tone, title, message, action})` | `action`은 선택 DOM 노드다. `warning`·`destructive`는 `role="alert"`, 나머지는 `role="status"`다. | `HTMLDivElement` |
+| `createCard({title, headingLevel, description, count, actions, body, footer})` | `title` 필수. `headingLevel` 기본 2(1~6의 정수). `description`은 카드 머리 제목 아래 `p.card-description`의 선택 문자열이다. `count`는 `createBadge`로 붙인다. SCR-001 개수 문구는 CPY-084·085이며 목록별 성공 데이터와 함께 갱신한다. | `HTMLElement`(`section`). `aria-labelledby`로 제목과 묶는다. |
 | `createStat({label, value, unit, tone, badge})` | `label` 필수. 값은 문자열 또는 숫자다. `badge` 기본값은 `false`이며, 기본 값은 `metric` 글꼴과 `tnum`을 쓴다. `badge: true`이면 `createBadge`에 값과 `tone`을 넘긴다. 실행 상태와 확인 불가·조회 중 값에 쓴다(DESIGN.md Stat). | `HTMLDivElement` |
 | `createGauge({label, value, max, valueText, limitText, unknownText, unknownTone})` | `value`는 `0`~`max`. `label`과 `limitText`는 필수다. 알려진 값은 가운데에 `valueText`(없으면 값)를 크게 보이고, 아래 줄에 `limitText`(상한 줄)를 보인다. `value`가 `null`이면 알 수 없음이며 링을 그리지 않고 `unknownText`(필수)를 `createBadge`의 배지로 쓴다. `unknownTone`은 그 배지의 톤이며 기본값은 `neutral`(확인 불가)이다. 첫 조회 전에는 호출자가 `info`(조회 중)를 넘긴다(DESIGN 상태 색). `value`가 `null`일 때 톤이 잘못되면 `TypeError`다. 알려진 값에서는 배지를 만들지 않으므로 `unknownTone`을 쓰지 않는다. 채움 길이는 `style.setProperty`로 쓴다. | `HTMLDivElement`. `role="progressbar"`, `aria-label`, `aria-valuemin`, `aria-valuemax`, `aria-valuenow`, `aria-valuetext`. 알려진 값의 `aria-valuetext`는 `valueText, limitText`다. |
 | `createNavbar({brand, items, help, language, action, label})` | `label`은 필수다(기본값 없음, 호출자가 준다). `items`는 `{label, href, current, icon}`. `help`·`language`·`action`은 선택 DOM 노드다. 도구 묶음에 이 순서로 넣는다. 화면이 활성 항목을 고르며 모든 항목은 모바일에서도 보인다. | `HTMLElement`(`header`). 안에 `nav`를 둔다. 현재 항목은 `aria-current="page"`. |
@@ -109,8 +109,6 @@ flowchart LR
 - `mobileHead: 'primary'` 셀에는 `.data-table-head-primary`, `'secondary'` 셀에는 `.data-table-head-secondary`를 붙인다. 두 셀은 모바일 격자의 첫 행(`grid-row: 1`)을 공유한다. 첫 줄 셀은 `::before` 레이블 없이 값만 보인다.
 - 일반 셀은 `data-label`과 CSS 가상 요소로 열 이름을 보인다. 가상 요소의 대체 텍스트는 비워 중복 읽기를 막는다(DESIGN 566행). 열 머리글은 화면에서만 숨기고 접근성 트리에는 남긴다.
 - 데스크톱 폭의 열 머리글은 한 줄이다. `data-table-wrap` 머리글만 낱말 사이에서 줄바꿈한다. 그래서 "대상->Viewer" 같은 낱말은 하이픈 뒤에서 끊기지 않는다. 칸 바로 아래의 배지(`td > .badge`)와 `data-table-nowrap` 클래스를 붙인 글씨도 한 줄을 유지한다(DESIGN의 배지 한 줄 규칙과 시각 값의 날짜·시각 두 줄 규칙). 호출자도 셀 값에 이 클래스를 쓸 수 있다. 모바일 폭에서는 320px 넘침을 막으려고 배지와 `data-table-nowrap` 글씨를 다시 줄바꿈한다.
-
-4.12 API 반영의 실행 검증과 캡처 결과는 별도 검증 기록에서 관리한다. 아래 날짜가 있는 대조 기록은 당시 결과다.
 
 ### 도움말 링크 조립
 
@@ -151,10 +149,10 @@ flowchart LR
 | 조각의 형태 | 요소를 돌려주는 함수 | 빌드와 프레임워크가 없다. 요소를 직접 검사하기 쉽다. | 사용자 정의 요소(`customElements`). 생명주기와 공개 표면이 늘어난다. |
 | 스타일 위치 | `app/styles/` CSS 파일에 클래스로 둔다 | 미리보기와 화면이 같은 CSS를 직접 가져온다. | 조각마다 스타일 문자열을 넣는다. CSP가 막는다. |
 | 화면 배치 규칙 위치 | 배치 클래스와 중단점 블록을 `app/styles/components.css`에 같이 둔다. 중단점은 `max-width: 1023.98px` 하나다 | `app.css`는 `components.css` 뒤에 로드되므로(`app/index.html`) 배치 기본 규칙을 거기 두면 중단점 블록을 덮는다. 같은 파일에 두면 소스 순서로 재정의가 지켜진다. | `app.css`에 배치 규칙을 두는 것. 767px 별도 블록을 두는 것(중단점이 둘이 된다). |
-| 미리보기 배치 | 구현 판단(사용자 결정 없음). `preview.js`의 `renderGroup`은 공유 `.grid`와 견본의 `.span-12`·`.span-6`·`.span-4`를 쓴다. 견본 1개는 전체 폭, 2개는 2열, 3개 이상은 3열로 둔다. 5개 견본은 3개와 2개로 나눈다. `preview.css`에는 미디어 쿼리가 없고 본문 여백은 모든 폭에서 `spacing.lg`다 | DESIGN.md의 단일 중단점을 공유한다. 12열 격자에서 같은 폭의 5열은 만들 수 없으므로 견본을 빠뜨리지 않고 다음 줄로 보낸다. 공유 컴포넌트 CSS에 페이지 본문 여백 클래스는 없다. | 미리보기 전용 중단점·5열 스타일을 유지하거나 제품 CSS에 미리보기 전용 규칙을 더하는 것. |
+| 미리보기 배치 | `preview.js`의 `renderGroup`은 공유 `.grid`와 `.span-12`·`.span-6`·`.span-4`를 쓴다. 견본 1개는 전체 폭, 2개는 2열, 3개 이상은 3열이다. 5개는 3개와 2개로 나눈다. `preview.css`에는 미디어 쿼리가 없고 여백은 모든 폭에서 `spacing.lg`다. | 단일 중단점과 12열 격자를 공유하며 견본을 빠뜨리지 않는다. | 미리보기 전용 중단점·5열 |
 | 상태 미리보기 | `is-hover`·`is-focus` 클래스 | 호버와 포커스를 재현할 수 있고 복제 CSS가 없다. | 미리보기 전용 CSS 복사본. 두 곳을 맞춰야 한다. |
 | 좁은 폭의 표 | CSS로 카드처럼 배치하고 표 역할은 유지 | 역할과 읽기 순서를 그대로 쓴다. | 폭마다 다른 마크업. |
-| 대화상자 | 네이티브 `dialog`와 `showModal()`. Tab 순환과 취소 뒤 포커스 복귀만 직접 만든다 | 열기와 Escape 닫기를 브라우저가 한다. 탐침에서 Tab이 `body`로 빠져서 `dialog.js`의 keydown이 두 단추 사이를 돈다(DASH-015, 검증 기록 4.7절). 브라우저는 닫을 때 열 당시 포커스가 있던 요소로 돌린다. WebKit은 마우스로 누른 단추에 포커스를 주지 않아 그 요소가 `body`일 수 있다. 그래서 취소·Escape 뒤에는 `returnFocus`로 직접 돌린다. 취소 단추는 `close` 이벤트를 기다리지 않는다. 가상 시간으로 실행한 Chromium 시험에서 이 이벤트가 시험의 100ms 대기 안에 오지 않았기 때문이다(DASH-009, 검증 기록 4.21절). | 포커스 가두기 전부를 직접 만드는 것. |
+| 대화상자 | 네이티브 `dialog`와 `showModal()`. Tab 순환과 취소 뒤 포커스 복귀를 직접 처리한다. | 열기와 Escape 닫기는 브라우저가 맡는다. `dialog.js`의 keydown은 두 단추 사이를 돈다. 취소·Escape 뒤에는 유효한 `returnFocus`로 돌린다. 취소 단추는 `close` 이벤트를 기다리지 않는다. | 포커스 가두기 전체를 직접 구현 |
 | 언어 선택 | 네이티브 `select` | 키보드 동작과 스크린 리더 이름을 브라우저가 맡는다. | 직접 만든 목록 상자. |
 | 아이콘 | 인라인 SVG와 `<template>` 복제 | 외부 파일 요청이 없고 CSP를 지킨다. | 외부 스프라이트 `<use href>`. 외부 파일 요청이 생긴다. |
 | 설정 입력과 진단 | 기존 `text-field-input`·Card·Alert·Dialog를 조립한다. 목록은 `textarea`, 정수는 단위가 있는 텍스트 입력과 숫자 키보드다. 입력 문법은 서버에 보내기 전에 검사한다 | 기존 단일 줄 `createTextField`는 로그인에 맞춘 API다. 설정의 여러 줄·단위·원래 줄 선택·여러 진단을 별도 화면 조립으로 추가하되 기존 시각 토큰과 오류 의미를 공유한다. 새 시각 토큰은 없다. | 로그인 필드 API에 설정 전용 자료형·상태를 넣는 것. |
@@ -166,36 +164,20 @@ flowchart LR
 
 `app.css`의 `.config-*`는 키·값 3열 목록, 여섯 입력 구역, 변경 목록과 스크롤 가능한 확인 대화상자를 그린다. `styles/components.css`의 기존 단일 중단점은 이 목록과 입력 격자를 한 열로 바꾼다. 목록 입력은 `typography.input-data`, 숫자·문자열 입력은 `typography.input`을 쓴다. 두 단계 모두 16px 이상이다. 불리언 입력은 로그 수준의 `.check` 상자를 재사용하고 키 이름을 label로 둔다. 키·문자열 보기 값은 기존 `typography.data`를 유지한다.
 
-`tests/settings.html`·`settings-scenarios.js`는 기존 `operations`·`session` 시험 페이지와 같은 가짜 API 패턴이다. 읽기 행과 입력에는 `data-config-key`를 두어 같은 키의 값·진단·배지와 연결한다. 실서버에 대한 파일 기록·기존 연결 유지 증거는 이 시험의 범위가 아니다. 그 증거는 `tests/dashboard_live/settings_view.rs`·`settings_edit.rs`·`settings_recovery.rs`가 실제 설정 파일·파일 변경 감지·`/api/v1/config`로 확인한다. 시험 쪽 주입 범위는 [프런트엔드 컨벤션 검증 표](../conventions/frontend.md)의 사용자 결정 2026-11-05(Q113)·2026-11-08(Q180)을 따른다.
+`tests/settings.html`·`settings-scenarios.js`는 가짜 API로 화면을 확인한다. `data-config-key`는 같은 키의 값·진단·배지를 연결한다. 실제 파일 기록·기존 연결 유지는 `tests/dashboard_live/settings_view.rs`·`settings_edit.rs`·`settings_recovery.rs`가 실제 설정 파일·변경 감지·`/api/v1/config`로 확인한다. 주입 범위는 [프런트엔드 컨벤션](../conventions/frontend.md)의 검증 표를 따른다.
 
 
-## 8. 미결정 사항
+## 시험과 확인 범위
 
-- (해결) 브라우저 시험(`tests/dashboard_browser.rs`)은 4.8에 넣었다. Windows와 WSL Ubuntu 모두에서 실행한다. Ubuntu에는 Google Chrome 안정판 .deb를 설치한다(사용자 결정 2026-10-22(Q41)). 브라우저가 없으면 시험은 실패한다(건너뛰지 않는다, 사용자 결정 2026-10-22(Q35)). 설치와 실행 기록은 [개발 환경 how-to](../how-to/set-up-and-verify.md#4-검증) 실행 기록 4에 있다.
-- (해결) 성능 예산(FE-TBD-016)은 두지 않는다. Q39로 화면이 생긴 뒤까지 보류했다가 사용자 결정 2026-11-07(Q159)로 지표 없이 닫았다.
-- 로그인(4.9)은 구성 요소의 생성 복사본을 가져온다. 로그인이 쓰려고 `setTextFieldError`를 추가했고 §3.1 표에 적었다. 운영 화면(4.10·4.11)이 조각을 더 요구하면 이 문서에 API를 추가한다.
-- (해결) 로그인 화면은 새로고침 후 계정명을 복원하지 않는다. 로그인 요청 제한 시간은 10초로 유지한다(사용자 결정 2026-11-07(Q158), [화면 스펙 9.5절](../specs/dashboard.md#95-결정-기록) 13항). 시안과의 차이 가운데 안내 제목과 빈 입력 문구는 사용자 결정 2026-10-23(Q56)로 정했다. 짧은 제목 없이 화면 스펙 9절의 승인 문구 한 문장을 쓴다(같은 절 10항).
+- `tests/dashboard_browser.rs`는 Windows와 WSL Ubuntu의 실제 브라우저에서 컴포넌트와 미리보기를 연다. 브라우저가 없으면 실패하며 건너뛰지 않는다. 설치는 [개발 환경 how-to](../how-to/set-up-and-verify.md)를 따른다.
+- 성능 예산은 두지 않는다([프런트엔드 컨벤션 4절](../conventions/frontend.md#4-접근성반응형성능-확인)).
+- 로그인 화면은 새로고침 뒤 계정명을 복원하지 않는다. 로그인 요청 제한 시간은 10초다. 안내는 별도 짧은 제목 없이 [화면 스펙 9절](../specs/dashboard.md#9-화면-문구)의 문장 하나를 쓴다.
+- 공개 함수 표의 문자열 필수 옵션(`button.label`, `badge.label`, `link.href`·`label`, `text-field.id`·`label`, `alert.title`)은 빈 값이면 `TypeError`다.
+- 자동 시험의 현재 결과는 [테스트 컨벤션](../conventions/testing.md)에 따라 `cargo xtask scenarios`의 `scenario-report.md`와 CI에서 확인한다.
+- 시안 대조·키보드·스크린 리더·실기기 관찰은 [프런트엔드 검증 기록](../how-to/verify-dashboard-frontend.md)에서 관리한다.
 
 ## 대조 기록
 
-대조일 2026-10-22, 환경 Windows 10.0.26200. 경로, 함수 이름, 상태 속성은 소스와 일치한다. 아래 표의 "차이"는 설계 문서를 코드에 맞춘 것이다.
-
-| 대상 | 확인 방법 | 결과 |
-| --- | --- | --- |
-| 파일 경로(2절 표) | 13개 조각 파일, `app/styles/base.css`·`components.css`, `preview/`, `tests/components.js` 존재 확인 | 통과 |
-| 공개 함수 이름과 옵션(3.1 표) | 각 `export function`의 옵션 구조 분해와 `TypeError` 검사를 대조 | 차이 7건을 고쳤다: card(`badge.js` 의존, 개수 배지), stat(`label` 필수), gauge(`limitText`·`unknownText` 추가), navbar(`label` 필수, "주 메뉴" 기본값 없음, `desktopOnly`), language-select(`icons.js` 의존, `variant` 기본 `form`), text-field(`icons.js` 의존, 2절 표), dialog(`title`·`confirmLabel`·`cancelLabel` 필수) |
-| 아이콘 이름 13개와 크기 md·sm | `PATHS` 키, `SIZE_CLASS`, CSS `.icon-md`·`.icon-sm` | 통과 |
-| 상태 속성 | `aria-busy`, `aria-current`, `aria-invalid`, `aria-describedby`, `aria-labelledby`, `role`(alert·status·progressbar) 검색 | 통과 |
-| 상태 클래스 | `is-hover`·`is-focus`를 미리보기 `preview.js`만 붙이고 `app/components/`는 붙이지 않는지 검색 | 통과 |
-| 색과 움직임 | `color-scheme: light`(base.css), 전환·애니메이션 검색 | 통과. 전환과 애니메이션은 없다 |
-| 줄바꿈 | `word-break: keep-all`(base.css), `overflow-wrap: anywhere`(components.css) | 통과 |
-| 미리보기와 테스트 호출 | `preview.js`와 `tests/components.js`가 `app/components/`의 함수를 import한다 | 통과 |
-| 토큰 CSS 연결 | `cargo xtask tokens --check` | 통과(종료 코드 0) |
-| 브라우저 시험 | `cargo test --test dashboard_browser` | 통과(시험 21개 ok). 미리보기와 테스트 페이지를 6폭 × ko/en 12회 열어 `data-result=pass`, CSP 위반 0, 가로 스크롤 0 |
-| 리뷰 수정 A–D(Q42, 2026-10-22) | 3.1 표와 CSS를 다시 대조: 게이지 `aria-valuetext`(gauge.js L71), 버튼 `navbar` 변형(button.js), 입력 상태(옵션 없음), 대화상자 `display`(components.css `.dialog[open]`) | 차이 4건을 고쳤다. A 게이지: 가운데에 현재 값, 아래 "상한" 줄. DESIGN.md 게이지 절을 따랐고 리뷰의 "비율" 표기는 쓰지 않았다(결정 요청 참고). B 상단 막대 로그아웃: `navbar` 변형, 항목 1개(`bc6248e`, `fc7c325`). C 입력: 비활성 견본을 포커스 견본으로 바꿈(`e1ba857`). D 대화상자: 닫힌 상태는 숨기고, 열린 견본은 프레임 안에 둠(`0741c3c`, 시험 `4e65789`). |
-| 로그인 복사본(4.9 재작업) | `cargo xtask tokens --check`, 복사본 변조·원본 변조·복사 목록 밖 파일 시험 | 통과. 깨끗한 상태는 통과. 복사본 변조, 원본 변조, 복사 목록 밖 파일 각각 `생성 결과와 다르다` 또는 `복사 목록에 없는 파일이다`로 실패하고 종료 코드 1이었다. 되돌린 뒤 다시 통과했다. |
-| 대화상자 Tab 순환(4.11, DASH-015) | 탐침: 열린 대화상자에서 `종료 확인`의 Tab이 어디로 가는지 확인. `session-scenarios.js`의 `DASH-015` 시험 두 건 | 차이 1건을 고쳤다. 네이티브 `showModal()`에서 Tab이 `body`로 빠졌다. `dialog.js` keydown으로 두 단추 사이를 돌게 했다. 시험은 합성 keydown이라 핸들러만 확인한다. 검증 기록 4.7절 |
-| SCR-001 표·카드 대조(4.12, 2026-10-23) | `mobileHead` 옵션·잘못된 값의 `TypeError`, 빈 행까지 명시한 표 역할, `description` 옵션을 구현·브라우저 DOM과 대조했다 | DESIGN 554~566·638행 반영. Chrome ko 1280·1023·390·320, en 1280·320에서 첫 줄 배치·설명 위치·넘침을 확인했다. 시험·명령 결과와 미실행 항목은 검증 기록 4.15절에 있다 |
-| SCR-001 목록 정보 확대 대조(Q234·Q235, 2026-11-17) | 최근 종료 표 8열을 시안 `th.wrap`·`.badge`·`.t`와 대조했다. `wrapLabel` 옵션, 배지와 `data-table-nowrap`의 데스크톱 한 줄 규칙을 더했다 | 차이 4건을 고쳤다. 배지 줄바꿈("Mode / II"), en 1024에서 시각 열이 날짜 중간까지 좁아짐, 머리글이 줄바꿈하지 않아 표가 카드 폭을 넘을 위험, 줄바꿈을 허용한 머리글이 하이픈 뒤에서 끊김("대상-" / ">Viewer")이다. 확인 방법과 남은 차이는 검증 기록 4.36절에 있다 |
-
-3.1 표에 없는 문자열 필수 옵션(`button`의 `label`, `badge`의 `label`, `link`의 `href`·`label`, `text-field`의 `id`·`label`, `alert`의 `title`)도 빈 값이면 `TypeError`를 던진다.
+| 날짜 | 대상 | 환경 | 확인 방법 | 실제 결과 |
+| --- | --- | --- | --- | --- |
+| 2026-11-17 | 작업 트리의 SCR-001 목록 정보 확대와 공통 표 | 대시보드 소스와 시안 | 최근 종료 표 8열을 시안의 `th.wrap`·`.badge`·`.t`와 비교했다. `wrapLabel`과 배지·`data-table-nowrap`의 데스크톱 한 줄 규칙을 대조했다. | 배지·날짜 중간 줄바꿈, 카드 폭 넘침 위험, 하이픈 뒤 머리글 줄바꿈의 차이를 해소했다. 실제 화면의 폭별 결과와 남은 한계는 프런트엔드 검증 기록을 따른다. |

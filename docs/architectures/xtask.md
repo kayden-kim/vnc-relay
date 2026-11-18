@@ -2,17 +2,15 @@
 
 `xtask`는 개발 전용 crate다. `cargo xtask scenarios`는 스펙 수용 테스트 표, 테스트 코드의 시나리오 표식, `cargo test` 결과를 대조해 시나리오별 상태 보고서를 만든다. `cargo xtask layers`는 `cargo metadata`의 crate 의존을 코드 지도의 레이어 표와 대조한다. 이 두 명령은 Cargo가 주는 정보(`cargo metadata`, 테스트 빌드 JSON 메시지, 테스트 출력)만 읽고 제품 crate를 링크하지 않는다. `cargo xtask tokens`는 DESIGN.md 머리말에서 토큰 CSS를 만들고 저장된 파일과 대조한다. `cargo xtask dashboard-serve`는 `web/dashboard/`를 `127.0.0.1`에서 제공하는 로컬 미리보기 서버다. `cargo xtask help-site`는 운영자 도움말 사이트를 만들고 검사한다. `cargo xtask help-serve`는 만든 도움말 사이트를 GitHub Pages와 같은 경로로 제공하는 로컬 미리보기 서버다. `cargo xtask ticket`은 접속 ticket을 손으로 확인할 때 외부 발급 쪽을 대신해 시험용 키와 ticket을 만든다.
 
-작업 0.9의 결정에 따라 `cargo xtask tokens`와 `cargo xtask dashboard-serve`를 추가했다(사용자 결정 2026-10-22(Q32)·(Q34)). 두 명령은 작업 4.8에서 구현했다.
-
-`cargo xtask help-site`와 `cargo xtask help-serve`는 운영자 도움말 사이트(사용자 결정 2026-11-11(Q220~Q227))를 위해 추가했다. mdBook 0.5.4로 만든다는 것은 사용자 결정 2026-11-11(Q223)이다. 빌드·검사를 xtask 명령으로 두는 형태는 이 문서의 판단이다(사용자 결정 없음). 사이트 화면과 동작은 [도움말 사이트 화면 스펙](../specs/help-site.md)이, 설치·빌드·게시 절차는 [도움말을 빌드하고 게시하는 방법](../how-to/publish-help.md)이 정한다.
+`cargo xtask help-site`와 `cargo xtask help-serve`는 mdBook 0.5.4로 운영자 도움말 사이트를 만든다. 사이트 화면과 동작은 [도움말 사이트 화면 스펙](../specs/help-site.md), 설치·빌드·게시 절차는 [도움말을 빌드하고 게시하는 방법](../how-to/publish-help.md)을 따른다.
 
 `cargo xtask notices [--check]`는 두 배포 대상의 일반·빌드 의존성 합집합과 라이선스 전문을 루트 `THIRD-PARTY-NOTICES.txt`에 만든다. 실행 파일에 넣는 대시보드 글꼴(Pretendard)의 라이선스 전문도 같은 파일에 넣는다. `--check`는 저장된 파일과 다시 만든 내용을 대조한다. 허용 라이선스 판정은 계속 `cargo deny`가 맡는다. 절차와 OPS-021 부분 증거는 [라이선스 검사 how-to](../how-to/check-dependency-licenses.md)에 있다.
 
-`cargo xtask package`는 실행한 OS(Windows x64 또는 Linux x64)용 배포 묶음을 만든다. release 빌드와 `notices --check`를 거친 뒤 [수동 운영 안내 3.1절](../how-to/operate-relay.md#31-release-빌드와-묶음)의 파일을 모아 Windows는 zip, Linux는 tar.gz로 압축하고 SHA-256 파일을 쓴다(사용자 결정 2026-11-08(Q161·Q164)). 버전이 `연.월.순서` 규칙(Q165)이 아니면 빌드 전에 실패한다. 절차는 [릴리스 how-to](../how-to/release.md)에 있다.
+`cargo xtask package`는 실행한 OS(Windows x64 또는 Linux x64)용 배포 묶음을 만든다. release 빌드와 `notices --check`를 거친 뒤 [수동 운영 안내 3.1절](../how-to/operate-relay.md#31-release-빌드와-묶음)의 파일을 모아 Windows는 zip, Linux는 tar.gz로 압축하고 SHA-256 파일을 쓴다. 버전이 `연.월.순서` 규칙이 아니면 빌드 전에 실패한다. 절차는 [릴리스 how-to](../how-to/release.md)에 있다.
 
 Windows의 `Platform.executables`는 `vnc-relay`·`vnc-relay-tray` 패키지와 `vnc-relay.exe`·`vnc-relay-tray.exe` 파일을 함께 나열한다. `package::run`은 이 목록으로 release 빌드 인수와 복사할 실행파일을 정한다. Linux 목록에는 `vnc-relay`만 있다([ADR-0010](../decisions/ADR-0010-windows-service-and-tray.md)).
 
-`cargo xtask ticket keys`와 `cargo xtask ticket issue`는 접속 ticket을 손으로 확인하는 시험 도구다. 제품은 외부 발급 쪽이 서명한 ticket을 확인만 하고 발급하지 않는다([ADR-0009](../decisions/ADR-0009-optional-relay-access-ticket.md)). 시험용 발급은 개발 전용 xtask 명령으로 두고 실행파일과 배포 묶음에는 넣지 않는다(사용자 결정 2026-11-13(Q233)). `keys`는 역할의 P-256 키 쌍을 만들어 공개 키 JWKS 파일과 개인 JWK 파일을 쓴다. `issue`는 그 개인키로 ES256 ticket 하나를 서명해 표준 출력에 쓴다. 형식은 [WebSocket 계약 1.9.2절](../contracts/websocket-relay-v2.md#192-ticket-형식과-클레임)과 [설정 계약 1.11절](../contracts/config-v4.md#111-접속-ticket-공개-키-파일-형식)을 따른다. 사용 절차는 [수동 운영 안내 3.10.1절](../how-to/operate-relay.md#3101-시험용-키와-ticket으로-확인하기)에 있다.
+`cargo xtask ticket keys`와 `cargo xtask ticket issue`는 접속 ticket을 손으로 확인하는 시험 도구다. 제품은 외부 발급 쪽이 서명한 ticket을 확인만 하고 발급하지 않는다([ADR-0009](../decisions/ADR-0009-optional-relay-access-ticket.md)). 시험용 발급은 개발 전용 xtask 명령으로 두고 실행파일과 배포 묶음에는 넣지 않는다. `keys`는 역할의 P-256 키 쌍을 만들어 공개 키 JWKS 파일과 개인 JWK 파일을 쓴다. `issue`는 그 개인키로 ES256 ticket 하나를 서명해 표준 출력에 쓴다. 형식은 [WebSocket 계약 1.9.2절](../contracts/websocket-relay-v2.md#192-ticket-형식과-클레임)과 [설정 계약 1.11절](../contracts/config-v4.md#111-접속-ticket-공개-키-파일-형식)을 따른다. 사용 절차는 [수동 운영 안내 3.10.1절](../how-to/operate-relay.md#3101-시험용-키와-ticket으로-확인하기)에 있다.
 
 | 항목 | 값 |
 | --- | --- |
@@ -34,14 +32,14 @@ Windows의 `Platform.executables`는 `vnc-relay`·`vnc-relay-tray` 패키지와 
   - 실행한 OS의 배포 묶음 생성과 버전 형식 검사
   - 도움말 사이트 생성과 정적 검사: 두 책을 mdBook으로 빌드하고 사이트 루트·토큰 CSS·글꼴을 더한 뒤 목차·제목·언어·링크·그림·외부 주소를 검사한다.
   - 로컬 미리보기 서버: 대시보드 파일과 만든 도움말 사이트를 `127.0.0.1`에서 제공한다. 두 명령은 한 정적 서버 구현(`static_server.rs`)을 함께 쓴다.
-  - 접속 ticket 시험 도구: 역할의 P-256 키 쌍, 공개 키 JWKS 파일, 개인 JWK 파일, ES256 ticket을 만든다(사용자 결정 2026-11-13(Q233)).
+  - 접속 ticket 시험 도구: 역할의 P-256 키 쌍, 공개 키 JWKS 파일, 개인 JWK 파일, ES256 ticket을 만든다.
 - 맡지 않는 책임:
   - 라이선스 검사. [의존성 라이선스 검사](../how-to/check-dependency-licenses.md)의 `cargo deny`가 맡는다.
   - 모듈 안의 입출력 타입 금지. `crates/app/clippy.toml`과 `cargo clippy`가 맡는다.
-  - 대시보드 테스트 결과 수집. 대시보드 브라우저 테스트는 Rust 통합 테스트라서 기존 스캐너가 읽는다(사용자 결정 2026-10-22(Q35)). 이 명령이 따로 모으지 않는다.
+  - 대시보드 테스트 결과 수집. 대시보드 브라우저 테스트는 Rust 통합 테스트라서 기존 스캐너가 읽는다. 이 명령이 따로 모으지 않는다.
   - mdBook 설치와 GitHub Pages 게시. mdBook은 [도움말 how-to](../how-to/publish-help.md)의 절차로 설치하고, 게시는 `.github/workflows/help.yml`이 맡는다. 도움말 사이트의 브라우저 동작 검사는 루트 `tests/help_site.rs`가 맡는다.
   - 운영 ticket 발급과 운영 서명 키 보관. 외부 발급 쪽이 맡는다. `ticket`이 만든 키는 시험에만 쓴다. 거절을 일으키는 잘못된 ticket(DER 서명, 잘못된 클레임 등)도 만들지 않는다. 그런 거절은 자동 시험(WS-037~046)이 확인한다.
-- 다른 모듈에 공개하는 기능: 없음. 명령행은 `cargo xtask scenarios [--require-all]`, `cargo xtask layers`, `cargo xtask tokens [--check]`(사용자 결정 2026-10-22(Q32)), `cargo xtask dashboard-serve [--port N]`(사용자 결정 2026-10-22(Q34), 기본 포트 8080), `cargo xtask notices [--check]`, `cargo xtask package`(사용자 결정 2026-11-08(Q161)), `cargo xtask help-site`, `cargo xtask help-serve [--port N]`(기본 포트 8090), `cargo xtask ticket keys <viewer|server> [--dir <디렉터리>]`, `cargo xtask ticket issue <viewer|server> <중계 ID> [--dir <디렉터리>] [--issuer <값>] [--relay-host <값>] [--lifetime <초>] [--session <초>] [--subject <값>]`(사용자 결정 2026-11-13(Q233))이다. 두 미리보기 명령은 포트 `0`을 받으면 OS가 고른 빈 포트를 쓰고 그 주소를 출력한다. 별칭은 `.cargo/config.toml`의 `[alias] xtask`다.
+- 다른 모듈에 공개하는 기능: 없음. 명령행은 `cargo xtask scenarios [--require-all]`, `cargo xtask layers`, `cargo xtask tokens [--check]`, `cargo xtask dashboard-serve [--port N]`(기본 포트 8080), `cargo xtask notices [--check]`, `cargo xtask package`, `cargo xtask help-site`, `cargo xtask help-serve [--port N]`(기본 포트 8090), `cargo xtask ticket keys <viewer|server> [--dir <디렉터리>]`, `cargo xtask ticket issue <viewer|server> <중계 ID> [--dir <디렉터리>] [--issuer <값>] [--relay-host <값>] [--lifetime <초>] [--session <초>] [--subject <값>]`이다. 두 미리보기 명령은 포트 `0`을 받으면 OS가 고른 빈 포트를 쓰고 그 주소를 출력한다. 별칭은 `.cargo/config.toml`의 `[alias] xtask`다.
 
 ## 2. 내부 구조
 
@@ -142,7 +140,7 @@ flowchart LR
 
 `cargo xtask layers`는 1단계 다음에 `layers::check`를 실행한다. 패키지마다 `RULES`의 허용 내부 crate와 외부 crate 규칙을 적용하고, 같은 외부 crate의 버전 요구가 패키지마다 다르면 위반으로 본다. `RULES`에 없는 패키지도 위반이다.
 
-`RULES`의 `vnc-relay-tray` 행은 내부 의존성을 `vnc-relay-app`·`vnc-relay-adapters`로 제한한다. 외부 의존성은 tray-icon·windows-registry·windows-service·windows-sys만 받는다. 새 세 라이브러리는 `APPROVED`에도 있다. 규칙은 [코드 지도 레이어 표](code-map.md#레이어와-의존-방향)와 같은 변경에서 맞춘다.
+`RULES`의 `vnc-relay-tray` 행은 내부 의존성을 `vnc-relay-app`·`vnc-relay-adapters`로 제한한다. 외부 의존성은 tray-icon·windows-registry·windows-service·windows-sys만 받는다. tray-icon·windows-registry·windows-service는 `APPROVED`에도 있다. 규칙은 [코드 지도 레이어 표](code-map.md#레이어와-의존-방향)와 같은 변경에서 맞춘다.
 
 `cargo xtask tokens`와 `cargo xtask tokens --check`는 앞부분이 같다. `cargo metadata`로 루트를 찾고, DESIGN.md 머리말을 `parse_document`로 읽어 `tokens_from`으로 토큰 목록을 만든다(`version`·`name`·`description`·`components`는 뺀다). `render_css`가 `:root` 블록을 만든다. 기본 실행(`write_outputs`)은 토큰 CSS 두 파일과 `MOCKUP_PATHS`의 목업마다 `DESIGN-TOKENS:START`·`END` 표식 사이 블록을 쓴다(`replace_mockup_block`). `shared::write`가 로그인 공통 복사본도 함께 쓴다. `--check`(`check_outputs`)는 같은 곳을 비교하고 화면 CSS 검사를 더한다. 목업의 차이는 목업 파일 경로와 표식 사이 블록 안의 줄 번호로 알린다. 복사본은 `shared::check`가 원본과 비교하고, 복사 디렉터리에서 목록에 없는 파일을 찾는다. 차이는 한 건씩 출력하고 `tokens --check: 실패 (N건)`, 종료 코드 1이다. 차이가 없으면 `통과`, 종료 코드 0이다.
 
@@ -168,7 +166,7 @@ flowchart LR
 
 - 초기화·로딩 시점: 명령 실행마다 처음부터 읽는다. 캐시는 없다.
 - 상태 소유자와 제거 시점: 모든 상태는 명령 실행 동안 메모리에만 있다. 보고서 파일, 도움말 사이트(`help-stage/`·`help-site/`), `ticket`의 키 파일만 남는다. 다음 `help-site` 실행이 도움말 사이트를 지우고 다시 만든다. 키 파일은 사용자가 지울 때까지 남는다.
-- 동시 실행과 순서: 같은 대상 디렉터리에서 두 번 동시에 실행하면 Cargo 빌드 잠금을 기다리고 보고서는 나중에 끝난 실행이 덮어쓴다. `help-site`가 `help-stage/`·`help-site/`를 지우고 다시 만드는 일은 이 잠금 밖에서 일어난다. 그래서 `help-site`를 동시에 두 번 실행하거나, `help-serve`나 도움말 시험(`tests/help_site.rs`)이 같은 대상 디렉터리의 사이트를 쓰는 동안 실행하면 서로의 산출물을 지울 수 있다. 이런 실행은 차례로 한다(이 문서의 판단, 사용자 결정 없음).
+- 동시 실행과 순서: 같은 대상 디렉터리에서 두 번 동시에 실행하면 Cargo 빌드 잠금을 기다리고 보고서는 나중에 끝난 실행이 덮어쓴다. `help-site`가 `help-stage/`·`help-site/`를 지우고 다시 만드는 일은 이 잠금 밖에서 일어난다. 그래서 `help-site`를 동시에 두 번 실행하거나, `help-serve`나 도움말 시험(`tests/help_site.rs`)이 같은 대상 디렉터리의 사이트를 쓰는 동안 실행하면 서로의 산출물을 지울 수 있다. 이런 실행은 차례로 한다().
 
 ## 6. 오류 처리
 
@@ -196,57 +194,68 @@ flowchart LR
 
 ## 7. 설계 선택
 
-| 선택 | 이유 | 검토한 다른 방법 | 근거 |
-| --- | --- | --- | --- |
-| 시나리오 보고를 Rust `xtask`로 구현 | 두 OS에서 Rust 도구만으로 실행한다. 별도 스크립트 언어를 설치하지 않는다. | Python·셸 스크립트. 두 OS 실행 환경이 갈린다. | 사용자 결정(2026-10-20) |
-| 표식을 직접 어휘 분석 | 외부 파서 crate 없이 주석·문자열 안의 중괄호를 구분하면 충분하다. 승인 목록 밖 crate(`syn`)를 직접 쓰지 않는다. | `syn`으로 구문 분석. PRD 승인 목록에 없다. | [PRD "구현 기술" 행](../requirements/PRD.md#확정-기준) |
-| 실행파일 이름으로 테스트 대상 식별 | `cargo test` 출력의 `Running` 줄은 패키지 기준 상대 경로만 보여 같은 이름의 테스트 파일을 구분하지 못한다. 실행파일 이름에는 해시가 붙어 유일하다. | 패키지마다 `cargo test -p` 실행. 빌드가 반복되고 기능 통합이 달라진다. | 이 문서 4절 4단계 |
-| 안정판 테스트 출력 형식만 사용 | libtest JSON 출력은 불안정 옵션(`-Z unstable-options`)이다. | `--format json`. 안정판에서 쓸 수 없다. | 고정 도구 모음 Rust 1.99.1 |
-| `layers`의 승인 crate 목록을 코드 상수로 유지 | PRD 표는 사람이 읽는 문장이라 기계적으로 읽기 어렵다. 목록을 바꿀 때 PRD 행과 같은 변경에서 고친다. | PRD 문장 해석. 문구가 바뀌면 깨진다. | `xtask/src/layers.rs` `APPROVED` 주석 |
-| 일부만 확인하는 테스트를 ` partial` 표식과 `부분` 상태로 구분 | 시스템 동작보다 먼저 만든 계약 테스트가 시나리오의 일부만 확인해도 보고서가 시나리오 전체를 `통과`로 보이지 않게 한다. | 부분 테스트에 표식을 달지 않기. 문서 규칙상 연결해야 할 테스트가 보고서에서 빠진다. 표식은 그대로 두고 `통과`로 읽기. 완료 여부를 오해한다. | 사용자 결정(2026-10-20) |
-| 대시보드 브라우저 테스트를 Rust 통합 테스트로 두고 기존 스캐너가 읽는다 | 테스트 결과를 별도 경로로 합치지 않아 보고 도구의 판정 규칙과 표식 문법을 바꾸지 않는다. Chromium을 실행하고 판정하는 일은 테스트 안에서 한다. | 별도 결과 파일을 `xtask`가 합치는 방법. 보고서가 두 곳으로 나뉜다. | 사용자 결정 2026-10-22(Q35) |
-| 토큰 머리말은 xtask 안의 YAML 부분집합 파서로 읽는다 | 승인 목록 밖 crate를 쓰지 않는다. DESIGN.md가 쓰는 문법(들여쓰기 맵, 한 줄 스칼라)만 읽으면 된다. | YAML crate(예: `serde_yaml`). `layers.rs` `APPROVED`와 PRD 승인 행을 함께 바꿔야 한다. | [PRD "구현 기술" 행](../requirements/PRD.md#확정-기준). 승인 없이 부분집합 파서를 택했다(작업 4.8 지시). 승인이 필요하면 이 행을 바꾼다. |
-| 미리보기 서버는 `std::net`만 쓴다 | `127.0.0.1` 전용 정적 파일 제공에 HTTP crate가 필요 없다. | `tiny_http`·`axum`. 승인 목록 밖이다. | 사용자 결정 2026-10-22(Q34): 로컬 전용, 바이너리에 넣지 않는다. |
-| 목업 토큰 블록도 `tokens`가 쓰고 `--check`가 비교한다 | 토큰 값이 목업과 어긋나는 것을 같은 명령에서 잡는다. | 목업 블록을 손으로 맞춘다. 어긋남을 놓칠 수 있다. | 사용자 결정 2026-10-22(Q32). |
-| 로그인 화면의 공통 컴포넌트와 스타일은 복사본으로 둔다 | `login/`은 세션 없이 받으므로 `/app/` 파일을 참조할 수 없다. 복사본은 `tokens`가 쓰고 `--check`가 원본과 비교한다. | `login/`이 `app/` 파일을 직접 가리킨다. 세션 없는 로그인 화면이 `/app/` 파일을 받지 못한다. 마크업과 스타일을 손으로 복제한다. | 구현 판단(사용자 결정 없음). 리뷰어 지시에 따른다. |
-| 글꼴 원본은 제공하지 않는 `web/dashboard/fonts/`에 두고, `tokens`가 `app/fonts/`·`login/fonts/`에 바이트 그대로 복사한다 | `app/`과 `login/`은 파일을 공유하지 않는다. 원본 폴더에 둔 `LICENSE.txt`는 제공 표 대조 범위(`login/`·`app/`) 밖이라 제공되지 않는다. `@font-face`는 생성 토큰 파일에 있어 화면 CSS의 `url(` 금지를 바꾸지 않는다. | `app/fonts/`를 원본으로 두고 로그인만 복사. `LICENSE.txt`가 제공 경로 아래에 놓이거나 원본 위치가 둘로 갈린다. 화면 CSS에 `@font-face` 작성. `url(` 금지에 예외가 생긴다. | **이 문서의 판단, 사용자 결정 없음**. 글꼴 내장은 사용자 결정 2026-11-07(Q139) |
-| 고지 생성은 기존 xtask의 std·serde_json만 사용 | Rust만 준비된 두 OS에서 같은 절차를 쓴다. `Cargo.lock` 원문을 넣어 해시 crate 없이 입력 변화도 감지한다. | cargo-about·cargo-license 추가 설치, Python 스크립트, 고지 수동 편집. 도구·설치 경로가 늘거나 갱신 누락을 잡기 어렵다. | **이 문서의 판단, 사용자 결정 없음**. [OPS-021](../specs/operations.md#7-수용-테스트)의 고지 의무를 구현한다. |
-| 루트 통합 시험이 오프라인 `notices --check`를 실행 | xtask 시험은 시나리오 스캐너에서 제외된다. 루트 `tests/dependency_notices.rs`의 OPS-021 `partial`만 연결한다. Cargo가 실행파일 위치를 정하므로 `CARGO_TARGET_DIR` 값에 의존하지 않는다. | xtask 시험에 표식 추가. 기존 스캐너가 읽지 않는다. | **이 문서의 판단, 사용자 결정 없음**. 시험은 의존성 고지만 대조하므로 전체 표식은 쓰지 않는다. 프로젝트 MIT LICENSE는 [라이선스 검사 4.2절](../how-to/check-dependency-licenses.md#42-프로젝트-license-검토-기록2026-11-07)에서 수동 검토한다. |
-| 묶음 압축은 OS 기본 `tar`를 호출 | Windows 10 이후 기본 bsdtar는 `-a`로 zip을 쓰고, Ubuntu GNU tar는 tar.gz를 쓴다. 승인 목록 밖 압축 crate가 필요 없다. Windows는 PATH의 다른 `tar`(Git의 GNU tar 등)가 zip을 못 쓰므로 `%SystemRoot%\System32\tar.exe`를 직접 부른다. | `zip`·`flate2` crate. PRD 승인 목록과 `layers.rs` `APPROVED`를 바꿔야 한다. PowerShell `Compress-Archive`. Linux 명령이 따로 필요하다. | **이 문서의 판단, 사용자 결정 없음**. 새 crate 없이 만든다는 조건은 사용자 결정 2026-11-08(Q161) |
-| SHA-256을 xtask 안에 직접 구현 | 해시 crate 없이 두 OS에서 같은 `sha256sum` 형식 파일을 쓴다. FIPS 180-4 예제 해시 네 개로 단위 시험한다. | `sha2` crate. 승인 목록 밖이다. `certutil`·`sha256sum` 출력 해석. OS마다 출력 형식이 다르다. | **이 문서의 판단, 사용자 결정 없음** |
-| 도움말 빌드는 xtask가 mdBook 실행 파일을 부르고 버전을 확인한다 | 사용자 결정의 도구(mdBook 0.5.4)를 바꾸지 않고 두 OS와 Actions에서 같은 명령을 쓴다. mdBook crate를 링크하지 않으므로 승인 crate 목록과 `layers.rs` `APPROVED`가 바뀌지 않는다. 버전 확인은 테마가 기대하는 템플릿 구조가 다른 버전에서 바뀌는 것을 막는다. | mdBook을 라이브러리로 링크한다. 승인 목록 밖 crate가 늘어난다. 셸 스크립트로 빌드한다. 두 OS 명령이 갈린다. | **이 문서의 판단, 사용자 결정 없음**. 도구는 사용자 결정 2026-11-11(Q223) |
-| 책과 테마를 `help-stage/`에 모아 빌드한다 | 테마 원본을 `web/help/theme/` 한 곳에 두고 두 책이 함께 쓴다. mdBook은 `additional-css`·`additional-js`의 상대 경로를 출력 디렉터리 안의 같은 상대 경로에 쓴다. 책 밖을 가리키는 `../` 경로는 출력 디렉터리 밖에 파일을 만들 수 있다. | 책마다 테마를 복사해 커밋한다. 원본이 둘로 갈린다. `book.toml`에서 `../../../web/help/theme`을 가리킨다. 출력 위치가 책 밖으로 나간다. | **이 문서의 판단, 사용자 결정 없음** |
-| 도움말 사이트의 토큰 CSS와 글꼴은 빌드 때 만들고 커밋하지 않는다 | 사이트 전체가 빌드 산출물이다. 원본(DESIGN.md, `web/dashboard/fonts/`)은 `tokens --check`가 이미 지킨다. 커밋한 복사본이 하나 더 생기지 않는다. | `web/help/`에 생성 파일을 커밋하고 `tokens --check`로 대조한다. 대조할 복사본이 늘어난다. | **이 문서의 판단, 사용자 결정 없음** |
-| 도움말 검사는 xtask 안의 작은 HTML 스캐너로 한다 | 승인 목록 밖 HTML 파서 crate를 쓰지 않는다. 검사는 시작 태그의 이름과 속성, `id`, CSS의 `url()`만 읽으면 된다. 입력은 mdBook과 이 저장소가 만든 HTML이다. | `html5ever`·`scraper` crate. 승인 목록을 바꿔야 한다. 브라우저 시험에서만 검사한다. 그림·링크 문제를 빌드 단계에서 잡지 못한다. | **이 문서의 판단, 사용자 결정 없음** |
-| 외부 링크는 허용 목록으로 검사한다 | [도움말 작성 규칙](../help/AGENTS.md)의 링크 규칙(저장소 파일, GitHub Releases, 고지 페이지의 제3자 출처와 라이선스, UltraVNC·noVNC 공식 사이트, 추천 구성 사례의 droidVNC-NG 수정판 저장소)을 기계로 확인한다. 저장소 파일 링크는 존재까지 확인한다. 외부 사이트에 요청하지 않으므로 오프라인에서도 같은 결과다. | 모든 외부 링크에 HTTP 요청. 네트워크 상태에 따라 결과가 바뀐다. 외부 링크를 검사하지 않는다. 규칙 위반을 놓친다. | **이 문서의 판단, 사용자 결정 없음** |
-| 두 미리보기 명령이 `static_server.rs` 하나를 쓴다 | 두 사이트는 마운트, `/`의 이동 위치, CSP, 404 본문만 다르다. 요청 해석과 경로 검사를 한 곳에서 고친다. | 명령마다 서버를 따로 둔다. 같은 경로 검사 코드가 둘이 된다. | **이 문서의 판단, 사용자 결정 없음** |
-| `help-serve`는 GitHub Pages처럼 `/vnc-relay/` 아래에 제공하고 없는 경로에 루트 `404.html`을 준다. CSP 헤더는 보내지 않는다 | 게시 주소와 같은 경로에서 404 페이지의 절대 경로와 언어 이동을 확인한다. GitHub Pages는 CSP 헤더를 보내지 않으므로 페이지의 `meta` CSP만 적용되는 상태를 그대로 본다. | 대시보드처럼 `/`에 제공한다. 404 페이지의 `/vnc-relay/` 경로를 확인할 수 없다. | **이 문서의 판단, 사용자 결정 없음** |
-| 끝 `/`가 빠진 디렉터리 주소는 `/`를 붙여 302 보낸다 | 디렉터리의 `index.html`이 상대 경로로 다른 파일을 읽으려면 주소가 `/`로 끝나야 한다. GitHub Pages도 같은 주소로 보낸다. 대시보드 미리보기에도 같이 적용된다. | `index.html`을 바로 준다. 상대 경로가 한 단계 위를 가리킨다. | **이 문서의 판단, 사용자 결정 없음** |
-| 시험용 발급을 개발 전용 xtask 명령으로 둔다 | 제품은 외부 발급 쪽이 서명한 ticket만 확인한다. 서명 개인키 처리가 실행파일과 배포 묶음에 들어가지 않는다. 저장소가 있으면 두 OS에서 같은 명령으로 시험한다. | 실행파일 하위 명령. 개인키 처리가 제품에 들어간다. 관리 API 발급. ADR-0009의 발급 쪽 분리와 충돌한다. 저장소 밖 스크립트. Node·Python 실행 환경이 더 필요하다. | 사용자 결정 2026-11-13(Q233) |
-| 키 생성·서명·지문·난수는 aws-lc-rs를 쓴다 | adapters가 ticket 확인에 쓰는 승인 crate다. 새 crate가 없으므로 PRD 승인 목록과 `layers.rs` `APPROVED`를 바꾸지 않는다. | 암호 연산을 직접 구현한다. 잘못 구현할 위험이 크다. | **이 문서의 판단, 사용자 결정 없음** |
-| 개인키는 개인 JWK 파일로 둔다 | 키와 `kid`를 한 파일에 담으므로 `issue`가 `kid`를 따로 받지 않는다. 기존 serde_json으로 읽고 쓴다. 이 파일을 공개 키 파일 자리에 잘못 두면 vnc-relay가 `d` 멤버 때문에 거절한다. | PKCS#8 PEM. `kid`를 따로 관리하고 PEM 인코더를 더 만들어야 한다. | **이 문서의 판단, 사용자 결정 없음** |
-| `kid`는 RFC 7638 JWK 지문이다 | 키마다 다르므로 공개 키 교체 시험에서 두 키를 한 파일에 넣어도 `kid`가 겹치지 않는다. | 역할별 고정 이름. 교체 시험에서 `kid`가 겹쳐 `ticket_keys_invalid`가 된다. | **이 문서의 판단, 사용자 결정 없음** |
-| 기본 키 디렉터리는 Cargo 대상 디렉터리 안이고 기존 파일을 덮어쓰지 않는다 | 개인키가 저장소 추적 파일이 되지 않는다. 이미 배치한 공개 키와 짝인 개인키를 실수로 바꾸지 않는다. | 현재 디렉터리에 쓴다. 저장소 루트에 개인키가 생긴다. 덮어쓴다. 배치한 공개 키와 맞지 않게 된다. | **이 문서의 판단, 사용자 결정 없음** |
-| 기본 발급자·중계 호스트·수명은 예시 설정의 주석 값이다 | 예시 설정의 주석만 풀면 옵션 없이 시험할 수 있다. | 필수 옵션. 매번 같은 값을 입력해야 한다. | **이 문서의 판단, 사용자 결정 없음** |
-| 올바른 ticket만 만든다 | 손으로 확인할 거절(재사용, ticket 없음, 중계 ID 불일치, 기동 전 발급, 만료)은 올바른 ticket과 시간 경과로 만들 수 있다. 나머지 거절은 자동 시험이 맡는다. | DER 서명·잘못된 클레임을 만드는 옵션. 도구와 시험이 커진다. | **이 문서의 판단, 사용자 결정 없음** |
+| 선택 | 이유 | 검토한 다른 방법 |
+| --- | --- | --- |
+| 시나리오 보고를 Rust `xtask`로 구현 | 두 OS에서 Rust 도구만으로 실행한다. 별도 스크립트 언어를 설치하지 않는다. | Python·셸 스크립트. 두 OS 실행 환경이 갈린다. |
+| 표식을 직접 어휘 분석 | 외부 파서 crate 없이 주석·문자열 안의 중괄호를 구분하면 충분하다. 승인 목록 밖 crate(`syn`)를 직접 쓰지 않는다. | `syn`으로 구문 분석. PRD 승인 목록에 없다. |
+| 실행파일 이름으로 테스트 대상 식별 | `cargo test` 출력의 `Running` 줄은 패키지 기준 상대 경로만 보여 같은 이름의 테스트 파일을 구분하지 못한다. 실행파일 이름에는 해시가 붙어 유일하다. | 패키지마다 `cargo test -p` 실행. 빌드가 반복되고 기능 통합이 달라진다. |
+| 안정판 테스트 출력 형식만 사용 | libtest JSON 출력은 불안정 옵션(`-Z unstable-options`)이다. | `--format json`. 안정판에서 쓸 수 없다. |
+| `layers`의 승인 crate 목록을 코드 상수로 유지 | PRD 표는 사람이 읽는 문장이라 기계적으로 읽기 어렵다. 목록을 바꿀 때 PRD 행과 같은 변경에서 고친다. | PRD 문장 해석. 문구가 바뀌면 깨진다. |
+| 일부만 확인하는 테스트를 ` partial` 표식과 `부분` 상태로 구분 | 계약 테스트가 시나리오의 일부만 확인할 때 보고서가 시나리오 전체를 `통과`로 보이지 않게 한다. | 부분 테스트에 표식을 달지 않기. 문서 규칙상 연결해야 할 테스트가 보고서에서 빠진다. 표식은 그대로 두고 `통과`로 읽기. 완료 여부를 오해한다. |
+| 대시보드 브라우저 테스트를 Rust 통합 테스트로 두고 기존 스캐너가 읽는다 | 테스트 결과를 별도 경로로 합치지 않아 보고 도구의 판정 규칙과 표식 문법을 바꾸지 않는다. Chromium을 실행하고 판정하는 일은 테스트 안에서 한다. | 별도 결과 파일을 `xtask`가 합치는 방법. 보고서가 두 곳으로 나뉜다. |
+| 토큰 머리말은 xtask 안의 YAML 부분집합 파서로 읽는다 | 승인 목록 밖 crate를 쓰지 않는다. DESIGN.md가 쓰는 문법(들여쓰기 맵, 한 줄 스칼라)만 읽으면 된다. | YAML crate(예: `serde_yaml`). `layers.rs` `APPROVED`와 PRD 승인 행을 함께 바꿔야 한다. |
+| 미리보기 서버는 `std::net`만 쓴다 | `127.0.0.1` 전용 정적 파일 제공에 HTTP crate가 필요 없다. | `tiny_http`·`axum`. 승인 목록 밖이다. |
+| 목업 토큰 블록도 `tokens`가 쓰고 `--check`가 비교한다 | 토큰 값이 목업과 어긋나는 것을 같은 명령에서 잡는다. | 목업 블록을 손으로 맞춘다. 어긋남을 놓칠 수 있다. |
+| 로그인 화면의 공통 컴포넌트와 스타일은 복사본으로 둔다 | `login/`은 세션 없이 받으므로 `/app/` 파일을 참조할 수 없다. 복사본은 `tokens`가 쓰고 `--check`가 원본과 비교한다. | `login/`이 `app/` 파일을 직접 가리킨다. 세션 없는 로그인 화면이 `/app/` 파일을 받지 못한다. 마크업과 스타일을 손으로 복제한다. |
+| 글꼴 원본은 제공하지 않는 `web/dashboard/fonts/`에 두고, `tokens`가 `app/fonts/`·`login/fonts/`에 바이트 그대로 복사한다 | `app/`과 `login/`은 파일을 공유하지 않는다. 원본 폴더에 둔 `LICENSE.txt`는 제공 표 대조 범위(`login/`·`app/`) 밖이라 제공되지 않는다. `@font-face`는 생성 토큰 파일에 있어 화면 CSS의 `url(` 금지를 바꾸지 않는다. | `app/fonts/`를 원본으로 두고 로그인만 복사. `LICENSE.txt`가 제공 경로 아래에 놓이거나 원본 위치가 둘로 갈린다. 화면 CSS에 `@font-face` 작성. `url(` 금지에 예외가 생긴다. |
+| 고지 생성은 기존 xtask의 std·serde_json만 사용 | Rust만 준비된 두 OS에서 같은 절차를 쓴다. `Cargo.lock` 원문을 넣어 해시 crate 없이 입력 변화도 감지한다. | cargo-about·cargo-license 추가 설치, Python 스크립트, 고지 수동 편집. 도구·설치 경로가 늘거나 갱신 누락을 잡기 어렵다. |
+| 루트 통합 시험이 오프라인 `notices --check`를 실행 | xtask 시험은 시나리오 스캐너에서 제외된다. 루트 `tests/dependency_notices.rs`의 OPS-021 `partial`만 연결한다. 시험은 의존성 고지만 대조하므로 전체 표식은 쓰지 않는다. 프로젝트 MIT LICENSE는 [라이선스 검사 안내](../how-to/check-dependency-licenses.md)에서 수동 검토한다. Cargo가 실행파일 위치를 정하므로 `CARGO_TARGET_DIR` 값에 의존하지 않는다. | xtask 시험에 표식 추가. 기존 스캐너가 읽지 않는다. |
+| 묶음 압축은 OS 기본 `tar`를 호출 | Windows 10 이후 기본 bsdtar는 `-a`로 zip을 쓰고, Ubuntu GNU tar는 tar.gz를 쓴다. 승인 목록 밖 압축 crate가 필요 없다. Windows는 PATH의 다른 `tar`(Git의 GNU tar 등)가 zip을 못 쓰므로 `%SystemRoot%\System32\tar.exe`를 직접 부른다. | `zip`·`flate2` crate. PRD 승인 목록과 `layers.rs` `APPROVED`를 바꿔야 한다. PowerShell `Compress-Archive`. Linux 명령이 따로 필요하다. |
+| SHA-256을 xtask 안에 직접 구현 | 해시 crate 없이 두 OS에서 같은 `sha256sum` 형식 파일을 쓴다. FIPS 180-4 예제 해시 네 개로 단위 시험한다. | `sha2` crate. 승인 목록 밖이다. `certutil`·`sha256sum` 출력 해석. OS마다 출력 형식이 다르다. |
+| 도움말 빌드는 xtask가 mdBook 실행 파일을 부르고 버전을 확인한다 | mdBook 0.5.4를 사용해 두 OS와 Actions에서 같은 명령을 쓴다. mdBook crate를 링크하지 않으므로 승인 crate 목록과 `layers.rs` `APPROVED`가 바뀌지 않는다. 버전 확인은 테마가 기대하는 템플릿 구조가 다른 버전에서 바뀌는 것을 막는다. | mdBook을 라이브러리로 링크한다. 승인 목록 밖 crate가 늘어난다. 셸 스크립트로 빌드한다. 두 OS 명령이 갈린다. |
+| 책과 테마를 `help-stage/`에 모아 빌드한다 | 테마 원본을 `web/help/theme/` 한 곳에 두고 두 책이 함께 쓴다. mdBook은 `additional-css`·`additional-js`의 상대 경로를 출력 디렉터리 안의 같은 상대 경로에 쓴다. 책 밖을 가리키는 `../` 경로는 출력 디렉터리 밖에 파일을 만들 수 있다. | 책마다 테마를 복사해 커밋한다. 원본이 둘로 갈린다. `book.toml`에서 `../../../web/help/theme`을 가리킨다. 출력 위치가 책 밖으로 나간다. |
+| 도움말 사이트의 토큰 CSS와 글꼴은 빌드 때 만들고 커밋하지 않는다 | 사이트 전체가 빌드 산출물이다. 원본(DESIGN.md, `web/dashboard/fonts/`)은 `tokens --check`가 이미 지킨다. 커밋한 복사본이 하나 더 생기지 않는다. | `web/help/`에 생성 파일을 커밋하고 `tokens --check`로 대조한다. 대조할 복사본이 늘어난다. |
+| 도움말 검사는 xtask 안의 작은 HTML 스캐너로 한다 | 승인 목록 밖 HTML 파서 crate를 쓰지 않는다. 검사는 시작 태그의 이름과 속성, `id`, CSS의 `url()`만 읽으면 된다. 입력은 mdBook과 이 저장소가 만든 HTML이다. | `html5ever`·`scraper` crate. 승인 목록을 바꿔야 한다. 브라우저 시험에서만 검사한다. 그림·링크 문제를 빌드 단계에서 잡지 못한다. |
+| 외부 링크는 허용 목록으로 검사한다 | [도움말 작성 규칙](../help/AGENTS.md)의 링크 규칙(저장소 파일, GitHub Releases, 고지 페이지의 제3자 출처와 라이선스, UltraVNC·noVNC 공식 사이트, 추천 구성 사례의 droidVNC-NG 수정판 저장소)을 기계로 확인한다. 저장소 파일 링크는 존재까지 확인한다. 외부 사이트에 요청하지 않으므로 오프라인에서도 같은 결과다. | 모든 외부 링크에 HTTP 요청. 네트워크 상태에 따라 결과가 바뀐다. 외부 링크를 검사하지 않는다. 규칙 위반을 놓친다. |
+| 두 미리보기 명령이 `static_server.rs` 하나를 쓴다 | 두 사이트는 마운트, `/`의 이동 위치, CSP, 404 본문만 다르다. 요청 해석과 경로 검사를 한 곳에서 고친다. | 명령마다 서버를 따로 둔다. 같은 경로 검사 코드가 둘이 된다. |
+| `help-serve`는 GitHub Pages처럼 `/vnc-relay/` 아래에 제공하고 없는 경로에 루트 `404.html`을 준다. CSP 헤더는 보내지 않는다 | 게시 주소와 같은 경로에서 404 페이지의 절대 경로와 언어 이동을 확인한다. GitHub Pages는 CSP 헤더를 보내지 않으므로 페이지의 `meta` CSP만 적용되는 상태를 그대로 본다. | 대시보드처럼 `/`에 제공한다. 404 페이지의 `/vnc-relay/` 경로를 확인할 수 없다. |
+| 끝 `/`가 빠진 디렉터리 주소는 `/`를 붙여 302 보낸다 | 디렉터리의 `index.html`이 상대 경로로 다른 파일을 읽으려면 주소가 `/`로 끝나야 한다. GitHub Pages도 같은 주소로 보낸다. 대시보드 미리보기에도 같이 적용된다. | `index.html`을 바로 준다. 상대 경로가 한 단계 위를 가리킨다. |
+| 시험용 발급을 개발 전용 xtask 명령으로 둔다 | 제품은 외부 발급 쪽이 서명한 ticket만 확인한다. 서명 개인키 처리가 실행파일과 배포 묶음에 들어가지 않는다. 저장소가 있으면 두 OS에서 같은 명령으로 시험한다. | 실행파일 하위 명령. 개인키 처리가 제품에 들어간다. 관리 API 발급. ADR-0009의 발급 쪽 분리와 충돌한다. 저장소 밖 스크립트. Node·Python 실행 환경이 더 필요하다. |
+| 키 생성·서명·지문·난수는 aws-lc-rs를 쓴다 | adapters가 ticket 확인에 쓰는 승인 crate다. 새 crate가 없으므로 PRD 승인 목록과 `layers.rs` `APPROVED`를 바꾸지 않는다. | 암호 연산을 직접 구현한다. 잘못 구현할 위험이 크다. |
+| 개인키는 개인 JWK 파일로 둔다 | 키와 `kid`를 한 파일에 담으므로 `issue`가 `kid`를 따로 받지 않는다. 기존 serde_json으로 읽고 쓴다. 이 파일을 공개 키 파일 자리에 잘못 두면 vnc-relay가 `d` 멤버 때문에 거절한다. | PKCS#8 PEM. `kid`를 따로 관리하고 PEM 인코더를 더 만들어야 한다. |
+| `kid`는 RFC 7638 JWK 지문이다 | 키마다 다르므로 공개 키 교체 시험에서 두 키를 한 파일에 넣어도 `kid`가 겹치지 않는다. | 역할별 고정 이름. 교체 시험에서 `kid`가 겹쳐 `ticket_keys_invalid`가 된다. |
+| 기본 키 디렉터리는 Cargo 대상 디렉터리 안이고 기존 파일을 덮어쓰지 않는다 | 개인키가 저장소 추적 파일이 되지 않는다. 이미 배치한 공개 키와 짝인 개인키를 실수로 바꾸지 않는다. | 현재 디렉터리에 쓴다. 저장소 루트에 개인키가 생긴다. 덮어쓴다. 배치한 공개 키와 맞지 않게 된다. |
+| 기본 발급자·중계 호스트·수명은 예시 설정의 주석 값이다 | 예시 설정의 주석만 풀면 옵션 없이 시험할 수 있다. | 필수 옵션. 매번 같은 값을 입력해야 한다. |
+| 올바른 ticket만 만든다 | 손으로 확인할 거절(재사용, ticket 없음, 중계 ID 불일치, 기동 전 발급, 만료)은 올바른 ticket과 시간 경과로 만들 수 있다. 나머지 거절은 자동 시험이 맡는다. | DER 서명·잘못된 클레임을 만드는 옵션. 도구와 시험이 커진다. |
 
 ## 대조 기록
 
-2026-11-18 작업 트리의 `package.rs` `Platform.executables`·`run`, `notices.rs` `render`, `layers.rs` `RULES`·`APPROVED`를 읽고 Windows 트레이 범위를 대조했다. 이번 문서 개정은 빌드·시험·묶음 생성을 실행하지 않았다. 아래 이전 배포 묶음 기록은 트레이가 추가된 묶음의 실행 증거가 아니다.
+### 구조 대조
 
-| 대조 범위 | 환경 | 확인 방법 | 결과 |
-| --- | --- | --- | --- |
-| 이 문서를 추가한 커밋의 `xtask/` | Ubuntu 24.04.4(WSL2), Rust 1.99.1 | 2·4절의 파일·심볼과 실제 코드를 대조했다. 단위 테스트 12건(`cargo test --workspace`)과 [테스트 컨벤션의 보고 도구 확인 기록](../conventions/testing.md#보고-도구-확인-기록)의 시험 실행으로 처리 순서를 확인했다. | 통과 |
-| 부분 표식을 추가한 변경(기준 커밋 `4fb7acb` + `xtask/src/scenarios*` 수정) | 같음 | 2·3·4절의 `Marker`·`TestEntry`·`Status`와 실제 코드를 대조했다. 단위 테스트 12건과 [보고 도구 확인 기록](../conventions/testing.md#보고-도구-확인-기록)의 부분 표식 실행으로 판정을 확인했다. | 통과 |
-| Windows 실행(기준 커밋 `e1cfc4f` + Windows 경고 수정) | Windows 11 Pro 10.0.26200, Rust 1.99.1(`x86_64-pc-windows-msvc`) | `cargo xtask layers`는 `레이어 검사: 통과 (패키지 5개)`였다. `cargo xtask scenarios`가 `target\scenario-report.md`를 만들었다. 보고서의 테스트 위치는 `/` 구분자(`tests/serve.rs`)로 나왔고, `#[cfg(unix)]`로 빠진 테스트는 `미실행(이번 실행에 없음)`으로 표시됐다. | 통과 |
-| 토큰 CSS와 미리보기 명령(기준 커밋 `c96b948`~`75d7906`) | Windows 10.0.26200 | 2·4·6·7절의 파일·함수·오류 경로를 실제 코드와 대조했다. `cargo xtask tokens --check`는 `tokens --check: 통과`, 종료 코드 0이었다. DESIGN.md 6행(`colors`)의 `#f4f6f5`를 `#f4f6f6`으로 바꾸면 `tokens --check: 실패 (3건)`, 종료 코드 1이었고 되돌려 다시 통과했다. `cargo xtask dashboard-serve`로 띄운 미리보기를 6폭 × ko/en 12회 캡처해 콘솔 오류와 CSP 위반이 없었다. | 통과 |
-| 배포 고지 생성·대조와 루트 부분 시험(2026-11-04 작업 트리) | WSL Ubuntu·Windows, Rust 1.99.1 | `cargo test --offline --locked --test code_map --test dependency_notices`, WSL `cargo test --offline --locked -p xtask`. [출처·라이선스 실행 기록](../how-to/check-dependency-licenses.md#43-실행-기록-2026-11-04) | 통과. 두 OS에서 코드 지도 4개·고지 대조 1개. WSL 도구 단위 시험 14개. 제품 MIT LICENSE는 별도 미완료다. |
-| 배포 묶음 명령(커밋 `7859b5d`) | Windows 11 Pro 10.0.26200, WSL2 Ubuntu 24.04.4, Rust 1.99.1, GitHub Actions `windows-2025`·`ubuntu-24.04` | 2·4·6·7절의 `package.rs` 심볼과 처리 순서를 실제 코드와 대조했다. xtask 단위 시험 16건(SHA-256 FIPS 180-4 예제 4개, 버전 형식 규칙 포함)이 통과했다. 두 OS와 Actions에서 `cargo xtask package`를 실행했다. [릴리스 how-to 4절](../how-to/release.md#4-검증) | 통과 |
-| 도움말 사이트 도구(커밋 `92749c8`) | Windows 11 Pro 10.0.26200, WSL2 Ubuntu 24.04.4, Rust 1.99.1, mdBook 0.5.4, GitHub Actions `ubuntu-24.04` | 도움말 도구 행(`help_site.rs`·`help_site/checks.rs`·`help_site/html.rs`·`help_serve.rs`·`static_server.rs`)에 적은 심볼 25개가 모두 해당 파일에 정의되어 있음을 확인했다. `cargo xtask help-site`를 두 OS와 Actions에서 실행했다. 루트 시험 `tests/help_site.rs`(HELP-001~018)와 xtask 단위 시험이 두 OS 전체 게이트에서 통과했다. [도움말 게시 how-to 4절](../how-to/publish-help.md#4-검증) | 통과 |
-| 도움말 검사 보강(커밋 `8f99434`) | Windows 11 Pro 10.0.26200, WSL2 Ubuntu 24.04.4, Rust 1.99.1, mdBook 0.5.4 | `help_site/checks.rs` 행의 빈 주소 규칙을 `check_url`과, 5절의 동시 실행 설명을 `help_site.rs` `run`의 지우기·만들기 순서와 대조했다. xtask 단위 시험 25건(`empty_addresses_are_reported` 포함)과 루트 시험 `tests/help_site.rs`가 두 OS 전체 게이트에서 통과했다. [개발 환경·검증 4.6절](../how-to/set-up-and-verify.md#46-운영-도움말-판정표) | 통과 |
-| 시험용 접속 ticket 도구(커밋 `4bcfe68`, 수정 `2d8de7b`·`84e208e`) | Windows 11 Pro 10.0.26200, WSL2 Ubuntu 24.04.4, Rust 1.99.1 | 2·3·4·6절의 `ticket.rs` 심볼, 파일 형식, 처리 순서를 실제 코드와 대조했다. xtask 단위 시험은 Windows 29건, WSL 30건(Unix 개인키 권한 `0600` 시험 포함)이 통과했다. [수동 운영 안내 3.10.1절](../how-to/operate-relay.md#3101-시험용-키와-ticket으로-확인하기) 1~5단계를 두 OS에서 `4bcfe68`의 debug 실행파일과 예시 설정(포트만 바꿈)으로 실행했다. `keys`는 세 줄을 출력했고, 다시 실행하면 종료 코드 1이었다. WSL에서 공개 키 파일은 `0644`, 개인 JWK는 `0600`이었다. 업그레이드는 101(`binary`)과 `RFB 000.000` 프레임을 받은 뒤 curl 종료 코드 28로 끝났고, 같은 ticket 재사용은 401(`ticket_reused`)이었다. Windows에서는 저장소 밖 Node.js 스크립트로 양방향 중계, 101 뒤 중계 ID 불일치의 Close 4012(`ticket_relay_mismatch`), `--lifetime 61`의 401(`ticket_invalid`), 잘못된 중계 ID의 종료 코드 2도 확인했다. WSL의 양방향 중계는 Node.js 18에 WebSocket이 없어 실행하지 않았다. `84e208e`의 지우기 실패 보고는 WSL에서 쓰기를 막은 디렉터리로 한 번 확인했다(저장소에 남기지 않은 임시 시험). `2d8de7b`·`84e208e`는 Windows에서 fmt·clippy·xtask 단위 시험으로 다시 확인했다. 전체 게이트: Windows는 `4bcfe68`과 `39d9738`에서 `ALL PASSED (all)`(통과 268, 부분 12, 실패 0, 미실행 3, 미연결 2, 오류 0)였다. WSL은 `2d8de7b`·`84e208e`에서 ticket 시스템 시험 1건이 실패했다. 시험의 시간 측정을 고친 뒤 `39d9738`에서 `ALL PASSED`(통과 271, 부분 8, 실패 0, 미실행 4, 미연결 2, 오류 0)였다([접속 ticket 모듈 설계의 수정 기록](relay-access-ticket.md#세션-만료-시스템-시험의-시간-측정-수정)). ticket 원문과 키 내용은 기록하지 않았다. | 통과 |
-| 저장소 밖 경로 표시(커밋 `e6e8a88`) | Windows 11 Pro 10.0.26200, WSL2 Ubuntu 24.04.4, Rust 1.99.1, mdBook 0.5.4 | 2절 `cargo.rs` 행의 `display_path` 규칙을 코드와 대조했다. `package.rs`의 같은 예외 처리는 `display_path`로 합쳤다. 새 단위 시험 2건(`display_path_joins_inside_root_with_slashes`, `display_path_keeps_paths_outside_root_as_they_are`)을 포함해 xtask 단위 시험이 Windows 31건, WSL 32건 통과했다. WSL에서 `CARGO_TARGET_DIR`을 저장소 밖(`~/vnc-relay-target`)에 두고 `cargo xtask help-site`를 실행했다. 출력은 `help-site: 통과 (/home/<사용자>/vnc-relay-target/help-site)`였다. 고치기 전에는 같은 경로가 `//home/…`으로 보였다. | 통과 |
+- 날짜·대상: 2026-11-18 작업 트리의 `package.rs` `Platform.executables`·`run`, `notices.rs` `render`, `layers.rs` `RULES`·`APPROVED`.
+- 환경·방법: 저장소 소스를 읽고 Windows 트레이의 실행파일·고지·허용 의존 경계를 본문과 대조했다.
+- 결과: 본문의 Windows 트레이 범위와 일치한다. 소스 대조는 묶음 생성이나 실행 통과를 뜻하지 않는다. 시나리오별 현재 결과는 `cargo xtask scenarios`가 만드는 `scenario-report.md`와 CI에서 확인한다([테스트 컨벤션](../conventions/testing.md#7-테스트와-스펙-시나리오-연결)).
+
+### 미리보기 수동 확인
+
+- 대상: 커밋 `c96b948`~`75d7906`의 토큰 CSS·미리보기 명령. 날짜는 원기록에 없다.
+- 환경·방법: Windows 10.0.26200에서 `cargo xtask dashboard-serve`를 실행하고 6폭 × ko/en 12회 캡처했다.
+- 결과: 콘솔 오류와 CSP 위반이 없었다.
+
+### 접속 ticket 도구 수동 확인
+
+- 날짜·대상: 2026-11-13의 debug 실행파일과 지우기 실패 보고를 다루는 `84e208e`.
+- 환경: Windows 11 Pro 10.0.26200·WSL2 Ubuntu 24.04.4, Rust 1.99.1. WSL Node.js는 18이다.
+- 방법: [수동 운영 안내 3.10.1절](../how-to/operate-relay.md#3101-시험용-키와-ticket으로-확인하기) 1~5단계를 두 OS에서 예시 설정의 포트만 바꾸어 실행했다.
+- 결과: `keys`는 세 줄을 출력했고 재실행은 종료 코드 1이었다. WSL 공개 키는 `0644`, 개인 JWK는 `0600`이었다. 업그레이드는 101(`binary`)과 `RFB 000.000` 프레임을 받은 뒤 curl 종료 코드 28로 끝났고, 재사용은 401(`ticket_reused`)이었다. Windows의 저장소 밖 Node.js 스크립트는 양방향 중계, ID 불일치 Close 4012(`ticket_relay_mismatch`), `--lifetime 61`의 401(`ticket_invalid`), 잘못된 ID의 종료 코드 2를 확인했다. WSL의 쓰기를 막은 디렉터리에서는 지우기 실패 보고를 확인했다.
+- 한계: WSL Node.js 18에는 WebSocket이 없어 양방향 중계를 실행하지 않았다. ticket 원문과 키 내용은 기록하지 않았다.
+
+### 저장소 밖 경로 수동 확인
+
+- 대상: 커밋 `e6e8a88`. 날짜는 원기록에 없다.
+- 환경·방법: Ubuntu 24.04.4(WSL2), Rust 1.99.1, mdBook 0.5.4에서 `CARGO_TARGET_DIR`을 저장소 밖 `~/vnc-relay-target`로 두고 `cargo xtask help-site`를 실행했다.
+- 결과: `help-site: 통과 (/home/<사용자>/vnc-relay-target/help-site)`를 출력했다. 경로에 중복 `/`가 없었다.
 
 ## 8. 미결정 사항
 
-이 문서 자체에 열린 항목은 없다. 대시보드 테스트 결과 수집은 사용자 결정 2026-10-22(Q35)로 정했다(1절과 7절). `tests/dashboard_browser.rs`와 `tests/dashboard_live.rs`의 `/// spec:` 표식이 DASH 시나리오를 연결한다. 브라우저 시험은 Windows와 WSL Ubuntu 모두에서 실행한다(사용자 결정 2026-10-22(Q41), [대시보드 컴포넌트 설계 8절](dashboard-components.md#8-미결정-사항)). 현재 보고서 상태와 수동 증거를 합친 판정은 [작업 5.9 판정표](../how-to/set-up-and-verify.md#41-작업-59-판정표)를 따른다.
+열린 항목은 없다. `tests/dashboard_browser.rs`와 `tests/dashboard_live.rs`의 `/// spec:` 표식이 DASH 시나리오를 연결한다. 브라우저 시험은 Windows와 WSL Ubuntu에서 실행한다. 시나리오별 현재 결과는 `cargo xtask scenarios`가 만드는 `scenario-report.md`와 CI에서 확인한다([테스트 컨벤션](../conventions/testing.md#7-테스트와-스펙-시나리오-연결)).
