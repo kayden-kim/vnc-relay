@@ -95,7 +95,7 @@ Windows 11에서는 VNC Relay를 Windows 서비스로 실행할 수 있게 한�
 - 트레이 앱의 `/readyz` 조회는 표준 라이브러리 TCP로 구현했다. HTTP 라이브러리를 더하지 않았다(이 문서의 판단, 사용자 결정 없음).
 - 서비스 실행(`service run`)의 종료 요청은 windows-service의 서비스 제어 처리기가 받은 중지·시스템 종료 제어로만 만들도록 구현했다. 터미널 `serve`의 콘솔 종료 신호(Ctrl+C·Ctrl+Break·콘솔 창 닫기)는 서비스 실행에서 종료 요청으로 쓰지 않는다. 사용자 로그오프로 서비스가 멈추지 않는지는 재시작이 필요한 OPS-078의 확인 범위에 남아 있다([CLI 계약 1.9절](../contracts/cli-v1.md#19-windows-서비스-실행), 이 문서의 판단, 사용자 결정 없음).
 - Windows 표시 언어는 windows-registry로 읽도록 구현했다. 새 `unsafe`는 없다. HKCU `Control Panel\Desktop`의 `PreferredUILanguages`, HKCU `Control Panel\Desktop\MuiCached`의 `MachinePreferredUILanguages` 순서로 읽는다. 각 다중 문자열 값은 첫 항목만 본다. 값을 읽지 못하거나 첫 항목이 없거나 비어 있으면 다음 값으로 넘어간다. 선택한 첫 항목의 기본 언어가 `ko`이면 한국어, 그 밖에는 영어다. 두 값에서 언어를 얻지 못하면 HKLM `SYSTEM\CurrentControlSet\Control\Nls\Language`의 `InstallLanguage`가 `0412`일 때만 한국어를 쓴다. 이 값도 읽지 못하면 영어다. 기존 레지스트리 의존성을 재사용하고 `unsafe` 범위를 늘리지 않기 위한 구현 판단이다(이 문서의 판단, 사용자 결정 없음).
-- 미결정: 트레이 문구와 아이콘([TRAY-TBD-001·002](../specs/windows-tray.md#8-미결정-사항)), 시스템 종료 때의 시간 한도([OPS-TBD-014](../specs/operations.md#8-미결정-사항)), CLI 이름과 오류 코드의 채택([CLI 계약 6절](../contracts/cli-v1.md#6-초안을-확정하기-전에-해결할-사항)). 중지 중 두 번째 중지 요청은 SCM의 1061 거절로 서비스에 전달되지 않으므로 OPS-TBD-013을 해소했다.
+- 미결정: 트레이 문구([TRAY-TBD-001](../specs/windows-tray.md#8-미결정-사항)), 시스템 종료 때의 시간 한도([OPS-TBD-014](../specs/operations.md#8-미결정-사항)), CLI 이름과 오류 코드의 채택([CLI 계약 6절](../contracts/cli-v1.md#6-초안을-확정하기-전에-해결할-사항)). 중지 중 두 번째 중지 요청은 SCM의 1061 거절로 서비스에 전달되지 않으므로 OPS-TBD-013을 해소했다. 트레이 아이콘(TRAY-TBD-002)은 사용자 결정 2026-11-18(Q258)으로 대시보드 브랜드 표식과 같은 그림 하나로 정했다.
 
 ## 7. 검증
 

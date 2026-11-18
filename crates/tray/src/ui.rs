@@ -196,39 +196,71 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+const ICON_SIZE: u32 = 32;
+
 fn icon() -> Result<Icon, tray_icon::BadIcon> {
-    let mut pixels = vec![0_u8; 32 * 32 * 4];
-    for y in 0_i32..32 {
-        for x in 0_i32..32 {
-            let corner_x = if x < 7 {
-                7 - x
-            } else if x > 24 {
-                x - 24
-            } else {
-                0
-            };
-            let corner_y = if y < 7 {
-                7 - y
-            } else if y > 24 {
-                y - 24
-            } else {
-                0
-            };
-            if corner_x * corner_x + corner_y * corner_y > 49 {
+    Icon::from_rgba(brand_mark_rgba(), ICON_SIZE, ICON_SIZE)
+}
+
+/// Draws the dashboard brand mark as the tray icon (DESIGN.md "아이콘 규칙", Q258).
+///
+/// Like the top bar: a `spacing.brand-size` square with `rounded.md` corners in
+/// `colors.navbar-accent`, holding the 16-unit `brand` icon at 1.25× in
+/// `colors.navbar-brand` lines of `spacing.icon-stroke`. The tray takes RGBA, not
+/// SVG, so each pixel counts 4×4 samples to keep the edges smooth when Windows
+/// scales the icon down.
+fn brand_mark_rgba() -> Vec<u8> {
+    const RADIUS: f32 = 8.0;
+    const BACKGROUND: [u8; 3] = [0x1c, 0x27, 0x23];
+    const LINE: [u8; 3] = [0xff, 0xff, 0xff];
+    const SCALE: f32 = 1.25;
+    const OFFSET: f32 = (ICON_SIZE as f32 - 16.0 * SCALE) / 2.0;
+    const HALF_WIDTH: f32 = 1.75 * SCALE / 2.0;
+    const SAMPLES: u32 = 4;
+    // The `brand` icon of web/dashboard/app/components/icons.js as segments.
+    const SEGMENTS: [[f32; 4]; 6] = [
+        [2.75, 5.5, 12.25, 5.5],
+        [9.75, 3.0, 12.25, 5.5],
+        [12.25, 5.5, 9.75, 8.0],
+        [13.25, 10.5, 3.75, 10.5],
+        [6.25, 8.0, 3.75, 10.5],
+        [3.75, 10.5, 6.25, 13.0],
+    ];
+    let size = ICON_SIZE as f32;
+    let mut pixels = Vec::with_capacity((ICON_SIZE * ICON_SIZE * 4) as usize);
+    for y in 0..ICON_SIZE {
+        for x in 0..ICON_SIZE {
+            let (mut inside, mut line) = (0_u32, 0_u32);
+            for sample in 0..SAMPLES * SAMPLES {
+                let px = x as f32 + ((sample % SAMPLES) as f32 + 0.5) / SAMPLES as f32;
+                let py = y as f32 + ((sample / SAMPLES) as f32 + 0.5) / SAMPLES as f32;
+                let dx = (RADIUS - px).max(px - (size - RADIUS)).max(0.0);
+                let dy = (RADIUS - py).max(py - (size - RADIUS)).max(0.0);
+                if dx * dx + dy * dy > RADIUS * RADIUS {
+                    continue;
+                }
+                inside += 1;
+                let on_line = SEGMENTS.iter().any(|&[ax, ay, bx, by]| {
+                    let (ax, ay) = (OFFSET + ax * SCALE, OFFSET + ay * SCALE);
+                    let (sx, sy) = (OFFSET + bx * SCALE - ax, OFFSET + by * SCALE - ay);
+                    let t =
+                        (((px - ax) * sx + (py - ay) * sy) / (sx * sx + sy * sy)).clamp(0.0, 1.0);
+                    let (cx, cy) = (ax + t * sx - px, ay + t * sy - py);
+                    cx * cx + cy * cy <= HALF_WIDTH * HALF_WIDTH
+                });
+                line += u32::from(on_line);
+            }
+            if inside == 0 {
+                pixels.extend_from_slice(&[0, 0, 0, 0]);
                 continue;
             }
-            let mark = ((7..=24).contains(&x) && (10..=12).contains(&y))
-                || ((7..=24).contains(&x) && (19..=21).contains(&y))
-                || ((7..=9).contains(&x) && (10..=21).contains(&y))
-                || ((22..=24).contains(&x) && (10..=21).contains(&y));
-            let color = if mark {
-                [255, 255, 255, 255]
-            } else {
-                [18, 53, 43, 255]
-            };
-            let index = ((y * 32 + x) * 4) as usize;
-            pixels[index..index + 4].copy_from_slice(&color);
+            // Coverage-weighted mix; every value stays within 0..=255.
+            for (background, stroke) in BACKGROUND.into_iter().zip(LINE) {
+                let mixed = u32::from(background) * (inside - line) + u32::from(stroke) * line;
+                pixels.push((mixed / inside) as u8);
+            }
+            pixels.push((inside * 255 / (SAMPLES * SAMPLES)) as u8);
         }
     }
-    Icon::from_rgba(pixels, 32, 32)
+    pixels
 }
