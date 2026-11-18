@@ -690,7 +690,7 @@ WS-025는 두 게이트에서 `미실행`(무시 표시 시험)이며 4.3절 표
 | Ubuntu 최종 | 같음 | 같음 | 통과. 두 대상의 `cargo fetch --locked --target …`이 종료 코드 0으로 끝나고 `notices --check: 통과`를 확인한 뒤 다시 실행했다. `ALL PASSED`. 311건: 통과 275, 부분 10, 실패 0, 미실행 17, 미연결 9, 오류 0. `+ 미커밋 변경`은 줄 끝 차이다(`git diff --ignore-cr-at-eol` 출력 없음, Windows `git status` 깨끗함). deny 단계 종료 코드 0 | `~/vnc-relay-target/scenario-report.md`(`738d068`, 2026-11-17T23:45:45Z) |
 | 배포 묶음 | [3.3절](#33-변경-범위별-검증)의 배포 묶음 행 | 위 두 OS | 통과. 두 OS에서 `cargo xtask package`가 종료 코드 0이고 `notices --check: 통과`, `package:`·`sha256:` 줄이 나왔다. Windows 묶음(`vnc-relay-2026.11.4-windows-x64.zip`)에는 `vnc-relay.exe`와 `vnc-relay-tray.exe`가 있다. Linux 묶음(`vnc-relay-2026.11.4-linux-x64.tar.gz`)에는 실행파일 `vnc-relay`만 있다. 실행파일은 `738d068`의 코드로 빌드했다. 묶음의 `docs/`에는 이 기록을 쓰던 중의 미커밋 문서가 들어갔으므로 이 묶음은 배포에 쓰지 않는다 | 이 표 |
 
-Ubuntu 최종 보고서의 OPS-027 `부분`은 출력이 섞여 생긴 집계 차이다. `file_watch::tests::overtaken_candidate_is_never_applied_when_the_newest_write_is_valid_or_invalid`의 결과 줄 중간에 같은 시험 실행 파일이 표준 출력에 쓴 운영 로그 JSON 줄이 끼었고, `ok`는 다음 줄로 밀렸다. 보고 도구는 이 결과를 읽지 못해 `미실행(이번 실행에 없음)`으로 표시했다. `cargo test`는 통과했다. 같은 시험은 Windows와 Ubuntu 최초 실행에서 `통과`였다. 그래서 OPS-027은 통과로 판정한다.
+Ubuntu 최종 보고서의 OPS-027 `부분`은 출력이 섞여 생긴 집계 차이다. 게이트 출력에서 `file_watch::tests::overtaken_candidate_is_never_applied_when_the_newest_write_is_valid_or_invalid`의 결과 줄 중간에 같은 시험 실행 파일이 표준 출력에 쓴 운영 로그 JSON 줄이 끼었고, `ok`는 다음 줄로 밀렸다. 보고 도구는 시험 이름과 결과가 한 줄에 있어야 읽으므로 이 결과를 `미실행(이번 실행에 없음)`으로 표시했다. 같은 시험은 Windows와 Ubuntu 최초 실행에서 `통과`였다. 후속 확인: `738d068` 뒤 문서만 바꾼 커밋 `a67d8da`에서 Ubuntu로 이 시험만 실행했고 `1 passed; 0 failed`였다. 그래서 OPS-027은 통과로 판정한다.
 
 기존 시나리오에서 `통과`가 아닌 것은 Windows 17개, Ubuntu 15개다. Windows 17개와 Ubuntu 14개는 4.3절 표와 같은 상태다. 나머지 Ubuntu 1개는 위 OPS-027이다.
 
