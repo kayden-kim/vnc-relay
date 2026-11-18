@@ -240,7 +240,7 @@ noVNC ---WSS---> VNC Relay <---WSS--- droidVNC-NG
 9. noVNC and the modified droidVNC-NG complete VNC authentication and exchange the screen. VNC Relay forwards RFB data without interpreting it.
 10. At the session expiry time, VNC Relay sends Close 4013 to both connections and ends the active session.
 
-When support staff close the screen, the active session in VNC Relay ends and the Server connection closes too. VNC Relay does not pair ended connections again. To open the screen again in the same remote support session, the device must also reconnect with a new Server ticket.
+When support staff close the screen, the active session in VNC Relay ends and the Server connection closes too. VNC Relay does not pair ended connections again. To open the screen again, the device must also start a new connection with a new Server ticket. droidVNC-NG does not notify the device app when a connection drops. To detect a drop, the device app must query the connection state with `ACTION_GET_CLIENTS`. The device app in this case does not detect drops after a successful connection. The backend must therefore tell the device to connect again, for example by starting a new remote support session.
 
 ### VNC Relay configuration
 
@@ -323,14 +323,12 @@ If the key management service returns ECDSA signatures in DER format, convert th
 
 | Claim | Value in this case |
 | --- | --- |
-| `iss` | Fixed name of the backend API. It matches `issuer` for both roles. |
-| `aud` | `vnc-relay/viewer` or `vnc-relay/server`. |
-| `rh` | Fixed name of VNC Relay. It matches `relay_host` for both roles. |
 | `rid` | Relay ID of the remote support session. This case uses six random digits. |
-| `jti` | A new 128-bit random value for each ticket. |
 | `iat`, `exp` | The issue time and 60 seconds after it. |
 | `sx` | Expiry time of the remote support session. |
 | `sub` | Remote support session ID. It is neither a secret nor personal information. Use `ticket_sub` in the operations log to match it with the backend session. |
+
+`iss` and `rh` hold fixed names that match `issuer` and `relay_host` for both roles. For the other claim rules, follow [Access tickets](access-ticket.md#prepare-the-issuer-and-clients).
 
 The backend API issues a new Viewer ticket for each connection details request and a new Server ticket for each device connection attempt. It does not store tickets in its database or logs.
 
@@ -369,8 +367,8 @@ Parameters arrive through the droidVNC-NG Intent interface (`ACTION_CONNECT_REPE
 
 The device app is responsible for these tasks:
 
-- Check that the installed droidVNC-NG is a modified build with WebSocket support before passing a WSS address.
-- Get a new Server ticket from the backend API for each connection attempt. After a failure, retry with a new ticket at increasing intervals.
+- Check that the installed droidVNC-NG is a modified build with WebSocket support before passing a WSS address. Do not rely on the version number alone, because a modified build can keep the original version number.
+- Get a new Server ticket from the backend API for each connection attempt. If the ticket request or the connect request fails, retry with a new ticket at increasing intervals. This retry does not cover a drop after a successful connection.
 - Do not fall back to TCP without a ticket when the WSS connection fails.
 - Do not write tickets to logs.
 

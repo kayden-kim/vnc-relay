@@ -240,7 +240,7 @@ noVNC ---WSS---> VNC Relay <---WSS--- droidVNC-NG
 9. noVNC와 droidVNC-NG 수정판이 VNC 인증을 거쳐 화면을 주고받는다. VNC Relay는 RFB 내용을 해석하지 않고 전달한다.
 10. 세션 만료 시각이 되면 VNC Relay가 두 연결에 Close 4013을 보내고 활성 세션을 끝낸다.
 
-지원 담당자가 화면을 닫으면 VNC Relay의 활성 세션이 끝나고 Server 쪽 연결도 닫힌다. VNC Relay는 끝난 연결을 다시 짝짓지 않는다. 같은 원격 지원 세션에서 화면을 다시 열려면 기기도 새 Server용 ticket으로 다시 접속해야 한다.
+지원 담당자가 화면을 닫으면 VNC Relay의 활성 세션이 끝나고 Server 쪽 연결도 닫힌다. VNC Relay는 끝난 연결을 다시 짝짓지 않는다. 같은 화면을 다시 열려면 기기도 새 Server용 ticket으로 새 연결을 시작해야 한다. droidVNC-NG는 연결이 끊겨도 기기 앱에 알리지 않는다. 끊김을 감지하려면 기기 앱이 `ACTION_GET_CLIENTS`로 연결 상태를 조회해야 한다. 이 사례의 기기 앱은 연결이 성공한 뒤의 끊김을 감지하지 않는다. 그래서 백엔드가 기기에 새 연결을 지시해야 한다. 예를 들어 원격 지원 세션을 새로 시작한다.
 
 ### VNC Relay 설정
 
@@ -323,14 +323,12 @@ output = "relay.log"
 
 | 클레임 | 이 사례의 값 |
 | --- | --- |
-| `iss` | 백엔드 API의 고정 이름이다. 두 역할의 `issuer`와 같다. |
-| `aud` | `vnc-relay/viewer` 또는 `vnc-relay/server`다. |
-| `rh` | VNC Relay의 고정 이름이다. 두 역할의 `relay_host`와 같다. |
 | `rid` | 원격 지원 세션의 중계 ID다. 이 사례는 무작위 6자리 숫자를 쓴다. |
-| `jti` | ticket마다 새로 만든 128비트 난수다. |
 | `iat`, `exp` | 발급 시각과 그 60초 뒤다. |
 | `sx` | 원격 지원 세션의 만료 시각이다. |
 | `sub` | 원격 지원 세션 ID다. 비밀이나 개인정보가 아니다. 운영 로그의 `ticket_sub`로 백엔드 세션과 맞춰 볼 수 있다. |
+
+`iss`와 `rh`에는 두 역할의 `issuer`·`relay_host`와 같은 고정 이름을 쓴다. 나머지 클레임 규칙은 [접속 ticket](access-ticket.md#발급-쪽과-클라이언트-준비)을 따른다.
 
 백엔드 API는 Viewer용 ticket을 접속 정보 요청마다, Server용 ticket을 기기의 연결 시도마다 새로 발급한다. ticket 원문은 백엔드의 DB와 로그에 남기지 않는다.
 
@@ -369,8 +367,8 @@ const rfb = new RFB(screen, connection.relayUrl, {
 
 기기 앱은 다음 일을 맡는다.
 
-- 설치된 droidVNC-NG가 WebSocket을 지원하는 수정판인지 확인한 뒤 WSS 주소를 넘긴다.
-- 연결 시도마다 백엔드 API에서 새 Server용 ticket을 받는다. 실패하면 간격을 늘리며 새 ticket으로 다시 시도한다.
+- 설치된 droidVNC-NG가 WebSocket을 지원하는 수정판인지 확인한 뒤 WSS 주소를 넘긴다. 수정판이 원본과 같은 버전 번호를 쓸 수 있으므로 버전 번호만으로 판단하지 않는다.
+- 연결 시도마다 백엔드 API에서 새 Server용 ticket을 받는다. ticket 요청이나 연결 지시가 실패하면 간격을 늘리며 새 ticket으로 다시 시도한다. 연결이 성공한 뒤의 끊김은 이 재시도 대상이 아니다.
 - WSS 연결이 실패해도 ticket 없는 TCP로 되돌아가지 않는다.
 - ticket을 로그에 남기지 않는다.
 
