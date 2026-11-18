@@ -41,9 +41,11 @@ TCP 진입점은 ticket을 확인하지 못한다. ticket을 켠 역할의 TCP �
 
 전체 형식과 확인 순서는 [WebSocket 계약 1.9.2~1.9.4절](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/websocket-relay-v2.md)을 따른다.
 
+키를 만들고 ticket을 발급·확인하는 예시 스크립트는 [추천 구성 사례](recommended-setup.md#ticket-발급-예시)에 있다.
+
 ## 역할별 확인 켜기
 
-발급 쪽과 ticket을 전송할 클라이언트를 먼저 준비해야 한다. 기존에 ticket 없이 접속하던 클라이언트는 확인을 켠 뒤 거절된다. 아래는 Viewer 설정 부분이다. Server는 `[relay.ticket.server]`에 같은 종류의 설정을 두되 다른 서명 키의 공개 키 파일을 써야 한다. 두 역할을 함께 켠 전체 설정과 발급 쪽·클라이언트 구성 예는 [VNC 연결 구성의 추천 구성 사례](connect.md#추천-구성-사례-양쪽-wss와-접속-ticket)에 있다.
+발급 쪽과 ticket을 전송할 클라이언트를 먼저 준비해야 한다. 기존에 ticket 없이 접속하던 클라이언트는 확인을 켠 뒤 거절된다. 아래는 Viewer 설정 부분이다. Server는 `[relay.ticket.server]`에 같은 종류의 설정을 두되 다른 서명 키의 공개 키 파일을 써야 한다. 두 역할을 함께 켠 전체 설정과 발급 쪽·클라이언트 구성 예는 [추천 구성 사례](recommended-setup.md)에 있다.
 
 1. 해당 역할의 공개 키 파일을 준비한다.
 2. 설정 파일에 역할별 ticket 테이블을 추가한다.

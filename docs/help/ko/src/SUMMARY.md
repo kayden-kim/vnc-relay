@@ -9,6 +9,7 @@
 - [대시보드](dashboard.md)
 - [접속 ticket](access-ticket.md)
 - [운영](operate.md)
+- [추천 구성 사례](recommended-setup.md)
 - [문제 해결](troubleshooting.md)
 - [참조](reference.md)
 

@@ -151,7 +151,7 @@ Close 4010 (`waiting_full`) means that new waiting registration reached its limi
 
 This feature is available from `v2026.11.3` and is off by default. An enabled role requires a valid access ticket. Check ticket-related `reason` values in `connection_rejected`. They distinguish missing tickets, invalid format/signature/claims, expiry, reuse, and failure of the startup-time condition. `ticket_issued_before_start` means that `iat` is at or before server startup time + 5 seconds. A ticket issued just after startup can also fail this condition.
 
-Check issuer and server clocks, role settings, and public keys. A new ticket is needed after restart. Obtain a new value from the issuer instead of resending the same ticket. Administrator sign-in does not resolve a relay ticket failure.
+Check issuer and server clocks, role settings, and public keys. A new ticket is needed after restart. Obtain a new value from the issuer instead of resending the same ticket. Administrator sign-in does not resolve a relay ticket failure. To check a signature with the public keys file and view the claims, you can use the [ticket verification example](recommended-setup.md#ticket-verification-example).
 
 For close 4012 (`ticket_relay_mismatch`) after 101, match the initial request's relay ID to the ticket's `rid` byte for byte. `0123` and `123` differ. A Viewer Mode I request that passes existing mode and initial request checks is also rejected with 4012. If Mode I is disabled, `mode_disabled` (1008) takes precedence. See [Access tickets](access-ticket.md) for all conditions. Do not paste ticket contents into logs or reports.
 

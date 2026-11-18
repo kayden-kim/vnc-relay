@@ -35,6 +35,7 @@ This help is for operators who deploy the executable and configuration files dir
 | Sign in and work with connections, sessions, logs, and settings | [Dashboard](dashboard.md) |
 | Integrate connection authorization with an external issuer | [Access tickets](access-ticket.md) |
 | Start, stop, reload, and upgrade the relay | [Operations](operate.md) |
+| Connect a browser Viewer and an Android Server with WSS and access tickets | [Recommended setup](recommended-setup.md) |
 | Investigate startup and connection failures | [Troubleshooting](troubleshooting.md) |
 | Find the CLI, configuration, and protocol contracts | [Reference](reference.md) |
 | Check the license and third-party notices | [Notices](notices.md) |

@@ -1,0 +1,69 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 380" width="760" height="380" font-family="Pretendard, 'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans KR', system-ui, -apple-system, 'Segoe UI', sans-serif">
+  <title>추천 구성 사례의 구성도</title>
+  <defs>
+    <marker id="arrow-wss" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0L10 5L0 10z" fill="#0f7048"/>
+    </marker>
+    <marker id="arrow-control" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0L10 5L0 10z" fill="#58665f"/>
+    </marker>
+  </defs>
+  <rect width="760" height="380" fill="#ffffff"/>
+
+  <!-- 백엔드 API -->
+  <rect x="250" y="20" width="260" height="72" rx="10" fill="#eef2f0" stroke="#e1e7e4"/>
+  <text x="380" y="50" text-anchor="middle" font-size="15" font-weight="600" fill="#0d1a15">백엔드 API (발급 쪽)</text>
+  <text x="380" y="73" text-anchor="middle" font-size="13" fill="#58665f">역할별 키로 ticket 서명</text>
+
+  <!-- 원격 지원 웹 -->
+  <rect x="20" y="168" width="200" height="104" rx="10" fill="#eef2f0" stroke="#e1e7e4"/>
+  <text x="120" y="198" text-anchor="middle" font-size="15" font-weight="600" fill="#0d1a15">원격 지원 웹</text>
+  <text x="120" y="221" text-anchor="middle" font-size="13" fill="#58665f">브라우저 · noVNC</text>
+  <rect x="88" y="234" width="64" height="24" rx="12" fill="#e3f2f5" stroke="#b3dbe4"/>
+  <text x="120" y="251" text-anchor="middle" font-size="12.5" font-weight="600" fill="#0b6173">Viewer</text>
+
+  <!-- VNC Relay -->
+  <rect x="280" y="150" width="200" height="140" rx="12" fill="#12352b"/>
+  <text x="380" y="182" text-anchor="middle" font-size="16" font-weight="600" fill="#ffffff">VNC Relay</text>
+  <text x="380" y="206" text-anchor="middle" font-size="13" fill="#ffffff" fill-opacity="0.82">WSS 리스너 :8443</text>
+  <text x="380" y="233" text-anchor="middle" font-size="13" fill="#ffffff" font-family="ui-monospace, 'SF Mono', 'Cascadia Mono', Consolas, 'Liberation Mono', monospace">/relay/viewer</text>
+  <text x="380" y="255" text-anchor="middle" font-size="13" fill="#ffffff" font-family="ui-monospace, 'SF Mono', 'Cascadia Mono', Consolas, 'Liberation Mono', monospace">/relay/server</text>
+  <text x="380" y="278" text-anchor="middle" font-size="12.5" fill="#ffffff" fill-opacity="0.82">ticket 확인 · Mode II 중계</text>
+
+  <!-- Android 기기 -->
+  <rect x="540" y="128" width="200" height="180" rx="10" fill="#eef2f0" stroke="#e1e7e4"/>
+  <text x="640" y="152" text-anchor="middle" font-size="14" font-weight="600" fill="#0d1a15">Android 기기</text>
+  <rect x="556" y="164" width="168" height="40" rx="8" fill="#ffffff" stroke="#e1e7e4"/>
+  <text x="640" y="189" text-anchor="middle" font-size="13.5" font-weight="600" fill="#0d1a15">기기 앱</text>
+  <rect x="556" y="230" width="168" height="64" rx="8" fill="#ffffff" stroke="#e1e7e4"/>
+  <text x="640" y="253" text-anchor="middle" font-size="13" font-weight="600" fill="#0d1a15">droidVNC-NG 수정판</text>
+  <rect x="608" y="264" width="64" height="22" rx="11" fill="#e3f2f5" stroke="#b3dbe4"/>
+  <text x="640" y="280" text-anchor="middle" font-size="12.5" font-weight="600" fill="#0b6173">Server</text>
+  <line x1="640" y1="204" x2="640" y2="228" stroke="#58665f" stroke-width="1.5" marker-end="url(#arrow-control)"/>
+  <text x="650" y="221" font-size="12" fill="#58665f">Intent</text>
+
+  <!-- ticket 전달 -->
+  <path d="M250 56 H120 V166" fill="none" stroke="#58665f" stroke-width="1.5" marker-end="url(#arrow-control)"/>
+  <text x="185" y="47" text-anchor="middle" font-size="12.5" fill="#58665f">Viewer용 ticket</text>
+  <path d="M510 56 H700 V162" fill="none" stroke="#58665f" stroke-width="1.5" marker-end="url(#arrow-control)"/>
+  <text x="605" y="47" text-anchor="middle" font-size="12.5" fill="#58665f">Server용 ticket</text>
+
+  <!-- 공개 키 파일 배포 -->
+  <line x1="380" y1="92" x2="380" y2="148" stroke="#58665f" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#arrow-control)"/>
+  <text x="390" y="124" font-size="12.5" fill="#58665f">공개 키 파일 (JWKS)</text>
+
+  <!-- WSS 연결 -->
+  <line x1="220" y1="229" x2="278" y2="229" stroke="#0f7048" stroke-width="2" marker-end="url(#arrow-wss)"/>
+  <text x="249" y="221" text-anchor="middle" font-size="12" font-weight="600" fill="#0f7048">WSS</text>
+  <line x1="556" y1="251" x2="482" y2="251" stroke="#0f7048" stroke-width="2" marker-end="url(#arrow-wss)"/>
+  <text x="519" y="243" text-anchor="middle" font-size="12" font-weight="600" fill="#0f7048">WSS</text>
+
+  <!-- 범례 -->
+  <line x1="20" y1="324" x2="740" y2="324" stroke="#e1e7e4"/>
+  <line x1="170" y1="352" x2="198" y2="352" stroke="#0f7048" stroke-width="2"/>
+  <text x="206" y="356" font-size="12.5" fill="#0d1a15">WSS 연결</text>
+  <line x1="320" y1="352" x2="348" y2="352" stroke="#58665f" stroke-width="1.5"/>
+  <text x="356" y="356" font-size="12.5" fill="#0d1a15">ticket 전달</text>
+  <line x1="470" y1="352" x2="498" y2="352" stroke="#58665f" stroke-width="1.5" stroke-dasharray="5 4"/>
+  <text x="506" y="356" font-size="12.5" fill="#0d1a15">공개 키 파일 배포</text>
+</svg>

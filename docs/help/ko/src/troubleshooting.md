@@ -151,7 +151,7 @@ close 4010(`waiting_full`)이면 새 대기 등록 상한에 걸린 것이다. �
 
 이 기능은 `v2026.11.3`부터 있으며 기본은 꺼져 있다. 켠 역할에서는 유효한 접속 ticket이 필수다. `connection_rejected`의 ticket 관련 `reason`을 확인한다. 없음, 형식·서명·클레임 불일치, 만료, 재사용과 기동 시각 조건 위반을 구분한다. `ticket_issued_before_start`는 `iat`가 서버 기동 시각 + 5초 이하일 때다. 기동 직후 발급한 ticket도 이 조건에 걸릴 수 있다.
 
-발급 쪽과 서버의 시계, 역할별 설정과 공개 키를 확인한다. 재시작 뒤에는 새 ticket이 필요하다. 같은 ticket을 다시 보내지 말고 발급 쪽에서 새 값을 받아야 한다. 관리자 로그인을 해도 중계용 ticket 실패는 해결되지 않는다.
+발급 쪽과 서버의 시계, 역할별 설정과 공개 키를 확인한다. 재시작 뒤에는 새 ticket이 필요하다. 같은 ticket을 다시 보내지 말고 발급 쪽에서 새 값을 받아야 한다. 관리자 로그인을 해도 중계용 ticket 실패는 해결되지 않는다. 공개 키 파일로 서명을 확인하고 클레임을 보려면 [ticket 확인 예시](recommended-setup.md#ticket-확인-예시)를 쓸 수 있다.
 
 101 뒤 close 4012(`ticket_relay_mismatch`)이면 초기 요청의 중계 ID를 ticket의 `rid`와 바이트 단위로 맞춘다. `0123`과 `123`은 다르다. 기존 모드·초기 요청 검사를 통과한 Viewer Mode I 요청도 4012로 거절한다. Mode I이 꺼져 있으면 `mode_disabled`(1008)가 먼저다. 전체 조건은 [접속 ticket](access-ticket.md)을 따른다. ticket 원문을 로그나 보고서에 붙이지 않는다.
 

@@ -35,6 +35,7 @@ noVNC는 포함하지 않는다. 운영자가 별도로 준비하는 외부 View
 | 로그인하고 연결·세션·로그·설정 다루기 | [대시보드](dashboard.md) |
 | 외부 발급 쪽과 접속 허가 연동하기 | [접속 ticket](access-ticket.md) |
 | 시작·종료·부분 재로드·업그레이드하기 | [운영](operate.md) |
+| 브라우저 Viewer와 Android Server를 WSS·접속 ticket으로 연결하기 | [추천 구성 사례](recommended-setup.md) |
 | 시작 실패와 접속 실패 조사하기 | [문제 해결](troubleshooting.md) |
 | CLI·설정·프로토콜 기준 찾기 | [참조](reference.md) |
 | 라이선스와 제삼자 고지 확인하기 | [고지](notices.md) |

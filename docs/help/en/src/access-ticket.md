@@ -41,9 +41,11 @@ The issuer and VNC Relay clocks must be within five seconds. Verification requir
 
 For the full format and verification order, use the [WebSocket contract, §§1.9.2–1.9.4](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/websocket-relay-v2.md).
 
+Example scripts that create keys and issue and verify tickets are in [Recommended setup](recommended-setup.md#ticket-issuing-example).
+
 ## Enable checks per role
 
-Prepare the issuer and ticket-capable clients first. Existing clients that connect without tickets will be rejected after checks are enabled. The excerpt below configures Viewer. For Server, use the same types of settings under `[relay.ticket.server]`, with a public keys file for different signing keys. For a complete configuration with both roles enabled, including the issuer and clients, see the [recommended setup in Connecting VNC clients](connect.md#recommended-setup-wss-and-access-tickets-on-both-sides).
+Prepare the issuer and ticket-capable clients first. Existing clients that connect without tickets will be rejected after checks are enabled. The excerpt below configures Viewer. For Server, use the same types of settings under `[relay.ticket.server]`, with a public keys file for different signing keys. For a complete configuration with both roles enabled, including the issuer and clients, see [Recommended setup](recommended-setup.md).
 
 1. Prepare the role's public keys file.
 2. Add the role's ticket table to the configuration file.

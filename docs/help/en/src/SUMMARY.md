@@ -9,6 +9,7 @@
 - [Dashboard](dashboard.md)
 - [Access tickets](access-ticket.md)
 - [Operations](operate.md)
+- [Recommended setup](recommended-setup.md)
 - [Troubleshooting](troubleshooting.md)
 - [Reference](reference.md)
 

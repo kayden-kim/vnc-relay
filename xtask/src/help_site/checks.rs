@@ -14,15 +14,17 @@ use crate::static_server::percent_decode;
 pub const REPOSITORY_BLOB: &str = "https://github.com/kayden-kim/vnc-relay/blob/main/";
 
 /// The other external links that help pages may use (docs/help/AGENTS.md,
-/// links): GitHub Releases, the UltraVNC and noVNC official sites, and the
-/// sources and license texts of the third-party components on the notices page.
+/// links): GitHub Releases, the UltraVNC and noVNC official sites, the
+/// modified droidVNC-NG repository of the recommended setup, and the sources
+/// and license texts of the third-party components on the notices page.
 /// A prefix without a final `/` also matches when `/`, `?`, or `#` follows it.
-pub const ALLOWED_LINKS: [&str; 11] = [
+pub const ALLOWED_LINKS: [&str; 12] = [
     "https://github.com/kayden-kim/vnc-relay/releases",
     "https://uvnc.com/",
     "https://www.uvnc.com/",
     "https://novnc.com/",
     "https://github.com/novnc/",
+    "https://github.com/kayden-kim/droidVNC-NG",
     "https://github.com/rust-lang/mdBook/",
     "https://github.com/FortAwesome/Font-Awesome/",
     "https://fontawesome.com/license/",
