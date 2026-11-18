@@ -6,10 +6,7 @@ Use this page to choose a connection mode for your situation and to configure Ul
 
 The two modes differ in which side opens the connection between VNC Relay and the Server. In Mode II, the Server connects to VNC Relay (a reverse connection). In Mode I, VNC Relay connects to the Server.
 
-```text
-Mode II: Viewer --> VNC Relay <-- Server
-Mode I:  Viewer --> VNC Relay --> Server
-```
+![Diagram: in Mode II, the Viewer and the Server each connect to VNC Relay with the same relay ID (ID:1234), and VNC Relay pairs them. The Server can be behind NAT or a firewall. In Mode I, the Viewer sends a target address to VNC Relay, which checks the target allow policy and opens a TCP connection to the Server's VNC port. In this example, VNC Relay and the Server are on the same internal network.](images/connection-modes.svg)
 
 | Mode | Viewer action | Server action |
 | --- | --- | --- |

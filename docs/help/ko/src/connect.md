@@ -6,10 +6,7 @@
 
 두 방식은 VNC Relay와 Server 사이의 연결을 누가 여는지가 다르다. Mode II에서는 Server가 VNC Relay에 연결한다(역접속). Mode I에서는 VNC Relay가 Server에 연결한다.
 
-```text
-Mode II: Viewer --> VNC Relay <-- Server
-Mode I:  Viewer --> VNC Relay --> Server
-```
+![구성도: Mode II에서는 Viewer와 Server가 각각 같은 중계 ID(ID:1234)로 VNC Relay에 연결하고, VNC Relay가 둘을 짝지어 중계한다. Server는 공유기(NAT)나 방화벽 뒤에 있어도 된다. Mode I에서는 Viewer가 VNC Relay에 대상 주소를 보내고, VNC Relay가 대상 허용 정책을 확인한 뒤 Server의 VNC 포트에 TCP로 연결한다. 이 예에서 VNC Relay와 Server는 같은 내부망에 있다.](images/connection-modes.svg)
 
 | 방식 | Viewer가 하는 일 | Server가 하는 일 |
 | --- | --- | --- |
