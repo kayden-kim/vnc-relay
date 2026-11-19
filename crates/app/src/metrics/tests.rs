@@ -12,7 +12,7 @@ use vnc_relay_domain::login_limit::LimitScope;
 use vnc_relay_domain::peer_ip::PeerIp;
 use vnc_relay_domain::session::{CloseCause, Direction, SessionId, Transport};
 
-use super::history::{HISTORY_CAPACITY, HISTORY_KEYS, History};
+use super::history::{HISTORY_KEYS, History, HistoryView, HistoryWindow};
 use super::snapshot::{MetricsSnapshot, Number, PointValue};
 use super::{MetricSources, Metrics, MetricsService, MetricsSink};
 use crate::events::{
@@ -751,7 +751,7 @@ fn leaves_an_unreadable_value_unavailable_and_null_in_history_instead_of_zero() 
     assert_eq!(series(&snapshot, "process.thread.count"), ["9"]);
 
     fixture.service.sample_history();
-    let view = fixture.service.history_after(None);
+    let view = fixture.service.history_after(HistoryWindow::Hour, None);
     let point = view.points.first().expect("history point");
     let memory = HISTORY_KEYS
         .iter()
@@ -767,6 +767,7 @@ fn leaves_an_unreadable_value_unavailable_and_null_in_history_instead_of_zero() 
 }
 
 /// spec: management.md:MGT-058 partial
+/// spec: management.md:MGT-061 partial
 #[test]
 fn takes_history_points_from_the_same_reading_as_the_snapshot() {
     let mut counts = RelayCounts::default();
@@ -781,7 +782,7 @@ fn takes_history_points_from_the_same_reading_as_the_snapshot() {
     fixture.metrics.add_io(Direction::TargetToViewer, 99);
 
     fixture.service.sample_history();
-    let view = fixture.service.history_after(None);
+    let view = fixture.service.history_after(HistoryWindow::Hour, None);
     assert_eq!(view.latest_seq, Some(0));
     let point = view.points.first().expect("history point");
     assert_eq!(point.seq, 0);
@@ -800,40 +801,116 @@ fn takes_history_points_from_the_same_reading_as_the_snapshot() {
             Some(Number::Int(52_428_800)),
         ]
     );
+    // The point at ready is also the first point of the 24-hour history.
+    assert_eq!(
+        fixture.service.history_after(HistoryWindow::Day, None),
+        view
+    );
 }
 
 /// spec: management.md:MGT-058 partial
 /// spec: management.md:MGT-059 partial
 #[test]
 fn keeps_the_newest_points_with_sequence_numbers_that_are_never_reused() {
+    let hour = HistoryWindow::Hour;
     let mut history = History::new();
-    let empty = history.after(None);
+    let empty = history.after(hour, None);
     assert_eq!(empty.latest_seq, None);
     assert!(empty.points.is_empty());
 
     let at = SystemTime::UNIX_EPOCH;
-    for _ in 0..=HISTORY_CAPACITY {
+    for _ in 0..=hour.capacity() {
         history.push(at, [None; HISTORY_KEYS.len()]);
     }
-    let all = history.after(None);
-    let last = HISTORY_CAPACITY as u64;
+    let all = history.after(hour, None);
+    let last = hour.capacity() as u64;
     assert_eq!(all.latest_seq, Some(last));
-    assert_eq!(all.points.len(), HISTORY_CAPACITY);
+    assert_eq!(all.points.len(), hour.capacity());
     let seqs: Vec<u64> = all.points.iter().map(|point| point.seq).collect();
     assert_eq!(seqs, (1..=last).collect::<Vec<_>>());
 
     let newer: Vec<u64> = history
-        .after(Some(last - 2))
+        .after(hour, Some(last - 2))
         .points
         .iter()
         .map(|point| point.seq)
         .collect();
     assert_eq!(newer, [last - 1, last]);
     // A number older than the oldest kept point returns every kept point.
-    assert_eq!(history.after(Some(0)).points.len(), HISTORY_CAPACITY);
+    assert_eq!(history.after(hour, Some(0)).points.len(), hour.capacity());
     for after in [last, last + 1, u64::MAX] {
-        let view = history.after(Some(after));
+        let view = history.after(hour, Some(after));
         assert_eq!(view.latest_seq, Some(last));
         assert!(view.points.is_empty(), "after {after}");
     }
+}
+
+/// spec: management.md:MGT-061 partial
+#[test]
+fn keeps_every_sixth_point_for_24_hours_with_its_own_sequence_numbers() {
+    let day = HistoryWindow::Day;
+    assert_eq!(day.interval(), Duration::from_secs(60));
+    assert_eq!(HistoryWindow::Hour.interval(), Duration::from_secs(10));
+    let mut history = History::new();
+    assert_eq!(
+        history.after(day, None),
+        HistoryView {
+            latest_seq: None,
+            points: Vec::new(),
+        }
+    );
+
+    // One-hour point n is taken at 10n seconds and every value is n, so a
+    // 24-hour point shows which one-hour point it came from.
+    let start = SystemTime::UNIX_EPOCH;
+    let point = |n: u64| {
+        (
+            start + Duration::from_secs(10 * n),
+            [Some(Number::Int(n)); HISTORY_KEYS.len()],
+        )
+    };
+    let last = day.capacity() as u64;
+    // 6 × 1440 + 1 one-hour points give 1441 24-hour points.
+    let total = 6 * last + 1;
+    for n in 0..total {
+        let (at, values) = point(n);
+        history.push(at, values);
+        if n < 13 {
+            // Points 0, 6, and 12 open a new minute.
+            let kept = history.after(day, None).points.len() as u64;
+            assert_eq!(kept, n / 6 + 1, "after one-hour point {n}");
+        }
+    }
+
+    let all = history.after(day, None);
+    assert_eq!(all.latest_seq, Some(last));
+    assert_eq!(all.points.len(), day.capacity());
+    for (index, kept) in all.points.iter().enumerate() {
+        // The oldest 24-hour point (seq 0, one-hour point 0) is gone.
+        let seq = index as u64 + 1;
+        let (at, values) = point(6 * seq);
+        assert_eq!((kept.seq, kept.at, kept.values), (seq, at, values));
+    }
+
+    // `history_after` counts in 24-hour numbers.
+    let newer: Vec<u64> = history
+        .after(day, Some(last - 2))
+        .points
+        .iter()
+        .map(|kept| kept.seq)
+        .collect();
+    assert_eq!(newer, [last - 1, last]);
+    assert!(history.after(day, Some(last)).points.is_empty());
+
+    // The one-hour history still keeps its newest 360 points, and its newest
+    // point (8640) is also the newest 24-hour point.
+    let hour = history.after(HistoryWindow::Hour, None);
+    assert_eq!(hour.latest_seq, Some(total - 1));
+    assert_eq!(hour.points.len(), HistoryWindow::Hour.capacity());
+    let newest = hour.points.last().expect("one-hour point");
+    let newest_day = all.points.last().expect("24-hour point");
+    assert_eq!(
+        (newest.seq, newest.at, newest.values),
+        (total - 1, newest_day.at, newest_day.values)
+    );
 }

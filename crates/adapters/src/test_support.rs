@@ -49,6 +49,15 @@ impl ProcessStatsSource for FixedProcess {
 /// The metrics read side over `metrics` and the given process values, with
 /// every other source empty.
 pub(crate) fn metrics_service(metrics: Arc<Metrics>, process: ProcessStats) -> MetricsService {
+    metrics_service_with_clock(metrics, process, Arc::new(SystemClock::new()))
+}
+
+/// `metrics_service` that reads the time from `clock`.
+pub(crate) fn metrics_service_with_clock(
+    metrics: Arc<Metrics>,
+    process: ProcessStats,
+    clock: Arc<dyn Clock>,
+) -> MetricsService {
     MetricsService::new(
         metrics,
         MetricSources {
@@ -59,7 +68,7 @@ pub(crate) fn metrics_service(metrics: Arc<Metrics>, process: ProcessStats) -> M
             admin: Arc::new(Empty),
             process: Arc::new(FixedProcess(process)),
         },
-        Arc::new(SystemClock::new()),
+        clock,
         "test",
     )
 }

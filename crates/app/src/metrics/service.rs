@@ -1,5 +1,6 @@
-//! Reads every metric into one snapshot and keeps the 10-second history
-//! (metrics-v1 §1.3, §1.8). Design: docs/architectures/metrics.md §3, §4.
+//! Reads every metric into one snapshot and keeps the history of the last
+//! hour and the last 24 hours (metrics-v1 §1.3, §1.8). Design:
+//! docs/architectures/metrics.md §3, §4.
 
 use std::sync::{Arc, Mutex};
 
@@ -8,7 +9,7 @@ use vnc_relay_domain::entry_point::Role;
 use vnc_relay_domain::handshake::Mode;
 use vnc_relay_domain::session::Transport;
 
-use super::history::{HISTORY_KEYS, History, HistoryView};
+use super::history::{HISTORY_KEYS, History, HistoryView, HistoryWindow};
 use super::snapshot::{MetricFamily, MetricKind, MetricPoint, MetricsSnapshot, Number, PointValue};
 use super::{
     Metrics, SESSION_DURATION_BOUNDS, SHORT_DURATION_BOUNDS, WAITING_DURATION_BOUNDS, lock,
@@ -371,18 +372,18 @@ impl MetricsService {
     }
 
     /// Adds one history point read the same way as `snapshot`
-    /// (metrics-v1 §1.8 "값"). The serve task calls it every 10 seconds
-    /// from readiness on.
+    /// (metrics-v1 §1.8 "값"); every sixth one also goes into the 24-hour
+    /// history. The serve task calls it every 10 seconds from readiness on.
     pub fn sample_history(&self) {
         let snapshot = self.snapshot();
         let values = history_values(&snapshot);
         lock(&self.history).push(snapshot.as_of, values);
     }
 
-    /// History points after `after` (management-api-v1 §1.16
-    /// `history_after`); every kept point when `None`.
-    pub fn history_after(&self, after: Option<u64>) -> HistoryView {
-        lock(&self.history).after(after)
+    /// History points of `window` after `after` (management-api-v1 §1.16
+    /// `history_window`, `history_after`); every kept point when `None`.
+    pub fn history_after(&self, window: HistoryWindow, after: Option<u64>) -> HistoryView {
+        lock(&self.history).after(window, after)
     }
 
     /// L and Lm in force now (metrics-v1 `*.limit`).

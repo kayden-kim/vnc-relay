@@ -37,7 +37,7 @@ use vnc_relay_app::management::login::dummy_hash;
 use vnc_relay_app::management::query::ManagementQueryService;
 use vnc_relay_app::management::terminate::ManagementTerminateService;
 use vnc_relay_app::management::{AdminAuth, AdminPorts};
-use vnc_relay_app::metrics::history::HISTORY_INTERVAL;
+use vnc_relay_app::metrics::history::HistoryWindow;
 use vnc_relay_app::metrics::{MetricSources, Metrics, MetricsService, MetricsSink};
 use vnc_relay_app::ports::{
     AdminSessionSource, Clock, EventSink, RelaySessionControl, RelayStateSource,
@@ -823,11 +823,12 @@ fn startup_keys_failure(log: &dyn EventSink, error: &dyn Display) -> u8 {
     runtime_failure(log, "운영체제 난수원으로 시작 키를 만들 수 없다", error)
 }
 
-/// Takes one history point every `HISTORY_INTERVAL` after the ready point
-/// that `listen_until_shutdown` takes itself (management-api-v1 §1.16). A
-/// late tick moves the next one back, so two points are never taken at once.
+/// Takes one history point every one-hour interval (10 seconds) after the
+/// ready point that `listen_until_shutdown` takes itself (management-api-v1
+/// §1.16). A late tick moves the next one back, so two points are never
+/// taken at once.
 async fn sample_history(metrics: Arc<MetricsService>) {
-    let mut ticks = tokio::time::interval(HISTORY_INTERVAL);
+    let mut ticks = tokio::time::interval(HistoryWindow::Hour.interval());
     ticks.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
     // The first tick completes at once. The ready point is already taken.
     ticks.tick().await;

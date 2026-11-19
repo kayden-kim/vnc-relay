@@ -6329,6 +6329,7 @@ fn history_seqs(body: &Value) -> Vec<u64> {
 
 /// spec: management.md:MGT-058 partial
 /// spec: management.md:MGT-059
+/// spec: management.md:MGT-061 partial
 #[tokio::test]
 async fn metrics_history_after_is_checked_and_returns_only_newer_points() {
     let running = start(None, ROOMY_LM).await;
@@ -6340,6 +6341,12 @@ async fn metrics_history_after_is_checked_and_returns_only_newer_points() {
     assert_eq!(empty["history"]["capacity"], 360);
     assert_eq!(empty["history"]["latest_seq"], Value::Null);
     assert_eq!(empty["history"]["points"], json!([]));
+    let empty_day =
+        authenticated_query(&running, &cookie, "/api/v1/metrics?history_window=24h").await;
+    assert_eq!(empty_day["history"]["interval_secs"], 60);
+    assert_eq!(empty_day["history"]["capacity"], 1440);
+    assert_eq!(empty_day["history"]["latest_seq"], Value::Null);
+    assert_eq!(empty_day["history"]["points"], json!([]));
 
     for bad in ["-1", "1.5", "", "18446744073709551616", "1&history_after=2"] {
         let reply = plain_exchange(
@@ -6349,6 +6356,21 @@ async fn metrics_history_after_is_checked_and_returns_only_newer_points() {
         .await;
         assert_eq!(reply.status, 400, "history_after={bad}");
         assert_eq!(error_code(&reply), "invalid_request", "history_after={bad}");
+    }
+    for bad in [
+        "history_window=1H",
+        "history_window=24",
+        "history_window=7d",
+        "history_window=",
+        "history_window=1h&history_window=24h",
+    ] {
+        let reply = plain_exchange(
+            running.addr,
+            &get(&format!("/api/v1/metrics?{bad}"), &[&cookie]),
+        )
+        .await;
+        assert_eq!(reply.status, 400, "{bad}");
+        assert_eq!(error_code(&reply), "invalid_request", "{bad}");
     }
 
     for _ in 0..3 {
@@ -6369,6 +6391,13 @@ async fn metrics_history_after_is_checked_and_returns_only_newer_points() {
         assert_eq!(body["history"]["latest_seq"], 2, "{after}");
         assert_eq!(body["history"]["points"], json!([]), "{after}");
     }
+    // The 24-hour history took the first of these points only.
+    let day = authenticated_query(&running, &cookie, "/api/v1/metrics?history_window=24h").await;
+    assert_eq!(day["history"]["latest_seq"], 0);
+    assert_eq!(
+        day["history"]["points"],
+        json!([all["history"]["points"][0]])
+    );
 
     // 361 points: the oldest goes, and numbers are not reused.
     for _ in 3..361 {

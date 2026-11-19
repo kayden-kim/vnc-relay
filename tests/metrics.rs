@@ -625,6 +625,7 @@ fn metrics_equal_the_log_counts_and_the_management_api() {
 /// spec: operations.md:OPS-092 partial
 /// spec: management.md:MGT-057 partial
 /// spec: management.md:MGT-058 partial
+/// spec: management.md:MGT-061 partial
 #[test]
 fn metrics_stay_off_the_status_listener_until_a_restart_with_the_key() {
     let server = Server::start("metrics-off", None);
@@ -646,8 +647,16 @@ fn metrics_stay_off_the_status_listener_until_a_restart_with_the_key() {
     );
     assert_eq!(body["history"]["interval_secs"], 10);
     assert_eq!(body["history"]["capacity"], 360);
-    // The first point is taken at ready.
+    // The first point is taken at ready, in both windows.
     assert_eq!(body["history"]["points"][0]["seq"], 0);
+    let day = server.query(&admin, "/api/v1/metrics?history_window=24h");
+    assert_eq!(day["history"]["interval_secs"], 60);
+    assert_eq!(day["history"]["capacity"], 1440);
+    assert_eq!(day["history"]["points"][0]["seq"], 0);
+    assert_eq!(
+        day["history"]["points"][0]["at"],
+        body["history"]["points"][0]["at"]
+    );
 
     let mut config = server.config_text();
     config.push_str(METRICS_ON);
