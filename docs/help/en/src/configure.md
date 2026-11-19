@@ -25,6 +25,7 @@ The [distribution example](https://github.com/kayden-kim/vnc-relay/blob/main/exa
 | `[dashboard]` | Dashboard polling interval and query timeout |
 | `[recent_closed]`, `[recent_logs]` | Memory limits for recently closed sessions and recent logs |
 | `[status]` | Status listener for liveness and readiness checks |
+| `[metrics]` | Enable external metric collection on the status listener |
 | `[log]` | Operations log output destination |
 | `[reload]` | File-change result deadline and fallback polling interval |
 
@@ -116,13 +117,15 @@ Before changing values, check the defaults, ranges, and value relationships in t
 
 The management listener serves the dashboard and management API. HTTPS is the rule. Omitting both `management.cert_file` and `management.key_file` selects plain HTTP. Plain HTTP must bind only to loopback. Administrator sign-in remains required on loopback.
 
-The status listener serves only `/livez` and `/readyz` over plain HTTP. It has no authentication. It does not return sessions, relay IDs, or peer addresses. Loopback is recommended. The distribution example uses management `127.0.0.1:18080` and status `127.0.0.1:18081`. These are example addresses, not defaults.
+The status listener serves `/livez` and `/readyz` over plain HTTP. It has no authentication. It does not return sessions, relay IDs, or peer addresses. Loopback is recommended. The distribution example uses management `127.0.0.1:18080` and status `127.0.0.1:18081`. These are example addresses, not defaults.
+
+Set `[metrics] enabled = true` to also serve `GET /metrics` on the status listener. The default is `false`; the disabled path returns 404. Use an external editor to change the configuration file, then restart the server. The key is neither reloadable nor editable through dynamic configuration editing. Dashboard and management API metrics remain available after sign-in regardless of this value. If an external collector must read the status listener, restrict access to the monitoring network. For collection configuration examples, see [Collect metrics](operate.md#collect-metrics).
 
 `log.output` is `"stdout"` or a file path. The default is `"stdout"`. Operations logs use JSON Lines. Files are appended to. When an operator replaces the file, the same path is reopened. Rotation and long-term retention are the operator's responsibility.
 
 `recent_logs.max_entries` controls a separate in-memory list. `0` disables retention. Restarting clears the list. The list is independent of the output destination and output success. Recent logs are not long-term storage. `[recent_closed]` controls the list of active sessions whose cleanup has completed.
 
-See [Operations](operate.md) for health checks and log retention procedures.
+See [Operations](operate.md) for health checks, metric collection, and log retention procedures.
 
 ## Reload and dynamic configuration editing
 
@@ -136,7 +139,7 @@ There are 37 editable keys. They exclude four TLS paths and two ticket public ke
 
 > **Warning:** If a valid configuration file retains even one restart-required difference, file-change detection rejects the entire candidate as `reload_restart_required`. Leaving that difference in the file also blocks later certificate and public key replacements. Dynamic configuration editing returns HTTP 409 `config_restart_pending` ([management API contract, §1.14](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/management-api-v1.md)). Revert the value or gracefully stop and restart the server.
 
-Listener addresses, listener/role/mode enablement, management HTTP/HTTPS transitions, account settings, management login limits and session lifetimes, `management.config_edit`, dashboard settings, retention settings, log settings, and file-watch settings require a restart. Ticket table `enabled` is an exception: it is reloadable. Invalid candidates produce `reload_rejected`; the previous valid settings and connections remain in use.
+Listener addresses, listener/role/mode enablement, management HTTP/HTTPS transitions, account settings, management login limits and session lifetimes, `management.config_edit`, `metrics.enabled`, dashboard settings, retention settings, log settings, and file-watch settings require a restart. Ticket table `enabled` is an exception: it is reloadable. Invalid candidates produce `reload_rejected`; the previous valid settings and connections remain in use.
 
 ## Migrate from v3 to v4
 

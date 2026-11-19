@@ -78,7 +78,64 @@ curl --fail http://127.0.0.1:18081/readyz
 
 `/livez` returns HTTP 200 and `{"status":"alive"}` when the process can respond. `/readyz` returns HTTP 200 and `{"status":"ready"}` when ready. Otherwise it returns 503. During the shutdown grace period, `/livez` remains 200 while the process can respond, but `/readyz` returns 503.
 
-The status listener requires no authentication. It provides only liveness and readiness, not session lists. Loopback binding is recommended. See [Dashboard](dashboard.md) for management screens.
+The status listener requires no authentication. It provides liveness, readiness, and optional metrics, not session lists. Loopback binding is recommended. See [Dashboard](dashboard.md) for management screens.
+
+## Collect metrics
+
+Metrics express connection, session, administration, and process resource activity as numbers. Collect them with Prometheus or the OpenTelemetry Collector's `prometheus` receiver. VNC Relay does not export directly through OTLP.
+
+1. Use an external editor to set the following in the configuration file. If `[metrics]` already exists, change only its `enabled` key.
+
+   ```toml
+   [metrics]
+   enabled = true
+   ```
+
+2. Shut down the server gracefully and start it again.
+3. Configure the collector to read `GET /metrics` on the status listener.
+
+The default is `false`, which returns 404 for `/metrics`. This key cannot be reloaded or edited through the dashboard. Values continue to be recorded when it is off. Signed-in administrators can always use the [Metrics screen](dashboard.md#metrics) and management API `GET /api/v1/metrics`.
+
+> **Warning:** `/metrics` requires no sign-in and uses plain HTTP. Keep the status listener on loopback or restrict access to the monitoring network. Each scrape connection occupies one slot in the shared management and status connection limit Lm (`limits.admin_connections`). The response's management connection usage includes that connection.
+
+Use this `scrape_configs` example in the Prometheus configuration file when the collector and VNC Relay run on the same host and the status listener is `127.0.0.1:18081`. The 15-second scrape interval is an example.
+
+```yaml
+scrape_configs:
+  - job_name: vnc-relay
+    scrape_interval: 15s
+    metrics_path: /metrics
+    scheme: http
+    static_configs:
+      - targets: ["127.0.0.1:18081"]
+```
+
+For OpenTelemetry Collector on the same host, configure this `prometheus` receiver. Also add `prometheus` to `service.pipelines.metrics.receivers` in the existing metrics pipeline. Keep the export destination from your operational Collector configuration.
+
+```yaml
+receivers:
+  prometheus:
+    config:
+      scrape_configs:
+        - job_name: vnc-relay
+          scrape_interval: 15s
+          metrics_path: /metrics
+          scheme: http
+          static_configs:
+            - targets: ["127.0.0.1:18081"]
+```
+
+`/metrics` provides Prometheus text format 0.0.4, including these values.
+
+- `vnc_relay_session_count`, `vnc_relay_waiting_count`: current active sessions and waiting connections.
+- `vnc_relay_connection_rejected_total`: cumulative connection rejections by listener, stage, and reason.
+- `vnc_relay_session_io_bytes_total`: cumulative transferred bytes by direction.
+- `vnc_relay_handshake_duration_seconds`, `vnc_relay_session_duration_seconds`: distributions of initial exchange and session durations.
+- `process_cpu_time_seconds_total`, `process_memory_usage_bytes`: process CPU time and physical memory usage.
+
+For the full list, OpenTelemetry-to-Prometheus name mapping, units, and attributes, use the [metrics contract](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/metrics-v1.md). Unreadable process values have no samples; they are not replaced with zero.
+
+Metrics exist only in memory. Cumulative counts and duration distributions start again from zero after a server restart. Reloading does not clear values. Use the collector for long-term retention. Metrics contain no relay IDs, session IDs, addresses, or account names.
 
 ## Shut down and restart
 

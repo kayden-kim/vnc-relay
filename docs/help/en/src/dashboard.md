@@ -1,6 +1,6 @@
 # Dashboard
 
-Use the dashboard to inspect connections and active sessions, terminate a session, and edit dynamic settings. Use recent logs to investigate problems.
+Use the dashboard to inspect connections, active sessions, and metrics, terminate a session, and edit dynamic settings. Use recent logs to investigate problems. The top navigation order is "Operations overview" · "Metrics" · "Logs" · "Settings".
 
 ## Sign in
 
@@ -62,6 +62,27 @@ Termination by administrator stops the relay for that connection pair. A closed 
 The server responds after resource cleanup finishes. The session can remain in the active count while the request is pending. If the session has already ended, the screen shows "The current session was not found". It does not terminate another session that reconnected with the same relay ID.
 
 If no response arrives, do not assume success. Select "Check status again" first. The dashboard does not resend termination requests automatically. Select "Back to list" to return to the overview.
+
+## Metrics
+
+Select "Metrics" in the top bar to open `/#/metrics`. Signed-in administrators can use this screen even when `metrics.enabled` is off. For external collection, see [Collect metrics](operate.md#collect-metrics).
+
+- "Key indicators" contains eight cards: "Active sessions", "Waiting connections", "Relay connections", "Management connections", "Throughput", "Rejected connections (since start)", "CPU usage", and "Memory usage". Connection cards show current usage and limits. Throughput shows transferred bytes per second by direction. CPU usage of 100% equals one fully used core.
+- "Trends (last hour)" contains five charts: active sessions and waiting connections, accepted/rejected/aborted connections per minute, throughput, CPU usage, and memory usage. They use the latest 360 points recorded by the server every 10 seconds. The server continues recording when the browser is closed. Legends show the current value and the maximum in the visible range.
+- The "Connections (per minute)" chart draws one value per one-minute group. The value is the increase in accepted, rejected, or aborted connections during that group, converted to a per-minute rate and shown with one decimal place. If late recording makes a group longer than one minute, the value is still per minute.
+- "Duration distribution" summarizes histograms for initial exchange, waiting, session, and Mode I target connection durations with counts, means, and the "p95 upper bound". This bound is the edge of the first bucket that holds 95% of recorded values, not an exact percentile. The last bucket beyond the final boundary uses `>`. The bars in the "Distribution" column show the count per bucket. The leftmost bar is the shortest bucket and the rightmost bar is the bucket beyond the final boundary. Compare bar heights only within the same row. Screen readers read the buckets whose count is not zero.
+- "Counts by cause (since start)" contains "Rejected connections", "Aborted connections", "Closed sessions", "Administration", "Configuration changes", and "WebSocket" tables. Attribute names and values are not translated. Items or tables without records show "No records". The bar next to each count is scaled to the largest count in that table. Read the value from the number.
+- "Process" shows uptime, "CPU time (user / system)", memory usage, "Virtual memory", "Threads", and version. It also shows "Open handles" on Windows or "Open file descriptors" on Linux.
+
+The screen refreshes automatically at the `dashboard.poll_secs` interval, which defaults to 2 seconds. The server records trend points every 10 seconds regardless of that setting. Select "Refresh" to read current values and the full retained history again. Leaving the screen stops automatic refresh. Automatic refresh does not extend management session idle expiry.
+
+With fewer than two trend points, the throughput and CPU usage cards in "Key indicators" show "Collecting". A chart shows "Collecting trend data. One point is added every 10 seconds." until it has enough points to draw a line. The active sessions and waiting connections chart and the memory chart need 2 points, the throughput and CPU usage charts need 3 points, and the "Connections (per minute)" chart needs 13 points (about 2 minutes). Other current values remain available. Unreadable values show "Unavailable", not zero. A chart with enough points leaves gaps only for unreadable values and keeps the other data.
+
+If a query fails, the screen retains previous values, history, and the last successful update time. Do not treat "Stale data" as current data. Without previous successful data, the screen shows query failure, not empty tables, empty charts, or zero. Automatic queries continue at the next interval.
+
+If HTTP 400 or 405 rejects a request, automatic queries stop and the screen shows "The metrics request could not be processed. Use Refresh to query again." Select "Refresh"; a successful query restarts automatic refresh. When the management session expires, the screen clears values and history and opens sign-in.
+
+Values and history exist only in memory. After a server restart, cumulative values start from zero and history starts empty. Sign in again. This screen does not provide long-term retention or threshold alerts. For metric meanings and units, use the [metrics contract](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/metrics-v1.md).
 
 ## Recent logs
 

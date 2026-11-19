@@ -42,10 +42,11 @@ Ubuntu bash:
 | --- | --- | --- |
 | 상태 | `GET /livez` | 프로세스가 응답할 수 있으면 `200`과 `status: alive`를 반환한다. |
 | 상태 | `GET /readyz` | 준비됨이면 `200`과 `status: ready`를 반환한다. 준비되지 않았으면 `503`과 `status: not_ready`를 반환한다. |
+| 상태 | `GET /metrics` | `metrics.enabled = true`일 때만 Prometheus 텍스트 0.0.4 메트릭을 제공한다. 꺼져 있으면 `404`다. |
 | 관리 | `/` | 내장 대시보드를 제공한다. |
-| 관리 | `/api/v1/` 아래 | 관리자 로그인·로그아웃, 서버·연결·세션·설정·로그 조회, 관리자 종료와 동적 설정 편집 API다. |
+| 관리 | `/api/v1/` 아래 | 관리자 로그인·로그아웃, 서버·연결·세션·설정·로그·메트릭 조회, 관리자 종료와 동적 설정 편집 API다. |
 
-상태 확인은 인증이 없다. 상태 리스너는 평문 HTTP다. 관리 리스너는 HTTPS가 원칙이며 평문 HTTP는 루프백에서만 허용한다. 관리 API의 개별 경로·인증·CSRF 요구는 [관리 API 계약 1.2절](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/management-api-v1.md)을 따른다. 생존과 준비의 차이와 전체 응답 형식은 [운영 정보 계약 1.12절](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/ops-info-v2.md)을 따른다.
+상태 리스너에는 인증이 없으며 평문 HTTP를 쓴다. 루프백에 두거나 모니터링 네트워크에서만 접근하도록 제한한다. 관리 리스너는 HTTPS가 원칙이며 평문 HTTP는 루프백에서만 허용한다. 관리 API의 개별 경로·인증·CSRF 요구는 [관리 API 계약 1.2절](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/management-api-v1.md)을 따른다. 생존과 준비의 차이와 전체 응답 형식은 [운영 정보 계약 1.12절](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/ops-info-v2.md)을, 메트릭 형식은 [메트릭 계약](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/metrics-v1.md)을 따른다. 수집 절차는 [메트릭 수집](operate.md#메트릭-수집)을 따른다.
 
 ## WebSocket 경로
 
@@ -90,6 +91,7 @@ WS와 WSS는 같은 경로를 쓴다. 쿼리는 대상이나 중계 ID를 선택
 | `[recent_closed]` | 최근 종료 목록의 보관 크기 |
 | `[recent_logs]` | 최근 로그의 메모리 보관 크기 |
 | `[status]` | 상태 리스너 주소 |
+| `[metrics]` | 상태 리스너의 외부 메트릭 수집 켜기 |
 | `[log]` | 운영 로그 출력 위치 |
 | `[reload]` | 파일 변경 결과 확인 제한 시간과 주기 확인 간격 |
 
@@ -138,17 +140,18 @@ WS와 WSS는 같은 경로를 쓴다. 쿼리는 대상이나 중계 ID를 선택
 
 | 계약 이름 | 버전 | 기준 문서 |
 | --- | --- | --- |
-| `vnc-relay-config` | 4.1.0 | [설정 파일 계약](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/config-v4.md) |
+| `vnc-relay-config` | 4.2.0 | [설정 파일 계약](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/config-v4.md) |
 | `ops-info` | 2.1.0 | [운영 정보 계약](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/ops-info-v2.md) |
 | `websocket-relay` | 2.1.0 | [WebSocket 중계 계약](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/websocket-relay-v2.md) |
 | `vnc-relay-cli` | 1.7.0 | [CLI·계정 파일 계약](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/cli-v1.md) |
-| `management-api` | 1.1.0 | [관리 API 계약](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/management-api-v1.md) |
+| `management-api` | 1.2.0 | [관리 API 계약](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/management-api-v1.md) |
+| `vnc-relay-metrics` | 1.0.0 | [메트릭 계약](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/metrics-v1.md) |
 
 ## 기준 문서 찾기
 
 - 요구사항: [PRD](https://github.com/kayden-kim/vnc-relay/blob/main/docs/requirements/PRD.md). 1절의 확정 기준과 미확정 제안을 구분한다.
 - 스펙: [중계](https://github.com/kayden-kim/vnc-relay/blob/main/docs/specs/relay.md), [WS·WSS](https://github.com/kayden-kim/vnc-relay/blob/main/docs/specs/websocket.md), [운영](https://github.com/kayden-kim/vnc-relay/blob/main/docs/specs/operations.md), [관리](https://github.com/kayden-kim/vnc-relay/blob/main/docs/specs/management.md), [대시보드](https://github.com/kayden-kim/vnc-relay/blob/main/docs/specs/dashboard.md).
-- 계약: [설정](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/config-v4.md), [CLI·계정 파일](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/cli-v1.md), [WebSocket](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/websocket-relay-v2.md), [운영 정보](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/ops-info-v2.md), [관리 API](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/management-api-v1.md), [Repeater 초기 교환](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/repeater-handshake-v1.md).
+- 계약: [설정](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/config-v4.md), [CLI·계정 파일](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/cli-v1.md), [WebSocket](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/websocket-relay-v2.md), [운영 정보](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/ops-info-v2.md), [관리 API](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/management-api-v1.md), [메트릭](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/metrics-v1.md), [Repeater 초기 교환](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/repeater-handshake-v1.md).
 - 호환성 근거: [Repeater 호환성 검증 기록](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/repeater-compat-record.md).
 - 운영 절차: [수동 운영 안내](https://github.com/kayden-kim/vnc-relay/blob/main/docs/how-to/operate-relay.md), [릴리스 안내](https://github.com/kayden-kim/vnc-relay/blob/main/docs/how-to/release.md), [소스 빌드·검증](https://github.com/kayden-kim/vnc-relay/blob/main/docs/how-to/set-up-and-verify.md), [UltraVNC 수동 확인](https://github.com/kayden-kim/vnc-relay/blob/main/docs/how-to/verify-ultravnc-manually.md).
 - 설정 예시: [examples/relay.toml](https://github.com/kayden-kim/vnc-relay/blob/main/examples/relay.toml). 모든 설정 키를 담는다.

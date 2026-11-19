@@ -78,7 +78,64 @@ curl --fail http://127.0.0.1:18081/readyz
 
 `/livez`는 응답 가능한 프로세스에 HTTP 200과 `{"status":"alive"}`를 돌려준다. `/readyz`는 준비됨 상태에 HTTP 200과 `{"status":"ready"}`를 돌려준다. 준비되지 않았으면 503이다. 종료 유예 중에도 `/livez`는 응답 가능한 동안 200이지만 `/readyz`는 503이다.
 
-상태 리스너에는 인증이 없다. 생존·준비 결과만 제공하며 세션 목록은 제공하지 않는다. 루프백 바인딩을 권장한다. 대시보드 사용법은 [대시보드](dashboard.md)를 따른다.
+상태 리스너에는 인증이 없다. 생존·준비 결과와 선택형 메트릭을 제공하며 세션 목록은 제공하지 않는다. 루프백 바인딩을 권장한다. 대시보드 사용법은 [대시보드](dashboard.md)를 따른다.
+
+## 메트릭 수집
+
+메트릭은 연결·세션·관리 활동과 프로세스 자원을 수로 나타낸 값이다. Prometheus나 OpenTelemetry Collector의 `prometheus` 수신기로 수집할 수 있다. VNC Relay는 OTLP로 직접 내보내지 않는다.
+
+1. 외부 편집기로 설정 파일에 다음 값을 설정한다. `[metrics]` 테이블이 이미 있으면 그 안의 `enabled`만 바꾼다.
+
+   ```toml
+   [metrics]
+   enabled = true
+   ```
+
+2. 서버를 정상 종료한 뒤 다시 시작한다.
+3. 수집 도구에서 상태 리스너의 `GET /metrics`를 읽도록 설정한다.
+
+기본값은 `false`이며 이때 `/metrics`는 404다. 이 키는 재로드하거나 대시보드에서 편집할 수 없다. 꺼져 있어도 값은 계속 센다. 로그인한 관리자는 [메트릭 화면](dashboard.md#메트릭)과 관리 API `GET /api/v1/metrics`를 항상 쓸 수 있다.
+
+> **주의:** `/metrics`에는 로그인이 필요 없으며 평문 HTTP를 쓴다. 상태 리스너는 루프백에 두거나 모니터링 네트워크에서만 접근할 수 있게 제한해야 한다. 수집 연결 하나는 관리·상태 연결 상한 Lm(`limits.admin_connections`)의 자리 하나를 차지한다. 수집 응답의 관리 연결 사용량에는 그 연결도 포함한다.
+
+Prometheus 설정 파일의 `scrape_configs` 예시는 다음과 같다. 수집 도구와 VNC Relay가 같은 호스트에 있고 상태 리스너가 `127.0.0.1:18081`인 경우다. 15초는 이 예시의 수집 주기다.
+
+```yaml
+scrape_configs:
+  - job_name: vnc-relay
+    scrape_interval: 15s
+    metrics_path: /metrics
+    scheme: http
+    static_configs:
+      - targets: ["127.0.0.1:18081"]
+```
+
+OpenTelemetry Collector에서는 같은 호스트 조건으로 다음 `prometheus` 수신기를 설정한다. 기존 메트릭 파이프라인의 `service.pipelines.metrics.receivers`에도 `prometheus`를 추가한다. 내보내기 대상은 운영 중인 Collector 설정을 따른다.
+
+```yaml
+receivers:
+  prometheus:
+    config:
+      scrape_configs:
+        - job_name: vnc-relay
+          scrape_interval: 15s
+          metrics_path: /metrics
+          scheme: http
+          static_configs:
+            - targets: ["127.0.0.1:18081"]
+```
+
+`/metrics`는 Prometheus 텍스트 0.0.4 형식으로 다음과 같은 값을 제공한다.
+
+- `vnc_relay_session_count`, `vnc_relay_waiting_count`: 현재 활성 세션과 대기 연결 수다.
+- `vnc_relay_connection_rejected_total`: 리스너·단계·원인별 연결 거절 누적 수다.
+- `vnc_relay_session_io_bytes_total`: 방향별 전송량 누적 바이트 수다.
+- `vnc_relay_handshake_duration_seconds`, `vnc_relay_session_duration_seconds`: 초기 교환과 세션 지속 시간의 분포다.
+- `process_cpu_time_seconds_total`, `process_memory_usage_bytes`: 프로세스 CPU 시간과 물리 메모리 사용량이다.
+
+전체 목록, OpenTelemetry 이름과 Prometheus 이름의 대응, 단위와 속성은 [메트릭 계약](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/metrics-v1.md)을 따른다. 읽지 못한 프로세스 값의 표본은 빠지며 0으로 대신하지 않는다.
+
+메트릭은 메모리에만 있다. 누적 수와 시간 분포는 서버를 재시작하면 0부터 다시 센다. 재로드는 값을 지우지 않는다. 장기 보관은 수집 도구에서 해야 한다. 메트릭에는 중계 ID, 세션 식별자, 주소와 계정명이 없다.
 
 ## 정상 종료와 재시작
 

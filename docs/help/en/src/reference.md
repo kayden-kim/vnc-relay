@@ -42,10 +42,11 @@ The management, status, and relay WS/WSS listeners are separate. One port does n
 | --- | --- | --- |
 | Status | `GET /livez` | Return `200` with `status: alive` if the process can respond. |
 | Status | `GET /readyz` | Return `200` with `status: ready` when ready. Otherwise return `503` with `status: not_ready`. |
+| Status | `GET /metrics` | Serve Prometheus text format 0.0.4 metrics only when `metrics.enabled = true`. Return `404` when disabled. |
 | Management | `/` | Serve the embedded dashboard. |
-| Management | Under `/api/v1/` | Administrator sign-in/out, server/connection/session/settings/log queries, termination by administrator, and dynamic configuration editing. |
+| Management | Under `/api/v1/` | Administrator sign-in/out, server/connection/session/settings/log/metrics queries, termination by administrator, and dynamic configuration editing. |
 
-Status checks need no authentication. The status listener uses plain HTTP. Management uses HTTPS as the rule; plain HTTP is allowed only on loopback. For individual management API paths, authentication, and CSRF requirements, use the [management API contract, §1.2](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/management-api-v1.md). For liveness versus readiness and full response formats, use the [operations information contract, §1.12](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/ops-info-v2.md).
+The status listener needs no authentication and uses plain HTTP. Keep it on loopback or restrict access to the monitoring network. Management uses HTTPS as the rule; plain HTTP is allowed only on loopback. For individual management API paths, authentication, and CSRF requirements, use the [management API contract, §1.2](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/management-api-v1.md). For liveness versus readiness and full response formats, use the [operations information contract, §1.12](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/ops-info-v2.md). For metric formats, use the [metrics contract](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/metrics-v1.md). Follow [Collect metrics](operate.md#collect-metrics) for collection procedures.
 
 ## WebSocket paths
 
@@ -90,6 +91,7 @@ This table helps locate settings. For the full key list, defaults, and ranges, u
 | `[recent_closed]` | Retention size for recently closed sessions |
 | `[recent_logs]` | In-memory recent log retention size |
 | `[status]` | Status listener address |
+| `[metrics]` | Enable external metric collection on the status listener |
 | `[log]` | Operations log destination |
 | `[reload]` | File-change result deadline and fallback polling interval |
 
@@ -138,17 +140,18 @@ These are external format contract versions, not product Release numbers.
 
 | Contract name | Version | Governing document |
 | --- | --- | --- |
-| `vnc-relay-config` | 4.1.0 | [Configuration file contract](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/config-v4.md) |
+| `vnc-relay-config` | 4.2.0 | [Configuration file contract](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/config-v4.md) |
 | `ops-info` | 2.1.0 | [Operations information contract](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/ops-info-v2.md) |
 | `websocket-relay` | 2.1.0 | [WebSocket relay contract](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/websocket-relay-v2.md) |
 | `vnc-relay-cli` | 1.7.0 | [CLI and account file contract](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/cli-v1.md) |
-| `management-api` | 1.1.0 | [Management API contract](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/management-api-v1.md) |
+| `management-api` | 1.2.0 | [Management API contract](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/management-api-v1.md) |
+| `vnc-relay-metrics` | 1.0.0 | [Metrics contract](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/metrics-v1.md) |
 
 ## Find reference documents
 
 - Requirements: [PRD](https://github.com/kayden-kim/vnc-relay/blob/main/docs/requirements/PRD.md). Distinguish confirmed criteria in §1 from undecided proposals.
 - Specifications: [Relay](https://github.com/kayden-kim/vnc-relay/blob/main/docs/specs/relay.md), [WS/WSS](https://github.com/kayden-kim/vnc-relay/blob/main/docs/specs/websocket.md), [Operations](https://github.com/kayden-kim/vnc-relay/blob/main/docs/specs/operations.md), [Management](https://github.com/kayden-kim/vnc-relay/blob/main/docs/specs/management.md), [Dashboard](https://github.com/kayden-kim/vnc-relay/blob/main/docs/specs/dashboard.md).
-- Contracts: [Configuration](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/config-v4.md), [CLI and account files](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/cli-v1.md), [WebSocket](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/websocket-relay-v2.md), [Operations information](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/ops-info-v2.md), [Management API](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/management-api-v1.md), [Repeater handshake](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/repeater-handshake-v1.md).
+- Contracts: [Configuration](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/config-v4.md), [CLI and account files](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/cli-v1.md), [WebSocket](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/websocket-relay-v2.md), [Operations information](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/ops-info-v2.md), [Management API](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/management-api-v1.md), [Metrics](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/metrics-v1.md), [Repeater initial exchange](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/repeater-handshake-v1.md).
 - Compatibility evidence: [Repeater compatibility record](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/repeater-compat-record.md).
 - Procedures: [Manual operations guide](https://github.com/kayden-kim/vnc-relay/blob/main/docs/how-to/operate-relay.md), [Release guide](https://github.com/kayden-kim/vnc-relay/blob/main/docs/how-to/release.md), [Source build and verification](https://github.com/kayden-kim/vnc-relay/blob/main/docs/how-to/set-up-and-verify.md), [Manual UltraVNC verification](https://github.com/kayden-kim/vnc-relay/blob/main/docs/how-to/verify-ultravnc-manually.md).
 - Example configuration: [examples/relay.toml](https://github.com/kayden-kim/vnc-relay/blob/main/examples/relay.toml). It lists every configuration key.
