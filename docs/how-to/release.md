@@ -7,7 +7,7 @@ Windows 11 x64와 Ubuntu 24.04 LTS x64용 배포 묶음을 만들고, 버전 태
 | 대상 독자 | 릴리스 담당자 |
 | 검증 상태 | Verified — 두 OS Release 묶음의 해시·내용·버전은 4절의 수동 기록으로 확인했다. 로컬 묶음 생성과 CI의 현재 결과는 3.1·3.2절로 확인한다. 6절 롤백은 미실행이다. |
 | 검증 환경·버전 | Windows 11 Pro 10.0.26200 x64(PowerShell 7, Python 3), WSL2 Ubuntu 24.04.4 LTS x64(GNU coreutils `sha256sum`), Rust 1.99.1, GitHub Actions 호스팅 러너 `windows-2025`·`ubuntu-24.04` |
-| 최종 검증일 | 2026-11-18 |
+| 최종 검증일 | 2026-11-20 |
 | 관련 기준 문서 | [PRD 확정 기준](../requirements/PRD.md#확정-기준)의 "배포 산출물"·"버전 규칙" 행, [수동 운영 안내 3.1절](operate-relay.md#31-release-빌드와-묶음), [xtask 모듈 설계](../architectures/xtask.md), [개발 환경·검증 how-to](set-up-and-verify.md) |
 
 ## 1. 대상과 영향
@@ -164,7 +164,7 @@ Windows 11 x64와 Ubuntu 24.04 LTS x64용 배포 묶음을 만들고, 버전 태
 
 | 대상·날짜 | 환경·방법 | 실제 결과 |
 | --- | --- | --- |
-| Release `v2026.11.7`, 커밋 `1a928d8`, 2026-11-19 | Windows 11 Pro 10.0.26200 x64(PowerShell 7, Git), WSL2 Ubuntu 24.04.4 LTS x64(GNU coreutils `sha256sum`). [Release](https://github.com/kayden-kim/vnc-relay/releases/tag/v2026.11.7)와 묶음 두 개·`.sha256` 두 개를 확인했다. 내려받은 묶음의 해시를 독립 계산하고, 풀어서 파일 구성·권한·`--version`을 확인했다. `docs/`는 태그의 Git 블롭과 바이트 단위로 비교했다 | 통과. Linux SHA-256 `6c4589a05bb5b93a0ef8eef164b1225865817be6a087b9c61adaa48cf9c70555`, Windows `9c69fa4e1959af6adcb5dfc39ce979fa6540dd4c0191b5c376f1c116ef477fa6`. 각 `.sha256`과 같고 WSL `sha256sum -c`는 `OK`였다. tar.gz 파일 156개는 `-rw-r--r--`, 실행파일 1개는 `-rwxr-xr-x`, 디렉터리 21개는 `drwxr-xr-x`, 소유자는 `0/0`이다. 두 묶음 모두 최상위 디렉터리 하나와 태그와 경로가 같은 `docs/` 파일 151개를 담았다. Linux 묶음의 `docs/`는 태그와 바이트까지 같다. Windows 묶음의 `docs/`에서 PNG 12개는 바이트까지 같고, 텍스트 파일 139개는 줄 끝만 CRLF로 다르다. 공통 파일은 Linux 7종, Windows는 트레이 앱을 포함한 8종이다. 두 서버 실행파일은 `vnc-relay 2026.11.7`을 출력했다. 이번에는 Windows 서비스 교체를 확인하지 않았다. 이전 교체 기록은 [수동 운영 안내 4절](operate-relay.md#4-검증)에 있다 |
+| Release `v2026.11.8`, 커밋 `e05808b`, 2026-11-20 | Windows 11 Pro 10.0.26200 x64(PowerShell 7, Git), WSL2 Ubuntu 24.04.4 LTS x64(GNU coreutils `sha256sum` 9.4). [Release](https://github.com/kayden-kim/vnc-relay/releases/tag/v2026.11.8)와 묶음 두 개·`.sha256` 두 개를 확인했다. 내려받은 묶음의 해시를 독립 계산하고, 풀어서 파일 구성·권한·`--version`을 확인했다. `docs/`는 태그의 Git 블롭과 바이트 단위로 비교했다 | 통과. Linux SHA-256 `ed6b7a228553ff4c5c09a1d60db178a95dae88975aed30ed6560459d0905e3d0`, Windows `280a16f8d97e1c254d42072e8464edc6cc5bc40ecc4f1f91f95f3c6d6cd5d9e7`. 각 `.sha256`과 같고 WSL `sha256sum -c`는 `OK`였다. tar.gz 파일 156개는 `-rw-r--r--`, 실행파일 1개는 `-rwxr-xr-x`, 디렉터리 21개는 `drwxr-xr-x`, 소유자는 `0/0`이다. 두 묶음 모두 최상위 디렉터리 하나와 태그와 경로가 같은 `docs/` 파일 151개를 담았다. Linux 묶음의 `docs/`는 태그와 바이트까지 같다. Windows 묶음의 `docs/`에서 PNG 12개는 바이트까지 같고, 텍스트 파일 139개는 줄 끝만 CRLF로 다르다. 공통 파일은 Linux 7종, Windows는 트레이 앱을 포함한 8종이다. 두 서버 실행파일은 `vnc-relay 2026.11.8`을 출력했다. 같은 Release로 바꾼 Windows 서비스의 기록은 [수동 운영 안내 4절](operate-relay.md#4-검증)에 있다 |
 
 Windows에서는 PowerShell 7의 `Get-FileHash`나 `certutil -hashfile <파일> SHA256`으로 해시를 확인하기를 권장한다. Git Bash의 `sha256sum 0.8.0`은 CR 바이트가 든 해시 파일을 `-c`로 확인할 때 실제 해시가 같아도 `FAILED`로 보고할 수 있다. Ubuntu의 GNU coreutils `sha256sum`을 쓰거나 해시 값을 직접 비교한다.
 
