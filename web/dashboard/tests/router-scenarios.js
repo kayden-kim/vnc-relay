@@ -6,6 +6,7 @@
 import { mountRouter, routeOf } from '../app/router.js';
 import { COPY } from '../app/copy.js';
 import { STORAGE_KEY } from '../app/language.js';
+import { metricsBody, points } from './metrics-fixture.js';
 
 const host = document.getElementById('host');
 const result = document.getElementById('result');
@@ -140,11 +141,13 @@ function checkLayout(label) {
   check(`${label}: no horizontal scroll`, page.scrollWidth <= page.clientWidth);
   const links = [...host.querySelectorAll('.navbar-nav .navbar-item')];
   const route = routeOf(location.hash).name;
-  const currentIndex = route === 'settings' ? 2 : route === 'logs' ? 1 : 0;
+  const currentIndex = { metrics: 1, logs: 2, settings: 3 }[route] ?? 0;
   const copy = COPY[document.documentElement.lang];
-  check(`${label}: three navigation destinations are available`, links.length === 3
-    && links[0].textContent === copy.operations && links[1].textContent === copy.logs && links[2].textContent === copy.settings
-    && links[0].getAttribute('href') === '/' && links[2].getAttribute('href') === '/#/settings');
+  check(`${label}: four navigation destinations are available`, links.length === 4
+    && links[0].textContent === copy.operations && links[1].textContent === copy.metrics
+    && links[2].textContent === copy.logs && links[3].textContent === copy.settings
+    && links[0].getAttribute('href') === '/' && links[1].getAttribute('href') === '/#/metrics'
+    && links[2].getAttribute('href') === '/#/logs' && links[3].getAttribute('href') === '/#/settings');
   check(`${label}: current screen navigation is active`,
     links[currentIndex]?.getAttribute('aria-current') === 'page'
     && links.every((link, index) => index === currentIndex || !link.hasAttribute('aria-current')));
@@ -234,7 +237,7 @@ async function caseDash006() {
     input().value = value;
     input().dispatchEvent(new Event('input', { bubbles: true }));
   };
-  clickNav(2);
+  clickNav(3);
   await waitFor(readyView);
   check('settings router: navigation opens settings view', titleOf(host) === t.settingsTitle);
   checkLayout('settings router view navigation');
@@ -243,7 +246,7 @@ async function caseDash006() {
   check('settings router: edit action opens edit route', location.hash === '#/settings/edit'
     && titleOf(host) === t.settingsEditTitle);
   changeWaiting('9');
-  clickNav(2);
+  clickNav(3);
   await waitFor(readyView);
   check('settings router: settings navigation discards draft without PATCH', api.count('PATCH /api/v1/config') === 0);
   host.querySelector('#settings-edit').click();
@@ -260,7 +263,7 @@ async function caseDash006() {
   const readsAfterSave = api.count('GET /api/v1/config');
   clickNav(0);
   await waitFor(() => detailLinkOf(host) !== null);
-  clickNav(2);
+  clickNav(3);
   await waitFor(readyView);
   check('settings router: applied notice is consumed once', !host.textContent.includes(appliedMessage));
   check('settings router: revisiting view performs a fresh read', api.count('GET /api/v1/config') === readsAfterSave + 1);
@@ -328,6 +331,7 @@ async function caseDash025() {
 }
 async function caseDash028() {
   const api = fakeApi({
+    'GET /api/v1/metrics': () => ok(metricsBody()),
     'GET /api/v1/logs': () =>
       ok({
         as_of: AS_OF,
@@ -343,21 +347,86 @@ async function caseDash028() {
   await waitFor(() => linkNamed(host, t.details) !== null);
 
   const navItems = [...host.querySelectorAll('.navbar-nav .navbar-item')];
-  check('DASH-028: three nav items present', navItems.length === 3);
-  check('DASH-028: nav order is operations, logs, settings',
+  check('DASH-028: four nav items present', navItems.length === 4);
+  check('DASH-028: nav order is operations, metrics, logs, settings',
     navItems[0]?.textContent.includes(t.operations) &&
-    navItems[1]?.textContent.includes(t.logs) &&
-    navItems[2]?.textContent.includes(t.settings));
+    navItems[1]?.textContent.includes(t.metrics) &&
+    navItems[2]?.textContent.includes(t.logs) &&
+    navItems[3]?.textContent.includes(t.settings));
   check('DASH-028: operations item is current on root', navItems[0]?.getAttribute('aria-current') === 'page');
+
+  location.hash = '#/metrics';
+  await waitFor(() => host.querySelector('h1.page-title')?.textContent === t.metrics);
+  const metricsNavItems = [...host.querySelectorAll('.navbar-nav .navbar-item')];
+  check('DASH-028: metrics item is current on #/metrics', metricsNavItems[1]?.getAttribute('aria-current') === 'page');
+  checkLayout('DASH-028 metrics');
 
   // Navigate to logs
   location.hash = '#/logs';
   await waitFor(() => host.querySelector('h1.page-title')?.textContent === t.logs);
   const logsNavItems = [...host.querySelectorAll('.navbar-nav .navbar-item')];
-  check('DASH-028: logs item is current on #/logs', logsNavItems[1]?.getAttribute('aria-current') === 'page');
+  check('DASH-028: logs item is current on #/logs', logsNavItems[2]?.getAttribute('aria-current') === 'page');
 
   checkLayout('DASH-028');
   router.dispose();
+}
+
+// DASH-068 (router part): the metrics item opens SCR-007 with a first request that has no history_after and no
+// X-Relay-Poll. Leaving stops the automatic polls, a late response does not touch the next screen, and coming back
+// reads the whole trend again.
+async function caseDash068() {
+  const metricsCalls = [];
+  const lateGate = { resolve: () => {} };
+  const late = new Promise((resolve) => { lateGate.resolve = resolve; });
+  const api = fakeApi({
+    'GET /api/v1/session': () => ok({
+      csrf_token: 'csrf-token-1',
+      dashboard: { poll_secs: 1, query_timeout_secs: 5, terminate_timeout_secs: 10 },
+    }),
+  });
+  const request = (path, init = {}) => {
+    if (!path.startsWith('/api/v1/metrics')) return api.request(path, init);
+    metricsCalls.push({ path, poll: init.headers?.['X-Relay-Poll'] ?? null });
+    if (metricsCalls.length === 2) return late;
+    return Promise.resolve(ok(metricsBody({ points: points(5, 7) })));
+  };
+  location.hash = '';
+  const navigations = [];
+  const router = mountRouter(host, {
+    request,
+    storage: { getItem: () => lang, setItem() {} },
+    navigate: (url) => navigations.push(url),
+  });
+  await waitFor(() => titleOf(host) === t.operations);
+  const link = [...host.querySelectorAll('.navbar-nav .navbar-item')][1];
+  check('DASH-068: the metrics item names the metrics route', link?.getAttribute('href') === '/#/metrics');
+  location.hash = new URL(link?.href ?? location.href).hash;
+  await waitFor(() => metricsCalls.length >= 1 && host.querySelector('[data-kpi]') !== null);
+  check('DASH-068: metrics screen opens', titleOf(host) === t.metrics);
+  check('DASH-068: metrics item is the current item',
+    [...host.querySelectorAll('.navbar-nav .navbar-item')][1]?.getAttribute('aria-current') === 'page');
+  check('DASH-068: first request has no history_after and no X-Relay-Poll',
+    metricsCalls[0]?.path === '/api/v1/metrics' && metricsCalls[0].poll === null);
+
+  await waitFor(() => metricsCalls.length === 2, 3000);
+  check('DASH-068: automatic poll carries X-Relay-Poll and the largest seq',
+    metricsCalls[1]?.poll === '1' && metricsCalls[1].path === '/api/v1/metrics?history_after=7');
+  location.hash = '#/logs';
+  await waitFor(() => titleOf(host) === t.logs);
+  lateGate.resolve(ok(metricsBody({ points: points(5, 9) })));
+  await wait(300);
+  check('DASH-068: a late response does not draw metrics on the next screen',
+    titleOf(host) === t.logs && host.querySelector('.metrics-main') === null && host.querySelector('[data-kpi]') === null);
+  await wait(1600);
+  check('DASH-068: leaving stops the automatic polls', metricsCalls.length === 2);
+
+  location.hash = '#/metrics';
+  await waitFor(() => metricsCalls.length === 3, 3000);
+  check('DASH-068: coming back reads the trend from the start',
+    metricsCalls[2]?.path === '/api/v1/metrics' && metricsCalls[2].poll === null);
+  check('DASH-068: router stayed on this page', navigations.length === 0);
+  router.dispose();
+  location.hash = '';
 }
 
 // DASH-066: the log link of a closed row opens SCR-006 with that session's filter. The hash change stands in for
@@ -416,6 +485,7 @@ const CASES = {
   'dash-025': caseDash025,
   'dash-028': caseDash028,
   'dash-066': caseDash066,
+  'dash-068': caseDash068,
 };
 
 const caseName = new URLSearchParams(location.search).get('case');

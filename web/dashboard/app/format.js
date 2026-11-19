@@ -94,3 +94,50 @@ export function fill(template, values) {
     Object.hasOwn(values, key) ? String(values[key]) : match,
   );
 }
+
+// One decimal place, rounded half up, grouped by the browser locale (DESIGN.md 표시 형식: 비율·연결 1분당 증가량·눈금).
+// `+ 0` turns a rounded -0 into 0.
+export function formatDecimal(value) {
+  const rounded = Math.round(value * 10) / 10 + 0;
+  return new Intl.NumberFormat(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(rounded);
+}
+
+// Bytes that may carry a fraction (a per-second rate): the same KiB/MiB boundary as formatBytes, in floating point.
+export function formatBytesRate(value) {
+  const tenthsKib = Math.round((value * 10) / 1024);
+  if (tenthsKib < 10240) {
+    return `${formatDecimal(tenthsKib / 10)} KiB`;
+  }
+  return `${formatDecimal(Math.round((value * 10) / 1048576) / 10)} MiB`;
+}
+
+// Whole bytes of the API (memory) keep the exact BigInt format. Anything else uses the floating-point one.
+export function formatBytesValue(value) {
+  return Number.isSafeInteger(value) && value >= 0 ? formatBytes(value) : formatBytesRate(value);
+}
+
+// CPU usage: a percentage with one decimal. 100.0% is one fully used core and is not capped.
+export function formatPercent(value) {
+  return `${formatDecimal(value)}%`;
+}
+
+// Short duration from seconds (DESIGN.md 표시 형식): milliseconds below 1 s, one-decimal seconds below 60 s,
+// then `D일 HH:MM:SS`. The switch points use the rounded value. `unit` holds the copy templates.
+export function formatShortSeconds(seconds, { secondsUnit, dayUnit }) {
+  const millis = Math.round(seconds * 1000);
+  if (millis < 1000) {
+    return `${millis} ms`;
+  }
+  const tenths = Math.round(seconds * 10);
+  if (tenths < 600) {
+    return fill(secondsUnit, { n: formatDecimal(tenths / 10) });
+  }
+  return formatDuration(Math.round(seconds) * 1000, dayUnit);
+}
+
+// Local clock time HH:mm of a chart x tick, without a zone.
+export function formatClock(ms) {
+  const date = new Date(ms);
+  const pad = (number) => String(number).padStart(2, '0');
+  return `${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}

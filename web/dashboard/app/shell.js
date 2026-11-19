@@ -52,6 +52,7 @@ export function buildNavbar({ t, lang, idPrefix, active = 'operations', onLangua
     brand: BRAND_NAME,
     items: [
       { label: t.operations, href: '/', current: active === 'operations', icon: 'grid' },
+      { label: t.metrics, href: '/#/metrics', current: active === 'metrics', icon: 'metrics' },
       { label: t.logs, href: '/#/logs', current: active === 'logs', icon: 'log' },
       { label: t.settings, href: '/#/settings', current: active === 'settings', icon: 'settings' },
     ],

@@ -199,6 +199,54 @@ export const COPY = {
     logsMethodNotAllowed: '로그 조회 방식이 맞지 않습니다. 화면을 다시 불러오십시오.', // CPY-177
     recentLogsTitle: '최근 로그', // CPY-178
     sessionFilterNote: '보관 중인 로그만 검색합니다. 세션 시작 로그가 제거됐으면 연결별 로그 일부는 포함되지 않을 수 있습니다.', // CPY-186
+    // SCR-007 metrics
+    metrics: '메트릭', // CPY-202
+    metricsRange: '추이: 최근 1시간, 10초 간격 · 점 {n}/360개', // CPY-203
+    kpiTitle: '핵심 지표', // CPY-204
+    throughput: '처리량', // CPY-205
+    perSecond: '{value}/초', // CPY-206
+    rejectedTotal: '거절한 연결(시작 뒤 누적)', // CPY-207
+    cpuUsage: 'CPU 사용률', // CPY-208
+    cpuNote: '직전 10초 동안 쓴 CPU 시간의 비율입니다. 100%는 코어 1개를 모두 쓴 양입니다.', // CPY-209
+    memoryUsage: '메모리 사용량', // CPY-210
+    memoryNote: '물리 메모리 사용량입니다. Linux는 RSS, Windows는 작업 집합입니다.', // CPY-211
+    collecting: '수집 중', // CPY-212
+    trendsTitle: '추이(최근 1시간)', // CPY-213
+    chartSessions: '활성 세션·대기 연결', // CPY-214
+    chartConnections: '연결(분당)', // CPY-215
+    connectionSeries: ['수락', '거절', '중단'], // CPY-216 (accepted / rejected / aborted)
+    chartThroughput: '처리량(초당)', // CPY-217
+    legendValue: '현재 {current} · 최대 {max}', // CPY-219
+    chartEmpty: '추이를 모으는 중입니다. 10초마다 점이 하나씩 쌓입니다.', // CPY-220
+    distTitle: '시간 분포', // CPY-221
+    distColumns: ['항목', '속성', '개수', '평균', 'p95 상한', '분포'], // CPY-222
+    distNames: ['초기 교환', '대기', '세션', 'Mode I 대상 연결'], // CPY-223
+    p95Le: '≤ {value}', // CPY-224
+    p95Gt: '> {value}', // CPY-224
+    distNote: 'p95 상한은 기록한 값의 95%가 들어가는 첫 구간의 경계입니다. 정확한 백분위수가 아닙니다.', // CPY-225
+    causeTitle: '원인별 수(시작 뒤 누적)', // CPY-226
+    causeTables: ['연결 거절', '연결 중단', '세션 종료', '관리 활동', '설정 변경', 'WebSocket'], // CPY-227
+    causeConnectionColumns: ['리스너', '단계', '원인', '수'], // CPY-228
+    causeClosedColumns: ['모드', '종료 원인', '수'], // CPY-229
+    causeAdminColumns: ['항목', '결과·범위', '수'], // CPY-230
+    adminItems: ['로그인', '로그인 제한', '관리자 종료'], // CPY-231
+    causeConfigColumns: ['항목', '결과', '계기·원인', '수'], // CPY-232
+    configItems: ['재로드', '편집'], // CPY-233
+    causeWebSocketColumns: ['항목', '리스너', '역할', '수'], // CPY-234
+    webSocketItems: ['ping 시간 초과', '접속 ticket 수락'], // CPY-235
+    noRecords: '기록 없음', // CPY-236
+    processTitle: '프로세스', // CPY-237
+    cpuTime: 'CPU 시간(사용자 / 시스템)', // CPY-238
+    virtualMemory: '가상 메모리', // CPY-239
+    threadCount: '스레드 수', // CPY-240
+    handleCount: '열린 핸들 수', // CPY-241
+    descriptorCount: '열린 파일 기술자 수', // CPY-242
+    version: '버전', // CPY-243
+    externalNote: '외부 수집 도구는 상태 리스너의 /metrics에서 같은 값을 읽습니다. 켜려면 설정 파일에서 [metrics] enabled = true로 바꾸고 서버를 재시작하십시오.', // CPY-244
+    metricsRejected: '메트릭 조회 요청을 처리하지 못했습니다. 새로고침으로 다시 조회하십시오.', // CPY-245
+    secondsUnit: '{n}초', // CPY-246
+    distBarName: '구간별 개수: {items}', // CPY-247
+    distBarItem: '{bound} {count}개', // CPY-247 (one non-zero bucket)
   },
   en: {
     navLabel: 'Main menu', // CPY-078
@@ -392,5 +440,53 @@ export const COPY = {
     logsMethodNotAllowed: 'The log query method is not supported. Reload this screen.', // CPY-177
     recentLogsTitle: 'Recent logs', // CPY-178
     sessionFilterNote: 'Only retained logs are searched. Some connection logs may be excluded if the session start log has been removed.', // CPY-186
+    // SCR-007 metrics
+    metrics: 'Metrics', // CPY-202
+    metricsRange: 'Trends: last hour, 10-second interval · Points: {n}/360', // CPY-203
+    kpiTitle: 'Key indicators', // CPY-204
+    throughput: 'Throughput', // CPY-205
+    perSecond: '{value}/s', // CPY-206
+    rejectedTotal: 'Rejected connections (since start)', // CPY-207
+    cpuUsage: 'CPU usage', // CPY-208
+    cpuNote: 'Share of CPU time used in the last 10 seconds. 100% equals one fully used core.', // CPY-209
+    memoryUsage: 'Memory usage', // CPY-210
+    memoryNote: 'Physical memory in use: RSS on Linux, working set on Windows.', // CPY-211
+    collecting: 'Collecting', // CPY-212
+    trendsTitle: 'Trends (last hour)', // CPY-213
+    chartSessions: 'Active sessions and waiting connections', // CPY-214
+    chartConnections: 'Connections (per minute)', // CPY-215
+    connectionSeries: ['Accepted', 'Rejected', 'Aborted'], // CPY-216 (accepted / rejected / aborted)
+    chartThroughput: 'Throughput (per second)', // CPY-217
+    legendValue: 'Now {current} · Max {max}', // CPY-219
+    chartEmpty: 'Collecting trend data. One point is added every 10 seconds.', // CPY-220
+    distTitle: 'Duration distribution', // CPY-221
+    distColumns: ['Metric', 'Attributes', 'Count', 'Mean', 'p95 upper bound', 'Distribution'], // CPY-222
+    distNames: ['Initial exchange', 'Waiting', 'Session', 'Mode I target connection'], // CPY-223
+    p95Le: '≤ {value}', // CPY-224
+    p95Gt: '> {value}', // CPY-224
+    distNote: 'The p95 upper bound is the edge of the first bucket that holds 95% of recorded values. It is not an exact percentile.', // CPY-225
+    causeTitle: 'Counts by cause (since start)', // CPY-226
+    causeTables: ['Rejected connections', 'Aborted connections', 'Closed sessions', 'Administration', 'Configuration changes', 'WebSocket'], // CPY-227
+    causeConnectionColumns: ['Listener', 'Stage', 'Reason', 'Count'], // CPY-228
+    causeClosedColumns: ['Mode', 'Close cause', 'Count'], // CPY-229
+    causeAdminColumns: ['Item', 'Result or scope', 'Count'], // CPY-230
+    adminItems: ['Sign-in', 'Sign-in limit', 'Administrator termination'], // CPY-231
+    causeConfigColumns: ['Item', 'Result', 'Trigger or reason', 'Count'], // CPY-232
+    configItems: ['Reload', 'Edit'], // CPY-233
+    causeWebSocketColumns: ['Item', 'Listener', 'Role', 'Count'], // CPY-234
+    webSocketItems: ['Ping timeout', 'Access ticket accepted'], // CPY-235
+    noRecords: 'No records', // CPY-236
+    processTitle: 'Process', // CPY-237
+    cpuTime: 'CPU time (user / system)', // CPY-238
+    virtualMemory: 'Virtual memory', // CPY-239
+    threadCount: 'Threads', // CPY-240
+    handleCount: 'Open handles', // CPY-241
+    descriptorCount: 'Open file descriptors', // CPY-242
+    version: 'Version', // CPY-243
+    externalNote: 'External collectors read the same values from /metrics on the status listener. To turn it on, set [metrics] enabled = true in the configuration file and restart the server.', // CPY-244
+    metricsRejected: 'The metrics request could not be processed. Use Refresh to query again.', // CPY-245
+    secondsUnit: '{n} s', // CPY-246
+    distBarName: 'Count per bucket: {items}', // CPY-247
+    distBarItem: '{bound}: {count}', // CPY-247 (one non-zero bucket)
   },
 };

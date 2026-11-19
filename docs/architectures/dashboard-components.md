@@ -91,7 +91,7 @@ flowchart LR
 | `createTextField({id, label, type, value, required, autocomplete, helpText, error})` | `type`은 `text` 또는 `password`. `error`가 있으면 오류 상태다. 비활성 옵션은 없다(DESIGN.md 입력 상태는 기본·포커스·오류). 포커스는 CSS의 `:focus-visible`과 미리보기 클래스 `is-focus`로 나타난다. | `HTMLDivElement`. 오류가 있으면 `aria-invalid="true"`, `aria-describedby`에 오류 문구 id를 쓴다. |
 | `setTextFieldError(field, error)` | `field`는 `createTextField`가 만든 `div`다. 오류가 있으면 문구와 `aria-invalid="true"`·오류 문구 id의 `aria-describedby`를 붙인다. 빈 오류는 문구를 지우고 `aria-invalid="false"`로 바꾼다. 도움말이 있으면 그 id로 복원하고 없으면 속성을 지운다. | `undefined`. 요소를 새로 만들지 않고 바꾼다. |
 | `createBadge({tone, label, icon})` | `icon` 기본값은 `tone`별 아이콘(`neutral`은 없음). `icon: false`로 끈다. | `HTMLSpanElement` |
-| `createAlert({tone, title, message, action})` | `action`은 선택 DOM 노드다. `warning`·`destructive`는 `role="alert"`, 나머지는 `role="status"`다. | `HTMLDivElement` |
+| `createAlert({tone, title, message, action, icon})` | `action`은 선택 DOM 노드다. `icon`은 선택 아이콘 이름이며 기본값은 `tone`별 아이콘이다(`neutral`은 `clock`). SCR-007 외부 수집 안내는 DESIGN대로 `neutral`에 `alert` 아이콘을 쓴다. `warning`·`destructive`는 `role="alert"`, 나머지는 `role="status"`다. | `HTMLDivElement` |
 | `createCard({title, headingLevel, description, count, actions, body, footer})` | `title` 필수. `headingLevel` 기본 2(1~6의 정수). `description`은 카드 머리 제목 아래 `p.card-description`의 선택 문자열이다. `count`는 `createBadge`로 붙인다. SCR-001 개수 문구는 CPY-084·085이며 목록별 성공 데이터와 함께 갱신한다. | `HTMLElement`(`section`). `aria-labelledby`로 제목과 묶는다. |
 | `createStat({label, value, unit, tone, badge})` | `label` 필수. 값은 문자열 또는 숫자다. `badge` 기본값은 `false`이며, 기본 값은 `metric` 글꼴과 `tnum`을 쓴다. `badge: true`이면 `createBadge`에 값과 `tone`을 넘긴다. 실행 상태와 확인 불가·조회 중 값에 쓴다(DESIGN.md Stat). | `HTMLDivElement` |
 | `createGauge({label, value, max, valueText, limitText, unknownText, unknownTone})` | `value`는 `0`~`max`. `label`과 `limitText`는 필수다. 알려진 값은 가운데에 `valueText`(없으면 값)를 크게 보이고, 아래 줄에 `limitText`(상한 줄)를 보인다. `value`가 `null`이면 알 수 없음이며 링을 그리지 않고 `unknownText`(필수)를 `createBadge`의 배지로 쓴다. `unknownTone`은 그 배지의 톤이며 기본값은 `neutral`(확인 불가)이다. 첫 조회 전에는 호출자가 `info`(조회 중)를 넘긴다(DESIGN 상태 색). `value`가 `null`일 때 톤이 잘못되면 `TypeError`다. 알려진 값에서는 배지를 만들지 않으므로 `unknownTone`을 쓰지 않는다. 채움 길이는 `style.setProperty`로 쓴다. | `HTMLDivElement`. `role="progressbar"`, `aria-label`, `aria-valuemin`, `aria-valuemax`, `aria-valuenow`, `aria-valuetext`. 알려진 값의 `aria-valuetext`는 `valueText, limitText`다. |
@@ -118,7 +118,7 @@ flowchart LR
 
 `styles/components.css`는 도움말의 두 변형과 모바일 도구 줄바꿈을 맡는다. 로그인 전용 `login.css`는 도움말과 언어 선택의 간격을 맡는다. 새 토큰은 없다. `preview.js`는 상단 막대와 로그인형 링크를 함께 보여 준다.
 
-`tests/help-link-checks.js`의 `checkHelpLink`·`checkHelpLanguageChange`는 다섯 화면 시험 페이지에서 주소·문구·접근 가능한 이름의 구성·새 탭 속성·배치·즉시 언어 변경을 확인한다. 설정 페이지는 보기와 편집을 모두 확인한다. `tests/dashboard_browser.rs`의 `every_screen_localizes_safe_help_links_without_requesting_the_help_site_in_browser`는 두 언어와 1280·390px을 실행하도록 연결한다. 링크를 누르거나 도움말 주소로 이동하지 않는다. 실행 결과는 이 문서에 선언하지 않는다.
+`tests/help-link-checks.js`의 `checkHelpLink`·`checkHelpLanguageChange`는 여섯 화면 시험 페이지에서 주소·문구·접근 가능한 이름의 구성·새 탭 속성·배치·즉시 언어 변경을 확인한다. 설정 페이지는 보기와 편집을 모두 확인한다. `tests/dashboard_browser.rs`의 `every_screen_localizes_safe_help_links_without_requesting_the_help_site_in_browser`는 두 언어와 1280·390px을 실행하도록 연결한다. 링크를 누르거나 도움말 주소로 이동하지 않는다. 실행 결과는 이 문서에 선언하지 않는다.
 
 
 ## 4. 처리 순서

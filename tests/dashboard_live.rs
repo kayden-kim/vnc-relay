@@ -23,6 +23,8 @@ mod logs_accessibility;
 mod logs_download;
 #[path = "dashboard_live/logs_states.rs"]
 mod logs_states;
+#[path = "dashboard_live/metrics.rs"]
+mod metrics;
 #[path = "dashboard_live/overview.rs"]
 mod overview;
 #[path = "dashboard_live/settings.rs"]
@@ -419,6 +421,18 @@ fn dashboard_065_066_real_waiting_and_closed_rows_with_forwarded_addresses() {
 #[test]
 fn dashboard_063_real_logs_keyboard_languages_widths_and_preservation() {
     run(logs_accessibility::keyboard_languages_widths_and_state_preservation);
+}
+
+/// spec: dashboard.md:DASH-068
+#[test]
+fn dashboard_068_real_metrics_menu_entry_polls_leaving_and_returning() {
+    run(metrics::menu_entry_automatic_polls_leaving_and_returning);
+}
+
+/// spec: dashboard.md:DASH-076
+#[test]
+fn dashboard_076_real_metrics_401_and_idle_expiry_not_extended_by_polls() {
+    run(metrics::unauthenticated_poll_removes_data_and_idle_expiry_is_not_extended);
 }
 
 #[test]

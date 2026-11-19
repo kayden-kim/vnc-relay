@@ -175,7 +175,7 @@ fn assert_nav(browser: &mut Browser, active: &str) {
         browser.eval(&format!(
             r#"(() => {{
         const links = [...document.querySelectorAll('a.navbar-item')];
-        return ['/', '/#/logs', '/#/settings'].every(href => {{
+        return ['/', '/#/metrics', '/#/logs', '/#/settings'].every(href => {{
             const a = links.find(a => a.getAttribute('href') === href);
             const r = a?.getBoundingClientRect();
             return r?.width > 0 && r.height > 0 && r.left >= 0 && r.right <= innerWidth &&
@@ -192,7 +192,7 @@ fn assert_nav(browser: &mut Browser, active: &str) {
 pub fn settings_navigation_and_protected_direct_routes() {
     let server = Server::start_with_config("dash-028", Some(60), true);
     let mut browser = Browser::start("dash-028", &["ko-KR"]);
-    for route in ["/#/settings", "/#/settings/edit", "/#/logs"] {
+    for route in ["/#/settings", "/#/settings/edit", "/#/logs", "/#/metrics"] {
         browser.navigate(&server.url(route));
         browser.wait(
             "location.pathname === '/login/' && document.querySelector('#login-account') !== null",
@@ -203,7 +203,9 @@ pub fn settings_navigation_and_protected_direct_routes() {
         );
         assert!(!browser.text().contains("limits.waiting"));
         assert_eq!(
-            browser.eval("document.querySelectorAll('.log-row,.log-detail,#logs-q').length"),
+            browser.eval(
+                "document.querySelectorAll('.log-row,.log-detail,#logs-q,[data-kpi],[data-chart],.metrics-main').length"
+            ),
             json!(0)
         );
     }
@@ -230,6 +232,11 @@ pub fn settings_navigation_and_protected_direct_routes() {
         browser.click("a.navbar-item[href='/#/logs']");
         browser.wait("document.querySelector('#logs-download')?.disabled === false");
         assert_nav(&mut browser, "/#/logs");
+        browser.click("a.navbar-item[href='/#/metrics']");
+        browser.wait("document.querySelector('#metrics-refresh')?.disabled === false");
+        assert_nav(&mut browser, "/#/metrics");
+        browser.click("a.navbar-item[href='/#/logs']");
+        browser.wait("document.querySelector('#logs-download')?.disabled === false");
         open_settings(&mut browser, &server);
         assert_nav(&mut browser, "/#/settings");
         open_settings_edit(&mut browser, &server);

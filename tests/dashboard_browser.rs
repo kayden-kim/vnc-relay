@@ -477,8 +477,9 @@ fn automatic_polls_under_one_second_keep_the_status_marks_in_browser() {
 
 /// spec: dashboard.md:DASH-028 partial
 #[test]
-fn router_navigates_between_three_menu_items_in_browser() {
+fn router_navigates_between_four_menu_items_in_browser() {
     check_localized_case("/tests/router.html", "dash-028");
+    check_localized_case("/tests/metrics.html", "dash-028");
 }
 
 /// spec: dashboard.md:DASH-054 partial
@@ -535,11 +536,104 @@ fn logs_supports_keyboard_aria_and_language_change_in_browser() {
     check_localized_case("/tests/logs.html", "dash-063");
 }
 
+/// spec: dashboard.md:DASH-068 partial
+#[test]
+fn metrics_opens_from_the_menu_and_stops_polling_after_leaving_in_browser() {
+    check_localized_case_at("/tests/router.html", "dash-068", &[1280, 390]);
+    check_localized_case_at("/tests/metrics.html", "dash-068", &[1280, 390]);
+}
+
+/// spec: dashboard.md:DASH-069 partial
+#[test]
+fn metrics_shows_the_eight_key_indicators_from_the_response_in_browser() {
+    check_localized_case("/tests/metrics.html", "dash-069");
+}
+
+/// spec: dashboard.md:DASH-070 partial
+#[test]
+fn metrics_draws_five_trend_charts_and_merges_new_points_in_browser() {
+    check_localized_case("/tests/metrics.html", "dash-070");
+}
+
+/// spec: dashboard.md:DASH-071 partial
+#[test]
+fn metrics_shows_distribution_cause_tables_and_process_values_in_browser() {
+    check_localized_case("/tests/metrics.html", "dash-071");
+}
+
+/// spec: dashboard.md:DASH-071 partial
+#[test]
+fn metrics_draws_the_smallest_bars_at_the_two_pixel_minimum_in_browser() {
+    check_localized_case("/tests/metrics.html", "bars");
+}
+
+/// spec: dashboard.md:DASH-070 partial
+#[test]
+fn metrics_chart_axis_top_follows_the_design_rule_in_browser() {
+    check_localized_case_at("/tests/metrics.html", "axis", &[1280, 390]);
+}
+
+/// spec: dashboard.md:DASH-072 partial
+#[test]
+fn metrics_shows_collecting_and_unavailable_values_without_zeros_in_browser() {
+    check_localized_case("/tests/metrics.html", "dash-072");
+}
+
+/// spec: dashboard.md:DASH-073 partial
+#[test]
+fn metrics_shows_failures_and_keeps_the_last_values_in_browser() {
+    check_localized_case_at("/tests/metrics.html", "dash-073", &[1280, 390]);
+}
+
+/// spec: dashboard.md:DASH-074 partial
+#[test]
+fn metrics_refresh_and_automatic_polls_recover_after_failure_in_browser() {
+    check_localized_case_at("/tests/metrics.html", "dash-074", &[1280, 390]);
+}
+
+/// spec: dashboard.md:DASH-075 partial
+#[test]
+fn metrics_stops_automatic_polls_after_400_or_405_until_refresh_succeeds_in_browser() {
+    check_localized_case_at("/tests/metrics.html", "dash-075", &[1280, 390]);
+}
+
+/// spec: dashboard.md:DASH-076 partial
+#[test]
+fn metrics_removes_its_data_and_goes_to_login_on_401_in_browser() {
+    check_localized_case_at("/tests/metrics.html", "dash-076", &[1280, 390]);
+}
+
+/// spec: dashboard.md:DASH-077 partial
+#[test]
+fn metrics_shows_updating_only_after_one_second_and_never_overlaps_requests_in_browser() {
+    check_localized_case_at("/tests/metrics.html", "dash-077", &[1280, 390]);
+    check_localized_case_at("/tests/metrics.html", "dash-077-more", &[1280, 390]);
+}
+
+/// spec: dashboard.md:DASH-078 partial
+#[test]
+fn metrics_fits_every_width_and_keeps_charts_and_tables_accessible_in_browser() {
+    check_localized_case_at("/tests/metrics.html", "dash-078", &[1280, 390, 320]);
+}
+
+/// spec: dashboard.md:DASH-079 partial
+#[test]
+fn metrics_changes_language_without_requesting_again_in_browser() {
+    check_localized_case_at("/tests/metrics.html", "dash-079", &[1280, 390]);
+}
+
 /// spec: dashboard.md:DASH-064
 #[test]
 fn every_screen_localizes_safe_help_links_without_requesting_the_help_site_in_browser() {
     let mut runs = Vec::new();
-    for page in ["operations", "session", "login", "settings", "logs"] {
+    for page in [
+        "operations",
+        "session",
+        "login",
+        "settings",
+        "logs",
+        "metrics",
+    ] {
         for lang in LANGS {
             for width in [1280, 390] {
                 runs.push((
@@ -578,6 +672,18 @@ fn check_localized_case(page: &str, case: &str) {
     for lang in LANGS {
         for width in WIDTHS {
             runs.push((format!("{page}?case={case}&lang={lang}"), width));
+        }
+    }
+    check_runs(&runs);
+}
+
+/// Like `check_localized_case`, at the given widths only. Scenarios that wait for several poll periods use two or
+/// three widths, as DASH-067 does.
+fn check_localized_case_at(page: &str, case: &str, widths: &[u32]) {
+    let mut runs = Vec::new();
+    for lang in LANGS {
+        for width in widths {
+            runs.push((format!("{page}?case={case}&lang={lang}"), *width));
         }
     }
     check_runs(&runs);

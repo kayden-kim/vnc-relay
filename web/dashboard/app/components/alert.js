@@ -20,10 +20,11 @@ function element(tag, className, text) {
 }
 
 /**
- * @param {{tone?: string, title: string, message?: string, action?: HTMLElement}} options
+ * @param {{tone?: string, title: string, message?: string, action?: HTMLElement, icon?: string}} options
+ *   `icon` replaces the tone's default icon name.
  * @returns {HTMLDivElement}
  */
-export function createAlert({ tone = 'neutral', title, message, action } = {}) {
+export function createAlert({ tone = 'neutral', title, message, action, icon: iconName } = {}) {
   if (!TONES.includes(tone)) {
     throw new TypeError(`unknown tone: ${String(tone)}`);
   }
@@ -41,7 +42,7 @@ export function createAlert({ tone = 'neutral', title, message, action } = {}) {
   body.append(element('p', 'alert-title', title));
   if (message) body.append(element('p', 'alert-message', message));
 
-  root.append(icon(ICONS[tone]), body);
+  root.append(icon(iconName ?? ICONS[tone]), body);
   if (action) root.append(action);
   return root;
 }

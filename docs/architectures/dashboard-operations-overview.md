@@ -1,14 +1,14 @@
-# 운영 대시보드 앱 구조 (SCR-001·002·004·005·006)
+# 운영 대시보드 앱 구조 (SCR-001·002·004·005·006·007)
 
 | 항목 | 값 |
 | --- | --- |
 | 구조 시점 | Current |
 | 문서 상태 | Draft |
 | 구현 대조 | Partial — [대조 기록](#대조-기록) |
-| 코드 위치 | `web/dashboard/app/`의 `main.js`, `router.js`(`mountRouter`, `routeOf`), `operations.js`(`mountOperations`, `endSession`, `signOut`), `session.js`(`mountSession`), `shell.js`(`buildNavbar`, `signOutUrl`), `query.js`(`newQuery`, `beginQuery`, `showBusy`, `endQuery`, `viewOf`), `model.js`, `api.js`(`getQuery`, `getSession`, `deleteSession`, `terminateSession`), `panels.js`(`statusAlert`, `statusBadge`, `usageGauge`, `waitingTable`, `closedTable`, `logsLink`, `panelCard`, `applyChrome`, `setContent`), `format.js`, `copy.js`, `language.js`, `app.css`. `crates/adapters/src/dashboard_assets.rs`(`ASSETS`), `crates/adapters/src/management_http.rs`(`static_answer`), `xtask/src/tokens/shared.rs`(`SHARED_FILES`) |
+| 코드 위치 | `web/dashboard/app/`의 `main.js`, `router.js`(`mountRouter`, `routeOf`), `operations.js`(`mountOperations`, `endSession`, `signOut`), `session.js`(`mountSession`), `metrics.js`(`mountMetrics`), `metrics-model.js`, `shell.js`(`buildNavbar`, `signOutUrl`), `query.js`(`newQuery`, `beginQuery`, `showBusy`, `endQuery`, `viewOf`), `model.js`, `api.js`(`getQuery`, `getSession`, `deleteSession`, `terminateSession`), `panels.js`(`statusAlert`, `statusBadge`, `usageGauge`, `waitingTable`, `closedTable`, `logsLink`, `panelCard`, `applyChrome`, `setContent`), `format.js`, `copy.js`, `language.js`, `app.css`. `crates/adapters/src/dashboard_assets.rs`(`ASSETS`), `crates/adapters/src/management_http.rs`(`static_answer`), `xtask/src/tokens/shared.rs`(`SHARED_FILES`) |
 | 코드 지도 | [코드 지도](code-map.md) (`web/dashboard/` 행, `dashboard_assets.rs` 행, xtask 행), [컴포넌트 구조](dashboard-components.md) |
-| 관련 스펙 | [화면 스펙](../specs/dashboard.md) 3·4·5·6·9절; [디자인 기준](../design/DESIGN.md) 화면 구성(522~534행), 중단점, 표시 형식(489~492행); [프런트엔드 규약](../conventions/frontend.md) 1.1·1.2·1.3·3·4절; [시험 규약](../conventions/testing.md) 상태 규칙(23·99·100행) |
-| 관련 계약 | [관리 API 계약 v1](../contracts/management-api-v1.md) 1.3·1.4·1.5·1.6~1.12·2.2·2.3절 |
+| 관련 스펙 | [화면 스펙](../specs/dashboard.md) 3·4·5·6·9절; [디자인 기준](../design/DESIGN.md) 화면 구성(522~534행), 중단점, 표시 형식(489~492행), [메트릭 화면 확장](../design/DESIGN.md#메트릭-화면-확장); [프런트엔드 규약](../conventions/frontend.md) 1.1·1.2·1.3·3·4절; [시험 규약](../conventions/testing.md) 상태 규칙(23·99·100행) |
+| 관련 계약 | [관리 API 계약 v1](../contracts/management-api-v1.md) 1.3·1.4·1.5·1.6~1.12·1.16·2.2·2.3절 |
 | 관련 ADR | 없음 |
 
 이 문서는 `web/dashboard/app/`의 파일 배치, 모듈 책임, 조회·갱신 흐름, 실패 처리, 로그아웃, 표시 형식을 정한다. 화면 문구는 스펙 9절이, 필드 의미는 계약이 정한다. 미확인 차이는 [열린 항목](#15-열린-항목)에 둔다.
@@ -18,7 +18,7 @@
 - SCR-001 운영 현황과 앱 셸은 진입점·관리 세션 확인·언어 선택·로그아웃을 제공한다.
 - SCR-002는 본문·상세 조회·종료 흐름과 해시 라우터를 쓴다. SCR-001 목록 링크는 계약 1.11절의 `/#/sessions/{session_id}`다.
 - 해시(`#/sessions/…`)는 서버로 가지 않는다. 서버는 `/`와 같은 응답을 준다: 세션이 있으면 200 HTML, 없으면 303 `/login/`. 404 JSON이 아니다.
-- `router.js`는 세션 상세·설정 보기·설정 편집·최근 로그 해시를 각 화면으로 보낸다. 그 밖의 해시는 운영 현황으로 보낸다. `#/logs?session_id=…`의 값은 `logs.js`가 API 요청 전에 검사한다.
+- `router.js`는 세션 상세·설정 보기·설정 편집·최근 로그·메트릭 해시를 각 화면으로 보낸다. 그 밖의 해시는 운영 현황으로 보낸다. `#/logs?session_id=…`의 값은 `logs.js`가 API 요청 전에 검사한다.
 - 이 문서가 정하지 않는 것: 관리 API 필드 의미(계약), 화면 문구(스펙 9절), 색과 간격 토큰(DESIGN.md).
 
 ## 2. 파일 배치
@@ -31,6 +31,8 @@ web/dashboard/app/
 ├── operations.js      SCR-001 조립, 세션 확인, 조회 루프, 세대 번호, 로그아웃, 언어 상태
 ├── session.js         SCR-002 조립, 상세 조회, 종료 확인·결과, 대상 소멸, 세대 번호
 ├── logs.js            SCR-006 필터, 증분 커서, 이전 페이지, 상세 펼침, 다운로드 수집·정리
+├── metrics.js         SCR-007 상태·조회 루프·화면 조립·언어 전환·해제
+├── metrics-model.js   메트릭 응답 검증, 추이 합치기, 카드·차트·표·프로세스 계산 (DOM 없음)
 ├── settings.js        SCR-004·005 설정 보기·편집, 요청·입력·진단·저장 결과
 ├── settings-model.js  설정 v4 응답 검증과 편집 대상 입력·진단
 ├── shell.js           보호 화면의 상단 막대, 언어 선택, 로그아웃 결과 판정
@@ -67,6 +69,8 @@ web/dashboard/app/
 | `copy.js` | `ko`·`en` 문구 객체. 각 키에 CPY ID 주석 | 없음 |
 | `language.js` | `LANGUAGES`, `chooseLanguage`, `readSavedLanguage`, `saveLanguage` (login과 같은 저장 키). login/language.js는 이 파일의 복사본 | `storage`, `preferredLanguages` |
 | `logs.js` | `mountLogs(root, deps, { sessionId })`: 최근 로그 상태와 조회를 소유한다. 다른 화면으로 이동하면 요청·타이머·보호 데이터를 제거한다. | `request`, `storage`, `preferredLanguages`, `navigate`, `replaceUrl` |
+| `metrics.js` | `mountMetrics(root, deps)`: 메트릭 상태와 조회를 소유한다. 다른 화면으로 이동하면 요청·타이머·보호 데이터를 제거한다. | `request`, `storage`, `preferredLanguages`, `navigate` |
+| `metrics-model.js` | `parseMetrics`, `mergeHistory`, `keyIndicators`, `buildCharts`, `distributionItems`, `causeRows`, `processRows`. DOM과 시계를 쓰지 않는다. 맞지 않는 응답은 `invalid` 오류 | 없음 |
 
 화면은 `createNavbar`, `createLanguageSelect`(variant `navbar`), `createButton`, `createCard`, `createStat`, `createGauge`, `createDataTable`, `createBadge`, `createAlert`, `createLink`, `icon`을 쓴다. SCR-002의 종료 확인은 `createDialog`를 쓴다. 공개 API는 [컴포넌트 구조](dashboard-components.md#31-공개-함수)를 따른다.
 
@@ -76,7 +80,7 @@ web/dashboard/app/
 
 ## 4. 화면 골격 (SCR-001)
 
-- 상단 막대는 `shell.js` `buildNavbar`를 쓴다. 브랜드, 운영 현황·로그·설정, 언어 선택과 로그아웃을 조합한다. 현재 화면은 `aria-current`로 표시한다. 모바일에서도 세 항목을 둘째 줄에 보이며 필요한 경우 줄바꿈한다. `nav` 이름은 CPY-078이다.
+- 상단 막대는 `shell.js` `buildNavbar`를 쓴다. 브랜드, 운영 현황·메트릭·로그·설정, 언어 선택과 로그아웃을 조합한다. 현재 화면은 `aria-current`로 표시한다. 모바일에서도 네 항목을 둘째 줄에 보이며 필요한 경우 줄바꿈한다. `nav` 이름은 CPY-078이다. 메트릭 항목의 아이콘은 `metrics`이고 라벨은 CPY-202다.
 - 랜드마크: 상단 막대는 `nav`, 본문은 `main`이다. `nav` 이름은 CPY-078 한국어 "주 메뉴", English "Main menu"다.
 - 페이지 머리말: 제목 "운영 현황"(CPY-004), 줄 "마지막 성공 갱신: {시각}"(CPY-015), [새로고침] 버튼(CPY-008).
 - 상태 안내는 각 목록 카드 맨 위에 둔다(`operations.js`의 `applyChrome`). 머리말 아래 전체 폭 안내는 두지 않는다.
@@ -289,6 +293,97 @@ router.js mountRouter → logs.js mountLogs
 - `logs_accessibility.rs`는 1280·390px × ko·en에서 실제 CDP 키 입력으로 조작한다. `transports.rs`는 실제 TCP·WS·WSS와 시험 TLS 인증서로 Mode II 양쪽 9조합과 전달 주소 0·1·2개를 만든다. 활성 목록·상세 대조는 `overview.rs`·`detail.rs`가 제공한다. 자동 결과는 시나리오 보고서, 수동 다른 엔진의 결과와 한계는 [키보드·다른 엔진 확인 기록](../how-to/verify-dashboard-frontend.md#42-키보드다른-엔진-확인-기록)을 따른다.
 - F-C 재현은 같은 페이지의 `shot-<상태>&lang=ko|en`을 쓴다. `loading`, `normal`, `empty`, `disabled`, `failed`, `failed-first`, `invalid-session`, `gap`, `paused`, `session`, `download`, `download-failed`, `refreshing`, `input-error`, `request-rejected`, `expired`를 제공한다. 실제 화면 함수와 공통 CSS를 쓰며 제품에 넣지 않는다.
 
+## 17. 메트릭 (SCR-007)
+
+동작 기준은 [화면 스펙 4.1·5.3절과 SCR-007](../specs/dashboard.md#41-폴링), 데이터 형식은 [관리 API 계약 1.16절](../contracts/management-api-v1.md#116-메트릭-get-apiv1metrics)이다. 시안은 `docs/design/mockups/dashboard.html`의 SCR-007 프레임이다.
+
+### 파일과 호출
+
+```text
+router.js mountRouter → metrics.js mountMetrics
+  → api.js getSession → model.js parseSession → P와 조회 제한 시간
+  → api.js getQuery(/api/v1/metrics[?history_after=N]) → metrics-model.js parseMetrics
+  → metrics-model.js mergeHistory → 보관한 점
+  → metrics-model.js keyIndicators·buildCharts·distributionItems·causeRows·processRows
+  → 공통 Card·Badge·Alert·Button·Gauge·DataTable·상단 막대
+```
+
+- 화면 값 계산은 `metrics-model.js`에만 둔다. `metrics.js`는 그 결과를 DOM으로 옮긴다.
+- 새 공통 조각은 없다. `components/icons.js`에 `metrics` 아이콘 하나를 더했다. login 복사본도 같은 줄을 가진다.
+
+### 상태와 요청 소유
+
+- `metrics.js`의 `state`는 `query.js`의 필드(`inFlight`, `busyShown`, `busyTimer`, `failed`, `data`, `lastSuccessAt`)에 언어, 보관한 점, `rejected`, `stopped`, `epoch`를 더한다. `data`는 마지막 성공 응답을 검사한 값이다.
+- 화면 진입과 [새로고침]은 사용자 행동이다. 이 요청은 `history_after`와 `X-Relay-Poll`을 보내지 않고 보관한 점을 모두 바꾼다. 자동 조회는 `X-Relay-Poll: 1`을 붙이고, 보관한 점이 있으면 가장 큰 `seq`를 `history_after`로 보낸다.
+- 자동 조회는 응답이 끝난 뒤 `setTimeout`으로 P 뒤에 한 번 예약한다. 요청은 겹치지 않는다. 자동 조회 중 [새로고침]은 새 요청 없이 `showBusy`로 진행 표시만 바로 보인다(DASH-077).
+- 세션 확인(`GET /api/v1/session`)은 진입 때 한 번 한다. 이 응답이 P·조회 제한 시간·CSRF 토큰을 준다. 이 확인이 실패하면 P를 모르므로 자동 재시도가 없다. 사용자가 [새로고침]을 눌러야 한다.
+- 실패 처리는 아래 표를 따른다. 모든 실패에서 이전 값·보관한 점·마지막 성공 시각은 그대로 둔다.
+
+| 응답 | 표시 | 자동 조회 |
+| --- | --- | --- |
+| 401 | `dispose` 뒤 `/login/`으로 이동. 값·추이·진행 중 요청을 지운다 | 멈춤 |
+| 400·405 | CPY-018 배지와 CPY-245 | 멈춤. 새로고침이 성공하면 다시 시작. 새로고침이 실패해도 멈춘 채로 둔다 |
+| 500·응답 없음·시간 초과·검사 실패 | 첫 실패는 CPY-018 배지와 CPY-021. 성공 뒤 실패는 CPY-019 배지와 CPY-020 | P마다 계속 |
+
+- 성공하면 `failed`·`rejected`·`stopped`를 지우고 `dataVersion`을 올린다. 본문은 `dataVersion`이 바뀔 때만 다시 만든다.
+- 세대 번호(`epoch`)와 `state.ended`로 화면을 떠난 뒤 도착한 응답을 버린다. `dispose`는 요청 중단, 타이머 해제, 값·점·CSRF 토큰 제거, 보호 DOM 제거를 한다(DASH-068).
+- 언어 변경은 언어를 저장하고 문서 언어·제목을 바꾼 뒤 화면을 다시 만든다. 요청은 보내지 않고 점과 값은 그대로다(DASH-079).
+
+### 추이를 합치는 규칙
+
+- 보관한 점은 최대 360개다. 자동 조회 응답의 점은 보관한 가장 큰 `seq`보다 큰 것만 더한다. 그 뒤 `가장 큰 seq − 360` 이하인 점을 버린다.
+- 새로고침과 진입은 응답의 점으로 모두 바꾼다. 응답의 `history.points`가 비어도 정상이다.
+- 점마다 `seq`, `at`, `values`를 가진다. `at`은 `YYYY-MM-DDTHH:mm:ss.SSSZ` 형식이어야 한다. 아니면 응답 형식 오류다.
+
+### 계산
+
+- 활성·대기·거절은 같은 이름의 모든 점(속성 행)의 합이다. 값이 없으면 확인 불가다.
+- 처리량과 CPU 사용률은 가장 최근 이웃한 두 점(`seq` 차이 1)의 차이를 `at` 차이(초)로 나눈다. 시각 차이가 0 이하이면 그 점은 확인 불가다. 방향 하나라도 확인 불가이면 처리량 카드는 확인 불가다. 이웃한 점이 없으면 "수집 중"(CPY-212)이다.
+- 연결 차트는 `seq` 6개씩 묶는다. (묶음 마지막 값 − 첫 값) ÷ `at` 차이(초) × 60을 묶음 마지막 점 시각에 그린다.
+- 차트 x축은 가장 최근 점이 오른쪽 끝이고 폭은 3600초다. 창 밖 점은 그리지 않는다. 선은 `null`과 `seq`가 비는 자리에서 끊긴다. 한 점만 남은 선은 길이 0인 선분이며 둥근 끝(`chart-dot`)으로 점처럼 보인다.
+- y축 위쪽 끝은 `niceCeil`이 구한다. {2, 4, 6, 8, 10} × 10^k 가운데 보이는 최댓값 이상인 가장 작은 값이다(DESIGN.md 선 차트). 보이는 값이 없거나 모두 0이면 2다. 10 미만에서는 최댓값 자신의 10의 거듭제곱부터 찾아서 개수 축의 위쪽 끝이 1이 되지 않는다. 바이트는 KiB 기준 위쪽 끝을 먼저 구하고 그 값이 1024 KiB 이상이면 MiB 기준으로 다시 구한다. 아니면 KiB 눈금이다.
+- 차트 SVG는 `viewBox="0 0 360 100"`, `preserveAspectRatio="none"`이고 모든 선에 `vector-effect="non-scaling-stroke"`를 준다. 가로 폭은 컨테이너를 따른다.
+- 차트별 최소 점 수는 순서대로 2·13·3·3·2다. 모자란 차트 자리는 CPY-220이다. 점 수가 충분해도 선이 없으면(모든 값이 `null`) 범례의 현재·최대는 CPY-035이다.
+
+### 최소 막대 크기
+
+DESIGN.md가 정한 대로 0이 아닌 값의 막대는 `spacing.chart-stroke`(2px)보다 작게 그리지 않는다. 아주 작은 값은 일부러 크게 보이게 한다. 0인 값은 막대를 그리지 않는다.
+
+- 분포 막대는 높이 32px에 viewBox 높이 100이다. 최소 높이는 `2/32 × 100 = 6.25`다(`MIN_DIST_BAR_HEIGHT`).
+- 수 막대는 폭 64px에 viewBox 폭 100이다. 최소 폭은 `2/64 × 100 = 3.125`다(`MIN_COUNT_BAR_WIDTH`).
+- 가장 큰 값의 막대는 비례 크기를 유지한다.
+
+### 표
+
+- 시간 분포 표는 `createDataTable` 하나다. `caption`은 `sr-only`다. 항목마다 행이 여러 개일 수 있다. 속성은 `이름=값`을 쉼표로 이어 `span.mono`에 둔다. 평균·p95는 `formatShortSeconds`로 쓴다. p95 상한은 CPY-224 `≤ x` 또는 `> 마지막 경계`다. 개수가 0이면 평균·p95는 CPY-035다.
+- p95 구간은 누적 개수 × 100이 전체 × 95 이상이 되는 첫 구간이다.
+- 기록이 없는 항목은 항목 이름과 CPY-236 한 칸(나머지 열에 걸침)이다.
+- 분포 막대 `svg.dist`는 `role="img"`이고 이름은 CPY-247에 0이 아닌 구간만 `≤ 5 ms 3개`처럼 쉼표로 이어 넣는다.
+- 원인별 표 6개는 수가 큰 순서이고 같으면 응답 순서다. `close_cause` 값은 SCR-001과 같은 번역(CPY-045~050·083·190)을 쓰고 목록 밖 값은 중립 배지로 원문을 보인다. 다른 속성 값은 번역하지 않는다. 행이 없으면 CPY-236이다.
+- 수 칸은 `span.count-cell`이다. `svg.count-bar`(`aria-hidden`)와 숫자를 담는다. 막대 길이는 그 표의 가장 큰 수에 비례한다.
+
+### 프로세스
+
+- 행은 가동 시간, CPU 시간(사용자 / 시스템), 메모리 사용량, 가상 메모리, 스레드 수, 열린 핸들 수 또는 열린 파일 기술자 수, 버전이다. 핸들·기술자 행은 응답에 그 메트릭이 있을 때만 만든다.
+- 첫 응답 전에는 플랫폼을 모르므로 핸들·기술자 행을 만들지 않고 조회 중 배지만 둔다. 시안은 이때 핸들 행을 보인다.
+
+### 화면 골격과 접근성
+
+- 머리말: `h1.page-title`(CPY-202) → 상태 배지와 "마지막 성공 갱신"(CPY-015) → 추이 범위(CPY-203, 데이터가 있을 때만) → [새로고침].
+- 순서: 외부 수집 안내(CPY-244, 중립 안내에 `createAlert`의 `icon: 'alert'`로 원 안 느낌표 아이콘, 라이브 영역 아님) → 조회 실패 안내 → 핵심 지표 → 추이 → 시간 분포 → 원인별 수 → 프로세스.
+- 구역 제목은 `h2`, 카드 제목은 `h3`이고, 시간 분포·프로세스 카드 제목은 `h2`다. 시안은 `h5`·`h6`을 쓴다. `base.css`의 제목 여백 초기화가 h1~h5만 덮으므로 h6을 쓰지 않는다.
+- 상태 배지 칸만 `role="status"`다. 조회 때마다 칸의 내용은 상태가 바뀔 때만 바꾼다. 차트·표·값에는 라이브 영역이 없다.
+- 차트는 `figure[role="img"]`이고 이름은 `제목. 계열 이름: 현재 X · 최대 Y. …`다. 마우스 도구 설명이나 포커스 대상이 없다. 선 모양(실선·긴 점선·점선)과 색을 함께 쓴다.
+- 포커스는 `id`로 복원한다: `metrics-refresh`, `metrics-alert-refresh`, `metrics-language`, `metrics-logout`. 새로고침이 끝나면 [새로고침]으로 돌려준다.
+- 모바일(1023.98px 이하)에서 카드와 표는 한 열이다. 표는 `data-label`을 가진 열별 쌍이다. 기록이 없는 칸(`td.none`)은 레이블이 없다.
+
+### 시험
+
+- `web/dashboard/tests/metrics.html`·`metrics-scenarios.js`가 가짜 API로 dash-028·064·068~075·077~079와 최소 막대 크기(`bars`), y축 위쪽 끝(`axis`) 사례를 돌린다. 결과는 `data-result`다. `?case=…&lang=ko|en`을 쓴다. 가짜 응답 결과는 실서버 증거가 아니다. dash-077은 시간이 길어 `dash-077`과 `dash-077-more` 두 사례로 나눈다. `dump-dom`이 가상 시간 10초에서 멈추기 때문이다.
+- `tests/dashboard_browser.rs`가 이 사례를 실행하고 마커를 가진다. 가짜 응답이 증명하지 못하는 부분은 마커에 `partial`을 붙인다.
+- `tests/dashboard_live/metrics.rs`는 실제 서버와 프록시로 DASH-068(SCR-005 입력 버림, 진입 요청 모양, 떠난 뒤 자동 조회 중단, 붙잡아 둔 늦은 응답)과 DASH-076(401, 자동 조회의 유휴 만료 비연장)을 확인한다. 두 마커는 `partial`이 아니다.
+- F-C 재현은 `metrics.html?case=shot-<상태>&lang=ko|en`이다. `loading`, `collecting`, `normal`, `partial`, `failed`, `failed-first`, `refreshing`, `rejected`를 제공한다. `partial`은 메모리 메트릭이 `available = false`이고 추이 값 일부가 `null`인 상태다. 제품에 넣지 않는다.
+
 ## 15. 열린 항목
 
 | 항목 | 현재 동작·영향 | 책임자 |
@@ -302,6 +397,7 @@ router.js mountRouter → logs.js mountLogs
 | 날짜 | 대상 | 환경 | 방법 | 실제 결과 |
 | --- | --- | --- | --- | --- |
 | 2026-11-17 | `9d43e3e`의 대기·활성·최근 종료 표 | Windows의 에이전트 조작 Chromium 탭. 버전은 원 기록에 없다. | `cargo xtask dashboard-serve`의 제품 화면과 파일 시안을 1280·1100·1024·1023·768·390·320px × ko·en으로 대조했다. | 가로 넘침 0건. 대기·활성 시각은 날짜와 시각·시간대 두 줄이며 주소 레이블은 값 위에 있다. 범위별 실제 결과와 허용 차이는 [시각 대조 기록](../how-to/verify-dashboard-frontend.md#41-시각-대조-기록)을 따른다. |
+| 2026-11-19 | `metrics.js`·`metrics-model.js`·`app.css`의 SCR-007 구현 | Windows 10.0.26200 x64, Chrome 157.0.8103.79, 에이전트 조작 탭 | 이 문서 17절의 규칙과 시안 SCR-007 프레임의 마크업·CSS를 코드와 비교했다. `cargo xtask dashboard-serve`의 시험 페이지와 시안 값의 가짜 API로 화면을 시안과 대조했다. | 남은 차이는 제목 단계(h2·h3), 조회 중의 핸들 행 생략, 클래스 이름(시안 `xfer`·`kv`는 `kpi-xfer`·`kv-list`)이다. 외부 수집 안내 아이콘은 구현을, 빈 원인 표 정렬과 모바일 배지 폭은 시안을 고쳤다. 폭별 결과는 [시각 대조 기록](../how-to/verify-dashboard-frontend.md#41-시각-대조-기록)을 따른다. |
 
 전체 화면 시안 대조·개수 배지·도움말 링크의 최신 기록도 같은 시각 대조 표에서 관리한다. 키보드·다른 엔진의 수동 결과는 [별도 기록](../how-to/verify-dashboard-frontend.md#42-키보드다른-엔진-확인-기록)을 따른다.
 

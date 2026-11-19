@@ -275,6 +275,16 @@ pub const ASSETS: &[Asset] = &[
         content_type: JS,
         body: include_bytes!("../../../web/dashboard/app/logs.js"),
     },
+    Asset {
+        path: "/app/metrics.js",
+        content_type: JS,
+        body: include_bytes!("../../../web/dashboard/app/metrics.js"),
+    },
+    Asset {
+        path: "/app/metrics-model.js",
+        content_type: JS,
+        body: include_bytes!("../../../web/dashboard/app/metrics-model.js"),
+    },
 ];
 
 /// The file served at `path`. Only an exact match is served.

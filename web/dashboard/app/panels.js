@@ -333,7 +333,7 @@ function transportCell(item) {
   return cell;
 }
 
-function closeCauseBadge(t, cause) {
+export function closeCauseBadge(t, cause) {
   const tone = cause === 'connection_error' || cause === 'internal_error'
     ? 'destructive'
     : ['dead_connection', 'close_timeout'].includes(cause) ? 'warning' : 'neutral';

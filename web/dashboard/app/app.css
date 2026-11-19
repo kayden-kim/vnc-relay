@@ -224,7 +224,8 @@
 
 .settings-main .alert-body > .alert-title:only-child,
 .config-dialog .alert-body > .alert-title:only-child,
-.logs-main .alert:not(.logs-session-error) .alert-body > .alert-title:only-child {
+.logs-main .alert:not(.logs-session-error) .alert-body > .alert-title:only-child,
+.metrics-main .alert-body > .alert-title:only-child {
   font-family: var(--type-body-family);
   font-size: var(--type-body-size);
   font-weight: var(--type-body-weight);
@@ -721,3 +722,313 @@ fieldset.check-group {
   justify-content: center;
 }
 
+/* SCR-007 metrics (DESIGN.md "메트릭 화면 확장"). Tokens only. */
+.metrics-main :is(p, dt, dd) {
+  overflow-wrap: anywhere;
+}
+
+.metrics-main .label {
+  font-family: var(--type-label-family);
+  font-size: var(--type-label-size);
+  font-weight: var(--type-label-weight);
+  line-height: var(--type-label-line);
+  letter-spacing: var(--type-label-tracking);
+}
+
+.metrics-main .muted {
+  color: var(--color-muted-foreground);
+}
+
+.metrics-main .num {
+  font-family: var(--type-body-numeric-family);
+  font-size: var(--type-body-numeric-size);
+  font-weight: var(--type-body-numeric-weight);
+  line-height: var(--type-body-numeric-line);
+  letter-spacing: var(--type-body-numeric-tracking);
+  font-feature-settings: var(--type-body-numeric-feature);
+}
+
+.metrics-main .mono {
+  font-family: var(--type-data-family);
+  font-size: var(--type-data-size);
+  font-weight: var(--type-data-weight);
+  line-height: var(--type-data-line);
+  letter-spacing: var(--type-data-tracking);
+  font-feature-settings: var(--type-data-feature);
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+
+.metrics-main .metric {
+  font-family: var(--type-metric-family);
+  font-size: var(--type-metric-size);
+  font-weight: var(--type-metric-weight);
+  line-height: var(--type-metric-line);
+  letter-spacing: var(--type-metric-tracking);
+  font-feature-settings: var(--type-metric-feature);
+  overflow-wrap: anywhere;
+}
+
+.metrics-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+}
+
+.metrics-alerts:empty {
+  display: none;
+}
+
+.metrics-main .grid {
+  gap: var(--space-lg);
+  align-items: stretch;
+}
+
+.metrics-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(max(var(--space-metric-card-min), calc((100% - 3 * var(--space-lg)) / 4)), 1fr));
+  gap: var(--space-lg);
+}
+
+.kpi-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.kpi-xfer {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-xl);
+  margin: 0;
+  text-align: left;
+}
+
+.kpi-xfer > div {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.kpi-xfer dt {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  color: var(--color-muted-foreground);
+}
+
+.kpi-xfer dd {
+  margin: 0;
+}
+
+.kpi-xfer .direction-mark {
+  flex: none;
+  margin-right: 0;
+}
+
+.chart-fig {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  margin: 0;
+}
+
+.chart {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: var(--space-sm);
+  row-gap: var(--space-xs);
+}
+
+.chart-y {
+  grid-column: 1;
+  grid-row: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: flex-end;
+  margin: calc(var(--type-label-size) * var(--type-label-line) / -2) 0;
+  white-space: nowrap;
+}
+
+.chart-plot {
+  grid-column: 2;
+  grid-row: 1;
+  display: block;
+  width: 100%;
+  height: var(--space-chart-height);
+  overflow: visible;
+}
+
+.chart-x {
+  grid-column: 2;
+  grid-row: 2;
+  display: flex;
+  justify-content: space-between;
+}
+
+.chart-grid {
+  fill: none;
+  stroke: var(--color-border);
+  stroke-width: var(--space-border-width);
+}
+
+.chart-line {
+  fill: none;
+  stroke-width: var(--space-chart-stroke);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.chart-line.s1 {
+  stroke: var(--color-chart-line-1);
+}
+
+.chart-line.s2 {
+  stroke: var(--color-chart-line-2);
+  stroke-linecap: butt;
+}
+
+.chart-line.s3 {
+  stroke: var(--color-chart-line-3);
+}
+
+/* A run of one point is a zero-length path. The round cap draws it as a dot (any dash pattern would hide it). */
+.chart-line.chart-dot {
+  stroke-linecap: round;
+  stroke-dasharray: none;
+}
+
+.chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs) var(--space-lg);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.chart-legend li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 var(--space-sm);
+}
+
+.chart-swatch {
+  flex: none;
+  width: calc(var(--space-icon-size) * 1.5);
+  height: var(--space-icon-size);
+  overflow: visible;
+}
+
+.chart-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--space-chart-height);
+  margin: 0;
+  padding: var(--space-lg);
+  border: var(--space-border-width) solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-background);
+  color: var(--color-muted-foreground);
+  text-align: center;
+}
+
+.data-table td.none {
+  color: var(--color-muted-foreground);
+}
+
+.dist {
+  display: block;
+  width: calc(var(--space-icon-size) * 8);
+  height: calc(var(--space-icon-size) * 2);
+  overflow: visible;
+}
+
+.dist-bar {
+  fill: var(--color-chart-line-1);
+}
+
+.dist-base {
+  fill: none;
+  stroke: var(--color-border);
+  stroke-width: var(--space-border-width);
+}
+
+.count-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.count-cell .num {
+  min-width: calc(var(--space-icon-size) * 2);
+  text-align: right;
+}
+
+.count-bar {
+  flex: none;
+  display: block;
+  width: calc(var(--space-icon-size) * 4);
+  height: var(--space-sm);
+}
+
+.count-track {
+  fill: var(--color-border);
+}
+
+.count-fill {
+  fill: var(--color-chart-line-1);
+}
+
+.kv-list {
+  display: grid;
+  grid-template-columns: minmax(var(--space-kv-label-col), max-content) minmax(0, 1fr);
+  align-items: baseline;
+  gap: var(--space-md) var(--space-lg);
+  margin: 0;
+}
+
+.kv-list dt {
+  color: var(--color-muted-foreground);
+}
+
+.kv-list dd {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs);
+  min-width: 0;
+  margin: 0;
+}
+
+@media (max-width: 1023.98px) {
+  .data-table td.none {
+    display: block;
+    padding: var(--space-xs) 0;
+  }
+
+  .data-table td.none::before {
+    content: none;
+  }
+
+  .kv-list {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+  }
+
+  .kv-list dd {
+    margin: var(--space-xs) 0 var(--space-md);
+  }
+}

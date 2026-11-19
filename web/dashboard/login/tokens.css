@@ -38,6 +38,9 @@
   --color-navbar-brand: #ffffff;
   --color-chart-1: #62b6c8;
   --color-chart-2: #4fb488;
+  --color-chart-line-1: #1f7f94;
+  --color-chart-line-2: #2a8a5a;
+  --color-chart-line-3: #b36a00;
   --color-gauge: #2a8b9f;
   --color-gauge-track: #e2eae7;
   --color-overlay: #0d1a1580;
@@ -150,6 +153,9 @@
   --space-icon-stroke: 1.75px;
   --space-gauge-size: 120px;
   --space-gauge-stroke: 12px;
+  --space-chart-height: 160px;
+  --space-chart-stroke: 2px;
+  --space-metric-card-min: 224px;
   --space-label-col: 128px;
   --space-kv-label-col: 160px;
   --space-alert-text-min: 192px;
