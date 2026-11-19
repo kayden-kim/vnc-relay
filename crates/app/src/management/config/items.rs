@@ -57,7 +57,7 @@ fn optional<T: ToString>(value: Option<T>) -> ConfigValue {
 
 pub fn config_items(s: &Settings, presence: &ConfigPresence) -> Vec<ConfigItem> {
     use ConfigReloadKind::{Dynamic, Restart};
-    let mut out = Vec::with_capacity(75);
+    let mut out = Vec::with_capacity(76);
     out.push(item(
         "admin.accounts_file",
         text(s.admin.accounts_file.display()),
@@ -409,6 +409,12 @@ pub fn config_items(s: &Settings, presence: &ConfigPresence) -> Vec<ConfigItem> 
         out.push(integer(key, value, min, max, false));
     }
     out.push(item("status.listen", text(s.status.listen), Restart, false));
+    out.push(item(
+        "metrics.enabled",
+        ConfigValue::Bool(s.metrics.enabled),
+        Restart,
+        false,
+    ));
     out.push(item(
         "log.output",
         match &s.log.output {

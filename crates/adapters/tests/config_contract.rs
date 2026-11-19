@@ -8,9 +8,9 @@ use vnc_relay_adapters::config_file::{load, parse};
 use vnc_relay_app::settings::{
     AdminSessionSettings, AdminSettings, Argon2Settings, ConfigWarning, DashboardSettings,
     EntryPointSettings, KeepaliveSettings, LimitSettings, LogOutput, LogSettings,
-    LoginLimitSettings, ManagementSettings, Mode1Settings, Mode2Settings, RecentClosedSettings,
-    RecentLogsSettings, RelaySettings, ReloadSettings, Settings, StatusSettings, TicketSettings,
-    TimeoutSettings, TlsFiles, WsListenerSettings, WsRoleSettings,
+    LoginLimitSettings, ManagementSettings, MetricsSettings, Mode1Settings, Mode2Settings,
+    RecentClosedSettings, RecentLogsSettings, RelaySettings, ReloadSettings, Settings,
+    StatusSettings, TicketSettings, TimeoutSettings, TlsFiles, WsListenerSettings, WsRoleSettings,
 };
 use vnc_relay_domain::allow_list::{AllowList, IpItem};
 use vnc_relay_domain::entry_point::{EntryPoint, Listener};
@@ -191,6 +191,7 @@ listen = "127.0.0.1:18081"
         status: StatusSettings {
             listen: addr("127.0.0.1:18081"),
         },
+        metrics: MetricsSettings::default(),
         log: LogSettings {
             output: LogOutput::Stdout,
         },
@@ -1488,6 +1489,35 @@ fn recent_logs_defaults_and_integer_bounds_are_enforced() {
             [problem(code, "recent_logs.max_entries")]
         );
     }
+}
+
+/// spec: operations.md:OPS-092 partial
+#[test]
+fn metrics_enabled_defaults_false_and_requires_a_boolean() {
+    assert!(!parse_ok(REQUIRED).metrics.enabled);
+    assert!(!parse_ok(&with_required("[metrics]\n")).metrics.enabled);
+    for enabled in [false, true] {
+        assert_eq!(
+            parse_ok(&with_required(&format!("[metrics]\nenabled = {enabled}\n")))
+                .metrics
+                .enabled,
+            enabled
+        );
+    }
+    for value in ["'yes'", "1"] {
+        assert_eq!(
+            problems(&with_required(&format!("[metrics]\nenabled = {value}\n"))),
+            [problem("config_type_mismatch", "metrics.enabled")]
+        );
+    }
+    assert_eq!(
+        problems(&with_required("[metrics]\nunknown = true\n")),
+        [problem("config_unknown_key", "metrics.unknown")]
+    );
+    assert_eq!(
+        problems(&format!("metrics = true\n{REQUIRED}")),
+        [problem("config_type_mismatch", "metrics")]
+    );
 }
 
 /// spec: operations.md:OPS-065 partial

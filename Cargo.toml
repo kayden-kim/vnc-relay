@@ -39,6 +39,7 @@ vnc-relay-domain = { path = "crates/domain" }
 [workspace.lints.rust]
 # Only crates/adapters/src/terminal/windows_console.rs,
 # crates/adapters/src/windows_service/security.rs, crates/tray/src/message_loop.rs,
+# crates/adapters/src/process_stats/windows.rs,
 # the pseudo-console module of tests/windows_console.rs, and the Windows
 # handle-snapshot module of tests/performance.rs allow `unsafe`
 # (docs/conventions/rust.md section 2).

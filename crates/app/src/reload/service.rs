@@ -1002,6 +1002,11 @@ pub fn restart_required_keys(running: &Settings, candidate: &Settings) -> Vec<St
         a.status.listen != b.status.listen,
         "status.listen",
     );
+    push_if(
+        &mut keys,
+        a.metrics.enabled != b.metrics.enabled,
+        "metrics.enabled",
+    );
     push_if(&mut keys, a.log.output != b.log.output, "log.output");
     push_if(
         &mut keys,
@@ -1031,9 +1036,9 @@ mod tests {
     use crate::settings::{
         AdminSessionSettings, AdminSettings, Argon2Settings, DashboardSettings, EntryPointSettings,
         KeepaliveSettings, LimitSettings, LogOutput, LogSettings, LoginLimitSettings,
-        Mode1Settings, Mode2Settings, RecentClosedSettings, RecentLogsSettings, RelaySettings,
-        ReloadSettings, StatusSettings, TicketSettings, TimeoutSettings, WsListenerSettings,
-        WsRoleSettings,
+        MetricsSettings, Mode1Settings, Mode2Settings, RecentClosedSettings, RecentLogsSettings,
+        RelaySettings, ReloadSettings, StatusSettings, TicketSettings, TimeoutSettings,
+        WsListenerSettings, WsRoleSettings,
     };
 
     /// In-memory file store. Tests change file contents through `put`.
@@ -1208,6 +1213,7 @@ mod tests {
                     max_lifetime: Duration::from_secs(28_800),
                 },
             },
+            metrics: MetricsSettings::default(),
             dashboard: DashboardSettings {
                 poll: Duration::from_secs(2),
                 query_timeout: Duration::from_secs(5),
@@ -1266,6 +1272,34 @@ mod tests {
             }]
         );
         assert!(Arc::ptr_eq(&before, &h.cell.current()));
+    }
+
+    /// spec: operations.md:OPS-092 partial
+    #[test]
+    fn metrics_enabled_change_requires_restart_without_swapping_settings() {
+        for enabled in [false, true] {
+            let mut running = settings();
+            running.metrics.enabled = enabled;
+            let mut h = harness(running.clone(), None);
+            let before = h.cell.current();
+            let mut next = running;
+            next.metrics.enabled = !enabled;
+            assert_eq!(
+                restart_required_keys(&before.settings, &next),
+                ["metrics.enabled"]
+            );
+            let outcome =
+                h.service
+                    .handle_config(Ok(candidate(next)), &|| true, SystemTime::UNIX_EPOCH);
+            assert_eq!(outcome, ReloadOutcome::RestartRequired);
+            assert_eq!(
+                h.sink.events(),
+                vec![Event::ReloadRestartRequired {
+                    config_keys: vec!["metrics.enabled".to_owned()],
+                }]
+            );
+            assert!(Arc::ptr_eq(&before, &h.cell.current()));
+        }
     }
 
     /// spec: operations.md:OPS-025 partial

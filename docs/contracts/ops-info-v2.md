@@ -1,6 +1,6 @@
 # 운영 로그와 상태 엔드포인트 v2 계약
 
-VNC Relay가 운영자에게 내보내는 두 가지 정보의 교환 형식을 정한다. 하나는 JSON Lines 운영 로그이고, 다른 하나는 상태 리스너의 `/livez`·`/readyz` 응답이다. 로그 수집 도구와 상태 확인 도구가 이 문서의 표를 형식의 기준으로 쓴다. 외부 동작은 [운영 스펙](../specs/operations.md#35-운영-정보)이 소유하며, 이 문서는 그 동작을 바꾸지 않는다.
+VNC Relay가 운영자에게 내보내는 두 가지 정보의 교환 형식을 정한다. 하나는 JSON Lines 운영 로그이고, 다른 하나는 상태 리스너의 `/livez`·`/readyz` 응답이다. 로그 수집 도구와 상태 확인 도구가 이 문서의 표를 형식의 기준으로 쓴다. 외부 동작은 [운영 스펙](../specs/operations.md#35-운영-정보)이 소유하며, 이 문서는 그 동작을 바꾸지 않는다. 같은 상태 리스너의 `/metrics`는 [메트릭 계약](metrics-v1.md)이 정한다.
 
 현재 계약은 `ops-info` 2.1.0이다. 파일 이름의 v2는 major 버전을 뜻한다.
 
@@ -22,7 +22,7 @@ VNC Relay가 운영자에게 내보내는 두 가지 정보의 교환 형식을 
 | 호환성 범위 | 이 계약의 2.x 형식을 따르는 `vnc-relay` 구현과 소비자. 지원 판정은 Producer 시험을 따른다. 저장소에 없는 외부 소비 도구의 시험은 대상이 아니다. |
 | 관련 테스트 | [운영 스펙 7절](../specs/operations.md#7-수용-테스트)의 OPS-011·OPS-012·OPS-013·OPS-032를 중심으로 5절 표에 연결한다. 계약 테스트는 `crates/adapters/tests/ops_info_contract.rs`와 `tests/serve.rs`에 있다. 접속 ticket의 WS-038~045·RLY-029~032·OPS-070~073·MGT-052는 5절의 계약 시험에 연결한다. |
 
-관련 문서: [설정 계약](config-v4.md)(`[log]`·`[status]` 키, 경고 코드, 오류 코드, 재로드 결과 코드), [관리 API 계약](management-api-v1.md)(`session_id`·`close_cause`·바이트 필드 이름), [CLI·계정 파일 계약](cli-v1.md)(시작 실패 오류 코드), [WebSocket 중계 계약](websocket-relay-v2.md)(close 코드와 종료 원인 대응), [Repeater 초기 교환 계약](repeater-handshake-v1.md)(초기 교환 오류 코드), [ADR-0002 출발지 IP 허용 목록](../decisions/ADR-0002-source-ip-allowlist.md), [ADR-0003 단일 인스턴스·메모리 상태](../decisions/ADR-0003-single-instance-memory-state.md), [ADR-0009 접속 ticket](../decisions/ADR-0009-optional-relay-access-ticket.md).
+관련 문서: [설정 계약](config-v4.md)(`[log]`·`[status]` 키, 경고 코드, 오류 코드, 재로드 결과 코드), [관리 API 계약](management-api-v1.md)(`session_id`·`close_cause`·바이트 필드 이름), [CLI·계정 파일 계약](cli-v1.md)(시작 실패 오류 코드), [WebSocket 중계 계약](websocket-relay-v2.md)(close 코드와 종료 원인 대응), [Repeater 초기 교환 계약](repeater-handshake-v1.md)(초기 교환 오류 코드), [메트릭 계약](metrics-v1.md)(상태 리스너의 `/metrics`와 이 계약의 사건에서 세는 값), [ADR-0002 출발지 IP 허용 목록](../decisions/ADR-0002-source-ip-allowlist.md), [ADR-0003 단일 인스턴스·메모리 상태](../decisions/ADR-0003-single-instance-memory-state.md), [ADR-0009 접속 ticket](../decisions/ADR-0009-optional-relay-access-ticket.md).
 
 ## 1. 형식과 의미
 
@@ -374,8 +374,9 @@ ticket 업그레이드 거절은 `connection_rejected`의 `warn`과 공통 필�
 | 인증 | 없다. `Authorization`·`Cookie` 헤더가 있어도 무시한다. 대시보드의 로그인 예외 규칙과 무관하다. |
 | 메서드 | `GET`만 받는다. 다른 메서드는 405다. |
 | 쿼리 문자열·본문 | 무시한다. |
-| 본문 형식 | `Content-Type: application/json`, UTF-8. `Cache-Control: no-store`를 보낸다. |
-| 본문에 넣는 필드 | 아래 표의 필드만. 세션 목록, 중계 ID, 상대 주소, 인증 비밀, 연결 수, 세션 수, 가동 시간, 버전은 넣지 않는다. |
+| 본문 형식 | `/livez`·`/readyz`는 `Content-Type: application/json`, UTF-8. `Cache-Control: no-store`를 보낸다. |
+| 본문에 넣는 필드 | `/livez`·`/readyz`는 아래 표의 필드만. 세션 목록, 중계 ID, 상대 주소, 인증 비밀, 연결 수, 세션 수, 가동 시간, 버전은 넣지 않는다. |
+| 메트릭 경로 | `[metrics] enabled = true`이면 `GET /metrics`도 응답한다. 형식과 노출 범위는 [메트릭 계약](metrics-v1.md)이 정한다. 인증·메서드·쿼리 문자열 규칙은 이 표와 같다. 꺼져 있으면 정의하지 않은 경로처럼 404다. |
 
 | 경로 | 조건 | 상태 코드 | 본문 |
 | --- | --- | --- | --- |
@@ -411,8 +412,8 @@ ticket 업그레이드 거절은 `connection_rejected`의 `warn`과 공통 필�
 | `starting` | 준비 전. `/readyz`가 503과 `{"status":"not_ready","reason":"starting"}`를 응답한다. 설정 검증 뒤 시작 중 상태에서 쓴다. 필수 리스너가 모두 준비되면 200이 된다. | OPS-013, OPS-002 |
 | `shutting_down` | 종료 유예 중 또는 종료 정리 중. `/readyz`가 503과 `{"status":"not_ready","reason":"shutting_down"}`를 응답한다. 신규 중계 접속을 받지 않는다. | OPS-013, OPS-007, OPS-043 |
 | `listener_failed` | 필수 리스너의 복구 불가능 수락 오류. 살아 있는 상태 HTTP는 503 `{"status":"not_ready","reason":"listener_failed"}`를 답한다. 감독자가 즉시 `shutdown_started(trigger=fatal_error, level=error)`를 시작한다. 장애 종료의 유예·정리 동안 이 원인을 유지한다. | OPS-046 |
-| `not_found` | 정의하지 않은 경로. 404와 `{"error":{"code":"not_found","message":"<사람용 문장>"}}`. 관리 API의 오류 본문과 같은 모양이다. | OPS-032 |
-| `method_not_allowed` | `GET`이 아닌 메서드. 405와 `Allow: GET` 헤더, `{"error":{"code":"method_not_allowed","message":"<사람용 문장>"}}`. | OPS-032 |
+| `not_found` | 정의하지 않은 경로. `[metrics] enabled = false`일 때의 `/metrics`도 포함한다. 404와 `{"error":{"code":"not_found","message":"<사람용 문장>"}}`. 관리 API의 오류 본문과 같은 모양이다. | OPS-032, OPS-082 |
+| `method_not_allowed` | `GET`이 아닌 메서드. 켜진 `/metrics`도 같다. 405와 `Allow: GET` 헤더, `{"error":{"code":"method_not_allowed","message":"<사람용 문장>"}}`. | OPS-032, OPS-084 |
 
 Lm 상한에서 거절한 연결은 HTTP 응답을 받지 못하고 연결이 닫힌다. 이 경우는 오류 코드가 없다([운영 스펙 5절](../specs/operations.md#5-오류와-복구) Lm 행).
 
@@ -427,6 +428,8 @@ Lm 상한에서 거절한 연결은 HTTP 응답을 받지 못하고 연결이 �
 2.0.0은 `listener`의 의미와 허용 값을 바꾸고 WS·WSS의 수락 시점 필수 `role`을 없앤 major 변경이다. 전달 주소 필드, Mode II의 필수 `server_transport`와 새 거절 원인을 이 major에 함께 반영한다.
 
 2.1.0의 접속 ticket 사건·선택 필드·원인 값·설정 경고는 호환 변경이다. 1.3.0의 호환 추가는 버전을 유지하지만 호환성 규칙이 버전 유지를 요구하지는 않는다. 접속 ticket 범위는 minor 버전 2.1.0이며 `server_starting.log_contract`는 `ops-info/2.1.0`이다. 소비자는 2.x의 알 수 없는 필드·사건·값 처리 규칙을 따른다.
+
+상태 리스너의 `/metrics`는 [메트릭 계약](metrics-v1.md)이 소유하며 기본으로 꺼져 있다. 이 경로를 더해도 로그 형식과 `/livez`·`/readyz`의 경로·상태 코드·본문은 바뀌지 않는다. 그래서 이 계약은 2.1.0을 유지하고 `log_contract`도 바꾸지 않는다. 메트릭의 속성 값은 이 계약의 원인 값을 그대로 쓰므로, 원인 값의 이름을 바꾸는 major 변경은 메트릭 계약의 major 변경과 함께 한다.
 
 ### 로그 소비자 마이그레이션
 

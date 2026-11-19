@@ -1,6 +1,6 @@
 # VNC Relay — PRD
 
-- 문서 상태: 초안 0.15
+- 문서 상태: 초안 0.16
 - 프로젝트명 / 디렉터리: `vnc-relay`
 - 제품 정의: Rust로 독립 구현하는 VNC Relay. UltraVNC Repeater와 호환된다. TCP 중계, WS·WSS ↔ TCP 프록시와 웹 대시보드를 제공한다.
 
@@ -10,7 +10,7 @@
 
 | 구분 | 내용 |
 | --- | --- |
-| 사용자 확정 | Rust 독립 구현(tokio·rustls), TCP·WS·WSS와 Mode I·II, Windows 11 x64·Ubuntu 24.04 LTS x64, 실행파일 하나의 CLI, TOML 설정, 내장 TLS, 서버 내장 관리 로그인·조회·종료·동적 설정 편집, 진입점별 출발지 IP 허용 목록, 공유 WS·WSS 리스너의 경로별 Viewer·Server 역할, 역할별 선택형 접속 ticket 확인, 중계 WS·WSS 리스너 앞의 프록시 TLS 종료와 신뢰 프록시 전달 주소, Origin 정확 일치, 최근 종료 목록과 최근 로그 화면, 정적 HTML·JS 대시보드와 한국어·영어 지원, 43개 키의 부분 재로드와 37개 키의 편집, 단일 인스턴스, 연결 상한·끊긴 연결 감지·정상 종료, 독립 구현과 MIT, 실제 UltraVNC 호환 검증, noVNC는 외부 검증 도구로만 사용, 한국어·영어 운영 도움말 사이트와 GitHub Pages 게시, Windows 11의 서비스 실행과 별도 실행파일의 트레이 앱. 세부 범위와 근거는 아래 확정 기준 표를 따른다 |
+| 사용자 확정 | Rust 독립 구현(tokio·rustls), TCP·WS·WSS와 Mode I·II, Windows 11 x64·Ubuntu 24.04 LTS x64, 실행파일 하나의 CLI, TOML 설정, 내장 TLS, 서버 내장 관리 로그인·조회·종료·동적 설정 편집, 진입점별 출발지 IP 허용 목록, 공유 WS·WSS 리스너의 경로별 Viewer·Server 역할, 역할별 선택형 접속 ticket 확인, 중계 WS·WSS 리스너 앞의 프록시 TLS 종료와 신뢰 프록시 전달 주소, Origin 정확 일치, 최근 종료 목록과 최근 로그 화면, 정적 HTML·JS 대시보드와 한국어·영어 지원, 43개 키의 부분 재로드와 37개 키의 편집, 단일 인스턴스, 연결 상한·끊긴 연결 감지·정상 종료, 독립 구현과 MIT, 실제 UltraVNC 호환 검증, noVNC는 외부 검증 도구로만 사용, 한국어·영어 운영 도움말 사이트와 GitHub Pages 게시, Windows 11의 서비스 실행과 별도 실행파일의 트레이 앱, OpenTelemetry 호환 메트릭(상태 리스너의 `/metrics`, 기본 꺼짐)과 대시보드 메트릭 화면. 세부 범위와 근거는 아래 확정 기준 표를 따른다 |
 | 구현 원칙 | 기존 UltraVNC·websockify 소스의 복사·번역·포팅 없이 통신 규칙을 독립 구현 |
 | 미확정 | 파일 감지의 플랫폼별 세부와 주소 재사용 같은 OS 동작의 관찰 확인. 검증 범위와 남은 항목은 [12절](#12-미확정-결정과-주요-위험)을 따른다 |
 
@@ -25,7 +25,7 @@ TCP·WS·WSS와 아래 기준은 확정한 요구사항이다. WS는 TLS 없는 
 | 중계 모드 | Mode I·II 모두 구현·검증 |
 | 서버 플랫폼 | Windows 11 x64·Ubuntu 24.04 LTS x64, 양쪽에서 실행·종료·호환성 검증. Windows Server는 제외 |
 | 실행 형태 | 서버 실행파일 하나에 하위 명령을 둠. 서버 실행과 관리자 계정 준비는 같은 실행파일의 서로 다른 하위 명령. Windows에서는 같은 실행파일의 `service` 하위 명령으로 Windows 서비스를 설치·해제하고 서비스로 실행한다. Windows 트레이 앱은 별도 GUI 실행파일 `vnc-relay-tray.exe`다. 하위 명령 이름·옵션·종료 코드는 [CLI 계약](../contracts/cli-v1.md)이 정함(Active). 인증서·개인키 파일 오류는 설정 오류와 같은 종료 코드를 쓰고 리스너 바인드 실패와 구분. 시작 키(RelayIdKey·SessionIdKey)는 OS 난수원으로 생성하며 실패 시 `runtime_unavailable`(종료 코드 1)로 멈춤 |
-| 설정 형식 | 설정 파일은 TOML. 키 이름·구조는 [설정 계약 v4](../contracts/config-v4.md)의 `vnc-relay-config` 4.1.0을 따름. WS·WSS 리스너와 역할 표를 분리한 4.0.0은 호환성 파괴 변경이며 v3 파일은 [3.3절](../contracts/config-v4.md#33-v3-파일을-v4로-옮기기)에 따라 옮겨야 함. 4.1.0은 접속 ticket 표를 더하는 호환 변경이다 |
+| 설정 형식 | 설정 파일은 TOML. 키 이름·구조는 [설정 계약 v4](../contracts/config-v4.md)의 `vnc-relay-config` 4.2.0을 따름. WS·WSS 리스너와 역할 표를 분리한 4.0.0은 호환성 파괴 변경이며 v3 파일은 [3.3절](../contracts/config-v4.md#33-v3-파일을-v4로-옮기기)에 따라 옮겨야 함. 4.1.0은 접속 ticket 표를, 4.2.0은 `[metrics]` 표를 더하는 호환 변경이다 |
 | 수치 기본값 | 한도·시간·세션·해시 매개변수의 기본값과 유효 범위, 진입점·모드의 기본 비활성, TCP 진입점의 기본 포트는 [설정 계약](../contracts/config-v4.md)을 따름 |
 | TLS 종료 | WSS·관리 HTTPS의 내장 TLS는 유지. 중계 WS·WSS 리스너 앞에서는 역방향 프록시 TLS 종료도 지원. 관리 리스너는 이 지원에서 제외하며 내장 HTTPS 또는 루프백 평문 HTTP 규칙을 유지. 내장 TLS는 1.2 미만 협상을 거절. 암호 스위트는 aws-lc-rs의 rustls 기본 목록이며 변경 키가 없음. [ADR-0007](../decisions/ADR-0007-proxy-tls-termination.md) 참조 |
 | 관리 접근 | 외부 HTTPS 접근 허용, 서버 내장 관리자 로그인 필수. 관리 리스너는 HTTPS가 원칙이며, 평문 HTTP는 루프백 주소에 바인딩한 경우에만 허용. 루프백이 아닌 주소에 평문 HTTP를 설정하면 시작 실패. 루프백에서도 관리자 로그인은 생략하지 않음 |
@@ -33,7 +33,7 @@ TCP·WS·WSS와 아래 기준은 확정한 요구사항이다. WS는 TLS 없는 
 | 관리 세션 수명 | 유휴 만료 시간과 절대 최대 수명을 가짐. 대시보드 자동 폴링은 유휴 만료를 연장하지 않음. 절대 최대 수명이 지나면 활동과 관계없이 무효화. 수치와 요청 구분 방식은 설정 계약과 관리 API 계약에서 정함 |
 | 관리 세션 보관 | 서버 메모리에 보관하고 불투명 식별자 쿠키를 사용. 프로세스를 재시작하면 이전 관리 세션은 모두 무효이며 다시 로그인해야 함 |
 | 관리 세션 쿠키 | HttpOnly, SameSite=Strict. HTTPS에서는 Secure를 붙임. 평문 HTTP 루프백 관리 리스너에서는 Secure만 빼고 HttpOnly·SameSite=Strict를 유지. CSRF 방어는 별도로 유지 |
-| 관리 기능 | 서버·대기 연결·활성 세션 조회, 최근 종료 목록·최근 로그 조회, 확인 절차를 거친 활성 세션 종료, 설정 보기·동적 설정 편집 |
+| 관리 기능 | 서버·대기 연결·활성 세션 조회, 최근 종료 목록·최근 로그 조회, 메트릭과 최근 1시간 추이 조회, 확인 절차를 거친 활성 세션 종료, 설정 보기·동적 설정 편집 |
 | 관리 API | JSON over HTTP, 경로 접두사 `/api/v1/`. 개별 경로·메서드·오류 본문·로그인 교환은 [관리 API 계약](../contracts/management-api-v1.md)이 정함(Active). 인증 실패 401 응답에는 `WWW-Authenticate: Session realm="vnc-relay"`를 붙임. 브라우저가 기본 인증 창을 띄우는지는 구현에서 확인 |
 | 대시보드 구현 | 별도 빌드 단계 없는 정적 HTML·JS로 만들고 실행파일에 넣어 관리 리스너가 제공. Node 빌드 체인·JS 프레임워크 의존성을 추가하지 않음. 시각 기준(색·간격·토큰·배치)은 [디자인 기준](../design/DESIGN.md)과 그 HTML 시안을 따름 |
 | 화면·브라우저 | 데스크톱 폭과 모바일 폭, 최신 Chrome·Edge·Firefox·Safari를 지원. 두 폭 모두에서 필수 정보와 상세 이동·종료·취소·로그아웃 행동을 쓸 수 있어야 함. 모바일 폭의 구체 배치(중단점·표 표시 방식)는 디자인 기준이 정함 |
@@ -43,7 +43,8 @@ TCP·WS·WSS와 아래 기준은 확정한 요구사항이다. WS는 TLS 없는 
 | 전송량·시각 표현 | 방향별 전송량은 상대 전송 계층에 쓰기 성공한 바이트로 센다. 관리 API는 시각을 UTC ISO 8601로, 전송량을 바이트 정수로 제공. 대시보드는 브라우저 현지 시각(시간대 표시)과 KiB·MiB(이진 단위)로 표시 |
 | 관리자 종료 응답·종료 중 집계 | 관리자 종료 요청은 정리가 끝난 뒤 완료 응답한다. 별도 "처리 중" 응답 상태는 두지 않음. 응답 시간은 최대 정리 제한 시간 E까지 길어질 수 있음. 종료 중인 세션은 정리가 끝날 때까지 활성 수에 포함 |
 | 관리 권한 | 단일 관리자 역할. 로그인한 모든 관리자 계정이 같은 권한(조회·활성 세션 종료·동적 설정 변경)을 가짐. 활성 세션 종료와 동적 설정 변경에는 유효한 관리 세션이 필요함. 관리자 종료·설정 편집 사건 로그에 수행한 계정명을 기록하고, 편집 사건에는 바뀐 키도 기록하되 값은 기록하지 않음 |
-| 상태 확인 | 생존·준비 상태는 관리 리스너와 분리한 상태 리스너에서 제공. 기본 바인딩은 루프백이며, 인증 없이 생존·준비 결과만 응답. 세션 목록·중계 ID·상대 주소·인증 비밀은 포함하지 않음 |
+| 상태 확인 | 생존·준비 상태는 관리 리스너와 분리한 상태 리스너에서 제공. 기본 바인딩은 루프백이며, 인증 없이 생존·준비 결과만 응답. 세션 목록·중계 ID·상대 주소·인증 비밀은 포함하지 않음. 같은 리스너의 `/metrics`는 아래 메트릭 행을 따름 |
+| 메트릭 | OpenTelemetry 의미 규칙의 이름·단위·속성을 쓰는 메트릭을 상태 리스너의 `GET /metrics`에서 Prometheus 텍스트 형식 0.0.4로 제공(pull). `[metrics] enabled`로 켜며 기본은 꺼짐, 재시작 필요, 편집 대상 아님. 인증은 없고 속성에 중계 ID·세션 식별자·주소·계정명·ticket 값·비밀을 넣지 않음. 범위는 연결 수락·거절·중단과 진행 중 연결, L·Lm 사용량, 초기 교환·대기·세션·Mode I 대상 연결 시간 분포, 활성 세션·대기 수와 방향별 전송량, 접속 ticket·WebSocket ping 시간 초과, 관리 로그인·관리자 종료·설정 재로드·편집 결과, 프로세스 CPU·메모리·스레드·핸들 수. 관리 API `GET /api/v1/metrics`와 SCR-007 메트릭 화면은 설정과 관계없이 로그인한 관리자에게 같은 값과 10초 간격 360개의 최근 1시간 추이를 제공. 값은 메모리에만 두며 재시작하면 0부터 다시 셈. OTLP 내보내기(push)와 장기 보관은 하지 않음. 형식은 [메트릭 계약](../contracts/metrics-v1.md), 이유는 [ADR-0011](../decisions/ADR-0011-pull-metrics-on-status-listener.md)을 따름 |
 | WS·WSS 중계 접근 | WS·WSS 공유 리스너에서 `/relay/viewer`는 Viewer, `/relay/server`는 Server 역할. 출발지 IP 허용 목록은 리스너와 역할의 조합인 진입점마다 분리. 접속 수락 때는 켠 역할 목록의 합집합 또는 신뢰 프록시 여부를 검사하고, 업그레이드 때는 해당 역할 목록으로 클라이언트 주소를 검사. 관리자 로그인과 분리. 접속 ticket은 기본으로 쓰지 않고, 설정으로 켠 WS·WSS 역할에서만 확인. 평문 WS는 기본 비활성이며 명시적으로 켠 경우에만 열림 |
 | 접속 ticket | 기본 꺼짐이며 역할마다 켠다. 같은 역할의 WS·WSS에 함께 적용한다. 켠 역할은 ticket이 필수이며 실패는 101 전 HTTP 401로 거절한다. ticket 연결은 `rid`와 같은 중계 ID로만 등록·매칭하고 Viewer Mode I는 거절한다. `sx`가 있으면 그 시각에 끝낸다. 재시작 뒤 `iat ≤ 기동 시각 + 5초`인 ticket을 거절한다. 역할마다 최대 수명과 서로 다른 서명 키를 둔다. TCP에는 적용하지 않으며 같은 역할의 열린 TCP 진입점과 평문 WS 사용은 경고한다. 평문 WS 구간은 믿을 수 있는 망 안에 있어야 한다. 켜고 끄는 키는 재로드·편집 대상이며 기존 연결은 유지한다. 형식은 [WebSocket 계약 1.9절](../contracts/websocket-relay-v2.md#19-접속-ticket), 이유는 [ADR-0009](../decisions/ADR-0009-optional-relay-access-ticket.md)를 따른다. 제품은 ticket을 발급하지 않는다. 시험용 키와 ticket은 개발 전용 `cargo xtask ticket`이 만들며 실행파일과 배포 묶음에는 넣지 않는다. |
 | Origin | Origin 헤더가 있으면 해당 역할의 허용 값과 `scheme://host[:port]` 정확 일치일 때만 업그레이드. 와일드카드는 없음. 스킴·호스트·포트 중 하나라도 다르면 거절. 없으면 Origin 검사만 생략하며 IP 검사와 켠 역할의 ticket 확인은 유지. 정규화 세부는 [설정 계약](../contracts/config-v4.md) 1.4절과 [WebSocket 계약](../contracts/websocket-relay-v2.md)이 정함 |
@@ -62,11 +63,11 @@ TCP·WS·WSS와 아래 기준은 확정한 요구사항이다. WS는 TLS 없는 
 | noVNC 사용 범위 | 제품 구현·번들링·배포물·제품 의존성에 넣지 않음. 외부 상호운용 검증 도구로만 사용하며, 검증에 쓰는 noVNC 버전도 기록해 고정 |
 | 초기 규모 | 단일 서버의 동시 활성 세션 100개, 세션 한 개는 연결 한 쌍 |
 | 라이선스 | 독립 구현 코드는 MIT, 의존성의 라이선스·고지 의무는 별도 준수 |
-| 구현 기술 | 비동기 런타임 tokio, TLS rustls. TLS 어댑터는 tokio-rustls, 인증서·개인키 PEM 읽기는 rustls-pki-types, HTTP는 axum(hyper 기반), WebSocket은 tokio-tungstenite, 설정은 toml·serde, JSON은 serde_json, 비밀번호 해시는 argon2, 숨김 비밀번호 입력은 rpassword, 파일 감지는 notify, CLI는 clap을 쓴다. 설정 파일의 주석·공백·키 순서를 보존하는 편집에는 toml_edit 0.25(MIT OR Apache-2.0)를 쓴다([ADR-0006](../decisions/ADR-0006-config-edit-through-file.md)). WebSocket 데이터 프레임 처리는 자체 스트리밍 상태 머신을 쓴다. tungstenite 0.30.0에서는 공개 `FrameHeader::parse`/`format`과 `derive_accept_key`만 재사용한다. 페이로드 청킹·인플레이스 언마스킹·프레임 분할·제어 프레임·Close 상태 머신은 RFC 6455만으로 자체 구현하며 새 crate 의존성은 두지 않는다([ADR-0005](../decisions/ADR-0005-in-house-ws-streaming-frame-codec.md)). 운영 로그는 별도 로그 라이브러리 없이 serde_json으로 JSON Lines를 직접 쓴다(tracing·tracing-subscriber 제외). HMAC·운영체제 난수는 rustls 암호 모듈인 aws-lc-rs를 직접 쓴다. TCP keepalive의 유휴 시간·탐색 간격·탐색 횟수는 socket2로 설정한다. 의존성 라이선스는 허용 목록(MIT·Apache-2.0·ISC·BSD-3-Clause·Unlicense·CC0-1.0·BSL-1.0·Unicode-3.0·MIT-0) 안에 있어야 한다. 검사 방법은 [의존성 라이선스 검사](../how-to/check-dependency-licenses.md)를 따른다. 이 행에 없는 라이브러리를 더하려면 이 행을 갱신하고 검사를 통과해야 한다. Windows 콘솔 입력 모드 저장·복원, 서비스 접근 권한 설정과 트레이 메시지 루프의 Win32 호출은 windows-sys를 직접 쓴다([Rust 코드 컨벤션](../conventions/rust.md)의 `unsafe` 예외). Windows 서비스 실행은 windows-service 0.8.1, 트레이 앱의 알림 영역 아이콘·메뉴는 tray-icon 0.26.1, 로그인할 때 시작 레지스트리 값은 windows-registry 0.100.0을 쓴다([ADR-0010](../decisions/ADR-0010-windows-service-and-tray.md)). 세 라이브러리는 Windows 대상에서만 쓰며 라이선스는 모두 MIT OR Apache-2.0이다. tray-icon은 `default-features = false`로 쓴다. 따라서 Linux 전용 하위 의존성 option-ext(MPL-2.0)·target-lexicon(Apache-2.0 WITH LLVM-exception)은 `Cargo.lock`에 없다. 배포 고지는 [의존성 라이선스 검사 3.1절](../how-to/check-dependency-licenses.md#31-배포-고지-생성과-대조)의 `cargo xtask notices`로 생성·대조한다. 제안: 라이선스 검사는 두 대상 의존성 그래프의 합집합으로 실행하며 허용 목록은 유지한다. 합집합 검사는 대상별 검사보다 검사 범위가 좁지 않다 |
+| 구현 기술 | 비동기 런타임 tokio, TLS rustls. TLS 어댑터는 tokio-rustls, 인증서·개인키 PEM 읽기는 rustls-pki-types, HTTP는 axum(hyper 기반), WebSocket은 tokio-tungstenite, 설정은 toml·serde, JSON은 serde_json, 비밀번호 해시는 argon2, 숨김 비밀번호 입력은 rpassword, 파일 감지는 notify, CLI는 clap을 쓴다. 설정 파일의 주석·공백·키 순서를 보존하는 편집에는 toml_edit 0.25(MIT OR Apache-2.0)를 쓴다([ADR-0006](../decisions/ADR-0006-config-edit-through-file.md)). WebSocket 데이터 프레임 처리는 자체 스트리밍 상태 머신을 쓴다. tungstenite 0.30.0에서는 공개 `FrameHeader::parse`/`format`과 `derive_accept_key`만 재사용한다. 페이로드 청킹·인플레이스 언마스킹·프레임 분할·제어 프레임·Close 상태 머신은 RFC 6455만으로 자체 구현하며 새 crate 의존성은 두지 않는다([ADR-0005](../decisions/ADR-0005-in-house-ws-streaming-frame-codec.md)). 운영 로그는 별도 로그 라이브러리 없이 serde_json으로 JSON Lines를 직접 쓴다(tracing·tracing-subscriber 제외). 메트릭도 OpenTelemetry SDK·prometheus 계열 라이브러리 없이 직접 집계하고 Prometheus 텍스트를 직접 쓴다. 프로세스 값은 Ubuntu에서 `/proc/self`를 읽고, Windows에서 windows-sys의 Win32 호출로 읽는다([ADR-0011](../decisions/ADR-0011-pull-metrics-on-status-listener.md)). HMAC·운영체제 난수는 rustls 암호 모듈인 aws-lc-rs를 직접 쓴다. TCP keepalive의 유휴 시간·탐색 간격·탐색 횟수는 socket2로 설정한다. 의존성 라이선스는 허용 목록(MIT·Apache-2.0·ISC·BSD-3-Clause·Unlicense·CC0-1.0·BSL-1.0·Unicode-3.0·MIT-0) 안에 있어야 한다. 검사 방법은 [의존성 라이선스 검사](../how-to/check-dependency-licenses.md)를 따른다. 이 행에 없는 라이브러리를 더하려면 이 행을 갱신하고 검사를 통과해야 한다. Windows 콘솔 입력 모드 저장·복원, 서비스 접근 권한 설정, 트레이 메시지 루프와 프로세스 메트릭의 Win32 호출은 windows-sys를 직접 쓴다([Rust 코드 컨벤션](../conventions/rust.md)의 `unsafe` 예외). Windows 서비스 실행은 windows-service 0.8.1, 트레이 앱의 알림 영역 아이콘·메뉴는 tray-icon 0.26.1, 로그인할 때 시작 레지스트리 값은 windows-registry 0.100.0을 쓴다([ADR-0010](../decisions/ADR-0010-windows-service-and-tray.md)). 세 라이브러리는 Windows 대상에서만 쓰며 라이선스는 모두 MIT OR Apache-2.0이다. tray-icon은 `default-features = false`로 쓴다. 따라서 Linux 전용 하위 의존성 option-ext(MPL-2.0)·target-lexicon(Apache-2.0 WITH LLVM-exception)은 `Cargo.lock`에 없다. 배포 고지는 [의존성 라이선스 검사 3.1절](../how-to/check-dependency-licenses.md#31-배포-고지-생성과-대조)의 `cargo xtask notices`로 생성·대조한다. 제안: 라이선스 검사는 두 대상 의존성 그래프의 합집합으로 실행하며 허용 목록은 유지한다. 합집합 검사는 대상별 검사보다 검사 범위가 좁지 않다 |
 | 관리자 계정 준비 | 로컬 CLI에서 숨김 비밀번호 입력, Argon2id 검증용 해시만 저장(매개변수는 설정 계약에서 정함). 여러 계정을 준비할 수 있음. 준비된 계정이 하나도 없으면 시작 실패. 공개 웹 가입·기본 비밀번호 제외 |
 | 배포 산출물 | Windows 11 x64·Ubuntu 24.04 LTS x64용 실행파일, 비밀 없는 설정 예시, 수동 운영 안내. 설정 예시는 모든 설정 키를 활성 값이나 주석 줄로 보여 준다. Windows 11 묶음에는 트레이 실행파일 `vnc-relay-tray.exe`를 함께 넣고, Windows 서비스는 `vnc-relay service install`로 등록한다. Ubuntu의 OS 서비스 등록과 컨테이너 제외. 묶음은 각 OS에서 `cargo xtask package`로 만든다. Windows는 zip, Ubuntu는 tar.gz이며 실행파일·설정 예시·`README.md`·`LICENSE`·`THIRD-PARTY-NOTICES.txt`·`docs/`·`GLOSSARY.md`와 SHA-256 파일을 낸다. GitHub Actions가 push·PR마다 두 OS에서 빠른 검사와 묶음 빌드를 하고, 전체 시험은 로컬 게이트가 맡는다. `v<버전>` 태그를 올리면 GitHub Release에 두 OS 묶음을 붙인다. 절차는 [릴리스 how-to](../how-to/release.md) |
 | 버전 규칙 | `연.월.순서`(예: `2026.4.0`). 연은 네 자리, 월은 1~12, 순서는 그 달의 몇 번째 릴리스인지를 0부터 센다. 연월이 바뀌면 순서를 0으로 되돌린다. Cargo가 앞자리 0을 받지 않으므로 Cargo·묶음 이름·`--version`은 앞자리 0 없는 같은 버전 문자열을 쓴다. 태그는 그 앞에 `v`만 붙인다(예: `v2026.4.0`). 첫 버전은 `2026.11.0`이다 |
-| 재로드 범위 | 43개 키를 재시작 없이 교체: `relay.tcp_viewer.allow`·`relay.tcp_server.allow` 2개, `relay.ws.trusted_proxies`·`relay.wss.trusted_proxies` 2개, `relay.{ws,wss}.{viewer,server}.allow`·`allowed_origins` 8개, `relay.wss.cert_file`·`key_file`와 `management.cert_file`·`key_file` 4개, `mode1.allow_targets` 1개, `[limits]` 5개, `[timeouts]` 6개, `[keepalive]` 5개, `[relay.ticket.viewer]`·`[relay.ticket.server]` 각 5개. 리스너·리스너 하위 역할의 `enabled`·`listen`과 나머지 키는 재시작 필요. ticket 표의 `enabled`는 재로드 대상이다. 관리 로그인 제한·관리 세션 수명·`dashboard.*`·`recent_closed.max_entries`·`recent_logs.max_entries`도 재시작 필요. 키별 적용 시점은 [설정 계약 1.8절](../contracts/config-v4.md#18-재로드-구분)이 정함 |
+| 재로드 범위 | 43개 키를 재시작 없이 교체: `relay.tcp_viewer.allow`·`relay.tcp_server.allow` 2개, `relay.ws.trusted_proxies`·`relay.wss.trusted_proxies` 2개, `relay.{ws,wss}.{viewer,server}.allow`·`allowed_origins` 8개, `relay.wss.cert_file`·`key_file`와 `management.cert_file`·`key_file` 4개, `mode1.allow_targets` 1개, `[limits]` 5개, `[timeouts]` 6개, `[keepalive]` 5개, `[relay.ticket.viewer]`·`[relay.ticket.server]` 각 5개. 리스너·리스너 하위 역할의 `enabled`·`listen`과 나머지 키는 재시작 필요. ticket 표의 `enabled`는 재로드 대상이다. 관리 로그인 제한·관리 세션 수명·`dashboard.*`·`recent_closed.max_entries`·`recent_logs.max_entries`·`metrics.enabled`도 재시작 필요. 키별 적용 시점은 [설정 계약 1.8절](../contracts/config-v4.md#18-재로드-구분)이 정함 |
 | 재로드 거절 기준 | 재로드 후보는 실행 중 유효 설정과 비교. 재로드 대상이 아닌 값이 실행 중 값과 다르면 후보 전체를 "재시작 필요"로 거절. 그 차이가 파일에 남아 있는 동안에는 이후 재로드 대상 변경도 모두 거절(급한 인증서 교체와 관리 API 편집 포함). 운영자는 그 값을 되돌리거나 재시작해야 함 |
 | IP 변경 효과 | 이미 통과한 판정과 초기 교환·대기·활성 연결은 유지. 새 수락 시 합집합 검사와 새 업그레이드 시 역할 목록·신뢰 프록시 검사부터 적용 |
 | 재로드 실행 | 설정 파일과 참조한 인증서·개인키 파일, 켠 ticket 표의 공개 키 파일 변경·교체 저장 자동 감지, 실패 시 이전 유효 설정 유지. OS 파일 알림으로 감지하고 주기 확인으로 보조하며, 알림을 놓친 변경도 주기 확인으로 감지. 안정화 시간·주기 확인 간격의 수치는 설정 계약을 따르고, 플랫폼별 세부는 운영 스펙에서 정함. 관리 API 편집도 `serve`가 읽는 같은 설정 파일에 바뀐 키만 기록하고 같은 재로드 검증·전체 적용 규칙으로 반영. 주석·공백·키 순서·다른 값은 유지하고 재시작 뒤에도 남김. 수동 재로드 API·CLI는 추가하지 않음 |
@@ -103,9 +104,9 @@ UltraVNC Server와 Viewer 사이의 TCP 연결을 중계하면서, WS 또는 WSS
 - Repeater Mode I: Viewer가 요청한 대상으로 TCP 연결을 생성하고 중계.
 - Repeater Mode II: Server와 Viewer의 연결을 ID 기준으로 매칭하고 중계.
 - WS·WSS ↔ TCP/중계 스트림 변환.
-- 연결·세션 상태와 설정 보기·동적 설정 편집을 제공하는 관리 API.
-- 웹 대시보드: 서버 상태, 대기 연결, 활성 세션, 세션 상세, 최근 종료 목록, 최근 로그, 활성 세션 종료, 설정 보기, 동적 설정 편집.
-- 운영 설정, 부분 재로드와 설정 파일 편집, 상태 확인 엔드포인트, 구조화된 운영 로그.
+- 연결·세션 상태와 설정 보기·동적 설정 편집, 메트릭을 제공하는 관리 API.
+- 웹 대시보드: 서버 상태, 대기 연결, 활성 세션, 세션 상세, 최근 종료 목록, 최근 로그, 메트릭과 최근 1시간 추이, 활성 세션 종료, 설정 보기, 동적 설정 편집.
+- 운영 설정, 부분 재로드와 설정 파일 편집, 상태 확인 엔드포인트, OpenTelemetry 호환 메트릭 엔드포인트(기본 꺼짐), 구조화된 운영 로그.
 - 운영 도움말 사이트: 한국어·영어의 설치·설정·운영·문제 해결 안내, GitHub Pages 게시, 대시보드의 도움말 링크.
 - Windows 11의 서비스 실행: 같은 실행파일의 서비스 설치·해제 하위 명령과 서비스 제어 관리자를 통한 시작·중지. 서비스 상태 표시·시작·중지·대시보드 열기를 제공하는 Windows 트레이 앱.
 - 실제 UltraVNC 실행 파일을 이용한 호환성 검증.
@@ -122,6 +123,7 @@ UltraVNC Server와 Viewer 사이의 TCP 연결을 중계하면서, WS 또는 WSS
 - 다중 노드 매칭, 클러스터링, 무중단 세션 이동.
 - 접속 ticket 발급. 제품은 외부 발급 쪽이 서명한 ticket을 확인만 한다([확정 기준](#확정-기준)의 접속 ticket 행).
 - Ubuntu의 OS 서비스 등록과 컨테이너 배포. Windows 서비스의 복구 동작(실패 뒤 자동 재시작)과 한 PC의 여러 서비스 등록.
+- OTLP 메트릭 내보내기(push), 메트릭 장기 보관·집계, 분산 추적(trace). 장기 보관과 집계는 운영자의 메트릭 수집 도구가 맡는다.
 
 단순 바이트 중계가 가능한 확장은 그대로 통과할 수 있으나, 이를 검증된 기능 지원으로 표기하지 않는다. VNC Relay가 인증·암호화를 종단 처리해야 하는 변형은 별도 범위 결정이 필요하다.
 
@@ -207,7 +209,7 @@ UltraVNC Server와 Viewer 사이의 TCP 연결을 중계하면서, WS 또는 WSS
 - 중계 ID는 인증 비밀이 아니지만 운영 정보로 취급하고, 로그 노출 범위를 제한한다.
 - 활성 세션 종료에는 유효한 관리 세션과 UI 확인 절차를 적용한다. 종료 대상은 고유 세션 식별자로 지정한다.
 - 관리자 종료 요청은 정리가 끝난 뒤 완료 응답한다. 별도 "처리 중" 응답 상태는 두지 않는다. 응답 시간은 최대 정리 제한 시간 E까지 길어질 수 있다. 응답을 받지 못했을 때 결과를 다시 조회하는 규칙은 관리 스펙을 따른다. 종료 중인 세션은 정리가 끝날 때까지 활성 세션 수에 포함한다.
-- 대시보드·관리 API는 서버 내장 관리자 로그인으로 보호한다. 대시보드 중 로그인 화면만 인증 없이 접근할 수 있다. 상태 엔드포인트는 관리 리스너가 아니므로 이 규칙 대상이 아니다. 로그인·관리 세션 만료·로그아웃 동작은 관리 스펙에서 정한다.
+- 대시보드·관리 API는 서버 내장 관리자 로그인으로 보호한다. 대시보드 중 로그인 화면만 인증 없이 접근할 수 있다. 상태·메트릭 엔드포인트는 관리 리스너가 아니므로 이 규칙 대상이 아니다. 로그인·관리 세션 만료·로그아웃 동작은 관리 스펙에서 정한다.
 - 관리 API는 JSON over HTTP이며 경로 접두사는 `/api/v1/`다. 개별 경로·메서드·오류 본문·로그인 교환은 관리 스펙에서 정한다.
 - 관리자 로그인 실패는 계정별·출발지 IP별로 센다. 실패 기준을 넘으면 제한 시간 동안 로그인을 지연하거나 거절한다. 이 응답은 계정 존재 여부를 드러내지 않는다. 제한 중에는 올바른 비밀번호도 거절한다.
 - 관리 세션은 유휴 만료 시간과 절대 최대 수명을 가진다. 사용자 행동 요청만 유휴 만료를 연장한다. 대시보드의 자동 폴링 요청은 연장하지 않는다. 절대 최대 수명이 지나면 활동과 관계없이 무효화한다. 자동 요청과 사용자 요청을 구분하는 방식은 관리 API 계약에서 정한다.
@@ -216,6 +218,7 @@ UltraVNC Server와 Viewer 사이의 TCP 연결을 중계하면서, WS 또는 WSS
 - 종료 실패, 조회 실패, 연결 없음 상태를 빈 목록과 구분하여 표시한다.
 - 대시보드 폴링 주기 P는 설정할 수 있으며 기본값은 2초다. 화면은 서버 설정의 P를 따르고 마지막 갱신 시각을 표시한다. P는 재시작이 필요한 설정이다. 유효 범위와 조회 제한 시간은 설정 계약에서 정한다.
 - SCR-006 로그(`/#/logs`)에서 최근 로그를 확인한다. 수준·사건 이름 필터, 값 검색, 일시 정지 가능한 P 주기 자동 갱신, 세션 상세에서 해당 세션으로 거른 로그 열기, 현재 필터 결과 전체의 JSON Lines 내려받기를 제공한다. 최근 종료 목록의 각 항목에서도 해당 세션으로 거른 로그를 연다.
+- SCR-007 메트릭(`/#/metrics`)에서 핵심 지표, 최근 1시간 추이 차트, 시간 분포, 원인별 수, 프로세스 자원을 P 주기로 갱신해 보여 준다. 관리 API `GET /api/v1/metrics`가 같은 값과 추이를 준다. 둘 다 `[metrics] enabled`와 관계없이 로그인한 관리자가 쓴다. 기록이 쌓이기 전, 조회 실패, 읽지 못한 값을 0이나 빈 목록과 구분해 표시한다. 화면 동작은 [화면 스펙](../specs/dashboard.md#scr-007-메트릭)이 정한다.
 - 브라우저에서 원격 화면을 열거나 조작하는 기능은 제공하지 않는다.
 - 대시보드는 별도 빌드 단계 없는 정적 HTML·JS로 만들고 실행파일에 넣어 관리 리스너가 제공한다. Node 빌드 체인과 JS 프레임워크 의존성을 추가하지 않는다. 시각 기준(색·간격·토큰·배치)은 [디자인 기준](../design/DESIGN.md)을 따른다.
 - 대시보드는 데스크톱 폭과 모바일 폭, 최신 Chrome·Edge·Firefox·Safari를 지원한다. 두 폭 모두에서 필수 정보와 상세 이동·종료·취소·로그아웃 행동을 쓸 수 있어야 한다. 모바일 폭의 구체 배치(중단점·표 표시 방식)는 디자인 기준이 정한다.
@@ -233,9 +236,10 @@ UltraVNC Server와 Viewer 사이의 TCP 연결을 중계하면서, WS 또는 WSS
 - 잘못된 설정은 시작 시 명확한 오류로 거절하며, 보안 설정 누락을 조용히 완화하지 않는다.
 - 다음 설정은 시작 실패로 거절한다: 준비된 관리자 계정이 없음, 켠 진입점의 출발지 IP 허용 목록 누락, 루프백이 아닌 주소에 대한 평문 HTTP 관리 리스너 설정. 이미 사용 중인 리스너 주소로 두 번째 프로세스를 시작하는 경우도 시작 실패로 보고한다.
 - 출발지 IP 허용 목록 항목은 단일 IP, CIDR, 범위(`a-b`)만 받는다(IPv4·IPv6 모두). 잘못된 표기, 시작이 끝보다 큰 범위, 주소 체계가 섞인 범위는 설정 오류다. 시작이면 시작 실패로, 재로드면 후보 전체 거절로 처리한다.
-- 설정 파일은 TOML이며 `vnc-relay-config` 4.1.0을 따른다. 서버 실행과 관리자 계정 준비는 같은 실행파일의 서로 다른 하위 명령이다. 확정 기준 표의 43개 키를 파일 변경 자동 감지로 재로드한다. 켠 ticket 표의 공개 키 파일도 감시한다. OS 파일 알림을 놓친 변경도 주기 확인으로 감지한다. 이미 통과한 판정·기존 연결·시작한 타이머·설정한 소켓 옵션은 유지한다. 새 값의 적용 경계는 [설정 계약 1.8절](../contracts/config-v4.md#18-재로드-구분)을 따른다.
+- 설정 파일은 TOML이며 `vnc-relay-config` 4.2.0을 따른다. 서버 실행과 관리자 계정 준비는 같은 실행파일의 서로 다른 하위 명령이다. 확정 기준 표의 43개 키를 파일 변경 자동 감지로 재로드한다. 켠 ticket 표의 공개 키 파일도 감시한다. OS 파일 알림을 놓친 변경도 주기 확인으로 감지한다. 이미 통과한 판정·기존 연결·시작한 타이머·설정한 소켓 옵션은 유지한다. 새 값의 적용 경계는 [설정 계약 1.8절](../contracts/config-v4.md#18-재로드-구분)을 따른다.
 - 재로드 후보는 실행 중 유효 설정과 비교한다. 재로드 대상이 아닌 값이 실행 중 값과 다르면 후보 전체를 "재시작 필요"로 거절한다. 그 차이가 파일에 남아 있는 동안에는 이후 재로드 대상 변경도 모두 거절한다(급한 인증서 교체와 관리 API 편집 포함). 운영자는 그 값을 되돌리거나 재시작해야 한다.
-- 재로드 후보 검증 실패나 재시작이 필요한 변경은 후보 전체를 미적용하고 이전 유효 설정·연결을 유지한다. 리스너·리스너 하위 역할의 `enabled`와 리스너의 `listen`, 계정·관리 로그인 제한·관리 세션 수명·`dashboard.*`·`recent_closed.max_entries`·`recent_logs.max_entries` 등 재로드 대상이 아닌 변경은 정상 종료·재시작으로 적용한다. 접속 ticket 표의 `enabled`는 재로드 대상이다.
+- 재로드 후보 검증 실패나 재시작이 필요한 변경은 후보 전체를 미적용하고 이전 유효 설정·연결을 유지한다. 리스너·리스너 하위 역할의 `enabled`와 리스너의 `listen`, 계정·관리 로그인 제한·관리 세션 수명·`dashboard.*`·`recent_closed.max_entries`·`recent_logs.max_entries`·`metrics.enabled` 등 재로드 대상이 아닌 변경은 정상 종료·재시작으로 적용한다. 접속 ticket 표의 `enabled`는 재로드 대상이다.
+- `[metrics] enabled`로 상태 리스너의 `/metrics`를 켠다. 기본은 꺼짐이며 재시작이 필요하고 편집 대상이 아니다. 관리 API·대시보드의 메트릭은 이 값과 관계없이 동작한다.
 - 설정 조회·편집 관리 API를 제공한다. 편집은 같은 설정 파일의 바뀐 키만 기록하고 나머지 내용의 주석·공백·키 순서·다른 값을 보존한다. 같은 재로드 검증·전체 적용 규칙으로 반영하고 재시작 뒤에도 유지한다. API 형식·충돌과 파일 쓰기 실패는 [관리 API 계약](../contracts/management-api-v1.md)이 정한다.
 - 재로드의 자동 감지·원자적 적용·실패 결과·키별 적용 경계는 [운영 스펙](../specs/operations.md)이 정한다. 수동 재로드 API·수동 재로드 CLI는 추가하지 않는다.
 - 종료 요청 시 신규 접속을 중지하고, 대기 연결을 해제하며, 활성 세션에 유예 시간을 준 뒤 정리한다.
@@ -253,6 +257,9 @@ UltraVNC Server와 Viewer 사이의 TCP 연결을 중계하면서, WS 또는 WSS
 - 세션 식별자, 역할, 모드, 시각, 종료 원인으로 장애를 추적할 수 있어야 한다.
 - 화면 데이터, 입력 내용, VNC 인증 데이터, 전체 원시 페이로드를 로그에 기록하지 않는다.
 - 프로세스 생존과 리스너 준비 여부를 확인하는 상태 엔드포인트를 관리 리스너와 분리한 상태 리스너에서 제공한다. 기본 바인딩은 루프백이며, 인증 없이 생존·준비 결과만 응답한다. 세션 목록·중계 ID·상대 주소·인증 비밀은 노출하지 않는다.
+- `[metrics] enabled = true`이면 같은 상태 리스너가 `GET /metrics`에 [메트릭 계약](../contracts/metrics-v1.md)의 Prometheus 텍스트로 응답한다. 인증은 없다. 운영자의 Prometheus나 OpenTelemetry Collector가 이 주소를 주기적으로 읽는다.
+- 운영 로그 사건에서 세는 메트릭은 같은 프로세스가 기록한 사건 수와 같아야 한다. 시간 분포는 히스토그램으로 내며, 방향별 전송량은 활성 세션의 쓰기 성공 바이트를 실시간으로 더한다. 프로세스 값은 두 OS에서 읽고, 읽지 못한 값은 0으로 쓰지 않고 뺀다.
+- 메트릭 속성은 계약이 정한 고정 값만 쓴다. 중계 ID·세션 식별자·상대 주소·전달 주소·계정명·ticket 값·비밀은 넣지 않는다.
 - 활성 세션 상태와 카운터는 메모리에 유지한다. 장기 저장용 데이터베이스는 초기 필수 요소로 두지 않는다.
 - 최근 운영 로그 사건을 `recent_logs.max_entries`개까지 기록 순서대로 메모리에 보관한다. 가득 차면 가장 오래된 사건부터 제거한다. `log.output`과 출력 쓰기 성공 여부에 영향받지 않는다. 0이면 보관하지 않으며 재시작하면 비어 있다.
 - 소켓 상대 IP인 `peer_ip`는 유지한다. 신뢰 프록시의 전달 주소를 구한 WS·WSS 연결 사건에는 `forwarded_ip`를 제공한다. 리스너와 역할의 구분은 `ops-info` 2.0.0의 의미를 따르며, 접속 ticket 사건·필드·값은 2.1.0을 따른다.
@@ -299,6 +306,7 @@ Windows 서비스·트레이의 수용 기준은 AC-57~59다. 실제 계정·서
 - 대기 수, WebSocket 메시지 크기, 초기 교환·대기·대상 연결 시간을 별도로 제한한다. 초기 요청은 250바이트 고정이다.
 - Mode I의 허용 대상은 명시적으로 설정한다. 내부망 접근이 목적일 수 있으므로 사설 IP 전체를 무조건 금지하는 정책으로 대체하지 않는다.
 - VNC Relay는 운영 로그를 표준 출력 또는 파일로 출력하고 최근 N개를 메모리에 보관한다. 파일 교체·장기 보관 기간·접근 권한은 운영자 책임이다. 최근 로그는 장기 이력 저장소가 아니다.
+- 상태 리스너의 `/metrics`는 인증이 없다. 기본으로 꺼져 있으며, 켜면 연결·세션 수, 처리량, L·Lm 상한, 프로세스 자원, 버전을 읽을 수 있다. 속성에는 고정 값만 쓰며 식별자·주소·계정명·비밀은 넣지 않는다. 상태 리스너를 루프백 밖에 두면 그 주소의 접근 보호는 운영자 책임이다.
 - 편집 기능을 켜면 VNC Relay를 실행하는 서비스 계정에 설정 파일 쓰기 권한이 필요하다. 같은 디렉터리에서 임시 파일 생성과 설정 파일 교체도 허용해야 한다. 이 권한은 설정을 보는 권한과 구분하며, OS별 권한 안내는 [수동 운영 안내](../how-to/operate-relay.md)에 둔다.
 - Windows 서비스는 가상 계정 `NT SERVICE\vnc-relay`로 실행한다. 이 계정이 설정·계정·인증서·개인키·접속 ticket 공개 키 파일을 읽고 로그 파일에 쓸 수 있게 운영자가 파일 권한을 정한다. 서비스 시작·중지 권한은 관리자와 설치 때 지정한 서비스 운영자에게만 준다. 제안: 트레이 앱은 관리 API에 로그인하지 않고, 계정 파일·개인키·접속 ticket 공개 키 파일을 읽지 않는다.
 
@@ -310,7 +318,7 @@ Windows 서비스·트레이의 수용 기준은 AC-57~59다. 실제 계정·서
 | 안정성 | 개별 연결 오류가 프로세스나 다른 세션을 종료시키지 않음 |
 | 리소스 | 연결 수와 버퍼 크기에 상한을 두고 종료 후 소켓·대기 등록을 회수 |
 | 성능 | 단일 서버에서 동시 활성 100세션을 검증 목표로 한다. 측정 환경은 개발 PC 한 대의 Windows 11 x64와 같은 PC의 WSL2 Ubuntu 24.04 LTS x64이며 루프백으로 접속한다. 전송 조합(TCP·WS·WSS)마다 활성 100세션이 세션마다 양방향으로 각 1 Mbit/s를 10분 동안 보낸다. 합격 수치는 데이터 유실·혼입 0건, 중계로 늘어난 지연의 p99 10 ms 이하, 서버 프로세스 CPU 평균 1코어 이하, RSS 256 MiB 이하, 측정 구간 시작 뒤 RSS 증가 10% 이하다. 판정 세부는 [운영 스펙 6절](../specs/operations.md#6-비기능호환성출처-수용-조건)이 정한다. |
-| 운영성 | 명확한 시작 실패, 상태 조회, 세션별 종료 원인, 정상 종료 지원 |
+| 운영성 | 명확한 시작 실패, 상태 조회, 메트릭 수집, 세션별 종료 원인, 정상 종료 지원 |
 | 유지보수성 | 프로토콜 처리·매칭·중계·관리 인터페이스의 책임을 구분하되 불필요한 분산 구조는 도입하지 않음 |
 | 이식성 | Windows 11 x64·Ubuntu 24.04 LTS x64를 검증 대상으로 하고, Windows Server는 제외한다. 각 조합의 빌드·실행·종료·호환성 증거 전에는 지원 완료라고 표기하지 않는다. |
 | 배포 | Windows 11 x64·Ubuntu 24.04 LTS x64용 실행파일과 비밀 없는 설정 예시·수동 운영 안내를 제공한다. 로컬 CLI 관리자 계정 준비를 포함한다. Windows 11에는 서비스 설치·해제 하위 명령과 트레이 실행파일을 제공한다. Ubuntu의 OS 서비스 등록과 컨테이너 배포는 제외한다. |
@@ -403,6 +411,9 @@ Viewer·Server 초기 메시지, Mode I 대상 문법, Mode II ID, 수신 데이
 | AC-57 | Windows 서비스 설치·해제 | 관리자 권한 터미널에서 설정 검사를 통과한 설정으로 설치하면 서비스 `vnc-relay` 하나를 가상 계정·자동(지연 시작)·복구 동작 없음으로 등록하고, 지정한 서비스 운영자에게 시작·중지 권한을 준다. 관리자 권한 없음·같은 이름 있음·설정 오류·`log.output = "stdout"`·없는 서비스 운영자는 등록하지 않는다. 해제는 중지된 서비스만 지우고 파일은 남긴다. `service run`을 터미널에서 실행하거나 Ubuntu에서 `service`를 쓰면 사용법 오류다. | [운영: OPS-074~075·OPS-080~081](../specs/operations.md#7-수용-테스트) |
 | AC-58 | Windows 서비스 실행과 종료 | 준비됨 뒤에만 실행 중으로 보고하고 중계·관리 기능이 동작한다. 중지 요청은 G를 적용한 정상 종료다. 시작 실패는 실행 중으로 보고하지 않고 CLI 종료 코드를 서비스 종료 코드로 남긴다. 시스템 종료·재시작은 G 없이 즉시 강제 정리하고 종료 기록을 남긴다. 서비스 운영자와 관리자만 시작·중지할 수 있다. | [운영: OPS-076~079](../specs/operations.md#7-수용-테스트) |
 | AC-59 | Windows 트레이 앱 | 콘솔 창 없이 알림 영역에 사용자 세션마다 하나만 뜬다. 서비스 상태를 표시하고 시작·중지·대시보드 열기·로그와 설정 파일 위치 열기·로그인할 때 시작·트레이 끝내기가 동작한다. 서비스가 없으면 서비스 없음을 표시하고 관련 항목을 끈다. 메뉴 언어는 Windows 표시 언어를 따른다. 트레이를 끝내도 서비스는 그대로다. | [트레이: TRAY-001~013](../specs/windows-tray.md#7-수용-테스트) |
+| AC-60 | 메트릭 엔드포인트 | `[metrics] enabled = false`(기본)이면 `/metrics`는 404다. 켜면 상태 리스너가 인증 없이 Prometheus 텍스트 0.0.4로 응답한다. 사건에서 세는 값이 같은 프로세스의 운영 로그 사건 수와 같다. 초기 교환·대기·세션·Mode I 대상 연결 히스토그램, 방향별 전송량, WebSocket ping 시간 초과, 프로세스 값을 두 OS에서 낸다. 읽지 못한 프로세스 값은 0으로 쓰지 않는다. 응답에 중계 ID·세션 식별자·주소·계정명·ticket 값이 없다. 값을 바꾸면 재시작이 필요하다. | [운영: OPS-082~094](../specs/operations.md#7-수용-테스트) |
+| AC-61 | 메트릭 관리 API | 로그인한 관리자만 `GET /api/v1/metrics`로 같은 값과 최근 1시간 추이를 받는다. `history_after`로 새 점만 받고, 잘못된 값은 400이다. `[metrics] enabled`와 관계없이 응답하며, 읽지 못한 프로세스 값은 0이 아니라 확인 불가로 구분한다. | [관리: MGT-056~060](../specs/management.md#7-수용-테스트) |
+| AC-62 | 메트릭 화면 | SCR-007이 핵심 지표, 최근 1시간 추이 차트, 시간 분포, 원인별 표, 프로세스 자원을 P 주기로 갱신해 데스크톱·모바일 폭과 한국어·영어로 보여 준다. 상단 막대에서 들어가며, 기록이 쌓이기 전·조회 실패·확인 불가 값을 0이나 빈 목록과 구분한다. | [화면: DASH-068~079](../specs/dashboard.md#7-수용-테스트) |
 
 외부 WebSocket 뷰어의 화면 렌더링 자체는 수용 범위가 아니다. 대신 WebSocket 프록시의 바이트 전달 계약을 실제 대상과 검증한다. noVNC 검증(AC-17)의 수용 판정은 WS·WSS Mode II의 매칭 성립과 noVNC의 RFB 연결 완료 관찰이다. noVNC 화면 렌더링은 VNC Relay의 수용 기준이 아니다. TCP 기반 UltraVNC 호환성은 실제 화면·입력까지 별도로 확인한다.
 
@@ -421,6 +432,7 @@ Viewer·Server 초기 메시지, Mode I 대상 문법, Mode II ID, 수신 데이
 | 7. 접속 ticket | 역할별 선택 확인, 중계 ID 대조·세션 만료, 설정 검증·재로드·관리 API, 시나리오와 계약 테스트 | AC-49~52와 AC-13 충족 |
 | 8. 운영 도움말 | 도움말 원본(ko·en), 테마·검색·언어 전환, 빌드·검사 명령, Pages 워크플로, 대시보드 도움말 링크 | AC-53~55 충족 |
 | 9. Windows 서비스·트레이 | `service` 하위 명령과 서비스 실행 경로, 트레이 실행파일, 코드 지도·모듈 설계, 배포 묶음과 운영 안내·도움말 | AC-57~59 충족 |
+| 10. 메트릭 | 메트릭 계약, 사건 기반 집계·직접 기록·프로세스 값, `/metrics`, 관리 API, SCR-007 시안·구현, 코드 지도·모듈 설계, 운영 안내·도움말 | AC-60~62 충족 |
 
 단계별 산출물은 전체 제품의 완료를 의미하지 않는다. 전체 범위의 수용 기준 충족을 제품 완료 조건으로 한다.
 
@@ -440,6 +452,7 @@ Viewer·Server 초기 메시지, Mode I 대상 문법, Mode II ID, 수신 데이
 | 라이선스 고지 충돌 | 공식 웹페이지와 현행 소스의 고지가 다르다. 원본 코드는 재사용하지 않으며 필요하면 해당 배포본과 권리자에게 확인한다 |
 | 도움말과 제품의 차이 | 도움말은 `main`의 동작을 설명한다. 빌드 때 링크를 검사하고, Release마다 [릴리스 how-to](../how-to/release.md)에 따라 설치 예시의 버전을 맞춘다 |
 | Windows 서비스·트레이 | 미결정은 트레이 문구([TRAY-TBD-001](../specs/windows-tray.md#8-미결정-사항)), 시스템 종료 때의 시간 한도([OPS-TBD-014](../specs/operations.md#8-미결정-사항)), `service run` 이름·새 오류 코드·서비스 표시 이름의 채택([CLI 계약 6절](../contracts/cli-v1.md#6-초안을-확정하기-전에-해결할-사항))이다. 담당은 프로젝트 요구사항·운영 결정 담당자다. 아이콘은 대시보드 브랜드 표식과 같은 그림 하나를 모든 상태에 쓴다. Windows 표시 언어는 레지스트리로 읽는다. OPS-TBD-013의 서비스 중지 중 두 번째 중지 요청은 SCM이 1061로 거절하므로 서비스에는 전달되지 않는다. 파일 ACL 제한은 운영자 책임이다. 수동 시험 범위·결과는 [Windows 서비스 시험](../how-to/set-up-and-verify.md#windows-서비스-시험), 구현 판단은 [ADR-0010 6절](../decisions/ADR-0010-windows-service-and-tray.md#6-결과), 라이선스 검토 근거는 [ADR-0010 7절](../decisions/ADR-0010-windows-service-and-tray.md#7-검증)을 따른다 |
+| 메트릭 노출 | `/metrics`는 인증이 없어 상태 리스너에 닿는 누구나 연결 수·처리량·버전을 읽을 수 있다. 기본 꺼짐·루프백 권장·고정 속성 값으로 줄인다. 루프백 밖에 둘 때의 접근 보호는 운영자 책임이다. 메트릭 이름·버킷 경계·추이 계열은 [메트릭 계약](../contracts/metrics-v1.md)이 정하며, 바꾸면 계약 버전 규칙을 따른다 |
 
 ## 13. 참고 자료
 
@@ -456,7 +469,7 @@ Viewer·Server 초기 메시지, Mode I 대상 문법, Mode II ID, 수신 데이
 
 중계·WS·WSS·관리·대시보드·운영 스펙과 도움말 사이트 스펙은 Active다. Windows 트레이 앱 스펙은 Draft이며 문구는 미결정이다. 문서의 채택과 구현·테스트 완료는 구분한다.
 
-Mode I·II 및 TCP·WS·WSS의 지원 조합은 모두 검증 대상이다. 각 스펙의 규칙 ID는 기존 FR ID를 세부 동작으로 나누어 추적하며 상위 요구사항 ID를 대체하지 않는다. 접속 ticket은 AC-49~52, 운영 도움말은 AC-53~55, 목록 정보는 AC-56, Windows 서비스·트레이는 AC-57~59와 아래 시나리오로 추적한다.
+Mode I·II 및 TCP·WS·WSS의 지원 조합은 모두 검증 대상이다. 각 스펙의 규칙 ID는 기존 FR ID를 세부 동작으로 나누어 추적하며 상위 요구사항 ID를 대체하지 않는다. 접속 ticket은 AC-49~52, 운영 도움말은 AC-53~55, 목록 정보는 AC-56, Windows 서비스·트레이는 AC-57~59, 메트릭은 AC-60~62와 아래 시나리오로 추적한다.
 
 자동 테스트의 현재 결과는 `cargo xtask scenarios`의 `scenario-report.md`와 CI에서 확인한다([테스트 컨벤션](../conventions/testing.md)). 도움말 게시 확인은 [도움말 게시 how-to 4절](../how-to/publish-help.md#4-검증), Windows 서비스·트레이 수동 확인은 [Windows 서비스 시험](../how-to/set-up-and-verify.md#windows-서비스-시험)을 따른다.
 
@@ -467,11 +480,11 @@ Mode I·II 및 TCP·WS·WSS의 지원 조합은 모두 검증 대상이다. 각 
 | FR-03 Mode II | [중계](../specs/relay.md#7-수용-테스트) | RLY-010~016·RLY-029~032 |
 | FR-04 양방향 중계 | [중계](../specs/relay.md#7-수용-테스트), [WS·WSS](../specs/websocket.md#7-수용-테스트) | RLY-017~021·RLY-025~027, WS-011·WS-016~017·WS-026 |
 | FR-05 WS·WSS | [전송](../specs/websocket.md#7-수용-테스트), [중계](../specs/relay.md#7-수용-테스트) | WS-001~046, RLY-028~032 |
-| FR-06 관리 API·화면 | [관리](../specs/management.md#7-수용-테스트), [대시보드](../specs/dashboard.md#7-수용-테스트), [운영](../specs/operations.md#7-수용-테스트) | MGT-001~055, DASH-001~063·DASH-065~067, OPS-029~030·OPS-043·OPS-060~062·OPS-068 |
-| FR-07 설정·프로세스 수명 | [운영](../specs/operations.md#7-수용-테스트), [전송](../specs/websocket.md#7-수용-테스트), [관리](../specs/management.md#7-수용-테스트) | OPS-001~010·OPS-023~031·OPS-033·OPS-035·OPS-037~044·OPS-047~073, WS-022·WS-046, MGT-028~045·MGT-053 |
-| FR-08 로그·상태 정보 | [운영](../specs/operations.md#7-수용-테스트), [관리](../specs/management.md#7-수용-테스트), [전송](../specs/websocket.md#7-수용-테스트), [중계](../specs/relay.md#7-수용-테스트) | OPS-011~013·OPS-028·OPS-032·OPS-045·OPS-058~061·OPS-068~073, MGT-013·MGT-030~031·MGT-033~036·MGT-038·MGT-046~052, WS-038~045, RLY-029~032 |
-| 7절 보안·신뢰 경계 | [운영](../specs/operations.md#7-수용-테스트), [전송](../specs/websocket.md#7-수용-테스트), [관리](../specs/management.md#7-수용-테스트), [중계](../specs/relay.md#7-수용-테스트) | OPS-014·OPS-016·OPS-025~026·OPS-029~030·OPS-033~034·OPS-036~038·OPS-040·OPS-061~062·OPS-067·OPS-070~073, WS-013~015·WS-021~024·WS-027·WS-030~046, MGT-008·MGT-014~015·MGT-017~022·MGT-025·MGT-027·MGT-029~030·MGT-032~038·MGT-052~053, RLY-007~008·RLY-023~024·RLY-029~032 |
-| 8절 비기능 | [운영](../specs/operations.md#7-수용-테스트), [중계](../specs/relay.md#7-수용-테스트) | OPS-017~019·OPS-022~023·OPS-031, RLY-025~027 |
+| FR-06 관리 API·화면 | [관리](../specs/management.md#7-수용-테스트), [대시보드](../specs/dashboard.md#7-수용-테스트), [운영](../specs/operations.md#7-수용-테스트) | MGT-001~060, DASH-001~063·DASH-065~074, OPS-029~030·OPS-043·OPS-060~062·OPS-068 |
+| FR-07 설정·프로세스 수명 | [운영](../specs/operations.md#7-수용-테스트), [전송](../specs/websocket.md#7-수용-테스트), [관리](../specs/management.md#7-수용-테스트) | OPS-001~010·OPS-023~031·OPS-033·OPS-035·OPS-037~044·OPS-047~073·OPS-092, WS-022·WS-046, MGT-028~045·MGT-053 |
+| FR-08 로그·상태 정보 | [운영](../specs/operations.md#7-수용-테스트), [관리](../specs/management.md#7-수용-테스트), [전송](../specs/websocket.md#7-수용-테스트), [중계](../specs/relay.md#7-수용-테스트) | OPS-011~013·OPS-028·OPS-032·OPS-045·OPS-058~061·OPS-068~073·OPS-082~094, MGT-013·MGT-030~031·MGT-033~036·MGT-038·MGT-046~052·MGT-056~060, WS-038~045, RLY-029~032 |
+| 7절 보안·신뢰 경계 | [운영](../specs/operations.md#7-수용-테스트), [전송](../specs/websocket.md#7-수용-테스트), [관리](../specs/management.md#7-수용-테스트), [중계](../specs/relay.md#7-수용-테스트) | OPS-014·OPS-016·OPS-025~026·OPS-029~030·OPS-033~034·OPS-036~038·OPS-040·OPS-061~062·OPS-067·OPS-070~073·OPS-091, WS-013~015·WS-021~024·WS-027·WS-030~046, MGT-008·MGT-014~015·MGT-017~022·MGT-025·MGT-027·MGT-029~030·MGT-032~038·MGT-052~053·MGT-056, RLY-007~008·RLY-023~024·RLY-029~032 |
+| 8절 비기능 | [운영](../specs/operations.md#7-수용-테스트), [중계](../specs/relay.md#7-수용-테스트) | OPS-017~019·OPS-022~023·OPS-031·OPS-090, RLY-025~027 |
 | 9절 호환성 조사·독립 구현 | [운영](../specs/operations.md#7-수용-테스트) | OPS-020~021 |
 | AC-49 접속 ticket 업그레이드 | [전송](../specs/websocket.md#7-수용-테스트) | WS-037~046 |
 | AC-50 ticket 중계 ID·세션 만료 | [중계](../specs/relay.md#7-수용-테스트) | RLY-029~032 |
@@ -479,6 +492,7 @@ Mode I·II 및 TCP·WS·WSS의 지원 조합은 모두 검증 대상이다. 각 
 | AC-52 ticket 관리 API | [관리](../specs/management.md#7-수용-테스트) | MGT-052~053 |
 | FR-09 운영 도움말 | [도움말 사이트](../specs/help-site.md#7-수용-테스트), [대시보드](../specs/dashboard.md#7-수용-테스트) | HELP-001~012·014~018, DASH-064 |
 | FR-10 Windows 서비스·트레이 | [운영](../specs/operations.md#7-수용-테스트), [트레이](../specs/windows-tray.md#7-수용-테스트) | OPS-074~081, TRAY-001~013 |
+| AC-60~62 메트릭 | [운영](../specs/operations.md#7-수용-테스트), [관리](../specs/management.md#7-수용-테스트), [대시보드](../specs/dashboard.md#7-수용-테스트) | OPS-082~094, MGT-056~060, DASH-068~079 |
 
 미결정 사항은 각 스펙의 8절에서 담당 주체·제약·확정 위치를 관리한다. 테스트 결과와 실행 증거는 [검증 기록](../AGENTS.md#검증-기록)에 따른 커버리지·결과 보고서에서 관리하며, 이 PRD와 스펙의 수용 테스트 표에는 복제하지 않는다.
 

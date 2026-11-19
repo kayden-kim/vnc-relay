@@ -11,12 +11,15 @@ mod tests;
 
 use std::io;
 use std::pin::Pin;
+use std::sync::Arc;
 use std::task::{Context, Poll};
 
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 use vnc_relay_app::events::ConnectionErrorKind;
+use vnc_relay_app::metrics::Metrics;
 use vnc_relay_app::ports::{RelayCloseAction, RelayStream, RelayStreamError};
 use vnc_relay_app::settings::KeepaliveSettings;
+use vnc_relay_domain::entry_point::Listener;
 use vnc_relay_domain::session::Transport;
 
 use self::frame::{
@@ -45,6 +48,8 @@ pub struct WsRelayStream<S> {
     raw_terminal_disposal: bool,
     transport_eof: bool,
     keepalive: Keepalive,
+    /// Where a missed Pong deadline is counted, and the listener label.
+    ping_timeouts: Option<(Arc<Metrics>, Listener)>,
 }
 
 impl<S> WsRelayStream<S> {
@@ -86,12 +91,30 @@ impl<S> WsRelayStream<S> {
             raw_terminal_disposal: false,
             transport_eof: false,
             keepalive: Keepalive::new(keepalive),
+            ping_timeouts: None,
         }
+    }
+
+    /// Counts this connection in `vnc_relay.websocket.ping_timeouts` with
+    /// `listener` (`ws` or `wss`) if it misses a Pong deadline
+    /// (metrics-v1 §1.3).
+    pub fn count_ping_timeouts(mut self, metrics: Arc<Metrics>, listener: Listener) -> Self {
+        self.ping_timeouts = Some((metrics, listener));
+        self
     }
 
     /// The transport kind (Ws or Wss), independent of the connection role.
     pub fn transport(&self) -> Transport {
         self.transport
+    }
+
+    /// Advances the keepalive timers and counts a first missed Pong deadline.
+    fn poll_keepalive_timers(&mut self, cx: &mut Context<'_>) {
+        if self.keepalive.poll(cx)
+            && let Some((metrics, listener)) = &self.ping_timeouts
+        {
+            metrics.record_ping_timeout(*listener);
+        }
     }
 
     /// Returns the remaining payload length of an outbound frame whose header
@@ -255,7 +278,7 @@ impl<S> WsRelayStream<S> {
             return Poll::Pending;
         }
         if !closing {
-            self.keepalive.poll(cx);
+            self.poll_keepalive_timers(cx);
             if self.keepalive.expired {
                 return Poll::Ready(Err(RelayStreamError::DeadConnection.into_io_error()));
             }
@@ -290,7 +313,7 @@ impl<S> WsRelayStream<S> {
                 result => return result,
             }
             if !closing {
-                self.keepalive.poll(cx);
+                self.poll_keepalive_timers(cx);
             }
         }
         Poll::Pending

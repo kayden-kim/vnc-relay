@@ -88,6 +88,7 @@ pub(crate) fn settings() -> Settings {
         recent_closed: RecentClosedSettings { max_entries: 2 },
         recent_logs: RecentLogsSettings { max_entries: 1000 },
         status: StatusSettings { listen },
+        metrics: MetricsSettings::default(),
         log: LogSettings {
             output: LogOutput::Stdout,
         },

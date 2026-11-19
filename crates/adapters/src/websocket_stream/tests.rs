@@ -1732,3 +1732,107 @@ async fn classifies_underlying_ws_and_wss_socket_timeouts_without_changing_other
         }
     }
 }
+
+/// The `vnc_relay.websocket.ping_timeouts` points of `metrics` as
+/// `listener=count` lines.
+fn ping_timeouts(metrics: &std::sync::Arc<vnc_relay_app::metrics::Metrics>) -> Vec<String> {
+    use vnc_relay_app::metrics::snapshot::{Number, PointValue};
+    use vnc_relay_app::ports::{OpenCount, ProcessStats};
+
+    let unread = ProcessStats {
+        cpu: None,
+        memory_usage: None,
+        memory_virtual: None,
+        threads: None,
+        open: OpenCount::NotSupported,
+    };
+    crate::test_support::metrics_service(std::sync::Arc::clone(metrics), unread)
+        .snapshot()
+        .families
+        .iter()
+        .filter(|family| family.name == "vnc_relay.websocket.ping_timeouts")
+        .flat_map(|family| &family.points)
+        .map(|point| {
+            let listener = point
+                .attributes
+                .iter()
+                .map(|(_, value)| value.to_string())
+                .collect::<String>();
+            match point.value {
+                PointValue::Number(Number::Int(count)) => format!("listener={listener} {count}"),
+                ref other => panic!("ping timeouts must be an integer counter: {other:?}"),
+            }
+        })
+        .collect()
+}
+
+/// spec: operations.md:OPS-089 partial
+#[tokio::test(start_paused = true)]
+async fn counts_a_missed_pong_deadline_once_and_never_an_answered_ping() {
+    use std::sync::Arc;
+    use vnc_relay_app::metrics::Metrics;
+    use vnc_relay_domain::entry_point::Listener;
+
+    let metrics = Arc::new(Metrics::new(&crate::clock::SystemClock::new()));
+    let mut cx = Context::from_waker(Waker::noop());
+    let (mut answering_peer, io) = duplex(4096);
+    let mut answered =
+        WsRelayStream::new(io, Vec::new(), 65536, 16384, Transport::Wss, kw_settings())
+            .count_ping_timeouts(Arc::clone(&metrics), Listener::Wss);
+    let (mut silent_peer, io) = duplex(4096);
+    let mut silent =
+        WsRelayStream::new(io, Vec::new(), 65536, 16384, Transport::Wss, kw_settings())
+            .count_ping_timeouts(Arc::clone(&metrics), Listener::Wss);
+    // A stream that is not counted, as with TCP keepalive failures.
+    let (_quiet_peer, io) = duplex(4096);
+    let mut uncounted =
+        WsRelayStream::new(io, Vec::new(), 65536, 16384, Transport::Ws, kw_settings());
+
+    for ws in [&mut answered, &mut silent, &mut uncounted] {
+        assert!(Pin::new(ws).poll_maintenance(&mut cx).is_pending());
+    }
+    tokio::time::advance(std::time::Duration::from_secs(5)).await;
+    for ws in [&mut answered, &mut silent, &mut uncounted] {
+        assert!(Pin::new(ws).poll_maintenance(&mut cx).is_pending());
+    }
+    for peer in [&mut answering_peer, &mut silent_peer] {
+        let mut ping = [0; 2];
+        peer.read_exact(&mut ping)
+            .await
+            .unwrap_or_else(|error| panic!("server Ping: {error}"));
+        assert_eq!(ping, [0x89, 0]);
+    }
+    answering_peer
+        .write_all(&make_client_frame(
+            true,
+            (false, false, false),
+            10,
+            [1; 4],
+            b"",
+        ))
+        .await
+        .unwrap_or_else(|error| panic!("Pong: {error}"));
+    let mut byte = [0; 1];
+    assert!(
+        Pin::new(&mut answered)
+            .poll_read(&mut cx, &mut ReadBuf::new(&mut byte))
+            .is_pending()
+    );
+
+    tokio::time::advance(std::time::Duration::from_secs(5)).await;
+    assert!(
+        Pin::new(&mut answered)
+            .poll_maintenance(&mut cx)
+            .is_pending()
+    );
+    // Every poll after the deadline reports the dead connection; it counts once.
+    for _ in 0..2 {
+        for ws in [&mut silent, &mut uncounted] {
+            match Pin::new(ws).poll_maintenance(&mut cx) {
+                Poll::Ready(Err(error)) => assert!(RelayStreamError::is_dead_connection(&error)),
+                other => panic!("Pong deadline must expire: {other:?}"),
+            }
+        }
+    }
+    assert_eq!(ping_timeouts(&metrics), ["listener=wss 1"]);
+}

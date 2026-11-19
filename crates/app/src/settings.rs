@@ -29,6 +29,7 @@ pub struct Settings {
     pub recent_closed: RecentClosedSettings,
     pub recent_logs: RecentLogsSettings,
     pub status: StatusSettings,
+    pub metrics: MetricsSettings,
     pub log: LogSettings,
     pub reload: ReloadSettings,
 }
@@ -327,6 +328,12 @@ pub struct RecentLogsSettings {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct StatusSettings {
     pub listen: SocketAddr,
+}
+
+/// Opt-in status-listener metrics export. See config-v4 §1.2 and §1.8.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct MetricsSettings {
+    pub enabled: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

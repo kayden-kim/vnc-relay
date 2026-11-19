@@ -31,7 +31,7 @@
 | 실패 처리 | 테스트 밖 코드에서 `unwrap`·`expect`를 쓰지 않는다. 오류를 반환하거나 연결 하나만 정리한다. | 연결 오류로 프로세스가 끝나는 코드 | clippy `unwrap_used`·`expect_used`(deny, 테스트 허용) |
 | 출력 | 명령행 출력은 실행파일 조립 crate에서 `std::io::Write`로 쓴다. 운영 로그는 adapters의 운영 로그 모듈만 쓴다. | `println!`·`eprintln!`·`dbg!` | clippy `print_stdout`·`print_stderr`·`dbg_macro`(deny) |
 | 비밀 값 | 비밀번호·해시·쿠키 값·CSRF 토큰·개인키를 담는 타입은 `Debug`를 직접 구현해 값을 가린다(`"<redacted>"`). | 비밀 값 타입에 `#[derive(Debug)]` | 리뷰, 운영 정보 계약 1.11절 계약 테스트 |
-| unsafe | `unsafe` 코드를 쓰지 않는다. 예외는 아래 다섯 파일·모듈뿐이다. | `unsafe` 블록(예외 파일·모듈 밖), crate 전체 `allow` | rustc `unsafe_code`(deny). 각 예외 모듈 선언에 이유 있는 `#[expect(unsafe_code, reason = "...")]`를 쓰고, 호출마다 `SAFETY` 주석으로 안전 조건을 설명한다. |
+| unsafe | `unsafe` 코드를 쓰지 않는다. 예외는 아래 여섯 파일·모듈뿐이다. | `unsafe` 블록(예외 파일·모듈 밖), crate 전체 `allow` | rustc `unsafe_code`(deny). 각 예외 모듈 선언에 이유 있는 `#[expect(unsafe_code, reason = "...")]`를 쓰고, 호출마다 `SAFETY` 주석으로 안전 조건을 설명한다. |
 | 미완성 표시 | 끝나지 않은 코드를 병합하지 않는다. | `todo!()`, `unimplemented!()` | clippy `todo`·`unimplemented`(deny) |
 | lint 예외 | 꼭 필요하면 가장 좁은 범위에 `#[expect(lint, reason = "...")]`를 쓴다. | crate 전체 `#![allow(...)]`, 이유 없는 `allow` | clippy `allow_attributes_without_reason`(deny), 리뷰 |
 | 의존성 | [PRD "구현 기술" 행](../requirements/PRD.md#확정-기준)의 crate만 쓴다. 버전은 작업 공간 `[workspace.dependencies]`에 한 번만 적는다. | crate마다 다른 버전, 목록 밖 crate | `cargo xtask layers`, `cargo deny check licenses` |
@@ -43,6 +43,7 @@
 | `crates/adapters/src/terminal/windows_console.rs` | Win32 콘솔 모드를 읽고 바꾸며 복구한다. | `crates/adapters/src/terminal.rs` |
 | `crates/adapters/src/windows_service/security.rs` | Windows 서비스 운영자 이름을 계정 SID로 바꾸고 서비스 DACL에 시작·중지·상태 조회·구성 조회 권한을 더한다. windows-service에는 이 기능이 없다. | `crates/adapters/src/windows_service.rs`의 `mod security`. reason은 `Win32 account lookup and service DACL change; see docs/conventions/rust.md`다. [서비스 모듈 설계](../architectures/windows-service.md) |
 | `crates/tray/src/message_loop.rs` | tray-icon이 Windows에서 요구하는 같은 스레드의 Win32 메시지 루프를 돌린다. 다른 트레이 기능은 직접 `unsafe`를 쓰지 않는다. | `crates/tray/src/main.rs`의 `mod message_loop`. reason은 `Win32 message loop that tray-icon needs; see docs/conventions/rust.md`다. [트레이 모듈 설계](../architectures/windows-tray.md) |
+| `crates/adapters/src/process_stats/windows.rs` | 현재 프로세스의 CPU 시간·작업 집합·전용 메모리·핸들 수·스레드 수를 읽는다(`GetProcessTimes`, `K32GetProcessMemoryInfo`, `GetProcessHandleCount`, Toolhelp32 스레드 목록). 표준 라이브러리에는 이 값을 읽는 API가 없다. 읽기만 하며 프로세스 상태를 바꾸지 않는다. | `crates/adapters/src/process_stats.rs`의 `mod windows`. reason은 `Win32 process statistics for metrics; see docs/conventions/rust.md`다. [메트릭 모듈 설계](../architectures/metrics.md) |
 | `tests/windows_console.rs`의 의사 콘솔 모듈 | 실제 실행파일을 ConPTY에서 띄우고 제어 신호·숨김 입력·콘솔 닫기를 시험한다. 표준 라이브러리에는 다른 프로세스의 콘솔을 만들고 제어하는 API가 없다. | 같은 파일의 모듈 선언 |
 | `tests/performance.rs`의 Windows 핸들 표본 모듈 | 중계 프로세스의 핸들 목록에서 Event 핸들을 따로 센다. 표준 라이브러리와 `Get-Process`는 종류별 핸들 수를 주지 않는다. | 같은 파일의 모듈 선언 |
 

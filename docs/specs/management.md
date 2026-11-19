@@ -1,22 +1,22 @@
 # 관리 조회와 세션 종료 스펙
 
-운영자가 서버·대기 연결·활성 세션·최근 종료 목록·최근 로그와 설정을 조회하고, 유효한 관리 세션을 가진 관리자가 지정한 세션을 종료하거나 동적 설정을 편집할 때 관찰하는 결과를 정의한다.
+운영자가 서버·대기 연결·활성 세션·최근 종료 목록·최근 로그·메트릭과 설정을 조회하고, 유효한 관리 세션을 가진 관리자가 지정한 세션을 종료하거나 동적 설정을 편집할 때 관찰하는 결과를 정의한다.
 
 | 항목 | 값 |
 | --- | --- |
 | 상태 | Active |
-| 관련 요구사항 | [PRD](../requirements/PRD.md) FR-06·FR-07·FR-08, 7절 보안 경계, AC-09·AC-10·AC-52·AC-56 |
+| 관련 요구사항 | [PRD](../requirements/PRD.md) FR-06·FR-07·FR-08, 7절 보안 경계, AC-09·AC-10·AC-52·AC-56·AC-61 |
 | 용어 | [VNC Relay 용어집](../../GLOSSARY.md) |
 | 관련 스펙 | [중계와 매칭](relay.md), [대시보드 화면](dashboard.md), [설정·운영](operations.md) |
-| 관련 계약 | [관리 API v1](../contracts/management-api-v1.md), [운영 로그와 상태 엔드포인트 v2](../contracts/ops-info-v2.md). 경로·메서드·오류 본문·로그인 교환은 관리 API 계약이, 로그 필드 이름과 로그 버전의 적용 상태는 운영 정보 계약이 기준이다. 관리 API는 JSON over HTTP이며 경로 접두사는 `/api/v1/`이다. |
-| 관련 아키텍처 문서·ADR | [코드 지도](../architectures/code-map.md), [관리 리스너 모듈 설계](../architectures/management-listener.md), [관리 세션 모듈 설계](../architectures/management-session.md), [관리 조회 모듈 설계](../architectures/management-query.md), [관리자 종료 모듈 설계](../architectures/management-terminate.md), [ADR-0003 단일 인스턴스·메모리 상태](../decisions/ADR-0003-single-instance-memory-state.md). 대시보드는 별도 빌드 단계 없는 정적 HTML·JS이며 실행파일에 넣어 관리 리스너가 제공한다([대시보드 화면](dashboard.md)). |
+| 관련 계약 | [관리 API v1](../contracts/management-api-v1.md), [운영 로그와 상태 엔드포인트 v2](../contracts/ops-info-v2.md), [메트릭 v1](../contracts/metrics-v1.md). 경로·메서드·오류 본문·로그인 교환은 관리 API 계약이, 로그 필드 이름과 로그 버전의 적용 상태는 운영 정보 계약이, 메트릭 이름과 JSON 형식은 메트릭 계약이 기준이다. 관리 API는 JSON over HTTP이며 경로 접두사는 `/api/v1/`이다. |
+| 관련 아키텍처 문서·ADR | [코드 지도](../architectures/code-map.md), [관리 리스너 모듈 설계](../architectures/management-listener.md), [관리 세션 모듈 설계](../architectures/management-session.md), [관리 조회 모듈 설계](../architectures/management-query.md), [관리자 종료 모듈 설계](../architectures/management-terminate.md), [메트릭 모듈 설계](../architectures/metrics.md), [ADR-0003 단일 인스턴스·메모리 상태](../decisions/ADR-0003-single-instance-memory-state.md), [ADR-0011 상태 리스너의 pull 메트릭](../decisions/ADR-0011-pull-metrics-on-status-listener.md). 대시보드는 별도 빌드 단계 없는 정적 HTML·JS이며 실행파일에 넣어 관리 리스너가 제공한다([대시보드 화면](dashboard.md)). |
 
 ## 1. 범위와 적용 상태
 
 - 대시보드는 조회·활성 세션 종료·내장 관리자 로그인과 외부 HTTPS 접근을 제공한다. 관리 세션 수명의 기본값과 유효 범위는 [설정 계약](../contracts/config-v4.md)이 기준이다. 개별 API 경로·본문 형식은 [관리 API 계약](../contracts/management-api-v1.md)이 정한다.
 - 대시보드·관리 API는 서버가 관리자 로그인을 검증한다. 중계용 출발지 IP 허용은 관리 권한을 부여하지 않는다.
 - 관리 API는 JSON over HTTP이고 경로 접두사는 `/api/v1/`이다. 이 문서는 논리적인 조회·종료·설정 편집 결과를 정의한다. 개별 경로·메서드·JSON 필드 이름·오류 본문은 [관리 API 계약](../contracts/management-api-v1.md)이 정한다.
-- 화면 동작·폴링·확인 대화상자는 [화면 스펙](dashboard.md)이 소유한다. 생존·준비 상태 엔드포인트와 상태 리스너는 [운영 스펙](operations.md)이 소유한다.
+- 화면 동작·폴링·확인 대화상자는 [화면 스펙](dashboard.md)이 소유한다. 생존·준비 상태 엔드포인트, 상태 리스너의 `/metrics`, 값을 세는 규칙은 [운영 스펙](operations.md)이 소유한다.
 - 설정 보기와 동적 설정 변경 API·UI를 제공한다. 수동 재로드 API·CLI는 추가하지 않는다. 원격 화면 제어, 장기 이력 검색, 데이터베이스 저장도 추가하지 않는다. 최근 종료 목록은 장기 이력이 아니며 메모리에만 둔다([2.3절](#23-최근-종료-목록)).
 - 최근 로그 조회를 제공한다. 이는 메모리의 최근 운영 로그이며 장기 이력 저장이 아니다. 접속 ticket 발급과 확인은 이 관리 기능의 범위가 아니다([WS·WSS 스펙](websocket.md)).
 
@@ -31,6 +31,7 @@
 | 최근 종료 목록 | 세션 식별자, 모드, Viewer와 Server/Mode I 대상의 전송 경로, 시작·종료 시각, 지속 시간, 방향별 최종 누적 바이트, 양 끝의 실제 소켓 상대 주소와 전달 주소, 종료 원인 | 정리가 끝난 활성 세션만, 최대 R개, 메모리 기준, 재시작 시 비움([2.3절](#23-최근-종료-목록)) |
 | 설정 보기 | 기본값을 포함한 실행 중 유효 설정의 모든 키·값, 키별 재로드 구분·편집 가능 여부, 지금 파일의 상태와 리비전, 마지막 재로드 결과 | 현재 프로세스의 유효 설정. 경로가 가리키는 파일 내용과 비밀은 노출하지 않음([3.3절](#33-설정-보기와-동적-설정-편집)) |
 | 최근 로그 | 기록 순번과 운영 로그 사건 원본, 보관 상한·순번 경계, 필터와 페이지 결과 | 메모리의 최근 사건만. 보관·재시작 규칙은 [운영 스펙](operations.md), 조회 의미는 [2.4절](#24-최근-로그)을 따름 |
+| 메트릭 | [메트릭 계약](../contracts/metrics-v1.md)의 메트릭 값과 최근 1시간 추이 | 현재 프로세스, 메모리 기준, 재시작 시 0부터([2.5절](#25-메트릭)) |
 
 초기 교환 중이거나 Mode I 대상에 연결 중인 연결은 대기 연결 수와 구분한다. 하나의 중계 연결 쌍은 활성 세션 한 개로 센다. 종료 중인 세션은 정리가 끝날 때까지 활성 수에 포함한다.
 
@@ -89,6 +90,18 @@
 - 정상적인 빈 목록과 보관 꺼짐은 `200`의 빈 `items`다. 조회 실패나 인증 실패로 대신하지 않는다. 존재하지 않는 세션 식별자도 형식이 맞으면 빈 결과다.
 - `X-Relay-Poll: 1` 자동 조회는 유휴 만료를 연장하지 않는다. 헤더 없는 사용자 행동 조회는 기존 규칙대로 연장한다. 관리 세션이 없으면 `401 unauthenticated`다.
 - 정확한 매개변수 범위·필터 비교·순번·페이지·오류·응답 형식은 [관리 API 계약 1.15절](../contracts/management-api-v1.md#115-최근-로그-get-apiv1logs)을 따른다. SCR-006 필터·갱신·세션에서 이동·JSON Lines 다운로드는 [화면 스펙](dashboard.md)이 소유한다.
+
+### 2.5 메트릭
+
+유효한 관리 세션으로 메트릭과 최근 1시간 추이를 조회한다. 이름·종류·속성과 JSON 형식은 [메트릭 계약](../contracts/metrics-v1.md)이, 값을 세는 규칙은 [운영 스펙 3.8절](operations.md#38-메트릭)이 정한다.
+
+- `[metrics] enabled`와 관계없이 조회할 수 있다. 이 설정은 상태 리스너의 `/metrics`만 켜고 끈다.
+- 메트릭 값은 같은 시점의 `/metrics`와 같다. 대기·활성 세션·진행 중 연결 수는 서버 요약과 같은 한 번의 상태 포착에서 읽는다(2.2절). L·Lm 사용량은 2.2절처럼 같은 응답의 다른 값과 잠깐 어긋날 수 있다.
+- 추이(history)는 서버가 10초마다 찍은 점의 목록이다. 최근 360개를 보관하며 점마다 순번 `seq`가 있다. 클라이언트는 마지막으로 받은 순번을 `history_after`로 보내 새 점만 받는다. 이 값이 최신 순번 이상이면 빈 목록이며 오류가 아니다.
+- 프로세스 값을 읽지 못하면 그 메트릭을 `available = false`로 준다. 0으로 대신하지 않으며 요청 전체를 실패시키지 않는다. 그때 찍은 추이 점의 해당 값은 `null`이다.
+- 재시작하면 값은 0부터, 추이는 빈 목록과 순번 0부터 다시 시작한다. 재시작 전 관리 세션은 무효다(MGT-R18).
+- `X-Relay-Poll: 1` 자동 조회는 유휴 만료를 연장하지 않는다. 헤더 없는 사용자 행동 조회는 기존 규칙대로 연장한다. 관리 세션이 없으면 `401 unauthenticated`다.
+- 응답에는 중계 ID·세션 식별자·주소·계정명이 없다. 정확한 매개변수·오류는 [관리 API 계약 1.16절](../contracts/management-api-v1.md#116-메트릭-get-apiv1metrics)을, 화면 표시는 [화면 스펙 SCR-007](dashboard.md#scr-007-메트릭)을 따른다.
 
 
 ## 3. 정상 흐름과 규칙
@@ -174,6 +187,9 @@
 | MGT-R28 | FR-06·AC-52 | 접속 ticket의 세션 만료 시각(`sx`)으로 끝난 활성 세션은 최근 종료 목록과 운영 로그의 종료 원인에 `session_expired`를 써야 한다. 관리자 종료와 구분한다. |
 | MGT-R29 | FR-06·AC-52 | 설정 보기는 ticket 키 10개를 보여 줘야 한다. 편집은 3.3절의 37개 편집 대상과 역할별 조건을 따라야 한다. 공개 키 파일 경로 2개는 편집할 수 없다. |
 | MGT-R30 | FR-06·AC-56 | 대기 연결 항목은 전송 경로·실제 소켓 상대 주소·전달 주소를 제공해야 한다. 최근 종료 항목과 `closed_session`은 지속 시간과 종료 전 양 끝의 소켓 상대 주소·전달 주소를 제공해야 한다. 전달 주소는 MGT-R10을 따르며 소켓 주소를 대신하지 않는다. |
+| MGT-R31 | FR-06·AC-61 | 유효한 관리 세션으로 `[metrics] enabled`와 관계없이 메트릭과 추이를 조회할 수 있어야 한다. 값은 같은 시점의 `/metrics`와 같아야 한다. |
+| MGT-R32 | FR-06·AC-61 | 추이는 10초 간격·최대 360개·늘어나기만 하는 순번을 지켜야 한다. `history_after`를 받으면 그보다 큰 순번의 점만 돌려줘야 한다. |
+| MGT-R33 | FR-06·AC-61 | 읽지 못한 프로세스 값은 `available = false`와 추이의 `null`로 구분해야 한다. 0으로 대신하거나 요청 전체를 실패시켜서는 안 된다. |
 
 ## 4. 오류와 복구
 
@@ -200,6 +216,10 @@
 | 최근 로그 메서드 오류 | `405 invalid_request`, `Allow: GET` | 중계·보관 목록 변경 없음 | GET으로 조회 |
 | 최근 로그 GET에 본문이 있고 Content-Type이 틀림 | 공통 규칙의 `415 invalid_request` | 중계·보관 목록 변경 없음 | 요청 본문 형식 수정 |
 | 최근 로그 내부 처리·통신 실패 | `500 internal` 또는 응답 없음. 빈 성공과 구분 | 중계 영향 없음 | 이전 결과를 마지막 성공 시각과 함께 유지하고 조회 재시도 |
+| 메트릭 `history_after` 형식 오류·중복 지정 | `400 invalid_request` | 중계·메트릭 값 변경 없음 | 마지막으로 받은 순번이나 생략으로 다시 조회 |
+| 메트릭 메서드 오류 | `405 invalid_request`, `Allow: GET` | 중계·메트릭 값 변경 없음 | GET으로 조회 |
+| 메트릭 내부 처리·통신 실패 | `500 internal` 또는 응답 없음. 빈 값·0과 구분 | 중계 영향 없음 | 이전 결과를 마지막 성공 시각과 함께 유지하고 조회 재시도 |
+| 프로세스 값 읽기 실패 | `200`, 해당 메트릭 `available = false` | 다른 메트릭·중계 영향 없음 | 다음 조회에서 다시 읽음 |
 
 요청마다 같은 중계 ID를 다시 찾아 종료하는 동작은 금지한다. 실제 오류 코드와 로그인·세션 교환 형식은 [관리 API 계약](../contracts/management-api-v1.md)이 정한다.
 
@@ -214,7 +234,7 @@
 
 ## 6. 화면 동작의 소유
 
-[대시보드 화면 스펙](dashboard.md)의 7절이 정상·빈 결과·오류·상세 이동·종료 확인·폴링·로그인·로그아웃·최근 종료 목록·최근 로그·연결 수·사용량 표시·설정 보기·동적 설정 편집·화면 폭과 브라우저 호환·화면 언어를 소유한다. 이 문서의 수용 테스트는 API·서비스 경계의 결과를 검증하며 UI 테스트를 중복 정의하지 않는다.
+[대시보드 화면 스펙](dashboard.md)의 7절이 정상·빈 결과·오류·상세 이동·종료 확인·폴링·로그인·로그아웃·최근 종료 목록·최근 로그·메트릭·연결 수·사용량 표시·설정 보기·동적 설정 편집·화면 폭과 브라우저 호환·화면 언어를 소유한다. 이 문서의 수용 테스트는 API·서비스 경계의 결과를 검증하며 UI 테스트를 중복 정의하지 않는다.
 
 ## 7. 수용 테스트
 
@@ -277,6 +297,11 @@
 | MGT-053 | FR-06·AC-52 / MGT-R29 | 정상·거절: ticket 키가 있는 서버에서 설정 보기·편집. 그 역할이 WS·WSS에서 모두 꺼진 경우, 공개 키 파일 경로 변경, `enabled = true`로 바꾸는 후보에 필수 키가 빠진 경우도 포함 | 보기에 ticket 키 10개가 `reload = dynamic`으로 나오고 경로 2개는 `editable = false`. 전체 재로드 대상 43개·편집 대상 37개. ticket 편집은 그 역할이 WS 또는 WSS에서 켜져 있을 때 `enabled`·`issuer`·`relay_host`·`max_lifetime_secs`만 허용. 편집 불가 키는 `400 invalid_request`. 필수 키 누락은 `400 config_invalid`와 `config_missing_key` 진단이며 변경 없음. 성공하면 재로드 적용, 새 업그레이드부터 변경 |
 | MGT-054 | FR-06·AC-56 / MGT-R10·R30 | 정상: TCP·WS·WSS로 들어온 Viewer·Server 대기 연결, 신뢰 프록시를 거친 WS·WSS 연결과 거치지 않은 연결의 대기 목록 조회 | `transport`는 연결이 들어온 전송 경로와 같음. `address`는 실제 소켓 상대 주소이며 IP 정규화 적용. `forwarded_ip`는 신뢰 프록시의 전달 주소 또는 `null`이고 TCP는 항상 `null`. 기존 필드의 의미 유지 |
 | MGT-055 | FR-06·AC-56 / MGT-R10·R30 | 정상: Mode I/II, 신뢰 프록시 유무의 활성 세션이 자연 종료·관리자 종료로 끝난 뒤 최근 종료 목록과 종료 응답의 `closed_session` 조회 | `duration_ms`는 0 이상의 정수이며 같은 세션의 `session_closed` 로그 `duration_ms`와 같음. `viewer_address`·`target_address`·`viewer_forwarded_ip`·`target_forwarded_ip`는 종료 전 활성 객체의 값과 같음. Mode I의 `target_forwarded_ip`는 `null`. 같은 세션의 최근 종료 항목과 `closed_session` 값이 같음 |
+| MGT-056 | FR-06·7절·AC-61 / MGT-R11·R16 | 정상·거절: 관리 세션 없이 `GET /api/v1/metrics`. 로그인 뒤 `X-Relay-Poll: 1` 메트릭 조회만 보내 Si 경과. 헤더 없는 메트릭 조회 | 관리 세션이 없으면 `401 unauthenticated`이며 메트릭 비노출. 자동 조회는 유휴 만료를 연장하지 않음. 헤더 없는 조회는 기존 규칙대로 연장 |
+| MGT-057 | FR-06·AC-61 / MGT-R31 | 정상: `[metrics] enabled = false`와 `true`인 서버에서 각각 중계·관리 활동을 만든 뒤, 활동이 멈춘 상태에서 관리 API 메트릭과 서버 요약, 켠 경우 `/metrics`를 연속 조회 | 두 설정 모두 `200`. 메트릭의 순서·이름·종류·단위·속성이 메트릭 계약 1.3·1.7절과 같음. 켠 경우 값이 `/metrics`와 같음. 대기·활성·진행 중 연결 수는 서버 요약과 같음. `resource`의 `service.version`은 실행파일 버전 |
+| MGT-058 | FR-06·AC-61 / MGT-R32 | 정상: 시험용 시계로 추이 점 361개 이상을 찍은 뒤 `history_after` 없이·있게 조회. 정상 종료 유예 중에도 점 확인. 재시작 뒤 조회 | `interval_secs = 10`, `capacity = 360`. 첫 점 `seq = 0`은 준비됨 때 찍음. 가장 오래된 점부터 지워 360개만 남고, `seq`는 1씩 늘며 다시 쓰지 않음. `history_after = n`이면 `seq > n`인 점만 오름차순. 유예 중에도 점이 늘어남. 재시작 뒤 추이는 순번 0부터 |
+| MGT-059 | FR-06·AC-61 / MGT-R32 | 거절·경계: `history_after`에 `-1`·`1.5`·빈 값·`u64` 최댓값 초과 값을 넣거나 두 번 지정. `latest_seq`와 같은 값·더 큰 값으로 조회. 점이 없을 때 조회. `GET`이 아닌 메서드 | 형식 오류·중복은 `400 invalid_request`. `latest_seq` 이상이면 `200`과 빈 `history.points`. 점이 없으면 `latest_seq = null`과 빈 배열. 메서드 오류는 `405 invalid_request`와 `Allow: GET` |
+| MGT-060 | FR-06·AC-61 / MGT-R33 | 부분 실패: 시험 대역으로 프로세스 값 하나를 읽지 못하게 한 뒤 조회하고, 그 상태에서 추이 점을 찍음 | `200`. 그 메트릭은 `available = false`와 빈 `points`, 다른 메트릭은 `available = true`. 그 추이 점의 해당 계열 값은 `null`. 0으로 대신하지 않음 |
 
 ## 8. 미결정 사항
 

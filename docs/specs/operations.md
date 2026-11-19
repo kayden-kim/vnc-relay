@@ -7,11 +7,12 @@
 | 상태 | Active |
 | 접속 ticket 범위 | OPS-R37~OPS-R40·OPS-070~OPS-073을 따른다. 결정 근거는 [ADR-0009](../decisions/ADR-0009-optional-relay-access-ticket.md), 형식은 [WebSocket 계약 1.9절](../contracts/websocket-relay-v2.md#19-접속-ticket)을 따른다. |
 | Windows 서비스 범위 | [3.7절](#37-windows-서비스-실행), OPS-R41~OPS-R46, OPS-074~OPS-081을 따른다. 수동 확인 범위와 남은 시험은 [Windows 서비스 시험](../how-to/set-up-and-verify.md#windows-서비스-시험)에 있다. 결정 근거는 [ADR-0010](../decisions/ADR-0010-windows-service-and-tray.md), 명령 형식은 [CLI 계약 1.9절](../contracts/cli-v1.md#19-windows-서비스-실행), 트레이 앱 동작은 [Windows 트레이 앱 스펙](windows-tray.md)을 따른다. |
-| 관련 요구사항 | [PRD](../requirements/PRD.md) FR-06·FR-07·FR-08·FR-10, 7절 보안, 8절 비기능, 9절 독립 구현, AC-07·AC-08·AC-11~14, AC-32·AC-34·AC-35·AC-51·AC-57·AC-58 |
+| 메트릭 범위 | [3.8절](#38-메트릭), OPS-R47~OPS-R51, OPS-082~OPS-094를 따른다. 이름·종류·속성·표현 형식은 [메트릭 계약](../contracts/metrics-v1.md), 결정 근거는 [ADR-0011](../decisions/ADR-0011-pull-metrics-on-status-listener.md)을 따른다. 관리 API와 화면은 [관리 기능 2.5절](management.md#25-메트릭)과 [화면 SCR-007](dashboard.md#scr-007-메트릭)을 따른다. |
+| 관련 요구사항 | [PRD](../requirements/PRD.md) FR-06·FR-07·FR-08·FR-10, 7절 보안, 8절 비기능, 9절 독립 구현, AC-07·AC-08·AC-11~14, AC-32·AC-34·AC-35·AC-51·AC-57·AC-58·AC-60 |
 | 용어 | [VNC Relay 용어집](../../GLOSSARY.md) |
 | 관련 스펙 | [중계와 매칭](relay.md), [WS·WSS](websocket.md), [관리 기능](management.md), [화면](dashboard.md), [Windows 트레이 앱](windows-tray.md) |
-| 관련 계약 | [설정 파일 v4](../contracts/config-v4.md), [CLI와 관리자 계정 파일 v1](../contracts/cli-v1.md), [운영 로그와 상태 엔드포인트 v2](../contracts/ops-info-v2.md) |
-| 관련 아키텍처 문서·ADR | [코드 지도](../architectures/code-map.md), [설정 로딩 모듈 설계](../architectures/config-loading.md), [`serve` 시작 모듈 설계](../architectures/serve-startup.md), [관리자 계정 준비 CLI 모듈 설계](../architectures/admin-accounts.md), [운영 로그 모듈 설계](../architectures/ops-log.md), [파일 변경 감지 모듈 설계](../architectures/file-watch.md), [TCP 진입점 모듈 설계](../architectures/tcp-entry-point.md), [연결 상한과 시간 제한 모듈 설계](../architectures/connection-limits.md), [상태 리스너와 준비 상태 모듈 설계](../architectures/status-listener.md), [TLS 모듈 설계](../architectures/tls.md), [중계 세션 수명 모듈 설계](../architectures/relay-session.md), [Windows 서비스 모듈 설계](../architectures/windows-service.md), [ADR-0001 내장 TLS](../decisions/ADR-0001-built-in-tls.md), [ADR-0002 출발지 IP 허용 목록](../decisions/ADR-0002-source-ip-allowlist.md), [ADR-0003 단일 인스턴스·메모리 상태](../decisions/ADR-0003-single-instance-memory-state.md), [ADR-0004 tokio·rustls](../decisions/ADR-0004-tokio-rustls.md), [ADR-0010 Windows 서비스와 트레이 앱](../decisions/ADR-0010-windows-service-and-tray.md). 코드 지도는 현재(Current) 구조다. |
+| 관련 계약 | [설정 파일 v4](../contracts/config-v4.md), [CLI와 관리자 계정 파일 v1](../contracts/cli-v1.md), [운영 로그와 상태 엔드포인트 v2](../contracts/ops-info-v2.md), [메트릭 v1](../contracts/metrics-v1.md) |
+| 관련 아키텍처 문서·ADR | [코드 지도](../architectures/code-map.md), [설정 로딩 모듈 설계](../architectures/config-loading.md), [`serve` 시작 모듈 설계](../architectures/serve-startup.md), [관리자 계정 준비 CLI 모듈 설계](../architectures/admin-accounts.md), [운영 로그 모듈 설계](../architectures/ops-log.md), [파일 변경 감지 모듈 설계](../architectures/file-watch.md), [TCP 진입점 모듈 설계](../architectures/tcp-entry-point.md), [연결 상한과 시간 제한 모듈 설계](../architectures/connection-limits.md), [상태 리스너와 준비 상태 모듈 설계](../architectures/status-listener.md), [메트릭 모듈 설계](../architectures/metrics.md), [TLS 모듈 설계](../architectures/tls.md), [중계 세션 수명 모듈 설계](../architectures/relay-session.md), [Windows 서비스 모듈 설계](../architectures/windows-service.md), [ADR-0001 내장 TLS](../decisions/ADR-0001-built-in-tls.md), [ADR-0002 출발지 IP 허용 목록](../decisions/ADR-0002-source-ip-allowlist.md), [ADR-0003 단일 인스턴스·메모리 상태](../decisions/ADR-0003-single-instance-memory-state.md), [ADR-0004 tokio·rustls](../decisions/ADR-0004-tokio-rustls.md), [ADR-0010 Windows 서비스와 트레이 앱](../decisions/ADR-0010-windows-service-and-tray.md), [ADR-0011 상태 리스너의 pull 메트릭](../decisions/ADR-0011-pull-metrics-on-status-listener.md). 코드 지도는 현재(Current) 구조다. |
 
 ## 1. 범위와 적용 상태
 
@@ -22,6 +23,7 @@
 - 단일 인스턴스로 운영하고 TCP keepalive·WebSocket ping으로 끊긴 연결을 감지한다. 프로세스 사이에 대기·세션·카운터 상태를 공유하지 않는다. 이미 사용 중인 리스너 주소로 두 번째 프로세스를 시작하면 시작 실패다. 상대가 살아 있는 유휴 연결은 끊지 않는다.
 - 검증 대상 OS는 Windows 11 x64와 Ubuntu 24.04 LTS x64다. Windows Server는 검증 대상이 아니다. 실제 실행 증거가 없으면 지원 완료로 표시하지 않는다.
 - VNC Relay는 로그를 표준 출력 또는 지정한 파일로 출력한다. 별도로 최근 운영 사건 N개를 메모리에 보관해 대시보드 로그 화면에서 조회한다. 로그 파일 교체·보관 기간·접근 권한은 운영자 책임이며, 수동 운영 안내에 권장 사항을 적는다.
+- 메트릭은 OpenTelemetry 의미 규칙의 이름을 쓰며, 상태 리스너의 `/metrics`에서 Prometheus 텍스트로 낸다. 기본은 꺼짐이다. 관리 API와 대시보드는 설정과 관계없이 같은 값과 최근 1시간 추이를 로그인한 관리자에게 보여 준다(3.8절). OTLP 내보내기와 장기 보관은 제공하지 않는다.
 - 하위 명령 이름·파일 확장자·환경 변수 이름·설정 키 이름과 기본 포트는 [설정 계약](../contracts/config-v4.md)과 [CLI 계약](../contracts/cli-v1.md)이 정한다. Rust 라이브러리는 [PRD 1절 "구현 기술" 행](../requirements/PRD.md#확정-기준)이 단일 기준이다.
 - 이 문서의 범위는 시작 검증, 제한, 종료, 운영 정보, 접근 경계, 성능·호환성·출처의 수용 판정이다. 설치·빌드 절차는 [개발 환경·검증 how-to](../how-to/set-up-and-verify.md)에서 관리한다.
 - 신규 중계 프로토콜·세션 영속화·자동 재접속·전체 설정 재로드·Ubuntu의 OS 서비스 등록·컨테이너 배포는 제공하지 않는다. Windows 11의 서비스 실행은 3.7절을 따른다. 설정 보기와 37개 대상 키의 관리 API·대시보드 편집을 제공한다. 수동 재로드 API·CLI는 제공하지 않는다.
@@ -62,7 +64,7 @@
 | Kw | WebSocket ping 주기와 pong 응답 제한 시간 | WS·WSS 연결에 적용. 제한 안에 pong이 없으면 끊긴 연결로 처리, pong에 응답하는 유휴 연결은 유지. [WS·WSS](websocket.md)의 WS-026 |
 | P | 대시보드 폴링 주기 | 설정 가능, 기본값 2초. 유효 범위는 설정 계약에서 정함. [화면](dashboard.md)의 DASH-022 |
 
-L·Lm·Lw·B·M·H·U·W·C·E·G·K·Kw는 재로드 대상이다. 새 값의 적용 시점은 3.3절과 [설정 계약 1.8절](../contracts/config-v4.md#18-재로드-구분)을 따른다. F·Si·Sa·P·R, `recent_logs.max_entries`와 `dashboard.query_timeout_secs`는 재시작이 필요하다. 세션 정보 응답의 `dashboard.terminate_timeout_secs`는 응답 때의 E + 5초다.
+L·Lm·Lw·B·M·H·U·W·C·E·G·K·Kw는 재로드 대상이다. 새 값의 적용 시점은 3.3절과 [설정 계약 1.8절](../contracts/config-v4.md#18-재로드-구분)을 따른다. F·Si·Sa·P·R, `recent_logs.max_entries`, `metrics.enabled`와 `dashboard.query_timeout_secs`는 재시작이 필요하다. 세션 정보 응답의 `dashboard.terminate_timeout_secs`는 응답 때의 E + 5초다.
 
 Mode I의 Viewer 연결과 생성한 대상 연결은 L에서 각각 한 개다. Mode II의 Viewer·Server 연결도 각각 한 개다. 관리·상태 연결은 L이 아니라 Lm에서 센다. 수신·송신 소켓을 구분해 상한을 우회해서는 안 되며, 대상 연결 생성 전에도 예산을 확보한다. 리스닝 소켓 자체는 연결 수에 세지 않지만 기본 자원 측정에 포함한다.
 
@@ -217,6 +219,23 @@ D:(A;;CCLCSWRPWPDTLOCRRC;;;SY)(A;;CCDCLCSWRPWPDTLOCRSDRCWDWO;;;BA)(A;;CCLCSWLOCR
 
 서비스 등록은 설치할 때의 실행파일 절대 경로를 쓴다. 실행파일을 새 버전으로 바꿀 때는 서비스를 중지하고 같은 경로의 파일을 바꾼 뒤 다시 시작한다. 실행파일 위치를 바꾸려면 해제한 뒤 다시 설치한다. 서비스가 실행 중일 때 같은 리스너 주소의 설정으로 터미널에서 `serve`를 시작하면 리스너 바인드 실패로 끝난다(OPS-R23).
 
+### 3.8 메트릭
+
+메트릭(metric)은 서버의 연결·세션·관리 활동과 프로세스 자원을 시간에 따라 바뀌는 수로 나타낸 값이다. 이름·종류·단위·속성과 두 표현 형식은 [메트릭 계약](../contracts/metrics-v1.md)이 정한다. 이 절은 언제 무엇을 응답하는지 정한다.
+
+1. `[metrics] enabled = true`이면 상태 리스너가 `GET /metrics`에 메트릭 계약 1.6절의 Prometheus 텍스트로 응답한다. 인증은 없다. 운영자의 Prometheus나 OpenTelemetry Collector(Prometheus 수신기)가 이 주소를 주기적으로 읽는다.
+2. `[metrics] enabled = false`(기본)이면 `/metrics`는 정의하지 않은 경로와 같은 404 `not_found`다. 그래도 값은 센다. 관리 API와 대시보드가 같은 값을 쓰기 때문이다.
+3. `/metrics`도 상태 리스너의 다른 규칙을 따른다. 연결은 Lm에서 세고, U와 Lm 거절 규칙도 같다. 상태 리스너가 응답하는 동안에는 준비 전과 종료 유예 중에도 응답한다. 준비 여부는 `/readyz`로 판단한다.
+4. 운영 로그 사건에서 세는 값은 사건을 운영 로그 기록부에 넘길 때 함께 센다. 로그 출력의 성공 여부와 관계없다. 그래서 같은 프로세스의 로그 사건 수와 같다. 관리·상태 리스너는 `connection_accepted`를 기록하지 않으므로 수락 수에는 중계 리스너만 있다.
+5. 사건이 없는 값은 동작이 끝날 때 직접 기록한다. 초기 교환 시간, Mode I 대상 연결 시간, WebSocket ping 시간 초과가 여기에 속한다. 방향별 전송량은 상대 전송 계층에 쓰기에 성공할 때마다 더한다. 그래서 세션이 끝나기 전에도 늘어난다. 방향과 뜻은 관리 API의 방향별 바이트와 같다([관리 기능 2.1절](management.md#21-전송량의-의미)).
+6. 현재 값은 응답을 만들 때 읽는다. 대기·활성 세션·진행 중 연결 수, L·Lm의 사용량과 상한, 유효한 관리 세션 수가 여기에 속한다. L·Lm을 재로드하면 다음 응답부터 새 상한이 나온다.
+7. 프로세스 값도 응답을 만들 때 OS에서 읽는다. 가동 시간, CPU 시간, 메모리, 스레드 수, Linux의 파일 기술자 수, Windows의 핸들 수가 여기에 속한다. 읽지 못한 값은 0으로 대신하지 않고 그 계열의 표본을 뺀다. 다른 값은 그대로 응답한다.
+8. 속성은 메트릭 계약 1.4절의 고정 값만 쓴다. 중계 ID·세션 식별자·주소·계정명·Origin·ticket 값·설정 값·파일 경로는 넣지 않는다.
+9. 값은 메모리에만 둔다. 재시작하면 0부터 다시 센다. 재로드는 값을 지우지 않는다.
+10. 서버는 준비됨이 된 때부터 10초마다 일부 값을 추이로 기록하고 최근 360개(1시간)를 보관한다. 정상 종료 유예 중에도 기록한다. 추이는 관리 API와 대시보드만 쓰며 `/metrics`에는 나오지 않는다([메트릭 계약 1.8절](../contracts/metrics-v1.md#18-추이)).
+11. `metrics.enabled`는 재시작이 필요하며 편집 대상이 아니다. 설정 보기에서는 값만 보여 준다.
+12. 메트릭 기록 때문에 중계 경로가 6절의 성능 합격 수치를 어겨서는 안 된다. 데이터 전송마다 하는 기록은 잠금 없이 더한다.
+
 ## 4. 보안과 신뢰 경계
 
 | 경계 | 지켜야 할 동작 | 적용 조건 |
@@ -227,6 +246,7 @@ D:(A;;CCLCSWRPWPDTLOCRRC;;;SY)(A;;CCDCLCSWRPWPDTLOCRSDRCWDWO;;;BA)(A;;CCLCSWLOCR
 | 대시보드·관리 API | 외부 접근은 내장 HTTPS·관리자 로그인 필수, 조회·종료는 유효한 관리 세션을 서버에서 검증 | 로컬에서도 로그인 생략 금지 |
 | 관리 리스너 평문 HTTP | 루프백 바인딩에서만 허용, 비루프백 주소의 평문 설정은 시작 실패 | 루프백에서도 관리자 로그인 생략 금지 |
 | 상태 리스너 | 기본 루프백인 별도 리스너, 인증 없이 생존·준비 결과만 응답, 세션·중계 ID·상대 주소·인증 비밀 미포함 | 관리 리스너가 아님, 로그인 예외 규칙 미적용 |
+| 메트릭 엔드포인트 | 기본 꺼짐. 켜면 상태 리스너에서 인증 없이 응답. 속성은 고정 값만 쓰며 식별자·주소·계정명·비밀 없음 | 상태 리스너를 루프백 밖에 두면 그 주소의 접근 보호는 운영자 책임. OPS-R49 |
 | WS·WSS | 진입점(리스너·역할 쌍)마다 클라이언트 주소의 IP 허용 목록 적용. 공개 접속에는 내장 WSS 또는 역방향 프록시 TLS 종료 권장 | 관리 세션으로 IP 제한 우회 금지 |
 | 접속 ticket | 기본은 꺼짐. 설정으로 켠 역할의 WS·WSS에 함께 적용하며 ticket이 없거나 유효하지 않으면 101 전에 HTTP 401로 거절 | 관리자 로그인과 별개. [WebSocket 계약 1.9절](../contracts/websocket-relay-v2.md#19-접속-ticket) |
 | 출발지 IP 허용 목록 표기 | 항목은 단일 IP·CIDR·범위(`a-b`)만 허용(IPv4·IPv6), 잘못된 표기·역순 범위·체계 혼합 범위는 설정 오류 | 시작이면 시작 실패, 재로드이면 후보 전체 거절, OPS-R24 |
@@ -296,6 +316,11 @@ TCP 진입점은 접속 ticket을 실을 수 없어 ticket 확인을 적용하�
 | OPS-R44 | FR-07·FR-10·AC-58 | 서비스 중지 요청은 G를 적용하는 정상 종료 요청으로 처리해야 한다. |
 | OPS-R45 | FR-07·FR-10·AC-58 | 서비스로 실행 중 Windows 시스템 종료·재시작 알림을 받으면 G 없이 남은 세션을 즉시 강제 정리하고, OS가 프로세스를 끝내기 전에 종료 기록을 마쳐야 한다. 사용자 로그오프로 서비스를 멈춰서는 안 된다. |
 | OPS-R46 | FR-10·AC-57 | 서비스 해제는 중지된 서비스만 지워야 하며 설정·계정·인증서·로그 파일을 지워서는 안 된다. |
+| OPS-R47 | FR-08·AC-60 | `[metrics] enabled = false`이면 `/metrics`에 메트릭을 응답해서는 안 된다. 켜면 상태 리스너가 인증 없이 [메트릭 계약 1.6절](../contracts/metrics-v1.md#16-prometheus-텍스트-표현) 형식으로 응답해야 한다. |
+| OPS-R48 | FR-08·AC-60 | 운영 로그 사건에서 세는 메트릭은 같은 프로세스가 기록부에 넘긴 사건 수와 같아야 한다. 로그 출력 실패가 값을 바꾸어서는 안 된다. |
+| OPS-R49 | FR-08·7절·AC-60 | 메트릭 응답에 중계 ID·세션 식별자·주소·계정명·Origin·ticket 값·비밀·설정 값을 넣어서는 안 된다. 속성은 메트릭 계약 1.4절의 값만 써야 한다. |
+| OPS-R50 | FR-08·AC-60 | 읽지 못한 프로세스 값을 0으로 대신해서는 안 된다. 한 값의 읽기 실패가 다른 메트릭 응답을 막아서는 안 된다. |
+| OPS-R51 | FR-07·AC-60 | `metrics.enabled`는 재시작이 필요한 키여야 하며 관리 API로 편집할 수 없어야 한다. |
 
 ## 5. 오류와 복구
 
@@ -308,6 +333,9 @@ TCP 진입점은 접속 ticket을 실을 수 없어 ticket 확인을 적용하�
 | 켠 진입점의 출발지 IP 허용 목록 없음 | 시작 실패, 공개 허용으로 대체하지 않음 | 해당 진입점 목록 설정 후 다시 시작 |
 | 출발지 IP 허용 목록 항목의 잘못된 표기·역순 범위·주소 체계가 섞인 범위 | 시작이면 시작 실패, 재로드이면 후보 전체 거절·기존 설정 유지, 원인 표시 | 항목 수정 후 다시 시작, 재로드는 다음 유효 변경 감지로 적용 |
 | 비루프백 주소에 평문 HTTP 관리 설정 | 시작 실패 | 루프백 바인딩으로 바꾸거나 HTTPS 설정 후 다시 시작 |
+| `[metrics] enabled = false`에서 `/metrics` 조회 | 404 `not_found`. 값은 계속 세며 관리 API·대시보드는 정상 | 설정 파일에 `[metrics] enabled = true`를 쓰고 정상 종료 뒤 다시 시작 |
+| 프로세스 값 읽기 실패 | `/metrics`는 그 계열의 표본만 빼고 응답. 관리 API는 `available = false`. 0으로 쓰지 않음 | 다음 조회에서 다시 읽음 |
+| 실행 중 `metrics.enabled` 변경 | `reload_restart_required`, 후보 전체 미적용, `/metrics`의 켜짐·꺼짐 유지 | 값을 되돌리거나 정상 종료 뒤 다시 시작 |
 | 필수 포트 사용 중·TLS 준비 실패 | 필수 포트 사용 중이면 부분 준비 자원 회수 후 시작 실패. TLS 준비 실패는 리스너를 바인드하기 전에 시작 실패 | 배치 수정 후 다시 시작 |
 | 같은 리스너 주소의 두 번째 프로세스 | 두 번째 프로세스 시작 실패·시작 중 확보한 자원 회수, 첫 번째 프로세스의 대기·활성 세션 영향 없음 | 리스너 주소를 바꾸거나 첫 번째 프로세스를 정상 종료한 뒤 다시 시작 |
 | L 상한 도달 | 새 중계 접속 거절, 기존 세션 유지 | 기존 연결 해제 후 새 접속 |
@@ -453,6 +481,19 @@ Windows 11 x64·Ubuntu 24.04 LTS x64와 Mode I·II, 모든 전송 조합을 검�
 | OPS-079 | FR-10·7절·AC-58 / OPS-R42 | 권한: `--operator`로 지정한 일반 사용자, 지정하지 않은 일반 사용자, 관리자 권한 터미널, 관리자 계정의 일반(비승격) 터미널에서 각각 시작·중지 | 지정한 사용자와 관리자 권한 터미널은 성공. 지정하지 않은 일반 사용자와 비승격 관리자 터미널은 접근 거부. UAC 확인 창 없음 |
 | OPS-080 | FR-10·AC-57 / OPS-R46 | 해제: 중지된 서비스를 관리자 권한 터미널에서 해제. 실행 중 서비스 해제, 서비스가 없을 때 해제, 관리자 권한 없는 해제 | 중지된 서비스는 지워지고 종료 코드 0과 성공 문장. 설정·계정·로그 파일 유지. 나머지는 각각 `service_running`(1), `service_not_found`(1), `service_access_denied`(1)이며 서비스 상태 변화 없음 |
 | OPS-081 | FR-10·AC-57 / OPS-R41 | 오용: Windows 터미널에서 `vnc-relay service run --config <path>` 실행. Ubuntu에서 `vnc-relay service install --config <path>` 실행 | Windows는 `service_controller_unavailable`(2), 리스너 없음. Ubuntu는 `usage_error`(2) |
+| OPS-082 | FR-08·AC-60 / OPS-R47 | 기본 설정(`[metrics]` 없음)으로 시작한 뒤 로그인 없이 상태 리스너에 `GET /metrics` | 404 `not_found`와 [운영 정보 계약 2절](../contracts/ops-info-v2.md#2-오류)의 JSON 오류 본문. 정의하지 않은 경로와 같은 응답. `/livez`·`/readyz` 응답은 그대로 |
+| OPS-083 | FR-08·AC-60 / OPS-R47 | `[metrics] enabled = true`로 시작. 중계 활동 없이 로그인 없이 `GET /metrics` | 200, `Content-Type: text/plain; version=0.0.4; charset=utf-8`, `Cache-Control: no-store`. 첫 계열은 `target_info{service_name="vnc-relay",service_version="<--version의 버전>"} 1`. [메트릭 계약 1.3절](../contracts/metrics-v1.md#13-메트릭-목록)의 이 플랫폼 계열이 모두 그 순서로 `# HELP`·`# TYPE`을 가짐. 아직 기록하지 않은 `counter`·`histogram`은 표본 없음. `connection_in_progress` 2개·`waiting_count` 6개·`session_count` 12개 조합은 값 0으로 있음. L·Lm 상한은 설정 값. 마지막 줄은 LF로 끝남 |
+| OPS-084 | FR-08·AC-60 / OPS-R47 | 켠 상태에서 `/metrics`에 `HEAD`·`POST`·`PUT`·`DELETE` | 405 `method_not_allowed`, `Allow: GET`, JSON 오류 본문. 메트릭 값 변화 없음 |
+| OPS-085 | FR-08·AC-60 / OPS-R48 | 켠 상태에서 TCP·WS·WSS 수락, 출발지 IP 거절, 초기 교환 형식 오류·시간 초과, 대기 등록 전 종료를 만든 뒤 `/metrics` 조회. 출력에 실패하는 기록부에서도 같은 사건 | `connection_accepted_total{listener}`, `connection_rejected_total{listener,stage,reason}`, `connection_aborted_total{listener,stage,reason}`이 같은 프로세스 운영 로그의 사건 수와 라벨별로 같음. 출력 실패와 관계없이 같음 |
+| OPS-086 | FR-08·AC-60 | Mode II TCP 세션과 WS Viewer 세션을 열어 양방향으로 알려진 바이트를 보냄. 열린 채로 조회한 뒤 닫고 조회. 대기 W 만료와 대기 제거도 발생 | 열린 동안 `session_count`의 해당 조합이 1이고 `session_io_bytes_total{direction}`이 관리 API 세션 상세의 방향별 바이트 합과 같음. 닫은 뒤에는 최근 종료 항목의 방향별 최종 바이트 합과 같음. `session_started_total`·`session_closed_total{mode,close_cause}`·`session_duration_seconds_count`가 사건 수와 같음. `waiting_duration_seconds_count`의 `matched`·`expired`·`removed`가 각 사건 수와 같고 `_sum`은 `waited_ms` 합 ÷ 1000. `handshake_duration_seconds_count`는 성공한 초기 교환 수 |
+| OPS-087 | FR-08·AC-60 | Mode I 대상 연결을 성공, 이름 해석 실패, 연결 거부, C 시간 초과로 각각 한 번 시도. 허용 정책 밖 대상도 한 번 요청 | `target_connect_duration_seconds_count`가 `result = connected`·`resolve_failed`·`connect_refused`·`connect_timeout`에서 각각 1. 시간 초과 표본은 C 이상 구간. 정책 거절은 히스토그램에 기록하지 않고 `connection_rejected_total`로만 셈 |
+| OPS-088 | FR-06·FR-08·AC-60 | 관리자 로그인 성공·잘못된 비밀번호·제한 중 로그인, 계정 기준과 출발지 기준 제한 시작, 관리자 종료(`terminated`·`not_found`), 파일 감지 재로드 적용·거절·재시작 필요, 관리 API 편집 성공·거절, 로그아웃 | `admin_logins_total{result}`, `admin_lockouts_total{scope}`, `admin_terminations_total{result}`, `config_reloads_total`, `config_edits_total`이 같은 프로세스의 사건 수와 같음. `trigger`는 `result = applied`에만, `reason`은 `result = rejected`에만 있음. `admin_session_count`는 로그인 뒤 1, 로그아웃 뒤 0 |
+| OPS-089 | FR-08·AC-60 | WS·WSS 연결이 pong에 응답하지 않아 Kw 경과. pong에 응답하는 유휴 연결 유지. ticket을 켠 역할에 유효 ticket으로 접속 | `websocket_ping_timeouts_total{listener}`는 끊긴 연결로 판정한 수만큼 늘고, 응답하는 연결은 세지 않음. TCP keepalive 판정은 세지 않음. `ticket_accepted_total{listener,role}`이 `ticket_accepted` 사건 수와 같음 |
+| OPS-090 | FR-08·8절·AC-60 | Windows 11과 Ubuntu에서 각각 켜고 두 번 조회. 두 조회 사이에 서버가 CPU를 쓰는 중계를 실행 | `process_uptime_seconds`가 늘어남. `process_cpu_time_seconds_total{cpu_mode}`의 `user`·`system`이 있고 줄지 않음. `process_memory_usage_bytes`·`process_memory_virtual_bytes`·`process_thread_count`가 0보다 큼. Ubuntu는 `process_unix_file_descriptor_count`만, Windows는 `process_windows_handle_count`만 있음 |
+| OPS-091 | FR-08·7절·AC-60 / OPS-R49 | 알려진 중계 ID·계정명·Origin·ticket `jti`·출발지 주소·Mode I 대상 이름을 쓰는 TCP·WSS·Mode I·관리 로그인 활동 뒤 `/metrics`와 관리 API 메트릭 응답 조회 | 두 응답 본문에 그 문자열이 하나도 없음. 라벨·속성 이름과 값이 메트릭 계약 1.4절 목록 안에 있음 |
+| OPS-092 | FR-07·AC-60 / OPS-R51 | `[metrics] enabled`를 `"yes"`·`1`로 설정해 시작. 키 생략. 실행 중 `false`를 `true`로 바꿔 저장. 관리 API로 `metrics.enabled` 편집 요청. 그 뒤 재시작 | 잘못된 자료형은 `config_type_mismatch`로 시작 실패(종료 코드 3). 생략하면 `false`. 실행 중 변경은 `reload_restart_required`이고 `/metrics`는 그대로 404. 편집 요청은 `400 invalid_request`. 설정 보기 항목은 `reload = restart`·`editable = false`. 재시작 뒤 `/metrics` 200 |
+| OPS-093 | FR-08·AC-60 | 경계와 같은 값, 두 경계 사이 값, 마지막 경계보다 큰 값을 각 히스토그램에 기록한 뒤 텍스트와 JSON 비교 | 값 v는 `v ≤ 경계`인 첫 구간에 들어감. 텍스트 `_bucket`은 누적이고 `le="+Inf"`는 `_count`와 같음. JSON `bucket_counts`는 구간별이며 길이는 경계 수 + 1, 합은 `count`. `_sum`·`sum`은 초 값의 합. 경계는 지수 없는 소수 표기 |
+| OPS-094 | FR-08·AC-60 / OPS-R50 | 시험 대역으로 프로세스 값 하나(예: 메모리 사용량)를 읽지 못하게 한 뒤 `/metrics` 조회 | 그 계열은 `# HELP`·`# TYPE`만 있고 표본이 없음. 0을 쓰지 않음. 다른 계열과 상태 코드 200은 그대로 |
 
 OPS-015는 예약 ID이며 사용하지 않는다.
 

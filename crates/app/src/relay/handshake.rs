@@ -127,6 +127,7 @@ mod tests {
 
     use super::*;
     use crate::events::{ConnectionErrorKind, Event, RejectReason, Stage};
+    use crate::metrics::Metrics;
     use crate::ports::{EventSink, RelayCloseAction, RelayStream};
     use crate::relay::test_support::TestSettings;
     use crate::relay::{ConnectionContext, PreparedConnection, RelayService};
@@ -344,7 +345,13 @@ mod tests {
                 settings.timeouts.close = Duration::from_secs(3);
             });
             Arc::new(Self {
-                service: RelayService::new(modes, settings.clone(), clock.clone(), events.clone()),
+                service: RelayService::new(
+                    modes,
+                    settings.clone(),
+                    clock.clone(),
+                    events.clone(),
+                    Arc::new(Metrics::new(clock.as_ref())),
+                ),
                 clock,
                 events,
                 budget: ConnectionBudget::new(),

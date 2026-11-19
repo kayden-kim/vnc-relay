@@ -125,8 +125,12 @@ pub(super) async fn dispatch<C: TargetConnector>(
     };
     viewer.trailing.truncate(filled);
     drop(connecting);
+    // The span of `target_connect_failed.elapsed_ms` (metrics-v1
+    // `vnc_relay.target_connect.duration`).
+    let elapsed = service.clock.monotonic().saturating_sub(started);
     match result {
         Ok((stream, permit, target)) => {
+            service.metrics.record_target_connect(Ok(()), elapsed);
             let other = RelayEndpoint {
                 stream: Box::new(stream),
                 trailing: Vec::new(),
@@ -148,7 +152,7 @@ pub(super) async fn dispatch<C: TargetConnector>(
                 .await
         }
         Err(failure) => {
-            let elapsed_ms = milliseconds(service.clock.monotonic().saturating_sub(started));
+            let elapsed_ms = milliseconds(elapsed);
             let action = match &failure {
                 Failure::Rejected(RejectReason::TargetNotAllowed, _) => {
                     RelayCloseAction::TargetNotAllowed
@@ -182,6 +186,7 @@ pub(super) async fn dispatch<C: TargetConnector>(
                     Err(RelayDispatchError::Rejected(reason))
                 }
                 Failure::Failed(reason, target_ip) => {
+                    service.metrics.record_target_connect(Err(reason), elapsed);
                     service.events.record(&Event::TargetConnectFailed {
                         conn_id: context.conn_id,
                         entry_point: context.entry_point,

@@ -230,6 +230,15 @@ impl AdminSessionTable {
     pub fn prune(&mut self, now: Duration) {
         self.sessions.retain(|_, session| session.is_live(now));
     }
+
+    /// Counts the sessions live at `now`. Unlike `prune`, it removes nothing
+    /// (metrics-v1 `vnc_relay.admin_session.count`).
+    pub fn live_count(&self, now: Duration) -> usize {
+        self.sessions
+            .values()
+            .filter(|session| session.is_live(now))
+            .count()
+    }
 }
 
 #[cfg(test)]
@@ -326,5 +335,36 @@ mod tests {
         );
         table.prune(Duration::from_secs(300));
         assert!(table.get(&token).is_none());
+    }
+
+    /// spec: operations.md:OPS-088 partial
+    #[test]
+    fn live_count_skips_expired_sessions_without_removing_them() {
+        let policy = policy(300, 3600);
+        let mut table = AdminSessionTable::default();
+        let expired = AdminSessionToken::parse(TOKEN).unwrap_or_else(|error| panic!("{error}"));
+        let live = AdminSessionToken::parse(
+            "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210",
+        )
+        .unwrap_or_else(|error| panic!("{error}"));
+        table.insert(
+            expired.clone(),
+            AdminSession::start(account(), csrf(), Duration::ZERO, wall_at(0), policy),
+        );
+        table.insert(
+            live.clone(),
+            AdminSession::start(
+                account(),
+                csrf(),
+                Duration::from_secs(200),
+                wall_at(200),
+                policy,
+            ),
+        );
+
+        assert_eq!(table.live_count(Duration::from_secs(300)), 1);
+        assert!(table.get(&expired).is_some());
+        assert!(table.get(&live).is_some());
+        assert_eq!(table.live_count(Duration::from_secs(500)), 0);
     }
 }

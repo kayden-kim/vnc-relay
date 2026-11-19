@@ -1,7 +1,7 @@
 # 상태 리스너와 준비 상태 모듈 설계
 
 
-상태 리스너(`[status] listen`)가 `/livez`·`/readyz`에 답하는 구조와 준비 상태를 다룬다. 준비 상태는 시작 중·준비됨·정상 종료 중·리스너 장애다. 상태 리스너는 다른 필수 리스너보다 먼저 열고, 관리·상태 연결 상한 Lm으로 센다. 모든 필수 리스너가 준비되면 준비됨으로 바꾸고 `server_ready`를 기록한다.
+상태 리스너(`[status] listen`)가 `/livez`·`/readyz`에 답하는 구조와 준비 상태를 다룬다. `[metrics] enabled`가 참이면 `/metrics`도 이 리스너가 답한다. 준비 상태는 시작 중·준비됨·정상 종료 중·리스너 장애다. 상태 리스너는 다른 필수 리스너보다 먼저 열고, 관리·상태 연결 상한 Lm으로 센다. 모든 필수 리스너가 준비되면 준비됨으로 바꾸고 `server_ready`를 기록한다.
 
 | 항목 | 값 |
 | --- | --- |
@@ -10,16 +10,16 @@
 | 구현 대조 | Verified — [대조 기록](#대조-기록) |
 | 코드 위치 | `crates/app/src/lifecycle.rs`(`Readiness`, `LifecycleService`), `crates/app/src/events.rs`(`Event::ServerReady`, `RejectReason::AdminConnectionLimit`), `crates/app/src/settings.rs`(`Settings::status_listener`, `Settings::other_listeners`), `crates/adapters/src/admission.rs`(`AdmittingListener`), `crates/adapters/src/status_http.rs`(`StatusListener`), `crates/adapters/src/net.rs`(`bind_one`), `src/serve.rs`(상태 리스너 먼저 열기, 준비됨 전환) |
 | 코드 지도 | [코드 지도 2절](code-map.md#2-코드-위치와-구성요소), [3절](code-map.md#3-진입점) |
-| 관련 스펙 | [운영 스펙 2절](../specs/operations.md#2-상태와-검증-매개변수)의 준비 상태와 Lm, OPS-R08·OPS-R19·OPS-R20, OPS-013(일부), OPS-032, OPS-004(일부), OPS-033(일부) |
-| 관련 계약 | [운영 정보 계약 1.12절](../contracts/ops-info-v2.md#112-상태-리스너와-엔드포인트)·[2절](../contracts/ops-info-v2.md#2-오류)(상태 응답), [1.5절](../contracts/ops-info-v2.md#15-사건-목록)(`server_ready`), [1.6절](../contracts/ops-info-v2.md#16-원인-코드)(`admin_connection_limit`), [설정 계약 1.2절](../contracts/config-v4.md#12-키-표)(`status.listen`, `limits.admin_connections`) |
-| 관련 ADR | [ADR-0004 tokio·rustls](../decisions/ADR-0004-tokio-rustls.md) |
+| 관련 스펙 | [운영 스펙 2절](../specs/operations.md#2-상태와-검증-매개변수)의 준비 상태와 Lm, OPS-R08·OPS-R19·OPS-R20, OPS-013(일부), OPS-032, OPS-004(일부), OPS-033(일부). [운영 스펙 3.8절](../specs/operations.md#38-메트릭)의 `/metrics` 경로, OPS-082~084 |
+| 관련 계약 | [운영 정보 계약 1.12절](../contracts/ops-info-v2.md#112-상태-리스너와-엔드포인트)·[2절](../contracts/ops-info-v2.md#2-오류)(상태 응답), [1.5절](../contracts/ops-info-v2.md#15-사건-목록)(`server_ready`), [1.6절](../contracts/ops-info-v2.md#16-원인-코드)(`admin_connection_limit`), [설정 계약 1.2절](../contracts/config-v4.md#12-키-표)(`status.listen`, `limits.admin_connections`, `metrics.enabled`), [메트릭 계약 1.6절](../contracts/metrics-v1.md#16-prometheus-텍스트-표현)(`/metrics` 본문) |
+| 관련 ADR | [ADR-0004 tokio·rustls](../decisions/ADR-0004-tokio-rustls.md), [ADR-0011](../decisions/ADR-0011-pull-metrics-on-status-listener.md) |
 
 ## 1. 책임과 경계
 
 - 맡는 책임:
   - 준비 상태: 시작 중에서 전체 바인드 후 준비됨이 된다. 정상 종료는 `shutting_down`이다. 복구 불가능 수락 오류가 먼저 종료를 시작하면 `listener_failed`다. 장애 종료의 유예·정리 동안 이 값을 유지한다. 
   - 상태 리스너를 다른 필수 리스너보다 먼저 바인드하고 바로 응답한다(1.12절). 다른 리스너를 바인드하는 동안 `/readyz`는 503 `starting`이다.
-  - 응답(1.12·2절): `GET /livez`는 상태와 관계없이 200 `{"status":"alive"}`. `GET /readyz`는 준비됨이면 200 `{"status":"ready"}`, 아니면 503 `{"status":"not_ready","reason":"<code>"}`. 정의하지 않은 경로는 404 `not_found`, 정의한 경로의 `GET`이 아닌 메서드는 405 `method_not_allowed`와 `Allow: GET`. 모든 응답은 `Content-Type: application/json`과 `Cache-Control: no-store`를 가진다. 인증 헤더·쿠키·쿼리 문자열·본문은 무시한다.
+  - 응답(1.12·2절): `GET /livez`는 상태와 관계없이 200 `{"status":"alive"}`. `GET /readyz`는 준비됨이면 200 `{"status":"ready"}`, 아니면 503 `{"status":"not_ready","reason":"<code>"}`. `metrics.enabled`가 참이면 `GET /metrics`는 200과 Prometheus 텍스트(`Content-Type: text/plain; version=0.0.4; charset=utf-8`)다. 거짓이면 `/metrics`는 정의하지 않은 경로다. 정의하지 않은 경로는 404 `not_found`, 정의한 경로의 `GET`이 아닌 메서드는 405 `method_not_allowed`와 `Allow: GET`. `/metrics`의 200 밖의 모든 응답은 `Content-Type: application/json`이다. 모든 응답은 `Cache-Control: no-store`를 가진다. 인증 헤더·쿠키·쿼리 문자열·본문은 무시한다.
   - Lm: 수락은 `admission.rs`의 `AdmittingListener`(`name` = `status`)가 맡는다. 상태 연결은 수락 직후 Lm 예산의 자리를 잡는다. 자리가 없으면 `connection_rejected`(`listener` = `status`, `stage` = `accept`, `reason` = `admin_connection_limit`, `limit`)를 기록하고 HTTP 응답 없이 닫는다. 연결이 끝나면 자리를 돌려준다. L과는 다른 예산이다.
   - 준비됨으로 바뀔 때 `server_ready`(`listeners`: 바인드한 모든 리스너의 `name`·`listen`)를 기록한다. 설정 경고 뒤, 접속 사건 앞이다.
 - 맡지 않는 책임:
@@ -28,6 +28,7 @@
   - 관리 리스너의 Lm 집계. 상태 리스너와 같은 Lm 예산을 쓴다([관리 리스너 모듈 설계](management-listener.md)).
   - WS·WSS 리스너의 연결 수락. `serve`가 만든 `WsEntryPoint`가 맡는다(`src/serve.rs`). 이 리스너들은 바인드해 준비됨 판정에 포함한다([`serve` 시작 모듈 설계 1절](serve-startup.md#1-책임과-경계)). 관리 리스너는 별도 관리 작업이 수락한다([관리 리스너 모듈 설계](management-listener.md)).
   - 인증서 검사와 파일 변경 감지 준비. `serve`가 준비됨 전 단계에서 수행한다.
+  - `/metrics`의 값과 본문. [메트릭 모듈 설계](metrics.md)가 맡는다. 이 문서는 `metrics.enabled`에 따라 그 경로를 열고 닫는 판정과 메서드 판정만 맡는다.
 - 다른 모듈에 공개하는 기능:
   - `vnc_relay_app::lifecycle::{Readiness, LifecycleService}`
   - `vnc_relay_app::events::{Event::ServerReady, RejectReason::AdminConnectionLimit}`
@@ -57,7 +58,7 @@ flowchart LR
 | `crates/adapters/src/listener.rs` `Listener`, `SupervisedListener`, `ListenerFailure`, `is_fatal_accept_error` | 모든 리스너의 수락 포트·OS 오류 분류·최초 장애 채널. `TcpListener`는 실제 소켓 포트다. | `serve`가 바인드한 각 소켓을 감싼다 | std, tokio |
 | `crates/app/src/events.rs` `Event::ServerReady`, `RejectReason::AdminConnectionLimit` | `server_ready`의 `listeners`, `admin_connection_limit`과 `limit` | 사건이 생길 때 | 없음 |
 | `crates/adapters/src/net.rs` `bind_one` | 계획 하나를 바인드한다. `bind`도 계획마다 이 함수를 쓴다. | 4단계 | tokio, app |
-| `crates/adapters/src/status_http.rs` `StatusListener` | 상태 리스너 하나. axum으로 HTTP/1.1을 처리한다. 수락은 `admission.rs`의 `AdmittingListener`가 맡아 Lm 자리를 잡고, 응답은 1.12·2절 표를 따른다. | `serve`가 상태 리스너를 바인드한 직후 띄운다. 종료 끝에 `serve`가 작업을 멈춘다. | axum, serde_json, tokio, app, domain |
+| `crates/adapters/src/status_http.rs` `StatusListener` | 상태 리스너 하나. axum으로 HTTP/1.1을 처리한다. 수락은 `admission.rs`의 `AdmittingListener`가 맡아 Lm 자리를 잡고, 응답은 1.12·2절 표를 따른다. `metrics.enabled`가 참일 때만 `StatusListener::new`가 `Some(MetricsService)`를 받아 `/metrics`를 연다. | `serve`가 상태 리스너를 바인드한 직후 띄운다. 종료 끝에 `serve`가 작업을 멈춘다. | axum, serde_json, tokio, app, domain, `metrics_text` |
 | `src/serve.rs` `listen_until_shutdown` | 상태 리스너를 먼저 바인드해 띄우고, 관리 리스너와 나머지를 바인드하고, 준비됨으로 바꾸고 `server_ready`를 기록한 뒤 관리 리스너와 TCP 진입점을 띄운다. 종료 요청을 받으면 종료 중으로 바꾼다. | `serve` 실행마다 | adapters, app, domain, tokio |
 
 ### 상태 수락 경계 (Current / Active)
@@ -128,6 +129,12 @@ flowchart LR
 - 날짜·대상: 2026-11-08 작업 트리의 상태 수락 경계.
 - 환경·방법: 저장소의 `admission.rs`·`status_http.rs`와 실행 설정 source를 읽고 현재 Lm/CAS·공유 사용량·U 미적용 경계를 대조했다.
 - 결과: 본문의 상태 수락 경계와 일치한다. 시나리오별 현재 결과는 `cargo xtask scenarios`가 만드는 `scenario-report.md`와 CI에서 확인한다([테스트 컨벤션](../conventions/testing.md#7-테스트와-스펙-시나리오-연결)).
+
+### `/metrics` 경로 대조
+
+- 날짜·대상: 2026-11-19 작업 트리의 `status_http.rs` `answer`와 `src/serve.rs`의 `StatusListener::new` 호출.
+- 환경·방법: 코드를 읽어 1절의 응답 목록과 대조했다. Windows 11 x64에서 `crates/adapters/tests/ops_info_contract.rs`(OPS-082~084·094)와 `tests/metrics.rs`(OPS-082·092)를 실행했다.
+- 결과: 꺼진 `/metrics`는 404 `not_found`, 켜진 `/metrics`는 로그인 없이 200 텍스트, `GET` 밖의 메서드는 405와 `Allow: GET`이다. 설정 파일을 바꿔도 재시작 전에는 경로가 열리지 않는다.
 
 ### 필수 리스너 장애 수동 관찰
 

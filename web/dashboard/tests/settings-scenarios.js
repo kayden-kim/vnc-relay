@@ -129,7 +129,7 @@ function deferred() {
   return { promise, resolve };
 }
 
-// Full contract order: 75 keys, 43 reloadable (37 editable and six file paths).
+// Full contract order: 76 keys, 43 reloadable (37 editable and six file paths).
 function config(overrides = {}) {
   const items = [];
   const add = (key, value, reload = 'restart', editable = false, min, max) => {
@@ -196,6 +196,7 @@ function config(overrides = {}) {
     ['recent_closed.max_entries', 100, 0, 10000],
   ]) add(key, value, 'restart', false, min, max);
   add('status.listen', '127.0.0.1:9080');
+  add('metrics.enabled', false);
   add('log.output', 'stdout');
   add('reload.settle_secs', 5, 'restart', false, 1, 60);
   add('reload.poll_secs', 30, 'restart', false, 5, 600);
@@ -360,7 +361,7 @@ async function case029() {
   await ready(m);
   const rows = [...m.root.querySelectorAll('[data-config-key]')];
   check('DASH-029: all contract keys in order', same(rows.map((row) => row.dataset.configKey), data.items.map((item) => item.key)));
-  check('DASH-029: fixture has all 75 contract keys', data.items.length === 75);
+  check('DASH-029: fixture has all 76 contract keys', data.items.length === 76);
   check('DASH-029: fixture has all 43 reloadable keys', data.items.filter((item) => item.reload === 'dynamic').length === 43);
   check('DASH-029: fixture has all 37 potential editable keys', data.items.filter((item) => item.editable).length === 37);
   const sections = [...m.root.querySelectorAll('.card-title')].map((node) => node.textContent);

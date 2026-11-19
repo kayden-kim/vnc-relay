@@ -219,7 +219,7 @@ fn parse_query(query_str: Option<&str>) -> Result<LogsFilter, &'static str> {
     Ok(filter)
 }
 
-fn percent_decode(input: &str) -> Option<String> {
+pub(super) fn percent_decode(input: &str) -> Option<String> {
     let mut bytes = Vec::with_capacity(input.len());
     let mut iter = input.bytes();
     while let Some(b) = iter.next() {

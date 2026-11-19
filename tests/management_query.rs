@@ -3070,6 +3070,7 @@ fn config_view_reports_effective_values_all_file_states_and_reload_history() {
         "recent_closed.max_entries",
         "recent_logs.max_entries",
         "status.listen",
+        "metrics.enabled",
         "log.output",
         "reload.settle_secs",
         "reload.poll_secs",

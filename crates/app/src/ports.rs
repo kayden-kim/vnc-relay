@@ -315,6 +315,56 @@ pub trait RelaySessionControl: Send + Sync {
 /// Provides a snapshot of relay runtime state for management queries.
 pub trait RelayStateSource: Send + Sync {
     fn snapshot(&self, clock: &dyn Clock) -> crate::relay::RelaySnapshot;
+
+    /// Counts of the same state under one lock, without copying the lists
+    /// (metrics-v1 §1.1 "현재 값").
+    fn counts(&self) -> crate::relay::RelayCounts;
+}
+
+/// CPU time the process has used (metrics-v1 `process.cpu.time`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CpuTimes {
+    pub user: Duration,
+    pub system: Duration,
+}
+
+/// Open descriptors or handles. Which one exists depends on the platform
+/// (metrics-v1 §1.1 "플랫폼별 메트릭").
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OpenCount {
+    /// Linux: entries of `/proc/self/fd` (`process.unix.file_descriptor.count`).
+    FileDescriptors(Option<u64>),
+    /// Windows: open handles (`process.windows.handle.count`).
+    Handles(Option<u64>),
+    /// The platform has neither metric.
+    NotSupported,
+}
+
+/// Values of the running process (metrics-v1 §1.3 `process.*` except
+/// `process.uptime`, which the app measures). `None` is a value that could
+/// not be read; it is never replaced with 0 (metrics-v1 §1.1).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ProcessStats {
+    pub cpu: Option<CpuTimes>,
+    /// Bytes of physical memory: `VmRSS` on Linux, the working set on Windows.
+    pub memory_usage: Option<u64>,
+    /// Bytes of virtual memory: `VmSize` on Linux, private bytes on Windows.
+    pub memory_virtual: Option<u64>,
+    pub threads: Option<u64>,
+    pub open: OpenCount,
+}
+
+/// Reads the values of the running process. Each value is read on its own,
+/// so one failure leaves only that value `None`. Reading never fails as a
+/// whole and writes no log line (docs/architectures/metrics.md §6).
+pub trait ProcessStatsSource: Send + Sync {
+    fn read(&self) -> ProcessStats;
+}
+
+/// Counts the administrator sessions live now (metrics-v1
+/// `vnc_relay.admin_session.count`). `AdminAuth` implements it.
+pub trait AdminSessionSource: Send + Sync {
+    fn live_sessions(&self) -> usize;
 }
 
 #[cfg(test)]

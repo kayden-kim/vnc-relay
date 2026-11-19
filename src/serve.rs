@@ -23,6 +23,7 @@ use vnc_relay_adapters::listener::{ListenerFailure, SupervisedListener};
 use vnc_relay_adapters::management_http::{DashboardHints, ManagementListener, ManagementServices};
 use vnc_relay_adapters::net::{AcceptPolicy, AllowSource, BindFailure, TcpEntryPoint};
 use vnc_relay_adapters::ops_log::{JsonLinesEventSink, RecentLogs};
+use vnc_relay_adapters::process_stats::OsProcessStats;
 use vnc_relay_adapters::status_http::StatusListener;
 use vnc_relay_adapters::target::TcpTargetConnector;
 use vnc_relay_adapters::tls::{self, TlsError, TlsFile, TlsSource};
@@ -36,7 +37,11 @@ use vnc_relay_app::management::login::dummy_hash;
 use vnc_relay_app::management::query::ManagementQueryService;
 use vnc_relay_app::management::terminate::ManagementTerminateService;
 use vnc_relay_app::management::{AdminAuth, AdminPorts};
-use vnc_relay_app::ports::{Clock, EventSink, RelaySessionControl, RelayStateSource};
+use vnc_relay_app::metrics::history::HISTORY_INTERVAL;
+use vnc_relay_app::metrics::{MetricSources, Metrics, MetricsService, MetricsSink};
+use vnc_relay_app::ports::{
+    AdminSessionSource, Clock, EventSink, RelaySessionControl, RelayStateSource,
+};
 use vnc_relay_app::relay::{RelayRuntime, RelayRuntimeConfig, RelayService};
 use vnc_relay_app::reload::service::ReloadService;
 use vnc_relay_app::reload::snapshot::{ReloadCell, ReloadSnapshot};
@@ -133,7 +138,10 @@ pub fn start(config: &Path, host: Host) -> u8 {
             return EXIT_CONFIG;
         }
     };
-    let log: Arc<dyn EventSink> = output.clone();
+    // Metrics count the events of this process from here on (metrics-v1 §1.1).
+    let clock: Arc<dyn Clock> = Arc::new(SystemClock::new());
+    let metrics = Arc::new(Metrics::new(clock.as_ref()));
+    let log: Arc<dyn EventSink> = Arc::new(MetricsSink::new(Arc::clone(&metrics), output.clone()));
     log.record(&Event::ServerStarting);
     for warning in settings.warnings() {
         log.record(&Event::ConfigWarning {
@@ -163,7 +171,6 @@ pub fn start(config: &Path, host: Host) -> u8 {
     };
     let session = settings.management.session;
     let limit = settings.management.login_limit;
-    let clock: Arc<dyn Clock> = Arc::new(SystemClock::new());
     let auth = Arc::new(AdminAuth::new(
         loaded.accounts,
         dummy,
@@ -195,14 +202,27 @@ pub fn start(config: &Path, host: Host) -> u8 {
     };
     runtime.block_on(listen_until_shutdown(
         &running,
-        output,
-        recent_logs,
+        Logging {
+            output,
+            log,
+            recent_logs,
+            metrics,
+        },
         auth,
         config,
         clock,
         started_at,
         host,
     ))
+}
+
+/// The log sinks and the event counters that `start` opened before the
+/// runtime. `log` counts each event in `metrics`, then writes it to `output`.
+struct Logging {
+    output: Arc<JsonLinesEventSink>,
+    log: Arc<dyn EventSink>,
+    recent_logs: Arc<RecentLogs>,
+    metrics: Arc<Metrics>,
 }
 
 /// The file checks of `service install` (cli-v1 §1.9 install step 4): stages
@@ -276,14 +296,9 @@ fn report_service_log_stdout() {
     );
 }
 
-#[expect(
-    clippy::too_many_arguments,
-    reason = "the start stages hand over their parts, and the host decides the shutdown source"
-)]
 async fn listen_until_shutdown(
     running: &ConfigCandidate,
-    output: Arc<JsonLinesEventSink>,
-    recent_logs: Arc<RecentLogs>,
+    logging: Logging,
     auth: Arc<AdminAuth>,
     config: &Path,
     clock: Arc<dyn Clock>,
@@ -292,7 +307,12 @@ async fn listen_until_shutdown(
 ) -> u8 {
     let mut running = running.clone();
     let settings = &running.settings;
-    let log: Arc<dyn EventSink> = output.clone();
+    let Logging {
+        output,
+        log,
+        recent_logs,
+        metrics,
+    } = logging;
     let (mut requests, status) = match host {
         Host::Terminal => match ShutdownSignal::register() {
             Ok(signal) => (Requests::Terminal(signal), HostStatus::default()),
@@ -407,6 +427,39 @@ async fn listen_until_shutdown(
     let (listener_failures, mut failed_listener) = watch::channel(None);
     // Lm, shared by the status listener and the management listener (4.2).
     let admin_budget = ConnectionBudget::new();
+    // Every relay entry point takes places from one L.
+    let relay_budget = ConnectionBudget::new();
+    let waiting_budget = ConnectionBudget::new();
+    let connector = TcpTargetConnector::new(
+        Arc::clone(&cell) as Arc<dyn vnc_relay_app::reload::ports::RuntimeSettingsSource>
+    );
+    let runtime = Arc::new(RelayRuntime::new(
+        connector,
+        Arc::new(relay_key),
+        Arc::new(session_key),
+        Arc::clone(&relay_budget),
+        waiting_budget,
+        RelayRuntimeConfig {
+            recent_closed: settings.recent_closed.max_entries as usize,
+        },
+        Arc::clone(&cell) as Arc<dyn vnc_relay_app::reload::ports::RuntimeSettingsSource>,
+    ));
+    // The management API always reads metrics; the status listener serves
+    // them only when `metrics.enabled` is on (metrics-v1 §1.1).
+    let metrics_service = Arc::new(MetricsService::new(
+        Arc::clone(&metrics),
+        MetricSources {
+            relay: Arc::clone(&runtime) as Arc<dyn RelayStateSource>,
+            relay_budget: Arc::clone(&relay_budget),
+            admin_budget: Arc::clone(&admin_budget),
+            settings: Arc::clone(&cell)
+                as Arc<dyn vnc_relay_app::reload::ports::RuntimeSettingsSource>,
+            admin: Arc::clone(&auth) as Arc<dyn AdminSessionSource>,
+            process: Arc::new(OsProcessStats::new()),
+        },
+        Arc::clone(&clock),
+        env!("CARGO_PKG_VERSION"),
+    ));
     let status_plan = settings.status_listener();
     let management_plan = settings.management_listener();
 
@@ -420,6 +473,10 @@ async fn listen_until_shutdown(
                 Arc::clone(&admin_budget),
                 Arc::clone(&lifecycle),
                 Arc::clone(&cell) as Arc<dyn vnc_relay_app::reload::ports::RuntimeSettingsSource>,
+                settings
+                    .metrics
+                    .enabled
+                    .then(|| Arc::clone(&metrics_service)),
             );
             Some(tokio::spawn(status.run(Arc::clone(&log))))
         }
@@ -453,6 +510,9 @@ async fn listen_until_shutdown(
         return EXIT_LISTENER;
     }
 
+    // The first history point is taken before ready (MGT-R32), so every
+    // request that sees the server ready also sees that point.
+    metrics_service.sample_history();
     lifecycle.mark_ready();
     let ready = std::iter::once(&status_plan)
         .chain(management.iter().map(|bound| &bound.plan))
@@ -461,27 +521,13 @@ async fn listen_until_shutdown(
         .collect();
     log.record(&Event::ServerReady { listeners: ready });
     status.ready();
+    // Points go on through the shutdown grace, so the task stops with the
+    // listeners.
+    let sampler_task = Some(tokio::spawn(sample_history(Arc::clone(&metrics_service))));
 
-    // The TCP and WebSocket entry points accept from here on. Every relay entry
-    // point takes places from one L.
-    let relay_budget = ConnectionBudget::new();
-    // One ticket use table for WS and WSS (websocket-relay-v2 §1.9.4).
+    // The TCP and WebSocket entry points accept from here on. One ticket use
+    // table for WS and WSS (websocket-relay-v2 §1.9.4).
     let ticket_uses = Arc::new(Mutex::new(TicketUseTable::new()));
-    let waiting_budget = ConnectionBudget::new();
-    let connector = TcpTargetConnector::new(
-        Arc::clone(&cell) as Arc<dyn vnc_relay_app::reload::ports::RuntimeSettingsSource>
-    );
-    let runtime = Arc::new(RelayRuntime::new(
-        connector,
-        Arc::new(relay_key),
-        Arc::new(session_key),
-        Arc::clone(&relay_budget),
-        waiting_budget,
-        RelayRuntimeConfig {
-            recent_closed: settings.recent_closed.max_entries as usize,
-        },
-        Arc::clone(&cell) as Arc<dyn vnc_relay_app::reload::ports::RuntimeSettingsSource>,
-    ));
     let query_service = Arc::new(ManagementQueryService::new(
         Arc::clone(&runtime) as Arc<dyn RelayStateSource>,
         Arc::clone(&relay_budget),
@@ -514,6 +560,7 @@ async fn listen_until_shutdown(
                 terminate: terminate_service,
                 config: config_service,
                 logs: Arc::clone(&recent_logs),
+                metrics: metrics_service,
             },
         );
         tokio::spawn(listener.run(Arc::clone(&log)))
@@ -526,6 +573,7 @@ async fn listen_until_shutdown(
         Arc::clone(&cell) as Arc<dyn vnc_relay_app::reload::ports::RuntimeSettingsSource>,
         Arc::clone(&clock),
         Arc::clone(&log),
+        metrics,
     ));
 
     let supervisor = {
@@ -636,6 +684,7 @@ async fn listen_until_shutdown(
     drop(idle);
     stop_task(management_task).await;
     stop_task(status_task).await;
+    stop_task(sampler_task).await;
     let _ = watch_task.await;
     log.record(&Event::ServerStopped);
     exit
@@ -773,6 +822,21 @@ where
 fn startup_keys_failure(log: &dyn EventSink, error: &dyn Display) -> u8 {
     runtime_failure(log, "운영체제 난수원으로 시작 키를 만들 수 없다", error)
 }
+
+/// Takes one history point every `HISTORY_INTERVAL` after the ready point
+/// that `listen_until_shutdown` takes itself (management-api-v1 §1.16). A
+/// late tick moves the next one back, so two points are never taken at once.
+async fn sample_history(metrics: Arc<MetricsService>) {
+    let mut ticks = tokio::time::interval(HISTORY_INTERVAL);
+    ticks.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+    // The first tick completes at once. The ready point is already taken.
+    ticks.tick().await;
+    loop {
+        ticks.tick().await;
+        metrics.sample_history();
+    }
+}
+
 /// Cancels a background task and joins it before releasing its resources.
 async fn stop_task(task: Option<tokio::task::JoinHandle<()>>) {
     if let Some(task) = task {

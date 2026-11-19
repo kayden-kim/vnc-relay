@@ -15,9 +15,9 @@
 | 진입점 | TCP·WS·WSS의 Viewer·Server(역접속). TCP는 역할마다 리스너가 따로 있다. WS·WSS는 리스너 하나에서 요청 경로로 역할을 나눈다. `/relay/viewer`는 Viewer, `/relay/server`는 Server(Mode II만) 역할이다([ADR-0008](docs/decisions/ADR-0008-shared-ws-listener-path-roles.md)). 평문 WS는 기본으로 꺼져 있다. |
 | TLS | WSS와 관리 HTTPS의 TLS를 서버가 직접 처리한다. 내장 TLS는 TLS 1.2 미만을 거절한다. 인증서는 운영자가 준비한다. 중계 WS·WSS 앞에서 역방향 프록시가 TLS를 끝내는 배치도 지원한다. 관리 리스너는 이 배치에서 제외한다([ADR-0007](docs/decisions/ADR-0007-proxy-tls-termination.md)). |
 | 접근 제한 | 진입점마다 출발지 IP 허용 목록(단일 IP·CIDR·범위)을 둔다. WS·WSS는 역할마다 IP·`Origin` 허용 목록을 따로 둔다. 연결을 받을 때는 켠 역할 목록의 합집합으로, 업그레이드 때는 고른 역할의 목록으로 검사한다. 신뢰 프록시(`trusted_proxies`)를 거친 요청은 `X-Forwarded-For`의 전달 주소로 판정한다. WS·WSS는 역할마다 접속 ticket 확인도 켤 수 있다. 켠 역할은 외부 발급 쪽이 서명한 유효한 ticket이 있을 때만 업그레이드를 받는다. 기본은 꺼짐이고, TCP 진입점에는 적용하지 않는다([ADR-0009](docs/decisions/ADR-0009-optional-relay-access-ticket.md)). |
-| 관리 | 내장 로그인(Argon2id 해시)이 있는 대시보드와 관리 API(`/api/v1/`). 서버·대기 연결·활성 세션·최근 종료 목록·최근 로그·설정을 조회한다. 활성 세션 종료와 동적 설정 편집도 제공한다. 로그 화면(`/#/logs`)에서는 최근 운영 로그를 필터·검색·자동 갱신하고 JSON Lines로 내려받는다. 화면은 한국어·영어다. |
-| 운영 | 인증 없는 상태 리스너(`/livez`, `/readyz`), JSON Lines 운영 로그(표준 출력 또는 파일), 메모리의 최근 로그(기본 1000건, 0~10000, 바꾸면 재시작), 43개 키 자동 재로드·37개 키 편집, 종료 유예 G. |
-| 계약 버전 | 현재 소스가 구현한 버전은 설정 [vnc-relay-config 4.1.0](docs/contracts/config-v4.md), 운영 로그 [ops-info 2.1.0](docs/contracts/ops-info-v2.md), WebSocket [websocket-relay 2.1.0](docs/contracts/websocket-relay-v2.md)이다. 접속 ticket은 기본으로 꺼져 있다. |
+| 관리 | 내장 로그인(Argon2id 해시)이 있는 대시보드와 관리 API(`/api/v1/`). 서버·대기 연결·활성 세션·최근 종료 목록·최근 로그·설정·메트릭을 조회한다. 활성 세션 종료와 동적 설정 편집도 제공한다. 로그 화면(`/#/logs`)에서는 최근 운영 로그를 필터·검색·자동 갱신하고 JSON Lines로 내려받는다. 메트릭 화면(`/#/metrics`)에서는 핵심 지표, 최근 1시간 추이 차트, 시간 분포, 원인별 수, 프로세스 자원을 본다. 화면은 한국어·영어다. |
+| 운영 | 인증 없는 상태 리스너(`/livez`, `/readyz`), JSON Lines 운영 로그(표준 출력 또는 파일), 메모리의 최근 로그(기본 1000건, 0~10000, 바꾸면 재시작), 43개 키 자동 재로드·37개 키 편집, 종료 유예 G. `[metrics] enabled = true`이면 상태 리스너의 `/metrics`가 OpenTelemetry 이름 규칙의 메트릭을 Prometheus 텍스트로 낸다(기본 꺼짐, 바꾸면 재시작, [ADR-0011](docs/decisions/ADR-0011-pull-metrics-on-status-listener.md)). |
+| 계약 버전 | 현재 소스가 구현한 버전은 설정 [vnc-relay-config 4.2.0](docs/contracts/config-v4.md), 운영 로그 [ops-info 2.1.0](docs/contracts/ops-info-v2.md), WebSocket [websocket-relay 2.1.0](docs/contracts/websocket-relay-v2.md), 관리 API [management-api 1.2.0](docs/contracts/management-api-v1.md), 메트릭 [vnc-relay-metrics 1.0.0](docs/contracts/metrics-v1.md)이다. 접속 ticket과 `/metrics`는 기본으로 꺼져 있다. |
 
 noVNC 클라이언트는 포함하지 않는다. noVNC는 외부 클라이언트로 접속할 수 있고, 상호운용 시험에만 쓴다.
 
@@ -185,7 +185,7 @@ cargo deny check licenses
 | [문서 안내](docs/README.md) | 문서 종류와 변경별로 읽을 문서 |
 | [PRD](docs/requirements/PRD.md) | 제품 요구사항과 수용 기준 |
 | [스펙 목록](docs/specs/README.md) | 중계·WebSocket·관리·대시보드·운영의 외부 동작과 수용 시나리오 |
-| [계약 목록](docs/contracts/README.md) | 설정·CLI·관리 API·운영 로그·WebSocket·Repeater 초기 교환 형식 |
+| [계약 목록](docs/contracts/README.md) | 설정·CLI·관리 API·운영 로그·메트릭·WebSocket·Repeater 초기 교환 형식 |
 | [호환성 검증 기록](docs/contracts/repeater-compat-record.md) | UltraVNC 1.8.3.0·Repeater·noVNC 1.7.0과의 대조 결과 |
 | [실행파일을 묶고 수동 운영하는 방법](docs/how-to/operate-relay.md) | 배포 묶음 설치·설정·업그레이드·롤백 절차 |
 | [용어집](GLOSSARY.md) | 업무 용어의 이름과 뜻 |

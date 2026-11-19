@@ -286,7 +286,7 @@ pub fn settings_view_displays_all_effective_values_in_contract_order() {
     let items = raw["items"]
         .as_array()
         .unwrap_or_else(|| panic!("items missing"));
-    assert_eq!(items.len(), 75, "every v4 config key must be present");
+    assert_eq!(items.len(), 76, "every v4 config key must be present");
     assert!(items.iter().any(|i| i["value"].is_null()));
     assert!(items.iter().any(|i| i["value"] == json!([])));
     assert!(

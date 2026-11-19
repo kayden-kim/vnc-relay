@@ -6,6 +6,7 @@ use std::fmt;
 use std::future::poll_fn;
 use std::net::SocketAddr;
 use std::pin::{Pin, pin};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::task::Poll;
 use std::time::{Duration, SystemTime};
@@ -14,7 +15,7 @@ use tokio::sync::watch;
 use vnc_relay_domain::account::AccountName;
 use vnc_relay_domain::budget::{BudgetPermit, ConnectionBudget};
 use vnc_relay_domain::conn_id::ConnId;
-use vnc_relay_domain::entry_point::EntryPoint;
+use vnc_relay_domain::entry_point::{EntryPoint, Role};
 use vnc_relay_domain::handshake::{HandshakeError, HandshakePolicy, HandshakeRequest, Mode};
 use vnc_relay_domain::matching::{MatchClaim, WaitingTable};
 use vnc_relay_domain::peer_ip::PeerIp;
@@ -27,6 +28,7 @@ use vnc_relay_domain::session::{
 use crate::events::{
     AbortReason, AdminTerminateResult, Event, RejectReason, RelayIdRef, ShutdownTrigger, Stage,
 };
+use crate::metrics::Metrics;
 use crate::ports::{
     BoxRelayStream, Clock, EventSink, RelayCloseAction, RelayIdSource, RelayLifecycle,
     RelaySessionControl, RelayStateSource, RelayStream, SessionIdSource, TargetConnector,
@@ -87,6 +89,10 @@ pub struct PreparedConnection<S> {
     permit: BudgetPermit,
     /// Present when the connection was upgraded with an access ticket.
     ticket: Option<TicketBinding>,
+    /// From the start of H to the valid request (metrics-v1
+    /// `vnc_relay.handshake.duration`). `dispatch` records it once the
+    /// ticket binding also holds.
+    exchange_elapsed: Duration,
 }
 
 struct ConnectionResources<S> {
@@ -196,23 +202,33 @@ pub struct RelayService {
     settings: Arc<dyn RuntimeSettingsSource>,
     clock: Arc<dyn Clock>,
     events: Arc<dyn EventSink>,
+    metrics: Arc<Metrics>,
 }
 
 impl RelayService {
     /// Uses startup mode flags and the current E at each close start.
     /// B and H are supplied by the entry point in the connection context.
+    /// `metrics` takes the values that have no event (metrics-v1 §1.3).
     pub fn new(
         modes: HandshakePolicy,
         settings: Arc<dyn RuntimeSettingsSource>,
         clock: Arc<dyn Clock>,
         events: Arc<dyn EventSink>,
+        metrics: Arc<Metrics>,
     ) -> Self {
         Self {
             modes,
             settings,
             clock,
             events,
+            metrics,
         }
+    }
+
+    /// The metrics this service records into; WebSocket streams of its
+    /// connections record ping timeouts there too.
+    pub fn metrics(&self) -> &Arc<Metrics> {
+        &self.metrics
     }
 
     /// Writes the viewer greeting and reads a request within one absolute H.
@@ -263,6 +279,7 @@ impl RelayService {
         .await;
         match result {
             Ok((request, trailing)) => {
+                let exchange_elapsed = self.clock.monotonic().saturating_sub(context.exchange_at);
                 let ConnectionResources { stream, permit } = resources;
                 Ok(PreparedConnection {
                     stream,
@@ -272,6 +289,7 @@ impl RelayService {
                     buffer_limit: context.buffer_bytes,
                     permit,
                     ticket,
+                    exchange_elapsed,
                 })
             }
             Err(error) => {
@@ -472,6 +490,79 @@ pub struct RelaySnapshot {
     pub waiting: Vec<WaitingSnapshot>,
     pub active: Vec<ActiveSessionSnapshot>,
     pub recent_closed: Vec<ClosedSessionSnapshot>,
+}
+
+/// Counts of the relay registry for metrics (metrics-v1 §1.3
+/// `connection.in_progress`, `waiting.count`, `session.count`). Waiting
+/// connections count by role and transport, active sessions by mode, Viewer
+/// transport, and target transport.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct RelayCounts {
+    pub handshaking: usize,
+    pub target_connecting: usize,
+    waiting: [[usize; 3]; 2],
+    sessions: [[[usize; 3]; 3]; 2],
+}
+
+impl RelayCounts {
+    /// The counts of a snapshot, for state sources that keep only snapshots.
+    pub fn of(snapshot: &RelaySnapshot) -> Self {
+        let mut counts = Self {
+            handshaking: snapshot.handshaking,
+            target_connecting: snapshot.target_connecting,
+            ..Self::default()
+        };
+        for entry in &snapshot.waiting {
+            let entry_point = entry.context.entry_point;
+            counts.add_waiting(entry_point.role(), entry_point.transport());
+        }
+        for session in &snapshot.active {
+            counts.add_session(
+                session.mode,
+                session.viewer_transport,
+                session.target_transport,
+            );
+        }
+        counts
+    }
+
+    pub fn add_waiting(&mut self, role: Role, transport: Transport) {
+        self.waiting[role_index(role)][transport_index(transport)] += 1;
+    }
+
+    pub fn add_session(&mut self, mode: Mode, viewer: Transport, target: Transport) {
+        self.sessions[mode_index(mode)][transport_index(viewer)][transport_index(target)] += 1;
+    }
+
+    pub fn waiting(&self, role: Role, transport: Transport) -> usize {
+        self.waiting[role_index(role)][transport_index(transport)]
+    }
+
+    pub fn sessions(&self, mode: Mode, viewer: Transport, target: Transport) -> usize {
+        self.sessions[mode_index(mode)][transport_index(viewer)][transport_index(target)]
+    }
+}
+
+fn role_index(role: Role) -> usize {
+    match role {
+        Role::Viewer => 0,
+        Role::Server => 1,
+    }
+}
+
+fn transport_index(transport: Transport) -> usize {
+    match transport {
+        Transport::Tcp => 0,
+        Transport::Ws => 1,
+        Transport::Wss => 2,
+    }
+}
+
+fn mode_index(mode: Mode) -> usize {
+    match mode {
+        Mode::Mode1 => 0,
+        Mode::Mode2 => 1,
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -702,6 +793,29 @@ impl<C> RelayRuntime<C> {
                 })
                 .collect(),
         }
+    }
+
+    /// Counts by stage, role, transport, and mode under one registry lock,
+    /// without copying the lists (metrics-v1 §1.1 "현재 값").
+    pub fn counts(&self) -> RelayCounts {
+        let state = self.lock();
+        let mut counts = RelayCounts {
+            handshaking: state.handshaking,
+            target_connecting: state.connecting,
+            ..RelayCounts::default()
+        };
+        for entry in state.waiting.values() {
+            let entry_point = entry.connection.context.entry_point;
+            counts.add_waiting(entry_point.role(), entry_point.transport());
+        }
+        for session in state.active.values() {
+            counts.add_session(
+                session.mode,
+                session.viewer_transport,
+                session.target_transport,
+            );
+        }
+        counts
     }
 
     /// Increments the handshaking counter and returns an RAII guard that
@@ -971,6 +1085,10 @@ impl<C: Send + Sync> RelayStateSource for RelayRuntime<C> {
     fn snapshot(&self, clock: &dyn Clock) -> RelaySnapshot {
         self.snapshot(clock)
     }
+
+    fn counts(&self) -> RelayCounts {
+        self.counts()
+    }
 }
 
 impl RelayService {
@@ -984,6 +1102,7 @@ impl RelayService {
         S: RelayStream + 'static,
         C: TargetConnector,
     {
+        let exchange_elapsed = prepared.exchange_elapsed;
         let (mut connection, request) = OwnedConnection::from_prepared(prepared);
         if let Some(binding) = &mut connection.ticket {
             let (mode, relay_id_ref, matches) = match &request {
@@ -1015,6 +1134,15 @@ impl RelayService {
                 ));
             }
         }
+        let mode = match &request {
+            HandshakeRequest::Mode1(_) => Mode::Mode1,
+            HandshakeRequest::Mode2(_) => Mode::Mode2,
+        };
+        self.metrics.record_handshake(
+            connection.context.entry_point.listener(),
+            mode,
+            exchange_elapsed,
+        );
         match request {
             HandshakeRequest::Mode1(address) => {
                 target::dispatch(self, runtime, connection, address).await
@@ -1434,6 +1562,9 @@ impl RelayService {
         let mut pair = pair;
         let relay_id = pair.relay.as_ref().map(|(id, _, _)| id);
         let observed = Mutex::new(SessionState::Active);
+        // Bytes already added to `vnc_relay.session.io`, per direction
+        // (metrics-v1 §1.3). The session counts start at zero.
+        let reported = [AtomicU64::new(0), AtomicU64::new(0)];
         let result = {
             let session_deadline = match (
                 pair.viewer
@@ -1465,6 +1596,17 @@ impl RelayService {
                         .error_kind
                         .lock()
                         .unwrap_or_else(std::sync::PoisonError::into_inner) = error_kind;
+                    for (direction, reported) in
+                        [Direction::ViewerToTarget, Direction::TargetToViewer]
+                            .into_iter()
+                            .zip(&reported)
+                    {
+                        let total = session.bytes(direction);
+                        let before = reported.swap(total, Ordering::Relaxed);
+                        if total > before {
+                            self.metrics.add_io(direction, total - before);
+                        }
+                    }
                     let mut state = runtime.lock();
                     if let Some(snapshot) = state.active.get_mut(session.id()) {
                         snapshot.state = session.state();
@@ -1804,6 +1946,7 @@ mod tests {
                     settings.clone(),
                     clock.clone(),
                     events.clone(),
+                    Arc::new(Metrics::new(clock.as_ref())),
                 ),
                 runtime: RelayRuntime::new(
                     connector,
@@ -1852,6 +1995,7 @@ mod tests {
                     settings.clone(),
                     clock.clone(),
                     events.clone(),
+                    Arc::new(Metrics::new(clock.as_ref())),
                 ),
                 runtime: RelayRuntime::new(
                     connector,

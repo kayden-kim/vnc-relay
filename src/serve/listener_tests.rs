@@ -194,6 +194,7 @@ enabled = true
             Arc::clone(&settings),
             Arc::clone(&clock),
             Arc::clone(&log),
+            Arc::new(Metrics::new(clock.as_ref())),
         ));
         let mut owners = JoinSet::new();
         let mut abort = Vec::new();
@@ -241,6 +242,7 @@ enabled = true
             Arc::clone(&admin_budget),
             Arc::clone(&lifecycle),
             settings,
+            None,
         );
         let status_task = tokio::spawn(status.run(Arc::clone(&log)));
         abort.push(status_task.abort_handle());

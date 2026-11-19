@@ -5,6 +5,7 @@ pub mod accounts;
 pub mod events;
 pub mod lifecycle;
 pub mod management;
+pub mod metrics;
 pub mod ports;
 pub mod relay;
 pub mod reload;

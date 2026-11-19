@@ -260,7 +260,8 @@ async fn connection(
                 conn.settings.buffer_bytes,
                 transport,
                 settings.keepalive,
-            );
+            )
+            .count_ping_timeouts(Arc::clone(shared.service.metrics()), conn.listener);
             let lifecycle = shared.runtime.lifecycle();
             let _handshaking = shared.runtime.track_handshaking();
             let prepared = shared

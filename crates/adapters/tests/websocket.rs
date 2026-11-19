@@ -23,6 +23,7 @@ use vnc_relay_adapters::clock::SystemClock;
 use vnc_relay_adapters::crypto::{RelayIdKey, SessionIdKey, SystemTokenSource};
 use vnc_relay_adapters::management_http::{DashboardHints, ManagementListener, ManagementServices};
 use vnc_relay_adapters::net::{AcceptPolicy, AllowSource};
+use vnc_relay_adapters::process_stats::OsProcessStats;
 use vnc_relay_adapters::target::TcpTargetConnector;
 use vnc_relay_adapters::tls;
 use vnc_relay_adapters::websocket::{WsEntryPoint, WsPolicy};
@@ -31,10 +32,13 @@ use vnc_relay_app::management::login::dummy_hash;
 use vnc_relay_app::management::query::ManagementQueryService;
 use vnc_relay_app::management::terminate::{ManagementTerminateService, TerminationTicket};
 use vnc_relay_app::management::{AdminAuth, AdminPorts};
+use vnc_relay_app::metrics::{MetricSources, Metrics, MetricsService};
 use vnc_relay_app::ports::{
-    Clock, EventSink, RelayLifecycle, RelaySessionControl, RelayStateSource,
+    AdminSessionSource, Clock, EventSink, RelayLifecycle, RelaySessionControl, RelayStateSource,
 };
-use vnc_relay_app::relay::{RelayRuntime, RelayRuntimeConfig, RelayService, RelaySnapshot};
+use vnc_relay_app::relay::{
+    RelayCounts, RelayRuntime, RelayRuntimeConfig, RelayService, RelaySnapshot,
+};
 use vnc_relay_app::reload::snapshot::{ReloadCell, ReloadSnapshot};
 use vnc_relay_app::settings::KeepaliveSettings;
 use vnc_relay_domain::account::Argon2Params;
@@ -295,6 +299,7 @@ async fn start_with_handshake(
         source,
         Arc::clone(&clock),
         Arc::clone(&log),
+        Arc::new(Metrics::new(clock.as_ref())),
     ));
     tokio::spawn(
         WsEntryPoint::new(
@@ -1122,15 +1127,28 @@ async fn start_management(tls: Option<TlsAcceptor>) -> (SocketAddr, Arc<Recorder
     let relay_budget = ConnectionBudget::new();
     let query = Arc::new(ManagementQueryService::new(
         Arc::new(EmptyRelaySource),
-        relay_budget,
+        Arc::clone(&relay_budget),
         Arc::clone(&budget),
         Arc::clone(&clock),
         Arc::clone(&source),
     ));
     let terminate = Arc::new(ManagementTerminateService::new(
         Arc::new(EmptyRelaySource),
-        clock,
+        Arc::clone(&clock),
         Arc::clone(&log),
+    ));
+    let metrics = Arc::new(MetricsService::new(
+        Arc::new(Metrics::new(clock.as_ref())),
+        MetricSources {
+            relay: Arc::new(EmptyRelaySource),
+            relay_budget,
+            admin_budget: Arc::clone(&budget),
+            settings: Arc::clone(&source),
+            admin: Arc::clone(&auth) as Arc<dyn AdminSessionSource>,
+            process: Arc::new(OsProcessStats::new()),
+        },
+        clock,
+        "test",
     ));
     let listener = ManagementListener::new(
         listener,
@@ -1144,6 +1162,7 @@ async fn start_management(tls: Option<TlsAcceptor>) -> (SocketAddr, Arc<Recorder
             terminate,
             config,
             logs: Arc::new(vnc_relay_adapters::ops_log::RecentLogs::new(1000)),
+            metrics,
         },
     );
     tokio::spawn(listener.run(log));
@@ -1177,6 +1196,10 @@ impl RelayStateSource for EmptyRelaySource {
             active: Vec::new(),
             recent_closed: Vec::new(),
         }
+    }
+
+    fn counts(&self) -> RelayCounts {
+        RelayCounts::default()
     }
 }
 

@@ -1417,6 +1417,47 @@ fn restart_only_change_holds_back_the_ip_change_until_the_port_is_reverted() {
     ));
 }
 
+/// spec: operations.md:OPS-092 partial
+#[test]
+fn metrics_enabled_change_holds_back_dynamic_changes_until_reverted() {
+    let _lock = lock_ports();
+    let ports = Ports::free();
+    let config = setup(
+        "metrics-restart-required",
+        &config_text(ports, VIEWER_ONLY, CERT, KEY),
+    );
+    let log = log_of(&config);
+    let mut guard = Guard(Some(spawn(&config)));
+    wait_listening(guard.child(), ports);
+
+    write(
+        &config,
+        &(config_text(ports, SECOND_ONLY, CERT, KEY) + "\n[metrics]\nenabled = true\n"),
+    );
+    let line = wait_for_line(&log, |line| event_is(line, "reload_restart_required"));
+    assert!(line.contains("metrics.enabled"), "{line}");
+    assert_eq!(logged(&log, |line| event_is(line, "reload_applied")), 0);
+    assert!(!closed_within(
+        &mut connect_from([127, 0, 0, 1], ports.tcp_viewer),
+        SETTLE
+    ));
+    assert!(closed_within(
+        &mut connect_from([127, 0, 0, 2], ports.tcp_viewer),
+        EXIT_LIMIT
+    ));
+
+    write(&config, &config_text(ports, SECOND_ONLY, CERT, KEY));
+    wait_for_count(&log, 1, |line| event_is(line, "reload_applied"));
+    assert!(!closed_within(
+        &mut connect_from([127, 0, 0, 2], ports.tcp_viewer),
+        SETTLE
+    ));
+    assert!(closed_within(
+        &mut connect_from([127, 0, 0, 1], ports.tcp_viewer),
+        EXIT_LIMIT
+    ));
+}
+
 /// spec: operations.md:OPS-035
 #[test]
 fn restart_only_change_holds_back_a_certificate_change_until_the_port_is_reverted() {

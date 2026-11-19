@@ -33,6 +33,7 @@ use vnc_relay_adapters::crypto::{RelayIdKey, SessionIdKey, SystemTokenSource};
 use vnc_relay_adapters::management_http::{DashboardHints, ManagementListener, ManagementServices};
 use vnc_relay_adapters::net::{AcceptPolicy, AllowSource, TcpEntryPoint, TcpRelayStream};
 use vnc_relay_adapters::ops_log::{JsonLinesEventSink, RecentLogs, format_line};
+use vnc_relay_adapters::process_stats::OsProcessStats;
 use vnc_relay_adapters::target::TcpTargetConnector;
 use vnc_relay_adapters::tls;
 use vnc_relay_app::events::{AdminTerminateResult, Event, Level, RejectReason, Stage};
@@ -44,15 +45,18 @@ use vnc_relay_app::management::login::dummy_hash;
 use vnc_relay_app::management::query::ManagementQueryService;
 use vnc_relay_app::management::terminate::{ManagementTerminateService, TerminationTicket};
 use vnc_relay_app::management::{AdminAuth, AdminPorts};
+use vnc_relay_app::metrics::{MetricSources, Metrics, MetricsService};
 use vnc_relay_app::ports::{
     Clock, EventSink, HashError, PasswordHasher, PasswordVerifier, RelayCloseAction,
     RelayLifecycle, RelaySessionControl, RelayStateSource, RelayStream,
 };
 use vnc_relay_app::relay::{
-    ConnectionContext, RelayRuntime, RelayRuntimeConfig, RelayService, RelaySnapshot,
+    ConnectionContext, RelayCounts, RelayRuntime, RelayRuntimeConfig, RelayService, RelaySnapshot,
 };
 use vnc_relay_app::reload::SharedReload;
-use vnc_relay_app::reload::ports::{ReloadFileStore, ReloadTlsStore, TlsBuildError};
+use vnc_relay_app::reload::ports::{
+    ReloadFileStore, ReloadTlsStore, RuntimeSettingsSource, TlsBuildError,
+};
 use vnc_relay_app::reload::service::ReloadService;
 use vnc_relay_app::reload::snapshot::{ReloadCell, ReloadSnapshot};
 use vnc_relay_domain::account::{Account, AccountName, Argon2Params, Password, PasswordHash};
@@ -151,6 +155,8 @@ struct Running {
     events: Arc<Recorder>,
     task: JoinHandle<()>,
     logs: Arc<RecentLogs>,
+    /// The read side behind `/api/v1/metrics`; tests take history points.
+    metrics: Arc<MetricsService>,
 }
 
 impl Drop for Running {
@@ -246,16 +252,24 @@ async fn start_with_ports_and_logs(
     let relay_budget = ConnectionBudget::new();
     let query = Arc::new(ManagementQueryService::new(
         Arc::new(EmptyRelaySource),
-        relay_budget,
+        Arc::clone(&relay_budget),
         Arc::clone(&budget),
         Arc::clone(&clock),
         runtime.clone(),
     ));
     let terminate = Arc::new(ManagementTerminateService::new(
         Arc::new(EmptyRelaySource),
-        clock,
+        Arc::clone(&clock),
         Arc::clone(&log),
     ));
+    let metrics = metrics_service(
+        Arc::new(Metrics::new(clock.as_ref())),
+        Arc::new(EmptyRelaySource),
+        (relay_budget, Arc::clone(&budget)),
+        runtime.clone(),
+        Arc::clone(&auth),
+        clock,
+    );
     start_services(
         tls,
         budget,
@@ -266,6 +280,7 @@ async fn start_with_ports_and_logs(
             terminate,
             config: config_fixture(false, Arc::new(SystemClock::new()), Arc::clone(&log)).service,
             logs,
+            metrics,
         },
         events,
     )
@@ -301,6 +316,7 @@ async fn start_services(
         tls::TlsSource::management(runtime.clone())
     });
     let logs = Arc::clone(&services.logs);
+    let metrics = Arc::clone(&services.metrics);
     let listener = ManagementListener::new(listener, tls, budget, runtime, dashboard, services);
     let task = tokio::spawn(listener.run(events.clone()));
     Running {
@@ -308,6 +324,7 @@ async fn start_services(
         events,
         task,
         logs,
+        metrics,
     }
 }
 
@@ -387,6 +404,15 @@ impl RunningRelay {
             Arc::clone(&clock),
             Arc::clone(&log),
         ));
+        let metrics = Arc::new(Metrics::new(clock.as_ref()));
+        let metrics_view = metrics_service(
+            Arc::clone(&metrics),
+            runtime.clone(),
+            (Arc::clone(&relay_budget), Arc::clone(&admin_budget)),
+            cell.clone(),
+            Arc::clone(&auth),
+            Arc::clone(&clock),
+        );
         let management = start_services(
             None,
             admin_budget,
@@ -397,6 +423,7 @@ impl RunningRelay {
                 terminate,
                 config: config_fixture(false, Arc::clone(&clock), Arc::clone(&log)).service,
                 logs: Arc::new(RecentLogs::new(1000)),
+                metrics: metrics_view,
             },
             events,
         )
@@ -409,6 +436,7 @@ impl RunningRelay {
             cell.clone(),
             Arc::clone(&clock),
             Arc::clone(&log),
+            metrics,
         ));
         let mut addresses = Vec::new();
         let mut tasks = Vec::new();
@@ -675,6 +703,10 @@ impl RelayStateSource for EmptyRelaySource {
             active: Vec::new(),
             recent_closed: Vec::new(),
         }
+    }
+
+    fn counts(&self) -> RelayCounts {
+        RelayCounts::default()
     }
 }
 
@@ -1334,6 +1366,31 @@ const TEST_PARAMS: Argon2Params = Argon2Params {
 
 /// The cookie that a refused or ended session clears over plain HTTP.
 const CLEARED_COOKIE: &str = "relay_admin_session=; Path=/; Max-Age=0; HttpOnly; SameSite=Strict";
+
+/// The metrics read side over a test's own sources. `metrics` is the
+/// registry the test's relay service records into, if it has one.
+fn metrics_service(
+    metrics: Arc<Metrics>,
+    relay: Arc<dyn RelayStateSource>,
+    (relay_budget, admin_budget): (Arc<ConnectionBudget>, Arc<ConnectionBudget>),
+    settings: Arc<dyn RuntimeSettingsSource>,
+    admin: Arc<AdminAuth>,
+    clock: Arc<dyn Clock>,
+) -> Arc<MetricsService> {
+    Arc::new(MetricsService::new(
+        metrics,
+        MetricSources {
+            relay,
+            relay_budget,
+            admin_budget,
+            settings,
+            admin,
+            process: Arc::new(OsProcessStats::new()),
+        },
+        clock,
+        "test",
+    ))
+}
 
 /// Admin state of one listener: `alice` and `bob` with their test passwords.
 /// `verifier` and `clock` are the ports that the test chooses.
@@ -2779,6 +2836,10 @@ impl RelayStateSource for ObservedRelaySource {
         }
         snapshot
     }
+
+    fn counts(&self) -> RelayCounts {
+        self.runtime.counts()
+    }
 }
 
 struct SteppingClock(Mutex<(Duration, SystemTime)>);
@@ -4001,18 +4062,27 @@ async fn start_config_services(
         Arc::new(Argon2Verifier),
         clock.clone(),
     );
+    let relay_budget = ConnectionBudget::new();
     let query = Arc::new(ManagementQueryService::new(
         Arc::new(EmptyRelaySource),
-        ConnectionBudget::new(),
+        Arc::clone(&relay_budget),
         budget.clone(),
         clock.clone(),
         runtime.clone(),
     ));
     let terminate = Arc::new(ManagementTerminateService::new(
         Arc::new(EmptyRelaySource),
-        clock,
+        clock.clone(),
         log,
     ));
+    let metrics = metrics_service(
+        Arc::new(Metrics::new(clock.as_ref())),
+        Arc::new(EmptyRelaySource),
+        (relay_budget, budget.clone()),
+        runtime.clone(),
+        Arc::clone(&auth),
+        clock,
+    );
     start_services(
         None,
         budget,
@@ -4023,6 +4093,7 @@ async fn start_config_services(
             terminate,
             config,
             logs: Arc::new(RecentLogs::new(1000)),
+            metrics,
         },
         events,
     )
@@ -4604,7 +4675,7 @@ async fn ticket_config_view_edits_and_refusals_follow_management_contract() {
     assert_eq!(view.status, 200);
     let body = config_json(&view);
     let items = body["items"].as_array().unwrap_or_else(|| panic!("items"));
-    assert_eq!(items.len(), 75);
+    assert_eq!(items.len(), 76);
     assert_eq!(
         items
             .iter()
@@ -5351,6 +5422,10 @@ async fn session_queries_and_termination_provide_full_transport_and_forwarded_ip
         fn snapshot(&self, _clock: &dyn Clock) -> RelaySnapshot {
             self.snapshot.lock().unwrap().clone()
         }
+
+        fn counts(&self) -> RelayCounts {
+            RelayCounts::of(&self.snapshot.lock().unwrap())
+        }
     }
 
     impl RelaySessionControl for ControllableRelayState {
@@ -5576,6 +5651,14 @@ async fn session_queries_and_termination_provide_full_transport_and_forwarded_ip
         clock.clone(),
         events.clone(),
     ));
+    let metrics = metrics_service(
+        Arc::new(Metrics::new(clock.as_ref())),
+        relay_state.clone(),
+        (ConnectionBudget::new(), ConnectionBudget::new()),
+        cell.clone(),
+        Arc::clone(&auth),
+        clock.clone(),
+    );
     let running = start_services(
         None,
         ConnectionBudget::new(),
@@ -5586,6 +5669,7 @@ async fn session_queries_and_termination_provide_full_transport_and_forwarded_ip
             terminate,
             config: config_fixture(false, clock.clone(), events.clone()).service,
             logs: Arc::new(RecentLogs::new(1000)),
+            metrics,
         },
         events,
     )
@@ -6180,4 +6264,133 @@ async fn recent_logs_polling_idle_timeout_and_unauthenticated_guard() {
         still_valid.status, 200,
         "session must remain valid because user request extended idle"
     );
+}
+
+/// spec: management.md:MGT-056
+#[tokio::test]
+async fn metrics_need_a_session_and_automatic_refresh_does_not_extend_it() {
+    let clock = Arc::new(FakeClock::default());
+    let session = AdminSessionPolicy::new(Duration::from_secs(400), Duration::from_secs(3600));
+    let running = start_with_ports(
+        None,
+        ROOMY_LM,
+        UPGRADE,
+        session,
+        limit_policy(),
+        Arc::new(Argon2Verifier),
+        clock.clone(),
+    )
+    .await;
+
+    let refused = plain_exchange(running.addr, &get("/api/v1/metrics", &[])).await;
+    assert_eq!(refused.status, 401);
+    assert_eq!(error_code(&refused), "unauthenticated");
+    assert!(!String::from_utf8_lossy(&refused.body).contains("vnc_relay."));
+
+    let cookie =
+        cookie_line(&plain_exchange(running.addr, &login_request(ACCOUNT, PASSWORD)).await);
+    clock.set(Duration::from_secs(250));
+    let polled = plain_exchange(
+        running.addr,
+        &get("/api/v1/metrics", &[&cookie, "X-Relay-Poll: 1"]),
+    )
+    .await;
+    assert_eq!(polled.status, 200);
+    clock.set(Duration::from_secs(500));
+    let expired = plain_exchange(running.addr, &get("/api/v1/metrics", &[&cookie])).await;
+    assert_eq!(
+        expired.status, 401,
+        "automatic refresh must not extend idle"
+    );
+    assert_eq!(error_code(&expired), "unauthenticated");
+
+    let cookie =
+        cookie_line(&plain_exchange(running.addr, &login_request(ACCOUNT, PASSWORD)).await);
+    clock.set(Duration::from_secs(750));
+    let user = plain_exchange(running.addr, &get("/api/v1/metrics", &[&cookie])).await;
+    assert_eq!(user.status, 200);
+    clock.set(Duration::from_secs(1000));
+    let extended = plain_exchange(running.addr, &get("/api/v1/metrics", &[&cookie])).await;
+    assert_eq!(
+        extended.status, 200,
+        "a request without the header extends idle"
+    );
+}
+
+/// The `seq` values of a metrics answer's history points.
+fn history_seqs(body: &Value) -> Vec<u64> {
+    body["history"]["points"]
+        .as_array()
+        .unwrap_or_else(|| panic!("history points: {body}"))
+        .iter()
+        .map(|point| point["seq"].as_u64().unwrap_or(u64::MAX))
+        .collect()
+}
+
+/// spec: management.md:MGT-058 partial
+/// spec: management.md:MGT-059
+#[tokio::test]
+async fn metrics_history_after_is_checked_and_returns_only_newer_points() {
+    let running = start(None, ROOMY_LM).await;
+    let cookie =
+        cookie_line(&plain_exchange(running.addr, &login_request(ACCOUNT, PASSWORD)).await);
+
+    let empty = authenticated_query(&running, &cookie, "/api/v1/metrics").await;
+    assert_eq!(empty["history"]["interval_secs"], 10);
+    assert_eq!(empty["history"]["capacity"], 360);
+    assert_eq!(empty["history"]["latest_seq"], Value::Null);
+    assert_eq!(empty["history"]["points"], json!([]));
+
+    for bad in ["-1", "1.5", "", "18446744073709551616", "1&history_after=2"] {
+        let reply = plain_exchange(
+            running.addr,
+            &get(&format!("/api/v1/metrics?history_after={bad}"), &[&cookie]),
+        )
+        .await;
+        assert_eq!(reply.status, 400, "history_after={bad}");
+        assert_eq!(error_code(&reply), "invalid_request", "history_after={bad}");
+    }
+
+    for _ in 0..3 {
+        running.metrics.sample_history();
+    }
+    let all = authenticated_query(&running, &cookie, "/api/v1/metrics").await;
+    assert_eq!(all["history"]["latest_seq"], 2);
+    assert_eq!(history_seqs(&all), [0, 1, 2]);
+    let values = all["history"]["points"][0]["values"]
+        .as_object()
+        .unwrap_or_else(|| panic!("point values: {all}"));
+    assert_eq!(values.len(), 9);
+    let newer = authenticated_query(&running, &cookie, "/api/v1/metrics?history_after=0").await;
+    assert_eq!(history_seqs(&newer), [1, 2]);
+    for after in ["2", "3", "18446744073709551615"] {
+        let path = format!("/api/v1/metrics?history_after={after}");
+        let body = authenticated_query(&running, &cookie, &path).await;
+        assert_eq!(body["history"]["latest_seq"], 2, "{after}");
+        assert_eq!(body["history"]["points"], json!([]), "{after}");
+    }
+
+    // 361 points: the oldest goes, and numbers are not reused.
+    for _ in 3..361 {
+        running.metrics.sample_history();
+    }
+    let full = authenticated_query(&running, &cookie, "/api/v1/metrics").await;
+    assert_eq!(full["history"]["latest_seq"], 360);
+    assert_eq!(history_seqs(&full), (1..=360).collect::<Vec<u64>>());
+
+    let view = authenticated_query(&running, &cookie, "/api/v1/session").await;
+    let csrf = format!(
+        "X-CSRF-Token: {}",
+        view["csrf_token"].as_str().unwrap_or_default()
+    );
+    for method in ["POST", "PUT", "PATCH", "DELETE"] {
+        let reply = plain_exchange(
+            running.addr,
+            &request(method, "/api/v1/metrics", &[&cookie, &csrf]),
+        )
+        .await;
+        assert_eq!(reply.status, 405, "{method}");
+        assert_eq!(reply.header("allow"), Some("GET"), "{method}");
+        assert_eq!(error_code(&reply), "invalid_request", "{method}");
+    }
 }

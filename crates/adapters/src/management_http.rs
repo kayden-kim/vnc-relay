@@ -25,6 +25,7 @@ use vnc_relay_app::management::AdminAuth;
 use vnc_relay_app::management::config::ConfigManagement;
 use vnc_relay_app::management::query::ManagementQueryService;
 use vnc_relay_app::management::terminate::ManagementTerminateService;
+use vnc_relay_app::metrics::MetricsService;
 use vnc_relay_app::ports::EventSink;
 use vnc_relay_domain::budget::ConnectionBudget;
 use vnc_relay_domain::peer_ip::PeerIp;
@@ -38,6 +39,7 @@ use crate::tls_listener::TlsListener;
 
 mod config_api;
 mod logs_api;
+mod metrics_api;
 mod query_api;
 mod session_api;
 mod terminate_api;
@@ -60,6 +62,7 @@ pub struct ManagementServices {
     pub terminate: Arc<ManagementTerminateService>,
     pub config: Arc<dyn ConfigManagement>,
     pub logs: Arc<crate::ops_log::RecentLogs>,
+    pub metrics: Arc<MetricsService>,
 }
 
 /// A management listener. Connections run TLS when `tls` is set and plain
@@ -114,6 +117,7 @@ impl<L: Listener> ManagementListener<L> {
             terminate: self.services.terminate,
             config: self.services.config,
             logs: self.services.logs,
+            metrics: self.services.metrics,
             dashboard: self.dashboard,
         };
         let router = Router::new()
@@ -200,6 +204,7 @@ struct Shared {
     terminate: Arc<ManagementTerminateService>,
     config: Arc<dyn ConfigManagement>,
     logs: Arc<crate::ops_log::RecentLogs>,
+    metrics: Arc<MetricsService>,
     dashboard: DashboardHints,
 }
 

@@ -187,6 +187,10 @@ max_entries = 1000
 [status]
 listen = "127.0.0.1:18081"
 
+# 상태 리스너의 /metrics는 기본으로 꺼진다. 바꾸면 재시작해야 한다.
+[metrics]
+# enabled = false
+
 # Append one JSON event per line. The parent directory must already exist.
 # To write the log to standard output, set output = "stdout" or omit output.
 [log]

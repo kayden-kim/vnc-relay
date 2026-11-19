@@ -17,6 +17,7 @@ use vnc_relay_adapters::ops_log::format_line;
 use vnc_relay_adapters::target::TcpTargetConnector;
 use vnc_relay_adapters::websocket_stream::WsRelayStream;
 use vnc_relay_app::events::Event;
+use vnc_relay_app::metrics::Metrics;
 use vnc_relay_app::ports::{Clock, EventSink};
 use vnc_relay_app::relay::{
     ConnectionContext, RelayRuntime, RelayRuntimeConfig, RelayService, TicketBinding,
@@ -152,6 +153,7 @@ impl Harness {
             source,
             clock.clone(),
             events.clone(),
+            Arc::new(Metrics::new(clock.as_ref())),
         ));
         Self {
             service,

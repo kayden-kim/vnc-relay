@@ -14,9 +14,9 @@ use crate::reload::{ConfigFileState, ConfigPresence, ReloadResult};
 use crate::settings::{
     AdminSessionSettings, AdminSettings, Argon2Settings, ConfigError, DashboardSettings,
     EntryPointSettings, KeepaliveSettings, LimitSettings, LogOutput, LogSettings,
-    LoginLimitSettings, ManagementSettings, Mode1Settings, Mode2Settings, RecentClosedSettings,
-    RecentLogsSettings, RelaySettings, ReloadSettings, Settings, StatusSettings, TicketSettings,
-    TimeoutSettings, TlsFiles, WsListenerSettings, WsRoleSettings,
+    LoginLimitSettings, ManagementSettings, MetricsSettings, Mode1Settings, Mode2Settings,
+    RecentClosedSettings, RecentLogsSettings, RelaySettings, ReloadSettings, Settings,
+    StatusSettings, TicketSettings, TimeoutSettings, TlsFiles, WsListenerSettings, WsRoleSettings,
 };
 
 type Trace = Arc<Mutex<Vec<String>>>;
@@ -104,6 +104,7 @@ fn settings() -> Settings {
         recent_closed: RecentClosedSettings { max_entries: 100 },
         recent_logs: RecentLogsSettings { max_entries: 1000 },
         status: StatusSettings { listen: addr(9090) },
+        metrics: MetricsSettings::default(),
         log: LogSettings {
             output: LogOutput::Stdout,
         },
@@ -1270,7 +1271,7 @@ keepalive.tcp_idle_secs keepalive.tcp_interval_secs keepalive.tcp_probes keepali
 management.listen management.cert_file management.key_file management.config_edit
 management.login_limit.per_account management.login_limit.per_source management.login_limit.window_secs management.login_limit.lockout_secs
 management.session.idle_secs management.session.max_lifetime_secs dashboard.poll_secs dashboard.query_timeout_secs recent_closed.max_entries recent_logs.max_entries
-status.listen log.output reload.settle_secs reload.poll_secs";
+status.listen metrics.enabled log.output reload.settle_secs reload.poll_secs";
 
 const DYNAMIC_KEYS: &str = "
 relay.tcp_viewer.allow relay.tcp_server.allow relay.ws.trusted_proxies relay.ws.viewer.allow relay.ws.viewer.allowed_origins relay.ws.server.allow relay.ws.server.allowed_origins
@@ -1339,7 +1340,7 @@ fn descriptors_follow_contract_order_with_43_dynamic_and_37_enabled_editable_key
                 .collect::<Vec<_>>(),
             ORDERED_KEYS.split_whitespace().collect::<Vec<_>>()
         );
-        assert_eq!(items.len(), 75);
+        assert_eq!(items.len(), 76);
         let dynamic = items
             .iter()
             .filter(|item| item.reload == ConfigReloadKind::Dynamic)
@@ -1684,6 +1685,40 @@ fn shared_listener_editability_tracks_each_role_and_any_role_enablement() {
     assert_eq!(logs.reload, ConfigReloadKind::Restart);
     assert_eq!((logs.min, logs.max), (Some(0), Some(10000)));
     assert!(!logs.editable);
+}
+
+/// spec: operations.md:OPS-092 partial
+#[test]
+fn metrics_descriptor_follows_status_and_refuses_edits_before_io() {
+    for enabled in [false, true] {
+        let mut running = transaction_settings();
+        running.metrics.enabled = enabled;
+        let items = config_items(&running, &ConfigPresence::default());
+        let status_index = items
+            .iter()
+            .position(|item| item.key == "status.listen")
+            .unwrap_or_else(|| panic!("status.listen descriptor"));
+        let metrics = &items[status_index + 1];
+        assert_eq!(metrics.key, "metrics.enabled");
+        assert_eq!(metrics.value, ConfigValue::Bool(enabled));
+        assert_eq!(metrics.reload, ConfigReloadKind::Restart);
+        assert!(!metrics.editable);
+        let h = Harness::new(running.clone(), running.clone(), running, &[], false);
+        assert_eq!(
+            h.service.patch(
+                actor(),
+                ConfigPatch {
+                    revision: revision_of(b"original"),
+                    changes: vec![ConfigChange {
+                        key: "metrics.enabled".to_owned(),
+                        value: ConfigValue::Bool(!enabled),
+                    }],
+                },
+            ),
+            Err(ConfigEditError::InvalidRequest)
+        );
+        assert!(h.calls().is_empty());
+    }
 }
 
 /// spec: management.md:MGT-038 partial

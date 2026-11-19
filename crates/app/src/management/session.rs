@@ -4,6 +4,7 @@
 use vnc_relay_domain::admin_session::AdminSessionToken;
 
 use super::{AdminAuth, AuthError, SessionView, session_view};
+use crate::ports::AdminSessionSource;
 
 /// A request that has a live session. The token names the session for
 /// `touch` and `logout`.
@@ -75,6 +76,15 @@ impl AdminAuth {
     /// Ends the session of `admin`. Relay sessions are not touched (MGT-020).
     pub fn logout(&self, admin: &AuthorizedAdmin) {
         self.lock().sessions.remove(&admin.token);
+    }
+}
+
+impl AdminSessionSource for AdminAuth {
+    /// A session past its deadline is not counted even before a request
+    /// prunes it.
+    fn live_sessions(&self) -> usize {
+        let now = self.clock.monotonic();
+        self.lock().sessions.live_count(now)
     }
 }
 

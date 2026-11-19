@@ -22,6 +22,7 @@ use vnc_relay_adapters::target::TcpTargetConnector;
 use vnc_relay_adapters::tls::{self, TlsSource};
 use vnc_relay_adapters::websocket::{WsEntryPoint, WsPolicy};
 use vnc_relay_app::events::{Event, RejectReason};
+use vnc_relay_app::metrics::Metrics;
 use vnc_relay_app::ports::{Clock, EventSink};
 use vnc_relay_app::relay::{RelayRuntime, RelayRuntimeConfig, RelayService};
 use vnc_relay_app::reload::ConfigCandidate;
@@ -187,6 +188,7 @@ impl Running {
             source,
             clock.clone(),
             events.clone(),
+            Arc::new(Metrics::new(clock.as_ref())),
         ));
         let uses = Arc::new(Mutex::new(TicketUseTable::new()));
         let (stop, stopped) = watch::channel(false);

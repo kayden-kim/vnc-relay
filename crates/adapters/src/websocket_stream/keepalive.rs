@@ -60,11 +60,16 @@ impl Keepalive {
         self.pending_ping = None;
     }
 
-    pub(super) fn poll(&mut self, cx: &mut Context<'_>) {
+    /// Schedules the next Ping and checks the oldest Pong deadline. Returns
+    /// `true` only on the call that first finds that deadline passed, so the
+    /// caller counts each dead connection once (metrics-v1
+    /// `vnc_relay.websocket.ping_timeouts`).
+    pub(super) fn poll(&mut self, cx: &mut Context<'_>) -> bool {
         let now = Instant::now();
         if self.deadlines[self.head].is_some_and(|deadline| now >= deadline) {
+            let first = !self.expired;
             self.expired = true;
-            return;
+            return first;
         }
         if now >= self.next_ping {
             if self.pending_ping.is_none() {
@@ -81,6 +86,7 @@ impl Keepalive {
             self.timer.as_mut().reset(wake);
         }
         let _ = self.timer.as_mut().poll(cx);
+        false
     }
 }
 

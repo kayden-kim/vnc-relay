@@ -9,6 +9,7 @@ use std::sync::Arc;
 use std::time::{Duration, UNIX_EPOCH};
 
 use serde_json::{Map, Value, json};
+use vnc_relay_adapters::clock::SystemClock;
 use vnc_relay_adapters::crypto::RelayIdKey;
 use vnc_relay_adapters::ops_log::{JsonLinesEventSink, format_line};
 use vnc_relay_adapters::status_http::StatusListener;
@@ -17,8 +18,14 @@ use vnc_relay_app::events::{
     WaitingRemovalReason,
 };
 use vnc_relay_app::lifecycle::LifecycleService;
-use vnc_relay_app::ports::EventSink;
+use vnc_relay_app::metrics::{MetricSources, Metrics, MetricsService};
+use vnc_relay_app::ports::{
+    AdminSessionSource, Clock, CpuTimes, EventSink, OpenCount, ProcessStats, ProcessStatsSource,
+    RelayLifecycle, RelayStateSource,
+};
+use vnc_relay_app::relay::{RelayCounts, RelaySnapshot};
 use vnc_relay_app::reload::ReloadTrigger;
+use vnc_relay_app::reload::snapshot::{ReloadCell, ReloadSnapshot};
 use vnc_relay_app::settings::{ConfigWarning, LogOutput};
 use vnc_relay_domain::account::AccountName;
 use vnc_relay_domain::allow_list::IpItem;
@@ -729,7 +736,11 @@ struct StatusServer {
 }
 
 impl StatusServer {
-    fn start(lifecycle: Arc<LifecycleService>, log: Arc<dyn EventSink>) -> Self {
+    fn start(
+        lifecycle: Arc<LifecycleService>,
+        log: Arc<dyn EventSink>,
+        metrics: Option<Arc<MetricsService>>,
+    ) -> Self {
         let (addr_tx, addr_rx) = std::sync::mpsc::channel();
         let (stop, stopped) = tokio::sync::oneshot::channel::<()>();
         let thread = std::thread::spawn(move || {
@@ -748,20 +759,12 @@ impl StatusServer {
                 addr_tx
                     .send(addr)
                     .unwrap_or_else(|error| panic!("send: {error}"));
-                let mut candidate = vnc_relay_adapters::config_file::parse_candidate(
-                    b"[admin]\naccounts_file = 'accounts.toml'\n[management]\nlisten = '127.0.0.1:18080'\n[status]\nlisten = '127.0.0.1:18081'\n",
-                    &std::env::temp_dir(),
-                )
-                .unwrap_or_else(|diagnostics| panic!("status settings: {diagnostics:?}"));
-                candidate.settings.limits.admin_connections = 64;
-                let source = Arc::new(vnc_relay_app::reload::snapshot::ReloadCell::<()>::new(
-                    vnc_relay_app::reload::snapshot::ReloadSnapshot::new(candidate, None, None),
-                ));
                 let status = StatusListener::new(
                     listener,
                     ConnectionBudget::new(),
                     lifecycle,
-                    source,
+                    status_settings(),
+                    metrics,
                 );
                 tokio::select! {
                     () = status.run(log) => {}
@@ -888,7 +891,7 @@ fn answers_liveness_and_readiness_in_each_state_with_only_the_contract_fields() 
     let dir = temp_dir("status-states");
     let log: Arc<dyn EventSink> = Arc::new(file_sink(&dir.join("relay.log")));
     let lifecycle = Arc::new(LifecycleService::new());
-    let server = StatusServer::start(Arc::clone(&lifecycle), log);
+    let server = StatusServer::start(Arc::clone(&lifecycle), log, None);
     let alive = json!({ "status": "alive" });
 
     assert_json_reply(&send(server.addr, "GET", "/livez", ""), 200, &alive);
@@ -916,13 +919,14 @@ fn answers_liveness_and_readiness_in_each_state_with_only_the_contract_fields() 
 }
 
 /// spec: operations.md:OPS-032 partial
+/// spec: operations.md:OPS-082 partial
 #[test]
 fn ignores_credentials_and_queries_and_refuses_other_methods_and_paths() {
     let dir = temp_dir("status-requests");
     let log: Arc<dyn EventSink> = Arc::new(file_sink(&dir.join("relay.log")));
     let lifecycle = Arc::new(LifecycleService::new());
     lifecycle.mark_ready();
-    let server = StatusServer::start(lifecycle, log);
+    let server = StatusServer::start(lifecycle, log, None);
     let ready = json!({ "status": "ready" });
 
     let credentials = "Authorization: Basic YWxpY2U6cGFzcw==\r\nCookie: session=abc\r\n";
@@ -957,6 +961,289 @@ fn ignores_credentials_and_queries_and_refuses_other_methods_and_paths() {
         assert_error_reply(&reply, 404, "not_found");
         assert_eq!(reply.header("allow"), None, "{method} {path}");
     }
+}
+
+/// The runtime settings of the status test listener: Lm 64, other values
+/// from the minimal config.
+fn status_settings() -> Arc<ReloadCell<()>> {
+    let mut candidate = vnc_relay_adapters::config_file::parse_candidate(
+        b"[admin]\naccounts_file = 'accounts.toml'\n[management]\nlisten = '127.0.0.1:18080'\n[status]\nlisten = '127.0.0.1:18081'\n",
+        &std::env::temp_dir(),
+    )
+    .unwrap_or_else(|diagnostics| panic!("status settings: {diagnostics:?}"));
+    candidate.settings.limits.admin_connections = 64;
+    Arc::new(ReloadCell::new(ReloadSnapshot::new(candidate, None, None)))
+}
+
+/// A relay with no connection in any stage.
+struct IdleRelay;
+
+impl RelayStateSource for IdleRelay {
+    fn snapshot(&self, clock: &dyn Clock) -> RelaySnapshot {
+        RelaySnapshot {
+            lifecycle: RelayLifecycle::Running,
+            observed_at: clock.monotonic(),
+            handshaking: 0,
+            target_connecting: 0,
+            max_entries: 0,
+            waiting: Vec::new(),
+            active: Vec::new(),
+            recent_closed: Vec::new(),
+        }
+    }
+
+    fn counts(&self) -> RelayCounts {
+        RelayCounts::default()
+    }
+}
+
+struct NoAdminSessions;
+
+impl AdminSessionSource for NoAdminSessions {
+    fn live_sessions(&self) -> usize {
+        0
+    }
+}
+
+/// Process values chosen by the test, including unreadable ones.
+struct FixedProcess(ProcessStats);
+
+impl ProcessStatsSource for FixedProcess {
+    fn read(&self) -> ProcessStats {
+        self.0
+    }
+}
+
+fn readable_process() -> ProcessStats {
+    ProcessStats {
+        cpu: Some(CpuTimes {
+            user: Duration::from_millis(1500),
+            system: Duration::from_millis(250),
+        }),
+        memory_usage: Some(52_428_800),
+        memory_virtual: Some(104_857_600),
+        threads: Some(9),
+        open: OpenCount::NotSupported,
+    }
+}
+
+fn metrics_view(process: ProcessStats) -> Arc<MetricsService> {
+    let clock: Arc<dyn Clock> = Arc::new(SystemClock::new());
+    Arc::new(MetricsService::new(
+        Arc::new(Metrics::new(clock.as_ref())),
+        MetricSources {
+            relay: Arc::new(IdleRelay),
+            relay_budget: ConnectionBudget::new(),
+            admin_budget: ConnectionBudget::new(),
+            settings: status_settings(),
+            admin: Arc::new(NoAdminSessions),
+            process: Arc::new(FixedProcess(process)),
+        },
+        clock,
+        "2026.11.6-test",
+    ))
+}
+
+/// Prometheus family names in `# TYPE` order (metrics-v1 §1.6 table, no
+/// platform-specific family).
+const FAMILY_ORDER: [&str; 31] = [
+    "target_info",
+    "vnc_relay_connection_accepted_total",
+    "vnc_relay_connection_rejected_total",
+    "vnc_relay_connection_aborted_total",
+    "vnc_relay_connection_in_progress",
+    "vnc_relay_relay_connection_usage",
+    "vnc_relay_relay_connection_limit",
+    "vnc_relay_admin_connection_usage",
+    "vnc_relay_admin_connection_limit",
+    "vnc_relay_handshake_duration_seconds",
+    "vnc_relay_waiting_count",
+    "vnc_relay_waiting_duration_seconds",
+    "vnc_relay_session_count",
+    "vnc_relay_session_started_total",
+    "vnc_relay_session_closed_total",
+    "vnc_relay_session_duration_seconds",
+    "vnc_relay_session_io_bytes_total",
+    "vnc_relay_target_connect_duration_seconds",
+    "vnc_relay_ticket_accepted_total",
+    "vnc_relay_websocket_ping_timeouts_total",
+    "vnc_relay_admin_logins_total",
+    "vnc_relay_admin_lockouts_total",
+    "vnc_relay_admin_terminations_total",
+    "vnc_relay_admin_session_count",
+    "vnc_relay_config_reloads_total",
+    "vnc_relay_config_edits_total",
+    "process_uptime_seconds",
+    "process_cpu_time_seconds_total",
+    "process_memory_usage_bytes",
+    "process_memory_virtual_bytes",
+    "process_thread_count",
+];
+
+/// Sample lines (not `#` lines) whose series name is exactly `name`.
+fn samples<'a>(body: &'a str, name: &str) -> Vec<&'a str> {
+    body.lines()
+        .filter(|line| {
+            line.strip_prefix(name)
+                .is_some_and(|rest| rest.starts_with('{') || rest.starts_with(' '))
+        })
+        .collect()
+}
+
+/// spec: operations.md:OPS-083 partial
+#[test]
+fn serves_enabled_metrics_as_prometheus_text_without_login() {
+    let dir = temp_dir("status-metrics");
+    let log: Arc<dyn EventSink> = Arc::new(file_sink(&dir.join("relay.log")));
+    let lifecycle = Arc::new(LifecycleService::new());
+    lifecycle.mark_ready();
+    let server = StatusServer::start(lifecycle, log, Some(metrics_view(readable_process())));
+
+    let reply = send(server.addr, "GET", "/metrics", "");
+    assert_eq!(reply.status, 200);
+    assert_eq!(
+        reply.header("content-type"),
+        Some("text/plain; version=0.0.4; charset=utf-8")
+    );
+    assert_eq!(reply.header("cache-control"), Some("no-store"));
+    let body = reply.body.as_str();
+    assert!(body.ends_with('\n') && !body.contains('\r'));
+    let lines: Vec<&str> = body.lines().collect();
+    assert_eq!(lines.first(), Some(&"# HELP target_info Target metadata"));
+    assert_eq!(lines.get(1), Some(&"# TYPE target_info gauge"));
+    assert_eq!(
+        lines.get(2),
+        Some(&"target_info{service_name=\"vnc-relay\",service_version=\"2026.11.6-test\"} 1")
+    );
+    let families: Vec<&str> = lines
+        .iter()
+        .filter_map(|line| line.strip_prefix("# TYPE "))
+        .filter_map(|line| line.split(' ').next())
+        .collect();
+    assert_eq!(families, FAMILY_ORDER);
+    let help_count = lines
+        .iter()
+        .filter(|line| line.starts_with("# HELP "))
+        .count();
+    assert_eq!(help_count, FAMILY_ORDER.len());
+
+    // Nothing recorded yet: counters and histograms have no samples.
+    for name in [
+        "vnc_relay_connection_accepted_total",
+        "vnc_relay_connection_rejected_total",
+        "vnc_relay_session_io_bytes_total",
+        "vnc_relay_handshake_duration_seconds_bucket",
+        "vnc_relay_handshake_duration_seconds_count",
+        "vnc_relay_config_edits_total",
+    ] {
+        assert_eq!(samples(body, name), Vec::<&str>::new(), "{name}");
+    }
+    // Up-down counters with attributes always show every combination.
+    assert_eq!(
+        samples(body, "vnc_relay_connection_in_progress"),
+        [
+            "vnc_relay_connection_in_progress{stage=\"initial_exchange\"} 0",
+            "vnc_relay_connection_in_progress{stage=\"target_connect\"} 0",
+        ]
+    );
+    let waiting = samples(body, "vnc_relay_waiting_count");
+    assert_eq!(waiting.len(), 6);
+    assert_eq!(
+        waiting.first(),
+        Some(&"vnc_relay_waiting_count{role=\"server\",transport=\"tcp\"} 0")
+    );
+    assert!(waiting.iter().all(|line| line.ends_with(" 0")));
+    let sessions = samples(body, "vnc_relay_session_count");
+    assert_eq!(sessions.len(), 12);
+    assert_eq!(
+        sessions.first(),
+        Some(
+            &"vnc_relay_session_count{mode=\"mode1\",viewer_transport=\"tcp\",target_transport=\"tcp\"} 0"
+        )
+    );
+    assert!(sessions.iter().all(|line| line.ends_with(" 0")));
+    let limit = status_settings()
+        .current()
+        .settings
+        .limits
+        .relay_connections;
+    assert_eq!(
+        samples(body, "vnc_relay_relay_connection_limit"),
+        [format!("vnc_relay_relay_connection_limit {limit}").as_str()]
+    );
+    assert_eq!(
+        samples(body, "vnc_relay_admin_connection_limit"),
+        ["vnc_relay_admin_connection_limit 64"]
+    );
+    assert_eq!(
+        samples(body, "process_cpu_time_seconds_total"),
+        [
+            "process_cpu_time_seconds_total{cpu_mode=\"system\"} 0.25",
+            "process_cpu_time_seconds_total{cpu_mode=\"user\"} 1.5",
+        ]
+    );
+}
+
+/// spec: operations.md:OPS-084
+#[test]
+fn refuses_other_methods_on_enabled_metrics_without_changing_values() {
+    let dir = temp_dir("status-metrics-methods");
+    let log: Arc<dyn EventSink> = Arc::new(file_sink(&dir.join("relay.log")));
+    let lifecycle = Arc::new(LifecycleService::new());
+    lifecycle.mark_ready();
+    let server = StatusServer::start(lifecycle, log, Some(metrics_view(readable_process())));
+    let relay_lines = |body: &str| -> Vec<String> {
+        body.lines()
+            .filter(|line| line.starts_with("vnc_relay_"))
+            .map(str::to_owned)
+            .collect()
+    };
+    let before = relay_lines(&send(server.addr, "GET", "/metrics", "").body);
+
+    for method in ["HEAD", "POST", "PUT", "DELETE"] {
+        let reply = send(server.addr, method, "/metrics", "Content-Length: 0\r\n");
+        assert_eq!(reply.status, 405, "{method}");
+        assert_eq!(reply.header("allow"), Some("GET"), "{method}");
+        assert_eq!(reply.header("content-type"), Some("application/json"));
+        if method != "HEAD" {
+            assert_error_reply(&reply, 405, "method_not_allowed");
+        }
+    }
+
+    let after = relay_lines(&send(server.addr, "GET", "/metrics", "").body);
+    assert_eq!(before, after);
+}
+
+/// spec: operations.md:OPS-094 partial
+#[test]
+fn leaves_an_unreadable_process_value_without_samples() {
+    let dir = temp_dir("status-metrics-unreadable");
+    let log: Arc<dyn EventSink> = Arc::new(file_sink(&dir.join("relay.log")));
+    let lifecycle = Arc::new(LifecycleService::new());
+    lifecycle.mark_ready();
+    let process = ProcessStats {
+        memory_usage: None,
+        ..readable_process()
+    };
+    let server = StatusServer::start(lifecycle, log, Some(metrics_view(process)));
+
+    let reply = send(server.addr, "GET", "/metrics", "");
+    assert_eq!(reply.status, 200);
+    let body = reply.body.as_str();
+    assert!(body.contains("# HELP process_memory_usage_bytes "));
+    assert!(body.contains("# TYPE process_memory_usage_bytes gauge\n"));
+    assert_eq!(
+        samples(body, "process_memory_usage_bytes"),
+        Vec::<&str>::new()
+    );
+    assert_eq!(
+        samples(body, "process_memory_virtual_bytes"),
+        ["process_memory_virtual_bytes 104857600"]
+    );
+    assert_eq!(
+        samples(body, "process_thread_count"),
+        ["process_thread_count 9"]
+    );
 }
 
 #[test]

@@ -11,12 +11,16 @@ pub mod dashboard_assets;
 pub mod file_watch;
 pub mod listener;
 pub mod management_http;
+pub mod metrics_text;
 pub mod net;
 pub mod ops_log;
+pub mod process_stats;
 mod request_deadline;
 pub mod status_http;
 pub mod target;
 pub mod terminal;
+#[cfg(test)]
+pub(crate) mod test_support;
 pub mod ticket;
 pub mod tls;
 mod tls_listener;

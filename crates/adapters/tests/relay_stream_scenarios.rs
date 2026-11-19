@@ -23,6 +23,7 @@ use vnc_relay_adapters::net::{AcceptPolicy, AllowSource, TcpEntryPoint, TcpRelay
 use vnc_relay_adapters::ops_log::format_line;
 use vnc_relay_adapters::target::TcpTargetConnector;
 use vnc_relay_app::events::Event;
+use vnc_relay_app::metrics::Metrics;
 use vnc_relay_app::ports::{Clock, EventSink, RelayCloseAction, RelayStream};
 use vnc_relay_app::relay::{ConnectionContext, RelayRuntime, RelayRuntimeConfig, RelayService};
 use vnc_relay_app::reload::ports::RuntimeSettingsSource;
@@ -182,6 +183,7 @@ enabled = true
             settings,
             Arc::clone(&clock),
             Arc::clone(&log),
+            Arc::new(Metrics::new(clock.as_ref())),
         ));
         let (stop, stopped) = watch::channel(false);
         let mut tasks = Vec::new();

@@ -17,6 +17,7 @@ mod delayed_cleanup {
     use vnc_relay_adapters::ops_log::format_line;
     use vnc_relay_adapters::target::TcpTargetConnector;
     use vnc_relay_app::events::Event;
+    use vnc_relay_app::metrics::Metrics;
     use vnc_relay_app::ports::{Clock, EventSink};
     use vnc_relay_app::relay::{
         ConnectionContext, PreparedConnection, RelayRuntime, RelayRuntimeConfig, RelayService,
@@ -260,6 +261,7 @@ mod delayed_cleanup {
                     Arc::clone(&settings),
                     Arc::clone(&clock),
                     Arc::clone(&log),
+                    Arc::new(Metrics::new(clock.as_ref())),
                 ));
                 let entry = TcpEntryPoint::new(
                     EntryPoint::TcpViewer,

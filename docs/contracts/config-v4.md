@@ -6,9 +6,9 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 이름과 버전 | `vnc-relay-config` 4.1.0. 기본으로 꺼진 역할별 접속 ticket 표와 공개 키 파일 형식, 재로드·편집 구분을 추가한 호환 변경이다. |
+| 이름과 버전 | `vnc-relay-config` 4.2.0. 기본으로 꺼진 `[metrics] enabled` 선택 키를 추가한 호환 변경이다. |
 | 상태 | Active |
-| 이전 버전 이력 | 4.0.0: WS·WSS 리스너 표와 역할 표 분리, Server 역할·신뢰 프록시·최근 로그 보관과 재로드·편집 구분 추가. 호환성을 깨는 변경이다. 3.0.0: 재로드 대상 8개에서 27개로 확대, `management.config_edit`와 관리 API 파일 쓰기 추가. 2.0.0: `limits.initial_message_bytes`(I)와 관계 I ≤ B 삭제. B와 M 사이에는 대소 제약이 없다. 1.1.0: `log_file_unavailable` 추가. 1.2.0: 관리 TLS·첫 요청 머리 읽기에 U 적용, 감시 대상 명확화. |
+| 이전 버전 이력 | 4.1.0: 기본으로 꺼진 역할별 접속 ticket 표와 공개 키 파일 형식, 재로드·편집 구분 추가. 호환 변경이다. 4.0.0: WS·WSS 리스너 표와 역할 표 분리, Server 역할·신뢰 프록시·최근 로그 보관과 재로드·편집 구분 추가. 호환성을 깨는 변경이다. 3.0.0: 재로드 대상 8개에서 27개로 확대, `management.config_edit`와 관리 API 파일 쓰기 추가. 2.0.0: `limits.initial_message_bytes`(I)와 관계 I ≤ B 삭제. B와 M 사이에는 대소 제약이 없다. 1.1.0: `log_file_unavailable` 추가. 1.2.0: 관리 TLS·첫 요청 머리 읽기에 U 적용, 감시 대상 명확화. |
 | 소유자 | vnc-relay 프로젝트 관리자 |
 | 만드는 쪽(Producer) | 운영자(설정 파일 작성자), 편집 기능을 켰을 때의 관리 API |
 | 사용하는 쪽(Consumer) | `vnc-relay serve`(시작 검증·자동 재로드·관리 API 편집 적용). Windows의 `vnc-relay service run`도 `serve`와 같이 읽고, `vnc-relay service install`은 등록 전에 같은 검증을 한다([CLI 계약 1.9절](cli-v1.md#19-windows-서비스-실행)). `vnc-relay admin` 하위 명령은 `[admin]` 테이블만 읽는다. Windows 트레이 앱은 `management.listen`·`management.cert_file`·`status.listen`·`log.output`만 쓴다([Windows 트레이 앱 스펙](../specs/windows-tray.md)). |
@@ -16,12 +16,12 @@
 | 스키마 기준 파일 | 없음. 이 문서의 Markdown 표가 형식의 기준이다. |
 | 기준 스펙 | [설정·프로세스 수명·운영 보안 스펙](../specs/operations.md) |
 | 관련 요구사항 | [PRD](../requirements/PRD.md) FR-02·FR-05·FR-06·FR-07·FR-08, [7절 보안 및 신뢰 경계](../requirements/PRD.md#7-보안-및-신뢰-경계). |
-| 호환성 범위 | 설정 파일 v4(`vnc-relay-config` 4.1.0). Windows 11 x64·Ubuntu 24.04 LTS x64. 파일 안에 형식 버전 키는 없다. v1→v2는 3.1절, v2→v3는 3.2절, v3→v4와 롤백은 3.3절을 따른다. v4 서버는 v3 표를 읽지 않는다. ticket 표를 쓴 파일의 4.0.0 롤백은 3절을 따른다. |
-| 관련 테스트 | [운영 스펙 수용 테스트](../specs/operations.md#7-수용-테스트) OPS-001~006·OPS-016·OPS-023~027·OPS-031·OPS-034~042·OPS-047~073, [WS·WSS 스펙](../specs/websocket.md#7-수용-테스트) WS-015·WS-022·WS-024·WS-027~046, [중계 스펙](../specs/relay.md#7-수용-테스트) RLY-007·RLY-008·RLY-022~027. 계약 시험은 5절에 연결한다. |
+| 호환성 범위 | 설정 파일 v4(`vnc-relay-config` 4.2.0). Windows 11 x64·Ubuntu 24.04 LTS x64. 파일 안에 형식 버전 키는 없다. v1→v2는 3.1절, v2→v3는 3.2절, v3→v4와 롤백은 3.3절을 따른다. v4 서버는 v3 표를 읽지 않는다. ticket 표나 `[metrics]` 표를 쓴 파일을 이전 4.x 서버로 되돌리는 방법은 3절을 따른다. |
+| 관련 테스트 | [운영 스펙 수용 테스트](../specs/operations.md#7-수용-테스트) OPS-001~006·OPS-016·OPS-023~027·OPS-031·OPS-034~042·OPS-047~073·OPS-092, [WS·WSS 스펙](../specs/websocket.md#7-수용-테스트) WS-015·WS-022·WS-024·WS-027~046, [중계 스펙](../specs/relay.md#7-수용-테스트) RLY-007·RLY-008·RLY-022~027. 계약 시험은 5절에 연결한다. |
 
 용어는 [VNC Relay 용어집](../../GLOSSARY.md)을 따른다. 테스트·검증 기호 L~Dp 등은 [운영 스펙 2절](../specs/operations.md#2-상태와-검증-매개변수)의 기호이며, 이 계약이 각 기호를 키에 연결한다.
 
-관련 문서: [CLI·계정 파일 계약](cli-v1.md)(`[admin]` 테이블 사용, 종료 코드), [관리 API 계약](management-api-v1.md)(`[dashboard]`·`[recent_closed]`·`[management]`의 값 전달), [WebSocket 중계 계약](websocket-relay-v2.md)(`allowed_origins`·WS 키 사용), [Repeater 초기 교환 계약](repeater-handshake-v1.md)(`handshake_secs`·`[mode1]`·`[mode2]` 사용), [운영 정보 계약](ops-info-v2.md)(경고·재로드 사건 이름, `[log]`·`[status]`), [ADR-0001 내장 TLS](../decisions/ADR-0001-built-in-tls.md), [ADR-0002 출발지 IP 허용 목록](../decisions/ADR-0002-source-ip-allowlist.md), [ADR-0004 tokio·rustls](../decisions/ADR-0004-tokio-rustls.md).
+관련 문서: [CLI·계정 파일 계약](cli-v1.md)(`[admin]` 테이블 사용, 종료 코드), [관리 API 계약](management-api-v1.md)(`[dashboard]`·`[recent_closed]`·`[management]`의 값 전달), [WebSocket 중계 계약](websocket-relay-v2.md)(`allowed_origins`·WS 키 사용), [Repeater 초기 교환 계약](repeater-handshake-v1.md)(`handshake_secs`·`[mode1]`·`[mode2]` 사용), [운영 정보 계약](ops-info-v2.md)(경고·재로드 사건 이름, `[log]`·`[status]`), [메트릭 계약](metrics-v1.md)(`[metrics]`가 켜는 `/metrics`), [ADR-0001 내장 TLS](../decisions/ADR-0001-built-in-tls.md), [ADR-0002 출발지 IP 허용 목록](../decisions/ADR-0002-source-ip-allowlist.md), [ADR-0004 tokio·rustls](../decisions/ADR-0004-tokio-rustls.md).
 
 접속 ticket의 보안 경계는 [ADR-0009](../decisions/ADR-0009-optional-relay-access-ticket.md)를 따른다.
 
@@ -190,7 +190,7 @@ K의 감지 시간은 `tcp_idle_secs + tcp_interval_secs × tcp_probes`다. 기�
 
 #### `[dashboard]`, `[recent_closed]`, `[status]`, `[log]`, `[reload]`
 
-아래 표는 `[recent_logs]`도 함께 정한다.
+아래 표는 `[recent_logs]`와 `[metrics]`도 함께 정한다.
 
 | 키(기호) | 자료형 | 필수 여부 | 기본값 | 유효 범위·의미 |
 | --- | --- | --- | --- | --- |
@@ -199,11 +199,12 @@ K의 감지 시간은 `tcp_idle_secs + tcp_interval_secs × tcp_probes`다. 기�
 | `recent_closed.max_entries`(R) | 정수 | 아님 | 100 | 0~10000. 최근 종료 목록의 최대 항목 수. 0이면 목록을 보관하지 않는다. |
 | `recent_logs.max_entries` | 정수 | 아님 | 1000 | 0~10000. 메모리에 보관할 최근 운영 로그 사건 수. 0이면 보관하지 않는다. 재시작하면 목록이 빈다. `log.output`이나 출력 쓰기 성공 여부와 무관하다. |
 | `status.listen` | 문자열(주소) | 필수 | 없음 | 상태 리스너 주소(1.1절). 포트까지 필수다. 루프백을 쓰기를 권장한다. 루프백이 아니면 경고 `status_listen_not_loopback`을 기록한다. |
+| `metrics.enabled` | 불리언 | 아님 | `false` | `true`이면 상태 리스너가 `GET /metrics`에 [메트릭 계약](metrics-v1.md)의 Prometheus 텍스트로 응답한다. `false`이면 그 경로는 404다. 관리 API·대시보드의 메트릭 화면은 이 값과 관계없이 쓸 수 있다. 재시작 필요. 편집 대상 아님. |
 | `log.output` | 문자열 | 아님 | `"stdout"` | `"stdout"`(표준 출력) 또는 로그 파일 경로. 파일이면 이어 쓴다. 파일이 없으면 만든다. 이름이 `stdout`인 파일은 `"./stdout"`으로 쓴다. 운영자가 파일을 교체하면 같은 경로를 다시 연다([운영 정보 계약 1.1절](ops-info-v2.md#11-로그-일반-규칙) "파일 다시 열기"). 회전 시점·보관은 운영자 책임이다. Windows 서비스 실행(`service install`·`service run`)에서는 파일 경로여야 한다. `"stdout"`이면 `service_log_stdout`이다([CLI 계약 1.9절](cli-v1.md#19-windows-서비스-실행)). |
 | `reload.settle_secs`(D) | 정수(초) | 아님 | 5 | 1~60. 마지막 변경을 감지한 뒤 적용·실패 결과를 확인할 때까지의 최대 시간. |
 | `reload.poll_secs`(Dp) | 정수(초) | 아님 | 30 | 5~600. OS 파일 알림을 놓친 변경을 찾는 주기 확인 간격. 로그 파일을 다시 여는 주기도 이 값이다. |
 
-`[dashboard]`·`[recent_closed]`·`[recent_logs]`·`[status]`·`[log]`·`[reload]`의 모든 키는 재시작이 필요하다. `status.listen`은 UltraVNC에 대응하는 기본 포트가 없어 포트까지 필수로 둔다. D의 이름 `settle_secs`는 "안정될 때까지 기다리는 시간"으로 읽을 수 있다. 이 계약에서 D는 [운영 스펙 2절](../specs/operations.md#2-상태와-검증-매개변수)의 정의대로 결과 확인 제한 시간이다. 변경 안정화 대기는 D 안에서 구현이 정한다.
+`[dashboard]`·`[recent_closed]`·`[recent_logs]`·`[status]`·`[metrics]`·`[log]`·`[reload]`의 모든 키는 재시작이 필요하다. `status.listen`은 UltraVNC에 대응하는 기본 포트가 없어 포트까지 필수로 둔다. D의 이름 `settle_secs`는 "안정될 때까지 기다리는 시간"으로 읽을 수 있다. 이 계약에서 D는 [운영 스펙 2절](../specs/operations.md#2-상태와-검증-매개변수)의 정의대로 결과 확인 제한 시간이다. 변경 안정화 대기는 D 안에서 구현이 정한다.
 
 ### 1.3 IP 항목 문법
 
@@ -358,7 +359,7 @@ K의 감지 시간은 `tcp_idle_secs + tcp_interval_secs × tcp_probes`다. 기�
 | `keepalive.tcp_idle_secs`, `keepalive.tcp_interval_secs`, `keepalive.tcp_probes` | 교체 뒤 수락·연결하는 TCP 소켓부터 |
 | `keepalive.ws_ping_secs`, `keepalive.ws_pong_timeout_secs` | 교체 뒤 업그레이드하는 WS·WSS 연결부터 |
 
-재시작이 필요한 변경에는 다음이 포함된다: TCP 진입점·WS·WSS 역할·모드의 `enabled`, 모든 `listen`, `admin.accounts_file`, `admin.argon2`, `[management]`의 인증서·개인키 이외 키(HTTP·HTTPS 전환과 `management.config_edit` 포함), `[dashboard]`, `[recent_closed]`, `[recent_logs]`, `[status]`, `[log]`, `[reload]`. 접속 ticket 표의 `enabled`는 재로드 대상이다.
+재시작이 필요한 변경에는 다음이 포함된다: TCP 진입점·WS·WSS 역할·모드의 `enabled`, 모든 `listen`, `admin.accounts_file`, `admin.argon2`, `[management]`의 인증서·개인키 이외 키(HTTP·HTTPS 전환과 `management.config_edit` 포함), `[dashboard]`, `[recent_closed]`, `[recent_logs]`, `[status]`, `[metrics]`, `[log]`, `[reload]`. 접속 ticket 표의 `enabled`는 재로드 대상이다.
 
 규칙:
 
@@ -476,7 +477,7 @@ UTF-8이 아닌 파일도 `config_file_unreadable` 진단에 해당한다. 관�
 ## 3. 호환성 규칙
 
 - 서버는 알 수 없는 테이블·키를 `config_unknown_key` 오류로 거절해야 한다. 허용 형식 밖의 값(예: 허용하지 않는 Origin 스킴)은 해당 값의 오류 코드(`config_origin_invalid` 등)로 거절해야 한다. 무시하거나 경고만 하지 않는다.
-- 호환 변경(minor 올림): 기본값이 있고 생략해도 기존 동작이 같은 새 선택 키 추가, 유효 범위 넓힘, 오류 메시지 문구 변경. 새 키를 쓴 파일은 그 키를 모르는 이전 서버가 거절한다. 그래서 새 키를 쓰려면 서버를 먼저 올린다. 4.1.0의 `[relay.ticket.*]` 표는 이 범위다. 이 표를 쓴 파일은 4.0.0 서버가 `config_unknown_key`로 거절하므로, 실행파일을 되돌리기 전에 표를 지운다.
+- 호환 변경(minor 올림): 기본값이 있고 생략해도 기존 동작이 같은 새 선택 키 추가, 유효 범위 넓힘, 오류 메시지 문구 변경. 새 키를 쓴 파일은 그 키를 모르는 이전 서버가 거절한다. 그래서 새 키를 쓰려면 서버를 먼저 올린다. 4.1.0의 `[relay.ticket.*]` 표는 이 범위다. 이 표를 쓴 파일은 4.0.0 서버가 `config_unknown_key`로 거절하므로, 실행파일을 되돌리기 전에 표를 지운다. 4.2.0의 `[metrics]` 표도 이 범위다. 이 표를 쓴 파일은 4.1.0 이하 서버가 `config_unknown_key`로 거절하므로, 되돌리기 전에 표를 지운다.
 - 호환성을 깨는 변경(새 major 버전): 키 이름·자료형·단위 변경이나 삭제, 필수 키 추가, 기본값 변경, 유효 범위 좁힘, 재로드 구분 변경, 항목 문법 변경, 보안 검사 완화. major를 올리고 마이그레이션(이전 파일을 새 형식으로 바꾸는 방법)과 롤백(새 형식 파일을 이전 서버로 되돌리는 방법) 계획을 함께 작성한다. 2.0.0의 계획은 3.1절, 3.0.0은 3.2절, 4.0.0은 3.3절에 있다.
 - 모든 값의 의미는 키 표에 있다. 키 순서와 주석은 의미가 없다.
 
@@ -526,7 +527,7 @@ UTF-8이 아닌 파일도 `config_file_unreadable` 진단에 해당한다. 관�
 | 상태 | 조건 | 지원 종료·대체 |
 | --- | --- | --- |
 | Draft | 채택 전 상태. | 해당 없음 |
-| Active | 현재 4.1.0. 계약 시험과 결과 확인 방법은 5절을 따른다. | v1은 3.1절, v2는 3.2절, v3는 3.3절의 지원 기간 규칙대로 대체한다. |
+| Active | 현재 4.2.0. 계약 시험과 결과 확인 방법은 5절을 따른다. | v1은 3.1절, v2는 3.2절, v3는 3.3절의 지원 기간 규칙대로 대체한다. 4.1.0 이하 4.x는 호환 추가인 4.2.0으로 대체한다. |
 | Deprecated | 대체 계약이 Active이다. | 지원 종료 날짜는 대체 계약에서 정한다. |
 | Retired | 지원 종료. | 새 구현의 근거로 쓰지 않는다. |
 
@@ -600,6 +601,9 @@ config_edit = false # true로 바꾸고 재시작하면 관리 API·대시보드
 [status]
 listen = "127.0.0.1:18081"
 
+[metrics]
+enabled = true # 상태 리스너의 /metrics를 켠다. 바꾸면 재시작해야 한다.
+
 [recent_logs]
 max_entries = 1000
 
@@ -660,6 +664,7 @@ max_lifetime_secs = 60
 | Consumer / 접속 ticket 설정 경고 계약 시험 | 같은 역할의 TCP 진입점·평문 WS를 함께 켰을 때 시작·재로드 경고와 계속 진행(2.2절). [OPS-071](../specs/operations.md#7-수용-테스트) |
 | Producer·Consumer / 접속 ticket 재로드·편집 계약 시험 | ticket 키 10개 재로드, 경로 2개 편집 불가, 43개 재로드·37개 편집 대상, 공개 키 파일 내용 감시·교체, 실패 시 기존 설정·공개 키·연결 유지(1.8절). [OPS-072](../specs/operations.md#7-수용-테스트), [WS-046](../specs/websocket.md#7-수용-테스트) |
 | Consumer / 접속 ticket 비노출 계약 시험 | 진단·운영 로그·상태 응답·관리 API 응답에 ticket 원문과 공개 키 파일 내용 없음(2.1절). [OPS-073](../specs/operations.md#7-수용-테스트) |
+| Producer·Consumer / 메트릭 설정 계약 시험 | `metrics.enabled` 기본 `false`, 불리언이 아닌 값의 `config_type_mismatch`, 재시작 필요 구분과 편집 대상 아님(1.2·1.8절). [OPS-092](../specs/operations.md#7-수용-테스트) |
 
 
 ### 계약 테스트 실행 기록

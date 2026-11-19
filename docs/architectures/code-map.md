@@ -8,7 +8,7 @@ VNC Relay는 TCP·WS·WSS Viewer를 Mode I 대상이나 TCP·WS·WSS Mode II Ser
 | 문서 상태 | Draft |
 | 구현 대조 | Verified — [대조 기록](#대조-기록) |
 | 관련 PRD | [PRD](../requirements/PRD.md), [유지보수성](../requirements/PRD.md#8-비기능-요구사항), [구현 기술](../requirements/PRD.md#확정-기준) |
-| 관련 ADR | [ADR-0001 내장 TLS](../decisions/ADR-0001-built-in-tls.md), [ADR-0003 메모리 상태](../decisions/ADR-0003-single-instance-memory-state.md), [ADR-0004 tokio·rustls](../decisions/ADR-0004-tokio-rustls.md), [ADR-0005 WS 코덱](../decisions/ADR-0005-in-house-ws-streaming-frame-codec.md), [ADR-0006 파일을 통한 설정 편집](../decisions/ADR-0006-config-edit-through-file.md) |
+| 관련 ADR | [ADR-0001 내장 TLS](../decisions/ADR-0001-built-in-tls.md), [ADR-0003 메모리 상태](../decisions/ADR-0003-single-instance-memory-state.md), [ADR-0004 tokio·rustls](../decisions/ADR-0004-tokio-rustls.md), [ADR-0005 WS 코덱](../decisions/ADR-0005-in-house-ws-streaming-frame-codec.md), [ADR-0006 파일을 통한 설정 편집](../decisions/ADR-0006-config-edit-through-file.md), [ADR-0011 상태 리스너의 메트릭](../decisions/ADR-0011-pull-metrics-on-status-listener.md) |
 
 제품은 domain·app·adapters·서버 실행파일 조립·트레이 실행파일 조립의 다섯 crate로 나뉜다. 개발 도구는 별도 `xtask` crate다. 정적 대시보드는 `web/dashboard/`에 있다. 코드가 있다는 사실과 스펙 시나리오 전체가 검증되었다는 판단은 다르다. 시나리오별 실행 결과는 [테스트 컨벤션](../conventions/testing.md#7-테스트와-스펙-시나리오-연결)의 보고서가 맡는다.
 
@@ -33,6 +33,8 @@ flowchart LR
     DOM["domain 업무 규칙"]
     SCM["adapters/windows_service"]
     TRAY["crates/tray<br/>UI·작업 스레드"]
+    MET["app/metrics<br/>기록·스냅숏·추이"]
+    PROC["adapters/process_stats"]
     CLI -->|"서비스 등록·해제·dispatcher"| SCM
     SCM -->|"제어 채널·상태 보고자"| CLI
     TRAY -->|"SCM 상태 조회·시작·중지"| SCMOS["Windows SCM"]
@@ -61,6 +63,15 @@ flowchart LR
     RELAY -->|"규칙 호출"| DOM
     MGMT -->|"규칙 호출"| DOM
     RELOAD -->|"설정의 정책 값"| DOM
+    RELAY -->|"초기 교환·대상 연결 시간·전송량 기록"| MET
+    NET -->|"WS ping 시간 초과 기록"| MET
+    CLI -->|"사건 장식자 주입·10초 추이 기록"| MET
+    STATUS -->|"/metrics 스냅숏"| MET
+    HTTP -->|"메트릭 API 스냅숏·추이"| MET
+    MET -->|"포트: 중계 상태 수"| RELAY
+    MET -->|"포트: 관리 세션 수"| MGMT
+    MET -->|"포트: 프로세스 값"| PROC
+    MET -->|"감싼 사건 기록부로 전달"| LOG
 ```
 
 ### 레이어와 의존 방향
@@ -118,9 +129,9 @@ flowchart LR
 | 코드 위치 | 구성요소 | 주된 책임 | 맡지 않는 책임 | 의존 대상 | 모듈 설계 |
 | --- | --- | --- | --- | --- | --- |
 | `crates/app/src/lib.rs` | 모듈 공개 | 사용 사례 모듈을 공개한다. | 구현체 주입 | 하위 모듈 | 이 지도 |
-| `crates/app/src/ports.rs` `TargetConnector` `RelayIdSource` `SessionIdSource` `RelayStream` `RelayStateSource` `RelaySessionControl` | 외부 기능 경계 | DNS·단일 IP 연결, ID 계산, 전송·종료·maintenance, 상태 조회·관리자 종료를 정의한다. 계정·입력·해시·시계·토큰·사건 포트도 정의한다. | 포트 구현·HTTP | domain·tokio trait | [중계 수명](relay-session.md), [관리 조회](management-query.md), [관리자 종료](management-terminate.md) |
+| `crates/app/src/ports.rs` `TargetConnector` `RelayIdSource` `SessionIdSource` `RelayStream` `RelayStateSource` `RelaySessionControl` `AdminSessionSource` `ProcessStatsSource` | 외부 기능 경계 | DNS·단일 IP 연결, ID 계산, 전송·종료·maintenance, 상태 조회·관리자 종료를 정의한다. 계정·입력·해시·시계·토큰·사건 포트와 메트릭 원천인 관리 세션 수·프로세스 값 포트도 정의한다. | 포트 구현·HTTP | domain·tokio trait | [중계 수명](relay-session.md), [관리 조회](management-query.md), [관리자 종료](management-terminate.md), [메트릭](metrics.md) |
 | `crates/app/src/settings.rs` `Settings` `RelaySettings` `EntryPointSettings` `WsListenerSettings` `WsRoleSettings` `TicketSettings` `TicketRoleSettings` `RecentLogsSettings` `ListenerPlan`; `crates/app/src/events.rs` `Event` `ShutdownTrigger` | 설정·사건 | v4의 TCP 설정·공유 WS 리스너·역할 설정·역할별 접속 ticket 설정과 공개 키·최근 로그 상한과 리스너 계획, ops-info 2.1.0의 선택 역할·Server 전송·ticket 사건 값을 정의한다. | TOML·JSON 출력·로그 보관 | domain | [설정](config-loading.md), [운영 로그](ops-log.md), [접속 ticket](relay-access-ticket.md) |
-| `crates/app/src/relay.rs` `RelayService::handle_connection` `RelayService::dispatch` `PreparedConnection` `TicketBinding` `RelayRuntime` `RelayState` `run_pair` | 중계 소유권 | 초기 교환을 준비하고 Mode I·II로 분기한다. ticket으로 받은 연결의 중계 ID 대조와 세션 만료 시각을 넘긴다. 공유 상태·활성 등록·정리 guard·최종 사건을 소유한다. B·L은 복제하지 않고 이동한다. | 수락·DNS 구현·프레임·ticket 서명 확인 | domain·ports·tokio | [초기 교환](initial-exchange.md), [중계 수명](relay-session.md), [접속 ticket](relay-access-ticket.md) |
+| `crates/app/src/relay.rs` `RelayService::handle_connection` `RelayService::dispatch` `PreparedConnection` `TicketBinding` `RelayRuntime` `RelayState` `run_pair` | 중계 소유권 | 초기 교환을 준비하고 Mode I·II로 분기한다. ticket으로 받은 연결의 중계 ID 대조와 세션 만료 시각을 넘긴다. 공유 상태·활성 등록·정리 guard·최종 사건을 소유한다. B·L은 복제하지 않고 이동한다. 초기 교환 시간과 방향별 전송량을 `Metrics`에 기록한다. | 수락·DNS 구현·프레임·ticket 서명 확인 | domain·ports·tokio·metrics | [초기 교환](initial-exchange.md), [중계 수명](relay-session.md), [접속 ticket](relay-access-ticket.md), [메트릭](metrics.md) |
 | `crates/app/src/relay.rs` `RelayRuntime::snapshot` `RelaySnapshot` `ActivePeer` `ClosedSessionSnapshot` `HandshakingGuard` | 관리 상태·제어 | 상태 잠금 한 번으로 메타데이터를 복사한다. 실제 peer 주소·전달 주소·초기 교환 수를 보존한다. 최근 종료 항목에는 활성 때의 양쪽 주소·전달 주소와 단조 지속 시간을 붙인다. RelaySessionControl 구현은 세션 소유자에게 종료를 전달한다. | HTTP·스트림 읽기 | Clock·domain·제어 알림 | [관리 조회](management-query.md), [관리자 종료](management-terminate.md) |
 | `crates/app/src/relay/handshake.rs` `exchange`; `crates/app/src/relay/target.rs` `dispatch`; `crates/app/src/relay/matching.rs` `dispatch`; `crates/app/src/relay/session.rs` `run_session_controlled` | 처리 단계 | 각각 시작 바이트·H, 정책·C·대상 L, 대기·W·Lw·원자적 매칭, 두 방향 중계·E·관리자 종료·Kw 진행을 맡는다. | OS 소켓·신호·작업 생성 | RelayRuntime·RelayStream·domain | [중계 수명](relay-session.md), [WS 스트림](websocket-stream.md) |
 | `crates/app/src/relay.rs` `RelayService::request_shutdown` `RelayService::request_fatal_shutdown` `RelayService::drive_shutdown`; `crates/app/src/lifecycle.rs` `LifecycleService` `Readiness` | 수명 | RelayService는 최초 종료 원인을 유지하며 Running→Grace→Force와 G 감독을 맡는다. LifecycleService는 시작·준비·종료 중·필수 리스너 실패 상태를 제공한다. | OS 신호 수신·소켓 오류 분류 | 공유 상태·시계·watch | [중계 수명](relay-session.md), [상태 리스너](status-listener.md) |
@@ -131,6 +142,7 @@ flowchart LR
 | `crates/app/src/reload/service.rs` `ReloadService` `PreparedReload` `dynamic_changed_keys` `restart_required_keys`; `crates/app/src/reload/snapshot.rs` `ReloadCell` `ReloadSnapshot` | 재로드 적용 | 부작용 없는 후보 준비·파일 분류와 실패 없는 commit을 나눈다. Settings·presence·TLS를 한 snapshot으로 발행하고 실제 적용 키·trigger·마지막 결과를 기록한다. | 파일 감지·TLS 라이브러리 | 재로드 포트·EventSink | [파일 감지](file-watch.md) |
 | `crates/app/src/reload/ticket_keys.rs` `load` `file_key` | ticket 공개 키 적재 | 켠 역할의 공개 키 파일을 읽어 Settings에 넣고 끈 역할의 키를 비운다. 파일 오류와 두 역할의 같은 키를 `ticket_keys_invalid` 진단으로 바꾼다. 시작과 재로드 후보 준비가 같은 함수를 쓴다. | JWKS 해석·파일 감지 | ReloadFileStore·ReloadTicketKeyStore·domain | [접속 ticket](relay-access-ticket.md), [설정](config-loading.md) |
 | `crates/app/src/accounts.rs` `AdminService` `list` | 계정 준비 | 계정 진단·변경 절차·목록 | 숨김 입력·잠금·파일 교체 | domain·ports | [계정 준비](admin-accounts.md) |
+| `crates/app/src/metrics.rs` `Metrics` `MetricsSink`; `crates/app/src/metrics/service.rs` `MetricsService` `MetricSources`; `crates/app/src/metrics/history.rs` `History`; `crates/app/src/metrics/snapshot.rs` `MetricsSnapshot` `MetricFamily` | 메트릭 | 사건 장식자로 연결·세션·관리 사건을 센다. 초기 교환·대상 연결 시간, 방향별 전송량, ping 시간 초과를 기록한다. 현재 값과 프로세스 값을 모아 계약 순서의 스냅숏을 만들고 10초 추이 360개를 보관한다. | 텍스트·JSON 표현, HTTP, OS 값 읽기, 추이 기록 주기 | EventSink·RelayStateSource·AdminSessionSource·ProcessStatsSource·RuntimeSettingsSource·Clock·domain 예산 | [메트릭](metrics.md) |
 
 ### 2.3 adapters와 실행파일 조립
 
@@ -141,12 +153,14 @@ flowchart LR
 | `crates/adapters/src/listener.rs` `Listener` `SupervisedListener` `ListenerFailure` `is_fatal_accept_error` | 리스너 감독 | 취소 가능한 수락 포트, OS별 복구 불가 오류 분류, 최초 장애의 감독 채널 전달 | 재시도 횟수·G·프로세스 종료 판정 | tokio·std 소켓 오류 | [상태 리스너](status-listener.md), [TCP 진입점](tcp-entry-point.md) |
 | `crates/adapters/src/websocket.rs` `WsEntryPoint` `check_upgrade` `exchange_handshake`; `crates/adapters/src/upgrade.rs` `read_head` `check` | WS·WSS 진입점 | 공유 리스너 수락·WSS 협상, 경로별 역할과 해당 Origin/IP·M/Kw 검사, 101 뒤 H 읽기와 suffix·선택한 진입점의 공통 서비스 인계 | Repeater 해석·전달 헤더 판정 | app·TLS·헤더 도구 | [WS 진입점](websocket-entry-point.md) |
 | `crates/adapters/src/ticket.rs` `TicketJwksStore`; `crates/adapters/src/ticket/jwks.rs`; `crates/adapters/src/ticket/jws.rs` `verify` | 접속 ticket 어댑터 | 공개 키 파일(JWKS)의 크기·키 수·P-256 좌표 해석, JWS 헤더·중복 멤버·ES256 R‖S 서명·클레임 자료형 확인 뒤 domain 정책 호출. 서명 통과 뒤에만 `jti`를 거절에 담는다 | 사용 기록·101 뒤 대조·파일 감시 | aws-lc-rs·serde_json·domain·app 포트 | [접속 ticket](relay-access-ticket.md) |
-| `crates/adapters/src/websocket_stream.rs` `WsRelayStream`; `crates/adapters/src/websocket_stream/frame.rs` `FrameDecoder`; `crates/adapters/src/websocket_stream/keepalive.rs` `Keepalive` | WS 스트림 | 페이로드 청크·마스크·분할·논리 M·같은 방향 B·제어 프레임·Close와 고정 Ping·Pong 기한 FIFO | H·C·W·E·G 판정·사건 | RelayStream·tokio·헤더 도구 | [WS 스트림](websocket-stream.md) |
+| `crates/adapters/src/websocket_stream.rs` `WsRelayStream`; `crates/adapters/src/websocket_stream/frame.rs` `FrameDecoder`; `crates/adapters/src/websocket_stream/keepalive.rs` `Keepalive` | WS 스트림 | 페이로드 청크·마스크·분할·논리 M·같은 방향 B·제어 프레임·Close와 고정 Ping·Pong 기한 FIFO. `count_ping_timeouts`로 받은 메트릭에 pong 대기 만료를 센다 | H·C·W·E·G 판정·사건 | RelayStream·tokio·헤더 도구·app 메트릭 | [WS 스트림](websocket-stream.md), [메트릭](metrics.md) |
 | `crates/adapters/src/websocket_stream/tests.rs` | WS 내부 시험 | 메모리 스트림·부분 쓰기·M/B·제어·Close·Kw 회귀 시험 | 실제 외부 Viewer | 테스트 전용 tokio | [WS 스트림 7절](websocket-stream.md#7-테스트-계획) |
 | `crates/adapters/src/tls.rs` `load_acceptor` `RustlsTlsStore` `TlsSource`; `crates/adapters/src/tls_listener.rs` `TlsListener` | TLS | 파일 검사·후보 acceptor·실행 중 스냅샷 선택·접속별 협상 | 관리 인증 | rustls·tokio-rustls·app | [TLS](tls.md), [관리 리스너](management-listener.md) |
 | `crates/adapters/src/management_http.rs` `ManagementListener` `ManagementServices` `DashboardHints` `answer` `static_answer`; `crates/adapters/src/dashboard_assets.rs` `ASSETS` `find_asset` | 관리 HTTP·정적 파일 | 관리 리스너와 API 분기, 보호 경로 세션 검사, 정확한 내장 파일 표, `DashboardHints`의 동적 E+5 힌트 계산, 응답 보안 헤더 | 관리 업무 규칙 | app·axum·TLS | [관리 리스너](management-listener.md) |
-| `crates/adapters/src/management_http/session_api.rs` `answer`; `crates/adapters/src/management_http/query_api.rs` `answer`; `crates/adapters/src/management_http/terminate_api.rs` `answer`; `crates/adapters/src/management_http/config_api.rs` `answer`; `crates/adapters/src/management_http/logs_api.rs` `answer` | 관리 API 어댑터 | 인증→PATCH 포함 CSRF→경로·메서드·입력 검증, 서비스 호출, 계약 JSON·쿠키. 설정 GET/PATCH는 spawn_blocking에서 실행하고 PATCH 본문은 64KiB로 제한한다. 최근 로그는 링 버퍼에서 조건 검색·페이지네이션한다. 종료 수락 뒤 완료 대기에만 U를 멈춘다. | 상태·스트림·파일 소유 | app 관리 서비스·axum·serde_json | [관리 세션](management-session.md), [조회](management-query.md), [종료](management-terminate.md), [설정 편집](config-edit.md) |
-| `crates/adapters/src/status_http.rs` `StatusListener`; `crates/adapters/src/admission.rs` `AdmittingListener` `AdmittedAddr`; `crates/adapters/src/request_deadline.rs` `DeadlineListener` `IdleControl` | 상태·수락·기한 | /livez·/readyz, 공유 Lm의 현재 상한 읽기·CAS, `AdmittedAddr`로 수락 U 메타데이터 전달, 관리 요청 U와 종료 대기 일시 정지 | 준비 상태 전이 | app·domain·axum·tokio | [상태 리스너](status-listener.md), [관리 리스너](management-listener.md) |
+| `crates/adapters/src/management_http/session_api.rs` `answer`; `crates/adapters/src/management_http/query_api.rs` `answer`; `crates/adapters/src/management_http/terminate_api.rs` `answer`; `crates/adapters/src/management_http/config_api.rs` `answer`; `crates/adapters/src/management_http/logs_api.rs` `answer`; `crates/adapters/src/management_http/metrics_api.rs` `answer` | 관리 API 어댑터 | 인증→PATCH 포함 CSRF→경로·메서드·입력 검증, 서비스 호출, 계약 JSON·쿠키. 설정 GET/PATCH는 spawn_blocking에서 실행하고 PATCH 본문은 64KiB로 제한한다. 최근 로그는 링 버퍼에서 조건 검색·페이지네이션한다. 메트릭은 `history_after`를 검사하고 스냅숏과 추이를 JSON으로 낸다. 종료 수락 뒤 완료 대기에만 U를 멈춘다. | 상태·스트림·파일 소유 | app 관리 서비스·app 메트릭·axum·serde_json | [관리 세션](management-session.md), [조회](management-query.md), [종료](management-terminate.md), [설정 편집](config-edit.md), [메트릭](metrics.md) |
+| `crates/adapters/src/status_http.rs` `StatusListener`; `crates/adapters/src/admission.rs` `AdmittingListener` `AdmittedAddr`; `crates/adapters/src/request_deadline.rs` `DeadlineListener` `IdleControl` | 상태·수락·기한 | /livez·/readyz와 `[metrics] enabled`일 때의 /metrics, 공유 Lm의 현재 상한 읽기·CAS, `AdmittedAddr`로 수락 U 메타데이터 전달, 관리 요청 U와 종료 대기 일시 정지 | 준비 상태 전이·메트릭 값 | app·domain·axum·tokio | [상태 리스너](status-listener.md), [관리 리스너](management-listener.md), [메트릭](metrics.md) |
+| `crates/adapters/src/metrics_text.rs` `encode`; `crates/adapters/src/process_stats.rs` `OsProcessStats`; `crates/adapters/src/process_stats/linux.rs`; `crates/adapters/src/process_stats/windows.rs` | 메트릭 표현·프로세스 값 | 스냅숏을 Prometheus 텍스트 0.0.4로 바꾼다. Linux `/proc/self`와 Windows Win32 API로 CPU 시간·메모리·스레드·열린 파일 기술자 또는 핸들 수를 읽는다. `process_stats/windows.rs`는 이 crate의 직접 unsafe 파일이다 | 메트릭 기록·경로 판정 | app 메트릭·std·windows-sys | [메트릭](metrics.md), [Rust 컨벤션](../conventions/rust.md#21-unsafe-예외) |
+| `crates/adapters/src/test_support.rs` `metrics_service` | 단위 시험 보조 | 빈 중계 상태·관리 세션과 고정 프로세스 값으로 `MetricsService`를 만든다. `cfg(test)`에서만 컴파일한다 | 제품 코드 경로 | app 메트릭 | [메트릭](metrics.md) |
 | `crates/adapters/src/config_file.rs` `load` `load_candidate` `parse_candidate` `load_admin` `read_tcp_listener` `read_websocket_listener` `read_websocket_role` `read_recent_logs`; `crates/adapters/src/config_file/reader.rs`; `crates/adapters/src/config_file/listen.rs`; `crates/adapters/src/toml_text.rs` | 설정 읽기 | v4의 부모 listen/TLS/trusted_proxies와 역할별 enabled/allow/Origin, 최근 로그 상한을 검증한다. 시작과 후보는 같은 바이트에서 Settings·presence를 만든다. | 재로드 판정·XFF 해석·로그 보관 | app·domain·toml | [설정](config-loading.md) |
 | `crates/adapters/src/config_edit.rs` `FsConfigFileStore` `TomlConfigDocument` `edit_change` | 설정 파일 편집 | SHA-256 revision, 중첩 역할 테이블·dotted/inline 키의 source span 보존 편집, 임시 파일 동기화→원본 revision 재확인→rename 교체 | 후보 수용·인증·HTTP | app 포트·toml_edit·aws-lc-rs·std 파일 | [설정 보기·편집](config-edit.md) |
 | `crates/adapters/src/accounts_file.rs` `load`; `crates/adapters/src/accounts_file/store.rs` `AccountsFile`; `crates/adapters/src/accounts_file/hasher.rs` `Argon2Hasher` `Argon2Verifier` | 계정 파일 | 읽기·검증·잠금·원자적 교체·Argon2id 생성과 검증 | 계정 규칙 | app 포트·toml·argon2 | [계정 준비](admin-accounts.md), [관리 세션](management-session.md) |
@@ -156,7 +170,7 @@ flowchart LR
 | `crates/adapters/src/windows_service.rs` `Scm` `Installed` `run` `ServiceSession` `StatusReporter` `StopControl` | Windows SCM | 서비스 등록·해제·제어 처리기·상태와 checkpoint 보고 | G 계산·서버 시작 순서 | windows-service·tokio·security | [Windows 서비스](windows-service.md) |
 | `crates/adapters/src/windows_service/security.rs` `Operator` `lookup` `grant` `LocalMemory` | 서비스 접근 권한 | 운영자 계정 SID 조회·서비스 DACL에 권한 추가·Win32 메모리 해제. 서비스의 직접 unsafe 경계다. | 파일 ACL 변경·트레이 메뉴 | windows-sys | [Windows 서비스](windows-service.md), [Rust 컨벤션](../conventions/rust.md#21-unsafe-예외) |
 | `src/main.rs` `main`; `src/cli.rs` `parse`; `src/admin.rs` `run` | CLI 조립 | 명령·옵션·진단·종료 코드, admin 포트 주입 | 계정 규칙 | clap·app·adapters | [시작](serve-startup.md), [계정 준비](admin-accounts.md) |
-| `src/serve.rs` `run` `start` `Host` `check_service_files` `listen_until_shutdown` `config_management` `generate_startup_keys` `ShutdownRequest` `Requests` `HostStatus` `wait_for_shutdown` `begin_process_shutdown` `begin_relay_shutdown` `finish_relay_shutdown` | 서버 조립 | 터미널·서비스의 같은 시작 경로와 설치 전 파일 검사. 같은 reload cell/source와 SharedReload를 reader·watcher·설정 서비스에 주입한다. 현재 G·첫 원인·종료 요청·SCM 상태·작업 회수를 연결한다. | 매칭·바이트 전달·OS 오류 분류 | 제품 crate·tokio | [시작](serve-startup.md), [Windows 서비스](windows-service.md), [파일 감지](file-watch.md), [설정 편집](config-edit.md), [중계 수명](relay-session.md) |
+| `src/serve.rs` `run` `start` `Host` `check_service_files` `listen_until_shutdown` `config_management` `generate_startup_keys` `ShutdownRequest` `Requests` `HostStatus` `wait_for_shutdown` `begin_process_shutdown` `begin_relay_shutdown` `finish_relay_shutdown` `sample_history` | 서버 조립 | 터미널·서비스의 같은 시작 경로와 설치 전 파일 검사. 같은 reload cell/source와 SharedReload를 reader·watcher·설정 서비스에 주입한다. `Metrics`·`MetricsSink`·`MetricsService`를 만들어 주입하고 준비됨 뒤 10초 추이 기록 작업을 돌린다. 현재 G·첫 원인·종료 요청·SCM 상태·작업 회수를 연결한다. | 매칭·바이트 전달·OS 오류 분류 | 제품 crate·tokio | [시작](serve-startup.md), [Windows 서비스](windows-service.md), [파일 감지](file-watch.md), [설정 편집](config-edit.md), [중계 수명](relay-session.md), [메트릭](metrics.md) |
 | `crates/adapters/src/file_watch.rs` `reopen_log`; `crates/adapters/src/ops_log.rs` `JsonLinesEventSink::reopen` `file_path` | 로그 파일 교체 | 재로드와 분리한 로그 알림·Dp 재열기, 같은 줄 쓰기 잠금의 핸들 교체, 실패 연속 구간 첫 경고·사건 | 로그 보관·압축·삭제 | notify·tokio·app 사건 | [운영 로그](ops-log.md), [파일 감지](file-watch.md) |
 | `src/service.rs` `run` `install` `install_with` `Installer` `uninstall` `run_service` `Failure` | 서비스 명령 조립 | 설치 전 검사·등록 순서·되돌림·진단·종료 코드를 연결한다. `Installer`의 제품 구현은 Scm이다. | SCM 직접 호출·중계 규칙 | cli·serve·adapters | [Windows 서비스](windows-service.md) |
 | `crates/tray/Cargo.toml`; `crates/tray/src/main.rs` `main` `run`; `crates/tray/src/single_instance.rs` `acquire` | 트레이 진입·단일 인스턴스 | Windows GUI 실행파일과 사용자별 파일 잠금. 중복 프로세스는 UI 생성 전에 성공 종료한다. | 서비스 설치·해제 | std·ui | [Windows 트레이](windows-tray.md) |
@@ -214,11 +228,12 @@ flowchart LR
 | `tests/relay_target_scenarios.rs` | relay.md: RLY-007~009. operations.md: OPS-023 |
 | `tests/relay_matching_scenarios.rs` | relay.md: RLY-012~016. operations.md: OPS-005 |
 | `tests/relay_log_scenarios.rs`; `tests/relay_dead_peer_linux.rs` | 로그: operations.md OPS-011·012, relay.md RLY-027. 단절: relay.md RLY-025·026 |
-| `tests/reload.rs` | operations.md: OPS-003·024~026·035·038·040·070~072. websocket.md: WS-022 |
+| `tests/reload.rs` | operations.md: OPS-003·024~026·035·038·040·070~072·092. websocket.md: WS-022 |
 | `tests/ticket_system.rs`; `tests/common/ticket_server.rs` `Server` `Ws` | 실제 실행파일의 접속 ticket. websocket.md: WS-038·046. relay.md: RLY-029~032. management.md: MGT-052. operations.md: OPS-073. `common/ticket_server.rs`는 ticket을 켠 실서버·WS 클라이언트·관리 API 도우미와 `sx` 만료를 단조 시계로 재는 `sx_deadline`·`assert_closed_between`을 두며 표식이 없다. 서명은 `crates/adapters/tests/common/ticket.rs`를 경로로 가져와 쓴다 |
-| `crates/adapters/tests/config_contract.rs` | operations.md: OPS-001·034·038·040·070 |
-| `crates/adapters/tests/management.rs` | operations.md: OPS-006·029·033·034·036·072. management.md: MGT-012~014·017~020·022·025·027·053. dashboard.md: DASH-014 |
-| `crates/adapters/tests/ops_info_contract.rs` | relay.md: 초기 교환·대상·대기·세션 사건. operations.md: 상한·정리·로그·상태·종료 원인. management.md: MGT-009·023. websocket.md: WS-008·010·019·038~043·045 |
+| `crates/adapters/tests/config_contract.rs` | operations.md: OPS-001·034·038·040·070·092 |
+| `crates/adapters/tests/management.rs` | operations.md: OPS-006·029·033·034·036·072. management.md: MGT-012~014·017~020·022·025·027·053·056·058·059. dashboard.md: DASH-014 |
+| `crates/adapters/tests/ops_info_contract.rs` | relay.md: 초기 교환·대상·대기·세션 사건. operations.md: 상한·정리·로그·상태·종료 원인, `/metrics`의 OPS-082~084·094. management.md: MGT-009·023. websocket.md: WS-008·010·019·038~043·045 |
+| `tests/metrics.rs` | operations.md: OPS-082·083·085~088·090~092. management.md: MGT-057·058. 실제 실행파일에 중계·관리 요청을 보낸 뒤 `/metrics` 텍스트와 메트릭 API 값을 대조한다. `metrics.enabled`를 끈 실행과 켠 실행을 함께 확인한다 |
 | `crates/adapters/tests/websocket_ticket.rs`; `crates/adapters/tests/relay_ticket.rs`; `crates/adapters/tests/common/ticket.rs` `Signer` | websocket.md: WS-037~046. relay.md: RLY-029~032. management.md: MGT-052. `common/ticket.rs`는 시험용 ES256 서명과 JWKS를 만들며 표식이 없다 |
 | `crates/adapters/tests/relay_delayed_cleanup_scenarios.rs`; `crates/adapters/tests/relay_stream_scenarios.rs`; `crates/adapters/tests/tcp_target.rs` | 각각 relay.md RLY-016, RLY-017~019·021, RLY-009·019 |
 | `crates/adapters/tests/tls.rs`; `crates/adapters/tests/websocket.rs` | TLS: operations.md OPS-036, websocket.md WS-013. WS 진입점: websocket.md 업그레이드·Origin·IP·TLS, operations.md U·종료·TLS·허용 목록, relay.md RLY-005 |
@@ -238,8 +253,9 @@ flowchart LR
 | 트레이 | `crates/tray/src/main.rs` `main` | Windows GUI 실행파일 시작 | `single_instance::acquire` → `ui::run` → `worker::spawn` |
 | TCP | `crates/adapters/src/net.rs` `TcpEntryPoint::run` | Viewer·Server 수락 | `accept_connections` → `RelayService::handle_connection` → `RelayService::dispatch` |
 | WS·WSS | `crates/adapters/src/websocket.rs` `WsEntryPoint::run` | 공유 리스너 수락·TLS·경로별 역할/정책 검사와 101 flush 성공 | `WsRelayStream::new` → `RelayService::handle_connection` → `RelayService::dispatch` |
-| 관리 HTTP | `crates/adapters/src/management_http.rs` `answer` | 관리 요청 | `session_api` → `query_api` 또는 `session_api` → `terminate_api` 또는 `session_api` → `config_api` 또는 `session_api` → `logs_api` 또는 `static_answer` |
-| 상태 HTTP | `crates/adapters/src/status_http.rs` `StatusListener::run` | 상태 요청 | `LifecycleService::readiness` |
+| 관리 HTTP | `crates/adapters/src/management_http.rs` `answer` | 관리 요청 | `session_api` → `query_api` 또는 `session_api` → `terminate_api` 또는 `session_api` → `config_api` 또는 `session_api` → `logs_api` 또는 `session_api` → `metrics_api` 또는 `static_answer` |
+| 상태 HTTP | `crates/adapters/src/status_http.rs` `StatusListener::run` | 상태 요청 | `LifecycleService::readiness` 또는 `metrics_response` → `MetricsService::snapshot` → `metrics_text::encode` |
+| 추이 기록 | `src/serve.rs` `sample_history` | 준비됨 직전 첫 점(`listen_until_shutdown`이 직접), 그 뒤 10초마다 | `MetricsService::sample_history` → `History::push` |
 | 파일 변경 | `crates/adapters/src/file_watch.rs` `ReloadWatcher::run` | OS 알림·주기 확인 | `ReloadService::handle_config` 또는 `ReloadService::handle_unreadable` |
 | 종료 신호 | `src/serve.rs` `ShutdownSignal::wait` | Ctrl+C·SIGTERM(Ubuntu)·Ctrl+Break·콘솔 창 닫기(Windows) | `wait_for_shutdown` → `begin_process_shutdown` → `begin_relay_shutdown` → `finish_relay_shutdown` |
 | 필수 리스너 장애 | `crates/adapters/src/listener.rs` `SupervisedListener`; `src/serve.rs` `wait_for_shutdown` | 복구 불가 `accept` 오류의 최초 보고 | `wait_for_shutdown` → `begin_process_shutdown` → `LifecycleService::listener_failed` 또는 `wait_for_shutdown` → `begin_process_shutdown` → `RelayService::request_fatal_shutdown` |
@@ -295,6 +311,12 @@ PATCH의 `ConfigEditService::patch`는 같은 잠금으로 편집 허용→원�
 
 `management_http::answer` → `session_api::answer` → `logs_api::answer`가 `/api/v1/logs`를 처리한다. 세션 인증이 선행되며 CSRF 검증은 필요하지 않다. `X-Relay-Poll: 1` 자동 갱신 요청은 유휴 만료를 연장하지 않는다. `logs_api`는 쿼리 매개변수를 검증하고 `RecentLogs::query`를 부른다. 버퍼 잠금 안에서 커서 범위를 좁히고 그 범위의 `Arc<LogEntry>`를 복제한다. 세션 필터는 범위 밖의 `session_started` 참조도 확보해 연결 식별자 연계를 보존한다. 일치 검사와 페이지 선택은 잠금 밖에서 한다. `src/serve.rs::run`은 기록 싱크와 관리 서비스에 같은 `Arc<RecentLogs>`를 직접 전달한다.
 
+### 메트릭 기록·조회 흐름(Current)
+
+기록은 두 길로 들어온다. 사건 장식자 `MetricsSink`는 사건을 감싼 기록부에 넘기기 전에 수락·거절·중단·세션·관리 사건을 센다. 사건에 없는 값은 직접 기록한다. `RelayService::prepare`가 잰 초기 교환 시간은 `RelayService::dispatch`가, Mode I 대상 연결 시간은 `relay/target.rs`의 `dispatch`가, 방향별 전송량은 `run_pair`의 갱신 함수가, ping 시간 초과는 `WsRelayStream`이 기록한다. 첫 추이 점은 `src/serve.rs`의 `listen_until_shutdown`이 준비됨 직전에 `MetricsService::sample_history`로 직접 찍는다. 그 뒤 점은 `sample_history` 작업이 10초마다 찍는다.
+
+조회도 두 길이다. 상태 리스너는 `[metrics] enabled`일 때만 `GET /metrics`를 `metrics_response`로 보낸다. `MetricsService::snapshot`이 기록 값을 계열마다 짧게 잠가 복사하고, `RelayStateSource::counts`·L·Lm 예산·`AdminSessionSource`·`ProcessStatsSource`에서 현재 값을 읽는다. `metrics_text::encode`가 이것을 Prometheus 텍스트로 바꾼다. 관리 API는 `management_http::answer` → `session_api::answer` → `metrics_api::answer` 순서다. 세션 인증 뒤 `history_after`를 검사하고, 같은 스냅숏과 `MetricsService::history_after`의 추이를 JSON으로 낸다. `X-Relay-Poll: 1` 요청은 유휴 만료를 연장하지 않는다([메트릭 모듈 설계](metrics.md)).
+
 ### Windows 서비스·트레이 흐름(Current)
 
 `src/main.rs`의 `main`은 `cli::parse`가 만든 `ServiceAction`을 `src/service.rs`의 `run`에 넘긴다. 설치는 `install_with`에서 기존 등록→운영자 조회→`serve::check_service_files`→현재 실행파일→등록→지연 시작·권한 부여 순서다. 등록 뒤 실패하면 새 등록을 삭제한다. 실행은 adapters의 `windows_service::run`이 받은 `ServiceSession`을 `serve::start`의 `Host::Service`에 전달한다. SCM 상태·종료 요청만 바꾸고 서버 조립은 공유한다([서비스 모듈](windows-service.md)).
@@ -314,6 +336,7 @@ PATCH의 `ConfigEditService::patch`는 같은 잠금으로 편집 허용→원�
 - 첫 종료 원인을 고른 뒤 현재 snapshot의 G를 한 번 읽어 Grace deadline을 고정한다. 준비 상태를 종료 중으로 바꾸고 watcher와 새 중계 수락을 멈춘다. 초기 교환·대기·대상 연결을 정리하며 기존 활성은 Grace 안에서 계속 진행한다. 관리 GET/PATCH는 유예 동안 유지한다. 유예 중 G 변경은 시작한 deadline을 바꾸지 않으며 두 번째 신호는 Force를 요청한다.
 - 필수 리스너의 `SupervisedListener`는 첫 복구 불가 수락 오류를 `ListenerFailure`로 알린다. `wait_for_shutdown`이 종료 신호와 이 사건을 함께 기다린다. `begin_process_shutdown`은 리스너 장애에 `LifecycleService::listener_failed`와 `RelayService::request_fatal_shutdown`을 적용한다. 같은 G·자원 정리 경로를 거친 뒤 종료 코드 1을 반환한다. 먼저 선택된 정상 종료 원인은 나중 리스너 오류로 바꾸지 않는다.
 - `finish_relay_shutdown`은 모든 진입점 소유자가 끝날 때까지 감독 작업을 유지한다. 그 뒤 관리·상태·감지 작업을 거두고 `server_stopped`를 쓴다.
+- `start`는 운영 로그를 연 직후 `Metrics`를 만들고, 모든 사건 기록부 자리에 `MetricsSink`를 넘긴다. `listen_until_shutdown`은 중계 실행 상태를 만든 뒤 `MetricsService`를 만들어 관리 서비스에 넣고, `[metrics] enabled`이면 상태 리스너에도 넣는다. 준비됨 직전에 첫 추이 점을 찍고, 준비됨 뒤 추이 기록 작업을 시작한다. 이 작업은 종료 정리에서 관리·상태 작업 다음에 멈춘다.
 - 설정은 `config_file`이 읽는다. 객체 연결은 `src/serve.rs`와 `src/admin.rs`의 인수·Arc로 한다. DI 프레임워크는 없다.
 - 준비 상태의 종료 전이는 `LifecycleService::begin_shutdown`이, 중계 수명 전이는 `RelayService::request_shutdown`이 맡는다.
 - WS·WSS의 전체 주소 신뢰 프록시 항목은 시작·재로드 때 `trust_all_proxies` 경고를 만든다. 관리 활성 세션 목록·상세는 `viewer_forwarded_ip`·`target_forwarded_ip`를 제공한다.

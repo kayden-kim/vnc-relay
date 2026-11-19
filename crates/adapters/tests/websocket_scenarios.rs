@@ -30,6 +30,7 @@ use vnc_relay_adapters::tls::{self, TlsSource};
 use vnc_relay_adapters::websocket::{WsEntryPoint, WsPolicy};
 use vnc_relay_adapters::websocket_stream::WsRelayStream;
 use vnc_relay_app::events::Event;
+use vnc_relay_app::metrics::Metrics;
 use vnc_relay_app::ports::{Clock, EventSink, RelayCloseAction, RelayStream};
 use vnc_relay_app::relay::{ConnectionContext, RelayRuntime, RelayRuntimeConfig, RelayService};
 use vnc_relay_app::reload::snapshot::{ReloadCell, ReloadSnapshot};
@@ -245,6 +246,7 @@ impl Running {
             source,
             Arc::clone(&clock),
             Arc::clone(&log),
+            Arc::new(Metrics::new(clock.as_ref())),
         ));
         let (stop, stopped) = watch::channel(false);
         let accept = |allow| AcceptPolicy {

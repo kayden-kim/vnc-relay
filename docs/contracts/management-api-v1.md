@@ -1,12 +1,12 @@
 # 관리 API v1 계약
 
-관리 리스너가 제공하는 JSON over HTTP 관리 API의 경로·메서드·요청·응답·오류와 로그인 교환 형식을 정한다. 내장 대시보드(정적 HTML·JS)가 이 API로 서버 요약·대기 연결·활성 세션·최근 종료 목록·최근 로그와 설정을 조회하고, 동적 설정을 편집하고, 활성 세션을 종료하고, 관리자 로그인·로그아웃을 한다. 이 문서는 [관리 스펙](../specs/management.md)과 [화면 스펙](../specs/dashboard.md)의 동작을 바꾸지 않는다. 스펙과 다르면 스펙을 따른다.
+관리 리스너가 제공하는 JSON over HTTP 관리 API의 경로·메서드·요청·응답·오류와 로그인 교환 형식을 정한다. 내장 대시보드(정적 HTML·JS)가 이 API로 서버 요약·대기 연결·활성 세션·최근 종료 목록·최근 로그·메트릭과 설정을 조회하고, 동적 설정을 편집하고, 활성 세션을 종료하고, 관리자 로그인·로그아웃을 한다. 이 문서는 [관리 스펙](../specs/management.md)과 [화면 스펙](../specs/dashboard.md)의 동작을 바꾸지 않는다. 스펙과 다르면 스펙을 따른다.
 
 | 항목 | 값 |
 | --- | --- |
-| 이름과 버전 | `management-api` 1.1.0 |
+| 이름과 버전 | `management-api` 1.2.0 |
 | 상태 | Active |
-| 버전 차이 | 1.1.0은 1.11절 CSP 헤더가 필수다. Consumer 동작은 같으며 Producer는 CSP 헤더를 보내야 한다. |
+| 버전 차이 | 1.1.0은 1.11절 CSP 헤더가 필수다. Consumer 동작은 같으며 Producer는 CSP 헤더를 보내야 한다. 1.2.0은 1.16절 메트릭 경로를 더한 호환 추가다. |
 | 소유자 | vnc-relay 프로젝트 관리자 |
 | 만드는 쪽(Producer) | `vnc-relay` 관리 리스너(서버) |
 | 사용하는 쪽(Consumer) | 같은 실행파일에 내장된 대시보드(정적 HTML·JS). 같은 규칙으로 호출하는 외부 HTTP 클라이언트도 Consumer로 본다. |
@@ -18,8 +18,9 @@
 | 관련 테스트 | [관리 스펙 7절](../specs/management.md#7-수용-테스트) MGT-001~MGT-055, [화면 스펙 7절](../specs/dashboard.md#7-수용-테스트), [운영 스펙 7절](../specs/operations.md#7-수용-테스트) OPS-043. 계약 테스트와 현재 결과 확인 방법은 5절을 따른다. |
 | 접속 ticket 관련 테스트 | [관리 스펙 7절](../specs/management.md#7-수용-테스트) MGT-052~053. |
 | 목록 필드 관련 테스트 | [관리 스펙 7절](../specs/management.md#7-수용-테스트) MGT-054~055, [화면 스펙 7절](../specs/dashboard.md#7-수용-테스트) DASH-065~066. 시험 위치와 현재 결과 확인 방법은 5절을 따른다. |
+| 메트릭 관련 테스트 | [관리 스펙 7절](../specs/management.md#7-수용-테스트) MGT-056~060, [화면 스펙 7절](../specs/dashboard.md#7-수용-테스트) DASH-068~079. |
 
-관련 문서: [설정 계약](config-v4.md)(`[dashboard]`·`[limits]`·`[recent_closed]`·`[recent_logs]`·`[timeouts]`·`[management]` 키와 기본값·범위), [CLI·계정 파일 계약](cli-v1.md)(계정명 규칙), [운영 정보 계약](ops-info-v2.md)(`session_id`·종료 사건 로그, 상태 리스너), [WebSocket 중계 계약](websocket-relay-v2.md)(관리자 종료의 Close 4005), [ADR-0001 내장 TLS](../decisions/ADR-0001-built-in-tls.md), [ADR-0003 단일 인스턴스·메모리 상태](../decisions/ADR-0003-single-instance-memory-state.md).
+관련 문서: [설정 계약](config-v4.md)(`[dashboard]`·`[limits]`·`[recent_closed]`·`[recent_logs]`·`[timeouts]`·`[management]` 키와 기본값·범위), [CLI·계정 파일 계약](cli-v1.md)(계정명 규칙), [운영 정보 계약](ops-info-v2.md)(`session_id`·종료 사건 로그, 상태 리스너), [메트릭 계약](metrics-v1.md)(메트릭 응답 본문), [WebSocket 중계 계약](websocket-relay-v2.md)(관리자 종료의 Close 4005), [ADR-0001 내장 TLS](../decisions/ADR-0001-built-in-tls.md), [ADR-0003 단일 인스턴스·메모리 상태](../decisions/ADR-0003-single-instance-memory-state.md).
 
 이 계약의 경로·메서드·필드·오류 코드·헤더·쿠키·화면 URL은 확정된 형식이다. 기본 규칙은 다음과 같다.
 
@@ -36,7 +37,7 @@
 
 | 항목 | 규칙 |
 | --- | --- |
-| 전송 | 관리 리스너 하나에서 정적 대시보드(`/`)와 API(`/api/v1/`)를 함께 제공한다. 상태 리스너(`/livez`·`/readyz`)는 이 계약의 대상이 아니다. |
+| 전송 | 관리 리스너 하나에서 정적 대시보드(`/`)와 API(`/api/v1/`)를 함께 제공한다. 상태 리스너(`/livez`·`/readyz`·`/metrics`)는 이 계약의 대상이 아니다. |
 | 본문 형식 | 요청·응답 본문은 UTF-8 JSON이다. 응답은 `Content-Type: application/json; charset=utf-8`이다. 본문이 있는 요청은 `Content-Type: application/json`을 보내야 한다. 다르면 `415`와 `invalid_request`로 거절한다. 단, 1.9절의 본문 금지처럼 경로별 규칙이 있으면 그 규칙을 먼저 적용한다. |
 | 응답 헤더 | API 응답에 `Cache-Control: no-store`를 붙인다. CORS 헤더(`Access-Control-*`)를 보내지 않는다. 같은 출처의 대시보드만 API를 호출한다. |
 | 필드 이름 | 소문자 `snake_case`다. |
@@ -67,6 +68,7 @@
 | 원시 중계 데이터(RFB 스트림) | 어디에도 없음 | 모든 응답 |
 | 설정 키·값과 설정 경로 | `GET /api/v1/config`의 실행 중 유효 설정(1.13절). 최근 로그에는 운영 정보 계약이 정한 설정 키 등 사건 메타 정보만 포함 | 경로가 가리키는 파일 내용, 비밀번호·해시·개인키 내용, 오류의 입력값 인용 |
 | 최근 로그 사건 | `GET /api/v1/logs`의 `entry`. 운영 정보 계약의 비밀 비노출·`relay_id_ref` 규칙을 그대로 따름 | 원시 중계 ID·인증 비밀·원시 스트림은 로그에 없음 |
+| 메트릭 값 | `GET /api/v1/metrics`. 속성은 [메트릭 계약 1.4절](metrics-v1.md#14-속성-값)의 고정 값만 쓴다 | 중계 ID·세션 식별자·주소·계정명·설정 값(L·Lm 상한 제외)은 메트릭에 없음 |
 
 오류 본문의 `message`에는 요청 입력값(계정명·비밀번호·세션 식별자·중계 ID·설정값)을 되풀이하지 않는다. 설정 진단의 `message`에도 값을 인용하지 않는다([설정 계약 2.1절](config-v4.md#21-설정-오류와-준비-실패)).
 
@@ -86,6 +88,7 @@
 | `POST /api/v1/sessions/{session_id}/terminate` | 필요 | 필요 | `200` 종료 결과(1.9절) | 관리자 종료(MGT-R05·R06·R07, [관리 3.2절](../specs/management.md#32-관리자-종료)) |
 | `GET /api/v1/closed-sessions` | 필요 | 불필요 | `200` 최근 종료 목록(1.10절) | 최근 종료 목록(MGT-R15, [관리 2.3절](../specs/management.md#23-최근-종료-목록)) |
 | `GET /api/v1/logs` | 필요 | 불필요 | `200` 최근 로그(1.15절) | 최근 로그 조회([관리 2.4절](../specs/management.md#24-최근-로그), MGT-046~050) |
+| `GET /api/v1/metrics` | 필요 | 불필요 | `200` 메트릭(1.16절) | 메트릭과 최근 1시간 추이([관리 2.5절](../specs/management.md#25-메트릭), MGT-056~060) |
 | `GET /api/v1/config` | 필요 | 불필요 | `200` 설정 보기(1.13절) | 실행 중 유효 설정과 파일 상태([관리 3.3절](../specs/management.md#33-설정-보기와-동적-설정-편집), MGT-R19) |
 | `PATCH /api/v1/config` | 필요 | 필요 | `200` 편집 결과(1.14절) | 설정 파일 기록과 동적 설정 변경([관리 3.3절](../specs/management.md#33-설정-보기와-동적-설정-편집), MGT-R20~R27) |
 
@@ -343,7 +346,7 @@
 - 정적 경로의 `404`는 2.1절 형식의 JSON 본문과 `not_found`를 유지한다. 정적 `303`·`404`를 API와 나누는 예외는 경로 범위에 관한 것이다. `404`의 JSON 본문을 없애는 뜻이 아니다.
 - 로그인 화면 파일에는 운영 데이터·계정 정보·설정 값을 넣지 않는다.
 - 로그인 성공 뒤 화면은 `/`로 이동한다.
-- 화면 URL: SCR-003은 `/login/`, SCR-001은 `/`, SCR-002는 `/#/sessions/{session_id}`, SCR-004는 `/#/settings`, SCR-005는 `/#/settings/edit`, SCR-006은 `/#/logs`다. URL의 조각(`#` 뒤)은 서버로 전송되지 않고 서버 접근 로그에 남지 않는다. 서버는 이 조각을 해석하지 않는다.
+- 화면 URL: SCR-003은 `/login/`, SCR-001은 `/`, SCR-002는 `/#/sessions/{session_id}`, SCR-004는 `/#/settings`, SCR-005는 `/#/settings/edit`, SCR-006은 `/#/logs`, SCR-007은 `/#/metrics`다. URL의 조각(`#` 뒤)은 서버로 전송되지 않고 서버 접근 로그에 남지 않는다. 서버는 이 조각을 해석하지 않는다.
 - 화면은 URL의 `session_id`가 1.8절 형식을 만족하는지 먼저 확인한다. 형식이 틀리면 요청을 보내지 않고 "잘못된 세션 식별자"를 표시한다. SCR-002에서 형식이 맞으면 상세를 조회하고, `404`이면 "대상 없음"을 표시한다. SCR-006의 세션 필터 URL은 `/#/logs?session_id={session_id}`다. 이 형식도 요청 전에 같은 형식 검사를 한다. 형식이 맞지만 일치하는 로그가 없으면 `200`의 빈 결과다.
 - 보호된 정적 응답과 API 응답에 `Cache-Control: no-store`를 붙인다. 로그인 화면 정적 응답에도 같은 헤더를 붙인다. 서버를 갱신한 뒤 브라우저가 이전 버전의 화면 코드를 다시 쓰지 않게 하기 위해서다.
 - 정적 응답에 `X-Content-Type-Options: nosniff`와 `Referrer-Policy: no-referrer`를 권장한다. `Content-Security-Policy: default-src 'self'; frame-ancestors 'none'`은 필수다. 대시보드는 인라인 스크립트와 인라인 스타일(`<style>`, `style` 속성)을 쓰지 않는다.
@@ -358,7 +361,7 @@
 | 조회 제한 시간·설정 편집 응답 대기 한도 | `[dashboard] query_timeout_secs`(재시작 필요) | 세션 정보의 `dashboard.query_timeout_secs` |
 | 종료 응답 대기 한도 | 설정 키 없음. 재로드 대상 `[timeouts] close_secs`(E)에서 계산 | 세션 정보의 `dashboard.terminate_timeout_secs`. 응답 때의 E + 5초다. |
 
-- 폴링 조회는 `GET` 여섯 경로(`summary`·`waiting`·`sessions`·`sessions/{session_id}`·`closed-sessions`·`logs`)에 붙인 자동 요청이다. 응답이 `query_timeout_secs` 안에 오지 않으면 Consumer는 요청을 중단하고 조회 실패로 처리한다. 실패를 빈 목록으로 표시하지 않는다.
+- 폴링 조회는 `GET` 일곱 경로(`summary`·`waiting`·`sessions`·`sessions/{session_id}`·`closed-sessions`·`logs`·`metrics`)에 붙인 자동 요청이다. 응답이 `query_timeout_secs` 안에 오지 않으면 Consumer는 요청을 중단하고 조회 실패로 처리한다. 실패를 빈 목록으로 표시하지 않는다.
 - 같은 조회가 진행 중이면 다음 주기 요청을 겹쳐 보내지 않는다([화면 4.1절](../specs/dashboard.md#41-폴링)). 조회 제한 시간이 P보다 길어도 된다.
 - 종료 요청에는 폴링 조회 제한 시간을 쓰지 않는다. 정리가 최대 E까지 걸릴 수 있기 때문이다. `terminate_timeout_secs`를 쓴다.
 - E를 교체한 뒤 세션 정보를 응답하면 새 E + 5초를 전달한다. 이미 시작한 종료 교환의 기한은 바꾸지 않는다. P와 `query_timeout_secs`는 재시작 필요로 남는다.
@@ -509,6 +512,23 @@ ticket 설정 변경은 새 업그레이드 요청부터 적용한다. 이미 10
 
 JSON Lines 다운로드는 Consumer가 만든다. 같은 필터로 커서 없이 `limit=1000`을 조회한 뒤 `before`와 `limit=1000`으로 과거 페이지를 수집한다. 각 다음 요청의 `before`는 직전 페이지의 가장 작은 `seq`다. `has_more = false`이면 끝낸다. 각 `entry`를 UTF-8·LF의 JSON 한 줄로 기록한다. 조회용 `seq`와 응답 포장 필드는 파일에 넣지 않는다. 파일 이름은 `vnc-relay-logs-<UTC yyyymmddThhmmssZ>.jsonl`이다. 다운로드 전용 API 경로는 추가하지 않는다. 첫 페이지 이후 생긴 새 사건은 포함하지 않는다. 페이지 요청 사이에 제거된 사건까지 완전한 이력으로 보장하지 않는다.
 
+### 1.16 메트릭 `GET /api/v1/metrics`
+
+유효한 관리 세션이 필요하다. CSRF 토큰은 필요하지 않다. `X-Relay-Poll: 1`을 허용하며, 이 헤더가 있는 자동 갱신은 관리 세션의 유휴 만료를 연장하지 않는다. 헤더가 없으면 사용자 행동 요청이다(1.4.2절). `[metrics] enabled`와 관계없이 응답한다. 이 설정은 상태 리스너의 `/metrics`만 켜고 끈다.
+
+`200` 응답 본문은 [메트릭 계약 1.7절](metrics-v1.md#17-json-표현)의 JSON이다. `history`는 [메트릭 계약 1.8절](metrics-v1.md#18-추이)을 따른다. 값은 같은 시점의 상태 리스너 `/metrics`와 같다. 이 응답에는 `as_of` 외에 1.6절 서버 요약의 필드를 넣지 않는다.
+
+| 매개변수 | 형식·범위 | 의미 |
+| --- | --- | --- |
+| `history_after` | 부호 없는 10진 숫자. `u64` 범위의 정수, 0 이상 | `history.points`에 `seq`가 이 값보다 큰 점만 넣는다. 생략하면 보관 중인 모든 점을 넣는다. `metrics`와 `history`의 다른 필드는 이 값과 관계없다. |
+
+- `history_after`는 1.15절의 `after`와 같은 표기 규칙을 따른다. `[0-9]+` 표기만 받는다. 부호·공백·소수점·지수 표기, `u64` 최댓값을 넘는 값, 빈 값은 `400 invalid_request`다.
+- `history_after`를 두 번 이상 보내면 `400 invalid_request`다. 쿼리 문자열 해석과 표에 없는 매개변수 무시는 1.15절 규칙과 같다.
+- `history_after`가 `latest_seq` 이상이면 `history.points`는 빈 배열이다. 오류가 아니다. 보관 범위보다 오래된 값이면 보관 중인 모든 점을 준다.
+- 재시작하면 추이 순번이 0부터 다시 시작한다. 재시작 전 관리 세션은 모두 무효이므로 Consumer는 다시 로그인한 뒤 `history_after` 없이 처음부터 조회한다.
+
+오류는 `400 invalid_request`(매개변수·폴링 헤더 오류), `401 unauthenticated`, `405 invalid_request`(`Allow: GET`), `500 internal`이다. 인증·메서드·본문·Content-Type의 공통 규칙(1.1·1.3절)도 적용하므로 본문이 있고 Content-Type이 틀리면 `415 invalid_request`다. 프로세스 값을 읽지 못한 것은 오류가 아니다. `200`의 `available = false`로 구분한다.
+
 ## 2. 오류
 
 ### 2.1 오류 본문과 상태 코드
@@ -566,6 +586,7 @@ JSON Lines 다운로드는 Consumer가 만든다. 같은 필터로 커서 없이
 | `GET /api/v1/config` | `200` | `400`, `401`, `405`, `415`, `500`(`internal`). 파일 검증·읽기 실패 자체는 `200`의 `file.state`로 구분한다. |
 | `PATCH /api/v1/config` | `200` | `400`(`invalid_request`·`config_invalid`), `401`(`unauthenticated`), `403`(`csrf_invalid`·`config_edit_disabled`), `405`, `409`(`config_conflict`·`config_restart_pending`·`config_file_invalid`), `415`, `500`(`config_write_failed`·`internal`) |
 | `GET /api/v1/logs` | `200` | `400`(`invalid_request`), `401`(`unauthenticated`), `405`(`invalid_request`), `415`(공통 본문 형식 규칙), `500`(`internal`) |
+| `GET /api/v1/metrics` | `200` | `400`(`invalid_request`), `401`(`unauthenticated`), `405`(`invalid_request`), `415`(공통 본문 형식 규칙), `500`(`internal`) |
 
 ### 2.2 HTTP 응답이 없는 실패
 
@@ -609,6 +630,7 @@ JSON Lines 다운로드는 Consumer가 만든다. 같은 필터로 커서 없이
 - 최근 로그 경로·선택 매개변수·응답 필드와 세션 필드는 1.1.0의 호환 추가 범위다. 세션 필터 URL은 1.11절을 따른다.
 - 접속 ticket의 `session_expired`와 설정 보기 항목은 1.1.0의 허용 값·필드 추가 범위다. ticket 편집은 편집 대상 8개에 적용한다.
 - 대기·최근 종료 목록 필드는 1.1.0의 응답 필드 추가 범위다. 기존 필드의 이름·자료형·의미는 바꾸지 않는다.
+- 메트릭 경로·선택 매개변수·응답 본문은 1.2.0의 새 경로 추가 범위다. 응답 본문의 호환 규칙은 [메트릭 계약 3절](metrics-v1.md#3-호환성-규칙)을 따른다.
 - 호환성을 깨는 변경(Breaking change): 필드나 경로를 삭제·이름 변경한다. 자료형·단위·시각 형식·`null` 의미를 바꾼다. 기존 조건의 HTTP 상태 코드나 오류 코드를 바꾼다. 요청 필드를 필수로 바꾼다. 쿠키 이름이나 헤더 이름·의미를 바꾼다. 쿠키 보안 속성을 약하게 바꾼다. 인증·CSRF 요구를 약하게 바꾼다. 위 변경은 새 major 버전(`/api/v2/`)으로 낸다.
 - 마이그레이션: 새 major 버전은 새 접두사로 제공하고, 같은 릴리스에서 대시보드를 새 버전으로 옮긴다. 대시보드는 같은 실행파일에 들어 있으므로 서버와 대시보드의 버전이 어긋나지 않는다. 외부 클라이언트가 있으면 이전 major를 한동안 함께 제공한다. 기간은 새 major 채택 때 정한다.
 - 롤백: 이전 릴리스 실행파일로 되돌리면 이전 major와 대시보드가 함께 돌아온다. 관리 세션은 서버 메모리에만 있으므로 되돌리는 시점에 모두 무효가 되고, 관리자는 다시 로그인한다. 최근 종료 목록도 비워진다.

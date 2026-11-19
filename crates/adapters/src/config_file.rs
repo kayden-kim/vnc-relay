@@ -13,9 +13,9 @@ use vnc_relay_app::reload::{ConfigCandidate, ConfigPresence};
 use vnc_relay_app::settings::{
     AdminSessionSettings, AdminSettings, Argon2Settings, ConfigDiagnostic, ConfigError,
     DashboardSettings, EntryPointSettings, KeepaliveSettings, LimitSettings, LogOutput,
-    LogSettings, LoginLimitSettings, ManagementSettings, Mode1Settings, Mode2Settings,
-    RecentClosedSettings, RecentLogsSettings, RelaySettings, ReloadSettings, Settings,
-    StatusSettings, TicketRoleSettings, TicketSettings, TimeoutSettings, TlsFiles,
+    LogSettings, LoginLimitSettings, ManagementSettings, MetricsSettings, Mode1Settings,
+    Mode2Settings, RecentClosedSettings, RecentLogsSettings, RelaySettings, ReloadSettings,
+    Settings, StatusSettings, TicketRoleSettings, TicketSettings, TimeoutSettings, TlsFiles,
     WsListenerSettings, WsRoleSettings,
 };
 use vnc_relay_domain::account::Argon2Params;
@@ -196,6 +196,7 @@ fn read_settings(root: &mut Section<'_>, base_dir: &Path, d: &mut Diagnostics) -
     let recent_closed = read_recent_closed(root, d);
     let recent_logs = read_recent_logs(root, d);
     let status = read_status(root, d);
+    let metrics = read_metrics(root, d);
     let log = read_log(root, base_dir, d);
     let reload = read_reload(root, d);
 
@@ -216,6 +217,7 @@ fn read_settings(root: &mut Section<'_>, base_dir: &Path, d: &mut Diagnostics) -
         recent_closed: recent_closed?,
         recent_logs: recent_logs?,
         status: status?,
+        metrics: metrics?,
         log: log?,
         reload: reload?,
     })
@@ -766,6 +768,13 @@ fn read_status(root: &mut Section<'_>, d: &mut Diagnostics) -> Option<StatusSett
     let listen = required(&status, "listen", listen, "", d);
     status.finish(d);
     Some(StatusSettings { listen: listen? })
+}
+
+fn read_metrics(root: &mut Section<'_>, d: &mut Diagnostics) -> Option<MetricsSettings> {
+    let mut metrics = root.section("metrics", d);
+    let enabled = metrics.bool("enabled", d).or(false);
+    metrics.finish(d);
+    Some(MetricsSettings { enabled: enabled? })
 }
 
 fn read_log(root: &mut Section<'_>, base_dir: &Path, d: &mut Diagnostics) -> Option<LogSettings> {

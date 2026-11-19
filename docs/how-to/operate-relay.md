@@ -239,6 +239,14 @@ v4 서버는 v3의 WS·WSS 테이블을 읽지 않는다. 호환 지원 기간�
 
    기대 결과: 인증 전에는 운영 데이터를 볼 수 없다. 공개 관리 배치에서는 설정한 `https://` 주소를 쓰고 인증서 검증을 생략하지 않는다.
 
+5. 설정에서 `[metrics] enabled = true`를 켰다면 같은 상태 리스너에서 메트릭을 조회한다. 이 키는 재시작해야 적용된다.
+
+   Windows: `curl.exe --fail http://127.0.0.1:18081/metrics`
+
+   Ubuntu: `curl --fail http://127.0.0.1:18081/metrics`
+
+   기대 결과: HTTP 200과 `Content-Type: text/plain; version=0.0.4; charset=utf-8`다. 본문의 첫 계열은 `target_info`이고 `target_info{service_name="vnc-relay",service_version="<버전>"} 1` 줄이 있다. 꺼져 있으면 404이며 `--fail` 때문에 curl이 종료 코드 22로 끝난다. 이 경로에도 인증이 없다. 상태 리스너는 루프백이나 모니터링 네트워크로 제한해야 한다. 이름·단위·속성은 [메트릭 계약](../contracts/metrics-v1.md)을, Prometheus·OpenTelemetry Collector 수집 설정은 [운영자 도움말 "메트릭 수집"](../help/ko/src/operate.md#메트릭-수집)을 따른다.
+
 #### 3.3.1 Windows 서비스와 트레이 앱
 
 이 절은 Windows 11 x64에만 적용한다. 서비스와 트레이 앱은 Windows 묶음에 있다. 설치·해제에는 관리자 권한 터미널이 필요하다. 서비스 시작·중지에는 설치 때 지정한 서비스 운영자의 일반 터미널을 쓸 수 있다. 기준은 [운영 스펙 3.7절](../specs/operations.md#37-windows-서비스-실행)과 [CLI 계약 1.9절](../contracts/cli-v1.md#19-windows-서비스-실행)이다. 시험 절차와 실제 확인 범위는 [Windows 서비스 시험](set-up-and-verify.md#8-windows-서비스-시험)에 있다.
