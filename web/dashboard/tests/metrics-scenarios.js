@@ -48,6 +48,10 @@ const fail = (status) => json(status, {
 });
 const body = (points = pointsOf(1, 3), metrics = defaultMetrics()) => metricsBody({ metrics, points });
 const okBody = (...args) => ok(body(...args));
+// The last 24 hours: points one minute apart in a body with that window's interval and capacity.
+const dayPoints = (from, to, overrides = {}) => pointsOf(from, to, overrides, 60);
+const dayBody = (retained = dayPoints(1, 3), metrics = defaultMetrics()) => ok(metricsBody({ metrics, points: retained, period: '24h' }));
+const isDay = (call) => call.query.get('history_window') === '24h';
 
 // Fake management API. `handler(call, n)` answers the n-th metrics request. `maxInflight` is the largest number of
 // metrics requests that were open at the same moment.
@@ -105,6 +109,16 @@ const isPoll = (call) => call.init.headers?.['X-Relay-Poll'] === '1';
 const perSecond = (value) => fill(t.perSecond, { value });
 const rowsOf = (root) => [...root.querySelectorAll('tbody tr')];
 const cellsOf = (row) => [...row.children].map((cell) => cell.textContent.trim());
+const periodSelect = () => host.querySelector('#metrics-period');
+const rangeText = () => host.querySelector('#metrics-range')?.textContent ?? '';
+const trendsTitle = () => [...host.querySelectorAll('.metrics-section > h2')][1]?.textContent ?? null;
+// Chooses a trend period the way a keyboard or pointer user does: focus, new value, change event.
+function choosePeriod(value) {
+  const select = periodSelect();
+  select.focus();
+  select.value = value;
+  select.dispatchEvent(new Event('change'));
+}
 
 function checkLayout(label) {
   check(`${label}: no horizontal scroll`, document.documentElement.scrollWidth <= document.documentElement.clientWidth);
@@ -121,6 +135,15 @@ function checkLayout(label) {
   }
   for (const node of host.querySelectorAll('.table-scroll, .kpi-body, [data-chart-card] .card-body')) {
     check(`${label}: no inner horizontal overflow`, node.scrollWidth <= node.clientWidth + 1);
+  }
+  const period = host.querySelector('#metrics-period')?.getBoundingClientRect();
+  const refresh = host.querySelector('#metrics-refresh')?.getBoundingClientRect();
+  if (period && refresh && innerWidth <= 1023.98) {
+    check(`${label}: period select spans the row above refresh at the touch height`, period.bottom <= refresh.top
+      && Math.abs(period.width - refresh.width) < 1 && period.height >= 44);
+  } else if (period && refresh) {
+    check(`${label}: period select left of refresh with aligned bottoms`, period.right <= refresh.left
+      && Math.abs(period.bottom - refresh.bottom) < 1);
   }
   if (innerWidth <= 1023.98) {
     const button = host.querySelector('#metrics-refresh');
@@ -595,11 +618,14 @@ async function case078() {
   }
   const live = [...host.querySelectorAll('[aria-live], [role="status"], [role="alert"]')];
   check('078: only the status cell is a live region', live.length === 1 && live[0].id === 'metrics-status');
-  for (const selector of ['.navbar-item', '.help-link', '#metrics-language', '#metrics-logout', '#metrics-refresh']) {
+  for (const selector of ['.navbar-item', '.help-link', '#metrics-language', '#metrics-logout', '#metrics-period', '#metrics-refresh']) {
     const control = host.querySelector(selector);
     control.focus();
     check(`078: keyboard reaches ${selector}`, document.activeElement === control);
   }
+  const periodLabel = host.querySelector('label[for="metrics-period"]');
+  check('078: the period select has a visible label', periodLabel?.textContent === t.periodLabel
+    && periodLabel.getBoundingClientRect().width > 0 && periodLabel.getBoundingClientRect().height > 0);
 
   mount(fakeApi(() => okBody([])));
   await waitFor(settled);
@@ -642,6 +668,188 @@ async function case079() {
     && host.querySelector('#metrics-range').textContent === fill(n.metricsRange, { n: 3 }));
   check('079: chart names change language', chart('sessions').getAttribute('aria-label').startsWith(n.chartSessions));
   check('079: language focus kept', document.activeElement?.id === 'metrics-language');
+
+  // The chosen trend period stays too, and still without a request.
+  const d = mount(fakeApi((call) => (isDay(call) ? dayBody() : okBody())));
+  await waitFor(settled);
+  choosePeriod('24h');
+  await waitFor(() => rangeText() === fill(t.metricsRange24h, { n: 3 }));
+  const calls = d.api.calls.length;
+  const again = host.querySelector('#metrics-language');
+  again.value = next;
+  again.dispatchEvent(new Event('change'));
+  check('079: the chosen period stays without a request', periodSelect().value === '24h' && d.api.calls.length === calls
+    && rangeText() === fill(n.metricsRange24h, { n: 3 }) && trendsTitle() === n.trendsTitle24h
+    && host.querySelector('label[for="metrics-period"]').textContent === n.periodLabel);
+}
+
+// ---- DASH-080, 081: trend period ----
+
+async function case080() {
+  // Last hour → last 24 hours → last hour. The 24-hour answer waits, so the screen in between can be read.
+  const gate = deferred();
+  const m = mount(fakeApi((call, n) => {
+    if (n === 2) return gate.promise;
+    return isDay(call) ? dayBody(dayPoints(1, 8)) : okBody(pointsOf(1, 5));
+  }));
+  await waitFor(settled);
+  const select = periodSelect();
+  const label = host.querySelector('label[for="metrics-period"]');
+  check('080: the select has a visible label', label?.textContent === t.periodLabel && label.getBoundingClientRect().width > 0);
+  check('080: two choices, the last hour first and chosen', [...select.options].map((option) => `${option.value}=${option.textContent}`).join('|')
+    === `1h=${t.periodHour}|24h=${t.periodDay}` && select.value === '1h');
+  const before = { time: timeText(), range: rangeText(), charts: chartIds().join('|') };
+  choosePeriod('24h');
+  check('080: updating shows at once', status() === t.refreshing && refreshLabel() === t.refreshing);
+  check('080: the select stays usable and keeps the focus', !select.disabled && document.activeElement === select);
+  const change = m.api.calls[1];
+  check('080: the change asks for the last 24 hours without history_after and X-Relay-Poll',
+    !!change && isDay(change) && !change.query.has('history_after') && !isPoll(change));
+  check('080: until it succeeds the last hour stays', rangeText() === before.range && timeText() === before.time
+    && trendsTitle() === t.trendsTitle && chartIds().join('|') === before.charts && metricOf('active') === '3');
+  gate.resolve(dayBody(dayPoints(1, 8)));
+  await waitFor(settled);
+  check('080: success replaces the points with the last 24 hours', rangeText() === fill(t.metricsRange24h, { n: 8 })
+    && trendsTitle() === t.trendsTitle24h && status() === '');
+  check('080: the focus stays on the select', document.activeElement === select);
+  choosePeriod('1h');
+  await waitFor(() => m.api.calls.length === 3 && settled());
+  const back = m.api.calls[2];
+  check('080: back to the last hour asks without history_window, history_after, and X-Relay-Poll',
+    back.path === '/api/v1/metrics' && !isPoll(back));
+  check('080: the last hour shows again', rangeText() === fill(t.metricsRange, { n: 5 }) && trendsTitle() === t.trendsTitle);
+
+  // A change during an automatic poll waits for it, drops its answer, and then asks for the chosen window.
+  const late = deferred();
+  const p = mount(fakeApi((call, n) => {
+    if (n === 2) return late.promise;
+    return isDay(call) ? dayBody(dayPoints(1, 8)) : okBody(pointsOf(1, 5));
+  }, { pollSecs: 1 }));
+  await waitFor(settled);
+  await waitFor(() => p.api.calls.length === 2, 3000);
+  check('080 during a poll: the poll runs without the updating state yet', isPoll(p.api.calls[1]) && status() === '');
+  const ranges = [];
+  const observer = new MutationObserver(() => ranges.push(rangeText()));
+  observer.observe(host.querySelector('#metrics-range'), { childList: true, characterData: true, subtree: true });
+  choosePeriod('24h');
+  check('080 during a poll: updating at once, no second request', status() === t.refreshing && p.api.calls.length === 2);
+  late.resolve(okBody(pointsOf(6, 9)));
+  await waitFor(() => rangeText() === fill(t.metricsRange24h, { n: 8 }), 3000);
+  observer.disconnect();
+  const next = p.api.calls[2];
+  check('080 during a poll: the chosen window is asked right after', !!next && isDay(next) && !next.query.has('history_after') && !isPoll(next));
+  check('080 during a poll: the answer of the earlier window never shows', !ranges.includes(fill(t.metricsRange, { n: 9 })));
+  check('080: metrics requests never overlap (change, poll)', m.api.maxInflight === 1 && p.api.maxInflight === 1);
+
+  // A change that fails keeps the last hour with the stale notice. The next automatic poll asks for the chosen window.
+  const f = mount(fakeApi((call, n) => {
+    if (n === 2) return fail(500);
+    return isDay(call) ? dayBody(dayPoints(1, 8)) : okBody(pointsOf(1, 5));
+  }, { pollSecs: 1 }));
+  await waitFor(settled);
+  choosePeriod('24h');
+  await waitFor(() => f.api.calls.length === 2 && settled());
+  check('080 failed: stale badge and notice while the last hour stays', status() === t.stale
+    && host.querySelector('.metrics-alerts .alert')?.textContent.includes(t.staleMessage.split('{time}')[0])
+    && rangeText() === fill(t.metricsRange, { n: 5 }) && trendsTitle() === t.trendsTitle);
+  check('080 failed: the select keeps the chosen window', periodSelect().value === '24h');
+  await waitFor(() => rangeText() === fill(t.metricsRange24h, { n: 8 }), 3000);
+  const retry = f.api.calls[2];
+  check('080 failed: the next automatic poll asks for the chosen window without history_after',
+    !!retry && isPoll(retry) && isDay(retry) && !retry.query.has('history_after'));
+  check('080 failed: its success clears the failure', status() === '' && host.querySelector('.metrics-alerts').childElementCount === 0);
+  await waitFor(() => f.api.calls.length === 4, 3000);
+  check('080 failed: later polls continue the chosen window', isDay(f.api.calls[3]) && f.api.calls[3].query.get('history_after') === '8');
+
+  // Leaving and coming back starts again from the last hour: the router mounts a new screen.
+  mount(fakeApi((call) => (isDay(call) ? dayBody() : okBody())));
+  await waitFor(settled);
+  choosePeriod('24h');
+  await waitFor(() => rangeText() === fill(t.metricsRange24h, { n: 3 }));
+  const returned = mount(fakeApi((call) => (isDay(call) ? dayBody() : okBody())));
+  await waitFor(settled);
+  check('080 return: the last hour is chosen and asked for', periodSelect().value === '1h' && returned.api.calls[0].path === '/api/v1/metrics'
+    && rangeText() === fill(t.metricsRange, { n: 3 }));
+}
+
+async function case081() {
+  // 1440 one-minute points, then an automatic poll that brings one new point.
+  const gate = deferred();
+  const m = mount(fakeApi((call, n) => {
+    if (!isDay(call)) return okBody(pointsOf(1, 5));
+    if (n === 2) return dayBody(dayPoints(1, 1440));
+    if (n === 3) return dayBody(dayPoints(1441, 1441));
+    return gate.promise;
+  }, { pollSecs: 1 }));
+  await waitFor(settled);
+  choosePeriod('24h');
+  await waitFor(() => rangeText() === fill(t.metricsRange24h, { n: 1440 }));
+  check('081: range, section title, and cpu note of the last 24 hours', trendsTitle() === t.trendsTitle24h
+    && kpi('cpu').textContent.includes(t.cpuNote24h) && !kpi('cpu').textContent.includes(t.cpuNote));
+  check('081: five charts', chartIds().join('|') === 'sessions|connections|throughput|cpu|memory');
+  const latest = T0 + 1440 * 60000;
+  check('081: five time labels six hours apart, from one day back to the newest point',
+    [...chart('sessions').querySelectorAll('.chart-x span')].map((node) => node.textContent).join('|')
+    === [0, 6, 12, 18, 24].map((hours) => formatClock(latest - 86400000 + hours * 3600000)).join('|'));
+  const sessions = coords(chart('sessions').querySelector('.chart-plot path.chart-line.s1'));
+  check('081: one day across the plot, newest point at the right edge', sessions.length === 1440 && sessions[0][0] === 0.25
+    && sessions.at(-1)[0] === 360);
+  check('081: throughput and cpu are per-second rates of one-minute neighbours',
+    [...kpi('throughput').querySelectorAll('dd .metric')].map((node) => node.textContent).join('|')
+    === [perSecond(formatBytesRate(10240 / 60)), perSecond(formatBytesRate(20480 / 60))].join('|')
+    && metricOf('cpu') === formatPercent(100 / 60));
+  const legend = (value) => fill(t.legendValue, { current: formatDecimal(value), max: formatDecimal(value) });
+  check('081: connections are the per-minute increase of each neighbouring pair',
+    legendOf('connections').map((row) => row[1]).join('|') === [legend(2), legend(1), legend(0)].join('|')
+    && coords(chart('connections').querySelector('.chart-plot path.chart-line.s1')).length === 1439);
+  await waitFor(() => m.api.calls.length === 4, 4000);
+  const poll = m.api.calls[2];
+  check('081: the automatic poll asks for the last 24 hours after the largest kept seq', isPoll(poll) && isDay(poll)
+    && poll.query.get('history_after') === '1440');
+  check('081: the new point joins and the oldest leaves (1440 kept)', rangeText() === fill(t.metricsRange24h, { n: 1440 })
+    && coords(chart('sessions').querySelector('.chart-plot path.chart-line.s1')).length === 1440);
+  check('081: the next poll continues from seq 1441', isDay(m.api.calls[3]) && m.api.calls[3].query.get('history_after') === '1441');
+
+  for (const [count, drawn] of [[1, []], [2, ['sessions', 'memory']], [3, ['sessions', 'connections', 'throughput', 'cpu', 'memory']]]) {
+    mount(fakeApi((call) => (isDay(call) ? dayBody(dayPoints(1, count)) : okBody())));
+    await waitFor(settled);
+    choosePeriod('24h');
+    await waitFor(() => rangeText() === fill(t.metricsRange24h, { n: count }));
+    check(`081 ${count} points: charts drawn`, chartIds().join('|') === drawn.join('|'));
+    check(`081 ${count} points: the others say a point comes every minute`, emptyCharts() === 5 - drawn.length
+      && [...host.querySelectorAll('[data-chart-card] .chart-empty')].every((node) => node.textContent === t.chartEmpty24h));
+    if (count === 1) {
+      check('081 1 point: throughput and cpu are collecting, no zero', kpi('throughput').textContent.includes(t.collecting)
+        && metricOf('cpu') === null);
+    }
+    if (count === 3) {
+      check('081 3 points: the connection line joins two values',
+        coords(chart('connections').querySelector('.chart-plot path.chart-line.s1')).length === 2);
+    }
+  }
+
+  // Seq 5 is missing, and seq 7 comes two minutes after seq 6.
+  const gappy = dayPoints(1, 8).filter((point) => point.seq !== 5)
+    .map((point) => (point.seq >= 7 ? { ...point, at: iso(Date.parse(point.at) + 60000) } : point));
+  mount(fakeApi((call) => (isDay(call) ? dayBody(gappy) : okBody())));
+  await waitFor(settled);
+  choosePeriod('24h');
+  await waitFor(() => rangeText() === fill(t.metricsRange24h, { n: 7 }));
+  const lines = (id) => [...chart(id).querySelectorAll('.chart-plot path.chart-line.s1')];
+  check('081 gaps: a missing seq breaks the line and is never drawn as zero', lines('sessions').length === 2
+    && lines('sessions').every((path) => coords(path).every(([, y]) => y < 100)));
+  check('081 gaps: the connection line breaks at the missing seq', lines('connections').length === 2);
+  check('081 gaps: a two-minute neighbour still gives a per-minute value (2 per 120 s is 1.0)',
+    coords(lines('connections')[1])[0][1] === 50);
+  checkLayout('081');
+
+  // An answer with the other window's interval does not fit the request: a response format failure.
+  mount(fakeApi(() => okBody()));
+  await waitFor(settled);
+  choosePeriod('24h');
+  await waitFor(() => status() === t.stale);
+  check('081: an answer of the last hour fails the last 24 hours and the last hour stays', status() === t.stale
+    && rangeText() === fill(t.metricsRange, { n: 3 }));
 }
 
 // ---- Smallest bars (DESIGN.md 메트릭 화면 확장) ----
@@ -721,6 +929,8 @@ const CASES = {
   'dash-077-more': case077More,
   'dash-078': case078,
   'dash-079': case079,
+  'dash-080': case080,
+  'dash-081': case081,
   bars: caseBars,
   axis: caseAxis,
 };

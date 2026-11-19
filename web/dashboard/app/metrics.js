@@ -1,4 +1,5 @@
-// SCR-007 Metrics screen: key indicators, one-hour trend charts, duration distribution, counts by cause, and process values.
+// SCR-007 Metrics screen: key indicators, trend charts of the last hour or the last 24 hours, duration distribution,
+// counts by cause, and process values.
 // State, requests, and rendering live here. The checks and calculations live in metrics-model.js.
 import { BRAND_NAME, COPY } from './copy.js';
 import { chooseLanguage, readSavedLanguage, saveLanguage } from './language.js';
@@ -22,6 +23,7 @@ import { createButton } from './components/button.js';
 import { createCard } from './components/card.js';
 import { createDataTable } from './components/data-table.js';
 import { createGauge } from './components/gauge.js';
+import { icon } from './components/icons.js';
 import { buildNavbar, defaultStorage, signOutUrl, LOGIN_URL } from './shell.js';
 import { beginQuery, clearBusyTimer, endQuery, showBusy, viewOf } from './query.js';
 import { closeCauseBadge, el, statusBadge } from './panels.js';
@@ -29,6 +31,7 @@ import {
   CAUSE_TABLES,
   COUNT_VIEWBOX_WIDTH,
   DIST_VIEWBOX_HEIGHT,
+  HISTORY_WINDOWS,
   PLOT_HEIGHT,
   PLOT_WIDTH,
   buildCharts,
@@ -46,7 +49,6 @@ import {
 
 const METRICS_PATH = '/api/v1/metrics';
 const SVG_NS = 'http://www.w3.org/2000/svg';
-const QUARTER_HOUR_MS = 15 * 60 * 1000;
 
 // Line shape of the series of one chart: solid, dashed (flat ends), dotted (round ends). The dash pattern is a
 // presentation attribute so the stylesheet keeps only tokens (DESIGN.md 선 차트).
@@ -114,8 +116,12 @@ export function mountMetrics(root, deps = {}) {
     stopped: false,
     data: null,
     lastSuccessAt: null,
-    // Retained history points, at most 360.
+    // Retained history points of the shown window, at most its capacity (360 or 1440).
     points: [],
+    // Trend windows (HISTORY_WINDOWS keys): the one the select names and the one the kept points belong to. Both start
+    // at the last hour on every entry (dashboard.md SCR-007).
+    selected: '1h',
+    shown: '1h',
     // Counts successful responses, so the body rebuilds only when there is new data.
     dataVersion: 0,
     refocusRefresh: false,
@@ -124,6 +130,18 @@ export function mountMetrics(root, deps = {}) {
 
   function t() {
     return COPY[state.lang];
+  }
+
+  // Window the screen shows: the kept points' window, or the chosen one before the first success (dashboard.md SCR-007).
+  function visiblePeriod() {
+    return state.data ? state.shown : state.selected;
+  }
+
+  // Texts that follow the shown window: CPY-203·213·209·220 for the last hour, CPY-251·252·254·253 for the last 24 hours.
+  function periodTexts(copy) {
+    return visiblePeriod() === '24h'
+      ? { range: copy.metricsRange24h, trends: copy.trendsTitle24h, cpuNote: copy.cpuNote24h, chartEmpty: copy.chartEmpty24h }
+      : { range: copy.metricsRange, trends: copy.trendsTitle, cpuNote: copy.cpuNote, chartEmpty: copy.chartEmpty };
   }
 
   function renderIfLive() {
@@ -179,12 +197,16 @@ export function mountMetrics(root, deps = {}) {
     state.pollTimer = setTimeout(() => void load(false), state.pollMs);
   }
 
-  // One metrics request. Entry and refresh (`manual`) send no history_after and no X-Relay-Poll, and replace the kept
-  // points. An automatic poll sends X-Relay-Poll: 1 and the largest kept seq. Requests never overlap (dashboard.md 4.1).
+  // One metrics request for the chosen window. Entry, refresh, and a period change (`manual`) send no history_after and
+  // no X-Relay-Poll, and replace the kept points. An automatic poll sends X-Relay-Poll: 1 and, while the kept points
+  // belong to the chosen window, the largest kept seq; otherwise its points replace the kept ones too. Only the last
+  // 24 hours adds history_window=24h. Requests never overlap. A request that ends after the period changed is dropped
+  // and the chosen window is asked for at once (dashboard.md 4.1).
   async function load(manual) {
     if (state.ended || state.inFlight) return;
     clearTimeout(state.pollTimer);
     const epoch = ++state.epoch;
+    const period = state.selected;
     beginQuery(state, manual, renderIfLive);
     update();
     try {
@@ -195,11 +217,19 @@ export function mountMetrics(root, deps = {}) {
         state.timeoutMs = session.queryTimeoutMs;
         state.pollMs = session.pollMs;
       }
-      const after = manual ? null : historyAfter(state.points);
-      const path = after === null ? METRICS_PATH : `${METRICS_PATH}?history_after=${after}`;
-      const parsed = parseMetrics(await getQuery(request, path, { poll: !manual, timeoutMs: state.timeoutMs }));
+      const after = manual || state.shown !== period ? null : historyAfter(state.points);
+      const params = [period === '24h' ? 'history_window=24h' : null, after === null ? null : `history_after=${after}`];
+      const query = params.filter((param) => param !== null).join('&');
+      const path = query === '' ? METRICS_PATH : `${METRICS_PATH}?${query}`;
+      const parsed = parseMetrics(await getQuery(request, path, { poll: !manual, timeoutMs: state.timeoutMs }), period);
       if (epoch !== state.epoch || state.ended) return;
-      state.points = mergeHistory(state.points, parsed.points, manual);
+      if (period !== state.selected) {
+        endQuery(state);
+        void load(true);
+        return;
+      }
+      state.points = mergeHistory(state.points, parsed.points, after === null, HISTORY_WINDOWS[period].capacity);
+      state.shown = period;
       state.data = parsed;
       state.dataVersion += 1;
       state.lastSuccessAt = new Date();
@@ -216,6 +246,10 @@ export function mountMetrics(root, deps = {}) {
         leave(LOGIN_URL);
         return;
       }
+      if (period !== state.selected) {
+        void load(true);
+        return;
+      }
       state.failed = true;
       state.rejected = error instanceof ApiError && error.kind === 'failed' && (error.status === 400 || error.status === 405);
       if (state.rejected) state.stopped = true;
@@ -228,6 +262,19 @@ export function mountMetrics(root, deps = {}) {
   function onRefresh() {
     if (state.ended) return;
     state.refocusRefresh = true;
+    if (state.inFlight) {
+      if (showBusy(state)) update();
+      return;
+    }
+    void load(true);
+  }
+
+  // The trend period select (DASH-080). The chosen window is asked for at once, or right after the running request,
+  // which load() then drops. CPY-017 shows at once and the focus stays on the select.
+  function onPeriodChange(next) {
+    if (state.ended || next === state.selected) return;
+    state.selected = next;
+    state.refocusRefresh = false;
     if (state.inFlight) {
       if (showBusy(state)) update();
       return;
@@ -287,7 +334,24 @@ export function mountMetrics(root, deps = {}) {
     range.id = 'metrics-range';
     const text = el('div', 'page-head-text');
     text.append(title, meta, range);
+    // The period select is built here once. A status change swaps only the refresh button, so the select keeps focus.
+    const select = el('select', 'text-field-input');
+    select.id = 'metrics-period';
+    for (const [value, label] of [['1h', copy.periodHour], ['24h', copy.periodDay]]) {
+      const option = el('option', undefined, label);
+      option.value = value;
+      option.selected = value === state.selected;
+      select.append(option);
+    }
+    select.addEventListener('change', () => onPeriodChange(select.value));
+    const selectWrap = el('div', 'select');
+    selectWrap.append(select, icon('chevron-down', { size: 'sm' }));
+    const periodLabel = el('label', 'text-field-label', copy.periodLabel);
+    periodLabel.setAttribute('for', select.id);
+    const period = el('div', 'field period-field');
+    period.append(periodLabel, selectWrap);
     const actions = el('div', 'page-actions');
+    actions.append(period);
     const head = el('header', 'page-head');
     head.append(text, actions);
 
@@ -302,7 +366,19 @@ export function mountMetrics(root, deps = {}) {
     main.append(head, note, alerts, body);
     root.replaceChildren(navbar.navbar, main);
 
-    ui = { status, time, range, actions, alerts, body, statusKey: null, actionKey: null, alertKey: null, bodyKey: null };
+    ui = {
+      status,
+      time,
+      range,
+      actions,
+      refresh: null,
+      alerts,
+      body,
+      statusKey: null,
+      actionKey: null,
+      alertKey: null,
+      bodyKey: null,
+    };
     if (focusId) document.getElementById(focusId)?.focus();
   }
 
@@ -317,17 +393,20 @@ export function mountMetrics(root, deps = {}) {
     ui.time.textContent = fill(copy.lastSuccess, {
       time: state.lastSuccessAt ? formatTime(state.lastSuccessAt) : copy.unavailable,
     });
-    ui.range.textContent = state.data ? fill(copy.metricsRange, { n: state.points.length }) : '';
+    ui.range.textContent = state.data ? fill(periodTexts(copy).range, { n: state.points.length }) : '';
     ui.range.hidden = !state.data;
     const actionKey = view;
     if (ui.actionKey !== actionKey) {
       // A focused button that turns busy (disabled) loses focus. Ask for focus again once it is enabled.
-      if (ui.actions.contains(document.activeElement)) state.refocusRefresh = true;
+      if (ui.refresh !== null && document.activeElement === ui.refresh) state.refocusRefresh = true;
       ui.actionKey = actionKey;
-      ui.actions.replaceChildren(refreshButton('metrics-refresh', view));
+      const button = refreshButton('metrics-refresh', view);
+      if (ui.refresh === null) ui.actions.append(button);
+      else ui.refresh.replaceWith(button);
+      ui.refresh = button;
       if (state.refocusRefresh && view !== 'refreshing' && view !== 'loading') {
         state.refocusRefresh = false;
-        document.getElementById('metrics-refresh')?.focus();
+        button.focus();
       }
     }
   }
@@ -352,7 +431,7 @@ export function mountMetrics(root, deps = {}) {
   }
 
   function updateBody(view) {
-    const key = [state.lang, state.data ? `data:${state.dataVersion}` : view].join('|');
+    const key = [state.lang, visiblePeriod(), state.data ? `data:${state.dataVersion}` : view].join('|');
     if (ui.bodyKey === key) return;
     ui.bodyKey = key;
     if (!state.data && view !== 'loading') {
@@ -494,7 +573,7 @@ export function mountMetrics(root, deps = {}) {
       gaugeCard('admin', copy.adminTitle, copy.adminNote, kpi?.admin, loading),
       throughputCard(copy, kpi, loading),
       kpiCard('rejected', copy.rejectedTotal, undefined, valueOrBadge(copy, kpi?.rejected ?? null, formatCount, loading)),
-      rateCard(copy, 'cpu', copy.cpuUsage, copy.cpuNote, kpi?.cpu, loading, formatPercent),
+      rateCard(copy, 'cpu', copy.cpuUsage, periodTexts(copy).cpuNote, kpi?.cpu, loading, formatPercent),
       kpiCard('memory', copy.memoryUsage, copy.memoryNote, valueOrBadge(copy, kpi?.memory ?? null, formatBytesValue, loading)),
     );
     return sectionOf(copy.kpiTitle, grid);
@@ -537,7 +616,10 @@ export function mountMetrics(root, deps = {}) {
 
   // Path data of one run. A single point becomes a zero-length segment that the round cap shows as a dot.
   function runPath(run, chart) {
-    const coords = run.map((entry) => `${round(plotX(entry.atMs, chart.from))} ${round(plotY(entry.value, chart.axis.top))}`);
+    const coords = run.map((entry) => {
+      const x = round(plotX(entry.atMs, chart.from, chart.to));
+      return `${x} ${round(plotY(entry.value, chart.axis.top))}`;
+    });
     return coords.length === 1 ? `M${coords[0]}L${coords[0]}` : `M${coords.join('L')}`;
   }
 
@@ -584,8 +666,10 @@ export function mountMetrics(root, deps = {}) {
       }
     });
 
+    // Five local times that split the window span into quarters: 15 minutes or 6 hours apart.
+    const quarterMs = (chart.to - chart.from) / 4;
     const xAxis = el('div', 'chart-x label muted');
-    for (let step = 0; step <= 4; step += 1) xAxis.append(el('span', undefined, formatClock(chart.from + step * QUARTER_HOUR_MS)));
+    for (let step = 0; step <= 4; step += 1) xAxis.append(el('span', undefined, formatClock(chart.from + step * quarterMs)));
     const frame = el('div', 'chart');
     frame.append(yAxis, plot, xAxis);
 
@@ -608,7 +692,7 @@ export function mountMetrics(root, deps = {}) {
       empty.append(loadingBadge(copy));
       return empty;
     }
-    if (!chart.enough) return el('p', 'chart-empty', copy.chartEmpty);
+    if (!chart.enough) return el('p', 'chart-empty', periodTexts(copy).chartEmpty);
     return chartFigure(copy, chart, view);
   }
 
@@ -617,7 +701,7 @@ export function mountMetrics(root, deps = {}) {
     const views = chartViews(copy);
     const charts = loading
       ? Object.keys(views).map((id) => ({ id, enough: false }))
-      : buildCharts(state.points);
+      : buildCharts(state.points, state.shown);
     const grid = el('div', 'grid');
     for (const chart of charts) {
       const view = views[chart.id];
@@ -626,7 +710,7 @@ export function mountMetrics(root, deps = {}) {
       card.dataset.chartCard = chart.id;
       grid.append(card);
     }
-    return sectionOf(copy.trendsTitle, grid);
+    return sectionOf(periodTexts(copy).trends, grid);
   }
 
   // ---- Distribution ----

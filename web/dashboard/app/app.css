@@ -396,7 +396,8 @@
 }
 
 /* SCR-006 Recent logs layout */
-.logs-main .field {
+.logs-main .field,
+.metrics-main .field {
   display: flex;
   flex-direction: column;
   gap: var(--space-xs);
@@ -540,19 +541,22 @@ fieldset.check-group {
   max-width: calc(var(--space-index-min) * 2);
 }
 
-.event-field > .select {
+.event-field > .select,
+.period-field > .select {
   position: relative;
   display: flex;
   align-items: center;
 }
 
-.event-field > .select > select {
+.event-field > .select > select,
+.period-field > .select > select {
   width: 100%;
   appearance: none;
   padding-right: var(--space-xl);
 }
 
-.event-field > .select > .icon {
+.event-field > .select > .icon,
+.period-field > .select > .icon {
   position: absolute;
   right: var(--space-md);
   pointer-events: none;
@@ -725,6 +729,15 @@ fieldset.check-group {
 /* SCR-007 metrics (DESIGN.md "메트릭 화면 확장"). Tokens only. */
 .metrics-main :is(p, dt, dd) {
   overflow-wrap: anywhere;
+}
+
+/* Trend period select (DESIGN.md "추이 기간 선택"): as wide as its longest option and bottom-aligned with Refresh. */
+.period-field {
+  flex: none;
+}
+
+.metrics-main .page-actions {
+  align-items: flex-end;
 }
 
 .metrics-main .label {
@@ -1030,5 +1043,9 @@ fieldset.check-group {
 
   .kv-list dd {
     margin: var(--space-xs) 0 var(--space-md);
+  }
+
+  .metrics-main .period-field {
+    flex: 1 1 100%;
   }
 }

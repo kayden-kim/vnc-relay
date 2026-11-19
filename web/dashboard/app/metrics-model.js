@@ -5,14 +5,15 @@ import { ApiError } from './api.js';
 
 const TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
 
-// Metrics contract 1.8: the server keeps 360 points, one per 10 seconds, so the chart spans one hour.
-export const HISTORY_CAPACITY = 360;
-export const HISTORY_INTERVAL_SECS = 10;
-export const HISTORY_SPAN_MS = 3600 * 1000;
-// A connection chart group is seven neighbouring points, that is six pairs, one minute of history.
-export const GROUP_STEP = 6;
+// Metrics contract 1.8: the server keeps two trend windows, keyed by their `history_window` value. `groupStep` is the
+// number of neighbouring pairs in one connection chart group, one minute of history: six 10-second pairs or one
+// 1-minute pair.
+export const HISTORY_WINDOWS = {
+  '1h': { intervalSecs: 10, capacity: 360, spanMs: 3600 * 1000, groupStep: 6 },
+  '24h': { intervalSecs: 60, capacity: 1440, spanMs: 86400 * 1000, groupStep: 1 },
+};
 
-// Plot geometry shared with the renderer. One x unit is 10 seconds of the one-hour span.
+// Plot geometry shared with the renderer. The x range covers the span of the shown window.
 export const PLOT_WIDTH = 360;
 export const PLOT_HEIGHT = 100;
 
@@ -150,8 +151,9 @@ function parseHistoryPoint(raw) {
   return { seq: integer(point.seq), atMs: timestampMs(point.at), values: checked };
 }
 
-// Response of GET /api/v1/metrics (metrics contract 1.7·1.8). Anything that does not fit becomes an 'invalid' failure.
-export function parseMetrics(body) {
+// Response of GET /api/v1/metrics (metrics contract 1.7·1.8) for the requested trend window. Anything that does not
+// fit, including the interval or capacity of another window, becomes an 'invalid' failure.
+export function parseMetrics(body, period) {
   const data = object(body);
   timestampMs(data.as_of);
   const resource = object(data.resource);
@@ -163,8 +165,10 @@ export function parseMetrics(body) {
     }
   }
   const history = object(data.history);
-  integer(history.interval_secs, 1);
-  integer(history.capacity, 1);
+  const spec = HISTORY_WINDOWS[period];
+  if (integer(history.interval_secs, 1) !== spec.intervalSecs || integer(history.capacity, 1) !== spec.capacity) {
+    throw invalid();
+  }
   if (history.latest_seq !== null) {
     integer(history.latest_seq);
   }
@@ -182,9 +186,10 @@ export function parseMetrics(body) {
 }
 
 // Retained points after a successful response (dashboard.md 4.1). A request without history_after (`replace`) gets
-// every retained point, so the response replaces the kept ones. A poll appends the points that are newer than the
-// largest kept seq, so no seq enters twice. Points 360 or more behind the largest seq are dropped.
-export function mergeHistory(kept, incoming, replace) {
+// every retained point of its window, so the response replaces the kept ones. A poll appends the points that are
+// newer than the largest kept seq, so no seq enters twice. Points `capacity` or more behind the largest seq are
+// dropped, so at most 360 (last hour) or 1440 (last 24 hours) stay.
+export function mergeHistory(kept, incoming, replace, capacity) {
   const merged = replace ? [] : [...kept];
   let largest = merged.length > 0 ? merged[merged.length - 1].seq : -1;
   for (const point of incoming) {
@@ -193,7 +198,7 @@ export function mergeHistory(kept, incoming, replace) {
       largest = point.seq;
     }
   }
-  const floor = largest - HISTORY_CAPACITY;
+  const floor = largest - capacity;
   return merged.filter((point) => point.seq > floor);
 }
 
@@ -299,20 +304,20 @@ function rateSeries(key, scale = 1) {
   });
 }
 
-// Per-minute increase of one connection series. Groups of seven points are counted back from the newest seq in steps of
-// six, and neighbouring groups share their boundary point. The oldest group that reaches before the oldest retained
-// seq is dropped. A group with a missing seq or a null value has no value. Drawn at the group's last point.
-function groupSeries(key) {
+// Per-minute increase of one connection series. Groups of `step` neighbouring pairs (one minute) are counted back from
+// the newest seq, and neighbouring groups share their boundary point. The oldest group that reaches before the oldest
+// retained seq is dropped. A group with a missing seq or a null value has no value. Drawn at the group's last point.
+function groupSeries(key, step) {
   return (points) => {
     const bySeq = new Map(points.map((point) => [point.seq, point]));
     const oldest = points[0].seq;
     const entries = [];
-    for (let end = points[points.length - 1].seq; end - GROUP_STEP >= oldest; end -= GROUP_STEP) {
-      const first = bySeq.get(end - GROUP_STEP);
+    for (let end = points[points.length - 1].seq; end - step >= oldest; end -= step) {
+      const first = bySeq.get(end - step);
       const last = bySeq.get(end);
       let value = null;
       let complete = first !== undefined && last !== undefined;
-      for (let seq = end - GROUP_STEP; complete && seq <= end; seq += 1) {
+      for (let seq = end - step; complete && seq <= end; seq += 1) {
         const point = bySeq.get(seq);
         complete = point !== undefined && point.values[key] !== null;
       }
@@ -326,26 +331,34 @@ function groupSeries(key) {
   };
 }
 
-// Charts in screen order. `min` is the fewest retained points that can draw one line (dashboard.md SCR-007).
-const CHARTS = [
-  { id: 'sessions', kind: 'count', min: 2, step: 1, series: [directSeries('session_count'), directSeries('waiting_count')] },
-  {
-    id: 'connections',
-    kind: 'decimal',
-    min: 13,
-    step: GROUP_STEP,
-    series: [groupSeries('connection_accepted'), groupSeries('connection_rejected'), groupSeries('connection_aborted')],
-  },
-  {
-    id: 'throughput',
-    kind: 'bytes',
-    min: 3,
-    step: 1,
-    series: [rateSeries('session_io_viewer_to_target'), rateSeries('session_io_target_to_viewer')],
-  },
-  { id: 'cpu', kind: 'percent', min: 3, step: 1, series: [rateSeries('process_cpu_time', 100)] },
-  { id: 'memory', kind: 'bytes', min: 2, step: 1, series: [directSeries('process_memory_usage')] },
-];
+// Charts of a window in screen order. `min` is the fewest retained points that can draw one line (dashboard.md
+// SCR-007): the connection chart needs two groups, so 13 points for the last hour and 3 for the last 24 hours.
+function chartsOf(spec) {
+  const step = spec.groupStep;
+  return [
+    { id: 'sessions', kind: 'count', min: 2, step: 1, series: [directSeries('session_count'), directSeries('waiting_count')] },
+    {
+      id: 'connections',
+      kind: 'decimal',
+      min: step * 2 + 1,
+      step,
+      series: [
+        groupSeries('connection_accepted', step),
+        groupSeries('connection_rejected', step),
+        groupSeries('connection_aborted', step),
+      ],
+    },
+    {
+      id: 'throughput',
+      kind: 'bytes',
+      min: 3,
+      step: 1,
+      series: [rateSeries('session_io_viewer_to_target'), rateSeries('session_io_target_to_viewer')],
+    },
+    { id: 'cpu', kind: 'percent', min: 3, step: 1, series: [rateSeries('process_cpu_time', 100)] },
+    { id: 'memory', kind: 'bytes', min: 2, step: 1, series: [directSeries('process_memory_usage')] },
+  ];
+}
 
 // Runs of drawable neighbours. A null value or a seq distance other than `step` ends a run, so the line breaks there.
 export function runsOf(entries, step) {
@@ -404,13 +417,15 @@ export function axisOf(kind, largest) {
   return { top: niceCeil(max) };
 }
 
-// The five charts. A chart with fewer retained points than its minimum is not `enough`: the screen shows CPY-220.
-// Each series keeps its visible entries (inside the last hour), its runs, the current value (newest entry),
-// and the largest visible value. Null means "unavailable" (CPY-035).
-export function buildCharts(points) {
+// The five charts of the window the points belong to. A chart with fewer retained points than its minimum is not
+// `enough`: the screen shows CPY-220 or CPY-253. Each series keeps its visible entries (inside the window span from
+// the newest point), its runs, the current value (newest entry), and the largest visible value. Null means
+// "unavailable" (CPY-035).
+export function buildCharts(points, period) {
+  const spec = HISTORY_WINDOWS[period];
   const latestMs = points.length > 0 ? points[points.length - 1].atMs : 0;
-  const from = latestMs - HISTORY_SPAN_MS;
-  return CHARTS.map((chart) => {
+  const from = latestMs - spec.spanMs;
+  return chartsOf(spec).map((chart) => {
     if (points.length < chart.min) {
       return { id: chart.id, kind: chart.kind, enough: false, series: [], axis: null, from, to: latestMs };
     }
@@ -439,9 +454,9 @@ export function buildCharts(points) {
   });
 }
 
-// x of a time in plot units: the newest point sits at the right edge.
-export function plotX(atMs, from) {
-  return ((atMs - from) / HISTORY_SPAN_MS) * PLOT_WIDTH;
+// x of a time in plot units: the newest point sits at the right edge and `from` at the left edge.
+export function plotX(atMs, from, to) {
+  return ((atMs - from) / (to - from)) * PLOT_WIDTH;
 }
 
 export function plotY(value, top) {

@@ -622,6 +622,18 @@ fn metrics_changes_language_without_requesting_again_in_browser() {
     check_localized_case_at("/tests/metrics.html", "dash-079", &[1280, 390]);
 }
 
+/// spec: dashboard.md:DASH-080 partial
+#[test]
+fn metrics_switches_the_trend_period_and_drops_answers_of_the_earlier_period_in_browser() {
+    check_localized_case_at("/tests/metrics.html", "dash-080", &[1280, 390]);
+}
+
+/// spec: dashboard.md:DASH-081 partial
+#[test]
+fn metrics_draws_the_last_24_hours_from_one_minute_points_in_browser() {
+    check_localized_case_at("/tests/metrics.html", "dash-081", &[1280, 390]);
+}
+
 /// spec: dashboard.md:DASH-064
 #[test]
 fn every_screen_localizes_safe_help_links_without_requesting_the_help_site_in_browser() {

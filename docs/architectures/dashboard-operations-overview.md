@@ -69,8 +69,8 @@ web/dashboard/app/
 | `copy.js` | `ko`·`en` 문구 객체. 각 키에 CPY ID 주석 | 없음 |
 | `language.js` | `LANGUAGES`, `chooseLanguage`, `readSavedLanguage`, `saveLanguage` (login과 같은 저장 키). login/language.js는 이 파일의 복사본 | `storage`, `preferredLanguages` |
 | `logs.js` | `mountLogs(root, deps, { sessionId })`: 최근 로그 상태와 조회를 소유한다. 다른 화면으로 이동하면 요청·타이머·보호 데이터를 제거한다. | `request`, `storage`, `preferredLanguages`, `navigate`, `replaceUrl` |
-| `metrics.js` | `mountMetrics(root, deps)`: 메트릭 상태와 조회를 소유한다. 다른 화면으로 이동하면 요청·타이머·보호 데이터를 제거한다. | `request`, `storage`, `preferredLanguages`, `navigate` |
-| `metrics-model.js` | `parseMetrics`, `mergeHistory`, `keyIndicators`, `buildCharts`, `distributionItems`, `causeRows`, `processRows`. DOM과 시계를 쓰지 않는다. 맞지 않는 응답은 `invalid` 오류 | 없음 |
+| `metrics.js` | `mountMetrics(root, deps)`: 메트릭 상태와 조회, 추이 기간 선택을 소유한다. 다른 화면으로 이동하면 요청·타이머·보호 데이터와 고른 기간을 제거한다. | `request`, `storage`, `preferredLanguages`, `navigate` |
+| `metrics-model.js` | `HISTORY_WINDOWS`, `parseMetrics`, `mergeHistory`, `keyIndicators`, `buildCharts`, `distributionItems`, `causeRows`, `processRows`. DOM과 시계를 쓰지 않는다. 맞지 않는 응답과 추이 간격·개수가 요청한 기간과 다른 응답은 `invalid` 오류 | 없음 |
 
 화면은 `createNavbar`, `createLanguageSelect`(variant `navbar`), `createButton`, `createCard`, `createStat`, `createGauge`, `createDataTable`, `createBadge`, `createAlert`, `createLink`, `icon`을 쓴다. SCR-002의 종료 확인은 `createDialog`를 쓴다. 공개 API는 [컴포넌트 구조](dashboard-components.md#31-공개-함수)를 따른다.
 
@@ -302,10 +302,10 @@ router.js mountRouter → logs.js mountLogs
 ```text
 router.js mountRouter → metrics.js mountMetrics
   → api.js getSession → model.js parseSession → P와 조회 제한 시간
-  → api.js getQuery(/api/v1/metrics[?history_after=N]) → metrics-model.js parseMetrics
-  → metrics-model.js mergeHistory → 보관한 점
-  → metrics-model.js keyIndicators·buildCharts·distributionItems·causeRows·processRows
-  → 공통 Card·Badge·Alert·Button·Gauge·DataTable·상단 막대
+  → api.js getQuery(/api/v1/metrics[?history_window=24h][&history_after=N]) → metrics-model.js parseMetrics(응답, 기간)
+  → metrics-model.js mergeHistory(보관한 점, 응답의 점, 바꿈 여부, 기간) → 보관한 점
+  → metrics-model.js keyIndicators·buildCharts(보관한 점, 기간)·distributionItems·causeRows·processRows
+  → 공통 Card·Badge·Alert·Button·Gauge·DataTable·상단 막대, 추이 기간 select
 ```
 
 - 화면 값 계산은 `metrics-model.js`에만 둔다. `metrics.js`는 그 결과를 DOM으로 옮긴다.
@@ -313,37 +313,41 @@ router.js mountRouter → metrics.js mountMetrics
 
 ### 상태와 요청 소유
 
-- `metrics.js`의 `state`는 `query.js`의 필드(`inFlight`, `busyShown`, `busyTimer`, `failed`, `data`, `lastSuccessAt`)에 언어, 보관한 점, `rejected`, `stopped`, `epoch`를 더한다. `data`는 마지막 성공 응답을 검사한 값이다.
-- 화면 진입과 [새로고침]은 사용자 행동이다. 이 요청은 `history_after`와 `X-Relay-Poll`을 보내지 않고 보관한 점을 모두 바꾼다. 자동 조회는 `X-Relay-Poll: 1`을 붙이고, 보관한 점이 있으면 가장 큰 `seq`를 `history_after`로 보낸다.
+- `metrics.js`의 `state`는 `query.js`의 필드(`inFlight`, `busyShown`, `busyTimer`, `failed`, `data`, `lastSuccessAt`)에 언어, 보관한 점, `rejected`, `stopped`, `epoch`, 고른 기간(`selected`), 보관한 점의 기간(`shown`)을 더한다. `data`는 마지막 성공 응답을 검사한 값이다. 두 기간은 처음에 `1h`다. 화면을 떠나면 사라지므로 다시 들어오면 `1h`다.
+- 화면 진입과 [새로고침]은 사용자 행동이다. 이 요청은 `history_after`와 `X-Relay-Poll`을 보내지 않고 보관한 점을 모두 바꾼다. 자동 조회는 `X-Relay-Poll: 1`을 붙이고, `shown`이 `selected`와 같고 보관한 점이 있으면 가장 큰 `seq`를 `history_after`로 보낸다. 모든 요청은 `selected`가 `24h`일 때만 `history_window=24h`를 붙인다.
 - 자동 조회는 응답이 끝난 뒤 `setTimeout`으로 P 뒤에 한 번 예약한다. 요청은 겹치지 않는다. 자동 조회 중 [새로고침]은 새 요청 없이 `showBusy`로 진행 표시만 바로 보인다(DASH-077).
+- 추이 기간 변경도 사용자 행동이다(DASH-080). `selected`를 바꾸고 예약된 자동 조회를 취소한 뒤 CPY-017 진행 표시를 바로 보인다. 진행 중인 요청이 없으면 바로 고른 기간을 요청한다. 요청은 새로고침과 같은 모양이다. 진행 중인 요청이 있으면 그 요청이 끝난 뒤 요청한다. 각 요청은 시작할 때의 기간을 기억한다. 끝났을 때 그 기간이 `selected`와 다르면 응답을 반영하지 않고 고른 기간을 바로 다시 요청한다.
+- 기간 요청이 성공하면 `shown`을 `selected`로 바꾸고 보관한 점을 응답의 점으로 바꾼다. 실패하면 `shown`·보관한 점·이전 값을 그대로 두고 아래 표대로 실패를 보인다. 자동 조회가 계속되는 실패이면 다음 자동 조회는 `shown`이 `selected`와 다르므로 `history_after` 없이 고른 기간을 요청한다. 400·405이면 자동 조회는 멈춘 채로 있다.
 - 세션 확인(`GET /api/v1/session`)은 진입 때 한 번 한다. 이 응답이 P·조회 제한 시간·CSRF 토큰을 준다. 이 확인이 실패하면 P를 모르므로 자동 재시도가 없다. 사용자가 [새로고침]을 눌러야 한다.
 - 실패 처리는 아래 표를 따른다. 모든 실패에서 이전 값·보관한 점·마지막 성공 시각은 그대로 둔다.
 
 | 응답 | 표시 | 자동 조회 |
 | --- | --- | --- |
 | 401 | `dispose` 뒤 `/login/`으로 이동. 값·추이·진행 중 요청을 지운다 | 멈춤 |
-| 400·405 | CPY-018 배지와 CPY-245 | 멈춤. 새로고침이 성공하면 다시 시작. 새로고침이 실패해도 멈춘 채로 둔다 |
+| 400·405 | CPY-018 배지와 CPY-245 | 멈춤. 새로고침이나 추이 기간 변경의 요청이 성공하면 다시 시작. 그 요청이 실패해도 멈춘 채로 둔다 |
 | 500·응답 없음·시간 초과·검사 실패 | 첫 실패는 CPY-018 배지와 CPY-021. 성공 뒤 실패는 CPY-019 배지와 CPY-020 | P마다 계속 |
 
 - 성공하면 `failed`·`rejected`·`stopped`를 지우고 `dataVersion`을 올린다. 본문은 `dataVersion`이 바뀔 때만 다시 만든다.
 - 세대 번호(`epoch`)와 `state.ended`로 화면을 떠난 뒤 도착한 응답을 버린다. `dispose`는 요청 중단, 타이머 해제, 값·점·CSRF 토큰 제거, 보호 DOM 제거를 한다(DASH-068).
-- 언어 변경은 언어를 저장하고 문서 언어·제목을 바꾼 뒤 화면을 다시 만든다. 요청은 보내지 않고 점과 값은 그대로다(DASH-079).
+- 언어 변경은 언어를 저장하고 문서 언어·제목을 바꾼 뒤 화면을 다시 만든다. 요청은 보내지 않고 점·값·두 기간은 그대로다(DASH-079).
 
 ### 추이를 합치는 규칙
 
-- 보관한 점은 최대 360개다. 자동 조회 응답의 점은 보관한 가장 큰 `seq`보다 큰 것만 더한다. 그 뒤 `가장 큰 seq − 360` 이하인 점을 버린다.
-- 새로고침과 진입은 응답의 점으로 모두 바꾼다. 응답의 `history.points`가 비어도 정상이다.
+- 기간 값은 `metrics-model.js`의 `HISTORY_WINDOWS`가 정한다. `1h`는 10초·360개·3600초 폭·묶음 쌍 6개이고, `24h`는 60초·1440개·86400초 폭·묶음 쌍 1개다. `parseMetrics`는 응답의 `interval_secs`·`capacity`가 요청한 기간의 값과 다르면 응답 형식 오류로 본다.
+- 보관한 점은 최대 그 기간의 `capacity`개다. 자동 조회 응답의 점은 보관한 가장 큰 `seq`보다 큰 것만 더한다. 그 뒤 `가장 큰 seq − capacity` 이하인 점을 버린다.
+- 진입·새로고침·기간 변경은 응답의 점으로 모두 바꾼다. 응답의 `history.points`가 비어도 정상이다.
 - 점마다 `seq`, `at`, `values`를 가진다. `at`은 `YYYY-MM-DDTHH:mm:ss.SSSZ` 형식이어야 한다. 아니면 응답 형식 오류다.
 
 ### 계산
 
 - 활성·대기·거절은 같은 이름의 모든 점(속성 행)의 합이다. 값이 없으면 확인 불가다.
-- 처리량과 CPU 사용률은 가장 최근 이웃한 두 점(`seq` 차이 1)의 차이를 `at` 차이(초)로 나눈다. 시각 차이가 0 이하이면 그 점은 확인 불가다. 방향 하나라도 확인 불가이면 처리량 카드는 확인 불가다. 이웃한 점이 없으면 "수집 중"(CPY-212)이다.
-- 연결 차트는 `seq` 6개씩 묶는다. (묶음 마지막 값 − 첫 값) ÷ `at` 차이(초) × 60을 묶음 마지막 점 시각에 그린다.
-- 차트 x축은 가장 최근 점이 오른쪽 끝이고 폭은 3600초다. 창 밖 점은 그리지 않는다. 선은 `null`과 `seq`가 비는 자리에서 끊긴다. 한 점만 남은 선은 길이 0인 선분이며 둥근 끝(`chart-dot`)으로 점처럼 보인다.
+- 처리량과 CPU 사용률은 보이는 기간의 가장 최근 이웃한 두 점(`seq` 차이 1)의 차이를 `at` 차이(초)로 나눈다. 최근 24시간이면 두 점의 간격은 1분이다. 시각 차이가 0 이하이면 그 점은 확인 불가다. 방향 하나라도 확인 불가이면 처리량 카드는 확인 불가다. 이웃한 점이 없으면 "수집 중"(CPY-212)이다.
+- 연결 차트는 `seq`를 묶음 쌍 수(최근 1시간 6, 최근 24시간 1)씩 묶는다. (묶음 마지막 값 − 첫 값) ÷ `at` 차이(초) × 60을 묶음 마지막 점 시각에 그린다.
+- 차트 x축은 가장 최근 점이 오른쪽 끝이고 폭은 보이는 기간(3600초 또는 86400초)이다. 눈금은 그 폭을 4등분한 다섯 개의 현지 시각(15분 또는 6시간 간격)이다. 창 밖 점은 그리지 않는다. 선은 `null`과 `seq`가 비는 자리에서 끊긴다. 한 점만 남은 선은 길이 0인 선분이며 둥근 끝(`chart-dot`)으로 점처럼 보인다.
 - y축 위쪽 끝은 `niceCeil`이 구한다. {2, 4, 6, 8, 10} × 10^k 가운데 보이는 최댓값 이상인 가장 작은 값이다(DESIGN.md 선 차트). 보이는 값이 없거나 모두 0이면 2다. 10 미만에서는 최댓값 자신의 10의 거듭제곱부터 찾아서 개수 축의 위쪽 끝이 1이 되지 않는다. 바이트는 KiB 기준 위쪽 끝을 먼저 구하고 그 값이 1024 KiB 이상이면 MiB 기준으로 다시 구한다. 아니면 KiB 눈금이다.
 - 차트 SVG는 `viewBox="0 0 360 100"`, `preserveAspectRatio="none"`이고 모든 선에 `vector-effect="non-scaling-stroke"`를 준다. 가로 폭은 컨테이너를 따른다.
-- 차트별 최소 점 수는 순서대로 2·13·3·3·2다. 모자란 차트 자리는 CPY-220이다. 점 수가 충분해도 선이 없으면(모든 값이 `null`) 범례의 현재·최대는 CPY-035이다.
+- 차트별 최소 점 수는 순서대로 2·(묶음 쌍 수 × 2 + 1)·3·3·2다. 연결 차트는 최근 1시간 13개, 최근 24시간 3개다. 모자란 차트 자리는 CPY-220(최근 24시간은 CPY-253)이다. 점 수가 충분해도 선이 없으면(모든 값이 `null`) 범례의 현재·최대는 CPY-035이다.
+- 보이는 기간에 따라 추이 범위(CPY-203·251), 추이 구역 제목(CPY-213·252), CPU 사용률 설명(CPY-209·254)을 고른다.
 
 ### 최소 막대 크기
 
@@ -369,17 +373,17 @@ DESIGN.md가 정한 대로 0이 아닌 값의 막대는 `spacing.chart-stroke`(2
 
 ### 화면 골격과 접근성
 
-- 머리말: `h1.page-title`(CPY-202) → 상태 배지와 "마지막 성공 갱신"(CPY-015) → 추이 범위(CPY-203, 데이터가 있을 때만) → [새로고침].
+- 머리말: `h1.page-title`(CPY-202) → 상태 배지와 "마지막 성공 갱신"(CPY-015) → 추이 범위(CPY-203·251, 데이터가 있을 때만) → 추이 기간 선택 → [새로고침]. 추이 기간 선택은 `div.field.period-field` 안의 `label`(CPY-248)과 `select#metrics-period`(CPY-249·250)다. `build()`에서 한 번 만들고, 상태가 바뀌면 [새로고침] 자리만 다시 만든다. 그래서 갱신이 선택의 포커스를 빼앗지 않는다. 선택은 비활성으로 두지 않는다.
 - 순서: 외부 수집 안내(CPY-244, 중립 안내에 `createAlert`의 `icon: 'alert'`로 원 안 느낌표 아이콘, 라이브 영역 아님) → 조회 실패 안내 → 핵심 지표 → 추이 → 시간 분포 → 원인별 수 → 프로세스.
 - 구역 제목은 `h2`, 카드 제목은 `h3`이고, 시간 분포·프로세스 카드 제목은 `h2`다. 시안은 `h5`·`h6`을 쓴다. `base.css`의 제목 여백 초기화가 h1~h5만 덮으므로 h6을 쓰지 않는다.
 - 상태 배지 칸만 `role="status"`다. 조회 때마다 칸의 내용은 상태가 바뀔 때만 바꾼다. 차트·표·값에는 라이브 영역이 없다.
 - 차트는 `figure[role="img"]`이고 이름은 `제목. 계열 이름: 현재 X · 최대 Y. …`다. 마우스 도구 설명이나 포커스 대상이 없다. 선 모양(실선·긴 점선·점선)과 색을 함께 쓴다.
-- 포커스는 `id`로 복원한다: `metrics-refresh`, `metrics-alert-refresh`, `metrics-language`, `metrics-logout`. 새로고침이 끝나면 [새로고침]으로 돌려준다.
+- 포커스는 `id`로 복원한다: `metrics-period`, `metrics-refresh`, `metrics-alert-refresh`, `metrics-language`, `metrics-logout`. 새로고침이 끝나면 [새로고침]으로 돌려준다. 기간 변경 뒤에는 포커스를 옮기지 않는다.
 - 모바일(1023.98px 이하)에서 카드와 표는 한 열이다. 표는 `data-label`을 가진 열별 쌍이다. 기록이 없는 칸(`td.none`)은 레이블이 없다.
 
 ### 시험
 
-- `web/dashboard/tests/metrics.html`·`metrics-scenarios.js`가 가짜 API로 dash-028·064·068~075·077~079와 최소 막대 크기(`bars`), y축 위쪽 끝(`axis`) 사례를 돌린다. 결과는 `data-result`다. `?case=…&lang=ko|en`을 쓴다. 가짜 응답 결과는 실서버 증거가 아니다. dash-077은 시간이 길어 `dash-077`과 `dash-077-more` 두 사례로 나눈다. `dump-dom`이 가상 시간 10초에서 멈추기 때문이다.
+- `web/dashboard/tests/metrics.html`·`metrics-scenarios.js`가 가짜 API로 dash-028·064·068~075·077~081과 최소 막대 크기(`bars`), y축 위쪽 끝(`axis`) 사례를 돌린다. 결과는 `data-result`다. `?case=…&lang=ko|en`을 쓴다. 가짜 응답 결과는 실서버 증거가 아니다. dash-077은 시간이 길어 `dash-077`과 `dash-077-more` 두 사례로 나눈다. `dump-dom`이 가상 시간 10초에서 멈추기 때문이다.
 - `tests/dashboard_browser.rs`가 이 사례를 실행하고 마커를 가진다. 가짜 응답이 증명하지 못하는 부분은 마커에 `partial`을 붙인다.
 - `tests/dashboard_live/metrics.rs`는 실제 서버와 프록시로 DASH-068(SCR-005 입력 버림, 진입 요청 모양, 떠난 뒤 자동 조회 중단, 붙잡아 둔 늦은 응답)과 DASH-076(401, 자동 조회의 유휴 만료 비연장)을 확인한다. 두 마커는 `partial`이 아니다.
 - F-C 재현은 `metrics.html?case=shot-<상태>&lang=ko|en`이다. `loading`, `collecting`, `normal`, `partial`, `failed`, `failed-first`, `refreshing`, `rejected`를 제공한다. `partial`은 메모리 메트릭이 `available = false`이고 추이 값 일부가 `null`인 상태다. 제품에 넣지 않는다.

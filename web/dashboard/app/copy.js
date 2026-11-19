@@ -247,6 +247,13 @@ export const COPY = {
     secondsUnit: '{n}초', // CPY-246
     distBarName: '구간별 개수: {items}', // CPY-247
     distBarItem: '{bound} {count}개', // CPY-247 (one non-zero bucket)
+    periodLabel: '추이 기간', // CPY-248
+    periodHour: '최근 1시간', // CPY-249
+    periodDay: '최근 24시간', // CPY-250
+    metricsRange24h: '추이: 최근 24시간, 1분 간격 · 점 {n}/1440개', // CPY-251
+    trendsTitle24h: '추이(최근 24시간)', // CPY-252
+    chartEmpty24h: '추이를 모으는 중입니다. 1분마다 점이 하나씩 쌓입니다.', // CPY-253
+    cpuNote24h: '직전 1분 동안 쓴 CPU 시간의 비율입니다. 100%는 코어 1개를 모두 쓴 양입니다.', // CPY-254
   },
   en: {
     navLabel: 'Main menu', // CPY-078
@@ -488,5 +495,12 @@ export const COPY = {
     secondsUnit: '{n} s', // CPY-246
     distBarName: 'Count per bucket: {items}', // CPY-247
     distBarItem: '{bound}: {count}', // CPY-247 (one non-zero bucket)
+    periodLabel: 'Trend period', // CPY-248
+    periodHour: 'Last hour', // CPY-249
+    periodDay: 'Last 24 hours', // CPY-250
+    metricsRange24h: 'Trends: last 24 hours, 1-minute interval · Points: {n}/1440', // CPY-251
+    trendsTitle24h: 'Trends (last 24 hours)', // CPY-252
+    chartEmpty24h: 'Collecting trend data. One point is added every minute.', // CPY-253
+    cpuNote24h: 'Share of CPU time used in the last minute. 100% equals one fully used core.', // CPY-254
   },
 };

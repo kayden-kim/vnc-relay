@@ -1,13 +1,15 @@
 // Contract-shaped metrics responses for the fake API pages (metrics.html and router.html). Values are examples, not server data.
-// Points follow metrics contract 1.8: one per 10 s, nine series keys, cumulative counters.
+// Points follow metrics contract 1.8: one per 10 s (last hour) or one per 60 s (last 24 hours), nine series keys,
+// cumulative counters.
 export const T0 = Date.parse('2026-11-19T10:00:00.000Z');
 export const iso = (ms) => new Date(ms).toISOString();
 
-// One retained point. `at` is T0 plus 10 s per seq, so seq 360 is one hour after seq 0.
-export function historyPoint(seq, overrides = {}) {
+// One retained point. `at` is T0 plus `intervalSecs` per seq: with 10 s, seq 360 is one hour after seq 0, and with
+// 60 s (the last 24 hours), seq 1440 is one day after seq 0.
+export function historyPoint(seq, overrides = {}, intervalSecs = 10) {
   return {
     seq,
-    at: iso(T0 + seq * 10000),
+    at: iso(T0 + seq * intervalSecs * 1000),
     values: {
       session_count: 3,
       waiting_count: 1,
@@ -24,10 +26,10 @@ export function historyPoint(seq, overrides = {}) {
 }
 
 // Points `from` to `to`, both included. `overrides` may be a function of seq.
-export function points(from, to, overrides = {}) {
+export function points(from, to, overrides = {}, intervalSecs = 10) {
   return Array.from({ length: to - from + 1 }, (_, index) => {
     const seq = from + index;
-    return historyPoint(seq, typeof overrides === 'function' ? overrides(seq) : overrides);
+    return historyPoint(seq, typeof overrides === 'function' ? overrides(seq) : overrides, intervalSecs);
   });
 }
 
@@ -116,14 +118,16 @@ export function defaultMetrics(overrides = {}) {
   return [...named.values()];
 }
 
-export function metricsBody({ metrics = defaultMetrics(), points: retained = [] } = {}) {
+// Response body of one trend window: `1h` (10 s, 360 points) or `24h` (60 s, 1440 points), metrics contract 1.8.
+export function metricsBody({ metrics = defaultMetrics(), points: retained = [], period = '1h' } = {}) {
+  const day = period === '24h';
   return {
     as_of: iso(T0 + 3600000),
     resource: { 'service.version': '0.9.0-test' },
     metrics,
     history: {
-      interval_secs: 10,
-      capacity: 360,
+      interval_secs: day ? 60 : 10,
+      capacity: day ? 1440 : 360,
       latest_seq: retained.length > 0 ? retained[retained.length - 1].seq : null,
       points: retained,
     },
