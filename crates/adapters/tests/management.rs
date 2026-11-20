@@ -30,6 +30,7 @@ use vnc_relay_adapters::clock::SystemClock;
 use vnc_relay_adapters::config_edit::{FsConfigFileStore, TomlConfigDocument};
 use vnc_relay_adapters::config_file;
 use vnc_relay_adapters::crypto::{RelayIdKey, SessionIdKey, SystemTokenSource};
+use vnc_relay_adapters::ip_db::MmdbLoader;
 use vnc_relay_adapters::management_http::{DashboardHints, ManagementListener, ManagementServices};
 use vnc_relay_adapters::net::{AcceptPolicy, AllowSource, TcpEntryPoint, TcpRelayStream};
 use vnc_relay_adapters::ops_log::{JsonLinesEventSink, RecentLogs, format_line};
@@ -37,6 +38,7 @@ use vnc_relay_adapters::process_stats::OsProcessStats;
 use vnc_relay_adapters::target::TcpTargetConnector;
 use vnc_relay_adapters::tls;
 use vnc_relay_app::events::{AdminTerminateResult, Event, Level, RejectReason, Stage};
+use vnc_relay_app::ip_info::{IpInfoService, IpLookup};
 use vnc_relay_app::management::config::{
     ConfigActor, ConfigEditError, ConfigEditResult, ConfigEditService, ConfigFileStore,
     ConfigGetError, ConfigManagement, ConfigPatch, ConfigReplaceError, ConfigView,
@@ -59,6 +61,7 @@ use vnc_relay_app::reload::ports::{
 };
 use vnc_relay_app::reload::service::ReloadService;
 use vnc_relay_app::reload::snapshot::{ReloadCell, ReloadSnapshot};
+use vnc_relay_app::sources::{SourceStats, SourcesService};
 use vnc_relay_domain::account::{Account, AccountName, Argon2Params, Password, PasswordHash};
 use vnc_relay_domain::admin_session::AdminSessionPolicy;
 use vnc_relay_domain::budget::ConnectionBudget;
@@ -281,6 +284,7 @@ async fn start_with_ports_and_logs(
             config: config_fixture(false, Arc::new(SystemClock::new()), Arc::clone(&log)).service,
             logs,
             metrics,
+            sources: empty_sources(),
         },
         events,
     )
@@ -424,6 +428,7 @@ impl RunningRelay {
                 config: config_fixture(false, Arc::clone(&clock), Arc::clone(&log)).service,
                 logs: Arc::new(RecentLogs::new(1000)),
                 metrics: metrics_view,
+                sources: empty_sources(),
             },
             events,
         )
@@ -960,6 +965,7 @@ async fn tls10_and_tls11_hellos_are_refused_without_plaintext_fallback() {
             event,
             Event::ConnectionRejected {
                 listener: "management",
+                conn_id: None,
                 stage: Stage::Tls,
                 reason: RejectReason::TlsVersionUnsupported,
                 peer_ip: loopback(),
@@ -1041,6 +1047,7 @@ async fn management_connection_beyond_lm_is_refused_at_accept() {
         event,
         Event::ConnectionRejected {
             listener: "management",
+            conn_id: None,
             stage: Stage::Accept,
             reason: RejectReason::AdminConnectionLimit { limit: 1 },
             peer_ip: loopback(),
@@ -1389,6 +1396,25 @@ fn metrics_service(
         },
         clock,
         "test",
+    ))
+}
+
+/// The read side of `/api/v1/sources` with no event and no database file.
+/// `tests/sources.rs` covers that route with a whole server.
+fn empty_sources() -> Arc<SourcesService> {
+    let clock: Arc<dyn Clock> = Arc::new(SystemClock::new());
+    let lookup = Arc::new(IpLookup::new());
+    let ip_info = Arc::new(IpInfoService::new(
+        None,
+        None,
+        Arc::new(MmdbLoader),
+        Arc::clone(&lookup),
+        Arc::clone(&clock),
+        Arc::new(Recorder::default()),
+    ));
+    Arc::new(SourcesService::new(
+        Arc::new(SourceStats::new(lookup, clock)),
+        ip_info,
     ))
 }
 
@@ -4094,6 +4120,7 @@ async fn start_config_services(
             config,
             logs: Arc::new(RecentLogs::new(1000)),
             metrics,
+            sources: empty_sources(),
         },
         events,
     )
@@ -4675,7 +4702,7 @@ async fn ticket_config_view_edits_and_refusals_follow_management_contract() {
     assert_eq!(view.status, 200);
     let body = config_json(&view);
     let items = body["items"].as_array().unwrap_or_else(|| panic!("items"));
-    assert_eq!(items.len(), 76);
+    assert_eq!(items.len(), 78);
     assert_eq!(
         items
             .iter()
@@ -5670,6 +5697,7 @@ async fn session_queries_and_termination_provide_full_transport_and_forwarded_ip
             config: config_fixture(false, clock.clone(), events.clone()).service,
             logs: Arc::new(RecentLogs::new(1000)),
             metrics,
+            sources: empty_sources(),
         },
         events,
     )

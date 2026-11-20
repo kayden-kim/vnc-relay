@@ -214,6 +214,7 @@ async fn connection(
             stream,
             source,
             conn.peer_ip,
+            Some(conn.conn_id),
             Arc::clone(&shared.log),
             conn.listener.name(),
         ))),

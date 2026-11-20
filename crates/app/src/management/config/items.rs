@@ -57,7 +57,7 @@ fn optional<T: ToString>(value: Option<T>) -> ConfigValue {
 
 pub fn config_items(s: &Settings, presence: &ConfigPresence) -> Vec<ConfigItem> {
     use ConfigReloadKind::{Dynamic, Restart};
-    let mut out = Vec::with_capacity(76);
+    let mut out = Vec::with_capacity(78);
     out.push(item(
         "admin.accounts_file",
         text(s.admin.accounts_file.display()),
@@ -438,6 +438,17 @@ pub fn config_items(s: &Settings, presence: &ConfigPresence) -> Vec<ConfigItem> 
         600,
         false,
     ));
+    for (key, path) in [
+        ("ip_info.country_db", &s.ip_info.country_db),
+        ("ip_info.asn_db", &s.ip_info.asn_db),
+    ] {
+        out.push(item(
+            key,
+            optional(path.as_ref().map(|path| path.display())),
+            Restart,
+            false,
+        ));
+    }
     out
 }
 

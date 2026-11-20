@@ -15,7 +15,7 @@
 | 관련 ADR | 없음 |
 | 관련 문서 | [접속 ticket 모듈 설계](relay-access-ticket.md) |
 
-`LOG_CONTRACT`는 `ops-info/2.1.0`이다([접속 ticket 모듈 설계](relay-access-ticket.md)). `listener`는 `tcp_viewer`·`tcp_server`·`ws`·`wss`·`management`·`status` 중 하나다. WS·WSS는 경로 판정 전 role을 생략하고 켜진 경로 판정 뒤 role을 보존한다. TCP 수락은 고정 role을 출력한다. `allow_all_source`는 WS·WSS 역할 목록일 때 role을 더하고 `plaintext_ws_enabled.listener`는 `ws`다. `session_started.server_transport`는 Server의 전송 방식을 기록한다.
+`LOG_CONTRACT`는 `ops-info/2.2.0`이다. 2.1.0은 접속 ticket 사건을([접속 ticket 모듈 설계](relay-access-ticket.md)), 2.2.0은 IP 정보 DB 사건 `ip_db_loaded`·`ip_db_unavailable`과 WSS TLS 단계 `connection_rejected`의 `conn_id`를 더했다([접속 출처 통계 모듈 설계](source-stats.md)). `listener`는 `tcp_viewer`·`tcp_server`·`ws`·`wss`·`management`·`status` 중 하나다. WS·WSS는 경로 판정 전 role을 생략하고 켜진 경로 판정 뒤 role을 보존한다. TCP 수락은 고정 role을 출력한다. `allow_all_source`는 WS·WSS 역할 목록일 때 role을 더하고 `plaintext_ws_enabled.listener`는 `ws`다. `session_started.server_transport`는 Server의 전송 방식을 기록한다.
 
 [운영 정보 계약](../contracts/ops-info-v2.md)의 `forwarded_ip`, `viewer_forwarded_ip`, `server_forwarded_ip`, `connection_rejected.reason = forwarded_for_invalid`, `trust_all_proxies` 경고를 사용한다. 신뢰 프록시의 전달 주소를 도출한 뒤의 사건에 `forwarded_ip`가 기록되며, 소켓 상대 IP인 `peer_ip`는 바꾸지 않는다. 전체 범위를 포괄하는 `trusted_proxies` 항목은 시작·재로드 때 `trust_all_proxies` 경고(`listener`, `item`, `phase`)로 기록한다.
 
@@ -95,7 +95,7 @@ flowchart LR
 
 | 이름 | 필드·형태 | 줄의 필드 | 제약과 항상 지켜야 할 조건 |
 | --- | --- | --- | --- |
-| `Event::ServerStarting` | 없음 | `log_contract`(`LOG_CONTRACT` = `ops-info/2.1.0`) | 시작 단계의 첫 사건이다. |
+| `Event::ServerStarting` | 없음 | `log_contract`(`LOG_CONTRACT` = `ops-info/2.2.0`) | 시작 단계의 첫 사건이다. |
 | `Event::ConfigWarning` | `warning: ConfigWarning`, `phase: Phase` | 사건 이름은 경고 코드. `plaintext_ws_enabled`: `listener=ws`, `listen`. `allow_all_source`: `listener`, WS·WSS 목록의 `role`, `item`, `phase`. `trust_all_proxies`: `listener`, `item`, `phase`. 나머지는 기존 필드. | `item`은 항목의 표준 표기다. `trust_all_proxies`는 신뢰 프록시 목록에 전체 체계 항목이 있을 때 기록한다. |
 | `Event::ConfigWarning`의 ticket 경고 | `TicketTcpBypass { role }`, `TicketPlaintextWs { role }`, `phase` | `ticket_tcp_bypass`: 해당 TCP `listener`, `role`, `phase`. `ticket_plaintext_ws`: `listener=ws`, `role`, `phase` | ticket을 켠 역할의 TCP·평문 WS가 켜졌을 때 쓴다. 재로드는 해당 ticket `enabled` 키가 실제 바뀐 경우에만 다시 쓴다. |
 | `Event::StartupFailed` | `reason: &'static str`, `config_key: Option<String>`, `listener: Option<&'static str>`, `detail: Option<String>` | 같은 이름 | 진단 하나에 한 줄이다(계약 1.6절). `detail`에 설정 값·경로·파일 내용을 넣지 않는다(6절). |
@@ -109,7 +109,10 @@ flowchart LR
 | `Event::ReloadApplied` | `trigger: ReloadTrigger`, `applied: Vec<String>` | `trigger`, `applied` | 파일 감지는 `file_watch`, 편집 commit은 `config_edit`다. 실제 바뀐 실행값/TLS/ticket 공개 키 항목만 담고 값은 넣지 않는다. 같은 경로의 공개 키 목록이 바뀌면 `public_keys_file`을 넣는다. |
 | `Event::ConfigEdited` | `admin_account: AccountName`, `peer_ip: PeerIp`, `config_keys`, `revision` | 같은 이름 | info. 요청 changes 중 파일값이 달라진 키와 새 바이트 revision이다. 이미 pending이던 실행값 차이는 `ReloadApplied.applied`에만 추가된다. |
 | `Event::ConfigEditRejected` | `admin_account: AccountName`, `peer_ip: PeerIp`, `reason: String`, `config_keys: Option<Vec<String>>` | 같은 이름, 없는 config_keys는 생략 | warn. reason은 여섯 편집 업무 오류의 API code다. 설정값·후보·revision은 없다. 인증·CSRF·invalid_request·internal에는 만들지 않는다. |
-| `Level` | `Info`, `Warn`, `Error` | `level` | 2.1.0에 다른 값이 없다. |
+| `Event::ConnectionRejected` | `listener: &'static str`, `conn_id: Option<ConnId>`, `stage: Stage`, `reason: RejectReason`, `peer_ip: PeerIp` | `connection_rejected`, `listener`, 있을 때만 `conn_id`, `stage`, `reason`, `peer_ip` | 수락 단계(`stage=accept`)는 아직 `conn_id`가 없다. WSS의 TLS 단계 거절은 수락 때 받은 `conn_id`를 쓴다(2.2.0). [접속 출처 통계](source-stats.md)가 이 값으로 보류한 수락을 꺼낸다. |
+| `Event::IpDbLoaded` | `key: IpDbKey`, `database_type: String`, `build_time: SystemTime`, `phase: Phase` | `ip_db_loaded`, `config_key`, `database_type`, `build_time`, `phase` | info. `database_type`은 앞 128자다. `phase`는 `startup` 또는 `reload`다. |
+| `Event::IpDbUnavailable` | `key: IpDbKey`, `reason: IpDbFailure`, `phase: Phase`, `detail: Option<String>` | `ip_db_unavailable`, `config_key`, `reason`, `phase`, 선택 `detail` | warn. `reason`은 `file_unreadable`·`file_too_large`·`invalid_format`·`unsupported_data`다. `detail`에 경로와 파일 내용을 넣지 않는다. 같은 원인과 내용 표시의 실패는 다시 쓰지 않는다. |
+| `Level` | `Info`, `Warn`, `Error` | `level` | 2.2.0에 다른 값이 없다. |
 | `RelayIdRef` | 소문자 16진수 16자 `String` | `relay_id_ref` | HMAC 결과 앞 8바이트로만 만든다. 원문 중계 ID로 만드는 생성자가 없다. |
 | `PeerIp` | `IpAddr` | `peer_ip` | IPv4-mapped가 아니다. 포트·영역 식별자가 없다. |
 

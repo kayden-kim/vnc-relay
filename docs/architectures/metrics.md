@@ -78,7 +78,7 @@ flowchart LR
 | 요소(파일·심볼) | 역할 | 만들어지는 시점과 소유자 | 의존 대상 |
 | --- | --- | --- | --- |
 | `crates/app/src/metrics.rs` `Metrics` | 카운터·히스토그램·전송량·ping 시간 초과의 기록 | `src/serve.rs` `start`가 운영 로그 기록부를 연 직후 `Arc`로 만든다. 프로세스가 끝날 때 없어진다 | `Clock`(가동 시간 기준점) |
-| `crates/app/src/metrics.rs` `MetricsSink` | `EventSink` 장식자. 사건 종류와 필드로 해당 메트릭을 센 뒤 감싼 기록부에 넘긴다 | `Metrics`와 함께 만든다. 이후 모든 `Arc<dyn EventSink>` 자리에 이것을 넘긴다 | `Metrics`, 감싼 `EventSink` |
+| `crates/app/src/metrics.rs` `MetricsSink` | `EventSink` 장식자. 사건 종류와 필드로 해당 메트릭을 센 뒤 감싼 기록부에 넘긴다. 감싼 기록부는 [접속 출처](source-stats.md)의 `SourcesSink`이고, 그 안쪽이 운영 로그 기록부다 | `Metrics`와 함께 만든다. 이후 모든 `Arc<dyn EventSink>` 자리에 이것을 넘긴다 | `Metrics`, 감싼 `EventSink` |
 | `crates/app/src/metrics/service.rs` `MetricsService` | 기록 값과 현재 값을 모아 스냅숏을 만들고, 추이 점을 찍고 돌려준다 | `src/serve.rs` `listen_until_shutdown`이 중계 실행 상태(`RelayRuntime`)를 만든 직후, 상태 리스너를 열기 전에 만든다 | `Metrics`, `MetricSources`(`RelayStateSource`, L·Lm `ConnectionBudget`, `RuntimeSettingsSource`, `AdminSessionSource`, `ProcessStatsSource`), `Clock` |
 | `crates/app/src/metrics/history.rs` `History`·`Ring`·`HistoryWindow` | 두 추이 기간의 고리 버퍼(`Ring`)와 기간마다 따로 매기는 순번. 최근 1시간 360개, 최근 24시간 1440개 | `MetricsService`가 소유한다 | 없음 |
 | `crates/app/src/metrics/snapshot.rs` `MetricsSnapshot` | 계약 1.3절 순서의 계열 목록. 두 표현이 함께 쓴다 | 요청마다 만들고 응답 뒤 버린다 | 없음 |

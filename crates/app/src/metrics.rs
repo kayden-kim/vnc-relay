@@ -283,6 +283,8 @@ impl Metrics {
             | Event::ReloadChangeDetected { .. }
             | Event::ReloadWatchFailed { .. }
             | Event::LogReopenFailed { .. }
+            | Event::IpDbLoaded { .. }
+            | Event::IpDbUnavailable { .. }
             | Event::ServerStopped => {}
         }
     }

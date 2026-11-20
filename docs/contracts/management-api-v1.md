@@ -1,12 +1,12 @@
 # 관리 API v1 계약
 
-관리 리스너가 제공하는 JSON over HTTP 관리 API의 경로·메서드·요청·응답·오류와 로그인 교환 형식을 정한다. 내장 대시보드(정적 HTML·JS)가 이 API로 서버 요약·대기 연결·활성 세션·최근 종료 목록·최근 로그·메트릭과 설정을 조회하고, 동적 설정을 편집하고, 활성 세션을 종료하고, 관리자 로그인·로그아웃을 한다. 이 문서는 [관리 스펙](../specs/management.md)과 [화면 스펙](../specs/dashboard.md)의 동작을 바꾸지 않는다. 스펙과 다르면 스펙을 따른다.
+관리 리스너가 제공하는 JSON over HTTP 관리 API의 경로·메서드·요청·응답·오류와 로그인 교환 형식을 정한다. 내장 대시보드(정적 HTML·JS)가 이 API로 서버 요약·대기 연결·활성 세션·최근 종료 목록·최근 로그·메트릭·접속 출처와 설정을 조회하고, 동적 설정을 편집하고, 활성 세션을 종료하고, 관리자 로그인·로그아웃을 한다. 이 문서는 [관리 스펙](../specs/management.md)과 [화면 스펙](../specs/dashboard.md)의 동작을 바꾸지 않는다. 스펙과 다르면 스펙을 따른다.
 
 | 항목 | 값 |
 | --- | --- |
-| 이름과 버전 | `management-api` 1.3.0 |
+| 이름과 버전 | `management-api` 1.4.0 |
 | 상태 | Active |
-| 버전 차이 | 1.1.0은 1.11절 CSP 헤더가 필수다. Consumer 동작은 같으며 Producer는 CSP 헤더를 보내야 한다. 1.2.0은 1.16절 메트릭 경로를 더한 호환 추가다. 1.3.0은 1.16절 `history_window` 선택 매개변수를 더한 호환 추가다. |
+| 버전 차이 | 1.1.0은 1.11절 CSP 헤더가 필수다. Consumer 동작은 같으며 Producer는 CSP 헤더를 보내야 한다. 1.2.0은 1.16절 메트릭 경로를 더한 호환 추가다. 1.3.0은 1.16절 `history_window` 선택 매개변수를 더한 호환 추가다. 1.4.0은 1.17절 접속 출처 경로를 더한 호환 추가다. |
 | 소유자 | vnc-relay 프로젝트 관리자 |
 | 만드는 쪽(Producer) | `vnc-relay` 관리 리스너(서버) |
 | 사용하는 쪽(Consumer) | 같은 실행파일에 내장된 대시보드(정적 HTML·JS). 같은 규칙으로 호출하는 외부 HTTP 클라이언트도 Consumer로 본다. |
@@ -19,8 +19,9 @@
 | 접속 ticket 관련 테스트 | [관리 스펙 7절](../specs/management.md#7-수용-테스트) MGT-052~053. |
 | 목록 필드 관련 테스트 | [관리 스펙 7절](../specs/management.md#7-수용-테스트) MGT-054~055, [화면 스펙 7절](../specs/dashboard.md#7-수용-테스트) DASH-065~066. 시험 위치와 현재 결과 확인 방법은 5절을 따른다. |
 | 메트릭 관련 테스트 | [관리 스펙 7절](../specs/management.md#7-수용-테스트) MGT-056~061, [화면 스펙 7절](../specs/dashboard.md#7-수용-테스트) DASH-068~081. |
+| 접속 출처 관련 테스트 | [관리 스펙 7절](../specs/management.md#7-수용-테스트) MGT-062~064, [화면 스펙 7절](../specs/dashboard.md#7-수용-테스트) DASH-082~088. |
 
-관련 문서: [설정 계약](config-v4.md)(`[dashboard]`·`[limits]`·`[recent_closed]`·`[recent_logs]`·`[timeouts]`·`[management]` 키와 기본값·범위), [CLI·계정 파일 계약](cli-v1.md)(계정명 규칙), [운영 정보 계약](ops-info-v2.md)(`session_id`·종료 사건 로그, 상태 리스너), [메트릭 계약](metrics-v1.md)(메트릭 응답 본문), [WebSocket 중계 계약](websocket-relay-v2.md)(관리자 종료의 Close 4005), [ADR-0001 내장 TLS](../decisions/ADR-0001-built-in-tls.md), [ADR-0003 단일 인스턴스·메모리 상태](../decisions/ADR-0003-single-instance-memory-state.md).
+관련 문서: [설정 계약](config-v4.md)(`[dashboard]`·`[limits]`·`[recent_closed]`·`[recent_logs]`·`[timeouts]`·`[management]`·`[ip_info]` 키와 기본값·범위, IP 정보 DB 형식), [CLI·계정 파일 계약](cli-v1.md)(계정명 규칙), [운영 정보 계약](ops-info-v2.md)(`session_id`·종료 사건 로그, 상태 리스너, 주소 표기), [메트릭 계약](metrics-v1.md)(메트릭 응답 본문), [WebSocket 중계 계약](websocket-relay-v2.md)(관리자 종료의 Close 4005), [ADR-0001 내장 TLS](../decisions/ADR-0001-built-in-tls.md), [ADR-0003 단일 인스턴스·메모리 상태](../decisions/ADR-0003-single-instance-memory-state.md), [ADR-0012 IP 정보 DB](../decisions/ADR-0012-local-ip-info-databases.md).
 
 이 계약의 경로·메서드·필드·오류 코드·헤더·쿠키·화면 URL은 확정된 형식이다. 기본 규칙은 다음과 같다.
 
@@ -69,6 +70,7 @@
 | 설정 키·값과 설정 경로 | `GET /api/v1/config`의 실행 중 유효 설정(1.13절). 최근 로그에는 운영 정보 계약이 정한 설정 키 등 사건 메타 정보만 포함 | 경로가 가리키는 파일 내용, 비밀번호·해시·개인키 내용, 오류의 입력값 인용 |
 | 최근 로그 사건 | `GET /api/v1/logs`의 `entry`. 운영 정보 계약의 비밀 비노출·`relay_id_ref` 규칙을 그대로 따름 | 원시 중계 ID·인증 비밀·원시 스트림은 로그에 없음 |
 | 메트릭 값 | `GET /api/v1/metrics`. 속성은 [메트릭 계약 1.4절](metrics-v1.md#14-속성-값)의 고정 값만 쓴다 | 중계 ID·세션 식별자·주소·계정명·설정 값(L·Lm 상한 제외)은 메트릭에 없음 |
+| 접속 출처 통계(클라이언트 주소와 주소·국가·ASN별 수, IP 정보 DB 상태) | `GET /api/v1/sources`(1.17절) | 운영 로그, `/metrics`, 오류 본문. IP 정보 DB 파일 경로와 내용은 어디에도 없음 |
 
 오류 본문의 `message`에는 요청 입력값(계정명·비밀번호·세션 식별자·중계 ID·설정값)을 되풀이하지 않는다. 설정 진단의 `message`에도 값을 인용하지 않는다([설정 계약 2.1절](config-v4.md#21-설정-오류와-준비-실패)).
 
@@ -89,6 +91,7 @@
 | `GET /api/v1/closed-sessions` | 필요 | 불필요 | `200` 최근 종료 목록(1.10절) | 최근 종료 목록(MGT-R15, [관리 2.3절](../specs/management.md#23-최근-종료-목록)) |
 | `GET /api/v1/logs` | 필요 | 불필요 | `200` 최근 로그(1.15절) | 최근 로그 조회([관리 2.4절](../specs/management.md#24-최근-로그), MGT-046~050) |
 | `GET /api/v1/metrics` | 필요 | 불필요 | `200` 메트릭(1.16절) | 메트릭과 최근 1시간 또는 최근 24시간 추이([관리 2.5절](../specs/management.md#25-메트릭), MGT-056~061) |
+| `GET /api/v1/sources` | 필요 | 불필요 | `200` 접속 출처(1.17절) | 최근 1시간 또는 최근 24시간의 주소·국가·ASN별 연결 수와 IP 정보 DB 상태([관리 2.6절](../specs/management.md#26-접속-출처), MGT-062~064) |
 | `GET /api/v1/config` | 필요 | 불필요 | `200` 설정 보기(1.13절) | 실행 중 유효 설정과 파일 상태([관리 3.3절](../specs/management.md#33-설정-보기와-동적-설정-편집), MGT-R19) |
 | `PATCH /api/v1/config` | 필요 | 필요 | `200` 편집 결과(1.14절) | 설정 파일 기록과 동적 설정 변경([관리 3.3절](../specs/management.md#33-설정-보기와-동적-설정-편집), MGT-R20~R27) |
 
@@ -346,7 +349,7 @@
 - 정적 경로의 `404`는 2.1절 형식의 JSON 본문과 `not_found`를 유지한다. 정적 `303`·`404`를 API와 나누는 예외는 경로 범위에 관한 것이다. `404`의 JSON 본문을 없애는 뜻이 아니다.
 - 로그인 화면 파일에는 운영 데이터·계정 정보·설정 값을 넣지 않는다.
 - 로그인 성공 뒤 화면은 `/`로 이동한다.
-- 화면 URL: SCR-003은 `/login/`, SCR-001은 `/`, SCR-002는 `/#/sessions/{session_id}`, SCR-004는 `/#/settings`, SCR-005는 `/#/settings/edit`, SCR-006은 `/#/logs`, SCR-007은 `/#/metrics`다. URL의 조각(`#` 뒤)은 서버로 전송되지 않고 서버 접근 로그에 남지 않는다. 서버는 이 조각을 해석하지 않는다.
+- 화면 URL: SCR-003은 `/login/`, SCR-001은 `/`, SCR-002는 `/#/sessions/{session_id}`, SCR-004는 `/#/settings`, SCR-005는 `/#/settings/edit`, SCR-006은 `/#/logs`, SCR-007은 `/#/metrics`, SCR-008은 `/#/sources`다. URL의 조각(`#` 뒤)은 서버로 전송되지 않고 서버 접근 로그에 남지 않는다. 서버는 이 조각을 해석하지 않는다.
 - 화면은 URL의 `session_id`가 1.8절 형식을 만족하는지 먼저 확인한다. 형식이 틀리면 요청을 보내지 않고 "잘못된 세션 식별자"를 표시한다. SCR-002에서 형식이 맞으면 상세를 조회하고, `404`이면 "대상 없음"을 표시한다. SCR-006의 세션 필터 URL은 `/#/logs?session_id={session_id}`다. 이 형식도 요청 전에 같은 형식 검사를 한다. 형식이 맞지만 일치하는 로그가 없으면 `200`의 빈 결과다.
 - 보호된 정적 응답과 API 응답에 `Cache-Control: no-store`를 붙인다. 로그인 화면 정적 응답에도 같은 헤더를 붙인다. 서버를 갱신한 뒤 브라우저가 이전 버전의 화면 코드를 다시 쓰지 않게 하기 위해서다.
 - 정적 응답에 `X-Content-Type-Options: nosniff`와 `Referrer-Policy: no-referrer`를 권장한다. `Content-Security-Policy: default-src 'self'; frame-ancestors 'none'`은 필수다. 대시보드는 인라인 스크립트와 인라인 스타일(`<style>`, `style` 속성)을 쓰지 않는다.
@@ -361,7 +364,7 @@
 | 조회 제한 시간·설정 편집 응답 대기 한도 | `[dashboard] query_timeout_secs`(재시작 필요) | 세션 정보의 `dashboard.query_timeout_secs` |
 | 종료 응답 대기 한도 | 설정 키 없음. 재로드 대상 `[timeouts] close_secs`(E)에서 계산 | 세션 정보의 `dashboard.terminate_timeout_secs`. 응답 때의 E + 5초다. |
 
-- 폴링 조회는 `GET` 일곱 경로(`summary`·`waiting`·`sessions`·`sessions/{session_id}`·`closed-sessions`·`logs`·`metrics`)에 붙인 자동 요청이다. 응답이 `query_timeout_secs` 안에 오지 않으면 Consumer는 요청을 중단하고 조회 실패로 처리한다. 실패를 빈 목록으로 표시하지 않는다.
+- 폴링 조회는 `GET` 여덟 경로(`summary`·`waiting`·`sessions`·`sessions/{session_id}`·`closed-sessions`·`logs`·`metrics`·`sources`)에 붙인 자동 요청이다. 응답이 `query_timeout_secs` 안에 오지 않으면 Consumer는 요청을 중단하고 조회 실패로 처리한다. 실패를 빈 목록으로 표시하지 않는다.
 - 같은 조회가 진행 중이면 다음 주기 요청을 겹쳐 보내지 않는다([화면 4.1절](../specs/dashboard.md#41-폴링)). 조회 제한 시간이 P보다 길어도 된다.
 - 종료 요청에는 폴링 조회 제한 시간을 쓰지 않는다. 정리가 최대 E까지 걸릴 수 있기 때문이다. `terminate_timeout_secs`를 쓴다.
 - E를 교체한 뒤 세션 정보를 응답하면 새 E + 5초를 전달한다. 이미 시작한 종료 교환의 기한은 바꾸지 않는다. P와 `query_timeout_secs`는 재시작 필요로 남는다.
@@ -532,6 +535,52 @@ JSON Lines 다운로드는 Consumer가 만든다. 같은 필터로 커서 없이
 
 오류는 `400 invalid_request`(매개변수·폴링 헤더 오류), `401 unauthenticated`, `405 invalid_request`(`Allow: GET`), `500 internal`이다. 인증·메서드·본문·Content-Type의 공통 규칙(1.1·1.3절)도 적용하므로 본문이 있고 Content-Type이 틀리면 `415 invalid_request`다. 프로세스 값을 읽지 못한 것은 오류가 아니다. `200`의 `available = false`로 구분한다.
 
+### 1.17 접속 출처 `GET /api/v1/sources`
+
+유효한 관리 세션이 필요하다. CSRF 토큰은 필요하지 않다. `X-Relay-Poll: 1`을 허용하며, 이 헤더가 있는 자동 갱신은 관리 세션의 유휴 만료를 연장하지 않는다. 헤더가 없으면 사용자 행동 요청이다(1.4.2절). 무엇을 어떤 주소로 세는지는 [관리 스펙 2.6절](../specs/management.md#26-접속-출처)과 [운영 스펙 3.9절](../specs/operations.md#39-접속-출처-통계)이 정한다. 이 절은 요청과 응답 형식만 정한다.
+
+| 매개변수 | 형식·범위 | 의미 |
+| --- | --- | --- |
+| `window` | `1h` 또는 `24h`. 대소문자를 구분한다 | 집계 기간. `as_of`에서 1시간 또는 24시간 전까지의 사건을 센다. 생략하면 `1h`다. |
+
+- `window`는 표의 두 값만 받는다. 다른 값과 빈 값, 두 번 이상 보낸 값은 `400 invalid_request`다. 쿼리 문자열 해석과 표에 없는 매개변수 무시는 1.15절 규칙과 같다.
+- 시각은 1.1절의 UTC 시각 형식이다. IP 주소 표기는 [운영 정보 계약 1.10절](ops-info-v2.md#110-상대-주소-표기)과 같다.
+
+`200` 응답 본문:
+
+| 필드 | 자료형 | 필수 여부·null 허용 여부 | 의미 |
+| --- | --- | --- | --- |
+| `as_of` | 문자열 | 필수, null 불가 | 집계한 시각. |
+| `window` | 문자열 | 필수, null 불가 | 집계한 기간. `1h` 또는 `24h`. |
+| `window_start` | 문자열 | 필수, null 불가 | `as_of`에서 기간을 뺀 시각. 사건 시각이 이 값 이상이고 `as_of` 이하인 사건을 센다. |
+| `capacity` | 정수 | 필수, null 불가 | 메모리에 보관하는 사건의 상한. 100000이다. |
+| `stored` | 정수 | 필수, null 불가 | 지금 보관 중인 사건 수. 기간과 관계없다. |
+| `dropped_before` | 문자열 | 필수, null 허용 | 상한을 넘어 버린 사건 가운데 가장 늦은 사건의 시각. 버린 사건이 없으면 `null`이다. 이 값이 `window_start` 이상이면 기간의 앞부분이 빠졌다. |
+| `databases` | 객체 | 필수, null 불가 | `country`·`asn` 두 객체. IP 정보 DB 상태다. |
+| `databases.<종류>.state` | 문자열 | 필수, null 불가 | `not_configured`(설정에 경로 없음), `loaded`(DB를 쓰고 마지막 읽기에 성공), `stale`(마지막 다시 읽기에 실패해 이전 DB를 씀), `unavailable`(쓰는 DB 없음). |
+| `databases.<종류>.error` | 문자열 | 필수, null 허용 | 마지막 읽기 실패의 원인 코드([설정 계약 1.12절](config-v4.md#112-ip-정보-db-파일-형식)). `stale`·`unavailable`일 때만 값이 있다. |
+| `databases.<종류>.database_type` | 문자열 | 필수, null 허용 | 쓰는 DB 메타데이터의 `database_type`. 128자를 넘으면 앞 128자다. 쓰는 DB가 없으면 `null`이다. |
+| `databases.<종류>.provider` | 문자열 | 필수, null 허용 | 쓰는 DB의 제공자. `dbip`, `ipinfo`, `maxmind_geolite`, `maxmind`, `unknown`([설정 계약 1.12절](config-v4.md#112-ip-정보-db-파일-형식) 제공자 판정). 쓰는 DB가 없으면 `null`이다. |
+| `databases.<종류>.build_time` | 문자열 | 필수, null 허용 | 쓰는 DB의 빌드 시각. 쓰는 DB가 없으면 `null`이다. |
+| `databases.<종류>.loaded_at` | 문자열 | 필수, null 허용 | 쓰는 DB를 읽은 시각. 쓰는 DB가 없으면 `null`이다. |
+| `totals` | 객체 | 필수, null 불가 | 기간 안 사건 수. `attempts`(연결 시도), `rejected`(거절), `aborted`(중단), `sessions`(시작한 세션 수). 모두 정수다. |
+| `addresses` | 객체 | 필수, null 불가 | `total`(기간 안 서로 다른 클라이언트 주소 수)과 `items`(아래 순서로 최대 100개). |
+| `addresses.items[]` | 객체 | 항목마다 필수 | `ip`(문자열), `local`(불리언), `country`(문자열·null), `asn`(정수·null), `as_name`(문자열·null), `attempts`·`rejected`·`aborted`·`sessions`(정수), `last_seen_at`(문자열). |
+| `countries` | 객체 | 필수, null 불가 | `total`(기간 안 서로 다른 국가 수. 국가 없음도 하나로 센다)과 `items`(모든 국가). |
+| `countries.items[]` | 객체 | 항목마다 필수 | `country`(문자열·null), `addresses`(서로 다른 주소 수), `attempts`·`rejected`·`aborted`·`sessions`(정수). |
+| `asns` | 객체 | 필수, null 불가 | `total`(기간 안 서로 다른 ASN 수. ASN 없음도 하나로 센다)과 `items`(아래 순서로 최대 100개). |
+| `asns.items[]` | 객체 | 항목마다 필수 | `asn`(정수·null), `as_name`(문자열·null), `addresses`(서로 다른 주소 수), `attempts`·`rejected`·`aborted`·`sessions`(정수). |
+
+- `country`는 영문 대문자 두 글자 국가 코드다. `null`은 국가를 찾지 못했거나 국가 DB가 없었다는 뜻이다. `asn`은 1~4294967295이며 `null`은 ASN을 찾지 못했거나 ASN DB가 없었다는 뜻이다. 국가 이름은 응답에 넣지 않는다. 화면이 표시 언어로 바꾼다.
+- `local`이 `true`이면 그 주소는 루프백, 사설(10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, fc00::/7), 링크 로컬(169.254.0.0/16, fe80::/10), 공유(100.64.0.0/10), 지정되지 않은 주소다. 이런 주소는 IP 정보 DB에서 찾지 않으므로 `country`·`asn`이 `null`이다.
+- 주소 항목의 `country`·`asn`은 그 주소의 가장 늦은 사건에서 찾은 값이다. 국가·ASN 항목은 사건마다 찾은 값으로 센다. DB를 바꾼 뒤에는 두 값이 다를 수 있다.
+- `as_name`은 응답 때 지금 쓰는 ASN DB에서 찾는다. 그 주소(ASN 항목이면 그 ASN의 가장 늦은 사건 주소)가 지금도 같은 ASN이면 이름을 넣고, 아니면 `null`이다.
+- `sessions`는 주소·국가·ASN 항목에서 그 주소가 Viewer 또는 Mode II Server로 참여한 세션 쪽 수다. `totals.sessions`는 시작한 세션 수이므로 항목 합과 다를 수 있다.
+- 주소 항목은 `attempts` 내림차순, 같으면 `last_seen_at` 내림차순, 같으면 IP 주소 오름차순(IPv4가 먼저, 같은 체계는 숫자 순)이다. 국가 항목과 ASN 항목은 `attempts` 내림차순, 같으면 코드·번호 오름차순이며 `null`은 같은 `attempts` 안에서 마지막이다.
+- 기간 안 사건이 없으면 `totals`는 모두 0이고 세 `items`는 빈 배열이다. 오류가 아니다.
+
+오류는 `400 invalid_request`(매개변수·폴링 헤더 오류), `401 unauthenticated`, `405 invalid_request`(`Allow: GET`), `500 internal`이다. 인증·메서드·본문·Content-Type의 공통 규칙(1.1·1.3절)도 적용하므로 본문이 있고 Content-Type이 틀리면 `415 invalid_request`다. IP 정보 DB가 없거나 읽지 못한 것은 오류가 아니다. `200`의 `databases`로 구분한다.
+
 ## 2. 오류
 
 ### 2.1 오류 본문과 상태 코드
@@ -590,6 +639,7 @@ JSON Lines 다운로드는 Consumer가 만든다. 같은 필터로 커서 없이
 | `PATCH /api/v1/config` | `200` | `400`(`invalid_request`·`config_invalid`), `401`(`unauthenticated`), `403`(`csrf_invalid`·`config_edit_disabled`), `405`, `409`(`config_conflict`·`config_restart_pending`·`config_file_invalid`), `415`, `500`(`config_write_failed`·`internal`) |
 | `GET /api/v1/logs` | `200` | `400`(`invalid_request`), `401`(`unauthenticated`), `405`(`invalid_request`), `415`(공통 본문 형식 규칙), `500`(`internal`) |
 | `GET /api/v1/metrics` | `200` | `400`(`invalid_request`), `401`(`unauthenticated`), `405`(`invalid_request`), `415`(공통 본문 형식 규칙), `500`(`internal`) |
+| `GET /api/v1/sources` | `200` | `400`(`invalid_request`), `401`(`unauthenticated`), `405`(`invalid_request`), `415`(공통 본문 형식 규칙), `500`(`internal`) |
 
 ### 2.2 HTTP 응답이 없는 실패
 
@@ -635,6 +685,7 @@ JSON Lines 다운로드는 Consumer가 만든다. 같은 필터로 커서 없이
 - 대기·최근 종료 목록 필드는 1.1.0의 응답 필드 추가 범위다. 기존 필드의 이름·자료형·의미는 바꾸지 않는다.
 - 메트릭 경로·선택 매개변수·응답 본문은 1.2.0의 새 경로 추가 범위다. 응답 본문의 호환 규칙은 [메트릭 계약 3절](metrics-v1.md#3-호환성-규칙)을 따른다.
 - `history_window` 선택 매개변수와 최근 24시간 추이는 1.3.0의 요청 선택 필드 추가 범위다. 이 매개변수를 보내지 않는 Consumer는 1.2.0과 같은 최근 1시간 추이를 받는다.
+- 접속 출처 경로·선택 매개변수·응답 본문은 1.4.0의 새 경로 추가 범위다. Consumer는 모르는 `state`·`provider`·`error` 값을 받은 그대로 표시한다.
 - 호환성을 깨는 변경(Breaking change): 필드나 경로를 삭제·이름 변경한다. 자료형·단위·시각 형식·`null` 의미를 바꾼다. 기존 조건의 HTTP 상태 코드나 오류 코드를 바꾼다. 요청 필드를 필수로 바꾼다. 쿠키 이름이나 헤더 이름·의미를 바꾼다. 쿠키 보안 속성을 약하게 바꾼다. 인증·CSRF 요구를 약하게 바꾼다. 위 변경은 새 major 버전(`/api/v2/`)으로 낸다.
 - 마이그레이션: 새 major 버전은 새 접두사로 제공하고, 같은 릴리스에서 대시보드를 새 버전으로 옮긴다. 대시보드는 같은 실행파일에 들어 있으므로 서버와 대시보드의 버전이 어긋나지 않는다. 외부 클라이언트가 있으면 이전 major를 한동안 함께 제공한다. 기간은 새 major 채택 때 정한다.
 - 롤백: 이전 릴리스 실행파일로 되돌리면 이전 major와 대시보드가 함께 돌아온다. 관리 세션은 서버 메모리에만 있으므로 되돌리는 시점에 모두 무효가 되고, 관리자는 다시 로그인한다. 최근 종료 목록도 비워진다.
@@ -839,11 +890,50 @@ X-Relay-Poll: 1
 }
 ```
 
+접속 출처 `GET /api/v1/sources?window=1h`의 `200` 예제(읽기 편하게 각 `items`에서 일부만 남겼다):
+
+```json
+{
+  "as_of": "2026-11-20T05:00:00.000Z",
+  "window": "1h",
+  "window_start": "2026-11-20T04:00:00.000Z",
+  "capacity": 100000,
+  "stored": 412,
+  "dropped_before": null,
+  "databases": {
+    "country": {"state": "loaded", "error": null, "database_type": "DBIP-Country-Lite", "provider": "dbip", "build_time": "2026-11-01T00:00:00.000Z", "loaded_at": "2026-11-20T01:00:00.020Z"},
+    "asn": {"state": "unavailable", "error": "file_unreadable", "database_type": null, "provider": null, "build_time": null, "loaded_at": null}
+  },
+  "totals": {"attempts": 37, "rejected": 5, "aborted": 2, "sessions": 12},
+  "addresses": {
+    "total": 3,
+    "items": [
+      {"ip": "203.0.113.9", "local": false, "country": "KR", "asn": null, "as_name": null, "attempts": 20, "rejected": 4, "aborted": 1, "sessions": 8, "last_seen_at": "2026-11-20T04:59:58.120Z"},
+      {"ip": "192.168.0.15", "local": true, "country": null, "asn": null, "as_name": null, "attempts": 2, "rejected": 0, "aborted": 0, "sessions": 2, "last_seen_at": "2026-11-20T04:30:00.000Z"}
+    ]
+  },
+  "countries": {
+    "total": 3,
+    "items": [
+      {"country": "KR", "addresses": 1, "attempts": 20, "rejected": 4, "aborted": 1, "sessions": 8},
+      {"country": null, "addresses": 1, "attempts": 2, "rejected": 0, "aborted": 0, "sessions": 2}
+    ]
+  },
+  "asns": {
+    "total": 1,
+    "items": [
+      {"asn": null, "as_name": null, "addresses": 3, "attempts": 37, "rejected": 5, "aborted": 2, "sessions": 14}
+    ]
+  }
+}
+```
+
 계약 테스트는 아래 위치에서 관리한다. 현재 시나리오별 결과는 [테스트 컨벤션](../conventions/testing.md)에 따라 `cargo xtask scenarios`로 생성한 `scenario-report.md`와 CI 결과에서 확인한다.
 
 | 범위 | 테스트 위치 |
 | --- | --- |
 | Producer의 경로·인증·조회·종료·설정·최근 로그 | `crates/adapters/tests/management.rs`, `tests/management_session.rs`, `tests/management_query.rs`, `tests/management_terminate.rs` |
+| 접속 출처 경로·집계·IP 정보 DB 상태 | `crates/adapters/src/management_http/sources_api.rs`, `crates/app/src/sources.rs`, `tests/sources.rs` |
 | 실행파일의 전송 경로·주소·대기·최근 종료 필드 | `tests/serve.rs`의 `refuses_public_plaintext_and_answers_login_less_queries_with_401_on_loopback`·`real_mode_i_and_proxied_ws_wss_sessions_expose_transport_and_forwarded_addresses`·`real_waiting_lists_preserve_all_entry_transports_and_proxy_addresses`·`real_closed_lists_and_termination_preserve_addresses_and_logged_monotonic_duration` |
 | 접속 ticket의 종료 원인·설정 | `tests/ticket_system.rs`, `crates/adapters/tests/management.rs` |
 | Consumer의 정적 파일·화면·실서버 교환 | `tests/dashboard_assets.rs`, `tests/dashboard_browser.rs`, `tests/dashboard_live.rs` |

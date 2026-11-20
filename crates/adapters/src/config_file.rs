@@ -12,8 +12,8 @@ use std::time::Duration;
 use vnc_relay_app::reload::{ConfigCandidate, ConfigPresence};
 use vnc_relay_app::settings::{
     AdminSessionSettings, AdminSettings, Argon2Settings, ConfigDiagnostic, ConfigError,
-    DashboardSettings, EntryPointSettings, KeepaliveSettings, LimitSettings, LogOutput,
-    LogSettings, LoginLimitSettings, ManagementSettings, MetricsSettings, Mode1Settings,
+    DashboardSettings, EntryPointSettings, IpInfoSettings, KeepaliveSettings, LimitSettings,
+    LogOutput, LogSettings, LoginLimitSettings, ManagementSettings, MetricsSettings, Mode1Settings,
     Mode2Settings, RecentClosedSettings, RecentLogsSettings, RelaySettings, ReloadSettings,
     Settings, StatusSettings, TicketRoleSettings, TicketSettings, TimeoutSettings, TlsFiles,
     WsListenerSettings, WsRoleSettings,
@@ -197,6 +197,7 @@ fn read_settings(root: &mut Section<'_>, base_dir: &Path, d: &mut Diagnostics) -
     let recent_logs = read_recent_logs(root, d);
     let status = read_status(root, d);
     let metrics = read_metrics(root, d);
+    let ip_info = read_ip_info(root, base_dir, d);
     let log = read_log(root, base_dir, d);
     let reload = read_reload(root, d);
 
@@ -218,6 +219,7 @@ fn read_settings(root: &mut Section<'_>, base_dir: &Path, d: &mut Diagnostics) -
         recent_logs: recent_logs?,
         status: status?,
         metrics: metrics?,
+        ip_info: ip_info?,
         log: log?,
         reload: reload?,
     })
@@ -775,6 +777,21 @@ fn read_metrics(root: &mut Section<'_>, d: &mut Diagnostics) -> Option<MetricsSe
     let enabled = metrics.bool("enabled", d).or(false);
     metrics.finish(d);
     Some(MetricsSettings { enabled: enabled? })
+}
+
+fn read_ip_info(
+    root: &mut Section<'_>,
+    base_dir: &Path,
+    d: &mut Diagnostics,
+) -> Option<IpInfoSettings> {
+    let mut ip_info = root.section("ip_info", d);
+    let country_db = optional(read_path(&mut ip_info, "country_db", base_dir, d));
+    let asn_db = optional(read_path(&mut ip_info, "asn_db", base_dir, d));
+    ip_info.finish(d);
+    Some(IpInfoSettings {
+        country_db: country_db?,
+        asn_db: asn_db?,
+    })
 }
 
 fn read_log(root: &mut Section<'_>, base_dir: &Path, d: &mut Diagnostics) -> Option<LogSettings> {

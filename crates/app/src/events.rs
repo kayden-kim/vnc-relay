@@ -15,11 +15,12 @@ use vnc_relay_domain::peer_ip::PeerIp;
 use vnc_relay_domain::session::{CloseCause, SessionId, Side, Transport};
 use vnc_relay_domain::ticket::TicketError;
 
+use crate::ip_info::{IpDbFailure, IpDbKey};
 use crate::reload::{ChangeSource, WatchFailure};
 use crate::settings::ConfigWarning;
 
 /// Value of `log_contract` in `server_starting` (ops-info-v2 §1.5).
-pub const LOG_CONTRACT: &str = "ops-info/2.1.0";
+pub const LOG_CONTRACT: &str = "ops-info/2.2.0";
 
 /// `level` values of ops-info-v2 §1.3. v2 has no other value.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -392,9 +393,11 @@ pub enum Event {
     },
     /// The server refused a connection. At `Stage::Accept` the connection
     /// has no `conn_id` yet. `listener` is the ops-info-v2 §1.5 name of the
-    /// listener that refused it.
+    /// listener that refused it. A WSS refusal in the TLS stage carries the
+    /// `conn_id` given at accept (ops-info-v2 §1.6 `tls`).
     ConnectionRejected {
         listener: &'static str,
+        conn_id: Option<ConnId>,
         stage: Stage,
         reason: RejectReason,
         peer_ip: PeerIp,
@@ -640,6 +643,22 @@ pub enum Event {
         reason: WatchFailure,
         detail: Option<String>,
     },
+    /// An IP information database was read; lookups use it from the next
+    /// event on (ops-info-v2 §1.5 `ip_db_loaded`). No path is held.
+    IpDbLoaded {
+        key: IpDbKey,
+        database_type: String,
+        build_time: SystemTime,
+        phase: Phase,
+    },
+    /// An IP information database cannot be used (config-v4 §2.2 warning
+    /// `ip_db_unavailable`). `detail` holds no path and no file content.
+    IpDbUnavailable {
+        key: IpDbKey,
+        reason: IpDbFailure,
+        phase: Phase,
+        detail: Option<String>,
+    },
     /// The configured log path could not be reopened. First failure of a streak.
     LogReopenFailed { detail: String },
     /// Last event: resources are released and the process ends.
@@ -682,6 +701,8 @@ impl Event {
             Self::ReloadRejected { .. } => "reload_rejected",
             Self::ReloadRestartRequired { .. } => "reload_restart_required",
             Self::ReloadWatchFailed { .. } => "reload_watch_failed",
+            Self::IpDbLoaded { .. } => "ip_db_loaded",
+            Self::IpDbUnavailable { .. } => "ip_db_unavailable",
             Self::LogReopenFailed { .. } => "log_reopen_failed",
             Self::ServerStopped => "server_stopped",
         }
@@ -737,10 +758,13 @@ impl Event {
             Self::ConfigEdited { .. } => Level::Info,
             Self::ConfigEditRejected { .. } => Level::Warn,
             Self::StartupFailed { .. } => Level::Error,
-            Self::ReloadChangeDetected { .. } | Self::ReloadApplied { .. } => Level::Info,
+            Self::ReloadChangeDetected { .. }
+            | Self::ReloadApplied { .. }
+            | Self::IpDbLoaded { .. } => Level::Info,
             Self::ReloadRejected { .. }
             | Self::ReloadRestartRequired { .. }
-            | Self::LogReopenFailed { .. } => Level::Warn,
+            | Self::LogReopenFailed { .. }
+            | Self::IpDbUnavailable { .. } => Level::Warn,
             Self::ReloadWatchFailed { .. } => Level::Error,
         }
     }

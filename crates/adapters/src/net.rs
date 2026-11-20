@@ -522,6 +522,7 @@ async fn accept_connections_with_keepalive<L: crate::listener::Listener, Serve, 
                 // close also finds the line.
                 log.record(&Event::ConnectionRejected {
                     listener: relay_listener.name(),
+                    conn_id: None,
                     stage: Stage::Accept,
                     reason,
                     peer_ip,

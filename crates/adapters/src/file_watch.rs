@@ -8,8 +8,9 @@ mod feed;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
+use std::fs::File;
 use std::hash::{DefaultHasher, Hash, Hasher};
-use std::io;
+use std::io::{self, Read};
 use std::path::{Path, PathBuf};
 use std::pin::pin;
 use std::sync::Arc;
@@ -18,6 +19,7 @@ use std::time::{Duration, SystemTime};
 use feed::{ChangeFeed, ChangeQueue, NotifyFeed, WatchTarget};
 use tokio::sync::{mpsc, watch};
 use vnc_relay_app::events::Event;
+use vnc_relay_app::ip_info::IpInfoService;
 use vnc_relay_app::ports::EventSink;
 use vnc_relay_app::reload::ports::{ReloadClock, ReloadFileStore};
 use vnc_relay_app::reload::service::ReloadOutcome;
@@ -34,6 +36,9 @@ const QUIET: Duration = Duration::from_millis(300);
 /// Gap G between the two stamp recordings (file-watch.md §4 step 3 (c), §9 item 1).
 /// Implementation constant.
 const GAP: Duration = Duration::from_millis(100);
+
+/// Read size when hashing IP information database files, which can be large.
+const HASH_CHUNK: usize = 64 * 1024;
 
 /// Failure to start the file watcher. The caller reports `startup_failed` with `watch_unavailable`
 /// and exits 1 (file-watch.md §6).
@@ -135,6 +140,8 @@ fn assemble<A: Clone, C: ReloadClock>(
         notify_failed: false,
         seen_generation: 0,
         log_output: None,
+        ip_db: None,
+        optional_missing: false,
     };
     watcher.attach()?;
     Ok(watcher)
@@ -162,6 +169,20 @@ pub struct ReloadWatcher<A, C> {
     notify_failed: bool,
     /// Generation whose changes have already been handed to the service.
     seen_generation: u64,
+    /// IP information database files, re-read by their own rules (config-v4 §1.12).
+    ip_db: Option<IpDbWatch>,
+    /// True while a directory registered only for the database files could not be registered.
+    /// Each poll tick retries it without a warning (config-v4 §1.12 rule 2).
+    optional_missing: bool,
+}
+
+/// The database files the watcher hashes and the service that re-reads them.
+struct IpDbWatch {
+    service: Arc<IpInfoService>,
+    /// The configured paths, as the service names them.
+    paths: Vec<PathBuf>,
+    /// Content hash per path at the last read. `None` means missing or unreadable.
+    processed: BTreeMap<PathBuf, Option<u64>>,
 }
 
 /// Outcome of one `run` loop turn that is not an episode step.
@@ -215,6 +236,32 @@ fn content_hash(bytes: &[u8]) -> u64 {
 /// Hash of a file's current content, or `None` when it is missing or unreadable (file-watch.md §4 step 2).
 fn hash_of(files: &dyn ReloadFileStore, path: &Path) -> Option<u64> {
     files.read(path).ok().map(|bytes| content_hash(&bytes))
+}
+
+/// Hash of a file's content read in chunks, or `None` when it cannot be read. Database files can
+/// be hundreds of megabytes, so they are never held whole here (source-stats.md §7).
+fn stream_hash(path: &Path) -> Option<u64> {
+    let mut file = File::open(path).ok()?;
+    let mut hasher = DefaultHasher::new();
+    let mut chunk = vec![0; HASH_CHUNK];
+    loop {
+        match file.read(&mut chunk) {
+            Ok(0) => return Some(hasher.finish()),
+            Ok(read) => hasher.write(chunk.get(..read)?),
+            Err(error) if error.kind() == io::ErrorKind::Interrupted => {}
+            Err(_) => return None,
+        }
+    }
+}
+
+fn stream_hashes(paths: Vec<PathBuf>) -> BTreeMap<PathBuf, Option<u64>> {
+    paths
+        .into_iter()
+        .map(|path| {
+            let hash = stream_hash(&path);
+            (path, hash)
+        })
+        .collect()
 }
 
 fn stamp_of(path: &Path) -> Option<FileStamp> {
@@ -286,10 +333,26 @@ impl<A: Clone, C: ReloadClock> ReloadWatcher<A, C> {
 
     fn sync_notify(&mut self) -> Result<(), ReloadWatchError> {
         let plan = watch_plan(&self.watched)?;
-        self.queue.set_targets(plan.targets);
+        let mut targets = plan.targets;
+        let mut db_dirs = BTreeSet::new();
+        let mut hidden = Vec::new();
+        if let Some(ip_db) = &self.ip_db {
+            hidden.extend(ip_db.paths.iter().cloned());
+            // A database path that cannot be resolved is only polled; its error names the path.
+            if let Ok(db_plan) = watch_plan(&ip_db.paths) {
+                for target in db_plan.targets {
+                    hidden.push(target.path());
+                    if !targets.contains(&target) {
+                        targets.push(target);
+                    }
+                }
+                db_dirs = db_plan.dirs;
+            }
+        }
+        self.queue.set_targets(targets);
         // `assemble` first registers config/TLS alone; `attach_log` then adds
         // optional log directories without making their failure fatal (Q111).
-        self.sync_log_notify(plan.dirs)
+        self.sync_log_notify(plan.dirs, db_dirs, hidden)
     }
 
     fn attach_log(&mut self, output: Arc<JsonLinesEventSink>) {
@@ -300,14 +363,25 @@ impl<A: Clone, C: ReloadClock> ReloadWatcher<A, C> {
         self.resync_notify();
     }
 
-    fn sync_log_notify(&mut self, mut dirs: BTreeSet<PathBuf>) -> Result<(), ReloadWatchError> {
-        let Some(path) = self.log_output.as_ref().and_then(|log| log.file_path()) else {
-            return self.feed.watch_dirs(&dirs);
-        };
-        let plan = watch_plan(&[path.to_path_buf()])?;
-        self.queue.set_log_targets(plan.targets);
-        dirs.extend(plan.dirs);
-        self.feed.watch_dirs(&dirs)
+    /// Registers `dirs` and the log directory as required, and the directories needed only by
+    /// the database files as optional.
+    fn sync_log_notify(
+        &mut self,
+        mut dirs: BTreeSet<PathBuf>,
+        db_dirs: BTreeSet<PathBuf>,
+        mut hidden: Vec<PathBuf>,
+    ) -> Result<(), ReloadWatchError> {
+        if let Some(path) = self.log_output.as_ref().and_then(|log| log.file_path()) {
+            let plan = watch_plan(&[path.to_path_buf()])?;
+            self.queue.set_log_targets(plan.targets);
+            dirs.extend(plan.dirs);
+        }
+        let optional: BTreeSet<PathBuf> = db_dirs.difference(&dirs).cloned().collect();
+        hidden.extend(optional.iter().cloned());
+        self.queue.set_hidden(hidden);
+        let complete = self.feed.watch_dirs(&dirs, &optional)?;
+        self.optional_missing = !complete;
+        Ok(())
     }
 
     /// Re-registers the watches. A failure is reported again on every attempt (file-watch.md §6, §9 item 8).
@@ -364,8 +438,15 @@ impl<A: Clone, C: ReloadClock> ReloadWatcher<A, C> {
         Ok(hashes)
     }
 
+    /// Stamps of the watched files and the database files, so a database copy in progress also
+    /// holds the episode back (file-watch.md §4 step 3).
     fn stamps(&self) -> Vec<Option<FileStamp>> {
-        self.watched.iter().map(|path| stamp_of(path)).collect()
+        let db_paths = self.ip_db.iter().flat_map(|ip_db| ip_db.paths.iter());
+        self.watched
+            .iter()
+            .chain(db_paths)
+            .map(|path| stamp_of(path))
+            .collect()
     }
 
     /// Makes the candidate's hashes the processed state and re-derives the watch set (file-watch.md §4 step 5, §9 item 9).
@@ -386,20 +467,21 @@ impl<A: Clone, C: ReloadClock> ReloadWatcher<A, C> {
         self.resync_notify();
     }
 
-    /// The final read, parse, prepare and commit share the same lock as PATCH.
+    /// The final read, parse, prepare and commit share the same lock as PATCH. `None` means the
+    /// files moved and stabilization starts again; otherwise whether the candidate was handled.
     fn apply(
         &mut self,
         window: u64,
         before: &[Option<FileStamp>],
         stop: &watch::Receiver<bool>,
-    ) -> bool {
+    ) -> Option<bool> {
         let shared = Arc::clone(&self.service);
         let mut service = shared
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         let candidate = self.read_candidate();
         if self.stamps() != before || self.queue.generation() != window {
-            return false;
+            return None;
         }
         let queue = Arc::clone(&self.queue);
         let is_current = || queue.generation() == window && !*stop.borrow();
@@ -414,10 +496,53 @@ impl<A: Clone, C: ReloadClock> ReloadWatcher<A, C> {
         };
         drop(service);
         self.seen_generation = window;
-        if !matches!(outcome, ReloadOutcome::Discarded) {
+        let handled = !matches!(outcome, ReloadOutcome::Discarded);
+        if handled {
             self.refresh_watch_set(candidate.hashes);
         }
-        true
+        Some(handled)
+    }
+
+    /// Content hashes of the database files, computed off the async threads. Takes `&mut self`
+    /// so the future stays `Send`: the change feed is not `Sync`.
+    async fn db_hashes(&mut self) -> Option<BTreeMap<PathBuf, Option<u64>>> {
+        let paths = self.ip_db.as_ref()?.paths.clone();
+        tokio::task::spawn_blocking(move || stream_hashes(paths))
+            .await
+            .ok()
+    }
+
+    /// True when a database file differs from the content last read.
+    async fn ip_db_changed(&mut self) -> bool {
+        match (self.db_hashes().await, &self.ip_db) {
+            (Some(hashes), Some(ip_db)) => hashes != ip_db.processed,
+            _ => false,
+        }
+    }
+
+    /// Re-reads the database files whose content changed (config-v4 §1.12 rule 2, 3). Runs after
+    /// the config candidate, outside the reload lock, so a database never blocks a config reload
+    /// and the result never appears in `reload_applied`. Awaited, so its events come before
+    /// `server_stopped`.
+    async fn refresh_ip_db(&mut self, stop: &watch::Receiver<bool>) {
+        let Some(hashes) = self.db_hashes().await else {
+            return;
+        };
+        let Some(ip_db) = self.ip_db.as_mut() else {
+            return;
+        };
+        let changed: Vec<PathBuf> = hashes
+            .iter()
+            .filter(|(path, hash)| ip_db.processed.get(*path) != Some(*hash))
+            .map(|(path, _)| path.clone())
+            .collect();
+        ip_db.processed = hashes;
+        if changed.is_empty() || *stop.borrow() {
+            return;
+        }
+        let service = Arc::clone(&ip_db.service);
+        // A panic inside the read is not expected; the previous databases stay in use.
+        let _ = tokio::task::spawn_blocking(move || service.refresh(&changed)).await;
     }
 
     /// Waits for the quiet window Q. A notify event or a stop signal ends the wait early.
@@ -464,8 +589,11 @@ impl<A: Clone, C: ReloadClock> ReloadWatcher<A, C> {
             if self.stamps() != before || self.queue.generation() != window {
                 continue;
             }
-            if !self.apply(window, &before, stop) {
+            let Some(handled) = self.apply(window, &before, stop) else {
                 continue;
+            };
+            if handled {
+                self.refresh_ip_db(stop).await;
             }
             return Flow::Continue;
         }
@@ -488,30 +616,56 @@ impl<A: Clone, C: ReloadClock> ReloadWatcher<A, C> {
     /// state (file-watch.md §4 step 2, §6).
     async fn on_tick(&mut self, stop: &mut watch::Receiver<bool>) -> Flow {
         self.report_notify_failures();
-        if self.notify_failed {
+        if self.notify_failed || self.optional_missing {
             self.resync_notify();
         }
         self.poll_check(stop).await
     }
 
-    /// Compares the files with the processed state. A difference starts a poll episode. A read error
-    /// is recorded as `reload_watch_failed` with `poll_error` on every tick (file-watch.md §6, §9 item 8).
+    /// Compares the files with the processed state. A difference starts a poll episode. A config
+    /// or TLS read error is recorded as `reload_watch_failed` with `poll_error` on every tick
+    /// (file-watch.md §6, §9 item 8). A database file that cannot be read is not a watch failure:
+    /// its read reports `file_unreadable` (config-v4 §1.12 rule 2).
     async fn poll_check(&mut self, stop: &mut watch::Receiver<bool>) -> Flow {
-        match self.read_poll() {
-            Ok(hashes) if hashes == self.processed => Flow::Continue,
+        let config = self.read_poll();
+        let db_changed = self.ip_db_changed().await;
+        match config {
+            Ok(hashes) if hashes == self.processed && !db_changed => Flow::Continue,
             Ok(_) => self.episode(ChangeSource::Poll, stop).await,
             Err(detail) => {
                 self.log.record(&Event::ReloadWatchFailed {
                     reason: WatchFailure::PollError,
                     detail: Some(detail),
                 });
-                Flow::Continue
+                if db_changed {
+                    self.episode(ChangeSource::Poll, stop).await
+                } else {
+                    Flow::Continue
+                }
             }
         }
     }
 }
 
 impl<A: Clone, C: ReloadClock> ReloadWatcher<A, C> {
+    /// Watches the IP information database files of `service` too (config-v4 §1.12 rule 2).
+    /// Their content is hashed now as the baseline, so call this before the first read. A
+    /// directory that cannot be registered is polled only and retried on each tick, without a
+    /// warning; no error names a database path.
+    pub fn attach_ip_info(&mut self, service: Arc<IpInfoService>) {
+        let paths = service.paths();
+        if paths.is_empty() {
+            return;
+        }
+        let processed = stream_hashes(paths.clone());
+        self.ip_db = Some(IpDbWatch {
+            service,
+            paths,
+            processed,
+        });
+        self.resync_notify();
+    }
+
     /// Runs the watcher until `stop` becomes true or its sender is dropped (file-watch.md §4, §5).
     pub async fn run(mut self, stop: watch::Receiver<bool>) {
         let Some(output) = self.log_output.take() else {
@@ -652,11 +806,15 @@ mod tests {
     }
 
     impl ChangeFeed for SwitchFeed {
-        fn watch_dirs(&mut self, _dirs: &BTreeSet<PathBuf>) -> Result<(), ReloadWatchError> {
+        fn watch_dirs(
+            &mut self,
+            _required: &BTreeSet<PathBuf>,
+            _optional: &BTreeSet<PathBuf>,
+        ) -> Result<bool, ReloadWatchError> {
             if self.refuse.load(Ordering::SeqCst) {
                 Err(ReloadWatchError::new("registration refused".to_owned()))
             } else {
-                Ok(())
+                Ok(true)
             }
         }
     }
@@ -1334,8 +1492,263 @@ mod tests {
         watcher.files = checked.clone();
         files.set(&config_path, RELAY_CANDIDATE.as_bytes());
         let before = watcher.stamps();
-        assert!(watcher.apply(watcher.queue.generation(), &before, &stop));
+        assert_eq!(
+            watcher.apply(watcher.queue.generation(), &before, &stop),
+            Some(true)
+        );
         assert!(checked.reads.load(Ordering::SeqCst) > 0);
         assert_eq!(sink.names(), ["reload_applied"]);
+    }
+
+    /// Reads database files from disk. `db:<type>` is a usable database of that type; any other
+    /// content is an invalid file. Lookups find nothing.
+    struct TextLoader;
+
+    struct TextDb(vnc_relay_app::ip_info::IpDbMetadata);
+
+    impl vnc_relay_app::ports::IpDatabase for TextDb {
+        fn metadata(&self) -> &vnc_relay_app::ip_info::IpDbMetadata {
+            &self.0
+        }
+        fn supports(&self, _key: vnc_relay_app::ip_info::IpDbKey) -> bool {
+            true
+        }
+        fn country(&self, _ip: IpAddr) -> Option<vnc_relay_domain::ip_info::CountryCode> {
+            None
+        }
+        fn asn(&self, _ip: IpAddr) -> Option<vnc_relay_domain::ip_info::Asn> {
+            None
+        }
+        fn as_name(&self, _ip: IpAddr) -> Option<(vnc_relay_domain::ip_info::Asn, String)> {
+            None
+        }
+    }
+
+    impl vnc_relay_app::ports::IpDbLoader for TextLoader {
+        fn read(&self, path: &Path) -> vnc_relay_app::ip_info::IpDbRead {
+            use vnc_relay_app::ip_info::{
+                Fingerprint, IpDbError, IpDbFailure, IpDbMetadata, IpDbRead,
+            };
+            let Ok(bytes) = std::fs::read(path) else {
+                return IpDbRead {
+                    fingerprint: Fingerprint::Unreadable,
+                    result: Err(IpDbError {
+                        failure: IpDbFailure::FileUnreadable,
+                        detail: None,
+                    }),
+                };
+            };
+            let fingerprint = Fingerprint::Content(content_hash(&bytes));
+            let result = match bytes.strip_prefix(b"db:") {
+                Some(kind) => {
+                    let kind = String::from_utf8_lossy(kind);
+                    let db: Arc<dyn vnc_relay_app::ports::IpDatabase> =
+                        Arc::new(TextDb(IpDbMetadata::new(&kind, SystemTime::UNIX_EPOCH)));
+                    Ok(db)
+                }
+                None => Err(IpDbError {
+                    failure: IpDbFailure::InvalidFormat,
+                    detail: None,
+                }),
+            };
+            IpDbRead {
+                fingerprint,
+                result,
+            }
+        }
+    }
+
+    fn db_dir(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!(
+            "vnc-relay-watch-ipdb-{}-{name}",
+            std::process::id()
+        ));
+        if dir.exists() {
+            std::fs::remove_dir_all(&dir).expect("clear database directory");
+        }
+        std::fs::create_dir_all(&dir).expect("create database directory");
+        dir
+    }
+
+    /// Attaches a country database at `path` and runs the startup read.
+    fn attach_country_db(
+        watcher: &mut ReloadWatcher<(), ManualClock>,
+        sink: &Arc<RecordingSink>,
+        path: &Path,
+    ) -> Arc<IpInfoService> {
+        let service = Arc::new(IpInfoService::new(
+            Some(path.to_path_buf()),
+            None,
+            Arc::new(TextLoader),
+            Arc::new(vnc_relay_app::ip_info::IpLookup::new()),
+            Arc::new(crate::clock::SystemClock::new()),
+            sink.clone(),
+        ));
+        watcher.attach_ip_info(Arc::clone(&service));
+        service.load_startup();
+        service
+    }
+
+    /// Runs one poll tick and releases the quiet window and the gap if an episode starts.
+    async fn tick_through_episode(
+        watcher: &mut ReloadWatcher<(), ManualClock>,
+        sleeps: &mut mpsc::UnboundedReceiver<SleepRequest>,
+        stop: &mut watch::Receiver<bool>,
+    ) {
+        let driver = async {
+            let quiet = next_sleep(sleeps, QUIET).await;
+            let _ = quiet.send(());
+            let gap = next_sleep(sleeps, GAP).await;
+            let _ = gap.send(());
+        };
+        let (flow, ()) = tokio::join!(watcher.on_tick(stop), driver);
+        assert_eq!(flow, Flow::Continue);
+    }
+
+    /// `(event name, database_type or reason, phase)` of the database events.
+    fn db_events(sink: &RecordingSink) -> Vec<(&'static str, String, &'static str)> {
+        sink.snapshot()
+            .into_iter()
+            .filter_map(|event| match event {
+                Event::IpDbLoaded {
+                    database_type,
+                    phase,
+                    ..
+                } => Some(("ip_db_loaded", database_type, phase.as_str())),
+                Event::IpDbUnavailable { reason, phase, .. } => Some((
+                    "ip_db_unavailable",
+                    reason.as_str().to_owned(),
+                    phase.as_str(),
+                )),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// spec: operations.md:OPS-097 partial
+    #[tokio::test]
+    async fn database_content_changes_are_reread_and_never_join_reload_applied() {
+        let Fixture {
+            mut watcher,
+            mut sleeps,
+            sink,
+            mut stop,
+            _stop_sender,
+            ..
+        } = fixture();
+        let dir = db_dir("replace");
+        let path = dir.join("country.mmdb");
+        std::fs::write(&path, b"db:A").expect("write database");
+        let service = attach_country_db(&mut watcher, &sink, &path);
+
+        // Another valid database.
+        std::fs::write(&path, b"db:B").expect("write database");
+        tick_through_episode(&mut watcher, &mut sleeps, &mut stop).await;
+        // A broken file keeps B in use.
+        std::fs::write(&path, b"broken").expect("write database");
+        tick_through_episode(&mut watcher, &mut sleeps, &mut stop).await;
+        assert_eq!(
+            service.status()[0].state,
+            vnc_relay_app::ip_info::IpDbState::Stale
+        );
+        // The same broken content saved again starts nothing and warns nothing.
+        std::fs::write(&path, b"broken").expect("write database");
+        assert_eq!(watcher.on_tick(&mut stop).await, Flow::Continue);
+        assert!(sleeps.try_recv().is_err());
+        // A valid file again.
+        std::fs::write(&path, b"db:A").expect("write database");
+        tick_through_episode(&mut watcher, &mut sleeps, &mut stop).await;
+
+        assert_eq!(
+            db_events(&sink),
+            [
+                ("ip_db_loaded", "A".to_owned(), "startup"),
+                ("ip_db_loaded", "B".to_owned(), "reload"),
+                ("ip_db_unavailable", "invalid_format".to_owned(), "reload"),
+                ("ip_db_loaded", "A".to_owned(), "reload"),
+            ]
+        );
+        assert_eq!(
+            service.status()[0].state,
+            vnc_relay_app::ip_info::IpDbState::Loaded
+        );
+        // The config file did not change: no reload result at all.
+        assert!(
+            !sink
+                .names()
+                .iter()
+                .any(|name| name.starts_with("reload_") && *name != "reload_change_detected"),
+            "{:?}",
+            sink.names()
+        );
+    }
+
+    /// spec: operations.md:OPS-097 partial
+    #[tokio::test]
+    async fn database_is_reread_while_a_restart_required_difference_stays() {
+        let Fixture {
+            mut watcher,
+            mut sleeps,
+            files,
+            sink,
+            config_path,
+            mut stop,
+            _stop_sender,
+            ..
+        } = fixture();
+        let dir = db_dir("restart");
+        let path = dir.join("country.mmdb");
+        std::fs::write(&path, b"db:A").expect("write database");
+        attach_country_db(&mut watcher, &sink, &path);
+        files.set(
+            &config_path,
+            CONFIG
+                .replace("127.0.0.1:18081", "127.0.0.1:18082")
+                .as_bytes(),
+        );
+        tick_through_episode(&mut watcher, &mut sleeps, &mut stop).await;
+        assert_eq!(
+            sink.names(),
+            [
+                "ip_db_loaded",
+                "reload_change_detected",
+                "reload_restart_required"
+            ]
+        );
+        std::fs::write(&path, b"db:B").expect("write database");
+        tick_through_episode(&mut watcher, &mut sleeps, &mut stop).await;
+        assert_eq!(
+            db_events(&sink).last(),
+            Some(&("ip_db_loaded", "B".to_owned(), "reload"))
+        );
+    }
+
+    /// spec: operations.md:OPS-097 partial
+    #[tokio::test]
+    async fn a_database_in_a_missing_directory_is_polled_without_a_watch_failure() {
+        let Fixture {
+            mut watcher,
+            mut sleeps,
+            sink,
+            mut stop,
+            _stop_sender,
+            ..
+        } = fixture();
+        let dir = db_dir("missing").join("later");
+        let path = dir.join("country.mmdb");
+        attach_country_db(&mut watcher, &sink, &path);
+        assert_eq!(watcher.on_tick(&mut stop).await, Flow::Continue);
+        assert!(sleeps.try_recv().is_err());
+        std::fs::create_dir_all(&dir).expect("create database directory");
+        std::fs::write(&path, b"db:A").expect("write database");
+        tick_through_episode(&mut watcher, &mut sleeps, &mut stop).await;
+        assert_eq!(
+            db_events(&sink),
+            [
+                ("ip_db_unavailable", "file_unreadable".to_owned(), "startup"),
+                ("ip_db_loaded", "A".to_owned(), "reload"),
+            ]
+        );
+        assert!(!sink.names().contains(&"reload_watch_failed"));
     }
 }

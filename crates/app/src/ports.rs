@@ -2,12 +2,16 @@
 //! implements them (docs/architectures/code-map.md, layer "app").
 
 use std::fmt;
+use std::net::IpAddr;
+use std::path::Path;
 use std::time::{Duration, SystemTime};
 
 use vnc_relay_domain::account::{Account, Argon2Params, Password, PasswordHash};
+use vnc_relay_domain::ip_info::{Asn, CountryCode};
 
 use crate::accounts::{AccountsDiagnostic, AccountsWarning, AdminFailure, LoadedAccounts};
 use crate::events::Event;
+use crate::ip_info::{IpDbKey, IpDbMetadata, IpDbRead};
 
 /// Records operation log events (ops-info-v2). Recording does not fail for
 /// the caller: a sink that cannot write drops the line (ops-info-v2 §1.1),
@@ -365,6 +369,31 @@ pub trait ProcessStatsSource: Send + Sync {
 /// `vnc_relay.admin_session.count`). `AdminAuth` implements it.
 pub trait AdminSessionSource: Send + Sync {
     fn live_sessions(&self) -> usize;
+}
+
+/// Reads one IP information database file (config-v4 §1.12): size limit,
+/// whole-file read, format check, and the field choice. It never fails as
+/// a call; the outcome and a fingerprint of what was read come back.
+pub trait IpDbLoader: Send + Sync {
+    fn read(&self, path: &Path) -> IpDbRead;
+}
+
+/// A database that was read and checked. Lookups never touch the file.
+pub trait IpDatabase: Send + Sync {
+    fn metadata(&self) -> &IpDbMetadata;
+
+    /// True when the records have the field `key` needs (config-v4 §1.12
+    /// 국가 필드, ASN 필드).
+    fn supports(&self, key: IpDbKey) -> bool;
+
+    /// The two-letter country code of `ip`; other values are no country.
+    fn country(&self, ip: IpAddr) -> Option<CountryCode>;
+
+    /// The AS number of `ip`, 1 to 4294967295.
+    fn asn(&self, ip: IpAddr) -> Option<Asn>;
+
+    /// The AS number of `ip` with its name, when the record has a name.
+    fn as_name(&self, ip: IpAddr) -> Option<(Asn, String)>;
 }
 
 #[cfg(test)]

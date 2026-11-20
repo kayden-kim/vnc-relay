@@ -2,11 +2,11 @@
 
 VNC Relay가 운영자에게 내보내는 두 가지 정보의 교환 형식을 정한다. 하나는 JSON Lines 운영 로그이고, 다른 하나는 상태 리스너의 `/livez`·`/readyz` 응답이다. 로그 수집 도구와 상태 확인 도구가 이 문서의 표를 형식의 기준으로 쓴다. 외부 동작은 [운영 스펙](../specs/operations.md#35-운영-정보)이 소유하며, 이 문서는 그 동작을 바꾸지 않는다. 같은 상태 리스너의 `/metrics`는 [메트릭 계약](metrics-v1.md)이 정한다.
 
-현재 계약은 `ops-info` 2.1.0이다. 파일 이름의 v2는 major 버전을 뜻한다.
+현재 계약은 `ops-info` 2.2.0이다. 파일 이름의 v2는 major 버전을 뜻한다.
 
 | 항목 | 값 |
 | --- | --- |
-| 현재 이름과 버전 | `ops-info` 2.1.0. 접속 ticket 사건·필드·원인 값·설정 경고는 3절의 호환 추가 범위다. |
+| 현재 이름과 버전 | `ops-info` 2.2.0. IP 정보 DB 사건(`ip_db_loaded`·경고 `ip_db_unavailable`)과 그 필드·원인 값은 3절의 호환 추가 범위다. 2.1.0의 접속 ticket 사건·필드·원인 값·설정 경고도 같은 범위다. |
 | 2.0.0과 1.x의 차이 | `listener`는 소켓 단위이며 WS·WSS의 경로 판정 전 `role`은 생략한다. 필드 의미와 필수 여부가 다른 major 변경이다. 전달 주소·Mode II `server_transport`·새 거절 원인·v4 설정 키 이름을 포함한다. |
 | 1.x 버전 차이 | 1.1.0은 `startup_failed.reason`에 `runtime_unavailable`을 추가한다. 1.2.0은 `log_file_unavailable`, 로그 쓰기 실패 처리와 진단마다 한 줄인 `startup_failed`를 포함한다. 1.3.0은 `connection_aborted.stage=register`와 강제 정리 중 기존 `close_cause` 보존 규칙을 포함한다. 모두 호환 변경이다. |
 | 1.3.0의 호환 추가 범위 | 수락 소켓의 keepalive·`TCP_NODELAY` 설정 실패 기록, `admin_terminate.result=already_closed`, 관리자 E 만료의 `side`·계정 표기, `internal_error`, Windows 콘솔 창 닫기 조건, `log_reopen_failed`, 필수 리스너 장애 종료, `config_edited`·`config_edit_rejected`·`revision`·`reload_applied.trigger`, 재로드 대상 27개와 `allow_all_target.phase=reload`가 포함된다. |
@@ -20,9 +20,9 @@ VNC Relay가 운영자에게 내보내는 두 가지 정보의 교환 형식을 
 | 기준 스펙 | [운영 스펙 3.5절](../specs/operations.md#35-운영-정보), [4절](../specs/operations.md#4-보안과-신뢰-경계), [5절](../specs/operations.md#5-오류와-복구), [중계 스펙](../specs/relay.md), [WS·WSS 스펙](../specs/websocket.md), [관리 스펙](../specs/management.md) |
 | 관련 요구사항 | [PRD](../requirements/PRD.md) FR-08, FR-07, 7절 보안, AC-23, AC-25 |
 | 호환성 범위 | 이 계약의 2.x 형식을 따르는 `vnc-relay` 구현과 소비자. 지원 판정은 Producer 시험을 따른다. 저장소에 없는 외부 소비 도구의 시험은 대상이 아니다. |
-| 관련 테스트 | [운영 스펙 7절](../specs/operations.md#7-수용-테스트)의 OPS-011·OPS-012·OPS-013·OPS-032를 중심으로 5절 표에 연결한다. 계약 테스트는 `crates/adapters/tests/ops_info_contract.rs`와 `tests/serve.rs`에 있다. 접속 ticket의 WS-038~045·RLY-029~032·OPS-070~073·MGT-052는 5절의 계약 시험에 연결한다. |
+| 관련 테스트 | [운영 스펙 7절](../specs/operations.md#7-수용-테스트)의 OPS-011·OPS-012·OPS-013·OPS-032를 중심으로 5절 표에 연결한다. 계약 테스트는 `crates/adapters/tests/ops_info_contract.rs`와 `tests/serve.rs`에 있다. 접속 ticket의 WS-038~045·RLY-029~032·OPS-070~073·MGT-052와 IP 정보 DB의 OPS-096~097은 5절의 계약 시험에 연결한다. |
 
-관련 문서: [설정 계약](config-v4.md)(`[log]`·`[status]` 키, 경고 코드, 오류 코드, 재로드 결과 코드), [관리 API 계약](management-api-v1.md)(`session_id`·`close_cause`·바이트 필드 이름), [CLI·계정 파일 계약](cli-v1.md)(시작 실패 오류 코드), [WebSocket 중계 계약](websocket-relay-v2.md)(close 코드와 종료 원인 대응), [Repeater 초기 교환 계약](repeater-handshake-v1.md)(초기 교환 오류 코드), [메트릭 계약](metrics-v1.md)(상태 리스너의 `/metrics`와 이 계약의 사건에서 세는 값), [ADR-0002 출발지 IP 허용 목록](../decisions/ADR-0002-source-ip-allowlist.md), [ADR-0003 단일 인스턴스·메모리 상태](../decisions/ADR-0003-single-instance-memory-state.md), [ADR-0009 접속 ticket](../decisions/ADR-0009-optional-relay-access-ticket.md).
+관련 문서: [설정 계약](config-v4.md)(`[log]`·`[status]`·`[ip_info]` 키, 경고 코드, 오류 코드, 재로드 결과 코드, IP 정보 DB 원인 코드), [관리 API 계약](management-api-v1.md)(`session_id`·`close_cause`·바이트 필드 이름), [CLI·계정 파일 계약](cli-v1.md)(시작 실패 오류 코드), [WebSocket 중계 계약](websocket-relay-v2.md)(close 코드와 종료 원인 대응), [Repeater 초기 교환 계약](repeater-handshake-v1.md)(초기 교환 오류 코드), [메트릭 계약](metrics-v1.md)(상태 리스너의 `/metrics`와 이 계약의 사건에서 세는 값), [ADR-0002 출발지 IP 허용 목록](../decisions/ADR-0002-source-ip-allowlist.md), [ADR-0003 단일 인스턴스·메모리 상태](../decisions/ADR-0003-single-instance-memory-state.md), [ADR-0009 접속 ticket](../decisions/ADR-0009-optional-relay-access-ticket.md), [ADR-0012 IP 정보 DB](../decisions/ADR-0012-local-ip-info-databases.md).
 
 ## 1. 형식과 의미
 
@@ -98,6 +98,8 @@ VNC Relay가 운영자에게 내보내는 두 가지 정보의 교환 형식을 
 | `trigger` | 문자열 | 사건을 시작한 경로. `shutdown_started`는 `requested`·`fatal_error`, `reload_applied`는 `file_watch`·`config_edit`다. |
 | `revision` | 문자열 | 설정 파일 바이트의 SHA-256. `sha256:` 접두사 뒤 소문자 16진수 64자다. `config_edited`에서는 교체한 새 파일의 값이다([설정 계약 1.10절](config-v4.md#110-관리-api-편집의-파일-쓰기)). |
 | `config_keys` | 문자열 배열 | 값이 다른 키 또는 편집 요청·결과의 키 경로. 사건 표가 정한 범위만 쓰며, 키의 값은 넣지 않는다. |
+| `database_type` | 문자열 | IP 정보 DB 파일 메타데이터의 `database_type`. 128자를 넘으면 앞 128자만 쓴다. |
+| `build_time` | 문자열 | IP 정보 DB 파일 메타데이터의 빌드 시각. `ts`와 같은 UTC ISO 8601 형식(밀리초, `Z`)이다. |
 
 ### 1.5 사건 목록
 
@@ -109,14 +111,14 @@ VNC Relay가 운영자에게 내보내는 두 가지 정보의 교환 형식을 
 
 | 사건 | `level` | 발생 시점 | 필드 | 스펙 근거 |
 | --- | --- | --- | --- | --- |
-| `server_starting` | `info` | 설정이 유효하고 로그 출력을 연 뒤 시작 중 상태로 들어갔을 때 | `log_contract`: 문자열. 2.1.0 Producer의 값은 `ops-info/2.1.0`이다. | OPS-001, OPS-010, OPS-069 |
+| `server_starting` | `info` | 설정이 유효하고 로그 출력을 연 뒤 시작 중 상태로 들어갔을 때 | `log_contract`: 문자열. 2.2.0 Producer의 값은 `ops-info/2.2.0`이다. | OPS-001, OPS-010, OPS-069 |
 | `server_ready` | `info` | 필수 리스너와 접근 경계가 모두 준비돼 준비됨 상태로 들어갔을 때 | `listeners`: 객체 배열. 각 객체는 `name`(1.4절의 `listener` 값)과 `listen`(바인딩 주소 문자열)을 가진다. 공유 WS·WSS 리스너는 역할별로 나누지 않는다. | OPS-002, OPS-013, OPS-032, OPS-069 |
 | `startup_failed` | `error` | 시작 실패가 확정됐을 때. 자원을 회수한 뒤 프로세스가 끝난다. | `reason`(시작을 막은 오류 코드, 1.6절), `config_key?`, `listener?`, `detail?`. | OPS-001, OPS-002, OPS-028, OPS-034, OPS-038, OPS-039, OPS-040, OPS-070 |
 | `shutdown_started` | `info`. `trigger`가 `fatal_error`이면 `error` | 종료 유예 중 상태로 들어갔을 때. 이후 신규 중계 접속을 받지 않는다. Windows 콘솔 창 닫기도 `requested`로 쓴다. Windows 서비스의 중지 요청과 서비스로 실행 중의 시스템 종료 알림도 `requested`로 쓴다. | `trigger`: `requested` 또는 `fatal_error`. `grace_secs`: 정수(G). `active_sessions`: 정수. `detail?` | OPS-007, OPS-008, OPS-044, OPS-076, OPS-078 |
 | `shutdown_forced` | `warn` | G가 지나거나, 유예 중 두 번째 종료 요청을 받거나, Windows 콘솔 창이 닫히거나, 서비스로 실행 중 시스템 종료 알림을 받아 남은 활성 세션을 강제 정리하기 시작했을 때. 남은 세션이 없으면 기록하지 않는다. | `remaining_sessions`: 정수. | OPS-009, OPS-042, OPS-044, OPS-078 |
 | `server_stopped` | `info` | 자원 정리를 마치고 프로세스가 끝나기 직전 | 없음 | OPS-010 |
 
-순서 규칙: `server_starting`은 시작 단계의 첫 사건이다. 시작 경고(아래 "설정 경고"의 사건)는 `server_starting` 뒤, `server_ready` 앞에 쓴다. `shutdown_forced`는 `server_shutdown` 원인의 `session_closed`보다 앞에 쓴다. `server_stopped`는 마지막 줄이다.
+순서 규칙: `server_starting`은 시작 단계의 첫 사건이다. 시작 경고(아래 "설정 경고"의 사건)와 `phase = startup`인 IP 정보 DB 사건은 `server_starting` 뒤, `server_ready` 앞에 쓴다. `shutdown_forced`는 `server_shutdown` 원인의 `session_closed`보다 앞에 쓴다. `server_stopped`는 마지막 줄이다.
 
 #### 설정 경고
 
@@ -131,6 +133,7 @@ VNC Relay가 운영자에게 내보내는 두 가지 정보의 교환 형식을 
 | `status_listen_not_loopback` | `warn` | `listen`: 바인딩 주소 문자열. | OPS-032 |
 | `ticket_tcp_bypass` | `warn` | `role`(`viewer`·`server`), `listener`(`tcp_viewer`·`tcp_server`), `phase`. ticket을 켠 역할의 TCP 진입점이 켜져 있으면 시작·재로드 때 기록한다. TCP는 ticket을 확인하지 못한다. | OPS-071 |
 | `ticket_plaintext_ws` | `warn` | `role`(`viewer`·`server`), `listener`: 항상 `ws`, `phase`. ticket을 켠 역할이 평문 WS에서 켜져 있으면 시작·재로드 때 기록한다. 그 구간은 믿을 수 있는 망 안에 있어야 한다. | OPS-071 |
+| `ip_db_unavailable` | `warn` | `config_key`: `ip_info.country_db` 또는 `ip_info.asn_db`. `reason`: 1.6절의 IP 정보 DB 원인 값. `phase`: `startup` 또는 `reload`. `detail?`: 원인 문장(운영체제 오류·형식 오류 문장). 경로와 파일 내용은 쓰지 않는다. 키마다 한 줄이며, 두 키가 같은 파일이면 두 줄을 쓴다. 실패한 내용과 같은 내용을 다시 감지하면 쓰지 않는다. | OPS-096, OPS-097 |
 
 #### 자동 재로드
 
@@ -138,7 +141,7 @@ VNC Relay가 운영자에게 내보내는 두 가지 정보의 교환 형식을 
 
 | 사건 | `level` | 발생 시점 | 필드 | 스펙 근거 |
 | --- | --- | --- | --- | --- |
-| `reload_change_detected` | `info` | 설정·인증서·개인키 파일과 `enabled = true`인 ticket 표의 공개 키 파일 변경을 처음 감지했을 때 | `source`: `os_notify`(OS 파일 알림) 또는 `poll`(주기 확인). 처음 감지한 쪽이다. | OPS-024, OPS-041, OPS-072 |
+| `reload_change_detected` | `info` | 설정·인증서·개인키 파일, `enabled = true`인 ticket 표의 공개 키 파일, `[ip_info]`가 가리키는 IP 정보 DB 파일의 변경을 처음 감지했을 때 | `source`: `os_notify`(OS 파일 알림) 또는 `poll`(주기 확인). 처음 감지한 쪽이다. | OPS-024, OPS-041, OPS-072, OPS-097 |
 | `reload_applied` | `info` | 후보를 검증하고 재로드 대상 값을 원자적으로 교체했을 때 | `trigger`: `file_watch` 또는 `config_edit`. `applied`: 실제 값·경로·파일 내용이 바뀐 재로드 대상 키의 문자열 배열. 허용 값 43개는 아래 목록을 따른다. | OPS-024, OPS-025, OPS-035, OPS-040, OPS-047, OPS-050~060, OPS-067, OPS-072 |
 | `reload_rejected` | `warn` | 후보 검증에 실패해 후보 전체를 거절했을 때. 기존 설정과 연결은 그대로다. | `reason`(설정 오류 코드, 1.6절), `config_key?`, `detail?`. | OPS-026, OPS-027, OPS-040, OPS-070, OPS-072 |
 | `reload_restart_required` | `warn` | 재로드 대상이 아닌 값이 실행 중 값과 달라 후보 전체를 거절했을 때. 차이가 남은 동안 이후 변경에도 기록한다. | `config_keys`: 문자열 배열. 다른 값을 가진 설정 키의 경로. 값은 쓰지 않는다. | OPS-003, OPS-035 |
@@ -160,6 +163,14 @@ VNC Relay가 운영자에게 내보내는 두 가지 정보의 교환 형식을 
 `trigger`는 기존 소비자에 대한 호환 추가 필드다. 새 Producer는 항상 기록하고, 이전 Producer의 줄에는 없을 수 있다. 뒤따르는 파일 감지가 같은 설정을 읽어 차이가 없으면 `reload_applied`를 다시 쓰지 않는다. `reload_change_detected`는 기록될 수 있다.
 
 로그 파일은 열 수 있지만 로그 디렉터리의 알림 등록만 실패하면 예외다. `reload_watch_failed`(`notify_error`)를 쓰고 시작을 계속한다. Dp마다 로그 파일을 다시 열고 알림 등록도 다시 시도한다. 설정·TLS 파일 감시 준비 실패에는 이 예외를 적용하지 않는다. 접속 ticket 공개 키 파일의 감시 준비 실패도 설정 파일과 같이 다룬다.
+
+#### IP 정보 DB
+
+IP 정보 DB 파일의 읽기는 설정 재로드와 따로 한다([설정 계약 1.12절](config-v4.md#112-ip-정보-db-파일-형식)). 실패는 위 "설정 경고"의 `ip_db_unavailable`이다. IP 정보 DB 파일만 바뀌면 `reload_change_detected` 뒤에 설정 후보 검사가 차이를 찾지 못하므로 `reload_applied`를 쓰지 않는다. 재시작이 필요한 차이가 남아 있으면 `reload_restart_required`는 다른 변경과 같이 다시 기록된다.
+
+| 사건 | `level` | 발생 시점 | 필드 | 스펙 근거 |
+| --- | --- | --- | --- | --- |
+| `ip_db_loaded` | `info` | 시작 때 또는 실행 중 파일 내용이 바뀌어 IP 정보 DB를 읽고 그 뒤 사건부터 쓰기 시작했을 때 | `config_key`: `ip_info.country_db` 또는 `ip_info.asn_db`. `database_type`. `build_time`. `phase`: `startup` 또는 `reload`. 키마다 한 줄이며, 두 키가 같은 파일이면 두 줄을 쓴다. 경로는 쓰지 않는다. | OPS-096, OPS-097 |
 
 #### 로그 출력
 
@@ -238,6 +249,10 @@ WS·WSS의 수락·TLS·경로 판정 전 업그레이드 거절·중단에는 `
 
 접속 ticket 공개 키 파일의 오류는 `ticket_keys_invalid`다([설정 계약 1.11절](config-v4.md#111-접속-ticket-공개-키-파일-형식)). 시작은 종료 코드 3으로 실패하고 재로드는 기존 공개 키를 유지한다(OPS-070, OPS-072). 파일 내용은 오류 문장에도 넣지 않는다(OPS-073).
 
+#### `ip_db_unavailable`의 `reason`
+
+값은 [설정 계약 1.12절](config-v4.md#112-ip-정보-db-파일-형식)의 원인 코드 `file_unreadable`, `file_too_large`, `invalid_format`, `unsupported_data`다. 설정 오류 코드가 아니며 시작·재로드를 막지 않는다.
+
 #### `connection_rejected`의 `stage`와 `reason`
 
 | `stage` | 뜻 | `reason` | 의미 | 근거 |
@@ -245,7 +260,7 @@ WS·WSS의 수락·TLS·경로 판정 전 업그레이드 거절·중단에는 `
 | `accept` | 접속 수락 직후 | `ip_not_allowed` | TCP는 해당 역할의 허용 목록에 소켓 상대 IP가 없음. WS·WSS는 소켓 상대 IP가 신뢰 프록시도 아니고 켜진 역할의 허용 목록 합집합에도 없음. 데이터를 읽거나 TLS를 협상하기 전에 거절한다. | RLY-023, OPS-037, WS-014, WS-023, WS-030 |
 | `accept` | 접속 수락 직후 | `relay_connection_limit` | 중계 연결 상한 L에 도달함. `limit`을 쓴다. | OPS-004 |
 | `accept` | 접속 수락 직후 | `admin_connection_limit` | 관리·상태 연결 상한 Lm에 도달함. `listener`는 `management` 또는 `status`다. `limit`을 쓴다. | OPS-033 |
-| `tls` | TLS 협상 | `tls_version_unsupported` | TLS 1.2 미만 협상. `listener`는 `wss` 또는 `management`다. | OPS-036 |
+| `tls` | TLS 협상 | `tls_version_unsupported` | TLS 1.2 미만 협상. `listener`는 `wss` 또는 `management`다. `wss`이면 수락 때 준 `conn_id`를 쓴다. | OPS-036 |
 | `upgrade` | WebSocket 업그레이드 직전 | `ip_not_allowed` | 업그레이드 직전 재검사에서 클라이언트 주소가 경로로 정한 역할의 허용 목록에 없음 | WS-022, WS-030, WS-032 |
 | `upgrade` | WebSocket 업그레이드 직전 | `forwarded_for_invalid` | 신뢰 프록시의 `X-Forwarded-For`가 없거나 비어 있음, 검사한 요소가 잘못됨, 또는 모든 요소가 신뢰 프록시 주소임. 마지막 경우 프록시 주소가 역할 허용 목록에 있어도 거절한다. HTTP 400이다. `peer_ip`는 프록시 소켓 IP이며 `forwarded_ip`는 생략한다. | WS-033, WS-036 |
 | `upgrade` | WebSocket 업그레이드 직전 | `origin_not_allowed` | Origin 헤더 값이 허용 값과 정확히 일치하지 않음. `origin`에 헤더 값을 쓴다. | WS-015, WS-027 |
@@ -364,6 +379,7 @@ ticket 업그레이드 거절은 `connection_rejected`의 `warn`과 공통 필�
 | 중계 ID 원문 | 1.9절 |
 | 전달 헤더 원문 | `X-Forwarded-For` 원문·체인을 쓰지 않는다. 신뢰 프록시에서 도출한 IP만 1.10절의 `forwarded_ip`·`*_forwarded_ip`로 쓴다. |
 | 설정 값 | 오류 사건은 설정 키 이름(`config_key`)만 쓴다. 항목 내용은 쓰지 않는다. |
+| IP 정보 DB 파일의 경로·내용, 연결마다 찾은 국가·ASN | 접속 출처 통계는 관리 API로만 제공한다(OPS-R54). `ip_db_loaded`의 `database_type`·`build_time`은 쓴다. IP 정보 DB 사건은 경로 대신 `config_key`를 쓴다. 감시 실패(`reload_watch_failed`)의 `detail`에도 DB 파일 경로와 DB 파일만을 위해 등록한 디렉터리를 쓰지 않는다. |
 
 ### 1.12 상태 리스너와 엔드포인트
 
@@ -427,9 +443,11 @@ Lm 상한에서 거절한 연결은 HTTP 응답을 받지 못하고 연결이 �
 
 2.0.0은 `listener`의 의미와 허용 값을 바꾸고 WS·WSS의 수락 시점 필수 `role`을 없앤 major 변경이다. 전달 주소 필드, Mode II의 필수 `server_transport`와 새 거절 원인을 이 major에 함께 반영한다.
 
-2.1.0의 접속 ticket 사건·선택 필드·원인 값·설정 경고는 호환 변경이다. 1.3.0의 호환 추가는 버전을 유지하지만 호환성 규칙이 버전 유지를 요구하지는 않는다. 접속 ticket 범위는 minor 버전 2.1.0이며 `server_starting.log_contract`는 `ops-info/2.1.0`이다. 소비자는 2.x의 알 수 없는 필드·사건·값 처리 규칙을 따른다.
+2.1.0의 접속 ticket 사건·선택 필드·원인 값·설정 경고는 호환 변경이다. 1.3.0의 호환 추가는 버전을 유지하지만 호환성 규칙이 버전 유지를 요구하지는 않는다. 접속 ticket 범위는 minor 버전 2.1.0이며 그때 `server_starting.log_contract`는 `ops-info/2.1.0`이었다. 소비자는 2.x의 알 수 없는 필드·사건·값 처리 규칙을 따른다.
 
-상태 리스너의 `/metrics`는 [메트릭 계약](metrics-v1.md)이 소유하며 기본으로 꺼져 있다. 이 경로를 더해도 로그 형식과 `/livez`·`/readyz`의 경로·상태 코드·본문은 바뀌지 않는다. 그래서 이 계약은 2.1.0을 유지하고 `log_contract`도 바꾸지 않는다. 메트릭의 속성 값은 이 계약의 원인 값을 그대로 쓰므로, 원인 값의 이름을 바꾸는 major 변경은 메트릭 계약의 major 변경과 함께 한다.
+2.2.0의 IP 정보 DB 사건 `ip_db_loaded`·`ip_db_unavailable`, 필드 `database_type`·`build_time`, `ip_db_unavailable`의 원인 값은 호환 변경이다. `reload_change_detected`의 감지 대상에 IP 정보 DB 파일이 더해졌으며 필드는 같다. WSS의 TLS 단계 `connection_rejected`에 선택 필드 `conn_id`를 쓰기 시작한 것도 호환 변경이다. `server_starting.log_contract`는 `ops-info/2.2.0`이다.
+
+상태 리스너의 `/metrics`는 [메트릭 계약](metrics-v1.md)이 소유하며 기본으로 꺼져 있다. 이 경로를 더해도 로그 형식과 `/livez`·`/readyz`의 경로·상태 코드·본문은 바뀌지 않는다. 그래서 메트릭을 더할 때 이 계약은 2.1.0을 유지했고 `log_contract`도 바꾸지 않았다. 메트릭의 속성 값은 이 계약의 원인 값을 그대로 쓰므로, 원인 값의 이름을 바꾸는 major 변경은 메트릭 계약의 major 변경과 함께 한다.
 
 ### 로그 소비자 마이그레이션
 
@@ -450,10 +468,10 @@ Lm 상한에서 거절한 연결은 HTTP 응답을 받지 못하고 연결이 �
 | 상태 | 조건 | 지원 종료·대체 |
 | --- | --- | --- |
 | Draft | 채택 전 상태. | 해당 없음 |
-| Active | 현재 `ops-info` 2.1.0. Producer 계약 테스트의 현재 결과는 5절의 방법으로 확인한다. 저장소에 외부 소비 도구가 없어 Consumer 시험은 해당 없음이다. 지원 판정은 Producer 시험을 따른다. | 2.0.0은 2.1.0으로 대체됨(Superseded)이다. |
+| Active | 현재 `ops-info` 2.2.0. Producer 계약 테스트의 현재 결과는 5절의 방법으로 확인한다. 저장소에 외부 소비 도구가 없어 Consumer 시험은 해당 없음이다. 지원 판정은 Producer 시험을 따른다. | 2.1.0 이하 2.x는 2.2.0으로 대체됨(Superseded)이다. |
 | Deprecated | 새 major가 있고 이전 major를 쓰는 소비자가 남아 있다. | 신규 적용을 피하고 대체 문서를 확인한다. |
 | Retired | 지원 종료. | 새 구현의 근거로 쓰지 않는다. |
-| Superseded | `ops-info` 2.0.0 이하. 2.0.0은 호환 추가인 2.1.0으로 대체한다. | 새 구현의 근거로 쓰지 않는다. 기존 1.x 로그를 읽을 때는 3절의 마이그레이션 표를 따른다. |
+| Superseded | `ops-info` 2.1.0 이하. 2.x는 호환 추가인 2.2.0으로 대체한다. | 새 구현의 근거로 쓰지 않는다. 기존 1.x 로그를 읽을 때는 3절의 마이그레이션 표를 따른다. |
 
 ## 5. 예제와 계약 테스트
 
@@ -462,7 +480,7 @@ Lm 상한에서 거절한 연결은 HTTP 응답을 받지 못하고 연결이 �
 로그 줄(실제로는 줄바꿈 없이 한 줄씩 쓴다).
 
 ```jsonl
-{"ts":"2026-10-16T01:00:00.000Z","level":"info","event":"server_starting","log_contract":"ops-info/2.1.0"}
+{"ts":"2026-10-16T01:00:00.000Z","level":"info","event":"server_starting","log_contract":"ops-info/2.2.0"}
 {"ts":"2026-10-16T01:00:00.010Z","level":"warn","event":"plaintext_ws_enabled","listener":"ws","listen":"127.0.0.1:8080"}
 {"ts":"2026-10-16T01:00:00.011Z","level":"warn","event":"allow_all_source","listener":"tcp_viewer","item":"0.0.0.0/0","phase":"startup"}
 {"ts":"2026-10-16T01:00:00.120Z","level":"info","event":"server_ready","listeners":[{"name":"tcp_viewer","listen":"0.0.0.0:5900"},{"name":"tcp_server","listen":"0.0.0.0:5500"},{"name":"ws","listen":"127.0.0.1:8080"},{"name":"wss","listen":"0.0.0.0:8443"},{"name":"management","listen":"127.0.0.1:9443"},{"name":"status","listen":"127.0.0.1:9000"}]}
@@ -495,6 +513,15 @@ Lm 상한에서 거절한 연결은 HTTP 응답을 받지 못하고 연결이 �
 {"ts":"2026-11-11T01:05:00.000Z","level":"info","event":"session_closed","session_id":"ses_4m8q2v6x0b3n7c1z5h9w2y6k0d","mode":"mode2","viewer_transport":"wss","started_at":"2026-11-11T01:02:01.000Z","duration_ms":179000,"bytes_viewer_to_target":10240,"bytes_target_to_viewer":4194304,"close_cause":"session_expired","relay_id_ref":"9b0a1c2d3e4f5678"}
 ```
 
+IP 정보 DB 로그 예다. 실행 결과가 아니다.
+
+```jsonl
+{"ts":"2026-11-20T01:00:00.020Z","level":"info","event":"ip_db_loaded","config_key":"ip_info.country_db","database_type":"DBIP-Country-Lite","build_time":"2026-11-01T00:00:00.000Z","phase":"startup"}
+{"ts":"2026-11-20T01:00:00.021Z","level":"warn","event":"ip_db_unavailable","config_key":"ip_info.asn_db","reason":"file_unreadable","phase":"startup","detail":"파일을 찾을 수 없다."}
+{"ts":"2026-11-20T02:00:00.000Z","level":"info","event":"reload_change_detected","source":"os_notify"}
+{"ts":"2026-11-20T02:00:00.400Z","level":"info","event":"ip_db_loaded","config_key":"ip_info.asn_db","database_type":"DBIP-ASN-Lite (compat=GeoLite2-ASN)","build_time":"2026-11-01T00:00:00.000Z","phase":"reload"}
+```
+
 상태 응답.
 
 ```http
@@ -512,6 +539,7 @@ Producer 계약 테스트는 다음 위치에서 관리한다. 현재 시나리�
 | ticket 사건·거절·ID 대조·만료·비노출 | `tests/ticket_system.rs`, `crates/adapters/tests/websocket_ticket.rs` |
 | 역할·신뢰 프록시·전달 주소 | `crates/adapters/tests/websocket_scenarios.rs`, `crates/adapters/tests/websocket.rs` |
 | 재로드·설정 편집·로그 다시 열기 | `tests/reload.rs`, `tests/log_reopen.rs`, `tests/management_query.rs`, `crates/adapters/tests/management.rs`, `crates/adapters/src/file_watch/reopen_tests.rs` |
+| IP 정보 DB 사건·순서·비노출 | `crates/adapters/tests/ops_info_contract.rs`, `crates/adapters/src/ip_db.rs`, `crates/app/src/ip_info.rs`, `tests/sources.rs` |
 | 로그인·관리자 종료·정상 종료·리스너 장애 | `tests/management_session.rs`, `tests/management_terminate.rs`, `tests/unix_shutdown.rs`, `tests/windows_console.rs`, `src/serve/listener_tests.rs` |
 
 외부 수집 도구·상태 확인 도구는 저장소에 없으므로 Consumer 시험은 해당 없음이다. 3절은 외부 소비자를 위한 지침이다. Windows 트레이 앱의 `/readyz` 소비 동작은 [트레이 앱 스펙](../specs/windows-tray.md)의 수용 테스트를 따른다.

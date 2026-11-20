@@ -15,5 +15,6 @@ ADR(Architecture Decision Record, 기술 결정 기록)은 중요하고 되돌�
 | [ADR-0009](ADR-0009-optional-relay-access-ticket.md) | Accepted | 진입점별 출발지 IP 허용 목록과 함께 WS·WSS 역할별 선택형 접속 ticket 확인을 제공한다. TCP에는 적용하지 않는다. |
 | [ADR-0010](ADR-0010-windows-service-and-tray.md) | Accepted | Windows 11에서 같은 실행파일의 `service` 하위 명령으로 서비스를 설치·실행한다. 별도 GUI 실행파일인 트레이 앱으로 상태 확인과 시작·중지를 한다. Ubuntu는 수동 실행한다. |
 | [ADR-0011](ADR-0011-pull-metrics-on-status-listener.md) | Accepted | OpenTelemetry 호환 메트릭을 상태 리스너의 `/metrics`에서 Prometheus 텍스트로 내보낸다(pull, 기본 꺼짐). 별도 메트릭 라이브러리 없이 직접 쓰고, 관리 API·대시보드는 같은 값과 최근 1시간 추이를 보여 준다. |
+| [ADR-0012](ADR-0012-local-ip-info-databases.md) | Accepted | 접속 출처의 국가·ASN을 운영자가 둔 로컬 MMDB 파일(DB-IP Lite·IPinfo Lite·MaxMind)에서 찾는다. 서버는 외부에 요청하지 않고, 파일 전체를 읽어 검사하며, 실패하면 경고하고 계속한다. |
 
 작성 규칙은 [AGENTS.md](AGENTS.md)를 따른다.

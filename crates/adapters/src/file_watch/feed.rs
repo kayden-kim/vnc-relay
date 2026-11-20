@@ -28,6 +28,9 @@ pub(super) struct ChangeQueue {
     targets: Mutex<Vec<WatchTarget>>,
     wake: mpsc::Sender<()>,
     log_targets: Mutex<Vec<WatchTarget>>,
+    /// IP information database files, their resolved targets, and the directories registered only
+    /// for them. Notify errors never name them (config-v4 §1.12 rule 6).
+    hidden: Mutex<Vec<PathBuf>>,
     pub(super) log_changed: Notify,
 }
 
@@ -42,6 +45,7 @@ impl ChangeQueue {
             targets: Mutex::new(Vec::new()),
             wake,
             log_targets: Mutex::new(Vec::new()),
+            hidden: Mutex::new(Vec::new()),
             log_changed: Notify::new(),
         };
         (Arc::new(queue), receiver)
@@ -69,6 +73,10 @@ impl ChangeQueue {
 
     pub(super) fn set_log_targets(&self, targets: Vec<WatchTarget>) {
         *lock(&self.log_targets) = targets;
+    }
+
+    pub(super) fn set_hidden(&self, paths: Vec<PathBuf>) {
+        *lock(&self.hidden) = paths;
     }
 
     /// Handles one OS event (file-watch.md §4 step 1).
@@ -120,6 +128,25 @@ impl ChangeQueue {
         self.nudge();
     }
 
+    /// Handles a backend error. Paths of IP information databases are removed first. An error
+    /// that named only such paths is dropped: database files are re-read by their own rules
+    /// (config-v4 §1.12 rule 2, 6).
+    pub(super) fn offer_error(&self, mut error: notify::Error) {
+        let named = !error.paths.is_empty();
+        {
+            let hidden = lock(&self.hidden);
+            error.paths.retain(|path| {
+                !hidden.iter().any(|item| {
+                    same_path(path, item) || path.parent().is_some_and(|dir| same_path(dir, item))
+                })
+            });
+        }
+        if named && error.paths.is_empty() {
+            return;
+        }
+        self.offer_failure(error.to_string());
+    }
+
     /// Wakes the loop. A full channel loses the wake, so it is recorded as an overflow.
     fn nudge(&self) {
         if self.wake.try_send(()).is_err() {
@@ -151,6 +178,11 @@ impl WatchTarget {
         &self.dir
     }
 
+    /// The watched file's full path.
+    pub(super) fn path(&self) -> PathBuf {
+        self.dir.join(&self.name)
+    }
+
     fn matches(&self, path: &Path) -> bool {
         path.parent() == Some(self.dir.as_path())
             && path
@@ -169,13 +201,24 @@ fn same_name(left: &OsStr, right: &OsStr) -> bool {
     }
 }
 
+/// Compares whole paths with the same case rule as `same_name`.
+fn same_path(left: &Path, right: &Path) -> bool {
+    same_name(left.as_os_str(), right.as_os_str())
+}
+
 /// Registers directories with the OS notification API (file-watch.md §4 step 1, §6).
 ///
 /// The trait lets tests replace the OS backend with a silent feed. The watcher otherwise depends
 /// only on [`ChangeQueue`].
 pub(super) trait ChangeFeed: Send {
-    /// Makes `dirs` the registered set. Directories already registered stay registered.
-    fn watch_dirs(&mut self, dirs: &BTreeSet<PathBuf>) -> Result<(), ReloadWatchError>;
+    /// Makes `required` and `optional` the registered set. Directories already registered stay
+    /// registered. A `required` failure is an error. An `optional` directory that cannot be
+    /// registered is skipped; the result is `false` then, and the caller retries on a later tick.
+    fn watch_dirs(
+        &mut self,
+        required: &BTreeSet<PathBuf>,
+        optional: &BTreeSet<PathBuf>,
+    ) -> Result<bool, ReloadWatchError>;
 }
 
 /// Feed backed by the platform notification API through `notify::recommended_watcher`.
@@ -191,7 +234,7 @@ impl NotifyFeed {
             notify::recommended_watcher(
                 move |result: notify::Result<notify::Event>| match result {
                     Ok(event) => queue.offer_event(&event),
-                    Err(error) => queue.offer_failure(error.to_string()),
+                    Err(error) => queue.offer_error(error),
                 },
             )
             .map_err(|error| ReloadWatchError::new(error.to_string()))?;
@@ -203,15 +246,24 @@ impl NotifyFeed {
 }
 
 impl ChangeFeed for NotifyFeed {
-    fn watch_dirs(&mut self, dirs: &BTreeSet<PathBuf>) -> Result<(), ReloadWatchError> {
-        let stale: Vec<PathBuf> = self.registered.difference(dirs).cloned().collect();
+    fn watch_dirs(
+        &mut self,
+        required: &BTreeSet<PathBuf>,
+        optional: &BTreeSet<PathBuf>,
+    ) -> Result<bool, ReloadWatchError> {
+        let stale: Vec<PathBuf> = self
+            .registered
+            .iter()
+            .filter(|dir| !required.contains(*dir) && !optional.contains(*dir))
+            .cloned()
+            .collect();
         for dir in stale {
             // An unwatch error is ignored. The directory has left the watch set, and a leftover
             // OS registration only produces events that no target matches.
             let _ = self.watcher.unwatch(&dir);
             self.registered.remove(&dir);
         }
-        for dir in dirs {
+        for dir in required {
             if self.registered.contains(dir) {
                 continue;
             }
@@ -220,7 +272,19 @@ impl ChangeFeed for NotifyFeed {
                 .map_err(|error| ReloadWatchError::new(format!("{}: {error}", dir.display())))?;
             self.registered.insert(dir.clone());
         }
-        Ok(())
+        let mut complete = true;
+        for dir in optional {
+            if self.registered.contains(dir) {
+                continue;
+            }
+            // The error names the directory, so it is not kept (config-v4 §1.12 rule 6).
+            if self.watcher.watch(dir, RecursiveMode::NonRecursive).is_ok() {
+                self.registered.insert(dir.clone());
+            } else {
+                complete = false;
+            }
+        }
+        Ok(complete)
     }
 }
 

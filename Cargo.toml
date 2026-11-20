@@ -15,6 +15,8 @@ argon2 = { version = "0.6.0", default-features = false, features = ["alloc", "pa
 aws-lc-rs = "1.18.2"
 axum = { version = "0.8.9", default-features = false, features = ["http1", "tokio"] }
 clap = { version = "4.6.7", default-features = false, features = ["std", "error-context"] }
+# Read-only MMDB reader for IP information databases (ADR-0012). No mmap feature.
+maxminddb = { version = "0.33.0", default-features = false }
 notify = "8.2.0"
 rpassword = "7.5.4"
 rustls = { version = "0.23.46", default-features = false, features = ["std", "tls12", "aws_lc_rs"] }

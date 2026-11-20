@@ -193,7 +193,7 @@ flowchart LR
 
 ## 8. 현재 코드와의 차이
 
-2~5절은 현재 구조다. ticket은 `crates/domain/src/ticket.rs`, `crates/app/src/reload/ticket_keys.rs`, `crates/adapters/src/ticket.rs`·`ticket/jwks.rs`·`ticket/jws.rs`가 맡는다. 재로드 대상은 43개, 편집 대상은 37개, 운영 로그는 `ops-info/2.1.0`이다.
+2~5절은 현재 구조다. ticket은 `crates/domain/src/ticket.rs`, `crates/app/src/reload/ticket_keys.rs`, `crates/adapters/src/ticket.rs`·`ticket/jwks.rs`·`ticket/jws.rs`가 맡는다. 재로드 대상은 43개, 편집 대상은 37개다. ticket 사건은 운영 로그 `ops-info/2.1.0`에서 더했다.
 
 ### 구조 대조 기록
 

@@ -12,6 +12,7 @@ use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 use tokio_rustls::server::{Accept, TlsStream};
 use vnc_relay_app::events::{Event, RejectReason, Stage};
 use vnc_relay_app::ports::EventSink;
+use vnc_relay_domain::conn_id::ConnId;
 use vnc_relay_domain::peer_ip::PeerIp;
 
 use crate::tls::TlsSource;
@@ -55,6 +56,7 @@ where
             stream,
             &self.source,
             PeerIp::from(addr.socket),
+            None,
             Arc::clone(&self.log),
             self.name,
         );
@@ -79,6 +81,8 @@ pub(crate) struct Handshake<IO> {
     accept: Accept<Recorded<IO>>,
     capture: Capture,
     peer: PeerIp,
+    /// The relay connection's ID; management connections have none.
+    conn_id: Option<ConnId>,
     log: Arc<dyn EventSink>,
     name: &'static str,
 }
@@ -124,6 +128,7 @@ impl<IO: AsyncRead + AsyncWrite + Unpin> TlsIo<IO> {
         io: IO,
         source: &TlsSource,
         peer: PeerIp,
+        conn_id: Option<ConnId>,
         log: Arc<dyn EventSink>,
         name: &'static str,
     ) -> Self {
@@ -140,6 +145,7 @@ impl<IO: AsyncRead + AsyncWrite + Unpin> TlsIo<IO> {
             }),
             capture,
             peer,
+            conn_id,
             log,
             name,
         })
@@ -180,6 +186,7 @@ impl<IO: AsyncRead + AsyncWrite + Unpin> TlsIo<IO> {
                         let failure = if offers_no_tls12(&hello) {
                             handshake.log.record(&Event::ConnectionRejected {
                                 listener: handshake.name,
+                                conn_id: handshake.conn_id,
                                 stage: Stage::Tls,
                                 reason: RejectReason::TlsVersionUnsupported,
                                 peer_ip: handshake.peer,

@@ -1147,8 +1147,22 @@ async fn start_management(tls: Option<TlsAcceptor>) -> (SocketAddr, Arc<Recorder
             admin: Arc::clone(&auth) as Arc<dyn AdminSessionSource>,
             process: Arc::new(OsProcessStats::new()),
         },
-        clock,
+        Arc::clone(&clock),
         "test",
+    ));
+    // No relay event reaches this listener's sources; the route only needs a reader.
+    let lookup = Arc::new(vnc_relay_app::ip_info::IpLookup::new());
+    let ip_info = Arc::new(vnc_relay_app::ip_info::IpInfoService::new(
+        None,
+        None,
+        Arc::new(vnc_relay_adapters::ip_db::MmdbLoader),
+        Arc::clone(&lookup),
+        Arc::clone(&clock),
+        Arc::clone(&log),
+    ));
+    let sources = Arc::new(vnc_relay_app::sources::SourcesService::new(
+        Arc::new(vnc_relay_app::sources::SourceStats::new(lookup, clock)),
+        ip_info,
     ));
     let listener = ManagementListener::new(
         listener,
@@ -1163,6 +1177,7 @@ async fn start_management(tls: Option<TlsAcceptor>) -> (SocketAddr, Arc<Recorder
             config,
             logs: Arc::new(vnc_relay_adapters::ops_log::RecentLogs::new(1000)),
             metrics,
+            sources,
         },
     );
     tokio::spawn(listener.run(log));
@@ -1228,8 +1243,15 @@ fn legacy_client_hello(legacy_version: [u8; 2]) -> Vec<u8> {
 }
 
 /// Sends a ClientHello that offers only `legacy_version`. The server must send
-/// no HTTP reply and must record the version refusal at the TLS stage.
-async fn assert_legacy_hello_refused(addr: SocketAddr, legacy_version: [u8; 2], events: &Recorder) {
+/// no HTTP reply and must record the version refusal at the TLS stage. A WSS
+/// refusal carries the conn_id given at accept; a management one has none
+/// (ops-info-v2 §1.5).
+async fn assert_legacy_hello_refused(
+    addr: SocketAddr,
+    legacy_version: [u8; 2],
+    events: &Recorder,
+    relay: bool,
+) {
     let mut stream = TcpStream::connect(addr)
         .await
         .unwrap_or_else(|error| panic!("connect: {error}"));
@@ -1251,8 +1273,9 @@ async fn assert_legacy_hello_refused(addr: SocketAddr, legacy_version: [u8; 2], 
             Event::ConnectionRejected {
                 reason: RejectReason::TlsVersionUnsupported,
                 stage: Stage::Tls,
+                conn_id,
                 ..
-            }
+            } if conn_id.is_some() == relay
         )
     })
     .await;
@@ -1356,9 +1379,9 @@ async fn tls10_and_tls11_are_refused_and_tls12_and_tls13_succeed_on_wss_and_mana
             UPGRADE,
         )
         .await;
-        assert_legacy_hello_refused(wss.addr, legacy_version, &wss.events).await;
+        assert_legacy_hello_refused(wss.addr, legacy_version, &wss.events, true).await;
         let (management, events) = start_management(Some(tls_acceptor())).await;
-        assert_legacy_hello_refused(management, legacy_version, &events).await;
+        assert_legacy_hello_refused(management, legacy_version, &events, false).await;
     }
 
     // TLS 1.2 and TLS 1.3 clients complete the handshake on both listeners.

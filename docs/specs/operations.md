@@ -8,11 +8,12 @@
 | 접속 ticket 범위 | OPS-R37~OPS-R40·OPS-070~OPS-073을 따른다. 결정 근거는 [ADR-0009](../decisions/ADR-0009-optional-relay-access-ticket.md), 형식은 [WebSocket 계약 1.9절](../contracts/websocket-relay-v2.md#19-접속-ticket)을 따른다. |
 | Windows 서비스 범위 | [3.7절](#37-windows-서비스-실행), OPS-R41~OPS-R46, OPS-074~OPS-081을 따른다. 수동 확인 범위와 남은 시험은 [Windows 서비스 시험](../how-to/set-up-and-verify.md#windows-서비스-시험)에 있다. 결정 근거는 [ADR-0010](../decisions/ADR-0010-windows-service-and-tray.md), 명령 형식은 [CLI 계약 1.9절](../contracts/cli-v1.md#19-windows-서비스-실행), 트레이 앱 동작은 [Windows 트레이 앱 스펙](windows-tray.md)을 따른다. |
 | 메트릭 범위 | [3.8절](#38-메트릭), OPS-R47~OPS-R51, OPS-082~OPS-094를 따른다. 이름·종류·속성·표현 형식은 [메트릭 계약](../contracts/metrics-v1.md), 결정 근거는 [ADR-0011](../decisions/ADR-0011-pull-metrics-on-status-listener.md)을 따른다. 관리 API와 화면은 [관리 기능 2.5절](management.md#25-메트릭)과 [화면 SCR-007](dashboard.md#scr-007-메트릭)을 따른다. |
-| 관련 요구사항 | [PRD](../requirements/PRD.md) FR-06·FR-07·FR-08·FR-10, 7절 보안, 8절 비기능, 9절 독립 구현, AC-07·AC-08·AC-11~14, AC-32·AC-34·AC-35·AC-51·AC-57·AC-58·AC-60 |
+| 접속 출처 범위 | [3.9절](#39-접속-출처-통계), OPS-R52~OPS-R54, OPS-095~OPS-099를 따른다. IP 정보 DB 파일 형식은 [설정 계약 1.12절](../contracts/config-v4.md#112-ip-정보-db-파일-형식), 결정 근거는 [ADR-0012](../decisions/ADR-0012-local-ip-info-databases.md)를 따른다. 관리 API와 화면은 [관리 기능 2.6절](management.md#26-접속-출처)과 [화면 SCR-008](dashboard.md#scr-008-접속-출처)을 따른다. |
+| 관련 요구사항 | [PRD](../requirements/PRD.md) FR-06·FR-07·FR-08·FR-10, 7절 보안, 8절 비기능, 9절 독립 구현, AC-07·AC-08·AC-11~14, AC-32·AC-34·AC-35·AC-51·AC-57·AC-58·AC-60·AC-63·AC-64 |
 | 용어 | [VNC Relay 용어집](../../GLOSSARY.md) |
 | 관련 스펙 | [중계와 매칭](relay.md), [WS·WSS](websocket.md), [관리 기능](management.md), [화면](dashboard.md), [Windows 트레이 앱](windows-tray.md) |
 | 관련 계약 | [설정 파일 v4](../contracts/config-v4.md), [CLI와 관리자 계정 파일 v1](../contracts/cli-v1.md), [운영 로그와 상태 엔드포인트 v2](../contracts/ops-info-v2.md), [메트릭 v1](../contracts/metrics-v1.md) |
-| 관련 아키텍처 문서·ADR | [코드 지도](../architectures/code-map.md), [설정 로딩 모듈 설계](../architectures/config-loading.md), [`serve` 시작 모듈 설계](../architectures/serve-startup.md), [관리자 계정 준비 CLI 모듈 설계](../architectures/admin-accounts.md), [운영 로그 모듈 설계](../architectures/ops-log.md), [파일 변경 감지 모듈 설계](../architectures/file-watch.md), [TCP 진입점 모듈 설계](../architectures/tcp-entry-point.md), [연결 상한과 시간 제한 모듈 설계](../architectures/connection-limits.md), [상태 리스너와 준비 상태 모듈 설계](../architectures/status-listener.md), [메트릭 모듈 설계](../architectures/metrics.md), [TLS 모듈 설계](../architectures/tls.md), [중계 세션 수명 모듈 설계](../architectures/relay-session.md), [Windows 서비스 모듈 설계](../architectures/windows-service.md), [ADR-0001 내장 TLS](../decisions/ADR-0001-built-in-tls.md), [ADR-0002 출발지 IP 허용 목록](../decisions/ADR-0002-source-ip-allowlist.md), [ADR-0003 단일 인스턴스·메모리 상태](../decisions/ADR-0003-single-instance-memory-state.md), [ADR-0004 tokio·rustls](../decisions/ADR-0004-tokio-rustls.md), [ADR-0010 Windows 서비스와 트레이 앱](../decisions/ADR-0010-windows-service-and-tray.md), [ADR-0011 상태 리스너의 pull 메트릭](../decisions/ADR-0011-pull-metrics-on-status-listener.md). 코드 지도는 현재(Current) 구조다. |
+| 관련 아키텍처 문서·ADR | [코드 지도](../architectures/code-map.md), [설정 로딩 모듈 설계](../architectures/config-loading.md), [`serve` 시작 모듈 설계](../architectures/serve-startup.md), [관리자 계정 준비 CLI 모듈 설계](../architectures/admin-accounts.md), [운영 로그 모듈 설계](../architectures/ops-log.md), [파일 변경 감지 모듈 설계](../architectures/file-watch.md), [TCP 진입점 모듈 설계](../architectures/tcp-entry-point.md), [연결 상한과 시간 제한 모듈 설계](../architectures/connection-limits.md), [상태 리스너와 준비 상태 모듈 설계](../architectures/status-listener.md), [메트릭 모듈 설계](../architectures/metrics.md), [접속 출처 모듈 설계](../architectures/source-stats.md), [TLS 모듈 설계](../architectures/tls.md), [중계 세션 수명 모듈 설계](../architectures/relay-session.md), [Windows 서비스 모듈 설계](../architectures/windows-service.md), [ADR-0001 내장 TLS](../decisions/ADR-0001-built-in-tls.md), [ADR-0002 출발지 IP 허용 목록](../decisions/ADR-0002-source-ip-allowlist.md), [ADR-0003 단일 인스턴스·메모리 상태](../decisions/ADR-0003-single-instance-memory-state.md), [ADR-0004 tokio·rustls](../decisions/ADR-0004-tokio-rustls.md), [ADR-0010 Windows 서비스와 트레이 앱](../decisions/ADR-0010-windows-service-and-tray.md), [ADR-0011 상태 리스너의 pull 메트릭](../decisions/ADR-0011-pull-metrics-on-status-listener.md), [ADR-0012 운영자가 둔 IP 정보 DB](../decisions/ADR-0012-local-ip-info-databases.md). 코드 지도는 현재(Current) 구조다. |
 
 ## 1. 범위와 적용 상태
 
@@ -24,6 +25,7 @@
 - 검증 대상 OS는 Windows 11 x64와 Ubuntu 24.04 LTS x64다. Windows Server는 검증 대상이 아니다. 실제 실행 증거가 없으면 지원 완료로 표시하지 않는다.
 - VNC Relay는 로그를 표준 출력 또는 지정한 파일로 출력한다. 별도로 최근 운영 사건 N개를 메모리에 보관해 대시보드 로그 화면에서 조회한다. 로그 파일 교체·보관 기간·접근 권한은 운영자 책임이며, 수동 운영 안내에 권장 사항을 적는다.
 - 메트릭은 OpenTelemetry 의미 규칙의 이름을 쓰며, 상태 리스너의 `/metrics`에서 Prometheus 텍스트로 낸다. 기본은 꺼짐이다. 관리 API와 대시보드는 설정과 관계없이 같은 값과 최근 1시간·최근 24시간 추이를 로그인한 관리자에게 보여 준다(3.8절). OTLP 내보내기와 장기 보관은 제공하지 않는다.
+- 접속 출처 통계는 중계 리스너의 연결 사건을 클라이언트 주소마다 세어 최근 사건 100,000개를 메모리에 보관한다. 국가·ASN은 운영자가 내려받아 둔 IP 정보 DB 파일에서 찾는다(3.9절). 서버는 IP 정보를 찾으려고 외부에 요청하지 않으며, DB 파일을 배포 묶음에 넣거나 내려받지 않는다.
 - 하위 명령 이름·파일 확장자·환경 변수 이름·설정 키 이름과 기본 포트는 [설정 계약](../contracts/config-v4.md)과 [CLI 계약](../contracts/cli-v1.md)이 정한다. Rust 라이브러리는 [PRD 1절 "구현 기술" 행](../requirements/PRD.md#확정-기준)이 단일 기준이다.
 - 이 문서의 범위는 시작 검증, 제한, 종료, 운영 정보, 접근 경계, 성능·호환성·출처의 수용 판정이다. 설치·빌드 절차는 [개발 환경·검증 how-to](../how-to/set-up-and-verify.md)에서 관리한다.
 - 신규 중계 프로토콜·세션 영속화·자동 재접속·전체 설정 재로드·Ubuntu의 OS 서비스 등록·컨테이너 배포는 제공하지 않는다. Windows 11의 서비스 실행은 3.7절을 따른다. 설정 보기와 37개 대상 키의 관리 API·대시보드 편집을 제공한다. 수동 재로드 API·CLI는 제공하지 않는다.
@@ -64,7 +66,7 @@
 | Kw | WebSocket ping 주기와 pong 응답 제한 시간 | WS·WSS 연결에 적용. 제한 안에 pong이 없으면 끊긴 연결로 처리, pong에 응답하는 유휴 연결은 유지. [WS·WSS](websocket.md)의 WS-026 |
 | P | 대시보드 폴링 주기 | 설정 가능, 기본값 2초. 유효 범위는 설정 계약에서 정함. [화면](dashboard.md)의 DASH-022 |
 
-L·Lm·Lw·B·M·H·U·W·C·E·G·K·Kw는 재로드 대상이다. 새 값의 적용 시점은 3.3절과 [설정 계약 1.8절](../contracts/config-v4.md#18-재로드-구분)을 따른다. F·Si·Sa·P·R, `recent_logs.max_entries`, `metrics.enabled`와 `dashboard.query_timeout_secs`는 재시작이 필요하다. 세션 정보 응답의 `dashboard.terminate_timeout_secs`는 응답 때의 E + 5초다.
+L·Lm·Lw·B·M·H·U·W·C·E·G·K·Kw는 재로드 대상이다. 새 값의 적용 시점은 3.3절과 [설정 계약 1.8절](../contracts/config-v4.md#18-재로드-구분)을 따른다. F·Si·Sa·P·R, `recent_logs.max_entries`, `metrics.enabled`, `ip_info.country_db`·`ip_info.asn_db`와 `dashboard.query_timeout_secs`는 재시작이 필요하다. 세션 정보 응답의 `dashboard.terminate_timeout_secs`는 응답 때의 E + 5초다.
 
 Mode I의 Viewer 연결과 생성한 대상 연결은 L에서 각각 한 개다. Mode II의 Viewer·Server 연결도 각각 한 개다. 관리·상태 연결은 L이 아니라 Lm에서 센다. 수신·송신 소켓을 구분해 상한을 우회해서는 안 되며, 대상 연결 생성 전에도 예산을 확보한다. 리스닝 소켓 자체는 연결 수에 세지 않지만 기본 자원 측정에 포함한다.
 
@@ -84,8 +86,10 @@ Mode I의 Viewer 연결과 생성한 대상 연결은 L에서 각각 한 개다.
 8. 채택한 필수 리스너를 준비한다. 상태 리스너는 기본 루프백의 별도 리스너로 준비한다. 일부 필수 리스너 준비에 실패하면 시작 중 확보한 자원을 회수한다. 부분 준비 상태를 정상 준비 완료로 표시하지 않는다.
 9. 관리 바인딩은 기본 루프백으로 둘 수 있으며 설정한 주소로 외부 HTTPS 접근을 지원한다. 내장 TLS와 관리자 로그인 준비 없이 공개 관리 요청을 수락하지 않는다. 기본 관리자 비밀번호를 묵시적으로 제공하지 않는다.
 10. 관리 평문 HTTP는 루프백 바인딩에서만 허용한다. 비루프백 주소에 평문 HTTP를 설정하면 시작 실패다. 평문 루프백에서도 관리자 로그인을 생략하지 않는다. 쿠키 보안 속성은 [관리 기능](management.md)의 3.0절이 정한다.
-11. 설정 파일과 참조한 인증서·개인키 파일, `enabled = true`인 ticket 표의 `public_keys_file` 변경 감지(OS 파일 알림과 주기 확인)를 준비한 뒤 접속을 받는다. 변경 감지 준비가 불가능하면 이를 묵시적으로 끄고 시작하지 않는다.
+11. 설정 파일과 참조한 인증서·개인키 파일, `enabled = true`인 ticket 표의 `public_keys_file`, `[ip_info]`가 가리키는 IP 정보 DB 파일의 변경 감지(OS 파일 알림과 주기 확인)를 준비한 뒤 접속을 받는다. 변경 감지 준비가 불가능하면 이를 묵시적으로 끄고 시작하지 않는다.
     로그 디렉터리 알림 등록만 실패한 경우는 시작 실패에 해당하지 않는다. `reload_watch_failed`(`notify_error`)를 쓰고 시작을 계속하며 Dp마다 로그 파일 다시 열기와 알림 등록을 시도한다.
+    IP 정보 DB 파일 디렉터리의 알림 등록 실패도 시작 실패가 아니다. DB 파일은 없어도 되므로 경고 없이 주기 확인으로 감지하고 Dp마다 등록을 다시 시도한다([설정 계약 1.12절](../contracts/config-v4.md#112-ip-정보-db-파일-형식)).
+12. `[ip_info]`에 경로가 있으면 변경 감지를 준비한 뒤, 준비됨 전에 IP 정보 DB 파일을 읽는다(3.9절). 읽지 못해도 시작 실패가 아니다. 키마다 경고 `ip_db_unavailable`을 기록하고 그 정보 없이 시작한다. 감시를 먼저 준비하므로 읽는 사이에 바뀐 파일도 변경 감지로 다시 읽는다.
 
 단일 인스턴스로 운영한다. 프로세스 사이에 대기·세션·카운터 상태를 공유하지 않는다. 이미 사용 중인 리스너 주소로 두 번째 프로세스를 시작하면 시작 실패다. 두 번째 프로세스의 시작 실패는 첫 번째 프로세스의 대기·활성 세션에 영향을 주어서는 안 된다.
 
@@ -128,13 +132,14 @@ Mode I의 Viewer 연결과 생성한 대상 연결은 L에서 각각 한 개다.
 | G | 교체 뒤 시작하는 정상 종료부터 | 이미 시작한 종료 유예 유지 |
 | K(`keepalive.tcp_*`) | 교체 뒤 수락·연결하는 TCP 소켓부터 | 이미 설정한 소켓 옵션 유지 |
 | Kw | 교체 뒤 업그레이드하는 WS·WSS 연결부터 | 기존 연결의 ping·pong 제한 유지 |
-| 리스너 주소·포트(관리·상태 포함), 리스너 역할·모드 켜기·끄기, 관리 HTTP·HTTPS 전환, 계정·로그인 제한·관리 세션, `management.config_edit`, `[dashboard]`·`[recent_closed]`·`[recent_logs]`·`[log]`·`[reload]` 등 나머지 키 | 재시작 필요. 접속 ticket 표의 `enabled`는 재로드 대상 | 실행 중 기존 유효 설정 유지 |
+| 리스너 주소·포트(관리·상태 포함), 리스너 역할·모드 켜기·끄기, 관리 HTTP·HTTPS 전환, 계정·로그인 제한·관리 세션, `management.config_edit`, `[dashboard]`·`[recent_closed]`·`[recent_logs]`·`[metrics]`·`[ip_info]`·`[log]`·`[reload]` 등 나머지 키 | 재시작 필요. 접속 ticket 표의 `enabled`는 재로드 대상 | 실행 중 기존 유효 설정 유지 |
+| IP 정보 DB 파일 내용 | 재로드 대상이 아니다. 파일 변경을 감지하면 설정 재로드와 따로 다시 읽고, 성공하면 그 뒤 사건부터 새 DB로 찾는다(3.9절) | 이미 센 사건의 국가·ASN 유지. 다시 읽기에 실패하면 이전 DB 유지 |
 
 TCP 접속은 수락 직후, 데이터 읽기 전에 출발지 IP 허용 목록을 검사한다. WS·WSS는 수락 직후(TLS·HTTP 전)에 소켓 상대가 신뢰 프록시인지 또는 켜진 역할 허용 목록의 합집합에 있는지 검사한다. 업그레이드 때는 경로로 역할을 고른 뒤 클라이언트 주소를 해당 역할 목록으로 다시 검사한다. 신뢰 프록시의 전달 주소 판정과 순서는 [WebSocket 계약 1.8절](../contracts/websocket-relay-v2.md#18-신뢰-프록시와-x-forwarded-for)을 따른다. 각 판정과 재로드 적용은 이전 또는 새 정책 중 하나로 일관되게 처리한다. 업그레이드 전의 HTTP·TLS 연결은 아직 중계 접속이 아니다. 재검사에서 거절된 연결은 업그레이드하지 않는다. 관리 HTTPS·로그인 권한은 중계 IP 정책과 별개다.
 
 `trusted_proxies`에는 프록시 주소만 넣어야 한다. 클라이언트 범위를 넣어서는 안 된다. 신뢰 프록시의 `X-Forwarded-For`는 오른쪽부터 검사해 처음 만나는 비신뢰 주소를 클라이언트 주소로 쓴다. 그 왼쪽 요소는 검사하지 않는다. 헤더 누락·빈 값·검사 중 잘못된 요소·모든 요소가 신뢰 프록시인 체인은 `HTTP 400 forwarded_for_invalid`로 거절한다. 이때 등록과 `forwarded_ip`는 없다. 프록시 주소가 역할 허용 목록에 있어도 모두 신뢰하는 체인은 거절해야 한다([WS-032~036](websocket.md#7-수용-테스트)). 신뢰 프록시 호스트나 그 신뢰 범위 안에서 시작한 요청은 프록시를 거치면 거절된다. 같은 출발지에서 그 리스너에 직접 접속해도 신뢰 프록시 연결로 취급한다. 그래서 유효한 전달 헤더가 없으면 거절되고, 있으면 같은 전달 주소 판정과 역할 허용 목록 검사를 받는다. 전달 헤더 없이 직접 접속하려면 출발지가 그 리스너의 `trusted_proxies` 밖에 있고 해당 역할의 허용 목록에 들어야 한다.
 
-1. 설정 파일과 켜진 중계 리스너·관리 리스너가 쓰는 인증서·개인키 파일의 변경·교체 저장을 OS 파일 알림으로 감지한다. 역할을 모두 끈 리스너의 TLS 파일은 감시하지 않는다. `enabled = true`인 ticket 표의 `public_keys_file`도 감시한다. 알림을 놓친 변경도 주기 확인(간격 Dp)으로 감지한다. 변경이 안정되면 설정·파일을 한 재로드 후보로 읽는다.
+1. 설정 파일과 켜진 중계 리스너·관리 리스너가 쓰는 인증서·개인키 파일의 변경·교체 저장을 OS 파일 알림으로 감지한다. 역할을 모두 끈 리스너의 TLS 파일은 감시하지 않는다. `enabled = true`인 ticket 표의 `public_keys_file`도 감시한다. 알림을 놓친 변경도 주기 확인(간격 Dp)으로 감지한다. 변경이 안정되면 설정·파일을 한 재로드 후보로 읽는다. `[ip_info]`가 가리키는 IP 정보 DB 파일도 같은 방법으로 감시하지만 재로드 후보에는 넣지 않는다. 그 파일은 3.9절에 따라 따로 다시 읽는다.
 2. 시작과 같은 전체 설정 검증을 한다. 구문·모든 정책·한도·시간·값 관계·인증서/개인키 쌍·필수 보안 설정을 포함한다. ticket의 필수 키·범위·공개 키 파일과 역할 간 공개 키 분리도 검사한다. 공개 키 파일 형식은 [설정 계약 1.11절](../contracts/config-v4.md#111-접속-ticket-공개-키-파일-형식)을 따른다. 임시 저장·한쪽 인증서 파일만 교체·파일 일시 소멸은 유효한 새 구성으로 취급하지 않는다.
 3. 재로드 후보는 실행 중 유효 설정과 비교한다. 재로드 대상이 아닌 값이 실행 중 값과 다르면 후보 전체를 재시작 필요로 거절한다. 그 차이가 설정 파일에 남아 있는 동안에는 이후 재로드 대상 변경(IP·인증서·관리 API 편집 포함)도 모두 거절한다. 급한 인증서 교체도 같다. 운영자는 그 값을 되돌리거나 재시작해야 한다. 일부 값만 조용히 적용하지 않으며, 거절된 후보를 적용된 설정으로 보고하지 않는다.
 4. 유효한 후보의 재로드 대상 값을 원자적으로 한 번에 교체한다. 후보 검증 중에는 이전 유효 설정과 기존 중계를 유지한다. 실패하면 어느 값도 일부만 반영하지 않는다. 전체 출발지 허용 항목은 `allow_all_source`, 전체 대상 허용 항목은 `allow_all_target` 경고를 `phase = reload`로 기록한다. WS·WSS 역할 목록의 경고에는 `role`도 기록한다. 전체 주소 체계를 신뢰하는 `trusted_proxies` 항목은 `trust_all_proxies` 경고에 `listener`·`item`·`phase`를 기록한다.
@@ -236,6 +241,29 @@ D:(A;;CCLCSWRPWPDTLOCRRC;;;SY)(A;;CCDCLCSWRPWPDTLOCRSDRCWDWO;;;BA)(A;;CCLCSWLOCR
 11. `metrics.enabled`는 재시작이 필요하며 편집 대상이 아니다. 설정 보기에서는 값만 보여 준다.
 12. 메트릭 기록 때문에 중계 경로가 6절의 성능 합격 수치를 어겨서는 안 된다. 데이터 전송마다 하는 기록은 잠금 없이 더한다.
 
+### 3.9 접속 출처 통계
+
+접속 출처 통계는 중계 리스너에 들어온 연결을 클라이언트 주소마다 센 값이다. 운영자는 접속이 어느 주소·국가·ASN(인터넷 경로를 운영하는 조직의 번호)에서 오는지, 어느 주소가 자주 거절되는지 본다. 조회 형식은 [관리 API 계약 1.17절](../contracts/management-api-v1.md#117-접속-출처-get-apiv1sources), 화면은 [SCR-008](dashboard.md#scr-008-접속-출처)을 따른다.
+
+1. 운영 로그 사건을 기록부에 넘길 때 함께 센다. 로그 출력의 성공 여부와 관계없다. 중계 리스너(`tcp_viewer`·`tcp_server`·`ws`·`wss`)의 사건만 센다. 관리·상태 리스너의 사건은 세지 않는다.
+2. 다음 사건을 센다. `target_connect_failed`, 대기 사건, `session_closed`는 세지 않는다.
+
+   | 종류 | 세는 사건 |
+   | --- | --- |
+   | 연결 시도 | `connection_accepted`와 수락 단계(`stage = accept`)의 `connection_rejected` |
+   | 거절 | 중계 리스너의 모든 `connection_rejected`(수락·TLS·업그레이드·초기 교환·등록·대상 단계) |
+   | 중단 | `connection_aborted` |
+   | 세션 참여 | `session_started`의 Viewer 쪽과 Mode II Server 쪽 각각. Mode I 대상은 세지 않는다 |
+
+3. 클라이언트 주소는 그 사건의 전달 주소(`forwarded_ip`·`viewer_forwarded_ip`·`server_forwarded_ip`)가 있으면 그 값, 없으면 소켓 상대 IP다. 업그레이드 검사에 쓴 주소와 같다([운영 정보 계약 1.10절](../contracts/ops-info-v2.md#110-상대-주소-표기)).
+4. WS·WSS의 `connection_accepted`에는 전달 주소가 없다. 그래서 같은 `conn_id`의 다음 사건이 올 때 그 사건의 주소로 연결 시도를 센다. WSS의 TLS 단계 거절에도 `conn_id`가 있다. 사건 시각은 수락 시각이다. 다음 사건이 오기 전에는 그 연결 시도가 조회에 나오지 않는다. 다음 사건을 기다리는 연결이 65,536개를 넘으면 가장 오래된 것부터 소켓 상대 IP로 센다.
+5. 사건마다 그때 쓰는 IP 정보 DB에서 국가와 ASN을 찾아 함께 보관한다. 찾기는 메모리의 DB에서 하며 외부에 요청하지 않는다. 루프백·사설·링크 로컬·공유·지정되지 않은 주소는 찾지 않는다.
+6. 사건은 최대 100,000개를 메모리에 보관한다. 넘으면 가장 오래된 사건부터 버리고, 버린 사건 가운데 가장 늦은 시각을 기억한다. 이 상한은 설정할 수 없다. 재시작하면 비어 있다. 재로드는 지우지 않는다.
+7. 조회 때 기간(최근 1시간 또는 최근 24시간) 안 사건을 주소·국가·ASN별로 센다.
+8. IP 정보 DB는 시작 때 읽는다(3.1절 12단계). 실행 중에는 파일 내용 변경을 감지해 다시 읽는다. 성공하면 그 뒤 사건부터 새 DB를 쓰고 `ip_db_loaded`를 기록한다. 실패하면 이전 DB를 계속 쓰고 `ip_db_unavailable`을 기록한다. 설정 재로드 결과(`reload_applied`·`reload_rejected`·`reload_restart_required`)와 관계없이 다시 읽는다. 경로를 바꾸려면 재시작해야 한다. 형식과 원인 코드는 [설정 계약 1.12절](../contracts/config-v4.md#112-ip-정보-db-파일-형식)을 따른다.
+9. 통계는 `/metrics`·상태 응답·운영 로그에 넣지 않는다. 관리 API로만 제공한다.
+10. 통계 기록 때문에 중계 경로가 6절의 성능 합격 수치를 어겨서는 안 된다. 기록은 연결 사건마다 하며 데이터 전송마다 하지 않는다.
+
 ## 4. 보안과 신뢰 경계
 
 | 경계 | 지켜야 할 동작 | 적용 조건 |
@@ -247,6 +275,8 @@ D:(A;;CCLCSWRPWPDTLOCRRC;;;SY)(A;;CCDCLCSWRPWPDTLOCRSDRCWDWO;;;BA)(A;;CCLCSWLOCR
 | 관리 리스너 평문 HTTP | 루프백 바인딩에서만 허용, 비루프백 주소의 평문 설정은 시작 실패 | 루프백에서도 관리자 로그인 생략 금지 |
 | 상태 리스너 | 기본 루프백인 별도 리스너, 인증 없이 생존·준비 결과만 응답, 세션·중계 ID·상대 주소·인증 비밀 미포함 | 관리 리스너가 아님, 로그인 예외 규칙 미적용 |
 | 메트릭 엔드포인트 | 기본 꺼짐. 켜면 상태 리스너에서 인증 없이 응답. 속성은 고정 값만 쓰며 식별자·주소·계정명·비밀 없음 | 상태 리스너를 루프백 밖에 두면 그 주소의 접근 보호는 운영자 책임. OPS-R49 |
+| 접속 출처 통계 | 로그인한 관리자에게만 클라이언트 IP와 국가·ASN별 수를 관리 API로 제공. 서버는 IP 정보를 찾으려고 외부에 요청하지 않음. `/metrics`·운영 로그·상태 응답에 넣지 않음 | 화면의 ipinfo.io 조회 링크는 관리자가 누를 때만 브라우저가 열며 그 IP나 ASN이 ipinfo.io에 전달됨. OPS-R54 |
+| IP 정보 DB 파일 | 운영자가 내려받아 둔 파일만 읽음. 파일 경로와 내용은 운영 로그·진단에 넣지 않음. 접속 출처 조회는 경로 대신 설정 키로 구분함. 경로 값은 설정 보기에만 나옴 | 제공자 라이선스·출처 표시·갱신은 운영자 책임. [수동 운영 안내](../how-to/operate-relay.md) |
 | WS·WSS | 진입점(리스너·역할 쌍)마다 클라이언트 주소의 IP 허용 목록 적용. 공개 접속에는 내장 WSS 또는 역방향 프록시 TLS 종료 권장 | 관리 세션으로 IP 제한 우회 금지 |
 | 접속 ticket | 기본은 꺼짐. 설정으로 켠 역할의 WS·WSS에 함께 적용하며 ticket이 없거나 유효하지 않으면 101 전에 HTTP 401로 거절 | 관리자 로그인과 별개. [WebSocket 계약 1.9절](../contracts/websocket-relay-v2.md#19-접속-ticket) |
 | 출발지 IP 허용 목록 표기 | 항목은 단일 IP·CIDR·범위(`a-b`)만 허용(IPv4·IPv6), 잘못된 표기·역순 범위·체계 혼합 범위는 설정 오류 | 시작이면 시작 실패, 재로드이면 후보 전체 거절, OPS-R24 |
@@ -321,6 +351,9 @@ TCP 진입점은 접속 ticket을 실을 수 없어 ticket 확인을 적용하�
 | OPS-R49 | FR-08·7절·AC-60 | 메트릭 응답에 중계 ID·세션 식별자·주소·계정명·Origin·ticket 값·비밀·설정 값을 넣어서는 안 된다. 속성은 메트릭 계약 1.4절의 값만 써야 한다. |
 | OPS-R50 | FR-08·AC-60 | 읽지 못한 프로세스 값을 0으로 대신해서는 안 된다. 한 값의 읽기 실패가 다른 메트릭 응답을 막아서는 안 된다. |
 | OPS-R51 | FR-07·AC-60 | `metrics.enabled`는 재시작이 필요한 키여야 하며 관리 API로 편집할 수 없어야 한다. |
+| OPS-R52 | FR-07·FR-08·AC-63 | IP 정보 DB는 선택이어야 한다. DB 파일이 없거나 읽을 수 없거나 형식이 틀려도 시작·재로드를 거절해서는 안 된다. 경고를 기록하고 그 정보 없이 또는 이전 DB로 운영해야 한다. 실행 중 파일 내용이 바뀌면 설정 재로드와 따로 다시 읽어야 한다. |
+| OPS-R53 | FR-06·FR-08·AC-64 | 접속 출처 통계는 3.9절의 사건 종류·클라이언트 주소·리스너 범위로 세야 한다. 보관 상한 100,000개를 넘으면 가장 오래된 사건부터 버려야 한다. |
+| OPS-R54 | FR-08·7절·AC-64 | 서버는 IP 정보를 찾으려고 외부에 요청해서는 안 된다. 접속 출처 통계와 IP 정보 DB의 경로·내용을 `/metrics`·운영 로그·상태 응답에 넣어서는 안 된다. 접속 출처 조회에도 DB 파일 경로를 넣어서는 안 된다. |
 
 ## 5. 오류와 복구
 
@@ -336,6 +369,10 @@ TCP 진입점은 접속 ticket을 실을 수 없어 ticket 확인을 적용하�
 | `[metrics] enabled = false`에서 `/metrics` 조회 | 404 `not_found`. 값은 계속 세며 관리 API·대시보드는 정상 | 설정 파일에 `[metrics] enabled = true`를 쓰고 정상 종료 뒤 다시 시작 |
 | 프로세스 값 읽기 실패 | `/metrics`는 그 계열의 표본만 빼고 응답. 관리 API는 `available = false`. 0으로 쓰지 않음 | 다음 조회에서 다시 읽음 |
 | 실행 중 `metrics.enabled` 변경 | `reload_restart_required`, 후보 전체 미적용, `/metrics`의 켜짐·꺼짐 유지 | 값을 되돌리거나 정상 종료 뒤 다시 시작 |
+| IP 정보 DB 파일 없음·읽기 실패·형식 오류(시작) | `ip_db_unavailable(phase=startup)`, 그 정보 없이 준비됨. 관리 API의 DB 상태는 `unavailable` | 파일을 고치면 변경 감지로 다시 읽음. 재시작은 필요 없음 |
+| IP 정보 DB 다시 읽기 실패(실행 중) | `ip_db_unavailable(phase=reload)`, 이전 DB 계속 사용. DB 상태는 `stale` | 파일을 고치면 변경 감지로 다시 읽음 |
+| 실행 중 `ip_info.*` 경로 변경 | `reload_restart_required`, 후보 전체 미적용, 이전 경로의 DB 계속 사용 | 값을 되돌리거나 정상 종료 뒤 다시 시작 |
+| 접속 출처 보관 상한 도달 | 가장 오래된 사건부터 버림. 조회 응답의 `dropped_before`로 알림 | 없음. 상한은 고정 |
 | 필수 포트 사용 중·TLS 준비 실패 | 필수 포트 사용 중이면 부분 준비 자원 회수 후 시작 실패. TLS 준비 실패는 리스너를 바인드하기 전에 시작 실패 | 배치 수정 후 다시 시작 |
 | 같은 리스너 주소의 두 번째 프로세스 | 두 번째 프로세스 시작 실패·시작 중 확보한 자원 회수, 첫 번째 프로세스의 대기·활성 세션 영향 없음 | 리스너 주소를 바꾸거나 첫 번째 프로세스를 정상 종료한 뒤 다시 시작 |
 | L 상한 도달 | 새 중계 접속 거절, 기존 세션 유지 | 기존 연결 해제 후 새 접속 |
@@ -468,7 +505,7 @@ Windows 11 x64·Ubuntu 24.04 LTS x64와 Mode I·II, 모든 전송 조합을 검�
 | OPS-066 | FR-07 / OPS-R01 | v3 테이블 `relay.ws_viewer`·`relay.wss_viewer`가 있는 파일로 시작. [설정 계약 3.3절](../contracts/config-v4.md#33-v3-파일을-v4로-옮기기)의 매핑 뒤 다시 시작 | 이전 테이블은 `config_unknown_key`로 시작 실패. 이관 뒤 Viewer 동작 유지. Viewer 경로는 [WebSocket 계약 1.7절](../contracts/websocket-relay-v2.md#17-경로와-역할)을 따른다. |
 | OPS-067 | FR-07·FR-08 / OPS-R14·OPS-R30 | `trusted_proxies` 재로드·관리 API 편집. 기존 연결 유지 상태에서 새 수락·업그레이드 검사. 전체 주소 체계를 덮는 신뢰 항목으로 시작·재로드 | 교체 뒤 새 검사부터 새 신뢰 목록 적용. 이미 통과한 검사 결과와 기존 연결 유지. 전체 신뢰 항목은 시작·재로드 때 `trust_all_proxies` 경고 |
 | OPS-068 | FR-08 / OPS-R06·OPS-R07 | `recent_logs.max_entries`까지 사건 기록 후 초과. `0` 설정, 재시작, `log.output` 표준 출력·파일과 출력 쓰기 실패 조건 비교 | 기록 순서와 `seq` 유지, 내용은 운영 로그 객체와 같음. 상한 초과 시 가장 오래된 항목 제거. `0`이면 보관하지 않음. 재시작 뒤 비어 있음. 출력 경로·쓰기 성공 여부와 독립 |
-| OPS-069 | FR-08 / OPS-R06 | WS·WSS 수락과 역할 선택 전후 사건, 서버 시작과 전체 허용 역할 목록 경고 관찰 | ops-info 2.1.0의 `listener`는 `ws`·`wss`. WS·WSS `connection_accepted`에는 `role` 없음. `server_starting.log_contract = ops-info/2.1.0`. WS·WSS `allow_all_source`에는 `role` 있음 |
+| OPS-069 | FR-08 / OPS-R06 | WS·WSS 수락과 역할 선택 전후 사건, 서버 시작과 전체 허용 역할 목록 경고 관찰 | ops-info 2.2.0의 `listener`는 `ws`·`wss`. WS·WSS `connection_accepted`에는 `role` 없음. `server_starting.log_contract = ops-info/2.2.0`. WS·WSS `allow_all_source`에는 `role` 있음 |
 | OPS-070 | FR-07·7절·AC-51 / OPS-R37 | `relay.ticket.viewer.enabled = true`인데 `issuer`·`relay_host`·`public_keys_file`을 각각 누락. `max_lifetime_secs`를 9·10·600·601로 설정. 빈 `issuer`. 공개 키 파일 없음·JSON 아님·빈 `keys`·P-256 아님·`d` 포함·`kid` 중복·64 KiB 초과. 두 역할을 켜고 같은 공개 키 설정. 같은 후보를 재로드 | 시작은 오류에 따라 `config_missing_key`·`config_value_out_of_range`·`ticket_keys_invalid` 진단, 종료 코드 3, 리스너 없음. 다른 조건이 유효하면 10·600은 통과. 같은 오류의 재로드는 `reload_rejected`, 기존 설정·공개 키·연결 유지 |
 | OPS-071 | FR-07·FR-08·7절·AC-51 / OPS-R38 | Viewer ticket과 `relay.tcp_viewer.enabled`, Server ticket과 `relay.tcp_server.enabled`를 각각 함께 켬. ticket을 켠 역할의 `relay.ws.viewer.enabled` 또는 `relay.ws.server.enabled`를 켬. 시작·재로드 수행 | TCP는 `ticket_tcp_bypass`(`role`, `listener = tcp_viewer` 또는 `tcp_server`, `phase`), 평문 WS는 `ticket_plaintext_ws`(`role`, `listener = ws`, `phase`) 경고. `phase`는 시작이면 `startup`, 재로드이면 `reload`. 평문 WS 경고는 믿을 수 있는 망 조건을 알림. 시작·재로드는 계속 |
 | OPS-072 | FR-07·FR-08·AC-51 / OPS-R37·OPS-R39 | ticket 키 10개의 재로드·관리 API 편집 구분 확인. 켠 ticket 역할의 공개 키 파일 내용을 유효한 새 파일과 잘못된 새 파일로 각각 교체 | 10개 모두 재로드 대상이며 실제 바뀐 키 경로가 `reload_applied.applied`에 기록됨. `public_keys_file` 2개는 편집 불가, 나머지 8개는 설정 계약의 역할 조건에 따라 편집 가능. 공개 키 파일 내용 변경을 감지해 재로드하며 기존 연결 유지. 전체 재로드 대상 43개·편집 대상 37개. 잘못된 새 파일은 `reload_rejected(reason=ticket_keys_invalid)`이며 기존 키 유지 |
@@ -494,6 +531,11 @@ Windows 11 x64·Ubuntu 24.04 LTS x64와 Mode I·II, 모든 전송 조합을 검�
 | OPS-092 | FR-07·AC-60 / OPS-R51 | `[metrics] enabled`를 `"yes"`·`1`로 설정해 시작. 키 생략. 실행 중 `false`를 `true`로 바꿔 저장. 관리 API로 `metrics.enabled` 편집 요청. 그 뒤 재시작 | 잘못된 자료형은 `config_type_mismatch`로 시작 실패(종료 코드 3). 생략하면 `false`. 실행 중 변경은 `reload_restart_required`이고 `/metrics`는 그대로 404. 편집 요청은 `400 invalid_request`. 설정 보기 항목은 `reload = restart`·`editable = false`. 재시작 뒤 `/metrics` 200 |
 | OPS-093 | FR-08·AC-60 | 경계와 같은 값, 두 경계 사이 값, 마지막 경계보다 큰 값을 각 히스토그램에 기록한 뒤 텍스트와 JSON 비교 | 값 v는 `v ≤ 경계`인 첫 구간에 들어감. 텍스트 `_bucket`은 누적이고 `le="+Inf"`는 `_count`와 같음. JSON `bucket_counts`는 구간별이며 길이는 경계 수 + 1, 합은 `count`. `_sum`·`sum`은 초 값의 합. 경계는 지수 없는 소수 표기 |
 | OPS-094 | FR-08·AC-60 / OPS-R50 | 시험 대역으로 프로세스 값 하나(예: 메모리 사용량)를 읽지 못하게 한 뒤 `/metrics` 조회 | 그 계열은 `# HELP`·`# TYPE`만 있고 표본이 없음. 0을 쓰지 않음. 다른 계열과 상태 코드 200은 그대로 |
+| OPS-095 | FR-07·AC-63 / OPS-R52 | `[ip_info]`를 생략, 두 키에 같은 상대 경로, 빈 문자열, 정수 값으로 각각 설정해 시작. 실행 중 경로를 바꿔 저장. 관리 API로 `ip_info.country_db` 편집 요청 | 생략하면 DB 없이 준비됨. 같은 경로는 설정 파일 디렉터리 기준으로 풀어 한 번 읽고 두 키에 씀. 빈 문자열은 `config_value_out_of_range`, 정수는 `config_type_mismatch`로 시작 실패(종료 코드 3). 실행 중 경로 변경은 `reload_restart_required`이고 DB 유지. 편집 요청은 `400 invalid_request`. 설정 보기 항목은 `reload = restart`·`editable = false` |
+| OPS-096 | FR-07·FR-08·AC-63 / OPS-R52 | DB-IP·IPinfo·MaxMind 형식의 시험 DB, 없는 파일, 256 MiB를 넘는 파일, MMDB가 아닌 파일, 국가 필드가 없는 ASN 파일을 `country_db`로 두고 각각 시작 | 지원 형식은 `server_starting`과 `server_ready` 사이에 `ip_db_loaded(phase=startup)`과 `database_type`·`build_time`. 나머지는 원인별 `ip_db_unavailable`(`file_unreadable`·`file_too_large`·`invalid_format`·`unsupported_data`)과 정상 준비됨. 로그에 경로가 없음 |
+| OPS-097 | FR-08·AC-63 / OPS-R52 | 실행 중 국가 DB 파일을 다른 유효 DB로 교체, 깨진 파일로 교체, 같은 깨진 내용으로 다시 저장, 다시 유효 파일로 교체. 재시작 필요 차이가 설정 파일에 남은 상태에서 DB 교체 | 교체 뒤 Dp + D 안에 `ip_db_loaded(phase=reload)`이고 그 뒤 사건부터 새 국가. 깨진 파일은 `ip_db_unavailable(phase=reload)`이고 이전 DB 유지(DB 상태 `stale`). 같은 깨진 내용은 다시 경고하지 않음. 재시작 필요 차이가 있어도 다시 읽음. `reload_applied`에 `ip_info` 키가 없음 |
+| OPS-098 | FR-06·FR-08·AC-64 / OPS-R53 | TCP Viewer·TCP Server·WS·WSS로 허용·수락 단계 거절·업그레이드 거절·초기 교환 중단·Mode I·Mode II 세션을 만듦. 신뢰 프록시를 거친 WS 연결과 관리·상태 리스너 접속도 만듦 | 연결 시도·거절·중단·세션 참여 수가 3.9절 규칙과 같음. 프록시를 거친 연결은 전달 주소로 셈. 관리·상태 리스너 접속은 세지 않음. WS·WSS 연결 시도의 시각은 수락 시각 |
+| OPS-099 | FR-08·7절·AC-64 / OPS-R53·R54 | 사건 100,001개를 기록부에 넘김. 재로드 뒤 조회. 재시작 뒤 조회. 접속 출처를 만든 뒤 `/metrics`·운영 로그 확인 | 가장 오래된 사건부터 버려 100,000개 유지. 재로드는 통계를 지우지 않음. 재시작 뒤 비어 있음. `/metrics`와 운영 로그에 클라이언트 주소별 수·국가·ASN·DB 경로가 없음 |
 
 OPS-015는 예약 ID이며 사용하지 않는다.
 

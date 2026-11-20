@@ -19,6 +19,7 @@ use vnc_relay_adapters::clock::SystemClock;
 use vnc_relay_adapters::config_edit::{FsConfigFileStore, TomlConfigDocument};
 use vnc_relay_adapters::crypto::{CryptoError, RelayIdKey, SessionIdKey, SystemTokenSource};
 use vnc_relay_adapters::file_watch::{self, FsReloadFileStore, SystemReloadClock};
+use vnc_relay_adapters::ip_db::MmdbLoader;
 use vnc_relay_adapters::listener::{ListenerFailure, SupervisedListener};
 use vnc_relay_adapters::management_http::{DashboardHints, ManagementListener, ManagementServices};
 use vnc_relay_adapters::net::{AcceptPolicy, AllowSource, BindFailure, TcpEntryPoint};
@@ -31,6 +32,7 @@ use vnc_relay_adapters::websocket::{WsEntryPoint, WsPolicy};
 use vnc_relay_adapters::{accounts_file, config_file, net};
 use vnc_relay_app::accounts::{self, ACCOUNTS_FILE_KEY, AccountsDiagnostic};
 use vnc_relay_app::events::{Event, Phase};
+use vnc_relay_app::ip_info::{IpInfoService, IpLookup};
 use vnc_relay_app::lifecycle::LifecycleService;
 use vnc_relay_app::management::config::{ConfigEditService, ConfigManagement};
 use vnc_relay_app::management::login::dummy_hash;
@@ -47,6 +49,7 @@ use vnc_relay_app::reload::service::ReloadService;
 use vnc_relay_app::reload::snapshot::{ReloadCell, ReloadSnapshot};
 use vnc_relay_app::reload::{ConfigCandidate, SharedReload};
 use vnc_relay_app::settings::{LogOutput, Settings, TlsFiles};
+use vnc_relay_app::sources::{SourceStats, SourcesService, SourcesSink};
 use vnc_relay_domain::admin_session::AdminSessionPolicy;
 use vnc_relay_domain::budget::ConnectionBudget;
 use vnc_relay_domain::entry_point::{EntryPoint, Listener};
@@ -138,10 +141,17 @@ pub fn start(config: &Path, host: Host) -> u8 {
             return EXIT_CONFIG;
         }
     };
-    // Metrics count the events of this process from here on (metrics-v1 §1.1).
+    // Metrics and source statistics count the events of this process from
+    // here on (metrics-v1 §1.1, source-stats.md §4.1). The sink chain is
+    // MetricsSink → SourcesSink → the log output.
     let clock: Arc<dyn Clock> = Arc::new(SystemClock::new());
     let metrics = Arc::new(Metrics::new(clock.as_ref()));
-    let log: Arc<dyn EventSink> = Arc::new(MetricsSink::new(Arc::clone(&metrics), output.clone()));
+    let ip_lookup = Arc::new(IpLookup::new());
+    let sources = Arc::new(SourceStats::new(Arc::clone(&ip_lookup), Arc::clone(&clock)));
+    let log: Arc<dyn EventSink> = Arc::new(MetricsSink::new(
+        Arc::clone(&metrics),
+        Arc::new(SourcesSink::new(Arc::clone(&sources), output.clone())),
+    ));
     log.record(&Event::ServerStarting);
     for warning in settings.warnings() {
         log.record(&Event::ConfigWarning {
@@ -207,6 +217,8 @@ pub fn start(config: &Path, host: Host) -> u8 {
             log,
             recent_logs,
             metrics,
+            ip_lookup,
+            sources,
         },
         auth,
         config,
@@ -217,12 +229,16 @@ pub fn start(config: &Path, host: Host) -> u8 {
 }
 
 /// The log sinks and the event counters that `start` opened before the
-/// runtime. `log` counts each event in `metrics`, then writes it to `output`.
+/// runtime. `log` counts each event in `metrics` and `sources`, then writes
+/// it to `output`. `ip_lookup` holds the IP information databases that
+/// `sources` reads; `listen_until_shutdown` fills it.
 struct Logging {
     output: Arc<JsonLinesEventSink>,
     log: Arc<dyn EventSink>,
     recent_logs: Arc<RecentLogs>,
     metrics: Arc<Metrics>,
+    ip_lookup: Arc<IpLookup>,
+    sources: Arc<SourceStats>,
 }
 
 /// The file checks of `service install` (cli-v1 §1.9 install step 4): stages
@@ -312,6 +328,8 @@ async fn listen_until_shutdown(
         log,
         recent_logs,
         metrics,
+        ip_lookup,
+        sources,
     } = logging;
     let (mut requests, status) = match host {
         Host::Terminal => match ShutdownSignal::register() {
@@ -410,7 +428,18 @@ async fn listen_until_shutdown(
         }
     };
     let (stop, stopped) = watch::channel(false);
-    let watcher = match file_watch::start(
+    // IP information databases (config-v4 §1.12): the watcher hashes them as
+    // its baseline, then the first read runs before any listener is bound.
+    // A failed read is a warning; the server starts without that database.
+    let ip_info = Arc::new(IpInfoService::new(
+        settings.ip_info.country_db.clone(),
+        settings.ip_info.asn_db.clone(),
+        Arc::new(MmdbLoader),
+        ip_lookup,
+        Arc::clone(&clock),
+        Arc::clone(&log),
+    ));
+    let mut watcher = match file_watch::start(
         config,
         Arc::clone(&reload),
         settings.reload.poll,
@@ -422,6 +451,10 @@ async fn listen_until_shutdown(
         Ok(watcher) => watcher,
         Err(error) => return watch_unavailable(log.as_ref(), error.detail()),
     };
+    watcher.attach_ip_info(Arc::clone(&ip_info));
+    // Reading and checking a file of up to 256 MiB blocks this thread.
+    tokio::task::block_in_place(|| ip_info.load_startup());
+    let sources_service = Arc::new(SourcesService::new(sources, ip_info));
     let watch_task = tokio::spawn(watcher.run(stopped.clone()));
     let lifecycle = Arc::new(LifecycleService::new());
     let (listener_failures, mut failed_listener) = watch::channel(None);
@@ -561,6 +594,7 @@ async fn listen_until_shutdown(
                 config: config_service,
                 logs: Arc::clone(&recent_logs),
                 metrics: metrics_service,
+                sources: sources_service,
             },
         );
         tokio::spawn(listener.run(Arc::clone(&log)))

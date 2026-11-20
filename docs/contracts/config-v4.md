@@ -6,9 +6,9 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 이름과 버전 | `vnc-relay-config` 4.2.0. 기본으로 꺼진 `[metrics] enabled` 선택 키를 추가한 호환 변경이다. |
+| 이름과 버전 | `vnc-relay-config` 4.3.0. 국가·ASN 조회용 IP 정보 DB 파일 경로를 담는 선택 표 `[ip_info]`와 그 파일 형식(1.12절)을 추가한 호환 변경이다. |
 | 상태 | Active |
-| 이전 버전 이력 | 4.1.0: 기본으로 꺼진 역할별 접속 ticket 표와 공개 키 파일 형식, 재로드·편집 구분 추가. 호환 변경이다. 4.0.0: WS·WSS 리스너 표와 역할 표 분리, Server 역할·신뢰 프록시·최근 로그 보관과 재로드·편집 구분 추가. 호환성을 깨는 변경이다. 3.0.0: 재로드 대상 8개에서 27개로 확대, `management.config_edit`와 관리 API 파일 쓰기 추가. 2.0.0: `limits.initial_message_bytes`(I)와 관계 I ≤ B 삭제. B와 M 사이에는 대소 제약이 없다. 1.1.0: `log_file_unavailable` 추가. 1.2.0: 관리 TLS·첫 요청 머리 읽기에 U 적용, 감시 대상 명확화. |
+| 이전 버전 이력 | 4.2.0: 기본으로 꺼진 `[metrics] enabled` 선택 키 추가. 호환 변경이다. 4.1.0: 기본으로 꺼진 역할별 접속 ticket 표와 공개 키 파일 형식, 재로드·편집 구분 추가. 호환 변경이다. 4.0.0: WS·WSS 리스너 표와 역할 표 분리, Server 역할·신뢰 프록시·최근 로그 보관과 재로드·편집 구분 추가. 호환성을 깨는 변경이다. 3.0.0: 재로드 대상 8개에서 27개로 확대, `management.config_edit`와 관리 API 파일 쓰기 추가. 2.0.0: `limits.initial_message_bytes`(I)와 관계 I ≤ B 삭제. B와 M 사이에는 대소 제약이 없다. 1.1.0: `log_file_unavailable` 추가. 1.2.0: 관리 TLS·첫 요청 머리 읽기에 U 적용, 감시 대상 명확화. |
 | 소유자 | vnc-relay 프로젝트 관리자 |
 | 만드는 쪽(Producer) | 운영자(설정 파일 작성자), 편집 기능을 켰을 때의 관리 API |
 | 사용하는 쪽(Consumer) | `vnc-relay serve`(시작 검증·자동 재로드·관리 API 편집 적용). Windows의 `vnc-relay service run`도 `serve`와 같이 읽고, `vnc-relay service install`은 등록 전에 같은 검증을 한다([CLI 계약 1.9절](cli-v1.md#19-windows-서비스-실행)). `vnc-relay admin` 하위 명령은 `[admin]` 테이블만 읽는다. Windows 트레이 앱은 `management.listen`·`management.cert_file`·`status.listen`·`log.output`만 쓴다([Windows 트레이 앱 스펙](../specs/windows-tray.md)). |
@@ -16,14 +16,14 @@
 | 스키마 기준 파일 | 없음. 이 문서의 Markdown 표가 형식의 기준이다. |
 | 기준 스펙 | [설정·프로세스 수명·운영 보안 스펙](../specs/operations.md) |
 | 관련 요구사항 | [PRD](../requirements/PRD.md) FR-02·FR-05·FR-06·FR-07·FR-08, [7절 보안 및 신뢰 경계](../requirements/PRD.md#7-보안-및-신뢰-경계). |
-| 호환성 범위 | 설정 파일 v4(`vnc-relay-config` 4.2.0). Windows 11 x64·Ubuntu 24.04 LTS x64. 파일 안에 형식 버전 키는 없다. v1→v2는 3.1절, v2→v3는 3.2절, v3→v4와 롤백은 3.3절을 따른다. v4 서버는 v3 표를 읽지 않는다. ticket 표나 `[metrics]` 표를 쓴 파일을 이전 4.x 서버로 되돌리는 방법은 3절을 따른다. |
-| 관련 테스트 | [운영 스펙 수용 테스트](../specs/operations.md#7-수용-테스트) OPS-001~006·OPS-016·OPS-023~027·OPS-031·OPS-034~042·OPS-047~073·OPS-092, [WS·WSS 스펙](../specs/websocket.md#7-수용-테스트) WS-015·WS-022·WS-024·WS-027~046, [중계 스펙](../specs/relay.md#7-수용-테스트) RLY-007·RLY-008·RLY-022~027. 계약 시험은 5절에 연결한다. |
+| 호환성 범위 | 설정 파일 v4(`vnc-relay-config` 4.3.0). Windows 11 x64·Ubuntu 24.04 LTS x64. 파일 안에 형식 버전 키는 없다. v1→v2는 3.1절, v2→v3는 3.2절, v3→v4와 롤백은 3.3절을 따른다. v4 서버는 v3 표를 읽지 않는다. ticket 표나 `[metrics]`·`[ip_info]` 표를 쓴 파일을 이전 4.x 서버로 되돌리는 방법은 3절을 따른다. |
+| 관련 테스트 | [운영 스펙 수용 테스트](../specs/operations.md#7-수용-테스트) OPS-001~006·OPS-016·OPS-023~027·OPS-031·OPS-034~042·OPS-047~073·OPS-092·OPS-095~097, [WS·WSS 스펙](../specs/websocket.md#7-수용-테스트) WS-015·WS-022·WS-024·WS-027~046, [중계 스펙](../specs/relay.md#7-수용-테스트) RLY-007·RLY-008·RLY-022~027. 계약 시험은 5절에 연결한다. |
 
 용어는 [VNC Relay 용어집](../../GLOSSARY.md)을 따른다. 테스트·검증 기호 L~Dp 등은 [운영 스펙 2절](../specs/operations.md#2-상태와-검증-매개변수)의 기호이며, 이 계약이 각 기호를 키에 연결한다.
 
-관련 문서: [CLI·계정 파일 계약](cli-v1.md)(`[admin]` 테이블 사용, 종료 코드), [관리 API 계약](management-api-v1.md)(`[dashboard]`·`[recent_closed]`·`[management]`의 값 전달), [WebSocket 중계 계약](websocket-relay-v2.md)(`allowed_origins`·WS 키 사용), [Repeater 초기 교환 계약](repeater-handshake-v1.md)(`handshake_secs`·`[mode1]`·`[mode2]` 사용), [운영 정보 계약](ops-info-v2.md)(경고·재로드 사건 이름, `[log]`·`[status]`), [메트릭 계약](metrics-v1.md)(`[metrics]`가 켜는 `/metrics`), [ADR-0001 내장 TLS](../decisions/ADR-0001-built-in-tls.md), [ADR-0002 출발지 IP 허용 목록](../decisions/ADR-0002-source-ip-allowlist.md), [ADR-0004 tokio·rustls](../decisions/ADR-0004-tokio-rustls.md).
+관련 문서: [CLI·계정 파일 계약](cli-v1.md)(`[admin]` 테이블 사용, 종료 코드), [관리 API 계약](management-api-v1.md)(`[dashboard]`·`[recent_closed]`·`[management]`의 값 전달, `[ip_info]` DB 상태 전달), [WebSocket 중계 계약](websocket-relay-v2.md)(`allowed_origins`·WS 키 사용), [Repeater 초기 교환 계약](repeater-handshake-v1.md)(`handshake_secs`·`[mode1]`·`[mode2]` 사용), [운영 정보 계약](ops-info-v2.md)(경고·재로드 사건 이름, `[log]`·`[status]`, IP 정보 DB 사건), [메트릭 계약](metrics-v1.md)(`[metrics]`가 켜는 `/metrics`), [ADR-0001 내장 TLS](../decisions/ADR-0001-built-in-tls.md), [ADR-0002 출발지 IP 허용 목록](../decisions/ADR-0002-source-ip-allowlist.md), [ADR-0004 tokio·rustls](../decisions/ADR-0004-tokio-rustls.md).
 
-접속 ticket의 보안 경계는 [ADR-0009](../decisions/ADR-0009-optional-relay-access-ticket.md)를 따른다.
+접속 ticket의 보안 경계는 [ADR-0009](../decisions/ADR-0009-optional-relay-access-ticket.md)를 따른다. 운영자가 둔 IP 정보 DB 파일을 쓰는 이유와 대안은 [ADR-0012](../decisions/ADR-0012-local-ip-info-databases.md)를 따른다.
 
 ## 1. 형식과 의미
 
@@ -206,6 +206,15 @@ K의 감지 시간은 `tcp_idle_secs + tcp_interval_secs × tcp_probes`다. 기�
 
 `[dashboard]`·`[recent_closed]`·`[recent_logs]`·`[status]`·`[metrics]`·`[log]`·`[reload]`의 모든 키는 재시작이 필요하다. `status.listen`은 UltraVNC에 대응하는 기본 포트가 없어 포트까지 필수로 둔다. D의 이름 `settle_secs`는 "안정될 때까지 기다리는 시간"으로 읽을 수 있다. 이 계약에서 D는 [운영 스펙 2절](../specs/operations.md#2-상태와-검증-매개변수)의 정의대로 결과 확인 제한 시간이다. 변경 안정화 대기는 D 안에서 구현이 정한다.
 
+#### `[ip_info]`
+
+| 키(기호) | 자료형 | 필수 여부 | 기본값 | 유효 범위·의미 |
+| --- | --- | --- | --- | --- |
+| `ip_info.country_db` | 문자열(경로) | 아님 | 없음 | 국가 조회에 쓸 IP 정보 DB 파일 경로(1.1절 경로 값). 형식은 1.12절을 따른다. 생략하면 접속 출처 통계에 국가를 쓰지 않는다. |
+| `ip_info.asn_db` | 문자열(경로) | 아님 | 없음 | ASN(인터넷 경로를 운영하는 조직의 번호) 조회에 쓸 IP 정보 DB 파일 경로. 형식은 1.12절을 따른다. 생략하면 ASN을 쓰지 않는다. `country_db`와 같은 경로여도 된다. |
+
+`[ip_info]`의 두 키는 재시작이 필요하며 편집 대상이 아니다. 가리키는 파일의 내용은 설정 재로드와 따로 감시해 다시 읽는다(1.12절). 파일이 없거나 형식이 맞지 않아도 설정 오류가 아니다. 경고 `ip_db_unavailable`(2.2절)을 기록하고 그 정보 없이 운영한다. 값을 쓰는 조회는 [관리 API 계약](management-api-v1.md)의 접속 출처 조회가 정한다.
+
 ### 1.3 IP 항목 문법
 
 `allow`·`trusted_proxies` 배열의 각 문자열은 항목 하나다. 두 키는 같은 IP 항목 문법을 쓴다. 한 문자열에 여러 항목을 넣을 수 없다. 공백은 어디에도 허용하지 않는다. 빈 문자열은 잘못된 표기다. IPv4와 IPv6를 모두 쓴다.
@@ -359,7 +368,7 @@ K의 감지 시간은 `tcp_idle_secs + tcp_interval_secs × tcp_probes`다. 기�
 | `keepalive.tcp_idle_secs`, `keepalive.tcp_interval_secs`, `keepalive.tcp_probes` | 교체 뒤 수락·연결하는 TCP 소켓부터 |
 | `keepalive.ws_ping_secs`, `keepalive.ws_pong_timeout_secs` | 교체 뒤 업그레이드하는 WS·WSS 연결부터 |
 
-재시작이 필요한 변경에는 다음이 포함된다: TCP 진입점·WS·WSS 역할·모드의 `enabled`, 모든 `listen`, `admin.accounts_file`, `admin.argon2`, `[management]`의 인증서·개인키 이외 키(HTTP·HTTPS 전환과 `management.config_edit` 포함), `[dashboard]`, `[recent_closed]`, `[recent_logs]`, `[status]`, `[metrics]`, `[log]`, `[reload]`. 접속 ticket 표의 `enabled`는 재로드 대상이다.
+재시작이 필요한 변경에는 다음이 포함된다: TCP 진입점·WS·WSS 역할·모드의 `enabled`, 모든 `listen`, `admin.accounts_file`, `admin.argon2`, `[management]`의 인증서·개인키 이외 키(HTTP·HTTPS 전환과 `management.config_edit` 포함), `[dashboard]`, `[recent_closed]`, `[recent_logs]`, `[status]`, `[metrics]`, `[ip_info]`, `[log]`, `[reload]`. 접속 ticket 표의 `enabled`는 재로드 대상이다.
 
 규칙:
 
@@ -373,6 +382,7 @@ K의 감지 시간은 `tcp_idle_secs + tcp_interval_secs × tcp_probes`다. 기�
 8. 편집 대상은 재로드 대상 43개에서 인증서·개인키 경로 4개(`relay.wss.cert_file`, `relay.wss.key_file`, `management.cert_file`, `management.key_file`)와 공개 키 파일 경로 2개(`relay.ticket.viewer.public_keys_file`, `relay.ticket.server.public_keys_file`)를 뺀 37개다. 이 6개 경로는 설정 보기에만 나온다. 인증서 갱신과 공개 키 교체는 같은 경로의 파일 내용을 바꾸는 방식으로 한다.
 9. TCP 진입점의 `allow`와 WS·WSS 역할의 `allow`·`allowed_origins`는 해당 진입점·역할이 켜져 있을 때만 편집할 수 있다. 리스너의 `trusted_proxies`는 역할이 하나라도 켜져 있을 때 편집할 수 있다. ticket 표의 편집 대상 4개(`enabled`, `issuer`, `relay_host`, `max_lifetime_secs`)는 그 역할이 `[relay.ws]` 또는 `[relay.wss]`에서 하나라도 켜져 있을 때만 편집할 수 있다. `mode1.allow_targets`는 `mode1.enabled = true`일 때만 편집할 수 있다. 꺼진 진입점·역할·리스너·모드의 키는 보기에만 나온다. 값이 없으면 API에서 `null`로 보인다.
 10. 파일 변경 감지와 관리 API 편집은 같은 후보 검증·전체 교체 규칙을 쓴다. 관리 API는 파일 쓰기 성공 뒤 같은 후보를 즉시 한 번 교체한다. `reload_applied.trigger`는 파일 변경 감지이면 `file_watch`, 관리 API 편집이면 `config_edit`다. 뒤따르는 파일 감지는 차이가 없으므로 다시 교체하거나 `reload_applied`를 기록하지 않는다.
+11. `[ip_info]`가 가리키는 IP 정보 DB 파일도 감시 대상이지만 재로드 후보에 넣지 않는다. 파일 내용 변경은 1.12절에 따라 따로 다시 읽는다. 그 결과는 `reload_applied`·`reload_rejected`에 나오지 않는다. 재시작이 필요한 차이가 파일에 남아 있어도 DB 다시 읽기는 막지 않는다.
 
 ### 1.9 인증서·개인키 파일 형식
 
@@ -415,6 +425,39 @@ TLS 1.2 미만은 거절한다. 허용 암호 스위트는 rustls의 aws-lc-rs �
 | 오류 | 이 형식을 어기거나 두 역할의 공개 키가 같으면(1.6절) `ticket_keys_invalid`다. 파일 내용은 로그·오류 메시지에 쓰지 않는다. |
 
 키를 교체할 때는 새 공개 키를 파일에 더한다. 발급 쪽을 새 서명 키로 바꾼다. 그 역할의 `max_lifetime_secs` + 10초 뒤에 옛 공개 키를 뺀다.
+
+### 1.12 IP 정보 DB 파일 형식
+
+`ip_info.country_db`·`ip_info.asn_db`가 가리키는 파일은 [MaxMind DB 파일 형식](https://maxmind.github.io/MaxMind-DB/) 2.x(MMDB) 파일이다. 운영자가 제공자 사이트에서 내려받아 둔다. 서버는 이 파일을 읽기만 하며, IP 정보를 찾으려고 외부에 요청하지 않는다. 지원하는 제공자는 DB-IP Lite(국가·ASN), IPinfo Lite(국가와 ASN을 담은 한 파일), MaxMind GeoLite(Country·City·ASN)와 같은 필드를 쓰는 GeoIP2 파일이다.
+
+| 항목 | 규칙 |
+| --- | --- |
+| 파일 | MMDB 2.x 파일 하나. 256 MiB(268,435,456바이트) 이하. 파일 전체를 메모리로 읽은 뒤 닫는다. 압축 파일(`.gz`·`.tar.gz`)은 받지 않는다. 풀어서 둔다. |
+| 검사 | 메타데이터와 검색 트리·데이터 영역 전체를 검사한다. 그 뒤 앞쪽 레코드 4096개 안에서 아래 필드를 찾아 필드 형식을 정한다. |
+| 국가 필드 | `country_code`(IPinfo Lite) 또는 `country.iso_code`(DB-IP, MaxMind). 앞의 필드가 있는 레코드가 하나라도 있으면 그 필드를 쓴다. 영문 대문자 두 글자(ISO 3166-1 alpha-2) 값만 국가로 쓴다. 그 밖의 값과 빈 값은 국가 없음이다. |
+| ASN 필드 | `asn`(IPinfo Lite, `AS` 뒤 십진수)·`as_name` 또는 `autonomous_system_number`·`autonomous_system_organization`(DB-IP, MaxMind). 앞의 필드가 있는 레코드가 하나라도 있으면 그 필드를 쓴다. 번호는 1~4294967295만 쓴다. 이름은 선택이다. |
+| 한 파일 | 두 키가 같은 경로를 가리키면 한 번 읽어 함께 쓴다. 각 키의 필드 검사는 따로 한다. |
+| 제공자 | 메타데이터의 `database_type`으로 출처 표시에 쓸 제공자를 정한다. `DBIP-`로 시작하면 DB-IP, 대소문자 구분 없이 `ipinfo`를 담으면 IPinfo, `GeoLite`로 시작하면 MaxMind GeoLite, `GeoIP`로 시작하면 MaxMind, 그 밖은 알 수 없음이다. 제공자 판정은 필드 선택에 쓰지 않는다. |
+| 오류 | 아래 원인이면 그 키의 DB를 쓰지 않는다(시작). 실행 중이면 이전 DB를 계속 쓴다. 시작·재로드를 거절하지 않으며 경고 `ip_db_unavailable`(2.2절)을 기록한다. |
+
+| 원인 코드 | 조건 |
+| --- | --- |
+| `file_unreadable` | 파일이 없거나, 읽을 권한이 없거나, 디렉터리이거나, 읽는 중 입출력 오류가 났다. |
+| `file_too_large` | 파일이 256 MiB를 넘는다. 내용은 끝까지 읽지 않는다. |
+| `invalid_format` | MMDB 2.x 파일이 아니거나 검사에 실패했다. 복사가 끝나지 않은 파일도 여기에 해당할 수 있다. |
+| `unsupported_data` | MMDB 파일이지만 그 키에 필요한 국가 또는 ASN 필드를 찾지 못했다. 예: ASN 전용 파일을 `country_db`에 지정했다. |
+
+규칙:
+
+1. 시작 때는 설정 검증과 로그 출력 준비, 변경 감지 준비가 끝난 뒤, 리스너 준비 전에 각 키의 파일을 읽는다. 결과는 키마다 `ip_db_loaded` 또는 `ip_db_unavailable`(`phase = startup`)로 기록한다.
+2. 실행 중에는 설정 파일과 같은 OS 파일 알림과 `reload.poll_secs`(Dp) 주기 확인으로 파일 내용 변경을 감지한다. 크기와 수정 시각이 같아도 내용이 다르면 변경이다. 알림을 놓친 변경의 최대 지연은 Dp + D다. 내용이 바뀌면 다시 읽는다. 읽기와 검사 시간은 파일 크기에 비례하므로 큰 파일에서는 이 지연에 더해질 수 있다.
+   DB 파일의 디렉터리를 OS 파일 알림에 등록하지 못하면(예: 디렉터리가 아직 없음) 그 파일은 주기 확인으로만 감지한다. 시작 실패나 경고가 아니며 Dp마다 등록을 다시 시도한다. 주기 확인에서 파일을 읽지 못한 것도 `reload_watch_failed`가 아니라 이 절의 `file_unreadable`로 다룬다.
+3. 다시 읽기에 성공하면 그 뒤 사건부터 새 DB로 찾고 `ip_db_loaded`(`phase = reload`)를 기록한다. 실패하면 이전 DB를 계속 쓰고 `ip_db_unavailable`(`phase = reload`)을 기록한다. 시작 때 읽지 못했다면 계속 그 정보 없이 운영한다. 실패한 내용과 같은 내용을 다시 감지하면 경고를 다시 쓰지 않는다.
+4. 이미 센 사건의 국가·ASN은 바꾸지 않는다.
+5. 경로 값을 바꾸려면 재시작해야 한다(1.8절).
+6. 파일 경로와 내용은 운영 로그·진단에 쓰지 않는다. IP 정보 DB 사건은 경로 대신 설정 키를 쓴다. 감시 실패의 `detail`에도 DB 파일 경로와 DB 파일만을 위해 등록한 디렉터리를 쓰지 않는다. 접속 출처 조회는 DB의 `database_type`·빌드 시각·제공자와 읽은 시각만 보여 준다. 경로 값은 다른 경로 키와 같이 설정 보기에만 나온다.
+
+제공자의 내려받기·갱신 방법과 라이선스 조건은 [수동 운영 안내](../how-to/operate-relay.md)를 따른다.
 
 
 ## 2. 오류
@@ -462,6 +505,7 @@ UTF-8이 아닌 파일도 `config_file_unreadable` 진단에 해당한다. 관�
 | `status_listen_not_loopback` | `status.listen`이 루프백이 아니다. 시작 때. | OPS-032 |
 | `ticket_tcp_bypass` | ticket을 켠 역할의 TCP 진입점이 켜져 있다(Viewer ↔ `relay.tcp_viewer.enabled`, Server ↔ `relay.tcp_server.enabled`). 시작·재로드 때 `role`, `listener`, `phase`를 기록한다. | OPS-071 |
 | `ticket_plaintext_ws` | ticket을 켠 역할이 `[relay.ws]` 리스너에서 켜져 있다. 그 구간은 믿을 수 있는 망 안에 있어야 한다. 시작·재로드 때 `role`, `listener = ws`, `phase`를 기록한다. | OPS-071 |
+| `ip_db_unavailable` | `ip_info.country_db` 또는 `ip_info.asn_db`가 가리키는 IP 정보 DB 파일을 쓸 수 없다(1.12절). 시작 때와 실행 중 파일 내용이 바뀌었을 때. `config_key`, `reason`, `phase`를 기록한다. 그 정보 없이, 또는 이전 DB로 계속 운영한다. | OPS-096, OPS-097 |
 
 ### 2.3 재로드 결과
 
@@ -477,7 +521,7 @@ UTF-8이 아닌 파일도 `config_file_unreadable` 진단에 해당한다. 관�
 ## 3. 호환성 규칙
 
 - 서버는 알 수 없는 테이블·키를 `config_unknown_key` 오류로 거절해야 한다. 허용 형식 밖의 값(예: 허용하지 않는 Origin 스킴)은 해당 값의 오류 코드(`config_origin_invalid` 등)로 거절해야 한다. 무시하거나 경고만 하지 않는다.
-- 호환 변경(minor 올림): 기본값이 있고 생략해도 기존 동작이 같은 새 선택 키 추가, 유효 범위 넓힘, 오류 메시지 문구 변경. 새 키를 쓴 파일은 그 키를 모르는 이전 서버가 거절한다. 그래서 새 키를 쓰려면 서버를 먼저 올린다. 4.1.0의 `[relay.ticket.*]` 표는 이 범위다. 이 표를 쓴 파일은 4.0.0 서버가 `config_unknown_key`로 거절하므로, 실행파일을 되돌리기 전에 표를 지운다. 4.2.0의 `[metrics]` 표도 이 범위다. 이 표를 쓴 파일은 4.1.0 이하 서버가 `config_unknown_key`로 거절하므로, 되돌리기 전에 표를 지운다.
+- 호환 변경(minor 올림): 기본값이 있고 생략해도 기존 동작이 같은 새 선택 키 추가, 유효 범위 넓힘, 오류 메시지 문구 변경. 새 키를 쓴 파일은 그 키를 모르는 이전 서버가 거절한다. 그래서 새 키를 쓰려면 서버를 먼저 올린다. 4.1.0의 `[relay.ticket.*]` 표는 이 범위다. 이 표를 쓴 파일은 4.0.0 서버가 `config_unknown_key`로 거절하므로, 실행파일을 되돌리기 전에 표를 지운다. 4.2.0의 `[metrics]` 표도 이 범위다. 이 표를 쓴 파일은 4.1.0 이하 서버가 `config_unknown_key`로 거절하므로, 되돌리기 전에 표를 지운다. 4.3.0의 `[ip_info]` 표도 이 범위다. 이 표를 쓴 파일은 4.2.0 이하 서버가 `config_unknown_key`로 거절하므로, 되돌리기 전에 표를 지운다. DB 파일은 남겨도 된다.
 - 호환성을 깨는 변경(새 major 버전): 키 이름·자료형·단위 변경이나 삭제, 필수 키 추가, 기본값 변경, 유효 범위 좁힘, 재로드 구분 변경, 항목 문법 변경, 보안 검사 완화. major를 올리고 마이그레이션(이전 파일을 새 형식으로 바꾸는 방법)과 롤백(새 형식 파일을 이전 서버로 되돌리는 방법) 계획을 함께 작성한다. 2.0.0의 계획은 3.1절, 3.0.0은 3.2절, 4.0.0은 3.3절에 있다.
 - 모든 값의 의미는 키 표에 있다. 키 순서와 주석은 의미가 없다.
 
@@ -527,7 +571,7 @@ UTF-8이 아닌 파일도 `config_file_unreadable` 진단에 해당한다. 관�
 | 상태 | 조건 | 지원 종료·대체 |
 | --- | --- | --- |
 | Draft | 채택 전 상태. | 해당 없음 |
-| Active | 현재 4.2.0. 계약 시험과 결과 확인 방법은 5절을 따른다. | v1은 3.1절, v2는 3.2절, v3는 3.3절의 지원 기간 규칙대로 대체한다. 4.1.0 이하 4.x는 호환 추가인 4.2.0으로 대체한다. |
+| Active | 현재 4.3.0. 계약 시험과 결과 확인 방법은 5절을 따른다. | v1은 3.1절, v2는 3.2절, v3는 3.3절의 지원 기간 규칙대로 대체한다. 4.2.0 이하 4.x는 호환 추가인 4.3.0으로 대체한다. |
 | Deprecated | 대체 계약이 Active이다. | 지원 종료 날짜는 대체 계약에서 정한다. |
 | Retired | 지원 종료. | 새 구현의 근거로 쓰지 않는다. |
 
@@ -604,6 +648,10 @@ listen = "127.0.0.1:18081"
 [metrics]
 enabled = true # 상태 리스너의 /metrics를 켠다. 바꾸면 재시작해야 한다.
 
+[ip_info]
+country_db = "ipdb/dbip-country-lite.mmdb" # 운영자가 내려받아 둔 파일. 바꾸면 재시작해야 한다.
+asn_db = "ipdb/dbip-asn-lite.mmdb"
+
 [recent_logs]
 max_entries = 1000
 
@@ -665,6 +713,7 @@ max_lifetime_secs = 60
 | Producer·Consumer / 접속 ticket 재로드·편집 계약 시험 | ticket 키 10개 재로드, 경로 2개 편집 불가, 43개 재로드·37개 편집 대상, 공개 키 파일 내용 감시·교체, 실패 시 기존 설정·공개 키·연결 유지(1.8절). [OPS-072](../specs/operations.md#7-수용-테스트), [WS-046](../specs/websocket.md#7-수용-테스트) |
 | Consumer / 접속 ticket 비노출 계약 시험 | 진단·운영 로그·상태 응답·관리 API 응답에 ticket 원문과 공개 키 파일 내용 없음(2.1절). [OPS-073](../specs/operations.md#7-수용-테스트) |
 | Producer·Consumer / 메트릭 설정 계약 시험 | `metrics.enabled` 기본 `false`, 불리언이 아닌 값의 `config_type_mismatch`, 재시작 필요 구분과 편집 대상 아님(1.2·1.8절). [OPS-092](../specs/operations.md#7-수용-테스트) |
+| Producer·Consumer / IP 정보 DB 설정 계약 시험 | `[ip_info]` 두 키는 선택이며 빈 경로·문자열이 아닌 값은 설정 오류, 상대 경로는 설정 파일 디렉터리 기준, 재시작 필요와 편집 대상 아님(1.1·1.2·1.8절). DB-IP·IPinfo·MaxMind 형식의 필드 판정과 제공자 판정, 네 원인 코드, 같은 경로 공유(1.12절), 경고 `ip_db_unavailable`(2.2절). [OPS-095~097](../specs/operations.md#7-수용-테스트) |
 
 
 ### 계약 테스트 실행 기록

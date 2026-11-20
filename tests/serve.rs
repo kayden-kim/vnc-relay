@@ -807,10 +807,17 @@ fn tls_file(name: &str) -> String {
 
 /// Valid config with an enabled WSS entry point that uses `cert` and `key`.
 fn wss_config(ports: Ports, cert: &str, key: &str) -> String {
-    let wss_port = TcpListener::bind("127.0.0.1:0")
-        .and_then(|listener| listener.local_addr())
-        .unwrap_or_else(|error| panic!("free port: {error}"))
-        .port();
+    // The four holders of `ports` are already closed, so the OS may hand one
+    // of those ports out again. A repeat would fail with config_listen_conflict.
+    let wss_port = loop {
+        let port = TcpListener::bind("127.0.0.1:0")
+            .and_then(|listener| listener.local_addr())
+            .unwrap_or_else(|error| panic!("free port: {error}"))
+            .port();
+        if !ports.all().contains(&port) {
+            break port;
+        }
+    };
     format!(
         "{}\n[relay.wss]\nlisten = '127.0.0.1:{wss_port}'\ncert_file = '{}'\nkey_file = '{}'\n[relay.wss.viewer]\nenabled = true\nallow = ['127.0.0.1']\n",
         config_text(ports),
@@ -1194,7 +1201,7 @@ fn writes_the_log_to_the_configured_file_from_start_to_stop() {
     );
     let lines: Vec<&str> = log.lines().collect();
     assert_eq!(field(lines[0], "level"), Some("info"));
-    assert_eq!(field(lines[0], "log_contract"), Some("ops-info/2.1.0"));
+    assert_eq!(field(lines[0], "log_contract"), Some("ops-info/2.2.0"));
     assert_eq!(field(lines[1], "level"), Some("warn"));
     assert_eq!(field(lines[1], "listener"), Some("tcp_viewer"));
     assert_eq!(field(lines[1], "item"), Some("0.0.0.0/0"));
@@ -1587,7 +1594,7 @@ fn server_only_websocket_roles_open_each_shared_listener() {
         .lines()
         .find(|line| field(line, "event") == Some("server_starting"))
         .expect("server_starting");
-    assert_eq!(field(starting, "log_contract"), Some("ops-info/2.1.0"));
+    assert_eq!(field(starting, "log_contract"), Some("ops-info/2.2.0"));
     let warning = wait_for_line(&log, |line| {
         field(line, "event") == Some("plaintext_ws_enabled")
     });

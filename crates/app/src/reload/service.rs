@@ -1007,6 +1007,16 @@ pub fn restart_required_keys(running: &Settings, candidate: &Settings) -> Vec<St
         a.metrics.enabled != b.metrics.enabled,
         "metrics.enabled",
     );
+    push_if(
+        &mut keys,
+        a.ip_info.country_db != b.ip_info.country_db,
+        "ip_info.country_db",
+    );
+    push_if(
+        &mut keys,
+        a.ip_info.asn_db != b.ip_info.asn_db,
+        "ip_info.asn_db",
+    );
     push_if(&mut keys, a.log.output != b.log.output, "log.output");
     push_if(
         &mut keys,
@@ -1035,10 +1045,10 @@ mod tests {
     use super::*;
     use crate::settings::{
         AdminSessionSettings, AdminSettings, Argon2Settings, DashboardSettings, EntryPointSettings,
-        KeepaliveSettings, LimitSettings, LogOutput, LogSettings, LoginLimitSettings,
-        MetricsSettings, Mode1Settings, Mode2Settings, RecentClosedSettings, RecentLogsSettings,
-        RelaySettings, ReloadSettings, StatusSettings, TicketSettings, TimeoutSettings,
-        WsListenerSettings, WsRoleSettings,
+        IpInfoSettings, KeepaliveSettings, LimitSettings, LogOutput, LogSettings,
+        LoginLimitSettings, MetricsSettings, Mode1Settings, Mode2Settings, RecentClosedSettings,
+        RecentLogsSettings, RelaySettings, ReloadSettings, StatusSettings, TicketSettings,
+        TimeoutSettings, WsListenerSettings, WsRoleSettings,
     };
 
     /// In-memory file store. Tests change file contents through `put`.
@@ -1214,6 +1224,7 @@ mod tests {
                 },
             },
             metrics: MetricsSettings::default(),
+            ip_info: IpInfoSettings::default(),
             dashboard: DashboardSettings {
                 poll: Duration::from_secs(2),
                 query_timeout: Duration::from_secs(5),
@@ -1300,6 +1311,32 @@ mod tests {
             );
             assert!(Arc::ptr_eq(&before, &h.cell.current()));
         }
+    }
+
+    /// spec: operations.md:OPS-095 partial
+    #[test]
+    fn ip_info_path_change_requires_restart_without_swapping_settings() {
+        let running = settings();
+        let mut h = harness(running.clone(), None);
+        let before = h.cell.current();
+        let mut next = running;
+        next.ip_info.country_db = Some(std::path::PathBuf::from("country.mmdb"));
+        next.ip_info.asn_db = Some(std::path::PathBuf::from("asn.mmdb"));
+        assert_eq!(
+            restart_required_keys(&before.settings, &next),
+            ["ip_info.country_db", "ip_info.asn_db"]
+        );
+        let outcome =
+            h.service
+                .handle_config(Ok(candidate(next)), &|| true, SystemTime::UNIX_EPOCH);
+        assert_eq!(outcome, ReloadOutcome::RestartRequired);
+        assert_eq!(
+            h.sink.events(),
+            vec![Event::ReloadRestartRequired {
+                config_keys: vec!["ip_info.country_db".to_owned(), "ip_info.asn_db".to_owned()],
+            }]
+        );
+        assert!(Arc::ptr_eq(&before, &h.cell.current()));
     }
 
     /// spec: operations.md:OPS-025 partial

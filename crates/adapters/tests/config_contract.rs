@@ -7,7 +7,7 @@ use std::time::Duration;
 use vnc_relay_adapters::config_file::{load, parse};
 use vnc_relay_app::settings::{
     AdminSessionSettings, AdminSettings, Argon2Settings, ConfigWarning, DashboardSettings,
-    EntryPointSettings, KeepaliveSettings, LimitSettings, LogOutput, LogSettings,
+    EntryPointSettings, IpInfoSettings, KeepaliveSettings, LimitSettings, LogOutput, LogSettings,
     LoginLimitSettings, ManagementSettings, MetricsSettings, Mode1Settings, Mode2Settings,
     RecentClosedSettings, RecentLogsSettings, RelaySettings, ReloadSettings, Settings,
     StatusSettings, TicketSettings, TimeoutSettings, TlsFiles, WsListenerSettings, WsRoleSettings,
@@ -192,6 +192,7 @@ listen = "127.0.0.1:18081"
             listen: addr("127.0.0.1:18081"),
         },
         metrics: MetricsSettings::default(),
+        ip_info: IpInfoSettings::default(),
         log: LogSettings {
             output: LogOutput::Stdout,
         },
@@ -1517,6 +1518,41 @@ fn metrics_enabled_defaults_false_and_requires_a_boolean() {
     assert_eq!(
         problems(&format!("metrics = true\n{REQUIRED}")),
         [problem("config_type_mismatch", "metrics")]
+    );
+}
+
+/// spec: operations.md:OPS-095 partial
+#[test]
+fn ip_info_paths_are_optional_strings_relative_to_the_config_directory() {
+    assert_eq!(parse_ok(REQUIRED).ip_info, IpInfoSettings::default());
+    assert_eq!(
+        parse_ok(&with_required("[ip_info]\n")).ip_info,
+        IpInfoSettings::default()
+    );
+    let same = parse_ok(&with_required(
+        "[ip_info]\ncountry_db = \"ipdb/ipinfo_lite.mmdb\"\nasn_db = \"ipdb/ipinfo_lite.mmdb\"\n",
+    ));
+    let resolved = base_dir().join("ipdb/ipinfo_lite.mmdb");
+    assert_eq!(
+        same.ip_info,
+        IpInfoSettings {
+            country_db: Some(resolved.clone()),
+            asn_db: Some(resolved),
+        }
+    );
+    let only_asn = parse_ok(&with_required("[ip_info]\nasn_db = \"asn.mmdb\"\n"));
+    assert_eq!(only_asn.ip_info.country_db, None);
+    assert_eq!(only_asn.ip_info.asn_db, Some(base_dir().join("asn.mmdb")));
+    assert_eq!(
+        problems(&with_required("[ip_info]\ncountry_db = \"\"\nasn_db = 3\n")),
+        [
+            problem("config_value_out_of_range", "ip_info.country_db"),
+            problem("config_type_mismatch", "ip_info.asn_db"),
+        ]
+    );
+    assert_eq!(
+        problems(&with_required("[ip_info]\ncity_db = \"city.mmdb\"\n")),
+        [problem("config_unknown_key", "ip_info.city_db")]
     );
 }
 

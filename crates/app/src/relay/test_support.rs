@@ -89,6 +89,7 @@ pub(crate) fn settings() -> Settings {
         recent_logs: RecentLogsSettings { max_entries: 1000 },
         status: StatusSettings { listen },
         metrics: MetricsSettings::default(),
+        ip_info: IpInfoSettings::default(),
         log: LogSettings {
             output: LogOutput::Stdout,
         },

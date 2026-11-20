@@ -11,6 +11,7 @@ pub mod conn_id;
 pub mod entry_point;
 pub mod forwarded_for;
 pub mod handshake;
+pub mod ip_info;
 pub mod login_limit;
 pub mod matching;
 pub mod origin;

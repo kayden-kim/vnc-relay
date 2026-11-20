@@ -13,7 +13,7 @@ use crate::reload::snapshot::{ReloadCell, ReloadSnapshot};
 use crate::reload::{ConfigFileState, ConfigPresence, ReloadResult};
 use crate::settings::{
     AdminSessionSettings, AdminSettings, Argon2Settings, ConfigError, DashboardSettings,
-    EntryPointSettings, KeepaliveSettings, LimitSettings, LogOutput, LogSettings,
+    EntryPointSettings, IpInfoSettings, KeepaliveSettings, LimitSettings, LogOutput, LogSettings,
     LoginLimitSettings, ManagementSettings, MetricsSettings, Mode1Settings, Mode2Settings,
     RecentClosedSettings, RecentLogsSettings, RelaySettings, ReloadSettings, Settings,
     StatusSettings, TicketSettings, TimeoutSettings, TlsFiles, WsListenerSettings, WsRoleSettings,
@@ -105,6 +105,7 @@ fn settings() -> Settings {
         recent_logs: RecentLogsSettings { max_entries: 1000 },
         status: StatusSettings { listen: addr(9090) },
         metrics: MetricsSettings::default(),
+        ip_info: IpInfoSettings::default(),
         log: LogSettings {
             output: LogOutput::Stdout,
         },
@@ -1271,7 +1272,7 @@ keepalive.tcp_idle_secs keepalive.tcp_interval_secs keepalive.tcp_probes keepali
 management.listen management.cert_file management.key_file management.config_edit
 management.login_limit.per_account management.login_limit.per_source management.login_limit.window_secs management.login_limit.lockout_secs
 management.session.idle_secs management.session.max_lifetime_secs dashboard.poll_secs dashboard.query_timeout_secs recent_closed.max_entries recent_logs.max_entries
-status.listen metrics.enabled log.output reload.settle_secs reload.poll_secs";
+status.listen metrics.enabled log.output reload.settle_secs reload.poll_secs ip_info.country_db ip_info.asn_db";
 
 const DYNAMIC_KEYS: &str = "
 relay.tcp_viewer.allow relay.tcp_server.allow relay.ws.trusted_proxies relay.ws.viewer.allow relay.ws.viewer.allowed_origins relay.ws.server.allow relay.ws.server.allowed_origins
@@ -1340,7 +1341,7 @@ fn descriptors_follow_contract_order_with_43_dynamic_and_37_enabled_editable_key
                 .collect::<Vec<_>>(),
             ORDERED_KEYS.split_whitespace().collect::<Vec<_>>()
         );
-        assert_eq!(items.len(), 76);
+        assert_eq!(items.len(), 78);
         let dynamic = items
             .iter()
             .filter(|item| item.reload == ConfigReloadKind::Dynamic)
@@ -1719,6 +1720,50 @@ fn metrics_descriptor_follows_status_and_refuses_edits_before_io() {
         );
         assert!(h.calls().is_empty());
     }
+}
+
+/// spec: operations.md:OPS-095 partial
+#[test]
+fn ip_info_descriptors_show_paths_and_refuse_edits_before_io() {
+    let mut running = transaction_settings();
+    let items = config_items(&running, &ConfigPresence::default());
+    let tail: Vec<_> = items[items.len() - 2..]
+        .iter()
+        .map(|item| (item.key.as_str(), item.value.clone()))
+        .collect();
+    assert_eq!(
+        tail,
+        [
+            ("ip_info.country_db", ConfigValue::Null),
+            ("ip_info.asn_db", ConfigValue::Null)
+        ]
+    );
+    let path = std::path::PathBuf::from("ipdb").join("ipinfo_lite.mmdb");
+    running.ip_info.country_db = Some(path.clone());
+    running.ip_info.asn_db = Some(path.clone());
+    let items = config_items(&running, &ConfigPresence::default());
+    for item in &items[items.len() - 2..] {
+        assert_eq!(item.value, ConfigValue::String(path.display().to_string()));
+        assert_eq!(item.reload, ConfigReloadKind::Restart);
+        assert!(!item.editable);
+    }
+    let h = Harness::new(running.clone(), running.clone(), running, &[], false);
+    for key in ["ip_info.country_db", "ip_info.asn_db"] {
+        assert_eq!(
+            h.service.patch(
+                actor(),
+                ConfigPatch {
+                    revision: revision_of(b"original"),
+                    changes: vec![ConfigChange {
+                        key: key.to_owned(),
+                        value: ConfigValue::String("other.mmdb".to_owned()),
+                    }],
+                },
+            ),
+            Err(ConfigEditError::InvalidRequest)
+        );
+    }
+    assert!(h.calls().is_empty());
 }
 
 /// spec: management.md:MGT-038 partial

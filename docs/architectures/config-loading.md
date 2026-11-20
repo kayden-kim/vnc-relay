@@ -87,13 +87,14 @@ v4의 `config_file.rs`는 `read_tcp_listener(Listener)`와 `read_websocket_liste
 
 | 이름 | 필드·형태 | 저장 위치 | 제약과 항상 지켜야 할 조건 |
 | --- | --- | --- | --- |
-| `Settings` | `admin`, `relay`, `mode1`, `mode2`, `limits`, `timeouts`, `keepalive`, `management`, `dashboard`, `recent_closed`, `recent_logs`, `status`, `log`, `reload` | 메모리 | 전체 검사를 통과한 값만 담는다. 생략한 키는 기본값으로 채운다. `PartialEq`는 표기·주석·키 순서가 아니라 실행 의미를 비교한다. |
+| `Settings` | `admin`, `relay`, `mode1`, `mode2`, `limits`, `timeouts`, `keepalive`, `management`, `dashboard`, `recent_closed`, `recent_logs`, `status`, `metrics`, `ip_info`, `log`, `reload` | 메모리 | 전체 검사를 통과한 값만 담는다. 생략한 키는 기본값으로 채운다. `PartialEq`는 표기·주석·키 순서가 아니라 실행 의미를 비교한다. |
 | `RelaySettings` | `tcp_viewer`, `tcp_server`: `EntryPointSettings`; `ws`, `wss`: `WsListenerSettings`; `ticket: TicketSettings` | `Settings.relay` | TCP 두 리스너와 공유 WS·WSS 두 리스너를 구분한다. `enabled(EntryPoint)`는 역할, `listener_enabled(Listener)`는 바인드 여부를 조회한다. ticket 정책은 역할별로 WS·WSS가 공유한다. |
 | `EntryPointSettings` | `enabled`, `listen: Option<SocketAddr>`, `allow: Option<AllowList>` | TCP 두 칸 | 켜진 TCP 진입점의 `listen`·`allow`는 필수다. |
 | `WsListenerSettings` | `listen`, `trusted_proxies: AllowList`, `tls: Option<TlsFiles>`, `viewer`, `server`: `WsRoleSettings` | WS·WSS 두 칸 | `enabled()`는 두 역할의 OR다. 어느 역할이든 켜면 부모의 `listen`이 필수다. WSS는 부모 TLS 두 경로도 필수다. WS에는 TLS 키를 받지 않는다. |
 | `WsRoleSettings` | `enabled`, `allow: Option<AllowList>`, `allowed_origins: Vec<Origin>` | 공유 리스너 아래 역할 두 칸 | 켜진 역할의 `allow`만 필수다. 꺼진 역할도 명시한 값의 형식·범위를 검사한다. |
 | `TicketSettings`·`TicketRoleSettings` | Viewer·Server별 `enabled`, `issuer`, `relay_host`, `public_keys_file`, `max_lifetime`, `keys` | `Settings.relay.ticket` | 로더는 빈 키 목록을 만든다. 시작·재로드가 파일을 검사해 실행 스냅샷의 키 목록을 채운다. |
 | `RecentLogsSettings` | `max_entries: u32` | `Settings.recent_logs` | 기본 1000, 범위 0~10000. 변경은 재시작 필요다. 버퍼 생성은 `serve`와 운영 로그가 맡는다. |
+| `IpInfoSettings` | `country_db`, `asn_db`: `Option<PathBuf>` | `Settings.ip_info` | `read_ip_info`가 읽는다. 설정 파일 디렉터리 기준으로 푼 경로이며 생략하면 `None`이다. 로더는 파일을 열지 않는다. 파일 읽기와 형식 검사는 [접속 출처 모듈](source-stats.md)이 맡는다. 두 키 모두 변경은 재시작 필요다. |
 | `Mode1Settings` | `enabled`, `allow_targets: Option<TargetPolicy>` | `Settings.mode1` | `enabled = true`이면 `allow_targets`가 있다. |
 | `LimitSettings` 등 수치 | `u32`(개수·바이트), `Duration`(초 단위 키) | 각 하위 설정 | 1.2절 범위 안. Lw ≤ L, Si ≤ Sa |
 | `ManagementSettings` | `listen`, `tls: Option<TlsFiles>`, `config_edit: bool`, `login_limit`, `session` | `Settings.management` | `config_edit` 기본값은 false이고 재시작 필요다. `tls`가 없으면 `listen`이 루프백(127.0.0.0/8, ::1)이다. |

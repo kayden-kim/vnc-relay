@@ -14,6 +14,7 @@ const APPROVED: &[&str] = &[
     "aws-lc-rs",
     "axum",
     "clap",
+    "maxminddb",
     "notify",
     "rpassword",
     "rustls",

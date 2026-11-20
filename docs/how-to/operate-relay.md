@@ -750,9 +750,101 @@ WS·WSS 역할마다 접속 ticket 확인을 켤 수 있다. 접속 ticket(ticke
 
 키 디렉터리도 지우기를 권장한다. 기본 위치는 `cargo clean`으로도 지워진다.
 
+### 3.11 IP 정보 DB 준비와 갱신
+
+대시보드의 "접속 출처" 화면은 연결 시도·거절·중단·세션 수를 클라이언트 주소마다 보인다. 국가와 ASN(인터넷 경로를 운영하는 조직의 번호)까지 보려면 IP 정보 DB 파일이 필요하다. IP 정보 DB는 IP 주소 범위마다 국가나 ASN을 담은 MMDB(MaxMind DB 형식) 파일이다. 이 절은 선택이다. 파일이 없으면 국가·ASN 칸만 "알 수 없음"이고 주소별 수는 그대로 센다. 동작 기준은 [운영 스펙 3.9절](../specs/operations.md#39-접속-출처-통계)과 [설정 계약 1.12절](../contracts/config-v4.md#112-ip-정보-db-파일-형식), 결정 근거는 [ADR-0012](../decisions/ADR-0012-local-ip-info-databases.md)에 있다.
+
+먼저 다음 조건을 확인한다.
+
+- 서버는 IP 정보를 찾으려고 외부에 요청하지 않는다. 파일도 내려받지 않는다. 운영자가 제공자 사이트에서 받아 운영 디렉터리에 둔다.
+- 배포 묶음과 저장소에는 DB 파일이 없다. 제공자의 이용 조건은 파일을 받은 운영자가 지켜야 한다.
+- `[ip_info]` 표는 설정 계약 4.3.0이다. 이 표를 쓴 파일은 이전 실행파일이 `config_unknown_key`로 거절한다. 실행파일을 먼저 바꾼 뒤 표를 더한다.
+- 경로를 바꾸면 재시작해야 한다. 같은 경로의 파일 내용을 바꾸면 재시작 없이 다시 읽는다.
+- 파일은 256 MiB 이하의 압축을 푼 `.mmdb` 파일이어야 한다. 서버는 파일 전체를 메모리로 읽으므로 파일 크기만큼 메모리를 더 쓴다.
+
+지원하는 제공자는 다음 세 곳이다. 2026-11-20에 각 제공자 페이지에서 확인한 내용이다. 받기 전에 제공자 페이지의 현재 조건을 다시 확인한다.
+
+| 제공자 | 받을 파일 | 계정 | 갱신 | 이용 조건 |
+| --- | --- | --- | --- | --- |
+| [DB-IP Lite](https://db-ip.com/db/lite.php) | 국가 `dbip-country-lite-<연>-<월>.mmdb.gz`, ASN `dbip-asn-lite-<연>-<월>.mmdb.gz` | 필요 없음 | 매월 | CC BY 4.0. 결과를 보이는 웹 화면에 `https://db-ip.com` 링크를 둬야 한다 |
+| [IPinfo Lite](https://ipinfo.io/developers/ipinfo-lite-database) | 국가와 ASN을 함께 담은 `ipinfo_lite.mmdb` 하나 | 필요. 내려받을 때 계정 토큰을 쓴다 | 제공자 페이지의 갱신 시각을 확인한다 | CC BY-SA 4.0. `https://ipinfo.io` 링크로 출처를 밝혀야 한다 |
+| [MaxMind GeoLite](https://dev.maxmind.com/geoip/geolite2-free-geolocation-data) | 국가 `GeoLite2-Country.mmdb`(또는 `GeoLite2-City.mmdb`), ASN `GeoLite2-ASN.mmdb` | 필요. 계정 ID와 라이선스 키를 쓴다 | 새 판이 나오면 바로 써야 하고 옛 판은 30일 안에 지워야 한다 | [GeoLite EULA](https://www.maxmind.com/en/geolite/eula). 출처 문장을 보여야 한다 |
+
+대시보드는 쓰는 DB의 제공자를 파일의 `database_type`으로 판정하고 그 제공자의 출처 표시를 화면에 보인다. 운영자가 화면에 출처 표시를 따로 더하지 않아도 된다. 대시보드 밖에서 결과를 다시 쓰거나 공유하면 그곳에도 제공자의 조건이 적용된다.
+
+처음 설정은 다음 순서로 한다. 예시는 DB-IP Lite이며, 운영 디렉터리(`relay.toml`이 있는 디렉터리)에서 실행한다.
+
+1. 운영 디렉터리에 `ipdb` 디렉터리를 만든다.
+2. 제공자 사이트에서 파일을 받는다. DB-IP Lite는 [내려받기 페이지](https://db-ip.com/db/lite.php)에서 이용 조건에 동의한 뒤 MMDB 파일을 받는다.
+3. 받은 `.gz` 파일의 압축을 풀어 `ipdb`에 둔다.
+
+   Windows PowerShell:
+
+   ```powershell
+   $in = [IO.File]::OpenRead("dbip-country-lite-2026-11.mmdb.gz")
+   $gz = [IO.Compression.GZipStream]::new($in, [IO.Compression.CompressionMode]::Decompress)
+   $out = [IO.File]::Create("ipdb\dbip-country-lite.mmdb")
+   $gz.CopyTo($out); $out.Close(); $gz.Close()
+   ```
+
+   Ubuntu:
+
+   ```shell
+   gunzip -c dbip-country-lite-2026-11.mmdb.gz > ipdb/dbip-country-lite.mmdb
+   ```
+
+   ASN 파일도 같은 방법으로 `ipdb/dbip-asn-lite.mmdb`에 둔다. IPinfo Lite의 `ipinfo_lite.mmdb`는 압축 파일이 아니므로 그대로 둔다. GeoLite는 `tar.gz` 묶음 안의 `.mmdb` 파일만 꺼내 둔다.
+
+4. 서버 실행 계정이 `ipdb`의 파일을 읽을 수 있는지 확인한다. Windows 서비스는 3.3.1절에서 데이터 폴더에 준 읽기 권한이 하위 폴더에도 적용되는지 확인한다.
+5. 서버를 정상 종료한다(3.8절).
+6. `relay.toml`에 `[ip_info]` 표를 더한다. 상대 경로는 `relay.toml`의 디렉터리를 기준으로 푼다.
+
+   ```toml
+   [ip_info]
+   country_db = "ipdb/dbip-country-lite.mmdb"
+   asn_db = "ipdb/dbip-asn-lite.mmdb"
+   ```
+
+   IPinfo Lite는 두 키에 같은 경로(`"ipdb/ipinfo_lite.mmdb"`)를 쓴다. 서버는 이 파일을 한 번만 읽는다. 한 키만 쓰면 다른 정보는 "알 수 없음"으로 둔다.
+
+7. 서버를 시작하고(3.3절) 운영 로그를 확인한다.
+
+   기대 결과: `server_ready` 전에 키마다 `ip_db_loaded`(`phase = startup`)가 한 줄씩 남는다. `config_key`는 `ip_info.country_db` 또는 `ip_info.asn_db`이고, `database_type`과 `build_time`이 있다. 파일 경로는 로그에 쓰지 않는다.
+
+8. 대시보드의 "접속 출처"를 연다.
+
+   기대 결과: "IP 정보 DB"의 두 행이 "사용 중"이고 제공자 출처 표시가 보인다. 연결이 들어오면 공인 주소의 국가와 ASN이 나온다. 루프백·사설 주소는 "로컬" 배지가 붙고 찾지 않는다.
+
+읽지 못하면 서버는 시작을 계속하고 그 키의 정보 없이 운영한다. 운영 로그에 `ip_db_unavailable` 경고가 남고 화면의 그 행은 "읽기 실패"다. `reason`이 `file_unreadable`이면 경로와 권한, `file_too_large`이면 파일 크기, `invalid_format`이면 압축을 풀었는지와 파일이 손상되지 않았는지 확인한다. `unsupported_data`이면 국가 키에 ASN 전용 파일을 넣는 것처럼 키와 파일 종류가 맞지 않는다. 파일을 고치면 서버가 자동으로 다시 읽는다.
+
+파일은 다음 순서로 갱신한다. 경로를 바꾸지 않으므로 재시작이 필요 없다.
+
+1. 새 파일을 같은 디렉터리에 임시 이름으로 받거나 풀어 둔다. 예: `ipdb/dbip-country-lite.mmdb.new`.
+2. 임시 파일로 기존 파일을 바꾼다. 같은 디렉터리 안의 이름 바꾸기는 한 번에 끝나므로, 서버가 반쯤 복사된 파일을 읽지 않는다.
+
+   Windows PowerShell:
+
+   ```powershell
+   Move-Item -Force ipdb\dbip-country-lite.mmdb.new ipdb\dbip-country-lite.mmdb
+   ```
+
+   Ubuntu:
+
+   ```shell
+   mv ipdb/dbip-country-lite.mmdb.new ipdb/dbip-country-lite.mmdb
+   ```
+
+3. 운영 로그를 확인한다.
+
+   기대 결과: Dp + D 안에 `reload_change_detected`와 `ip_db_loaded`(`phase = reload`)가 남는다. 기본값으로는 35초 안이다. 설정 파일은 바뀌지 않았으므로 `reload_applied`는 남지 않는다. 화면의 "빌드 시각"이 새 파일의 값으로 바뀐다. 이미 센 사건의 국가·ASN은 바뀌지 않고, 그 뒤 사건부터 새 파일로 찾는다.
+
+새 파일을 읽지 못하면 이전 파일의 내용을 계속 쓴다. `ip_db_unavailable`(`phase = reload`)이 남고 화면의 행은 "이전 DB 사용 중"이다. 정상 파일로 다시 바꾸면 자동으로 다시 읽는다. 같은 잘못된 내용을 다시 감지하면 경고를 다시 쓰지 않는다.
+
+GeoLite는 MaxMind가 권장하는 GeoIP Update 프로그램(`geoipupdate`)으로 정기 갱신할 수 있다. 데이터 디렉터리를 `ipdb`로 정하면 `GeoLite2-Country.mmdb`·`GeoLite2-ASN.mmdb`를 그 이름으로 둔다. `[ip_info]`의 경로도 이 이름으로 맞춘다. 설정 방법은 [MaxMind 갱신 안내](https://dev.maxmind.com/geoip/updating-databases)를 따른다. DB-IP Lite는 매월 새 파일이 나오므로 월 1회 위 갱신 순서를 실행하기를 권장한다.
+
 ## 4. 검증
 
-각 OS에서 기본 TCP 배치의 3.1~3.8절을 실행한다. TLS 배치가 아니면 3.6절은 해당 없음으로 기록한다. v3→v4 이관은 3.2.2절, Viewer 경로 이전은 3.2.3절, WSS 두 역할은 3.2.1절, 프록시 TLS 종료는 3.9절, 접속 ticket은 3.10절을 각각 추가 검증한다. OPS-031의 일반 배포 확인에 없는 TLS 동작을 확인한 것처럼 표시하지 않는다. 인증서 교체 자체의 자동 증거는 OPS-024가 담당한다.
+각 OS에서 기본 TCP 배치의 3.1~3.8절을 실행한다. TLS 배치가 아니면 3.6절은 해당 없음으로 기록한다. v3→v4 이관은 3.2.2절, Viewer 경로 이전은 3.2.3절, WSS 두 역할은 3.2.1절, 프록시 TLS 종료는 3.9절, 접속 ticket은 3.10절, IP 정보 DB는 3.11절을 각각 추가 검증한다. OPS-031의 일반 배포 확인에 없는 TLS 동작을 확인한 것처럼 표시하지 않는다. 인증서 교체 자체의 자동 증거는 OPS-024가 담당한다.
 
 자동 시험의 현재 결과는 `cargo xtask scenarios`가 만드는 `scenario-report.md`와 CI에서 확인한다([테스트 컨벤션](../conventions/testing.md)). `tests/distribution.rs`와 `tests/windows_console.rs`는 예시를 복사해 포트·경로만 바꾸고 CLI 계정 준비·시작·양방향 중계·IP 재로드·정상 종료를 확인한다. `cargo test`는 debug 실행파일을 빌드하므로 release 실행파일과 안내 전체의 증거를 대신하지 않는다. OPS-031 자동 표식은 부분이다.
 
@@ -771,6 +863,7 @@ WS·WSS 역할마다 접속 ticket 확인을 켤 수 있다. 접속 ticket(ticke
 | TCP 짝 중계와 실행파일 교체 복구 스크립트, 2026-11-17 | Windows 11 Pro 10.0.26200 x64, PowerShell 7. Release `v2026.11.4`, 실행파일 SHA-256 `6155ff8c58d4c4fc55e023b1aec12433bec6f701768fef1d9739d45823272181` | 운영 설정의 검증 사본에서 TCP Viewer를 루프백에 켰다. Python 클라이언트로 TCP Viewer↔TCP Server의 양방향 4,096바이트가 일치했다. Ctrl+C 뒤 종료 코드 0이었다. 교체 스크립트는 정상 종료를 확인한 뒤 디렉터리를 옮기고 30초 안에 준비되지 않으면 복원하도록 했다. 이전 실행파일의 시험 사본과 별도 루프백 포트로 교체 성공·복원 경로를 각각 실행해 확인했다 | 운영 포트는 TCP Viewer가 꺼져 있고 WSS 두 역할에 ticket이 필요해 짝 시험을 하지 않았다. 이 복원 시험은 Windows 서비스 전환·교체 스크립트의 복원을 확인한 것이 아니다 |
 | Windows 서비스 설치·권한·시작, 2026-11-18 | Windows 11 Pro 10.0.26200 x64, PowerShell. Release `v2026.11.5`. 서버 SHA-256 `cae5595c16d366affc8f7c1931713b3405c3b9239be66f1d0d5098897b3d0e30`, 트레이 앱 `ac3e78ac3c42e055efcfe23f7cecc761241f3a3db60709223f4f4a842605f275` | 3.3.1절로 `%ProgramFiles%\vnc-relay\`에 복사해 관리자 권한으로 설치했다. `service install` 종료 코드 0, `sc.exe qc`는 자동(지연 시작)·`NT SERVICE\vnc-relay`·`VNC Relay`와 절대 설정 경로를 보였다. 운영자 SID 권한은 `CCLCRPWP`였다. 데이터 폴더에 서비스 `(OI)(CI)RX`, 로그 폴더에 `(OI)(CI)M`을 줬다. 새 실행파일 경로의 인바운드 규칙 두 개를 만들고 이전 서버의 로그인 자동 시작 바로 가기는 제거했다. 일반 PowerShell의 `sc.exe start`는 UAC 없이 성공했다. 0.30초 안에 `RUNNING`과 `/readyz` 200을 확인했고 네 리스너가 서비스 프로세스에 속했다 | 인증서 갱신 도구 때문에 데이터는 사용자 프로필 아래 기존 위치에 두었다. 비밀 파일의 상속 차단 권장 단계는 적용하지 않았다. 자동(지연) 시작의 재부팅 확인·서비스 해제·전환 실패 복원은 미실행이다 |
 | Windows 서비스 중지·실행파일 교체·서버 쪽 확인, 2026-11-20 | Windows 11 Pro 10.0.26200 x64, PowerShell 7.6.10. Release `v2026.11.8`. 서버 SHA-256 `ac3ccea5eb233a71d4c89bbf07bdfcfb4ca5da9319addac4b05f92c8b17118c8`, 트레이 앱 `a15b182deb13bdedaa33db93f533432c5625f25d977996da7750ba5cef8d8250`. 이전 설치는 Release `v2026.11.6`(서버 SHA-256 `1da9be6f595d3a2fafffea669b9dfb3146b4aba153124e576bfe2696d8d35ba0`)이다 | `gh release download`로 받은 묶음의 해시를 대조하고 준비 디렉터리에 풀었다. 관리자 PowerShell 스크립트 하나로 다음을 차례로 했다. 서비스 실행 경로(`PathName`)와 설치된 실행파일의 해시·버전 확인, 트레이 스레드에 `WM_QUIT`, 중지 직전 유휴 확인, 서비스 중지, 폴더 교체, 해시와 버전 대조, 시작, `Running`과 `/readyz` 200 확인, 서버 쪽 확인, 이전 폴더 삭제다. 트레이 앱은 0.11초 안에 끝났다. 유휴 확인에서 서비스 시작 이후 운영 로그의 대기 등록·세션 사건은 0건이었고 중계 포트 443·5500에 연결이 없었다. 중지 0.27초, 시작부터 준비 0.40초, 전체 2.14초, 로그의 중지부터 준비는 1.96초였다. `shutdown_started`는 `requested`·G 30·활성 0이었고 `server_stopped`가 남았다. `log_contract`는 `ops-info/2.1.0`이고, 시작 경고 네 건(`allow_all_source` 세 건, `ticket_tcp_bypass` 한 건)은 이전과 같았다. 서버 쪽 확인 18개가 통과했다. `/livez`·`/readyz` 200, 관리 `/` 303·`/login/` 200이었다. 루프백과 공유기 NAT 루프백에서 각각 WSS 두 이름이 TLS 1.3과 인증서 검증을 통과했다. ticket 없는 Viewer·Server는 401(`WWW-Authenticate: VncRelayTicket`), 허용 밖 Origin은 403, `/relay`는 404였다. TCP Server 연결도 서비스에 닿았다. `[metrics]`가 없는 운영 설정에서 상태 리스너의 `/metrics`는 404였다. 새 트레이 앱은 일반 사용자 세션에서 실행됐다 | 서비스 등록·운영 파일·방화벽 경로는 바꾸지 않았다. 복원은 일어나지 않았다. 관리 로그인이 필요한 확인(메트릭 화면과 24시간 추이)·트레이 메뉴·실제 기기와 Viewer 중계·롤백은 미실행이다 |
+| IP 정보 DB 읽기와 접속 출처 조회, 2026-11-20 | Windows 11 Pro 10.0.26200 x64, Rust 1.99.1. 커밋 `40c67bb`에 접속 출처 변경을 더한 미커밋 작업 트리의 debug 실행파일. 시험 도구가 띄운 `target/debug/vnc-relay.exe`의 SHA-256은 `9949de447c7335222a5c2444872dda828ed3415b4ad0098d2740682c85611f02`이다. DB-IP Lite 2026-11 국가·ASN 파일(8,515,063·9,648,279바이트), IPinfo Lite 표본 파일 하나(3,301바이트), MaxMind 시험 파일 `GeoLite2-Country-Test`·`GeoLite2-City-Test`·`GeoLite2-ASN-Test` | 저장소의 실행파일 시험 도구(`tests/common/dashboard_live.rs`)로 임시 자동 시험을 만들어 실행한 뒤 지웠다. 루프백 포트에 서버를 띄우고 네 조합을 차례로 썼다: DB-IP 국가+ASN, IPinfo 한 파일을 두 키에, GeoLite Country+ASN, GeoLite City+ASN. 네 조합 모두 준비 전에 `ip_db_loaded` 두 개(`phase = startup`)가 남았다. `database_type`은 `DBIP-Country-Lite`, `DBIP-ASN-Lite (compat=GeoLite2-ASN)`, `ipinfo bundle_location_lite_sample.mmdb`, `GeoLite2-Country`·`GeoLite2-City`·`GeoLite2-ASN`이었다. `/api/v1/sources`의 두 DB는 `loaded`였고 `provider`는 차례로 `dbip`·`ipinfo`·`maxmind_geolite`였다. 루프백 신뢰 프록시를 거쳐 공인 주소 7개로 WS Viewer를 열고 닫았다. 모두 101이었고 주소마다 연결 시도 1·중단 1이었다. DB-IP는 7개 모두 국가·ASN·AS 이름을 찾았다. IPinfo 표본과 MaxMind 시험 파일은 파일에 든 범위의 주소만 찾았고 나머지는 `null`이었다. City 파일의 국가는 Country 파일과 같았다 | debug 실행파일의 자동 시험이며 release 묶음이나 수동 운영 확인이 아니다. 이 실행 뒤 DB 읽기·집계·조회 코드는 rustfmt 서식만 바뀌었다. 대시보드 자산은 그 뒤에도 바뀌었다. IPinfo Lite 전체 파일과 실제 GeoLite 파일은 토큰·계정이 필요해 확인하지 않았다. 실행 중 파일 교체, 대시보드 화면, Ubuntu는 이 기록의 범위 밖이다. 찾은 국가·ASN 값은 기록하지 않는다 |
 
 Windows 서비스 교체의 상태 확인에는 `Get-Service`를 쓴다. 2026-11-18 `v2026.11.6` 교체의 첫 시도는 `sc.exe query`에서 영문 `STATE`를 찾다가 서비스를 멈춘 직후 끝났다. 파일 교체 전이었고 일반 PowerShell의 `sc.exe start`로 이전 버전을 다시 시작했다. 중단은 19.3초였다. 한국어 Windows의 `sc.exe` 출력은 항목 이름을 현지화하므로 영문 문자열을 상태 판정 기준으로 쓰지 않는다.
 
@@ -785,6 +878,7 @@ Windows 서비스 교체의 상태 확인에는 `Get-Service`를 쓴다. 2026-11
 - 3.7.1절 최근 로그 상한·제거·재시작·0 보관·필터·JSON Lines 내려받기.
 - 3.2.3절의 변경된 클라이언트 URL 실제 중계·롤백·Ubuntu 경로 이전.
 - Windows 서비스 재부팅 뒤 자동(지연) 시작·해제·트레이 메뉴 동작·실제 기기와 Viewer 중계·서비스 교체 롤백.
+- 3.11절의 IPinfo Lite 전체 파일·실제 GeoLite 파일, 실행 중 DB 파일 교체, release 실행파일과 Ubuntu에서의 IP 정보 DB 확인.
 
 ## 5. 중단 조건
 
@@ -814,6 +908,8 @@ v4→v3(릴리스 `v2026.11.1`) 롤백은 정상 종료 뒤 이전 실행파일�
 프록시 TLS 종료를 쓰던 배치는 v3의 전달 주소 검사가 없어진다. 롤백 전에 직접 내장 WSS와 실제 소켓 IP 정책으로 되돌리거나 프록시를 통한 접근을 중지해야 한다. 프록시 주소를 전체 클라이언트의 주소처럼 허용해 우회하지 않는다. 시작·준비·실제 Viewer 중계·관리 재로그인과 로그 소비자 표기를 다시 확인한다. 이전 서버의 재로드 구분을 다시 적용한다. 이 롤백 절차는 미실행이다.
 
 접속 ticket을 켠 뒤 문제가 생기면 그 역할의 `enabled = false`로 되돌린다. 재시작은 필요 없다. 접속 ticket을 지원하지 않는 이전 실행파일로 되돌릴 때는 `[relay.ticket.*]` 표를 지운 설정 파일과 함께 복원한다. 표가 남으면 이전 서버는 `config_unknown_key`로 시작하지 않는다.
+
+IP 정보 DB 파일에 문제가 있으면 이전 정상 파일을 같은 경로에 다시 둔다. 재시작은 필요 없다. 국가·ASN을 쓰지 않으려면 정상 종료한 뒤 `[ip_info]` 표를 지우고 다시 시작한다. 접속 출처를 지원하지 않는 이전 실행파일(릴리스 `2026.11.8` 이하)로 되돌릴 때는 `[ip_info]` 표를 지운 설정 파일과 함께 복원한다. 표가 남으면 이전 서버는 `config_unknown_key`로 시작하지 않는다. 내려받은 DB 파일은 남겨 두어도 이전 서버가 읽지 않는다.
 
 로그 화면·상단 메뉴와 ko/en 문구(CPY-149~189)의 기준은 [운영 스펙](../specs/operations.md)을 따른다.
 

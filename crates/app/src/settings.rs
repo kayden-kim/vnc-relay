@@ -30,6 +30,7 @@ pub struct Settings {
     pub recent_logs: RecentLogsSettings,
     pub status: StatusSettings,
     pub metrics: MetricsSettings,
+    pub ip_info: IpInfoSettings,
     pub log: LogSettings,
     pub reload: ReloadSettings,
 }
@@ -334,6 +335,15 @@ pub struct StatusSettings {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct MetricsSettings {
     pub enabled: bool,
+}
+
+/// IP information database files for connection source statistics
+/// (config-v4 §1.2 `[ip_info]`, §1.12). Paths are already resolved against
+/// the config file directory. Both keys need a restart.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct IpInfoSettings {
+    pub country_db: Option<PathBuf>,
+    pub asn_db: Option<PathBuf>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

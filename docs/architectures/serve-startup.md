@@ -26,7 +26,7 @@
   - 명령행 해석: `serve --config <path>`(`--config=<path>` 포함, 한 번만), `--help`·`-h`, `--version`·`-V`. `admin`은 [계정 준비 모듈](admin-accounts.md), Windows 전용 `service`는 [서비스 모듈](windows-service.md)에 실행을 넘긴다. 그 밖의 하위 명령·옵션은 `usage_error`(종료 코드 2)다.
   - 진단 출력: `error[<code>] key=<key>: <message>`, `warning[<code>] key=<key>: <message>`. 키가 없으면 ` key=`를 뺀다(1.5절).
   - 종료 코드 매핑: 사용법 2, 설정 3, 리스너 4, 계정 파일 5, 런타임 준비 1, 정상 종료 0.
-  - `serve` 시작 순서: 설정·presence 읽기와 로그 열기 → 계정 검증·인증 서비스 → 런타임·종료 신호 → 시작 키 → TLS 검사 → ticket 공개 키 검사 → snapshot·공유 재로드·설정 서비스·감시 등록 → 리스너 바인드. TLS·ticket 공개 키 오류는 함께 모은다([접속 ticket 모듈 설계](relay-access-ticket.md#41-시작)).
+  - `serve` 시작 순서: 설정·presence 읽기와 로그 열기 → 계정 검증·인증 서비스 → 런타임·종료 신호 → 시작 키 → TLS 검사 → ticket 공개 키 검사 → snapshot·공유 재로드·설정 서비스·감시 등록 → IP 정보 DB 첫 읽기 → 리스너 바인드. TLS·ticket 공개 키 오류는 함께 모은다([접속 ticket 모듈 설계](relay-access-ticket.md#41-시작)). IP 정보 DB 오류는 경고만 쓰고 시작을 막지 않는다([접속 출처 모듈 설계](source-stats.md#43-db-첫-읽기)).
   - 단계마다 운영 로그 사건을 기록한다: `server_starting`, 설정 경고(`phase` = `startup`), 진단마다 `startup_failed`, 정상 종료 때 `server_stopped`. 필드 규칙은 [운영 로그 모듈 설계 4·6절](ops-log.md#4-처리-순서)이다.
   - 계정 파일 읽기와 형식·해시 문자열 검사(1.3·1.4절), 계정이 없을 때의 시작 거절, Ubuntu의 권한 경고(1.6절).
   - 리스너 바인드 실패 수집과 실패 때 이미 바인드한 리스너 닫기.
@@ -130,10 +130,10 @@ flowchart LR
 | 순서 | 코드 위치(파일·심볼) | 조건·계산 | 바뀌는 상태 | 결과를 쓰는 곳 |
 | --- | --- | --- | --- | --- |
 | 1 | `src/main.rs` `main`, `src/cli.rs` `parse` | 인수를 해석한다. 오류면 `error[usage_error]`와 사용법을 stderr에 쓰고 2로 끝난다. | `Command::Serve { config }` | 2단계 |
-| 2 | `src/serve.rs` `start`, `config_file::load_candidate`, `JsonLinesEventSink::open` | 같은 바이트에서 Settings와 presence를 얻는다. 설정 진단은 모두 출력하고 3으로 끝난다. 로그를 열지 못해도 3이다. 성공하면 server_starting·시작 경고를 쓴다. | ConfigCandidate·로그 출력 | 3단계 |
+| 2 | `src/serve.rs` `start`, `config_file::load_candidate`, `JsonLinesEventSink::open` | 같은 바이트에서 Settings와 presence를 얻는다. 설정 진단은 모두 출력하고 3으로 끝난다. 로그를 열지 못해도 3이다. 성공하면 기록부 사슬 `MetricsSink → SourcesSink → 로그 출력`을 만들고([메트릭](metrics.md), [접속 출처](source-stats.md)) server_starting·시작 경고를 쓴다. | ConfigCandidate·로그 출력·`Metrics`·`SourceStats`·빈 `IpLookup` | 3단계 |
 | 3 | `accounts_file::load`, `accounts::require_any` | `settings.admin.accounts_file`을 읽고 검증한다. 경고는 stderr에 쓴다. 진단이 있거나 계정이 없으면 모두 쓰고, 진단마다 `startup_failed`를 기록하고, 5로 끝난다. | `LoadedAccounts` | 4단계 |
 | 4 | `src/serve.rs` `start`, `ShutdownSignal::register`, `generate_startup_keys`, `tls_checks`, `reload::ticket_keys::load` | 인증 서비스·tokio 런타임·신호·시작 키를 준비한다. 런타임 준비 실패는 1이다. 켜진 WSS·관리 TLS를 모두 검사한 뒤 ticket을 켠 역할의 공개 키 파일을 검사한다. 오류가 있으면 파일별 진단과 `startup_failed`를 남기고 3으로 끝난다. | 인증·런타임·신호·시작 키·검사 통과 acceptor·공개 키를 채운 후보 | 5단계 |
-| 5 | `listen_until_shutdown`, `config_management`, `file_watch::start` | 공개 키를 채운 후보·TLS로 ReloadCell을 만든다. ReloadService에 `TicketJwksStore`를 주입한다. Arc/Mutex로 감싸 설정 서비스와 watcher에 공유한다. 켠 역할의 공개 키 파일도 감시한다. 감시 등록 후 기준 해시를 읽고 watcher를 spawn한다. 감시 시작 실패는 바인드 전 `watch_unavailable`·1이다. | cell·SharedReload·ConfigManagement·감시 작업 | 6단계 |
+| 5 | `listen_until_shutdown`, `config_management`, `file_watch::start`, `ReloadWatcher::attach_ip_info`, `IpInfoService::load_startup` | 공개 키를 채운 후보·TLS로 ReloadCell을 만든다. ReloadService에 `TicketJwksStore`를 주입한다. Arc/Mutex로 감싸 설정 서비스와 watcher에 공유한다. 켠 역할의 공개 키 파일도 감시한다. 감시 등록 후 기준 해시를 읽는다. 감시 시작 실패는 바인드 전 `watch_unavailable`·1이다. 이어 `[ip_info]` DB 경로를 감시에 더하고, `block_in_place` 안에서 DB를 처음 읽는다. DB 오류는 `ip_db_unavailable` 경고만 쓰고 시작을 계속한다. 그 뒤 watcher를 spawn한다. | cell·SharedReload·ConfigManagement·`IpInfoService`·`SourcesService`·감시 작업 | 6단계 |
 | 6 | `Settings::status_listener`, `net::bind_one`, `Settings::management_listener`, `Settings::other_listeners`, `net::bind` | 상태→관리→나머지 순으로 바인드한다. 상태 작업은 바인드 직후 시작한다. 상태와 관리는 같은 count-only Lm과 현재 값 source를 쓴다. 실패는 모두 모아 성공 리스너·상태·감시를 회수하고 listener_bind_failed·4로 끝난다. | 바인드한 리스너·상태 작업 | 7단계 |
 | 7 | `listen_until_shutdown`, `ManagementListener::new`, `TcpEntryPoint::run`, `WsEntryPoint::run` | ready 사건 뒤 count-only L/Lw, source를 가진 TcpTargetConnector·RelayRuntime·RelayService를 만든다. 관리 query/terminate/config와 DashboardHints를 주입하고 관리·중계·G 감독 작업을 실행한다. | 준비 상태·공유 runtime·작업 소유자 | 종료 감독 |
 

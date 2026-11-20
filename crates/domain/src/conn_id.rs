@@ -9,8 +9,9 @@ static NEXT: AtomicU64 = AtomicU64::new(1);
 
 /// ID that a relay listener gives a connection when it accepts it. It is
 /// unique within the process and differs from the session ID. `Display`
-/// writes `c` and the decimal sequence number, such as `c1`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+/// writes `c` and the decimal sequence number, such as `c1`. IDs compare in
+/// the order they were handed out.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct ConnId(u64);
 
 impl ConnId {

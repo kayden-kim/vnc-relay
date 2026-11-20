@@ -1,13 +1,13 @@
 # 파일 변경 감지 모듈 설계
 
-이 모듈은 설정 파일, 켜진 TLS 리스너의 인증서·개인키, ticket을 켠 역할의 공개 키 파일 변경을 감지한다. 안정화 뒤 후보를 읽고 검증해 43개 동적 설정과 TLS 수락기를 한 snapshot으로 발행한다. 공개 키 목록도 Settings에 포함한다. watcher와 설정 편집 서비스는 같은 잠금으로 파일 읽기부터 적용까지 직렬화한다. GET/PATCH의 업무 경계는 [설정 보기·편집 모듈](config-edit.md)이 맡는다. ticket 연결은 [접속 ticket 모듈 설계](relay-access-ticket.md#44-재로드와-편집)를 따른다.
+이 모듈은 설정 파일, 켜진 TLS 리스너의 인증서·개인키, ticket을 켠 역할의 공개 키 파일 변경을 감지한다. 안정화 뒤 후보를 읽고 검증해 43개 동적 설정과 TLS 수락기를 한 snapshot으로 발행한다. 공개 키 목록도 Settings에 포함한다. watcher와 설정 편집 서비스는 같은 잠금으로 파일 읽기부터 적용까지 직렬화한다. GET/PATCH의 업무 경계는 [설정 보기·편집 모듈](config-edit.md)이 맡는다. ticket 연결은 [접속 ticket 모듈 설계](relay-access-ticket.md#44-재로드와-편집)를 따른다. `[ip_info]`의 IP 정보 DB 파일도 같은 에피소드로 감지하지만 snapshot에 넣지 않고, 설정 후보를 처리한 뒤 [접속 출처 모듈](source-stats.md#44-다시-읽기)에 다시 읽기를 맡긴다.
 
 | 항목 | 값 |
 | --- | --- |
 | 구조 시점 | Current |
 | 문서 상태 | Draft |
 | 구현 대조 | 소스 대조 범위와 수동 관찰은 [대조 기록](#대조-기록)을 따른다. |
-| 코드 위치 | `crates/adapters/src/file_watch.rs` `ReloadWatcher::run`·`attach`·`episode`·`apply`, `crates/adapters/src/file_watch/feed.rs`, `crates/app/src/reload.rs` `SharedReload`·`ConfigCandidate`·`ConfigPresence`, `crates/app/src/reload/service.rs` `ReloadService`·`PreparedReload`, `crates/app/src/reload/snapshot.rs` `ReloadSnapshot`·`ReloadCell` |
+| 코드 위치 | `crates/adapters/src/file_watch.rs` `ReloadWatcher::run`·`attach`·`attach_ip_info`·`episode`·`apply`·`refresh_ip_db`, `crates/adapters/src/file_watch/feed.rs`, `crates/app/src/reload.rs` `SharedReload`·`ConfigCandidate`·`ConfigPresence`, `crates/app/src/reload/service.rs` `ReloadService`·`PreparedReload`, `crates/app/src/reload/snapshot.rs` `ReloadSnapshot`·`ReloadCell` |
 | 코드 지도 | [코드 지도](code-map.md) |
 | 관련 스펙 | [운영 §3.3](../specs/operations.md#33-파일-변경-자동-감지와-부분-재로드), OPS-003·024~028·035·038·040·041·047~064 |
 | 관련 계약 | [설정 §1.8](../contracts/config-v4.md#18-재로드-구분), [설정 오류](../contracts/config-v4.md#21-설정-오류와-준비-실패), [관리 API §1.13~14](../contracts/management-api-v1.md#113-설정-보기-get-apiv1config), [운영 정보 자동 재로드](../contracts/ops-info-v2.md#자동-재로드) |
@@ -24,6 +24,7 @@
 - 파일 감시·로그 재열기는 adapters, 실행 값·정책·후보 수용은 app이다. app은 notify·TOML·rustls 타입을 알지 못한다.
 - 수동 재로드 API·CLI는 없다. PATCH는 설정 파일을 먼저 교체한 뒤 같은 준비 후보를 commit한다.
 - 로그 경로는 재로드 해시·세대와 분리한다. 생성·삭제·이름 변경과 독립 Dp 작업이 로그 핸들을 다시 연다.
+- IP 정보 DB 파일은 내용 해시로만 비교한다. 바뀌면 에피소드를 열고, 설정 후보 처리 뒤 바뀐 경로로 `IpInfoService::refresh`를 부른다. DB 결과는 `reload_applied`·재로드 이력·설정 거절에 들어가지 않는다. DB 파일만을 위한 디렉터리의 알림 등록은 실패해도 경고하지 않는 선택 등록이고, 알림 오류 문장에서 DB 경로를 뺀다(설정 v4 1.12절 규칙 2·6).
 
 ## 2. 내부 구조
 
@@ -49,6 +50,8 @@ flowchart LR
 | `reload/snapshot.rs` `ReloadCell`·`ReloadSnapshot` | Settings·presence·TLS를 한 번 발행한다. | 서비스가 쓰고 runtime reader가 읽는다. |
 | `reload/ports.rs` `RuntimeSettingsSource` | TLS 타입을 노출하지 않는 현재 Settings callback | 같은 snapshot read lock을 callback 끝까지 유지한다. |
 | `file_watch.rs` `reopen_log` | 알림·Dp에서 로그를 다시 연다. 안정화 대기와 독립이다. | watcher run과 함께 끝난다. |
+| `file_watch.rs` `attach_ip_info`·`IpDbWatch`·`db_hashes`·`ip_db_changed`·`refresh_ip_db` | DB 경로 목록과 경로별 마지막 처리 해시를 둔다. 해시는 `stream_hashes`가 64 KiB씩 읽어 `spawn_blocking`에서 계산한다. 두 async 함수는 `&mut self`를 받는다. `ChangeFeed`가 `Sync`가 아니어서 `&self`를 await 너머로 들고 가면 `run`의 future가 `Send`가 아니게 되기 때문이다 | serve가 `file_watch::start` 직후, DB 첫 읽기 전에 붙인다. 경로는 프로세스 동안 고정이다. |
+| `file_watch/feed.rs` `ChangeFeed::watch_dirs(required, optional)`·`ChangeQueue::set_hidden`·`offer_error` | 필수 디렉터리 등록 실패는 오류다. 선택 디렉터리 등록 실패는 건너뛰고 `false`를 돌려주며 watcher는 다음 Dp에 다시 시도한다. 알림 오류는 숨길 경로(DB 파일·해석한 대상·선택 디렉터리)를 뺀 뒤 기록하고, 숨길 경로만 있던 오류는 버린다 | watcher와 OS 콜백이 공유한다. |
 
 ## 3. 데이터 모델
 
@@ -65,6 +68,7 @@ flowchart LR
 | `ReloadSnapshot<A>` | `Arc<Settings>`·`Arc<ConfigPresence>`·`wss_tls`·`management_tls`. IP 정책 중복 저장은 없다. |
 | `ReloadCell<A>` | `RwLock<Arc<ReloadSnapshot<A>>>`. `current`는 Arc를 복사한다. `with_current`는 read lock을 callback 끝까지 유지한다. 중독된 snapshot lock은 `PoisonError::into_inner`로 읽는다. |
 | `ReloadOutcome` | Applied·Rejected·RestartRequired·Unchanged·Discarded. 마지막 둘은 결과 사건·이력을 만들지 않는다. |
+| `IpDbWatch` | `Arc<IpInfoService>`, 설정한 DB 경로 `Vec<PathBuf>`, 경로별 마지막 처리 해시 `BTreeMap<PathBuf, Option<u64>>`. `None`은 없거나 읽지 못한 파일이다. 설정 `processed`와 따로 둔다. |
 | `LastReload` | 확정 시각·결과·trigger·키. 프로세스 메모리에만 두고 시작은 None이다. |
 
 ## 4. 처리 순서
@@ -87,6 +91,8 @@ flowchart LR
 **presence-only 갱신.** 명시 키 유무는 `dynamic_changed_keys`·`restart_required_keys`의 의미 차이가 아니다. watcher 후보의 실행 값·TLS가 같고 presence만 다르면 `handle_config`는 `running_presence`와 snapshot presence만 갱신한다. snapshot의 Settings는 기존 running Arc를 그대로 쓴다. 결과는 Unchanged이며 `reload_applied`·경고·last_reload는 바뀌지 않는다. 이 갱신은 꺼진 기능의 표시에서 생략과 명시를 구분하기 위한 것이다. `inactive_paths`는 꺼진 WSS에 TLS 경로 하나만 있어 `Settings.tls=None`인 경우 그 경로를 표시하는 fallback으로만 쓴다. 해당 파일을 읽거나 감시하지 않는다.
 
 로그 알림은 위 순서에 들어가지 않는다. `reopen_log`는 내용 해시와 무관하게 Dp마다 항상 다시 연다. 로그의 일반 쓰기 알림은 재열기·재로드 세대를 만들지 않는다.
+
+IP 정보 DB 파일은 위 순서에 끼어든다. 1단계의 주기 확인(`poll_check`)은 설정 해시와 함께 DB 해시를 비교해, DB만 바뀌어도 `poll` 에피소드를 연다. 설정 파일을 읽지 못해 `reload_watch_failed(poll_error)`를 쓴 틱에도 DB가 바뀌었으면 에피소드를 연다. 8단계 뒤 결과가 Discarded가 아니면 `refresh_ip_db`가 DB 해시를 다시 계산하고, 처리 해시와 다른 경로를 모아 처리 해시를 바꾼다. 바뀐 경로가 있고 종료 중이 아니면 `IpInfoService::refresh`를 `spawn_blocking`으로 부르고 끝날 때까지 기다린다. 이 단계는 `SharedReload` 잠금 밖이다. 설정 내용이 같으면 결과는 Unchanged이므로 `reload_change_detected` 뒤에 `ip_db_loaded` 또는 `ip_db_unavailable`만 남는다.
 
 ### 4.1 시간 기준
 
@@ -124,6 +130,9 @@ flowchart LR
 | --- | --- |
 | 시작 설정/TLS/ticket 공개 키 감시 등록 | `startup_failed(watch_unavailable)`, 종료 코드 1. 리스너를 바인드하지 않는다. |
 | 실행 중 OS 알림 등록·수신 | `reload_watch_failed(notify_error)`. Dp마다 재등록하며 주기 확인은 계속한다. |
+| DB 파일만을 위한 디렉터리의 알림 등록 | 경고하지 않는다. 주기 확인으로 감지하고 Dp마다 등록을 다시 시도한다. |
+| 알림 오류가 DB 경로를 가리킴 | 그 경로를 `detail`에서 뺀다. 남는 경로가 없으면 `reload_watch_failed`를 쓰지 않는다. |
+| DB 파일 없음·읽기 실패 | 감시 실패가 아니다. 해시를 "읽지 못함"으로 비교하고, 다시 읽기가 `ip_db_unavailable(file_unreadable)`을 쓴다. |
 | 주기 확인 I/O | `reload_watch_failed(poll_error)`. 실행 값은 유지한다. OS 알림이 살아 있으면 그 경로는 계속한다. | 한쪽 감시만 실패하면 다른 쪽으로 계속한다. 둘 다 실패하면 자동 적용을 멈추고 이전 유효 설정을 유지한다.
 | 알림 유실·넘침 | 전체 재확인을 요청한다. 새로운 재로드 세대로 처리한다. |
 | 설정 구문·값·TLS·ticket 키 오류 | `reload_rejected`, FileWatch rejected 이력. 실행 값·인증서·공개 키·기존 연결은 유지한다. ticket 키 오류 사유는 `ticket_keys_invalid`다. 설정 파일 소멸·비UTF-8은 `config_file_unreadable`이다. |
@@ -223,6 +232,12 @@ PATCH는 같은 running Settings·TLS 기준 해시를 갱신한다. 뒤 watcher
 - 날짜·대상: 2026-11-08 작업 트리의 reload·watcher·serve와 소비자 경계.
 - 환경·방법: 저장소 소스를 읽고 공유 mutex, snapshot 발행과 reader 경계를 본문과 대조했다. 실행 환경의 동작 검증은 포함하지 않는다.
 - 결과: 본문은 대조한 구조를 설명한다. 실행 결과는 시나리오 보고서와 CI에서 확인한다.
+
+### IP 정보 DB 감시 대조
+
+- 날짜·대상: 2026-11-20 작업 트리의 `attach_ip_info`·`poll_check`·`refresh_ip_db`·`feed.rs`의 선택 등록과 오류 경로 제거.
+- 환경·방법: 본문 1·2·3·4·6절의 DB 항목을 소스와 대조했다. Windows 11 x64에서 `file_watch.rs`의 DB 감시 단위 시험과 실행파일 시험 `tests/sources.rs`를 실행했다.
+- 결과: 본문과 일치한다. Linux inotify에서 DB 디렉터리 선택 등록이 실패하는 경우는 관찰하지 않았다.
 
 ### Windows 파일 감시 수동 관찰
 

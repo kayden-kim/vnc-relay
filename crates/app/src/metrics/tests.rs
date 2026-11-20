@@ -235,6 +235,7 @@ fn counted_events() -> Vec<Event> {
         },
         Event::ConnectionRejected {
             listener: "management",
+            conn_id: None,
             stage: Stage::Accept,
             reason: RejectReason::AdminConnectionLimit { limit: 4 },
             peer_ip: peer(),

@@ -72,6 +72,9 @@ pub(super) async fn answer(shared: &Shared, peer: &PeerAddr, parts: Parts, body:
     if parts.uri.path() == "/api/v1/metrics" {
         return super::metrics_api::answer(shared, &mut admin, parts, body).await;
     }
+    if parts.uri.path() == "/api/v1/sources" {
+        return super::sources_api::answer(shared, &mut admin, parts, body).await;
+    }
     super::query_api::answer(shared, &mut admin, parts, body).await
 }
 

@@ -749,10 +749,14 @@ fn push_event_fields(fields: &mut Vec<(&'static str, Value)>, event: &Event) {
         }
         Event::ConnectionRejected {
             listener,
+            conn_id,
             stage,
             reason,
             peer_ip,
         } => {
+            if let Some(conn_id) = conn_id {
+                fields.push(("conn_id", Value::from(conn_id.to_string())));
+            }
             fields.push(("listener", Value::from(*listener)));
             fields.push(("stage", Value::from(stage.as_str())));
             fields.push(("reason", Value::from(reason.as_str())));
@@ -1266,6 +1270,30 @@ fn push_event_fields(fields: &mut Vec<(&'static str, Value)>, event: &Event) {
         }
         Event::ReloadWatchFailed { reason, detail } => {
             fields.push(("reason", Value::from(reason.as_str())));
+            if let Some(detail) = detail {
+                fields.push(("detail", Value::from(cut(detail, DETAIL_MAX_BYTES))));
+            }
+        }
+        Event::IpDbLoaded {
+            key,
+            database_type,
+            build_time,
+            phase,
+        } => {
+            fields.push(("config_key", Value::from(key.config_key())));
+            fields.push(("database_type", Value::from(database_type.as_str())));
+            fields.push(("build_time", Value::from(timestamp(*build_time))));
+            fields.push(("phase", Value::from(phase.as_str())));
+        }
+        Event::IpDbUnavailable {
+            key,
+            reason,
+            phase,
+            detail,
+        } => {
+            fields.push(("config_key", Value::from(key.config_key())));
+            fields.push(("reason", Value::from(reason.as_str())));
+            fields.push(("phase", Value::from(phase.as_str())));
             if let Some(detail) = detail {
                 fields.push(("detail", Value::from(cut(detail, DETAIL_MAX_BYTES))));
             }

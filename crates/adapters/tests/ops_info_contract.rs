@@ -17,6 +17,7 @@ use vnc_relay_app::events::{
     AbortReason, ConnectionErrorKind, Event, Phase, RejectReason, Stage, TargetFailureReason,
     WaitingRemovalReason,
 };
+use vnc_relay_app::ip_info::{IpDbFailure, IpDbKey};
 use vnc_relay_app::lifecycle::LifecycleService;
 use vnc_relay_app::metrics::{MetricSources, Metrics, MetricsService};
 use vnc_relay_app::ports::{
@@ -156,7 +157,7 @@ fn writes_one_json_object_per_line_with_common_fields_first() {
             ("info", "server_stopped"),
         ]
     );
-    assert_eq!(text(&lines[0], "log_contract"), "ops-info/2.1.0");
+    assert_eq!(text(&lines[0], "log_contract"), "ops-info/2.2.0");
     assert_eq!(text(&lines[1], "listener"), "tcp_viewer");
     assert_eq!(text(&lines[1], "item"), "0.0.0.0/0");
     assert_eq!(text(&lines[1], "phase"), "startup");
@@ -456,6 +457,7 @@ fn writes_connection_events_with_their_contract_fields() {
     let conn_id = ConnId::next();
     log.record(&Event::ConnectionRejected {
         listener: "tcp_viewer",
+        conn_id: None,
         stage: Stage::Accept,
         reason: RejectReason::IpNotAllowed,
         peer_ip: peer("::ffff:198.51.100.21"),
@@ -474,6 +476,16 @@ fn writes_connection_events_with_their_contract_fields() {
         peer_ip: peer("2001:db8::5"),
         forwarded_ip: None,
         elapsed_ms: 1234,
+    });
+    // A WSS connection refused during the TLS handshake already has a conn_id
+    // (ops-info-v2 2.2.0 §1.5): it counts as one source connection attempt.
+    let tls_conn = ConnId::next();
+    log.record(&Event::ConnectionRejected {
+        listener: "wss",
+        conn_id: Some(tls_conn),
+        stage: Stage::Tls,
+        reason: RejectReason::TlsVersionUnsupported,
+        peer_ip: peer("203.0.113.40"),
     });
     let lines = objects(&read(&path));
 
@@ -527,6 +539,87 @@ fn writes_connection_events_with_their_contract_fields() {
     assert_eq!(text(&lines[2], "reason"), "server_shutdown");
     assert_eq!(text(&lines[2], "role"), "server");
     assert_eq!(lines[2].get("elapsed_ms"), Some(&Value::from(1234)));
+
+    assert_eq!(text(&lines[3], "event"), "connection_rejected");
+    assert_eq!(
+        keys(&lines[3]),
+        [
+            "conn_id", "event", "level", "listener", "peer_ip", "reason", "stage", "ts"
+        ]
+    );
+    assert_eq!(text(&lines[3], "conn_id"), tls_conn.to_string());
+    assert_eq!(text(&lines[3], "listener"), "wss");
+}
+
+/// spec: operations.md:OPS-096 partial
+/// spec: operations.md:OPS-097 partial
+#[test]
+fn writes_ip_db_events_with_the_config_key_and_never_a_path() {
+    let dir = temp_dir("ip-db");
+    let path = dir.join("relay.log");
+    let log = file_sink(&path);
+    log.record(&Event::IpDbLoaded {
+        key: IpDbKey::Country,
+        database_type: "DBIP-Country-Lite".to_owned(),
+        build_time: UNIX_EPOCH + Duration::from_secs(1_761_955_200),
+        phase: Phase::Startup,
+    });
+    log.record(&Event::IpDbUnavailable {
+        key: IpDbKey::Asn,
+        reason: IpDbFailure::FileUnreadable,
+        phase: Phase::Reload,
+        detail: Some("파일을 찾을 수 없다.".to_owned()),
+    });
+    log.record(&Event::IpDbUnavailable {
+        key: IpDbKey::Country,
+        reason: IpDbFailure::UnsupportedData,
+        phase: Phase::Startup,
+        detail: None,
+    });
+    let lines = objects(&read(&path));
+    assert_eq!(text(&lines[0], "event"), "ip_db_loaded");
+    assert_eq!(text(&lines[0], "level"), "info");
+    assert_eq!(
+        keys(&lines[0]),
+        [
+            "build_time",
+            "config_key",
+            "database_type",
+            "event",
+            "level",
+            "phase",
+            "ts"
+        ]
+    );
+    assert_eq!(text(&lines[0], "config_key"), "ip_info.country_db");
+    assert_eq!(text(&lines[0], "database_type"), "DBIP-Country-Lite");
+    assert_eq!(text(&lines[0], "build_time"), "2025-11-01T00:00:00.000Z");
+    assert_eq!(text(&lines[0], "phase"), "startup");
+
+    assert_eq!(text(&lines[1], "event"), "ip_db_unavailable");
+    assert_eq!(text(&lines[1], "level"), "warn");
+    assert_eq!(
+        keys(&lines[1]),
+        [
+            "config_key",
+            "detail",
+            "event",
+            "level",
+            "phase",
+            "reason",
+            "ts"
+        ]
+    );
+    assert_eq!(text(&lines[1], "config_key"), "ip_info.asn_db");
+    assert_eq!(text(&lines[1], "reason"), "file_unreadable");
+    assert_eq!(text(&lines[1], "phase"), "reload");
+    assert_eq!(text(&lines[1], "detail"), "파일을 찾을 수 없다.");
+
+    assert_eq!(text(&lines[2], "reason"), "unsupported_data");
+    assert_eq!(
+        keys(&lines[2]),
+        ["config_key", "event", "level", "phase", "reason", "ts"]
+    );
 }
 
 /// spec: relay.md:RLY-004 partial
@@ -633,12 +726,14 @@ fn writes_limit_and_error_kind_with_the_reasons_that_carry_them() {
     let conn_id = ConnId::next();
     log.record(&Event::ConnectionRejected {
         listener: "tcp_server",
+        conn_id: None,
         stage: Stage::Accept,
         reason: RejectReason::RelayConnectionLimit { limit: 2 },
         peer_ip: peer,
     });
     log.record(&Event::ConnectionRejected {
         listener: "status",
+        conn_id: None,
         stage: Stage::Accept,
         reason: RejectReason::AdminConnectionLimit { limit: 64 },
         peer_ip: peer,

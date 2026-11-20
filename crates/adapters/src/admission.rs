@@ -91,6 +91,7 @@ impl<L: Listener> axum::serve::Listener for AdmittingListener<L> {
             // finds the line.
             self.log.record(&Event::ConnectionRejected {
                 listener: self.name,
+                conn_id: None,
                 stage: Stage::Accept,
                 reason: RejectReason::AdminConnectionLimit { limit },
                 peer_ip: PeerIp::from(addr),

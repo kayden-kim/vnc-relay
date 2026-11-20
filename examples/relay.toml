@@ -191,6 +191,14 @@ listen = "127.0.0.1:18081"
 [metrics]
 # enabled = false
 
+# Optional MMDB files for the country and ASN of connection sources (dashboard "Sources").
+# Download them from DB-IP Lite, IPinfo Lite, or MaxMind GeoLite; the server never fetches them.
+# Paths are relative to this file. Changing a path needs a restart; replacing a file's
+# content is picked up automatically. IPinfo Lite holds both: use the same path twice.
+[ip_info]
+# country_db = "ipdb/dbip-country-lite.mmdb"
+# asn_db = "ipdb/dbip-asn-lite.mmdb"
+
 # Append one JSON event per line. The parent directory must already exist.
 # To write the log to standard output, set output = "stdout" or omit output.
 [log]

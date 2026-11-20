@@ -266,6 +266,7 @@ wsl -d Ubuntu -u root -- bash -lc 'cd /tmp && wget -q https://dl.google.com/linu
 | OPS-020, RLY-006·010·011, WS-025의 실제 UltraVNC·noVNC 상호운용 | [호환성 검증 기록](../contracts/repeater-compat-record.md), [UltraVNC 수동 확인](verify-ultravnc-manually.md). Windows VNC Relay와 UltraVNC 1.8.3.0·noVNC 1.7.0의 확인 범위를 따른다. Ubuntu VNC Relay와 실제 UltraVNC, WS·WSS Server 역할의 실제 클라이언트 조합은 미실행이다 |
 | OPS-021의 출처·프로젝트 LICENSE 수동 검토 | [의존성 라이선스 검사](check-dependency-licenses.md). 자동 고지 대조와 수동 검토를 구분한다 |
 | OPS-031의 배포 묶음 운영, 설정 이관·롤백, 접속 ticket 운영 | [수동 운영 안내](operate-relay.md). v3→v4 이관은 Windows에서 관리 재로그인을 빼고 실행했다. 롤백과 Ubuntu 이관은 미실행이다. ticket 켜기·공개 키 교체·끄기는 두 OS의 Release `v2026.11.3` 묶음으로 실행했다 |
+| OPS-096·097의 실제 IP 정보 DB 파일 읽기 | [수동 운영 안내 4절](operate-relay.md#4-검증). Windows debug 실행파일로 DB-IP Lite, IPinfo Lite 견본, GeoLite 시험 파일 조합의 시작 시 읽기를 확인했다. IPinfo Lite·GeoLite 전체 파일, 실행 중 교체(OPS-097), Release 묶음, Ubuntu는 미실행이다 |
 | 도움말 사이트의 시안 대조·게시 수동 확인 | [도움말 게시](publish-help.md). 실제 Safari·Edge·Firefox·실기기·스크린 리더, 사람이 하는 시안 비교와 Pages 끄기는 미실행이다 |
 
 자동 시험의 OS별 관찰 범위도 구분한다. Windows에서는 큐가 찬 `listen()`이 WSAECONNREFUSED로 거절되어 연결 중 대상 소켓을 만들 수 없다. 따라서 OPS-023·RLY-009의 해당 경계는 Ubuntu 시험으로 확인한다. RLY-025·026의 실제 DROP은 3.1절의 Linux 전용 시험으로 확인한다. OPS-044는 Windows 전용이다. OPS-040의 IPv6 경계는 단위 시험으로 확인한다.

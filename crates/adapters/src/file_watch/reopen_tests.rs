@@ -242,14 +242,18 @@ struct RefuseLog {
     attempts: Arc<AtomicU64>,
 }
 impl ChangeFeed for RefuseLog {
-    fn watch_dirs(&mut self, dirs: &BTreeSet<PathBuf>) -> Result<(), ReloadWatchError> {
+    fn watch_dirs(
+        &mut self,
+        dirs: &BTreeSet<PathBuf>,
+        _optional: &BTreeSet<PathBuf>,
+    ) -> Result<bool, ReloadWatchError> {
         if dirs.contains(&self.log_dir) {
             self.attempts.fetch_add(1, Ordering::SeqCst);
             if self.refuse.load(Ordering::SeqCst) {
                 return Err(ReloadWatchError::new("log registration refused".to_owned()));
             }
         }
-        Ok(())
+        Ok(true)
     }
 }
 

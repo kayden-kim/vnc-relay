@@ -3074,6 +3074,8 @@ fn config_view_reports_effective_values_all_file_states_and_reload_history() {
         "log.output",
         "reload.settle_secs",
         "reload.poll_secs",
+        "ip_info.country_db",
+        "ip_info.asn_db",
     ];
     let items = some(initial["items"].as_array(), "items");
     assert_eq!(
