@@ -2,14 +2,14 @@
 
 | 항목 | 내용 |
 | --- | --- |
-| 상태 | Accepted |
+| 상태 | Superseded by [ADR-0013](ADR-0013-relay-source-deny-list.md) (2026-11-20) |
 | 결정일 | 2026-10-16 |
 | 결정자 | 프로젝트 소유자(사용자) |
 | 관련 요구사항 | [PRD 확정 기준 "TCP 중계 접근"·"WS·WSS 중계 접근"·"출발지 IP 허용 목록 규칙"](../requirements/PRD.md#확정-기준), [FR-01](../requirements/PRD.md#fr-01-tcp-접속과-프로토콜-처리), [FR-05](../requirements/PRD.md#fr-05-wswss-프록시), [7절 보안 및 신뢰 경계](../requirements/PRD.md#7-보안-및-신뢰-경계) |
 | 관련 스펙·계약 | [중계와 매칭 스펙](../specs/relay.md), [WS·WSS 전송 스펙](../specs/websocket.md), [설정·운영 스펙](../specs/operations.md#4-보안과-신뢰-경계), [설정 계약](../contracts/config-v4.md), [Repeater 초기 교환 계약](../contracts/repeater-handshake-v1.md), [WebSocket 중계 계약](../contracts/websocket-relay-v2.md), [운영 정보 계약](../contracts/ops-info-v2.md) |
 | 관련 아키텍처 문서 | 없음(구현 전) |
 | 이 ADR이 대체하는 이전 ADR | 없음 |
-| 이 ADR을 대체한 새 ADR | 없음 |
+| 이 ADR을 대체한 새 ADR | [ADR-0013](ADR-0013-relay-source-deny-list.md) (2026-11-20) |
 
 ## 1. 결정
 
@@ -98,3 +98,5 @@ Repeater 중계는 Viewer와 Server가 같은 ID를 대면 연결된다. ID를 �
 후속: 2026-11-08. 사용자 결정 2026-11-08(Q181·Q188)에 따른 [ADR-0008](ADR-0008-shared-ws-listener-path-roles.md)에서 진입점을 리스너와 역할의 조합으로 구분한다. WS·WSS 수락 때는 켠 역할 목록의 합집합 또는 신뢰 프록시 여부를 검사한다. 업그레이드 때는 선택한 역할의 목록으로 클라이언트 주소를 검사한다. 사용자 결정 2026-11-08(Q182·Q183)에 따른 [ADR-0007](ADR-0007-proxy-tls-termination.md)에서 신뢰 프록시를 거친 연결은 전달 주소로 판정한다. 따라서 프록시 배치 미지원의 결과는 중계 WS·WSS에서 바뀐다. TCP는 소켓 주소 판정을 유지하며 프록시 전달 주소를 지원하지 않는다. 관리 리스너도 전달 헤더를 무시한다. 이 ADR의 진입점별 허용 목록 원칙과 Accepted 상태는 유지한다. 위 본문은 당시 결정의 근거로 보존한다.
 
 후속: 2026-11-11. 사용자 결정 2026-11-11(Q192·Q194)에 따른 [ADR-0009](ADR-0009-optional-relay-access-ticket.md)에서 WS·WSS 역할에 기본으로 꺼진 접속 ticket 확인을 더한다. 출발지 IP 허용 목록은 모든 진입점의 기본 통제로 남고, ticket은 설정으로 켠 역할에만 더하는 확인이다. 5절에서 제외한 WS 전용 토큰의 이유 가운데 TCP 경로에 적용할 수 없다는 점은 그대로이며, ADR-0009는 이를 경고로 다룬다. ticket은 관리 세션과 무관한 발급 쪽이 서명하므로 관리 권한과 중계 권한을 섞지 않는다. 이 ADR의 진입점별 허용 목록 원칙과 Accepted 상태는 유지한다. 위 본문은 당시 결정의 근거로 보존한다. 접속 ticket의 구현은 커밋 `4be8e0e`이며, 계약 테스트는 같은 커밋의 두 OS 전체 게이트에서 통과했다.
+
+후속: 2026-11-20. 사용자 결정 2026-11-20에 따른 [ADR-0013](ADR-0013-relay-source-deny-list.md)에서 허용 목록에 중계 진입점 여섯 곳의 공통 차단 목록을 더한다. 차단 목록은 허용 목록보다 우선하고, 목록이 바뀌면 그 주소의 열린 활성 세션과 대기 연결을 바로 끊는다. 이 ADR의 결론(진입점별 허용 목록, 수락 직후 판정, 초기 교환에 인증 필드 없음)은 ADR-0013이 이어받는다. 위 본문은 당시 결정의 근거로 보존한다.

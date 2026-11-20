@@ -12,7 +12,7 @@
 | 코드 지도 | [코드 지도 2절](code-map.md#2-코드-위치와-구성요소) |
 | 관련 스펙 | [운영 스펙 3.1절](../specs/operations.md#31-설정-검증과-시작), OPS-001(일부), OPS-038(일부), OPS-040(일부) |
 | 관련 계약 | [설정 계약](../contracts/config-v4.md) 1·2절, [운영 정보 계약 1.5절](../contracts/ops-info-v2.md#15-사건-목록)(경고 사건 필드) |
-| 관련 ADR | [ADR-0002 출발지 IP 허용 목록](../decisions/ADR-0002-source-ip-allowlist.md) |
+| 관련 ADR | [ADR-0002 출발지 IP 허용 목록](../decisions/ADR-0002-source-ip-allowlist.md), [ADR-0013 출발지 IP 차단 목록](../decisions/ADR-0013-relay-source-deny-list.md). `[relay.deny] sources`는 `read_ip_items`로 원문을 보존한 `DenyList`가 된다. 켠 역할이 있는 WS·WSS 리스너의 `trusted_proxies`와 겹치는 항목은 `relay.deny.sources[i]` 키의 `config_deny_overlaps_proxy`다. |
 | 관련 문서 | [접속 ticket 모듈 설계](relay-access-ticket.md) |
 
 ## 1. 책임과 경계

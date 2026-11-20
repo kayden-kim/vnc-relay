@@ -1399,6 +1399,14 @@ fn metrics_service(
     ))
 }
 
+/// No running settings: `deny_editable` reads `false` and no address has
+/// deny items.
+struct NoSettings;
+
+impl RuntimeSettingsSource for NoSettings {
+    fn with_current(&self, _read: &mut dyn FnMut(&vnc_relay_app::settings::Settings)) {}
+}
+
 /// The read side of `/api/v1/sources` with no event and no database file.
 /// `tests/sources.rs` covers that route with a whole server.
 fn empty_sources() -> Arc<SourcesService> {
@@ -1415,6 +1423,7 @@ fn empty_sources() -> Arc<SourcesService> {
     Arc::new(SourcesService::new(
         Arc::new(SourceStats::new(lookup, clock)),
         ip_info,
+        Arc::new(NoSettings),
     ))
 }
 
@@ -4532,7 +4541,7 @@ async fn config_patch_rejects_uneditable_empty_mistyped_and_poll_requests_withou
     }
     assert_eq!(
         items.iter().filter(|item| item["editable"] == true).count(),
-        37
+        38
     );
     for changes in [
         json!({}),
@@ -4702,17 +4711,17 @@ async fn ticket_config_view_edits_and_refusals_follow_management_contract() {
     assert_eq!(view.status, 200);
     let body = config_json(&view);
     let items = body["items"].as_array().unwrap_or_else(|| panic!("items"));
-    assert_eq!(items.len(), 78);
+    assert_eq!(items.len(), 79);
     assert_eq!(
         items
             .iter()
             .filter(|item| item["reload"] == "dynamic")
             .count(),
-        43
+        44
     );
     assert_eq!(
         items.iter().filter(|item| item["editable"] == true).count(),
-        37
+        38
     );
     let ticket_items = items
         .iter()

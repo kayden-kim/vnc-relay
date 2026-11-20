@@ -5,11 +5,11 @@
 | 항목 | 값 |
 | --- | --- |
 | 상태 | Active |
-| 관련 요구사항 | [PRD](../requirements/PRD.md) FR-06·FR-07·FR-08, 7절 보안 경계, AC-09·AC-10·AC-52·AC-56·AC-61·AC-64 |
+| 관련 요구사항 | [PRD](../requirements/PRD.md) FR-06·FR-07·FR-08, 7절 보안 경계, AC-09·AC-10·AC-52·AC-56·AC-61·AC-64·AC-67·AC-68 |
 | 용어 | [VNC Relay 용어집](../../GLOSSARY.md) |
 | 관련 스펙 | [중계와 매칭](relay.md), [대시보드 화면](dashboard.md), [설정·운영](operations.md) |
 | 관련 계약 | [관리 API v1](../contracts/management-api-v1.md), [운영 로그와 상태 엔드포인트 v2](../contracts/ops-info-v2.md), [메트릭 v1](../contracts/metrics-v1.md), [설정 v4](../contracts/config-v4.md)(IP 정보 DB 형식). 경로·메서드·오류 본문·로그인 교환은 관리 API 계약이, 로그 필드 이름과 로그 버전의 적용 상태는 운영 정보 계약이, 메트릭 이름과 JSON 형식은 메트릭 계약이 기준이다. 관리 API는 JSON over HTTP이며 경로 접두사는 `/api/v1/`이다. |
-| 관련 아키텍처 문서·ADR | [코드 지도](../architectures/code-map.md), [관리 리스너 모듈 설계](../architectures/management-listener.md), [관리 세션 모듈 설계](../architectures/management-session.md), [관리 조회 모듈 설계](../architectures/management-query.md), [관리자 종료 모듈 설계](../architectures/management-terminate.md), [메트릭 모듈 설계](../architectures/metrics.md), [접속 출처 모듈 설계](../architectures/source-stats.md), [ADR-0003 단일 인스턴스·메모리 상태](../decisions/ADR-0003-single-instance-memory-state.md), [ADR-0011 상태 리스너의 pull 메트릭](../decisions/ADR-0011-pull-metrics-on-status-listener.md), [ADR-0012 운영자가 둔 IP 정보 DB](../decisions/ADR-0012-local-ip-info-databases.md). 대시보드는 별도 빌드 단계 없는 정적 HTML·JS이며 실행파일에 넣어 관리 리스너가 제공한다([대시보드 화면](dashboard.md)). |
+| 관련 아키텍처 문서·ADR | [코드 지도](../architectures/code-map.md), [관리 리스너 모듈 설계](../architectures/management-listener.md), [관리 세션 모듈 설계](../architectures/management-session.md), [관리 조회 모듈 설계](../architectures/management-query.md), [관리자 종료 모듈 설계](../architectures/management-terminate.md), [메트릭 모듈 설계](../architectures/metrics.md), [접속 출처 모듈 설계](../architectures/source-stats.md), [ADR-0003 단일 인스턴스·메모리 상태](../decisions/ADR-0003-single-instance-memory-state.md), [ADR-0011 상태 리스너의 pull 메트릭](../decisions/ADR-0011-pull-metrics-on-status-listener.md), [ADR-0012 운영자가 둔 IP 정보 DB](../decisions/ADR-0012-local-ip-info-databases.md), [ADR-0013 허용 목록과 공통 차단 목록](../decisions/ADR-0013-relay-source-deny-list.md). 대시보드는 별도 빌드 단계 없는 정적 HTML·JS이며 실행파일에 넣어 관리 리스너가 제공한다([대시보드 화면](dashboard.md)). |
 
 ## 1. 범위와 적용 상태
 
@@ -77,6 +77,7 @@
 - 항목: 세션 식별자, 모드, Viewer와 Server/Mode I 대상의 전송 경로, 시작·종료 시각, 지속 시간, 방향별 최종 누적 바이트(2.1절의 방향), 양 끝의 소켓 상대 주소와 전달 주소(2.2절), 종료 원인.
 - 지속 시간: 중계 시작부터 정리 완료까지 단조 시계로 잰 경과 시간이다. 종료 사건 로그 `session_closed`의 `duration_ms`와 같은 값이다. 시스템 시각을 보정해도 음수가 되지 않으므로 종료 시각과 시작 시각의 차이와 다를 수 있다.
 - 종료 원인: 정상 EOF, 연결 오류, 관리자 종료, 끊긴 연결 감지, 정리 제한 시간(E) 초과, 서버 종료, 내부 오류, 세션 만료(`session_expired`)를 구분한다. 세션 만료는 접속 ticket의 세션 만료 시각(`sx`)이 되어 서버가 세션을 끝낸 경우다([WebSocket 계약 1.9.5절](../contracts/websocket-relay-v2.md#195-101-뒤의-중계-id-대조와-세션-만료)). 서버 종료는 정상 종료 유예 G 만료나 유예 중 두 번째 종료 요청으로 강제 정리한 경우다. 한 세션의 종료 원인은 정리를 시작하게 한 최초 원인이다. 강제 정리 시점에 이미 정리를 시작한 세션은 최초 원인을 유지하고 아직 정리를 시작하지 않은 세션만 서버 종료(`server_shutdown`)가 된다. 서버가 Running일 때 세션 소유 작업이 panic 등 버그로 끝났고 기존 종료 원인이 없으면 내부 오류(`internal_error`)를 쓴다. 정상 종료 중(Grace·Force)에 소유 작업이 취소되면 기존 원인이 없는 경우 `server_shutdown`을 쓴다. 두 경우 모두 기존 원인이 있으면 유지한다. 끊긴 연결 감지는 응답하지 않는 상대를 TCP keepalive나 WebSocket ping으로 판정해 종료한 경우다. K·Kw와 E, G의 정의는 [운영 스펙](operations.md)을 따른다. 서버 종료 항목은 프로세스가 끝나면 목록도 사라지므로 이 목록에서 조회되는지는 구현에서 확인한다.
+- 차단 목록 종료: 종료 원인 `ip_denied`를 더 쓴다. 차단 목록(`relay.deny.sources`)이 바뀐 직후 Viewer 또는 Mode II Server의 클라이언트 주소가 항목과 일치해 서버가 세션 전체를 끝낸 경우다. 관리자 계정은 없다. 이미 정리를 시작한 세션은 최초 원인을 유지한다. 운영 로그 `session_closed`의 `side`는 관리자 종료와 같이 없다. 규칙은 [운영 스펙 3.10절](operations.md#310-출발지-ip-차단-목록)을 따른다.
 - 보관: 메모리에만 둔다. 최대 R개를 보관하며, 초과하면 가장 오래된 항목부터 제거한다. 프로세스를 재시작하면 비운다.
 - 상세·종료: 목록의 세션 식별자로 상세 조회나 종료를 요청하면 기존처럼 대상 없음을 반환한다. 목록은 목록 정보만 제공하며 상세 이력을 제공하지 않는다.
 - 조회: 운영 데이터이므로 유효한 관리 세션이 있어야 조회할 수 있다([3.0절](#30-관리자-로그인과-세션)).
@@ -116,6 +117,9 @@
 - IP 정보 DB 상태를 함께 준다. 경로 없음, 사용 중, 다시 읽기에 실패해 이전 DB 사용 중, 사용 불가를 구분하고 실패 원인 코드를 준다. DB가 없거나 읽지 못해도 `200`이다.
 - 사건은 메모리에 최대 100,000개 보관한다. 넘으면 가장 오래된 사건부터 버리고, 버린 사건 가운데 가장 늦은 시각을 준다. 그 시각이 기간 안이면 기간의 앞부분이 빠졌다는 뜻이다. 재시작하면 비어 있다.
 - `X-Relay-Poll: 1` 자동 조회는 유휴 만료를 연장하지 않는다. 헤더 없는 사용자 행동 조회는 기존 규칙대로 연장한다. 관리 세션이 없으면 `401 unauthenticated`다.
+- 응답은 최상위 `deny_editable`(불리언)을 준다. 실행 중 `management.config_edit`가 `true`이면 `true`다. 대시보드가 차단·해제 행동을 보일지 정하는 값이며, `false`이면 설정 편집으로 차단 목록을 바꿀 수 없다.
+- 주소 항목마다 `deny_entries`(문자열 배열)를 준다. 실행 중 차단 목록(`relay.deny.sources`)에서 그 주소를 덮는 항목을 파일에 적힌 글자 그대로, 목록 순서로 담는다. 빈 배열이면 차단되지 않은 주소다. `local = true`인 주소도 같다.
+- 차단·해제 전용 경로는 없다. 변경은 3.3절의 설정 편집으로 한다.
 - 응답에는 클라이언트 IP가 있다. 중계 ID·세션 식별자·계정명·IP 정보 DB 경로는 없다. 화면 표시는 [화면 스펙 SCR-008](dashboard.md#scr-008-접속-출처)을 따른다.
 
 
@@ -174,9 +178,11 @@
 
 편집은 `management.config_edit = true`일 때만 제공한다. 기본은 `false`다. 이 키를 바꾸려면 설정 파일을 고치고 서버를 재시작해야 한다. 화면에서 버튼을 숨기는 것으로 서버의 인증·CSRF·편집 허용 검사를 대신하지 않는다.
 
-편집 대상은 재로드 대상 43개에서 인증서·개인키 경로 4개와 접속 ticket 공개 키 파일 경로 2개를 뺀 37개 키다. 출발지 IP 허용 목록·역할별 Origin 허용 목록·신뢰 프록시 목록·Mode I 대상 허용 목록·연결 상한·시간 제한·연결 유지를 편집한다. 접속 ticket의 역할별 `enabled`·`issuer`·`relay_host`·`max_lifetime_secs` 8개도 편집한다. TCP의 `allow`는 해당 진입점이, WS·WSS의 `allow`·`allowed_origins`는 해당 역할이 켜져 있을 때만 편집할 수 있다. `trusted_proxies`는 해당 리스너 역할 중 하나 이상이 켜져 있을 때만 편집할 수 있다. 접속 ticket의 키는 그 역할이 WS 또는 WSS 리스너에서 하나라도 켜져 있을 때만 편집할 수 있다. Mode I 대상 허용 목록은 Mode I이 켜져 있을 때만 편집할 수 있다. 인증서·개인키·접속 ticket 공개 키 파일 경로는 보기에만 나온다. 키 파일 교체는 같은 경로의 파일 내용을 바꾸는 방식을 따른다. 정확한 키와 적용 시점은 [설정 계약 1.8절](../contracts/config-v4.md#18-재로드-구분)이 기준이다.
+편집 대상은 재로드 대상 44개에서 인증서·개인키 경로 4개와 접속 ticket 공개 키 파일 경로 2개를 뺀 38개 키다. 출발지 IP 허용 목록·출발지 IP 차단 목록·역할별 Origin 허용 목록·신뢰 프록시 목록·Mode I 대상 허용 목록·연결 상한·시간 제한·연결 유지를 편집한다. 접속 ticket의 역할별 `enabled`·`issuer`·`relay_host`·`max_lifetime_secs` 8개도 편집한다. TCP의 `allow`는 해당 진입점이, WS·WSS의 `allow`·`allowed_origins`는 해당 역할이 켜져 있을 때만 편집할 수 있다. `trusted_proxies`는 해당 리스너 역할 중 하나 이상이 켜져 있을 때만 편집할 수 있다. 접속 ticket의 키는 그 역할이 WS 또는 WSS 리스너에서 하나라도 켜져 있을 때만 편집할 수 있다. Mode I 대상 허용 목록은 Mode I이 켜져 있을 때만 편집할 수 있다. 차단 목록 `relay.deny.sources`는 중계 진입점이 모두 꺼져 있어도 항상 편집할 수 있다. 인증서·개인키·접속 ticket 공개 키 파일 경로는 보기에만 나온다. 키 파일 교체는 같은 경로의 파일 내용을 바꾸는 방식을 따른다. 정확한 키와 적용 시점은 [설정 계약 1.8절](../contracts/config-v4.md#18-재로드-구분)이 기준이다.
 
 설정 보기는 접속 ticket 키 10개를 포함한다. 모두 재로드 대상이며 공개 키 파일 경로 2개는 편집 불가다. `enabled = true`로 바꾸는 후보에 `issuer`·`relay_host`·`public_keys_file`이 빠져 있으면 `400 config_invalid`와 `config_missing_key` 진단을 반환한다. 파일과 실행 중 값은 바꾸지 않는다. 성공한 ticket 설정 변경은 새 업그레이드 요청부터 적용한다. 이미 101을 보낸 연결의 중계 ID 대조와 `sx` 타이머, 사용 기록은 유지한다([WebSocket 계약 1.9.6절](../contracts/websocket-relay-v2.md#196-설정과-적용-시점)).
+
+`relay.deny.sources` 편집 후보는 허용 목록과 같은 항목 문법 검사와, 신뢰 프록시 항목과의 겹침 검사를 받는다. 문법 오류는 허용 목록과 같은 오류 코드의 진단이고, 겹침은 `config_deny_overlaps_proxy` 진단이다. 진단의 `key`는 `relay.deny.sources[i]`다. 둘 다 `400 config_invalid`이며 파일과 실행 중 값은 바뀌지 않는다. `management.config_edit = false`이면 다른 키와 같이 `403 config_edit_disabled`다. 성공하면 교체 직후 그 주소의 열린 활성 세션과 대기 연결을 바로 끊는다([운영 스펙 3.10절](operations.md#310-출발지-ip-차단-목록)). 차단·해제 전용 요청은 없다. 대시보드는 설정 보기로 `revision`과 현재 목록을 읽고, 편집 요청으로 `relay.deny.sources` 전체 값을 보낸다.
 
 서버는 편집과 파일 변경 재로드를 직렬화한다. 편집 때 읽은 파일의 리비전이 요청의 리비전과 다르면 충돌로 거절한다. 지금 파일이 잘못되었거나 읽히지 않으면 편집을 거절한다. 재시작 필요 키의 차이가 남아 있어도 거절한다. 다른 관리자가 바꾸었거나 외부에서 파일을 바꾼 경우 모두 이 규칙을 따른다.
 
@@ -184,7 +190,7 @@
 
 서버는 바뀐 값만 `serve`가 읽는 TOML 파일에 기록한다. 나머지 주석·공백·키 순서·다른 값은 보존한다. 후보 전체 검증을 통과한 뒤 같은 디렉터리의 임시 파일을 원자적으로 교체한다. 쓰기·교체에 실패하면 파일과 실행 중 값은 이전 그대로다. 성공하면 같은 후보의 재로드 대상 값을 한 번에 교체한다. 부분 적용하지 않는다. 뒤따르는 파일 변경 감지가 같은 내용을 읽으면 다시 교체하지 않는다. 값이 실제로 바뀌지 않았으면 파일을 쓰거나 편집 성공 사건을 기록하지 않고 성공한 빈 적용 결과를 반환한다. 처리 순서는 [관리 API 계약 1.14절](../contracts/management-api-v1.md#114-동적-설정-편집-patch-apiv1config)이 정한다.
 
-이미 맺은 연결·시작한 타이머·설정한 소켓 옵션은 이전 값을 유지한다. E 변경 뒤 세션 정보는 응답 때의 E + 5초를 종료 응답 대기 한도로 전달한다. 이미 시작한 종료 교환의 기한은 바꾸지 않는다. P와 `query_timeout_secs`는 재시작 필요로 남는다. 정상 종료 유예 중에도 설정 보기·편집을 처리한다.
+이미 맺은 연결·시작한 타이머·설정한 소켓 옵션은 이전 값을 유지한다. 차단 목록은 예외이며 열린 대기·활성 연결을 끊는다. E 변경 뒤 세션 정보는 응답 때의 E + 5초를 종료 응답 대기 한도로 전달한다. 이미 시작한 종료 교환의 기한은 바꾸지 않는다. P와 `query_timeout_secs`는 재시작 필요로 남는다. 정상 종료 유예 중에도 설정 보기·편집을 처리한다.
 
 편집 성공은 `reload_applied`(`trigger = config_edit`) 다음 `config_edited` 순서로 기록한다. 인증·CSRF를 통과한 편집 거절은 `invalid_request`를 제외하고 `config_edit_rejected`로 기록한다. 계정명과 키를 기록하되 설정값은 기록하지 않는다. 사건·필드와 계정명 기록 규칙은 [운영 정보 계약 1.5절](../contracts/ops-info-v2.md#15-사건-목록)·[1.8절](../contracts/ops-info-v2.md#18-관리자-계정명-기록-규칙)을 따른다.
 
@@ -192,7 +198,7 @@
 | --- | --- | --- |
 | MGT-R19 | FR-06·FR-08 | 유효한 관리 세션으로 실행 중 유효 설정과 파일 상태를 조회할 수 있어야 한다. |
 | MGT-R20 | FR-06·FR-07 | 편집 기능이 꺼져 있으면 서버가 편집을 거절해야 한다. |
-| MGT-R21 | FR-06·FR-07 | 편집 대상이 아니거나 해당 진입점·모드가 꺼진 키의 변경을 거절해야 한다. |
+| MGT-R21 | FR-06·FR-07 | 편집 대상이 아니거나 해당 진입점·모드가 꺼진 키의 변경을 거절해야 한다. `relay.deny.sources`는 진입점·모드가 꺼져 있어도 거절해서는 안 된다. |
 | MGT-R22 | FR-07 | 요청 리비전과 지금 파일 리비전이 다르면 충돌로 거절해야 한다. |
 | MGT-R23 | FR-07 | 현재 파일을 읽거나 검증할 수 없거나 재시작 필요 차이가 남아 있으면 편집을 거절해야 한다. |
 | MGT-R24 | FR-07 | 후보 전체 검증에 실패하면 파일을 바꾸지 않고 키별 진단을 반환해야 한다. |
@@ -200,7 +206,7 @@
 | MGT-R26 | FR-06·FR-08 | 편집 성공·거절의 감사 사건은 3.3절의 기록 조건·순서·값 비노출 규칙을 따라야 한다. |
 | MGT-R27 | FR-06·FR-07 | 편집 응답이 없거나 시간이 초과되면 자동 재전송하지 않고 설정 재조회로 결과를 확인해야 한다. |
 | MGT-R28 | FR-06·AC-52 | 접속 ticket의 세션 만료 시각(`sx`)으로 끝난 활성 세션은 최근 종료 목록과 운영 로그의 종료 원인에 `session_expired`를 써야 한다. 관리자 종료와 구분한다. |
-| MGT-R29 | FR-06·AC-52 | 설정 보기는 ticket 키 10개를 보여 줘야 한다. 편집은 3.3절의 37개 편집 대상과 역할별 조건을 따라야 한다. 공개 키 파일 경로 2개는 편집할 수 없다. |
+| MGT-R29 | FR-06·AC-52 | 설정 보기는 ticket 키 10개를 보여 줘야 한다. 편집은 3.3절의 38개 편집 대상과 역할별 조건을 따라야 한다. 공개 키 파일 경로 2개는 편집할 수 없다. |
 | MGT-R30 | FR-06·AC-56 | 대기 연결 항목은 전송 경로·실제 소켓 상대 주소·전달 주소를 제공해야 한다. 최근 종료 항목과 `closed_session`은 지속 시간과 종료 전 양 끝의 소켓 상대 주소·전달 주소를 제공해야 한다. 전달 주소는 MGT-R10을 따르며 소켓 주소를 대신하지 않는다. |
 | MGT-R31 | FR-06·AC-61 | 유효한 관리 세션으로 `[metrics] enabled`와 관계없이 메트릭과 추이를 조회할 수 있어야 한다. 값은 같은 시점의 `/metrics`와 같아야 한다. |
 | MGT-R32 | FR-06·AC-61 | 추이는 기간마다 간격·최대 개수(최근 1시간은 10초·360개, 최근 24시간은 1분·1440개)와 늘어나기만 하는 순번을 지켜야 한다. `history_window`로 고른 기간의 점만 돌려줘야 하며, `history_after`를 받으면 그 기간에서 더 큰 순번의 점만 돌려줘야 한다. |
@@ -209,6 +215,7 @@
 | MGT-R35 | FR-06·AC-64 | 주소·국가·ASN 항목은 2.6절과 관리 API 계약 1.17절의 수·정렬·개수 제한을 지켜야 한다. 국가·ASN은 사건 때 찾은 값이며, DB 없음과 찾지 못함은 `null`이어야 한다. |
 | MGT-R36 | FR-06·AC-63·AC-64 | IP 정보 DB 상태와 실패 원인을 빈 결과와 구분해 돌려줘야 한다. DB가 없거나 읽지 못해도 요청을 실패시켜서는 안 된다. |
 | MGT-R37 | FR-06·AC-64 | 보관 상한을 넘어 버린 사건이 있으면 그 경계 시각을 돌려줘야 한다. 재시작하면 통계는 비어 있어야 한다. |
+| MGT-R38 | FR-06·FR-07·7절·AC-67·AC-68 | 접속 출처 조회는 `deny_editable`과 주소별 `deny_entries`를 제공해야 한다. 차단·해제는 `relay.deny.sources`를 설정 편집으로 바꾸는 방식으로만 해야 하며, 편집 켜짐·인증·CSRF·리비전·후보 전체 검증 규칙을 그대로 따라야 한다. 신뢰 프록시 항목과 겹치는 항목은 `400 config_invalid`로 거절해야 한다. |
 
 ## 4. 오류와 복구
 
@@ -317,7 +324,7 @@
 | MGT-050 | FR-06·7절 / MGT-R11·R16 | 정상·거절: `X-Relay-Poll: 1` 로그 조회만 보내 Si 경과, 헤더 없는 사용자 조회, 관리 세션 없는 로그 조회 | 자동 조회는 유휴 만료를 연장하지 않음. 사용자 조회는 기존 규칙대로 연장. 관리 세션이 없으면 `401 unauthenticated`, 보호 로그 비노출 |
 | MGT-051 | FR-06 / MGT-R10·R15 | 정상: Mode I/II, TCP·WS·WSS 양 끝, 신뢰 프록시 유무의 활성 목록·상세·종료 응답·최근 종료 항목 조회 | `target_transport`가 Mode I은 `tcp`, Mode II는 Server 경로와 일치. 활성 객체의 `viewer_forwarded_ip`·`target_forwarded_ip`는 전달 주소 또는 `null`. 실제 소켓 주소는 유지. 최근 종료 항목·`closed_session`도 `target_transport` 제공 |
 | MGT-052 | FR-06·AC-52 / MGT-R28 | 정상: 접속 ticket의 `sx`로 끝난 활성 세션이 있는 서버에서 최근 종료 목록과 해당 운영 로그 조회 | `close_cause = session_expired`이며 관리자 종료와 구분. 최근 종료 항목의 나머지 필드는 기존 의미 유지 |
-| MGT-053 | FR-06·AC-52 / MGT-R29 | 정상·거절: ticket 키가 있는 서버에서 설정 보기·편집. 그 역할이 WS·WSS에서 모두 꺼진 경우, 공개 키 파일 경로 변경, `enabled = true`로 바꾸는 후보에 필수 키가 빠진 경우도 포함 | 보기에 ticket 키 10개가 `reload = dynamic`으로 나오고 경로 2개는 `editable = false`. 전체 재로드 대상 43개·편집 대상 37개. ticket 편집은 그 역할이 WS 또는 WSS에서 켜져 있을 때 `enabled`·`issuer`·`relay_host`·`max_lifetime_secs`만 허용. 편집 불가 키는 `400 invalid_request`. 필수 키 누락은 `400 config_invalid`와 `config_missing_key` 진단이며 변경 없음. 성공하면 재로드 적용, 새 업그레이드부터 변경 |
+| MGT-053 | FR-06·AC-52 / MGT-R29 | 정상·거절: ticket 키가 있는 서버에서 설정 보기·편집. 그 역할이 WS·WSS에서 모두 꺼진 경우, 공개 키 파일 경로 변경, `enabled = true`로 바꾸는 후보에 필수 키가 빠진 경우도 포함 | 보기에 ticket 키 10개가 `reload = dynamic`으로 나오고 경로 2개는 `editable = false`. 전체 재로드 대상 44개·편집 대상 38개. ticket 편집은 그 역할이 WS 또는 WSS에서 켜져 있을 때 `enabled`·`issuer`·`relay_host`·`max_lifetime_secs`만 허용. 편집 불가 키는 `400 invalid_request`. 필수 키 누락은 `400 config_invalid`와 `config_missing_key` 진단이며 변경 없음. 성공하면 재로드 적용, 새 업그레이드부터 변경 |
 | MGT-054 | FR-06·AC-56 / MGT-R10·R30 | 정상: TCP·WS·WSS로 들어온 Viewer·Server 대기 연결, 신뢰 프록시를 거친 WS·WSS 연결과 거치지 않은 연결의 대기 목록 조회 | `transport`는 연결이 들어온 전송 경로와 같음. `address`는 실제 소켓 상대 주소이며 IP 정규화 적용. `forwarded_ip`는 신뢰 프록시의 전달 주소 또는 `null`이고 TCP는 항상 `null`. 기존 필드의 의미 유지 |
 | MGT-055 | FR-06·AC-56 / MGT-R10·R30 | 정상: Mode I/II, 신뢰 프록시 유무의 활성 세션이 자연 종료·관리자 종료로 끝난 뒤 최근 종료 목록과 종료 응답의 `closed_session` 조회 | `duration_ms`는 0 이상의 정수이며 같은 세션의 `session_closed` 로그 `duration_ms`와 같음. `viewer_address`·`target_address`·`viewer_forwarded_ip`·`target_forwarded_ip`는 종료 전 활성 객체의 값과 같음. Mode I의 `target_forwarded_ip`는 `null`. 같은 세션의 최근 종료 항목과 `closed_session` 값이 같음 |
 | MGT-056 | FR-06·7절·AC-61 / MGT-R11·R16 | 정상·거절: 관리 세션 없이 `GET /api/v1/metrics`. 로그인 뒤 `X-Relay-Poll: 1` 메트릭 조회만 보내 Si 경과. 헤더 없는 메트릭 조회 | 관리 세션이 없으면 `401 unauthenticated`이며 메트릭 비노출. 자동 조회는 유휴 만료를 연장하지 않음. 헤더 없는 조회는 기존 규칙대로 연장 |
@@ -329,6 +336,8 @@
 | MGT-062 | FR-06·7절·AC-64 / MGT-R34·R11·R16 | 정상·거절: 관리 세션 없이 `GET /api/v1/sources`. 로그인 뒤 `X-Relay-Poll: 1` 조회만 보내 Si 경과. 헤더 없는 조회. `window`에 `1H`·`7d`·빈 값을 넣거나 두 번 지정. `window` 생략. `GET`이 아닌 메서드 | 관리 세션이 없으면 `401 unauthenticated`이며 주소 비노출. 자동 조회는 유휴 만료를 연장하지 않고 헤더 없는 조회는 연장. 형식 오류·중복은 `400 invalid_request`. 생략은 `window = 1h`. 메서드 오류는 `405 invalid_request`와 `Allow: GET` |
 | MGT-063 | FR-06·AC-63·AC-64 / MGT-R35·R36 | 정상: 시험용 국가·ASN DB를 둔 서버와 DB가 없는 서버에서 로컬이 아닌 주소 여러 개와 사설 주소의 연결 시도·거절·중단·세션을 만든 뒤 조회. 주소 101개 이상, 국가·ASN을 찾지 못하는 주소 포함 | `totals`와 각 항목의 수가 만든 사건과 같음. 주소·ASN 항목은 최대 100개이고 `total`은 전체 개수. 정렬과 `null`의 위치가 계약과 같음. 사설 주소는 `local = true`이고 국가·ASN `null`. `as_name`은 지금 DB의 이름. DB 상태는 `loaded`와 제공자·빌드 시각. DB가 없으면 `not_configured`와 모든 국가·ASN `null` |
 | MGT-064 | FR-06·AC-64 / MGT-R37 | 경계: 시험용 시계로 1시간·24시간 경계 앞뒤의 사건을 만든 뒤 `window=1h`·`24h`로 조회. 사건 100,001개를 만든 뒤 조회. 새 프로세스에서 조회 | 시각이 `window_start` 이상인 사건만 셈. 100,000개만 남고 `stored = 100000`, `dropped_before`는 버린 사건 가운데 가장 늦은 시각. 버린 사건이 없으면 `null`. 새 프로세스는 `stored = 0`과 빈 항목 |
+| MGT-065 | FR-06·AC-68 / MGT-R38 | 정상: `management.config_edit`가 `true`인 서버와 `false`인 서버에서, 차단 목록 `["203.0.113.9", "198.51.100.0/24", "2001:db8::1-2001:db8::ff"]`을 두고 연결 사건이 있는 주소(203.0.113.9, 198.51.100.7, 203.0.113.50, 2001:db8::5)와 로컬 주소로 `GET /api/v1/sources` 조회. 한 주소를 둘 이상의 항목이 덮는 목록(203.0.113.9와 203.0.113.0/24)도 조회. 목록을 빈 목록으로 바꾼 뒤 다시 조회. 관리 세션 없이 조회 | `deny_editable`은 `config_edit` 값과 같음. 각 주소의 `deny_entries`는 그 주소를 덮는 항목을 파일에 적힌 글자 그대로 목록 순서로 담음(203.0.113.9는 `["203.0.113.9"]`, 198.51.100.7은 `["198.51.100.0/24"]`, 2001:db8::5는 범위 항목, 203.0.113.50은 `[]`). 둘 이상의 항목이 덮으면 모두 목록 순서로 담음. 항목이 덮는 로컬 주소도 채움. 빈 목록 뒤에는 모든 `deny_entries`가 `[]`. 관리 세션이 없으면 `401 unauthenticated` |
+| MGT-066 | FR-06·FR-07·7절·AC-67 / MGT-R38 | 편집: (a) `config_edit = true`에서 현재 `revision`으로 `relay.deny.sources`만 바꿈(항목 추가, 항목 삭제, 빈 목록). 중계 진입점이 모두 꺼진 서버도 포함. (b) 표기가 잘못된 항목과 신뢰 프록시 항목과 겹치는 항목(역할이 켜진 리스너, 역할이 모두 꺼진 리스너). (c) `config_edit = false`. (d) 현재 값과 같은 값 | (a) `200`과 `relay.deny.sources`가 담긴 적용 결과. 파일에서는 이 키만 바뀌고, `[relay.deny]` 표가 없으면 표를 파일 끝에 추가. 교체 직후 그 주소의 열린 활성 세션·대기 연결이 끊김. `reload_applied`(`trigger=config_edit`) 다음 `config_edited`에 이 키가 있고 값은 없음. 진입점이 꺼져 있어도 설정 보기 항목이 `editable = true`. (b) `400 config_invalid`. 문법 오류는 허용 목록과 같은 코드, 겹침은 `config_deny_overlaps_proxy`이며 `key`는 `relay.deny.sources[i]`. 파일과 실행 중 값 변경 없음. 역할이 모두 꺼진 리스너와의 겹침은 통과. (c) `403 config_edit_disabled`, 변경 없음. (d) `200`과 빈 적용 결과, 파일 쓰기·성공 사건 없음 |
 
 ## 8. 미결정 사항
 

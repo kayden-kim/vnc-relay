@@ -3036,6 +3036,7 @@ fn config_view_reports_effective_values_all_file_states_and_reload_history() {
         "relay.ticket.server.relay_host",
         "relay.ticket.server.public_keys_file",
         "relay.ticket.server.max_lifetime_secs",
+        "relay.deny.sources",
         "mode1.enabled",
         "mode1.allow_targets",
         "mode2.enabled",

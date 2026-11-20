@@ -915,7 +915,12 @@ fn push_event_fields(fields: &mut Vec<(&'static str, Value)>, event: &Event) {
             fields.push(("conn_id", Value::from(conn_id.to_string())));
             fields.push(("listener", Value::from(entry_point.listener().name())));
             fields.push(("role", Value::from(entry_point.role().as_str())));
-            fields.push(("mode", Value::from(Mode::Mode2.as_str())));
+            let mode = if relay_id_ref.is_some() {
+                Mode::Mode2
+            } else {
+                Mode::Mode1
+            };
+            fields.push(("mode", Value::from(mode.as_str())));
             fields.push(("peer_ip", Value::from(peer_ip.to_string())));
             if let Some(ip) = forwarded_ip {
                 fields.push(("forwarded_ip", Value::from(ip.to_string())));
@@ -925,8 +930,10 @@ fn push_event_fields(fields: &mut Vec<(&'static str, Value)>, event: &Event) {
             if let Some(limit) = reason.limit() {
                 fields.push(("limit", Value::from(limit)));
             }
-            if *reason == RejectReason::DuplicateId {
-                fields.push(("relay_id_ref", Value::from(relay_id_ref.as_str())));
+            if *reason == RejectReason::DuplicateId
+                && let Some(reference) = relay_id_ref
+            {
+                fields.push(("relay_id_ref", Value::from(reference.as_str())));
             }
         }
         Event::RelayAborted {
@@ -1132,7 +1139,8 @@ fn push_event_fields(fields: &mut Vec<(&'static str, Value)>, event: &Event) {
                 CloseCause::AdminTerminated
                 | CloseCause::ServerShutdown
                 | CloseCause::InternalError
-                | CloseCause::SessionExpired => {}
+                | CloseCause::SessionExpired
+                | CloseCause::IpDenied => {}
             }
             if *close_cause == CloseCause::ConnectionError
                 && let Some(kind) = error_kind

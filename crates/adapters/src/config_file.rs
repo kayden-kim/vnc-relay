@@ -20,6 +20,7 @@ use vnc_relay_app::settings::{
 };
 use vnc_relay_domain::account::Argon2Params;
 use vnc_relay_domain::allow_list::{AllowList, IpItem, IpItemError};
+use vnc_relay_domain::deny_list::{DenyEntry, DenyList};
 use vnc_relay_domain::entry_point::Listener;
 use vnc_relay_domain::origin::Origin;
 use vnc_relay_domain::target_policy::{TargetItem, TargetItemError, TargetPolicy};
@@ -266,14 +267,69 @@ fn read_relay(
     let ws = read_websocket_listener(&mut relay, Listener::Ws, base_dir, d);
     let wss = read_websocket_listener(&mut relay, Listener::Wss, base_dir, d);
     let ticket = read_ticket(&mut relay, base_dir, d);
+    let deny = read_deny(&mut relay, d);
     relay.finish(d);
+    let (ws, wss, deny) = (ws?, wss?, deny?);
+    check_deny_overlaps_proxy(&deny, [&ws, &wss], d);
     Some(RelaySettings {
         tcp_viewer: tcp_viewer?,
         tcp_server: tcp_server?,
-        ws: ws?,
-        wss: wss?,
+        ws,
+        wss,
         ticket: ticket?,
+        deny,
     })
+}
+
+/// `[relay.deny]`: an omitted table or key is an empty list, which denies
+/// nothing (config-v4 §1.2).
+fn read_deny(relay: &mut Section<'_>, d: &mut Diagnostics) -> Option<DenyList> {
+    let mut table = relay.section("deny", d);
+    let sources = read_ip_items(&mut table, "sources", d)
+        .map(|items| {
+            Some(DenyList::new(
+                items
+                    .into_iter()
+                    .map(|(text, item)| DenyEntry::new(text.to_owned(), item))
+                    .collect(),
+            ))
+        })
+        .or(DenyList::default());
+    table.finish(d);
+    sources
+}
+
+/// A deny item must not share an address with a `trusted_proxies` item of a
+/// WS or WSS listener that has an enabled role (config-v4 §1.6). Listeners
+/// with every role disabled are not compared.
+fn check_deny_overlaps_proxy(
+    deny: &DenyList,
+    listeners: [&WsListenerSettings; 2],
+    d: &mut Diagnostics,
+) {
+    for (index, entry) in deny.entries().iter().enumerate() {
+        for (listener, settings) in [Listener::Ws, Listener::Wss].into_iter().zip(listeners) {
+            if !settings.enabled() {
+                continue;
+            }
+            if let Some(proxy) = settings
+                .trusted_proxies
+                .items()
+                .iter()
+                .find(|proxy| entry.item().overlaps(proxy))
+            {
+                d.push(
+                    ConfigError::DenyOverlapsProxy,
+                    format!("relay.deny.sources[{index}]"),
+                    format!(
+                        "차단 항목이 relay.{}.trusted_proxies의 `{proxy}` 항목과 겹친다. 신뢰 프록시 주소는 차단할 수 없다.",
+                        listener.name()
+                    ),
+                );
+                break;
+            }
+        }
+    }
 }
 
 fn read_ticket(
@@ -460,13 +516,28 @@ fn read_allow_list(
     key: &'static str,
     d: &mut Diagnostics,
 ) -> Field<AllowList> {
+    read_ip_items(table, key, d).map(|items| {
+        Some(AllowList::new(
+            items.into_iter().map(|(_, item)| item).collect(),
+        ))
+    })
+}
+
+/// Parses every item of an IP item list with its written text (config-v4
+/// §1.3). Each bad item is reported at `key[i]`, and any bad item makes the
+/// whole value invalid.
+fn read_ip_items<'a>(
+    table: &mut Section<'a>,
+    key: &'static str,
+    d: &mut Diagnostics,
+) -> Field<Vec<(&'a str, IpItem)>> {
     let path = table.key_path(key);
     table.string_array(key, d).map(|texts| {
         let mut items = Vec::with_capacity(texts.len());
         let mut valid = true;
         for (index, text) in texts.into_iter().enumerate() {
             match IpItem::parse(text) {
-                Ok(item) => items.push(item),
+                Ok(item) => items.push((text, item)),
                 Err(error) => {
                     let (code, message) = ip_item_problem(error);
                     d.push(code, format!("{path}[{index}]"), message);
@@ -474,7 +545,7 @@ fn read_allow_list(
                 }
             }
         }
-        valid.then(|| AllowList::new(items))
+        valid.then_some(items)
     })
 }
 

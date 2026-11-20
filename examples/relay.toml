@@ -92,6 +92,12 @@ enabled = false
 # public_keys_file = "keys/server-ticket.jwks"
 # max_lifetime_secs = 60
 
+# Source IP deny list for all six relay entry points, checked before each
+# allow list. Items must not overlap a WS or WSS trusted_proxies item.
+# [] denies nobody. Example: ["198.51.100.7", "203.0.113.64/26"]
+[relay.deny]
+sources = []
+
 # Mode I target connections are off.
 [mode1]
 enabled = false

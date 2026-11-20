@@ -4,13 +4,13 @@
 
 | 계약 | 상태 | 만드는 쪽 → 사용하는 쪽 | 기준 형식 파일 | 관련 스펙 |
 | --- | --- | --- | --- | --- |
-| [설정 파일 v4(vnc-relay-config 4.3.0)](config-v4.md) | Active | 운영자·관리 API 편집 → `vnc-relay serve`·Windows 서비스(`service install`·`service run`), Windows 트레이 앱(키 4개만) | 없음(Markdown 표) | [운영](../specs/operations.md), [WS·WSS](../specs/websocket.md), [관리](../specs/management.md), [화면](../specs/dashboard.md), [중계](../specs/relay.md), [Windows 트레이 앱](../specs/windows-tray.md) |
+| [설정 파일 v4(vnc-relay-config 4.4.0)](config-v4.md) | Active | 운영자·관리 API 편집 → `vnc-relay serve`·Windows 서비스(`service install`·`service run`), Windows 트레이 앱(키 4개만) | 없음(Markdown 표) | [운영](../specs/operations.md), [WS·WSS](../specs/websocket.md), [관리](../specs/management.md), [화면](../specs/dashboard.md), [중계](../specs/relay.md), [Windows 트레이 앱](../specs/windows-tray.md) |
 | [CLI와 관리자 계정 파일 v1(vnc-relay-cli 1.8.0)](cli-v1.md) | Active | `vnc-relay` 실행파일 → 운영자·스크립트·Windows SCM·Windows 트레이 앱(서비스 이름·등록 명령), `vnc-relay serve`(계정 파일) | 없음(Markdown 표) | [운영](../specs/operations.md), [Windows 트레이 앱](../specs/windows-tray.md) |
-| [관리 API v1(management-api 1.4.0)](management-api-v1.md) | Active | 관리 리스너(서버) → 내장 대시보드, 외부 HTTP 클라이언트 | 없음(Markdown 표) | [관리](../specs/management.md), [화면](../specs/dashboard.md) |
-| [WebSocket 중계 v2(websocket-relay 2.1.0)](websocket-relay-v2.md) | Active | 외부 WebSocket 클라이언트 ↔ `vnc-relay` WS·WSS 리스너 | 없음(Markdown 표) | [WS·WSS](../specs/websocket.md), [중계](../specs/relay.md) |
+| [관리 API v1(management-api 1.5.0)](management-api-v1.md) | Active | 관리 리스너(서버) → 내장 대시보드, 외부 HTTP 클라이언트 | 없음(Markdown 표) | [관리](../specs/management.md), [화면](../specs/dashboard.md) |
+| [WebSocket 중계 v2(websocket-relay 2.2.0)](websocket-relay-v2.md) | Active | 외부 WebSocket 클라이언트 ↔ `vnc-relay` WS·WSS 리스너 | 없음(Markdown 표) | [WS·WSS](../specs/websocket.md), [중계](../specs/relay.md) |
 | [Repeater 초기 교환 v1](repeater-handshake-v1.md) | Active | UltraVNC Viewer·Server, 외부 WebSocket 클라이언트 → `vnc-relay` 진입점(Viewer 쪽 시작 바이트는 반대 방향) | 없음(Markdown 표) | [중계](../specs/relay.md), [WS·WSS](../specs/websocket.md) |
-| [운영 로그와 상태 엔드포인트 v2(ops-info 2.2.0)](ops-info-v2.md) | Active | `vnc-relay serve`·Windows 서비스 → 운영자의 로그 수집·상태 확인 도구, 관리 API·내장 대시보드, Windows 트레이 앱(`/readyz`만) | 없음(Markdown 표) | [운영](../specs/operations.md), [관리](../specs/management.md), [화면](../specs/dashboard.md), [WS·WSS](../specs/websocket.md), [중계](../specs/relay.md), [Windows 트레이 앱](../specs/windows-tray.md) |
-| [메트릭 v1(vnc-relay-metrics 1.1.0)](metrics-v1.md) | Active | `vnc-relay serve`·Windows 서비스 → 운영자의 메트릭 수집 도구(상태 리스너 `/metrics`), 관리 API·내장 대시보드 | 없음(Markdown 표) | [운영](../specs/operations.md), [관리](../specs/management.md), [화면](../specs/dashboard.md) |
+| [운영 로그와 상태 엔드포인트 v2(ops-info 2.3.0)](ops-info-v2.md) | Active | `vnc-relay serve`·Windows 서비스 → 운영자의 로그 수집·상태 확인 도구, 관리 API·내장 대시보드, Windows 트레이 앱(`/readyz`만) | 없음(Markdown 표) | [운영](../specs/operations.md), [관리](../specs/management.md), [화면](../specs/dashboard.md), [WS·WSS](../specs/websocket.md), [중계](../specs/relay.md), [Windows 트레이 앱](../specs/windows-tray.md) |
+| [메트릭 v1(vnc-relay-metrics 1.2.0)](metrics-v1.md) | Active | `vnc-relay serve`·Windows 서비스 → 운영자의 메트릭 수집 도구(상태 리스너 `/metrics`), 관리 API·내장 대시보드 | 없음(Markdown 표) | [운영](../specs/operations.md), [관리](../specs/management.md), [화면](../specs/dashboard.md) |
 
 설정 v4, ops-info v2, WebSocket 중계 v2는 호환성을 깨는 변경이다. 이전·롤백은 각 계약 3절을 따른다. `trust_all_proxies`, 최근 로그 API의 질의·응답 필드 이름과 세션 필터 URL은 관련 계약이 정한다.
 
@@ -21,6 +21,8 @@ Windows 서비스 실행은 CLI 계약 1.8.0의 `service install`·`service unin
 메트릭은 OpenTelemetry 의미 규칙의 이름·단위·속성을 쓰고, 상태 리스너의 `/metrics`에서 Prometheus 텍스트로 내보낸다. `/metrics`는 기본으로 꺼져 있다(`[metrics] enabled = false`). 설정 4.2.0은 이 키를 더한 호환 변경이고, 관리 API 1.2.0은 `GET /api/v1/metrics`를 더한 호환 변경이다. 메트릭 1.1.0과 관리 API 1.3.0은 최근 24시간 추이와 이를 고르는 `history_window` 매개변수를 더한 호환 변경이다. 로그 형식과 `/livez`·`/readyz`는 바뀌지 않으므로 ops-info는 2.1.0을 유지한다. 결정 이유는 [ADR-0011](../decisions/ADR-0011-pull-metrics-on-status-listener.md)에 있다.
 
 접속 출처 통계는 운영자가 내려받아 둔 IP 정보 DB(MMDB 파일)로 클라이언트 주소의 국가·ASN을 찾는다. 설정 4.3.0은 DB 경로를 담는 `[ip_info]` 표와 파일 형식을, 관리 API 1.4.0은 `GET /api/v1/sources`를, ops-info 2.2.0은 `ip_db_loaded`·`ip_db_unavailable` 사건을 더한 호환 변경이다. 결정 이유는 [ADR-0012](../decisions/ADR-0012-local-ip-info-databases.md)에 있다.
+
+출발지 IP 차단 목록은 모든 중계 리스너가 함께 쓰는 선택 목록이다. 기본값(`relay.deny.sources = []`)에서는 기존 설정 파일과 클라이언트의 판정이 바뀌지 않는다. 설정 4.4.0은 `[relay.deny]` 표와 신뢰 프록시와의 겹침 검사를, 관리 API 1.5.0은 `GET /api/v1/sources`의 `deny_editable`·`deny_entries`와 설정 편집 대상 `relay.deny.sources`를, ops-info 2.3.0과 메트릭 1.2.0은 `ip_denied` 원인 값과 `config_deny_overlaps_proxy` 오류 코드를, WebSocket 중계 2.2.0은 검사 순서와 close 4014를 더한 호환 변경이다. 결정 이유는 [ADR-0013](../decisions/ADR-0013-relay-source-deny-list.md)에 있다.
 
 ## 호환성 검증 기록
 

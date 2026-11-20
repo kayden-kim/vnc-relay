@@ -13,7 +13,7 @@ use super::{
     PrepareReloadError, ReloadResult, ReloadTrigger,
 };
 use crate::events::{Event, Phase};
-use crate::ports::EventSink;
+use crate::ports::{Clock, EventSink, RelayDenyControl};
 use crate::reload::ports::{ReloadFileStore, ReloadTicketKeyStore, ReloadTlsStore, TlsBuildError};
 use crate::reload::snapshot::{ReloadCell, ReloadSnapshot};
 use crate::settings::{
@@ -69,6 +69,10 @@ pub struct ReloadService<A> {
     /// Test seam (file-watch-v1 §4.3): runs once, right before the next candidate is validated.
     /// Only tests arm it; the product never does.
     before_validation: Option<Box<dyn FnOnce() + Send>>,
+    /// Closes the open relay connections a changed deny list denies, with the
+    /// clock that times each session close (config-v4 §1.8). Attached after
+    /// the relay runtime exists; before that no relay connection is open.
+    deny_control: Option<(Arc<dyn RelayDenyControl>, Arc<dyn Clock>)>,
 }
 
 impl<A> ReloadService<A> {
@@ -104,6 +108,7 @@ impl<A> ReloadService<A> {
             wss_hashes,
             management_hashes,
             before_validation: None,
+            deny_control: None,
         }
     }
 
@@ -134,6 +139,16 @@ impl<A> ReloadService<A> {
     /// validated. Only tests arm it; the product never does.
     pub fn arm_before_validation(&mut self, action: Box<dyn FnOnce() + Send>) {
         self.before_validation = Some(action);
+    }
+
+    /// Attaches the relay runtime that `commit_prepared` notifies after it
+    /// publishes a changed deny list (OPS-R55).
+    pub fn attach_deny_control(
+        &mut self,
+        control: Arc<dyn RelayDenyControl>,
+        clock: Arc<dyn Clock>,
+    ) {
+        self.deny_control = Some((control, clock));
     }
 }
 
@@ -307,6 +322,7 @@ impl<A: Clone> ReloadService<A> {
             trigger,
             config_keys: history_keys,
         };
+        let deny_changed = self.running.relay.deny != settings.relay.deny;
         self.cell.publish(snapshot);
         self.running = settings;
         self.presence = presence;
@@ -319,6 +335,12 @@ impl<A: Clone> ReloadService<A> {
             });
         }
         self.events.record(&event);
+        // Connections are closed right after the swap and after
+        // `reload_applied`, so each `waiting_removed` and `session_closed`
+        // follows it (ops-info-v2 §1.5).
+        if deny_changed && let Some((control, clock)) = &self.deny_control {
+            control.close_denied(clock.as_ref());
+        }
         self.last_reload = Some(history);
         applied
     }
@@ -672,7 +694,7 @@ fn push_if(keys: &mut Vec<String>, differs: bool, key: &str) {
 }
 
 /// Canonical config-v4 key order, including TLS content changes.
-const DYNAMIC_KEYS: [&str; 43] = [
+const DYNAMIC_KEYS: [&str; 44] = [
     "relay.tcp_viewer.allow",
     "relay.tcp_server.allow",
     "relay.ws.trusted_proxies",
@@ -687,6 +709,7 @@ const DYNAMIC_KEYS: [&str; 43] = [
     "relay.wss.viewer.allowed_origins",
     "relay.wss.server.allow",
     "relay.wss.server.allowed_origins",
+    "relay.deny.sources",
     "relay.ticket.viewer.enabled",
     "relay.ticket.viewer.issuer",
     "relay.ticket.viewer.relay_host",
@@ -752,6 +775,12 @@ pub fn dynamic_changed_keys(a: &Settings, b: &Settings) -> Vec<String> {
             &format!("relay.{}.trusted_proxies", listener.name()),
         );
     }
+    // The deny list applies even when every relay entry point is disabled.
+    push_if(
+        &mut keys,
+        a.relay.deny != b.relay.deny,
+        "relay.deny.sources",
+    );
     for role in [Role::Viewer, Role::Server] {
         let before = a.relay.ticket.role(role);
         let after = b.relay.ticket.role(role);
@@ -1183,6 +1212,7 @@ mod tests {
                 ws: WsListenerSettings::default(),
                 wss: WsListenerSettings::default(),
                 ticket: TicketSettings::default(),
+                deny: Default::default(),
             },
             mode1: Mode1Settings::default(),
             mode2: Mode2Settings::default(),
@@ -1698,7 +1728,10 @@ mod tests {
         running.mode1.enabled = true;
         running.mode1.allow_targets = Some(TargetPolicy::default());
         type Change = (&'static str, fn(&mut Settings));
-        let changes: [Change; 25] = [
+        let changes: [Change; 26] = [
+            ("relay.deny.sources", |s| {
+                s.relay.deny = deny(&["203.0.113.9"])
+            }),
             ("relay.ws.trusted_proxies", |s| {
                 s.relay.ws.trusted_proxies =
                     AllowList::new(vec![IpItem::Single(IpAddr::from([10, 0, 0, 1]))]);
@@ -1806,6 +1839,112 @@ mod tests {
         }
         assert!(h.sink.events().is_empty());
         assert!(h.service.last_reload().is_none());
+    }
+
+    fn deny(texts: &[&str]) -> vnc_relay_domain::deny_list::DenyList {
+        vnc_relay_domain::deny_list::DenyList::new(
+            texts
+                .iter()
+                .map(|text| {
+                    let item =
+                        IpItem::parse(text).unwrap_or_else(|error| panic!("{text}: {error:?}"));
+                    vnc_relay_domain::deny_list::DenyEntry::new((*text).to_owned(), item)
+                })
+                .collect(),
+        )
+    }
+
+    /// Records each `close_denied` call with the deny list it sees and the
+    /// number of events recorded before it.
+    struct FakeDenyControl {
+        cell: Arc<ReloadCell<u32>>,
+        sink: Arc<RecordingSink>,
+        calls: Mutex<Vec<(vnc_relay_domain::deny_list::DenyList, usize)>>,
+    }
+
+    impl RelayDenyControl for FakeDenyControl {
+        fn close_denied(&self, clock: &dyn Clock) {
+            assert_eq!(clock.monotonic(), Duration::from_secs(7));
+            self.calls
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .push((
+                    self.cell.current().settings.relay.deny.clone(),
+                    self.sink.events().len(),
+                ));
+        }
+    }
+
+    struct FixedClock;
+
+    impl Clock for FixedClock {
+        fn monotonic(&self) -> Duration {
+            Duration::from_secs(7)
+        }
+        fn wall(&self) -> SystemTime {
+            SystemTime::UNIX_EPOCH
+        }
+    }
+
+    /// The relay runtime is told to close denied connections only after a
+    /// published deny list value changed, and only after `reload_applied`.
+    /// The list applies with every relay entry point disabled.
+    /// spec: operations.md:OPS-101 partial
+    /// spec: operations.md:OPS-100 partial
+    #[test]
+    fn changed_deny_list_notifies_the_relay_after_reload_applied() {
+        let mut running = settings();
+        running.relay.tcp_viewer.enabled = false;
+        running.relay.tcp_server.enabled = false;
+        let mut h = harness(running.clone(), None);
+        let control = Arc::new(FakeDenyControl {
+            cell: Arc::clone(&h.cell),
+            sink: Arc::clone(&h.sink),
+            calls: Mutex::new(Vec::new()),
+        });
+        h.service
+            .attach_deny_control(control.clone(), Arc::new(FixedClock));
+        let calls = || {
+            control
+                .calls
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .clone()
+        };
+
+        let mut next = running.clone();
+        next.relay.deny = deny(&["203.0.113.9", "198.51.100.0/24"]);
+        let apply = |h: &mut Harness, next: &Settings| {
+            h.service.handle_config(
+                Ok(candidate(next.clone())),
+                &|| true,
+                SystemTime::UNIX_EPOCH,
+            )
+        };
+        assert_eq!(apply(&mut h, &next), ReloadOutcome::Applied);
+        assert_eq!(calls(), [(next.relay.deny.clone(), 1)]);
+        assert_eq!(
+            h.sink.events(),
+            [Event::ReloadApplied {
+                trigger: ReloadTrigger::FileWatch,
+                applied: vec!["relay.deny.sources".to_owned()],
+            }]
+        );
+
+        // The same list again: no change, no notification.
+        assert_eq!(apply(&mut h, &next), ReloadOutcome::Unchanged);
+        assert_eq!(calls().len(), 1);
+
+        // Another dynamic key: applied without a deny check.
+        next.limits.waiting += 1;
+        assert_eq!(apply(&mut h, &next), ReloadOutcome::Applied);
+        assert_eq!(calls().len(), 1);
+
+        // Removing an item is a change; the runtime finds nothing to close.
+        next.relay.deny = deny(&["198.51.100.0/24"]);
+        assert_eq!(apply(&mut h, &next), ReloadOutcome::Applied);
+        assert_eq!(calls().len(), 2);
+        assert_eq!(calls()[1].0, next.relay.deny);
     }
     /// spec: operations.md:OPS-067 partial
     #[test]
@@ -1992,8 +2131,8 @@ mod tests {
         enable_ticket(&mut next, Role::Server, "server.jwks");
         next.relay.ticket.viewer.max_lifetime = Duration::from_secs(10);
         next.relay.ticket.server.max_lifetime = Duration::from_secs(600);
-        let expected = &DYNAMIC_KEYS[14..24];
-        assert_eq!(DYNAMIC_KEYS.len(), 43);
+        let expected = &DYNAMIC_KEYS[15..25];
+        assert_eq!(DYNAMIC_KEYS.len(), 44);
         assert_eq!(dynamic_changed_keys(&running, &next), expected);
         assert!(restart_required_keys(&running, &next).is_empty());
         let mut h = harness(running, None);

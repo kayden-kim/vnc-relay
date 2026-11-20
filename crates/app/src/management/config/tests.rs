@@ -57,6 +57,7 @@ fn settings() -> Settings {
             ws: WsListenerSettings::default(),
             wss: WsListenerSettings::default(),
             ticket: TicketSettings::default(),
+            deny: Default::default(),
         },
         mode1: Mode1Settings::default(),
         mode2: Mode2Settings::default(),
@@ -1265,6 +1266,7 @@ relay.ws.listen relay.ws.trusted_proxies relay.ws.viewer.enabled relay.ws.viewer
 relay.wss.listen relay.wss.trusted_proxies relay.wss.cert_file relay.wss.key_file relay.wss.viewer.enabled relay.wss.viewer.allow relay.wss.viewer.allowed_origins relay.wss.server.enabled relay.wss.server.allow relay.wss.server.allowed_origins
 relay.ticket.viewer.enabled relay.ticket.viewer.issuer relay.ticket.viewer.relay_host relay.ticket.viewer.public_keys_file relay.ticket.viewer.max_lifetime_secs
 relay.ticket.server.enabled relay.ticket.server.issuer relay.ticket.server.relay_host relay.ticket.server.public_keys_file relay.ticket.server.max_lifetime_secs
+relay.deny.sources
 mode1.enabled mode1.allow_targets mode2.enabled
 limits.relay_connections limits.admin_connections limits.waiting limits.buffer_bytes limits.ws_message_bytes
 timeouts.handshake_secs timeouts.tls_upgrade_secs timeouts.wait_secs timeouts.connect_secs timeouts.close_secs timeouts.shutdown_grace_secs
@@ -1278,7 +1280,7 @@ const DYNAMIC_KEYS: &str = "
 relay.tcp_viewer.allow relay.tcp_server.allow relay.ws.trusted_proxies relay.ws.viewer.allow relay.ws.viewer.allowed_origins relay.ws.server.allow relay.ws.server.allowed_origins
 relay.wss.trusted_proxies relay.wss.cert_file relay.wss.key_file relay.wss.viewer.allow relay.wss.viewer.allowed_origins relay.wss.server.allow relay.wss.server.allowed_origins
 relay.ticket.viewer.enabled relay.ticket.viewer.issuer relay.ticket.viewer.relay_host relay.ticket.viewer.public_keys_file relay.ticket.viewer.max_lifetime_secs
-relay.ticket.server.enabled relay.ticket.server.issuer relay.ticket.server.relay_host relay.ticket.server.public_keys_file relay.ticket.server.max_lifetime_secs mode1.allow_targets
+relay.ticket.server.enabled relay.ticket.server.issuer relay.ticket.server.relay_host relay.ticket.server.public_keys_file relay.ticket.server.max_lifetime_secs relay.deny.sources mode1.allow_targets
 limits.relay_connections limits.admin_connections limits.waiting limits.buffer_bytes limits.ws_message_bytes
 timeouts.handshake_secs timeouts.tls_upgrade_secs timeouts.wait_secs timeouts.connect_secs timeouts.close_secs timeouts.shutdown_grace_secs
 keepalive.tcp_idle_secs keepalive.tcp_interval_secs keepalive.tcp_probes keepalive.ws_ping_secs keepalive.ws_pong_timeout_secs management.cert_file management.key_file";
@@ -1292,11 +1294,13 @@ fn item_named<'a>(items: &'a [ConfigItem], key: &str) -> &'a ConfigItem {
 
 /// spec: management.md:MGT-028 partial
 /// spec: management.md:MGT-037 partial
+/// spec: management.md:MGT-066 partial
 /// spec: operations.md:OPS-063 partial
 /// spec: operations.md:OPS-064 partial
 /// spec: operations.md:OPS-072 partial
+/// spec: operations.md:OPS-100 partial
 #[test]
-fn descriptors_follow_contract_order_with_43_dynamic_and_37_enabled_editable_keys() {
+fn descriptors_follow_contract_order_with_44_dynamic_and_38_enabled_editable_keys() {
     let mut all = transaction_settings();
     let role = WsRoleSettings {
         enabled: true,
@@ -1341,14 +1345,14 @@ fn descriptors_follow_contract_order_with_43_dynamic_and_37_enabled_editable_key
                 .collect::<Vec<_>>(),
             ORDERED_KEYS.split_whitespace().collect::<Vec<_>>()
         );
-        assert_eq!(items.len(), 78);
+        assert_eq!(items.len(), 79);
         let dynamic = items
             .iter()
             .filter(|item| item.reload == ConfigReloadKind::Dynamic)
             .map(|item| item.key.as_str())
             .collect::<Vec<_>>();
         assert_eq!(dynamic, DYNAMIC_KEYS.split_whitespace().collect::<Vec<_>>());
-        assert_eq!(dynamic.len(), 43);
+        assert_eq!(dynamic.len(), 44);
         let editable = items
             .iter()
             .filter(|item| item.editable)
@@ -1362,7 +1366,7 @@ fn descriptors_follow_contract_order_with_43_dynamic_and_37_enabled_editable_key
                 .filter(|key| !tls_paths.contains(key))
                 .collect::<Vec<_>>()
         );
-        assert_eq!(editable.len(), 37);
+        assert_eq!(editable.len(), 38);
         assert!(items.iter().all(|item| item.editable
             == (item.reload == ConfigReloadKind::Dynamic
                 && !tls_paths.contains(&item.key.as_str()))));
@@ -1380,9 +1384,11 @@ fn descriptors_follow_contract_order_with_43_dynamic_and_37_enabled_editable_key
             .iter()
             .filter(|item| item.reload == ConfigReloadKind::Dynamic)
             .count(),
-        43
+        44
     );
-    assert_eq!(items.iter().filter(|item| item.editable).count(), 16);
+    // The deny list stays editable with every entry point and mode off.
+    assert_eq!(items.iter().filter(|item| item.editable).count(), 17);
+    assert!(item_named(&items, "relay.deny.sources").editable);
     for key in [
         "relay.tcp_viewer.allow",
         "relay.tcp_server.allow",

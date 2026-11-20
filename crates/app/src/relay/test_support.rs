@@ -41,6 +41,7 @@ pub(crate) fn settings() -> Settings {
             ws: WsListenerSettings::default(),
             wss: WsListenerSettings::default(),
             ticket: TicketSettings::default(),
+            deny: Default::default(),
         },
         mode1: Mode1Settings::default(),
         mode2: Mode2Settings { enabled: true },

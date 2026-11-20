@@ -391,10 +391,15 @@ fn check_upgrade(
             } else {
                 None
             };
+            let client = forwarded_ip.unwrap_or(peer_ip);
+            if settings.relay.deny.denies(client) {
+                // Same as the role allow check: the ticket stays unconsumed.
+                return Err(Refusal::IpDenied(ticket.map(|claims| claims.jti)));
+            }
             let entry = EntryPoint::from_parts(policy.accept.allow.listener(), upgrade.role);
             if entry
                 .and_then(|entry| settings.relay.allow(entry))
-                .is_some_and(|allow| allow.permits(forwarded_ip.unwrap_or(peer_ip)))
+                .is_some_and(|allow| allow.permits(client))
             {
                 if let Some(claims) = &ticket {
                     let mut uses = policy

@@ -11,7 +11,7 @@
 | 코드 지도 | [코드 지도](code-map.md) |
 | 관련 스펙 | [관리 §3.3](../specs/management.md#33-설정-보기와-동적-설정-편집) MGT-R19~R27·MGT-028~045, [운영 §3.3](../specs/operations.md#33-파일-변경-자동-감지와-부분-재로드) OPS-059~064, [화면](../specs/dashboard.md#scr-004-설정-보기) DASH-028~053 |
 | 관련 계약 | [설정 §1.8](../contracts/config-v4.md#18-재로드-구분)·[§1.10](../contracts/config-v4.md#110-관리-api-편집의-파일-쓰기), [관리 API §1.13](../contracts/management-api-v1.md#113-설정-보기-get-apiv1config)·[§1.14](../contracts/management-api-v1.md#114-동적-설정-편집-patch-apiv1config)·[§2.3](../contracts/management-api-v1.md#23-consumer의-판정-규칙), [운영 정보 §1.5](../contracts/ops-info-v2.md#15-사건-목록) |
-| 관련 ADR | [ADR-0006](../decisions/ADR-0006-config-edit-through-file.md) |
+| 관련 ADR | [ADR-0006](../decisions/ADR-0006-config-edit-through-file.md), [ADR-0013](../decisions/ADR-0013-relay-source-deny-list.md). `relay.deny.sources`는 편집 가능한 문자열 목록이다. 파일에 표가 없으면 끝에 `[relay.deny]`를 더한다. commit 순서는 `reload_applied` → 차단 연결 종료 → `config_edited`다. |
 | 관련 문서 | [접속 ticket 모듈 설계](relay-access-ticket.md) |
 
 설정 v4의 ticket을 포함한 재로드 43개·편집 37개 이름을 사용한다([접속 ticket 모듈 설계](relay-access-ticket.md#44-재로드와-편집)). `trusted_proxies`는 신뢰 프록시의 수락·전달 주소 판정에 사용한다. `recent_logs.max_entries`는 보기 전용 재시작 키다. 최근 로그 버퍼와 API는 [운영 로그 모듈](ops-log.md)이 맡는다.

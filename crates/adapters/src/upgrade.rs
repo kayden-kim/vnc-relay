@@ -93,6 +93,11 @@ pub(crate) enum Refusal {
     /// 403: the source IP failed the pre-upgrade recheck (§1.1). It keeps
     /// the `jti` of a ticket that already passed its checks for the log.
     IpNotAllowed(Option<String>),
+    /// 403: the client address is in the deny list at the pre-upgrade
+    /// recheck, before the role allow check (§1.1 step 8). It keeps the
+    /// `jti` of a ticket that already passed its checks for the log; the
+    /// ticket is not consumed.
+    IpDenied(Option<String>),
     /// 400: a trusted proxy did not supply a valid client address.
     ForwardedForInvalid,
     /// 401: an enabled role requires a valid, unused access ticket.
@@ -112,6 +117,7 @@ impl Refusal {
             Self::OriginNotAllowed(_) => RejectReason::OriginNotAllowed,
             Self::SubprotocolNotSupported => RejectReason::SubprotocolNotSupported,
             Self::IpNotAllowed(_) => RejectReason::IpNotAllowed,
+            Self::IpDenied(_) => RejectReason::IpDenied,
             Self::ForwardedForInvalid => RejectReason::ForwardedForInvalid,
             Self::Ticket { reason, .. } => RejectReason::Ticket(*reason),
         }
@@ -128,7 +134,9 @@ impl Refusal {
     /// The `jti` to log: only refusals after the signature check have one.
     pub(crate) fn ticket_jti(&self) -> Option<&str> {
         match self {
-            Self::Ticket { jti, .. } | Self::IpNotAllowed(jti) => jti.as_deref(),
+            Self::Ticket { jti, .. } | Self::IpNotAllowed(jti) | Self::IpDenied(jti) => {
+                jti.as_deref()
+            }
             _ => None,
         }
     }
@@ -142,7 +150,9 @@ impl Refusal {
             Self::NotFound => ("404 Not Found", ""),
             Self::MethodNotAllowed => ("405 Method Not Allowed", "Allow: GET\r\n"),
             Self::VersionUnsupported => ("426 Upgrade Required", "Sec-WebSocket-Version: 13\r\n"),
-            Self::OriginNotAllowed(_) | Self::IpNotAllowed(_) => ("403 Forbidden", ""),
+            Self::OriginNotAllowed(_) | Self::IpNotAllowed(_) | Self::IpDenied(_) => {
+                ("403 Forbidden", "")
+            }
             Self::Ticket { .. } => ("401 Unauthorized", "WWW-Authenticate: VncRelayTicket\r\n"),
         };
         format!("HTTP/1.1 {status}\r\n{extra}Content-Length: 0\r\nConnection: close\r\n\r\n")
@@ -631,6 +641,7 @@ mod tests {
         );
     }
 
+    /// spec: websocket.md:WS-047 partial
     #[test]
     fn refusal_answers_carry_their_status_and_headers() {
         let text = |refusal: Refusal| String::from_utf8_lossy(&refusal.answer()).into_owned();
@@ -638,6 +649,11 @@ mod tests {
         assert!(text(Refusal::MethodNotAllowed).contains("Allow: GET\r\n"));
         assert!(text(Refusal::VersionUnsupported).contains("Sec-WebSocket-Version: 13\r\n"));
         assert!(text(Refusal::IpNotAllowed(None)).starts_with("HTTP/1.1 403 Forbidden\r\n"));
+        assert!(text(Refusal::IpDenied(None)).starts_with("HTTP/1.1 403 Forbidden\r\n"));
+        assert_eq!(
+            Refusal::IpDenied(Some("jti-1".to_owned())).ticket_jti(),
+            Some("jti-1")
+        );
         assert!(text(Refusal::Invalid).ends_with("Connection: close\r\n\r\n"));
         assert!(text(Refusal::ForwardedForInvalid).starts_with("HTTP/1.1 400 Bad Request\r\n"));
         assert!(text(Refusal::ForwardedForInvalid).ends_with("Connection: close\r\n\r\n"));
@@ -658,6 +674,7 @@ mod tests {
             Refusal::IpNotAllowed(None).reason().as_str(),
             "ip_not_allowed"
         );
+        assert_eq!(Refusal::IpDenied(None).reason().as_str(), "ip_denied");
         assert_eq!(
             Refusal::ForwardedForInvalid.reason().as_str(),
             "forwarded_for_invalid"

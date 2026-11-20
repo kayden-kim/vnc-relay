@@ -20,7 +20,7 @@ use crate::reload::{ChangeSource, WatchFailure};
 use crate::settings::ConfigWarning;
 
 /// Value of `log_contract` in `server_starting` (ops-info-v2 §1.5).
-pub const LOG_CONTRACT: &str = "ops-info/2.2.0";
+pub const LOG_CONTRACT: &str = "ops-info/2.3.0";
 
 /// `level` values of ops-info-v2 §1.3. v2 has no other value.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -94,6 +94,9 @@ impl Stage {
 pub enum RejectReason {
     /// The source IP is not in the allow list of the entry point.
     IpNotAllowed,
+    /// The client address is in the relay deny list (config-v4 §1.2
+    /// `relay.deny.sources`), at accept, upgrade, or register.
+    IpDenied,
     /// Every place of the relay connection limit L is held.
     RelayConnectionLimit { limit: u32 },
     /// Every place of the management and status connection limit Lm is
@@ -135,6 +138,7 @@ impl RejectReason {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::IpNotAllowed => "ip_not_allowed",
+            Self::IpDenied => "ip_denied",
             Self::RelayConnectionLimit { .. } => "relay_connection_limit",
             Self::AdminConnectionLimit { .. } => "admin_connection_limit",
             Self::TlsVersionUnsupported => "tls_version_unsupported",
@@ -156,6 +160,7 @@ impl RejectReason {
     pub fn limit(self) -> Option<u32> {
         match self {
             Self::IpNotAllowed
+            | Self::IpDenied
             | Self::TlsVersionUnsupported
             | Self::InvalidUpgrade
             | Self::ForwardedForInvalid
@@ -291,6 +296,8 @@ pub enum WaitingRemovalReason {
     ServerShutdown,
     /// The access ticket's `sx` was reached while waiting (websocket-relay-v2 §1.9.5).
     SessionExpired,
+    /// The deny list changed and the client address is denied (OPS-R55).
+    IpDenied,
 }
 
 impl WaitingRemovalReason {
@@ -302,6 +309,7 @@ impl WaitingRemovalReason {
             Self::DeadConnection => "dead_connection",
             Self::ServerShutdown => "server_shutdown",
             Self::SessionExpired => "session_expired",
+            Self::IpDenied => "ip_denied",
         }
     }
 
@@ -309,15 +317,19 @@ impl WaitingRemovalReason {
     pub fn error_kind(self) -> Option<ConnectionErrorKind> {
         match self {
             Self::ConnectionError(kind) => Some(kind),
-            Self::PeerEof | Self::DeadConnection | Self::ServerShutdown | Self::SessionExpired => {
-                None
-            }
+            Self::PeerEof
+            | Self::DeadConnection
+            | Self::ServerShutdown
+            | Self::SessionExpired
+            | Self::IpDenied => None,
         }
     }
 
     fn level(self) -> Level {
         match self {
-            Self::PeerEof | Self::ServerShutdown | Self::SessionExpired => Level::Info,
+            Self::PeerEof | Self::ServerShutdown | Self::SessionExpired | Self::IpDenied => {
+                Level::Info
+            }
             Self::ConnectionError(_) | Self::DeadConnection => Level::Warn,
         }
     }
@@ -478,14 +490,17 @@ pub enum Event {
         target_port: u16,
         target_ip: Option<IpAddr>,
     },
-    /// A Mode II registration refusal (ops-info-v2 §1.6).
+    /// A refusal at `stage = register` (ops-info-v2 §1.6): a Mode II
+    /// registration refusal, or a Mode I `ip_denied` refusal before the
+    /// target connect. `relay_id_ref` is present for Mode II only, and the
+    /// written `mode` follows it.
     RegistrationRejected {
         conn_id: ConnId,
         entry_point: EntryPoint,
         peer_ip: PeerIp,
         forwarded_ip: Option<PeerIp>,
         reason: RejectReason,
-        relay_id_ref: RelayIdRef,
+        relay_id_ref: Option<RelayIdRef>,
     },
     /// An unfinished relay connection with a known mode (ops-info-v2 §1.5).
     RelayAborted {
@@ -733,9 +748,10 @@ impl Event {
             }
             Self::WaitingRemoved { reason, .. } => reason.level(),
             Self::SessionClosed { close_cause, .. } => match close_cause {
-                CloseCause::PeerEof | CloseCause::AdminTerminated | CloseCause::SessionExpired => {
-                    Level::Info
-                }
+                CloseCause::PeerEof
+                | CloseCause::AdminTerminated
+                | CloseCause::SessionExpired
+                | CloseCause::IpDenied => Level::Info,
                 CloseCause::ConnectionError
                 | CloseCause::DeadConnection
                 | CloseCause::CloseTimeout

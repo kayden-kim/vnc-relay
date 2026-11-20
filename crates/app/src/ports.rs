@@ -155,6 +155,9 @@ pub enum RelayCloseAction {
     TicketRelayMismatch,
     /// Close 4013: the access ticket's `sx` was reached (websocket-relay-v2 §1.9.5).
     SessionExpired,
+    /// Close 4014: the client address is in the changed deny list
+    /// (websocket-relay-v2 §1.6). TCP closes as for `AdminTerminated`.
+    IpDenied,
 }
 
 /// Bounded payload stream with explicit half-close and terminal-close intent.
@@ -314,6 +317,14 @@ pub trait RelaySessionControl: Send + Sync {
         clock: &dyn Clock,
         events: &dyn EventSink,
     ) -> Option<crate::management::terminate::TerminationTicket>;
+}
+
+/// Closes the open relay connections the current deny list denies
+/// (config-v4 §1.8 `relay.deny.sources`, OPS-R55). The reload service calls
+/// it right after it publishes a snapshot whose deny list changed. `clock`
+/// gives the acceptance time of each session close.
+pub trait RelayDenyControl: Send + Sync {
+    fn close_denied(&self, clock: &dyn Clock);
 }
 
 /// Provides a snapshot of relay runtime state for management queries.

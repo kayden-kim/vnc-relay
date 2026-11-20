@@ -6,9 +6,9 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 이름과 버전 | `vnc-relay-config` 4.3.0. 국가·ASN 조회용 IP 정보 DB 파일 경로를 담는 선택 표 `[ip_info]`와 그 파일 형식(1.12절)을 추가한 호환 변경이다. |
+| 이름과 버전 | `vnc-relay-config` 4.4.0. 출발지 IP 차단 목록을 담는 선택 표 `[relay.deny]`와 키 `sources`, 차단 항목과 신뢰 프록시 항목의 겹침 검사(1.6절), 재로드·편집 대상 키 추가(1.8절)를 더한 호환 변경이다. |
 | 상태 | Active |
-| 이전 버전 이력 | 4.2.0: 기본으로 꺼진 `[metrics] enabled` 선택 키 추가. 호환 변경이다. 4.1.0: 기본으로 꺼진 역할별 접속 ticket 표와 공개 키 파일 형식, 재로드·편집 구분 추가. 호환 변경이다. 4.0.0: WS·WSS 리스너 표와 역할 표 분리, Server 역할·신뢰 프록시·최근 로그 보관과 재로드·편집 구분 추가. 호환성을 깨는 변경이다. 3.0.0: 재로드 대상 8개에서 27개로 확대, `management.config_edit`와 관리 API 파일 쓰기 추가. 2.0.0: `limits.initial_message_bytes`(I)와 관계 I ≤ B 삭제. B와 M 사이에는 대소 제약이 없다. 1.1.0: `log_file_unavailable` 추가. 1.2.0: 관리 TLS·첫 요청 머리 읽기에 U 적용, 감시 대상 명확화. |
+| 이전 버전 이력 | 4.3.0: 국가·ASN 조회용 IP 정보 DB 파일 경로를 담는 선택 표 `[ip_info]`와 그 파일 형식(1.12절) 추가. 호환 변경이다. 4.2.0: 기본으로 꺼진 `[metrics] enabled` 선택 키 추가. 호환 변경이다. 4.1.0: 기본으로 꺼진 역할별 접속 ticket 표와 공개 키 파일 형식, 재로드·편집 구분 추가. 호환 변경이다. 4.0.0: WS·WSS 리스너 표와 역할 표 분리, Server 역할·신뢰 프록시·최근 로그 보관과 재로드·편집 구분 추가. 호환성을 깨는 변경이다. 3.0.0: 재로드 대상 8개에서 27개로 확대, `management.config_edit`와 관리 API 파일 쓰기 추가. 2.0.0: `limits.initial_message_bytes`(I)와 관계 I ≤ B 삭제. B와 M 사이에는 대소 제약이 없다. 1.1.0: `log_file_unavailable` 추가. 1.2.0: 관리 TLS·첫 요청 머리 읽기에 U 적용, 감시 대상 명확화. |
 | 소유자 | vnc-relay 프로젝트 관리자 |
 | 만드는 쪽(Producer) | 운영자(설정 파일 작성자), 편집 기능을 켰을 때의 관리 API |
 | 사용하는 쪽(Consumer) | `vnc-relay serve`(시작 검증·자동 재로드·관리 API 편집 적용). Windows의 `vnc-relay service run`도 `serve`와 같이 읽고, `vnc-relay service install`은 등록 전에 같은 검증을 한다([CLI 계약 1.9절](cli-v1.md#19-windows-서비스-실행)). `vnc-relay admin` 하위 명령은 `[admin]` 테이블만 읽는다. Windows 트레이 앱은 `management.listen`·`management.cert_file`·`status.listen`·`log.output`만 쓴다([Windows 트레이 앱 스펙](../specs/windows-tray.md)). |
@@ -16,12 +16,12 @@
 | 스키마 기준 파일 | 없음. 이 문서의 Markdown 표가 형식의 기준이다. |
 | 기준 스펙 | [설정·프로세스 수명·운영 보안 스펙](../specs/operations.md) |
 | 관련 요구사항 | [PRD](../requirements/PRD.md) FR-02·FR-05·FR-06·FR-07·FR-08, [7절 보안 및 신뢰 경계](../requirements/PRD.md#7-보안-및-신뢰-경계). |
-| 호환성 범위 | 설정 파일 v4(`vnc-relay-config` 4.3.0). Windows 11 x64·Ubuntu 24.04 LTS x64. 파일 안에 형식 버전 키는 없다. v1→v2는 3.1절, v2→v3는 3.2절, v3→v4와 롤백은 3.3절을 따른다. v4 서버는 v3 표를 읽지 않는다. ticket 표나 `[metrics]`·`[ip_info]` 표를 쓴 파일을 이전 4.x 서버로 되돌리는 방법은 3절을 따른다. |
-| 관련 테스트 | [운영 스펙 수용 테스트](../specs/operations.md#7-수용-테스트) OPS-001~006·OPS-016·OPS-023~027·OPS-031·OPS-034~042·OPS-047~073·OPS-092·OPS-095~097, [WS·WSS 스펙](../specs/websocket.md#7-수용-테스트) WS-015·WS-022·WS-024·WS-027~046, [중계 스펙](../specs/relay.md#7-수용-테스트) RLY-007·RLY-008·RLY-022~027. 계약 시험은 5절에 연결한다. |
+| 호환성 범위 | 설정 파일 v4(`vnc-relay-config` 4.4.0). Windows 11 x64·Ubuntu 24.04 LTS x64. 파일 안에 형식 버전 키는 없다. v1→v2는 3.1절, v2→v3는 3.2절, v3→v4와 롤백은 3.3절을 따른다. v4 서버는 v3 표를 읽지 않는다. ticket 표나 `[metrics]`·`[ip_info]`·`[relay.deny]` 표를 쓴 파일을 이전 4.x 서버로 되돌리는 방법은 3절을 따른다. |
+| 관련 테스트 | [운영 스펙 수용 테스트](../specs/operations.md#7-수용-테스트) OPS-001~006·OPS-016·OPS-023~027·OPS-031·OPS-034~042·OPS-047~073·OPS-092·OPS-095~097·OPS-100·OPS-101, [WS·WSS 스펙](../specs/websocket.md#7-수용-테스트) WS-015·WS-022·WS-024·WS-027~046, [중계 스펙](../specs/relay.md#7-수용-테스트) RLY-007·RLY-008·RLY-022~027. 계약 시험은 5절에 연결한다. |
 
 용어는 [VNC Relay 용어집](../../GLOSSARY.md)을 따른다. 테스트·검증 기호 L~Dp 등은 [운영 스펙 2절](../specs/operations.md#2-상태와-검증-매개변수)의 기호이며, 이 계약이 각 기호를 키에 연결한다.
 
-관련 문서: [CLI·계정 파일 계약](cli-v1.md)(`[admin]` 테이블 사용, 종료 코드), [관리 API 계약](management-api-v1.md)(`[dashboard]`·`[recent_closed]`·`[management]`의 값 전달, `[ip_info]` DB 상태 전달), [WebSocket 중계 계약](websocket-relay-v2.md)(`allowed_origins`·WS 키 사용), [Repeater 초기 교환 계약](repeater-handshake-v1.md)(`handshake_secs`·`[mode1]`·`[mode2]` 사용), [운영 정보 계약](ops-info-v2.md)(경고·재로드 사건 이름, `[log]`·`[status]`, IP 정보 DB 사건), [메트릭 계약](metrics-v1.md)(`[metrics]`가 켜는 `/metrics`), [ADR-0001 내장 TLS](../decisions/ADR-0001-built-in-tls.md), [ADR-0002 출발지 IP 허용 목록](../decisions/ADR-0002-source-ip-allowlist.md), [ADR-0004 tokio·rustls](../decisions/ADR-0004-tokio-rustls.md).
+관련 문서: [CLI·계정 파일 계약](cli-v1.md)(`[admin]` 테이블 사용, 종료 코드), [관리 API 계약](management-api-v1.md)(`[dashboard]`·`[recent_closed]`·`[management]`의 값 전달, `[ip_info]` DB 상태 전달, `[relay.deny]` 편집), [WebSocket 중계 계약](websocket-relay-v2.md)(`allowed_origins`·WS 키 사용, 차단 검사 순서), [Repeater 초기 교환 계약](repeater-handshake-v1.md)(`handshake_secs`·`[mode1]`·`[mode2]` 사용), [운영 정보 계약](ops-info-v2.md)(경고·재로드 사건 이름, `[log]`·`[status]`, IP 정보 DB 사건), [메트릭 계약](metrics-v1.md)(`[metrics]`가 켜는 `/metrics`), [ADR-0001 내장 TLS](../decisions/ADR-0001-built-in-tls.md), [ADR-0013 허용 목록과 공통 차단 목록](../decisions/ADR-0013-relay-source-deny-list.md), [ADR-0004 tokio·rustls](../decisions/ADR-0004-tokio-rustls.md).
 
 접속 ticket의 보안 경계는 [ADR-0009](../decisions/ADR-0009-optional-relay-access-ticket.md)를 따른다. 운영자가 둔 IP 정보 DB 파일을 쓰는 이유와 대안은 [ADR-0012](../decisions/ADR-0012-local-ip-info-databases.md)를 따른다.
 
@@ -77,7 +77,7 @@ TCP 리스너는 역할 하나를 고정해 받는다. 두 테이블의 키는 �
 | 키 | 자료형 | 필수 여부 | 기본값 | 유효 범위·의미 | 재로드 |
 | --- | --- | --- | --- | --- | --- |
 | `listen` | 문자열(주소) | 이 리스너의 역할이 하나라도 켜져 있으면 필수 | 없음 | `"IP:포트"`(1.1절). 포트까지 써야 한다. | 재시작 |
-| `trusted_proxies` | 문자열 배열 | 아님 | `[]` | IP 항목(1.3절)과 일치하는 소켓 상대의 `X-Forwarded-For`만 읽는다. `[]`이면 읽지 않는다. 전달 주소 판정은 [WebSocket 중계 계약 1.8절](websocket-relay-v2.md#18-신뢰-프록시와-x-forwarded-for)을 따른다. | 대상·편집 대상 |
+| `trusted_proxies` | 문자열 배열 | 아님 | `[]` | IP 항목(1.3절)과 일치하는 소켓 상대의 `X-Forwarded-For`만 읽는다. `[]`이면 읽지 않는다. 차단 목록 `relay.deny.sources`의 항목과 겹치면 안 된다(1.6절). 전달 주소 판정은 [WebSocket 중계 계약 1.8절](websocket-relay-v2.md#18-신뢰-프록시와-x-forwarded-for)을 따른다. | 대상·편집 대상 |
 | `cert_file` | 문자열(경로) | `[relay.wss]`만. WSS 역할이 하나라도 켜져 있으면 필수 | 없음 | PEM 인증서 체인 파일(1.9절). | 대상(경로와 파일 내용)·편집 불가 |
 | `key_file` | 문자열(경로) | `cert_file`과 같음 | 없음 | PEM 개인키 파일(1.9절). | 대상(경로와 파일 내용)·편집 불가 |
 
@@ -91,7 +91,7 @@ TCP 리스너는 역할 하나를 고정해 받는다. 두 테이블의 키는 �
 
 TCP 테이블은 `allowed_origins`·`trusted_proxies`·`cert_file`·`key_file`을 받지 않는다. `[relay.ws]`는 `cert_file`·`key_file`을 받지 않는다. 알 수 없는 키는 `config_unknown_key`다. 꺼진 역할·리스너도 값의 형식·범위를 검사한다. 꺼진 역할과 모든 역할이 꺼진 리스너는 필수 키 검사를 생략한다.
 
-수락 때는 소켓 상대가 `trusted_proxies` 또는 켜진 역할의 `allow` 합집합에 있어야 한다. 업그레이드 때는 선택한 역할의 `allow`를 클라이언트 주소에 적용한다. 신뢰 프록시는 전달 주소를 쓰고, 그 밖은 소켓 상대 IP를 쓴다. 검사 순서와 실패 응답은 [WebSocket 중계 계약](websocket-relay-v2.md)이 정한다. 프록시 TLS 종료의 공식 지원 범위는 중계 WS·WSS뿐이다. 관리 리스너의 내장 HTTPS·루프백 HTTP 제한은 바뀌지 않는다.
+수락 때는 소켓 상대가 `trusted_proxies` 또는 켜진 역할의 `allow` 합집합에 있어야 한다. 소켓 상대가 신뢰 프록시가 아니면 이 합집합 검사 앞에 차단 목록 검사를 한다(`[relay.deny]`). 업그레이드 때는 선택한 역할의 `allow`를 클라이언트 주소에 적용하며, 그 바로 앞에서 클라이언트 주소에 차단 목록 검사를 한다. 신뢰 프록시는 전달 주소를 쓰고, 그 밖은 소켓 상대 IP를 쓴다. 검사 순서와 실패 응답은 [WebSocket 중계 계약](websocket-relay-v2.md)이 정한다. 프록시 TLS 종료의 공식 지원 범위는 중계 WS·WSS뿐이다. 관리 리스너의 내장 HTTPS·루프백 HTTP 제한은 바뀌지 않는다.
 
 `trusted_proxies`에는 프록시 주소만 넣어야 한다. 클라이언트 범위를 넣으면 안 된다. 신뢰 프록시의 전달 헤더가 없거나 비어 있거나, 검사한 요소가 잘못됐거나, 모든 요소가 신뢰 프록시 주소이면 HTTP 400 `forwarded_for_invalid`로 거절한다. 마지막 경우는 프록시 주소가 역할 `allow`에 있어도 같다. 등록하지 않고 `forwarded_ip`도 기록하지 않는다([WS-036](../specs/websocket.md#7-수용-테스트)). 신뢰 프록시 호스트나 그 범위 안의 클라이언트는 프록시를 거치면 이 조건으로 거절될 수 있다. 같은 출발지에서 그 리스너에 직접 접속해도 신뢰 프록시 연결로 취급한다. 그래서 유효한 전달 헤더가 없으면 거절되고, 있으면 같은 전달 주소 판정과 역할 `allow` 검사를 받는다. 전달 헤더 없이 직접 접속하려면 출발지가 그 리스너의 `trusted_proxies` 밖에 있고 해당 역할의 `allow`에 들어야 한다.
 
@@ -123,6 +123,16 @@ TCP 테이블은 `allowed_origins`·`trusted_proxies`·`cert_file`·`key_file`�
 | `max_lifetime_secs` | 정수 | 아님 | `60` | 10~600. ticket의 `exp − iat` 상한. | 대상·편집 대상 |
 
 두 표는 WS·WSS 리스너의 해당 역할에 함께 적용한다. 꺼진 표도 값의 형식·범위를 검사한다. `enabled = false`이면 필수 키 검사를 생략한다. 시계 오차는 5초 고정이며 설정 키가 없다. 범위 밖 값·빈 문자열은 `config_value_out_of_range`다.
+
+#### 차단 목록: `[relay.deny]`
+
+차단 목록은 중계 진입점 6개(TCP Viewer, TCP Server, WS Viewer, WS Server, WSS Viewer, WSS Server)가 하나를 함께 쓴다. 기본은 빈 목록이다. 관리 리스너와 상태 리스너에는 적용하지 않는다. 만료는 없다. 운영자가 항목을 지울 때까지 차단한다.
+
+| 키 | 자료형 | 필수 여부 | 기본값 | 유효 범위·의미 | 재로드 |
+| --- | --- | --- | --- | --- | --- |
+| `sources` | 문자열 배열 | 아님 | `[]` | 출발지 IP 항목 배열(1.3절). 클라이언트 주소가 항목 하나라도 일치하면 허용 목록과 관계없이 거절한다. `[]`은 아무것도 차단하지 않는다. | 대상·편집 대상 |
+
+`[]`의 뜻은 허용 목록과 반대다. `allow`의 `[]`은 모두 거절이고, `relay.deny.sources`의 `[]`은 아무것도 거절하지 않는다. 차단 검사는 허용 검사보다 앞선다. 판정 주소는 클라이언트 주소다. 신뢰 프록시를 거친 WS·WSS는 전달 주소를, 그 밖의 접속은 소켓 상대 주소를 쓴다. 이 표는 진입점이 꺼져 있어도 값의 형식을 검사한다. 항목 문법과 오류 코드는 1.3절, 신뢰 프록시와 겹침 검사는 1.6절, 적용 시점과 열린 연결 끊기는 1.8절이 정한다. 검사 순서와 실패 응답은 [WebSocket 중계 계약](websocket-relay-v2.md)과 [운영 스펙](../specs/operations.md)이 정한다.
 
 #### `[mode1]`, `[mode2]`
 
@@ -217,7 +227,7 @@ K의 감지 시간은 `tcp_idle_secs + tcp_interval_secs × tcp_probes`다. 기�
 
 ### 1.3 IP 항목 문법
 
-`allow`·`trusted_proxies` 배열의 각 문자열은 항목 하나다. 두 키는 같은 IP 항목 문법을 쓴다. 한 문자열에 여러 항목을 넣을 수 없다. 공백은 어디에도 허용하지 않는다. 빈 문자열은 잘못된 표기다. IPv4와 IPv6를 모두 쓴다.
+`allow`·`trusted_proxies`·`relay.deny.sources` 배열의 각 문자열은 항목 하나다. 세 키는 같은 IP 항목 문법을 쓴다. 한 문자열에 여러 항목을 넣을 수 없다. 공백은 어디에도 허용하지 않는다. 빈 문자열은 잘못된 표기다. IPv4와 IPv6를 모두 쓴다.
 
 | 형태 | 문법 | 규칙 | 예 |
 | --- | --- | --- | --- |
@@ -235,6 +245,8 @@ K의 감지 시간은 `tcp_idle_secs + tcp_interval_secs × tcp_probes`다. 기�
 | 범위의 두 주소가 서로 다른 체계(IPv4와 IPv6) | `config_ip_range_family_mixed` |
 
 항목의 주소가 `::ffff:0:0/96`(IPv4-mapped IPv6) 안에 있으면 `config_ip_item_invalid`다. 서버는 이 대역의 상대 주소를 IPv4 주소로 바꿔 비교한다. 겹치거나 중복된 항목은 오류도 경고도 아니다. 상대 IP가 항목 중 하나라도 일치하면 허용이다.
+
+`relay.deny.sources`는 같은 문법과 같은 오류 코드를 쓴다. 진단 `key`는 `relay.deny.sources[i]`다. 이 목록에서는 상대 IP가 항목 중 하나라도 일치하면 거절이다. 빈 배열은 아무것도 차단하지 않는다. 한 체계 전체를 덮는 항목(`0.0.0.0/0`, `::/0`)에 대한 특별한 경고나 오류는 없다.
 
 `allow`의 IPv4 또는 IPv6 한 체계 전체를 덮는 항목은 허용하며 경고 `allow_all_source`를 시작·재로드 때 기록한다. 표기와 관계없이 항목 하나가 그 체계의 전체 주소를 덮으면 해당한다. `0.0.0.0/0`, `::/0`이 해당하고, 같은 효과를 내는 범위(`0.0.0.0-255.255.255.255`, `::-ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff`)도 해당한다. 서로 다른 여러 항목을 합쳐야 전체가 되는 경우(예: `0.0.0.0/1`과 `128.0.0.0/1`)는 판정하지 않는다. 합집합 계산을 요구하지 않기 위해서이며, 범위가 넓은 목록은 운영자가 직접 확인한다.
 
@@ -307,6 +319,7 @@ K의 감지 시간은 `tcp_idle_secs + tcp_interval_secs × tcp_probes`다. 기�
 | 리스너 주소 중복 금지 | 켠 TCP 리스너, 역할이 하나라도 켜진 `relay.ws.listen`·`relay.wss.listen`, `management.listen`, `status.listen` 중 두 곳의 `IP:포트`가 완전히 같으면 안 된다. WS·WSS의 두 역할은 같은 리스너를 쓰므로 역할끼리는 중복으로 세지 않는다. TCP는 기본 포트를 붙인 값으로 비교한다. 와일드카드와 구체 주소의 겹침은 OS가 바인드 때 알려 준다. `trusted_proxies`는 이 검사에 영향을 주지 않는다. | `config_listen_conflict` |
 | Argon2id 하한 | `admin.argon2` 값이 하한(19456·2·1) 미만이면 안 된다. | `config_value_out_of_range` |
 | 역할별 공개 키 분리 | `relay.ticket.viewer.enabled`와 `relay.ticket.server.enabled`가 모두 `true`이면 두 `public_keys_file`에 같은 공개 키(같은 `x`·`y`)가 없어야 한다. | `ticket_keys_invalid` |
+| 차단 목록과 신뢰 프록시 분리 | `relay.deny.sources`의 항목이 역할이 하나라도 켜진 `relay.ws`·`relay.wss` 리스너의 `trusted_proxies` 항목과 주소를 하나라도 공유하면 안 된다. 같은 체계에서 두 항목의 주소 구간이 겹치는지 본다. 진단 `key`는 `relay.deny.sources[i]`다. 역할이 모두 꺼진 리스너의 `trusted_proxies`는 비교하지 않는다. 시작에서 위반하면 시작 실패(종료 코드 3)다. 재로드·편집 후보에서 위반하면 후보 전체를 거절하며, 관리 API 편집은 `400 config_invalid`다. | `config_deny_overlaps_proxy` |
 
 ### 1.7 시작 때 필수 키
 
@@ -324,7 +337,7 @@ K의 감지 시간은 `tcp_idle_secs + tcp_interval_secs × tcp_probes`다. 기�
 
 ### 1.8 재로드 구분
 
-[운영 스펙 3.3절](../specs/operations.md#33-파일-변경-자동-감지와-부분-재로드)을 키에 적용한 표다. 재로드 대상은 아래 43개다. 목록에 없는 키는 모두 "재시작 필요"다. 이미 맺은 연결·이미 시작한 타이머·이미 설정한 소켓 옵션은 이전 값을 유지한다. IP·프록시·ticket 검사의 적용 시점은 아래 표를 따른다.
+[운영 스펙 3.3절](../specs/operations.md#33-파일-변경-자동-감지와-부분-재로드)을 키에 적용한 표다. 재로드 대상은 아래 44개다. 목록에 없는 키는 모두 "재시작 필요"다. 이미 맺은 연결·이미 시작한 타이머·이미 설정한 소켓 옵션은 이전 값을 유지한다. IP·프록시·ticket 검사의 적용 시점은 아래 표를 따른다. 차단 목록은 예외로, 열린 연결 일부를 바로 끊는다.
 
 | 재로드 대상 | 적용 시점 |
 | --- | --- |
@@ -340,6 +353,7 @@ K의 감지 시간은 `tcp_idle_secs + tcp_interval_secs × tcp_probes`다. 기�
 | `relay.ws.server.allowed_origins` | 교체 뒤 Origin 검사를 받는 새 업그레이드 요청부터 |
 | `relay.wss.viewer.allowed_origins` | 교체 뒤 Origin 검사를 받는 새 업그레이드 요청부터 |
 | `relay.wss.server.allowed_origins` | 교체 뒤 Origin 검사를 받는 새 업그레이드 요청부터 |
+| `relay.deny.sources` | 교체 뒤 새 수락·새 업그레이드·새 등록부터. 교체 직후에는 열린 활성 세션과 대기 연결도 검사한다. 목록 값이 이전과 다르면, 클라이언트 주소가 항목과 일치하는 대기 연결과 활성 세션(세션 전체)을 바로 끊는다. 활성 세션은 Viewer나 Mode II Server의 클라이언트 주소로 판정하며 Mode I 대상 주소는 보지 않는다. 이미 정리 중인 세션은 기존 종료 원인을 유지한다. 목록이 그대로이거나 줄기만 하면 끊을 연결이 없다. 끊김의 원인·코드는 [ops-info](ops-info-v2.md#16-원인-코드)·[WebSocket 계약](websocket-relay-v2.md#15-close-코드)이 정한다. |
 | `relay.wss.cert_file` | 경로 값과 파일 내용. 새 TLS 핸드셰이크부터. 기존 TLS 연결 유지 |
 | `relay.wss.key_file` | 경로 값과 파일 내용. 새 TLS 핸드셰이크부터. 기존 TLS 연결 유지 |
 | `management.cert_file` | 경로 값과 파일 내용. 새 TLS 핸드셰이크부터. 기존 TLS 연결 유지 |
@@ -379,8 +393,8 @@ K의 감지 시간은 `tcp_idle_secs + tcp_interval_secs × tcp_probes`다. 기�
 5. 후보가 유효하고 차이가 재로드 대상뿐이면 재로드 대상 값을 한 번에 교체한다. 일부만 적용하지 않는다.
 6. 검증 실패는 `reload_rejected`다. 실패 원인 코드(2절)를 함께 알린다. 기존 설정·연결을 유지한다.
 7. OS 파일 알림을 놓친 변경은 `reload.poll_secs`(Dp) 주기 확인으로 감지한다. 감시 자체가 실패하면 `reload_watch_failed`를 알리고 이전 유효 설정으로 계속 운영한다. 알림을 놓친 변경의 최대 지연은 Dp + D다.
-8. 편집 대상은 재로드 대상 43개에서 인증서·개인키 경로 4개(`relay.wss.cert_file`, `relay.wss.key_file`, `management.cert_file`, `management.key_file`)와 공개 키 파일 경로 2개(`relay.ticket.viewer.public_keys_file`, `relay.ticket.server.public_keys_file`)를 뺀 37개다. 이 6개 경로는 설정 보기에만 나온다. 인증서 갱신과 공개 키 교체는 같은 경로의 파일 내용을 바꾸는 방식으로 한다.
-9. TCP 진입점의 `allow`와 WS·WSS 역할의 `allow`·`allowed_origins`는 해당 진입점·역할이 켜져 있을 때만 편집할 수 있다. 리스너의 `trusted_proxies`는 역할이 하나라도 켜져 있을 때 편집할 수 있다. ticket 표의 편집 대상 4개(`enabled`, `issuer`, `relay_host`, `max_lifetime_secs`)는 그 역할이 `[relay.ws]` 또는 `[relay.wss]`에서 하나라도 켜져 있을 때만 편집할 수 있다. `mode1.allow_targets`는 `mode1.enabled = true`일 때만 편집할 수 있다. 꺼진 진입점·역할·리스너·모드의 키는 보기에만 나온다. 값이 없으면 API에서 `null`로 보인다.
+8. 편집 대상은 재로드 대상 44개에서 인증서·개인키 경로 4개(`relay.wss.cert_file`, `relay.wss.key_file`, `management.cert_file`, `management.key_file`)와 공개 키 파일 경로 2개(`relay.ticket.viewer.public_keys_file`, `relay.ticket.server.public_keys_file`)를 뺀 38개다. 이 6개 경로는 설정 보기에만 나온다. 인증서 갱신과 공개 키 교체는 같은 경로의 파일 내용을 바꾸는 방식으로 한다.
+9. TCP 진입점의 `allow`와 WS·WSS 역할의 `allow`·`allowed_origins`는 해당 진입점·역할이 켜져 있을 때만 편집할 수 있다. 리스너의 `trusted_proxies`는 역할이 하나라도 켜져 있을 때 편집할 수 있다. ticket 표의 편집 대상 4개(`enabled`, `issuer`, `relay_host`, `max_lifetime_secs`)는 그 역할이 `[relay.ws]` 또는 `[relay.wss]`에서 하나라도 켜져 있을 때만 편집할 수 있다. `mode1.allow_targets`는 `mode1.enabled = true`일 때만 편집할 수 있다. `relay.deny.sources`는 중계 진입점이 모두 꺼져 있어도 항상 편집할 수 있다. 꺼진 진입점·역할·리스너·모드의 키는 보기에만 나온다. 값이 없으면 API에서 `null`로 보인다.
 10. 파일 변경 감지와 관리 API 편집은 같은 후보 검증·전체 교체 규칙을 쓴다. 관리 API는 파일 쓰기 성공 뒤 같은 후보를 즉시 한 번 교체한다. `reload_applied.trigger`는 파일 변경 감지이면 `file_watch`, 관리 API 편집이면 `config_edit`다. 뒤따르는 파일 감지는 차이가 없으므로 다시 교체하거나 `reload_applied`를 기록하지 않는다.
 11. `[ip_info]`가 가리키는 IP 정보 DB 파일도 감시 대상이지만 재로드 후보에 넣지 않는다. 파일 내용 변경은 1.12절에 따라 따로 다시 읽는다. 그 결과는 `reload_applied`·`reload_rejected`에 나오지 않는다. 재시작이 필요한 차이가 파일에 남아 있어도 DB 다시 읽기는 막지 않는다.
 
@@ -397,7 +411,7 @@ TLS 1.2 미만은 거절한다. 허용 암호 스위트는 rustls의 aws-lc-rs �
 
 ### 1.10 관리 API 편집의 파일 쓰기
 
-관리 API는 `serve`가 읽는 같은 TOML 파일에 37개 편집 대상 키의 값을 기록한다. 결과 파일은 같은 로더가 읽는 v4 파일이다. 별도 동적 설정 파일이나 메모리 전용 적용은 없다. 요청·오류 형식은 [관리 API 계약](management-api-v1.md)이 정한다.
+관리 API는 `serve`가 읽는 같은 TOML 파일에 38개 편집 대상 키의 값을 기록한다. 결과 파일은 같은 로더가 읽는 v4 파일이다. 별도 동적 설정 파일이나 메모리 전용 적용은 없다. 요청·오류 형식은 [관리 API 계약](management-api-v1.md)이 정한다.
 
 | 항목 | 규칙 |
 | --- | --- |
@@ -482,6 +496,7 @@ UTF-8이 아닌 파일도 `config_file_unreadable` 진단에 해당한다. 관�
 | `config_ip_item_invalid` | IP 항목 표기 오류(1.3절). | 시작 실패 | 후보 전체 거절 | OPS-040 |
 | `config_ip_range_reversed` | 범위의 시작이 끝보다 크다. | 시작 실패 | 후보 전체 거절 | OPS-040 |
 | `config_ip_range_family_mixed` | 범위의 두 주소가 IPv4와 IPv6로 다르다. | 시작 실패 | 후보 전체 거절 | OPS-040 |
+| `config_deny_overlaps_proxy` | 차단 목록 항목이 역할이 하나라도 켜진 WS·WSS 리스너의 `trusted_proxies` 항목과 한 주소라도 겹친다(1.6절). `key`는 `relay.deny.sources[i]`다. | 시작 실패(종료 코드 3) | 후보 전체 거절 | OPS-100 |
 | `config_origin_invalid` | Origin 값 표기 오류(1.4절). | 시작 실패 | 후보 거절 | WS-027 |
 | `config_target_item_invalid` | Mode I 대상 항목 표기 오류(1.5절). | 시작 실패 | 후보 거절 | RLY-007, RLY-008 |
 | `config_plaintext_management_not_loopback` | 평문 HTTP 관리 리스너가 루프백이 아닌 주소다. | 시작 실패 | 후보 거절 | OPS-014, OPS-034 |
@@ -521,7 +536,7 @@ UTF-8이 아닌 파일도 `config_file_unreadable` 진단에 해당한다. 관�
 ## 3. 호환성 규칙
 
 - 서버는 알 수 없는 테이블·키를 `config_unknown_key` 오류로 거절해야 한다. 허용 형식 밖의 값(예: 허용하지 않는 Origin 스킴)은 해당 값의 오류 코드(`config_origin_invalid` 등)로 거절해야 한다. 무시하거나 경고만 하지 않는다.
-- 호환 변경(minor 올림): 기본값이 있고 생략해도 기존 동작이 같은 새 선택 키 추가, 유효 범위 넓힘, 오류 메시지 문구 변경. 새 키를 쓴 파일은 그 키를 모르는 이전 서버가 거절한다. 그래서 새 키를 쓰려면 서버를 먼저 올린다. 4.1.0의 `[relay.ticket.*]` 표는 이 범위다. 이 표를 쓴 파일은 4.0.0 서버가 `config_unknown_key`로 거절하므로, 실행파일을 되돌리기 전에 표를 지운다. 4.2.0의 `[metrics]` 표도 이 범위다. 이 표를 쓴 파일은 4.1.0 이하 서버가 `config_unknown_key`로 거절하므로, 되돌리기 전에 표를 지운다. 4.3.0의 `[ip_info]` 표도 이 범위다. 이 표를 쓴 파일은 4.2.0 이하 서버가 `config_unknown_key`로 거절하므로, 되돌리기 전에 표를 지운다. DB 파일은 남겨도 된다.
+- 호환 변경(minor 올림): 기본값이 있고 생략해도 기존 동작이 같은 새 선택 키 추가, 유효 범위 넓힘, 오류 메시지 문구 변경. 새 키를 쓴 파일은 그 키를 모르는 이전 서버가 거절한다. 그래서 새 키를 쓰려면 서버를 먼저 올린다. 4.1.0의 `[relay.ticket.*]` 표는 이 범위다. 이 표를 쓴 파일은 4.0.0 서버가 `config_unknown_key`로 거절하므로, 실행파일을 되돌리기 전에 표를 지운다. 4.2.0의 `[metrics]` 표도 이 범위다. 이 표를 쓴 파일은 4.1.0 이하 서버가 `config_unknown_key`로 거절하므로, 되돌리기 전에 표를 지운다. 4.3.0의 `[ip_info]` 표도 이 범위다. 이 표를 쓴 파일은 4.2.0 이하 서버가 `config_unknown_key`로 거절하므로, 되돌리기 전에 표를 지운다. DB 파일은 남겨도 된다. 4.4.0의 `[relay.deny]` 표도 이 범위다. 이 표를 쓴 파일은 4.3.0 이하 서버가 `config_unknown_key`로 거절하므로, 되돌리기 전에 표를 지운다. 표를 지우면 그 차단도 없어진다.
 - 호환성을 깨는 변경(새 major 버전): 키 이름·자료형·단위 변경이나 삭제, 필수 키 추가, 기본값 변경, 유효 범위 좁힘, 재로드 구분 변경, 항목 문법 변경, 보안 검사 완화. major를 올리고 마이그레이션(이전 파일을 새 형식으로 바꾸는 방법)과 롤백(새 형식 파일을 이전 서버로 되돌리는 방법) 계획을 함께 작성한다. 2.0.0의 계획은 3.1절, 3.0.0은 3.2절, 4.0.0은 3.3절에 있다.
 - 모든 값의 의미는 키 표에 있다. 키 순서와 주석은 의미가 없다.
 
@@ -571,7 +586,7 @@ UTF-8이 아닌 파일도 `config_file_unreadable` 진단에 해당한다. 관�
 | 상태 | 조건 | 지원 종료·대체 |
 | --- | --- | --- |
 | Draft | 채택 전 상태. | 해당 없음 |
-| Active | 현재 4.3.0. 계약 시험과 결과 확인 방법은 5절을 따른다. | v1은 3.1절, v2는 3.2절, v3는 3.3절의 지원 기간 규칙대로 대체한다. 4.2.0 이하 4.x는 호환 추가인 4.3.0으로 대체한다. |
+| Active | 현재 4.4.0. 계약 시험과 결과 확인 방법은 5절을 따른다. | v1은 3.1절, v2는 3.2절, v3는 3.3절의 지원 기간 규칙대로 대체한다. 4.3.0 이하 4.x는 호환 추가인 4.4.0으로 대체한다. |
 | Deprecated | 대체 계약이 Active이다. | 지원 종료 날짜는 대체 계약에서 정한다. |
 | Retired | 지원 종료. | 새 구현의 근거로 쓰지 않는다. |
 
@@ -672,6 +687,13 @@ public_keys_file = "keys/viewer-ticket.jwks"
 max_lifetime_secs = 60
 ```
 
+같은 예제에서 차단 목록을 쓰려면 다음 표를 더한다. 값은 문서용이다. 이 목록은 중계 진입점 6개에 함께 적용하며, 허용 목록에 있는 주소도 막는다. `trusted_proxies`의 `192.0.2.10`과 겹치는 항목은 `config_deny_overlaps_proxy`다.
+
+```toml
+[relay.deny]
+sources = ["198.51.100.7", "203.0.113.64/26", "2001:db8:bad::/48"]
+```
+
 설정 로더의 시험은 `crates/adapters/tests/config_contract.rs`와 domain 단위 시험에 있다. 현재 자동 시험 결과는 `cargo xtask scenarios`가 만드는 `scenario-report.md`와 CI에서 확인한다. 실행 방법과 판정 기준은 [테스트 규칙](../conventions/testing.md)을 따른다.
 
 | 주체·테스트 위치 | 확인할 계약 규칙 |
@@ -695,13 +717,13 @@ max_lifetime_secs = 60
 | Consumer·재로드 통합 테스트 `tests/reload.rs` 10건과 단위 시험(`file_watch.rs`, `reload/service.rs`, `src/serve.rs`) | 재로드 대상과 재시작 필요 구분, 비재로드 차이가 남은 후보 거절, 후보 실패 시 기존 유지, 주기 확인(1.8·2.3절), 시작 때 감시 등록 실패(`watch_unavailable`). [OPS-003](../specs/operations.md#7-수용-테스트), [OPS-024~028](../specs/operations.md#7-수용-테스트), [OPS-035](../specs/operations.md#7-수용-테스트), [OPS-038](../specs/operations.md#7-수용-테스트), [OPS-040](../specs/operations.md#7-수용-테스트), [OPS-041](../specs/operations.md#7-수용-테스트), [WS-022](../specs/websocket.md#7-수용-테스트). |
 | Consumer·`crates/adapters/src/net.rs` `sets_keepalive_from_the_settings_and_turns_nagle_off`; `tests/relay_dead_peer_linux.rs` `removes_unresponsive_waiting_server_and_reuses_id_and_l`·`removes_unresponsive_active_peers_without_harming_other_sessions`; `tests/relay_log_scenarios.rs` `idle_active_sessions_survive_longer_than_k_and_transfer_data`; `crates/adapters/tests/websocket_scenarios.rs` `ws_and_wss_kw_keeps_idle_peers_and_drops_unresponsive_peers`; `tests/unix_shutdown.rs`·`tests/windows_console.rs`의 종료 유예 시험; `crates/adapters/tests/management.rs` `limited_logins_refuse_alike_and_the_right_password_works_after_the_locks`·`idle_polling_and_absolute_activity_expiry_leave_existing_relays_alive`; `tests/management_query.rs` `recent_closed_fifo_overflow_and_restart_clears_list`; `tests/dashboard_live.rs` `dashboard_022_real_configured_and_default_polling_on_both_screens` | K·Kw·G·F·Si·Sa·P·R 값이 각 기능에 반영. [RLY-025~027](../specs/relay.md#7-수용-테스트), [WS-026](../specs/websocket.md#7-수용-테스트), [OPS-008](../specs/operations.md#7-수용-테스트)·[OPS-009](../specs/operations.md#7-수용-테스트)·[OPS-042](../specs/operations.md#7-수용-테스트), [MGT-022](../specs/management.md#7-수용-테스트), [MGT-024](../specs/management.md#7-수용-테스트), [MGT-025](../specs/management.md#7-수용-테스트), [DASH-022](../specs/dashboard.md#7-수용-테스트) |
 | Producer·`tests/distribution.rs` `repository_example_loads_without_secrets`, `repository_example_lists_every_key_once_with_its_default`, `example_cli_account_relay_reload_and_graceful_stop`(Linux), `tests/windows_console.rs`의 같은 실행파일 시험(Windows) | [`examples/relay.toml`](../../examples/relay.toml)을 실제 로더로 읽는다. 상대 경로·안전한 진입점·비밀과 기본 비밀번호 없음도 확인한다. 1.2절의 모든 키가 활성 줄이나 `# 키 = 값` 주석 줄로 한 번씩 있는지 `config_items` 목록과 대조한다. 주석을 모두 풀어도 로더가 읽는지, 기본값이 있는 키의 주석 값이 기본값과 같은지도 확인한다. 예시 복사본으로 CLI 계정 준비·시작·중계·IP 재로드·종료를 확인한다. [OPS-031](../specs/operations.md#7-수용-테스트)의 자동 시험 범위. 전체 판정에는 두 OS의 [수동 안내](../how-to/operate-relay.md) 실행 기록도 필요하다. |
-| Producer·Consumer / 확대 재로드·설정 편집 계약 시험 | 43개 재로드 대상·37개 편집 대상과 꺼진 진입점·모드 제외(1.8절), `config_edit` 기본값·재시작 구분(1.2절), 주석·서식·줄바꿈 보존·없는 키 추가·원자적 교체·SHA-256 revision(1.10절), v2 마이그레이션·롤백(3.2절). [OPS-047~064](../specs/operations.md#7-수용-테스트) |
+| Producer·Consumer / 확대 재로드·설정 편집 계약 시험 | 44개 재로드 대상·38개 편집 대상과 꺼진 진입점·모드 제외(1.8절), `config_edit` 기본값·재시작 구분(1.2절), 주석·서식·줄바꿈 보존·없는 키 추가·원자적 교체·SHA-256 revision(1.10절), v2 마이그레이션·롤백(3.2절). [OPS-047~064](../specs/operations.md#7-수용-테스트) |
 
 | 주체·테스트 위치 | 확인할 계약 규칙 |
 | --- | --- |
 | Producer·Consumer / v4 설정 로더·시작 계약 시험 | TCP·리스너·역할 표, 역할 하나 이상일 때 리스너 열기, 켠 역할의 `allow`, WSS 파일 필수, 꺼진 역할 형식·범위 검사, WS·WSS 포트 필수와 중복 검사(1.2·1.6·1.7절). [OPS-065](../specs/operations.md#7-수용-테스트) |
 | Producer·Consumer / v3 마이그레이션·롤백 계약 시험 | v3 전용 표는 `config_unknown_key`. 3.3절 대응표로 옮긴 Viewer의 동작 유지. Viewer 경로는 [WebSocket 계약 1.7절](websocket-relay-v2.md#17-경로와-역할)을 따른다. 새 기능 표·키를 제거하고 역변환한 파일은 v3로 롤백 가능. [OPS-066](../specs/operations.md#7-수용-테스트) |
-| Producer·Consumer / v4 재로드·편집 계약 시험 | 43개 재로드·37개 편집 대상, TLS 경로 4개·공개 키 경로 2개 편집 불가, `trusted_proxies`와 역할 키의 적용 시점, 기존 연결 유지, 전체 범위 경고 `trust_all_proxies`. [OPS-067](../specs/operations.md#7-수용-테스트) |
+| Producer·Consumer / v4 재로드·편집 계약 시험 | 44개 재로드·38개 편집 대상, TLS 경로 4개·공개 키 경로 2개 편집 불가, `trusted_proxies`와 역할 키의 적용 시점, 기존 연결 유지, 전체 범위 경고 `trust_all_proxies`. [OPS-067](../specs/operations.md#7-수용-테스트) |
 | Consumer / 최근 로그 계약 시험 | 기본 1000, 0·10000 경계와 범위 밖 거절, 0이면 보관 안 함, 재시작 필요·목록 초기화, 기록 순서와 오래된 항목 제거, 출력 경로·쓰기 성공과 독립. [OPS-068](../specs/operations.md#7-수용-테스트) |
 | Consumer / 설정 경고·사건 계약 시험 | ops-info 2.0.0의 `ws`·`wss` 리스너 값, 역할 확정 전 `role` 없음, `allow_all_source.role`, `plaintext_ws_enabled.listener = ws`. [OPS-069](../specs/operations.md#7-수용-테스트) |
 | Consumer / WS·WSS 역할·프록시 계약 시험 | Server 경로·Mode II, 경로별 역할·IP·Origin, 신뢰 프록시의 전달 주소, 잘못된 헤더와 모든 요소가 신뢰 프록시인 체인의 400, 비신뢰 헤더 무시, 프록시 TLS 종료 배치. [WS-028~036](../specs/websocket.md#7-수용-테스트) |
@@ -710,10 +732,12 @@ max_lifetime_secs = 60
 | --- | --- |
 | Producer·Consumer / 접속 ticket 설정 로더·시작 계약 시험 | ticket 표의 기본값·형식·필수 키·수명 경계, JWKS 형식·크기·`kid` 중복·개인키 금지, 역할 간 같은 공개 키 거절, 시작 종료 코드 3과 리스너 미바인드(1.2·1.6·1.7·1.11·2.1절). [OPS-070](../specs/operations.md#7-수용-테스트) |
 | Consumer / 접속 ticket 설정 경고 계약 시험 | 같은 역할의 TCP 진입점·평문 WS를 함께 켰을 때 시작·재로드 경고와 계속 진행(2.2절). [OPS-071](../specs/operations.md#7-수용-테스트) |
-| Producer·Consumer / 접속 ticket 재로드·편집 계약 시험 | ticket 키 10개 재로드, 경로 2개 편집 불가, 43개 재로드·37개 편집 대상, 공개 키 파일 내용 감시·교체, 실패 시 기존 설정·공개 키·연결 유지(1.8절). [OPS-072](../specs/operations.md#7-수용-테스트), [WS-046](../specs/websocket.md#7-수용-테스트) |
+| Producer·Consumer / 접속 ticket 재로드·편집 계약 시험 | ticket 키 10개 재로드, 경로 2개 편집 불가, 44개 재로드·38개 편집 대상, 공개 키 파일 내용 감시·교체, 실패 시 기존 설정·공개 키·연결 유지(1.8절). [OPS-072](../specs/operations.md#7-수용-테스트), [WS-046](../specs/websocket.md#7-수용-테스트) |
 | Consumer / 접속 ticket 비노출 계약 시험 | 진단·운영 로그·상태 응답·관리 API 응답에 ticket 원문과 공개 키 파일 내용 없음(2.1절). [OPS-073](../specs/operations.md#7-수용-테스트) |
 | Producer·Consumer / 메트릭 설정 계약 시험 | `metrics.enabled` 기본 `false`, 불리언이 아닌 값의 `config_type_mismatch`, 재시작 필요 구분과 편집 대상 아님(1.2·1.8절). [OPS-092](../specs/operations.md#7-수용-테스트) |
 | Producer·Consumer / IP 정보 DB 설정 계약 시험 | `[ip_info]` 두 키는 선택이며 빈 경로·문자열이 아닌 값은 설정 오류, 상대 경로는 설정 파일 디렉터리 기준, 재시작 필요와 편집 대상 아님(1.1·1.2·1.8절). DB-IP·IPinfo·MaxMind 형식의 필드 판정과 제공자 판정, 네 원인 코드, 같은 경로 공유(1.12절), 경고 `ip_db_unavailable`(2.2절). [OPS-095~097](../specs/operations.md#7-수용-테스트) |
+| Producer·Consumer / 차단 목록 설정 계약 시험 | `relay.deny.sources`의 기본 `[]`·항목 문법·진단 키 `relay.deny.sources[i]`(1.2·1.3절), 신뢰 프록시와 겹치면 `config_deny_overlaps_proxy`(시작 실패·재로드 후보 거절, 역할이 모두 꺼진 리스너는 제외, 1.6·2.1절), 44개 재로드·38개 편집 대상과 진입점이 꺼져도 편집 가능(1.8절). [OPS-100](../specs/operations.md#7-수용-테스트) |
+| Consumer / 차단 목록 재로드 계약 시험 | 교체 뒤 새 수락·업그레이드·등록의 차단, 값이 달라졌을 때 열린 활성 세션·대기 연결 끊기, 목록이 그대로이거나 줄 때 유지(1.8절). [OPS-101](../specs/operations.md#7-수용-테스트) |
 
 
 ### 계약 테스트 실행 기록

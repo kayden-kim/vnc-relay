@@ -173,6 +173,9 @@ pub enum CloseCause {
     /// The access ticket's session expiry time `sx` was reached
     /// (websocket-relay-v2 §1.9.5).
     SessionExpired,
+    /// The deny list changed and a client address of the session is denied
+    /// (config-v4 §1.8 `relay.deny.sources`).
+    IpDenied,
 }
 
 impl CloseCause {
@@ -187,6 +190,7 @@ impl CloseCause {
             Self::ServerShutdown => "server_shutdown",
             Self::InternalError => "internal_error",
             Self::SessionExpired => "session_expired",
+            Self::IpDenied => "ip_denied",
         }
     }
 }
@@ -419,6 +423,18 @@ impl Session {
         }
         self.close_started_mono = Some(now);
         Ok(self.select_cause(CloseCause::SessionExpired, None))
+    }
+
+    /// Starts cleanup after a deny list change only if the session is still
+    /// active (OPS-R55). An already closing session keeps its cause. The
+    /// cause has no endpoint, and E does not replace it with `close_timeout`.
+    pub fn begin_ip_denied_close(&mut self, now: Duration) -> Result<bool, SessionError> {
+        self.ensure_unfinished()?;
+        if self.state != SessionState::Active {
+            return Ok(false);
+        }
+        self.close_started_mono = Some(now);
+        Ok(self.select_cause(CloseCause::IpDenied, None))
     }
 
     /// Forces shutdown after G or a second request for any unfinished session.
@@ -748,6 +764,7 @@ mod tests {
             (CloseCause::ServerShutdown, "server_shutdown"),
             (CloseCause::InternalError, "internal_error"),
             (CloseCause::SessionExpired, "session_expired"),
+            (CloseCause::IpDenied, "ip_denied"),
         ] {
             assert_eq!(cause.as_str(), expected);
         }
@@ -1216,6 +1233,50 @@ mod tests {
             );
             assert_eq!(finish(&mut session).close_cause(), cause);
         }
+    }
+
+    /// spec: operations.md:OPS-101 partial
+    #[test]
+    fn ip_denied_close_keeps_its_cause_and_never_replaces_an_earlier_one() {
+        let mut denied = session(Mode::Mode2);
+        assert!(
+            denied
+                .begin_ip_denied_close(Duration::from_secs(12))
+                .unwrap()
+        );
+        assert!(!denied.begin_admin_close(Duration::from_secs(13)).unwrap());
+        assert!(!denied.force_server_shutdown().unwrap());
+        assert!(
+            !denied
+                .expire_close(Duration::MAX, Duration::from_secs(10))
+                .unwrap()
+        );
+        let closed = finish(&mut denied);
+        assert_eq!(closed.close_cause(), CloseCause::IpDenied);
+        assert_eq!(closed.close_side(), None);
+
+        let mut closing = session(Mode::Mode2);
+        closing
+            .observe_eof(Side::Viewer, Duration::from_secs(11))
+            .unwrap();
+        assert!(
+            !closing
+                .begin_ip_denied_close(Duration::from_secs(12))
+                .unwrap()
+        );
+        let mut admin = session(Mode::Mode2);
+        admin.begin_admin_close(Duration::from_secs(11)).unwrap();
+        assert!(
+            !admin
+                .begin_ip_denied_close(Duration::from_secs(12))
+                .unwrap()
+        );
+        assert_eq!(
+            finish(&mut admin).close_cause(),
+            CloseCause::AdminTerminated
+        );
+        normal_complete(&mut closing, Side::Viewer, Side::Server);
+        assert_eq!(finish(&mut closing).close_cause(), CloseCause::PeerEof);
     }
 
     /// spec: relay.md:RLY-020 partial

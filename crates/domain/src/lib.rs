@@ -8,6 +8,7 @@ pub mod admin_session;
 pub mod allow_list;
 pub mod budget;
 pub mod conn_id;
+pub mod deny_list;
 pub mod entry_point;
 pub mod forwarded_for;
 pub mod handshake;

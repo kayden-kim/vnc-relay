@@ -4,9 +4,9 @@ VNC Relay가 내보내는 메트릭의 이름·종류·단위·속성과 두 표
 
 | 항목 | 값 |
 | --- | --- |
-| 이름과 버전 | `vnc-relay-metrics` 1.1.0 |
+| 이름과 버전 | `vnc-relay-metrics` 1.2.0 |
 | 상태 | Active |
-| 버전 차이 | 1.1.0은 1.8절에 최근 24시간 추이를 더한 호환 추가다. 기간을 고르지 않는 Consumer는 1.0.0과 같은 최근 1시간 추이를 받는다. |
+| 버전 차이 | 1.1.0은 1.8절에 최근 24시간 추이를 더한 호환 추가다. 기간을 고르지 않는 Consumer는 1.0.0과 같은 최근 1시간 추이를 받는다. 1.2.0은 1.4절 거절 원인·종료 원인 속성 값과 대기 제거 결과에 출발지 IP 차단 `ip_denied`를 더한 호환 추가다. |
 | 소유자 | vnc-relay 프로젝트 관리자 |
 | 만드는 쪽(Producer) | `vnc-relay` (`vnc-relay serve` 프로세스와 Windows 서비스로 실행한 `vnc-relay service run` 프로세스) |
 | 사용하는 쪽(Consumer) | 운영자의 메트릭 수집 도구(Prometheus, OpenTelemetry Collector의 Prometheus 수신기), 내장 대시보드 SCR-007([화면 스펙](../specs/dashboard.md#scr-007-메트릭)) |
@@ -15,7 +15,7 @@ VNC Relay가 내보내는 메트릭의 이름·종류·단위·속성과 두 표
 | 기준 스펙 | [운영 스펙 3.8절](../specs/operations.md#38-메트릭), [관리 스펙 2.5절](../specs/management.md#25-메트릭), [화면 스펙 SCR-007](../specs/dashboard.md#scr-007-메트릭) |
 | 관련 요구사항 | [PRD](../requirements/PRD.md) 확정 기준의 메트릭 행, FR-06·FR-07·FR-08, AC-60~62 |
 | 호환성 범위 | 이 계약의 1.x 형식을 따르는 `vnc-relay` 구현과 소비자. 지원 판정은 Producer 시험을 따른다. 저장소에 없는 외부 수집 도구의 시험은 대상이 아니다. |
-| 관련 테스트 | [운영 스펙 7절](../specs/operations.md#7-수용-테스트) OPS-082~094, [관리 스펙 7절](../specs/management.md#7-수용-테스트) MGT-056~061, [화면 스펙 7절](../specs/dashboard.md#7-수용-테스트) DASH-068~081. 시험 위치는 5절을 따른다. |
+| 관련 테스트 | [운영 스펙 7절](../specs/operations.md#7-수용-테스트) OPS-082~094·OPS-101, [관리 스펙 7절](../specs/management.md#7-수용-테스트) MGT-056~061, [화면 스펙 7절](../specs/dashboard.md#7-수용-테스트) DASH-068~081. 시험 위치는 5절을 따른다. |
 
 관련 문서: [운영 정보 계약](ops-info-v2.md)(속성 값의 출처인 `listener`·`stage`·`reason`·`close_cause`·`result`, 상태 리스너), [관리 API 계약](management-api-v1.md)(인증·폴링 표시·오류 본문), [설정 계약](config-v4.md)(`[metrics] enabled`), [ADR-0011](../decisions/ADR-0011-pull-metrics-on-status-listener.md)(선택 이유).
 
@@ -94,15 +94,15 @@ VNC Relay가 내보내는 메트릭의 이름·종류·단위·속성과 두 표
 | `listener` | `connection.rejected` | `tcp_viewer`, `tcp_server`, `ws`, `wss`, `management`, `status` | 같은 절 |
 | `listener` | `connection.aborted`, `handshake.duration` | `tcp_viewer`, `tcp_server`, `ws`, `wss` | 같은 절 |
 | `listener` | `ticket.accepted`, `websocket.ping_timeouts` | `ws`, `wss` | 같은 절 |
-| `stage`, `reason` | `connection.rejected`, `connection.aborted` | 해당 로그 사건의 값 그대로 | [운영 정보 계약 1.6절](ops-info-v2.md#16-원인-코드) |
+| `stage`, `reason` | `connection.rejected`, `connection.aborted` | 해당 로그 사건의 값 그대로. `connection.rejected`의 `reason`에는 `ip_denied`(`stage`는 `accept`·`upgrade`·`register`)가 있다. | [운영 정보 계약 1.6절](ops-info-v2.md#16-원인-코드) |
 | `stage` | `connection.in_progress` | `initial_exchange`, `target_connect` | 위 값의 부분 집합 |
 | `mode` | `handshake.duration`, `session.*` | `mode1`, `mode2` | 운영 정보 계약 1.4절 |
 | `role` | `waiting.count`, `ticket.accepted` | `viewer`, `server` | 같은 절 |
 | `transport` | `waiting.count` | `tcp`, `ws`, `wss` | [관리 API 계약 1.7절](management-api-v1.md#17-대기-연결-목록-get-apiv1waiting) |
 | `viewer_transport`, `target_transport` | `session.count`, `session.started` | `tcp`, `ws`, `wss`. Mode I의 `target_transport`는 항상 `tcp`다. | [관리 API 계약 1.8절](management-api-v1.md#18-활성-세션-get-apiv1sessions-get-apiv1sessionssession_id) |
-| `close_cause` | `session.closed` | 로그 사건 `session_closed`의 값 그대로 | [관리 API 계약 1.10절](management-api-v1.md#110-최근-종료-목록-get-apiv1closed-sessions) |
+| `close_cause` | `session.closed` | 로그 사건 `session_closed`의 값 그대로. 출발지 IP 차단으로 끊은 세션은 `ip_denied`다. | [관리 API 계약 1.10절](management-api-v1.md#110-최근-종료-목록-get-apiv1closed-sessions) |
 | `direction` | `session.io` | `viewer_to_target`, `target_to_viewer` | 관리 API의 `bytes_viewer_to_target`·`bytes_target_to_viewer`와 같은 방향 |
-| `result` | `waiting.duration` | `matched`(매칭), `expired`(대기 시간 W 만료), `removed`(그 밖의 제거) | 이 계약 |
+| `result` | `waiting.duration` | `matched`(매칭), `expired`(대기 시간 W 만료), `removed`(그 밖의 제거) | 이 계약. 차단 목록 교체로 대기에서 뺀 연결(`waiting_removed`의 `reason = ip_denied`)도 `removed`다. 제거 원인은 속성에 쓰지 않는다. |
 | `result` | `target_connect.duration` | `connected`, `resolve_failed`, `connect_refused`, `connect_timeout`, `connect_error` | `connected` 외에는 로그 사건 `target_connect_failed`의 `reason` |
 | `result` | `admin.logins` | `succeeded`, `invalid_credentials`, `limited` | `admin_login_succeeded`는 `succeeded`. `admin_login_failed`는 그 `reason` |
 | `scope` | `admin.lockouts` | `account`, `source` | 로그 사건 `admin_login_limited`의 `scope`. 어느 기준의 제한인지만 나타낸다. 계정명이나 주소가 아니다. |
@@ -265,7 +265,7 @@ Lm 상한에서 거절한 연결은 HTTP 응답을 받지 못한다([운영 정�
 
 - 수집 도구는 모르는 계열·라벨·라벨 값을 오류로 처리하지 않아야 한다. JSON Consumer는 모르는 필드·메트릭·속성 값과 `type` 값을 무시하거나 받은 그대로 보여 줘야 한다.
 - 수집 도구는 `# HELP` 문구로 분기하지 않아야 한다.
-- 호환 변경: 메트릭 추가, 1.4절 속성 값 추가(운영 정보 계약에 원인 값이 추가된 경우 포함), JSON 응답에 필드 추가, 추이 계열 키 추가, 추이 기간 추가, `# HELP` 문구 변경.
+- 호환 변경: 메트릭 추가, 1.4절 속성 값 추가(운영 정보 계약에 원인 값이 추가된 경우 포함), JSON 응답에 필드 추가, 추이 계열 키 추가, 추이 기간 추가, `# HELP` 문구 변경. 1.2.0의 `ip_denied` 값 추가는 이 범위다.
 - 호환성을 깨는 변경(Breaking change): 메트릭·속성의 이름 변경이나 삭제, 종류·단위·의미 변경, 히스토그램 경계 변경, 기록 시점의 의미 변경, 기존 추이 기간의 간격·개수와 계열 키의 의미 변경, 텍스트 형식 버전 변경. 이런 변경은 새 major 버전(`vnc-relay-metrics` 2.0.0)과 함께 한다. 수집 도구의 질의·경보 규칙을 새 이름으로 먼저 옮긴 뒤 Producer를 올린다. 롤백은 이전 실행파일로 되돌리는 것이다. 값은 메모리에만 있으므로([ADR-0003](../decisions/ADR-0003-single-instance-memory-state.md)) 데이터 되돌림은 필요 없다.
 - 운영 정보 계약의 원인 값 이름이 바뀌는 major 변경은 이 계약의 속성 값도 바꾸므로 이 계약의 major 변경과 함께 한다.
 
@@ -274,7 +274,7 @@ Lm 상한에서 거절한 연결은 HTTP 응답을 받지 못한다([운영 정�
 | 상태 | 조건 | 지원 종료·대체 |
 | --- | --- | --- |
 | Draft | 채택 전 상태. | 해당 없음 |
-| Active | 현재 `vnc-relay-metrics` 1.1.0. Producer 계약 테스트의 현재 결과는 5절의 방법으로 확인한다. 통과 전에는 지원 완료로 표시하지 않는다. 저장소에 외부 수집 도구가 없어 Consumer 시험은 대시보드 시험만 해당한다. | 새 major가 Active가 될 때까지 유지한다. |
+| Active | 현재 `vnc-relay-metrics` 1.2.0. Producer 계약 테스트의 현재 결과는 5절의 방법으로 확인한다. 통과 전에는 지원 완료로 표시하지 않는다. 저장소에 외부 수집 도구가 없어 Consumer 시험은 대시보드 시험만 해당한다. | 새 major가 Active가 될 때까지 유지한다. |
 | Deprecated | 새 major가 있고 이전 major를 쓰는 소비자가 남아 있다. | 신규 적용을 피하고 대체 문서를 확인한다. |
 | Retired | 지원 종료. | 새 구현의 근거로 쓰지 않는다. |
 
@@ -293,6 +293,7 @@ vnc_relay_connection_accepted_total{listener="wss"} 7
 # HELP vnc_relay_connection_rejected_total Connections rejected by policy, limit or format.
 # TYPE vnc_relay_connection_rejected_total counter
 vnc_relay_connection_rejected_total{listener="tcp_viewer",stage="accept",reason="ip_not_allowed"} 2
+vnc_relay_connection_rejected_total{listener="wss",stage="upgrade",reason="ip_denied"} 1
 vnc_relay_connection_rejected_total{listener="wss",stage="upgrade",reason="ticket_expired"} 1
 ...
 # HELP vnc_relay_handshake_duration_seconds Repeater initial exchange duration.

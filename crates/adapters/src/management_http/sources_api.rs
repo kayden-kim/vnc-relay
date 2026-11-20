@@ -108,6 +108,10 @@ fn sources_json(report: &SourcesReport) -> Value {
             .map_or(Value::Null, |at| Value::from(timestamp(at))),
     );
     body.insert(
+        "deny_editable".to_owned(),
+        Value::from(report.deny_editable),
+    );
+    body.insert(
         "databases".to_owned(),
         json!({ "country": database_json(country), "asn": database_json(asn) }),
     );
@@ -185,6 +189,10 @@ fn address_json(item: &AddressItem) -> Value {
     object.insert(
         "last_seen_at".to_owned(),
         Value::from(timestamp(item.last_seen_at)),
+    );
+    object.insert(
+        "deny_entries".to_owned(),
+        Value::from(item.deny_entries.clone()),
     );
     Value::Object(object)
 }

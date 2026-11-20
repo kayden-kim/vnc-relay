@@ -9,9 +9,11 @@ use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use vnc_relay_domain::ip_info::{Asn, CountryCode, is_local};
+use vnc_relay_domain::peer_ip::PeerIp;
 
 use super::{CAPACITY, Kind, SourceEvent, SourceStats, lock, millis};
 use crate::ip_info::{IpDbStatus, IpInfoService};
+use crate::reload::ports::RuntimeSettingsSource;
 
 /// Most address and ASN items in one answer.
 const ITEM_LIMIT: usize = 100;
@@ -66,6 +68,9 @@ pub struct AddressItem {
     pub as_name: Option<String>,
     pub counts: Counts,
     pub last_seen_at: SystemTime,
+    /// Running deny list items that cover this address, as written and in
+    /// list order; empty when the address is not denied.
+    pub deny_entries: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -92,6 +97,9 @@ pub struct SourcesReport {
     pub capacity: usize,
     pub stored: usize,
     pub dropped_before: Option<SystemTime>,
+    /// Whether the dashboard may edit the deny list: the running
+    /// `management.config_edit`.
+    pub deny_editable: bool,
     /// Country first, then ASN.
     pub databases: [IpDbStatus; 2],
     pub totals: Counts,
@@ -104,6 +112,8 @@ pub struct SourcesReport {
 pub struct SourcesService {
     stats: Arc<SourceStats>,
     ip_info: Arc<IpInfoService>,
+    /// The running deny list and `management.config_edit` (§1.17).
+    settings: Arc<dyn RuntimeSettingsSource>,
 }
 
 /// Running counts of one address.
@@ -124,8 +134,16 @@ struct GroupTally {
 }
 
 impl SourcesService {
-    pub fn new(stats: Arc<SourceStats>, ip_info: Arc<IpInfoService>) -> Self {
-        Self { stats, ip_info }
+    pub fn new(
+        stats: Arc<SourceStats>,
+        ip_info: Arc<IpInfoService>,
+        settings: Arc<dyn RuntimeSettingsSource>,
+    ) -> Self {
+        Self {
+            stats,
+            ip_info,
+            settings,
+        }
     }
 
     /// Counts the events whose time is at least `window_start` and at most
@@ -194,7 +212,7 @@ impl SourcesService {
                 .then(left_ip.cmp(right_ip))
         });
         addresses.truncate(ITEM_LIMIT);
-        let addresses = addresses
+        let mut addresses: Vec<AddressItem> = addresses
             .into_iter()
             .map(|(ip, tally)| AddressItem {
                 ip,
@@ -204,8 +222,21 @@ impl SourcesService {
                 as_name: name_of(ip, tally.asn),
                 counts: tally.counts,
                 last_seen_at: at_millis(tally.last_at),
+                deny_entries: Vec::new(),
             })
             .collect();
+        let mut deny_editable = false;
+        self.settings.with_current(&mut |settings| {
+            deny_editable = settings.management.config_edit;
+            for item in &mut addresses {
+                item.deny_entries = settings
+                    .relay
+                    .deny
+                    .covering(PeerIp::new(item.ip))
+                    .map(str::to_owned)
+                    .collect();
+            }
+        });
 
         let country_total = by_country.len();
         let mut countries: Vec<CountryItem> = by_country
@@ -251,6 +282,7 @@ impl SourcesService {
             capacity: CAPACITY,
             stored,
             dropped_before: dropped_before.map(at_millis),
+            deny_editable,
             databases: self.ip_info.status(),
             totals,
             addresses: Listing {

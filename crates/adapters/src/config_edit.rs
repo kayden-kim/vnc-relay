@@ -498,6 +498,43 @@ mod tests {
         }
     }
 
+    /// spec: management.md:MGT-066 partial
+    #[test]
+    fn missing_deny_table_is_appended_at_the_end_and_edited_in_place_later() {
+        for newline in ["\n", "\r\n"] {
+            let source =
+                "# untouched\n[relay.tcp_viewer]\nenabled = true # keep\n".replace('\n', newline);
+            let change = |items: &[&str]| {
+                [ConfigChange {
+                    key: "relay.deny.sources".to_owned(),
+                    value: ConfigValue::Strings(
+                        items.iter().map(|item| (*item).to_owned()).collect(),
+                    ),
+                }]
+            };
+            let added = TomlConfigDocument
+                .edit(
+                    source.as_bytes(),
+                    &change(&["203.0.113.9", "198.51.100.0/24"]),
+                )
+                .unwrap_or_else(|error| panic!("edit deny: {error:?}"));
+            assert_eq!(
+                String::from_utf8(added.clone()).unwrap_or_default(),
+                format!(
+                    "{source}[relay.deny]{newline}sources = [\"203.0.113.9\", \"198.51.100.0/24\"]{newline}"
+                )
+            );
+            let emptied = TomlConfigDocument
+                .edit(&added, &change(&[]))
+                .unwrap_or_else(|error| panic!("empty deny: {error:?}"));
+            assert_eq!(
+                String::from_utf8(emptied).unwrap_or_default(),
+                // The shared list writer renders an empty array as `[ ]`.
+                format!("{source}[relay.deny]{newline}sources = [ ]{newline}")
+            );
+        }
+    }
+
     struct Fixture(PathBuf);
 
     impl Fixture {

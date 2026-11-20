@@ -30,8 +30,9 @@ use crate::events::{
 };
 use crate::metrics::Metrics;
 use crate::ports::{
-    BoxRelayStream, Clock, EventSink, RelayCloseAction, RelayIdSource, RelayLifecycle,
-    RelaySessionControl, RelayStateSource, RelayStream, SessionIdSource, TargetConnector,
+    BoxRelayStream, Clock, EventSink, RelayCloseAction, RelayDenyControl, RelayIdSource,
+    RelayLifecycle, RelaySessionControl, RelayStateSource, RelayStream, SessionIdSource,
+    TargetConnector,
 };
 use crate::reload::ports::RuntimeSettingsSource;
 
@@ -61,6 +62,14 @@ pub struct ConnectionContext {
     pub buffer_bytes: usize,
     /// H captured when this connection starts its initial exchange.
     pub handshake: Duration,
+}
+
+impl ConnectionContext {
+    /// The address the deny list judges: the forwarded address after a
+    /// trusted proxy, otherwise the socket peer (OPS-R55).
+    pub fn client_ip(&self) -> PeerIp {
+        self.forwarded_ip.unwrap_or(self.peer_ip)
+    }
 }
 
 /// What a ticket upgrade fixed at its 101 response (websocket-relay-v2 §1.9.5).
@@ -666,7 +675,7 @@ struct AdminClose {
 /// The owner holds this lock only during a synchronous engine poll.
 /// HTTP clones its handle under the registry lock, then releases that lock.
 struct SessionControl {
-    command: watch::Sender<Option<(Duration, Duration)>>,
+    command: watch::Sender<Option<session::SessionCommand>>,
     completion: watch::Sender<Option<Result<Arc<ClosedSessionSnapshot>, ()>>>,
     admin: Option<AdminClose>,
     closing: bool,
@@ -846,6 +855,110 @@ impl<C> RelayRuntime<C> {
         }
         self.lifecycle.send_replace(RelayLifecycle::Force);
     }
+
+    /// Sends a close command to one active session unless it is already
+    /// closing or shutdown is forcing every session. Returns whether this
+    /// call started the close. The caller holds the session control lock.
+    fn start_close_locked(
+        state: &mut RelayState,
+        id: &SessionId,
+        control: &mut SessionControl,
+        command: session::SessionCommand,
+    ) -> bool {
+        let initiated = !control.closing && state.lifecycle != RelayLifecycle::Force;
+        if initiated {
+            control.closing = true;
+            if let Some(entry) = state.active.get_mut(id) {
+                entry.state = SessionState::Closing;
+            }
+            control.command.send_replace(Some(command));
+        }
+        initiated
+    }
+
+    /// Starts the administrator close order with cause `ip_denied` when the
+    /// current deny list denies the Viewer or the Mode II Server client
+    /// address. The Mode I target address is never checked (OPS-R55).
+    fn close_if_denied(
+        &self,
+        id: &SessionId,
+        control: &Mutex<SessionControl>,
+        viewer: &ConnectionContext,
+        server: Option<&ConnectionContext>,
+        clock: &dyn Clock,
+    ) {
+        let mut control = control
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if control.completed {
+            return;
+        }
+        self.settings.with_current(&mut |settings| {
+            let deny = &settings.relay.deny;
+            if !deny.denies(viewer.client_ip())
+                && !server.is_some_and(|server| deny.denies(server.client_ip()))
+            {
+                return;
+            }
+            let mut state = self.lock();
+            Self::start_close_locked(
+                &mut state,
+                id,
+                &mut control,
+                session::SessionCommand {
+                    kind: session::CommandedClose::IpDenied,
+                    accepted_at: clock.monotonic(),
+                    timeout: settings.timeouts.close,
+                },
+            );
+        });
+    }
+}
+
+impl<C: Send + Sync> RelayDenyControl for RelayRuntime<C> {
+    /// Flags denied waiting connections and wakes their owners, which remove
+    /// and close them with `waiting_removed(reason=ip_denied)`. Then starts
+    /// the close of each denied active session. The session control lock is
+    /// taken only after the registry lock is released (lock order: control,
+    /// then registry).
+    fn close_denied(&self, clock: &dyn Clock) {
+        let mut active = Vec::new();
+        self.settings.with_current(&mut |settings| {
+            let deny = &settings.relay.deny;
+            if deny.is_empty() {
+                return;
+            }
+            let mut state = self.lock();
+            for entry in state.waiting.values_mut() {
+                if deny.denies(entry.connection.context.client_ip()) {
+                    entry.deny();
+                }
+            }
+            active = state
+                .active
+                .values()
+                .filter(|entry| {
+                    deny.denies(entry.viewer.client_ip())
+                        || entry
+                            .peer
+                            .server()
+                            .is_some_and(|server| deny.denies(server.client_ip()))
+                })
+                .filter_map(|entry| {
+                    let control = state.controls.get(&entry.session_id)?;
+                    Some((
+                        entry.session_id.clone(),
+                        Arc::clone(control),
+                        entry.viewer,
+                        entry.peer.server().copied(),
+                    ))
+                })
+                .collect();
+        });
+        for (id, control, viewer, server) in active {
+            self.close_if_denied(&id, &control, &viewer, server.as_ref(), clock);
+        }
+    }
 }
 
 impl<C: Send + Sync> RelaySessionControl for RelayRuntime<C> {
@@ -874,14 +987,18 @@ impl<C: Send + Sync> RelaySessionControl for RelayRuntime<C> {
             {
                 self.force_locked(&mut state, events);
             }
-            initiated = !control.closing && state.lifecycle != RelayLifecycle::Force;
+            initiated = Self::start_close_locked(
+                &mut state,
+                &id,
+                &mut control,
+                session::SessionCommand {
+                    kind: session::CommandedClose::Admin,
+                    accepted_at,
+                    timeout: settings.timeouts.close,
+                },
+            );
             if initiated {
-                control.closing = true;
                 control.admin = admin.take();
-                if let Some(entry) = state.active.get_mut(&id) {
-                    entry.state = SessionState::Closing;
-                }
-                control.command.send_replace(Some((accepted_at, settings.timeouts.close)));
             }
         });
         Some(crate::management::terminate::TerminationTicket {
@@ -1019,8 +1136,8 @@ impl<C> Drop for ActiveGuard<'_, C> {
             state.matching.release(id, &self.session_id);
         }
         if let Some(entry) = state.active.remove(&self.session_id) {
-            if let Some((accepted_at, _)) = *control.command.borrow() {
-                let _ = self.model.begin_admin_close(accepted_at);
+            if let Some(command) = *control.command.borrow() {
+                let _ = command.begin(&mut self.model);
             }
             if let Ok(closed) = self.model.finish_after_owner_loss(
                 state.lifecycle != RelayLifecycle::Running,
@@ -1557,6 +1674,17 @@ impl RelayService {
             metadata,
             error_kind: Mutex::new(None),
         };
+        // A deny list published after the register check, while this pair
+        // was claimed or its target was connecting, is checked once the
+        // session is registered: any later change reaches it through
+        // `close_denied` (OPS-R55).
+        runtime.close_if_denied(
+            &active_guard.session_id,
+            &control,
+            &pair.viewer.context,
+            pair.peer.server(),
+            self.clock.as_ref(),
+        );
         // Declare stream ownership after its registry guard: cancellation drops
         // streams and permits before releasing active ID occupancy.
         let mut pair = pair;
@@ -2150,6 +2278,140 @@ mod tests {
             relay_id: RelayId::parse(rid).expect("rid"),
             session_deadline: sx,
         });
+    }
+
+    fn deny_fixture_peer() -> vnc_relay_domain::deny_list::DenyList {
+        let item = vnc_relay_domain::allow_list::IpItem::parse("192.0.2.0/24")
+            .unwrap_or_else(|error| panic!("deny item: {error:?}"));
+        vnc_relay_domain::deny_list::DenyList::new(vec![
+            vnc_relay_domain::deny_list::DenyEntry::new("192.0.2.0/24".to_owned(), item),
+        ])
+    }
+
+    /// spec: relay.md:RLY-033 partial
+    #[tokio::test(start_paused = true)]
+    async fn denied_client_is_rejected_at_registration_without_waiting() {
+        let harness = Harness::new(3, 2, 8, &[]);
+        harness
+            .settings
+            .change(|settings| settings.relay.deny = deny_fixture_peer());
+        let (prepared, _peer, _) = harness.prepare(Role::Server, "ID:1", b"").await;
+        let task = harness.start(prepared);
+        settle().await;
+        let _ = task.await.expect("task");
+        assert!(harness.snapshot().waiting.is_empty());
+        assert_eq!(harness.free_places(&harness.waiting), 2);
+        assert!(harness.events().iter().any(|event| matches!(
+            event,
+            Event::RegistrationRejected {
+                reason: RejectReason::IpDenied,
+                relay_id_ref: Some(_),
+                ..
+            }
+        )));
+    }
+
+    /// spec: relay.md:RLY-034 partial
+    /// spec: operations.md:OPS-101 partial
+    #[tokio::test(start_paused = true)]
+    async fn deny_change_closes_waiting_and_active_connections_of_denied_clients() {
+        let harness = Harness::new(4, 2, 8, &[]);
+        let (prepared, _waiting_peer, waiting_actions) =
+            harness.prepare(Role::Server, "ID:1", b"").await;
+        let waiting_task = harness.start(prepared);
+        let (prepared, _viewer_peer, viewer_actions) =
+            harness.prepare(Role::Viewer, "ID:2", b"").await;
+        let viewer_task = harness.start(prepared);
+        let (prepared, _server_peer, server_actions) =
+            harness.prepare(Role::Server, "ID:2", b"").await;
+        let server_task = harness.start(prepared);
+        settle().await;
+        assert_eq!(harness.snapshot().waiting.len(), 1);
+        assert_eq!(harness.snapshot().active.len(), 1);
+
+        // An unchanged list closes nothing.
+        harness.runtime.close_denied(harness.clock.as_ref());
+        settle().await;
+        assert_eq!(harness.snapshot().waiting.len(), 1);
+        assert_eq!(harness.snapshot().active.len(), 1);
+
+        harness
+            .settings
+            .change(|settings| settings.relay.deny = deny_fixture_peer());
+        harness.runtime.close_denied(harness.clock.as_ref());
+        let _ = waiting_task.await.expect("waiting task");
+        let _ = viewer_task.await.expect("viewer task");
+        let _ = server_task.await.expect("server task");
+        let snapshot = harness.snapshot();
+        assert!(snapshot.waiting.is_empty());
+        assert!(snapshot.active.is_empty());
+        assert_eq!(snapshot.recent_closed[0].close_cause, CloseCause::IpDenied);
+        assert!(harness.events().iter().any(|event| matches!(
+            event,
+            Event::WaitingRemoved {
+                reason: crate::events::WaitingRemovalReason::IpDenied,
+                ..
+            }
+        )));
+        for actions in [&waiting_actions, &viewer_actions, &server_actions] {
+            assert!(
+                actions
+                    .lock()
+                    .expect("actions")
+                    .contains(&RelayCloseAction::IpDenied)
+            );
+        }
+        assert_eq!(harness.free_places(&harness.budget), 4);
+        assert_eq!(harness.free_places(&harness.waiting), 2);
+    }
+
+    /// A deny change published while a Mode I target connect is in flight:
+    /// the enforcement scan finds no session yet, so the activation recheck
+    /// reads the new list and closes the session it just registered.
+    /// spec: relay.md:RLY-034 partial
+    #[tokio::test(start_paused = true)]
+    async fn deny_change_racing_a_target_connect_closes_the_session_at_activation() {
+        let harness = Harness::new(3, 1, 8, &["192.0.2.0/24:5900"]);
+        let (stream, _target_peer) = duplex(4096);
+        let target_actions = Arc::new(Mutex::new(Vec::new()));
+        harness
+            .runtime
+            .connector
+            .attempts
+            .lock()
+            .expect("attempts")
+            .push_back(Attempt {
+                delay: Duration::from_secs(1),
+                result: Ok(TestStream {
+                    stream,
+                    actions: target_actions.clone(),
+                    failure: None,
+                    block_close: false,
+                    on_drop: None,
+                    eof_signal: None,
+                    panic_after_eof: None,
+                }),
+            });
+        let (prepared, _viewer, viewer_actions) =
+            harness.prepare(Role::Viewer, "192.0.2.10:5900", b"").await;
+        let task = harness.start(prepared);
+        settle().await;
+        assert!(harness.snapshot().active.is_empty());
+        harness
+            .settings
+            .change(|settings| settings.relay.deny = deny_fixture_peer());
+        harness.runtime.close_denied(harness.clock.as_ref());
+        let _ = task.await.expect("task");
+        let snapshot = harness.snapshot();
+        assert!(snapshot.active.is_empty());
+        assert_eq!(snapshot.recent_closed[0].close_cause, CloseCause::IpDenied);
+        assert!(
+            viewer_actions
+                .lock()
+                .expect("actions")
+                .contains(&RelayCloseAction::IpDenied)
+        );
+        assert_eq!(harness.free_places(&harness.budget), 3);
     }
 
     /// spec: relay.md:RLY-029 partial

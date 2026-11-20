@@ -1163,6 +1163,7 @@ async fn start_management(tls: Option<TlsAcceptor>) -> (SocketAddr, Arc<Recorder
     let sources = Arc::new(vnc_relay_app::sources::SourcesService::new(
         Arc::new(vnc_relay_app::sources::SourceStats::new(lookup, clock)),
         ip_info,
+        Arc::clone(&source),
     ));
     let listener = ManagementListener::new(
         listener,

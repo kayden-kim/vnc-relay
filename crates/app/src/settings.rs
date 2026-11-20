@@ -7,6 +7,7 @@ use std::time::Duration;
 
 use vnc_relay_domain::account::Argon2Params;
 use vnc_relay_domain::allow_list::{AllowList, IpItem};
+use vnc_relay_domain::deny_list::DenyList;
 use vnc_relay_domain::entry_point::{EntryPoint, Listener, Role};
 use vnc_relay_domain::origin::Origin;
 use vnc_relay_domain::target_policy::{TargetItem, TargetPolicy};
@@ -68,6 +69,9 @@ pub struct RelaySettings {
     /// `[relay.ticket.viewer]` and `[relay.ticket.server]`; they apply to the
     /// role on both WS and WSS (config-v4 §1.2).
     pub ticket: TicketSettings,
+    /// `[relay.deny] sources`: one deny list for the six relay entry points
+    /// (config-v4 §1.2). Empty by default; an empty list denies nothing.
+    pub deny: DenyList,
 }
 
 impl RelaySettings {
@@ -519,6 +523,9 @@ pub enum ConfigError {
     TlsFileInvalid,
     /// A ticket public key file breaks config-v4 §1.11, or both roles share a key.
     TicketKeysInvalid,
+    /// A deny item shares an address with a `trusted_proxies` item of a WS or
+    /// WSS listener that has an enabled role (config-v4 §1.6).
+    DenyOverlapsProxy,
 }
 
 impl ConfigError {
@@ -543,6 +550,7 @@ impl ConfigError {
             Self::TlsPairIncomplete => "config_tls_pair_incomplete",
             Self::TlsFileInvalid => "tls_file_invalid",
             Self::TicketKeysInvalid => "ticket_keys_invalid",
+            Self::DenyOverlapsProxy => "config_deny_overlaps_proxy",
         }
     }
 }

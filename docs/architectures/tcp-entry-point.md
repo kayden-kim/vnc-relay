@@ -12,7 +12,7 @@ TCP Viewer·TCP Server 진입점이 접속을 수락하고, 데이터를 읽기 
 | 코드 지도 | [코드 지도 2절](code-map.md#2-코드-위치와-구성요소), [3절](code-map.md#3-진입점) |
 | 관련 스펙 | [중계 스펙 3.1절](../specs/relay.md#31-초기-교환)의 1항과 RLY-R16, [운영 스펙 4절](../specs/operations.md#4-보안과-신뢰-경계), RLY-023(일부), RLY-024, OPS-037(일부), OPS-038(일부), OPS-040(일부), OPS-007(일부) |
 | 관련 계약 | [운영 정보 계약 1.4절](../contracts/ops-info-v2.md#14-필드-사전)(`conn_id`, `listener`, `role`, `peer_ip`), [1.5절](../contracts/ops-info-v2.md#15-사건-목록)(접속 수락·거절·중단), [1.6절](../contracts/ops-info-v2.md#16-원인-코드)(`stage`·`reason`), [설정 계약 1.3절](../contracts/config-v4.md#13-ip-항목-문법)(IP 항목) |
-| 관련 ADR | [ADR-0002 출발지 IP 허용 목록](../decisions/ADR-0002-source-ip-allowlist.md) |
+| 관련 ADR | [ADR-0002 출발지 IP 허용 목록](../decisions/ADR-0002-source-ip-allowlist.md), [ADR-0013 출발지 IP 차단 목록](../decisions/ADR-0013-relay-source-deny-list.md). 수락 직후 소켓 상대 IP를 차단 목록과 먼저 비교하고(`AllowSource::denies_in`), 일치하면 허용 검사 전에 `connection_rejected(stage=accept, reason=ip_denied)`로 닫는다. |
 
 ## 1. 책임과 경계
 

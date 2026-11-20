@@ -57,7 +57,7 @@ fn optional<T: ToString>(value: Option<T>) -> ConfigValue {
 
 pub fn config_items(s: &Settings, presence: &ConfigPresence) -> Vec<ConfigItem> {
     use ConfigReloadKind::{Dynamic, Restart};
-    let mut out = Vec::with_capacity(78);
+    let mut out = Vec::with_capacity(79);
     out.push(item(
         "admin.accounts_file",
         text(s.admin.accounts_file.display()),
@@ -234,6 +234,21 @@ pub fn config_items(s: &Settings, presence: &ConfigPresence) -> Vec<ConfigItem> 
         lifetime.editable = editable;
         out.push(lifetime);
     }
+    // Editable even when every relay entry point is disabled
+    // (management-api-v1 §1.13). Items are shown as written in the file.
+    out.push(item(
+        "relay.deny.sources",
+        ConfigValue::Strings(
+            s.relay
+                .deny
+                .entries()
+                .iter()
+                .map(|entry| entry.text().to_owned())
+                .collect(),
+        ),
+        Dynamic,
+        true,
+    ));
     out.push(item(
         "mode1.enabled",
         ConfigValue::Bool(s.mode1.enabled),
@@ -488,6 +503,7 @@ pub(super) fn accepts_change(s: &Settings, change: &super::ConfigChange) -> bool
         }
         "relay.ticket.viewer.max_lifetime_secs" => integer && ticket_role_editable(s, Role::Viewer),
         "relay.ticket.server.max_lifetime_secs" => integer && ticket_role_editable(s, Role::Server),
+        "relay.deny.sources" => strings,
         "mode1.allow_targets" => strings && s.mode1.enabled,
         "limits.relay_connections"
         | "limits.admin_connections"

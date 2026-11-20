@@ -42,10 +42,29 @@ pub(super) async fn dispatch<C: TargetConnector>(
 ) -> Result<(), RelayDispatchError> {
     let mut connect_timeout = Duration::ZERO;
     let mut policy = None;
+    let mut denied = false;
     runtime.settings.with_current(&mut |settings| {
         connect_timeout = settings.timeouts.connect;
         policy = settings.mode1.allow_targets.clone();
+        denied = settings.relay.deny.denies(viewer.context.client_ip());
     });
+    if denied {
+        // Re-checked after the initial exchange, before any target connect
+        // (OPS-R55). A later list change reaches the session at activation.
+        let context = viewer.context;
+        service
+            .reject_connection(viewer, RelayCloseAction::IpDenied, runtime)
+            .await;
+        service.events.record(&Event::RegistrationRejected {
+            conn_id: context.conn_id,
+            entry_point: context.entry_point,
+            peer_ip: context.peer_ip,
+            forwarded_ip: context.forwarded_ip,
+            reason: RejectReason::IpDenied,
+            relay_id_ref: None,
+        });
+        return Err(RelayDispatchError::Rejected(RejectReason::IpDenied));
+    }
     let started = service.clock.monotonic();
     let deadline = started.saturating_add(connect_timeout);
     let context = viewer.context;

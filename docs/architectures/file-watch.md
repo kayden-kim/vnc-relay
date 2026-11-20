@@ -11,7 +11,7 @@
 | 코드 지도 | [코드 지도](code-map.md) |
 | 관련 스펙 | [운영 §3.3](../specs/operations.md#33-파일-변경-자동-감지와-부분-재로드), OPS-003·024~028·035·038·040·041·047~064 |
 | 관련 계약 | [설정 §1.8](../contracts/config-v4.md#18-재로드-구분), [설정 오류](../contracts/config-v4.md#21-설정-오류와-준비-실패), [관리 API §1.13~14](../contracts/management-api-v1.md#113-설정-보기-get-apiv1config), [운영 정보 자동 재로드](../contracts/ops-info-v2.md#자동-재로드) |
-| 관련 ADR | [ADR-0006](../decisions/ADR-0006-config-edit-through-file.md) |
+| 관련 ADR | [ADR-0006](../decisions/ADR-0006-config-edit-through-file.md), [ADR-0013](../decisions/ADR-0013-relay-source-deny-list.md). 동적 키는 `relay.deny.sources`를 더해 44개다. 차단 목록 값이 바뀐 commit만 `reload_applied` 뒤 `RelayDenyControl::close_denied`를 부른다(`ReloadService::attach_deny_control`). |
 | 관련 문서 | [접속 ticket 모듈 설계](relay-access-ticket.md) |
 
 현재는 [설정 v4](../contracts/config-v4.md#18-재로드-구분)의 ticket 10개를 포함한 43개 키를 비교·발행한다. WS·WSS 부모 `trusted_proxies`, 네 역할의 `allow`·`allowed_origins`, 부모 `relay.wss.cert_file`·`key_file`을 각각 비교한다. 부모 `listen`·WS·WSS 역할 `enabled`·`recent_logs.max_entries`의 차이는 후보 전체를 재시작 필요로 거절한다. ticket의 역할 `enabled`는 동적 키다. 모든 WSS 역할이 꺼졌으면 TLS 내용을 읽거나 감시하지 않는다. 어느 한 역할이라도 켜졌으면 부모 TLS 한 쌍만 감시한다.

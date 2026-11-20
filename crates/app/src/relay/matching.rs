@@ -25,6 +25,9 @@ pub(super) struct WaitingConnection {
     filled: usize,
     waiting_permit: Option<BudgetPermit>,
     waker: Option<Waker>,
+    /// Set when a changed deny list denies the client address. The owner
+    /// removes the entry with `waiting_removed(reason=ip_denied)`.
+    denied: bool,
 }
 
 impl WaitingConnection {
@@ -36,6 +39,15 @@ impl WaitingConnection {
         drop(self.waiting_permit);
         self.connection
     }
+
+    /// Marks the entry denied and wakes its owner (OPS-R55). Matching never
+    /// claims a denied entry: the arrival removes it first.
+    pub(super) fn deny(&mut self) {
+        self.denied = true;
+        if let Some(waker) = self.waker.take() {
+            waker.wake();
+        }
+    }
 }
 
 fn session_deadline(entry: &WaitingConnection) -> Option<std::time::Duration> {
@@ -46,7 +58,12 @@ fn session_deadline(entry: &WaitingConnection) -> Option<std::time::Duration> {
         .and_then(|binding| binding.session_deadline)
 }
 
+/// Why the entry must leave the waiting table now, if it must: a deny list
+/// change first, then the ticket `sx` or the waiting deadline.
 fn expiry_reason(entry: &WaitingConnection, now: std::time::Duration) -> Option<RemovedReason> {
+    if entry.denied {
+        return Some(RemovedReason::Removed(WaitingRemovalReason::IpDenied));
+    }
     if let Some(end) = session_deadline(entry).filter(|end| *end < entry.metadata.deadline) {
         if now >= end {
             return Some(RemovedReason::Removed(WaitingRemovalReason::SessionExpired));
@@ -66,6 +83,8 @@ enum Registration {
     Matched(OwnedConnection, OwnedConnection, MatchClaim),
     Rejected(OwnedConnection, MatchingError),
     Shutdown(OwnedConnection),
+    /// The current deny list denies the client address (OPS-R55).
+    Denied(OwnedConnection),
 }
 
 enum RemovedReason {
@@ -144,6 +163,8 @@ pub(super) async fn dispatch<C: TargetConnector>(
         registration = Some({
             if state.lifecycle != RelayLifecycle::Running {
                 Registration::Shutdown(incoming)
+            } else if settings.relay.deny.denies(context.client_ip()) {
+                Registration::Denied(incoming)
             } else {
                 if let Some(reason) = state
                     .waiting
@@ -194,6 +215,7 @@ pub(super) async fn dispatch<C: TargetConnector>(
                                         filled,
                                         waiting_permit: Some(waiting_permit),
                                         waker: None,
+                                        denied: false,
                                     },
                                 );
                                 service.events.record(&Event::WaitingRegistered {
@@ -297,7 +319,7 @@ pub(super) async fn dispatch<C: TargetConnector>(
                 peer_ip: context.peer_ip,
                 forwarded_ip: context.forwarded_ip,
                 reason,
-                relay_id_ref: reference,
+                relay_id_ref: Some(reference),
             });
             Err(RelayDispatchError::Rejected(reason))
         }
@@ -312,6 +334,20 @@ pub(super) async fn dispatch<C: TargetConnector>(
                 AbortReason::ServerShutdown,
             );
             Err(RelayDispatchError::Aborted(AbortReason::ServerShutdown))
+        }
+        Registration::Denied(connection) => {
+            service
+                .reject_connection(connection, RelayCloseAction::IpDenied, runtime)
+                .await;
+            service.events.record(&Event::RegistrationRejected {
+                conn_id: context.conn_id,
+                entry_point: context.entry_point,
+                peer_ip: context.peer_ip,
+                forwarded_ip: context.forwarded_ip,
+                reason: RejectReason::IpDenied,
+                relay_id_ref: Some(reference),
+            });
+            Err(RelayDispatchError::Rejected(RejectReason::IpDenied))
         }
     }
 }
@@ -444,6 +480,7 @@ async fn cleanup<C: TargetConnector>(
         RemovedReason::Removed(WaitingRemovalReason::SessionExpired) => {
             RelayCloseAction::SessionExpired
         }
+        RemovedReason::Removed(WaitingRemovalReason::IpDenied) => RelayCloseAction::IpDenied,
     };
     service.reject_connection(connection, action, runtime).await;
     match removed.reason {

@@ -86,6 +86,28 @@ impl IpItem {
         }
     }
 
+    /// True when this item and `other` share at least one address: they are of
+    /// the same family and their address intervals intersect (config-v4 §1.6,
+    /// `config_deny_overlaps_proxy`).
+    pub fn overlaps(&self, other: &IpItem) -> bool {
+        let (family, start, end) = self.interval();
+        let (other_family, other_start, other_end) = other.interval();
+        family == other_family && start <= other_end && other_start <= end
+    }
+
+    /// Address family (true for IPv4) and the first and last address as integers.
+    fn interval(&self) -> (bool, u128, u128) {
+        match *self {
+            Self::Single(address) => (address.is_ipv4(), bits(address), bits(address)),
+            Self::Cidr { network, prefix } => (
+                network.is_ipv4(),
+                bits(network),
+                bits(network) | host_mask(network, prefix),
+            ),
+            Self::Range { start, end } => (start.is_ipv4(), bits(start), bits(end)),
+        }
+    }
+
     fn written_addresses(&self) -> impl Iterator<Item = IpAddr> {
         let (first, second) = match *self {
             Self::Single(address) => (address, None),
@@ -370,5 +392,34 @@ mod tests {
         let allow = AllowList::default();
         assert!(!allow.permits(peer("192.0.2.1")));
         assert!(!allow.permits(peer("::1")));
+    }
+
+    /// spec: operations.md:OPS-100 partial
+    #[test]
+    fn overlaps_when_the_address_intervals_of_one_family_intersect() {
+        for (left, right) in [
+            ("192.0.2.10", "192.0.2.10"),
+            ("192.0.2.10", "192.0.2.0/24"),
+            ("192.0.2.0/24", "192.0.2.255"),
+            ("192.0.2.0/25", "192.0.2.100-192.0.2.200"),
+            ("192.0.2.200-192.0.2.210", "192.0.2.128/25"),
+            ("0.0.0.0/0", "203.0.113.9"),
+            ("2001:db8::/32", "2001:db8:ffff::1"),
+            ("2001:db8::1-2001:db8::9", "2001:db8::9-2001:db8::f"),
+        ] {
+            assert!(ok(left).overlaps(&ok(right)), "{left} {right}");
+            assert!(ok(right).overlaps(&ok(left)), "{right} {left}");
+        }
+        for (left, right) in [
+            ("192.0.2.10", "192.0.2.11"),
+            ("192.0.2.0/25", "192.0.2.128/25"),
+            ("192.0.2.0-192.0.2.9", "192.0.2.10/31"),
+            ("0.0.0.0/0", "::/0"),
+            ("::c000:20a", "192.0.2.10"),
+            ("2001:db8::/48", "2001:db8:1::/48"),
+        ] {
+            assert!(!ok(left).overlaps(&ok(right)), "{left} {right}");
+            assert!(!ok(right).overlaps(&ok(left)), "{right} {left}");
+        }
     }
 }

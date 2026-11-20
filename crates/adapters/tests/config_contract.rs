@@ -142,6 +142,7 @@ listen = "127.0.0.1:18081"
             ws: WsListenerSettings::default(),
             wss: WsListenerSettings::default(),
             ticket: TicketSettings::default(),
+            deny: Default::default(),
         },
         mode1: Mode1Settings::default(),
         mode2: Mode2Settings { enabled: true },
@@ -825,6 +826,68 @@ trusted_proxies = ["::/0"]
             listener: Listener::Wss,
             item: IpItem::parse("::/0").expect("item"),
         }]
+    );
+}
+
+/// spec: operations.md:OPS-100 partial
+#[test]
+fn deny_list_keeps_its_text_and_must_not_overlap_an_enabled_trusted_proxy() {
+    // Omitted and empty lists deny nobody.
+    assert!(parse_ok(REQUIRED).relay.deny.is_empty());
+    let settings = parse_ok(&with_required(
+        r#"
+[relay.deny]
+sources = ["203.0.113.9", "198.51.100.0/24", "2001:DB8::1-2001:db8::ff"]
+"#,
+    ));
+    let texts: Vec<&str> = settings
+        .relay
+        .deny
+        .entries()
+        .iter()
+        .map(|entry| entry.text())
+        .collect();
+    assert_eq!(
+        texts,
+        ["203.0.113.9", "198.51.100.0/24", "2001:DB8::1-2001:db8::ff"]
+    );
+    assert!(
+        parse_ok(&with_required("[relay.deny]\nsources = []\n"))
+            .relay
+            .deny
+            .is_empty()
+    );
+
+    let listeners = r#"
+[relay.ws]
+listen = "127.0.0.1:18090"
+trusted_proxies = ["192.0.2.10"]
+[relay.ws.viewer]
+enabled = true
+allow = []
+[relay.wss]
+trusted_proxies = ["198.51.100.0/24"]
+"#;
+    assert_eq!(
+        problems(&with_required(&format!(
+            "{listeners}\n[relay.deny]\nsources = [\"203.0.113.9\", \"192.0.2.0/24\"]\n"
+        ))),
+        [problem(
+            "config_deny_overlaps_proxy",
+            "relay.deny.sources[1]"
+        )]
+    );
+    // The WSS listener has every role off, so its proxy list is not compared.
+    let settings = parse_ok(&with_required(&format!(
+        "{listeners}\n[relay.deny]\nsources = [\"198.51.100.7\"]\n"
+    )));
+    assert_eq!(settings.relay.deny.entries().len(), 1);
+    assert_eq!(
+        problems(&with_required(
+            "[relay.deny]\nsources = [\"203.0.113.300\"]\n"
+        ))[0]
+            .1,
+        "relay.deny.sources[0]"
     );
 }
 

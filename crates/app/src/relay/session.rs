@@ -19,6 +19,33 @@ use crate::ports::{Clock, RelayCloseAction, RelayLifecycle, RelayStream, RelaySt
 /// treated as reached early.
 const MAX_TIMER_STEP: Duration = Duration::from_secs(24 * 60 * 60);
 
+/// Who asked the runtime to close an active session. Both use the
+/// administrator close order; only the selected cause differs (OPS-R55).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum CommandedClose {
+    Admin,
+    IpDenied,
+}
+
+/// A close command accepted by the runtime: its kind, the monotonic time it
+/// was accepted, and the close timeout E read at that time.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) struct SessionCommand {
+    pub(super) kind: CommandedClose,
+    pub(super) accepted_at: Duration,
+    pub(super) timeout: Duration,
+}
+
+impl SessionCommand {
+    /// Selects the command's cause if the session has none yet.
+    pub(super) fn begin(self, session: &mut Session) -> Result<bool, SessionError> {
+        match self.kind {
+            CommandedClose::Admin => session.begin_admin_close(self.accepted_at),
+            CommandedClose::IpDenied => session.begin_ip_denied_close(self.accepted_at),
+        }
+    }
+}
+
 /// Runs until transport cleanup completes or its absolute bound expires.
 /// `PeerEof` stays provisional: only the caller can drop streams/permits and
 /// call `Session::finish`. Close actions preserve TCP half-close and the
@@ -39,7 +66,7 @@ pub(super) async fn run_session_controlled(
     mut lifecycle: watch::Receiver<RelayLifecycle>,
     buffer_bytes: [usize; 2],
     settings: &dyn crate::reload::ports::RuntimeSettingsSource,
-    mut admin_close: watch::Receiver<Option<(Duration, Duration)>>,
+    mut admin_close: watch::Receiver<Option<SessionCommand>>,
     session_deadline: Option<Duration>,
     on_update: impl Fn(&Session, Option<ConnectionErrorKind>),
 ) -> Result<Option<ConnectionErrorKind>, SessionError> {
@@ -72,10 +99,10 @@ pub(super) async fn run_session_controlled(
         let state = *lifecycle.borrow_and_update();
         let now = clock.monotonic().max(timer_now);
         let admin_started = *admin_close.borrow_and_update();
-        if let Some((accepted_at, timeout)) = admin_started
-            && session.begin_admin_close(accepted_at)?
+        if let Some(command) = admin_started
+            && command.begin(session)?
         {
-            close_timeout.get_or_insert(timeout);
+            close_timeout.get_or_insert(command.timeout);
             on_update(session, error_kind);
         }
         let grace_deadline = match state {
@@ -99,7 +126,8 @@ pub(super) async fn run_session_controlled(
         let eof_deadline = session
             .first_eof()
             .map(|(_, at)| at.saturating_add(timeout));
-        let admin_deadline = admin_started.map(|(at, _)| at.saturating_add(timeout));
+        let admin_deadline =
+            admin_started.map(|command| command.accepted_at.saturating_add(timeout));
         let cleanup_deadline = eof_deadline
             .or(admin_deadline)
             .or_else(|| expiry_started.map(|at: Duration| at.saturating_add(timeout)));
@@ -238,7 +266,11 @@ pub(super) async fn run_session_controlled(
                         if is_ws[index]
                             && matches!(
                                 session.close_cause(),
-                                Some(CloseCause::AdminTerminated | CloseCause::SessionExpired)
+                                Some(
+                                    CloseCause::AdminTerminated
+                                        | CloseCause::SessionExpired
+                                        | CloseCause::IpDenied
+                                )
                             )
                             && stream.pending_write_len() > 0
                             && incoming.start < incoming.end
@@ -603,6 +635,7 @@ fn close_action(
         Some(CloseCause::AdminTerminated) => RelayCloseAction::AdminTerminated,
         Some(CloseCause::ServerShutdown) => RelayCloseAction::ServerShutdown,
         Some(CloseCause::SessionExpired) => RelayCloseAction::SessionExpired,
+        Some(CloseCause::IpDenied) => RelayCloseAction::IpDenied,
         Some(CloseCause::InternalError) => return None,
         None | Some(CloseCause::PeerEof | CloseCause::CloseTimeout) => {
             if is_ws != [false; 2]
@@ -2741,7 +2774,7 @@ mod tests {
             let clock = TestClock::new();
             let mut session = model(Mode::Mode1);
             let (_lifecycle, receiver) = watch::channel(RelayLifecycle::Running);
-            let (_command, command) = watch::channel(Some((Duration::ZERO, E)));
+            let (_command, command) = watch::channel(admin_command(CommandedClose::Admin));
             let (mut viewer, viewer_control) = stream(b"must-not-read", false);
             let (mut other, other_control) = stream(b"must-not-read-either", false);
             viewer_control.change(|state| state.terminal = behavior);
@@ -2823,6 +2856,81 @@ mod tests {
         }
     }
 
+    fn admin_command(kind: CommandedClose) -> Option<SessionCommand> {
+        Some(SessionCommand {
+            kind,
+            accepted_at: Duration::ZERO,
+            timeout: E,
+        })
+    }
+
+    /// A deny list close follows the administrator close order, keeps its
+    /// cause after E, and closes both endpoints with the `ip_denied` action.
+    /// spec: relay.md:RLY-034 partial
+    /// spec: websocket.md:WS-048 partial
+    #[tokio::test(start_paused = true)]
+    async fn ip_denied_cleanup_uses_the_admin_close_order_and_keeps_its_cause() {
+        for behavior in [CloseBehavior::Ready, CloseBehavior::Pending] {
+            let clock = TestClock::new();
+            let mut session = model(Mode::Mode2);
+            let (_lifecycle, receiver) = watch::channel(RelayLifecycle::Running);
+            let (_command, command) = watch::channel(admin_command(CommandedClose::IpDenied));
+            let (mut viewer, viewer_control) = stream(b"must-not-read", false);
+            let (mut other, other_control) = stream(b"must-not-read-either", false);
+            viewer_control.change(|state| {
+                state.terminal = behavior;
+                state.transport = Transport::Ws;
+            });
+            other_control.change(|state| state.terminal = behavior);
+            let settings = TestSettings::new();
+            settings.change(|settings| settings.timeouts.close = E);
+            {
+                let mut relay = pin!(run_session_controlled(
+                    &mut viewer,
+                    &mut other,
+                    Vec::new(),
+                    Vec::new(),
+                    &mut session,
+                    clock.as_ref(),
+                    receiver,
+                    [8; 2],
+                    settings.as_ref(),
+                    command,
+                    None,
+                    |_, _| {},
+                ));
+                if matches!(behavior, CloseBehavior::Pending) {
+                    poll_fn(|cx| {
+                        assert!(relay.as_mut().poll(cx).is_pending());
+                        Poll::Ready(())
+                    })
+                    .await;
+                    advance(E).await;
+                }
+                assert_eq!(
+                    relay
+                        .await
+                        .unwrap_or_else(|e| panic!("ip_denied cleanup: {e}")),
+                    None
+                );
+            }
+            assert_eq!(session.close_cause(), Some(CloseCause::IpDenied));
+            assert_eq!(session.close_side(), None);
+            assert_eq!(session.bytes(Direction::ViewerToTarget), 0);
+            assert_eq!(session.bytes(Direction::TargetToViewer), 0);
+            assert!(
+                viewer_control
+                    .actions()
+                    .contains(&RelayCloseAction::IpDenied)
+            );
+            assert!(
+                other_control
+                    .actions()
+                    .contains(&RelayCloseAction::IpDenied)
+            );
+        }
+    }
+
     /// The existing adapter maps AdminTerminated to Close 4005; here the
     /// controlled transport refuses that close until the started frame drains.
     /// spec: management.md:MGT-009 partial
@@ -2835,7 +2943,7 @@ mod tests {
             .record_write(Direction::TargetToViewer, 2)
             .unwrap_or_else(|e| panic!("prior write: {e}"));
         let (_lifecycle, receiver) = watch::channel(RelayLifecycle::Running);
-        let (_command, command) = watch::channel(Some((Duration::ZERO, E)));
+        let (_command, command) = watch::channel(admin_command(CommandedClose::Admin));
         let (mut viewer, viewer_control) = stream(b"unread", false);
         let (mut other, other_control) = stream(b"no-new-read", false);
         viewer_control.change(|state| {
@@ -3144,7 +3252,7 @@ mod tests {
         let clock = TestClock::new();
         let mut session = model(Mode::Mode2);
         let (_lifecycle, receiver) = watch::channel(RelayLifecycle::Running);
-        let (_command, command) = watch::channel(Some((Duration::ZERO, E)));
+        let (_command, command) = watch::channel(admin_command(CommandedClose::Admin));
         let (mut viewer, viewer_control) = stream(b"unread-viewer", false);
         let (mut server, server_control) = stream(b"unread-server", false);
         for control in [&viewer_control, &server_control] {

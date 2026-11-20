@@ -4,9 +4,9 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 이름과 버전 | `management-api` 1.4.0 |
+| 이름과 버전 | `management-api` 1.5.0 |
 | 상태 | Active |
-| 버전 차이 | 1.1.0은 1.11절 CSP 헤더가 필수다. Consumer 동작은 같으며 Producer는 CSP 헤더를 보내야 한다. 1.2.0은 1.16절 메트릭 경로를 더한 호환 추가다. 1.3.0은 1.16절 `history_window` 선택 매개변수를 더한 호환 추가다. 1.4.0은 1.17절 접속 출처 경로를 더한 호환 추가다. |
+| 버전 차이 | 1.1.0은 1.11절 CSP 헤더가 필수다. Consumer 동작은 같으며 Producer는 CSP 헤더를 보내야 한다. 1.2.0은 1.16절 메트릭 경로를 더한 호환 추가다. 1.3.0은 1.16절 `history_window` 선택 매개변수를 더한 호환 추가다. 1.4.0은 1.17절 접속 출처 경로를 더한 호환 추가다. 1.5.0은 1.17절 응답의 `deny_editable`·`deny_entries`와 1.13·1.14절 편집 대상 `relay.deny.sources`를 더한 호환 추가다. |
 | 소유자 | vnc-relay 프로젝트 관리자 |
 | 만드는 쪽(Producer) | `vnc-relay` 관리 리스너(서버) |
 | 사용하는 쪽(Consumer) | 같은 실행파일에 내장된 대시보드(정적 HTML·JS). 같은 규칙으로 호출하는 외부 HTTP 클라이언트도 Consumer로 본다. |
@@ -20,8 +20,9 @@
 | 목록 필드 관련 테스트 | [관리 스펙 7절](../specs/management.md#7-수용-테스트) MGT-054~055, [화면 스펙 7절](../specs/dashboard.md#7-수용-테스트) DASH-065~066. 시험 위치와 현재 결과 확인 방법은 5절을 따른다. |
 | 메트릭 관련 테스트 | [관리 스펙 7절](../specs/management.md#7-수용-테스트) MGT-056~061, [화면 스펙 7절](../specs/dashboard.md#7-수용-테스트) DASH-068~081. |
 | 접속 출처 관련 테스트 | [관리 스펙 7절](../specs/management.md#7-수용-테스트) MGT-062~064, [화면 스펙 7절](../specs/dashboard.md#7-수용-테스트) DASH-082~088. |
+| 차단 목록 관련 테스트 | [관리 스펙 7절](../specs/management.md#7-수용-테스트) MGT-065~066, [화면 스펙 7절](../specs/dashboard.md#7-수용-테스트) DASH-089~091. |
 
-관련 문서: [설정 계약](config-v4.md)(`[dashboard]`·`[limits]`·`[recent_closed]`·`[recent_logs]`·`[timeouts]`·`[management]`·`[ip_info]` 키와 기본값·범위, IP 정보 DB 형식), [CLI·계정 파일 계약](cli-v1.md)(계정명 규칙), [운영 정보 계약](ops-info-v2.md)(`session_id`·종료 사건 로그, 상태 리스너, 주소 표기), [메트릭 계약](metrics-v1.md)(메트릭 응답 본문), [WebSocket 중계 계약](websocket-relay-v2.md)(관리자 종료의 Close 4005), [ADR-0001 내장 TLS](../decisions/ADR-0001-built-in-tls.md), [ADR-0003 단일 인스턴스·메모리 상태](../decisions/ADR-0003-single-instance-memory-state.md), [ADR-0012 IP 정보 DB](../decisions/ADR-0012-local-ip-info-databases.md).
+관련 문서: [설정 계약](config-v4.md)(`[dashboard]`·`[limits]`·`[recent_closed]`·`[recent_logs]`·`[timeouts]`·`[management]`·`[ip_info]`·`[relay.deny]` 키와 기본값·범위, IP 정보 DB 형식, 차단 목록과 신뢰 프록시의 겹침 검사), [CLI·계정 파일 계약](cli-v1.md)(계정명 규칙), [운영 정보 계약](ops-info-v2.md)(`session_id`·종료 사건 로그, 상태 리스너, 주소 표기), [메트릭 계약](metrics-v1.md)(메트릭 응답 본문), [WebSocket 중계 계약](websocket-relay-v2.md)(관리자 종료의 Close 4005), [ADR-0001 내장 TLS](../decisions/ADR-0001-built-in-tls.md), [ADR-0003 단일 인스턴스·메모리 상태](../decisions/ADR-0003-single-instance-memory-state.md), [ADR-0012 IP 정보 DB](../decisions/ADR-0012-local-ip-info-databases.md), [ADR-0013 허용 목록과 공통 차단 목록](../decisions/ADR-0013-relay-source-deny-list.md).
 
 이 계약의 경로·메서드·필드·오류 코드·헤더·쿠키·화면 URL은 확정된 형식이다. 기본 규칙은 다음과 같다.
 
@@ -326,6 +327,7 @@
 | `server_shutdown` | 정상 종료 유예 G가 지나거나 유예 중 두 번째 종료 요청을 받아 강제로 정리했다. 정상 종료 중(Grace·Force)에 세션 소유 작업이 취소된 경우도 포함한다. 기존 종료 원인이 없는 세션에만 기록한다. Running 중 소유 작업이 버그로 끝난 경우는 포함하지 않는다. |
 | `internal_error` | 내부 오류. 서버가 Running일 때 세션 소유 작업이 panic 등 버그로 끝났고 기존 종료 원인이 없었다. 기존 원인은 이 값으로 바꾸지 않는다. |
 | `session_expired` | 접속 ticket의 세션 만료 시각(`sx`)이 되어 서버가 세션을 끝냈다([WebSocket 계약 1.9.5절](websocket-relay-v2.md#195-101-뒤의-중계-id-대조와-세션-만료)). |
+| `ip_denied` | 출발지 IP 차단. 차단 목록(`relay.deny.sources`)이 바뀐 직후 Viewer 또는 Mode II Server의 클라이언트 주소가 항목과 일치해 서버가 세션 전체를 끝냈다. 관리자 계정은 없다. |
 
 - Consumer는 목록에 없는 값을 받으면 받은 그대로 표시하고 오류로 처리하지 않는다.
 - 목록은 보관 개수 R을 넘으면 가장 오래된 항목부터 제거한다(MGT-024).
@@ -393,10 +395,12 @@
 | `items[].key` | 문자열 | 필수, null 불가 | 테이블과 키를 점으로 이은 설정 키 |
 | `items[].value` | 불리언·정수·문자열·문자열 배열 | 필수, null 허용 | 설정 자료형 그대로다. 꺼진 진입점의 생략된 키는 `null`이다. 경로는 설정 파일 기준으로 푼 값이다. |
 | `items[].reload` | 문자열 | 필수, null 불가 | `dynamic`(재로드 대상)·`restart`(재시작 필요). [설정 계약 1.8절](config-v4.md#18-재로드-구분)을 따른다. |
-| `items[].editable` | 불리언 | 필수, null 불가 | 편집 대상이고 해당 진입점·모드가 켜져 있으면 `true`. `edit_enabled`와는 별개다. |
+| `items[].editable` | 불리언 | 필수, null 불가 | 편집 대상이고 해당 진입점·모드가 켜져 있으면 `true`. `edit_enabled`와는 별개다. 예외로 `relay.deny.sources`는 중계 진입점이 모두 꺼져 있어도 항상 `true`다. |
 | `items[].min`·`items[].max` | 정수 | 정수 키에 필수, null 불가. 그 밖의 키에는 없음 | 설정 계약의 정적 범위. Lw의 `max`는 65535이며 Lw ≤ L 관계 검사는 따로 한다. |
 
 `items`에는 접속 ticket 키 10개도 포함한다. Viewer는 `relay.ticket.viewer.enabled`·`relay.ticket.viewer.issuer`·`relay.ticket.viewer.relay_host`·`relay.ticket.viewer.public_keys_file`·`relay.ticket.viewer.max_lifetime_secs`다. Server는 `relay.ticket.server.enabled`·`relay.ticket.server.issuer`·`relay.ticket.server.relay_host`·`relay.ticket.server.public_keys_file`·`relay.ticket.server.max_lifetime_secs`다. 모두 `reload = dynamic`이다. `public_keys_file` 2개는 항상 `editable = false`다. 나머지 8개는 그 역할이 WS 또는 WSS 리스너에서 하나라도 켜져 있을 때만 `editable = true`다. `enabled`의 기본값은 `false`다. `max_lifetime_secs`의 기본값은 60이며 `min = 10`, `max = 600`이다([설정 계약 1.2절](config-v4.md#12-키-표)).
+
+`items`에는 `relay.deny.sources`(문자열 배열, `reload = dynamic`)도 포함한다. 기본값은 `[]`이며 아무것도 차단하지 않는다([설정 계약 1.2절](config-v4.md#12-키-표)).
 
 | `file.state` | 뜻 |
 | --- | --- |
@@ -428,7 +432,7 @@ PATCH 본문은 64 KiB(65536바이트) 이하여야 한다. 초과하면 `400 in
 
 JSON 정수는 `i64`나 `u64`로 읽을 수 있으면 정수로 받아 7단계에서 설정 범위를 검사한다. 범위를 벗어나면 `config_invalid`다. 이보다 큰 정수 표기는 JSON 수 해석 한계 때문에 지수 표기 실수와 구분하지 않으므로 1단계에서 `invalid_request`로 거절한다.
 
-편집 대상은 출발지 IP 허용 목록 6개, WS·WSS 역할별 Origin 허용 목록 4개, 리스너별 `trusted_proxies` 2개, `mode1.allow_targets`, `[limits]` 5개, `[timeouts]` 6개, `[keepalive]` 5개와 접속 ticket 8개인 총 37개 키다. ticket 편집 대상은 `relay.ticket.viewer.enabled`·`relay.ticket.viewer.issuer`·`relay.ticket.viewer.relay_host`·`relay.ticket.viewer.max_lifetime_secs`·`relay.ticket.server.enabled`·`relay.ticket.server.issuer`·`relay.ticket.server.relay_host`·`relay.ticket.server.max_lifetime_secs`다. 목록과 적용 시점은 [설정 계약 1.8절](config-v4.md#18-재로드-구분)이 기준이다. 인증서·개인키 경로 4개는 편집 대상이 아니다. 접속 ticket 공개 키 파일 경로 2개도 편집할 수 없다. 이 경로 6개를 포함한 재로드 대상은 총 43개다. 공개 키 교체는 같은 경로의 파일 내용을 바꾸는 방식을 따른다([설정 계약 1.11절](config-v4.md#111-접속-ticket-공개-키-파일-형식)). 역할별 키는 그 역할이 켜져 있을 때만, `trusted_proxies`는 해당 리스너의 역할 중 하나 이상이 켜져 있을 때만 편집할 수 있다. ticket 키는 그 역할이 WS 또는 WSS 리스너에서 하나라도 켜져 있을 때만 편집할 수 있다. `mode1.allow_targets`는 `mode1.enabled = true`일 때만 편집할 수 있다. `management.config_edit`와 `recent_logs.max_entries`를 비롯한 재시작 필요 키는 편집할 수 없다.
+편집 대상은 출발지 IP 허용 목록 6개, WS·WSS 역할별 Origin 허용 목록 4개, 리스너별 `trusted_proxies` 2개, `mode1.allow_targets`, `[limits]` 5개, `[timeouts]` 6개, `[keepalive]` 5개, 접속 ticket 8개와 차단 목록 `relay.deny.sources`인 총 38개 키다. ticket 편집 대상은 `relay.ticket.viewer.enabled`·`relay.ticket.viewer.issuer`·`relay.ticket.viewer.relay_host`·`relay.ticket.viewer.max_lifetime_secs`·`relay.ticket.server.enabled`·`relay.ticket.server.issuer`·`relay.ticket.server.relay_host`·`relay.ticket.server.max_lifetime_secs`다. 목록과 적용 시점은 [설정 계약 1.8절](config-v4.md#18-재로드-구분)이 기준이다. 인증서·개인키 경로 4개는 편집 대상이 아니다. 접속 ticket 공개 키 파일 경로 2개도 편집할 수 없다. 이 경로 6개를 포함한 재로드 대상은 총 44개다. 공개 키 교체는 같은 경로의 파일 내용을 바꾸는 방식을 따른다([설정 계약 1.11절](config-v4.md#111-접속-ticket-공개-키-파일-형식)). 역할별 키는 그 역할이 켜져 있을 때만, `trusted_proxies`는 해당 리스너의 역할 중 하나 이상이 켜져 있을 때만 편집할 수 있다. ticket 키는 그 역할이 WS 또는 WSS 리스너에서 하나라도 켜져 있을 때만 편집할 수 있다. `mode1.allow_targets`는 `mode1.enabled = true`일 때만 편집할 수 있다. `relay.deny.sources`는 중계 진입점이 꺼져 있어도 항상 편집할 수 있다. `management.config_edit`와 `recent_logs.max_entries`를 비롯한 재시작 필요 키는 편집할 수 없다.
 
 서버는 재로드 서비스와 직렬화하여 다음 10단계를 순서대로 처리한다. 앞 단계에서 거절하면 뒤 단계는 하지 않는다.
 
@@ -438,7 +442,7 @@ JSON 정수는 `i64`나 `u64`로 읽을 수 있으면 정수로 받아 7단계�
 4. 요청 `revision`이 지금 파일 바이트의 리비전과 다르면 `409 config_conflict`로 거절한다.
 5. 지금 파일이 검증에 실패하면 `409 config_file_invalid`와 `diagnostics`를 반환한다. 재시작 필요 키의 차이가 남아 있으면 `409 config_restart_pending`과 그 키의 `config_keys`를 반환한다.
 6. `toml_edit`로 요청 `changes` 중 파일값이 바뀐 키의 값만 고친다. 나머지 주석·공백·키 순서·다른 값은 보존한다. 없는 키는 기존 테이블에 넣는다. 테이블도 없으면 파일 끝에 새 테이블로 더한다. 새 줄은 파일의 기존 줄바꿈 방식을 따른다. 지금 파일이 `pending`이면 그 미적용 변경에 이번 편집을 얹은 후보 전체를 만든다.
-7. 고친 후보 전체를 시작·재로드와 같은 규칙으로 검증한다. 실패하면 `400 config_invalid`와 `diagnostics`를 반환한다. 진단의 `key`는 `relay.tcp_viewer.allow[2]`처럼 첨자를 포함할 수 있다. ticket의 `enabled = true`로 바꾸는 후보에 그 역할의 `issuer`·`relay_host`·`public_keys_file`이 빠져 있으면 `400 config_invalid`와 `config_missing_key` 진단을 반환한다([설정 계약 1.7절](config-v4.md#17-시작-때-필수-키)). 파일은 바꾸지 않는다.
+7. 고친 후보 전체를 시작·재로드와 같은 규칙으로 검증한다. 실패하면 `400 config_invalid`와 `diagnostics`를 반환한다. 진단의 `key`는 `relay.tcp_viewer.allow[2]`처럼 첨자를 포함할 수 있다. ticket의 `enabled = true`로 바꾸는 후보에 그 역할의 `issuer`·`relay_host`·`public_keys_file`이 빠져 있으면 `400 config_invalid`와 `config_missing_key` 진단을 반환한다([설정 계약 1.7절](config-v4.md#17-시작-때-필수-키)). `relay.deny.sources`의 항목이 신뢰 프록시 항목과 겹치면 `400 config_invalid`와 `config_deny_overlaps_proxy` 진단을 반환하며, 진단의 `key`는 `relay.deny.sources[i]`다([설정 계약 1.6절](config-v4.md#16-값-관계-검사)). 파일은 바꾸지 않는다.
 8. 편집 전후 파일 바이트가 같으면 쓰기·교체·실행 중 값 적용 없이 `200`으로 응답한다. `applied`는 빈 배열이며 `revision`은 그대로다. `reload_applied`·`config_edited`를 기록하거나 `last_reload`를 갱신하지 않는다. 파일에 이미 남아 있던 `pending` 변경은 파일 변경 감지가 적용한다.
 9. 공유 잠금 안에서 같은 디렉터리의 임시 파일을 쓰고 flush한다. 원자 교체 바로 전에 현재 파일을 다시 읽어 `revision`을 비교한다. 다르면 임시 파일을 지우고 `409 config_conflict`로 거절하며 이번 요청은 파일·실행 중 값을 바꾸지 않는다. 같으면 원자 교체한 뒤 같은 후보를 적용한다. 마지막 재확인과 교체 사이의 아주 짧은 틈은 보장 범위가 아니다. 재확인 읽기 실패도 임시 파일을 지우고 `409 config_conflict`로 거절하며 `config_edit_rejected.reason = config_conflict`를 기록한다. 쓰기·교체 자체에 실패하면 `500 config_write_failed`이며 파일과 실행 중 값은 이전 그대로다.
 10. 같은 후보의 재로드 대상 값을 한 번에 교체한다. `pending`에 있던 변경도 함께 적용한다. 응답과 `reload_applied`의 `applied`는 실제 실행 중 값이 바뀐 모든 키다. `config_edited.config_keys`는 요청 `changes` 중 파일값이 바뀐 키만이다. 실행 중 값이 바뀌면 `reload_applied`(`trigger = config_edit`)를 기록하고 `last_reload`를 갱신한다. 그 뒤 `config_edited`를 기록한다([운영 정보 계약 1.5절](ops-info-v2.md#15-사건-목록)). 실행 중 값의 차이가 없으면 `reload_applied`와 이력 갱신 없이 `config_edited`만 기록한다. 이후 파일 변경 감지가 같은 내용을 읽으면 다시 교체하거나 성공 사건·이력을 추가하지 않는다. `reload_change_detected`는 기록될 수 있다.
@@ -455,6 +459,8 @@ JSON 정수는 `i64`나 `u64`로 읽을 수 있으면 정수로 받아 7단계�
 편집은 파일에 남아 재시작 뒤에도 유지된다. 이미 맺은 연결·시작한 타이머·설정한 소켓 옵션은 이전 값을 유지한다. 바뀐 값은 [설정 계약 1.8절](config-v4.md#18-재로드-구분)의 시점부터 적용한다. 정상 종료 유예 중에도 다른 관리 요청처럼 처리한다. 특별히 거절하지 않는다.
 
 ticket 설정 변경은 새 업그레이드 요청부터 적용한다. 이미 101을 보낸 연결의 중계 ID 대조와 `sx` 타이머, 사용 기록은 유지한다([WebSocket 계약 1.9.6절](websocket-relay-v2.md#196-설정과-적용-시점)).
+
+`relay.deny.sources`를 바꾸면 교체 직후 그 주소의 열린 활성 세션과 대기 연결을 바로 끊는다([설정 계약 1.8절](config-v4.md#18-재로드-구분)). 차단·해제 전용 경로는 없다. 대시보드는 `GET /api/v1/config`로 `revision`과 현재 목록을 읽고 `PATCH /api/v1/config`로 `relay.deny.sources` 전체 값을 보낸다.
 
 인증·CSRF를 통과한 편집 거절은 `invalid_request`를 제외하고 `config_edit_rejected`로 기록한다. PATCH 거절은 `last_reload`를 갱신하지 않는다. 편집 사건의 `admin_account`는 필수다. 키와 리비전 등 사건별 메타 정보는 기록하되 설정값(IP·Origin·대상 항목·수치)은 기록하지 않는다. 필드·사건 형식은 [운영 정보 계약 1.5절](ops-info-v2.md#15-사건-목록)과 [1.8절](ops-info-v2.md#18-관리자-계정명-기록-규칙)을 따른다.
 
@@ -556,6 +562,7 @@ JSON Lines 다운로드는 Consumer가 만든다. 같은 필터로 커서 없이
 | `capacity` | 정수 | 필수, null 불가 | 메모리에 보관하는 사건의 상한. 100000이다. |
 | `stored` | 정수 | 필수, null 불가 | 지금 보관 중인 사건 수. 기간과 관계없다. |
 | `dropped_before` | 문자열 | 필수, null 허용 | 상한을 넘어 버린 사건 가운데 가장 늦은 사건의 시각. 버린 사건이 없으면 `null`이다. 이 값이 `window_start` 이상이면 기간의 앞부분이 빠졌다. |
+| `deny_editable` | 불리언 | 필수, null 불가 | 실행 중 `management.config_edit`가 `true`이면 `true`다. 대시보드가 차단·해제 행동을 보일지 정한다. |
 | `databases` | 객체 | 필수, null 불가 | `country`·`asn` 두 객체. IP 정보 DB 상태다. |
 | `databases.<종류>.state` | 문자열 | 필수, null 불가 | `not_configured`(설정에 경로 없음), `loaded`(DB를 쓰고 마지막 읽기에 성공), `stale`(마지막 다시 읽기에 실패해 이전 DB를 씀), `unavailable`(쓰는 DB 없음). |
 | `databases.<종류>.error` | 문자열 | 필수, null 허용 | 마지막 읽기 실패의 원인 코드([설정 계약 1.12절](config-v4.md#112-ip-정보-db-파일-형식)). `stale`·`unavailable`일 때만 값이 있다. |
@@ -565,7 +572,7 @@ JSON Lines 다운로드는 Consumer가 만든다. 같은 필터로 커서 없이
 | `databases.<종류>.loaded_at` | 문자열 | 필수, null 허용 | 쓰는 DB를 읽은 시각. 쓰는 DB가 없으면 `null`이다. |
 | `totals` | 객체 | 필수, null 불가 | 기간 안 사건 수. `attempts`(연결 시도), `rejected`(거절), `aborted`(중단), `sessions`(시작한 세션 수). 모두 정수다. |
 | `addresses` | 객체 | 필수, null 불가 | `total`(기간 안 서로 다른 클라이언트 주소 수)과 `items`(아래 순서로 최대 100개). |
-| `addresses.items[]` | 객체 | 항목마다 필수 | `ip`(문자열), `local`(불리언), `country`(문자열·null), `asn`(정수·null), `as_name`(문자열·null), `attempts`·`rejected`·`aborted`·`sessions`(정수), `last_seen_at`(문자열). |
+| `addresses.items[]` | 객체 | 항목마다 필수 | `ip`(문자열), `local`(불리언), `country`(문자열·null), `asn`(정수·null), `as_name`(문자열·null), `attempts`·`rejected`·`aborted`·`sessions`(정수), `last_seen_at`(문자열), `deny_entries`(문자열 배열, 필수, null 불가). |
 | `countries` | 객체 | 필수, null 불가 | `total`(기간 안 서로 다른 국가 수. 국가 없음도 하나로 센다)과 `items`(모든 국가). |
 | `countries.items[]` | 객체 | 항목마다 필수 | `country`(문자열·null), `addresses`(서로 다른 주소 수), `attempts`·`rejected`·`aborted`·`sessions`(정수). |
 | `asns` | 객체 | 필수, null 불가 | `total`(기간 안 서로 다른 ASN 수. ASN 없음도 하나로 센다)과 `items`(아래 순서로 최대 100개). |
@@ -578,6 +585,8 @@ JSON Lines 다운로드는 Consumer가 만든다. 같은 필터로 커서 없이
 - `sessions`는 주소·국가·ASN 항목에서 그 주소가 Viewer 또는 Mode II Server로 참여한 세션 쪽 수다. `totals.sessions`는 시작한 세션 수이므로 항목 합과 다를 수 있다.
 - 주소 항목은 `attempts` 내림차순, 같으면 `last_seen_at` 내림차순, 같으면 IP 주소 오름차순(IPv4가 먼저, 같은 체계는 숫자 순)이다. 국가 항목과 ASN 항목은 `attempts` 내림차순, 같으면 코드·번호 오름차순이며 `null`은 같은 `attempts` 안에서 마지막이다.
 - 기간 안 사건이 없으면 `totals`는 모두 0이고 세 `items`는 빈 배열이다. 오류가 아니다.
+- `deny_entries`는 실행 중 차단 목록(`relay.deny.sources`)에서 이 주소를 덮는 항목을 파일에 적힌 글자 그대로, 목록 순서로 담는다. 비어 있으면 차단되지 않은 주소다. `local`이 `true`인 주소도 같다.
+- 차단·해제 전용 경로는 없다. 변경은 1.14절의 `PATCH /api/v1/config`로 한다.
 
 오류는 `400 invalid_request`(매개변수·폴링 헤더 오류), `401 unauthenticated`, `405 invalid_request`(`Allow: GET`), `500 internal`이다. 인증·메서드·본문·Content-Type의 공통 규칙(1.1·1.3절)도 적용하므로 본문이 있고 Content-Type이 틀리면 `415 invalid_request`다. IP 정보 DB가 없거나 읽지 못한 것은 오류가 아니다. `200`의 `databases`로 구분한다.
 
@@ -686,6 +695,7 @@ JSON Lines 다운로드는 Consumer가 만든다. 같은 필터로 커서 없이
 - 메트릭 경로·선택 매개변수·응답 본문은 1.2.0의 새 경로 추가 범위다. 응답 본문의 호환 규칙은 [메트릭 계약 3절](metrics-v1.md#3-호환성-규칙)을 따른다.
 - `history_window` 선택 매개변수와 최근 24시간 추이는 1.3.0의 요청 선택 필드 추가 범위다. 이 매개변수를 보내지 않는 Consumer는 1.2.0과 같은 최근 1시간 추이를 받는다.
 - 접속 출처 경로·선택 매개변수·응답 본문은 1.4.0의 새 경로 추가 범위다. Consumer는 모르는 `state`·`provider`·`error` 값을 받은 그대로 표시한다.
+- `deny_editable`과 주소 항목의 `deny_entries`, 설정 보기·편집의 `relay.deny.sources`, 최근 종료 목록 `close_cause`의 `ip_denied`는 1.5.0의 응답 필드·허용 값·편집 대상 추가 범위다. 필드를 모르는 Consumer는 무시하고, 모르는 `close_cause`는 받은 그대로 표시한다.
 - 호환성을 깨는 변경(Breaking change): 필드나 경로를 삭제·이름 변경한다. 자료형·단위·시각 형식·`null` 의미를 바꾼다. 기존 조건의 HTTP 상태 코드나 오류 코드를 바꾼다. 요청 필드를 필수로 바꾼다. 쿠키 이름이나 헤더 이름·의미를 바꾼다. 쿠키 보안 속성을 약하게 바꾼다. 인증·CSRF 요구를 약하게 바꾼다. 위 변경은 새 major 버전(`/api/v2/`)으로 낸다.
 - 마이그레이션: 새 major 버전은 새 접두사로 제공하고, 같은 릴리스에서 대시보드를 새 버전으로 옮긴다. 대시보드는 같은 실행파일에 들어 있으므로 서버와 대시보드의 버전이 어긋나지 않는다. 외부 클라이언트가 있으면 이전 major를 한동안 함께 제공한다. 기간은 새 major 채택 때 정한다.
 - 롤백: 이전 릴리스 실행파일로 되돌리면 이전 major와 대시보드가 함께 돌아온다. 관리 세션은 서버 메모리에만 있으므로 되돌리는 시점에 모두 무효가 되고, 관리자는 다시 로그인한다. 최근 종료 목록도 비워진다.
@@ -900,6 +910,7 @@ X-Relay-Poll: 1
   "capacity": 100000,
   "stored": 412,
   "dropped_before": null,
+  "deny_editable": true,
   "databases": {
     "country": {"state": "loaded", "error": null, "database_type": "DBIP-Country-Lite", "provider": "dbip", "build_time": "2026-11-01T00:00:00.000Z", "loaded_at": "2026-11-20T01:00:00.020Z"},
     "asn": {"state": "unavailable", "error": "file_unreadable", "database_type": null, "provider": null, "build_time": null, "loaded_at": null}
@@ -908,8 +919,8 @@ X-Relay-Poll: 1
   "addresses": {
     "total": 3,
     "items": [
-      {"ip": "203.0.113.9", "local": false, "country": "KR", "asn": null, "as_name": null, "attempts": 20, "rejected": 4, "aborted": 1, "sessions": 8, "last_seen_at": "2026-11-20T04:59:58.120Z"},
-      {"ip": "192.168.0.15", "local": true, "country": null, "asn": null, "as_name": null, "attempts": 2, "rejected": 0, "aborted": 0, "sessions": 2, "last_seen_at": "2026-11-20T04:30:00.000Z"}
+      {"ip": "203.0.113.9", "local": false, "country": "KR", "asn": null, "as_name": null, "attempts": 20, "rejected": 4, "aborted": 1, "sessions": 8, "last_seen_at": "2026-11-20T04:59:58.120Z", "deny_entries": ["203.0.113.9", "203.0.113.0/24"]},
+      {"ip": "192.168.0.15", "local": true, "country": null, "asn": null, "as_name": null, "attempts": 2, "rejected": 0, "aborted": 0, "sessions": 2, "last_seen_at": "2026-11-20T04:30:00.000Z", "deny_entries": []}
     ]
   },
   "countries": {
@@ -934,6 +945,7 @@ X-Relay-Poll: 1
 | --- | --- |
 | Producer의 경로·인증·조회·종료·설정·최근 로그 | `crates/adapters/tests/management.rs`, `tests/management_session.rs`, `tests/management_query.rs`, `tests/management_terminate.rs` |
 | 접속 출처 경로·집계·IP 정보 DB 상태 | `crates/adapters/src/management_http/sources_api.rs`, `crates/app/src/sources.rs`, `tests/sources.rs` |
+| 차단 목록의 설정 편집·`deny_entries` | `crates/adapters/src/management_http/sources_api.rs`, `crates/app/src/management/config/tests.rs`, `crates/adapters/tests/management.rs`, `tests/sources.rs` |
 | 실행파일의 전송 경로·주소·대기·최근 종료 필드 | `tests/serve.rs`의 `refuses_public_plaintext_and_answers_login_less_queries_with_401_on_loopback`·`real_mode_i_and_proxied_ws_wss_sessions_expose_transport_and_forwarded_addresses`·`real_waiting_lists_preserve_all_entry_transports_and_proxy_addresses`·`real_closed_lists_and_termination_preserve_addresses_and_logged_monotonic_duration` |
 | 접속 ticket의 종료 원인·설정 | `tests/ticket_system.rs`, `crates/adapters/tests/management.rs` |
 | Consumer의 정적 파일·화면·실서버 교환 | `tests/dashboard_assets.rs`, `tests/dashboard_browser.rs`, `tests/dashboard_live.rs` |

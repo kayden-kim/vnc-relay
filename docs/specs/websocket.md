@@ -1,21 +1,21 @@
 # WS·WSS 전송 스펙
 
-외부 Viewer·Server가 WS·WSS로 중계 스트림에 접속하는 동작을 정의한다. 내장 WSS와 릴레이 리스너 앞의 역방향 프록시 TLS 종료를 지원한다. 중계 접근은 관리자 로그인과 분리한 진입점별 IP 허용 정책을 따른다. 접속 ticket 확인은 기본으로 꺼져 있고, 설정으로 켠 역할에만 더한다. 신뢰 프록시를 거치면 전달 주소로 클라이언트 주소를 판정한다.
+외부 Viewer·Server가 WS·WSS로 중계 스트림에 접속하는 동작을 정의한다. 내장 WSS와 릴레이 리스너 앞의 역방향 프록시 TLS 종료를 지원한다. 중계 접근은 관리자 로그인과 분리한 진입점별 IP 허용 정책을 따른다. 중계 진입점 공통의 출발지 IP 차단 목록이 허용 정책보다 먼저 판정한다. 접속 ticket 확인은 기본으로 꺼져 있고, 설정으로 켠 역할에만 더한다. 신뢰 프록시를 거치면 전달 주소로 클라이언트 주소를 판정한다.
 
 | 항목 | 값 |
 | --- | --- |
 | 상태 | Active |
-| 관련 요구사항 | [PRD](../requirements/PRD.md) FR-05, 7절 보안 경계, AC-05~08·AC-49 |
+| 관련 요구사항 | [PRD](../requirements/PRD.md) FR-05, 7절 보안 경계, AC-05~08·AC-49·AC-66 |
 | 용어 | [VNC Relay 용어집](../../GLOSSARY.md) |
 | 관련 스펙 | [중계와 매칭](relay.md), [설정·운영](operations.md) |
 | 관련 계약 | [WebSocket 중계 v2](../contracts/websocket-relay-v2.md), [설정 파일 v4](../contracts/config-v4.md). URL·서브프로토콜·HTTP 상태·종료 코드의 이름·번호와 Origin 정규화는 이 계약이 기준이다. |
-| 관련 아키텍처 문서·ADR | [코드 지도](../architectures/code-map.md), [WS·WSS 진입점 모듈 설계](../architectures/websocket-entry-point.md), [WS 스트림 모듈 설계](../architectures/websocket-stream.md), [TLS 모듈 설계](../architectures/tls.md), [ADR-0001 내장 TLS](../decisions/ADR-0001-built-in-tls.md), [ADR-0002 출발지 IP 허용 목록](../decisions/ADR-0002-source-ip-allowlist.md), [ADR-0004 tokio·rustls](../decisions/ADR-0004-tokio-rustls.md), [ADR-0005 자체 WS 스트리밍 프레임 코덱](../decisions/ADR-0005-in-house-ws-streaming-frame-codec.md). |
+| 관련 아키텍처 문서·ADR | [코드 지도](../architectures/code-map.md), [WS·WSS 진입점 모듈 설계](../architectures/websocket-entry-point.md), [WS 스트림 모듈 설계](../architectures/websocket-stream.md), [TLS 모듈 설계](../architectures/tls.md), [ADR-0001 내장 TLS](../decisions/ADR-0001-built-in-tls.md), [ADR-0002 출발지 IP 허용 목록](../decisions/ADR-0002-source-ip-allowlist.md), [ADR-0004 tokio·rustls](../decisions/ADR-0004-tokio-rustls.md), [ADR-0005 자체 WS 스트리밍 프레임 코덱](../decisions/ADR-0005-in-house-ws-streaming-frame-codec.md), [ADR-0013 허용 목록과 공통 차단 목록](../decisions/ADR-0013-relay-source-deny-list.md). |
 
 ## 1. 범위와 적용 상태
 
 - WS(`ws://`)·WSS(`wss://`)를 지원한다.
 - 공유 WS·WSS 리스너는 Viewer·Server 역할을 제공한다. `/relay/viewer`는 Viewer, `/relay/server`는 Server다. 별도 Server 리스너는 만들지 않는다.
-- `/relay`는 다른 미지원 경로와 같이 404다. 현재 `websocket-relay` 계약은 2.1.0이다. 1.x 클라이언트의 이전·롤백은 [WebSocket 계약 3.1절](../contracts/websocket-relay-v2.md#31-1x-클라이언트를-200으로-옮기기)을 따른다.
+- `/relay`는 다른 미지원 경로와 같이 404다. 현재 `websocket-relay` 계약은 2.2.0이다. 1.x 클라이언트의 이전·롤백은 [WebSocket 계약 3.1절](../contracts/websocket-relay-v2.md#31-1x-클라이언트를-200으로-옮기기)을 따른다.
 - Viewer는 Mode I·II, Server는 TCP Server와 같이 Mode II만 지원한다. 접속 ticket을 켠 Viewer 역할은 Mode I을 거절한다. WS·WSS Server와 TCP·WS·WSS Viewer의 모든 조합을 양 접속 순서로 검증한다.
 - 평문 WS 리스너는 기본 비활성이다. 설정에서 명시적으로 켠 경우에만 연다(WS-R12, WS-024). 테스트에서는 WS 리스너를 켜고 검증한다.
 - noVNC, websockify 실행 파일, 원격 화면 렌더러를 의존성으로 추가하지 않는다. noVNC는 번들·배포물에도 넣지 않고 외부 상호운용 검증 대상으로만 쓴다.
@@ -28,10 +28,10 @@
 
 | 상태 | 진입 조건 | 종료 조건 |
 | --- | --- | --- |
-| 접속 수락 시 IP 검사 | WS·WSS 리스너가 TCP 접속을 수락한 직후, 데이터 읽기·TLS 협상 전. 역할은 아직 모름 | 소켓 상대가 신뢰 프록시이거나 켠 역할의 `allow` 합집합에 있으면 진행. 둘 다 아니면 TLS·HTTP 처리 전에 연결 종료 |
+| 접속 수락 시 IP 검사 | WS·WSS 리스너가 TCP 접속을 수락한 직후, 데이터 읽기·TLS 협상 전. 역할은 아직 모름 | 소켓 상대가 신뢰 프록시이면 진행. 신뢰 프록시가 아니면 차단 목록에 있을 때 TLS·HTTP 처리 전에 연결 종료. 차단되지 않았으면 켠 역할의 `allow` 합집합에 있을 때 진행하고, 없으면 TLS·HTTP 처리 전에 연결 종료 |
 | TLS 협상 | accept 검사를 통과한 WSS 연결이 VNC Relay의 내장 TLS 리스너에 접속 | TLS 성립 또는 협상 실패(TLS 1.2 미만 포함) |
-| 업그레이드 대기 | HTTP WebSocket 요청 수신 | 요청 머리·경로·역할 → 클라이언트 주소 → Origin → 서브프로토콜 → 켠 역할의 ticket 확인 → 역할별 IP 재검사 → 켠 역할의 사용 기록 쓰기 뒤 업그레이드 또는 거절 |
-| Repeater 초기 교환 | WebSocket 연결 성립 | 호환 요청 완료, 오류, 시간 초과, 단절 |
+| 업그레이드 대기 | HTTP WebSocket 요청 수신 | 요청 머리·경로·역할 → 클라이언트 주소 → Origin → 서브프로토콜 → 켠 역할의 ticket 확인 → 차단 목록 → 역할별 IP 재검사 → 켠 역할의 사용 기록 쓰기 뒤 업그레이드 또는 거절 |
+| Repeater 초기 교환 | WebSocket 연결 성립 | 호환 요청 완료, 오류, 시간 초과, 단절, 등록 직전 차단 목록 검사 거절 |
 | 대기·중계 | 유효한 Mode I·II 요청 | 중계 스펙의 정상 전이 또는 종료 사건 |
 | 종료 중 | close, TCP 오류·EOF, 관리자 종료 | 종료 교환 완료 또는 정리 제한 만료 |
 | 종료됨 | WebSocket·중계 자원 회수 | 같은 연결을 재사용하지 않음 |
@@ -44,7 +44,13 @@ WS Viewer·WS Server·WSS Viewer·WSS Server는 각각 자기 진입점의 `allo
 
 목록의 IP 문법과 전체 허용 항목 경고는 [설정 계약](../contracts/config-v4.md)이 정한다. 관리자 로그인 쿠키와 중계 ID는 IP 제한을 우회하지 못한다. IP 정책은 같은 공인 IP를 공유하는 개별 사용자를 식별하지 않는다. `trusted_proxies`에는 프록시 주소만 넣어야 하며 클라이언트 범위를 넣어서는 안 된다. 모든 XFF 요소가 신뢰 프록시이면 주소를 대신 고르지 않고 거절한다(WS-036).
 
-IP 목록·`trusted_proxies`·인증서 재로드는 [운영 스펙](operations.md#33-파일-변경-자동-감지와-부분-재로드)에 따른다. 각 accept·upgrade 검사는 그 시점의 유효 설정을 쓴다. 이미 통과한 검사의 결과는 유지한다. 업그레이드를 완료한 연결은 IP 제거 뒤에도 유지한다. 업그레이드 전 HTTP·TLS 연결과 재로드 뒤 새 업그레이드의 역할별 IP 검사에는 그 순간 유효한 목록을 적용한다.
+IP 허용 목록·`trusted_proxies`·인증서 재로드는 [운영 스펙](operations.md#33-파일-변경-자동-감지와-부분-재로드)에 따른다. 각 accept·upgrade 검사는 그 시점의 유효 설정을 쓴다. 이미 통과한 검사의 결과는 유지한다. 업그레이드를 완료한 연결은 허용 목록에서 항목이 제거된 뒤에도 유지한다. 업그레이드 전 HTTP·TLS 연결과 재로드 뒤 새 업그레이드의 역할별 IP 검사에는 그 순간 유효한 목록을 적용한다. 차단 목록 교체는 다음 문단들을 따른다.
+
+차단 목록(`relay.deny.sources`)은 허용 목록보다 먼저 판정한다. 판정 주소는 클라이언트 주소다. accept에서 소켓 상대가 해당 리스너의 신뢰 프록시이면 차단 검사를 건너뛴다. 설정 검사가 차단 항목과 신뢰 프록시 항목의 겹침을 거절하므로 신뢰 프록시는 차단 대상이 될 수 없다. 소켓 상대가 신뢰 프록시가 아니면 소켓 상대 IP를 차단 목록으로 먼저 검사하고, 그다음 켠 역할의 `allow` 합집합으로 검사한다. 차단이면 TLS·HTTP 처리 전에 연결을 닫고 `connection_rejected`(stage `accept`, reason `ip_denied`)를 기록한다.
+
+업그레이드에서는 클라이언트 주소를 역할별 `allow` 검사 바로 앞에서 차단 목록으로 검사한다. 차단이면 HTTP 403 `ip_denied`로 거절하고 `connection_rejected`(stage `upgrade`, reason `ip_denied`)를 기록한다. ticket은 소비하지 않는다. 초기 교환을 마친 뒤 등록 직전에는 현재 차단 목록으로 클라이언트 주소를 다시 검사한다. 차단이면 close 4014 `ip_denied`로 닫고 `connection_rejected`(stage `register`, reason `ip_denied`)를 기록한다. 대기 등록·매칭·Mode I 대상 연결은 만들지 않는다.
+
+차단 목록 값이 바뀌면 교체 직후 열린 WS·WSS 연결도 검사한다. 허용 목록과 달리 업그레이드를 마친 대기 연결과 활성 세션도 끊는다. 대기 연결은 클라이언트 주소(신뢰 프록시를 거쳤으면 전달 주소)가 차단되면 close 4014 `ip_denied`로 닫는다. 활성 세션은 WS·WSS Viewer 또는 Server의 클라이언트 주소가 차단되면 세션 전체를 끊는다. 그 연결에는 close 4014 `ip_denied`를 보내고 반대쪽 연결도 닫는다. 종료 원인은 `ip_denied`다. 규칙은 [운영 스펙 3.10절](operations.md#310-출발지-ip-차단-목록)을 따른다.
 
 Origin 정책: Origin 헤더가 있으면 해당 역할의 `allowed_origins`와 일치할 때만 업그레이드한다. 허용 값은 `scheme://host[:port]` 형식이며 정확 일치로 비교한다. 와일드카드는 없다. 스킴·호스트·포트 중 하나라도 다르면 거절한다. 하위 도메인은 다른 호스트다. 정규화 세부는 [설정 계약 1.4절](../contracts/config-v4.md#14-origin-값-문법과-비교)이 정하고, 비교 결과의 처리는 [WebSocket 계약 1.3절](../contracts/websocket-relay-v2.md#13-origin-비교)이 정한다. Origin 헤더가 없어도 클라이언트 주소가 해당 역할의 `allow`에 있어야 한다. Origin은 사용자 인증 수단이 아니다.
 
@@ -53,7 +59,7 @@ Origin 정책: Origin 헤더가 있으면 해당 역할의 `allowed_origins`와 
 ## 3. 정상 흐름과 규칙
 
 1. WSS는 TLS가 성립한 뒤 HTTP 업그레이드를 진행한다. WS는 TLS 없이 업그레이드를 진행한다.
-2. accept IP 검사를 통과한 뒤 요청 경로로 역할을 고른다. 클라이언트 주소·역할별 Origin·서브프로토콜·켠 역할의 ticket·역할별 IP 재검사 순서로 검사한다. 거절 우선순위는 Origin 403 → 서브프로토콜 400 → ticket 401 → IP 재검사 403이다. 모두 통과한 뒤 사용 기록을 쓰고 `101`을 보낸다. 앞 검사에서 거절한 요청은 ticket을 소비하지 않는다. 세부 순서는 [계약 1.1절](../contracts/websocket-relay-v2.md#11-업그레이드-요청)이 정한다.
+2. accept IP 검사를 통과한 뒤 요청 경로로 역할을 고른다. 클라이언트 주소·역할별 Origin·서브프로토콜·켠 역할의 ticket·차단 목록·역할별 IP 재검사 순서로 검사한다. 거절 우선순위는 Origin 403 → 서브프로토콜 400 → ticket 401 → IP 재검사 403이다. IP 재검사는 차단 목록, 역할별 `allow` 순서다. 모두 통과한 뒤 사용 기록을 쓰고 `101`을 보낸다. 앞 검사에서 거절한 요청은 ticket을 소비하지 않는다. 세부 순서는 [계약 1.1절](../contracts/websocket-relay-v2.md#11-업그레이드-요청)이 정한다.
 3. WebSocket 연결 뒤 바이너리 메시지의 페이로드를 선택한 역할의 연속 바이트 스트림으로 취급한다.
 4. Viewer에는 `101` 응답 직후 시작 바이트를 보낸다. Server에는 보내지 않으며 Server가 `ID:` 초기 요청을 먼저 보낸다. [중계 스펙](relay.md#3-정상-흐름)의 초기 교환으로 대상 주소 또는 ID를 얻는다. 형식은 [Repeater 초기 교환 계약](../contracts/repeater-handshake-v1.md)을 따른다. 계약 밖의 별도 선택 단계를 만들지 않는다.
 5. 상대 TCP·WS·WSS 스트림은 바이너리 메시지로 전달한다. 출력 메시지 크기나 경계가 입력과 같을 필요는 없다.
@@ -85,6 +91,7 @@ ticket을 켠 역할은 `binary`와 `ticket.` 뒤에 JWS 압축 형식을 붙인
 | WS-R21 | FR-05·7절·AC-49 | 한 ticket은 한 번만 받아들여야 한다. 사용 기록은 업그레이드 검사를 모두 통과한 뒤에 써야 한다. `iat ≤ 기동 시각 + 5`인 ticket은 거절해야 한다([계약 1.9.3·1.9.4절](../contracts/websocket-relay-v2.md#193-확인-순서와-거절)). |
 | WS-R22 | FR-05·7절·AC-49 | ticket을 켠 역할의 `101` 응답은 `binary`만 골라야 한다. ticket 값을 응답·운영 로그·관리 API에 넣어서는 안 된다. |
 | WS-R23 | FR-05·7절·AC-49 | ticket 설정의 교체는 새 업그레이드 요청부터 적용해야 한다. 이미 `101`을 보낸 연결의 중계 ID 대조와 세션 만료, 사용 기록은 유지해야 한다. |
+| WS-R24 | FR-05·7절·AC-66 | 출발지 IP 차단 목록은 허용 목록보다 먼저 판정해야 한다. accept에서 소켓 상대가 신뢰 프록시이면 차단 검사를 건너뛰고, 아니면 소켓 상대 IP를 차단 목록으로 검사해야 한다. 업그레이드에서는 클라이언트 주소를 역할별 `allow` 검사 바로 앞에서 차단 목록으로 검사해야 한다. 차단되면 HTTP 403 `ip_denied`로 거절해야 하며 ticket을 소비해서는 안 된다. 등록 직전에 현재 차단 목록으로 다시 검사해야 한다. 차단 목록이 바뀌면 교체 직후 차단된 클라이언트 주소의 대기 연결과 활성 세션을 close 4014 `ip_denied`로 끊어야 한다. |
 
 메시지 크기 제한 M은 프레임별 크기가 아니라 한 논리 메시지에 적용한다. B와 M 사이에는 대소 제약이 없다. 프레임 안에서 스트리밍하며 방향당 미전달 보관 바이트는 B 이하다. B보다 큰 유효 프레임도 수락해 스트리밍하며 전체를 저장하지 않는다. 스트리밍 중 제한 초과를 확인할 때까지 일부 바이너리 데이터가 이미 전달될 수 있다. 초과 확인 뒤 추가 데이터 전달을 중지하고 종료 코드 1009로 닫는다. 실패한 메시지 전체를 원자적으로 취소하는 보장은 하지 않는다.
 
@@ -98,7 +105,11 @@ ticket을 켠 역할은 `binary`와 `ticket.` 뒤에 JWS 압축 형식을 붙인
 | TLS 1.2 미만 협상 | WSS 협상 실패, 평문 전환 없음 | 중계 등록 없음, 규칙 [OPS-R17](operations.md#41-판정-가능한-규칙) |
 | 잘못된 경로·업그레이드 요청 | HTTP 단계 거절 | 중계 ID 등록·대상 연결 없음 |
 | 접속 수락 시 소켓 상대가 켠 역할의 `allow` 합집합에도 신뢰 프록시 목록에도 없음 | TLS·HTTP 처리 전에 연결 종료 | 중계 등록·대상 연결 없음, 관리자 로그인으로 우회 불가 |
+| 접속 수락 시 소켓 상대가 신뢰 프록시가 아니며 차단 목록에 있음 | TLS·HTTP 처리 전에 연결 종료. `connection_rejected(stage=accept, reason=ip_denied)`. 허용 목록에 있어도 같음 | 중계 등록·대상 연결 없음, 관리자 로그인으로 우회 불가. 항목을 지운 뒤 새 접속 |
 | 업그레이드 직전 클라이언트 주소가 역할별 `allow`에 없거나 역할별 Origin 정책 위반 | HTTP 403, IP 거절은 `ip_not_allowed` | 신규 중계 세션 없음, 관리자 로그인으로 우회 불가 |
+| 업그레이드 직전 클라이언트 주소가 차단 목록에 있음 | HTTP 403 `ip_denied`. `connection_rejected(stage=upgrade, reason=ip_denied)` | 신규 중계 세션 없음. ticket 소비·사용 기록·`ticket_accepted` 없음. 항목을 지운 뒤 새 접속하며 같은 ticket을 다시 쓸 수 있음 |
+| 초기 교환을 마친 연결이 등록 직전에 차단됨 | close 4014 `ip_denied`. `connection_rejected(stage=register, reason=ip_denied)` | 대기 등록·매칭·대상 연결 없음. 항목을 지운 뒤 새 접속 |
+| 차단 목록 교체 뒤 열린 대기·활성 연결이 차단됨 | close 4014 `ip_denied`. 활성 세션이면 반대쪽 연결도 종료 | 대기 해제(`waiting_removed.reason = ip_denied`) 또는 세션 정리(`close_cause = ip_denied`). 차단되지 않은 연결 영향 없음. 끊은 연결은 되살아나지 않음 |
 | 신뢰 프록시의 XFF 누락·빈 값, 잘못된 검사 대상 요소, 모든 요소가 신뢰 프록시인 체인 | HTTP 400, `connection_rejected(stage=upgrade, reason=forwarded_for_invalid)` | 등록·대상 연결·`forwarded_ip` 없음 |
 | ticket을 켠 역할의 ticket 없음·무효·만료·기동 전 발급·재사용 | `101` 전 HTTP 401, `WWW-Authenticate: VncRelayTicket`. `connection_rejected(stage=upgrade)`의 `reason`은 [계약 1.9.3·1.9.4절](../contracts/websocket-relay-v2.md#193-확인-순서와-거절)을 따름 | 대기 등록·대상 연결·`ticket_accepted` 없음. 클라이언트는 새 ticket으로 새 접속 |
 | 텍스트 메시지 | 지원하지 않는 데이터로 종료 | 텍스트를 TCP에 전달하지 않음 |
@@ -197,6 +208,8 @@ WS-007 이후의 공통 중계 테스트는 WS·WSS 각각에 적용한다. 내�
 | WS-044 | FR-05·7절·AC-49 / WS-R20·WS-R21 | Origin·서브프로토콜·ticket·업그레이드 직전 IP 재검사를 함께 어기는 요청을 조합별로 전송. 앞 검사를 하나씩 통과시킴 | [계약 1.1절](../contracts/websocket-relay-v2.md#11-업그레이드-요청) 순서로 먼저 걸린 상태 하나만 응답: Origin 403 → 서브프로토콜 400 → ticket 401 → IP 재검사 403. 거절한 요청은 ticket을 소비하지 않음 |
 | WS-045 | FR-05·7절·AC-49 / WS-R20·WS-R22 | 역할마다 다른 `issuer`·공개 키로 ticket을 켬. `/relay/server`에 Server·Viewer ticket을 각각 전송하고 Viewer 역할에도 Server ticket 전송 | 자기 역할 ticket만 `101`, `ticket_accepted.role`이 요청 역할과 일치. 다른 역할 ticket은 HTTP 401과 `WWW-Authenticate: VncRelayTicket`, `reason=ticket_invalid` |
 | WS-046 | FR-05·7절·AC-49 / WS-R23 | 재로드·관리 API 편집으로 `enabled`를 켜고 끔. `issuer`·`relay_host`·`max_lifetime_secs`와 공개 키 파일 내용을 교체. 이미 `101`을 보낸 연결과 사용 기록을 유지 | 새 업그레이드 요청부터 교체 값으로 판정. 이미 `101`을 보낸 연결의 중계 ID 대조와 `sx` 타이머는 이전 값 유지. 사용 기록은 설정을 끄고 켜거나 공개 키를 교체해도 유지되며, 확인을 통과하는 같은 ticket의 재사용은 401 `ticket_reused`. ticket을 끈 뒤 ticket 없는 유효 요청은 `101` |
+| WS-047 | FR-05·7절·AC-66 / WS-R24 | 소켓 상대가 신뢰 프록시인 연결, 신뢰 프록시가 아니고 차단 목록과 역할 `allow`에 모두 있는 주소(203.0.113.9)의 직접 연결, 신뢰 프록시가 전달한 클라이언트 주소가 차단 목록과 역할 `allow`에 모두 있는 업그레이드, 차단되지 않은 전달 주소(198.51.100.7)의 업그레이드. ticket을 켠 역할에서 유효한 ticket으로 차단 주소의 업그레이드를 시도한 뒤 차단을 풀고 같은 ticket으로 다시 시도. Origin·서브프로토콜·ticket 검사에서 먼저 걸리는 요청도 차단 주소로 전송 | 신뢰 프록시 소켓은 accept의 차단 검사를 건너뜀. 직접 연결한 차단 주소는 TLS·HTTP 처리 전에 닫히고 `connection_rejected(stage=accept, reason=ip_denied)`. 전달 주소가 차단되면 HTTP 403 `ip_denied`와 `connection_rejected(stage=upgrade, reason=ip_denied)`에 `forwarded_ip` 기록. 차단 검사가 역할별 `allow` 검사보다 앞서 허용 목록에 있어도 거절. 차단되지 않은 전달 주소는 통과. ticket은 소비되지 않아 차단을 푼 뒤 같은 ticket으로 `101`. Origin 403 → 서브프로토콜 400 → ticket 401 → IP 재검사 403 순서는 유지됨 |
+| WS-048 | FR-03·FR-05·7절·AC-66 / WS-R24 | WS·WSS Viewer·Server의 대기 연결(직접 연결과 신뢰 프록시를 거친 연결)과 활성 세션(차단 주소가 WS Viewer인 경우, WSS Server인 경우, 반대쪽이 TCP인 경우)을 둠. 다른 주소의 연결도 둠. 그 주소를 차단 목록에 더해 교체(재로드·편집). 별도로 교체 전에 수락돼 초기 교환 중이던 WS·WSS 연결이 교체 뒤 초기 요청을 마침 | 대기 연결은 close 4014 `ip_denied`로 닫히고 `waiting_removed.reason=ip_denied`. 활성 세션은 세션 전체가 끊겨 WS·WSS 쪽은 close 4014 `ip_denied`, TCP 쪽은 소켓 닫힘, `session_closed.close_cause=ip_denied`. 신뢰 프록시를 거친 연결은 전달 주소로 판정. 다른 주소의 연결은 유지. 교체 전에 수락돼 초기 교환 중이던 연결은 등록 직전에 close 4014와 `connection_rejected(stage=register, reason=ip_denied)`, 대기 등록 없음 |
 
 ## 8. 미결정 사항
 

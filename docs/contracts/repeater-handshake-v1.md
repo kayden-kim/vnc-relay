@@ -18,7 +18,7 @@ UltraVNC Viewer·Server와 외부 WebSocket 클라이언트가 VNC Relay에 접�
 | 호환성 범위 | UltraVNC Server·Viewer 1.8.3.0, UltraVNC Repeater(Windows) 1.6.0.0, noVNC 1.7.0이다([호환성 검증 기록](repeater-compat-record.md) 2절). Windows VNC Relay의 실제 클라이언트 조합과 비교 캡처는 [기록 6절](repeater-compat-record.md#6-모드전송-조합-검증)·[7절](repeater-compat-record.md#7-계약-64-비교-캡처)을 따른다. Ubuntu의 자동 시험 결과는 5절의 방법으로 확인한다. 자동 시험을 실제 UltraVNC 시나리오 RLY-006·010·011의 Ubuntu 지원 근거로 쓰는 것은 제안이다. 실제 UltraVNC와 Ubuntu VNC Relay의 조합·비교 캡처는 미실행이다. 대상 버전 Repeater와 일부러 다르게 처리하는 입력은 [3.1절](#31-대상-버전-repeater와-다르게-처리하는-입력)에 있다. |
 | 관련 테스트 | [RLY-001~005, RLY-010~015, RLY-022](../specs/relay.md#7-수용-테스트), [WS-003~006, WS-018, WS-025](../specs/websocket.md#7-수용-테스트). 계약 테스트는 5절을 따른다. |
 
-관련 계약: [WebSocket 중계](websocket-relay-v2.md)(WS·WSS 쪽 전송 규칙과 종료 코드), [운영 정보](ops-info-v2.md)(로그에서 중계 ID 노출 방식과 오류 코드의 로그 이름), [설정](config-v4.md)(`handshake_secs`·`mode1`·`mode2`·`allow_targets` 키). 관련 결정: [ADR-0002 출발지 IP 허용 목록](../decisions/ADR-0002-source-ip-allowlist.md).
+관련 계약: [WebSocket 중계](websocket-relay-v2.md)(WS·WSS 쪽 전송 규칙과 종료 코드), [운영 정보](ops-info-v2.md)(로그에서 중계 ID 노출 방식과 오류 코드의 로그 이름), [설정](config-v4.md)(`handshake_secs`·`mode1`·`mode2`·`allow_targets` 키). 관련 결정: [ADR-0002 출발지 IP 허용 목록](../decisions/ADR-0002-source-ip-allowlist.md), [ADR-0013 출발지 IP 차단 목록](../decisions/ADR-0013-relay-source-deny-list.md).
 
 ## 1. 형식과 의미
 
@@ -78,7 +78,7 @@ WS·WSS에서 접속 ticket을 켠 역할은 위 검사를 모두 통과한 뒤 
 | 후속 바이트 보존 | 초기 요청 뒤에 이미 받은 데이터는 중계 스트림의 첫 바이트로 한 번만 전달한다. 이 데이터도 버퍼 상한 B에 포함한다. | RLY-R03, [RLY-003](../specs/relay.md#7-수용-테스트), [WS-018](../specs/websocket.md#7-수용-테스트) |
 | 크기와 시간 | 초기 요청은 250바이트 고정이다. 초기 교환은 제한 시간 H를 지킨다. 설정 키는 `handshake_secs`다([설정 계약](config-v4.md)). | [운영 스펙 2절](../specs/operations.md#2-상태와-검증-매개변수), [RLY-004](../specs/relay.md#7-수용-테스트), [RLY-005](../specs/relay.md#7-수용-테스트) |
 | 모드 비활성 | 설정으로 끈 모드의 요청은 대기 등록과 대상 연결 전에 거절한다. | RLY-R17, [RLY-022](../specs/relay.md#7-수용-테스트) |
-| 인증 필드 없음 | 초기 교환에 인증 필드를 추가하지 않는다. 접근은 진입점별 출발지 IP 허용 목록으로 통제한다. | [ADR-0002](../decisions/ADR-0002-source-ip-allowlist.md) |
+| 인증 필드 없음 | 초기 교환에 인증 필드를 추가하지 않는다. 접근은 진입점별 출발지 IP 허용 목록과 중계 전체의 출발지 IP 차단 목록으로 통제한다. 차단은 초기 교환 뒤 등록 단계에서 다시 검사한다. | [ADR-0002](../decisions/ADR-0002-source-ip-allowlist.md), [ADR-0013](../decisions/ADR-0013-relay-source-deny-list.md) |
 | 대상 선택 단계 없음 | 별도의 대상 선택 메시지나 URL API를 추가하지 않는다. | [relay.md 3.1절](../specs/relay.md#31-초기-교환), [websocket.md 1절](../specs/websocket.md#1-범위와-적용-상태) |
 | 중계 ID 노출 제한 | 초기 교환 바이트와 중계 ID 원문을 로그에 그대로 남기지 않는다. 노출 방식은 [운영 정보 계약](ops-info-v2.md)이 정한다. | [websocket.md 5절](../specs/websocket.md#5-항상-지켜야-할-규칙과-비보장-범위) |
 | 독립 구현 | 이 계약의 형식은 공개 문서와 허가된 관찰로만 확정했다. UltraVNC·websockify·noVNC 소스 코드를 읽거나 복사·번역하지 않는다. | [PRD 9절](../requirements/PRD.md#9-호환성-조사와-독립-구현-원칙), [relay.md 6절](../specs/relay.md#6-검증-전제) |

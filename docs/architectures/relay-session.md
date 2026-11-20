@@ -12,7 +12,7 @@
 | 코드 지도 | [코드 지도](code-map.md#2-코드-위치와-구성요소) |
 | 관련 스펙 | [중계](../specs/relay.md): RLY-003·006~021·023·025~027. [운영](../specs/operations.md): OPS-005·007~009·023·039·042~043. [관리](../specs/management.md#2-조회-대상과-상태): MGT-005 일부 |
 | 관련 계약 | [Repeater 초기 교환](../contracts/repeater-handshake-v1.md), [설정 1.2·1.5절](../contracts/config-v4.md#12-키-표), [운영 정보 1.5~1.9절](../contracts/ops-info-v2.md#15-사건-목록), [관리 API 1.6~1.10절](../contracts/management-api-v1.md#16-서버-요약-get-apiv1summary), [WebSocket 1.4~1.6절](../contracts/websocket-relay-v2.md#14-데이터-메시지와-제어-프레임) |
-| 관련 ADR | [ADR-0003 단일 인스턴스·메모리 상태](../decisions/ADR-0003-single-instance-memory-state.md), [ADR-0004 tokio·rustls](../decisions/ADR-0004-tokio-rustls.md) |
+| 관련 ADR | [ADR-0003 단일 인스턴스·메모리 상태](../decisions/ADR-0003-single-instance-memory-state.md), [ADR-0004 tokio·rustls](../decisions/ADR-0004-tokio-rustls.md), [ADR-0013 출발지 IP 차단 목록](../decisions/ADR-0013-relay-source-deny-list.md). 등록 단계는 실행 값 잠금과 상태 잠금을 함께 잡고 차단을 검사한다. `RelayRuntime`의 `RelayDenyControl` 구현은 발행 뒤 대기 항목을 `ip_denied`로 제거하고 활성 세션에 관리자 종료와 같은 경로(`SessionCommand`, `CommandedClose::IpDenied`)로 종료를 보낸다. 활성 등록 직후 `close_if_denied`가 다시 확인한다. |
 | 관련 문서 | [접속 ticket 모듈 설계](relay-access-ticket.md) |
 
 업무 용어는 [용어집](../../GLOSSARY.md#중계-방식과-세션)을 따른다. [초기 교환 설계](initial-exchange.md)의 출력 인터페이스를 재사용한다.

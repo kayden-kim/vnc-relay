@@ -454,7 +454,11 @@ async fn listen_until_shutdown(
     watcher.attach_ip_info(Arc::clone(&ip_info));
     // Reading and checking a file of up to 256 MiB blocks this thread.
     tokio::task::block_in_place(|| ip_info.load_startup());
-    let sources_service = Arc::new(SourcesService::new(sources, ip_info));
+    let sources_service = Arc::new(SourcesService::new(
+        sources,
+        ip_info,
+        Arc::clone(&cell) as Arc<dyn vnc_relay_app::reload::ports::RuntimeSettingsSource>,
+    ));
     let watch_task = tokio::spawn(watcher.run(stopped.clone()));
     let lifecycle = Arc::new(LifecycleService::new());
     let (listener_failures, mut failed_listener) = watch::channel(None);
@@ -477,6 +481,15 @@ async fn listen_until_shutdown(
         },
         Arc::clone(&cell) as Arc<dyn vnc_relay_app::reload::ports::RuntimeSettingsSource>,
     ));
+    // A published deny list change closes the open relay connections it
+    // denies (config-v4 §1.8). No relay connection exists before this point.
+    reload
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .attach_deny_control(
+            Arc::clone(&runtime) as Arc<dyn vnc_relay_app::ports::RelayDenyControl>,
+            Arc::clone(&clock),
+        );
     // The management API always reads metrics; the status listener serves
     // them only when `metrics.enabled` is on (metrics-v1 §1.1).
     let metrics_service = Arc::new(MetricsService::new(

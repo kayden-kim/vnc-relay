@@ -1201,7 +1201,7 @@ fn writes_the_log_to_the_configured_file_from_start_to_stop() {
     );
     let lines: Vec<&str> = log.lines().collect();
     assert_eq!(field(lines[0], "level"), Some("info"));
-    assert_eq!(field(lines[0], "log_contract"), Some("ops-info/2.2.0"));
+    assert_eq!(field(lines[0], "log_contract"), Some("ops-info/2.3.0"));
     assert_eq!(field(lines[1], "level"), Some("warn"));
     assert_eq!(field(lines[1], "listener"), Some("tcp_viewer"));
     assert_eq!(field(lines[1], "item"), Some("0.0.0.0/0"));
@@ -1348,12 +1348,18 @@ fn is(line: &str, event: &str, listener: &str, peer_ip: &str) -> bool {
         && field(line, "peer_ip") == Some(peer_ip)
 }
 
-/// Waits until the log file has a line that `wanted` accepts and returns it.
+/// Waits until the log file has a complete line that `wanted` accepts and
+/// returns it without its newline. A line still being written is skipped.
 fn wait_for_line(log: &Path, wanted: impl Fn(&str) -> bool) -> String {
     let deadline = Instant::now() + EXIT_LIMIT;
     loop {
         let text = std::fs::read_to_string(log).unwrap_or_default();
-        if let Some(line) = text.lines().find(|line| wanted(line)) {
+        if let Some(line) = text
+            .split_inclusive('\n')
+            .filter_map(|line| line.strip_suffix('\n'))
+            .map(|line| line.strip_suffix('\r').unwrap_or(line))
+            .find(|line| wanted(line))
+        {
             return line.to_owned();
         }
         assert!(
@@ -1594,7 +1600,7 @@ fn server_only_websocket_roles_open_each_shared_listener() {
         .lines()
         .find(|line| field(line, "event") == Some("server_starting"))
         .expect("server_starting");
-    assert_eq!(field(starting, "log_contract"), Some("ops-info/2.2.0"));
+    assert_eq!(field(starting, "log_contract"), Some("ops-info/2.3.0"));
     let warning = wait_for_line(&log, |line| {
         field(line, "event") == Some("plaintext_ws_enabled")
     });

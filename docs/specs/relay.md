@@ -5,11 +5,11 @@ Viewer와 Server가 VNC Relay에 접속했을 때 관찰하는 연결 수명, �
 | 항목 | 값 |
 | --- | --- |
 | 상태 | Active |
-| 관련 요구사항 | [PRD](../requirements/PRD.md) FR-01·FR-02·FR-03·FR-04·7절 보안, AC-01~04·AC-06~08·AC-50 |
+| 관련 요구사항 | [PRD](../requirements/PRD.md) FR-01·FR-02·FR-03·FR-04·7절 보안, AC-01~04·AC-06~08·AC-50·AC-66 |
 | 용어 | [VNC Relay 용어집](../../GLOSSARY.md) |
 | 관련 스펙 | [WS·WSS](websocket.md), [관리 기능](management.md), [설정·운영](operations.md) |
 | 관련 계약 | [Repeater 초기 교환 v1](../contracts/repeater-handshake-v1.md). 초기 요청 형식, Mode I 대상 문법, 중계 ID 비교, 오류 표시의 기준이다. |
-| 관련 아키텍처 문서·ADR | [코드 지도](../architectures/code-map.md), [TCP 진입점 모듈 설계](../architectures/tcp-entry-point.md), [초기 교환 모듈 설계](../architectures/initial-exchange.md), [중계 세션 수명 모듈 설계](../architectures/relay-session.md), [연결 상한과 시간 제한 모듈 설계](../architectures/connection-limits.md), [ADR-0002 출발지 IP 허용 목록](../decisions/ADR-0002-source-ip-allowlist.md), [ADR-0003 단일 인스턴스·메모리 상태](../decisions/ADR-0003-single-instance-memory-state.md) |
+| 관련 아키텍처 문서·ADR | [코드 지도](../architectures/code-map.md), [TCP 진입점 모듈 설계](../architectures/tcp-entry-point.md), [초기 교환 모듈 설계](../architectures/initial-exchange.md), [중계 세션 수명 모듈 설계](../architectures/relay-session.md), [연결 상한과 시간 제한 모듈 설계](../architectures/connection-limits.md), [ADR-0002 출발지 IP 허용 목록](../decisions/ADR-0002-source-ip-allowlist.md), [ADR-0003 단일 인스턴스·메모리 상태](../decisions/ADR-0003-single-instance-memory-state.md), [ADR-0013 허용 목록과 공통 차단 목록](../decisions/ADR-0013-relay-source-deny-list.md) |
 
 ## 1. 범위와 적용 상태
 
@@ -25,10 +25,10 @@ Viewer와 Server가 VNC Relay에 접속했을 때 관찰하는 연결 수명, �
 
 | 상태 | 진입 조건 | 외부에서 관찰하는 동작 | 종료 조건 |
 | --- | --- | --- | --- |
-| 초기 교환 | 허용 출발지의 접속 수락 | 제한된 크기·시간 안에서 호환 요청 수신 | 유효 요청, 거절, 시간 초과, 단절 |
+| 초기 교환 | 차단 목록에 없고 허용된 출발지의 접속 수락 | 제한된 크기·시간 안에서 호환 요청 수신 | 유효 요청, 거절, 시간 초과, 단절 |
 | 대상 연결 중 | 유효한 Mode I 요청 | 허용 정책을 만족하는 대상에 연결 시도 | 연결 성공, 실패, 취소 |
-| 상대 대기 | 유효한 Mode II 요청 등록 | 역할·중계 ID·대기 시간이 관리 조회에 나타남 | 매칭, 대기 만료, ticket의 `sx` 도달, 단절, 끊긴 연결 감지, 프로세스 종료 |
-| 중계 중 | Mode I 대상 연결 성공 또는 Mode II 매칭 성공 | 양방향 바이트 전달 | EOF, 오류, 끊긴 연결 감지, 관리자 종료, ticket의 `sx` 도달, 프로세스 종료 |
+| 상대 대기 | 유효한 Mode II 요청 등록 | 역할·중계 ID·대기 시간이 관리 조회에 나타남 | 매칭, 대기 만료, ticket의 `sx` 도달, 차단 목록 교체로 차단, 단절, 끊긴 연결 감지, 프로세스 종료 |
+| 중계 중 | Mode I 대상 연결 성공 또는 Mode II 매칭 성공 | 양방향 바이트 전달 | EOF, 오류, 끊긴 연결 감지, 관리자 종료, ticket의 `sx` 도달, 차단 목록 교체로 차단, 프로세스 종료 |
 | 종료 중 | 종료 원인 발생 | 신규 매칭 금지, 허용된 잔여 전송 처리 | 해당 연결·세션 자원 회수 |
 | 종료됨 | 정리 완료 | 활성·대기 목록에서 제거 | 이전 세션으로 복귀하지 않음 |
 
@@ -60,6 +60,7 @@ Viewer와 Server가 VNC Relay에 접속했을 때 관찰하는 연결 수명, �
 | RLY-R20 | FR-01·FR-03·FR-05 | WS·WSS Server에도 TCP Server와 같은 초기 교환·Mode II 규칙을 적용해야 한다. Server 역할은 `ID:` 요청만 받고 Mode I을 거절해야 한다. 같은 ID·같은 역할의 중복은 전송 경로와 관계없이 `duplicate_id`로 거절해야 한다. |
 | RLY-R21 | FR-03·7절·AC-50 | ticket으로 업그레이드한 연결은 초기 요청의 중계 ID가 ticket의 `rid`와 바이트 단위로 같을 때만 대기 등록·매칭해야 한다. Mode I 요청과 다른 중계 ID는 close 4012로 닫아야 한다. 검사는 기존 초기 요청 검사(Server의 `ID:` 접두어 → 모드 판정 → 꺼진 모드 `mode_disabled`(1008) → 값 문법 `handshake_invalid`(4008))를 모두 통과한 뒤, 대기 등록·대상 연결 전에 해야 한다. Mode I이 꺼져 있으면 기존 1008을 먼저 적용해야 한다. |
 | RLY-R22 | FR-03·7절·AC-50 | `sx`를 가진 ticket으로 연 연결은 `sx`에 끝내야 한다. 활성 세션은 양쪽 ticket의 `sx` 가운데 이른 시각에 끝내야 하며, 종료 원인은 `session_expired`여야 한다([WebSocket 계약 1.9.5절](../contracts/websocket-relay-v2.md#195-101-뒤의-중계-id-대조와-세션-만료)). |
+| RLY-R23 | FR-01·7절·AC-66 | 출발지 IP 차단 목록(`relay.deny.sources`)은 TCP Viewer·TCP Server 진입점에도 허용 검사보다 먼저 적용해야 한다. 소켓 상대 주소가 차단되면 허용 목록에 있어도 수락 직후 데이터를 읽기 전에 거절해야 한다. 초기 교환을 마친 연결은 대기 등록·매칭·Mode I 대상 연결 전에 현재 차단 목록으로 다시 검사해야 한다. 차단 목록이 바뀌면 교체 직후 차단된 주소의 TCP 대기 연결과 활성 세션을 끊어야 한다. 활성 세션은 Viewer 또는 Mode II Server의 클라이언트 주소로 판정하고 세션 전체를 끊어야 하며, Mode I 대상 주소는 검사해서는 안 된다. 종료 원인은 `ip_denied`여야 한다. |
 
 ## 3. 정상 흐름
 
@@ -74,7 +75,11 @@ ticket으로 업그레이드한 연결은 초기 요청 검사를 모두 통과�
 
 ticket을 켠 Viewer의 Mode I 요청은 `mode1.enabled = true`이면 문법 검사 뒤 close 4012로 거절한다. `mode1.enabled = false`이면 `mode_disabled`(1008)를 먼저 적용한다. 두 경우 모두 대상 연결을 시도하지 않는다.
 
-IP 목록 재로드는 [운영 스펙](operations.md#33-파일-변경-자동-감지와-부분-재로드)에 따른다. 허용 검사를 통과한 TCP 연결과 업그레이드를 완료한 WS·WSS 연결은 이후 목록에서 제거돼도 초기 교환·대기·활성 수명을 유지한다. 기존 대기 연결은 원래의 허용 판정으로 매칭될 수 있다. 새 TCP 연결의 허용 검사와 WS·WSS 업그레이드 검사에는 당시 유효한 목록을 적용한다.
+출발지 IP 허용 목록 재로드는 [운영 스펙](operations.md#33-파일-변경-자동-감지와-부분-재로드)에 따른다. 허용 검사를 통과한 TCP 연결과 업그레이드를 완료한 WS·WSS 연결은 이후 허용 목록에서 제거돼도 초기 교환·대기·활성 수명을 유지한다. 기존 대기 연결은 원래의 허용 판정으로 매칭될 수 있다. 새 TCP 연결의 허용 검사와 WS·WSS 업그레이드 검사에는 당시 유효한 목록을 적용한다. 차단 목록은 이 문단의 예외이며 아래를 따른다.
+
+차단 목록은 TCP 수락 직후 허용 검사보다 먼저 소켓 상대 주소를 검사한다. 차단되면 허용 목록에 있어도 초기 교환에 진입하지 않는다. `connection_rejected`(stage `accept`, reason `ip_denied`)를 기록하고 소켓을 바로 닫는다. 초기 교환을 마친 연결은 대기 등록·매칭·Mode I 대상 연결 전에 현재 차단 목록으로 다시 검사한다. 차단이면 stage `register`, reason `ip_denied`로 기록하고 연결을 닫는다. 이 검사는 목록 교체 전에 수락돼 초기 교환 중이던 연결을 막는다.
+
+차단 목록 값이 바뀌면 교체 직후 열린 TCP 연결을 검사한다. 차단된 주소의 대기 연결은 대기에서 빼고 닫는다. 활성 세션은 Viewer 또는 Mode II Server의 소켓 상대 주소가 차단되면 세션 전체를 끊고 반대쪽 연결도 닫는다. Mode I 대상 주소는 클라이언트가 아니므로 검사하지 않는다. 종료 원인은 `ip_denied`이고 관리자 계정은 없다. 닫는 방식은 관리자 종료와 같다. 이미 정리 중인 세션은 기존 종료 원인을 유지한다. 판정 주소·WS·WSS 순서·사건 값은 [운영 스펙 3.10절](operations.md#310-출발지-ip-차단-목록)과 [WS·WSS 스펙](websocket.md#2-상태와-리스너-책임)이 정한다.
 
 ### 3.2 Mode I
 
@@ -120,6 +125,9 @@ IP 목록 재로드는 [운영 스펙](operations.md#33-파일-변경-자동-감
 | 대기 단절·만료 | 해당 대기 제거 | 후속 상대가 이전 연결과 매칭되지 않음 | 양 끝점이 새로 접속 |
 | 중계 I/O 오류 | 해당 세션 종료 | 자원 회수, 종료 원인 기록 | 새 세션으로 접속 |
 | 끊긴 연결 감지 | 해당 연결 종료. 활성 세션이면 반대쪽 연결도 종료, 종료 원인은 끊긴 연결 감지 | 대기 등록 해제 또는 세션 정리, 자원 회수, 다른 세션 영향 없음 | 같은 ID로 새 Server·Viewer 접속 |
+| 차단된 주소의 TCP 접속 | 수락 직후 소켓을 바로 닫음. `connection_rejected`(stage `accept`, reason `ip_denied`). 허용 목록에 있어도 같음 | 초기 교환·대기 등록·대상 연결 없음, 기존 세션 유지 | 항목을 지운 뒤 새 접속 |
+| 목록 교체 전에 수락돼 초기 교환 중이던 연결이 차단됨 | 등록 직전 검사에서 거절. `connection_rejected`(stage `register`, reason `ip_denied`). TCP는 닫음 | 대기 등록·대상 연결 없음 | 항목을 지운 뒤 새 접속 |
+| 차단 목록 교체로 TCP 대기·활성 연결이 차단됨 | 해당 연결 종료. 활성 세션이면 반대쪽 연결도 종료. 종료 원인은 `ip_denied` | 대기 등록 해제(`waiting_removed.reason = ip_denied`) 또는 세션 정리, 자원 회수. 차단되지 않은 연결·세션 영향 없음 | 끊긴 연결은 되살아나지 않음. 같은 ID로 새 접속은 항목을 지운 뒤 |
 
 [Repeater 초기 교환 계약 2절](../contracts/repeater-handshake-v1.md#2-오류)에 따라 오류 응답 바이트를 보내지 않는다. TCP는 연결을 닫아(FIN) 알리고, WS·WSS는 close 코드로 알린다.
 
@@ -176,6 +184,8 @@ IP 목록 재로드는 [운영 스펙](operations.md#33-파일-변경-자동-감
 | RLY-030 | FR-03·7절·AC-50 / RLY-R21 | Viewer ticket을 켠 역할에서 `101` 뒤 문법에 맞는 Mode I 초기 요청 전송. `mode1.enabled = true`·`false`를 각각 적용 | `true`이면 문법 검사 뒤 close 4012 `ticket_relay_mismatch`, `connection_rejected(stage=initial_exchange, reason=ticket_relay_mismatch)`. `false`이면 기존 close 1008 `mode_disabled`가 먼저 적용됨. 두 경우 모두 대상 연결 시도·대기 등록 없음 |
 | RLY-031 | FR-03·7절·AC-50 / RLY-R22 | `sx`가 있는 ticket 연결이 초기 교환 중·대기 중·활성 세션 중 `sx`에 도달. 양쪽 ticket의 `sx`가 다른 세션과 한쪽만 `sx`가 있는 세션, `sx` 없는 ticket 연결도 둠 | 초기 교환 중: close 4013과 `connection_aborted(stage=initial_exchange, reason=session_expired)`. 대기 중: close 4013과 `waiting_removed(reason=session_expired)`. 활성 세션: WS·WSS 쪽 close 4013, TCP 쪽 소켓 닫힘, `session_closed(close_cause=session_expired)`와 최근 종료 목록 `session_expired`. 양쪽에 `sx`가 있으면 이른 시각에 끝나고, 한쪽만 있으면 그 시각에 끝남. `sx` 없는 ticket은 종료 시각 없음 |
 | RLY-032 | FR-03·7절·AC-50 / RLY-R21 | Server ticket을 켠 `/relay/server`에서 `101` 뒤 `ID:` 초기 요청의 중계 ID를 `rid`와 같게·다르게 전송. 그 요청 ID를 기다리던 Viewer도 둠 | 같으면 대기 등록·매칭. 다르면 close 4012 `ticket_relay_mismatch`, `connection_rejected(stage=initial_exchange, reason=ticket_relay_mismatch)`에 `ticket_jti`·`mode`·`relay_id_ref` 기록. 대기 등록 없음, 기다리던 Viewer 연결 유지 |
+| RLY-033 | FR-01·7절·AC-66 / RLY-R23 | (a) TCP Viewer·TCP Server 진입점에 차단 목록과 허용 목록에 모두 있는 주소(203.0.113.9), 차단 목록에만 있는 주소, 허용 목록에만 있는 주소(198.51.100.7)로 접속. 차단 항목은 단일 IP·CIDR·범위로 각각 시험. (b) 초기 교환 중인 연결이 있는 상태에서 그 주소를 차단 목록에 더해 교체한 뒤 초기 요청을 마침. (c) 관리·상태 리스너에 차단 주소로 접속 | (a) 차단 주소는 허용 목록에 있어도 수락 직후 데이터를 읽기 전에 소켓이 닫히고 `connection_rejected(stage=accept, reason=ip_denied)`. 허용 목록에 없는 차단 주소의 사유도 `ip_denied`. 허용 목록에만 있는 주소는 기존대로 초기 교환. (b) 등록 직전 재검사에서 `connection_rejected(stage=register, reason=ip_denied)`, TCP 닫힘, 대기 등록·대상 연결 없음. (c) 관리·상태 리스너 접속은 차단되지 않음 |
+| RLY-034 | FR-03·FR-04·7절·AC-66 / RLY-R23 | 같은 주소(203.0.113.9)의 TCP Server 대기 연결, TCP Viewer·TCP Server로 이룬 Mode II 활성 세션(그 주소가 Viewer인 경우와 Server인 경우), Mode I 활성 세션(Viewer는 다른 주소이고 대상 주소만 그 주소인 경우)을 둠. 다른 주소의 대기 연결·활성 세션과 이미 정리 중인 세션도 둠. 그 주소를 차단 목록에 더하는 재로드·편집을 적용. 이어서 같은 목록을 다시 저장하고, 항목을 지우기만 하는 변경도 적용 | 대기 연결은 대기에서 빠지고 닫힘(`waiting_removed.reason=ip_denied`). 같은 ID로 새 접속하면 다른 주소는 대기 등록됨. Mode II 활성 세션은 차단 주소가 어느 쪽이든 세션 전체와 반대쪽 연결까지 끊김(`session_closed.close_cause=ip_denied`, 관리자 계정명 없음, 최근 종료 목록 `ip_denied`). Mode I 대상 주소만 차단 주소인 세션은 유지. 다른 주소의 연결·세션은 유지하고 정리 중인 세션은 기존 종료 원인 유지. 같은 목록 재저장과 항목 삭제는 끊을 연결 없음 |
 
 ## 8. 미결정 사항
 

@@ -324,6 +324,18 @@ impl AllowSource {
             })
     }
 
+    /// Whether the deny list refuses `peer_ip` at accept (OPS-R55). TCP
+    /// checks the socket peer. WS and WSS skip the check for a trusted proxy,
+    /// whose forwarded address is checked at the upgrade.
+    pub(crate) fn denies_in(&self, settings: &Settings, peer_ip: PeerIp) -> bool {
+        let proxy = self.listener.fixed_role().is_none()
+            && settings
+                .relay
+                .websocket(self.listener)
+                .is_some_and(|listener| listener.trusted_proxies.permits(peer_ip));
+        !proxy && settings.relay.deny.denies(peer_ip)
+    }
+
     pub(crate) fn listener(&self) -> Listener {
         self.listener
     }
@@ -571,15 +583,18 @@ async fn accept_connections_with_keepalive<L: crate::listener::Listener, Serve, 
     while held.join_next().await.is_some() {}
 }
 
-/// The source IP check, then a place of L (relay spec §3.1 step 1, RLY-R16).
-/// A refused source neither takes a place of L nor learns that L is full.
+/// The deny check, the source IP check, then a place of L (relay spec §3.1
+/// step 1, RLY-R16, OPS-R55). A refused source neither takes a place of L
+/// nor learns that L is full.
 fn admit(
     policy: &AcceptPolicy,
     peer_ip: PeerIp,
 ) -> Result<(BudgetPermit, AcceptedSettings), RejectReason> {
     let mut admitted = Err(RejectReason::IpNotAllowed);
     policy.allow.with_current(&mut |settings| {
-        if policy.allow.permits_in(settings, peer_ip) {
+        if policy.allow.denies_in(settings, peer_ip) {
+            admitted = Err(RejectReason::IpDenied);
+        } else if policy.allow.permits_in(settings, peer_ip) {
             let limit = settings.limits.relay_connections;
             admitted = policy
                 .relay_budget

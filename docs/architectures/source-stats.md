@@ -11,7 +11,7 @@
 | 코드 지도 | [코드 지도 2.1절](code-map.md#21-domain)·[2.2절](code-map.md#22-app)·[2.3절](code-map.md#23-adapters와-실행파일-조립)의 접속 출처 행 |
 | 관련 스펙 | [운영 스펙 3.9절](../specs/operations.md#39-접속-출처-통계) OPS-095~099, [관리 스펙 2.6절](../specs/management.md#26-접속-출처) MGT-062~064, [화면 스펙 SCR-008](../specs/dashboard.md#scr-008-접속-출처) DASH-082~088 |
 | 관련 계약 | [관리 API v1 1.17절](../contracts/management-api-v1.md#117-접속-출처-get-apiv1sources), [설정 v4](../contracts/config-v4.md)의 `[ip_info]`와 [1.12절](../contracts/config-v4.md#112-ip-정보-db-파일-형식), [운영 정보 v2](../contracts/ops-info-v2.md)의 `ip_db_loaded`·`ip_db_unavailable` |
-| 관련 ADR | [ADR-0012](../decisions/ADR-0012-local-ip-info-databases.md) |
+| 관련 ADR | [ADR-0012](../decisions/ADR-0012-local-ip-info-databases.md), [ADR-0013](../decisions/ADR-0013-relay-source-deny-list.md). `SourcesService`는 실행 값을 읽어 `deny_editable`(`management.config_edit`)과 주소마다 덮는 차단 항목 원문 `deny_entries`를 채운다. |
 
 ## 1. 책임과 경계
 

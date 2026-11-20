@@ -283,7 +283,7 @@ fn counted_events() -> Vec<Event> {
             peer_ip: peer(),
             forwarded_ip: None,
             reason: RejectReason::WaitingFull { limit: 3 },
-            relay_id_ref: relay_id(),
+            relay_id_ref: Some(relay_id()),
         },
         Event::ConnectionAborted {
             conn_id: ConnId::next(),

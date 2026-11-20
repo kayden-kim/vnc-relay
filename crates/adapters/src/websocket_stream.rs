@@ -942,6 +942,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin + Send> RelayStream for WsRelayStream<S> 
                 RelayCloseAction::ServerShutdown => Some((1001, "server_shutdown")),
                 RelayCloseAction::TicketRelayMismatch => Some((4012, "ticket_relay_mismatch")),
                 RelayCloseAction::SessionExpired => Some((4013, "session_expired")),
+                RelayCloseAction::IpDenied => Some((4014, "ip_denied")),
             };
 
             match close_spec {

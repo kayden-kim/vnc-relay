@@ -157,7 +157,7 @@ fn writes_one_json_object_per_line_with_common_fields_first() {
             ("info", "server_stopped"),
         ]
     );
-    assert_eq!(text(&lines[0], "log_contract"), "ops-info/2.2.0");
+    assert_eq!(text(&lines[0], "log_contract"), "ops-info/2.3.0");
     assert_eq!(text(&lines[1], "listener"), "tcp_viewer");
     assert_eq!(text(&lines[1], "item"), "0.0.0.0/0");
     assert_eq!(text(&lines[1], "phase"), "startup");
@@ -1683,6 +1683,7 @@ fn writes_waiting_events_without_raw_ids_or_unrelated_optional_fields() {
             "warn",
             Some("io_error"),
         ),
+        (WaitingRemovalReason::IpDenied, "ip_denied", "info", None),
     ] {
         let event = Event::WaitingRemoved {
             conn_id,
@@ -1705,6 +1706,7 @@ fn writes_waiting_events_without_raw_ids_or_unrelated_optional_fields() {
     for reason in [
         RejectReason::DuplicateId,
         RejectReason::WaitingFull { limit: 8 },
+        RejectReason::IpDenied,
     ] {
         let event = Event::RegistrationRejected {
             conn_id,
@@ -1712,7 +1714,7 @@ fn writes_waiting_events_without_raw_ids_or_unrelated_optional_fields() {
             peer_ip: relay_peer(),
             forwarded_ip: None,
             reason,
-            relay_id_ref: reference.clone(),
+            relay_id_ref: Some(reference.clone()),
         };
         let mut expected = json!({
             "event": "connection_rejected", "level": "warn",
@@ -1722,12 +1724,29 @@ fn writes_waiting_events_without_raw_ids_or_unrelated_optional_fields() {
         });
         if reason == RejectReason::DuplicateId {
             expected["relay_id_ref"] = json!(reference.as_str());
-        } else {
+        } else if reason != RejectReason::IpDenied {
             expected["limit"] = json!(8);
         }
         assert_relay_fields(&event, expected);
         assert!(!format_line(&event, UNIX_EPOCH).contains(std::str::from_utf8(raw).unwrap()));
     }
+    // A Mode I register-stage refusal has no relay ID and no reference.
+    assert_relay_fields(
+        &Event::RegistrationRejected {
+            conn_id,
+            entry_point: EntryPoint::TcpViewer,
+            peer_ip: relay_peer(),
+            forwarded_ip: None,
+            reason: RejectReason::IpDenied,
+            relay_id_ref: None,
+        },
+        json!({
+            "event": "connection_rejected", "level": "warn",
+            "conn_id": conn_id.to_string(), "listener": "tcp_viewer",
+            "role": "viewer", "mode": "mode1", "peer_ip": "198.51.100.21",
+            "stage": "register", "reason": "ip_denied"
+        }),
+    );
     assert_relay_fields(
         &Event::RelayAborted {
             conn_id,
@@ -1847,6 +1866,7 @@ fn writes_session_close_cause_levels_and_canonical_optional_fields() {
             ),
             (CloseCause::ServerShutdown, "server_shutdown", "warn", false),
             (CloseCause::InternalError, "internal_error", "warn", false),
+            (CloseCause::IpDenied, "ip_denied", "info", false),
         ] {
             let side = if mode == Mode::Mode1 {
                 Side::Target
@@ -2183,4 +2203,42 @@ fn writes_ticket_upgrade_rejections_without_unrelated_or_unauthenticated_fields(
             assert_relay_fields(&event, expected);
         }
     }
+}
+
+/// spec: websocket.md:WS-047 partial
+/// spec: relay.md:RLY-033 partial
+#[test]
+fn writes_ip_denied_rejections_at_accept_and_upgrade() {
+    assert_relay_fields(
+        &Event::ConnectionRejected {
+            listener: "tcp_server",
+            conn_id: None,
+            stage: Stage::Accept,
+            reason: RejectReason::IpDenied,
+            peer_ip: relay_peer(),
+        },
+        json!({
+            "level": "warn", "event": "connection_rejected", "listener": "tcp_server",
+            "stage": "accept", "reason": "ip_denied", "peer_ip": relay_peer().to_string()
+        }),
+    );
+    let conn_id = ConnId::next();
+    assert_relay_fields(
+        &Event::UpgradeRejected {
+            conn_id,
+            listener: "ws",
+            role: Some(Role::Viewer),
+            reason: RejectReason::IpDenied,
+            peer_ip: relay_peer(),
+            forwarded_ip: Some(PeerIp::new("198.51.100.7".parse().unwrap())),
+            origin: None,
+            ticket_jti: Some("connection-1".into()),
+        },
+        json!({
+            "level": "warn", "event": "connection_rejected", "conn_id": conn_id.to_string(),
+            "listener": "ws", "role": "viewer", "stage": "upgrade", "reason": "ip_denied",
+            "peer_ip": relay_peer().to_string(), "forwarded_ip": "198.51.100.7",
+            "ticket_jti": "connection-1"
+        }),
+    );
 }

@@ -365,12 +365,18 @@ fn wait_for_count(log: &Path, count: usize, wanted: impl Fn(&str) -> bool) {
     }
 }
 
-/// Waits until the log has a line that `wanted` accepts and returns it.
+/// Waits until the log has a complete line that `wanted` accepts and returns
+/// it without its newline. A line still being written is skipped.
 fn wait_for_line(log: &Path, wanted: impl Fn(&str) -> bool) -> String {
     let deadline = Instant::now() + EXIT_LIMIT;
     loop {
         let text = std::fs::read_to_string(log).unwrap_or_default();
-        if let Some(line) = text.lines().find(|line| wanted(line)) {
+        if let Some(line) = text
+            .split_inclusive('\n')
+            .filter_map(|line| line.strip_suffix('\n'))
+            .map(|line| line.strip_suffix('\r').unwrap_or(line))
+            .find(|line| wanted(line))
+        {
             return line.to_owned();
         }
         assert!(
@@ -3620,11 +3626,11 @@ fn full_ticket_dynamic_reload_rotation_and_management_capabilities() {
             .iter()
             .filter(|item| item["reload"] == "dynamic")
             .count(),
-        43
+        44
     );
     assert_eq!(
         items.iter().filter(|item| item["editable"] == true).count(),
-        37
+        38
     );
     let (mut viewer, mut server) = pair(ports, "7203");
     exchange(&mut viewer, &mut server);

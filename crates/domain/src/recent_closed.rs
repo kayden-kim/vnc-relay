@@ -117,6 +117,11 @@ mod tests {
                     .begin_session_expiry(Duration::from_secs(12))
                     .unwrap();
             }
+            CloseCause::IpDenied => {
+                session
+                    .begin_ip_denied_close(Duration::from_secs(12))
+                    .unwrap();
+            }
             CloseCause::DeadConnection => {
                 session.dead_connection(Side::Viewer).unwrap();
             }

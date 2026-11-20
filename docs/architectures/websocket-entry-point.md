@@ -14,7 +14,7 @@
 | 코드 지도 | [코드 지도 2절](code-map.md#2-코드-위치와-구성요소), [3절](code-map.md#3-진입점) |
 | 관련 스펙 | [WebSocket 스펙 7절](../specs/websocket.md#7-수용-테스트)의 WS-012(일부), WS-013(일부), WS-014, WS-015(WS·WSS), WS-021(일부), WS-022(일부), WS-023(WSS), WS-027(WS·WSS); [운영 스펙 7절](../specs/operations.md#7-수용-테스트)의 OPS-006(일부), OPS-037(WS·WSS, 일부) |
 | 관련 계약 | [WebSocket 중계 v2 1.1절](../contracts/websocket-relay-v2.md#11-업그레이드-요청), [1.2절](../contracts/websocket-relay-v2.md#12-업그레이드-응답과-서브프로토콜), [1.3절](../contracts/websocket-relay-v2.md#13-origin-비교), [1.5절](../contracts/websocket-relay-v2.md#15-close-코드), [2.1절](../contracts/websocket-relay-v2.md#21-http-단계의-거절), [설정 계약 1.4절](../contracts/config-v4.md#14-origin-값-문법과-비교), [운영 정보 계약 1.5·1.6절](../contracts/ops-info-v2.md) |
-| 관련 ADR | [ADR-0001 내장 TLS](../decisions/ADR-0001-built-in-tls.md), [ADR-0002 출발지 IP 허용 목록](../decisions/ADR-0002-source-ip-allowlist.md) |
+| 관련 ADR | [ADR-0001 내장 TLS](../decisions/ADR-0001-built-in-tls.md), [ADR-0002 출발지 IP 허용 목록](../decisions/ADR-0002-source-ip-allowlist.md), [ADR-0013 출발지 IP 차단 목록](../decisions/ADR-0013-relay-source-deny-list.md). 수락 때 `trusted_proxies`가 아닌 소켓 상대 IP를 차단 목록과 비교해 TLS·HTTP 전에 닫는다. 업그레이드 직전에는 ticket 검사 뒤, 역할 허용 검사 앞에서 클라이언트 주소를 비교해 `Refusal::IpDenied`(403, ticket 미소비)로 거절한다. |
 | 관련 문서 | [접속 ticket 모듈 설계](relay-access-ticket.md) |
 
 ## 1. 책임과 경계

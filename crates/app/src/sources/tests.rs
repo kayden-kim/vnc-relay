@@ -17,6 +17,7 @@ use super::{CAPACITY, PENDING_CAPACITY, SourceStats, SourceWindow, SourcesReport
 use crate::events::{AbortReason, Event, RejectReason, RelayIdRef, Stage};
 use crate::ip_info::{IpDbKey, IpDbMetadata, IpDbRead, IpInfoService, IpLookup};
 use crate::ports::{Clock, EventSink, IpDatabase, IpDbLoader};
+use crate::relay::test_support::TestSettings;
 
 /// 2026-09-21T13:46:40Z in milliseconds.
 const START_MS: u64 = 1_790_000_000_000;
@@ -93,6 +94,7 @@ struct Fixture {
     lookup: Arc<IpLookup>,
     stats: Arc<SourceStats>,
     service: SourcesService,
+    settings: Arc<TestSettings>,
 }
 
 fn fixture() -> Fixture {
@@ -110,12 +112,18 @@ fn fixture() -> Fixture {
         Arc::clone(&clock) as Arc<dyn Clock>,
         Arc::new(Discard),
     ));
-    let service = SourcesService::new(Arc::clone(&stats), ip_info);
+    let settings = TestSettings::new();
+    let service = SourcesService::new(
+        Arc::clone(&stats),
+        ip_info,
+        Arc::clone(&settings) as Arc<dyn crate::reload::ports::RuntimeSettingsSource>,
+    );
     Fixture {
         clock,
         lookup,
         stats,
         service,
+        settings,
     }
 }
 
@@ -497,5 +505,85 @@ fn the_query_sorts_cuts_and_names_by_the_current_database() {
             .databases
             .iter()
             .all(|status| status.in_use.is_none())
+    );
+}
+
+fn deny(texts: &[&str]) -> vnc_relay_domain::deny_list::DenyList {
+    vnc_relay_domain::deny_list::DenyList::new(
+        texts
+            .iter()
+            .map(|text| {
+                let item = vnc_relay_domain::allow_list::IpItem::parse(text)
+                    .unwrap_or_else(|error| panic!("{text}: {error:?}"));
+                vnc_relay_domain::deny_list::DenyEntry::new((*text).to_owned(), item)
+            })
+            .collect(),
+    )
+}
+
+fn deny_entries(report: &SourcesReport, address: &str) -> Vec<String> {
+    report
+        .addresses
+        .items
+        .iter()
+        .find(|item| item.ip == ip(address))
+        .map(|item| item.deny_entries.clone())
+        .unwrap_or_else(|| panic!("missing address {address}"))
+}
+
+/// spec: management.md:MGT-065 partial
+#[test]
+fn each_address_lists_the_running_deny_items_that_cover_it() {
+    let fixture = fixture();
+    for address in [
+        "203.0.113.9",
+        "198.51.100.7",
+        "203.0.113.50",
+        "2001:db8::5",
+        "192.168.0.15",
+    ] {
+        fixture.accept(Listener::TcpViewer, address);
+    }
+    for edit in [false, true] {
+        fixture.settings.change(|settings| {
+            settings.management.config_edit = edit;
+            settings.relay.deny = deny(&[
+                "203.0.113.9",
+                "198.51.100.0/24",
+                "2001:DB8::1-2001:db8::ff",
+                "192.168.0.0/16",
+            ]);
+        });
+        let report = fixture.service.report(SourceWindow::Hour);
+        assert_eq!(report.deny_editable, edit);
+        assert_eq!(deny_entries(&report, "203.0.113.9"), ["203.0.113.9"]);
+        assert_eq!(deny_entries(&report, "198.51.100.7"), ["198.51.100.0/24"]);
+        assert_eq!(
+            deny_entries(&report, "2001:db8::5"),
+            ["2001:DB8::1-2001:db8::ff"]
+        );
+        assert!(deny_entries(&report, "203.0.113.50").is_empty());
+        // Local addresses are filled the same way.
+        assert_eq!(deny_entries(&report, "192.168.0.15"), ["192.168.0.0/16"]);
+    }
+    fixture
+        .settings
+        .change(|settings| settings.relay.deny = deny(&["203.0.113.9", "203.0.113.0/24"]));
+    let report = fixture.service.report(SourceWindow::Hour);
+    assert_eq!(
+        deny_entries(&report, "203.0.113.9"),
+        ["203.0.113.9", "203.0.113.0/24"]
+    );
+    assert_eq!(deny_entries(&report, "203.0.113.50"), ["203.0.113.0/24"]);
+    fixture
+        .settings
+        .change(|settings| settings.relay.deny = deny(&[]));
+    let report = fixture.service.report(SourceWindow::Hour);
+    assert!(
+        report
+            .addresses
+            .items
+            .iter()
+            .all(|item| item.deny_entries.is_empty())
     );
 }
