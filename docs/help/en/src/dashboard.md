@@ -1,6 +1,6 @@
 # Dashboard
 
-Use the dashboard to inspect connections, active sessions, and metrics, terminate a session, and edit dynamic settings. Use recent logs to investigate problems. The top navigation order is "Operations overview" · "Metrics" · "Logs" · "Settings".
+Use the dashboard to inspect connections, active sessions, metrics, and connection sources, terminate a session, and edit dynamic settings. Use recent logs to investigate problems. The top navigation order is "Overview" · "Metrics" · "Sources" · "Logs" · "Settings". "Overview" opens the "Operations overview" screen.
 
 ## Sign in
 
@@ -83,6 +83,23 @@ If a query fails, the screen retains previous values, history, and the last succ
 If HTTP 400 or 405 rejects a request, automatic queries stop and the screen shows "The metrics request could not be processed. Use Refresh to query again." Select "Refresh" or change "Trend period"; a successful query restarts automatic refresh. When the management session expires, the screen clears values and history and opens sign-in.
 
 Values and history exist only in memory. After a server restart, cumulative values start from zero and history starts empty. Sign in again. This screen does not provide long-term retention or threshold alerts. For metric meanings and units, use the [metrics contract](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/metrics-v1.md).
+
+## Sources
+
+Select "Sources" in the top navigation to open `/#/sources`. The screen shows the connections that reached the relay listeners, counted by client address, country, and ASN. An ASN (autonomous system number) identifies the organization that operates a network route on the internet. To see countries and ASNs, the operator must configure IP information database files. Follow [Prepare and update IP information databases](operate.md#prepare-and-update-ip-information-databases). Per-address counts are available without databases.
+
+- Choose "Last hour" or "Last 24 hours" in "Period". "Last hour" is the first choice. The header shows the start and end of the counted period and the number of stored events.
+- "Summary" contains seven cards: "Connection attempts", "Rejected", "Aborted", "Sessions started", "Addresses", "Countries", and "ASNs". Connection attempts are connections that relay listeners accepted plus connections rejected at the accept stage. Rejections and aborts are counted at every stage, such as TLS, upgrade, and handshake. Connections to the management and status listeners are not counted.
+- "IP information databases" shows the state of the country database and the ASN database: "In use", "Using previous file", "Load failed", or "Not configured". A database in use also shows its type, build time, and load time. The attribution of the database provider in use appears in this section. Database state is separate from query success. If a database cannot be read, other values still appear.
+- The "By address", "By country", and "By ASN" tables are ordered by connection attempts, most first. The screen does not re-sort them. When fewer items than the total are received, the title shows "Top {shown} of {total}".
+- The client address is the address forwarded by a trusted proxy if there is one, otherwise the socket peer address. The "Sessions" column counts sessions in which that address took part as the Viewer or the Mode II Server.
+- A country or ASN that was not found shows "Unknown". Local addresses (loopback, private, link-local, and shared) carry a "Local" badge and are not looked up.
+
+Addresses without the "Local" badge and all ASNs are ipinfo.io lookup links. Links open in a new tab, and the dashboard screen and management session stay as they are. Selecting a link sends that address or ASN to ipinfo.io. The server and the dashboard do not contact ipinfo.io before you select a link. Checking your operations policy before sending addresses to an external site is recommended.
+
+The screen refreshes automatically at the `dashboard.poll_secs` interval. "Refresh" and a change of "Period" read the chosen period again at once. Until the read completes, the previous values stay on screen. If a query fails, the screen keeps the previous values and the last successful update time and shows "Stale data". Without previous values, it shows the query failure instead of empty tables or zero. If HTTP 400 or 405 rejects a request, automatic queries stop and the screen shows "The sources request could not be processed. Use Refresh to query again." Leaving the screen stops automatic refresh, and coming back starts with "Last hour".
+
+The server keeps up to 100,000 counted events in memory. Beyond that, the oldest events are dropped first. If the start of the chosen period was dropped, the screen shows "The storage limit was reached, so events up to … were dropped." The table counts then do not cover the whole period. A server restart clears the statistics. A configuration reload does not. Source statistics are not included in `/metrics`, status responses, or the operations log, and only signed-in administrators can see them. For the response format, see the [management API contract, §1.17](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/management-api-v1.md).
 
 ## Recent logs
 

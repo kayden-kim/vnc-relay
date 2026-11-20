@@ -15,10 +15,11 @@ pub const REPOSITORY_BLOB: &str = "https://github.com/kayden-kim/vnc-relay/blob/
 
 /// The other external links that help pages may use (docs/help/AGENTS.md,
 /// links): GitHub Releases, the UltraVNC and noVNC official sites, the
-/// modified droidVNC-NG repository of the recommended setup, and the sources
-/// and license texts of the third-party components on the notices page.
+/// modified droidVNC-NG repository of the recommended setup, the sources
+/// and license texts of the third-party components on the notices page, and
+/// the download pages and terms of the IP information database providers.
 /// A prefix without a final `/` also matches when `/`, `?`, or `#` follows it.
-pub const ALLOWED_LINKS: [&str; 12] = [
+pub const ALLOWED_LINKS: [&str; 16] = [
     "https://github.com/kayden-kim/vnc-relay/releases",
     "https://uvnc.com/",
     "https://www.uvnc.com/",
@@ -31,6 +32,10 @@ pub const ALLOWED_LINKS: [&str; 12] = [
     "https://github.com/highlightjs/highlight.js/",
     "https://github.com/zenorocha/clipboard.js/",
     "https://github.com/orioncactus/pretendard/",
+    "https://db-ip.com/db/lite.php",
+    "https://ipinfo.io/developers/ipinfo-lite-database",
+    "https://dev.maxmind.com/geoip/geolite2-free-geolocation-data",
+    "https://www.maxmind.com/en/geolite/eula",
 ];
 
 /// URL path where GitHub Pages serves the site. Root-relative links must start with it.

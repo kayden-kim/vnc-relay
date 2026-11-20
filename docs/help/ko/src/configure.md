@@ -26,6 +26,7 @@
 | `[recent_closed]`, `[recent_logs]` | 메모리에 보관할 최근 종료 목록과 최근 로그의 크기 |
 | `[status]` | 생존·준비 확인용 상태 리스너 |
 | `[metrics]` | 상태 리스너의 외부 메트릭 수집 켜기 |
+| `[ip_info]` | 접속 출처의 국가·ASN을 찾을 IP 정보 DB 파일 경로 |
 | `[log]` | 운영 로그 출력 위치 |
 | `[reload]` | 파일 변경 감지의 결과 확인 제한 시간과 주기 확인 간격 |
 
@@ -127,6 +128,19 @@ IP로 지정한 대상은 IP·포트 항목과 일치해야 한다. DNS 이름�
 
 [운영](operate.md)에서 상태 확인, 메트릭 수집과 로그 보관 절차를 확인할 수 있다.
 
+## IP 정보 DB
+
+`[ip_info]`는 대시보드 "접속 출처"에서 국가와 ASN을 찾을 IP 정보 DB 파일의 경로다. 두 키 모두 선택이며 기본값은 없다.
+
+| 키 | 값 |
+| --- | --- |
+| `ip_info.country_db` | 국가를 찾을 MMDB 파일 경로 |
+| `ip_info.asn_db` | ASN을 찾을 MMDB 파일 경로. `country_db`와 같은 경로여도 된다 |
+
+상대 경로는 설정 파일의 디렉터리를 기준으로 푼다. 빈 문자열은 `config_value_out_of_range`, 문자열이 아닌 값은 `config_type_mismatch`로 시작을 거절한다. 파일이 없거나 형식이 맞지 않는 것은 설정 오류가 아니다. 서버는 경고 `ip_db_unavailable`을 남기고 그 정보 없이 시작한다.
+
+경로를 바꾸면 재시작해야 한다. 대시보드에서 편집할 수 없고 "설정 보기"에만 나온다. 같은 경로의 파일 내용을 바꾸면 재시작 없이 다시 읽는다. 지원하는 제공자, 파일 준비와 갱신 절차는 [운영의 IP 정보 DB 준비와 갱신](operate.md#ip-정보-db-준비와-갱신)을 따른다. 파일 형식 규칙은 [설정 계약 1.12절](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/config-v4.md)을 따른다.
+
 ## 부분 재로드와 동적 설정 편집
 
 서버는 설정 파일과 사용 중인 TLS 파일, 켠 ticket 표의 공개 키 파일 변경을 자동 감지한다. 재로드 대상은 43개다. IP·Origin·신뢰 프록시 정책, TLS 파일, ticket 설정, Mode I 대상 허용 정책, 상한·시간·연결 유지 값이 포함된다. 정확한 목록과 적용 시점은 [설정 계약 1.8절](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/config-v4.md)을 따른다.
@@ -139,7 +153,7 @@ IP로 지정한 대상은 IP·포트 항목과 일치해야 한다. DNS 이름�
 
 > **주의:** 유효한 설정 파일에 재시작이 필요한 값의 차이가 하나라도 남아 있으면 파일 감지는 후보 전체를 `reload_restart_required`로 거절한다. 그 차이를 남기면 이후 인증서·공개 키 교체도 거절한다. 동적 설정 편집은 HTTP 409 `config_restart_pending`으로 거절한다([관리 API 계약 1.14절](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/management-api-v1.md)). 해당 값을 되돌리거나 서버를 정상 종료하고 다시 시작해야 한다.
 
-리스너 주소, 리스너·역할·모드 활성화, 관리 HTTP·HTTPS 전환, 계정 설정, 관리 로그인 제한·관리 세션 수명, `management.config_edit`, `metrics.enabled`, 대시보드·기록 보관·로그·감지 설정 등은 재시작이 필요하다. ticket 표의 `enabled`는 예외로 재로드 대상이다. 후보 검증 실패는 `reload_rejected`로 기록하고 이전 유효 설정과 연결을 유지한다.
+리스너 주소, 리스너·역할·모드 활성화, 관리 HTTP·HTTPS 전환, 계정 설정, 관리 로그인 제한·관리 세션 수명, `management.config_edit`, `metrics.enabled`, `[ip_info]` 경로, 대시보드·기록 보관·로그·감지 설정 등은 재시작이 필요하다. ticket 표의 `enabled`는 예외로 재로드 대상이다. 후보 검증 실패는 `reload_rejected`로 기록하고 이전 유효 설정과 연결을 유지한다.
 
 ## v3에서 v4로 옮기기
 

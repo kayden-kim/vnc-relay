@@ -60,7 +60,7 @@
 
 - 같은 책의 페이지는 상대 링크로 연결한다(예: `configure.md#접속-허용`).
 - 기준 문서와 저장소 파일은 `https://github.com/kayden-kim/vnc-relay/blob/main/` 아래 절대 주소로 연결한다(예: `https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/config-v4.md`).
-- 외부 사이트는 공식 배포처와 공식 문서(GitHub Releases, UltraVNC, noVNC)만 연결한다. 고지 페이지(`notices.md`)는 사이트에 함께 싣는 제3자 구성요소의 공식 출처와 라이선스 원문도 연결한다. 추천 구성 사례(`recommended-setup.md`)는 그 구성에 쓰는 [droidVNC-NG 수정판 저장소](https://github.com/kayden-kim/droidVNC-NG)도 연결한다.
+- 외부 사이트는 공식 배포처와 공식 문서(GitHub Releases, UltraVNC, noVNC)만 연결한다. 고지 페이지(`notices.md`)는 사이트에 함께 싣는 제3자 구성요소의 공식 출처와 라이선스 원문도 연결한다. 추천 구성 사례(`recommended-setup.md`)는 그 구성에 쓰는 [droidVNC-NG 수정판 저장소](https://github.com/kayden-kim/droidVNC-NG)도 연결한다. 운영 페이지(`operate.md`)는 IP 정보 DB 제공자(DB-IP·IPinfo·MaxMind)의 공식 내려받기 페이지와 이용 조건도 연결한다. 운영자가 그 페이지에서 파일을 받고 조건을 확인해야 하기 때문이다.
 - `cargo xtask help-site`는 이 규칙을 허용 목록으로 확인한다. 새 외부 링크가 필요하면 허용 목록과 [xtask 모듈 설계](../architectures/xtask.md)를 함께 고친다.
 
 ## 화면 캡처

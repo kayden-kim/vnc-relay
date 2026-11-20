@@ -10,7 +10,7 @@ Use this help to install VNC Relay, connect VNC clients, and operate the relay t
 | --- | --- |
 | Mode I | The Viewer specifies a target address. VNC Relay connects to an allowed VNC Server. VNC Relay must be able to connect to the Server's VNC port. |
 | Mode II | The Viewer and Server each connect to VNC Relay. VNC Relay pairs the two roles with the same relay ID. It works even when the Server cannot accept incoming connections from outside. |
-| Dashboard | Sign in with an administrator account to view waiting connections, active sessions, recently closed sessions, recent logs, and settings. You can also terminate active sessions and edit dynamic settings. |
+| Dashboard | Sign in with an administrator account to view waiting connections, active sessions, recently closed sessions, metrics, connection sources, recent logs, and settings. You can also terminate active sessions and edit dynamic settings. |
 
 To choose a mode for your situation, see [Choose a connection mode](connect.md#choose-a-connection-mode).
 

@@ -211,6 +211,8 @@ Listener addresses and ports, relay role and mode switches, management HTTP/HTTP
 
 Candidate validation failure produces `reload_rejected`. Watch failures produce `reload_watch_failed`. Failures retain the previous valid configuration and existing relays. There is no manual reload CLI or web reload API. You can also inspect file status and the last result in dashboard "View settings".
 
+The IP information database files named in `[ip_info]` are watched the same way, but they are not part of configuration reload. When a file's content changes, the server reads only that file again and writes `ip_db_loaded` or `ip_db_unavailable`. No `reload_applied` is written. See [Prepare and update IP information databases](#prepare-and-update-ip-information-databases).
+
 ## Replace certificate and public key files
 
 ### TLS certificate and private key
@@ -238,6 +240,54 @@ Use this procedure for a role with access tickets enabled. Keep signing keys onl
 7. Check for `reload_applied` again.
 
 Invalid public key files are rejected with `ticket_keys_invalid`, retaining the previous public keys. Replacement does not clear already upgraded connections or usage records. Restricting write access to the file is recommended. Anyone able to insert a key can authorize tickets they create. See [Access tickets](access-ticket.md) for formats and prerequisites.
+
+## Prepare and update IP information databases
+
+The country and ASN on the dashboard "Sources" screen come from IP information database files that the operator places on the server. An IP information database is an MMDB (MaxMind DB format) file that maps IP address ranges to a country or an ASN. The server and the per-address statistics work without these files. The server never sends requests to find IP information and never downloads database files. The distribution bundle does not contain database files.
+
+The supported providers are listed below. The operator who downloads a file must follow its terms. Check the provider page for the current terms before downloading.
+
+| Provider | Files | Account | Terms |
+| --- | --- | --- | --- |
+| [DB-IP Lite](https://db-ip.com/db/lite.php) | Separate country and ASN files, released monthly | Not required | CC BY 4.0 |
+| [IPinfo Lite](https://ipinfo.io/developers/ipinfo-lite-database) | `ipinfo_lite.mmdb`, which holds both country and ASN | Required | CC BY-SA 4.0 |
+| [MaxMind GeoLite](https://dev.maxmind.com/geoip/geolite2-free-geolocation-data) | `GeoLite2-Country.mmdb` (or City) and `GeoLite2-ASN.mmdb` | Required | [GeoLite EULA](https://www.maxmind.com/en/geolite/eula). Use a new release promptly |
+
+The dashboard identifies the provider from the database type in the file and shows the attribution that the provider requires.
+
+1. Create an `ipdb` directory in the operations directory.
+2. Download the MMDB files from the provider. If you received `.gz` or `.tar.gz` files, extract them and put the `.mmdb` files in `ipdb`. The server does not read compressed files. Each file must be 256 MiB or smaller.
+3. Confirm that the OS account running the server can read the files.
+4. Stop the server gracefully.
+5. Add `[ip_info]` to the configuration file. Relative paths are resolved from the configuration file's directory.
+
+   ```toml
+   [ip_info]
+   country_db = "ipdb/dbip-country-lite.mmdb"
+   asn_db = "ipdb/dbip-asn-lite.mmdb"
+   ```
+
+   For IPinfo Lite, use the same path for both keys. The server reads that file once.
+
+6. Start the server and confirm in the operations log that each key has an `ip_db_loaded` line before `server_ready`. The log shows `config_key` instead of the path.
+7. On the dashboard "Sources" screen, confirm that both rows in "IP information databases" are "In use".
+
+If a file cannot be read, the server still starts and runs without that information. Use the `reason` of the `ip_db_unavailable` warning to find the cause.
+
+| `reason` | What to check |
+| --- | --- |
+| `file_unreadable` | The path, whether the file exists, and read permission |
+| `file_too_large` | Whether the file is 256 MiB or smaller |
+| `invalid_format` | Whether the file was extracted, fully copied, and is not damaged |
+| `unsupported_data` | Whether the key matches the file type, for example an ASN-only file in the country key |
+
+To update a database, replace the file content at the same path. No restart is needed.
+
+1. Put the new file in the same directory under a temporary name, for example `ipdb/dbip-country-lite.mmdb.new`.
+2. Rename the temporary file over the existing file. Use `Move-Item -Force` in Windows PowerShell or `mv` on Ubuntu. A rename inside one directory completes in one step, so the server never reads a half-copied file.
+3. Check for `ip_db_loaded` (`phase = reload`) in the operations log. With the defaults, it appears within 35 seconds (Dp + D).
+
+If the new file cannot be read, the server keeps using the previous content and writes `ip_db_unavailable` (`phase = reload`). The screen row changes to "Using previous file". When you put a valid file back, the server reads it again automatically. Countries and ASNs of events that were already counted do not change. Changing a path requires a restart. For provider downloads and extraction commands, see the [manual operations guide, §3.11](https://github.com/kayden-kim/vnc-relay/blob/main/docs/how-to/operate-relay.md).
 
 ## Manage administrator accounts
 
@@ -289,7 +339,7 @@ There is no configuration-validation-only CLI. Starting on alternate ports does 
 
 > **Warning:** WS/WSS Viewers must use `/relay/viewer`. If clients use `/relay`, migrate the server and all Viewer URLs together. Do not change TCP or `/relay/server`. A `main` build prints the latest Release version until the next release, so `--version` alone cannot distinguish them. Record the deployment source and commit too.
 
-For rollback, stop the new server gracefully and restore the previous executable together with configuration compatible with it. Restore client URLs too when crossing Viewer path versions. Do not leave `[relay.ticket.*]` tables in configuration for a version without access ticket support. Restoring the protected v3 configuration is recommended when rolling back from v4 to v3. Before returning to a version without forwarded address checks, stop proxy access or switch to direct built-in WSS and actual socket IP policies. Do not allow the proxy IP as a substitute for every client.
+For rollback, stop the new server gracefully and restore the previous executable together with configuration compatible with it. Restore client URLs too when crossing Viewer path versions. Do not leave `[relay.ticket.*]` tables in configuration for a version without access ticket support. Do not leave an `[ip_info]` table in configuration for a version without connection source support. Restoring the protected v3 configuration is recommended when rolling back from v4 to v3. Before returning to a version without forwarded address checks, stop proxy access or switch to direct built-in WSS and actual socket IP policies. Do not allow the proxy IP as a substitute for every client.
 
 After restoration, check startup, readiness, actual relay traffic, and management sign-in. Follow the version-specific migration and recovery steps in [Operations how-to §3.2 and §6](https://github.com/kayden-kim/vnc-relay/blob/main/docs/how-to/operate-relay.md).
 
@@ -304,5 +354,6 @@ After restoration, check startup, readiness, actual relay traffic, and managemen
 - Protect account files, private keys, configuration, public key files, and logs. Restrict public key write access to prevent tampering.
 - When configuration editing is enabled, check that the server OS account can read and replace the configuration file and create and replace temporary files in its parent directory. Block writes by other ordinary OS accounts.
 - To control a role's access only through access tickets, disable that role's TCP entry point. Tickets do not apply to TCP.
+- Selecting an ipinfo.io lookup link on the "Sources" screen sends that address or ASN to an external site. Check that your operations policy allows external lookups. Prevent other regular OS accounts from changing IP information database files.
 
 See the [Configuration contract](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/config-v4.md), [Operations information contract](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/ops-info-v2.md), and [PRD confirmed criteria](https://github.com/kayden-kim/vnc-relay/blob/main/docs/requirements/PRD.md) for detailed requirements. See [Troubleshooting](troubleshooting.md) for symptom-specific recovery.

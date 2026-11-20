@@ -44,7 +44,7 @@ The management, status, and relay WS/WSS listeners are separate. One port does n
 | Status | `GET /readyz` | Return `200` with `status: ready` when ready. Otherwise return `503` with `status: not_ready`. |
 | Status | `GET /metrics` | Serve Prometheus text format 0.0.4 metrics only when `metrics.enabled = true`. Return `404` when disabled. |
 | Management | `/` | Serve the embedded dashboard. |
-| Management | Under `/api/v1/` | Administrator sign-in/out, server/connection/session/settings/log/metrics queries, termination by administrator, and dynamic configuration editing. |
+| Management | Under `/api/v1/` | Administrator sign-in/out, server/connection/session/settings/log/metrics/connection source queries, termination by administrator, and dynamic configuration editing. |
 
 The status listener needs no authentication and uses plain HTTP. Keep it on loopback or restrict access to the monitoring network. Management uses HTTPS as the rule; plain HTTP is allowed only on loopback. For individual management API paths, authentication, and CSRF requirements, use the [management API contract, §1.2](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/management-api-v1.md). For liveness versus readiness and full response formats, use the [operations information contract, §1.12](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/ops-info-v2.md). For metric formats, use the [metrics contract](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/metrics-v1.md). Follow [Collect metrics](operate.md#collect-metrics) for collection procedures.
 
@@ -92,6 +92,7 @@ This table helps locate settings. For the full key list, defaults, and ranges, u
 | `[recent_logs]` | In-memory recent log retention size |
 | `[status]` | Status listener address |
 | `[metrics]` | Enable external metric collection on the status listener |
+| `[ip_info]` | IP information database files for the country and ASN of connection sources |
 | `[log]` | Operations log destination |
 | `[reload]` | File-change result deadline and fallback polling interval |
 
@@ -130,6 +131,7 @@ Operations logs use JSON Lines. The `event` field identifies the event. This is 
 | `allow_all_source`, `trust_all_proxies`, `allow_all_target` | Broad access policy warnings |
 | `ticket_tcp_bypass`, `ticket_plaintext_ws` | TCP ticket bypass and plain WS exposure warnings |
 | `log_reopen_failed` | Failure to reopen a replaced log file |
+| `ip_db_loaded`, `ip_db_unavailable` | Whether an IP information database file was read, or why it was not (`reason`). The log shows `config_key` instead of the path. |
 | `shutdown_started`, `shutdown_forced`, `server_stopped` | Shutdown start, forced cleanup of remaining sessions, and completion |
 
 See [Operations](operate.md) and [Troubleshooting](troubleshooting.md) for log correlation and response procedures.
@@ -140,12 +142,12 @@ These are external format contract versions, not product Release numbers.
 
 | Contract name | Version | Governing document |
 | --- | --- | --- |
-| `vnc-relay-config` | 4.2.0 | [Configuration file contract](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/config-v4.md) |
-| `ops-info` | 2.1.0 | [Operations information contract](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/ops-info-v2.md) |
+| `vnc-relay-config` | 4.3.0 | [Configuration file contract](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/config-v4.md) |
+| `ops-info` | 2.2.0 | [Operations information contract](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/ops-info-v2.md) |
 | `websocket-relay` | 2.1.0 | [WebSocket relay contract](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/websocket-relay-v2.md) |
-| `vnc-relay-cli` | 1.7.0 | [CLI and account file contract](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/cli-v1.md) |
-| `management-api` | 1.2.0 | [Management API contract](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/management-api-v1.md) |
-| `vnc-relay-metrics` | 1.0.0 | [Metrics contract](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/metrics-v1.md) |
+| `vnc-relay-cli` | 1.8.0 | [CLI and account file contract](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/cli-v1.md) |
+| `management-api` | 1.4.0 | [Management API contract](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/management-api-v1.md) |
+| `vnc-relay-metrics` | 1.1.0 | [Metrics contract](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/metrics-v1.md) |
 
 ## Find reference documents
 

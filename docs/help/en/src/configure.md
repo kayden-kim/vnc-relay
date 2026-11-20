@@ -26,6 +26,7 @@ The [distribution example](https://github.com/kayden-kim/vnc-relay/blob/main/exa
 | `[recent_closed]`, `[recent_logs]` | Memory limits for recently closed sessions and recent logs |
 | `[status]` | Status listener for liveness and readiness checks |
 | `[metrics]` | Enable external metric collection on the status listener |
+| `[ip_info]` | IP information database files for the country and ASN of connection sources |
 | `[log]` | Operations log output destination |
 | `[reload]` | File-change result deadline and fallback polling interval |
 
@@ -127,6 +128,19 @@ Set `[metrics] enabled = true` to also serve `GET /metrics` on the status listen
 
 See [Operations](operate.md) for health checks, metric collection, and log retention procedures.
 
+## IP information databases
+
+`[ip_info]` holds the paths of the IP information database files used to find the country and ASN of connection sources on the dashboard "Sources" screen. Both keys are optional and have no default.
+
+| Key | Value |
+| --- | --- |
+| `ip_info.country_db` | Path of the MMDB file used to find countries |
+| `ip_info.asn_db` | Path of the MMDB file used to find ASNs. It may be the same path as `country_db` |
+
+Relative paths are resolved from the configuration file's directory. An empty string fails startup with `config_value_out_of_range`, and a value that is not a string fails with `config_type_mismatch`. A missing file or a file in the wrong format is not a configuration error. The server writes the warning `ip_db_unavailable` and starts without that information.
+
+Changing a path requires a restart. The paths cannot be edited on the dashboard and appear only in "View settings". When the file content at the same path changes, the server reads it again without a restart. For supported providers and the procedures to prepare and update files, see [Prepare and update IP information databases](operate.md#prepare-and-update-ip-information-databases). For the file format rules, see the [configuration contract, §1.12](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/config-v4.md).
+
 ## Reload and dynamic configuration editing
 
 The server automatically detects changes to the configuration file, TLS files in use, and public keys files for enabled ticket tables. There are 43 reloadable keys. They include IP, Origin, and trusted proxy policies, TLS files, ticket settings, Mode I target policy, limits, timeouts, and keepalive. Use the [configuration contract, §1.8](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/config-v4.md) for the exact list and application boundaries.
@@ -139,7 +153,7 @@ There are 37 editable keys. They exclude four TLS paths and two ticket public ke
 
 > **Warning:** If a valid configuration file retains even one restart-required difference, file-change detection rejects the entire candidate as `reload_restart_required`. Leaving that difference in the file also blocks later certificate and public key replacements. Dynamic configuration editing returns HTTP 409 `config_restart_pending` ([management API contract, §1.14](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/management-api-v1.md)). Revert the value or gracefully stop and restart the server.
 
-Listener addresses, listener/role/mode enablement, management HTTP/HTTPS transitions, account settings, management login limits and session lifetimes, `management.config_edit`, `metrics.enabled`, dashboard settings, retention settings, log settings, and file-watch settings require a restart. Ticket table `enabled` is an exception: it is reloadable. Invalid candidates produce `reload_rejected`; the previous valid settings and connections remain in use.
+Listener addresses, listener/role/mode enablement, management HTTP/HTTPS transitions, account settings, management login limits and session lifetimes, `management.config_edit`, `metrics.enabled`, `[ip_info]` paths, dashboard settings, retention settings, log settings, and file-watch settings require a restart. Ticket table `enabled` is an exception: it is reloadable. Invalid candidates produce `reload_rejected`; the previous valid settings and connections remain in use.
 
 ## Migrate from v3 to v4
 

@@ -211,6 +211,8 @@ echo $?
 
 후보 검증에 실패하면 `reload_rejected`를 기록한다. 감지 장애는 `reload_watch_failed`로 알린다. 실패하면 이전 유효 설정과 기존 중계를 유지한다. 수동 재로드 CLI나 웹 재로드 API는 없다. 파일 상태와 마지막 결과는 대시보드 "설정 보기"에서도 확인할 수 있다.
 
+`[ip_info]`가 가리키는 IP 정보 DB 파일도 같은 방식으로 감지한다. 다만 설정 재로드의 대상이 아니다. 파일 내용이 바뀌면 그 파일만 다시 읽고 `ip_db_loaded` 또는 `ip_db_unavailable`을 기록한다. `reload_applied`는 남지 않는다. 절차는 [IP 정보 DB 준비와 갱신](#ip-정보-db-준비와-갱신)을 따른다.
+
 ## 인증서와 공개 키 파일 교체
 
 ### TLS 인증서와 개인키
@@ -238,6 +240,54 @@ TLS를 켠 배치에만 적용한다. 인증서와 개인키는 유효한 쌍이
 7. 다시 `reload_applied`를 확인한다.
 
 잘못된 공개 키 파일은 `ticket_keys_invalid`로 거절하며 이전 공개 키를 유지한다. 이미 업그레이드한 연결과 사용 기록은 교체로 지우지 않는다. 파일 쓰기 권한도 제한하기를 권장한다. 다른 키를 넣을 수 있는 사람은 자신이 만든 ticket을 통과시킬 수 있다. 형식과 전제 조건은 [접속 ticket](access-ticket.md)을 따른다.
+
+## IP 정보 DB 준비와 갱신
+
+대시보드 "접속 출처"의 국가와 ASN은 운영자가 둔 IP 정보 DB 파일에서 찾는다. IP 정보 DB는 IP 주소 범위마다 국가나 ASN을 담은 MMDB(MaxMind DB 형식) 파일이다. 설정하지 않아도 서버와 주소별 통계는 동작한다. 서버는 IP 정보를 찾으려고 외부에 요청하지 않으며 DB 파일을 내려받지도 않는다. 배포 묶음에도 DB 파일은 없다.
+
+지원하는 제공자는 다음과 같다. 이용 조건은 파일을 받은 운영자가 지켜야 한다. 받기 전에 제공자 페이지의 현재 조건을 확인한다.
+
+| 제공자 | 파일 | 계정 | 이용 조건 |
+| --- | --- | --- | --- |
+| [DB-IP Lite](https://db-ip.com/db/lite.php) | 국가·ASN 파일 각각. 매월 나온다 | 필요 없음 | CC BY 4.0 |
+| [IPinfo Lite](https://ipinfo.io/developers/ipinfo-lite-database) | 국가와 ASN을 함께 담은 `ipinfo_lite.mmdb` | 필요 | CC BY-SA 4.0 |
+| [MaxMind GeoLite](https://dev.maxmind.com/geoip/geolite2-free-geolocation-data) | `GeoLite2-Country.mmdb`(또는 City), `GeoLite2-ASN.mmdb` | 필요 | [GeoLite EULA](https://www.maxmind.com/en/geolite/eula). 새 판이 나오면 바로 바꿔야 한다 |
+
+대시보드는 파일의 DB 종류로 제공자를 판정하고 그 제공자가 요구하는 출처 표시를 보인다.
+
+1. 운영 디렉터리에 `ipdb` 디렉터리를 만든다.
+2. 제공자 사이트에서 MMDB 파일을 받는다. `.gz`·`.tar.gz`로 받았으면 압축을 풀어 `.mmdb` 파일을 `ipdb`에 둔다. 서버는 압축 파일을 읽지 않는다. 파일은 256 MiB 이하여야 한다.
+3. 서버 실행 OS 계정이 파일을 읽을 수 있는지 확인한다.
+4. 서버를 정상 종료한다.
+5. 설정 파일에 `[ip_info]`를 더한다. 상대 경로는 설정 파일의 디렉터리 기준이다.
+
+   ```toml
+   [ip_info]
+   country_db = "ipdb/dbip-country-lite.mmdb"
+   asn_db = "ipdb/dbip-asn-lite.mmdb"
+   ```
+
+   IPinfo Lite는 두 키에 같은 경로를 쓴다. 서버는 이 파일을 한 번만 읽는다.
+
+6. 서버를 시작하고 운영 로그에서 `server_ready` 전에 키마다 `ip_db_loaded`가 남았는지 확인한다. 로그에는 경로 대신 `config_key`가 나온다.
+7. 대시보드 "접속 출처"의 "IP 정보 DB"에서 두 행이 "사용 중"인지 확인한다.
+
+파일을 읽지 못해도 서버는 시작하고 그 정보 없이 운영한다. `ip_db_unavailable` 경고의 `reason`으로 원인을 찾는다.
+
+| `reason` | 확인할 내용 |
+| --- | --- |
+| `file_unreadable` | 경로, 파일 존재, 읽기 권한 |
+| `file_too_large` | 파일이 256 MiB 이하인지 |
+| `invalid_format` | 압축을 풀었는지, 복사가 끝났는지, 손상되지 않았는지 |
+| `unsupported_data` | 키와 파일 종류가 맞는지. 예: 국가 키에 ASN 전용 파일 |
+
+갱신은 같은 경로의 파일 내용을 바꾸는 방법으로 한다. 재시작은 필요 없다.
+
+1. 새 파일을 같은 디렉터리에 임시 이름으로 둔다. 예: `ipdb/dbip-country-lite.mmdb.new`.
+2. 임시 파일의 이름을 기존 파일 이름으로 바꿔 덮어쓴다. Windows PowerShell은 `Move-Item -Force`, Ubuntu는 `mv`를 쓴다. 같은 디렉터리 안의 이름 바꾸기는 한 번에 끝나므로 반쯤 복사된 파일을 읽지 않는다.
+3. 운영 로그에서 `ip_db_loaded`(`phase = reload`)를 확인한다. 기본값으로는 35초(Dp + D) 안에 남는다.
+
+새 파일을 읽지 못하면 이전 내용을 계속 쓰고 `ip_db_unavailable`(`phase = reload`)을 기록한다. 화면의 행은 "이전 DB 사용 중"이 된다. 정상 파일로 다시 바꾸면 자동으로 다시 읽는다. 이미 센 사건의 국가·ASN은 바뀌지 않는다. 경로를 바꾸려면 재시작해야 한다. 제공자별 내려받기와 압축 풀기 명령은 [수동 운영 안내 3.11절](https://github.com/kayden-kim/vnc-relay/blob/main/docs/how-to/operate-relay.md)을 따른다.
 
 ## 관리자 계정 관리
 
@@ -289,7 +339,7 @@ Ubuntu:
 
 > **주의:** WS·WSS Viewer는 `/relay/viewer`로 접속해야 한다. `/relay`를 쓰는 클라이언트가 있으면 서버와 모든 Viewer URL을 함께 옮긴다. TCP와 `/relay/server`는 바꾸지 않는다. `main` 빌드는 다음 릴리스 전까지 최신 Release와 같은 버전을 출력하므로 `--version`만으로 둘을 구분하지 않는다. 배포 출처와 커밋도 기록한다.
 
-롤백할 때는 새 서버를 정상 종료하고 이전 실행파일과 그 버전에 맞는 설정을 함께 복원한다. Viewer 경로가 다른 버전 사이에서는 클라이언트 URL도 함께 되돌린다. 접속 ticket을 지원하지 않는 버전에는 `[relay.ticket.*]` 테이블을 남기지 않는다. v4에서 v3로 되돌릴 때는 보호한 v3 설정을 복원하는 방법을 권장한다. 전달 주소 검사가 없는 버전으로 되돌릴 때는 프록시 경유 접근을 중지하거나 직접 내장 WSS와 실제 소켓 IP 정책으로 먼저 바꿔야 한다. 프록시 IP를 모든 클라이언트 대신 허용해서는 안 된다.
+롤백할 때는 새 서버를 정상 종료하고 이전 실행파일과 그 버전에 맞는 설정을 함께 복원한다. Viewer 경로가 다른 버전 사이에서는 클라이언트 URL도 함께 되돌린다. 접속 ticket을 지원하지 않는 버전에는 `[relay.ticket.*]` 테이블을 남기지 않는다. 접속 출처를 지원하지 않는 버전에는 `[ip_info]` 테이블을 남기지 않는다. v4에서 v3로 되돌릴 때는 보호한 v3 설정을 복원하는 방법을 권장한다. 전달 주소 검사가 없는 버전으로 되돌릴 때는 프록시 경유 접근을 중지하거나 직접 내장 WSS와 실제 소켓 IP 정책으로 먼저 바꿔야 한다. 프록시 IP를 모든 클라이언트 대신 허용해서는 안 된다.
 
 복원 뒤 시작·준비·실제 중계와 관리 재로그인을 확인한다. 정확한 버전별 이관·복구는 [운영 how-to 3.2절·6절](https://github.com/kayden-kim/vnc-relay/blob/main/docs/how-to/operate-relay.md)을 따른다.
 
@@ -304,5 +354,6 @@ Ubuntu:
 - 계정 파일·개인키·설정·공개 키 파일과 로그를 보호한다. 공개 키도 변조되지 않도록 쓰기 권한을 제한한다.
 - 설정 편집을 켰으면 서버 실행 OS 계정의 설정 파일 읽기·교체 권한과 상위 디렉터리의 임시 파일 생성·교체 권한을 확인한다. 다른 일반 OS 계정의 쓰기는 막는다.
 - 접속 ticket만으로 해당 역할의 접근을 통제하려면 같은 역할의 TCP 진입점을 꺼야 한다. ticket은 TCP에 적용하지 않는다.
+- 접속 출처의 ipinfo.io 조회 링크를 고르면 그 주소나 ASN이 외부 사이트로 간다. 외부 조회가 허용되는지 운영 정책을 확인한다. IP 정보 DB 파일은 다른 일반 OS 계정이 바꾸지 못하게 한다.
 
 세부 기준은 [설정 계약](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/config-v4.md), [운영 정보 계약](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/ops-info-v2.md)과 [PRD 확정 기준](https://github.com/kayden-kim/vnc-relay/blob/main/docs/requirements/PRD.md)을 따른다. 실패 원인별 복구는 [문제 해결](troubleshooting.md)을 참고한다.

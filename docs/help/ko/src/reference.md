@@ -44,7 +44,7 @@ Ubuntu bash:
 | 상태 | `GET /readyz` | 준비됨이면 `200`과 `status: ready`를 반환한다. 준비되지 않았으면 `503`과 `status: not_ready`를 반환한다. |
 | 상태 | `GET /metrics` | `metrics.enabled = true`일 때만 Prometheus 텍스트 0.0.4 메트릭을 제공한다. 꺼져 있으면 `404`다. |
 | 관리 | `/` | 내장 대시보드를 제공한다. |
-| 관리 | `/api/v1/` 아래 | 관리자 로그인·로그아웃, 서버·연결·세션·설정·로그·메트릭 조회, 관리자 종료와 동적 설정 편집 API다. |
+| 관리 | `/api/v1/` 아래 | 관리자 로그인·로그아웃, 서버·연결·세션·설정·로그·메트릭·접속 출처 조회, 관리자 종료와 동적 설정 편집 API다. |
 
 상태 리스너에는 인증이 없으며 평문 HTTP를 쓴다. 루프백에 두거나 모니터링 네트워크에서만 접근하도록 제한한다. 관리 리스너는 HTTPS가 원칙이며 평문 HTTP는 루프백에서만 허용한다. 관리 API의 개별 경로·인증·CSRF 요구는 [관리 API 계약 1.2절](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/management-api-v1.md)을 따른다. 생존과 준비의 차이와 전체 응답 형식은 [운영 정보 계약 1.12절](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/ops-info-v2.md)을, 메트릭 형식은 [메트릭 계약](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/metrics-v1.md)을 따른다. 수집 절차는 [메트릭 수집](operate.md#메트릭-수집)을 따른다.
 
@@ -92,6 +92,7 @@ WS와 WSS는 같은 경로를 쓴다. 쿼리는 대상이나 중계 ID를 선택
 | `[recent_logs]` | 최근 로그의 메모리 보관 크기 |
 | `[status]` | 상태 리스너 주소 |
 | `[metrics]` | 상태 리스너의 외부 메트릭 수집 켜기 |
+| `[ip_info]` | 접속 출처의 국가·ASN을 찾을 IP 정보 DB 파일 경로 |
 | `[log]` | 운영 로그 출력 위치 |
 | `[reload]` | 파일 변경 결과 확인 제한 시간과 주기 확인 간격 |
 
@@ -130,6 +131,7 @@ WS와 WSS는 같은 경로를 쓴다. 쿼리는 대상이나 중계 ID를 선택
 | `allow_all_source`, `trust_all_proxies`, `allow_all_target` | 넓은 접근 정책 경고 |
 | `ticket_tcp_bypass`, `ticket_plaintext_ws` | ticket 확인이 적용되지 않는 TCP와 평문 WS 노출 경고 |
 | `log_reopen_failed` | 교체한 로그 파일을 다시 열지 못했는지 |
+| `ip_db_loaded`, `ip_db_unavailable` | IP 정보 DB 파일을 읽었는지, 읽지 못한 원인(`reason`). 경로 대신 `config_key`가 나온다. |
 | `shutdown_started`, `shutdown_forced`, `server_stopped` | 종료 시작, 남은 세션 강제 정리, 종료 완료 |
 
 로그 연결 방법과 대응 절차는 [운영](operate.md)과 [문제 해결](troubleshooting.md)을 따른다.
@@ -140,12 +142,12 @@ WS와 WSS는 같은 경로를 쓴다. 쿼리는 대상이나 중계 ID를 선택
 
 | 계약 이름 | 버전 | 기준 문서 |
 | --- | --- | --- |
-| `vnc-relay-config` | 4.2.0 | [설정 파일 계약](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/config-v4.md) |
-| `ops-info` | 2.1.0 | [운영 정보 계약](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/ops-info-v2.md) |
+| `vnc-relay-config` | 4.3.0 | [설정 파일 계약](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/config-v4.md) |
+| `ops-info` | 2.2.0 | [운영 정보 계약](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/ops-info-v2.md) |
 | `websocket-relay` | 2.1.0 | [WebSocket 중계 계약](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/websocket-relay-v2.md) |
-| `vnc-relay-cli` | 1.7.0 | [CLI·계정 파일 계약](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/cli-v1.md) |
-| `management-api` | 1.2.0 | [관리 API 계약](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/management-api-v1.md) |
-| `vnc-relay-metrics` | 1.0.0 | [메트릭 계약](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/metrics-v1.md) |
+| `vnc-relay-cli` | 1.8.0 | [CLI·계정 파일 계약](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/cli-v1.md) |
+| `management-api` | 1.4.0 | [관리 API 계약](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/management-api-v1.md) |
+| `vnc-relay-metrics` | 1.1.0 | [메트릭 계약](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/metrics-v1.md) |
 
 ## 기준 문서 찾기
 

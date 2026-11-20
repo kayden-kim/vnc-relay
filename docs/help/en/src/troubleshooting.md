@@ -200,6 +200,17 @@ If retention is enabled, check level, event, search, and session filters. Restar
 
 Do not treat a query failure as an empty result. Check "Stale data" and the last successful update time. Recent logs are independent of file output success. The screen alone does not prove that file logging works.
 
+## Sources show "Unknown" for country or ASN
+
+First check the state of that database row in "IP information databases" on the "Sources" screen.
+
+- "Not configured" means the configuration file has no `[ip_info]` path. Prepare the file, set the path, and restart. Follow [Prepare and update IP information databases](operate.md#prepare-and-update-ip-information-databases).
+- "Load failed" or "Using previous file": check the cause on the row or the `reason` of `ip_db_unavailable` in the operations log. Fix the path and permissions (`file_unreadable`), the 256 MiB limit (`file_too_large`), extraction or damage (`invalid_format`), or the key and file type (`unsupported_data`). The server reads the file again automatically after the fix.
+- If the row is "In use" but some cells are "Unknown", those addresses are not in the database. Free databases have limited coverage and accuracy. Loopback and private addresses with a "Local" badge are not looked up.
+- If old values remain after you replaced a database file, note that events already counted keep their country and ASN. The new file applies to later events.
+
+If every WS/WSS connection behind a trusted proxy appears with the proxy address, check that `trusted_proxies` contains that proxy address. The client address uses the forwarded address only when a trusted proxy sends it.
+
 ## Collect information for a report
 
 1. Record the OS version and architecture.
