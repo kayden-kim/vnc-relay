@@ -77,7 +77,7 @@ flowchart LR
 | `tone` | `success`, `info`, `warning`, `destructive`, `neutral` | 다른 값이면 `TypeError`. 요소에 `data-tone`으로 쓴다. |
 | `variant`(버튼) | `primary`, `outline`, `ghost`, `destructive`, `navbar` | 다른 값이면 `TypeError`. `navbar`는 상단 막대의 항목형(로그아웃) 버튼이다. |
 | `variant`(언어 선택) | `navbar`, `form` | 다른 값이면 `TypeError` |
-| 아이콘 이름 | `check`, `clock`, `warning`, `alert`, `refresh`, `logout`, `back`, `chevron-right`, `chevron-down`, `chevron-up`, `cancel`, `globe`, `grid`, `settings`, `brand`, `log`, `search`, `download`, `close`, `pause`, `arrow-right`, `help`, `external-link` | 다른 값이면 `TypeError`. 로그인 복사본은 `cargo xtask tokens`로 생성한다. |
+| 아이콘 이름 | `check`, `clock`, `warning`, `alert`, `refresh`, `logout`, `back`, `chevron-right`, `chevron-down`, `chevron-up`, `cancel`, `globe`, `grid`, `settings`, `brand`, `log`, `search`, `download`, `close`, `pause`, `arrow-right`, `help`, `metrics`, `external-link`, `pin` | 다른 값이면 `TypeError`. 로그인 복사본은 `cargo xtask tokens`로 생성한다. |
 | 아이콘 크기 | `md`(`--space-icon-size`), `sm`(`--space-icon-size-sm`) | 기본값 `md` |
 | 상태 클래스 | `is-hover`, `is-focus` | 미리보기가 상태를 고정할 때만 붙인다. 화면 코드는 붙이지 않는다. |
 | 상태 속성 | `disabled`, `aria-busy`, `aria-invalid`, `aria-current`, `aria-describedby` | 상태 표현은 이 속성으로 한다. |

@@ -27,6 +27,8 @@ const PATHS = {
   help: '<circle cx="8" cy="8" r="6.25"/><path d="M6.25 6.25a1.75 1.75 0 1 1 2.5 1.6c-.5.25-.75.6-.75 1.15v.5"/><path d="M8 11.25h.01"/>',
   metrics: '<path d="M2.75 13.25h10.5"/><path d="M4.75 10.5V8M8 10.5V3.5M11.25 10.5V6"/>',
   'external-link': '<path d="M9.5 2.75h3.75v3.75"/><path d="M13.25 2.75 7.5 8.5"/><path d="M11.25 9.5v2.75a1 1 0 0 1-1 1h-6.5a1 1 0 0 1-1-1v-6.5a1 1 0 0 1 1-1h2.75"/>',
+  // SCR-008 navigation: a location pin (DESIGN.md 접속 출처 아이콘).
+  pin: '<path d="M8 14.25s4.5-3.9 4.5-7.5a4.5 4.5 0 1 0-9 0c0 3.6 4.5 7.5 4.5 7.5z"/><circle cx="8" cy="6.75" r="1.5"/>',
 };
 
 const SIZE_CLASS = { md: 'icon-md', sm: 'icon-sm' };

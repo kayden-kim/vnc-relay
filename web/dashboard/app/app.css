@@ -225,7 +225,8 @@
 .settings-main .alert-body > .alert-title:only-child,
 .config-dialog .alert-body > .alert-title:only-child,
 .logs-main .alert:not(.logs-session-error) .alert-body > .alert-title:only-child,
-.metrics-main .alert-body > .alert-title:only-child {
+.metrics-main .alert-body > .alert-title:only-child,
+.sources-main .alert-body > .alert-title:only-child {
   font-family: var(--type-body-family);
   font-size: var(--type-body-size);
   font-weight: var(--type-body-weight);
@@ -397,7 +398,8 @@
 
 /* SCR-006 Recent logs layout */
 .logs-main .field,
-.metrics-main .field {
+.metrics-main .field,
+.sources-main .field {
   display: flex;
   flex-direction: column;
   gap: var(--space-xs);
@@ -726,8 +728,9 @@ fieldset.check-group {
   justify-content: center;
 }
 
-/* SCR-007 metrics (DESIGN.md "메트릭 화면 확장"). Tokens only. */
-.metrics-main :is(p, dt, dd) {
+/* SCR-007 metrics (DESIGN.md "메트릭 화면 확장") and SCR-008 sources (DESIGN.md "접속 출처 화면 확장"), which reuses
+   the metrics head, text styles, sections, and KPI grid. Tokens only. */
+:is(.metrics-main, .sources-main) :is(p, dt, dd) {
   overflow-wrap: anywhere;
 }
 
@@ -736,11 +739,11 @@ fieldset.check-group {
   flex: none;
 }
 
-.metrics-main .page-actions {
+:is(.metrics-main, .sources-main) .page-actions {
   align-items: flex-end;
 }
 
-.metrics-main .label {
+:is(.metrics-main, .sources-main) .label {
   font-family: var(--type-label-family);
   font-size: var(--type-label-size);
   font-weight: var(--type-label-weight);
@@ -748,11 +751,11 @@ fieldset.check-group {
   letter-spacing: var(--type-label-tracking);
 }
 
-.metrics-main .muted {
+:is(.metrics-main, .sources-main) .muted {
   color: var(--color-muted-foreground);
 }
 
-.metrics-main .num {
+:is(.metrics-main, .sources-main) .num {
   font-family: var(--type-body-numeric-family);
   font-size: var(--type-body-numeric-size);
   font-weight: var(--type-body-numeric-weight);
@@ -761,7 +764,7 @@ fieldset.check-group {
   font-feature-settings: var(--type-body-numeric-feature);
 }
 
-.metrics-main .mono {
+:is(.metrics-main, .sources-main) .mono {
   font-family: var(--type-data-family);
   font-size: var(--type-data-size);
   font-weight: var(--type-data-weight);
@@ -772,7 +775,7 @@ fieldset.check-group {
   word-break: normal;
 }
 
-.metrics-main .metric {
+:is(.metrics-main, .sources-main) .metric {
   font-family: var(--type-metric-family);
   font-size: var(--type-metric-size);
   font-weight: var(--type-metric-weight);
@@ -782,13 +785,16 @@ fieldset.check-group {
   overflow-wrap: anywhere;
 }
 
-.metrics-body {
+.metrics-body,
+.sources-body {
   display: flex;
   flex-direction: column;
   gap: var(--space-lg);
 }
 
-.metrics-alerts:empty {
+.metrics-alerts:empty,
+.sources-notice:empty,
+.sources-alerts:empty {
   display: none;
 }
 
@@ -1026,6 +1032,84 @@ fieldset.check-group {
   margin: 0;
 }
 
+/* SCR-008 normal state has no status badge (adopted scr008 frames). The empty live region stays in the page, so it
+   is not hidden; a negative margin takes back the gap before the last-success time. */
+.sources-main .log-meta > [role="status"]:empty {
+  margin-inline-end: calc(-1 * var(--space-lg));
+}
+
+/* SCR-008 IP information databases, attributions, and tables (DESIGN.md "접속 출처 화면 확장", adopted scr008 mockup). */
+.src-db {
+  display: flex;
+  flex-direction: column;
+}
+
+.src-db-row {
+  display: grid;
+  grid-template-columns: minmax(var(--space-label-col), max-content) minmax(0, 1fr);
+  align-items: start;
+  gap: var(--space-sm) var(--space-lg);
+  padding: var(--space-md) 0;
+  border-top: var(--space-border-width) solid var(--color-border);
+}
+
+.src-db-row:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.src-db-name {
+  margin: 0;
+  font-family: var(--type-body-strong-family);
+  font-size: var(--type-body-strong-size);
+  font-weight: var(--type-body-strong-weight);
+  line-height: var(--type-body-strong-line);
+  letter-spacing: var(--type-body-strong-tracking);
+}
+
+.src-db-info {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-sm);
+  min-width: 0;
+}
+
+.src-attrib {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  margin-top: var(--space-md);
+  padding-top: var(--space-md);
+  border-top: var(--space-border-width) solid var(--color-border);
+}
+
+/* A provider link keeps the label text style of its line. */
+.src-attrib .link {
+  display: inline;
+  font: inherit;
+  letter-spacing: inherit;
+  font-feature-settings: inherit;
+}
+
+.src-attrib .link .icon {
+  margin-left: var(--space-xs);
+  vertical-align: middle;
+}
+
+.src-address {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs);
+  min-width: 0;
+}
+
+.src-table .src-asname {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
 @media (max-width: 1023.98px) {
   .data-table td.none {
     display: block;
@@ -1045,7 +1129,16 @@ fieldset.check-group {
     margin: var(--space-xs) 0 var(--space-md);
   }
 
-  .metrics-main .period-field {
+  :is(.metrics-main, .sources-main) .period-field {
     flex: 1 1 100%;
+  }
+
+  .src-db-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* A null AS name leaves its cell empty; the mobile card shows no line for it. */
+  .src-table td:empty {
+    display: none;
   }
 }

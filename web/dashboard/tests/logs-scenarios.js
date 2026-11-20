@@ -84,7 +84,7 @@ async function submit(value) {
 }
 function checkLayout(label) {
   check(`${label}: no horizontal scroll`, document.documentElement.scrollWidth <= document.documentElement.clientWidth);
-  check(`${label}: four navigation items`, host.querySelectorAll('.navbar-nav .navbar-item').length === 4);
+  check(`${label}: five navigation items`, host.querySelectorAll('.navbar-nav .navbar-item').length === 5);
   for (const control of host.querySelectorAll('button, input, select')) {
     const box = control.getBoundingClientRect();
     if (box.width && box.height) check(`${label}: control inside viewport`, box.left >= 0 && box.right <= innerWidth + 1);

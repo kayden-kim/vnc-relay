@@ -477,9 +477,10 @@ fn automatic_polls_under_one_second_keep_the_status_marks_in_browser() {
 
 /// spec: dashboard.md:DASH-028 partial
 #[test]
-fn router_navigates_between_four_menu_items_in_browser() {
+fn router_navigates_between_five_menu_items_in_browser() {
     check_localized_case("/tests/router.html", "dash-028");
     check_localized_case("/tests/metrics.html", "dash-028");
+    check_localized_case("/tests/sources.html", "dash-028");
 }
 
 /// spec: dashboard.md:DASH-054 partial
@@ -634,6 +635,53 @@ fn metrics_draws_the_last_24_hours_from_one_minute_points_in_browser() {
     check_localized_case_at("/tests/metrics.html", "dash-081", &[1280, 390]);
 }
 
+/// spec: dashboard.md:DASH-082 partial
+#[test]
+fn sources_opens_from_the_menu_and_stops_polling_after_leaving_in_browser() {
+    check_localized_case_at("/tests/router.html", "dash-082", &[1280, 390]);
+    check_localized_case_at("/tests/sources.html", "dash-082", &[1280, 390]);
+}
+
+/// spec: dashboard.md:DASH-083 partial
+#[test]
+fn sources_shows_totals_tables_counts_and_the_storage_notice_in_browser() {
+    check_localized_case_at("/tests/sources.html", "dash-083", &[1280, 390]);
+}
+
+/// spec: dashboard.md:DASH-084 partial
+#[test]
+fn sources_links_public_addresses_and_asns_to_ipinfo_in_browser() {
+    check_localized_case("/tests/sources.html", "dash-084");
+}
+
+/// spec: dashboard.md:DASH-085 partial
+#[test]
+fn sources_shows_database_states_causes_and_attributions_in_browser() {
+    check_localized_case_at("/tests/sources.html", "dash-085", &[1280, 390]);
+}
+
+/// spec: dashboard.md:DASH-086 partial
+#[test]
+fn sources_shows_loading_failures_empty_results_and_recovery_in_browser() {
+    check_localized_case_at("/tests/sources.html", "dash-086", &[1280, 390]);
+    check_localized_case_at("/tests/sources.html", "dash-086-more", &[1280, 390]);
+    check_localized_case_at("/tests/sources.html", "dash-086-rejected", &[1280, 390]);
+    check_localized_case_at("/tests/sources.html", "dash-086-busy", &[1280, 390]);
+}
+
+/// spec: dashboard.md:DASH-087 partial
+#[test]
+fn sources_switches_the_period_and_changes_language_without_requesting_again_in_browser() {
+    check_localized_case_at("/tests/sources.html", "dash-087", &[1280, 390]);
+    check_localized_case_at("/tests/sources.html", "dash-087-language", &[1280, 390]);
+}
+
+/// spec: dashboard.md:DASH-088 partial
+#[test]
+fn sources_fits_every_width_and_keeps_tables_links_and_status_accessible_in_browser() {
+    check_localized_case_at("/tests/sources.html", "dash-088", &[1280, 1024, 390, 320]);
+}
+
 /// spec: dashboard.md:DASH-064
 #[test]
 fn every_screen_localizes_safe_help_links_without_requesting_the_help_site_in_browser() {
@@ -645,6 +693,7 @@ fn every_screen_localizes_safe_help_links_without_requesting_the_help_site_in_br
         "settings",
         "logs",
         "metrics",
+        "sources",
     ] {
         for lang in LANGS {
             for width in [1280, 390] {
@@ -1021,6 +1070,7 @@ fn content_type(path: &Path) -> Option<&'static str> {
         "css" => Some("text/css; charset=utf-8"),
         "js" => Some("text/javascript; charset=utf-8"),
         "svg" => Some("image/svg+xml"),
+        "woff2" => Some("font/woff2"),
         _ => None,
     }
 }

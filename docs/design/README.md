@@ -5,7 +5,7 @@
 | 문서 | 상태 | 대상 화면 스펙 | 답하는 질문 |
 | --- | --- | --- | --- |
 | [운영 대시보드 디자인 시스템](DESIGN.md) | Accepted | 없음 | 대시보드와 도움말 사이트는 어떤 색·글꼴·간격 토큰과 상태 색을 쓰고, 어떤 폭에서 어떻게 배치하는가? |
-| [대시보드 HTML 시안](mockups/dashboard.html) | Accepted | [운영 대시보드 화면](../specs/dashboard.md) | SCR-001~005와 도움말 링크(DASH-064)는 어떻게 보이는가? 설정 화면은 한국어·English를 각각 제공한다 |
+| [대시보드 HTML 시안](mockups/dashboard.html) | Accepted | [운영 대시보드 화면](../specs/dashboard.md) | SCR-001~008과 도움말 링크(DASH-064)는 어떻게 보이는가? 설정·로그·메트릭·접속 출처 화면은 한국어·English를 각각 제공한다. SCR-008 접속 출처 프레임은 사용자가 2026-11-20에 채택했다 |
 | [도움말 사이트 HTML 시안](mockups/help-site.html) | Accepted | [도움말 사이트 화면](../specs/help-site.md) | HLP-001~003의 상태는 데스크톱·모바일 폭과 한국어·English에서 어떻게 보이는가? |
 
 `DESIGN.md`와 `mockups/`의 HTML 시안을 이 표에 등록한다. 디자인 시스템의 대상 화면 스펙은 없음으로 쓴다.

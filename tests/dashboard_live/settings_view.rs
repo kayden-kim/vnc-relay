@@ -175,7 +175,7 @@ fn assert_nav(browser: &mut Browser, active: &str) {
         browser.eval(&format!(
             r#"(() => {{
         const links = [...document.querySelectorAll('a.navbar-item')];
-        return ['/', '/#/metrics', '/#/logs', '/#/settings'].every(href => {{
+        return ['/', '/#/metrics', '/#/sources', '/#/logs', '/#/settings'].every(href => {{
             const a = links.find(a => a.getAttribute('href') === href);
             const r = a?.getBoundingClientRect();
             return r?.width > 0 && r.height > 0 && r.left >= 0 && r.right <= innerWidth &&
@@ -192,7 +192,13 @@ fn assert_nav(browser: &mut Browser, active: &str) {
 pub fn settings_navigation_and_protected_direct_routes() {
     let server = Server::start_with_config("dash-028", Some(60), true);
     let mut browser = Browser::start("dash-028", &["ko-KR"]);
-    for route in ["/#/settings", "/#/settings/edit", "/#/logs", "/#/metrics"] {
+    for route in [
+        "/#/settings",
+        "/#/settings/edit",
+        "/#/logs",
+        "/#/metrics",
+        "/#/sources",
+    ] {
         browser.navigate(&server.url(route));
         browser.wait(
             "location.pathname === '/login/' && document.querySelector('#login-account') !== null",
@@ -204,7 +210,7 @@ pub fn settings_navigation_and_protected_direct_routes() {
         assert!(!browser.text().contains("limits.waiting"));
         assert_eq!(
             browser.eval(
-                "document.querySelectorAll('.log-row,.log-detail,#logs-q,[data-kpi],[data-chart],.metrics-main').length"
+                "document.querySelectorAll('.log-row,.log-detail,#logs-q,[data-kpi],[data-chart],.metrics-main,.sources-main').length"
             ),
             json!(0)
         );
@@ -235,6 +241,9 @@ pub fn settings_navigation_and_protected_direct_routes() {
         browser.click("a.navbar-item[href='/#/metrics']");
         browser.wait("document.querySelector('#metrics-refresh')?.disabled === false");
         assert_nav(&mut browser, "/#/metrics");
+        browser.click("a.navbar-item[href='/#/sources']");
+        browser.wait("document.querySelector('#sources-refresh')?.disabled === false");
+        assert_nav(&mut browser, "/#/sources");
         browser.click("a.navbar-item[href='/#/logs']");
         browser.wait("document.querySelector('#logs-download')?.disabled === false");
         open_settings(&mut browser, &server);
@@ -293,7 +302,7 @@ pub fn settings_view_displays_all_effective_values_in_contract_order() {
     let items = raw["items"]
         .as_array()
         .unwrap_or_else(|| panic!("items missing"));
-    assert_eq!(items.len(), 76, "every v4 config key must be present");
+    assert_eq!(items.len(), 78, "every v4 config key must be present");
     assert!(items.iter().any(|i| i["value"].is_null()));
     assert!(items.iter().any(|i| i["value"] == json!([])));
     assert!(

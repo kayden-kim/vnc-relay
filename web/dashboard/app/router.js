@@ -1,4 +1,5 @@
-// Hash router for operations (SCR-001), session details (SCR-002), settings (SCR-004·005), logs (SCR-006), and metrics (SCR-007).
+// Hash router for operations (SCR-001), session details (SCR-002), settings (SCR-004·005), logs (SCR-006), metrics
+// (SCR-007), and sources (SCR-008).
 // The previous screen is disposed before the next one mounts, so late responses from it are dropped.
 
 import { mountOperations } from './operations.js';
@@ -6,6 +7,7 @@ import { mountSession } from './session.js';
 import { mountSettings } from './settings.js';
 import { mountLogs } from './logs.js';
 import { mountMetrics } from './metrics.js';
+import { mountSources } from './sources.js';
 
 const SESSION_HASH = /^#\/sessions\/([^/]+)$/;
 
@@ -16,6 +18,9 @@ export function routeOf(hash) {
   }
   if (hash === '#/metrics') {
     return { name: 'metrics' };
+  }
+  if (hash === '#/sources') {
+    return { name: 'sources' };
   }
   if (hash === '#/logs' || hash.startsWith('#/logs?')) {
     const queryPart = hash.includes('?') ? hash.slice(hash.indexOf('?') + 1) : '';
@@ -44,7 +49,7 @@ export function mountRouter(root, deps = {}) {
 
   // Successful settings edits carry the applied-key count in memory, never in the URL or storage.
   function navigate(url, options = {}) {
-    if (url.startsWith('/#/logs') || url === '/#/metrics' || url === '/#/settings' || url === '/#/settings/edit' || url === '/#/' || url === '/') {
+    if (url.startsWith('/#/logs') || url === '/#/metrics' || url === '/#/sources' || url === '/#/settings' || url === '/#/settings/edit' || url === '/#/' || url === '/') {
       applied = options.applied ?? null;
       const hash = url.startsWith('/') ? url.slice(1) : url;
       if (location.hash === hash) show();
@@ -69,6 +74,8 @@ export function mountRouter(root, deps = {}) {
       current = mountLogs(root, screenDeps, { sessionId: route.sessionId });
     } else if (route.name === 'metrics') {
       current = mountMetrics(root, screenDeps);
+    } else if (route.name === 'sources') {
+      current = mountSources(root, screenDeps);
     } else if (route.name === 'session') {
       current = mountSession(root, route.id, screenDeps);
     } else {

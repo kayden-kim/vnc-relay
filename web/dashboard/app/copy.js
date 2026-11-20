@@ -5,6 +5,16 @@ export const BRAND_NAME = 'VNC Relay'; // CPY-003
 export const LANGUAGE_LABEL = '언어 (Language)'; // CPY-001
 // Each language is named in its own language.
 export const LANGUAGE_NAMES = { ko: '한국어', en: 'English' }; // CPY-002
+// Provider attributions of the IP information databases. They are the providers' license wording, so both languages
+// use the same English text. CPY-278 links only its address part.
+export const PROVIDER_ATTRIBUTION = {
+  dbip: { text: 'IP Geolocation by DB-IP', href: 'https://db-ip.com' }, // CPY-276
+  ipinfo: { text: 'IP address data powered by IPinfo', href: 'https://ipinfo.io' }, // CPY-277
+  maxmind_geolite: { // CPY-278
+    text: 'This product includes GeoLite Data created by MaxMind, available from https://www.maxmind.com.',
+    href: 'https://www.maxmind.com',
+  },
+};
 
 export const COPY = {
   ko: {
@@ -12,6 +22,7 @@ export const COPY = {
     help: '도움말', // CPY-195
     opensInNewTab: '새 탭에서 열림', // CPY-196
     operations: '운영 현황', // CPY-004
+    navOperations: '운영 현황', // CPY-294
     signOut: '로그아웃', // CPY-007
     refresh: '새로고침', // CPY-008
     details: '상세', // CPY-009
@@ -254,12 +265,49 @@ export const COPY = {
     trendsTitle24h: '추이(최근 24시간)', // CPY-252
     chartEmpty24h: '추이를 모으는 중입니다. 1분마다 점이 하나씩 쌓입니다.', // CPY-253
     cpuNote24h: '직전 1분 동안 쓴 CPU 시간의 비율입니다. 100%는 코어 1개를 모두 쓴 양입니다.', // CPY-254
+    sources: '접속 출처', // CPY-255
+    sourcesPeriodLabel: '집계 기간', // CPY-256
+    sourcesRange: '집계: {start} ~ {end} · 보관 사건 {stored}/{capacity}개', // CPY-257
+    sourcesDropped: '보관 상한에 이르러 {time}까지의 사건을 버렸습니다. 이 기간의 앞부분은 수에 들어 있지 않습니다.', // CPY-258
+    sourcesSummaryTitle: '요약', // CPY-259
+    sourcesSummaryNames: ['연결 시도', '거절', '중단', '시작한 세션', '주소', '국가', 'ASN'], // CPY-260
+    sourcesSummaryNote: '연결 시도는 중계 리스너가 받아들인 연결과 수락 단계에서 거절한 연결의 수입니다. 거절과 중단은 모든 단계에서 센 수입니다. 시작한 세션은 이 기간에 시작한 중계 세션 수입니다.', // CPY-261
+    ipDbTitle: 'IP 정보 DB', // CPY-262
+    ipDbNames: ['국가 DB', 'ASN DB'], // CPY-263
+    ipDbNotConfigured: '설정 안 됨', // CPY-264
+    ipDbLoaded: '사용 중', // CPY-265
+    ipDbStale: '이전 DB 사용 중', // CPY-266
+    ipDbUnavailable: '읽기 실패', // CPY-267
+    ipDbInfoLabels: ['종류', '빌드 시각', '읽은 시각'], // CPY-268
+    ipDbNotConfiguredNote: '설정 파일의 {key}에 DB 파일 경로를 넣고 서버를 재시작하면 이 정보를 찾습니다.', // CPY-269
+    ipDbStaleNote: '파일을 다시 읽지 못해 이전 DB를 계속 씁니다. 원인: {reason}. 파일을 고치면 자동으로 다시 읽습니다.', // CPY-270
+    ipDbUnavailableNote: 'DB 파일을 읽지 못했습니다. 원인: {reason}. 파일을 고치면 자동으로 다시 읽습니다.', // CPY-271
+    ipDbFileUnreadable: '파일이 없거나 읽을 수 없음', // CPY-272
+    ipDbFileTooLarge: '파일이 256 MiB보다 큼', // CPY-273
+    ipDbInvalidFormat: 'MMDB 파일이 아니거나 검사에 실패함', // CPY-274
+    ipDbUnsupportedData: '이 DB에 필요한 국가 또는 ASN 값이 없음', // CPY-275
+    addressTitle: '주소별', // CPY-279
+    addressColumns: ['주소', '국가', 'ASN', '연결 시도', '거절', '중단', '세션', '마지막 사건'], // CPY-280
+    clientAddressNote: '클라이언트 주소는 신뢰 프록시가 전달한 주소가 있으면 그 주소이고, 없으면 소켓 상대 주소입니다. 세션 열은 그 주소가 Viewer 또는 Mode II Server로 참여한 세션 수입니다.', // CPY-281
+    localAddress: '로컬', // CPY-282
+    localAddressNote: '로컬 주소(루프백·사설·링크 로컬·공유 주소)는 IP 정보 DB에서 찾지 않고 조회 링크도 없습니다.', // CPY-283
+    countryTitle: '국가별', // CPY-284
+    countryColumns: ['국가', '주소', '연결 시도', '거절', '중단', '세션'], // CPY-285
+    asnTitle: 'ASN별', // CPY-286
+    asnColumns: ['ASN', '이름', '주소', '연결 시도', '거절', '중단', '세션'], // CPY-287
+    unknownValue: '알 수 없음', // CPY-288
+    partialCount: '전체 {total}개 중 상위 {shown}개', // CPY-289
+    sourcesEmpty: '이 기간에 기록한 연결이 없습니다.', // CPY-290
+    lookupName: 'ipinfo.io에서 {value} 조회', // CPY-291
+    lookupNote: '조회 링크는 ipinfo.io를 새 탭에서 엽니다. 링크를 고르면 그 주소나 ASN이 ipinfo.io에 전달됩니다.', // CPY-292
+    sourcesRejected: '접속 출처 조회 요청을 처리하지 못했습니다. 새로고침으로 다시 조회하십시오.', // CPY-293
   },
   en: {
     navLabel: 'Main menu', // CPY-078
     help: 'Help', // CPY-195
     opensInNewTab: 'opens in a new tab', // CPY-196
     operations: 'Operations overview', // CPY-004
+    navOperations: 'Overview', // CPY-294
     signOut: 'Sign out', // CPY-007
     refresh: 'Refresh', // CPY-008
     details: 'Details', // CPY-009
@@ -502,5 +550,41 @@ export const COPY = {
     trendsTitle24h: 'Trends (last 24 hours)', // CPY-252
     chartEmpty24h: 'Collecting trend data. One point is added every minute.', // CPY-253
     cpuNote24h: 'Share of CPU time used in the last minute. 100% equals one fully used core.', // CPY-254
+    sources: 'Sources', // CPY-255
+    sourcesPeriodLabel: 'Period', // CPY-256
+    sourcesRange: 'Counting {start} – {end} · Stored events: {stored}/{capacity}', // CPY-257
+    sourcesDropped: 'The storage limit was reached, so events up to {time} were dropped. The start of this period is not counted.', // CPY-258
+    sourcesSummaryTitle: 'Summary', // CPY-259
+    sourcesSummaryNames: ['Connection attempts', 'Rejected', 'Aborted', 'Sessions started', 'Addresses', 'Countries', 'ASNs'], // CPY-260
+    sourcesSummaryNote: 'Connection attempts are connections that relay listeners accepted or rejected at the accept stage. Rejected and aborted include all stages. Sessions started is the number of relay sessions that started in this period.', // CPY-261
+    ipDbTitle: 'IP information databases', // CPY-262
+    ipDbNames: ['Country database', 'ASN database'], // CPY-263
+    ipDbNotConfigured: 'Not configured', // CPY-264
+    ipDbLoaded: 'In use', // CPY-265
+    ipDbStale: 'Using previous file', // CPY-266
+    ipDbUnavailable: 'Load failed', // CPY-267
+    ipDbInfoLabels: ['Type', 'Built', 'Loaded'], // CPY-268
+    ipDbNotConfiguredNote: 'Set {key} in the configuration file to a database file path and restart the server to look up this information.', // CPY-269
+    ipDbStaleNote: 'The file could not be read again, so the previous database is still in use. Cause: {reason}. The file is read again automatically after it is fixed.', // CPY-270
+    ipDbUnavailableNote: 'The database file could not be read. Cause: {reason}. The file is read again automatically after it is fixed.', // CPY-271
+    ipDbFileUnreadable: 'File missing or unreadable', // CPY-272
+    ipDbFileTooLarge: 'File larger than 256 MiB', // CPY-273
+    ipDbInvalidFormat: 'Not a valid MMDB file', // CPY-274
+    ipDbUnsupportedData: 'No country or ASN data for this database', // CPY-275
+    addressTitle: 'By address', // CPY-279
+    addressColumns: ['Address', 'Country', 'ASN', 'Attempts', 'Rejected', 'Aborted', 'Sessions', 'Last seen'], // CPY-280
+    clientAddressNote: 'The client address is the address forwarded by a trusted proxy, or the socket peer address when there is none. The Sessions column counts sessions that the address joined as a Viewer or Mode II Server.', // CPY-281
+    localAddress: 'Local', // CPY-282
+    localAddressNote: 'Local addresses (loopback, private, link-local, and shared) are not looked up in the IP information databases and have no lookup link.', // CPY-283
+    countryTitle: 'By country', // CPY-284
+    countryColumns: ['Country', 'Addresses', 'Attempts', 'Rejected', 'Aborted', 'Sessions'], // CPY-285
+    asnTitle: 'By ASN', // CPY-286
+    asnColumns: ['ASN', 'Name', 'Addresses', 'Attempts', 'Rejected', 'Aborted', 'Sessions'], // CPY-287
+    unknownValue: 'Unknown', // CPY-288
+    partialCount: 'Top {shown} of {total}', // CPY-289
+    sourcesEmpty: 'No connections were recorded in this period.', // CPY-290
+    lookupName: 'Look up {value} on ipinfo.io', // CPY-291
+    lookupNote: 'Lookup links open ipinfo.io in a new tab. Selecting a link sends that address or ASN to ipinfo.io.', // CPY-292
+    sourcesRejected: 'The sources request could not be processed. Use Refresh to query again.', // CPY-293
   },
 };

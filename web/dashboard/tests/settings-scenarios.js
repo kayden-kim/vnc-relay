@@ -343,8 +343,8 @@ async function case028() {
     const links = [...m.root.querySelectorAll('nav a')];
     const selected = links.filter((link) => link.getAttribute('aria-current') === 'page');
     check('DASH-028: settings active in both settings screens', selected.length === 1 && selected[0].textContent.includes(w.settings));
-    check('DASH-028: operations link available', links.some((link) => link.textContent.includes(t.operations)));
-    check('DASH-028: both nav labels visible at every width', links.filter((link) => link.textContent.includes(t.operations) || link.textContent.includes(w.settings)).every((link) => link.getBoundingClientRect().width > 0));
+    check('DASH-028: operations link available', links.some((link) => link.textContent.includes(t.navOperations)));
+    check('DASH-028: both nav labels visible at every width', links.filter((link) => link.textContent.includes(t.navOperations) || link.textContent.includes(w.settings)).every((link) => link.getBoundingClientRect().width > 0));
     checkLayout('DASH-028', m.root);
     const unauth = mount(fakeApi({ [SESSION]: () => fail(401, 'unauthenticated') }), { edit });
     await waitFor(() => unauth.navigations.length > 0);

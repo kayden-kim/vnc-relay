@@ -102,7 +102,7 @@ const BUTTON_VARIANTS = ["primary", "outline", "ghost", "destructive", "navbar"]
 const ICON_NAMES = [
   "check", "clock", "warning", "alert", "refresh", "logout", "back",
   "chevron-right", "chevron-down", "cancel", "globe", "grid", "settings", "brand",
-  "help", "external-link",
+  "help", "external-link", "pin",
 ];
 const LANGUAGE_OPTIONS = [
   { value: "ko", label: "한국어" },

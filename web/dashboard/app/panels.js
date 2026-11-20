@@ -237,9 +237,9 @@ function timeLine(label, value) {
   return line;
 }
 
-// Waiting connect time and active start time: the date, then the clock with its zone below it at every width
-// (Q236 mockup `.wd`·`.wt`).
-function timeStack(value) {
+// Waiting connect time, active start time, and SCR-008 last event time: the date, then the clock with its zone below
+// it at every width (Q236 mockup `.wd`·`.wt`).
+export function timeStack(value) {
   const cell = el('div', 'cell-time-stack');
   cell.append(...timeParts(value));
   return cell;

@@ -197,14 +197,15 @@ function checkLayout(label) {
   for (const navbar of host.querySelectorAll('.navbar')) {
     const links = [...navbar.querySelectorAll('.navbar-nav .navbar-item')];
     const copy = COPY[document.documentElement.lang];
-    check(`${label}: four navigation links remain available`, links.length === 4
-      && links[0].textContent === copy.operations && links[1].textContent === copy.metrics
-      && links[2].textContent === copy.logs && links[3].textContent === copy.settings
+    check(`${label}: five navigation links remain available`, links.length === 5
+      && links[0].textContent === copy.navOperations && links[1].textContent === copy.metrics
+      && links[2].textContent === copy.sources && links[3].textContent === copy.logs && links[4].textContent === copy.settings
       && links.every((link) => getComputedStyle(link).display !== 'none' && link.getBoundingClientRect().height > 0));
     check(`${label}: detail keeps operations navigation active`, links[0]?.getAttribute('aria-current') === 'page'
       && links.slice(1).every((link) => !link.hasAttribute('aria-current')));
     check(`${label}: metrics link uses the metrics route`, links[1]?.getAttribute('href') === '/#/metrics');
-    check(`${label}: settings link uses the settings route`, links[3]?.getAttribute('href') === '/#/settings');
+    check(`${label}: sources link uses the sources route`, links[2]?.getAttribute('href') === '/#/sources');
+    check(`${label}: settings link uses the settings route`, links[4]?.getAttribute('href') === '/#/settings');
     if (window.innerWidth < 1024) {
       check(`${label}: mobile navigation occupies a second row`,
         navbar.querySelector('.navbar-nav').getBoundingClientRect().top >= navbar.querySelector('.navbar-tools').getBoundingClientRect().bottom);

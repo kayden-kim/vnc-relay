@@ -123,8 +123,8 @@ function choosePeriod(value) {
 function checkLayout(label) {
   check(`${label}: no horizontal scroll`, document.documentElement.scrollWidth <= document.documentElement.clientWidth);
   const links = host.querySelectorAll('.navbar-nav .navbar-item');
-  check(`${label}: four navigation items, metrics current`,
-    links.length === 4 && links[1].getAttribute('aria-current') === 'page'
+  check(`${label}: five navigation items, metrics current`,
+    links.length === 5 && links[1].getAttribute('aria-current') === 'page'
     && [...links].filter((link) => link.hasAttribute('aria-current')).length === 1);
   for (const box of [...host.querySelectorAll('section.card')].map((node) => node.getBoundingClientRect())) {
     if (box.width) check(`${label}: card inside viewport`, box.left >= 0 && box.right <= innerWidth + 1);
@@ -162,9 +162,9 @@ async function case028() {
   const m = mount();
   await waitFor(settled);
   const links = [...host.querySelectorAll('.navbar-nav .navbar-item')];
-  check('028: four items in the adopted order',
-    links.map((link) => link.textContent.trim()).join('|') === [t.operations, t.metrics, t.logs, t.settings].join('|'));
-  check('028: item destinations', links.map((link) => link.getAttribute('href')).join('|') === '/|/#/metrics|/#/logs|/#/settings');
+  check('028: five items in the adopted order',
+    links.map((link) => link.textContent.trim()).join('|') === [t.navOperations, t.metrics, t.sources, t.logs, t.settings].join('|'));
+  check('028: item destinations', links.map((link) => link.getAttribute('href')).join('|') === '/|/#/metrics|/#/sources|/#/logs|/#/settings');
   check('028: only the metrics item is current', links[1].getAttribute('aria-current') === 'page'
     && links.filter((link) => link.hasAttribute('aria-current')).length === 1);
   check('028: every item is visible', links.every((link) => link.getBoundingClientRect().width > 0 && link.getBoundingClientRect().height > 0));

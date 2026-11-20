@@ -25,6 +25,12 @@ mod logs_download;
 mod logs_states;
 #[path = "dashboard_live/metrics.rs"]
 mod metrics;
+#[expect(
+    dead_code,
+    reason = "the shared MMDB writer also builds the adapter test files"
+)]
+#[path = "../crates/adapters/tests/common/mmdb.rs"]
+mod mmdb;
 #[path = "dashboard_live/overview.rs"]
 mod overview;
 #[path = "dashboard_live/settings.rs"]
@@ -35,6 +41,8 @@ mod settings_edit;
 mod settings_recovery;
 #[path = "dashboard_live/settings_view.rs"]
 mod settings_view;
+#[path = "dashboard_live/sources.rs"]
+mod sources;
 #[path = "dashboard_live/transports.rs"]
 mod transports;
 
@@ -433,6 +441,20 @@ fn dashboard_068_real_metrics_menu_entry_polls_leaving_and_returning() {
 #[test]
 fn dashboard_076_real_metrics_401_and_idle_expiry_not_extended_by_polls() {
     run(metrics::unauthenticated_poll_removes_data_and_idle_expiry_is_not_extended);
+}
+
+/// spec: dashboard.md:DASH-082
+#[test]
+fn dashboard_082_real_sources_menu_entry_polls_leaving_and_returning() {
+    run(sources::menu_entry_automatic_polls_leaving_and_returning);
+}
+
+/// spec: dashboard.md:DASH-083 partial
+/// spec: dashboard.md:DASH-084 partial
+/// spec: dashboard.md:DASH-085 partial
+#[test]
+fn dashboard_083_084_085_real_sources_counts_links_and_databases() {
+    run(sources::real_counts_links_and_databases);
 }
 
 #[test]
