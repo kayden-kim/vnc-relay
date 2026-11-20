@@ -14,7 +14,7 @@
 | 관련 ADR | [ADR-0006](../decisions/ADR-0006-config-edit-through-file.md), [ADR-0013](../decisions/ADR-0013-relay-source-deny-list.md). `relay.deny.sources`는 편집 가능한 문자열 목록이다. 파일에 표가 없으면 끝에 `[relay.deny]`를 더한다. commit 순서는 `reload_applied` → 차단 연결 종료 → `config_edited`다. |
 | 관련 문서 | [접속 ticket 모듈 설계](relay-access-ticket.md) |
 
-설정 v4의 ticket을 포함한 재로드 43개·편집 37개 이름을 사용한다([접속 ticket 모듈 설계](relay-access-ticket.md#44-재로드와-편집)). `trusted_proxies`는 신뢰 프록시의 수락·전달 주소 판정에 사용한다. `recent_logs.max_entries`는 보기 전용 재시작 키다. 최근 로그 버퍼와 API는 [운영 로그 모듈](ops-log.md)이 맡는다.
+설정 v4의 ticket과 차단 목록을 포함한 재로드 44개·편집 38개 이름을 사용한다([접속 ticket 모듈 설계](relay-access-ticket.md#44-재로드와-편집)). `trusted_proxies`는 신뢰 프록시의 수락·전달 주소 판정에 사용한다. `recent_logs.max_entries`는 보기 전용 재시작 키다. 최근 로그 버퍼와 API는 [운영 로그 모듈](ops-log.md)이 맡는다.
 
 
 ## 1. 책임과 경계
@@ -77,7 +77,7 @@ ticket 10개 항목은 WS·WSS 역할 뒤, `mode1` 앞에 놓으며 모두 `dyna
 
 | 단계 | 위치·동작 | 실패 또는 결과 |
 | --- | --- | --- |
-| 1 | HTTP에서 인증→CSRF→경로/메서드/헤더/JSON. app에서 빈 changes·37개 외 키·위 편집 가능 조건 불충족·값 자료형 거절 | `400 invalid_request`; 매체 형식은 기존 `415`, 메서드는 `405 Allow: GET, PATCH`. 편집 사건 없음 |
+| 1 | HTTP에서 인증→CSRF→경로/메서드/헤더/JSON. app에서 빈 changes·38개 외 키·위 편집 가능 조건 불충족·값 자료형 거절 | `400 invalid_request`; 매체 형식은 기존 `415`, 메서드는 `405 Allow: GET, PATCH`. 편집 사건 없음 |
 | 2 | app에서 실행 중 `management.config_edit` 확인 | `403 config_edit_disabled` |
 | 3 | 공유 mutex 아래 현재 파일 읽기 | `409 config_file_invalid`, 진단 `[]` |
 | 4 | 현재 원시 바이트 revision과 요청 비교 | `409 config_conflict` |
@@ -125,7 +125,7 @@ v4의 `edit_change`는 마지막 점 앞까지를 테이블 경로로, 마지막
 
 | 사건 | 작성 위치와 필드 출처 | 순서·금지 |
 | --- | --- | --- |
-| `reload_applied` | `ReloadService::commit_prepared`, `trigger=config_edit`, 실행값/경로/내용이 달라진 43개 중 키. 같은 경로의 ticket 키 목록 교체도 `public_keys_file`에 포함 | 실행값 차이가 있으면 같은 편집의 `config_edited`보다 먼저. 값 없음 |
+| `reload_applied` | `ReloadService::commit_prepared`, `trigger=config_edit`, 실행값/경로/내용이 달라진 44개 중 키. 같은 경로의 ticket 키 목록 교체도 `public_keys_file`에 포함 | 실행값 차이가 있으면 같은 편집의 `config_edited`보다 먼저. 값 없음 |
 | `config_edited` | `ConfigEditService::patch`, `admin_account`는 AuthorizedAdmin의 계정, `peer_ip`는 실제 소켓의 정규화 PeerIp, `config_keys`는 요청 중 파일값 변경 키, `revision`은 저장한 바이트 SHA-256 | 파일 변경 있는 성공만 한 번. 헤더 전달 IP·설정값·후보 텍스트 없음 |
 | `config_edit_rejected` | `ConfigEditService::reject`, 인증/CSRF 뒤의 6개 편집 업무 오류; `reason`은 API 오류 code, account/peer는 위와 같음, 선택 `config_keys`는 요청 키 | invalid_request·internal·인증·CSRF 실패에는 없음. 성공 사건 없음 |
 | `allow_all_target`·`allow_all_source` | `prepare_candidate`가 실제 바뀐 정책의 경고만 준비하고 commit에서 `phase=reload`로 기록 | [설정 §1.8 규칙 5~6](../contracts/config-v4.md#18-재로드-구분), OPS-058 |

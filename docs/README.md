@@ -50,7 +50,7 @@
 
 WS·WSS는 공유 리스너에서 경로별로 Viewer·Server 역할을 나눈다. 중계 리스너 앞의 프록시 TLS 종료와 최근 로그 화면을 제공한다. 관련 수용 범위는 [PRD AC-44~48](requirements/PRD.md#10-검증-및-수용-기준)에 있다.
 
-WS·WSS의 접속 ticket 확인은 역할별 선택 기능이며 기본으로 꺼져 있다. 형식과 확인 규칙은 [WebSocket 계약 1.9절](contracts/websocket-relay-v2.md#19-접속-ticket)에, 설정 키와 재로드 43개·편집 37개 키의 범위는 [설정 계약](contracts/config-v4.md)에 있다. 대시보드는 ticket 키 편집 입력과 `session_expired` 종료 원인 표시를 제공한다. 관련 수용 범위는 [PRD AC-49~52](requirements/PRD.md#10-검증-및-수용-기준)다.
+WS·WSS의 접속 ticket 확인은 역할별 선택 기능이며 기본으로 꺼져 있다. 형식과 확인 규칙은 [WebSocket 계약 1.9절](contracts/websocket-relay-v2.md#19-접속-ticket)에, 설정 키와 재로드 44개·편집 38개 키의 범위는 [설정 계약](contracts/config-v4.md)에 있다. 대시보드는 ticket 키 편집 입력과 `session_expired` 종료 원인 표시를 제공한다. 관련 수용 범위는 [PRD AC-49~52](requirements/PRD.md#10-검증-및-수용-기준)다.
 
 운영자 도움말과 대시보드 도움말 링크의 수용 범위는 [PRD AC-53~55](requirements/PRD.md#10-검증-및-수용-기준), Windows 서비스·트레이 앱은 [PRD AC-57~59](requirements/PRD.md#10-검증-및-수용-기준)를 따른다. 각 범위와 스펙의 연결은 [스펙 추적](specs/README.md#적용-범위와-추적)에서 확인한다.
 
