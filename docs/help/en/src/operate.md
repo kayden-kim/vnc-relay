@@ -198,7 +198,7 @@ Rotation timing, retention, and access permissions are the operator's responsibi
 
 The server detects changes to the configuration file, TLS files in use, and public key files for roles with access ticket checks enabled. It does not watch TLS files for a WSS listener whose roles are all disabled. Periodic checks supplement OS notifications. The defaults for `reload.poll_secs` (Dp) and `reload.settle_secs` (D) are 30 and 5 seconds. Once file changes stop, even a missed notification produces an application or failure result within Dp + D. With successive changes, the result for the latest stable files is due within D after the last detected change.
 
-Reloadable settings include source IP, Origin, trusted proxy, and Mode I target policies; limits, timeouts, and keepalive; TLS paths and contents; and access ticket settings and public key files. See application timing by key in [Configuration contract §1.8](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/config-v4.md).
+Reloadable settings include source IP, Origin, trusted proxy, and Mode I target policies; the source IP deny list; limits, timeouts, and keepalive; TLS paths and contents; and access ticket settings and public key files. See application timing by key in [Configuration contract §1.8](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/config-v4.md).
 
 1. Keep protected backups of the current valid files.
 2. Change only the required reloadable values with an external editor and save.
@@ -206,6 +206,8 @@ Reloadable settings include source IP, Origin, trusted proxy, and Mode I target 
 4. Check the result with a new connection or request that uses the changed policy.
 
 Completed checks, existing connections, started timers, and configured socket options retain their previous results. Lowering a limit below current use does not disconnect existing connections. It rejects new resource use.
+
+The deny list `relay.deny.sources` is the only exception. When it changes, open active sessions and waiting connections from the matching addresses are closed immediately. Each closed connection is recorded as `session_closed` (`close_cause = ip_denied`) or `waiting_removed` (`reason = ip_denied`). For the rules, see [Source IP deny list](configure.md#source-ip-deny-list).
 
 Listener addresses and ports, relay role and mode switches, management HTTP/HTTPS selection, account and management session policies, and `management.config_edit` require a restart. A restart-required difference rejects the entire candidate with `reload_restart_required`. Leaving that difference in the file also blocks subsequent urgent certificate replacements.
 
@@ -347,9 +349,10 @@ After restoration, check startup, readiness, actual relay traffic, and managemen
 
 - Remote management must use built-in HTTPS. Keep plain HTTP on loopback only. Relay proxy TLS termination rules do not apply to the management listener.
 - Narrow source IP allow lists for each role. An empty list rejects all sources. Do not enable unrestricted access unintentionally.
+- Block problem sources with the source IP deny list (`relay.deny.sources`). The deny list takes precedence over allow lists. An empty deny list blocks nothing, which is the opposite of an empty allow list. Blocking closes open sessions and waiting connections from that address immediately.
 - WSS or relay proxy TLS termination is recommended for public WebSocket access. Keep unnecessary plain WS roles disabled. Protect the proxy-to-VNC Relay segment too.
 - Match browser Origin values with each role's `allowed_origins`. Origin does not replace IP checks or user authentication.
-- Put only proxy addresses in `trusted_proxies`, not client ranges.
+- Put only proxy addresses in `trusted_proxies`, not client ranges. An entry that overlaps a deny list entry is a configuration error.
 - Narrow Mode I `allow_targets` to required target IPs and ports.
 - Protect account files, private keys, configuration, public key files, and logs. Restrict public key write access to prevent tampering.
 - When configuration editing is enabled, check that the server OS account can read and replace the configuration file and create and replace temporary files in its parent directory. Block writes by other ordinary OS accounts.

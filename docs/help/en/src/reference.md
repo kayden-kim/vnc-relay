@@ -61,6 +61,8 @@ See [Connecting VNC clients](connect.md) for client configuration.
 
 For upgrades and all close codes, use the [WebSocket contract, §§1.1, 1.5, and 1.7](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/websocket-relay-v2.md). For additional rules on ticket-enabled roles, see [Access tickets](access-ticket.md).
 
+A connection that hits the deny list (`ip_denied`) is closed without an HTTP response at the accept stage. At the upgrade stage it is rejected with HTTP 403. A connection rejected by the recheck at the registration stage, and a waiting connection or active session closed right after the deny list changed, receive close 4014 `ip_denied`. For the response, see [Troubleshooting](troubleshooting.md#the-address-is-in-the-deny-list).
+
 ## Configuration table map
 
 This table helps locate settings. For the full key list, defaults, and ranges, use the [configuration contract, §1.2](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/config-v4.md). See [Configuration](configure.md) for authoring and reload behavior.
@@ -77,6 +79,7 @@ This table helps locate settings. For the full key list, defaults, and ranges, u
 | `[relay.ws.server]` | WS Server enablement, IP, and Origin policies |
 | `[relay.wss.viewer]` | WSS Viewer enablement, IP, and Origin policies |
 | `[relay.wss.server]` | WSS Server enablement, IP, and Origin policies |
+| `[relay.deny]` | Source IP deny list shared by the six relay entry points |
 | `[relay.ticket.viewer]` | Access ticket checks for WS/WSS Viewer |
 | `[relay.ticket.server]` | Access ticket checks for WS/WSS Server |
 | `[mode1]` | Mode I enablement and target allow policy |
@@ -106,6 +109,7 @@ A close reason explains why an active session ended after cleanup. The labels be
 | `connection_error` | "Connection error" |
 | `admin_terminated` | "Terminated by administrator" |
 | `session_expired` | "Session expired" |
+| `ip_denied` | "Closed by deny list" |
 | `dead_connection` | "Dead connection detected" |
 | `close_timeout` | "Cleanup time limit exceeded" |
 | `server_shutdown` | "Server shutdown" |
@@ -120,8 +124,8 @@ Operations logs use JSON Lines. The `event` field identifies the event. This is 
 | Events | What to check |
 | --- | --- |
 | `server_ready`, `startup_failed` | Startup success or failure reason |
-| `connection_rejected` | Rejection stage and `reason` |
-| `waiting_registered`, `waiting_expired`, `waiting_removed` | Mode II waiting registration, wait timeout, and removal for other reasons |
+| `connection_rejected` | Rejection stage (`accept`, `upgrade`, or `register`) and `reason`. A deny list hit has `reason = ip_denied`. |
+| `waiting_registered`, `waiting_expired`, `waiting_removed` | Mode II waiting registration, wait timeout, and removal for other reasons. A removal by the deny list has `reason = ip_denied` in `waiting_removed`. |
 | `session_started`, `session_closed` | Session start and end. The close reason is in `session_closed.close_cause`. |
 | `ticket_accepted` | Successful ticket verification and use-record insertion |
 | `target_connect_failed` | Mode I target resolution or connection failure |
@@ -142,12 +146,12 @@ These are external format contract versions, not product Release numbers.
 
 | Contract name | Version | Governing document |
 | --- | --- | --- |
-| `vnc-relay-config` | 4.3.0 | [Configuration file contract](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/config-v4.md) |
-| `ops-info` | 2.2.0 | [Operations information contract](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/ops-info-v2.md) |
-| `websocket-relay` | 2.1.0 | [WebSocket relay contract](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/websocket-relay-v2.md) |
+| `vnc-relay-config` | 4.4.0 | [Configuration file contract](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/config-v4.md) |
+| `ops-info` | 2.3.0 | [Operations information contract](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/ops-info-v2.md) |
+| `websocket-relay` | 2.2.0 | [WebSocket relay contract](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/websocket-relay-v2.md) |
 | `vnc-relay-cli` | 1.8.0 | [CLI and account file contract](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/cli-v1.md) |
-| `management-api` | 1.4.0 | [Management API contract](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/management-api-v1.md) |
-| `vnc-relay-metrics` | 1.1.0 | [Metrics contract](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/metrics-v1.md) |
+| `management-api` | 1.5.0 | [Management API contract](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/management-api-v1.md) |
+| `vnc-relay-metrics` | 1.2.0 | [Metrics contract](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/metrics-v1.md) |
 
 ## Find reference documents
 

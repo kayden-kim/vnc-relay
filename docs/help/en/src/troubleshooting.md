@@ -46,6 +46,8 @@ For exit code 3, inspect `config_*`, `tls_file_invalid`, `ticket_keys_invalid`, 
 
 Plain management HTTP on a non-loopback address prevents startup with `config_plaintext_management_not_loopback`. Configure built-in HTTPS for remote management or keep management HTTP on loopback.
 
+For `config_deny_overlaps_proxy`, an entry in the deny list overlaps a trusted proxy entry. The diagnostic `key` is `relay.deny.sources[i]`. The comparison uses `trusted_proxies` of each WS or WSS listener that has at least one role enabled. If this error stops startup, the exit code is 3. Remove the overlapping entry from the deny list or change it to an address that does not overlap. A proxy address cannot be blocked.
+
 For exit code 2, check command syntax and interactive input requirements. For example, omitting `--config` is a usage error. Exit code 1 also covers execution environment failures such as watcher or runtime preparation. See [CLI contract §2](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/cli-v1.md) for complete meanings and stable diagnostic codes.
 
 ## Windows service or tray errors
@@ -117,6 +119,25 @@ For `ip_not_allowed`, check the entry point's `allow` list. TCP checks the actua
 
 With a proxy, distinguish `peer_ip` from `forwarded_ip`. For `forwarded_for_invalid` and HTTP 400, check `trusted_proxies` and the proxy's `X-Forwarded-For` handling. Trust only proxy addresses. Requests whose forwarded addresses are all trusted proxies are also rejected. Do not allow the proxy IP as a substitute for every client. See [Configuration](configure.md).
 
+### The address is in the deny list
+
+For `ip_denied`, the client address is in the source IP deny list (`relay.deny.sources`). The connection is rejected even if the address is in an allow list. Do not confuse it with `ip_not_allowed`. The `stage` of `connection_rejected` shows where the connection was rejected.
+
+- `accept`: Right after the connection is accepted. The socket is closed at once. There is no HTTP response. WSS closes before the TLS negotiation.
+- `upgrade`: Just before the WS or WSS upgrade. The request is rejected with HTTP 403. The access ticket is not consumed.
+- `register`: After the handshake, just before waiting registration. TCP closes the connection. WS and WSS close with close 4014 `ip_denied`. A connection that was accepted before the deny list changed and was still in its handshake falls here.
+
+For a WS or WSS connection behind a proxy, `forwarded_ip` is the address that is checked. Compare the deny entries with `forwarded_ip`, not `peer_ip`.
+
+If the block was not intended, follow these steps.
+
+1. Find the rejected address in `peer_ip` and `forwarded_ip` in the operations log.
+2. In the dashboard "Sources" screen, look for the "Blocked" badge in the "By address" table. You can also check `relay.deny.sources` in "View settings".
+3. For a single-address entry, select "Unblock". For a CIDR or range entry, remove it in "Edit dynamic settings" or in the configuration file. See [Block and unblock addresses](dashboard.md#block-and-unblock-addresses).
+4. Check with a new connection. After you remove the entry, new connections are judged by the allow lists again.
+
+Other users who share the same public IP may also be blocked. For the deny list rules, see [Source IP deny list](configure.md#source-ip-deny-list).
+
 ### Origin does not match
 
 For `origin_not_allowed` and HTTP 403, compare the browser's Origin with that role's `allowed_origins`. Normalized scheme, host, and port must match. Scheme and host ignore ASCII case, and omitted default ports match explicit default ports. Wildcards are unsupported. An empty list rejects all requests with Origin. Without Origin, only this comparison is skipped. IP checks and any enabled access ticket check still apply. See [Configuration contract §1.4](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/config-v4.md#14-origin-값-문법과-비교) for the exact normalization rules.
@@ -166,6 +187,7 @@ Check the close reason in "Recently closed sessions" and `session_closed` events
 - `dead_connection` means that keepalive or ping detected an unresponsive peer. Check the network and client responses. An idle connection that responds is not closed merely because no screen data flows.
 - For `admin_terminated`, check `admin_terminate` for the responsible account. WS/WSS receives close 4005.
 - `session_expired` means that an access ticket's session expiry time `sx` was reached. WS/WSS receives close 4013. If both sides have expiry times, the earlier time ends the session. Check the issuer's session lifetime policy.
+- For `ip_denied`, the deny list changed and the client address of the Viewer or the Mode II Server matched an entry. "Recently closed sessions" shows "Closed by deny list". WS/WSS receives close 4014. Check `reload_applied` at the same time to see whether `relay.deny.sources` changed. If the block was not intended, remove the entry from the list. A closed session does not come back, so the client must connect again.
 - `close_timeout` means that reverse-direction delivery or the closing exchange did not finish within `timeouts.close_secs` (E). Check peer responses and the network. Administrator termination can also produce this reason when cleanup times out.
 - For `server_shutdown`, check server shutdown activity such as grace expiry or immediate forced cleanup. Look for `shutdown_started` and `shutdown_forced`.
 - `internal_error` can indicate that a server bug ended the session owner task. Preserve surrounding logs and the deployment version for a report. Close 1011 is reserved and is not sent by the current implementation.
@@ -173,6 +195,8 @@ Check the close reason in "Recently closed sessions" and `session_closed` events
 Do not infer the cause from a client-displayed 1006 alone. The server does not send close code 1006. Pong timeout and internal errors can close sockets without a Close frame.
 
 If the connection was still waiting, find waiting time expiry in `waiting_expired` and other waiting removals in `waiting_removed`. `connection_aborted` records connections that ended before waiting registration or session startup. Close 4001 means that the Mode II peer did not arrive within the waiting time. Do not confuse this with an active session's close reason. See [Operations information contract §1.5 and §1.6](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/ops-info-v2.md) and [Management API contract §1.10](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/management-api-v1.md) for the detailed mapping.
+
+A waiting connection that the deny list closed has `reason = ip_denied` in `waiting_removed`, and WS/WSS receives close 4014. There is no summary event for closed connections. Each connection leaves its own `waiting_removed` or `session_closed`.
 
 ## Reload is rejected
 
@@ -185,10 +209,12 @@ Check "Configuration file status" and "Last reload" under dashboard "Settings". 
 ## Settings cannot be edited
 
 - For `config_edit_disabled`, set `management.config_edit = true` externally, restart, and sign in again. Editing is off by default.
+- If the "Block" button is missing on "Sources", `management.config_edit` is off. Follow the note above the table: set `management.config_edit = true` with an external editor and restart.
 - For `config_restart_pending`, revert restart-required differences or restart first. For `config_file_invalid`, correct source file read or validation problems externally.
 - For `config_conflict`, another administrator or external editor changed the file. Comments and whitespace also cause conflicts. Select "Reload settings" to discard your input and load current settings, then edit again. Do not resend the old request automatically.
 - For `config_write_failed`, this request changed neither the file nor the values in effect. Check file read/replacement permissions, parent directory temporary-file creation/replacement permissions, and disk space for the server OS account. On Windows, check open file handles that block replacement. On Ubuntu, also check directory write/search permissions and read-only mounts.
-- Certificate, private key, public key paths, and restart-required keys have no input fields. Keys for disabled roles, listeners, or Mode I are also not editable.
+- For `config_deny_overlaps_proxy`, a deny entry overlaps a trusted proxy entry. A dashboard edit rejects the whole candidate (HTTP 400 `config_invalid`), and a file reload is recorded as `reload_rejected`. Fix the entry that the diagnostic `key` (`relay.deny.sources[i]`) points to. A proxy address cannot be blocked.
+- Certificate, private key, public key paths, and restart-required keys have no input fields. Keys for disabled roles, listeners, or Mode I are also not editable. The exception is `relay.deny.sources`, which is editable even when the relay entry points are disabled.
 
 Timeout or a missing response leaves the result unknown. First query current values, file status, and recent results in "View settings". Do not apply again before checking. See [Dashboard](dashboard.md) and [Operations how-to §3.5.1](https://github.com/kayden-kim/vnc-relay/blob/main/docs/how-to/operate-relay.md).
 

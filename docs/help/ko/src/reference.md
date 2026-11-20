@@ -61,6 +61,8 @@ WS와 WSS는 같은 경로를 쓴다. 쿼리는 대상이나 중계 ID를 선택
 
 업그레이드와 종료 코드 전체는 [WebSocket 계약 1.1·1.5·1.7절](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/websocket-relay-v2.md)을 따른다. ticket을 켠 역할의 추가 규칙은 [접속 ticket](access-ticket.md)을 따른다.
 
+차단 목록(`ip_denied`)에 걸린 연결은 수락 단계에서 HTTP 응답 없이 닫는다. 업그레이드 단계에서는 HTTP 403으로 거절한다. 등록 단계의 재검사에서 거절한 연결과, 차단 목록이 바뀐 직후 끊은 대기 연결·활성 세션에는 close 4014 `ip_denied`를 보낸다. 대응은 [문제 해결](troubleshooting.md#차단-목록에-걸렸다)을 따른다.
+
 ## 설정 테이블 지도
 
 아래 표는 위치를 찾기 위한 지도다. 키 전체 목록·기본값·유효 범위는 [설정 계약 1.2절](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/config-v4.md)을 따른다. 작성 방법과 부분 재로드 구분은 [설정](configure.md)을 따른다.
@@ -77,6 +79,7 @@ WS와 WSS는 같은 경로를 쓴다. 쿼리는 대상이나 중계 ID를 선택
 | `[relay.ws.server]` | WS Server 역할의 활성화·IP·Origin 정책 |
 | `[relay.wss.viewer]` | WSS Viewer 역할의 활성화·IP·Origin 정책 |
 | `[relay.wss.server]` | WSS Server 역할의 활성화·IP·Origin 정책 |
+| `[relay.deny]` | 중계 진입점 여섯 곳이 함께 쓰는 출발지 IP 차단 목록 |
 | `[relay.ticket.viewer]` | WS·WSS Viewer의 접속 ticket 확인 |
 | `[relay.ticket.server]` | WS·WSS Server의 접속 ticket 확인 |
 | `[mode1]` | Mode I 활성화와 대상 허용 정책 |
@@ -106,6 +109,7 @@ WS와 WSS는 같은 경로를 쓴다. 쿼리는 대상이나 중계 ID를 선택
 | `connection_error` | "연결 오류" |
 | `admin_terminated` | "관리자 종료" |
 | `session_expired` | "세션 만료" |
+| `ip_denied` | "차단 목록으로 끊음" |
 | `dead_connection` | "끊긴 연결 감지" |
 | `close_timeout` | "정리 제한 시간 초과" |
 | `server_shutdown` | "서버 종료" |
@@ -120,8 +124,8 @@ WS와 WSS는 같은 경로를 쓴다. 쿼리는 대상이나 중계 ID를 선택
 | 사건 | 확인할 내용 |
 | --- | --- |
 | `server_ready`, `startup_failed` | 시작 성공 여부와 실패 원인 |
-| `connection_rejected` | 거절한 단계와 `reason` |
-| `waiting_registered`, `waiting_expired`, `waiting_removed` | Mode II 대기 등록, 대기 시간 만료, 그 밖의 원인으로 제거 |
+| `connection_rejected` | 거절한 단계(`accept`·`upgrade`·`register`)와 `reason`. 차단 목록에 걸리면 `reason`은 `ip_denied`다. |
+| `waiting_registered`, `waiting_expired`, `waiting_removed` | Mode II 대기 등록, 대기 시간 만료, 그 밖의 원인으로 제거. 차단 목록으로 끊으면 `waiting_removed`의 `reason`이 `ip_denied`다. |
 | `session_started`, `session_closed` | 세션 시작·종료. 종료 원인은 `session_closed.close_cause`에 있다. |
 | `ticket_accepted` | ticket 확인과 사용 기록 쓰기를 통과했는지 |
 | `target_connect_failed` | Mode I 대상 주소 해석·연결 실패 |
@@ -142,12 +146,12 @@ WS와 WSS는 같은 경로를 쓴다. 쿼리는 대상이나 중계 ID를 선택
 
 | 계약 이름 | 버전 | 기준 문서 |
 | --- | --- | --- |
-| `vnc-relay-config` | 4.3.0 | [설정 파일 계약](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/config-v4.md) |
-| `ops-info` | 2.2.0 | [운영 정보 계약](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/ops-info-v2.md) |
-| `websocket-relay` | 2.1.0 | [WebSocket 중계 계약](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/websocket-relay-v2.md) |
+| `vnc-relay-config` | 4.4.0 | [설정 파일 계약](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/config-v4.md) |
+| `ops-info` | 2.3.0 | [운영 정보 계약](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/ops-info-v2.md) |
+| `websocket-relay` | 2.2.0 | [WebSocket 중계 계약](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/websocket-relay-v2.md) |
 | `vnc-relay-cli` | 1.8.0 | [CLI·계정 파일 계약](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/cli-v1.md) |
-| `management-api` | 1.4.0 | [관리 API 계약](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/management-api-v1.md) |
-| `vnc-relay-metrics` | 1.1.0 | [메트릭 계약](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/metrics-v1.md) |
+| `management-api` | 1.5.0 | [관리 API 계약](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/management-api-v1.md) |
+| `vnc-relay-metrics` | 1.2.0 | [메트릭 계약](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/metrics-v1.md) |
 
 ## 기준 문서 찾기
 

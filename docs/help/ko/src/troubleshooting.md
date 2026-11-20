@@ -46,6 +46,8 @@ echo $?
 
 평문 관리 HTTP를 루프백 아닌 주소에 두면 `config_plaintext_management_not_loopback`으로 시작하지 않는다. 외부 관리는 내장 HTTPS로 구성하거나 관리 HTTP를 루프백에 둬야 한다.
 
+`config_deny_overlaps_proxy`이면 차단 목록의 항목이 신뢰 프록시 항목과 겹친 것이다. 진단의 `key`는 `relay.deny.sources[i]`다. 역할이 하나 이상 켜진 WS·WSS 리스너의 `trusted_proxies`와 비교한다. 이 오류로 시작하지 못하면 종료 코드는 3이다. 겹치는 항목을 차단 목록에서 빼거나 겹치지 않는 주소로 바꾼다. 프록시 주소는 차단할 수 없다.
+
 종료 코드 2이면 사용법과 대화형 입력 조건을 확인한다. 예를 들어 `--config` 누락은 사용법 오류다. 종료 코드 1은 변경 감지 준비나 런타임 등 실행 환경 실패에도 쓰인다. 전체 의미와 안정적인 진단 코드는 [CLI 계약 2절](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/cli-v1.md)을 따른다.
 
 ## Windows 서비스나 트레이에 오류가 나온다
@@ -117,6 +119,25 @@ Ubuntu:
 
 프록시를 쓰면 `peer_ip`와 `forwarded_ip`를 구분한다. `forwarded_for_invalid`와 HTTP 400이면 `trusted_proxies`와 프록시의 `X-Forwarded-For` 전달을 확인한다. 프록시 주소만 신뢰해야 한다. 모든 전달 주소가 신뢰 프록시 범위인 요청도 거절한다. 접근을 되게 하려고 프록시 IP를 모든 클라이언트 대신 허용하지 않는다. 설정 방법은 [설정](configure.md)을 따른다.
 
+### 차단 목록에 걸렸다
+
+`ip_denied`이면 클라이언트 주소가 출발지 IP 차단 목록(`relay.deny.sources`)에 있는 것이다. 허용 목록에 있어도 거절한다. `ip_not_allowed`와 구분한다. `connection_rejected`의 `stage`로 거절한 단계를 알 수 있다.
+
+- `accept`: 접속 수락 직후다. 소켓을 바로 닫는다. HTTP 응답은 없다. WSS는 TLS 협상 전에 닫는다.
+- `upgrade`: WS·WSS 업그레이드 직전이다. HTTP 403으로 거절한다. 접속 ticket은 소비하지 않는다.
+- `register`: 초기 교환을 마친 뒤 대기 등록 직전이다. TCP는 연결을 닫는다. WS·WSS는 close 4014 `ip_denied`로 닫는다. 차단 목록을 바꾸기 전에 수락돼 초기 교환 중이던 연결이 여기에 해당한다.
+
+프록시 뒤의 WS·WSS 연결은 `forwarded_ip`가 판정 주소다. 차단 항목을 `peer_ip`가 아니라 `forwarded_ip`와 비교한다.
+
+의도하지 않은 차단이면 다음 순서로 푼다.
+
+1. 운영 로그의 `peer_ip`와 `forwarded_ip`로 거절된 주소를 확인한다.
+2. 대시보드 "접속 출처"의 "주소별" 표에서 "차단됨" 배지를 확인한다. "설정 보기"에서 `relay.deny.sources`를 확인해도 된다.
+3. 단일 주소 항목이면 "차단 해제"를 선택한다. CIDR·범위 항목이면 "동적 설정 편집"이나 설정 파일에서 그 항목을 지운다. 절차는 [주소 차단과 해제](dashboard.md#주소-차단과-해제)를 따른다.
+4. 새 접속으로 확인한다. 항목을 지운 뒤의 새 접속부터 다시 허용 목록으로 판정한다.
+
+같은 공인 IP를 쓰는 다른 사용자도 함께 차단됐을 수 있다. 차단 목록의 규칙은 [출발지 IP 차단 목록](configure.md#출발지-ip-차단-목록)을 따른다.
+
 ### Origin이 맞지 않는다
 
 `origin_not_allowed`와 HTTP 403이면 브라우저가 보낸 Origin과 그 역할의 `allowed_origins`를 비교한다. 정규화한 스킴·호스트·포트가 같아야 한다. 스킴·호스트의 ASCII 대소문자는 구분하지 않으며 기본 포트는 생략해도 같다. 와일드카드는 없다. 빈 목록은 Origin이 있는 요청을 모두 거절한다. Origin이 없으면 이 비교만 생략한다. IP 검사와 켠 역할의 접속 ticket 확인은 유지한다. 정확한 정규화 규칙은 [설정 계약 1.4절](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/config-v4.md#14-origin-값-문법과-비교)을 따른다.
@@ -166,6 +187,7 @@ HTTP 거절과 close 코드의 전체 기준은 [WebSocket 계약 1.5절·2절](
 - `dead_connection`은 응답 없는 상대를 keepalive나 ping으로 감지한 경우다. 네트워크와 클라이언트 응답을 확인한다. 응답하는 유휴 연결은 화면 데이터가 없다는 이유만으로 끊지 않는다.
 - `admin_terminated`이면 `admin_terminate` 사건에서 수행 계정을 확인한다. WS·WSS에는 close 4005를 보낸다.
 - `session_expired`이면 접속 ticket의 세션 만료 시각 `sx`에 도달한 것이다. WS·WSS에는 close 4013을 보낸다. 양쪽에 만료 시각이 있으면 이른 시각에 끝낸다. 발급 쪽의 세션 수명 정책을 확인한다.
+- `ip_denied`이면 차단 목록이 바뀌어 Viewer 또는 Mode II Server의 클라이언트 주소가 항목과 일치한 것이다. 최근 종료 목록에는 "차단 목록으로 끊음"으로 나온다. WS·WSS에는 close 4014를 보낸다. 같은 시각의 `reload_applied`에서 `relay.deny.sources`가 바뀌었는지 확인한다. 의도한 차단이 아니면 목록에서 항목을 지운다. 끊은 세션은 되살아나지 않으므로 클라이언트가 새로 접속해야 한다.
 - `close_timeout`이면 `timeouts.close_secs`(E) 안에 반대 방향 전달이나 종료 교환을 마치지 못했다. 상대 응답과 네트워크를 확인한다. 관리자 종료에서도 정리 시간이 지나면 이 원인이 될 수 있다.
 - `server_shutdown`이면 종료 유예 만료나 즉시 강제 정리 등 서버 종료 과정을 확인한다. `shutdown_started`와 `shutdown_forced`를 함께 찾는다.
 - `internal_error`이면 서버 내부 버그로 세션 소유 작업이 끝났을 수 있다. 전후 로그와 배포 버전을 보존해 보고한다. close 1011은 예약 코드이며 현재 구현이 보내지 않는다.
@@ -173,6 +195,8 @@ HTTP 거절과 close 코드의 전체 기준은 [WebSocket 계약 1.5절·2절](
 클라이언트가 표시한 1006만으로 원인을 단정하지 않는다. 1006은 서버가 보내는 close 코드가 아니다. pong 제한 초과나 내부 오류처럼 Close 없이 소켓을 닫는 경우도 있다.
 
 아직 대기 중이었다면 대기 시간 만료는 `waiting_expired`, 그 밖의 대기 제거는 `waiting_removed`에서 찾는다. `connection_aborted`는 대기 등록이나 세션 시작 전에 끝난 연결의 기록이다. close 4001은 Mode II 상대가 대기 시간 안에 오지 않은 경우다. 활성 세션 종료 원인과 혼동하지 않는다. 상세 대응은 [운영 정보 계약 1.5·1.6절](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/ops-info-v2.md)과 [관리 API 계약 1.10절](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/management-api-v1.md)을 따른다.
+
+차단 목록으로 끊은 대기 연결은 `waiting_removed`의 `reason`이 `ip_denied`이고, WS·WSS에는 close 4014를 보낸다. 끊은 연결을 요약하는 사건은 따로 없다. 연결마다 `waiting_removed` 또는 `session_closed`가 남는다.
 
 ## 재로드가 거절된다
 
@@ -185,10 +209,12 @@ HTTP 거절과 close 코드의 전체 기준은 [WebSocket 계약 1.5절·2절](
 ## 설정을 편집할 수 없다
 
 - `config_edit_disabled`이면 외부 편집기로 `management.config_edit = true`로 바꾼 뒤 재시작·재로그인한다. 기본값은 꺼짐이다.
+- "접속 출처"에 "차단" 버튼이 없으면 `management.config_edit`이 꺼진 것이다. 표 위의 안내를 따라 외부 편집기로 `management.config_edit = true`로 바꾸고 재시작한다.
 - `config_restart_pending`이면 먼저 재시작 필요 차이를 되돌리거나 재시작한다. `config_file_invalid`이면 원본 파일의 읽기·검증 문제를 외부에서 고친다.
 - `config_conflict`이면 다른 관리자나 외부 편집기가 파일을 바꾼 것이다. 주석·공백 변경도 충돌한다. "다시 불러오기"로 입력을 버리고 최신 설정을 읽은 뒤 새로 편집한다. 옛 요청을 자동 재전송하지 않는다.
 - `config_write_failed`이면 이번 요청은 파일과 실행값을 바꾸지 않았다. 서버 실행 OS 계정의 파일 읽기·교체 권한, 상위 디렉터리의 임시 파일 생성·교체 권한과 디스크 여유를 확인한다. Windows에서는 교체를 막는 열린 파일 핸들도 확인한다. Ubuntu에서는 디렉터리 write+search 권한과 읽기 전용 마운트도 확인한다.
-- 인증서·개인키·공개 키 경로나 재시작 필요 키에는 입력란이 없다. 꺼진 역할·리스너·Mode I에 속한 키도 편집하지 못한다.
+- `config_deny_overlaps_proxy`이면 차단 항목이 신뢰 프록시 항목과 겹친 것이다. 대시보드 편집은 후보 전체를 거절하고(HTTP 400 `config_invalid`), 파일 재로드는 `reload_rejected`로 기록한다. 진단의 `key`(`relay.deny.sources[i]`)가 가리키는 항목을 고친다. 프록시 주소는 차단할 수 없다.
+- 인증서·개인키·공개 키 경로나 재시작 필요 키에는 입력란이 없다. 꺼진 역할·리스너·Mode I에 속한 키도 편집하지 못한다. 다만 `relay.deny.sources`는 중계 진입점이 꺼져 있어도 편집할 수 있다.
 
 시간 초과나 응답 유실은 성공 여부가 불명이다. "설정 보기"에서 현재 값·파일 상태·최근 결과를 먼저 조회한다. 확인 전에는 다시 적용하지 않는다. 자세한 절차는 [대시보드](dashboard.md)와 [운영 how-to 3.5.1절](https://github.com/kayden-kim/vnc-relay/blob/main/docs/how-to/operate-relay.md)을 따른다.
 

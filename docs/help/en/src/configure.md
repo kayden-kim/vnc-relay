@@ -16,6 +16,7 @@ The [distribution example](https://github.com/kayden-kim/vnc-relay/blob/main/exa
 | `[relay.tcp_viewer]`, `[relay.tcp_server]` | Fixed-role TCP listeners and source IP allow lists |
 | `[relay.ws]`, `[relay.wss]` | Shared listener addresses, trusted proxies, and WSS TLS files |
 | `[relay.ws.viewer]`, `[relay.ws.server]`, `[relay.wss.viewer]`, `[relay.wss.server]` | Role enablement, source IP allow lists, and Origin allow lists |
+| `[relay.deny]` | Source IP deny list shared by the six relay entry points |
 | `[relay.ticket.viewer]`, `[relay.ticket.server]` | Optional access ticket checks per role |
 | `[mode1]`, `[mode2]` | Relay mode enablement and Mode I target allow policy |
 | `[limits]` | Connection, waiting connection, buffer, and WebSocket message limits |
@@ -59,7 +60,51 @@ allow = ["127.0.0.1", "192.0.2.0/24", "198.51.100.10-198.51.100.20", "2001:db8::
 
 TCP checks the actual socket peer IP. At acceptance, WS and WSS check whether the peer is a trusted proxy or belongs to the union of enabled roles' `allow` lists. At upgrade, the selected role's `allow` is checked against the client address. A trusted proxy connection uses the forwarded address.
 
+The source IP deny list is checked before these checks. See [Source IP deny list](#source-ip-deny-list).
+
 For the full syntax, use the [configuration contract, §1.3](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/config-v4.md).
+
+## Source IP deny list
+
+`sources` in `[relay.deny]` is the deny list. It blocks a problem source in one place. The six relay entry points (the Viewer and Server of TCP, WS, and WSS) share this single list. It does not apply to the management listener or the status listener.
+
+```toml
+[relay.deny]
+sources = ["198.51.100.7", "203.0.113.64/26", "2001:db8:bad::/48"]
+```
+
+The item syntax is the same as `allow`. Use single IPs, CIDRs, or ranges in `a-b` form, in IPv4 or IPv6. Items must not contain whitespace. The table is optional. If you omit it, `sources = []` applies. Entries do not expire. They block until you remove them.
+
+- The deny list takes precedence over allow lists. An address that is in `allow` is still rejected if it matches a deny entry.
+- `[]` means the opposite in the two lists. `relay.deny.sources = []` blocks nothing. `allow = []` rejects every source.
+- The address that is checked is the client address. For WS and WSS behind a trusted proxy, it is the forwarded address. For every other connection, it is the socket peer address.
+- The list is checked at acceptance, at WS and WSS upgrade, and at registration after the handshake. A socket peer that is a trusted proxy is not checked at acceptance.
+- `0.0.0.0/0` and `::/0` produce no warning or error as deny entries. They can block every source, so use them with care.
+
+> **Warning:** Blocking works per address. Users who share one public IP cannot be told apart. If you block that address, all of them are blocked.
+
+### An entry must not overlap a trusted proxy
+
+If a deny entry shares even one address with a trusted proxy entry, the configuration is invalid with `config_deny_overlaps_proxy`. Blocking a proxy address would block every client behind that proxy.
+
+- The comparison uses `trusted_proxies` of each WS or WSS listener that has at least one role enabled.
+- If they overlap at startup, startup fails (exit code 3).
+- If a reload or dashboard edit candidate overlaps, the entire candidate is rejected.
+
+To block a client behind a proxy, put that client's forwarded address in the deny list, not the proxy address.
+
+### A new list applies immediately
+
+`relay.deny.sources` is reloadable. Editing the file and reloading gives the same result as editing in the dashboard. You can edit it even when the relay entry points are disabled.
+
+- The new value applies from the next accept, upgrade, and registration check.
+- When the list changes, open active sessions and waiting connections from matching addresses are closed immediately. This differs from allow lists, where a change keeps open connections.
+- An active session ends as a whole if the client address of its Viewer or Mode II Server is blocked. The Mode I target address is not checked.
+- If the list is unchanged or you only remove entries, there is nothing to close. A closed connection does not come back. After you remove an entry, new connections are judged by the allow lists again.
+
+> **Warning:** If the file still contains a restart-required difference, the whole reload candidate is rejected. Until then, deny list changes are not applied either. See [Reload and dynamic configuration editing](#reload-and-dynamic-configuration-editing).
+
+To block and unblock one address in the dashboard, follow [Block and unblock addresses](dashboard.md#block-and-unblock-addresses). Use the [configuration contract, §1.3](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/config-v4.md) for item syntax, §1.6 for the overlap check, and §1.8 for application timing and closing open connections. For the decision, see [ADR-0013](https://github.com/kayden-kim/vnc-relay/blob/main/docs/decisions/ADR-0013-relay-source-deny-list.md).
 
 ## Origin allow lists
 
@@ -83,6 +128,8 @@ When any WSS role is enabled, `[relay.wss]` must contain both `cert_file` and `k
 `cert_file` is a PEM certificate chain. Put the server certificate first, followed by intermediate certificates. `key_file` is the matching PEM private key. PKCS#8 is recommended. Do not put private key contents in the configuration file. Restricting private key reads to the server's OS account is recommended. File formats follow the [configuration contract, §1.9](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/config-v4.md).
 
 A proxy can terminate TLS before relay WS or WSS. The listener's `trusted_proxies` must contain only proxy IPs, not client ranges. It uses the same item syntax as `allow`. An empty list trusts no forwarded headers.
+
+A `trusted_proxies` entry must not overlap an entry in the deny list `relay.deny.sources`. If it does, the error is `config_deny_overlaps_proxy`. See [Source IP deny list](#source-ip-deny-list).
 
 For trusted proxy connections, `X-Forwarded-For` is read from right to left. The first non-trusted address becomes the forwarded address and is checked against the role's `allow`. A missing or empty header, an invalid inspected element, or a chain containing only trusted proxies causes rejection. Logs retain the actual socket peer IP.
 
@@ -143,13 +190,13 @@ Changing a path requires a restart. The paths cannot be edited on the dashboard 
 
 ## Reload and dynamic configuration editing
 
-The server automatically detects changes to the configuration file, TLS files in use, and public keys files for enabled ticket tables. There are 43 reloadable keys. They include IP, Origin, and trusted proxy policies, TLS files, ticket settings, Mode I target policy, limits, timeouts, and keepalive. Use the [configuration contract, §1.8](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/config-v4.md) for the exact list and application boundaries.
+The server automatically detects changes to the configuration file, TLS files in use, and public keys files for enabled ticket tables. There are 44 reloadable keys. They include IP, Origin, and trusted proxy policies, the source IP deny list, TLS files, ticket settings, Mode I target policy, limits, timeouts, and keepalive. Use the [configuration contract, §1.8](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/config-v4.md) for the exact list and application boundaries.
 
-New values apply from the next check or request for each key. Completed checks, started timers, and configured socket options retain their previous results. Existing relay sessions continue.
+New values apply from the next check or request for each key. Completed checks, started timers, and configured socket options retain their previous results. Existing relay sessions continue. The deny list is the only exception. When it changes, open sessions and waiting connections from the matching addresses are closed immediately.
 
 The dashboard's "View settings" shows settings in effect and file status. Set `management.config_edit = true` and restart to enable "Edit dynamic settings". Editing is off by default. Edits are saved to the same TOML file and applied to running settings. The server account needs permission to write the file and create temporary files and replace files in that directory.
 
-There are 37 editable keys. They exclude four TLS paths and two ticket public keys file paths from the reloadable set. These paths are view-only. Renew certificates and public keys by replacing file contents at the same path. Keys owned by roles or modes also require the activation conditions defined by the contract. See [Dashboard](dashboard.md) for screen procedures.
+There are 38 editable keys. They exclude four TLS paths and two ticket public keys file paths from the reloadable set. These paths are view-only. Renew certificates and public keys by replacing file contents at the same path. Keys owned by roles or modes also require the activation conditions defined by the contract. `relay.deny.sources` is editable even when the relay entry points are disabled. See [Dashboard](dashboard.md) for screen procedures.
 
 > **Warning:** If a valid configuration file retains even one restart-required difference, file-change detection rejects the entire candidate as `reload_restart_required`. Leaving that difference in the file also blocks later certificate and public key replacements. Dynamic configuration editing returns HTTP 409 `config_restart_pending` ([management API contract, §1.14](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/management-api-v1.md)). Revert the value or gracefully stop and restart the server.
 

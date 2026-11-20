@@ -1,6 +1,6 @@
 # Dashboard
 
-Use the dashboard to inspect connections, active sessions, metrics, and connection sources, terminate a session, and edit dynamic settings. Use recent logs to investigate problems. The top navigation order is "Overview" · "Metrics" · "Sources" · "Logs" · "Settings". "Overview" opens the "Operations overview" screen.
+Use the dashboard to inspect connections, active sessions, metrics, and connection sources, terminate a session, block addresses, and edit dynamic settings. Use recent logs to investigate problems. The top navigation order is "Overview" · "Metrics" · "Sources" · "Logs" · "Settings". "Overview" opens the "Operations overview" screen.
 
 ## Sign in
 
@@ -34,6 +34,8 @@ Check "Server state" and "Uptime" in "Server summary". "Ready" means that the se
 Connection times in waiting connections and start times in active sessions show the date and time on two lines. Address labels of active sessions sit above their values.
 
 "Recently closed sessions" shows the close reason, mode, both transports, start and close times, duration, final transfer counts, and peer addresses of active sessions after cleanup. The server measures the duration independently of system clock changes, so it can differ from the difference between the start and close times. Select "View logs" to open recent logs with that session's filter. Find waiting timeouts in logs instead. Recently closed sessions are retained only in memory. Older entries are removed when the limit is exceeded, and restarting clears the list. Closed sessions have no historical details page.
+
+A session that a deny list change closed has the close reason "Closed by deny list". To block an address, see [Block and unblock addresses](#block-and-unblock-addresses).
 
 Times use the browser's local time and show the time zone. Transfer counts use KiB/MiB. These counts measure bytes successfully written to the peer transport. They do not prove that the peer application read the data or displayed the screen.
 
@@ -94,12 +96,61 @@ Select "Sources" in the top navigation to open `/#/sources`. The screen shows th
 - The "By address", "By country", and "By ASN" tables are ordered by connection attempts, most first. The screen does not re-sort them. When fewer items than the total are received, the title shows "Top {shown} of {total}".
 - The client address is the address forwarded by a trusted proxy if there is one, otherwise the socket peer address. The "Sessions" column counts sessions in which that address took part as the Viewer or the Mode II Server.
 - A country or ASN that was not found shows "Unknown". Local addresses (loopback, private, link-local, and shared) carry a "Local" badge and are not looked up.
+- In the "Block status" column of the "By address" table, you can block an address or unblock it. See [Block and unblock addresses](#block-and-unblock-addresses) below. A blocked address carries a "Blocked" badge.
 
 Addresses without the "Local" badge and all ASNs are ipinfo.io lookup links. Links open in a new tab, and the dashboard screen and management session stay as they are. Selecting a link sends that address or ASN to ipinfo.io. The server and the dashboard do not contact ipinfo.io before you select a link. Checking your operations policy before sending addresses to an external site is recommended.
 
 The screen refreshes automatically at the `dashboard.poll_secs` interval. "Refresh" and a change of "Period" read the chosen period again at once. Until the read completes, the previous values stay on screen. If a query fails, the screen keeps the previous values and the last successful update time and shows "Stale data". Without previous values, it shows the query failure instead of empty tables or zero. If HTTP 400 or 405 rejects a request, automatic queries stop and the screen shows "The sources request could not be processed. Use Refresh to query again." Leaving the screen stops automatic refresh, and coming back starts with "Last hour".
 
 The server keeps up to 100,000 counted events in memory. Beyond that, the oldest events are dropped first. If the start of the chosen period was dropped, the screen shows "The storage limit was reached, so events up to … were dropped." The table counts then do not cover the whole period. A server restart clears the statistics. A configuration reload does not. Source statistics are not included in `/metrics`, status responses, or the operations log, and only signed-in administrators can see them. For the response format, see the [management API contract, §1.17](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/management-api-v1.md).
+
+### Block and unblock addresses
+
+In the "By address" table, you can block one address or unblock it. A blocked address is rejected at all relay entry points, even if it is in an allow list. For the deny list rules, see [Source IP deny list](configure.md#source-ip-deny-list).
+
+Blocking and unblocking is not a separate feature. It is dynamic configuration editing. It uses the same sign-in, CSRF check, conflict check, and file-write rules. So you must set `management.config_edit = true` and restart. To turn editing on, follow [Edit dynamic settings](#edit-dynamic-settings). The dashboard reads `relay.deny.sources` from the settings, adds or removes entries, and saves the whole list.
+
+The "Block status" column depends on the address and the settings.
+
+| Address and settings | "Block status" column |
+| --- | --- |
+| An address that is not blocked | "Block" button |
+| An address blocked by a single-address entry | "Blocked" badge and "Unblock" button |
+| An address with at least one CIDR or range entry | "Blocked" badge and the note "Blocked by a range entry. Remove it in Settings." No button |
+| A local address | No button. A blocked local address shows only the "Blocked" badge |
+| A server with editing disabled | No button. A blocked address shows only the "Blocked" badge |
+
+When editing is disabled, the line "To block addresses, set management.config_edit = true in the configuration file and restart the server." appears above the table.
+
+To block an address:
+
+1. In the "By address" table, find the row of the address to block.
+2. Select "Block". A screen reader announces this button as "Block {address}".
+3. In "Confirm blocking address", check "Address to block". The body reads "New connections from this address are rejected at all relay entry points, and its open sessions and waiting connections are closed immediately." Focus starts on "Cancel".
+4. Select "Block" to block. Select "Cancel" to send no request.
+5. Check the notice "Blocked address: {address}". The table is queried again, and the row shows the "Blocked" badge.
+
+To unblock an address:
+
+1. In the row of an address blocked by a single-address entry, select "Unblock". A screen reader announces this button as "Unblock {address}".
+2. In "Confirm unblocking address", check "Address to unblock". The body reads "New connections from this address are checked against the allow lists again. Connections that were closed do not come back."
+3. Select "Unblock" to unblock. Select "Cancel" to send no request.
+4. Check the notice "Removed the deny list entries for: {address}". If another administrator changed the list in the meantime and there is no entry to remove, the notice is "The deny list has already changed and has no entry to remove. Check the refreshed result." If the refreshed row still shows "Blocked", another range entry covers the address; check it in Settings.
+
+You cannot unblock an address blocked by a CIDR or range entry on this screen. Open "Edit dynamic settings" under "Settings", find "Deny list" in "Access policies", and remove that entry.
+
+While a request is running, the confirm button changes to "Blocking…" or "Unblocking…". All row buttons and the dialog buttons are disabled. The dialog closes when the request ends, whatever the result. The result appears in a notice above the table.
+
+> **Warning:** Blocking closes open sessions and waiting connections from that address immediately. Unblocking does not bring closed connections back. Blocking works per address, so users who share one public IP are blocked together.
+
+If the request fails, a notice gives the cause. In every case, the dashboard does not resend the request automatically.
+
+- "The deny list was not changed because the configuration file changed. Use Refresh and try again." Another administrator or an external editor changed the file.
+- "The deny list was not changed because of the state of the configuration file. Check the file state in View settings." Fix the restart-required difference or the file error first.
+- "The deny list was not changed. Cause: A deny entry overlaps a trusted proxy address. Proxy addresses cannot be blocked." Do not block proxy addresses.
+- "Could not confirm whether the deny list changed. Use Refresh to check." Do not assume the result. Query the table again.
+- "The request could not be processed. Reload this screen and try again."
+- "The settings could not be read, so the deny list was not changed. Try again later."
 
 ## Recent logs
 
@@ -128,6 +179,8 @@ Select "Settings" to open "View settings". All signed-in administrators can view
 
 The table shows **values currently in effect**, including defaults. It does not show unapplied file values as current values. Certificate, private key, and access ticket public key files appear as paths only. Their contents are not shown.
 
+`sources` in `[relay.deny]` also appears in this table. It is shown as a value that applies without a restart.
+
 Check "Configuration file status" for differences between the file and values in effect. Check "Last reload" for its result and changed keys. These are separate facts. Settings screens do not poll automatically. Select "Refresh" to read the current status again.
 
 - `in_effect`: The file matches the values in effect.
@@ -152,6 +205,8 @@ The default `management.config_edit = false` permits viewing only. To enable edi
 
 "Edit dynamic settings" provides source IP allow lists, Origin and trusted proxy policies, Mode I target policies, connection limits, timeouts, and keepalive settings. Related policy fields appear only when the corresponding entry point, role, listener, or Mode I is enabled. "Access tickets" provides `enabled`, `issuer`, `relay_host`, and `max_lifetime_secs` for each role. These fields appear when that role is enabled in WS or WSS, even if access ticket checks themselves are off.
 
+"Deny list" (`relay.deny.sources`) in "Access policies" is editable even when the relay entry points are disabled. Its help text reads "The deny list takes precedence over allow lists. Saving closes open sessions and waiting connections from matching addresses immediately. An empty list blocks nothing." When you add entries or change existing ones, "Confirm settings changes" shows the warning "Exception: Open sessions and waiting connections from addresses covered by new or changed deny list entries are closed immediately after saving." If you only remove entries, the warning does not appear. An entry that overlaps a trusted proxy is flagged on its line with "A deny entry overlaps a trusted proxy address. Proxy addresses cannot be blocked." The empty-list warning of the allow lists does not appear for this list.
+
 You cannot edit restart-required keys such as listener addresses or relay role and mode switches. TLS file paths and access ticket public key file paths are also not editable. See the full editable scope and application timing in [Configuration contract §1.8](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/config-v4.md).
 
 1. Change the required fields. Enter one list item per line without whitespace.
@@ -160,7 +215,7 @@ You cannot edit restart-required keys such as listener addresses or relay role a
 4. Select "Apply" to save.
 5. Check the values in effect, file status, and last reload result in "View settings".
 
-Saved values remain in the same configuration file after a restart. Changed values apply from the next check or request for each key. Completed checks, started timers, and configured socket options retain their previous results. Existing relay sessions continue.
+Saved values remain in the same configuration file after a restart. Changed values apply from the next check or request for each key. Completed checks, started timers, and configured socket options retain their previous results. Existing relay sessions continue. The deny list is the only exception. When you save added entries, open sessions and waiting connections from those addresses are closed immediately.
 
 > **Warning:** Do not save through an external editor and the dashboard at the same time. Agree on a save order with other administrators. Even comment or whitespace changes can cause a conflict.
 

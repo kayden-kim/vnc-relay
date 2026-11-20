@@ -10,7 +10,7 @@
 
 한 ticket은 한 역할과 한 중계 ID에 묶인다. Viewer용 ticket으로 Server 역할에 접속할 수 없다. 업그레이드 뒤 초기 교환의 중계 ID도 ticket의 `rid`와 같아야 한다. 중계 ID는 짝을 찾는 값이지 접속 권한을 증명하는 비밀값이 아니다.
 
-ticket은 관리 세션과 무관하다. 관리자 로그인 쿠키로 대신할 수 없다. 출발지 IP 허용 목록과 Origin 검사도 계속 적용한다. 개념과 용어는 [용어집](https://github.com/kayden-kim/vnc-relay/blob/main/GLOSSARY.md), 결정 배경은 [ADR-0009](https://github.com/kayden-kim/vnc-relay/blob/main/docs/decisions/ADR-0009-optional-relay-access-ticket.md)를 따른다.
+ticket은 관리 세션과 무관하다. 관리자 로그인 쿠키로 대신할 수 없다. 출발지 IP 허용 목록·차단 목록과 Origin 검사도 계속 적용한다. 개념과 용어는 [용어집](https://github.com/kayden-kim/vnc-relay/blob/main/GLOSSARY.md), 결정 배경은 [ADR-0009](https://github.com/kayden-kim/vnc-relay/blob/main/docs/decisions/ADR-0009-optional-relay-access-ticket.md)를 따른다.
 
 ## 보호하지 않는 경로
 

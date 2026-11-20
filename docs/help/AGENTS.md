@@ -37,6 +37,7 @@
 | 대기 연결, 활성 세션 | waiting connection, active session |
 | 최근 종료 목록, 최근 로그, 운영 로그 | recently closed sessions, recent logs, operations log |
 | 출발지 IP 허용 목록 | source IP allow list |
+| 출발지 IP 차단 목록, 차단 목록 | source IP deny list, deny list |
 | 신뢰 프록시, 전달 주소 | trusted proxy, forwarded address |
 | 접속 ticket, 발급 쪽, 세션 만료 시각 | access ticket, issuer, session expiry time |
 | 부분 재로드, 재로드 대상, 편집 대상 | reload, reloadable key, editable key |

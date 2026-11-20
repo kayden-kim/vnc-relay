@@ -10,7 +10,7 @@ An access ticket is a one-time connection permission signed by an external issue
 
 Each ticket is bound to one role and one relay ID. A Viewer ticket cannot authorize the Server role. After upgrade, the handshake relay ID must also match the ticket's `rid`. A relay ID selects a pair; it is not a secret proof of access permission.
 
-Tickets are separate from management sessions. An administrator sign-in cookie cannot replace a ticket. Source IP allow lists and Origin checks still apply. For terms, see the [glossary](https://github.com/kayden-kim/vnc-relay/blob/main/GLOSSARY.md). For the decision, see [ADR-0009](https://github.com/kayden-kim/vnc-relay/blob/main/docs/decisions/ADR-0009-optional-relay-access-ticket.md).
+Tickets are separate from management sessions. An administrator sign-in cookie cannot replace a ticket. Source IP allow lists, the source IP deny list, and Origin checks still apply. For terms, see the [glossary](https://github.com/kayden-kim/vnc-relay/blob/main/GLOSSARY.md). For the decision, see [ADR-0009](https://github.com/kayden-kim/vnc-relay/blob/main/docs/decisions/ADR-0009-optional-relay-access-ticket.md).
 
 ## Paths that tickets do not protect
 
