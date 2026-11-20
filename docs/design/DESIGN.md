@@ -344,7 +344,7 @@ components:
 
 이 문서는 운영 대시보드의 공통 시각 기준을 정하는 디자인 시스템이다. `docs/design/DESIGN.md`에 둔다. 화면 동작은 [대시보드 화면 스펙](../specs/dashboard.md)이, 교환 형식은 [관리 API v1 계약](../contracts/management-api-v1.md)이 정한다. 이 문서는 동작과 문구를 새로 정하지 않고 색·글꼴·간격·배치만 정한다.
 
-**이 문서는 채택된 기준(Accepted)이다.** 대시보드 구현은 이 문서의 토큰과 컴포넌트 기준을 따라야 한다. 설정 화면·로그 화면·메트릭 화면·접속 출처 화면·도움말 사이트와 대시보드 도움말 링크에도 적용한다. 메트릭 화면 확장은 사용자 결정 2026-11-19로 채택했다. 접속 출처 화면 확장은 사용자 결정 2026-11-20으로 채택했다. 남은 미결정 사항은 [미결정 사항](#미결정-사항)에서 관리한다.
+**이 문서는 채택된 기준(Accepted)이다.** 대시보드 구현은 이 문서의 토큰과 컴포넌트 기준을 따라야 한다. 설정 화면·로그 화면·메트릭 화면·접속 출처 화면·도움말 사이트와 대시보드 도움말 링크에도 적용한다. 메트릭 화면 확장은 사용자 결정 2026-11-19로 채택했다. 접속 출처 화면 확장과 주소 차단 확장은 사용자 결정 2026-11-20으로 채택했다. 남은 미결정 사항은 [미결정 사항](#미결정-사항)에서 관리한다.
 
 
 | 항목 | 값 |
@@ -380,7 +380,7 @@ components:
 | 채택 | 범례의 작은 색 사각형(청록·녹색) | 방향별 바이트 앞의 표식(`chart-1`·`chart-2`)으로 쓴다 |
 | 채택 | 표의 흐린 열 머리글과 얇은 행 구분선 | `muted-foreground` 머리글과 `border` 구분선을 쓴다 |
 | 채택 | 둘째 이미지의 폼 행, 녹색으로 칠한 선택 상태, 짙은 녹색 주요 버튼 | 입력과 주요 버튼(`primary`)에 쓴다 |
-| 벗어난 점 | 세션 종료·종료 확인 버튼은 빨간색 | 되돌릴 수 없는 행동을 주요 버튼과 구분한다. 이미지에는 위험 행동이 없다 |
+| 벗어난 점 | 세션 종료·종료 확인·주소 차단 확인 버튼은 빨간색 | 되돌릴 수 없는 행동을 주요 버튼과 구분한다. 이미지에는 위험 행동이 없다 |
 | 벗어난 점 | 입력 경계는 3:1 대비의 진한 회녹색(`input`) | 입력은 경계로 식별하므로 WCAG 1.4.11의 3:1이 필요하다. 이미지와 shadcn/ui의 연한 경계는 이 기준에 못 미친다 |
 | 벗어난 점 | 사용량 고리의 채움은 진한 청록(`gauge`) | 이미지의 연한 청록은 흰 바탕에서 3:1에 못 미친다 |
 | 벗어난 점 | 메뉴 바탕은 이미지의 짙은 녹색 대신 녹색 기운만 남긴 검정에 가까운 색(`navbar`) | 채도 높은 녹색 면이 넓으면 투박해 보인다. 녹색은 활성 표시 막대(`navbar-primary`)에만 둔다. 브랜드 표식 선은 순백색(`navbar-brand`)이다 |
@@ -432,7 +432,7 @@ components:
 | `colors.ring` | 포커스 링 | 상단 막대 밖 모든 조작 요소의 `:focus-visible` 윤곽선 | `spacing.focus-ring-width`·`spacing.focus-ring-offset` |
 | `colors.primary` / `colors.primary-foreground` / `colors.primary-hover` | 주요 행동 | 로그인 버튼. 설정 보기의 편집·변경 확인·적용에도 재사용한다. 한 영역에 주요 버튼은 하나만 둔다 | 버튼 글씨 |
 | `colors.link` | 링크 글씨 | 세션 식별자 링크 | 밑줄을 함께 쓴다 |
-| `colors.destructive` / `colors.destructive-foreground` / `colors.destructive-hover` | 위험한 행동 | 세션 종료 버튼과 종료 확인 버튼에만 쓴다. 입력 오류 경계와 오류 문장에도 쓴다 | 버튼에 "종료" 글씨를 쓴다 |
+| `colors.destructive` / `colors.destructive-foreground` / `colors.destructive-hover` | 위험한 행동 | 세션 종료 버튼, 종료 확인 버튼, 주소 차단 확인 버튼에만 쓴다. 입력 오류 경계와 오류 문장에도 쓴다 | 버튼에 "종료"·"차단" 글씨를 쓴다 |
 | `colors.navbar` / `colors.navbar-foreground` / `colors.navbar-muted-foreground` | 상단 막대 바탕·글씨 | 모든 폭의 상단 막대. 브랜드 이름·활성 항목·언어 선택 글씨는 `navbar-foreground`, 나머지 항목은 `navbar-muted-foreground`다. 언어 선택 경계도 `navbar-muted-foreground`다. 로그인 화면의 브랜드 표식 바탕은 `navbar`다 | 상단 막대 안의 모든 글씨 |
 | `colors.navbar-accent` / `colors.navbar-primary` | 상단 막대 활성 항목 | `navbar-accent`는 활성 항목·hover 바탕과 상단 막대 브랜드 표식 바탕, `navbar-primary`는 활성 항목 아래 표시 막대다 | 글씨 레이블 |
 | `colors.navbar-ring` | 상단 막대 포커스 링 | 상단 막대 안 조작 요소의 `:focus-visible` 윤곽선 | `spacing.focus-ring-width` |
@@ -639,7 +639,7 @@ components:
 | 활성 세션 표 | 7열 표(세션·모드·전송 경로·시작·방향별 바이트·상대 주소·상세). 시작 칸은 날짜 아래 줄에 시각(시간대 포함)을 둔다(시안의 `.wd`·`.wt`). 상대 주소 칸의 레이블은 값 위 줄에 둔다(시안의 `.addr .k`) | 행마다 첫 줄에 세션 식별자 링크와 [상세] 버튼, 아래에 레이블·값 쌍(모드, 전송 경로, 시작, 방향별 바이트 2줄, 상대 주소) |
 | 최근 종료 표 | 8열 표(세션·종료 원인·모드·전송 경로·시각·방향별 바이트·상대 주소·로그). 시각 칸은 시작 시각·종료 시각·지속 시간 세 줄이고, 로그 칸은 [로그 보기] outline 버튼이다. 시각 줄은 레이블, 날짜, 시각(시간대 포함)을 이어 쓴다. 폭이 모자라면 시각부터 다음 줄로 넘기고, 날짜와 시각은 각각 통째로 넘긴다. 1280px에서는 날짜가 레이블 옆에 온다. 상대 주소 칸의 레이블은 값 위 줄에 둔다. 전송 경로와 방향별 바이트 머리글은 낱말 사이에서 줄바꿈을 허용한다(시안의 `.tl`·`.addr .k`·`th.wrap`) | 행마다 첫 줄에 세션 식별자와 종료 원인 배지, 아래에 레이블·값 쌍(모드, 전송 경로, 시각 3줄, 방향별 바이트 2줄, 상대 주소, [로그 보기]) |
 | 세션 상세 | 세션 정보 카드(레이블·값 두 열 목록)와 전송량 카드를 나란히 둔다. [세션 종료]는 세션 정보 카드 바닥 오른쪽 | 두 카드를 쌓는다. 레이블·값 한 열 목록. [세션 종료]는 전체 폭 |
-| 종료 확인 대화상자 | 최대 폭 `spacing.dialog-max`, 가운데. 버튼은 가로로 [취소][종료 확인] | 뷰포트 폭에서 가로 여백 `spacing.md`씩 뺀 폭. 버튼은 세로로 쌓고 전체 폭이며 [취소]가 위에 온다 |
+| 종료 확인·주소 차단·해제 확인 대화상자 | 최대 폭 `spacing.dialog-max`, 가운데. 버튼은 가로로 [취소][종료 확인]([취소][차단]·[취소][차단 해제]) | 뷰포트 폭에서 가로 여백 `spacing.md`씩 뺀 폭. 버튼은 세로로 쌓고 전체 폭이며 [취소]가 위에 온다 |
 | 로그인 | 최대 폭 `spacing.login-max` 카드, 가운데. 입력과 [로그인] 버튼은 전체 폭 | 전체 폭 카드. 같음 |
 | 메트릭 핵심 지표 | 카드 8개 격자. 한 줄에 최대 4개 | 폭이 줄면 한 줄 카드 수가 4·3·2·1로 줄어든다. 카드 최소 폭은 `spacing.metric-card-min`이며 320px에서 1열이다 |
 | 메트릭 추이 차트 | 카드 5개를 12열 격자에서 6열씩 둔다. 마지막 카드는 왼쪽에 혼자 둔다 | 카드를 한 열로 쌓는다. 차트 높이는 `spacing.chart-height` 그대로다. 눈금 글씨는 12px을 지킨다 |
@@ -685,7 +685,7 @@ shadcn/ui처럼 경계선과 얕은 그림자로 층을 나눈다.
 | 상단 막대 | `colors.navbar`. 경계·그림자 없음 | 화면 맨 위, 모든 폭 |
 | 카드 | `colors.card`, `spacing.border-width` `colors.border` 경계, 그림자 `0 spacing.shadow-y spacing.shadow-blur colors.shadow` | 요약·사용량·목록·세션 정보·전송량·로그인 카드. 카드 안 구분은 `colors.border` 선이다 |
 | 안내(Alert) | `<상태>-bg` 바탕, `spacing.border-width` `<상태>-border` 경계. 그림자 없음 | 상태 안내 |
-| 대화상자 | 카드와 같은 경계, 그림자는 카드 그림자를 네 배 키운 값(`spacing.shadow-y`·`spacing.shadow-blur`의 4배). 뒤에 `colors.overlay` | 종료 확인 대화상자 |
+| 대화상자 | 카드와 같은 경계, 그림자는 카드 그림자를 네 배 키운 값(`spacing.shadow-y`·`spacing.shadow-blur`의 4배). 뒤에 `colors.overlay` | 종료 확인·주소 차단·해제 확인 대화상자 |
 
 ## Shapes
 
@@ -723,7 +723,7 @@ shadcn/ui처럼 경계선과 얕은 그림자로 층을 나눈다.
 
 | 컴포넌트 | 변형 | 시각 상태 | 크기와 구성 | 관련 동작 |
 | --- | --- | --- | --- | --- |
-| Button | `button-primary`(로그인), `button-outline`(새로고침·상세·상태 재조회·취소·안내 안 버튼), `button-ghost`(목록으로), `button-destructive`(세션 종료·종료 확인), 상단 막대 항목형(로그아웃) | 기본·hover(`*-hover` 토큰)·focus-visible·disabled(투명도를 낮추지 않고 `colors.muted-foreground` 글씨와 `colors.muted` 바탕, 경계 `colors.border`)·진행 중(레이블을 진행 중 문구로 바꾸고 disabled). 주요·위험 버튼은 `typography.button-strong`, 나머지는 `typography.button` | 높이 `spacing.control-height`(표 안 [상세]는 `spacing.control-height-sm`, 모바일 `spacing.control-height-touch`), 가로 안쪽 `spacing.lg`, 아이콘과 글씨 사이 `spacing.sm`. outline은 `colors.border` 경계와 `colors.card` 바탕이다. 한 영역의 주요 버튼은 하나다 | DASH-003·DASH-009~013·DASH-017~019 |
+| Button | `button-primary`(로그인), `button-outline`(새로고침·상세·상태 재조회·취소·차단·차단 해제·안내 안 버튼), `button-ghost`(목록으로), `button-destructive`(세션 종료·종료 확인·주소 차단 확인), 상단 막대 항목형(로그아웃) | 기본·hover(`*-hover` 토큰)·focus-visible·disabled(투명도를 낮추지 않고 `colors.muted-foreground` 글씨와 `colors.muted` 바탕, 경계 `colors.border`)·진행 중(레이블을 진행 중 문구로 바꾸고 disabled). 주요·위험 버튼은 `typography.button-strong`, 나머지는 `typography.button` | 높이 `spacing.control-height`(표 안 [상세]·[차단]·[차단 해제]는 `spacing.control-height-sm`, 모바일 `spacing.control-height-touch`), 가로 안쪽 `spacing.lg`, 아이콘과 글씨 사이 `spacing.sm`. outline은 `colors.border` 경계와 `colors.card` 바탕이다. 한 영역의 주요 버튼은 하나다 | DASH-003·DASH-009~013·DASH-017~019·DASH-089·DASH-090 |
 | Input | 텍스트·비밀번호 | 기본·focus-visible·오류 | 높이 `spacing.control-height`(모바일 `spacing.control-height-touch`), `typography.input`, `colors.input` 경계. 오류일 때 경계를 `colors.destructive`로 바꾸고 오류 문장을 입력 아래에 쓴다 | DASH-018 |
 | Badge | `badge-success`·`badge-info`·`badge-warning`·`badge-destructive`·`badge-neutral` | 정적 | `typography.badge`, `rounded.sm`, 가로 안쪽 `spacing.sm`·세로 `spacing.xs`. 상태 배지는 아이콘 + 글씨, 중립·개수 배지는 글씨만 | DASH-001·DASH-003·DASH-020 |
 | Alert | `alert-info`·`alert-warning`·`alert-destructive`·`alert-neutral` | 정적 | `<상태>-bg` 바탕, `<상태>-border` 경계, `rounded.lg`, 안쪽 `spacing.md`(세로)·`spacing.lg`(가로). 왼쪽 아이콘(`<상태>` 색), 제목 `typography.body-strong`(`<상태>` 색), 설명 `typography.body`(`foreground`), 오른쪽에 outline 버튼 | DASH-003·DASH-007·DASH-008·DASH-012·DASH-013 |
@@ -734,7 +734,7 @@ shadcn/ui처럼 경계선과 얕은 그림자로 층을 나눈다.
 | Language select | 상단 막대형(`lang-select`, 어두운 바탕)·로그인형(밝은 바탕) | 기본·hover·focus-visible | 브라우저 기본 `<select>`. 왼쪽에 지구 아이콘, 오른쪽에 펼침 아이콘. 상단 막대형은 `navbar` 바탕·`navbar-foreground` 글씨·`navbar-muted-foreground` 경계, 로그인형은 `card` 바탕·`foreground` 글씨·`input` 경계. 높이는 버튼과 같다. 선택한 언어 이름을 보인다 | DASH-024·DASH-025 |
 | Data table | 표(데스크톱 폭)·카드 목록(모바일 폭) | 행 hover(`colors.muted`), 링크 hover·focus-visible | 머리글 `typography.label`·`colors.muted-foreground`, 바탕 없음, 아래에 `colors.border` 선. 행은 `colors.border` 선으로 나눈다. 숫자 열은 오른쪽 정렬한다. 방향별 바이트는 줄마다 방향 표식 + 흐린 방향 이름 + 값이다 | DASH-001·DASH-015 |
 | Link | 세션 식별자 | 기본(밑줄)·hover·focus-visible | `colors.link`, 밑줄, `typography.data` | DASH-006 |
-| Dialog | 종료 확인 | 열림·닫힘 | `<dialog>` 모달 기준. 제목 `typography.heading-card`, 설명 `typography.body`, 바닥에 오른쪽 정렬 버튼. 폭은 위 [배치](#중단점과-모바일-배치)를 따른다 | DASH-009 |
+| Dialog | 종료 확인, 주소 차단 확인, 주소 차단 해제 확인 | 열림·닫힘 | `<dialog>` 모달 기준. 제목 `typography.heading-card`, 설명 `typography.body`, 바닥에 오른쪽 정렬 버튼. 폭은 위 [배치](#중단점과-모바일-배치)를 따른다 | DASH-009·DASH-089·DASH-090 |
 | Metric card | 값 하나(활성 세션 수·대기 연결 수·거절한 연결·CPU 사용률·메모리 사용량), 방향 두 줄(처리량), Gauge(중계 연결·관리 연결) | 정적. 값 상태는 값 있음·확인 불가·수집 중·조회 중이다 | Card·Stat·Gauge 재사용. 제목 줄 `typography.heading-card`(설명이 있으면 `typography.label`·`colors.muted-foreground`), 본문 가운데 값 `typography.metric`. 격자는 한 줄 최대 4개이고 카드 최소 폭은 `spacing.metric-card-min`이다. 상세는 [메트릭 화면 확장](#메트릭-화면-확장) | DASH-068·DASH-069·DASH-072 |
 | Line chart | 계열 1·2·3개 | 정적. 데이터 있음 또는 빈 자리(CPY-220, 보관한 점이 차트별 최소 수보다 적을 때만). 호버·초점·툴팁 없음 | 높이 `spacing.chart-height`, 선 두께 `spacing.chart-stroke`, 선 색 `colors.chart-line-1`~`3`, 격자 `colors.border`. y축·x축 눈금은 `typography.label`·`colors.muted-foreground`. 값이 없는 자리는 선을 끊는다. `role="img"`. 상세는 [메트릭 화면 확장](#메트릭-화면-확장) | DASH-070·DASH-072 |
 | Chart legend | 계열 1·2·3개 | 정적 | 선 견본(차트와 같은 색·모양·두께), 이름 `typography.body`, 값(CPY-219) `typography.label`·`colors.muted-foreground`. 현재 값이 없으면 그 자리에 "확인 불가" | DASH-070·DASH-072 |
@@ -857,7 +857,7 @@ shadcn/ui처럼 경계선과 얕은 그림자로 층을 나눈다.
 | IP 정보 DB 카드 | Card 하나. 제목 `typography.heading-card`(CPY-262). 본문에 DB 행 둘(국가 DB, ASN DB. CPY-263)을 이 순서로 쌓고 행 사이에 `colors.border` 구분선을 둔다. 행은 왼쪽에 행 이름(`typography.body-strong`, 최소 폭 `spacing.label-col`), 오른쪽에 상태 배지·메타 값·안내를 둔다. 메타는 로그 화면의 요약 목록(레이블 `muted-foreground`, 값은 `typography.data`와 `typography.body-numeric`)을 재사용한다. 레이블은 CPY-268(종류·빌드 시각·읽은 시각) | 상태 배지는 `not_configured`=`badge-neutral`(글씨만), `loaded`=`badge-success`(체크 아이콘), `stale`=`badge-warning`(삼각형 아이콘), `unavailable`=`badge-destructive`(원 느낌표 아이콘), 모르는 값=받은 글씨 그대로 `badge-neutral`. 글씨는 CPY-264~267이다. `loaded`·`stale`만 메타 값을 보인다. 안내는 `typography.body`다: CPY-269는 `ip_info.country_db`·`ip_info.asn_db` 키를 `typography.data`로 쓴다. CPY-270·271은 원인 문구(CPY-272~275, 모르는 값은 원문)를 넣고 `error`가 `null`이면 원인 문장을 뺀다. DB 상태는 화면 상태 배지를 바꾸지 않는다. 모바일은 행을 한 열로 쌓는다(이름, 배지·메타, 안내) | 상태 색 표의 뜻(성공·경고·위험·중립)을 그대로 따른다. 새 변형이 없다. DB 종류·빌드 시각·읽은 시각은 값이라 번역하지 않는다. 시각은 현지 시각과 시간대다 | Accepted |
 | 출처 표시 | IP 정보 DB 카드 맨 아래, `colors.border` 윗선 아래. 문장마다 한 줄, `typography.label`. 링크 부분은 Link(`colors.link`, 밑줄)이고 끝에 새 탭 아이콘(`spacing.icon-size-sm`, 글씨와 간격 `spacing.xs`)을 둔다. 전체가 링크인 문구(CPY-276 DB-IP, CPY-277 IPinfo)와 주소 부분만 링크인 문구(CPY-278 GeoLite의 `https://www.maxmind.com`)가 있다 | 쓰는 DB의 제공자마다 한 번만 보인다. `maxmind`·`unknown`·모르는 값·`provider = null`은 보이지 않는다. 쓰는 DB가 없으면 출처 표시 줄도 없다. 두 언어에서 같은 영어 문구다. 링크는 `target="_blank"`·`rel="noopener noreferrer"`이고 접근 가능한 이름은 보이는 글씨 뒤에 CPY-196을 붙인 글이다. 새 탭 아이콘은 장식이다 | 도움말 링크의 새 탭 규칙(CPY-196, 아이콘 `aria-hidden`)을 재사용한다. 라이선스가 정한 문구라 줄이거나 번역하지 않는다 | Accepted |
 | 표 세 개의 공통 구성 | Card 하나에 Data table 하나. 카드 제목 `typography.heading-card`(CPY-279·284·286)와 제목 옆 개수 배지, 아래 `colors.border` 구분선. 표 `caption`은 같은 글씨이며 화면에서만 감춘다. 열 머리글 CPY-280·285·287은 `th scope="col"`. 수 열은 `typography.body-numeric`이고 오른쪽 정렬이다. 행 hover는 `colors.muted` | 개수 배지는 `badge-neutral`이다. `total`이 `items` 수보다 크면 CPY-289("전체 150개 중 상위 100개"), 같으면 CPY-084·085다. 배지는 한 줄 글씨라 320px에서 카드 제목 줄 안에서 제목 아래로 넘어간다. 표는 응답 순서 그대로이며 정렬 조작이 없다. 세 카드는 주소별, 국가별, ASN별 순서로 전체 폭에 쌓는다. 긴 값은 `overflow-wrap:anywhere`로 줄바꿈하고 자르지 않는다 | SCR-001의 목록 카드와 같은 구성이다. 개수 배지 글씨가 길어지는 점만 다르다. ASN별 표가 7열이라 국가별 표와 나란히 두지 않는다 | Accepted |
-| 주소별 표 | 8열(주소·국가·ASN·연결 시도·거절·중단·세션·마지막 사건). 카드 제목 아래 설명 세 줄(CPY-281·283·292, `typography.label`·`colors.muted-foreground`). 주소는 `typography.data`. 마지막 사건은 날짜 위·시각(시간대 포함) 아래 두 줄이다(기존 `.wd`·`.wt` 패턴). ASN 칸은 `AS{n}` 링크 아래 줄에 AS 이름(`typography.label`) | 주소가 38자인 IPv6도 열 안에서 줄바꿈한다. `local = false`이면 주소 글씨 전체가 `https://ipinfo.io/<ip>` 링크이고 글씨 뒤에 새 탭 아이콘이 붙는다. `local = true`이면 링크 없이 로컬 배지가 주소 옆에 온다. AS 이름이 길면 줄바꿈하고 `null`이면 그 줄이 없다 | 마지막 사건을 두 줄로 두어 1024px에서도 열 폭을 아낀다. SCR-001의 시각 칸과 같은 패턴이다 | Accepted |
+| 주소별 표 | 9열(주소·국가·ASN·연결 시도·거절·중단·세션·마지막 사건·차단 상태). 마지막 열은 [주소 차단 확장](#주소-차단-확장)이 정한다. 카드 제목 아래 설명 세 줄(CPY-281·283·292, `typography.label`·`colors.muted-foreground`). 주소는 `typography.data`. 마지막 사건은 날짜 위·시각(시간대 포함) 아래 두 줄이다(기존 `.wd`·`.wt` 패턴). ASN 칸은 `AS{n}` 링크 아래 줄에 AS 이름(`typography.label`) | 주소가 38자인 IPv6도 열 안에서 줄바꿈한다. `local = false`이면 주소 글씨 전체가 `https://ipinfo.io/<ip>` 링크이고 글씨 뒤에 새 탭 아이콘이 붙는다. `local = true`이면 링크 없이 로컬 배지가 주소 옆에 온다. AS 이름이 길면 줄바꿈하고 `null`이면 그 줄이 없다 | 마지막 사건을 두 줄로 두어 1024px에서도 열 폭을 아낀다. SCR-001의 시각 칸과 같은 패턴이다 | Accepted |
 | 조회 링크(주소·ASN) | Link 재사용(`colors.link`, 밑줄, 주소는 `typography.data`, ASN은 `typography.body-numeric`). 글씨 뒤에 새 탭 아이콘 `spacing.icon-size-sm`(`colors.link`와 같은 색) | 보이는 글씨는 주소 또는 `AS{n}`이고, 접근 가능한 이름은 CPY-291 뒤에 괄호로 CPY-196을 붙인 글이다. `target="_blank"`·`rel="noopener noreferrer"`. hover·focus-visible은 Link와 같다. 모바일에서도 같은 글씨 크기다. 이웃한 링크와 중심 간격이 `spacing.target-min` 이상이 되도록 표 행 간격을 쓴다 | 세션 식별자 링크와 같은 Link다. 새 탭으로 간다는 사실은 아이콘이 보이고 이름이 읽는다 | Accepted |
 | 로컬 배지 | `badge-neutral`, 글씨만(CPY-282). 주소 글씨 뒤 `spacing.xs` 간격 | `local = true`인 주소에만 둔다. 글씨가 뜻을 전한다. 이 주소의 국가·ASN 칸은 "알 수 없음"(CPY-288)이다 | 중립 배지는 아이콘 없는 글씨 배지 규칙을 따른다 | Accepted |
 | 국가·ASN 값 칸 | 국가는 `{이름} ({코드})`(`typography.body-numeric`). 이름은 화면 언어의 브라우저 지역 이름이고, 이름이 없으면 코드만 쓴다. ASN은 `AS{n}` 링크. 값이 없으면 `colors.muted-foreground` 글씨 "알 수 없음"(CPY-288) | `null` 국가·ASN은 배지가 아니라 흐린 글씨다. ASN이 `null`이면 링크가 없다. 국가별 표의 `null` 행은 응답 순서(같은 연결 시도 수 안에서 마지막)를 따른다. ASN별 표의 이름 칸은 `as_name`이 `null`이면 빈 칸이다 | "확인 불가"(서버가 값을 못 읽음)와 "알 수 없음"(DB에서 못 찾음)은 뜻이 다르다. 한 열에 배지가 줄줄이 있으면 정상 값이 묻혀서 글씨로만 둔다 | Accepted |
@@ -886,6 +886,56 @@ shadcn/ui처럼 경계선과 얕은 그림자로 층을 나눈다.
 | 6 | 데스크톱 1024px 영어 상단 막대 | 다섯 항목을 한 줄에 둔다. SCR-001 항목 이름은 CPY-294 "Overview"를 쓴다(사용자 결정 2026-11-20) | 화면 제목과 같은 "Operations overview"로 두면 1024px에서 메뉴와 도구 사이 간격이 8px만 남고, 도구가 오른쪽 안쪽 여백 24px 중 6.5px를 침범했다. "Overview"로 줄이면 간격이 66.7px이고 오른쪽 여백 24px을 모두 지킨다. 영어 프레임 64개의 상단 막대는 1024·390·320px에서 가로 넘침이 없다 |
 
 시안에서 확인하는 경계 콘텐츠: 로컬 주소 행, 38자 IPv6 주소, 긴 AS 이름, 국가·ASN이 `null`인 행, 제목 옆 CPY-289(전체 150개 중 상위 100개, 전체 120개 중 상위 100개), 보관 상한 안내, DB 상태 넷(`not_configured`·`stale`·`unavailable`·`loaded`)과 제공자별 출처 표시(DB-IP·IPinfo·GeoLite), 사건 없음, 최초 로딩·갱신 중·조회 실패(이전 값 유무)·요청 거절. 폭은 1280·1024·390·320px, 언어는 한국어·English다.
+
+### 주소 차단 확장
+
+**Accepted (사용자 결정 2026-11-20).** SCR-008의 주소 차단·해제, SCR-004·005의 차단 목록, SCR-001의 종료 원인 `ip_denied`의 구성 기준이다. 화면 스펙과 충돌하면 스펙이 우선한다. 문구는 [화면 스펙 9.3.8](../specs/dashboard.md#938-scr-008-접속-출처)·9.3.5·9.3.2의 CPY-295~324를 그대로 쓴다. 동작 기준은 스펙 SCR-008 "주소 차단과 해제" 소절, 5.5절, DASH-089~091이다. 이 절은 새 색·간격·글꼴 토큰을 만들지 않고 기존 토큰과 컴포넌트를 조합한다. 시각 시안은 [dashboard.html](mockups/dashboard.html)의 "주소 차단" 그룹 프레임 36개다. SCR-008은 한국어·English 각 12개(차단 가능·편집 꺼짐·차단 확인·차단 해제 확인·차단 요청 중·차단 해제 요청 중·차단 성공·차단 해제 성공·실패(충돌)·실패(검증 거부)·결과 불명·결과 알림 일람)다. SCR-004는 [relay.deny] 카드, SCR-005는 입력·검증 실패·변경 확인(추가·뺌), SCR-001은 `ip_denied` 행이며 각각 한국어·English 프레임이 있다. 화면 일부만 보이는 프레임은 캡션에 생략한 카드를 적었다. 기존 SCR-008 프레임 20개에도 차단 상태 열을 더했다. 시안의 주소는 문서용 대역이고 숫자는 예시다.
+
+| 공통 요소 | 토큰·구성 | 폭·상태·사용 조건 | 관계·이유 | 상태 |
+| --- | --- | --- | --- | --- |
+| 차단 상태 열 | 주소별 표의 아홉 번째(마지막) 열. 열 머리글 CPY-295(`th scope="col"`). 칸 안은 가로 `flex`, `flex-wrap`, 간격 `spacing.xs`(세로)·`spacing.sm`(가로). 배지, 버튼, 안내를 이 순서로 둔다 | 데스크톱 열 최소 폭은 `spacing.2xl`의 4배(192px)다. 1024px에서도 표가 가로로 넘치지 않는다(1280·1024·390·320px 측정). 칸이 비는 경우는 로컬 주소이면서 차단되지 않았을 때, 편집이 꺼져 있고 차단되지 않았을 때다. 빈 칸에 글씨를 넣지 않는다. 최초 로딩·사건 없음의 표 자리 안내 칸은 아홉 열 전체에 걸친다 | 스펙이 주소별 표 끝에 열을 더하라고 정했다. 마지막 열이라 기존 8열의 폭 배분을 건드리지 않는다 | Accepted |
+| [차단]·[차단 해제] 행 버튼 | `button-outline` `sm`. 글씨는 CPY-296·298이다. 접근 가능한 이름은 `aria-label`로 CPY-297·299(주소 포함)이다. 아이콘 없음. 높이 `spacing.control-height-sm`(32px), 모바일 `spacing.control-height-touch`(44px) | `deny_editable = true`이고 로컬이 아닌 행에만 둔다. 차단 안 된 행은 [차단], 단일 항목으로만 차단된 행은 [차단 해제]다. 범위 항목이 하나라도 있으면 버튼이 없다. 요청 중에는 모든 행의 버튼이 `disabled`(`colors.muted` 바탕, `colors.muted-foreground` 글씨)다. 누르면 확인 대화상자가 열리고 바로 요청하지 않는다 | 행마다 빨간 버튼을 두지 않는다는 기존 규칙(허용·금지 조합 "위험 행동")을 지킨다. 빨강은 대화상자의 확인 버튼에만 쓴다(결정 2·3). 보이는 글씨 "차단"이 접근 가능한 이름에 들어 있어 음성 제어와 맞는다 | Accepted |
+| 차단됨 배지 | `badge-destructive` + 원 안 가로줄 아이콘(기존 "세션 종료" 아이콘, `spacing.icon-size-sm`) + 글씨 CPY-300. 아이콘은 `aria-hidden` | 이 주소가 차단 목록에 걸리면 편집 가능 여부와 상관없이 보인다. 로컬 주소도 보인다(로컬 배지 옆에 둘 다). 배지만 보이고 버튼이 없는 경우: 로컬 주소, 범위 항목, 편집 꺼짐 | 글씨·모양·색 세 가지로 전한다. 목록에서 차단된 주소를 빨리 찾는 것이 이 열의 일이다(결정 1) | Accepted |
+| 범위 항목 안내 | `typography.label`·`colors.muted-foreground`, 글씨 CPY-301. 배지 아래 줄, 칸 폭 전체(`flex-basis:100%`) | 이 주소가 `/`나 `-`가 든 항목으로 차단되었을 때만 보인다(단일 항목과 섞여도 보인다). 이때 [차단 해제] 버튼은 없다. 링크·버튼이 없는 일반 글이다. 줄바꿈하고 자르지 않는다 | 화면에서 풀 수 없다는 사실과 풀 곳(설정)을 한 문장으로 알린다. 안내가 짧은 열 폭에서 3줄까지 늘어난다 | Accepted |
+| 편집 꺼짐 안내 | 주소별 카드 설명의 마지막 줄. `typography.label`·`colors.muted-foreground`, 글씨 CPY-302. 키 이름과 값은 글에 그대로 들어 있다 | `deny_editable = false`일 때만 표 위에 한 줄 더한다. 버튼과 범위 안내(CPY-301)는 없고 차단된 주소의 배지는 남는다. 알림 컴포넌트가 아니라 설명 줄이라 라이브 영역이 아니다 | 같은 카드의 다른 설명 세 줄과 자리·글씨가 같다. 매번 눈에 띄는 알림은 편집을 일부러 끈 운영자에게 잡음이다(결정 7) | Accepted |
+| 차단·해제 확인 대화상자 | 기존 `dialog`(최대 폭 `spacing.dialog-max`, 그림자 4배, 뒤 `colors.overlay`). 제목 `typography.heading-card`(CPY-303·307), 라벨 `typography.label`·`colors.muted-foreground`(CPY-304·308), 주소 `typography.data`, 본문 `typography.body`(CPY-305·309), 아래 오른쪽에 `button-outline` [취소](CPY-011)와 확인 버튼. 차단 확인은 `button-destructive` "차단"(CPY-296), 해제 확인은 `button-primary` "차단 해제"(CPY-298) | 열릴 때 초점이 [취소]에 있다(초점 링 `ring` 2px). Escape·[취소]는 닫고 호출한 행 버튼으로 초점을 돌려준다. 버튼이 사라졌으면 결과 알림 영역으로 돌려준다. 모바일은 버튼을 세로로 쌓고 [취소]가 위다. 뒤 화면은 `inert`다 | SCR-002 세션 종료 대화상자와 같은 모양이다. 새 컴포넌트가 없다. 해제는 되돌릴 수 있는 쪽이라 primary로 둔다(결정 3) | Accepted |
+| 요청 중 상태 | 확인 버튼 글씨가 "차단 중…"(CPY-306)·"차단 해제 중…"(CPY-310)으로 바뀌고 `disabled`. [취소]도 `disabled`. 표의 모든 행 버튼도 `disabled`. 새 스피너·막대 없음 | 요청이 끝나면 어떤 결과든 대화상자가 닫힌다. 요청 중에 뒤 화면을 다시 조회하지 않는다 | 기존 버튼 규칙("진행 중 = 글씨 바꿈 + 비활성")이다. 모션을 새로 만들지 않는다 | Accepted |
+| 결과 알림 영역 | 머리말 바로 아래, 상태 안내 자리(위 "상태 안내"와 같은 자리). `alert-*` 하나만 보인다. 제목 없이 문장만 쓴다. 주소는 `typography.data` | 성공(CPY-311 차단, CPY-312 해제)은 `alert-success`와 체크 아이콘, `role="status"`. 충돌(CPY-313)·파일 상태(CPY-314)·결과 불명(CPY-317)·해제할 항목이 현재 목록에 없음(CPY-324, PATCH 없이 한 번 다시 조회)은 `alert-warning`, `role="alert"`. 검증 거부(CPY-315, 뒤에 서버 진단. 신뢰 프록시 겹침은 CPY-322)·요청 오류(CPY-316)·설정 읽기 실패(CPY-318)는 `alert-destructive`, `role="alert"`. 편집 꺼짐(CPY-097)은 `alert-neutral`, `role="status"`. 닫기 버튼이 없다. 알림을 지우는 시점은 스펙에 없어 구현에서 정한다. 어떤 실패도 성공 색으로 보이지 않는다 | SCR-005의 결과 알림 색 배정(충돌·결과 불명은 warning, 검증·쓰기 실패는 destructive, 꺼짐은 neutral)을 그대로 따른다. 새 변형이 없다(결정 8·9·10) | Accepted |
+| 모바일 카드의 차단 상태 | 표를 카드로 바꾸는 규칙을 그대로 쓴다. 카드 첫 줄은 주소(와 로컬 배지)다. 차단 상태는 마지막에 레이블 "차단 상태"(CPY-295)와 값 쌍으로 둔다. 값 안은 배지·버튼·안내이고 버튼 높이는 44px다 | 1023.98px 이하. 칸이 비면 그 줄을 두지 않는다(`td:empty{display:none}`). `data-label`·`role` 속성을 유지한다. 가로 스크롤이 없다 | 다른 열과 같은 규칙이라 읽는 순서가 일정하다(결정 5) | Accepted |
+| SCR-004 [relay.deny] 카드 | 기존 설정 카드(`card-head`에 `[relay.deny]` `typography.heading-card`, 본문 `config-list`). 행은 키 `relay.deny.sources`(`typography.data`), 값(항목마다 한 줄, `typography.data`), `badge-info` "재시작 없이 적용" | 카드 순서는 `[relay.ticket.server]`, `[relay.deny]`, `[mode1]`이다(설정 계약 순서). 빈 목록은 기존 키처럼 "빈 목록 []"이고 경고하지 않는다 | 동적 키 표시(DASH-091)는 기존 `relay.ticket.*`와 같은 배지다 | Accepted |
+| SCR-005 차단 목록 입력 | 접근 정책 카드의 목록 입력(`textarea.input.list-input`, `typography.input-data`). 라벨 한 줄에 이름(CPY-319, `typography.label`)과 키 `relay.deny.sources`(`typography.data`)를 간격 `spacing.sm`으로 둔다. 도움말 두 줄: CPY-119 다음 CPY-320(`typography.label`·`colors.muted-foreground`). 순서는 `mode1.allow_targets` 앞이다 | 문법 오류는 기존 줄 오류(`p.err`, 위치 "n줄:"과 `relay.deny.sources[i]`)이고 입력란은 `aria-invalid="true"`다. 신뢰 프록시와 겹치면 같은 자리에 CPY-322를 보인다. 빈 목록에는 경고(CPY-105)가 없다 | 다른 목록 입력란과 같은 컴포넌트다. 이름을 앞에 둔 점만 다르다(결정 12) | Accepted |
+| SCR-005 확인 대화상자의 경고 | 키별 변경 카드 안에 `alert-warning`(경고 아이콘)과 CPY-321("예외: 차단 목록에 새로 넣거나 바꾼 항목에 해당하는 주소의 열린 세션과 대기 연결은 저장 직후 끊깁니다.")을 넣는다. CPY-194(ticket.enabled)와 같은 방식이다. 이전 값 / 새 값, 추가한 항목이 그 위에 있다 | 새 값에 옛 값에 없던 항목 글씨가 있을 때(항목을 더했거나 바꿨을 때)만 보인다. 늘기만 하는 경우로 한정하지 않는다. 뺀 항목만 있으면 경고가 없다. `role="alert"` | 이미 있는 키별 경고 패턴이다. 대화상자 설명(CPY-189)의 "기존 중계 세션은 계속 동작합니다"는 그대로 두고, 이 키의 예외는 CPY-321이 알린다(결정 13) | Accepted |
+| 종료 원인 `ip_denied` | SCR-001 최근 종료 목록의 종료 원인 칸. `badge-neutral`, 글씨만(CPY-323) | 다른 종료 원인 배지와 같은 칸·같은 위치다. 아이콘이 없다. 글씨가 뜻을 전한다 | 운영자가 일부러 끊은 일이라 `admin_terminated`·`session_expired`(중립)와 같은 계열이다. 실패 색은 장애로 읽힌다(결정 11) | Accepted |
+
+접근성 요약: 행 버튼의 접근 가능한 이름은 주소를 포함한다(CPY-297·299). 보이는 글씨 "차단"·"차단 해제"가 이름 안에 있다. 차단됨 배지는 색 외에 글씨와 아이콘(`aria-hidden`)으로 전한다. 범위 항목 안내는 일반 글이라 같은 칸에서 배지 뒤에 이어 읽힌다. 확인 대화상자는 `role="dialog"`, `aria-modal="true"`, `aria-labelledby`(제목), `aria-describedby`(본문)를 쓴다. 열릴 때 초점은 [취소]이고, 닫을 때 호출한 버튼으로 돌아간다. 요청 중에는 두 버튼과 모든 행 버튼이 비활성이고, 글씨가 "차단 중…"으로 바뀌어 비활성 이유를 알린다. 성공 알림은 `role="status"`, 실패·결과 불명·해제 대상 없음 알림은 `role="alert"`다. 상태는 색만으로 전하지 않는다(글씨·아이콘 병행). 행 버튼 높이는 데스크톱 32px(최소 24px 이상), 모바일 44px이고, 시안에서 측정했다. 이웃한 행 버튼의 간격이 목표 크기 24px 이상인지는 구현에서 다시 확인한다. 1280·1024·390·320px에서 SCR-008 프레임 44개(기존 20개 포함)와 SCR-004·005·001 차단 프레임 12개가 가로로 넘치지 않는다(측정). 영어 문구가 길어도 열·버튼에 고정 폭을 두지 않는다. 포커스 링은 기존 `ring` 2px이다.
+
+#### 주소 차단 화면 전용 토큰
+
+새 토큰은 없다. 색은 기존 `destructive`·`warning`·`success`·`neutral`·`info`의 세 쌍과 `muted`·`muted-foreground`·`ring`만 쓴다. 대비는 위쪽 [대비 기준](#대비-기준) 표의 쌍을 그대로 쓴다. 간격은 `xs`~`xl`, `dialog-max`, `control-height-sm`, `control-height-touch`, `icon-size-sm`을 쓴다. 차단 상태 열 최소 폭은 `spacing.2xl`의 배수로 계산했다(새 값이 아니다). 새 값이 필요해지면 이 표에 값과 이유를 먼저 적는다.
+
+#### 채택한 결정
+
+사용자 결정 2026-11-20이다. 초안의 결정 1·3·11은 A로, 나머지도 권장안(A)으로 채택했다. 같은 날 사용자가 시안도 채택했다. 결정 3을 따라 위험 버튼 규칙 문장을 함께 고쳤다: 색 표 `colors.destructive` 행, Button 행, 허용·금지 조합 "위험 행동" 행, "벗어난 점" 행이다. 대화상자 행·Dialog 행에는 차단·해제 확인을 더했고, 접속 출처 주소별 표 행은 9열로 고쳤다. 후보 비교 프레임은 채택해서 지웠다.
+
+| 번호 | 결정한 것 | 채택한 선택 | 이유 |
+| --- | --- | --- | --- |
+| 1 | 차단됨 배지 모양 | `badge-destructive` + 원 안 가로줄 아이콘 | 이 열의 일은 차단된 주소를 한눈에 찾는 것이다. 글씨·모양·색 세 가지로 전하고 확인 버튼의 빨강과 이어진다 |
+| 2 | 행 버튼 모양 | 둘 다 `button-outline` `sm` | 기존 변형만 쓰고 "행마다 빨간 버튼 금지"를 지킨다 |
+| 3 | 확인 버튼 색 | 차단 확인 `button-destructive`, 해제 확인 `button-primary` | 스펙이 차단 확인을 destructive로 정했다. 해제는 되돌릴 수 있는 쪽이다. 위험 버튼 규칙에 주소 차단 확인을 더했다 |
+| 4 | 칸 안 배치 | 배지와 버튼을 한 줄에 두고 모자라면 줄바꿈 | 행 높이를 낮춘다 |
+| 5 | 모바일 차단 상태 자리 | 카드 맨 아래 레이블 줄 | 다른 열과 같은 규칙이고 범위 안내가 폭을 넓게 쓴다 |
+| 6 | 범위 안내 표현 | 배지 아래 흐린 글씨 한 줄 | 조용하고 열 안에 들어간다. 툴팁은 키보드·터치에서 읽기 어렵다 |
+| 7 | 편집 꺼짐 안내 | 주소별 카드 설명 마지막 줄 | 다른 설명 줄과 같은 모양이고 조용하다 |
+| 8 | 결과 알림 위치 | 머리말 아래 알림 영역(스펙 와이어프레임) | 다른 상태 알림과 같은 자리다. 알림이 생길 때 그 자리로 스크롤하고 초점을 옮기는 동작이 구현에서 필요하다 |
+| 9 | 알림 색 배정 | SCR-005와 같음: 충돌·파일 상태·결과 불명·해제 대상 없음 warning, 검증·요청·읽기 실패 destructive, 꺼짐 neutral | 화면 사이 일관성이 있고 "다시 조회하면 된다"와 "입력을 고쳐야 한다"가 구분된다 |
+| 10 | 성공 알림 색 | `alert-success` | SCR-004의 저장 성공 안내와 같다 |
+| 11 | `ip_denied` 배지 | `badge-neutral` 글씨만 | 운영자가 일부러 끊은 일이라 `admin_terminated`와 같은 중립이 어울린다 |
+| 12 | 차단 목록 입력 라벨 | 이름과 키를 한 줄에 | 스펙 문장("label은 CPY-319와 키 이름")을 그대로 한 줄에 둔다 |
+| 13 | 확인 대화상자 설명과 CPY-321 | 설명(CPY-189)은 그대로, 경고는 키 카드 안에 | 스펙과 같다. 같은 화면에서 설명이 모순처럼 읽힐 수 있는 점은 스펙 문구 확인으로 남긴다 |
+| 14 | 기존 SCR-008 프레임 20개 | 차단 상태 열을 더한다 | 문서와 구현의 어긋남을 없앤다. 표가 있는 프레임 14개는 행마다 칸을 더했고, 표 자리 안내가 있는 프레임은 열 머리글과 열 걸침(colspan 9)을 맞췄다 |
+| 15 | 차단 아이콘 | 기존 원 안 가로줄 재사용 | 새 아이콘이 없다. 같은 모양이 "세션 종료"에도 쓰이지만 뜻("멈춤")이 이어진다 |
+
+시안에서 확인하는 경계 콘텐츠: 38자 IPv6 주소(단일·범위 항목), 로컬 주소(차단됨·차단 안 됨), 단일과 범위가 섞인 주소, 범위 안내가 3줄로 늘어나는 좁은 열, 편집 꺼짐, 요청 중, 실패·결과 불명·해제 대상 없음 문구(CPY-097·313~318·324), 신뢰 프록시 겹침 진단, 차단 항목을 더하는 변경과 빼기만 하는 변경, 영어 문구. 폭은 1280·1024·390·320px, 언어는 한국어·English다.
 
 ### 도움말 사이트 확장
 
@@ -937,7 +987,7 @@ shadcn/ui처럼 경계선과 얕은 그림자로 층을 나눈다.
 | 모바일 표 | 카드 목록으로 바꾸고 모든 값을 보인다 | 가로 스크롤 표, 열 숨김, 말줄임 | 필수 정보가 가려진다([화면 스펙 6절](../specs/dashboard.md#6-화면-크기와-접근성)) |
 | 확인하지 못한 값 | "확인 불가" 배지 | 0, 빈 칸, `-`, 빈 고리 | 0과 구분할 수 없다([화면 스펙 3절](../specs/dashboard.md#3-화면-구성과-와이어프레임)) |
 | 포커스 | 토큰의 링 | `outline: none`만 적용 | 키보드 위치를 알 수 없다 |
-| 위험 행동 | `button-destructive`는 세션 종료·종료 확인에만 쓴다 | 목록 행마다 빨간 종료 버튼, 주요 행동을 빨간색으로 표시 | 종료는 SCR-002의 확인 절차로만 시작한다([화면 스펙 2절](../specs/dashboard.md#2-화면-흐름)) |
+| 위험 행동 | `button-destructive`는 세션 종료·종료 확인·주소 차단 확인에만 쓴다 | 목록 행마다 빨간 종료·차단 버튼, 주요 행동을 빨간색으로 표시 | 종료는 SCR-002의 확인 절차로만 시작한다([화면 스펙 2절](../specs/dashboard.md#2-화면-흐름)). 차단은 SCR-008의 확인 대화상자로만 시작한다 |
 | 차트 색 | 방향 표식, 사용량 고리, 추이 차트 선(`chart-line-*`, 선 모양과 범례 글씨를 함께 쓴다) | 글씨 색, 상태 의미를 혼자 전하는 색, 스펙에 없는 그래프, 값을 전하는 선에 `chart-1`·`chart-2` | 글씨 대비 4.5:1을 못 넘는다. 값을 전하는 선은 3:1이 필요하다. 그래프는 새 데이터가 필요하다 |
 | 사용량 고리 | 현재·상한 값을 글씨로 함께 쓴다 | 값 없이 고리만 쓰기, 비율에 따라 색 바꾸기 | 스펙에 임계값 규칙이 없다. 값을 확인하려면 글씨가 필요하다 |
 | 카드 | `border` 경계와 얕은 그림자 | 굵은 테두리, 진한 그림자, 표 행 줄무늬 | shadcn/ui의 평평한 카드 형태다 |

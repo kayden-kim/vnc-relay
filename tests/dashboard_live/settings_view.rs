@@ -152,19 +152,21 @@ fn expected_inputs(raw: &Value) -> Value {
         if key.starts_with("relay.") && key.ends_with(".allow") {
             0
         } else if key.starts_with("relay.ticket.") {
-            7
+            8
         } else if key.ends_with(".trusted_proxies") {
             1
         } else if key.ends_with(".allowed_origins") {
             2
-        } else if key.starts_with("mode1.") {
+        } else if key == "relay.deny.sources" {
             3
-        } else if key.starts_with("limits.") {
+        } else if key.starts_with("mode1.") {
             4
-        } else if key.starts_with("timeouts.") {
+        } else if key.starts_with("limits.") {
             5
-        } else {
+        } else if key.starts_with("timeouts.") {
             6
+        } else {
+            7
         }
     });
     json!(fields.into_iter().map(|(_, v)| v).collect::<Vec<_>>())
@@ -302,7 +304,7 @@ pub fn settings_view_displays_all_effective_values_in_contract_order() {
     let items = raw["items"]
         .as_array()
         .unwrap_or_else(|| panic!("items missing"));
-    assert_eq!(items.len(), 78, "every v4 config key must be present");
+    assert_eq!(items.len(), 79, "every v4 config key must be present");
     assert!(items.iter().any(|i| i["value"].is_null()));
     assert!(items.iter().any(|i| i["value"] == json!([])));
     assert!(
@@ -316,7 +318,7 @@ pub fn settings_view_displays_all_effective_values_in_contract_order() {
     );
     assert_eq!(
         items.iter().filter(|i| i["reload"] == "dynamic").count(),
-        43
+        44
     );
     for name in [
         "relay.ws.trusted_proxies",

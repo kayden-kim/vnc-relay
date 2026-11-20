@@ -11,6 +11,7 @@ import { createBadge } from './components/badge.js';
 import { createButton } from './components/button.js';
 import { createCard } from './components/card.js';
 import { createDataTable } from './components/data-table.js';
+import { createDialog } from './components/dialog.js';
 import { createLink } from './components/link.js';
 import { icon } from './components/icons.js';
 import { buildNavbar, defaultStorage, signOutUrl, LOGIN_URL } from './shell.js';
@@ -21,11 +22,14 @@ import {
   SUMMARY_KEYS,
   attributedProviders,
   countryLabel,
+  denyCell,
   parseSources,
   storageLimited,
   summaryValues,
   tableCount,
 } from './sources-model.js';
+import { changeDenyList } from './sources-deny.js';
+import { diagnosticText } from './settings-model.js';
 
 const SOURCES_PATH = '/api/v1/sources';
 const LOOKUP_URL = 'https://ipinfo.io/';
@@ -82,6 +86,11 @@ export function mountSources(root, deps = {}) {
     // Counts successful responses, so the body rebuilds only when there is new data.
     dataVersion: 0,
     refocusRefresh: false,
+    // Block and unblock (dashboard.md SCR-008 주소 차단과 해제). `dialog`: the open confirm dialog as {action, address,
+    // entries}. `busy`: the config request runs. `result`: the notice above the cards. `focus`: the row button to focus
+    // once the new rows are in. `requerying`: a sources query for the new state is wanted or running. `pendingRequery`:
+    // it waits for the sources request that was running.
+    deny: { dialog: null, busy: false, result: null, focus: null, requerying: false, pendingRequery: false },
   };
   let ui = null;
 
@@ -148,6 +157,7 @@ export function mountSources(root, deps = {}) {
   async function load(manual) {
     if (state.ended || state.inFlight) return;
     clearTimeout(state.pollTimer);
+    const forDeny = manual && state.deny.requerying && !state.deny.pendingRequery;
     const epoch = ++state.epoch;
     const period = state.selected;
     beginQuery(state, manual, renderIfLive);
@@ -176,6 +186,7 @@ export function mountSources(root, deps = {}) {
       state.stopped = false;
       endQuery(state);
       update();
+      if (forDeny) settleDeny();
       schedulePoll();
     } catch (error) {
       if (epoch !== state.epoch || state.ended) return;
@@ -191,8 +202,18 @@ export function mountSources(root, deps = {}) {
       state.failed = true;
       state.rejected = error instanceof ApiError && error.kind === 'failed' && (error.status === 400 || error.status === 405);
       if (state.rejected) state.stopped = true;
+      if (forDeny) {
+        state.deny.requerying = false;
+        state.deny.focus = null;
+      }
       update();
       schedulePoll();
+    } finally {
+      // A block or unblock ended while this request ran: its sources query goes out now, never before (dashboard.md SCR-008).
+      if (!state.ended && state.deny.pendingRequery && !state.inFlight) {
+        state.deny.pendingRequery = false;
+        void load(true);
+      }
     }
   }
 
@@ -293,28 +314,36 @@ export function mountSources(root, deps = {}) {
     const head = el('header', 'page-head');
     head.append(text, actions);
 
+    const result = el('div', 'sources-result');
+    result.tabIndex = -1;
     const notice = el('div', 'sources-notice');
     const alerts = el('div', 'sources-alerts');
     const body = el('div', 'sources-body');
-    main.append(head, notice, alerts, body);
+    main.append(head, result, notice, alerts, body);
     root.replaceChildren(navbar.navbar, main);
 
     ui = {
+      main,
       status,
       time,
       range,
       actions,
       refresh: null,
+      result,
       notice,
       alerts,
       body,
+      dialog: null,
+      dialogLive: null,
       statusKey: null,
       actionKey: null,
+      resultKey: null,
       noticeKey: null,
       alertKey: null,
       bodyKey: null,
     };
     if (focusId) document.getElementById(focusId)?.focus();
+    renderDialog();
   }
 
   function updateHead(view) {
@@ -400,6 +429,8 @@ export function mountSources(root, deps = {}) {
       return;
     }
     const copy = t();
+    // Every new response rebuilds the rows. A block or unblock button that has the focus keeps it.
+    const keep = activeDenyKey();
     ui.body.replaceChildren(
       summarySection(copy),
       databaseCard(copy),
@@ -407,15 +438,191 @@ export function mountSources(root, deps = {}) {
       countryCard(copy),
       asnCard(copy),
     );
+    if (keep !== null) findDenyButton(keep)?.focus({ preventScroll: true });
   }
 
   function update() {
     if (state.ended || ui === null) return;
     const view = viewOf(state);
     updateHead(view);
+    updateResult();
     updateNotice();
     updateAlerts(view);
     updateBody(view);
+  }
+
+  // ---- Block and unblock (dashboard.md SCR-008 주소 차단과 해제, 5.5) ----
+
+  function activeDenyKey() {
+    const active = document.activeElement;
+    if (!(active instanceof HTMLButtonElement) || !active.dataset.denyAction || !ui.body.contains(active)) return null;
+    return { action: active.dataset.denyAction, address: active.dataset.denyAddress };
+  }
+
+  function findDenyButton(key) {
+    const buttons = [...ui.body.querySelectorAll('[data-deny-action]')];
+    return buttons.find((button) => button.dataset.denyAction === key.action && button.dataset.denyAddress === key.address) ?? null;
+  }
+
+  // Focus goes back to the button that opened the dialog. When the new rows have no such button, it goes to the result.
+  function focusDenyCaller(key) {
+    const button = key ? findDenyButton(key) : null;
+    if (button !== null && !button.disabled) button.focus({ preventScroll: true });
+    else if (state.deny.result !== null) ui.result.focus({ preventScroll: true });
+  }
+
+  // The sources query for the new state has ended and the rows are in.
+  function settleDeny() {
+    const key = state.deny.focus;
+    state.deny.focus = null;
+    state.deny.requerying = false;
+    focusDenyCaller(key);
+  }
+
+  // Every row button and the dialog follow the running request (DESIGN.md 요청 중 상태).
+  function syncDeny() {
+    const busy = state.deny.busy;
+    for (const button of ui.body.querySelectorAll('[data-deny-action]')) button.disabled = busy;
+    const target = state.deny.dialog;
+    if (ui.dialog === null || target === null) return;
+    const label = target.action === 'block' ? t().denyBlocking : t().denyUnblocking;
+    ui.dialog.setBusy(busy ? label : null);
+    ui.dialogLive.textContent = busy ? label : '';
+  }
+
+  function removeDialog() {
+    if (ui?.dialog) {
+      ui.dialog.hide();
+      ui.dialog.element.remove();
+    }
+    if (ui) {
+      ui.dialog = null;
+      ui.dialogLive = null;
+    }
+  }
+
+  // The confirm dialog of the open block or unblock. Built again with the screen language on a language change.
+  function renderDialog() {
+    removeDialog();
+    const target = state.deny.dialog;
+    if (target === null) return;
+    const copy = t();
+    const block = target.action === 'block';
+    const dialog = createDialog({
+      title: block ? copy.denyBlockTitle : copy.denyUnblockTitle,
+      description: block ? copy.denyBlockBody : copy.denyUnblockBody,
+      confirmLabel: block ? copy.denyBlock : copy.denyUnblock,
+      cancelLabel: copy.cancel,
+      destructive: block,
+      closeOnConfirm: false,
+      returnFocus: () => findDenyButton(target) ?? ui.refresh,
+      onConfirm: () => void confirmDeny(),
+      onCancel: () => {
+        state.deny.dialog = null;
+      },
+    });
+    const description = dialog.element.querySelector('.dialog-description');
+    const live = el('p', 'sr-only');
+    live.setAttribute('role', 'status');
+    dialog.element.insertBefore(el('p', 'label muted', block ? copy.denyBlockLabel : copy.denyUnblockLabel), description);
+    dialog.element.insertBefore(el('p', 'mono', target.address), description);
+    dialog.element.insertBefore(live, dialog.element.querySelector('.dialog-actions'));
+    ui.main.append(dialog.element);
+    ui.dialog = dialog;
+    ui.dialogLive = live;
+    dialog.show();
+    if (state.deny.busy) syncDeny();
+    else dialog.cancel.focus();
+  }
+
+  // [차단] and [차단 해제] open the dialog and send nothing.
+  function openDeny(action, item) {
+    if (state.ended || state.deny.busy || state.deny.dialog !== null) return;
+    state.deny.dialog = { action, address: item.ip, entries: item.denyEntries };
+    renderDialog();
+  }
+
+  async function confirmDeny() {
+    const target = state.deny.dialog;
+    if (target === null || state.deny.busy || state.ended) return;
+    state.deny.busy = true;
+    state.deny.result = null;
+    syncDeny();
+    updateResult();
+    const outcome = await changeDenyList(request, {
+      csrfToken: state.csrfToken,
+      timeoutMs: state.timeoutMs,
+      action: target.action,
+      address: target.address,
+      entries: target.entries,
+    });
+    if (state.ended) return;
+    state.deny.busy = false;
+    if (outcome.kind === 'unauthorized') {
+      leave(LOGIN_URL);
+      return;
+    }
+    finishDeny(target, outcome);
+  }
+
+  // Any result closes the dialog and shows its notice above the cards. A result that changed or may have changed the list
+  // asks for one sources query without X-Relay-Poll, after the running sources request.
+  function finishDeny(target, outcome) {
+    const block = target.action === 'block';
+    let requery = true;
+    if (outcome.kind === 'done') {
+      state.deny.result = { key: block ? 'denyBlockDone' : 'denyUnblockDone', tone: 'success', address: target.address };
+    } else if (outcome.kind === 'nothing') {
+      state.deny.result = { key: 'denyNothingToRemove', tone: 'warning' };
+    } else {
+      state.deny.result = { key: outcome.key, tone: outcome.tone };
+      if (outcome.key === 'denyInvalid') {
+        state.deny.result.diagnostics = outcome.diagnostics;
+        state.deny.result.fallback = outcome.fallback;
+      }
+      requery = outcome.requery === true;
+    }
+    state.deny.dialog = null;
+    removeDialog();
+    syncDeny();
+    updateResult();
+    ui.result.scrollIntoView?.({ block: 'nearest' });
+    const key = { action: target.action, address: target.address };
+    focusDenyCaller(key);
+    if (!requery) return;
+    state.deny.focus = key;
+    state.deny.requerying = true;
+    if (state.inFlight) state.deny.pendingRequery = true;
+    else void load(true);
+  }
+
+  function diagnosticSentence(copy, result) {
+    const texts = (result.diagnostics ?? [])
+      .filter((diagnostic) => diagnostic && typeof diagnostic.code === 'string')
+      .map((diagnostic) => diagnosticText(diagnostic, copy));
+    return texts.length > 0 ? [...new Set(texts)].join(' ') : `${result.fallback ?? ''} (config_invalid)`.trim();
+  }
+
+  function resultAlert(copy, result) {
+    const title = result.key === 'denyInvalid'
+      ? fill(copy.denyInvalid, { diagnostic: diagnosticSentence(copy, result) })
+      : fill(copy[result.key], { address: result.address });
+    const alert = createAlert({ tone: result.tone, title });
+    if (result.address !== undefined) {
+      const [before, after] = copy[result.key].split('{address}');
+      alert.querySelector('.alert-title').replaceChildren(before, el('span', 'mono', result.address), after);
+    }
+    return alert;
+  }
+
+  // The result notice. Success is a polite status; the others interrupt (createAlert). It stays until the next block or
+  // unblock starts or the screen is left.
+  function updateResult() {
+    const result = state.deny.result;
+    const key = [state.lang, JSON.stringify(result)].join('|');
+    if (ui.resultKey === key) return;
+    ui.resultKey = key;
+    ui.result.replaceChildren(...(result === null ? [] : [resultAlert(t(), result)]));
   }
 
   // ---- Sections ----
@@ -584,7 +791,7 @@ export function mountSources(root, deps = {}) {
   }
 
   // A table card. The caption repeats the title for assistive technology and is hidden on screen (DESIGN.md 표).
-  function tableCard(copy, { key, title, labels, keys, numeric, part, row, notes = [] }) {
+  function tableCard(copy, { key, title, labels, keys, numeric, part, row, notes = [], denyColumn = false }) {
     const table = createDataTable({
       caption: title,
       columns: labels.map((label, index) => ({ key: keys[index], label, ...(index === 0 ? { mobileHead: 'primary' } : {}) })),
@@ -594,6 +801,11 @@ export function mountSources(root, deps = {}) {
     });
     table.classList.add('src-table');
     table.querySelector('caption').classList.add('sr-only');
+    if (denyColumn) {
+      for (const cell of table.querySelectorAll('thead th:last-child, tbody tr:not(.data-table-empty) td:last-child')) {
+        cell.classList.add('src-deny');
+      }
+    }
     const wrap = el('div', 'table-scroll');
     wrap.append(table);
     const card = createCard({
@@ -615,21 +827,48 @@ export function mountSources(root, deps = {}) {
     return COUNT_KEYS.map((key) => formatCount(item[key]));
   }
 
+  // The block status cell (CPY-295~301): the badge, the button, and the range note, in this order. A cell with nothing
+  // to show stays empty so that the mobile card shows no line for it.
+  function denyStatusCell(copy, item) {
+    const cell = denyCell(item, state.data.denyEditable);
+    if (!cell.blocked && cell.action === null) return '';
+    const wrap = el('div', 'src-deny-cell');
+    if (cell.blocked) wrap.append(createBadge({ tone: 'destructive', label: copy.denyBlocked, icon: 'cancel' }));
+    if (cell.action !== null) {
+      const block = cell.action === 'block';
+      const button = createButton({
+        variant: 'outline',
+        label: block ? copy.denyBlock : copy.denyUnblock,
+        disabled: state.deny.busy,
+      });
+      button.setAttribute('aria-label', fill(block ? copy.denyBlockName : copy.denyUnblockName, { address: item.ip }));
+      button.dataset.denyAction = cell.action;
+      button.dataset.denyAddress = item.ip;
+      button.addEventListener('click', () => openDeny(cell.action, item));
+      wrap.append(button);
+    }
+    if (cell.rangeNote) wrap.append(el('p', 'label muted src-deny-note', copy.denyRangeNote));
+    return wrap;
+  }
+
   function addressCard(copy) {
+    const editOff = state.data && !state.data.denyEditable ? [copy.denyEditOff] : [];
     return tableCard(copy, {
       key: 'addresses',
       title: copy.addressTitle,
       labels: copy.addressColumns,
-      keys: ['ip', 'country', 'asn', ...COUNT_KEYS, 'last_seen_at'],
+      keys: ['ip', 'country', 'asn', ...COUNT_KEYS, 'last_seen_at', 'deny'],
       numeric: COUNT_KEYS,
       part: state.data?.addresses,
-      notes: [copy.clientAddressNote, copy.localAddressNote, copy.lookupNote],
+      notes: [copy.clientAddressNote, copy.localAddressNote, copy.lookupNote, ...editOff],
+      denyColumn: true,
       row: (item) => [
         addressCell(copy, item),
         countryCell(copy, item.country),
         asnCell(copy, item.asn, item.asName),
         ...counts(item),
         timeStack(formatTime(item.lastSeenAt)),
+        denyStatusCell(copy, item),
       ],
     });
   }

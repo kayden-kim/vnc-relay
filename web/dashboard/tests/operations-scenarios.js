@@ -51,6 +51,7 @@ const COPY = {
     causeShutdown: '서버 종료',
     causeInternalError: '내부 오류',
     causeSessionExpired: '세션 만료',
+    causeIpDenied: '차단 목록으로 종료',
     bytesHeader: 'Viewer->대상 / 대상->Viewer',
     details: '상세',
     waitingHeaders: ['역할', '중계 ID', '전송 경로', '상대 주소', '접속 시각', '대기 시간'],
@@ -106,6 +107,7 @@ const COPY = {
     causeShutdown: 'Server shutdown',
     causeInternalError: 'Internal error',
     causeSessionExpired: 'Session expired',
+    causeIpDenied: 'Closed by deny list',
     bytesHeader: 'Viewer->target / target->Viewer',
     details: 'Details',
     waitingHeaders: ['Role', 'Relay ID', 'Transport', 'Peer address', 'Connected at', 'Waiting time'],
@@ -890,6 +892,7 @@ async function caseDash020() {
             closedItem({ session_id: 'sess_8', close_cause: 'server_shutdown' }),
             closedItem({ session_id: 'sess_9', close_cause: 'internal_error' }),
             closedItem({ session_id: 'sess_10', close_cause: 'session_expired' }),
+            closedItem({ session_id: 'sess_11', close_cause: 'ip_denied' }),
           ],
         }),
     }),
@@ -897,8 +900,8 @@ async function caseDash020() {
   await waitFor(() => settled(root));
   const card = cardOf(root, t.closedTitle);
   const rows = dataRowsOf(card);
-  check('DASH-020: all known causes and an unknown cause have rows', rows.length === 9);
-  checkListCount('DASH-020 closed causes', card, 9);
+  check('DASH-020: all known causes and an unknown cause have rows', rows.length === 10);
+  checkListCount('DASH-020 closed causes', card, 10);
   check('DASH-020: normal EOF cause shown', rows[0]?.textContent.includes(t.causePeerEof));
   check('DASH-020: administrator termination shown', rows[1]?.textContent.includes(t.causeAdmin));
   check('DASH-020: connection error shown', rows[2]?.textContent.includes(t.causeConnectionError));
@@ -913,6 +916,7 @@ async function caseDash020() {
     [6, t.causeShutdown, 'neutral', null],
     [7, t.causeInternalError, 'destructive', 'alert'],
     [8, t.causeSessionExpired, 'neutral', null],
+    [9, t.causeIpDenied, 'neutral', null],
   ]) {
     const badge = rows[index]?.cells[1].querySelector('.badge');
     const svg = badge?.querySelector('svg');

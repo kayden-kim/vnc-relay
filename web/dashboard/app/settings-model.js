@@ -1,6 +1,9 @@
 // Config input conversion preserves source line numbers and compares only editable values.
 import { fill } from './format.js';
 
+// The deny list (CPY-319~322). The SCR-005 input sits in the access policy section, before `mode1.allow_targets`.
+export const DENY_KEY = 'relay.deny.sources';
+
 export function parseConfig(body) {
   if (!body || typeof body.as_of !== 'string' || !Array.isArray(body.items) ||
       typeof body.edit_enabled !== 'boolean' || !body.file || !Array.isArray(body.file.config_keys) ||
@@ -31,8 +34,11 @@ export function editableItems(config) {
   const rank = (key) => {
     const group = fieldGroup(key);
     if (group === 'sourceAllowLists') return 0;
-    if (group === 'accessPolicies') return key.endsWith('.trusted_proxies') ? 1
-      : key.endsWith('.allowed_origins') ? 2 : 3;
+    if (group === 'accessPolicies') {
+      if (key.endsWith('.trusted_proxies')) return 1;
+      if (key.endsWith('.allowed_origins')) return 2;
+      return key === DENY_KEY ? 2.5 : 3;
+    }
     return { connectionLimits: 4, timeouts: 5, keepalive: 6, accessTickets: 7 }[group];
   };
   return config.items.filter((item) => item.editable).sort((a, b) => rank(a.key) - rank(b.key));

@@ -52,6 +52,13 @@ const WORDS = {
       'IP 범위의 시작 주소는 끝 주소 이하여야 합니다.', 'IP 범위의 두 주소는 모두 IPv4이거나 모두 IPv6여야 합니다.',
       'Origin 항목의 형식이 올바르지 않습니다.', 'Mode I 대상 항목의 형식이 올바르지 않습니다.',
     ],
+    listHelp: '한 줄에 항목 하나를 입력하십시오. 빈 줄은 무시합니다. 공백은 넣지 마십시오.',
+    deny: {
+      name: '차단 목록',
+      help: '허용 목록보다 우선합니다. 저장하면 이 목록에 해당하는 주소의 열린 세션과 대기 연결을 바로 끊습니다. 빈 목록은 아무것도 차단하지 않습니다.',
+      warning: '예외: 차단 목록에 새로 넣거나 바꾼 항목에 해당하는 주소의 열린 세션과 대기 연결은 저장 직후 끊깁니다.',
+      overlap: '차단 항목이 신뢰 프록시 주소와 겹칩니다. 프록시 주소는 차단할 수 없습니다.',
+    },
   },
   en: {
     view: 'View settings', edit: 'Edit dynamic settings', settings: 'Settings', review: 'Review changes', apply: 'Apply',
@@ -87,6 +94,13 @@ const WORDS = {
       'The start address of an IP range must not exceed its end address.', 'Both addresses in an IP range must be IPv4 or both must be IPv6.',
       'The Origin item has an invalid format.', 'The Mode I target item has an invalid format.',
     ],
+    listHelp: 'Enter one item per line. Empty lines are ignored. Do not include whitespace.',
+    deny: {
+      name: 'Deny list',
+      help: 'The deny list takes precedence over allow lists. Saving closes open sessions and waiting connections from matching addresses immediately. An empty list blocks nothing.',
+      warning: 'Exception: Open sessions and waiting connections from addresses covered by new or changed deny list entries are closed immediately after saving.',
+      overlap: 'A deny entry overlaps a trusted proxy address. Proxy addresses cannot be blocked.',
+    },
   },
 };
 const w = WORDS[lang];
@@ -105,6 +119,7 @@ const REV = `sha256:${'0'.repeat(64)}`;
 const NEXT_REV = `sha256:${'1'.repeat(64)}`;
 const LIST = 'relay.tcp_viewer.allow';
 const WAITING = 'limits.waiting';
+const DENY = 'relay.deny.sources';
 const LONG_PATH = `/settings/${'very-long-directory-name/'.repeat(9)}private-key.pem`;
 const TICKET = 'relay.ticket.viewer';
 const TICKET_FIELDS = ['enabled', 'issuer', 'relay_host', 'max_lifetime_secs'];
@@ -129,7 +144,7 @@ function deferred() {
   return { promise, resolve };
 }
 
-// Full contract order: 76 keys, 43 reloadable (37 editable and six file paths).
+// Full contract order: 77 keys, 44 reloadable (38 editable and six file paths).
 function config(overrides = {}) {
   const items = [];
   const add = (key, value, reload = 'restart', editable = false, min, max) => {
@@ -170,6 +185,7 @@ function config(overrides = {}) {
     add(`${prefix}.public_keys_file`, ticketPublicPath(role), 'dynamic');
     add(`${prefix}.max_lifetime_secs`, 60, 'dynamic', true, 10, 600);
   }
+  add(DENY, ['203.0.113.9'], 'dynamic', true);
   add('mode1.enabled', true);
   add('mode1.allow_targets', ['198.51.100.7:5900'], 'dynamic', true);
   add('mode2.enabled', true);
@@ -361,14 +377,15 @@ async function case029() {
   await ready(m);
   const rows = [...m.root.querySelectorAll('[data-config-key]')];
   check('DASH-029: all contract keys in order', same(rows.map((row) => row.dataset.configKey), data.items.map((item) => item.key)));
-  check('DASH-029: fixture has all 76 contract keys', data.items.length === 76);
-  check('DASH-029: fixture has all 43 reloadable keys', data.items.filter((item) => item.reload === 'dynamic').length === 43);
-  check('DASH-029: fixture has all 37 potential editable keys', data.items.filter((item) => item.editable).length === 37);
+  check('DASH-029: fixture has all 77 contract keys', data.items.length === 77);
+  check('DASH-029: fixture has all 44 reloadable keys', data.items.filter((item) => item.reload === 'dynamic').length === 44);
+  check('DASH-029: fixture has all 38 potential editable keys', data.items.filter((item) => item.editable).length === 38);
   const sections = [...m.root.querySelectorAll('.card-title')].map((node) => node.textContent);
   const ticketSections = ['[relay.ticket.viewer]', '[relay.ticket.server]'];
-  check('DASH-029: ticket sections follow WS/WSS and precede Mode I', ticketSections.every((section, index) =>
+  check('DASH-029: ticket sections follow WS/WSS and precede the deny list and Mode I', ticketSections.every((section, index) =>
     sections.indexOf(section) === sections.indexOf('[relay.wss.server]') + index + 1) &&
-    sections.indexOf('[mode1]') === sections.indexOf(ticketSections[1]) + 1);
+    sections.indexOf('[relay.deny]') === sections.indexOf(ticketSections[1]) + 1 &&
+    sections.indexOf('[mode1]') === sections.indexOf('[relay.deny]') + 1);
   for (const role of ['viewer', 'server']) {
     const ticketRows = rows.filter((row) => row.dataset.configKey.startsWith(`relay.ticket.${role}.`));
     check(`DASH-029 ${role}: five ticket keys in contract order`, same(ticketRows.map((row) => row.dataset.configKey),
@@ -491,7 +508,7 @@ async function case035() {
     const expectedKeys = [
       (key) => /^relay\..+\.allow$/.test(key),
       (key) => key.endsWith('.trusted_proxies'),
-      (key) => key.endsWith('.allowed_origins') || key === 'mode1.allow_targets',
+      (key) => key.endsWith('.allowed_origins'), (key) => key === DENY, (key) => key === 'mode1.allow_targets',
       (key) => key.startsWith('limits.'), (key) => key.startsWith('timeouts.'), (key) => key.startsWith('keepalive.'),
       (key) => key.startsWith('relay.ticket.'),
     ].flatMap((belongs) => data.items.filter((item) => item.editable && belongs(item.key)).map((item) => item.key));
@@ -1182,6 +1199,7 @@ async function shot(frame) {
     conflict: () => fail(409, 'config_conflict'), 'write-failed': () => fail(500, 'config_write_failed'),
     unknown: () => { throw new TypeError('response lost'); },
     'request-rejected': () => fail(400, 'invalid_request'), saving: () => gate.promise,
+    'deny-error': () => fail(400, 'config_invalid', { diagnostics: [diagnostic('config_deny_overlaps_proxy', `${DENY}[1]`)] }),
   };
   const api = fakeApi({
     [SESSION]: () => ok({ csrf_token: 'shot-token',
@@ -1211,6 +1229,9 @@ async function shot(frame) {
     setValue(m.root, `${TICKET}.issuer`, '');
     setValue(m.root, `${TICKET}.relay_host`, 'a'.repeat(257));
     buttonOf(m.root, 'review').click();
+  } else if (state === 'deny-add' || state === 'deny-remove') {
+    setValue(m.root, DENY, state === 'deny-add' ? '203.0.113.9\n198.51.100.0/24' : '');
+    await review(m.root);
   } else if (state === 'confirm' || state === 'unchanged') {
     if (state === 'confirm') {
       for (const key of ['relay.tcp_viewer.allow', 'relay.ws.trusted_proxies', 'relay.ws.viewer.allowed_origins']) setValue(m.root, key, '');
@@ -1220,10 +1241,109 @@ async function shot(frame) {
     }
     await review(m.root);
   } else if (outcomes[state]) {
-    setValue(m.root, LIST, '192.0.2.7');
+    if (state === 'deny-error') setValue(m.root, DENY, '203.0.113.9\n192.0.2.7');
+    else setValue(m.root, LIST, '192.0.2.7');
     await apply(m.root);
     if (state !== 'saving') await waitFor(() => !dialogOf(m.root)?.open);
   }
+}
+
+// DASH-091: the deny list on SCR-004/005, with every relay entry point off.
+function denyData(list) {
+  const data = withValue(config(), DENY, list);
+  for (const item of data.items) {
+    if (/^relay\.(tcp_viewer|tcp_server|ws|wss)\./.test(item.key) || item.key.startsWith('mode1.')) {
+      item.editable = false;
+      if (item.key.endsWith('.enabled')) item.value = false;
+      else if (item.key.endsWith('.listen')) item.value = null;
+    }
+  }
+  return data;
+}
+async function closeReview(root) {
+  cancelOf(root).click();
+  await waitFor(() => !dialogOf(root)?.open);
+}
+async function case091() {
+  // SCR-004: the key is in its own table, applies without restart, and an empty list is the empty-list text.
+  const view = mount(fakeApi({ [GET]: () => ok(denyData(['203.0.113.9', '198.51.100.0/24'])) }));
+  await ready(view);
+  const row = rowOf(view.root, DENY);
+  check('DASH-091 view: the key is in the [relay.deny] table', row?.closest('.card')?.querySelector('.card-title')?.textContent === '[relay.deny]');
+  check('DASH-091 view: values and applies without restart', row !== null && has(row, '203.0.113.9') && has(row, '198.51.100.0/24') && has(row, w.dynamic) && !has(row, w.restart));
+  const none = mount(fakeApi({ [GET]: () => ok(denyData([])) }));
+  await ready(none);
+  check('DASH-091 view: an empty list shows the empty-list text', has(rowOf(none.root, DENY), w.empty));
+
+  // SCR-005: the input exists with every relay entry point off, in the access policy section.
+  const m = mount(fakeApi({ [GET]: () => ok(denyData(['203.0.113.9', '192.0.2.1'])) }), { edit: true });
+  await ready(m, true);
+  const input = inputOf(m.root, DENY);
+  check('DASH-091 edit: the input is there with no relay entry point on', input?.tagName === 'TEXTAREA'
+    && !inputsOf(m.root).some((node) => /^relay\.(tcp_viewer|tcp_server|ws|wss)\./.test(node.dataset.configKey)));
+  check('DASH-091 edit: it is in the access policy section', input?.closest('.card')?.querySelector('.card-title')?.textContent === w.groups[1]);
+  const label = [...m.root.querySelectorAll('label')].find((node) => node.htmlFor === input?.id);
+  check('DASH-091 edit: the label has CPY-319 and the key', label?.querySelector('.config-name')?.textContent === w.deny.name
+    && label.querySelector('.config-data')?.textContent === DENY && label.textContent === `${w.deny.name}${DENY}`);
+  const help = input?.getAttribute('aria-describedby')?.split(/\s+/).map((id) => document.getElementById(id)?.textContent ?? '') ?? [];
+  check('DASH-091 edit: help is CPY-119 then CPY-320', help.includes(w.listHelp) && help.includes(w.deny.help)
+    && help.indexOf(w.listHelp) < help.indexOf(w.deny.help));
+  check('DASH-091 edit: the input holds the current entries', input?.value === '203.0.113.9\n192.0.2.1');
+  checkLayout('DASH-091 edit', m.root);
+
+  // The confirmation: the warning follows new or changed entries (even with the same count), never a removal.
+  const confirmWarnings = async (name, value) => {
+    setValue(m.root, DENY, value);
+    await review(m.root);
+    const change = changeOf(m.root, DENY);
+    const found = {
+      warned: has(change, w.deny.warning), emptyWarned: has(dialogOf(m.root), w.emptyWarning),
+      alerts: change?.querySelectorAll('.alert').length ?? -1, shown: change !== undefined,
+    };
+    check(`DASH-091 ${name}: CPY-189 stays in the dialog`, has(dialogOf(m.root), w.timing));
+    await closeReview(m.root);
+    return found;
+  };
+  const added = await confirmWarnings('add', '203.0.113.9\n192.0.2.1\n198.51.100.0/24');
+  check('DASH-091 add: CPY-321 inside the key change', added.shown && added.warned && added.alerts === 1 && !added.emptyWarned);
+  const widened = await confirmWarnings('widen', '203.0.113.0/24\n192.0.2.1');
+  check('DASH-091 widen: the same count still warns', widened.warned && widened.alerts === 1);
+  const removed = await confirmWarnings('remove', '192.0.2.1');
+  check('DASH-091 remove: no warning when only removing', removed.shown && !removed.warned && removed.alerts === 0 && !removed.emptyWarned);
+  const emptied = await confirmWarnings('empty', '');
+  check('DASH-091 empty: no CPY-105 and no CPY-321 for an empty list', emptied.shown && !emptied.emptyWarned && !emptied.warned && emptied.alerts === 0);
+  const reorder = await confirmWarnings('reorder', '192.0.2.1\n203.0.113.9');
+  check('DASH-091 reorder: no new entry means no warning', !reorder.warned);
+  check('DASH-091: no request before confirmation', m.api.count(PATCH) === 0);
+
+  // The PATCH carries the list as typed; diagnostics map to their own lines.
+  const value = '203.0.113.9\n\n192.0.2.10';
+  const overlap = mount(fakeApi({
+    [GET]: () => ok(denyData(['203.0.113.9'])),
+    [PATCH]: () => fail(400, 'config_invalid', { diagnostics: [diagnostic('config_deny_overlaps_proxy', `${DENY}[1]`)] }),
+  }), { edit: true });
+  await ready(overlap, true);
+  setValue(overlap.root, DENY, value);
+  await apply(overlap.root);
+  await waitFor(() => has(overlap.root, w.validation));
+  check('DASH-091 overlap: CPY-322 on the line of the overlapping entry', has(overlap.root, w.line(3, w.deny.overlap)));
+  check('DASH-091 overlap: the server wording is hidden', !has(overlap.root, 'SERVER_DIAGNOSTIC_config_deny_overlaps_proxy'));
+  check('DASH-091 overlap: the input keeps the text, has focus and the invalid state', inputOf(overlap.root, DENY)?.value === value
+    && document.activeElement === inputOf(overlap.root, DENY));
+  checkAria('DASH-091 overlap', overlap.root, DENY);
+  check('DASH-091 overlap: PATCH sent the list and nothing was resent', same(overlap.api.calls.find((call) => call.key === PATCH)?.body?.changes,
+    { [DENY]: ['203.0.113.9', '192.0.2.10'] }) && overlap.api.count(PATCH) === 1);
+
+  const syntax = mount(fakeApi({
+    [GET]: () => ok(denyData(['203.0.113.9'])),
+    [PATCH]: () => fail(400, 'config_invalid', { diagnostics: [diagnostic('config_ip_item_invalid', `${DENY}[0]`)] }),
+  }), { edit: true });
+  await ready(syntax, true);
+  setValue(syntax.root, DENY, 'not-an-address');
+  await apply(syntax.root);
+  await waitFor(() => has(syntax.root, w.validation));
+  check('DASH-091 syntax: CPY-144 on line 1', has(syntax.root, w.line(1, w.diagnostics[4])));
+  checkLayout('DASH-091 syntax', syntax.root);
 }
 
 async function case064() {
@@ -1248,6 +1368,7 @@ const CASES = {
   'dash-048': case048, 'dash-049': case049, 'dash-050': case050, 'dash-051': case051,
   'dash-052': case052, 'dash-053': case053,
   'dash-064': case064,
+  'dash-091': case091,
 };
 const caseName = params.get('case');
 try {

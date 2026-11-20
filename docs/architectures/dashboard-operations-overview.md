@@ -35,6 +35,7 @@ web/dashboard/app/
 ├── metrics-model.js   메트릭 응답 검증, 추이 합치기, 카드·차트·표·프로세스 계산 (DOM 없음)
 ├── sources.js         SCR-008 상태·조회 루프·집계 기간·화면 조립·언어 전환·해제
 ├── sources-model.js   접속 출처 응답 검증, 요약 값, 표 개수, 출처 표시, 국가 이름 (DOM 없음)
+├── sources-deny.js    SCR-008 주소 차단·해제 요청 순서와 실패 분류 (DOM 없음)
 ├── settings.js        SCR-004·005 설정 보기·편집, 요청·입력·진단·저장 결과
 ├── settings-model.js  설정 v4 응답 검증과 편집 대상 입력·진단
 ├── shell.js           보호 화면의 상단 막대, 언어 선택, 로그아웃 결과 판정
@@ -74,13 +75,14 @@ web/dashboard/app/
 | `metrics.js` | `mountMetrics(root, deps)`: 메트릭 상태와 조회, 추이 기간 선택을 소유한다. 다른 화면으로 이동하면 요청·타이머·보호 데이터와 고른 기간을 제거한다. | `request`, `storage`, `preferredLanguages`, `navigate` |
 | `metrics-model.js` | `HISTORY_WINDOWS`, `parseMetrics`, `mergeHistory`, `keyIndicators`, `buildCharts`, `distributionItems`, `causeRows`, `processRows`. DOM과 시계를 쓰지 않는다. 맞지 않는 응답과 추이 간격·개수가 요청한 기간과 다른 응답은 `invalid` 오류 | 없음 |
 | `sources.js` | `mountSources(root, deps)`: 접속 출처 상태와 조회, 집계 기간 선택을 소유한다. 다른 화면으로 이동하면 요청·타이머·보호 데이터와 고른 기간을 제거한다. | `request`, `storage`, `preferredLanguages`, `navigate` |
-| `sources-model.js` | `SUMMARY_KEYS`, `DATABASE_ROWS`, `parseSources`, `storageLimited`, `summaryValues`, `tableCount`, `attributedProviders`, `countryLabel`. DOM과 시계를 쓰지 않는다. 맞지 않는 응답과 `window`가 요청한 기간과 다른 응답은 `invalid` 오류 | 없음 |
+| `sources-model.js` | `SUMMARY_KEYS`, `DATABASE_ROWS`, `parseSources`, `storageLimited`, `summaryValues`, `tableCount`, `attributedProviders`, `countryLabel`, `isRangeEntry`, `denyCell`, `listForBlock`, `listForUnblock`. DOM과 시계를 쓰지 않는다. 맞지 않는 응답(`deny_editable`·`deny_entries` 없음 포함)과 `window`가 요청한 기간과 다른 응답은 `invalid` 오류 | 없음 |
+| `sources-deny.js` | `changeDenyList(request, { csrfToken, timeoutMs, action, address, entries })`: 설정을 읽고(`GET /api/v1/config`) `relay.deny.sources` 전체 목록을 보낸다(`PATCH /api/v1/config`). reject하지 않고 `done`·`nothing`·`unauthorized`·`notice` 중 하나를 돌려준다. DOM이 없다. | `request` 인자로 받음 |
 
-화면은 `createNavbar`, `createLanguageSelect`(variant `navbar`), `createButton`, `createCard`, `createStat`, `createGauge`, `createDataTable`, `createBadge`, `createAlert`, `createLink`, `icon`을 쓴다. SCR-002의 종료 확인은 `createDialog`를 쓴다. 공개 API는 [컴포넌트 구조](dashboard-components.md#31-공개-함수)를 따른다.
+화면은 `createNavbar`, `createLanguageSelect`(variant `navbar`), `createButton`, `createCard`, `createStat`, `createGauge`, `createDataTable`, `createBadge`, `createAlert`, `createLink`, `icon`을 쓴다. SCR-002의 종료 확인과 SCR-008의 차단·해제 확인은 `createDialog`를 쓴다. 후자는 `closeOnConfirm: false`와 `setBusy`로 요청이 끝날 때까지 열어 둔다. 공개 API는 [컴포넌트 구조](dashboard-components.md#31-공개-함수)를 따른다.
 
 ### 설정 보기·편집
 
-- SCR-004는 v4 계약의 테이블 순서를 유지하며 ticket 키도 `[relay.ticket.viewer]`·`[relay.ticket.server]`로 묶는다. SCR-005의 `editableItems`는 allow 6개 → trusted_proxies 2개 → allowed_origins 4개 → Mode I 목록 → 상한·제한 시간·연결 유지 → 접속 ticket 순서다. 마지막 구역은 Viewer 다음 Server이며 각 역할의 `enabled`·`issuer`·`relay_host`·`max_lifetime_secs` 순서다. 비활성 진입점의 편집 불가 키와 공개 키 파일 경로는 입력 목록에서 빠진다. 확인 대화상자는 허용 목록·프록시 목록·Origin 목록의 빈 값 경고(CPY-105·183·192)를 각각 고른다. ticket `enabled`의 false→true 경고(CPY-194)는 그 키의 변경 항목 안에 둔다.
+- SCR-004는 v4 계약의 테이블 순서를 유지하며 ticket 키도 `[relay.ticket.viewer]`·`[relay.ticket.server]`로 묶고, 차단 목록 `relay.deny.sources`는 `[relay.deny]` 표에 둔다. SCR-005의 `editableItems`는 allow 6개 → trusted_proxies 2개 → allowed_origins 4개 → 차단 목록 → Mode I 목록 → 상한·제한 시간·연결 유지 → 접속 ticket 순서다. 마지막 구역은 Viewer 다음 Server이며 각 역할의 `enabled`·`issuer`·`relay_host`·`max_lifetime_secs` 순서다. 비활성 진입점의 편집 불가 키와 공개 키 파일 경로는 입력 목록에서 빠진다. 차단 목록은 중계 진입점이 꺼져 있어도 `editable`이면 접근 정책 구역에 입력란이 있다. 라벨은 이름(CPY-319)과 키를 한 줄에 두고, 도움말은 CPY-119 다음 CPY-320이다. 확인 대화상자는 허용 목록·프록시 목록·Origin 목록의 빈 값 경고(CPY-105·183·192)를 각각 고른다. 차단 목록은 빈 값이어도 CPY-105를 쓰지 않는다. 처음 값에 없던 항목 글자가 하나라도 있으면(항목 수가 같아도) 그 키의 변경 항목 안에 CPY-321을 둔다. ticket `enabled`의 false→true 경고(CPY-194)도 그 키의 변경 항목 안에 둔다. 서버 진단 `config_deny_overlaps_proxy`는 CPY-322로 번역한다.
 
 ## 4. 화면 골격 (SCR-001)
 
@@ -404,6 +406,8 @@ router.js mountRouter → sources.js mountSources
   → api.js getQuery(/api/v1/sources?window=1h|24h) → sources-model.js parseSources(응답, 기간)
   → sources-model.js summaryValues·storageLimited·tableCount·attributedProviders·countryLabel
   → 공통 Card·Badge·Alert·Button·DataTable·Link·상단 막대, 집계 기간 select
+  → 차단 상태 칸: sources-model.js denyCell → [차단]·[차단 해제] → createDialog 확인
+     → sources-deny.js changeDenyList → api.js getConfig, patchConfig(/api/v1/config) → 알림 → 다시 조회
 ```
 
 - 화면 값 계산은 `sources-model.js`에만 둔다. `sources.js`는 그 결과를 DOM으로 옮긴다.
@@ -429,11 +433,23 @@ router.js mountRouter → sources.js mountSources
 - 상태 배지 칸만 `role="status"`다. 포커스는 `id`(`sources-period`, `sources-refresh`, `sources-alert-refresh`)로 복원한다. 제목은 `h1` → 구역 `h2` → DB 이름 `h3`이다. 시안은 `h4`~`h6`을 쓴다.
 - 모바일(1023.98px 이하)에서 DB 행은 한 열이고, 표는 `data-label`을 가진 열별 쌍이다. 빈 칸(이름 없는 ASN)은 숨긴다.
 
+### 주소 차단과 해제
+
+동작 기준은 화면 스펙 SCR-008 "주소 차단과 해제"와 5.5절이다. 차단·해제는 전용 API 없이 설정 편집으로 한다.
+
+- 차단 상태 칸(9열)은 `denyCell(item, denyEditable)`이 정한다. 차단됨 배지, 버튼 종류(`block`·`unblock`·없음), 범위 항목 안내를 값으로 돌려주고, `sources.js`의 `denyStatusCell`이 배지(`destructive`, 기존 `cancel` 아이콘), [버튼], 안내(`label muted`) 순서로 DOM에 옮긴다. 보일 것이 없는 칸은 빈 문자열이라 모바일 카드에서 줄이 숨는다. 편집 꺼짐 안내(CPY-302)는 주소 카드 설명의 마지막 줄이다.
+- 확인하면 `changeDenyList`가 `GET /api/v1/config`로 `revision`과 현재 목록을 읽고, 전체 목록을 `PATCH`로 보낸다. 차단은 현재 목록 끝에 `ip` 글자를 더한다. 해제는 행의 `deny_entries` 글자를 모두 뺀다. 같은 글자가 이미 있거나(차단) 뺄 글자가 없으면(해제) PATCH 없이 끝난다. 이 함수는 reject하지 않고 자동으로 다시 보내지 않는다.
+- 대화상자는 요청이 끝날 때까지 열려 있다. 요청 중에는 모든 행 버튼과 대화상자의 [취소]·확인이 꺼지고, 확인 글씨는 CPY-306·310이며, Escape는 닫지 못한다. 대화상자 안의 `role="status"` 줄도 같은 글씨를 읽어 준다. 언어를 바꾸면 대화상자를 새 언어로 다시 만든다.
+- 결과는 어떤 경우에도 대화상자를 닫고 머리글 아래 알림 하나(`.sources-result`)로 보인다. 다음 차단·해제를 시작하거나 화면을 떠나기 전까지 남는다. 어조는 성공 success, 충돌·파일 상태·결과 불명·CPY-324 warning, 검증 실패·요청 거절·설정 읽기 실패 destructive, 편집 꺼짐 neutral이다. 5.5절의 오류 표가 정한 대로 `GET` 실패는 CPY-318, 결과를 알 수 없으면 CPY-317이다.
+- 목록이 바뀌었거나 바뀌었을 수 있으면(성공, 이미 있음, 해제할 항목 없음, 결과 불명, 편집 꺼짐) `X-Relay-Poll` 없이 현재 `window`로 한 번 다시 조회한다. 진행 중인 접속 출처 요청이 있으면 그 요청이 끝난 뒤에 보낸다(`pendingRequery`). 충돌·파일 상태·`config_invalid`·그 밖의 4xx·설정 읽기 실패는 다시 조회하지 않는다. `401`은 `/login/`으로 간다.
+- 포커스: 취소·Escape·실패는 호출한 버튼으로 돌아간다. 성공이나 다시 조회 뒤 그 버튼이 사라지면(예: [차단]이 [차단 해제]가 됨) 알림 영역(`tabindex="-1"`)으로 간다. 알림은 `scrollIntoView({ block: 'nearest' })`로 보이게 한다. 다시 조회로 표가 새로 그려져도 포커스가 있던 차단 버튼은 같은 버튼으로 이어진다.
+- 확인에 쓰는 `createDialog`는 `closeOnConfirm`(기본 true)·`returnFocus`(함수 가능)·`setBusy(label|null)`을 더했다. SCR-002·005의 기존 동작은 바뀌지 않는다.
+
 ### 시험
 
-- `web/dashboard/tests/sources.html`·`sources-scenarios.js`·`sources-fixture.js`가 가짜 API로 dash-028·064·082~088을 돌린다. dash-086은 시간이 길어 `dash-086`·`dash-086-more`·`dash-086-rejected`·`dash-086-busy`로 나눈다. `tests/dashboard_browser.rs`의 표식은 `partial`이다.
-- `tests/dashboard_live/sources.rs`는 실제 서버로 DASH-082 전체(메뉴 순서, SCR-005 입력 버림, 진입 요청 모양, 떠난 뒤 자동 조회 중단, 늦은 응답, 돌아오면 최근 1시간, 세션 없는 직접 진입)를 확인한다. 생성한 MMDB와 신뢰 프록시 뒤 WebSocket 클라이언트로 DASH-083~085 일부도 확인한다.
-- F-C 재현은 `sources.html?case=shot-<상태>&lang=ko|en`이다. `loading`, `normal`, `empty`, `db-mixed`, `db-failed`, `storage-limit`, `refreshing`, `failed`, `failed-first`, `rejected`를 제공한다. 주소·ASN 표는 시안처럼 7행이다. 제품에 넣지 않는다.
+- `web/dashboard/tests/sources.html`·`sources-scenarios.js`·`sources-fixture.js`가 가짜 API로 dash-028·064·082~090을 돌린다. dash-086은 시간이 길어 `dash-086`·`dash-086-more`·`dash-086-rejected`·`dash-086-busy`로, dash-090은 `dash-090`·`dash-090-errors`로 나눈다. 가짜 API는 `config` 인자로 `/api/v1/config` 요청을 받고 요청 순서(`log`)를 남긴다. 차단 목록 서버(`denyServer`)는 목록을 들고 있다가 조회마다 `deny_entries`를 계산하므로, 확인 사이에 목록을 바꾸면 다른 관리자의 변경을 흉내 낸다. `tests/dashboard_browser.rs`의 표식은 `partial`이다.
+- `tests/dashboard_live/sources.rs`는 실제 서버로 DASH-082 전체(메뉴 순서, SCR-005 입력 버림, 진입 요청 모양, 떠난 뒤 자동 조회 중단, 늦은 응답, 돌아오면 최근 1시간, 세션 없는 직접 진입)를 확인한다. 생성한 MMDB와 신뢰 프록시 뒤 WebSocket 클라이언트로 DASH-083~085 일부도 확인한다. 같은 파일의 차단 시험은 실제 설정 파일 변경, 차단된 주소의 연결 거절, 범위 항목과 편집 꺼짐 표시, SCR-005 차단 목록 입력(DASH-091), 차단으로 끊긴 세션의 `ip_denied` 표시(DASH-020)를 확인한다.
+- F-C 재현은 `sources.html?case=shot-<상태>&lang=ko|en`이다. `loading`, `normal`, `empty`, `db-mixed`, `db-failed`, `storage-limit`, `refreshing`, `failed`, `failed-first`, `rejected`를 제공한다. 주소·ASN 표는 시안처럼 7행이다. 차단 화면은 `shot-deny-editable`, `deny-edit-off`, `deny-block-dialog`, `deny-unblock-dialog`, `deny-busy`, `deny-success`, `deny-unblock-success`, `deny-conflict`, `deny-file-state`, `deny-invalid`, `deny-request-failed`, `deny-read-failed`, `deny-unknown`, `deny-edit-disabled`, `deny-nothing`이다. 제품에 넣지 않는다.
 
 ## 15. 열린 항목
 
@@ -450,6 +466,7 @@ router.js mountRouter → sources.js mountSources
 | 2026-11-17 | `9d43e3e`의 대기·활성·최근 종료 표 | Windows의 에이전트 조작 Chromium 탭. 버전은 원 기록에 없다. | `cargo xtask dashboard-serve`의 제품 화면과 파일 시안을 1280·1100·1024·1023·768·390·320px × ko·en으로 대조했다. | 가로 넘침 0건. 대기·활성 시각은 날짜와 시각·시간대 두 줄이며 주소 레이블은 값 위에 있다. 범위별 실제 결과와 허용 차이는 [시각 대조 기록](../how-to/verify-dashboard-frontend.md#41-시각-대조-기록)을 따른다. |
 | 2026-11-19 | `metrics.js`·`metrics-model.js`·`app.css`의 SCR-007 구현 | Windows 10.0.26200 x64, Chrome 157.0.8103.79, 에이전트 조작 탭 | 이 문서 17절의 규칙과 시안 SCR-007 프레임의 마크업·CSS를 코드와 비교했다. `cargo xtask dashboard-serve`의 시험 페이지와 시안 값의 가짜 API로 화면을 시안과 대조했다. | 남은 차이는 제목 단계(h2·h3), 조회 중의 핸들 행 생략, 클래스 이름(시안 `xfer`·`kv`는 `kpi-xfer`·`kv-list`)이다. 외부 수집 안내 아이콘은 구현을, 빈 원인 표 정렬과 모바일 배지 폭은 시안을 고쳤다. 폭별 결과는 [시각 대조 기록](../how-to/verify-dashboard-frontend.md#41-시각-대조-기록)을 따른다. |
 | 2026-11-20 | `sources.js`·`sources-model.js`·`app.css`의 SCR-008 구현 | Windows 10.0.26200 x64, Chrome, CDP 기기 크기 지정 | `sources.html?case=shot-<상태>`를 1280·1024·390·320px × ko·en(80장)으로 찍어 채택 시안 그림(`target/scr008-shots/`)과 대조했다. | 가로 넘침 0건, 콘솔 오류 0건. 남은 차이는 제목 단계(h1·h2·h3), 시험 값, 표 개수 배지의 표시 행 수(시안은 7행에 "상위 100개")다. |
+| 2026-11-23 | `sources.js`·`sources-deny.js`·`settings.js`·`app.css`의 주소 차단 구현 | Windows 10.0.26200 x64, Chrome 157.0.8103.79 헤드리스, CDP 기기 크기 지정 | `sources.html?case=shot-deny-<상태>`·`settings.html?case=shot-scr005-deny-<상태>`를 1280·390px × ko·en으로 찍어 채택 시안 프레임과 대조했다. 가로 넘침은 1280~320px에서 쟀다. | 가로 넘침 0건. 구현을 고친 차이는 행 버튼 안쪽 여백(16px → 시안 12px) 한 건이다. 남은 차이는 중립 알림 아이콘, 설정 확인의 세로 배치, 서버 진단 키 줄 생략이다. 자세한 내용은 [시각 대조 기록](../how-to/verify-dashboard-frontend.md#41-시각-대조-기록)을 따른다. |
 
 전체 화면 시안 대조·개수 배지·도움말 링크의 최신 기록도 같은 시각 대조 표에서 관리한다. 키보드·다른 엔진의 수동 결과는 [별도 기록](../how-to/verify-dashboard-frontend.md#42-키보드다른-엔진-확인-기록)을 따른다.
 

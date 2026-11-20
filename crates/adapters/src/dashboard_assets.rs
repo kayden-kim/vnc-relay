@@ -295,6 +295,11 @@ pub const ASSETS: &[Asset] = &[
         content_type: JS,
         body: include_bytes!("../../../web/dashboard/app/sources-model.js"),
     },
+    Asset {
+        path: "/app/sources-deny.js",
+        content_type: JS,
+        body: include_bytes!("../../../web/dashboard/app/sources-deny.js"),
+    },
 ];
 
 /// The file served at `path`. Only an exact match is served.

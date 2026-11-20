@@ -72,6 +72,7 @@ export const COPY = {
       server_shutdown: '서버 종료', // CPY-050
       internal_error: '내부 오류', // CPY-083
       session_expired: '세션 만료', // CPY-190
+      ip_denied: '차단 목록으로 종료', // CPY-323
     },
     directionViewerToTarget: 'Viewer->대상', // CPY-040·CPY-043 table headers (spec §9.3.2).
     directionTargetToViewer: '대상->Viewer', // CPY-040·CPY-043 table headers (spec §9.3.2).
@@ -165,6 +166,7 @@ export const COPY = {
       config_ip_range_family_mixed: 'IP 범위의 두 주소는 모두 IPv4이거나 모두 IPv6여야 합니다.', // CPY-146
       config_origin_invalid: 'Origin 항목의 형식이 올바르지 않습니다.', // CPY-147
       config_target_item_invalid: 'Mode I 대상 항목의 형식이 올바르지 않습니다.', // CPY-148
+      config_deny_overlaps_proxy: '차단 항목이 신뢰 프록시 주소와 겹칩니다. 프록시 주소는 차단할 수 없습니다.', // CPY-322
     },
     // SCR-002 labels & link
     targetTransportLabel: 'Server/대상 전송 경로', // CPY-179
@@ -178,6 +180,9 @@ export const COPY = {
     accessTickets: '접속 ticket', // CPY-191
     stringLengthError: '1바이트 이상 256바이트 이하로 입력하십시오.', // CPY-193
     enableTicketWarning: '접속 ticket 확인을 켜면 이 역할의 WS·WSS 업그레이드 요청 가운데 유효한 ticket이 없는 요청을 거절합니다. 기존 중계 세션은 계속 동작합니다.', // CPY-194
+    denyListName: '차단 목록', // CPY-319
+    denyListHelp: '허용 목록보다 우선합니다. 저장하면 이 목록에 해당하는 주소의 열린 세션과 대기 연결을 바로 끊습니다. 빈 목록은 아무것도 차단하지 않습니다.', // CPY-320
+    denyChangeWarning: '예외: 차단 목록에 새로 넣거나 바꾼 항목에 해당하는 주소의 열린 세션과 대기 연결은 저장 직후 끊깁니다.', // CPY-321
     // SCR-006 logs
     logs: '로그', // CPY-149
     retainedCount: '보관 {n} / 최대 {max}', // CPY-150
@@ -287,7 +292,7 @@ export const COPY = {
     ipDbInvalidFormat: 'MMDB 파일이 아니거나 검사에 실패함', // CPY-274
     ipDbUnsupportedData: '이 DB에 필요한 국가 또는 ASN 값이 없음', // CPY-275
     addressTitle: '주소별', // CPY-279
-    addressColumns: ['주소', '국가', 'ASN', '연결 시도', '거절', '중단', '세션', '마지막 사건'], // CPY-280
+    addressColumns: ['주소', '국가', 'ASN', '연결 시도', '거절', '중단', '세션', '마지막 사건', '차단 상태'], // CPY-280·295
     clientAddressNote: '클라이언트 주소는 신뢰 프록시가 전달한 주소가 있으면 그 주소이고, 없으면 소켓 상대 주소입니다. 세션 열은 그 주소가 Viewer 또는 Mode II Server로 참여한 세션 수입니다.', // CPY-281
     localAddress: '로컬', // CPY-282
     localAddressNote: '로컬 주소(루프백·사설·링크 로컬·공유 주소)는 IP 정보 DB에서 찾지 않고 조회 링크도 없습니다.', // CPY-283
@@ -301,6 +306,31 @@ export const COPY = {
     lookupName: 'ipinfo.io에서 {value} 조회', // CPY-291
     lookupNote: '조회 링크는 ipinfo.io를 새 탭에서 엽니다. 링크를 고르면 그 주소나 ASN이 ipinfo.io에 전달됩니다.', // CPY-292
     sourcesRejected: '접속 출처 조회 요청을 처리하지 못했습니다. 새로고침으로 다시 조회하십시오.', // CPY-293
+    // SCR-008 address block and unblock (CPY-296~318, 324). {address} and {diagnostic} are filled by fill().
+    denyBlock: '차단', // CPY-296
+    denyBlockName: '{address} 차단', // CPY-297
+    denyUnblock: '차단 해제', // CPY-298
+    denyUnblockName: '{address} 차단 해제', // CPY-299
+    denyBlocked: '차단됨', // CPY-300
+    denyRangeNote: '범위 항목으로 차단되어 있습니다. 설정에서 해제하십시오.', // CPY-301
+    denyEditOff: '차단하려면 설정 파일에서 management.config_edit = true로 바꾸고 서버를 재시작하십시오.', // CPY-302
+    denyBlockTitle: '주소 차단 확인', // CPY-303
+    denyBlockLabel: '차단할 주소', // CPY-304
+    denyBlockBody: '이 주소의 새 접속을 모든 중계 진입점에서 거절하고, 열린 세션과 대기 연결을 바로 끊습니다.', // CPY-305
+    denyBlocking: '차단 중…', // CPY-306
+    denyUnblockTitle: '차단 해제 확인', // CPY-307
+    denyUnblockLabel: '차단을 해제할 주소', // CPY-308
+    denyUnblockBody: '이 주소의 새 접속을 다시 허용 목록으로 판정합니다. 끊은 연결은 되살아나지 않습니다.', // CPY-309
+    denyUnblocking: '차단 해제 중…', // CPY-310
+    denyBlockDone: '주소를 차단했습니다: {address}', // CPY-311
+    denyUnblockDone: '차단 목록에서 이 주소의 항목을 지웠습니다: {address}', // CPY-312
+    denyConflict: '설정 파일이 바뀌어 차단 목록을 바꾸지 못했습니다. 새로고침으로 다시 조회한 뒤 다시 시도하십시오.', // CPY-313
+    denyFileState: '설정 파일 상태 때문에 차단 목록을 바꾸지 못했습니다. 설정 보기에서 파일 상태를 확인하십시오.', // CPY-314
+    denyInvalid: '차단 목록을 바꾸지 못했습니다. 원인: {diagnostic}', // CPY-315
+    denyRequestFailed: '요청을 처리하지 못했습니다. 화면을 다시 불러온 뒤 다시 시도하십시오.', // CPY-316
+    denyUnknown: '차단 목록이 바뀌었는지 확인하지 못했습니다. 새로고침으로 다시 조회해 확인하십시오.', // CPY-317
+    denyConfigReadFailed: '설정을 읽지 못해 차단 목록을 바꾸지 못했습니다. 잠시 뒤 다시 시도하십시오.', // CPY-318
+    denyNothingToRemove: '차단 목록이 이미 바뀌어 지울 항목이 없습니다. 다시 조회한 결과를 확인하십시오.', // CPY-324
   },
   en: {
     navLabel: 'Main menu', // CPY-078
@@ -357,6 +387,7 @@ export const COPY = {
       server_shutdown: 'Server shutdown', // CPY-050
       internal_error: 'Internal error', // CPY-083
       session_expired: 'Session expired', // CPY-190
+      ip_denied: 'Closed by deny list', // CPY-323
     },
     directionViewerToTarget: 'Viewer->target', // CPY-040·CPY-043 table headers (spec §9.3.2).
     directionTargetToViewer: 'target->Viewer', // CPY-040·CPY-043 table headers (spec §9.3.2).
@@ -450,6 +481,7 @@ export const COPY = {
       config_ip_range_family_mixed: 'Both addresses in an IP range must be IPv4 or both must be IPv6.', // CPY-146
       config_origin_invalid: 'The Origin item has an invalid format.', // CPY-147
       config_target_item_invalid: 'The Mode I target item has an invalid format.', // CPY-148
+      config_deny_overlaps_proxy: 'A deny entry overlaps a trusted proxy address. Proxy addresses cannot be blocked.', // CPY-322
     },
     // SCR-002 labels & link
     targetTransportLabel: 'Server/target transport', // CPY-179
@@ -463,6 +495,9 @@ export const COPY = {
     accessTickets: 'Access tickets', // CPY-191
     stringLengthError: 'Enter 1 to 256 bytes.', // CPY-193
     enableTicketWarning: "Turning on access ticket checks rejects this role's WS and WSS upgrade requests that have no valid ticket. Existing relay sessions continue.", // CPY-194
+    denyListName: 'Deny list', // CPY-319
+    denyListHelp: 'The deny list takes precedence over allow lists. Saving closes open sessions and waiting connections from matching addresses immediately. An empty list blocks nothing.', // CPY-320
+    denyChangeWarning: 'Exception: Open sessions and waiting connections from addresses covered by new or changed deny list entries are closed immediately after saving.', // CPY-321
     // SCR-006 logs
     logs: 'Logs', // CPY-149
     retainedCount: 'Retained {n} / Maximum {max}', // CPY-150
@@ -572,7 +607,7 @@ export const COPY = {
     ipDbInvalidFormat: 'Not a valid MMDB file', // CPY-274
     ipDbUnsupportedData: 'No country or ASN data for this database', // CPY-275
     addressTitle: 'By address', // CPY-279
-    addressColumns: ['Address', 'Country', 'ASN', 'Attempts', 'Rejected', 'Aborted', 'Sessions', 'Last seen'], // CPY-280
+    addressColumns: ['Address', 'Country', 'ASN', 'Attempts', 'Rejected', 'Aborted', 'Sessions', 'Last seen', 'Block status'], // CPY-280·295
     clientAddressNote: 'The client address is the address forwarded by a trusted proxy, or the socket peer address when there is none. The Sessions column counts sessions that the address joined as a Viewer or Mode II Server.', // CPY-281
     localAddress: 'Local', // CPY-282
     localAddressNote: 'Local addresses (loopback, private, link-local, and shared) are not looked up in the IP information databases and have no lookup link.', // CPY-283
@@ -586,5 +621,30 @@ export const COPY = {
     lookupName: 'Look up {value} on ipinfo.io', // CPY-291
     lookupNote: 'Lookup links open ipinfo.io in a new tab. Selecting a link sends that address or ASN to ipinfo.io.', // CPY-292
     sourcesRejected: 'The sources request could not be processed. Use Refresh to query again.', // CPY-293
+    // SCR-008 address block and unblock (CPY-296~318, 324). {address} and {diagnostic} are filled by fill().
+    denyBlock: 'Block', // CPY-296
+    denyBlockName: 'Block {address}', // CPY-297
+    denyUnblock: 'Unblock', // CPY-298
+    denyUnblockName: 'Unblock {address}', // CPY-299
+    denyBlocked: 'Blocked', // CPY-300
+    denyRangeNote: 'Blocked by a range entry. Remove it in Settings.', // CPY-301
+    denyEditOff: 'To block addresses, set management.config_edit = true in the configuration file and restart the server.', // CPY-302
+    denyBlockTitle: 'Confirm blocking address', // CPY-303
+    denyBlockLabel: 'Address to block', // CPY-304
+    denyBlockBody: 'New connections from this address are rejected at all relay entry points, and its open sessions and waiting connections are closed immediately.', // CPY-305
+    denyBlocking: 'Blocking…', // CPY-306
+    denyUnblockTitle: 'Confirm unblocking address', // CPY-307
+    denyUnblockLabel: 'Address to unblock', // CPY-308
+    denyUnblockBody: 'New connections from this address are checked against the allow lists again. Connections that were closed do not come back.', // CPY-309
+    denyUnblocking: 'Unblocking…', // CPY-310
+    denyBlockDone: 'Blocked address: {address}', // CPY-311
+    denyUnblockDone: 'Removed the deny list entries for: {address}', // CPY-312
+    denyConflict: 'The deny list was not changed because the configuration file changed. Use Refresh and try again.', // CPY-313
+    denyFileState: 'The deny list was not changed because of the state of the configuration file. Check the file state in View settings.', // CPY-314
+    denyInvalid: 'The deny list was not changed. Cause: {diagnostic}', // CPY-315
+    denyRequestFailed: 'The request could not be processed. Reload this screen and try again.', // CPY-316
+    denyUnknown: 'Could not confirm whether the deny list changed. Use Refresh to check.', // CPY-317
+    denyConfigReadFailed: 'The settings could not be read, so the deny list was not changed. Try again later.', // CPY-318
+    denyNothingToRemove: 'The deny list has already changed and has no entry to remove. Check the refreshed result.', // CPY-324
   },
 };

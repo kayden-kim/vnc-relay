@@ -107,6 +107,7 @@ function addressItem(raw) {
     asName: nullable(raw.as_name, text),
     ...counts(raw),
     lastSeenAt: timestamp(raw.last_seen_at),
+    denyEntries: array(raw.deny_entries).map(text),
   };
 }
 
@@ -135,6 +136,7 @@ export function parseSources(body, period) {
   return {
     asOf: timestamp(data.as_of),
     windowStart: timestamp(data.window_start),
+    denyEditable: boolean(data.deny_editable),
     capacity: integer(data.capacity),
     stored: integer(data.stored),
     droppedBefore: nullable(data.dropped_before, timestamp),
@@ -199,4 +201,32 @@ export function countryLabel(code, lang) {
     name = undefined;
   }
   return name && name !== code ? `${name} (${code})` : code;
+}
+
+// A deny entry with `/` or `-` covers a range, not one address (dashboard.md SCR-008 주소 차단과 해제).
+export function isRangeEntry(entry) {
+  return entry.includes('/') || entry.includes('-');
+}
+
+// What the block status cell of one address row shows (dashboard.md SCR-008 table of conditions).
+// `blocked`: the blocked badge. `action`: 'block', 'unblock', or null. `rangeNote`: CPY-301.
+export function denyCell(item, denyEditable) {
+  const blocked = item.denyEntries.length > 0;
+  if (!denyEditable || item.local) return { blocked, action: null, rangeNote: false };
+  if (!blocked) return { blocked, action: 'block', rangeNote: false };
+  if (item.denyEntries.some(isRangeEntry)) return { blocked, action: null, rangeNote: true };
+  return { blocked, action: 'unblock', rangeNote: false };
+}
+
+// The deny list to send for a block: the current list with the address at the end. `null` when the current list already
+// holds the same text, so nothing is sent and the block counts as done.
+export function listForBlock(current, ip) {
+  return current.includes(ip) ? null : [...current, ip];
+}
+
+// The deny list to send for an unblock: the current list without every text of `entries`. `null` when none of them is in
+// the current list, so nothing is sent.
+export function listForUnblock(current, entries) {
+  const next = current.filter((entry) => !entries.includes(entry));
+  return next.length === current.length ? null : next;
 }

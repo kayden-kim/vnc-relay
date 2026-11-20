@@ -12,13 +12,19 @@ function requireText(value, name) {
 
 /**
  * @param {{title: string, description?: string, confirmLabel: string, cancelLabel: string,
- *   destructive?: boolean, onConfirm?: () => void, onCancel?: () => void,
- *   returnFocus?: HTMLElement}} options
- *   `returnFocus` is the element that opens the dialog. Cancel and Escape move focus back to it.
- * @returns {{element: HTMLDialogElement, show: () => void, hide: () => void}}
+ *   destructive?: boolean, closeOnConfirm?: boolean, onConfirm?: () => void, onCancel?: () => void,
+ *   returnFocus?: HTMLElement | (() => HTMLElement | null)}} options
+ *   `returnFocus` is the element that opens the dialog, or a function that finds it when the dialog closes (the
+ *   opener may have been replaced meanwhile). Cancel and Escape move focus back to it.
+ *   `closeOnConfirm: false` keeps the dialog open after Confirm, for a request that closes it when it ends.
+ * @returns {{element: HTMLDialogElement, show: () => void, hide: () => void,
+ *   cancel: HTMLButtonElement, confirm: HTMLButtonElement, setBusy: (label: string | null) => void}}
+ *   `setBusy(label)` disables Cancel and Confirm, shows `label` on Confirm, and makes Escape do nothing.
+ *   `setBusy(null)` undoes it.
  */
 export function createDialog({
-  title, description, confirmLabel, cancelLabel, destructive = false, onConfirm, onCancel, returnFocus,
+  title, description, confirmLabel, cancelLabel, destructive = false, closeOnConfirm = true, onConfirm, onCancel,
+  returnFocus,
 } = {}) {
   requireText(title, 'dialog title');
   requireText(confirmLabel, 'dialog confirm label');
@@ -63,11 +69,13 @@ export function createDialog({
   // (Safari) does not focus the button, so that element can be the page body. Cancel and Escape
   // therefore move focus to `returnFocus`. Confirm and hide() leave focus to the caller.
   const restoreFocus = () => {
-    if (returnFocus?.isConnected && !returnFocus.disabled) returnFocus.focus();
+    const target = typeof returnFocus === 'function' ? returnFocus() : returnFocus;
+    if (target?.isConnected && !target.disabled) target.focus();
   };
   // close() restores the browser's choice synchronously, so the cancel button can move focus right after it.
   // Escape closes the dialog after the 'cancel' event, so that path waits for the 'close' event.
   let restoreOnClose = false;
+  let busy = false;
   const show = () => {
     if (!element.open) {
       restoreOnClose = false;
@@ -90,10 +98,14 @@ export function createDialog({
   });
   confirm.addEventListener('click', () => {
     onConfirm?.();
-    hide();
+    if (closeOnConfirm) hide();
   });
-  // Escape fires 'cancel'; the browser closes the dialog itself.
-  element.addEventListener('cancel', () => {
+  // Escape fires 'cancel'; the browser closes the dialog itself. A busy dialog stays open.
+  element.addEventListener('cancel', (event) => {
+    if (busy) {
+      event.preventDefault();
+      return;
+    }
     restoreOnClose = true;
     onCancel?.();
   });
@@ -109,5 +121,14 @@ export function createDialog({
     }
   });
 
-  return { element, show, hide };
+  const setBusy = (busyLabel) => {
+    busy = busyLabel !== null;
+    cancel.disabled = busy;
+    confirm.disabled = busy;
+    confirm.querySelector('.button-label').textContent = busy ? busyLabel : confirmLabel;
+    if (busy) confirm.setAttribute('aria-busy', 'true');
+    else confirm.removeAttribute('aria-busy');
+  };
+
+  return { element, show, hide, cancel, confirm, setBusy };
 }

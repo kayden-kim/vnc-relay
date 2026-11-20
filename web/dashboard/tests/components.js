@@ -583,6 +583,47 @@ function runChecks() {
     }
   });
 
+  check("dialog-busy-keeps-open", () => {
+    let confirmed = 0;
+    let cancelled = 0;
+    const opener = mount(createButton({ variant: "outline", label: t.cancel }));
+    const dialog = createDialog({
+      title: t.dialogTitle,
+      description: t.dialogDescription,
+      confirmLabel: t.confirm,
+      cancelLabel: t.cancel,
+      destructive: true,
+      closeOnConfirm: false,
+      returnFocus: () => opener,
+      onConfirm: () => {
+        confirmed += 1;
+      },
+      onCancel: () => {
+        cancelled += 1;
+      },
+    });
+    mount(dialog.element);
+    try {
+      dialog.show();
+      dialog.confirm.click();
+      expect(confirmed === 1 && dialog.element.open === true);
+      // Busy: both actions are disabled, the confirm label changes, Escape does nothing.
+      dialog.setBusy("...");
+      expect(dialog.cancel.disabled && dialog.confirm.disabled);
+      expect(dialog.confirm.querySelector(".button-label").textContent === "...");
+      expect(dialog.confirm.getAttribute("aria-busy") === "true");
+      const escape = new Event("cancel", { cancelable: true });
+      expect(dialog.element.dispatchEvent(escape) === false && cancelled === 0 && dialog.element.open === true);
+      // Idle again: the label comes back and Escape closes the dialog and reports it.
+      dialog.setBusy(null);
+      expect(!dialog.cancel.disabled && !dialog.confirm.disabled && !dialog.confirm.hasAttribute("aria-busy"));
+      expect(dialog.confirm.querySelector(".button-label").textContent === t.confirm);
+      expect(dialog.element.dispatchEvent(new Event("cancel", { cancelable: true })) === true && cancelled === 1);
+    } finally {
+      dialog.hide();
+    }
+  });
+
   check("long-text", () => {
     const button = mount(createButton({ variant: "primary", label: LONG_KO_LABEL }));
     const badge = mount(createBadge({ tone: "info", label: LONG_EN_LABEL }));

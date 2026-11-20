@@ -47,7 +47,17 @@ function counts(attempts) {
 
 // The first rows carry the special cases; the rest are documentation IPv4 addresses with known countries and ASNs.
 const COUNTRY_CYCLE = ['KR', 'US', 'JP', 'DE', 'GB'];
-export function addressItems(count) {
+// The entries of `list` that cover `ip`, in list order. Only the shapes the scenarios use: the address itself, a
+// documentation /24 network, 2001:db8::/32, and the range 2001:db8::1-2001:db8::ff.
+export function denyEntriesFor(list, ip) {
+  return list.filter((entry) => entry === ip
+    || (entry.endsWith('.0/24') && ip.startsWith(entry.slice(0, -4)))
+    || (entry === '2001:db8::/32' && ip.startsWith('2001:db8:'))
+    || (entry === '2001:db8::1-2001:db8::ff' && /^2001:db8::[0-9a-f]{1,2}$/.test(ip)));
+}
+
+// `denyOf(ip)` gives the `deny_entries` of a row. Nothing is blocked by default.
+export function addressItems(count, denyOf = () => []) {
   const special = [
     { ip: LONG_IPV6, local: false, country: 'US', asn: exampleAsn(4), as_name: LONG_AS_NAME },
     { ip: '198.51.100.250', local: false, country: 'KR', asn: exampleAsn(0), as_name: 'Example Transit Networks' },
@@ -66,6 +76,7 @@ export function addressItems(count) {
     return {
       ...base,
       ...counts(500 - index),
+      deny_entries: denyOf(base.ip),
       last_seen_at: iso(AS_OF - index * 60000),
     };
   });
@@ -101,6 +112,7 @@ export function sourcesBody({
   dbs = databases(),
   totals = { attempts: 1234, rejected: 56, aborted: 78, sessions: 90 },
   addresses = { total: 150, items: addressItems(100) },
+  denyEditable = true,
   countries = { total: 7, items: countryItems() },
   asns = { total: 120, items: asnItems(100) },
 } = {}) {
@@ -111,6 +123,7 @@ export function sourcesBody({
     capacity: 100000,
     stored,
     dropped_before: droppedBefore === null ? null : iso(droppedBefore),
+    deny_editable: denyEditable,
     databases: dbs,
     totals,
     addresses,

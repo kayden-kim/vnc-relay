@@ -13,7 +13,7 @@ import { parseSession } from './model.js';
 import { el, pageHead, statusAlert, statusBadge } from './panels.js';
 import { LOGIN_URL, buildNavbar, defaultStorage, signOutUrl } from './shell.js';
 import {
-  canEdit, diagnosticText, editableItems, fieldGroup, fieldUnit, initialInputs, inputErrorText,
+  DENY_KEY, canEdit, diagnosticText, editableItems, fieldGroup, fieldUnit, initialInputs, inputErrorText,
   inspectInputs, mapDiagnostics, parseConfig, selectErrorLine,
 } from './settings-model.js';
 
@@ -160,8 +160,11 @@ export function mountSettings(root, deps = {}, { edit = false, applied = null } 
     const list = Array.isArray(item.value);
     const wrapper = el('div', `text-field config-field${boolean ? ' config-field-bool' : ''}`);
     const id = `config-${item.key.replaceAll('.', '-')}`;
-    const label = el('label', boolean ? 'check config-data' : 'config-data', boolean ? '' : item.key);
+    const denyList = item.key === DENY_KEY;
+    const label = denyList ? el('label', 'config-deny-label') :
+      el('label', boolean ? 'check config-data' : 'config-data', boolean ? '' : item.key);
     label.htmlFor = id;
+    if (denyList) label.append(el('span', 'config-name', t().denyListName), el('span', 'config-data', item.key));
     const input = el(list ? 'textarea' : 'input', boolean ? '' : 'text-field-input config-input');
     input.id = id;
     input.dataset.configKey = item.key;
@@ -191,6 +194,12 @@ export function mountSettings(root, deps = {}, { edit = false, applied = null } 
       proxyHelp = el('p', 'config-help', t().trustedProxiesHelp);
       proxyHelp.id = `${id}-proxy-help`;
     }
+    // CPY-320 follows CPY-119 under the deny list input.
+    let denyHelp = null;
+    if (denyList) {
+      denyHelp = el('p', 'config-help', t().denyListHelp);
+      denyHelp.id = `${id}-deny-help`;
+    }
     const errors = state.errors.filter((error) => error.key === item.key && error.field !== false);
     const errorNode = el('div', 'config-field-errors');
     errorNode.id = `${id}-error`;
@@ -200,7 +209,8 @@ export function mountSettings(root, deps = {}, { edit = false, applied = null } 
       errorNode.append(message);
     }
     input.setAttribute('aria-invalid', String(errors.length > 0));
-    const describedBy = [help?.id, proxyHelp?.id, errors.length ? errorNode.id : null].filter(Boolean).join(' ');
+    const describedBy = [help?.id, proxyHelp?.id, denyHelp?.id, errors.length ? errorNode.id : null]
+      .filter(Boolean).join(' ');
     if (describedBy) input.setAttribute('aria-describedby', describedBy);
     if (boolean) {
       label.append(input, el('span', '', item.key));
@@ -209,7 +219,8 @@ export function mountSettings(root, deps = {}, { edit = false, applied = null } 
       const control = el('div', 'config-number-unit');
       control.append(input);
       if (integer) control.append(el('span', 'config-help', t().configUnits[fieldUnit(item.key)]));
-      wrapper.append(label, control, ...(help ? [help] : []), ...(proxyHelp ? [proxyHelp] : []), errorNode);
+      wrapper.append(label, control, ...(help ? [help] : []), ...(proxyHelp ? [proxyHelp] : []),
+        ...(denyHelp ? [denyHelp] : []), errorNode);
     }
     return wrapper;
   }
@@ -355,13 +366,17 @@ export function mountSettings(root, deps = {}, { edit = false, applied = null } 
       if (Array.isArray(value)) {
         content.append(el('p', 'config-help', t().addedItems), valueNode(value.filter((entry) => !previous.includes(entry))),
           el('p', 'config-help', t().removedItems), valueNode(previous.filter((entry) => !value.includes(entry))));
-        if (!value.length) {
+        // An empty deny list blocks nothing, so it has no CPY-105 warning. New or changed entry text warns with CPY-321.
+        if (!value.length && key !== DENY_KEY) {
           const warning = key.endsWith('.trusted_proxies')
             ? t().emptyTrustedProxiesWarning
             : key.endsWith('.allowed_origins')
               ? t().emptyAllowedOriginsWarning
               : t().emptyAllowWarning;
           content.append(alert(warning, 'warning'));
+        }
+        if (key === DENY_KEY && value.some((entry) => !previous.includes(entry))) {
+          content.append(alert(t().denyChangeWarning, 'warning'));
         }
       }
       if (key.startsWith('relay.ticket.') && key.endsWith('.enabled') && previous === false && value === true) {

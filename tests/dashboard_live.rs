@@ -457,6 +457,31 @@ fn dashboard_083_084_085_real_sources_counts_links_and_databases() {
     run(sources::real_counts_links_and_databases);
 }
 
+/// spec: dashboard.md:DASH-089 partial
+/// spec: dashboard.md:DASH-090 partial
+#[test]
+fn dashboard_089_090_real_block_and_unblock_change_the_file_and_the_connections() {
+    run(sources::block_and_unblock_one_address);
+}
+
+/// spec: dashboard.md:DASH-090 partial
+#[test]
+fn dashboard_090_real_range_local_and_edit_off_rows() {
+    run(sources::range_entries_local_rows_and_edit_off);
+}
+
+/// spec: dashboard.md:DASH-091 partial
+#[test]
+fn dashboard_091_real_deny_list_input_warning_and_server_diagnostics() {
+    run(sources::deny_list_input_warning_and_server_diagnostics);
+}
+
+/// spec: dashboard.md:DASH-020 partial
+#[test]
+fn dashboard_020_real_deny_list_closes_an_open_session_as_ip_denied() {
+    run(sources::deny_list_closes_an_open_session_with_ip_denied);
+}
+
 #[test]
 fn dashboard_proxy_preserves_an_idle_browser_preconnection() {
     run(|| {

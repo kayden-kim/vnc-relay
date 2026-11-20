@@ -400,3 +400,424 @@ pub fn real_counts_links_and_databases() {
         json!(true)
     );
 }
+
+const DENY: &str = "relay.deny.sources";
+
+fn deny_button(ip: &str, action: &str) -> String {
+    format!(
+        "[data-sources-card='addresses'] button[data-deny-address='{ip}'][data-deny-action='{action}']"
+    )
+}
+
+fn wait_for_deny_button(browser: &mut Browser, ip: &str, action: &str) {
+    browser.wait(&format!(
+        "document.querySelector(\"{}\") !== null",
+        deny_button(ip, action)
+    ));
+}
+
+/// The effective value of the deny list, read with the oracle session.
+fn deny_value(server: &Server, admin: &Admin) -> Value {
+    let config = server.query(admin, "/api/v1/config");
+    config["items"]
+        .as_array()
+        .and_then(|items| items.iter().find(|item| item["key"] == DENY))
+        .map(|item| item["value"].clone())
+        .unwrap_or_else(|| panic!("{DENY} is in the configuration"))
+}
+
+/// The `deny_entries` of one address of the last-hour report, read with the oracle session.
+fn address_entries(server: &Server, admin: &Admin, ip: &str) -> Value {
+    let report = server.query(admin, ENTRY);
+    report["addresses"]["items"]
+        .as_array()
+        .and_then(|items| items.iter().find(|item| item["ip"] == ip))
+        .map(|item| item["deny_entries"].clone())
+        .unwrap_or_else(|| panic!("{ip} is among the sources"))
+}
+
+/// What the block status cell of one address shows: the badge text, the button action and the range note.
+fn deny_cell(browser: &mut Browser, ip: &str) -> Value {
+    browser.eval(&format!(
+        r#"(() => {{
+            const row = [...document.querySelectorAll('[data-sources-card="addresses"] tbody tr')].find(tr => tr.children[0].textContent.includes('{ip}'));
+            const cell = row?.querySelector('td.src-deny');
+            return {{
+                badge: cell?.querySelector('.badge')?.textContent ?? null,
+                button: cell?.querySelector('button')?.dataset.denyAction ?? null,
+                note: cell?.querySelector('.src-deny-note')?.textContent ?? null,
+                empty: cell?.childElementCount === 0,
+            }};
+        }})()"#
+    ))
+}
+
+/// The first line of the reply to a WebSocket Viewer upgrade from `client` behind the trusted proxy. Empty when the
+/// server closes the connection without a reply.
+fn ws_reply_line(server: &Server, client: &str) -> String {
+    let mut stream = connect(server.ws_port);
+    must(stream.set_read_timeout(Some(Duration::from_secs(3))));
+    let request = format!(
+        "GET /relay/viewer HTTP/1.1\r\nHost: localhost\r\nOrigin: http://127.0.0.1\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Protocol: binary\r\nX-Forwarded-For: {client}\r\n\r\n"
+    );
+    must(stream.write_all(request.as_bytes()));
+    let mut buffer = [0; 512];
+    let read = stream.read(&mut buffer).unwrap_or(0);
+    String::from_utf8_lossy(&buffer[..read])
+        .lines()
+        .next()
+        .unwrap_or_default()
+        .to_owned()
+}
+
+fn review_settings(browser: &mut Browser) {
+    browser.click("#settings-review");
+    browser.wait("document.querySelector('dialog.config-dialog[open]') !== null");
+}
+
+fn apply_settings(browser: &mut Browser) {
+    browser.click("dialog.config-dialog .dialog-actions .button-primary");
+}
+
+/// Opens SCR-005, replaces the deny list with `value`, confirms, and waits for the settings view.
+fn save_deny_list(browser: &mut Browser, server: &Server, value: &str) {
+    open_settings(browser, server);
+    open_settings_edit(browser, server);
+    set_field_value(browser, DENY, value);
+    review_settings(browser);
+    apply_settings(browser);
+    browser.wait(
+        "location.hash === '#/settings' && document.querySelector('#settings-edit') !== null && document.querySelector('#settings-refresh')?.disabled === false",
+    );
+}
+
+// DASH-089 with a real configuration: the dialog sends nothing until it is confirmed, one GET and one PATCH change the
+// file, the address stops connecting, and the screen queries again. DASH-090 (a) unblocks it again.
+pub fn block_and_unblock_one_address() {
+    const IP: &str = "198.51.100.7";
+    let server = Server::start_with_config_transform("dash-089", Some(1), true, with_databases);
+    let admin = server.login();
+    connect_clients(&server, &admin);
+    assert!(
+        ws_reply_line(&server, IP).starts_with("HTTP/1.1 101"),
+        "the address connects before it is blocked"
+    );
+    let mut browser = Browser::start("dash-089", &["ko-KR"]);
+    browser.login(&server);
+    browser.navigate(&server.url("/#/sources"));
+    ready(&mut browser);
+    let report = server.query(&admin, ENTRY);
+    assert_eq!(report["deny_editable"], json!(true));
+    assert!(
+        report["addresses"]["items"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .all(|item| item["deny_entries"] == json!([])),
+        "nothing is blocked yet"
+    );
+    assert_eq!(deny_value(&server, &admin), json!([]));
+    assert_eq!(
+        browser
+            .eval("document.querySelectorAll('[data-sources-card=\"addresses\"] thead th').length"),
+        json!(9),
+        "the address table has the block status column"
+    );
+    assert_eq!(
+        deny_cell(&mut browser, IP),
+        json!({"badge": null, "button": "block", "note": null, "empty": false})
+    );
+    assert_eq!(
+        deny_cell(&mut browser, "127.0.0.1"),
+        json!({"badge": null, "button": null, "note": null, "empty": true}),
+        "a local address that is not blocked has an empty cell"
+    );
+
+    // Opening the dialog sends nothing. Cancel and Escape close it and return the focus to the button.
+    browser.click(&deny_button(IP, "block"));
+    browser.wait("document.querySelector('dialog.dialog[open]') !== null");
+    assert_eq!(
+        browser.eval("document.activeElement?.textContent.trim()"),
+        json!("취소")
+    );
+    assert_eq!(
+        browser.eval("document.querySelector('dialog.dialog p.mono').textContent"),
+        json!(IP)
+    );
+    browser.key("Escape");
+    browser.wait("document.querySelector('dialog.dialog[open]') === null");
+    assert_eq!(
+        browser.eval("document.activeElement?.dataset.denyAddress"),
+        json!(IP)
+    );
+    browser.click(&deny_button(IP, "block"));
+    browser.wait("document.querySelector('dialog.dialog[open]') !== null");
+    browser.click("dialog.dialog .dialog-actions button:first-child");
+    browser.wait("document.querySelector('dialog.dialog[open]') === null");
+    assert_eq!(
+        browser.eval("document.activeElement?.dataset.denyAddress"),
+        json!(IP)
+    );
+    assert_eq!(server.proxy.count("GET", "/api/v1/config"), 0);
+    assert_eq!(server.proxy.count("PATCH", "/api/v1/config"), 0);
+
+    // Confirm: one GET, one PATCH with the CSRF token, then a query without X-Relay-Poll.
+    let before = requests(&server).len();
+    browser.click(&deny_button(IP, "block"));
+    browser.wait("document.querySelector('dialog.dialog[open]') !== null");
+    browser.click("dialog.dialog .dialog-actions button:last-child");
+    wait_for_deny_button(&mut browser, IP, "unblock");
+    assert_eq!(server.proxy.count("GET", "/api/v1/config"), 1);
+    assert_eq!(server.proxy.count("PATCH", "/api/v1/config"), 1);
+    let patch = server
+        .proxy
+        .traffic()
+        .into_iter()
+        .find(|r| r.method == "PATCH" && r.path == "/api/v1/config")
+        .unwrap_or_else(|| panic!("the PATCH went through the proxy"));
+    assert_eq!(patch.status, Some(200));
+    assert!(patch.headers.to_ascii_lowercase().contains("x-csrf-token:"));
+    assert_eq!(deny_value(&server, &admin), json!([IP]));
+    let text = server.config_text();
+    assert!(
+        text.split("[relay.deny]")
+            .nth(1)
+            .is_some_and(|rest| rest.contains(IP)),
+        "the file has the entry under [relay.deny]: {text}"
+    );
+    assert_eq!(address_entries(&server, &admin, IP), json!([IP]));
+    assert_eq!(
+        browser.eval("document.querySelector('.sources-result .alert')?.textContent"),
+        json!("주소를 차단했습니다: 198.51.100.7")
+    );
+    assert_eq!(
+        browser.eval("document.querySelector('.sources-result .alert')?.getAttribute('role')"),
+        json!("status")
+    );
+    assert_eq!(
+        deny_cell(&mut browser, IP),
+        json!({"badge": "차단됨", "button": "unblock", "note": null, "empty": false})
+    );
+    assert!(
+        requests(&server)
+            .iter()
+            .skip(before)
+            .any(|(path, headers)| path == ENTRY && !is_poll(headers)),
+        "the screen queried again as a user action"
+    );
+    assert!(
+        !ws_reply_line(&server, IP).starts_with("HTTP/1.1 101"),
+        "the blocked address no longer connects"
+    );
+
+    // Unblock removes the row's entry.
+    browser.click(&deny_button(IP, "unblock"));
+    browser.wait("document.querySelector('dialog.dialog[open]') !== null");
+    assert_eq!(
+        browser.eval("document.querySelector('dialog.dialog .dialog-title').textContent"),
+        json!("차단 해제 확인")
+    );
+    browser.click("dialog.dialog .dialog-actions button:last-child");
+    wait_for_deny_button(&mut browser, IP, "block");
+    assert_eq!(server.proxy.count("PATCH", "/api/v1/config"), 2);
+    assert_eq!(deny_value(&server, &admin), json!([]));
+    assert_eq!(
+        browser.eval("document.querySelector('.sources-result .alert')?.textContent"),
+        json!("차단 목록에서 이 주소의 항목을 지웠습니다: 198.51.100.7")
+    );
+    assert!(
+        ws_reply_line(&server, IP).starts_with("HTTP/1.1 101"),
+        "the unblocked address connects again"
+    );
+}
+
+// DASH-090 (b), (c) and (d) with real values: a CIDR entry written through SCR-005 makes a badge with the range note
+// and no button, a local address has no button, and a server with editing off has no buttons and the CPY-302 line.
+pub fn range_entries_local_rows_and_edit_off() {
+    const RANGE_NOTE: &str = "범위 항목으로 차단되어 있습니다. 설정에서 해제하십시오.";
+    const EDIT_OFF: &str =
+        "차단하려면 설정 파일에서 management.config_edit = true로 바꾸고 서버를 재시작하십시오.";
+    let server = Server::start_with_config_transform("dash-090", Some(1), true, with_databases);
+    let admin = server.login();
+    connect_clients(&server, &admin);
+    let mut browser = Browser::start("dash-090", &["ko-KR"]);
+    browser.login(&server);
+    save_deny_list(&mut browser, &server, "198.51.100.0/24");
+    assert_eq!(deny_value(&server, &admin), json!(["198.51.100.0/24"]));
+    assert_eq!(
+        address_entries(&server, &admin, "198.51.100.7"),
+        json!(["198.51.100.0/24"])
+    );
+    browser.click(MENU);
+    ready(&mut browser);
+    assert_eq!(
+        deny_cell(&mut browser, "198.51.100.7"),
+        json!({"badge": "차단됨", "button": null, "note": RANGE_NOTE, "empty": false}),
+        "a range entry shows the badge and the note, never a button"
+    );
+    assert_eq!(
+        deny_cell(&mut browser, "2001:db8::7"),
+        json!({"badge": null, "button": "block", "note": null, "empty": false})
+    );
+    assert_eq!(
+        deny_cell(&mut browser, "127.0.0.1"),
+        json!({"badge": null, "button": null, "note": null, "empty": true})
+    );
+    assert_eq!(
+        browser.eval(
+            "[...document.querySelectorAll('[data-sources-card=\"addresses\"] .card-head .card-description')].map(p => p.textContent).includes('차단하려면 설정 파일에서 management.config_edit = true로 바꾸고 서버를 재시작하십시오.')"
+        ),
+        json!(false),
+        "with editing on there is no CPY-302"
+    );
+
+    let off = Server::start_with_config_transform("dash-090-off", Some(1), false, with_databases);
+    let off_admin = off.login();
+    connect_clients(&off, &off_admin);
+    let mut off_browser = Browser::start("dash-090-off", &["ko-KR"]);
+    off_browser.login(&off);
+    off_browser.navigate(&off.url("/#/sources"));
+    ready(&mut off_browser);
+    assert_eq!(off.query(&off_admin, ENTRY)["deny_editable"], json!(false));
+    assert_eq!(
+        off_browser.eval("document.querySelectorAll('[data-deny-action]').length"),
+        json!(0)
+    );
+    assert_eq!(
+        off_browser.eval(
+            "[...document.querySelectorAll('[data-sources-card=\"addresses\"] .card-head .card-description')].map(p => p.textContent).at(-1)"
+        ),
+        json!(EDIT_OFF)
+    );
+}
+
+// DASH-091 with a real server: SCR-004 shows the key in its own table, SCR-005 has the input with its label and help,
+// the confirmation warns only for new or changed entries, and the server's rejections map to the right line.
+pub fn deny_list_input_warning_and_server_diagnostics() {
+    let server = Server::start_with_config_transform("dash-091", Some(1), true, with_databases);
+    let admin = server.login();
+    let mut browser = Browser::start("dash-091", &["ko-KR"]);
+    browser.login(&server);
+    open_settings(&mut browser, &server);
+    assert_eq!(
+        browser.eval(
+            r#"(() => {
+                const row = document.querySelector('[data-config-key="relay.deny.sources"]');
+                return [row?.closest('.card')?.querySelector('.card-title')?.textContent, row?.textContent.includes('재시작 없이 적용'), row?.textContent.includes('빈 목록')];
+            })()"#
+        ),
+        json!(["[relay.deny]", true, true]),
+        "SCR-004 shows the key in [relay.deny] as applying without restart, empty"
+    );
+    open_settings_edit(&mut browser, &server);
+    assert_eq!(
+        browser.eval(
+            r#"(() => {
+                const input = document.querySelector('[data-config-key="relay.deny.sources"]');
+                const label = [...document.querySelectorAll('label')].find(l => l.htmlFor === input.id);
+                const help = input.getAttribute('aria-describedby').split(/\s+/).map(id => document.getElementById(id)?.textContent ?? '');
+                return [
+                    input.closest('.card').querySelector('.card-title').textContent,
+                    label.textContent,
+                    help.some(text => text.startsWith('한 줄에 항목 하나를 입력하십시오.')),
+                    help.some(text => text.startsWith('허용 목록보다 우선합니다.')),
+                ];
+            })()"#
+        ),
+        json!(["접근 정책", "차단 목록relay.deny.sources", true, true])
+    );
+
+    // A new entry warns inside its change; Escape closes the confirmation and sends nothing.
+    set_field_value(&mut browser, DENY, "198.51.100.0/24");
+    review_settings(&mut browser);
+    let warnings = r#"(() => {
+        const dialog = document.querySelector('dialog.config-dialog');
+        const change = [...dialog.querySelectorAll('.config-change')].find(c => c.querySelector('.card-heading')?.textContent === 'relay.deny.sources');
+        return [change?.textContent.includes('예외: 차단 목록에 새로 넣거나 바꾼 항목'), dialog.textContent.includes('빈 허용 목록은 해당 키가')];
+    })()"#;
+    assert_eq!(browser.eval(warnings), json!([true, false]));
+    browser.key("Escape");
+    browser.wait("document.querySelector('dialog.config-dialog[open]') === null");
+    assert_eq!(server.proxy.count("PATCH", "/api/v1/config"), 0);
+
+    // The server rejects the trusted proxy address and a malformed entry, each on its line.
+    let original = server.config_text();
+    let errors = r#"(document.querySelector('[data-config-key="relay.deny.sources"]').closest('.config-field').querySelector('.config-field-errors')?.textContent ?? '')"#;
+    set_field_value(&mut browser, DENY, "127.0.0.1");
+    review_settings(&mut browser);
+    apply_settings(&mut browser);
+    browser.wait(&format!("{errors}.includes('겹칩니다')"));
+    assert_eq!(
+        browser.eval(&format!("{errors}.includes('1줄: 차단 항목이 신뢰 프록시 주소와 겹칩니다. 프록시 주소는 차단할 수 없습니다.')")),
+        json!(true)
+    );
+    set_field_value(&mut browser, DENY, "198.51.100.0/24\nnot-an-address");
+    review_settings(&mut browser);
+    apply_settings(&mut browser);
+    browser.wait(&format!("{errors}.includes('형식이 올바르지 않습니다')"));
+    assert_eq!(
+        browser.eval(&format!(
+            "{errors}.includes('2줄: IP·CIDR·범위 항목의 형식이 올바르지 않습니다.')"
+        )),
+        json!(true)
+    );
+    assert_eq!(
+        server.config_text(),
+        original,
+        "a rejected list changes nothing"
+    );
+    assert_eq!(deny_value(&server, &admin), json!([]));
+
+    // A valid entry is saved. Removing it again warns nothing, not even for the empty list.
+    set_field_value(&mut browser, DENY, "198.51.100.0/24");
+    review_settings(&mut browser);
+    apply_settings(&mut browser);
+    browser.wait(
+        "location.hash === '#/settings' && document.querySelector('#settings-edit') !== null",
+    );
+    assert_eq!(deny_value(&server, &admin), json!(["198.51.100.0/24"]));
+    wait_for("the watcher applied the saved list", LIMIT, || {
+        server.query(&admin, "/api/v1/config")["file"]["state"] != "pending"
+    });
+    browser.wait("document.body.innerText.includes('설정 파일과 실행 중인 설정이 같습니다')");
+    open_settings_edit(&mut browser, &server);
+    set_field_value(&mut browser, DENY, "");
+    review_settings(&mut browser);
+    assert_eq!(browser.eval(warnings), json!([false, false]));
+    apply_settings(&mut browser);
+    browser.wait(
+        "location.hash === '#/settings' && document.querySelector('#settings-edit') !== null",
+    );
+    assert_eq!(deny_value(&server, &admin), json!([]));
+}
+
+// DASH-020 with a real session: saving the deny list closes the open session, and the closed list shows the neutral
+// "ip_denied" badge with CPY-323.
+pub fn deny_list_closes_an_open_session_with_ip_denied() {
+    let server = Server::start_with_config("dash-020-denied", Some(1), true);
+    let admin = server.login();
+    let pair = server.pair(&admin, "II", "52031");
+    let mut browser = Browser::start("dash-020-denied", &["ko-KR"]);
+    browser.login(&server);
+    save_deny_list(&mut browser, &server, "127.0.0.1");
+    wait_for("the session closed by the deny list", LIMIT, || {
+        server.query(&admin, "/api/v1/closed-sessions")["items"]
+            .as_array()
+            .is_some_and(|items| {
+                items.iter().any(|item| {
+                    item["session_id"] == pair.sid && item["close_cause"] == "ip_denied"
+                })
+            })
+    });
+    browser.click("a.navbar-item[href='/']");
+    browser.wait("document.querySelector('#operations-refresh') !== null");
+    browser.wait("[...document.querySelectorAll('.badge')].some(b => b.textContent === '차단 목록으로 종료')");
+    assert_eq!(
+        browser.eval(
+            "(() => { const b = [...document.querySelectorAll('.badge')].find(b => b.textContent === '차단 목록으로 종료'); return [b.dataset.tone, b.querySelector('svg') === null]; })()"
+        ),
+        json!(["neutral", true]),
+        "the cause badge is neutral and text only"
+    );
+    drop(pair);
+}

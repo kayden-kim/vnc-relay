@@ -1,6 +1,8 @@
 // Contract-shaped fake API evidence only. Real server coverage belongs to dashboard_live.
 // One page load runs one case: ?case=dash-083&lang=ko|en, or ?case=shot-<state>&lang=ko|en for the screen states.
 import { mountSources } from '../app/sources.js';
+import { denyCell } from '../app/sources-model.js';
+import { icon } from '../app/components/icons.js';
 import { COPY, BRAND_NAME, PROVIDER_ATTRIBUTION } from '../app/copy.js';
 import { STORAGE_KEY } from '../app/language.js';
 import { LOGIN_URL } from '../app/shell.js';
@@ -8,7 +10,7 @@ import { fill, formatCount, formatTime } from '../app/format.js';
 import { checkHelpLanguageChange } from './help-link-checks.js';
 import {
   AS_OF, LONG_AS_NAME, LONG_IPV6, NOT_IN_USE, UNNAMED_COUNTRY, WINDOW_MS,
-  addressItems, asnItems, countryItems, databases, emptyBody, exampleAsn, sourcesBody,
+  addressItems, asnItems, countryItems, databases, denyEntriesFor, emptyBody, exampleAsn, sourcesBody,
 } from './sources-fixture.js';
 
 const host = document.getElementById('host');
@@ -40,12 +42,16 @@ const windowOf = (call) => call.query.get('window');
 // A body for the window the call asked for.
 const okBody = (call, options = {}) => ok(sourcesBody({ window: windowOf(call), ...options }));
 
-// Fake management API. `handler(call, n)` answers the n-th sources request. `maxInflight` is the largest number of
-// sources requests that were open at the same moment.
-function fakeApi(handler = (call) => okBody(call), { pollSecs = 3600, timeoutSecs = 5 } = {}) {
+// Fake management API. `handler(call, n)` answers the n-th sources request. `config(call)` answers the requests to
+// /api/v1/config (`call.method`, `call.body`, `call.csrf`); without it they are unexpected. `maxInflight` is the largest
+// number of sources requests that were open at the same moment, and `log` lists every request after the session in
+// order ('sources', 'GET config', 'PATCH config').
+function fakeApi(handler = (call) => okBody(call), { pollSecs = 3600, timeoutSecs = 5, config = null } = {}) {
   const calls = [];
+  const configCalls = [];
+  const log = [];
   let inflight = 0;
-  const api = { calls, maxInflight: 0 };
+  const api = { calls, configCalls, log, maxInflight: 0 };
   api.request = (path, init = {}) => {
     const url = new URL(path, location.origin);
     if (url.pathname === '/api/v1/session') {
@@ -54,9 +60,19 @@ function fakeApi(handler = (call) => okBody(call), { pollSecs = 3600, timeoutSec
         dashboard: { poll_secs: pollSecs, query_timeout_secs: timeoutSecs, terminate_timeout_secs: 1 },
       }));
     }
+    if (url.pathname === '/api/v1/config' && config !== null) {
+      const call = {
+        path, init, method: init.method ?? 'GET', body: init.body ? JSON.parse(init.body) : null,
+        csrf: init.headers?.['X-CSRF-Token'] ?? null, at: performance.now(),
+      };
+      configCalls.push(call);
+      log.push(`${call.method} config`);
+      return Promise.resolve(config(call));
+    }
     if (url.pathname !== '/api/v1/sources') throw new Error(`unexpected path ${path}`);
     const call = { path, init, query: url.searchParams, at: performance.now() };
     calls.push(call);
+    log.push('sources');
     inflight += 1;
     api.maxInflight = Math.max(api.maxInflight, inflight);
     return Promise.resolve(handler(call, calls.length)).finally(() => { inflight -= 1; });
@@ -244,7 +260,7 @@ async function case083() {
   const addressItemsSent = addressItems(100);
   check('083: every address row in response order', rowsOf(card('addresses')).length === 100
     && rowsOf(card('addresses')).every((row, index) => row.children[0].querySelector('.mono, a span')?.textContent === addressItemsSent[index].ip));
-  check('083: address counts and last event', cellsOf(rowsOf(card('addresses'))[1]).slice(3).join('|')
+  check('083: address counts and last event', cellsOf(rowsOf(card('addresses'))[1]).slice(3, 8).join('|')
     === [499, 499 % 3, 499 % 2, Math.floor(499 / 4)].map(formatCount).concat(formatTime(AS_OF - 60000)).join('|'));
   check('083: every country row in response order', rowsOf(card('countries')).length === 7
     && cellsOf(rowsOf(card('countries'))[6])[0] === t.unknownValue && cellsOf(rowsOf(card('countries'))[5])[0] === UNNAMED_COUNTRY);
@@ -682,10 +698,408 @@ async function case088() {
   check('088 loading: the period select is reachable', document.activeElement === periodSelect());
 }
 
+// ---- DASH-089 and DASH-090: block and unblock one address (SCR-008 "주소 차단과 해제") ----
+
+const DENY = 'relay.deny.sources';
+const CSRF = 'fake-csrf-token';
+const REVISION = `sha256:${'a'.repeat(64)}`;
+const NEXT_REVISION = `sha256:${'b'.repeat(64)}`;
+const jsonEqual = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+const failWith = (status, code, extra = {}) => json(status, { error: { code, message: 'SERVER_TEXT_NOT_UI_COPY', ...extra } });
+const configBody = ({ list, editEnabled = true, state = 'in_effect', editable = true }) => ({
+  as_of: new Date(AS_OF).toISOString(), revision: REVISION, edit_enabled: editEnabled,
+  file: { state, config_keys: [], diagnostics: [] }, last_reload: null,
+  items: [{ key: DENY, value: list, reload: 'dynamic', editable }],
+});
+const patchApplied = () => ok({ as_of: new Date(AS_OF).toISOString(), result: 'applied', revision: NEXT_REVISION, applied: [DENY] });
+
+// A server with one deny list. The sources answer follows `store.list` at the moment of each request, so a change made
+// between two requests plays another administrator. `onGet`, `onPatch` and `onSources` replace one answer; `onPatch`
+// and `onSources` fall through when they return nothing.
+function denyServer(initial, options = {}) {
+  const store = {
+    list: [...initial], editEnabled: true, state: 'in_effect', editable: true, onGet: null, onPatch: null, onSources: null,
+    ...options,
+  };
+  store.rows = (call) => okBody(call, {
+    denyEditable: store.editEnabled,
+    addresses: { total: 7, items: addressItems(7, (ip) => denyEntriesFor(store.list, ip)) },
+  });
+  store.api = (settings = {}) => fakeApi((call, n) => store.onSources?.(call, n) ?? store.rows(call), {
+    ...settings,
+    config: (call) => {
+      if (call.method === 'GET') return store.onGet?.(call) ?? ok(configBody(store));
+      const answer = store.onPatch?.(call);
+      if (answer !== undefined && answer !== null) return answer;
+      store.list = call.body.changes[DENY];
+      return patchApplied();
+    },
+  });
+  return store;
+}
+
+const addressRow = (ip) => rowsOf(card('addresses')).find((row) => row.children[0].querySelector('.mono, a span')?.textContent === ip) ?? null;
+const denyCellOf = (ip) => addressRow(ip)?.querySelector('td.src-deny') ?? null;
+const denyBadgeOf = (ip) => denyCellOf(ip)?.querySelector('.badge') ?? null;
+const denyButtonOf = (ip) => denyCellOf(ip)?.querySelector('button') ?? null;
+const denyNoteOf = (ip) => denyCellOf(ip)?.querySelector('.src-deny-note') ?? null;
+const allDenyButtons = () => [...host.querySelectorAll('[data-deny-action]')];
+const resultNode = () => host.querySelector('.sources-result .alert');
+const resultRegion = () => host.querySelector('.sources-result');
+const dialogNode = () => host.querySelector('dialog.dialog');
+const dialogOpen = () => dialogNode()?.open === true;
+const confirmButton = () => dialogNode()?.querySelector('.dialog-actions button:last-child');
+const cancelButton = () => dialogNode()?.querySelector('.dialog-actions button:first-child');
+const addressNotes = () => [...card('addresses').querySelectorAll('.card-head .card-description')].map((node) => node.textContent);
+const roleOf = (tone) => (tone === 'warning' || tone === 'destructive' ? 'alert' : 'status');
+const sequence = (api) => api.log.join('>');
+// Escape as the browser models it: the cancel event, then the default close.
+function pressEscape() {
+  const dialog = dialogNode();
+  if (dialog.dispatchEvent(new Event('cancel', { cancelable: true }))) dialog.close();
+}
+// The result alert holds `text` with the tone, and has the live role the tone gets.
+function resultIs(label, text, tone) {
+  const node = resultNode();
+  check(`${label}: the notice says the adopted text`, node?.textContent === text);
+  check(`${label}: the notice is ${tone} with its live role`, node?.dataset.tone === tone && node.getAttribute('role') === roleOf(tone));
+}
+async function openAndConfirm(ip) {
+  denyButtonOf(ip).click();
+  confirmButton().click();
+}
+
+async function case089() {
+  const IP = '203.0.113.9';
+  const before = ['198.51.100.250'];
+  const store = denyServer(before);
+  const m = mount(store.api());
+  await waitFor(settled);
+
+  check('089: the ninth column is CPY-295', t.addressColumns.length === 9 && card('addresses').querySelectorAll('thead th').length === 9
+    && card('addresses').querySelector('thead th:last-child').textContent === t.addressColumns[8]);
+  const trigger = denyButtonOf(IP);
+  check('089: a plain address has the block button CPY-296 named by CPY-297 and no badge', trigger?.textContent.trim() === t.denyBlock
+    && trigger.getAttribute('aria-label') === fill(t.denyBlockName, { address: IP }) && denyBadgeOf(IP) === null);
+  check('089: the button has the table button height', trigger.getBoundingClientRect().height >= (innerWidth <= 1023.98 ? 44 : 32) - 0.5);
+  trigger.focus();
+  check('089: the button takes keyboard focus', document.activeElement === trigger);
+  trigger.click();
+  const dialog = dialogNode();
+  check('089 dialog: modal with CPY-303, CPY-304, the address and CPY-305', dialogOpen()
+    && dialog.querySelector('.dialog-title').textContent === t.denyBlockTitle
+    && dialog.querySelector('p.label').textContent === t.denyBlockLabel
+    && dialog.querySelector('p.mono').textContent === IP
+    && dialog.querySelector('.dialog-description').textContent === t.denyBlockBody
+    && dialog.getAttribute('aria-describedby') === dialog.querySelector('.dialog-description').id);
+  check('089 dialog: focus is on cancel and confirm is the destructive block button', document.activeElement === cancelButton()
+    && cancelButton().textContent.trim() === t.cancel && confirmButton().textContent.trim() === t.denyBlock
+    && confirmButton().classList.contains('button-destructive'));
+  check('089 dialog: opening sends no request', sequence(m.api) === 'sources');
+  checkLayout('089 dialog');
+
+  cancelButton().click();
+  check('089 cancel: closes without a request and returns focus to the button', !dialogOpen() && sequence(m.api) === 'sources'
+    && document.activeElement === denyButtonOf(IP));
+  denyButtonOf(IP).click();
+  pressEscape();
+  await wait(60);
+  check('089 Escape: closes without a request and returns focus to the button', !dialogOpen() && sequence(m.api) === 'sources'
+    && document.activeElement === denyButtonOf(IP));
+
+  // Confirm: GET config first, then one PATCH with the whole list. Everything is disabled meanwhile.
+  const readGate = deferred();
+  const writeGate = deferred();
+  store.onGet = () => readGate.promise;
+  store.onPatch = () => writeGate.promise;
+  await openAndConfirm(IP);
+  check('089 busy: the first request is GET config', sequence(m.api) === 'sources>GET config');
+  check('089 busy: every row button, cancel and confirm are disabled and confirm says CPY-306', dialogOpen()
+    && allDenyButtons().length >= 4 && allDenyButtons().every((button) => button.disabled)
+    && cancelButton().disabled && confirmButton().disabled && confirmButton().textContent.trim() === t.denyBlocking
+    && confirmButton().getAttribute('aria-busy') === 'true' && resultNode() === null);
+  for (const control of [confirmButton(), confirmButton(), cancelButton(), ...allDenyButtons()]) control.click();
+  pressEscape();
+  check('089 busy: repeated clicks and Escape change nothing', dialogOpen() && sequence(m.api) === 'sources>GET config');
+  checkLayout('089 busy');
+  readGate.resolve(ok(configBody({ list: store.list })));
+  await waitFor(() => m.api.configCalls.length === 2);
+  const patch = m.api.configCalls[1];
+  check('089 request: the PATCH has the revision, the CSRF token and the whole list with the address last', patch?.method === 'PATCH'
+    && patch.csrf === CSRF && jsonEqual(patch.body, { revision: REVISION, changes: { [DENY]: [...before, IP] } }));
+  check('089 request: still disabled while the PATCH runs', dialogOpen() && confirmButton().disabled && allDenyButtons().every((button) => button.disabled));
+  store.list = [...before, IP];
+  writeGate.resolve(patchApplied());
+  await waitFor(() => denyBadgeOf(IP) !== null && settled());
+  check('089 success: one GET and one PATCH, then one query', sequence(m.api) === 'sources>GET config>PATCH config>sources');
+  check('089 success: the query has no X-Relay-Poll and keeps the period', !isPoll(m.api.calls[1]) && windowOf(m.api.calls[1]) === '1h');
+  check('089 success: the dialog is closed and every button is enabled again', !dialogOpen() && allDenyButtons().every((button) => !button.disabled));
+  resultIs('089 success', fill(t.denyBlockDone, { address: IP }), 'success');
+  check('089 success: the address is in the data font inside the notice', resultNode()?.querySelector('.mono')?.textContent === IP);
+  check('089 success: the row has the badge CPY-300 and the unblock button named by CPY-299', denyBadgeOf(IP)?.textContent === t.denyBlocked
+    && denyButtonOf(IP)?.textContent.trim() === t.denyUnblock && denyButtonOf(IP).getAttribute('aria-label') === fill(t.denyUnblockName, { address: IP }));
+  check('089 success: the screen status is untouched', status() === '' && alertOf() === null);
+  check('089 success: the caller button is gone, so focus is on the notice region', document.activeElement === resultRegion());
+  checkLayout('089 success');
+
+  // The list already has the text: no PATCH, the same success notice, one query.
+  const stale = denyServer([]);
+  const s = mount(stale.api());
+  await waitFor(settled);
+  stale.list = [IP];
+  await openAndConfirm(IP);
+  await waitFor(() => denyBadgeOf(IP) !== null && settled());
+  check('089 same text: GET only, no PATCH, then one query', sequence(s.api) === 'sources>GET config>sources');
+  resultIs('089 same text', fill(t.denyBlockDone, { address: IP }), 'success');
+
+  // The query waits for the sources request that is running, and requests never overlap.
+  const poll = deferred();
+  const slow = denyServer([]);
+  slow.onSources = (call, n) => (n === 2 ? poll.promise : null);
+  const p = mount(slow.api({ pollSecs: 1 }));
+  await waitFor(settled);
+  await waitFor(() => p.api.calls.length === 2, 3000);
+  await openAndConfirm(IP);
+  await waitFor(() => resultNode() !== null);
+  await wait(150);
+  check('089 during a poll: the answer shows, the query waits and nothing overlaps', resultNode() !== null && p.api.calls.length === 2
+    && p.api.maxInflight === 1 && p.api.configCalls.length === 2);
+  poll.resolve(slow.rows(p.api.calls[1]));
+  await waitFor(() => p.api.calls.length === 3, 3000);
+  check('089 during a poll: the query follows the poll without X-Relay-Poll', isPoll(p.api.calls[1]) && !isPoll(p.api.calls[2]) && p.api.maxInflight === 1);
+  await waitFor(() => denyBadgeOf(IP) !== null && settled(), 3000);
+  check('089 during a poll: the row shows the new state', denyButtonOf(IP)?.dataset.denyAction === 'unblock');
+}
+
+async function case090() {
+  const IP = '203.0.113.9';
+
+  // (a) A single entry: unblock removes the row's entries from the current list.
+  const store = denyServer([IP, '192.0.2.99']);
+  const m = mount(store.api());
+  await waitFor(settled);
+  const badge = denyBadgeOf(IP);
+  check('090 a: the badge is CPY-300 in the error tone with the circle-with-bar icon', badge?.textContent === t.denyBlocked
+    && badge.classList.contains('badge-tone-destructive') && badge.querySelector('svg')?.innerHTML === icon('cancel').innerHTML);
+  check('090 a: the cell is badge then unblock button, with no range note', denyButtonOf(IP)?.textContent.trim() === t.denyUnblock
+    && denyButtonOf(IP).getAttribute('aria-label') === fill(t.denyUnblockName, { address: IP }) && denyNoteOf(IP) === null
+    && [...denyCellOf(IP).firstElementChild.children].map((node) => node.tagName).join('|') === 'SPAN|BUTTON');
+  denyButtonOf(IP).click();
+  const dialog = dialogNode();
+  check('090 a: dialog CPY-307, CPY-308, the address and CPY-309', dialogOpen()
+    && dialog.querySelector('.dialog-title').textContent === t.denyUnblockTitle
+    && dialog.querySelector('p.label').textContent === t.denyUnblockLabel && dialog.querySelector('p.mono').textContent === IP
+    && dialog.querySelector('.dialog-description').textContent === t.denyUnblockBody);
+  check('090 a: focus is on cancel and confirm is the primary unblock button', document.activeElement === cancelButton()
+    && confirmButton().textContent.trim() === t.denyUnblock && confirmButton().classList.contains('button-primary')
+    && !confirmButton().classList.contains('button-destructive'));
+  checkLayout('090 a dialog');
+  confirmButton().click();
+  await waitFor(() => denyButtonOf(IP)?.dataset.denyAction === 'block' && settled());
+  check('090 a: the PATCH removes the row entries and keeps the rest', jsonEqual(m.api.configCalls[1]?.body, { revision: REVISION, changes: { [DENY]: ['192.0.2.99'] } })
+    && m.api.configCalls[1].csrf === CSRF);
+  check('090 a: one GET, one PATCH, then one query without X-Relay-Poll', sequence(m.api) === 'sources>GET config>PATCH config>sources' && !isPoll(m.api.calls[1]));
+  resultIs('090 a', fill(t.denyUnblockDone, { address: IP }), 'success');
+  check('090 a: the row is a plain address again and focus is on the notice', denyBadgeOf(IP) === null && document.activeElement === resultRegion());
+
+  // (a) Another administrator removed the entry meanwhile: no PATCH, CPY-324, one query.
+  const gone = denyServer([IP]);
+  const g = mount(gone.api());
+  await waitFor(settled);
+  gone.list = [];
+  await openAndConfirm(IP);
+  await waitFor(() => resultNode() !== null && g.api.calls.length === 2 && settled());
+  check('090 a gone: GET only, no PATCH, then one query', sequence(g.api) === 'sources>GET config>sources');
+  resultIs('090 a gone', t.denyNothingToRemove, 'warning');
+  check('090 a gone: no unblock success text', !resultNode().textContent.includes(fill(t.denyUnblockDone, { address: IP })));
+  check('090 a gone: the queried row is a plain address', denyButtonOf(IP)?.dataset.denyAction === 'block' && denyBadgeOf(IP) === null);
+
+  // (a) The entry is gone and a CIDR covers the address: the queried row has the badge and CPY-301 only.
+  const covered = denyServer([IP]);
+  const c = mount(covered.api());
+  await waitFor(settled);
+  covered.list = ['203.0.113.0/24'];
+  await openAndConfirm(IP);
+  await waitFor(() => resultNode() !== null && c.api.calls.length === 2 && settled());
+  check('090 a covered: no PATCH and CPY-324', sequence(c.api) === 'sources>GET config>sources' && resultNode().textContent === t.denyNothingToRemove);
+  check('090 a covered: the row has the badge and CPY-301 and no button', denyBadgeOf(IP)?.textContent === t.denyBlocked
+    && denyNoteOf(IP)?.textContent === t.denyRangeNote && denyButtonOf(IP) === null);
+
+  // (b) and (c) Range entries, mixed entries and local addresses.
+  const mixed = denyServer(['198.51.100.0/24', LONG_IPV6, '2001:db8::/32', '127.0.0.1', IP]);
+  mount(mixed.api());
+  await waitFor(settled);
+  for (const ip of ['198.51.100.250', LONG_IPV6]) {
+    check(`090 b ${ip}: badge and CPY-301 in the muted label style, no button`, denyBadgeOf(ip)?.textContent === t.denyBlocked
+      && denyNoteOf(ip)?.textContent === t.denyRangeNote && denyNoteOf(ip).classList.contains('muted') && denyButtonOf(ip) === null
+      && [...denyCellOf(ip).firstElementChild.children].map((node) => node.tagName).join('|') === 'SPAN|P');
+  }
+  check('090 b: another address in the range has the same note', denyNoteOf('198.51.100.5')?.textContent === t.denyRangeNote);
+  check('090 c: a blocked local address has the badge only', denyBadgeOf('127.0.0.1')?.textContent === t.denyBlocked
+    && denyButtonOf('127.0.0.1') === null && denyNoteOf('127.0.0.1') === null);
+  check('090: a single-entry address still has the unblock button and a plain one the block button',
+    denyButtonOf(IP)?.dataset.denyAction === 'unblock' && denyButtonOf('192.0.2.44')?.dataset.denyAction === 'block');
+  check('090: the range note stays inside the viewport', [...host.querySelectorAll('.src-deny-note')].every((node) => node.getBoundingClientRect().right <= innerWidth + 1));
+  const none = denyServer([]);
+  mount(none.api());
+  await waitFor(settled);
+  check('090 c: a local address that is not blocked has an empty cell and no button', denyCellOf('127.0.0.1')?.childElementCount === 0
+    && denyCellOf('127.0.0.1').textContent === '' && denyButtonOf('127.0.0.1') === null
+    && (innerWidth > 1023.98 || getComputedStyle(denyCellOf('127.0.0.1')).display === 'none'));
+  check('090: with edit on there is no CPY-302', addressNotes().length === 3 && !addressNotes().includes(t.denyEditOff));
+
+  // The range test of the model: a `-` or a `/` makes an entry a range entry.
+  check('090 model: a range with a dash is a range entry', (() => {
+    const cell = denyCell({ local: false, denyEntries: ['2001:db8::1-2001:db8::ff'] }, true);
+    return cell.blocked && cell.action === null && cell.rangeNote;
+  })());
+  check('090 model: a single IPv6 entry is not a range entry', denyCell({ local: false, denyEntries: [LONG_IPV6] }, true).action === 'unblock');
+
+  // (d) deny_editable = false: no buttons, no range note, badges stay, CPY-302 is the last line of the address card head.
+  const off = denyServer([IP, '198.51.100.0/24'], { editEnabled: false });
+  mount(off.api());
+  await waitFor(settled);
+  check('090 d: no buttons anywhere', allDenyButtons().length === 0 && card('addresses').querySelector('td.src-deny button') === null);
+  check('090 d: blocked rows keep the badge without a range note', denyBadgeOf(IP)?.textContent === t.denyBlocked
+    && denyBadgeOf('198.51.100.250')?.textContent === t.denyBlocked && host.querySelector('.src-deny-note') === null);
+  check('090 d: CPY-302 is the last line of the address card description', addressNotes().length === 4 && addressNotes()[3] === t.denyEditOff);
+  check('090 d: the other tables and the page status are untouched', status() === '' && card('countries').querySelector('.card-description') === null);
+  checkLayout('090 d');
+}
+
+const ERROR_CASES = [
+  { name: 'GET 500', setup: (s) => { s.onGet = () => failWith(500, 'internal'); }, key: 'denyConfigReadFailed', tone: 'destructive', patches: 0, requery: false },
+  { name: 'GET no response', setup: (s) => { s.onGet = () => Promise.reject(new TypeError('network')); }, key: 'denyConfigReadFailed', tone: 'destructive', patches: 0, requery: false },
+  { name: 'GET body that is not a configuration', setup: (s) => { s.onGet = () => ok({ unexpected: true }); }, key: 'denyConfigReadFailed', tone: 'destructive', patches: 0, requery: false },
+  { name: 'GET without the deny key', setup: (s) => { s.onGet = () => ok({ ...configBody(s), items: [] }); }, key: 'denyConfigReadFailed', tone: 'destructive', patches: 0, requery: false },
+  { name: 'GET edit off', setup: (s) => { s.editEnabled = false; }, key: 'configEditDisabled', tone: 'neutral', patches: 0, requery: true, editOff: true },
+  { name: 'GET file state restart_required', setup: (s) => { s.state = 'restart_required'; }, key: 'denyFileState', tone: 'warning', patches: 0, requery: false },
+  { name: 'GET file state invalid', setup: (s) => { s.state = 'invalid'; }, key: 'denyFileState', tone: 'warning', patches: 0, requery: false },
+  { name: 'GET key not editable', setup: (s) => { s.editable = false; }, key: 'denyFileState', tone: 'warning', patches: 0, requery: false },
+  { name: '403 config_edit_disabled', setup: (s) => { s.onPatch = () => { s.editEnabled = false; return failWith(403, 'config_edit_disabled'); }; }, key: 'configEditDisabled', tone: 'neutral', patches: 1, requery: true, editOff: true },
+  { name: '409 config_conflict', setup: (s) => { s.onPatch = () => failWith(409, 'config_conflict'); }, key: 'denyConflict', tone: 'warning', patches: 1, requery: false },
+  { name: '409 config_file_invalid', setup: (s) => { s.onPatch = () => failWith(409, 'config_file_invalid'); }, key: 'denyFileState', tone: 'warning', patches: 1, requery: false },
+  { name: '409 config_restart_pending', setup: (s) => { s.onPatch = () => failWith(409, 'config_restart_pending'); }, key: 'denyFileState', tone: 'warning', patches: 1, requery: false },
+  {
+    name: '400 config_invalid with the proxy overlap',
+    setup: (s) => { s.onPatch = () => failWith(400, 'config_invalid', { diagnostics: [{ code: 'config_deny_overlaps_proxy', key: `${DENY}[1]`, message: 'SERVER_DIAGNOSTIC_TEXT' }] }); },
+    key: 'denyInvalid', tone: 'destructive', patches: 1, requery: false, diagnostic: () => t.configDiagnostics.config_deny_overlaps_proxy,
+  },
+  {
+    name: '400 config_invalid with an unknown code',
+    setup: (s) => { s.onPatch = () => failWith(400, 'config_invalid', { diagnostics: [{ code: 'future_diagnostic', key: DENY, message: 'Future text' }] }); },
+    key: 'denyInvalid', tone: 'destructive', patches: 1, requery: false, diagnostic: () => 'Future text (future_diagnostic)',
+  },
+  { name: '400 invalid_request', setup: (s) => { s.onPatch = () => failWith(400, 'invalid_request'); }, key: 'denyRequestFailed', tone: 'destructive', patches: 1, requery: false },
+  { name: '403 csrf_invalid', setup: (s) => { s.onPatch = () => failWith(403, 'csrf_invalid'); }, key: 'denyRequestFailed', tone: 'destructive', patches: 1, requery: false },
+  { name: 'PATCH 500', setup: (s) => { s.onPatch = () => failWith(500, 'internal'); }, key: 'denyUnknown', tone: 'warning', patches: 1, requery: true },
+  { name: 'PATCH no response', setup: (s) => { s.onPatch = () => Promise.reject(new TypeError('network')); }, key: 'denyUnknown', tone: 'warning', patches: 1, requery: true },
+  { name: 'PATCH timeout', setup: (s) => { s.onPatch = (call) => stalled(call); }, key: 'denyUnknown', tone: 'warning', patches: 1, requery: true },
+  { name: 'PATCH answer that is not an applied result', setup: (s) => { s.onPatch = () => ok({ unexpected: true }); }, key: 'denyUnknown', tone: 'warning', patches: 1, requery: true },
+];
+
+async function case090Errors() {
+  const IP = '203.0.113.9';
+  for (const entry of ERROR_CASES) {
+    const label = `090 e ${entry.name}`;
+    const store = denyServer(['198.51.100.250']);
+    const m = mount(store.api({ timeoutSecs: 1 }));
+    await waitFor(settled);
+    entry.setup(store);
+    await openAndConfirm(IP);
+    await waitFor(() => !dialogOpen() && resultNode() !== null, 4000);
+    if (entry.requery) await waitFor(() => m.api.calls.length === 2 && settled(), 4000);
+    else await wait(120);
+    const text = entry.diagnostic ? fill(t.denyInvalid, { diagnostic: entry.diagnostic() }) : t[entry.key];
+    resultIs(label, text, entry.tone);
+    check(`${label}: never shown as a success`, !resultNode().classList.contains('alert-tone-success'));
+    check(`${label}: server wording is not shown`, !resultNode().textContent.includes('SERVER_'));
+    check(`${label}: one GET and ${entry.patches} PATCH, never resent`, m.api.configCalls.filter((call) => call.method === 'GET').length === 1
+      && m.api.configCalls.filter((call) => call.method === 'PATCH').length === entry.patches);
+    check(`${label}: ${entry.requery ? 'one query without X-Relay-Poll' : 'no query'}`, entry.requery
+      ? m.api.calls.length === 2 && !isPoll(m.api.calls[1]) : m.api.calls.length === 1);
+    check(`${label}: the dialog is closed and the screen is usable`, !dialogOpen() && status() === '' && !host.querySelector('#sources-refresh').disabled);
+    if (entry.editOff) {
+      check(`${label}: the queried screen has no buttons and CPY-302`, allDenyButtons().length === 0 && addressNotes().at(-1) === t.denyEditOff
+        && document.activeElement === resultRegion());
+    } else {
+      check(`${label}: the buttons are enabled and focus is back on the caller`, allDenyButtons().every((button) => !button.disabled)
+        && document.activeElement === denyButtonOf(IP));
+    }
+    checkLayout(label);
+  }
+
+  // 401 on either request removes the values and goes to the login screen.
+  for (const [name, setup] of [
+    ['GET 401', (s) => { s.onGet = () => fail(401); }],
+    ['PATCH 401', (s) => { s.onPatch = () => fail(401); }],
+  ]) {
+    const store = denyServer([]);
+    const m = mount(store.api());
+    await waitFor(settled);
+    setup(store);
+    await openAndConfirm(IP);
+    await waitFor(() => m.navigations.length > 0, 3000);
+    check(`090 e ${name}: goes to the login screen without data and without a notice`, m.navigations.join('|') === LOGIN_URL
+      && host.childElementCount === 0);
+    await wait(150);
+    check(`090 e ${name}: nothing is requested afterwards`, m.api.calls.length === 1 && m.api.configCalls.length <= 2);
+  }
+}
+
+// ---- Deny screens for the screenshots (shot-deny-<state>) ----
+
+const DENY_SHOTS = {
+  'deny-editable': {},
+  'deny-edit-off': { off: true },
+  'deny-block-dialog': { open: 'block' },
+  'deny-unblock-dialog': { open: 'unblock' },
+  'deny-busy': { open: 'block', confirm: true, hold: true },
+  'deny-success': { open: 'block', confirm: true },
+  'deny-unblock-success': { open: 'unblock', confirm: true },
+  'deny-conflict': { open: 'block', confirm: true, patch: () => failWith(409, 'config_conflict') },
+  'deny-file-state': { open: 'block', confirm: true, patch: () => failWith(409, 'config_file_invalid') },
+  'deny-invalid': {
+    open: 'block', confirm: true,
+    patch: () => failWith(400, 'config_invalid', { diagnostics: [{ code: 'config_deny_overlaps_proxy', key: `${DENY}[1]`, message: 'x' }] }),
+  },
+  'deny-request-failed': { open: 'block', confirm: true, patch: () => failWith(403, 'csrf_invalid') },
+  'deny-read-failed': { open: 'block', confirm: true, get: () => failWith(500, 'internal') },
+  'deny-unknown': { open: 'block', confirm: true, patch: () => failWith(500, 'internal') },
+  'deny-edit-disabled': { open: 'block', confirm: true, off: 'after' },
+  'deny-nothing': { open: 'unblock', confirm: true, gone: true },
+};
+
+async function denyShot(state) {
+  const spec = DENY_SHOTS[state];
+  const ip = spec.open === 'unblock' ? LONG_IPV6 : '203.0.113.9';
+  const store = denyServer(['198.51.100.0/24', LONG_IPV6, '127.0.0.1'], { editEnabled: spec.off !== true });
+  const hold = deferred();
+  mount(store.api({ timeoutSecs: 3600, pollSecs: 3600 }));
+  await waitFor(settled);
+  if (spec.open === undefined) return;
+  if (spec.hold) store.onGet = () => hold.promise;
+  if (spec.get) store.onGet = spec.get;
+  if (spec.patch) store.onPatch = spec.patch;
+  if (spec.off === 'after') store.onGet = () => { store.editEnabled = false; return ok(configBody(store)); };
+  if (spec.gone) store.list = ['198.51.100.0/24', '127.0.0.1'];
+  denyButtonOf(ip).click();
+  if (!spec.confirm) return;
+  confirmButton().click();
+  if (spec.hold) return;
+  await waitFor(() => !dialogOpen() && resultNode() !== null, 4000);
+  await waitFor(settled, 4000);
+  await wait(100);
+}
+
 // ---- Persistent screen states. They call the real mountSources and the shared CSS. ----
 
 // The adopted frames list seven rows in the address and ASN tables, so the screens here do the same.
 async function shot(state) {
+  if (state.startsWith('deny-')) {
+    await denyShot(state);
+    return;
+  }
   const gate = deferred();
   const compact = { addresses: { total: 150, items: addressItems(7) }, asns: { total: 120, items: asnItems(7) } };
   const api = fakeApi((call, n) => {
@@ -725,6 +1139,9 @@ const CASES = {
   'dash-087': case087,
   'dash-087-language': case087Language,
   'dash-088': case088,
+  'dash-089': case089,
+  'dash-090': case090,
+  'dash-090-errors': case090Errors,
 };
 const caseName = params.get('case');
 try {

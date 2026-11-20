@@ -682,6 +682,25 @@ fn sources_fits_every_width_and_keeps_tables_links_and_status_accessible_in_brow
     check_localized_case_at("/tests/sources.html", "dash-088", &[1280, 1024, 390, 320]);
 }
 
+/// spec: dashboard.md:DASH-089 partial
+#[test]
+fn sources_block_dialog_sends_one_patch_and_queries_again_in_browser() {
+    check_localized_case_at("/tests/sources.html", "dash-089", &[1280, 390]);
+}
+
+/// spec: dashboard.md:DASH-090 partial
+#[test]
+fn sources_unblock_range_local_edit_off_and_error_states_in_browser() {
+    check_localized_case_at("/tests/sources.html", "dash-090", &[1280, 390]);
+    check_localized_case_at("/tests/sources.html", "dash-090-errors", &[1280, 390]);
+}
+
+/// spec: dashboard.md:DASH-091 partial
+#[test]
+fn settings_deny_list_input_confirmation_warning_and_diagnostics_in_browser() {
+    check_localized_case("/tests/settings.html", "dash-091");
+}
+
 /// spec: dashboard.md:DASH-064
 #[test]
 fn every_screen_localizes_safe_help_links_without_requesting_the_help_site_in_browser() {
