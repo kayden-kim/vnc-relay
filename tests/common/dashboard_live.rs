@@ -16,6 +16,8 @@ use vnc_relay_adapters::accounts_file::Argon2Hasher;
 use vnc_relay_app::ports::PasswordHasher;
 use vnc_relay_domain::account::{Argon2Params, Password};
 
+#[path = "browser_port.rs"]
+mod browser_port;
 #[path = "cdp.rs"]
 mod cdp;
 #[path = "dashboard_cdp.rs"]

@@ -2,13 +2,13 @@
 //! Traffic distinguishes injected failures from actual management responses.
 
 use std::io::{self, Read, Write};
-use std::net::{TcpListener, TcpStream};
+use std::net::TcpStream;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
-use super::{LIMIT, connect, must};
+use super::{LIMIT, browser_port, connect, must};
 
 #[derive(Clone)]
 pub enum Fault {
@@ -67,7 +67,7 @@ pub struct Proxy {
 
 impl Proxy {
     pub fn start(upstream: u16) -> Self {
-        let listener = must(TcpListener::bind("127.0.0.1:0"));
+        let listener = browser_port::bind();
         let port = must(listener.local_addr()).port();
         must(listener.set_nonblocking(true));
         let shared = Arc::new(Shared::default());

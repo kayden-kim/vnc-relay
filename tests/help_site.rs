@@ -8,12 +8,14 @@
 //! Headless Chromium drives the pages over CDP. A missing mdBook or browser
 //! fails the tests; they are not skipped.
 
+#[path = "common/browser_port.rs"]
+mod browser_port;
 #[path = "common/cdp.rs"]
 mod cdp;
 
 use std::fs;
 use std::io::{self, Read, Write};
-use std::net::{TcpListener, TcpStream};
+use std::net::TcpStream;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::{Condvar, LazyLock, Mutex, PoisonError};
@@ -1447,8 +1449,7 @@ fn browse(name: &str, preferences: &[&str], check: impl FnOnce(&mut Browser, &Si
 
 /// Serves `root` under `MOUNT` on a free loopback port until the test process exits.
 fn serve(root: PathBuf) -> u16 {
-    let listener = TcpListener::bind(("127.0.0.1", 0))
-        .unwrap_or_else(|error| panic!("bind 127.0.0.1: {error}"));
+    let listener = browser_port::bind();
     let port = listener
         .local_addr()
         .unwrap_or_else(|error| panic!("read the bound address: {error}"))

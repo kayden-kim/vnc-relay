@@ -24,6 +24,8 @@ use std::time::{Duration, Instant};
 
 use serde_json::{Value, json};
 
+#[path = "common/browser_port.rs"]
+mod browser_port;
 #[path = "common/cdp.rs"]
 mod cdp;
 use cdp::Browser;
@@ -145,9 +147,7 @@ struct Relay {
 
 impl Relay {
     fn start(name: &str, origin_port: u16) -> Self {
-        let holders: Vec<_> = (0..5)
-            .map(|_| must(TcpListener::bind("127.0.0.1:0")))
-            .collect();
+        let holders: Vec<_> = (0..5).map(|_| browser_port::bind()).collect();
         let ports: Vec<u16> = holders
             .iter()
             .map(|holder| must(holder.local_addr()).port())
@@ -307,7 +307,7 @@ struct Site {
 
 impl Site {
     fn start(root: Option<PathBuf>) -> Self {
-        let listener = must(TcpListener::bind("127.0.0.1:0"));
+        let listener = browser_port::bind();
         let port = must(listener.local_addr()).port();
         let stop = Arc::new(AtomicBool::new(false));
         let flag = Arc::clone(&stop);

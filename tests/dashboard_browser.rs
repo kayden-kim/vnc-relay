@@ -10,9 +10,12 @@
 //! (docs/contracts/management-api-v1.md §1.11, docs/conventions/frontend.md
 //! §1.2). Keep the two in sync.
 
+#[path = "common/browser_port.rs"]
+mod browser_port;
+
 use std::fs::{self, File};
 use std::io::{self, Read, Write};
-use std::net::{TcpListener, TcpStream};
+use std::net::TcpStream;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -953,9 +956,7 @@ fn start_server() -> u16 {
     let Ok(root) = fs::canonicalize(&dashboard) else {
         panic!("cannot open {}", dashboard.display());
     };
-    let Ok(listener) = TcpListener::bind(("127.0.0.1", 0)) else {
-        panic!("cannot bind 127.0.0.1");
-    };
+    let listener = browser_port::bind();
     let Ok(addr) = listener.local_addr() else {
         panic!("cannot read the bound address");
     };
