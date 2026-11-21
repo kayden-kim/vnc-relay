@@ -94,7 +94,7 @@ Run subsequent commands in this directory, which contains the executable and `re
 | `vnc-relay.exe` or `vnc-relay` | Executable for the target OS |
 | `vnc-relay-tray.exe` | Tray app for Windows service status, start, and stop. Included only in Windows bundles |
 | `relay.toml` | Loopback configuration from the repository's `examples/relay.toml` |
-| `README.md` | Product introduction and quick start |
+| `README.md`, `README.ko.md` | Product introduction and quick start, in English and Korean |
 | `docs/`, `GLOSSARY.md` | Operations guide, contracts, and glossary for offline reading |
 | `LICENSE` | Project MIT license |
 | `THIRD-PARTY-NOTICES.txt` | Notices for third-party components included in the executable |

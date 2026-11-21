@@ -94,7 +94,7 @@
 | `vnc-relay.exe` 또는 `vnc-relay` | 해당 OS의 실행파일 |
 | `vnc-relay-tray.exe` | Windows 서비스 상태·시작·중지용 트레이 앱. Windows 묶음에만 있다 |
 | `relay.toml` | 저장소 `examples/relay.toml`의 루프백 설정 |
-| `README.md` | 제품 소개와 빠른 시작 |
+| `README.md`, `README.ko.md` | 제품 소개와 빠른 시작. 영어판과 한국어판 |
 | `docs/`, `GLOSSARY.md` | 오프라인으로 읽을 수 있는 운영 안내·기준 문서·용어집 |
 | `LICENSE` | 프로젝트의 MIT 라이선스 |
 | `THIRD-PARTY-NOTICES.txt` | 실행파일에 포함된 제삼자 구성요소의 고지 |

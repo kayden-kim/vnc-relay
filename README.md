@@ -1,79 +1,113 @@
 # vnc-relay
 
-`vnc-relay`는 UltraVNC Repeater와 호환되는 VNC 중계 서버다. TCP·WS·WSS 중계와 웹 관리 대시보드를 실행파일 하나로 제공한다. Rust로 독립 구현했다.
+**English** | [한국어](README.ko.md)
 
-- 버전: 2026.11.9. 버전은 `연.월.순서`다([릴리스 how-to](docs/how-to/release.md)).
-- 기준: 이 README는 `main`의 현재 소스를 설명한다. 현재 소스로 빌드한 실행파일도 다음 릴리스 전까지 위 버전을 출력한다.
-- 지원 OS: Windows 11 x64, Ubuntu 24.04 LTS x64. Windows Server와 다른 OS·아키텍처는 검증 범위가 아니다.
-- 라이선스: [MIT](LICENSE)
+`vnc-relay` is a VNC relay server compatible with the UltraVNC Repeater. One executable provides TCP, WS, and WSS relaying and a web management dashboard. It is an independent implementation in Rust.
 
-## 주요 기능
+![VNC Relay operations overview: server summary, relay and management connection gauges, waiting connections, and active sessions](docs/help/en/src/images/operations.png)
 
-| 기능 | 내용 |
-| --- | --- |
-| 중계 모드 | Mode I: Viewer가 대상 주소를 보내면 vnc-relay가 그 대상에 연결한다. 대상은 허용 목록 안에서만 연다. vnc-relay에서 내부망의 VNC Server에 연결할 수 있고 Viewer만 바깥에 있을 때 쓴다. Mode II: 같은 중계 ID로 들어온 Viewer와 Server를 짝지어 중계한다. 원격 지원처럼 Server가 NAT·방화벽 뒤에 있어 들어오는 연결을 받을 수 없을 때 쓴다. 상황별 시나리오는 [PRD 5절](docs/requirements/PRD.md#5-사용자와-주요-시나리오)에 있다. |
-| 진입점 | TCP·WS·WSS의 Viewer·Server(역접속). TCP는 역할마다 리스너가 따로 있다. WS·WSS는 리스너 하나에서 요청 경로로 역할을 나눈다. `/relay/viewer`는 Viewer, `/relay/server`는 Server(Mode II만) 역할이다([ADR-0008](docs/decisions/ADR-0008-shared-ws-listener-path-roles.md)). 평문 WS는 기본으로 꺼져 있다. |
-| TLS | WSS와 관리 HTTPS의 TLS를 서버가 직접 처리한다. 내장 TLS는 TLS 1.2 미만을 거절한다. 인증서는 운영자가 준비한다. 중계 WS·WSS 앞에서 역방향 프록시가 TLS를 끝내는 배치도 지원한다. 관리 리스너는 이 배치에서 제외한다([ADR-0007](docs/decisions/ADR-0007-proxy-tls-termination.md)). |
-| 접근 제한 | 진입점마다 출발지 IP 허용 목록(단일 IP·CIDR·범위)을 둔다. WS·WSS는 역할마다 IP·`Origin` 허용 목록을 따로 둔다. 연결을 받을 때는 켠 역할 목록의 합집합으로, 업그레이드 때는 고른 역할의 목록으로 검사한다. 신뢰 프록시(`trusted_proxies`)를 거친 요청은 `X-Forwarded-For`의 전달 주소로 판정한다. 모든 진입점에 함께 쓰는 출발지 IP 차단 목록(`[relay.deny] sources`)도 둔다. 차단 목록은 허용 목록보다 먼저 적용한다. 목록을 바꾸면 차단된 주소의 대기 연결과 활성 세션도 끊는다([ADR-0013](docs/decisions/ADR-0013-relay-source-deny-list.md)). WS·WSS는 역할마다 접속 ticket 확인도 켤 수 있다. 켠 역할은 외부 발급 쪽이 서명한 유효한 ticket이 있을 때만 업그레이드를 받는다. 기본은 꺼짐이고, TCP 진입점에는 적용하지 않는다([ADR-0009](docs/decisions/ADR-0009-optional-relay-access-ticket.md)). |
-| 관리 | 내장 로그인(Argon2id 해시)이 있는 대시보드와 관리 API(`/api/v1/`). 서버·대기 연결·활성 세션·최근 종료 목록·최근 로그·설정·메트릭·접속 출처를 조회한다. 활성 세션 종료와 동적 설정 편집도 제공한다. 로그 화면(`/#/logs`)에서는 최근 운영 로그를 필터·검색·자동 갱신하고 JSON Lines로 내려받는다. 메트릭 화면(`/#/metrics`)에서는 핵심 지표, 최근 1시간 또는 최근 24시간 추이 차트, 시간 분포, 원인별 수, 프로세스 자원을 본다. 접속 출처 화면(`/#/sources`)에서는 최근 1시간 또는 최근 24시간의 연결 시도·거절·중단·세션 수를 클라이언트 주소·국가·ASN별로 보고 ipinfo.io 조회 링크를 연다. 설정 편집이 켜져 있으면 이 화면에서 주소를 바로 차단하거나 차단을 해제한다. 화면은 한국어·영어다. |
-| 운영 | 인증 없는 상태 리스너(`/livez`, `/readyz`), JSON Lines 운영 로그(표준 출력 또는 파일), 메모리의 최근 로그(기본 1000건, 0~10000, 바꾸면 재시작), 44개 키 자동 재로드·38개 키 편집, 종료 유예 G. `[metrics] enabled = true`이면 상태 리스너의 `/metrics`가 OpenTelemetry 이름 규칙의 메트릭을 Prometheus 텍스트로 낸다(기본 꺼짐, 바꾸면 재시작, [ADR-0011](docs/decisions/ADR-0011-pull-metrics-on-status-listener.md)). 접속 출처의 국가·ASN은 운영자가 내려받아 `[ip_info]`에 지정한 DB-IP Lite·IPinfo Lite·MaxMind GeoLite MMDB 파일에서 찾는다. 서버는 외부에 요청하지 않고, 파일 내용이 바뀌면 재시작 없이 다시 읽는다([ADR-0012](docs/decisions/ADR-0012-local-ip-info-databases.md)). |
-| 계약 버전 | 현재 소스가 구현한 버전은 설정 [vnc-relay-config 4.4.0](docs/contracts/config-v4.md), 운영 로그 [ops-info 2.3.0](docs/contracts/ops-info-v2.md), WebSocket [websocket-relay 2.2.0](docs/contracts/websocket-relay-v2.md), 관리 API [management-api 1.5.0](docs/contracts/management-api-v1.md), 메트릭 [vnc-relay-metrics 1.2.0](docs/contracts/metrics-v1.md)이다. 접속 ticket과 `/metrics`는 기본으로 꺼져 있다. |
+- Version: 2026.11.9. Versions use `year.month.sequence` ([release how-to](docs/how-to/release.md)).
+- Basis: this README describes the current source on `main`. An executable built from the current source prints the version above until the next release.
+- Supported OS: Windows 11 x64 and Ubuntu 24.04 LTS x64. Windows Server and other OSes or architectures are outside the verified scope.
+- Operator help: [English](https://kayden-kim.github.io/vnc-relay/en/) · [한국어](https://kayden-kim.github.io/vnc-relay/ko/)
+- License: [MIT](LICENSE)
 
-noVNC 클라이언트는 포함하지 않는다. noVNC는 외부 클라이언트로 접속할 수 있고, 상호운용 시험에만 쓴다.
+## Features
 
-## 빠른 시작
+### Relay
 
-아래 절차는 루프백 주소에서 TCP Mode II만 켜는 [예시 설정](examples/relay.toml)을 쓴다. 공개 배치에 그대로 쓰지 않는다. 전체 절차와 공개 배치 주의 사항은 [실행파일을 묶고 수동 운영하는 방법](docs/how-to/operate-relay.md)에 있다.
+- **UltraVNC Repeater compatible.** UltraVNC Viewer and Server connect with the Repeater handshake. Checked against UltraVNC 1.8.3.0 and noVNC 1.7.0 ([compatibility record](docs/contracts/repeater-compat-record.md)).
+- **Mode I: the Viewer picks the target.** The Viewer sends a target address and vnc-relay connects to it. vnc-relay opens only targets in the allow list. Use it when vnc-relay can reach a VNC Server on an internal network and only the Viewer is outside.
+- **Mode II: pairing by relay ID.** vnc-relay pairs a Viewer and a Server that arrive with the same relay ID. Either side can connect first. Use it for remote support, where the Server is behind NAT or a firewall and cannot accept incoming connections. Scenarios are in [PRD section 5](docs/requirements/PRD.md#5-사용자와-주요-시나리오).
+- **TCP, WS, and WSS entry points.** Viewers and Servers (reverse connections) can use each transport. TCP has a separate listener per role. WS and WSS share one listener and choose the role by path: `/relay/viewer` for Viewers and `/relay/server` for Servers (Mode II only) ([ADR-0008](docs/decisions/ADR-0008-shared-ws-listener-path-roles.md)). Plain WS is off by default.
 
-1. OS에 맞는 배포 묶음을 준비한다. [GitHub Releases](https://github.com/kayden-kim/vnc-relay/releases)에서 내려받거나 저장소에서 직접 만든다. 내려받았으면 함께 있는 `.sha256` 파일로 해시를 확인하고 3단계로 간다. 직접 만들려면 빌드 도구가 필요하다. Windows는 Visual Studio Build Tools 2022의 C++ 빌드 도구, Ubuntu는 `cc`(gcc)를 쓴다. Rust 툴체인은 `rust-toolchain.toml`(Rust 1.99.1)이 정한다. 자세한 내용은 [개발 환경 준비](docs/how-to/set-up-and-verify.md)를 따른다.
-2. 직접 만들 때는 저장소 루트에서 묶음을 만든다. Windows에서 NASM이 없으면 먼저 PowerShell에서 `$env:AWS_LC_SYS_PREBUILT_NASM = "1"`을 실행한다.
+### Security and access control
+
+- **Built-in TLS.** The server handles TLS for WSS and management HTTPS itself and rejects versions below TLS 1.2. The operator supplies certificates.
+- **Reverse proxy TLS termination.** A reverse proxy can end TLS in front of relay WS and WSS. The management listener does not support this layout ([ADR-0007](docs/decisions/ADR-0007-proxy-tls-termination.md)).
+- **Source IP allow lists.** Each entry point has an allow list of single IPs, CIDRs, and ranges. WS and WSS have separate IP and `Origin` allow lists per role.
+- **Trusted proxies.** For requests through a trusted proxy (`trusted_proxies`), vnc-relay checks the forwarded address in `X-Forwarded-For`.
+- **Deny list.** One source IP deny list (`[relay.deny] sources`) covers all entry points and applies before the allow lists. When the list changes, vnc-relay also closes waiting connections and active sessions from denied addresses ([ADR-0013](docs/decisions/ADR-0013-relay-source-deny-list.md)).
+- **Optional access tickets.** WS and WSS can require a ticket per role. An enabled role accepts the upgrade only with a valid ticket signed by an external issuer. Tickets are off by default and do not apply to TCP ([ADR-0009](docs/decisions/ADR-0009-optional-relay-access-ticket.md)).
+
+### Web dashboard
+
+- **Built-in sign-in.** Accounts with Argon2id password hashes protect the dashboard and the management API (`/api/v1/`). There is no default account.
+- **Operations overview.** Server state, waiting connections, active sessions, and recently closed sessions. Session details show addresses and traffic, and an administrator can terminate an active session.
+- **Logs (`/#/logs`).** Filter, search, and auto-refresh recent operations logs. Download them as JSON Lines.
+- **Metrics (`/#/metrics`).** Key indicators, trend charts for the last hour or 24 hours, time distributions, counts by cause, and process resources.
+- **Sources (`/#/sources`).** Connection attempts, rejections, aborts, and sessions per client address, country, and ASN for the last hour or 24 hours, with an ipinfo.io lookup link. With config editing on, block or unblock an address from this screen.
+- **Settings.** View the running configuration. With `management.config_edit = true`, edit dynamic settings and save them to the configuration file.
+- **Korean and English.** Every screen is available in both languages.
+
+### Operations
+
+- **Single executable.** One executable per OS. The Windows bundle adds a tray app, and `vnc-relay service install` registers a Windows 11 service.
+- **Health checks.** An unauthenticated status listener serves `/livez` and `/readyz`.
+- **Operations logs.** JSON Lines to standard output or a file. The latest entries (default 1000, 0–10000, restart to change) stay in memory for the dashboard.
+- **Reload without restart.** 44 keys reload automatically when the configuration file changes, and 38 of them can be edited in the dashboard. On shutdown, active sessions get a grace period G.
+- **Prometheus metrics.** With `[metrics] enabled = true`, `/metrics` on the status listener serves metrics with OpenTelemetry names in Prometheus text format. Off by default; restart to change ([ADR-0011](docs/decisions/ADR-0011-pull-metrics-on-status-listener.md)).
+- **Local IP information.** Country and ASN come from DB-IP Lite, IPinfo Lite, or MaxMind GeoLite MMDB files that the operator downloads and sets in `[ip_info]`. The server sends no outside requests and rereads a file without restart when its content changes ([ADR-0012](docs/decisions/ADR-0012-local-ip-info-databases.md)).
+
+### Contract versions
+
+The current source implements configuration [vnc-relay-config 4.4.0](docs/contracts/config-v4.md), operations log [ops-info 2.3.0](docs/contracts/ops-info-v2.md), WebSocket [websocket-relay 2.2.0](docs/contracts/websocket-relay-v2.md), management API [management-api 1.5.0](docs/contracts/management-api-v1.md), and metrics [vnc-relay-metrics 1.2.0](docs/contracts/metrics-v1.md). Access tickets and `/metrics` are off by default.
+
+The noVNC client is not included. noVNC can connect as an external client and is used only for interoperability tests.
+
+## Quick start
+
+These steps use the [example configuration](examples/relay.toml), which enables only TCP Mode II on loopback addresses. Do not use it as is for a public deployment. The full procedure and public deployment cautions are in [packaging and operating the executable](docs/how-to/operate-relay.md).
+
+1. Get the bundle for your OS. Download it from [GitHub Releases](https://github.com/kayden-kim/vnc-relay/releases) or build it from the repository. If you downloaded it, check the hash with the `.sha256` file next to it and go to step 3. To build it, you need build tools: the C++ build tools of Visual Studio Build Tools 2022 on Windows, or `cc` (gcc) on Ubuntu. `rust-toolchain.toml` pins the Rust toolchain (Rust 1.99.1). See [setting up the development environment](docs/how-to/set-up-and-verify.md).
+2. To build it, make the bundle from the repository root. On Windows without NASM, first run `$env:AWS_LC_SYS_PREBUILT_NASM = "1"` in PowerShell.
 
    ```shell
    cargo xtask package
    ```
 
-   결과는 `target/package/`의 `vnc-relay-<버전>-windows-x64.zip` 또는 `vnc-relay-<버전>-linux-x64.tar.gz`와 SHA-256 파일이다.
+   The result is `vnc-relay-<version>-windows-x64.zip` or `vnc-relay-<version>-linux-x64.tar.gz` and its SHA-256 file in `target/package/`.
 
-3. 묶음을 풀고, 생긴 `vnc-relay-<버전>-<os>-x64/` 디렉터리로 이동한다. 실행파일과 `relay.toml`이 이 디렉터리에 있다. 아래 명령은 이 디렉터리에서 실행한다.
-4. 관리자 계정을 만든다. 비밀번호는 숨김 입력으로 두 번 묻는다. 기본 계정은 없고, 계정이 없으면 서버가 시작하지 않는다.
+3. Extract the bundle and go to the new `vnc-relay-<version>-<os>-x64/` directory. The executable and `relay.toml` are in it. Run the commands below in this directory.
+4. Create an administrator account. The password prompt is hidden and asks twice. There is no default account, and the server does not start without one.
 
    ```shell
    ./vnc-relay admin add opsadmin --config ./relay.toml
    ```
 
-5. 서버를 시작한다. 프로세스는 터미널을 점유하고 `relay.log`에 운영 로그를 쓴다.
+5. Start the server. The process keeps the terminal and writes operations logs to `relay.log`.
 
    ```shell
    ./vnc-relay serve --config ./relay.toml
    ```
 
-6. 다른 터미널에서 준비 상태를 확인한다. 준비되면 HTTP 200과 `{"status":"ready"}`가 나온다.
+6. In another terminal, check readiness. When ready, it returns HTTP 200 and `{"status":"ready"}`.
 
    ```shell
    curl --fail http://127.0.0.1:18081/readyz
    ```
 
-7. 브라우저에서 `http://127.0.0.1:18080/`을 열고 만든 계정으로 로그인한다.
-8. 서버는 Ctrl+C로 정상 종료한다.
+7. Open `http://127.0.0.1:18080/` in a browser and sign in with the account.
+8. Stop the server with Ctrl+C.
 
-Windows PowerShell에서는 `./vnc-relay`를 `.\vnc-relay.exe`로, `curl`을 `curl.exe`로 바꾼다.
+In Windows PowerShell, use `.\vnc-relay.exe` instead of `./vnc-relay` and `curl.exe` instead of `curl`.
 
-운영 로그를 터미널(표준 출력)에서 보려면 서버를 시작하기 전에 `relay.toml`의 `[log]`에서 `output`을 `"stdout"`으로 바꾼다.
+To see operations logs in the terminal (standard output), set `output` in the `[log]` table of `relay.toml` to `"stdout"` before you start the server.
 
-## 연결 구성 예
+## Example deployment
 
-Viewer와 Server는 서로 직접 연결하지 않는다. 둘 다 vnc-relay에 접속하고, vnc-relay가 같은 중계 ID로 들어온 둘을 짝지어 중계한다(Mode II). 어느 쪽이 먼저 접속해도 된다.
+The Viewer and the Server do not connect to each other. Both connect to vnc-relay, and vnc-relay pairs the two that arrive with the same relay ID (Mode II). Either side can connect first.
 
-아래 예에서 vnc-relay 호스트는 `relay.example.test`(192.0.2.20)이고, 중계 ID는 `1234`다. Viewer는 UltraVNC Viewer와 브라우저의 noVNC 가운데 하나를 쓴다.
+In this example, the vnc-relay host is `relay.example.test` (192.0.2.20) and the relay ID is `1234`. The Viewer is either UltraVNC Viewer or noVNC in a browser.
 
 ```mermaid
 flowchart LR
     UV["UltraVNC Viewer<br/>192.0.2.10"] -->|"TCP 5901, ID:1234"| R["vnc-relay<br/>relay.example.test"]
-    NV["noVNC(브라우저)<br/>192.0.2.10"] -->|"WSS 8443 /relay/viewer, ID:1234"| R
+    NV["noVNC (browser)<br/>192.0.2.10"] -->|"WSS 8443 /relay/viewer, ID:1234"| R
     US["UltraVNC Server<br/>192.0.2.30"] -->|"TCP 5500, ID:1234"| R
 ```
 
-vnc-relay의 `relay.toml`은 다음과 같다. 계정 파일은 빠른 시작 4단계처럼 만든다.
+The `relay.toml` of vnc-relay is below. Create the account file as in step 4 of the quick start.
 
 ```toml
 [admin]
@@ -112,44 +146,47 @@ listen = "127.0.0.1:18081"
 output = "relay.log"
 ```
 
-- `allow`에는 해당 진입점에 접속할 PC의 IP를 넣는다. 목록 밖의 출발지는 거절한다.
-- `cert_file`·`key_file`은 `relay.example.test`용 인증서 체인과 개인키다. 브라우저가 신뢰하는 인증서여야 한다.
-- `allowed_origins`에는 noVNC 페이지를 제공하는 사이트의 origin을 넣는다. 브라우저는 WebSocket 요청에 이 값을 `Origin` 헤더로 보낸다. 목록이 비어 있으면 브라우저의 접속은 모두 거절된다.
-- `output`은 운영 로그의 출력 위치다. 파일 경로 또는 `"stdout"`을 넣는다. 이 예는 `relay.log` 파일에 이어 쓴다. `"stdout"`이면 표준 출력으로 쓴다. `output`을 생략해도 표준 출력이다. 출력 위치를 바꾸면 재시작해야 적용된다.
+- `allow` holds the IPs of the PCs that connect to that entry point. vnc-relay rejects other sources.
+- `cert_file` and `key_file` are the certificate chain and private key for `relay.example.test`. Browsers must trust the certificate.
+- `allowed_origins` holds the origin of the site that serves the noVNC page. Browsers send this value in the `Origin` header of WebSocket requests. If the list is empty, vnc-relay rejects all browser connections.
+- `output` is where operations logs go: a file path or `"stdout"`. This example appends to `relay.log`. With `"stdout"`, or without `output`, logs go to standard output. A change takes effect after a restart.
 
-각 PC에서는 다음과 같이 접속한다. UltraVNC 명령은 UltraVNC 1.8.3.0에서 확인한 형식이다([호환성 검증 기록 6절](docs/contracts/repeater-compat-record.md#6-모드전송-조합-검증)).
+Each PC connects as follows. The UltraVNC commands use the format checked with UltraVNC 1.8.3.0 ([compatibility record section 6](docs/contracts/repeater-compat-record.md#6-모드전송-조합-검증)).
 
-| 역할 | 접속 방법 |
+| Role | How to connect |
 | --- | --- |
-| UltraVNC Server(192.0.2.30) | `winvnc.exe -id:1234 -connect 192.0.2.20::5500 -run` |
-| UltraVNC Viewer(192.0.2.10) | `vncviewer.exe -proxy 192.0.2.20:5901 ID:1234` |
-| noVNC(192.0.2.10의 브라우저) | `https://viewer.example.test/vnc.html?autoconnect=true&host=relay.example.test&port=8443&encrypt=true&path=relay/viewer&repeaterID=1234` |
+| UltraVNC Server (192.0.2.30) | `winvnc.exe -id:1234 -connect 192.0.2.20::5500 -run` |
+| UltraVNC Viewer (192.0.2.10) | `vncviewer.exe -proxy 192.0.2.20:5901 ID:1234` |
+| noVNC (browser on 192.0.2.10) | `https://viewer.example.test/vnc.html?autoconnect=true&host=relay.example.test&port=8443&encrypt=true&path=relay/viewer&repeaterID=1234` |
 
-noVNC는 `repeaterID` 값 앞에 `ID:`를 붙여 보낸다. 같은 ID를 다른 Viewer가 이미 쓰고 있으면(대기 중이거나 중계 중) 뒤에 온 Viewer는 거절된다.
+noVNC sends the `repeaterID` value with `ID:` in front. If another Viewer already uses the same ID (waiting or relaying), vnc-relay rejects the later Viewer.
 
-같은 파일에 다음 설정을 더하면 다른 연결 방식도 쓸 수 있다.
+Add these settings to the same file for other connection types.
 
-- WebSocket으로 접속하는 Server: `[relay.wss.server]`에 `enabled = true`와 `allow = ["192.0.2.30"]`을 넣는다. Server는 `wss://relay.example.test:8443/relay/server`로 접속하고, 이 경로는 Mode II만 받는다.
-- Mode I(Viewer가 대상을 지정): `[mode1]`에 `enabled = true`와 `allow_targets = ["192.0.2.30:5900"]`을 넣는다. Viewer가 `vncviewer.exe -connect 192.0.2.30::5900 -proxy 192.0.2.20:5901`로 접속하면 vnc-relay가 그 대상에 연결한다. 이때 Server는 vnc-relay에 접속하지 않고 대상 포트에서 기다린다.
+- Server over WebSocket: put `enabled = true` and `allow = ["192.0.2.30"]` in `[relay.wss.server]`. The Server connects to `wss://relay.example.test:8443/relay/server`. This path accepts Mode II only.
+- Mode I (the Viewer picks the target): put `enabled = true` and `allow_targets = ["192.0.2.30:5900"]` in `[mode1]`. When the Viewer connects with `vncviewer.exe -connect 192.0.2.30::5900 -proxy 192.0.2.20:5901`, vnc-relay connects to that target. The Server does not connect to vnc-relay and waits on the target port.
 
-[예시 설정](examples/relay.toml)은 모든 설정 키를 담는다. 쓰지 않는 키는 주석 줄로 기본값이나 예시 값을 보여 준다. 키별 규칙은 [설정 계약 v4](docs/contracts/config-v4.md)에, 운영 배치 절차는 [실행파일을 묶고 수동 운영하는 방법](docs/how-to/operate-relay.md)에 있다.
+The [example configuration](examples/relay.toml) contains every configuration key. Unused keys appear as comment lines with their default or example values. Key rules are in [configuration contract v4](docs/contracts/config-v4.md), and the deployment procedure is in [packaging and operating the executable](docs/how-to/operate-relay.md).
 
-## 명령
+## Commands
 
-| 명령 | 하는 일 |
+| Command | What it does |
 | --- | --- |
-| `vnc-relay serve --config <path>` | 서버를 포그라운드로 실행한다. |
-| `vnc-relay admin add <account> --config <path>` | 관리자 계정을 추가한다. |
-| `vnc-relay admin passwd <account> --config <path>` | 비밀번호를 바꾼다. |
-| `vnc-relay admin remove <account> [--yes] --config <path>` | 계정을 삭제한다. |
-| `vnc-relay admin list --config <path>` | 계정 이름을 나열한다. |
-| `vnc-relay --help`, `vnc-relay --version` | 사용법이나 버전을 출력한다. |
+| `vnc-relay serve --config <path>` | Runs the server in the foreground. |
+| `vnc-relay admin add <account> --config <path>` | Adds an administrator account. |
+| `vnc-relay admin passwd <account> --config <path>` | Changes a password. |
+| `vnc-relay admin remove <account> [--yes] --config <path>` | Removes an account. |
+| `vnc-relay admin list --config <path>` | Lists account names. |
+| `vnc-relay service install --config <path> [--operator <name>]...` | Windows 11 only. Registers the `vnc-relay` service. Run it in an administrator terminal. |
+| `vnc-relay service uninstall` | Windows 11 only. Removes the stopped `vnc-relay` service. Run it in an administrator terminal. |
+| `vnc-relay service run --config <path>` | Windows 11 only. The service control manager uses it to start the service. Do not run it yourself. |
+| `vnc-relay --help`, `vnc-relay --version` | Prints usage or the version. |
 
-계정 변경은 서버를 다시 시작해야 적용된다. 옵션·종료 코드·입력 규칙은 [CLI 계약](docs/contracts/cli-v1.md)이, 설정 키와 기본값은 [설정 계약 v4](docs/contracts/config-v4.md)가 정한다.
+Account changes take effect after a server restart. The [CLI contract](docs/contracts/cli-v1.md) defines options, exit codes, and input rules. The [configuration contract v4](docs/contracts/config-v4.md) defines configuration keys and defaults.
 
-## 개발
+## Development
 
-변경을 마치기 전에 저장소 루트에서 다음 명령을 실행한다. 모두 종료 코드 0이어야 한다. 대시보드 브라우저 시험에는 Chrome 또는 Edge가 필요하다.
+Before you finish a change, run these commands from the repository root. All must exit with code 0. The dashboard browser tests need Chrome or Edge.
 
 ```shell
 cargo fmt --all --check
@@ -160,38 +197,41 @@ cargo xtask scenarios
 cargo deny check licenses
 ```
 
-`cargo xtask scenarios`는 `cargo test --workspace`를 함께 실행하고, 스펙 시나리오별 결과를 `scenario-report.md`로 쓴다. 변경 범위별 명령과 OS별 준비는 [개발 환경 준비와 검증](docs/how-to/set-up-and-verify.md)을 따른다. 작업 규칙은 [AGENTS.md](AGENTS.md)에 있다.
+`cargo xtask scenarios` also runs `cargo test --workspace` and writes per-scenario results to `scenario-report.md`. For commands per change type and OS setup, see [setting up and verifying](docs/how-to/set-up-and-verify.md). Working rules are in [AGENTS.md](AGENTS.md).
 
-## 저장소 구조
+## Repository layout
 
-| 위치 | 내용 |
+| Location | Contents |
 | --- | --- |
-| `src/` | 실행파일 `vnc-relay`. CLI와 `serve`·`admin` 조립 |
-| `crates/domain/` | 초기 교환·매칭·세션·주소·예산·계정 규칙. 입출력 없음 |
-| `crates/app/` | 중계·관리·재로드·준비 상태 사용 사례. 외부 기능은 포트로 정의 |
-| `crates/adapters/` | 네트워크·TLS·WebSocket·관리 HTTP·파일·로그 구현 |
-| `web/dashboard/` | 정적 HTML·CSS·JS 대시보드. 빌드 단계와 JS 외부 의존성 없음 |
-| `xtask/` | 시나리오 보고·레이어 검사·토큰 생성·배포 고지 생성·시험용 접속 ticket 발급 도구 |
-| `tests/` | 실행파일 수준의 통합·시스템 시험 |
-| `examples/` | 모든 설정 키를 담은 비밀 값 없는 예시 설정 |
-| `docs/` | 요구사항·스펙·계약·설계·절차 문서 |
+| `src/` | The `vnc-relay` executable. CLI and assembly of `serve` and `admin` |
+| `crates/domain/` | Rules for the initial exchange, matching, sessions, addresses, budgets, and accounts. No I/O |
+| `crates/app/` | Use cases for relaying, management, reload, and readiness. External functions are defined as ports |
+| `crates/adapters/` | Network, TLS, WebSocket, management HTTP, file, and log implementations |
+| `web/dashboard/` | Static HTML, CSS, and JS dashboard. No build step and no external JS dependencies |
+| `xtask/` | Tools for scenario reports, layer checks, token generation, bundle notices, and test access tickets |
+| `tests/` | Integration and system tests at the executable level |
+| `examples/` | Example configuration with every key and no secret values |
+| `docs/` | Requirements, specs, contracts, design, and procedure documents |
 
-코드 위치와 호출 흐름은 [코드 지도](docs/architectures/code-map.md)에 있다.
+Code locations and call flows are in the [code map](docs/architectures/code-map.md).
 
-## 문서
+## Documentation
 
-| 문서 | 내용 |
+The operator help is in Korean and English. The other documents under `docs/` are in Korean.
+
+| Document | Contents |
 | --- | --- |
-| [문서 안내](docs/README.md) | 문서 종류와 변경별로 읽을 문서 |
-| [PRD](docs/requirements/PRD.md) | 제품 요구사항과 수용 기준 |
-| [스펙 목록](docs/specs/README.md) | 중계·WebSocket·관리·대시보드·운영의 외부 동작과 수용 시나리오 |
-| [계약 목록](docs/contracts/README.md) | 설정·CLI·관리 API·운영 로그·메트릭·WebSocket·Repeater 초기 교환 형식 |
-| [호환성 검증 기록](docs/contracts/repeater-compat-record.md) | UltraVNC 1.8.3.0·Repeater·noVNC 1.7.0과의 대조 결과 |
-| [실행파일을 묶고 수동 운영하는 방법](docs/how-to/operate-relay.md) | 배포 묶음 설치·설정·업그레이드·롤백 절차 |
-| [용어집](GLOSSARY.md) | 업무 용어의 이름과 뜻 |
+| [Operator help](https://kayden-kim.github.io/vnc-relay/en/) | Installation, configuration, dashboard, operation, and troubleshooting for operators |
+| [Documentation guide](docs/README.md) | Document types and what to read for each kind of change |
+| [PRD](docs/requirements/PRD.md) | Product requirements and acceptance criteria |
+| [Specs](docs/specs/README.md) | External behavior and acceptance scenarios for relaying, WebSocket, management, dashboard, and operations |
+| [Contracts](docs/contracts/README.md) | Formats for configuration, CLI, management API, operations logs, metrics, WebSocket, and the Repeater initial exchange |
+| [Compatibility record](docs/contracts/repeater-compat-record.md) | Comparison results with UltraVNC 1.8.3.0, the Repeater, and noVNC 1.7.0 |
+| [Packaging and operating the executable](docs/how-to/operate-relay.md) | Bundle installation, configuration, upgrade, and rollback |
+| [Glossary](GLOSSARY.md) | Names and meanings of domain terms |
 
-## 독립 구현과 라이선스
+## Independent implementation and license
 
-UltraVNC·websockify·noVNC의 소스를 복사·번역·포팅하지 않았다. 공개 문서와 실행 관찰로 통신 규칙을 확인해 새로 작성했다. 검토 기록은 [의존성 라이선스 검사](docs/how-to/check-dependency-licenses.md)에 있다.
+The source of UltraVNC, websockify, and noVNC was not copied, translated, or ported. The protocol was confirmed from public documents and observed behavior and written from scratch. The review record is in [dependency license check](docs/how-to/check-dependency-licenses.md).
 
-이 프로젝트는 [MIT 라이선스](LICENSE)를 따른다. Copyright (c) 2026 vnc-relay contributors. 실행파일에 들어가는 의존성과 글꼴(Pretendard, SIL Open Font License 1.1)의 고지는 [THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt)에 있다. 배포 묶음에는 `LICENSE`와 `THIRD-PARTY-NOTICES.txt`를 함께 넣는다.
+This project uses the [MIT license](LICENSE). Copyright (c) 2026 vnc-relay contributors. Notices for the dependencies and the font (Pretendard, SIL Open Font License 1.1) in the executable are in [THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt). Bundles include `LICENSE` and `THIRD-PARTY-NOTICES.txt`.

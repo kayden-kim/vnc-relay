@@ -15,8 +15,9 @@ use crate::{Error, cargo, notices};
 const PRODUCT: &str = "vnc-relay";
 
 /// Files copied from the repository root as they are (docs/how-to/operate-relay.md 3.1).
-const ROOT_FILES: [&str; 4] = [
+const ROOT_FILES: [&str; 5] = [
     "README.md",
+    "README.ko.md",
     "LICENSE",
     "THIRD-PARTY-NOTICES.txt",
     "GLOSSARY.md",
