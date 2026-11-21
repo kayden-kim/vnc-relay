@@ -26104,7 +26104,7 @@ checksum = "8ecb6da28b8a351d773b68d5825ac39017e680750f980f3a1a85cd8dd28a47c1"
 
 [[package]]
 name = "vnc-relay"
-version = "2026.11.9"
+version = "2026.11.10"
 dependencies = [
  "aws-lc-rs",
  "clap",
@@ -26120,7 +26120,7 @@ dependencies = [
 
 [[package]]
 name = "vnc-relay-adapters"
-version = "2026.11.9"
+version = "2026.11.10"
 dependencies = [
  "argon2",
  "aws-lc-rs",
@@ -26145,7 +26145,7 @@ dependencies = [
 
 [[package]]
 name = "vnc-relay-app"
-version = "2026.11.9"
+version = "2026.11.10"
 dependencies = [
  "tokio",
  "vnc-relay-domain",
@@ -26153,11 +26153,11 @@ dependencies = [
 
 [[package]]
 name = "vnc-relay-domain"
-version = "2026.11.9"
+version = "2026.11.10"
 
 [[package]]
 name = "vnc-relay-tray"
-version = "2026.11.9"
+version = "2026.11.10"
 dependencies = [
  "tray-icon",
  "vnc-relay-adapters",

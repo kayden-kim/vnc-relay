@@ -6,7 +6,7 @@
 
 ![VNC Relay 운영 현황: 서버 요약, 중계·관리 연결 게이지, 대기 연결, 활성 세션](docs/help/ko/src/images/operations.png)
 
-- 버전: 2026.11.9. 버전은 `연.월.순서`다([릴리스 how-to](docs/how-to/release.md)).
+- 버전: 2026.11.10. 버전은 `연.월.순서`다([릴리스 how-to](docs/how-to/release.md)).
 - 기준: 이 README는 `main`의 현재 소스를 설명한다. 현재 소스로 빌드한 실행파일도 다음 릴리스 전까지 위 버전을 출력한다.
 - 지원 OS: Windows 11 x64, Ubuntu 24.04 LTS x64. Windows Server와 다른 OS·아키텍처는 검증 범위가 아니다.
 - 운영자 도움말: [한국어](https://kayden-kim.github.io/vnc-relay/ko/) · [English](https://kayden-kim.github.io/vnc-relay/en/)
