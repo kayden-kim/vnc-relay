@@ -2,7 +2,7 @@
 
 `vnc-relay`는 UltraVNC Repeater와 호환되는 VNC 중계 서버다. TCP·WS·WSS 중계와 웹 관리 대시보드를 실행파일 하나로 제공한다. Rust로 독립 구현했다.
 
-- 버전: 2026.11.8. 버전은 `연.월.순서`다([릴리스 how-to](docs/how-to/release.md)).
+- 버전: 2026.11.9. 버전은 `연.월.순서`다([릴리스 how-to](docs/how-to/release.md)).
 - 기준: 이 README는 `main`의 현재 소스를 설명한다. 현재 소스로 빌드한 실행파일도 다음 릴리스 전까지 위 버전을 출력한다.
 - 지원 OS: Windows 11 x64, Ubuntu 24.04 LTS x64. Windows Server와 다른 OS·아키텍처는 검증 범위가 아니다.
 - 라이선스: [MIT](LICENSE)
