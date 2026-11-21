@@ -189,7 +189,7 @@ SCR-001·002·004·005·006·007·008의 상단 막대 도구 맨 앞과 SCR-003
 ```text
 +------------------------------------------+
 |                         [도움말] [언어]  |
-| VNC Relay 관리자 로그인                  |
+| [표식] VNC Relay 로그인                  |
 | 계정명   [____________________]           |
 | 비밀번호 [********************]           |
 | [로그인]                                 |
@@ -959,7 +959,7 @@ IP 정보 DB 행은 `databases.country`와 `databases.asn`을 이 순서로 보�
 | CPY-004 | SCR-001 화면 이름 | 운영 현황 | Operations overview | 스펙 SCR-001 이름 |
 | CPY-294 | 상단 막대의 SCR-001 항목 이름 | 운영 현황 | Overview | 2절 상단 막대. 영어 1024px 폭(사용자 결정 2026-11-20) |
 | CPY-005 | SCR-002 화면 이름 | 세션 상세 | Session details | 스펙 SCR-002 이름 |
-| CPY-006 | SCR-003 화면 제목 | VNC Relay 관리자 로그인 | VNC Relay administrator sign in | 스펙 SCR-003 제목 |
+| CPY-006 | SCR-003 화면 제목 | VNC Relay 로그인 | VNC Relay sign in | 스펙 SCR-003 제목. "관리자"를 넣지 않는다(사용자 결정 2026-11-21) |
 | CPY-007 | 상단 막대 로그아웃 | 로그아웃 | Sign out | 디자인 기준 버튼 목록 |
 | CPY-008 | 새로고침 버튼 | 새로고침 | Refresh | 스펙 §3, 디자인 기준 버튼 |
 | CPY-009 | 상세 열기 버튼 | 상세 | Details | 디자인 기준 버튼 |

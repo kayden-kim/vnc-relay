@@ -904,9 +904,9 @@ pub fn browser_preferences_select_language_on_all_screens() {
             &mut browser,
             chosen,
             if chosen == "ko" {
-                "관리자 로그인"
+                "VNC Relay 로그인"
             } else {
-                "administrator sign in"
+                "VNC Relay sign in"
             },
         );
         browser.fill("#login-account", "alice");
@@ -981,9 +981,9 @@ pub fn saved_language_survives_all_screens() {
             &mut browser,
             chosen,
             if chosen == "ko" {
-                "관리자 로그인"
+                "VNC Relay 로그인"
             } else {
-                "administrator sign in"
+                "VNC Relay sign in"
             },
         );
         assert_eq!(
@@ -1086,9 +1086,9 @@ pub fn saved_language_survives_all_screens() {
             &mut browser,
             chosen,
             if chosen == "ko" {
-                "관리자 로그인"
+                "VNC Relay 로그인"
             } else {
-                "administrator sign in"
+                "VNC Relay sign in"
             },
         );
         browser.reload();
@@ -1097,9 +1097,9 @@ pub fn saved_language_survives_all_screens() {
             &mut browser,
             chosen,
             if chosen == "ko" {
-                "관리자 로그인"
+                "VNC Relay 로그인"
             } else {
-                "administrator sign in"
+                "VNC Relay sign in"
             },
         );
         for item in server

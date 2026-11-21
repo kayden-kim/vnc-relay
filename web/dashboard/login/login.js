@@ -19,7 +19,7 @@ const DEFAULT_TIMEOUT_MS = 10000;
 // Keys are the copy names that update() uses.
 const STRINGS = {
   ko: {
-    title: 'VNC Relay 관리자 로그인', // CPY-006
+    title: 'VNC Relay 로그인', // CPY-006
     accountLabel: '계정명', // CPY-069
     passwordLabel: '비밀번호', // CPY-070
     accountRequired: '계정명을 입력하십시오.', // CPY-071
@@ -35,7 +35,7 @@ const STRINGS = {
     opensInNewTab: '새 탭에서 열림', // CPY-196
   },
   en: {
-    title: 'VNC Relay administrator sign in',
+    title: 'VNC Relay sign in',
     accountLabel: 'Account name',
     passwordLabel: 'Password',
     accountRequired: 'Enter an account name.',
@@ -203,11 +203,11 @@ export function mountLogin(root, deps = {}) {
     void submit();
   });
 
-  // Only the brand mark sits above the card, as in the mockup. The product name is in the card title (CPY-006).
+  // The brand mark sits left of the card title (user decision 2026-11-21). The product name is in the title (CPY-006).
   const brandMark = el('span', 'login-mark');
   brandMark.append(icon('brand'));
-  const brand = el('div', 'login-brand');
-  brand.append(brandMark);
+  const heading = el('div', 'login-heading');
+  heading.append(brandMark, title);
 
   const help = el('a', 'help-link-login');
   help.target = '_blank';
@@ -220,7 +220,7 @@ export function mountLogin(root, deps = {}) {
 
   // The title row has a divider below it, as in the mockup. The body holds the notice and the form.
   const head = el('header', 'card-head');
-  head.append(title);
+  head.append(heading);
   const body = el('div', 'card-body');
   body.append(notices, form);
 
@@ -229,7 +229,7 @@ export function mountLogin(root, deps = {}) {
   card.append(head, body);
 
   const main = el('main', 'login-main');
-  main.append(top, brand, card);
+  main.append(top, card);
   root.replaceChildren(main);
 
   /** Shows the notice for `state.notice`. The node is replaced only when the kind changes. */

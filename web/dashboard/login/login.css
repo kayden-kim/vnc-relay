@@ -27,13 +27,16 @@
   padding: var(--space-xl) 0;
 }
 
-.login-brand {
+/* Brand mark and title share one row; the title wraps beside the mark, never below it. */
+.login-heading {
   display: flex;
   align-items: center;
   gap: var(--space-sm);
+  min-width: 0;
 }
 
 .login-mark {
+  flex: none;
   display: inline-flex;
   align-items: center;
   justify-content: center;
