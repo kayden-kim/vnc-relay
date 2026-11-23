@@ -471,9 +471,11 @@ Windows 11 x64에서 실제 서비스 등록과 트레이 앱을 확인한다. �
 
 ## 9. 생성 파일과 정리
 
-이 문서의 절차가 `.work/` 밖에 만드는 파일이다. `.work/` 안의 부수 파일은 [루트 지침](../../AGENTS.md#부수-파일-위치)을 따른다. 정리 순서는 [6절](#6-롤백-또는-복구)에 있다.
+이 문서의 빌드·검증 절차가 `.work/` 밖에 만드는 빌드 결과와 캐시다. `.work/` 안의 부수 파일은 [루트 지침](../../AGENTS.md#부수-파일-위치)을 따른다. 정리 순서는 [6절](#6-롤백-또는-복구)이 정한다. 아래 표는 그 위치만 가리킨다.
+
+2절의 Chrome 설치 파일 `google-chrome-stable_current_amd64.deb`는 `wget`을 실행한 디렉터리에 남는다. 저장소 안에서 받았다면 설치한 뒤 지운다.
 
 | 위치 | 만드는 명령·도구 | 정리 방법 | `.work/` 밖에 두는 이유 |
 | --- | --- | --- | --- |
-| `target/`. `CARGO_TARGET_DIR`을 정했으면 그 위치다. `cargo xtask package`의 `target/package/`와 `cargo xtask help-site`의 `target/help-site/`도 여기에 있다. | `cargo build`, `cargo test`, `cargo xtask` | 저장소 루트에서 `cargo clean`을 실행한다. 지우기 전에 `cargo clean --dry-run`으로 크기를 확인할 수 있다. | Cargo가 위치를 정한다. |
-| Cargo 홈의 `registry/` | Cargo가 의존성을 내려받는다. | `cargo clean`은 지우지 않는다. 디스크가 모자랄 때만 직접 지운다. 다음 빌드에서 다시 내려받는다. | Cargo가 위치를 정한다. |
+| `target/`. `CARGO_TARGET_DIR`을 정했으면 그 위치다. `cargo xtask package`의 `target/package/`와 `cargo xtask help-site`의 `target/help-site/`도 여기에 있다. | `cargo build`, `cargo test`, `cargo xtask` | [6절](#6-롤백-또는-복구) 2단계 | Cargo가 위치를 정한다. |
+| Cargo 홈의 `registry/` | Cargo가 의존성을 내려받는다. | [6절](#6-롤백-또는-복구) 3단계 | Cargo가 위치를 정한다. |
