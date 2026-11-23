@@ -340,7 +340,7 @@ D:(A;;CCLCSWRPWPDTLOCRRC;;;SY)(A;;CCDCLCSWRPWPDTLOCRSDRCWDWO;;;BA)(A;;CCLCSWLOCR
 
 빌드 결과와 보고서는 소스에서 다시 만든다. 지워도 소스는 바뀌지 않는다.
 
-1. 시나리오 보고서와 임시 파일을 지우려면 저장소 루트의 `.work/`를 지운다. Git이 무시하는 폴더다.
+1. 시나리오 보고서와 임시 파일을 지우려면 저장소 루트의 `.work/reports/`와 `.work/tmp/`를 지운다. `.work/evals/`는 사용자가 결과를 검토하기 전에는 지우지 않는다. 다른 하위 폴더의 지우는 시점은 [루트 지침의 부수 파일 위치](../../AGENTS.md#부수-파일-위치)를 따른다.
 2. 빌드 결과가 꼬였다고 의심되면 저장소 루트에서 `cargo clean`을 실행한다. Cargo 대상 디렉터리(`target/`, `CARGO_TARGET_DIR`을 정했으면 그 위치)를 지운다. 지우기 전에 `cargo clean --dry-run`으로 지울 파일 수와 크기를 확인할 수 있다. `--dry-run`은 파일을 지우지 않는다.
 3. Cargo가 내려받은 의존성 캐시(Cargo 홈의 `registry/`)는 `cargo clean`이 지우지 않는다. 지우면 다음 빌드에서 다시 내려받는다. 디스크가 모자랄 때만 지운다.
 4. 절차 4단계를 다시 실행해 `vnc-relay <버전>`이 나오는지 확인한다.
