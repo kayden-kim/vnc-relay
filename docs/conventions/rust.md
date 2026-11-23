@@ -22,7 +22,8 @@
 | 서식 | rustfmt 기본값을 쓴다. 설정 파일 `rustfmt.toml`을 두지 않는다. | 손으로 맞춘 정렬, rustfmt 설정 추가 | `cargo fmt --all --check` |
 | 대소문자 | 타입·trait·enum 값은 `UpperCamelCase`, 함수·변수·모듈·파일은 `snake_case`, 상수는 `SCREAMING_SNAKE_CASE`. crate 이름은 `vnc-relay-<레이어>`. | `relayID`, `Relay_Id` | 컴파일러 경고(`non_camel_case_types` 등), 리뷰 |
 | 업무 이름 | 업무 개념의 타입·모듈은 용어집 코드 영어 이름으로 시작한다(7절 prefix 목록). 용어집에 없는 업무 개념이면 먼저 용어집에 등록한다. | 용어집과 다른 동의어(`MatchId`, `Token`으로 중계 ID를 부름) | 리뷰 |
-| 유형 suffix | 역할이 있는 타입은 7절 suffix 목록의 suffix로 끝낸다. 업무 값 자체인 타입(`CloseCause`, `Role`, `Mode`, `ViewerTransport`)은 suffix 없이 용어집 이름만 쓴다. | 목록에 없는 suffix(`Manager`, `Helper`, `Util`) | 리뷰 |
+| 유형 suffix | 7절 목록의 역할을 하는 타입은 그 suffix로 끝낸다. trait은 모두 `Service` `Store` `Source` `Sink` `Gateway` `Control` `Clock` `Listener` 가운데 하나로 끝낸다. 포트 하나만 구현하는 구현체는 `<기술><trait 이름>`으로 짓기를 권장한다. 업무 값이나 기술 핸들이 포트를 겸해 구현하면 그 타입의 이름을 유지한다(`AccountsFile`, `RelayIdKey`, `RelayRuntime`, `Scm`). 업무 값·데이터 타입(`CloseCause`, `Role`, `Mode`, `ConnectionBudget`, `TicketClaims`)은 suffix 없이 업무 이름만 쓴다. trait의 예외는 용어집 이름 `RelayStream`뿐이다. | 7절 금지 이름(`Manager`, `Helper`, `Util`, `Handler`, `UseCase`, `Interactor`, `Repository`, `Dto`, `Impl`), 목록에 없는 역할 suffix | 리뷰 |
+| 테스트 전용 타입 | `#[cfg(test)]` 모듈과 `tests/`에만 있는 타입에는 유형 suffix 규칙을 적용하지 않는다. 대역 이름은 `Fake`나 `Test`로 시작하기를 권장한다. | 운영 코드에서 `Fake`·`Test` 이름을 쓰는 것 | 리뷰 |
 | 모듈 파일 | 하위 모듈이 있으면 `foo.rs`와 `foo/` 디렉터리를 쓴다. | `foo/mod.rs` | clippy `mod_module_files`(deny) |
 | 모듈 위치 | 코드 지도의 레이어와 위치에 둔다. 새 모듈이 생기면 같은 변경에서 코드 지도를 고친다. | domain·app에서 소켓·파일·TLS·HTTP 라이브러리 사용 | `cargo xtask layers`, `crates/app/clippy.toml`, 리뷰 |
 | 주석 언어 | 주석과 문서 주석은 영어로 쓴다. 용어는 용어집의 코드 영어 이름을 쓴다. | 한국어 주석, 용어집과 다른 영어 표현 | 리뷰 |
@@ -54,13 +55,25 @@ Win32 호출은 작업 공간의 `windows-sys`를 쓴다. 시험 쪽은 개발 �
 ```text
 좋음: crates/domain/src/matching.rs 의 WaitingTable
 나쁨: crates/domain/src/matcher/mod.rs 의 MatchManager
-이유: 용어집 이름 "대기 연결(waiting)"과 suffix 목록의 Table을 쓴다. mod.rs와 목록에 없는 suffix Manager를 쓰지 않는다.
+이유: 용어집 이름 "대기 연결(waiting)"과 suffix 목록의 Table을 쓴다. mod.rs와 금지 이름 Manager를 쓰지 않는다.
 ```
 
 ```text
-좋음: crates/app/src/ports.rs 의 trait AccountStore, crates/adapters/src/accounts_file.rs 의 FileAccountStore
+좋음: crates/app/src/ports.rs 의 trait AccountStore, crates/adapters/src/accounts_file/store.rs 의 AccountsFile
 나쁨: crates/app/src/ports.rs 의 trait TomlAccountRepository
-이유: app의 포트 이름은 기술(TOML)을 드러내지 않는다. 포트 구현체는 `<기술><포트 이름>`으로 짓는다. 도메인 prefix는 포트 이름 안에 있다.
+이유: app의 포트 이름은 기술(TOML)을 드러내지 않고, 메모리 밖 상태를 저장하는 포트는 Store로 끝낸다. 구현체 AccountsFile은 계정 파일이라는 업무 이름을 유지한다.
+```
+
+```text
+좋음: crates/app/src/ports.rs 의 trait TargetGateway, crates/adapters/src/target.rs 의 TcpTargetGateway
+나쁨: crates/app/src/ports.rs 의 trait TargetConnector
+이유: 대상 호스트에 연결하는 포트는 Store·Source·Sink·Control·Clock에 맞지 않아 Gateway로 끝낸다. 동사에서 만든 이름(Connector, Hasher, Loader)을 따로 늘리지 않는다.
+```
+
+```text
+좋음: crates/app/src/ports.rs 의 trait IpDbFileGateway, crates/adapters/src/ip_db.rs 의 MmdbFileGateway
+나쁨: crates/adapters/src/ip_db.rs 의 MmdbIpDbFileGateway
+이유: 포트 하나만 구현하는 구현체는 `<기술><포트 이름>`을 권장한다. 기술 이름(Mmdb)이 IP DB 형식을 이미 말하면 포트 이름 앞의 IpDb를 빼서 5단어 이상이 되지 않게 한다.
 ```
 
 ```rust
@@ -77,7 +90,7 @@ impl std::fmt::Debug for PasswordHash {
 ## 4. 예외와 자동 생성 산출물
 
 - 자동 생성 Rust 코드는 없다. 생기면 생성 위치와 생성 명령을 이 절에 적고 rustfmt·clippy 대상에서 제외하는 방법을 정한다.
-- 외부 계약이 정한 이름은 계약을 따른다. 예: 운영 로그 필드 `relay_id_ref`, 쿠키 이름 `relay_admin_session`. 이런 이름을 담는 Rust 필드는 계약 이름과 같게 쓴다.
+- 외부 계약이 정한 이름은 계약을 따른다. 예: 운영 로그 필드 `relay_id_ref`, 쿠키 이름 `relay_admin_session`, 설정 계약 [2.1절](../contracts/config-v4.md#21-설정-오류와-준비-실패)·[2.2절](../contracts/config-v4.md#22-경고)의 진단·경고(`ConfigDiagnostic`, `ConfigWarning`). 이런 이름을 담는 Rust 필드는 계약 이름과 같게 쓴다.
 - `xtask/`는 개발 도구다. 7절 prefix·suffix 규칙을 적용하지 않는다. 서식·lint 규칙은 적용한다.
 - lint 예외는 2절 "lint 예외" 행을 따른다. 예외는 코드에 이유와 함께 남기며 별도 목록을 두지 않는다.
 
@@ -97,7 +110,7 @@ cargo xtask layers
 
 ## 7. 이름 짓기 목록
 
-규칙은 [이름 짓기 기본 규칙](../conventions/AGENTS.md#이름-짓기-기본-규칙)을 따른다. Rust에서는 타입·trait 이름과 모듈 파일 이름에 적용한다. 함수 이름에는 적용하지 않는다. 모듈 이름이 이미 prefix를 담으면 타입에서 반복하지 않아도 된다(`matching::WaitingTable`).
+규칙은 [이름 짓기 기본 규칙](../conventions/AGENTS.md#이름-짓기-기본-규칙)을 따른다. Rust에서는 타입·trait 이름과 모듈 파일 이름에 적용한다. 함수 이름에는 적용하지 않는다. 모듈 이름이 이미 prefix를 담으면 타입에서 반복하지 않아도 된다(`matching::WaitingTable`). suffix는 레이어와 의존 방향에서 맡은 역할을 나타낸다. 데이터의 모양을 설명하는 말(`Claims`, `Parts`, `Binding`, `Budget`)은 suffix가 아니라 업무 이름의 일부다.
 
 도메인 prefix:
 
@@ -121,29 +134,51 @@ cargo xtask layers
 | `Reload` | 부분 재로드, 재로드 후보 | [용어집](../../GLOSSARY.md#설정과-수명) |
 | `Shutdown` | 정상 종료, 종료 유예 | [용어집](../../GLOSSARY.md#설정과-수명) |
 
-suffix 목록:
+suffix 목록(21개):
 
 | suffix | 레이어 | 역할 | 근거 |
 | --- | --- | --- | --- |
 | `Id` | domain | 식별자 값 타입(`RelayId`, `SessionId`, `ConnId`) | 계약의 `*_id` 필드와 대응한다. |
-| `Parser` | domain | 바이트·문자열을 점진적으로 해석하는 상태 기계(`HandshakeParser`) | 분할 수신을 다루는 해석기다. |
+| `Key` | domain·adapters | 서명 확인·HMAC 계산에 쓰는 키 값(`TicketKey`, `RelayIdKey`, `SessionIdKey`) | 서명 확인·HMAC 계산용 키를 나타낸다. |
+| `Policy` | domain | 허용·거절을 판정하는 규칙(`TargetPolicy`) | 클린 아키텍처의 도메인 서비스에 해당한다. 판정 규칙을 나타낸다. |
 | `Table` | domain | 키로 찾는 메모리 상태 모음(`WaitingTable`) | 키별 조회와 갱신을 나타낸다. |
 | `List` | domain | 순서가 있는 값 목록(`AllowList`, `RecentClosedList`) | 설정 키 `allow`와 최근 종료 목록에 대응한다. |
-| `Policy` | domain | 허용·거절을 판정하는 규칙(`TargetPolicy`) | 판정 규칙을 나타낸다. |
-| `Budget` | domain | 상한이 있는 자원 수 집계(`ConnectionBudget`) | L·Lm·Lw를 센다. |
+| `Parser` | domain | 바이트·문자열을 점진적으로 해석하는 상태 기계(`HandshakeParser`) | 분할 수신을 다루는 해석기다. |
 | `Settings` | app | 검증을 마친 설정 값(`RelaySettings`) | 파일 형식과 무관한 값이다. |
-| `Service` | app | adapters가 부르는 사용 사례의 입구(`RelayService`, `ManagementService`, `ReloadService`, `LifecycleService`) | 사용 사례의 입구를 나타낸다. |
-| `Store` | app(trait), adapters(구현) | 메모리 밖에 두는 상태의 읽기·저장 포트(`AccountStore`) | 상태 저장 포트를 나타낸다. |
-| `Sink` | app(trait), adapters(구현) | 사건을 받아 내보내는 포트(`EventSink`) | 사건 출력 포트를 나타낸다. |
-| `Connector` | app(trait), adapters(구현) | 바깥으로 연결을 여는 포트(`TargetConnector`) | Mode I 대상 연결이다. |
-| `Clock` | app(trait), adapters(구현) | 현재 시각을 주는 포트(`SystemClock`) | 테스트에서 시각을 바꾸기 위해 둔다. |
+| `View` | app | 계층 밖으로 내주는 읽기 전용 출력 모델(`SessionView`, `SummaryView`) | adapters가 이 값을 JSON 응답으로 바꾼다. 별도 `Dto` suffix를 두지 않는다. |
+| `Snapshot` | app | 한 시점에 고정한 상태 묶음(`RelaySnapshot`, `MetricsSnapshot`, `ReloadSnapshot`) | `View`는 계층 밖으로 내주는 출력이고 `Snapshot`은 app 안에서 시점을 고정한 상태라 역할이 다르다. |
+| `Service` | app | adapters가 부르는 사용 사례의 입구(`RelayService`, `AdminService`, `ReloadService`, `LifecycleService`, `ConfigEditService`)와 그 trait(`ConfigService`) | 클린 아키텍처의 UseCase·Interactor에 해당한다. 사용 사례 하나가 메서드 하나이며, 사용 사례마다 타입을 만들지 않는다. |
+| `Store` | app(trait), adapters(구현) | 메모리 밖에 두는 상태를 읽고 저장하는 포트(`AccountStore`, `ConfigFileStore`) | 클린 아키텍처의 Repository에 해당한다. |
+| `Source` | app(trait), adapters(구현) | 실행 상태나 바깥에서 값을 읽어 오는 포트(`TokenSource`, `RelayIdSource`, `RelayStateSource`, `ProcessStatsSource`) | 값을 공급하는 쪽을 나타낸다. |
+| `Sink` | app(trait), app·adapters(구현) | 사건을 받아 내보내는 포트(`EventSink`)와 그 구현(`JsonLinesEventSink`, `MetricsSink`) | 사건 출력 포트를 나타낸다. |
+| `Gateway` | app(trait), adapters(구현) | 바깥 기능을 부르는 포트 가운데 `Store`·`Source`·`Sink`·`Control`·`Clock`에 맞지 않는 것(`TargetGateway`, `PasswordHashGateway`, `PasswordVerifyGateway`, `IpDbFileGateway`, `IpDbLookupGateway`, `ConfigDocumentGateway`, `AccountInputGateway`). adapters나 실행파일 안에서만 쓰는 포트(`WatchGateway`, `ServiceInstallGateway`)도 같다. | 클린 아키텍처의 Gateway에 해당한다. 앞의 다섯 suffix에 맞으면 그 suffix를 쓴다. 맞는 것이 없을 때만 쓴다. |
+| `Control` | app | 실행 중인 중계에 명령을 넣는 포트(`RelaySessionControl`, `RelayDenyControl`) | `RelayRuntime`이 구현하고 관리·재로드 서비스가 부른다. 읽기 포트 `Source`와 짝이다. |
+| `Clock` | app(trait), adapters(구현) | 현재 시각을 주는 포트(`SystemClock`, `ReloadClock`) | 테스트에서 시각을 바꾸기 위해 둔다. |
 | `EntryPoint` | adapters | 중계 접속을 받는 리스너(`TcpEntryPoint`, `WebSocketEntryPoint`) | 용어집 "진입점"과 같다. |
-| `Listener` | adapters | 진입점이 아닌 HTTP 리스너(`ManagementListener`, `StatusListener`) | 용어집 "관리 리스너"·"상태 리스너"와 같다. |
+| `Listener` | adapters | 진입점이 아닌 HTTP 리스너와 리스너 trait(`ManagementListener`, `StatusListener`, `Listener`) | 용어집 "관리 리스너"·"상태 리스너"와 같다. |
 | `Watcher` | adapters | 파일 변경을 감지하는 작업(`ReloadWatcher`) | 변경 감지를 나타낸다. |
+| `Response` | adapters | adapters가 JSON 본문으로 바로 만드는 응답 모델(`LogsResponse`) | 관리 API 계약의 응답이다. adapters가 보관하는 값이라 app의 `View`가 아니다. wire 형식 전용 타입이 더 필요하면 adapters 경계에 두고 이 suffix를 쓴다. |
 | `Error` | 모든 레이어 | 모듈의 오류 enum(`ConfigError`) | 모듈 오류를 나타낸다. |
-| `Diagnostic` | app | 사용자에게 보여 줄 진단 한 건(오류 코드·키·문장)(`ConfigDiagnostic`) | [설정 계약 2.1절](../contracts/config-v4.md#21-설정-오류와-준비-실패)의 진단 형식이다. 오류 enum 하나로는 키와 문장을 담을 수 없다. |
-| `Warning` | app | 시작·재로드를 막지 않는 경고 enum(`ConfigWarning`) | [설정 계약 2.2절](../contracts/config-v4.md#22-경고)의 경고 코드와 대응한다. |
-| `Claims` | domain | 서명을 확인한 접속 ticket의 클레임 값 묶음(`TicketClaims`) | [RFC 7519 4절](https://www.rfc-editor.org/rfc/rfc7519#section-4)의 클레임 집합과 대응한다. `Policy`는 판정 규칙이고 `List`는 순서 있는 목록이라 값 묶음을 나타내지 못한다. |
-| `Key` | domain·adapters | 서명 확인·HMAC 계산에 쓰는 키 값(`TicketKey`, `RelayIdKey`, `SessionIdKey`) | 서명 확인·HMAC 계산용 키를 나타낸다. |
-| `Parts` | domain | 한 입력 문자열을 나눈 부분의 빌린 참조(`TicketParts`) | JWS 압축 직렬화의 세 부분과 서명 입력을 복사하지 않고 가리킨다. `Parser`는 분할 수신을 다루는 상태 기계라 맞지 않는다. |
-| `Binding` | app | 업그레이드 검사가 101 뒤 연결에 묶어 넘기는 확인 결과(`TicketBinding`) | ticket의 `jti`·`rid`·`sx`를 초기 교환과 세션 만료까지 전달한다. 설정 값(`Settings`)이나 정책(`Policy`)이 아니다. |
+
+클린 아키텍처 이름은 따로 만들지 않고 위 suffix로 받는다.
+
+| 클린 아키텍처 이름 | 이 저장소의 이름 |
+| --- | --- |
+| Entity·Value Object | suffix 없는 업무 이름(`Session`, `CloseCause`) |
+| Domain Service | `Policy` |
+| UseCase·Interactor·Application Service | `Service`의 메서드 |
+| Repository | `Store` |
+| Gateway | `Gateway` |
+| Presenter 입력·Output DTO | `View`(app), `Response`(adapters) |
+| Controller | `EntryPoint`, `Listener` |
+
+금지 이름:
+
+| 이름 | 쓰지 않는 이유 | 대신 쓰는 이름 |
+| --- | --- | --- |
+| `Manager` `Helper` `Util` `Handler` | 역할을 말하지 않는다. | 역할에 맞는 suffix. 값 타입이면 업무 이름 |
+| `UseCase` `Interactor` | 사용 사례마다 타입을 만들면 타입 수가 늘어난다. | `Service`의 메서드 |
+| `Repository` | `Store`와 역할이 같다. | `Store` |
+| `Dto` | `View`와 `Response`가 같은 역할을 한다. | `View`, `Response` |
+| `Impl` | 구현체 이름은 기술을 드러내야 한다. | `<기술><포트 이름>` |
+| `Connector` `Hasher` `Verifier` `Loader` | 동사에서 만든 이름은 포트마다 새 suffix를 늘린다. | `Gateway` |
