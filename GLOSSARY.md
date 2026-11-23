@@ -2,6 +2,8 @@
 
 VNC Relay 제품 전체를 하나의 맥락으로 보고, [PRD](docs/requirements/PRD.md)·스펙·ADR·계약·코드가 함께 쓰는 업무 용어를 정의한다. 용어의 정의는 기능의 채택 상태나 구현 완료를 뜻하지 않는다.
 
+코드와의 대응: [VNC Relay 도메인 모델](docs/architectures/domain-model.md)(중계 핵심 용어만 다룬다)
+
 ## 용어
 
 ### 제품과 역할

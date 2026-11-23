@@ -9,6 +9,7 @@ VNC Relay는 TCP·WS·WSS Viewer를 Mode I 대상이나 TCP·WS·WSS Mode II Ser
 | 구현 대조 | Verified — [대조 기록](#대조-기록) |
 | 관련 PRD | [PRD](../requirements/PRD.md), [유지보수성](../requirements/PRD.md#8-비기능-요구사항), [구현 기술](../requirements/PRD.md#확정-기준) |
 | 관련 ADR | [ADR-0001 내장 TLS](../decisions/ADR-0001-built-in-tls.md), [ADR-0003 메모리 상태](../decisions/ADR-0003-single-instance-memory-state.md), [ADR-0004 tokio·rustls](../decisions/ADR-0004-tokio-rustls.md), [ADR-0005 WS 코덱](../decisions/ADR-0005-in-house-ws-streaming-frame-codec.md), [ADR-0006 파일을 통한 설정 편집](../decisions/ADR-0006-config-edit-through-file.md), [ADR-0011 상태 리스너의 메트릭](../decisions/ADR-0011-pull-metrics-on-status-listener.md) |
+| 도메인 모델 | [VNC Relay 도메인 모델](domain-model.md) |
 
 제품은 domain·app·adapters·서버 실행파일 조립·트레이 실행파일 조립의 다섯 crate로 나뉜다. 개발 도구는 별도 `xtask` crate다. 정적 대시보드는 `web/dashboard/`에 있다. 코드가 있다는 사실과 스펙 시나리오 전체가 검증되었다는 판단은 다르다. 시나리오별 실행 결과는 [테스트 컨벤션](../conventions/testing.md#7-테스트와-스펙-시나리오-연결)의 보고서가 맡는다.
 

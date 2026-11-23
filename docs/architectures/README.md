@@ -5,6 +5,7 @@
 | 문서 | 답하는 질문 | 구조 시점 | 문서 상태 | 구현 대조 |
 | --- | --- | --- | --- | --- |
 | [코드 지도](code-map.md) | 코드를 어떤 레이어와 구성요소로 나누고, 대표 요청은 어디서 시작해 어디서 끝나는가 | Current | Draft | Verified — [대조 기록](code-map.md#대조-기록) |
+| [VNC Relay 도메인 모델](domain-model.md) | 중계 핵심 용어(대기 연결·활성 세션·접속 ticket·종료 원인 등)는 코드의 어떤 타입·필드로 표현되고, 코드는 어디서 어떤 조건을 지키는가 | Current | Draft | Partial — [대조 기록](domain-model.md#대조-기록) |
 | [xtask 개발 도구 모듈 설계](xtask.md) | 시나리오 커버리지 보고, 레이어 의존 검사, 토큰 CSS 생성과 대조, 미리보기 서버는 무엇을 읽고 어떻게 판정하거나 띄우는가 | Current | Draft | Verified — [대조 기록](xtask.md#대조-기록) |
 | [설정 로딩 모듈 설계](config-loading.md) | 설정 파일을 어떻게 읽고 검증해 유효 설정이나 진단 목록을 만드는가 | Current | Draft | Verified — [대조 기록](config-loading.md#대조-기록) |
 | [`serve` 시작 모듈 설계](serve-startup.md) | `serve`가 어떤 순서로 설정·계정 파일을 읽고 리스너를 바인드하며, 실패를 어떤 종료 코드와 진단으로 알리는가 | Current | Draft | Verified — [대조 기록](serve-startup.md#대조-기록) |
