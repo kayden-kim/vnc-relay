@@ -47,12 +47,12 @@
 | 코드 지도(변경 대상의 코드 위치와 연결 관계) | [코드 지도](architectures/code-map.md) — Current, Draft, Verified. 현재 코드는 `serve` 시작과 CLI 골격([`serve` 시작 모듈 설계](architectures/serve-startup.md): `src/`와 계정 파일·리스너 모듈), 설정 로더([설정 로딩 모듈 설계](architectures/config-loading.md): `crates/domain`·`crates/app`·`crates/adapters`), 운영 로그([운영 로그 모듈 설계](architectures/ops-log.md): 사건 타입·JSON Lines 출력·`relay_id_ref`), TCP 진입점([TCP 진입점 모듈 설계](architectures/tcp-entry-point.md): 접속 수락·출발지 IP 검사), 연결 상한과 시간 제한([연결 상한과 시간 제한 모듈 설계](architectures/connection-limits.md): 연결 예산·L·H·TCP keepalive), 상태 리스너와 준비 상태([상태 리스너와 준비 상태 모듈 설계](architectures/status-listener.md): `/livez`·`/readyz`·Lm·`server_ready`), 대시보드 공통 컴포넌트([대시보드 공통 컴포넌트 모듈 설계](architectures/dashboard-components.md): 조각 DOM·옵션·상태 속성과 미리보기), 개발 도구 [`xtask/`](architectures/xtask.md)다 |
 | Windows 서비스·트레이 코드 위치와 동작 | [Windows 서비스 모듈 설계](architectures/windows-service.md) — `src/service.rs`·`src/serve.rs`·`crates/adapters/src/windows_service.rs`·`crates/adapters/src/windows_service/security.rs`. [Windows 트레이 앱 모듈 설계](architectures/windows-tray.md) — `crates/tray/src/`의 GUI·작업 스레드·규칙·레지스트리·메시지 루프. 둘 다 Current, Draft다. 서비스 설치·실행·해제는 [운영 스펙 3.7절](specs/operations.md#37-windows-서비스-실행)과 [CLI 계약 1.9절](contracts/cli-v1.md#19-windows-서비스-실행)을, 트레이 앱은 [Windows 트레이 앱 스펙](specs/windows-tray.md)을 따른다. 검증은 부분이며 [Windows 서비스 시험](how-to/set-up-and-verify.md#windows-서비스-시험)에 확인 범위와 남은 시험이 있다. 코드 대조와 실행 검증은 구분한다. |
 | 도메인 모델(업무 용어와 코드 타입의 대응) | [VNC Relay 도메인 모델](architectures/domain-model.md) — Current, Draft, Partial. 용어집의 6개 묶음(중계 핵심, 접근 경계, 관리 기능, 기록과 통계, 설정과 수명, Windows 운영) 전체를 다룬다. 단독 이름이 맞는 위치인지는 일부만 정의를 읽어 확인했다. 범위는 문서의 [대조 기록](architectures/domain-model.md#대조-기록)을 따른다. |
-| 적용할 컨벤션 | [컨벤션 목록](conventions/README.md) — [Rust 코드 컨벤션](conventions/rust.md)·[테스트 컨벤션](conventions/testing.md)·[프런트엔드 컨벤션](conventions/frontend.md)은 Active다. 디자인 기준은 [디자인 목록](design/README.md)의 [운영 대시보드 디자인 시스템](design/DESIGN.md)(Accepted)과 채택된 [대시보드 HTML 시안](design/mockups/dashboard.html)이다. |
+| 적용할 컨벤션 | [컨벤션 목록](conventions/README.md). 적용 범위 열에서 변경할 파일에 맞는 문서를 고른다. [Rust 코드 컨벤션](conventions/rust.md)·[테스트 컨벤션](conventions/testing.md)·[프런트엔드 컨벤션](conventions/frontend.md)은 Active다. 디자인 기준은 [디자인 목록](design/README.md)의 [운영 대시보드 디자인 시스템](design/DESIGN.md)(Accepted)과 채택된 [대시보드 HTML 시안](design/mockups/dashboard.html)이다. |
 | 개발 환경 준비와 실행 방법 | [개발 환경을 준비하고 변경을 검증하는 방법](how-to/set-up-and-verify.md) — Draft. Ubuntu와 Windows의 개발 환경·빌드·전체 완료 검증 절차를 다룬다. rustup 설치 단계는 두 OS 모두 미실행이다. |
 | 실행파일 배포와 수동 운영 | [실행파일을 묶고 수동 운영하는 방법](how-to/operate-relay.md) — Draft. Windows 11 x64·Ubuntu 24.04 LTS x64의 release 묶음과 계정·재로드·종료 절차. 두 OS 수동 기록 전에는 검증 완료로 표시하지 않는다 |
 | 버전 규칙과 릴리스 | [릴리스 묶음을 만들고 배포하는 방법](how-to/release.md) — Verified. `연.월.순서` 버전, `cargo xtask package`, GitHub Actions 검사, 태그로 GitHub Release 내기를 다룬다. 확인 범위와 미실행 단계는 본문 검증 기록을 따른다. |
 | 변경 범위별 테스트와 전체 완료 검증 | [개발 환경·검증 how-to 3.3·3.4절](how-to/set-up-and-verify.md#33-변경-범위별-검증). 시나리오 표식과 보고 명령은 [테스트 컨벤션](conventions/testing.md)이 정한다. 현재 결과는 `cargo xtask scenarios`의 `scenario-report.md`와 CI에서 확인한다. 의존성을 바꾸면 [의존성 라이선스 검사](how-to/check-dependency-licenses.md)를 실행한다. |
-| `.work/` 밖에 생기는 빌드 결과·캐시의 위치와 정리 방법 | Cargo 대상 디렉터리 `target/`(WSL은 `CARGO_TARGET_DIR`로 정한 위치)과 Cargo 의존성 캐시가 `.work/` 밖에 생긴다. 위치는 [개발 환경·검증 how-to 1절](how-to/set-up-and-verify.md#1-대상과-영향)과 [2절](how-to/set-up-and-verify.md#2-전제-조건)에 있고, 정리 방법은 [6절](how-to/set-up-and-verify.md#6-롤백-또는-복구)에 있다. 시나리오 보고서는 `.work/reports/`에 만든다. |
+| `.work/` 밖에 생기는 빌드 결과·캐시의 위치와 정리 방법 | Cargo 대상 디렉터리 `target/`(WSL은 `CARGO_TARGET_DIR`로 정한 위치)과 Cargo 의존성 캐시가 `.work/` 밖에 생긴다. 위치와 정리 방법은 [개발 환경·검증 how-to 9절](how-to/set-up-and-verify.md#9-생성-파일과-정리)에 있다. 시나리오 보고서는 `.work/reports/`에 만든다. |
 | 운영자 도움말 | [도움말 목록](help/README.md)과 [도움말 작성 규칙](help/AGENTS.md). 한국어·영어 mdBook 책을 `main` 기준으로 [GitHub Pages](https://kayden-kim.github.io/vnc-relay/)에 게시한다. 사이트 화면과 동작은 [도움말 사이트 화면 스펙](specs/help-site.md)(Active)을 따른다. 빌드·검사·미리보기·게시는 [도움말 게시 how-to](how-to/publish-help.md)에 있다. |
 
 WS·WSS는 공유 리스너에서 경로별로 Viewer·Server 역할을 나눈다. 중계 리스너 앞의 프록시 TLS 종료와 최근 로그 화면을 제공한다. 관련 수용 범위는 [PRD AC-44~48](requirements/PRD.md#10-검증-및-수용-기준)에 있다.
@@ -65,7 +65,7 @@ WS·WSS의 접속 ticket 확인은 역할별 선택 기능이며 기본으로 �
 
 검증 절차에는 환경·버전·실행 위치, 변경 범위별 명령, 전체 완료 명령과 성공 조건을 적는다. 결과 기록은 [검증 규칙](AGENTS.md#검증-기록)을 따른다.
 
-작업 순서는 루트 [작업 지침](../AGENTS.md#작업-순서와-필수-참조), 문서 채택 여부와 충돌 판단은 [기준 문서 적용과 충돌 처리](AGENTS.md#기준-문서-적용과-충돌-처리)를 따른다.
+작업 단계와 순서는 루트 [작업 지침](../AGENTS.md#작업-단계-선택), 문서 채택 여부와 충돌 판단은 [기준 문서 적용과 충돌 처리](AGENTS.md#기준-문서-적용과-충돌-처리)를 따른다.
 
 ## 변경에 따른 문서 선택
 
