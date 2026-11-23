@@ -16,7 +16,7 @@
 
 이 문서에 쓴 이름은 모두 현재 코드에 있다. 그래서 `(계획)` 표시가 없다.
 
-범위에 넣은 용어는 용어집의 「중계 방식과 세션」 가운데 역할·Mode·대상·중계 ID·초기 교환·대기 연결·활성 세션·식별자·중계 스트림·전송 경로, 「접근 경계」의 접속 ticket과 그 관련 용어, 「세션 종료와 기록」의 종료 원인과 최근 종료 목록이다. 접근 경계(출발지 IP 목록·신뢰 프록시·연결 상한), 관리 기능, 설정과 수명, 메트릭·접속 출처, Windows 운영의 용어는 이번 범위가 아니다. 사용자 결정(2026-11-23)으로 첫 초안을 중계 핵심으로 한정했다.
+범위에 넣은 용어는 용어집의 「중계 방식과 세션」 가운데 역할·Mode·대상·대기 연결·활성 세션·중계 스트림, 「접근 경계」의 접속 ticket과 그 관련 용어, 「세션 종료와 기록」의 종료 원인이다. 중계 ID·초기 교환·세션 식별자·연결 식별자·전송 경로는 위 용어의 관계를 설명하는 데 필요해 함께 넣었다. 접근 경계(출발지 IP 목록·신뢰 프록시·연결 상한), 관리 기능, 최근 종료 목록과 그 보관, 설정과 수명, 메트릭·접속 출처, Windows 운영의 용어는 이번 범위가 아니다. 사용자 결정(2026-11-23)으로 첫 초안을 중계 핵심으로 한정했고, 나머지는 다음 단계로 둔다.
 
 ## 1. 모델 지도
 
@@ -54,7 +54,6 @@ classDiagram
         id
         close_cause
     }
-    class RecentClosedList
     class PreparedConnection
     class HandshakeRequest
     class TicketBinding {
@@ -65,7 +64,6 @@ classDiagram
     RelayState --> WaitingTable : matching
     RelayState --> "0..*" WaitingConnection : waiting
     RelayState --> "0..*" ActiveSessionSnapshot : active
-    RelayState --> RecentClosedList : recent
     WaitingTable --> "0..*" IdOccupancy : entries
     IdOccupancy --> WaitingEntry : Waiting
     IdOccupancy --> MatchClaim : Claimed
@@ -77,7 +75,6 @@ classDiagram
     Session --> SessionState : state
     Session --> CloseCause : close_cause
     Session --> Transport : viewer_transport
-    RecentClosedList --> "0..*" ClosedSession : entries
     ClosedSession --> CloseCause : close_cause
     PreparedConnection --> HandshakeRequest : request
     PreparedConnection --> TicketBinding : ticket
@@ -109,8 +106,7 @@ classDiagram
 | [발급 쪽(issuer)](../../GLOSSARY.md) | 구분 없음 | 전용 타입 없음. 클레임 `TicketClaims.iss`와 설정 `TicketRoleSettings.issuer`가 이름을 담는다 | `crates/domain/src/ticket.rs`, `crates/app/src/settings.rs` | 설정 `issuer` |
 | [사용 기록](../../GLOSSARY.md) | 구분 없음 | `TicketUseTable`(역할별 `jti` 집합) | `crates/domain/src/ticket.rs` | 없음 |
 | [세션 만료 시각(sx)](../../GLOSSARY.md) | 구분 없음 | 클레임 `TicketClaims.sx`(Unix 초)와 연결에 붙은 `TicketBinding.session_deadline`(서비스 시계의 단조 시각) | `crates/domain/src/ticket.rs`, `crates/app/src/relay.rs` | 없음 |
-| [종료 원인(close_cause)](../../GLOSSARY.md) | 구분 없음 | `CloseCause`(값 9개: `PeerEof` `ConnectionError` `AdminTerminated` `DeadConnection` `CloseTimeout` `ServerShutdown` `InternalError` `SessionExpired` `IpDenied`) | `crates/domain/src/session.rs` | 문자열 `peer_eof` `connection_error` `admin_terminated` `dead_connection` `close_timeout` `server_shutdown` `internal_error` `session_expired` `ip_denied`([관리 스펙 2.3절](../specs/management.md#23-최근-종료-목록)) |
-| [최근 종료 목록(recent_closed)](../../GLOSSARY.md) | 구분 없음 | `RecentClosedList`(필드 `max_entries` `entries`)와 항목 `ClosedSession`. 실행 중 요약은 `ClosedSessionSnapshot` | `crates/domain/src/{recent_closed,session}.rs`, `crates/app/src/relay.rs` | 관리 API 최근 종료 목록([관리 API 계약 1.10절](../contracts/management-api-v1.md)) |
+| [종료 원인(close_cause)](../../GLOSSARY.md) | 구분 없음 | `CloseCause`(값 9개: `PeerEof` `ConnectionError` `AdminTerminated` `DeadConnection` `CloseTimeout` `ServerShutdown` `InternalError` `SessionExpired` `IpDenied`). 정리가 끝난 세션의 최종 값은 `ClosedSession`(필드 `close_cause`)이 담는다 | `crates/domain/src/session.rs` | 문자열 `peer_eof` `connection_error` `admin_terminated` `dead_connection` `close_timeout` `server_shutdown` `internal_error` `session_expired` `ip_denied`([관리 스펙 2.3절](../specs/management.md#23-최근-종료-목록)) |
 
 ## 3. 관계
 
@@ -123,7 +119,6 @@ classDiagram
 | `IdOccupancy::Session` → 두 연결 | 2 (Viewer 1, Server 1) | 연결 식별자 필드 둘 | `crates/domain/src/matching.rs` `IdOccupancy::Session { viewer_conn_id, server_conn_id }` | [중계 3.3절 3](../specs/relay.md#33-mode-ii), RLY-R08 |
 | `SessionId` → 실행 중 세션 요약 | 1:1 | 맵 | `crates/app/src/relay.rs` `RelayState.active: HashMap<SessionId, ActiveSessionSnapshot>` | [관리 스펙](../specs/management.md) 활성 세션 조회 |
 | `Session` → `CloseCause` | 0..1 (정리 전), 1 (정리 뒤) | `Session.close_cause`는 `Option`, `ClosedSession.close_cause`는 값 하나 | `crates/domain/src/session.rs` `Session` `ClosedSession` | [관리 API 계약 1.10절](../contracts/management-api-v1.md) |
-| `RecentClosedList` → `ClosedSession` | 0..R | 큐. `max_entries`가 R | `crates/domain/src/recent_closed.rs` `RecentClosedList.entries` | MGT-R15 |
 | `PreparedConnection` → `TicketBinding` | 0..1 | `Option` | `crates/app/src/relay.rs` `PreparedConnection.ticket` | [WS·WSS 스펙](../specs/websocket.md) WS-R20 |
 | `TicketBinding` → `RelayId` | 1 | 필드 `relay_id`(ticket의 `rid`) | `crates/app/src/relay.rs` `TicketBinding.relay_id` | RLY-R21 |
 | `TicketUseTable` → `jti` | 역할마다 0..N | 역할별 집합 `viewer`, `server` | `crates/domain/src/ticket.rs` `TicketUseTable` | WS-R21 |
@@ -146,7 +141,6 @@ classDiagram
 | 101 뒤 초기 요청의 중계 ID는 ticket의 `rid`와 같아야 한다. 다르면 close 4012로 닫는다. | `crates/app/src/relay.rs`: `Mode2`의 ID가 `TicketBinding.relay_id`와 다르면 `RelayCloseAction::TicketRelayMismatch`. ticket 연결의 Mode I 요청도 불일치로 본다. | RLY-R21, RLY-029·RLY-030·RLY-032 |
 | `sx`에 도달한 연결은 끝나고 종료 원인은 `session_expired`다. | `crates/app/src/relay/session.rs`가 `session_deadline`에서 종료를 시작한다. 활성 세션이면 `CloseCause::SessionExpired`를 쓴다. | RLY-031, MGT-R28 |
 | 세션의 종료 원인은 정리를 시작하게 한 첫 원인이다. | `crates/domain/src/session.rs`의 원인 선택이 이미 원인이 있으면 바꾸지 않는다. | [관리 API 계약 1.10절](../contracts/management-api-v1.md) |
-| 최근 종료 목록은 최대 R개만 담고 오래된 항목부터 지운다. | `crates/domain/src/recent_closed.rs` `RecentClosedList::push` | MGT-R15 |
 
 ## 5. 용어집·스펙과 코드의 차이
 
@@ -172,7 +166,7 @@ classDiagram
 | 업무 관계를 스펙의 「용어·관계·상태」 절의 표로 정할지 | 3절의 개수는 코드 필드 형태와 스펙 규칙에서 읽었다. 스펙에 관계 표는 없다. | [중계](../specs/relay.md)·[WS·WSS](../specs/websocket.md)·[관리](../specs/management.md) 스펙 |
 | 두 `TargetHost`의 이름을 정리할지 | 읽는 사람이 두 타입을 혼동할 수 있다. | 컨벤션 또는 별도 작업 |
 | `MatchClaim`(짝이 정해지고 세션이 시작되기 전의 쌍)을 용어집 용어로 올릴지 | 스펙의 상태 표에는 이 단계가 따로 없다. | 용어집, [중계 스펙 2절](../specs/relay.md#2-상태와-경계) |
-| 이번 범위 밖 용어(접근 경계, 관리 기능, 설정과 수명, 메트릭·접속 출처, Windows 운영)의 도메인 모델 | 이 문서는 중계 핵심만 다룬다. | 이 문서의 확장 |
+| 이번 범위 밖 용어(접근 경계, 관리 기능, 최근 종료 목록과 그 보관, 설정과 수명, 메트릭·접속 출처, Windows 운영)의 도메인 모델 | 이 문서는 중계 핵심만 다룬다. | 이 문서의 확장 |
 
 ## 대조 기록
 
