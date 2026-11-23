@@ -14,7 +14,7 @@
 | HTML 시안 | [대시보드 시안](../design/mockups/dashboard.html). SCR-001~008의 모든 상태와 한국어·English 화면을 포함한다. SCR-006은 16개 상태를 제공한다. SCR-007은 4절의 상태 가운데 관리 세션 만료를 뺀 모든 상태를 제공한다. SCR-007 프레임은 추이 기간으로 최근 1시간을 고른 화면이며, 최근 24시간에서 바뀌는 문구는 9.3.7절의 CPY-251~254를 따른다. SCR-008도 4절의 상태 가운데 관리 세션 만료를 뺀 모든 상태를 제공하며, 프레임은 집계 기간으로 최근 1시간을 고른 화면이다. 시안과 이 문서의 문장이 다르면 문장을 따른다. |
 | 관련 컴포넌트 예시 | 구성 요소는 `web/dashboard/app/components/`에 있다([대시보드 구성 요소 설계](../architectures/dashboard-components.md)). 미리보기 `web/dashboard/preview/`는 `cargo xtask dashboard-serve`로 연다(로컬 전용). 로그인 화면(SCR-003)은 `web/dashboard/login/`에 있다. `login/`과 `app/`은 파일을 공유하지 않으므로 구성 요소를 가져오지 않는다([프런트엔드 컨벤션 1.1절](../conventions/frontend.md)). |
 
-선택 기준·시나리오 소유·와이어프레임 판정은 [스펙 작성 규칙](AGENTS.md)을, HTML 시안 판정은 [디자인 문서 작성 규칙](../design/AGENTS.md#html-시안)을 따른다. 색·간격·글꼴 값은 디자인 기준을 연결한다. 시안 작성 순서는 [frontend-workflow 참고 문서](../../.agents/skills/frontend-workflow/references/frontend-workflow.md#화면별-html-시안-4단계)를 따른다.
+선택 기준·시나리오 소유·와이어프레임 판정은 [스펙 작성 규칙](AGENTS.md)을, HTML 시안 판정은 [디자인 문서 작성 규칙](../design/AGENTS.md#html-시안)을 따른다. 색·간격·글꼴 값은 디자인 기준을 연결한다. 시안 작성 순서는 `frontend-workflow` 스킬의 참고 문서 「화면별 HTML 시안 (4단계)」를 따른다.
 
 ## 1. 범위와 사용자
 

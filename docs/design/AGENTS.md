@@ -4,7 +4,7 @@
 
 이 디렉터리는 화면의 시각 산출물을 둔다. 디자인 시스템(`DESIGN.md`)과 화면 스펙별 HTML 시안이 여기에 있다. 화면의 동작·상태·수용 테스트는 [스펙](../specs/AGENTS.md)이 소유한다. 디자인 기준을 코드에 적용하는 규칙은 [프런트엔드 컨벤션](../conventions/AGENTS.md)이 소유한다.
 
-작업 순서와 단계별 채택 기준은 [frontend-workflow 참고 문서](../../.agents/skills/frontend-workflow/references/frontend-workflow.md#4-디자인-탐색과-대표-화면)를 따른다.
+작업 순서와 단계별 채택 기준은 `frontend-workflow` 스킬의 참고 문서 「4. 디자인 탐색과 대표 화면」을 따른다.
 
 ## 시작 템플릿
 

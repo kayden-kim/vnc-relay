@@ -14,7 +14,7 @@
 | 디자인 기준과 코드 적용 규칙 | {{프로젝트 DESIGN.md·프런트엔드 컨벤션 링크}} |
 | 관련 컴포넌트 예시 | {{실제 컴포넌트 미리보기 URL·예시 ID 또는 기존 카탈로그 링크. 없으면 없음}} |
 
-선택 기준·시나리오 소유·와이어프레임 판정은 [스펙 작성 규칙](../specs/AGENTS.md)을, HTML 시안 판정은 [디자인 문서 작성 규칙](../design/AGENTS.md#html-시안)을 따른다. 색·간격·글꼴 값은 채택된 디자인 기준을 연결한다. 시안 작성 순서는 [frontend-workflow 참고 문서](../../.agents/skills/frontend-workflow/references/frontend-workflow.md#화면별-html-시안-4단계)를 따른다.
+선택 기준·시나리오 소유·와이어프레임 판정은 [스펙 작성 규칙](../specs/AGENTS.md)을, HTML 시안 판정은 [디자인 문서 작성 규칙](../design/AGENTS.md#html-시안)을 따른다. 색·간격·글꼴 값은 채택된 디자인 기준을 연결한다. 시안 작성 순서는 `frontend-workflow` 스킬의 참고 문서 「화면별 HTML 시안 (4단계)」를 따른다.
 
 ## 1. 범위와 사용자
 

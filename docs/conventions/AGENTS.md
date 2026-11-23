@@ -9,7 +9,7 @@
 | [컨벤션](../templates/convention.template.md) | 이름 짓기·소스·테스트·서식 규칙과 준수 확인 |
 | [프런트엔드 컨벤션](../templates/frontend.template.md) | 디자인 기준의 코드 적용·재사용·미리보기와 검증 |
 
-프런트엔드 작업은 [frontend-workflow 스킬](../../.agents/skills/frontend-workflow/SKILL.md)을 따른다. 디자인 시스템은 [디자인 문서 규칙](../design/AGENTS.md)에 따라 `docs/design/`에 둔다. 디자인 시스템은 시각 규칙과 토큰 원본을 지정한다. 프런트엔드 컨벤션은 코드 적용·생성 관계·미리보기·검증 규칙을 정한다.
+프런트엔드 작업은 `frontend-workflow` 스킬을 따른다. 디자인 시스템은 [디자인 문서 규칙](../design/AGENTS.md)에 따라 `docs/design/`에 둔다. 디자인 시스템은 시각 규칙과 토큰 원본을 지정한다. 프런트엔드 컨벤션은 코드 적용·생성 관계·미리보기·검증 규칙을 정한다.
 
 ## 규칙 우선순위
 

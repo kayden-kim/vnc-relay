@@ -63,7 +63,7 @@ components:
 
 상태와 적용 범위는 [기준 문서 적용과 충돌 처리](../AGENTS.md#기준-문서-적용과-충돌-처리)를 따른다. 참조한 시안과 문서가 다르면 적용 범위와 채택 근거를 확인한다. 해결할 근거가 없으면 관련 항목을 미결정 사항에 기록한다.
 
-작성 순서와 상태를 `Accepted`로 바꾸는 시점은 [frontend-workflow 참고 문서](../../.agents/skills/frontend-workflow/references/frontend-workflow.md#4-디자인-탐색과-대표-화면)를 따른다.
+작성 순서와 상태를 `Accepted`로 바꾸는 시점은 `frontend-workflow` 스킬의 참고 문서 「4. 디자인 탐색과 대표 화면」을 따른다.
 
 ### 디자인 방향
 

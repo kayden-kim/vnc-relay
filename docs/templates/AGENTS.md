@@ -11,7 +11,7 @@
 | `PRD.template.md` | [requirements](../requirements/AGENTS.md) |
 | `system-spec.template.md`, `screen-spec.template.md` | [specs](../specs/AGENTS.md) |
 | `contract.template.md` | [contracts](../contracts/AGENTS.md) |
-| `code-map.template.md`, `module-design.template.md`, `architecture-view.template.md` | [architectures](../architectures/AGENTS.md) |
+| `code-map.template.md`, `domain-model.template.md`, `module-design.template.md`, `architecture-view.template.md` | [architectures](../architectures/AGENTS.md) |
 | `ADR-0000-template.md` | [decisions](../decisions/AGENTS.md) |
 | `explainer.template.md` | [explainers](../explainers/AGENTS.md) |
 | `DESIGN.template.md` | [design](../design/AGENTS.md) |
