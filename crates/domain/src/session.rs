@@ -1279,6 +1279,54 @@ mod tests {
         assert_eq!(finish(&mut closing).close_cause(), CloseCause::PeerEof);
     }
 
+    /// spec: management.md:MGT-067
+    #[test]
+    fn a_selected_close_cause_survives_every_later_close_event() {
+        fn start(cause: CloseCause, session: &mut Session) -> bool {
+            let now = Duration::from_secs(11);
+            match cause {
+                CloseCause::AdminTerminated => session.begin_admin_close(now).unwrap(),
+                CloseCause::SessionExpired => session.begin_session_expiry(now).unwrap(),
+                CloseCause::IpDenied => session.begin_ip_denied_close(now).unwrap(),
+                CloseCause::DeadConnection => session.dead_connection(Side::Viewer).unwrap(),
+                CloseCause::ConnectionError => session.io_error(FORWARD, Side::Viewer).unwrap(),
+                CloseCause::ServerShutdown => session.force_server_shutdown().unwrap(),
+                other => panic!("{other:?} is not an event that selects a cause"),
+            }
+        }
+
+        let causes = [
+            CloseCause::AdminTerminated,
+            CloseCause::SessionExpired,
+            CloseCause::IpDenied,
+            CloseCause::DeadConnection,
+            CloseCause::ConnectionError,
+            CloseCause::ServerShutdown,
+        ];
+        for first in causes {
+            for later in causes {
+                let mut session = session(Mode::Mode2);
+                assert!(start(first, &mut session), "{first:?} starts the close");
+                assert!(!start(later, &mut session), "{later:?} after {first:?}");
+                let timed_out = session
+                    .expire_close(Duration::MAX, Duration::from_secs(10))
+                    .unwrap();
+                // Only an administrator close can turn into close_timeout.
+                assert_eq!(timed_out, first == CloseCause::AdminTerminated);
+                let expected = if timed_out {
+                    CloseCause::CloseTimeout
+                } else {
+                    first
+                };
+                assert_eq!(
+                    finish(&mut session).close_cause(),
+                    expected,
+                    "{first:?} then {later:?}"
+                );
+            }
+        }
+    }
+
     /// spec: relay.md:RLY-020 partial
     #[test]
     fn finalizes_exactly_once_and_rejects_all_later_mutations() {

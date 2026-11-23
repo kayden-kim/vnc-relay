@@ -110,18 +110,18 @@ classDiagram
 
 ## 3. 관계
 
-관계의 뜻은 스펙이 정한다. 이 표는 그 관계를 코드가 어떻게 연결하는지 적는다. 개수는 코드의 필드 형태(맵·집합·`Option`)에서 읽은 값이며, 근거 스펙 칸의 규칙이 같은 내용을 정한다.
+관계와 개수는 스펙의 업무 관계 표([중계 2.2절](../specs/relay.md#22-업무-관계), [WS·WSS 2.1절](../specs/websocket.md#21-업무-관계), [관리 2.7절](../specs/management.md#27-업무-관계))가 정한다. 이 표는 그 관계를 코드가 어떻게 연결하는지 적는다. 개수 칸은 스펙의 값을 코드의 필드 형태(맵·집합·`Option`)로 옮긴 것이다.
 
 | 관계 | 개수 | 코드에서 연결하는 방식 | 연결하는 코드(파일·심볼) | 근거 스펙 |
 | --- | --- | --- | --- | --- |
-| `RelayId` → 점유(대기·짝 맞춤·세션) | 0..1 | 맵. 한 중계 ID에 점유 하나 | `crates/domain/src/matching.rs` `WaitingTable.entries: HashMap<RelayId, IdOccupancy>` | [중계 3.3절 4](../specs/relay.md#33-mode-ii)(중복 정책), RLY-R10·RLY-R20 |
-| `RelayId` → `WaitingConnection` | 0..1 | 맵 | `crates/app/src/relay.rs` `RelayState.waiting` | 같은 규칙 |
-| `IdOccupancy::Session` → 두 연결 | 2 (Viewer 1, Server 1) | 연결 식별자 필드 둘 | `crates/domain/src/matching.rs` `IdOccupancy::Session { viewer_conn_id, server_conn_id }` | [중계 3.3절 3](../specs/relay.md#33-mode-ii), RLY-R08 |
-| `SessionId` → 실행 중 세션 요약 | 1:1 | 맵 | `crates/app/src/relay.rs` `RelayState.active: HashMap<SessionId, ActiveSessionSnapshot>` | [관리 스펙](../specs/management.md) 활성 세션 조회 |
-| `Session` → `CloseCause` | 0..1 (정리 전), 1 (정리 뒤) | `Session.close_cause`는 `Option`, `ClosedSession.close_cause`는 값 하나 | `crates/domain/src/session.rs` `Session` `ClosedSession` | [관리 API 계약 1.10절](../contracts/management-api-v1.md) |
-| `PreparedConnection` → `TicketBinding` | 0..1 | `Option` | `crates/app/src/relay.rs` `PreparedConnection.ticket` | [WS·WSS 스펙](../specs/websocket.md) WS-R20 |
-| `TicketBinding` → `RelayId` | 1 | 필드 `relay_id`(ticket의 `rid`) | `crates/app/src/relay.rs` `TicketBinding.relay_id` | RLY-R21 |
-| `TicketUseTable` → `jti` | 역할마다 0..N | 역할별 집합 `viewer`, `server` | `crates/domain/src/ticket.rs` `TicketUseTable` | WS-R21 |
+| `RelayId` → 점유(대기·짝 맞춤·세션) | 0..1 | 맵. 한 중계 ID에 점유 하나 | `crates/domain/src/matching.rs` `WaitingTable.entries: HashMap<RelayId, IdOccupancy>` | [중계 2.2절](../specs/relay.md#22-업무-관계)의 중계 ID 두 관계, RLY-R10·RLY-R20 |
+| `RelayId` → `WaitingConnection` | 0..1 | 맵 | `crates/app/src/relay.rs` `RelayState.waiting` | 같은 표의 중계 ID → 대기 연결 |
+| `IdOccupancy::Session` → 두 연결 | 2 (Viewer 1, Server 1) | 연결 식별자 필드 둘 | `crates/domain/src/matching.rs` `IdOccupancy::Session { viewer_conn_id, server_conn_id }` | [중계 2.2절](../specs/relay.md#22-업무-관계)의 활성 세션 → 연결과 연결 → 활성 세션, RLY-R08 |
+| `SessionId` → 실행 중 세션 요약 | 1:1 | 맵 | `crates/app/src/relay.rs` `RelayState.active: HashMap<SessionId, ActiveSessionSnapshot>` | [중계 2.2절](../specs/relay.md#22-업무-관계)의 활성 세션 → 세션 식별자, RLY-R11 |
+| `Session` → `CloseCause` | 0..1 (정리 전), 1 (정리 뒤) | `Session.close_cause`는 `Option`, `ClosedSession.close_cause`는 값 하나 | `crates/domain/src/session.rs` `Session` `ClosedSession` | [관리 2.7절](../specs/management.md#27-업무-관계)의 활성 세션 → 종료 원인, MGT-R39 |
+| `PreparedConnection` → `TicketBinding` | 0..1 | `Option` | `crates/app/src/relay.rs` `PreparedConnection.ticket` | [WS·WSS 2.1절](../specs/websocket.md#21-업무-관계)의 역할 → ticket 설정, WS-R20 |
+| `TicketBinding` → `RelayId` | 1 | 필드 `relay_id`(ticket의 `rid`) | `crates/app/src/relay.rs` `TicketBinding.relay_id` | [WS·WSS 2.1절](../specs/websocket.md#21-업무-관계)의 ticket → 중계 ID, RLY-R21 |
+| `TicketUseTable` → `jti` | 역할마다 0..N | 역할별 집합 `viewer`, `server` | `crates/domain/src/ticket.rs` `TicketUseTable` | [WS·WSS 2.1절](../specs/websocket.md#21-업무-관계)의 ticket → 업그레이드 연결, WS-R21 |
 
 도메인 `Session`은 중계 ID와 연결 식별자를 가지지 않는다. 이 둘은 `IdOccupancy::Session`(Mode II)이 가진다. `Session`은 `crates/app/src/relay.rs`에서 `Session::new`로 만든다.
 
@@ -140,7 +140,7 @@ classDiagram
 | 접속 ticket은 한 번만 받아들인다. | `crates/domain/src/ticket.rs` `TicketUseTable::try_record`가 이미 있는 `jti`를 거절한다. | WS-R21, WS-042 |
 | 101 뒤 초기 요청의 중계 ID는 ticket의 `rid`와 같아야 한다. 다르면 close 4012로 닫는다. | `crates/app/src/relay.rs`: `Mode2`의 ID가 `TicketBinding.relay_id`와 다르면 `RelayCloseAction::TicketRelayMismatch`. ticket 연결의 Mode I 요청도 불일치로 본다. | RLY-R21, RLY-029·RLY-030·RLY-032 |
 | `sx`에 도달한 연결은 끝나고 종료 원인은 `session_expired`다. | `crates/app/src/relay/session.rs`가 `session_deadline`에서 종료를 시작한다. 활성 세션이면 `CloseCause::SessionExpired`를 쓴다. | RLY-031, MGT-R28 |
-| 세션의 종료 원인은 정리를 시작하게 한 첫 원인이다. | `crates/domain/src/session.rs`의 원인 선택이 이미 원인이 있으면 바꾸지 않는다. | [관리 API 계약 1.10절](../contracts/management-api-v1.md) |
+| 세션의 종료 원인은 정리를 시작하게 한 첫 원인이다. 정리 제한 시간 E를 넘기면 관리자 종료와 EOF 정리 중인 세션만 `close_timeout`으로 바뀐다. | `crates/domain/src/session.rs`의 `select_cause`가 이미 원인이 있으면 바꾸지 않는다. `Session::expire_close`가 원인이 없거나 `AdminTerminated`일 때만 `CloseTimeout`으로 바꾼다. | MGT-R39, MGT-067(관리자 종료의 `close_timeout`), RLY-019(EOF 정리 중의 `close_timeout`) |
 
 ## 5. 용어집·스펙과 코드의 차이
 
@@ -163,7 +163,6 @@ classDiagram
 | 항목 | 영향 | 확정 위치 |
 | --- | --- | --- |
 | 용어집의 종료 원인 목록에 `ip_denied`를 더할지 | 용어집이 스펙·계약·코드보다 값이 하나 적다. | 용어집 |
-| 업무 관계를 스펙의 「용어·관계·상태」 절의 표로 정할지 | 3절의 개수는 코드 필드 형태와 스펙 규칙에서 읽었다. 스펙에 관계 표는 없다. | [중계](../specs/relay.md)·[WS·WSS](../specs/websocket.md)·[관리](../specs/management.md) 스펙 |
 | 두 `TargetHost`의 이름을 정리할지 | 읽는 사람이 두 타입을 혼동할 수 있다. | 컨벤션 또는 별도 작업 |
 | `MatchClaim`(짝이 정해지고 세션이 시작되기 전의 쌍)을 용어집 용어로 올릴지 | 스펙의 상태 표에는 이 단계가 따로 없다. | 용어집, [중계 스펙 2절](../specs/relay.md#2-상태와-경계) |
 | 이번 범위 밖 용어(접근 경계, 관리 기능, 최근 종료 목록과 그 보관, 설정과 수명, 메트릭·접속 출처, Windows 운영)의 도메인 모델 | 이 문서는 중계 핵심만 다룬다. | 이 문서의 확장 |

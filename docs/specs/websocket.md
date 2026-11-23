@@ -56,6 +56,17 @@ Origin 정책: Origin 헤더가 있으면 해당 역할의 `allowed_origins`와 
 
 접속 ticket은 IP 허용 목록을 대신하지 않는다. `[relay.ticket.viewer]`·`[relay.ticket.server]`로 역할마다 켜며, TCP 진입점에는 적용하지 않는다. 평문 WS에서도 켤 수 있지만 ticket 원문이 암호화되지 않으므로 그 구간은 믿을 수 있는 망 안에 있어야 한다. 같은 역할의 TCP 진입점과 평문 WS 경고는 [운영 스펙](operations.md#4-보안과-신뢰-경계)을 따른다.
 
+### 2.1 업무 관계
+
+접속 ticket의 형식과 확인은 [WebSocket 계약 1.9절](../contracts/websocket-relay-v2.md#19-접속-ticket)이 정한다. 이 표는 ticket과 역할·연결 사이의 소속과 개수를 정한다. ticket과 중계 ID·세션 만료 시각의 관계는 중계 스펙이 정하므로 링크한다. 이 표의 행은 시나리오가 아니다. 강제해야 하는 관계는 WS-R20·WS-R21과 7절의 시나리오가 확인한다.
+
+| 관계 | 개수 | 뜻 |
+| --- | --- | --- |
+| 역할 → ticket 설정 | 1 : 0..1 | Viewer·Server 역할마다 ticket 설정(`issuer`·공개 키·`relay_host`·`max_lifetime_secs`)을 따로 켠다. 켜지 않은 역할에는 ticket을 요구하지 않는다. 켠 역할은 다른 역할의 ticket을 받지 않는다(WS-R20, WS-037·WS-045). |
+| ticket → 업그레이드 연결 | 1 : 0..1 | ticket 하나로 연 연결은 하나다. 같은 ticket의 두 번째 사용은 거절한다. 업그레이드 검사에서 거절한 요청은 ticket을 쓰지 않은 것으로 본다(WS-R21, WS-042·WS-044). |
+| ticket → 중계 ID | 1 : 1 | ticket은 `rid`로 중계 ID 하나를 묶는다. 초기 요청의 중계 ID와 비교하는 규칙은 [중계 스펙 2.1절](relay.md#21-판정-가능한-규칙)의 RLY-R21이 정한다. |
+| ticket → 세션 만료 시각 | 1 : 0..1 | `sx`는 선택이다. `sx`에 연결·세션을 끝내는 규칙은 [중계 스펙 2.1절](relay.md#21-판정-가능한-규칙)의 RLY-R22가 정한다. |
+
 ## 3. 정상 흐름과 규칙
 
 1. WSS는 TLS가 성립한 뒤 HTTP 업그레이드를 진행한다. WS는 TLS 없이 업그레이드를 진행한다.
