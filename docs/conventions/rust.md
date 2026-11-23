@@ -158,14 +158,14 @@ cargo xtask layers
 | 같은 이름 충돌([7.3절](#73-suffix가-필요한-조건) A2) | 이름 2개(선언 4개) | 도메인 enum `Listener`(`crates/domain/src/entry_point.rs`)와 adapters trait `Listener`(`crates/adapters/src/listener.rs`). `TargetHost` 2개(`crates/domain/src/handshake.rs`, `crates/domain/src/target_policy.rs`) |
 | `Control`이 포트가 아닌 타입 | 2 | `IdleControl`(`crates/adapters/src/request_deadline.rs`), `StopControl`(`crates/adapters/src/windows_service.rs`) |
 | crate 이름: `vnc-relay-app` → `vnc-relay-application`([7.5절](#75-모듈-파일-crate-이름)) | crate 1개 | `vnc_relay_app` import 338줄, 68개 파일. `Cargo.toml` 4개, `xtask/src/layers.rs`, 문서의 crate 이름도 함께 바뀐다. 이름을 바꾸기 전까지 코드와 문서는 현재 이름 `vnc-relay-app`을 쓴다 |
-| 시험 코드의 `#[path]`(`mod.rs`와 함께 금지) | 43곳, 17개 파일 | `tests/dashboard_live.rs` 18곳, `tests/common/dashboard_live.rs` 4곳, `crates/adapters/tests/ip_db.rs`, `src/serve.rs`의 `#[cfg(test)]` 모듈 |
+| 시험 코드의 `#[path]`(`mod.rs`와 함께 금지) | `#[path]` 속성 43개, 17개 파일 | `tests/dashboard_live.rs` 18곳, `tests/common/dashboard_live.rs` 4곳, `crates/adapters/tests/ip_db.rs`, `src/serve.rs`의 `#[cfg(test)]` 모듈. 이 행만 시험 코드를 센다 |
 | 시험 대역 이름: `Test…` → `Fake`·`Stub`·`Spy` | `Test`로 시작하는 선언 13개(대역이 아닌 `TestCase` 포함) | `TestClock`, `TestStream`(`crates/app/src/relay.rs`의 시험 모듈) |
 | 개념 타입의 모듈 이름 되풀이([7.3절](#73-suffix가-필요한-조건) C) | 세지 않았다 | `session::SessionState`, `ticket::TicketPolicy`, `account::AccountName`(`crates/domain`) |
 | 함수 직접 import([7.7절](#77-금지-이름과-부딪히는-지점)) | 세지 않았다. 표본 점검으로 찾은 예 | `use crate::toml_text::error_position;`(`crates/adapters/src/accounts_file.rs`, `config_file.rs`), `use crate::crypto::random_bytes;`(`crates/adapters/src/accounts_file/hasher.rs`), `use crate::clock::timestamp;`(`crates/adapters/src/management_http/config_api.rs`) |
 
 합계: 이름 약 15개(오류 8, `Result` 3, 같은 이름 2, `Control` 2)와 crate 1개다. `#[path]`와 시험 대역 이름, 모듈 이름 되풀이, 함수 import는 합계에 넣지 않았다.
 
-- 금지 이름(`Dto` `Repository` `UseCase` `Interactor` `Manager` `Impl` `Handler` 등)을 쓰는 운영 코드 선언은 0개다.
+- 금지 이름(`Dto` `Repository` `UseCase` `Interactor` `Manager` `Impl` `Handler` 등)을 쓰는 운영 코드 선언은 0개다. 시험 코드와 `xtask/`는 이 점검에서 뺐다. 시험 전용 타입은 suffix 규칙 대상이 아니다([2절](#2-규칙)).
 - 코드를 바꾸지 않고 이 문서가 허용하도록 고친 것: adapters의 `Policy`(`AcceptPolicy`, `WsPolicy`)와 비공개 `Snapshot`(`QuerySnapshot`), 닫힌 목록 밖 suffix(`Guard` `Parser` 등, [7.9절](#79-등록-suffix와-예외-이름)).
 - 비공개 `Wire`(`crates/adapters/src/websocket.rs`)는 소켓을 감싸는 enum이다. 어댑터 내부 저장·전송 형식을 뜻하는 `Wire` suffix와 뜻이 다르다. 모듈 안 비공개 보조 타입이므로 바꾸지 않았다.
 - `LogsFilter`는 조회 조건 입력이다. 표준은 `Query`로 바꾸기를 필요할 때로 둔다. 세지 않았다.
