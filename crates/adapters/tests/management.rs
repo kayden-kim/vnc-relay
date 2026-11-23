@@ -25,23 +25,23 @@ use tokio::sync::watch;
 use tokio::task::JoinHandle;
 use tokio::time::timeout;
 use tokio_rustls::{TlsAcceptor, TlsConnector};
-use vnc_relay_adapters::accounts_file::{Argon2Hasher, Argon2Verifier};
+use vnc_relay_adapters::accounts_file::{Argon2PasswordHashGateway, Argon2PasswordVerifyGateway};
 use vnc_relay_adapters::clock::SystemClock;
-use vnc_relay_adapters::config_edit::{FsConfigFileStore, TomlConfigDocument};
+use vnc_relay_adapters::config_edit::{FsConfigFileStore, TomlConfigDocumentGateway};
 use vnc_relay_adapters::config_file;
 use vnc_relay_adapters::crypto::{RelayIdKey, SessionIdKey, SystemTokenSource};
-use vnc_relay_adapters::ip_db::MmdbLoader;
+use vnc_relay_adapters::ip_db::MmdbFileGateway;
 use vnc_relay_adapters::management_http::{DashboardHints, ManagementListener, ManagementServices};
 use vnc_relay_adapters::net::{AcceptPolicy, AllowSource, TcpEntryPoint, TcpRelayStream};
 use vnc_relay_adapters::ops_log::{JsonLinesEventSink, RecentLogs, format_line};
 use vnc_relay_adapters::process_stats::OsProcessStats;
-use vnc_relay_adapters::target::TcpTargetConnector;
+use vnc_relay_adapters::target::TcpTargetGateway;
 use vnc_relay_adapters::tls;
 use vnc_relay_app::events::{AdminTerminateResult, Event, Level, RejectReason, Stage};
 use vnc_relay_app::ip_info::{IpInfoService, IpLookup};
 use vnc_relay_app::management::config::{
     ConfigActor, ConfigEditError, ConfigEditResult, ConfigEditService, ConfigFileStore,
-    ConfigGetError, ConfigManagement, ConfigPatch, ConfigReplaceError, ConfigView,
+    ConfigGetError, ConfigPatch, ConfigReplaceError, ConfigService, ConfigView,
 };
 use vnc_relay_app::management::login::dummy_hash;
 use vnc_relay_app::management::query::ManagementQueryService;
@@ -49,7 +49,7 @@ use vnc_relay_app::management::terminate::{ManagementTerminateService, Terminati
 use vnc_relay_app::management::{AdminAuth, AdminPorts};
 use vnc_relay_app::metrics::{MetricSources, Metrics, MetricsService};
 use vnc_relay_app::ports::{
-    Clock, EventSink, HashError, PasswordHasher, PasswordVerifier, RelayCloseAction,
+    Clock, EventSink, HashError, PasswordHashGateway, PasswordVerifyGateway, RelayCloseAction,
     RelayLifecycle, RelaySessionControl, RelayStateSource, RelayStream,
 };
 use vnc_relay_app::relay::{
@@ -203,7 +203,7 @@ async fn start_with(
         upgrade,
         session,
         limit,
-        Arc::new(Argon2Verifier),
+        Arc::new(Argon2PasswordVerifyGateway),
         Arc::new(SystemClock::new()),
     )
     .await
@@ -216,7 +216,7 @@ async fn start_with_ports(
     upgrade: Duration,
     session: AdminSessionPolicy,
     limit: LoginLimitPolicy,
-    verifier: Arc<dyn PasswordVerifier>,
+    verifier: Arc<dyn PasswordVerifyGateway>,
     clock: Arc<dyn Clock>,
 ) -> Running {
     start_with_ports_and_logs(
@@ -237,7 +237,7 @@ async fn start_with_ports_and_logs(
     upgrade: Duration,
     session: AdminSessionPolicy,
     limit: LoginLimitPolicy,
-    verifier: Arc<dyn PasswordVerifier>,
+    verifier: Arc<dyn PasswordVerifyGateway>,
     state: (Arc<dyn Clock>, Arc<RecentLogs>),
 ) -> Running {
     let (clock, logs) = state;
@@ -339,7 +339,7 @@ struct RunningRelay {
     server: SocketAddr,
     stop: watch::Sender<bool>,
     tasks: Vec<JoinHandle<()>>,
-    runtime: Arc<RelayRuntime<TcpTargetConnector>>,
+    runtime: Arc<RelayRuntime<TcpTargetGateway>>,
     service: Arc<RelayService>,
     budget: Arc<ConnectionBudget>,
     clock: Arc<dyn Clock>,
@@ -348,13 +348,13 @@ struct RunningRelay {
 
 impl RunningRelay {
     async fn start(session: AdminSessionPolicy) -> Self {
-        Self::start_with_control(session, false, Arc::new(Argon2Verifier)).await
+        Self::start_with_control(session, false, Arc::new(Argon2PasswordVerifyGateway)).await
     }
 
     async fn start_with_control(
         session: AdminSessionPolicy,
         fail_first: bool,
-        verifier: Arc<dyn PasswordVerifier>,
+        verifier: Arc<dyn PasswordVerifyGateway>,
     ) -> Self {
         Self::start_with_clock(session, fail_first, verifier, Arc::new(SystemClock::new())).await
     }
@@ -362,7 +362,7 @@ impl RunningRelay {
     async fn start_with_clock(
         session: AdminSessionPolicy,
         fail_first: bool,
-        verifier: Arc<dyn PasswordVerifier>,
+        verifier: Arc<dyn PasswordVerifyGateway>,
         clock: Arc<dyn Clock>,
     ) -> Self {
         let events = Arc::new(Recorder::default());
@@ -371,7 +371,7 @@ impl RunningRelay {
         let admin_budget = ConnectionBudget::new();
         let cell = management_runtime(ROOMY_LM, UPGRADE, Duration::from_secs(1));
         let runtime = Arc::new(RelayRuntime::new(
-            TcpTargetConnector::new(cell.clone()),
+            TcpTargetGateway::new(cell.clone()),
             Arc::new(RelayIdKey::generate().unwrap_or_else(|error| panic!("relay key: {error:?}"))),
             Arc::new(
                 SessionIdKey::generate().unwrap_or_else(|error| panic!("session key: {error:?}")),
@@ -635,7 +635,7 @@ impl RelayPair {
 /// Only the first accepted control request loses its completion. Query state
 /// and all later termination requests still use the real relay runtime.
 struct FailFirstTermination {
-    runtime: Arc<RelayRuntime<TcpTargetConnector>>,
+    runtime: Arc<RelayRuntime<TcpTargetGateway>>,
     fail_next: AtomicBool,
 }
 
@@ -674,10 +674,10 @@ impl RelaySessionControl for FailFirstTermination {
 #[derive(Default)]
 struct HashRecordingVerifier(Mutex<String>);
 
-impl PasswordVerifier for HashRecordingVerifier {
+impl PasswordVerifyGateway for HashRecordingVerifier {
     fn verify(&self, typed: &str, hash: &PasswordHash) -> Result<bool, HashError> {
         *self.0.lock().unwrap_or_else(PoisonError::into_inner) = hash.as_str().to_owned();
-        Argon2Verifier.verify(typed, hash)
+        Argon2PasswordVerifyGateway.verify(typed, hash)
     }
 }
 
@@ -1415,7 +1415,7 @@ fn empty_sources() -> Arc<SourcesService> {
     let ip_info = Arc::new(IpInfoService::new(
         None,
         None,
-        Arc::new(MmdbLoader),
+        Arc::new(MmdbFileGateway),
         Arc::clone(&lookup),
         Arc::clone(&clock),
         Arc::new(Recorder::default()),
@@ -1433,7 +1433,7 @@ fn admin_auth(
     log: Arc<dyn EventSink>,
     session: AdminSessionPolicy,
     limit: LoginLimitPolicy,
-    verifier: Arc<dyn PasswordVerifier>,
+    verifier: Arc<dyn PasswordVerifyGateway>,
     clock: Arc<dyn Clock>,
 ) -> Arc<AdminAuth> {
     let accounts: Vec<Account> = [(ACCOUNT, PASSWORD), (OTHER_ACCOUNT, OTHER_PASSWORD)]
@@ -1443,7 +1443,7 @@ fn admin_auth(
                 .unwrap_or_else(|error| panic!("test account name is valid: {error}"));
             let password = Password::parse(password.to_owned())
                 .unwrap_or_else(|error| panic!("test password is valid: {error:?}"));
-            let password_hash = Argon2Hasher
+            let password_hash = Argon2PasswordHashGateway
                 .hash(&password, TEST_PARAMS)
                 .unwrap_or_else(|error| panic!("test hash is made: {error}"));
             Account {
@@ -1452,7 +1452,7 @@ fn admin_auth(
             }
         })
         .collect();
-    let dummy = dummy_hash(&Argon2Hasher, TEST_PARAMS)
+    let dummy = dummy_hash(&Argon2PasswordHashGateway, TEST_PARAMS)
         .unwrap_or_else(|error| panic!("dummy hash is made: {error}"));
     let ports = AdminPorts {
         verifier,
@@ -1494,10 +1494,10 @@ impl CountingVerifier {
     }
 }
 
-impl PasswordVerifier for CountingVerifier {
+impl PasswordVerifyGateway for CountingVerifier {
     fn verify(&self, typed: &str, hash: &PasswordHash) -> Result<bool, HashError> {
         *self.0.lock().unwrap_or_else(PoisonError::into_inner) += 1;
-        Argon2Verifier.verify(typed, hash)
+        Argon2PasswordVerifyGateway.verify(typed, hash)
     }
 }
 
@@ -2434,7 +2434,7 @@ async fn terminate_rejects_all_actual_bodies_but_allows_empty_content_types_with
         UPGRADE,
         session_policy(),
         limit_policy(),
-        Arc::new(Argon2Verifier),
+        Arc::new(Argon2PasswordVerifyGateway),
         clock.clone(),
     )
     .await;
@@ -2529,8 +2529,12 @@ async fn acknowledge_pair_close(pair: &mut RelayPair) {
 /// spec: management.md:MGT-012
 #[tokio::test]
 async fn completion_mgt012_failed_control_and_lost_response_never_invent_completion() {
-    let relay =
-        RunningRelay::start_with_control(session_policy(), true, Arc::new(Argon2Verifier)).await;
+    let relay = RunningRelay::start_with_control(
+        session_policy(),
+        true,
+        Arc::new(Argon2PasswordVerifyGateway),
+    )
+    .await;
     let running = &relay.management;
     let mut pair = relay.pair().await;
     let login = plain_exchange(running.addr, &login_request(ACCOUNT, PASSWORD)).await;
@@ -2852,7 +2856,7 @@ async fn completion_mgt013_query_auth_and_failed_termination_responses_keep_secr
 }
 
 struct ObservedRelaySource {
-    runtime: Arc<RelayRuntime<TcpTargetConnector>>,
+    runtime: Arc<RelayRuntime<TcpTargetGateway>>,
     after_snapshot: Mutex<Option<Box<dyn FnOnce() + Send>>>,
     last: Mutex<Option<RelaySnapshot>>,
 }
@@ -3249,7 +3253,7 @@ async fn completion_mgt007_reconnect_fresh_runtime_and_wall_steps_keep_counters_
     let relay = RunningRelay::start_with_clock(
         session_policy(),
         false,
-        Arc::new(Argon2Verifier),
+        Arc::new(Argon2PasswordVerifyGateway),
         clock.clone(),
     )
     .await;
@@ -3446,7 +3450,7 @@ async fn completion_mgt016_counts_lists_and_as_of_follow_one_capture_while_usage
     let relay = RunningRelay::start_with_clock(
         session_policy(),
         false,
-        Arc::new(Argon2Verifier),
+        Arc::new(Argon2PasswordVerifyGateway),
         clock.clone(),
     )
     .await;
@@ -4068,7 +4072,7 @@ fn config_fixture_text(
     let service = Arc::new(ConfigEditService::new(
         reload.clone(),
         files.clone(),
-        Arc::new(TomlConfigDocument),
+        Arc::new(TomlConfigDocumentGateway),
         base.join("relay.toml"),
         base,
         clock,
@@ -4083,7 +4087,7 @@ fn config_fixture_text(
 }
 
 async fn start_config_services(
-    config: Arc<dyn ConfigManagement>,
+    config: Arc<dyn ConfigService>,
     events: Arc<Recorder>,
     clock: Arc<dyn Clock>,
 ) -> Running {
@@ -4094,7 +4098,7 @@ async fn start_config_services(
         log.clone(),
         session_policy(),
         limit_policy(),
-        Arc::new(Argon2Verifier),
+        Arc::new(Argon2PasswordVerifyGateway),
         clock.clone(),
     );
     let relay_budget = ConnectionBudget::new();
@@ -5059,7 +5063,7 @@ async fn explicit_config_retry_after_write_repair_commits_and_audits_once() {
 }
 
 struct FailedConfigQuery;
-impl ConfigManagement for FailedConfigQuery {
+impl ConfigService for FailedConfigQuery {
     fn get(&self) -> Result<ConfigView, ConfigGetError> {
         Err(ConfigGetError::Internal)
     }
@@ -5169,7 +5173,7 @@ async fn config_user_actions_extend_idle_but_failures_do_not() {
         let clock = Arc::new(FakeClock::default());
         let fixture = config_fixture(action != "disabled", clock.clone(), events.clone());
         let revision = config_revision(&fixture);
-        let config: Arc<dyn ConfigManagement> = if action == "internal" {
+        let config: Arc<dyn ConfigService> = if action == "internal" {
             Arc::new(FailedConfigQuery)
         } else {
             fixture.service.clone()
@@ -5672,7 +5676,7 @@ async fn session_queries_and_termination_provide_full_transport_and_forwarded_ip
         events.clone(),
         session_policy(),
         limit_policy(),
-        Arc::new(Argon2Verifier),
+        Arc::new(Argon2PasswordVerifyGateway),
         clock.clone(),
     );
     let query = Arc::new(ManagementQueryService::new(
@@ -6196,7 +6200,7 @@ async fn recent_logs_zero_max_entries_and_empty_buffer_responses() {
         UPGRADE,
         session_policy(),
         limit_policy(),
-        Arc::new(Argon2Verifier),
+        Arc::new(Argon2PasswordVerifyGateway),
         (Arc::new(SystemClock::new()), zero_logs),
     )
     .await;
@@ -6222,7 +6226,7 @@ async fn recent_logs_polling_idle_timeout_and_unauthenticated_guard() {
         UPGRADE,
         session,
         limit_policy(),
-        Arc::new(Argon2Verifier),
+        Arc::new(Argon2PasswordVerifyGateway),
         clock.clone(),
     )
     .await;
@@ -6314,7 +6318,7 @@ async fn metrics_need_a_session_and_automatic_refresh_does_not_extend_it() {
         UPGRADE,
         session,
         limit_policy(),
-        Arc::new(Argon2Verifier),
+        Arc::new(Argon2PasswordVerifyGateway),
         clock.clone(),
     )
     .await;

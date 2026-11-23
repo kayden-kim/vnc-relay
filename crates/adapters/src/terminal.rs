@@ -9,7 +9,7 @@ use std::sync::mpsc::{self, RecvTimeoutError};
 use std::thread;
 use std::time::Duration;
 
-use vnc_relay_app::ports::{AccountInput, InputError};
+use vnc_relay_app::ports::{AccountInputGateway, InputError};
 
 #[cfg(windows)]
 #[expect(
@@ -48,11 +48,11 @@ const CANCEL_GRACE: Duration = Duration::from_millis(500);
 
 /// The console of the operator. Prompts go to stderr.
 #[derive(Debug)]
-pub struct Terminal {
+pub struct TerminalAccountInputGateway {
     canceled: Arc<AtomicBool>,
 }
 
-impl Terminal {
+impl TerminalAccountInputGateway {
     /// Starts the Ctrl+C detector. It lives until the process ends. From now
     /// on Ctrl+C sets a flag instead of ending the process, so rpassword can
     /// give the terminal settings back first on Unix. On Windows `hidden`
@@ -172,7 +172,7 @@ fn end_canceled_prompt<T>(outcome: Result<T, InputError>) -> Result<T, InputErro
     outcome
 }
 
-impl AccountInput for Terminal {
+impl AccountInputGateway for TerminalAccountInputGateway {
     fn hidden(&self, prompt: &str) -> Result<String, InputError> {
         self.ready()?;
         let kept = KeptInputMode::save().map_err(|error| {

@@ -16,7 +16,7 @@ use super::{
 };
 use crate::events::{AbortReason, Event, RejectReason, Stage, TargetFailureReason};
 use crate::ports::{
-    Clock, RelayCloseAction, RelayLifecycle, RelayStreamError, TargetConnector, TargetError,
+    Clock, RelayCloseAction, RelayLifecycle, RelayStreamError, TargetError, TargetGateway,
 };
 
 struct Connecting<'a, C>(&'a RelayRuntime<C>);
@@ -34,7 +34,7 @@ enum Failure {
     Aborted(AbortReason),
 }
 
-pub(super) async fn dispatch<C: TargetConnector>(
+pub(super) async fn dispatch<C: TargetGateway>(
     service: &RelayService,
     runtime: &RelayRuntime<C>,
     mut viewer: OwnedConnection,
@@ -246,7 +246,7 @@ fn stream_abort(error: &std::io::Error) -> AbortReason {
     }
 }
 
-async fn connect<C: TargetConnector>(
+async fn connect<C: TargetGateway>(
     service: &RelayService,
     runtime: &RelayRuntime<C>,
     address: &TargetAddress,

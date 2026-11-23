@@ -16,7 +16,7 @@ use super::{
     milliseconds,
 };
 use crate::events::{AbortReason, Event, RejectReason, RelayIdRef, Stage, WaitingRemovalReason};
-use crate::ports::{RelayCloseAction, RelayLifecycle, RelayStreamError, TargetConnector};
+use crate::ports::{RelayCloseAction, RelayLifecycle, RelayStreamError, TargetGateway};
 
 pub(super) struct WaitingConnection {
     pub(super) connection: OwnedConnection,
@@ -138,7 +138,7 @@ impl<C> Drop for ClaimGuard<'_, C> {
     }
 }
 
-pub(super) async fn dispatch<C: TargetConnector>(
+pub(super) async fn dispatch<C: TargetGateway>(
     service: &RelayService,
     runtime: &RelayRuntime<C>,
     incoming: OwnedConnection,
@@ -352,7 +352,7 @@ pub(super) async fn dispatch<C: TargetConnector>(
     }
 }
 
-async fn wait<C: TargetConnector>(
+async fn wait<C: TargetGateway>(
     service: &RelayService,
     runtime: &RelayRuntime<C>,
     id: &RelayId,
@@ -451,7 +451,7 @@ async fn wait<C: TargetConnector>(
     Ok(())
 }
 
-async fn cleanup<C: TargetConnector>(
+async fn cleanup<C: TargetGateway>(
     service: &RelayService,
     runtime: &RelayRuntime<C>,
     removed: Removed,

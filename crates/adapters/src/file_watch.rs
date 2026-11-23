@@ -16,7 +16,7 @@ use std::pin::pin;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
-use feed::{ChangeFeed, ChangeQueue, NotifyFeed, WatchTarget};
+use feed::{ChangeQueue, NotifyWatchGateway, WatchGateway, WatchTarget};
 use tokio::sync::{mpsc, watch};
 use vnc_relay_app::events::Event;
 use vnc_relay_app::ip_info::IpInfoService;
@@ -101,7 +101,7 @@ pub fn start<A: Clone, C: ReloadClock>(
     output: Arc<JsonLinesEventSink>,
 ) -> Result<ReloadWatcher<A, C>, ReloadWatchError> {
     let mut watcher = assemble(config_path, service, poll, clock, files, log, |queue| {
-        let feed: Box<dyn ChangeFeed> = Box::new(NotifyFeed::new(queue)?);
+        let feed: Box<dyn WatchGateway> = Box::new(NotifyWatchGateway::new(queue)?);
         Ok(feed)
     })?;
     watcher.attach_log(output);
@@ -116,7 +116,7 @@ fn assemble<A: Clone, C: ReloadClock>(
     clock: C,
     files: Arc<dyn ReloadFileStore>,
     log: Arc<dyn EventSink>,
-    make_feed: impl FnOnce(Arc<ChangeQueue>) -> Result<Box<dyn ChangeFeed>, ReloadWatchError>,
+    make_feed: impl FnOnce(Arc<ChangeQueue>) -> Result<Box<dyn WatchGateway>, ReloadWatchError>,
 ) -> Result<ReloadWatcher<A, C>, ReloadWatchError> {
     let config_path = std::path::absolute(config_path)
         .map_err(|error| ReloadWatchError::new(format!("{}: {error}", config_path.display())))?;
@@ -152,7 +152,7 @@ pub struct ReloadWatcher<A, C> {
     config_path: PathBuf,
     base_dir: PathBuf,
     service: SharedReload<A>,
-    feed: Box<dyn ChangeFeed>,
+    feed: Box<dyn WatchGateway>,
     queue: Arc<ChangeQueue>,
     wake: mpsc::Receiver<()>,
     poll: Duration,
@@ -805,7 +805,7 @@ mod tests {
         refuse: Arc<AtomicBool>,
     }
 
-    impl ChangeFeed for SwitchFeed {
+    impl WatchGateway for SwitchFeed {
         fn watch_dirs(
             &mut self,
             _required: &BTreeSet<PathBuf>,
@@ -947,7 +947,7 @@ mod tests {
             files.clone(),
             sink.clone(),
             |_queue| {
-                let feed: Box<dyn ChangeFeed> = Box::new(SwitchFeed { refuse });
+                let feed: Box<dyn WatchGateway> = Box::new(SwitchFeed { refuse });
                 Ok(feed)
             },
         )?;
@@ -1506,7 +1506,7 @@ mod tests {
 
     struct TextDb(vnc_relay_app::ip_info::IpDbMetadata);
 
-    impl vnc_relay_app::ports::IpDatabase for TextDb {
+    impl vnc_relay_app::ports::IpDbLookupGateway for TextDb {
         fn metadata(&self) -> &vnc_relay_app::ip_info::IpDbMetadata {
             &self.0
         }
@@ -1524,7 +1524,7 @@ mod tests {
         }
     }
 
-    impl vnc_relay_app::ports::IpDbLoader for TextLoader {
+    impl vnc_relay_app::ports::IpDbFileGateway for TextLoader {
         fn read(&self, path: &Path) -> vnc_relay_app::ip_info::IpDbRead {
             use vnc_relay_app::ip_info::{
                 Fingerprint, IpDbError, IpDbFailure, IpDbMetadata, IpDbRead,
@@ -1542,7 +1542,7 @@ mod tests {
             let result = match bytes.strip_prefix(b"db:") {
                 Some(kind) => {
                     let kind = String::from_utf8_lossy(kind);
-                    let db: Arc<dyn vnc_relay_app::ports::IpDatabase> =
+                    let db: Arc<dyn vnc_relay_app::ports::IpDbLookupGateway> =
                         Arc::new(TextDb(IpDbMetadata::new(&kind, SystemTime::UNIX_EPOCH)));
                     Ok(db)
                 }

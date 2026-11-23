@@ -6,7 +6,7 @@ use std::fmt;
 
 use vnc_relay_domain::account::{Account, AccountName, Argon2Params, Password, PasswordHash};
 
-use crate::ports::{AccountInput, AccountStore, InputError, PasswordHasher};
+use crate::ports::{AccountInputGateway, AccountStore, InputError, PasswordHashGateway};
 
 /// Config key of the account file path. File-level diagnostics and warnings
 /// use it as their `key` (cli-v1 §1.3).
@@ -197,8 +197,8 @@ pub fn list(
 /// Warnings go to the `warn` function of each call as they happen.
 pub struct AdminService<'a> {
     pub store: &'a dyn AccountStore,
-    pub input: &'a dyn AccountInput,
-    pub hasher: &'a dyn PasswordHasher,
+    pub input: &'a dyn AccountInputGateway,
+    pub hasher: &'a dyn PasswordHashGateway,
     /// Parameters of new hashes (`admin.argon2`).
     pub params: Argon2Params,
 }
@@ -452,7 +452,7 @@ mod tests {
         }
     }
 
-    impl AccountInput for FakeInput {
+    impl AccountInputGateway for FakeInput {
         fn hidden(&self, prompt: &str) -> Result<String, InputError> {
             self.next(prompt)?.ok_or(InputError::Canceled)
         }
@@ -468,7 +468,7 @@ mod tests {
 
     struct FakeHasher;
 
-    impl PasswordHasher for FakeHasher {
+    impl PasswordHashGateway for FakeHasher {
         fn hash(
             &self,
             password: &Password,

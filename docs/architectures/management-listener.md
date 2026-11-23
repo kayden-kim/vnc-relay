@@ -65,7 +65,7 @@ flowchart LR
 | `crates/adapters/src/management_http.rs` `static_answer`, `static_file` | 정적 경로 응답을 만든다(4절 6–8단계). 메서드를 검사하고, `/`·`/app/`은 세션을 읽기만 확인한 뒤 `dashboard_assets.rs` 표에서 파일을 찾는다. 파일 응답에 헤더를 붙인다. | `answer`가 정적 경로일 때 부른다 | axum, app(`AdminAuth::authorize`), `dashboard_assets.rs` |
 | `crates/adapters/src/management_http.rs` `PeerAddr` | 접속의 상대 소켓 주소를 `PeerIp`로 바꾼다(IPv4 매핑 IPv6는 IPv4로). 로그인 제한 키와 로그 `peer_ip`가 같은 값을 쓴다. `axum::extract::connect_info::Connected`를 구현한다. | `ManagementListener::run`이 `into_make_service_with_connect_info::<PeerAddr>()`로 만든다 | domain(`PeerIp`), axum |
 | `crates/adapters/src/management_http/session_api.rs` `answer` | `/api/v1/`의 인증 경계다. 로그인 이외는 세션→POST/PATCH/DELETE CSRF→경로/메서드 순으로 검사한 뒤 session/config/terminate/logs/query/metrics/sources handler로 전달한다. `/api/v1/sources`는 `sources_api::answer`로 보낸다([접속 출처 모듈 설계](source-stats.md)). | `management_http.rs` `answer`가 호출 | axum, app `AdminAuth` |
-| `crates/adapters/src/management_http/config_api.rs` `answer`, `patch_body`, `view_body`, `edit_error` | 설정 GET/PATCH 본문·64 KiB 상한·오류 직렬화·blocking 서비스 호출을 맡는다. 성공한 사용자 행동만 세션 유휴 기한을 연장한다. | 인증/CSRF 이후 요청마다 | app `ConfigManagement`, axum, serde_json |
+| `crates/adapters/src/management_http/config_api.rs` `answer`, `patch_body`, `view_body`, `edit_error` | 설정 GET/PATCH 본문·64 KiB 상한·오류 직렬화·blocking 서비스 호출을 맡는다. 성공한 사용자 행동만 세션 유휴 기한을 연장한다. | 인증/CSRF 이후 요청마다 | app `ConfigService`, axum, serde_json |
 | `crates/adapters/src/status_http.rs` `StatusListener` | 상태 리스너. `AdmittingListener`를 `status` 이름으로 쓴다. | `serve`가 상태 리스너를 바인드한 직후 띄운다. | `admission` 모듈 |
 | `crates/adapters/src/dashboard_assets.rs` `Asset`, `ASSETS`, `find_asset` | 정적 파일 표. 한 항목은 제공 경로, Content-Type, `include_bytes!`로 넣은 본문을 가진다. `find_asset`은 요청 경로와 정확히 같은 항목만 찾는다. `preview/`·`tests/`는 넣지 않는다. | 빌드 때 상수로 실행 파일에 들어간다 | 없음(std) |
 | `crates/app/src/events.rs` `Stage::Tls`, `RejectReason::TlsVersionUnsupported` | `connection_rejected`의 `stage` 값 `tls`와 `reason` 값 `tls_version_unsupported` | 사건이 생길 때 | 없음 |
@@ -106,7 +106,7 @@ flowchart LR
 
 관리 응답은 모두 `Cache-Control: no-store`를 가진다. 로그인 화면의 정적 응답도 같다. 정적 보안 헤더(`X-Content-Type-Options`·`Referrer-Policy`·`Content-Security-Policy`, 계약 1.11절)는 정적 파일 응답(200)에만 붙인다. 303과 404 응답에는 보안 헤더를 붙이지 않는다.
 
-`ManagementServices.config: Arc<dyn ConfigManagement>`를 `Shared`에 전달한다. `session_api::answer`는 인증과 POST/PATCH/DELETE CSRF 검사 뒤 `/api/v1/config`를 `config_api::answer`로 보낸다. GET/PATCH의 파일 작업은 `spawn_blocking`에서 수행하므로 응답 유실이 이미 시작한 트랜잭션을 취소하지 않는다. PATCH에는 terminate 전용 U 중지 예외를 적용하지 않는다. U는 관리 연결 수락 때 현재값으로 고정한다. `DashboardHints::terminate_timeout_secs`는 로그인·세션 조회 응답 때 현재 E+5를 만든다([설정 보기·편집](config-edit.md#6-http시간-제한종료-유예), [API 요청 처리 순서](../contracts/management-api-v1.md#13-요청-처리-순서)).
+`ManagementServices.config: Arc<dyn ConfigService>`를 `Shared`에 전달한다. `session_api::answer`는 인증과 POST/PATCH/DELETE CSRF 검사 뒤 `/api/v1/config`를 `config_api::answer`로 보낸다. GET/PATCH의 파일 작업은 `spawn_blocking`에서 수행하므로 응답 유실이 이미 시작한 트랜잭션을 취소하지 않는다. PATCH에는 terminate 전용 U 중지 예외를 적용하지 않는다. U는 관리 연결 수락 때 현재값으로 고정한다. `DashboardHints::terminate_timeout_secs`는 로그인·세션 조회 응답 때 현재 E+5를 만든다([설정 보기·편집](config-edit.md#6-http시간-제한종료-유예), [API 요청 처리 순서](../contracts/management-api-v1.md#13-요청-처리-순서)).
 
 ## 5. 상태와 초기화
 

@@ -101,7 +101,7 @@ pub trait ConfigFileStore: Send + Sync {
         next: &[u8],
     ) -> Result<(), ConfigReplaceError>;
 }
-pub trait ConfigDocument: Send + Sync {
+pub trait ConfigDocumentGateway: Send + Sync {
     fn parse(
         &self,
         bytes: &[u8],
@@ -113,7 +113,7 @@ pub trait ConfigDocument: Send + Sync {
         changes: &[ConfigChange],
     ) -> Result<Vec<u8>, Vec<ConfigDiagnostic>>;
 }
-pub trait ConfigManagement: Send + Sync {
+pub trait ConfigService: Send + Sync {
     fn get(&self) -> Result<ConfigView, ConfigGetError>;
     fn patch(
         &self,
@@ -125,7 +125,7 @@ pub trait ConfigManagement: Send + Sync {
 pub struct ConfigEditService<A> {
     reload: SharedReload<A>,
     files: Arc<dyn ConfigFileStore>,
-    document: Arc<dyn ConfigDocument>,
+    document: Arc<dyn ConfigDocumentGateway>,
     config_path: PathBuf,
     base_dir: PathBuf,
     clock: Arc<dyn Clock>,
@@ -135,7 +135,7 @@ impl<A> ConfigEditService<A> {
     pub fn new(
         reload: SharedReload<A>,
         files: Arc<dyn ConfigFileStore>,
-        document: Arc<dyn ConfigDocument>,
+        document: Arc<dyn ConfigDocumentGateway>,
         config_path: PathBuf,
         base_dir: PathBuf,
         clock: Arc<dyn Clock>,
@@ -171,7 +171,7 @@ impl<A> ConfigEditService<A> {
         error
     }
 }
-impl<A: Clone + Send + Sync + 'static> ConfigManagement for ConfigEditService<A> {
+impl<A: Clone + Send + Sync + 'static> ConfigService for ConfigEditService<A> {
     fn get(&self) -> Result<ConfigView, ConfigGetError> {
         let reload = self.reload.lock().map_err(|_| ConfigGetError::Internal)?;
         let bytes = self.files.read(&self.config_path).ok();

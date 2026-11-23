@@ -4,10 +4,10 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use vnc_relay_adapters::config_edit::{FsConfigFileStore, TomlConfigDocument};
+use vnc_relay_adapters::config_edit::{FsConfigFileStore, TomlConfigDocumentGateway};
 use vnc_relay_adapters::config_file::parse_candidate;
 use vnc_relay_app::management::config::{
-    ConfigChange, ConfigDocument, ConfigFileStore, ConfigReplaceError, ConfigValue,
+    ConfigChange, ConfigDocumentGateway, ConfigFileStore, ConfigReplaceError, ConfigValue,
 };
 use vnc_relay_app::settings::ConfigError;
 
@@ -25,7 +25,7 @@ fn strings(values: &[&str]) -> ConfigValue {
 }
 
 fn edit(source: &str, changes: &[ConfigChange]) -> String {
-    let bytes = TomlConfigDocument
+    let bytes = TomlConfigDocumentGateway
         .edit(source.as_bytes(), changes)
         .unwrap_or_else(|diagnostics| panic!("edit failed: {diagnostics:?}"));
     String::from_utf8(bytes).unwrap_or_else(|error| panic!("non-UTF8 result: {error}"))
@@ -123,7 +123,7 @@ fn candidate_defaults_config_edit_off_and_collects_only_explicit_leaf_keys() {
         "{}\n[relay.ws.viewer]\nenabled = false\nallowed_origins = []\nallow = ['127.0.0.1']\n[mode1]\nenabled = false\nallow_targets = []\n",
         REQUIRED.replace("[management]\n", "[management]\nconfig_edit = true\n")
     );
-    let parsed = TomlConfigDocument
+    let parsed = TomlConfigDocumentGateway
         .parse(source.as_bytes(), base)
         .unwrap_or_else(|diagnostics| panic!("parse: {diagnostics:?}"));
     assert!(parsed.settings.management.config_edit);
@@ -170,11 +170,11 @@ fn candidate_presence_handles_inline_and_dotted_tables_and_checks_new_flag_type(
 fn non_utf8_is_unreadable_without_echoing_file_content() {
     let bytes = b"private sentinel\xff";
     for diagnostics in [
-        TomlConfigDocument
+        TomlConfigDocumentGateway
             .parse(bytes, Path::new("."))
             .err()
             .unwrap_or_else(|| panic!("accepted invalid UTF8")),
-        TomlConfigDocument
+        TomlConfigDocumentGateway
             .edit(bytes, &[])
             .err()
             .unwrap_or_else(|| panic!("edited invalid UTF8")),
@@ -184,7 +184,7 @@ fn non_utf8_is_unreadable_without_echoing_file_content() {
         assert_eq!(diagnostics[0].key, "");
         assert!(!diagnostics[0].message.contains("sentinel"));
     }
-    let diagnostics = TomlConfigDocument
+    let diagnostics = TomlConfigDocumentGateway
         .edit(b"secret = [ private sentinel", &[])
         .err();
     // Empty changes must still validate syntax, not hide a corrupt document.
@@ -210,7 +210,7 @@ fn semantically_equal_values_keep_every_original_byte_and_file_metadata() {
     let path = fixture.path();
     fs::write(&path, source).unwrap_or_else(|error| panic!("write fixture: {error}"));
     let before = fs::metadata(&path).unwrap_or_else(|error| panic!("metadata: {error}"));
-    let result = TomlConfigDocument
+    let result = TomlConfigDocumentGateway
         .edit(
             &FsConfigFileStore
                 .read(&path)
@@ -458,7 +458,7 @@ fn real_file_replacement_saves_exact_bytes_preserves_permissions_and_leaves_no_t
         .unwrap_or_else(|error| panic!("read: {error}"));
     assert_eq!(bytes, next.as_bytes());
     assert_ne!(store.revision(&bytes), store.revision(original.as_bytes()));
-    let parsed = TomlConfigDocument
+    let parsed = TomlConfigDocumentGateway
         .parse(&bytes, &fixture.0)
         .unwrap_or_else(|diagnostics| panic!("parse: {diagnostics:?}"));
     assert!(parsed.settings.management.config_edit);

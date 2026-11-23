@@ -7,7 +7,7 @@
 | 구조 시점 | Current |
 | 문서 상태 | Draft |
 | 구현 대조 | Verified — [대조 기록](#대조-기록) |
-| 코드 위치 | `crates/domain/src/ip_info.rs`, `crates/app/src/ip_info.rs`, `crates/app/src/sources.rs`와 `crates/app/src/sources/`, `crates/app/src/ports.rs`(`IpDbLoader`, `IpDatabase`), `crates/adapters/src/ip_db.rs`, `crates/adapters/src/management_http/sources_api.rs`, `crates/adapters/src/file_watch.rs`(IP 정보 DB 감시), `crates/adapters/src/config_file.rs`(`[ip_info]`), `src/serve.rs` |
+| 코드 위치 | `crates/domain/src/ip_info.rs`, `crates/app/src/ip_info.rs`, `crates/app/src/sources.rs`와 `crates/app/src/sources/`, `crates/app/src/ports.rs`(`IpDbFileGateway`, `IpDbLookupGateway`), `crates/adapters/src/ip_db.rs`, `crates/adapters/src/management_http/sources_api.rs`, `crates/adapters/src/file_watch.rs`(IP 정보 DB 감시), `crates/adapters/src/config_file.rs`(`[ip_info]`), `src/serve.rs` |
 | 코드 지도 | [코드 지도 2.1절](code-map.md#21-domain)·[2.2절](code-map.md#22-app)·[2.3절](code-map.md#23-adapters와-실행파일-조립)의 접속 출처 행 |
 | 관련 스펙 | [운영 스펙 3.9절](../specs/operations.md#39-접속-출처-통계) OPS-095~099, [관리 스펙 2.6절](../specs/management.md#26-접속-출처) MGT-062~064, [화면 스펙 SCR-008](../specs/dashboard.md#scr-008-접속-출처) DASH-082~088 |
 | 관련 계약 | [관리 API v1 1.17절](../contracts/management-api-v1.md#117-접속-출처-get-apiv1sources), [설정 v4](../contracts/config-v4.md)의 `[ip_info]`와 [1.12절](../contracts/config-v4.md#112-ip-정보-db-파일-형식), [운영 정보 v2](../contracts/ops-info-v2.md)의 `ip_db_loaded`·`ip_db_unavailable` |
@@ -32,8 +32,8 @@
   - `vnc_relay_domain::ip_info`: `CountryCode`, `Asn`, `Provider::from_database_type`, `is_local`.
   - `vnc_relay_app::ip_info`: `IpLookup`, `IpInfoService`(`load_startup`, `refresh`, `paths`, `status`), `IpDbKey`, `IpDbFailure`, `IpDbMetadata`, `IpDbStatus`.
   - `vnc_relay_app::sources`: `SourceStats`, `SourcesSink`(`EventSink` 구현), `SourcesService::report`, `SourceWindow`, `SourcesReport`.
-  - `vnc_relay_app::ports`: `IpDbLoader`, `IpDatabase`.
-  - `vnc_relay_adapters::ip_db::MmdbLoader`.
+  - `vnc_relay_app::ports`: `IpDbFileGateway`, `IpDbLookupGateway`.
+  - `vnc_relay_adapters::ip_db::MmdbFileGateway`.
 
 ## 2. 내부 구조
 
@@ -49,7 +49,7 @@ flowchart LR
     report["app sources/report.rs SourcesService"]
     lookup["app ip_info.rs IpLookup"]
     info["app ip_info.rs IpInfoService"]
-    loader["adapters ip_db.rs MmdbLoader·MmdbDatabase"]
+    loader["adapters ip_db.rs MmdbFileGateway·MmdbLookupGateway"]
     watch["adapters file_watch.rs ReloadWatcher"]
     api["adapters management_http/sources_api.rs"]
 
@@ -73,13 +73,13 @@ flowchart LR
 | 요소(파일·심볼) | 역할 | 만들어지는 시점과 소유자 | 의존 대상 |
 | --- | --- | --- | --- |
 | `crates/domain/src/ip_info.rs` | 국가 코드(영문 대문자 두 글자)·ASN(1~4294967295) 값 형식, `database_type`으로 제공자 판정, 로컬 주소 판정 | 값·함수. 상태 없음 | std |
-| `crates/app/src/ports.rs` `IpDbLoader`·`IpDatabase` | 파일 하나를 읽어 DB 또는 실패 원인을 돌려주는 포트와, 읽은 DB의 메타데이터·국가·ASN·AS 이름 조회 | adapters가 구현한다 | 없음 |
-| `crates/app/src/ip_info.rs` `IpLookup` | 지금 쓰는 국가 DB·ASN DB 두 칸. 사건 기록과 조회가 읽고 `IpInfoService`만 바꾼다 | `src/serve.rs` `start`가 기록부 사슬을 만들 때 빈 상태로 만든다 | `IpDatabase` |
-| `crates/app/src/ip_info.rs` `IpInfoService` | 설정한 경로를 서로 다른 파일 단위로 묶어 읽고, 키마다 상태·실패 원인·마지막 내용 표시를 둔다. 성공하면 `IpLookup`의 칸을 바꾸고 사건을 기록한다 | `src/serve.rs` `listen_until_shutdown`이 파일 감시를 만들기 전에 만든다 | `IpDbLoader`, `IpLookup`, `Clock`, `EventSink` |
+| `crates/app/src/ports.rs` `IpDbFileGateway`·`IpDbLookupGateway` | 파일 하나를 읽어 DB 또는 실패 원인을 돌려주는 포트와, 읽은 DB의 메타데이터·국가·ASN·AS 이름 조회 | adapters가 구현한다 | 없음 |
+| `crates/app/src/ip_info.rs` `IpLookup` | 지금 쓰는 국가 DB·ASN DB 두 칸. 사건 기록과 조회가 읽고 `IpInfoService`만 바꾼다 | `src/serve.rs` `start`가 기록부 사슬을 만들 때 빈 상태로 만든다 | `IpDbLookupGateway` |
+| `crates/app/src/ip_info.rs` `IpInfoService` | 설정한 경로를 서로 다른 파일 단위로 묶어 읽고, 키마다 상태·실패 원인·마지막 내용 표시를 둔다. 성공하면 `IpLookup`의 칸을 바꾸고 사건을 기록한다 | `src/serve.rs` `listen_until_shutdown`이 파일 감시를 만들기 전에 만든다 | `IpDbFileGateway`, `IpLookup`, `Clock`, `EventSink` |
 | `crates/app/src/sources.rs` `SourceStats` | 사건 고리 버퍼(최대 100,000개), 보류 중인 WS·WSS 수락(최대 65,536개), 버린 사건의 가장 늦은 시각 | `start`가 `Metrics`와 함께 만든다. 프로세스가 끝날 때 없어진다 | `IpLookup`, `Clock` |
 | `crates/app/src/sources.rs` `SourcesSink` | `EventSink` 장식자. 사건을 `SourceStats`에 넣은 뒤 감싼 기록부에 넘긴다 | `start`가 운영 로그 기록부를 감싸 만들고, `MetricsSink`가 이것을 감싼다 | `SourceStats`, 감싼 `EventSink` |
 | `crates/app/src/sources/report.rs` `SourcesService` | 보관 사건을 복사해 기간 안 사건을 주소·국가·ASN별로 세고 정렬해 `SourcesReport`를 만든다 | `listen_until_shutdown`이 관리 리스너를 만들기 전에 만든다 | `SourceStats`, `IpInfoService`, `IpLookup`, `Clock` |
-| `crates/adapters/src/ip_db.rs` `MmdbLoader`·`MmdbDatabase` | 256 MiB 상한 확인, 전체 읽기, `maxminddb::Reader::from_source`와 `verify`, 앞쪽 레코드 4096개로 필드 형식 결정, 내용 해시 | `src/serve.rs`가 만든다. `MmdbDatabase`는 읽을 때마다 새로 만들어 `Arc`로 공유한다 | `maxminddb`, std |
+| `crates/adapters/src/ip_db.rs` `MmdbFileGateway`·`MmdbLookupGateway` | 256 MiB 상한 확인, 전체 읽기, `maxminddb::Reader::from_source`와 `verify`, 앞쪽 레코드 4096개로 필드 형식 결정, 내용 해시 | `src/serve.rs`가 만든다. `MmdbLookupGateway`는 읽을 때마다 새로 만들어 `Arc`로 공유한다 | `maxminddb`, std |
 | `crates/adapters/src/file_watch.rs` `ReloadWatcher::attach_ip_info` | DB 경로를 알림 대상과 주기 확인 대상에 더한다. DB 파일만을 위한 디렉터리는 등록 실패를 무시하는 선택 등록이다. 에피소드가 끝나면 내용 해시가 바뀐 DB 경로로 `IpInfoService::refresh`를 부른다 | `listen_until_shutdown`이 감시 시작 직후 부른다 | `IpInfoService` |
 | `crates/adapters/src/management_http/sources_api.rs` | `GET /api/v1/sources`. 메서드·폴링 헤더·본문·`window` 검사와 JSON 직렬화 | 관리 리스너 라우터가 연결한다. 인증은 `session_api.rs`가 먼저 한다 | `SourcesService` |
 | `src/serve.rs` | 생성·주입. 기록부 사슬 `MetricsSink → SourcesSink → JsonLinesEventSink`, 감시 준비 뒤 DB 첫 읽기 | 프로세스 시작 | 위 요소 모두 |
@@ -126,8 +126,8 @@ flowchart LR
 ### 4.3 DB 첫 읽기
 
 1. `listen_until_shutdown`이 `file_watch::start`로 감시 등록을 만들고 `attach_ip_info`로 DB 경로를 더한다. `attach_ip_info`는 이때 DB 파일의 내용 해시를 기준값으로 계산한다. 그 뒤 `IpInfoService::load_startup`을 `block_in_place` 안에서 부른다. 최대 256 MiB 파일을 읽고 검사하는 동안 비동기 작업자 스레드를 막기 때문이다. 리스너 바인드 전이다.
-2. 서로 다른 경로마다 `IpDbLoader::read`를 한 번 부른다. 두 키가 같은 파일이면 한 번 읽어 두 키에 쓴다.
-3. 키마다 `IpDatabase::supports`로 필드가 있는지 본다. 있으면 `IpLookup`의 칸에 넣고 `ip_db_loaded(phase=startup)`, 없거나 읽기에 실패하면 `ip_db_unavailable(phase=startup)`을 쓴다.
+2. 서로 다른 경로마다 `IpDbFileGateway::read`를 한 번 부른다. 두 키가 같은 파일이면 한 번 읽어 두 키에 쓴다.
+3. 키마다 `IpDbLookupGateway::supports`로 필드가 있는지 본다. 있으면 `IpLookup`의 칸에 넣고 `ip_db_loaded(phase=startup)`, 없거나 읽기에 실패하면 `ip_db_unavailable(phase=startup)`을 쓴다.
 4. 감시 작업은 첫 읽기 뒤에 시작한다. 감시를 먼저 등록했으므로 그 사이 바뀐 파일은 알림이나 주기 확인으로 다시 읽는다.
 
 ### 4.4 다시 읽기
@@ -167,7 +167,7 @@ flowchart LR
 - 사건 보관과 조회 때 집계: 분 단위 묶음 대신 사건을 그대로 둔다. 1시간·24시간 두 기간을 같은 자료로 정확히 세고, 주소 행의 마지막 시각을 밀리초로 낼 수 있다. 사건 버퍼는 100,000개 상한으로 약 4 MB에 묶인다. 보류 표는 65,536개 상한으로 따로 묶이며, 항목마다 키·값 40바이트에 `BTreeMap` 노드 부담이 더해져 수 MB 이하다[추정, 측정하지 않음]. 조회는 2초 폴링이어도 10만 개 집계가 수 ms 수준이라 부담이 작다[추정, 측정하지 않음].
 - 보류 표 키: `ConnId`가 수락 순서로 늘어나므로 `BTreeMap`의 첫 항목이 가장 오래된 보류다. 별도 순서 목록이 필요 없다.
 - WSS TLS 거절의 `conn_id`: TLS 계층이 거절할 때 바깥 리스너가 이미 `conn_id`를 줬다. 이 값을 TLS 계층에 넘겨 거절 사건에 쓴다. 같은 IP의 보류 연결 중 하나를 고르는 방식은 프록시처럼 한 IP에 연결이 몰릴 때 다른 연결의 시도를 잘못 꺼내므로 쓰지 않는다.
-- DB 교체: `RwLock`의 `Arc<dyn IpDatabase>` 두 칸을 바꾼다. 찾기는 읽기 잠금 안에서 하며 다시 읽기는 새 DB를 만든 뒤 쓰기 잠금을 짧게 잡는다.
+- DB 교체: `RwLock`의 `Arc<dyn IpDbLookupGateway>` 두 칸을 바꾼다. 찾기는 읽기 잠금 안에서 하며 다시 읽기는 새 DB를 만든 뒤 쓰기 잠금을 짧게 잡는다.
 - 시각 순서 보관: 사건을 도착 순서로 뒤에 붙이면 보류한 수락처럼 이른 시각의 사건이 늦게 들어올 때 맨 앞 사건이 가장 이른 사건이 아니게 된다. 그러면 상한을 넘을 때 더 늦은 사건을 버리거나 `dropped_before`가 틀린다. 그래서 시각 순서 자리에 넣는다. 시각을 잠금 안에서 정해 도착 순서와 맞추는 방법은 보류한 수락의 이른 시각을 다룰 수 없어 쓰지 않는다. 조회도 이 순서로 기간 경계를 이진 탐색한다.
 - 감시 해시: DB 파일은 수십~수백 MB일 수 있으므로 전체를 한 번에 메모리에 올리지 않고 나눠 해시한다. 크기·수정 시각만 비교하면 같은 크기·수정 시각을 보존한 교체를 놓치므로 내용을 비교한다. 해시 계산은 재로드 잠금 밖에서 한다.
 - 다시 읽기 위치: 에피소드 안정화를 그대로 쓰되 설정 후보와 분리한다. 그래서 DB 오류가 설정 재로드를 거절하거나 재시작 대기에 막히지 않는다([ADR-0012](../decisions/ADR-0012-local-ip-info-databases.md) 4절).

@@ -20,7 +20,7 @@
 ## 1. 책임과 경계
 
 - app의 `ConfigEditService<A>`는 GET/PATCH 순서·권한 이후 편집 허용·오류 분류·감사 사건을 맡는다. `A`는 app이 해석하지 않는 TLS 수락기다. HTTP·JSON·TOML·SHA 구현·OS 파일 호출은 adapters에 둔다. 이는 [코드 지도 레이어 규칙](code-map.md#레이어와-의존-방향)과 [ADR-0006](../decisions/ADR-0006-config-edit-through-file.md)의 같은 검증 경로를 따른다.
-- `ConfigManagement`라는 app trait로 GET/PATCH 결과를 공개하고 관리 리스너는 `Arc<dyn ConfigManagement>`를 받는다. 실행파일만 `ConfigEditService<TlsAcceptor>`의 구체 타입을 조립한다. app은 rustls·axum·toml_edit·aws-lc-rs에 의존하지 않는다([레이어 규칙](code-map.md#레이어와-의존-방향)).
+- `ConfigService`라는 app trait로 GET/PATCH 결과를 공개하고 관리 리스너는 `Arc<dyn ConfigService>`를 받는다. 실행파일만 `ConfigEditService<TlsAcceptor>`의 구체 타입을 조립한다. app은 rustls·axum·toml_edit·aws-lc-rs에 의존하지 않는다([레이어 규칙](code-map.md#레이어와-의존-방향)).
 - 계정 인증·CSRF·유휴 만료는 기존 `AdminAuth`가 맡는다. 파일 감지 안정화·세대 검사·감시 경로 갱신은 `ReloadWatcher`가 맡는다. 이 서비스는 수동 재로드 API가 아니다([관리 API §1.3](../contracts/management-api-v1.md#13-요청-처리-순서), [운영 §3.3](../specs/operations.md#33-파일-변경-자동-감지와-부분-재로드)).
 
 ## 2. 내부 구조와 초기화
@@ -31,7 +31,7 @@
 flowchart LR
     S["src/serve.rs"] -.-> H["management_http/config_api.rs"]
     S -.-> E["app/management/config.rs ConfigEditService"]
-    S -.-> F["adapters/config_edit.rs FsConfigFileStore / TomlConfigDocument"]
+    S -.-> F["adapters/config_edit.rs FsConfigFileStore / TomlConfigDocumentGateway"]
     H -->|"인증된 GET / PATCH 값"| E
     E -->|"하나의 Mutex 획득"| R["SharedReload / ReloadService"]
     E -->|"읽기·revision·편집·검증·원자 교체 포트"| F
@@ -45,7 +45,7 @@ flowchart LR
 | `SharedReload<A> = Arc<Mutex<ReloadService<A>>>` | `serve`에서 한 번 생성, watcher·편집 서비스가 공유 | read→revision→edit→validate→write→swap 직렬화. [API §1.14](../contracts/management-api-v1.md#114-동적-설정-편집-patch-apiv1config) |
 | `ConfigEditService<A>` | `serve`, 관리 리스너 종료까지 | 설정 경로·base_dir·공유 재로드·파일/문서 포트·Clock·EventSink 보유. [API §1.13~14](../contracts/management-api-v1.md#113-설정-보기-get-apiv1config) |
 | `FsConfigFileStore` | adapters, 프로세스 수명 | 원시 바이트 읽기, SHA-256, 같은 디렉터리 임시 파일과 교체. [설정 §1.10](../contracts/config-v4.md#110-관리-api-편집의-파일-쓰기) |
-| `TomlConfigDocument` | adapters 포트 구현, 문서는 요청마다 생성 | `toml_edit` 0.25의 `Document<&str>` source span으로 바뀐 값만 치환하고 `config_file::parse_candidate`로 전체 후보 검증. [ADR-0006](../decisions/ADR-0006-config-edit-through-file.md) |
+| `TomlConfigDocumentGateway` | adapters 포트 구현, 문서는 요청마다 생성 | `toml_edit` 0.25의 `Document<&str>` source span으로 바뀐 값만 치환하고 `config_file::parse_candidate`로 전체 후보 검증. [ADR-0006](../decisions/ADR-0006-config-edit-through-file.md) |
 | `ConfigView`·`ConfigPatch`·`ConfigEditResult` | app 값, 요청 수명 | 교환 필드의 정의는 [API §1.13~14](../contracts/management-api-v1.md#113-설정-보기-get-apiv1config). JSON Value를 app에 넘기지 않음 |
 | `management/config/items.rs` `config_items`, `ConfigItem`, `ConfigReloadKind` | app의 명시적 descriptor 목록 | 계약 순서의 실행값·reload 구분·정수 정적 min/max·편집 조건 생성. 참조 파일 내용은 읽지 않음 |
 
@@ -98,7 +98,7 @@ ticket 10개 항목은 WS·WSS 역할 뒤, `mode1` 앞에 놓으며 모두 `dyna
 
 - `ConfigFileStore::read(path) -> io::Result<Vec<u8>>`: 원시 바이트만 읽는다. 비UTF-8이면 file.state=unreadable, diagnostics=[]이고 바이트를 읽었으므로 revision은 그 바이트의 SHA-256이다. null은 바이트 읽기 실패일 때만이다. PATCH는 비UTF-8도 3단계에서 `409 config_file_invalid`, 빈 진단으로 거절한다([API §1.13~14](../contracts/management-api-v1.md#113-설정-보기-get-apiv1config), [설정 §2.1](../contracts/config-v4.md#21-설정-오류와-준비-실패)).
 - `ConfigFileStore::revision(bytes) -> String`: adapters에서 aws-lc-rs SHA-256을 사용한다. `read`는 바이트 읽기만 맡고 revision 계산은 이 별도 메서드가 맡는다. `ReloadService`의 프로세스 내부 TLS 변경 탐지용 해시를 외부 revision에 재사용하지 않는다.
-- `ConfigDocument::parse(bytes, base_dir) -> Result<ConfigCandidate, Vec<ConfigDiagnostic>>`: `TomlConfigDocument`가 `config_file::parse_candidate`를 호출한다. 이 함수는 공통 `settings_from_table` 전체 검사와 presence 수집을 사용한다. `edit(bytes, changes)`는 `toml_edit::Document<&str>`로 키·값의 원본 바이트 범위를 찾고 실제 값이 다른 범위만 치환한다. `same_value`는 같은 값이면 치환하지 않는다. `edit_array`는 배열 토큰 사이의 주석·공백을 원문에서 보존한다. 누락 키/테이블은 해당 scope/끝에 삽입한다. 기존 문서 전체를 `DocumentMut`로 다시 직렬화하지 않으므로 BOM·혼합 LF/CRLF도 고치지 않은 범위에서는 그대로다([설정 §1.10](../contracts/config-v4.md#110-관리-api-편집의-파일-쓰기)).
+- `ConfigDocumentGateway::parse(bytes, base_dir) -> Result<ConfigCandidate, Vec<ConfigDiagnostic>>`: `TomlConfigDocumentGateway`가 `config_file::parse_candidate`를 호출한다. 이 함수는 공통 `settings_from_table` 전체 검사와 presence 수집을 사용한다. `edit(bytes, changes)`는 `toml_edit::Document<&str>`로 키·값의 원본 바이트 범위를 찾고 실제 값이 다른 범위만 치환한다. `same_value`는 같은 값이면 치환하지 않는다. `edit_array`는 배열 토큰 사이의 주석·공백을 원문에서 보존한다. 누락 키/테이블은 해당 scope/끝에 삽입한다. 기존 문서 전체를 `DocumentMut`로 다시 직렬화하지 않으므로 BOM·혼합 LF/CRLF도 고치지 않은 범위에서는 그대로다([설정 §1.10](../contracts/config-v4.md#110-관리-api-편집의-파일-쓰기)).
 
 v4의 `edit_change`는 마지막 점 앞까지를 테이블 경로로, 마지막 조각을 leaf 키로 나눈다. `[relay.ws.server]` 같은 중첩 테이블을 따라 기존 source span을 찾는다. 누락한 역할 테이블은 정확한 `[relay.ws.server]` 헤더로 추가한다. 부모 `trusted_proxies`와 역할 `allow`를 같은 scope에 쓰지 않는다. dotted/inline table도 같은 leaf를 찾아 고치며 관련 없는 원문은 그대로 둔다.
 
@@ -136,13 +136,13 @@ v4의 `edit_change`는 마지막 점 앞까지를 테이블 경로로, 마지막
 
 | 확인한 코드 위치·심볼 | 현재 역할 | 근거 |
 | --- | --- | --- |
-| `crates/app/src/management/config.rs` `ConfigManagement`, `ConfigEditService::{get,patch,reject}` | object-safe 동기 포트, 동일 mutex의 GET/10단계 PATCH, 파일값 변경 키와 실행값 차이 분리, 업무 오류 감사 | API §1.13~14 |
+| `crates/app/src/management/config.rs` `ConfigService`, `ConfigEditService::{get,patch,reject}` | object-safe 동기 포트, 동일 mutex의 GET/10단계 PATCH, 파일값 변경 키와 실행값 차이 분리, 업무 오류 감사 | API §1.13~14 |
 | `crates/app/src/management/config/items.rs` `config_items` | 실행값·적용된 presence만 표시하고 TLS/계정 파일은 경로만 반환 | API §1.13 |
 | `crates/app/src/reload/snapshot.rs` `ReloadSnapshot`, `ReloadCell`; `reload/service.rs` `prepare_candidate`, `classify_file`, `commit_prepared` | Settings·presence·TLS 원자 발행, 부작용 없는 준비/분류, 실패를 반환하지 않는 commit과 last_reload | 설정 §1.8, API §1.13~14 |
 | `crates/adapters/src/config_file.rs` `parse_candidate`, `collect_presence`; `settings.rs` `ManagementSettings::config_edit` | 공통 전체 검증과 생략 정보, 기본 false | 설정 §1.2·§3.2 |
-| `crates/adapters/src/config_edit.rs` `FsConfigFileStore`, `replace_file`, `TempFile`, `TomlConfigDocument`, `edit_change`, `edit_array` | SHA-256, 같은 디렉터리 임시 파일·최종 revision 확인·rename·실패 정리, TOML source span 기반 부분 치환 | 설정 §1.10, 교체 직전 재확인 |
+| `crates/adapters/src/config_edit.rs` `FsConfigFileStore`, `replace_file`, `TempFile`, `TomlConfigDocumentGateway`, `edit_change`, `edit_array` | SHA-256, 같은 디렉터리 임시 파일·최종 revision 확인·rename·실패 정리, TOML source span 기반 부분 치환 | 설정 §1.10, 교체 직전 재확인 |
 | `crates/adapters/src/management_http.rs` `ManagementServices`, `DashboardHints`; `session_api::answer`, `config_api::{answer,patch_body,view_body,edit_error}` | 서비스 주입·PATCH CSRF·64 KiB·blocking 호출·JSON 오류 매핑·응답 때 현재 E+5 | API §1.3·§1.12~14 |
-| `src/serve.rs` `config_management`, `listen_until_shutdown` | `std::path::absolute`로 설정 경로와 base_dir을 맞춘 뒤 같은 SharedReload·파일/문서 포트·시계·사건 싱크를 app 서비스에 주입. helper는 `io::Result<Arc<dyn ConfigManagement>>`를 반환 | ADR-0006, 운영 §3.3 |
+| `src/serve.rs` `config_management`, `listen_until_shutdown` | `std::path::absolute`로 설정 경로와 base_dir을 맞춘 뒤 같은 SharedReload·파일/문서 포트·시계·사건 싱크를 app 서비스에 주입. helper는 `io::Result<Arc<dyn ConfigService>>`를 반환 | ADR-0006, 운영 §3.3 |
 
 - 날짜·대상: 2026-11-08 설정 편집 작업 트리의 위 소스.
 - 환경·방법: 저장소의 app·adapters·실행파일 소스를 읽고 경계·타입·처리 순서를 대조했다.

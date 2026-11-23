@@ -22,11 +22,11 @@ use vnc_relay_domain::admin_session::{
 use vnc_relay_domain::login_limit::{LoginLimitPolicy, LoginLimiter};
 
 use crate::events::Event;
-use crate::ports::{Clock, EventSink, PasswordVerifier, TokenSource};
+use crate::ports::{Clock, EventSink, PasswordVerifyGateway, TokenSource};
 
 /// The ports that `AdminAuth` uses.
 pub struct AdminPorts {
-    pub verifier: Arc<dyn PasswordVerifier>,
+    pub verifier: Arc<dyn PasswordVerifyGateway>,
     pub tokens: Arc<dyn TokenSource>,
     pub clock: Arc<dyn Clock>,
     pub events: Arc<dyn EventSink>,
@@ -75,7 +75,7 @@ pub struct AdminAuth {
     /// Real accounts by name. The unknown-account path uses `dummy` instead.
     accounts: HashMap<AccountName, PasswordHash>,
     dummy: PasswordHash,
-    verifier: Arc<dyn PasswordVerifier>,
+    verifier: Arc<dyn PasswordVerifyGateway>,
     tokens: Arc<dyn TokenSource>,
     clock: Arc<dyn Clock>,
     events: Arc<dyn EventSink>,
@@ -153,7 +153,9 @@ mod test_support {
 
     use super::{AdminAuth, AdminPorts};
     use crate::events::Event;
-    use crate::ports::{Clock, EventSink, HashError, PasswordVerifier, RandomError, TokenSource};
+    use crate::ports::{
+        Clock, EventSink, HashError, PasswordVerifyGateway, RandomError, TokenSource,
+    };
 
     pub const PASSWORD: &str = "correct-horse-battery";
     pub const OTHER_PASSWORD: &str = "another-long-password";
@@ -248,7 +250,7 @@ mod test_support {
         }
     }
 
-    impl PasswordVerifier for FakeVerifier {
+    impl PasswordVerifyGateway for FakeVerifier {
         fn verify(&self, typed: &str, hash: &PasswordHash) -> Result<bool, HashError> {
             *self.calls.lock().unwrap_or_else(PoisonError::into_inner) += 1;
             Ok(self

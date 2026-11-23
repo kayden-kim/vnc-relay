@@ -7,24 +7,24 @@ use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
 
 use tokio::net::{TcpStream, lookup_host};
-use vnc_relay_app::ports::{TargetConnector, TargetError};
+use vnc_relay_app::ports::{TargetError, TargetGateway};
 use vnc_relay_app::reload::ports::RuntimeSettingsSource;
 
 use crate::net::TcpRelayStream;
 
 /// Resolves once and connects only to the supplied, already checked address.
 #[derive(Clone)]
-pub struct TcpTargetConnector {
+pub struct TcpTargetGateway {
     runtime: Arc<dyn RuntimeSettingsSource>,
 }
 
-impl TcpTargetConnector {
+impl TcpTargetGateway {
     pub fn new(runtime: Arc<dyn RuntimeSettingsSource>) -> Self {
         Self { runtime }
     }
 }
 
-impl TargetConnector for TcpTargetConnector {
+impl TargetGateway for TcpTargetGateway {
     type Stream = TcpRelayStream;
 
     async fn resolve(&self, name: &str) -> Result<Vec<IpAddr>, TargetError> {

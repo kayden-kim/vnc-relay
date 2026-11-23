@@ -43,8 +43,8 @@ flowchart LR
     HS -->|"PreparedConnection 이동"| DISPATCH["RelayService::dispatch"]
     DISPATCH -->|"Mode1"| TARGET["relay/target.rs"]
     DISPATCH -->|"Mode2"| MATCH["relay/matching.rs"]
-    TARGET --> PORT["ports.rs TargetConnector"]
-    SERVE -.->|"주입"| ADAPTER["target.rs TcpTargetConnector"]
+    TARGET --> PORT["ports.rs TargetGateway"]
+    SERVE -.->|"주입"| ADAPTER["target.rs TcpTargetGateway"]
     ADAPTER -.->|"구현"| PORT
     TARGET -->|"연결 쌍"| PAIR["RelayService::run_pair"]
     MATCH -->|"매칭된 연결 쌍"| PAIR
@@ -61,11 +61,11 @@ flowchart LR
 | `crates/domain/src/session.rs` `SessionId`, `Session`, `CloseCause` | 식별자 형식, `active`·`closing`, 첫 종료 원인, 방향별 카운터 | 세션 활성화 때 생성 | std 값 |
 | `crates/domain/src/recent_closed.rs` `RecentClosedList` | 정리된 세션의 요약, R 초과 시 가장 오래된 항목 제거 | 프로세스마다 하나 | `session` |
 | `crates/app/src/relay.rs` `RelayService`, `RelayRuntime<C>`, `RelayState` | 서비스는 초기 교환과 단계 연결을 맡는다. runtime은 연결 포트·상태 잠금·예산·식별자 포트를 소유한다. | `serve`가 서비스와 공유 runtime을 생성 | domain, `ports`, 허용된 tokio |
-| `crates/app/src/relay/target.rs` | Mode I C·정책·L와 대상 연결 결과 | Mode I 연결 작업 | `TargetConnector`, `Clock`, 예산 |
+| `crates/app/src/relay/target.rs` | Mode I C·정책·L와 대상 연결 결과 | Mode I 연결 작업 | `TargetGateway`, `Clock`, 예산 |
 | `crates/app/src/relay/matching.rs` | 대기 I/O·W·Lw, 연결 쌍 인계 | 각 대기 연결 작업 | `WaitingTable`, 스트림 인터페이스 |
 | `crates/app/src/relay/session.rs` `run_session_controlled` | 두 방향 중계·EOF·E·전송 종료, 관리자 종료 명령 poll. 최종 등록·예산·사건 정리는 `RelayService::run_pair`가 맡는다. | 매칭 또는 대상 연결을 완료한 작업 | `Session`, 스트림 인터페이스 |
-| `crates/app/src/ports.rs` | `TargetConnector`, `RelayIdSource`, `SessionIdSource`, `RelaySessionControl`, `RelayStateSource`와 전송 수명 인터페이스 | trait 정의 | domain·tokio 입출력 trait |
-| `crates/adapters/src/target.rs` `TcpTargetConnector` | DNS와 단일 `SocketAddr` TCP 연결, K 적용 | `serve`가 생성 | tokio·socket2·app |
+| `crates/app/src/ports.rs` | `TargetGateway`, `RelayIdSource`, `SessionIdSource`, `RelaySessionControl`, `RelayStateSource`와 전송 수명 인터페이스 | trait 정의 | domain·tokio 입출력 trait |
+| `crates/adapters/src/target.rs` `TcpTargetGateway` | DNS와 단일 `SocketAddr` TCP 연결, K 적용 | `serve`가 생성 | tokio·socket2·app |
 | `crates/adapters/src/net.rs` TCP 스트림 래퍼 | TCP 단절 알림·FIN·입출력 구현. 수락과 연결 쪽에서 같은 래퍼 사용 | 소켓마다 하나 | tokio·app |
 | `crates/adapters/src/crypto.rs` | `RelayIdKey`가 `RelayIdSource`를, `SessionIdKey`가 `SessionIdSource`를 구현 | 프로세스마다 하나씩 | aws-lc-rs·app |
 | `crates/app/src/events.rs`, `crates/adapters/src/ops_log.rs` | 6절 사건과 JSON 필드 | 사건마다 | 기존 `EventSink` 경로 |
@@ -138,7 +138,7 @@ H 감시는 유효 요청 반환으로 끝난다. C·W·E에서 H를 다시 쓰�
 
 ### 4.1 Mode I 대상 연결
 
-`TargetConnector`는 app에 있고 adapters가 구현한다. 정적 제네릭 포트의 `resolve(name) -> Future<Result<Vec<IpAddr>, TargetError>>`와 `connect(SocketAddr) -> Future<Result<Self::Stream, TargetError>>`를 분리한다. `Self::Stream: RelayStream + 'static`이다. 연결 future는 단일 IP·포트만 받는다. `TargetError`는 해석 실패, 연결 거절, 기타 연결 오류, K 설정 실패를 구분한다. C 초과는 app이 만든다. 연결 future를 취소하면 시도 중인 소켓도 닫힌다. OS DNS 작업이 취소 뒤 완료돼도 결과를 버리고 연결을 열지 않는다.
+`TargetGateway`는 app에 있고 adapters가 구현한다. 정적 제네릭 포트의 `resolve(name) -> Future<Result<Vec<IpAddr>, TargetError>>`와 `connect(SocketAddr) -> Future<Result<Self::Stream, TargetError>>`를 분리한다. `Self::Stream: RelayStream + 'static`이다. 연결 future는 단일 IP·포트만 받는다. `TargetError`는 해석 실패, 연결 거절, 기타 연결 오류, K 설정 실패를 구분한다. C 초과는 app이 만든다. 연결 future를 취소하면 시도 중인 소켓도 닫힌다. OS DNS 작업이 취소 뒤 완료돼도 결과를 버리고 연결을 열지 않는다.
 
 | 순서 | 위치·처리 | 상태·결과 |
 | --- | --- | --- |

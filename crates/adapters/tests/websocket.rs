@@ -18,13 +18,13 @@ use tokio::net::{TcpListener, TcpSocket, TcpStream};
 use tokio::sync::watch;
 use tokio::time::timeout;
 use tokio_rustls::{TlsAcceptor, TlsConnector};
-use vnc_relay_adapters::accounts_file::{Argon2Hasher, Argon2Verifier};
+use vnc_relay_adapters::accounts_file::{Argon2PasswordHashGateway, Argon2PasswordVerifyGateway};
 use vnc_relay_adapters::clock::SystemClock;
 use vnc_relay_adapters::crypto::{RelayIdKey, SessionIdKey, SystemTokenSource};
 use vnc_relay_adapters::management_http::{DashboardHints, ManagementListener, ManagementServices};
 use vnc_relay_adapters::net::{AcceptPolicy, AllowSource};
 use vnc_relay_adapters::process_stats::OsProcessStats;
-use vnc_relay_adapters::target::TcpTargetConnector;
+use vnc_relay_adapters::target::TcpTargetGateway;
 use vnc_relay_adapters::tls;
 use vnc_relay_adapters::websocket::{WsEntryPoint, WsPolicy};
 use vnc_relay_app::events::{AbortReason, ConnectionErrorKind, Event, RejectReason, Stage};
@@ -165,7 +165,7 @@ struct Running {
     events: Arc<Recorder>,
     stop: watch::Sender<bool>,
     service: Arc<RelayService>,
-    runtime: Arc<RelayRuntime<TcpTargetConnector>>,
+    runtime: Arc<RelayRuntime<TcpTargetGateway>>,
 }
 
 impl Running {
@@ -277,7 +277,7 @@ async fn start_with_handshake(
     let log: Arc<dyn EventSink> = events.clone();
     let clock: Arc<dyn Clock> = Arc::new(SystemClock::new());
     let runtime = Arc::new(RelayRuntime::new(
-        TcpTargetConnector::new(Arc::clone(&source)),
+        TcpTargetGateway::new(Arc::clone(&source)),
         Arc::new(
             RelayIdKey::generate()
                 .unwrap_or_else(|error| panic!(concat!("relay key", ": {:?}"), error)),
@@ -1080,14 +1080,14 @@ async fn start_management(tls: Option<TlsAcceptor>) -> (SocketAddr, Arc<Recorder
         iterations: 1,
         parallelism: 1,
     };
-    let dummy = dummy_hash(&Argon2Hasher, params)
+    let dummy = dummy_hash(&Argon2PasswordHashGateway, params)
         .unwrap_or_else(|error| panic!("dummy hash is made: {error}"));
     let clock: Arc<dyn Clock> = Arc::new(SystemClock::new());
     let auth = Arc::new(AdminAuth::new(
         Vec::new(),
         dummy,
         AdminPorts {
-            verifier: Arc::new(Argon2Verifier),
+            verifier: Arc::new(Argon2PasswordVerifyGateway),
             tokens: Arc::new(SystemTokenSource),
             clock: Arc::clone(&clock),
             events: Arc::clone(&log),
@@ -1112,7 +1112,7 @@ async fn start_management(tls: Option<TlsAcceptor>) -> (SocketAddr, Arc<Recorder
     let config = Arc::new(vnc_relay_app::management::config::ConfigEditService::new(
         reload,
         Arc::new(vnc_relay_adapters::config_edit::FsConfigFileStore),
-        Arc::new(vnc_relay_adapters::config_edit::TomlConfigDocument),
+        Arc::new(vnc_relay_adapters::config_edit::TomlConfigDocumentGateway),
         PathBuf::from("missing-websocket-fixture.toml"),
         PathBuf::from("."),
         Arc::clone(&clock),
@@ -1155,7 +1155,7 @@ async fn start_management(tls: Option<TlsAcceptor>) -> (SocketAddr, Arc<Recorder
     let ip_info = Arc::new(vnc_relay_app::ip_info::IpInfoService::new(
         None,
         None,
-        Arc::new(vnc_relay_adapters::ip_db::MmdbLoader),
+        Arc::new(vnc_relay_adapters::ip_db::MmdbFileGateway),
         Arc::clone(&lookup),
         Arc::clone(&clock),
         Arc::clone(&log),

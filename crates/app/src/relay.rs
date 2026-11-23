@@ -32,7 +32,7 @@ use crate::metrics::Metrics;
 use crate::ports::{
     BoxRelayStream, Clock, EventSink, RelayCloseAction, RelayDenyControl, RelayIdSource,
     RelayLifecycle, RelaySessionControl, RelayStateSource, RelayStream, SessionIdSource,
-    TargetConnector,
+    TargetGateway,
 };
 use crate::reload::ports::RuntimeSettingsSource;
 
@@ -1217,7 +1217,7 @@ impl RelayService {
     ) -> Result<(), RelayDispatchError>
     where
         S: RelayStream + 'static,
-        C: TargetConnector,
+        C: TargetGateway,
     {
         let exchange_elapsed = prepared.exchange_elapsed;
         let (mut connection, request) = OwnedConnection::from_prepared(prepared);
@@ -1411,7 +1411,7 @@ impl RelayService {
         .await;
     }
 
-    async fn run_pair<C: TargetConnector>(
+    async fn run_pair<C: TargetGateway>(
         &self,
         runtime: &RelayRuntime<C>,
         mut pair: SessionPair,
@@ -2003,7 +2003,7 @@ mod tests {
         calls: Mutex<Vec<SocketAddr>>,
         names: Mutex<Vec<String>>,
     }
-    impl TargetConnector for Connector {
+    impl TargetGateway for Connector {
         type Stream = TestStream;
         async fn resolve(&self, name: &str) -> Result<Vec<std::net::IpAddr>, TargetError> {
             self.names.lock().expect("names").push(name.to_owned());

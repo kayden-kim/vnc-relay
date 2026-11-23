@@ -87,7 +87,7 @@ flowchart LR
 
 ## 4. 처리 순서
 
-`crates/adapters/src/net.rs`의 `AcceptPolicy`는 `AllowSource`와 사용량만 보관하는 L 예산을 가진다. `admit`는 `RuntimeSettingsSource::with_current` 안에서 출발지 IP와 현재 L을 검사하고 `try_acquire(limit)`의 CAS까지 끝낸다. 같은 세대의 B·H·U·K를 `AcceptedSettings`로 복사한다. TCP는 수락 시각을 초기 교환 시작 시각으로 쓰며, B·H를 `ConnectionContext`에 넘긴다. K는 수락 소켓에 한 번 설정한다. `target.rs`의 `TcpTargetConnector`는 새 대상 연결 시도에서 K를 별도로 읽는다. 기존 연결의 B·기한·소켓 옵션은 바꾸지 않는다([설정 §1.8](../contracts/config-v4.md#18-재로드-구분), OPS-050~053).
+`crates/adapters/src/net.rs`의 `AcceptPolicy`는 `AllowSource`와 사용량만 보관하는 L 예산을 가진다. `admit`는 `RuntimeSettingsSource::with_current` 안에서 출발지 IP와 현재 L을 검사하고 `try_acquire(limit)`의 CAS까지 끝낸다. 같은 세대의 B·H·U·K를 `AcceptedSettings`로 복사한다. TCP는 수락 시각을 초기 교환 시작 시각으로 쓰며, B·H를 `ConnectionContext`에 넘긴다. K는 수락 소켓에 한 번 설정한다. `target.rs`의 `TcpTargetGateway`는 새 대상 연결 시도에서 K를 별도로 읽는다. 기존 연결의 B·기한·소켓 옵션은 바꾸지 않는다([설정 §1.8](../contracts/config-v4.md#18-재로드-구분), OPS-050~053).
 
 `Listener`는 중계 소켓 네 개를, `EntryPoint`는 리스너·역할 조합 여섯 개를 나타낸다. TCP는 `Listener::fixed_role()`로 수락 때 역할을 안다. WS·WSS는 소켓 상대가 `trusted_proxies`에 속하거나 켜진 역할 allow의 합집합을 통과하면 수락한다. 역할과 전달 주소는 업그레이드에서 판정한다. `AllowSource::ws`·`wss`는 리스너별 현재 설정을 읽는다. `ListenerPlan::listener`가 바인드 소켓을 나타낸다.
 

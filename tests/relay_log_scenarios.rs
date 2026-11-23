@@ -12,8 +12,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Mutex, PoisonError};
 use std::time::{Duration, Instant};
 
-use vnc_relay_adapters::accounts_file::Argon2Hasher;
-use vnc_relay_app::ports::PasswordHasher;
+use vnc_relay_adapters::accounts_file::Argon2PasswordHashGateway;
+use vnc_relay_app::ports::PasswordHashGateway;
 use vnc_relay_domain::account::{Argon2Params, Password};
 
 const BIN: &str = env!("CARGO_BIN_EXE_vnc-relay");
@@ -549,7 +549,7 @@ impl RunningRelay {
         let accounts = dir.join("accounts.toml");
         let password = Password::parse(ADMIN_PASSWORD.to_owned())
             .unwrap_or_else(|error| panic!("admin password: {error:?}"));
-        let hash = Argon2Hasher
+        let hash = Argon2PasswordHashGateway
             .hash(
                 &password,
                 Argon2Params {

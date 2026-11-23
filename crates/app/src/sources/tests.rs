@@ -16,7 +16,7 @@ use super::report::Counts;
 use super::{CAPACITY, PENDING_CAPACITY, SourceStats, SourceWindow, SourcesReport, SourcesService};
 use crate::events::{AbortReason, Event, RejectReason, RelayIdRef, Stage};
 use crate::ip_info::{IpDbKey, IpDbMetadata, IpDbRead, IpInfoService, IpLookup};
-use crate::ports::{Clock, EventSink, IpDatabase, IpDbLoader};
+use crate::ports::{Clock, EventSink, IpDbFileGateway, IpDbLookupGateway};
 use crate::relay::test_support::TestSettings;
 
 /// 2026-09-21T13:46:40Z in milliseconds.
@@ -51,7 +51,7 @@ struct Table {
     rows: HashMap<IpAddr, (Option<CountryCode>, Option<Asn>)>,
 }
 
-impl IpDatabase for Table {
+impl IpDbLookupGateway for Table {
     fn metadata(&self) -> &IpDbMetadata {
         &self.metadata
     }
@@ -77,7 +77,7 @@ impl IpDatabase for Table {
 /// No file is configured; the query shows `not_configured`.
 struct NoFiles;
 
-impl IpDbLoader for NoFiles {
+impl IpDbFileGateway for NoFiles {
     fn read(&self, _path: &std::path::Path) -> IpDbRead {
         unreachable!("no path is configured")
     }
@@ -129,7 +129,7 @@ fn fixture() -> Fixture {
 
 impl Fixture {
     fn use_table(&self, rows: HashMap<IpAddr, (Option<CountryCode>, Option<Asn>)>) {
-        let table: Arc<dyn IpDatabase> = Arc::new(Table {
+        let table: Arc<dyn IpDbLookupGateway> = Arc::new(Table {
             metadata: IpDbMetadata::new("DBIP-ASN-Lite", at(START_MS)),
             rows,
         });

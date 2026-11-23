@@ -241,7 +241,7 @@ struct RefuseLog {
     refuse: Arc<AtomicBool>,
     attempts: Arc<AtomicU64>,
 }
-impl ChangeFeed for RefuseLog {
+impl WatchGateway for RefuseLog {
     fn watch_dirs(
         &mut self,
         dirs: &BTreeSet<PathBuf>,

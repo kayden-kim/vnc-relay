@@ -21,7 +21,7 @@ use vnc_relay_adapters::config_file::parse;
 use vnc_relay_adapters::crypto::{RelayIdKey, SessionIdKey};
 use vnc_relay_adapters::net::{AcceptPolicy, AllowSource, TcpEntryPoint, TcpRelayStream};
 use vnc_relay_adapters::ops_log::format_line;
-use vnc_relay_adapters::target::TcpTargetConnector;
+use vnc_relay_adapters::target::TcpTargetGateway;
 use vnc_relay_app::events::Event;
 use vnc_relay_app::metrics::Metrics;
 use vnc_relay_app::ports::{Clock, EventSink, RelayCloseAction, RelayStream};
@@ -96,7 +96,7 @@ struct Running {
     viewer: SocketAddr,
     server: SocketAddr,
     service: Arc<RelayService>,
-    runtime: Arc<RelayRuntime<TcpTargetConnector>>,
+    runtime: Arc<RelayRuntime<TcpTargetGateway>>,
     clock: Arc<dyn Clock>,
     events: Arc<Recorder>,
     budget: Arc<ConnectionBudget>,
@@ -167,7 +167,7 @@ enabled = true
         let log: Arc<dyn EventSink> = events.clone();
         let budget = ConnectionBudget::new();
         let runtime = Arc::new(RelayRuntime::new(
-            TcpTargetConnector::new(Arc::clone(&settings)),
+            TcpTargetGateway::new(Arc::clone(&settings)),
             Arc::new(RelayIdKey::generate().unwrap_or_else(|error| panic!("relay key: {error:?}"))),
             Arc::new(SessionIdKey::from_bytes(&[0x59; 32])),
             Arc::clone(&budget),

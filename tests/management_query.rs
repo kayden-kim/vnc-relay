@@ -30,8 +30,8 @@ use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, ServerName};
 use rustls::version::{TLS12, TLS13};
 use rustls::{ClientConfig, ClientConnection, RootCertStore, StreamOwned};
-use vnc_relay_adapters::accounts_file::Argon2Hasher;
-use vnc_relay_app::ports::PasswordHasher;
+use vnc_relay_adapters::accounts_file::Argon2PasswordHashGateway;
+use vnc_relay_app::ports::PasswordHashGateway;
 use vnc_relay_domain::account::{Argon2Params, Password};
 
 const BIN: &str = env!("CARGO_BIN_EXE_vnc-relay");
@@ -659,7 +659,7 @@ impl RunningServer {
             {
                 let typed = Password::parse(ALICE_PASSWORD.to_owned())
                     .unwrap_or_else(|e| panic!("password: {e:?}"));
-                let hashed = Argon2Hasher
+                let hashed = Argon2PasswordHashGateway
                     .hash(&typed, PARAMS)
                     .unwrap_or_else(|e| panic!("hash: {e:?}"));
                 hashed.as_str().to_owned()

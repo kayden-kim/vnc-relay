@@ -5,9 +5,9 @@ use std::io::{self, Write};
 use std::path::Path;
 use std::process::ExitCode;
 
-use vnc_relay_adapters::accounts_file::{AccountsFile, Argon2Hasher};
+use vnc_relay_adapters::accounts_file::{AccountsFile, Argon2PasswordHashGateway};
 use vnc_relay_adapters::config_file;
-use vnc_relay_adapters::terminal::Terminal;
+use vnc_relay_adapters::terminal::TerminalAccountInputGateway;
 use vnc_relay_app::accounts::{
     self, ACCOUNTS_FILE_KEY, AccountsWarning, AdminFailure, AdminService,
 };
@@ -67,7 +67,7 @@ fn change(
     };
     // Before any input, so that Ctrl+C never ends the process with the
     // terminal in hidden-input mode.
-    let terminal = match Terminal::open() {
+    let terminal = match TerminalAccountInputGateway::open() {
         Ok(terminal) => terminal,
         Err(message) => return report_failure(&AdminFailure::RuntimeUnavailable(message)),
     };
@@ -75,7 +75,7 @@ fn change(
     let service = AdminService {
         store: &store,
         input: &terminal,
-        hasher: &Argon2Hasher,
+        hasher: &Argon2PasswordHashGateway,
         params: settings.argon2.params(),
     };
     match procedure(&service, &name, &mut report_warning) {

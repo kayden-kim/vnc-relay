@@ -215,7 +215,7 @@ struct FakeDocument {
     noop: bool,
 }
 
-impl ConfigDocument for FakeDocument {
+impl ConfigDocumentGateway for FakeDocument {
     fn parse(
         &self,
         bytes: &[u8],

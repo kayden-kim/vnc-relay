@@ -16,8 +16,8 @@ use std::sync::{Mutex, MutexGuard, PoisonError};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
-use vnc_relay_adapters::accounts_file::Argon2Hasher;
-use vnc_relay_app::ports::PasswordHasher;
+use vnc_relay_adapters::accounts_file::Argon2PasswordHashGateway;
+use vnc_relay_app::ports::PasswordHashGateway;
 use vnc_relay_domain::account::{Argon2Params, Password};
 
 const BIN: &str = env!("CARGO_BIN_EXE_vnc-relay");
@@ -78,7 +78,7 @@ fn write(path: &Path, text: &str) {
 /// A real Argon2id hash of `password` with the test cost.
 fn hash(password: &str) -> String {
     let typed = Password::parse(password.to_owned()).unwrap_or_else(|e| panic!("password: {e:?}"));
-    let hashed = Argon2Hasher
+    let hashed = Argon2PasswordHashGateway
         .hash(&typed, PARAMS)
         .unwrap_or_else(|e| panic!("hash: {e}"));
     hashed.as_str().to_owned()

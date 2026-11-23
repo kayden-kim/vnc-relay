@@ -294,7 +294,7 @@ classDiagram
 | [상태 리스너(status)](../../GLOSSARY.md) | 구분 없음 | 전용 타입을 확인하지 않았다. 어댑터 모듈 `status_http`가 `/livez` `/readyz` `/metrics`를 응답한다 | `crates/adapters/src/status_http.rs` | 설정 `[status] listen` |
 | [대시보드(dashboard)](../../GLOSSARY.md) | 구분 없음 | 전용 도메인 타입 없음. 정적 파일은 `Asset`·`find_asset`, 응답 힌트는 `DashboardHints` | `crates/adapters/src/dashboard_assets.rs`, `crates/adapters/src/management_http.rs` | 설정 `dashboard`, 세션 응답의 `dashboard` 객체 |
 | [관리 API(management_api)](../../GLOSSARY.md) | 구분 없음 | 전용 타입 없음. 경로별 모듈 `session_api` `config_api` `query_api` `terminate_api` `logs_api` `metrics_api` `sources_api`가 요청을 받는다 | `crates/adapters/src/management_http/` | HTTP `/api/v1/` 경로([관리 API 계약](../contracts/management-api-v1.md)) |
-| [설정 보기](../../GLOSSARY.md) | 구분 없음 | `ConfigView`(`items: Vec<ConfigItem>`), `ConfigItem`, `ConfigReloadKind`. 조회는 `ConfigManagement::get` | `crates/app/src/management/config.rs`, `crates/app/src/management/config/items.rs` | `GET /api/v1/config`. 응답 필드 `revision` `edit_enabled` `items` 등 |
+| [설정 보기](../../GLOSSARY.md) | 구분 없음 | `ConfigView`(`items: Vec<ConfigItem>`), `ConfigItem`, `ConfigReloadKind`. 조회는 `ConfigService::get` | `crates/app/src/management/config.rs`, `crates/app/src/management/config/items.rs` | `GET /api/v1/config`. 응답 필드 `revision` `edit_enabled` `items` 등 |
 | [동적 설정 편집](../../GLOSSARY.md) | 구분 없음 | `ConfigPatch`(`changes: Vec<ConfigChange>`), `ConfigChange`, `ConfigValue`, `ConfigActor`, 적용은 `ConfigEditService::patch`, 오류는 `ConfigEditError` | `crates/app/src/management/config.rs` | `PATCH /api/v1/config`, 사건 `config_edited` `config_edit_rejected` |
 | [관리자 계정(admin_account)](../../GLOSSARY.md) | 구분 없음 | `Account`(`name: AccountName`, `password_hash: PasswordHash`) | `crates/domain/src/account.rs` | 로그인 응답의 `account`, 사건 필드 `admin_account` |
 | [관리자 계정 준비(admin)](../../GLOSSARY.md) | 구분 없음 | 전용 타입 없음(절차). `AdminService`의 `add` `passwd` `remove` `list`와 `AdminFailure`가 수행한다 | `crates/app/src/accounts.rs` | 명령 `vnc-relay admin`([CLI 계약](../contracts/cli-v1.md)) |
@@ -319,7 +319,7 @@ classDiagram
 | [접속 출처(sources)](../../GLOSSARY.md) | 구분 없음 | `SourceStats`(`store`, `lookup`), `SourceEvent`, `SourcesReport`, `SourcesService` | `crates/app/src/sources.rs`, `crates/app/src/sources/report.rs` | `GET /api/v1/sources` |
 | [연결 시도(attempts)](../../GLOSSARY.md) | 구분 없음 | 전용 타입 없음. 집계 값 `Counts.attempts`이고, 사건 종류는 비공개 `Kind::Attempt`다 | `crates/app/src/sources.rs`, `crates/app/src/sources/report.rs` | 관리 조회 응답 키 `attempts` |
 | [집계 기간(window)](../../GLOSSARY.md) | 상태 값 | `SourceWindow::Hour` `SourceWindow::Day` | `crates/app/src/sources/report.rs` | 쿼리 `window`(`1h` `24h`) |
-| [IP 정보 DB(ip_info)](../../GLOSSARY.md) | 구분 없음 | `IpInfoService`, `IpLookup`(국가·ASN 두 칸), `IpDbStatus`, `IpDbKey`, `IpDbFailure`. 파일을 읽는 쪽은 어댑터 `MmdbLoader`다 | `crates/app/src/ip_info.rs`, `crates/adapters/src/ip_db.rs` | 설정 `ip_info.country_db` `ip_info.asn_db` |
+| [IP 정보 DB(ip_info)](../../GLOSSARY.md) | 구분 없음 | `IpInfoService`, `IpLookup`(국가·ASN 두 칸), `IpDbStatus`, `IpDbKey`, `IpDbFailure`. 파일을 읽는 쪽은 어댑터 `MmdbFileGateway`다 | `crates/app/src/ip_info.rs`, `crates/adapters/src/ip_db.rs` | 설정 `ip_info.country_db` `ip_info.asn_db` |
 | [ASN(asn)](../../GLOSSARY.md) | 구분 없음 | `Asn`(`NonZeroU32` 감싸개) | `crates/domain/src/ip_info.rs` | 화면과 JSON의 `asn` |
 | [로컬 주소(local)](../../GLOSSARY.md) | 구분 없음 | 전용 타입 없음. 함수 `is_local(ip)`가 판정한다 | `crates/domain/src/ip_info.rs` | 접속 출처 항목 필드 `local` |
 

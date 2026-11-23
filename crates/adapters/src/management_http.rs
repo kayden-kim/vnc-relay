@@ -22,7 +22,7 @@ use axum::serve::IncomingStream;
 use serde_json::{Value, json};
 use tokio::net::TcpListener;
 use vnc_relay_app::management::AdminAuth;
-use vnc_relay_app::management::config::ConfigManagement;
+use vnc_relay_app::management::config::ConfigService;
 use vnc_relay_app::management::query::ManagementQueryService;
 use vnc_relay_app::management::terminate::ManagementTerminateService;
 use vnc_relay_app::metrics::MetricsService;
@@ -62,7 +62,7 @@ pub struct ManagementServices {
     pub auth: Arc<AdminAuth>,
     pub query: Arc<ManagementQueryService>,
     pub terminate: Arc<ManagementTerminateService>,
-    pub config: Arc<dyn ConfigManagement>,
+    pub config: Arc<dyn ConfigService>,
     pub logs: Arc<crate::ops_log::RecentLogs>,
     pub metrics: Arc<MetricsService>,
     pub sources: Arc<SourcesService>,
@@ -206,7 +206,7 @@ struct Shared {
     auth: Arc<AdminAuth>,
     query: Arc<ManagementQueryService>,
     terminate: Arc<ManagementTerminateService>,
-    config: Arc<dyn ConfigManagement>,
+    config: Arc<dyn ConfigService>,
     logs: Arc<crate::ops_log::RecentLogs>,
     metrics: Arc<MetricsService>,
     sources: Arc<SourcesService>,

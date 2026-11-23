@@ -13,8 +13,8 @@ use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, ServerName};
 use rustls::{ClientConfig, ClientConnection, RootCertStore, StreamOwned};
 use serde_json::{Value, json};
-use vnc_relay_adapters::accounts_file::Argon2Hasher;
-use vnc_relay_app::ports::PasswordHasher;
+use vnc_relay_adapters::accounts_file::Argon2PasswordHashGateway;
+use vnc_relay_app::ports::PasswordHashGateway;
 use vnc_relay_domain::account::{Argon2Params, Password};
 
 pub const LIMIT: Duration = Duration::from_secs(20);
@@ -234,7 +234,7 @@ impl Server {
         must(fs::write(dir.join("viewer.json"), viewer_keys));
         must(fs::write(dir.join("server.json"), server_keys));
         let password = must(Password::parse(PASSWORD.to_owned()));
-        let hash = must(Argon2Hasher.hash(
+        let hash = must(Argon2PasswordHashGateway.hash(
             &password,
             Argon2Params {
                 memory_kib: 19456,

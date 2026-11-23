@@ -28,7 +28,7 @@ use vnc_relay_domain::conn_id::ConnId;
 use vnc_relay_domain::entry_point::{EntryPoint, Listener};
 use vnc_relay_domain::peer_ip::PeerIp;
 
-use crate::target::TcpTargetConnector;
+use crate::target::TcpTargetGateway;
 /// TCP payload stream used after admission or an exact-address target connect.
 /// Terminal close intents shut down writes; the owner then drops the socket
 /// before returning its connection permit (relay-session.md §§3.2, 6).
@@ -359,7 +359,7 @@ pub struct TcpEntryPoint<L = TcpListener> {
     listener: L,
     policy: AcceptPolicy,
     service: Arc<RelayService>,
-    runtime: Arc<RelayRuntime<TcpTargetConnector>>,
+    runtime: Arc<RelayRuntime<TcpTargetGateway>>,
     clock: Arc<dyn Clock>,
 }
 
@@ -399,7 +399,7 @@ impl<L: crate::listener::Listener> TcpEntryPoint<L> {
         listener: L,
         policy: AcceptPolicy,
         service: Arc<RelayService>,
-        runtime: Arc<RelayRuntime<TcpTargetConnector>>,
+        runtime: Arc<RelayRuntime<TcpTargetGateway>>,
         clock: Arc<dyn Clock>,
     ) -> Self {
         Self {

@@ -25,7 +25,7 @@ Windows 서비스는 같은 서버 시작 경로를 터미널 대신 서비스 �
 
 ## 2. 내부 구조
 
-화살표는 실행 중 호출 또는 값 전달이다. `Installer`는 루트 조립 모듈 내부의 설치 경계다. 제품 구현은 `Scm`이고 단위 시험은 `FakeScm`을 주입한다. app·domain은 이 경계나 SCM을 알지 못한다.
+화살표는 실행 중 호출 또는 값 전달이다. `ServiceInstallGateway`는 루트 조립 모듈 내부의 설치 경계다. 제품 구현은 `Scm`이고 단위 시험은 `FakeScm`을 주입한다. app·domain은 이 경계나 SCM을 알지 못한다.
 
 ```mermaid
 flowchart LR
@@ -43,7 +43,7 @@ flowchart LR
 | 요소(파일·심볼) | 역할 | 만들어지는 시점과 소유자 | 의존 대상 |
 | --- | --- | --- | --- |
 | `src/main.rs` `main`; `src/cli.rs` `parse`, `parse_service`, `ServiceAction` | 명령을 해석하고 `service::run`에 넘긴다. | 프로세스 진입 | clap·service |
-| `src/service.rs` `run`, `install`, `install_with`, `Installer` | 설치 순서를 수행하고 등록 후 실패를 되돌린다. `impl Installer for Scm`이 실제 SCM 호출을 연결한다. | 설치 명령 동안 | cli·serve·adapters |
+| `src/service.rs` `run`, `install`, `install_with`, `ServiceInstallGateway` | 설치 순서를 수행하고 등록 후 실패를 되돌린다. `impl ServiceInstallGateway for Scm`이 실제 SCM 호출을 연결한다. | 설치 명령 동안 | cli·serve·adapters |
 | `src/service.rs` `uninstall`, `run_service` | 중지된 서비스만 해제하거나 SCM dispatcher에 서버 body를 등록한다. | 각 명령 동안 | Scm·adapters `run` |
 | `src/serve.rs` `Host`, `start`, `check_service_files`, `Requests`, `HostStatus` | 시작 경로를 공유하고 종료 요청 출처와 보고 대상을 바꾼다. | 서버 실행 또는 설치 전 검사 | 기존 서버 구성요소 |
 | `crates/adapters/src/windows_service.rs` `Scm`, `Installed`, `lookup_operator` | SCM 핸들·등록 핸들을 소유하고 안전한 API로 설치·해제를 수행한다. | 명령 동안 | windows-service·security |
@@ -77,9 +77,9 @@ flowchart LR
 | 1 | `src/service.rs` `install`; adapters `Scm::open_for_install` | CONNECT·CREATE_SERVICE로 SCM을 연다. | 설치 권한을 가진 핸들 | `install_with` |
 | 2 | `src/service.rs` `install_with` | 기존 서비스가 있으면 거절한다. 모든 `--operator`를 차례로 조회한다. | `Operator` 목록 | 파일 검사·권한 부여 |
 | 3 | 같은 함수; `src/serve.rs` `check_service_files` | `std::path::absolute`로 설정 경로를 바꾼 뒤 파일을 검사한다. 절대 경로 변환 실패는 원래 경로로 파일 검사에 넘긴다. | 검사 통과한 경로 | 등록 |
-| 4 | `src/service.rs` `install_with` | `current_exe`를 얻고 `Installer::create`를 부른다. | 새 등록 | configure |
+| 4 | `src/service.rs` `install_with` | `current_exe`를 얻고 `ServiceInstallGateway::create`를 부른다. | 새 등록 | configure |
 | 5 | adapters `Scm::create`; `Installed::set_delayed_start` | OWN_PROCESS·AutoStart·가상 계정으로 등록하고 지연 자동 시작을 켠다. 복구 동작은 설정하지 않는다. | 중지된 서비스 등록 | 권한 부여 |
-| 6 | `src/service.rs`의 `Installer::configure`; adapters `Installed::grant` | 운영자에게 시작·중지·상태 조회·구성 조회를 허용한다. 기존 DACL 항목은 유지한다. | 서비스 접근 권한 | 명령 결과 |
+| 6 | `src/service.rs`의 `ServiceInstallGateway::configure`; adapters `Installed::grant` | 운영자에게 시작·중지·상태 조회·구성 조회를 허용한다. 기존 DACL 항목은 유지한다. | 서비스 접근 권한 | 명령 결과 |
 | 7 | `src/service.rs` `install_with`, `run` | configure 실패면 방금 만든 등록을 삭제한다. 성공이면 설치 문장을 stdout에 쓴다. | 성공 등록 또는 되돌림 결과 | 운영자 |
 
 설치는 서비스를 시작하지 않는다. 되돌림 삭제도 실패하면 두 OS 오류 번호와 `sc.exe delete vnc-relay` 안내를 진단에 넣는다. 성공 문장을 출력하지 못해도 이미 끝난 등록을 되돌리지 않는다.
@@ -133,7 +133,7 @@ StopPending은 STOP을 받지 않는다. 따라서 두 번째 `sc.exe stop`은 �
 
 | 선택 | 이유 | 검토한 다른 방법 | 근거 |
 | --- | --- | --- | --- |
-| 등록·해제 조립과 SCM API를 분리하고 `Installer`로 설치 순서를 시험한다. | 실제 서비스 등록 없이 실패 단계·되돌림을 확인한다. | 각 단위 시험이 실제 SCM을 바꾸면 승격과 고정 서비스 이름이 필요하다. | 없음 |
+| 등록·해제 조립과 SCM API를 분리하고 `ServiceInstallGateway`로 설치 순서를 시험한다. | 실제 서비스 등록 없이 실패 단계·되돌림을 확인한다. | 각 단위 시험이 실제 SCM을 바꾸면 승격과 고정 서비스 이름이 필요하다. | 없음 |
 | `Host`로 시작 경로를 공유한다. | 서비스와 터미널에서 파일 검사·리스너·중계 종료 규칙을 따로 구현하지 않는다. | 서비스용 서버 시작 코드를 복제하면 검사 순서가 갈릴 수 있다. | [CLI 계약 1.9절](../contracts/cli-v1.md#19-windows-서비스-실행) |
 | `windows-service`가 등록 명령의 인수를 인용하게 한다. | Windows용 인수 전달을 라이브러리에 맡긴다. 공백 없는 경로는 따옴표 없이 등록될 수 있다. | 따옴표를 인수에 미리 넣으면 중복 인용이 된다. | 정확한 형식은 CLI 계약 1.9절 |
 | 서비스 계정·지연 시작·복구 없음·운영자 권한·한 서비스 이름을 고정한다. | 채택된 서비스 운영 범위를 따른다. | 이 모듈에서 별도 선택하지 않는다. | ADR-0010 |

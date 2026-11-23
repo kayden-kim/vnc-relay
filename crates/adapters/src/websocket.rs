@@ -24,7 +24,7 @@ use vnc_relay_domain::ticket::{TicketClaims, TicketError, TicketPolicy, TicketUs
 
 use crate::listener::Listener as SocketListener;
 use crate::net::{AcceptPolicy, Accepted, accept_connections};
-use crate::target::TcpTargetConnector;
+use crate::target::TcpTargetGateway;
 use crate::tls::TlsSource;
 use crate::tls_listener::{HandshakeFailure, TlsIo};
 use crate::upgrade::{HeadRead, Refusal, TicketOffer, check, read_head, switching_protocols};
@@ -52,7 +52,7 @@ pub struct WsEntryPoint<L = TcpListener> {
     tls: Option<TlsSource>,
     policy: WsPolicy,
     service: Arc<RelayService>,
-    runtime: Arc<RelayRuntime<TcpTargetConnector>>,
+    runtime: Arc<RelayRuntime<TcpTargetGateway>>,
     clock: Arc<dyn Clock>,
 }
 
@@ -64,7 +64,7 @@ impl<L: SocketListener> WsEntryPoint<L> {
         tls: Option<TlsSource>,
         policy: WsPolicy,
         service: Arc<RelayService>,
-        runtime: Arc<RelayRuntime<TcpTargetConnector>>,
+        runtime: Arc<RelayRuntime<TcpTargetGateway>>,
         clock: Arc<dyn Clock>,
     ) -> Self {
         Self {
@@ -110,7 +110,7 @@ struct WsShared {
     log: Arc<dyn EventSink>,
     policy: WsPolicy,
     service: Arc<RelayService>,
-    runtime: Arc<RelayRuntime<TcpTargetConnector>>,
+    runtime: Arc<RelayRuntime<TcpTargetGateway>>,
     clock: Arc<dyn Clock>,
 }
 

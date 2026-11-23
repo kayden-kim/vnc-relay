@@ -109,7 +109,7 @@ fn run_service(config: PathBuf) -> ExitCode {
 
 /// The SCM steps of `service install` after step 1. Tests use a fake to make
 /// each step fail.
-trait Installer {
+trait ServiceInstallGateway {
     type Operator;
     type Created;
     fn service_exists(&self) -> Result<bool, ScmError>;
@@ -124,7 +124,7 @@ trait Installer {
     fn delete(&self, created: Self::Created) -> Result<(), ScmError>;
 }
 
-impl Installer for Scm {
+impl ServiceInstallGateway for Scm {
     type Operator = Operator;
     type Created = Installed;
 
@@ -152,7 +152,7 @@ impl Installer for Scm {
 
 /// Install steps 2 to 6. A step that fails after the registration deletes it
 /// (cli-v1 §1.9 "설치 순서").
-fn install_with<I: Installer>(
+fn install_with<I: ServiceInstallGateway>(
     scm: &I,
     config: &Path,
     names: &[String],
@@ -274,7 +274,7 @@ mod tests {
         }
     }
 
-    impl Installer for FakeScm {
+    impl ServiceInstallGateway for FakeScm {
         type Operator = String;
         type Created = ();
 

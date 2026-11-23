@@ -10,7 +10,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use aws_lc_rs::digest::{SHA256, digest};
 use toml_edit::{Document, Item, Table, Value};
 use vnc_relay_app::management::config::{
-    ConfigChange, ConfigDocument, ConfigFileStore, ConfigReplaceError, ConfigValue,
+    ConfigChange, ConfigDocumentGateway, ConfigFileStore, ConfigReplaceError, ConfigValue,
 };
 use vnc_relay_app::reload::ConfigCandidate;
 use vnc_relay_app::settings::{ConfigDiagnostic, ConfigError};
@@ -132,9 +132,9 @@ impl Drop for TempFile {
 /// Uses the config loader for validation and TOML source spans for editing.
 /// Untouched bytes are never sent through a document serializer.
 #[derive(Debug, Default, Clone, Copy)]
-pub struct TomlConfigDocument;
+pub struct TomlConfigDocumentGateway;
 
-impl ConfigDocument for TomlConfigDocument {
+impl ConfigDocumentGateway for TomlConfigDocumentGateway {
     fn parse(
         &self,
         bytes: &[u8],
@@ -479,7 +479,7 @@ mod tests {
                         value: ConfigValue::Integer(90),
                     },
                 ];
-                let result = TomlConfigDocument
+                let result = TomlConfigDocumentGateway
                     .edit(source.as_bytes(), &changes)
                     .unwrap_or_else(|error| panic!("edit ticket: {error:?}"));
                 let separator = if source.ends_with('\n') { "" } else { newline };
@@ -490,7 +490,7 @@ mod tests {
                     )
                 );
                 assert_eq!(
-                    TomlConfigDocument.edit(&result, &changes),
+                    TomlConfigDocumentGateway.edit(&result, &changes),
                     Ok(result),
                     "repeating the edit must preserve all bytes"
                 );
@@ -512,7 +512,7 @@ mod tests {
                     ),
                 }]
             };
-            let added = TomlConfigDocument
+            let added = TomlConfigDocumentGateway
                 .edit(
                     source.as_bytes(),
                     &change(&["203.0.113.9", "198.51.100.0/24"]),
@@ -524,7 +524,7 @@ mod tests {
                     "{source}[relay.deny]{newline}sources = [\"203.0.113.9\", \"198.51.100.0/24\"]{newline}"
                 )
             );
-            let emptied = TomlConfigDocument
+            let emptied = TomlConfigDocumentGateway
                 .edit(&added, &change(&[]))
                 .unwrap_or_else(|error| panic!("empty deny: {error:?}"));
             assert_eq!(

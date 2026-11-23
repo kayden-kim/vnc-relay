@@ -3003,10 +3003,10 @@ fn initial_tls_and_upgrade_deadlines_have_distinct_causes_and_release_capacity()
 }
 
 fn setup_authenticated(name: &str, text: &str) -> PathBuf {
-    use vnc_relay_app::ports::PasswordHasher;
+    use vnc_relay_app::ports::PasswordHashGateway;
     use vnc_relay_domain::account::{Argon2Params, Password};
     let config = setup_with(name, text);
-    let hash = vnc_relay_adapters::accounts_file::Argon2Hasher
+    let hash = vnc_relay_adapters::accounts_file::Argon2PasswordHashGateway
         .hash(
             &Password::parse("correct-horse-battery".to_owned())
                 .unwrap_or_else(|error| panic!("test password: {error:?}")),

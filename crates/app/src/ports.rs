@@ -38,7 +38,7 @@ pub trait AccountStore {
 }
 
 /// Operator input of the `admin` commands (cli-v1 §1.5).
-pub trait AccountInput {
+pub trait AccountInputGateway {
     /// Writes `prompt` and reads one line without showing the typed text.
     fn hidden(&self, prompt: &str) -> Result<String, InputError>;
 
@@ -64,7 +64,7 @@ pub enum InputError {
 }
 
 /// Makes password hashes (cli-v1 §1.4).
-pub trait PasswordHasher {
+pub trait PasswordHashGateway {
     /// An Argon2id hash of `password` with a new salt and `params`.
     fn hash(&self, password: &Password, params: Argon2Params) -> Result<PasswordHash, HashError>;
 }
@@ -94,7 +94,7 @@ pub trait Clock: Send + Sync {
 }
 
 /// Checks a typed password against a stored hash (management-api-v1 §1.5).
-pub trait PasswordVerifier: Send + Sync {
+pub trait PasswordVerifyGateway: Send + Sync {
     /// `Ok(false)` for a mismatch. `Err` only when the check itself failed.
     fn verify(&self, typed: &str, hash: &PasswordHash) -> Result<bool, HashError>;
 }
@@ -281,7 +281,7 @@ impl std::error::Error for TargetError {}
 /// The adapter captures current K at each socket dial start; it must not retain
 /// startup K or change an established stream's options. Dropping a connect
 /// future closes its in-progress socket. KeepaliveFailed aborts the request.
-pub trait TargetConnector: Send + Sync {
+pub trait TargetGateway: Send + Sync {
     type Stream: RelayStream + 'static;
 
     fn resolve(
@@ -385,12 +385,12 @@ pub trait AdminSessionSource: Send + Sync {
 /// Reads one IP information database file (config-v4 §1.12): size limit,
 /// whole-file read, format check, and the field choice. It never fails as
 /// a call; the outcome and a fingerprint of what was read come back.
-pub trait IpDbLoader: Send + Sync {
+pub trait IpDbFileGateway: Send + Sync {
     fn read(&self, path: &Path) -> IpDbRead;
 }
 
 /// A database that was read and checked. Lookups never touch the file.
-pub trait IpDatabase: Send + Sync {
+pub trait IpDbLookupGateway: Send + Sync {
     fn metadata(&self) -> &IpDbMetadata;
 
     /// True when the records have the field `key` needs (config-v4 §1.12

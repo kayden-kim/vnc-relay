@@ -106,7 +106,7 @@ struct Running {
     status_fault: mpsc::UnboundedSender<i32>,
     requests: mpsc::UnboundedSender<ShutdownRequest>,
     service: Arc<RelayService>,
-    runtime: Arc<RelayRuntime<TcpTargetConnector>>,
+    runtime: Arc<RelayRuntime<TcpTargetGateway>>,
     lifecycle: Arc<LifecycleService>,
     budget: Arc<ConnectionBudget>,
     admin_budget: Arc<ConnectionBudget>,
@@ -178,7 +178,7 @@ enabled = true
         )));
         let settings: Arc<dyn RuntimeSettingsSource> = cell.clone();
         let runtime = Arc::new(RelayRuntime::new(
-            TcpTargetConnector::new(Arc::clone(&settings)),
+            TcpTargetGateway::new(Arc::clone(&settings)),
             Arc::new(RelayIdKey::generate().unwrap_or_else(|error| panic!("relay key: {error:?}"))),
             Arc::new(SessionIdKey::from_bytes(&[0x51; 32])),
             Arc::clone(&budget),

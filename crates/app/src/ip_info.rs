@@ -14,7 +14,7 @@ use std::time::SystemTime;
 use vnc_relay_domain::ip_info::{Asn, CountryCode, Provider, is_local};
 
 use crate::events::{Event, Phase};
-use crate::ports::{Clock, EventSink, IpDatabase, IpDbLoader};
+use crate::ports::{Clock, EventSink, IpDbFileGateway, IpDbLookupGateway};
 
 /// Longest `database_type` the query shows (management-api-v1 §1.17).
 const DATABASE_TYPE_CHARS: usize = 128;
@@ -105,16 +105,16 @@ pub struct IpDbError {
     pub detail: Option<String>,
 }
 
-/// One read of one file by `IpDbLoader`.
+/// One read of one file by `IpDbFileGateway`.
 pub struct IpDbRead {
     pub fingerprint: Fingerprint,
-    pub result: Result<Arc<dyn IpDatabase>, IpDbError>,
+    pub result: Result<Arc<dyn IpDbLookupGateway>, IpDbError>,
 }
 
 /// The databases used now, one slot per key. Event recording and the
 /// query read them; only `IpInfoService` replaces them.
 pub struct IpLookup {
-    slots: RwLock<[Option<Arc<dyn IpDatabase>>; 2]>,
+    slots: RwLock<[Option<Arc<dyn IpDbLookupGateway>>; 2]>,
 }
 
 impl IpLookup {
@@ -152,7 +152,7 @@ impl IpLookup {
             .and_then(|db| db.as_name(ip))
     }
 
-    pub(crate) fn set(&self, key: IpDbKey, db: Arc<dyn IpDatabase>) {
+    pub(crate) fn set(&self, key: IpDbKey, db: Arc<dyn IpDbLookupGateway>) {
         let mut slots = self.slots.write().unwrap_or_else(PoisonError::into_inner);
         slots[key.index()] = Some(db);
     }
@@ -219,7 +219,7 @@ struct Current {
 /// keeps the previous database and only writes a warning.
 pub struct IpInfoService {
     paths: [Option<PathBuf>; 2],
-    loader: Arc<dyn IpDbLoader>,
+    loader: Arc<dyn IpDbFileGateway>,
     lookup: Arc<IpLookup>,
     clock: Arc<dyn Clock>,
     log: Arc<dyn EventSink>,
@@ -232,7 +232,7 @@ impl IpInfoService {
     pub fn new(
         country_db: Option<PathBuf>,
         asn_db: Option<PathBuf>,
-        loader: Arc<dyn IpDbLoader>,
+        loader: Arc<dyn IpDbFileGateway>,
         lookup: Arc<IpLookup>,
         clock: Arc<dyn Clock>,
         log: Arc<dyn EventSink>,

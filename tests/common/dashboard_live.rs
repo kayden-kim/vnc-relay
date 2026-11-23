@@ -12,8 +12,8 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use serde_json::{Value, json};
-use vnc_relay_adapters::accounts_file::Argon2Hasher;
-use vnc_relay_app::ports::PasswordHasher;
+use vnc_relay_adapters::accounts_file::Argon2PasswordHashGateway;
+use vnc_relay_app::ports::PasswordHashGateway;
 use vnc_relay_domain::account::{Argon2Params, Password};
 
 #[path = "browser_port.rs"]
@@ -32,7 +32,7 @@ pub const PASSWORD: &str = "dashboard-real-password";
 static NEXT: AtomicU64 = AtomicU64::new(0);
 static HASH: LazyLock<String> = LazyLock::new(|| {
     let password = must(Password::parse(PASSWORD.to_owned()));
-    must(Argon2Hasher.hash(
+    must(Argon2PasswordHashGateway.hash(
         &password,
         Argon2Params {
             memory_kib: 19_456,

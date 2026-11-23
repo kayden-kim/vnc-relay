@@ -23,7 +23,7 @@ use vnc_relay_adapters::clock::SystemClock;
 use vnc_relay_adapters::crypto::{RelayIdKey, SessionIdKey};
 use vnc_relay_adapters::net::{AcceptPolicy, AllowSource, TcpEntryPoint};
 use vnc_relay_adapters::ops_log::format_line;
-use vnc_relay_adapters::target::TcpTargetConnector;
+use vnc_relay_adapters::target::TcpTargetGateway;
 use vnc_relay_adapters::tls::{self, TlsSource};
 use vnc_relay_adapters::websocket::{WsEntryPoint, WsPolicy};
 use vnc_relay_app::events::Event;
@@ -137,7 +137,7 @@ struct Running {
     secure: bool,
     events: Arc<Recorder>,
     service: Arc<RelayService>,
-    runtime: Arc<RelayRuntime<TcpTargetConnector>>,
+    runtime: Arc<RelayRuntime<TcpTargetGateway>>,
     clock: Arc<dyn Clock>,
     budget: Arc<ConnectionBudget>,
     limit: u32,
@@ -207,7 +207,7 @@ impl Running {
         let budget = ConnectionBudget::new();
         let runtime =
             Arc::new(RelayRuntime::new(
-                TcpTargetConnector::new(Arc::clone(&source)),
+                TcpTargetGateway::new(Arc::clone(&source)),
                 Arc::new(RelayIdKey::generate().unwrap_or_else(|error| {
                     panic!(concat!("relay reference key", ": {:?}"), error)
                 })),

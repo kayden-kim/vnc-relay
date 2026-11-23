@@ -15,8 +15,8 @@ use std::time::{Duration, Instant};
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, ServerName};
 use rustls::{ClientConfig, ClientConnection, RootCertStore, StreamOwned};
-use vnc_relay_adapters::accounts_file::Argon2Hasher;
-use vnc_relay_app::ports::PasswordHasher;
+use vnc_relay_adapters::accounts_file::Argon2PasswordHashGateway;
+use vnc_relay_app::ports::PasswordHashGateway;
 use vnc_relay_domain::account::{Argon2Params, Password};
 
 const BIN: &str = env!("CARGO_BIN_EXE_vnc-relay");
@@ -512,7 +512,7 @@ impl Server {
         ));
         must(fs::create_dir_all(&dir));
         let password = must(Password::parse(PASSWORD.to_owned()));
-        let hash = must(Argon2Hasher.hash(
+        let hash = must(Argon2PasswordHashGateway.hash(
             &password,
             Argon2Params {
                 memory_kib: 19_456,

@@ -7,7 +7,7 @@ use vnc_relay_domain::peer_ip::PeerIp;
 
 use super::{AdminAuth, AuthError, SessionView, session_view};
 use crate::events::{Event, LoginFailReason};
-use crate::ports::{HashError, PasswordHasher};
+use crate::ports::{HashError, PasswordHashGateway};
 
 /// The password behind the dummy hash. It is hashed once at startup and
 /// never stored. An unknown account is checked against the dummy hash, so it
@@ -16,7 +16,7 @@ const DUMMY_PASSWORD: &str = "dummy-password-for-unknown-accounts";
 
 /// Makes the dummy hash that unknown accounts are checked against.
 pub fn dummy_hash(
-    hasher: &dyn PasswordHasher,
+    hasher: &dyn PasswordHashGateway,
     params: Argon2Params,
 ) -> Result<PasswordHash, HashError> {
     let password =

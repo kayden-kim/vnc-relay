@@ -13,7 +13,7 @@ use super::{
     IpLookup,
 };
 use crate::events::{Event, Phase};
-use crate::ports::{Clock, EventSink, IpDatabase, IpDbLoader};
+use crate::ports::{Clock, EventSink, IpDbFileGateway, IpDbLookupGateway};
 
 const WALL: u64 = 1_790_000_000;
 
@@ -51,7 +51,7 @@ struct OneRecord {
     asn: Option<(Asn, String)>,
 }
 
-impl IpDatabase for OneRecord {
+impl IpDbLookupGateway for OneRecord {
     fn metadata(&self) -> &IpDbMetadata {
         &self.metadata
     }
@@ -104,7 +104,7 @@ impl Files {
     }
 }
 
-impl IpDbLoader for Files {
+impl IpDbFileGateway for Files {
     fn read(&self, path: &Path) -> IpDbRead {
         *self.reads.lock().expect("reads lock") += 1;
         let content = self
@@ -160,7 +160,7 @@ fn fixture(country_db: Option<&str>, asn_db: Option<&str>) -> Fixture {
     let service = IpInfoService::new(
         country_db.map(PathBuf::from),
         asn_db.map(PathBuf::from),
-        Arc::clone(&files) as Arc<dyn IpDbLoader>,
+        Arc::clone(&files) as Arc<dyn IpDbFileGateway>,
         Arc::clone(&lookup),
         Arc::new(FixedClock),
         Arc::clone(&log) as Arc<dyn EventSink>,

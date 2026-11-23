@@ -14,19 +14,21 @@ use std::time::{Duration, SystemTime};
 
 use tokio::sync::watch;
 use tokio::task::JoinSet;
-use vnc_relay_adapters::accounts_file::{Argon2Hasher, Argon2Verifier, HashFloor};
+use vnc_relay_adapters::accounts_file::{
+    Argon2PasswordHashGateway, Argon2PasswordVerifyGateway, HashFloor,
+};
 use vnc_relay_adapters::clock::SystemClock;
-use vnc_relay_adapters::config_edit::{FsConfigFileStore, TomlConfigDocument};
+use vnc_relay_adapters::config_edit::{FsConfigFileStore, TomlConfigDocumentGateway};
 use vnc_relay_adapters::crypto::{CryptoError, RelayIdKey, SessionIdKey, SystemTokenSource};
 use vnc_relay_adapters::file_watch::{self, FsReloadFileStore, SystemReloadClock};
-use vnc_relay_adapters::ip_db::MmdbLoader;
+use vnc_relay_adapters::ip_db::MmdbFileGateway;
 use vnc_relay_adapters::listener::{ListenerFailure, SupervisedListener};
 use vnc_relay_adapters::management_http::{DashboardHints, ManagementListener, ManagementServices};
 use vnc_relay_adapters::net::{AcceptPolicy, AllowSource, BindFailure, TcpEntryPoint};
 use vnc_relay_adapters::ops_log::{JsonLinesEventSink, RecentLogs};
 use vnc_relay_adapters::process_stats::OsProcessStats;
 use vnc_relay_adapters::status_http::StatusListener;
-use vnc_relay_adapters::target::TcpTargetConnector;
+use vnc_relay_adapters::target::TcpTargetGateway;
 use vnc_relay_adapters::tls::{self, TlsError, TlsFile, TlsSource};
 use vnc_relay_adapters::websocket::{WsEntryPoint, WsPolicy};
 use vnc_relay_adapters::{accounts_file, config_file, net};
@@ -34,7 +36,7 @@ use vnc_relay_app::accounts::{self, ACCOUNTS_FILE_KEY, AccountsDiagnostic};
 use vnc_relay_app::events::{Event, Phase};
 use vnc_relay_app::ip_info::{IpInfoService, IpLookup};
 use vnc_relay_app::lifecycle::LifecycleService;
-use vnc_relay_app::management::config::{ConfigEditService, ConfigManagement};
+use vnc_relay_app::management::config::{ConfigEditService, ConfigService};
 use vnc_relay_app::management::login::dummy_hash;
 use vnc_relay_app::management::query::ManagementQueryService;
 use vnc_relay_app::management::terminate::ManagementTerminateService;
@@ -173,7 +175,7 @@ pub fn start(config: &Path, host: Host) -> u8 {
     // Admin sessions (management-api-v1 §1.4). An unknown account is checked
     // against the dummy hash, so it costs one password check like a known one
     // (MGT-022).
-    let dummy = match dummy_hash(&Argon2Hasher, settings.admin.argon2.params()) {
+    let dummy = match dummy_hash(&Argon2PasswordHashGateway, settings.admin.argon2.params()) {
         Ok(dummy) => dummy,
         Err(error) => {
             return runtime_failure(log.as_ref(), "관리 세션용 더미 해시를 만들 수 없다", &error);
@@ -185,7 +187,7 @@ pub fn start(config: &Path, host: Host) -> u8 {
         loaded.accounts,
         dummy,
         AdminPorts {
-            verifier: Arc::new(Argon2Verifier),
+            verifier: Arc::new(Argon2PasswordVerifyGateway),
             tokens: Arc::new(SystemTokenSource),
             clock: Arc::clone(&clock),
             events: Arc::clone(&log),
@@ -434,7 +436,7 @@ async fn listen_until_shutdown(
     let ip_info = Arc::new(IpInfoService::new(
         settings.ip_info.country_db.clone(),
         settings.ip_info.asn_db.clone(),
-        Arc::new(MmdbLoader),
+        Arc::new(MmdbFileGateway),
         ip_lookup,
         Arc::clone(&clock),
         Arc::clone(&log),
@@ -467,7 +469,7 @@ async fn listen_until_shutdown(
     // Every relay entry point takes places from one L.
     let relay_budget = ConnectionBudget::new();
     let waiting_budget = ConnectionBudget::new();
-    let connector = TcpTargetConnector::new(
+    let connector = TcpTargetGateway::new(
         Arc::clone(&cell) as Arc<dyn vnc_relay_app::reload::ports::RuntimeSettingsSource>
     );
     let runtime = Arc::new(RelayRuntime::new(
@@ -744,12 +746,12 @@ fn config_management<A: Clone + Send + Sync + 'static>(
     reload: SharedReload<A>,
     clock: Arc<dyn Clock>,
     log: Arc<dyn EventSink>,
-) -> io::Result<Arc<dyn ConfigManagement>> {
+) -> io::Result<Arc<dyn ConfigService>> {
     let config = std::path::absolute(config)?;
     Ok(Arc::new(ConfigEditService::new(
         reload,
         Arc::new(FsConfigFileStore),
-        Arc::new(TomlConfigDocument),
+        Arc::new(TomlConfigDocumentGateway),
         config.to_path_buf(),
         config.parent().unwrap_or(Path::new("")).to_path_buf(),
         clock,

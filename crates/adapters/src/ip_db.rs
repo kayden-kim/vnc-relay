@@ -15,7 +15,7 @@ use maxminddb::{LookupResult, PathElement, Reader, WithinOptions};
 use vnc_relay_app::ip_info::{
     Fingerprint, IpDbError, IpDbFailure, IpDbKey, IpDbMetadata, IpDbRead,
 };
-use vnc_relay_app::ports::{IpDatabase, IpDbLoader};
+use vnc_relay_app::ports::{IpDbFileGateway, IpDbLookupGateway};
 use vnc_relay_domain::ip_info::{Asn, CountryCode};
 
 /// Largest file read: 256 MiB (config-v4 §1.12).
@@ -53,14 +53,14 @@ enum AsnField {
 }
 
 /// Reads files from the local file system.
-pub struct MmdbLoader;
+pub struct MmdbFileGateway;
 
-impl IpDbLoader for MmdbLoader {
+impl IpDbFileGateway for MmdbFileGateway {
     fn read(&self, path: &Path) -> IpDbRead {
         match read_bytes(path) {
             Ok((bytes, hash)) => IpDbRead {
                 fingerprint: Fingerprint::Content(hash),
-                result: open(bytes).map(|db| Arc::new(db) as Arc<dyn IpDatabase>),
+                result: open(bytes).map(|db| Arc::new(db) as Arc<dyn IpDbLookupGateway>),
             },
             Err((fingerprint, error)) => IpDbRead {
                 fingerprint,
@@ -134,7 +134,7 @@ fn failure(failure: IpDbFailure, detail: String) -> IpDbError {
 
 /// Checks the whole file and picks the fields. The detail sentences are
 /// fixed: messages from the reader can quote keys from the file.
-fn open(bytes: Vec<u8>) -> Result<MmdbDatabase, IpDbError> {
+fn open(bytes: Vec<u8>) -> Result<MmdbLookupGateway, IpDbError> {
     let invalid = |detail: &str| failure(IpDbFailure::InvalidFormat, detail.to_owned());
     // `from_source` also rejects a binary format major version other than 2.
     let reader = Reader::from_source(bytes)
@@ -146,7 +146,7 @@ fn open(bytes: Vec<u8>) -> Result<MmdbDatabase, IpDbError> {
     let source = reader.metadata();
     let build_time = SystemTime::UNIX_EPOCH + Duration::from_secs(source.build_epoch);
     let metadata = IpDbMetadata::new(&source.database_type, build_time);
-    Ok(MmdbDatabase {
+    Ok(MmdbLookupGateway {
         reader,
         metadata,
         country,
@@ -200,14 +200,14 @@ fn pick_fields(reader: &Reader<Vec<u8>>) -> Result<(Option<CountryField>, Option
 }
 
 /// A checked file held in memory.
-pub struct MmdbDatabase {
+pub struct MmdbLookupGateway {
     reader: Reader<Vec<u8>>,
     metadata: IpDbMetadata,
     country: Option<CountryField>,
     asn: Option<AsnField>,
 }
 
-impl MmdbDatabase {
+impl MmdbLookupGateway {
     fn text(&self, ip: IpAddr, path: &[PathElement<'_>]) -> Option<&str> {
         self.reader
             .lookup(ip)
@@ -218,7 +218,7 @@ impl MmdbDatabase {
     }
 }
 
-impl IpDatabase for MmdbDatabase {
+impl IpDbLookupGateway for MmdbLookupGateway {
     fn metadata(&self) -> &IpDbMetadata {
         &self.metadata
     }

@@ -45,13 +45,13 @@ flowchart LR
 | 요소(파일·심볼) | 역할 | 소유·수명 |
 | --- | --- | --- |
 | `file_watch.rs` `ReloadWatcher` | watched 경로·processed 해시·알림 feed·안정화·후보 최종 read | serve가 만들고 종료 시 join한다. |
-| `file_watch/feed.rs` `ChangeQueue`·`NotifyFeed` | 파일 이름별 OS 알림 필터, 세대·유실 재확인·로그 신호 | watcher와 OS 콜백이 공유한다. |
+| `file_watch/feed.rs` `ChangeQueue`·`NotifyWatchGateway` | 파일 이름별 OS 알림 필터, 세대·유실 재확인·로그 신호 | watcher와 OS 콜백이 공유한다. |
 | `reload/service.rs` `ReloadService`·`PreparedReload` | 실행 Settings/presence·TLS 기준 해시·마지막 결과, 부작용 없는 준비와 commit | watcher와 ConfigEditService가 같은 `SharedReload`로 공유한다. |
 | `reload/snapshot.rs` `ReloadCell`·`ReloadSnapshot` | Settings·presence·TLS를 한 번 발행한다. | 서비스가 쓰고 runtime reader가 읽는다. |
 | `reload/ports.rs` `RuntimeSettingsSource` | TLS 타입을 노출하지 않는 현재 Settings callback | 같은 snapshot read lock을 callback 끝까지 유지한다. |
 | `file_watch.rs` `reopen_log` | 알림·Dp에서 로그를 다시 연다. 안정화 대기와 독립이다. | watcher run과 함께 끝난다. |
-| `file_watch.rs` `attach_ip_info`·`IpDbWatch`·`db_hashes`·`ip_db_changed`·`refresh_ip_db` | DB 경로 목록과 경로별 마지막 처리 해시를 둔다. 해시는 `stream_hashes`가 64 KiB씩 읽어 `spawn_blocking`에서 계산한다. 두 async 함수는 `&mut self`를 받는다. `ChangeFeed`가 `Sync`가 아니어서 `&self`를 await 너머로 들고 가면 `run`의 future가 `Send`가 아니게 되기 때문이다 | serve가 `file_watch::start` 직후, DB 첫 읽기 전에 붙인다. 경로는 프로세스 동안 고정이다. |
-| `file_watch/feed.rs` `ChangeFeed::watch_dirs(required, optional)`·`ChangeQueue::set_hidden`·`offer_error` | 필수 디렉터리 등록 실패는 오류다. 선택 디렉터리 등록 실패는 건너뛰고 `false`를 돌려주며 watcher는 다음 Dp에 다시 시도한다. 알림 오류는 숨길 경로(DB 파일·해석한 대상·선택 디렉터리)를 뺀 뒤 기록하고, 숨길 경로만 있던 오류는 버린다 | watcher와 OS 콜백이 공유한다. |
+| `file_watch.rs` `attach_ip_info`·`IpDbWatch`·`db_hashes`·`ip_db_changed`·`refresh_ip_db` | DB 경로 목록과 경로별 마지막 처리 해시를 둔다. 해시는 `stream_hashes`가 64 KiB씩 읽어 `spawn_blocking`에서 계산한다. 두 async 함수는 `&mut self`를 받는다. `WatchGateway`가 `Sync`가 아니어서 `&self`를 await 너머로 들고 가면 `run`의 future가 `Send`가 아니게 되기 때문이다 | serve가 `file_watch::start` 직후, DB 첫 읽기 전에 붙인다. 경로는 프로세스 동안 고정이다. |
+| `file_watch/feed.rs` `WatchGateway::watch_dirs(required, optional)`·`ChangeQueue::set_hidden`·`offer_error` | 필수 디렉터리 등록 실패는 오류다. 선택 디렉터리 등록 실패는 건너뛰고 `false`를 돌려주며 watcher는 다음 Dp에 다시 시도한다. 알림 오류는 숨길 경로(DB 파일·해석한 대상·선택 디렉터리)를 뺀 뒤 기록하고, 숨길 경로만 있던 오류는 버린다 | watcher와 OS 콜백이 공유한다. |
 
 ## 3. 데이터 모델
 
@@ -203,7 +203,7 @@ IP 정보 DB 파일은 위 순서에 끼어든다. 1단계의 주기 확인(`pol
 | U | WS/WSS와 관리 TCP 수락 때 고정. `AdmittedAddr`가 관리 수락 U를 TLS/DeadlineListener로 전달 | 기존 keep-alive도 기존 U, 상태에는 U 없음 |
 | E | `relay/session.rs` 첫 종료 전이, `relay.rs` 단일 스트림 종료·관리 종료 수락 때 읽음. `DashboardHints::terminate_timeout_secs`도 응답 때 읽음 | 시작한 종료 deadline 유지 |
 | G | `serve.rs` 최초 종료 원인 선택 뒤 snapshot에서 한 번 읽음 | 유예 중 PATCH가 deadline을 바꾸지 않음 |
-| TCP keepalive 3개 | `net.rs` 수락 때 한 묶음, `target.rs` `TcpTargetConnector::connect`는 새 대상 소켓마다 읽음 | 기존 소켓 옵션 유지 |
+| TCP keepalive 3개 | `net.rs` 수락 때 한 묶음, `target.rs` `TcpTargetGateway::connect`는 새 대상 소켓마다 읽음 | 기존 소켓 옵션 유지 |
 
 원자 교체는 각 경계가 이전/새 한 세대만 읽는다는 뜻이다. 수락과 업그레이드처럼 서로 다른 경계가 서로 다른 세대를 읽는 것은 의도한 동작이다.
 

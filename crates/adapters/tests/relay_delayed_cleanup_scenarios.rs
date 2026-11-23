@@ -15,7 +15,7 @@ mod delayed_cleanup {
     use vnc_relay_adapters::crypto::{RelayIdKey, SessionIdKey};
     use vnc_relay_adapters::net::{AcceptPolicy, AllowSource, TcpEntryPoint, TcpRelayStream};
     use vnc_relay_adapters::ops_log::format_line;
-    use vnc_relay_adapters::target::TcpTargetConnector;
+    use vnc_relay_adapters::target::TcpTargetGateway;
     use vnc_relay_app::events::Event;
     use vnc_relay_app::metrics::Metrics;
     use vnc_relay_app::ports::{Clock, EventSink};
@@ -102,7 +102,7 @@ mod delayed_cleanup {
     async fn prepare_server(
         listener: &TcpListener,
         service: &RelayService,
-        runtime: &RelayRuntime<TcpTargetConnector>,
+        runtime: &RelayRuntime<TcpTargetGateway>,
         clock: &dyn Clock,
         budget: &Arc<ConnectionBudget>,
     ) -> (PreparedConnection<TcpRelayStream>, TcpStream) {
@@ -243,7 +243,7 @@ mod delayed_cleanup {
                 let settings: Arc<dyn RuntimeSettingsSource> = cell.clone();
                 let budget = ConnectionBudget::new();
                 let runtime = Arc::new(RelayRuntime::new(
-                    TcpTargetConnector::new(Arc::clone(&settings)),
+                    TcpTargetGateway::new(Arc::clone(&settings)),
                     Arc::new(RelayIdKey::generate().unwrap_or_else(|error| {
                         panic!(concat!("real relay reference key", ": {:?}"), error)
                     })),

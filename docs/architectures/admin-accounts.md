@@ -7,7 +7,7 @@
 | 구조 시점 | Current |
 | 문서 상태 | Draft |
 | 구현 대조 | Verified — [대조 기록](#대조-기록) |
-| 코드 위치 | `crates/domain/src/account.rs`(`Password`), `crates/app/src/accounts.rs`(`AdminService`, `AdminFailure`, `AccountsWarning`, `LoadedAccounts`), `crates/app/src/ports.rs`(`AccountStore`, `AccountInput`, `PasswordHasher`), `crates/adapters/src/accounts_file.rs`·`crates/adapters/src/accounts_file/`(`AccountsFile`, `HashFloor`, `Argon2Hasher`), `crates/adapters/src/terminal.rs`(`Terminal`), `crates/adapters/src/terminal/windows_console.rs`(`SavedInputMode`, Windows 전용), `crates/adapters/src/config_file.rs`(`load_admin`), `src/cli.rs`(`Command::Admin`), `src/admin.rs` |
+| 코드 위치 | `crates/domain/src/account.rs`(`Password`), `crates/app/src/accounts.rs`(`AdminService`, `AdminFailure`, `AccountsWarning`, `LoadedAccounts`), `crates/app/src/ports.rs`(`AccountStore`, `AccountInputGateway`, `PasswordHashGateway`), `crates/adapters/src/accounts_file.rs`·`crates/adapters/src/accounts_file/`(`AccountsFile`, `HashFloor`, `Argon2PasswordHashGateway`), `crates/adapters/src/terminal.rs`(`TerminalAccountInputGateway`), `crates/adapters/src/terminal/windows_console.rs`(`SavedInputMode`, Windows 전용), `crates/adapters/src/config_file.rs`(`load_admin`), `src/cli.rs`(`Command::Admin`), `src/admin.rs` |
 | 코드 지도 | [코드 지도 2절](code-map.md#2-코드-위치와-구성요소), [3절](code-map.md#3-진입점) |
 | 관련 스펙 | [운영 스펙 3.2절](../specs/operations.md#32-로컬-cli-계정-준비), OPS-R15, OPS-029(일부: 로그인 제외), OPS-030 |
 | 관련 계약 | [CLI 계약](../contracts/cli-v1.md) 1.1~1.6절·2절, [설정 계약 1.2절](../contracts/config-v4.md#12-키-표)(`[admin]`) |
@@ -32,9 +32,9 @@
 - 다른 모듈에 공개하는 기능:
   - `vnc_relay_domain::account::{Password, PasswordError}`
   - `vnc_relay_app::accounts::{AdminService, AdminFailure, LoadedAccounts, AccountsWarning, list}`
-  - `vnc_relay_app::ports::{AccountStore, AccountInput, InputError, PasswordHasher, HashError}`
-  - `vnc_relay_adapters::accounts_file::{AccountsFile, HashFloor, Argon2Hasher, load, parse}`
-  - `vnc_relay_adapters::terminal::Terminal`
+  - `vnc_relay_app::ports::{AccountStore, AccountInputGateway, InputError, PasswordHashGateway, HashError}`
+  - `vnc_relay_adapters::accounts_file::{AccountsFile, HashFloor, Argon2PasswordHashGateway, load, parse}`
+  - `vnc_relay_adapters::terminal::TerminalAccountInputGateway`
   - `vnc_relay_adapters::config_file::load_admin`
 
 ## 2. 내부 구조
@@ -48,8 +48,8 @@ flowchart LR
     ADMIN -->|"2 [admin]"| CFG["adapters config_file.rs<br/>load_admin"]
     ADMIN -->|"3 절차"| SVC["app accounts.rs<br/>AdminService"]
     SVC -->|"read, update"| STORE["adapters accounts_file<br/>AccountsFile(AccountStore)"]
-    SVC -->|"hidden, line, canceled"| TERM["adapters terminal.rs<br/>Terminal(AccountInput)"]
-    SVC -->|"hash"| HASH["adapters accounts_file<br/>Argon2Hasher(PasswordHasher)"]
+    SVC -->|"hidden, line, canceled"| TERM["adapters terminal.rs<br/>TerminalAccountInputGateway(AccountInputGateway)"]
+    SVC -->|"hash"| HASH["adapters accounts_file<br/>Argon2PasswordHashGateway(PasswordHashGateway)"]
     SVC -->|"규칙"| PW["domain account.rs<br/>Password::parse"]
     HASH -->|"솔트"| RAND["adapters crypto.rs<br/>random_bytes"]
 ```
@@ -61,14 +61,14 @@ flowchart LR
 | `crates/app/src/accounts.rs` `AdminFailure` | 절차 실패: `NotInteractive`, `AccountExists(AccountName)`, `AccountNotFound(AccountName)`, `PasswordInvalid(String)`, `PasswordMismatch`, `InputCanceled`, `RuntimeUnavailable(String)`, `Accounts(Vec<AccountsDiagnostic>)`(계정 파일 진단). 코드와 메시지를 준다. `report`가 줄을 쓴다. | 반환 값 | domain |
 | `crates/app/src/accounts.rs` `AccountsWarning` | `FilePermissive`, `LastAccountRemoved`, `CleanupFailed(String)`. `code`와 `message`를 준다. `serve`는 `load`가 돌려준 경고를 같은 코드와 메시지로 stderr에 쓴다. | 반환 값 | 없음 |
 | `crates/app/src/ports.rs` `AccountStore` | `read`(파일이 없으면 `None`)와 `update`(잠금 안에서 다시 읽고 바꾸고 교체) | 포트 | `accounts` |
-| `crates/app/src/ports.rs` `AccountInput` | `hidden`(숨김 한 줄), `line`(보이는 한 줄, 끝이면 `None`), `canceled`(입력을 연 뒤 Ctrl+C가 왔는지) | 포트 | 없음 |
-| `crates/app/src/ports.rs` `PasswordHasher` | 비밀번호와 매개변수로 `PasswordHash`를 만든다. | 포트 | domain |
+| `crates/app/src/ports.rs` `AccountInputGateway` | `hidden`(숨김 한 줄), `line`(보이는 한 줄, 끝이면 `None`), `canceled`(입력을 연 뒤 Ctrl+C가 왔는지) | 포트 | 없음 |
+| `crates/app/src/ports.rs` `PasswordHashGateway` | 비밀번호와 매개변수로 `PasswordHash`를 만든다. | 포트 | domain |
 | `crates/adapters/src/accounts_file.rs` `load`, `parse`, `HashFloor` | 읽기와 검사. `HashFloor::Reject`(`serve`)는 하한 미만을 `accounts_hash_below_minimum`으로 거절한다. `HashFloor::Accept`(`admin`)는 하한 미만을 받되, 상한 초과는 하한 미만과 함께 있어도 `accounts_file_invalid`로 거절한다. | 호출마다 | toml, app, domain |
 | `crates/adapters/src/accounts_file/store.rs` `AccountsFile` | `AccountStore` 구현. 1.6절 단계와 계정 파일 TOML 쓰기(이름순) | `src/admin.rs`가 하나 | std, app, domain |
-| `crates/adapters/src/accounts_file/hasher.rs` `Argon2Hasher` | `PasswordHasher` 구현. argon2 crate의 Argon2id·버전 19·출력 32바이트 | `src/admin.rs`가 하나 | argon2, `crypto`, app, domain |
+| `crates/adapters/src/accounts_file/hasher.rs` `Argon2PasswordHashGateway` | `PasswordHashGateway` 구현. argon2 crate의 Argon2id·버전 19·출력 32바이트 | `src/admin.rs`가 하나 | argon2, `crypto`, app, domain |
 | `crates/adapters/src/crypto.rs` `random_bytes` | 운영체제 난수로 바이트 배열을 채운다. `RelayIdKey::generate`도 쓴다. | 호출마다 | aws-lc-rs |
-| `crates/adapters/src/terminal.rs` `Terminal` | `AccountInput` 구현. 숨김 입력은 rpassword, 확인 입력은 표준 입력 한 줄. Ctrl+C 감지기를 등록한다. Windows에서는 숨김 입력 전에 콘솔 입력 모드를 저장하고 끝난 뒤(취소 포함) 되돌린다(`windows_console.rs`). | `add`·`passwd`·`remove`에서 `src/admin.rs`가 하나 | rpassword, tokio(`signal`), app, windows-sys(Windows) |
-| `crates/adapters/src/terminal/windows_console.rs` `SavedInputMode` | Windows 콘솔 입력 모드를 저장하고 되돌린다. `CONIN$`을 `CreateFileW`로 열고 `GetConsoleMode`·`SetConsoleMode`를 부른다. 핸들은 `Drop`에서 닫는다. 터미널 어댑터의 `unsafe`는 이 파일에 한정한다. 다른 OS에서는 `terminal.rs`의 빈 대체 타입(`KeptInputMode`)을 쓴다. | `Terminal::hidden`이 읽기 전후에 부른다 | windows-sys(Windows 전용) |
+| `crates/adapters/src/terminal.rs` `TerminalAccountInputGateway` | `AccountInputGateway` 구현. 숨김 입력은 rpassword, 확인 입력은 표준 입력 한 줄. Ctrl+C 감지기를 등록한다. Windows에서는 숨김 입력 전에 콘솔 입력 모드를 저장하고 끝난 뒤(취소 포함) 되돌린다(`windows_console.rs`). | `add`·`passwd`·`remove`에서 `src/admin.rs`가 하나 | rpassword, tokio(`signal`), app, windows-sys(Windows) |
+| `crates/adapters/src/terminal/windows_console.rs` `SavedInputMode` | Windows 콘솔 입력 모드를 저장하고 되돌린다. `CONIN$`을 `CreateFileW`로 열고 `GetConsoleMode`·`SetConsoleMode`를 부른다. 핸들은 `Drop`에서 닫는다. 터미널 어댑터의 `unsafe`는 이 파일에 한정한다. 다른 OS에서는 `terminal.rs`의 빈 대체 타입(`KeptInputMode`)을 쓴다. | `TerminalAccountInputGateway::hidden`이 읽기 전후에 부른다 | windows-sys(Windows 전용) |
 | `crates/adapters/src/config_file.rs` `load_admin` | 설정 파일을 읽어 TOML 구문 전체와 `[admin]`만 검사한다. 파일 읽기는 `load`와 같은 `read_text`를 쓴다. 구문 검사 뒤 `[admin]` 테이블만 `read_admin`으로 검사한다. | `admin` 실행마다 | toml, app, domain |
 | `src/cli.rs` `Command::Admin`, `AdminAction` | `admin` 하위 명령 해석 | `main`이 한 번 | clap |
 | `src/admin.rs` `run` | 이름 검사, 설정 읽기, 구현체 연결, 절차 실행, 진단·성공 문장·`notice` 출력, 종료 코드 결정 | `admin` 실행마다 | adapters, app, domain, `cli` |
@@ -92,11 +92,11 @@ flowchart LR
 | 1 | `src/main.rs` `main`, `src/cli.rs` `parse` | 인수를 `Command::Admin`으로 해석한다. | 없음 | 2단계 |
 | 2 | `src/admin.rs` `run`, `AccountName::parse` | 이름 규칙 위반이면 `account_name_invalid`, 종료 코드 2 | 없음 | stderr |
 | 3 | `config_file::load_admin` | 구문 전체와 `[admin]`을 검사한다. 실패하면 진단마다 한 줄, 종료 코드 3 | 없음 | stderr |
-| 4 | `Terminal::open` | Ctrl+C 감지기를 등록한다. 실패하면 `runtime_unavailable`, 종료 코드 1 | 감지 스레드 | 5단계 |
+| 4 | `TerminalAccountInputGateway::open` | Ctrl+C 감지기를 등록한다. 실패하면 `runtime_unavailable`, 종료 코드 1 | 감지 스레드 | 5단계 |
 | 5 | `AdminService::add`, `AccountsFile::read` | 파일이 없으면 계정 0개로 본다. 같은 이름이 있으면 `account_exists` | 없음 | 6단계 |
-| 6 | `AdminService::new_hash`, `Terminal::hidden`, `Password::parse` | `비밀번호: `를 쓰고 숨김 입력 → 규칙 검사 → `비밀번호 확인: ` → 비교 → 해시 계산 | 없음 | 7단계 |
-| 7 | `Argon2Hasher::hash` | 16바이트 솔트와 설정 매개변수로 해시 | 없음 | 8단계 |
-| 8 | `AdminService::save`, `Terminal::canceled` | 저장 직전에 Ctrl+C가 왔으면 `input_canceled` | 없음 | 9단계 |
+| 6 | `AdminService::new_hash`, `TerminalAccountInputGateway::hidden`, `Password::parse` | `비밀번호: `를 쓰고 숨김 입력 → 규칙 검사 → `비밀번호 확인: ` → 비교 → 해시 계산 | 없음 | 7단계 |
+| 7 | `Argon2PasswordHashGateway::hash` | 16바이트 솔트와 설정 매개변수로 해시 | 없음 | 8단계 |
+| 8 | `AdminService::save`, `TerminalAccountInputGateway::canceled` | 저장 직전에 Ctrl+C가 왔으면 `input_canceled` | 없음 | 9단계 |
 | 9 | `AccountsFile::update` | 1.6절 1~7단계. 다시 읽은 목록에 같은 이름이 생겼으면 `account_exists`. 계정을 더해 이름순으로 쓴다. | 계정 파일 교체 | 10단계 |
 | 10 | `src/admin.rs` `run` | `계정 'alice'을(를) 추가했다.`를 stdout에, `notice: 실행 중인 서버에는 반영되지 않는다. …`를 stderr에 쓰고 종료 코드 0 | 없음 | stdout, stderr |
 
@@ -108,7 +108,7 @@ flowchart LR
 
 ## 5. 상태와 초기화
 
-- 초기화 시점: `Terminal::open`이 감지 스레드 하나를 띄운다. 그 스레드는 tokio 현재 스레드 런타임으로 Ctrl+C를 기다리고, 받으면 공유 플래그를 켠다. 프로세스가 끝날 때까지 남는다.
+- 초기화 시점: `TerminalAccountInputGateway::open`이 감지 스레드 하나를 띄운다. 그 스레드는 tokio 현재 스레드 런타임으로 Ctrl+C를 기다리고, 받으면 공유 플래그를 켠다. 프로세스가 끝날 때까지 남는다.
 - 감지기를 먼저 등록하는 이유: rpassword는 숨김 입력 중 터미널의 신호 생성(`ISIG`)을 끈다. Ctrl+C를 읽으면 스스로 `SIGINT`를 보낸다(Unix). 처리기가 없으면 터미널 설정을 되돌리기 전에 프로세스가 끝난다. 처리기가 있으면 `Interrupted`를 반환하고 설정을 되돌린다. Windows에서는 rpassword의 복원이 읽기 종료 뒤에 실행되므로, `windows_console.rs`가 숨김 입력 전에 콘솔 입력 모드를 저장하고 끝난 뒤 취소 여부와 관계없이 복원한다.
 - Ctrl+C 무시 상속: `CreateProcess`에 `CREATE_NEW_PROCESS_GROUP`을 주면 새 프로세스에 Ctrl+C 무시 설정(`SetConsoleCtrlHandler(NULL, TRUE)`와 같은 설정)이 생기고, 이 설정은 자식 프로세스에 상속된다. 무시 설정이 있는 프로세스에는 Ctrl+C가 전달되지 않으므로 그 상태의 숨김 입력은 Ctrl+C로 끝나지 않는다. 근거: [CreateProcess](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-createprocessa), [SetConsoleCtrlHandler](https://learn.microsoft.com/en-us/windows/console/setconsolectrlhandler).
 - 확인 입력(`line`)과 숨김 입력(`hidden`)은 읽기 스레드를 띄우고 50밀리초마다 플래그를 본다. 읽기 스레드는 Windows 콘솔 읽기를 Ctrl+C로 끝낼 수 없어서 따로 띄운다. 플래그가 켜지면 500밀리초까지 읽기가 끝나기를 기다린 뒤 `input_canceled`로 끝낸다. 남은 읽기는 프로세스가 끝날 때 함께 끝난다. 취소된 프롬프트는 줄을 바꾼 뒤 오류 줄을 쓴다. 읽기 스레드를 띄우지 못하거나 읽기가 결과 없이 끝나면 `runtime_unavailable`로 끝낸다(취소가 아니다). 숨김 입력에서 콘솔 입력 모드를 읽거나 되돌리지 못해도 `runtime_unavailable`로 끝낸다(7절).

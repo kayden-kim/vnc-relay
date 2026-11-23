@@ -1,4 +1,4 @@
-//! Reads IP information database files through `MmdbLoader`
+//! Reads IP information database files through `MmdbFileGateway`
 //! (config-v4 §1.12): the three provider formats and the failure causes.
 
 use std::net::IpAddr;
@@ -6,9 +6,9 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
-use vnc_relay_adapters::ip_db::MmdbLoader;
+use vnc_relay_adapters::ip_db::MmdbFileGateway;
 use vnc_relay_app::ip_info::{IpDbError, IpDbFailure, IpDbKey};
-use vnc_relay_app::ports::{IpDatabase, IpDbLoader};
+use vnc_relay_app::ports::{IpDbFileGateway, IpDbLookupGateway};
 use vnc_relay_domain::ip_info::Provider;
 
 #[path = "common/mmdb.rs"]
@@ -35,15 +35,15 @@ fn write(dir: &std::path::Path, name: &str, bytes: &[u8]) -> PathBuf {
     path
 }
 
-fn load(path: &std::path::Path) -> Arc<dyn IpDatabase> {
-    match MmdbLoader.read(path).result {
+fn load(path: &std::path::Path) -> Arc<dyn IpDbLookupGateway> {
+    match MmdbFileGateway.read(path).result {
         Ok(db) => db,
         Err(error) => panic!("{} did not load: {error:?}", path.display()),
     }
 }
 
 fn load_error(path: &std::path::Path) -> IpDbError {
-    match MmdbLoader.read(path).result {
+    match MmdbFileGateway.read(path).result {
         Ok(_) => panic!("{} loaded unexpectedly", path.display()),
         Err(error) => error,
     }
@@ -54,15 +54,15 @@ fn ip(text: &str) -> IpAddr {
         .unwrap_or_else(|error| panic!("{text}: {error}"))
 }
 
-fn country(db: &dyn IpDatabase, address: &str) -> Option<String> {
+fn country(db: &dyn IpDbLookupGateway, address: &str) -> Option<String> {
     db.country(ip(address)).map(|code| code.as_str().to_owned())
 }
 
-fn asn(db: &dyn IpDatabase, address: &str) -> Option<u32> {
+fn asn(db: &dyn IpDbLookupGateway, address: &str) -> Option<u32> {
     db.asn(ip(address)).map(|asn| asn.get())
 }
 
-fn as_name(db: &dyn IpDatabase, address: &str) -> Option<(u32, String)> {
+fn as_name(db: &dyn IpDbLookupGateway, address: &str) -> Option<(u32, String)> {
     db.as_name(ip(address)).map(|(asn, name)| (asn.get(), name))
 }
 

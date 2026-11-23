@@ -14,7 +14,7 @@ use vnc_relay_adapters::clock::SystemClock;
 use vnc_relay_adapters::crypto::{RelayIdKey, SessionIdKey};
 use vnc_relay_adapters::net::TcpRelayStream;
 use vnc_relay_adapters::ops_log::format_line;
-use vnc_relay_adapters::target::TcpTargetConnector;
+use vnc_relay_adapters::target::TcpTargetGateway;
 use vnc_relay_adapters::websocket_stream::WsRelayStream;
 use vnc_relay_app::events::Event;
 use vnc_relay_app::metrics::Metrics;
@@ -101,7 +101,7 @@ impl Recorder {
 
 struct Harness {
     service: Arc<RelayService>,
-    runtime: Arc<RelayRuntime<TcpTargetConnector>>,
+    runtime: Arc<RelayRuntime<TcpTargetGateway>>,
     clock: Arc<dyn Clock>,
     budget: Arc<ConnectionBudget>,
     events: Arc<Recorder>,
@@ -137,7 +137,7 @@ impl Harness {
         let budget = ConnectionBudget::new();
         let references = Arc::new(RelayIdKey::generate().expect("relay reference key"));
         let runtime = Arc::new(RelayRuntime::new(
-            TcpTargetConnector::new(source.clone()),
+            TcpTargetGateway::new(source.clone()),
             references.clone(),
             Arc::new(SessionIdKey::from_bytes(&[0x65; 32])),
             budget.clone(),

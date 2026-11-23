@@ -18,7 +18,7 @@ use tokio_rustls::{TlsAcceptor, TlsConnector};
 use vnc_relay_adapters::crypto::{RelayIdKey, SessionIdKey};
 use vnc_relay_adapters::net::{AcceptPolicy, AllowSource};
 use vnc_relay_adapters::ops_log::format_line;
-use vnc_relay_adapters::target::TcpTargetConnector;
+use vnc_relay_adapters::target::TcpTargetGateway;
 use vnc_relay_adapters::tls::{self, TlsSource};
 use vnc_relay_adapters::websocket::{WsEntryPoint, WsPolicy};
 use vnc_relay_app::events::{Event, RejectReason};
@@ -102,7 +102,7 @@ struct Running {
     clock: Arc<TestClock>,
     uses: Arc<Mutex<TicketUseTable>>,
     stop: watch::Sender<bool>,
-    runtime: Arc<RelayRuntime<TcpTargetConnector>>,
+    runtime: Arc<RelayRuntime<TcpTargetGateway>>,
     service: Arc<RelayService>,
 }
 
@@ -167,7 +167,7 @@ impl Running {
         let source: Arc<dyn RuntimeSettingsSource> = cell.clone();
         let budget = ConnectionBudget::new();
         let runtime = Arc::new(RelayRuntime::new(
-            TcpTargetConnector::new(source.clone()),
+            TcpTargetGateway::new(source.clone()),
             Arc::new(RelayIdKey::generate().unwrap()),
             Arc::new(SessionIdKey::generate().unwrap()),
             budget.clone(),

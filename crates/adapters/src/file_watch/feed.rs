@@ -210,7 +210,7 @@ fn same_path(left: &Path, right: &Path) -> bool {
 ///
 /// The trait lets tests replace the OS backend with a silent feed. The watcher otherwise depends
 /// only on [`ChangeQueue`].
-pub(super) trait ChangeFeed: Send {
+pub(super) trait WatchGateway: Send {
     /// Makes `required` and `optional` the registered set. Directories already registered stay
     /// registered. A `required` failure is an error. An `optional` directory that cannot be
     /// registered is skipped; the result is `false` then, and the caller retries on a later tick.
@@ -222,12 +222,12 @@ pub(super) trait ChangeFeed: Send {
 }
 
 /// Feed backed by the platform notification API through `notify::recommended_watcher`.
-pub(super) struct NotifyFeed {
+pub(super) struct NotifyWatchGateway {
     watcher: notify::RecommendedWatcher,
     registered: BTreeSet<PathBuf>,
 }
 
-impl NotifyFeed {
+impl NotifyWatchGateway {
     /// Creates the backend. Its callback feeds `queue`. No directory is registered yet.
     pub(super) fn new(queue: Arc<ChangeQueue>) -> Result<Self, ReloadWatchError> {
         let watcher =
@@ -245,7 +245,7 @@ impl NotifyFeed {
     }
 }
 
-impl ChangeFeed for NotifyFeed {
+impl WatchGateway for NotifyWatchGateway {
     fn watch_dirs(
         &mut self,
         required: &BTreeSet<PathBuf>,

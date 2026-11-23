@@ -2,7 +2,7 @@
 //! Design: docs/architectures/admin-accounts.md.
 
 use argon2::{Algorithm, Argon2, Params, PasswordHasher as _, PasswordVerifier as _, Version};
-use vnc_relay_app::ports::{HashError, PasswordHasher, PasswordVerifier};
+use vnc_relay_app::ports::{HashError, PasswordHashGateway, PasswordVerifyGateway};
 use vnc_relay_domain::account::{Argon2Params, Password, PasswordHash};
 
 use crate::crypto::random_bytes;
@@ -13,9 +13,9 @@ const HASH_BYTES: usize = 32;
 /// Argon2id, version 19, 32-byte output, 16-byte salt from the OS random
 /// source.
 #[derive(Debug, Clone, Copy, Default)]
-pub struct Argon2Hasher;
+pub struct Argon2PasswordHashGateway;
 
-impl PasswordHasher for Argon2Hasher {
+impl PasswordHashGateway for Argon2PasswordHashGateway {
     fn hash(&self, password: &Password, params: Argon2Params) -> Result<PasswordHash, HashError> {
         let mut salt = [0u8; SALT_BYTES];
         random_bytes(&mut salt).map_err(|e| HashError(e.to_string()))?;
@@ -38,9 +38,9 @@ impl PasswordHasher for Argon2Hasher {
 /// Checks a typed password against a stored Argon2id hash (management-api-v1
 /// §1.5). `Ok(false)` is a wrong password; `Err` means the check itself failed.
 #[derive(Debug, Clone, Copy, Default)]
-pub struct Argon2Verifier;
+pub struct Argon2PasswordVerifyGateway;
 
-impl PasswordVerifier for Argon2Verifier {
+impl PasswordVerifyGateway for Argon2PasswordVerifyGateway {
     fn verify(&self, typed: &str, hash: &PasswordHash) -> Result<bool, HashError> {
         match Argon2::default().verify_password(typed.as_bytes(), hash.as_str()) {
             Ok(()) => Ok(true),
@@ -66,10 +66,10 @@ mod tests {
     fn makes_salted_argon2id_hashes_that_verify_the_password() {
         let password =
             Password::parse("correct horse battery".to_owned()).unwrap_or_else(|e| panic!("{e}"));
-        let first = Argon2Hasher
+        let first = Argon2PasswordHashGateway
             .hash(&password, PARAMS)
             .unwrap_or_else(|e| panic!("{e}"));
-        let second = Argon2Hasher
+        let second = Argon2PasswordHashGateway
             .hash(&password, PARAMS)
             .unwrap_or_else(|e| panic!("{e}"));
         assert!(
@@ -100,13 +100,13 @@ mod tests {
     fn verifier_accepts_the_right_password_and_refuses_another() {
         let password =
             Password::parse("correct horse battery".to_owned()).unwrap_or_else(|e| panic!("{e}"));
-        let hash = Argon2Hasher
+        let hash = Argon2PasswordHashGateway
             .hash(&password, PARAMS)
             .unwrap_or_else(|e| panic!("{e}"));
-        let right = Argon2Verifier
+        let right = Argon2PasswordVerifyGateway
             .verify("correct horse battery", &hash)
             .unwrap_or_else(|e| panic!("{e}"));
-        let wrong = Argon2Verifier
+        let wrong = Argon2PasswordVerifyGateway
             .verify("correct horse batterz", &hash)
             .unwrap_or_else(|e| panic!("{e}"));
         assert!(right);

@@ -18,7 +18,7 @@ use vnc_relay_domain::account::{
 };
 
 use crate::toml_text::error_position;
-pub use hasher::{Argon2Hasher, Argon2Verifier};
+pub use hasher::{Argon2PasswordHashGateway, Argon2PasswordVerifyGateway};
 pub use store::AccountsFile;
 
 /// What to do with a hash whose parameters are below the approved minimum.
