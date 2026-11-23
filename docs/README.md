@@ -52,7 +52,7 @@
 | 실행파일 배포와 수동 운영 | [실행파일을 묶고 수동 운영하는 방법](how-to/operate-relay.md) — Draft. Windows 11 x64·Ubuntu 24.04 LTS x64의 release 묶음과 계정·재로드·종료 절차. 두 OS 수동 기록 전에는 검증 완료로 표시하지 않는다 |
 | 버전 규칙과 릴리스 | [릴리스 묶음을 만들고 배포하는 방법](how-to/release.md) — Verified. `연.월.순서` 버전, `cargo xtask package`, GitHub Actions 검사, 태그로 GitHub Release 내기를 다룬다. 확인 범위와 미실행 단계는 본문 검증 기록을 따른다. |
 | 변경 범위별 테스트와 전체 완료 검증 | [개발 환경·검증 how-to 3.3·3.4절](how-to/set-up-and-verify.md#33-변경-범위별-검증). 시나리오 표식과 보고 명령은 [테스트 컨벤션](conventions/testing.md)이 정한다. 현재 결과는 `cargo xtask scenarios`의 `scenario-report.md`와 CI에서 확인한다. 의존성을 바꾸면 [의존성 라이선스 검사](how-to/check-dependency-licenses.md)를 실행한다. |
-| `.work/` 밖에 생기는 빌드 결과·캐시의 위치와 정리 방법 | Cargo 대상 디렉터리 `target/`(WSL은 `CARGO_TARGET_DIR`로 정한 위치)이 `.work/` 밖에 생긴다. 위치는 [개발 환경·검증 how-to 1절](how-to/set-up-and-verify.md#1-대상과-영향)과 [2절](how-to/set-up-and-verify.md#2-전제-조건)에 있다. 정리 방법은 아직 쓰지 않았다. |
+| `.work/` 밖에 생기는 빌드 결과·캐시의 위치와 정리 방법 | Cargo 대상 디렉터리 `target/`(WSL은 `CARGO_TARGET_DIR`로 정한 위치)과 Cargo 의존성 캐시가 `.work/` 밖에 생긴다. 위치는 [개발 환경·검증 how-to 1절](how-to/set-up-and-verify.md#1-대상과-영향)과 [2절](how-to/set-up-and-verify.md#2-전제-조건)에 있고, 정리 방법은 [6절](how-to/set-up-and-verify.md#6-롤백-또는-복구)에 있다. 시나리오 보고서는 `.work/reports/`에 만든다. |
 | 운영자 도움말 | [도움말 목록](help/README.md)과 [도움말 작성 규칙](help/AGENTS.md). 한국어·영어 mdBook 책을 `main` 기준으로 [GitHub Pages](https://kayden-kim.github.io/vnc-relay/)에 게시한다. 사이트 화면과 동작은 [도움말 사이트 화면 스펙](specs/help-site.md)(Active)을 따른다. 빌드·검사·미리보기·게시는 [도움말 게시 how-to](how-to/publish-help.md)에 있다. |
 
 WS·WSS는 공유 리스너에서 경로별로 Viewer·Server 역할을 나눈다. 중계 리스너 앞의 프록시 TLS 종료와 최근 로그 화면을 제공한다. 관련 수용 범위는 [PRD AC-44~48](requirements/PRD.md#10-검증-및-수용-기준)에 있다.

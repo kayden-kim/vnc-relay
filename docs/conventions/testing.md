@@ -59,7 +59,7 @@ fn reports_every_problem_in_one_pass() {
 
 ## 4. 예외와 자동 생성 산출물
 
-- 보고서는 자동 생성 산출물이다. Cargo 대상 디렉터리의 `scenario-report.md`에 만들고 저장소에 넣지 않는다. 기본 위치는 `target/scenario-report.md`이고, `CARGO_TARGET_DIR`을 정하면 그 디렉터리에 만든다.
+- 보고서는 자동 생성 산출물이다. 저장소 루트의 `.work/reports/scenario-report.md`에 만들고 저장소에 넣지 않는다. 위치는 Cargo 대상 디렉터리(`CARGO_TARGET_DIR`)와 무관하다. 같은 작업 트리를 쓰는 두 OS의 실행은 같은 파일을 덮어쓴다.
 - 시나리오가 아닌 규칙(계약 테스트의 세부 규칙, 내부 함수 검사)에는 표식을 쓰지 않아도 된다.
 - 하위 폴더의 스펙은 `specs/`를 뺀 상대 경로를 쓴다(예: `auth/login-screen.md:SCN-003`). 지금은 하위 폴더 스펙이 없다.
 
@@ -85,7 +85,7 @@ cargo xtask scenarios --require-all
 - 표식을 둘 수 없는 곳: 여러 통합 테스트가 함께 쓰는 `tests/common/` 같은 하위 모듈은 속한 테스트 대상을 정할 수 없다. 이런 파일의 표식은 `오류`가 된다. 표식은 테스트 함수가 있는 파일에 둔다.
 - 대시보드 브라우저 테스트: `tests/` 아래 Rust 통합 테스트가 Chromium을 헤드리스로 실행한다. 컴포넌트·목 응답 시험은 페이지의 `data-result`를 읽는다. 실서버 시험은 직접 만든 CDP 클라이언트로 실제 화면을 조작한다. 실패·지연·응답 유실은 시험용 전달 프록시로 만들며, 관리 세션 Si 만료는 실제 300초를 기다린다. 설정 화면 시험의 계약 모양 4xx 주입 범위는 [프런트엔드 컨벤션 6절](frontend.md#6-검증-명령과-통과-기준)을 따른다. 표식은 Rust 테스트 함수에 둔다. Chromium이 없으면 `#[ignore]` 없이 실패한다. Chromium(Chrome 또는 Edge)은 Windows와 Ubuntu 모두 필요하다. 상세 기준은 [프런트엔드 컨벤션](frontend.md)이 정한다.
 - WebSocket 브라우저 테스트: `tests/websocket_browser.rs`가 대시보드 실서버 시험과 같은 CDP 클라이언트(`tests/common/cdp.rs`)로 Chromium을 조작한다. WS-020은 Chromium 내장 WebSocket을 외부 독립 클라이언트로 쓰며, Chromium이 없으면 `#[ignore]` 없이 실패한다. 제품이 업그레이드에 쓰는 `tokio-tungstenite`의 클라이언트는 독립 도구로 세지 않는다. WS-025는 고정한 noVNC 압축 파일이 필요하므로 `#[ignore]`를 붙인다. 이 시험은 `VNC_RELAY_NOVNC_ZIP`의 SHA-256을 확인한 뒤 임시 디렉터리에 풀고, 시험 쪽 정적 HTTP 서버와 최소 RFB 3.8 서버를 상대로 쓴다. 실행 방법은 [noVNC 상호운용 시험 준비](../how-to/set-up-and-verify.md#novnc-상호운용-시험-준비)에 있다.
-- 보고서·CI 결과 위치: Cargo 대상 디렉터리의 `scenario-report.md`(4절). 표준 출력에는 상태별 수, 보고서 경로, 판정을 쓴다. 최신 자동 검증 결과는 `cargo xtask scenarios`로 생성한 보고서와 CI 실행 결과에서 확인한다. 수동 확인은 [개발 환경·검증 how-to](../how-to/set-up-and-verify.md#4-검증)의 검증 기록에 남긴다.
+- 보고서·CI 결과 위치: 저장소 루트의 `.work/reports/scenario-report.md`(4절). 표준 출력에는 상태별 수, 보고서 경로, 판정을 쓴다. 최신 자동 검증 결과는 `cargo xtask scenarios`로 생성한 보고서와 CI 실행 결과에서 확인한다. 수동 확인은 [개발 환경·검증 how-to](../how-to/set-up-and-verify.md#4-검증)의 검증 기록에 남긴다.
 - 통과 조건: 5절의 성공 조건과 같다.
 
 보고서의 시나리오별 상태는 다음 중 하나다.

@@ -197,7 +197,7 @@ cargo xtask scenarios
 cargo deny check licenses
 ```
 
-`cargo xtask scenarios` also runs `cargo test --workspace` and writes per-scenario results to `scenario-report.md`. For commands per change type and OS setup, see [setting up and verifying](docs/how-to/set-up-and-verify.md). Working rules are in [AGENTS.md](AGENTS.md).
+`cargo xtask scenarios` also runs `cargo test --workspace` and writes per-scenario results to `.work/reports/scenario-report.md`. For commands per change type and OS setup, see [setting up and verifying](docs/how-to/set-up-and-verify.md). Working rules are in [AGENTS.md](AGENTS.md).
 
 ## Repository layout
 

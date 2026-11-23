@@ -117,7 +117,7 @@ flowchart LR
 | `Status` | `Passed`(통과), `Partial`(부분), `Failed`(실패), `NotRun`(미실행), `Unlinked`(미연결) | 메모리 | 이 순서로 판정한다. 실패가 하나라도 있으면 실패, ` partial`이 없는 통과가 있으면 통과, 통과가 모두 ` partial`이면 부분, 테스트는 있으나 실행 결과가 없거나 무시되면 미실행, 테스트가 없으면 미연결 |
 | `Problem` | 위치(`파일:줄`), 내용 | 메모리 | 보고서의 `오류`. 1건이라도 있으면 판정은 실패다. |
 | `Token` | `name`(`--color-…`처럼 CSS 사용자 정의 속성 이름), `value`(DESIGN.md 원문 값) | 메모리 | 머리말 순서를 따른다. 허용하지 않는 키는 오류다. |
-| 보고서 | Markdown | `<Cargo 대상 디렉터리>/scenario-report.md` | 저장소에 넣지 않는다. 실행마다 덮어쓴다. |
+| 보고서 | Markdown | `<저장소 루트>/.work/reports/scenario-report.md` | 저장소에 넣지 않는다(`.work/`는 Git이 무시한다). 실행마다 덮어쓴다. 두 OS가 같은 작업 트리를 쓰면 마지막 실행의 보고서만 남는다. |
 | `Site` | `root`(정규화한 디렉터리), `mount`(`/`로 시작하고 끝나는 URL 경로), `home`(`/`의 이동 위치), `csp`(CSP 헤더 값 또는 없음), `not_found`(404 본문 파일 또는 없음) | 메모리 | `root` 밖의 파일은 제공하지 않는다. |
 | 도움말 사이트 | `index.html`·`404.html`(사이트 루트), `assets/`(`tokens.css`·`site.css`·`lang.js`·`favicon.svg`·`fonts/`), `ko/`·`en/`(mdBook 출력) | `<Cargo 대상 디렉터리>/help-site/`. 모으는 중간 파일은 `help-stage/` | 저장소에 넣지 않는다. 실행마다 지우고 다시 만든다. GitHub Pages에는 이 디렉터리를 그대로 올린다. |
 | 키 디렉터리 | `--dir` 값 또는 `<Cargo 대상 디렉터리>/ticket/` | 파일 시스템 | 기본 위치는 저장소에 넣지 않는 대상 디렉터리 안이다. 같은 이름의 파일이 있으면 `keys`가 쓰지 않는다. |

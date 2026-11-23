@@ -22,6 +22,10 @@ const SKIPPED_PACKAGE: &str = "xtask";
 
 const REPORT_FILE: &str = "scenario-report.md";
 
+/// The report is a local side file, so it goes under `.work/reports/` in the
+/// repository root (AGENTS.md, "부수 파일 위치"), not in the Cargo target directory.
+const REPORT_DIRS: [&str; 2] = [".work", "reports"];
+
 pub fn run(require_all: bool) -> Result<bool, Error> {
     let workspace = cargo::metadata()?;
     let mut problems = Vec::new();
@@ -31,8 +35,11 @@ pub fn run(require_all: bool) -> Result<bool, Error> {
     let rows = link(&specs, &tests, &run, &mut problems);
 
     let report = Report::new(&workspace.root, rows, problems, run.success, require_all);
-    std::fs::create_dir_all(&workspace.target_dir)?;
-    let path = workspace.target_dir.join(REPORT_FILE);
+    let dir = REPORT_DIRS
+        .iter()
+        .fold(workspace.root.clone(), |dir, part| dir.join(part));
+    std::fs::create_dir_all(&dir)?;
+    let path = dir.join(REPORT_FILE);
     std::fs::write(&path, report.render())?;
 
     let mut stdout = std::io::stdout().lock();

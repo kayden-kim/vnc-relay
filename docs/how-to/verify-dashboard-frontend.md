@@ -93,7 +93,7 @@
 
 2. 시나리오 보고서를 갱신한다.
 
-   영향: `<Cargo 대상 디렉터리>/scenario-report.md`를 덮어쓴다.
+   영향: `.work/reports/scenario-report.md`를 덮어쓴다.
 
    ```shell
    cargo xtask scenarios
@@ -193,7 +193,7 @@
 
 ## 4. 검증
 
-[검증 기록](../AGENTS.md#검증-기록)에 따라 실제 결과와 성공 조건을 대조한다. 자동 검사 결과는 3.1~3.3의 명령과 `cargo xtask scenarios`가 생성하는 `<Cargo 대상 디렉터리>/scenario-report.md`, CI에서 확인한다. 과거 테스트 통과 수를 현재 결과로 쓰지 않는다.
+[검증 기록](../AGENTS.md#검증-기록)에 따라 실제 결과와 성공 조건을 대조한다. 자동 검사 결과는 3.1~3.3의 명령과 `cargo xtask scenarios`가 생성하는 `.work/reports/scenario-report.md`, CI에서 확인한다. 과거 테스트 통과 수를 현재 결과로 쓰지 않는다.
 
 아래에는 화면별 최신 시각 대조와 저장소의 Chromium 시험만으로 다시 얻을 수 없는 검토 증거를 둔다. 에이전트의 이미지 대조, 외부 도구 실행, 사람의 검토를 구분한다. 통과는 각 기록의 대상과 범위에만 적용한다. 실제 Safari·모바일 기기·스크린 리더 확인은 미실행이다. 실제 기기가 없고, 스크린 리더는 사람의 읽기 순서·발음 확인이 필요하다.
 
@@ -278,11 +278,11 @@
 
 검증 절차는 저장소 파일을 바꾸지 않는다. 생성 산출물이 원본과 다르면 원본을 고친 뒤 `cargo xtask tokens`로 다시 쓴다.
 
-1. `target/dashboard-shots/`와 `target/scenario-report.md`를 지운다. 저장소 밖에 만든 임시 파일도 지운다.
+1. `target/dashboard-shots/`와 `.work/reports/scenario-report.md`를 지운다. 저장소 밖에 만든 임시 파일도 지운다.
 2. `git status --short`로 `web/dashboard/`와 `docs/design/mockups/`에 의도하지 않은 변경이 없는지 확인한다. 변경이 있으면 검증 기록에 적고 전달 대상에게 넘긴다.
 
 ## 7. 해결되지 않을 때 전달할 대상
 
 - 전달 대상: 대시보드 프런트엔드 담당자와 검토자.
-- 보존할 증거: 실행한 명령과 전체 출력, `rustc --version`, 브라우저 이름과 `--version` 결과, 스크린 리더 이름과 버전, `target/scenario-report.md`, 실패한 폭과 화면 상태의 스크린샷 경로, 커밋 해시와 `git status --short` 결과
+- 보존할 증거: 실행한 명령과 전체 출력, `rustc --version`, 브라우저 이름과 `--version` 결과, 스크린 리더 이름과 버전, `.work/reports/scenario-report.md`, 실패한 폭과 화면 상태의 스크린샷 경로, 커밋 해시와 `git status --short` 결과
 - 비밀 값 제외 규칙: 스크린샷과 로그에 비밀번호, 세션 식별자, 쿠키 값이 보이면 공유 전에 지운다. 지운 자리에 `<redacted>`를 적는다.

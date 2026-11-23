@@ -13,7 +13,7 @@ Windows 11 x64 또는 Ubuntu 24.04 LTS x64에서 고정된 Rust 툴체인으로 
 ## 1. 대상과 영향
 
 - 대상: 개발용 컴퓨터 한 대와 이 저장소의 작업 트리
-- 예상 사용자 영향: 없다. 사용자 홈에 Rust 툴체인을 설치하고 Cargo 대상 디렉터리에 빌드 결과를 만든다. Windows에서는 Visual Studio Build Tools를 시스템에 설치한다.
+- 예상 사용자 영향: 없다. 사용자 홈에 Rust 툴체인을 설치하고, Cargo 대상 디렉터리에 빌드 결과를, 저장소의 `.work/reports/`에 시나리오 보고서를 만든다. Windows에서는 Visual Studio Build Tools를 시스템에 설치한다.
 - 작업 허용 시간: 제한 없다.
 
 명령에서 `cargo`는 저장소 루트의 `rust-toolchain.toml`이 정한 툴체인(Rust 1.99.1, rustfmt, clippy)을 쓴다. rustup은 저장소 안에서 처음 Cargo를 실행할 때 이 툴체인을 내려받는다.
@@ -233,13 +233,13 @@ Linux 전용 `tests/relay_dead_peer_linux.rs`는 사용자·네트워크 네임�
 
    기대 결과: 여섯 명령 모두 종료 코드 0. `cargo xtask scenarios`가 `cargo test --workspace --no-fail-fast`를 함께 실행하므로 따로 실행하지 않는다. 대시보드 브라우저 테스트도 이때 실행되며 Chromium이 없으면 실패한다(2절). 도움말 브라우저 시험도 이때 실행되며 mdBook 0.5.4가 없으면 실패한다(2절). 출력 마지막에 `판정: 통과`, 라이선스 검사 마지막 줄에 `licenses ok`가 나온다. 보고서에 남은 `부분`·`미실행`·`미연결`은 자동 검사의 범위를 뜻한다. 해당 범위는 [4절의 수동 근거](#4-검증)와 대조하고, 확인하지 않은 분기는 통과로 합치지 않는다. `cargo xtask scenarios --require-all`은 완료 명령이 아니다. 남은 시나리오 수를 세는 진단용이며, 그런 시나리오가 하나라도 있으면 판정 실패와 종료 코드 1로 끝난다([테스트 컨벤션 5절](../conventions/testing.md#5-검증-명령과-통과-기준)).
 
-7. 결과를 기록한다. 시나리오 보고서는 Cargo 대상 디렉터리의 `scenario-report.md`다. 완료 보고에는 대상 커밋, OS, 명령, 판정을 적는다([검증 기록](../AGENTS.md#검증-기록)).
+7. 결과를 기록한다. 시나리오 보고서는 저장소 루트의 `.work/reports/scenario-report.md`다. Windows와 WSL이 같은 작업 트리를 쓰면 나중에 실행한 쪽이 보고서를 덮어쓴다. 각 OS의 결과는 실행 직후 기록한다. 완료 보고에는 대상 커밋, OS, 명령, 판정을 적는다([검증 기록](../AGENTS.md#검증-기록)).
 
    WSL에서 Windows 작업 트리를 쓰면 줄 끝(CRLF·LF) 차이 때문에 보고서의 대상 커밋에 `+ 미커밋 변경`이 붙을 수 있다. 이때는 Windows의 `git status`로 실제 변경 여부를 확인한다.
 
 ## 4. 검증
 
-자동 검사 결과는 `cargo xtask scenarios`가 만드는 Cargo 대상 디렉터리의 `scenario-report.md`와 CI에서 확인한다. 이 절에는 자동 검사로 다시 얻을 수 없는 최신 수동 근거와 미실행 범위만 둔다. 기록 방법은 [검증 기록](../AGENTS.md#검증-기록)을 따른다.
+자동 검사 결과는 `cargo xtask scenarios`가 `.work/reports/scenario-report.md`에 만드는 보고서와 CI에서 확인한다. 이 절에는 자동 검사로 다시 얻을 수 없는 최신 수동 근거와 미실행 범위만 둔다. 기록 방법은 [검증 기록](../AGENTS.md#검증-기록)을 따른다.
 
 ### 4.1 도구 설치 확인
 
@@ -338,8 +338,12 @@ D:(A;;CCLCSWRPWPDTLOCRRC;;;SY)(A;;CCDCLCSWRPWPDTLOCRSDRCWDWO;;;BA)(A;;CCLCSWLOCR
 
 ## 6. 롤백 또는 복구
 
-1. 빌드 결과가 꼬였다고 의심되면 `cargo clean`으로 Cargo 대상 디렉터리를 지운다. 소스는 바뀌지 않는다.
-2. 4단계를 다시 실행해 `vnc-relay <버전>`이 나오는지 확인한다.
+빌드 결과와 보고서는 소스에서 다시 만든다. 지워도 소스는 바뀌지 않는다.
+
+1. 시나리오 보고서와 임시 파일을 지우려면 저장소 루트의 `.work/`를 지운다. Git이 무시하는 폴더다.
+2. 빌드 결과가 꼬였다고 의심되면 저장소 루트에서 `cargo clean`을 실행한다. Cargo 대상 디렉터리(`target/`, `CARGO_TARGET_DIR`을 정했으면 그 위치)를 지운다. 지우기 전에 `cargo clean --dry-run`으로 지울 파일 수와 크기를 확인할 수 있다. `--dry-run`은 파일을 지우지 않는다.
+3. Cargo가 내려받은 의존성 캐시(Cargo 홈의 `registry/`)는 `cargo clean`이 지우지 않는다. 지우면 다음 빌드에서 다시 내려받는다. 디스크가 모자랄 때만 지운다.
+4. 절차 4단계를 다시 실행해 `vnc-relay <버전>`이 나오는지 확인한다.
 
 ## 7. 해결되지 않을 때 전달할 대상
 
