@@ -271,5 +271,5 @@ Windows 서비스를 설치할 때 지정해, 관리자 권한 없이 그 서비
 _Avoid_: 서비스 관리자
 
 **트레이 앱(tray)**:
-Windows 알림 영역에 아이콘을 두고 VNC Relay Windows 서비스의 상태를 보여 주는 별도 실행파일 `vnc-relay-tray.exe`다. 메뉴로 서비스를 시작·중지하고 대시보드를 연다.
+Windows 알림 영역에 아이콘을 두고 VNC Relay Windows 서비스의 상태를 보여 주는 별도 실행파일 `vnc-relay-tray.exe`다. 메뉴로 서비스를 시작·중지하고 대시보드를 연다. 로그 파일과 설정 파일의 위치를 열고, 로그인할 때 시작할지도 설정한다.
 _Avoid_: 트레이 프로그램

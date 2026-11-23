@@ -542,23 +542,17 @@ classDiagram
 | 용어집에 없는 모델(`MatchClaim`) | 용어집에 없다. | `MatchClaim`과 `IdOccupancy::Claimed`는 짝은 정해졌고 세션은 시작하기 전인 쌍이다. | 유지. 사용자 결정(2026-11-23)에 따라 코드 내부 개념으로 두고 용어집·스펙 상태 표에 올리지 않는다. |
 | 관리 리스너·상태 리스너 | 용어집에 용어 「관리 리스너」와 「상태 리스너」가 따로 있다. | `Listener` 열거형에는 `TcpViewer` `TcpServer` `Ws` `Wss`만 있다. 관리·상태 리스너는 어댑터의 이름 상수(`"management"` `"status"`)와 `AdmittingListener`로 구분한다. | 유지. `Listener`는 중계 진입점의 리스너만 가리킨다. |
 | 전체 허용 항목 | 용어집이 용어 `allow_all`을 정의한다. | 전용 이름이 없다. `IpItem::covers_whole_family()`가 접두사 0인 CIDR과 한 체계 전체를 덮는 `Range`를 모두 전체로 본다. | 유지. |
-| 중계 연결 상한 거절의 범위 | 용어집은 Mode I에서 대상 호스트에 연결하려 할 때 L에 닿아 거절하는 일로 정의한다. | 같은 이름의 거절 사유 `RejectReason::RelayConnectionLimit`이 진입점 수락 단계(`admit`)에도 쓰인다. Mode I 대상 연결의 거절 조치는 `RelayCloseAction::TargetConnectionLimit`이다. WS 응답을 4011로 바꾸는 것은 대상 연결 쪽만 확인했다. | 유지. 기준 문서와의 범위 차이를 기록한다. 용어집 정의를 넓힐지는 [6절](#6-미결정-사항)에 둔다. |
+| 중계 연결 상한 거절의 범위 | 용어집은 Mode I에서 대상 호스트에 연결하려 할 때 L에 닿아 거절하는 일로 정의한다. | 같은 이름의 거절 사유 `RejectReason::RelayConnectionLimit`이 진입점 수락 단계(`admit`)에도 쓰인다. Mode I 대상 연결의 거절 조치는 `RelayCloseAction::TargetConnectionLimit`이다. WS 응답을 4011로 바꾸는 것은 대상 연결 쪽만 확인했다. | 유지. 사용자 결정(2026-11-23)에 따라 용어집 정의를 넓히지 않는다. 수락 단계의 거절은 [운영 스펙 OPS-R03](../specs/operations.md)이 정한 동작이며, 이 차이를 계속 기록한다. |
 | 로그인 제한의 이름 | 용어집은 `잠금`을 쓰지 않는 말로 정한다. | 설정 키와 필드에 `lockout`이 있다(`LoginLimitPolicy.lockout`, 설정 `lockout_secs`). | 유지. 설정 계약이 정한 이름이다. |
 | 사건의 타입 이름 | 용어집은 「사건」을 쓰고 「이벤트」를 쓰지 않는다. | 타입 이름이 `Event`다(`crates/app/src/events.rs`). | 유지. |
 | 최근 종료 목록의 타입 | 용어집의 용어는 하나다. | `RecentClosedList`·`ClosedSession`(domain), `ClosedSessionSnapshot`·`ClosedMetadata`(app)로 나뉜다. 끝점 주소는 `ClosedMetadata`가 따로 보관한다. | 유지. domain이 주소 정보를 맡지 않는 구조에 따른다. |
 | 종료 유예의 상태 | 용어집·스펙은 실행 상태 `shutdown_grace` 하나를 정의한다. | `RelayLifecycle`에 `Grace`와 `Force`가 있고, 관리 요약은 둘 다 `shutdown_grace`로 보인다(`crates/app/src/management/query.rs`). | 유지. |
 | 재시작 필요의 이름 | 용어집의 용어는 하나다. | 위치마다 이름이 다르다. `ReloadResult::RestartRequired`, `ConfigEditError::RestartPending`, `ConfigReloadKind::Restart`다. | 유지. |
-| 트레이 앱의 기능 | 용어집은 서비스 상태 표시와 서비스 시작·중지, 대시보드 열기를 정의한다. | 메뉴에 로그 위치·설정 파일 위치 열기와 로그인 시 시작이 더 있다(`Action::Log` `Action::Config` `Action::SignIn`). [트레이 스펙](../specs/windows-tray.md)은 이 항목들을 정한다. | 기준 문서 수정 여부를 정하지 않았다([6절](#6-미결정-사항)). |
 | 용어집에 없는 모델(기록·설정·Windows) | 용어집에 없다. | 서비스 제어 타입 `Scm` `Installed` `ServiceSession` `StatusReporter` `StopControl`, 트레이 상태 `State`(7개), 재로드 결과 `ReloadOutcome::Unchanged` `ReloadOutcome::Discarded`, 접속 출처 사건 종류 `Kind`(비공개), `ClosedMetadata`. | 유지. `MatchClaim`과 같이 코드 내부 개념으로 둔다. 트레이 상태 7개는 [트레이 스펙 2절](../specs/windows-tray.md)이 정한다. |
 
 ## 6. 미결정 사항
 
-이전 초안의 미결정 4건은 사용자가 정했다(2026-11-23). 용어집의 종료 원인에 `ip_denied`를 더했고, 두 `TargetHost`와 `MatchClaim`은 이름과 위치를 유지하며, 범위 밖 용어는 이 문서에 모두 이어 썼다. 남은 미결정 사항은 아래와 같다.
-
-| 항목 | 영향 | 확정 위치 |
-| --- | --- | --- |
-| 용어집의 「트레이 앱」 정의에 로그·설정 위치 열기와 로그인 시 시작을 더할지 | 용어집이 트레이 스펙보다 기능이 적다. | 용어집 |
-| 용어집의 「중계 연결 상한 거절」 정의를 진입점 수락 단계까지 넓힐지 | 용어집이 코드보다 거절 범위가 좁다. | 용어집 |
+남은 미결정 사항은 없다. 이전 초안의 미결정 4건과 이어서 드러난 2건을 사용자가 모두 정했다(2026-11-23). 용어집의 종료 원인에 `ip_denied`를 더했고, 「트레이 앱」 정의에 로그·설정 위치 열기와 로그인 시 시작을 더했다. 두 `TargetHost`, `MatchClaim`, 중계 연결 상한 거절의 정의는 그대로 둔다. 범위 밖 용어는 이 문서에 모두 이어 썼다.
 
 ## 대조 기록
 
