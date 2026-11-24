@@ -391,7 +391,7 @@ crate 이름은 `kebab-case`이고 `-rs`·`-rust`를 붙이지 않는다. 단수
 | `HandshakeRequest` | domain enum | adapters가 소유한 API 요청 모델이 아닌데 `Request`로 끝난다. | [Repeater 초기 교환 계약](../contracts/repeater-handshake-v1.md)이 "초기 요청"이라 부르는 업무 값이다. |
 | 실행 crate 안의 보조 타입 | `vnc-relay-tray`의 `worker::Request` `Reply` | suffix 없이 짧은 이름을 쓴다. | 실행 crate의 타입은 다른 crate가 import하지 않고 계층 경계를 넘지 않는다([7.3절](#73-suffix가-필요한-조건) A1·A4에 해당하지 않는다). 금지 이름 규칙은 그대로 적용한다. |
 | `tls::File`, `snapshot::Cell` | adapters enum, app 공유 셀 | 표준 라이브러리 `std::fs::File`·`std::cell::Cell`과 이름이 같다([7.3절](#73-suffix가-필요한-조건) A2). `snapshot::Cell`은 다른 crate도 import한다(A1). | 7.3절 C를 app·adapters에도 적용하면서 `TlsFile`·`ReloadCell`의 모듈 이름 되풀이를 없앴다. 항상 부모 모듈을 붙여 쓴다(`tls::File`, `snapshot::Cell`). 단독으로 import하지 않는다. |
-| `sources::Report` | app struct | 경계 출력이다. [7.2절](#72-역할-단어-선택)은 `View`를 정하고 닫힌 어휘에 `Report`가 없다. | management-api-v1 §1.17의 `200` 본문을 JSON 변환 전에 담는 값이다. `sources` 모듈 경로가 맥락을 주므로 `sources::Report`로 쓴다. |
+| `sources::Report` | app struct | 경계 출력이다. [7.2절](#72-역할별-이름-표현)은 `View`를 정하고 닫힌 어휘에 `Report`가 없다. | management-api-v1 §1.17의 `200` 본문을 JSON 변환 전에 담는 값이다. `sources` 모듈 경로가 맥락을 주므로 `sources::Report`로 쓴다. |
 
 ### 7.10 도메인 prefix
 
