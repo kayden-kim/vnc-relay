@@ -9,7 +9,7 @@ use vnc_relay_domain::entry_point::Role;
 use vnc_relay_domain::handshake::Mode;
 use vnc_relay_domain::session::Transport;
 
-use super::history::{HISTORY_KEYS, History, HistoryView, HistoryWindow};
+use super::history::{HISTORY_KEYS, History, HistoryView, Window};
 use super::snapshot::{MetricFamily, MetricKind, MetricPoint, MetricsSnapshot, Number, PointValue};
 use super::{Metrics, SESSION_DURATION_BOUNDS, SHORT_DURATION_BOUNDS, WAITING_DURATION_BOUNDS};
 use crate::ports::{AdminSessionSource, Clock, OpenCount, ProcessStatsSource, RelayStateSource};
@@ -380,7 +380,7 @@ impl MetricsService {
 
     /// History points of `window` after `after` (management-api-v1 §1.16
     /// `history_window`, `history_after`); every kept point when `None`.
-    pub fn history_after(&self, window: HistoryWindow, after: Option<u64>) -> HistoryView {
+    pub fn history_after(&self, window: Window, after: Option<u64>) -> HistoryView {
         super::lock(&self.history).after(window, after)
     }
 

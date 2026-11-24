@@ -8,9 +8,7 @@ use std::process::ExitCode;
 use vnc_relay_adapters::accounts_file::{AccountsFile, Argon2PasswordHashGateway};
 use vnc_relay_adapters::config_file;
 use vnc_relay_adapters::terminal::TerminalAccountInputGateway;
-use vnc_relay_application::accounts::{
-    self, ACCOUNTS_FILE_KEY, AccountsWarning, AdminError, AdminService,
-};
+use vnc_relay_application::accounts::{self, ACCOUNTS_FILE_KEY, AdminError, AdminService, Warning};
 use vnc_relay_application::settings::AdminSettings;
 use vnc_relay_domain::account::Name;
 
@@ -48,11 +46,7 @@ fn change(
     config: &Path,
     account: &str,
     done: &str,
-    procedure: impl FnOnce(
-        &AdminService<'_>,
-        &Name,
-        &mut dyn FnMut(AccountsWarning),
-    ) -> Result<(), AdminError>,
+    procedure: impl FnOnce(&AdminService<'_>, &Name, &mut dyn FnMut(Warning)) -> Result<(), AdminError>,
 ) -> ExitCode {
     let name = match Name::parse(account) {
         Ok(name) => name,
@@ -136,7 +130,7 @@ fn report_failure(failure: &AdminError) -> ExitCode {
     })
 }
 
-fn report_warning(warning: AccountsWarning) {
+fn report_warning(warning: Warning) {
     cli::report(
         "warning",
         warning.code(),

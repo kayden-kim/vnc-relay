@@ -168,7 +168,7 @@ enabled = true
         settings.timeouts.close = Duration::from_secs(1);
         settings.keepalive = KEEPALIVE;
         settings.recent_closed.max_entries = 8;
-        let cell = Arc::new(ReloadCell::new(ReloadSnapshot::new(
+        let cell = Arc::new(snapshot::Cell::new(ReloadSnapshot::new(
             ConfigCandidate {
                 settings,
                 presence: Default::default(),

@@ -4,7 +4,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use tokio::sync::oneshot;
 use vnc_relay_application::reload::ports::{ReloadTlsStore, TlsBuildError};
 use vnc_relay_application::reload::service::ReloadService;
-use vnc_relay_application::reload::snapshot::{ReloadCell, ReloadSnapshot};
+use vnc_relay_application::reload::snapshot::{self, ReloadSnapshot};
 use vnc_relay_application::settings::LogOutput;
 
 static NEXT: AtomicU64 = AtomicU64::new(0);
@@ -280,7 +280,9 @@ async fn log_directory_registration_failure_keeps_poll_and_retries() {
     let files = Arc::new(FsReloadFileStore);
     let service = ReloadService::new(
         settings.clone(),
-        Arc::new(ReloadCell::new(ReloadSnapshot::new(settings, None, None))),
+        Arc::new(snapshot::Cell::new(ReloadSnapshot::new(
+            settings, None, None,
+        ))),
         files.clone(),
         Arc::new(StubReloadTlsStore),
         Arc::new(crate::ticket::TicketJwksStore),

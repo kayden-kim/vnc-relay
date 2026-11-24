@@ -24,9 +24,9 @@ use vnc_relay_application::ports::{
     AdminSessionSource, Clock, CpuTimes, EventSink, OpenCount, ProcessStats, ProcessStatsSource,
     RelayLifecycle, RelayStateSource,
 };
-use vnc_relay_application::relay::{RelayCounts, RelaySnapshot};
-use vnc_relay_application::reload::ReloadTrigger;
-use vnc_relay_application::reload::snapshot::{ReloadCell, ReloadSnapshot};
+use vnc_relay_application::relay::{Counts, RelaySnapshot};
+use vnc_relay_application::reload::Trigger;
+use vnc_relay_application::reload::snapshot::{self, ReloadSnapshot};
 use vnc_relay_application::settings::{ConfigWarning, LogOutput};
 use vnc_relay_domain::account::Name;
 use vnc_relay_domain::allow_list::IpItem;
@@ -194,7 +194,7 @@ fn config_edit_events_have_required_fields_and_never_values() {
     // SHA-256 of the raw bytes "abc"; the log must preserve the exact revision.
     let revision =
         "sha256:ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad".to_owned();
-    for trigger in [ReloadTrigger::FileWatch, ReloadTrigger::ConfigEdit] {
+    for trigger in [Trigger::FileWatch, Trigger::ConfigEdit] {
         log.record(&Event::ReloadApplied {
             trigger,
             applied: applied.clone(),
@@ -1060,14 +1060,16 @@ fn ignores_credentials_and_queries_and_refuses_other_methods_and_paths() {
 
 /// The runtime settings of the status test listener: Lm 64, other values
 /// from the minimal config.
-fn status_settings() -> Arc<ReloadCell<()>> {
+fn status_settings() -> Arc<snapshot::Cell<()>> {
     let mut candidate = vnc_relay_adapters::config_file::parse_candidate(
         b"[admin]\naccounts_file = 'accounts.toml'\n[management]\nlisten = '127.0.0.1:18080'\n[status]\nlisten = '127.0.0.1:18081'\n",
         &std::env::temp_dir(),
     )
     .unwrap_or_else(|diagnostics| panic!("status settings: {diagnostics:?}"));
     candidate.settings.limits.admin_connections = 64;
-    Arc::new(ReloadCell::new(ReloadSnapshot::new(candidate, None, None)))
+    Arc::new(snapshot::Cell::new(ReloadSnapshot::new(
+        candidate, None, None,
+    )))
 }
 
 /// A relay with no connection in any stage.
@@ -1087,8 +1089,8 @@ impl RelayStateSource for StubRelayStateSource {
         }
     }
 
-    fn counts(&self) -> RelayCounts {
-        RelayCounts::default()
+    fn counts(&self) -> Counts {
+        Counts::default()
     }
 }
 

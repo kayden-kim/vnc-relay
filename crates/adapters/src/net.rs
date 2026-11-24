@@ -21,7 +21,7 @@ use vnc_relay_application::events::{AbortReason, ConnectionErrorKind, Event, Rej
 use vnc_relay_application::ports::{Clock, EventSink};
 use vnc_relay_application::relay::{ConnectionContext, RelayRuntime, RelayService};
 use vnc_relay_application::reload::ports::RuntimeSettingsSource;
-use vnc_relay_application::reload::snapshot::ReloadCell;
+use vnc_relay_application::reload::snapshot;
 use vnc_relay_application::settings::{KeepaliveSettings, ListenerPlan, Settings};
 use vnc_relay_domain::budget::{ConnectionBudget, Permit};
 use vnc_relay_domain::conn_id::ConnId;
@@ -265,26 +265,26 @@ pub struct AllowSource {
 
 impl AllowSource {
     /// The `tcp_viewer` allow list of the snapshot.
-    pub fn tcp_viewer(cell: Arc<ReloadCell<TlsAcceptor>>) -> Self {
+    pub fn tcp_viewer(cell: Arc<snapshot::Cell<TlsAcceptor>>) -> Self {
         Self::new(cell, ListenerKind::TcpViewer)
     }
 
     /// The `tcp_server` allow list of the snapshot.
-    pub fn tcp_server(cell: Arc<ReloadCell<TlsAcceptor>>) -> Self {
+    pub fn tcp_server(cell: Arc<snapshot::Cell<TlsAcceptor>>) -> Self {
         Self::new(cell, ListenerKind::TcpServer)
     }
 
     /// The union of the enabled WS roles' allow lists.
-    pub fn ws(cell: Arc<ReloadCell<TlsAcceptor>>) -> Self {
+    pub fn ws(cell: Arc<snapshot::Cell<TlsAcceptor>>) -> Self {
         Self::new(cell, ListenerKind::Ws)
     }
 
     /// The union of the enabled WSS roles' allow lists.
-    pub fn wss(cell: Arc<ReloadCell<TlsAcceptor>>) -> Self {
+    pub fn wss(cell: Arc<snapshot::Cell<TlsAcceptor>>) -> Self {
         Self::new(cell, ListenerKind::Wss)
     }
 
-    fn new(cell: Arc<ReloadCell<TlsAcceptor>>, listener: ListenerKind) -> Self {
+    fn new(cell: Arc<snapshot::Cell<TlsAcceptor>>, listener: ListenerKind) -> Self {
         Self {
             runtime: cell,
             listener,
@@ -732,7 +732,7 @@ mod accept_tests {
             None,
             None,
         );
-        let cell = Arc::new(ReloadCell::new(snapshot));
+        let cell = Arc::new(snapshot::Cell::new(snapshot));
         let allow = match entry_point {
             ListenerKind::TcpViewer => AllowSource::tcp_viewer(cell),
             ListenerKind::TcpServer => AllowSource::tcp_server(cell),
@@ -907,7 +907,7 @@ mod accept_tests {
         settings.keepalive.tcp_probes = 7;
         let old: Keepalive = (Duration::from_secs(70), Duration::from_secs(11), 7);
         let new: Keepalive = (Duration::from_secs(90), Duration::from_secs(13), 9);
-        let cell = Arc::new(ReloadCell::new(snapshot(settings.clone())));
+        let cell = Arc::new(snapshot::Cell::new(snapshot(settings.clone())));
         let policy = AcceptPolicy {
             allow: AllowSource::tcp_viewer(Arc::clone(&cell)),
             relay_budget: ConnectionBudget::new(),

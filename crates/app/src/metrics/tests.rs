@@ -12,7 +12,7 @@ use vnc_relay_domain::login_limit::LimitScope;
 use vnc_relay_domain::peer_ip::PeerIp;
 use vnc_relay_domain::session::{CloseCause, Direction, Id, Transport};
 
-use super::history::{HISTORY_KEYS, History, HistoryView, HistoryWindow};
+use super::history::{HISTORY_KEYS, History, HistoryView, Window};
 use super::snapshot::{MetricsSnapshot, Number, PointValue};
 use super::{MetricSources, Metrics, MetricsService, MetricsSink};
 use crate::events::{
@@ -24,8 +24,8 @@ use crate::ports::{
     RelayStateSource,
 };
 use crate::relay::test_support::FakeRuntimeSettingsSource;
-use crate::relay::{RelayCounts, RelaySnapshot};
-use crate::reload::ReloadTrigger;
+use crate::relay::{Counts, RelaySnapshot};
+use crate::reload::Trigger;
 use vnc_relay_domain::budget::ConnectionBudget;
 
 /// Monotonic time the test moves by hand; wall time stays fixed.
@@ -52,14 +52,14 @@ impl Clock for FakeClock {
 }
 
 /// Relay counts set by the test.
-struct StubRelayStateSource(RelayCounts);
+struct StubRelayStateSource(Counts);
 
 impl RelayStateSource for StubRelayStateSource {
     fn snapshot(&self, _clock: &dyn Clock) -> RelaySnapshot {
         unreachable!("metrics read counts only")
     }
 
-    fn counts(&self) -> RelayCounts {
+    fn counts(&self) -> Counts {
         self.0
     }
 }
@@ -107,7 +107,7 @@ struct Fixture {
     service: MetricsService,
 }
 
-fn fixture(counts: RelayCounts, process: ProcessStats) -> Fixture {
+fn fixture(counts: Counts, process: ProcessStats) -> Fixture {
     let clock = FakeClock::at(100);
     let metrics = Arc::new(Metrics::new(clock.as_ref()));
     let relay_budget = ConnectionBudget::new();
@@ -391,7 +391,7 @@ fn counted_events() -> Vec<Event> {
             config_keys: None,
         },
         Event::ReloadApplied {
-            trigger: ReloadTrigger::FileWatch,
+            trigger: Trigger::FileWatch,
             applied: vec!["limits.waiting".to_owned()],
         },
         Event::ReloadRejected {
@@ -425,7 +425,7 @@ fn counted_events() -> Vec<Event> {
 /// spec: operations.md:OPS-089 partial
 #[test]
 fn counts_each_event_under_its_log_attributes_even_when_the_write_fails() {
-    let fixture = fixture(RelayCounts::default(), readable_process());
+    let fixture = fixture(Counts::default(), readable_process());
     let sink = MetricsSink::new(Arc::clone(&fixture.metrics), Arc::new(StubEventSink));
     for event in counted_events() {
         sink.record(&event);
@@ -523,7 +523,7 @@ fn counts_each_event_under_its_log_attributes_even_when_the_write_fails() {
 /// spec: operations.md:OPS-093 partial
 #[test]
 fn puts_each_value_in_the_first_bucket_whose_bound_is_at_least_the_value() {
-    let fixture = fixture(RelayCounts::default(), readable_process());
+    let fixture = fixture(Counts::default(), readable_process());
     let metrics = &fixture.metrics;
     // Equal to the first bound, between two bounds, above the last bound.
     for elapsed in [5, 7, 200_000] {
@@ -574,7 +574,7 @@ fn puts_each_value_in_the_first_bucket_whose_bound_is_at_least_the_value() {
 /// spec: operations.md:OPS-086 partial
 #[test]
 fn adds_session_bytes_by_direction_and_shows_only_directions_that_carried_bytes() {
-    let fixture = fixture(RelayCounts::default(), readable_process());
+    let fixture = fixture(Counts::default(), readable_process());
     assert_eq!(
         series(&fixture.service.snapshot(), "vnc_relay.session.io"),
         Vec::<String>::new()
@@ -600,7 +600,7 @@ fn adds_session_bytes_by_direction_and_shows_only_directions_that_carried_bytes(
 /// spec: operations.md:OPS-089 partial
 #[test]
 fn counts_websocket_ping_timeouts_by_listener() {
-    let fixture = fixture(RelayCounts::default(), readable_process());
+    let fixture = fixture(Counts::default(), readable_process());
     fixture.metrics.record_ping_timeout(ListenerKind::Wss);
     fixture.metrics.record_ping_timeout(ListenerKind::Ws);
     fixture.metrics.record_ping_timeout(ListenerKind::Wss);
@@ -618,7 +618,7 @@ fn counts_websocket_ping_timeouts_by_listener() {
 /// spec: management.md:MGT-057 partial
 #[test]
 fn reads_current_counts_limits_and_every_fixed_combination_in_contract_order() {
-    let mut counts = RelayCounts::default();
+    let mut counts = Counts::default();
     counts.handshaking = 2;
     counts.target_connecting = 1;
     counts.add_waiting(Role::Server, Transport::Wss);
@@ -729,7 +729,7 @@ fn leaves_an_unreadable_value_unavailable_and_null_in_history_instead_of_zero() 
         open: OpenCount::FileDescriptors(None),
         ..readable_process()
     };
-    let fixture = fixture(RelayCounts::default(), process);
+    let fixture = fixture(Counts::default(), process);
     let snapshot = fixture.service.snapshot();
 
     let unavailable: Vec<&str> = snapshot
@@ -752,7 +752,7 @@ fn leaves_an_unreadable_value_unavailable_and_null_in_history_instead_of_zero() 
     assert_eq!(series(&snapshot, "process.thread.count"), ["9"]);
 
     fixture.service.sample_history();
-    let view = fixture.service.history_after(HistoryWindow::Hour, None);
+    let view = fixture.service.history_after(Window::Hour, None);
     let point = view.points.first().expect("history point");
     let memory = HISTORY_KEYS
         .iter()
@@ -771,7 +771,7 @@ fn leaves_an_unreadable_value_unavailable_and_null_in_history_instead_of_zero() 
 /// spec: management.md:MGT-061 partial
 #[test]
 fn takes_history_points_from_the_same_reading_as_the_snapshot() {
-    let mut counts = RelayCounts::default();
+    let mut counts = Counts::default();
     counts.add_waiting(Role::Viewer, Transport::Tcp);
     counts.add_waiting(Role::Server, Transport::Ws);
     counts.add_session(Mode::Mode1, Transport::Wss, Transport::Tcp);
@@ -783,7 +783,7 @@ fn takes_history_points_from_the_same_reading_as_the_snapshot() {
     fixture.metrics.add_io(Direction::TargetToViewer, 99);
 
     fixture.service.sample_history();
-    let view = fixture.service.history_after(HistoryWindow::Hour, None);
+    let view = fixture.service.history_after(Window::Hour, None);
     assert_eq!(view.latest_seq, Some(0));
     let point = view.points.first().expect("history point");
     assert_eq!(point.seq, 0);
@@ -803,17 +803,14 @@ fn takes_history_points_from_the_same_reading_as_the_snapshot() {
         ]
     );
     // The point at ready is also the first point of the 24-hour history.
-    assert_eq!(
-        fixture.service.history_after(HistoryWindow::Day, None),
-        view
-    );
+    assert_eq!(fixture.service.history_after(Window::Day, None), view);
 }
 
 /// spec: management.md:MGT-058 partial
 /// spec: management.md:MGT-059 partial
 #[test]
 fn keeps_the_newest_points_with_sequence_numbers_that_are_never_reused() {
-    let hour = HistoryWindow::Hour;
+    let hour = Window::Hour;
     let mut history = History::new();
     let empty = history.after(hour, None);
     assert_eq!(empty.latest_seq, None);
@@ -849,9 +846,9 @@ fn keeps_the_newest_points_with_sequence_numbers_that_are_never_reused() {
 /// spec: management.md:MGT-061 partial
 #[test]
 fn keeps_every_sixth_point_for_24_hours_with_its_own_sequence_numbers() {
-    let day = HistoryWindow::Day;
+    let day = Window::Day;
     assert_eq!(day.interval(), Duration::from_secs(60));
-    assert_eq!(HistoryWindow::Hour.interval(), Duration::from_secs(10));
+    assert_eq!(Window::Hour.interval(), Duration::from_secs(10));
     let mut history = History::new();
     assert_eq!(
         history.after(day, None),
@@ -905,9 +902,9 @@ fn keeps_every_sixth_point_for_24_hours_with_its_own_sequence_numbers() {
 
     // The one-hour history still keeps its newest 360 points, and its newest
     // point (8640) is also the newest 24-hour point.
-    let hour = history.after(HistoryWindow::Hour, None);
+    let hour = history.after(Window::Hour, None);
     assert_eq!(hour.latest_seq, Some(total - 1));
-    assert_eq!(hour.points.len(), HistoryWindow::Hour.capacity());
+    assert_eq!(hour.points.len(), Window::Hour.capacity());
     let newest = hour.points.last().expect("one-hour point");
     let newest_day = all.points.last().expect("24-hour point");
     assert_eq!(

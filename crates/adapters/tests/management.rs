@@ -53,14 +53,14 @@ use vnc_relay_application::ports::{
     RelayLifecycle, RelaySessionControl, RelayStateSource, RelayStream,
 };
 use vnc_relay_application::relay::{
-    ConnectionContext, RelayCounts, RelayRuntime, RelayRuntimeConfig, RelayService, RelaySnapshot,
+    ConnectionContext, Counts, RelayRuntime, RelayRuntimeConfig, RelayService, RelaySnapshot,
 };
 use vnc_relay_application::reload::SharedReload;
 use vnc_relay_application::reload::ports::{
     ReloadFileStore, ReloadTlsStore, RuntimeSettingsSource, TlsBuildError,
 };
 use vnc_relay_application::reload::service::ReloadService;
-use vnc_relay_application::reload::snapshot::{ReloadCell, ReloadSnapshot};
+use vnc_relay_application::reload::snapshot::{self, ReloadSnapshot};
 use vnc_relay_application::sources::{SourceStats, SourcesService};
 use vnc_relay_domain::account::{Account, Argon2Params, Name, Password, PasswordHash};
 use vnc_relay_domain::admin_session;
@@ -294,7 +294,7 @@ async fn start_with_ports_and_logs(
 async fn start_services(
     tls: Option<TlsAcceptor>,
     budget: Arc<ConnectionBudget>,
-    runtime: Arc<ReloadCell<TlsAcceptor>>,
+    runtime: Arc<snapshot::Cell<TlsAcceptor>>,
     services: ManagementServices,
     events: Arc<SpyEventSink>,
 ) -> Running {
@@ -710,8 +710,8 @@ impl RelayStateSource for StubRelayStateSource {
         }
     }
 
-    fn counts(&self) -> RelayCounts {
-        RelayCounts::default()
+    fn counts(&self) -> Counts {
+        Counts::default()
     }
 }
 
@@ -2878,7 +2878,7 @@ impl RelayStateSource for SpyRelayStateSource {
         snapshot
     }
 
-    fn counts(&self) -> RelayCounts {
+    fn counts(&self) -> Counts {
         self.runtime.counts()
     }
 }
@@ -4047,7 +4047,7 @@ fn config_fixture_text(
     let base = std::env::temp_dir();
     let candidate = config_file::parse_candidate(text.as_bytes(), &base)
         .unwrap_or_else(|error| panic!("config fixture: {error:?}"));
-    let cell = Arc::new(ReloadCell::new(ReloadSnapshot::new(
+    let cell = Arc::new(snapshot::Cell::new(ReloadSnapshot::new(
         candidate.clone(),
         None,
         None,
@@ -5429,7 +5429,7 @@ fn management_runtime(
     admin_connections: u32,
     upgrade: Duration,
     close: Duration,
-) -> Arc<ReloadCell<TlsAcceptor>> {
+) -> Arc<snapshot::Cell<TlsAcceptor>> {
     let mut candidate = config_file::parse_candidate(CONFIG_TEXT.as_bytes(), &std::env::temp_dir())
         .unwrap_or_else(|error| panic!("runtime fixture: {error:?}"));
     candidate.settings.limits.admin_connections = admin_connections;
@@ -5442,7 +5442,9 @@ fn management_runtime(
     candidate.settings.timeouts.connect = LIMIT;
     candidate.settings.timeouts.close = close;
     candidate.settings.mode1.enabled = false;
-    Arc::new(ReloadCell::new(ReloadSnapshot::new(candidate, None, None)))
+    Arc::new(snapshot::Cell::new(ReloadSnapshot::new(
+        candidate, None, None,
+    )))
 }
 
 /// spec: management.md:MGT-051 partial
@@ -5464,8 +5466,8 @@ async fn session_queries_and_termination_provide_full_transport_and_forwarded_ip
             self.snapshot.lock().unwrap().clone()
         }
 
-        fn counts(&self) -> RelayCounts {
-            RelayCounts::of(&self.snapshot.lock().unwrap())
+        fn counts(&self) -> Counts {
+            Counts::of(&self.snapshot.lock().unwrap())
         }
     }
 

@@ -98,7 +98,7 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::task::JoinHandle;
 use tokio_rustls::{TlsAcceptor, TlsConnector};
-use vnc_relay_adapters::tls::{self, TlsError, TlsFile};
+use vnc_relay_adapters::tls::{self, TlsError};
 
 /// Upper bound for one handshake. A hang fails the test instead of blocking it.
 const HANDSHAKE_LIMIT: Duration = Duration::from_secs(10);
@@ -345,14 +345,14 @@ async fn supported_key_kinds_complete_tls13_handshake() {
 fn x25519_key_is_unsupported() {
     let error = load_err("server-chain.pem", "x25519-key.pem");
     assert!(matches!(error, TlsError::KeyUnsupported), "{error:?}");
-    assert_eq!(error.file(), TlsFile::Key);
+    assert_eq!(error.file(), tls::File::Key);
 }
 
 #[test]
 fn key_of_another_certificate_is_mismatch() {
     let error = load_err("server-chain.pem", "other-key-p256.pem");
     assert!(matches!(error, TlsError::KeyMismatch), "{error:?}");
-    assert_eq!(error.file(), TlsFile::Key);
+    assert_eq!(error.file(), tls::File::Key);
 }
 
 #[test]
@@ -365,7 +365,7 @@ fn missing_files_are_unreadable() {
         matches!(
             cert_error,
             TlsError::Unreadable {
-                file: TlsFile::Cert
+                file: tls::File::Cert
             }
         ),
         "{cert_error:?}"
@@ -375,7 +375,12 @@ fn missing_files_are_unreadable() {
         .err()
         .unwrap_or_else(|| panic!("missing key file fails"));
     assert!(
-        matches!(key_error, TlsError::Unreadable { file: TlsFile::Key }),
+        matches!(
+            key_error,
+            TlsError::Unreadable {
+                file: tls::File::Key
+            }
+        ),
         "{key_error:?}"
     );
 }
@@ -390,7 +395,7 @@ fn non_pem_and_missing_items_are_malformed() {
         matches!(
             not_pem,
             TlsError::Malformed {
-                file: TlsFile::Cert
+                file: tls::File::Cert
             }
         ),
         "{not_pem:?}"
@@ -398,7 +403,12 @@ fn non_pem_and_missing_items_are_malformed() {
     // A certificate file has no private key item.
     let no_key = load_err("server-chain.pem", "server-chain.pem");
     assert!(
-        matches!(no_key, TlsError::Malformed { file: TlsFile::Key }),
+        matches!(
+            no_key,
+            TlsError::Malformed {
+                file: tls::File::Key
+            }
+        ),
         "{no_key:?}"
     );
     // A key file has no certificate item.
@@ -407,7 +417,7 @@ fn non_pem_and_missing_items_are_malformed() {
         matches!(
             no_cert,
             TlsError::Malformed {
-                file: TlsFile::Cert
+                file: tls::File::Cert
             }
         ),
         "{no_cert:?}"

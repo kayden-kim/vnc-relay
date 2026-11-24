@@ -10,12 +10,12 @@ use vnc_relay_domain::entry_point::{EntryPoint, ListenerKind, Role};
 
 use super::{
     ConfigCandidate, ConfigFileState, ConfigPresence, FileClassification, LastReload,
-    LastReloadOutcome, PrepareReloadError, ReloadTrigger,
+    LastReloadOutcome, PrepareReloadError, Trigger,
 };
 use crate::events::{Event, Phase};
 use crate::ports::{Clock, EventSink, RelayDenyControl};
 use crate::reload::ports::{ReloadFileStore, ReloadTicketKeyStore, ReloadTlsStore, TlsBuildError};
-use crate::reload::snapshot::{ReloadCell, ReloadSnapshot};
+use crate::reload::snapshot::{self, ReloadSnapshot};
 use crate::settings::{
     ConfigDiagnostic, ConfigError, ConfigWarning, Settings, TicketSettings, TlsFiles,
 };
@@ -53,7 +53,7 @@ pub struct ReloadService<A> {
     running: Arc<Settings>,
     presence: Arc<ConfigPresence>,
     last_reload: Option<LastReload>,
-    cell: Arc<ReloadCell<A>>,
+    cell: Arc<snapshot::Cell<A>>,
     files: Arc<dyn ReloadFileStore>,
     tls: Arc<dyn ReloadTlsStore<A>>,
     /// Parses ticket public key files of enabled roles (config-v4 §1.11).
@@ -82,7 +82,7 @@ impl<A> ReloadService<A> {
     /// Emits no event.
     pub fn new(
         running: ConfigCandidate,
-        cell: Arc<ReloadCell<A>>,
+        cell: Arc<snapshot::Cell<A>>,
         files: Arc<dyn ReloadFileStore>,
         tls: Arc<dyn ReloadTlsStore<A>>,
         ticket_keys: Arc<dyn ReloadTicketKeyStore>,
@@ -294,7 +294,7 @@ impl<A: Clone> ReloadService<A> {
     pub fn commit_prepared(
         &mut self,
         prepared: PreparedReload<A>,
-        trigger: ReloadTrigger,
+        trigger: Trigger,
         at: SystemTime,
     ) -> Vec<String> {
         if prepared.applied.is_empty() {
@@ -383,7 +383,7 @@ impl<A: Clone> ReloadService<A> {
                 ReloadOutcome::Unchanged
             }
             Ok(prepared) => {
-                self.commit_prepared(prepared, ReloadTrigger::FileWatch, at);
+                self.commit_prepared(prepared, Trigger::FileWatch, at);
                 ReloadOutcome::Applied
             }
             Err(PrepareReloadError::Invalid(diagnostics)) => {
@@ -405,7 +405,7 @@ impl<A: Clone> ReloadService<A> {
                 self.last_reload = Some(LastReload {
                     at,
                     result: LastReloadOutcome::Rejected,
-                    trigger: ReloadTrigger::FileWatch,
+                    trigger: Trigger::FileWatch,
                     config_keys: Vec::new(),
                 });
                 ReloadOutcome::Rejected
@@ -417,7 +417,7 @@ impl<A: Clone> ReloadService<A> {
                 self.last_reload = Some(LastReload {
                     at,
                     result: LastReloadOutcome::RestartRequired,
-                    trigger: ReloadTrigger::FileWatch,
+                    trigger: Trigger::FileWatch,
                     config_keys: keys,
                 });
                 ReloadOutcome::RestartRequired
@@ -1147,7 +1147,7 @@ mod tests {
     struct Harness {
         files: Arc<FakeFiles>,
         sink: Arc<SpyEventSink>,
-        cell: Arc<ReloadCell<u32>>,
+        cell: Arc<snapshot::Cell<u32>>,
         service: ReloadService<u32>,
     }
 
@@ -1162,7 +1162,7 @@ mod tests {
         let files = Arc::new(FakeFiles::default());
         files.put("wss.crt", b"cert-v1");
         files.put("wss.key", b"key-v1");
-        let cell = Arc::new(ReloadCell::new(ReloadSnapshot::new(
+        let cell = Arc::new(snapshot::Cell::new(ReloadSnapshot::new(
             candidate(running.clone()),
             wss_acceptor,
             None,
@@ -1392,7 +1392,7 @@ mod tests {
         assert_eq!(
             h.sink.events(),
             vec![Event::ReloadApplied {
-                trigger: ReloadTrigger::FileWatch,
+                trigger: Trigger::FileWatch,
                 applied: vec!["relay.tcp_viewer.allow".to_owned()],
             }]
         );
@@ -1523,14 +1523,14 @@ mod tests {
         assert!(h.sink.events().is_empty());
         let applied =
             h.service
-                .commit_prepared(prepared, ReloadTrigger::ConfigEdit, SystemTime::UNIX_EPOCH);
+                .commit_prepared(prepared, Trigger::ConfigEdit, SystemTime::UNIX_EPOCH);
         assert_eq!(*h.cell.current().settings, next);
         assert_eq!(*before.settings, running);
         assert_eq!(h.service.running(), &next);
         assert_eq!(
             h.sink.events(),
             vec![Event::ReloadApplied {
-                trigger: ReloadTrigger::ConfigEdit,
+                trigger: Trigger::ConfigEdit,
                 applied: applied.clone(),
             }]
         );
@@ -1545,7 +1545,7 @@ mod tests {
             .unwrap_or_else(|error| panic!("unchanged preparation: {error:?}"));
         assert!(
             h.service
-                .commit_prepared(unchanged, ReloadTrigger::ConfigEdit, SystemTime::UNIX_EPOCH)
+                .commit_prepared(unchanged, Trigger::ConfigEdit, SystemTime::UNIX_EPOCH)
                 .is_empty()
         );
         assert_eq!(h.service.last_reload(), history.as_ref());
@@ -1632,7 +1632,7 @@ mod tests {
         );
         assert_eq!(
             h.service
-                .commit_prepared(prepared, ReloadTrigger::ConfigEdit, SystemTime::UNIX_EPOCH),
+                .commit_prepared(prepared, Trigger::ConfigEdit, SystemTime::UNIX_EPOCH),
             ["timeouts.close_secs"]
         );
         let history = h.service.last_reload().cloned();
@@ -1857,7 +1857,7 @@ mod tests {
     /// Records each `close_denied` call with the deny list it sees and the
     /// number of events recorded before it.
     struct FakeDenyControl {
-        cell: Arc<ReloadCell<u32>>,
+        cell: Arc<snapshot::Cell<u32>>,
         sink: Arc<SpyEventSink>,
         calls: Mutex<Vec<(vnc_relay_domain::deny_list::DenyList, usize)>>,
     }
@@ -1926,7 +1926,7 @@ mod tests {
         assert_eq!(
             h.sink.events(),
             [Event::ReloadApplied {
-                trigger: ReloadTrigger::FileWatch,
+                trigger: Trigger::FileWatch,
                 applied: vec!["relay.deny.sources".to_owned()],
             }]
         );
@@ -1986,7 +1986,7 @@ mod tests {
         );
         assert!(Arc::ptr_eq(&before, &h.cell.current()));
         h.service
-            .commit_prepared(prepared, ReloadTrigger::FileWatch, SystemTime::UNIX_EPOCH);
+            .commit_prepared(prepared, Trigger::FileWatch, SystemTime::UNIX_EPOCH);
         assert_eq!(*h.cell.current().settings, next);
         assert!(before.settings.relay.wss.trusted_proxies.items().is_empty());
         assert!(before.settings.relay.wss.server.allowed_origins.is_empty());
@@ -2083,7 +2083,7 @@ mod tests {
             ["relay.ticket.viewer.public_keys_file"]
         );
         h.service
-            .commit_prepared(prepared, ReloadTrigger::ConfigEdit, SystemTime::UNIX_EPOCH);
+            .commit_prepared(prepared, Trigger::ConfigEdit, SystemTime::UNIX_EPOCH);
         assert!(
             h.service
                 .running()
@@ -2153,7 +2153,7 @@ mod tests {
         let prepared = h.service.prepare_candidate(candidate(next)).unwrap();
         assert_eq!(prepared.applied_keys(), expected);
         h.service
-            .commit_prepared(prepared, ReloadTrigger::FileWatch, SystemTime::UNIX_EPOCH);
+            .commit_prepared(prepared, Trigger::FileWatch, SystemTime::UNIX_EPOCH);
         assert_eq!(h.cell.current().settings.relay.ticket.viewer.keys.len(), 1);
         assert_eq!(h.cell.current().settings.relay.ticket.server.keys.len(), 1);
     }
@@ -2182,7 +2182,7 @@ mod tests {
                 .prepare_candidate(candidate(running.clone()))
                 .unwrap();
             h.service
-                .commit_prepared(prepared, ReloadTrigger::FileWatch, SystemTime::UNIX_EPOCH);
+                .commit_prepared(prepared, Trigger::FileWatch, SystemTime::UNIX_EPOCH);
             let warnings: Vec<_> = h
                 .sink
                 .events()
@@ -2207,7 +2207,7 @@ mod tests {
         running.relay.ticket.viewer.issuer = Some("other-issuer.example".to_owned());
         let prepared = h.service.prepare_candidate(candidate(running)).unwrap();
         h.service
-            .commit_prepared(prepared, ReloadTrigger::FileWatch, SystemTime::UNIX_EPOCH);
+            .commit_prepared(prepared, Trigger::FileWatch, SystemTime::UNIX_EPOCH);
         assert_eq!(
             h.sink
                 .events()

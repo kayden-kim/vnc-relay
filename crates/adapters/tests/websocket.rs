@@ -37,9 +37,9 @@ use vnc_relay_application::ports::{
     AdminSessionSource, Clock, EventSink, RelayLifecycle, RelaySessionControl, RelayStateSource,
 };
 use vnc_relay_application::relay::{
-    RelayCounts, RelayRuntime, RelayRuntimeConfig, RelayService, RelaySnapshot,
+    Counts, RelayRuntime, RelayRuntimeConfig, RelayService, RelaySnapshot,
 };
-use vnc_relay_application::reload::snapshot::{ReloadCell, ReloadSnapshot};
+use vnc_relay_application::reload::snapshot::{self, ReloadSnapshot};
 use vnc_relay_application::settings::KeepaliveSettings;
 use vnc_relay_domain::account::Argon2Params;
 use vnc_relay_domain::admin_session;
@@ -250,7 +250,7 @@ async fn start_with_handshake(
     settings.timeouts.connect = HANDSHAKE;
     settings.timeouts.close = CLOSE;
     settings.keepalive = KEEPALIVE;
-    let cell = Arc::new(ReloadCell::new(ReloadSnapshot::new(
+    let cell = Arc::new(snapshot::Cell::new(ReloadSnapshot::new(
         vnc_relay_application::reload::ConfigCandidate {
             settings,
             presence: Default::default(),
@@ -1064,7 +1064,7 @@ async fn start_management(tls: Option<TlsAcceptor>) -> (SocketAddr, Arc<SpyEvent
     settings.limits.relay_connections = 10;
     settings.timeouts.tls_upgrade = UPGRADE;
     let secure = tls.is_some();
-    let cell = Arc::new(ReloadCell::new(ReloadSnapshot::new(
+    let cell = Arc::new(snapshot::Cell::new(ReloadSnapshot::new(
         vnc_relay_application::reload::ConfigCandidate {
             settings,
             presence: Default::default(),
@@ -1218,8 +1218,8 @@ impl RelayStateSource for StubRelayStateSource {
         }
     }
 
-    fn counts(&self) -> RelayCounts {
-        RelayCounts::default()
+    fn counts(&self) -> Counts {
+        Counts::default()
     }
 }
 

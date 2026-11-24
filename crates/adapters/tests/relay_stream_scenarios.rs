@@ -29,7 +29,7 @@ use vnc_relay_application::relay::{
     ConnectionContext, RelayRuntime, RelayRuntimeConfig, RelayService,
 };
 use vnc_relay_application::reload::ports::RuntimeSettingsSource;
-use vnc_relay_application::reload::snapshot::{ReloadCell, ReloadSnapshot};
+use vnc_relay_application::reload::snapshot::{self, ReloadSnapshot};
 use vnc_relay_application::reload::{ConfigCandidate, ConfigPresence};
 use vnc_relay_application::settings::KeepaliveSettings;
 use vnc_relay_domain::allow_list::{AllowList, IpItem};
@@ -155,7 +155,7 @@ enabled = true
         settings.timeouts.close = H_C_E;
         settings.keepalive = KEEPALIVE;
         settings.recent_closed.max_entries = 16;
-        let cell = Arc::new(ReloadCell::new(ReloadSnapshot::new(
+        let cell = Arc::new(snapshot::Cell::new(ReloadSnapshot::new(
             ConfigCandidate {
                 settings,
                 presence: ConfigPresence::default(),

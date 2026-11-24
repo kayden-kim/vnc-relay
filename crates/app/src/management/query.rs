@@ -329,7 +329,7 @@ mod tests {
     use super::*;
     use crate::events::RelayIdRef;
     use crate::relay::test_support::FakeRuntimeSettingsSource;
-    use crate::relay::{ClosedSessionSnapshot, ConnectionContext, RelayCounts, WaitingSnapshot};
+    use crate::relay::{ClosedSessionSnapshot, ConnectionContext, Counts, WaitingSnapshot};
     use std::sync::atomic::{AtomicI64, AtomicU64, Ordering};
     use vnc_relay_domain::conn_id::ConnId;
     use vnc_relay_domain::entry_point::EntryPoint;
@@ -386,8 +386,8 @@ mod tests {
             self.snapshot.lock().unwrap().clone()
         }
 
-        fn counts(&self) -> RelayCounts {
-            RelayCounts::of(&self.snapshot.lock().unwrap())
+        fn counts(&self) -> Counts {
+            Counts::of(&self.snapshot.lock().unwrap())
         }
     }
 

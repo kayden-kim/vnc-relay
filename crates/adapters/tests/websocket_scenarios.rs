@@ -35,7 +35,7 @@ use vnc_relay_application::ports::{Clock, EventSink, RelayCloseAction, RelayStre
 use vnc_relay_application::relay::{
     ConnectionContext, RelayRuntime, RelayRuntimeConfig, RelayService,
 };
-use vnc_relay_application::reload::snapshot::{ReloadCell, ReloadSnapshot};
+use vnc_relay_application::reload::snapshot::{self, ReloadSnapshot};
 use vnc_relay_application::settings::KeepaliveSettings;
 use vnc_relay_domain::allow_list::{AllowList, IpItem};
 use vnc_relay_domain::budget::ConnectionBudget;
@@ -140,7 +140,7 @@ struct Running {
     viewer_addr: SocketAddr,
     ws_addr: SocketAddr,
     wss_addr: SocketAddr,
-    cell: Arc<ReloadCell<tokio_rustls::TlsAcceptor>>,
+    cell: Arc<snapshot::Cell<tokio_rustls::TlsAcceptor>>,
     secure: bool,
     events: Arc<SpyEventSink>,
     service: Arc<RelayService>,
@@ -217,7 +217,7 @@ impl Running {
                 .unwrap_or_else(|error| panic!("loopback targets: {error:?}")),
         ]));
         configure(&mut settings);
-        let cell = Arc::new(ReloadCell::new(ReloadSnapshot::new(
+        let cell = Arc::new(snapshot::Cell::new(ReloadSnapshot::new(
             vnc_relay_application::reload::ConfigCandidate {
                 settings,
                 presence: Default::default(),

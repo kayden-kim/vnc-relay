@@ -20,7 +20,7 @@
   - 인증 우선 검증: 공통 `session_api::answer`가 유효한 관리 세션 쿠키를 검증한다. 경로·메서드·형식 검사보다 인증이 우선하며, 실패하면 즉시 `401 unauthenticated`를 반환한다([관리 API 계약 2.1절](../contracts/management-api-v1.md#21-오류-본문과-상태-코드)).
   - 조회 경로 라우팅: 인증 통과 후 다섯 조회 엔드포인트(`GET /api/v1/summary`, `GET /api/v1/waiting`, `GET /api/v1/sessions`, `GET /api/v1/sessions/{session_id}`, `GET /api/v1/closed-sessions`)를 처리한다. 조회 경로는 `GET`만 허용하며, 다른 메서드는 `405`(`Allow: GET`, `code: "invalid_request"`)로 거절한다.
   - 세션 인증 및 유휴 갱신 연계: `X-Relay-Poll` 헤더는 오직 `GET` 요청에서 값 `1`만 유효하며, 다른 값이나 다른 메서드에 포함되면 `400 invalid_request`를 반환한다. 오직 헤더가 없을 때만 사용자 행동으로 간주하여 관리 세션 유휴 만료 시각을 연장한다(`AdminAuth::touch`). 자동 폴링 요청(`X-Relay-Poll: 1`)은 유휴 만료를 연장하지 않는다.
-  - 스냅샷 일관성 보장(MGT-016): 한 요청에서 `RelayRuntime`의 `std::sync::Mutex<RelayState>`를 한 번만 짧게 획득해 대기·활성·최근 종료 상태를 복사한다. 바로 뒤에 기준 시점(`as_of_wall`, `as_of_mono`)을 읽는다. 집계와 목록은 이 복사본에서 만든다. 서버 요약의 L·Lm 사용량은 잠금 밖에서 `ConnectionBudget::current()`로 따로 읽으므로, 연결이 바뀌는 동안 같은 응답의 집계와 잠깐 어긋날 수 있다. 이는 스펙 2.2절이 허용한 동작이다.
+  - 스냅샷 일관성 보장(MGT-016): 한 요청에서 `RelayRuntime`의 `std::sync::Mutex<relay::State>`를 한 번만 짧게 획득해 대기·활성·최근 종료 상태를 복사한다. 바로 뒤에 기준 시점(`as_of_wall`, `as_of_mono`)을 읽는다. 집계와 목록은 이 복사본에서 만든다. 서버 요약의 L·Lm 사용량은 잠금 밖에서 `ConnectionBudget::current()`로 따로 읽으므로, 연결이 바뀌는 동안 같은 응답의 집계와 잠깐 어긋날 수 있다. 이는 스펙 2.2절이 허용한 동작이다.
   - 활성 세션 상태 및 포함 범위: `closing` 상태인 세션도 정리가 완료되기 전까지는 활성 세션 목록에 포함되고 `counts.active`에 집계된다(스펙 §2, §3.2).
   - 식별자 기준 상세 조회: 세션 상세 조회는 오직 `session_id`로만 대상을 찾으며, 동일한 중계 ID(`relay_id`)를 가진 다른 세션으로 대체하지 않는다(MGT-R02, MGT-R07).
   - 세션 식별자 형식 검증: `GET /api/v1/sessions/{session_id}` 요청 시 정규식 크레이트 없이 ASCII 조건문(`len 1~64`, 영문 대소문자·숫자·밑줄·하이픈)으로 검증한다. 잘못된 형식이면 즉시 `400 invalid_request`를 반환하고, 형식은 올바르나 활성 세션 표에 없으면(최근 종료 목록에 있는 경우 포함) `404 not_found`를 반환한다(스펙 §2.3, MGT-023).
@@ -64,8 +64,8 @@ flowchart LR
 | `crates/adapters/src/management_http/query_api.rs` `answer` | 요약·대기·활성 목록·상세·최근 종료 요청을 분기하고 JSON 응답을 구성한다. | `session_api::answer`가 인증 뒤 전달한다. | `ManagementQueryService`, `AdminAuth`, `serde_json`, `axum` |
 | `crates/domain/src/budget.rs` `ConnectionBudget::current` | L 및 Lm의 현재 점유 카운트(`used`)를 원자적으로 읽는다. | 시작 시 `src/serve.rs`가 예산을 생성한다. | `AtomicU32` |
 | `crates/app/src/ports.rs` `RelayStateSource` | 중계 런타임 상태 스냅샷을 조회하는 포트 trait이다. | `ManagementQueryService`가 주입받고 `RelayRuntime`이 구현한다. | `Clock`, `RelaySnapshot` |
-| `crates/app/src/relay.rs` `RelayRuntime::snapshot` | 상태 락을 한 번 획득하여 대기·활성·최근 종료 목록과 카운터를 복사한다. `handshaking`과 `max_entries`(R)도 제공한다. | 시작 시 `src/serve.rs`가 런타임을 생성하여 공유한다. | `Clock`, `RelayState` |
-| `crates/app/src/relay.rs` `RelayRuntime::track_handshaking` | `pub fn track_handshaking<'a>(&'a self) -> HandshakingGuard<'a, C>`는 `handshaking`을 1 늘리고 소멸 시 1 줄이는 RAII 가드를 반환한다. | TCP(`net.rs`) 및 WS·WSS(`websocket.rs`) 연결 준비 진입점에서 호출한다. | `std::sync::Mutex<RelayState>` |
+| `crates/app/src/relay.rs` `RelayRuntime::snapshot` | 상태 락을 한 번 획득하여 대기·활성·최근 종료 목록과 카운터를 복사한다. `handshaking`과 `max_entries`(R)도 제공한다. | 시작 시 `src/serve.rs`가 런타임을 생성하여 공유한다. | `Clock`, `relay::State` |
+| `crates/app/src/relay.rs` `RelayRuntime::track_handshaking` | `pub fn track_handshaking<'a>(&'a self) -> HandshakingGuard<'a, C>`는 `handshaking`을 1 늘리고 소멸 시 1 줄이는 RAII 가드를 반환한다. | TCP(`net.rs`) 및 WS·WSS(`websocket.rs`) 연결 준비 진입점에서 호출한다. | `std::sync::Mutex<relay::State>` |
 | `crates/app/src/relay.rs` `HandshakingGuard` | 초기 교환 중인 연결 수를 세는 RAII 카운터 가드다. | TCP는 `net.rs`의 `handle_connection` 진입 전, WS·WSS는 `websocket.rs`의 101 응답 flush 직후 생성한다. 연결 준비가 끝나면 소멸한다. | `RelayRuntime::track_handshaking` |
 | `crates/app/src/relay.rs` `ActivePeer` | 활성 세션의 상대(`Server(ConnectionContext)` 또는 `Target(SocketAddr)`)를 나타낸다. 대상 주소가 항상 유효함을 타입으로 보장한다. | `SessionPair` 및 `ActiveSessionSnapshot` 생성 시 소유한다. | `ConnectionContext`, `SocketAddr` |
 
@@ -112,9 +112,9 @@ flowchart LR
 
 ## 5. 상태와 초기화
 
-- 초기화 시점: `src/serve.rs`에서 `RelayRuntime`, `RelayService`, `LifecycleService`, `ConnectionBudget`을 조립한 뒤 `ManagementQueryService`를 생성한다. watcher·설정 편집·중계 reader와 같은 `ReloadCell`을 `RuntimeSettingsSource`로 주입한 뒤 `ManagementListener`에 전달한다.
+- 초기화 시점: `src/serve.rs`에서 `RelayRuntime`, `RelayService`, `LifecycleService`, `ConnectionBudget`을 조립한 뒤 `ManagementQueryService`를 생성한다. watcher·설정 편집·중계 reader와 같은 `reload::snapshot::Cell`을 `RuntimeSettingsSource`로 주입한 뒤 `ManagementListener`에 전달한다.
 - 상태 소유자와 수명:
-  - 활성 세션 표와 대기 표는 `RelayRuntime` 내부의 `std::sync::Mutex<RelayState>`가 소유하며, 프로세스 수명 동안만 유지된다.
+  - 활성 세션 표와 대기 표는 `RelayRuntime` 내부의 `std::sync::Mutex<relay::State>`가 소유하며, 프로세스 수명 동안만 유지된다.
   - 최근 종료 목록은 `recent_closed::List`가 소유하며 최대 R개를 보관한다. 항목별 `ClosedMetadata`는 같은 락 안의 `recent_metadata`에 두고, 목록에서 밀려난 항목과 함께 지운다. 프로세스가 재시작되면 모두 비워진다(ADR-0003).
   - L/Lm 예산은 `ConnectionBudget`이 원자적으로 관리한다.
 - 동시 실행과 락 불변식:
@@ -192,7 +192,7 @@ flowchart LR
 
 ## 설정 조회와 동적 상한
 
-설정 GET은 [ConfigEditService](config-edit.md#3-데이터-모델과-get)가 맡는다. `ManagementQueryService`에는 파일 I/O를 넣지 않는다. `src/serve.rs`는 watcher·설정 편집과 같은 `ReloadCell`을 `Arc<dyn RuntimeSettingsSource>`로 주입한다. `summary`는 `with_current` 한 번으로 같은 세대의 L/Lm을 읽는다. budget은 사용량의 원자 계수만 제공한다([동적 상한 설계](connection-limits.md), [설정 재로드 구분](../contracts/config-v4.md#18-재로드-구분)).
+설정 GET은 [ConfigEditService](config-edit.md#3-데이터-모델과-get)가 맡는다. `ManagementQueryService`에는 파일 I/O를 넣지 않는다. `src/serve.rs`는 watcher·설정 편집과 같은 `reload::snapshot::Cell`을 `Arc<dyn RuntimeSettingsSource>`로 주입한다. `summary`는 `with_current` 한 번으로 같은 세대의 L/Lm을 읽는다. budget은 사용량의 원자 계수만 제공한다([동적 상한 설계](connection-limits.md), [설정 재로드 구분](../contracts/config-v4.md#18-재로드-구분)).
 
 ## 서버 종료 항목의 조회
 

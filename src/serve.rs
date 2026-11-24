@@ -29,10 +29,10 @@ use vnc_relay_adapters::ops_log::{JsonLinesEventSink, RecentLogs};
 use vnc_relay_adapters::process_stats::OsProcessStats;
 use vnc_relay_adapters::status_http::StatusListener;
 use vnc_relay_adapters::target::TcpTargetGateway;
-use vnc_relay_adapters::tls::{self, TlsError, TlsFile, TlsSource};
+use vnc_relay_adapters::tls::{self, TlsError, TlsSource};
 use vnc_relay_adapters::websocket::{WsEntryPoint, WsPolicy};
 use vnc_relay_adapters::{accounts_file, config_file, net};
-use vnc_relay_application::accounts::{self, ACCOUNTS_FILE_KEY, AccountsDiagnostic};
+use vnc_relay_application::accounts::{self, ACCOUNTS_FILE_KEY, Diagnostic};
 use vnc_relay_application::events::{Event, Phase};
 use vnc_relay_application::ip_info::{IpInfoService, IpLookup};
 use vnc_relay_application::lifecycle::LifecycleService;
@@ -41,14 +41,14 @@ use vnc_relay_application::management::login;
 use vnc_relay_application::management::query::ManagementQueryService;
 use vnc_relay_application::management::terminate::ManagementTerminateService;
 use vnc_relay_application::management::{AdminAuth, AdminPorts};
-use vnc_relay_application::metrics::history::HistoryWindow;
+use vnc_relay_application::metrics::history::Window;
 use vnc_relay_application::metrics::{MetricSources, Metrics, MetricsService, MetricsSink};
 use vnc_relay_application::ports::{
     AdminSessionSource, Clock, EventSink, RelaySessionControl, RelayStateSource,
 };
 use vnc_relay_application::relay::{RelayRuntime, RelayRuntimeConfig, RelayService};
 use vnc_relay_application::reload::service::ReloadService;
-use vnc_relay_application::reload::snapshot::{ReloadCell, ReloadSnapshot};
+use vnc_relay_application::reload::snapshot::{self, ReloadSnapshot};
 use vnc_relay_application::reload::{ConfigCandidate, SharedReload};
 use vnc_relay_application::settings::{LogOutput, Settings, TlsFiles};
 use vnc_relay_application::sources::{SourceStats, SourcesService, SourcesSink};
@@ -406,7 +406,7 @@ async fn listen_until_shutdown(
     // this start. A failed watch start exits 1 before any listener is bound.
     let wss_present = wss_tls.is_some();
     let management_tls_on = management_tls.is_some();
-    let cell = Arc::new(ReloadCell::new(ReloadSnapshot::new(
+    let cell = Arc::new(snapshot::Cell::new(ReloadSnapshot::new(
         running.clone(),
         wss_tls,
         management_tls,
@@ -881,7 +881,7 @@ fn startup_keys_failure(log: &dyn EventSink, error: &dyn Display) -> u8 {
 /// §1.16). A late tick moves the next one back, so two points are never
 /// taken at once.
 async fn sample_history(metrics: Arc<MetricsService>) {
-    let mut ticks = tokio::time::interval(HistoryWindow::Hour.interval());
+    let mut ticks = tokio::time::interval(Window::Hour.interval());
     ticks.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
     // The first tick completes at once. The ready point is already taken.
     ticks.tick().await;
@@ -975,8 +975,8 @@ fn tls_failure(log: &dyn EventSink, check: &TlsCheck<'_>, error: &TlsError) {
 /// Writes the diagnostic of one TLS file error and returns its config key.
 fn report_tls(check: &TlsCheck<'_>, error: &TlsError) -> String {
     let file = match error.file() {
-        TlsFile::Cert => "cert_file",
-        TlsFile::Key => "key_file",
+        tls::File::Cert => "cert_file",
+        tls::File::Key => "key_file",
     };
     let key = format!("{}.{file}", check.prefix);
     cli::report("error", error.code(), &key, &error.to_string());
@@ -985,7 +985,7 @@ fn report_tls(check: &TlsCheck<'_>, error: &TlsError) -> String {
 
 /// Account file diagnostics may quote file paths inside the file, so the log
 /// line carries the config key of the file and no detail (ops-info-v1 §1.11).
-fn accounts_failure(log: &dyn EventSink, diagnostics: &[AccountsDiagnostic]) -> u8 {
+fn accounts_failure(log: &dyn EventSink, diagnostics: &[Diagnostic]) -> u8 {
     report_accounts(diagnostics);
     for d in diagnostics {
         record_failure(
@@ -999,13 +999,13 @@ fn accounts_failure(log: &dyn EventSink, diagnostics: &[AccountsDiagnostic]) -> 
     EXIT_ACCOUNTS
 }
 
-fn report_accounts(diagnostics: &[AccountsDiagnostic]) {
+fn report_accounts(diagnostics: &[Diagnostic]) {
     for d in diagnostics {
         cli::report("error", d.error.code(), &d.key, &d.message);
     }
 }
 
-fn report_accounts_warnings(warnings: &[accounts::AccountsWarning]) {
+fn report_accounts_warnings(warnings: &[accounts::Warning]) {
     for warning in warnings {
         cli::report(
             "warning",

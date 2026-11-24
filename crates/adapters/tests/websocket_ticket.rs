@@ -27,7 +27,7 @@ use vnc_relay_application::ports::{Clock, EventSink};
 use vnc_relay_application::relay::{RelayRuntime, RelayRuntimeConfig, RelayService};
 use vnc_relay_application::reload::ConfigCandidate;
 use vnc_relay_application::reload::ports::RuntimeSettingsSource;
-use vnc_relay_application::reload::snapshot::{ReloadCell, ReloadSnapshot};
+use vnc_relay_application::reload::snapshot::{self, ReloadSnapshot};
 use vnc_relay_application::settings::{Settings, TicketRoleSettings};
 use vnc_relay_domain::allow_list::{AllowList, IpItem};
 use vnc_relay_domain::budget::ConnectionBudget;
@@ -96,7 +96,7 @@ struct Running {
     addr: SocketAddr,
     wss_addr: SocketAddr,
     events: Arc<SpyEventSink>,
-    cell: Arc<ReloadCell<TlsAcceptor>>,
+    cell: Arc<snapshot::Cell<TlsAcceptor>>,
     clock: Arc<FakeClock>,
     uses: Arc<Mutex<UseTable>>,
     stop: watch::Sender<bool>,
@@ -154,7 +154,7 @@ impl Running {
             &fixture("server-key-p256.pem"),
         )
         .unwrap();
-        let cell = Arc::new(ReloadCell::new(ReloadSnapshot::new(
+        let cell = Arc::new(snapshot::Cell::new(ReloadSnapshot::new(
             ConfigCandidate {
                 settings,
                 presence: Default::default(),

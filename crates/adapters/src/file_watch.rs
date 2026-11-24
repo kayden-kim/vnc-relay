@@ -758,7 +758,7 @@ mod tests {
     use tokio::sync::oneshot;
     use vnc_relay_application::reload::ports::{ReloadTlsStore, TlsBuildError};
     use vnc_relay_application::reload::service::ReloadService;
-    use vnc_relay_application::reload::snapshot::{ReloadCell, ReloadSnapshot};
+    use vnc_relay_application::reload::snapshot::{self, ReloadSnapshot};
     use vnc_relay_domain::allow_list::{AllowList, IpItem};
     use vnc_relay_domain::peer_ip::PeerIp;
 
@@ -895,7 +895,7 @@ mod tests {
         files: Arc<FakeReloadFileStore>,
         sink: Arc<SpyEventSink>,
         config_path: PathBuf,
-        cell: Arc<ReloadCell<()>>,
+        cell: Arc<snapshot::Cell<()>>,
         stop: watch::Receiver<bool>,
         _stop_sender: watch::Sender<bool>,
     }
@@ -926,7 +926,7 @@ mod tests {
         let base_dir = config_path.parent().expect("config directory");
         let running = config_file::parse_candidate(running_text.as_bytes(), base_dir)
             .expect("valid running config");
-        let cell = Arc::new(ReloadCell::<()>::new(ReloadSnapshot::new(
+        let cell = Arc::new(snapshot::Cell::<()>::new(ReloadSnapshot::new(
             running.clone(),
             None,
             None,

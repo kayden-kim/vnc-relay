@@ -15,7 +15,7 @@ use vnc_relay_application::events::ConnectionErrorKind;
 use vnc_relay_application::ports::{RelayCloseAction, RelayStream, TargetError, TargetGateway};
 use vnc_relay_application::reload::{
     ConfigCandidate,
-    snapshot::{ReloadCell, ReloadSnapshot},
+    snapshot::{Cell, ReloadSnapshot},
 };
 use vnc_relay_application::settings::KeepaliveSettings;
 use vnc_relay_domain::session::Transport;
@@ -28,13 +28,13 @@ const KEEPALIVE: KeepaliveSettings = KeepaliveSettings {
     ws_pong_timeout: Duration::from_secs(30),
 };
 
-fn source(keepalive: KeepaliveSettings) -> Arc<ReloadCell<()>> {
+fn source(keepalive: KeepaliveSettings) -> Arc<Cell<()>> {
     let mut settings = got(vnc_relay_adapters::config_file::parse(
         "[admin]\naccounts_file='accounts.toml'\n[management]\nlisten='127.0.0.1:8443'\n[status]\nlisten='127.0.0.1:9090'\n",
         std::path::Path::new("."),
     ));
     settings.keepalive = keepalive;
-    Arc::new(ReloadCell::new(ReloadSnapshot::new(
+    Arc::new(Cell::new(ReloadSnapshot::new(
         ConfigCandidate {
             settings,
             presence: Default::default(),

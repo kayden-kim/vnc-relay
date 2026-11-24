@@ -11,8 +11,7 @@ use vnc_relay_domain::peer_ip::PeerIp;
 use crate::events::Event;
 use crate::ports::{Clock, EventSink};
 use crate::reload::{
-    ConfigCandidate, FileClassification, LastReload, PrepareReloadError, ReloadTrigger,
-    SharedReload,
+    ConfigCandidate, FileClassification, LastReload, PrepareReloadError, SharedReload, Trigger,
 };
 use crate::settings::ConfigDiagnostic;
 
@@ -301,7 +300,7 @@ impl<A: Clone + Send + Sync + 'static> ConfigService for ConfigEditService<A> {
                 })
             })?;
         let as_of = self.clock.wall();
-        let applied = reload.commit_prepared(prepared, ReloadTrigger::ConfigEdit, as_of);
+        let applied = reload.commit_prepared(prepared, Trigger::ConfigEdit, as_of);
         self.events.record(&event);
         Ok(ConfigEditOutcome {
             as_of,

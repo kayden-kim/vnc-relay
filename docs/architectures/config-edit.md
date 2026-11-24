@@ -35,7 +35,7 @@ flowchart LR
     H -->|"인증된 GET / PATCH 값"| E
     E -->|"하나의 Mutex 획득"| R["SharedReload / ReloadService"]
     E -->|"읽기·revision·편집·검증·원자 교체 포트"| F
-    R -->|"준비한 후보 한 번 발행"| C["ReloadCell"]
+    R -->|"준비한 후보 한 번 발행"| C["reload::snapshot::Cell"]
     E -->|"편집 사건"| L["EventSink"]
     R -->|"reload_applied"| L
 ```
@@ -138,7 +138,7 @@ v4의 `edit_change`는 마지막 점 앞까지를 테이블 경로로, 마지막
 | --- | --- | --- |
 | `crates/app/src/management/config.rs` `ConfigService`, `ConfigEditService::{get,patch,reject}` | object-safe 동기 포트, 동일 mutex의 GET/10단계 PATCH, 파일값 변경 키와 실행값 차이 분리, 업무 오류 감사 | API §1.13~14 |
 | `crates/app/src/management/config/items.rs` `config_items` | 실행값·적용된 presence만 표시하고 TLS/계정 파일은 경로만 반환 | API §1.13 |
-| `crates/app/src/reload/snapshot.rs` `ReloadSnapshot`, `ReloadCell`; `reload/service.rs` `prepare_candidate`, `classify_file`, `commit_prepared` | Settings·presence·TLS 원자 발행, 부작용 없는 준비/분류, 실패를 반환하지 않는 commit과 last_reload | 설정 §1.8, API §1.13~14 |
+| `crates/app/src/reload/snapshot.rs` `ReloadSnapshot`, `reload::snapshot::Cell`; `reload/service.rs` `prepare_candidate`, `classify_file`, `commit_prepared` | Settings·presence·TLS 원자 발행, 부작용 없는 준비/분류, 실패를 반환하지 않는 commit과 last_reload | 설정 §1.8, API §1.13~14 |
 | `crates/adapters/src/config_file.rs` `parse_candidate`, `collect_presence`; `settings.rs` `ManagementSettings::config_edit` | 공통 전체 검증과 생략 정보, 기본 false | 설정 §1.2·§3.2 |
 | `crates/adapters/src/config_edit.rs` `FsConfigFileStore`, `replace_file`, `TempFile`, `TomlConfigDocumentGateway`, `edit_change`, `edit_array` | SHA-256, 같은 디렉터리 임시 파일·최종 revision 확인·rename·실패 정리, TOML source span 기반 부분 치환 | 설정 §1.10, 교체 직전 재확인 |
 | `crates/adapters/src/management_http.rs` `ManagementServices`, `DashboardHints`; `session_api::answer`, `config_api::{answer,patch_body,view_body,edit_error}` | 서비스 주입·PATCH CSRF·64 KiB·blocking 호출·JSON 오류 매핑·응답 때 현재 E+5 | API §1.3·§1.12~14 |

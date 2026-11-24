@@ -33,11 +33,11 @@ impl<A> ReloadSnapshot<A> {
 ///
 /// Readers take the `Arc` once per new connection or handshake. Existing connections
 /// keep the values they took, so a replacement never changes them.
-pub struct ReloadCell<A> {
+pub struct Cell<A> {
     current: RwLock<Arc<ReloadSnapshot<A>>>,
 }
 
-impl<A> ReloadCell<A> {
+impl<A> Cell<A> {
     /// Creates the cell with the snapshot of the running settings.
     pub fn new(snapshot: ReloadSnapshot<A>) -> Self {
         Self {
@@ -63,7 +63,7 @@ impl<A> ReloadCell<A> {
     }
 }
 
-impl<A: Send + Sync> super::ports::RuntimeSettingsSource for ReloadCell<A> {
+impl<A: Send + Sync> super::ports::RuntimeSettingsSource for Cell<A> {
     fn with_current(&self, read: &mut dyn FnMut(&crate::settings::Settings)) {
         let guard = self.current.read().unwrap_or_else(PoisonError::into_inner);
         read(&guard.settings);

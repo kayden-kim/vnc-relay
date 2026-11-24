@@ -4,7 +4,7 @@
 use std::path::{Path, PathBuf};
 
 use vnc_relay_adapters::accounts_file::{self, AccountsFile, HashFloor};
-use vnc_relay_application::accounts::{AccountsWarning, AdminError};
+use vnc_relay_application::accounts::{AdminError, Warning};
 use vnc_relay_application::ports::AccountStore;
 use vnc_relay_domain::account::{Account, Name, PasswordHash};
 
@@ -225,8 +225,8 @@ fn warns_when_group_or_others_have_permissions() {
     };
     assert_eq!(warnings(0o600), []);
     assert_eq!(warnings(0o400), []);
-    assert_eq!(warnings(0o640), [AccountsWarning::FilePermissive]);
-    assert_eq!(warnings(0o604), [AccountsWarning::FilePermissive]);
+    assert_eq!(warnings(0o640), [Warning::FilePermissive]);
+    assert_eq!(warnings(0o604), [Warning::FilePermissive]);
 }
 
 fn stored(name: &str) -> Account {
@@ -241,7 +241,7 @@ fn stored(name: &str) -> Account {
 fn update(
     file: &AccountsFile,
     mut change: impl FnMut(Vec<Account>) -> Result<Vec<Account>, AdminError>,
-) -> (Result<(), AdminError>, Vec<AccountsWarning>) {
+) -> (Result<(), AdminError>, Vec<Warning>) {
     let mut warnings = Vec::new();
     let result = file.update(&mut change, &mut |w| warnings.push(w));
     (result, warnings)
@@ -397,7 +397,7 @@ fn a_failed_change_returns_its_error_and_warns_when_the_lock_cannot_be_removed()
         Err(AdminError::AccountExists(name.clone()))
     });
     assert_eq!(result, Err(AdminError::AccountExists(name)));
-    let codes: Vec<&str> = warnings.iter().map(AccountsWarning::code).collect();
+    let codes: Vec<&str> = warnings.iter().map(Warning::code).collect();
     assert_eq!(codes, ["accounts_file_cleanup_failed"]);
     assert_eq!(
         std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read: {e}")),

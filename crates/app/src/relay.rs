@@ -22,7 +22,7 @@ use vnc_relay_domain::peer_ip::PeerIp;
 use vnc_relay_domain::recent_closed::List;
 use vnc_relay_domain::relay_id::RelayId;
 use vnc_relay_domain::session::{
-    CloseCause, ClosedSession, Direction, Id, Session, SessionError, State, Transport,
+    CloseCause, ClosedSession, Direction, Id, Session, SessionError, Transport,
 };
 
 use crate::events::{
@@ -457,11 +457,11 @@ pub struct RelayRuntime<C> {
     waiting_budget: Arc<ConnectionBudget>,
     config: RelayRuntimeConfig,
     settings: Arc<dyn RuntimeSettingsSource>,
-    state: Mutex<RelayState>,
+    state: Mutex<State>,
     lifecycle: watch::Sender<RelayLifecycle>,
 }
 
-struct RelayState {
+struct State {
     lifecycle: RelayLifecycle,
     matching: WaitingTable,
     waiting: HashMap<RelayId, matching::WaitingConnection>,
@@ -474,7 +474,7 @@ struct RelayState {
     handshaking: usize,
 }
 
-impl RelayState {
+impl State {
     fn counted_active(&self) -> usize {
         self.active.len()
     }
@@ -498,14 +498,14 @@ pub struct RelaySnapshot {
 /// connections count by role and transport, active sessions by mode, Viewer
 /// transport, and target transport.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub struct RelayCounts {
+pub struct Counts {
     pub handshaking: usize,
     pub target_connecting: usize,
     waiting: [[usize; 3]; 2],
     sessions: [[[usize; 3]; 3]; 2],
 }
 
-impl RelayCounts {
+impl Counts {
     /// The counts of a snapshot, for state sources that keep only snapshots.
     pub fn of(snapshot: &RelaySnapshot) -> Self {
         let mut counts = Self {
@@ -610,7 +610,7 @@ pub struct ActiveSessionSnapshot {
     pub started_at: SystemTime,
     pub started_mono: Duration,
     pub duration: Duration,
-    pub state: State,
+    pub state: vnc_relay_domain::session::State,
     pub viewer: ConnectionContext,
     pub peer: ActivePeer,
     pub relay_id_ref: Option<RelayIdRef>,
@@ -709,7 +709,7 @@ impl<C> RelayRuntime<C> {
         settings: Arc<dyn RuntimeSettingsSource>,
     ) -> Self {
         let (lifecycle, _) = watch::channel(RelayLifecycle::Running);
-        let state = RelayState {
+        let state = State {
             lifecycle: RelayLifecycle::Running,
             matching: WaitingTable::new(),
             waiting: HashMap::new(),
@@ -739,7 +739,7 @@ impl<C> RelayRuntime<C> {
         self.lifecycle.subscribe()
     }
 
-    fn lock(&self) -> MutexGuard<'_, RelayState> {
+    fn lock(&self) -> MutexGuard<'_, State> {
         self.state
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -798,12 +798,12 @@ impl<C> RelayRuntime<C> {
 
     /// Counts by stage, role, transport, and mode under one registry lock,
     /// without copying the lists (metrics-v1 §1.1 "현재 값").
-    pub fn counts(&self) -> RelayCounts {
+    pub fn counts(&self) -> Counts {
         let state = self.lock();
-        let mut counts = RelayCounts {
+        let mut counts = Counts {
             handshaking: state.handshaking,
             target_connecting: state.connecting,
-            ..RelayCounts::default()
+            ..Counts::default()
         };
         for entry in state.waiting.values() {
             let entry_point = entry.connection.context.entry_point;
@@ -834,7 +834,7 @@ impl<C> RelayRuntime<C> {
         }
     }
 
-    fn force_locked(&self, state: &mut RelayState, events: &dyn EventSink) {
+    fn force_locked(&self, state: &mut State, events: &dyn EventSink) {
         if state.lifecycle == RelayLifecycle::Force {
             return;
         }
@@ -852,7 +852,7 @@ impl<C> RelayRuntime<C> {
     /// closing or shutdown is forcing every session. Returns whether this
     /// call started the close. The caller holds the session control lock.
     fn start_close_locked(
-        state: &mut RelayState,
+        state: &mut State,
         id: &Id,
         control: &mut SessionHandle,
         command: session::SessionCommand,
@@ -861,7 +861,7 @@ impl<C> RelayRuntime<C> {
         if initiated {
             control.closing = true;
             if let Some(entry) = state.active.get_mut(id) {
-                entry.state = State::Closing;
+                entry.state = vnc_relay_domain::session::State::Closing;
             }
             control.command.send_replace(Some(command));
         }
@@ -1063,7 +1063,7 @@ impl OwnedConnection {
         )
     }
 
-    fn into_endpoint(self) -> (RelayEndpoint, ConnectionContext) {
+    fn into_endpoint(self) -> (Endpoint, ConnectionContext) {
         let Self {
             stream,
             trailing,
@@ -1072,7 +1072,7 @@ impl OwnedConnection {
             ticket,
         } = self;
         (
-            RelayEndpoint {
+            Endpoint {
                 stream,
                 trailing,
                 permit,
@@ -1084,7 +1084,7 @@ impl OwnedConnection {
     }
 }
 
-struct RelayEndpoint {
+struct Endpoint {
     stream: BoxRelayStream,
     trailing: Vec<u8>,
     permit: Permit,
@@ -1094,7 +1094,7 @@ struct RelayEndpoint {
 
 struct SessionPair {
     viewer: OwnedConnection,
-    other: RelayEndpoint,
+    other: Endpoint,
     peer: ActivePeer,
     target_host: Option<String>,
     relay: Option<(RelayId, RelayIdRef, MatchClaim)>,
@@ -1195,7 +1195,7 @@ impl<C: Send + Sync> RelayStateSource for RelayRuntime<C> {
         self.snapshot(clock)
     }
 
-    fn counts(&self) -> RelayCounts {
+    fn counts(&self) -> Counts {
         self.counts()
     }
 }
@@ -1495,7 +1495,7 @@ impl RelayService {
                         started_at: session.started_at(),
                         started_mono,
                         duration: Duration::ZERO,
-                        state: State::Active,
+                        state: vnc_relay_domain::session::State::Active,
                         viewer: pair.viewer.context,
                         peer: pair.peer.clone(),
                         relay_id_ref: pair
@@ -1681,7 +1681,7 @@ impl RelayService {
         // streams and permits before releasing active ID occupancy.
         let mut pair = pair;
         let relay_id = pair.relay.as_ref().map(|(id, _, _)| id);
-        let observed = Mutex::new(State::Active);
+        let observed = Mutex::new(vnc_relay_domain::session::State::Active);
         // Bytes already added to `vnc_relay.session.io`, per direction
         // (metrics-v1 §1.3). The session counts start at zero.
         let reported = [AtomicU64::new(0), AtomicU64::new(0)];
@@ -1733,7 +1733,7 @@ impl RelayService {
                         snapshot.bytes_viewer_to_target = session.bytes(Direction::ViewerToTarget);
                         snapshot.bytes_target_to_viewer = session.bytes(Direction::TargetToViewer);
                     }
-                    if session.state() == State::Closing
+                    if session.state() == vnc_relay_domain::session::State::Closing
                         && let Some(id) = relay_id
                     {
                         state.matching.begin_closing(id, session.id());
@@ -1752,7 +1752,7 @@ impl RelayService {
                 control.closing |= *observed
                     .lock()
                     .unwrap_or_else(std::sync::PoisonError::into_inner)
-                    != State::Active;
+                    != vnc_relay_domain::session::State::Active;
                 result
             })
             .await
@@ -1765,7 +1765,7 @@ impl RelayService {
             permit: viewer_permit,
             ..
         } = pair.viewer;
-        let RelayEndpoint {
+        let Endpoint {
             stream: other_stream,
             permit: other_permit,
             ..
@@ -2976,7 +2976,10 @@ mod tests {
             if closing {
                 server.shutdown().await.expect("eof");
                 settle().await;
-                assert_eq!(harness.snapshot().active[0].state, State::Closing);
+                assert_eq!(
+                    harness.snapshot().active[0].state,
+                    vnc_relay_domain::session::State::Closing
+                );
             }
             let (duplicate, _peer, actions) = harness.prepare(Role::Viewer, "ID:3", b"").await;
             assert!(matches!(

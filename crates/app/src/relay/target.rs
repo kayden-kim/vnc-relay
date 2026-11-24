@@ -11,7 +11,7 @@ use tokio::sync::watch;
 use vnc_relay_domain::handshake::{Mode, TargetAddress, TargetHost};
 
 use super::{
-    ActivePeer, OwnedConnection, RelayDispatchError, RelayEndpoint, RelayRuntime, RelayService,
+    ActivePeer, Endpoint, OwnedConnection, RelayDispatchError, RelayRuntime, RelayService,
     SessionPair,
 };
 use crate::events::{AbortReason, Event, RejectReason, Stage, TargetFailureReason};
@@ -154,7 +154,7 @@ pub(super) async fn dispatch<C: TargetGateway>(
     match result {
         Ok((stream, permit, target)) => {
             service.metrics.record_target_connect(Ok(()), elapsed);
-            let other = RelayEndpoint {
+            let other = Endpoint {
                 stream: Box::new(stream),
                 trailing: Vec::new(),
                 permit,

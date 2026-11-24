@@ -90,7 +90,7 @@ pub struct AsnItem {
 
 /// The `200` body of management-api-v1 §1.17 before JSON.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SourcesReport {
+pub struct Report {
     pub as_of: SystemTime,
     pub window: SourceWindow,
     pub window_start: SystemTime,
@@ -148,7 +148,7 @@ impl SourcesService {
 
     /// Counts the events whose time is at least `window_start` and at most
     /// `as_of`. The store lock is held only to copy those events.
-    pub fn report(&self, window: SourceWindow) -> SourcesReport {
+    pub fn report(&self, window: SourceWindow) -> Report {
         let as_of = super::millis(self.stats.clock.wall());
         let start = as_of.saturating_sub(window_millis(window));
         let (events, stored, dropped_before) = {
@@ -275,7 +275,7 @@ impl SourcesService {
             })
             .collect();
 
-        SourcesReport {
+        Report {
             as_of: at_millis(as_of),
             window,
             window_start: at_millis(start),

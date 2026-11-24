@@ -13,7 +13,7 @@ use vnc_relay_application::management::config::{
     ConfigView,
 };
 use vnc_relay_application::management::session::AuthorizedAdmin;
-use vnc_relay_application::reload::{ConfigFileState, LastReloadOutcome, ReloadTrigger};
+use vnc_relay_application::reload::{ConfigFileState, LastReloadOutcome, Trigger};
 use vnc_relay_application::settings::ConfigDiagnostic;
 
 const PATCH_BODY_LIMIT: usize = 65_536;
@@ -144,7 +144,7 @@ fn view_body(view: ConfigView) -> Value {
         if let (Some(min),Some(max)) = (item.min,item.max) { body["min"]=json!(min); body["max"]=json!(max); }
         body
     }).collect::<Vec<_>>();
-    let last_reload = view.last_reload.map(|last| json!({"at":clock::timestamp(last.at),"result":match last.result {LastReloadOutcome::Applied=>"applied",LastReloadOutcome::Rejected=>"rejected",LastReloadOutcome::RestartRequired=>"restart_required"},"trigger":match last.trigger {ReloadTrigger::FileWatch=>"file_watch",ReloadTrigger::ConfigEdit=>"config_edit"},"config_keys":last.config_keys}));
+    let last_reload = view.last_reload.map(|last| json!({"at":clock::timestamp(last.at),"result":match last.result {LastReloadOutcome::Applied=>"applied",LastReloadOutcome::Rejected=>"rejected",LastReloadOutcome::RestartRequired=>"restart_required"},"trigger":match last.trigger {Trigger::FileWatch=>"file_watch",Trigger::ConfigEdit=>"config_edit"},"config_keys":last.config_keys}));
     json!({"as_of":clock::timestamp(view.as_of),"revision":view.revision,"edit_enabled":view.edit_enabled,
         "file":{"state":match view.file.state { ConfigFileState::InEffect=>"in_effect",ConfigFileState::Pending=>"pending",ConfigFileState::RestartRequired=>"restart_required",ConfigFileState::Invalid=>"invalid",ConfigFileState::Unreadable=>"unreadable" },"config_keys":view.file.config_keys,"diagnostics":diagnostics_body(view.file.diagnostics)},
         "last_reload":last_reload,"items":items})

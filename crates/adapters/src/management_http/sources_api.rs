@@ -9,9 +9,7 @@ use serde_json::{Map, Value, json};
 use vnc_relay_application::ip_info::IpDbStatus;
 use vnc_relay_application::management::session::AuthorizedAdmin;
 use vnc_relay_application::sources::SourceWindow;
-use vnc_relay_application::sources::report::{
-    AddressItem, AsnItem, CountryItem, Counts, SourcesReport,
-};
+use vnc_relay_application::sources::report::{AddressItem, AsnItem, CountryItem, Counts, Report};
 use vnc_relay_domain::peer_ip::PeerIp;
 
 use super::Shared;
@@ -94,7 +92,7 @@ fn window_query(query: Option<&str>) -> Result<SourceWindow, &'static str> {
 }
 
 /// The `200` body of management-api-v1 §1.17.
-fn sources_json(report: &SourcesReport) -> Value {
+fn sources_json(report: &Report) -> Value {
     let [country, asn] = &report.databases;
     let mut body = Map::new();
     body.insert(

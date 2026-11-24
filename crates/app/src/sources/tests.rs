@@ -13,7 +13,7 @@ use vnc_relay_domain::peer_ip::PeerIp;
 use vnc_relay_domain::session::{Id, Transport};
 
 use super::report::Counts;
-use super::{CAPACITY, PENDING_CAPACITY, SourceStats, SourceWindow, SourcesReport, SourcesService};
+use super::{CAPACITY, PENDING_CAPACITY, Report, SourceStats, SourceWindow, SourcesService};
 use crate::events::{AbortReason, Event, RejectReason, RelayIdRef, Stage};
 use crate::ip_info::{IpDbKey, IpDbMetadata, IpDbRead, IpInfoService, IpLookup};
 use crate::ports::{Clock, EventSink, IpDbFileGateway, IpDbLookupGateway};
@@ -170,7 +170,7 @@ impl Fixture {
         });
     }
 
-    fn report(&self, window: SourceWindow) -> SourcesReport {
+    fn report(&self, window: SourceWindow) -> Report {
         self.service.report(window)
     }
 }
@@ -203,7 +203,7 @@ fn session(mode: Mode, viewer: (ConnId, &str), server: Option<(ConnId, &str)>) -
     }
 }
 
-fn counts_of(report: &SourcesReport, address: &str) -> Counts {
+fn counts_of(report: &Report, address: &str) -> Counts {
     report
         .addresses
         .items
@@ -521,7 +521,7 @@ fn deny(texts: &[&str]) -> vnc_relay_domain::deny_list::DenyList {
     )
 }
 
-fn deny_entries(report: &SourcesReport, address: &str) -> Vec<String> {
+fn deny_entries(report: &Report, address: &str) -> Vec<String> {
     report
         .addresses
         .items

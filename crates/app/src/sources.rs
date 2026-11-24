@@ -24,7 +24,7 @@ use crate::events::{Event, Stage};
 use crate::ip_info::IpLookup;
 use crate::ports::{Clock, EventSink};
 
-pub use report::{SourceWindow, SourcesReport, SourcesService};
+pub use report::{Report, SourceWindow, SourcesService};
 
 /// Most events kept (operations.md §3.9 rule 6). Not configurable.
 pub const CAPACITY: usize = 100_000;

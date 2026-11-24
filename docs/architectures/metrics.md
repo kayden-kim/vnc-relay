@@ -30,7 +30,7 @@
   - `vnc_relay_application::metrics::Metrics`: 기록 전용 저장소. `record_handshake`, `record_target_connect`, `add_io`, `record_ping_timeout`.
   - `vnc_relay_application::metrics::MetricsSink`: `EventSink` 구현.
   - `vnc_relay_application::metrics::MetricsService`: 읽기 전용. `snapshot`, `sample_history`, `history_after(기간, 순번)`.
-  - `vnc_relay_application::metrics::history::HistoryWindow`: 추이 기간(`Hour`·`Day`)과 기간별 간격·보관 개수.
+  - `vnc_relay_application::metrics::history::Window`: 추이 기간(`Hour`·`Day`)과 기간별 간격·보관 개수.
   - `vnc_relay_application::ports::ProcessStatsSource`와 `ProcessStats`, `AdminSessionSource`, `RelayStateSource::counts`.
   - `vnc_relay_adapters::metrics_text::encode`.
   - `vnc_relay_adapters::process_stats::OsProcessStats`.
@@ -80,7 +80,7 @@ flowchart LR
 | `crates/app/src/metrics.rs` `Metrics` | 카운터·히스토그램·전송량·ping 시간 초과의 기록 | `src/serve.rs` `start`가 운영 로그 기록부를 연 직후 `Arc`로 만든다. 프로세스가 끝날 때 없어진다 | `Clock`(가동 시간 기준점) |
 | `crates/app/src/metrics.rs` `MetricsSink` | `EventSink` 장식자. 사건 종류와 필드로 해당 메트릭을 센 뒤 감싼 기록부에 넘긴다. 감싼 기록부는 [접속 출처](source-stats.md)의 `SourcesSink`이고, 그 안쪽이 운영 로그 기록부다 | `Metrics`와 함께 만든다. 이후 모든 `Arc<dyn EventSink>` 자리에 이것을 넘긴다 | `Metrics`, 감싼 `EventSink` |
 | `crates/app/src/metrics/service.rs` `MetricsService` | 기록 값과 현재 값을 모아 스냅숏을 만들고, 추이 점을 찍고 돌려준다 | `src/serve.rs` `listen_until_shutdown`이 중계 실행 상태(`RelayRuntime`)를 만든 직후, 상태 리스너를 열기 전에 만든다 | `Metrics`, `MetricSources`(`RelayStateSource`, L·Lm `ConnectionBudget`, `RuntimeSettingsSource`, `AdminSessionSource`, `ProcessStatsSource`), `Clock` |
-| `crates/app/src/metrics/history.rs` `History`·`Ring`·`HistoryWindow` | 두 추이 기간의 고리 버퍼(`Ring`)와 기간마다 따로 매기는 순번. 최근 1시간 360개, 최근 24시간 1440개 | `MetricsService`가 소유한다 | 없음 |
+| `crates/app/src/metrics/history.rs` `History`·`Ring`·`history::Window` | 두 추이 기간의 고리 버퍼(`Ring`)와 기간마다 따로 매기는 순번. 최근 1시간 360개, 최근 24시간 1440개 | `MetricsService`가 소유한다 | 없음 |
 | `crates/app/src/metrics/snapshot.rs` `MetricsSnapshot` | 계약 1.3절 순서의 계열 목록. 두 표현이 함께 쓴다 | 요청마다 만들고 응답 뒤 버린다 | 없음 |
 | `crates/app/src/ports.rs` `ProcessStatsSource` | 프로세스 값 읽기 포트. 값마다 `Option` | `src/serve.rs`가 `OsProcessStats`를 주입한다 | 없음 |
 | `crates/app/src/ports.rs` `AdminSessionSource` | 지금 유효한 관리 세션 수를 읽는 포트 | `src/serve.rs`가 `AdminAuth`를 주입한다(`crates/app/src/management/session.rs`의 구현) | 없음 |
@@ -111,14 +111,14 @@ flowchart LR
 | ping 시간 초과 | 사건 카운터와 같은 계열 구조. 속성은 `listener` 하나 | 메모리 | 기록한 리스너만 스냅숏에 낸다 |
 | `ProcessStats` | `cpu: Option<CpuTimes>`, `memory_usage`·`memory_virtual`·`threads: Option<u64>`, `open: OpenCount`(Linux 파일 기술자, Windows 핸들, 그 밖은 없음) | 읽을 때마다 새로 만든다 | `None`은 읽지 못한 값이다. 0으로 바꾸지 않는다 |
 | `MetricsSnapshot` | `as_of`, `service_version`, `families: Vec<MetricFamily>`. `MetricFamily`는 이름·종류·단위·`# HELP` 문구·`available`·경계·점 목록 | 요청마다 | 계열 순서는 계약 1.3절. 플랫폼에 없는 계열은 넣지 않는다 |
-| `HistoryPoint` | `seq: u64`, `at: SystemTime`, `values: [Option<Number>; 9]`(계약 1.8절 계열 키 순서) | `History`의 기간별 `VecDeque`. 최근 1시간 최대 360개, 최근 24시간 최대 1440개 | 기간마다 `seq`는 0부터 하나씩 는다. 가득 차면 가장 오래된 점을 버린다. 24시간 추이의 점은 1시간 추이에서 `seq`가 6의 배수인 점과 `at`·`values`가 같다 |
-| `HistoryWindow` | `Hour`(`1h`, 10초, 360개), `Day`(`24h`, 60초, 1440개). `interval()`·`capacity()` | 상수 | 관리 API 응답의 `interval_secs`·`capacity`와 표본 작업의 주기(`Hour`)가 이 값을 쓴다 |
+| `history::Point` | `seq: u64`, `at: SystemTime`, `values: [Option<Number>; 9]`(계약 1.8절 계열 키 순서) | `History`의 기간별 `VecDeque`. 최근 1시간 최대 360개, 최근 24시간 최대 1440개 | 기간마다 `seq`는 0부터 하나씩 는다. 가득 차면 가장 오래된 점을 버린다. 24시간 추이의 점은 1시간 추이에서 `seq`가 6의 배수인 점과 `at`·`values`가 같다 |
+| `history::Window` | `Hour`(`1h`, 10초, 360개), `Day`(`24h`, 60초, 1440개). `interval()`·`capacity()` | 상수 | 관리 API 응답의 `interval_secs`·`capacity`와 표본 작업의 주기(`Hour`)가 이 값을 쓴다 |
 
 현재 값은 저장하지 않는다. 응답할 때 다음 원천에서 읽는다.
 
 | 값 | 원천 |
 | --- | --- |
-| 진행 중 연결·대기·활성 세션 수 | `RelayStateSource::counts`. 한 번의 짧은 잠금에서 단계·역할·전송 경로·모드별 수만 센다(`RelayCounts`). 목록을 복제하지 않는다 |
+| 진행 중 연결·대기·활성 세션 수 | `RelayStateSource::counts`. 한 번의 짧은 잠금에서 단계·역할·전송 경로·모드별 수만 센다(`relay::Counts`). 목록을 복제하지 않는다 |
 | L·Lm 사용량 | `ConnectionBudget::current` |
 | L·Lm 상한 | `RuntimeSettingsSource::with_current`의 `limits` |
 | 관리 세션 수 | `AdminSessionSource::live_sessions`(구현은 `AdminAuth`). 그 시각에 유효한 세션만 센다(`admin_session::Table::live_count`) |

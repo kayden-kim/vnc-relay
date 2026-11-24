@@ -7,7 +7,7 @@
 | 구조 시점 | Current |
 | 문서 상태 | Draft |
 | 구현 대조 | 소스 대조 범위와 수동 관찰은 [대조 기록](#대조-기록)을 따른다. |
-| 코드 위치 | `crates/adapters/src/file_watch.rs` `ReloadWatcher::run`·`attach`·`attach_ip_info`·`episode`·`apply`·`refresh_ip_db`, `crates/adapters/src/file_watch/feed.rs`, `crates/app/src/reload.rs` `SharedReload`·`ConfigCandidate`·`ConfigPresence`, `crates/app/src/reload/service.rs` `ReloadService`·`PreparedReload`, `crates/app/src/reload/snapshot.rs` `ReloadSnapshot`·`ReloadCell` |
+| 코드 위치 | `crates/adapters/src/file_watch.rs` `ReloadWatcher::run`·`attach`·`attach_ip_info`·`episode`·`apply`·`refresh_ip_db`, `crates/adapters/src/file_watch/feed.rs`, `crates/app/src/reload.rs` `SharedReload`·`ConfigCandidate`·`ConfigPresence`, `crates/app/src/reload/service.rs` `ReloadService`·`PreparedReload`, `crates/app/src/reload/snapshot.rs` `ReloadSnapshot`·`reload::snapshot::Cell` |
 | 코드 지도 | [코드 지도](code-map.md) |
 | 관련 스펙 | [운영 §3.3](../specs/operations.md#33-파일-변경-자동-감지와-부분-재로드), OPS-003·024~028·035·038·040·041·047~064 |
 | 관련 계약 | [설정 §1.8](../contracts/config-v4.md#18-재로드-구분), [설정 오류](../contracts/config-v4.md#21-설정-오류와-준비-실패), [관리 API §1.13~14](../contracts/management-api-v1.md#113-설정-보기-get-apiv1config), [운영 정보 자동 재로드](../contracts/ops-info-v2.md#자동-재로드) |
@@ -36,7 +36,7 @@ flowchart LR
     Q -->|"조용한 구간·stat 안정화"| W["ReloadWatcher::episode"]
     W -->|"mutex 획득 뒤 최종 read·parse"| S["SharedReload / ReloadService"]
     EDIT["ConfigEditService"] -->|"같은 mutex: 조회·prepare·commit"| S
-    S -->|"검증된 Settings·presence·TLS"| CELL["ReloadCell / ReloadSnapshot"]
+    S -->|"검증된 Settings·presence·TLS"| CELL["reload::snapshot::Cell / ReloadSnapshot"]
     CELL -->|"경계별 현재 값 읽기"| R["접속·업그레이드·대상·대기·종료 reader"]
     S -->|"경고·결과 사건"| LOG["EventSink"]
     ROOT["src/serve.rs"] -.->|"파일·TLS·시계·사건 포트"| S
@@ -47,7 +47,7 @@ flowchart LR
 | `file_watch.rs` `ReloadWatcher` | watched 경로·processed 해시·알림 feed·안정화·후보 최종 read | serve가 만들고 종료 시 join한다. |
 | `file_watch/feed.rs` `ChangeQueue`·`NotifyWatchGateway` | 파일 이름별 OS 알림 필터, 세대·유실 재확인·로그 신호 | watcher와 OS 콜백이 공유한다. |
 | `reload/service.rs` `ReloadService`·`PreparedReload` | 실행 Settings/presence·TLS 기준 해시·마지막 결과, 부작용 없는 준비와 commit | watcher와 ConfigEditService가 같은 `SharedReload`로 공유한다. |
-| `reload/snapshot.rs` `ReloadCell`·`ReloadSnapshot` | Settings·presence·TLS를 한 번 발행한다. | 서비스가 쓰고 runtime reader가 읽는다. |
+| `reload/snapshot.rs` `reload::snapshot::Cell`·`ReloadSnapshot` | Settings·presence·TLS를 한 번 발행한다. | 서비스가 쓰고 runtime reader가 읽는다. |
 | `reload/ports.rs` `RuntimeSettingsSource` | TLS 타입을 노출하지 않는 현재 Settings callback | 같은 snapshot read lock을 callback 끝까지 유지한다. |
 | `file_watch.rs` `reopen_log` | 알림·Dp에서 로그를 다시 연다. 안정화 대기와 독립이다. | watcher run과 함께 끝난다. |
 | `file_watch.rs` `attach_ip_info`·`IpDbWatch`·`db_hashes`·`ip_db_changed`·`refresh_ip_db` | DB 경로 목록과 경로별 마지막 처리 해시를 둔다. 해시는 `stream_hashes`가 64 KiB씩 읽어 `spawn_blocking`에서 계산한다. 두 async 함수는 `&mut self`를 받는다. `WatchGateway`가 `Sync`가 아니어서 `&self`를 await 너머로 들고 가면 `run`의 future가 `Send`가 아니게 되기 때문이다 | serve가 `file_watch::start` 직후, DB 첫 읽기 전에 붙인다. 경로는 프로세스 동안 고정이다. |
@@ -66,7 +66,7 @@ flowchart LR
 | `ConfigPresence` | 명시 leaf 키 `BTreeSet<String>`과 비활성 경로 fallback `BTreeMap<String, PathBuf>`. 의미 차이 비교에는 쓰지 않는다. |
 | `PreparedReload<A>` | 검증·생성이 끝난 snapshot·TLS 해시·적용 키·사건/이력 키·경고. 같은 mutex 안에서 준비하고 바로 소비한다. |
 | `ReloadSnapshot<A>` | `Arc<Settings>`·`Arc<ConfigPresence>`·`wss_tls`·`management_tls`. IP 정책 중복 저장은 없다. |
-| `ReloadCell<A>` | `RwLock<Arc<ReloadSnapshot<A>>>`. `current`는 Arc를 복사한다. `with_current`는 read lock을 callback 끝까지 유지한다. 중독된 snapshot lock은 `PoisonError::into_inner`로 읽는다. |
+| `reload::snapshot::Cell<A>` | `RwLock<Arc<ReloadSnapshot<A>>>`. `current`는 Arc를 복사한다. `with_current`는 read lock을 callback 끝까지 유지한다. 중독된 snapshot lock은 `PoisonError::into_inner`로 읽는다. |
 | `ReloadOutcome` | Applied·Rejected·RestartRequired·Unchanged·Discarded. 마지막 둘은 결과 사건·이력을 만들지 않는다. |
 | `IpDbWatch` | `Arc<IpInfoService>`, 설정한 DB 경로 `Vec<PathBuf>`, 경로별 마지막 처리 해시 `BTreeMap<PathBuf, Option<u64>>`. `None`은 없거나 읽지 못한 파일이다. 설정 `processed`와 따로 둔다. |
 | `LastReload` | 확정 시각·결과·trigger·키. 프로세스 메모리에만 두고 시작은 None이다. |
@@ -118,7 +118,7 @@ IP 정보 DB 파일은 위 순서에 끼어든다. 1단계의 주기 확인(`pol
 
 ## 5. 상태와 초기화
 
-`serve`는 `load_candidate`로 같은 시작 바이트의 Settings와 presence를 준비한다. 계정·런타임·시작 키·TLS·ticket 공개 키 준비 뒤 `ReloadCell`과 `SharedReload`를 만들고 watcher·ConfigEditService에 같은 Arc를 주입한다. `file_watch::start`는 리스너 바인드 전에 감시를 등록하고 기준 해시를 읽는다. `ReloadWatcher::run`은 그 뒤 spawn한다.
+`serve`는 `load_candidate`로 같은 시작 바이트의 Settings와 presence를 준비한다. 계정·런타임·시작 키·TLS·ticket 공개 키 준비 뒤 `reload::snapshot::Cell`과 `SharedReload`를 만들고 watcher·ConfigEditService에 같은 Arc를 주입한다. `file_watch::start`는 리스너 바인드 전에 감시를 등록하고 기준 해시를 읽는다. `ReloadWatcher::run`은 그 뒤 spawn한다.
 
 후보 처리는 watcher 작업 하나가 맡지만 PATCH·GET과도 같은 mutex로 직렬화한다. snapshot read callback에는 await·파일/네트워크 I/O를 넣지 않는다. 새 수락의 현재 상한 읽기와 permit CAS는 callback 안에서 끝나므로 교체와 수락 판단이 섞이지 않는다.
 

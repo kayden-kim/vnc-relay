@@ -15,14 +15,14 @@ const DAY_STRIDE: u64 = 6;
 /// A history window of metrics-v1 §1.8, chosen by the `history_window`
 /// parameter of management-api-v1 §1.16.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum HistoryWindow {
+pub enum Window {
     /// `1h`: a point every 10 seconds, 360 points.
     Hour,
     /// `24h`: a point every minute, 1440 points.
     Day,
 }
 
-impl HistoryWindow {
+impl Window {
     /// Time between two points (metrics-v1 §1.8 "간격과 개수"). Points are
     /// taken at the `Hour` interval.
     pub const fn interval(self) -> Duration {
@@ -57,7 +57,7 @@ pub const HISTORY_KEYS: [&str; 9] = [
 /// One history point. `values[i]` is the value of `HISTORY_KEYS[i]`; `None`
 /// is a value that could not be read (JSON `null`).
 #[derive(Debug, Clone, PartialEq)]
-pub struct HistoryPoint {
+pub struct Point {
     pub seq: u64,
     pub at: SystemTime,
     pub values: [Option<Number>; HISTORY_KEYS.len()],
@@ -69,7 +69,7 @@ pub struct HistoryView {
     /// `seq` of the newest kept point; `None` before the first point.
     pub latest_seq: Option<u64>,
     /// Points in ascending `seq` order.
-    pub points: Vec<HistoryPoint>,
+    pub points: Vec<Point>,
 }
 
 /// Both windows. Every point goes into the one-hour history. The points whose
@@ -85,8 +85,8 @@ pub struct History {
 impl History {
     pub fn new() -> Self {
         Self {
-            hour: Ring::new(HistoryWindow::Hour.capacity()),
-            day: Ring::new(HistoryWindow::Day.capacity()),
+            hour: Ring::new(Window::Hour.capacity()),
+            day: Ring::new(Window::Day.capacity()),
         }
     }
 
@@ -101,10 +101,10 @@ impl History {
 
     /// Kept points of `window` with `seq` greater than `after`; every kept
     /// point when `after` is `None` (management-api-v1 §1.16 `history_after`).
-    pub fn after(&self, window: HistoryWindow, after: Option<u64>) -> HistoryView {
+    pub fn after(&self, window: Window, after: Option<u64>) -> HistoryView {
         match window {
-            HistoryWindow::Hour => self.hour.after(after),
-            HistoryWindow::Day => self.day.after(after),
+            Window::Hour => self.hour.after(after),
+            Window::Day => self.day.after(after),
         }
     }
 }
@@ -119,7 +119,7 @@ impl Default for History {
 /// one per point, and are never reused while the process runs.
 #[derive(Debug)]
 struct Ring {
-    points: VecDeque<HistoryPoint>,
+    points: VecDeque<Point>,
     capacity: usize,
     next_seq: u64,
 }
@@ -138,7 +138,7 @@ impl Ring {
         if self.points.len() == self.capacity {
             self.points.pop_front();
         }
-        self.points.push_back(HistoryPoint {
+        self.points.push_back(Point {
             seq: self.next_seq,
             at,
             values,

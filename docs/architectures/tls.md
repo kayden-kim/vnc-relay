@@ -24,7 +24,7 @@
 
 ## 2. 내부 구조
 
-화살표는 실행 중 호출과 값 반환을 뜻한다. `TlsSource`는 공유 `ReloadCell`을 받아 새 협상에 현재 수락기를 제공한다. 컴파일 의존은 `crates/adapters/Cargo.toml`에 적는다.
+화살표는 실행 중 호출과 값 반환을 뜻한다. `TlsSource`는 공유 `reload::snapshot::Cell`을 받아 새 협상에 현재 수락기를 제공한다. 컴파일 의존은 `crates/adapters/Cargo.toml`에 적는다.
 
 ```mermaid
 flowchart LR
@@ -43,7 +43,7 @@ flowchart LR
 | `crates/adapters/src/tls.rs` `read_file`, `parse_chain` | 파일 읽기와 PEM 체인 해석을 나눈다. 인증서 항목이 없으면 실패한다. | 호출 중에만 존재한다. | `fs::read`, `CertificateDer::pem_slice_iter` |
 | `crates/adapters/src/tls.rs` `parse_key` | PEM 바이트에서 첫 개인키를 읽는다. | 호출 중에만 존재한다. | `PrivateKeyDer::from_pem_slice` |
 | `crates/adapters/src/tls.rs` `classify_config` | rustls가 `ServerConfig`를 만들지 못한 오류를 `TlsError`로 나눈다. 인증서와 개인키가 맞는지 rustls가 확인한다. | 호출 중에만 존재한다. | `rustls::Error` |
-| `crates/adapters/src/tls.rs` `TlsError` | 실패 원인을 `code()`와 한국어 `Display`로 알린다. 파일 내용과 키 바이트를 담지 않는다. | 값으로 반환된다. | `TlsFile` |
+| `crates/adapters/src/tls.rs` `TlsError` | 실패 원인을 `code()`와 한국어 `Display`로 알린다. 파일 내용과 키 바이트를 담지 않는다. | 값으로 반환된다. | `tls::File` |
 
 ## 3. 데이터 모델
 
@@ -52,7 +52,7 @@ flowchart LR
 | 이름 | 필드·형태 | 저장 위치 | 제약과 항상 지켜야 할 조건 |
 | --- | --- | --- | --- |
 | `TlsError` | `Unreadable { file }`, `Malformed { file }`, `KeyUnsupported`, `KeyMismatch`, `Config(rustls::Error)` | 값 | `code()`는 항상 `tls_file_invalid`다. `Display`는 파일 경로·내용·키 바이트를 담지 않는다. |
-| `TlsFile` | `Cert`, `Key` | 값 | 어느 파일인지만 가리킨다. 설정 키 이름(`relay.wss.cert_file` 등)은 호출한 쪽이 붙인다. |
+| `tls::File` | `Cert`, `Key` | 값 | 어느 파일인지만 가리킨다. 설정 키 이름(`relay.wss.cert_file` 등)은 호출한 쪽이 붙인다. |
 | 개인키 종류 | RSA(PKCS#1·PKCS#8), ECDSA P-256·P-384·P-521(SEC1·PKCS#8), Ed25519(PKCS#8) | — | 시험으로 확인한 종류만 [설정 계약 1.9절](../contracts/config-v4.md#19-인증서개인키-파일-형식)에 적는다. X25519는 지원하지 않는다. |
 
 ## 4. 처리 순서
@@ -74,7 +74,7 @@ ticket 공개 키의 JWKS 해석은 TLS 모듈이 맡지 않는다. `reload::tic
 
 - 초기화·로딩 시점: 시작 4단계에서 런타임을 준비한 뒤, 리스너 바인드 전에 한 번 호출한다. 재로드는 `acceptor_from_pem`으로 후보를 만든다. 두 경로는 같은 `build_acceptor`를 쓴다.
 - 상태 소유자와 제거 시점: 성공한 `TlsAcceptor`(안에 `Arc<ServerConfig>`)는 `ReloadSnapshot`이 소유한다. WSS와 관리 리스너는 각각 `TlsSource::wss`·`TlsSource::management`로 새 협상 때 현재 수락기를 고른다. 기존 연결은 협상 때 받은 수락기를 유지한다.
-- 동시 실행과 순서: `load_acceptor`는 공유 상태가 없다. 시작 때 한 번만 호출한다. 재로드 중 교체의 원자성은 `ReloadCell` 한 번의 교체로 보장한다.
+- 동시 실행과 순서: `load_acceptor`는 공유 상태가 없다. 시작 때 한 번만 호출한다. 재로드 중 교체의 원자성은 `reload::snapshot::Cell` 한 번의 교체로 보장한다.
 
 ## 6. 오류 처리
 

@@ -15,12 +15,12 @@ use crate::settings::{ConfigDiagnostic, Settings};
 pub type SharedReload<A> = Arc<Mutex<service::ReloadService<A>>>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ReloadTrigger {
+pub enum Trigger {
     FileWatch,
     ConfigEdit,
 }
 
-impl ReloadTrigger {
+impl Trigger {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::FileWatch => "file_watch",
@@ -40,7 +40,7 @@ pub enum LastReloadOutcome {
 pub struct LastReload {
     pub at: SystemTime,
     pub result: LastReloadOutcome,
-    pub trigger: ReloadTrigger,
+    pub trigger: Trigger,
     pub config_keys: Vec<String>,
 }
 

@@ -51,7 +51,7 @@ impl std::error::Error for AccountsError {}
 /// account file, [`ACCOUNTS_FILE_KEY`] for file-level errors, or empty for
 /// syntax and encoding errors. `message` never quotes a hash or file content.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct AccountsDiagnostic {
+pub struct Diagnostic {
     pub error: AccountsError,
     pub key: String,
     pub message: String,
@@ -60,7 +60,7 @@ pub struct AccountsDiagnostic {
 /// Account file warnings (cli-v1 §1.5, §1.6). Their key is
 /// [`ACCOUNTS_FILE_KEY`].
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum AccountsWarning {
+pub enum Warning {
     /// Group or other users have some permission on the file (Ubuntu).
     FilePermissive,
     /// `admin remove` left the file without accounts.
@@ -70,7 +70,7 @@ pub enum AccountsWarning {
     CleanupFailed(String),
 }
 
-impl AccountsWarning {
+impl Warning {
     pub fn code(&self) -> &'static str {
         match self {
             Self::FilePermissive => "accounts_file_permissive",
@@ -95,13 +95,13 @@ impl AccountsWarning {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LoadedAccounts {
     pub accounts: Vec<Account>,
-    pub warnings: Vec<AccountsWarning>,
+    pub warnings: Vec<Warning>,
 }
 
 /// `serve` does not start without an account.
-pub fn require_any(accounts: &[Account]) -> Result<(), AccountsDiagnostic> {
+pub fn require_any(accounts: &[Account]) -> Result<(), Diagnostic> {
     if accounts.is_empty() {
-        Err(AccountsDiagnostic {
+        Err(Diagnostic {
             error: AccountsError::NoAccounts,
             key: ACCOUNTS_FILE_KEY.to_owned(),
             message: "관리자 계정이 없다. `vnc-relay admin add`로 계정을 만든 뒤 다시 시작한다."
@@ -126,7 +126,7 @@ pub enum AdminError {
     /// The Ctrl+C detector, the OS random source, or the hash memory is not
     /// available (`runtime_unavailable`).
     RuntimeUnavailable(String),
-    Accounts(Vec<AccountsDiagnostic>),
+    Accounts(Vec<Diagnostic>),
 }
 
 impl AdminError {
@@ -182,7 +182,7 @@ const NEW_PASSWORD_CONFIRM_PROMPT: &str = "새 비밀번호 확인: ";
 /// does not exist.
 pub fn list(
     store: &dyn AccountStore,
-    warn: &mut dyn FnMut(AccountsWarning),
+    warn: &mut dyn FnMut(Warning),
 ) -> Result<Option<Vec<Name>>, AdminError> {
     let Some(loaded) = store.read().map_err(AdminError::Accounts)? else {
         return Ok(None);
@@ -205,11 +205,7 @@ pub struct AdminService<'a> {
 
 impl AdminService<'_> {
     /// `admin add`. A missing file is created.
-    pub fn add(
-        &self,
-        name: &Name,
-        warn: &mut dyn FnMut(AccountsWarning),
-    ) -> Result<(), AdminError> {
+    pub fn add(&self, name: &Name, warn: &mut dyn FnMut(Warning)) -> Result<(), AdminError> {
         let accounts = self.read(warn)?.unwrap_or_default();
         if position(&accounts, name).is_some() {
             return Err(AdminError::AccountExists(name.clone()));
@@ -228,11 +224,7 @@ impl AdminService<'_> {
     }
 
     /// `admin passwd`. The current password is not asked.
-    pub fn passwd(
-        &self,
-        name: &Name,
-        warn: &mut dyn FnMut(AccountsWarning),
-    ) -> Result<(), AdminError> {
+    pub fn passwd(&self, name: &Name, warn: &mut dyn FnMut(Warning)) -> Result<(), AdminError> {
         let accounts = self.read(warn)?.unwrap_or_default();
         if position(&accounts, name).is_none() {
             return Err(AdminError::AccountNotFound(name.clone()));
@@ -251,7 +243,7 @@ impl AdminService<'_> {
         &self,
         name: &Name,
         assume_yes: bool,
-        warn: &mut dyn FnMut(AccountsWarning),
+        warn: &mut dyn FnMut(Warning),
     ) -> Result<(), AdminError> {
         let accounts = self.read(warn)?.unwrap_or_default();
         if position(&accounts, name).is_none() {
@@ -283,16 +275,13 @@ impl AdminService<'_> {
             Ok(accounts)
         })?;
         if remaining == 0 {
-            warn(AccountsWarning::LastAccountRemoved);
+            warn(Warning::LastAccountRemoved);
         }
         Ok(())
     }
 
     /// The accounts of the file, or `None` when it does not exist.
-    fn read(
-        &self,
-        warn: &mut dyn FnMut(AccountsWarning),
-    ) -> Result<Option<Vec<Account>>, AdminError> {
+    fn read(&self, warn: &mut dyn FnMut(Warning)) -> Result<Option<Vec<Account>>, AdminError> {
         let loaded = self.store.read().map_err(AdminError::Accounts)?;
         Ok(loaded.map(|loaded| {
             loaded.warnings.into_iter().for_each(&mut *warn);
@@ -326,7 +315,7 @@ impl AdminService<'_> {
     /// A Ctrl+C that came during hashing or confirmation still cancels.
     fn save(
         &self,
-        warn: &mut dyn FnMut(AccountsWarning),
+        warn: &mut dyn FnMut(Warning),
         change: &mut dyn FnMut(Vec<Account>) -> Result<Vec<Account>, AdminError>,
     ) -> Result<(), AdminError> {
         if self.input.canceled() {
@@ -377,7 +366,7 @@ mod tests {
         file: RefCell<Option<Vec<Account>>>,
         on_lock: RefCell<Option<Vec<Account>>>,
         updates: Cell<u32>,
-        cleanup: Vec<AccountsWarning>,
+        cleanup: Vec<Warning>,
     }
 
     impl FakeStore {
@@ -397,17 +386,17 @@ mod tests {
     }
 
     impl AccountStore for FakeStore {
-        fn read(&self) -> Result<Option<LoadedAccounts>, Vec<AccountsDiagnostic>> {
+        fn read(&self) -> Result<Option<LoadedAccounts>, Vec<Diagnostic>> {
             Ok(self.file.borrow().clone().map(|accounts| LoadedAccounts {
                 accounts,
-                warnings: vec![AccountsWarning::FilePermissive],
+                warnings: vec![Warning::FilePermissive],
             }))
         }
 
         fn update(
             &self,
             change: &mut dyn FnMut(Vec<Account>) -> Result<Vec<Account>, AdminError>,
-            warn: &mut dyn FnMut(AccountsWarning),
+            warn: &mut dyn FnMut(Warning),
         ) -> Result<(), AdminError> {
             self.updates.set(self.updates.get() + 1);
             if let Some(changed) = self.on_lock.borrow_mut().take() {
@@ -506,7 +495,7 @@ mod tests {
         let input = FakeInput::answering(&twice(PASSWORD));
         let seen: Seen = RefCell::new(Vec::new());
         service(&store, &input)
-            .add(&name("alice"), &mut |w: AccountsWarning| {
+            .add(&name("alice"), &mut |w: Warning| {
                 seen.borrow_mut().push(w.code())
             })
             .unwrap_or_else(|e| panic!("{e:?}"));
@@ -525,7 +514,7 @@ mod tests {
         // A second account; the read warning is passed on once.
         let input = FakeInput::answering(&twice(PASSWORD));
         service(&store, &input)
-            .add(&name("bob"), &mut |w: AccountsWarning| {
+            .add(&name("bob"), &mut |w: Warning| {
                 seen.borrow_mut().push(w.code())
             })
             .unwrap_or_else(|e| panic!("{e:?}"));
@@ -664,7 +653,7 @@ mod tests {
             let input = FakeInput::answering(&[Ok(Some(answer))]);
             let seen: Seen = RefCell::new(Vec::new());
             service(&store, &input)
-                .remove(&name("alice"), false, &mut |w: AccountsWarning| {
+                .remove(&name("alice"), false, &mut |w: Warning| {
                     seen.borrow_mut().push(w.code())
                 })
                 .unwrap_or_else(|e| panic!("{answer:?}: {e:?}"));
@@ -703,7 +692,7 @@ mod tests {
         let input = FakeInput::default();
         let seen: Seen = RefCell::new(Vec::new());
         service(&store, &input)
-            .remove(&name("alice"), true, &mut |w: AccountsWarning| {
+            .remove(&name("alice"), true, &mut |w: Warning| {
                 seen.borrow_mut().push(w.code())
             })
             .unwrap_or_else(|e| panic!("{e:?}"));
@@ -717,13 +706,13 @@ mod tests {
     #[test]
     fn passes_on_cleanup_warnings_after_saving() {
         let mut store = FakeStore::with(vec![account("alice", HASH_A)]);
-        store.cleanup = vec![AccountsWarning::CleanupFailed(
+        store.cleanup = vec![Warning::CleanupFailed(
             "잠금 파일을 지우지 못했다.".to_owned(),
         )];
         let input = FakeInput::answering(&twice(PASSWORD));
         let seen: Seen = RefCell::new(Vec::new());
         service(&store, &input)
-            .passwd(&name("alice"), &mut |w: AccountsWarning| {
+            .passwd(&name("alice"), &mut |w: Warning| {
                 seen.borrow_mut().push(w.code())
             })
             .unwrap_or_else(|e| panic!("{e:?}"));

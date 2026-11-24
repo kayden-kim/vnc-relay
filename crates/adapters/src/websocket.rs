@@ -617,7 +617,7 @@ mod tests {
     use crate::net::{AcceptedSettings, AllowSource};
     use vnc_relay_application::reload::{
         ConfigCandidate,
-        snapshot::{ReloadCell, ReloadSnapshot},
+        snapshot::{Cell, ReloadSnapshot},
     };
     use vnc_relay_domain::budget::ConnectionBudget;
 
@@ -683,9 +683,11 @@ mod tests {
             settings.relay.ws.viewer.allowed_origins = vec![origin.clone()];
             settings.relay.wss.viewer.allowed_origins = vec![origin];
             let accepted = AcceptedSettings::from_settings(&settings);
-            let cell = Arc::new(ReloadCell::<tokio_rustls::TlsAcceptor>::new(
-                ReloadSnapshot::new(candidate(settings.clone()), None, None),
-            ));
+            let cell = Arc::new(Cell::<tokio_rustls::TlsAcceptor>::new(ReloadSnapshot::new(
+                candidate(settings.clone()),
+                None,
+                None,
+            )));
             let policy = WsPolicy {
                 accept: AcceptPolicy {
                     allow: if entry == EntryPoint::WsViewer {

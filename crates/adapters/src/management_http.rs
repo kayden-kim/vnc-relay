@@ -395,15 +395,13 @@ mod dashboard_hint_tests {
             settings,
             presence: Default::default(),
         };
-        let source = std::sync::Arc::new(
-            vnc_relay_application::reload::snapshot::ReloadCell::<()>::new(
-                vnc_relay_application::reload::snapshot::ReloadSnapshot::new(
-                    candidate(settings.clone()),
-                    None,
-                    None,
-                ),
+        let source = std::sync::Arc::new(vnc_relay_application::reload::snapshot::Cell::<()>::new(
+            vnc_relay_application::reload::snapshot::ReloadSnapshot::new(
+                candidate(settings.clone()),
+                None,
+                None,
             ),
-        );
+        ));
         let hints = super::DashboardHints::new(
             std::time::Duration::from_secs(2),
             std::time::Duration::from_secs(5),

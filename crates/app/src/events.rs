@@ -642,7 +642,7 @@ pub enum Event {
     ReloadChangeDetected { source: ChangeSource },
     /// Reload targets were applied; `applied` lists the changed config keys (ops-info-v2 §1.5).
     ReloadApplied {
-        trigger: crate::reload::ReloadTrigger,
+        trigger: crate::reload::Trigger,
         applied: Vec<String>,
     },
     /// A candidate was refused; the running values are kept (ops-info-v2 §1.5).

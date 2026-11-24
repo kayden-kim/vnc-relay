@@ -31,7 +31,7 @@
 - 다른 모듈에 공개하는 기능:
   - `vnc_relay_domain::ip_info`: `CountryCode`, `Asn`, `Provider::from_database_type`, `is_local`.
   - `vnc_relay_application::ip_info`: `IpLookup`, `IpInfoService`(`load_startup`, `refresh`, `paths`, `status`), `IpDbKey`, `IpDbError`, `IpDbMetadata`, `IpDbStatus`.
-  - `vnc_relay_application::sources`: `SourceStats`, `SourcesSink`(`EventSink` 구현), `SourcesService::report`, `SourceWindow`, `SourcesReport`.
+  - `vnc_relay_application::sources`: `SourceStats`, `SourcesSink`(`EventSink` 구현), `SourcesService::report`, `SourceWindow`, `sources::Report`.
   - `vnc_relay_application::ports`: `IpDbFileGateway`, `IpDbLookupGateway`.
   - `vnc_relay_adapters::ip_db::MmdbFileGateway`.
 
@@ -78,7 +78,7 @@ flowchart LR
 | `crates/app/src/ip_info.rs` `IpInfoService` | 설정한 경로를 서로 다른 파일 단위로 묶어 읽고, 키마다 상태·실패 원인·마지막 내용 표시를 둔다. 성공하면 `IpLookup`의 칸을 바꾸고 사건을 기록한다 | `src/serve.rs` `listen_until_shutdown`이 파일 감시를 만들기 전에 만든다 | `IpDbFileGateway`, `IpLookup`, `Clock`, `EventSink` |
 | `crates/app/src/sources.rs` `SourceStats` | 사건 고리 버퍼(최대 100,000개), 보류 중인 WS·WSS 수락(최대 65,536개), 버린 사건의 가장 늦은 시각 | `start`가 `Metrics`와 함께 만든다. 프로세스가 끝날 때 없어진다 | `IpLookup`, `Clock` |
 | `crates/app/src/sources.rs` `SourcesSink` | `EventSink` 장식자. 사건을 `SourceStats`에 넣은 뒤 감싼 기록부에 넘긴다 | `start`가 운영 로그 기록부를 감싸 만들고, `MetricsSink`가 이것을 감싼다 | `SourceStats`, 감싼 `EventSink` |
-| `crates/app/src/sources/report.rs` `SourcesService` | 보관 사건을 복사해 기간 안 사건을 주소·국가·ASN별로 세고 정렬해 `SourcesReport`를 만든다 | `listen_until_shutdown`이 관리 리스너를 만들기 전에 만든다 | `SourceStats`, `IpInfoService`, `IpLookup`, `Clock` |
+| `crates/app/src/sources/report.rs` `SourcesService` | 보관 사건을 복사해 기간 안 사건을 주소·국가·ASN별로 세고 정렬해 `sources::Report`를 만든다 | `listen_until_shutdown`이 관리 리스너를 만들기 전에 만든다 | `SourceStats`, `IpInfoService`, `IpLookup`, `Clock` |
 | `crates/adapters/src/ip_db.rs` `MmdbFileGateway`·`MmdbLookupGateway` | 256 MiB 상한 확인, 전체 읽기, `maxminddb::Reader::from_source`와 `verify`, 앞쪽 레코드 4096개로 필드 형식 결정, 내용 해시 | `src/serve.rs`가 만든다. `MmdbLookupGateway`는 읽을 때마다 새로 만들어 `Arc`로 공유한다 | `maxminddb`, std |
 | `crates/adapters/src/file_watch.rs` `ReloadWatcher::attach_ip_info` | DB 경로를 알림 대상과 주기 확인 대상에 더한다. DB 파일만을 위한 디렉터리는 등록 실패를 무시하는 선택 등록이다. 에피소드가 끝나면 내용 해시가 바뀐 DB 경로로 `IpInfoService::refresh`를 부른다 | `listen_until_shutdown`이 감시 시작 직후 부른다 | `IpInfoService` |
 | `crates/adapters/src/management_http/sources_api.rs` | `GET /api/v1/sources`. 메서드·폴링 헤더·본문·`window` 검사와 JSON 직렬화 | 관리 리스너 라우터가 연결한다. 인증은 `session_api.rs`가 먼저 한다 | `SourcesService` |
@@ -92,7 +92,7 @@ flowchart LR
 | `Store` | `sources.rs` | 시각 오름차순 `VecDeque<SourceEvent>`(용량 100,000), 보류 표 `BTreeMap<ConnId, Pending>`(용량 65,536), `dropped_before: Option<u64>` |
 | `Pending` | `sources.rs` | WS·WSS 수락 시각과 소켓 상대 IP. `ConnId`는 프로세스 안에서 늘어나는 순번이므로 키 순서가 수락 순서다 |
 | `SourceWindow` | `sources/report.rs` | `Hour`(`1h`)·`Day`(`24h`)와 길이 |
-| `SourcesReport` | `sources/report.rs` | 계약 1.17절 필드. `databases`는 `[IpDbStatus; 2]`, 세 목록은 이미 정렬하고 자른 행과 전체 수 |
+| `sources::Report` | `sources/report.rs` | 계약 1.17절 필드. `databases`는 `[IpDbStatus; 2]`, 세 목록은 이미 정렬하고 자른 행과 전체 수 |
 | `IpDbStatus` | `ip_info.rs` | 상태(`NotConfigured`·`Loaded`·`Stale`·`Unavailable`), 실패 원인, 쓰는 DB의 `IpDbMetadata`와 읽은 시각 |
 | `IpDbMetadata` | `ip_info.rs` | `database_type`(앞 128자), 빌드 시각, `Provider` |
 | `Fingerprint` | `ip_info.rs` | 마지막 읽기의 내용 표시. 읽지 못함, 상한 초과(크기), 내용 해시. 같은 실패를 다시 경고하지 않는 데 쓴다 |

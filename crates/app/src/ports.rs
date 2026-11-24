@@ -9,7 +9,7 @@ use std::time::{Duration, SystemTime};
 use vnc_relay_domain::account::{Account, Argon2Params, Password, PasswordHash};
 use vnc_relay_domain::ip_info::{Asn, CountryCode};
 
-use crate::accounts::{AccountsDiagnostic, AccountsWarning, AdminError, LoadedAccounts};
+use crate::accounts::{AdminError, Diagnostic, LoadedAccounts, Warning};
 use crate::events::Event;
 use crate::ip_info::{IpDbKey, IpDbMetadata, IpDbRead};
 
@@ -23,7 +23,7 @@ pub trait EventSink: Send + Sync {
 /// The administrator account file (cli-v1 §1.3, §1.6).
 pub trait AccountStore {
     /// Reads and checks the file. `Ok(None)` when the file does not exist.
-    fn read(&self) -> Result<Option<LoadedAccounts>, Vec<AccountsDiagnostic>>;
+    fn read(&self) -> Result<Option<LoadedAccounts>, Vec<Diagnostic>>;
 
     /// Changes the file in one locked step: takes the lock, reads the file
     /// again (a missing file is an empty list), applies `change`, and
@@ -33,7 +33,7 @@ pub trait AccountStore {
     fn update(
         &self,
         change: &mut dyn FnMut(Vec<Account>) -> Result<Vec<Account>, AdminError>,
-        warn: &mut dyn FnMut(AccountsWarning),
+        warn: &mut dyn FnMut(Warning),
     ) -> Result<(), AdminError>;
 }
 
@@ -333,7 +333,7 @@ pub trait RelayStateSource: Send + Sync {
 
     /// Counts of the same state under one lock, without copying the lists
     /// (metrics-v1 §1.1 "현재 값").
-    fn counts(&self) -> crate::relay::RelayCounts;
+    fn counts(&self) -> crate::relay::Counts;
 }
 
 /// CPU time the process has used (metrics-v1 `process.cpu.time`).

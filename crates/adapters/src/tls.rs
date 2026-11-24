@@ -12,16 +12,16 @@ use rustls_pki_types::pem::PemObject;
 use rustls_pki_types::{CertificateDer, PrivateKeyDer};
 use tokio_rustls::TlsAcceptor;
 use vnc_relay_application::reload::ports::{ReloadTlsStore, TlsBuildError};
-use vnc_relay_application::reload::snapshot::{ReloadCell, ReloadSnapshot};
+use vnc_relay_application::reload::snapshot::{self, ReloadSnapshot};
 
 /// The two PEM files that make up the TLS identity of one listener.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum TlsFile {
+pub enum File {
     Cert,
     Key,
 }
 
-impl TlsFile {
+impl File {
     fn label(self) -> &'static str {
         match self {
             Self::Cert => "인증서 파일",
@@ -34,9 +34,9 @@ impl TlsFile {
 #[derive(Debug)]
 pub enum TlsError {
     /// The file does not exist or cannot be read.
-    Unreadable { file: TlsFile },
+    Unreadable { file: File },
     /// The file is not PEM, or it has no item of the expected kind.
-    Malformed { file: TlsFile },
+    Malformed { file: File },
     /// The private key kind is not supported, or the key is damaged.
     KeyUnsupported,
     /// The private key does not belong to the end-entity certificate.
@@ -53,11 +53,11 @@ impl TlsError {
 
     /// The file that the config key of the diagnostic names.
     /// A key error names the key file; a configuration error names the certificate file.
-    pub fn file(&self) -> TlsFile {
+    pub fn file(&self) -> File {
         match self {
             Self::Unreadable { file } | Self::Malformed { file } => *file,
-            Self::KeyUnsupported | Self::KeyMismatch => TlsFile::Key,
-            Self::Config(_) => TlsFile::Cert,
+            Self::KeyUnsupported | Self::KeyMismatch => File::Key,
+            Self::Config(_) => File::Cert,
         }
     }
 }
@@ -95,8 +95,8 @@ impl std::error::Error for TlsError {
 /// selects no ALPN protocol. A client that offers only TLS 1.0 or TLS 1.1 fails
 /// the handshake.
 pub fn load_acceptor(cert_file: &Path, key_file: &Path) -> Result<TlsAcceptor, TlsError> {
-    let chain = parse_chain(&read_file(cert_file, TlsFile::Cert)?)?;
-    let key = parse_key(&read_file(key_file, TlsFile::Key)?)?;
+    let chain = parse_chain(&read_file(cert_file, File::Cert)?)?;
+    let key = parse_key(&read_file(key_file, File::Key)?)?;
     build_acceptor(chain, key)
 }
 
@@ -110,7 +110,7 @@ pub fn acceptor_from_pem(cert_pem: &[u8], key_pem: &[u8]) -> Result<TlsAcceptor,
 }
 
 /// Reads the whole file. Any read error means the file is unreadable.
-fn read_file(path: &Path, file: TlsFile) -> Result<Vec<u8>, TlsError> {
+fn read_file(path: &Path, file: File) -> Result<Vec<u8>, TlsError> {
     fs::read(path).map_err(|_| TlsError::Unreadable { file })
 }
 
@@ -118,20 +118,16 @@ fn read_file(path: &Path, file: TlsFile) -> Result<Vec<u8>, TlsError> {
 fn parse_chain(pem: &[u8]) -> Result<Vec<CertificateDer<'static>>, TlsError> {
     let chain = CertificateDer::pem_slice_iter(pem)
         .collect::<Result<Vec<_>, _>>()
-        .map_err(|_| TlsError::Malformed {
-            file: TlsFile::Cert,
-        })?;
+        .map_err(|_| TlsError::Malformed { file: File::Cert })?;
     if chain.is_empty() {
-        return Err(TlsError::Malformed {
-            file: TlsFile::Cert,
-        });
+        return Err(TlsError::Malformed { file: File::Cert });
     }
     Ok(chain)
 }
 
 /// Parses the first private key in the PEM bytes.
 fn parse_key(pem: &[u8]) -> Result<PrivateKeyDer<'static>, TlsError> {
-    PrivateKeyDer::from_pem_slice(pem).map_err(|_| TlsError::Malformed { file: TlsFile::Key })
+    PrivateKeyDer::from_pem_slice(pem).map_err(|_| TlsError::Malformed { file: File::Key })
 }
 
 /// Builds the rustls configuration and the acceptor from a parsed chain and key.
@@ -155,9 +151,7 @@ fn classify_config(err: rustls::Error) -> TlsError {
         // rustls reports an unsupported or damaged private key as a general error.
         rustls::Error::General(_) => TlsError::KeyUnsupported,
         rustls::Error::InvalidCertificate(_) | rustls::Error::NoCertificatesPresented => {
-            TlsError::Malformed {
-                file: TlsFile::Cert,
-            }
+            TlsError::Malformed { file: File::Cert }
         }
         other => TlsError::Config(other),
     }
@@ -168,8 +162,8 @@ fn classify_config(err: rustls::Error) -> TlsError {
 fn build_detail(error: &TlsError) -> &'static str {
     match error {
         TlsError::Unreadable { file } | TlsError::Malformed { file } => match file {
-            TlsFile::Cert => "certificate format",
-            TlsFile::Key => "key format",
+            File::Cert => "certificate format",
+            File::Key => "key format",
         },
         TlsError::KeyUnsupported => "key format",
         TlsError::KeyMismatch => "pair mismatch",
@@ -195,13 +189,13 @@ impl ReloadTlsStore<TlsAcceptor> for RustlsTlsStore {
 /// (file-watch.md §4).
 #[derive(Clone)]
 pub struct TlsSource {
-    cell: Arc<ReloadCell<TlsAcceptor>>,
+    cell: Arc<snapshot::Cell<TlsAcceptor>>,
     pick: fn(&ReloadSnapshot<TlsAcceptor>) -> Option<&TlsAcceptor>,
 }
 
 impl TlsSource {
     /// The shared WSS listener's acceptor, used when either WSS role is enabled.
-    pub fn wss(cell: Arc<ReloadCell<TlsAcceptor>>) -> Self {
+    pub fn wss(cell: Arc<snapshot::Cell<TlsAcceptor>>) -> Self {
         Self {
             cell,
             pick: pick_wss,
@@ -210,7 +204,7 @@ impl TlsSource {
 
     /// The management acceptor of the snapshot. It is `None` while management
     /// TLS is not configured.
-    pub fn management(cell: Arc<ReloadCell<TlsAcceptor>>) -> Self {
+    pub fn management(cell: Arc<snapshot::Cell<TlsAcceptor>>) -> Self {
         Self {
             cell,
             pick: pick_management,

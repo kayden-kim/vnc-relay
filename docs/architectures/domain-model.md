@@ -24,11 +24,11 @@
 
 ### 1.1 중계 핵심
 
-생략한 타입은 `ticket::Key`·`ticket::Policy` 같은 ticket 판정 값, `budget::Permit` 같은 연결 부속 값, 관리 조회용 뷰다. `RelayState`는 `crates/app/src/relay.rs`의 비공개 구조체이며 실행 중 상태를 한곳에 모은다. `IdOccupancy`의 화살표 이름은 열거형 값 이름이다.
+생략한 타입은 `ticket::Key`·`ticket::Policy` 같은 ticket 판정 값, `budget::Permit` 같은 연결 부속 값, 관리 조회용 뷰다. `relay::State`는 `crates/app/src/relay.rs`의 비공개 구조체이며 실행 중 상태를 한곳에 모은다. `IdOccupancy`의 화살표 이름은 열거형 값 이름이다.
 
 ```mermaid
 classDiagram
-    class RelayState
+    class `relay::State`
     class WaitingTable
     class IdOccupancy
     class WaitingEntry {
@@ -63,9 +63,9 @@ classDiagram
         relay_id
         session_deadline
     }
-    RelayState --> WaitingTable : matching
-    RelayState --> "0..*" WaitingConnection : waiting
-    RelayState --> "0..*" ActiveSessionSnapshot : active
+    `relay::State` --> WaitingTable : matching
+    `relay::State` --> "0..*" WaitingConnection : waiting
+    `relay::State` --> "0..*" ActiveSessionSnapshot : active
     WaitingTable --> "0..*" IdOccupancy : entries
     IdOccupancy --> WaitingEntry : Waiting
     IdOccupancy --> MatchClaim : Claimed
@@ -164,11 +164,11 @@ classDiagram
 
 ### 1.4 기록과 통계
 
-최근 종료 목록은 `RelayState`가, 최근 로그는 로그 출력기가, 접속 출처 통계는 `SourceStats`가 가진다. IP 정보 DB는 `IpLookup`이 국가·ASN 두 칸으로 들고, 접속 출처 통계와 `IpInfoService`가 같은 `IpLookup`을 공유한다.
+최근 종료 목록은 `relay::State`가, 최근 로그는 로그 출력기가, 접속 출처 통계는 `SourceStats`가 가진다. IP 정보 DB는 `IpLookup`이 국가·ASN 두 칸으로 들고, 접속 출처 통계와 `IpInfoService`가 같은 `IpLookup`을 공유한다.
 
 ```mermaid
 classDiagram
-    class RelayState
+    class `relay::State`
     class `recent_closed::List`
     class ClosedSession
     class ClosedMetadata
@@ -182,8 +182,8 @@ classDiagram
     class IpLookup
     class IpInfoService
     class IpDbStatus
-    RelayState --> `recent_closed::List` : recent
-    RelayState --> "0..*" ClosedMetadata : recent_metadata
+    `relay::State` --> `recent_closed::List` : recent
+    `relay::State` --> "0..*" ClosedMetadata : recent_metadata
     `recent_closed::List` --> "0..*" ClosedSession : entries
     JsonLinesEventSink --> "0..1" RecentLogs : recent_logs
     RecentLogs --> RecentLogsInner : inner
@@ -198,13 +198,13 @@ classDiagram
 
 ### 1.5 설정과 수명
 
-실행 중 설정은 `ReloadService`가 `Settings`로 들고, 적용한 값은 `ReloadCell`이 `ReloadSnapshot`으로 바꿔 끼운다. 준비 상태는 `LifecycleService`가 `Readiness` 값으로 저장한다. 종료 유예 상태 `RelayLifecycle`은 `crates/app/src/ports.rs`에 있고, 이 그림에는 넣지 않았다(필드 관계를 확인하지 않았다).
+실행 중 설정은 `ReloadService`가 `Settings`로 들고, 적용한 값은 `reload::snapshot::Cell`이 `ReloadSnapshot`으로 바꿔 끼운다. 준비 상태는 `LifecycleService`가 `Readiness` 값으로 저장한다. 종료 유예 상태 `RelayLifecycle`은 `crates/app/src/ports.rs`에 있고, 이 그림에는 넣지 않았다(필드 관계를 확인하지 않았다).
 
 ```mermaid
 classDiagram
     class ConfigEditService
     class ReloadService
-    class ReloadCell
+    class `reload::snapshot::Cell`
     class ReloadSnapshot
     class ConfigCandidate
     class ConfigPresence
@@ -213,8 +213,8 @@ classDiagram
     ConfigEditService --> ReloadService : reload
     ReloadService --> Settings : running
     ReloadService --> ConfigPresence : presence
-    ReloadService --> ReloadCell : cell
-    ReloadCell --> ReloadSnapshot : current
+    ReloadService --> `reload::snapshot::Cell` : cell
+    `reload::snapshot::Cell` --> ReloadSnapshot : current
     ReloadSnapshot --> Settings : settings
     ReloadSnapshot --> ConfigPresence : presence
     ConfigCandidate --> Settings : settings
@@ -298,7 +298,7 @@ classDiagram
 | [동적 설정 편집](../../GLOSSARY.md) | 구분 없음 | `ConfigPatch`(`changes: Vec<ConfigChange>`), `ConfigChange`, `ConfigValue`, `ConfigActor`, 적용은 `ConfigEditService::patch`, 오류는 `ConfigEditError` | `crates/app/src/management/config.rs` | `PATCH /api/v1/config`, 사건 `config_edited` `config_edit_rejected` |
 | [관리자 계정(admin_account)](../../GLOSSARY.md) | 구분 없음 | `Account`(`name: account::Name`, `password_hash: PasswordHash`) | `crates/domain/src/account.rs` | 로그인 응답의 `account`, 사건 필드 `admin_account` |
 | [관리자 계정 준비(admin)](../../GLOSSARY.md) | 구분 없음 | 전용 타입 없음(절차). `AdminService`의 `add` `passwd` `remove` `list`와 `AdminError`가 수행한다 | `crates/app/src/accounts.rs` | 명령 `vnc-relay admin`([CLI 계약](../contracts/cli-v1.md)) |
-| [관리자 계정 파일(accounts_file)](../../GLOSSARY.md) | 구분 없음 | 앱 쪽 `LoadedAccounts`, `AccountsError`, `AccountsWarning`. 어댑터 쪽 파일 저장소 `AccountsFile` | `crates/app/src/accounts.rs`, `crates/adapters/src/accounts_file.rs` | 설정 `admin.accounts_file` |
+| [관리자 계정 파일(accounts_file)](../../GLOSSARY.md) | 구분 없음 | 앱 쪽 `LoadedAccounts`, `AccountsError`, `accounts::Warning`. 어댑터 쪽 파일 저장소 `AccountsFile` | `crates/app/src/accounts.rs`, `crates/adapters/src/accounts_file.rs` | 설정 `admin.accounts_file` |
 | [관리 세션(admin_session)](../../GLOSSARY.md) | 구분 없음 | `AdminSession`, `admin_session::Table`, 정책 `admin_session::Policy`. 앱 쪽 `AdminAuth`, `AuthorizedAdmin`, `LoggedIn` | `crates/domain/src/admin_session.rs`, `crates/app/src/management.rs`, `crates/app/src/management/{login,session}.rs` | `GET·POST·DELETE /api/v1/session`, 응답 필드 `csrf_token` `idle_expires_at` `absolute_expires_at` |
 | [관리 세션 쿠키(relay_admin_session)](../../GLOSSARY.md) | 구분 없음 | 쿠키 이름은 상수 `SESSION_COOKIE`다. 쿠키 값은 `admin_session::Token`(64자)이다 | `crates/adapters/src/management_http.rs`, `crates/domain/src/admin_session.rs` | 헤더 `Set-Cookie: relay_admin_session=…; HttpOnly; SameSite=Strict`, HTTPS일 때 `Secure` |
 | [로그인 제한(login_limit)](../../GLOSSARY.md) | 구분 없음 | `LoginLimiter`, `login_limit::Policy`, `LimitScope`(`Account` `Source`) | `crates/domain/src/login_limit.rs` | 설정 `[management.login_limit]`, 사건 `admin_login_limited` |
@@ -314,9 +314,9 @@ classDiagram
 | [최근 로그(recent_logs)](../../GLOSSARY.md) | 구분 없음 | `RecentLogs`, `RecentLogItem`(`seq`, `entry`), 조회 `LogsFilter` `LogsResponse`. 앱 계층이 아니라 어댑터에 있다 | `crates/adapters/src/ops_log.rs` | 설정 `[recent_logs] max_entries`, `GET /api/v1/logs` |
 | [사건(event)](../../GLOSSARY.md) | 구분 없음 | `Event`(`name()` `level()`), `Level`, `Phase`, `Stage`, `RejectReason`, `ShutdownTrigger` | `crates/app/src/events.rs` | 로그 필드 `event`. 예: `connection_accepted` `session_closed` |
 | [메트릭(metrics)](../../GLOSSARY.md) | 구분 없음 | `Metrics`, `MetricsSink`, `MetricsService`, `MetricsSnapshot` | `crates/app/src/metrics.rs`, `crates/app/src/metrics/` | `GET /metrics`(`[metrics] enabled`가 켜졌을 때만), 이름 예 `vnc_relay.connection.accepted` |
-| [추이(history)](../../GLOSSARY.md) | 구분 없음 | `History`(기간별 `hour`·`day` 두 링), `HistoryPoint`(`seq` `at` `values`), `HistoryView`, 키 목록 `HISTORY_KEYS` | `crates/app/src/metrics/history.rs` | 관리 조회 쿼리 `history_after` |
-| [추이 기간(history window)](../../GLOSSARY.md) | 상태 값 | `HistoryWindow::Hour` `HistoryWindow::Day`. `interval()`은 10초·60초, `capacity()`는 360·1440 | `crates/app/src/metrics/history.rs`, `crates/adapters/src/management_http/metrics_api.rs` | 쿼리 `history_window`(`1h` `24h`) |
-| [접속 출처(sources)](../../GLOSSARY.md) | 구분 없음 | `SourceStats`(`store`, `lookup`), `SourceEvent`, `SourcesReport`, `SourcesService` | `crates/app/src/sources.rs`, `crates/app/src/sources/report.rs` | `GET /api/v1/sources` |
+| [추이(history)](../../GLOSSARY.md) | 구분 없음 | `History`(기간별 `hour`·`day` 두 링), `history::Point`(`seq` `at` `values`), `HistoryView`, 키 목록 `HISTORY_KEYS` | `crates/app/src/metrics/history.rs` | 관리 조회 쿼리 `history_after` |
+| [추이 기간(history window)](../../GLOSSARY.md) | 상태 값 | `history::Window::Hour` `history::Window::Day`. `interval()`은 10초·60초, `capacity()`는 360·1440 | `crates/app/src/metrics/history.rs`, `crates/adapters/src/management_http/metrics_api.rs` | 쿼리 `history_window`(`1h` `24h`) |
+| [접속 출처(sources)](../../GLOSSARY.md) | 구분 없음 | `SourceStats`(`store`, `lookup`), `SourceEvent`, `sources::Report`, `SourcesService` | `crates/app/src/sources.rs`, `crates/app/src/sources/report.rs` | `GET /api/v1/sources` |
 | [연결 시도(attempts)](../../GLOSSARY.md) | 구분 없음 | 전용 타입 없음. 집계 값 `Counts.attempts`이고, 사건 종류는 비공개 `Kind::Attempt`다 | `crates/app/src/sources.rs`, `crates/app/src/sources/report.rs` | 관리 조회 응답 키 `attempts` |
 | [집계 기간(window)](../../GLOSSARY.md) | 상태 값 | `SourceWindow::Hour` `SourceWindow::Day` | `crates/app/src/sources/report.rs` | 쿼리 `window`(`1h` `24h`) |
 | [IP 정보 DB(ip_info)](../../GLOSSARY.md) | 구분 없음 | `IpInfoService`, `IpLookup`(국가·ASN 두 칸), `IpDbStatus`, `IpDbKey`, `IpDbError`. 파일을 읽는 쪽은 어댑터 `MmdbFileGateway`다 | `crates/app/src/ip_info.rs`, `crates/adapters/src/ip_db.rs` | 설정 `ip_info.country_db` `ip_info.asn_db` |
@@ -327,7 +327,7 @@ classDiagram
 
 | 용어 | 종류 | 코드 심볼 | 파일 | 다른 레이어의 표현 |
 | --- | --- | --- | --- | --- |
-| [부분 재로드(reload)](../../GLOSSARY.md) | 구분 없음 | 전용 타입 없음(동작 이름). `ReloadService::commit_prepared`가 적용하고, `ReloadCell`이 값을 바꿔 끼운다. 결과는 `ReloadOutcome`·`LastReloadOutcome` | `crates/app/src/reload/service.rs`, `crates/app/src/reload/snapshot.rs`, `crates/app/src/reload.rs` | 사건 `reload_applied`, 원인 `ReloadTrigger::FileWatch` `ReloadTrigger::ConfigEdit` |
+| [부분 재로드(reload)](../../GLOSSARY.md) | 구분 없음 | 전용 타입 없음(동작 이름). `ReloadService::commit_prepared`가 적용하고, `reload::snapshot::Cell`이 값을 바꿔 끼운다. 결과는 `ReloadOutcome`·`LastReloadOutcome` | `crates/app/src/reload/service.rs`, `crates/app/src/reload/snapshot.rs`, `crates/app/src/reload.rs` | 사건 `reload_applied`, 원인 `reload::Trigger::FileWatch` `reload::Trigger::ConfigEdit` |
 | [재로드 대상(dynamic)](../../GLOSSARY.md) | 구분 없음 | 상수 `DYNAMIC_KEYS`(44개), `dynamic_changed_keys()`, `ConfigReloadKind::Dynamic` | `crates/app/src/reload/service.rs`, `crates/app/src/management/config/items.rs` | 관리 조회 설정 항목의 `reload` 값 |
 | [편집 대상](../../GLOSSARY.md) | 구분 없음 | `ConfigItem.editable`, 판정 함수 `accepts_change()`와 `ticket_role_editable()` | `crates/app/src/management/config/items.rs` | 관리 조회 설정 항목의 편집 가능 여부 |
 | [편집 기능 켜기(config_edit)](../../GLOSSARY.md) | 구분 없음 | `ManagementSettings.config_edit`(`bool`), 꺼져 있으면 `ConfigEditError::EditDisabled` | `crates/app/src/settings.rs`, `crates/app/src/management/config.rs` | 설정 `management.config_edit`(기본 `false`) |
@@ -353,9 +353,9 @@ classDiagram
 | 관계 | 개수 | 코드에서 연결하는 방식 | 연결하는 코드(파일·심볼) | 근거 스펙 |
 | --- | --- | --- | --- | --- |
 | `RelayId` → 점유(대기·짝 맞춤·세션) | 0..1 | 맵. 한 중계 ID에 점유 하나 | `crates/domain/src/matching.rs` `WaitingTable.entries: HashMap<RelayId, IdOccupancy>` | [중계 2.2절](../specs/relay.md#22-업무-관계)의 중계 ID 두 관계, RLY-R10·RLY-R20 |
-| `RelayId` → `WaitingConnection` | 0..1 | 맵 | `crates/app/src/relay.rs` `RelayState.waiting` | 같은 표의 중계 ID → 대기 연결 |
+| `RelayId` → `WaitingConnection` | 0..1 | 맵 | `crates/app/src/relay.rs` `relay::State.waiting` | 같은 표의 중계 ID → 대기 연결 |
 | `IdOccupancy::Session` → 두 연결 | 2 (Viewer 1, Server 1) | 연결 식별자 필드 둘 | `crates/domain/src/matching.rs` `IdOccupancy::Session { viewer_conn_id, server_conn_id }` | [중계 2.2절](../specs/relay.md#22-업무-관계)의 활성 세션 → 연결과 연결 → 활성 세션, RLY-R08 |
-| `session::Id` → 실행 중 세션 요약 | 1:1 | 맵 | `crates/app/src/relay.rs` `RelayState.active: HashMap<session::Id, ActiveSessionSnapshot>` | [중계 2.2절](../specs/relay.md#22-업무-관계)의 활성 세션 → 세션 식별자, RLY-R11 |
+| `session::Id` → 실행 중 세션 요약 | 1:1 | 맵 | `crates/app/src/relay.rs` `relay::State.active: HashMap<session::Id, ActiveSessionSnapshot>` | [중계 2.2절](../specs/relay.md#22-업무-관계)의 활성 세션 → 세션 식별자, RLY-R11 |
 | `Session` → `CloseCause` | 0..1 (정리 전), 1 (정리 뒤) | `Session.close_cause`는 `Option`, `ClosedSession.close_cause`는 값 하나 | `crates/domain/src/session.rs` `Session` `ClosedSession` | [관리 2.7절](../specs/management.md#27-업무-관계)의 활성 세션 → 종료 원인, MGT-R39 |
 | `PreparedConnection` → `TicketBinding` | 0..1 | `Option` | `crates/app/src/relay.rs` `PreparedConnection.ticket` | [WS·WSS 2.1절](../specs/websocket.md#21-업무-관계)의 역할 → ticket 설정, WS-R20 |
 | `TicketBinding` → `RelayId` | 1 | 필드 `relay_id`(ticket의 `rid`) | `crates/app/src/relay.rs` `TicketBinding.relay_id` | [WS·WSS 2.1절](../specs/websocket.md#21-업무-관계)의 ticket → 중계 ID, RLY-R21 |
@@ -394,7 +394,7 @@ classDiagram
 | 관계 | 개수 | 코드에서 연결하는 방식 | 연결하는 코드(파일·심볼) | 근거 스펙 |
 | --- | --- | --- | --- | --- |
 | `recent_closed::List` → `ClosedSession` | 0..R | 이중 끝 큐 | `crates/domain/src/recent_closed.rs` `recent_closed::List.entries` | MGT-R15, MGT-024 |
-| `RelayState` → `ClosedMetadata` | 종료된 세션마다 0..1 | `session::Id`를 키로 둔 맵 | `crates/app/src/relay.rs` `RelayState.recent_metadata` | MGT-R15 |
+| `relay::State` → `ClosedMetadata` | 종료된 세션마다 0..1 | `session::Id`를 키로 둔 맵 | `crates/app/src/relay.rs` `relay::State.recent_metadata` | MGT-R15 |
 | `JsonLinesEventSink` → `RecentLogs` | 0..1 | `Option` | `crates/adapters/src/ops_log.rs` `JsonLinesEventSink.recent_logs` | OPS-068 |
 | `RecentLogs` → `RecentLogItem` | 0..N (최대 `max_entries`) | 내부 구조체의 이중 끝 큐 | `crates/adapters/src/ops_log.rs` `RecentLogsInner.entries` | OPS-068 |
 | `SourceStats` → `SourceEvent` | 0..`CAPACITY` | 저장소의 이중 끝 큐 | `crates/app/src/sources.rs` `Store.events` | [운영 스펙 3.9절](../specs/operations.md), OPS-R53 |
@@ -408,7 +408,7 @@ classDiagram
 | --- | --- | --- | --- | --- |
 | `ConfigEditService` → `ReloadService` | 1 | 공유 참조 | `crates/app/src/management/config.rs` `ConfigEditService.reload` | OPS-R34 |
 | `ReloadService` → `Settings` | 1 (실행 중 값) | 공유 참조 | `crates/app/src/reload/service.rs` `ReloadService.running` | OPS-R22 |
-| `ReloadCell` → `ReloadSnapshot` | 1 (현재 값) | 읽기·쓰기 잠금으로 보호한 공유 참조 | `crates/app/src/reload/snapshot.rs` `ReloadCell.current` | OPS-R13 |
+| `reload::snapshot::Cell` → `ReloadSnapshot` | 1 (현재 값) | 읽기·쓰기 잠금으로 보호한 공유 참조 | `crates/app/src/reload/snapshot.rs` `reload::snapshot::Cell.current` | OPS-R13 |
 | `ReloadSnapshot` → `Settings` | 1 | 공유 참조 | `crates/app/src/reload/snapshot.rs` `ReloadSnapshot.settings` | OPS-R13 |
 | `ConfigCandidate` → `Settings` | 1 | 필드 | `crates/app/src/reload.rs` `ConfigCandidate.settings` | OPS-R22 |
 | `PrepareReloadError` → 설정 키 | 0..N | `RestartRequired(Vec<String>)` | `crates/app/src/reload.rs` | OPS-R22 |
@@ -494,7 +494,7 @@ classDiagram
 | 로컬 주소는 IP 정보 DB에서 찾지 않는다(국가·ASN이 없다). | `crates/app/src/ip_info.rs` `IpLookup::find`, `crates/domain/src/ip_info.rs` `is_local` | OPS-R54 |
 | IP 정보 DB 파일을 읽지 못하면 이전 DB를 유지하고 경고만 남긴다. | `crates/app/src/ip_info.rs` `IpInfoService` | OPS-R52 |
 | IP 정보를 찾으려고 외부에 요청하지 않는다. | `crates/app/src/ip_info.rs`(DB는 파일에서만 읽는다) | OPS-R54 |
-| 추이 기간은 `1h`(10초 간격 360점)와 `24h`(60초 간격 1440점)뿐이다. | `crates/app/src/metrics/history.rs` `HistoryWindow::interval` `HistoryWindow::capacity`, `crates/adapters/src/management_http/metrics_api.rs` | MGT-R32 |
+| 추이 기간은 `1h`(10초 간격 360점)와 `24h`(60초 간격 1440점)뿐이다. | `crates/app/src/metrics/history.rs` `history::Window::interval` `history::Window::capacity`, `crates/adapters/src/management_http/metrics_api.rs` | MGT-R32 |
 | 접속 출처 집계 기간은 `1h`와 `24h`뿐이다. | `crates/app/src/sources/report.rs` `SourceWindow`, `crates/adapters/src/management_http/sources_api.rs` | MGT-R34 |
 | `/metrics`는 기본으로 꺼져 있고 켰을 때만 응답한다. | `crates/adapters/src/status_http.rs` | OPS-R47, OPS-082 |
 
@@ -503,7 +503,7 @@ classDiagram
 | 조건 | 지키는 코드(파일·심볼) | 근거 |
 | --- | --- | --- |
 | 재로드 대상이 아닌 값이 실행 중 값과 다르면 후보 전체를 재시작 필요로 거절한다. | `crates/app/src/reload/service.rs` `prepare_candidate`, `restart_required_keys` | OPS-R22 |
-| 재로드 대상의 변경은 한 번에 교체한다. 일부만 반영하지 않는다. | `crates/app/src/reload/service.rs` `commit_prepared`, `crates/app/src/reload/snapshot.rs` `ReloadCell::publish` | OPS-R13 |
+| 재로드 대상의 변경은 한 번에 교체한다. 일부만 반영하지 않는다. | `crates/app/src/reload/service.rs` `commit_prepared`, `crates/app/src/reload/snapshot.rs` `reload::snapshot::Cell::publish` | OPS-R13 |
 | 재로드 대상은 44개이고 목록에 없는 키는 재시작 필요다. | `crates/app/src/reload/service.rs` `DYNAMIC_KEYS` | OPS-R30 |
 | 편집은 같은 후보를 한 번만 적용한다. 파일 쓰기·교체가 실패하면 파일과 실행 값을 바꾸지 않는다. | `crates/app/src/management/config.rs` `ConfigEditService::patch`, `crates/adapters/src/config_edit.rs` | OPS-R34, OPS-R35 |
 | 정상 종료는 `Running`에서만 시작하고 유예는 한 번만 시작한다. | `crates/app/src/relay.rs` `RelayService::begin_shutdown` | OPS-R04 |
@@ -559,6 +559,6 @@ classDiagram
 | 항목 | 값 |
 | --- | --- |
 | 대조일 | 2026-11-23 |
-| 방법 | 이 문서의 코드 심볼과 파일이 현재 코드에 있는지 검색으로 확인했다. 중심 구조체와 열거형(`WaitingEntry` `MatchClaim` `IdOccupancy` `Session` `ClosedSession` `CloseCause` `ticket::Claims` `TicketBinding` `ActiveSessionSnapshot` `WaitingConnection` 등)은 정의를 읽어 필드를 확인했다. 새로 넣은 영역의 그림에 쓴 필드(`Settings` `RelaySettings` `EntryPointSettings` `WsListenerSettings` `WsRoleSettings` `AdminAuth` `AdminState` `AdminSession` `LoginLimiter` `RecentLogs` `SourceStats` `Store` `IpLookup` `IpDbStatus` `ReloadService` `ReloadCell` `ReloadSnapshot` `LifecycleService` `ServiceSession` `Snapshot` 등)도 정의를 읽어 확인했다. 새 영역의 용어와 조건은 읽기 전용 조사로 모았고, 인용한 스펙 규칙 ID는 스펙 표에서 내용을 확인했다. |
+| 방법 | 이 문서의 코드 심볼과 파일이 현재 코드에 있는지 검색으로 확인했다. 중심 구조체와 열거형(`WaitingEntry` `MatchClaim` `IdOccupancy` `Session` `ClosedSession` `CloseCause` `ticket::Claims` `TicketBinding` `ActiveSessionSnapshot` `WaitingConnection` 등)은 정의를 읽어 필드를 확인했다. 새로 넣은 영역의 그림에 쓴 필드(`Settings` `RelaySettings` `EntryPointSettings` `WsListenerSettings` `WsRoleSettings` `AdminAuth` `AdminState` `AdminSession` `LoginLimiter` `RecentLogs` `SourceStats` `Store` `IpLookup` `IpDbStatus` `ReloadService` `reload::snapshot::Cell` `ReloadSnapshot` `LifecycleService` `ServiceSession` `Snapshot` 등)도 정의를 읽어 확인했다. 새 영역의 용어와 조건은 읽기 전용 조사로 모았고, 인용한 스펙 규칙 ID는 스펙 표에서 내용을 확인했다. |
 | 결과 | 검색 검사 두 가지를 했다. 첫째, 백틱 이름 687개 가운데 파일·디렉터리 경로는 모두 있다. 이름은 조각마다 코드나 계약 문서 어딘가에 나오는지만 검색했고, 없는 이름은 없었다. 이 검사는 오탈자를 거르는 용도이며 이름이 설명한 위치의 정의라는 증거는 아니다. 둘째, `타입::값`·`타입.필드` 쌍은 그 타입의 정의 또는 구현 안에 값·필드·함수가 있는지 확인했다. 이 검사에서 소유 타입이 틀린 두 곳(`begin_shutdown`·`drive_shutdown`)을 찾아 `RelayService`로 고쳤고, 고친 뒤 없는 쌍은 없었다. 그림의 필드 관계는 위 정의를 읽어 확인했다. |
-| 확인하지 못한 범위 | 일부 필드 이름(`RelayState`의 필드 전부, `ticket::Policy`의 비교 함수 이름)은 정의 확인이 부분적이다. 4절의 조건은 위치를 읽었지만 관련 시험을 실행하지 않았다. 새 영역에서는 편집 대상 키가 44개 가운데 38개인지, `accepts_change`의 분기 내용, `serve.rs`의 준비 판정 코드 위치, 접속 출처 `plan()`의 일부 규칙, 메트릭 이름 전체 목록, 상태 리스너의 경로 정의를 읽지 않았다. 4절의 새 조건 가운데 `상태 리스너`·`/metrics` 행은 어댑터 파일을 열어 확인하지 않았다. |
+| 확인하지 못한 범위 | 일부 필드 이름(`relay::State`의 필드 전부, `ticket::Policy`의 비교 함수 이름)은 정의 확인이 부분적이다. 4절의 조건은 위치를 읽었지만 관련 시험을 실행하지 않았다. 새 영역에서는 편집 대상 키가 44개 가운데 38개인지, `accepts_change`의 분기 내용, `serve.rs`의 준비 판정 코드 위치, 접속 출처 `plan()`의 일부 규칙, 메트릭 이름 전체 목록, 상태 리스너의 경로 정의를 읽지 않았다. 4절의 새 조건 가운데 `상태 리스너`·`/metrics` 행은 어댑터 파일을 열어 확인하지 않았다. |

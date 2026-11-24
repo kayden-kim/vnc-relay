@@ -8,8 +8,7 @@ use std::io::{self, ErrorKind, Write as _};
 use std::path::{Path, PathBuf};
 
 use vnc_relay_application::accounts::{
-    ACCOUNTS_FILE_KEY, AccountsDiagnostic, AccountsError, AccountsWarning, AdminError,
-    LoadedAccounts,
+    ACCOUNTS_FILE_KEY, AccountsError, AdminError, Diagnostic, LoadedAccounts, Warning,
 };
 use vnc_relay_application::ports::AccountStore;
 use vnc_relay_domain::account::Account;
@@ -45,7 +44,7 @@ impl AccountsFile {
     fn replace(
         &self,
         change: &mut dyn FnMut(Vec<Account>) -> Result<Vec<Account>, AdminError>,
-        warn: &mut dyn FnMut(AccountsWarning),
+        warn: &mut dyn FnMut(Warning),
     ) -> Result<(), AdminError> {
         let current = super::read(&self.path, HashFloor::Accept)
             .map_err(AdminError::Accounts)?
@@ -72,7 +71,7 @@ impl AccountsFile {
             )));
         }
         if let Err(error) = sync_dir(&self.path) {
-            warn(AccountsWarning::CleanupFailed(format!(
+            warn(Warning::CleanupFailed(format!(
                 "계정 파일은 바꿨지만 디렉터리 내용을 디스크에 반영하지 못했다({}): {}",
                 reason(&error),
                 self.path.display()
@@ -83,19 +82,19 @@ impl AccountsFile {
 }
 
 impl AccountStore for AccountsFile {
-    fn read(&self) -> Result<Option<LoadedAccounts>, Vec<AccountsDiagnostic>> {
+    fn read(&self) -> Result<Option<LoadedAccounts>, Vec<Diagnostic>> {
         super::read(&self.path, HashFloor::Accept)
     }
 
     fn update(
         &self,
         change: &mut dyn FnMut(Vec<Account>) -> Result<Vec<Account>, AdminError>,
-        warn: &mut dyn FnMut(AccountsWarning),
+        warn: &mut dyn FnMut(Warning),
     ) -> Result<(), AdminError> {
         let lock = self.sibling(".lock")?;
         if let Err(error) = OpenOptions::new().write(true).create_new(true).open(&lock) {
             return Err(if error.kind() == ErrorKind::AlreadyExists {
-                AdminError::Accounts(vec![AccountsDiagnostic {
+                AdminError::Accounts(vec![Diagnostic {
                     error: AccountsError::FileLocked,
                     key: ACCOUNTS_FILE_KEY.to_owned(),
                     message: format!(
@@ -113,7 +112,7 @@ impl AccountStore for AccountsFile {
         }
         let result = self.replace(change, warn);
         if let Err(error) = std::fs::remove_file(&lock) {
-            warn(AccountsWarning::CleanupFailed(format!(
+            warn(Warning::CleanupFailed(format!(
                 "잠금 파일을 지우지 못했다({}). 실행 중인 `admin` 명령이 없으면 {}를 지운다.",
                 reason(&error),
                 lock.display()
@@ -211,7 +210,7 @@ fn reason(error: &io::Error) -> String {
 }
 
 fn write_failed(message: String) -> AdminError {
-    AdminError::Accounts(vec![AccountsDiagnostic {
+    AdminError::Accounts(vec![Diagnostic {
         error: AccountsError::WriteFailed,
         key: ACCOUNTS_FILE_KEY.to_owned(),
         message: format!("{message}. 기존 계정 파일은 그대로다."),

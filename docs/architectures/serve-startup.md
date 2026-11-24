@@ -8,7 +8,7 @@
 | 구조 시점 | Current |
 | 문서 상태 | Draft |
 | 구현 대조 | 소스 대조 범위는 [대조 기록](#대조-기록)을 따른다. |
-| 코드 위치 | `src/main.rs` `main`, `src/cli.rs` `parse`, `src/serve.rs` `run`·`listen_until_shutdown`·`config_management`·`begin_process_shutdown`, `crates/app/src/reload/snapshot.rs` `ReloadCell`, `crates/app/src/reload/service.rs` `ReloadService`, `crates/app/src/management/config.rs` `ConfigEditService`, `crates/adapters/src/file_watch.rs` `start`·`ReloadWatcher` |
+| 코드 위치 | `src/main.rs` `main`, `src/cli.rs` `parse`, `src/serve.rs` `run`·`listen_until_shutdown`·`config_management`·`begin_process_shutdown`, `crates/app/src/reload/snapshot.rs` `reload::snapshot::Cell`, `crates/app/src/reload/service.rs` `ReloadService`, `crates/app/src/management/config.rs` `ConfigEditService`, `crates/adapters/src/file_watch.rs` `start`·`ReloadWatcher` |
 | 코드 지도 | [코드 지도 2절](code-map.md#2-코드-위치와-구성요소) |
 | 관련 스펙 | [운영 스펙 3.1절](../specs/operations.md#31-설정-검증과-시작), OPS-001, OPS-002(일부), OPS-039(일부) |
 | 관련 계약 | [CLI 계약](../contracts/cli-v1.md) 1.1·1.3·1.4·1.5·1.8·2절, [설정 계약 2.1절](../contracts/config-v4.md#21-설정-오류와-준비-실패), [운영 정보 계약](../contracts/ops-info-v2.md) 1.5·1.6절(시작·종료 사건)·[1.12절](../contracts/ops-info-v2.md#112-상태-리스너와-엔드포인트)(상태 리스너를 먼저 연다) |
@@ -43,7 +43,7 @@
   - 비밀번호·로그인·계정 변경은 [계정 준비](admin-accounts.md)와 [관리 세션](management-session.md)이 맡는다.
 - 다른 모듈에 공개하는 기능:
   - `vnc_relay_domain::account::{Account, Name, AccountNameError, PasswordHash, PasswordHashError, Argon2Params, Argon2ParamsError}`
-  - `vnc_relay_application::accounts::{ACCOUNTS_FILE_KEY, AccountsError, AccountsDiagnostic, AccountsWarning, LoadedAccounts, require_any}`
+  - `vnc_relay_application::accounts::{ACCOUNTS_FILE_KEY, AccountsError, accounts::Diagnostic, accounts::Warning, LoadedAccounts, require_any}`
   - `vnc_relay_application::settings::{ListenerPlan, Settings::status_listener, Settings::management_listener, Settings::other_listeners}`
   - `vnc_relay_adapters::accounts_file::{load, parse}`
   - `vnc_relay_adapters::net::{bind, bind_one, BindError, BoundListener}`
@@ -65,7 +65,7 @@ flowchart LR
     START -->|"4 호출"| PLAN["app settings.rs<br/>Settings::status_listener, management_listener, other_listeners"]
     START -->|"4 호출"| NET["adapters net.rs<br/>bind_one, bind"]
     START -->|"4 호출"| TLS["adapters tls.rs<br/>load_acceptor"]
-    START -->|"TLS 검사 뒤 생성"| SNAP["app reload<br/>ReloadCell·SharedReload"]
+    START -->|"TLS 검사 뒤 생성"| SNAP["app reload<br/>reload::snapshot::Cell·SharedReload"]
     START -->|"공유 service 주입"| WATCH["adapters file_watch<br/>start·ReloadWatcher::run"]
     START -->|"config_management helper"| EDIT["app ConfigEditService<br/>adapters 파일·문서 포트"]
     SNAP -->|"같은 cell의 runtime source"| EP
@@ -85,7 +85,7 @@ flowchart LR
 | `src/cli.rs` `report`, `report_usage`, `help`, `silence`, `EXIT_*` | 진단과 사용법은 stderr에, 도움말은 stdout에 쓴다. `help`는 OS별 서비스 명령을 포함한 도움말을 조립한다. 서비스 body의 `silence` 뒤에는 진단 출력을 하지 않는다. | 호출마다 | 없음 |
 | `src/serve.rs` `run`, `start`, `listen_until_shutdown` | 시작 순서·오류·종료 코드·사건을 조립한다. Settings/presence/TLS로 만든 cell과 count-only L/Lw/Lm을 공유한다. `AcceptPolicy`·`WsPolicy`에는 현재 실행 값을 읽는 source와 예산을 전달한다. TLS는 `TlsSource::wss`/`management`로 새 협상 때 현재 acceptor를 고른다. | serve 실행마다 | adapters·app·domain·tokio·cli |
 | `src/serve.rs` `config_management` | 설정 절대 경로와 base_dir를 정하고 `ConfigEditService`에 SharedReload·FsConfigFileStore·TomlConfigDocumentGateway·Clock·EventSink를 주입한다. 요청 전 파일을 열지 않는다. | reload 생성 뒤, 리스너 바인드 전 | app config·adapters config_edit |
-| `crates/app/src/reload/snapshot.rs` `ReloadCell`; `crates/app/src/reload.rs` `SharedReload` | cell은 reader, mutex service는 watcher와 설정 GET/PATCH가 공유한다. | TLS 검사 뒤 생성, 프로세스 수명 | Settings·presence·TLS |
+| `crates/app/src/reload/snapshot.rs` `reload::snapshot::Cell`; `crates/app/src/reload.rs` `SharedReload` | cell은 reader, mutex service는 watcher와 설정 GET/PATCH가 공유한다. | TLS 검사 뒤 생성, 프로세스 수명 | Settings·presence·TLS |
 | `src/serve.rs` `ShutdownSignal::register`, `ShutdownSignal::wait`, `Requests::wait`, `HostStatus` | 터미널은 Ubuntu SIGINT·SIGTERM, Windows Ctrl+C·Ctrl+Break·콘솔 닫기를 처리한다. 바인드 전에 등록한다. 서비스는 콘솔 신호 대신 SCM 제어를 기다리고 준비·종료 상태를 SCM에 보고한다. | 4단계 처음 | tokio, Windows 서비스 어댑터 |
 | `crates/adapters/src/listener.rs` `Listener`, `SupervisedListener`, `ListenerError` | TCP 수락 포트와 최초 장애 보고. `serve`는 모든 필수 리스너를 이 래퍼로 감싼다. 분류는 [운영 정보 계약 1.12절](../contracts/ops-info-v2.md#112-상태-리스너와-엔드포인트)을 따른다. | 바인드 직후, 감독 채널은 프로세스마다 하나 | tokio, std |
 | `src/serve.rs` `wait_for_shutdown`, `begin_process_shutdown` | 최초 종료 원인을 선택한다. 정상 요청은 기존 동작이다. 장애는 상태를 바꾸고 `shutdown_started(fatal_error,error)`를 시작한다. | 준비 뒤 감독 단계 | adapters, app |
@@ -93,20 +93,20 @@ flowchart LR
 | `crates/domain/src/account.rs` `account::Name` | 1~32자, `a-z0-9._-`만 받는 계정 이름 값 타입 | 계정 파일을 읽을 때 | 없음 |
 | `crates/domain/src/account.rs` `PasswordHash`, `PasswordHashError`, `Argon2Params`, `Argon2ParamsError` | PHC 문자열 해석(1.4절): 알고리즘·버전·`m,t,p` 순서·솔트 16바이트 이상·해시 32바이트·패딩 없는 표준 Base64. 승인 범위 상수(`MEMORY_KIB` 등)와 범위 판정(하한 미만이 상한 초과보다 먼저다). `Debug`는 해시 문자열을 `"<redacted>"`로 가린다. | 계정 파일을 읽을 때 | 없음 |
 | `crates/domain/src/account.rs` `Account` | 이름과 해시 한 쌍 | 계정 파일을 읽을 때, 호출한 쪽이 소유 | 위 두 타입 |
-| `crates/app/src/accounts.rs` `AccountsError`, `AccountsDiagnostic`, `AccountsWarning` | 계정 파일 오류 코드 5종(`accounts_file_missing`·`accounts_file_unreadable`·`accounts_file_invalid`·`accounts_hash_below_minimum`·`accounts_none`)과 경고 `accounts_file_permissive`, 진단 한 건(`error`, `key`, `message`) | 값 타입 | domain |
+| `crates/app/src/accounts.rs` `AccountsError`, `accounts::Diagnostic`, `accounts::Warning` | 계정 파일 오류 코드 5종(`accounts_file_missing`·`accounts_file_unreadable`·`accounts_file_invalid`·`accounts_hash_below_minimum`·`accounts_none`)과 경고 `accounts_file_permissive`, 진단 한 건(`error`, `key`, `message`) | 값 타입 | domain |
 | `crates/app/src/accounts.rs` `require_any` | 계정이 하나도 없으면 `accounts_none` 진단을 준다(운영 스펙 3.1절 5). | `serve` 2단계 | domain |
 | `crates/app/src/settings.rs` `ListenerPlan`, `Settings::status_listener`, `Settings::management_listener`, `Settings::other_listeners` | 바인드할 리스너 계획. 상태·관리 뒤 중계는 `tcp_viewer`, `tcp_server`, `ws`, `wss` 순서다. 공유 WS·WSS는 어느 역할이든 켜면 각각 한 항목만 만든다. 각 항목은 이름, 부모 listen 설정 키, 주소, `Option<ListenerKind>`를 담는다. | 4단계 | domain |
 | `crates/adapters/src/accounts_file.rs` `load`, `parse` | 파일 읽기, UTF-8 확인, TOML 해석, `version`·`[[account]]` 키 검사, 중복 이름 검사, 해시 하한·상한 판정, Ubuntu 권한 경고. 모든 진단을 모은다. `LoadedAccounts`(app `accounts.rs`)를 돌려준다. | 호출마다 | toml, domain, app |
 | `crates/adapters/src/net.rs` `bind`, `bind_one`, `BindError`, `BoundListener` | `bind_one`은 `ListenerPlan` 하나를 tokio `TcpListener::bind`로 바인드한다. `bind`는 계획마다 `bind_one`을 부르고, 실패도 계속 시도해 모두 모은다. 하나라도 실패하면 성공한 리스너를 닫고 실패 목록을 돌려준다. 성공하면 계획과 리스너 쌍(`BoundListener`)을 돌려준다. 실패 원인은 주소를 뺀 한국어 문장이다. | 4단계 | tokio, app |
 | `crates/adapters/src/toml_text.rs` `error_position` | TOML 구문 오류의 행·열. 설정 파일과 계정 파일이 함께 쓴다. 파일 내용은 돌려주지 않는다. | 호출마다 | toml |
-| `crates/adapters/src/tls.rs` `load_acceptor`, `TlsError`, `TlsFile` | 인증서와 개인키 파일을 읽고 서로 맞는지 확인한 뒤 rustls 서버 설정을 만든다(암호 모듈 aws-lc-rs). 오류 코드는 모두 `tls_file_invalid`다. 설정 키의 파일 이름(`cert_file`·`key_file`)은 `TlsError::file`이 정한다. | 4단계, 검사마다 호출 | rustls, aws-lc-rs |
+| `crates/adapters/src/tls.rs` `load_acceptor`, `TlsError`, `tls::File` | 인증서와 개인키 파일을 읽고 서로 맞는지 확인한 뒤 rustls 서버 설정을 만든다(암호 모듈 aws-lc-rs). 오류 코드는 모두 `tls_file_invalid`다. 설정 키의 파일 이름(`cert_file`·`key_file`)은 `TlsError::file`이 정한다. | 4단계, 검사마다 호출 | rustls, aws-lc-rs |
 
 `crates/adapters/src/config_file.rs`는 `[admin.argon2]` 범위를 `Argon2Params`의 승인 범위 상수로 검사한다. 설정과 계정 파일이 같은 범위를 쓰게 하기 위해서다.
 
 <a id="작업-62~65-목표-조립-target--active"></a>
 ### 실행 값과 설정 편집 조립(Current)
 
-`serve`는 시작 파일의 Settings·presence와 검사한 TLS로 `ReloadCell`을 만들고, `SharedReload` 하나를 watcher와 `ConfigEditService`에 주입한다. 같은 cell의 `RuntimeSettingsSource`는 중계·대상·수락·관리·상태 reader에 전달한다. status에는 U를 넣지 않는다. 종료 시작 때 현재 G를 한 번 읽어 deadline을 고정하고 watcher 적용을 멈춘다. 유예 중 관리 GET/PATCH는 유지한다([파일 감지 §10](file-watch.md#10-target--설정-v3-실행-값과-공유-트랜잭션), [설정 보기·편집 §2](config-edit.md#2-내부-구조와-초기화)).
+`serve`는 시작 파일의 Settings·presence와 검사한 TLS로 `reload::snapshot::Cell`을 만들고, `SharedReload` 하나를 watcher와 `ConfigEditService`에 주입한다. 같은 cell의 `RuntimeSettingsSource`는 중계·대상·수락·관리·상태 reader에 전달한다. status에는 U를 넣지 않는다. 종료 시작 때 현재 G를 한 번 읽어 deadline을 고정하고 watcher 적용을 멈춘다. 유예 중 관리 GET/PATCH는 유지한다([파일 감지 §10](file-watch.md#10-target--설정-v3-실행-값과-공유-트랜잭션), [설정 보기·편집 §2](config-edit.md#2-내부-구조와-초기화)).
 
 ## 3. 데이터 모델
 
@@ -118,8 +118,8 @@ flowchart LR
 | `account::Name` | `String` | `Account` | 1~32자, `a-z0-9._-` |
 | `PasswordHash` | 원문 PHC 문자열, `Argon2Params` | `Account` | 검증된 해시는 AdminAuth의 로그인 검사에 쓴다. Debug·진단에는 원문을 넣지 않는다. |
 | `Argon2Params` | `memory_kib`, `iterations`, `parallelism`: `u32` | `PasswordHash` | 승인 범위: 19456~1048576, 2~10, 1~16([설정 계약 1.2절](../contracts/config-v4.md#12-키-표)) |
-| `AccountsDiagnostic` | `error: AccountsError`, `key: String`, `message: String` | 반환 값 | `key` 규칙은 [CLI 계약 1.3절](../contracts/cli-v1.md#13-계정-파일-형식). 빈 문자열이면 출력에서 ` key=`를 뺀다. 메시지에 해시·파일 내용을 넣지 않는다. |
-| `LoadedAccounts` | `accounts: Vec<Account>`, `warnings: Vec<AccountsWarning>` | 반환 값 | 파일 순서를 유지한다. |
+| `accounts::Diagnostic` | `error: AccountsError`, `key: String`, `message: String` | 반환 값 | `key` 규칙은 [CLI 계약 1.3절](../contracts/cli-v1.md#13-계정-파일-형식). 빈 문자열이면 출력에서 ` key=`를 뺀다. 메시지에 해시·파일 내용을 넣지 않는다. |
+| `LoadedAccounts` | `accounts: Vec<Account>`, `warnings: Vec<accounts::Warning>` | 반환 값 | 파일 순서를 유지한다. |
 | `ListenerPlan` | `name: &'static str`(운영 정보 계약의 `listener` 값), `key: &'static str`(설정 키), `addr: SocketAddr`, `listener: Option<ListenerKind>`(상태·관리 리스너는 `None`) | 메모리 | 같은 주소가 두 번 나오지 않는다. WS·WSS의 역할별로 바인드 계획을 중복 생성하지 않는다. |
 | `BindError` | `plan: ListenerPlan`, `cause: String` | 반환 값 | `cause`는 주소를 뺀 원인 문장이다. 이미 사용 중이면 "이미 사용 중이다." stderr 메시지는 `serve`가 주소와 원인을 합쳐 만든다. 운영 로그의 `detail`에는 원인만 쓴다. |
 

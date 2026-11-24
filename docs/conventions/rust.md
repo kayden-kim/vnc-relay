@@ -156,7 +156,7 @@ cargo xtask layers
 | 같은 이름 충돌([7.3절](#73-suffix가-필요한-조건) A2) | 도메인 enum `entry_point::Listener`→`ListenerKind`(adapters trait `Listener`는 그대로). `target_policy::TargetHost`→`TargetItemHost`(`handshake::TargetHost`는 그대로) |
 | `Control`이 포트가 아닌 타입 | `IdleControl`→`IdleTimerHandle`, `StopControl`→`StopRequest`, 비공개 `SessionControl`(`crates/app/src/relay.rs`)→`SessionHandle` |
 | crate 이름: `vnc-relay-app` → `vnc-relay-application`([7.5절](#75-모듈-파일-crate-이름)) | 패키지 이름과 `vnc_relay_application` import, `Cargo.toml`, `xtask/src/layers.rs`, 배포 고지, 문서를 함께 바꿨다. 디렉터리 `crates/app`은 그대로다 |
-| 개념 타입의 모듈 이름 되풀이([7.3절](#73-suffix가-필요한-조건) C, `crates/domain`) | `account::AccountName`→`Name`, `admin_session::{AdminSessionToken→Token, AdminSessionPolicy→Policy, AdminSessionTable→Table}`, `budget::BudgetPermit`→`Permit`, `handshake::HandshakePolicy`→`Policy`, `login_limit::LoginLimitPolicy`→`Policy`, `recent_closed::RecentClosedList`→`List`, `session::{SessionId→Id, SessionState→State}`, `ticket::{TicketParts→Parts, TicketClaims→Claims, TicketPolicy→Policy, TicketKey→Key, TicketKeyList→KeyList, TicketUseTable→UseTable}`. 이름이 겹치는 `Policy`는 부모 모듈을 붙여 쓴다(`handshake::Policy`) |
+| 개념 타입의 모듈 이름 되풀이([7.3절](#73-suffix가-필요한-조건) C) | `account::AccountName`→`Name`, `admin_session::{AdminSessionToken→Token, AdminSessionPolicy→Policy, AdminSessionTable→Table}`, `budget::BudgetPermit`→`Permit`, `handshake::HandshakePolicy`→`Policy`, `login_limit::LoginLimitPolicy`→`Policy`, `recent_closed::RecentClosedList`→`List`, `session::{SessionId→Id, SessionState→State}`, `ticket::{TicketParts→Parts, TicketClaims→Claims, TicketPolicy→Policy, TicketKey→Key, TicketKeyList→KeyList, TicketUseTable→UseTable}`. 이름이 겹치는 `Policy`는 부모 모듈을 붙여 쓴다(`handshake::Policy`). `crates/app`·`crates/adapters`도 같은 규칙을 적용했다. `accounts::{AccountsDiagnostic→Diagnostic, AccountsWarning→Warning}`, `relay::{RelayCounts→Counts, RelayState→State, RelayEndpoint→Endpoint}`(뒤의 둘은 비공개), `reload::ReloadTrigger`→`Trigger`, `reload::snapshot::ReloadCell`→`Cell`, `metrics::history::{HistoryWindow→Window, HistoryPoint→Point}`, `sources::SourcesReport`→`Report`, `tls::TlsFile`→`File`. 표준 라이브러리나 도메인 이름과 겹치는 것은 부모 모듈을 붙여 쓴다(`tls::File`, `snapshot::Cell`). `crates/app/src/relay.rs`는 도메인 `session::State`를 `vnc_relay_domain::session::State`로 쓴다. 이 파일에 하위 모듈 `session`이 있어서 부모 모듈 import로 풀 수 없다 |
 | 함수 직접 import([7.7절](#77-금지-이름과-부딪히는-지점)) | 작업 공간·표준·외부 crate의 함수 import를 모두 부모 모듈 경유 호출로 바꿨다(`toml_text::error_position(..)`). 매크로(`json!`, `pin!`, `ready!`)와 모듈 import는 대상이 아니다 |
 | 시험 대역 이름([2절](#2-규칙)) | 포트·소켓·스트림을 대신하는 시험 전용 타입을 모두 `Fake`·`Stub`·`Spy`로 시작하게 바꿨다(`TestClock`→`FakeClock`, `TestStream`→`FakeRelayStream`, `Recorder`→`SpyEventSink`, `FixedProcess`→`StubProcessStatsSource`). 대역이 아닌 보조 타입(`TestCase`, `TestResult`, `PartialWrites`, `FrameGate` 등)은 그대로다 |
 | 시험 코드의 `#[path]`와 `mod.rs`([2절](#2-규칙)) | `#[path]` 속성 43개를 모두 없앴다. 여러 시험 대상이 함께 쓰던 `tests/common/`과 `crates/adapters/tests/common/`의 도구는 작업 공간 crate `vnc-relay-testkit`(`crates/testkit`)의 모듈로 옮겼다. `tests/dashboard_live.rs`와 `tests/ticket_system.rs`는 `tests/<주제>/main.rs`와 하위 모듈로 나눴다. `src/serve.rs`의 불필요한 `#[path]`는 지웠다 |
@@ -165,7 +165,7 @@ cargo xtask layers
 - 코드를 바꾸지 않고 이 문서가 허용하도록 고친 것: adapters의 `Policy`(`AcceptPolicy`, `WsPolicy`)와 비공개 `Snapshot`(`QuerySnapshot`), 닫힌 목록 밖 suffix(`Guard` `Parser` 등, [7.9절](#79-등록-suffix와-예외-이름)).
 - 비공개 `Wire`(`crates/adapters/src/websocket.rs`)는 소켓을 감싸는 enum이다. 어댑터 내부 저장·전송 형식을 뜻하는 `Wire` suffix와 뜻이 다르다. 모듈 안 비공개 보조 타입이므로 바꾸지 않았다.
 - `LogsFilter`는 조회 조건 입력이다. 표준은 `Query`로 바꾸기를 필요할 때로 둔다. 바꾸지 않았다.
-- 7.3절 C는 `crates/domain`의 개념 타입에만 적용했다. app·adapters의 타입 가운데 모듈 이름으로 시작하는 이름(`ConfigPatch`, `ReloadTrigger`, `TlsFile` 등)은 바꾸지 않았다. 모듈 경로 없이 읽혀야 하는 역할 타입이기 때문이다.
+- 7.3절 C의 예외로 남긴 이름: 7.7절이 업무 이름으로 정한 `Config…`(`ConfigView`, `ConfigPatch`, `ConfigItem`, `ConfigChange`, `ConfigValue`, `ConfigActor`, `ConfigReloadKind`), 7.9절의 `RelayRuntime`, 등록 suffix를 쓰는 `FrameDecoder`다. 역할 suffix가 붙은 이름(`RelayService`, `ReloadSnapshot` 등)은 개념 타입이 아니라서 대상이 아니다.
 - `management::config`가 다시 내보내는 `config_items`는 공개 경로라서 그대로 두었다. 호출하는 쪽은 `management::config::config_items(..)`로 부른다.
 - `crates/app/src/relay/session.rs`의 시험용 `Control`은 대역이 흉내 내는 스트림을 조작하는 시험 쪽 핸들이라 바꾸지 않았다.
 
@@ -226,7 +226,7 @@ cargo xtask layers
 2. 같은 스코프에서 같은 이름과 함께 import될 가능성이 없다.
 3. 모듈 밖으로 `pub use`하지 않는다.
 
-**C. 경로로 표현하는 도메인 개념 타입은 모듈 이름을 되풀이하지 않는다.** 되풀이하면(`session::SessionState`) 사용 쪽이 모듈 경로를 이미 알고 있으므로 중복이다. 이 규칙은 개념 타입에만 적용한다. S 방식 역할 타입은 개념 prefix가 모듈 이름과 겹쳐도 된다(`relay::RelayService`). 이름이 모듈 경로 없이도 뜻을 가져야 하기 때문이다.
+**C. 경로로 표현하는 개념 타입은 모듈 이름을 되풀이하지 않는다.** 되풀이하면(`session::SessionState`) 사용 쪽이 모듈 경로를 이미 알고 있으므로 중복이다. 이 규칙은 개념 타입에만 적용한다. S 방식 역할 타입은 개념 prefix가 모듈 이름과 겹쳐도 된다(`relay::RelayService`). 이름이 모듈 경로 없이도 뜻을 가져야 하기 때문이다.
 
 **D. lint 전제.** `clippy::module_name_repetitions`는 공개 모듈의 공개 항목만 본다. S 방식은 모듈 이름과 겹치는 이름을 허용하므로 이 저장소는 이 lint를 켜지 않는다(작업 공간 lint에 없다). 이름 중복 검사는 코드 리뷰로 한다.
 

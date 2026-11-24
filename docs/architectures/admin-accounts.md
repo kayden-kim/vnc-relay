@@ -7,7 +7,7 @@
 | 구조 시점 | Current |
 | 문서 상태 | Draft |
 | 구현 대조 | Verified — [대조 기록](#대조-기록) |
-| 코드 위치 | `crates/domain/src/account.rs`(`Password`), `crates/app/src/accounts.rs`(`AdminService`, `AdminError`, `AccountsWarning`, `LoadedAccounts`), `crates/app/src/ports.rs`(`AccountStore`, `AccountInputGateway`, `PasswordHashGateway`), `crates/adapters/src/accounts_file.rs`·`crates/adapters/src/accounts_file/`(`AccountsFile`, `HashFloor`, `Argon2PasswordHashGateway`), `crates/adapters/src/terminal.rs`(`TerminalAccountInputGateway`), `crates/adapters/src/terminal/windows_console.rs`(`SavedInputMode`, Windows 전용), `crates/adapters/src/config_file.rs`(`load_admin`), `src/cli.rs`(`Command::Admin`), `src/admin.rs` |
+| 코드 위치 | `crates/domain/src/account.rs`(`Password`), `crates/app/src/accounts.rs`(`AdminService`, `AdminError`, `accounts::Warning`, `LoadedAccounts`), `crates/app/src/ports.rs`(`AccountStore`, `AccountInputGateway`, `PasswordHashGateway`), `crates/adapters/src/accounts_file.rs`·`crates/adapters/src/accounts_file/`(`AccountsFile`, `HashFloor`, `Argon2PasswordHashGateway`), `crates/adapters/src/terminal.rs`(`TerminalAccountInputGateway`), `crates/adapters/src/terminal/windows_console.rs`(`SavedInputMode`, Windows 전용), `crates/adapters/src/config_file.rs`(`load_admin`), `src/cli.rs`(`Command::Admin`), `src/admin.rs` |
 | 코드 지도 | [코드 지도 2절](code-map.md#2-코드-위치와-구성요소), [3절](code-map.md#3-진입점) |
 | 관련 스펙 | [운영 스펙 3.2절](../specs/operations.md#32-로컬-cli-계정-준비), OPS-R15, OPS-029(일부: 로그인 제외), OPS-030 |
 | 관련 계약 | [CLI 계약](../contracts/cli-v1.md) 1.1~1.6절·2절, [설정 계약 1.2절](../contracts/config-v4.md#12-키-표)(`[admin]`) |
@@ -31,7 +31,7 @@
   - 운영 로그. `admin` 명령은 운영 로그를 쓰지 않는다.
 - 다른 모듈에 공개하는 기능:
   - `vnc_relay_domain::account::{Password, PasswordError}`
-  - `vnc_relay_application::accounts::{AdminService, AdminError, LoadedAccounts, AccountsWarning, list}`
+  - `vnc_relay_application::accounts::{AdminService, AdminError, LoadedAccounts, accounts::Warning, list}`
   - `vnc_relay_application::ports::{AccountStore, AccountInputGateway, InputError, PasswordHashGateway, HashError}`
   - `vnc_relay_adapters::accounts_file::{AccountsFile, HashFloor, Argon2PasswordHashGateway, load, parse}`
   - `vnc_relay_adapters::terminal::TerminalAccountInputGateway`
@@ -58,8 +58,8 @@ flowchart LR
 | --- | --- | --- | --- |
 | `crates/domain/src/account.rs` `Password`, `PasswordError` | 비밀번호 규칙(1.2절): 12~128자, UTF-8 512바이트 이하, 제어 문자(`char::is_control`) 없음. `Debug`는 값을 가린다. | 입력을 검사할 때 | 없음 |
 | `crates/app/src/accounts.rs` `AdminService` | 명령별 절차(1.5절 순서). 포트 세 개와 해시 매개변수를 받는다. 경고는 호출한 쪽의 함수로 넘긴다. | `src/admin.rs`가 명령마다 하나 | `ports`, domain |
-| `crates/app/src/accounts.rs` `AdminError` | 절차 실패: `NotInteractive`, `AccountExists(account::Name)`, `AccountNotFound(account::Name)`, `PasswordInvalid(String)`, `PasswordMismatch`, `InputCanceled`, `RuntimeUnavailable(String)`, `Accounts(Vec<AccountsDiagnostic>)`(계정 파일 진단). 코드와 메시지를 준다. `report`가 줄을 쓴다. | 반환 값 | domain |
-| `crates/app/src/accounts.rs` `AccountsWarning` | `FilePermissive`, `LastAccountRemoved`, `CleanupFailed(String)`. `code`와 `message`를 준다. `serve`는 `load`가 돌려준 경고를 같은 코드와 메시지로 stderr에 쓴다. | 반환 값 | 없음 |
+| `crates/app/src/accounts.rs` `AdminError` | 절차 실패: `NotInteractive`, `AccountExists(account::Name)`, `AccountNotFound(account::Name)`, `PasswordInvalid(String)`, `PasswordMismatch`, `InputCanceled`, `RuntimeUnavailable(String)`, `Accounts(Vec<accounts::Diagnostic>)`(계정 파일 진단). 코드와 메시지를 준다. `report`가 줄을 쓴다. | 반환 값 | domain |
+| `crates/app/src/accounts.rs` `accounts::Warning` | `FilePermissive`, `LastAccountRemoved`, `CleanupFailed(String)`. `code`와 `message`를 준다. `serve`는 `load`가 돌려준 경고를 같은 코드와 메시지로 stderr에 쓴다. | 반환 값 | 없음 |
 | `crates/app/src/ports.rs` `AccountStore` | `read`(파일이 없으면 `None`)와 `update`(잠금 안에서 다시 읽고 바꾸고 교체) | 포트 | `accounts` |
 | `crates/app/src/ports.rs` `AccountInputGateway` | `hidden`(숨김 한 줄), `line`(보이는 한 줄, 끝이면 `None`), `canceled`(입력을 연 뒤 Ctrl+C가 왔는지) | 포트 | 없음 |
 | `crates/app/src/ports.rs` `PasswordHashGateway` | 비밀번호와 매개변수로 `PasswordHash`를 만든다. | 포트 | domain |
@@ -81,7 +81,7 @@ flowchart LR
 | 잠금 파일 | `<계정 파일 이름>.lock`, 내용 없음 | 계정 파일과 같은 디렉터리 | `create_new`로 만든다. 저장을 마치거나 실패하면 지운다. |
 | 임시 파일 | `<계정 파일 이름>.<프로세스 ID>.tmp` | 같은 디렉터리 | `create_new`로 만든다. Ubuntu는 만들 때 `0600`이다. 교체 전 실패하면 지운다. 같은 이름의 파일이 이미 있으면 만들지 못하고 그 파일을 지우지 않는다. |
 | PHC 문자열 | `$argon2id$v=19$m=<m>,t=<t>,p=<p>$<솔트>$<해시>` | 계정 파일 | 솔트 16바이트, 해시 32바이트. 만든 뒤 `PasswordHash::parse`로 형식을 확인한다. |
-| `LoadedAccounts` | `accounts: Vec<Account>`, `warnings: Vec<AccountsWarning>` | 반환 값 | 파일 순서. `list`가 이름순으로 정렬한다. |
+| `LoadedAccounts` | `accounts: Vec<Account>`, `warnings: Vec<accounts::Warning>` | 반환 값 | 파일 순서. `list`가 이름순으로 정렬한다. |
 
 ## 4. 처리 순서
 

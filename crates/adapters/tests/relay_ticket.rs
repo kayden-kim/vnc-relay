@@ -24,7 +24,7 @@ use vnc_relay_application::relay::{
 };
 use vnc_relay_application::reload::ConfigCandidate;
 use vnc_relay_application::reload::ports::RuntimeSettingsSource;
-use vnc_relay_application::reload::snapshot::{ReloadCell, ReloadSnapshot};
+use vnc_relay_application::reload::snapshot::{self, ReloadSnapshot};
 use vnc_relay_application::settings::KeepaliveSettings;
 use vnc_relay_domain::budget::ConnectionBudget;
 use vnc_relay_domain::conn_id::ConnId;
@@ -125,7 +125,7 @@ impl Harness {
         settings.limits.buffer_bytes = B as u32;
         settings.keepalive = KEEPALIVE;
         let source: Arc<dyn RuntimeSettingsSource> =
-            Arc::new(ReloadCell::new(ReloadSnapshot::<()>::new(
+            Arc::new(snapshot::Cell::new(ReloadSnapshot::<()>::new(
                 ConfigCandidate {
                     settings,
                     presence: Default::default(),

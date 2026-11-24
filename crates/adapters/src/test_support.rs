@@ -6,7 +6,7 @@ use vnc_relay_application::metrics::{MetricSources, Metrics, MetricsService};
 use vnc_relay_application::ports::{
     AdminSessionSource, Clock, ProcessStats, ProcessStatsSource, RelayStateSource,
 };
-use vnc_relay_application::relay::{RelayCounts, RelaySnapshot};
+use vnc_relay_application::relay::{Counts, RelaySnapshot};
 use vnc_relay_application::reload::ports::RuntimeSettingsSource;
 use vnc_relay_application::settings::Settings;
 use vnc_relay_domain::budget::ConnectionBudget;
@@ -21,8 +21,8 @@ impl RelayStateSource for StubRelayStateSource {
         unreachable!("metrics read counts only")
     }
 
-    fn counts(&self) -> RelayCounts {
-        RelayCounts::default()
+    fn counts(&self) -> Counts {
+        Counts::default()
     }
 }
 

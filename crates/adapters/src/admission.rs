@@ -170,7 +170,7 @@ mod tests {
     use tokio::net::TcpListener;
     use vnc_relay_application::reload::{
         ConfigCandidate,
-        snapshot::{ReloadCell, ReloadSnapshot},
+        snapshot::{Cell, ReloadSnapshot},
     };
 
     struct SpyEventSink(tokio::sync::mpsc::UnboundedSender<Event>);
@@ -197,7 +197,7 @@ mod tests {
             settings,
             presence: Default::default(),
         };
-        let source = Arc::new(ReloadCell::<()>::new(ReloadSnapshot::new(
+        let source = Arc::new(Cell::<()>::new(ReloadSnapshot::new(
             candidate(settings.clone()),
             None,
             None,

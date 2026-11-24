@@ -49,7 +49,7 @@ flowchart LR
     TARGET -->|"연결 쌍"| PAIR["RelayService::run_pair"]
     MATCH -->|"매칭된 연결 쌍"| PAIR
     PAIR --> SESSION["relay/session.rs run_session_controlled"]
-    MATCH --> STATE["RelayRuntime의 RelayState"]
+    MATCH --> STATE["RelayRuntime의 relay::State"]
     PAIR --> STATE
     PAIR --> LOG["EventSink"]
 ```
@@ -57,10 +57,10 @@ flowchart LR
 | 요소·파일 | 역할 | 생성 시점·소유자 | 의존 대상 |
 | --- | --- | --- | --- |
 | `crates/domain/src/target_policy.rs` `TargetPolicy` | `permits_name(name, port)`와 `permits_ip(ip, port)`로 정책 검사. 기존 `TargetItem`, `IpItem::contains` 재사용 | 실행 설정이 원본을 소유하고 대상 시도는 시작 세대의 정책을 보관 | 기존 주소·포트 값 |
-| `crates/domain/src/matching.rs` `WaitingTable` | `RelayId`별 `Waiting`·`Claimed`·`Active`·`Closing` 점유 판정. 연결 식별자·세션 식별자를 비교해 전이 | app의 `RelayState`가 소유 | `RelayId`, `Role`, `ConnId`, `session::Id` |
+| `crates/domain/src/matching.rs` `WaitingTable` | `RelayId`별 `Waiting`·`Claimed`·`Active`·`Closing` 점유 판정. 연결 식별자·세션 식별자를 비교해 전이 | app의 `relay::State`가 소유 | `RelayId`, `Role`, `ConnId`, `session::Id` |
 | `crates/domain/src/session.rs` `session::Id`, `Session`, `CloseCause` | 식별자 형식, `active`·`closing`, 첫 종료 원인, 방향별 카운터 | 세션 활성화 때 생성 | std 값 |
 | `crates/domain/src/recent_closed.rs` `recent_closed::List` | 정리된 세션의 요약, R 초과 시 가장 오래된 항목 제거 | 프로세스마다 하나 | `session` |
-| `crates/app/src/relay.rs` `RelayService`, `RelayRuntime<C>`, `RelayState` | 서비스는 초기 교환과 단계 연결을 맡는다. runtime은 연결 포트·상태 잠금·예산·식별자 포트를 소유한다. | `serve`가 서비스와 공유 runtime을 생성 | domain, `ports`, 허용된 tokio |
+| `crates/app/src/relay.rs` `RelayService`, `RelayRuntime<C>`, `relay::State` | 서비스는 초기 교환과 단계 연결을 맡는다. runtime은 연결 포트·상태 잠금·예산·식별자 포트를 소유한다. | `serve`가 서비스와 공유 runtime을 생성 | domain, `ports`, 허용된 tokio |
 | `crates/app/src/relay/target.rs` | Mode I C·정책·L와 대상 연결 결과 | Mode I 연결 작업 | `TargetGateway`, `Clock`, 예산 |
 | `crates/app/src/relay/matching.rs` | 대기 I/O·W·Lw, 연결 쌍 인계 | 각 대기 연결 작업 | `WaitingTable`, 스트림 인터페이스 |
 | `crates/app/src/relay/session.rs` `run_session_controlled` | 두 방향 중계·EOF·E·전송 종료, 관리자 종료 명령 poll. 최종 등록·예산·사건 정리는 `RelayService::run_pair`가 맡는다. | 매칭 또는 대상 연결을 완료한 작업 | `Session`, 스트림 인터페이스 |
@@ -110,7 +110,7 @@ H 감시는 유효 요청 반환으로 끝난다. C·W·E에서 H를 다시 쓰�
 
 | 이름 | 형태·저장 위치 | 항상 지켜야 할 조건 |
 | --- | --- | --- |
-| `RelayState` | app 공유 잠금 안의 대기 표·점유 표·활성 표·최근 종료 목록·128비트 발급 카운터·수명 단계 | 한 전이에서 관련 항목을 함께 변경한다. 발급 ID 집합은 없다. 잠금 안에서 비동기 대기·DNS·소켓 쓰기를 하지 않는다. |
+| `relay::State` | app 공유 잠금 안의 대기 표·점유 표·활성 표·최근 종료 목록·128비트 발급 카운터·수명 단계 | 한 전이에서 관련 항목을 함께 변경한다. 발급 ID 집합은 없다. 잠금 안에서 비동기 대기·DNS·소켓 쓰기를 하지 않는다. |
 | 대기 항목 | `RelayId`, 역할, `conn_id`, 수락 시각, `registered_at`, `deadline = registered_at + W`, `relay_id_ref`, 스트림·후속 데이터·L permit·Lw permit | ID 원문은 비교·인증된 관리 조회에만 쓴다. 로그는 ref만 쓴다. |
 | `Claimed` 점유 | ID, 역할 순서의 두 연결 식별자, 선행 대기 메타데이터, 매칭 시각 | 두 연결 식별자가 인계의 소유권을 구별한다. 활성화 때 세션 식별자를 이동한다. 인계 중에도 ID를 점유하며 조회의 대기·활성 목록에는 노출하지 않는다. |
 | 활성 항목 | `ActiveSessionSnapshot`의 `Session` 메타데이터, `viewer: ConnectionContext`, `peer: ActivePeer`, 연결 소유자, 종료 요청·완료 알림 | `peer`는 Mode II의 `ActivePeer::Server(ConnectionContext)` 또는 Mode I의 `ActivePeer::Target(SocketAddr)` 중 하나다. `active`와 `closing` 모두 활성 수에 포함한다. Mode II의 양 역할을 함께 점유한다. |
@@ -130,7 +130,7 @@ H 감시는 유효 요청 반환으로 끝난다. C·W·E에서 H를 다시 쓰�
 
 조회 스냅샷은 대기를 `connected_at`, 활성을 `started_at` 오름차순으로 정렬한다. 최근 종료는 `ended_at` 내림차순이다. 같은 시각의 순서는 정하지 않는다. ID 원문은 대기 항목에만 내보낸다. 대기·활성·최근 종료 항목은 계약이 정한 상대 주소를 제공한다. 내부 점유 표를 API 응답으로 직접 직렬화하지 않는다.
 
-현재 초기 교환 중 수는 `crates/app/src/relay.rs`의 `RelayRuntime::track_handshaking()`과 `HandshakingGuard`로 센다. 이 메서드는 `RelayState.handshaking`을 늘리고 가드를 반환한다. 가드는 버려질 때 수를 줄인다. TCP의 `crates/adapters/src/net.rs` `TcpEntryPoint::run`은 `handle_connection` 직전에 가드를 만든다. WS·WSS의 `crates/adapters/src/websocket.rs` `connection`은 101 응답을 flush한 뒤 같은 가드를 만든다. 두 경로 모두 `handle_connection`이 끝나면 성공·실패와 관계없이 가드를 버린다. 성공 경로도 `dispatch` 전에 초기 교환 집계에서 빠진다. 연결 작업이 취소되어 가드가 버려질 때도 수를 줄인다. `RelayRuntime::snapshot`은 같은 상태 잠금 아래 이 수를 `RelaySnapshot.handshaking`에 복사한다.
+현재 초기 교환 중 수는 `crates/app/src/relay.rs`의 `RelayRuntime::track_handshaking()`과 `HandshakingGuard`로 센다. 이 메서드는 `relay::State.handshaking`을 늘리고 가드를 반환한다. 가드는 버려질 때 수를 줄인다. TCP의 `crates/adapters/src/net.rs` `TcpEntryPoint::run`은 `handle_connection` 직전에 가드를 만든다. WS·WSS의 `crates/adapters/src/websocket.rs` `connection`은 101 응답을 flush한 뒤 같은 가드를 만든다. 두 경로 모두 `handle_connection`이 끝나면 성공·실패와 관계없이 가드를 버린다. 성공 경로도 `dispatch` 전에 초기 교환 집계에서 빠진다. 연결 작업이 취소되어 가드가 버려질 때도 수를 줄인다. `RelayRuntime::snapshot`은 같은 상태 잠금 아래 이 수를 `RelaySnapshot.handshaking`에 복사한다.
 
 ## 4. 처리 순서
 
@@ -160,7 +160,7 @@ DNS 후보는 반환 순서를 유지해 허용된 주소만 순차 시도한다
 
 ### 4.2 Mode II 등록과 원자적 매칭
 
-원자적 전이는 동시에 온 작업 중 하나만 상태를 바꾼다는 뜻이다. app은 `RelayState` 잠금 아래 domain 표의 판정과 스트림 이동을 함께 한다. 잠금은 짧게 잡는다. I/O 결과로 이미 관찰한 EOF·오류만 값으로 반영한다.
+원자적 전이는 동시에 온 작업 중 하나만 상태를 바꾼다는 뜻이다. app은 `relay::State` 잠금 아래 domain 표의 판정과 스트림 이동을 함께 한다. 잠금은 짧게 잡는다. I/O 결과로 이미 관찰한 EOF·오류만 값으로 반영한다.
 
 1. 새 요청의 정확한 `RelayId`로 ref를 계산한다. 수명 상태가 종료 중이면 등록하지 않는다.
 2. 잠금을 잡고 현재 시각을 읽는다. 같은 ID 대기의 W 기한·ticket 세션 만료 기한과 관찰한 EOF·오류를 먼저 판정한다. 종료 대상은 매칭 후보에서 제거한다. 제거된 연결의 정리는 잠금 밖에서 끝낸다.

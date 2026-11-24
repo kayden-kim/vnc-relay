@@ -9,7 +9,7 @@ use vnc_relay_domain::target_policy::TargetPolicy;
 use super::*;
 use crate::reload::ports::{ReloadFileStore, ReloadTlsStore, TlsBuildError};
 use crate::reload::service::ReloadService;
-use crate::reload::snapshot::{ReloadCell, ReloadSnapshot};
+use crate::reload::snapshot::{self, ReloadSnapshot};
 use crate::reload::{ConfigFileState, ConfigPresence, LastReloadOutcome};
 use crate::settings::{
     AdminSessionSettings, AdminSettings, Argon2Settings, ConfigError, DashboardSettings,
@@ -151,7 +151,7 @@ struct FakeFiles {
     bytes: Mutex<Vec<u8>>,
     unreadable: Mutex<bool>,
     replace_error: Mutex<Option<ConfigReplaceError>>,
-    cell: Arc<ReloadCell<u32>>,
+    cell: Arc<snapshot::Cell<u32>>,
     snapshot_at_replace: Mutex<Option<Arc<ReloadSnapshot<u32>>>>,
 }
 
@@ -316,7 +316,7 @@ impl ReloadTlsStore<u32> for FakeTls {
 
 struct SpyEventSink {
     trace: Trace,
-    cell: Arc<ReloadCell<u32>>,
+    cell: Arc<snapshot::Cell<u32>>,
     observations: Mutex<Vec<(Event, Arc<ReloadSnapshot<u32>>)>>,
 }
 
@@ -355,7 +355,7 @@ struct Harness {
     document: Arc<FakeDocument>,
     tls: Arc<FakeTls>,
     sink: Arc<SpyEventSink>,
-    cell: Arc<ReloadCell<u32>>,
+    cell: Arc<snapshot::Cell<u32>>,
     trace: Trace,
 }
 
@@ -370,7 +370,7 @@ impl Harness {
         let trace = Arc::new(Mutex::new(Vec::new()));
         let running = candidate(running);
         let management_tls = running.settings.management.tls.as_ref().map(|_| 1);
-        let cell = Arc::new(ReloadCell::new(ReloadSnapshot::new(
+        let cell = Arc::new(snapshot::Cell::new(ReloadSnapshot::new(
             running.clone(),
             None,
             management_tls,
@@ -478,7 +478,7 @@ impl Harness {
                 .unwrap_or_else(|error| panic!("{error:?}"));
             reload.commit_prepared(
                 prepared,
-                ReloadTrigger::FileWatch,
+                Trigger::FileWatch,
                 SystemTime::UNIX_EPOCH + Duration::from_secs(100),
             );
         }
@@ -822,7 +822,7 @@ fn patch_follows_all_ten_steps_and_stops_on_first_error() {
                 assert_eq!(
                     observations[0].0,
                     Event::ReloadApplied {
-                        trigger: ReloadTrigger::ConfigEdit,
+                        trigger: Trigger::ConfigEdit,
                         applied: vec!["timeouts.close_secs".to_owned()],
                     }
                 );
@@ -848,7 +848,7 @@ fn patch_follows_all_ten_steps_and_stops_on_first_error() {
                     Some(&LastReload {
                         at: result.as_of,
                         result: LastReloadOutcome::Applied,
-                        trigger: ReloadTrigger::ConfigEdit,
+                        trigger: Trigger::ConfigEdit,
                         config_keys: result.applied,
                     })
                 );
@@ -1072,7 +1072,7 @@ fn success_audits_only_requested_file_changes_but_applies_entire_prepared_candid
             .collect::<Vec<_>>(),
         vec![
             Event::ReloadApplied {
-                trigger: ReloadTrigger::ConfigEdit,
+                trigger: Trigger::ConfigEdit,
                 applied: applied.clone()
             },
             Event::ConfigEdited {

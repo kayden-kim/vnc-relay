@@ -11,7 +11,7 @@ use std::path::Path;
 
 use toml::{Table, Value};
 use vnc_relay_application::accounts::{
-    ACCOUNTS_FILE_KEY, AccountsDiagnostic, AccountsError, AccountsWarning, LoadedAccounts,
+    ACCOUNTS_FILE_KEY, AccountsError, Diagnostic, LoadedAccounts, Warning,
 };
 use vnc_relay_domain::account::{Account, Argon2Params, Argon2ParamsError, Name, PasswordHash};
 
@@ -30,9 +30,9 @@ pub enum HashFloor {
 
 /// Reads and checks the account file at `path`. A file without accounts is
 /// valid here; `serve` rejects it with `accounts::require_any`.
-pub fn load(path: &Path, floor: HashFloor) -> Result<LoadedAccounts, Vec<AccountsDiagnostic>> {
+pub fn load(path: &Path, floor: HashFloor) -> Result<LoadedAccounts, Vec<Diagnostic>> {
     read(path, floor)?.ok_or_else(|| {
-        vec![AccountsDiagnostic {
+        vec![Diagnostic {
             error: AccountsError::FileMissing,
             key: ACCOUNTS_FILE_KEY.to_owned(),
             message: format!(
@@ -44,7 +44,7 @@ pub fn load(path: &Path, floor: HashFloor) -> Result<LoadedAccounts, Vec<Account
 }
 
 /// Like [`load`], but a missing file is `Ok(None)`.
-fn read(path: &Path, floor: HashFloor) -> Result<Option<LoadedAccounts>, Vec<AccountsDiagnostic>> {
+fn read(path: &Path, floor: HashFloor) -> Result<Option<LoadedAccounts>, Vec<Diagnostic>> {
     let bytes = match std::fs::read(path) {
         Ok(bytes) => bytes,
         Err(error) if error.kind() == ErrorKind::NotFound => return Ok(None),
@@ -54,7 +54,7 @@ fn read(path: &Path, floor: HashFloor) -> Result<Option<LoadedAccounts>, Vec<Acc
                 ErrorKind::IsADirectory => "파일이 아니라 디렉터리다",
                 _ => "읽을 수 없다",
             };
-            return Err(vec![AccountsDiagnostic {
+            return Err(vec![Diagnostic {
                 error: AccountsError::FileUnreadable,
                 key: ACCOUNTS_FILE_KEY.to_owned(),
                 message: format!("계정 파일을 읽을 수 없다({reason}): {}", path.display()),
@@ -62,7 +62,7 @@ fn read(path: &Path, floor: HashFloor) -> Result<Option<LoadedAccounts>, Vec<Acc
         }
     };
     let text = String::from_utf8(bytes).map_err(|_| {
-        vec![AccountsDiagnostic {
+        vec![Diagnostic {
             error: AccountsError::FileInvalid,
             key: String::new(),
             message: "계정 파일이 UTF-8 텍스트가 아니다.".to_owned(),
@@ -70,7 +70,7 @@ fn read(path: &Path, floor: HashFloor) -> Result<Option<LoadedAccounts>, Vec<Acc
     })?;
     let accounts = parse(&text, floor)?;
     let warnings = if is_permissive(path) {
-        vec![AccountsWarning::FilePermissive]
+        vec![Warning::FilePermissive]
     } else {
         Vec::new()
     };
@@ -79,7 +79,7 @@ fn read(path: &Path, floor: HashFloor) -> Result<Option<LoadedAccounts>, Vec<Acc
 
 /// Checks account file text and returns every diagnostic found, or the
 /// accounts in file order.
-pub fn parse(text: &str, floor: HashFloor) -> Result<Vec<Account>, Vec<AccountsDiagnostic>> {
+pub fn parse(text: &str, floor: HashFloor) -> Result<Vec<Account>, Vec<Diagnostic>> {
     let table: Table = text.parse().map_err(|error: toml::de::Error| {
         let message = match toml_text::error_position(text, &error) {
             Some((line, column)) => {
@@ -143,7 +143,7 @@ fn read_account(
     item: &Value,
     floor: HashFloor,
     first_index: &mut BTreeMap<String, usize>,
-    problems: &mut Vec<AccountsDiagnostic>,
+    problems: &mut Vec<Diagnostic>,
 ) -> Option<Account> {
     let path = format!("account[{index}]");
     let Value::Table(table) = item else {
@@ -187,7 +187,7 @@ fn string_field<'a>(
     table: &'a Table,
     path: &str,
     field: &str,
-    problems: &mut Vec<AccountsDiagnostic>,
+    problems: &mut Vec<Diagnostic>,
 ) -> Option<&'a str> {
     let key = format!("{path}.{field}");
     match table.get(field) {
@@ -208,7 +208,7 @@ fn read_hash(
     text: &str,
     key: String,
     floor: HashFloor,
-    problems: &mut Vec<AccountsDiagnostic>,
+    problems: &mut Vec<Diagnostic>,
 ) -> Option<PasswordHash> {
     let hash = match PasswordHash::parse(text) {
         Ok(hash) => hash,
@@ -237,7 +237,7 @@ fn read_hash(
         ),
         Argon2ParamsError::AboveMaximum => (AccountsError::FileInvalid, ""),
     };
-    problems.push(AccountsDiagnostic {
+    problems.push(Diagnostic {
         error: code,
         key,
         message: format!(
@@ -256,15 +256,15 @@ fn read_hash(
     None
 }
 
-fn invalid(key: String, message: String) -> AccountsDiagnostic {
-    AccountsDiagnostic {
+fn invalid(key: String, message: String) -> Diagnostic {
+    Diagnostic {
         error: AccountsError::FileInvalid,
         key,
         message,
     }
 }
 
-fn unknown_key(key: String) -> AccountsDiagnostic {
+fn unknown_key(key: String) -> Diagnostic {
     invalid(key, "알 수 없는 키다.".to_owned())
 }
 

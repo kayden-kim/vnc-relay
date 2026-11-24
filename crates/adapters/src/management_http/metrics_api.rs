@@ -8,9 +8,7 @@ use axum::http::{Method, StatusCode};
 use axum::response::Response;
 use serde_json::{Map, Value, json};
 use vnc_relay_application::management::session::AuthorizedAdmin;
-use vnc_relay_application::metrics::history::{
-    HISTORY_KEYS, HistoryPoint, HistoryView, HistoryWindow,
-};
+use vnc_relay_application::metrics::history::{HISTORY_KEYS, HistoryView, Point, Window};
 use vnc_relay_application::metrics::snapshot::{
     MetricFamily, MetricKind, MetricPoint, MetricsSnapshot, Number, PointValue,
 };
@@ -64,7 +62,7 @@ pub(super) async fn answer(
 /// most once: the window is `1h` (the default) or `24h`, case-sensitive;
 /// `history_after` is `[0-9]+` within `u64`. Every pair is decoded as in
 /// §1.15; other parameters are ignored.
-fn history_query(query: Option<&str>) -> Result<(HistoryWindow, Option<u64>), &'static str> {
+fn history_query(query: Option<&str>) -> Result<(Window, Option<u64>), &'static str> {
     let mut window = None;
     let mut after = None;
     for pair in query.unwrap_or_default().split('&') {
@@ -80,8 +78,8 @@ fn history_query(query: Option<&str>) -> Result<(HistoryWindow, Option<u64>), &'
                     return Err("history_window 매개변수가 중복되었습니다.");
                 }
                 window = Some(match value.as_str() {
-                    "1h" => HistoryWindow::Hour,
-                    "24h" => HistoryWindow::Day,
+                    "1h" => Window::Hour,
+                    "24h" => Window::Day,
                     _ => return Err("history_window는 1h 또는 24h여야 합니다."),
                 });
             }
@@ -101,12 +99,12 @@ fn history_query(query: Option<&str>) -> Result<(HistoryWindow, Option<u64>), &'
             _ => {}
         }
     }
-    Ok((window.unwrap_or(HistoryWindow::Hour), after))
+    Ok((window.unwrap_or(Window::Hour), after))
 }
 
 /// The body of metrics-v1 §1.7. The history, up to 1440 points, moves into
 /// the body instead of being copied by `json!`.
-fn metrics_json(snapshot: &MetricsSnapshot, window: HistoryWindow, history: &HistoryView) -> Value {
+fn metrics_json(snapshot: &MetricsSnapshot, window: Window, history: &HistoryView) -> Value {
     let mut history_object = Map::new();
     history_object.insert(
         "interval_secs".to_owned(),
@@ -178,7 +176,7 @@ fn point_json(point: &MetricPoint) -> Value {
     }
 }
 
-fn history_point_json(point: &HistoryPoint) -> Value {
+fn history_point_json(point: &Point) -> Value {
     let values: Map<String, Value> = HISTORY_KEYS
         .iter()
         .zip(&point.values)
@@ -241,8 +239,8 @@ mod tests {
         service.sample_history();
         let body = metrics_json(
             &service.snapshot(),
-            HistoryWindow::Hour,
-            &service.history_after(HistoryWindow::Hour, None),
+            Window::Hour,
+            &service.history_after(Window::Hour, None),
         );
 
         let metric = |name: &str| {
@@ -278,7 +276,7 @@ mod tests {
     /// spec: management.md:MGT-059 partial
     #[test]
     fn history_query_accepts_one_window_and_one_unsigned_decimal() {
-        use HistoryWindow::{Day, Hour};
+        use Window::{Day, Hour};
         assert_eq!(history_query(None), Ok((Hour, None)));
         assert_eq!(history_query(Some("")), Ok((Hour, None)));
         assert_eq!(history_query(Some("history_after=0")), Ok((Hour, Some(0))));

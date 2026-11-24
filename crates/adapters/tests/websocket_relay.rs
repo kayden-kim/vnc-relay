@@ -30,7 +30,7 @@ use vnc_relay_application::events::Event;
 use vnc_relay_application::metrics::Metrics;
 use vnc_relay_application::ports::{Clock, EventSink};
 use vnc_relay_application::relay::{RelayRuntime, RelayRuntimeConfig, RelayService};
-use vnc_relay_application::reload::snapshot::{ReloadCell, ReloadSnapshot};
+use vnc_relay_application::reload::snapshot::{self, ReloadSnapshot};
 use vnc_relay_application::settings::KeepaliveSettings;
 use vnc_relay_domain::allow_list::{AllowList, IpItem};
 use vnc_relay_domain::budget::ConnectionBudget;
@@ -192,7 +192,7 @@ impl Running {
             TargetItem::parse("127.0.0.1:1-65535")
                 .unwrap_or_else(|error| panic!("loopback targets: {error:?}")),
         ]));
-        let cell = Arc::new(ReloadCell::new(ReloadSnapshot::new(
+        let cell = Arc::new(snapshot::Cell::new(ReloadSnapshot::new(
             vnc_relay_application::reload::ConfigCandidate {
                 settings: running,
                 presence: Default::default(),
