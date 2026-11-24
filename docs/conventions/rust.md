@@ -226,7 +226,7 @@ cargo xtask layers
 2. 같은 스코프에서 같은 이름과 함께 import될 가능성이 없다.
 3. 모듈 밖으로 `pub use`하지 않는다.
 
-**C. 경로로 표현하는 개념 타입은 모듈 이름을 되풀이하지 않는다.** 되풀이하면(`session::SessionState`) 사용 쪽이 모듈 경로를 이미 알고 있으므로 중복이다. 이 규칙은 개념 타입에만 적용한다. S 방식 역할 타입은 개념 prefix가 모듈 이름과 겹쳐도 된다(`relay::RelayService`). 이름이 모듈 경로 없이도 뜻을 가져야 하기 때문이다.
+**C. 경로로 표현하는 개념 타입은 모듈 이름을 되풀이하지 않는다.** 되풀이하면(`session::SessionState`) 사용 쪽이 모듈 경로를 이미 알고 있으므로 중복이다. 모듈 이름에는 선언한 모듈과 그 상위 모듈이 모두 해당한다(`reload::snapshot::ReloadCell` → `snapshot::Cell`). 도메인뿐 아니라 app·adapters의 개념 타입에도 적용한다. [7.4절](#74-계층별-규칙과-이-저장소의-배치)의 `Service` `Command` `View` 같은 suffix 목록은 역할 타입에 대한 것이고, 이 규칙은 그 목록에 해당하지 않는 개념 타입에만 적용한다. S 방식 역할 타입은 개념 prefix가 모듈 이름과 겹쳐도 된다(`relay::RelayService`). 이름이 모듈 경로 없이도 뜻을 가져야 하기 때문이다.
 
 **D. lint 전제.** `clippy::module_name_repetitions`는 공개 모듈의 공개 항목만 본다. S 방식은 모듈 이름과 겹치는 이름을 허용하므로 이 저장소는 이 lint를 켜지 않는다(작업 공간 lint에 없다). 이름 중복 검사는 코드 리뷰로 한다.
 
@@ -390,6 +390,8 @@ crate 이름은 `kebab-case`이고 `-rs`·`-rust`를 붙이지 않는다. 단수
 | `WatchGateway`, `ServiceInstallGateway` | adapters와 `src/`의 crate 안 포트 | 포트 trait을 app이 아닌 곳에 둔다. | app의 사용 사례가 부르지 않는 OS 기능(파일 감시, SCM)을 시험에서 바꿔 끼우는 용도다. suffix 어휘와 구현체 규칙은 같다. |
 | `HandshakeRequest` | domain enum | adapters가 소유한 API 요청 모델이 아닌데 `Request`로 끝난다. | [Repeater 초기 교환 계약](../contracts/repeater-handshake-v1.md)이 "초기 요청"이라 부르는 업무 값이다. |
 | 실행 crate 안의 보조 타입 | `vnc-relay-tray`의 `worker::Request` `Reply` | suffix 없이 짧은 이름을 쓴다. | 실행 crate의 타입은 다른 crate가 import하지 않고 계층 경계를 넘지 않는다([7.3절](#73-suffix가-필요한-조건) A1·A4에 해당하지 않는다). 금지 이름 규칙은 그대로 적용한다. |
+| `tls::File`, `snapshot::Cell` | adapters enum, app 공유 셀 | 표준 라이브러리 `std::fs::File`·`std::cell::Cell`과 이름이 같다([7.3절](#73-suffix가-필요한-조건) A2). `snapshot::Cell`은 다른 crate도 import한다(A1). | 7.3절 C를 app·adapters에도 적용하면서 `TlsFile`·`ReloadCell`의 모듈 이름 되풀이를 없앴다. 항상 부모 모듈을 붙여 쓴다(`tls::File`, `snapshot::Cell`). 단독으로 import하지 않는다. |
+| `sources::Report` | app struct | 경계 출력이다. [7.2절](#72-역할-단어-선택)은 `View`를 정하고 닫힌 어휘에 `Report`가 없다. | management-api-v1 §1.17의 `200` 본문을 JSON 변환 전에 담는 값이다. `sources` 모듈 경로가 맥락을 주므로 `sources::Report`로 쓴다. |
 
 ### 7.10 도메인 prefix
 
