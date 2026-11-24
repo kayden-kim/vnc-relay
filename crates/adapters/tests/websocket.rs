@@ -16,7 +16,7 @@ use rustls::{CertificateError, ClientConfig, RootCertStore, SupportedProtocolVer
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpSocket, TcpStream};
 use tokio::sync::watch;
-use tokio::time::timeout;
+use tokio::time;
 use tokio_rustls::{TlsAcceptor, TlsConnector};
 use vnc_relay_adapters::accounts_file::{Argon2PasswordHashGateway, Argon2PasswordVerifyGateway};
 use vnc_relay_adapters::clock::SystemClock;
@@ -27,27 +27,27 @@ use vnc_relay_adapters::process_stats::OsProcessStats;
 use vnc_relay_adapters::target::TcpTargetGateway;
 use vnc_relay_adapters::tls;
 use vnc_relay_adapters::websocket::{WsEntryPoint, WsPolicy};
-use vnc_relay_app::events::{AbortReason, ConnectionErrorKind, Event, RejectReason, Stage};
-use vnc_relay_app::management::login::dummy_hash;
-use vnc_relay_app::management::query::ManagementQueryService;
-use vnc_relay_app::management::terminate::{ManagementTerminateService, TerminationTicket};
-use vnc_relay_app::management::{AdminAuth, AdminPorts};
-use vnc_relay_app::metrics::{MetricSources, Metrics, MetricsService};
-use vnc_relay_app::ports::{
+use vnc_relay_application::events::{AbortReason, ConnectionErrorKind, Event, RejectReason, Stage};
+use vnc_relay_application::management::login;
+use vnc_relay_application::management::query::ManagementQueryService;
+use vnc_relay_application::management::terminate::{ManagementTerminateService, TerminationTicket};
+use vnc_relay_application::management::{AdminAuth, AdminPorts};
+use vnc_relay_application::metrics::{MetricSources, Metrics, MetricsService};
+use vnc_relay_application::ports::{
     AdminSessionSource, Clock, EventSink, RelayLifecycle, RelaySessionControl, RelayStateSource,
 };
-use vnc_relay_app::relay::{
+use vnc_relay_application::relay::{
     RelayCounts, RelayRuntime, RelayRuntimeConfig, RelayService, RelaySnapshot,
 };
-use vnc_relay_app::reload::snapshot::{ReloadCell, ReloadSnapshot};
-use vnc_relay_app::settings::KeepaliveSettings;
+use vnc_relay_application::reload::snapshot::{ReloadCell, ReloadSnapshot};
+use vnc_relay_application::settings::KeepaliveSettings;
 use vnc_relay_domain::account::Argon2Params;
-use vnc_relay_domain::admin_session::AdminSessionPolicy;
+use vnc_relay_domain::admin_session;
 use vnc_relay_domain::allow_list::{AllowList, IpItem};
 use vnc_relay_domain::budget::ConnectionBudget;
 use vnc_relay_domain::entry_point::EntryPoint;
-use vnc_relay_domain::handshake::{HandshakePolicy, VIEWER_GREETING};
-use vnc_relay_domain::login_limit::LoginLimitPolicy;
+use vnc_relay_domain::handshake::{self, VIEWER_GREETING};
+use vnc_relay_domain::login_limit;
 use vnc_relay_domain::origin::Origin;
 
 /// Upper bound for one exchange. A hang fails the test instead of blocking it.
@@ -88,7 +88,7 @@ const VERSION_LINE: &str = "Sec-WebSocket-Version: 13";
 
 const ALLOWED_ORIGIN: &str = "https://a.example:8443";
 
-fn runtime_settings() -> vnc_relay_app::settings::Settings {
+fn runtime_settings() -> vnc_relay_application::settings::Settings {
     vnc_relay_adapters::config_file::parse(
         "[admin]\naccounts_file='accounts.toml'\n[management]\nlisten='127.0.0.1:8443'\n[status]\nlisten='127.0.0.1:9090'\n",
         Path::new("."),
@@ -130,22 +130,22 @@ fn connector(versions: &[&'static SupportedProtocolVersion]) -> TlsConnector {
 
 /// Collects every event the entry point records.
 #[derive(Default)]
-struct Recorder(Mutex<Vec<Event>>);
+struct SpyEventSink(Mutex<Vec<Event>>);
 
-impl Recorder {
+impl SpyEventSink {
     fn lock(&self) -> MutexGuard<'_, Vec<Event>> {
         self.0.lock().unwrap_or_else(PoisonError::into_inner)
     }
 }
 
-impl EventSink for Recorder {
+impl EventSink for SpyEventSink {
     fn record(&self, event: &Event) {
         self.lock().push(event.clone());
     }
 }
 
 /// Waits until an event that `matches` is recorded.
-async fn wait_for(events: &Recorder, matches: impl Fn(&Event) -> bool) {
+async fn wait_for(events: &SpyEventSink, matches: impl Fn(&Event) -> bool) {
     let found = async {
         loop {
             if events.lock().iter().any(&matches) {
@@ -154,7 +154,7 @@ async fn wait_for(events: &Recorder, matches: impl Fn(&Event) -> bool) {
             tokio::time::sleep(Duration::from_millis(10)).await;
         }
     };
-    timeout(LIMIT, found)
+    time::timeout(LIMIT, found)
         .await
         .unwrap_or_else(|_| panic!("the expected event is recorded within {LIMIT:?}"));
 }
@@ -162,7 +162,7 @@ async fn wait_for(events: &Recorder, matches: impl Fn(&Event) -> bool) {
 /// A running entry point and what it recorded.
 struct Running {
     addr: SocketAddr,
-    events: Arc<Recorder>,
+    events: Arc<SpyEventSink>,
     stop: watch::Sender<bool>,
     service: Arc<RelayService>,
     runtime: Arc<RelayRuntime<TcpTargetGateway>>,
@@ -221,7 +221,7 @@ async fn start_with_handshake(
     let addr = listener
         .local_addr()
         .unwrap_or_else(|error| panic!("local address: {error}"));
-    let events = Arc::new(Recorder::default());
+    let events = Arc::new(SpyEventSink::default());
     let (stop, stopped) = watch::channel(false);
     let allow_list = AllowList::new(
         allow
@@ -251,7 +251,7 @@ async fn start_with_handshake(
     settings.timeouts.close = CLOSE;
     settings.keepalive = KEEPALIVE;
     let cell = Arc::new(ReloadCell::new(ReloadSnapshot::new(
-        vnc_relay_app::reload::ConfigCandidate {
+        vnc_relay_application::reload::ConfigCandidate {
             settings,
             presence: Default::default(),
         },
@@ -264,7 +264,7 @@ async fn start_with_handshake(
         EntryPoint::WssViewer => AllowSource::wss(Arc::clone(&cell)),
         _ => panic!("the WS helper takes WsViewer or WssViewer"),
     };
-    let source: Arc<dyn vnc_relay_app::reload::ports::RuntimeSettingsSource> = cell.clone();
+    let source: Arc<dyn vnc_relay_application::reload::ports::RuntimeSettingsSource> = cell.clone();
     let relay_budget = ConnectionBudget::new();
     let policy = WsPolicy {
         accept: AcceptPolicy {
@@ -292,7 +292,7 @@ async fn start_with_handshake(
         Arc::clone(&source),
     ));
     let service = Arc::new(RelayService::new(
-        HandshakePolicy {
+        handshake::Policy {
             mode1_enabled: true,
             mode2_enabled: true,
         },
@@ -381,7 +381,7 @@ async fn read_head<S: AsyncRead + Unpin>(stream: &mut S) -> Vec<u8> {
             }
         }
     };
-    timeout(LIMIT, reading)
+    time::timeout(LIMIT, reading)
         .await
         .unwrap_or_else(|_| panic!("the reply ends within {LIMIT:?}"));
     head
@@ -390,7 +390,7 @@ async fn read_head<S: AsyncRead + Unpin>(stream: &mut S) -> Vec<u8> {
 /// Checks the very first server data message, including its frame boundary.
 async fn assert_greeting<S: AsyncRead + Unpin>(stream: &mut S) {
     let mut frame = [0; 2 + VIEWER_GREETING.len()];
-    timeout(LIMIT, stream.read_exact(&mut frame))
+    time::timeout(LIMIT, stream.read_exact(&mut frame))
         .await
         .unwrap_or_else(|error| panic!(concat!("greeting arrives", ": {:?}"), error))
         .unwrap_or_else(|error| panic!("greeting reads: {error}"));
@@ -454,7 +454,7 @@ async fn refused(addr: SocketAddr, request: &[u8]) -> Vec<u8> {
         .unwrap_or_else(|error| panic!("connect: {error}"));
     let _ = stream.write_all(request).await;
     let mut reply = Vec::new();
-    let closed = timeout(PROMPT, stream.read_to_end(&mut reply)).await;
+    let closed = time::timeout(PROMPT, stream.read_to_end(&mut reply)).await;
     assert!(
         closed.is_ok(),
         "the refused connection closes within {PROMPT:?}"
@@ -689,7 +689,7 @@ async fn disallowed_source_on_wss_is_closed_before_tls_and_holds_no_relay_place(
     // The refused client starts a real TLS handshake. The server must close
     // before ServerHello within PROMPT, far below U.
     let tcp = connect_from([127, 0, 0, 2], running.addr).await;
-    let attempt = timeout(
+    let attempt = time::timeout(
         PROMPT,
         connector(&[&TLS12, &TLS13]).connect(name.clone(), tcp),
     )
@@ -749,7 +749,7 @@ async fn ws_and_wss_check_only_their_own_allow_lists() {
     let mut plain = connect_from([127, 0, 0, 3], ws.addr).await;
     let _ = plain.write_all(&request).await;
     let mut reply = Vec::new();
-    let closed = timeout(PROMPT, plain.read_to_end(&mut reply)).await;
+    let closed = time::timeout(PROMPT, plain.read_to_end(&mut reply)).await;
     assert!(closed.is_ok(), "ws closes 127.0.0.3 within {PROMPT:?}");
     assert!(reply.is_empty(), "ws gives 127.0.0.3 no HTTP reply");
     wait_for(&ws.events, |event| {
@@ -766,7 +766,7 @@ async fn ws_and_wss_check_only_their_own_allow_lists() {
     .await;
 
     let tcp = connect_from([127, 0, 0, 2], wss.addr).await;
-    let attempt = timeout(
+    let attempt = time::timeout(
         PROMPT,
         connector(&[&TLS12, &TLS13]).connect(name.clone(), tcp),
     )
@@ -946,7 +946,7 @@ async fn stalled_upgrade_request_is_closed_at_u_without_a_reply() {
         .await
         .unwrap_or_else(|error| panic!("partial head is sent: {error}"));
     let mut reply = Vec::new();
-    let closed = timeout(LIMIT, stream.read_to_end(&mut reply)).await;
+    let closed = time::timeout(LIMIT, stream.read_to_end(&mut reply)).await;
     assert!(
         closed.is_ok(),
         "the server closes the stalled upgrade within {LIMIT:?}"
@@ -981,7 +981,7 @@ async fn stalled_tls_handshake_on_wss_is_closed_at_u_without_a_reply() {
         .unwrap_or_else(|error| panic!("connect: {error}"));
     // No ClientHello is sent.
     let mut reply = Vec::new();
-    let closed = timeout(LIMIT, stream.read_to_end(&mut reply)).await;
+    let closed = time::timeout(LIMIT, stream.read_to_end(&mut reply)).await;
     assert!(
         closed.is_ok(),
         "the server closes the stalled handshake within {LIMIT:?}"
@@ -1049,14 +1049,14 @@ async fn head_completed_after_u_gets_no_answer() {
 
 /// Starts a management listener on loopback with the given TLS acceptor. Returns
 /// its address and what it records. Lm is 8 and U is `UPGRADE`.
-async fn start_management(tls: Option<TlsAcceptor>) -> (SocketAddr, Arc<Recorder>) {
+async fn start_management(tls: Option<TlsAcceptor>) -> (SocketAddr, Arc<SpyEventSink>) {
     let listener = TcpListener::bind("127.0.0.1:0")
         .await
         .unwrap_or_else(|error| panic!("loopback bind: {error}"));
     let addr = listener
         .local_addr()
         .unwrap_or_else(|error| panic!("local address: {error}"));
-    let events = Arc::new(Recorder::default());
+    let events = Arc::new(SpyEventSink::default());
     let log: Arc<dyn EventSink> = events.clone();
     let budget = ConnectionBudget::new();
     let mut settings = runtime_settings();
@@ -1065,14 +1065,14 @@ async fn start_management(tls: Option<TlsAcceptor>) -> (SocketAddr, Arc<Recorder
     settings.timeouts.tls_upgrade = UPGRADE;
     let secure = tls.is_some();
     let cell = Arc::new(ReloadCell::new(ReloadSnapshot::new(
-        vnc_relay_app::reload::ConfigCandidate {
+        vnc_relay_application::reload::ConfigCandidate {
             settings,
             presence: Default::default(),
         },
         None,
         tls,
     )));
-    let source: Arc<dyn vnc_relay_app::reload::ports::RuntimeSettingsSource> = cell.clone();
+    let source: Arc<dyn vnc_relay_application::reload::ports::RuntimeSettingsSource> = cell.clone();
     // No admin account: the tests only need the TLS handshake and a 401 for a
     // stale session cookie.
     let params = Argon2Params {
@@ -1080,7 +1080,7 @@ async fn start_management(tls: Option<TlsAcceptor>) -> (SocketAddr, Arc<Recorder
         iterations: 1,
         parallelism: 1,
     };
-    let dummy = dummy_hash(&Argon2PasswordHashGateway, params)
+    let dummy = login::dummy_hash(&Argon2PasswordHashGateway, params)
         .unwrap_or_else(|error| panic!("dummy hash is made: {error}"));
     let clock: Arc<dyn Clock> = Arc::new(SystemClock::new());
     let auth = Arc::new(AdminAuth::new(
@@ -1092,13 +1092,13 @@ async fn start_management(tls: Option<TlsAcceptor>) -> (SocketAddr, Arc<Recorder
             clock: Arc::clone(&clock),
             events: Arc::clone(&log),
         },
-        AdminSessionPolicy::new(Duration::from_secs(600), Duration::from_secs(3600)),
-        LoginLimitPolicy::new(5, 20, Duration::from_secs(300), Duration::from_secs(60)),
+        admin_session::Policy::new(Duration::from_secs(600), Duration::from_secs(3600)),
+        login_limit::Policy::new(5, 20, Duration::from_secs(300), Duration::from_secs(60)),
     ));
     let snapshot = cell.current();
     let reload = Arc::new(Mutex::new(
-        vnc_relay_app::reload::service::ReloadService::new(
-            vnc_relay_app::reload::ConfigCandidate {
+        vnc_relay_application::reload::service::ReloadService::new(
+            vnc_relay_application::reload::ConfigCandidate {
                 settings: snapshot.settings.as_ref().clone(),
                 presence: snapshot.presence.as_ref().clone(),
             },
@@ -1109,15 +1109,17 @@ async fn start_management(tls: Option<TlsAcceptor>) -> (SocketAddr, Arc<Recorder
             Arc::clone(&log),
         ),
     ));
-    let config = Arc::new(vnc_relay_app::management::config::ConfigEditService::new(
-        reload,
-        Arc::new(vnc_relay_adapters::config_edit::FsConfigFileStore),
-        Arc::new(vnc_relay_adapters::config_edit::TomlConfigDocumentGateway),
-        PathBuf::from("missing-websocket-fixture.toml"),
-        PathBuf::from("."),
-        Arc::clone(&clock),
-        Arc::clone(&log),
-    ));
+    let config = Arc::new(
+        vnc_relay_application::management::config::ConfigEditService::new(
+            reload,
+            Arc::new(vnc_relay_adapters::config_edit::FsConfigFileStore),
+            Arc::new(vnc_relay_adapters::config_edit::TomlConfigDocumentGateway),
+            PathBuf::from("missing-websocket-fixture.toml"),
+            PathBuf::from("."),
+            Arc::clone(&clock),
+            Arc::clone(&log),
+        ),
+    );
     let dashboard = DashboardHints::new(
         Duration::from_secs(2),
         Duration::from_secs(5),
@@ -1126,21 +1128,21 @@ async fn start_management(tls: Option<TlsAcceptor>) -> (SocketAddr, Arc<Recorder
     let tls = secure.then(|| tls::TlsSource::management(cell));
     let relay_budget = ConnectionBudget::new();
     let query = Arc::new(ManagementQueryService::new(
-        Arc::new(EmptyRelaySource),
+        Arc::new(StubRelayStateSource),
         Arc::clone(&relay_budget),
         Arc::clone(&budget),
         Arc::clone(&clock),
         Arc::clone(&source),
     ));
     let terminate = Arc::new(ManagementTerminateService::new(
-        Arc::new(EmptyRelaySource),
+        Arc::new(StubRelayStateSource),
         Arc::clone(&clock),
         Arc::clone(&log),
     ));
     let metrics = Arc::new(MetricsService::new(
         Arc::new(Metrics::new(clock.as_ref())),
         MetricSources {
-            relay: Arc::new(EmptyRelaySource),
+            relay: Arc::new(StubRelayStateSource),
             relay_budget,
             admin_budget: Arc::clone(&budget),
             settings: Arc::clone(&source),
@@ -1151,8 +1153,8 @@ async fn start_management(tls: Option<TlsAcceptor>) -> (SocketAddr, Arc<Recorder
         "test",
     ));
     // No relay event reaches this listener's sources; the route only needs a reader.
-    let lookup = Arc::new(vnc_relay_app::ip_info::IpLookup::new());
-    let ip_info = Arc::new(vnc_relay_app::ip_info::IpInfoService::new(
+    let lookup = Arc::new(vnc_relay_application::ip_info::IpLookup::new());
+    let ip_info = Arc::new(vnc_relay_application::ip_info::IpInfoService::new(
         None,
         None,
         Arc::new(vnc_relay_adapters::ip_db::MmdbFileGateway),
@@ -1160,8 +1162,10 @@ async fn start_management(tls: Option<TlsAcceptor>) -> (SocketAddr, Arc<Recorder
         Arc::clone(&clock),
         Arc::clone(&log),
     ));
-    let sources = Arc::new(vnc_relay_app::sources::SourcesService::new(
-        Arc::new(vnc_relay_app::sources::SourceStats::new(lookup, clock)),
+    let sources = Arc::new(vnc_relay_application::sources::SourcesService::new(
+        Arc::new(vnc_relay_application::sources::SourceStats::new(
+            lookup, clock,
+        )),
         ip_info,
         Arc::clone(&source),
     ));
@@ -1185,13 +1189,13 @@ async fn start_management(tls: Option<TlsAcceptor>) -> (SocketAddr, Arc<Recorder
     (addr, events)
 }
 
-struct EmptyRelaySource;
+struct StubRelayStateSource;
 
-impl RelaySessionControl for EmptyRelaySource {
+impl RelaySessionControl for StubRelayStateSource {
     fn request_terminate(
         &self,
         _session_id: &str,
-        _account: vnc_relay_domain::account::AccountName,
+        _account: vnc_relay_domain::account::Name,
         _peer: vnc_relay_domain::peer_ip::PeerIp,
         _clock: &dyn Clock,
         _events: &dyn EventSink,
@@ -1200,7 +1204,7 @@ impl RelaySessionControl for EmptyRelaySource {
     }
 }
 
-impl RelayStateSource for EmptyRelaySource {
+impl RelayStateSource for StubRelayStateSource {
     fn snapshot(&self, clock: &dyn Clock) -> RelaySnapshot {
         RelaySnapshot {
             lifecycle: RelayLifecycle::Running,
@@ -1250,7 +1254,7 @@ fn legacy_client_hello(legacy_version: [u8; 2]) -> Vec<u8> {
 async fn assert_legacy_hello_refused(
     addr: SocketAddr,
     legacy_version: [u8; 2],
-    events: &Recorder,
+    events: &SpyEventSink,
     relay: bool,
 ) {
     let mut stream = TcpStream::connect(addr)
@@ -1261,7 +1265,7 @@ async fn assert_legacy_hello_refused(
         .await
         .unwrap_or_else(|error| panic!("hello is sent: {error}"));
     let mut reply = Vec::new();
-    let closed = timeout(PROMPT, stream.read_to_end(&mut reply)).await;
+    let closed = time::timeout(PROMPT, stream.read_to_end(&mut reply)).await;
     assert!(closed.is_ok(), "the refused hello closes within {PROMPT:?}");
     assert!(
         !reply.starts_with(b"HTTP/"),
@@ -1423,14 +1427,14 @@ async fn assert_initial_exchange_close<S: AsyncRead + AsyncWrite + Unpin>(
         running.shutdown(grace);
     }
     let mut header = [0; 2];
-    timeout(LIMIT, stream.read_exact(&mut header))
+    time::timeout(LIMIT, stream.read_exact(&mut header))
         .await
         .unwrap_or_else(|error| panic!(concat!("close arrives", ": {:?}"), error))
         .unwrap_or_else(|error| panic!("close header: {error}"));
     assert_eq!(header[0], 0x88);
     assert!(header[1] <= 125, "unmasked control frame");
     let mut payload = vec![0; usize::from(header[1])];
-    timeout(LIMIT, stream.read_exact(&mut payload))
+    time::timeout(LIMIT, stream.read_exact(&mut payload))
         .await
         .unwrap_or_else(|error| panic!(concat!("close payload arrives", ": {:?}"), error))
         .unwrap_or_else(|error| panic!("close payload: {error}"));

@@ -3,7 +3,7 @@
 
 use std::collections::HashMap;
 use std::fmt;
-use std::future::poll_fn;
+use std::future;
 use std::net::SocketAddr;
 use std::pin::{Pin, pin};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -12,21 +12,21 @@ use std::task::Poll;
 use std::time::{Duration, SystemTime};
 
 use tokio::sync::watch;
-use vnc_relay_domain::account::AccountName;
-use vnc_relay_domain::budget::{BudgetPermit, ConnectionBudget};
+use vnc_relay_domain::account::Name;
+use vnc_relay_domain::budget::{ConnectionBudget, Permit};
 use vnc_relay_domain::conn_id::ConnId;
 use vnc_relay_domain::entry_point::{EntryPoint, Role};
-use vnc_relay_domain::handshake::{HandshakeError, HandshakePolicy, HandshakeRequest, Mode};
+use vnc_relay_domain::handshake::{HandshakeError, HandshakeRequest, Mode, Policy};
 use vnc_relay_domain::matching::{MatchClaim, WaitingTable};
 use vnc_relay_domain::peer_ip::PeerIp;
-use vnc_relay_domain::recent_closed::RecentClosedList;
+use vnc_relay_domain::recent_closed::List;
 use vnc_relay_domain::relay_id::RelayId;
 use vnc_relay_domain::session::{
-    CloseCause, ClosedSession, Direction, Session, SessionError, SessionId, SessionState, Transport,
+    CloseCause, ClosedSession, Direction, Id, Session, SessionError, State, Transport,
 };
 
 use crate::events::{
-    AbortReason, AdminTerminateResult, Event, RejectReason, RelayIdRef, ShutdownTrigger, Stage,
+    AbortReason, AdminTerminateOutcome, Event, RejectReason, RelayIdRef, ShutdownTrigger, Stage,
 };
 use crate::metrics::Metrics;
 use crate::ports::{
@@ -95,7 +95,7 @@ pub struct PreparedConnection<S> {
     request: HandshakeRequest,
     trailing: Vec<u8>,
     buffer_limit: usize,
-    permit: BudgetPermit,
+    permit: Permit,
     /// Present when the connection was upgraded with an access ticket.
     ticket: Option<TicketBinding>,
     /// From the start of H to the valid request (metrics-v1
@@ -106,7 +106,7 @@ pub struct PreparedConnection<S> {
 
 struct ConnectionResources<S> {
     stream: S,
-    permit: BudgetPermit,
+    permit: Permit,
 }
 
 impl<S> PreparedConnection<S> {
@@ -149,15 +149,7 @@ impl<S> PreparedConnection<S> {
 
     /// Moves all connection resources without reacquiring or releasing L.
     /// The returned prefix must precede reads from the stream (relay spec §3.1).
-    pub fn into_parts(
-        self,
-    ) -> (
-        S,
-        ConnectionContext,
-        HandshakeRequest,
-        Vec<u8>,
-        BudgetPermit,
-    ) {
+    pub fn into_parts(self) -> (S, ConnectionContext, HandshakeRequest, Vec<u8>, Permit) {
         (
             self.stream,
             self.context,
@@ -207,7 +199,7 @@ impl std::error::Error for RelayError {}
 /// Prepares connections and executes their configured relay lifetime.
 /// Preparation remains independently usable (initial-exchange.md §4–6).
 pub struct RelayService {
-    modes: HandshakePolicy,
+    modes: Policy,
     settings: Arc<dyn RuntimeSettingsSource>,
     clock: Arc<dyn Clock>,
     events: Arc<dyn EventSink>,
@@ -219,7 +211,7 @@ impl RelayService {
     /// B and H are supplied by the entry point in the connection context.
     /// `metrics` takes the values that have no event (metrics-v1 §1.3).
     pub fn new(
-        modes: HandshakePolicy,
+        modes: Policy,
         settings: Arc<dyn RuntimeSettingsSource>,
         clock: Arc<dyn Clock>,
         events: Arc<dyn EventSink>,
@@ -250,7 +242,7 @@ impl RelayService {
         stream: S,
         context: ConnectionContext,
         ticket: Option<TicketBinding>,
-        permit: BudgetPermit,
+        permit: Permit,
         shutdown: watch::Receiver<RelayLifecycle>,
     ) -> impl Future<Output = Result<PreparedConnection<S>, RelayError>> + Send
     where
@@ -408,7 +400,7 @@ impl RelayService {
                 // Force bounds disposal, not the best-effort first Close.
                 // Poll once without waiting so WS can still send 1001 when
                 // an initial exchange is stopped with G = 0.
-                poll_fn(|cx| {
+                future::poll_fn(|cx| {
                     let _ = poll_close(cx);
                     Poll::Ready(())
                 })
@@ -428,7 +420,7 @@ impl RelayService {
                 }
             });
             let mut changed = pin!(lifecycle.changed());
-            let complete = poll_fn(|cx| {
+            let complete = future::poll_fn(|cx| {
                 if !watch_closed && let Poll::Ready(result) = changed.as_mut().poll(cx) {
                     watch_closed = result.is_err();
                     return Poll::Ready(false);
@@ -473,10 +465,10 @@ struct RelayState {
     lifecycle: RelayLifecycle,
     matching: WaitingTable,
     waiting: HashMap<RelayId, matching::WaitingConnection>,
-    active: HashMap<SessionId, ActiveSessionSnapshot>,
-    controls: HashMap<SessionId, Arc<Mutex<SessionControl>>>,
-    recent: RecentClosedList,
-    recent_metadata: HashMap<SessionId, ClosedMetadata>,
+    active: HashMap<Id, ActiveSessionSnapshot>,
+    controls: HashMap<Id, Arc<Mutex<SessionHandle>>>,
+    recent: List,
+    recent_metadata: HashMap<Id, ClosedMetadata>,
     next_session: Option<u128>,
     connecting: usize,
     handshaking: usize,
@@ -609,7 +601,7 @@ impl ActivePeer {
 
 #[derive(Debug, Clone)]
 pub struct ActiveSessionSnapshot {
-    pub session_id: SessionId,
+    pub session_id: Id,
     pub mode: Mode,
     pub viewer_transport: Transport,
     pub target_transport: Transport,
@@ -618,7 +610,7 @@ pub struct ActiveSessionSnapshot {
     pub started_at: SystemTime,
     pub started_mono: Duration,
     pub duration: Duration,
-    pub state: SessionState,
+    pub state: State,
     pub viewer: ConnectionContext,
     pub peer: ActivePeer,
     pub relay_id_ref: Option<RelayIdRef>,
@@ -628,7 +620,7 @@ pub struct ActiveSessionSnapshot {
 
 #[derive(Debug, Clone)]
 pub struct ClosedSessionSnapshot {
-    pub session_id: SessionId,
+    pub session_id: Id,
     pub mode: Mode,
     pub viewer_transport: Transport,
     pub target_transport: Transport,
@@ -668,13 +660,13 @@ impl ClosedMetadata {
 }
 
 struct AdminClose {
-    account: AccountName,
+    account: Name,
     peer: PeerIp,
 }
 
 /// The owner holds this lock only during a synchronous engine poll.
 /// HTTP clones its handle under the registry lock, then releases that lock.
-struct SessionControl {
+struct SessionHandle {
     command: watch::Sender<Option<session::SessionCommand>>,
     completion: watch::Sender<Option<Result<Arc<ClosedSessionSnapshot>, ()>>>,
     admin: Option<AdminClose>,
@@ -723,7 +715,7 @@ impl<C> RelayRuntime<C> {
             waiting: HashMap::new(),
             active: HashMap::new(),
             controls: HashMap::new(),
-            recent: RecentClosedList::new(config.recent_closed),
+            recent: List::new(config.recent_closed),
             recent_metadata: HashMap::new(),
             next_session: Some(0),
             connecting: 0,
@@ -861,15 +853,15 @@ impl<C> RelayRuntime<C> {
     /// call started the close. The caller holds the session control lock.
     fn start_close_locked(
         state: &mut RelayState,
-        id: &SessionId,
-        control: &mut SessionControl,
+        id: &Id,
+        control: &mut SessionHandle,
         command: session::SessionCommand,
     ) -> bool {
         let initiated = !control.closing && state.lifecycle != RelayLifecycle::Force;
         if initiated {
             control.closing = true;
             if let Some(entry) = state.active.get_mut(id) {
-                entry.state = SessionState::Closing;
+                entry.state = State::Closing;
             }
             control.command.send_replace(Some(command));
         }
@@ -881,8 +873,8 @@ impl<C> RelayRuntime<C> {
     /// address. The Mode I target address is never checked (OPS-R55).
     fn close_if_denied(
         &self,
-        id: &SessionId,
-        control: &Mutex<SessionControl>,
+        id: &Id,
+        control: &Mutex<SessionHandle>,
         viewer: &ConnectionContext,
         server: Option<&ConnectionContext>,
         clock: &dyn Clock,
@@ -965,12 +957,12 @@ impl<C: Send + Sync> RelaySessionControl for RelayRuntime<C> {
     fn request_terminate(
         &self,
         session_id: &str,
-        account: AccountName,
+        account: Name,
         peer: PeerIp,
         clock: &dyn Clock,
         events: &dyn EventSink,
     ) -> Option<crate::management::terminate::TerminationTicket> {
-        let id = SessionId::parse(session_id).ok()?;
+        let id = Id::parse(session_id).ok()?;
         let control = self.lock().controls.get(&id).cloned()?;
         let mut control = control
             .lock()
@@ -1041,7 +1033,7 @@ impl std::error::Error for RelayDispatchError {}
 struct OwnedConnection {
     stream: BoxRelayStream,
     trailing: Vec<u8>,
-    permit: BudgetPermit,
+    permit: Permit,
     context: ConnectionContext,
     ticket: Option<TicketBinding>,
 }
@@ -1095,7 +1087,7 @@ impl OwnedConnection {
 struct RelayEndpoint {
     stream: BoxRelayStream,
     trailing: Vec<u8>,
-    permit: BudgetPermit,
+    permit: Permit,
     buffer_bytes: usize,
     session_deadline: Option<Duration>,
 }
@@ -1110,9 +1102,9 @@ struct SessionPair {
 
 struct ActiveGuard<'a, C> {
     runtime: &'a RelayRuntime<C>,
-    session_id: SessionId,
+    session_id: Id,
     relay_id: Option<RelayId>,
-    control: Arc<Mutex<SessionControl>>,
+    control: Arc<Mutex<SessionHandle>>,
     clock: &'a dyn Clock,
     events: &'a dyn EventSink,
     model: Session,
@@ -1180,7 +1172,7 @@ impl<C> Drop for ActiveGuard<'_, C> {
                 admin_account: admin.account.clone(),
                 peer_ip: admin.peer,
                 session_id: Some(self.session_id.clone()),
-                result: AdminTerminateResult::Failed,
+                result: AdminTerminateOutcome::Failed,
             });
         }
         control.completed = true;
@@ -1336,7 +1328,7 @@ impl RelayService {
             let mut timer = pin!(tokio::time::sleep(
                 deadline.saturating_sub(self.clock.monotonic())
             ));
-            let expired = poll_fn(|cx| {
+            let expired = future::poll_fn(|cx| {
                 if self.clock.monotonic() >= deadline || timer.as_mut().poll(cx).is_ready() {
                     Poll::Ready(true)
                 } else if changed.as_mut().poll(cx).is_ready() {
@@ -1428,7 +1420,7 @@ impl RelayService {
         };
         let (command, admin_close) = watch::channel(None);
         let (completion, _) = watch::channel(None);
-        let control = Arc::new(Mutex::new(SessionControl {
+        let control = Arc::new(Mutex::new(SessionHandle {
             command,
             completion,
             admin: None,
@@ -1503,7 +1495,7 @@ impl RelayService {
                         started_at: session.started_at(),
                         started_mono,
                         duration: Duration::ZERO,
-                        state: SessionState::Active,
+                        state: State::Active,
                         viewer: pair.viewer.context,
                         peer: pair.peer.clone(),
                         relay_id_ref: pair
@@ -1689,7 +1681,7 @@ impl RelayService {
         // streams and permits before releasing active ID occupancy.
         let mut pair = pair;
         let relay_id = pair.relay.as_ref().map(|(id, _, _)| id);
-        let observed = Mutex::new(SessionState::Active);
+        let observed = Mutex::new(State::Active);
         // Bytes already added to `vnc_relay.session.io`, per direction
         // (metrics-v1 §1.3). The session counts start at zero.
         let reported = [AtomicU64::new(0), AtomicU64::new(0)];
@@ -1741,7 +1733,7 @@ impl RelayService {
                         snapshot.bytes_viewer_to_target = session.bytes(Direction::ViewerToTarget);
                         snapshot.bytes_target_to_viewer = session.bytes(Direction::TargetToViewer);
                     }
-                    if session.state() == SessionState::Closing
+                    if session.state() == State::Closing
                         && let Some(id) = relay_id
                     {
                         state.matching.begin_closing(id, session.id());
@@ -1749,7 +1741,7 @@ impl RelayService {
                 },
             );
             let mut engine = pin!(engine);
-            poll_fn(|cx| {
+            future::poll_fn(|cx| {
                 runtime.force_if_due(self.clock.as_ref(), self.events.as_ref());
                 // Acceptance and natural transitions share this synchronous poll lock.
                 // No guard survives Pending, and registry callers release their lock first.
@@ -1760,7 +1752,7 @@ impl RelayService {
                 control.closing |= *observed
                     .lock()
                     .unwrap_or_else(std::sync::PoisonError::into_inner)
-                    != SessionState::Active;
+                    != State::Active;
                 result
             })
             .await
@@ -1826,7 +1818,7 @@ impl RelayService {
                 admin_account: admin.account.clone(),
                 peer_ip: admin.peer,
                 session_id: Some(snapshot.session_id.clone()),
-                result: AdminTerminateResult::Terminated,
+                result: AdminTerminateOutcome::Terminated,
             });
         }
         control.completed = true;
@@ -1848,24 +1840,22 @@ mod tests {
     use std::sync::atomic::{AtomicU64, Ordering};
     use std::task::Context;
 
-    use tokio::io::{
-        AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, DuplexStream, ReadBuf, duplex,
-    };
+    use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, DuplexStream, ReadBuf};
     use tokio::time::Instant;
     use vnc_relay_domain::entry_point::Role;
     use vnc_relay_domain::handshake::HANDSHAKE_REQUEST_LEN;
 
-    use super::test_support::TestSettings;
+    use super::test_support::FakeRuntimeSettingsSource;
     use super::*;
     use crate::ports::{RelayStreamError, TargetError};
     use vnc_relay_domain::target_policy::TargetPolicy;
 
-    struct TestClock {
+    struct FakeClock {
         epoch: Instant,
         offset: AtomicU64,
     }
 
-    impl Clock for TestClock {
+    impl Clock for FakeClock {
         fn monotonic(&self) -> Duration {
             self.epoch.elapsed() + Duration::from_millis(self.offset.load(Ordering::Relaxed))
         }
@@ -1877,8 +1867,8 @@ mod tests {
     type OnSessionClosed = Box<dyn Fn(&Event) + Send + Sync>;
 
     #[derive(Default)]
-    struct Recorder(Mutex<Vec<Event>>, Mutex<Option<OnSessionClosed>>);
-    impl EventSink for Recorder {
+    struct SpyEventSink(Mutex<Vec<Event>>, Mutex<Option<OnSessionClosed>>);
+    impl EventSink for SpyEventSink {
         fn record(&self, event: &Event) {
             if matches!(event, Event::SessionClosed { .. })
                 && let Some(observe) = self.1.lock().expect("closed observer").as_ref()
@@ -1889,7 +1879,7 @@ mod tests {
         }
     }
 
-    struct TestStream {
+    struct FakeRelayStream {
         stream: DuplexStream,
         actions: Arc<Mutex<Vec<RelayCloseAction>>>,
         failure: Option<crate::events::ConnectionErrorKind>,
@@ -1899,9 +1889,9 @@ mod tests {
         panic_after_eof: Option<Arc<std::sync::atomic::AtomicBool>>,
     }
 
-    impl std::fmt::Debug for TestStream {
+    impl std::fmt::Debug for FakeRelayStream {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            f.debug_struct("TestStream")
+            f.debug_struct("FakeRelayStream")
                 .field("actions", &self.actions)
                 .field("failure", &self.failure)
                 .field("block_close", &self.block_close)
@@ -1909,7 +1899,7 @@ mod tests {
         }
     }
 
-    impl Drop for TestStream {
+    impl Drop for FakeRelayStream {
         fn drop(&mut self) {
             if let Some(on_drop) = &self.on_drop {
                 on_drop();
@@ -1917,7 +1907,7 @@ mod tests {
         }
     }
 
-    impl AsyncRead for TestStream {
+    impl AsyncRead for FakeRelayStream {
         fn poll_read(
             mut self: Pin<&mut Self>,
             cx: &mut Context<'_>,
@@ -1945,7 +1935,7 @@ mod tests {
             }
         }
     }
-    impl AsyncWrite for TestStream {
+    impl AsyncWrite for FakeRelayStream {
         fn poll_write(
             mut self: Pin<&mut Self>,
             cx: &mut Context<'_>,
@@ -1960,7 +1950,7 @@ mod tests {
             Pin::new(&mut self.stream).poll_shutdown(cx)
         }
     }
-    impl RelayStream for TestStream {
+    impl RelayStream for FakeRelayStream {
         fn transport(&self) -> Transport {
             Transport::Tcp
         }
@@ -1979,39 +1969,39 @@ mod tests {
             Pin::new(&mut self.stream).poll_shutdown(cx)
         }
     }
-    struct Sources;
-    impl RelayIdSource for Sources {
+    struct StubIdSources;
+    impl RelayIdSource for StubIdSources {
         fn reference(&self, _: &RelayId) -> RelayIdRef {
             // Deliberately collide references: matching must use original IDs.
             RelayIdRef::from_hash_prefix([7; 8])
         }
     }
-    impl SessionIdSource for Sources {
-        fn session_id(&self, counter: u128) -> SessionId {
-            SessionId::from_block(counter.to_be_bytes())
+    impl SessionIdSource for StubIdSources {
+        fn session_id(&self, counter: u128) -> Id {
+            Id::from_block(counter.to_be_bytes())
         }
     }
 
     struct Attempt {
         delay: Duration,
-        result: Result<TestStream, TargetError>,
+        result: Result<FakeRelayStream, TargetError>,
     }
-    struct Connector {
+    struct FakeTargetGateway {
         resolved: Mutex<Result<Vec<std::net::IpAddr>, TargetError>>,
         resolve_delay: Mutex<Duration>,
         attempts: Mutex<VecDeque<Attempt>>,
         calls: Mutex<Vec<SocketAddr>>,
         names: Mutex<Vec<String>>,
     }
-    impl TargetGateway for Connector {
-        type Stream = TestStream;
+    impl TargetGateway for FakeTargetGateway {
+        type Stream = FakeRelayStream;
         async fn resolve(&self, name: &str) -> Result<Vec<std::net::IpAddr>, TargetError> {
             self.names.lock().expect("names").push(name.to_owned());
             let delay = *self.resolve_delay.lock().expect("delay");
             tokio::time::sleep(delay).await;
             self.resolved.lock().expect("resolved").clone()
         }
-        async fn connect(&self, address: SocketAddr) -> Result<TestStream, TargetError> {
+        async fn connect(&self, address: SocketAddr) -> Result<FakeRelayStream, TargetError> {
             self.calls.lock().expect("calls").push(address);
             let attempt = self.attempts.lock().expect("attempts").pop_front();
             match attempt {
@@ -2026,24 +2016,24 @@ mod tests {
 
     struct Harness {
         service: RelayService,
-        runtime: RelayRuntime<Connector>,
-        clock: Arc<TestClock>,
-        events: Arc<Recorder>,
+        runtime: RelayRuntime<FakeTargetGateway>,
+        clock: Arc<FakeClock>,
+        events: Arc<SpyEventSink>,
         budget: Arc<ConnectionBudget>,
         waiting: Arc<ConnectionBudget>,
-        settings: Arc<TestSettings>,
+        settings: Arc<FakeRuntimeSettingsSource>,
     }
 
     impl Harness {
         fn new(l: u32, lw: u32, b: usize, policy: &[&str]) -> Arc<Self> {
-            let clock = Arc::new(TestClock {
+            let clock = Arc::new(FakeClock {
                 epoch: Instant::now(),
                 offset: AtomicU64::new(0),
             });
-            let events = Arc::new(Recorder::default());
+            let events = Arc::new(SpyEventSink::default());
             let budget = ConnectionBudget::new();
             let waiting = ConnectionBudget::new();
-            let settings = TestSettings::new();
+            let settings = FakeRuntimeSettingsSource::new();
             settings.change(|settings| {
                 settings.limits.relay_connections = l;
                 settings.limits.waiting = lw;
@@ -2058,7 +2048,7 @@ mod tests {
                         .collect(),
                 ));
             });
-            let connector = Connector {
+            let connector = FakeTargetGateway {
                 resolved: Mutex::new(Ok(Vec::new())),
                 resolve_delay: Mutex::new(Duration::ZERO),
                 attempts: Mutex::new(VecDeque::new()),
@@ -2067,7 +2057,7 @@ mod tests {
             };
             Arc::new(Self {
                 service: RelayService::new(
-                    HandshakePolicy {
+                    Policy {
                         mode1_enabled: true,
                         mode2_enabled: true,
                     },
@@ -2078,8 +2068,8 @@ mod tests {
                 ),
                 runtime: RelayRuntime::new(
                     connector,
-                    Arc::new(Sources),
-                    Arc::new(Sources),
+                    Arc::new(StubIdSources),
+                    Arc::new(StubIdSources),
                     budget.clone(),
                     waiting.clone(),
                     RelayRuntimeConfig { recent_closed: 2 },
@@ -2093,21 +2083,21 @@ mod tests {
             })
         }
         fn new_with_recent(l: u32, lw: u32, b: usize, recent_closed: usize) -> Arc<Self> {
-            let clock = Arc::new(TestClock {
+            let clock = Arc::new(FakeClock {
                 epoch: Instant::now(),
                 offset: AtomicU64::new(0),
             });
-            let events = Arc::new(Recorder::default());
+            let events = Arc::new(SpyEventSink::default());
             let budget = ConnectionBudget::new();
             let waiting = ConnectionBudget::new();
-            let settings = TestSettings::new();
+            let settings = FakeRuntimeSettingsSource::new();
             settings.change(|settings| {
                 settings.limits.relay_connections = l;
                 settings.limits.waiting = lw;
                 settings.limits.buffer_bytes = b as u32;
                 settings.mode1.allow_targets = Some(TargetPolicy::new(vec![]));
             });
-            let connector = Connector {
+            let connector = FakeTargetGateway {
                 resolved: Mutex::new(Ok(Vec::new())),
                 resolve_delay: Mutex::new(Duration::ZERO),
                 attempts: Mutex::new(VecDeque::new()),
@@ -2116,7 +2106,7 @@ mod tests {
             };
             Arc::new(Self {
                 service: RelayService::new(
-                    HandshakePolicy {
+                    Policy {
                         mode1_enabled: true,
                         mode2_enabled: true,
                     },
@@ -2127,8 +2117,8 @@ mod tests {
                 ),
                 runtime: RelayRuntime::new(
                     connector,
-                    Arc::new(Sources),
-                    Arc::new(Sources),
+                    Arc::new(StubIdSources),
+                    Arc::new(StubIdSources),
                     budget.clone(),
                     waiting.clone(),
                     RelayRuntimeConfig { recent_closed },
@@ -2150,13 +2140,13 @@ mod tests {
             block_close: bool,
             on_drop: Option<Arc<dyn Fn() + Send + Sync>>,
         ) -> (
-            PreparedConnection<TestStream>,
+            PreparedConnection<FakeRelayStream>,
             DuplexStream,
             Arc<Mutex<Vec<RelayCloseAction>>>,
         ) {
-            let (stream, mut peer) = duplex(4096);
+            let (stream, mut peer) = tokio::io::duplex(4096);
             let actions = Arc::new(Mutex::new(Vec::new()));
-            let stream = TestStream {
+            let stream = FakeRelayStream {
                 stream,
                 actions: actions.clone(),
                 failure: None,
@@ -2226,7 +2216,7 @@ mod tests {
             request: &str,
             trailing: &[u8],
         ) -> (
-            PreparedConnection<TestStream>,
+            PreparedConnection<FakeRelayStream>,
             DuplexStream,
             Arc<Mutex<Vec<RelayCloseAction>>>,
         ) {
@@ -2236,7 +2226,7 @@ mod tests {
 
         fn start(
             self: &Arc<Self>,
-            prepared: PreparedConnection<TestStream>,
+            prepared: PreparedConnection<FakeRelayStream>,
         ) -> tokio::task::JoinHandle<Result<(), RelayDispatchError>> {
             let harness = self.clone();
             tokio::spawn(async move { harness.service.dispatch(prepared, &harness.runtime).await })
@@ -2272,7 +2262,11 @@ mod tests {
         limit.saturating_sub(budget.current()) as usize
     }
 
-    fn bind_ticket(prepared: &mut PreparedConnection<TestStream>, rid: &str, sx: Option<Duration>) {
+    fn bind_ticket(
+        prepared: &mut PreparedConnection<FakeRelayStream>,
+        rid: &str,
+        sx: Option<Duration>,
+    ) {
         prepared.ticket = Some(TicketBinding {
             jti: "relay-ticket".to_owned(),
             relay_id: RelayId::parse(rid).expect("rid"),
@@ -2372,7 +2366,7 @@ mod tests {
     #[tokio::test(start_paused = true)]
     async fn deny_change_racing_a_target_connect_closes_the_session_at_activation() {
         let harness = Harness::new(3, 1, 8, &["192.0.2.0/24:5900"]);
-        let (stream, _target_peer) = duplex(4096);
+        let (stream, _target_peer) = tokio::io::duplex(4096);
         let target_actions = Arc::new(Mutex::new(Vec::new()));
         harness
             .runtime
@@ -2382,7 +2376,7 @@ mod tests {
             .expect("attempts")
             .push_back(Attempt {
                 delay: Duration::from_secs(1),
-                result: Ok(TestStream {
+                result: Ok(FakeRelayStream {
                     stream,
                     actions: target_actions.clone(),
                     failure: None,
@@ -2573,7 +2567,7 @@ mod tests {
             Some(harness.clock.monotonic() + Duration::from_secs(4)),
         );
         let mut waiter = pin!(harness.service.dispatch(prepared, &harness.runtime));
-        poll_fn(|cx| {
+        future::poll_fn(|cx| {
             assert!(waiter.as_mut().poll(cx).is_pending());
             Poll::Ready(())
         })
@@ -2581,7 +2575,7 @@ mod tests {
         let (incoming, _viewer, _) = harness.prepare(Role::Viewer, "ID:123", b"").await;
         harness.clock.offset.fetch_add(4_000, Ordering::Relaxed);
         let mut incoming = pin!(harness.service.dispatch(incoming, &harness.runtime));
-        poll_fn(|cx| {
+        future::poll_fn(|cx| {
             assert!(incoming.as_mut().poll(cx).is_pending());
             Poll::Ready(())
         })
@@ -2982,7 +2976,7 @@ mod tests {
             if closing {
                 server.shutdown().await.expect("eof");
                 settle().await;
-                assert_eq!(harness.snapshot().active[0].state, SessionState::Closing);
+                assert_eq!(harness.snapshot().active[0].state, State::Closing);
             }
             let (duplicate, _peer, actions) = harness.prepare(Role::Viewer, "ID:3", b"").await;
             assert!(matches!(
@@ -3349,7 +3343,7 @@ mod tests {
             "192.0.2.10".parse().expect("first"),
             "::ffff:192.0.2.11".parse().expect("mapped"),
         ]);
-        let (stream, mut target_peer) = duplex(4096);
+        let (stream, mut target_peer) = tokio::io::duplex(4096);
         let target_actions = Arc::new(Mutex::new(Vec::new()));
         harness
             .runtime
@@ -3364,7 +3358,7 @@ mod tests {
                 },
                 Attempt {
                     delay: Duration::ZERO,
-                    result: Ok(TestStream {
+                    result: Ok(FakeRelayStream {
                         stream,
                         actions: target_actions,
                         failure: None,
@@ -3489,7 +3483,7 @@ mod tests {
         let (prepared, _old_peer, _) = harness.prepare(Role::Server, "ID:8", b"").await;
         let old_conn = prepared.context().conn_id;
         let mut old = Box::pin(harness.service.dispatch(prepared, &harness.runtime));
-        poll_fn(|cx| {
+        future::poll_fn(|cx| {
             assert!(old.as_mut().poll(cx).is_pending());
             Poll::Ready(())
         })
@@ -3643,7 +3637,7 @@ mod tests {
         assert_eq!(harness.runtime.lock().next_session, None);
         assert_eq!(
             harness.snapshot().active[0].session_id,
-            SessionId::from_block(u128::MAX.to_be_bytes())
+            Id::from_block(u128::MAX.to_be_bytes())
         );
         server.shutdown().await.expect("server eof");
         viewer.shutdown().await.expect("viewer eof");
@@ -3802,11 +3796,11 @@ mod tests {
     /// spec: relay.md:RLY-014 partial
     #[tokio::test(start_paused = true)]
     async fn clock_crossing_w_during_claim_preparation_never_activates_or_issues_counter() {
-        struct JumpSource(Arc<TestClock>);
-        impl SessionIdSource for JumpSource {
-            fn session_id(&self, counter: u128) -> SessionId {
+        struct FakeSessionIdSource(Arc<FakeClock>);
+        impl SessionIdSource for FakeSessionIdSource {
+            fn session_id(&self, counter: u128) -> Id {
                 self.0.offset.fetch_add(5000, Ordering::Relaxed);
-                SessionId::from_block(counter.to_be_bytes())
+                Id::from_block(counter.to_be_bytes())
             }
         }
         let mut harness = Harness::new(3, 1, 8, &[]);
@@ -3814,7 +3808,7 @@ mod tests {
         Arc::get_mut(&mut harness)
             .expect("unique harness")
             .runtime
-            .session_ids = Arc::new(JumpSource(clock));
+            .session_ids = Arc::new(FakeSessionIdSource(clock));
         let (prepared, _server, _) = harness.prepare(Role::Server, "ID:15", b"").await;
         let waiter = harness.start(prepared);
         settle().await;
@@ -3847,11 +3841,11 @@ mod tests {
     /// spec: relay.md:RLY-031 partial
     #[tokio::test(start_paused = true)]
     async fn ticket_sx_crossed_during_claim_never_activates_even_after_w() {
-        struct JumpSource(Arc<TestClock>);
-        impl SessionIdSource for JumpSource {
-            fn session_id(&self, counter: u128) -> SessionId {
+        struct FakeSessionIdSource(Arc<FakeClock>);
+        impl SessionIdSource for FakeSessionIdSource {
+            fn session_id(&self, counter: u128) -> Id {
                 self.0.offset.fetch_add(11_000, Ordering::Relaxed);
-                SessionId::from_block(counter.to_be_bytes())
+                Id::from_block(counter.to_be_bytes())
             }
         }
         for role in [Role::Viewer, Role::Server] {
@@ -3860,7 +3854,7 @@ mod tests {
             Arc::get_mut(&mut harness)
                 .expect("unique harness")
                 .runtime
-                .session_ids = Arc::new(JumpSource(clock));
+                .session_ids = Arc::new(FakeSessionIdSource(clock));
             let (mut prepared, _peer, actions) = harness.prepare(role, "ID:123", b"").await;
             bind_ticket(
                 &mut prepared,
@@ -4416,7 +4410,7 @@ mod tests {
             tokio::time::sleep(Duration::from_millis(10)).await;
         }
         let id = harness.snapshot().active[0].session_id.clone();
-        let account = AccountName::parse("alice").unwrap_or_else(|e| panic!("account: {e}"));
+        let account = Name::parse("alice").unwrap_or_else(|e| panic!("account: {e}"));
         let peer = PeerIp::new(std::net::Ipv4Addr::LOCALHOST.into());
         let mut ticket = harness
             .runtime
@@ -4474,7 +4468,7 @@ mod tests {
             close_cause: CloseCause::AdminTerminated, admin_account: Some(actual), ..
         } if actual == &account));
         let audit = events.iter().position(|event| matches!(event,
-            Event::AdminTerminate { session_id: Some(actual), result: AdminTerminateResult::Failed, .. }
+            Event::AdminTerminate { session_id: Some(actual), result: AdminTerminateOutcome::Failed, .. }
             if actual == &id)).unwrap_or_else(|| panic!("failed audit"));
         assert!(closed[0].0 < audit);
     }
@@ -4512,8 +4506,8 @@ mod tests {
     /// spec: management.md:MGT-011 partial
     #[tokio::test(start_paused = true)]
     async fn acceptance_at_exact_g_deadline_reads_clock_under_registry_lock_and_joins_force() {
-        struct AcceptanceClock<'a>(&'a RelayRuntime<Connector>, Duration);
-        impl Clock for AcceptanceClock<'_> {
+        struct StubAcceptanceClock<'a>(&'a RelayRuntime<FakeTargetGateway>, Duration);
+        impl Clock for StubAcceptanceClock<'_> {
             fn monotonic(&self) -> Duration {
                 assert!(
                     self.0.state.try_lock().is_err(),
@@ -4531,12 +4525,12 @@ mod tests {
         let deadline = harness.clock.monotonic() + Duration::from_secs(1);
         // Do not wake the supervisor: acceptance itself must publish Force.
         harness.runtime.lock().lifecycle = RelayLifecycle::Grace { deadline };
-        let clock = AcceptanceClock(&harness.runtime, deadline);
+        let clock = StubAcceptanceClock(&harness.runtime, deadline);
         let ticket = harness
             .runtime
             .request_terminate(
                 id.as_str(),
-                AccountName::parse("alice").unwrap_or_else(|e| panic!("{e}")),
+                Name::parse("alice").unwrap_or_else(|e| panic!("{e}")),
                 PeerIp::new(std::net::Ipv4Addr::LOCALHOST.into()),
                 &clock,
                 harness.events.as_ref(),

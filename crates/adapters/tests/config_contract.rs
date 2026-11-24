@@ -4,8 +4,8 @@ use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::time::Duration;
 
-use vnc_relay_adapters::config_file::{load, parse};
-use vnc_relay_app::settings::{
+use vnc_relay_adapters::config_file;
+use vnc_relay_application::settings::{
     AdminSessionSettings, AdminSettings, Argon2Settings, ConfigWarning, DashboardSettings,
     EntryPointSettings, IpInfoSettings, KeepaliveSettings, LimitSettings, LogOutput, LogSettings,
     LoginLimitSettings, ManagementSettings, MetricsSettings, Mode1Settings, Mode2Settings,
@@ -13,7 +13,7 @@ use vnc_relay_app::settings::{
     StatusSettings, TicketSettings, TimeoutSettings, TlsFiles, WsListenerSettings, WsRoleSettings,
 };
 use vnc_relay_domain::allow_list::{AllowList, IpItem};
-use vnc_relay_domain::entry_point::{EntryPoint, Listener};
+use vnc_relay_domain::entry_point::{EntryPoint, ListenerKind};
 use vnc_relay_domain::origin::Origin;
 use vnc_relay_domain::target_policy::{TargetItem, TargetPolicy};
 
@@ -38,7 +38,7 @@ fn base_dir() -> PathBuf {
 }
 
 fn parse_ok(text: &str) -> Settings {
-    match parse(text, &base_dir()) {
+    match config_file::parse(text, &base_dir()) {
         Ok(settings) => settings,
         Err(diagnostics) => panic!("unexpected diagnostics: {diagnostics:#?}"),
     }
@@ -46,7 +46,7 @@ fn parse_ok(text: &str) -> Settings {
 
 /// `(code, key)` of every diagnostic, in order.
 fn problems(text: &str) -> Vec<(&'static str, String)> {
-    match parse(text, &base_dir()) {
+    match config_file::parse(text, &base_dir()) {
         Ok(settings) => panic!("parsed unexpectedly: {settings:#?}"),
         Err(diagnostics) => diagnostics
             .into_iter()
@@ -357,7 +357,7 @@ fn rejects_missing_unreadable_and_non_utf8_files() {
     std::fs::write(&non_utf8, [0x5b, 0xff, 0xfe, 0x5d]).expect("write test file");
 
     for path in [&missing, &non_utf8, &dir] {
-        let diagnostics = load(path).expect_err("unreadable file must fail");
+        let diagnostics = config_file::load(path).expect_err("unreadable file must fail");
         let found: Vec<_> = diagnostics
             .iter()
             .map(|d| (d.error.code(), d.key.as_str()))
@@ -382,7 +382,7 @@ fn load_resolves_relative_paths_against_the_config_directory() {
     )
     .expect("write config");
 
-    let settings = load(&config).expect("valid config");
+    let settings = config_file::load(&config).expect("valid config");
     assert_eq!(
         settings.admin.accounts_file,
         dir.join("admin-accounts.toml")
@@ -800,13 +800,16 @@ allow = []
             ConfigWarning::PlaintextWsEnabled {
                 listen: addr("127.0.0.1:18090"),
             },
-            trust(Listener::Ws, "0.0.0.0/0"),
-            trust(Listener::Ws, "::/0"),
-            trust(Listener::Wss, "0.0.0.0-255.255.255.255"),
-            trust(Listener::Wss, "::-ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff"),
+            trust(ListenerKind::Ws, "0.0.0.0/0"),
+            trust(ListenerKind::Ws, "::/0"),
+            trust(ListenerKind::Wss, "0.0.0.0-255.255.255.255"),
+            trust(
+                ListenerKind::Wss,
+                "::-ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff"
+            ),
         ]
     );
-    assert_eq!(trust(Listener::Ws, "::/0").code(), "trust_all_proxies");
+    assert_eq!(trust(ListenerKind::Ws, "::/0").code(), "trust_all_proxies");
 }
 
 /// spec: operations.md:OPS-067 partial
@@ -823,7 +826,7 @@ trusted_proxies = ["::/0"]
     assert_eq!(
         settings.warnings(),
         [ConfigWarning::TrustAllProxies {
-            listener: Listener::Wss,
+            listener: ListenerKind::Wss,
             item: IpItem::parse("::/0").expect("item"),
         }]
     );
@@ -1191,8 +1194,10 @@ fn candidate_presence_distinguishes_disabled_omissions_and_explicit_empty_lists(
             .contains("relay.wss.viewer.allowed_origins")
     );
     assert!(!candidate.presence.keys.iter().any(|key| key.contains('[')));
-    let items =
-        vnc_relay_app::management::config::config_items(&candidate.settings, &candidate.presence);
+    let items = vnc_relay_application::management::config::config_items(
+        &candidate.settings,
+        &candidate.presence,
+    );
     let value = |key: &str| {
         &items
             .iter()
@@ -1202,11 +1207,11 @@ fn candidate_presence_distinguishes_disabled_omissions_and_explicit_empty_lists(
     };
     assert_eq!(
         value("relay.ws.viewer.allowed_origins"),
-        &vnc_relay_app::management::config::ConfigValue::Strings(vec![])
+        &vnc_relay_application::management::config::ConfigValue::Strings(vec![])
     );
     assert_eq!(
         value("relay.wss.viewer.allowed_origins"),
-        &vnc_relay_app::management::config::ConfigValue::Null
+        &vnc_relay_application::management::config::ConfigValue::Null
     );
     let errors = vnc_relay_adapters::config_file::parse_candidate(&[0xff], &base_dir())
         .err()
@@ -1214,7 +1219,7 @@ fn candidate_presence_distinguishes_disabled_omissions_and_explicit_empty_lists(
     assert_eq!(errors.len(), 1);
     assert_eq!(
         errors[0].error,
-        vnc_relay_app::settings::ConfigError::FileUnreadable
+        vnc_relay_application::settings::ConfigError::FileUnreadable
     );
     assert!(!errors[0].message.contains("ff"));
 }
@@ -1306,9 +1311,9 @@ fn disabled_websocket_roles_and_listeners_validate_supplied_values() {
             )))
             .relay
             .websocket(if listener == "ws" {
-                vnc_relay_domain::entry_point::Listener::Ws
+                vnc_relay_domain::entry_point::ListenerKind::Ws
             } else {
-                vnc_relay_domain::entry_point::Listener::Wss
+                vnc_relay_domain::entry_point::ListenerKind::Wss
             })
             .expect("websocket listener")
             .enabled()

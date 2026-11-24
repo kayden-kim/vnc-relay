@@ -4,11 +4,10 @@ use std::time::{Duration, Instant};
 
 use serde_json::{Value, json};
 
-use super::live::{Admin, Browser, Fault, LIMIT, Server, must, wait_for};
-#[path = "../../crates/adapters/tests/common/ticket.rs"]
-mod ticket;
-
-use ticket::Signer;
+use vnc_relay_testkit::cdp::Browser;
+use vnc_relay_testkit::dashboard_proxy::Fault;
+use vnc_relay_testkit::live::{self, Admin, LIMIT, Server};
+use vnc_relay_testkit::ticket::Signer;
 
 const WAITING: &str = ".grid > .card:nth-child(4)";
 const ACTIVE: &str = ".grid > .card:nth-child(5)";
@@ -49,12 +48,12 @@ fn initial(value: &str) -> [u8; 250] {
 }
 
 fn connect(port: u16) -> TcpStream {
-    let stream = must(TcpStream::connect_timeout(
+    let stream = live::must(TcpStream::connect_timeout(
         &SocketAddr::from(([127, 0, 0, 1], port)),
         LIMIT,
     ));
-    must(stream.set_read_timeout(Some(LIMIT)));
-    must(stream.set_write_timeout(Some(LIMIT)));
+    live::must(stream.set_read_timeout(Some(LIMIT)));
+    live::must(stream.set_write_timeout(Some(LIMIT)));
     stream
 }
 
@@ -157,8 +156,8 @@ pub fn overview_known_data() {
     mode_two.transfer(MIB_BYTES, KIB_BYTES);
     let waiting_viewer = server.waiting("41003");
     let mut waiting_server = connect(server.ports[3]);
-    must(waiting_server.write_all(&initial("ID:41004")));
-    wait_for("both real waiting roles", LIMIT, || {
+    live::must(waiting_server.write_all(&initial("ID:41004")));
+    live::wait_for("both real waiting roles", LIMIT, || {
         items(&server.query(&admin, "/api/v1/waiting")).len() == 2
     });
     let raw_active = server.query(&admin, "/api/v1/sessions");
@@ -264,7 +263,7 @@ pub fn overview_empty_lists() {
     assert!(server.proxy.traffic().iter().all(|entry| !entry.injected));
 }
 fn now_secs() -> u64 {
-    must(std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)).as_secs()
+    live::must(std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)).as_secs()
 }
 
 fn ticket_claims(rid: &str, sx: Option<u64>) -> Value {
@@ -295,11 +294,11 @@ impl WebSocket {
         let request = format!(
             "GET /relay/viewer HTTP/1.1\r\nHost: localhost\r\nOrigin: http://127.0.0.1\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Protocol: binary, ticket.{ticket}\r\n\r\n"
         );
-        must(stream.write_all(request.as_bytes()));
+        live::must(stream.write_all(request.as_bytes()));
         let mut head = Vec::new();
         while !head.ends_with(b"\r\n\r\n") {
             let mut byte = [0];
-            must(stream.read_exact(&mut byte));
+            live::must(stream.read_exact(&mut byte));
             head.push(byte[0]);
             assert!(head.len() < 16384, "bounded WebSocket handshake");
         }
@@ -319,39 +318,39 @@ impl WebSocket {
         assert!(bytes.len() <= usize::from(u16::MAX));
         let mut frame = vec![0x80 | opcode];
         if bytes.len() < 126 {
-            frame.push(0x80 | must(u8::try_from(bytes.len())));
+            frame.push(0x80 | live::must(u8::try_from(bytes.len())));
         } else {
             frame.push(0xfe);
-            frame.extend_from_slice(&must(u16::try_from(bytes.len())).to_be_bytes());
+            frame.extend_from_slice(&live::must(u16::try_from(bytes.len())).to_be_bytes());
         }
         let mask = [0x13, 0x57, 0x9b, 0xdf];
         frame.extend_from_slice(&mask);
         frame.extend(bytes.iter().enumerate().map(|(i, byte)| byte ^ mask[i % 4]));
-        must(self.stream.write_all(&frame));
-        must(self.stream.flush());
+        live::must(self.stream.write_all(&frame));
+        live::must(self.stream.flush());
     }
 
     fn frame(&mut self) -> (u8, Vec<u8>) {
         loop {
             let mut head = [0; 2];
-            must(self.stream.read_exact(&mut head));
+            live::must(self.stream.read_exact(&mut head));
             assert_eq!(head[1] & 0x80, 0, "server frames are unmasked");
             let len = match head[1] & 0x7f {
                 126 => {
                     let mut bytes = [0; 2];
-                    must(self.stream.read_exact(&mut bytes));
+                    live::must(self.stream.read_exact(&mut bytes));
                     usize::from(u16::from_be_bytes(bytes))
                 }
                 127 => {
                     let mut bytes = [0; 8];
-                    must(self.stream.read_exact(&mut bytes));
-                    must(usize::try_from(u64::from_be_bytes(bytes)))
+                    live::must(self.stream.read_exact(&mut bytes));
+                    live::must(usize::try_from(u64::from_be_bytes(bytes)))
                 }
                 value => usize::from(value),
             };
             assert!(len <= 1024 * 1024, "bounded WebSocket frame");
             let mut bytes = vec![0; len];
-            must(self.stream.read_exact(&mut bytes));
+            live::must(self.stream.read_exact(&mut bytes));
             match head[0] & 15 {
                 9 => self.send(10, &bytes),
                 10 => {}
@@ -364,15 +363,15 @@ impl WebSocket {
 fn close_with_protocol_error(server: &Server, admin: &Admin, ticket: &str) -> String {
     let mut viewer = WebSocket::open_with_ticket(server.ws_port, ticket);
     let mut target = connect(server.ports[3]);
-    must(target.write_all(&initial("ID:42002")));
-    wait_for("WebSocket error target waiting", LIMIT, || {
+    live::must(target.write_all(&initial("ID:42002")));
+    live::wait_for("WebSocket error target waiting", LIMIT, || {
         items(&server.query(admin, "/api/v1/waiting"))
             .iter()
             .any(|item| item["relay_id"] == "42002")
     });
     viewer.send(2, &initial("ID:42002"));
     let mut sid = String::new();
-    wait_for("real WS session active", LIMIT, || {
+    live::wait_for("real WS session active", LIMIT, || {
         let list = server.query(admin, "/api/v1/sessions");
         if let Some(item) = items(&list)
             .iter()
@@ -387,10 +386,10 @@ fn close_with_protocol_error(server: &Server, admin: &Admin, ticket: &str) -> St
     let outgoing = vec![0x31; KIB_BYTES];
     viewer.send(2, &outgoing);
     let mut received = vec![0; outgoing.len()];
-    must(target.read_exact(&mut received));
+    live::must(target.read_exact(&mut received));
     assert_eq!(received, outgoing);
     let incoming = vec![0x72; 3072];
-    must(target.write_all(&incoming));
+    live::must(target.write_all(&incoming));
     let mut received = Vec::new();
     while received.len() < incoming.len() {
         let (opcode, bytes) = viewer.frame();
@@ -406,7 +405,7 @@ fn close_with_protocol_error(server: &Server, admin: &Admin, ticket: &str) -> St
     assert!(payload.len() >= 2);
     assert_eq!(u16::from_be_bytes([payload[0], payload[1]]), 1003);
     drop((viewer, target));
-    wait_for("actual connection_error history", LIMIT, || {
+    live::wait_for("actual connection_error history", LIMIT, || {
         items(&server.query(admin, "/api/v1/closed-sessions"))
             .iter()
             .any(|item| item["session_id"] == sid && item["close_cause"] == "connection_error")
@@ -415,13 +414,13 @@ fn close_with_protocol_error(server: &Server, admin: &Admin, ticket: &str) -> St
 }
 
 pub fn overview_recent_closed() {
-    let signer = Signer::new();
+    let signer = Signer::generate();
     let server = Server::start_with_config_transform(
         "overview-history",
         Some(60),
         true,
         |config, dir| {
-            must(std::fs::write(
+            live::must(std::fs::write(
                 dir.join("viewer-ticket.json"),
                 signer.jwks(),
             ));
@@ -449,7 +448,7 @@ pub fn overview_recent_closed() {
     eof.transfer(KIB_BYTES, MIB_BYTES);
     let eof_sid = eof.sid.clone();
     eof.close();
-    wait_for("actual EOF history", LIMIT, || {
+    live::wait_for("actual EOF history", LIMIT, || {
         items(&server.query(&admin, "/api/v1/closed-sessions"))
             .iter()
             .any(|item| item["session_id"] == eof_sid && item["close_cause"] == "peer_eof")
@@ -462,7 +461,7 @@ pub fn overview_recent_closed() {
     browser.wait("document.querySelector('#session-terminate')?.disabled === false");
     browser.click("#session-terminate");
     browser.click("dialog[open] .button-destructive");
-    wait_for("browser administrator termination", LIMIT, || {
+    live::wait_for("browser administrator termination", LIMIT, || {
         items(&server.query(&admin, "/api/v1/closed-sessions"))
             .iter()
             .any(|item| {
@@ -473,15 +472,15 @@ pub fn overview_recent_closed() {
     let token = signer.sign(&ticket_claims("42004", Some(sx)));
     let mut expired_ws = WebSocket::open_with_ticket(server.ws_port, &token);
     let mut expired_target = connect(server.ports[3]);
-    must(expired_target.write_all(&initial("ID:42004")));
-    wait_for("WebSocket expired target waiting", LIMIT, || {
+    live::must(expired_target.write_all(&initial("ID:42004")));
+    live::wait_for("WebSocket expired target waiting", LIMIT, || {
         items(&server.query(&admin, "/api/v1/waiting"))
             .iter()
             .any(|item| item["relay_id"] == "42004")
     });
     expired_ws.send(2, &initial("ID:42004"));
     let mut expired_sid = String::new();
-    wait_for("real WS session with ticket active", LIMIT, || {
+    live::wait_for("real WS session with ticket active", LIMIT, || {
         let list = server.query(&admin, "/api/v1/sessions");
         if let Some(item) = items(&list)
             .iter()
@@ -495,8 +494,8 @@ pub fn overview_recent_closed() {
     });
     expired_ws.send(2, &vec![0x42; KIB_BYTES]);
     let mut received = vec![0; KIB_BYTES];
-    must(expired_target.read_exact(&mut received));
-    must(expired_target.write_all(&vec![0x84; MIB_BYTES]));
+    live::must(expired_target.read_exact(&mut received));
+    live::must(expired_target.write_all(&vec![0x84; MIB_BYTES]));
     let mut target_to_viewer = 0;
     while target_to_viewer < MIB_BYTES {
         let (opcode, bytes) = expired_ws.frame();
@@ -512,7 +511,7 @@ pub fn overview_recent_closed() {
     );
     assert_eq!(&close_payload[2..], b"session_expired");
     drop((expired_ws, expired_target));
-    wait_for("actual session_expired history", LIMIT, || {
+    live::wait_for("actual session_expired history", LIMIT, || {
         items(&server.query(&admin, "/api/v1/closed-sessions"))
             .iter()
             .any(|item| {
@@ -616,17 +615,17 @@ struct Backlog {
 #[cfg(target_os = "linux")]
 impl Backlog {
     fn saturated() -> Self {
-        let runtime = must(
+        let runtime = live::must(
             tokio::runtime::Builder::new_current_thread()
                 .enable_all()
                 .build(),
         );
         let listener = runtime.block_on(async {
-            let socket = must(tokio::net::TcpSocket::new_v4());
-            must(socket.bind(SocketAddr::from(([127, 0, 0, 1], 0))));
-            must(must(socket.listen(1)).into_std())
+            let socket = live::must(tokio::net::TcpSocket::new_v4());
+            live::must(socket.bind(SocketAddr::from(([127, 0, 0, 1], 0))));
+            live::must(live::must(socket.listen(1)).into_std())
         });
-        let address = must(listener.local_addr());
+        let address = live::must(listener.local_addr());
         let mut fillers = Vec::new();
         for _ in 0..64 {
             match TcpStream::connect_timeout(&address, Duration::from_millis(100)) {
@@ -671,9 +670,9 @@ pub fn overview_connection_counts() {
     #[cfg(target_os = "linux")]
     let backlog = Backlog::saturated();
     #[cfg(target_os = "linux")]
-    let target = must(backlog.listener.local_addr());
+    let target = live::must(backlog.listener.local_addr());
     #[cfg(not(target_os = "linux"))]
-    let target = must(must(TcpListener::bind("127.0.0.1:0")).local_addr());
+    let target = live::must(live::must(TcpListener::bind("127.0.0.1:0")).local_addr());
     let mut observed_in_browser = false;
     for _ in 0..5 {
         // Each attempt owns the whole raw-query and rendered-DOM observation.
@@ -682,12 +681,12 @@ pub fn overview_connection_counts() {
         // H and U do not expire while a later attempt is running.
         let mut management = connect(server.ports[0]);
         let mut status = connect(server.ports[1]);
-        must(management.write_all(b"GET /"));
-        must(status.write_all(b"GET /"));
+        live::must(management.write_all(b"GET /"));
+        live::must(status.write_all(b"GET /"));
         let h1 = server.handshaking();
         let h2 = server.handshaking();
         let mut connecting = server.handshaking();
-        must(connecting.write_all(&initial(&target.to_string())));
+        live::must(connecting.write_all(&initial(&target.to_string())));
         #[cfg(target_os = "linux")]
         let window = Duration::from_secs(10);
         #[cfg(not(target_os = "linux"))]
@@ -754,7 +753,7 @@ pub fn overview_connection_counts() {
         }
         // Late list responses from this attempt must settle before another
         // attempt can compare known Lm=3. No state or successful result is faked.
-        wait_for("previous pending observation fully released", LIMIT, || {
+        live::wait_for("previous pending observation fully released", LIMIT, || {
             let summary = server.query(&admin, "/api/v1/summary");
             summary["counts"]["handshaking"] == 0
                 && summary["counts"]["target_connecting"] == 0

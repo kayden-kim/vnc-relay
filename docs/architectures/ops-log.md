@@ -57,8 +57,8 @@
   - `accounts_file_permissive` 경고. 운영 정보 계약의 사건이 아니며 stderr에만 쓴다([`serve` 시작 모듈 설계](serve-startup.md)).
 - 다른 모듈에 공개하는 기능:
   - `vnc_relay_domain::peer_ip::PeerIp`
-  - `vnc_relay_app::events::{Event, Level, Phase, RelayIdRef, LOG_CONTRACT}`
-  - `vnc_relay_app::ports::EventSink`
+  - `vnc_relay_application::events::{Event, Level, Phase, RelayIdRef, LOG_CONTRACT}`
+  - `vnc_relay_application::ports::EventSink`
   - `vnc_relay_adapters::ops_log::{JsonLinesEventSink, LogFileError, LogEntry, RecentLogs, LogsFilter, LogsResponse, LogItemResponse, format_line}`
   - `vnc_relay_adapters::crypto::{RelayIdKey, CryptoError}`
 
@@ -107,11 +107,11 @@ flowchart LR
 | 기존 중단·대기 제거·세션 종료 사건의 만료 원인 | `AbortReason::SessionExpired`, `WaitingRemovalReason::SessionExpired`, `CloseCause::SessionExpired` | 초기 교환 `connection_aborted(reason=session_expired)`, 대기 `waiting_removed(reason=session_expired)`, 활성 정리 `session_closed(close_cause=session_expired)` | 모두 `info`다. 활성 세션은 `side`가 없다. E가 지나도 `session_expired`를 유지한다. |
 | `Event::UpgradeRejected`의 ticket 거절 | `RejectReason::Ticket`, 선택 `ticket_jti` | `connection_rejected`, `warn`, `stage=upgrade`, ticket 오류 사유 | `ticket_jti`는 서명 확인 뒤 문법이 유효한 값일 때만 넣는다. ticket 원문은 기록하지 않는다. |
 | `Event::ReloadApplied` | `trigger: ReloadTrigger`, `applied: Vec<String>` | `trigger`, `applied` | 파일 감지는 `file_watch`, 편집 commit은 `config_edit`다. 실제 바뀐 실행값/TLS/ticket 공개 키 항목만 담고 값은 넣지 않는다. 같은 경로의 공개 키 목록이 바뀌면 `public_keys_file`을 넣는다. |
-| `Event::ConfigEdited` | `admin_account: AccountName`, `peer_ip: PeerIp`, `config_keys`, `revision` | 같은 이름 | info. 요청 changes 중 파일값이 달라진 키와 새 바이트 revision이다. 이미 pending이던 실행값 차이는 `ReloadApplied.applied`에만 추가된다. |
-| `Event::ConfigEditRejected` | `admin_account: AccountName`, `peer_ip: PeerIp`, `reason: String`, `config_keys: Option<Vec<String>>` | 같은 이름, 없는 config_keys는 생략 | warn. reason은 여섯 편집 업무 오류의 API code다. 설정값·후보·revision은 없다. 인증·CSRF·invalid_request·internal에는 만들지 않는다. |
+| `Event::ConfigEdited` | `admin_account: account::Name`, `peer_ip: PeerIp`, `config_keys`, `revision` | 같은 이름 | info. 요청 changes 중 파일값이 달라진 키와 새 바이트 revision이다. 이미 pending이던 실행값 차이는 `ReloadApplied.applied`에만 추가된다. |
+| `Event::ConfigEditRejected` | `admin_account: account::Name`, `peer_ip: PeerIp`, `reason: String`, `config_keys: Option<Vec<String>>` | 같은 이름, 없는 config_keys는 생략 | warn. reason은 여섯 편집 업무 오류의 API code다. 설정값·후보·revision은 없다. 인증·CSRF·invalid_request·internal에는 만들지 않는다. |
 | `Event::ConnectionRejected` | `listener: &'static str`, `conn_id: Option<ConnId>`, `stage: Stage`, `reason: RejectReason`, `peer_ip: PeerIp` | `connection_rejected`, `listener`, 있을 때만 `conn_id`, `stage`, `reason`, `peer_ip` | 수락 단계(`stage=accept`)는 아직 `conn_id`가 없다. WSS의 TLS 단계 거절은 수락 때 받은 `conn_id`를 쓴다(2.2.0). [접속 출처 통계](source-stats.md)가 이 값으로 보류한 수락을 꺼낸다. |
 | `Event::IpDbLoaded` | `key: IpDbKey`, `database_type: String`, `build_time: SystemTime`, `phase: Phase` | `ip_db_loaded`, `config_key`, `database_type`, `build_time`, `phase` | info. `database_type`은 앞 128자다. `phase`는 `startup` 또는 `reload`다. |
-| `Event::IpDbUnavailable` | `key: IpDbKey`, `reason: IpDbFailure`, `phase: Phase`, `detail: Option<String>` | `ip_db_unavailable`, `config_key`, `reason`, `phase`, 선택 `detail` | warn. `reason`은 `file_unreadable`·`file_too_large`·`invalid_format`·`unsupported_data`다. `detail`에 경로와 파일 내용을 넣지 않는다. 같은 원인과 내용 표시의 실패는 다시 쓰지 않는다. |
+| `Event::IpDbUnavailable` | `key: IpDbKey`, `reason: IpDbError`, `phase: Phase`, `detail: Option<String>` | `ip_db_unavailable`, `config_key`, `reason`, `phase`, 선택 `detail` | warn. `reason`은 `file_unreadable`·`file_too_large`·`invalid_format`·`unsupported_data`다. `detail`에 경로와 파일 내용을 넣지 않는다. 같은 원인과 내용 표시의 실패는 다시 쓰지 않는다. |
 | `Level` | `Info`, `Warn`, `Error` | `level` | 2.2.0에 다른 값이 없다. |
 | `RelayIdRef` | 소문자 16진수 16자 `String` | `relay_id_ref` | HMAC 결과 앞 8바이트로만 만든다. 원문 중계 ID로 만드는 생성자가 없다. |
 | `PeerIp` | `IpAddr` | `peer_ip` | IPv4-mapped가 아니다. 포트·영역 식별자가 없다. |
@@ -183,7 +183,7 @@ ticket 사건의 생성 위치·순서·필드는 [접속 ticket 모듈 설계](
 | `crates/adapters/src/file_watch/reopen_tests.rs` `reopens_on_notifications_and_poll_and_reports_each_failure_streak_once` | 주입한 알림·시계의 Dp, 실패 연속 구간 첫 사건·알림, 복구와 새 실패 |
 | 같은 파일 `log_directory_registration_failure_keeps_poll_and_retries` | 로그 디렉터리 감시 실패 시 시작 지속과 Dp 등록 재시도 |
 | `tests/log_reopen.rs` `renamed_log_is_recreated_without_lost_or_duplicate_lines` | 실제 바이너리의 알림 재열기와 접속 사건 유실·중복 없음 |
-| `tests/log_reopen.rs`와 `tests/windows_console.rs`의 `log_reopen_failure_warns_once_keeps_old_file_and_recovers` | 공통 본문 `tests/common/log_reopen.rs`를 실행한다. Linux는 실제 stderr, Windows는 기존 ConPTY가 받은 콘솔 진단을 확인한다. 실패 경고 형식·경로 비노출·이전 파일 기록·복구 뒤 새 파일 기록·정상 종료를 확인한다. 알림과 Dp 중 어느 쪽이 먼저 시도해도 같은 실패·복구 결과로 판정한다. |
+| `tests/log_reopen.rs`와 `tests/windows_console.rs`의 `log_reopen_failure_warns_once_keeps_old_file_and_recovers` | 공통 본문 `crates/testkit/src/log_reopen.rs`를 실행한다. Linux는 실제 stderr, Windows는 기존 ConPTY가 받은 콘솔 진단을 확인한다. 실패 경고 형식·경로 비노출·이전 파일 기록·복구 뒤 새 파일 기록·정상 종료를 확인한다. 알림과 Dp 중 어느 쪽이 먼저 시도해도 같은 실패·복구 결과로 판정한다. |
 
 ## 7. 설계 선택
 

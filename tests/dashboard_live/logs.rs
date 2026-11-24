@@ -10,7 +10,9 @@ use std::time::Duration;
 
 use serde_json::{Value, json};
 
-use super::live::{Admin, Browser, Fault, LIMIT, Server, initial, must, wait_for};
+use vnc_relay_testkit::cdp::Browser;
+use vnc_relay_testkit::dashboard_proxy::Fault;
+use vnc_relay_testkit::live::{self, Admin, LIMIT, Server};
 
 pub(super) const API: &str = "/api/v1/logs";
 
@@ -34,9 +36,9 @@ pub(super) fn generate(server: &Server, count: usize) {
     // close before opening another socket so L and OS scheduling cannot hide it.
     for _ in 0..count {
         let mut wire = server.handshaking();
-        must(wire.write_all(&initial("!")));
+        live::must(wire.write_all(&live::initial("!")));
         let mut closed = [0; 1];
-        assert_eq!(must(wire.read(&mut closed)), 0);
+        assert_eq!(live::must(wire.read(&mut closed)), 0);
     }
 }
 
@@ -46,13 +48,13 @@ pub(super) fn seed_error(server: &Server, admin: &Admin) {
     // OS. Restore the original file after observing the real event, not a timer.
     let path = server.config_path();
     let backup = server.dir().join("saved-config.toml");
-    must(fs::rename(&path, &backup));
-    must(fs::create_dir(&path));
-    wait_for("real error-level watcher event", LIMIT, || {
+    live::must(fs::rename(&path, &backup));
+    live::must(fs::create_dir(&path));
+    live::wait_for("real error-level watcher event", LIMIT, || {
         !items(&server.query(admin, "/api/v1/logs?level=error")).is_empty()
     });
-    must(fs::remove_dir(&path));
-    must(fs::rename(backup, path));
+    live::must(fs::remove_dir(&path));
+    live::must(fs::rename(backup, path));
 }
 
 pub(super) fn ready(browser: &mut Browser) {
@@ -91,7 +93,10 @@ pub(super) fn last_reply(server: &Server) -> (String, Value) {
         .find(|r| r.path.starts_with(API) && r.status == Some(200) && r.completed.is_some())
         .unwrap_or_else(|| panic!("missing browser logs response"));
     assert!(r.forwarded && !r.response_body.is_empty());
-    (r.path.clone(), must(serde_json::from_str(&r.response_body)))
+    (
+        r.path.clone(),
+        live::must(serde_json::from_str(&r.response_body)),
+    )
 }
 
 pub(super) fn seqs(browser: &mut Browser) -> Value {
@@ -155,7 +160,7 @@ pub fn first_load_and_all_entry_fields() {
         .proxy
         .once("GET", API, Fault::Hold(Arc::clone(&release)));
     browser.navigate(&server.url("/#/logs"));
-    wait_for("first real logs held", LIMIT, || {
+    live::wait_for("first real logs held", LIMIT, || {
         server
             .proxy
             .traffic()
@@ -249,7 +254,7 @@ pub fn level_event_filters_and_obsolete_reply() {
         .proxy
         .once("GET", old, Fault::Hold(Arc::clone(&held)));
     select_event_pending(&mut browser, "server_ready");
-    wait_for("old filter response held", LIMIT, || {
+    live::wait_for("old filter response held", LIMIT, || {
         server
             .proxy
             .traffic()
@@ -259,7 +264,7 @@ pub fn level_event_filters_and_obsolete_reply() {
     select_event(&mut browser, "admin_login_succeeded");
     let (_, current) = last_reply(&server);
     held.store(true, Ordering::Release);
-    wait_for("old filter released", LIMIT, || {
+    live::wait_for("old filter released", LIMIT, || {
         server
             .proxy
             .traffic()
@@ -292,7 +297,7 @@ pub fn unicode_value_search_and_boundaries() {
     numeric.transfer(517, 619);
     let numeric_sid = numeric.sid.clone();
     numeric.close();
-    wait_for("numeric real close event", LIMIT, || {
+    live::wait_for("numeric real close event", LIMIT, || {
         items(&server.query(&admin, "/api/v1/logs?event=session_closed"))
             .iter()
             .any(|i| i["entry"]["session_id"] == numeric_sid)
@@ -309,7 +314,7 @@ pub fn unicode_value_search_and_boundaries() {
         } else {
             browser.click("#logs-search");
         }
-        wait_for("search request submitted", LIMIT, || {
+        live::wait_for("search request submitted", LIMIT, || {
             paths(&server).len() > before
         });
         ready(&mut browser);
@@ -452,7 +457,7 @@ pub fn polling_pages_pause_no_overlap_and_eviction() {
     browser.click("#logs-auto-refresh");
     let before = paths(&server).len();
     generate(&server, 2);
-    wait_for("nonmatching automatic response", LIMIT, || {
+    live::wait_for("nonmatching automatic response", LIMIT, || {
         paths(&server).len() > before
     });
     browser.wait("document.querySelector('#logs-refresh')?.disabled===false");

@@ -8,11 +8,11 @@ use std::time::{Duration, Instant};
 
 use serde_json::{Value, json};
 
-use super::live::{Admin, Browser, Fault, LIMIT, Server, must, wait_for};
-use super::settings::{
-    PermissionGuard, get_field_value, login_alice, open_settings, open_settings_edit, script_str,
-    set_field_value,
-};
+use super::settings;
+use super::settings::PermissionGuard;
+use vnc_relay_testkit::cdp::Browser;
+use vnc_relay_testkit::dashboard_proxy::Fault;
+use vnc_relay_testkit::live::{self, Admin, LIMIT, Server};
 
 const CONFIG: &str = "/api/v1/config";
 const WAITING: &str = "limits.waiting";
@@ -30,11 +30,11 @@ fn assert_js(browser: &mut Browser, expression: &str) {
 fn language(browser: &mut Browser, lang: &str) {
     browser.eval(&format!(
         "(()=>{{const e=document.querySelector('select.language-select-control');e.value={};e.dispatchEvent(new Event('change',{{bubbles:true}}));}})()",
-        script_str(lang)
+        settings::script_str(lang)
     ));
     browser.wait(&format!(
         "document.documentElement.lang === {}",
-        script_str(lang)
+        settings::script_str(lang)
     ));
 }
 
@@ -54,7 +54,7 @@ fn assert_patch(server: &Server, status: u16, code: &str) -> Value {
         .find(|item| item.method == "PATCH" && item.path == CONFIG)
         .unwrap_or_else(|| panic!("PATCH missing"));
     assert_eq!(patch.status, Some(status), "{}", patch.response_body);
-    let body: Value = must(serde_json::from_str(&patch.response_body));
+    let body: Value = live::must(serde_json::from_str(&patch.response_body));
     if !code.is_empty() {
         assert_eq!(body["error"]["code"], code);
     }
@@ -104,7 +104,7 @@ fn assert_view(browser: &mut Browser, server: &Server, config: &Value) {
         .rev()
         .find(|item| item.method == "GET" && item.path == CONFIG && item.status == Some(200))
         .unwrap_or_else(|| panic!("successful view GET missing"));
-    let received: Value = must(serde_json::from_str(&get.response_body));
+    let received: Value = live::must(serde_json::from_str(&get.response_body));
     assert_eq!(
         received["revision"], config["revision"],
         "view fetched the actual current revision"
@@ -182,11 +182,11 @@ pub fn settings_conflict_keeps_input_and_never_resends_automatically() {
     let server = Server::start_with_config("dash-041", None, true);
     let admin = server.login();
     let mut browser = Browser::start("dash-041", &["ko-KR"]);
-    login_alice(&mut browser, &server);
-    open_settings(&mut browser, &server);
+    settings::login_alice(&mut browser, &server);
+    settings::open_settings(&mut browser, &server);
     for external_comment in [false, true] {
-        open_settings_edit(&mut browser, &server);
-        set_field_value(&mut browser, WAITING, "11");
+        settings::open_settings_edit(&mut browser, &server);
+        settings::set_field_value(&mut browser, WAITING, "11");
         if external_comment {
             server.config_write(format!(
                 "{}\n# comment-only competing write\n",
@@ -199,7 +199,7 @@ pub fn settings_conflict_keeps_input_and_never_resends_automatically() {
         submit(&mut browser);
         browser.wait("document.querySelector('#settings-reload') !== null");
         assert_patch(&server, 409, "config_conflict");
-        assert_eq!(get_field_value(&mut browser, WAITING), "11");
+        assert_eq!(settings::get_field_value(&mut browser, WAITING), "11");
         let text = browser.text();
         assert!(text.contains("그사이 설정 파일이 바뀌었습니다. 다시 불러오면 입력 내용을 버리고 현재 설정으로 바꿉니다."), "{text}");
         assert_js(
@@ -217,11 +217,11 @@ pub fn config_conflict_reload_discards_input_and_uses_fresh_revision() {
     let server = Server::start_with_config("dash-042", None, true);
     let admin = server.login();
     let mut browser = Browser::start("dash-042", &["ko-KR"]);
-    login_alice(&mut browser, &server);
-    open_settings(&mut browser, &server);
-    open_settings_edit(&mut browser, &server);
+    settings::login_alice(&mut browser, &server);
+    settings::open_settings(&mut browser, &server);
+    settings::open_settings_edit(&mut browser, &server);
     let old = server.query(&admin, CONFIG);
-    set_field_value(&mut browser, WAITING, "11");
+    settings::set_field_value(&mut browser, WAITING, "11");
     let fresh = oracle_save(&server, &admin, 10);
     assert_ne!(old["revision"], fresh["revision"]);
     submit(&mut browser);
@@ -230,20 +230,20 @@ pub fn config_conflict_reload_discards_input_and_uses_fresh_revision() {
     browser.click("#settings-reload");
     browser.wait("document.querySelector('#settings-reload') === null && !document.querySelector('#settings-review').disabled");
     assert_eq!(
-        get_field_value(&mut browser, WAITING),
+        settings::get_field_value(&mut browser, WAITING),
         item_value(&fresh, WAITING).to_string()
     );
     assert_eq!(fresh["file"]["state"], "in_effect");
     // F1(P1): Right after reloading, change value on the same screen and submit.
     // Assert PATCH body revision matches fresh["revision"] from the reloaded GET and succeeds with 200.
-    set_field_value(&mut browser, WAITING, "12");
+    settings::set_field_value(&mut browser, WAITING, "12");
     submit(&mut browser);
     browser
         .wait("location.hash === '#/settings' && document.querySelector('.config-row') !== null");
     let applied = assert_patch(&server, 200, "");
     assert_eq!(applied["applied"], json!([WAITING]));
     let traffic = server.proxy.traffic();
-    let request: Value = must(serde_json::from_str(
+    let request: Value = live::must(serde_json::from_str(
         &traffic
             .iter()
             .rev()
@@ -261,14 +261,14 @@ pub fn config_conflict_reload_discards_input_and_uses_fresh_revision() {
     no_replay(&server, 2);
 
     // Then test that a late old response held during GET does not overwrite new values.
-    open_settings_edit(&mut browser, &server);
+    settings::open_settings_edit(&mut browser, &server);
     let release = Arc::new(AtomicBool::new(false));
     let injected = server.proxy.injected_count("GET", CONFIG);
     server
         .proxy
         .once("GET", CONFIG, Fault::Hold(Arc::clone(&release)));
     browser.click("#settings-refresh");
-    wait_for("old GET held", LIMIT, || {
+    live::wait_for("old GET held", LIMIT, || {
         server
             .proxy
             .traffic()
@@ -279,10 +279,10 @@ pub fn config_conflict_reload_discards_input_and_uses_fresh_revision() {
     browser.wait("document.querySelector('#settings-edit') !== null && !document.querySelector('#settings-edit').disabled");
     let newest = oracle_save(&server, &admin, 9);
     assert_eq!(item_value(&newest, WAITING), 9);
-    open_settings_edit(&mut browser, &server);
-    assert_eq!(get_field_value(&mut browser, WAITING), "9");
+    settings::open_settings_edit(&mut browser, &server);
+    assert_eq!(settings::get_field_value(&mut browser, WAITING), "9");
     release.store(true, Ordering::Release);
-    wait_for("old GET released", LIMIT, || {
+    live::wait_for("old GET released", LIMIT, || {
         !server
             .proxy
             .traffic()
@@ -291,7 +291,7 @@ pub fn config_conflict_reload_discards_input_and_uses_fresh_revision() {
     });
     thread::sleep(Duration::from_millis(100));
     assert_eq!(
-        get_field_value(&mut browser, WAITING),
+        settings::get_field_value(&mut browser, WAITING),
         "9",
         "late old response must not replace fresh values"
     );
@@ -373,7 +373,7 @@ fn rejection_replay(server: &Server, admin: &Admin, status: u16, code: &str) -> 
             .as_bytes(),
     );
     assert_eq!(reply.status, status, "{}", reply.body);
-    let body: Value = must(serde_json::from_str(&reply.body));
+    let body: Value = live::must(serde_json::from_str(&reply.body));
     assert_eq!(body["error"]["code"], code);
     if code == "config_restart_pending" {
         assert_eq!(body["error"]["config_keys"], raw["file"]["config_keys"]);
@@ -403,9 +403,9 @@ pub fn disabled_restart_pending_and_invalid_patch_results_remove_edit_actions() 
     let admin = server.login();
     let original = server.config_text();
     let mut browser = Browser::start("dash-043", &["ko-KR"]);
-    login_alice(&mut browser, &server);
-    open_settings(&mut browser, &server);
-    open_settings_edit(&mut browser, &server);
+    settings::login_alice(&mut browser, &server);
+    settings::open_settings(&mut browser, &server);
+    settings::open_settings_edit(&mut browser, &server);
     let disabled_server = Server::start_with_config("dash-043-disabled-oracle", None, false);
     let disabled_admin = disabled_server.login();
     let disabled = rejection_replay(
@@ -416,7 +416,7 @@ pub fn disabled_restart_pending_and_invalid_patch_results_remove_edit_actions() 
     );
     let injected = server.proxy.injected_count("PATCH", CONFIG);
     server.proxy.once("PATCH", CONFIG, disabled);
-    set_field_value(&mut browser, WAITING, "10");
+    settings::set_field_value(&mut browser, WAITING, "10");
     submit(&mut browser);
     browser.wait("document.querySelector('#settings-review') === null");
     assert_patch(&server, 403, "config_edit_disabled");
@@ -466,8 +466,8 @@ pub fn disabled_restart_pending_and_invalid_patch_results_remove_edit_actions() 
         server.config_write(&original);
         browser.click("#settings-view");
         browser.wait("document.querySelector('#settings-edit') !== null && !document.querySelector('#settings-edit').disabled");
-        open_settings_edit(&mut browser, &server);
-        set_field_value(&mut browser, WAITING, "10");
+        settings::open_settings_edit(&mut browser, &server);
+        settings::set_field_value(&mut browser, WAITING, "10");
         server.config_write(candidate);
         let raw = server.query(&admin, CONFIG);
         let code = if index == 0 {
@@ -572,11 +572,11 @@ fn write_failure(server: &Server, browser: &mut Browser, admin: &Admin) -> Permi
     let bytes = server.config_bytes();
     let before = server.query(admin, CONFIG);
     let guard = PermissionGuard::deny(server.dir());
-    set_field_value(browser, WAITING, "14");
+    settings::set_field_value(browser, WAITING, "14");
     submit(browser);
     browser.wait("document.body.innerText.includes('설정 파일을 쓰지 못했습니다')");
     assert_patch(server, 500, "config_write_failed");
-    assert_eq!(get_field_value(browser, WAITING), "14");
+    assert_eq!(settings::get_field_value(browser, WAITING), "14");
     let text = browser.text();
     assert!(
         text.contains("파일과 실행 값은 바뀌지 않았습니다."),
@@ -600,9 +600,9 @@ pub fn config_write_failure_keeps_input_without_success_notice() {
     let server = Server::start_with_config("dash-044", None, true);
     let admin = server.login();
     let mut browser = Browser::start("dash-044", &["ko-KR"]);
-    login_alice(&mut browser, &server);
-    open_settings(&mut browser, &server);
-    open_settings_edit(&mut browser, &server);
+    settings::login_alice(&mut browser, &server);
+    settings::open_settings(&mut browser, &server);
+    settings::open_settings_edit(&mut browser, &server);
     let mut guard = write_failure(&server, &mut browser, &admin);
     guard.restore();
 }
@@ -612,12 +612,12 @@ pub fn explicit_settings_retry_after_write_repair_saves_once() {
     let server = Server::start_with_config("dash-045", None, true);
     let admin = server.login();
     let mut browser = Browser::start("dash-045", &["ko-KR"]);
-    login_alice(&mut browser, &server);
-    open_settings(&mut browser, &server);
-    open_settings_edit(&mut browser, &server);
+    settings::login_alice(&mut browser, &server);
+    settings::open_settings(&mut browser, &server);
+    settings::open_settings_edit(&mut browser, &server);
     let mut guard = write_failure(&server, &mut browser, &admin);
     guard.restore();
-    assert_eq!(get_field_value(&mut browser, WAITING), "14");
+    assert_eq!(settings::get_field_value(&mut browser, WAITING), "14");
     no_replay(&server, 1);
     submit(&mut browser);
     browser
@@ -665,8 +665,8 @@ pub fn config_response_loss_and_timeout_require_get_before_retry() {
     let server = Server::start_with_config("dash-046", Some(2), true);
     let admin = server.login();
     let mut browser = Browser::start("dash-046", &["ko-KR"]);
-    login_alice(&mut browser, &server);
-    open_settings(&mut browser, &server);
+    settings::login_alice(&mut browser, &server);
+    settings::open_settings(&mut browser, &server);
     for (index, fault) in [
         Fault::DropResponse,
         Fault::Delay(Duration::from_secs(6)),
@@ -675,10 +675,10 @@ pub fn config_response_loss_and_timeout_require_get_before_retry() {
     .into_iter()
     .enumerate()
     {
-        open_settings_edit(&mut browser, &server);
+        settings::open_settings_edit(&mut browser, &server);
         let injected = server.proxy.injected_count("PATCH", CONFIG);
         server.proxy.once("PATCH", CONFIG, fault);
-        set_field_value(&mut browser, WAITING, &(12 + index).to_string());
+        settings::set_field_value(&mut browser, WAITING, &(12 + index).to_string());
         let submitted = Instant::now();
         submit(&mut browser);
         unknown(&mut browser);
@@ -714,11 +714,11 @@ pub fn unknown_edit_result_is_checked_with_get_without_patch_replay() {
     let server = Server::start_with_config("dash-047", None, true);
     let admin = server.login();
     let mut browser = Browser::start("dash-047", &["ko-KR"]);
-    login_alice(&mut browser, &server);
-    open_settings(&mut browser, &server);
-    open_settings_edit(&mut browser, &server);
+    settings::login_alice(&mut browser, &server);
+    settings::open_settings(&mut browser, &server);
+    settings::open_settings_edit(&mut browser, &server);
     server.proxy.once("PATCH", CONFIG, Fault::DropResponse);
-    set_field_value(&mut browser, WAITING, "15");
+    settings::set_field_value(&mut browser, WAITING, "15");
     submit(&mut browser);
     unknown(&mut browser);
     assert_eq!(server.proxy.injected_count("PATCH", CONFIG), 1);
@@ -754,14 +754,14 @@ pub fn settings_screens_preserve_input_and_accessibility_in_both_languages_and_w
     let origins: Vec<String> = (0..16)
         .map(|i| format!("https://{}.{}.example.com", "long-hostname".repeat(4), i))
         .collect();
-    let origins_json = must(serde_json::to_string(&origins));
+    let origins_json = live::must(serde_json::to_string(&origins));
     let server = Server::start_with_config_transform("dash-050", None, true, |config, _| {
         config.replace("[\"http://127.0.0.1\"]", &origins_json)
     });
     let admin = server.login();
     let mut browser = Browser::start("dash-050", &["ko-KR"]);
-    login_alice(&mut browser, &server);
-    open_settings(&mut browser, &server);
+    settings::login_alice(&mut browser, &server);
+    settings::open_settings(&mut browser, &server);
     let raw = server.query(&admin, CONFIG);
     assert_eq!(
         item_value(&raw, "relay.ws.viewer.allowed_origins"),
@@ -776,12 +776,12 @@ pub fn settings_screens_preserve_input_and_accessibility_in_both_languages_and_w
                 &mut browser,
                 &format!(
                     "Array.from(document.querySelectorAll('[data-config-key=\"relay.ws.viewer.allowed_origins\"] .config-value-list div')).map(e=>e.textContent).join('\\n') === {}",
-                    script_str(&origins.join("\n"))
+                    settings::script_str(&origins.join("\n"))
                 ),
             );
         }
     }
-    open_settings_edit(&mut browser, &server);
+    settings::open_settings_edit(&mut browser, &server);
     let draft = (0..24)
         .map(|i| format!("2001:db8:1234:5678:90ab:cdef:1234:{i:x}"))
         .collect::<Vec<_>>()
@@ -791,7 +791,7 @@ pub fn settings_screens_preserve_input_and_accessibility_in_both_languages_and_w
         browser.set_width(width);
         for lang in ["ko", "en"] {
             language(&mut browser, lang);
-            set_field_value(&mut browser, "relay.tcp_viewer.allow", &invalid_input);
+            settings::set_field_value(&mut browser, "relay.tcp_viewer.allow", &invalid_input);
             submit(&mut browser);
             browser.wait("document.querySelector('.config-field-error') !== null");
             assert_patch(&server, 400, "config_invalid");
@@ -800,13 +800,13 @@ pub fn settings_screens_preserve_input_and_accessibility_in_both_languages_and_w
                 "document.activeElement.dataset.configKey === 'relay.tcp_viewer.allow' && document.activeElement.value.slice(document.activeElement.selectionStart, document.activeElement.selectionEnd) === 'not-an-ip'",
             );
             assert_eq!(
-                get_field_value(&mut browser, "relay.tcp_viewer.allow"),
+                settings::get_field_value(&mut browser, "relay.tcp_viewer.allow"),
                 invalid_input,
             );
             let other_lang = if lang == "ko" { "en" } else { "ko" };
             language(&mut browser, other_lang);
             assert_eq!(
-                get_field_value(&mut browser, "relay.tcp_viewer.allow"),
+                settings::get_field_value(&mut browser, "relay.tcp_viewer.allow"),
                 invalid_input,
             );
             let text = browser.text();
@@ -831,7 +831,7 @@ pub fn settings_screens_preserve_input_and_accessibility_in_both_languages_and_w
             language(&mut browser, lang);
         }
     }
-    set_field_value(&mut browser, "relay.tcp_viewer.allow", &draft);
+    settings::set_field_value(&mut browser, "relay.tcp_viewer.allow", &draft);
     for width in [1280, 390] {
         browser.set_width(width);
         for lang in ["ko", "en"] {
@@ -903,7 +903,7 @@ fn invalidate_alice(server: &Server) -> String {
     let cookie = alice_cookie(server);
     let info = server.request("GET", "/api/v1/session", &[("Cookie", &cookie)], b"");
     assert_eq!(info.status, 200);
-    let info: Value = must(serde_json::from_str(&info.body));
+    let info: Value = live::must(serde_json::from_str(&info.body));
     let reply = server.request(
         "DELETE",
         "/api/v1/session",
@@ -946,11 +946,11 @@ pub fn settings_expiry_and_logout_remove_protected_values_and_leave_relays_alive
     let mut pair = server.pair(&admin, "II", "65051");
     let mut browser = Browser::start("dash-051", &["ko-KR"]);
     for edit in [false, true] {
-        login_alice(&mut browser, &server);
-        open_settings(&mut browser, &server);
+        settings::login_alice(&mut browser, &server);
+        settings::open_settings(&mut browser, &server);
         if edit {
-            open_settings_edit(&mut browser, &server);
-            set_field_value(&mut browser, WAITING, "13");
+            settings::open_settings_edit(&mut browser, &server);
+            settings::set_field_value(&mut browser, WAITING, "13");
         }
         let cookie = invalidate_alice(&server);
         if edit {
@@ -971,11 +971,11 @@ pub fn settings_expiry_and_logout_remove_protected_values_and_leave_relays_alive
         pair.transfer(37, 51);
     }
     for edit in [false, true] {
-        login_alice(&mut browser, &server);
-        open_settings(&mut browser, &server);
+        settings::login_alice(&mut browser, &server);
+        settings::open_settings(&mut browser, &server);
         if edit {
-            open_settings_edit(&mut browser, &server);
-            set_field_value(&mut browser, WAITING, "14");
+            settings::open_settings_edit(&mut browser, &server);
+            settings::set_field_value(&mut browser, WAITING, "14");
         }
         let cookie = alice_cookie(&server);
         let release = Arc::new(AtomicBool::new(false));
@@ -990,7 +990,7 @@ pub fn settings_expiry_and_logout_remove_protected_values_and_leave_relays_alive
         } else {
             browser.click("#settings-refresh");
         }
-        wait_for("request held during logout", LIMIT, || {
+        live::wait_for("request held during logout", LIMIT, || {
             server
                 .proxy
                 .traffic()
@@ -1024,7 +1024,7 @@ pub fn settings_expiry_and_logout_remove_protected_values_and_leave_relays_alive
             );
             assert_js(&mut browser, "location.search === ''");
         }
-        wait_for("in-flight request canceled in CDP", LIMIT, || {
+        live::wait_for("in-flight request canceled in CDP", LIMIT, || {
             let network = browser.network();
             let events = network
                 .as_array()
@@ -1057,7 +1057,7 @@ pub fn settings_expiry_and_logout_remove_protected_values_and_leave_relays_alive
             401
         );
         release.store(true, Ordering::Release);
-        wait_for("logout held response released", LIMIT, || {
+        live::wait_for("logout held response released", LIMIT, || {
             !server
                 .proxy
                 .traffic()
@@ -1078,21 +1078,21 @@ pub fn leaving_settings_edit_discards_input_without_confirmation_or_patch() {
     let server = Server::start_with_config("dash-053", None, true);
     let admin = server.login();
     let mut browser = Browser::start("dash-053", &["ko-KR"]);
-    login_alice(&mut browser, &server);
-    open_settings(&mut browser, &server);
+    settings::login_alice(&mut browser, &server);
+    settings::open_settings(&mut browser, &server);
     let original = item_value(&server.query(&admin, CONFIG), WAITING).to_string();
     for selector in [
         "#settings-cancel",
         "a.navbar-item[href='/']",
         "a.navbar-item[href='/#/settings']",
     ] {
-        open_settings_edit(&mut browser, &server);
-        set_field_value(&mut browser, WAITING, "15");
+        settings::open_settings_edit(&mut browser, &server);
+        settings::set_field_value(&mut browser, WAITING, "15");
         browser.eval("globalThis.exitConfirmations=0;globalThis.confirm=()=>{globalThis.exitConfirmations++;return false}");
         browser.click(selector);
         if selector == "a.navbar-item[href='/']" {
             browser.wait("document.querySelector('#operations-refresh') !== null");
-            open_settings(&mut browser, &server);
+            settings::open_settings(&mut browser, &server);
         } else {
             browser.wait("location.hash === '#/settings' && document.querySelector('#settings-edit') !== null && !document.querySelector('#settings-edit').disabled");
         }
@@ -1101,9 +1101,9 @@ pub fn leaving_settings_edit_discards_input_without_confirmation_or_patch() {
             "document.querySelector('dialog[open]') === null && !globalThis.exitConfirmations",
         );
         assert_eq!(server.proxy.count("PATCH", CONFIG), 0);
-        open_settings_edit(&mut browser, &server);
+        settings::open_settings_edit(&mut browser, &server);
         assert_eq!(
-            get_field_value(&mut browser, WAITING),
+            settings::get_field_value(&mut browser, WAITING),
             original,
             "draft discarded on {selector}"
         );

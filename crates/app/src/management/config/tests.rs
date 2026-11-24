@@ -10,7 +10,7 @@ use super::*;
 use crate::reload::ports::{ReloadFileStore, ReloadTlsStore, TlsBuildError};
 use crate::reload::service::ReloadService;
 use crate::reload::snapshot::{ReloadCell, ReloadSnapshot};
-use crate::reload::{ConfigFileState, ConfigPresence, ReloadResult};
+use crate::reload::{ConfigFileState, ConfigPresence, LastReloadOutcome};
 use crate::settings::{
     AdminSessionSettings, AdminSettings, Argon2Settings, ConfigError, DashboardSettings,
     EntryPointSettings, IpInfoSettings, KeepaliveSettings, LimitSettings, LogOutput, LogSettings,
@@ -314,13 +314,13 @@ impl ReloadTlsStore<u32> for FakeTls {
     }
 }
 
-struct RecordingSink {
+struct SpyEventSink {
     trace: Trace,
     cell: Arc<ReloadCell<u32>>,
     observations: Mutex<Vec<(Event, Arc<ReloadSnapshot<u32>>)>>,
 }
 
-impl EventSink for RecordingSink {
+impl EventSink for SpyEventSink {
     fn record(&self, event: &Event) {
         let name = match event {
             Event::ReloadApplied { .. } => "reload_applied".to_owned(),
@@ -336,9 +336,9 @@ impl EventSink for RecordingSink {
     }
 }
 
-struct FixedClock(Trace);
+struct SpyClock(Trace);
 
-impl Clock for FixedClock {
+impl Clock for SpyClock {
     fn monotonic(&self) -> Duration {
         Duration::from_secs(200)
     }
@@ -354,7 +354,7 @@ struct Harness {
     files: Arc<FakeFiles>,
     document: Arc<FakeDocument>,
     tls: Arc<FakeTls>,
-    sink: Arc<RecordingSink>,
+    sink: Arc<SpyEventSink>,
     cell: Arc<ReloadCell<u32>>,
     trace: Trace,
 }
@@ -379,7 +379,7 @@ impl Harness {
             trace: trace.clone(),
             bad_original: Mutex::new(false),
         });
-        let sink = Arc::new(RecordingSink {
+        let sink = Arc::new(SpyEventSink {
             trace: trace.clone(),
             cell: cell.clone(),
             observations: Mutex::new(Vec::new()),
@@ -414,7 +414,7 @@ impl Harness {
             document.clone(),
             PathBuf::from("config/relay.toml"),
             PathBuf::from("config"),
-            Arc::new(FixedClock(trace.clone())),
+            Arc::new(SpyClock(trace.clone())),
             sink.clone(),
         );
         let h = Self {
@@ -528,7 +528,7 @@ impl Harness {
 
 fn actor() -> ConfigActor {
     ConfigActor {
-        admin_account: AccountName::parse("alice").unwrap_or_else(|error| panic!("{error:?}")),
+        admin_account: Name::parse("alice").unwrap_or_else(|error| panic!("{error:?}")),
         peer_ip: PeerIp::from(addr(51000)),
     }
 }
@@ -847,7 +847,7 @@ fn patch_follows_all_ten_steps_and_stops_on_first_error() {
                         .last_reload(),
                     Some(&LastReload {
                         at: result.as_of,
-                        result: ReloadResult::Applied,
+                        result: LastReloadOutcome::Applied,
                         trigger: ReloadTrigger::ConfigEdit,
                         config_keys: result.applied,
                     })
@@ -1226,7 +1226,10 @@ fn get_classifies_unreadable_and_invalid_files_without_changing_runtime_or_histo
         );
         assert_eq!(view.last_reload, history);
         assert!(view.edit_enabled);
-        assert_eq!(view.items, config_items(&before.settings, &before.presence));
+        assert_eq!(
+            view.items,
+            items::config_items(&before.settings, &before.presence)
+        );
         assert!(Arc::ptr_eq(&before, &h.cell.current()));
         assert_eq!(
             h.reload
@@ -1337,7 +1340,7 @@ fn descriptors_follow_contract_order_with_44_dynamic_and_38_enabled_editable_key
     ];
     for edit_switch in [true, false] {
         all.management.config_edit = edit_switch;
-        let items = config_items(&all, &ConfigPresence::default());
+        let items = items::config_items(&all, &ConfigPresence::default());
         assert_eq!(
             items
                 .iter()
@@ -1378,7 +1381,7 @@ fn descriptors_follow_contract_order_with_44_dynamic_and_38_enabled_editable_key
     all.relay.wss.viewer.enabled = false;
     all.relay.wss.server.enabled = false;
     all.mode1.enabled = false;
-    let items = config_items(&all, &ConfigPresence::default());
+    let items = items::config_items(&all, &ConfigPresence::default());
     assert_eq!(
         items
             .iter()
@@ -1433,7 +1436,7 @@ fn ticket_editability_depends_on_either_transport_role_not_ticket_switch() {
             settings.relay.wss.server.enabled = server_wss;
             settings.relay.ticket.viewer.enabled = ticket_enabled;
             settings.relay.ticket.server.enabled = ticket_enabled;
-            let items = config_items(&settings, &ConfigPresence::default());
+            let items = items::config_items(&settings, &ConfigPresence::default());
             for (role, editable) in [
                 ("viewer", viewer_ws || viewer_wss),
                 ("server", server_ws || server_wss),
@@ -1474,7 +1477,7 @@ fn descriptors_distinguish_absent_disabled_values_from_explicit_empty_lists_and_
     let mut disabled = settings();
     disabled.relay.tcp_viewer = EntryPointSettings::default();
     disabled.relay.tcp_server = EntryPointSettings::default();
-    let absent = config_items(&disabled, &ConfigPresence::default());
+    let absent = items::config_items(&disabled, &ConfigPresence::default());
     for key in [
         "relay.tcp_viewer.listen",
         "relay.tcp_viewer.allow",
@@ -1531,7 +1534,7 @@ fn descriptors_distinguish_absent_disabled_values_from_explicit_empty_lists_and_
     disabled.relay.ws.server.allow = Some(AllowList::default());
     disabled.relay.wss.server.allow = Some(AllowList::default());
     disabled.mode1.allow_targets = Some(TargetPolicy::default());
-    let explicit = config_items(&disabled, &presence);
+    let explicit = items::config_items(&disabled, &presence);
     for key in [
         "relay.ws.viewer.allow",
         "relay.ws.viewer.allowed_origins",
@@ -1555,7 +1558,7 @@ fn descriptors_distinguish_absent_disabled_values_from_explicit_empty_lists_and_
 /// spec: management.md:MGT-036 partial
 #[test]
 fn descriptors_expose_all_integer_ranges_and_no_bounds_for_other_types() {
-    let items = config_items(&settings(), &ConfigPresence::default());
+    let items = items::config_items(&settings(), &ConfigPresence::default());
     let expected = [
         ("admin.argon2.memory_kib", 19_456, 1_048_576),
         ("admin.argon2.iterations", 2, 10),
@@ -1619,7 +1622,7 @@ fn descriptors_keep_lone_disabled_tls_paths_without_inventing_omitted_paths() {
         let path = PathBuf::from("config/inactive.pem");
         presence.keys.insert(key.to_owned());
         presence.inactive_paths.insert(key.to_owned(), path.clone());
-        let items = config_items(&running, &presence);
+        let items = items::config_items(&running, &presence);
         let present = item_named(&items, key);
         assert_eq!(
             present.value,
@@ -1650,7 +1653,7 @@ fn shared_listener_editability_tracks_each_role_and_any_role_enablement() {
         allow: Some(AllowList::default()),
         ..Default::default()
     };
-    let items = config_items(&running, &ConfigPresence::default());
+    let items = items::config_items(&running, &ConfigPresence::default());
     for key in [
         "relay.ws.trusted_proxies",
         "relay.ws.server.allow",
@@ -1700,7 +1703,7 @@ fn metrics_descriptor_follows_status_and_refuses_edits_before_io() {
     for enabled in [false, true] {
         let mut running = transaction_settings();
         running.metrics.enabled = enabled;
-        let items = config_items(&running, &ConfigPresence::default());
+        let items = items::config_items(&running, &ConfigPresence::default());
         let status_index = items
             .iter()
             .position(|item| item.key == "status.listen")
@@ -1732,7 +1735,7 @@ fn metrics_descriptor_follows_status_and_refuses_edits_before_io() {
 #[test]
 fn ip_info_descriptors_show_paths_and_refuse_edits_before_io() {
     let mut running = transaction_settings();
-    let items = config_items(&running, &ConfigPresence::default());
+    let items = items::config_items(&running, &ConfigPresence::default());
     let tail: Vec<_> = items[items.len() - 2..]
         .iter()
         .map(|item| (item.key.as_str(), item.value.clone()))
@@ -1747,7 +1750,7 @@ fn ip_info_descriptors_show_paths_and_refuse_edits_before_io() {
     let path = std::path::PathBuf::from("ipdb").join("ipinfo_lite.mmdb");
     running.ip_info.country_db = Some(path.clone());
     running.ip_info.asn_db = Some(path.clone());
-    let items = config_items(&running, &ConfigPresence::default());
+    let items = items::config_items(&running, &ConfigPresence::default());
     for item in &items[items.len() - 2..] {
         assert_eq!(item.value, ConfigValue::String(path.display().to_string()));
         assert_eq!(item.reload, ConfigReloadKind::Restart);

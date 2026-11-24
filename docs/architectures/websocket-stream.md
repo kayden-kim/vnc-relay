@@ -24,7 +24,7 @@
 | --- | --- |
 | [`Cargo.lock`](../../Cargo.lock), [`Cargo.toml`](../../Cargo.toml) | 잠금 버전은 `tokio-tungstenite 0.30.0`, `tungstenite 0.30.0`이다. 직접 의존은 기본 기능을 끄고 `handshake`를 켠 `tokio-tungstenite`다. |
 | [`crates/adapters/src/websocket.rs`](../../crates/adapters/src/websocket.rs)의 `upgrade` | `upgrade::read_head`로 head와 뒤따른 원시 바이트(`suffix`)를 받는다. `switching_protocols`의 101을 `write_all`·`flush`한 뒤 `Step::Switched { suffix, exchange_at }`를 반환한다. 라이브러리의 HTTP 수락 함수가 101을 보내는 구조가 아니다. |
-| 같은 파일의 `WsPolicy`, `connection` | `WsPolicy`는 `accept: AcceptPolicy`를 가진다. `connection`은 suffix·수락 B·업그레이드 M/Kw와 `Listener::transport()`를 `WsRelayStream::new`에 넘긴다. 경로가 고른 역할을 공통 서비스 문맥에 담는다. |
+| 같은 파일의 `WsPolicy`, `connection` | `WsPolicy`는 `accept: AcceptPolicy`를 가진다. `connection`은 suffix·수락 B·업그레이드 M/Kw와 `ListenerKind::transport()`를 `WsRelayStream::new`에 넘긴다. 경로가 고른 역할을 공통 서비스 문맥에 담는다. |
 | [`crates/adapters/src/upgrade.rs`](../../crates/adapters/src/upgrade.rs)의 `read_head` | 청크 단위로 읽고 HTTP head 상한을 둔다. `\r\n\r\n` 뒤 바이트는 버리지 않고 `HeadRead::Complete { head, suffix }`의 `suffix`로 돌려준다. |
 | 같은 파일의 `check`, `switching_protocols` | `tungstenite::handshake::derive_accept_key`를 쓴다. `binary` 서브프로토콜을 선택할 수 있다. 확장을 수락하지 않는다. |
 | [`crates/app/src/relay/handshake.rs`](../../crates/app/src/relay/handshake.rs)의 `read_request` | Viewer일 때 `VIEWER_GREETING`을 한 번 `write_all`한 뒤 `flush`한다. 둘 다 같은 H 안이다. 요청을 나눠 읽고 250바이트 뒤의 데이터를 반환한다. |

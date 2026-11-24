@@ -6,16 +6,18 @@ use axum::http::request::Parts;
 use axum::http::{Method, StatusCode};
 use axum::response::Response;
 use serde_json::{Map, Value, json};
-use vnc_relay_app::ip_info::IpDbStatus;
-use vnc_relay_app::management::session::AuthorizedAdmin;
-use vnc_relay_app::sources::SourceWindow;
-use vnc_relay_app::sources::report::{AddressItem, AsnItem, CountryItem, Counts, SourcesReport};
+use vnc_relay_application::ip_info::IpDbStatus;
+use vnc_relay_application::management::session::AuthorizedAdmin;
+use vnc_relay_application::sources::SourceWindow;
+use vnc_relay_application::sources::report::{
+    AddressItem, AsnItem, CountryItem, Counts, SourcesReport,
+};
 use vnc_relay_domain::peer_ip::PeerIp;
 
-use super::logs_api::percent_decode;
-use super::session_api::{media_type_allows, poll_flag};
-use super::{Shared, json_error, json_response, method_not_allowed};
-use crate::clock::timestamp;
+use super::Shared;
+use super::logs_api;
+use super::session_api;
+use crate::clock;
 
 const POLL_MESSAGE: &str = "X-Relay-Poll은 값 1을 가진 GET 요청에만 쓸 수 있다.";
 const MEDIA_TYPE_MESSAGE: &str = "요청 본문은 application/json이어야 한다.";
@@ -31,15 +33,15 @@ pub(super) async fn answer(
     body: Body,
 ) -> Response {
     if parts.method != Method::GET {
-        return method_not_allowed("GET", "이 경로는 GET 요청만 받는다.");
+        return super::method_not_allowed("GET", "이 경로는 GET 요청만 받는다.");
     }
-    match poll_flag(&parts.headers) {
-        None => return json_error(StatusCode::BAD_REQUEST, "invalid_request", POLL_MESSAGE),
+    match session_api::poll_flag(&parts.headers) {
+        None => return super::json_error(StatusCode::BAD_REQUEST, "invalid_request", POLL_MESSAGE),
         Some(false) => shared.auth.touch(admin),
         Some(true) => {}
     }
-    if !media_type_allows(body, &parts.headers).await {
-        return json_error(
+    if !session_api::media_type_allows(body, &parts.headers).await {
+        return super::json_error(
             StatusCode::UNSUPPORTED_MEDIA_TYPE,
             "invalid_request",
             MEDIA_TYPE_MESSAGE,
@@ -47,14 +49,16 @@ pub(super) async fn answer(
     }
     let window = match window_query(parts.uri.query()) {
         Ok(window) => window,
-        Err(message) => return json_error(StatusCode::BAD_REQUEST, "invalid_request", message),
+        Err(message) => {
+            return super::json_error(StatusCode::BAD_REQUEST, "invalid_request", message);
+        }
     };
     // Counting up to 100,000 events takes a few milliseconds; it runs on a
     // blocking thread so the management runtime keeps answering.
     let sources = std::sync::Arc::clone(&shared.sources);
     match tokio::task::spawn_blocking(move || sources.report(window)).await {
-        Ok(report) => json_response(StatusCode::OK, &sources_json(&report)),
-        Err(_) => json_error(
+        Ok(report) => super::json_response(StatusCode::OK, &sources_json(&report)),
+        Err(_) => super::json_error(
             StatusCode::INTERNAL_SERVER_ERROR,
             "internal",
             "접속 출처를 집계하지 못했다.",
@@ -72,11 +76,11 @@ fn window_query(query: Option<&str>) -> Result<SourceWindow, &'static str> {
             continue;
         }
         let (raw_key, raw_value) = pair.split_once('=').unwrap_or((pair, ""));
-        let key = percent_decode(raw_key).ok_or(ENCODING_MESSAGE)?;
+        let key = logs_api::percent_decode(raw_key).ok_or(ENCODING_MESSAGE)?;
         if key != "window" {
             continue;
         }
-        let value = percent_decode(raw_value).ok_or(ENCODING_MESSAGE)?;
+        let value = logs_api::percent_decode(raw_value).ok_or(ENCODING_MESSAGE)?;
         if window.is_some() {
             return Err("window 매개변수가 중복되었습니다.");
         }
@@ -93,11 +97,14 @@ fn window_query(query: Option<&str>) -> Result<SourceWindow, &'static str> {
 fn sources_json(report: &SourcesReport) -> Value {
     let [country, asn] = &report.databases;
     let mut body = Map::new();
-    body.insert("as_of".to_owned(), Value::from(timestamp(report.as_of)));
+    body.insert(
+        "as_of".to_owned(),
+        Value::from(clock::timestamp(report.as_of)),
+    );
     body.insert("window".to_owned(), Value::from(report.window.as_str()));
     body.insert(
         "window_start".to_owned(),
-        Value::from(timestamp(report.window_start)),
+        Value::from(clock::timestamp(report.window_start)),
     );
     body.insert("capacity".to_owned(), Value::from(report.capacity));
     body.insert("stored".to_owned(), Value::from(report.stored));
@@ -105,7 +112,7 @@ fn sources_json(report: &SourcesReport) -> Value {
         "dropped_before".to_owned(),
         report
             .dropped_before
-            .map_or(Value::Null, |at| Value::from(timestamp(at))),
+            .map_or(Value::Null, |at| Value::from(clock::timestamp(at))),
     );
     body.insert(
         "deny_editable".to_owned(),
@@ -147,8 +154,8 @@ fn database_json(status: &IpDbStatus) -> Value {
         "error": status.error.map(|failure| failure.as_str()),
         "database_type": in_use.map(|db| db.metadata.database_type.as_str()),
         "provider": in_use.map(|db| db.metadata.provider.as_str()),
-        "build_time": in_use.map(|db| timestamp(db.metadata.build_time)),
-        "loaded_at": in_use.map(|db| timestamp(db.loaded_at)),
+        "build_time": in_use.map(|db| clock::timestamp(db.metadata.build_time)),
+        "loaded_at": in_use.map(|db| clock::timestamp(db.loaded_at)),
     })
 }
 
@@ -188,7 +195,7 @@ fn address_json(item: &AddressItem) -> Value {
     object.extend(counts_json(&item.counts));
     object.insert(
         "last_seen_at".to_owned(),
-        Value::from(timestamp(item.last_seen_at)),
+        Value::from(clock::timestamp(item.last_seen_at)),
     );
     object.insert(
         "deny_entries".to_owned(),

@@ -13,19 +13,10 @@ use std::time::{Duration, Instant};
 
 use serde_json::{Value, json};
 use vnc_relay_adapters::accounts_file::Argon2PasswordHashGateway;
-use vnc_relay_app::ports::PasswordHashGateway;
+use vnc_relay_application::ports::PasswordHashGateway;
 use vnc_relay_domain::account::{Argon2Params, Password};
 
-#[path = "browser_port.rs"]
-mod browser_port;
-#[path = "cdp.rs"]
-mod cdp;
-#[path = "dashboard_cdp.rs"]
-mod dashboard_cdp;
-#[path = "dashboard_proxy.rs"]
-mod proxy;
-pub use cdp::Browser;
-pub use proxy::{Fault, Proxy};
+use crate::dashboard_proxy::Proxy;
 
 pub const LIMIT: Duration = Duration::from_secs(20);
 pub const PASSWORD: &str = "dashboard-real-password";
@@ -624,13 +615,17 @@ fn reserve_ports_unused_by(config: &str) -> (Vec<TcpListener>, [u16; 5]) {
 
 fn spawn_serve(dir: &std::path::Path) -> Child {
     must(
-        Command::new(env!("CARGO_BIN_EXE_vnc-relay"))
-            .args(["serve", "--config"])
-            .arg(dir.join("relay.toml"))
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::from(must(fs::File::create(dir.join("stderr.txt")))))
-            .spawn(),
+        Command::new(
+            std::env::var_os("CARGO_BIN_EXE_vnc-relay").unwrap_or_else(|| {
+                panic!("Cargo did not set CARGO_BIN_EXE_vnc-relay for this integration test")
+            }),
+        )
+        .args(["serve", "--config"])
+        .arg(dir.join("relay.toml"))
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::from(must(fs::File::create(dir.join("stderr.txt")))))
+        .spawn(),
     )
 }
 

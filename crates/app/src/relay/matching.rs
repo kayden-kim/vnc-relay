@@ -1,11 +1,11 @@
 //! One-lock Mode II registration, bounded waiting reads, and exact-ID handoff.
 
-use std::future::{Future, poll_fn};
+use std::future::{self, Future};
 use std::pin::{Pin, pin};
 use std::task::{Poll, Waker};
 
 use tokio::io::ReadBuf;
-use vnc_relay_domain::budget::BudgetPermit;
+use vnc_relay_domain::budget::Permit;
 use vnc_relay_domain::entry_point::Role;
 use vnc_relay_domain::handshake::Mode;
 use vnc_relay_domain::matching::{ArrivalOutcome, MatchClaim, MatchingError, WaitingEntry};
@@ -13,7 +13,6 @@ use vnc_relay_domain::relay_id::RelayId;
 
 use super::{
     ActivePeer, OwnedConnection, RelayDispatchError, RelayRuntime, RelayService, SessionPair,
-    milliseconds,
 };
 use crate::events::{AbortReason, Event, RejectReason, RelayIdRef, Stage, WaitingRemovalReason};
 use crate::ports::{RelayCloseAction, RelayLifecycle, RelayStreamError, TargetGateway};
@@ -23,7 +22,7 @@ pub(super) struct WaitingConnection {
     pub(super) metadata: WaitingEntry,
     pub(super) reference: RelayIdRef,
     filled: usize,
-    waiting_permit: Option<BudgetPermit>,
+    waiting_permit: Option<Permit>,
     waker: Option<Waker>,
     /// Set when a changed deny list denies the client address. The owner
     /// removes the entry with `waiting_removed(reason=ip_denied)`.
@@ -369,7 +368,7 @@ async fn wait<C: TargetGateway>(
     let mut timer = pin!(tokio::time::sleep(
         deadline.saturating_sub(service.clock.monotonic())
     ));
-    let removed = poll_fn(|cx| {
+    let removed = future::poll_fn(|cx| {
         let shutdown = stopped.as_mut().poll(cx).is_ready();
         let now = service.clock.monotonic();
         let timer_expired = timer.as_mut().poll(cx).is_ready();
@@ -458,7 +457,7 @@ async fn cleanup<C: TargetGateway>(
 ) {
     let metadata = removed.entry.metadata;
     let reference = removed.entry.reference.clone();
-    let waited_ms = milliseconds(
+    let waited_ms = super::milliseconds(
         service
             .clock
             .monotonic()

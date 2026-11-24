@@ -147,13 +147,11 @@ pub fn display_path(root: &Path, path: &Path) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::display_path;
-
     #[test]
     fn display_path_joins_inside_root_with_slashes() {
         let root = std::env::temp_dir().join("repo");
         let path = root.join("target").join("help-site");
-        assert_eq!(display_path(&root, &path), "target/help-site");
+        assert_eq!(super::display_path(&root, &path), "target/help-site");
     }
 
     #[test]
@@ -161,6 +159,9 @@ mod tests {
         let base = std::env::temp_dir();
         let root = base.join("repo");
         let outside = base.join("vnc-relay-target").join("help-site");
-        assert_eq!(display_path(&root, &outside), outside.display().to_string());
+        assert_eq!(
+            super::display_path(&root, &outside),
+            outside.display().to_string()
+        );
     }
 }

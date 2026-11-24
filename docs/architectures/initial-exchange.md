@@ -37,7 +37,7 @@ flowchart LR
     TCP -->|"수락·IP·L·K·수락 사건"| ACCEPT["accept_connections"]
     START -->|"공유 서비스 주입"| WS["adapters/websocket.rs<br/>connection"]
     WS -->|"101 뒤 스트림·문맥·permit·종료 알림"| SERVICE
-    ACCEPT -->|"스트림·문맥·BudgetPermit·종료 알림"| SERVICE["app/relay.rs<br/>RelayService::handle_connection"]
+    ACCEPT -->|"스트림·문맥·budget::Permit·종료 알림"| SERVICE["app/relay.rs<br/>RelayService::handle_connection"]
     SERVICE -->|"시작 바이트·읽기·H"| READ["app/relay/handshake.rs"]
     READ -->|"받은 바이트"| PARSE["domain/handshake.rs<br/>HandshakeParser"]
     PARSE -->|"ID 값 검사"| ID["domain/relay_id.rs<br/>RelayId"]
@@ -48,7 +48,7 @@ flowchart LR
 | 파일·심볼 | 책임 | 생성·소유 |
 | --- | --- | --- |
 | `crates/domain/src/handshake.rs` `HandshakeParser` | 250바이트 누적과 완료 판정. 완료 전에는 의미를 해석하지 않는다. | 연결마다 하나. app의 요청 읽기 작업이 소유한다. |
-| 같은 파일의 `HandshakeRequest`, `HandshakeError`, `Mode`, `TargetAddress`, `TargetHost` | 해석 결과와 형식 오류. `TargetHost`는 `handshake` 모듈 안의 이름이다. `target_policy::TargetHost`와는 다른 타입이다. | 요청 완료 때 하나. 다음 단계로 이동한다. |
+| 같은 파일의 `HandshakeRequest`, `HandshakeError`, `Mode`, `TargetAddress`, `TargetHost` | 해석 결과와 형식 오류. `TargetHost`는 `handshake` 모듈의 타입이다. `target_policy::TargetItemHost`와는 다른 타입이다. | 요청 완료 때 하나. 다음 단계로 이동한다. |
 | `crates/domain/src/relay_id.rs` `RelayId`, `RelayIdError` | 유효한 ASCII 숫자열과 정확 일치 비교 | Mode II 요청이 소유한다. |
 | `crates/app/src/relay.rs` `RelayService`, `ConnectionContext`, `PreparedConnection<S>` | 연결 사용 사례 입구와 다음 단계에 넘길 연결 | 서비스는 시작 때 만든다. 연결 값은 연결 작업 하나가 소유한다. |
 | `crates/app/src/relay/handshake.rs` | 시작 바이트 쓰기, 제한된 읽기, 기한·단절 구분 | `handle_connection`이 호출한다. |
@@ -77,7 +77,7 @@ domain API는 다음과 같다. 공개 상수는 `HANDSHAKE_REQUEST_LEN = 250`�
 
 `HandshakeRequest`는 `Mode1(TargetAddress)` 또는 `Mode2(RelayId)`다. 역할은 별도 요청 필드로 중복 저장하지 않는다. `ConnectionContext.entry_point.role()`로 얻는다. `Mode`는 사건의 `mode1`·`mode2` 표기에 쓴다.
 
-`modes`는 domain의 `HandshakePolicy { mode1_enabled: bool, mode2_enabled: bool }`다. app은 시작 설정의 두 활성 값을 이 타입에 담는다. domain이 app의 설정 타입을 참조하지 않는다.
+`modes`는 domain의 `handshake::Policy { mode1_enabled: bool, mode2_enabled: bool }`다. app은 시작 설정의 두 활성 값을 이 타입에 담는다. domain이 app의 설정 타입을 참조하지 않는다.
 
 `TargetAddress`는 단일 `IpAddr` 또는 정규화한 DNS 이름과 `u16` 포트다. DNS 이름만 소문자화하고 끝의 점을 지운다. ID에는 이 처리를 하지 않는다. `RelayId`는 검증된 `String`을 소유한다. 요청 읽기 버퍼가 사라진 뒤에도 ID가 살아야 하므로 이 소유용 복사는 필요하다. 요청 전체나 채움 바이트는 결과에 복제하지 않는다. ID와 초기 요청의 `Debug` 출력에는 원문을 넣지 않는다.
 
@@ -93,7 +93,7 @@ domain API는 다음과 같다. 공개 상수는 `HANDSHAKE_REQUEST_LEN = 250`�
 | IPv4-mapped IPv6 | `PeerIp::new`가 쓰는 `IpAddr::to_canonical` | 대상 주소에도 같은 표준 변환을 쓴다. `PeerIp` 타입을 대상 값으로 쓰지는 않는다. |
 | 요청 포트 | `target_policy::parse_port`는 설정용이다. 앞자리 0도 받는다. | 요청은 십진수·범위를 검사하며 앞자리 0을 거절한다. 설정 포트 문법은 바꾸지 않는다. |
 
-`IpItem::parse`나 `TargetItem::parse`를 요청 전체에 적용하지 않는다. 그 함수들은 CIDR·주소 범위·포트 범위를 받는다. 요청은 단일 호스트와 단일 포트만 받는다. `target_policy::TargetHost::Ip(IpItem)`도 요청 결과에 재사용하지 않는다.
+`IpItem::parse`나 `TargetItem::parse`를 요청 전체에 적용하지 않는다. 그 함수들은 CIDR·주소 범위·포트 범위를 받는다. 요청은 단일 호스트와 단일 포트만 받는다. `target_policy::TargetItemHost::Ip(IpItem)`도 요청 결과에 재사용하지 않는다.
 
 `allow_list::parse_address`는 IPv6의 점 표기 IPv4 꼬리를 거절한다. 이는 [설정 계약 1.3절](../contracts/config-v4.md#13-ip-항목-문법)의 제약이다. 반면 요청 계약은 RFC 4291 표기와 IPv4-mapped 변환을 정한다. 따라서 `[::ffff:192.0.2.30]`은 표준 `Ipv6Addr` 파서로 읽고 IPv4로 바꾼다. 설정용 금지 규칙을 요청에 복사하지 않는다. IPv6 문법 자체의 별도 파서는 만들지 않는다.
 
@@ -117,12 +117,12 @@ Viewer의 빈 요청은 Mode I이 꺼졌으면 `mode_disabled`, 켜졌으면 `ha
 | 순서 | 코드 위치·처리 | 전달 값·결과 |
 | --- | --- | --- |
 | 1 | `src/serve.rs`가 `RelayService`를 조립한다. | 시작 모드, 실행 설정 소스, 공유 `EventSink`·`Clock` |
-| 2 | `net.rs`의 `accept_connections`가 IP → L → `conn_id` → `connection_accepted` → K 순서를 유지한다. | 수락 B/H/U/K, 소켓과 기존 `BudgetPermit` 하나 |
+| 2 | `net.rs`의 `accept_connections`가 IP → L → `conn_id` → `connection_accepted` → K 순서를 유지한다. | 수락 B/H/U/K, 소켓과 기존 `budget::Permit` 하나 |
 | 3 | TCP·WS·WSS 연결 작업이 `ConnectionContext`와 스트림을 `handle_connection`에 넘긴다. | 실제 상대 주소·수락 시각·초기 교환 진입 시각·수락 B·시작 H와 종료 알림. ticket 업그레이드는 별도 `Option<TicketBinding>`도 넘긴다. TCP는 `None`이다. |
 | 4 | app이 H의 절대 기한을 만든다. ticket에 `sx`가 있으면 단조 세션 만료 기한과 비교한다. Viewer면 즉시 `RFB 000.000\n`을 한 번 쓰고 flush한다. Server에는 쓰지 않는다. | 쓰기·flush와 읽기는 더 이른 기한을 따른다. 두 기한이 같으면 H가 우선한다(구현 판단). 이후 H를 다시 시작하지 않는다. |
 | 5 | 요청을 읽어 `feed`에 넣는다. 매번 소비 길이와 완료 여부를 확인한다. | 250바이트 미만이면 같은 기한으로 계속 읽는다. |
 | 6 | 250바이트가 H 안에 모였으면 `finish`를 부른다. | 잘못된 값·꺼진 모드는 6절로 간다. 유효 요청이면 H 감시를 끝낸다. |
-| 7 | 결과·스트림·후속 데이터·문맥·`BudgetPermit`을 `PreparedConnection<S>`로 묶는다. | `handle_connection`은 유효 요청을 호출자에게 반환한다. 임시 보류·닫기·가짜 인계를 하지 않는다. TCP·WS·WSS 호출자가 `dispatch`를 실행한다([연결 순서](relay-session.md#8-현재-코드와의-차이와-연결-순서)). |
+| 7 | 결과·스트림·후속 데이터·문맥·`budget::Permit`을 `PreparedConnection<S>`로 묶는다. | `handle_connection`은 유효 요청을 호출자에게 반환한다. 임시 보류·닫기·가짜 인계를 하지 않는다. TCP·WS·WSS 호출자가 `dispatch`를 실행한다([연결 순서](relay-session.md#8-현재-코드와의-차이와-연결-순서)). |
 
 `dispatch`는 기존 초기 요청 검사 뒤, 모드 분기 전에 ticket의 `rid`를 대조한다. ticket 연결의 Mode I 요청과 `rid`가 바이트 단위로 다른 Mode II 요청은 Close 4012 `ticket_relay_mismatch`로 거절한다. 꺼진 Mode I의 기존 1008은 먼저 적용한다. `connection_rejected(stage=initial_exchange, reason=ticket_relay_mismatch)`는 `warn`이며 `mode`·`ticket_jti`를 쓴다. Mode II이면 `relay_id_ref`도 쓴다. 같은 ID로 대기 중인 상대는 유지한다([접속 ticket 모듈 설계](relay-access-ticket.md#43-101-뒤)).
 
@@ -169,7 +169,7 @@ app의 일반 tokio 기능은 `time`, `sync`, `io-util`뿐이다. `macros`, `rt`
 
 거절·중단은 E 안에서 close action을 진행한다. 절대 E·Grace의 G·Force 중 먼저 온 경계에서 기다림을 끝낸다. 이후 스트림과 후속 데이터를 버리고 L 자리를 돌려준 뒤 사건 하나를 쓴다(구현 판단). E는 H와 별도다. 닫기를 기다리면서 H를 다시 시작하지 않는다. 읽지 않은 수신 데이터 때문에 OS가 RST를 보낼 수 있다는 계약의 주의도 유지한다.
 
-`PreparedConnection<S>`는 스트림과 `BudgetPermit`을 함께 소유한다. 단계가 바뀌어도 L을 다시 잡거나 일찍 돌려주지 않는다. 실패·취소 때는 스트림을 먼저 버리고 그 뒤 permit을 버린다. 수락 반복은 종료 알림을 보낸 뒤 연결 작업을 거둔다. `server_stopped`는 그 뒤에 기록한다. 초기 교환은 Lw·대기·활성 등록을 소유하지 않는다.
+`PreparedConnection<S>`는 스트림과 `budget::Permit`을 함께 소유한다. 단계가 바뀌어도 L을 다시 잡거나 일찍 돌려주지 않는다. 실패·취소 때는 스트림을 먼저 버리고 그 뒤 permit을 버린다. 수락 반복은 종료 알림을 보낸 뒤 연결 작업을 거둔다. `server_stopped`는 그 뒤에 기록한다. 초기 교환은 Lw·대기·활성 등록을 소유하지 않는다.
 
 서비스 호출 시 스트림과 permit을 비공개 자원 묶음으로 옮긴다. 반환된 future가 아직 실행되지 않았거나 도중에 버려져도 스트림을 먼저 버린다. 이를 위해 `handle_connection`은 future를 반환하는 일반 함수로 쓴다. 호출자는 기존 비동기 함수처럼 `.await`한다. 자원 묶음에는 별도 할당이 없다.
 

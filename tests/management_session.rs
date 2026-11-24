@@ -17,7 +17,7 @@ use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
 use vnc_relay_adapters::accounts_file::Argon2PasswordHashGateway;
-use vnc_relay_app::ports::PasswordHashGateway;
+use vnc_relay_application::ports::PasswordHashGateway;
 use vnc_relay_domain::account::{Argon2Params, Password};
 
 const BIN: &str = env!("CARGO_BIN_EXE_vnc-relay");
@@ -664,7 +664,7 @@ fn restart_session_scenario(stop: fn(Server) -> String) {
 #[test]
 fn account_file_content_changes_apply_only_after_restart() {
     use vnc_relay_adapters::accounts_file::{self, AccountsFile, HashFloor};
-    use vnc_relay_app::ports::AccountStore;
+    use vnc_relay_application::ports::AccountStore;
 
     let _guard = lock_ports();
     let dir = setup_dir("account-content-restart");

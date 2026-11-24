@@ -11,31 +11,31 @@ use std::time::{Duration, UNIX_EPOCH};
 use serde_json::{Map, Value, json};
 use vnc_relay_adapters::clock::SystemClock;
 use vnc_relay_adapters::crypto::RelayIdKey;
-use vnc_relay_adapters::ops_log::{JsonLinesEventSink, format_line};
+use vnc_relay_adapters::ops_log::{self, JsonLinesEventSink};
 use vnc_relay_adapters::status_http::StatusListener;
-use vnc_relay_app::events::{
+use vnc_relay_application::events::{
     AbortReason, ConnectionErrorKind, Event, Phase, RejectReason, Stage, TargetFailureReason,
     WaitingRemovalReason,
 };
-use vnc_relay_app::ip_info::{IpDbFailure, IpDbKey};
-use vnc_relay_app::lifecycle::LifecycleService;
-use vnc_relay_app::metrics::{MetricSources, Metrics, MetricsService};
-use vnc_relay_app::ports::{
+use vnc_relay_application::ip_info::{IpDbError, IpDbKey};
+use vnc_relay_application::lifecycle::LifecycleService;
+use vnc_relay_application::metrics::{MetricSources, Metrics, MetricsService};
+use vnc_relay_application::ports::{
     AdminSessionSource, Clock, CpuTimes, EventSink, OpenCount, ProcessStats, ProcessStatsSource,
     RelayLifecycle, RelayStateSource,
 };
-use vnc_relay_app::relay::{RelayCounts, RelaySnapshot};
-use vnc_relay_app::reload::ReloadTrigger;
-use vnc_relay_app::reload::snapshot::{ReloadCell, ReloadSnapshot};
-use vnc_relay_app::settings::{ConfigWarning, LogOutput};
-use vnc_relay_domain::account::AccountName;
+use vnc_relay_application::relay::{RelayCounts, RelaySnapshot};
+use vnc_relay_application::reload::ReloadTrigger;
+use vnc_relay_application::reload::snapshot::{ReloadCell, ReloadSnapshot};
+use vnc_relay_application::settings::{ConfigWarning, LogOutput};
+use vnc_relay_domain::account::Name;
 use vnc_relay_domain::allow_list::IpItem;
 use vnc_relay_domain::budget::ConnectionBudget;
 use vnc_relay_domain::conn_id::ConnId;
-use vnc_relay_domain::entry_point::{EntryPoint, Listener, Role};
+use vnc_relay_domain::entry_point::{EntryPoint, ListenerKind, Role};
 use vnc_relay_domain::handshake::Mode;
 use vnc_relay_domain::peer_ip::PeerIp;
-use vnc_relay_domain::session::{CloseCause, SessionId, Side, Transport};
+use vnc_relay_domain::session::{CloseCause, Id, Side, Transport};
 
 fn temp_dir(name: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!("vnc-relay-ops-log-{}-{name}", std::process::id()));
@@ -176,7 +176,7 @@ fn config_edit_events_have_required_fields_and_never_values() {
     let dir = temp_dir("config-edit-events");
     let path = dir.join("relay.log");
     let log = file_sink(&path);
-    let account = AccountName::parse("alice").unwrap_or_else(|error| panic!("account: {error}"));
+    let account = Name::parse("alice").unwrap_or_else(|error| panic!("account: {error}"));
     let peer = PeerIp::new(
         "::ffff:192.0.2.17"
             .parse()
@@ -307,7 +307,7 @@ fn config_edit_events_have_required_fields_and_never_values() {
             assert!(!line.contains_key(forbidden), "{forbidden}: {line:?}");
         }
     }
-    let ipv6 = objects(&format_line(
+    let ipv6 = objects(&ops_log::format_line(
         &Event::ConfigEditRejected {
             admin_account: account,
             peer_ip: PeerIp::new(
@@ -366,9 +366,9 @@ fn writes_each_config_warning_with_its_contract_fields() {
 /// spec: operations.md:OPS-069 partial
 #[test]
 fn shared_listener_logs_resolve_role_only_after_the_path() {
-    for listener in Listener::ALL {
+    for listener in ListenerKind::ALL {
         let conn_id = ConnId::next();
-        let accepted = objects(&format_line(
+        let accepted = objects(&ops_log::format_line(
             &Event::ConnectionAccepted {
                 conn_id,
                 listener,
@@ -384,7 +384,7 @@ fn shared_listener_logs_resolve_role_only_after_the_path() {
         );
         if listener.fixed_role().is_none() {
             for role in [None, Some(Role::Viewer), Some(Role::Server)] {
-                let aborted = objects(&format_line(
+                let aborted = objects(&ops_log::format_line(
                     &Event::ConnectionAborted {
                         conn_id,
                         listener,
@@ -398,7 +398,7 @@ fn shared_listener_logs_resolve_role_only_after_the_path() {
                     UNIX_EPOCH,
                 ))
                 .remove(0);
-                let rejected = objects(&format_line(
+                let rejected = objects(&ops_log::format_line(
                     &Event::UpgradeRejected {
                         conn_id,
                         listener: listener.name(),
@@ -424,7 +424,7 @@ fn shared_listener_logs_resolve_role_only_after_the_path() {
     }
     for entry_point in EntryPoint::ALL {
         for phase in [Phase::Startup, Phase::Reload] {
-            let warning = objects(&format_line(
+            let warning = objects(&ops_log::format_line(
                 &Event::ConfigWarning {
                     warning: ConfigWarning::AllowAllSource {
                         entry_point,
@@ -464,12 +464,12 @@ fn writes_connection_events_with_their_contract_fields() {
     });
     log.record(&Event::ConnectionAccepted {
         conn_id,
-        listener: Listener::TcpServer,
+        listener: ListenerKind::TcpServer,
         peer_ip: peer("2001:db8::5"),
     });
     log.record(&Event::ConnectionAborted {
         conn_id,
-        listener: Listener::TcpServer,
+        listener: ListenerKind::TcpServer,
         role: Some(Role::Server),
         stage: Stage::InitialExchange,
         reason: AbortReason::ServerShutdown,
@@ -566,13 +566,13 @@ fn writes_ip_db_events_with_the_config_key_and_never_a_path() {
     });
     log.record(&Event::IpDbUnavailable {
         key: IpDbKey::Asn,
-        reason: IpDbFailure::FileUnreadable,
+        reason: IpDbError::FileUnreadable,
         phase: Phase::Reload,
         detail: Some("파일을 찾을 수 없다.".to_owned()),
     });
     log.record(&Event::IpDbUnavailable {
         key: IpDbKey::Country,
-        reason: IpDbFailure::UnsupportedData,
+        reason: IpDbError::UnsupportedData,
         phase: Phase::Startup,
         detail: None,
     });
@@ -745,7 +745,7 @@ fn writes_limit_and_error_kind_with_the_reasons_that_carry_them() {
     ] {
         log.record(&Event::ConnectionAborted {
             conn_id,
-            listener: Listener::TcpViewer,
+            listener: ListenerKind::TcpViewer,
             role: Some(Role::Viewer),
             stage: Stage::InitialExchange,
             reason,
@@ -1071,9 +1071,9 @@ fn status_settings() -> Arc<ReloadCell<()>> {
 }
 
 /// A relay with no connection in any stage.
-struct IdleRelay;
+struct StubRelayStateSource;
 
-impl RelayStateSource for IdleRelay {
+impl RelayStateSource for StubRelayStateSource {
     fn snapshot(&self, clock: &dyn Clock) -> RelaySnapshot {
         RelaySnapshot {
             lifecycle: RelayLifecycle::Running,
@@ -1092,18 +1092,18 @@ impl RelayStateSource for IdleRelay {
     }
 }
 
-struct NoAdminSessions;
+struct StubAdminSessionSource;
 
-impl AdminSessionSource for NoAdminSessions {
+impl AdminSessionSource for StubAdminSessionSource {
     fn live_sessions(&self) -> usize {
         0
     }
 }
 
 /// Process values chosen by the test, including unreadable ones.
-struct FixedProcess(ProcessStats);
+struct StubProcessStatsSource(ProcessStats);
 
-impl ProcessStatsSource for FixedProcess {
+impl ProcessStatsSource for StubProcessStatsSource {
     fn read(&self) -> ProcessStats {
         self.0
     }
@@ -1127,12 +1127,12 @@ fn metrics_view(process: ProcessStats) -> Arc<MetricsService> {
     Arc::new(MetricsService::new(
         Arc::new(Metrics::new(clock.as_ref())),
         MetricSources {
-            relay: Arc::new(IdleRelay),
+            relay: Arc::new(StubRelayStateSource),
             relay_budget: ConnectionBudget::new(),
             admin_budget: ConnectionBudget::new(),
             settings: status_settings(),
-            admin: Arc::new(NoAdminSessions),
-            process: Arc::new(FixedProcess(process)),
+            admin: Arc::new(StubAdminSessionSource),
+            process: Arc::new(StubProcessStatsSource(process)),
         },
         clock,
         "2026.11.6-test",
@@ -1495,7 +1495,7 @@ fn relay_peer() -> PeerIp {
 }
 
 fn assert_relay_fields(event: &Event, expected: Value) {
-    let line = format_line(event, UNIX_EPOCH);
+    let line = ops_log::format_line(event, UNIX_EPOCH);
     let mut actual = objects(&line).remove(0);
     assert_eq!(actual.remove("ts"), Some(json!("1970-01-01T00:00:00.000Z")));
     assert!(actual.values().all(|value| !value.is_null()));
@@ -1701,7 +1701,9 @@ fn writes_waiting_events_without_raw_ids_or_unrelated_optional_fields() {
             expected["error_kind"] = json!(kind);
         }
         assert_relay_fields(&event, expected);
-        assert!(!format_line(&event, UNIX_EPOCH).contains(std::str::from_utf8(raw).unwrap()));
+        assert!(
+            !ops_log::format_line(&event, UNIX_EPOCH).contains(std::str::from_utf8(raw).unwrap())
+        );
     }
     for reason in [
         RejectReason::DuplicateId,
@@ -1728,7 +1730,9 @@ fn writes_waiting_events_without_raw_ids_or_unrelated_optional_fields() {
             expected["limit"] = json!(8);
         }
         assert_relay_fields(&event, expected);
-        assert!(!format_line(&event, UNIX_EPOCH).contains(std::str::from_utf8(raw).unwrap()));
+        assert!(
+            !ops_log::format_line(&event, UNIX_EPOCH).contains(std::str::from_utf8(raw).unwrap())
+        );
     }
     // A Mode I register-stage refusal has no relay ID and no reference.
     assert_relay_fields(
@@ -1775,7 +1779,7 @@ fn writes_waiting_events_without_raw_ids_or_unrelated_optional_fields() {
 /// spec: websocket.md:WS-028 partial
 #[test]
 fn writes_session_start_fields_conditionally_by_mode_and_transport() {
-    let session_id = SessionId::from_block([7; 16]);
+    let session_id = Id::from_block([7; 16]);
     let viewer = ConnId::next();
     let server = ConnId::next();
     let key = RelayIdKey::generate().unwrap();
@@ -1830,7 +1834,8 @@ fn writes_session_start_fields_conditionally_by_mode_and_transport() {
                 }
                 assert_relay_fields(&event, expected);
                 assert!(
-                    !format_line(&event, UNIX_EPOCH).contains(std::str::from_utf8(raw).unwrap())
+                    !ops_log::format_line(&event, UNIX_EPOCH)
+                        .contains(std::str::from_utf8(raw).unwrap())
                 );
             }
         }
@@ -1842,11 +1847,11 @@ fn writes_session_start_fields_conditionally_by_mode_and_transport() {
 /// spec: management.md:MGT-023 partial
 #[test]
 fn writes_session_close_cause_levels_and_canonical_optional_fields() {
-    let id = SessionId::from_block([9; 16]);
+    let id = Id::from_block([9; 16]);
     let key = RelayIdKey::generate().unwrap();
     let raw = b"closed-raw-relay-id-123456789";
     let reference = key.reference(raw);
-    let account = vnc_relay_domain::account::AccountName::parse("admin").unwrap();
+    let account = vnc_relay_domain::account::Name::parse("admin").unwrap();
     for mode in [Mode::Mode1, Mode::Mode2] {
         for (cause, code, level, needs_side) in [
             (CloseCause::PeerEof, "peer_eof", "info", true),
@@ -1907,7 +1912,10 @@ fn writes_session_close_cause_levels_and_canonical_optional_fields() {
                 expected["admin_account"] = json!("admin");
             }
             assert_relay_fields(&event, expected);
-            assert!(!format_line(&event, UNIX_EPOCH).contains(std::str::from_utf8(raw).unwrap()));
+            assert!(
+                !ops_log::format_line(&event, UNIX_EPOCH)
+                    .contains(std::str::from_utf8(raw).unwrap())
+            );
         }
     }
     // An administrator's E expiry has no preceding EOF and therefore no side.
@@ -1963,7 +1971,7 @@ fn cuts_target_host_on_utf8_boundaries_in_every_target_event() {
             reason: TargetFailureReason::ConnectError,
         },
         Event::SessionStarted {
-            session_id: SessionId::from_block([0; 16]),
+            session_id: Id::from_block([0; 16]),
             mode: Mode::Mode1,
             viewer_transport: Transport::Tcp,
             server_transport: None,
@@ -1981,7 +1989,7 @@ fn cuts_target_host_on_utf8_boundaries_in_every_target_event() {
         },
     ];
     for event in events {
-        let line = format_line(&event, UNIX_EPOCH);
+        let line = ops_log::format_line(&event, UNIX_EPOCH);
         let object = objects(&line).remove(0);
         assert_eq!(text(&object, "target_host"), "a".repeat(254));
         assert!(!line.contains('가'));
@@ -1996,7 +2004,7 @@ fn cuts_target_host_on_utf8_boundaries_in_every_target_event() {
 fn writes_requested_shutdown_fields_without_unrelated_optional_fields() {
     assert_relay_fields(
         &Event::ShutdownStarted {
-            trigger: vnc_relay_app::events::ShutdownTrigger::Requested,
+            trigger: vnc_relay_application::events::ShutdownTrigger::Requested,
             grace_secs: 10,
             active_sessions: 2,
         },
@@ -2021,7 +2029,7 @@ fn writes_requested_shutdown_fields_without_unrelated_optional_fields() {
 #[test]
 fn preserves_typed_websocket_error_kinds_in_all_connection_error_events() {
     let conn_id = ConnId::next();
-    let session_id = SessionId::from_block([3; 16]);
+    let session_id = Id::from_block([3; 16]);
     let reference = RelayIdKey::generate()
         .unwrap()
         .reference(b"private-ws-relay-id");
@@ -2036,7 +2044,7 @@ fn preserves_typed_websocket_error_kinds_in_all_connection_error_events() {
         let events = [
             Event::ConnectionAborted {
                 conn_id,
-                listener: Listener::Ws,
+                listener: ListenerKind::Ws,
                 role: Some(Role::Viewer),
                 stage: Stage::InitialExchange,
                 reason: AbortReason::ConnectionError(kind),
@@ -2077,7 +2085,7 @@ fn preserves_typed_websocket_error_kinds_in_all_connection_error_events() {
             },
         ];
         for event in events {
-            let object = objects(&format_line(&event, UNIX_EPOCH)).remove(0);
+            let object = objects(&ops_log::format_line(&event, UNIX_EPOCH)).remove(0);
             assert_eq!(text(&object, "error_kind"), code);
             assert_eq!(text(&object, "level"), "warn");
             assert!(object.values().all(|value| !value.is_null()));
@@ -2090,26 +2098,26 @@ fn preserves_typed_websocket_error_kinds_in_all_connection_error_events() {
 /// spec: operations.md:OPS-011 partial
 #[test]
 fn administrator_termination_outcomes_use_contract_levels_and_omit_absent_identifiers() {
-    use vnc_relay_app::events::AdminTerminateResult;
-    use vnc_relay_domain::account::AccountName;
+    use vnc_relay_application::events::AdminTerminateOutcome;
+    use vnc_relay_domain::account::Name;
 
-    let account = AccountName::parse("alice").unwrap_or_else(|e| panic!("account: {e}"));
+    let account = Name::parse("alice").unwrap_or_else(|e| panic!("account: {e}"));
     let peer = PeerIp::new(std::net::Ipv4Addr::LOCALHOST.into());
-    let id = SessionId::from_block([11; 16]);
+    let id = Id::from_block([11; 16]);
     for result in [
-        AdminTerminateResult::Terminated,
-        AdminTerminateResult::AlreadyClosed,
-        AdminTerminateResult::NotFound,
-        AdminTerminateResult::Failed,
+        AdminTerminateOutcome::Terminated,
+        AdminTerminateOutcome::AlreadyClosed,
+        AdminTerminateOutcome::NotFound,
+        AdminTerminateOutcome::Failed,
     ] {
-        let found = result != AdminTerminateResult::NotFound;
+        let found = result != AdminTerminateOutcome::NotFound;
         let event = Event::AdminTerminate {
             admin_account: account.clone(),
             peer_ip: peer,
             session_id: found.then(|| id.clone()),
             result,
         };
-        let line = format_line(&event, UNIX_EPOCH);
+        let line = ops_log::format_line(&event, UNIX_EPOCH);
         let object = objects(&line).remove(0);
         assert_eq!(text(&object, "event"), "admin_terminate");
         assert_eq!(text(&object, "admin_account"), "alice");
@@ -2117,7 +2125,7 @@ fn administrator_termination_outcomes_use_contract_levels_and_omit_absent_identi
         assert_eq!(text(&object, "result"), result.as_str());
         assert_eq!(
             text(&object, "level"),
-            if result == AdminTerminateResult::Failed {
+            if result == AdminTerminateOutcome::Failed {
                 "error"
             } else {
                 "info"
@@ -2135,7 +2143,7 @@ fn administrator_termination_outcomes_use_contract_levels_and_omit_absent_identi
 /// spec: websocket.md:WS-045 partial
 #[test]
 fn writes_ticket_acceptance_with_only_authenticated_contract_fields() {
-    for listener in [Listener::Ws, Listener::Wss] {
+    for listener in [ListenerKind::Ws, ListenerKind::Wss] {
         for role in [Role::Viewer, Role::Server] {
             let conn_id = ConnId::next();
             for optional in [false, true] {

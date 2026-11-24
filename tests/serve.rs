@@ -3003,7 +3003,7 @@ fn initial_tls_and_upgrade_deadlines_have_distinct_causes_and_release_capacity()
 }
 
 fn setup_authenticated(name: &str, text: &str) -> PathBuf {
-    use vnc_relay_app::ports::PasswordHashGateway;
+    use vnc_relay_application::ports::PasswordHashGateway;
     use vnc_relay_domain::account::{Argon2Params, Password};
     let config = setup_with(name, text);
     let hash = vnc_relay_adapters::accounts_file::Argon2PasswordHashGateway
@@ -3130,9 +3130,9 @@ fn real_relay_logs_reach_management_and_restart_discards_previous_events() {
 
     // The same retention contract applies to stdout and file output.
     use vnc_relay_adapters::ops_log::{JsonLinesEventSink, LogsFilter, RecentLogs};
-    use vnc_relay_app::events::Event;
-    use vnc_relay_app::ports::EventSink;
-    use vnc_relay_app::settings::LogOutput;
+    use vnc_relay_application::events::Event;
+    use vnc_relay_application::ports::EventSink;
+    use vnc_relay_application::settings::LogOutput;
     for file in [false, true] {
         for capacity in [0, 3] {
             let logs = Arc::new(RecentLogs::new(capacity));

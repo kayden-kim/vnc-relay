@@ -16,7 +16,7 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use vnc_relay_domain::conn_id::ConnId;
-use vnc_relay_domain::entry_point::Listener;
+use vnc_relay_domain::entry_point::ListenerKind;
 use vnc_relay_domain::ip_info::{Asn, CountryCode};
 use vnc_relay_domain::peer_ip::PeerIp;
 
@@ -193,7 +193,9 @@ fn client(peer: PeerIp, forwarded: Option<PeerIp>) -> IpAddr {
 }
 
 fn is_relay_listener(name: &str) -> bool {
-    Listener::ALL.iter().any(|listener| listener.name() == name)
+    ListenerKind::ALL
+        .iter()
+        .any(|listener| listener.name() == name)
 }
 
 /// The counting rules of operations.md §3.9 rules 2–4 for one event.
@@ -205,10 +207,10 @@ fn plan(event: &Event) -> Option<Plan> {
             listener,
             peer_ip,
         } => match listener {
-            Listener::TcpViewer | Listener::TcpServer => {
+            ListenerKind::TcpViewer | ListenerKind::TcpServer => {
                 plan.count[0] = Some((Kind::Attempt, peer_ip.ip()));
             }
-            Listener::Ws | Listener::Wss => plan.hold = Some((*conn_id, peer_ip.ip())),
+            ListenerKind::Ws | ListenerKind::Wss => plan.hold = Some((*conn_id, peer_ip.ip())),
         },
         Event::ConnectionRejected {
             listener,

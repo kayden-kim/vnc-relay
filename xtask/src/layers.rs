@@ -42,6 +42,7 @@ enum External {
 struct Rule {
     package: &'static str,
     internal: &'static [&'static str],
+    internal_dev: &'static [&'static str],
     external: External,
 }
 
@@ -51,24 +52,41 @@ const RULES: &[Rule] = &[
     Rule {
         package: "vnc-relay-domain",
         internal: &[],
+        internal_dev: &[],
         external: External::None,
     },
     Rule {
-        package: "vnc-relay-app",
+        package: "vnc-relay-application",
         internal: &["vnc-relay-domain"],
+        internal_dev: &[],
         external: External::Only(&["tokio"]),
     },
     Rule {
         package: "vnc-relay-adapters",
-        internal: &["vnc-relay-domain", "vnc-relay-app"],
+        internal: &["vnc-relay-domain", "vnc-relay-application"],
+        internal_dev: &["vnc-relay-testkit"],
         external: External::Approved,
     },
     Rule {
+        package: "vnc-relay-testkit",
+        internal: &[
+            "vnc-relay-domain",
+            "vnc-relay-application",
+            "vnc-relay-adapters",
+        ],
+        internal_dev: &[],
+        external: External::Only(&["aws-lc-rs", "serde_json", "tokio", "tokio-tungstenite"]),
+    },
+    Rule {
         package: "vnc-relay",
-        internal: &["vnc-relay-domain", "vnc-relay-app", "vnc-relay-adapters"],
-        // Browser CDP reuses the approved JSON and WebSocket crates only in
-        // tests (Q112). aws-lc-rs signs access tickets only in real-binary
-        // tests. rustls and windows-sys are also dev-dependencies.
+        internal: &[
+            "vnc-relay-domain",
+            "vnc-relay-application",
+            "vnc-relay-adapters",
+        ],
+        internal_dev: &["vnc-relay-testkit"],
+        // Shared integration fixtures use testkit only as a dev-dependency.
+        // Other than clap and tokio, the external crates here are also test-only.
         external: External::Only(&[
             "aws-lc-rs",
             "clap",
@@ -81,7 +99,8 @@ const RULES: &[Rule] = &[
     },
     Rule {
         package: "vnc-relay-tray",
-        internal: &["vnc-relay-app", "vnc-relay-adapters"],
+        internal: &["vnc-relay-application", "vnc-relay-adapters"],
+        internal_dev: &[],
         external: External::Only(&[
             "tray-icon",
             "windows-registry",
@@ -92,6 +111,7 @@ const RULES: &[Rule] = &[
     Rule {
         package: "xtask",
         internal: &[],
+        internal_dev: &[],
         external: External::Approved,
     },
 ];
@@ -131,6 +151,7 @@ fn check(packages: &[Package]) -> Vec<String> {
             let name = dependency.name.as_str();
             let allowed = if members.contains(name) {
                 rule.internal.contains(&name)
+                    || (dependency.kind == "dev" && rule.internal_dev.contains(&name))
             } else {
                 requirements
                     .entry(name)
@@ -188,12 +209,26 @@ mod tests {
     #[test]
     fn rejects_dependency_pointing_up_the_layers() {
         let packages = [
-            package("vnc-relay-domain", &[("vnc-relay-app", "*")]),
-            package("vnc-relay-app", &[]),
+            package("vnc-relay-domain", &[("vnc-relay-application", "*")]),
+            package("vnc-relay-application", &[]),
         ];
         let violations = check(&packages);
         assert_eq!(violations.len(), 1);
-        assert!(violations[0].starts_with("vnc-relay-domain → vnc-relay-app"));
+        assert!(violations[0].starts_with("vnc-relay-domain → vnc-relay-application"));
+    }
+
+    #[test]
+    fn testkit_is_only_a_dev_dependency_of_relay_and_adapters() {
+        for consumer in ["vnc-relay", "vnc-relay-adapters"] {
+            let mut packages = [
+                package(consumer, &[("vnc-relay-testkit", "*")]),
+                package("vnc-relay-testkit", &[]),
+            ];
+            assert_eq!(check(&packages).len(), 1);
+
+            packages[0].dependencies[0].kind = "dev".to_owned();
+            assert!(check(&packages).is_empty());
+        }
     }
 
     #[test]
@@ -211,7 +246,7 @@ mod tests {
     #[test]
     fn rejects_different_version_requirements_for_one_crate() {
         let packages = [
-            package("vnc-relay-app", &[("tokio", "1.54")]),
+            package("vnc-relay-application", &[("tokio", "1.54")]),
             package("vnc-relay-adapters", &[("tokio", "1.50")]),
         ];
         let violations = check(&packages);

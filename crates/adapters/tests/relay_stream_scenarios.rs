@@ -15,26 +15,28 @@ use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::{Barrier, Notify, oneshot, watch};
 use tokio::task::JoinHandle;
-use tokio::time::timeout;
+use tokio::time;
 use vnc_relay_adapters::clock::SystemClock;
-use vnc_relay_adapters::config_file::parse;
+use vnc_relay_adapters::config_file;
 use vnc_relay_adapters::crypto::{RelayIdKey, SessionIdKey};
 use vnc_relay_adapters::net::{AcceptPolicy, AllowSource, TcpEntryPoint, TcpRelayStream};
-use vnc_relay_adapters::ops_log::format_line;
+use vnc_relay_adapters::ops_log;
 use vnc_relay_adapters::target::TcpTargetGateway;
-use vnc_relay_app::events::Event;
-use vnc_relay_app::metrics::Metrics;
-use vnc_relay_app::ports::{Clock, EventSink, RelayCloseAction, RelayStream};
-use vnc_relay_app::relay::{ConnectionContext, RelayRuntime, RelayRuntimeConfig, RelayService};
-use vnc_relay_app::reload::ports::RuntimeSettingsSource;
-use vnc_relay_app::reload::snapshot::{ReloadCell, ReloadSnapshot};
-use vnc_relay_app::reload::{ConfigCandidate, ConfigPresence};
-use vnc_relay_app::settings::KeepaliveSettings;
+use vnc_relay_application::events::Event;
+use vnc_relay_application::metrics::Metrics;
+use vnc_relay_application::ports::{Clock, EventSink, RelayCloseAction, RelayStream};
+use vnc_relay_application::relay::{
+    ConnectionContext, RelayRuntime, RelayRuntimeConfig, RelayService,
+};
+use vnc_relay_application::reload::ports::RuntimeSettingsSource;
+use vnc_relay_application::reload::snapshot::{ReloadCell, ReloadSnapshot};
+use vnc_relay_application::reload::{ConfigCandidate, ConfigPresence};
+use vnc_relay_application::settings::KeepaliveSettings;
 use vnc_relay_domain::allow_list::{AllowList, IpItem};
 use vnc_relay_domain::budget::ConnectionBudget;
 use vnc_relay_domain::conn_id::ConnId;
 use vnc_relay_domain::entry_point::EntryPoint;
-use vnc_relay_domain::handshake::{HANDSHAKE_REQUEST_LEN, HandshakePolicy, VIEWER_GREETING};
+use vnc_relay_domain::handshake::{HANDSHAKE_REQUEST_LEN, Policy, VIEWER_GREETING};
 use vnc_relay_domain::peer_ip::PeerIp;
 use vnc_relay_domain::session::Transport;
 
@@ -50,7 +52,7 @@ const KEEPALIVE: KeepaliveSettings = KeepaliveSettings {
 };
 
 async fn bounded<T>(future: impl Future<Output = T>) -> T {
-    timeout(LIMIT, future)
+    time::timeout(LIMIT, future)
         .await
         .unwrap_or_else(|error| panic!("TCP scenario exceeded {LIMIT:?}: {error}"))
 }
@@ -60,12 +62,12 @@ fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
 }
 
 #[derive(Default)]
-struct Recorder {
+struct SpyEventSink {
     lines: Mutex<Vec<Value>>,
     changed: Notify,
 }
 
-impl Recorder {
+impl SpyEventSink {
     async fn wait(&self, matches: impl Fn(&Value) -> bool) -> Value {
         bounded(async {
             loop {
@@ -81,9 +83,9 @@ impl Recorder {
     }
 }
 
-impl EventSink for Recorder {
+impl EventSink for SpyEventSink {
     fn record(&self, event: &Event) {
-        let line = format_line(event, SystemTime::UNIX_EPOCH);
+        let line = ops_log::format_line(event, SystemTime::UNIX_EPOCH);
         lock(&self.lines).push(
             serde_json::from_str(&line)
                 .unwrap_or_else(|error| panic!("operation log is JSON: {error}")),
@@ -98,7 +100,7 @@ struct Running {
     service: Arc<RelayService>,
     runtime: Arc<RelayRuntime<TcpTargetGateway>>,
     clock: Arc<dyn Clock>,
-    events: Arc<Recorder>,
+    events: Arc<SpyEventSink>,
     budget: Arc<ConnectionBudget>,
     places: u32,
     stop: watch::Sender<bool>,
@@ -122,7 +124,7 @@ impl Running {
         let allow = AllowList::new(vec![
             IpItem::parse("127.0.0.1").unwrap_or_else(|error| panic!("loopback allow: {error:?}")),
         ]);
-        let mut settings = parse(
+        let mut settings = config_file::parse(
             r#"[admin]
 accounts_file = "accounts.toml"
 [management]
@@ -163,7 +165,7 @@ enabled = true
         )));
         let settings: Arc<dyn RuntimeSettingsSource> = cell.clone();
         let clock: Arc<dyn Clock> = Arc::new(SystemClock::new());
-        let events = Arc::new(Recorder::default());
+        let events = Arc::new(SpyEventSink::default());
         let log: Arc<dyn EventSink> = events.clone();
         let budget = ConnectionBudget::new();
         let runtime = Arc::new(RelayRuntime::new(
@@ -176,7 +178,7 @@ enabled = true
             Arc::clone(&settings),
         ));
         let service = Arc::new(RelayService::new(
-            HandshakePolicy {
+            Policy {
                 mode1_enabled: true,
                 mode2_enabled: true,
             },
@@ -664,13 +666,13 @@ impl Meter {
     }
 }
 
-struct MeasuredStream {
+struct SpyRelayStream {
     inner: TcpStream,
     side: usize,
     meter: Arc<Meter>,
 }
 
-impl AsyncRead for MeasuredStream {
+impl AsyncRead for SpyRelayStream {
     fn poll_read(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -697,7 +699,7 @@ impl AsyncRead for MeasuredStream {
     }
 }
 
-impl AsyncWrite for MeasuredStream {
+impl AsyncWrite for SpyRelayStream {
     fn poll_write(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -732,7 +734,7 @@ impl AsyncWrite for MeasuredStream {
     }
 }
 
-impl RelayStream for MeasuredStream {
+impl RelayStream for SpyRelayStream {
     fn transport(&self) -> Transport {
         Transport::Tcp
     }
@@ -789,7 +791,7 @@ async fn measured_pair(
             .budget
             .try_acquire(running.places)
             .unwrap_or_else(|| panic!("measured admission"));
-        let input = MeasuredStream {
+        let input = SpyRelayStream {
             inner: TcpRelayStream::with_keepalive(stream, &KEEPALIVE)
                 .unwrap_or_else(|error| panic!("measured keepalive: {error}"))
                 .into_inner(),

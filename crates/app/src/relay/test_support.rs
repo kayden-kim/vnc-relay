@@ -6,15 +6,15 @@ use std::time::Duration;
 use crate::reload::ports::RuntimeSettingsSource;
 use crate::settings::*;
 
-pub(crate) struct TestSettings(pub(crate) RwLock<Settings>);
+pub(crate) struct FakeRuntimeSettingsSource(pub(crate) RwLock<Settings>);
 
-impl RuntimeSettingsSource for TestSettings {
+impl RuntimeSettingsSource for FakeRuntimeSettingsSource {
     fn with_current(&self, read: &mut dyn FnMut(&Settings)) {
         read(&self.0.read().expect("settings read"));
     }
 }
 
-impl TestSettings {
+impl FakeRuntimeSettingsSource {
     pub(crate) fn new() -> Arc<Self> {
         Arc::new(Self(RwLock::new(settings())))
     }

@@ -1,27 +1,20 @@
 //! Reads Win32 current-process values. See metrics-v1 §1.3.
 
-use std::mem::size_of;
 use std::ptr;
 use std::time::Duration;
 
-use vnc_relay_app::ports::{CpuTimes, OpenCount, ProcessStats};
+use vnc_relay_application::ports::{CpuTimes, OpenCount, ProcessStats};
 use windows_sys::Win32::Foundation::{
-    CloseHandle, ERROR_NO_MORE_FILES, FILETIME, GetLastError, HANDLE, INVALID_HANDLE_VALUE,
+    self, ERROR_NO_MORE_FILES, FILETIME, HANDLE, INVALID_HANDLE_VALUE,
 };
-use windows_sys::Win32::System::Diagnostics::ToolHelp::{
-    CreateToolhelp32Snapshot, TH32CS_SNAPTHREAD, THREADENTRY32, Thread32First, Thread32Next,
-};
-use windows_sys::Win32::System::ProcessStatus::{
-    K32GetProcessMemoryInfo, PROCESS_MEMORY_COUNTERS_EX,
-};
-use windows_sys::Win32::System::Threading::{
-    GetCurrentProcess, GetCurrentProcessId, GetProcessHandleCount, GetProcessTimes,
-};
+use windows_sys::Win32::System::Diagnostics::ToolHelp::{self, TH32CS_SNAPTHREAD, THREADENTRY32};
+use windows_sys::Win32::System::ProcessStatus::{self, PROCESS_MEMORY_COUNTERS_EX};
+use windows_sys::Win32::System::Threading;
 
 pub(super) fn read() -> ProcessStats {
     // SAFETY: GetCurrentProcess has no preconditions. Its pseudo handle remains
     // valid for this process and must not be closed.
-    let process = unsafe { GetCurrentProcess() };
+    let process = unsafe { Threading::GetCurrentProcess() };
     let cpu = read_cpu(process);
     let (memory_usage, memory_virtual) = read_memory(process);
     let open = OpenCount::Handles(read_handles(process));
@@ -41,7 +34,10 @@ fn read_cpu(process: HANDLE) -> Option<CpuTimes> {
     let mut user = FILETIME::default();
     // SAFETY: process is the current-process pseudo handle. Each output points
     // to a separate, initialized FILETIME that stays writable through the call.
-    if unsafe { GetProcessTimes(process, &mut creation, &mut exit, &mut kernel, &mut user) } == 0 {
+    if unsafe {
+        Threading::GetProcessTimes(process, &mut creation, &mut exit, &mut kernel, &mut user)
+    } == 0
+    {
         return None;
     }
     Some(CpuTimes {
@@ -65,7 +61,10 @@ fn read_memory(process: HANDLE) -> (Option<u64>, Option<u64>) {
     // SAFETY: process is the current-process pseudo handle. The repr(C) EX
     // structure starts with PROCESS_MEMORY_COUNTERS fields. Both size arguments
     // describe the full writable EX buffer, so the API also fills PrivateUsage.
-    if unsafe { K32GetProcessMemoryInfo(process, ptr::from_mut(&mut counters).cast(), size) } == 0 {
+    if unsafe {
+        ProcessStatus::K32GetProcessMemoryInfo(process, ptr::from_mut(&mut counters).cast(), size)
+    } == 0
+    {
         return (None, None);
     }
     (
@@ -78,7 +77,7 @@ fn read_handles(process: HANDLE) -> Option<u64> {
     let mut count = 0;
     // SAFETY: process is the current-process pseudo handle, and count points
     // to a writable u32 for the duration of the call.
-    if unsafe { GetProcessHandleCount(process, &mut count) } == 0 {
+    if unsafe { Threading::GetProcessHandleCount(process, &mut count) } == 0 {
         return None;
     }
     Some(u64::from(count))
@@ -90,20 +89,20 @@ impl Drop for ThreadSnapshot {
     fn drop(&mut self) {
         // SAFETY: this guard owns a successful CreateToolhelp32Snapshot handle,
         // never the current-process pseudo handle. It closes the snapshot once.
-        let _ = unsafe { CloseHandle(self.0) };
+        let _ = unsafe { Foundation::CloseHandle(self.0) };
     }
 }
 
 fn read_threads() -> Option<u64> {
     // SAFETY: these flags request a read-only system thread snapshot. The
     // process ID argument is ignored for TH32CS_SNAPTHREAD.
-    let handle = unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0) };
+    let handle = unsafe { ToolHelp::CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0) };
     if handle == INVALID_HANDLE_VALUE {
         return None;
     }
     let snapshot = ThreadSnapshot(handle);
     // SAFETY: GetCurrentProcessId has no preconditions.
-    let process_id = unsafe { GetCurrentProcessId() };
+    let process_id = unsafe { Threading::GetCurrentProcessId() };
     let size = size_of::<THREADENTRY32>() as u32;
     let mut entry = THREADENTRY32 {
         dwSize: size,
@@ -111,7 +110,7 @@ fn read_threads() -> Option<u64> {
     };
     // SAFETY: snapshot owns a valid thread snapshot. entry is a writable
     // THREADENTRY32 with dwSize set to its actual size.
-    if unsafe { Thread32First(snapshot.0, &mut entry) } == 0 {
+    if unsafe { ToolHelp::Thread32First(snapshot.0, &mut entry) } == 0 {
         return None;
     }
     let mut count = 0_u64;
@@ -122,10 +121,10 @@ fn read_threads() -> Option<u64> {
         entry.dwSize = size;
         // SAFETY: snapshot remains open, and entry is a writable THREADENTRY32
         // with dwSize reset before each call.
-        if unsafe { Thread32Next(snapshot.0, &mut entry) } == 0 {
+        if unsafe { ToolHelp::Thread32Next(snapshot.0, &mut entry) } == 0 {
             // SAFETY: GetLastError has no preconditions and immediately follows
             // the failed enumeration call on the same thread.
-            return if unsafe { GetLastError() } == ERROR_NO_MORE_FILES {
+            return if unsafe { Foundation::GetLastError() } == ERROR_NO_MORE_FILES {
                 Some(count)
             } else {
                 None

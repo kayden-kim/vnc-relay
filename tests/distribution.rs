@@ -4,21 +4,21 @@ use std::collections::BTreeSet;
 use std::fs;
 use std::path::Path;
 
-use vnc_relay_adapters::config_file::{load, parse};
-use vnc_relay_app::management::config::{ConfigItem, ConfigValue, config_items};
-use vnc_relay_app::reload::ConfigPresence;
-use vnc_relay_app::settings::LogOutput;
+use vnc_relay_adapters::config_file;
+use vnc_relay_application::management::config::{self, ConfigItem, ConfigValue};
+use vnc_relay_application::reload::ConfigPresence;
+use vnc_relay_application::settings::LogOutput;
 
 #[cfg(target_os = "linux")]
-#[path = "common/distribution.rs"]
-mod distribution;
+use vnc_relay_testkit::distribution;
 
 /// spec: operations.md:OPS-031 partial
 #[test]
 fn repository_example_loads_without_secrets() {
     let example = Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/relay.toml");
     let text = fs::read_to_string(&example).unwrap_or_else(|e| panic!("read exact example: {e}"));
-    let settings = load(&example).unwrap_or_else(|e| panic!("load exact example: {e:?}"));
+    let settings =
+        config_file::load(&example).unwrap_or_else(|e| panic!("load exact example: {e:?}"));
     let base = example
         .parent()
         .unwrap_or_else(|| panic!("example has no parent"));
@@ -96,8 +96,8 @@ fn repository_example_lists_every_key_once_with_its_default() {
         ..ConfigPresence::default()
     };
     let example_settings =
-        parse(&text, base).unwrap_or_else(|e| panic!("parse exact example: {e:?}"));
-    let defaults = config_items(&example_settings, &presence);
+        config_file::parse(&text, base).unwrap_or_else(|e| panic!("parse exact example: {e:?}"));
+    let defaults = config::config_items(&example_settings, &presence);
     let catalog: BTreeSet<_> = defaults.iter().map(|item| item.key.clone()).collect();
     assert_eq!(keys, catalog, "example keys differ from config-v4 1.2");
     let every_key_set = text
@@ -109,9 +109,9 @@ fn repository_example_lists_every_key_once_with_its_default() {
         })
         .collect::<Vec<_>>()
         .join("\n");
-    let set_settings = parse(&every_key_set, base)
+    let set_settings = config_file::parse(&every_key_set, base)
         .unwrap_or_else(|e| panic!("parse example with every comment removed: {e:?}"));
-    let set = config_items(&set_settings, &presence);
+    let set = config::config_items(&set_settings, &presence);
     for (key, commented) in &listed {
         let default = value(&defaults, key);
         if *commented && *default != ConfigValue::Null {
@@ -150,7 +150,7 @@ mod linux {
     use std::thread::JoinHandle;
     use std::time::{Duration, Instant};
 
-    use super::distribution::DistributionProcess;
+    use vnc_relay_testkit::distribution::DistributionProcess;
 
     const BIN: &str = env!("CARGO_BIN_EXE_vnc-relay");
     const LIMIT: Duration = Duration::from_secs(20);

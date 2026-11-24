@@ -12,9 +12,9 @@ use std::io::{ErrorKind, Write};
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use aws_lc_rs::digest::{SHA256, digest};
+use aws_lc_rs::digest::{self, SHA256};
 use aws_lc_rs::encoding::AsBigEndian;
-use aws_lc_rs::rand::{SystemRandom, fill};
+use aws_lc_rs::rand::{self, SystemRandom};
 use aws_lc_rs::signature::{ECDSA_P256_SHA256_FIXED_SIGNING, EcdsaKeyPair, KeyPair};
 use serde_json::{Map, Value};
 
@@ -295,7 +295,7 @@ fn path_error(path: &Path, error: &std::io::Error) -> Error {
 /// RFC 7638 JWK thumbprint of a P-256 public key: unique per key.
 fn thumbprint(x: &str, y: &str) -> String {
     let canonical = format!(r#"{{"crv":"P-256","kty":"EC","x":"{x}","y":"{y}"}}"#);
-    encode(digest(&SHA256, canonical.as_bytes()).as_ref())
+    encode(digest::digest(&SHA256, canonical.as_bytes()).as_ref())
 }
 
 struct SigningKey {
@@ -353,7 +353,7 @@ fn issue(key: &SigningKey, role: Role, claims: &Claims, now: u64) -> Result<Stri
             .ok_or_else(|| Error::new("만료 시각이 2^64 - 1을 넘는다"))
     };
     let mut jti = [0_u8; JTI_BYTES];
-    fill(&mut jti).map_err(|_| Error::new("jti 난수를 만들지 못했다"))?;
+    rand::fill(&mut jti).map_err(|_| Error::new("jti 난수를 만들지 못했다"))?;
     let mut body = Map::new();
     body.insert("iss".to_owned(), Value::from(claims.issuer.as_str()));
     body.insert("aud".to_owned(), Value::from(role.audience()));

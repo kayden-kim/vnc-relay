@@ -622,17 +622,12 @@ fn process_sample(pid: u32, epoch: Instant) -> Sample {
 )]
 mod handle_snapshot {
     use std::io;
-    use std::mem::size_of;
     use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle};
     use std::ptr;
 
-    use windows_sys::Wdk::System::Threading::{
-        NtQueryInformationProcess, ProcessHandleInformation,
-    };
+    use windows_sys::Wdk::System::Threading::ProcessHandleInformation;
     use windows_sys::Win32::Foundation::{HANDLE, STATUS_INFO_LENGTH_MISMATCH};
-    use windows_sys::Win32::System::Threading::{
-        CreateEventW, GetCurrentProcess, OpenProcess, PROCESS_QUERY_INFORMATION,
-    };
+    use windows_sys::Win32::System::Threading::{self, PROCESS_QUERY_INFORMATION};
 
     pub struct Counts {
         pub total: u64,
@@ -655,7 +650,7 @@ mod handle_snapshot {
     /// All handles of `pid`, and those whose object type is Event.
     pub fn counts(pid: u32) -> Counts {
         // SAFETY: plain call with no pointer arguments; a null result is checked below.
-        let raw = unsafe { OpenProcess(PROCESS_QUERY_INFORMATION, 0, pid) };
+        let raw = unsafe { Threading::OpenProcess(PROCESS_QUERY_INFORMATION, 0, pid) };
         assert!(
             !raw.is_null(),
             "OpenProcess({pid}): {}",
@@ -678,7 +673,7 @@ mod handle_snapshot {
     /// Type numbers are shared by every process of one boot.
     fn event_type_index() -> u32 {
         // SAFETY: no security attributes and no name; a null result is checked below.
-        let raw = unsafe { CreateEventW(ptr::null(), 1, 0, ptr::null()) };
+        let raw = unsafe { Threading::CreateEventW(ptr::null(), 1, 0, ptr::null()) };
         assert!(
             !raw.is_null(),
             "CreateEventW: {}",
@@ -687,7 +682,7 @@ mod handle_snapshot {
         // SAFETY: CreateEventW succeeded and returned a handle this function now owns.
         let event = unsafe { OwnedHandle::from_raw_handle(raw) };
         // SAFETY: GetCurrentProcess returns a pseudo handle that needs no closing.
-        let own = snapshot(unsafe { GetCurrentProcess() });
+        let own = snapshot(unsafe { Threading::GetCurrentProcess() });
         own.iter()
             .find(|entry| entry.handle == event.as_raw_handle())
             .map(|entry| entry.object_type_index)
@@ -705,7 +700,7 @@ mod handle_snapshot {
             // SAFETY: the buffer is writable for `bytes` bytes, pointer-aligned, and
             // outlives the call; `needed` is a valid output location.
             let status = unsafe {
-                NtQueryInformationProcess(
+                windows_sys::Wdk::System::Threading::NtQueryInformationProcess(
                     process,
                     ProcessHandleInformation,
                     words.as_mut_ptr().cast(),

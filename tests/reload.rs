@@ -1813,7 +1813,7 @@ const PASSWORD: &str = "correct-horse-battery";
 
 fn authenticated_setup(name: &str, text: &str) -> PathBuf {
     use vnc_relay_adapters::accounts_file::Argon2PasswordHashGateway;
-    use vnc_relay_app::ports::PasswordHashGateway;
+    use vnc_relay_application::ports::PasswordHashGateway;
     use vnc_relay_domain::account::{Argon2Params, Password};
 
     let config = setup(name, text);

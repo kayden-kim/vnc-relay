@@ -212,7 +212,7 @@ fn render(root: &Path) -> Result<String, Error> {
                 name.as_str(),
                 "vnc-relay"
                     | "vnc-relay-domain"
-                    | "vnc-relay-app"
+                    | "vnc-relay-application"
                     | "vnc-relay-adapters"
                     | "vnc-relay-tray"
             ) {

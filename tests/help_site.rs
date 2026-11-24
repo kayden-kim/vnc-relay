@@ -8,14 +8,10 @@
 //! Headless Chromium drives the pages over CDP. A missing mdBook or browser
 //! fails the tests; they are not skipped.
 
-#[path = "common/browser_port.rs"]
-mod browser_port;
-#[path = "common/cdp.rs"]
-mod cdp;
-
 use std::fs;
 use std::io::{self, Read, Write};
 use std::net::TcpStream;
+use std::ops::{Deref, DerefMut};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::{Condvar, LazyLock, Mutex, PoisonError};
@@ -23,8 +19,8 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use serde_json::json;
-
-use cdp::Browser;
+use vnc_relay_testkit::browser_port;
+use vnc_relay_testkit::cdp::Browser;
 
 /// Site path on GitHub Pages: `https://kayden-kim.github.io/vnc-relay/`.
 const MOUNT: &str = "/vnc-relay/";
@@ -1072,7 +1068,24 @@ fn hrefs(found: &[Found]) -> Vec<String> {
     found.iter().map(|item| item.href.clone()).collect()
 }
 
-impl Browser {
+// Keep help-specific actions separate from the dashboard actions on Browser.
+struct HelpBrowser(Browser);
+
+impl Deref for HelpBrowser {
+    type Target = Browser;
+
+    fn deref(&self) -> &Browser {
+        &self.0
+    }
+}
+
+impl DerefMut for HelpBrowser {
+    fn deref_mut(&mut self) -> &mut Browser {
+        &mut self.0
+    }
+}
+
+impl HelpBrowser {
     /// Starts a navigation without waiting for its document. The help root
     /// replaces itself at once, so its own document may never be seen.
     fn go(&mut self, url: &str) {
@@ -1378,7 +1391,7 @@ fn at(path: &str) -> String {
     )
 }
 
-fn expanded(browser: &mut Browser) -> String {
+fn expanded(browser: &mut HelpBrowser) -> String {
     browser
         .eval("document.querySelector('.help-toc-toggle').getAttribute('aria-expanded')")
         .as_str()
@@ -1386,7 +1399,7 @@ fn expanded(browser: &mut Browser) -> String {
         .to_owned()
 }
 
-fn content_width(browser: &mut Browser) -> f64 {
+fn content_width(browser: &mut HelpBrowser) -> f64 {
     browser
         .eval("document.querySelector('#mdbook-content').getBoundingClientRect().width")
         .as_f64()
@@ -1439,11 +1452,11 @@ impl Drop for Slot {
 }
 
 /// Runs `check` in a new headless browser with the given language preferences.
-fn browse(name: &str, preferences: &[&str], check: impl FnOnce(&mut Browser, &Site)) {
+fn browse(name: &str, preferences: &[&str], check: impl FnOnce(&mut HelpBrowser, &Site)) {
     let site = &*SITE;
     let _slot = Slot::take();
     // Declared after the slot, so the browser exits before the slot is freed.
-    let mut browser = Browser::start(&format!("help-{name}"), preferences);
+    let mut browser = HelpBrowser(Browser::start(&format!("help-{name}"), preferences));
     check(&mut browser, site);
 }
 

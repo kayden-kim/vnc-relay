@@ -2,22 +2,21 @@
 
 use std::sync::Arc;
 
-use vnc_relay_app::metrics::{MetricSources, Metrics, MetricsService};
-use vnc_relay_app::ports::{
+use vnc_relay_application::metrics::{MetricSources, Metrics, MetricsService};
+use vnc_relay_application::ports::{
     AdminSessionSource, Clock, ProcessStats, ProcessStatsSource, RelayStateSource,
 };
-use vnc_relay_app::relay::{RelayCounts, RelaySnapshot};
-use vnc_relay_app::reload::ports::RuntimeSettingsSource;
-use vnc_relay_app::settings::Settings;
+use vnc_relay_application::relay::{RelayCounts, RelaySnapshot};
+use vnc_relay_application::reload::ports::RuntimeSettingsSource;
+use vnc_relay_application::settings::Settings;
 use vnc_relay_domain::budget::ConnectionBudget;
 
 use crate::clock::SystemClock;
 
-/// No relay connection, no administrator session, and no settings: limits
-/// read as 0.
-struct Empty;
+/// No relay connections.
+struct StubRelayStateSource;
 
-impl RelayStateSource for Empty {
+impl RelayStateSource for StubRelayStateSource {
     fn snapshot(&self, _clock: &dyn Clock) -> RelaySnapshot {
         unreachable!("metrics read counts only")
     }
@@ -27,20 +26,25 @@ impl RelayStateSource for Empty {
     }
 }
 
-impl AdminSessionSource for Empty {
+struct StubAdminSessionSource;
+
+impl AdminSessionSource for StubAdminSessionSource {
     fn live_sessions(&self) -> usize {
         0
     }
 }
 
-impl RuntimeSettingsSource for Empty {
+/// No settings: limits read as 0.
+struct StubRuntimeSettingsSource;
+
+impl RuntimeSettingsSource for StubRuntimeSettingsSource {
     fn with_current(&self, _read: &mut dyn FnMut(&Settings)) {}
 }
 
 /// Process values chosen by the test, including unreadable ones.
-struct FixedProcess(ProcessStats);
+struct StubProcessStatsSource(ProcessStats);
 
-impl ProcessStatsSource for FixedProcess {
+impl ProcessStatsSource for StubProcessStatsSource {
     fn read(&self) -> ProcessStats {
         self.0
     }
@@ -61,12 +65,12 @@ pub(crate) fn metrics_service_with_clock(
     MetricsService::new(
         metrics,
         MetricSources {
-            relay: Arc::new(Empty),
+            relay: Arc::new(StubRelayStateSource),
             relay_budget: ConnectionBudget::new(),
             admin_budget: ConnectionBudget::new(),
-            settings: Arc::new(Empty),
-            admin: Arc::new(Empty),
-            process: Arc::new(FixedProcess(process)),
+            settings: Arc::new(StubRuntimeSettingsSource),
+            admin: Arc::new(StubAdminSessionSource),
+            process: Arc::new(StubProcessStatsSource(process)),
         },
         clock,
         "test",

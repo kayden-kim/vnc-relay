@@ -6,11 +6,11 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::SystemTime;
 
-use vnc_relay_domain::entry_point::{EntryPoint, Listener, Role};
+use vnc_relay_domain::entry_point::{EntryPoint, ListenerKind, Role};
 
 use super::{
     ConfigCandidate, ConfigFileState, ConfigPresence, FileClassification, LastReload,
-    PrepareReloadError, ReloadResult, ReloadTrigger,
+    LastReloadOutcome, PrepareReloadError, ReloadTrigger,
 };
 use crate::events::{Event, Phase};
 use crate::ports::{Clock, EventSink, RelayDenyControl};
@@ -318,7 +318,7 @@ impl<A: Clone> ReloadService<A> {
         };
         let history = LastReload {
             at,
-            result: ReloadResult::Applied,
+            result: LastReloadOutcome::Applied,
             trigger,
             config_keys: history_keys,
         };
@@ -404,7 +404,7 @@ impl<A: Clone> ReloadService<A> {
                 });
                 self.last_reload = Some(LastReload {
                     at,
-                    result: ReloadResult::Rejected,
+                    result: LastReloadOutcome::Rejected,
                     trigger: ReloadTrigger::FileWatch,
                     config_keys: Vec::new(),
                 });
@@ -416,7 +416,7 @@ impl<A: Clone> ReloadService<A> {
                 });
                 self.last_reload = Some(LastReload {
                     at,
-                    result: ReloadResult::RestartRequired,
+                    result: LastReloadOutcome::RestartRequired,
                     trigger: ReloadTrigger::FileWatch,
                     config_keys: keys,
                 });
@@ -766,8 +766,8 @@ pub fn dynamic_changed_keys(a: &Settings, b: &Settings) -> Vec<String> {
         }
     }
     for (listener, before, after) in [
-        (Listener::Ws, &a.relay.ws, &b.relay.ws),
-        (Listener::Wss, &a.relay.wss, &b.relay.wss),
+        (ListenerKind::Ws, &a.relay.ws, &b.relay.ws),
+        (ListenerKind::Wss, &a.relay.wss, &b.relay.wss),
     ] {
         push_if(
             &mut keys,
@@ -901,7 +901,7 @@ pub fn dynamic_changed_keys(a: &Settings, b: &Settings) -> Vec<String> {
 /// restart. WSS TLS presence follows whether either WSS role is enabled.
 pub fn restart_required_keys(running: &Settings, candidate: &Settings) -> Vec<String> {
     let mut keys = Vec::new();
-    for listener in Listener::ALL {
+    for listener in ListenerKind::ALL {
         if let Some(role) = listener.fixed_role()
             && let Some(entry) = EntryPoint::from_parts(listener, role)
         {
@@ -1122,11 +1122,11 @@ mod tests {
     }
 
     #[derive(Default)]
-    struct RecordingSink {
+    struct SpyEventSink {
         events: Mutex<Vec<Event>>,
     }
 
-    impl RecordingSink {
+    impl SpyEventSink {
         fn events(&self) -> Vec<Event> {
             self.events
                 .lock()
@@ -1135,7 +1135,7 @@ mod tests {
         }
     }
 
-    impl EventSink for RecordingSink {
+    impl EventSink for SpyEventSink {
         fn record(&self, event: &Event) {
             self.events
                 .lock()
@@ -1146,7 +1146,7 @@ mod tests {
 
     struct Harness {
         files: Arc<FakeFiles>,
-        sink: Arc<RecordingSink>,
+        sink: Arc<SpyEventSink>,
         cell: Arc<ReloadCell<u32>>,
         service: ReloadService<u32>,
     }
@@ -1167,7 +1167,7 @@ mod tests {
             wss_acceptor,
             None,
         )));
-        let sink = Arc::new(RecordingSink::default());
+        let sink = Arc::new(SpyEventSink::default());
         let service = ReloadService::new(
             candidate(running),
             Arc::clone(&cell),
@@ -1858,7 +1858,7 @@ mod tests {
     /// number of events recorded before it.
     struct FakeDenyControl {
         cell: Arc<ReloadCell<u32>>,
-        sink: Arc<RecordingSink>,
+        sink: Arc<SpyEventSink>,
         calls: Mutex<Vec<(vnc_relay_domain::deny_list::DenyList, usize)>>,
     }
 
@@ -1875,9 +1875,9 @@ mod tests {
         }
     }
 
-    struct FixedClock;
+    struct StubClock;
 
-    impl Clock for FixedClock {
+    impl Clock for StubClock {
         fn monotonic(&self) -> Duration {
             Duration::from_secs(7)
         }
@@ -1903,7 +1903,7 @@ mod tests {
             calls: Mutex::new(Vec::new()),
         });
         h.service
-            .attach_deny_control(control.clone(), Arc::new(FixedClock));
+            .attach_deny_control(control.clone(), Arc::new(StubClock));
         let calls = || {
             control
                 .calls

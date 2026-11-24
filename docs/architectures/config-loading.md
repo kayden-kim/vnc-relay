@@ -37,8 +37,8 @@
   - `vnc_relay_adapters::config_file::parse(text, base_dir) -> Result<Settings, Vec<ConfigDiagnostic>>`
   - `vnc_relay_adapters::config_file::parse_candidate(bytes, base_dir) -> Result<ConfigCandidate, Vec<ConfigDiagnostic>>`
   - `vnc_relay_adapters::config_file::load_candidate(path) -> Result<ConfigCandidate, Vec<ConfigDiagnostic>>` — 시작 시 한 번 읽은 파일에서 Settings와 presence를 함께 만든다.
-  - `vnc_relay_app::settings::{Settings, ConfigError, ConfigDiagnostic, ConfigWarning}`와 `Settings::warnings`
-  - `vnc_relay_domain::{allow_list::{IpItem, AllowList}, origin::Origin, target_policy::{TargetItem, TargetPolicy}, entry_point::{EntryPoint, Listener}}`
+  - `vnc_relay_application::settings::{Settings, ConfigError, ConfigDiagnostic, ConfigWarning}`와 `Settings::warnings`
+  - `vnc_relay_domain::{allow_list::{IpItem, AllowList}, origin::Origin, target_policy::{TargetItem, TargetPolicy}, entry_point::{EntryPoint, ListenerKind}}`
 
 ## 2. 내부 구조
 
@@ -58,7 +58,7 @@ flowchart LR
 
 | 요소(파일·심볼) | 역할 | 만들어지는 시점과 소유자 | 의존 대상 |
 | --- | --- | --- | --- |
-| `crates/domain/src/entry_point.rs` `EntryPoint`·`Listener` | 진입점 여섯 종류와 리스너 네 종류, 설정·사건 이름(`tcp_viewer` 등), 기본 포트(5901·5500) | 값 타입 | 없음 |
+| `crates/domain/src/entry_point.rs` `EntryPoint`·`ListenerKind` | 진입점 여섯 종류와 리스너 네 종류, 설정·사건 이름(`tcp_viewer` 등), 기본 포트(5901·5500) | 값 타입 | 없음 |
 | `crates/domain/src/allow_list.rs` `IpItem`, `IpItemError`, `AllowList` | IP 항목 해석(단일·CIDR·범위), 오류 3종 구분, 한 체계 전체를 덮는 항목 판정, 표준 표기 출력 | 설정을 읽을 때 만들고 `Settings`가 소유 | 없음 |
 | `crates/domain/src/origin.rs` `Origin`, `OriginError` | Origin 해석과 정규화. 같은 함수가 설정 값과 요청 헤더를 읽는다. 같음 비교가 1.4절의 일치 규칙이다. | 설정을 읽을 때 | 없음 |
 | `crates/domain/src/target_policy.rs` `TargetItem`, `TargetItemError`, `TargetPolicy` | Mode I 대상 항목 해석(1.5절 구분 순서), 세부 원인 구분, 전체 덮는 IP 항목 판정 | 설정을 읽을 때 | `allow_list`, `origin::is_dns_name` |
@@ -69,9 +69,9 @@ flowchart LR
 | `crates/adapters/src/config_file.rs` `load`, `parse` | 파일 읽기, TOML 해석, 테이블별 키 읽기, 관계·필수 키 검사, `Settings` 조립. `[admin.argon2]` 범위는 `vnc_relay_domain::account::Argon2Params`의 승인 범위 상수다. 구문 오류 위치는 `crates/adapters/src/toml_text.rs` `error_position`이 계정 파일 읽기와 같은 방식으로 계산한다. | 호출마다 | `reader`, `listen`, `toml_text`, domain, app, toml |
 | `crates/adapters/src/config_file.rs` `load_candidate`, `parse_candidate`, `settings_from_table`, `collect_presence` | 시작·조회·편집·watcher가 같은 전체 검증을 쓴다. 명시 leaf 키와 꺼진 WSS의 단독 경로를 presence로 보관한다. | 파일/바이트 후보 읽기마다 | `reader`, app `ConfigCandidate`·`ConfigPresence` |
 | `crates/adapters/src/config_file/reader.rs` `Section`, `Field`, `Diagnostics` | 한 TOML 테이블의 키를 읽고 읽은 키를 기록한다. 끝에서 읽지 않은 키를 `config_unknown_key`로 보고한다. 자료형·범위 오류를 진단으로 남긴다. `Field`는 키 상태(생략·무효·값)다. | 테이블마다 | toml, app |
-| `crates/adapters/src/config_file/listen.rs` `parse_listen` | `"IP:포트"`, `"[IPv6]:포트"`, 기본 포트가 있을 때 주소만 쓴 형식. 호스트 이름·영역 ID·포트 0을 거절한다. | 호출마다 | 호출한 쪽이 `Listener::default_port()`를 넘긴다. |
+| `crates/adapters/src/config_file/listen.rs` `parse_listen` | `"IP:포트"`, `"[IPv6]:포트"`, 기본 포트가 있을 때 주소만 쓴 형식. 호스트 이름·영역 ID·포트 0을 거절한다. | 호출마다 | 호출한 쪽이 `ListenerKind::default_port()`를 넘긴다. |
 
-v4의 `config_file.rs`는 `read_tcp_listener(Listener)`와 `read_websocket_listener(Listener)`를 나눈다. 뒤 함수는 부모 listen·trusted_proxies·TLS를 읽고 `read_websocket_role`로 Viewer·Server 자식을 읽는다. `read_allow_list`가 allow와 trusted_proxies의 IP 항목 검증을 공유한다. `read_recent_logs`는 max_entries를 읽는다. 주소 충돌은 `check_listen_conflicts`가 `Listener::ALL`을 한 번 순회하므로 공유 리스너를 역할 수만큼 중복 검사하지 않는다.
+v4의 `config_file.rs`는 `read_tcp_listener(ListenerKind)`와 `read_websocket_listener(ListenerKind)`를 나눈다. 뒤 함수는 부모 listen·trusted_proxies·TLS를 읽고 `read_websocket_role`로 Viewer·Server 자식을 읽는다. `read_allow_list`가 allow와 trusted_proxies의 IP 항목 검증을 공유한다. `read_recent_logs`는 max_entries를 읽는다. 주소 충돌은 `check_listen_conflicts`가 `ListenerKind::ALL`을 한 번 순회하므로 공유 리스너를 역할 수만큼 중복 검사하지 않는다.
 
 `read_relay`는 `[relay.ticket.viewer]`·`[relay.ticket.server]`도 읽는다. 각 역할의 `enabled`는 기본 `false`다. `issuer`·`relay_host`는 1~256바이트 문자열이다. `max_lifetime_secs`는 10~600초이며 기본 60초다. `enabled = true`이면 `issuer`·`relay_host`·`public_keys_file`이 필수다. 빠진 값은 `config_missing_key`다. 공개 키 경로는 설정 파일 디렉터리 기준으로 푼다. 꺼진 역할도 명시한 값의 자료형·범위를 검사한다. 로더는 키 파일을 읽지 않는다([접속 ticket 모듈 설계](relay-access-ticket.md#41-시작)).
 
@@ -88,7 +88,7 @@ v4의 `config_file.rs`는 `read_tcp_listener(Listener)`와 `read_websocket_liste
 | 이름 | 필드·형태 | 저장 위치 | 제약과 항상 지켜야 할 조건 |
 | --- | --- | --- | --- |
 | `Settings` | `admin`, `relay`, `mode1`, `mode2`, `limits`, `timeouts`, `keepalive`, `management`, `dashboard`, `recent_closed`, `recent_logs`, `status`, `metrics`, `ip_info`, `log`, `reload` | 메모리 | 전체 검사를 통과한 값만 담는다. 생략한 키는 기본값으로 채운다. `PartialEq`는 표기·주석·키 순서가 아니라 실행 의미를 비교한다. |
-| `RelaySettings` | `tcp_viewer`, `tcp_server`: `EntryPointSettings`; `ws`, `wss`: `WsListenerSettings`; `ticket: TicketSettings` | `Settings.relay` | TCP 두 리스너와 공유 WS·WSS 두 리스너를 구분한다. `enabled(EntryPoint)`는 역할, `listener_enabled(Listener)`는 바인드 여부를 조회한다. ticket 정책은 역할별로 WS·WSS가 공유한다. |
+| `RelaySettings` | `tcp_viewer`, `tcp_server`: `EntryPointSettings`; `ws`, `wss`: `WsListenerSettings`; `ticket: TicketSettings` | `Settings.relay` | TCP 두 리스너와 공유 WS·WSS 두 리스너를 구분한다. `enabled(EntryPoint)`는 역할, `listener_enabled(ListenerKind)`는 바인드 여부를 조회한다. ticket 정책은 역할별로 WS·WSS가 공유한다. |
 | `EntryPointSettings` | `enabled`, `listen: Option<SocketAddr>`, `allow: Option<AllowList>` | TCP 두 칸 | 켜진 TCP 진입점의 `listen`·`allow`는 필수다. |
 | `WsListenerSettings` | `listen`, `trusted_proxies: AllowList`, `tls: Option<TlsFiles>`, `viewer`, `server`: `WsRoleSettings` | WS·WSS 두 칸 | `enabled()`는 두 역할의 OR다. 어느 역할이든 켜면 부모의 `listen`이 필수다. WSS는 부모 TLS 두 경로도 필수다. WS에는 TLS 키를 받지 않는다. |
 | `WsRoleSettings` | `enabled`, `allow: Option<AllowList>`, `allowed_origins: Vec<Origin>` | 공유 리스너 아래 역할 두 칸 | 켜진 역할의 `allow`만 필수다. 꺼진 역할도 명시한 값의 형식·범위를 검사한다. |

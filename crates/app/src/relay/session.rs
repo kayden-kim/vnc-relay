@@ -1,7 +1,7 @@
 //! Two bounded relay directions driven by one owner, without socket tasks.
 //! Streams and permits remain with the caller until final registry cleanup.
 
-use std::future::{pending, poll_fn};
+use std::future;
 use std::pin::{Pin, pin};
 use std::task::{Context, Poll};
 use std::time::Duration;
@@ -117,9 +117,7 @@ pub(super) async fn run_session_controlled(
             expiry_started = Some(now);
             on_update(session, error_kind);
         }
-        if close_timeout.is_none()
-            && session.state() != vnc_relay_domain::session::SessionState::Active
-        {
+        if close_timeout.is_none() && session.state() != vnc_relay_domain::session::State::Active {
             settings.with_current(&mut |settings| close_timeout = Some(settings.timeouts.close));
         }
         let timeout = close_timeout.unwrap_or_default();
@@ -197,7 +195,7 @@ pub(super) async fn run_session_controlled(
             (Some(left), Some(right)) => Some(left.min(right)),
             (left, right) => left.or(right),
         };
-        let deadline = if session.state() == vnc_relay_domain::session::SessionState::Active {
+        let deadline = if session.state() == vnc_relay_domain::session::State::Active {
             match (deadline, session_deadline) {
                 (Some(left), Some(right)) => Some(left.min(right)),
                 (left, right) => left.or(right),
@@ -214,10 +212,10 @@ pub(super) async fn run_session_controlled(
             let mut timeout = pin!(async {
                 match wake_at {
                     Some(end) => tokio::time::sleep(end.saturating_sub(now)).await,
-                    None => pending::<()>().await,
+                    None => future::pending::<()>().await,
                 }
             });
-            poll_fn(|cx| {
+            future::poll_fn(|cx| {
                 if !command_closed && command_changed.as_mut().poll(cx).is_ready() {
                     return Poll::Ready(Wake::AdminCommand);
                 }
@@ -418,7 +416,7 @@ pub(super) async fn run_session_controlled(
             // Always-ready in-memory or buffered transports must not monopolize
             // the executor; fairness between directions alone is insufficient.
             let mut yielded = false;
-            poll_fn(|cx| {
+            future::poll_fn(|cx| {
                 if yielded {
                     Poll::Ready(())
                 } else {
@@ -659,7 +657,7 @@ async fn close_once<'a>(
     ws_close_sent: &mut [bool; 2],
 ) {
     let Some(action) = action else { return };
-    poll_fn(|cx| {
+    future::poll_fn(|cx| {
         for (index, stream) in [&mut *viewer, &mut *other].into_iter().enumerate() {
             if !ws_close_sent[index] {
                 let is_ws = stream.transport().is_websocket();
@@ -683,11 +681,11 @@ mod tests {
     use std::time::SystemTime;
 
     use tokio::io::{AsyncRead, AsyncWrite};
-    use tokio::time::{Instant, advance};
-    use vnc_relay_domain::session::{SessionId, SessionState, Transport};
+    use tokio::time::{self, Instant};
+    use vnc_relay_domain::session::{Id, State, Transport};
 
     use super::*;
-    use crate::relay::test_support::TestSettings;
+    use crate::relay::test_support::FakeRuntimeSettingsSource;
 
     #[expect(
         clippy::too_many_arguments,
@@ -706,7 +704,7 @@ mod tests {
         on_update: impl Fn(&Session),
     ) -> Result<Option<ConnectionErrorKind>, SessionError> {
         let (_command, receiver) = watch::channel(None);
-        let settings = TestSettings::new();
+        let settings = FakeRuntimeSettingsSource::new();
         settings.change(|settings| settings.timeouts.close = close_timeout);
         run_session_controlled(
             viewer,
@@ -730,8 +728,8 @@ mod tests {
     /// spec: management.md:MGT-041 partial
     #[tokio::test(start_paused = true)]
     async fn reload_reads_e_at_first_close_and_keeps_started_close_fixed() {
-        let settings = TestSettings::new();
-        let clock = TestClock::new();
+        let settings = FakeRuntimeSettingsSource::new();
+        let clock = FakeClock::new();
         let mut session = model(Mode::Mode2);
         let (_lifecycle, lifecycle) = watch::channel(RelayLifecycle::Running);
         let (_command, command) = watch::channel(None);
@@ -753,13 +751,13 @@ mod tests {
             |_, _| {},
         ));
         pump(&mut relay).await;
-        advance(Duration::from_secs(3)).await;
+        time::advance(Duration::from_secs(3)).await;
         settings.change(|settings| settings.timeouts.close = Duration::from_secs(5));
         viewer_control.feed(&[], true);
         pump(&mut relay).await;
         settings.change(|settings| settings.timeouts.close = Duration::from_secs(1));
-        advance(Duration::from_secs(4)).await;
-        poll_fn(|cx| {
+        time::advance(Duration::from_secs(4)).await;
+        future::poll_fn(|cx| {
             assert!(
                 relay.as_mut().poll(cx).is_pending(),
                 "started E must remain five seconds"
@@ -767,15 +765,15 @@ mod tests {
             Poll::Ready(())
         })
         .await;
-        advance(Duration::from_secs(1)).await;
+        time::advance(Duration::from_secs(1)).await;
         relay.await.expect("old E expires");
     }
 
     /// spec: operations.md:OPS-050 partial
     #[tokio::test(start_paused = true)]
     async fn mode_two_directions_keep_distinct_accepted_buffer_limits() {
-        let settings = TestSettings::new();
-        let clock = TestClock::new();
+        let settings = FakeRuntimeSettingsSource::new();
+        let clock = FakeClock::new();
         let mut session = model(Mode::Mode2);
         let (_lifecycle, lifecycle) = watch::channel(RelayLifecycle::Running);
         let (_command, command) = watch::channel(None);
@@ -805,12 +803,12 @@ mod tests {
 
     const E: Duration = Duration::from_secs(10);
 
-    struct TestClock {
+    struct FakeClock {
         epoch: Instant,
         offset_ms: AtomicU64,
     }
 
-    impl TestClock {
+    impl FakeClock {
         fn new() -> Arc<Self> {
             Arc::new(Self {
                 epoch: Instant::now(),
@@ -826,7 +824,7 @@ mod tests {
         }
     }
 
-    impl Clock for TestClock {
+    impl Clock for FakeClock {
         fn monotonic(&self) -> Duration {
             self.epoch.elapsed() + Duration::from_millis(self.offset_ms.load(Ordering::Relaxed))
         }
@@ -871,9 +869,9 @@ mod tests {
         actions: Vec<RelayCloseAction>,
         half_closed: bool,
         waker: Option<Waker>,
-        jump_on_read: Option<(Arc<TestClock>, Duration)>,
-        jump_on_write: Option<(Arc<TestClock>, Duration)>,
-        jump_on_half: Option<(Arc<TestClock>, Duration)>,
+        jump_on_read: Option<(Arc<FakeClock>, Duration)>,
+        jump_on_write: Option<(Arc<FakeClock>, Duration)>,
+        jump_on_half: Option<(Arc<FakeClock>, Duration)>,
         force_on_terminal: Option<watch::Sender<RelayLifecycle>>,
     }
 
@@ -914,7 +912,7 @@ mod tests {
         }
     }
 
-    struct TestStream(Arc<Mutex<StreamState>>);
+    struct FakeRelayStream(Arc<Mutex<StreamState>>);
 
     #[derive(Clone)]
     struct Control(Arc<Mutex<StreamState>>);
@@ -947,14 +945,14 @@ mod tests {
         }
     }
 
-    fn stream(input: &[u8], eof: bool) -> (TestStream, Control) {
+    fn stream(input: &[u8], eof: bool) -> (FakeRelayStream, Control) {
         let state = Arc::new(Mutex::new(StreamState::default()));
         let control = Control(state.clone());
         control.feed(input, eof);
-        (TestStream(state), control)
+        (FakeRelayStream(state), control)
     }
 
-    impl AsyncRead for TestStream {
+    impl AsyncRead for FakeRelayStream {
         fn poll_read(
             self: Pin<&mut Self>,
             cx: &mut Context<'_>,
@@ -989,7 +987,7 @@ mod tests {
         }
     }
 
-    impl AsyncWrite for TestStream {
+    impl AsyncWrite for FakeRelayStream {
         fn poll_write(
             self: Pin<&mut Self>,
             cx: &mut Context<'_>,
@@ -1050,7 +1048,7 @@ mod tests {
         }
     }
 
-    impl RelayStream for TestStream {
+    impl RelayStream for FakeRelayStream {
         fn transport(&self) -> Transport {
             self.0.lock().expect("stream state").transport
         }
@@ -1103,7 +1101,7 @@ mod tests {
 
     fn model(mode: Mode) -> Session {
         Session::new(
-            SessionId::from_block([0; 16]),
+            Id::from_block([0; 16]),
             mode,
             Transport::Tcp,
             Transport::Tcp,
@@ -1118,7 +1116,7 @@ mod tests {
         >,
     ) {
         for _ in 0..16 {
-            poll_fn(|cx| {
+            future::poll_fn(|cx| {
                 assert!(
                     future.as_mut().poll(cx).is_pending(),
                     "session must remain open"
@@ -1129,7 +1127,7 @@ mod tests {
         }
     }
 
-    fn finish(session: &mut Session, clock: &TestClock) -> CloseCause {
+    fn finish(session: &mut Session, clock: &FakeClock) -> CloseCause {
         session
             .finish(clock.wall(), clock.monotonic())
             .expect("caller finishes after cleanup")
@@ -1139,7 +1137,7 @@ mod tests {
     #[tokio::test(start_paused = true)]
     async fn drives_queued_and_partial_pongs_while_payload_writes_are_backpressured() {
         for frame_in_flight in [false, true] {
-            let clock = TestClock::new();
+            let clock = FakeClock::new();
             let mut session = model(Mode::Mode1);
             let (_sender, receiver) = watch::channel(RelayLifecycle::Running);
             let (mut viewer, viewer_control) = stream(b"full", false);
@@ -1210,7 +1208,7 @@ mod tests {
             ConnectionErrorKind::IoError,
             ConnectionErrorKind::WsProtocolError,
         ] {
-            let clock = TestClock::new();
+            let clock = FakeClock::new();
             let mut session = model(Mode::Mode1);
             let (_sender, receiver) = watch::channel(RelayLifecycle::Running);
             let (mut viewer, viewer_control) = stream(&[], false);
@@ -1245,7 +1243,7 @@ mod tests {
     #[tokio::test(start_paused = true)]
     async fn delivers_both_trailing_buffers_once_before_stream_bytes() {
         for mode in [Mode::Mode1, Mode::Mode2] {
-            let clock = TestClock::new();
+            let clock = FakeClock::new();
             let mut session = model(mode);
             let (_sender, receiver) = watch::channel(RelayLifecycle::Running);
             let (mut viewer, viewer_control) = stream(b"viewer-stream", true);
@@ -1276,7 +1274,7 @@ mod tests {
             assert_eq!(viewer_control.output(), b"other-firstother-stream");
             assert_eq!(session.bytes(Direction::ViewerToTarget), 25);
             assert_eq!(session.bytes(Direction::TargetToViewer), 23);
-            assert_eq!(session.state(), SessionState::Closing);
+            assert_eq!(session.state(), State::Closing);
             assert_eq!(
                 session.close_cause(),
                 None,
@@ -1291,7 +1289,7 @@ mod tests {
     /// spec: relay.md:RLY-017 partial
     #[tokio::test(start_paused = true)]
     async fn bounds_reads_and_preserves_reverse_progress_under_backpressure() {
-        let clock = TestClock::new();
+        let clock = FakeClock::new();
         let mut session = model(Mode::Mode2);
         let (_sender, receiver) = watch::channel(RelayLifecycle::Running);
         let payload: Vec<_> = (0..80).collect();
@@ -1351,7 +1349,7 @@ mod tests {
     #[tokio::test(start_paused = true)]
     async fn counts_only_successful_payload_writes() {
         for failed_direction in 0..2 {
-            let clock = TestClock::new();
+            let clock = FakeClock::new();
             let mut session = model(Mode::Mode1);
             let (_sender, receiver) = watch::channel(RelayLifecycle::Running);
             let (mut viewer, viewer_control) = stream(b"later-viewer", false);
@@ -1433,7 +1431,7 @@ mod tests {
 
     #[tokio::test(start_paused = true)]
     async fn treats_zero_writes_as_output_side_errors() {
-        let clock = TestClock::new();
+        let clock = FakeClock::new();
         let mut session = model(Mode::Mode2);
         let (_sender, receiver) = watch::channel(RelayLifecycle::Running);
         let (mut viewer, _) = stream(&[], false);
@@ -1462,7 +1460,7 @@ mod tests {
     #[tokio::test(start_paused = true)]
     async fn half_close_allows_a_late_response_in_either_direction() {
         for first in 0..2 {
-            let clock = TestClock::new();
+            let clock = FakeClock::new();
             let mut session = model(Mode::Mode2);
             let (_sender, receiver) = watch::channel(RelayLifecycle::Running);
             let (mut viewer, viewer_control) =
@@ -1498,7 +1496,7 @@ mod tests {
                         .count(),
                     0
                 );
-                advance(E - Duration::from_millis(1)).await;
+                time::advance(E - Duration::from_millis(1)).await;
                 responder.feed(b"late-response", true);
                 relay.await.expect("reply drains before E");
             }
@@ -1516,7 +1514,7 @@ mod tests {
     #[tokio::test(start_paused = true)]
     async fn expires_e_at_equality_including_pending_shutdown_and_final_close() {
         for blocked_stage in 0..3 {
-            let clock = TestClock::new();
+            let clock = FakeClock::new();
             let mut session = model(Mode::Mode1);
             let (_sender, receiver) = watch::channel(RelayLifecycle::Running);
             let (mut viewer, viewer_control) = stream(&[], true);
@@ -1541,7 +1539,7 @@ mod tests {
                     |_| {}
                 ));
                 pump(&mut relay).await;
-                advance(E).await;
+                time::advance(E).await;
                 relay.await.expect("E bounds all cleanup stages");
             }
             assert_eq!(session.close_cause(), Some(CloseCause::CloseTimeout));
@@ -1554,7 +1552,7 @@ mod tests {
     #[tokio::test(start_paused = true)]
     async fn checks_e_after_successful_writes_and_shutdowns() {
         for jump_during_write in [false, true] {
-            let clock = TestClock::new();
+            let clock = FakeClock::new();
             let mut session = model(Mode::Mode1);
             let (_sender, receiver) = watch::channel(RelayLifecycle::Running);
             let (mut viewer, viewer_control) = stream(&[], true);
@@ -1600,7 +1598,7 @@ mod tests {
 
     #[tokio::test(start_paused = true)]
     async fn never_reads_over_undelivered_trailing_data() {
-        let clock = TestClock::new();
+        let clock = FakeClock::new();
         let mut session = model(Mode::Mode1);
         let (_sender, receiver) = watch::channel(RelayLifecycle::Running);
         let (mut viewer, viewer_control) = stream(b"next", true);
@@ -1630,7 +1628,7 @@ mod tests {
 
     #[tokio::test(start_paused = true)]
     async fn does_not_restart_e_when_the_other_eof_arrives() {
-        let clock = TestClock::new();
+        let clock = FakeClock::new();
         let mut session = model(Mode::Mode1);
         let (_sender, receiver) = watch::channel(RelayLifecycle::Running);
         let (mut viewer, viewer_control) = stream(&[], true);
@@ -1650,10 +1648,10 @@ mod tests {
                 |_| {}
             ));
             pump(&mut relay).await;
-            advance(E - Duration::from_secs(1)).await;
+            time::advance(E - Duration::from_secs(1)).await;
             other_control.feed(&[], true);
             pump(&mut relay).await;
-            advance(Duration::from_secs(1)).await;
+            time::advance(Duration::from_secs(1)).await;
             relay.await.expect("the original E expires");
         }
         assert_eq!(session.first_eof(), Some((Side::Viewer, Duration::ZERO)));
@@ -1665,7 +1663,7 @@ mod tests {
     #[tokio::test(start_paused = true)]
     async fn errors_on_the_remaining_direction_replace_provisional_eof() {
         for shutdown_error in [false, true] {
-            let clock = TestClock::new();
+            let clock = FakeClock::new();
             let mut session = model(Mode::Mode2);
             let (_sender, receiver) = watch::channel(RelayLifecycle::Running);
             let (mut viewer, viewer_control) = stream(&[], true);
@@ -1714,7 +1712,7 @@ mod tests {
 
     #[tokio::test(start_paused = true)]
     async fn cleanup_errors_do_not_replace_completed_normal_directions() {
-        let clock = TestClock::new();
+        let clock = FakeClock::new();
         let mut session = model(Mode::Mode1);
         let (_sender, receiver) = watch::channel(RelayLifecycle::Running);
         let (mut viewer, viewer_control) = stream(b"v", true);
@@ -1746,7 +1744,7 @@ mod tests {
     /// spec: operations.md:OPS-008 partial
     #[tokio::test(start_paused = true)]
     async fn forwards_during_grace_and_finishes_naturally_before_g() {
-        let clock = TestClock::new();
+        let clock = FakeClock::new();
         let mut session = model(Mode::Mode1);
         let (sender, receiver) = watch::channel(RelayLifecycle::Running);
         let (mut viewer, viewer_control) = stream(&[], false);
@@ -1773,7 +1771,7 @@ mod tests {
             pump(&mut relay).await;
             assert_eq!(other_control.output(), b"during-grace");
             assert_eq!(viewer_control.output(), b"reply");
-            advance(Duration::from_secs(19)).await;
+            time::advance(Duration::from_secs(19)).await;
             viewer_control.feed(&[], true);
             other_control.feed(&[], true);
             relay.await.expect("natural EOF before G");
@@ -1786,7 +1784,7 @@ mod tests {
     #[tokio::test(start_paused = true)]
     async fn g_expiry_preserves_eof_and_never_waits_for_transport_close() {
         for grace in [Duration::ZERO, Duration::from_secs(3)] {
-            let clock = TestClock::new();
+            let clock = FakeClock::new();
             let mut session = model(Mode::Mode1);
             let (sender, receiver) = watch::channel(RelayLifecycle::Running);
             let (mut viewer, viewer_control) = stream(&[], true);
@@ -1811,7 +1809,7 @@ mod tests {
                 sender.send_replace(RelayLifecycle::Grace { deadline: grace });
                 if !grace.is_zero() {
                     pump(&mut relay).await;
-                    advance(grace).await;
+                    time::advance(grace).await;
                 }
                 assert_eq!(relay.await.expect("G is a hard bound"), None);
             }
@@ -1838,7 +1836,7 @@ mod tests {
                 ConnectionErrorKind::WsTextMessage,
                 ConnectionErrorKind::WsMessageTooLarge,
             ] {
-                let clock = TestClock::new();
+                let clock = FakeClock::new();
                 let mut session = model(Mode::Mode1);
                 let (sender, receiver) = watch::channel(RelayLifecycle::Running);
                 let (mut viewer, viewer_control) = stream(&[], false);
@@ -1869,7 +1867,7 @@ mod tests {
                     } else {
                         sender.send_replace(RelayLifecycle::Grace { deadline: grace });
                         pump(&mut relay).await;
-                        advance(grace).await;
+                        time::advance(grace).await;
                     }
                     assert_eq!(relay.await.expect("Force or G bounds cleanup"), Some(kind));
                 }
@@ -1895,7 +1893,7 @@ mod tests {
     #[tokio::test(start_paused = true)]
     async fn zero_grace_stops_new_reads_and_terminal_force_is_observed() {
         for force_in_close in [false, true] {
-            let clock = TestClock::new();
+            let clock = FakeClock::new();
             let mut session = model(Mode::Mode1);
             let state = if force_in_close {
                 RelayLifecycle::Running
@@ -1949,7 +1947,7 @@ mod tests {
 
     #[tokio::test(start_paused = true)]
     async fn bounds_terminal_error_cleanup_by_e_without_relabelling_the_error() {
-        let clock = TestClock::new();
+        let clock = FakeClock::new();
         let mut session = model(Mode::Mode1);
         let (_sender, receiver) = watch::channel(RelayLifecycle::Running);
         let (mut viewer, viewer_control) = stream(&[], false);
@@ -1986,7 +1984,7 @@ mod tests {
     /// spec: relay.md:RLY-026 partial
     #[tokio::test(start_paused = true)]
     async fn one_failed_session_cannot_close_or_mix_an_independent_session() {
-        let clock = TestClock::new();
+        let clock = FakeClock::new();
         let mut first_model = model(Mode::Mode1);
         let mut second_model = model(Mode::Mode2);
         let (_first_sender, first_receiver) = watch::channel(RelayLifecycle::Running);
@@ -2040,7 +2038,7 @@ mod tests {
     /// spec: relay.md:RLY-027 partial
     #[tokio::test(start_paused = true)]
     async fn does_not_turn_long_idle_time_into_dead_connection() {
-        let clock = TestClock::new();
+        let clock = FakeClock::new();
         let mut session = model(Mode::Mode1);
         let (sender, receiver) = watch::channel(RelayLifecycle::Running);
         let (mut viewer, viewer_control) = stream(&[], false);
@@ -2061,7 +2059,7 @@ mod tests {
             pump(&mut relay).await;
             // Closing the notification channel is not a forced shutdown.
             drop(sender);
-            advance(Duration::from_secs(86_400)).await;
+            time::advance(Duration::from_secs(86_400)).await;
             pump(&mut relay).await;
             assert!(viewer_control.actions().is_empty());
             assert!(other_control.actions().is_empty());
@@ -2077,7 +2075,7 @@ mod tests {
 
     #[tokio::test(start_paused = true)]
     async fn preserves_an_external_dead_connection_verdict_without_inventing_a_timer() {
-        let clock = TestClock::new();
+        let clock = FakeClock::new();
         let mut session = model(Mode::Mode2);
         session
             .dead_connection(Side::Server)
@@ -2117,7 +2115,7 @@ mod tests {
     /// spec: management.md:MGT-005 partial
     #[tokio::test(start_paused = true)]
     async fn publishes_saturating_counters_without_resetting_prior_progress() {
-        let clock = TestClock::new();
+        let clock = FakeClock::new();
         let mut session = model(Mode::Mode1);
         session
             .record_write(Direction::ViewerToTarget, u64::MAX - 1)
@@ -2173,7 +2171,7 @@ mod tests {
             ConnectionErrorKind::WsMessageTooLarge,
         ] {
             for write_error in [false, true] {
-                let clock = TestClock::new();
+                let clock = FakeClock::new();
                 let mut session = model(Mode::Mode1);
                 let (_sender, receiver) = watch::channel(RelayLifecycle::Running);
                 let (mut viewer, viewer_control) = stream(&[], false);
@@ -2227,7 +2225,7 @@ mod tests {
     /// spec: websocket.md:WS-016 partial
     #[tokio::test(start_paused = true)]
     async fn tcp_io_error_sends_the_websocket_peer_error_action() {
-        let clock = TestClock::new();
+        let clock = FakeClock::new();
         let mut session = model(Mode::Mode1);
         let (_sender, receiver) = watch::channel(RelayLifecycle::Running);
         let (mut viewer, viewer_control) = stream(&[], false);
@@ -2264,7 +2262,7 @@ mod tests {
     #[tokio::test(start_paused = true)]
     async fn client_close_finishes_only_the_started_frame_and_discards_tcp_data() {
         for pending_write in [0, 5] {
-            let clock = TestClock::new();
+            let clock = FakeClock::new();
             let mut session = model(Mode::Mode2);
             let (_sender, receiver) = watch::channel(RelayLifecycle::Running);
             let (mut viewer, viewer_control) = stream(&[], true);
@@ -2311,7 +2309,7 @@ mod tests {
     /// spec: websocket.md:WS-016 partial
     #[tokio::test(start_paused = true)]
     async fn tcp_eof_sends_close_after_drain_and_forwards_client_data_until_close() {
-        let clock = TestClock::new();
+        let clock = FakeClock::new();
         let mut session = model(Mode::Mode1);
         let (_sender, receiver) = watch::channel(RelayLifecycle::Running);
         let (mut viewer, viewer_control) = stream(&[], false);
@@ -2349,7 +2347,7 @@ mod tests {
     #[tokio::test(start_paused = true)]
     async fn websocket_close_waits_expire_at_the_same_absolute_e_in_both_orders() {
         for client_first in [false, true] {
-            let clock = TestClock::new();
+            let clock = FakeClock::new();
             let mut session = model(Mode::Mode1);
             let (_sender, receiver) = watch::channel(RelayLifecycle::Running);
             let (mut viewer, viewer_control) = stream(&[], client_first);
@@ -2375,14 +2373,14 @@ mod tests {
                 ));
                 pump(&mut relay).await;
                 assert_eq!(viewer_control.actions(), [close]);
-                advance(E / 2).await;
+                time::advance(E / 2).await;
                 if client_first {
                     other_control.feed(b"discard", false);
                 } else {
                     viewer_control.feed(b"forward", false);
                 }
                 pump(&mut relay).await;
-                advance(E / 2).await;
+                time::advance(E / 2).await;
                 relay.await.expect("absolute E expiry");
             }
             assert_eq!(viewer_control.actions(), [close]);
@@ -2396,7 +2394,7 @@ mod tests {
     #[tokio::test(start_paused = true)]
     async fn force_after_either_close_order_never_sends_a_second_websocket_close() {
         for client_first in [false, true] {
-            let clock = TestClock::new();
+            let clock = FakeClock::new();
             let mut session = model(Mode::Mode1);
             let (sender, receiver) = watch::channel(RelayLifecycle::Running);
             let (mut viewer, viewer_control) = stream(&[], client_first);
@@ -2460,7 +2458,7 @@ mod tests {
                 RelayCloseAction::StreamError(ConnectionErrorKind::WsMessageTooLarge),
             ),
         ] {
-            let clock = TestClock::new();
+            let clock = FakeClock::new();
             let mut session = model(Mode::Mode1);
             let fresh = kind.is_none() && eof_side.is_none();
             let (sender, receiver) = watch::channel(if fresh {
@@ -2528,7 +2526,7 @@ mod tests {
     /// spec: operations.md:OPS-042 partial
     #[tokio::test(start_paused = true)]
     async fn force_published_by_expired_cleanup_keeps_the_typed_error_action() {
-        let clock = TestClock::new();
+        let clock = FakeClock::new();
         let mut session = model(Mode::Mode1);
         let (sender, receiver) = watch::channel(RelayLifecycle::Running);
         let (mut viewer, viewer_control) = stream(&[], false);
@@ -2556,7 +2554,7 @@ mod tests {
             ));
             pump(&mut relay).await;
             viewer_control.change(|state| state.force_on_terminal = Some(sender.clone()));
-            advance(E).await;
+            time::advance(E).await;
             assert_eq!(
                 relay.await.expect("expired cleanup rechecks Force"),
                 Some(kind)
@@ -2580,7 +2578,7 @@ mod tests {
     #[tokio::test(start_paused = true)]
     async fn late_client_close_cannot_replace_tcp_first_pending_write_half_with_an_echo() {
         for (mode, tcp_side) in [(Mode::Mode1, Side::Target), (Mode::Mode2, Side::Server)] {
-            let clock = TestClock::new();
+            let clock = FakeClock::new();
             let mut session = model(mode);
             let (_sender, receiver) = watch::channel(RelayLifecycle::Running);
             let (mut viewer, viewer_control) = stream(&[], false);
@@ -2605,7 +2603,7 @@ mod tests {
                 pump(&mut relay).await;
                 assert_eq!(viewer_control.output(), b"before-fin");
                 assert!(!viewer_control.actions().is_empty());
-                advance(E / 2).await;
+                time::advance(E / 2).await;
                 viewer_control.feed(&[], true);
                 pump(&mut relay).await;
                 assert!(
@@ -2636,7 +2634,7 @@ mod tests {
     /// spec: websocket.md:WS-017 partial
     #[tokio::test(start_paused = true)]
     async fn an_inflight_frame_blocked_after_client_close_cannot_extend_e() {
-        let clock = TestClock::new();
+        let clock = FakeClock::new();
         let mut session = model(Mode::Mode1);
         let (_sender, receiver) = watch::channel(RelayLifecycle::Running);
         let (mut viewer, viewer_control) = stream(&[], true);
@@ -2660,7 +2658,7 @@ mod tests {
                 |_| {}
             ));
             pump(&mut relay).await;
-            advance(E).await;
+            time::advance(E).await;
             relay.await.expect("inflight frame shares E");
         }
         assert!(viewer_control.output().is_empty());
@@ -2670,7 +2668,7 @@ mod tests {
 
     #[tokio::test(start_paused = true)]
     async fn a_read_completing_at_e_does_not_start_another_payload_write() {
-        let clock = TestClock::new();
+        let clock = FakeClock::new();
         let mut session = model(Mode::Mode1);
         let (_sender, receiver) = watch::channel(RelayLifecycle::Running);
         let (mut viewer, viewer_control) = stream(&[], true);
@@ -2701,7 +2699,7 @@ mod tests {
     /// spec: relay.md:RLY-019 partial
     #[tokio::test(start_paused = true)]
     async fn e_includes_draining_the_other_directions_pending_payload() {
-        let clock = TestClock::new();
+        let clock = FakeClock::new();
         let mut session = model(Mode::Mode1);
         let (_sender, receiver) = watch::channel(RelayLifecycle::Running);
         let (mut viewer, viewer_control) = stream(&[], true);
@@ -2721,7 +2719,7 @@ mod tests {
                 |_| {}
             ));
             pump(&mut relay).await;
-            advance(E).await;
+            time::advance(E).await;
             relay.await.expect("drain is bounded by first EOF");
         }
         assert!(viewer_control.output().is_empty());
@@ -2733,7 +2731,7 @@ mod tests {
     /// spec: operations.md:OPS-009 partial
     #[tokio::test(start_paused = true)]
     async fn e_expires_at_equality_when_e_and_g_reach_deadline_together() {
-        let clock = TestClock::new();
+        let clock = FakeClock::new();
         let mut session = model(Mode::Mode1);
         let (_sender, receiver) = watch::channel(RelayLifecycle::Grace { deadline: E });
         let (mut viewer, _) = stream(&[], true);
@@ -2753,7 +2751,7 @@ mod tests {
                 |_| {}
             ));
             pump(&mut relay).await;
-            advance(E).await;
+            time::advance(E).await;
             relay.await.expect("equality expiry");
         }
         assert_eq!(session.close_cause(), Some(CloseCause::CloseTimeout));
@@ -2771,7 +2769,7 @@ mod tests {
             CloseBehavior::Error,
             CloseBehavior::Pending,
         ] {
-            let clock = TestClock::new();
+            let clock = FakeClock::new();
             let mut session = model(Mode::Mode1);
             let (_lifecycle, receiver) = watch::channel(RelayLifecycle::Running);
             let (_command, command) = watch::channel(admin_command(CommandedClose::Admin));
@@ -2779,7 +2777,7 @@ mod tests {
             let (mut other, other_control) = stream(b"must-not-read-either", false);
             viewer_control.change(|state| state.terminal = behavior);
             other_control.change(|state| state.terminal = behavior);
-            let settings = TestSettings::new();
+            let settings = FakeRuntimeSettingsSource::new();
             settings.change(|settings| settings.timeouts.close = E);
             {
                 let mut relay = pin!(run_session_controlled(
@@ -2797,18 +2795,18 @@ mod tests {
                     |_, _| {},
                 ));
                 if matches!(behavior, CloseBehavior::Pending) {
-                    poll_fn(|cx| {
+                    future::poll_fn(|cx| {
                         assert!(relay.as_mut().poll(cx).is_pending());
                         Poll::Ready(())
                     })
                     .await;
-                    advance(E - Duration::from_millis(1)).await;
-                    poll_fn(|cx| {
+                    time::advance(E - Duration::from_millis(1)).await;
+                    future::poll_fn(|cx| {
                         assert!(relay.as_mut().poll(cx).is_pending());
                         Poll::Ready(())
                     })
                     .await;
-                    advance(Duration::from_millis(1)).await;
+                    time::advance(Duration::from_millis(1)).await;
                 }
                 assert_eq!(
                     relay.await.unwrap_or_else(|e| panic!("admin cleanup: {e}")),
@@ -2871,7 +2869,7 @@ mod tests {
     #[tokio::test(start_paused = true)]
     async fn ip_denied_cleanup_uses_the_admin_close_order_and_keeps_its_cause() {
         for behavior in [CloseBehavior::Ready, CloseBehavior::Pending] {
-            let clock = TestClock::new();
+            let clock = FakeClock::new();
             let mut session = model(Mode::Mode2);
             let (_lifecycle, receiver) = watch::channel(RelayLifecycle::Running);
             let (_command, command) = watch::channel(admin_command(CommandedClose::IpDenied));
@@ -2882,7 +2880,7 @@ mod tests {
                 state.transport = Transport::Ws;
             });
             other_control.change(|state| state.terminal = behavior);
-            let settings = TestSettings::new();
+            let settings = FakeRuntimeSettingsSource::new();
             settings.change(|settings| settings.timeouts.close = E);
             {
                 let mut relay = pin!(run_session_controlled(
@@ -2900,12 +2898,12 @@ mod tests {
                     |_, _| {},
                 ));
                 if matches!(behavior, CloseBehavior::Pending) {
-                    poll_fn(|cx| {
+                    future::poll_fn(|cx| {
                         assert!(relay.as_mut().poll(cx).is_pending());
                         Poll::Ready(())
                     })
                     .await;
-                    advance(E).await;
+                    time::advance(E).await;
                 }
                 assert_eq!(
                     relay
@@ -2937,7 +2935,7 @@ mod tests {
     /// spec: relay.md:RLY-020 partial
     #[tokio::test(start_paused = true)]
     async fn admin_finishes_only_started_ws_frame_before_terminal_close_without_waiting_for_e() {
-        let clock = TestClock::new();
+        let clock = FakeClock::new();
         let mut session = model(Mode::Mode1);
         session
             .record_write(Direction::TargetToViewer, 2)
@@ -2953,7 +2951,7 @@ mod tests {
             state.write_chunk = 1;
             state.require_frame_finished = true;
         });
-        let settings = TestSettings::new();
+        let settings = FakeRuntimeSettingsSource::new();
         settings.change(|settings| settings.timeouts.close = E);
         run_session_controlled(
             &mut viewer,
@@ -3008,7 +3006,7 @@ mod tests {
     async fn server_controls_flush_with_full_payload_buffers_on_tcp_and_ws_peers() {
         for peer_transport in [Transport::Tcp, Transport::Wss] {
             for frame_in_flight in [false, true] {
-                let clock = TestClock::new();
+                let clock = FakeClock::new();
                 let mut session = model(Mode::Mode2);
                 let (_lifecycle, receiver) = watch::channel(RelayLifecycle::Running);
                 let (mut viewer, viewer_control) = stream(&[], false);
@@ -3070,7 +3068,7 @@ mod tests {
     async fn server_liveness_and_control_failures_preserve_server_side() {
         for peer_transport in [Transport::Tcp, Transport::Wss] {
             for dead in [false, true] {
-                let clock = TestClock::new();
+                let clock = FakeClock::new();
                 let mut session = model(Mode::Mode2);
                 let (_lifecycle, receiver) = watch::channel(RelayLifecycle::Running);
                 let (mut viewer, viewer_control) = stream(b"full", false);
@@ -3138,7 +3136,7 @@ mod tests {
     async fn server_websocket_close_waits_share_one_absolute_deadline_in_both_orders() {
         for peer_transport in [Transport::Tcp, Transport::Wss] {
             for server_first in [false, true] {
-                let clock = TestClock::new();
+                let clock = FakeClock::new();
                 let mut session = model(Mode::Mode2);
                 let (_lifecycle, receiver) = watch::channel(RelayLifecycle::Running);
                 let (mut viewer, viewer_control) = stream(&[], !server_first);
@@ -3183,7 +3181,7 @@ mod tests {
         for close_index in [0, 1] {
             for peer_transport in [Transport::Tcp, Transport::Wss] {
                 for pending_write in [0, 5] {
-                    let clock = TestClock::new();
+                    let clock = FakeClock::new();
                     let mut session = model(Mode::Mode2);
                     let (_lifecycle, receiver) = watch::channel(RelayLifecycle::Running);
                     let (mut viewer, viewer_control) = stream(&[], close_index == 0);
@@ -3249,7 +3247,7 @@ mod tests {
     /// spec: management.md:MGT-009 partial
     #[tokio::test(start_paused = true)]
     async fn admin_finishes_started_frames_on_both_websocket_roles_without_new_reads() {
-        let clock = TestClock::new();
+        let clock = FakeClock::new();
         let mut session = model(Mode::Mode2);
         let (_lifecycle, receiver) = watch::channel(RelayLifecycle::Running);
         let (_command, command) = watch::channel(admin_command(CommandedClose::Admin));
@@ -3263,7 +3261,7 @@ mod tests {
                 state.require_frame_finished = true;
             });
         }
-        let settings = TestSettings::new();
+        let settings = FakeRuntimeSettingsSource::new();
         settings.change(|settings| settings.timeouts.close = E);
         run_session_controlled(
             &mut viewer,
@@ -3297,11 +3295,11 @@ mod tests {
     #[tokio::test(start_paused = true)]
     async fn ticket_expiry_waits_e_without_changing_cause_or_reading_more_payload() {
         for transport in [Transport::Tcp, Transport::Ws, Transport::Wss] {
-            let clock = TestClock::new();
+            let clock = FakeClock::new();
             let mut session = model(Mode::Mode2);
             let (_lifecycle, lifecycle) = watch::channel(RelayLifecycle::Running);
             let (_command, command) = watch::channel(None);
-            let settings = TestSettings::new();
+            let settings = FakeRuntimeSettingsSource::new();
             settings.change(|settings| settings.timeouts.close = E);
             let (mut viewer, viewer_control) = stream(&[], false);
             let (mut other, other_control) = stream(&[], false);
@@ -3327,8 +3325,8 @@ mod tests {
                     |_, _| {},
                 ));
                 pump(&mut relay).await;
-                advance(Duration::from_secs(4)).await;
-                poll_fn(|cx| {
+                time::advance(Duration::from_secs(4)).await;
+                future::poll_fn(|cx| {
                     assert!(relay.as_mut().poll(cx).is_pending());
                     Poll::Ready(())
                 })
@@ -3342,13 +3340,13 @@ mod tests {
                     control.feed(b"must-not-read", false);
                 }
                 settings.change(|settings| settings.timeouts.close = Duration::from_secs(1));
-                advance(E - Duration::from_millis(1)).await;
-                poll_fn(|cx| {
+                time::advance(E - Duration::from_millis(1)).await;
+                future::poll_fn(|cx| {
                     assert!(relay.as_mut().poll(cx).is_pending());
                     Poll::Ready(())
                 })
                 .await;
-                advance(Duration::from_millis(1)).await;
+                time::advance(Duration::from_millis(1)).await;
                 assert_eq!(relay.await.expect("E bounds cleanup"), None);
             }
             assert_eq!(session.close_cause(), Some(CloseCause::SessionExpired));
@@ -3363,11 +3361,11 @@ mod tests {
     #[tokio::test(start_paused = true)]
     async fn far_ticket_expiry_outlives_the_tokio_sleep_cap_and_fires_at_sx() {
         const YEAR: Duration = Duration::from_secs(365 * 24 * 60 * 60);
-        let clock = TestClock::new();
+        let clock = FakeClock::new();
         let mut session = model(Mode::Mode2);
         let (_lifecycle, lifecycle) = watch::channel(RelayLifecycle::Running);
         let (_command, command) = watch::channel(None);
-        let settings = TestSettings::new();
+        let settings = FakeRuntimeSettingsSource::new();
         settings.change(|settings| settings.timeouts.close = E);
         let (mut viewer, viewer_control) = stream(&[], false);
         let (mut other, other_control) = stream(&[], false);
@@ -3391,13 +3389,13 @@ mod tests {
             ));
             pump(&mut relay).await;
             // One tokio sleep stops at 30 years; that wake is not the deadline.
-            advance(YEAR * 31).await;
+            time::advance(YEAR * 31).await;
             pump(&mut relay).await;
             for control in [&viewer_control, &other_control] {
                 assert!(control.actions().is_empty());
             }
-            advance(YEAR * 9).await;
-            poll_fn(|cx| {
+            time::advance(YEAR * 9).await;
+            future::poll_fn(|cx| {
                 assert!(relay.as_mut().poll(cx).is_pending());
                 Poll::Ready(())
             })
@@ -3405,7 +3403,7 @@ mod tests {
             for control in [&viewer_control, &other_control] {
                 assert_eq!(control.actions(), [RelayCloseAction::SessionExpired]);
             }
-            advance(E).await;
+            time::advance(E).await;
             assert_eq!(relay.await.expect("E bounds cleanup"), None);
         }
         assert_eq!(session.close_cause(), Some(CloseCause::SessionExpired));

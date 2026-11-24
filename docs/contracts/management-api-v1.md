@@ -947,13 +947,13 @@ X-Relay-Poll: 1
 | 접속 출처 경로·집계·IP 정보 DB 상태 | `crates/adapters/src/management_http/sources_api.rs`, `crates/app/src/sources.rs`, `tests/sources.rs` |
 | 차단 목록의 설정 편집·`deny_entries` | `crates/adapters/src/management_http/sources_api.rs`, `crates/app/src/management/config/tests.rs`, `crates/adapters/tests/management.rs`, `tests/sources.rs` |
 | 실행파일의 전송 경로·주소·대기·최근 종료 필드 | `tests/serve.rs`의 `refuses_public_plaintext_and_answers_login_less_queries_with_401_on_loopback`·`real_mode_i_and_proxied_ws_wss_sessions_expose_transport_and_forwarded_addresses`·`real_waiting_lists_preserve_all_entry_transports_and_proxy_addresses`·`real_closed_lists_and_termination_preserve_addresses_and_logged_monotonic_duration` |
-| 접속 ticket의 종료 원인·설정 | `tests/ticket_system.rs`, `crates/adapters/tests/management.rs` |
-| Consumer의 정적 파일·화면·실서버 교환 | `tests/dashboard_assets.rs`, `tests/dashboard_browser.rs`, `tests/dashboard_live.rs` |
+| 접속 ticket의 종료 원인·설정 | `tests/ticket_system/main.rs`, `crates/adapters/tests/management.rs` |
+| Consumer의 정적 파일·화면·실서버 교환 | `tests/dashboard_assets.rs`, `tests/dashboard_browser.rs`, `tests/dashboard_live/main.rs` |
 | 단위 시험 | `crates/app/src/management/login.rs`·`session.rs`·`query.rs`·`terminate.rs`·`config/tests.rs`, `crates/adapters/src/management_http/query_api.rs`·`terminate_api.rs` |
 
 Consumer 실서버 시험은 일반 로그인·조회·종료·설정 데이터를 실제 실행파일과 설정 파일에서 얻는다. 확인 불가 상태는 실제 조회 전달 실패로 만든다. 미래 enum 값은 현재 Producer가 만들 수 없는 별도 Consumer 계약 입력이다. 지연·응답 유실·500·연결 종료는 시험 쪽에서 주입한다. DASH-040의 `config_missing_key`·`config_type_mismatch`·`config_relation_violated`와 모르는 코드는 계약 형식의 진단이다. 편집 가능한 키의 PATCH로는 서버가 이 코드를 내지 않는다. DASH-043의 편집 불가 오류는 실제 원시 PATCH 응답을 다시 보낸다. 이런 주입을 Producer 오류의 증거로 세지 않는다.
 
-로그인 응답 시간의 계정 존재 비노출은 시간 측정 대신 `CountingVerifier` 구조 시험으로 판정한다. 모든 로그인 시도가 비밀번호 검증을 정확히 한 번 하는지 센다. 계정 해시와 더미 해시의 Argon2 매개변수가 같은지는 확인하지 않았다.
+로그인 응답 시간의 계정 존재 비노출은 시간 측정 대신 `SpyCountingPasswordVerifier` 구조 시험으로 판정한다. 모든 로그인 시도가 비밀번호 검증을 정확히 한 번 하는지 센다. 계정 해시와 더미 해시의 Argon2 매개변수가 같은지는 확인하지 않았다.
 
 브라우저 관찰 기록은 다음과 같다. 자동화 환경에서 인증 창 자체는 보이지 않으므로 `Session`과 `Basic` 401의 반응 차이로 판정한다.
 

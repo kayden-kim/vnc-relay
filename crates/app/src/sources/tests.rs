@@ -6,32 +6,32 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime};
 
 use vnc_relay_domain::conn_id::ConnId;
-use vnc_relay_domain::entry_point::{Listener, Role};
+use vnc_relay_domain::entry_point::{ListenerKind, Role};
 use vnc_relay_domain::handshake::Mode;
 use vnc_relay_domain::ip_info::{Asn, CountryCode};
 use vnc_relay_domain::peer_ip::PeerIp;
-use vnc_relay_domain::session::{SessionId, Transport};
+use vnc_relay_domain::session::{Id, Transport};
 
 use super::report::Counts;
 use super::{CAPACITY, PENDING_CAPACITY, SourceStats, SourceWindow, SourcesReport, SourcesService};
 use crate::events::{AbortReason, Event, RejectReason, RelayIdRef, Stage};
 use crate::ip_info::{IpDbKey, IpDbMetadata, IpDbRead, IpInfoService, IpLookup};
 use crate::ports::{Clock, EventSink, IpDbFileGateway, IpDbLookupGateway};
-use crate::relay::test_support::TestSettings;
+use crate::relay::test_support::FakeRuntimeSettingsSource;
 
 /// 2026-09-21T13:46:40Z in milliseconds.
 const START_MS: u64 = 1_790_000_000_000;
 
 /// Wall time the test moves by hand.
-struct WallClock(Mutex<u64>);
+struct FakeClock(Mutex<u64>);
 
-impl WallClock {
+impl FakeClock {
     fn advance(&self, by: Duration) {
         *self.0.lock().expect("clock lock") += u64::try_from(by.as_millis()).expect("short step");
     }
 }
 
-impl Clock for WallClock {
+impl Clock for FakeClock {
     fn monotonic(&self) -> Duration {
         Duration::ZERO
     }
@@ -46,12 +46,12 @@ fn at(millis: u64) -> SystemTime {
 }
 
 /// A database whose records the test writes per address.
-struct Table {
+struct StubIpDbLookupGateway {
     metadata: IpDbMetadata,
     rows: HashMap<IpAddr, (Option<CountryCode>, Option<Asn>)>,
 }
 
-impl IpDbLookupGateway for Table {
+impl IpDbLookupGateway for StubIpDbLookupGateway {
     fn metadata(&self) -> &IpDbMetadata {
         &self.metadata
     }
@@ -75,30 +75,30 @@ impl IpDbLookupGateway for Table {
 }
 
 /// No file is configured; the query shows `not_configured`.
-struct NoFiles;
+struct StubIpDbFileGateway;
 
-impl IpDbFileGateway for NoFiles {
+impl IpDbFileGateway for StubIpDbFileGateway {
     fn read(&self, _path: &std::path::Path) -> IpDbRead {
         unreachable!("no path is configured")
     }
 }
 
-struct Discard;
+struct StubEventSink;
 
-impl EventSink for Discard {
+impl EventSink for StubEventSink {
     fn record(&self, _event: &Event) {}
 }
 
 struct Fixture {
-    clock: Arc<WallClock>,
+    clock: Arc<FakeClock>,
     lookup: Arc<IpLookup>,
     stats: Arc<SourceStats>,
     service: SourcesService,
-    settings: Arc<TestSettings>,
+    settings: Arc<FakeRuntimeSettingsSource>,
 }
 
 fn fixture() -> Fixture {
-    let clock = Arc::new(WallClock(Mutex::new(START_MS)));
+    let clock = Arc::new(FakeClock(Mutex::new(START_MS)));
     let lookup = Arc::new(IpLookup::new());
     let stats = Arc::new(SourceStats::new(
         Arc::clone(&lookup),
@@ -107,12 +107,12 @@ fn fixture() -> Fixture {
     let ip_info = Arc::new(IpInfoService::new(
         None,
         None,
-        Arc::new(NoFiles),
+        Arc::new(StubIpDbFileGateway),
         Arc::clone(&lookup),
         Arc::clone(&clock) as Arc<dyn Clock>,
-        Arc::new(Discard),
+        Arc::new(StubEventSink),
     ));
-    let settings = TestSettings::new();
+    let settings = FakeRuntimeSettingsSource::new();
     let service = SourcesService::new(
         Arc::clone(&stats),
         ip_info,
@@ -129,7 +129,7 @@ fn fixture() -> Fixture {
 
 impl Fixture {
     fn use_table(&self, rows: HashMap<IpAddr, (Option<CountryCode>, Option<Asn>)>) {
-        let table: Arc<dyn IpDbLookupGateway> = Arc::new(Table {
+        let table: Arc<dyn IpDbLookupGateway> = Arc::new(StubIpDbLookupGateway {
             metadata: IpDbMetadata::new("DBIP-ASN-Lite", at(START_MS)),
             rows,
         });
@@ -137,7 +137,7 @@ impl Fixture {
         self.lookup.set(IpDbKey::Asn, table);
     }
 
-    fn accept(&self, listener: Listener, ip: &str) -> ConnId {
+    fn accept(&self, listener: ListenerKind, ip: &str) -> ConnId {
         let conn_id = ConnId::next();
         self.stats.record(&Event::ConnectionAccepted {
             conn_id,
@@ -157,7 +157,7 @@ impl Fixture {
         });
     }
 
-    fn abort(&self, conn_id: ConnId, listener: Listener, ip: &str, forwarded: Option<&str>) {
+    fn abort(&self, conn_id: ConnId, listener: ListenerKind, ip: &str, forwarded: Option<&str>) {
         self.stats.record(&Event::ConnectionAborted {
             conn_id,
             listener,
@@ -185,7 +185,7 @@ fn ip(text: &str) -> IpAddr {
 
 fn session(mode: Mode, viewer: (ConnId, &str), server: Option<(ConnId, &str)>) -> Event {
     Event::SessionStarted {
-        session_id: SessionId::from_block([7; 16]),
+        session_id: Id::from_block([7; 16]),
         mode,
         viewer_transport: Transport::Ws,
         server_transport: server.map(|_| Transport::Tcp),
@@ -228,14 +228,14 @@ fn counts(attempts: u64, rejected: u64, aborted: u64, sessions: u64) -> Counts {
 fn events_count_by_the_rules_of_each_kind() {
     let fixture = fixture();
     // TCP accept: an attempt at once.
-    fixture.accept(Listener::TcpViewer, "198.51.100.1");
+    fixture.accept(ListenerKind::TcpViewer, "198.51.100.1");
     // Refused at accept: an attempt and a refusal.
     fixture.refuse_at_accept("ws", "198.51.100.2");
     // Management and status listeners are not relay connections.
     fixture.refuse_at_accept("management", "198.51.100.3");
     fixture.refuse_at_accept("status", "198.51.100.3");
     // A WS connection through a trusted proxy counts the forwarded address.
-    let proxied = fixture.accept(Listener::Ws, "192.0.2.10");
+    let proxied = fixture.accept(ListenerKind::Ws, "192.0.2.10");
     fixture.stats.record(&Event::UpgradeRejected {
         listener: "ws",
         role: Some(Role::Viewer),
@@ -247,7 +247,7 @@ fn events_count_by_the_rules_of_each_kind() {
         ticket_jti: None,
     });
     // A WSS refusal in the TLS stage settles its held accept.
-    let tls = fixture.accept(Listener::Wss, "198.51.100.4");
+    let tls = fixture.accept(ListenerKind::Wss, "198.51.100.4");
     fixture.stats.record(&Event::ConnectionRejected {
         listener: "wss",
         conn_id: Some(tls),
@@ -256,18 +256,18 @@ fn events_count_by_the_rules_of_each_kind() {
         peer_ip: peer("198.51.100.4"),
     });
     // An aborted TCP connection.
-    let aborted = fixture.accept(Listener::TcpServer, "198.51.100.6");
-    fixture.abort(aborted, Listener::TcpServer, "198.51.100.6", None);
+    let aborted = fixture.accept(ListenerKind::TcpServer, "198.51.100.6");
+    fixture.abort(aborted, ListenerKind::TcpServer, "198.51.100.6", None);
     // Mode II: a WS Viewer and a TCP Server, one session.
-    let viewer = fixture.accept(Listener::Ws, "198.51.100.7");
-    let server = fixture.accept(Listener::TcpServer, "198.51.100.8");
+    let viewer = fixture.accept(ListenerKind::Ws, "198.51.100.7");
+    let server = fixture.accept(ListenerKind::TcpServer, "198.51.100.8");
     fixture.stats.record(&session(
         Mode::Mode2,
         (viewer, "198.51.100.7"),
         Some((server, "198.51.100.8")),
     ));
     // Mode I: a TCP Viewer, one session.
-    let mode1 = fixture.accept(Listener::TcpViewer, "198.51.100.9");
+    let mode1 = fixture.accept(ListenerKind::TcpViewer, "198.51.100.9");
     fixture
         .stats
         .record(&session(Mode::Mode1, (mode1, "198.51.100.9"), None));
@@ -295,10 +295,10 @@ fn events_count_by_the_rules_of_each_kind() {
 #[test]
 fn a_held_accept_counts_at_its_accept_time() {
     let fixture = fixture();
-    let held = fixture.accept(Listener::Wss, "198.51.100.20");
+    let held = fixture.accept(ListenerKind::Wss, "198.51.100.20");
     fixture.clock.advance(Duration::from_secs(3601));
-    fixture.accept(Listener::TcpViewer, "198.51.100.21");
-    fixture.abort(held, Listener::Wss, "198.51.100.20", None);
+    fixture.accept(ListenerKind::TcpViewer, "198.51.100.21");
+    fixture.abort(held, ListenerKind::Wss, "198.51.100.20", None);
 
     let hour = fixture.report(SourceWindow::Hour);
     let as_of = START_MS + 3_601_000;
@@ -324,7 +324,7 @@ fn a_held_accept_counts_at_its_accept_time() {
 #[test]
 fn the_window_starts_inclusive() {
     let fixture = fixture();
-    fixture.accept(Listener::TcpViewer, "198.51.100.22");
+    fixture.accept(ListenerKind::TcpViewer, "198.51.100.22");
     fixture.clock.advance(Duration::from_secs(3600));
 
     assert_eq!(fixture.report(SourceWindow::Hour).totals.attempts, 1);
@@ -337,9 +337,9 @@ fn the_window_starts_inclusive() {
 #[test]
 fn too_many_held_accepts_count_the_oldest_with_its_socket_address() {
     let fixture = fixture();
-    fixture.accept(Listener::Ws, "198.51.100.30");
+    fixture.accept(ListenerKind::Ws, "198.51.100.30");
     for _ in 0..PENDING_CAPACITY {
-        fixture.accept(Listener::Ws, "198.51.100.31");
+        fixture.accept(ListenerKind::Ws, "198.51.100.31");
     }
 
     let report = fixture.report(SourceWindow::Hour);
@@ -354,10 +354,10 @@ fn the_oldest_events_go_first_over_the_limit() {
     let fixture = fixture();
     assert_eq!(fixture.report(SourceWindow::Day).stored, 0);
     // Held at START_MS, before every later event.
-    let held = fixture.accept(Listener::Ws, "198.51.100.40");
+    let held = fixture.accept(ListenerKind::Ws, "198.51.100.40");
     for _ in 0..CAPACITY {
         fixture.clock.advance(Duration::from_millis(1));
-        fixture.accept(Listener::TcpViewer, "198.51.100.41");
+        fixture.accept(ListenerKind::TcpViewer, "198.51.100.41");
     }
     let full = fixture.report(SourceWindow::Day);
     assert_eq!(full.stored, CAPACITY);
@@ -365,7 +365,7 @@ fn the_oldest_events_go_first_over_the_limit() {
 
     // The held attempt goes in first, is the oldest, and goes out at once.
     // The abort then pushes out the oldest TCP attempt.
-    fixture.abort(held, Listener::Ws, "198.51.100.40", None);
+    fixture.abort(held, ListenerKind::Ws, "198.51.100.40", None);
 
     let report = fixture.report(SourceWindow::Day);
     assert_eq!(report.capacity, 100_000);
@@ -402,12 +402,12 @@ fn the_query_sorts_cuts_and_names_by_the_current_database() {
     );
     for _ in 0..10 {
         fixture.clock.advance(Duration::from_millis(1));
-        fixture.accept(Listener::TcpViewer, "10.0.0.1");
+        fixture.accept(ListenerKind::TcpViewer, "10.0.0.1");
     }
     for n in 0..150 {
         for _ in 0..=(n % 4) {
             fixture.clock.advance(Duration::from_millis(1));
-            fixture.accept(Listener::TcpViewer, &address(n).to_string());
+            fixture.accept(ListenerKind::TcpViewer, &address(n).to_string());
         }
     }
     // A newer ASN database moves 198.51.100.147 to another AS.
@@ -542,7 +542,7 @@ fn each_address_lists_the_running_deny_items_that_cover_it() {
         "2001:db8::5",
         "192.168.0.15",
     ] {
-        fixture.accept(Listener::TcpViewer, address);
+        fixture.accept(ListenerKind::TcpViewer, address);
     }
     for edit in [false, true] {
         fixture.settings.change(|settings| {

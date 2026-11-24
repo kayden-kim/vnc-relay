@@ -9,7 +9,7 @@ use std::collections::HashMap;
 use std::fmt;
 use std::time::{Duration, SystemTime};
 
-use crate::account::AccountName;
+use crate::account::Name;
 
 /// Length of a session token and of a CSRF token in characters.
 pub const TOKEN_LEN: usize = 64;
@@ -38,9 +38,9 @@ fn check_token(text: &str) -> Result<(), TokenError> {
 /// The value of the session cookie. It is the key of the session table.
 /// `Debug` hides the value.
 #[derive(Clone, PartialEq, Eq, Hash)]
-pub struct AdminSessionToken(String);
+pub struct Token(String);
 
-impl AdminSessionToken {
+impl Token {
     pub fn parse(text: &str) -> Result<Self, TokenError> {
         check_token(text)?;
         Ok(Self(text.to_owned()))
@@ -52,9 +52,9 @@ impl AdminSessionToken {
     }
 }
 
-impl fmt::Debug for AdminSessionToken {
+impl fmt::Debug for Token {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str("AdminSessionToken(<redacted>)")
+        f.write_str("Token(<redacted>)")
     }
 }
 
@@ -84,12 +84,12 @@ impl fmt::Debug for AdminCsrfToken {
 /// Lifetimes of administrator sessions: Si (`idle`) and Sa (`max_lifetime`)
 /// of config-v3 §1.2.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct AdminSessionPolicy {
+pub struct Policy {
     idle: Duration,
     max_lifetime: Duration,
 }
 
-impl AdminSessionPolicy {
+impl Policy {
     /// The config check keeps `idle` at or below `max_lifetime`.
     pub fn new(idle: Duration, max_lifetime: Duration) -> Self {
         Self { idle, max_lifetime }
@@ -105,7 +105,7 @@ impl AdminSessionPolicy {
 /// does not change it (구현 판단(사용자 결정 없음)).
 #[derive(Debug, Clone)]
 pub struct AdminSession {
-    account: AccountName,
+    account: Name,
     csrf: AdminCsrfToken,
     idle_deadline: Duration,
     absolute_deadline: Duration,
@@ -118,11 +118,11 @@ impl AdminSession {
     /// absolute deadline is `now + Sa`. The idle deadline is `now + Si`, never
     /// after the absolute deadline. The wall-clock pair follows the same rules.
     pub fn start(
-        account: AccountName,
+        account: Name,
         csrf: AdminCsrfToken,
         now: Duration,
         wall: SystemTime,
-        policy: AdminSessionPolicy,
+        policy: Policy,
     ) -> Self {
         let absolute_deadline = now.saturating_add(policy.max_lifetime);
         let absolute_wall = wall.checked_add(policy.max_lifetime).unwrap_or(wall);
@@ -141,7 +141,7 @@ impl AdminSession {
     /// A user action at monotonic time `now` and wall-clock time `wall` moves
     /// the idle deadlines to `+ Si`, but not past the absolute deadlines. The
     /// absolute deadlines never move.
-    pub fn extend_idle(&mut self, now: Duration, wall: SystemTime, policy: AdminSessionPolicy) {
+    pub fn extend_idle(&mut self, now: Duration, wall: SystemTime, policy: Policy) {
         let (idle_deadline, idle_wall) = idle_deadlines(
             now,
             wall,
@@ -158,7 +158,7 @@ impl AdminSession {
         now < self.idle_deadline && now < self.absolute_deadline
     }
 
-    pub fn account(&self) -> &AccountName {
+    pub fn account(&self) -> &Name {
         &self.account
     }
 
@@ -192,7 +192,7 @@ fn idle_deadlines(
     wall: SystemTime,
     absolute: Duration,
     absolute_wall: SystemTime,
-    policy: AdminSessionPolicy,
+    policy: Policy,
 ) -> (Duration, SystemTime) {
     let idle = now.saturating_add(policy.idle).min(absolute);
     let idle_wall = wall
@@ -205,24 +205,24 @@ fn idle_deadlines(
 /// The administrator sessions of this process. A restart empties it
 /// (cli-v1 §1.7, management.md MGT-R18).
 #[derive(Debug, Default)]
-pub struct AdminSessionTable {
-    sessions: HashMap<AdminSessionToken, AdminSession>,
+pub struct Table {
+    sessions: HashMap<Token, AdminSession>,
 }
 
-impl AdminSessionTable {
-    pub fn insert(&mut self, token: AdminSessionToken, session: AdminSession) {
+impl Table {
+    pub fn insert(&mut self, token: Token, session: AdminSession) {
         self.sessions.insert(token, session);
     }
 
-    pub fn get(&self, token: &AdminSessionToken) -> Option<&AdminSession> {
+    pub fn get(&self, token: &Token) -> Option<&AdminSession> {
         self.sessions.get(token)
     }
 
-    pub fn get_mut(&mut self, token: &AdminSessionToken) -> Option<&mut AdminSession> {
+    pub fn get_mut(&mut self, token: &Token) -> Option<&mut AdminSession> {
         self.sessions.get_mut(token)
     }
 
-    pub fn remove(&mut self, token: &AdminSessionToken) -> Option<AdminSession> {
+    pub fn remove(&mut self, token: &Token) -> Option<AdminSession> {
         self.sessions.remove(token)
     }
 
@@ -247,16 +247,16 @@ mod tests {
 
     const TOKEN: &str = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 
-    fn account() -> AccountName {
-        AccountName::parse("admin").unwrap_or_else(|error| panic!("{error:?}"))
+    fn account() -> Name {
+        Name::parse("admin").unwrap_or_else(|error| panic!("{error:?}"))
     }
 
     fn csrf() -> AdminCsrfToken {
         AdminCsrfToken::parse(TOKEN).unwrap_or_else(|error| panic!("{error}"))
     }
 
-    fn policy(idle: u64, max: u64) -> AdminSessionPolicy {
-        AdminSessionPolicy::new(Duration::from_secs(idle), Duration::from_secs(max))
+    fn policy(idle: u64, max: u64) -> Policy {
+        Policy::new(Duration::from_secs(idle), Duration::from_secs(max))
     }
 
     fn wall_at(secs: u64) -> SystemTime {
@@ -265,16 +265,16 @@ mod tests {
 
     #[test]
     fn accepts_only_64_lowercase_hex_digits() {
-        assert!(AdminSessionToken::parse(TOKEN).is_ok());
-        assert!(AdminSessionToken::parse(&TOKEN.to_uppercase()).is_err());
-        assert!(AdminSessionToken::parse(&TOKEN[1..]).is_err());
-        assert!(AdminSessionToken::parse(&format!("{TOKEN}0")).is_err());
+        assert!(Token::parse(TOKEN).is_ok());
+        assert!(Token::parse(&TOKEN.to_uppercase()).is_err());
+        assert!(Token::parse(&TOKEN[1..]).is_err());
+        assert!(Token::parse(&format!("{TOKEN}0")).is_err());
         assert!(AdminCsrfToken::parse("g".repeat(64).as_str()).is_err());
     }
 
     #[test]
     fn debug_output_hides_the_token_value() {
-        let token = AdminSessionToken::parse(TOKEN).unwrap_or_else(|error| panic!("{error}"));
+        let token = Token::parse(TOKEN).unwrap_or_else(|error| panic!("{error}"));
         assert!(!format!("{token:?}").contains(TOKEN));
         assert!(!format!("{:?}", csrf()).contains(TOKEN));
     }
@@ -327,8 +327,8 @@ mod tests {
     #[test]
     fn prune_keeps_only_live_sessions() {
         let policy = policy(300, 3600);
-        let mut table = AdminSessionTable::default();
-        let token = AdminSessionToken::parse(TOKEN).unwrap_or_else(|error| panic!("{error}"));
+        let mut table = Table::default();
+        let token = Token::parse(TOKEN).unwrap_or_else(|error| panic!("{error}"));
         table.insert(
             token.clone(),
             AdminSession::start(account(), csrf(), Duration::ZERO, wall_at(0), policy),
@@ -341,12 +341,10 @@ mod tests {
     #[test]
     fn live_count_skips_expired_sessions_without_removing_them() {
         let policy = policy(300, 3600);
-        let mut table = AdminSessionTable::default();
-        let expired = AdminSessionToken::parse(TOKEN).unwrap_or_else(|error| panic!("{error}"));
-        let live = AdminSessionToken::parse(
-            "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210",
-        )
-        .unwrap_or_else(|error| panic!("{error}"));
+        let mut table = Table::default();
+        let expired = Token::parse(TOKEN).unwrap_or_else(|error| panic!("{error}"));
+        let live = Token::parse("fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210")
+            .unwrap_or_else(|error| panic!("{error}"));
         table.insert(
             expired.clone(),
             AdminSession::start(account(), csrf(), Duration::ZERO, wall_at(0), policy),

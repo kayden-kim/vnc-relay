@@ -1,13 +1,10 @@
 #![cfg(unix)]
 
-#[path = "common/shutdown.rs"]
-mod shutdown;
-
 use std::fs::File;
 use std::path::Path;
 use std::process::{Child, Command, Stdio};
 
-use shutdown::ServerProcess;
+use vnc_relay_testkit::shutdown::{self, ServerProcess};
 
 struct UnixProcess {
     child: Child,

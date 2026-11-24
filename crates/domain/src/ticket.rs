@@ -64,7 +64,7 @@ pub fn decode_base64url(text: &str) -> Option<Vec<u8>> {
 
 /// The parts of a JWS compact serialization (RFC 7515 §7.1).
 #[derive(Clone, Copy, PartialEq, Eq)]
-pub struct TicketParts<'a> {
+pub struct Parts<'a> {
     /// `BASE64URL(header) '.' BASE64URL(payload)`, the bytes that are signed.
     pub signing_input: &'a str,
     pub header: &'a str,
@@ -72,22 +72,22 @@ pub struct TicketParts<'a> {
     pub signature: &'a str,
 }
 
-impl fmt::Debug for TicketParts<'_> {
+impl fmt::Debug for Parts<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // The parts together are the bearer ticket (ops-info-v2 §1.11).
-        f.write_str("TicketParts(<redacted>)")
+        f.write_str("Parts(<redacted>)")
     }
 }
 
 /// Splits `text` into exactly three dot-separated parts.
 /// Decoding of each part is left to the caller.
-pub fn split_compact(text: &str) -> Option<TicketParts<'_>> {
+pub fn split_compact(text: &str) -> Option<Parts<'_>> {
     let (signing_input, signature) = text.rsplit_once('.')?;
     let (header, payload) = signing_input.split_once('.')?;
     if payload.contains('.') {
         return None;
     }
-    Some(TicketParts {
+    Some(Parts {
         signing_input,
         header,
         payload,
@@ -98,7 +98,7 @@ pub fn split_compact(text: &str) -> Option<TicketParts<'_>> {
 /// Claims of a ticket whose types and identifier syntax are already checked
 /// (websocket-relay-v2 §1.9.3 step 6).
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct TicketClaims {
+pub struct Claims {
     pub iss: String,
     pub aud: String,
     pub rh: String,
@@ -112,7 +112,7 @@ pub struct TicketClaims {
 
 /// Claim comparison and time rules of one role (websocket-relay-v2 §1.9.3 steps 7 to 11).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct TicketPolicy<'a> {
+pub struct Policy<'a> {
     pub role: Role,
     pub issuer: &'a str,
     pub relay_host: &'a str,
@@ -121,14 +121,14 @@ pub struct TicketPolicy<'a> {
     pub started_at_secs: u64,
 }
 
-impl TicketPolicy<'_> {
+impl Policy<'_> {
     /// Checks steps 7 to 11 in contract order at `now` (Unix seconds, rounded down)
     /// and returns the first failure.
     ///
     /// Each contract row states the condition a ticket must meet; the code tests its
     /// negation. Step 11 requires `iat > start + 5`, so `iat <= start + 5` fails with
     /// `ticket_issued_before_start` (ops-info-v2 `connection_rejected` reasons, Q201).
-    pub fn check(&self, claims: &TicketClaims, now: u64) -> Result<(), TicketError> {
+    pub fn check(&self, claims: &Claims, now: u64) -> Result<(), TicketError> {
         if claims.iss != self.issuer
             || claims.aud != audience(self.role)
             || claims.rh != self.relay_host
@@ -198,13 +198,13 @@ impl std::error::Error for TicketError {}
 /// One P-256 public key from a key file (config-v4 §1.11).
 /// The adapter that builds it checks that the point is on the curve.
 #[derive(Clone, PartialEq, Eq)]
-pub struct TicketKey {
+pub struct Key {
     kid: String,
     x: [u8; 32],
     y: [u8; 32],
 }
 
-impl TicketKey {
+impl Key {
     /// Checks the `kid` length (1 to 128 bytes).
     pub fn new(kid: String, x: [u8; 32], y: [u8; 32]) -> Result<Self, TicketKeyError> {
         if !id_is_valid(&kid) {
@@ -231,10 +231,10 @@ impl TicketKey {
     }
 }
 
-impl fmt::Debug for TicketKey {
+impl fmt::Debug for Key {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // Key file contents never appear in logs or diagnostics (config-v4 §1.11).
-        f.write_str("TicketKey(<redacted>)")
+        f.write_str("Key(<redacted>)")
     }
 }
 
@@ -244,11 +244,11 @@ impl fmt::Debug for TicketKey {
 /// The default list is empty and stands for a role whose check is off.
 /// Equality ignores file order.
 #[derive(Clone, Default, PartialEq, Eq)]
-pub struct TicketKeyList(Vec<TicketKey>);
+pub struct KeyList(Vec<Key>);
 
-impl TicketKeyList {
+impl KeyList {
     /// Checks the key count and `kid` uniqueness.
-    pub fn new(mut keys: Vec<TicketKey>) -> Result<Self, TicketKeyError> {
+    pub fn new(mut keys: Vec<Key>) -> Result<Self, TicketKeyError> {
         if keys.is_empty() || keys.len() > MAX_KEYS {
             return Err(TicketKeyError::KeyCount);
         }
@@ -260,7 +260,7 @@ impl TicketKeyList {
     }
 
     /// Finds the key whose `kid` equals `kid` byte for byte.
-    pub fn find(&self, kid: &str) -> Option<&TicketKey> {
+    pub fn find(&self, kid: &str) -> Option<&Key> {
         self.0
             .binary_search_by(|key| key.kid.as_str().cmp(kid))
             .ok()
@@ -284,9 +284,9 @@ impl TicketKeyList {
     }
 }
 
-impl fmt::Debug for TicketKeyList {
+impl fmt::Debug for KeyList {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "TicketKeyList({} keys)", self.0.len())
+        write!(f, "KeyList({} keys)", self.0.len())
     }
 }
 
@@ -347,13 +347,13 @@ impl std::error::Error for TicketKeyError {}
 /// Holds only tickets whose signature was verified. Each record is removed at
 /// `exp + 5` seconds. There is no count limit.
 #[derive(Default)]
-pub struct TicketUseTable {
+pub struct UseTable {
     viewer: HashSet<Arc<str>>,
     server: HashSet<Arc<str>>,
     expiry: BTreeSet<(u64, Role, Arc<str>)>,
 }
 
-impl TicketUseTable {
+impl UseTable {
     pub fn new() -> Self {
         Self::default()
     }
@@ -400,9 +400,9 @@ impl TicketUseTable {
     }
 }
 
-impl fmt::Debug for TicketUseTable {
+impl fmt::Debug for UseTable {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "TicketUseTable({} records)", self.expiry.len())
+        write!(f, "UseTable({} records)", self.expiry.len())
     }
 }
 
@@ -410,8 +410,8 @@ impl fmt::Debug for TicketUseTable {
 mod tests {
     use super::*;
 
-    fn claims(iat: u64, exp: u64, sx: Option<u64>) -> TicketClaims {
-        TicketClaims {
+    fn claims(iat: u64, exp: u64, sx: Option<u64>) -> Claims {
+        Claims {
             iss: "https://admin.example".to_owned(),
             aud: "vnc-relay/viewer".to_owned(),
             rh: "relay.example".to_owned(),
@@ -424,8 +424,8 @@ mod tests {
         }
     }
 
-    fn policy(started_at_secs: u64) -> TicketPolicy<'static> {
-        TicketPolicy {
+    fn policy(started_at_secs: u64) -> Policy<'static> {
+        Policy {
             role: Role::Viewer,
             issuer: "https://admin.example",
             relay_host: "relay.example",
@@ -434,8 +434,8 @@ mod tests {
         }
     }
 
-    fn key(kid: &str, x: u8) -> TicketKey {
-        TicketKey::new(kid.to_owned(), [x; 32], [x.wrapping_add(1); 32]).unwrap()
+    fn key(kid: &str, x: u8) -> Key {
+        Key::new(kid.to_owned(), [x; 32], [x.wrapping_add(1); 32]).unwrap()
     }
 
     #[test]
@@ -470,7 +470,7 @@ mod tests {
     fn compares_issuer_audience_and_relay_host_byte_for_byte() {
         let base = claims(1000, 1060, None);
         assert_eq!(policy(0).check(&base, 1000), Ok(()));
-        let changes: [fn(&mut TicketClaims); 3] = [
+        let changes: [fn(&mut Claims); 3] = [
             |c| c.iss.push('/'),
             |c| c.aud = "vnc-relay/server".to_owned(),
             |c| c.rh = "Relay.example".to_owned(),
@@ -480,7 +480,7 @@ mod tests {
             change(&mut changed);
             assert_eq!(policy(0).check(&changed, 1000), Err(TicketError::Invalid));
         }
-        let server = TicketPolicy {
+        let server = Policy {
             role: Role::Server,
             ..policy(0)
         };
@@ -548,47 +548,41 @@ mod tests {
 
     #[test]
     fn key_lists_need_one_to_sixteen_unique_ids_and_ignore_order() {
-        assert_eq!(
-            TicketKeyList::new(Vec::new()),
-            Err(TicketKeyError::KeyCount)
-        );
+        assert_eq!(KeyList::new(Vec::new()), Err(TicketKeyError::KeyCount));
         let many = (0..17).map(|i| key(&format!("k{i:02}"), i)).collect();
-        assert_eq!(TicketKeyList::new(many), Err(TicketKeyError::KeyCount));
+        assert_eq!(KeyList::new(many), Err(TicketKeyError::KeyCount));
         assert_eq!(
-            TicketKeyList::new(vec![key("a", 1), key("a", 2)]),
+            KeyList::new(vec![key("a", 1), key("a", 2)]),
             Err(TicketKeyError::DuplicateKeyId)
         );
         assert_eq!(
-            TicketKey::new(String::new(), [0; 32], [0; 32]),
+            Key::new(String::new(), [0; 32], [0; 32]),
             Err(TicketKeyError::KeyId)
         );
         assert_eq!(
-            TicketKey::new("k".repeat(129), [0; 32], [0; 32]),
+            Key::new("k".repeat(129), [0; 32], [0; 32]),
             Err(TicketKeyError::KeyId)
         );
-        let list = TicketKeyList::new(vec![key("b", 2), key("a", 1)]).unwrap();
-        assert_eq!(
-            list,
-            TicketKeyList::new(vec![key("a", 1), key("b", 2)]).unwrap()
-        );
-        assert_eq!(list.find("a").map(TicketKey::kid), Some("a"));
-        assert_eq!(list.find("A").map(TicketKey::kid), None);
-        assert_eq!(format!("{list:?}"), "TicketKeyList(2 keys)");
+        let list = KeyList::new(vec![key("b", 2), key("a", 1)]).unwrap();
+        assert_eq!(list, KeyList::new(vec![key("a", 1), key("b", 2)]).unwrap());
+        assert_eq!(list.find("a").map(Key::kid), Some("a"));
+        assert_eq!(list.find("A").map(Key::kid), None);
+        assert_eq!(format!("{list:?}"), "KeyList(2 keys)");
     }
 
     #[test]
     fn detects_the_same_point_under_any_kid() {
-        let viewer = TicketKeyList::new(vec![key("v1", 1), key("v2", 2)]).unwrap();
-        let server = TicketKeyList::new(vec![key("s1", 3)]).unwrap();
+        let viewer = KeyList::new(vec![key("v1", 1), key("v2", 2)]).unwrap();
+        let server = KeyList::new(vec![key("s1", 3)]).unwrap();
         assert!(!viewer.shares_key_with(&server));
-        let shared = TicketKeyList::new(vec![key("s1", 3), key("other-name", 2)]).unwrap();
+        let shared = KeyList::new(vec![key("s1", 3), key("other-name", 2)]).unwrap();
         assert!(viewer.shares_key_with(&shared));
     }
 
     /// spec: websocket.md:WS-042 partial
     #[test]
     fn records_each_role_and_jti_once_until_exp_plus_skew() {
-        let mut table = TicketUseTable::new();
+        let mut table = UseTable::new();
         assert!(table.try_record(Role::Viewer, "j", 1060, 1000));
         assert!(!table.try_record(Role::Viewer, "j", 1060, 1001));
         // The same jti of the other role is a separate record.

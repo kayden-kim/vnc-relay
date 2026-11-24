@@ -11,13 +11,13 @@ use std::task::{Context, Poll};
 
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 use tokio::net::TcpStream;
-use vnc_relay_app::events::{Event, RejectReason, Stage};
-use vnc_relay_app::ports::EventSink;
-use vnc_relay_app::reload::ports::RuntimeSettingsSource;
-use vnc_relay_domain::budget::{BudgetPermit, ConnectionBudget};
+use vnc_relay_application::events::{Event, RejectReason, Stage};
+use vnc_relay_application::ports::EventSink;
+use vnc_relay_application::reload::ports::RuntimeSettingsSource;
+use vnc_relay_domain::budget::{ConnectionBudget, Permit};
 use vnc_relay_domain::peer_ip::PeerIp;
 
-use crate::listener::{Listener, is_fatal_accept_error};
+use crate::listener::{self, Listener};
 use crate::net::ACCEPT_RETRY_DELAY;
 
 /// Takes a place of Lm right after each accept. A connection without a
@@ -58,7 +58,7 @@ impl<L: Listener> axum::serve::Listener for AdmittingListener<L> {
             let (stream, addr) = match self.listener.accept().await {
                 Ok(accepted) => accepted,
                 Err(error) => {
-                    if is_fatal_accept_error(&error) {
+                    if listener::is_fatal_accept_error(&error) {
                         // Axum's infallible accept port cannot return an error.
                         // The supervisor owns shutdown and aborts this task last.
                         return std::future::pending().await;
@@ -121,7 +121,7 @@ pub(crate) struct AdmittedAddr {
 /// when the connection is dropped.
 pub(crate) struct Admitted {
     stream: TcpStream,
-    _permit: BudgetPermit,
+    _permit: Permit,
 }
 
 impl AsyncRead for Admitted {
@@ -168,14 +168,14 @@ impl AsyncWrite for Admitted {
 mod tests {
     use super::*;
     use tokio::net::TcpListener;
-    use vnc_relay_app::reload::{
+    use vnc_relay_application::reload::{
         ConfigCandidate,
         snapshot::{ReloadCell, ReloadSnapshot},
     };
 
-    struct Events(tokio::sync::mpsc::UnboundedSender<Event>);
+    struct SpyEventSink(tokio::sync::mpsc::UnboundedSender<Event>);
 
-    impl EventSink for Events {
+    impl EventSink for SpyEventSink {
         fn record(&self, event: &Event) {
             self.0.send(event.clone()).unwrap();
         }
@@ -210,7 +210,7 @@ mod tests {
             socket,
             budget.clone(),
             source.clone(),
-            Arc::new(Events(events)),
+            Arc::new(SpyEventSink(events)),
             "management",
         );
         let _first_client = TcpStream::connect(address).await.unwrap();

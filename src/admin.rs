@@ -8,11 +8,11 @@ use std::process::ExitCode;
 use vnc_relay_adapters::accounts_file::{AccountsFile, Argon2PasswordHashGateway};
 use vnc_relay_adapters::config_file;
 use vnc_relay_adapters::terminal::TerminalAccountInputGateway;
-use vnc_relay_app::accounts::{
-    self, ACCOUNTS_FILE_KEY, AccountsWarning, AdminFailure, AdminService,
+use vnc_relay_application::accounts::{
+    self, ACCOUNTS_FILE_KEY, AccountsWarning, AdminError, AdminService,
 };
-use vnc_relay_app::settings::AdminSettings;
-use vnc_relay_domain::account::AccountName;
+use vnc_relay_application::settings::AdminSettings;
+use vnc_relay_domain::account::Name;
 
 use crate::cli::{self, AdminAction, EXIT_ACCOUNTS, EXIT_CONFIG, EXIT_RUNTIME, EXIT_USAGE};
 
@@ -50,11 +50,11 @@ fn change(
     done: &str,
     procedure: impl FnOnce(
         &AdminService<'_>,
-        &AccountName,
+        &Name,
         &mut dyn FnMut(AccountsWarning),
-    ) -> Result<(), AdminFailure>,
+    ) -> Result<(), AdminError>,
 ) -> ExitCode {
-    let name = match AccountName::parse(account) {
+    let name = match Name::parse(account) {
         Ok(name) => name,
         Err(error) => {
             cli::report("error", "account_name_invalid", "", &format!("{error}."));
@@ -69,7 +69,7 @@ fn change(
     // terminal in hidden-input mode.
     let terminal = match TerminalAccountInputGateway::open() {
         Ok(terminal) => terminal,
-        Err(message) => return report_failure(&AdminFailure::RuntimeUnavailable(message)),
+        Err(message) => return report_failure(&AdminError::RuntimeUnavailable(message)),
     };
     let store = AccountsFile::new(settings.accounts_file);
     let service = AdminService {
@@ -122,17 +122,17 @@ fn load_settings(config: &Path) -> Result<AdminSettings, ExitCode> {
     })
 }
 
-fn report_failure(failure: &AdminFailure) -> ExitCode {
+fn report_failure(failure: &AdminError) -> ExitCode {
     failure.report(&mut |code, key, message| cli::report("error", code, key, message));
     ExitCode::from(match failure {
-        AdminFailure::NotInteractive => EXIT_USAGE,
-        AdminFailure::Accounts(_) => EXIT_ACCOUNTS,
-        AdminFailure::AccountExists(_)
-        | AdminFailure::AccountNotFound(_)
-        | AdminFailure::PasswordInvalid(_)
-        | AdminFailure::PasswordMismatch
-        | AdminFailure::InputCanceled
-        | AdminFailure::RuntimeUnavailable(_) => EXIT_RUNTIME,
+        AdminError::NotInteractive => EXIT_USAGE,
+        AdminError::Accounts(_) => EXIT_ACCOUNTS,
+        AdminError::AccountExists(_)
+        | AdminError::AccountNotFound(_)
+        | AdminError::PasswordInvalid(_)
+        | AdminError::PasswordMismatch
+        | AdminError::InputCanceled
+        | AdminError::RuntimeUnavailable(_) => EXIT_RUNTIME,
     })
 }
 

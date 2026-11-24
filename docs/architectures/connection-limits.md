@@ -36,8 +36,8 @@ WS·WSS 수락·TLS·경로 판정 전 중단에는 role이 없다. 켜진 경�
   - 끊긴 연결의 판정과 회수(`dead_connection`). keepalive가 끊긴 연결을 운영체제 오류로 알리면 대기·활성 연결을 다루는 단계가 처리한다(RLY-025~027). OS별 관찰 범위는 [검증 안내](../how-to/set-up-and-verify.md)를 따른다.
   - 바이트를 보낸 뒤 닫은 연결의 판정과 초기 교환 읽기·해석. `RelayService::handle_connection`(app)이 맡는다. 이 문서는 그 단계의 H 시간과 자리 반환 규칙만 정한다.
 - 다른 모듈에 공개하는 기능:
-  - `vnc_relay_domain::budget::{ConnectionBudget, BudgetPermit}`
-  - `vnc_relay_app::events::{RejectReason::RelayConnectionLimit, AbortReason, ConnectionErrorKind}`
+  - `vnc_relay_domain::budget::{ConnectionBudget, Permit}`
+  - `vnc_relay_application::events::{RejectReason::RelayConnectionLimit, AbortReason, ConnectionErrorKind}`
   - `vnc_relay_adapters::net::AcceptPolicy`
   - `vnc_relay_adapters::websocket::WsPolicy`
 
@@ -53,8 +53,8 @@ flowchart LR
     WSEP["adapters websocket.rs<br/>WsEntryPoint::run"] -->|"수락 반복 호출"| ACC
     ACC -->|"IP 통과 뒤 자리 잡기"| BUDGET["domain budget.rs<br/>ConnectionBudget::try_acquire"]
     ACC -->|"K"| KA["adapters net.rs<br/>set_keepalive"]
-    ACC -->|"BudgetPermit, TCP"| TCPH["app relay.rs<br/>RelayService::handle_connection"]
-    ACC -->|"BudgetPermit, WS·WSS"| UPG["adapters websocket.rs<br/>connection"]
+    ACC -->|"budget::Permit, TCP"| TCPH["app relay.rs<br/>RelayService::handle_connection"]
+    ACC -->|"budget::Permit, WS·WSS"| UPG["adapters websocket.rs<br/>connection"]
     TCPH -->|"H·종료·상대 종료 판정"| EXCH["app relay/handshake.rs<br/>exchange, read_request"]
     UPG -->|"101 뒤 H"| HUP["app relay.rs<br/>RelayService::handle_connection"]
     TCPH -->|"자리 반환 뒤 Event"| SINK["app ports.rs<br/>EventSink::record"]
@@ -65,13 +65,13 @@ flowchart LR
 | 요소(파일·심볼) | 역할 | 만들어지는 시점과 소유자 | 의존 대상 |
 | --- | --- | --- | --- |
 | `crates/domain/src/budget.rs` `ConnectionBudget` | 사용 중인 자리 수만 보유한다. `try_acquire(limit)`는 caller가 실행 설정에서 읽은 상한으로 원자적 비교·교환을 한다. | `serve`가 시작 때 만들고 `Arc`로 사용처에 나눈다 | 없음(std 원자 변수) |
-| `crates/domain/src/budget.rs` `BudgetPermit` | 잡은 자리 하나. 버리면(`Drop`) 자리를 돌려준다. 연결을 다루는 작업이 연결과 함께 소유한다. | `try_acquire`가 성공할 때 | `ConnectionBudget` |
+| `crates/domain/src/budget.rs` `budget::Permit` | 잡은 자리 하나. 버리면(`Drop`) 자리를 돌려준다. 연결을 다루는 작업이 연결과 함께 소유한다. | `try_acquire`가 성공할 때 | `ConnectionBudget` |
 | `crates/app/src/events.rs` `RejectReason::RelayConnectionLimit { limit }` | `relay_connection_limit`과 `limit` 값. 상한 거절만 `limit`을 가진다. | 거절할 때 | 없음 |
 | `crates/app/src/events.rs` `AbortReason`, `ConnectionErrorKind` | `handshake_timeout`·`peer_eof`·`connection_error`·`server_shutdown`과 `level`. `connection_error`만 `error_kind`를 가진다. | 연결이 끝날 때 | 없음 |
 | `crates/adapters/src/net.rs` `AcceptPolicy` | 진입점 허용 판정의 `AllowSource`와 공유 L 예산 | `serve`가 진입점마다 만든다 | domain, app |
 | `crates/adapters/src/net.rs` `set_keepalive` | socket2 `SockRef`로 `SO_KEEPALIVE`와 유휴 시간·탐색 간격·탐색 횟수를 설정한다. 이어 `TCP_NODELAY`를 켠다. 중계는 읽은 바이트를 바로 쓰므로, Nagle이 켜져 있으면 작은 쓰기 뒤의 다음 쓰기가 상대의 지연 ACK를 기다릴 수 있다. | 자리를 잡은 연결마다, Mode I 대상 연결마다(`TcpRelayStream::with_keepalive`) | socket2, tokio |
 | `crates/app/src/relay.rs` `RelayService::handle_connection`, `crates/app/src/relay/handshake.rs` `exchange`, `read_request` | 허용한 TCP 연결의 초기 교환을 H 안에 읽는다. H 만료, 상대 종료, 서버 종료, 연결 재설정 중 먼저 오는 것으로 끝낸다. 실패하면 `RelayCloseAction`을 정해 소켓을 닫고, 자리를 버린 뒤 사건을 기록한다. | 허용한 TCP 연결마다, `TcpEntryPoint::run`의 serve 작업이 부른다 | tokio, app, domain |
-| `crates/adapters/src/net.rs` `accept_connections` | TCP·WS·WSS가 함께 쓰는 수락 반복. IP 검사 뒤 L 자리를 잡는다. 자리가 없으면 `connection_rejected`(`relay_connection_limit`)를 기록하고 닫는다. 있으면 K를 설정하고 `BudgetPermit`을 연결 작업에 넘긴다. | 진입점 `run`마다 하나 | tokio, socket2, app, domain |
+| `crates/adapters/src/net.rs` `accept_connections` | TCP·WS·WSS가 함께 쓰는 수락 반복. IP 검사 뒤 L 자리를 잡는다. 자리가 없으면 `connection_rejected`(`relay_connection_limit`)를 기록하고 닫는다. 있으면 K를 설정하고 `budget::Permit`을 연결 작업에 넘긴다. | 진입점 `run`마다 하나 | tokio, socket2, app, domain |
 | `crates/adapters/src/websocket.rs` `WsPolicy` | `accept: AcceptPolicy`. U·B는 수락 메타데이터, Origin·M·Kw는 업그레이드 판정의 실행 설정에서 얻는다. | `serve`가 WS·WSS 진입점마다 만든다 | adapters |
 | `crates/adapters/src/websocket.rs` `connection` | `connection`은 U 안에서 WSS의 TLS 핸드셰이크와 업그레이드 요청을 끝낸다. 101 뒤 `WsRelayStream`을 만들어 `RelayService::handle_connection`에 넘기고, H는 `handle_connection`이 `exchange_at`부터 잰다. 자리는 연결 작업이 받아 `handle_connection`에 넘기고, 연결을 끝낸 뒤 돌려준다. | 허용한 WS·WSS 연결마다 | tokio, tokio-rustls, tokio-tungstenite, app, domain |
 
@@ -80,7 +80,7 @@ flowchart LR
 | 이름 | 필드·형태 | 저장 위치 | 제약과 항상 지켜야 할 조건 |
 | --- | --- | --- | --- |
 | `ConnectionBudget` | `used: AtomicU32` | `Arc`로 공유하는 메모리 | 자리 획득은 `used < 이번 판정의 limit`일 때만 성공한다. 하향 뒤 `used > limit`도 허용하며 기존 permit은 회수하지 않는다. |
-| `BudgetPermit` | `budget: Arc<ConnectionBudget>` | 연결 작업 | 연결 하나에 하나. 소켓을 닫은 뒤 버린다. |
+| `budget::Permit` | `budget: Arc<ConnectionBudget>` | 연결 작업 | 연결 하나에 하나. 소켓을 닫은 뒤 버린다. |
 | `AcceptPolicy` | `allow: AllowSource`, `relay_budget: Arc<ConnectionBudget>` | `TcpEntryPoint`, `WsPolicy.accept` | 모든 진입점의 `relay_budget`은 같다. `AllowSource`가 실행 설정 callback 안에서 허용·L/CAS·수락 B/H/U/K를 함께 읽는다. |
 | `WsPolicy` | `accept: AcceptPolicy` | `WsEntryPoint` | U·B는 수락 값을 유지한다. `check_upgrade`가 IP·Origin·M·Kw를 읽고, 101 flush 뒤 H만 새로 읽는다. |
 
@@ -97,7 +97,7 @@ flowchart LR
 | 3 | `ConnectionBudget::try_acquire` | 두 연결이 자리를 잡았으므로 세 번째는 `None`이다. `connection_rejected`(`relay_connection_limit`, `limit` = 2)를 기록하고 소켓을 닫는다. | 없음 | 운영 로그 |
 | 4 | `set_keepalive`, `TcpRelayStream`, `RelayService::handle_connection` | 자리를 잡은 연결은 `connection_accepted`를 먼저 기록한 뒤 K를 설정한다. 성공하면 소켓을 `TcpRelayStream`으로 감싸 `handle_connection`에 넘긴다. 실패하면 6절의 중단 기록과 자원 반환을 따른다. | 성공: 초기 교환 중인 연결. 실패: 반환 | 성공: 5단계 |
 | 5 | `handshake::exchange`, `read_request` | 상대가 아무 바이트도 보내지 않고 닫으면 읽기가 0바이트를 준다(`PeerEof`). | 없음 | 6단계 |
-| 6 | `RelayService::prepare` | 소켓을 닫고 `BudgetPermit`을 버린 뒤 `connection_aborted`(`peer_eof`)를 기록한다. 줄을 본 클라이언트가 바로 다시 접속해도 자리가 있다. | 자리 하나 반환 | 운영 로그 |
+| 6 | `RelayService::prepare` | 소켓을 닫고 `budget::Permit`을 버린 뒤 `connection_aborted`(`peer_eof`)를 기록한다. 줄을 본 클라이언트가 바로 다시 접속해도 자리가 있다. | 자리 하나 반환 | 운영 로그 |
 | 7 | 2~4와 같은 경로 | 다음 접속이 자리를 잡고 수락된다. | 초기 교환 중인 연결 | 운영 로그 |
 
 H가 먼저 지나면 5~6단계 대신 `handshake_timeout`(`warn`)으로, 서버가 종료하면 `server_shutdown`(`info`)으로 같은 정리를 한다.
@@ -171,7 +171,7 @@ TCP 경로는 2~4절과 같다. WS·WSS 행은 [WebSocket 진입점 모듈 설�
 
 `ConnectionBudget`는 `used: AtomicU32`만 보유한다. `try_acquire(limit)`가 CAS로 사용량을 늘리고 permit drop이 줄인다. 상한 원본은 재로드 snapshot 하나에만 있다. domain은 app snapshot을 알지 않는다([레이어 규칙](code-map.md#레이어와-의존-방향), [설정 §1.8 규칙 5](../contracts/config-v4.md#18-재로드-구분)).
 
-- `ConnectionBudget::new() -> Arc<Self>`와 `try_acquire(self: &Arc<Self>, limit: u32) -> Option<BudgetPermit>`를 사용한다. `limit()`은 없다. summary는 응답 때 현재 L·Lm을 함께 읽고, 거절 사건은 해당 판단에서 읽은 상한을 사용한다. `current`·permit drop의 의미는 유지한다([운영 OPS-R31](../specs/operations.md#33-파일-변경-자동-감지와-부분-재로드)).
+- `ConnectionBudget::new() -> Arc<Self>`와 `try_acquire(self: &Arc<Self>, limit: u32) -> Option<budget::Permit>`를 사용한다. `limit()`은 없다. summary는 응답 때 현재 L·Lm을 함께 읽고, 거절 사건은 해당 판단에서 읽은 상한을 사용한다. `current`·permit drop의 의미는 유지한다([운영 OPS-R31](../specs/operations.md#33-파일-변경-자동-감지와-부분-재로드)).
 - 수락/대상 자리 판정은 RuntimeSettingsSource의 짧은 snapshot read callback 안에서 상한을 얻고 CAS까지 끝낸다. snapshot write는 이 read가 끝난 뒤 한 번 수행한다. 따라서 재로드와 수락이 경합하면 판정은 이전/새 세대 중 하나에 선형화된다. 사용량이 새 상한 이상이면 새 CAS는 실패하고, 기존 permit은 그대로다. 상향은 발행 직후 다음 판정부터 적용된다. L과 Lm은 독립된 사용량이며 management/status만 같은 Lm을 공유한다([설정 §1.8 L/Lm 행](../contracts/config-v4.md#18-재로드-구분), OPS-051~053).
 - 대기 등록은 snapshot read→relay registry mutex 순으로 잡고 Lw·W를 한 번 읽는다. domain `WaitingTable::new()`는 정책을 고정하지 않는다. `arrive`가 `RegistrationPolicy { waiting_limit, wait_timeout }`를 받는다. app은 동일 Lw로 table 판정과 permit 획득을 처리한다. 기존 match-first·expired 제거·한 대기당 permit 하나 규칙은 유지한다. 상한 하향으로 map을 truncate하거나 기존 `WaitingEntry.deadline`을 다시 쓰지 않는다. 즉시 매칭은 새 대기 자리를 요구하지 않는다([운영 OPS-R32](../specs/operations.md#33-파일-변경-자동-감지와-부분-재로드), OPS-054~056).
 - snapshot read callback 안에서 relay registry를 사용할 수 있지만 역순(registry→snapshot)은 금지한다. session poll은 필요한 E를 registry 잠금 전에 읽거나 registry 잠금 밖 종료 상태 소유자가 읽는다. 파일 트랜잭션 mutex는 budget/registry가 획득하지 않는다. 이 순서는 [설정 §1.8 전체 교체·기존 연결 유지](../contracts/config-v4.md#18-재로드-구분)를 교착 없이 구현하기 위한 내부 선택이다.

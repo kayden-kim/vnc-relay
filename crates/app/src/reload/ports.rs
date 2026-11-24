@@ -49,7 +49,7 @@ pub trait ReloadTicketKeyStore: Send + Sync {
     fn parse(
         &self,
         bytes: &[u8],
-    ) -> Result<vnc_relay_domain::ticket::TicketKeyList, vnc_relay_domain::ticket::TicketKeyError>;
+    ) -> Result<vnc_relay_domain::ticket::KeyList, vnc_relay_domain::ticket::TicketKeyError>;
 }
 
 /// The watcher's only wait (file-watch-v1 §4). Tests drive it manually.

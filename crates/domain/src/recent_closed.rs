@@ -8,12 +8,12 @@ use crate::session::ClosedSession;
 /// The newest R closed summaries, ordered by descending cleanup wall time.
 /// Construction starts empty; no waiting or failed-connection data is accepted.
 #[derive(Debug)]
-pub struct RecentClosedList {
+pub struct List {
     max_entries: usize,
     entries: VecDeque<ClosedSession>,
 }
 
-impl RecentClosedList {
+impl List {
     /// Starts empty with the supplied R. Zero disables retention.
     pub fn new(max_entries: usize) -> Self {
         Self {
@@ -74,13 +74,13 @@ mod tests {
     use std::time::{Duration, SystemTime};
 
     use crate::handshake::Mode;
-    use crate::session::{CloseCause, Direction, Session, SessionId, Side, Transport};
+    use crate::session::{CloseCause, Direction, Id, Session, Side, Transport};
 
     use super::*;
 
     fn closed(seed: u8, ended_secs: u64, cause: CloseCause) -> ClosedSession {
         let mut session = Session::new(
-            SessionId::from_block([seed; 16]),
+            Id::from_block([seed; 16]),
             Mode::Mode2,
             Transport::Ws,
             Transport::Wss,
@@ -157,7 +157,7 @@ mod tests {
     /// spec: management.md:MGT-024 partial
     #[test]
     fn zero_capacity_stores_no_closed_summary() {
-        let mut list = RecentClosedList::new(0);
+        let mut list = List::new(0);
         for seed in 0..5 {
             let _ = list.push(closed(seed, u64::from(seed) + 2, CloseCause::PeerEof));
             assert!(list.is_empty());
@@ -171,7 +171,7 @@ mod tests {
     #[test]
     fn evicts_only_oldest_and_iterates_newest_first_at_capacity() {
         for capacity in [1, 3] {
-            let mut list = RecentClosedList::new(capacity);
+            let mut list = List::new(capacity);
             assert!(list.is_empty());
             assert_eq!(list.max_entries(), capacity);
             for seed in 0..8u8 {
@@ -183,7 +183,7 @@ mod tests {
                 let expected: Vec<_> = (0..=seed)
                     .rev()
                     .take(capacity)
-                    .map(|value| SessionId::from_block([value; 16]))
+                    .map(|value| Id::from_block([value; 16]))
                     .collect();
                 assert_eq!(actual, expected);
             }
@@ -194,7 +194,7 @@ mod tests {
     /// spec: management.md:MGT-024 partial
     #[test]
     fn retains_newest_end_times_when_wall_clock_values_arrive_out_of_order() {
-        let mut list = RecentClosedList::new(3);
+        let mut list = List::new(3);
         for (seed, time) in [(1, 10), (2, 30), (3, 20), (4, 5), (5, 25)] {
             let _ = list.push(closed(seed, time, CloseCause::ServerShutdown));
         }
@@ -202,7 +202,7 @@ mod tests {
             list.iter()
                 .map(|entry| entry.id().clone())
                 .collect::<Vec<_>>(),
-            [2, 5, 3].map(|seed| SessionId::from_block([seed; 16]))
+            [2, 5, 3].map(|seed| Id::from_block([seed; 16]))
         );
         assert_eq!(list.len(), 3);
         let _ = list.push(closed(6, 25, CloseCause::ServerShutdown));
@@ -210,14 +210,14 @@ mod tests {
             list.iter()
                 .map(|entry| entry.id().clone())
                 .collect::<Vec<_>>(),
-            [2, 6, 5].map(|seed| SessionId::from_block([seed; 16]))
+            [2, 6, 5].map(|seed| Id::from_block([seed; 16]))
         );
     }
 
     /// spec: management.md:MGT-024 partial
     #[test]
     fn zero_capacity_returns_rejected_incoming_summary() {
-        let mut list = RecentClosedList::new(0);
+        let mut list = List::new(0);
         assert_eq!(
             list.push(closed(1, 20, CloseCause::AdminTerminated)),
             Some(closed(1, 20, CloseCause::AdminTerminated))
@@ -228,7 +228,7 @@ mod tests {
     /// spec: management.md:MGT-024 partial
     #[test]
     fn capacity_insertion_returns_displaced_oldest_summary() {
-        let mut list = RecentClosedList::new(2);
+        let mut list = List::new(2);
         assert_eq!(list.push(closed(1, 10, CloseCause::PeerEof)), None);
         assert_eq!(list.push(closed(2, 20, CloseCause::ServerShutdown)), None);
         assert_eq!(
@@ -241,7 +241,7 @@ mod tests {
     /// spec: management.md:MGT-024 partial
     #[test]
     fn out_of_order_insertion_returns_rejected_or_displaced_summary() {
-        let mut list = RecentClosedList::new(3);
+        let mut list = List::new(3);
         for (seed, time) in [(1, 10), (2, 30), (3, 20)] {
             assert_eq!(
                 list.push(closed(seed, time, CloseCause::ServerShutdown)),
@@ -264,14 +264,14 @@ mod tests {
             list.iter()
                 .map(|entry| entry.id().clone())
                 .collect::<Vec<_>>(),
-            [2, 6, 5].map(|seed| SessionId::from_block([seed; 16]))
+            [2, 6, 5].map(|seed| Id::from_block([seed; 16]))
         );
     }
 
     /// spec: management.md:MGT-024 partial
     #[test]
     fn insertion_without_eviction_returns_none() {
-        let mut list = RecentClosedList::new(4);
+        let mut list = List::new(4);
         for (seed, time) in [(1, 20), (2, 10), (3, 30), (4, 20)] {
             assert_eq!(
                 list.push(closed(seed, time, CloseCause::ServerShutdown)),
@@ -282,14 +282,14 @@ mod tests {
             list.iter()
                 .map(|entry| entry.id().clone())
                 .collect::<Vec<_>>(),
-            [3, 4, 1, 2].map(|seed| SessionId::from_block([seed; 16]))
+            [3, 4, 1, 2].map(|seed| Id::from_block([seed; 16]))
         );
     }
 
     /// spec: management.md:MGT-023 partial
     #[test]
     fn retains_final_causes_metadata_times_and_directional_counters() {
-        let mut list = RecentClosedList::new(7);
+        let mut list = List::new(7);
         let causes = [
             CloseCause::PeerEof,
             CloseCause::ConnectionError,
@@ -325,10 +325,10 @@ mod tests {
     /// spec: management.md:MGT-024 partial
     #[test]
     fn starts_empty_again_without_restoring_prior_process_history() {
-        let mut old = RecentClosedList::new(2);
+        let mut old = List::new(2);
         let _ = old.push(closed(1, 20, CloseCause::AdminTerminated));
         assert_eq!(old.len(), 1);
-        let restarted = RecentClosedList::new(old.max_entries());
+        let restarted = List::new(old.max_entries());
         assert!(restarted.is_empty());
         assert_eq!(restarted.iter().count(), 0);
         assert_eq!(old.len(), 1);

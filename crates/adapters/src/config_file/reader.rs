@@ -4,7 +4,7 @@
 use std::ops::RangeInclusive;
 
 use toml::{Table, Value};
-use vnc_relay_app::settings::{ConfigDiagnostic, ConfigError};
+use vnc_relay_application::settings::{ConfigDiagnostic, ConfigError};
 
 /// All diagnostics found so far, in the order they were found.
 #[derive(Debug, Default)]

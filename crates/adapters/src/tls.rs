@@ -11,8 +11,8 @@ use rustls::{InconsistentKeys, ServerConfig};
 use rustls_pki_types::pem::PemObject;
 use rustls_pki_types::{CertificateDer, PrivateKeyDer};
 use tokio_rustls::TlsAcceptor;
-use vnc_relay_app::reload::ports::{ReloadTlsStore, TlsBuildError};
-use vnc_relay_app::reload::snapshot::{ReloadCell, ReloadSnapshot};
+use vnc_relay_application::reload::ports::{ReloadTlsStore, TlsBuildError};
+use vnc_relay_application::reload::snapshot::{ReloadCell, ReloadSnapshot};
 
 /// The two PEM files that make up the TLS identity of one listener.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

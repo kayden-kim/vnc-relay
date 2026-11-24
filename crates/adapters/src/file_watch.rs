@@ -18,12 +18,12 @@ use std::time::{Duration, SystemTime};
 
 use feed::{ChangeQueue, NotifyWatchGateway, WatchGateway, WatchTarget};
 use tokio::sync::{mpsc, watch};
-use vnc_relay_app::events::Event;
-use vnc_relay_app::ip_info::IpInfoService;
-use vnc_relay_app::ports::EventSink;
-use vnc_relay_app::reload::ports::{ReloadClock, ReloadFileStore};
-use vnc_relay_app::reload::service::ReloadOutcome;
-use vnc_relay_app::reload::{ChangeSource, SharedReload, WatchFailure};
+use vnc_relay_application::events::Event;
+use vnc_relay_application::ip_info::IpInfoService;
+use vnc_relay_application::ports::EventSink;
+use vnc_relay_application::reload::ports::{ReloadClock, ReloadFileStore};
+use vnc_relay_application::reload::service::ReloadOutcome;
+use vnc_relay_application::reload::{ChangeSource, SharedReload, WatchError};
 
 use crate::config_file;
 use crate::ops_log::JsonLinesEventSink;
@@ -397,7 +397,7 @@ impl<A: Clone, C: ReloadClock> ReloadWatcher<A, C> {
     fn report_notify_error(&mut self, detail: &str) {
         self.notify_failed = true;
         self.log.record(&Event::ReloadWatchFailed {
-            reason: WatchFailure::NotifyError,
+            reason: WatchError::NotifyError,
             detail: Some(detail.to_owned()),
         });
     }
@@ -634,7 +634,7 @@ impl<A: Clone, C: ReloadClock> ReloadWatcher<A, C> {
             Ok(_) => self.episode(ChangeSource::Poll, stop).await,
             Err(detail) => {
                 self.log.record(&Event::ReloadWatchFailed {
-                    reason: WatchFailure::PollError,
+                    reason: WatchError::PollError,
                     detail: Some(detail),
                 });
                 if db_changed {
@@ -756,9 +756,9 @@ mod tests {
     use std::sync::Mutex;
     use std::sync::atomic::{AtomicBool, Ordering};
     use tokio::sync::oneshot;
-    use vnc_relay_app::reload::ports::{ReloadTlsStore, TlsBuildError};
-    use vnc_relay_app::reload::service::ReloadService;
-    use vnc_relay_app::reload::snapshot::{ReloadCell, ReloadSnapshot};
+    use vnc_relay_application::reload::ports::{ReloadTlsStore, TlsBuildError};
+    use vnc_relay_application::reload::service::ReloadService;
+    use vnc_relay_application::reload::snapshot::{ReloadCell, ReloadSnapshot};
     use vnc_relay_domain::allow_list::{AllowList, IpItem};
     use vnc_relay_domain::peer_ip::PeerIp;
 
@@ -772,11 +772,11 @@ mod tests {
     type SleepRequest = (Duration, oneshot::Sender<()>);
 
     /// Clock whose sleeps finish only when the test releases them.
-    struct ManualClock {
+    struct FakeReloadClock {
         requests: mpsc::UnboundedSender<SleepRequest>,
     }
 
-    impl ReloadClock for ManualClock {
+    impl ReloadClock for FakeReloadClock {
         fn sleep(&self, duration: Duration) -> impl Future<Output = ()> + Send {
             let (release, released) = oneshot::channel();
             let requested = self.requests.send((duration, release)).is_ok();
@@ -801,11 +801,11 @@ mod tests {
 
     /// Feed that refuses every registration while `refuse` is set. It never delivers OS events, so
     /// the poll tick is the only detector, as when the notify backend is blocked (OPS-041).
-    struct SwitchFeed {
+    struct FakeWatchGateway {
         refuse: Arc<AtomicBool>,
     }
 
-    impl WatchGateway for SwitchFeed {
+    impl WatchGateway for FakeWatchGateway {
         fn watch_dirs(
             &mut self,
             _required: &BTreeSet<PathBuf>,
@@ -819,20 +819,20 @@ mod tests {
         }
     }
 
-    struct NoTls;
+    struct StubReloadTlsStore;
 
-    impl ReloadTlsStore<()> for NoTls {
+    impl ReloadTlsStore<()> for StubReloadTlsStore {
         fn build(&self, _cert_pem: &[u8], _key_pem: &[u8]) -> Result<(), TlsBuildError> {
             Ok(())
         }
     }
 
     #[derive(Default)]
-    struct RecordingSink {
+    struct SpyEventSink {
         events: Mutex<Vec<Event>>,
     }
 
-    impl RecordingSink {
+    impl SpyEventSink {
         fn names(&self) -> Vec<&'static str> {
             self.events
                 .lock()
@@ -847,19 +847,19 @@ mod tests {
         }
     }
 
-    impl EventSink for RecordingSink {
+    impl EventSink for SpyEventSink {
         fn record(&self, event: &Event) {
             self.events.lock().expect("sink lock").push(event.clone());
         }
     }
 
     #[derive(Default)]
-    struct MemoryFiles {
+    struct FakeReloadFileStore {
         files: Mutex<BTreeMap<PathBuf, Vec<u8>>>,
         denied: Mutex<BTreeSet<PathBuf>>,
     }
 
-    impl MemoryFiles {
+    impl FakeReloadFileStore {
         fn set(&self, path: &Path, bytes: &[u8]) {
             self.files
                 .lock()
@@ -875,7 +875,7 @@ mod tests {
         }
     }
 
-    impl ReloadFileStore for MemoryFiles {
+    impl ReloadFileStore for FakeReloadFileStore {
         fn read(&self, path: &Path) -> io::Result<Vec<u8>> {
             if self.denied.lock().expect("denied lock").contains(path) {
                 return Err(io::Error::from(io::ErrorKind::PermissionDenied));
@@ -890,10 +890,10 @@ mod tests {
     }
 
     struct Fixture {
-        watcher: ReloadWatcher<(), ManualClock>,
+        watcher: ReloadWatcher<(), FakeReloadClock>,
         sleeps: mpsc::UnboundedReceiver<SleepRequest>,
-        files: Arc<MemoryFiles>,
-        sink: Arc<RecordingSink>,
+        files: Arc<FakeReloadFileStore>,
+        sink: Arc<SpyEventSink>,
         config_path: PathBuf,
         cell: Arc<ReloadCell<()>>,
         stop: watch::Receiver<bool>,
@@ -917,8 +917,8 @@ mod tests {
         refuse: Arc<AtomicBool>,
     ) -> Result<Fixture, ReloadWatchError> {
         let (requests, sleeps) = mpsc::unbounded_channel();
-        let files = Arc::new(MemoryFiles::default());
-        let sink = Arc::new(RecordingSink::default());
+        let files = Arc::new(FakeReloadFileStore::default());
+        let sink = Arc::new(SpyEventSink::default());
         let config_path = std::path::absolute("vnc-relay.toml").expect("current directory");
         files.set(&config_path, running_text.as_bytes());
         // The watcher parses candidates against the config directory, so the running settings must
@@ -935,7 +935,7 @@ mod tests {
             running,
             Arc::clone(&cell),
             files.clone(),
-            Arc::new(NoTls),
+            Arc::new(StubReloadTlsStore),
             Arc::new(crate::ticket::TicketJwksStore),
             sink.clone(),
         );
@@ -943,11 +943,11 @@ mod tests {
             &config_path,
             Arc::new(Mutex::new(service)),
             POLL,
-            ManualClock { requests },
+            FakeReloadClock { requests },
             files.clone(),
             sink.clone(),
             |_queue| {
-                let feed: Box<dyn WatchGateway> = Box::new(SwitchFeed { refuse });
+                let feed: Box<dyn WatchGateway> = Box::new(FakeWatchGateway { refuse });
                 Ok(feed)
             },
         )?;
@@ -1233,8 +1233,8 @@ mod tests {
     /// Arms the §4.3 validation hook. While the candidate is being validated, `text` is written and
     /// queued as a newer change, the way a second save would arrive.
     fn arm_newer_write(
-        watcher: &mut ReloadWatcher<(), ManualClock>,
-        files: &Arc<MemoryFiles>,
+        watcher: &mut ReloadWatcher<(), FakeReloadClock>,
+        files: &Arc<FakeReloadFileStore>,
         config_path: &Path,
         text: &str,
     ) {
@@ -1421,7 +1421,7 @@ mod tests {
         assert!(matches!(
             sink.snapshot()[0],
             Event::ReloadWatchFailed {
-                reason: WatchFailure::NotifyError,
+                reason: WatchError::NotifyError,
                 ..
             }
         ));
@@ -1460,12 +1460,12 @@ mod tests {
     #[test]
     fn final_candidate_read_holds_the_same_mutex_as_config_edit() {
         use std::sync::atomic::AtomicUsize;
-        struct CheckingFiles {
-            inner: Arc<MemoryFiles>,
+        struct SpyReloadFileStore {
+            inner: Arc<FakeReloadFileStore>,
             reload: std::sync::Weak<Mutex<ReloadService<()>>>,
             reads: AtomicUsize,
         }
-        impl ReloadFileStore for CheckingFiles {
+        impl ReloadFileStore for SpyReloadFileStore {
             fn read(&self, path: &Path) -> io::Result<Vec<u8>> {
                 let reload = self.reload.upgrade().expect("shared transaction alive");
                 assert!(
@@ -1484,7 +1484,7 @@ mod tests {
             stop,
             ..
         } = fixture_running(RELAY_CONFIG);
-        let checked = Arc::new(CheckingFiles {
+        let checked = Arc::new(SpyReloadFileStore {
             inner: files.clone(),
             reload: Arc::downgrade(&watcher.service),
             reads: AtomicUsize::new(0),
@@ -1502,15 +1502,15 @@ mod tests {
 
     /// Reads database files from disk. `db:<type>` is a usable database of that type; any other
     /// content is an invalid file. Lookups find nothing.
-    struct TextLoader;
+    struct FakeIpDbFileGateway;
 
-    struct TextDb(vnc_relay_app::ip_info::IpDbMetadata);
+    struct StubIpDbLookupGateway(vnc_relay_application::ip_info::IpDbMetadata);
 
-    impl vnc_relay_app::ports::IpDbLookupGateway for TextDb {
-        fn metadata(&self) -> &vnc_relay_app::ip_info::IpDbMetadata {
+    impl vnc_relay_application::ports::IpDbLookupGateway for StubIpDbLookupGateway {
+        fn metadata(&self) -> &vnc_relay_application::ip_info::IpDbMetadata {
             &self.0
         }
-        fn supports(&self, _key: vnc_relay_app::ip_info::IpDbKey) -> bool {
+        fn supports(&self, _key: vnc_relay_application::ip_info::IpDbKey) -> bool {
             true
         }
         fn country(&self, _ip: IpAddr) -> Option<vnc_relay_domain::ip_info::CountryCode> {
@@ -1524,16 +1524,16 @@ mod tests {
         }
     }
 
-    impl vnc_relay_app::ports::IpDbFileGateway for TextLoader {
-        fn read(&self, path: &Path) -> vnc_relay_app::ip_info::IpDbRead {
-            use vnc_relay_app::ip_info::{
-                Fingerprint, IpDbError, IpDbFailure, IpDbMetadata, IpDbRead,
+    impl vnc_relay_application::ports::IpDbFileGateway for FakeIpDbFileGateway {
+        fn read(&self, path: &Path) -> vnc_relay_application::ip_info::IpDbRead {
+            use vnc_relay_application::ip_info::{
+                Fingerprint, IpDbError, IpDbMetadata, IpDbRead, IpDbReadError,
             };
             let Ok(bytes) = std::fs::read(path) else {
                 return IpDbRead {
                     fingerprint: Fingerprint::Unreadable,
-                    result: Err(IpDbError {
-                        failure: IpDbFailure::FileUnreadable,
+                    result: Err(IpDbReadError {
+                        failure: IpDbError::FileUnreadable,
                         detail: None,
                     }),
                 };
@@ -1542,12 +1542,13 @@ mod tests {
             let result = match bytes.strip_prefix(b"db:") {
                 Some(kind) => {
                     let kind = String::from_utf8_lossy(kind);
-                    let db: Arc<dyn vnc_relay_app::ports::IpDbLookupGateway> =
-                        Arc::new(TextDb(IpDbMetadata::new(&kind, SystemTime::UNIX_EPOCH)));
+                    let db: Arc<dyn vnc_relay_application::ports::IpDbLookupGateway> = Arc::new(
+                        StubIpDbLookupGateway(IpDbMetadata::new(&kind, SystemTime::UNIX_EPOCH)),
+                    );
                     Ok(db)
                 }
-                None => Err(IpDbError {
-                    failure: IpDbFailure::InvalidFormat,
+                None => Err(IpDbReadError {
+                    failure: IpDbError::InvalidFormat,
                     detail: None,
                 }),
             };
@@ -1572,15 +1573,15 @@ mod tests {
 
     /// Attaches a country database at `path` and runs the startup read.
     fn attach_country_db(
-        watcher: &mut ReloadWatcher<(), ManualClock>,
-        sink: &Arc<RecordingSink>,
+        watcher: &mut ReloadWatcher<(), FakeReloadClock>,
+        sink: &Arc<SpyEventSink>,
         path: &Path,
     ) -> Arc<IpInfoService> {
         let service = Arc::new(IpInfoService::new(
             Some(path.to_path_buf()),
             None,
-            Arc::new(TextLoader),
-            Arc::new(vnc_relay_app::ip_info::IpLookup::new()),
+            Arc::new(FakeIpDbFileGateway),
+            Arc::new(vnc_relay_application::ip_info::IpLookup::new()),
             Arc::new(crate::clock::SystemClock::new()),
             sink.clone(),
         ));
@@ -1591,7 +1592,7 @@ mod tests {
 
     /// Runs one poll tick and releases the quiet window and the gap if an episode starts.
     async fn tick_through_episode(
-        watcher: &mut ReloadWatcher<(), ManualClock>,
+        watcher: &mut ReloadWatcher<(), FakeReloadClock>,
         sleeps: &mut mpsc::UnboundedReceiver<SleepRequest>,
         stop: &mut watch::Receiver<bool>,
     ) {
@@ -1606,7 +1607,7 @@ mod tests {
     }
 
     /// `(event name, database_type or reason, phase)` of the database events.
-    fn db_events(sink: &RecordingSink) -> Vec<(&'static str, String, &'static str)> {
+    fn db_events(sink: &SpyEventSink) -> Vec<(&'static str, String, &'static str)> {
         sink.snapshot()
             .into_iter()
             .filter_map(|event| match event {
@@ -1649,7 +1650,7 @@ mod tests {
         tick_through_episode(&mut watcher, &mut sleeps, &mut stop).await;
         assert_eq!(
             service.status()[0].state,
-            vnc_relay_app::ip_info::IpDbState::Stale
+            vnc_relay_application::ip_info::IpDbState::Stale
         );
         // The same broken content saved again starts nothing and warns nothing.
         std::fs::write(&path, b"broken").expect("write database");
@@ -1670,7 +1671,7 @@ mod tests {
         );
         assert_eq!(
             service.status()[0].state,
-            vnc_relay_app::ip_info::IpDbState::Loaded
+            vnc_relay_application::ip_info::IpDbState::Loaded
         );
         // The config file did not change: no reload result at all.
         assert!(

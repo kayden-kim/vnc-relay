@@ -10,8 +10,8 @@ use std::task::{Context, Poll, ready};
 
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 use tokio_rustls::server::{Accept, TlsStream};
-use vnc_relay_app::events::{Event, RejectReason, Stage};
-use vnc_relay_app::ports::EventSink;
+use vnc_relay_application::events::{Event, RejectReason, Stage};
+use vnc_relay_application::ports::EventSink;
 use vnc_relay_domain::conn_id::ConnId;
 use vnc_relay_domain::peer_ip::PeerIp;
 
@@ -73,7 +73,7 @@ pub(crate) enum TlsIo<IO> {
     Handshaking(Handshake<IO>),
     Established(TlsStream<Recorded<IO>>),
     /// The handshake failed. Every later call fails too.
-    Failed(HandshakeFailure),
+    Failed(TlsHandshakeError),
 }
 
 /// A handshake in progress, with what a refusal needs for its event.
@@ -90,7 +90,7 @@ pub(crate) struct Handshake<IO> {
 /// Why a handshake failed. The entry points use it to pick the event of the
 /// connection.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum HandshakeFailure {
+pub(crate) enum TlsHandshakeError {
     /// The client offered no TLS 1.2 or later (OPS-036). The rejection is
     /// logged.
     VersionUnsupported,
@@ -103,7 +103,7 @@ pub(crate) enum HandshakeFailure {
     Io,
 }
 
-impl HandshakeFailure {
+impl TlsHandshakeError {
     /// Classifies an error that the version check did not claim.
     fn from_error(error: &io::Error) -> Self {
         if error
@@ -135,7 +135,7 @@ impl<IO: AsyncRead + AsyncWrite + Unpin> TlsIo<IO> {
         let Some(acceptor) = source.acceptor() else {
             // No acceptor is current for this listener. The connection takes
             // the negotiation abort path, and no handshake starts.
-            return Self::Failed(HandshakeFailure::Negotiation);
+            return Self::Failed(TlsHandshakeError::Negotiation);
         };
         let capture: Capture = Arc::new(Mutex::new(Some(Vec::new())));
         Self::Handshaking(Handshake {
@@ -157,7 +157,7 @@ impl<IO: AsyncRead + AsyncWrite + Unpin> TlsIo<IO> {
     }
 
     /// Why the handshake failed, or `None` while it runs or after it succeeded.
-    pub(crate) fn handshake_failure(&self) -> Option<HandshakeFailure> {
+    pub(crate) fn handshake_failure(&self) -> Option<TlsHandshakeError> {
         match self {
             Self::Failed(failure) => Some(*failure),
             Self::Handshaking(_) | Self::Established(_) => None,
@@ -191,9 +191,9 @@ impl<IO: AsyncRead + AsyncWrite + Unpin> TlsIo<IO> {
                                 reason: RejectReason::TlsVersionUnsupported,
                                 peer_ip: handshake.peer,
                             });
-                            HandshakeFailure::VersionUnsupported
+                            TlsHandshakeError::VersionUnsupported
                         } else {
-                            HandshakeFailure::from_error(&error)
+                            TlsHandshakeError::from_error(&error)
                         };
                         *self = Self::Failed(failure);
                         Poll::Ready(Err(error))

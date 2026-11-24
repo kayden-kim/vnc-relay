@@ -4,14 +4,14 @@ use crate::session::Transport;
 
 /// One bound relay socket (ops-info-v2 §1.5).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub enum Listener {
+pub enum ListenerKind {
     TcpViewer,
     TcpServer,
     Ws,
     Wss,
 }
 
-impl Listener {
+impl ListenerKind {
     /// Relay listeners in startup bind order.
     pub const ALL: [Self; 4] = [Self::TcpViewer, Self::TcpServer, Self::Ws, Self::Wss];
 
@@ -76,12 +76,12 @@ impl EntryPoint {
     ];
 
     /// Socket accepting this entry point.
-    pub fn listener(self) -> Listener {
+    pub fn listener(self) -> ListenerKind {
         match self {
-            Self::TcpViewer => Listener::TcpViewer,
-            Self::TcpServer => Listener::TcpServer,
-            Self::WsViewer | Self::WsServer => Listener::Ws,
-            Self::WssViewer | Self::WssServer => Listener::Wss,
+            Self::TcpViewer => ListenerKind::TcpViewer,
+            Self::TcpServer => ListenerKind::TcpServer,
+            Self::WsViewer | Self::WsServer => ListenerKind::Ws,
+            Self::WssViewer | Self::WssServer => ListenerKind::Wss,
         }
     }
 
@@ -99,14 +99,14 @@ impl EntryPoint {
     }
 
     /// Resolves a supported listener/role pair; TCP roles cannot be reversed.
-    pub fn from_parts(listener: Listener, role: Role) -> Option<Self> {
+    pub fn from_parts(listener: ListenerKind, role: Role) -> Option<Self> {
         match (listener, role) {
-            (Listener::TcpViewer, Role::Viewer) => Some(Self::TcpViewer),
-            (Listener::TcpServer, Role::Server) => Some(Self::TcpServer),
-            (Listener::Ws, Role::Viewer) => Some(Self::WsViewer),
-            (Listener::Ws, Role::Server) => Some(Self::WsServer),
-            (Listener::Wss, Role::Viewer) => Some(Self::WssViewer),
-            (Listener::Wss, Role::Server) => Some(Self::WssServer),
+            (ListenerKind::TcpViewer, Role::Viewer) => Some(Self::TcpViewer),
+            (ListenerKind::TcpServer, Role::Server) => Some(Self::TcpServer),
+            (ListenerKind::Ws, Role::Viewer) => Some(Self::WsViewer),
+            (ListenerKind::Ws, Role::Server) => Some(Self::WsServer),
+            (ListenerKind::Wss, Role::Viewer) => Some(Self::WssViewer),
+            (ListenerKind::Wss, Role::Server) => Some(Self::WssServer),
             _ => None,
         }
     }
@@ -155,14 +155,14 @@ mod tests {
             assert_eq!(entry.transport(), entry.listener().transport());
         }
         assert_eq!(
-            EntryPoint::from_parts(Listener::TcpViewer, Role::Server),
+            EntryPoint::from_parts(ListenerKind::TcpViewer, Role::Server),
             None
         );
         assert_eq!(
-            EntryPoint::from_parts(Listener::TcpServer, Role::Viewer),
+            EntryPoint::from_parts(ListenerKind::TcpServer, Role::Viewer),
             None
         );
-        assert_eq!(Listener::Ws.fixed_role(), None);
-        assert_eq!(Listener::Wss.fixed_role(), None);
+        assert_eq!(ListenerKind::Ws.fixed_role(), None);
+        assert_eq!(ListenerKind::Wss.fixed_role(), None);
     }
 }

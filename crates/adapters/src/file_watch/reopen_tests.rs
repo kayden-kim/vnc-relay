@@ -2,10 +2,10 @@ use super::*;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use tokio::sync::oneshot;
-use vnc_relay_app::reload::ports::{ReloadTlsStore, TlsBuildError};
-use vnc_relay_app::reload::service::ReloadService;
-use vnc_relay_app::reload::snapshot::{ReloadCell, ReloadSnapshot};
-use vnc_relay_app::settings::LogOutput;
+use vnc_relay_application::reload::ports::{ReloadTlsStore, TlsBuildError};
+use vnc_relay_application::reload::service::ReloadService;
+use vnc_relay_application::reload::snapshot::{ReloadCell, ReloadSnapshot};
+use vnc_relay_application::settings::LogOutput;
 
 static NEXT: AtomicU64 = AtomicU64::new(0);
 
@@ -28,8 +28,8 @@ impl Drop for Directory {
 }
 
 type Request = (Duration, oneshot::Sender<()>);
-struct Clock(mpsc::UnboundedSender<Request>);
-impl ReloadClock for Clock {
+struct FakeReloadClock(mpsc::UnboundedSender<Request>);
+impl ReloadClock for FakeReloadClock {
     fn sleep(&self, duration: Duration) -> impl Future<Output = ()> + Send {
         let (tx, rx) = oneshot::channel();
         self.0
@@ -222,7 +222,7 @@ async fn reopens_on_notifications_and_poll_and_reports_each_failure_streak_once(
         reopen_log(
             log.clone(),
             queue.clone(),
-            Arc::new(Clock(requests)),
+            Arc::new(FakeReloadClock(requests)),
             Duration::from_secs(30),
             stopped
         ),
@@ -230,18 +230,18 @@ async fn reopens_on_notifications_and_poll_and_reports_each_failure_streak_once(
     );
 }
 
-struct NoTls;
-impl ReloadTlsStore<()> for NoTls {
+struct StubReloadTlsStore;
+impl ReloadTlsStore<()> for StubReloadTlsStore {
     fn build(&self, _: &[u8], _: &[u8]) -> Result<(), TlsBuildError> {
         Ok(())
     }
 }
-struct RefuseLog {
+struct FakeLogWatchGateway {
     log_dir: PathBuf,
     refuse: Arc<AtomicBool>,
     attempts: Arc<AtomicU64>,
 }
-impl WatchGateway for RefuseLog {
+impl WatchGateway for FakeLogWatchGateway {
     fn watch_dirs(
         &mut self,
         dirs: &BTreeSet<PathBuf>,
@@ -282,7 +282,7 @@ async fn log_directory_registration_failure_keeps_poll_and_retries() {
         settings.clone(),
         Arc::new(ReloadCell::new(ReloadSnapshot::new(settings, None, None))),
         files.clone(),
-        Arc::new(NoTls),
+        Arc::new(StubReloadTlsStore),
         Arc::new(crate::ticket::TicketJwksStore),
         log.clone(),
     );
@@ -293,11 +293,11 @@ async fn log_directory_registration_failure_keeps_poll_and_retries() {
         &config,
         Arc::new(Mutex::new(service)),
         Duration::from_secs(30),
-        Clock(requests),
+        FakeReloadClock(requests),
         files,
         log.clone(),
         |_| {
-            Ok(Box::new(RefuseLog {
+            Ok(Box::new(FakeLogWatchGateway {
                 log_dir,
                 refuse: refuse.clone(),
                 attempts: attempts.clone(),

@@ -5,11 +5,11 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use vnc_relay_adapters::config_edit::{FsConfigFileStore, TomlConfigDocumentGateway};
-use vnc_relay_adapters::config_file::parse_candidate;
-use vnc_relay_app::management::config::{
+use vnc_relay_adapters::config_file;
+use vnc_relay_application::management::config::{
     ConfigChange, ConfigDocumentGateway, ConfigFileStore, ConfigReplaceError, ConfigValue,
 };
-use vnc_relay_app::settings::ConfigError;
+use vnc_relay_application::settings::ConfigError;
 
 const REQUIRED: &str = "[admin]\naccounts_file = 'accounts.toml'\n[management]\nlisten = '127.0.0.1:18080'\n[status]\nlisten = '127.0.0.1:18081'\n";
 
@@ -108,7 +108,7 @@ fn raw_revision_uses_sha256_and_includes_comments_bom_and_line_endings() {
 #[test]
 fn candidate_defaults_config_edit_off_and_collects_only_explicit_leaf_keys() {
     let base = Path::new("config-base");
-    let minimal = parse_candidate(REQUIRED.as_bytes(), base)
+    let minimal = config_file::parse_candidate(REQUIRED.as_bytes(), base)
         .unwrap_or_else(|diagnostics| panic!("parse: {diagnostics:?}"));
     assert!(!minimal.settings.management.config_edit);
     assert_eq!(
@@ -144,7 +144,7 @@ fn candidate_defaults_config_edit_off_and_collects_only_explicit_leaf_keys() {
 #[test]
 fn candidate_presence_handles_inline_and_dotted_tables_and_checks_new_flag_type() {
     let source = "admin.accounts_file='accounts.toml'\nmanagement={listen='127.0.0.1:18080', config_edit=true}\nstatus.listen='127.0.0.1:18081'\nrelay.ws.viewer.allowed_origins=[]\n";
-    let parsed = parse_candidate(source.as_bytes(), Path::new("."))
+    let parsed = config_file::parse_candidate(source.as_bytes(), Path::new("."))
         .unwrap_or_else(|diagnostics| panic!("parse: {diagnostics:?}"));
     assert_eq!(parsed.presence.keys.len(), 5);
     assert!(
@@ -154,7 +154,7 @@ fn candidate_presence_handles_inline_and_dotted_tables_and_checks_new_flag_type(
             .contains("relay.ws.viewer.allowed_origins")
     );
     let invalid = source.replace("config_edit=true", "config_edit='true'");
-    let diagnostics = parse_candidate(invalid.as_bytes(), Path::new("."))
+    let diagnostics = config_file::parse_candidate(invalid.as_bytes(), Path::new("."))
         .err()
         .unwrap_or_else(|| panic!("accepted non-boolean flag"));
     assert!(
@@ -549,7 +549,7 @@ fn disabled_lone_tls_paths_survive_candidate_presence_with_resolved_paths() {
         let source = format!(
             "{REQUIRED}\n[relay.wss]\n{key} = 'tls/disabled.pem'\n[relay.wss.viewer]\nenabled = false\n[relay.wss.server]\nenabled = false\n"
         );
-        let candidate = parse_candidate(source.as_bytes(), base)
+        let candidate = config_file::parse_candidate(source.as_bytes(), base)
             .unwrap_or_else(|diagnostics| panic!("parse: {diagnostics:?}"));
         assert!(candidate.settings.relay.wss.tls.is_none());
         assert_eq!(candidate.presence.inactive_paths.len(), 1);
@@ -568,7 +568,7 @@ fn disabled_lone_tls_paths_survive_candidate_presence_with_resolved_paths() {
         );
     }
     let source = format!("{REQUIRED}\n[relay.wss]\ncert_file='cert.pem'\nkey_file='key.pem'\n");
-    let candidate = parse_candidate(source.as_bytes(), base)
+    let candidate = config_file::parse_candidate(source.as_bytes(), base)
         .unwrap_or_else(|diagnostics| panic!("parse: {diagnostics:?}"));
     assert!(candidate.presence.inactive_paths.is_empty());
     assert_eq!(
@@ -581,7 +581,7 @@ fn disabled_lone_tls_paths_survive_candidate_presence_with_resolved_paths() {
             .map(|tls| tls.cert_file.as_path()),
         Some(base.join("cert.pem").as_path())
     );
-    let candidate = parse_candidate(REQUIRED.as_bytes(), base)
+    let candidate = config_file::parse_candidate(REQUIRED.as_bytes(), base)
         .unwrap_or_else(|diagnostics| panic!("parse: {diagnostics:?}"));
     assert!(candidate.presence.inactive_paths.is_empty());
 }
@@ -721,7 +721,8 @@ fn nested_role_edits_and_trusted_proxy_edits_parse_through_the_real_loader() {
             ),
         ],
     );
-    let candidate = parse_candidate(result.as_bytes(), Path::new(".")).expect("v4 loader");
+    let candidate =
+        config_file::parse_candidate(result.as_bytes(), Path::new(".")).expect("v4 loader");
     assert!(candidate.settings.relay.ws.viewer.enabled);
     assert!(candidate.settings.relay.ws.server.enabled);
     assert_eq!(candidate.settings.relay.ws.trusted_proxies.items().len(), 1);
@@ -746,7 +747,7 @@ fn server_only_wss_uses_parent_tls_and_never_records_inactive_paths() {
          [relay.wss.viewer]\nenabled=false\n\
          [relay.wss.server]\nenabled=true\nallow=[]\n"
     );
-    let candidate = parse_candidate(source.as_bytes(), base).expect("server-only WSS");
+    let candidate = config_file::parse_candidate(source.as_bytes(), base).expect("server-only WSS");
     assert!(!candidate.settings.relay.wss.viewer.enabled);
     assert!(candidate.settings.relay.wss.server.enabled);
     assert!(candidate.presence.inactive_paths.is_empty());

@@ -7,14 +7,11 @@ use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
 use vnc_relay_adapters::ip_db::MmdbFileGateway;
-use vnc_relay_app::ip_info::{IpDbError, IpDbFailure, IpDbKey};
-use vnc_relay_app::ports::{IpDbFileGateway, IpDbLookupGateway};
+use vnc_relay_application::ip_info::{IpDbError, IpDbKey, IpDbReadError};
+use vnc_relay_application::ports::{IpDbFileGateway, IpDbLookupGateway};
 use vnc_relay_domain::ip_info::Provider;
 
-#[path = "common/mmdb.rs"]
-mod mmdb;
-
-use mmdb::{MmdbWriter, Value, ipinfo, iso_country, map, maxmind_asn, text};
+use vnc_relay_testkit::mmdb::{self, MmdbWriter, Value};
 
 const BUILD_EPOCH: u64 = 1_763_078_400; // 2025-11-14T00:00:00Z
 
@@ -42,7 +39,7 @@ fn load(path: &std::path::Path) -> Arc<dyn IpDbLookupGateway> {
     }
 }
 
-fn load_error(path: &std::path::Path) -> IpDbError {
+fn load_error(path: &std::path::Path) -> IpDbReadError {
     match MmdbFileGateway.read(path).result {
         Ok(_) => panic!("{} loaded unexpectedly", path.display()),
         Err(error) => error,
@@ -74,11 +71,11 @@ fn reads_db_ip_lite_country_and_asn_files() {
         // A record without a country comes first; the field is still found.
         .insert(
             "192.0.2.0/25",
-            map(&[("continent", map(&[("code", text("AS"))]))]),
+            mmdb::map(&[("continent", mmdb::map(&[("code", mmdb::text("AS"))]))]),
         )
-        .insert("192.0.2.128/25", iso_country("KR"))
-        .insert("2001:db8::/33", iso_country("JP"))
-        .insert("198.51.100.0/24", iso_country("kr"));
+        .insert("192.0.2.128/25", mmdb::iso_country("KR"))
+        .insert("2001:db8::/33", mmdb::iso_country("JP"))
+        .insert("198.51.100.0/24", mmdb::iso_country("kr"));
     let path = write(&dir, "dbip-country-lite.mmdb", &country_db.to_bytes());
     let db = load(&path);
     assert_eq!(db.metadata().database_type, "DBIP-Country-Lite");
@@ -97,10 +94,10 @@ fn reads_db_ip_lite_country_and_asn_files() {
     assert_eq!(country(db.as_ref(), "203.0.113.9"), None);
 
     let asn_db = MmdbWriter::new("DBIP-ASN-Lite (compat=GeoLite2-ASN)", BUILD_EPOCH)
-        .insert("192.0.2.0/24", maxmind_asn(64496, "Example Transit"))
+        .insert("192.0.2.0/24", mmdb::maxmind_asn(64496, "Example Transit"))
         .insert(
             "2001:db8::/32",
-            map(&[("autonomous_system_number", Value::U32(64497))]),
+            mmdb::map(&[("autonomous_system_number", Value::U32(64497))]),
         );
     let path = write(&dir, "dbip-asn-lite.mmdb", &asn_db.to_bytes());
     let db = load(&path);
@@ -123,13 +120,19 @@ fn reads_db_ip_lite_country_and_asn_files() {
 fn reads_one_ipinfo_lite_file_for_country_and_asn() {
     let dir = temp_dir("ipinfo");
     let lite = MmdbWriter::new("ipinfo_lite.mmdb", BUILD_EPOCH)
-        .insert("203.0.113.0/24", ipinfo("DE", "AS64500", "Example Hosting"))
+        .insert(
+            "203.0.113.0/24",
+            mmdb::ipinfo("DE", "AS64500", "Example Hosting"),
+        )
         .insert(
             "2001:db8:8000::/33",
-            ipinfo("FR", "AS65551", "Example Cloud"),
+            mmdb::ipinfo("FR", "AS65551", "Example Cloud"),
         )
         // Not `AS` and a decimal number: no ASN.
-        .insert("198.51.100.0/24", ipinfo("US", "64501", "Example Lab"));
+        .insert(
+            "198.51.100.0/24",
+            mmdb::ipinfo("US", "64501", "Example Lab"),
+        );
     let path = write(&dir, "ipinfo_lite.mmdb", &lite.to_bytes());
     let db = load(&path);
     assert_eq!(db.metadata().provider, Provider::Ipinfo);
@@ -152,10 +155,16 @@ fn reads_maxmind_geolite_country_city_and_asn_files() {
     let dir = temp_dir("geolite");
     let city = MmdbWriter::new("GeoLite2-City", BUILD_EPOCH).insert(
         "198.51.100.0/24",
-        map(&[
-            ("city", map(&[("names", map(&[("en", text("Example"))]))])),
-            ("country", map(&[("iso_code", text("GB"))])),
-            ("location", map(&[("time_zone", text("Europe/London"))])),
+        mmdb::map(&[
+            (
+                "city",
+                mmdb::map(&[("names", mmdb::map(&[("en", mmdb::text("Example"))]))]),
+            ),
+            ("country", mmdb::map(&[("iso_code", mmdb::text("GB"))])),
+            (
+                "location",
+                mmdb::map(&[("time_zone", mmdb::text("Europe/London"))]),
+            ),
         ]),
     );
     let path = write(&dir, "GeoLite2-City.mmdb", &city.to_bytes());
@@ -170,12 +179,15 @@ fn reads_maxmind_geolite_country_city_and_asn_files() {
         // A 64-bit unsigned field is read as well.
         .insert(
             "203.0.113.0/24",
-            map(&[
+            mmdb::map(&[
                 ("autonomous_system_number", Value::U64(65536)),
-                ("autonomous_system_organization", text("Example Backbone")),
+                (
+                    "autonomous_system_organization",
+                    mmdb::text("Example Backbone"),
+                ),
             ]),
         )
-        .insert("2001:db8::/32", maxmind_asn(64511, "Example Edge"));
+        .insert("2001:db8::/32", mmdb::maxmind_asn(64511, "Example Edge"));
     let path = write(&dir, "GeoLite2-ASN.mmdb", &asn_db.to_bytes());
     let db = load(&path);
     assert_eq!(db.metadata().provider, Provider::MaxmindGeolite);
@@ -186,13 +198,13 @@ fn reads_maxmind_geolite_country_city_and_asn_files() {
     );
     assert_eq!(asn(db.as_ref(), "2001:db8::7"), Some(64511));
 
-    let paid =
-        MmdbWriter::new("GeoIP2-Country", BUILD_EPOCH).insert("192.0.2.0/24", iso_country("CA"));
+    let paid = MmdbWriter::new("GeoIP2-Country", BUILD_EPOCH)
+        .insert("192.0.2.0/24", mmdb::iso_country("CA"));
     let path = write(&dir, "GeoIP2-Country.mmdb", &paid.to_bytes());
     assert_eq!(load(&path).metadata().provider, Provider::Maxmind);
 
-    let other =
-        MmdbWriter::new("Example-Country", BUILD_EPOCH).insert("192.0.2.0/24", iso_country("CA"));
+    let other = MmdbWriter::new("Example-Country", BUILD_EPOCH)
+        .insert("192.0.2.0/24", mmdb::iso_country("CA"));
     let path = write(&dir, "other.mmdb", &other.to_bytes());
     let db = load(&path);
     assert_eq!(db.metadata().provider, Provider::Unknown);
@@ -205,7 +217,7 @@ fn a_file_without_the_fields_supports_neither_key() {
     let dir = temp_dir("fields");
     let empty = MmdbWriter::new("DBIP-ASN-Lite", BUILD_EPOCH).insert(
         "192.0.2.0/24",
-        map(&[("autonomous_system_organization", text("Name only"))]),
+        mmdb::map(&[("autonomous_system_organization", mmdb::text("Name only"))]),
     );
     let path = write(&dir, "fields.mmdb", &empty.to_bytes());
     let db = load(&path);
@@ -217,24 +229,24 @@ fn a_file_without_the_fields_supports_neither_key() {
 #[test]
 fn each_failure_cause_has_a_fixed_detail_without_the_path() {
     let dir = temp_dir("failures");
-    let valid =
-        MmdbWriter::new("DBIP-Country-Lite", BUILD_EPOCH).insert("192.0.2.0/24", iso_country("KR"));
+    let valid = MmdbWriter::new("DBIP-Country-Lite", BUILD_EPOCH)
+        .insert("192.0.2.0/24", mmdb::iso_country("KR"));
     let bytes = valid.to_bytes();
-    let cases: Vec<(PathBuf, IpDbFailure)> = vec![
-        (dir.join("missing.mmdb"), IpDbFailure::FileUnreadable),
-        (dir.clone(), IpDbFailure::FileUnreadable),
+    let cases: Vec<(PathBuf, IpDbError)> = vec![
+        (dir.join("missing.mmdb"), IpDbError::FileUnreadable),
+        (dir.clone(), IpDbError::FileUnreadable),
         (
             write(&dir, "not-mmdb.mmdb", b"not an MMDB file"),
-            IpDbFailure::InvalidFormat,
+            IpDbError::InvalidFormat,
         ),
         (
             // A copy that has not finished: the metadata is missing.
             write(&dir, "partial.mmdb", &bytes[..bytes.len() / 2]),
-            IpDbFailure::InvalidFormat,
+            IpDbError::InvalidFormat,
         ),
         (
             write(&dir, "separator.mmdb", &valid.to_bytes_with_bad_separator()),
-            IpDbFailure::InvalidFormat,
+            IpDbError::InvalidFormat,
         ),
         (
             write(
@@ -242,10 +254,10 @@ fn each_failure_cause_has_a_fixed_detail_without_the_path() {
                 "version.mmdb",
                 &MmdbWriter::new("DBIP-Country-Lite", BUILD_EPOCH)
                     .major_version(3)
-                    .insert("192.0.2.0/24", iso_country("KR"))
+                    .insert("192.0.2.0/24", mmdb::iso_country("KR"))
                     .to_bytes(),
             ),
-            IpDbFailure::InvalidFormat,
+            IpDbError::InvalidFormat,
         ),
     ];
     for (path, expected) in cases {
@@ -271,7 +283,7 @@ fn a_file_over_256_mib_is_not_read() {
         .expect("grow large file");
     drop(file);
     let error = load_error(&path);
-    assert_eq!(error.failure, IpDbFailure::FileTooLarge);
+    assert_eq!(error.failure, IpDbError::FileTooLarge);
     std::fs::remove_file(&path).expect("remove large file");
 
     let exact = dir.join("exact.mmdb");
@@ -279,6 +291,6 @@ fn a_file_over_256_mib_is_not_read() {
     file.set_len(256 * 1024 * 1024).expect("grow exact file");
     drop(file);
     // At the limit the file is read; zeros are not an MMDB file.
-    assert_eq!(load_error(&exact).failure, IpDbFailure::InvalidFormat);
+    assert_eq!(load_error(&exact).failure, IpDbError::InvalidFormat);
     std::fs::remove_file(&exact).expect("remove exact file");
 }

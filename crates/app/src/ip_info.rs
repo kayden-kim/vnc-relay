@@ -11,7 +11,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError, RwLock};
 use std::time::SystemTime;
 
-use vnc_relay_domain::ip_info::{Asn, CountryCode, Provider, is_local};
+use vnc_relay_domain::ip_info::{self, Asn, CountryCode, Provider};
 
 use crate::events::{Event, Phase};
 use crate::ports::{Clock, EventSink, IpDbFileGateway, IpDbLookupGateway};
@@ -47,14 +47,14 @@ impl IpDbKey {
 
 /// Why a database cannot be used (config-v4 §1.12 원인 코드).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum IpDbFailure {
+pub enum IpDbError {
     FileUnreadable,
     FileTooLarge,
     InvalidFormat,
     UnsupportedData,
 }
 
-impl IpDbFailure {
+impl IpDbError {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::FileUnreadable => "file_unreadable",
@@ -100,15 +100,15 @@ pub enum Fingerprint {
 
 /// A failed read: the cause and a sentence without path or file content.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct IpDbError {
-    pub failure: IpDbFailure,
+pub struct IpDbReadError {
+    pub failure: IpDbError,
     pub detail: Option<String>,
 }
 
 /// One read of one file by `IpDbFileGateway`.
 pub struct IpDbRead {
     pub fingerprint: Fingerprint,
-    pub result: Result<Arc<dyn IpDbLookupGateway>, IpDbError>,
+    pub result: Result<Arc<dyn IpDbLookupGateway>, IpDbReadError>,
 }
 
 /// The databases used now, one slot per key. Event recording and the
@@ -128,7 +128,7 @@ impl IpLookup {
     /// Country and AS number of `ip` in the databases used now. A local
     /// address is never looked up (management-api-v1 §1.17 `local`).
     pub fn find(&self, ip: IpAddr) -> (Option<CountryCode>, Option<Asn>) {
-        if is_local(ip) {
+        if ip_info::is_local(ip) {
             return (None, None);
         }
         let slots = self.slots.read().unwrap_or_else(PoisonError::into_inner);
@@ -143,7 +143,7 @@ impl IpLookup {
 
     /// The AS number and name of `ip` in the ASN database used now.
     pub fn as_name(&self, ip: IpAddr) -> Option<(Asn, String)> {
-        if is_local(ip) {
+        if ip_info::is_local(ip) {
             return None;
         }
         let slots = self.slots.read().unwrap_or_else(PoisonError::into_inner);
@@ -197,7 +197,7 @@ pub struct IpDbStatus {
     pub state: IpDbState,
     /// The last failure while it lasts: present for `Stale` and for an
     /// `Unavailable` key whose file was read at least once.
-    pub error: Option<IpDbFailure>,
+    pub error: Option<IpDbError>,
     pub in_use: Option<InUse>,
 }
 
@@ -206,7 +206,7 @@ pub struct IpDbStatus {
 struct KeyState {
     current: Option<Current>,
     /// The last failure and the content that failed. Cleared by a success.
-    failure: Option<(IpDbFailure, Fingerprint)>,
+    failure: Option<(IpDbError, Fingerprint)>,
 }
 
 struct Current {
@@ -360,8 +360,8 @@ impl IpInfoService {
                 state.failure = None;
                 return Some(event);
             }
-            Ok(_) => IpDbError {
-                failure: IpDbFailure::UnsupportedData,
+            Ok(_) => IpDbReadError {
+                failure: IpDbError::UnsupportedData,
                 detail: Some(missing_field(key).to_owned()),
             },
             Err(error) => error.clone(),

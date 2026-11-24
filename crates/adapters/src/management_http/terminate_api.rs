@@ -5,13 +5,13 @@ use axum::http::request::Parts;
 use axum::http::{Method, StatusCode};
 use axum::response::Response;
 use serde_json::json;
-use vnc_relay_app::management::query::ManagementQueryService;
-use vnc_relay_app::management::session::AuthorizedAdmin;
-use vnc_relay_app::management::terminate::{TerminateError, TerminateView};
+use vnc_relay_application::management::query::ManagementQueryService;
+use vnc_relay_application::management::session::AuthorizedAdmin;
+use vnc_relay_application::management::terminate::{TerminateError, TerminateView};
 
-use super::query_api::format_address;
-use super::{PeerAddr, Shared, json_error, json_response, method_not_allowed};
-use crate::clock::timestamp;
+use super::query_api;
+use super::{PeerAddr, Shared};
+use crate::clock;
 
 const PREFIX: &str = "/api/v1/sessions/";
 const SUFFIX: &str = "/terminate";
@@ -39,7 +39,7 @@ pub(super) async fn answer(
         return super::not_found();
     };
     if parts.method != Method::POST {
-        return method_not_allowed("POST", "이 경로는 POST 요청만 받는다.");
+        return super::method_not_allowed("POST", "이 경로는 POST 요청만 받는다.");
     }
     if parts.headers.contains_key("x-relay-poll") {
         return invalid_request("X-Relay-Poll은 값 1을 가진 GET 요청에만 쓸 수 있다.");
@@ -57,7 +57,7 @@ pub(super) async fn answer(
             .terminate
             .request_terminate(id, admin.session().account.clone(), peer.ip)
     else {
-        return json_error(
+        return super::json_error(
             StatusCode::NOT_FOUND,
             "not_found",
             "지정한 세션을 찾을 수 없습니다.",
@@ -73,7 +73,7 @@ pub(super) async fn answer(
 fn completion_response(outcome: Result<TerminateView, TerminateError>) -> Response {
     match outcome {
         Ok(view) => success(&view),
-        Err(error) => json_error(
+        Err(error) => super::json_error(
             StatusCode::INTERNAL_SERVER_ERROR,
             error.code(),
             "세션 종료를 확인할 수 없다.",
@@ -82,28 +82,28 @@ fn completion_response(outcome: Result<TerminateView, TerminateError>) -> Respon
 }
 
 fn invalid_request(message: &str) -> Response {
-    json_error(StatusCode::BAD_REQUEST, "invalid_request", message)
+    super::json_error(StatusCode::BAD_REQUEST, "invalid_request", message)
 }
 
 fn success(view: &TerminateView) -> Response {
     let closed = &view.closed_session;
-    json_response(
+    super::json_response(
         StatusCode::OK,
         &json!({
-            "as_of": timestamp(view.as_of),
+            "as_of": clock::timestamp(view.as_of),
             "result": view.result.as_str(),
             "closed_session": {
                 "session_id": closed.session_id.as_str(),
                 "mode": closed.mode.as_str(),
                 "viewer_transport": closed.viewer_transport.as_str(),
                 "target_transport": closed.target_transport.as_str(),
-                "started_at": timestamp(closed.started_at),
-                "ended_at": timestamp(closed.ended_at),
+                "started_at": clock::timestamp(closed.started_at),
+                "ended_at": clock::timestamp(closed.ended_at),
                 "duration_ms": u64::try_from(closed.duration.as_millis()).unwrap_or(u64::MAX),
                 "bytes_viewer_to_target": closed.bytes_viewer_to_target,
                 "bytes_target_to_viewer": closed.bytes_target_to_viewer,
-                "viewer_address": format_address(&closed.viewer_address),
-                "target_address": format_address(&closed.target_address),
+                "viewer_address": query_api::format_address(&closed.viewer_address),
+                "target_address": query_api::format_address(&closed.target_address),
                 "viewer_forwarded_ip": closed.viewer_forwarded_ip.map(|ip| ip.to_string()),
                 "target_forwarded_ip": closed.target_forwarded_ip.map(|ip| ip.to_string()),
                 "close_cause": closed.close_cause.as_str(),
@@ -155,10 +155,10 @@ mod tests {
     async fn success_response_serializes_closed_session_target_transport() {
         use std::sync::Arc;
         use std::time::{Duration, SystemTime};
-        use vnc_relay_app::events::AdminTerminateResult;
-        use vnc_relay_app::relay::ClosedSessionSnapshot;
+        use vnc_relay_application::events::AdminTerminateOutcome;
+        use vnc_relay_application::relay::ClosedSessionSnapshot;
         use vnc_relay_domain::handshake::Mode;
-        use vnc_relay_domain::session::{CloseCause, SessionId, Transport};
+        use vnc_relay_domain::session::{CloseCause, Id, Transport};
 
         for (mode, viewer_transport, target_transport) in [
             (Mode::Mode1, Transport::Tcp, Transport::Tcp),
@@ -166,9 +166,9 @@ mod tests {
         ] {
             let view = TerminateView {
                 as_of: SystemTime::UNIX_EPOCH,
-                result: AdminTerminateResult::Terminated,
+                result: AdminTerminateOutcome::Terminated,
                 closed_session: Arc::new(ClosedSessionSnapshot {
-                    session_id: SessionId::parse("ses_aaaaaaaaaaaaaaaaaaaaaaaaaa").unwrap(),
+                    session_id: Id::parse("ses_aaaaaaaaaaaaaaaaaaaaaaaaaa").unwrap(),
                     mode,
                     viewer_transport,
                     target_transport,

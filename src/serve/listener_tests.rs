@@ -11,11 +11,11 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::mpsc;
 use tokio::task::{AbortHandle, JoinHandle};
-use vnc_relay_adapters::listener::{Listener, is_fatal_accept_error};
-use vnc_relay_adapters::ops_log::format_line;
-use vnc_relay_app::lifecycle::Readiness;
-use vnc_relay_app::reload::ports::RuntimeSettingsSource;
-use vnc_relay_app::settings::KeepaliveSettings;
+use vnc_relay_adapters::listener::{self, Listener};
+use vnc_relay_adapters::ops_log;
+use vnc_relay_application::lifecycle::Readiness;
+use vnc_relay_application::reload::ports::RuntimeSettingsSource;
+use vnc_relay_application::settings::KeepaliveSettings;
 use vnc_relay_domain::allow_list::{AllowList, IpItem};
 use vnc_relay_domain::handshake::{HANDSHAKE_REQUEST_LEN, VIEWER_GREETING};
 
@@ -35,9 +35,9 @@ async fn bounded<T>(future: impl Future<Output = T>) -> T {
 }
 
 #[derive(Default)]
-struct Recorder(Mutex<Vec<Value>>);
+struct SpyEventSink(Mutex<Vec<Value>>);
 
-impl Recorder {
+impl SpyEventSink {
     fn lines(&self) -> Vec<Value> {
         self.0
             .lock()
@@ -57,9 +57,9 @@ impl Recorder {
     }
 }
 
-impl EventSink for Recorder {
+impl EventSink for SpyEventSink {
     fn record(&self, event: &Event) {
-        let line = format_line(event, SystemTime::UNIX_EPOCH);
+        let line = ops_log::format_line(event, SystemTime::UNIX_EPOCH);
         let value = serde_json::from_str(&line)
             .unwrap_or_else(|error| panic!("actual event JSON: {error}"));
         self.0
@@ -69,12 +69,12 @@ impl EventSink for Recorder {
     }
 }
 
-struct FaultListener {
+struct FakeListener {
     inner: TcpListener,
     faults: mpsc::UnboundedReceiver<i32>,
 }
 
-impl Listener for FaultListener {
+impl Listener for FakeListener {
     async fn accept(&mut self) -> io::Result<(TcpStream, SocketAddr)> {
         tokio::select! {
             biased;
@@ -111,7 +111,7 @@ struct Running {
     budget: Arc<ConnectionBudget>,
     admin_budget: Arc<ConnectionBudget>,
     clock: Arc<dyn Clock>,
-    events: Arc<Recorder>,
+    events: Arc<SpyEventSink>,
     done: JoinHandle<u8>,
     abort: Vec<AbortHandle>,
 }
@@ -127,7 +127,7 @@ impl Running {
         let (requests, mut requested) = mpsc::unbounded_channel();
         let (stop, stopped) = watch::channel(false);
         let lifecycle = Arc::new(LifecycleService::new());
-        let events = Arc::new(Recorder::default());
+        let events = Arc::new(SpyEventSink::default());
         let log: Arc<dyn EventSink> = events.clone();
         log.record(&Event::ServerStarting);
         let budget = ConnectionBudget::new();
@@ -187,7 +187,7 @@ enabled = true
             Arc::clone(&settings),
         ));
         let service = Arc::new(RelayService::new(
-            HandshakePolicy {
+            handshake::Policy {
                 mode1_enabled: false,
                 mode2_enabled: true,
             },
@@ -213,7 +213,7 @@ enabled = true
             ),
         ] {
             let listener = SupervisedListener::new(
-                FaultListener { inner, faults },
+                FakeListener { inner, faults },
                 kind.listener().name(),
                 failures.clone(),
             );
@@ -232,7 +232,7 @@ enabled = true
         }
         let status = StatusListener::new(
             SupervisedListener::new(
-                FaultListener {
+                FakeListener {
                     inner: status,
                     faults: status_faults,
                 },
@@ -421,7 +421,9 @@ async fn listener_failures_retry_then_drive_fatal_grace_cleanup_and_preserve_req
         vec![23, 24, 12, 105, 95]
     };
     for code in transient {
-        assert!(!is_fatal_accept_error(&io::Error::from_raw_os_error(code)));
+        assert!(!listener::is_fatal_accept_error(
+            &io::Error::from_raw_os_error(code)
+        ));
     }
     // Both the relay and HTTP implementations retry descriptor exhaustion.
     let mut running = Running::start().await;
@@ -448,7 +450,7 @@ async fn listener_failures_retry_then_drive_fatal_grace_cleanup_and_preserve_req
     assert_eq!(started["grace_secs"], 2);
     assert_eq!(
         started["detail"],
-        ListenerFailure {
+        ListenerError {
             listener: "tcp_viewer",
             os_error: fatal_code()
         }
@@ -511,7 +513,7 @@ async fn listener_failures_retry_then_drive_fatal_grace_cleanup_and_preserve_req
     let event = running.events.event("shutdown_started").await;
     assert_eq!(
         event["detail"],
-        ListenerFailure {
+        ListenerError {
             listener: "status",
             os_error: fatal_code()
         }
@@ -595,7 +597,7 @@ async fn listener_failures_retry_then_drive_fatal_grace_cleanup_and_preserve_req
 
     // A ready console request wins simultaneous reports; the supervisor does not
     // reinterpret a listener error as CloseNow or as a second OS signal.
-    let (sender, mut failed) = watch::channel(Some(ListenerFailure {
+    let (sender, mut failed) = watch::channel(Some(ListenerError {
         listener: "status",
         os_error: fatal_code(),
     }));

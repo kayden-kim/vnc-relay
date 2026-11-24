@@ -49,7 +49,7 @@ impl Fixture {
                 .unwrap_or_else(|e| panic!("distribution port address: {e}"))
                 .port();
         }
-        let example = Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/relay.toml");
+        let example = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/relay.toml");
         let mut text = fs::read_to_string(example)
             .unwrap_or_else(|e| panic!("read distribution example: {e}"));
         // Only listener ports change; account and log paths remain relative.

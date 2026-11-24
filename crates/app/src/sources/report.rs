@@ -8,10 +8,10 @@ use std::net::IpAddr;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use vnc_relay_domain::ip_info::{Asn, CountryCode, is_local};
+use vnc_relay_domain::ip_info::{self, Asn, CountryCode};
 use vnc_relay_domain::peer_ip::PeerIp;
 
-use super::{CAPACITY, Kind, SourceEvent, SourceStats, lock, millis};
+use super::{CAPACITY, Kind, SourceEvent, SourceStats};
 use crate::ip_info::{IpDbStatus, IpInfoService};
 use crate::reload::ports::RuntimeSettingsSource;
 
@@ -149,10 +149,10 @@ impl SourcesService {
     /// Counts the events whose time is at least `window_start` and at most
     /// `as_of`. The store lock is held only to copy those events.
     pub fn report(&self, window: SourceWindow) -> SourcesReport {
-        let as_of = millis(self.stats.clock.wall());
+        let as_of = super::millis(self.stats.clock.wall());
         let start = as_of.saturating_sub(window_millis(window));
         let (events, stored, dropped_before) = {
-            let store = lock(&self.stats.store);
+            let store = super::lock(&self.stats.store);
             let from = store.events.partition_point(|event| event.at < start);
             let to = store.events.partition_point(|event| event.at <= as_of);
             let events: Vec<SourceEvent> =
@@ -216,7 +216,7 @@ impl SourcesService {
             .into_iter()
             .map(|(ip, tally)| AddressItem {
                 ip,
-                local: is_local(ip),
+                local: ip_info::is_local(ip),
                 country: tally.country,
                 asn: tally.asn,
                 as_name: name_of(ip, tally.asn),

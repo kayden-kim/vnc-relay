@@ -9,7 +9,7 @@ use std::sync::{Mutex, PoisonError};
 use std::time::{Duration, Instant};
 
 use vnc_relay_adapters::accounts_file::Argon2PasswordHashGateway;
-use vnc_relay_app::ports::PasswordHashGateway;
+use vnc_relay_application::ports::PasswordHashGateway;
 use vnc_relay_domain::account::{Argon2Params, Password};
 
 const LIMIT: Duration = Duration::from_secs(20);

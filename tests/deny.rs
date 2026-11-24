@@ -6,21 +6,13 @@
 //! `127.0.0.1`. WebSocket checks go through the trusted loopback proxy and
 //! use documentation addresses (RFC 5737, RFC 3849).
 
-#[expect(
-    dead_code,
-    unused_imports,
-    reason = "the shared live-process module also carries browser helpers"
-)]
-#[path = "common/dashboard_live.rs"]
-mod live;
-
 use std::fs;
 use std::io::{Read, Write};
 use std::net::TcpStream;
 use std::process::{Command, Stdio};
 
-use live::{Admin, LIMIT, Reply, Server, connect, initial, must, wait_for};
 use serde_json::{Value, json};
+use vnc_relay_testkit::live::{self, Admin, LIMIT, Reply, Server};
 
 /// Trusts the loopback proxy on the WS listener and allows the documentation
 /// clients on the WS Viewer path.
@@ -50,7 +42,7 @@ fn wait_for_event(server: &Server, label: &str, fields: &Value) -> Value {
         .as_object()
         .unwrap_or_else(|| panic!("event fields are an object"));
     let mut found = Value::Null;
-    wait_for(label, LIMIT, || {
+    live::wait_for(label, LIMIT, || {
         if let Some(event) = log_events(server)
             .into_iter()
             .find(|event| wanted.iter().all(|(key, value)| &event[key] == value))
@@ -77,7 +69,7 @@ fn deny_by_file(server: &Server, sources: &str) {
 
 /// The peer closed the connection without sending any byte.
 fn assert_closed_silently(mut stream: TcpStream) {
-    must(stream.set_read_timeout(Some(LIMIT)));
+    live::must(stream.set_read_timeout(Some(LIMIT)));
     let mut byte = [0; 1];
     assert_eq!(
         stream.read(&mut byte).unwrap_or(0),
@@ -89,15 +81,15 @@ fn assert_closed_silently(mut stream: TcpStream) {
 /// Opens a WebSocket Viewer through the trusted loopback proxy for `client`.
 /// Returns the status and, after `101`, the open stream.
 fn ws_from(server: &Server, client: &str) -> (u16, TcpStream) {
-    let mut stream = connect(server.ws_port);
+    let mut stream = live::connect(server.ws_port);
     let request = format!(
         "GET /relay/viewer HTTP/1.1\r\nHost: localhost\r\nOrigin: http://127.0.0.1\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Protocol: binary\r\nX-Forwarded-For: {client}\r\n\r\n"
     );
-    must(stream.write_all(request.as_bytes()));
+    live::must(stream.write_all(request.as_bytes()));
     let mut head = Vec::new();
     while !head.ends_with(b"\r\n\r\n") {
         let mut byte = [0];
-        must(stream.read_exact(&mut byte));
+        live::must(stream.read_exact(&mut byte));
         head.push(byte[0]);
         assert!(head.len() < 16384, "bounded WebSocket reply head");
     }
@@ -112,38 +104,38 @@ fn ws_from(server: &Server, client: &str) -> (u16, TcpStream) {
 /// One server frame: opcode and payload. Server frames are never masked.
 fn read_frame(stream: &mut TcpStream) -> (u8, Vec<u8>) {
     let mut head = [0; 2];
-    must(stream.read_exact(&mut head));
+    live::must(stream.read_exact(&mut head));
     let len = match head[1] & 0x7f {
         126 => {
             let mut bytes = [0; 2];
-            must(stream.read_exact(&mut bytes));
+            live::must(stream.read_exact(&mut bytes));
             usize::from(u16::from_be_bytes(bytes))
         }
         127 => {
             let mut bytes = [0; 8];
-            must(stream.read_exact(&mut bytes));
+            live::must(stream.read_exact(&mut bytes));
             usize::try_from(u64::from_be_bytes(bytes)).unwrap_or_else(|_| panic!("frame size"))
         }
         len => usize::from(len),
     };
     let mut payload = vec![0; len];
-    must(stream.read_exact(&mut payload));
+    live::must(stream.read_exact(&mut payload));
     (head[0] & 0x0f, payload)
 }
 
 /// Sends the initial request in one masked binary frame (a zero mask key).
 fn ws_request(stream: &mut TcpStream, request: &str) {
-    let payload = initial(request);
+    let payload = live::initial(request);
     let mut frame = vec![0x82, 0x80 | 126, 0, 250, 0, 0, 0, 0];
     frame.extend_from_slice(&payload);
-    must(stream.write_all(&frame));
+    live::must(stream.write_all(&frame));
 }
 
 /// Opens a WS Viewer for `client` and sends `ID:<id>` after the greeting.
 fn ws_viewer(server: &Server, client: &str, id: &str) -> TcpStream {
     let (status, mut stream) = ws_from(server, client);
     assert_eq!(status, 101, "{client} upgrades");
-    must(stream.set_read_timeout(Some(LIMIT)));
+    live::must(stream.set_read_timeout(Some(LIMIT)));
     let (opcode, greeting) = read_frame(&mut stream);
     assert_eq!((opcode, greeting.as_slice()), (2, &b"RFB 000.000\n"[..]));
     ws_request(&mut stream, &format!("ID:{id}"));
@@ -199,7 +191,7 @@ fn sign_in(server: &Server) -> Editor {
         .and_then(|(_, value)| value.trim().split(';').next())
         .unwrap_or_else(|| panic!("login cookie"))
         .to_owned();
-    let view: Value = must(serde_json::from_str(&reply.body));
+    let view: Value = live::must(serde_json::from_str(&reply.body));
     let csrf = view["csrf_token"]
         .as_str()
         .unwrap_or_else(|| panic!("csrf token"))
@@ -210,7 +202,7 @@ fn sign_in(server: &Server) -> Editor {
 fn get(server: &Server, editor: &Editor, path: &str) -> Value {
     let reply = server.request("GET", path, &[("Cookie", editor.cookie.as_str())], b"");
     assert_eq!(reply.status, 200, "{path}: {}", reply.body);
-    must(serde_json::from_str(&reply.body))
+    live::must(serde_json::from_str(&reply.body))
 }
 
 fn patch(server: &Server, editor: &Editor, changes: Value) -> Reply {
@@ -249,7 +241,7 @@ fn file_reload_closes_denied_tcp_connections_and_refuses_new_ones_at_accept() {
     let server = Server::start("deny-tcp", None);
     let admin = server.login();
     let _waiting = server.waiting("4101");
-    wait_for("TCP Viewer waiting", LIMIT, || {
+    live::wait_for("TCP Viewer waiting", LIMIT, || {
         waiting_ids(&server, &admin).contains(&"4101".to_owned())
     });
     let _pair = server.pair(&admin, "II", "4102");
@@ -269,7 +261,7 @@ fn file_reload_closes_denied_tcp_connections_and_refuses_new_ones_at_accept() {
     );
     assert_eq!(closed["level"], "info");
     assert!(closed.get("side").is_none(), "{closed}");
-    wait_for("registries emptied", LIMIT, || {
+    live::wait_for("registries emptied", LIMIT, || {
         waiting_ids(&server, &admin).is_empty()
             && server.query(&admin, "/api/v1/sessions")["items"]
                 .as_array()
@@ -277,7 +269,7 @@ fn file_reload_closes_denied_tcp_connections_and_refuses_new_ones_at_accept() {
     });
 
     // New TCP connections close before any byte, with an accept-stage reason.
-    assert_closed_silently(connect(server.ports[2]));
+    assert_closed_silently(live::connect(server.ports[2]));
     let rejected = wait_for_event(
         &server,
         "TCP accept refused",
@@ -287,7 +279,7 @@ fn file_reload_closes_denied_tcp_connections_and_refuses_new_ones_at_accept() {
     assert_eq!(rejected["level"], "warn");
 
     // A direct WS peer outside `trusted_proxies` closes before the HTTP answer.
-    let mut ws = connect(server.ws_port);
+    let mut ws = live::connect(server.ws_port);
     let _ = ws.write_all(b"GET /relay/viewer HTTP/1.1\r\nHost: localhost\r\n\r\n");
     assert_closed_silently(ws);
     wait_for_event(
@@ -306,13 +298,13 @@ fn websocket_clients_of_a_new_deny_item_close_with_4014_and_new_upgrades_get_403
         Server::start_with_config_transform("deny-ws", None, false, |config, _| proxied(config));
     let admin = server.login();
     let mut waiting = ws_viewer(&server, "198.51.100.8", "4201");
-    wait_for("WS Viewer waiting", LIMIT, || {
+    live::wait_for("WS Viewer waiting", LIMIT, || {
         waiting_ids(&server, &admin).contains(&"4201".to_owned())
     });
     let mut active = ws_viewer(&server, "198.51.100.9", "4202");
-    let mut target = connect(server.ports[3]);
-    must(target.write_all(&initial("ID:4202")));
-    wait_for("WS session active", LIMIT, || {
+    let mut target = live::connect(server.ports[3]);
+    live::must(target.write_all(&live::initial("ID:4202")));
+    live::wait_for("WS session active", LIMIT, || {
         server.query(&admin, "/api/v1/sessions")["items"]
             .as_array()
             .is_some_and(|items| !items.is_empty())
@@ -357,7 +349,7 @@ fn deny_items_are_edited_through_the_api_and_listed_per_source_address() {
         json!({"relay.deny.sources": ["198.51.100.7", "198.51.100.0/24"]}),
     );
     assert_eq!(applied.status, 200, "{}", applied.body);
-    let body: Value = must(serde_json::from_str(&applied.body));
+    let body: Value = live::must(serde_json::from_str(&applied.body));
     assert_eq!(body["applied"], json!(["relay.deny.sources"]));
     assert!(
         server
@@ -381,7 +373,7 @@ fn deny_items_are_edited_through_the_api_and_listed_per_source_address() {
     assert_eq!(ws_from(&server, "198.51.100.7").0, 403);
     assert_eq!(ws_from(&server, "2001:db8::5").0, 101);
     let mut sources = Value::Null;
-    wait_for("both addresses counted", LIMIT, || {
+    live::wait_for("both addresses counted", LIMIT, || {
         sources = get(&server, &editor, "/api/v1/sources");
         address(&sources, "198.51.100.7").is_some() && address(&sources, "2001:db8::5").is_some()
     });
@@ -402,7 +394,7 @@ fn deny_items_are_edited_through_the_api_and_listed_per_source_address() {
         json!({"relay.deny.sources": ["198.51.100.7", "127.0.0.0/8"]}),
     );
     assert_eq!(overlap.status, 400, "{}", overlap.body);
-    let body: Value = must(serde_json::from_str(&overlap.body));
+    let body: Value = live::must(serde_json::from_str(&overlap.body));
     assert_eq!(body["error"]["code"], "config_invalid");
     assert_eq!(
         body["error"]["diagnostics"][0]["code"],
@@ -431,7 +423,7 @@ fn deny_items_are_edited_through_the_api_and_listed_per_source_address() {
         json!({"relay.deny.sources": ["198.51.100.7"]}),
     );
     assert_eq!(refused.status, 403, "{}", refused.body);
-    let body: Value = must(serde_json::from_str(&refused.body));
+    let body: Value = live::must(serde_json::from_str(&refused.body));
     assert_eq!(body["error"]["code"], "config_edit_disabled");
 }
 
@@ -439,8 +431,8 @@ fn deny_items_are_edited_through_the_api_and_listed_per_source_address() {
 #[test]
 fn startup_exits_3_when_a_deny_item_overlaps_an_enabled_trusted_proxy() {
     let dir = std::env::temp_dir().join(format!("vnc-relay-deny-start-{}", std::process::id()));
-    must(fs::create_dir_all(&dir));
-    must(fs::write(
+    live::must(fs::create_dir_all(&dir));
+    live::must(fs::write(
         dir.join("relay.toml"),
         r#"
 [admin]
@@ -462,7 +454,7 @@ allowed_origins = ["http://127.0.0.1"]
 sources = ["203.0.113.9", "192.0.2.0/24"]
 "#,
     ));
-    let output = must(
+    let output = live::must(
         Command::new(env!("CARGO_BIN_EXE_vnc-relay"))
             .args(["serve", "--config"])
             .arg(dir.join("relay.toml"))

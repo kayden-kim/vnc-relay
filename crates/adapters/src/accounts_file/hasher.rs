@@ -2,10 +2,10 @@
 //! Design: docs/architectures/admin-accounts.md.
 
 use argon2::{Algorithm, Argon2, Params, PasswordHasher as _, PasswordVerifier as _, Version};
-use vnc_relay_app::ports::{HashError, PasswordHashGateway, PasswordVerifyGateway};
+use vnc_relay_application::ports::{HashError, PasswordHashGateway, PasswordVerifyGateway};
 use vnc_relay_domain::account::{Argon2Params, Password, PasswordHash};
 
-use crate::crypto::random_bytes;
+use crate::crypto;
 
 const SALT_BYTES: usize = 16;
 const HASH_BYTES: usize = 32;
@@ -18,7 +18,7 @@ pub struct Argon2PasswordHashGateway;
 impl PasswordHashGateway for Argon2PasswordHashGateway {
     fn hash(&self, password: &Password, params: Argon2Params) -> Result<PasswordHash, HashError> {
         let mut salt = [0u8; SALT_BYTES];
-        random_bytes(&mut salt).map_err(|e| HashError(e.to_string()))?;
+        crypto::random_bytes(&mut salt).map_err(|e| HashError(e.to_string()))?;
         let params = Params::new(
             params.memory_kib,
             params.iterations,

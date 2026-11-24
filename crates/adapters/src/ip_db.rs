@@ -12,10 +12,10 @@ use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
 use maxminddb::{LookupResult, PathElement, Reader, WithinOptions};
-use vnc_relay_app::ip_info::{
-    Fingerprint, IpDbError, IpDbFailure, IpDbKey, IpDbMetadata, IpDbRead,
+use vnc_relay_application::ip_info::{
+    Fingerprint, IpDbError, IpDbKey, IpDbMetadata, IpDbRead, IpDbReadError,
 };
-use vnc_relay_app::ports::{IpDbFileGateway, IpDbLookupGateway};
+use vnc_relay_application::ports::{IpDbFileGateway, IpDbLookupGateway};
 use vnc_relay_domain::ip_info::{Asn, CountryCode};
 
 /// Largest file read: 256 MiB (config-v4 §1.12).
@@ -71,18 +71,18 @@ impl IpDbFileGateway for MmdbFileGateway {
 }
 
 /// The file's bytes and a hash of them, or why it cannot be used.
-fn read_bytes(path: &Path) -> Result<(Vec<u8>, u64), (Fingerprint, IpDbError)> {
+fn read_bytes(path: &Path) -> Result<(Vec<u8>, u64), (Fingerprint, IpDbReadError)> {
     let unreadable = |error: std::io::Error| {
         (
             Fingerprint::Unreadable,
-            failure(IpDbFailure::FileUnreadable, io_cause(&error)),
+            failure(IpDbError::FileUnreadable, io_cause(&error)),
         )
     };
     let too_large = |size: u64| {
         (
             Fingerprint::TooLarge(size),
             failure(
-                IpDbFailure::FileTooLarge,
+                IpDbError::FileTooLarge,
                 "파일이 256 MiB를 넘는다.".to_owned(),
             ),
         )
@@ -93,7 +93,7 @@ fn read_bytes(path: &Path) -> Result<(Vec<u8>, u64), (Fingerprint, IpDbError)> {
         return Err((
             Fingerprint::Unreadable,
             failure(
-                IpDbFailure::FileUnreadable,
+                IpDbError::FileUnreadable,
                 "파일이 아니라 디렉터리다.".to_owned(),
             ),
         ));
@@ -125,8 +125,8 @@ fn io_cause(error: &std::io::Error) -> String {
     }
 }
 
-fn failure(failure: IpDbFailure, detail: String) -> IpDbError {
-    IpDbError {
+fn failure(failure: IpDbError, detail: String) -> IpDbReadError {
+    IpDbReadError {
         failure,
         detail: Some(detail),
     }
@@ -134,8 +134,8 @@ fn failure(failure: IpDbFailure, detail: String) -> IpDbError {
 
 /// Checks the whole file and picks the fields. The detail sentences are
 /// fixed: messages from the reader can quote keys from the file.
-fn open(bytes: Vec<u8>) -> Result<MmdbLookupGateway, IpDbError> {
-    let invalid = |detail: &str| failure(IpDbFailure::InvalidFormat, detail.to_owned());
+fn open(bytes: Vec<u8>) -> Result<MmdbLookupGateway, IpDbReadError> {
+    let invalid = |detail: &str| failure(IpDbError::InvalidFormat, detail.to_owned());
     // `from_source` also rejects a binary format major version other than 2.
     let reader = Reader::from_source(bytes)
         .map_err(|_| invalid("MMDB 2.x 메타데이터나 검색 트리를 읽지 못했다."))?;

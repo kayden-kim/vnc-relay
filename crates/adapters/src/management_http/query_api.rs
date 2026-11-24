@@ -10,15 +10,15 @@ use axum::http::request::Parts;
 use axum::http::{Method, StatusCode};
 use axum::response::Response;
 use serde_json::json;
-use vnc_relay_app::management::query::{
+use vnc_relay_application::management::query::{
     ActiveSessionItemView, ClosedSessionsView, SessionDetailView, SessionListView,
     SessionQueryError, SummaryView, WaitingListView,
 };
-use vnc_relay_app::management::session::AuthorizedAdmin;
+use vnc_relay_application::management::session::AuthorizedAdmin;
 
-use super::session_api::{media_type_allows, poll_flag};
-use super::{Shared, json_error, json_response, method_not_allowed, not_found};
-use crate::clock::timestamp;
+use super::Shared;
+use super::session_api;
+use crate::clock;
 
 const SUMMARY_PATH: &str = "/api/v1/summary";
 const WAITING_PATH: &str = "/api/v1/waiting";
@@ -59,23 +59,23 @@ pub(super) async fn answer(
             .is_some_and(|id| !id.contains('/'));
 
     if !is_query_path {
-        return not_found();
+        return super::not_found();
     }
 
     if parts.method != Method::GET {
-        return method_not_allowed("GET", "이 경로는 GET 요청만 받는다.");
+        return super::method_not_allowed("GET", "이 경로는 GET 요청만 받는다.");
     }
 
-    match poll_flag(&parts.headers) {
-        None => return json_error(StatusCode::BAD_REQUEST, "invalid_request", POLL_MESSAGE),
+    match session_api::poll_flag(&parts.headers) {
+        None => return super::json_error(StatusCode::BAD_REQUEST, "invalid_request", POLL_MESSAGE),
         Some(false) => {
             shared.auth.touch(admin);
         }
         Some(true) => {}
     }
 
-    if !media_type_allows(body, &parts.headers).await {
-        return json_error(
+    if !session_api::media_type_allows(body, &parts.headers).await {
+        return super::json_error(
             StatusCode::UNSUPPORTED_MEDIA_TYPE,
             "invalid_request",
             MEDIA_TYPE_MESSAGE,
@@ -96,16 +96,16 @@ pub(super) async fn answer(
     }
     if let Some(rest) = path.strip_prefix(SESSIONS_PREFIX) {
         if rest.contains('/') {
-            return not_found();
+            return super::not_found();
         }
         return match shared.query.session_detail(rest) {
             Ok(detail) => session_detail_response(&detail),
-            Err(SessionQueryError::InvalidId) => json_error(
+            Err(SessionQueryError::InvalidId) => super::json_error(
                 StatusCode::BAD_REQUEST,
                 "invalid_request",
                 INVALID_SESSION_ID_MESSAGE,
             ),
-            Err(SessionQueryError::NotFound) => json_error(
+            Err(SessionQueryError::NotFound) => super::json_error(
                 StatusCode::NOT_FOUND,
                 "not_found",
                 NOT_FOUND_SESSION_MESSAGE,
@@ -113,13 +113,13 @@ pub(super) async fn answer(
         };
     }
 
-    not_found()
+    super::not_found()
 }
 
 fn summary_response(view: &SummaryView) -> Response {
     // Design §7: counts and budgets have no failure path; the contract requires the unavailable_reason fields, which are null when current is present.
     let body = json!({
-        "as_of": timestamp(view.as_of),
+        "as_of": clock::timestamp(view.as_of),
         "server": {
             "state": view.server.state,
             "uptime_ms": view.server.uptime_ms,
@@ -145,7 +145,7 @@ fn summary_response(view: &SummaryView) -> Response {
             },
         },
     });
-    json_response(StatusCode::OK, &body)
+    super::json_response(StatusCode::OK, &body)
 }
 
 fn waiting_response(view: &WaitingListView) -> Response {
@@ -156,7 +156,7 @@ fn waiting_response(view: &WaitingListView) -> Response {
             json!({
                 "role": item.role,
                 "relay_id": item.relay_id,
-                "connected_at": timestamp(item.connected_at),
+                "connected_at": clock::timestamp(item.connected_at),
                 "waited_ms": item.waited_ms,
                 "transport": item.transport,
                 "address": format_address(&item.address),
@@ -165,10 +165,10 @@ fn waiting_response(view: &WaitingListView) -> Response {
         })
         .collect();
     let body = json!({
-        "as_of": timestamp(view.as_of),
+        "as_of": clock::timestamp(view.as_of),
         "items": items,
     });
-    json_response(StatusCode::OK, &body)
+    super::json_response(StatusCode::OK, &body)
 }
 
 fn session_item_json(item: &ActiveSessionItemView) -> serde_json::Value {
@@ -178,7 +178,7 @@ fn session_item_json(item: &ActiveSessionItemView) -> serde_json::Value {
         "mode": item.mode,
         "viewer_transport": item.viewer_transport,
         "target_transport": item.target_transport,
-        "started_at": timestamp(item.started_at),
+        "started_at": clock::timestamp(item.started_at),
         "bytes_viewer_to_target": item.bytes_viewer_to_target,
         "bytes_target_to_viewer": item.bytes_target_to_viewer,
         "viewer_address": format_address(&item.viewer_address),
@@ -191,18 +191,18 @@ fn session_item_json(item: &ActiveSessionItemView) -> serde_json::Value {
 fn sessions_response(view: &SessionListView) -> Response {
     let items: Vec<_> = view.items.iter().map(session_item_json).collect();
     let body = json!({
-        "as_of": timestamp(view.as_of),
+        "as_of": clock::timestamp(view.as_of),
         "items": items,
     });
-    json_response(StatusCode::OK, &body)
+    super::json_response(StatusCode::OK, &body)
 }
 
 fn session_detail_response(view: &SessionDetailView) -> Response {
     let body = json!({
-        "as_of": timestamp(view.as_of),
+        "as_of": clock::timestamp(view.as_of),
         "session": session_item_json(&view.session),
     });
-    json_response(StatusCode::OK, &body)
+    super::json_response(StatusCode::OK, &body)
 }
 
 fn closed_sessions_response(view: &ClosedSessionsView) -> Response {
@@ -215,8 +215,8 @@ fn closed_sessions_response(view: &ClosedSessionsView) -> Response {
                 "mode": item.mode,
                 "viewer_transport": item.viewer_transport,
                 "target_transport": item.target_transport,
-                "started_at": timestamp(item.started_at),
-                "ended_at": timestamp(item.ended_at),
+                "started_at": clock::timestamp(item.started_at),
+                "ended_at": clock::timestamp(item.ended_at),
                 "duration_ms": item.duration_ms,
                 "bytes_viewer_to_target": item.bytes_viewer_to_target,
                 "bytes_target_to_viewer": item.bytes_target_to_viewer,
@@ -229,18 +229,18 @@ fn closed_sessions_response(view: &ClosedSessionsView) -> Response {
         })
         .collect();
     let body = json!({
-        "as_of": timestamp(view.as_of),
+        "as_of": clock::timestamp(view.as_of),
         "max_entries": view.max_entries,
         "items": items,
     });
-    json_response(StatusCode::OK, &body)
+    super::json_response(StatusCode::OK, &body)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::time::SystemTime;
-    use vnc_relay_app::management::query::ClosedSessionItemView;
+    use vnc_relay_application::management::query::ClosedSessionItemView;
     use vnc_relay_domain::peer_ip::PeerIp;
 
     async fn response_json(response: Response) -> serde_json::Value {
@@ -271,7 +271,7 @@ mod tests {
     /// spec: management.md:MGT-054 partial
     #[tokio::test]
     async fn waiting_outputs_transport_canonical_socket_and_required_forwarded_ip() {
-        use vnc_relay_app::management::query::WaitingItemView;
+        use vnc_relay_application::management::query::WaitingItemView;
         for role in ["viewer", "server"] {
             for transport in ["tcp", "ws", "wss"] {
                 for forwarded_ip in [None, Some(PeerIp::new("2001:0DB8::7".parse().unwrap()))] {
@@ -294,7 +294,10 @@ mod tests {
                     let item = &list["items"][0];
                     assert_eq!(item["role"], role);
                     assert_eq!(item["relay_id"], "00123");
-                    assert_eq!(item["connected_at"], timestamp(SystemTime::UNIX_EPOCH));
+                    assert_eq!(
+                        item["connected_at"],
+                        clock::timestamp(SystemTime::UNIX_EPOCH)
+                    );
                     assert_eq!(item["waited_ms"], 42);
                     assert_eq!(item["transport"], transport);
                     assert_eq!(item["address"], json!({"ip": "192.0.2.1", "port": 5000}));

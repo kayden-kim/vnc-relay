@@ -21,7 +21,7 @@ Windows 서비스는 같은 서버 시작 경로를 터미널 대신 서비스 �
 - `crates/adapters/src/windows_service.rs`는 서비스 등록·삭제, 제어 처리기, 상태 보고를 맡는다. 중계 규칙이나 G 계산은 맡지 않는다.
 - 설치는 파일 ACL을 검사하거나 바꾸지 않는다. 관리자 권한으로 검사한 파일을 서비스 계정도 읽을 수 있다고 보장하지 않는다. 파일 권한과 운영 절차는 [운영 안내](../how-to/operate-relay.md)가 맡는다.
 - 트레이의 메뉴·준비 상태 조회·로그인할 때 시작은 [트레이 모듈](windows-tray.md)이 맡는다.
-- 조립 진입점은 `service::run`이다. adapters의 공개 경계는 `Scm`, `Installed`, `lookup_operator`, `run`, `ServiceSession`, `StatusReporter`, `StopControl`이다.
+- 조립 진입점은 `service::run`이다. adapters의 공개 경계는 `Scm`, `Installed`, `lookup_operator`, `run`, `ServiceSession`, `StatusReporter`, `StopRequest`이다.
 
 ## 2. 내부 구조
 
@@ -37,7 +37,7 @@ flowchart LR
     SERVICE -->|"run_service"| DISPATCH["adapters/windows_service.rs run / service_main"]
     DISPATCH -->|"ServiceSession을 body에 전달"| START["src/serve.rs start / Host::Service"]
     START -->|"준비·종료 상태"| STATUS["StatusReporter"]
-    DISPATCH -->|"StopControl 채널"| START
+    DISPATCH -->|"StopRequest 채널"| START
 ```
 
 | 요소(파일·심볼) | 역할 | 만들어지는 시점과 소유자 | 의존 대상 |
@@ -58,11 +58,11 @@ flowchart LR
 | 이름 | 필드·형태 | 저장 위치 | 제약과 항상 지켜야 할 조건 |
 | --- | --- | --- | --- |
 | `ServiceAction` | `Install { config, operators }`, `Uninstall`, `Run { config }` | 메모리 | Windows에서만 정의한다. |
-| `Failure` | `Reported(u8)` 또는 `Error { code, message, exit }` | 명령 반환 값 | 이미 출력한 파일 진단은 다시 출력하지 않는다. |
+| `ServiceError` | `Reported(u8)` 또는 `Error { code, message, exit }` | 명령 반환 값 | 이미 출력한 파일 진단은 다시 출력하지 않는다. |
 | `Operator` | 정렬을 보장하는 `Vec<u32>` SID와 trustee 종류 | 설치 동안 | 사용자·그룹 종류만 받는다. |
 | `ScmError` | 원시 OS 번호 `i32` | 오류 반환 값 | OS 번호 없는 라이브러리 오류는 87이다. |
 | `ServiceSession` | `controls`, `status` | 서버 body | 제어 수신기와 복제 가능한 상태 보고자를 전달한다. |
-| `StopControl` | `Stop`, `SystemShutdown` | 무제한 mpsc 채널 | 도착 순서대로 처리한다. |
+| `StopRequest` | `Stop`, `SystemShutdown` | 무제한 mpsc 채널 | 도착 순서대로 처리한다. |
 | `Progress` | `state`, `checkpoint` | `Reporter`의 Mutex | Stopped 뒤에는 다른 상태로 바꾸지 않는다. |
 | `BODY`, `OUTCOME` | 서비스 body와 반환 결과의 `Mutex<Option<_>>` | 프로세스 정적 메모리 | dispatcher가 요구하는 일반 함수와 main 스레드를 잇는다. 한 프로세스의 서비스 실행 한 번을 전제로 한다. |
 
@@ -90,7 +90,7 @@ flowchart LR
 2. body는 `cli::silence`를 호출한 뒤 `serve::start(config, Host::Service(session))`를 실행한다. 설정 오류와 로그 열기 전 실패도 stdout·stderr에 쓰지 않는다.
 3. `start`는 `serve`와 같은 순서로 서버를 준비한다. 서비스에서 `log.output = "stdout"`은 거절한다. 로그 파일을 연 뒤의 시작 오류는 운영 로그에 남긴다.
 4. 서버가 준비됨에 들어가면 `HostStatus::ready`가 `StatusReporter::running`을 부른다. 시작 실패이면 이 단계를 거치지 않는다.
-5. 처리기는 Stop을 `StopControl::Stop`, Shutdown을 `StopControl::SystemShutdown`으로 보낸다. Interrogate에는 성공으로 답하고 그 밖의 제어는 NotImplemented다. `Requests::wait`는 각각 `ShutdownRequest::Requested`, `CloseNow`로 바꾼다. 콘솔 신호는 등록하지 않는다.
+5. 처리기는 Stop을 `StopRequest::Stop`, Shutdown을 `StopRequest::SystemShutdown`으로 보낸다. Interrogate에는 성공으로 답하고 그 밖의 제어는 NotImplemented다. `Requests::wait`는 각각 `ShutdownRequest::Requested`, `CloseNow`로 바꾼다. 콘솔 신호는 등록하지 않는다.
 6. 서버가 종료를 시작하면 `HostStatus::stopping`이 StopPending을 보고한다. Stop은 현재 G를 적용한다. SystemShutdown은 기존 콘솔 닫기와 같은 즉시 강제 정리 경로를 쓴다.
 7. body가 반환하면 `service_main`이 Stopped를 보고한다. 0은 NO_ERROR, 그 밖은 `ServiceSpecific(code)`다. dispatcher가 돌아오면 프로세스도 그 코드로 끝난다.
 

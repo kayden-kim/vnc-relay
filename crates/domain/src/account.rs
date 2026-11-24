@@ -6,7 +6,7 @@ use std::ops::RangeInclusive;
 
 /// Account name: 1 to 32 characters from `a-z`, `0-9`, `.`, `_`, `-`.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct AccountName(String);
+pub struct Name(String);
 
 /// The text breaks the account name rule.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -20,7 +20,7 @@ impl fmt::Display for AccountNameError {
 
 impl std::error::Error for AccountNameError {}
 
-impl AccountName {
+impl Name {
     pub const MAX_LEN: usize = 32;
 
     pub fn parse(text: &str) -> Result<Self, AccountNameError> {
@@ -37,7 +37,7 @@ impl AccountName {
     }
 }
 
-impl fmt::Display for AccountName {
+impl fmt::Display for Name {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(&self.0)
     }
@@ -258,7 +258,7 @@ impl fmt::Debug for PasswordHash {
 /// One administrator account from the account file.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Account {
-    pub name: AccountName,
+    pub name: Name,
     pub password_hash: PasswordHash,
 }
 
@@ -322,7 +322,7 @@ mod tests {
         let longest = "a".repeat(32);
         for name in ["a", "alice", "ops.team_1-x", longest.as_str()] {
             assert_eq!(
-                AccountName::parse(name).map(|n| n.to_string()),
+                Name::parse(name).map(|n| n.to_string()),
                 Ok(name.to_owned())
             );
         }
@@ -336,7 +336,7 @@ mod tests {
             "a/b",
             "a@b",
         ] {
-            assert_eq!(AccountName::parse(name), Err(AccountNameError), "{name}");
+            assert_eq!(Name::parse(name), Err(AccountNameError), "{name}");
         }
     }
 

@@ -6,8 +6,8 @@ use std::time::{Duration, Instant};
 
 use serde_json::json;
 
-use super::cdp::Browser;
-use super::{LIMIT, PASSWORD, Server, must};
+use crate::cdp::Browser;
+use crate::live::{self, LIMIT, PASSWORD, Server};
 
 impl Browser {
     pub fn reload(&mut self) {
@@ -25,7 +25,7 @@ impl Browser {
     }
 
     pub fn click(&mut self, selector: &str) {
-        let selector = must(serde_json::to_string(selector));
+        let selector = live::must(serde_json::to_string(selector));
         self.wait(&format!("(()=>{{const e=document.querySelector({selector});return !!e&&e.getBoundingClientRect().width>0}})()"));
         let point = self.eval(&format!("(()=>{{const e=document.querySelector({selector});e.scrollIntoView({{block:'center'}});const r=e.getBoundingClientRect();return {{x:r.x+r.width/2,y:r.y+r.height/2}}}})()"));
         let x = point["x"].as_f64().unwrap_or(0.0);
@@ -41,7 +41,7 @@ impl Browser {
     }
 
     pub fn fill(&mut self, selector: &str, value: &str) {
-        let selector = must(serde_json::to_string(selector));
+        let selector = live::must(serde_json::to_string(selector));
         self.wait(&format!("document.querySelector({selector}) !== null"));
         self.eval(&format!(
             "(()=>{{const e=document.querySelector({selector});e.focus();e.select()}})()"

@@ -1,7 +1,7 @@
 //! Safe registry access; startup never writes the Run value.
 
 use crate::copy::Language;
-use crate::rules::{Reason, language_tag, run_value_matches};
+use crate::rules::{self, Reason};
 use std::path::Path;
 use windows_registry::{CURRENT_USER, LOCAL_MACHINE};
 
@@ -20,7 +20,7 @@ pub fn language() -> Language {
             && let Ok(tags) = key.get_multi_string(name)
             && let Some(tag) = tags.first().filter(|tag| !tag.is_empty())
         {
-            return language_tag(tag);
+            return rules::language_tag(tag);
         }
     }
     if LOCAL_MACHINE
@@ -38,7 +38,7 @@ pub fn sign_in(executable: &Path) -> bool {
     CURRENT_USER
         .open(RUN)
         .and_then(|key| key.get_string(VALUE))
-        .is_ok_and(|value| run_value_matches(&value, &executable.to_string_lossy()))
+        .is_ok_and(|value| rules::run_value_matches(&value, &executable.to_string_lossy()))
 }
 
 pub fn toggle_sign_in(executable: &Path) -> Result<(), Reason> {

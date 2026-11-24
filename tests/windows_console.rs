@@ -1,19 +1,12 @@
 //! Real Windows console input, control events, and shutdown through ConPTY.
 #![cfg(windows)]
 
-#[path = "common/shutdown.rs"]
-mod shutdown;
-
-#[path = "common/distribution.rs"]
-mod distribution;
-
-#[path = "common/log_reopen.rs"]
-mod log_reopen;
-
 use std::path::Path;
 use std::time::{Duration, Instant};
 
-use shutdown::ServerProcess;
+use vnc_relay_testkit::distribution;
+use vnc_relay_testkit::log_reopen;
+use vnc_relay_testkit::shutdown::{self, Admin, Fixture, RelayPair, Reply, ServerProcess};
 
 const BIN: &str = env!("CARGO_BIN_EXE_vnc-relay");
 const LIMIT: Duration = Duration::from_secs(20);
@@ -40,21 +33,18 @@ mod pseudo_console {
     use windows_sys::Win32::Foundation::{
         GENERIC_READ, GENERIC_WRITE, HANDLE, INVALID_HANDLE_VALUE, WAIT_OBJECT_0, WAIT_TIMEOUT,
     };
+    use windows_sys::Win32::Storage::FileSystem;
     use windows_sys::Win32::Storage::FileSystem::{
-        CreateFileW, FILE_SHARE_READ, FILE_SHARE_WRITE, OPEN_EXISTING,
+        FILE_SHARE_READ, FILE_SHARE_WRITE, OPEN_EXISTING,
     };
-    use windows_sys::Win32::System::Console::{
-        AttachConsole, COORD, CTRL_BREAK_EVENT, ClosePseudoConsole, CreatePseudoConsole,
-        ENABLE_ECHO_INPUT, FreeConsole, GenerateConsoleCtrlEvent, GetConsoleMode, HPCON,
-        SetConsoleCtrlHandler,
-    };
-    use windows_sys::Win32::System::Pipes::CreatePipe;
+    use windows_sys::Win32::System;
+    use windows_sys::Win32::System::Console::{COORD, CTRL_BREAK_EVENT, ENABLE_ECHO_INPUT, HPCON};
+    use windows_sys::Win32::System::Pipes;
+    use windows_sys::Win32::System::Threading;
     use windows_sys::Win32::System::Threading::{
-        CREATE_NEW_PROCESS_GROUP, CreateProcessW, DETACHED_PROCESS, DeleteProcThreadAttributeList,
-        EXTENDED_STARTUPINFO_PRESENT, GetExitCodeProcess, InitializeProcThreadAttributeList,
+        CREATE_NEW_PROCESS_GROUP, DETACHED_PROCESS, EXTENDED_STARTUPINFO_PRESENT,
         LPPROC_THREAD_ATTRIBUTE_LIST, PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE, PROCESS_INFORMATION,
-        STARTF_USESTDHANDLES, STARTUPINFOEXW, TerminateProcess, UpdateProcThreadAttribute,
-        WaitForSingleObject,
+        STARTF_USESTDHANDLES, STARTUPINFOEXW,
     };
 
     const HELPER_PID: &str = "VNC_RELAY_CONSOLE_HELPER_PID";
@@ -74,7 +64,7 @@ mod pseudo_console {
         // SAFETY: writable handle slots live through the call; null security
         // attributes make non-inheritable synchronous pipes.
         check(
-            unsafe { CreatePipe(&mut read, &mut write, ptr::null(), 0) },
+            unsafe { Pipes::CreatePipe(&mut read, &mut write, ptr::null(), 0) },
             "CreatePipe",
         );
         // SAFETY: CreatePipe succeeded and transfers two distinct owned handles.
@@ -92,7 +82,7 @@ mod pseudo_console {
         fn drop(&mut self) {
             // SAFETY: this guard owns the live HPCON, and the output reader
             // remains active until this call finishes, including final frames.
-            unsafe { ClosePseudoConsole(self.0) };
+            unsafe { System::Console::ClosePseudoConsole(self.0) };
         }
     }
 
@@ -108,14 +98,21 @@ mod pseudo_console {
         fn new(console: HPCON) -> Self {
             let mut bytes = 0;
             // SAFETY: the documented first call queries the required buffer size.
-            unsafe { InitializeProcThreadAttributeList(ptr::null_mut(), 1, 0, &mut bytes) };
+            unsafe {
+                Threading::InitializeProcThreadAttributeList(ptr::null_mut(), 1, 0, &mut bytes)
+            };
             assert!(bytes > 0, "attribute list size was not returned");
             let mut storage = vec![0usize; bytes.div_ceil(size_of::<usize>())];
             // SAFETY: word-aligned storage has at least the requested byte count
             // and is not resized for the lifetime of the initialized list.
             check(
                 unsafe {
-                    InitializeProcThreadAttributeList(storage.as_mut_ptr().cast(), 1, 0, &mut bytes)
+                    Threading::InitializeProcThreadAttributeList(
+                        storage.as_mut_ptr().cast(),
+                        1,
+                        0,
+                        &mut bytes,
+                    )
                 },
                 "InitializeProcThreadAttributeList",
             );
@@ -124,7 +121,7 @@ mod pseudo_console {
             // for PSEUDOCONSOLE (not a pointer to a handle-sized slot).
             check(
                 unsafe {
-                    UpdateProcThreadAttribute(
+                    Threading::UpdateProcThreadAttribute(
                         list.pointer(),
                         0,
                         PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE as usize,
@@ -143,7 +140,7 @@ mod pseudo_console {
     impl Drop for Attributes {
         fn drop(&mut self) {
             // SAFETY: the initialized list still occupies its original buffer.
-            unsafe { DeleteProcThreadAttributeList(self.pointer()) };
+            unsafe { Threading::DeleteProcThreadAttributeList(self.pointer()) };
         }
     }
 
@@ -155,13 +152,15 @@ mod pseudo_console {
     impl Process {
         fn try_wait(&self) -> Option<i32> {
             // SAFETY: this guard owns a valid process handle.
-            match unsafe { WaitForSingleObject(self.handle.as_raw_handle(), 0) } {
+            match unsafe { Threading::WaitForSingleObject(self.handle.as_raw_handle(), 0) } {
                 WAIT_TIMEOUT => None,
                 WAIT_OBJECT_0 => {
                     let mut code = 0;
                     // SAFETY: the process is signaled and code is writable.
                     check(
-                        unsafe { GetExitCodeProcess(self.handle.as_raw_handle(), &mut code) },
+                        unsafe {
+                            Threading::GetExitCodeProcess(self.handle.as_raw_handle(), &mut code)
+                        },
                         "GetExitCodeProcess",
                     );
                     Some(i32::from_ne_bytes(code.to_ne_bytes()))
@@ -177,8 +176,8 @@ mod pseudo_console {
             // SAFETY: the handle remains owned until after cleanup. A process
             // that already exited needs no termination; that failure is benign.
             unsafe {
-                TerminateProcess(self.handle.as_raw_handle(), 1);
-                WaitForSingleObject(self.handle.as_raw_handle(), 5_000);
+                Threading::TerminateProcess(self.handle.as_raw_handle(), 1);
+                Threading::WaitForSingleObject(self.handle.as_raw_handle(), 5_000);
             }
         }
     }
@@ -206,7 +205,7 @@ mod pseudo_console {
             // SAFETY: both pipe endpoints stay open through console creation;
             // the out handle is writable. No cursor inheritance is requested.
             let result = unsafe {
-                CreatePseudoConsole(
+                System::Console::CreatePseudoConsole(
                     COORD { X: 300, Y: 100 },
                     input_read.as_raw_handle(),
                     output_write.as_raw_handle(),
@@ -261,10 +260,10 @@ mod pseudo_console {
             // No ordinary handles are inherited; ConPTY supplies console I/O.
             // Ensure normal Ctrl+C handling is active so the child does not
             // inherit an ignored Ctrl+C state from an outer test runner.
-            unsafe { SetConsoleCtrlHandler(None, 0) };
+            unsafe { System::Console::SetConsoleCtrlHandler(None, 0) };
             check(
                 unsafe {
-                    CreateProcessW(
+                    Threading::CreateProcessW(
                         application.as_ptr(),
                         command.as_mut_ptr(),
                         ptr::null(),
@@ -438,9 +437,12 @@ mod pseudo_console {
         let action = std::env::var(HELPER_ACTION).unwrap_or_else(|e| panic!("helper action: {e}"));
         // SAFETY: this is a separate, env-guarded helper process. Detaching
         // cannot affect the parent test runner or another ConPTY test.
-        unsafe { FreeConsole() };
+        unsafe { System::Console::FreeConsole() };
         // SAFETY: pid is a live child whose console the parent owns.
-        check(unsafe { AttachConsole(pid) }, "AttachConsole");
+        check(
+            unsafe { System::Console::AttachConsole(pid) },
+            "AttachConsole",
+        );
         match action.as_str() {
             "break" => {
                 // SAFETY: the target was created with CREATE_NEW_PROCESS_GROUP;
@@ -448,7 +450,7 @@ mod pseudo_console {
                 // but attached to the same console, so only the target receives
                 // the event. No broadcast reaches the test runner.
                 check(
-                    unsafe { GenerateConsoleCtrlEvent(CTRL_BREAK_EVENT, pid) },
+                    unsafe { System::Console::GenerateConsoleCtrlEvent(CTRL_BREAK_EVENT, pid) },
                     "GenerateConsoleCtrlEvent",
                 );
             }
@@ -457,7 +459,7 @@ mod pseudo_console {
                 // SAFETY: name is terminated and the remaining parameters are
                 // valid console-device access/share flags and null optionals.
                 let raw: HANDLE = unsafe {
-                    CreateFileW(
+                    FileSystem::CreateFileW(
                         name.as_ptr(),
                         GENERIC_READ | GENERIC_WRITE,
                         FILE_SHARE_READ | FILE_SHARE_WRITE,
@@ -480,7 +482,9 @@ mod pseudo_console {
                     let mut mode = 0;
                     // SAFETY: input is open and mode is writable for this call.
                     check(
-                        unsafe { GetConsoleMode(input.as_raw_handle(), &mut mode) },
+                        unsafe {
+                            System::Console::GetConsoleMode(input.as_raw_handle(), &mut mode)
+                        },
                         "GetConsoleMode",
                     );
                     if mode & ENABLE_ECHO_INPUT == 0 {
@@ -496,7 +500,7 @@ mod pseudo_console {
             other => panic!("unknown console helper action {other}"),
         }
         // SAFETY: only this isolated helper's console association changes.
-        check(unsafe { FreeConsole() }, "FreeConsole");
+        check(unsafe { System::Console::FreeConsole() }, "FreeConsole");
     }
 }
 
@@ -595,7 +599,7 @@ fn wait_exit(process: &mut pseudo_console::ConsoleProcess) -> (i32, String) {
     }
 }
 
-fn assert_graceful_log(fixture: &shutdown::Fixture) {
+fn assert_graceful_log(fixture: &Fixture) {
     let log = std::fs::read_to_string(fixture.config.with_file_name("stdout.log"))
         .unwrap_or_else(|e| panic!("read serve log: {e}"));
     assert!(log.contains("\"event\":\"shutdown_started\""), "{log}");
@@ -604,7 +608,7 @@ fn assert_graceful_log(fixture: &shutdown::Fixture) {
 
 #[test]
 fn ctrl_c_stops_gracefully_with_exit_code_zero() {
-    let fixture = shutdown::Fixture::new("windows-ctrl-c", 1);
+    let fixture = Fixture::new("windows-ctrl-c", 1);
     let mut process = pseudo_console::ConsoleProcess::start(&fixture.config);
     fixture.wait_ready(&mut process);
     process.request_stop();
@@ -614,7 +618,7 @@ fn ctrl_c_stops_gracefully_with_exit_code_zero() {
 
 #[test]
 fn ctrl_break_stops_gracefully_with_exit_code_zero() {
-    let fixture = shutdown::Fixture::new("windows-ctrl-break", 1);
+    let fixture = Fixture::new("windows-ctrl-break", 1);
     // Only this child needs a new process group. Applying the flag to Ctrl+C
     // children would inherit Windows' disabled Ctrl+C handling and invalidate
     // the 0x03 input test.
@@ -625,7 +629,7 @@ fn ctrl_break_stops_gracefully_with_exit_code_zero() {
     assert_graceful_log(&fixture);
 }
 
-fn assert_unauthenticated(reply: shutdown::Reply) {
+fn assert_unauthenticated(reply: Reply) {
     assert_eq!(reply.status, 401, "{}", reply.body);
     assert!(
         reply.body.contains("\"code\":\"unauthenticated\""),
@@ -634,7 +638,7 @@ fn assert_unauthenticated(reply: shutdown::Reply) {
     );
 }
 
-fn assert_relay_listed(fixture: &shutdown::Fixture, admin: &shutdown::Admin, sid: &str) {
+fn assert_relay_listed(fixture: &Fixture, admin: &Admin, sid: &str) {
     let reply = fixture.query(admin, "/api/v1/sessions");
     assert_eq!(reply.status, 200, "{}", reply.body);
     assert!(
@@ -662,11 +666,7 @@ fn assert_peer_closed(stream: &mut std::net::TcpStream) {
     }
 }
 
-fn terminate_relay(
-    fixture: &shutdown::Fixture,
-    admin: &shutdown::Admin,
-    relay: &mut shutdown::RelayPair,
-) {
+fn terminate_relay(fixture: &Fixture, admin: &Admin, relay: &mut RelayPair) {
     use std::net::Shutdown;
 
     let mut server = relay
@@ -714,7 +714,7 @@ fn terminate_relay(
 /// spec: management.md:MGT-027
 #[test]
 fn graceful_restart_ends_the_admin_session_and_login_works_again() {
-    let fixture = shutdown::Fixture::new("windows-management-restart", 1);
+    let fixture = Fixture::new("windows-management-restart", 1);
     let mut first = pseudo_console::ConsoleProcess::start(&fixture.config);
     fixture.wait_ready(&mut first);
     let old = fixture.login();
@@ -728,7 +728,7 @@ fn graceful_restart_ends_the_admin_session_and_login_works_again() {
     let mut second = pseudo_console::ConsoleProcess::start(&fixture.config);
     fixture.wait_ready(&mut second);
     let observer = fixture.login();
-    let mut relay = shutdown::RelayPair::start(&fixture, "731231");
+    let mut relay = RelayPair::start(&fixture, "731231");
     relay.transfer();
     assert_unauthenticated(fixture.query(&old, "/api/v1/sessions"));
     assert_unauthenticated(fixture.terminate(&old, &relay.sid));
@@ -753,7 +753,7 @@ fn cli_prepared_admins_have_hidden_salted_credentials_and_equal_relay_rights() {
 
     const ALICE_PASSWORD: &str = "correct-horse-battery";
     const BOB_PASSWORD: &str = "another-long-password";
-    let fixture = shutdown::Fixture::new("windows-cli-two-accounts", 1);
+    let fixture = Fixture::new("windows-cli-two-accounts", 1);
     let accounts_path = fixture.config.with_file_name("admin-accounts.toml");
     fs::remove_file(&accounts_path).unwrap_or_else(|e| panic!("clear seeded account: {e}"));
     // Windows ACLs are the operator's responsibility (cli-v1 §1.6,
@@ -837,7 +837,7 @@ fn cli_prepared_admins_have_hidden_salted_credentials_and_equal_relay_rights() {
     ] {
         let admin = shutdown::login(fixture.ports[0], account, password);
         assert_eq!(fixture.query(&admin, "/api/v1/summary").status, 200);
-        let mut relay = shutdown::RelayPair::start(&fixture, relay_id);
+        let mut relay = RelayPair::start(&fixture, relay_id);
         relay.transfer();
         assert_relay_listed(&fixture, &admin, &relay.sid);
         terminate_relay(&fixture, &admin, &mut relay);
@@ -913,7 +913,7 @@ fn every_failed_preparation_keeps_the_account_file_and_prints_no_secret() {
         "correct horse batterz",
         "too short",
     ];
-    let fixture = shutdown::Fixture::new("windows-admin-failures", 1);
+    let fixture = Fixture::new("windows-admin-failures", 1);
     let accounts_path = fixture.config.with_file_name("admin-accounts.toml");
     let original = fs::read(&accounts_path).unwrap_or_else(|e| panic!("read accounts: {e}"));
     let stored = String::from_utf8_lossy(&original).into_owned();

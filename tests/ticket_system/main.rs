@@ -1,17 +1,14 @@
 //! End-to-end ticket scenarios through the shipped serve binary, file watcher,
 //! management API, operation log, TCP, WS and fixture-authenticated WSS.
 
-#[path = "../crates/adapters/tests/common/ticket.rs"]
-mod ticket;
-#[path = "common/ticket_server.rs"]
-mod ticket_server;
-
 use std::fs;
 use std::net::TcpListener;
 use std::time::{Duration, Instant};
 
 use serde_json::{Value, json};
-use ticket::Signer;
+use vnc_relay_testkit::ticket::Signer;
+
+mod ticket_server;
 use ticket_server::*;
 
 fn items(value: &Value) -> &[Value] {
@@ -86,8 +83,8 @@ fn remember_keys(secrets: &mut Vec<String>, keys: &str) {
 #[test]
 fn viewer_ws_wss_tickets_match_and_all_observable_surfaces_keep_secrets_private() {
     let _ports = lock();
-    let viewer = Signer::new();
-    let server_signer = Signer::new();
+    let viewer = Signer::generate();
+    let server_signer = Signer::generate();
     let server = Server::start("privacy", &viewer.jwks(), &server_signer.jwks(), true);
     let mut secrets = Vec::new();
     remember_keys(&mut secrets, &viewer.jwks());
@@ -128,7 +125,7 @@ fn viewer_ws_wss_tickets_match_and_all_observable_surfaces_keep_secrets_private(
                 .any(|s| s["viewer_transport"] == if secure { "wss" } else { "ws" })
         });
     }
-    let bad_signer = Signer::new();
+    let bad_signer = Signer::generate();
     let bad = bad_signer.sign(&claims("viewer", "bad-signature", "999", None));
     remember_ticket(&mut secrets, &bad);
     let before = server.events().len();
@@ -205,9 +202,9 @@ fn replacement_claims(jti: &str, rid: &str) -> Value {
 fn watched_and_api_ticket_reconfiguration_preserves_existing_bindings_timers_and_use_records() {
     let _ports = lock();
     for api in [false, true] {
-        let original = Signer::new();
-        let rotated = Signer::new();
-        let server_signer = Signer::new();
+        let original = Signer::generate();
+        let rotated = Signer::generate();
+        let server_signer = Signer::generate();
         let server = Server::start(
             if api {
                 "api-reconfigure"
@@ -284,8 +281,8 @@ fn watched_and_api_ticket_reconfiguration_preserves_existing_bindings_timers_and
 #[test]
 fn both_ticket_roles_compare_rid_bytes_and_leave_the_waiting_opposite_peer_intact() {
     let _ports = lock();
-    let viewer = Signer::new();
-    let target = Signer::new();
+    let viewer = Signer::generate();
+    let target = Signer::generate();
     let server = Server::start("rid-binding", &viewer.jwks(), &target.jwks(), true);
     for (role, opposite, signer) in [("viewer", "server", &viewer), ("server", "viewer", &target)] {
         let mut waiting = server.tcp_peer(opposite, "123");
@@ -339,8 +336,8 @@ fn both_ticket_roles_compare_rid_bytes_and_leave_the_waiting_opposite_peer_intac
 fn ticket_mode_one_rejection_precedes_target_connect_but_not_disabled_mode_or_syntax() {
     let _ports = lock();
     for enabled in [true, false] {
-        let viewer = Signer::new();
-        let target = Signer::new();
+        let viewer = Signer::generate();
+        let target = Signer::generate();
         let server = Server::start(
             if enabled { "mode1-on" } else { "mode1-off" },
             &viewer.jwks(),
@@ -441,8 +438,8 @@ fn assert_expired_session(server: &Server, active: &Value) {
 #[test]
 fn sx_expires_every_lifecycle_state_and_earliest_side_with_distinct_management_cause() {
     let _ports = lock();
-    let viewer = Signer::new();
-    let target = Signer::new();
+    let viewer = Signer::generate();
+    let target = Signer::generate();
     let server = Server::start("session-expiry", &viewer.jwks(), &target.jwks(), true);
     // Initial exchange and waiting are tested over both logical roles/transports.
     for (role, secure, waiting) in [("viewer", false, false), ("server", true, true)] {

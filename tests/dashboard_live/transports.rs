@@ -9,9 +9,10 @@ use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, ServerName};
 use rustls::{ClientConfig, ClientConnection, RootCertStore, StreamOwned};
 use serde_json::{Value, json};
-use tokio_tungstenite::tungstenite::{Message, WebSocket, client, client::IntoClientRequest};
+use tokio_tungstenite::tungstenite::{self, Message, WebSocket, client::IntoClientRequest};
 
-use super::live::{Admin, Browser, LIMIT, Server, connect, initial, must, wait_for};
+use vnc_relay_testkit::cdp::Browser;
+use vnc_relay_testkit::live::{self, Admin, LIMIT, Server};
 
 fn fixture(name: &str) -> String {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -58,7 +59,7 @@ impl Endpoint {
             return Self::Tcp(if viewer {
                 server.handshaking()
             } else {
-                connect(server.ports[3])
+                live::connect(server.ports[3])
             });
         }
         let port = if transport == "wss" {
@@ -66,13 +67,13 @@ impl Endpoint {
         } else {
             server.ws_port
         };
-        let socket = connect(port);
+        let socket = live::connect(port);
         let wire = if transport == "wss" {
             let mut roots = RootCertStore::empty();
-            for cert in must(CertificateDer::pem_file_iter(fixture("root-ca.pem"))) {
-                must(roots.add(must(cert)));
+            for cert in live::must(CertificateDer::pem_file_iter(fixture("root-ca.pem"))) {
+                live::must(roots.add(live::must(cert)));
             }
-            let config = must(
+            let config = live::must(
                 ClientConfig::builder_with_provider(Arc::new(
                     rustls::crypto::aws_lc_rs::default_provider(),
                 ))
@@ -81,9 +82,9 @@ impl Endpoint {
             .with_root_certificates(roots)
             .with_no_client_auth();
             Wire::Tls(Box::new(StreamOwned::new(
-                must(ClientConnection::new(
+                live::must(ClientConnection::new(
                     Arc::new(config),
-                    must(ServerName::try_from("localhost")),
+                    live::must(ServerName::try_from("localhost")),
                 )),
                 socket,
             )))
@@ -95,14 +96,14 @@ impl Endpoint {
         } else {
             "/relay/server"
         };
-        let mut request = must(format!("ws://localhost:{port}{path}").into_client_request());
+        let mut request = live::must(format!("ws://localhost:{port}{path}").into_client_request());
         if forwarded {
             request.headers_mut().insert(
                 "X-Forwarded-For",
-                must(if viewer { "192.0.2.41" } else { "192.0.2.42" }.parse()),
+                live::must(if viewer { "192.0.2.41" } else { "192.0.2.42" }.parse()),
             );
         }
-        let (ws, response) = must(client(request, wire));
+        let (ws, response) = live::must(tungstenite::client(request, wire));
         assert_eq!(response.status().as_u16(), 101);
         let mut endpoint = Self::Ws(Box::new(ws));
         if viewer {
@@ -112,23 +113,23 @@ impl Endpoint {
     }
     fn send(&mut self, data: &[u8]) {
         match self {
-            Self::Tcp(s) => must(s.write_all(data)),
-            Self::Ws(s) => must(s.send(Message::Binary(data.to_vec().into()))),
+            Self::Tcp(s) => live::must(s.write_all(data)),
+            Self::Ws(s) => live::must(s.send(Message::Binary(data.to_vec().into()))),
         }
     }
     fn receive(&mut self, len: usize) -> Vec<u8> {
         match self {
             Self::Tcp(s) => {
                 let mut data = vec![0; len];
-                must(s.read_exact(&mut data));
+                live::must(s.read_exact(&mut data));
                 data
             }
             Self::Ws(s) => {
                 let mut bytes = Vec::with_capacity(len);
                 while bytes.len() < len {
-                    match must(s.read()) {
+                    match live::must(s.read()) {
                         Message::Binary(data) => bytes.extend_from_slice(&data),
-                        Message::Ping(_) => must(s.flush()),
+                        Message::Ping(_) => live::must(s.flush()),
                         m => panic!("unexpected relay message {m:?}"),
                     }
                 }
@@ -165,16 +166,16 @@ fn pair(
 ) {
     let (viewer_transport, target_transport, forwarded) = transports;
     let mut target = Endpoint::open(server, wss, target_transport, false, forwarded[1]);
-    target.send(&initial(&format!("ID:{id}")));
-    wait_for("real matrix server waiting", LIMIT, || {
+    target.send(&live::initial(&format!("ID:{id}")));
+    live::wait_for("real matrix server waiting", LIMIT, || {
         server.query(admin, "/api/v1/waiting")["items"]
             .as_array()
             .is_some_and(|items| items.iter().any(|i| i["relay_id"] == id))
     });
     let mut viewer = Endpoint::open(server, wss, viewer_transport, true, forwarded[0]);
-    viewer.send(&initial(&format!("ID:{id}")));
+    viewer.send(&live::initial(&format!("ID:{id}")));
     let mut session = Value::Null;
-    wait_for("real matrix pair active", LIMIT, || {
+    live::wait_for("real matrix pair active", LIMIT, || {
         session = server.query(admin, "/api/v1/sessions")["items"]
             .as_array()
             .and_then(|items| {
@@ -231,7 +232,7 @@ fn pair(
     assert_screens(browser, server, &detail["session"]);
     drop(viewer);
     drop(target);
-    wait_for("matrix relay released", LIMIT, || {
+    live::wait_for("matrix relay released", LIMIT, || {
         server.query(admin, "/api/v1/sessions")["items"]
             .as_array()
             .is_some_and(|items| items.is_empty())
@@ -241,8 +242,8 @@ fn pair(
 /// Starts a relay with WS and WSS Viewer and Server listeners. `trust` turns on the trusted proxy for WS and for
 /// WSS. `extra` is appended to the configuration. Returns the server and the WSS port.
 fn start(name: &str, trust: [bool; 2], extra: &str) -> (Server, u16) {
-    let reservation = must(TcpListener::bind("127.0.0.1:0"));
-    let wss = must(reservation.local_addr()).port();
+    let reservation = live::must(TcpListener::bind("127.0.0.1:0"));
+    let wss = live::must(reservation.local_addr()).port();
     let server = Server::start_with_config_transform(name, Some(60), false, |config, _| {
         drop(reservation);
         let proxies = |enabled| if enabled { "[\"127.0.0.1\"]" } else { "[]" };
@@ -322,8 +323,8 @@ fn close_mode2(
 ) {
     let closed = count(server, admin, "/api/v1/closed-sessions");
     let mut viewer = Endpoint::open(server, wss, viewer.0, true, viewer.1);
-    viewer.send(&initial(&format!("ID:{id}")));
-    wait_for("real list pair active", LIMIT, || {
+    viewer.send(&live::initial(&format!("ID:{id}")));
+    live::wait_for("real list pair active", LIMIT, || {
         count(server, admin, "/api/v1/sessions") == 1
     });
     viewer.send(b"viewer-bytes");
@@ -332,7 +333,7 @@ fn close_mode2(
     assert_eq!(viewer.receive(12), b"server-bytes");
     drop(viewer);
     drop(target);
-    wait_for("real list pair closed", LIMIT, || {
+    live::wait_for("real list pair closed", LIMIT, || {
         count(server, admin, "/api/v1/closed-sessions") == closed + 1
     });
 }
@@ -371,12 +372,12 @@ pub fn real_waiting_and_closed_rows_with_forwarded_addresses() {
     browser.login(&server);
 
     let mut tcp_viewer = Endpoint::open(&server, wss, "tcp", true, false);
-    tcp_viewer.send(&initial("ID:46501"));
+    tcp_viewer.send(&live::initial("ID:46501"));
     let mut ws_server = Endpoint::open(&server, wss, "ws", false, true);
-    ws_server.send(&initial("ID:46502"));
+    ws_server.send(&live::initial("ID:46502"));
     let mut wss_server = Endpoint::open(&server, wss, "wss", false, false);
-    wss_server.send(&initial("ID:46503"));
-    wait_for("three real waiting transports", LIMIT, || {
+    wss_server.send(&live::initial("ID:46503"));
+    live::wait_for("three real waiting transports", LIMIT, || {
         count(&server, &admin, "/api/v1/waiting") == 3
     });
     let waiting = list(&server, &admin, "/api/v1/waiting");
@@ -435,7 +436,7 @@ pub fn real_waiting_and_closed_rows_with_forwarded_addresses() {
     close_mode2(&server, &admin, wss, wss_server, ("ws", true), "46503");
     let mode1 = server.pair(&admin, "I", "46504");
     mode1.close();
-    wait_for("three real closed sessions", LIMIT, || {
+    live::wait_for("three real closed sessions", LIMIT, || {
         count(&server, &admin, "/api/v1/closed-sessions") == 3
     });
     let closed = list(&server, &admin, "/api/v1/closed-sessions");

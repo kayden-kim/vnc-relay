@@ -13,7 +13,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use serde_json::{Value, json};
-use tokio_tungstenite::tungstenite::{Message, WebSocket, client};
+use tokio_tungstenite::tungstenite::{self, Message, WebSocket};
 
 const LIMIT: Duration = Duration::from_secs(20);
 static NEXT: AtomicU64 = AtomicU64::new(0);
@@ -184,7 +184,7 @@ impl Browser {
             .and_then(|items| items.iter().find(|item| item["type"] == "page"))
             .and_then(|item| item["webSocketDebuggerUrl"].as_str())
             .unwrap_or_else(|| panic!("CDP page target missing"));
-        let (socket, _) = must(client(url, connect(port)));
+        let (socket, _) = must(tungstenite::client(url, connect(port)));
         let (child, dir) = process.take();
         let mut browser = Self {
             child,

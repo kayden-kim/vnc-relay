@@ -1,0 +1,20 @@
+[package]
+name = "vnc-relay-testkit"
+description = "Shared integration-test fixtures and harnesses for VNC Relay"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+aws-lc-rs.workspace = true
+serde_json.workspace = true
+tokio = { workspace = true, features = ["net", "rt"] }
+tokio-tungstenite.workspace = true
+vnc-relay-adapters.workspace = true
+vnc-relay-application.workspace = true
+vnc-relay-domain.workspace = true

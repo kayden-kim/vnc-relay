@@ -1,11 +1,11 @@
 //! Login: checks an account and a password, then issues a session
 //! (management-api-v1 §1.4.1, §1.5; management.md §3.0).
 
-use vnc_relay_domain::account::{AccountName, Argon2Params, Password, PasswordHash};
-use vnc_relay_domain::admin_session::{AdminCsrfToken, AdminSession, AdminSessionToken};
+use vnc_relay_domain::account::{Argon2Params, Name, Password, PasswordHash};
+use vnc_relay_domain::admin_session::{AdminCsrfToken, AdminSession, Token};
 use vnc_relay_domain::peer_ip::PeerIp;
 
-use super::{AdminAuth, AuthError, SessionView, session_view};
+use super::{AdminAuth, AuthError, SessionView};
 use crate::events::{Event, LoginFailReason};
 use crate::ports::{HashError, PasswordHashGateway};
 
@@ -28,7 +28,7 @@ pub fn dummy_hash(
 /// `Set-Cookie` header.
 #[derive(Debug)]
 pub struct LoggedIn {
-    pub token: AdminSessionToken,
+    pub token: Token,
     pub session: SessionView,
 }
 
@@ -47,7 +47,7 @@ impl AdminAuth {
         // is refused before any password check. It writes no event and does
         // not count against the login limit (management-api-v1 §2.1;
         // 구현 판단(사용자 결정 없음)).
-        let name = AccountName::parse(account).map_err(|_| AuthError::InvalidAccount)?;
+        let name = Name::parse(account).map_err(|_| AuthError::InvalidAccount)?;
         let stored = self.accounts.get(&name);
         let hash = stored.unwrap_or(&self.dummy);
         // `admin_account` names the account only when the account is real
@@ -86,11 +86,11 @@ impl AdminAuth {
         }
 
         if let Some((token, csrf)) = tokens {
-            if let Some(prior) = prior.and_then(|text| AdminSessionToken::parse(text).ok()) {
+            if let Some(prior) = prior.and_then(|text| Token::parse(text).ok()) {
                 state.sessions.remove(&prior);
             }
             let session = AdminSession::start(name.clone(), csrf, mono, wall, self.session_policy);
-            let view = session_view(&session, wall);
+            let view = super::session_view(&session, wall);
             state.sessions.insert(token.clone(), session);
             drop(state);
             self.record(Event::AdminLoginSucceeded {
@@ -124,7 +124,7 @@ impl AdminAuth {
     }
 
     /// Makes the session token and the CSRF token. Both come from the token source.
-    fn new_tokens(&self) -> Result<(AdminSessionToken, AdminCsrfToken), AuthError> {
+    fn new_tokens(&self) -> Result<(Token, AdminCsrfToken), AuthError> {
         let token = self
             .tokens
             .new_token()
@@ -133,8 +133,7 @@ impl AdminAuth {
             .tokens
             .new_token()
             .map_err(|error| AuthError::Internal(error.0))?;
-        let token = AdminSessionToken::parse(&token)
-            .map_err(|error| AuthError::Internal(error.to_string()))?;
+        let token = Token::parse(&token).map_err(|error| AuthError::Internal(error.to_string()))?;
         let csrf =
             AdminCsrfToken::parse(&csrf).map_err(|error| AuthError::Internal(error.to_string()))?;
         Ok((token, csrf))
@@ -143,14 +142,12 @@ impl AdminAuth {
 
 #[cfg(test)]
 mod tests {
-    use vnc_relay_domain::login_limit::{LimitScope, LoginLimitPolicy};
+    use vnc_relay_domain::login_limit::{LimitScope, Policy};
 
     use super::super::AuthError;
     use super::{DUMMY_PASSWORD, Password};
     use crate::events::{Event, LoginFailReason};
-    use crate::management::test_support::{
-        OTHER_PASSWORD, PASSWORD, harness, harness_with, peer, secs, session_policy,
-    };
+    use crate::management::test_support::{self, OTHER_PASSWORD, PASSWORD};
 
     #[test]
     fn dummy_password_is_a_valid_password() {
@@ -162,10 +159,10 @@ mod tests {
     /// spec: management.md:MGT-017 partial
     #[test]
     fn correct_password_issues_a_session_and_records_success() {
-        let h = harness();
+        let h = test_support::harness();
         let login = h
             .auth
-            .login("alice", PASSWORD, peer(1), None)
+            .login("alice", PASSWORD, test_support::peer(1), None)
             .unwrap_or_else(|error| panic!("{error:?}"));
         assert_eq!(login.session.account.as_str(), "alice");
         assert!(h.auth.authorize(Some(login.token.as_str())).is_ok());
@@ -182,14 +179,14 @@ mod tests {
     /// spec: management.md:MGT-018 partial
     #[test]
     fn wrong_password_and_unknown_account_give_the_same_refusal() {
-        let h = harness();
+        let h = test_support::harness();
         let wrong = h
             .auth
-            .login("alice", "wrong-password-1", peer(1), None)
+            .login("alice", "wrong-password-1", test_support::peer(1), None)
             .err();
         let unknown = h
             .auth
-            .login("nobody", "wrong-password-1", peer(1), None)
+            .login("nobody", "wrong-password-1", test_support::peer(1), None)
             .err();
         assert_eq!(wrong, Some(AuthError::LoginFailed));
         assert_eq!(unknown, Some(AuthError::LoginFailed));
@@ -219,14 +216,23 @@ mod tests {
     /// spec: management.md:MGT-022 partial
     #[test]
     fn every_attempt_runs_one_password_check_including_unknown_and_limited() {
-        let h = harness_with(
-            session_policy(),
-            LoginLimitPolicy::new(1, 100, secs(900), secs(900)),
+        let h = test_support::harness_with(
+            test_support::session_policy(),
+            Policy::new(1, 100, test_support::secs(900), test_support::secs(900)),
         );
-        let _ = h.auth.login("alice", "wrong-password-1", peer(1), None);
-        let _ = h.auth.login("alice", "wrong-password-2", peer(1), None);
-        let limited = h.auth.login("alice", PASSWORD, peer(1), None).err();
-        let _ = h.auth.login("nobody", PASSWORD, peer(1), None);
+        let _ = h
+            .auth
+            .login("alice", "wrong-password-1", test_support::peer(1), None);
+        let _ = h
+            .auth
+            .login("alice", "wrong-password-2", test_support::peer(1), None);
+        let limited = h
+            .auth
+            .login("alice", PASSWORD, test_support::peer(1), None)
+            .err();
+        let _ = h
+            .auth
+            .login("nobody", PASSWORD, test_support::peer(1), None);
         assert_eq!(limited, Some(AuthError::LoginFailed));
         assert_eq!(h.verifier.calls(), 4);
     }
@@ -237,15 +243,15 @@ mod tests {
     /// spec: management.md:MGT-022 partial
     #[test]
     fn locked_account_refuses_the_correct_password_until_the_lock_ends() {
-        let h = harness_with(
-            session_policy(),
-            LoginLimitPolicy::new(2, 100, secs(900), secs(60)),
+        let h = test_support::harness_with(
+            test_support::session_policy(),
+            Policy::new(2, 100, test_support::secs(900), test_support::secs(60)),
         );
         for at in [0, 1, 2] {
-            h.clock.set(secs(at));
+            h.clock.set(test_support::secs(at));
             assert_eq!(
                 h.auth
-                    .login("alice", "wrong-password-1", peer(1), None)
+                    .login("alice", "wrong-password-1", test_support::peer(1), None)
                     .err(),
                 Some(AuthError::LoginFailed)
             );
@@ -259,28 +265,36 @@ mod tests {
             }
         )));
 
-        h.clock.set(secs(3));
+        h.clock.set(test_support::secs(3));
         assert_eq!(
-            h.auth.login("alice", PASSWORD, peer(1), None).err(),
+            h.auth
+                .login("alice", PASSWORD, test_support::peer(1), None)
+                .err(),
             Some(AuthError::LoginFailed)
         );
-        h.clock.set(secs(61));
+        h.clock.set(test_support::secs(61));
         assert_eq!(
-            h.auth.login("alice", PASSWORD, peer(1), None).err(),
+            h.auth
+                .login("alice", PASSWORD, test_support::peer(1), None)
+                .err(),
             Some(AuthError::LoginFailed)
         );
 
         // After the lock ends, the counts start again. A wrong password is
         // refused, and the correct password then gets a session.
-        h.clock.set(secs(62));
+        h.clock.set(test_support::secs(62));
         assert_eq!(
             h.auth
-                .login("alice", "wrong-password-1", peer(1), None)
+                .login("alice", "wrong-password-1", test_support::peer(1), None)
                 .err(),
             Some(AuthError::LoginFailed)
         );
-        h.clock.set(secs(63));
-        assert!(h.auth.login("alice", PASSWORD, peer(1), None).is_ok());
+        h.clock.set(test_support::secs(63));
+        assert!(
+            h.auth
+                .login("alice", PASSWORD, test_support::peer(1), None)
+                .is_ok()
+        );
     }
 
     // The source lock counts failures for all accounts. A limited source
@@ -288,13 +302,19 @@ mod tests {
     /// spec: management.md:MGT-022 partial
     #[test]
     fn same_source_is_limited_for_other_accounts_too() {
-        let h = harness_with(
-            session_policy(),
-            LoginLimitPolicy::new(100, 2, secs(900), secs(60)),
+        let h = test_support::harness_with(
+            test_support::session_policy(),
+            Policy::new(100, 2, test_support::secs(900), test_support::secs(60)),
         );
-        let _ = h.auth.login("alice", "wrong-password-1", peer(9), None);
-        let _ = h.auth.login("bob", "wrong-password-1", peer(9), None);
-        let _ = h.auth.login("carol", "wrong-password-1", peer(9), None);
+        let _ = h
+            .auth
+            .login("alice", "wrong-password-1", test_support::peer(9), None);
+        let _ = h
+            .auth
+            .login("bob", "wrong-password-1", test_support::peer(9), None);
+        let _ = h
+            .auth
+            .login("carol", "wrong-password-1", test_support::peer(9), None);
         assert!(h.events.all().iter().any(|event| matches!(
             event,
             Event::AdminLoginLimited {
@@ -304,32 +324,52 @@ mod tests {
         )));
 
         assert_eq!(
-            h.auth.login("alice", PASSWORD, peer(9), None).err(),
+            h.auth
+                .login("alice", PASSWORD, test_support::peer(9), None)
+                .err(),
             Some(AuthError::LoginFailed)
         );
-        assert!(h.auth.login("alice", PASSWORD, peer(10), None).is_ok());
-        assert!(h.auth.login("bob", OTHER_PASSWORD, peer(10), None).is_ok());
+        assert!(
+            h.auth
+                .login("alice", PASSWORD, test_support::peer(10), None)
+                .is_ok()
+        );
+        assert!(
+            h.auth
+                .login("bob", OTHER_PASSWORD, test_support::peer(10), None)
+                .is_ok()
+        );
     }
 
     // Contract §1.4.1: a new login ends a valid prior session. An unreadable
     // prior cookie is ignored.
     #[test]
     fn a_new_login_ends_the_prior_session() {
-        let h = harness();
+        let h = test_support::harness();
         let first = h
             .auth
-            .login("alice", PASSWORD, peer(1), None)
+            .login("alice", PASSWORD, test_support::peer(1), None)
             .unwrap_or_else(|error| panic!("{error:?}"));
         let second = h
             .auth
-            .login("alice", PASSWORD, peer(1), Some(first.token.as_str()))
+            .login(
+                "alice",
+                PASSWORD,
+                test_support::peer(1),
+                Some(first.token.as_str()),
+            )
             .unwrap_or_else(|error| panic!("{error:?}"));
         assert!(h.auth.authorize(Some(first.token.as_str())).is_err());
         assert!(h.auth.authorize(Some(second.token.as_str())).is_ok());
 
         let third = h
             .auth
-            .login("alice", PASSWORD, peer(1), Some("not-a-token"))
+            .login(
+                "alice",
+                PASSWORD,
+                test_support::peer(1),
+                Some("not-a-token"),
+            )
             .unwrap_or_else(|error| panic!("{error:?}"));
         assert!(h.auth.authorize(Some(third.token.as_str())).is_ok());
         assert!(h.auth.authorize(Some(second.token.as_str())).is_ok());
@@ -340,10 +380,13 @@ mod tests {
     // count against the source limit.
     #[test]
     fn account_outside_the_name_grammar_is_refused_and_not_counted() {
-        let h = harness();
+        let h = test_support::harness();
         let long = "x".repeat(33);
         for name in ["Alice", "al ice", "bob!", "가나다", "ALICE", long.as_str()] {
-            let refused = h.auth.login(name, PASSWORD, peer(1), None).err();
+            let refused = h
+                .auth
+                .login(name, PASSWORD, test_support::peer(1), None)
+                .err();
             assert!(refused.is_some(), "{name} is refused");
             assert_ne!(refused, Some(AuthError::LoginFailed), "{name}");
         }
@@ -351,6 +394,10 @@ mod tests {
         assert!(h.events.all().is_empty());
         // Six refusals from one source would lock it under the default limit
         // of 5 per source. The valid login must still get through.
-        assert!(h.auth.login("alice", PASSWORD, peer(1), None).is_ok());
+        assert!(
+            h.auth
+                .login("alice", PASSWORD, test_support::peer(1), None)
+                .is_ok()
+        );
     }
 }

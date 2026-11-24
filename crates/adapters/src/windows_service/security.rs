@@ -7,16 +7,16 @@ use std::io;
 use std::ptr;
 
 use windows_sys::Win32::Foundation::{
-    ERROR_INSUFFICIENT_BUFFER, ERROR_NONE_MAPPED, ERROR_SUCCESS, LocalFree, WIN32_ERROR,
+    self, ERROR_INSUFFICIENT_BUFFER, ERROR_NONE_MAPPED, ERROR_SUCCESS, WIN32_ERROR,
 };
 use windows_sys::Win32::Security::Authorization::{
-    EXPLICIT_ACCESS_W, GRANT_ACCESS, GetSecurityInfo, NO_MULTIPLE_TRUSTEE, SE_SERVICE,
-    SetEntriesInAclW, SetSecurityInfo, TRUSTEE_IS_ALIAS, TRUSTEE_IS_GROUP, TRUSTEE_IS_SID,
-    TRUSTEE_IS_USER, TRUSTEE_IS_WELL_KNOWN_GROUP, TRUSTEE_TYPE, TRUSTEE_W,
+    self, EXPLICIT_ACCESS_W, GRANT_ACCESS, NO_MULTIPLE_TRUSTEE, SE_SERVICE, TRUSTEE_IS_ALIAS,
+    TRUSTEE_IS_GROUP, TRUSTEE_IS_SID, TRUSTEE_IS_USER, TRUSTEE_IS_WELL_KNOWN_GROUP, TRUSTEE_TYPE,
+    TRUSTEE_W,
 };
 use windows_sys::Win32::Security::{
-    ACL, DACL_SECURITY_INFORMATION, LookupAccountNameW, NO_INHERITANCE, PSECURITY_DESCRIPTOR,
-    SID_NAME_USE, SidTypeAlias, SidTypeGroup, SidTypeUser, SidTypeWellKnownGroup,
+    self, ACL, DACL_SECURITY_INFORMATION, NO_INHERITANCE, PSECURITY_DESCRIPTOR, SID_NAME_USE,
+    SidTypeAlias, SidTypeGroup, SidTypeUser, SidTypeWellKnownGroup,
 };
 use windows_sys::Win32::System::Services::{
     SC_HANDLE, SERVICE_QUERY_CONFIG, SERVICE_QUERY_STATUS, SERVICE_START, SERVICE_STOP,
@@ -48,7 +48,7 @@ pub fn lookup(name: &str) -> io::Result<Option<Operator>> {
     // domain buffers with zero sizes ask only for the sizes, which go to the
     // writable locals.
     let found = unsafe {
-        LookupAccountNameW(
+        Security::LookupAccountNameW(
             ptr::null(),
             wide.as_ptr(),
             ptr::null_mut(),
@@ -72,7 +72,7 @@ pub fn lookup(name: &str) -> io::Result<Option<Operator>> {
     // `domain_len` UTF-16 units, the sizes from the call above. Both live for
     // the call, as does the NUL-terminated `wide`.
     let found = unsafe {
-        LookupAccountNameW(
+        Security::LookupAccountNameW(
             ptr::null(),
             wide.as_ptr(),
             sid.as_mut_ptr().cast(),
@@ -114,7 +114,7 @@ pub fn grant(service: SC_HANDLE, operators: &[Operator]) -> io::Result<()> {
     // Null owner, group, and SACL pointers ask for the DACL only. Windows
     // writes the DACL and descriptor pointers into the writable locals.
     let status = unsafe {
-        GetSecurityInfo(
+        Authorization::GetSecurityInfo(
             service,
             SE_SERVICE,
             DACL_SECURITY_INFORMATION,
@@ -151,14 +151,15 @@ pub fn grant(service: SC_HANDLE, operators: &[Operator]) -> io::Result<()> {
     // point into `operators`, which outlives the call. `dacl` is the DACL from
     // the descriptor kept above. Windows writes the new ACL pointer into the
     // writable local.
-    let status = unsafe { SetEntriesInAclW(count, entries.as_ptr(), dacl, &mut new_dacl) };
+    let status =
+        unsafe { Authorization::SetEntriesInAclW(count, entries.as_ptr(), dacl, &mut new_dacl) };
     check(status)?;
     let _new_dacl = LocalMemory(new_dacl.cast());
     // SAFETY: the caller keeps `service` open with WRITE_DAC for the call.
     // `new_dacl` is the valid ACL from SetEntriesInAclW, kept until the end of
     // this function. Null owner, group, and SACL leave those parts unchanged.
     let status = unsafe {
-        SetSecurityInfo(
+        Authorization::SetSecurityInfo(
             service,
             SE_SERVICE,
             DACL_SECURITY_INFORMATION,
@@ -193,7 +194,7 @@ impl Drop for LocalMemory {
         if !self.0.is_null() {
             // SAFETY: the pointer came from a Win32 call that allocates with
             // LocalAlloc, and it is freed only here.
-            unsafe { LocalFree(self.0) };
+            unsafe { Foundation::LocalFree(self.0) };
         }
     }
 }

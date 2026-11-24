@@ -8,7 +8,7 @@ TCP Viewer·TCP Server 진입점이 접속을 수락하고, 데이터를 읽기 
 | 구조 시점 | Current |
 | 문서 상태 | Draft |
 | 구현 대조 | Verified — [대조 기록](#대조-기록) |
-| 코드 위치 | `crates/domain/src/allow_list.rs`, `crates/domain/src/entry_point.rs`(`Listener`, `EntryPoint`, `Role`), `crates/domain/src/conn_id.rs`, `crates/app/src/events.rs`, `crates/app/src/settings.rs`(`ListenerPlan::listener`), `crates/adapters/src/net.rs`(`TcpEntryPoint`, `TcpRelayStream`, `accept_connections`), `crates/app/src/relay.rs`(`handle_connection`, `dispatch`), `crates/adapters/src/websocket.rs`(`WsEntryPoint`), `src/serve.rs` |
+| 코드 위치 | `crates/domain/src/allow_list.rs`, `crates/domain/src/entry_point.rs`(`ListenerKind`, `EntryPoint`, `Role`), `crates/domain/src/conn_id.rs`, `crates/app/src/events.rs`, `crates/app/src/settings.rs`(`ListenerPlan::listener`), `crates/adapters/src/net.rs`(`TcpEntryPoint`, `TcpRelayStream`, `accept_connections`), `crates/app/src/relay.rs`(`handle_connection`, `dispatch`), `crates/adapters/src/websocket.rs`(`WsEntryPoint`), `src/serve.rs` |
 | 코드 지도 | [코드 지도 2절](code-map.md#2-코드-위치와-구성요소), [3절](code-map.md#3-진입점) |
 | 관련 스펙 | [중계 스펙 3.1절](../specs/relay.md#31-초기-교환)의 1항과 RLY-R16, [운영 스펙 4절](../specs/operations.md#4-보안과-신뢰-경계), RLY-023(일부), RLY-024, OPS-037(일부), OPS-038(일부), OPS-040(일부), OPS-007(일부) |
 | 관련 계약 | [운영 정보 계약 1.4절](../contracts/ops-info-v2.md#14-필드-사전)(`conn_id`, `listener`, `role`, `peer_ip`), [1.5절](../contracts/ops-info-v2.md#15-사건-목록)(접속 수락·거절·중단), [1.6절](../contracts/ops-info-v2.md#16-원인-코드)(`stage`·`reason`), [설정 계약 1.3절](../contracts/config-v4.md#13-ip-항목-문법)(IP 항목) |
@@ -34,8 +34,8 @@ TCP Viewer·TCP Server 진입점이 접속을 수락하고, 데이터를 읽기 
   - `vnc_relay_domain::allow_list::AllowList::permits`
   - `vnc_relay_domain::entry_point::{Role, EntryPoint::role}`
   - `vnc_relay_domain::conn_id::ConnId`
-  - `vnc_relay_app::events::{Event::ConnectionAccepted, Event::ConnectionRejected, Event::ConnectionAborted, Stage, RejectReason, AbortReason}`
-  - `vnc_relay_app::settings::ListenerPlan::listener`
+  - `vnc_relay_application::events::{Event::ConnectionAccepted, Event::ConnectionRejected, Event::ConnectionAborted, Stage, RejectReason, AbortReason}`
+  - `vnc_relay_application::settings::ListenerPlan::listener`
   - `vnc_relay_adapters::net::TcpEntryPoint`
 
 ## 2. 내부 구조
@@ -75,10 +75,10 @@ flowchart LR
 
 | 이름 | 필드·형태 | 줄의 필드(순서대로) | 제약과 항상 지켜야 할 조건 |
 | --- | --- | --- | --- |
-| `Event::ConnectionAccepted` | `conn_id: ConnId`, `listener: Listener`, `peer_ip: PeerIp` | `conn_id`, `listener`, TCP에만 `role`, `peer_ip` | `level`은 `info`. 허용 판정과 L을 통과한 연결만 만든다. TCP role은 `fixed_role()`로 출력한다. WS·WSS에는 아직 role이 없다. |
-| `Event::ConnectionRejected` | `listener: &'static str`(`Listener::name()`), `stage: Stage`, `reason: RejectReason`, `peer_ip: PeerIp` | `listener`, `stage`, `reason`, `peer_ip`, `limit`(상한 거절만) | `level`은 `warn`. accept에서는 `conn_id`·`role`이 없다. 상태·관리도 같은 사건을 쓴다. |
+| `Event::ConnectionAccepted` | `conn_id: ConnId`, `listener: ListenerKind`, `peer_ip: PeerIp` | `conn_id`, `listener`, TCP에만 `role`, `peer_ip` | `level`은 `info`. 허용 판정과 L을 통과한 연결만 만든다. TCP role은 `fixed_role()`로 출력한다. WS·WSS에는 아직 role이 없다. |
+| `Event::ConnectionRejected` | `listener: &'static str`(`ListenerKind::name()`), `stage: Stage`, `reason: RejectReason`, `peer_ip: PeerIp` | `listener`, `stage`, `reason`, `peer_ip`, `limit`(상한 거절만) | `level`은 `warn`. accept에서는 `conn_id`·`role`이 없다. 상태·관리도 같은 사건을 쓴다. |
 | `Event::UpgradeRejected` | `listener: &'static str`, `role: Option<Role>`, `conn_id: ConnId`, `reason: RejectReason`과 나머지 필드 | `connection_rejected` 줄, `stage` = `upgrade`, 선택 `role` | WS·WSS의 켜진 경로 판정 뒤 거절에만 role이 있다. 나머지 필드는 [WebSocket 진입점 모듈 설계](websocket-entry-point.md)를 따른다. |
-| `Event::ConnectionAborted` | `conn_id: ConnId`, `listener: Listener`, `role: Option<Role>`, `stage: Stage`, `reason: AbortReason`, `peer_ip: PeerIp`, `elapsed_ms: u64` | `conn_id`, `listener`, 선택 `role`, `stage`, `reason`, `peer_ip`, `elapsed_ms`, 선택 `error_kind` | TCP는 고정 role을 보존한다. WS·WSS는 경로 판정 전 None, 뒤 Some(role)이다. `elapsed_ms`는 수락부터의 밀리초다. |
+| `Event::ConnectionAborted` | `conn_id: ConnId`, `listener: ListenerKind`, `role: Option<Role>`, `stage: Stage`, `reason: AbortReason`, `peer_ip: PeerIp`, `elapsed_ms: u64` | `conn_id`, `listener`, 선택 `role`, `stage`, `reason`, `peer_ip`, `elapsed_ms`, 선택 `error_kind` | TCP는 고정 role을 보존한다. WS·WSS는 경로 판정 전 None, 뒤 Some(role)이다. `elapsed_ms`는 수락부터의 밀리초다. |
 | `Stage` | `Accept`, `InitialExchange`, `Tls`, `Upgrade` | `stage`(`accept`, `initial_exchange`, `tls`, `upgrade`) | `tls`는 TLS 핸드셰이크 단계(버전 거절, 핸드셰이크 중 중단), `upgrade`는 101 전 업그레이드 단계다. 다른 단계의 값은 해당 사건 생성자가 쓴다. |
 | `RejectReason` | `IpNotAllowed`, `RelayConnectionLimit { limit }`, `AdminConnectionLimit { limit }`(상태·관리 리스너), `TlsVersionUnsupported`, `InvalidUpgrade`, `OriginNotAllowed`, `SubprotocolNotSupported` | `reason`(`ip_not_allowed`, `relay_connection_limit`, `admin_connection_limit`, `tls_version_unsupported`, `invalid_upgrade`, `origin_not_allowed`, `subprotocol_not_supported`) | `limit`은 상한 거절 둘에만 있다. `tls_version_unsupported`는 WSS와 관리 리스너, 나머지 세 값은 WS·WSS 업그레이드 거절이다. |
 | `AbortReason` | `HandshakeTimeout`, `TlsUpgradeTimeout`, `PeerEof`, `ConnectionError(ConnectionErrorKind)`, `ServerShutdown` | `reason`(`handshake_timeout`, `tls_upgrade_timeout`, `peer_eof`, `connection_error`, `server_shutdown`) | `tls_upgrade_timeout`은 WS·WSS가 U 안에 TLS 핸드셰이크나 업그레이드 요청을 끝내지 못한 경우다. |
@@ -89,7 +89,7 @@ flowchart LR
 
 `crates/adapters/src/net.rs`의 `AcceptPolicy`는 `AllowSource`와 사용량만 보관하는 L 예산을 가진다. `admit`는 `RuntimeSettingsSource::with_current` 안에서 출발지 IP와 현재 L을 검사하고 `try_acquire(limit)`의 CAS까지 끝낸다. 같은 세대의 B·H·U·K를 `AcceptedSettings`로 복사한다. TCP는 수락 시각을 초기 교환 시작 시각으로 쓰며, B·H를 `ConnectionContext`에 넘긴다. K는 수락 소켓에 한 번 설정한다. `target.rs`의 `TcpTargetGateway`는 새 대상 연결 시도에서 K를 별도로 읽는다. 기존 연결의 B·기한·소켓 옵션은 바꾸지 않는다([설정 §1.8](../contracts/config-v4.md#18-재로드-구분), OPS-050~053).
 
-`Listener`는 중계 소켓 네 개를, `EntryPoint`는 리스너·역할 조합 여섯 개를 나타낸다. TCP는 `Listener::fixed_role()`로 수락 때 역할을 안다. WS·WSS는 소켓 상대가 `trusted_proxies`에 속하거나 켜진 역할 allow의 합집합을 통과하면 수락한다. 역할과 전달 주소는 업그레이드에서 판정한다. `AllowSource::ws`·`wss`는 리스너별 현재 설정을 읽는다. `ListenerPlan::listener`가 바인드 소켓을 나타낸다.
+`ListenerKind`는 중계 소켓 네 개를, `EntryPoint`는 리스너·역할 조합 여섯 개를 나타낸다. TCP는 `ListenerKind::fixed_role()`로 수락 때 역할을 안다. WS·WSS는 소켓 상대가 `trusted_proxies`에 속하거나 켜진 역할 allow의 합집합을 통과하면 수락한다. 역할과 전달 주소는 업그레이드에서 판정한다. `AllowSource::ws`·`wss`는 리스너별 현재 설정을 읽는다. `ListenerPlan::listener`가 바인드 소켓을 나타낸다.
 
 대표 시나리오는 RLY-024다. Viewer 진입점 목록에만 있는 IP가 Server 진입점에 접속한다.
 

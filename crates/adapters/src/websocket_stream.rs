@@ -15,19 +15,19 @@ use std::sync::Arc;
 use std::task::{Context, Poll};
 
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
-use vnc_relay_app::events::ConnectionErrorKind;
-use vnc_relay_app::metrics::Metrics;
-use vnc_relay_app::ports::{RelayCloseAction, RelayStream, RelayStreamError};
-use vnc_relay_app::settings::KeepaliveSettings;
-use vnc_relay_domain::entry_point::Listener;
+use vnc_relay_application::events::ConnectionErrorKind;
+use vnc_relay_application::metrics::Metrics;
+use vnc_relay_application::ports::{RelayCloseAction, RelayStream, RelayStreamError};
+use vnc_relay_application::settings::KeepaliveSettings;
+use vnc_relay_domain::entry_point::ListenerKind;
 use vnc_relay_domain::session::Transport;
 
 use self::frame::{
     ControlOp, DecodeState, FrameDecoder, MAX_NON_DATA_FRAMES_PER_POLL, OutboundDataFrame,
-    PendingClose, PendingPong, encode_close, encode_data_header,
+    PendingClose, PendingPong,
 };
 use self::keepalive::Keepalive;
-use crate::net::classify_socket_error;
+use crate::net;
 
 /// An adapter wrapping a stream with streaming RFC 6455 WebSocket framing,
 /// implementing the common `RelayStream` port.
@@ -49,7 +49,7 @@ pub struct WsRelayStream<S> {
     transport_eof: bool,
     keepalive: Keepalive,
     /// Where a missed Pong deadline is counted, and the listener label.
-    ping_timeouts: Option<(Arc<Metrics>, Listener)>,
+    ping_timeouts: Option<(Arc<Metrics>, ListenerKind)>,
 }
 
 impl<S> WsRelayStream<S> {
@@ -98,7 +98,7 @@ impl<S> WsRelayStream<S> {
     /// Counts this connection in `vnc_relay.websocket.ping_timeouts` with
     /// `listener` (`ws` or `wss`) if it misses a Pong deadline
     /// (metrics-v1 §1.3).
-    pub fn count_ping_timeouts(mut self, metrics: Arc<Metrics>, listener: Listener) -> Self {
+    pub fn count_ping_timeouts(mut self, metrics: Arc<Metrics>, listener: ListenerKind) -> Self {
         self.ping_timeouts = Some((metrics, listener));
         self
     }
@@ -197,7 +197,7 @@ impl<S> WsRelayStream<S> {
         let mut read_buf = ReadBuf::new(buf);
         match Pin::new(io)
             .poll_read(cx, &mut read_buf)
-            .map_err(classify_socket_error)
+            .map_err(net::classify_socket_error)
         {
             Poll::Ready(Ok(())) => Poll::Ready(Ok(read_buf.filled().len())),
             Poll::Ready(Err(e)) => Poll::Ready(Err(e)),
@@ -229,7 +229,7 @@ impl<S> WsRelayStream<S> {
             while !pong.is_finished() {
                 match Pin::new(&mut self.io)
                     .poll_write(cx, pong.remaining_bytes())
-                    .map_err(classify_socket_error)
+                    .map_err(net::classify_socket_error)
                 {
                     Poll::Ready(Ok(0)) => {
                         return Poll::Ready(Err(io::Error::from(io::ErrorKind::WriteZero)));
@@ -251,7 +251,7 @@ impl<S> WsRelayStream<S> {
         if self.pong_flush_pending {
             match Pin::new(&mut self.io)
                 .poll_flush(cx)
-                .map_err(classify_socket_error)
+                .map_err(net::classify_socket_error)
             {
                 Poll::Ready(Ok(())) => self.pong_flush_pending = false,
                 result => return result,
@@ -294,7 +294,7 @@ impl<S> WsRelayStream<S> {
             while written < 2 {
                 match Pin::new(&mut self.io)
                     .poll_write(cx, &[0x89, 0][usize::from(written)..])
-                    .map_err(classify_socket_error)
+                    .map_err(net::classify_socket_error)
                 {
                     Poll::Ready(Ok(0)) => return Poll::Ready(Err(io::ErrorKind::WriteZero.into())),
                     Poll::Ready(Ok(count)) => {
@@ -307,7 +307,7 @@ impl<S> WsRelayStream<S> {
             }
             match Pin::new(&mut self.io)
                 .poll_flush(cx)
-                .map_err(classify_socket_error)
+                .map_err(net::classify_socket_error)
             {
                 Poll::Ready(Ok(())) => self.keepalive.sent(tokio::time::Instant::now()),
                 result => return result,
@@ -338,7 +338,7 @@ impl<S> WsRelayStream<S> {
                 let rem = close.remaining_bytes();
                 match Pin::new(&mut self.io)
                     .poll_write(cx, rem)
-                    .map_err(classify_socket_error)
+                    .map_err(net::classify_socket_error)
                 {
                     Poll::Ready(Ok(0)) => {
                         return Poll::Ready(Err(io::Error::from(io::ErrorKind::WriteZero)));
@@ -366,7 +366,7 @@ impl<S> WsRelayStream<S> {
     {
         match Pin::new(&mut self.io)
             .poll_flush(cx)
-            .map_err(classify_socket_error)
+            .map_err(net::classify_socket_error)
         {
             Poll::Ready(Ok(())) => {}
             result => return result,
@@ -377,7 +377,7 @@ impl<S> WsRelayStream<S> {
                 if self.decoder.peer_closed || self.transport_eof {
                     return Pin::new(&mut self.io)
                         .poll_shutdown(cx)
-                        .map_err(classify_socket_error);
+                        .map_err(net::classify_socket_error);
                 }
                 let mut buffer = ReadBuf::new(&mut discard);
                 match Pin::new(&mut *self).poll_read(cx, &mut buffer) {
@@ -385,7 +385,7 @@ impl<S> WsRelayStream<S> {
                     Poll::Ready(Err(_)) if self.transport_eof => {
                         return Pin::new(&mut self.io)
                             .poll_shutdown(cx)
-                            .map_err(classify_socket_error);
+                            .map_err(net::classify_socket_error);
                     }
                     Poll::Ready(Err(error))
                         if matches!(
@@ -406,7 +406,7 @@ impl<S> WsRelayStream<S> {
         }
         match Pin::new(&mut self.io)
             .poll_shutdown(cx)
-            .map_err(classify_socket_error)
+            .map_err(net::classify_socket_error)
         {
             Poll::Ready(Ok(())) => {}
             result => return result,
@@ -416,7 +416,7 @@ impl<S> WsRelayStream<S> {
             let mut buffer = ReadBuf::new(&mut discard);
             match Pin::new(&mut self.io)
                 .poll_read(cx, &mut buffer)
-                .map_err(classify_socket_error)
+                .map_err(net::classify_socket_error)
             {
                 Poll::Ready(Ok(())) if buffer.filled().is_empty() => return Poll::Ready(Ok(())),
                 Poll::Ready(Ok(())) => {}
@@ -696,7 +696,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin + Send> AsyncWrite for WsRelayStream<S> {
 
             // Create new outbound binary frame
             let payload_len = buf.len().min(this.max_message_size);
-            let (header_buf, header_len) = encode_data_header(payload_len);
+            let (header_buf, header_len) = frame::encode_data_header(payload_len);
             this.outbound_frame = Some(OutboundDataFrame {
                 header_buf,
                 header_len,
@@ -726,7 +726,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin + Send> AsyncWrite for WsRelayStream<S> {
             ];
             match Pin::new(&mut this.io)
                 .poll_write_vectored(cx, &parts)
-                .map_err(classify_socket_error)
+                .map_err(net::classify_socket_error)
             {
                 Poll::Ready(Ok(0)) => {
                     this.outbound_frame = Some(frame);
@@ -768,7 +768,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin + Send> AsyncWrite for WsRelayStream<S> {
 
         match Pin::new(&mut this.io)
             .poll_write(cx, &buf[..to_write])
-            .map_err(classify_socket_error)
+            .map_err(net::classify_socket_error)
         {
             Poll::Ready(Ok(0)) => {
                 this.outbound_frame = Some(frame);
@@ -820,14 +820,14 @@ impl<S: AsyncRead + AsyncWrite + Unpin + Send> AsyncWrite for WsRelayStream<S> {
         }
         Pin::new(&mut this.io)
             .poll_flush(cx)
-            .map_err(classify_socket_error)
+            .map_err(net::classify_socket_error)
     }
 
     fn poll_shutdown(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         let this = self.get_mut();
         Pin::new(&mut this.io)
             .poll_shutdown(cx)
-            .map_err(classify_socket_error)
+            .map_err(net::classify_socket_error)
     }
 }
 
@@ -855,7 +855,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin + Send> RelayStream for WsRelayStream<S> 
         if this.keepalive.expired {
             return Pin::new(&mut this.io)
                 .poll_shutdown(cx)
-                .map_err(classify_socket_error);
+                .map_err(net::classify_socket_error);
         }
         // Finish any started Ping before a Close or another control frame.
         if this
@@ -892,7 +892,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin + Send> RelayStream for WsRelayStream<S> 
             } else {
                 Pin::new(&mut this.io)
                     .poll_flush(cx)
-                    .map_err(classify_socket_error)
+                    .map_err(net::classify_socket_error)
             };
         }
         // A shutdown request cannot replace a Close already received from the
@@ -947,7 +947,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin + Send> RelayStream for WsRelayStream<S> 
 
             match close_spec {
                 Some((code, reason)) => {
-                    this.pending_close = Some(encode_close(code, reason));
+                    this.pending_close = Some(frame::encode_close(code, reason));
                     this.terminal_close = !matches!(
                         action,
                         RelayCloseAction::WriteHalf | RelayCloseAction::PeerEof
@@ -965,7 +965,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin + Send> RelayStream for WsRelayStream<S> 
                     this.close_sent = true;
                     return Pin::new(&mut this.io)
                         .poll_shutdown(cx)
-                        .map_err(classify_socket_error);
+                        .map_err(net::classify_socket_error);
                 }
             }
         }
@@ -974,7 +974,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin + Send> RelayStream for WsRelayStream<S> 
             Poll::Ready(Ok(())) if this.terminal_close => this.poll_terminal_disposal(cx),
             Poll::Ready(Ok(())) => Pin::new(&mut this.io)
                 .poll_flush(cx)
-                .map_err(classify_socket_error),
+                .map_err(net::classify_socket_error),
             Poll::Ready(Err(e)) => Poll::Ready(Err(e)),
             Poll::Pending => Poll::Pending,
         }

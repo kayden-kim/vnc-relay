@@ -9,46 +9,49 @@ use std::time::Duration;
 
 use serde_json::{Value, json};
 
-use super::live::{Browser, Fault, LIMIT, must, wait_for};
-use super::logs::{generate, items, open, pause, ready, select_event, start};
+use super::logs;
+use vnc_relay_testkit::cdp::Browser;
+use vnc_relay_testkit::dashboard_proxy::Fault;
+use vnc_relay_testkit::live;
+use vnc_relay_testkit::live::LIMIT;
 
 fn files(dir: &Path) -> Vec<std::path::PathBuf> {
-    must(fs::read_dir(dir))
-        .map(|entry| must(entry).path())
+    live::must(fs::read_dir(dir))
+        .map(|entry| live::must(entry).path())
         .collect()
 }
 
 pub fn complete_json_lines_snapshot_and_no_partial_files() {
-    let server = start("dash-060", 60, 10000);
+    let server = logs::start("dash-060", 60, 10000);
     let admin = server.login();
-    generate(&server, 1005);
+    logs::generate(&server, 1005);
     let mut browser = Browser::start("dash-060", &["ko-KR"]);
-    open(&mut browser, &server);
-    pause(&mut browser);
-    select_event(&mut browser, "connection_rejected");
+    logs::open(&mut browser, &server);
+    logs::pause(&mut browser);
+    logs::select_event(&mut browser, "connection_rejected");
     let dir = server.dir().join("downloads");
-    must(fs::create_dir(&dir));
+    live::must(fs::create_dir(&dir));
     browser.command(
         "Browser.setDownloadBehavior",
         json!({"behavior":"allow","downloadPath":dir,"eventsEnabled":true}),
     );
     let first_path = "/api/v1/logs?event=connection_rejected&limit=1000";
     let first = server.query(&admin, first_path);
-    assert_eq!(items(&first).len(), 1000);
+    assert_eq!(logs::items(&first).len(), 1000);
     assert_eq!(first["has_more"], true);
-    let cursor = &items(&first)[0]["seq"];
+    let cursor = &logs::items(&first)[0]["seq"];
     let older_path = format!("{first_path}&before={cursor}");
     let older = server.query(&admin, &older_path);
     assert_eq!(older["has_more"], false);
-    assert!(items(&older).len() >= 5);
-    let mut expected = items(&older).to_vec();
-    expected.extend_from_slice(items(&first));
+    assert!(logs::items(&older).len() >= 5);
+    let mut expected = logs::items(&older).to_vec();
+    expected.extend_from_slice(logs::items(&first));
     let release = Arc::new(AtomicBool::new(false));
     server
         .proxy
         .once("GET", &older_path, Fault::Hold(Arc::clone(&release)));
     browser.click("#logs-download");
-    wait_for("second real download page held", LIMIT, || {
+    live::wait_for("second real download page held", LIMIT, || {
         server
             .proxy
             .traffic()
@@ -59,14 +62,14 @@ pub fn complete_json_lines_snapshot_and_no_partial_files() {
         files(&dir).is_empty(),
         "no file before the entire collection"
     );
-    generate(&server, 3);
+    logs::generate(&server, 3);
     release.store(true, Ordering::Release);
-    wait_for("complete actual browser download", LIMIT, || {
+    live::wait_for("complete actual browser download", LIMIT, || {
         files(&dir)
             .iter()
             .any(|p| p.extension().is_some_and(|e| e == "jsonl"))
     });
-    wait_for("browser download completed event", LIMIT, || {
+    live::wait_for("browser download completed event", LIMIT, || {
         browser.eval("true");
         browser.network().as_array().is_some_and(|events| {
             events
@@ -90,12 +93,12 @@ pub fn complete_json_lines_snapshot_and_no_partial_files() {
             .enumerate()
             .all(|(i, b)| i == 8 || i == 15 || b.is_ascii_digit())
     );
-    let bytes = must(fs::read(&paths[0]));
-    let contents = must(String::from_utf8(bytes));
+    let bytes = live::must(fs::read(&paths[0]));
+    let contents = live::must(String::from_utf8(bytes));
     assert!(contents.ends_with('\n') && !contents.contains('\r'));
     let downloaded: Vec<Value> = contents
         .lines()
-        .map(|line| must(serde_json::from_str(line)))
+        .map(|line| live::must(serde_json::from_str(line)))
         .collect();
     let wanted: Vec<_> = expected.iter().map(|item| item["entry"].clone()).collect();
     assert_eq!(
@@ -108,13 +111,13 @@ pub fn complete_json_lines_snapshot_and_no_partial_files() {
             .all(|entry| entry.get("seq").is_none() && entry.get("entry").is_none())
     );
     assert_eq!(server.proxy.injected_count("GET", &older_path), 1);
-    ready(&mut browser);
-    must(fs::remove_file(&paths[0]));
+    logs::ready(&mut browser);
+    live::must(fs::remove_file(&paths[0]));
 
     // The newest page now has three more events; recompute its real cursor.
     for failure in ["error", "leave", "unauthorized"] {
         let current = server.query(&admin, first_path);
-        let next = format!("{first_path}&before={}", items(&current)[0]["seq"]);
+        let next = format!("{first_path}&before={}", logs::items(&current)[0]["seq"]);
         let before = server.proxy.injected_count("GET", &next);
         let held = Arc::new(AtomicBool::new(false));
         server
@@ -124,7 +127,7 @@ pub fn complete_json_lines_snapshot_and_no_partial_files() {
             server.proxy.once("GET", &next, Fault::Error500("internal"));
         }
         browser.click("#logs-download");
-        wait_for("download first real page held", LIMIT, || {
+        live::wait_for("download first real page held", LIMIT, || {
             server.proxy.traffic().iter().rev().any(|r| {
                 r.path == first_path && r.stage == "response_held" && r.completed.is_none()
             })
@@ -171,9 +174,9 @@ pub fn complete_json_lines_snapshot_and_no_partial_files() {
         server.proxy.clear();
         if failure == "leave" {
             browser.navigate(&server.url("/#/logs"));
-            ready(&mut browser);
-            pause(&mut browser);
-            select_event(&mut browser, "connection_rejected");
+            logs::ready(&mut browser);
+            logs::pause(&mut browser);
+            logs::select_event(&mut browser, "connection_rejected");
         }
     }
 }

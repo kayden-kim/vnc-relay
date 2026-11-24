@@ -12,10 +12,10 @@ use axum::http::{HeaderValue, Method, StatusCode, Uri};
 use axum::response::{IntoResponse, Response};
 use serde_json::{Value, json};
 use tokio::net::TcpListener;
-use vnc_relay_app::lifecycle::LifecycleService;
-use vnc_relay_app::metrics::MetricsService;
-use vnc_relay_app::ports::EventSink;
-use vnc_relay_app::reload::ports::RuntimeSettingsSource;
+use vnc_relay_application::lifecycle::LifecycleService;
+use vnc_relay_application::metrics::MetricsService;
+use vnc_relay_application::ports::EventSink;
+use vnc_relay_application::reload::ports::RuntimeSettingsSource;
 use vnc_relay_domain::budget::ConnectionBudget;
 
 use crate::admission::AdmittingListener;

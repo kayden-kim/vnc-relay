@@ -30,9 +30,9 @@
   - 국가 이름 표시, 출처 표시, 조회 링크: 대시보드가 맡는다([화면 스펙 SCR-008](../specs/dashboard.md#scr-008-접속-출처)).
 - 다른 모듈에 공개하는 기능:
   - `vnc_relay_domain::ip_info`: `CountryCode`, `Asn`, `Provider::from_database_type`, `is_local`.
-  - `vnc_relay_app::ip_info`: `IpLookup`, `IpInfoService`(`load_startup`, `refresh`, `paths`, `status`), `IpDbKey`, `IpDbFailure`, `IpDbMetadata`, `IpDbStatus`.
-  - `vnc_relay_app::sources`: `SourceStats`, `SourcesSink`(`EventSink` 구현), `SourcesService::report`, `SourceWindow`, `SourcesReport`.
-  - `vnc_relay_app::ports`: `IpDbFileGateway`, `IpDbLookupGateway`.
+  - `vnc_relay_application::ip_info`: `IpLookup`, `IpInfoService`(`load_startup`, `refresh`, `paths`, `status`), `IpDbKey`, `IpDbError`, `IpDbMetadata`, `IpDbStatus`.
+  - `vnc_relay_application::sources`: `SourceStats`, `SourcesSink`(`EventSink` 구현), `SourcesService::report`, `SourceWindow`, `SourcesReport`.
+  - `vnc_relay_application::ports`: `IpDbFileGateway`, `IpDbLookupGateway`.
   - `vnc_relay_adapters::ip_db::MmdbFileGateway`.
 
 ## 2. 내부 구조

@@ -8,10 +8,10 @@ use std::time::Duration;
 use vnc_relay_domain::account::Argon2Params;
 use vnc_relay_domain::allow_list::{AllowList, IpItem};
 use vnc_relay_domain::deny_list::DenyList;
-use vnc_relay_domain::entry_point::{EntryPoint, Listener, Role};
+use vnc_relay_domain::entry_point::{EntryPoint, ListenerKind, Role};
 use vnc_relay_domain::origin::Origin;
 use vnc_relay_domain::target_policy::{TargetItem, TargetPolicy};
-use vnc_relay_domain::ticket::TicketKeyList;
+use vnc_relay_domain::ticket::KeyList;
 
 /// Validated settings. Omitted keys hold their defaults. Equality compares
 /// values only, so notation, comments, key order, and explicit defaults do not
@@ -103,31 +103,31 @@ impl RelaySettings {
     }
 
     /// Shared WS or WSS listener settings.
-    pub fn websocket(&self, listener: Listener) -> Option<&WsListenerSettings> {
+    pub fn websocket(&self, listener: ListenerKind) -> Option<&WsListenerSettings> {
         match listener {
-            Listener::Ws => Some(&self.ws),
-            Listener::Wss => Some(&self.wss),
-            Listener::TcpViewer | Listener::TcpServer => None,
+            ListenerKind::Ws => Some(&self.ws),
+            ListenerKind::Wss => Some(&self.wss),
+            ListenerKind::TcpViewer | ListenerKind::TcpServer => None,
         }
     }
 
     /// Whether this socket has at least one enabled role.
-    pub fn listener_enabled(&self, listener: Listener) -> bool {
+    pub fn listener_enabled(&self, listener: ListenerKind) -> bool {
         match listener {
-            Listener::TcpViewer => self.tcp_viewer.enabled,
-            Listener::TcpServer => self.tcp_server.enabled,
-            Listener::Ws => self.ws.enabled(),
-            Listener::Wss => self.wss.enabled(),
+            ListenerKind::TcpViewer => self.tcp_viewer.enabled,
+            ListenerKind::TcpServer => self.tcp_server.enabled,
+            ListenerKind::Ws => self.ws.enabled(),
+            ListenerKind::Wss => self.wss.enabled(),
         }
     }
 
     /// Address of the shared socket, including any TCP default port.
-    pub fn listen(&self, listener: Listener) -> Option<SocketAddr> {
+    pub fn listen(&self, listener: ListenerKind) -> Option<SocketAddr> {
         match listener {
-            Listener::TcpViewer => self.tcp_viewer.listen,
-            Listener::TcpServer => self.tcp_server.listen,
-            Listener::Ws => self.ws.listen,
-            Listener::Wss => self.wss.listen,
+            ListenerKind::TcpViewer => self.tcp_viewer.listen,
+            ListenerKind::TcpServer => self.tcp_server.listen,
+            ListenerKind::Ws => self.ws.listen,
+            ListenerKind::Wss => self.wss.listen,
         }
     }
 }
@@ -211,7 +211,7 @@ pub struct TicketRoleSettings {
     /// Keys read from `public_keys_file`. The config loader leaves this empty;
     /// startup and reload fill it for enabled roles only
     /// (docs/architectures/relay-access-ticket.md §3).
-    pub keys: TicketKeyList,
+    pub keys: KeyList,
 }
 
 impl TicketRoleSettings {
@@ -228,7 +228,7 @@ impl Default for TicketRoleSettings {
             relay_host: None,
             public_keys_file: None,
             max_lifetime: Self::DEFAULT_MAX_LIFETIME,
-            keys: TicketKeyList::default(),
+            keys: KeyList::default(),
         }
     }
 }
@@ -387,8 +387,8 @@ impl Settings {
             }
         }
         for (listener, settings) in [
-            (Listener::Ws, &self.relay.ws),
-            (Listener::Wss, &self.relay.wss),
+            (ListenerKind::Ws, &self.relay.ws),
+            (ListenerKind::Wss, &self.relay.wss),
         ] {
             warnings.extend(settings.trusted_proxies.whole_family_items().map(|item| {
                 ConfigWarning::TrustAllProxies {
@@ -462,7 +462,7 @@ impl Settings {
     /// order: TCP Viewer, TCP Server, WS, WSS, when enabled.
     pub fn other_listeners(&self) -> Vec<ListenerPlan> {
         let mut plans = Vec::new();
-        for listener in Listener::ALL {
+        for listener in ListenerKind::ALL {
             if let Some(addr) = self
                 .relay
                 .listen(listener)
@@ -489,15 +489,15 @@ pub struct ListenerPlan {
     pub key: &'static str,
     pub addr: SocketAddr,
     /// Relay socket, or `None` for status and management listeners.
-    pub listener: Option<Listener>,
+    pub listener: Option<ListenerKind>,
 }
 
-fn listen_key(listener: Listener) -> &'static str {
+fn listen_key(listener: ListenerKind) -> &'static str {
     match listener {
-        Listener::TcpViewer => "relay.tcp_viewer.listen",
-        Listener::TcpServer => "relay.tcp_server.listen",
-        Listener::Ws => "relay.ws.listen",
-        Listener::Wss => "relay.wss.listen",
+        ListenerKind::TcpViewer => "relay.tcp_viewer.listen",
+        ListenerKind::TcpServer => "relay.tcp_server.listen",
+        ListenerKind::Ws => "relay.ws.listen",
+        ListenerKind::Wss => "relay.wss.listen",
     }
 }
 
@@ -584,7 +584,7 @@ pub enum ConfigWarning {
         item: IpItem,
     },
     TrustAllProxies {
-        listener: Listener,
+        listener: ListenerKind,
         item: IpItem,
     },
     AllowAllTarget {

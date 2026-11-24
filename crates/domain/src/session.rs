@@ -11,9 +11,9 @@ const BASE32: &[u8; 32] = b"abcdefghijklmnopqrstuvwxyz234567";
 /// Canonical producer ID: `ses_` and 26 lowercase, unpadded base32 characters.
 /// Uniqueness and keyed block generation belong to the caller, not this value.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct SessionId([u8; 30]);
+pub struct Id([u8; 30]);
 
-impl SessionId {
+impl Id {
     /// Encodes a supplied 128-bit block, most significant bit first.
     /// The last character has two zero padding bits. No randomness is obtained.
     pub fn from_block(block: [u8; 16]) -> Self {
@@ -53,12 +53,12 @@ impl SessionId {
     pub fn as_str(&self) -> &str {
         match std::str::from_utf8(&self.0) {
             Ok(text) => text,
-            Err(_) => unreachable!("SessionId constructors only store ASCII"),
+            Err(_) => unreachable!("Id constructors only store ASCII"),
         }
     }
 }
 
-impl fmt::Display for SessionId {
+impl fmt::Display for Id {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(self.as_str())
     }
@@ -133,7 +133,7 @@ impl Direction {
 
 /// Session lifecycle; `Closing` still counts as active until cleanup finishes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SessionState {
+pub enum State {
     /// Both relay directions are available.
     Active,
     /// EOF or another close trigger has started cleanup.
@@ -142,7 +142,7 @@ pub enum SessionState {
     Finished,
 }
 
-impl SessionState {
+impl State {
     /// Returns the lifecycle name; finished sessions leave the active registry.
     pub fn as_str(self) -> &'static str {
         match self {
@@ -235,13 +235,13 @@ impl std::error::Error for SessionError {}
 /// directions have drained and shut down. Socket ownership stays in app.
 #[derive(Debug)]
 pub struct Session {
-    id: SessionId,
+    id: Id,
     mode: Mode,
     viewer_transport: Transport,
     target_transport: Transport,
     started_at: SystemTime,
     started_mono: Duration,
-    state: SessionState,
+    state: State,
     bytes: [u64; 2],
     eof: [bool; 2],
     completed: [bool; 2],
@@ -254,7 +254,7 @@ pub struct Session {
 impl Session {
     /// Starts a fresh active session with zero payload counters.
     pub fn new(
-        id: SessionId,
+        id: Id,
         mode: Mode,
         viewer_transport: Transport,
         target_transport: Transport,
@@ -271,7 +271,7 @@ impl Session {
             },
             started_at,
             started_mono,
-            state: SessionState::Active,
+            state: State::Active,
             bytes: [0; 2],
             eof: [false; 2],
             completed: [false; 2],
@@ -283,7 +283,7 @@ impl Session {
     }
 
     /// Returns this session's identifier, never a relay ID.
-    pub fn id(&self) -> &SessionId {
+    pub fn id(&self) -> &Id {
         &self.id
     }
 
@@ -309,7 +309,7 @@ impl Session {
     }
 
     /// Returns the current lifecycle state.
-    pub fn state(&self) -> SessionState {
+    pub fn state(&self) -> State {
         self.state
     }
 
@@ -364,8 +364,8 @@ impl Session {
         if self.first_eof.is_none() {
             self.first_eof = Some((side, now));
         }
-        if self.state == SessionState::Active {
-            self.state = SessionState::Closing;
+        if self.state == State::Active {
+            self.state = State::Closing;
             self.close_started_mono = Some(now);
         }
         Ok(())
@@ -406,7 +406,7 @@ impl Session {
     /// The caller retains the authenticated account for the operation log.
     pub fn begin_admin_close(&mut self, now: Duration) -> Result<bool, SessionError> {
         self.ensure_unfinished()?;
-        if self.state != SessionState::Active {
+        if self.state != State::Active {
             return Ok(false);
         }
         self.close_started_mono = Some(now);
@@ -418,7 +418,7 @@ impl Session {
     /// replace it with `close_timeout`.
     pub fn begin_session_expiry(&mut self, now: Duration) -> Result<bool, SessionError> {
         self.ensure_unfinished()?;
-        if self.state != SessionState::Active {
+        if self.state != State::Active {
             return Ok(false);
         }
         self.close_started_mono = Some(now);
@@ -430,7 +430,7 @@ impl Session {
     /// cause has no endpoint, and E does not replace it with `close_timeout`.
     pub fn begin_ip_denied_close(&mut self, now: Duration) -> Result<bool, SessionError> {
         self.ensure_unfinished()?;
-        if self.state != SessionState::Active {
+        if self.state != State::Active {
             return Ok(false);
         }
         self.close_started_mono = Some(now);
@@ -441,7 +441,7 @@ impl Session {
     /// Sets `ServerShutdown` only when no cleanup has started; an existing first cause
     /// (EOF observed, I/O error, dead connection, admin close) is preserved.
     pub fn force_server_shutdown(&mut self) -> Result<bool, SessionError> {
-        if self.state == SessionState::Finished {
+        if self.state == State::Finished {
             return Ok(false);
         }
         if self.close_cause.is_some() {
@@ -452,7 +452,7 @@ impl Session {
             self.close_side = self.first_eof.map(|(side, _)| side);
             return Ok(false);
         }
-        self.state = SessionState::Closing;
+        self.state = State::Closing;
         self.close_cause = Some(CloseCause::ServerShutdown);
         self.close_side = None;
         Ok(true)
@@ -501,7 +501,7 @@ impl Session {
                 CloseCause::InternalError
             });
         }
-        self.state = SessionState::Closing;
+        self.state = State::Closing;
         self.finish(ended_at, ended_mono)
     }
 
@@ -515,7 +515,7 @@ impl Session {
         ended_mono: Duration,
     ) -> Result<ClosedSession, SessionError> {
         self.ensure_unfinished()?;
-        if self.state != SessionState::Closing {
+        if self.state != State::Closing {
             return Err(SessionError::NotClosing);
         }
         let cause = match self.close_cause {
@@ -527,7 +527,7 @@ impl Session {
             None => return Err(SessionError::IncompleteDirections),
         };
         self.close_cause = Some(cause);
-        self.state = SessionState::Finished;
+        self.state = State::Finished;
         Ok(ClosedSession {
             id: self.id.clone(),
             mode: self.mode,
@@ -553,7 +553,7 @@ impl Session {
     }
 
     fn ensure_unfinished(&self) -> Result<(), SessionError> {
-        if self.state == SessionState::Finished {
+        if self.state == State::Finished {
             Err(SessionError::Finished)
         } else {
             Ok(())
@@ -564,7 +564,7 @@ impl Session {
         if self.close_cause.is_some() {
             return false;
         }
-        self.state = SessionState::Closing;
+        self.state = State::Closing;
         self.close_cause = Some(cause);
         self.close_side = side;
         true
@@ -575,7 +575,7 @@ impl Session {
 /// Only `Session::finish` can construct this value (management-api-v1 §1.10).
 #[derive(Debug, PartialEq, Eq)]
 pub struct ClosedSession {
-    id: SessionId,
+    id: Id,
     mode: Mode,
     viewer_transport: Transport,
     target_transport: Transport,
@@ -589,7 +589,7 @@ pub struct ClosedSession {
 
 impl ClosedSession {
     /// Returns the finalized session identifier.
-    pub fn id(&self) -> &SessionId {
+    pub fn id(&self) -> &Id {
         &self.id
     }
 
@@ -649,7 +649,7 @@ mod tests {
 
     fn session(mode: Mode) -> Session {
         Session::new(
-            SessionId::from_block([1; 16]),
+            Id::from_block([1; 16]),
             mode,
             Transport::Tcp,
             Transport::Tcp,
@@ -684,10 +684,10 @@ mod tests {
             (*b"abcdefghijklmnop", "ses_mfrggzdfmztwq2lknnwg23tpoa"),
         ];
         for (block, expected) in vectors {
-            let id = SessionId::from_block(block);
+            let id = Id::from_block(block);
             assert_eq!(id.as_str(), expected);
             assert_eq!(id.to_string(), expected);
-            assert_eq!(SessionId::parse(expected), Ok(id.clone()));
+            assert_eq!(Id::parse(expected), Ok(id.clone()));
             let mut ids = std::collections::HashSet::new();
             assert!(ids.insert(id.clone()));
             assert!(!ids.insert(id));
@@ -695,13 +695,13 @@ mod tests {
         let mut low = [0; 16];
         low[15] = 1;
         assert_eq!(
-            SessionId::from_block(low).as_str(),
+            Id::from_block(low).as_str(),
             "ses_aaaaaaaaaaaaaaaaaaaaaaaaae"
         );
         let mut high = [0; 16];
         high[0] = 128;
         assert_eq!(
-            SessionId::from_block(high).as_str(),
+            Id::from_block(high).as_str(),
             "ses_qaaaaaaaaaaaaaaaaaaaaaaaaa"
         );
     }
@@ -712,14 +712,14 @@ mod tests {
         for bit in 0..128 {
             let mut block = [0; 16];
             block[bit / 8] = 1 << (7 - bit % 8);
-            let id = SessionId::from_block(block);
+            let id = Id::from_block(block);
             assert_eq!(id.as_str().len(), 30);
-            assert_eq!(SessionId::parse(id.as_str()), Ok(id.clone()));
+            assert_eq!(Id::parse(id.as_str()), Ok(id.clone()));
             assert!(ids.insert(id));
         }
         for (index, character) in BASE32.iter().enumerate() {
             let text = format!("ses_aaaaaaaaaaaaaaaaaaaaaaaaa{}", char::from(*character));
-            assert_eq!(SessionId::parse(&text).is_ok(), index % 4 == 0);
+            assert_eq!(Id::parse(&text).is_ok(), index % 4 == 0);
         }
     }
 
@@ -745,11 +745,7 @@ mod tests {
             "ses_aaaaaaaaaaaaaaaaaaaaaaaaaa\n",
             " ses_aaaaaaaaaaaaaaaaaaaaaaaaaa",
         ] {
-            assert_eq!(
-                SessionId::parse(text),
-                Err(SessionError::InvalidId),
-                "{text:?}"
-            );
+            assert_eq!(Id::parse(text), Err(SessionError::InvalidId), "{text:?}");
         }
     }
 
@@ -774,9 +770,9 @@ mod tests {
         assert_eq!(Transport::Tcp.as_str(), "tcp");
         assert_eq!(Transport::Ws.as_str(), "ws");
         assert_eq!(Transport::Wss.as_str(), "wss");
-        assert_eq!(SessionState::Active.as_str(), "active");
-        assert_eq!(SessionState::Closing.as_str(), "closing");
-        assert_eq!(SessionState::Finished.as_str(), "finished");
+        assert_eq!(State::Active.as_str(), "active");
+        assert_eq!(State::Closing.as_str(), "closing");
+        assert_eq!(State::Finished.as_str(), "finished");
     }
 
     /// spec: relay.md:RLY-019 partial
@@ -787,7 +783,7 @@ mod tests {
         for (mode, other) in [(Mode::Mode1, Side::Target), (Mode::Mode2, Side::Server)] {
             for (first, second) in [(Side::Viewer, other), (other, Side::Viewer)] {
                 let mut session = session(mode);
-                assert_eq!(session.state(), SessionState::Active);
+                assert_eq!(session.state(), State::Active);
                 assert_eq!(
                     session.complete_direction(FORWARD),
                     Err(SessionError::DirectionNotEof)
@@ -797,7 +793,7 @@ mod tests {
                     Err(SessionError::NotClosing)
                 );
                 session.observe_eof(first, Duration::from_secs(12)).unwrap();
-                assert_eq!(session.state(), SessionState::Closing);
+                assert_eq!(session.state(), State::Closing);
                 assert_eq!(session.close_cause(), None);
                 let first_direction = if first == Side::Viewer {
                     FORWARD
@@ -835,7 +831,7 @@ mod tests {
                 assert_eq!(closed.close_side(), Some(first));
                 assert_eq!(closed.bytes(first_direction), 3);
                 assert_eq!(closed.bytes(second_direction), 9);
-                assert_eq!(session.state(), SessionState::Finished);
+                assert_eq!(session.state(), State::Finished);
             }
         }
     }
@@ -1061,7 +1057,7 @@ mod tests {
                         session.dead_connection(invalid),
                         Err(SessionError::InvalidSide)
                     );
-                    assert_eq!(session.state(), SessionState::Active);
+                    assert_eq!(session.state(), State::Active);
                     if eof_first {
                         session.observe_eof(other, Duration::from_secs(12)).unwrap();
                     }
@@ -1116,7 +1112,7 @@ mod tests {
         assert_eq!(closed.viewer_transport(), old.viewer_transport());
         assert_eq!(closed.target_transport(), old.target_transport());
         let mut fresh = Session::new(
-            SessionId::from_block([2; 16]),
+            Id::from_block([2; 16]),
             Mode::Mode2,
             Transport::Wss,
             Transport::Ws,
@@ -1124,7 +1120,7 @@ mod tests {
             Duration::from_secs(40),
         );
         assert_ne!(fresh.id(), old.id());
-        assert_eq!(fresh.state(), SessionState::Active);
+        assert_eq!(fresh.state(), State::Active);
         assert_eq!(fresh.bytes(FORWARD), 0);
         assert_eq!(fresh.bytes(REVERSE), 0);
         assert_eq!(fresh.close_cause(), None);
@@ -1155,7 +1151,7 @@ mod tests {
             for viewer in [Transport::Tcp, Transport::Ws, Transport::Wss] {
                 for target in [Transport::Tcp, Transport::Ws, Transport::Wss] {
                     let mut session = Session::new(
-                        SessionId::from_block([3; 16]),
+                        Id::from_block([3; 16]),
                         mode,
                         viewer,
                         target,

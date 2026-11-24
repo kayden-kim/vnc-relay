@@ -8,7 +8,8 @@ use std::sync::{Arc, Mutex, PoisonError};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
-use super::{LIMIT, browser_port, connect, must};
+use crate::browser_port;
+use crate::live::{self, LIMIT};
 
 #[derive(Clone)]
 pub enum Fault {
@@ -68,8 +69,8 @@ pub struct Proxy {
 impl Proxy {
     pub fn start(upstream: u16) -> Self {
         let listener = browser_port::bind();
-        let port = must(listener.local_addr()).port();
-        must(listener.set_nonblocking(true));
+        let port = live::must(listener.local_addr()).port();
+        live::must(listener.set_nonblocking(true));
         let shared = Arc::new(Shared::default());
         let serving = Arc::clone(&shared);
         let task = thread::spawn(move || {
@@ -91,14 +92,14 @@ impl Proxy {
                 while index < workers.len() {
                     if workers[index].is_finished() {
                         let worker = workers.swap_remove(index);
-                        must(worker.join());
+                        live::must(worker.join());
                     } else {
                         index += 1;
                     }
                 }
             }
             for worker in workers {
-                must(worker.join());
+                live::must(worker.join());
             }
         });
         Self {
@@ -224,7 +225,7 @@ impl Proxy {
         if let Some(task) = self.task.take() {
             let result = task.join();
             if !thread::panicking() {
-                must(result);
+                live::must(result);
             }
         }
     }
@@ -251,9 +252,9 @@ fn exchange(mut downstream: TcpStream, upstream: u16, state: &Shared) {
     // Windows accepted sockets inherit the listener's nonblocking mode.
     // Chromium may preconnect before sending its request; an immediate
     // WouldBlock must not be mistaken for a closed/failed HTTP connection.
-    must(downstream.set_nonblocking(false));
-    must(downstream.set_read_timeout(Some(LIMIT)));
-    must(downstream.set_write_timeout(Some(LIMIT)));
+    live::must(downstream.set_nonblocking(false));
+    live::must(downstream.set_read_timeout(Some(LIMIT)));
+    live::must(downstream.set_write_timeout(Some(LIMIT)));
     let accepted_at = Instant::now();
     state.accepted.fetch_add(1, Ordering::Release);
     let bytes = match request_bytes(&mut downstream) {
@@ -383,7 +384,7 @@ fn forward(
         _ => {}
     }
     state.traffic.lock().unwrap_or_else(PoisonError::into_inner)[index].stage = "upstream_connect";
-    let mut stream = connect(upstream);
+    let mut stream = live::connect(upstream);
     {
         let mut traffic = state.traffic.lock().unwrap_or_else(PoisonError::into_inner);
         traffic[index].upstream_connected_at = Some(Instant::now());

@@ -1,6 +1,6 @@
 //! Bounded request reading under a single absolute H deadline.
 
-use std::future::poll_fn;
+use std::future;
 use std::pin::pin;
 use std::task::Poll;
 use std::time::Duration;
@@ -9,7 +9,7 @@ use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::sync::watch;
 use vnc_relay_domain::entry_point::{EntryPoint, Role};
 use vnc_relay_domain::handshake::{
-    HANDSHAKE_REQUEST_LEN, HandshakeParser, HandshakePolicy, HandshakeRequest, VIEWER_GREETING,
+    HANDSHAKE_REQUEST_LEN, HandshakeParser, HandshakeRequest, Policy, VIEWER_GREETING,
 };
 
 use super::RelayError;
@@ -23,7 +23,7 @@ use crate::ports::{Clock, RelayLifecycle, RelayStreamError};
 pub(super) async fn exchange<S>(
     stream: &mut S,
     entry_point: EntryPoint,
-    modes: HandshakePolicy,
+    modes: Policy,
     buffer_bytes: usize,
     deadline: Duration,
     session_deadline: Option<Duration>,
@@ -42,7 +42,7 @@ where
         deadline.saturating_sub(clock.monotonic()),
     ));
     let mut exchange = pin!(read_request(stream, entry_point, modes, buffer_bytes));
-    poll_fn(|cx| {
+    future::poll_fn(|cx| {
         if stopped.as_mut().poll(cx).is_ready() {
             return Poll::Ready(Err(RelayError::Aborted(AbortReason::ServerShutdown)));
         }
@@ -66,7 +66,7 @@ where
 async fn read_request<S>(
     stream: &mut S,
     entry_point: EntryPoint,
-    modes: HandshakePolicy,
+    modes: Policy,
     buffer_bytes: usize,
 ) -> Result<(HandshakeRequest, Vec<u8>), RelayError>
 where
@@ -117,9 +117,9 @@ mod tests {
     use std::task::Context;
     use std::time::SystemTime;
 
-    use tokio::io::{DuplexStream, ReadBuf, duplex};
+    use tokio::io::{DuplexStream, ReadBuf};
     use tokio::task::JoinHandle;
-    use tokio::time::{Instant, advance};
+    use tokio::time::{self, Instant};
     use vnc_relay_domain::budget::ConnectionBudget;
     use vnc_relay_domain::conn_id::ConnId;
     use vnc_relay_domain::handshake::{HandshakeError, Mode};
@@ -129,12 +129,12 @@ mod tests {
     use crate::events::{ConnectionErrorKind, Event, RejectReason, Stage};
     use crate::metrics::Metrics;
     use crate::ports::{EventSink, RelayCloseAction, RelayStream};
-    use crate::relay::test_support::TestSettings;
+    use crate::relay::test_support::FakeRuntimeSettingsSource;
     use crate::relay::{ConnectionContext, PreparedConnection, RelayService};
     use vnc_relay_domain::session::Transport;
 
     const H: Duration = Duration::from_secs(10);
-    const ENABLED: HandshakePolicy = HandshakePolicy {
+    const ENABLED: Policy = Policy {
         mode1_enabled: true,
         mode2_enabled: true,
     };
@@ -157,7 +157,7 @@ mod tests {
             (H + Duration::from_secs(1), H, AbortReason::HandshakeTimeout),
         ] {
             let harness = Harness::new(4, ENABLED);
-            let (stream, _peer) = duplex(4096);
+            let (stream, _peer) = tokio::io::duplex(4096);
             let context = ConnectionContext {
                 conn_id: ConnId::next(),
                 entry_point: EntryPoint::WsServer,
@@ -171,7 +171,7 @@ mod tests {
                 handshake: H,
             };
             let mut exchange = pin!(harness.service.handle_connection(
-                TestStream {
+                FakeRelayStream {
                     stream,
                     actions: harness.close_actions.clone(),
                     budget: harness.budget.clone(),
@@ -187,12 +187,12 @@ mod tests {
                 harness.budget.try_acquire(1).expect("L"),
                 harness.shutdown.subscribe(),
             ));
-            poll_fn(|cx| {
+            future::poll_fn(|cx| {
                 assert!(exchange.as_mut().poll(cx).is_pending());
                 Poll::Ready(())
             })
             .await;
-            advance(elapsed).await;
+            time::advance(elapsed).await;
             assert_eq!(exchange.await.err(), Some(RelayError::Aborted(expected)));
             assert!(
                 harness
@@ -220,7 +220,7 @@ mod tests {
     #[tokio::test(start_paused = true)]
     async fn exchange_keeps_accepted_b_and_started_h_after_reload() {
         let harness = Harness::new(4, ENABLED);
-        let (stream, mut peer) = duplex(4096);
+        let (stream, mut peer) = tokio::io::duplex(4096);
         let context = ConnectionContext {
             conn_id: ConnId::next(),
             entry_point: EntryPoint::TcpServer,
@@ -234,7 +234,7 @@ mod tests {
             handshake: H,
         };
         let mut exchange = pin!(harness.service.handle_connection(
-            TestStream {
+            FakeRelayStream {
                 stream,
                 actions: harness.close_actions.clone(),
                 budget: harness.budget.clone(),
@@ -246,7 +246,7 @@ mod tests {
             harness.budget.try_acquire(1).expect("L"),
             harness.shutdown.subscribe(),
         ));
-        poll_fn(|cx| {
+        future::poll_fn(|cx| {
             assert!(exchange.as_mut().poll(cx).is_pending());
             Poll::Ready(())
         })
@@ -255,8 +255,8 @@ mod tests {
             settings.timeouts.handshake = Duration::from_secs(1);
             settings.limits.buffer_bytes = 1;
         });
-        advance(Duration::from_secs(2)).await;
-        poll_fn(|cx| {
+        time::advance(Duration::from_secs(2)).await;
+        future::poll_fn(|cx| {
             assert!(
                 exchange.as_mut().poll(cx).is_pending(),
                 "started H is unchanged"
@@ -272,12 +272,12 @@ mod tests {
         assert_eq!(prepared.trailing_bytes(), b"abcd");
     }
 
-    struct TestClock {
+    struct FakeClock {
         epoch: Instant,
         offset_ms: AtomicU64,
     }
 
-    impl TestClock {
+    impl FakeClock {
         fn jump(&self, duration: Duration) {
             self.offset_ms.fetch_add(
                 u64::try_from(duration.as_millis()).expect("test duration"),
@@ -286,7 +286,7 @@ mod tests {
         }
     }
 
-    impl Clock for TestClock {
+    impl Clock for FakeClock {
         fn monotonic(&self) -> Duration {
             self.epoch.elapsed() + Duration::from_millis(self.offset_ms.load(Ordering::Relaxed))
         }
@@ -297,12 +297,12 @@ mod tests {
     }
 
     #[derive(Default)]
-    struct Recorder {
+    struct SpyEventSink {
         events: Mutex<Vec<Event>>,
         resources: Mutex<Option<(Arc<AtomicBool>, Arc<ConnectionBudget>)>>,
     }
 
-    impl EventSink for Recorder {
+    impl EventSink for SpyEventSink {
         fn record(&self, event: &Event) {
             if let Some((dropped, budget)) = &*self.resources.lock().expect("resource lock") {
                 assert!(
@@ -315,7 +315,7 @@ mod tests {
         }
     }
 
-    impl Recorder {
+    impl SpyEventSink {
         fn snapshot(&self) -> Vec<Event> {
             self.events.lock().expect("events lock").clone()
         }
@@ -323,23 +323,23 @@ mod tests {
 
     struct Harness {
         service: RelayService,
-        clock: Arc<TestClock>,
-        events: Arc<Recorder>,
+        clock: Arc<FakeClock>,
+        events: Arc<SpyEventSink>,
         budget: Arc<ConnectionBudget>,
         shutdown: watch::Sender<RelayLifecycle>,
         close_actions: Arc<Mutex<Vec<RelayCloseAction>>>,
-        settings: Arc<TestSettings>,
+        settings: Arc<FakeRuntimeSettingsSource>,
     }
 
     impl Harness {
-        fn new(buffer_bytes: usize, modes: HandshakePolicy) -> Arc<Self> {
-            let clock = Arc::new(TestClock {
+        fn new(buffer_bytes: usize, modes: Policy) -> Arc<Self> {
+            let clock = Arc::new(FakeClock {
                 epoch: Instant::now(),
                 offset_ms: AtomicU64::new(0),
             });
-            let events = Arc::new(Recorder::default());
+            let events = Arc::new(SpyEventSink::default());
             let (shutdown, _) = watch::channel(RelayLifecycle::Running);
-            let settings = TestSettings::new();
+            let settings = FakeRuntimeSettingsSource::new();
             settings.change(|settings| {
                 settings.limits.buffer_bytes = buffer_bytes as u32;
                 settings.timeouts.close = Duration::from_secs(3);
@@ -365,7 +365,7 @@ mod tests {
             self: &Arc<Self>,
             stream: S,
             entry_point: EntryPoint,
-        ) -> JoinHandle<Result<PreparedConnection<TestStream<S>>, RelayError>>
+        ) -> JoinHandle<Result<PreparedConnection<FakeRelayStream<S>>, RelayError>>
         where
             S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
         {
@@ -390,7 +390,7 @@ mod tests {
             let permit = self.budget.try_acquire(1).expect("test L slot");
             let shutdown = self.shutdown.subscribe();
             let harness = self.clone();
-            let stream = TestStream {
+            let stream = FakeRelayStream {
                 stream,
                 actions: self.close_actions.clone(),
                 budget: self.budget.clone(),
@@ -406,7 +406,7 @@ mod tests {
         }
     }
 
-    struct TestStream<S> {
+    struct FakeRelayStream<S> {
         stream: S,
         actions: Arc<Mutex<Vec<RelayCloseAction>>>,
         budget: Arc<ConnectionBudget>,
@@ -414,7 +414,7 @@ mod tests {
         failure: Option<ConnectionErrorKind>,
     }
 
-    impl<S: AsyncRead + Unpin> AsyncRead for TestStream<S> {
+    impl<S: AsyncRead + Unpin> AsyncRead for FakeRelayStream<S> {
         fn poll_read(
             mut self: Pin<&mut Self>,
             cx: &mut Context<'_>,
@@ -427,7 +427,7 @@ mod tests {
         }
     }
 
-    impl<S: AsyncWrite + Unpin> AsyncWrite for TestStream<S> {
+    impl<S: AsyncWrite + Unpin> AsyncWrite for FakeRelayStream<S> {
         fn poll_write(
             mut self: Pin<&mut Self>,
             cx: &mut Context<'_>,
@@ -443,7 +443,7 @@ mod tests {
         }
     }
 
-    impl<S: AsyncRead + AsyncWrite + Unpin + Send> RelayStream for TestStream<S> {
+    impl<S: AsyncRead + AsyncWrite + Unpin + Send> RelayStream for FakeRelayStream<S> {
         fn transport(&self) -> Transport {
             Transport::Tcp
         }
@@ -492,7 +492,7 @@ mod tests {
     async fn sends_the_viewer_greeting_once_and_sends_none_to_the_server() {
         for entry_point in [EntryPoint::TcpViewer, EntryPoint::TcpServer] {
             let harness = Harness::new(8, ENABLED);
-            let (stream, mut peer) = duplex(4096);
+            let (stream, mut peer) = tokio::io::duplex(4096);
             let task = harness.start(stream, entry_point);
             if entry_point == EntryPoint::TcpViewer {
                 let mut greeting = [0; 12];
@@ -521,7 +521,7 @@ mod tests {
         let mut expected = None;
         for size in [1, 7, 249, 250] {
             let harness = Harness::new(8, ENABLED);
-            let (stream, mut peer) = duplex(4096);
+            let (stream, mut peer) = tokio::io::duplex(4096);
             let task = harness.start(stream, EntryPoint::TcpServer);
             for chunk in request(b"ID:0123").chunks(size) {
                 peer.write_all(chunk).await.expect("chunk");
@@ -542,7 +542,7 @@ mod tests {
     async fn preserves_trailing_bytes_and_counts_them_against_b() {
         for buffer_bytes in [0, 4, 8] {
             let harness = Harness::new(buffer_bytes, ENABLED);
-            let (stream, mut peer) = duplex(4096);
+            let (stream, mut peer) = tokio::io::duplex(4096);
             let mut input = request(b"ID:0123").to_vec();
             input.extend_from_slice(b"abcdefghNEXT");
             peer.write_all(&input).await.expect("coalesced input");
@@ -575,7 +575,7 @@ mod tests {
     /// spec: relay.md:RLY-022 partial
     #[tokio::test(start_paused = true)]
     async fn rejects_invalid_and_disabled_requests_without_preparing_a_connection() {
-        let disabled = HandshakePolicy {
+        let disabled = Policy {
             mode1_enabled: false,
             mode2_enabled: false,
         };
@@ -612,7 +612,7 @@ mod tests {
             ),
         ] {
             let harness = Harness::new(8, modes);
-            let (stream, mut peer) = duplex(4096);
+            let (stream, mut peer) = tokio::io::duplex(4096);
             peer.write_all(&request(value)).await.expect("request");
             assert_eq!(
                 harness
@@ -657,7 +657,7 @@ mod tests {
     async fn distinguishes_peer_eof_from_the_absolute_h_timeout() {
         for count in [0, 1, 249] {
             let harness = Harness::new(8, ENABLED);
-            let (stream, mut peer) = duplex(4096);
+            let (stream, mut peer) = tokio::io::duplex(4096);
             peer.write_all(&request(b"ID:1")[..count])
                 .await
                 .expect("partial");
@@ -673,11 +673,11 @@ mod tests {
             assert_abort(&harness, AbortReason::PeerEof);
         }
         let harness = Harness::new(8, ENABLED);
-        let (stream, mut peer) = duplex(4096);
+        let (stream, mut peer) = tokio::io::duplex(4096);
         peer.write_all(b"ID:").await.expect("partial");
         let task = harness.start(stream, EntryPoint::TcpServer);
         tokio::task::yield_now().await;
-        advance(H).await;
+        time::advance(H).await;
         assert_eq!(
             task.await.expect("task").unwrap_err(),
             RelayError::Aborted(AbortReason::HandshakeTimeout)
@@ -693,12 +693,12 @@ mod tests {
     #[tokio::test(start_paused = true)]
     async fn does_not_restart_h_on_partial_reads_or_greeting_writes() {
         let harness = Harness::new(8, ENABLED);
-        let (stream, mut peer) = duplex(4096);
+        let (stream, mut peer) = tokio::io::duplex(4096);
         let task = harness.start(stream, EntryPoint::TcpServer);
         for chunk in request(b"ID:1")[..249].chunks(83) {
             peer.write_all(chunk).await.expect("partial");
             tokio::task::yield_now().await;
-            advance(Duration::from_secs(4)).await;
+            time::advance(Duration::from_secs(4)).await;
         }
         assert_eq!(
             task.await.expect("task").unwrap_err(),
@@ -707,11 +707,11 @@ mod tests {
         assert_abort(&harness, AbortReason::HandshakeTimeout);
 
         let harness = Harness::new(8, ENABLED);
-        let (stream, mut peer) = duplex(1);
+        let (stream, mut peer) = tokio::io::duplex(1);
         let task = harness.start(stream, EntryPoint::TcpViewer);
         for _ in 0..3 {
             peer.read_exact(&mut [0; 1]).await.expect("greeting byte");
-            advance(Duration::from_secs(4)).await;
+            time::advance(Duration::from_secs(4)).await;
         }
         assert_eq!(
             task.await.expect("task").unwrap_err(),
@@ -725,7 +725,7 @@ mod tests {
             H + Duration::from_millis(1),
         ] {
             let harness = Harness::new(8, ENABLED);
-            let (stream, mut peer) = duplex(4096);
+            let (stream, mut peer) = tokio::io::duplex(4096);
             let task = harness.start(stream, EntryPoint::TcpServer);
             harness.clock.jump(elapsed);
             peer.write_all(&request(b"ID:1"))
@@ -745,7 +745,7 @@ mod tests {
         }
     }
 
-    struct TrackedStream {
+    struct SpyRelayStream {
         stream: DuplexStream,
         dropped: Arc<AtomicBool>,
         budget: Arc<ConnectionBudget>,
@@ -753,7 +753,7 @@ mod tests {
         fail_write: bool,
     }
 
-    impl Drop for TrackedStream {
+    impl Drop for SpyRelayStream {
         fn drop(&mut self) {
             assert!(
                 self.budget.try_acquire(1).is_none(),
@@ -763,7 +763,7 @@ mod tests {
         }
     }
 
-    impl AsyncRead for TrackedStream {
+    impl AsyncRead for SpyRelayStream {
         fn poll_read(
             mut self: Pin<&mut Self>,
             cx: &mut Context<'_>,
@@ -777,7 +777,7 @@ mod tests {
         }
     }
 
-    impl AsyncWrite for TrackedStream {
+    impl AsyncWrite for SpyRelayStream {
         fn poll_write(
             mut self: Pin<&mut Self>,
             cx: &mut Context<'_>,
@@ -799,7 +799,7 @@ mod tests {
         }
     }
 
-    impl RelayStream for TrackedStream {
+    impl RelayStream for SpyRelayStream {
         fn transport(&self) -> Transport {
             Transport::Tcp
         }
@@ -826,8 +826,8 @@ mod tests {
             let dropped = Arc::new(AtomicBool::new(false));
             *harness.events.resources.lock().expect("resource lock") =
                 Some((dropped.clone(), harness.budget.clone()));
-            let (stream, peer) = duplex(4096);
-            let stream = TrackedStream {
+            let (stream, peer) = tokio::io::duplex(4096);
+            let stream = SpyRelayStream {
                 stream,
                 dropped,
                 budget: harness.budget.clone(),
@@ -847,7 +847,7 @@ mod tests {
                     AbortReason::PeerEof
                 }
                 1 => {
-                    advance(H).await;
+                    time::advance(H).await;
                     AbortReason::HandshakeTimeout
                 }
                 2 | 3 => AbortReason::ConnectionError(ConnectionErrorKind::IoError),
@@ -869,8 +869,8 @@ mod tests {
         for poll_once in [false, true] {
             let harness = Harness::new(8, ENABLED);
             let dropped = Arc::new(AtomicBool::new(false));
-            let (stream, _peer) = duplex(4096);
-            let stream = TrackedStream {
+            let (stream, _peer) = tokio::io::duplex(4096);
+            let stream = SpyRelayStream {
                 stream,
                 dropped: dropped.clone(),
                 budget: harness.budget.clone(),
@@ -897,7 +897,7 @@ mod tests {
                 harness.shutdown.subscribe(),
             ));
             if poll_once {
-                poll_fn(|cx| {
+                future::poll_fn(|cx| {
                     assert!(future.as_mut().poll(cx).is_pending());
                     Poll::Ready(())
                 })
@@ -916,11 +916,11 @@ mod tests {
     async fn rejection_and_h_timeout_close_before_release_but_never_hold_l_beyond_e() {
         for timeout in [false, true] {
             let harness = Harness::new(8, ENABLED);
-            let (stream, mut peer) = duplex(4096);
+            let (stream, mut peer) = tokio::io::duplex(4096);
             let invalid = request(b"invalid");
             let input: &[u8] = if timeout { b"ID:" } else { &invalid };
             peer.write_all(input).await.expect("input");
-            let stream = TestStream {
+            let stream = FakeRelayStream {
                 stream,
                 actions: harness.close_actions.clone(),
                 budget: harness.budget.clone(),
@@ -946,14 +946,14 @@ mod tests {
                 harness.budget.try_acquire(1).expect("L"),
                 harness.shutdown.subscribe(),
             ));
-            poll_fn(|cx| {
+            future::poll_fn(|cx| {
                 assert!(future.as_mut().poll(cx).is_pending());
                 Poll::Ready(())
             })
             .await;
             if timeout {
-                advance(H).await;
-                poll_fn(|cx| {
+                time::advance(H).await;
+                future::poll_fn(|cx| {
                     assert!(future.as_mut().poll(cx).is_pending());
                     Poll::Ready(())
                 })
@@ -973,7 +973,7 @@ mod tests {
             );
             assert!(harness.budget.try_acquire(1).is_none());
             assert!(harness.events.snapshot().is_empty());
-            advance(Duration::from_secs(3)).await;
+            time::advance(Duration::from_secs(3)).await;
             assert!(future.await.is_err());
             assert!(harness.budget.try_acquire(1).is_some());
             assert_eq!(peer.read(&mut [0; 1]).await.expect("stream dropped"), 0);
@@ -992,8 +992,8 @@ mod tests {
             ConnectionErrorKind::WsMessageTooLarge,
         ] {
             let harness = Harness::new(8, ENABLED);
-            let (stream, _peer) = duplex(4096);
-            let stream = TestStream {
+            let (stream, _peer) = tokio::io::duplex(4096);
+            let stream = FakeRelayStream {
                 stream,
                 actions: harness.close_actions.clone(),
                 budget: harness.budget.clone(),
@@ -1039,8 +1039,8 @@ mod tests {
     async fn force_polls_initial_shutdown_close_once_without_waiting_or_holding_l() {
         for block_close in [false, true] {
             let harness = Harness::new(8, ENABLED);
-            let (stream, mut peer) = duplex(4096);
-            let stream = TestStream {
+            let (stream, mut peer) = tokio::io::duplex(4096);
+            let stream = FakeRelayStream {
                 stream,
                 actions: harness.close_actions.clone(),
                 budget: harness.budget.clone(),
@@ -1092,11 +1092,11 @@ mod tests {
     async fn pending_initial_failure_close_stops_at_grace_deadline_or_second_shutdown() {
         for second_shutdown in [false, true] {
             let harness = Harness::new(8, ENABLED);
-            let (stream, mut peer) = duplex(4096);
+            let (stream, mut peer) = tokio::io::duplex(4096);
             peer.write_all(&request(b"invalid"))
                 .await
                 .expect("invalid request");
-            let stream = TestStream {
+            let stream = FakeRelayStream {
                 stream,
                 actions: harness.close_actions.clone(),
                 budget: harness.budget.clone(),
@@ -1122,7 +1122,7 @@ mod tests {
                 harness.budget.try_acquire(1).expect("L"),
                 harness.shutdown.subscribe(),
             ));
-            poll_fn(|cx| {
+            future::poll_fn(|cx| {
                 assert!(future.as_mut().poll(cx).is_pending());
                 Poll::Ready(())
             })
@@ -1140,7 +1140,7 @@ mod tests {
             harness.shutdown.send_replace(RelayLifecycle::Grace {
                 deadline: harness.clock.monotonic() + Duration::from_secs(1),
             });
-            poll_fn(|cx| {
+            future::poll_fn(|cx| {
                 assert!(future.as_mut().poll(cx).is_pending());
                 Poll::Ready(())
             })
@@ -1152,7 +1152,7 @@ mod tests {
                 assert!(future.await.is_err());
             } else {
                 // Advance to G deadline
-                advance(Duration::from_secs(1)).await;
+                time::advance(Duration::from_secs(1)).await;
                 assert!(future.await.is_err());
             }
             assert!(harness.budget.try_acquire(1).is_some());

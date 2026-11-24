@@ -31,7 +31,7 @@ use rustls::pki_types::{CertificateDer, ServerName};
 use rustls::version::{TLS12, TLS13};
 use rustls::{ClientConfig, ClientConnection, RootCertStore, StreamOwned};
 use vnc_relay_adapters::accounts_file::Argon2PasswordHashGateway;
-use vnc_relay_app::ports::PasswordHashGateway;
+use vnc_relay_application::ports::PasswordHashGateway;
 use vnc_relay_domain::account::{Argon2Params, Password};
 
 const BIN: &str = env!("CARGO_BIN_EXE_vnc-relay");
@@ -2926,16 +2926,15 @@ fn config_item<'a>(view: &'a ConfigJson, key: &str) -> &'a ConfigJson {
 }
 
 fn config_revision(bytes: &[u8]) -> String {
-    use vnc_relay_app::management::config::ConfigFileStore;
+    use vnc_relay_application::management::config::ConfigFileStore;
     vnc_relay_adapters::config_edit::FsConfigFileStore.revision(bytes)
 }
 
 fn config_assert_revision(view: &ConfigJson, bytes: &[u8]) {
     assert_eq!(view["revision"], config_revision(bytes));
-    assert!(vnc_relay_app::management::config::valid_revision(some(
-        view["revision"].as_str(),
-        "revision"
-    )));
+    assert!(vnc_relay_application::management::config::valid_revision(
+        some(view["revision"].as_str(), "revision")
+    ));
 }
 
 fn config_assert_error(reply: &Reply, status: u16, code: &str) -> ConfigJson {

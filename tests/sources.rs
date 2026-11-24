@@ -5,21 +5,6 @@
 //! Addresses are documentation ranges (RFC 5737, RFC 3849) and AS numbers
 //! are examples (RFC 5398).
 
-#[expect(
-    dead_code,
-    unused_imports,
-    reason = "the shared live-process module also carries browser helpers"
-)]
-#[path = "common/dashboard_live.rs"]
-mod live;
-
-#[expect(
-    dead_code,
-    reason = "the shared MMDB writer also builds the adapter test files"
-)]
-#[path = "../crates/adapters/tests/common/mmdb.rs"]
-mod mmdb;
-
 use std::collections::BTreeMap;
 use std::fs;
 use std::io::{Read, Write};
@@ -27,9 +12,10 @@ use std::net::TcpStream;
 use std::path::Path;
 use std::time::Duration;
 
-use live::{Admin, LIMIT, Reply, Server, connect, must, read_reply, wait_for};
-use mmdb::{MmdbWriter, iso_country, maxmind_asn};
 use serde_json::{Value, json};
+use vnc_relay_testkit::live::{self, Admin, LIMIT, Reply, Server};
+use vnc_relay_testkit::mmdb;
+use vnc_relay_testkit::mmdb::MmdbWriter;
 
 const BUILD_EPOCH: u64 = 1_761_955_200; // 2025-11-01T00:00:00Z
 
@@ -50,35 +36,38 @@ fn proxied(config: String, ip_info: &str) -> String {
 
 fn country_db(code: &str) -> Vec<u8> {
     MmdbWriter::new("DBIP-Country-Lite", BUILD_EPOCH)
-        .insert("198.51.100.0/24", iso_country(code))
-        .insert("2001:db8::/32", iso_country("JP"))
+        .insert("198.51.100.0/24", mmdb::iso_country(code))
+        .insert("2001:db8::/32", mmdb::iso_country("JP"))
         .to_bytes()
 }
 
 fn asn_db() -> Vec<u8> {
     MmdbWriter::new("GeoLite2-ASN", BUILD_EPOCH)
-        .insert("198.51.100.0/24", maxmind_asn(64496, "Example Transit"))
-        .insert("192.0.2.0/24", maxmind_asn(64511, "Example Edge"))
+        .insert(
+            "198.51.100.0/24",
+            mmdb::maxmind_asn(64496, "Example Transit"),
+        )
+        .insert("192.0.2.0/24", mmdb::maxmind_asn(64511, "Example Edge"))
         .to_bytes()
 }
 
 fn write_db(dir: &Path, name: &str, bytes: &[u8]) {
-    must(fs::create_dir_all(dir.join("ipdb")));
-    must(fs::write(dir.join("ipdb").join(name), bytes));
+    live::must(fs::create_dir_all(dir.join("ipdb")));
+    live::must(fs::write(dir.join("ipdb").join(name), bytes));
 }
 
 /// Opens a WebSocket Viewer through the trusted loopback proxy for `client`.
 /// Returns the status and, after `101`, the open stream.
 fn ws_from(server: &Server, client: &str) -> (u16, TcpStream) {
-    let mut stream = connect(server.ws_port);
+    let mut stream = live::connect(server.ws_port);
     let request = format!(
         "GET /relay/viewer HTTP/1.1\r\nHost: localhost\r\nOrigin: http://127.0.0.1\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Protocol: binary\r\nX-Forwarded-For: {client}\r\n\r\n"
     );
-    must(stream.write_all(request.as_bytes()));
+    live::must(stream.write_all(request.as_bytes()));
     let mut head = Vec::new();
     while !head.ends_with(b"\r\n\r\n") {
         let mut byte = [0];
-        must(stream.read_exact(&mut byte));
+        live::must(stream.read_exact(&mut byte));
         head.push(byte[0]);
         assert!(head.len() < 16384, "bounded WebSocket reply head");
     }
@@ -238,7 +227,7 @@ fn sources_count_proxied_clients_with_the_local_databases() {
         b"",
     );
     assert_eq!(polled.status, 200, "{}", polled.body);
-    let polled: Value = must(serde_json::from_str(&polled.body));
+    let polled: Value = live::must(serde_json::from_str(&polled.body));
     assert_eq!(polled["window"], "24h");
     let bad_poll = server.request(
         "GET",
@@ -261,7 +250,7 @@ fn sources_count_proxied_clients_with_the_local_databases() {
     let (status, _) = ws_from(&server, "192.0.2.9");
     assert_eq!(status, 403);
     let mut body = Value::Null;
-    wait_for("source counts", LIMIT, || {
+    live::wait_for("source counts", LIMIT, || {
         body = sources(&server, &admin);
         body["totals"] == json!({"attempts": 6, "rejected": 1, "aborted": 3, "sessions": 1})
     });
@@ -334,13 +323,13 @@ fn sources_count_proxied_clients_with_the_local_databases() {
             .count()
     };
     write_db(server.dir(), "country.mmdb", &country_db("DE"));
-    wait_for("country database reloaded", Duration::from_secs(30), || {
+    live::wait_for("country database reloaded", Duration::from_secs(30), || {
         reloads(&server) == 1
     });
     let (status, kept) = ws_from(&server, "198.51.100.8");
     assert_eq!(status, 101);
     drop(kept);
-    wait_for("later event counted", LIMIT, || {
+    live::wait_for("later event counted", LIMIT, || {
         body = sources(&server, &admin);
         body["totals"]["aborted"] == 4
     });
@@ -355,11 +344,11 @@ fn sources_count_proxied_clients_with_the_local_databases() {
     );
 
     // OPS-099: the statistics and the database paths stay out of /metrics and the log.
-    let mut stream = connect(server.ports[1]);
-    must(
+    let mut stream = live::connect(server.ports[1]);
+    live::must(
         stream.write_all(b"GET /metrics HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n"),
     );
-    let metrics = read_reply(stream);
+    let metrics = live::read_reply(stream);
     assert_eq!(metrics.status, 200);
     for secret in [
         "198.51.100",
@@ -486,7 +475,7 @@ fn a_new_process_without_databases_starts_empty_and_counts_without_lookups() {
     );
     drop(server.handshaking());
     let mut body = Value::Null;
-    wait_for("loopback abort counted", LIMIT, || {
+    live::wait_for("loopback abort counted", LIMIT, || {
         body = sources(&server, &admin);
         body["totals"]["aborted"] == 1
     });

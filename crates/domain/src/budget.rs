@@ -26,13 +26,13 @@ impl ConnectionBudget {
 
     /// Takes one place, or `None` when all `limit` places are held. Takes
     /// never exceed the limit, even when tasks take places at once.
-    pub fn try_acquire(self: &Arc<Self>, limit: u32) -> Option<BudgetPermit> {
+    pub fn try_acquire(self: &Arc<Self>, limit: u32) -> Option<Permit> {
         self.used
             .try_update(Ordering::AcqRel, Ordering::Acquire, |used| {
                 (used < limit).then(|| used + 1)
             })
             .ok()?;
-        Some(BudgetPermit {
+        Some(Permit {
             budget: Arc::clone(self),
         })
     }
@@ -41,11 +41,11 @@ impl ConnectionBudget {
 /// One held place. Dropping it gives the place back.
 #[derive(Debug)]
 #[must_use = "dropping the permit gives the place back at once"]
-pub struct BudgetPermit {
+pub struct Permit {
     budget: Arc<ConnectionBudget>,
 }
 
-impl Drop for BudgetPermit {
+impl Drop for Permit {
     fn drop(&mut self) {
         self.budget.used.fetch_sub(1, Ordering::AcqRel);
     }
@@ -124,7 +124,7 @@ mod tests {
                 })
             })
             .collect();
-        let held: Vec<BudgetPermit> = workers
+        let held: Vec<Permit> = workers
             .into_iter()
             .flat_map(|worker| worker.join().unwrap_or_else(|_| panic!("worker panicked")))
             .collect();

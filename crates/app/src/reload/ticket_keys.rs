@@ -3,7 +3,7 @@
 //! Design: docs/architectures/relay-access-ticket.md §4.1, §4.4.
 
 use vnc_relay_domain::entry_point::Role;
-use vnc_relay_domain::ticket::{TicketKeyError, TicketKeyList};
+use vnc_relay_domain::ticket::{KeyList, TicketKeyError};
 
 use crate::reload::ports::{ReloadFileStore, ReloadTicketKeyStore};
 use crate::settings::{ConfigDiagnostic, ConfigError, Settings, TicketSettings};
@@ -21,7 +21,7 @@ pub fn load(
     let mut diagnostics = Vec::new();
     for role in [Role::Viewer, Role::Server] {
         let ticket = settings.relay.ticket.role_mut(role);
-        ticket.keys = TicketKeyList::default();
+        ticket.keys = KeyList::default();
         if !ticket.enabled {
             continue;
         }
@@ -73,7 +73,7 @@ pub(crate) struct FakeTicketKeys;
 
 #[cfg(test)]
 impl ReloadTicketKeyStore for FakeTicketKeys {
-    fn parse(&self, bytes: &[u8]) -> Result<TicketKeyList, TicketKeyError> {
+    fn parse(&self, bytes: &[u8]) -> Result<KeyList, TicketKeyError> {
         let text = std::str::from_utf8(bytes).map_err(|_| TicketKeyError::Format)?;
         let keys = text
             .lines()
@@ -84,10 +84,10 @@ impl ReloadTicketKeyStore for FakeTicketKeys {
                     .trim()
                     .parse::<u8>()
                     .map_err(|_| TicketKeyError::Format)?;
-                vnc_relay_domain::ticket::TicketKey::new(kid.to_owned(), [byte; 32], [byte; 32])
+                vnc_relay_domain::ticket::Key::new(kid.to_owned(), [byte; 32], [byte; 32])
             })
             .collect::<Result<Vec<_>, _>>()?;
-        TicketKeyList::new(keys)
+        KeyList::new(keys)
     }
 }
 
@@ -99,12 +99,12 @@ mod tests {
     use std::sync::Mutex;
 
     use super::*;
-    use crate::relay::test_support::settings;
+    use crate::relay::test_support;
 
     #[derive(Default)]
-    struct Files(Mutex<HashMap<PathBuf, Vec<u8>>>);
+    struct FakeReloadFileStore(Mutex<HashMap<PathBuf, Vec<u8>>>);
 
-    impl ReloadFileStore for Files {
+    impl ReloadFileStore for FakeReloadFileStore {
         fn read(&self, path: &Path) -> io::Result<Vec<u8>> {
             self.0
                 .lock()
@@ -123,8 +123,8 @@ mod tests {
         ticket.public_keys_file = Some(PathBuf::from(path));
     }
 
-    fn files(entries: &[(&str, &str)]) -> Files {
-        let files = Files::default();
+    fn files(entries: &[(&str, &str)]) -> FakeReloadFileStore {
+        let files = FakeReloadFileStore::default();
         for (path, text) in entries {
             files
                 .0
@@ -137,7 +137,7 @@ mod tests {
 
     #[test]
     fn fills_enabled_roles_and_clears_disabled_ones() {
-        let mut settings = settings();
+        let mut settings = test_support::settings();
         enable(&mut settings, Role::Viewer, "viewer.jwks");
         settings.relay.ticket.server.public_keys_file = Some(PathBuf::from("server.jwks"));
         let store = files(&[("viewer.jwks", "a 1\nb 2"), ("server.jwks", "c 3")]);
@@ -148,7 +148,7 @@ mod tests {
 
     #[test]
     fn reports_each_failing_role_on_its_file_key() {
-        let mut settings = settings();
+        let mut settings = test_support::settings();
         enable(&mut settings, Role::Viewer, "viewer.jwks");
         enable(&mut settings, Role::Server, "server.jwks");
         let store = files(&[("viewer.jwks", "invalid")]);
@@ -174,7 +174,7 @@ mod tests {
 
     #[test]
     fn rejects_a_public_key_shared_by_both_roles() {
-        let mut settings = settings();
+        let mut settings = test_support::settings();
         enable(&mut settings, Role::Viewer, "viewer.jwks");
         enable(&mut settings, Role::Server, "server.jwks");
         let store = files(&[("viewer.jwks", "a 1"), ("server.jwks", "other 1")]);

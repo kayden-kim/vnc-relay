@@ -1,7 +1,7 @@
 //! Reads current-process statistics for [the metrics module design](../../../docs/architectures/metrics.md).
 //! See [metrics-v1 §1.3](../../../docs/contracts/metrics-v1.md#13-메트릭-목록).
 
-use vnc_relay_app::ports::{ProcessStats, ProcessStatsSource};
+use vnc_relay_application::ports::{ProcessStats, ProcessStatsSource};
 
 #[cfg(any(target_os = "linux", test))]
 mod linux;
@@ -41,7 +41,7 @@ impl ProcessStatsSource for OsProcessStats {
                 memory_usage: None,
                 memory_virtual: None,
                 threads: None,
-                open: vnc_relay_app::ports::OpenCount::NotSupported,
+                open: vnc_relay_application::ports::OpenCount::NotSupported,
             }
         }
     }
@@ -52,7 +52,7 @@ mod tests {
     #[cfg(any(target_os = "linux", windows))]
     use super::*;
     #[cfg(any(target_os = "linux", windows))]
-    use vnc_relay_app::ports::OpenCount;
+    use vnc_relay_application::ports::OpenCount;
 
     /// spec: operations.md:OPS-090 partial
     #[cfg(target_os = "linux")]

@@ -4,11 +4,11 @@ use std::fmt;
 use std::net::IpAddr;
 
 use crate::allow_list::{IpItem, IpItemError};
-use crate::origin::is_dns_name;
+use crate::origin;
 
 /// The target part of an item: IP item or DNS name.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum TargetHost {
+pub enum TargetItemHost {
     Ip(IpItem),
     /// Lower-case name without a trailing dot.
     Name(String),
@@ -24,7 +24,7 @@ pub struct PortRange {
 /// One `target:port` item of `mode1.allow_targets`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TargetItem {
-    pub host: TargetHost,
+    pub host: TargetItemHost,
     pub ports: PortRange,
 }
 
@@ -72,13 +72,13 @@ impl TargetItem {
                 // IPv6 items need brackets; IPv4 items must not have them.
                 return Err(TargetItemError::Format);
             }
-            TargetHost::Ip(item)
+            TargetItemHost::Ip(item)
         } else {
             let name = target.strip_suffix('.').unwrap_or(target);
-            if !name.is_ascii() || !is_dns_name(name) {
+            if !name.is_ascii() || !origin::is_dns_name(name) {
                 return Err(TargetItemError::Name);
             }
-            TargetHost::Name(name.to_ascii_lowercase())
+            TargetItemHost::Name(name.to_ascii_lowercase())
         };
         Ok(Self { host, ports })
     }
@@ -86,7 +86,7 @@ impl TargetItem {
     /// True when the target is an IP item that covers a whole address family
     /// (warning `allow_all_target`).
     pub fn covers_whole_family(&self) -> bool {
-        matches!(&self.host, TargetHost::Ip(item) if item.covers_whole_family())
+        matches!(&self.host, TargetItemHost::Ip(item) if item.covers_whole_family())
     }
 }
 
@@ -94,9 +94,9 @@ impl TargetItem {
 impl fmt::Display for TargetItem {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self.host {
-            TargetHost::Ip(item) if is_ipv6(item) => write!(f, "[{item}]")?,
-            TargetHost::Ip(item) => write!(f, "{item}")?,
-            TargetHost::Name(name) => f.write_str(name)?,
+            TargetItemHost::Ip(item) if is_ipv6(item) => write!(f, "[{item}]")?,
+            TargetItemHost::Ip(item) => write!(f, "{item}")?,
+            TargetItemHost::Name(name) => f.write_str(name)?,
         }
         if self.ports.start == self.ports.end {
             write!(f, ":{}", self.ports.start)
@@ -126,7 +126,7 @@ impl TargetPolicy {
     pub fn permits_name(&self, name: &str, port: u16) -> bool {
         let name = name.strip_suffix('.').unwrap_or(name);
         self.items.iter().any(|item| {
-            matches!(&item.host, TargetHost::Name(allowed) if allowed.eq_ignore_ascii_case(name))
+            matches!(&item.host, TargetItemHost::Name(allowed) if allowed.eq_ignore_ascii_case(name))
                 && (item.ports.start..=item.ports.end).contains(&port)
         })
     }
@@ -136,7 +136,7 @@ impl TargetPolicy {
     pub fn permits_ip(&self, ip: IpAddr, port: u16) -> bool {
         let ip = ip.to_canonical();
         self.items.iter().any(|item| {
-            matches!(&item.host, TargetHost::Ip(allowed) if allowed.contains(ip))
+            matches!(&item.host, TargetItemHost::Ip(allowed) if allowed.contains(ip))
                 && (item.ports.start..=item.ports.end).contains(&port)
         })
     }
@@ -214,7 +214,7 @@ mod tests {
         }
         assert_eq!(
             ok("pc1.example:5900").host,
-            TargetHost::Name("pc1.example".to_owned())
+            TargetItemHost::Name("pc1.example".to_owned())
         );
     }
 

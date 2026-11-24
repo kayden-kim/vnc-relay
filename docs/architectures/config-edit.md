@@ -46,14 +46,14 @@ flowchart LR
 | `ConfigEditService<A>` | `serve`, 관리 리스너 종료까지 | 설정 경로·base_dir·공유 재로드·파일/문서 포트·Clock·EventSink 보유. [API §1.13~14](../contracts/management-api-v1.md#113-설정-보기-get-apiv1config) |
 | `FsConfigFileStore` | adapters, 프로세스 수명 | 원시 바이트 읽기, SHA-256, 같은 디렉터리 임시 파일과 교체. [설정 §1.10](../contracts/config-v4.md#110-관리-api-편집의-파일-쓰기) |
 | `TomlConfigDocumentGateway` | adapters 포트 구현, 문서는 요청마다 생성 | `toml_edit` 0.25의 `Document<&str>` source span으로 바뀐 값만 치환하고 `config_file::parse_candidate`로 전체 후보 검증. [ADR-0006](../decisions/ADR-0006-config-edit-through-file.md) |
-| `ConfigView`·`ConfigPatch`·`ConfigEditResult` | app 값, 요청 수명 | 교환 필드의 정의는 [API §1.13~14](../contracts/management-api-v1.md#113-설정-보기-get-apiv1config). JSON Value를 app에 넘기지 않음 |
+| `ConfigView`·`ConfigPatch`·`ConfigEditOutcome` | app 값, 요청 수명 | 교환 필드의 정의는 [API §1.13~14](../contracts/management-api-v1.md#113-설정-보기-get-apiv1config). JSON Value를 app에 넘기지 않음 |
 | `management/config/items.rs` `config_items`, `ConfigItem`, `ConfigReloadKind` | app의 명시적 descriptor 목록 | 계약 순서의 실행값·reload 구분·정수 정적 min/max·편집 조건 생성. 참조 파일 내용은 읽지 않음 |
 
 ## 3. 데이터 모델과 GET
 
 [API §1.13](../contracts/management-api-v1.md#113-설정-보기-get-apiv1config)을 다음 내부 자료로 만든다.
 
-`ConfigView`는 `as_of: SystemTime`, `revision: Option<String>`, `edit_enabled: bool`, `file: FileClassification`, `last_reload: Option<LastReload>`, `items: Vec<ConfigItem>`를 담는다. `ConfigPatch`는 revision과 `Vec<ConfigChange>`이며 각 값은 `ConfigValue`다. HTTP의 changes 객체를 이 자료로 바꾸므로 app에 JSON/TOML 타입이 들어오지 않는다. `ConfigActor`는 `AccountName`·`PeerIp`, 성공 `ConfigEditResult`는 as_of·revision·applied를 담는다.
+`ConfigView`는 `as_of: SystemTime`, `revision: Option<String>`, `edit_enabled: bool`, `file: FileClassification`, `last_reload: Option<LastReload>`, `items: Vec<ConfigItem>`를 담는다. `ConfigPatch`는 revision과 `Vec<ConfigChange>`이며 각 값은 `ConfigValue`다. HTTP의 changes 객체를 이 자료로 바꾸므로 app에 JSON/TOML 타입이 들어오지 않는다. `ConfigActor`는 `account::Name`·`PeerIp`, 성공 `ConfigEditOutcome`는 as_of·revision·applied를 담는다.
 
 1. 공유 재로드 mutex를 잡는다. 현재 파일 바이트를 다시 읽고 revision을 계산한다. 실행 `Settings`·`last_reload`·파일 분류를 같은 잠금 구간에서 복사한 뒤 푼다. 파일 I/O 때문에 중계 상태 mutex를 잡지 않는다. GET은 어떤 재로드 결과 사건이나 `last_reload` 갱신도 만들지 않는다.
 2. `ReloadService::classify_file`은 바이트 읽기 실패 또는 비UTF-8 → `unreadable`, 그 밖의 설정/TLS 후보 검증 실패 → `invalid`, 재시작 필요 차이 존재 → `restart_required`, 재로드 대상 차이만 존재 → `pending`, 차이 없음 → `in_effect` 순으로 분류한다. 비UTF-8에서도 읽은 바이트의 revision은 유지한다. `restart_required`에는 재시작 키만, `pending`에는 동적 차이만 담는다. 진단은 `invalid`에만 담는다. 검증과 차이 비교는 쓰기 경로와 같은 함수를 쓰고 TLS 내용 변경도 준비 후보 차이에 포함한다([설정 §1.8 규칙 2~6](../contracts/config-v4.md#18-재로드-구분), [API §1.13](../contracts/management-api-v1.md#113-설정-보기-get-apiv1config)).

@@ -7,13 +7,13 @@ use std::ops::Range;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use aws_lc_rs::digest::{SHA256, digest};
+use aws_lc_rs::digest::{self, SHA256};
 use toml_edit::{Document, Item, Table, Value};
-use vnc_relay_app::management::config::{
+use vnc_relay_application::management::config::{
     ConfigChange, ConfigDocumentGateway, ConfigFileStore, ConfigReplaceError, ConfigValue,
 };
-use vnc_relay_app::reload::ConfigCandidate;
-use vnc_relay_app::settings::{ConfigDiagnostic, ConfigError};
+use vnc_relay_application::reload::ConfigCandidate;
+use vnc_relay_application::settings::{ConfigDiagnostic, ConfigError};
 
 /// Raw-file SHA-256 revisions and atomic, conflict-checked replacement.
 #[derive(Debug, Default, Clone, Copy)]
@@ -26,7 +26,7 @@ impl ConfigFileStore for FsConfigFileStore {
 
     fn revision(&self, bytes: &[u8]) -> String {
         const HEX: &[u8; 16] = b"0123456789abcdef";
-        let hash = digest(&SHA256, bytes);
+        let hash = digest::digest(&SHA256, bytes);
         let mut revision = String::with_capacity(71);
         revision.push_str("sha256:");
         for byte in hash.as_ref() {

@@ -6,10 +6,7 @@ use std::fmt;
 use aws_lc_rs::signature::{ECDSA_P256_SHA256_FIXED, UnparsedPublicKey};
 use serde_json::{Map, Value};
 use vnc_relay_domain::relay_id::RelayId;
-use vnc_relay_domain::ticket::{
-    TicketClaims, TicketError, TicketKeyList, TicketPolicy, decode_base64url, id_is_valid,
-    split_compact,
-};
+use vnc_relay_domain::ticket::{self, Claims, KeyList, Policy, TicketError};
 
 /// Only an authenticated, syntactically valid jti may accompany a refusal.
 #[derive(Debug, PartialEq, Eq)]
@@ -34,24 +31,24 @@ impl std::error::Error for TicketVerificationError {}
 
 pub(crate) fn verify(
     compact: &str,
-    keys: &TicketKeyList,
-    policy: TicketPolicy<'_>,
+    keys: &KeyList,
+    policy: Policy<'_>,
     now_secs: u64,
-) -> Result<TicketClaims, TicketVerificationError> {
+) -> Result<Claims, TicketVerificationError> {
     let invalid = || TicketVerificationError {
         reason: TicketError::Invalid,
         jti: None,
     };
-    let parts = split_compact(compact).ok_or_else(invalid)?;
-    let header = decode_base64url(parts.header).ok_or_else(invalid)?;
-    let payload = decode_base64url(parts.payload).ok_or_else(invalid)?;
-    let signature = decode_base64url(parts.signature).ok_or_else(invalid)?;
+    let parts = ticket::split_compact(compact).ok_or_else(invalid)?;
+    let header = ticket::decode_base64url(parts.header).ok_or_else(invalid)?;
+    let payload = ticket::decode_base64url(parts.payload).ok_or_else(invalid)?;
+    let signature = ticket::decode_base64url(parts.signature).ok_or_else(invalid)?;
     let header = object(&header).ok_or_else(invalid)?;
     if text(&header, "alg") != Some("ES256") || header.contains_key("crit") {
         return Err(invalid());
     }
     let kid = text(&header, "kid")
-        .filter(|kid| id_is_valid(kid))
+        .filter(|kid| ticket::id_is_valid(kid))
         .ok_or_else(invalid)?;
     let key = keys.find(kid).ok_or_else(invalid)?;
     if signature.len() != 64 {
@@ -62,7 +59,7 @@ pub(crate) fn verify(
         .map_err(|_| invalid())?;
 
     let payload = object(&payload).ok_or_else(invalid)?;
-    let jti = text(&payload, "jti").filter(|jti| id_is_valid(jti));
+    let jti = text(&payload, "jti").filter(|jti| ticket::id_is_valid(jti));
     let rejected = |reason| TicketVerificationError {
         reason,
         jti: jti.map(str::to_owned),
@@ -76,17 +73,22 @@ fn text<'a>(object: &'a Map<String, Value>, name: &str) -> Option<&'a str> {
     object.get(name).and_then(Value::as_str)
 }
 
-fn claims(object: &Map<String, Value>) -> Option<TicketClaims> {
-    let jti = text(object, "jti").filter(|jti| id_is_valid(jti))?;
+fn claims(object: &Map<String, Value>) -> Option<Claims> {
+    let jti = text(object, "jti").filter(|jti| ticket::id_is_valid(jti))?;
     let sub = match object.get("sub") {
         None => None,
-        Some(value) => Some(value.as_str().filter(|sub| id_is_valid(sub))?.to_owned()),
+        Some(value) => Some(
+            value
+                .as_str()
+                .filter(|sub| ticket::id_is_valid(sub))?
+                .to_owned(),
+        ),
     };
     let sx = match object.get("sx") {
         None => None,
         Some(value) => Some(value.as_u64()?),
     };
-    Some(TicketClaims {
+    Some(Claims {
         iss: text(object, "iss")?.to_owned(),
         aud: text(object, "aud")?.to_owned(),
         rh: text(object, "rh")?.to_owned(),
@@ -169,7 +171,7 @@ mod tests {
     use aws_lc_rs::signature::{ECDSA_P256_SHA256_FIXED_SIGNING, EcdsaKeyPair, KeyPair};
     use serde_json::json;
     use vnc_relay_domain::entry_point::Role;
-    use vnc_relay_domain::ticket::TicketKey;
+    use vnc_relay_domain::ticket::Key;
 
     fn encode(bytes: &[u8]) -> String {
         const ALPHABET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
@@ -196,10 +198,10 @@ mod tests {
         EcdsaKeyPair::from_pkcs8(&ECDSA_P256_SHA256_FIXED_SIGNING, pkcs8.as_ref()).unwrap()
     }
 
-    fn keys(signer: &EcdsaKeyPair) -> TicketKeyList {
+    fn keys(signer: &EcdsaKeyPair) -> KeyList {
         let point = signer.public_key().as_ref();
-        TicketKeyList::new(vec![
-            TicketKey::new(
+        KeyList::new(vec![
+            Key::new(
                 "key".into(),
                 point[1..33].try_into().unwrap(),
                 point[33..65].try_into().unwrap(),
@@ -223,8 +225,8 @@ mod tests {
         json!({"iss":"issuer.example", "aud":"vnc-relay/viewer", "rh":"relay.example", "rid":"0123", "jti":"id", "iat":100, "exp":160})
     }
 
-    fn policy() -> TicketPolicy<'static> {
-        TicketPolicy {
+    fn policy() -> Policy<'static> {
+        Policy {
             role: Role::Viewer,
             issuer: "issuer.example",
             relay_host: "relay.example",

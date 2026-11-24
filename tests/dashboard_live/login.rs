@@ -2,7 +2,9 @@ use std::time::{Duration, Instant};
 
 use serde_json::{Value, json};
 
-use super::live::{Browser, Fault, LIMIT, PASSWORD, Server, wait_for};
+use vnc_relay_testkit::cdp::Browser;
+use vnc_relay_testkit::dashboard_proxy::Fault;
+use vnc_relay_testkit::live::{self, LIMIT, PASSWORD, Server};
 
 const SESSION_PATH: &str = "/api/v1/session";
 const QUERY_PATHS: [&str; 4] = [
@@ -188,7 +190,7 @@ pub fn login_transport_failures_are_distinct_and_block_duplicates() {
                 json!(true),
                 "{branch}: duplicate attempts must remain disabled while in flight",
             );
-            wait_for("one login request reaches the proxy", LIMIT, || {
+            live::wait_for("one login request reaches the proxy", LIMIT, || {
                 server.proxy.count("POST", SESSION_PATH) == before + 1
             });
             browser.wait(
@@ -201,7 +203,7 @@ pub fn login_transport_failures_are_distinct_and_block_duplicates() {
             assert_eq!(notice(&mut browser), json!(REQUEST_FAILED), "{branch}");
             assert_ne!(notice(&mut browser), wrong_notice, "{branch}");
             assert_private_login(&mut browser, &server, "7427001");
-            wait_for("injected login exchange finishes", LIMIT, || {
+            live::wait_for("injected login exchange finishes", LIMIT, || {
                 server
                     .proxy
                     .traffic()
@@ -287,7 +289,7 @@ fn fail_credentials(
         json!(account),
     );
     assert_eq!(server.proxy.count("POST", SESSION_PATH), attempts);
-    wait_for("real credential refusal completes", LIMIT, || {
+    live::wait_for("real credential refusal completes", LIMIT, || {
         server
             .proxy
             .traffic()

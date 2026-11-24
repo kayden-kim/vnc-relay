@@ -22,9 +22,9 @@ use vnc_relay_adapters::config_edit::{FsConfigFileStore, TomlConfigDocumentGatew
 use vnc_relay_adapters::crypto::{CryptoError, RelayIdKey, SessionIdKey, SystemTokenSource};
 use vnc_relay_adapters::file_watch::{self, FsReloadFileStore, SystemReloadClock};
 use vnc_relay_adapters::ip_db::MmdbFileGateway;
-use vnc_relay_adapters::listener::{ListenerFailure, SupervisedListener};
+use vnc_relay_adapters::listener::{ListenerError, SupervisedListener};
 use vnc_relay_adapters::management_http::{DashboardHints, ManagementListener, ManagementServices};
-use vnc_relay_adapters::net::{AcceptPolicy, AllowSource, BindFailure, TcpEntryPoint};
+use vnc_relay_adapters::net::{AcceptPolicy, AllowSource, BindError, TcpEntryPoint};
 use vnc_relay_adapters::ops_log::{JsonLinesEventSink, RecentLogs};
 use vnc_relay_adapters::process_stats::OsProcessStats;
 use vnc_relay_adapters::status_http::StatusListener;
@@ -32,35 +32,35 @@ use vnc_relay_adapters::target::TcpTargetGateway;
 use vnc_relay_adapters::tls::{self, TlsError, TlsFile, TlsSource};
 use vnc_relay_adapters::websocket::{WsEntryPoint, WsPolicy};
 use vnc_relay_adapters::{accounts_file, config_file, net};
-use vnc_relay_app::accounts::{self, ACCOUNTS_FILE_KEY, AccountsDiagnostic};
-use vnc_relay_app::events::{Event, Phase};
-use vnc_relay_app::ip_info::{IpInfoService, IpLookup};
-use vnc_relay_app::lifecycle::LifecycleService;
-use vnc_relay_app::management::config::{ConfigEditService, ConfigService};
-use vnc_relay_app::management::login::dummy_hash;
-use vnc_relay_app::management::query::ManagementQueryService;
-use vnc_relay_app::management::terminate::ManagementTerminateService;
-use vnc_relay_app::management::{AdminAuth, AdminPorts};
-use vnc_relay_app::metrics::history::HistoryWindow;
-use vnc_relay_app::metrics::{MetricSources, Metrics, MetricsService, MetricsSink};
-use vnc_relay_app::ports::{
+use vnc_relay_application::accounts::{self, ACCOUNTS_FILE_KEY, AccountsDiagnostic};
+use vnc_relay_application::events::{Event, Phase};
+use vnc_relay_application::ip_info::{IpInfoService, IpLookup};
+use vnc_relay_application::lifecycle::LifecycleService;
+use vnc_relay_application::management::config::{ConfigEditService, ConfigService};
+use vnc_relay_application::management::login;
+use vnc_relay_application::management::query::ManagementQueryService;
+use vnc_relay_application::management::terminate::ManagementTerminateService;
+use vnc_relay_application::management::{AdminAuth, AdminPorts};
+use vnc_relay_application::metrics::history::HistoryWindow;
+use vnc_relay_application::metrics::{MetricSources, Metrics, MetricsService, MetricsSink};
+use vnc_relay_application::ports::{
     AdminSessionSource, Clock, EventSink, RelaySessionControl, RelayStateSource,
 };
-use vnc_relay_app::relay::{RelayRuntime, RelayRuntimeConfig, RelayService};
-use vnc_relay_app::reload::service::ReloadService;
-use vnc_relay_app::reload::snapshot::{ReloadCell, ReloadSnapshot};
-use vnc_relay_app::reload::{ConfigCandidate, SharedReload};
-use vnc_relay_app::settings::{LogOutput, Settings, TlsFiles};
-use vnc_relay_app::sources::{SourceStats, SourcesService, SourcesSink};
-use vnc_relay_domain::admin_session::AdminSessionPolicy;
+use vnc_relay_application::relay::{RelayRuntime, RelayRuntimeConfig, RelayService};
+use vnc_relay_application::reload::service::ReloadService;
+use vnc_relay_application::reload::snapshot::{ReloadCell, ReloadSnapshot};
+use vnc_relay_application::reload::{ConfigCandidate, SharedReload};
+use vnc_relay_application::settings::{LogOutput, Settings, TlsFiles};
+use vnc_relay_application::sources::{SourceStats, SourcesService, SourcesSink};
+use vnc_relay_domain::admin_session;
 use vnc_relay_domain::budget::ConnectionBudget;
-use vnc_relay_domain::entry_point::{EntryPoint, Listener};
-use vnc_relay_domain::handshake::HandshakePolicy;
-use vnc_relay_domain::login_limit::LoginLimitPolicy;
-use vnc_relay_domain::ticket::TicketUseTable;
+use vnc_relay_domain::entry_point::{EntryPoint, ListenerKind};
+use vnc_relay_domain::handshake;
+use vnc_relay_domain::login_limit;
+use vnc_relay_domain::ticket::UseTable;
 
 #[cfg(windows)]
-use vnc_relay_adapters::windows_service::{ServiceSession, StatusReporter, StopControl};
+use vnc_relay_adapters::windows_service::{ServiceSession, StatusReporter, StopRequest};
 
 use crate::cli::{self, EXIT_ACCOUNTS, EXIT_CONFIG, EXIT_LISTENER, EXIT_RUNTIME, EXIT_SUCCESS};
 
@@ -175,7 +175,8 @@ pub fn start(config: &Path, host: Host) -> u8 {
     // Admin sessions (management-api-v1 §1.4). An unknown account is checked
     // against the dummy hash, so it costs one password check like a known one
     // (MGT-022).
-    let dummy = match dummy_hash(&Argon2PasswordHashGateway, settings.admin.argon2.params()) {
+    let dummy = match login::dummy_hash(&Argon2PasswordHashGateway, settings.admin.argon2.params())
+    {
         Ok(dummy) => dummy,
         Err(error) => {
             return runtime_failure(log.as_ref(), "관리 세션용 더미 해시를 만들 수 없다", &error);
@@ -192,8 +193,8 @@ pub fn start(config: &Path, host: Host) -> u8 {
             clock: Arc::clone(&clock),
             events: Arc::clone(&log),
         },
-        AdminSessionPolicy::new(session.idle, session.max_lifetime),
-        LoginLimitPolicy::new(
+        admin_session::Policy::new(session.idle, session.max_lifetime),
+        login_limit::Policy::new(
             limit.per_account,
             limit.per_source,
             limit.window,
@@ -275,7 +276,7 @@ pub fn check_service_files(config: &Path) -> Result<(), u8> {
             failed = true;
         }
     }
-    if let Err(diagnostics) = vnc_relay_app::reload::ticket_keys::load(
+    if let Err(diagnostics) = vnc_relay_application::reload::ticket_keys::load(
         &mut running.settings,
         &FsReloadFileStore,
         &vnc_relay_adapters::ticket::TicketJwksStore,
@@ -374,7 +375,7 @@ async fn listen_until_shutdown(
     }
     // Ticket public key files of enabled roles are checked at the same point
     // (config-v4 §1.11): any failure exits 3 before binding.
-    if let Err(diagnostics) = vnc_relay_app::reload::ticket_keys::load(
+    if let Err(diagnostics) = vnc_relay_application::reload::ticket_keys::load(
         &mut running.settings,
         &FsReloadFileStore,
         &vnc_relay_adapters::ticket::TicketJwksStore,
@@ -459,7 +460,7 @@ async fn listen_until_shutdown(
     let sources_service = Arc::new(SourcesService::new(
         sources,
         ip_info,
-        Arc::clone(&cell) as Arc<dyn vnc_relay_app::reload::ports::RuntimeSettingsSource>,
+        Arc::clone(&cell) as Arc<dyn vnc_relay_application::reload::ports::RuntimeSettingsSource>,
     ));
     let watch_task = tokio::spawn(watcher.run(stopped.clone()));
     let lifecycle = Arc::new(LifecycleService::new());
@@ -469,9 +470,9 @@ async fn listen_until_shutdown(
     // Every relay entry point takes places from one L.
     let relay_budget = ConnectionBudget::new();
     let waiting_budget = ConnectionBudget::new();
-    let connector = TcpTargetGateway::new(
-        Arc::clone(&cell) as Arc<dyn vnc_relay_app::reload::ports::RuntimeSettingsSource>
-    );
+    let connector =
+        TcpTargetGateway::new(Arc::clone(&cell)
+            as Arc<dyn vnc_relay_application::reload::ports::RuntimeSettingsSource>);
     let runtime = Arc::new(RelayRuntime::new(
         connector,
         Arc::new(relay_key),
@@ -481,7 +482,7 @@ async fn listen_until_shutdown(
         RelayRuntimeConfig {
             recent_closed: settings.recent_closed.max_entries as usize,
         },
-        Arc::clone(&cell) as Arc<dyn vnc_relay_app::reload::ports::RuntimeSettingsSource>,
+        Arc::clone(&cell) as Arc<dyn vnc_relay_application::reload::ports::RuntimeSettingsSource>,
     ));
     // A published deny list change closes the open relay connections it
     // denies (config-v4 §1.8). No relay connection exists before this point.
@@ -489,7 +490,7 @@ async fn listen_until_shutdown(
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner)
         .attach_deny_control(
-            Arc::clone(&runtime) as Arc<dyn vnc_relay_app::ports::RelayDenyControl>,
+            Arc::clone(&runtime) as Arc<dyn vnc_relay_application::ports::RelayDenyControl>,
             Arc::clone(&clock),
         );
     // The management API always reads metrics; the status listener serves
@@ -501,7 +502,7 @@ async fn listen_until_shutdown(
             relay_budget: Arc::clone(&relay_budget),
             admin_budget: Arc::clone(&admin_budget),
             settings: Arc::clone(&cell)
-                as Arc<dyn vnc_relay_app::reload::ports::RuntimeSettingsSource>,
+                as Arc<dyn vnc_relay_application::reload::ports::RuntimeSettingsSource>,
             admin: Arc::clone(&auth) as Arc<dyn AdminSessionSource>,
             process: Arc::new(OsProcessStats::new()),
         },
@@ -520,7 +521,8 @@ async fn listen_until_shutdown(
                 SupervisedListener::new(bound.listener, bound.plan.name, listener_failures.clone()),
                 Arc::clone(&admin_budget),
                 Arc::clone(&lifecycle),
-                Arc::clone(&cell) as Arc<dyn vnc_relay_app::reload::ports::RuntimeSettingsSource>,
+                Arc::clone(&cell)
+                    as Arc<dyn vnc_relay_application::reload::ports::RuntimeSettingsSource>,
                 settings
                     .metrics
                     .enabled
@@ -575,13 +577,13 @@ async fn listen_until_shutdown(
 
     // The TCP and WebSocket entry points accept from here on. One ticket use
     // table for WS and WSS (websocket-relay-v2 §1.9.4).
-    let ticket_uses = Arc::new(Mutex::new(TicketUseTable::new()));
+    let ticket_uses = Arc::new(Mutex::new(UseTable::new()));
     let query_service = Arc::new(ManagementQueryService::new(
         Arc::clone(&runtime) as Arc<dyn RelayStateSource>,
         Arc::clone(&relay_budget),
         Arc::clone(&admin_budget),
         Arc::clone(&clock),
-        Arc::clone(&cell) as Arc<dyn vnc_relay_app::reload::ports::RuntimeSettingsSource>,
+        Arc::clone(&cell) as Arc<dyn vnc_relay_application::reload::ports::RuntimeSettingsSource>,
     ));
     let terminate_service = Arc::new(ManagementTerminateService::new(
         Arc::clone(&runtime) as Arc<dyn RelaySessionControl>,
@@ -594,13 +596,15 @@ async fn listen_until_shutdown(
         let dashboard = DashboardHints::new(
             settings.dashboard.poll,
             settings.dashboard.query_timeout,
-            Arc::clone(&cell) as Arc<dyn vnc_relay_app::reload::ports::RuntimeSettingsSource>,
+            Arc::clone(&cell)
+                as Arc<dyn vnc_relay_application::reload::ports::RuntimeSettingsSource>,
         );
         let listener = ManagementListener::new(
             SupervisedListener::new(bound.listener, bound.plan.name, listener_failures.clone()),
             management_tls_on.then(|| TlsSource::management(Arc::clone(&cell))),
             Arc::clone(&admin_budget),
-            Arc::clone(&cell) as Arc<dyn vnc_relay_app::reload::ports::RuntimeSettingsSource>,
+            Arc::clone(&cell)
+                as Arc<dyn vnc_relay_application::reload::ports::RuntimeSettingsSource>,
             dashboard,
             ManagementServices {
                 auth,
@@ -615,11 +619,11 @@ async fn listen_until_shutdown(
         tokio::spawn(listener.run(Arc::clone(&log)))
     });
     let relay_service = Arc::new(RelayService::new(
-        HandshakePolicy {
+        handshake::Policy {
             mode1_enabled: settings.mode1.enabled,
             mode2_enabled: settings.mode2.enabled,
         },
-        Arc::clone(&cell) as Arc<dyn vnc_relay_app::reload::ports::RuntimeSettingsSource>,
+        Arc::clone(&cell) as Arc<dyn vnc_relay_application::reload::ports::RuntimeSettingsSource>,
         Arc::clone(&clock),
         Arc::clone(&log),
         metrics,
@@ -637,14 +641,14 @@ async fn listen_until_shutdown(
     let mut idle = Vec::new();
     for bound in listeners {
         match bound.plan.listener {
-            Some(listener @ (Listener::TcpViewer | Listener::TcpServer)) => {
+            Some(listener @ (ListenerKind::TcpViewer | ListenerKind::TcpServer)) => {
                 let entry_point = match listener {
-                    Listener::TcpViewer => EntryPoint::TcpViewer,
+                    ListenerKind::TcpViewer => EntryPoint::TcpViewer,
                     _ => EntryPoint::TcpServer,
                 };
                 let policy = AcceptPolicy {
                     allow: match listener {
-                        Listener::TcpViewer => AllowSource::tcp_viewer(Arc::clone(&cell)),
+                        ListenerKind::TcpViewer => AllowSource::tcp_viewer(Arc::clone(&cell)),
                         _ => AllowSource::tcp_server(Arc::clone(&cell)),
                     },
                     relay_budget: Arc::clone(&relay_budget),
@@ -663,19 +667,19 @@ async fn listen_until_shutdown(
                 );
                 entry_points.spawn(entry.run(Arc::clone(&log), stopped.clone()));
             }
-            Some(listener @ (Listener::Ws | Listener::Wss)) => {
+            Some(listener @ (ListenerKind::Ws | ListenerKind::Wss)) => {
                 let tls = match listener {
-                    Listener::Wss if wss_present => Some(TlsSource::wss(Arc::clone(&cell))),
+                    ListenerKind::Wss if wss_present => Some(TlsSource::wss(Arc::clone(&cell))),
                     _ => None,
                 };
-                if matches!(listener, Listener::Wss) && tls.is_none() {
+                if matches!(listener, ListenerKind::Wss) && tls.is_none() {
                     idle.push(bound);
                     continue;
                 }
                 let policy = WsPolicy {
                     accept: AcceptPolicy {
                         allow: match listener {
-                            Listener::Wss => AllowSource::wss(Arc::clone(&cell)),
+                            ListenerKind::Wss => AllowSource::wss(Arc::clone(&cell)),
                             _ => AllowSource::ws(Arc::clone(&cell)),
                         },
                         relay_budget: Arc::clone(&relay_budget),
@@ -764,14 +768,14 @@ fn config_management<A: Clone + Send + Sync + 'static>(
 #[derive(Clone, Copy)]
 enum ShutdownRequest {
     Requested,
-    ListenerFailed(ListenerFailure),
+    ListenerFailed(ListenerError),
     #[cfg(any(windows, test))]
     CloseNow,
 }
 
 async fn wait_for_shutdown(
     requested: impl Future<Output = ShutdownRequest>,
-    failed: &mut watch::Receiver<Option<ListenerFailure>>,
+    failed: &mut watch::Receiver<Option<ListenerError>>,
 ) -> ShutdownRequest {
     tokio::select! {
         biased;
@@ -896,7 +900,7 @@ async fn stop_task(task: Option<tokio::task::JoinHandle<()>>) {
     }
 }
 
-fn report_bind_failures(log: &dyn EventSink, failures: &[BindFailure]) {
+fn report_bind_failures(log: &dyn EventSink, failures: &[BindError]) {
     for failure in failures {
         let plan = failure.plan;
         cli::report(
@@ -946,7 +950,7 @@ fn tls_checks(settings: &Settings) -> Vec<TlsCheck<'_>> {
     if let (true, Some(files)) = (wss.enabled(), wss.tls.as_ref()) {
         checks.push(TlsCheck {
             prefix: "relay.wss",
-            listener: Listener::Wss.name(),
+            listener: ListenerKind::Wss.name(),
             files,
         });
     }
@@ -1067,7 +1071,7 @@ enum Requests {
     /// Stop and system shutdown controls of the SCM (cli-v1 §1.9). Console
     /// signals are not shutdown requests of a service.
     #[cfg(windows)]
-    Service(tokio::sync::mpsc::UnboundedReceiver<StopControl>),
+    Service(tokio::sync::mpsc::UnboundedReceiver<StopRequest>),
 }
 
 impl Requests {
@@ -1076,8 +1080,8 @@ impl Requests {
             Self::Terminal(signal) => signal.wait().await,
             #[cfg(windows)]
             Self::Service(controls) => match controls.recv().await {
-                Some(StopControl::Stop) => ShutdownRequest::Requested,
-                Some(StopControl::SystemShutdown) => ShutdownRequest::CloseNow,
+                Some(StopRequest::Stop) => ShutdownRequest::Requested,
+                Some(StopRequest::SystemShutdown) => ShutdownRequest::CloseNow,
                 // The control handler keeps the sender until the process ends.
                 None => std::future::pending().await,
             },
@@ -1121,10 +1125,10 @@ struct ShutdownSignal {
 #[cfg(unix)]
 impl ShutdownSignal {
     fn register() -> io::Result<Self> {
-        use tokio::signal::unix::{SignalKind, signal};
+        use tokio::signal::unix::{self, SignalKind};
         Ok(Self {
-            interrupt: signal(SignalKind::interrupt())?,
-            terminate: signal(SignalKind::terminate())?,
+            interrupt: unix::signal(SignalKind::interrupt())?,
+            terminate: unix::signal(SignalKind::terminate())?,
         })
     }
 
@@ -1180,14 +1184,14 @@ mod tests {
     use super::*;
     use std::sync::Mutex;
     use std::sync::atomic::{AtomicBool, Ordering};
-    use vnc_relay_app::events::Event;
+    use vnc_relay_application::events::Event;
 
     #[derive(Default)]
-    struct RecordingSink {
+    struct SpyEventSink {
         events: Mutex<Vec<Event>>,
     }
 
-    impl EventSink for RecordingSink {
+    impl EventSink for SpyEventSink {
         fn record(&self, event: &Event) {
             self.events.lock().expect("sink lock").push(event.clone());
         }
@@ -1336,7 +1340,7 @@ mod tests {
     /// spec: operations.md:OPS-028 partial
     #[test]
     fn watch_registration_refused_at_start_is_a_startup_failure() {
-        let sink = RecordingSink::default();
+        let sink = SpyEventSink::default();
         let code = watch_unavailable(&sink, "registration refused");
         assert_eq!(code, EXIT_RUNTIME);
         let events = sink.events.lock().expect("sink lock");
@@ -1349,7 +1353,7 @@ mod tests {
 
     #[test]
     fn startup_key_generation_failure_is_a_startup_failure() {
-        let sink = RecordingSink::default();
+        let sink = SpyEventSink::default();
         let error = CryptoError;
         let code = startup_keys_failure(&sink, &error);
         assert_eq!(code, EXIT_RUNTIME);
@@ -1367,5 +1371,4 @@ mod tests {
 }
 
 #[cfg(test)]
-#[path = "serve/listener_tests.rs"]
 mod listener_tests;

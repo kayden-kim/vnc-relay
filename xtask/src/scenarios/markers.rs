@@ -4,7 +4,7 @@
 //! A small lexer skips comments, strings, and character literals so that braces
 //! inside them do not change the module nesting.
 
-use super::spec::is_scenario_id;
+use super::spec;
 
 /// One `/// spec:` marker.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -164,7 +164,7 @@ fn parse_marker(text: &str) -> Option<(String, String, bool)> {
                     .bytes()
                     .all(|b| b.is_ascii_alphanumeric() || b"-_.".contains(&b))
         });
-    (valid_spec && is_scenario_id(id)).then(|| (spec.to_owned(), id.to_owned(), partial))
+    (valid_spec && spec::is_scenario_id(id)).then(|| (spec.to_owned(), id.to_owned(), partial))
 }
 
 /// Reads an attribute that starts after `#`. Returns its path and the index after `]`.

@@ -4,46 +4,24 @@
 
 use std::sync::{Mutex, PoisonError};
 
-#[path = "dashboard_live/cross.rs"]
+use vnc_relay_testkit::live::{self, LIMIT, Server};
+
 mod cross;
-#[path = "dashboard_live/detail.rs"]
 mod detail;
 #[cfg(target_os = "linux")]
-#[path = "dashboard_live/help_screenshots.rs"]
 mod help_screenshots;
-#[path = "common/dashboard_live.rs"]
-mod live;
-#[path = "dashboard_live/login.rs"]
 mod login;
-#[path = "dashboard_live/logs.rs"]
 mod logs;
-#[path = "dashboard_live/logs_accessibility.rs"]
 mod logs_accessibility;
-#[path = "dashboard_live/logs_download.rs"]
 mod logs_download;
-#[path = "dashboard_live/logs_states.rs"]
 mod logs_states;
-#[path = "dashboard_live/metrics.rs"]
 mod metrics;
-#[expect(
-    dead_code,
-    reason = "the shared MMDB writer also builds the adapter test files"
-)]
-#[path = "../crates/adapters/tests/common/mmdb.rs"]
-mod mmdb;
-#[path = "dashboard_live/overview.rs"]
 mod overview;
-#[path = "dashboard_live/settings.rs"]
 mod settings;
-#[path = "dashboard_live/settings_edit.rs"]
 mod settings_edit;
-#[path = "dashboard_live/settings_recovery.rs"]
 mod settings_recovery;
-#[path = "dashboard_live/settings_view.rs"]
 mod settings_view;
-#[path = "dashboard_live/sources.rs"]
 mod sources;
-#[path = "dashboard_live/transports.rs"]
 mod transports;
 
 // Several scenarios hold multiple browsers and real listeners. Serialize this
@@ -488,14 +466,12 @@ fn dashboard_proxy_preserves_an_idle_browser_preconnection() {
         use std::io::Write;
         use std::time::Duration;
 
-        let server = live::Server::start("proxy-preconnect", None);
+        let server = Server::start("proxy-preconnect", None);
         let accepted = server.proxy.accepted_count();
         let mut stream = live::connect(server.proxy.port);
-        live::wait_for(
-            "accepted proxy worker reaches request read",
-            live::LIMIT,
-            || server.proxy.accepted_count() > accepted,
-        );
+        live::wait_for("accepted proxy worker reaches request read", LIMIT, || {
+            server.proxy.accepted_count() > accepted
+        });
         // The worker has acknowledged entry into its request-read path.
         // Windows used to inherit nonblocking mode and close it with 10035.
         std::thread::sleep(Duration::from_millis(100));
@@ -506,7 +482,7 @@ fn dashboard_proxy_preserves_an_idle_browser_preconnection() {
         let reply = live::read_reply(stream);
         assert_eq!(reply.status, 200);
         assert!(reply.body.contains("login-root"));
-        live::wait_for("preconnected HTTP exchange completes", live::LIMIT, || {
+        live::wait_for("preconnected HTTP exchange completes", LIMIT, || {
             server.proxy.traffic().iter().any(|item| {
                 item.path == "/login/"
                     && item.forwarded

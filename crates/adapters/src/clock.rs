@@ -4,7 +4,7 @@
 
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use vnc_relay_app::ports::Clock;
+use vnc_relay_application::ports::Clock;
 
 /// The process clock. `monotonic` counts from the moment the clock is made;
 /// `wall` reads the system time.

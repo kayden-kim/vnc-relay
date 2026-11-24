@@ -9,8 +9,8 @@ use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use vnc_relay_app::reload::{ConfigCandidate, ConfigPresence};
-use vnc_relay_app::settings::{
+use vnc_relay_application::reload::{ConfigCandidate, ConfigPresence};
+use vnc_relay_application::settings::{
     AdminSessionSettings, AdminSettings, Argon2Settings, ConfigDiagnostic, ConfigError,
     DashboardSettings, EntryPointSettings, IpInfoSettings, KeepaliveSettings, LimitSettings,
     LogOutput, LogSettings, LoginLimitSettings, ManagementSettings, MetricsSettings, Mode1Settings,
@@ -21,13 +21,12 @@ use vnc_relay_app::settings::{
 use vnc_relay_domain::account::Argon2Params;
 use vnc_relay_domain::allow_list::{AllowList, IpItem, IpItemError};
 use vnc_relay_domain::deny_list::{DenyEntry, DenyList};
-use vnc_relay_domain::entry_point::Listener;
+use vnc_relay_domain::entry_point::ListenerKind;
 use vnc_relay_domain::origin::Origin;
 use vnc_relay_domain::target_policy::{TargetItem, TargetItemError, TargetPolicy};
 
-use crate::toml_text::error_position;
-use listen::parse_listen;
-use reader::{Diagnostics, Field, Section, out_of_range};
+use crate::toml_text;
+use reader::{Diagnostics, Field, Section};
 
 /// Reads and checks the config file at `path`. Relative paths inside the
 /// file are resolved against the file's directory.
@@ -176,7 +175,7 @@ fn parse_table(text: &str) -> Result<toml::Table, Vec<ConfigDiagnostic>> {
 
 /// Position only; the message must not quote file content (config-v4 §2.1).
 fn syntax_message(text: &str, error: &toml::de::Error) -> String {
-    match error_position(text, error) {
+    match toml_text::error_position(text, error) {
         Some((line, column)) => format!("TOML 구문 오류 또는 중복 키다({line}행 {column}열)."),
         None => "TOML 구문 오류 또는 중복 키다.".to_owned(),
     }
@@ -262,10 +261,10 @@ fn read_relay(
     d: &mut Diagnostics,
 ) -> Option<RelaySettings> {
     let mut relay = root.section("relay", d);
-    let tcp_viewer = read_tcp_listener(&mut relay, Listener::TcpViewer, d);
-    let tcp_server = read_tcp_listener(&mut relay, Listener::TcpServer, d);
-    let ws = read_websocket_listener(&mut relay, Listener::Ws, base_dir, d);
-    let wss = read_websocket_listener(&mut relay, Listener::Wss, base_dir, d);
+    let tcp_viewer = read_tcp_listener(&mut relay, ListenerKind::TcpViewer, d);
+    let tcp_server = read_tcp_listener(&mut relay, ListenerKind::TcpServer, d);
+    let ws = read_websocket_listener(&mut relay, ListenerKind::Ws, base_dir, d);
+    let wss = read_websocket_listener(&mut relay, ListenerKind::Wss, base_dir, d);
     let ticket = read_ticket(&mut relay, base_dir, d);
     let deny = read_deny(&mut relay, d);
     relay.finish(d);
@@ -308,7 +307,10 @@ fn check_deny_overlaps_proxy(
     d: &mut Diagnostics,
 ) {
     for (index, entry) in deny.entries().iter().enumerate() {
-        for (listener, settings) in [Listener::Ws, Listener::Wss].into_iter().zip(listeners) {
+        for (listener, settings) in [ListenerKind::Ws, ListenerKind::Wss]
+            .into_iter()
+            .zip(listeners)
+        {
             if !settings.enabled() {
                 continue;
             }
@@ -394,7 +396,7 @@ fn read_ticket_name(
         if (1..=256).contains(&text.len()) {
             Some(text.to_owned())
         } else {
-            out_of_range(d, path, 1, 256);
+            reader::out_of_range(d, path, 1, 256);
             None
         }
     })
@@ -402,7 +404,7 @@ fn read_ticket_name(
 
 fn read_tcp_listener(
     relay: &mut Section<'_>,
-    listener: Listener,
+    listener: ListenerKind,
     d: &mut Diagnostics,
 ) -> Option<EntryPointSettings> {
     let mut table = relay.section(listener.name(), d);
@@ -429,7 +431,7 @@ fn read_tcp_listener(
 
 fn read_websocket_listener(
     relay: &mut Section<'_>,
-    listener: Listener,
+    listener: ListenerKind,
     base_dir: &Path,
     d: &mut Diagnostics,
 ) -> Option<WsListenerSettings> {
@@ -437,7 +439,7 @@ fn read_websocket_listener(
     let listen = read_listen(&mut table, "listen", None, d);
     let trusted_proxies =
         read_allow_list(&mut table, "trusted_proxies", d).or(AllowList::new(Vec::new()));
-    let (cert_file, key_file) = if listener == Listener::Wss {
+    let (cert_file, key_file) = if listener == ListenerKind::Wss {
         (
             read_path(&mut table, "cert_file", base_dir, d),
             read_path(&mut table, "key_file", base_dir, d),
@@ -454,7 +456,7 @@ fn read_websocket_listener(
     } else {
         optional(listen)
     };
-    let tls = if enabled && listener == Listener::Wss {
+    let tls = if enabled && listener == ListenerKind::Wss {
         let cert_file = required(&table, "cert_file", cert_file, &condition, d);
         let key_file = required(&table, "key_file", key_file, &condition, d);
         cert_file.zip(key_file).map(|(cert_file, key_file)| {
@@ -666,7 +668,7 @@ fn read_limits(root: &mut Section<'_>, d: &mut Diagnostics) -> Option<LimitSetti
     if let (Some(waiting), Some(relay_connections)) = (waiting, relay_connections)
         && waiting > relay_connections
     {
-        out_of_range(
+        reader::out_of_range(
             d,
             limits.key_path("waiting"),
             1,
@@ -900,7 +902,7 @@ fn check_listen_conflicts(
     status: &StatusSettings,
     d: &mut Diagnostics,
 ) {
-    let mut listeners: Vec<(String, SocketAddr)> = Listener::ALL
+    let mut listeners: Vec<(String, SocketAddr)> = ListenerKind::ALL
         .into_iter()
         .filter_map(|listener| {
             let listen = relay
@@ -933,7 +935,7 @@ fn read_listen(
 ) -> Field<SocketAddr> {
     let path = section.key_path(key);
     section.string(key, d).map(|text| {
-        let address = parse_listen(text, default_port);
+        let address = listen::parse_listen(text, default_port);
         if address.is_none() {
             let message = if default_port.is_some() {
                 "주소 형식이 잘못되었다. `IP:포트`, `[IPv6]:포트`, `IPv4`, `[IPv6]` 중 하나로 쓴다. 호스트 이름은 받지 않는다."

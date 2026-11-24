@@ -1,4 +1,4 @@
-# Clippy settings for vnc-relay-app. This file replaces the root clippy.toml for
+# Clippy settings for vnc-relay-application. This file replaces the root clippy.toml for
 # this crate, so the root keys are repeated here.
 # I/O bans: docs/architectures/code-map.md, layer "app". Tokio is used only for
 # time, synchronization, and generic I/O traits, never OS I/O.

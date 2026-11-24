@@ -11,9 +11,7 @@ use vnc_relay_domain::session::Transport;
 
 use super::history::{HISTORY_KEYS, History, HistoryView, HistoryWindow};
 use super::snapshot::{MetricFamily, MetricKind, MetricPoint, MetricsSnapshot, Number, PointValue};
-use super::{
-    Metrics, SESSION_DURATION_BOUNDS, SHORT_DURATION_BOUNDS, WAITING_DURATION_BOUNDS, lock,
-};
+use super::{Metrics, SESSION_DURATION_BOUNDS, SHORT_DURATION_BOUNDS, WAITING_DURATION_BOUNDS};
 use crate::ports::{AdminSessionSource, Clock, OpenCount, ProcessStatsSource, RelayStateSource};
 use crate::reload::ports::RuntimeSettingsSource;
 
@@ -60,7 +58,7 @@ impl MetricsService {
 
     /// Every metric of this platform now, in metrics-v1 §1.3 order. The relay
     /// counts come from one registry lock; each recorded family is copied
-    /// under its own lock (docs/architectures/metrics.md §5).
+    /// under its own super::lock (docs/architectures/metrics.md §5).
     pub fn snapshot(&self) -> MetricsSnapshot {
         use MetricKind::{Counter, Gauge, UpDownCounter};
 
@@ -377,13 +375,13 @@ impl MetricsService {
     pub fn sample_history(&self) {
         let snapshot = self.snapshot();
         let values = history_values(&snapshot);
-        lock(&self.history).push(snapshot.as_of, values);
+        super::lock(&self.history).push(snapshot.as_of, values);
     }
 
     /// History points of `window` after `after` (management-api-v1 §1.16
     /// `history_window`, `history_after`); every kept point when `None`.
     pub fn history_after(&self, window: HistoryWindow, after: Option<u64>) -> HistoryView {
-        lock(&self.history).after(window, after)
+        super::lock(&self.history).after(window, after)
     }
 
     /// L and Lm in force now (metrics-v1 `*.limit`).

@@ -35,7 +35,7 @@
   - 클라이언트 대시보드의 폴링 타이머 및 렌더링: [대시보드 화면 스펙](../specs/dashboard.md)이 소유한다.
   - 설정 파일 조회·검증·편집과 파일 상태/이력: [설정 보기·편집 서비스](config-edit.md)가 별도 공유 재로드 mutex에서 처리한다. 중계 상태 락과 파일 I/O를 함께 잡지 않는다.
 - 다른 모듈에 공개하는 기능:
-  - `vnc_relay_app::management::query::ManagementQueryService`
+  - `vnc_relay_application::management::query::ManagementQueryService`
   - `vnc_relay_adapters::management_http::query_api::answer`
   - `vnc_relay_adapters::management_http::logs_api::answer`
 
@@ -115,7 +115,7 @@ flowchart LR
 - 초기화 시점: `src/serve.rs`에서 `RelayRuntime`, `RelayService`, `LifecycleService`, `ConnectionBudget`을 조립한 뒤 `ManagementQueryService`를 생성한다. watcher·설정 편집·중계 reader와 같은 `ReloadCell`을 `RuntimeSettingsSource`로 주입한 뒤 `ManagementListener`에 전달한다.
 - 상태 소유자와 수명:
   - 활성 세션 표와 대기 표는 `RelayRuntime` 내부의 `std::sync::Mutex<RelayState>`가 소유하며, 프로세스 수명 동안만 유지된다.
-  - 최근 종료 목록은 `RecentClosedList`가 소유하며 최대 R개를 보관한다. 항목별 `ClosedMetadata`는 같은 락 안의 `recent_metadata`에 두고, 목록에서 밀려난 항목과 함께 지운다. 프로세스가 재시작되면 모두 비워진다(ADR-0003).
+  - 최근 종료 목록은 `recent_closed::List`가 소유하며 최대 R개를 보관한다. 항목별 `ClosedMetadata`는 같은 락 안의 `recent_metadata`에 두고, 목록에서 밀려난 항목과 함께 지운다. 프로세스가 재시작되면 모두 비워진다(ADR-0003).
   - L/Lm 예산은 `ConnectionBudget`이 원자적으로 관리한다.
 - 동시 실행과 락 불변식:
   - 중계 펌프 루프(`pump`)는 소켓 쓰기 성공 시 `on_update`로 세션 바이트 카운터를 갱신하며 런타임 상태 락을 잡는다.

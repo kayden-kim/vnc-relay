@@ -10,14 +10,12 @@ use std::io::ErrorKind;
 use std::path::Path;
 
 use toml::{Table, Value};
-use vnc_relay_app::accounts::{
+use vnc_relay_application::accounts::{
     ACCOUNTS_FILE_KEY, AccountsDiagnostic, AccountsError, AccountsWarning, LoadedAccounts,
 };
-use vnc_relay_domain::account::{
-    Account, AccountName, Argon2Params, Argon2ParamsError, PasswordHash,
-};
+use vnc_relay_domain::account::{Account, Argon2Params, Argon2ParamsError, Name, PasswordHash};
 
-use crate::toml_text::error_position;
+use crate::toml_text;
 pub use hasher::{Argon2PasswordHashGateway, Argon2PasswordVerifyGateway};
 pub use store::AccountsFile;
 
@@ -83,7 +81,7 @@ fn read(path: &Path, floor: HashFloor) -> Result<Option<LoadedAccounts>, Vec<Acc
 /// accounts in file order.
 pub fn parse(text: &str, floor: HashFloor) -> Result<Vec<Account>, Vec<AccountsDiagnostic>> {
     let table: Table = text.parse().map_err(|error: toml::de::Error| {
-        let message = match error_position(text, &error) {
+        let message = match toml_text::error_position(text, &error) {
             Some((line, column)) => {
                 format!("계정 파일의 TOML 구문 오류 또는 중복 키다({line}행 {column}열).")
             }
@@ -160,7 +158,7 @@ fn read_account(
     }
     let name = string_field(table, &path, "name", problems).and_then(|text| {
         let key = format!("{path}.name");
-        let name = match AccountName::parse(text) {
+        let name = match Name::parse(text) {
             Ok(name) => name,
             Err(error) => {
                 problems.push(invalid(key, format!("{error}.")));

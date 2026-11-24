@@ -17,7 +17,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
-use vnc_relay_domain::entry_point::Listener;
+use vnc_relay_domain::entry_point::ListenerKind;
 use vnc_relay_domain::handshake::Mode;
 use vnc_relay_domain::session::{Direction, Transport};
 
@@ -98,7 +98,7 @@ impl Metrics {
 
     /// A successful Repeater initial exchange: `elapsed` runs from the start
     /// of H to the valid request (metrics-v1 `vnc_relay.handshake.duration`).
-    pub fn record_handshake(&self, listener: Listener, mode: Mode, elapsed: Duration) {
+    pub fn record_handshake(&self, listener: ListenerKind, mode: Mode, elapsed: Duration) {
         self.handshake_duration.observe(
             [Some(listener.name()), Some(mode.as_str())],
             elapsed.as_secs_f64(),
@@ -136,7 +136,7 @@ impl Metrics {
     /// A WebSocket connection that missed its Pong deadline
     /// (metrics-v1 `vnc_relay.websocket.ping_timeouts`). TCP keepalive
     /// failures are not counted here.
-    pub fn record_ping_timeout(&self, listener: Listener) {
+    pub fn record_ping_timeout(&self, listener: ListenerKind) {
         self.websocket_ping_timeouts
             .increment([Some(listener.name())]);
     }

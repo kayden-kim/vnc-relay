@@ -12,15 +12,15 @@ use std::sync::{Mutex, PoisonError};
 use std::time::SystemTime;
 
 use serde_json::{Value, json};
-use vnc_relay_app::events::{Event, LOG_CONTRACT, RejectReason, Stage};
-use vnc_relay_app::ports::EventSink;
-use vnc_relay_app::settings::{ConfigWarning, LogOutput};
-use vnc_relay_domain::entry_point::{Listener, Role};
+use vnc_relay_application::events::{Event, LOG_CONTRACT, RejectReason, Stage};
+use vnc_relay_application::ports::EventSink;
+use vnc_relay_application::settings::{ConfigWarning, LogOutput};
+use vnc_relay_domain::entry_point::{ListenerKind, Role};
 use vnc_relay_domain::handshake::Mode;
 use vnc_relay_domain::peer_ip::PeerIp;
 use vnc_relay_domain::session::CloseCause;
 
-use crate::clock::timestamp;
+use crate::clock;
 
 /// Longest `detail` in bytes (ops-info-v2 §1.1).
 const DETAIL_MAX_BYTES: usize = 512;
@@ -275,7 +275,7 @@ impl fmt::Display for LogEntry {
 
 fn event_entry(event: &Event, at: SystemTime) -> LogEntry {
     let mut fields = vec![
-        ("ts", Value::from(timestamp(at))),
+        ("ts", Value::from(clock::timestamp(at))),
         ("level", Value::from(event.level().as_str())),
         ("event", Value::from(event.name())),
     ];
@@ -471,7 +471,7 @@ impl RecentLogs {
         } = self.query_snapshot(filter);
         if self.max_entries == 0 || entries.is_empty() {
             return LogsResponse {
-                as_of: timestamp(at),
+                as_of: clock::timestamp(at),
                 max_entries: self.max_entries,
                 oldest_seq,
                 latest_seq,
@@ -539,7 +539,7 @@ impl RecentLogs {
             .collect();
 
         LogsResponse {
-            as_of: timestamp(at),
+            as_of: clock::timestamp(at),
             max_entries: self.max_entries,
             oldest_seq,
             latest_seq,
@@ -676,15 +676,15 @@ fn push_event_fields(fields: &mut Vec<(&'static str, Value)>, event: &Event) {
             ConfigWarning::TicketTcpBypass { role } => {
                 fields.push(("role", Value::from(role.as_str())));
                 let listener = match role {
-                    Role::Viewer => Listener::TcpViewer,
-                    Role::Server => Listener::TcpServer,
+                    Role::Viewer => ListenerKind::TcpViewer,
+                    Role::Server => ListenerKind::TcpServer,
                 };
                 fields.push(("listener", Value::from(listener.name())));
                 fields.push(("phase", Value::from(phase.as_str())));
             }
             ConfigWarning::TicketPlaintextWs { role } => {
                 fields.push(("role", Value::from(role.as_str())));
-                fields.push(("listener", Value::from(Listener::Ws.name())));
+                fields.push(("listener", Value::from(ListenerKind::Ws.name())));
                 fields.push(("phase", Value::from(phase.as_str())));
             }
         },
@@ -744,7 +744,10 @@ fn push_event_fields(fields: &mut Vec<(&'static str, Value)>, event: &Event) {
                 fields.push(("ticket_sub", Value::from(sub.as_str())));
             }
             if let Some(expires_at) = session_expires_at {
-                fields.push(("session_expires_at", Value::from(timestamp(*expires_at))));
+                fields.push((
+                    "session_expires_at",
+                    Value::from(clock::timestamp(*expires_at)),
+                ));
             }
         }
         Event::ConnectionRejected {
@@ -1111,7 +1114,7 @@ fn push_event_fields(fields: &mut Vec<(&'static str, Value)>, event: &Event) {
             fields.push(("session_id", Value::from(session_id.as_str())));
             fields.push(("mode", Value::from(mode.as_str())));
             fields.push(("viewer_transport", Value::from(viewer_transport.as_str())));
-            fields.push(("started_at", Value::from(timestamp(*started_at))));
+            fields.push(("started_at", Value::from(clock::timestamp(*started_at))));
             fields.push(("duration_ms", Value::from(*duration_ms)));
             fields.push((
                 "bytes_viewer_to_target",
@@ -1159,10 +1162,10 @@ fn push_event_fields(fields: &mut Vec<(&'static str, Value)>, event: &Event) {
             active_sessions,
         } => {
             match trigger {
-                vnc_relay_app::events::ShutdownTrigger::Requested => {
+                vnc_relay_application::events::ShutdownTrigger::Requested => {
                     fields.push(("trigger", Value::from("requested")));
                 }
-                vnc_relay_app::events::ShutdownTrigger::FatalError { detail } => {
+                vnc_relay_application::events::ShutdownTrigger::FatalError { detail } => {
                     fields.push(("trigger", Value::from("fatal_error")));
                     fields.push(("detail", Value::from(detail.as_str())));
                 }
@@ -1290,7 +1293,7 @@ fn push_event_fields(fields: &mut Vec<(&'static str, Value)>, event: &Event) {
         } => {
             fields.push(("config_key", Value::from(key.config_key())));
             fields.push(("database_type", Value::from(database_type.as_str())));
-            fields.push(("build_time", Value::from(timestamp(*build_time))));
+            fields.push(("build_time", Value::from(clock::timestamp(*build_time))));
             fields.push(("phase", Value::from(phase.as_str())));
         }
         Event::IpDbUnavailable {
@@ -1325,8 +1328,8 @@ mod tests {
     use super::*;
     use std::net::IpAddr;
     use std::time::UNIX_EPOCH;
-    use vnc_relay_app::events::{LoginFailReason, RejectReason};
-    use vnc_relay_domain::account::AccountName;
+    use vnc_relay_application::events::{LoginFailReason, RejectReason};
+    use vnc_relay_domain::account::Name;
     use vnc_relay_domain::conn_id::ConnId;
     use vnc_relay_domain::login_limit::LimitScope;
     use vnc_relay_domain::peer_ip::PeerIp;
@@ -1384,7 +1387,7 @@ mod tests {
         // ops-info-v2 §1.8: `admin_account` is set only for a real account,
         // and `scope` is set only for a refusal by a limit.
         let peer_ip = || PeerIp::new(IpAddr::from([127, 0, 0, 1]));
-        let alice = AccountName::parse("alice")
+        let alice = Name::parse("alice")
             .unwrap_or_else(|error| panic!("test account name is valid: {error}"));
         let failed = format_line(
             &Event::AdminLoginFailed {
@@ -1445,7 +1448,7 @@ mod tests {
         sink.record(&Event::ServerStarting);
         sink.record(&Event::ConnectionAccepted {
             conn_id,
-            listener: vnc_relay_domain::entry_point::Listener::TcpViewer,
+            listener: vnc_relay_domain::entry_point::ListenerKind::TcpViewer,
             peer_ip: PeerIp::new(IpAddr::from([127, 0, 0, 1])),
         });
         sink.record(&Event::ServerStopped);
@@ -1590,7 +1593,7 @@ mod tests {
     #[test]
     fn recent_logs_query_filters_alone_and_combined() {
         let buffer = Arc::new(RecentLogs::new(100));
-        let sid1 = vnc_relay_domain::session::SessionId::from_block([1; 16]);
+        let sid1 = vnc_relay_domain::session::Id::from_block([1; 16]);
         let conn1 = ConnId::next();
         let conn2 = ConnId::next();
 
@@ -1721,7 +1724,7 @@ mod tests {
                     for _ in 0..64 {
                         sink.record(&Event::ConnectionAccepted {
                             conn_id: ConnId::next(),
-                            listener: vnc_relay_domain::entry_point::Listener::Ws,
+                            listener: vnc_relay_domain::entry_point::ListenerKind::Ws,
                             peer_ip: PeerIp::new("127.0.0.1".parse().unwrap()),
                         });
                     }

@@ -25,12 +25,12 @@ impl Listener for TcpListener {
 
 /// A required listener that can no longer accept on its existing socket.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ListenerFailure {
+pub struct ListenerError {
     pub listener: &'static str,
     pub os_error: i32,
 }
 
-impl ListenerFailure {
+impl ListenerError {
     /// Contains no socket peer, payload or operating-system error text.
     pub fn detail(self) -> String {
         format!(
@@ -45,14 +45,14 @@ impl ListenerFailure {
 pub struct SupervisedListener<L> {
     inner: L,
     name: &'static str,
-    failures: watch::Sender<Option<ListenerFailure>>,
+    failures: watch::Sender<Option<ListenerError>>,
 }
 
 impl<L: Listener> SupervisedListener<L> {
     pub fn new(
         inner: L,
         name: &'static str,
-        failures: watch::Sender<Option<ListenerFailure>>,
+        failures: watch::Sender<Option<ListenerError>>,
     ) -> Self {
         Self {
             inner,
@@ -73,7 +73,7 @@ impl<L: Listener> Listener for SupervisedListener<L> {
                 if first.is_some() {
                     return false;
                 }
-                *first = Some(ListenerFailure {
+                *first = Some(ListenerError {
                     listener: self.name,
                     os_error,
                 });
@@ -143,8 +143,8 @@ mod tests {
     async fn actual_os_rejects_a_non_listening_socket_and_supervision_preserves_the_error() {
         // No raw handle is closed behind Rust's ownership. This observes a real
         // invalid-listen-state error, not damage to an already-running binary.
-        struct NotListening(std::net::TcpListener);
-        impl Listener for NotListening {
+        struct StubListener(std::net::TcpListener);
+        impl Listener for StubListener {
             async fn accept(&mut self) -> io::Result<(TcpStream, SocketAddr)> {
                 let (stream, address) = self.0.accept()?;
                 stream.set_nonblocking(true)?;
@@ -161,7 +161,7 @@ mod tests {
             .unwrap_or_else(|error| panic!("nonblocking: {error}"));
         let (sender, mut failed) = watch::channel(None);
         let mut listener =
-            SupervisedListener::new(NotListening(socket.into()), "tcp_viewer", sender);
+            SupervisedListener::new(StubListener(socket.into()), "tcp_viewer", sender);
         let error = tokio::time::timeout(std::time::Duration::from_secs(2), listener.accept())
             .await
             .unwrap_or_else(|error| panic!("accept bounded: {error}"))
@@ -198,7 +198,7 @@ mod tests {
         assert_eq!(error.raw_os_error(), Some(22));
         assert_eq!(
             *failed.borrow(),
-            Some(ListenerFailure {
+            Some(ListenerError {
                 listener: "management",
                 os_error: 22
             })

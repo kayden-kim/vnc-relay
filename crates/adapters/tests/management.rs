@@ -23,7 +23,7 @@ use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::watch;
 use tokio::task::JoinHandle;
-use tokio::time::timeout;
+use tokio::time;
 use tokio_rustls::{TlsAcceptor, TlsConnector};
 use vnc_relay_adapters::accounts_file::{Argon2PasswordHashGateway, Argon2PasswordVerifyGateway};
 use vnc_relay_adapters::clock::SystemClock;
@@ -33,42 +33,42 @@ use vnc_relay_adapters::crypto::{RelayIdKey, SessionIdKey, SystemTokenSource};
 use vnc_relay_adapters::ip_db::MmdbFileGateway;
 use vnc_relay_adapters::management_http::{DashboardHints, ManagementListener, ManagementServices};
 use vnc_relay_adapters::net::{AcceptPolicy, AllowSource, TcpEntryPoint, TcpRelayStream};
-use vnc_relay_adapters::ops_log::{JsonLinesEventSink, RecentLogs, format_line};
+use vnc_relay_adapters::ops_log::{self, JsonLinesEventSink, RecentLogs};
 use vnc_relay_adapters::process_stats::OsProcessStats;
 use vnc_relay_adapters::target::TcpTargetGateway;
 use vnc_relay_adapters::tls;
-use vnc_relay_app::events::{AdminTerminateResult, Event, Level, RejectReason, Stage};
-use vnc_relay_app::ip_info::{IpInfoService, IpLookup};
-use vnc_relay_app::management::config::{
-    ConfigActor, ConfigEditError, ConfigEditResult, ConfigEditService, ConfigFileStore,
+use vnc_relay_application::events::{AdminTerminateOutcome, Event, Level, RejectReason, Stage};
+use vnc_relay_application::ip_info::{IpInfoService, IpLookup};
+use vnc_relay_application::management::config::{
+    ConfigActor, ConfigEditError, ConfigEditOutcome, ConfigEditService, ConfigFileStore,
     ConfigGetError, ConfigPatch, ConfigReplaceError, ConfigService, ConfigView,
 };
-use vnc_relay_app::management::login::dummy_hash;
-use vnc_relay_app::management::query::ManagementQueryService;
-use vnc_relay_app::management::terminate::{ManagementTerminateService, TerminationTicket};
-use vnc_relay_app::management::{AdminAuth, AdminPorts};
-use vnc_relay_app::metrics::{MetricSources, Metrics, MetricsService};
-use vnc_relay_app::ports::{
+use vnc_relay_application::management::login;
+use vnc_relay_application::management::query::ManagementQueryService;
+use vnc_relay_application::management::terminate::{ManagementTerminateService, TerminationTicket};
+use vnc_relay_application::management::{AdminAuth, AdminPorts};
+use vnc_relay_application::metrics::{MetricSources, Metrics, MetricsService};
+use vnc_relay_application::ports::{
     Clock, EventSink, HashError, PasswordHashGateway, PasswordVerifyGateway, RelayCloseAction,
     RelayLifecycle, RelaySessionControl, RelayStateSource, RelayStream,
 };
-use vnc_relay_app::relay::{
+use vnc_relay_application::relay::{
     ConnectionContext, RelayCounts, RelayRuntime, RelayRuntimeConfig, RelayService, RelaySnapshot,
 };
-use vnc_relay_app::reload::SharedReload;
-use vnc_relay_app::reload::ports::{
+use vnc_relay_application::reload::SharedReload;
+use vnc_relay_application::reload::ports::{
     ReloadFileStore, ReloadTlsStore, RuntimeSettingsSource, TlsBuildError,
 };
-use vnc_relay_app::reload::service::ReloadService;
-use vnc_relay_app::reload::snapshot::{ReloadCell, ReloadSnapshot};
-use vnc_relay_app::sources::{SourceStats, SourcesService};
-use vnc_relay_domain::account::{Account, AccountName, Argon2Params, Password, PasswordHash};
-use vnc_relay_domain::admin_session::AdminSessionPolicy;
+use vnc_relay_application::reload::service::ReloadService;
+use vnc_relay_application::reload::snapshot::{ReloadCell, ReloadSnapshot};
+use vnc_relay_application::sources::{SourceStats, SourcesService};
+use vnc_relay_domain::account::{Account, Argon2Params, Name, Password, PasswordHash};
+use vnc_relay_domain::admin_session;
 use vnc_relay_domain::budget::ConnectionBudget;
 use vnc_relay_domain::conn_id::ConnId;
 use vnc_relay_domain::entry_point::EntryPoint;
-use vnc_relay_domain::handshake::{HANDSHAKE_REQUEST_LEN, HandshakePolicy, VIEWER_GREETING};
-use vnc_relay_domain::login_limit::{LimitScope, LoginLimitPolicy};
+use vnc_relay_domain::handshake::{self, HANDSHAKE_REQUEST_LEN, VIEWER_GREETING};
+use vnc_relay_domain::login_limit::{self, LimitScope};
 use vnc_relay_domain::peer_ip::PeerIp;
 use vnc_relay_domain::session::Transport;
 
@@ -120,9 +120,9 @@ fn connector(versions: &[&'static SupportedProtocolVersion]) -> TlsConnector {
 
 /// Collects every event the listener records.
 #[derive(Default)]
-struct Recorder(Mutex<Vec<Event>>);
+struct SpyEventSink(Mutex<Vec<Event>>);
 
-impl Recorder {
+impl SpyEventSink {
     fn lock(&self) -> MutexGuard<'_, Vec<Event>> {
         self.0.lock().unwrap_or_else(PoisonError::into_inner)
     }
@@ -132,14 +132,14 @@ impl Recorder {
     }
 }
 
-impl EventSink for Recorder {
+impl EventSink for SpyEventSink {
     fn record(&self, event: &Event) {
         self.lock().push(event.clone());
     }
 }
 
 /// Waits until an event that `matches` is recorded and returns it.
-async fn wait_for(events: &Recorder, matches: impl Fn(&Event) -> bool) -> Event {
+async fn wait_for(events: &SpyEventSink, matches: impl Fn(&Event) -> bool) -> Event {
     let found = async {
         loop {
             if let Some(event) = events.snapshot().into_iter().find(&matches) {
@@ -148,14 +148,14 @@ async fn wait_for(events: &Recorder, matches: impl Fn(&Event) -> bool) -> Event 
             tokio::time::sleep(Duration::from_millis(10)).await;
         }
     };
-    timeout(LIMIT, found)
+    time::timeout(LIMIT, found)
         .await
         .unwrap_or_else(|error| panic!("event is recorded in time: {error}"))
 }
 
 struct Running {
     addr: SocketAddr,
-    events: Arc<Recorder>,
+    events: Arc<SpyEventSink>,
     task: JoinHandle<()>,
     logs: Arc<RecentLogs>,
     /// The read side behind `/api/v1/metrics`; tests take history points.
@@ -194,8 +194,8 @@ async fn start_with(
     tls: Option<TlsAcceptor>,
     admin_connections: u32,
     upgrade: Duration,
-    session: AdminSessionPolicy,
-    limit: LoginLimitPolicy,
+    session: admin_session::Policy,
+    limit: login_limit::Policy,
 ) -> Running {
     start_with_ports(
         tls,
@@ -214,8 +214,8 @@ async fn start_with_ports(
     tls: Option<TlsAcceptor>,
     admin_connections: u32,
     upgrade: Duration,
-    session: AdminSessionPolicy,
-    limit: LoginLimitPolicy,
+    session: admin_session::Policy,
+    limit: login_limit::Policy,
     verifier: Arc<dyn PasswordVerifyGateway>,
     clock: Arc<dyn Clock>,
 ) -> Running {
@@ -235,13 +235,13 @@ async fn start_with_ports_and_logs(
     tls: Option<TlsAcceptor>,
     admin_connections: u32,
     upgrade: Duration,
-    session: AdminSessionPolicy,
-    limit: LoginLimitPolicy,
+    session: admin_session::Policy,
+    limit: login_limit::Policy,
     verifier: Arc<dyn PasswordVerifyGateway>,
     state: (Arc<dyn Clock>, Arc<RecentLogs>),
 ) -> Running {
     let (clock, logs) = state;
-    let events = Arc::new(Recorder::default());
+    let events = Arc::new(SpyEventSink::default());
     let log: Arc<dyn EventSink> = events.clone();
     let budget = ConnectionBudget::new();
     let runtime = management_runtime(admin_connections, upgrade, Duration::from_secs(10));
@@ -254,20 +254,20 @@ async fn start_with_ports_and_logs(
     );
     let relay_budget = ConnectionBudget::new();
     let query = Arc::new(ManagementQueryService::new(
-        Arc::new(EmptyRelaySource),
+        Arc::new(StubRelayStateSource),
         Arc::clone(&relay_budget),
         Arc::clone(&budget),
         Arc::clone(&clock),
         runtime.clone(),
     ));
     let terminate = Arc::new(ManagementTerminateService::new(
-        Arc::new(EmptyRelaySource),
+        Arc::new(StubRelayStateSource),
         Arc::clone(&clock),
         Arc::clone(&log),
     ));
     let metrics = metrics_service(
         Arc::new(Metrics::new(clock.as_ref())),
-        Arc::new(EmptyRelaySource),
+        Arc::new(StubRelayStateSource),
         (relay_budget, Arc::clone(&budget)),
         runtime.clone(),
         Arc::clone(&auth),
@@ -296,7 +296,7 @@ async fn start_services(
     budget: Arc<ConnectionBudget>,
     runtime: Arc<ReloadCell<TlsAcceptor>>,
     services: ManagementServices,
-    events: Arc<Recorder>,
+    events: Arc<SpyEventSink>,
 ) -> Running {
     let listener = TcpListener::bind("127.0.0.1:0")
         .await
@@ -343,16 +343,16 @@ struct RunningRelay {
     service: Arc<RelayService>,
     budget: Arc<ConnectionBudget>,
     clock: Arc<dyn Clock>,
-    source: Arc<ObservedRelaySource>,
+    source: Arc<SpyRelayStateSource>,
 }
 
 impl RunningRelay {
-    async fn start(session: AdminSessionPolicy) -> Self {
+    async fn start(session: admin_session::Policy) -> Self {
         Self::start_with_control(session, false, Arc::new(Argon2PasswordVerifyGateway)).await
     }
 
     async fn start_with_control(
-        session: AdminSessionPolicy,
+        session: admin_session::Policy,
         fail_first: bool,
         verifier: Arc<dyn PasswordVerifyGateway>,
     ) -> Self {
@@ -360,12 +360,12 @@ impl RunningRelay {
     }
 
     async fn start_with_clock(
-        session: AdminSessionPolicy,
+        session: admin_session::Policy,
         fail_first: bool,
         verifier: Arc<dyn PasswordVerifyGateway>,
         clock: Arc<dyn Clock>,
     ) -> Self {
-        let events = Arc::new(Recorder::default());
+        let events = Arc::new(SpyEventSink::default());
         let log: Arc<dyn EventSink> = events.clone();
         let relay_budget = ConnectionBudget::new();
         let admin_budget = ConnectionBudget::new();
@@ -388,7 +388,7 @@ impl RunningRelay {
             verifier,
             Arc::clone(&clock),
         );
-        let source = Arc::new(ObservedRelaySource {
+        let source = Arc::new(SpyRelayStateSource {
             runtime: runtime.clone(),
             after_snapshot: Mutex::new(None),
             last: Mutex::new(None),
@@ -401,7 +401,7 @@ impl RunningRelay {
             cell.clone(),
         ));
         let terminate = Arc::new(ManagementTerminateService::new(
-            Arc::new(FailFirstTermination {
+            Arc::new(FakeRelaySessionControl {
                 runtime: runtime.clone(),
                 fail_next: AtomicBool::new(fail_first),
             }),
@@ -434,7 +434,7 @@ impl RunningRelay {
         )
         .await;
         let service = Arc::new(RelayService::new(
-            HandshakePolicy {
+            handshake::Policy {
                 mode1_enabled: false,
                 mode2_enabled: true,
             },
@@ -513,7 +513,7 @@ impl RunningRelay {
                 }
             })
             .collect();
-        timeout(LIMIT, async {
+        time::timeout(LIMIT, async {
             let mut viewer = TcpStream::connect(self.viewer)
                 .await
                 .unwrap_or_else(|error| panic!("viewer connect: {error}"));
@@ -581,7 +581,7 @@ struct RelayPair {
 
 impl RelayPair {
     async fn assert_bidirectional(&mut self) {
-        timeout(LIMIT, async {
+        time::timeout(LIMIT, async {
             async fn transfer(source: &mut TcpStream, destination: &mut TcpStream, bytes: &[u8]) {
                 source
                     .write_all(bytes)
@@ -634,16 +634,16 @@ impl RelayPair {
 
 /// Only the first accepted control request loses its completion. Query state
 /// and all later termination requests still use the real relay runtime.
-struct FailFirstTermination {
+struct FakeRelaySessionControl {
     runtime: Arc<RelayRuntime<TcpTargetGateway>>,
     fail_next: AtomicBool,
 }
 
-impl RelaySessionControl for FailFirstTermination {
+impl RelaySessionControl for FakeRelaySessionControl {
     fn request_terminate(
         &self,
         session_id: &str,
-        account: AccountName,
+        account: Name,
         peer: PeerIp,
         clock: &dyn Clock,
         events: &dyn EventSink,
@@ -672,22 +672,22 @@ impl RelaySessionControl for FailFirstTermination {
 
 /// Retains the actual account hash verified during login, not a synthetic PHC.
 #[derive(Default)]
-struct HashRecordingVerifier(Mutex<String>);
+struct SpyPasswordVerifyGateway(Mutex<String>);
 
-impl PasswordVerifyGateway for HashRecordingVerifier {
+impl PasswordVerifyGateway for SpyPasswordVerifyGateway {
     fn verify(&self, typed: &str, hash: &PasswordHash) -> Result<bool, HashError> {
         *self.0.lock().unwrap_or_else(PoisonError::into_inner) = hash.as_str().to_owned();
         Argon2PasswordVerifyGateway.verify(typed, hash)
     }
 }
 
-struct EmptyRelaySource;
+struct StubRelayStateSource;
 
-impl RelaySessionControl for EmptyRelaySource {
+impl RelaySessionControl for StubRelayStateSource {
     fn request_terminate(
         &self,
         _session_id: &str,
-        _account: AccountName,
+        _account: Name,
         _peer: PeerIp,
         _clock: &dyn Clock,
         _events: &dyn EventSink,
@@ -696,7 +696,7 @@ impl RelaySessionControl for EmptyRelaySource {
     }
 }
 
-impl RelayStateSource for EmptyRelaySource {
+impl RelayStateSource for StubRelayStateSource {
     fn snapshot(&self, clock: &dyn Clock) -> RelaySnapshot {
         RelaySnapshot {
             lifecycle: RelayLifecycle::Running,
@@ -716,13 +716,13 @@ impl RelayStateSource for EmptyRelaySource {
 }
 
 /// Session times that the login tests never reach by accident.
-fn session_policy() -> AdminSessionPolicy {
-    AdminSessionPolicy::new(Duration::from_secs(600), Duration::from_secs(3600))
+fn session_policy() -> admin_session::Policy {
+    admin_session::Policy::new(Duration::from_secs(600), Duration::from_secs(3600))
 }
 
 /// Limits that the login tests never reach. The limit tests pass their own.
-fn limit_policy() -> LoginLimitPolicy {
-    LoginLimitPolicy::new(50, 500, Duration::from_secs(60), Duration::from_secs(60))
+fn limit_policy() -> login_limit::Policy {
+    login_limit::Policy::new(50, 500, Duration::from_secs(60), Duration::from_secs(60))
 }
 
 /// The loopback peer that the test client uses. The port does not matter for
@@ -798,7 +798,7 @@ where
     let mut reply = Vec::new();
     // A TLS peer may close without close_notify. The bytes read so far are the
     // reply, so a read error here is not a failure of its own.
-    let _ = timeout(LIMIT, stream.read_to_end(&mut reply)).await;
+    let _ = time::timeout(LIMIT, stream.read_to_end(&mut reply)).await;
     reply
 }
 
@@ -941,7 +941,7 @@ async fn tls10_and_tls11_hellos_are_refused_without_plaintext_fallback() {
             .await
             .unwrap_or_else(|error| panic!("hello is sent: {error}"));
         let mut reply = Vec::new();
-        timeout(LIMIT, tcp.read_to_end(&mut reply))
+        time::timeout(LIMIT, tcp.read_to_end(&mut reply))
             .await
             .unwrap_or_else(|error| panic!("server closes in time: {error}"))
             .unwrap_or_else(|error| panic!("reply is read: {error}"));
@@ -994,7 +994,7 @@ async fn version_refusal_follows_supported_versions_when_present() {
         // The server closes after the failed handshake. An event is recorded
         // before that close, so it is in place once the reply ends.
         let mut reply = Vec::new();
-        timeout(LIMIT, tcp.read_to_end(&mut reply))
+        time::timeout(LIMIT, tcp.read_to_end(&mut reply))
             .await
             .unwrap_or_else(|error| panic!("server closes in time: {error}"))
             .unwrap_or_else(|error| panic!("reply is read: {error}"));
@@ -1027,7 +1027,7 @@ async fn management_connection_beyond_lm_is_refused_at_accept() {
         .unwrap_or_else(|error| panic!("second connection: {error}"));
 
     let mut reply = Vec::new();
-    timeout(LIMIT, refused.read_to_end(&mut reply))
+    time::timeout(LIMIT, refused.read_to_end(&mut reply))
         .await
         .unwrap_or_else(|error| panic!("refused connection closes in time: {error}"))
         .unwrap_or_else(|error| panic!("refused connection is read: {error}"));
@@ -1065,7 +1065,7 @@ async fn stalled_tls_handshake_is_closed_after_u_without_an_answer() {
         .unwrap_or_else(|error| panic!("loopback connect: {error}"));
     let started = Instant::now();
     let mut reply = Vec::new();
-    timeout(LIMIT, stalled.read_to_end(&mut reply))
+    time::timeout(LIMIT, stalled.read_to_end(&mut reply))
         .await
         .unwrap_or_else(|error| panic!("stalled handshake is closed in time: {error}"))
         .unwrap_or_else(|error| panic!("stalled handshake is read: {error}"));
@@ -1086,7 +1086,7 @@ async fn stalled_request_frees_its_lm_place_after_u() {
         .await
         .unwrap_or_else(|error| panic!("partial head is sent: {error}"));
     let mut reply = Vec::new();
-    timeout(LIMIT, stalled.read_to_end(&mut reply))
+    time::timeout(LIMIT, stalled.read_to_end(&mut reply))
         .await
         .unwrap_or_else(|error| panic!("stalled request is closed in time: {error}"))
         .unwrap_or_else(|error| panic!("stalled request is read: {error}"));
@@ -1111,7 +1111,7 @@ async fn idle_connection_after_a_reply_is_closed_after_u() {
         .await
         .unwrap_or_else(|error| panic!("request is sent: {error}"));
     let mut raw = Vec::new();
-    timeout(LIMIT, idle.read_to_end(&mut raw))
+    time::timeout(LIMIT, idle.read_to_end(&mut raw))
         .await
         .unwrap_or_else(|error| panic!("idle connection is closed in time: {error}"))
         .unwrap_or_else(|error| panic!("idle connection is read: {error}"));
@@ -1401,10 +1401,10 @@ fn metrics_service(
 
 /// No running settings: `deny_editable` reads `false` and no address has
 /// deny items.
-struct NoSettings;
+struct StubRuntimeSettingsSource;
 
-impl RuntimeSettingsSource for NoSettings {
-    fn with_current(&self, _read: &mut dyn FnMut(&vnc_relay_app::settings::Settings)) {}
+impl RuntimeSettingsSource for StubRuntimeSettingsSource {
+    fn with_current(&self, _read: &mut dyn FnMut(&vnc_relay_application::settings::Settings)) {}
 }
 
 /// The read side of `/api/v1/sources` with no event and no database file.
@@ -1418,12 +1418,12 @@ fn empty_sources() -> Arc<SourcesService> {
         Arc::new(MmdbFileGateway),
         Arc::clone(&lookup),
         Arc::clone(&clock),
-        Arc::new(Recorder::default()),
+        Arc::new(SpyEventSink::default()),
     ));
     Arc::new(SourcesService::new(
         Arc::new(SourceStats::new(lookup, clock)),
         ip_info,
-        Arc::new(NoSettings),
+        Arc::new(StubRuntimeSettingsSource),
     ))
 }
 
@@ -1431,15 +1431,15 @@ fn empty_sources() -> Arc<SourcesService> {
 /// `verifier` and `clock` are the ports that the test chooses.
 fn admin_auth(
     log: Arc<dyn EventSink>,
-    session: AdminSessionPolicy,
-    limit: LoginLimitPolicy,
+    session: admin_session::Policy,
+    limit: login_limit::Policy,
     verifier: Arc<dyn PasswordVerifyGateway>,
     clock: Arc<dyn Clock>,
 ) -> Arc<AdminAuth> {
     let accounts: Vec<Account> = [(ACCOUNT, PASSWORD), (OTHER_ACCOUNT, OTHER_PASSWORD)]
         .into_iter()
         .map(|(name, password)| {
-            let name = AccountName::parse(name)
+            let name = Name::parse(name)
                 .unwrap_or_else(|error| panic!("test account name is valid: {error}"));
             let password = Password::parse(password.to_owned())
                 .unwrap_or_else(|error| panic!("test password is valid: {error:?}"));
@@ -1452,7 +1452,7 @@ fn admin_auth(
             }
         })
         .collect();
-    let dummy = dummy_hash(&Argon2PasswordHashGateway, TEST_PARAMS)
+    let dummy = login::dummy_hash(&Argon2PasswordHashGateway, TEST_PARAMS)
         .unwrap_or_else(|error| panic!("dummy hash is made: {error}"));
     let ports = AdminPorts {
         verifier,
@@ -1486,15 +1486,15 @@ impl Clock for FakeClock {
 
 /// The real Argon2 check, with a count of the checks that ran.
 #[derive(Default)]
-struct CountingVerifier(Mutex<usize>);
+struct SpyCountingPasswordVerifier(Mutex<usize>);
 
-impl CountingVerifier {
+impl SpyCountingPasswordVerifier {
     fn calls(&self) -> usize {
         *self.0.lock().unwrap_or_else(PoisonError::into_inner)
     }
 }
 
-impl PasswordVerifyGateway for CountingVerifier {
+impl PasswordVerifyGateway for SpyCountingPasswordVerifier {
     fn verify(&self, typed: &str, hash: &PasswordHash) -> Result<bool, HashError> {
         *self.0.lock().unwrap_or_else(PoisonError::into_inner) += 1;
         Argon2PasswordVerifyGateway.verify(typed, hash)
@@ -1505,7 +1505,7 @@ impl PasswordVerifyGateway for CountingVerifier {
 /// attempt runs the check too (management-api-v1 §6).
 async fn checked_login(
     running: &Running,
-    verifier: &CountingVerifier,
+    verifier: &SpyCountingPasswordVerifier,
     account: &str,
     password: &str,
 ) -> Reply {
@@ -1656,7 +1656,7 @@ async fn https_and_plain_loopback_logins_set_transport_cookies_and_allow_queries
 /// spec: management.md:MGT-018
 #[tokio::test]
 async fn wrong_password_and_unknown_account_get_the_same_refusal() {
-    let verifier = Arc::new(CountingVerifier::default());
+    let verifier = Arc::new(SpyCountingPasswordVerifier::default());
     let running = start_with_ports(
         None,
         ROOMY_LM,
@@ -1706,8 +1706,8 @@ async fn wrong_password_and_unknown_account_get_the_same_refusal() {
 #[tokio::test]
 async fn limited_logins_refuse_alike_and_the_right_password_works_after_the_locks() {
     // Two failures per account are allowed, and six per source. Each lock lasts 60 s.
-    let limit = LoginLimitPolicy::new(2, 6, Duration::from_secs(900), Duration::from_secs(60));
-    let verifier = Arc::new(CountingVerifier::default());
+    let limit = login_limit::Policy::new(2, 6, Duration::from_secs(900), Duration::from_secs(60));
+    let verifier = Arc::new(SpyCountingPasswordVerifier::default());
     let clock = Arc::new(FakeClock::default());
     let running = start_with_ports(
         None,
@@ -1786,7 +1786,7 @@ fn assert_unauthenticated(reply: &Reply) {
 /// spec: management.md:MGT-019
 #[tokio::test]
 async fn expired_admin_cookie_cannot_query_or_terminate_and_the_relay_survives() {
-    let session = AdminSessionPolicy::new(Duration::from_millis(300), Duration::from_secs(3600));
+    let session = admin_session::Policy::new(Duration::from_millis(300), Duration::from_secs(3600));
     let relay = RunningRelay::start(session).await;
     let mut pair = relay.pair().await;
     let running = &relay.management;
@@ -1820,7 +1820,7 @@ async fn idle_polling_and_absolute_activity_expiry_leave_existing_relays_alive()
     let idle = Duration::from_millis(400);
     let max_lifetime = Duration::from_millis(1200);
     for automatic in [true, false] {
-        let relay = RunningRelay::start(AdminSessionPolicy::new(idle, max_lifetime)).await;
+        let relay = RunningRelay::start(admin_session::Policy::new(idle, max_lifetime)).await;
         let mut pair = relay.pair().await;
         let running = &relay.management;
         let started = Instant::now();
@@ -2264,7 +2264,7 @@ async fn login_body_limit_is_16_kib_for_sized_and_chunked_bodies() {
 /// spec: management.md:MGT-022 partial
 #[tokio::test]
 async fn malformed_login_bodies_are_not_counted_against_the_limit() {
-    let limit = LoginLimitPolicy::new(2, 2, Duration::from_secs(60), Duration::from_secs(60));
+    let limit = login_limit::Policy::new(2, 2, Duration::from_secs(60), Duration::from_secs(60));
     let running = start_with(None, ROOMY_LM, UPGRADE, session_policy(), limit).await;
     for _ in 0..3 {
         let reply = plain_exchange(running.addr, &sized_login("{")).await;
@@ -2519,7 +2519,7 @@ async fn acknowledge_pair_close(pair: &mut RelayPair) {
             .await
             .unwrap_or_else(|error| panic!("relay peer acknowledges close: {error}"));
     }
-    timeout(LIMIT, async {
+    time::timeout(LIMIT, async {
         tokio::join!(acknowledge(&mut pair.viewer), acknowledge(&mut pair.server));
     })
     .await
@@ -2555,7 +2555,7 @@ async fn completion_mgt012_failed_control_and_lost_response_never_invent_complet
     assert!(body.get("result").is_none());
     let audit = wait_for(&running.events, |event| {
         matches!(event, Event::AdminTerminate {
-            admin_account, peer_ip, session_id: Some(id), result: AdminTerminateResult::Failed
+            admin_account, peer_ip, session_id: Some(id), result: AdminTerminateOutcome::Failed
         } if admin_account.as_str() == ACCOUNT && *peer_ip == loopback()
             && id.as_str() == pair.session_id)
     })
@@ -2576,7 +2576,8 @@ async fn completion_mgt012_failed_control_and_lost_response_never_invent_complet
             event,
             Event::SessionClosed { .. }
                 | Event::AdminTerminate {
-                    result: AdminTerminateResult::Terminated | AdminTerminateResult::AlreadyClosed,
+                    result: AdminTerminateOutcome::Terminated
+                        | AdminTerminateOutcome::AlreadyClosed,
                     ..
                 }
         )),
@@ -2596,7 +2597,7 @@ async fn completion_mgt012_failed_control_and_lost_response_never_invent_complet
     // Observe relay-side EOF before disconnecting HTTP: write_all alone does
     // not prove the listener accepted the command on every operating system.
     let mut unexpected = [0; 1];
-    let eof = timeout(LIMIT, pair.viewer.read(&mut unexpected))
+    let eof = time::timeout(LIMIT, pair.viewer.read(&mut unexpected))
         .await
         .unwrap_or_else(|error| panic!("accepted termination closes relay write side: {error}"))
         .unwrap_or_else(|error| panic!("relay termination EOF: {error}"));
@@ -2611,7 +2612,7 @@ async fn completion_mgt012_failed_control_and_lost_response_never_invent_complet
     acknowledge_pair_close(&mut pair).await;
     wait_for(&running.events, |event| {
         matches!(event, Event::AdminTerminate {
-            admin_account, peer_ip, session_id: Some(id), result: AdminTerminateResult::Terminated
+            admin_account, peer_ip, session_id: Some(id), result: AdminTerminateOutcome::Terminated
         } if admin_account.as_str() == ACCOUNT && *peer_ip == loopback()
             && id.as_str() == pair.session_id)
     })
@@ -2650,7 +2651,8 @@ async fn completion_mgt012_failed_control_and_lost_response_never_invent_complet
             matches!(
                 event,
                 Event::AdminTerminate {
-                    result: AdminTerminateResult::Terminated | AdminTerminateResult::AlreadyClosed,
+                    result: AdminTerminateOutcome::Terminated
+                        | AdminTerminateOutcome::AlreadyClosed,
                     ..
                 }
             )
@@ -2671,11 +2673,11 @@ async fn completion_mgt012_failed_control_and_lost_response_never_invent_complet
 #[tokio::test]
 async fn completion_mgt013_query_auth_and_failed_termination_responses_keep_secrets_private() {
     const PAYLOAD: &[u8] = b"MGT013_UNIQUE_RAW_RFB_PAYLOAD_95_738291";
-    let verifier = Arc::new(HashRecordingVerifier::default());
+    let verifier = Arc::new(SpyPasswordVerifyGateway::default());
     let relay = RunningRelay::start_with_control(session_policy(), true, verifier.clone()).await;
     let running = &relay.management;
     let mut pair = relay.pair().await;
-    timeout(LIMIT, async {
+    time::timeout(LIMIT, async {
         pair.viewer
             .write_all(PAYLOAD)
             .await
@@ -2855,13 +2857,13 @@ async fn completion_mgt013_query_auth_and_failed_termination_responses_keep_secr
     }
 }
 
-struct ObservedRelaySource {
+struct SpyRelayStateSource {
     runtime: Arc<RelayRuntime<TcpTargetGateway>>,
     after_snapshot: Mutex<Option<Box<dyn FnOnce() + Send>>>,
     last: Mutex<Option<RelaySnapshot>>,
 }
 
-impl RelayStateSource for ObservedRelaySource {
+impl RelayStateSource for SpyRelayStateSource {
     fn snapshot(&self, clock: &dyn Clock) -> RelaySnapshot {
         let snapshot = self.runtime.snapshot(clock);
         *self.last.lock().unwrap_or_else(PoisonError::into_inner) = Some(snapshot.clone());
@@ -2881,9 +2883,9 @@ impl RelayStateSource for ObservedRelaySource {
     }
 }
 
-struct SteppingClock(Mutex<(Duration, SystemTime)>);
+struct FakeSteppingClock(Mutex<(Duration, SystemTime)>);
 
-impl SteppingClock {
+impl FakeSteppingClock {
     fn new() -> Self {
         Self(Mutex::new((
             Duration::ZERO,
@@ -2903,7 +2905,7 @@ impl SteppingClock {
     }
 }
 
-impl Clock for SteppingClock {
+impl Clock for FakeSteppingClock {
     fn monotonic(&self) -> Duration {
         self.0.lock().unwrap_or_else(PoisonError::into_inner).0
     }
@@ -2937,12 +2939,12 @@ impl PartialWrites {
 
 /// Only payload write completions are controlled; the socket, handshake,
 /// session owner, forwarding engine and management HTTP stack remain real.
-struct PartialTcpStream {
+struct FakePartialRelayStream {
     inner: TcpRelayStream,
     writes: Arc<PartialWrites>,
 }
 
-impl AsyncRead for PartialTcpStream {
+impl AsyncRead for FakePartialRelayStream {
     fn poll_read(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -2952,7 +2954,7 @@ impl AsyncRead for PartialTcpStream {
     }
 }
 
-impl AsyncWrite for PartialTcpStream {
+impl AsyncWrite for FakePartialRelayStream {
     fn poll_write(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -2991,7 +2993,7 @@ impl AsyncWrite for PartialTcpStream {
     }
 }
 
-impl RelayStream for PartialTcpStream {
+impl RelayStream for FakePartialRelayStream {
     fn transport(&self) -> Transport {
         Transport::Tcp
     }
@@ -3042,7 +3044,7 @@ impl RunningRelay {
             .try_acquire(10)
             .unwrap_or_else(|| panic!("partial stream L permit"));
         let prepare = self.service.handle_connection(
-            PartialTcpStream {
+            FakePartialRelayStream {
                 inner: TcpRelayStream::new(socket),
                 writes: writes.clone(),
             },
@@ -3067,7 +3069,7 @@ impl RunningRelay {
                 .await
                 .unwrap_or_else(|error| panic!("partial initial request: {error}"));
         };
-        let (prepared, ()) = timeout(LIMIT, async { tokio::join!(prepare, handshake) })
+        let (prepared, ()) = time::timeout(LIMIT, async { tokio::join!(prepare, handshake) })
             .await
             .unwrap_or_else(|error| panic!("partial stream preparation deadline: {error}"));
         let prepared = prepared.unwrap_or_else(|error| panic!("real stream preparation: {error}"));
@@ -3129,7 +3131,7 @@ async fn completion_mgt005_partial_success_and_write_failure_count_only_delivere
     };
     let forward = b"seventeen-bytes!!!";
     let reverse = b"a-different-reverse-payload-29";
-    timeout(LIMIT, async {
+    time::timeout(LIMIT, async {
         viewer
             .write_all(forward)
             .await
@@ -3177,7 +3179,7 @@ async fn completion_mgt005_partial_success_and_write_failure_count_only_delivere
         .await
         .unwrap_or_else(|error| panic!("failing payload send: {error}"));
     let mut final_bytes = Vec::new();
-    timeout(LIMIT, server.read_to_end(&mut final_bytes))
+    time::timeout(LIMIT, server.read_to_end(&mut final_bytes))
         .await
         .unwrap_or_else(|error| panic!("failed transport closes: {error}"))
         .unwrap_or_else(|error| panic!("read partial accepted prefix: {error}"));
@@ -3196,7 +3198,7 @@ async fn completion_mgt005_partial_success_and_write_failure_count_only_delivere
     )
     .await;
     for task in [viewer_task, server_task] {
-        timeout(LIMIT, task)
+        time::timeout(LIMIT, task)
             .await
             .unwrap_or_else(|error| panic!("dispatch deadline: {error}"))
             .unwrap_or_else(|error| panic!("dispatch joins: {error}"));
@@ -3249,7 +3251,7 @@ async fn terminate_pair(running: &Running, login: &Reply, pair: &mut RelayPair) 
 /// spec: management.md:MGT-007
 #[tokio::test]
 async fn completion_mgt007_reconnect_fresh_runtime_and_wall_steps_keep_counters_separate() {
-    let clock = Arc::new(SteppingClock::new());
+    let clock = Arc::new(FakeSteppingClock::new());
     let relay = RunningRelay::start_with_clock(
         session_policy(),
         false,
@@ -3308,7 +3310,7 @@ async fn completion_mgt007_reconnect_fresh_runtime_and_wall_steps_keep_counters_
         .write_all(&initial)
         .await
         .unwrap_or_else(|error| panic!("clock waiter handshake: {error}"));
-    timeout(LIMIT, async {
+    time::timeout(LIMIT, async {
         loop {
             if relay.runtime.snapshot(clock.as_ref()).waiting.len() == 1 {
                 break;
@@ -3389,7 +3391,7 @@ async fn completion_mgt007_reconnect_fresh_runtime_and_wall_steps_keep_counters_
         }
     ));
     drop(waiting);
-    timeout(LIMIT, async {
+    time::timeout(LIMIT, async {
         loop {
             if relay.runtime.snapshot(clock.as_ref()).waiting.is_empty() {
                 break;
@@ -3446,7 +3448,7 @@ async fn completion_mgt007_reconnect_fresh_runtime_and_wall_steps_keep_counters_
 /// spec: management.md:MGT-016
 #[tokio::test]
 async fn completion_mgt016_counts_lists_and_as_of_follow_one_capture_while_usage_is_sampled() {
-    let clock = Arc::new(SteppingClock::new());
+    let clock = Arc::new(FakeSteppingClock::new());
     let relay = RunningRelay::start_with_clock(
         session_policy(),
         false,
@@ -3470,8 +3472,7 @@ async fn completion_mgt016_counts_lists_and_as_of_follow_one_capture_while_usage
         .unwrap_or_else(PoisonError::into_inner) = Some(Box::new(move || {
         let ticket = runtime.request_terminate(
             &id,
-            AccountName::parse(ACCOUNT)
-                .unwrap_or_else(|error| panic!("snapshot initiator: {error}")),
+            Name::parse(ACCOUNT).unwrap_or_else(|error| panic!("snapshot initiator: {error}")),
             loopback(),
             clock_for_hook.as_ref(),
             events.as_ref(),
@@ -3499,12 +3500,12 @@ async fn completion_mgt016_counts_lists_and_as_of_follow_one_capture_while_usage
         sessions["items"][0]["state"], "active",
         "the response retains pre-mutation state"
     );
-    timeout(LIMIT, async {
+    time::timeout(LIMIT, async {
         loop {
             let now = relay.runtime.snapshot(clock.as_ref());
             if now.active.is_empty()
                 || now.active.first().is_some_and(|session| {
-                    session.state == vnc_relay_domain::session::SessionState::Closing
+                    session.state == vnc_relay_domain::session::State::Closing
                 })
             {
                 break;
@@ -3650,7 +3651,7 @@ async fn completion_mgt016_counts_lists_and_as_of_follow_one_capture_while_usage
     worker
         .join()
         .unwrap_or_else(|error| panic!("post-snapshot admission joins: {error:?}"));
-    timeout(LIMIT, async {
+    time::timeout(LIMIT, async {
         loop {
             if relay.runtime.snapshot(clock.as_ref()).handshaking == 0
                 && relay.budget.current() == 0
@@ -3682,7 +3683,7 @@ async fn completion_mgt016_counts_lists_and_as_of_follow_one_capture_while_usage
                 .write_all(&initial)
                 .await
                 .unwrap_or_else(|error| panic!("churn handshake: {error}"));
-            timeout(LIMIT, async {
+            time::timeout(LIMIT, async {
                 loop {
                     if !relay.runtime.snapshot(clock.as_ref()).waiting.is_empty() {
                         break;
@@ -3693,7 +3694,7 @@ async fn completion_mgt016_counts_lists_and_as_of_follow_one_capture_while_usage
             .await
             .unwrap_or_else(|error| panic!("churn registration: {error}"));
             drop(socket);
-            timeout(LIMIT, async {
+            time::timeout(LIMIT, async {
                 loop {
                     if relay.runtime.snapshot(clock.as_ref()).waiting.is_empty() {
                         break;
@@ -3749,7 +3750,7 @@ async fn completion_mgt016_counts_lists_and_as_of_follow_one_capture_while_usage
             }
         }
     };
-    timeout(LIMIT, async {
+    time::timeout(LIMIT, async {
         tokio::join!(churn, queries);
     })
     .await
@@ -3794,7 +3795,7 @@ async fn completion_mgt023_shutdown_history_is_queryable_and_preserves_prior_eof
         .await
         .unwrap_or_else(|error| panic!("prior EOF write half closes: {error}"));
     let mut unexpected = [0; 1];
-    let eof = timeout(LIMIT, prior_eof.server.read(&mut unexpected))
+    let eof = time::timeout(LIMIT, prior_eof.server.read(&mut unexpected))
         .await
         .unwrap_or_else(|error| panic!("relay propagates prior EOF: {error}"))
         .unwrap_or_else(|error| panic!("read propagated prior EOF: {error}"));
@@ -3812,7 +3813,7 @@ async fn completion_mgt023_shutdown_history_is_queryable_and_preserves_prior_eof
     relay
         .service
         .request_shutdown(&relay.runtime, Duration::ZERO);
-    timeout(LIMIT, supervisor)
+    time::timeout(LIMIT, supervisor)
         .await
         .unwrap_or_else(|error| panic!("shutdown supervisor completes: {error}"))
         .unwrap_or_else(|error| panic!("shutdown supervisor joins: {error}"));
@@ -3908,7 +3909,7 @@ allow_targets = ["127.0.0.1:5900"]
 enabled = true
 "#;
 
-struct ConfigMemory {
+struct FakeConfigFileStore {
     bytes: Mutex<Vec<u8>>,
     unreadable: AtomicBool,
     fail_replace: AtomicBool,
@@ -3937,7 +3938,7 @@ impl Drop for ReleaseConfigReplacement {
     }
 }
 
-impl ConfigMemory {
+impl FakeConfigFileStore {
     fn bytes(&self) -> Vec<u8> {
         self.bytes
             .lock()
@@ -3949,7 +3950,7 @@ impl ConfigMemory {
     }
 }
 
-impl ConfigFileStore for ConfigMemory {
+impl ConfigFileStore for FakeConfigFileStore {
     fn read(&self, _path: &Path) -> io::Result<Vec<u8>> {
         if self.unreadable.load(Ordering::SeqCst) {
             return Err(io::Error::from(io::ErrorKind::PermissionDenied));
@@ -3993,10 +3994,10 @@ impl ConfigFileStore for ConfigMemory {
 }
 
 #[derive(Default)]
-struct ConfigTls {
+struct FakeReloadTlsStore {
     invalid: AtomicBool,
 }
-impl ReloadFileStore for ConfigTls {
+impl ReloadFileStore for FakeReloadTlsStore {
     fn read(&self, path: &Path) -> io::Result<Vec<u8>> {
         if path
             .extension()
@@ -4007,7 +4008,7 @@ impl ReloadFileStore for ConfigTls {
         Ok(b"TLS-FILE-SECRET".to_vec())
     }
 }
-impl ReloadTlsStore<()> for ConfigTls {
+impl ReloadTlsStore<()> for FakeReloadTlsStore {
     fn build(&self, _cert: &[u8], _key: &[u8]) -> Result<(), TlsBuildError> {
         if self.invalid.load(Ordering::SeqCst) {
             Err(TlsBuildError {
@@ -4021,8 +4022,8 @@ impl ReloadTlsStore<()> for ConfigTls {
 
 struct ConfigFixture {
     service: Arc<ConfigEditService<()>>,
-    files: Arc<ConfigMemory>,
-    tls: Arc<ConfigTls>,
+    files: Arc<FakeConfigFileStore>,
+    tls: Arc<FakeReloadTlsStore>,
     reload: SharedReload<()>,
 }
 
@@ -4051,7 +4052,7 @@ fn config_fixture_text(
         None,
         None,
     )));
-    let tls = Arc::new(ConfigTls::default());
+    let tls = Arc::new(FakeReloadTlsStore::default());
     let reload = Arc::new(Mutex::new(ReloadService::new(
         candidate,
         cell,
@@ -4060,7 +4061,7 @@ fn config_fixture_text(
         Arc::new(vnc_relay_adapters::ticket::TicketJwksStore),
         events.clone(),
     )));
-    let files = Arc::new(ConfigMemory {
+    let files = Arc::new(FakeConfigFileStore {
         bytes: Mutex::new(text.as_bytes().to_vec()),
         unreadable: AtomicBool::new(false),
         fail_write: AtomicBool::new(false),
@@ -4088,7 +4089,7 @@ fn config_fixture_text(
 
 async fn start_config_services(
     config: Arc<dyn ConfigService>,
-    events: Arc<Recorder>,
+    events: Arc<SpyEventSink>,
     clock: Arc<dyn Clock>,
 ) -> Running {
     let log: Arc<dyn EventSink> = events.clone();
@@ -4103,20 +4104,20 @@ async fn start_config_services(
     );
     let relay_budget = ConnectionBudget::new();
     let query = Arc::new(ManagementQueryService::new(
-        Arc::new(EmptyRelaySource),
+        Arc::new(StubRelayStateSource),
         Arc::clone(&relay_budget),
         budget.clone(),
         clock.clone(),
         runtime.clone(),
     ));
     let terminate = Arc::new(ManagementTerminateService::new(
-        Arc::new(EmptyRelaySource),
+        Arc::new(StubRelayStateSource),
         clock.clone(),
         log,
     ));
     let metrics = metrics_service(
         Arc::new(Metrics::new(clock.as_ref())),
-        Arc::new(EmptyRelaySource),
+        Arc::new(StubRelayStateSource),
         (relay_budget, budget.clone()),
         runtime.clone(),
         Arc::clone(&auth),
@@ -4194,7 +4195,7 @@ fn config_json(reply: &Reply) -> Value {
         .unwrap_or_else(|error| panic!("config JSON: {error}: {:?}", reply.body))
 }
 
-fn config_audits(events: &Recorder) -> Vec<Value> {
+fn config_audits(events: &SpyEventSink) -> Vec<Value> {
     events
         .snapshot()
         .iter()
@@ -4207,7 +4208,7 @@ fn config_audits(events: &Recorder) -> Vec<Value> {
             )
         })
         .map(|event| {
-            serde_json::from_str(&format_line(event, UNIX_EPOCH))
+            serde_json::from_str(&ops_log::format_line(event, UNIX_EPOCH))
                 .unwrap_or_else(|error| panic!("audit JSON: {error}"))
         })
         .collect()
@@ -4216,7 +4217,7 @@ fn config_audits(events: &Recorder) -> Vec<Value> {
 fn assert_config_unchanged(
     fixture: &ConfigFixture,
     bytes: &[u8],
-    running: &vnc_relay_app::settings::Settings,
+    running: &vnc_relay_application::settings::Settings,
 ) {
     assert_eq!(fixture.files.bytes(), bytes);
     let reload = fixture
@@ -4227,7 +4228,7 @@ fn assert_config_unchanged(
     assert!(reload.last_reload().is_none());
 }
 
-fn assert_rejection(events: &Recorder, reason: &str, key: &str) {
+fn assert_rejection(events: &SpyEventSink, reason: &str, key: &str) {
     let audits = config_audits(events);
     assert_eq!(audits.len(), 1, "{audits:?}");
     assert_eq!(audits[0]["event"], "config_edit_rejected");
@@ -4251,7 +4252,7 @@ fn assert_rejection(events: &Recorder, reason: &str, key: &str) {
 /// spec: management.md:MGT-029
 #[tokio::test]
 async fn config_routes_refuse_unauthenticated_requests_before_details() {
-    let events = Arc::new(Recorder::default());
+    let events = Arc::new(SpyEventSink::default());
     let clock = Arc::new(FakeClock::default());
     let fixture = config_fixture(true, clock.clone(), events.clone());
     fixture
@@ -4282,7 +4283,7 @@ async fn config_routes_refuse_unauthenticated_requests_before_details() {
 /// spec: management.md:MGT-030
 #[tokio::test]
 async fn disabled_config_edit_keeps_file_and_runtime_and_audits_rejection() {
-    let events = Arc::new(Recorder::default());
+    let events = Arc::new(SpyEventSink::default());
     let clock = Arc::new(FakeClock::default());
     let fixture = config_fixture(false, clock.clone(), events.clone());
     let original = fixture.files.bytes();
@@ -4318,7 +4319,7 @@ async fn disabled_config_edit_keeps_file_and_runtime_and_audits_rejection() {
 /// spec: management.md:MGT-032
 #[tokio::test]
 async fn config_patch_csrf_failure_changes_nothing_and_emits_no_edit_event() {
-    let events = Arc::new(Recorder::default());
+    let events = Arc::new(SpyEventSink::default());
     let clock = Arc::new(FakeClock::default());
     let fixture = config_fixture(true, clock.clone(), events.clone());
     let original = fixture.files.bytes();
@@ -4359,7 +4360,7 @@ async fn config_patch_csrf_failure_changes_nothing_and_emits_no_edit_event() {
 #[tokio::test]
 async fn invalid_or_unreadable_current_file_refuses_patch_with_safe_diagnostics() {
     for state in ["read", "utf8", "syntax", "tls"] {
-        let events = Arc::new(Recorder::default());
+        let events = Arc::new(SpyEventSink::default());
         let clock = Arc::new(FakeClock::default());
         let text = if state == "tls" {
             CONFIG_TEXT.replace(
@@ -4468,7 +4469,7 @@ async fn invalid_config_candidate_returns_indexed_safe_diagnostics_without_write
             "PRIVATE-BAD-TARGET",
         ),
     ] {
-        let events = Arc::new(Recorder::default());
+        let events = Arc::new(SpyEventSink::default());
         let clock = Arc::new(FakeClock::default());
         let fixture = config_fixture(true, clock.clone(), events.clone());
         let original = fixture.files.bytes();
@@ -4512,7 +4513,7 @@ async fn invalid_config_candidate_returns_indexed_safe_diagnostics_without_write
 /// spec: management.md:MGT-037
 #[tokio::test]
 async fn config_patch_rejects_uneditable_empty_mistyped_and_poll_requests_without_audit() {
-    let events = Arc::new(Recorder::default());
+    let events = Arc::new(SpyEventSink::default());
     let clock = Arc::new(FakeClock::default());
     let all_roles = format!(
         "{CONFIG_TEXT}\n[relay.ws.server]\nenabled=true\nallow=['127.0.0.1']\n\
@@ -4579,7 +4580,7 @@ async fn config_patch_rejects_uneditable_empty_mistyped_and_poll_requests_withou
     assert_eq!(fixture.files.replaces.load(Ordering::SeqCst), 0);
     assert!(config_audits(&events).is_empty());
     drop(running);
-    let events = Arc::new(Recorder::default());
+    let events = Arc::new(SpyEventSink::default());
     let clock = Arc::new(FakeClock::default());
     let text = CONFIG_TEXT
         .replace(
@@ -4701,7 +4702,7 @@ fn ticket_coordinate(bytes: &[u8]) -> String {
 #[tokio::test]
 async fn ticket_config_view_edits_and_refusals_follow_management_contract() {
     let key_files = TicketConfigFiles::new();
-    let events = Arc::new(Recorder::default());
+    let events = Arc::new(SpyEventSink::default());
     let clock = Arc::new(FakeClock::default());
     let text = format!(
         "{CONFIG_TEXT}\n[relay.ws.server]\nenabled = true\nallow = [\"127.0.0.1\"]\n[relay.wss.server]\nenabled = true\nallow = [\"127.0.0.1\"]\n{}{}",
@@ -4858,7 +4859,7 @@ async fn ticket_config_view_edits_and_refusals_follow_management_contract() {
 
     // Both transports disabled must reject every editable ticket kind.
     for role in ["viewer", "server"] {
-        let events = Arc::new(Recorder::default());
+        let events = Arc::new(SpyEventSink::default());
         let clock = Arc::new(FakeClock::default());
         let text = CONFIG_TEXT
             .replace(
@@ -4912,7 +4913,7 @@ async fn ticket_config_view_edits_and_refusals_follow_management_contract() {
     }
     for role in ["viewer", "server"] {
         for missing in ["issuer", "relay_host", "public_keys_file"] {
-            let events = Arc::new(Recorder::default());
+            let events = Arc::new(SpyEventSink::default());
             let clock = Arc::new(FakeClock::default());
             let text = format!(
                 "{CONFIG_TEXT}\n[relay.ws.server]\nenabled = true\nallow = [\"127.0.0.1\"]\n{}",
@@ -4958,7 +4959,7 @@ async fn ticket_config_view_edits_and_refusals_follow_management_contract() {
 #[tokio::test]
 async fn temporary_write_and_replace_failures_keep_original_bytes_and_running_values() {
     for stage in ["temporary_write", "atomic_replace"] {
-        let events = Arc::new(Recorder::default());
+        let events = Arc::new(SpyEventSink::default());
         let clock = Arc::new(FakeClock::default());
         let fixture = config_fixture(true, clock.clone(), events.clone());
         fixture
@@ -5007,7 +5008,7 @@ async fn temporary_write_and_replace_failures_keep_original_bytes_and_running_va
 /// spec: operations.md:OPS-062
 #[tokio::test]
 async fn explicit_config_retry_after_write_repair_commits_and_audits_once() {
-    let events = Arc::new(Recorder::default());
+    let events = Arc::new(SpyEventSink::default());
     let clock = Arc::new(FakeClock::default());
     let fixture = config_fixture(true, clock.clone(), events.clone());
     fixture.files.fail_replace.store(true, Ordering::SeqCst);
@@ -5062,8 +5063,8 @@ async fn explicit_config_retry_after_write_repair_commits_and_audits_once() {
     assert_eq!(audits[2]["revision"], config_revision(&fixture));
 }
 
-struct FailedConfigQuery;
-impl ConfigService for FailedConfigQuery {
+struct StubConfigService;
+impl ConfigService for StubConfigService {
     fn get(&self) -> Result<ConfigView, ConfigGetError> {
         Err(ConfigGetError::Internal)
     }
@@ -5071,7 +5072,7 @@ impl ConfigService for FailedConfigQuery {
         &self,
         _actor: ConfigActor,
         _request: ConfigPatch,
-    ) -> Result<ConfigEditResult, ConfigEditError> {
+    ) -> Result<ConfigEditOutcome, ConfigEditError> {
         Err(ConfigEditError::Internal)
     }
 }
@@ -5079,9 +5080,9 @@ impl ConfigService for FailedConfigQuery {
 /// spec: management.md:MGT-042 partial
 #[tokio::test]
 async fn config_query_internal_error_is_not_an_empty_view() {
-    let events = Arc::new(Recorder::default());
+    let events = Arc::new(SpyEventSink::default());
     let running = start_config_services(
-        Arc::new(FailedConfigQuery),
+        Arc::new(StubConfigService),
         events.clone(),
         Arc::new(FakeClock::default()),
     )
@@ -5097,7 +5098,7 @@ async fn config_query_internal_error_is_not_an_empty_view() {
 /// spec: management.md:MGT-040 partial
 #[tokio::test]
 async fn disconnected_config_client_does_not_cancel_commit() {
-    let events = Arc::new(Recorder::default());
+    let events = Arc::new(SpyEventSink::default());
     let clock = Arc::new(FakeClock::default());
     let fixture = config_fixture(true, clock.clone(), events.clone());
     let gate = Arc::new(ConfigReplacementGate::default());
@@ -5123,7 +5124,7 @@ async fn disconnected_config_client_does_not_cancel_commit() {
         ))
         .await
         .unwrap_or_else(|error| panic!("write PATCH: {error}"));
-    timeout(LIMIT, async {
+    time::timeout(LIMIT, async {
         while !gate.entered.load(Ordering::SeqCst) {
             tokio::time::sleep(Duration::from_millis(5)).await;
         }
@@ -5169,12 +5170,12 @@ async fn config_user_actions_extend_idle_but_failures_do_not() {
         "candidate",
         "restart",
     ] {
-        let events = Arc::new(Recorder::default());
+        let events = Arc::new(SpyEventSink::default());
         let clock = Arc::new(FakeClock::default());
         let fixture = config_fixture(action != "disabled", clock.clone(), events.clone());
         let revision = config_revision(&fixture);
         let config: Arc<dyn ConfigService> = if action == "internal" {
-            Arc::new(FailedConfigQuery)
+            Arc::new(StubConfigService)
         } else {
             fixture.service.clone()
         };
@@ -5317,7 +5318,7 @@ async fn config_user_actions_extend_idle_but_failures_do_not() {
 
 #[tokio::test]
 async fn config_methods_media_type_body_limit_and_unknown_fields_follow_common_order() {
-    let events = Arc::new(Recorder::default());
+    let events = Arc::new(SpyEventSink::default());
     let clock = Arc::new(FakeClock::default());
     let fixture = config_fixture(true, clock.clone(), events.clone());
     let running = start_config_services(fixture.service.clone(), events.clone(), clock).await;
@@ -5449,16 +5450,16 @@ fn management_runtime(
 #[tokio::test]
 async fn session_queries_and_termination_provide_full_transport_and_forwarded_ip_coverage() {
     use std::collections::HashMap;
-    use vnc_relay_app::relay::{ActivePeer, ActiveSessionSnapshot, ClosedSessionSnapshot};
+    use vnc_relay_application::relay::{ActivePeer, ActiveSessionSnapshot, ClosedSessionSnapshot};
     use vnc_relay_domain::handshake::Mode;
-    use vnc_relay_domain::session::{CloseCause, SessionId, SessionState, Transport};
+    use vnc_relay_domain::session::{CloseCause, Id, State, Transport};
 
-    struct ControllableRelayState {
+    struct FakeRelayStateSource {
         snapshot: Mutex<RelaySnapshot>,
         terminated: Mutex<HashMap<String, Arc<ClosedSessionSnapshot>>>,
     }
 
-    impl RelayStateSource for ControllableRelayState {
+    impl RelayStateSource for FakeRelayStateSource {
         fn snapshot(&self, _clock: &dyn Clock) -> RelaySnapshot {
             self.snapshot.lock().unwrap().clone()
         }
@@ -5468,11 +5469,11 @@ async fn session_queries_and_termination_provide_full_transport_and_forwarded_ip
         }
     }
 
-    impl RelaySessionControl for ControllableRelayState {
+    impl RelaySessionControl for FakeRelayStateSource {
         fn request_terminate(
             &self,
             session_id: &str,
-            _account: AccountName,
+            _account: Name,
             _peer: PeerIp,
             _clock: &dyn Clock,
             _events: &dyn EventSink,
@@ -5598,7 +5599,7 @@ async fn session_queries_and_termination_provide_full_transport_and_forwarded_ip
     let mut recent_closed = Vec::new();
 
     for tc in &cases {
-        let session_id = SessionId::parse(tc.id).unwrap();
+        let session_id = Id::parse(tc.id).unwrap();
         let active_entry = ActiveSessionSnapshot {
             session_id: session_id.clone(),
             mode: tc.mode,
@@ -5609,7 +5610,7 @@ async fn session_queries_and_termination_provide_full_transport_and_forwarded_ip
             started_at: UNIX_EPOCH + Duration::from_secs(1_700_000_000),
             started_mono: Duration::from_secs(1),
             duration: Duration::from_secs(5),
-            state: SessionState::Active,
+            state: State::Active,
             viewer: ConnectionContext {
                 conn_id: ConnId::next(),
                 entry_point: match tc.viewer_transport {
@@ -5655,7 +5656,7 @@ async fn session_queries_and_termination_provide_full_transport_and_forwarded_ip
         recent_closed.push((*closed_entry).clone());
     }
 
-    let relay_state = Arc::new(ControllableRelayState {
+    let relay_state = Arc::new(FakeRelayStateSource {
         snapshot: Mutex::new(RelaySnapshot {
             lifecycle: RelayLifecycle::Running,
             observed_at: Duration::from_secs(10),
@@ -5671,7 +5672,7 @@ async fn session_queries_and_termination_provide_full_transport_and_forwarded_ip
 
     let cell = management_runtime(ROOMY_LM, UPGRADE, Duration::from_secs(1));
     let clock = Arc::new(SystemClock::new());
-    let events = Arc::new(Recorder::default());
+    let events = Arc::new(SpyEventSink::default());
     let auth = admin_auth(
         events.clone(),
         session_policy(),
@@ -5852,7 +5853,7 @@ async fn recent_logs_query_basics_limit_order_and_bounds() {
         ConnId::next()
     ));
     let sink = JsonLinesEventSink::open(
-        &vnc_relay_app::settings::LogOutput::File(path.clone()),
+        &vnc_relay_application::settings::LogOutput::File(path.clone()),
         |_| {},
         |_| {},
     )
@@ -5913,14 +5914,14 @@ async fn recent_logs_filters_alone_and_combined_and_session_relation() {
     let sink = JsonLinesEventSink::stdout(|_| {}).with_recent_logs(Arc::clone(&running.logs));
     let conn1 = ConnId::next();
     let conn2 = ConnId::next();
-    let sid1 = vnc_relay_domain::session::SessionId::from_block([1; 16]);
-    let sid2 = vnc_relay_domain::session::SessionId::from_block([2; 16]);
+    let sid1 = vnc_relay_domain::session::Id::from_block([1; 16]);
+    let sid2 = vnc_relay_domain::session::Id::from_block([2; 16]);
     let ip = PeerIp::new(std::net::IpAddr::from([127, 0, 0, 1]));
 
     // seq 1
     sink.record(&Event::ConnectionAccepted {
         conn_id: conn1,
-        listener: vnc_relay_domain::entry_point::Listener::TcpViewer,
+        listener: vnc_relay_domain::entry_point::ListenerKind::TcpViewer,
         peer_ip: ip,
     });
     // seq 2
@@ -5944,7 +5945,7 @@ async fn recent_logs_filters_alone_and_combined_and_session_relation() {
     // seq 3
     sink.record(&Event::ConnectionAccepted {
         conn_id: conn2,
-        listener: vnc_relay_domain::entry_point::Listener::TcpServer,
+        listener: vnc_relay_domain::entry_point::ListenerKind::TcpServer,
         peer_ip: ip,
     });
     // seq 4
@@ -5959,9 +5960,9 @@ async fn recent_logs_filters_alone_and_combined_and_session_relation() {
         server_conn_id: Some(conn2),
         server_peer_ip: Some(ip),
         server_forwarded_ip: None,
-        relay_id_ref: Some(vnc_relay_app::events::RelayIdRef::from_hash_prefix([
-            0xab, 0xcd, 0xef, 0x01, 0x23, 0x45, 0x67, 0x89,
-        ])),
+        relay_id_ref: Some(vnc_relay_application::events::RelayIdRef::from_hash_prefix(
+            [0xab, 0xcd, 0xef, 0x01, 0x23, 0x45, 0x67, 0x89],
+        )),
         waited_ms: Some(100),
         target_ip: None,
         target_port: None,
@@ -5969,11 +5970,11 @@ async fn recent_logs_filters_alone_and_combined_and_session_relation() {
     });
     // seq 5
     sink.record(&Event::ConfigWarning {
-        warning: vnc_relay_app::settings::ConfigWarning::TrustAllProxies {
-            listener: vnc_relay_domain::entry_point::Listener::Ws,
+        warning: vnc_relay_application::settings::ConfigWarning::TrustAllProxies {
+            listener: vnc_relay_domain::entry_point::ListenerKind::Ws,
             item: vnc_relay_domain::allow_list::IpItem::parse("0.0.0.0/0").unwrap(),
         },
-        phase: vnc_relay_app::events::Phase::Startup,
+        phase: vnc_relay_application::events::Phase::Startup,
     });
 
     // 1. level filter
@@ -6219,7 +6220,7 @@ async fn recent_logs_zero_max_entries_and_empty_buffer_responses() {
 async fn recent_logs_polling_idle_timeout_and_unauthenticated_guard() {
     let idle = Duration::from_secs(400);
     let clock = Arc::new(FakeClock::default());
-    let session = AdminSessionPolicy::new(idle, Duration::from_secs(3600));
+    let session = admin_session::Policy::new(idle, Duration::from_secs(3600));
     let running = start_with_ports(
         None,
         ROOMY_LM,
@@ -6311,7 +6312,7 @@ async fn recent_logs_polling_idle_timeout_and_unauthenticated_guard() {
 #[tokio::test]
 async fn metrics_need_a_session_and_automatic_refresh_does_not_extend_it() {
     let clock = Arc::new(FakeClock::default());
-    let session = AdminSessionPolicy::new(Duration::from_secs(400), Duration::from_secs(3600));
+    let session = admin_session::Policy::new(Duration::from_secs(400), Duration::from_secs(3600));
     let running = start_with_ports(
         None,
         ROOMY_LM,

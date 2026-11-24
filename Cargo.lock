@@ -1303,8 +1303,9 @@ dependencies = [
  "tokio",
  "tokio-tungstenite",
  "vnc-relay-adapters",
- "vnc-relay-app",
+ "vnc-relay-application",
  "vnc-relay-domain",
+ "vnc-relay-testkit",
  "windows-sys 0.61.2",
 ]
 
@@ -1327,14 +1328,15 @@ dependencies = [
  "tokio-tungstenite",
  "toml",
  "toml_edit",
- "vnc-relay-app",
+ "vnc-relay-application",
  "vnc-relay-domain",
+ "vnc-relay-testkit",
  "windows-service",
  "windows-sys 0.61.2",
 ]
 
 [[package]]
-name = "vnc-relay-app"
+name = "vnc-relay-application"
 version = "2026.11.10"
 dependencies = [
  "tokio",
@@ -1346,12 +1348,25 @@ name = "vnc-relay-domain"
 version = "2026.11.10"
 
 [[package]]
+name = "vnc-relay-testkit"
+version = "2026.11.10"
+dependencies = [
+ "aws-lc-rs",
+ "serde_json",
+ "tokio",
+ "tokio-tungstenite",
+ "vnc-relay-adapters",
+ "vnc-relay-application",
+ "vnc-relay-domain",
+]
+
+[[package]]
 name = "vnc-relay-tray"
 version = "2026.11.10"
 dependencies = [
  "tray-icon",
  "vnc-relay-adapters",
- "vnc-relay-app",
+ "vnc-relay-application",
  "windows-registry",
  "windows-service",
  "windows-sys 0.61.2",

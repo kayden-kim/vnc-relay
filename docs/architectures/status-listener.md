@@ -30,8 +30,8 @@
   - 인증서 검사와 파일 변경 감지 준비. `serve`가 준비됨 전 단계에서 수행한다.
   - `/metrics`의 값과 본문. [메트릭 모듈 설계](metrics.md)가 맡는다. 이 문서는 `metrics.enabled`에 따라 그 경로를 열고 닫는 판정과 메서드 판정만 맡는다.
 - 다른 모듈에 공개하는 기능:
-  - `vnc_relay_app::lifecycle::{Readiness, LifecycleService}`
-  - `vnc_relay_app::events::{Event::ServerReady, RejectReason::AdminConnectionLimit}`
+  - `vnc_relay_application::lifecycle::{Readiness, LifecycleService}`
+  - `vnc_relay_application::events::{Event::ServerReady, RejectReason::AdminConnectionLimit}`
   - `vnc_relay_adapters::status_http::StatusListener`
   - `vnc_relay_adapters::net::bind_one`
 
@@ -55,7 +55,7 @@ flowchart LR
 | --- | --- | --- | --- |
 | `crates/app/src/lifecycle.rs` `Readiness` | 준비 상태와 `/readyz`의 `reason`. 장애 종료는 `ListenerFailed`다. | 값 타입 | 없음 |
 | `crates/app/src/lifecycle.rs` `LifecycleService` | `mark_ready`는 시작 중에만 전환한다. `begin_shutdown`과 `listener_failed`는 최초 종료 원인을 유지한다. | `serve`가 바인드 전에 만들고 상태 HTTP와 공유 | std 원자 변수 |
-| `crates/adapters/src/listener.rs` `Listener`, `SupervisedListener`, `ListenerFailure`, `is_fatal_accept_error` | 모든 리스너의 수락 포트·OS 오류 분류·최초 장애 채널. `TcpListener`는 실제 소켓 포트다. | `serve`가 바인드한 각 소켓을 감싼다 | std, tokio |
+| `crates/adapters/src/listener.rs` `Listener`, `SupervisedListener`, `ListenerError`, `is_fatal_accept_error` | 모든 리스너의 수락 포트·OS 오류 분류·최초 장애 채널. `TcpListener`는 실제 소켓 포트다. | `serve`가 바인드한 각 소켓을 감싼다 | std, tokio |
 | `crates/app/src/events.rs` `Event::ServerReady`, `RejectReason::AdminConnectionLimit` | `server_ready`의 `listeners`, `admin_connection_limit`과 `limit` | 사건이 생길 때 | 없음 |
 | `crates/adapters/src/net.rs` `bind_one` | 계획 하나를 바인드한다. `bind`도 계획마다 이 함수를 쓴다. | 4단계 | tokio, app |
 | `crates/adapters/src/status_http.rs` `StatusListener` | 상태 리스너 하나. axum으로 HTTP/1.1을 처리한다. 수락은 `admission.rs`의 `AdmittingListener`가 맡아 Lm 자리를 잡고, 응답은 1.12·2절 표를 따른다. `metrics.enabled`가 참일 때만 `StatusListener::new`가 `Some(MetricsService)`를 받아 `/metrics`를 연다. | `serve`가 상태 리스너를 바인드한 직후 띄운다. 종료 끝에 `serve`가 작업을 멈춘다. | axum, serde_json, tokio, app, domain, `metrics_text` |

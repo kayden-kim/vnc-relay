@@ -30,7 +30,7 @@ impl ReloadTrigger {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ReloadResult {
+pub enum LastReloadOutcome {
     Applied,
     Rejected,
     RestartRequired,
@@ -39,7 +39,7 @@ pub enum ReloadResult {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LastReload {
     pub at: SystemTime,
-    pub result: ReloadResult,
+    pub result: LastReloadOutcome,
     pub trigger: ReloadTrigger,
     pub config_keys: Vec<String>,
 }
@@ -99,14 +99,14 @@ impl ChangeSource {
 
 /// Why watching stopped working (ops-info-v2 §1.5 `reload_watch_failed`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum WatchFailure {
+pub enum WatchError {
     /// The OS notification API reported an error.
     NotifyError,
     /// The periodic poll failed.
     PollError,
 }
 
-impl WatchFailure {
+impl WatchError {
     /// Value of the `reason` field of `reload_watch_failed`.
     pub fn as_str(&self) -> &'static str {
         match self {

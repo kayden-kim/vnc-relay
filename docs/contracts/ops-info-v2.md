@@ -557,7 +557,7 @@ Producer 계약 테스트는 다음 위치에서 관리한다. 현재 시나리�
 | --- | --- |
 | JSON Lines 형식·사건·필드·상태 응답 | `crates/adapters/tests/ops_info_contract.rs`, `crates/adapters/src/ops_log.rs`·`crypto.rs`, `crates/domain/src/peer_ip.rs`·`allow_list.rs`, `crates/app/src/lifecycle.rs` |
 | 실제 프로세스의 시작·접속·거절·중계·비밀 비노출 | `tests/serve.rs`, `tests/relay_log_scenarios.rs` |
-| ticket 사건·거절·ID 대조·만료·비노출 | `tests/ticket_system.rs`, `crates/adapters/tests/websocket_ticket.rs` |
+| ticket 사건·거절·ID 대조·만료·비노출 | `tests/ticket_system/main.rs`, `crates/adapters/tests/websocket_ticket.rs` |
 | 역할·신뢰 프록시·전달 주소 | `crates/adapters/tests/websocket_scenarios.rs`, `crates/adapters/tests/websocket.rs` |
 | 재로드·설정 편집·로그 다시 열기 | `tests/reload.rs`, `tests/log_reopen.rs`, `tests/management_query.rs`, `crates/adapters/tests/management.rs`, `crates/adapters/src/file_watch/reopen_tests.rs` |
 | IP 정보 DB 사건·순서·비노출 | `crates/adapters/tests/ops_info_contract.rs`, `crates/adapters/src/ip_db.rs`, `crates/app/src/ip_info.rs`, `tests/sources.rs` |

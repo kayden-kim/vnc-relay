@@ -3,7 +3,7 @@
 //! test hook or a fake stream.
 
 mod delayed_cleanup {
-    use std::future::{Future, poll_fn};
+    use std::future::{self, Future};
     use std::sync::{Arc, Mutex, PoisonError};
     use std::task::Poll;
     use std::time::{Duration, SystemTime};
@@ -14,23 +14,23 @@ mod delayed_cleanup {
     use vnc_relay_adapters::clock::SystemClock;
     use vnc_relay_adapters::crypto::{RelayIdKey, SessionIdKey};
     use vnc_relay_adapters::net::{AcceptPolicy, AllowSource, TcpEntryPoint, TcpRelayStream};
-    use vnc_relay_adapters::ops_log::format_line;
+    use vnc_relay_adapters::ops_log;
     use vnc_relay_adapters::target::TcpTargetGateway;
-    use vnc_relay_app::events::Event;
-    use vnc_relay_app::metrics::Metrics;
-    use vnc_relay_app::ports::{Clock, EventSink};
-    use vnc_relay_app::relay::{
+    use vnc_relay_application::events::Event;
+    use vnc_relay_application::metrics::Metrics;
+    use vnc_relay_application::ports::{Clock, EventSink};
+    use vnc_relay_application::relay::{
         ConnectionContext, PreparedConnection, RelayRuntime, RelayRuntimeConfig, RelayService,
     };
-    use vnc_relay_app::reload::ports::RuntimeSettingsSource;
-    use vnc_relay_app::reload::snapshot::{ReloadCell, ReloadSnapshot};
-    use vnc_relay_app::reload::{ConfigCandidate, ConfigPresence};
-    use vnc_relay_app::settings::KeepaliveSettings;
+    use vnc_relay_application::reload::ports::RuntimeSettingsSource;
+    use vnc_relay_application::reload::snapshot::{ReloadCell, ReloadSnapshot};
+    use vnc_relay_application::reload::{ConfigCandidate, ConfigPresence};
+    use vnc_relay_application::settings::KeepaliveSettings;
     use vnc_relay_domain::allow_list::{AllowList, IpItem};
     use vnc_relay_domain::budget::ConnectionBudget;
     use vnc_relay_domain::conn_id::ConnId;
     use vnc_relay_domain::entry_point::EntryPoint;
-    use vnc_relay_domain::handshake::HandshakePolicy;
+    use vnc_relay_domain::handshake::Policy;
     use vnc_relay_domain::peer_ip::PeerIp;
     use vnc_relay_domain::target_policy::TargetPolicy;
 
@@ -64,18 +64,18 @@ mod delayed_cleanup {
     };
 
     #[derive(Default)]
-    struct Recorder(Mutex<Vec<String>>);
+    struct SpyEventSink(Mutex<Vec<String>>);
 
-    impl EventSink for Recorder {
+    impl EventSink for SpyEventSink {
         fn record(&self, value: &Event) {
             self.0
                 .lock()
                 .unwrap_or_else(PoisonError::into_inner)
-                .push(format_line(value, SystemTime::now()));
+                .push(ops_log::format_line(value, SystemTime::now()));
         }
     }
 
-    impl Recorder {
+    impl SpyEventSink {
         fn lines(&self) -> Vec<String> {
             self.0
                 .lock()
@@ -206,7 +206,7 @@ mod delayed_cleanup {
                     .await
                     .unwrap_or_else(|error| panic!(concat!("Server bind", ": {:?}"), error));
                 let clock: Arc<dyn Clock> = Arc::new(SystemClock::new());
-                let events = Arc::new(Recorder::default());
+                let events = Arc::new(SpyEventSink::default());
                 let log: Arc<dyn EventSink> = events.clone();
                 let mut settings = vnc_relay_adapters::config_file::parse(
                     "[admin]\naccounts_file = 'accounts.toml'\n\
@@ -254,7 +254,7 @@ mod delayed_cleanup {
                     Arc::clone(&settings),
                 ));
                 let service = Arc::new(RelayService::new(
-                    HandshakePolicy {
+                    Policy {
                         mode1_enabled: false,
                         mode2_enabled: true,
                     },
@@ -286,7 +286,7 @@ mod delayed_cleanup {
                 .await;
                 let old_conn = prepared.context().conn_id;
                 let mut old_owner = Box::pin(service.dispatch(prepared, &runtime));
-                poll_fn(|cx| {
+                future::poll_fn(|cx| {
                     assert!(old_owner.as_mut().poll(cx).is_pending());
                     Poll::Ready(())
                 })

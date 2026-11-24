@@ -17,15 +17,15 @@ use tokio::sync::watch;
 use tokio::task::JoinSet;
 use tokio::time::Instant;
 use tokio_rustls::TlsAcceptor;
-use vnc_relay_app::events::{AbortReason, ConnectionErrorKind, Event, RejectReason, Stage};
-use vnc_relay_app::ports::{Clock, EventSink};
-use vnc_relay_app::relay::{ConnectionContext, RelayRuntime, RelayService};
-use vnc_relay_app::reload::ports::RuntimeSettingsSource;
-use vnc_relay_app::reload::snapshot::ReloadCell;
-use vnc_relay_app::settings::{KeepaliveSettings, ListenerPlan, Settings};
-use vnc_relay_domain::budget::{BudgetPermit, ConnectionBudget};
+use vnc_relay_application::events::{AbortReason, ConnectionErrorKind, Event, RejectReason, Stage};
+use vnc_relay_application::ports::{Clock, EventSink};
+use vnc_relay_application::relay::{ConnectionContext, RelayRuntime, RelayService};
+use vnc_relay_application::reload::ports::RuntimeSettingsSource;
+use vnc_relay_application::reload::snapshot::ReloadCell;
+use vnc_relay_application::settings::{KeepaliveSettings, ListenerPlan, Settings};
+use vnc_relay_domain::budget::{ConnectionBudget, Permit};
 use vnc_relay_domain::conn_id::ConnId;
-use vnc_relay_domain::entry_point::{EntryPoint, Listener};
+use vnc_relay_domain::entry_point::{EntryPoint, ListenerKind};
 use vnc_relay_domain::peer_ip::PeerIp;
 
 use crate::target::TcpTargetGateway;
@@ -66,7 +66,7 @@ pub(crate) fn classify_socket_error(error: io::Error) -> io::Error {
             ErrorKind::TimedOut | ErrorKind::HostUnreachable | ErrorKind::NetworkUnreachable
         )
     {
-        vnc_relay_app::ports::RelayStreamError::DeadConnection.into_io_error()
+        vnc_relay_application::ports::RelayStreamError::DeadConnection.into_io_error()
     } else {
         error
     }
@@ -74,11 +74,10 @@ pub(crate) fn classify_socket_error(error: io::Error) -> io::Error {
 
 #[cfg(all(test, target_os = "linux"))]
 mod socket_error_tests {
-    use super::classify_socket_error;
     use std::io;
     use std::task::Poll;
-    use vnc_relay_app::events::ConnectionErrorKind;
-    use vnc_relay_app::ports::RelayStreamError;
+    use vnc_relay_application::events::ConnectionErrorKind;
+    use vnc_relay_application::ports::RelayStreamError;
 
     #[test]
     fn classifies_only_linux_socket_timeouts_as_dead_connections() {
@@ -91,7 +90,7 @@ mod socket_error_tests {
         ] {
             // Inject the same poll result produced by the underlying TCP socket.
             let result: Poll<io::Result<()>> = Poll::Ready(Err(io::Error::from(kind)));
-            let error = match result.map_err(classify_socket_error) {
+            let error = match result.map_err(super::classify_socket_error) {
                 Poll::Ready(Err(error)) => error,
                 other => panic!("injected socket error disappeared: {other:?}"),
             };
@@ -168,7 +167,7 @@ impl tokio::io::AsyncWrite for TcpRelayStream {
     }
 }
 
-impl vnc_relay_app::ports::RelayStream for TcpRelayStream {
+impl vnc_relay_application::ports::RelayStream for TcpRelayStream {
     fn transport(&self) -> vnc_relay_domain::session::Transport {
         vnc_relay_domain::session::Transport::Tcp
     }
@@ -180,7 +179,7 @@ impl vnc_relay_app::ports::RelayStream for TcpRelayStream {
     fn poll_close(
         self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
-        _action: vnc_relay_app::ports::RelayCloseAction,
+        _action: vnc_relay_application::ports::RelayCloseAction,
     ) -> std::task::Poll<io::Result<()>> {
         tokio::io::AsyncWrite::poll_shutdown(self, cx)
     }
@@ -200,7 +199,7 @@ pub struct BoundListener {
 /// A plan that could not be bound. `cause` is one Korean sentence without
 /// the address, so the operation log can carry it (ops-info-v2 §1.11).
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct BindFailure {
+pub struct BindError {
     pub plan: ListenerPlan,
     pub cause: String,
 }
@@ -208,7 +207,7 @@ pub struct BindFailure {
 /// Binds every plan in order. After a failure it still tries the rest so
 /// that every failure is reported (cli-v1 §1.5). When any plan fails, the
 /// listeners already bound are closed before returning.
-pub async fn bind(plans: &[ListenerPlan]) -> Result<Vec<BoundListener>, Vec<BindFailure>> {
+pub async fn bind(plans: &[ListenerPlan]) -> Result<Vec<BoundListener>, Vec<BindError>> {
     let mut bound = Vec::with_capacity(plans.len());
     let mut failures = Vec::new();
     for plan in plans {
@@ -227,10 +226,10 @@ pub async fn bind(plans: &[ListenerPlan]) -> Result<Vec<BoundListener>, Vec<Bind
 
 /// Binds one plan. The status listener is bound alone first so that it
 /// answers while the others are bound (ops-info-v2 §1.12).
-pub async fn bind_one(plan: ListenerPlan) -> Result<BoundListener, BindFailure> {
+pub async fn bind_one(plan: ListenerPlan) -> Result<BoundListener, BindError> {
     match TcpListener::bind(plan.addr).await {
         Ok(listener) => Ok(BoundListener { plan, listener }),
-        Err(error) => Err(BindFailure {
+        Err(error) => Err(BindError {
             plan,
             cause: bind_cause(&error),
         }),
@@ -261,31 +260,31 @@ pub struct AcceptPolicy {
 #[derive(Clone)]
 pub struct AllowSource {
     runtime: Arc<dyn RuntimeSettingsSource>,
-    listener: Listener,
+    listener: ListenerKind,
 }
 
 impl AllowSource {
     /// The `tcp_viewer` allow list of the snapshot.
     pub fn tcp_viewer(cell: Arc<ReloadCell<TlsAcceptor>>) -> Self {
-        Self::new(cell, Listener::TcpViewer)
+        Self::new(cell, ListenerKind::TcpViewer)
     }
 
     /// The `tcp_server` allow list of the snapshot.
     pub fn tcp_server(cell: Arc<ReloadCell<TlsAcceptor>>) -> Self {
-        Self::new(cell, Listener::TcpServer)
+        Self::new(cell, ListenerKind::TcpServer)
     }
 
     /// The union of the enabled WS roles' allow lists.
     pub fn ws(cell: Arc<ReloadCell<TlsAcceptor>>) -> Self {
-        Self::new(cell, Listener::Ws)
+        Self::new(cell, ListenerKind::Ws)
     }
 
     /// The union of the enabled WSS roles' allow lists.
     pub fn wss(cell: Arc<ReloadCell<TlsAcceptor>>) -> Self {
-        Self::new(cell, Listener::Wss)
+        Self::new(cell, ListenerKind::Wss)
     }
 
-    fn new(cell: Arc<ReloadCell<TlsAcceptor>>, listener: Listener) -> Self {
+    fn new(cell: Arc<ReloadCell<TlsAcceptor>>, listener: ListenerKind) -> Self {
         Self {
             runtime: cell,
             listener,
@@ -336,7 +335,7 @@ impl AllowSource {
         !proxy && settings.relay.deny.denies(peer_ip)
     }
 
-    pub(crate) fn listener(&self) -> Listener {
+    pub(crate) fn listener(&self) -> ListenerKind {
         self.listener
     }
 
@@ -366,7 +365,7 @@ pub struct TcpEntryPoint<L = TcpListener> {
 /// An accepted connection while it waits for the next stage.
 pub(crate) struct Accepted {
     pub(crate) conn_id: ConnId,
-    pub(crate) listener: Listener,
+    pub(crate) listener: ListenerKind,
     pub(crate) peer_ip: PeerIp,
     pub(crate) at: Instant,
     pub(crate) peer_addr: SocketAddr,
@@ -469,14 +468,14 @@ impl<L: crate::listener::Listener> TcpEntryPoint<L> {
 /// true, the listener closes and the function returns after every served
 /// connection has ended.
 pub(crate) async fn accept_connections<L: crate::listener::Listener, Serve, Fut>(
-    relay_listener: Listener,
+    relay_listener: ListenerKind,
     listener: L,
     policy: AcceptPolicy,
     log: Arc<dyn EventSink>,
     stop: watch::Receiver<bool>,
     serve: Serve,
 ) where
-    Serve: Fn(TcpStream, Accepted, BudgetPermit, watch::Receiver<bool>) -> Fut,
+    Serve: Fn(TcpStream, Accepted, Permit, watch::Receiver<bool>) -> Fut,
     Fut: Future<Output = ()> + Send + 'static,
 {
     accept_connections_with_keepalive(
@@ -494,7 +493,7 @@ pub(crate) async fn accept_connections<L: crate::listener::Listener, Serve, Fut>
 // The socket-option operation is an explicit parameter so tests can fail it
 // deterministically without relying on platform-specific option limits.
 async fn accept_connections_with_keepalive<L: crate::listener::Listener, Serve, Fut, Keepalive>(
-    relay_listener: Listener,
+    relay_listener: ListenerKind,
     mut listener: L,
     policy: AcceptPolicy,
     log: Arc<dyn EventSink>,
@@ -502,7 +501,7 @@ async fn accept_connections_with_keepalive<L: crate::listener::Listener, Serve, 
     serve: Serve,
     keepalive: Keepalive,
 ) where
-    Serve: Fn(TcpStream, Accepted, BudgetPermit, watch::Receiver<bool>) -> Fut,
+    Serve: Fn(TcpStream, Accepted, Permit, watch::Receiver<bool>) -> Fut,
     Fut: Future<Output = ()> + Send + 'static,
     Keepalive: Fn(&TcpStream, &KeepaliveSettings) -> io::Result<()>,
 {
@@ -559,9 +558,9 @@ async fn accept_connections_with_keepalive<L: crate::listener::Listener, Serve, 
         });
         if keepalive(&stream, &conn.settings.keepalive).is_err() {
             let stage = match relay_listener {
-                Listener::TcpViewer | Listener::TcpServer => Stage::InitialExchange,
-                Listener::Ws => Stage::Upgrade,
-                Listener::Wss => Stage::Tls,
+                ListenerKind::TcpViewer | ListenerKind::TcpServer => Stage::InitialExchange,
+                ListenerKind::Ws => Stage::Upgrade,
+                ListenerKind::Wss => Stage::Tls,
             };
             log.record(&Event::ConnectionAborted {
                 conn_id: conn.conn_id,
@@ -589,7 +588,7 @@ async fn accept_connections_with_keepalive<L: crate::listener::Listener, Serve, 
 fn admit(
     policy: &AcceptPolicy,
     peer_ip: PeerIp,
-) -> Result<(BudgetPermit, AcceptedSettings), RejectReason> {
+) -> Result<(Permit, AcceptedSettings), RejectReason> {
     let mut admitted = Err(RejectReason::IpNotAllowed);
     policy.allow.with_current(&mut |settings| {
         if policy.allow.denies_in(settings, peer_ip) {
@@ -670,17 +669,17 @@ mod accept_tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::sync::mpsc;
-    use vnc_relay_app::reload::snapshot::ReloadSnapshot;
+    use vnc_relay_application::reload::snapshot::ReloadSnapshot;
     use vnc_relay_domain::allow_list::AllowList;
     use vnc_relay_domain::allow_list::IpItem;
 
-    use crate::ops_log::format_line;
+    use crate::ops_log;
 
-    struct LogSender(mpsc::UnboundedSender<serde_json::Value>);
+    struct SpyEventSink(mpsc::UnboundedSender<serde_json::Value>);
 
-    impl EventSink for LogSender {
+    impl EventSink for SpyEventSink {
         fn record(&self, event: &Event) {
-            let line = format_line(event, SystemTime::UNIX_EPOCH);
+            let line = ops_log::format_line(event, SystemTime::UNIX_EPOCH);
             let value = serde_json::from_str(&line)
                 .unwrap_or_else(|error| panic!("parse log line: {error}"));
             self.0
@@ -692,10 +691,10 @@ mod accept_tests {
     #[tokio::test]
     async fn keepalive_failure_aborts_accepted_connections_and_releases_l() {
         for (entry_point, stage) in [
-            (Listener::TcpViewer, "initial_exchange"),
-            (Listener::TcpServer, "initial_exchange"),
-            (Listener::Ws, "upgrade"),
-            (Listener::Wss, "tls"),
+            (ListenerKind::TcpViewer, "initial_exchange"),
+            (ListenerKind::TcpServer, "initial_exchange"),
+            (ListenerKind::Ws, "upgrade"),
+            (ListenerKind::Wss, "tls"),
         ] {
             tokio::time::timeout(Duration::from_secs(5), check_failure(entry_point, stage))
                 .await
@@ -703,7 +702,7 @@ mod accept_tests {
         }
     }
 
-    async fn check_failure(entry_point: Listener, stage: &str) {
+    async fn check_failure(entry_point: ListenerKind, stage: &str) {
         let listener = TcpListener::bind("127.0.0.1:0")
             .await
             .unwrap_or_else(|error| panic!("bind: {error}"));
@@ -726,7 +725,7 @@ mod accept_tests {
         settings.limits.relay_connections = 1;
         settings.timeouts.handshake = Duration::from_secs(5);
         let snapshot = ReloadSnapshot::new(
-            vnc_relay_app::reload::ConfigCandidate {
+            vnc_relay_application::reload::ConfigCandidate {
                 settings,
                 presence: Default::default(),
             },
@@ -735,10 +734,10 @@ mod accept_tests {
         );
         let cell = Arc::new(ReloadCell::new(snapshot));
         let allow = match entry_point {
-            Listener::TcpViewer => AllowSource::tcp_viewer(cell),
-            Listener::TcpServer => AllowSource::tcp_server(cell),
-            Listener::Ws => AllowSource::ws(cell),
-            Listener::Wss => AllowSource::wss(cell),
+            ListenerKind::TcpViewer => AllowSource::tcp_viewer(cell),
+            ListenerKind::TcpServer => AllowSource::tcp_server(cell),
+            ListenerKind::Ws => AllowSource::ws(cell),
+            ListenerKind::Wss => AllowSource::wss(cell),
         };
         let budget = ConnectionBudget::new();
         let policy = AcceptPolicy {
@@ -746,7 +745,7 @@ mod accept_tests {
             relay_budget: Arc::clone(&budget),
         };
         let (events, mut received) = mpsc::unbounded_channel();
-        let log: Arc<dyn EventSink> = Arc::new(LogSender(events));
+        let log: Arc<dyn EventSink> = Arc::new(SpyEventSink(events));
         let (stop, stopped) = watch::channel(false);
         let attempts = Arc::new(AtomicUsize::new(0));
         let attempts_in_accept = Arc::clone(&attempts);
@@ -881,7 +880,7 @@ mod accept_tests {
         }
         fn snapshot(settings: Settings) -> ReloadSnapshot<TlsAcceptor> {
             ReloadSnapshot::new(
-                vnc_relay_app::reload::ConfigCandidate {
+                vnc_relay_application::reload::ConfigCandidate {
                     settings,
                     presence: Default::default(),
                 },
@@ -914,11 +913,11 @@ mod accept_tests {
             relay_budget: ConnectionBudget::new(),
         };
         let (events, _log_lines) = mpsc::unbounded_channel();
-        let log: Arc<dyn EventSink> = Arc::new(LogSender(events));
+        let log: Arc<dyn EventSink> = Arc::new(SpyEventSink(events));
         let (stop, stopped) = watch::channel(false);
         let (observed, mut seen) = mpsc::unbounded_channel();
         let task = tokio::spawn(accept_connections(
-            Listener::TcpViewer,
+            ListenerKind::TcpViewer,
             listener,
             policy,
             log,

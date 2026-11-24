@@ -7,10 +7,10 @@
 use std::fmt;
 
 use aws_lc_rs::{constant_time, hmac, rand};
-use vnc_relay_app::events::RelayIdRef;
-use vnc_relay_app::ports::{RandomError, RelayIdSource, SessionIdSource, TokenSource};
+use vnc_relay_application::events::RelayIdRef;
+use vnc_relay_application::ports::{RandomError, RelayIdSource, SessionIdSource, TokenSource};
 use vnc_relay_domain::relay_id::RelayId;
-use vnc_relay_domain::session::SessionId;
+use vnc_relay_domain::session::Id;
 
 const KEY_BYTES: usize = 32;
 const TOKEN_BYTES: usize = 32;
@@ -123,8 +123,8 @@ impl SessionIdKey {
 }
 
 impl SessionIdSource for SessionIdKey {
-    fn session_id(&self, counter: u128) -> SessionId {
-        SessionId::from_block(self.permute(counter))
+    fn session_id(&self, counter: u128) -> Id {
+        Id::from_block(self.permute(counter))
     }
 }
 
@@ -215,7 +215,7 @@ mod tests {
             let id = key.session_id(counter);
             assert_eq!(id.as_str(), expected);
             assert_eq!(id, same_key.session_id(counter));
-            assert_eq!(SessionId::parse(expected), Ok(id));
+            assert_eq!(Id::parse(expected), Ok(id));
         }
     }
 

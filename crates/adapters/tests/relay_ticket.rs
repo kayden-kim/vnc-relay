@@ -13,23 +13,23 @@ use tokio::task::JoinHandle;
 use vnc_relay_adapters::clock::SystemClock;
 use vnc_relay_adapters::crypto::{RelayIdKey, SessionIdKey};
 use vnc_relay_adapters::net::TcpRelayStream;
-use vnc_relay_adapters::ops_log::format_line;
+use vnc_relay_adapters::ops_log;
 use vnc_relay_adapters::target::TcpTargetGateway;
 use vnc_relay_adapters::websocket_stream::WsRelayStream;
-use vnc_relay_app::events::Event;
-use vnc_relay_app::metrics::Metrics;
-use vnc_relay_app::ports::{Clock, EventSink};
-use vnc_relay_app::relay::{
+use vnc_relay_application::events::Event;
+use vnc_relay_application::metrics::Metrics;
+use vnc_relay_application::ports::{Clock, EventSink};
+use vnc_relay_application::relay::{
     ConnectionContext, RelayRuntime, RelayRuntimeConfig, RelayService, TicketBinding,
 };
-use vnc_relay_app::reload::ConfigCandidate;
-use vnc_relay_app::reload::ports::RuntimeSettingsSource;
-use vnc_relay_app::reload::snapshot::{ReloadCell, ReloadSnapshot};
-use vnc_relay_app::settings::KeepaliveSettings;
+use vnc_relay_application::reload::ConfigCandidate;
+use vnc_relay_application::reload::ports::RuntimeSettingsSource;
+use vnc_relay_application::reload::snapshot::{ReloadCell, ReloadSnapshot};
+use vnc_relay_application::settings::KeepaliveSettings;
 use vnc_relay_domain::budget::ConnectionBudget;
 use vnc_relay_domain::conn_id::ConnId;
 use vnc_relay_domain::entry_point::{EntryPoint, Role};
-use vnc_relay_domain::handshake::{HANDSHAKE_REQUEST_LEN, HandshakePolicy, VIEWER_GREETING};
+use vnc_relay_domain::handshake::{HANDSHAKE_REQUEST_LEN, Policy, VIEWER_GREETING};
 use vnc_relay_domain::peer_ip::PeerIp;
 use vnc_relay_domain::relay_id::RelayId;
 use vnc_relay_domain::session::{CloseCause, Transport};
@@ -55,7 +55,7 @@ async fn bounded<T>(future: impl Future<Output = T>) -> T {
 }
 
 #[derive(Default)]
-struct Recorder {
+struct SpyEventSink {
     lines: Mutex<Vec<Value>>,
     changed: Notify,
 }
@@ -64,10 +64,11 @@ struct Recorder {
     clippy::expect_used,
     reason = "test helper: a broken log line fails the test"
 )]
-impl EventSink for Recorder {
+impl EventSink for SpyEventSink {
     fn record(&self, event: &Event) {
         self.lines.lock().expect("logs").push(
-            serde_json::from_str(&format_line(event, SystemTime::UNIX_EPOCH)).expect("JSON log"),
+            serde_json::from_str(&ops_log::format_line(event, SystemTime::UNIX_EPOCH))
+                .expect("JSON log"),
         );
         self.changed.notify_one();
     }
@@ -77,7 +78,7 @@ impl EventSink for Recorder {
     clippy::expect_used,
     reason = "test helper: a poisoned log lock fails the test"
 )]
-impl Recorder {
+impl SpyEventSink {
     async fn wait(&self, matches: impl Fn(&Value) -> bool) -> Value {
         bounded(async {
             loop {
@@ -104,7 +105,7 @@ struct Harness {
     runtime: Arc<RelayRuntime<TcpTargetGateway>>,
     clock: Arc<dyn Clock>,
     budget: Arc<ConnectionBudget>,
-    events: Arc<Recorder>,
+    events: Arc<SpyEventSink>,
     references: Arc<RelayIdKey>,
 }
 
@@ -133,7 +134,7 @@ impl Harness {
                 None,
             )));
         let clock: Arc<dyn Clock> = Arc::new(SystemClock::new());
-        let events = Arc::new(Recorder::default());
+        let events = Arc::new(SpyEventSink::default());
         let budget = ConnectionBudget::new();
         let references = Arc::new(RelayIdKey::generate().expect("relay reference key"));
         let runtime = Arc::new(RelayRuntime::new(
@@ -146,7 +147,7 @@ impl Harness {
             source.clone(),
         ));
         let service = Arc::new(RelayService::new(
-            HandshakePolicy {
+            Policy {
                 mode1_enabled,
                 mode2_enabled: true,
             },

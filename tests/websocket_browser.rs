@@ -24,11 +24,8 @@ use std::time::{Duration, Instant};
 
 use serde_json::{Value, json};
 
-#[path = "common/browser_port.rs"]
-mod browser_port;
-#[path = "common/cdp.rs"]
-mod cdp;
-use cdp::Browser;
+use vnc_relay_testkit::browser_port;
+use vnc_relay_testkit::cdp::Browser;
 
 const LIMIT: Duration = Duration::from_secs(20);
 const GREETING: &[u8; 12] = b"RFB 000.000\n";

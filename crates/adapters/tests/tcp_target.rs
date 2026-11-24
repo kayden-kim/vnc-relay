@@ -1,6 +1,6 @@
 //! Real loopback checks for the exact-address target port and TCP relay stream.
 
-use std::future::{Future, poll_fn};
+use std::future::{self, Future};
 use std::net::SocketAddr;
 use std::pin::Pin;
 use std::sync::Arc;
@@ -8,16 +8,16 @@ use std::time::Duration;
 
 use socket2::SockRef;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::net::{TcpListener, TcpStream, lookup_host};
+use tokio::net::{self, TcpListener, TcpStream};
 use vnc_relay_adapters::net::TcpRelayStream;
 use vnc_relay_adapters::target::TcpTargetGateway;
-use vnc_relay_app::events::ConnectionErrorKind;
-use vnc_relay_app::ports::{RelayCloseAction, RelayStream, TargetError, TargetGateway};
-use vnc_relay_app::reload::{
+use vnc_relay_application::events::ConnectionErrorKind;
+use vnc_relay_application::ports::{RelayCloseAction, RelayStream, TargetError, TargetGateway};
+use vnc_relay_application::reload::{
     ConfigCandidate,
     snapshot::{ReloadCell, ReloadSnapshot},
 };
-use vnc_relay_app::settings::KeepaliveSettings;
+use vnc_relay_application::settings::KeepaliveSettings;
 use vnc_relay_domain::session::Transport;
 
 const KEEPALIVE: KeepaliveSettings = KeepaliveSettings {
@@ -70,7 +70,7 @@ async fn resolves_literal_ips_and_preserves_the_system_candidate_order() {
             vec![got(text.parse::<std::net::IpAddr>())]
         );
     }
-    let expected: Vec<_> = got(within(lookup_host(("localhost", 0))).await)
+    let expected: Vec<_> = got(within(net::lookup_host(("localhost", 0))).await)
         .map(|address| address.ip())
         .collect();
     assert_eq!(got(within(connector.resolve("localhost")).await), expected);
@@ -179,7 +179,7 @@ async fn write_half_close_delivers_payload_and_keeps_reverse_reads_open() {
     let (mut stream, mut peer) = connected_pair().await;
     got(stream.write_all(b"viewer payload").await);
     got(stream.flush().await);
-    got(within(poll_fn(|cx| {
+    got(within(future::poll_fn(|cx| {
         Pin::new(&mut stream).poll_close(cx, RelayCloseAction::WriteHalf)
     }))
     .await);
@@ -216,7 +216,10 @@ async fn every_terminal_close_action_shuts_down_the_socket_before_owner_drop() {
         RelayCloseAction::ServerShutdown,
     ] {
         let (mut stream, mut peer) = connected_pair().await;
-        got(within(poll_fn(|cx| Pin::new(&mut stream).poll_close(cx, action))).await);
+        got(within(future::poll_fn(|cx| {
+            Pin::new(&mut stream).poll_close(cx, action)
+        }))
+        .await);
         let mut byte = [0; 1];
         assert_eq!(got(within(peer.read(&mut byte)).await), 0, "{action:?}");
         drop(stream);

@@ -6,13 +6,14 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, SystemTime};
 
-use super::live::{Browser, PASSWORD, Server, must};
+use vnc_relay_testkit::cdp::Browser;
+use vnc_relay_testkit::live::{self, PASSWORD, Server};
 
 // Public P-256 generator point; coordinates are the standard 6B17D1F2…C296 / 4FE342E2…51F5.
 pub(super) const TICKET_JWKS: &str = r#"{"keys":[{"kty":"EC","crv":"P-256","kid":"k1","x":"axfR8uEsQkf4vOblY6RA8ncDfYEt6zOg9KE5RdiYwpY","y":"T-NC4v4af5uO5-tKfA-eFivOM1drMV7Oy7ZAaDe_UfU"}]}"#;
 
 pub(super) fn with_ticket_config(config: String, dir: &Path, role: &str) -> String {
-    must(std::fs::write(dir.join("ticket-public.jwks"), TICKET_JWKS));
+    live::must(std::fs::write(dir.join("ticket-public.jwks"), TICKET_JWKS));
     config
         + &format!(
             "\n[relay.ticket.{role}]\nenabled = false\nissuer = \"dashboard-issuer\"\nrelay_host = \"relay.example.test\"\npublic_keys_file = \"ticket-public.jwks\"\n"
@@ -33,7 +34,7 @@ pub(super) struct PendingFile {
 impl PendingFile {
     pub(super) fn write(server: &Server, contents: &str) -> Self {
         server.config_write(contents);
-        let file = must(
+        let file = live::must(
             std::fs::OpenOptions::new()
                 .write(true)
                 .open(server.config_path()),
@@ -42,7 +43,7 @@ impl PendingFile {
         let stopping = Arc::clone(&stop);
         let task = std::thread::spawn(move || {
             while !stopping.load(Ordering::Acquire) {
-                must(file.set_modified(SystemTime::now()));
+                live::must(file.set_modified(SystemTime::now()));
                 std::thread::sleep(Duration::from_millis(50));
             }
         });
@@ -57,7 +58,7 @@ impl Drop for PendingFile {
     fn drop(&mut self) {
         self.stop.store(true, Ordering::Release);
         if let Some(task) = self.task.take() {
-            must(task.join());
+            live::must(task.join());
         }
     }
 }
@@ -146,7 +147,7 @@ impl Drop for PermissionGuard {
 }
 
 pub(super) fn script_str(value: &str) -> String {
-    must(serde_json::to_string(value))
+    live::must(serde_json::to_string(value))
 }
 
 pub(super) fn login_alice(browser: &mut Browser, server: &Server) {

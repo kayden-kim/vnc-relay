@@ -10,7 +10,7 @@ use std::task::{Context, Poll};
 use std::time::Duration;
 
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
-use tokio::time::{Instant, Sleep, sleep_until};
+use tokio::time::{self, Instant, Sleep};
 
 /// The bytes `\r\n\r\n` as a big-endian word. It ends an HTTP/1.1 request head.
 const HEAD_END: u32 = u32::from_be_bytes(*b"\r\n\r\n");
@@ -46,9 +46,9 @@ where
 /// Connection-local exception to U for an accepted termination wait (Q92).
 /// Only the first actual response write resumes the idle timer.
 #[derive(Debug, Clone)]
-pub(crate) struct IdleControl(Arc<AtomicBool>);
+pub(crate) struct IdleTimerHandle(Arc<AtomicBool>);
 
-impl IdleControl {
+impl IdleTimerHandle {
     pub(crate) fn pause_for_termination(&self) {
         self.0.store(true, Ordering::Release);
     }
@@ -66,7 +66,7 @@ pub(crate) struct Deadlined<IO> {
     head_done: bool,
     /// The last four bytes read while the head is still open.
     window: u32,
-    idle: IdleControl,
+    idle: IdleTimerHandle,
 }
 
 impl<IO> Deadlined<IO> {
@@ -79,14 +79,14 @@ impl<IO> Deadlined<IO> {
         Self {
             io,
             limit,
-            timer: Box::pin(sleep_until(at + limit)),
+            timer: Box::pin(time::sleep_until(at + limit)),
             head_done: false,
             window: 0,
-            idle: IdleControl(Arc::new(AtomicBool::new(false))),
+            idle: IdleTimerHandle(Arc::new(AtomicBool::new(false))),
         }
     }
 
-    pub(crate) fn idle_control(&self) -> IdleControl {
+    pub(crate) fn idle_control(&self) -> IdleTimerHandle {
         self.idle.clone()
     }
 
@@ -192,22 +192,21 @@ mod tests {
     use std::task::Waker;
 
     use tokio::io::AsyncWriteExt;
-    use tokio::time::advance;
 
     /// spec: operations.md:OPS-050 partial
     #[tokio::test(start_paused = true)]
     async fn delayed_wrapping_keeps_the_original_accept_deadline_and_u() {
         let accepted_at = Instant::now();
         let old_u = Duration::from_secs(3);
-        advance(Duration::from_secs(2)).await;
+        time::advance(Duration::from_secs(2)).await;
         let mut old = Deadlined::at(tokio::io::sink(), old_u, accepted_at);
         let mut new = Deadlined::new(tokio::io::sink(), Duration::from_secs(7));
         let mut cx = Context::from_waker(Waker::noop());
         assert!(!old.expired(&mut cx));
-        advance(Duration::from_secs(1)).await;
+        time::advance(Duration::from_secs(1)).await;
         assert!(old.expired(&mut cx));
         assert!(!new.expired(&mut cx));
-        advance(Duration::from_secs(6)).await;
+        time::advance(Duration::from_secs(6)).await;
         assert!(new.expired(&mut cx));
     }
     use super::*;
@@ -221,7 +220,7 @@ mod tests {
         ordinary.note_read(b"GET / HTTP/1.1\r\n\r\n");
         let control = waiting.idle_control();
         control.pause_for_termination();
-        advance(limit * 3).await;
+        time::advance(limit * 3).await;
         let mut cx = Context::from_waker(Waker::noop());
         assert!(!waiting.expired(&mut cx));
         assert!(ordinary.expired(&mut cx));
@@ -232,9 +231,9 @@ mod tests {
             .await
             .unwrap_or_else(|error| panic!("response writes with a fresh U: {error}"));
         assert!(!control.0.load(Ordering::Acquire));
-        advance(limit - Duration::from_millis(1)).await;
+        time::advance(limit - Duration::from_millis(1)).await;
         assert!(!waiting.expired(&mut cx));
-        advance(Duration::from_millis(1)).await;
+        time::advance(Duration::from_millis(1)).await;
         assert!(waiting.expired(&mut cx));
     }
 
@@ -243,7 +242,7 @@ mod tests {
         let limit = Duration::from_secs(1);
         let mut io = Deadlined::new(tokio::io::sink(), limit);
         io.note_read(b"POST / HTTP/1.1\r\nContent-Length: 1\r\n\r\n");
-        advance(limit).await;
+        time::advance(limit).await;
         let error = io
             .write_all(b"response")
             .await

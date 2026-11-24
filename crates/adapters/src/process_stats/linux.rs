@@ -2,9 +2,9 @@
 
 use std::time::Duration;
 
-use vnc_relay_app::ports::CpuTimes;
+use vnc_relay_application::ports::CpuTimes;
 #[cfg(target_os = "linux")]
-use vnc_relay_app::ports::{OpenCount, ProcessStats};
+use vnc_relay_application::ports::{OpenCount, ProcessStats};
 
 // Linux procfs CPU times use USER_HZ, which is 100, independently of the
 // kernel's scheduler tick rate. std has no sysconf; no libc dependency is needed.

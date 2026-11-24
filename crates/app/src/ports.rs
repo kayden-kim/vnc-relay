@@ -9,7 +9,7 @@ use std::time::{Duration, SystemTime};
 use vnc_relay_domain::account::{Account, Argon2Params, Password, PasswordHash};
 use vnc_relay_domain::ip_info::{Asn, CountryCode};
 
-use crate::accounts::{AccountsDiagnostic, AccountsWarning, AdminFailure, LoadedAccounts};
+use crate::accounts::{AccountsDiagnostic, AccountsWarning, AdminError, LoadedAccounts};
 use crate::events::Event;
 use crate::ip_info::{IpDbKey, IpDbMetadata, IpDbRead};
 
@@ -32,9 +32,9 @@ pub trait AccountStore {
     /// cannot be removed, go to `warn`.
     fn update(
         &self,
-        change: &mut dyn FnMut(Vec<Account>) -> Result<Vec<Account>, AdminFailure>,
+        change: &mut dyn FnMut(Vec<Account>) -> Result<Vec<Account>, AdminError>,
         warn: &mut dyn FnMut(AccountsWarning),
-    ) -> Result<(), AdminFailure>;
+    ) -> Result<(), AdminError>;
 }
 
 /// Operator input of the `admin` commands (cli-v1 §1.5).
@@ -304,7 +304,7 @@ pub trait RelayIdSource: Send + Sync {
 /// Applies the per-process keyed permutation to one never-reused counter.
 /// No runtime randomness, failure path, or issued-ID set (relay-session §3.3).
 pub trait SessionIdSource: Send + Sync {
-    fn session_id(&self, counter: u128) -> vnc_relay_domain::session::SessionId;
+    fn session_id(&self, counter: u128) -> vnc_relay_domain::session::Id;
 }
 
 /// Accepts a single-session cleanup command without borrowing relay streams.
@@ -312,7 +312,7 @@ pub trait RelaySessionControl: Send + Sync {
     fn request_terminate(
         &self,
         session_id: &str,
-        account: vnc_relay_domain::account::AccountName,
+        account: vnc_relay_domain::account::Name,
         peer: vnc_relay_domain::peer_ip::PeerIp,
         clock: &dyn Clock,
         events: &dyn EventSink,

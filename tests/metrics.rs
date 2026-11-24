@@ -2,22 +2,14 @@
 //! against the operations log and the management API of the same process
 //! (metrics-v1, operations.md §3.8, management.md §2.5).
 
-#[expect(
-    dead_code,
-    unused_imports,
-    reason = "the shared live-process module also carries browser helpers"
-)]
-#[path = "common/dashboard_live.rs"]
-mod live;
-
 use std::collections::BTreeMap;
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::thread;
 use std::time::Duration;
 
-use live::{Admin, LIMIT, PASSWORD, Reply, Server, connect, initial, must, read_reply, wait_for};
 use serde_json::{Value, json};
+use vnc_relay_testkit::live::{self, Admin, LIMIT, PASSWORD, Reply, Server};
 
 const METRICS_ON: &str = "[metrics]\nenabled = true\n";
 /// Relay IDs chosen so that no metric value can contain them by chance.
@@ -30,11 +22,11 @@ const REFUSED_TARGET: &str = "192.0.2.77:5900";
 type Series = (String, Vec<(String, String)>);
 
 fn status_get(server: &Server, path: &str) -> Reply {
-    let mut stream = connect(server.ports[1]);
-    must(stream.write_all(
+    let mut stream = live::connect(server.ports[1]);
+    live::must(stream.write_all(
         format!("GET {path} HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n").as_bytes(),
     ));
-    read_reply(stream)
+    live::read_reply(stream)
 }
 
 fn header<'a>(reply: &'a Reply, name: &str) -> Option<&'a str> {
@@ -210,30 +202,30 @@ fn metrics_equal_the_log_counts_and_the_management_api() {
     // A valid Mode I request for a target outside the policy.
     close_after_reply({
         let mut viewer = server.handshaking();
-        must(viewer.write_all(&initial(REFUSED_TARGET)));
+        live::must(viewer.write_all(&live::initial(REFUSED_TARGET)));
         viewer
     });
     // A valid Mode I request for a closed loopback port.
-    let closed_port = must(must(TcpListener::bind("127.0.0.1:0")).local_addr()).port();
+    let closed_port = live::must(live::must(TcpListener::bind("127.0.0.1:0")).local_addr()).port();
     close_after_reply({
         let mut viewer = server.handshaking();
-        must(viewer.write_all(&initial(&format!("127.0.0.1:{closed_port}"))));
+        live::must(viewer.write_all(&live::initial(&format!("127.0.0.1:{closed_port}"))));
         viewer
     });
     // A Viewer that waits, then leaves.
     let waiting = server.waiting(WAITING_ID);
-    wait_for("Viewer waiting", LIMIT, || {
+    live::wait_for("Viewer waiting", LIMIT, || {
         server.query(&admin, "/api/v1/waiting")["items"]
             .as_array()
             .is_some_and(|items| items.iter().any(|item| item["relay_id"] == WAITING_ID))
     });
     drop(waiting);
-    wait_for("waiting removed", LIMIT, || {
+    live::wait_for("waiting removed", LIMIT, || {
         events(&server)
             .iter()
             .any(|event| event["event"] == "waiting_removed")
     });
-    wait_for("refused target logged", LIMIT, || {
+    live::wait_for("refused target logged", LIMIT, || {
         count_events(
             &server,
             "target_connect_failed",
@@ -253,7 +245,7 @@ fn metrics_equal_the_log_counts_and_the_management_api() {
     let mut pair = server.pair(&admin, "II", PAIR_ID);
     pair.transfer(1000, 3000);
     let detail_path = format!("/api/v1/sessions/{}", pair.sid);
-    wait_for("session bytes counted", LIMIT, || {
+    live::wait_for("session bytes counted", LIMIT, || {
         let detail = server.query(&admin, &detail_path);
         detail["session"]["bytes_viewer_to_target"] == 1000
             && detail["session"]["bytes_target_to_viewer"] == 3000
@@ -318,10 +310,10 @@ fn metrics_equal_the_log_counts_and_the_management_api() {
 
     // Mode I session to a loopback target.
     let mut pair = server.pair(&admin, "I", "");
-    let target_address = must(pair.target.local_addr()).to_string();
+    let target_address = live::must(pair.target.local_addr()).to_string();
     pair.transfer(10, 20);
     pair.close();
-    wait_for("both sessions closed", LIMIT, || {
+    live::wait_for("both sessions closed", LIMIT, || {
         events(&server)
             .iter()
             .filter(|event| event["event"] == "session_closed")
@@ -632,7 +624,7 @@ fn metrics_stay_off_the_status_listener_until_a_restart_with_the_key() {
 
     let reply = status_get(&server, "/metrics");
     assert_eq!(reply.status, 404);
-    let error: Value = must(serde_json::from_str(&reply.body));
+    let error: Value = live::must(serde_json::from_str(&reply.body));
     assert_eq!(error["error"]["code"], "not_found");
     assert_eq!(status_get(&server, "/livez").status, 200);
     assert_eq!(status_get(&server, "/readyz").status, 200);
@@ -661,7 +653,7 @@ fn metrics_stay_off_the_status_listener_until_a_restart_with_the_key() {
     let mut config = server.config_text();
     config.push_str(METRICS_ON);
     server.config_write(config);
-    wait_for("restart required", LIMIT, || {
+    live::wait_for("restart required", LIMIT, || {
         events(&server).iter().any(|event| {
             event["event"] == "reload_restart_required"
                 && event["config_keys"]

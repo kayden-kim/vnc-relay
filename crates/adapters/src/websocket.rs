@@ -14,20 +14,20 @@ use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt, ReadBuf};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::watch;
 use tokio::time::Instant;
-use vnc_relay_app::events::{AbortReason, ConnectionErrorKind, Event, Stage};
-use vnc_relay_app::ports::{Clock, EventSink};
-use vnc_relay_app::relay::{ConnectionContext, RelayRuntime, RelayService, TicketBinding};
-use vnc_relay_domain::budget::BudgetPermit;
-use vnc_relay_domain::entry_point::{EntryPoint, Listener, Role};
+use vnc_relay_application::events::{AbortReason, ConnectionErrorKind, Event, Stage};
+use vnc_relay_application::ports::{Clock, EventSink};
+use vnc_relay_application::relay::{ConnectionContext, RelayRuntime, RelayService, TicketBinding};
+use vnc_relay_domain::budget::Permit;
+use vnc_relay_domain::entry_point::{EntryPoint, ListenerKind, Role};
 use vnc_relay_domain::peer_ip::PeerIp;
-use vnc_relay_domain::ticket::{TicketClaims, TicketError, TicketPolicy, TicketUseTable};
+use vnc_relay_domain::ticket::{Claims, Policy, TicketError, UseTable};
 
 use crate::listener::Listener as SocketListener;
-use crate::net::{AcceptPolicy, Accepted, accept_connections};
+use crate::net::{self, AcceptPolicy, Accepted};
 use crate::target::TcpTargetGateway;
 use crate::tls::TlsSource;
-use crate::tls_listener::{HandshakeFailure, TlsIo};
-use crate::upgrade::{HeadRead, Refusal, TicketOffer, check, read_head, switching_protocols};
+use crate::tls_listener::{TlsHandshakeError, TlsIo};
+use crate::upgrade::{self, HeadRead, Refusal, TicketOffer};
 use crate::websocket_stream::WsRelayStream;
 
 /// What a WS or WSS entry point applies to each connection.
@@ -38,7 +38,7 @@ pub struct WsPolicy {
     pub accept: AcceptPolicy,
     /// Ticket use records of both roles. WS and WSS share one table
     /// (websocket-relay-v2 §1.9.4).
-    pub ticket_uses: Arc<Mutex<TicketUseTable>>,
+    pub ticket_uses: Arc<Mutex<UseTable>>,
     /// Process start time; tickets issued at or before it plus 5 seconds are
     /// refused (websocket-relay-v2 §1.9.3 step 11).
     pub started_at: SystemTime,
@@ -47,7 +47,7 @@ pub struct WsPolicy {
 /// A shared WS or WSS listener. `tls` is the WSS acceptor source and is
 /// `None` for WS.
 pub struct WsEntryPoint<L = TcpListener> {
-    relay_listener: Listener,
+    relay_listener: ListenerKind,
     listener: L,
     tls: Option<TlsSource>,
     policy: WsPolicy,
@@ -59,7 +59,7 @@ pub struct WsEntryPoint<L = TcpListener> {
 impl<L: SocketListener> WsEntryPoint<L> {
     /// Wraps a bound WS or WSS listener.
     pub fn new(
-        relay_listener: Listener,
+        relay_listener: ListenerKind,
         listener: L,
         tls: Option<TlsSource>,
         policy: WsPolicy,
@@ -90,7 +90,7 @@ impl<L: SocketListener> WsEntryPoint<L> {
             runtime: self.runtime,
             clock: self.clock,
         });
-        accept_connections(
+        net::accept_connections(
             self.relay_listener,
             self.listener,
             accept,
@@ -132,7 +132,7 @@ impl Wire {
         }
     }
 
-    fn handshake_failure(&self) -> Option<HandshakeFailure> {
+    fn handshake_failure(&self) -> Option<TlsHandshakeError> {
         match self {
             Self::Plain(_) => None,
             Self::Tls(tls) => tls.handshake_failure(),
@@ -204,7 +204,7 @@ impl AsyncWrite for Wire {
 async fn connection(
     stream: TcpStream,
     conn: Accepted,
-    permit: BudgetPermit,
+    permit: Permit,
     mut stop: watch::Receiver<bool>,
     shared: Arc<WsShared>,
 ) {
@@ -320,7 +320,7 @@ enum Step {
 #[derive(Debug, Clone, Copy)]
 struct UpgradedSettings {
     message_bytes: usize,
-    keepalive: vnc_relay_app::settings::KeepaliveSettings,
+    keepalive: vnc_relay_application::settings::KeepaliveSettings,
 }
 
 fn check_upgrade(
@@ -334,7 +334,7 @@ fn check_upgrade(
     (
         crate::upgrade::ValidUpgrade,
         UpgradedSettings,
-        Option<TicketClaims>,
+        Option<Claims>,
     ),
     Refusal,
 > {
@@ -343,90 +343,91 @@ fn check_upgrade(
         let Some(listener) = settings.relay.websocket(policy.accept.allow.listener()) else {
             return;
         };
-        decision = check(head, listener, role, peer_ip, forwarded_ip).and_then(|upgrade| {
-            let ticket_settings = settings.relay.ticket.role(upgrade.role);
-            let now_secs = wall
-                .duration_since(SystemTime::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_secs();
-            let ticket = if ticket_settings.enabled {
-                let compact = match &upgrade.ticket {
-                    TicketOffer::None => {
-                        return Err(Refusal::Ticket {
-                            reason: TicketError::Missing,
-                            jti: None,
-                        });
-                    }
-                    TicketOffer::Many => {
-                        return Err(Refusal::Ticket {
-                            reason: TicketError::Invalid,
-                            jti: None,
-                        });
-                    }
-                    TicketOffer::One(compact) => compact,
-                };
-                let ticket_policy = TicketPolicy {
-                    role: upgrade.role,
-                    issuer: ticket_settings.issuer.as_deref().unwrap_or_default(),
-                    relay_host: ticket_settings.relay_host.as_deref().unwrap_or_default(),
-                    max_lifetime_secs: ticket_settings.max_lifetime.as_secs(),
-                    started_at_secs: policy
-                        .started_at
-                        .duration_since(SystemTime::UNIX_EPOCH)
-                        .unwrap_or_default()
-                        .as_secs(),
-                };
-                Some(
-                    crate::ticket::jws::verify(
-                        compact,
-                        &ticket_settings.keys,
-                        ticket_policy,
-                        now_secs,
+        decision =
+            upgrade::check(head, listener, role, peer_ip, forwarded_ip).and_then(|upgrade| {
+                let ticket_settings = settings.relay.ticket.role(upgrade.role);
+                let now_secs = wall
+                    .duration_since(SystemTime::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_secs();
+                let ticket = if ticket_settings.enabled {
+                    let compact = match &upgrade.ticket {
+                        TicketOffer::None => {
+                            return Err(Refusal::Ticket {
+                                reason: TicketError::Missing,
+                                jti: None,
+                            });
+                        }
+                        TicketOffer::Many => {
+                            return Err(Refusal::Ticket {
+                                reason: TicketError::Invalid,
+                                jti: None,
+                            });
+                        }
+                        TicketOffer::One(compact) => compact,
+                    };
+                    let ticket_policy = Policy {
+                        role: upgrade.role,
+                        issuer: ticket_settings.issuer.as_deref().unwrap_or_default(),
+                        relay_host: ticket_settings.relay_host.as_deref().unwrap_or_default(),
+                        max_lifetime_secs: ticket_settings.max_lifetime.as_secs(),
+                        started_at_secs: policy
+                            .started_at
+                            .duration_since(SystemTime::UNIX_EPOCH)
+                            .unwrap_or_default()
+                            .as_secs(),
+                    };
+                    Some(
+                        crate::ticket::jws::verify(
+                            compact,
+                            &ticket_settings.keys,
+                            ticket_policy,
+                            now_secs,
+                        )
+                        .map_err(|error| Refusal::Ticket {
+                            reason: error.reason,
+                            jti: error.jti,
+                        })?,
                     )
-                    .map_err(|error| Refusal::Ticket {
-                        reason: error.reason,
-                        jti: error.jti,
-                    })?,
-                )
-            } else {
-                None
-            };
-            let client = forwarded_ip.unwrap_or(peer_ip);
-            if settings.relay.deny.denies(client) {
-                // Same as the role allow check: the ticket stays unconsumed.
-                return Err(Refusal::IpDenied(ticket.map(|claims| claims.jti)));
-            }
-            let entry = EntryPoint::from_parts(policy.accept.allow.listener(), upgrade.role);
-            if entry
-                .and_then(|entry| settings.relay.allow(entry))
-                .is_some_and(|allow| allow.permits(client))
-            {
-                if let Some(claims) = &ticket {
-                    let mut uses = policy
-                        .ticket_uses
-                        .lock()
-                        .unwrap_or_else(std::sync::PoisonError::into_inner);
-                    if !uses.try_record(upgrade.role, &claims.jti, claims.exp, now_secs) {
-                        return Err(Refusal::Ticket {
-                            reason: TicketError::Reused,
-                            jti: Some(claims.jti.clone()),
-                        });
-                    }
+                } else {
+                    None
+                };
+                let client = forwarded_ip.unwrap_or(peer_ip);
+                if settings.relay.deny.denies(client) {
+                    // Same as the role allow check: the ticket stays unconsumed.
+                    return Err(Refusal::IpDenied(ticket.map(|claims| claims.jti)));
                 }
-                Ok((
-                    upgrade,
-                    UpgradedSettings {
-                        message_bytes: settings.limits.ws_message_bytes as usize,
-                        keepalive: settings.keepalive,
-                    },
-                    ticket,
-                ))
-            } else {
-                // The ticket already passed every check, so its jti is logged
-                // (contract §1.9.3); it stays unconsumed.
-                Err(Refusal::IpNotAllowed(ticket.map(|claims| claims.jti)))
-            }
-        });
+                let entry = EntryPoint::from_parts(policy.accept.allow.listener(), upgrade.role);
+                if entry
+                    .and_then(|entry| settings.relay.allow(entry))
+                    .is_some_and(|allow| allow.permits(client))
+                {
+                    if let Some(claims) = &ticket {
+                        let mut uses = policy
+                            .ticket_uses
+                            .lock()
+                            .unwrap_or_else(std::sync::PoisonError::into_inner);
+                        if !uses.try_record(upgrade.role, &claims.jti, claims.exp, now_secs) {
+                            return Err(Refusal::Ticket {
+                                reason: TicketError::Reused,
+                                jti: Some(claims.jti.clone()),
+                            });
+                        }
+                    }
+                    Ok((
+                        upgrade,
+                        UpgradedSettings {
+                            message_bytes: settings.limits.ws_message_bytes as usize,
+                            keepalive: settings.keepalive,
+                        },
+                        ticket,
+                    ))
+                } else {
+                    // The ticket already passed every check, so its jti is logged
+                    // (contract §1.9.3); it stays unconsumed.
+                    Err(Refusal::IpNotAllowed(ticket.map(|claims| claims.jti)))
+                }
+            });
     });
     decision
 }
@@ -441,7 +442,7 @@ async fn upgrade(
     role: &mut Option<Role>,
     forwarded_ip: &mut Option<PeerIp>,
 ) -> io::Result<Step> {
-    let read = read_head(wire).await?;
+    let read = upgrade::read_head(wire).await?;
     let (decision, suffix) = match read {
         HeadRead::Complete { head, suffix } => {
             let decision = check_upgrade(
@@ -475,7 +476,7 @@ async fn upgrade(
                 });
             }
             (
-                switching_protocols(&upgrade),
+                upgrade::switching_protocols(&upgrade),
                 Ok((upgrade.role, settings, ticket)),
             )
         }
@@ -579,12 +580,12 @@ async fn refuse(
 /// line here: the TLS layer already logged it as `connection_rejected`.
 fn io_reason(wire: &Wire) -> Option<AbortReason> {
     match wire.handshake_failure() {
-        Some(HandshakeFailure::VersionUnsupported) => None,
-        Some(HandshakeFailure::Negotiation) => {
+        Some(TlsHandshakeError::VersionUnsupported) => None,
+        Some(TlsHandshakeError::Negotiation) => {
             Some(AbortReason::ConnectionError(ConnectionErrorKind::TlsFailed))
         }
-        Some(HandshakeFailure::PeerEof) => Some(AbortReason::PeerEof),
-        Some(HandshakeFailure::Io) | None => {
+        Some(TlsHandshakeError::PeerEof) => Some(AbortReason::PeerEof),
+        Some(TlsHandshakeError::Io) | None => {
             Some(AbortReason::ConnectionError(ConnectionErrorKind::IoError))
         }
     }
@@ -614,7 +615,7 @@ fn log_abort(
 mod tests {
     use super::*;
     use crate::net::{AcceptedSettings, AllowSource};
-    use vnc_relay_app::reload::{
+    use vnc_relay_application::reload::{
         ConfigCandidate,
         snapshot::{ReloadCell, ReloadSnapshot},
     };
@@ -655,7 +656,7 @@ mod tests {
 
     const HEAD: &[u8] = b"GET /relay/viewer HTTP/1.1\r\nHost: localhost\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nOrigin: https://old.example\r\n\r\n";
 
-    fn candidate(settings: vnc_relay_app::settings::Settings) -> ConfigCandidate {
+    fn candidate(settings: vnc_relay_application::settings::Settings) -> ConfigCandidate {
         ConfigCandidate {
             settings,
             presence: Default::default(),

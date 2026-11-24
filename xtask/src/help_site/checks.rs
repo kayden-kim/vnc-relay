@@ -7,7 +7,7 @@ use std::path::Path;
 use super::LANGUAGES;
 use super::html::{self, Tag};
 use crate::Error;
-use crate::static_server::percent_decode;
+use crate::static_server;
 
 /// Links to files of this repository. The rest of the URL must name a path
 /// that exists in the repository.
@@ -278,7 +278,7 @@ fn check_url(
         }
         if let Some(rest) = url.strip_prefix(REPOSITORY_BLOB) {
             let path = rest.split(['#', '?']).next().unwrap_or_default();
-            let decoded = percent_decode(path).unwrap_or_default();
+            let decoded = static_server::percent_decode(path).unwrap_or_default();
             if decoded.is_empty() || decoded.contains("..") || !repository_has(&decoded) {
                 return Some(format!("저장소에 없는 경로: {url}"));
             }
@@ -314,7 +314,7 @@ fn check_url(
         return Some(format!("{what}: {url}"));
     }
     let fragment = fragment.filter(|fragment| !fragment.is_empty())?;
-    let decoded = percent_decode(fragment).unwrap_or_default();
+    let decoded = static_server::percent_decode(fragment).unwrap_or_default();
     let found = inventory
         .pages
         .get(&target)
@@ -365,7 +365,7 @@ fn is_allowed_link(url: &str) -> bool {
 /// directory (empty last segment or a directory in the site) becomes its
 /// `index.html`. `Err` when the link leaves the site.
 fn resolve(inventory: &Inventory, from: &str, location: &str) -> Result<String, &'static str> {
-    let decoded = percent_decode(location).ok_or("잘못된 퍼센트 인코딩")?;
+    let decoded = static_server::percent_decode(location).ok_or("잘못된 퍼센트 인코딩")?;
     let mut parts: Vec<&str> = Vec::new();
     let relative = if decoded.starts_with('/') {
         decoded.strip_prefix(MOUNT).ok_or("사이트 밖을 가리킨다")?

@@ -6,9 +6,9 @@
 use std::io;
 
 use tokio::io::{AsyncRead, AsyncReadExt};
-use tokio_tungstenite::tungstenite::handshake::derive_accept_key;
-use vnc_relay_app::events::RejectReason;
-use vnc_relay_app::settings::WsListenerSettings;
+use tokio_tungstenite::tungstenite::handshake;
+use vnc_relay_application::events::RejectReason;
+use vnc_relay_application::settings::WsListenerSettings;
 use vnc_relay_domain::entry_point::Role;
 use vnc_relay_domain::origin::Origin;
 use vnc_relay_domain::peer_ip::PeerIp;
@@ -304,7 +304,7 @@ pub(crate) fn check(
 
     Ok(ValidUpgrade {
         role,
-        accept_key: derive_accept_key(key.as_bytes()),
+        accept_key: handshake::derive_accept_key(key.as_bytes()),
         binary: tokens.contains(&"binary"),
         ticket,
     })
@@ -392,7 +392,7 @@ mod tests {
         origins: &[vnc_relay_domain::origin::Origin],
     ) -> Result<ValidUpgrade, Refusal> {
         let listener = WsListenerSettings {
-            viewer: vnc_relay_app::settings::WsRoleSettings {
+            viewer: vnc_relay_application::settings::WsRoleSettings {
                 enabled: true,
                 allowed_origins: origins.to_vec(),
                 ..Default::default()

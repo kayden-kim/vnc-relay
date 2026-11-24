@@ -13,7 +13,7 @@ use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
 use std::time::{Duration, Instant};
 use vnc_relay_adapters::windows_service::SERVICE_NAME;
-use vnc_relay_app::settings::LogOutput;
+use vnc_relay_application::settings::LogOutput;
 use windows_service::service::{ServiceAccess, ServiceState};
 use windows_service::service_manager::{ServiceManager, ServiceManagerAccess};
 

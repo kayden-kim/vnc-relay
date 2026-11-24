@@ -11,7 +11,7 @@ use std::time::Duration;
 use crate::conn_id::ConnId;
 use crate::entry_point::Role;
 use crate::relay_id::RelayId;
-use crate::session::SessionId;
+use crate::session::Id;
 
 /// One registered waiter's metadata (config-v3 §1.2, W and Lw).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -76,7 +76,7 @@ pub enum IdOccupancy {
     /// One active or closing session holds the ID and no Lw place.
     Session {
         /// The session that alone may release this occupancy after cleanup.
-        session_id: SessionId,
+        session_id: Id,
         /// The claimed Viewer, retained to prevent double dispatch until release.
         viewer_conn_id: ConnId,
         /// The claimed Server, retained to prevent double dispatch until release.
@@ -316,7 +316,7 @@ impl WaitingTable {
         &mut self,
         relay_id: &RelayId,
         claim: &MatchClaim,
-        session_id: SessionId,
+        session_id: Id,
     ) -> Result<(), MatchingError> {
         let Some(occupancy) = self.entries.get_mut(relay_id) else {
             return Err(MatchingError::InvalidClaim);
@@ -355,7 +355,7 @@ impl WaitingTable {
 
     /// Marks the matching active session Closing while retaining its ID.
     /// Returns false for stale IDs and already-closing sessions (RLY-015/016).
-    pub fn begin_closing(&mut self, relay_id: &RelayId, session_id: &SessionId) -> bool {
+    pub fn begin_closing(&mut self, relay_id: &RelayId, session_id: &Id) -> bool {
         match self.entries.get_mut(relay_id) {
             Some(IdOccupancy::Session {
                 session_id: current,
@@ -371,7 +371,7 @@ impl WaitingTable {
 
     /// Releases only this Closing session after sockets and L are cleaned up.
     /// A delayed release cannot remove a new waiter, claim, or session (RLY-016).
-    pub fn release(&mut self, relay_id: &RelayId, session_id: &SessionId) -> bool {
+    pub fn release(&mut self, relay_id: &RelayId, session_id: &Id) -> bool {
         let Some(IdOccupancy::Session {
             session_id: current,
             viewer_conn_id,
@@ -756,7 +756,7 @@ mod tests {
         assert!(match_first.cancel_claim(&id, &claim));
         assert!(!match_first.cancel_claim(&id, &claim));
         assert_eq!(
-            match_first.activate(&id, &claim, SessionId::from_block([1; 16])),
+            match_first.activate(&id, &claim, Id::from_block([1; 16])),
             Err(MatchingError::InvalidClaim)
         );
         assert_eq!(match_first.get(&id), None);
@@ -770,7 +770,7 @@ mod tests {
         let mut table = table();
         let id = id("1");
         let claim = claim(&mut table, &id, Role::Server);
-        let session_id = SessionId::from_block([1; 16]);
+        let session_id = Id::from_block([1; 16]);
         for phase in 0..3 {
             for role in [Role::Viewer, Role::Server] {
                 for _ in 0..4 {
@@ -796,7 +796,7 @@ mod tests {
                 0 => {
                     assert_eq!(table.activate(&id, &claim, session_id.clone()), Ok(()));
                     assert_eq!(
-                        table.activate(&id, &claim, SessionId::from_block([2; 16])),
+                        table.activate(&id, &claim, Id::from_block([2; 16])),
                         Err(MatchingError::InvalidClaim)
                     );
                     assert!(!table.release(&id, &session_id));
@@ -842,8 +842,8 @@ mod tests {
         let mut table = table();
         let id = id("1");
         let old_claim = claim(&mut table, &id, Role::Viewer);
-        let old_session = SessionId::from_block([1; 16]);
-        let fresh_session = SessionId::from_block([2; 16]);
+        let old_session = Id::from_block([1; 16]);
+        let fresh_session = Id::from_block([2; 16]);
         assert_ne!(old_session, fresh_session);
         assert_eq!(table.activate(&id, &old_claim, old_session.clone()), Ok(()));
         assert!(!table.begin_closing(&id, &fresh_session));
@@ -924,16 +924,13 @@ mod tests {
             },
         ] {
             assert_eq!(
-                table.activate(&id, &wrong, SessionId::from_block([1; 16])),
+                table.activate(&id, &wrong, Id::from_block([1; 16])),
                 Err(MatchingError::InvalidClaim)
             );
             assert!(!table.cancel_claim(&id, &wrong));
             assert_eq!(table.get(&id), Some(&IdOccupancy::Claimed(claim)));
         }
-        assert_eq!(
-            table.activate(&id, &claim, SessionId::from_block([2; 16])),
-            Ok(())
-        );
+        assert_eq!(table.activate(&id, &claim, Id::from_block([2; 16])), Ok(()));
     }
 
     /// spec: relay.md:RLY-013 partial
@@ -976,7 +973,7 @@ mod tests {
         ) else {
             panic!("a different connection must match");
         };
-        let session_id = SessionId::from_block([3; 16]);
+        let session_id = Id::from_block([3; 16]);
         for phase in 0..3 {
             for conn_id in [first, second] {
                 for role in [Role::Viewer, Role::Server] {

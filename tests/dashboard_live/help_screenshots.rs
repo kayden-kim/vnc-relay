@@ -10,7 +10,9 @@ use std::path::Path;
 
 use serde_json::json;
 
-use super::live::{Browser, Server, must};
+use vnc_relay_testkit::cdp::Browser;
+use vnc_relay_testkit::live;
+use vnc_relay_testkit::live::Server;
 
 /// Size of every picture in CSS pixels, at device scale 1.
 const WIDTH: u32 = 1280;
@@ -40,7 +42,7 @@ pub fn capture() {
         .join("help");
     for (language, languages) in [("ko", ["ko-KR", "ko"]), ("en", ["en-US", "en"])] {
         let images = help.join(language).join("src").join("images");
-        must(fs::create_dir_all(&images));
+        live::must(fs::create_dir_all(&images));
         let mut browser = Browser::start(&format!("help-capture-{language}"), &languages);
         browser.command(
             "Emulation.setDeviceMetricsOverride",
@@ -114,7 +116,7 @@ fn shoot(browser: &mut Browser, path: &Path, ready: &str) {
     let data = shot["data"]
         .as_str()
         .unwrap_or_else(|| panic!("screenshot data missing for {}", path.display()));
-    must(fs::write(path, decode_base64(data)));
+    live::must(fs::write(path, decode_base64(data)));
 }
 
 /// Standard base64 with padding, as CDP returns screenshot data.

@@ -8,7 +8,7 @@
 
 use std::path::{Path, PathBuf};
 
-use super::{DASHBOARD_DIR, first_difference, read_text};
+use super::DASHBOARD_DIR;
 use crate::Error;
 use crate::cargo;
 
@@ -55,7 +55,7 @@ fn login_path(root: &Path, name: &str) -> PathBuf {
 /// Writes every copy from its source. Called by `cargo xtask tokens`.
 pub(super) fn write(root: &Path) -> Result<(), Error> {
     for name in SHARED_FILES {
-        let text = read_text(&app_path(root, name))?;
+        let text = super::read_text(&app_path(root, name))?;
         let path = login_path(root, name);
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
@@ -70,10 +70,13 @@ pub(super) fn write(root: &Path) -> Result<(), Error> {
 pub(super) fn check(root: &Path) -> Result<Vec<String>, Error> {
     let mut problems = Vec::new();
     for name in SHARED_FILES {
-        let expected = render(&source_label(name), &read_text(&app_path(root, name))?);
+        let expected = render(
+            &source_label(name),
+            &super::read_text(&app_path(root, name))?,
+        );
         let label = format!("{DASHBOARD_DIR}/login/{name}");
-        let actual = read_text(&login_path(root, name))?;
-        if let Some(message) = first_difference(&label, &expected, &actual) {
+        let actual = super::read_text(&login_path(root, name))?;
+        if let Some(message) = super::first_difference(&label, &expected, &actual) {
             problems.push(message);
         }
     }

@@ -7,11 +7,11 @@ use std::fs::{File, OpenOptions};
 use std::io::{self, ErrorKind, Write as _};
 use std::path::{Path, PathBuf};
 
-use vnc_relay_app::accounts::{
-    ACCOUNTS_FILE_KEY, AccountsDiagnostic, AccountsError, AccountsWarning, AdminFailure,
+use vnc_relay_application::accounts::{
+    ACCOUNTS_FILE_KEY, AccountsDiagnostic, AccountsError, AccountsWarning, AdminError,
     LoadedAccounts,
 };
-use vnc_relay_app::ports::AccountStore;
+use vnc_relay_application::ports::AccountStore;
 use vnc_relay_domain::account::Account;
 
 use super::HashFloor;
@@ -29,7 +29,7 @@ impl AccountsFile {
     }
 
     /// `<account file name><suffix>` in the same directory.
-    fn sibling(&self, suffix: &str) -> Result<PathBuf, AdminFailure> {
+    fn sibling(&self, suffix: &str) -> Result<PathBuf, AdminError> {
         let Some(name) = self.path.file_name() else {
             return Err(write_failed(format!(
                 "계정 파일 경로에 파일 이름이 없다: {}",
@@ -44,11 +44,11 @@ impl AccountsFile {
     /// Steps 2 to 6 of cli-v1 §1.6, inside the lock.
     fn replace(
         &self,
-        change: &mut dyn FnMut(Vec<Account>) -> Result<Vec<Account>, AdminFailure>,
+        change: &mut dyn FnMut(Vec<Account>) -> Result<Vec<Account>, AdminError>,
         warn: &mut dyn FnMut(AccountsWarning),
-    ) -> Result<(), AdminFailure> {
+    ) -> Result<(), AdminError> {
         let current = super::read(&self.path, HashFloor::Accept)
-            .map_err(AdminFailure::Accounts)?
+            .map_err(AdminError::Accounts)?
             .map(|loaded| loaded.accounts)
             .unwrap_or_default();
         let mut next = change(current)?;
@@ -89,13 +89,13 @@ impl AccountStore for AccountsFile {
 
     fn update(
         &self,
-        change: &mut dyn FnMut(Vec<Account>) -> Result<Vec<Account>, AdminFailure>,
+        change: &mut dyn FnMut(Vec<Account>) -> Result<Vec<Account>, AdminError>,
         warn: &mut dyn FnMut(AccountsWarning),
-    ) -> Result<(), AdminFailure> {
+    ) -> Result<(), AdminError> {
         let lock = self.sibling(".lock")?;
         if let Err(error) = OpenOptions::new().write(true).create_new(true).open(&lock) {
             return Err(if error.kind() == ErrorKind::AlreadyExists {
-                AdminFailure::Accounts(vec![AccountsDiagnostic {
+                AdminError::Accounts(vec![AccountsDiagnostic {
                     error: AccountsError::FileLocked,
                     key: ACCOUNTS_FILE_KEY.to_owned(),
                     message: format!(
@@ -125,7 +125,7 @@ impl AccountStore for AccountsFile {
 
 /// Steps 3 and 4 after the owner-only file exists: written, flushed to disk,
 /// read again, and checked.
-fn fill_and_check(mut file: File, temp: &Path, accounts: &[Account]) -> Result<(), AdminFailure> {
+fn fill_and_check(mut file: File, temp: &Path, accounts: &[Account]) -> Result<(), AdminError> {
     file.write_all(render(accounts).as_bytes())
         .map_err(|e| temp_failed("쓸", temp, &e))?;
     file.sync_all()
@@ -145,7 +145,7 @@ fn fill_and_check(mut file: File, temp: &Path, accounts: &[Account]) -> Result<(
     }
 }
 
-fn temp_failed(step: &str, temp: &Path, error: &io::Error) -> AdminFailure {
+fn temp_failed(step: &str, temp: &Path, error: &io::Error) -> AdminError {
     write_failed(format!(
         "임시 파일을 {step} 수 없다({}): {}",
         reason(error),
@@ -210,8 +210,8 @@ fn reason(error: &io::Error) -> String {
     }
 }
 
-fn write_failed(message: String) -> AdminFailure {
-    AdminFailure::Accounts(vec![AccountsDiagnostic {
+fn write_failed(message: String) -> AdminError {
+    AdminError::Accounts(vec![AccountsDiagnostic {
         error: AccountsError::WriteFailed,
         key: ACCOUNTS_FILE_KEY.to_owned(),
         message: format!("{message}. 기존 계정 파일은 그대로다."),

@@ -15,11 +15,9 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::SystemTime;
 
-use vnc_relay_domain::account::{Account, AccountName, PasswordHash};
-use vnc_relay_domain::admin_session::{
-    AdminCsrfToken, AdminSession, AdminSessionPolicy, AdminSessionTable,
-};
-use vnc_relay_domain::login_limit::{LoginLimitPolicy, LoginLimiter};
+use vnc_relay_domain::account::{Account, Name, PasswordHash};
+use vnc_relay_domain::admin_session::{self, AdminCsrfToken, AdminSession, Table};
+use vnc_relay_domain::login_limit::{self, LoginLimiter};
 
 use crate::events::Event;
 use crate::ports::{Clock, EventSink, PasswordVerifyGateway, TokenSource};
@@ -54,7 +52,7 @@ pub enum AuthError {
 /// The session values that a response shows (management-api-v1 §1.5).
 #[derive(Debug, Clone)]
 pub struct SessionView {
-    pub account: AccountName,
+    pub account: Name,
     pub csrf: AdminCsrfToken,
     pub idle_expires_at: SystemTime,
     pub absolute_expires_at: SystemTime,
@@ -65,7 +63,7 @@ pub struct SessionView {
 
 /// Session table and login limit, guarded by one lock.
 struct AdminState {
-    sessions: AdminSessionTable,
+    sessions: Table,
     limiter: LoginLimiter,
 }
 
@@ -73,13 +71,13 @@ struct AdminState {
 /// process. A restart drops every session (MGT-R18).
 pub struct AdminAuth {
     /// Real accounts by name. The unknown-account path uses `dummy` instead.
-    accounts: HashMap<AccountName, PasswordHash>,
+    accounts: HashMap<Name, PasswordHash>,
     dummy: PasswordHash,
     verifier: Arc<dyn PasswordVerifyGateway>,
     tokens: Arc<dyn TokenSource>,
     clock: Arc<dyn Clock>,
     events: Arc<dyn EventSink>,
-    session_policy: AdminSessionPolicy,
+    session_policy: admin_session::Policy,
     state: Mutex<AdminState>,
 }
 
@@ -90,8 +88,8 @@ impl AdminAuth {
         accounts: Vec<Account>,
         dummy: PasswordHash,
         ports: AdminPorts,
-        session_policy: AdminSessionPolicy,
-        limit_policy: LoginLimitPolicy,
+        session_policy: admin_session::Policy,
+        limit_policy: login_limit::Policy,
     ) -> Self {
         let AdminPorts {
             verifier,
@@ -111,7 +109,7 @@ impl AdminAuth {
             events,
             session_policy,
             state: Mutex::new(AdminState {
-                sessions: AdminSessionTable::default(),
+                sessions: Table::default(),
                 limiter: LoginLimiter::new(limit_policy),
             }),
         }
@@ -146,9 +144,9 @@ mod test_support {
     use std::sync::{Arc, Mutex, PoisonError};
     use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-    use vnc_relay_domain::account::{Account, AccountName, PasswordHash};
-    use vnc_relay_domain::admin_session::AdminSessionPolicy;
-    use vnc_relay_domain::login_limit::LoginLimitPolicy;
+    use vnc_relay_domain::account::{Account, Name, PasswordHash};
+    use vnc_relay_domain::admin_session;
+    use vnc_relay_domain::login_limit;
     use vnc_relay_domain::peer_ip::PeerIp;
 
     use super::{AdminAuth, AdminPorts};
@@ -184,17 +182,17 @@ mod test_support {
         PeerIp::new(IpAddr::V4(Ipv4Addr::new(192, 0, 2, last)))
     }
 
-    pub fn session_policy() -> AdminSessionPolicy {
-        AdminSessionPolicy::new(secs(300), secs(3600))
+    pub fn session_policy() -> admin_session::Policy {
+        admin_session::Policy::new(secs(300), secs(3600))
     }
 
-    pub fn limit_policy() -> LoginLimitPolicy {
-        LoginLimitPolicy::new(5, 20, secs(900), secs(900))
+    pub fn limit_policy() -> login_limit::Policy {
+        login_limit::Policy::new(5, 20, secs(900), secs(900))
     }
 
     pub fn account(name: &str, fill: char) -> Account {
         Account {
-            name: AccountName::parse(name).unwrap_or_else(|error| panic!("{error}")),
+            name: Name::parse(name).unwrap_or_else(|error| panic!("{error}")),
             password_hash: PasswordHash::parse(&hash_text(fill))
                 .unwrap_or_else(|error| panic!("{error}")),
         }
@@ -313,7 +311,7 @@ mod test_support {
         harness_with(session_policy(), limit_policy())
     }
 
-    pub fn harness_with(session: AdminSessionPolicy, limit: LoginLimitPolicy) -> Harness {
+    pub fn harness_with(session: admin_session::Policy, limit: login_limit::Policy) -> Harness {
         let clock = Arc::new(FakeClock::default());
         let verifier = Arc::new(FakeVerifier {
             passwords: HashMap::from([

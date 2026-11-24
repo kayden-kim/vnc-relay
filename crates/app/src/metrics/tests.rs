@@ -4,34 +4,34 @@ use std::net::{IpAddr, Ipv4Addr};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime};
 
-use vnc_relay_domain::account::AccountName;
+use vnc_relay_domain::account::Name;
 use vnc_relay_domain::conn_id::ConnId;
-use vnc_relay_domain::entry_point::{EntryPoint, Listener, Role};
+use vnc_relay_domain::entry_point::{EntryPoint, ListenerKind, Role};
 use vnc_relay_domain::handshake::Mode;
 use vnc_relay_domain::login_limit::LimitScope;
 use vnc_relay_domain::peer_ip::PeerIp;
-use vnc_relay_domain::session::{CloseCause, Direction, SessionId, Transport};
+use vnc_relay_domain::session::{CloseCause, Direction, Id, Transport};
 
 use super::history::{HISTORY_KEYS, History, HistoryView, HistoryWindow};
 use super::snapshot::{MetricsSnapshot, Number, PointValue};
 use super::{MetricSources, Metrics, MetricsService, MetricsSink};
 use crate::events::{
-    AbortReason, AdminTerminateResult, Event, LoginFailReason, RejectReason, RelayIdRef, Stage,
+    AbortReason, AdminTerminateOutcome, Event, LoginFailReason, RejectReason, RelayIdRef, Stage,
     TargetFailureReason,
 };
 use crate::ports::{
     AdminSessionSource, Clock, CpuTimes, EventSink, OpenCount, ProcessStats, ProcessStatsSource,
     RelayStateSource,
 };
-use crate::relay::test_support::TestSettings;
+use crate::relay::test_support::FakeRuntimeSettingsSource;
 use crate::relay::{RelayCounts, RelaySnapshot};
 use crate::reload::ReloadTrigger;
 use vnc_relay_domain::budget::ConnectionBudget;
 
 /// Monotonic time the test moves by hand; wall time stays fixed.
-struct TestClock(Mutex<Duration>);
+struct FakeClock(Mutex<Duration>);
 
-impl TestClock {
+impl FakeClock {
     fn at(seconds: u64) -> Arc<Self> {
         Arc::new(Self(Mutex::new(Duration::from_secs(seconds))))
     }
@@ -41,7 +41,7 @@ impl TestClock {
     }
 }
 
-impl Clock for TestClock {
+impl Clock for FakeClock {
     fn monotonic(&self) -> Duration {
         *self.0.lock().expect("clock lock")
     }
@@ -52,9 +52,9 @@ impl Clock for TestClock {
 }
 
 /// Relay counts set by the test.
-struct FixedRelay(RelayCounts);
+struct StubRelayStateSource(RelayCounts);
 
-impl RelayStateSource for FixedRelay {
+impl RelayStateSource for StubRelayStateSource {
     fn snapshot(&self, _clock: &dyn Clock) -> RelaySnapshot {
         unreachable!("metrics read counts only")
     }
@@ -64,26 +64,26 @@ impl RelayStateSource for FixedRelay {
     }
 }
 
-struct AdminSessions(usize);
+struct StubAdminSessionSource(usize);
 
-impl AdminSessionSource for AdminSessions {
+impl AdminSessionSource for StubAdminSessionSource {
     fn live_sessions(&self) -> usize {
         self.0
     }
 }
 
-struct FixedProcess(ProcessStats);
+struct StubProcessStatsSource(ProcessStats);
 
-impl ProcessStatsSource for FixedProcess {
+impl ProcessStatsSource for StubProcessStatsSource {
     fn read(&self) -> ProcessStats {
         self.0
     }
 }
 
 /// A log writer whose every write fails: it keeps nothing.
-struct FailingLog;
+struct StubEventSink;
 
-impl EventSink for FailingLog {
+impl EventSink for StubEventSink {
     fn record(&self, _event: &Event) {}
 }
 
@@ -101,25 +101,25 @@ fn readable_process() -> ProcessStats {
 }
 
 struct Fixture {
-    clock: Arc<TestClock>,
+    clock: Arc<FakeClock>,
     metrics: Arc<Metrics>,
     relay_budget: Arc<ConnectionBudget>,
     service: MetricsService,
 }
 
 fn fixture(counts: RelayCounts, process: ProcessStats) -> Fixture {
-    let clock = TestClock::at(100);
+    let clock = FakeClock::at(100);
     let metrics = Arc::new(Metrics::new(clock.as_ref()));
     let relay_budget = ConnectionBudget::new();
     let service = MetricsService::new(
         Arc::clone(&metrics),
         MetricSources {
-            relay: Arc::new(FixedRelay(counts)),
+            relay: Arc::new(StubRelayStateSource(counts)),
             relay_budget: Arc::clone(&relay_budget),
             admin_budget: ConnectionBudget::new(),
-            settings: TestSettings::new(),
-            admin: Arc::new(AdminSessions(3)),
-            process: Arc::new(FixedProcess(process)),
+            settings: FakeRuntimeSettingsSource::new(),
+            admin: Arc::new(StubAdminSessionSource(3)),
+            process: Arc::new(StubProcessStatsSource(process)),
         },
         Arc::clone(&clock) as Arc<dyn Clock>,
         "2026.11.6-test",
@@ -191,13 +191,13 @@ fn relay_id() -> RelayIdRef {
     RelayIdRef::from_hash_prefix([7; 8])
 }
 
-fn account() -> AccountName {
-    AccountName::parse("alice").expect("account name")
+fn account() -> Name {
+    Name::parse("alice").expect("account name")
 }
 
 fn session_started(mode: Mode, viewer: Transport, server: Option<Transport>) -> Event {
     Event::SessionStarted {
-        session_id: SessionId::from_block([1; 16]),
+        session_id: Id::from_block([1; 16]),
         mode,
         viewer_transport: viewer,
         server_transport: server,
@@ -220,17 +220,17 @@ fn counted_events() -> Vec<Event> {
     vec![
         Event::ConnectionAccepted {
             conn_id: ConnId::next(),
-            listener: Listener::Ws,
+            listener: ListenerKind::Ws,
             peer_ip: peer(),
         },
         Event::ConnectionAccepted {
             conn_id: ConnId::next(),
-            listener: Listener::Ws,
+            listener: ListenerKind::Ws,
             peer_ip: peer(),
         },
         Event::ConnectionAccepted {
             conn_id: ConnId::next(),
-            listener: Listener::TcpViewer,
+            listener: ListenerKind::TcpViewer,
             peer_ip: peer(),
         },
         Event::ConnectionRejected {
@@ -287,7 +287,7 @@ fn counted_events() -> Vec<Event> {
         },
         Event::ConnectionAborted {
             conn_id: ConnId::next(),
-            listener: Listener::TcpViewer,
+            listener: ListenerKind::TcpViewer,
             role: None,
             stage: Stage::InitialExchange,
             reason: AbortReason::HandshakeTimeout,
@@ -307,7 +307,7 @@ fn counted_events() -> Vec<Event> {
         },
         Event::TicketAccepted {
             conn_id: ConnId::next(),
-            listener: Listener::Wss,
+            listener: ListenerKind::Wss,
             role: Role::Viewer,
             peer_ip: peer(),
             forwarded_ip: None,
@@ -331,7 +331,7 @@ fn counted_events() -> Vec<Event> {
         session_started(Mode::Mode2, Transport::Ws, Some(Transport::Tcp)),
         session_started(Mode::Mode1, Transport::Tcp, None),
         Event::SessionClosed {
-            session_id: SessionId::from_block([1; 16]),
+            session_id: Id::from_block([1; 16]),
             mode: Mode::Mode2,
             viewer_transport: Transport::Ws,
             started_at: SystemTime::UNIX_EPOCH,
@@ -348,13 +348,13 @@ fn counted_events() -> Vec<Event> {
             admin_account: account(),
             peer_ip: peer(),
             session_id: None,
-            result: AdminTerminateResult::Terminated,
+            result: AdminTerminateOutcome::Terminated,
         },
         Event::AdminTerminate {
             admin_account: account(),
             peer_ip: peer(),
             session_id: None,
-            result: AdminTerminateResult::NotFound,
+            result: AdminTerminateOutcome::NotFound,
         },
         Event::AdminLoginSucceeded {
             admin_account: account(),
@@ -426,7 +426,7 @@ fn counted_events() -> Vec<Event> {
 #[test]
 fn counts_each_event_under_its_log_attributes_even_when_the_write_fails() {
     let fixture = fixture(RelayCounts::default(), readable_process());
-    let sink = MetricsSink::new(Arc::clone(&fixture.metrics), Arc::new(FailingLog));
+    let sink = MetricsSink::new(Arc::clone(&fixture.metrics), Arc::new(StubEventSink));
     for event in counted_events() {
         sink.record(&event);
     }
@@ -528,7 +528,7 @@ fn puts_each_value_in_the_first_bucket_whose_bound_is_at_least_the_value() {
     // Equal to the first bound, between two bounds, above the last bound.
     for elapsed in [5, 7, 200_000] {
         metrics.record_handshake(
-            Listener::TcpViewer,
+            ListenerKind::TcpViewer,
             Mode::Mode2,
             Duration::from_millis(elapsed),
         );
@@ -601,9 +601,9 @@ fn adds_session_bytes_by_direction_and_shows_only_directions_that_carried_bytes(
 #[test]
 fn counts_websocket_ping_timeouts_by_listener() {
     let fixture = fixture(RelayCounts::default(), readable_process());
-    fixture.metrics.record_ping_timeout(Listener::Wss);
-    fixture.metrics.record_ping_timeout(Listener::Ws);
-    fixture.metrics.record_ping_timeout(Listener::Wss);
+    fixture.metrics.record_ping_timeout(ListenerKind::Wss);
+    fixture.metrics.record_ping_timeout(ListenerKind::Ws);
+    fixture.metrics.record_ping_timeout(ListenerKind::Wss);
 
     assert_eq!(
         series(
@@ -776,7 +776,7 @@ fn takes_history_points_from_the_same_reading_as_the_snapshot() {
     counts.add_waiting(Role::Server, Transport::Ws);
     counts.add_session(Mode::Mode1, Transport::Wss, Transport::Tcp);
     let fixture = fixture(counts, readable_process());
-    let sink = MetricsSink::new(Arc::clone(&fixture.metrics), Arc::new(FailingLog));
+    let sink = MetricsSink::new(Arc::clone(&fixture.metrics), Arc::new(StubEventSink));
     for event in counted_events() {
         sink.record(&event);
     }

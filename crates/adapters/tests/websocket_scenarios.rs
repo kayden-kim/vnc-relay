@@ -19,27 +19,29 @@ use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::{Notify, watch};
 use tokio::task::JoinHandle;
-use tokio::time::{Instant, timeout};
+use tokio::time::{self, Instant};
 use tokio_rustls::TlsConnector;
 use vnc_relay_adapters::clock::SystemClock;
 use vnc_relay_adapters::crypto::{RelayIdKey, SessionIdKey};
 use vnc_relay_adapters::net::{AcceptPolicy, AllowSource, TcpEntryPoint};
-use vnc_relay_adapters::ops_log::format_line;
+use vnc_relay_adapters::ops_log;
 use vnc_relay_adapters::target::TcpTargetGateway;
 use vnc_relay_adapters::tls::{self, TlsSource};
 use vnc_relay_adapters::websocket::{WsEntryPoint, WsPolicy};
 use vnc_relay_adapters::websocket_stream::WsRelayStream;
-use vnc_relay_app::events::Event;
-use vnc_relay_app::metrics::Metrics;
-use vnc_relay_app::ports::{Clock, EventSink, RelayCloseAction, RelayStream};
-use vnc_relay_app::relay::{ConnectionContext, RelayRuntime, RelayRuntimeConfig, RelayService};
-use vnc_relay_app::reload::snapshot::{ReloadCell, ReloadSnapshot};
-use vnc_relay_app::settings::KeepaliveSettings;
+use vnc_relay_application::events::Event;
+use vnc_relay_application::metrics::Metrics;
+use vnc_relay_application::ports::{Clock, EventSink, RelayCloseAction, RelayStream};
+use vnc_relay_application::relay::{
+    ConnectionContext, RelayRuntime, RelayRuntimeConfig, RelayService,
+};
+use vnc_relay_application::reload::snapshot::{ReloadCell, ReloadSnapshot};
+use vnc_relay_application::settings::KeepaliveSettings;
 use vnc_relay_domain::allow_list::{AllowList, IpItem};
 use vnc_relay_domain::budget::ConnectionBudget;
 use vnc_relay_domain::conn_id::ConnId;
-use vnc_relay_domain::entry_point::{EntryPoint, Listener};
-use vnc_relay_domain::handshake::{HANDSHAKE_REQUEST_LEN, HandshakePolicy, VIEWER_GREETING};
+use vnc_relay_domain::entry_point::{EntryPoint, ListenerKind};
+use vnc_relay_domain::handshake::{HANDSHAKE_REQUEST_LEN, Policy, VIEWER_GREETING};
 use vnc_relay_domain::peer_ip::PeerIp;
 use vnc_relay_domain::session::Transport;
 use vnc_relay_domain::target_policy::{TargetItem, TargetPolicy};
@@ -57,7 +59,7 @@ const KEEPALIVE: KeepaliveSettings = KeepaliveSettings {
 };
 
 async fn bounded<T>(future: impl Future<Output = T>) -> T {
-    timeout(LIMIT, future)
+    time::timeout(LIMIT, future)
         .await
         .unwrap_or_else(|error| panic!("socket scenario exceeded {LIMIT:?}: {error}"))
 }
@@ -99,12 +101,12 @@ fn acceptor() -> tokio_rustls::TlsAcceptor {
 }
 
 #[derive(Default)]
-struct Recorder {
+struct SpyEventSink {
     lines: Mutex<Vec<Value>>,
     changed: Notify,
 }
 
-impl Recorder {
+impl SpyEventSink {
     async fn wait(&self, matches: impl Fn(&Value) -> bool) -> Value {
         bounded(async {
             loop {
@@ -120,9 +122,9 @@ impl Recorder {
     }
 }
 
-impl EventSink for Recorder {
+impl EventSink for SpyEventSink {
     fn record(&self, event: &Event) {
-        let text = format_line(event, SystemTime::UNIX_EPOCH);
+        let text = ops_log::format_line(event, SystemTime::UNIX_EPOCH);
         assert_eq!(text.lines().count(), 1);
         lock(&self.lines).push(
             serde_json::from_str(&text)
@@ -140,7 +142,7 @@ struct Running {
     wss_addr: SocketAddr,
     cell: Arc<ReloadCell<tokio_rustls::TlsAcceptor>>,
     secure: bool,
-    events: Arc<Recorder>,
+    events: Arc<SpyEventSink>,
     service: Arc<RelayService>,
     runtime: Arc<RelayRuntime<TcpTargetGateway>>,
     clock: Arc<dyn Clock>,
@@ -167,7 +169,7 @@ impl Running {
         secure: bool,
         keepalive: KeepaliveSettings,
         wait_timeout: Duration,
-        configure: impl FnOnce(&mut vnc_relay_app::settings::Settings),
+        configure: impl FnOnce(&mut vnc_relay_application::settings::Settings),
     ) -> Self {
         let listener = target().await;
         let server = target().await;
@@ -216,16 +218,17 @@ impl Running {
         ]));
         configure(&mut settings);
         let cell = Arc::new(ReloadCell::new(ReloadSnapshot::new(
-            vnc_relay_app::reload::ConfigCandidate {
+            vnc_relay_application::reload::ConfigCandidate {
                 settings,
                 presence: Default::default(),
             },
             Some(acceptor()),
             None,
         )));
-        let source: Arc<dyn vnc_relay_app::reload::ports::RuntimeSettingsSource> = cell.clone();
+        let source: Arc<dyn vnc_relay_application::reload::ports::RuntimeSettingsSource> =
+            cell.clone();
         let clock: Arc<dyn Clock> = Arc::new(SystemClock::new());
-        let events = Arc::new(Recorder::default());
+        let events = Arc::new(SpyEventSink::default());
         let log: Arc<dyn EventSink> = events.clone();
         let budget = ConnectionBudget::new();
         let waiting_budget = ConnectionBudget::new();
@@ -239,7 +242,7 @@ impl Running {
             Arc::clone(&source),
         ));
         let service = Arc::new(RelayService::new(
-            HandshakePolicy {
+            Policy {
                 mode1_enabled: true,
                 mode2_enabled: true,
             },
@@ -254,7 +257,11 @@ impl Running {
             relay_budget: Arc::clone(&budget),
         };
         let ws = WsEntryPoint::new(
-            if secure { Listener::Wss } else { Listener::Ws },
+            if secure {
+                ListenerKind::Wss
+            } else {
+                ListenerKind::Ws
+            },
             listener,
             secure.then(|| TlsSource::wss(Arc::clone(&cell))),
             WsPolicy {
@@ -279,7 +286,11 @@ impl Running {
             Arc::clone(&clock),
         );
         let other = WsEntryPoint::new(
-            if secure { Listener::Ws } else { Listener::Wss },
+            if secure {
+                ListenerKind::Ws
+            } else {
+                ListenerKind::Wss
+            },
             other_ws,
             (!secure).then(|| TlsSource::wss(Arc::clone(&cell))),
             WsPolicy {
@@ -507,7 +518,7 @@ impl Peer {
         if server {
             let mut byte = [0; 1];
             assert!(
-                timeout(Duration::from_millis(30), client.wire.read(&mut byte))
+                time::timeout(Duration::from_millis(30), client.wire.read(&mut byte))
                     .await
                     .is_err(),
                 "Server receives no greeting"
@@ -589,7 +600,7 @@ async fn websocket_servers_pair_with_every_viewer_transport_in_both_orders() {
                 assert_eq!(started["mode"], "mode2");
                 assert_eq!(started["viewer_transport"], viewer_transport.as_str());
                 assert_eq!(started["server_transport"], server_transport.as_str());
-                let query = vnc_relay_app::management::query::ManagementQueryService::new(
+                let query = vnc_relay_application::management::query::ManagementQueryService::new(
                     running.runtime.clone(),
                     running.budget.clone(),
                     ConnectionBudget::new(),
@@ -678,7 +689,7 @@ async fn websocket_server_paths_refuse_mode_i_without_registration_or_target_con
             .await;
         server.rejected(4008, "handshake_invalid").await;
         assert!(
-            timeout(Duration::from_millis(30), target.accept())
+            time::timeout(Duration::from_millis(30), target.accept())
                 .await
                 .is_err()
         );
@@ -924,7 +935,7 @@ async fn server_role_handles_fragmented_data_control_frames_and_idle_pongs() {
         );
         let mut byte = [0; 1];
         assert!(
-            timeout(Duration::from_millis(30), viewer.read(&mut byte))
+            time::timeout(Duration::from_millis(30), viewer.read(&mut byte))
                 .await
                 .is_err(),
             "Server ping/pong bytes never reach TCP Viewer"
@@ -975,12 +986,15 @@ async fn unresponsive_websocket_server_releases_tcp_viewer_and_session() {
     }
 }
 
-fn update_settings(running: &Running, update: impl FnOnce(&mut vnc_relay_app::settings::Settings)) {
+fn update_settings(
+    running: &Running,
+    update: impl FnOnce(&mut vnc_relay_application::settings::Settings),
+) {
     let current = running.cell.current();
     let mut settings = (*current.settings).clone();
     update(&mut settings);
     running.cell.replace(ReloadSnapshot::new(
-        vnc_relay_app::reload::ConfigCandidate {
+        vnc_relay_application::reload::ConfigCandidate {
             settings,
             presence: (*current.presence).clone(),
         },
@@ -1402,7 +1416,7 @@ impl Client {
 
     /// Reads raw frames without the automatic Pong of a WebSocket library.
     async fn kw_eof(&mut self) -> usize {
-        timeout(Duration::from_secs(20), async {
+        time::timeout(Duration::from_secs(20), async {
             let mut pings = 0;
             loop {
                 let mut byte = [0; 1];
@@ -1661,7 +1675,7 @@ async fn management_paths_and_invalid_upgrades_cannot_register_or_connect_a_targ
                         || line["event"] == "target_connect_failed")
             );
             assert!(
-                timeout(Duration::from_millis(30), target.accept())
+                time::timeout(Duration::from_millis(30), target.accept())
                     .await
                     .is_err(),
                 "rejected request did not open the real target"
@@ -2026,14 +2040,14 @@ impl Meter {
     }
 }
 
-struct MeasuredStream<S> {
+struct SpyRelayStream<S> {
     inner: S,
     side: usize,
     meter: Arc<Meter>,
     frame_gate: Option<Arc<FrameGate>>,
 }
 
-impl<S: AsyncRead + Unpin> AsyncRead for MeasuredStream<S> {
+impl<S: AsyncRead + Unpin> AsyncRead for SpyRelayStream<S> {
     fn poll_read(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -2066,7 +2080,7 @@ impl<S: AsyncRead + Unpin> AsyncRead for MeasuredStream<S> {
     }
 }
 
-impl<S: AsyncWrite + Unpin> AsyncWrite for MeasuredStream<S> {
+impl<S: AsyncWrite + Unpin> AsyncWrite for SpyRelayStream<S> {
     fn poll_write(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -2101,7 +2115,7 @@ impl<S: AsyncWrite + Unpin> AsyncWrite for MeasuredStream<S> {
     }
 }
 
-impl<S: RelayStream> RelayStream for MeasuredStream<S> {
+impl<S: RelayStream> RelayStream for SpyRelayStream<S> {
     fn transport(&self) -> Transport {
         self.inner.transport()
     }
@@ -2146,7 +2160,7 @@ async fn measured_pair(
     let (client, (wire, addr)) =
         bounded(async { tokio::join!(Client::transport(address, running.secure), viewer) }).await;
     let wire: Box<dyn Wire> = if let Some(gate) = &frame_gate {
-        Box::new(FrameGatedWire {
+        Box::new(FakeFrameGatedWire {
             inner: wire,
             gate: Arc::clone(gate),
         })
@@ -2170,7 +2184,7 @@ async fn measured_pair(
         buffer_bytes: B,
         handshake: Duration::from_secs(3),
     };
-    let viewer_stream = MeasuredStream {
+    let viewer_stream = SpyRelayStream {
         inner: WsRelayStream::new(
             wire,
             Vec::new(),
@@ -2227,7 +2241,7 @@ async fn measured_pair(
         buffer_bytes: B,
         handshake: Duration::from_secs(3),
     };
-    let server_stream = MeasuredStream {
+    let server_stream = SpyRelayStream {
         inner: vnc_relay_adapters::net::TcpRelayStream::with_keepalive(tcp, &KEEPALIVE)
             .unwrap_or_else(|error| panic!("measured Server keepalive: {error}")),
         side: 1,
@@ -2392,12 +2406,12 @@ impl FrameGate {
 // This gate is above the real TCP/TLS wire, below WsRelayStream. It passes
 // exactly one complete header, flushes it to the client, and holds every
 // payload byte until the real WS decoder has observed the client's Close.
-struct FrameGatedWire {
+struct FakeFrameGatedWire {
     inner: Box<dyn Wire>,
     gate: Arc<FrameGate>,
 }
 
-impl AsyncRead for FrameGatedWire {
+impl AsyncRead for FakeFrameGatedWire {
     fn poll_read(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -2407,7 +2421,7 @@ impl AsyncRead for FrameGatedWire {
     }
 }
 
-impl AsyncWrite for FrameGatedWire {
+impl AsyncWrite for FakeFrameGatedWire {
     fn poll_write(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -2629,7 +2643,7 @@ async fn ws_and_wss_kw_keeps_idle_peers_and_drops_unresponsive_peers() {
         // No Ping header/payload may reach TCP, even on the dead session.
         let mut byte = [0; 1];
         assert_eq!(
-            timeout(Duration::from_secs(20), silent_tcp.read(&mut byte))
+            time::timeout(Duration::from_secs(20), silent_tcp.read(&mut byte))
                 .await
                 .unwrap_or_else(|error| panic!("dead TCP reclaimed: {error}"))
                 .unwrap_or_else(|error| panic!("dead TCP EOF: {error}")),
@@ -2660,7 +2674,7 @@ async fn ws_and_wss_kw_keeps_idle_peers_and_drops_unresponsive_peers() {
             .await;
         assert_eq!(removed["reason"], "dead_connection");
         assert_eq!(removed["level"], "warn");
-        let mut live = timeout(Duration::from_secs(20), live_task)
+        let mut live = time::timeout(Duration::from_secs(20), live_task)
             .await
             .unwrap_or_else(|error| panic!("idle Pong client: {error}"))
             .unwrap_or_else(|error| panic!("idle Pong task: {error}"));
@@ -2674,7 +2688,7 @@ async fn ws_and_wss_kw_keeps_idle_peers_and_drops_unresponsive_peers() {
         );
         let mut byte = [0; 1];
         assert!(
-            timeout(Duration::from_millis(10), live_tcp.read(&mut byte))
+            time::timeout(Duration::from_millis(10), live_tcp.read(&mut byte))
                 .await
                 .is_err(),
             "server Ping bytes never appear in TCP"
@@ -2785,7 +2799,7 @@ async fn trusted_proxy_uses_rightmost_untrusted_canonical_address_on_both_paths(
                 assert_eq!(started[format!("{side}_peer_ip")], "127.0.0.1");
                 assert_eq!(started[format!("{side}_forwarded_ip")], client_ip);
             }
-            let query = vnc_relay_app::management::query::ManagementQueryService::new(
+            let query = vnc_relay_application::management::query::ManagementQueryService::new(
                 running.runtime.clone(),
                 running.budget.clone(),
                 ConnectionBudget::new(),
@@ -3116,7 +3130,7 @@ async fn tls_terminating_proxy_adds_each_client_address_and_pipes_mode_two_both_
     assert_eq!(server.data(12).await, b"TLS viewer\0\xff");
     server.binary(b"TLS server\xff\0").await;
     assert_eq!(viewer.data(12).await, b"TLS server\xff\0");
-    let query = vnc_relay_app::management::query::ManagementQueryService::new(
+    let query = vnc_relay_application::management::query::ManagementQueryService::new(
         running.runtime.clone(),
         running.budget.clone(),
         ConnectionBudget::new(),

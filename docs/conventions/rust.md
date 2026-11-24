@@ -81,14 +81,14 @@ Win32 호출은 작업 공간의 `windows-sys`를 쓴다. 시험 쪽은 개발 �
 
 ```text
 좋음: crates/app/src/settings.rs 의 ConfigError, crates/adapters/src/tls.rs 의 TlsError
-나쁨: crates/app/src/accounts.rs 의 AdminFailure, 단독 Error
-이유: 오류 타입은 항상 <개념>Error다. Failure로 끝나는 오류 이름을 쓰지 않는다. 단독 Error는 std::error::Error와 겹친다. 기존 AdminFailure는 6절의 마이그레이션 대상이다.
+나쁨: AdminFailure, 단독 Error
+이유: 오류 타입은 항상 <개념>Error다. Failure로 끝나는 오류 이름을 쓰지 않는다. 단독 Error는 std::error::Error와 겹친다.
 ```
 
 ```text
 좋음: crates/app/src/reload/service.rs 의 ReloadOutcome
-나쁨: crates/app/src/reload.rs 의 ReloadResult
-이유: alias가 아닌 타입에는 Result suffix를 쓰지 않는다. fmt::Result·io::Result처럼 독자가 alias로 읽기 때문이다. 분류는 Outcome, 묶음은 개념 이름으로 짓는다. 기존 ReloadResult는 6절의 마이그레이션 대상이다.
+나쁨: ReloadResult
+이유: alias가 아닌 타입에는 Result suffix를 쓰지 않는다. fmt::Result·io::Result처럼 독자가 alias로 읽기 때문이다. 분류는 Outcome, 묶음은 개념 이름으로 짓는다.
 ```
 
 ```text
@@ -104,9 +104,9 @@ Win32 호출은 작업 공간의 `windows-sys`를 쓴다. 시험 쪽은 개발 �
 ```
 
 ```text
-좋음: 새 개념 타입 session::State(모듈 경로 session이 맥락을 준다)
+좋음: crates/domain/src/session.rs 의 session::State(모듈 경로 session이 맥락을 준다)
 나쁨: session::SessionState(개념 타입이 모듈 이름을 되풀이한다), session::SessionStateEntity
-이유: 개념 타입은 모듈 경로가 맥락을 주므로 suffix도, 모듈 이름 되풀이도 필요 없다. 기존 session::SessionState는 6절의 마이그레이션 대상이다.
+이유: 개념 타입은 모듈 경로가 맥락을 주므로 suffix도, 모듈 이름 되풀이도 필요 없다.
 ```
 
 ```rust
@@ -147,33 +147,31 @@ cargo xtask layers
 
 ## 6. 기존 코드 마이그레이션
 
-새로 짓거나 바꾸는 이름은 7절을 따른다. 기존 코드의 이름은 바꾸지 않았다(rename 없음). 아래 이름은 7절과 다르다. 바꿀지와 시점은 별도 작업으로 정한다. 공개 이름을 바꿀 때는 그 이름을 import한 곳과 코드 지도·도메인 모델·모듈 설계의 심볼을 같은 변경에서 고친다.
+2026-11-24에 7절과 다르던 기존 이름과 시험 코드 구조를 모두 고쳤다. 이 절은 바꾼 내용과 바꾸지 않은 예외를 기록한다. 새 코드는 이 절이 아니라 7절을 따른다. 바꾼 이름은 import한 곳과 코드 지도·도메인 모델·모듈 설계의 심볼을 같은 변경에서 고쳤다.
 
-수는 2026-11-24 작업 트리에서 `struct` `enum` `trait` `type` 선언을 정규식으로 센 값이다. `#[cfg(test)]` 모듈, `tests/`, `xtask/`는 뺐다. 매크로가 만드는 타입은 세지 않았다.
-
-| 규칙 | 개수 | 대표 예시 |
-| --- | --- | --- |
-| 오류 이름: `Failure` → `<개념>Error`([7.7절](#77-금지-이름과-부딪히는-지점)) | 8 | `AdminFailure`(`crates/app/src/accounts.rs`), `ListenerFailure`(`crates/adapters/src/listener.rs`), `BindFailure`(`crates/adapters/src/net.rs`), `IpDbFailure`, `WatchFailure`, `HandshakeFailure`. 비공개 `Failure` 2개(`crates/app/src/relay/target.rs`, `src/service.rs`) |
-| `Result` suffix → `Outcome` 또는 개념 이름 | 3 | `ReloadResult`(enum, `crates/app/src/reload.rs`), `AdminTerminateResult`(enum, `crates/app/src/events.rs`), `ConfigEditResult`(struct, `crates/app/src/management/config.rs`) |
-| 같은 이름 충돌([7.3절](#73-suffix가-필요한-조건) A2) | 이름 2개(선언 4개) | 도메인 enum `Listener`(`crates/domain/src/entry_point.rs`)와 adapters trait `Listener`(`crates/adapters/src/listener.rs`). `TargetHost` 2개(`crates/domain/src/handshake.rs`, `crates/domain/src/target_policy.rs`) |
-| `Control`이 포트가 아닌 타입 | 2 | `IdleControl`(`crates/adapters/src/request_deadline.rs`), `StopControl`(`crates/adapters/src/windows_service.rs`) |
-| crate 이름: `vnc-relay-app` → `vnc-relay-application`([7.5절](#75-모듈-파일-crate-이름)) | crate 1개 | `vnc_relay_app` import 338줄, 68개 파일. `Cargo.toml` 4개, `xtask/src/layers.rs`, 문서의 crate 이름도 함께 바뀐다. 이름을 바꾸기 전까지 코드와 문서는 현재 이름 `vnc-relay-app`을 쓴다 |
-| 시험 코드의 `#[path]`(`mod.rs`와 함께 금지) | `#[path]` 속성 43개, 17개 파일 | `tests/dashboard_live.rs` 18곳, `tests/common/dashboard_live.rs` 4곳, `crates/adapters/tests/ip_db.rs`, `src/serve.rs`의 `#[cfg(test)]` 모듈. 이 행만 시험 코드를 센다 |
-| 시험 대역 이름: `Test…` → `Fake`·`Stub`·`Spy` | `Test`로 시작하는 선언 13개(대역이 아닌 `TestCase` 포함) | `TestClock`, `TestStream`(`crates/app/src/relay.rs`의 시험 모듈) |
-| 개념 타입의 모듈 이름 되풀이([7.3절](#73-suffix가-필요한-조건) C) | 세지 않았다 | `session::SessionState`, `ticket::TicketPolicy`, `account::AccountName`(`crates/domain`) |
-| 함수 직접 import([7.7절](#77-금지-이름과-부딪히는-지점)) | 세지 않았다. 표본 점검으로 찾은 예 | `use crate::toml_text::error_position;`(`crates/adapters/src/accounts_file.rs`, `config_file.rs`), `use crate::crypto::random_bytes;`(`crates/adapters/src/accounts_file/hasher.rs`), `use crate::clock::timestamp;`(`crates/adapters/src/management_http/config_api.rs`) |
-
-합계: 이름 약 15개(오류 8, `Result` 3, 같은 이름 2, `Control` 2)와 crate 1개다. `#[path]`와 시험 대역 이름, 모듈 이름 되풀이, 함수 import는 합계에 넣지 않았다.
+| 규칙 | 바꾼 내용 |
+| --- | --- |
+| 오류 이름: `Failure` → `<개념>Error`([7.7절](#77-금지-이름과-부딪히는-지점)) | `AdminFailure`→`AdminError`, `ListenerFailure`→`ListenerError`, `BindFailure`→`BindError`, `WatchFailure`→`WatchError`, `HandshakeFailure`(`crates/adapters/src/tls_listener.rs`)→`TlsHandshakeError`, `IpDbFailure`→`IpDbError`. 원래 `IpDbError`였던 감싸는 구조체는 `IpDbReadError`로 바꿨다. 비공개 `Failure`는 `crates/app/src/relay/target.rs`에서 `TargetConnectError`, `src/service.rs`에서 `ServiceError`가 되었다 |
+| `Result` suffix → `Outcome` 또는 개념 이름 | `ReloadResult`→`LastReloadOutcome`(`ReloadOutcome`이 이미 있어서 구분했다), `AdminTerminateResult`→`AdminTerminateOutcome`, `ConfigEditResult`→`ConfigEditOutcome` |
+| 같은 이름 충돌([7.3절](#73-suffix가-필요한-조건) A2) | 도메인 enum `entry_point::Listener`→`ListenerKind`(adapters trait `Listener`는 그대로). `target_policy::TargetHost`→`TargetItemHost`(`handshake::TargetHost`는 그대로) |
+| `Control`이 포트가 아닌 타입 | `IdleControl`→`IdleTimerHandle`, `StopControl`→`StopRequest`, 비공개 `SessionControl`(`crates/app/src/relay.rs`)→`SessionHandle` |
+| crate 이름: `vnc-relay-app` → `vnc-relay-application`([7.5절](#75-모듈-파일-crate-이름)) | 패키지 이름과 `vnc_relay_application` import, `Cargo.toml`, `xtask/src/layers.rs`, 배포 고지, 문서를 함께 바꿨다. 디렉터리 `crates/app`은 그대로다 |
+| 개념 타입의 모듈 이름 되풀이([7.3절](#73-suffix가-필요한-조건) C, `crates/domain`) | `account::AccountName`→`Name`, `admin_session::{AdminSessionToken→Token, AdminSessionPolicy→Policy, AdminSessionTable→Table}`, `budget::BudgetPermit`→`Permit`, `handshake::HandshakePolicy`→`Policy`, `login_limit::LoginLimitPolicy`→`Policy`, `recent_closed::RecentClosedList`→`List`, `session::{SessionId→Id, SessionState→State}`, `ticket::{TicketParts→Parts, TicketClaims→Claims, TicketPolicy→Policy, TicketKey→Key, TicketKeyList→KeyList, TicketUseTable→UseTable}`. 이름이 겹치는 `Policy`는 부모 모듈을 붙여 쓴다(`handshake::Policy`) |
+| 함수 직접 import([7.7절](#77-금지-이름과-부딪히는-지점)) | 작업 공간·표준·외부 crate의 함수 import를 모두 부모 모듈 경유 호출로 바꿨다(`toml_text::error_position(..)`). 매크로(`json!`, `pin!`, `ready!`)와 모듈 import는 대상이 아니다 |
+| 시험 대역 이름([2절](#2-규칙)) | 포트·소켓·스트림을 대신하는 시험 전용 타입을 모두 `Fake`·`Stub`·`Spy`로 시작하게 바꿨다(`TestClock`→`FakeClock`, `TestStream`→`FakeRelayStream`, `Recorder`→`SpyEventSink`, `FixedProcess`→`StubProcessStatsSource`). 대역이 아닌 보조 타입(`TestCase`, `TestResult`, `PartialWrites`, `FrameGate` 등)은 그대로다 |
+| 시험 코드의 `#[path]`와 `mod.rs`([2절](#2-규칙)) | `#[path]` 속성 43개를 모두 없앴다. 여러 시험 대상이 함께 쓰던 `tests/common/`과 `crates/adapters/tests/common/`의 도구는 작업 공간 crate `vnc-relay-testkit`(`crates/testkit`)의 모듈로 옮겼다. `tests/dashboard_live.rs`와 `tests/ticket_system.rs`는 `tests/<주제>/main.rs`와 하위 모듈로 나눴다. `src/serve.rs`의 불필요한 `#[path]`는 지웠다 |
 
 - 금지 이름(`Dto` `Repository` `UseCase` `Interactor` `Manager` `Impl` `Handler` 등)을 쓰는 운영 코드 선언은 0개다. 시험 코드와 `xtask/`는 이 점검에서 뺐다. 시험 전용 타입은 suffix 규칙 대상이 아니다([2절](#2-규칙)).
 - 코드를 바꾸지 않고 이 문서가 허용하도록 고친 것: adapters의 `Policy`(`AcceptPolicy`, `WsPolicy`)와 비공개 `Snapshot`(`QuerySnapshot`), 닫힌 목록 밖 suffix(`Guard` `Parser` 등, [7.9절](#79-등록-suffix와-예외-이름)).
 - 비공개 `Wire`(`crates/adapters/src/websocket.rs`)는 소켓을 감싸는 enum이다. 어댑터 내부 저장·전송 형식을 뜻하는 `Wire` suffix와 뜻이 다르다. 모듈 안 비공개 보조 타입이므로 바꾸지 않았다.
-- `LogsFilter`는 조회 조건 입력이다. 표준은 `Query`로 바꾸기를 필요할 때로 둔다. 세지 않았다.
-- 비공개 `SessionControl`(`crates/app/src/relay.rs`)도 포트가 아닌 `Control`이다. 모듈 안 비공개 보조 타입이라 합계에 넣지 않았다.
+- `LogsFilter`는 조회 조건 입력이다. 표준은 `Query`로 바꾸기를 필요할 때로 둔다. 바꾸지 않았다.
+- 7.3절 C는 `crates/domain`의 개념 타입에만 적용했다. app·adapters의 타입 가운데 모듈 이름으로 시작하는 이름(`ConfigPatch`, `ReloadTrigger`, `TlsFile` 등)은 바꾸지 않았다. 모듈 경로 없이 읽혀야 하는 역할 타입이기 때문이다.
+- `management::config`가 다시 내보내는 `config_items`는 공개 경로라서 그대로 두었다. 호출하는 쪽은 `management::config::config_items(..)`로 부른다.
+- `crates/app/src/relay/session.rs`의 시험용 `Control`은 대역이 흉내 내는 스트림을 조작하는 시험 쪽 핸들이라 바꾸지 않았다.
 
 ## 7. 이름 짓기 규칙과 목록
 
-공통 표준의 규칙을 이 저장소의 crate·모듈에 맞춰 옮겼다. 7.1~7.7절이 규칙이고 7.8~7.10절이 목록이다. 표의 "이 저장소의 예"는 현재 코드의 이름이다. [6절](#6-기존-코드-마이그레이션)의 마이그레이션 대상 이름은 예로 쓰지 않았다.
+공통 표준의 규칙을 이 저장소의 crate·모듈에 맞춰 옮겼다. 7.1~7.7절이 규칙이고 7.8~7.10절이 목록이다. 표의 "이 저장소의 예"는 현재 코드의 이름이다.
 
 ### 7.1 원칙
 
@@ -218,7 +216,7 @@ cargo xtask layers
 **A. 역할 타입은 아래 중 하나라도 해당하면 S 방식을 쓴다(suffix 필수).**
 
 1. 타입이 자기 모듈 밖으로 나간다. `pub use`로 올리거나, 다른 crate가 직접 import한다(조립 코드 포함).
-2. 같은 스코프에서 같은 이름의 다른 타입과 함께 import될 수 있다. 다른 모듈의 같은 역할 타입, 표준 라이브러리 또는 외부 crate의 동명 타입이 포함된다. 이 저장소의 사례는 도메인 enum `Listener`와 adapters trait `Listener`다. enum은 개념 타입이므로 suffix 대신 이름을 구분한다([6절](#6-기존-코드-마이그레이션)).
+2. 같은 스코프에서 같은 이름의 다른 타입과 함께 import될 수 있다. 다른 모듈의 같은 역할 타입, 표준 라이브러리 또는 외부 crate의 동명 타입이 포함된다. 이 저장소의 사례는 도메인 enum `ListenerKind`와 adapters trait `Listener`, 도메인 `handshake::TargetHost`와 `target_policy::TargetItemHost`다. 개념 타입은 suffix 대신 이름 자체를 구분한다([6절](#6-기존-코드-마이그레이션)).
 3. trait과 구현체가 같은 이름이 된다. 구현체에 기술·구현 성격 prefix를 붙인다(`Clock` → `SystemClock`).
 4. 계층 경계를 넘는다. 포트, 서비스, 경계 데이터, 오류는 읽는 쪽이 계층 모듈 경로를 보지 않아도 역할을 알아야 한다.
 
@@ -239,7 +237,7 @@ cargo xtask layers
 | 계층 | 이 저장소의 위치 | 타입 이름 | trait 이름 | 모듈·파일 이름 | 금지 |
 | --- | --- | --- | --- | --- | --- |
 | domain(엔티티·값) | `crates/domain`(`vnc-relay-domain`) | 개념 이름(P). 값 모양 단어 허용. 오류는 `<개념>Error` | 없는 것이 기본. 규칙 확장점이 필요하면 능력 이름 | 개념 단위 `snake_case`, `pub mod`, 파일 이름 = 모듈 이름(`allow_list.rs`, `target_policy.rs`) | `Service` `Manager` `Dto` `View` `Impl` |
-| application(유스케이스) | `crates/app`(`vnc-relay-app`. crate 이름은 [6절](#6-기존-코드-마이그레이션)) | `<개념>Service`, `Command` `Query` `View` `Snapshot` `Event` `Settings` `Config` | 포트 trait은 `ports` 모듈 | 기능 단위 `snake_case`(`relay`, `reload`, `management`, `metrics`) | `UseCase` `Interactor` `Handler` `Manager` `Impl` |
+| application(유스케이스) | `crates/app`(`vnc-relay-application`) | `<개념>Service`, `Command` `Query` `View` `Snapshot` `Event` `Settings` `Config` | 포트 trait은 `ports` 모듈 | 기능 단위 `snake_case`(`relay`, `reload`, `management`, `metrics`) | `UseCase` `Interactor` `Handler` `Manager` `Impl` |
 | ports(app이 소유하는 trait) | `crates/app/src/ports.rs`. 기능 안에서만 쓰는 포트 묶음은 그 기능의 `ports.rs`(`crates/app/src/reload/ports.rs`)에 둘 수 있다. 하위 파일이 필요하면 `ports/<개념>.rs`로 두고 이름은 `ports::` 아래로 평면 노출한다 | 포트가 소유한 데이터는 `Command` `Query` `View` `Event` | `<개념><Source·Sink·Store·Gateway·Control·Clock>` | `ports.rs` | `Port` suffix, `I` prefix, 기술 이름 |
 | adapters(구동되는 쪽. 포트 구현) | `crates/adapters`(`vnc-relay-adapters`, 한 crate) | `<기술><포트 이름>`. 내부 형식은 `Wire` `Request` `Response` | 포트 trait은 만들지 않는다(app이 소유한다). 예외는 [7.9절](#79-등록-suffix와-예외-이름) | 기술 이름 또는 `<개념>_<기술>`(`tls`, `accounts_file`, `ip_db`). HTTP 경로 묶음은 `<개념>_api`(`management_http/session_api.rs`) | `Impl` `Default<포트>` |
 | interface(구동하는 쪽: 진입점·리스너·CLI) | adapters 안의 모듈. 실행 인자는 루트 crate `src/`(`cli.rs`) | `<기술>EntryPoint`(`TcpEntryPoint`, `WsEntryPoint`), `<이름>Listener`(`ManagementListener`, `StatusListener`). HTTP 핸들러는 타입이 아닌 함수 | 필요 시 `Listener` | `<개념>_api`, `<기술>_http`(`management_http`, `status_http`) | `Controller` `Handler` `Presenter` suffix |
@@ -270,12 +268,12 @@ cargo xtask layers
 | 종류 | 이름 | 이 저장소 |
 | --- | --- | --- |
 | 도메인 | `<제품>-domain` | `vnc-relay-domain` |
-| 애플리케이션 | `<제품>-application` | `vnc-relay-app`은 이 규칙과 다르다. 이름은 바꾸지 않았다([6절](#6-기존-코드-마이그레이션)). 새 crate는 이 규칙을 따른다 |
+| 애플리케이션 | `<제품>-application` | `vnc-relay-application`(디렉터리는 `crates/app`) |
 | 어댑터 하나로 묶음 | `<제품>-adapters` | `vnc-relay-adapters` |
 | 어댑터를 기술별로 나눔 | `<제품>-adapter-<기술>` | 쓰지 않는다. 이 저장소는 어댑터를 한 crate에 모은다 |
 | 실행 파일 | `<제품>` | `vnc-relay` |
 | 보조 UI·도구 | `<제품>-<이름>`, 개발 도구는 `xtask` | `vnc-relay-tray`, `xtask` |
-| 시험 하네스 | `<제품>-sim` 또는 `<제품>-testkit` | 없음 |
+| 시험 하네스 | `<제품>-sim` 또는 `<제품>-testkit` | `vnc-relay-testkit`(`crates/testkit`, 배포하지 않는다) |
 
 crate 이름은 `kebab-case`이고 `-rs`·`-rust`를 붙이지 않는다. 단수 `adapter-<기술>`과 복수 `adapters`를 섞어 쓰지 않는다. 한 crate에 어댑터를 모으면 `adapters`, 기술마다 crate를 나누면 `adapter-<기술>`이다.
 

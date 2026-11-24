@@ -8,8 +8,8 @@ use std::io::{self, Cursor};
 
 use tokio_tungstenite::tungstenite::protocol::frame::FrameHeader;
 use tokio_tungstenite::tungstenite::protocol::frame::coding::{CloseCode, Control, Data, OpCode};
-use vnc_relay_app::events::ConnectionErrorKind;
-use vnc_relay_app::ports::RelayStreamError;
+use vnc_relay_application::events::ConnectionErrorKind;
+use vnc_relay_application::ports::RelayStreamError;
 
 /// Maximum number of non-data frames (empty messages, pings, unsolicited pongs)
 /// processed in one `poll_read` before yielding to the executor.
@@ -638,9 +638,9 @@ impl FrameDecoder {
 
 #[cfg(test)]
 mod tests {
-    use super::{DecodeState, FrameDecoder, encode_close};
-    use vnc_relay_app::events::ConnectionErrorKind;
-    use vnc_relay_app::ports::RelayStreamError;
+    use super::{DecodeState, FrameDecoder};
+    use vnc_relay_application::events::ConnectionErrorKind;
+    use vnc_relay_application::ports::RelayStreamError;
 
     fn masked_header(opcode: u8, marker: u8, extended: &[u8]) -> Vec<u8> {
         let mut header = vec![opcode, 0x80 | marker];
@@ -766,7 +766,7 @@ mod tests {
     #[test]
     fn encodes_close_reason_beyond_the_old_28_byte_limit() {
         let reason = "x".repeat(29);
-        let close = encode_close(1000, &reason);
+        let close = super::encode_close(1000, &reason);
         let bytes = close.remaining_bytes();
         assert_eq!(bytes.len(), 33);
         assert_eq!(&bytes[..4], &[0x88, 31, 0x03, 0xe8]);
@@ -786,7 +786,7 @@ mod tests {
             ("😀".repeat(31), "😀".repeat(30)),
         ];
         for (reason, expected) in reasons {
-            let mut close = encode_close(1000, &reason);
+            let mut close = super::encode_close(1000, &reason);
             let bytes = close.remaining_bytes();
             assert_eq!(bytes.len(), 4 + expected.len());
             assert!(bytes.len() <= 127);

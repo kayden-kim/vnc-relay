@@ -1,6 +1,6 @@
 //! Mode I policy, one absolute C, sequential candidates, and the second L place.
 
-use std::future::{Future, poll_fn};
+use std::future::{self, Future};
 use std::net::{IpAddr, SocketAddr};
 use std::pin::{Pin, pin};
 use std::task::Poll;
@@ -12,7 +12,7 @@ use vnc_relay_domain::handshake::{Mode, TargetAddress, TargetHost};
 
 use super::{
     ActivePeer, OwnedConnection, RelayDispatchError, RelayEndpoint, RelayRuntime, RelayService,
-    SessionPair, milliseconds,
+    SessionPair,
 };
 use crate::events::{AbortReason, Event, RejectReason, Stage, TargetFailureReason};
 use crate::ports::{
@@ -27,7 +27,7 @@ impl<C> Drop for Connecting<'_, C> {
     }
 }
 
-enum Failure {
+enum TargetConnectError {
     Rejected(RejectReason, Option<IpAddr>),
     Failed(TargetFailureReason, Option<IpAddr>),
     Shutdown,
@@ -111,7 +111,7 @@ pub(super) async fn dispatch<C: TargetGateway>(
             deadline,
             policy.as_ref()
         ));
-        poll_fn(|cx| {
+        future::poll_fn(|cx| {
             if let Err(failure) = check(service.clock.as_ref(), deadline, &lifecycle) {
                 return Poll::Ready(Err(failure));
             }
@@ -119,16 +119,20 @@ pub(super) async fn dispatch<C: TargetGateway>(
                 if let Poll::Ready(Err(error)) =
                     Pin::new(viewer.stream.as_mut()).poll_maintenance(cx)
                 {
-                    return Poll::Ready(Err(Failure::Aborted(stream_abort(&error))));
+                    return Poll::Ready(Err(TargetConnectError::Aborted(stream_abort(&error))));
                 }
                 if filled < viewer.trailing.len() {
                     let mut buffer = ReadBuf::new(&mut viewer.trailing[filled..]);
                     match Pin::new(viewer.stream.as_mut()).poll_read(cx, &mut buffer) {
                         Poll::Ready(Err(error)) => {
-                            return Poll::Ready(Err(Failure::Aborted(stream_abort(&error))));
+                            return Poll::Ready(Err(TargetConnectError::Aborted(stream_abort(
+                                &error,
+                            ))));
                         }
                         Poll::Ready(Ok(())) if buffer.filled().is_empty() => {
-                            return Poll::Ready(Err(Failure::Aborted(AbortReason::PeerEof)));
+                            return Poll::Ready(Err(TargetConnectError::Aborted(
+                                AbortReason::PeerEof,
+                            )));
                         }
                         Poll::Ready(Ok(())) => {
                             filled += buffer.filled().len();
@@ -171,27 +175,29 @@ pub(super) async fn dispatch<C: TargetGateway>(
                 .await
         }
         Err(failure) => {
-            let elapsed_ms = milliseconds(elapsed);
+            let elapsed_ms = super::milliseconds(elapsed);
             let action = match &failure {
-                Failure::Rejected(RejectReason::TargetNotAllowed, _) => {
+                TargetConnectError::Rejected(RejectReason::TargetNotAllowed, _) => {
                     RelayCloseAction::TargetNotAllowed
                 }
-                Failure::Rejected(RejectReason::RelayConnectionLimit { .. }, _) => {
+                TargetConnectError::Rejected(RejectReason::RelayConnectionLimit { .. }, _) => {
                     RelayCloseAction::TargetConnectionLimit
                 }
-                Failure::Rejected(_, _) => RelayCloseAction::TargetConnectionLimit,
-                Failure::Failed(_, _) => RelayCloseAction::TargetConnectFailed,
-                Failure::Shutdown => RelayCloseAction::ServerShutdown,
-                Failure::Aborted(AbortReason::DeadConnection) => RelayCloseAction::DeadConnection,
-                Failure::Aborted(AbortReason::PeerEof) => RelayCloseAction::PeerEof,
-                Failure::Aborted(AbortReason::ConnectionError(kind)) => {
+                TargetConnectError::Rejected(_, _) => RelayCloseAction::TargetConnectionLimit,
+                TargetConnectError::Failed(_, _) => RelayCloseAction::TargetConnectFailed,
+                TargetConnectError::Shutdown => RelayCloseAction::ServerShutdown,
+                TargetConnectError::Aborted(AbortReason::DeadConnection) => {
+                    RelayCloseAction::DeadConnection
+                }
+                TargetConnectError::Aborted(AbortReason::PeerEof) => RelayCloseAction::PeerEof,
+                TargetConnectError::Aborted(AbortReason::ConnectionError(kind)) => {
                     RelayCloseAction::StreamError(*kind)
                 }
-                Failure::Aborted(_) => RelayCloseAction::ServerShutdown,
+                TargetConnectError::Aborted(_) => RelayCloseAction::ServerShutdown,
             };
             service.reject_connection(viewer, action, runtime).await;
             match failure {
-                Failure::Rejected(reason, target_ip) => {
+                TargetConnectError::Rejected(reason, target_ip) => {
                     service.events.record(&Event::TargetRejected {
                         conn_id: context.conn_id,
                         entry_point: context.entry_point,
@@ -204,7 +210,7 @@ pub(super) async fn dispatch<C: TargetGateway>(
                     });
                     Err(RelayDispatchError::Rejected(reason))
                 }
-                Failure::Failed(reason, target_ip) => {
+                TargetConnectError::Failed(reason, target_ip) => {
                     service.metrics.record_target_connect(Err(reason), elapsed);
                     service.events.record(&Event::TargetConnectFailed {
                         conn_id: context.conn_id,
@@ -220,7 +226,7 @@ pub(super) async fn dispatch<C: TargetGateway>(
                     });
                     Err(RelayDispatchError::Target(reason))
                 }
-                Failure::Shutdown => {
+                TargetConnectError::Shutdown => {
                     service.aborted(
                         context,
                         Stage::TargetConnect,
@@ -229,7 +235,7 @@ pub(super) async fn dispatch<C: TargetGateway>(
                     );
                     Err(RelayDispatchError::Aborted(AbortReason::ServerShutdown))
                 }
-                Failure::Aborted(reason) => {
+                TargetConnectError::Aborted(reason) => {
                     service.aborted(context, Stage::TargetConnect, Mode::Mode1, reason);
                     Err(RelayDispatchError::Aborted(reason))
                 }
@@ -252,20 +258,16 @@ async fn connect<C: TargetGateway>(
     address: &TargetAddress,
     deadline: Duration,
     policy: Option<&vnc_relay_domain::target_policy::TargetPolicy>,
-) -> Result<
-    (
-        C::Stream,
-        vnc_relay_domain::budget::BudgetPermit,
-        SocketAddr,
-    ),
-    Failure,
-> {
+) -> Result<(C::Stream, vnc_relay_domain::budget::Permit, SocketAddr), TargetConnectError> {
     let resolved;
     let candidates: &[IpAddr] = match &address.host {
         TargetHost::Ip(ip) => std::slice::from_ref(ip),
         TargetHost::Name(name) => {
             if !policy.is_some_and(|policy| policy.permits_name(name, address.port)) {
-                return Err(Failure::Rejected(RejectReason::TargetNotAllowed, None));
+                return Err(TargetConnectError::Rejected(
+                    RejectReason::TargetNotAllowed,
+                    None,
+                ));
             }
             resolved = match bounded(
                 runtime.connector.resolve(name),
@@ -276,7 +278,12 @@ async fn connect<C: TargetGateway>(
             .await
             {
                 Ok(Ok(ips)) if !ips.is_empty() => ips,
-                Ok(_) => return Err(Failure::Failed(TargetFailureReason::ResolveFailed, None)),
+                Ok(_) => {
+                    return Err(TargetConnectError::Failed(
+                        TargetFailureReason::ResolveFailed,
+                        None,
+                    ));
+                }
                 Err(failure) => return Err(failure),
             };
             &resolved
@@ -301,7 +308,7 @@ async fn connect<C: TargetGateway>(
                 limit = settings.limits.relay_connections;
                 admission = runtime.relay_budget.try_acquire(limit);
             });
-            permit = Some(admission.ok_or(Failure::Rejected(
+            permit = Some(admission.ok_or(TargetConnectError::Rejected(
                 RejectReason::RelayConnectionLimit { limit },
                 None,
             ))?);
@@ -322,23 +329,31 @@ async fn connect<C: TargetGateway>(
                 if let Some(permit) = permit.take() {
                     return Ok((stream, permit, target));
                 }
-                return Err(Failure::Failed(TargetFailureReason::ConnectError, last_ip));
+                return Err(TargetConnectError::Failed(
+                    TargetFailureReason::ConnectError,
+                    last_ip,
+                ));
             }
             Ok(Err(TargetError::KeepaliveFailed)) => {
-                return Err(Failure::Failed(TargetFailureReason::ConnectError, last_ip));
+                return Err(TargetConnectError::Failed(
+                    TargetFailureReason::ConnectError,
+                    last_ip,
+                ));
             }
             Ok(Err(error)) => all_refused &= error == TargetError::ConnectRefused,
-            Err(Failure::Failed(reason, _)) => return Err(Failure::Failed(reason, last_ip)),
+            Err(TargetConnectError::Failed(reason, _)) => {
+                return Err(TargetConnectError::Failed(reason, last_ip));
+            }
             Err(failure) => return Err(failure),
         }
     }
     if last_ip.is_none() {
-        Err(Failure::Rejected(
+        Err(TargetConnectError::Rejected(
             RejectReason::TargetNotAllowed,
             last_checked,
         ))
     } else {
-        Err(Failure::Failed(
+        Err(TargetConnectError::Failed(
             if all_refused {
                 TargetFailureReason::ConnectRefused
             } else {
@@ -353,11 +368,14 @@ fn check(
     clock: &dyn Clock,
     deadline: Duration,
     lifecycle: &watch::Receiver<RelayLifecycle>,
-) -> Result<(), Failure> {
+) -> Result<(), TargetConnectError> {
     if *lifecycle.borrow() != RelayLifecycle::Running {
-        Err(Failure::Shutdown)
+        Err(TargetConnectError::Shutdown)
     } else if clock.monotonic() >= deadline {
-        Err(Failure::Failed(TargetFailureReason::ConnectTimeout, None))
+        Err(TargetConnectError::Failed(
+            TargetFailureReason::ConnectTimeout,
+            None,
+        ))
     } else {
         Ok(())
     }
@@ -368,18 +386,18 @@ async fn bounded<T>(
     clock: &dyn Clock,
     deadline: Duration,
     mut lifecycle: watch::Receiver<RelayLifecycle>,
-) -> Result<T, Failure> {
+) -> Result<T, TargetConnectError> {
     let mut stopped = pin!(lifecycle.wait_for(|phase| *phase != RelayLifecycle::Running));
     let mut timer = pin!(tokio::time::sleep(
         deadline.saturating_sub(clock.monotonic())
     ));
     let mut future = pin!(future);
-    poll_fn(|cx| {
+    future::poll_fn(|cx| {
         if stopped.as_mut().poll(cx).is_ready() {
-            return Poll::Ready(Err(Failure::Shutdown));
+            return Poll::Ready(Err(TargetConnectError::Shutdown));
         }
         if clock.monotonic() >= deadline || timer.as_mut().poll(cx).is_ready() {
-            return Poll::Ready(Err(Failure::Failed(
+            return Poll::Ready(Err(TargetConnectError::Failed(
                 TargetFailureReason::ConnectTimeout,
                 None,
             )));
@@ -388,10 +406,10 @@ async fn bounded<T>(
             Poll::Ready(value) => {
                 if stopped.as_mut().poll(cx).is_ready() {
                     drop(value);
-                    Poll::Ready(Err(Failure::Shutdown))
+                    Poll::Ready(Err(TargetConnectError::Shutdown))
                 } else if clock.monotonic() >= deadline || timer.as_mut().poll(cx).is_ready() {
                     drop(value);
-                    Poll::Ready(Err(Failure::Failed(
+                    Poll::Ready(Err(TargetConnectError::Failed(
                         TargetFailureReason::ConnectTimeout,
                         None,
                     )))

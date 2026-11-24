@@ -1,5 +1,5 @@
 [package]
-name = "vnc-relay-app"
+name = "vnc-relay-application"
 description = "VNC Relay use cases; I/O only through port traits"
 version.workspace = true
 edition.workspace = true

@@ -5,7 +5,7 @@
 
 use std::fmt::Write as _;
 
-use vnc_relay_app::metrics::snapshot::{
+use vnc_relay_application::metrics::snapshot::{
     MetricKind, MetricPoint, MetricsSnapshot, Number, PointValue,
 };
 
@@ -194,7 +194,7 @@ mod tests {
     use std::time::SystemTime;
 
     use super::*;
-    use vnc_relay_app::metrics::snapshot::MetricFamily;
+    use vnc_relay_application::metrics::snapshot::MetricFamily;
 
     const TARGET: &str = concat!(
         "# HELP target_info Target metadata\n",

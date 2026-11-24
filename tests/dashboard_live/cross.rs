@@ -5,8 +5,10 @@ use std::time::{Duration, Instant};
 
 use serde_json::{Value, json};
 
-use super::live::{Browser, Fault, LIMIT, PASSWORD, Server, must, wait_for};
-use super::overview::assert_list_counts;
+use super::overview;
+use vnc_relay_testkit::cdp::Browser;
+use vnc_relay_testkit::dashboard_proxy::Fault;
+use vnc_relay_testkit::live::{self, LIMIT, PASSWORD, Server};
 
 const OVERVIEW_PATHS: [&str; 4] = [
     "/api/v1/summary",
@@ -17,7 +19,7 @@ const OVERVIEW_PATHS: [&str; 4] = [
 const DELAY: Duration = Duration::from_secs(3);
 
 fn script_string(value: &str) -> String {
-    must(serde_json::to_string(value))
+    live::must(serde_json::to_string(value))
 }
 
 fn text_at(browser: &mut Browser, selector: &str) -> String {
@@ -189,7 +191,7 @@ pub fn failed_reads_distinguish_empty_and_stale() {
         assert!(text_at(&mut browser, ".page-meta").contains("Unavailable"));
         if !detail {
             assert_eq!(browser.eval("document.querySelector('.summary-grid .stat-value')?.textContent === 'Unavailable'"), json!(true));
-            assert_list_counts(&mut browser, [None, None, None], "en");
+            overview::assert_list_counts(&mut browser, [None, None, None], "en");
             assert_eq!(
                 browser.eval("document.querySelectorAll('table').length"),
                 json!(0)
@@ -206,7 +208,7 @@ pub fn failed_reads_distinguish_empty_and_stale() {
         browser.wait("document.body.textContent.includes('2.0 KiB') && document.body.textContent.includes('4.0 KiB')");
         settled(&mut browser);
         if !detail {
-            assert_list_counts(&mut browser, [Some(0), Some(1), Some(0)], "en");
+            overview::assert_list_counts(&mut browser, [Some(0), Some(1), Some(0)], "en");
         }
         let success = text_at(&mut browser, ".page-meta");
         inject_failures(&server, &paths);
@@ -222,7 +224,7 @@ pub fn failed_reads_distinguish_empty_and_stale() {
         assert_eq!(text_at(&mut browser, ".page-meta"), success);
         assert_injected_failures(&server, &paths);
         if !detail {
-            assert_list_counts(&mut browser, [Some(0), Some(1), Some(0)], "en");
+            overview::assert_list_counts(&mut browser, [Some(0), Some(1), Some(0)], "en");
         }
     }
 }
@@ -256,7 +258,7 @@ pub fn explicit_refresh_recovers_only_on_success() {
         );
         assert_injected_failures(&server, &paths);
         if !detail {
-            assert_list_counts(&mut browser, [Some(0), Some(1), Some(0)], "en");
+            overview::assert_list_counts(&mut browser, [Some(0), Some(1), Some(0)], "en");
         }
         pair.transfer(8192, 16384);
         server.proxy.clear();
@@ -276,7 +278,7 @@ pub fn explicit_refresh_recovers_only_on_success() {
             "request start changed success timestamp"
         );
         if !detail {
-            assert_list_counts(&mut browser, [Some(0), Some(1), Some(0)], "en");
+            overview::assert_list_counts(&mut browser, [Some(0), Some(1), Some(0)], "en");
         }
         browser.wait("document.body.textContent.includes('8.0 KiB') && document.body.textContent.includes('16.0 KiB')");
         settled(&mut browser);
@@ -306,7 +308,7 @@ pub fn explicit_refresh_recovers_only_on_success() {
 }
 
 fn wait_delayed(server: &Server, path: &str, after: Instant) {
-    wait_for("real forwarded response held by proxy", LIMIT, || {
+    live::wait_for("real forwarded response held by proxy", LIMIT, || {
         server.proxy.traffic().iter().any(|item| {
             item.path == path
                 && item.at >= after
@@ -318,7 +320,7 @@ fn wait_delayed(server: &Server, path: &str, after: Instant) {
 }
 
 fn wait_delay_finished(server: &Server, path: &str, after: Instant) {
-    wait_for("late real response completes", LIMIT, || {
+    live::wait_for("late real response completes", LIMIT, || {
         server.proxy.traffic().iter().any(|item| {
             item.path == path
                 && item.at >= after
@@ -344,7 +346,7 @@ pub fn delayed_queries_do_not_overlap_or_overwrite_routes() {
             .once("GET", path, Fault::Hold(Arc::clone(&release_initial)));
     }
     login(&mut browser, &server);
-    wait_for(
+    live::wait_for(
         "all initial list responses held after upstream completion",
         LIMIT,
         || {
@@ -363,10 +365,10 @@ pub fn delayed_queries_do_not_overlap_or_overwrite_routes() {
     browser.wait(
         "[...document.querySelectorAll('.grid > .card')].slice(3).length === 3 && [...document.querySelectorAll('.grid > .card')].slice(3).every(card => card.querySelector('.card-status')?.textContent.includes('Loading'))",
     );
-    assert_list_counts(&mut browser, [None, None, None], "en");
+    overview::assert_list_counts(&mut browser, [None, None, None], "en");
     release_initial.store(true, Ordering::Release);
     settled(&mut browser);
-    assert_list_counts(&mut browser, [Some(0), Some(2), Some(0)], "en");
+    overview::assert_list_counts(&mut browser, [Some(0), Some(2), Some(0)], "en");
     let began = Instant::now();
     for path in OVERVIEW_PATHS {
         server.proxy.once("GET", path, Fault::Delay(DELAY));
@@ -375,7 +377,7 @@ pub fn delayed_queries_do_not_overlap_or_overwrite_routes() {
     for path in OVERVIEW_PATHS {
         wait_delayed(&server, path, began);
     }
-    assert_list_counts(&mut browser, [Some(0), Some(2), Some(0)], "en");
+    overview::assert_list_counts(&mut browser, [Some(0), Some(2), Some(0)], "en");
     let counts: Vec<_> = OVERVIEW_PATHS
         .iter()
         .map(|path| server.proxy.count("GET", path))
@@ -705,7 +707,7 @@ pub fn relay_changes_appear_on_next_poll() {
         }
         if !detail {
             settled(&mut browser);
-            assert_list_counts(&mut browser, [Some(0), Some(0), Some(1)], "en");
+            overview::assert_list_counts(&mut browser, [Some(0), Some(0), Some(1)], "en");
         }
         assert_no_editing(&mut browser);
     }
@@ -788,7 +790,7 @@ pub fn configured_and_default_poll_intervals() {
             settled(&mut browser);
             let paths = screen_paths(detail, &pair.sid);
             for path in &paths {
-                wait_for("three genuine automatic polls", LIMIT, || {
+                live::wait_for("three genuine automatic polls", LIMIT, || {
                     server
                         .proxy
                         .traffic()
@@ -998,7 +1000,7 @@ pub fn saved_language_survives_all_screens() {
         ));
         let overview = overview_data(&mut browser, &pair.sid);
         settled(&mut browser);
-        assert_list_counts(&mut browser, [Some(0), Some(1), Some(0)], chosen);
+        overview::assert_list_counts(&mut browser, [Some(0), Some(1), Some(0)], chosen);
         assert_formats(&overview);
         assert_language(
             &mut browser,
@@ -1021,10 +1023,10 @@ pub fn saved_language_survives_all_screens() {
             },
         );
         assert_eq!(overview_data(&mut browser, &pair.sid), overview);
-        assert_list_counts(&mut browser, [Some(0), Some(1), Some(0)], opposite);
+        overview::assert_list_counts(&mut browser, [Some(0), Some(1), Some(0)], opposite);
         select_language(&mut browser, chosen);
         assert_eq!(overview_data(&mut browser, &pair.sid), overview);
-        assert_list_counts(&mut browser, [Some(0), Some(1), Some(0)], chosen);
+        overview::assert_list_counts(&mut browser, [Some(0), Some(1), Some(0)], chosen);
         browser.reload();
         browser.wait(&format!(
             "document.querySelector('table') && document.body.textContent.includes({})",
@@ -1041,7 +1043,7 @@ pub fn saved_language_survives_all_screens() {
         );
         assert_eq!(overview_data(&mut browser, &pair.sid), overview);
         settled(&mut browser);
-        assert_list_counts(&mut browser, [Some(0), Some(1), Some(0)], chosen);
+        overview::assert_list_counts(&mut browser, [Some(0), Some(1), Some(0)], chosen);
         open_detail(&mut browser, &pair.sid);
         let detail = detail_data(&mut browser);
         assert_language(
@@ -1123,7 +1125,7 @@ pub fn saved_language_survives_all_screens() {
                 ));
             }
             if item.method == "POST" && item.path == "/api/v1/session" {
-                let body: Value = must(serde_json::from_str(&item.body));
+                let body: Value = live::must(serde_json::from_str(&item.body));
                 let object = match body.as_object() {
                     Some(value) => value,
                     None => panic!("login body is not an object"),
@@ -1141,7 +1143,7 @@ fn assert_unknown_consumer_values(browser: &mut Browser, real_detail: &Value) {
     // The typed producer cannot emit future enum variants. This separate consumer
     // contract input is rendered by the real production parser and table component.
     // It is never an API response, proxy payload, or replacement fetch implementation.
-    let source = must(serde_json::to_string(real_detail));
+    let source = live::must(serde_json::to_string(real_detail));
     let result = browser.eval(&format!(
         r#"(async () => {{
           const [model, panels, copy] = await Promise.all([

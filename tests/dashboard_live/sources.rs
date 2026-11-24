@@ -15,9 +15,12 @@ use std::time::Duration;
 
 use serde_json::{Value, json};
 
-use super::live::{Admin, Browser, Fault, LIMIT, Server, connect, must, wait_for};
-use super::mmdb::{MmdbWriter, iso_country, maxmind_asn};
-use super::settings::{open_settings, open_settings_edit, set_field_value};
+use super::settings;
+use vnc_relay_testkit::cdp::Browser;
+use vnc_relay_testkit::dashboard_proxy::Fault;
+use vnc_relay_testkit::live::{self, Admin, LIMIT, Server};
+use vnc_relay_testkit::mmdb;
+use vnc_relay_testkit::mmdb::MmdbWriter;
 
 const API: &str = "/api/v1/sources";
 const ENTRY: &str = "/api/v1/sources?window=1h";
@@ -49,15 +52,18 @@ fn is_poll(headers: &str) -> bool {
 /// listener, and allows the documentation clients there.
 fn with_databases(config: String, dir: &Path) -> String {
     let country = MmdbWriter::new("DBIP-Country-Lite", BUILD_EPOCH)
-        .insert("198.51.100.0/24", iso_country("KR"))
-        .insert("2001:db8::/32", iso_country("JP"))
+        .insert("198.51.100.0/24", mmdb::iso_country("KR"))
+        .insert("2001:db8::/32", mmdb::iso_country("JP"))
         .to_bytes();
     let asn = MmdbWriter::new("GeoLite2-ASN", BUILD_EPOCH)
-        .insert("198.51.100.0/24", maxmind_asn(64496, "Example Transit"))
+        .insert(
+            "198.51.100.0/24",
+            mmdb::maxmind_asn(64496, "Example Transit"),
+        )
         .to_bytes();
-    must(fs::create_dir_all(dir.join("ipdb")));
-    must(fs::write(dir.join("ipdb").join("country.mmdb"), country));
-    must(fs::write(dir.join("ipdb").join("asn.mmdb"), asn));
+    live::must(fs::create_dir_all(dir.join("ipdb")));
+    live::must(fs::write(dir.join("ipdb").join("country.mmdb"), country));
+    live::must(fs::write(dir.join("ipdb").join("asn.mmdb"), asn));
     let config = config
         .replace(
             "[relay.ws]\n",
@@ -72,15 +78,15 @@ fn with_databases(config: String, dir: &Path) -> String {
 
 /// Opens a WebSocket Viewer through the trusted loopback proxy for `client` and returns the open stream.
 fn ws_from(server: &Server, client: &str) -> TcpStream {
-    let mut stream = connect(server.ws_port);
+    let mut stream = live::connect(server.ws_port);
     let request = format!(
         "GET /relay/viewer HTTP/1.1\r\nHost: localhost\r\nOrigin: http://127.0.0.1\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Protocol: binary\r\nX-Forwarded-For: {client}\r\n\r\n"
     );
-    must(stream.write_all(request.as_bytes()));
+    live::must(stream.write_all(request.as_bytes()));
     let mut head = Vec::new();
     while !head.ends_with(b"\r\n\r\n") {
         let mut byte = [0];
-        must(stream.read_exact(&mut byte));
+        live::must(stream.read_exact(&mut byte));
         head.push(byte[0]);
         assert!(head.len() < 16384, "bounded WebSocket reply head");
     }
@@ -99,7 +105,7 @@ fn connect_clients(server: &Server, admin: &Admin) {
     drop(ws_from(server, "198.51.100.7"));
     drop(ws_from(server, "2001:db8::7"));
     drop(server.handshaking());
-    wait_for("three source addresses", LIMIT, || {
+    live::wait_for("three source addresses", LIMIT, || {
         server.query(admin, ENTRY)["addresses"]["total"] == json!(3)
     });
 }
@@ -143,9 +149,9 @@ pub fn menu_entry_automatic_polls_leaving_and_returning() {
     );
 
     // Real SCR-005 input is dropped by the menu: no confirmation and no PATCH.
-    open_settings(&mut browser, &server);
-    open_settings_edit(&mut browser, &server);
-    set_field_value(&mut browser, "limits.waiting", "7");
+    settings::open_settings(&mut browser, &server);
+    settings::open_settings_edit(&mut browser, &server);
+    settings::set_field_value(&mut browser, "limits.waiting", "7");
     browser.click(MENU);
     ready(&mut browser);
     assert_eq!(
@@ -168,7 +174,7 @@ pub fn menu_entry_automatic_polls_leaving_and_returning() {
         "the entry request is a user action: {}",
         entry[0].1
     );
-    wait_for("real automatic sources poll", LIMIT, || {
+    live::wait_for("real automatic sources poll", LIMIT, || {
         requests(&server)
             .iter()
             .skip(1)
@@ -200,7 +206,7 @@ pub fn menu_entry_automatic_polls_leaving_and_returning() {
     browser.eval(
         "(() => { const s = document.querySelector('#sources-period'); s.value = '24h'; s.dispatchEvent(new Event('change', { bubbles: true })); })()",
     );
-    wait_for("the 24-hour request", LIMIT, || {
+    live::wait_for("the 24-hour request", LIMIT, || {
         requests(&server)
             .iter()
             .any(|(path, _)| path == "/api/v1/sources?window=24h")
@@ -229,7 +235,7 @@ pub fn menu_entry_automatic_polls_leaving_and_returning() {
         .once("GET", ENTRY, Fault::Hold(Arc::clone(&held)));
     let before = server.proxy.traffic().len();
     browser.click(MENU);
-    wait_for("sources entry held", LIMIT, || {
+    live::wait_for("sources entry held", LIMIT, || {
         server
             .proxy
             .traffic()
@@ -240,7 +246,7 @@ pub fn menu_entry_automatic_polls_leaving_and_returning() {
     browser.click("a.navbar-item[href='/#/logs']");
     browser.wait("document.querySelector('#logs-refresh') !== null");
     held.store(true, Ordering::Release);
-    wait_for("late sources response released", LIMIT, || {
+    live::wait_for("late sources response released", LIMIT, || {
         server
             .proxy
             .traffic()
@@ -455,12 +461,12 @@ fn deny_cell(browser: &mut Browser, ip: &str) -> Value {
 /// The first line of the reply to a WebSocket Viewer upgrade from `client` behind the trusted proxy. Empty when the
 /// server closes the connection without a reply.
 fn ws_reply_line(server: &Server, client: &str) -> String {
-    let mut stream = connect(server.ws_port);
-    must(stream.set_read_timeout(Some(Duration::from_secs(3))));
+    let mut stream = live::connect(server.ws_port);
+    live::must(stream.set_read_timeout(Some(Duration::from_secs(3))));
     let request = format!(
         "GET /relay/viewer HTTP/1.1\r\nHost: localhost\r\nOrigin: http://127.0.0.1\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Protocol: binary\r\nX-Forwarded-For: {client}\r\n\r\n"
     );
-    must(stream.write_all(request.as_bytes()));
+    live::must(stream.write_all(request.as_bytes()));
     let mut buffer = [0; 512];
     let read = stream.read(&mut buffer).unwrap_or(0);
     String::from_utf8_lossy(&buffer[..read])
@@ -481,9 +487,9 @@ fn apply_settings(browser: &mut Browser) {
 
 /// Opens SCR-005, replaces the deny list with `value`, confirms, and waits for the settings view.
 fn save_deny_list(browser: &mut Browser, server: &Server, value: &str) {
-    open_settings(browser, server);
-    open_settings_edit(browser, server);
-    set_field_value(browser, DENY, value);
+    settings::open_settings(browser, server);
+    settings::open_settings_edit(browser, server);
+    settings::set_field_value(browser, DENY, value);
     review_settings(browser);
     apply_settings(browser);
     browser.wait(
@@ -698,7 +704,7 @@ pub fn deny_list_input_warning_and_server_diagnostics() {
     let admin = server.login();
     let mut browser = Browser::start("dash-091", &["ko-KR"]);
     browser.login(&server);
-    open_settings(&mut browser, &server);
+    settings::open_settings(&mut browser, &server);
     assert_eq!(
         browser.eval(
             r#"(() => {
@@ -709,7 +715,7 @@ pub fn deny_list_input_warning_and_server_diagnostics() {
         json!(["[relay.deny]", true, true]),
         "SCR-004 shows the key in [relay.deny] as applying without restart, empty"
     );
-    open_settings_edit(&mut browser, &server);
+    settings::open_settings_edit(&mut browser, &server);
     assert_eq!(
         browser.eval(
             r#"(() => {
@@ -728,7 +734,7 @@ pub fn deny_list_input_warning_and_server_diagnostics() {
     );
 
     // A new entry warns inside its change; Escape closes the confirmation and sends nothing.
-    set_field_value(&mut browser, DENY, "198.51.100.0/24");
+    settings::set_field_value(&mut browser, DENY, "198.51.100.0/24");
     review_settings(&mut browser);
     let warnings = r#"(() => {
         const dialog = document.querySelector('dialog.config-dialog');
@@ -743,7 +749,7 @@ pub fn deny_list_input_warning_and_server_diagnostics() {
     // The server rejects the trusted proxy address and a malformed entry, each on its line.
     let original = server.config_text();
     let errors = r#"(document.querySelector('[data-config-key="relay.deny.sources"]').closest('.config-field').querySelector('.config-field-errors')?.textContent ?? '')"#;
-    set_field_value(&mut browser, DENY, "127.0.0.1");
+    settings::set_field_value(&mut browser, DENY, "127.0.0.1");
     review_settings(&mut browser);
     apply_settings(&mut browser);
     browser.wait(&format!("{errors}.includes('겹칩니다')"));
@@ -751,7 +757,7 @@ pub fn deny_list_input_warning_and_server_diagnostics() {
         browser.eval(&format!("{errors}.includes('1줄: 차단 항목이 신뢰 프록시 주소와 겹칩니다. 프록시 주소는 차단할 수 없습니다.')")),
         json!(true)
     );
-    set_field_value(&mut browser, DENY, "198.51.100.0/24\nnot-an-address");
+    settings::set_field_value(&mut browser, DENY, "198.51.100.0/24\nnot-an-address");
     review_settings(&mut browser);
     apply_settings(&mut browser);
     browser.wait(&format!("{errors}.includes('형식이 올바르지 않습니다')"));
@@ -769,19 +775,19 @@ pub fn deny_list_input_warning_and_server_diagnostics() {
     assert_eq!(deny_value(&server, &admin), json!([]));
 
     // A valid entry is saved. Removing it again warns nothing, not even for the empty list.
-    set_field_value(&mut browser, DENY, "198.51.100.0/24");
+    settings::set_field_value(&mut browser, DENY, "198.51.100.0/24");
     review_settings(&mut browser);
     apply_settings(&mut browser);
     browser.wait(
         "location.hash === '#/settings' && document.querySelector('#settings-edit') !== null",
     );
     assert_eq!(deny_value(&server, &admin), json!(["198.51.100.0/24"]));
-    wait_for("the watcher applied the saved list", LIMIT, || {
+    live::wait_for("the watcher applied the saved list", LIMIT, || {
         server.query(&admin, "/api/v1/config")["file"]["state"] != "pending"
     });
     browser.wait("document.body.innerText.includes('설정 파일과 실행 중인 설정이 같습니다')");
-    open_settings_edit(&mut browser, &server);
-    set_field_value(&mut browser, DENY, "");
+    settings::open_settings_edit(&mut browser, &server);
+    settings::set_field_value(&mut browser, DENY, "");
     review_settings(&mut browser);
     assert_eq!(browser.eval(warnings), json!([false, false]));
     apply_settings(&mut browser);
@@ -800,7 +806,7 @@ pub fn deny_list_closes_an_open_session_with_ip_denied() {
     let mut browser = Browser::start("dash-020-denied", &["ko-KR"]);
     browser.login(&server);
     save_deny_list(&mut browser, &server, "127.0.0.1");
-    wait_for("the session closed by the deny list", LIMIT, || {
+    live::wait_for("the session closed by the deny list", LIMIT, || {
         server.query(&admin, "/api/v1/closed-sessions")["items"]
             .as_array()
             .is_some_and(|items| {

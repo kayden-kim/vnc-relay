@@ -20,4 +20,4 @@ windows-registry.workspace = true
 windows-service.workspace = true
 windows-sys = { workspace = true, features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging"] }
 vnc-relay-adapters.workspace = true
-vnc-relay-app.workspace = true
+vnc-relay-application.workspace = true

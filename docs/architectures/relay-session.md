@@ -57,9 +57,9 @@ flowchart LR
 | 요소·파일 | 역할 | 생성 시점·소유자 | 의존 대상 |
 | --- | --- | --- | --- |
 | `crates/domain/src/target_policy.rs` `TargetPolicy` | `permits_name(name, port)`와 `permits_ip(ip, port)`로 정책 검사. 기존 `TargetItem`, `IpItem::contains` 재사용 | 실행 설정이 원본을 소유하고 대상 시도는 시작 세대의 정책을 보관 | 기존 주소·포트 값 |
-| `crates/domain/src/matching.rs` `WaitingTable` | `RelayId`별 `Waiting`·`Claimed`·`Active`·`Closing` 점유 판정. 연결 식별자·세션 식별자를 비교해 전이 | app의 `RelayState`가 소유 | `RelayId`, `Role`, `ConnId`, `SessionId` |
-| `crates/domain/src/session.rs` `SessionId`, `Session`, `CloseCause` | 식별자 형식, `active`·`closing`, 첫 종료 원인, 방향별 카운터 | 세션 활성화 때 생성 | std 값 |
-| `crates/domain/src/recent_closed.rs` `RecentClosedList` | 정리된 세션의 요약, R 초과 시 가장 오래된 항목 제거 | 프로세스마다 하나 | `session` |
+| `crates/domain/src/matching.rs` `WaitingTable` | `RelayId`별 `Waiting`·`Claimed`·`Active`·`Closing` 점유 판정. 연결 식별자·세션 식별자를 비교해 전이 | app의 `RelayState`가 소유 | `RelayId`, `Role`, `ConnId`, `session::Id` |
+| `crates/domain/src/session.rs` `session::Id`, `Session`, `CloseCause` | 식별자 형식, `active`·`closing`, 첫 종료 원인, 방향별 카운터 | 세션 활성화 때 생성 | std 값 |
+| `crates/domain/src/recent_closed.rs` `recent_closed::List` | 정리된 세션의 요약, R 초과 시 가장 오래된 항목 제거 | 프로세스마다 하나 | `session` |
 | `crates/app/src/relay.rs` `RelayService`, `RelayRuntime<C>`, `RelayState` | 서비스는 초기 교환과 단계 연결을 맡는다. runtime은 연결 포트·상태 잠금·예산·식별자 포트를 소유한다. | `serve`가 서비스와 공유 runtime을 생성 | domain, `ports`, 허용된 tokio |
 | `crates/app/src/relay/target.rs` | Mode I C·정책·L와 대상 연결 결과 | Mode I 연결 작업 | `TargetGateway`, `Clock`, 예산 |
 | `crates/app/src/relay/matching.rs` | 대기 I/O·W·Lw, 연결 쌍 인계 | 각 대기 연결 작업 | `WaitingTable`, 스트림 인터페이스 |
@@ -76,7 +76,7 @@ flowchart LR
 
 ### 3.1 초기 교환에서 받는 값
 
-`PreparedConnection<S>`는 초기 교환의 스트림, `HandshakeRequest`, 후속 데이터, `ConnectionContext`, `Option<TicketBinding>`, L의 `BudgetPermit` 하나를 이동받는다. ticket 바인딩은 `jti`·`rid`·단조 세션 만료 기한을 담는다. `dispatch`는 기존 초기 요청 검사 뒤, 모드 분기 전에 `rid`를 대조한다. ticket 연결의 Mode I 또는 다른 중계 ID는 Close 4012로 거절한다. 진입점은 실제 상대 IP·전달 주소 `forwarded_ip`·소켓 주소 `peer_addr`, 표시용 수락 시각 `accepted_wall`, 수락·초기 교환 진입 단조 시각, 수락 B와 초기 교환 시작 H를 채운다. 파싱한 요청·IP나 현재 벽시계로 상대 주소·수락 시각을 재구성하지 않는다.
+`PreparedConnection<S>`는 초기 교환의 스트림, `HandshakeRequest`, 후속 데이터, `ConnectionContext`, `Option<TicketBinding>`, L의 `budget::Permit` 하나를 이동받는다. ticket 바인딩은 `jti`·`rid`·단조 세션 만료 기한을 담는다. `dispatch`는 기존 초기 요청 검사 뒤, 모드 분기 전에 `rid`를 대조한다. ticket 연결의 Mode I 또는 다른 중계 ID는 Close 4012로 거절한다. 진입점은 실제 상대 IP·전달 주소 `forwarded_ip`·소켓 주소 `peer_addr`, 표시용 수락 시각 `accepted_wall`, 수락·초기 교환 진입 단조 시각, 수락 B와 초기 교환 시작 H를 채운다. 파싱한 요청·IP나 현재 벽시계로 상대 주소·수락 시각을 재구성하지 않는다.
 
 H 감시는 유효 요청 반환으로 끝난다. C·W·E에서 H를 다시 쓰지 않는다. `PreparedConnection`을 복제하지 않는다. L permit을 다시 얻거나 단계 전환 때 반환하지 않는다. 후속 데이터 `n`바이트는 이미 해당 연결의 B를 쓴 상태다.
 
@@ -115,10 +115,10 @@ H 감시는 유효 요청 반환으로 끝난다. C·W·E에서 H를 다시 쓰�
 | `Claimed` 점유 | ID, 역할 순서의 두 연결 식별자, 선행 대기 메타데이터, 매칭 시각 | 두 연결 식별자가 인계의 소유권을 구별한다. 활성화 때 세션 식별자를 이동한다. 인계 중에도 ID를 점유하며 조회의 대기·활성 목록에는 노출하지 않는다. |
 | 활성 항목 | `ActiveSessionSnapshot`의 `Session` 메타데이터, `viewer: ConnectionContext`, `peer: ActivePeer`, 연결 소유자, 종료 요청·완료 알림 | `peer`는 Mode II의 `ActivePeer::Server(ConnectionContext)` 또는 Mode I의 `ActivePeer::Target(SocketAddr)` 중 하나다. `active`와 `closing` 모두 활성 수에 포함한다. Mode II의 양 역할을 함께 점유한다. |
 | 방향 버퍼 | 원본 연결의 후속 데이터와 읽기 작업 공간, 미전달 범위의 시작·끝 인덱스 | 각 방향은 해당 원본 연결을 수락할 때의 B 이내다. Mode II의 두 B가 다르면 합계 상한은 두 값의 합이다. Mode I의 대상 방향은 Viewer 수락 B를 이어받는다. |
-| `SessionId` | 계약의 `ses_` + 소문자 영문·숫자 26자 | 중계 ID·연결 식별자와 별도다. 프로세스 안에서 한 번 발급한 값을 다시 쓰지 않는다. |
+| `session::Id` | 계약의 `ses_` + 소문자 영문·숫자 26자 | 중계 ID·연결 식별자와 별도다. 프로세스 안에서 한 번 발급한 값을 다시 쓰지 않는다. |
 | 최근 종료 항목 | 계약 1.10절의 시작·종료 시각, 최종 두 카운터, 종료 원인과 식별자·모드·전송 | 정리된 활성 세션만 넣는다. 대기 만료·연결 실패는 넣지 않는다. R=0이면 보관하지 않는다. |
 
-세션 식별자는 시작 때 만든 비밀 키와 128비트 카운터로 만든다. 카운터의 big-endian 16바이트에 키가 있는 의사 난수 순열을 적용한다. 순열은 입력과 출력이 일대일인 변환이다. 그 결과를 `SessionId::from_block([u8; 16])`로 인코딩한다. 출력은 `ses_`와 소문자 base32 26자이며 알파벳은 `a-z2-7`이다. 마지막 문자의 쓰지 않는 하위 2비트는 0이다. `SessionId::parse`도 이 정규 형식을 검사한다.
+세션 식별자는 시작 때 만든 비밀 키와 128비트 카운터로 만든다. 카운터의 big-endian 16바이트에 키가 있는 의사 난수 순열을 적용한다. 순열은 입력과 출력이 일대일인 변환이다. 그 결과를 `session::Id::from_block([u8; 16])`로 인코딩한다. 출력은 `ses_`와 소문자 base32 26자이며 알파벳은 `a-z2-7`이다. 마지막 문자의 쓰지 않는 하위 2비트는 0이다. `session::Id::parse`도 이 정규 형식을 검사한다.
 
 발급 경로에는 OS 난수 호출·충돌 재시도·발급 ID 집합이 없다. 순열과 정규 인코딩이 모두 일대일이므로 카운터가 순환하지 않는 한 재사용은 구조적으로 불가능하다. 키가 없으면 다음 값을 예측할 수 없으므로 관리 API 1.8절의 불투명·무작위 형식을 만족한다고 판단한다. 카운터는 checked 증가하며 128비트 전 범위를 소진하면 재사용하지 않고 발급을 중지한다. 이는 현실적인 운영 수명보다 큰 수학적 경계이며 새 런타임 난수 실패 사건을 만들지 않는다. 이 선택과 이유는 구현 판단이다.
 
@@ -206,9 +206,9 @@ TCP half-close는 읽기 쪽 전체 소켓 drop이 아니다. 예를 들어 View
 
 각 카운터는 상대 전송 계층에 쓰기에 성공한 스트림 바이트만 센다. 초기 요청 250바이트, Viewer 시작 바이트 12바이트, TLS·WS 프레이밍과 제어 데이터는 제외한다. 후속 데이터와 RFB 자체의 초기 교환·인증·화면 데이터는 포함한다. 새 세션은 0부터 시작한다. `u64`의 포화 덧셈으로 감소·순환을 막는 안을 쓴다(구현 판단). 조회 스냅샷에는 같은 잠금 아래 확정한 두 카운터를 담는다. EOF·오류 시 마지막 부분 쓰기도 반영한다. 실제 애플리케이션 수신 완료로 설명하지 않는다.
 
-구현한 `Session`은 `new`, `record_write`, `observe_eof`, `complete_direction`, `io_error`, `dead_connection`, `begin_admin_close`, `force_server_shutdown`, `expire_close`, `finish`를 공개한다. 시각은 호출자가 값으로 준다. `observe_eof`는 방향별 입력 종료만 표시한다. app이 버퍼 소진과 상대 쓰기 종료까지 마친 뒤 `complete_direction`을 부른다. `finish`는 실제 소켓·permit 정리 뒤 한 번만 호출할 수 있고 `ClosedSession`을 반환한다. `ClosedSession`은 외부 생성자와 `Clone`이 없으므로 같은 정리 결과를 중복 삽입하지 않는다. `SessionId`는 고정 30바이트 저장 공간을 쓰며 인코딩 때 할당하지 않는다. `SessionId::parse`는 Producer 형식용이다. 관리 URL의 더 넓은 Consumer 문법을 이 함수로 거절하지 않는다.
+구현한 `Session`은 `new`, `record_write`, `observe_eof`, `complete_direction`, `io_error`, `dead_connection`, `begin_admin_close`, `force_server_shutdown`, `expire_close`, `finish`를 공개한다. 시각은 호출자가 값으로 준다. `observe_eof`는 방향별 입력 종료만 표시한다. app이 버퍼 소진과 상대 쓰기 종료까지 마친 뒤 `complete_direction`을 부른다. `finish`는 실제 소켓·permit 정리 뒤 한 번만 호출할 수 있고 `ClosedSession`을 반환한다. `ClosedSession`은 외부 생성자와 `Clone`이 없으므로 같은 정리 결과를 중복 삽입하지 않는다. `session::Id`는 고정 30바이트 저장 공간을 쓰며 인코딩 때 할당하지 않는다. `session::Id::parse`는 Producer 형식용이다. 관리 URL의 더 넓은 Consumer 문법을 이 함수로 거절하지 않는다.
 
-`RecentClosedList::new(R)`, `push(ClosedSession)`, `iter`, `len`, `is_empty`, `max_entries`는 정리된 세션만 다룬다. `push`는 최대 R개를 유지하고 `ended_at` 내림차순으로 보관한다. 뒤늦게 전달된 오래된 종료 시각도 순서와 상한을 바꾸지 않는다. R=0이면 요약을 보관하지 않는다. 반복자는 항목을 빌리므로 조회마다 이력을 복제하지 않는다.
+`recent_closed::List::new(R)`, `push(ClosedSession)`, `iter`, `len`, `is_empty`, `max_entries`는 정리된 세션만 다룬다. `push`는 최대 R개를 유지하고 `ended_at` 내림차순으로 보관한다. 뒤늦게 전달된 오래된 종료 시각도 순서와 상한을 바꾸지 않는다. R=0이면 요약을 보관하지 않는다. 반복자는 항목을 빌리므로 조회마다 이력을 복제하지 않는다.
 
 <a id="44-ws를-나중에-연결하는-경계"></a>
 
@@ -295,7 +295,7 @@ Mode II가 초기 교환을 마쳤더라도 대기 등록 전에 서버 종료�
 1. 해당 연결·세션에 종료 소유자를 하나만 정한다. 활성 세션은 `closing`으로 남기고 Mode II ID 점유도 유지한다. 새 읽기·매칭은 중지한다. 정상 TCP EOF의 허용된 반대 방향 전달은 4.3절을 따른다.
 2. 대기 등록을 제거할 때는 연결 식별자까지 비교한다. 같은 잠금 아래 Lw permit을 반환하고 실제 스트림을 정리하는 소유자에게 옮긴다. 중복 제거 요청은 아무 permit도 갖지 못한다.
 3. 스트림의 종료 action을 실행하고 소켓·방향 버퍼를 버린다. 모든 split·래퍼 참조가 사라져 실제 소켓이 닫힌 뒤에만 L permit을 drop한다. 완료되지 않는 종료 교환은 E 또는 강제 종료 경계에서 끊는다.
-4. 대기 제거·매칭 전이에서 이미 Lw를 반환했으므로 비동기 소켓 정리에서는 다시 반환하지 않는다. `BudgetPermit`은 복제하지 않는다. 수동 수치 차감도 하지 않는다.
+4. 대기 제거·매칭 전이에서 이미 Lw를 반환했으므로 비동기 소켓 정리에서는 다시 반환하지 않는다. `budget::Permit`은 복제하지 않는다. 수동 수치 차감도 하지 않는다.
 5. 활성 정리 완료는 잠금 아래 활성 항목 제거·같은 `session_id`의 ID 점유 해제·최근 종료 추가를 함께 한다. 최종 카운터와 시각을 확정한다. `session_closed`를 한 번 기록하고 완료 알림을 보낸다. 관리자 API는 이 알림 뒤에만 응답할 수 있다.
 6. 대기 만료·중단은 자원을 돌려준 뒤 각각 `waiting_expired`·`waiting_removed`를 한 번 기록한다. Mode I 연결 실패도 대상 소켓·추가 L·Viewer 스트림·기존 L·대상 연결 중 등록을 정리한 뒤 `target_connect_failed`를 쓴다. 정책·등록 거절도 Close·stream·permit 정리를 마친 뒤 거절 사건을 기록한다.
 
@@ -387,7 +387,7 @@ Mode II는 TCP·WS·WSS의 양 역할을 같은 `WaitingTable`에서 매칭한�
 - 공통 fixture가 필요한 대상·등록·수명 단위 시험은 `relay.rs`의 `tests`에 모았다. 방향 엔진 시험은 `relay/session.rs`, 실제 대상 소켓 시험은 `crates/adapters/tests/tcp_target.rs`다. 7절의 전체 시나리오 시험을 이 단위 시험으로 대체하지 않는다. 구현 판단이다.
 - 외부에서 dispatch future 자체를 취소해도 guard가 정확한 점유와 permit을 회수한다. 이미 버린 future에서 비동기 Close를 완료했다거나 정상 종료 요약을 확정했다고 기록하지 않는다. 정상 서버 종료는 future 강제 취소 대신 공유 수명 입력으로 진행한다.
 - 각 wake에서 G 만료·공유 Force 전이·`shutdown_forced`를 엔진 poll보다 먼저 처리한다. 엔진이 Ready를 반환한 뒤에는 그 세션의 정리가 완료된 것으로 표시하며 원인을 바꾸지 않는다. 뒤늦은 Force의 `remaining_sessions`에서 이 세션을 제외하지만 stream·permit drop 전까지 ID 점유는 유지한다.
-- `RecentClosedList::push`가 보관하지 않은 요약 하나를 반환한다. 최근 종료 ref 목록은 그 식별자 하나만 제거한다. R=0과 너무 오래된 새 요약도 반환 대상이다. 전체 ref마다 최근 목록을 다시 검색하는 O(R²) 정리를 하지 않는다.
+- `recent_closed::List::push`가 보관하지 않은 요약 하나를 반환한다. 최근 종료 ref 목록은 그 식별자 하나만 제거한다. R=0과 너무 오래된 새 요약도 반환 대상이다. 전체 ref마다 최근 목록을 다시 검색하는 O(R²) 정리를 하지 않는다.
 
 ## 대조 기록
 

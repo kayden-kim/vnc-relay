@@ -14,7 +14,7 @@ use rustls::pki_types::{CertificateDer, ServerName};
 use rustls::{ClientConfig, ClientConnection, RootCertStore, StreamOwned};
 use serde_json::{Value, json};
 use vnc_relay_adapters::accounts_file::Argon2PasswordHashGateway;
-use vnc_relay_app::ports::PasswordHashGateway;
+use vnc_relay_application::ports::PasswordHashGateway;
 use vnc_relay_domain::account::{Argon2Params, Password};
 
 pub const LIMIT: Duration = Duration::from_secs(20);

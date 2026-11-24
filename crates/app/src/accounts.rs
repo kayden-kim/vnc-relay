@@ -4,7 +4,7 @@
 
 use std::fmt;
 
-use vnc_relay_domain::account::{Account, AccountName, Argon2Params, Password, PasswordHash};
+use vnc_relay_domain::account::{Account, Argon2Params, Name, Password, PasswordHash};
 
 use crate::ports::{AccountInputGateway, AccountStore, InputError, PasswordHashGateway};
 
@@ -115,10 +115,10 @@ pub fn require_any(accounts: &[Account]) -> Result<(), AccountsDiagnostic> {
 /// Why an `admin` command stopped. In every case the account file is as it
 /// was before the command.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum AdminFailure {
+pub enum AdminError {
     NotInteractive,
-    AccountExists(AccountName),
-    AccountNotFound(AccountName),
+    AccountExists(Name),
+    AccountNotFound(Name),
     /// The sentence says which part of the rule the input breaks.
     PasswordInvalid(String),
     PasswordMismatch,
@@ -129,7 +129,7 @@ pub enum AdminFailure {
     Accounts(Vec<AccountsDiagnostic>),
 }
 
-impl AdminFailure {
+impl AdminError {
     /// Calls `line(code, key, message)` for each diagnostic line. `key` is
     /// empty when the line has none.
     pub fn report(&self, line: &mut dyn FnMut(&str, &str, &str)) {
@@ -183,12 +183,12 @@ const NEW_PASSWORD_CONFIRM_PROMPT: &str = "새 비밀번호 확인: ";
 pub fn list(
     store: &dyn AccountStore,
     warn: &mut dyn FnMut(AccountsWarning),
-) -> Result<Option<Vec<AccountName>>, AdminFailure> {
-    let Some(loaded) = store.read().map_err(AdminFailure::Accounts)? else {
+) -> Result<Option<Vec<Name>>, AdminError> {
+    let Some(loaded) = store.read().map_err(AdminError::Accounts)? else {
         return Ok(None);
     };
     loaded.warnings.into_iter().for_each(&mut *warn);
-    let mut names: Vec<AccountName> = loaded.accounts.into_iter().map(|a| a.name).collect();
+    let mut names: Vec<Name> = loaded.accounts.into_iter().map(|a| a.name).collect();
     names.sort();
     Ok(Some(names))
 }
@@ -207,17 +207,17 @@ impl AdminService<'_> {
     /// `admin add`. A missing file is created.
     pub fn add(
         &self,
-        name: &AccountName,
+        name: &Name,
         warn: &mut dyn FnMut(AccountsWarning),
-    ) -> Result<(), AdminFailure> {
+    ) -> Result<(), AdminError> {
         let accounts = self.read(warn)?.unwrap_or_default();
         if position(&accounts, name).is_some() {
-            return Err(AdminFailure::AccountExists(name.clone()));
+            return Err(AdminError::AccountExists(name.clone()));
         }
         let hash = self.new_hash(PASSWORD_PROMPT, PASSWORD_CONFIRM_PROMPT)?;
         self.save(warn, &mut |mut accounts| {
             if position(&accounts, name).is_some() {
-                return Err(AdminFailure::AccountExists(name.clone()));
+                return Err(AdminError::AccountExists(name.clone()));
             }
             accounts.push(Account {
                 name: name.clone(),
@@ -230,17 +230,17 @@ impl AdminService<'_> {
     /// `admin passwd`. The current password is not asked.
     pub fn passwd(
         &self,
-        name: &AccountName,
+        name: &Name,
         warn: &mut dyn FnMut(AccountsWarning),
-    ) -> Result<(), AdminFailure> {
+    ) -> Result<(), AdminError> {
         let accounts = self.read(warn)?.unwrap_or_default();
         if position(&accounts, name).is_none() {
-            return Err(AdminFailure::AccountNotFound(name.clone()));
+            return Err(AdminError::AccountNotFound(name.clone()));
         }
         let hash = self.new_hash(NEW_PASSWORD_PROMPT, NEW_PASSWORD_CONFIRM_PROMPT)?;
         self.save(warn, &mut |mut accounts| {
             let index = position(&accounts, name)
-                .ok_or_else(|| AdminFailure::AccountNotFound(name.clone()))?;
+                .ok_or_else(|| AdminError::AccountNotFound(name.clone()))?;
             accounts[index].password_hash = hash.clone();
             Ok(accounts)
         })
@@ -249,13 +249,13 @@ impl AdminService<'_> {
     /// `admin remove`. `assume_yes` (`--yes`) skips the confirmation.
     pub fn remove(
         &self,
-        name: &AccountName,
+        name: &Name,
         assume_yes: bool,
         warn: &mut dyn FnMut(AccountsWarning),
-    ) -> Result<(), AdminFailure> {
+    ) -> Result<(), AdminError> {
         let accounts = self.read(warn)?.unwrap_or_default();
         if position(&accounts, name).is_none() {
-            return Err(AdminFailure::AccountNotFound(name.clone()));
+            return Err(AdminError::AccountNotFound(name.clone()));
         }
         if !assume_yes {
             let prompt = format!("계정 '{name}'을(를) 삭제할까요? [y/N] ");
@@ -265,19 +265,19 @@ impl AdminService<'_> {
                     answer.eq_ignore_ascii_case("y") || answer.eq_ignore_ascii_case("yes")
                 }
                 Ok(None) | Err(InputError::Canceled | InputError::InvalidText) => false,
-                Err(InputError::NotInteractive) => return Err(AdminFailure::NotInteractive),
+                Err(InputError::NotInteractive) => return Err(AdminError::NotInteractive),
                 Err(InputError::Unavailable(message)) => {
-                    return Err(AdminFailure::RuntimeUnavailable(message));
+                    return Err(AdminError::RuntimeUnavailable(message));
                 }
             };
             if !approved {
-                return Err(AdminFailure::InputCanceled);
+                return Err(AdminError::InputCanceled);
             }
         }
         let mut remaining = 0;
         self.save(warn, &mut |mut accounts| {
             let index = position(&accounts, name)
-                .ok_or_else(|| AdminFailure::AccountNotFound(name.clone()))?;
+                .ok_or_else(|| AdminError::AccountNotFound(name.clone()))?;
             accounts.remove(index);
             remaining = accounts.len();
             Ok(accounts)
@@ -292,8 +292,8 @@ impl AdminService<'_> {
     fn read(
         &self,
         warn: &mut dyn FnMut(AccountsWarning),
-    ) -> Result<Option<Vec<Account>>, AdminFailure> {
-        let loaded = self.store.read().map_err(AdminFailure::Accounts)?;
+    ) -> Result<Option<Vec<Account>>, AdminError> {
+        let loaded = self.store.read().map_err(AdminError::Accounts)?;
         Ok(loaded.map(|loaded| {
             loaded.warnings.into_iter().for_each(&mut *warn);
             loaded.accounts
@@ -301,24 +301,24 @@ impl AdminService<'_> {
     }
 
     /// First entry, rule check, confirmation, comparison, then the hash.
-    fn new_hash(&self, prompt: &str, confirm_prompt: &str) -> Result<PasswordHash, AdminFailure> {
+    fn new_hash(&self, prompt: &str, confirm_prompt: &str) -> Result<PasswordHash, AdminError> {
         let password = Password::parse(self.hidden(prompt)?)
-            .map_err(|e| AdminFailure::PasswordInvalid(e.to_string()))?;
+            .map_err(|e| AdminError::PasswordInvalid(e.to_string()))?;
         if self.hidden(confirm_prompt)?.as_bytes() != password.as_bytes() {
-            return Err(AdminFailure::PasswordMismatch);
+            return Err(AdminError::PasswordMismatch);
         }
         self.hasher
             .hash(&password, self.params)
-            .map_err(|e| AdminFailure::RuntimeUnavailable(e.0))
+            .map_err(|e| AdminError::RuntimeUnavailable(e.0))
     }
 
-    fn hidden(&self, prompt: &str) -> Result<String, AdminFailure> {
+    fn hidden(&self, prompt: &str) -> Result<String, AdminError> {
         self.input.hidden(prompt).map_err(|error| match error {
-            InputError::NotInteractive => AdminFailure::NotInteractive,
-            InputError::Canceled => AdminFailure::InputCanceled,
-            InputError::Unavailable(message) => AdminFailure::RuntimeUnavailable(message),
+            InputError::NotInteractive => AdminError::NotInteractive,
+            InputError::Canceled => AdminError::InputCanceled,
+            InputError::Unavailable(message) => AdminError::RuntimeUnavailable(message),
             InputError::InvalidText => {
-                AdminFailure::PasswordInvalid("입력한 비밀번호가 UTF-8 텍스트가 아니다".to_owned())
+                AdminError::PasswordInvalid("입력한 비밀번호가 UTF-8 텍스트가 아니다".to_owned())
             }
         })
     }
@@ -327,16 +327,16 @@ impl AdminService<'_> {
     fn save(
         &self,
         warn: &mut dyn FnMut(AccountsWarning),
-        change: &mut dyn FnMut(Vec<Account>) -> Result<Vec<Account>, AdminFailure>,
-    ) -> Result<(), AdminFailure> {
+        change: &mut dyn FnMut(Vec<Account>) -> Result<Vec<Account>, AdminError>,
+    ) -> Result<(), AdminError> {
         if self.input.canceled() {
-            return Err(AdminFailure::InputCanceled);
+            return Err(AdminError::InputCanceled);
         }
         self.store.update(change, warn)
     }
 }
 
-fn position(accounts: &[Account], name: &AccountName) -> Option<usize> {
+fn position(accounts: &[Account], name: &Name) -> Option<usize> {
     accounts.iter().position(|a| &a.name == name)
 }
 
@@ -355,8 +355,8 @@ mod tests {
     type Answer = Result<Option<&'static str>, InputError>;
     type Seen = RefCell<Vec<&'static str>>;
 
-    fn name(text: &str) -> AccountName {
-        AccountName::parse(text).unwrap_or_else(|e| panic!("{e}"))
+    fn name(text: &str) -> Name {
+        Name::parse(text).unwrap_or_else(|e| panic!("{e}"))
     }
 
     fn hash(text: &str) -> PasswordHash {
@@ -406,9 +406,9 @@ mod tests {
 
         fn update(
             &self,
-            change: &mut dyn FnMut(Vec<Account>) -> Result<Vec<Account>, AdminFailure>,
+            change: &mut dyn FnMut(Vec<Account>) -> Result<Vec<Account>, AdminError>,
             warn: &mut dyn FnMut(AccountsWarning),
-        ) -> Result<(), AdminFailure> {
+        ) -> Result<(), AdminError> {
             self.updates.set(self.updates.get() + 1);
             if let Some(changed) = self.on_lock.borrow_mut().take() {
                 *self.file.borrow_mut() = Some(changed);
@@ -542,18 +542,18 @@ mod tests {
         let store = FakeStore::with(vec![account("alice", HASH_A)]);
         let input = FakeInput::default();
         let result = service(&store, &input).add(&name("alice"), &mut |_| {});
-        assert_eq!(result, Err(AdminFailure::AccountExists(name("alice"))));
+        assert_eq!(result, Err(AdminError::AccountExists(name("alice"))));
         assert!(input.prompts.borrow().is_empty());
         for missing in [
             service(&store, &input).passwd(&name("bob"), &mut |_| {}),
             service(&store, &input).remove(&name("bob"), true, &mut |_| {}),
         ] {
-            assert_eq!(missing, Err(AdminFailure::AccountNotFound(name("bob"))));
+            assert_eq!(missing, Err(AdminError::AccountNotFound(name("bob"))));
         }
         let empty = FakeStore::default();
         assert_eq!(
             service(&empty, &input).passwd(&name("bob"), &mut |_| {}),
-            Err(AdminFailure::AccountNotFound(name("bob")))
+            Err(AdminError::AccountNotFound(name("bob")))
         );
         assert_eq!(store.updates.get(), 0);
 
@@ -563,7 +563,7 @@ mod tests {
         let input = FakeInput::answering(&twice(PASSWORD));
         assert_eq!(
             service(&store, &input).add(&name("carol"), &mut |_| {}),
-            Err(AdminFailure::AccountExists(name("carol")))
+            Err(AdminError::AccountExists(name("carol")))
         );
         assert_eq!(
             store
@@ -578,38 +578,38 @@ mod tests {
     /// spec: operations.md:OPS-030 partial
     #[test]
     fn stops_before_saving_on_invalid_mismatched_or_canceled_input() {
-        let cases: [(&[Answer], AdminFailure, usize); 7] = [
+        let cases: [(&[Answer], AdminError, usize); 7] = [
             (
                 &[Ok(Some("short"))],
-                AdminFailure::PasswordInvalid("비밀번호가 12자보다 짧다".to_owned()),
+                AdminError::PasswordInvalid("비밀번호가 12자보다 짧다".to_owned()),
                 1,
             ),
             (
                 &[Ok(Some(PASSWORD)), Ok(Some("correct horse battery!"))],
-                AdminFailure::PasswordMismatch,
+                AdminError::PasswordMismatch,
                 2,
             ),
-            (&[Err(InputError::Canceled)], AdminFailure::InputCanceled, 1),
+            (&[Err(InputError::Canceled)], AdminError::InputCanceled, 1),
             (
                 &[Ok(Some(PASSWORD)), Err(InputError::Canceled)],
-                AdminFailure::InputCanceled,
+                AdminError::InputCanceled,
                 2,
             ),
             (
                 &[Err(InputError::NotInteractive)],
-                AdminFailure::NotInteractive,
+                AdminError::NotInteractive,
                 1,
             ),
             (
                 &[Err(InputError::InvalidText)],
-                AdminFailure::PasswordInvalid("입력한 비밀번호가 UTF-8 텍스트가 아니다".to_owned()),
+                AdminError::PasswordInvalid("입력한 비밀번호가 UTF-8 텍스트가 아니다".to_owned()),
                 1,
             ),
             (
                 &[Err(InputError::Unavailable(
                     "입력 읽기 스레드를 시작하지 못했다".to_owned(),
                 ))],
-                AdminFailure::RuntimeUnavailable("입력 읽기 스레드를 시작하지 못했다".to_owned()),
+                AdminError::RuntimeUnavailable("입력 읽기 스레드를 시작하지 못했다".to_owned()),
                 1,
             ),
         ];
@@ -630,7 +630,7 @@ mod tests {
         input.canceled.set(true);
         assert_eq!(
             service(&store, &input).passwd(&name("alice"), &mut |_| {}),
-            Err(AdminFailure::InputCanceled)
+            Err(AdminError::InputCanceled)
         );
         assert_eq!(
             *input.prompts.borrow(),
@@ -687,7 +687,7 @@ mod tests {
             let input = FakeInput::answering(std::slice::from_ref(&answer));
             assert_eq!(
                 service(&store, &input).remove(&name("alice"), false, &mut |_| {}),
-                Err(AdminFailure::InputCanceled),
+                Err(AdminError::InputCanceled),
                 "{answer:?}"
             );
             assert_eq!(store.updates.get(), 0);
@@ -696,7 +696,7 @@ mod tests {
         let input = FakeInput::answering(&[Err(InputError::NotInteractive)]);
         assert_eq!(
             service(&store, &input).remove(&name("alice"), false, &mut |_| {}),
-            Err(AdminFailure::NotInteractive)
+            Err(AdminError::NotInteractive)
         );
 
         // `--yes` asks nothing; removing the last account warns.

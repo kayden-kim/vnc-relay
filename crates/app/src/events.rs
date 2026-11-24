@@ -6,17 +6,17 @@ use std::fmt;
 use std::net::{IpAddr, SocketAddr};
 use std::time::SystemTime;
 
-use vnc_relay_domain::account::AccountName;
+use vnc_relay_domain::account::Name;
 use vnc_relay_domain::conn_id::ConnId;
-use vnc_relay_domain::entry_point::{EntryPoint, Listener, Role};
+use vnc_relay_domain::entry_point::{EntryPoint, ListenerKind, Role};
 use vnc_relay_domain::handshake::Mode;
 use vnc_relay_domain::login_limit::LimitScope;
 use vnc_relay_domain::peer_ip::PeerIp;
-use vnc_relay_domain::session::{CloseCause, SessionId, Side, Transport};
+use vnc_relay_domain::session::{CloseCause, Id, Side, Transport};
 use vnc_relay_domain::ticket::TicketError;
 
-use crate::ip_info::{IpDbFailure, IpDbKey};
-use crate::reload::{ChangeSource, WatchFailure};
+use crate::ip_info::{IpDbError, IpDbKey};
+use crate::reload::{ChangeSource, WatchError};
 use crate::settings::ConfigWarning;
 
 /// Value of `log_contract` in `server_starting` (ops-info-v2 §1.5).
@@ -353,14 +353,14 @@ impl LoginFailReason {
 
 /// Outcome of an authenticated administrator termination (ops-info-v2 §1.5).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum AdminTerminateResult {
+pub enum AdminTerminateOutcome {
     Terminated,
     AlreadyClosed,
     NotFound,
     Failed,
 }
 
-impl AdminTerminateResult {
+impl AdminTerminateOutcome {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Terminated => "terminated",
@@ -400,7 +400,7 @@ pub enum Event {
     /// check and took a place of L. Only TCP has a role before path resolution.
     ConnectionAccepted {
         conn_id: ConnId,
-        listener: Listener,
+        listener: ListenerKind,
         peer_ip: PeerIp,
     },
     /// The server refused a connection. At `Stage::Accept` the connection
@@ -434,7 +434,7 @@ pub enum Event {
     /// before the 101 response (websocket-relay-v2 §1.9.4).
     TicketAccepted {
         conn_id: ConnId,
-        listener: Listener,
+        listener: ListenerKind,
         role: Role,
         peer_ip: PeerIp,
         forwarded_ip: Option<PeerIp>,
@@ -471,7 +471,7 @@ pub enum Event {
     /// An accepted connection ended before it waited or joined a session.
     ConnectionAborted {
         conn_id: ConnId,
-        listener: Listener,
+        listener: ListenerKind,
         role: Option<Role>,
         stage: Stage,
         reason: AbortReason,
@@ -552,7 +552,7 @@ pub enum Event {
     /// An active session was registered (ops-info-v2 §1.5).
     /// Only fields belonging to `mode` are serialized.
     SessionStarted {
-        session_id: SessionId,
+        session_id: Id,
         mode: Mode,
         viewer_transport: Transport,
         /// Present only for Mode II; identifies the Server transport.
@@ -572,7 +572,7 @@ pub enum Event {
     /// Finalized session summary, after sockets and permits are released.
     /// Cause-specific fields and the Mode II reference follow ops-info-v2 §1.6.
     SessionClosed {
-        session_id: SessionId,
+        session_id: Id,
         mode: Mode,
         viewer_transport: Transport,
         started_at: SystemTime,
@@ -583,14 +583,14 @@ pub enum Event {
         side: Option<Side>,
         error_kind: Option<ConnectionErrorKind>,
         relay_id_ref: Option<RelayIdRef>,
-        admin_account: Option<AccountName>,
+        admin_account: Option<Name>,
     },
     /// Recorded after final cleanup, without leaking absent request IDs.
     AdminTerminate {
-        admin_account: AccountName,
+        admin_account: Name,
         peer_ip: PeerIp,
-        session_id: Option<SessionId>,
-        result: AdminTerminateResult,
+        session_id: Option<Id>,
+        result: AdminTerminateOutcome,
     },
     /// The server entered shutdown grace (ops-info-v2 §1.5).
     ShutdownStarted {
@@ -603,7 +603,7 @@ pub enum Event {
     /// An administrator logged in and got a session (ops-info-v2 §1.5,
     /// management.md MGT-017). The login event carries no session ID.
     AdminLoginSucceeded {
-        admin_account: AccountName,
+        admin_account: Name,
         peer_ip: PeerIp,
     },
     /// A login attempt was refused (ops-info-v2 §1.5, MGT-018, MGT-022).
@@ -612,20 +612,20 @@ pub enum Event {
     AdminLoginFailed {
         reason: LoginFailReason,
         scope: Option<LimitScope>,
-        admin_account: Option<AccountName>,
+        admin_account: Option<Name>,
         peer_ip: PeerIp,
     },
     /// A login lock started. One event for each lock (ops-info-v2 §1.5).
     AdminLoginLimited {
         scope: LimitScope,
         lockout_secs: u64,
-        admin_account: Option<AccountName>,
+        admin_account: Option<Name>,
         peer_ip: PeerIp,
     },
     /// An authenticated edit replaced the file and effective configuration.
     /// Only changed key names and the new raw-file revision are recorded (§1.5).
     ConfigEdited {
-        admin_account: AccountName,
+        admin_account: Name,
         peer_ip: PeerIp,
         config_keys: Vec<String>,
         revision: String,
@@ -633,7 +633,7 @@ pub enum Event {
     /// An authenticated, CSRF-validated edit failed with a management API code.
     /// `reason` and optional requested key names contain no setting values (§1.8).
     ConfigEditRejected {
-        admin_account: AccountName,
+        admin_account: Name,
         peer_ip: PeerIp,
         reason: String,
         config_keys: Option<Vec<String>>,
@@ -655,7 +655,7 @@ pub enum Event {
     ReloadRestartRequired { config_keys: Vec<String> },
     /// The config file or a TLS file cannot be watched (ops-info-v2 §1.5).
     ReloadWatchFailed {
-        reason: WatchFailure,
+        reason: WatchError,
         detail: Option<String>,
     },
     /// An IP information database was read; lookups use it from the next
@@ -670,7 +670,7 @@ pub enum Event {
     /// `ip_db_unavailable`). `detail` holds no path and no file content.
     IpDbUnavailable {
         key: IpDbKey,
-        reason: IpDbFailure,
+        reason: IpDbError,
         phase: Phase,
         detail: Option<String>,
     },
@@ -763,7 +763,7 @@ impl Event {
                 ShutdownTrigger::FatalError { .. } => Level::Error,
             },
             Self::AdminTerminate { result, .. } => {
-                if *result == AdminTerminateResult::Failed {
+                if *result == AdminTerminateOutcome::Failed {
                     Level::Error
                 } else {
                     Level::Info

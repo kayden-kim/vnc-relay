@@ -13,14 +13,14 @@ use crate::peer_ip::PeerIp;
 
 /// The limit values of config-v3 §1.2 `[management.login_limit]`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct LoginLimitPolicy {
+pub struct Policy {
     per_account: usize,
     per_source: usize,
     window: Duration,
     lockout: Duration,
 }
 
-impl LoginLimitPolicy {
+impl Policy {
     /// `per_account` and `per_source` are F. A count above F starts a lock.
     pub fn new(per_account: u32, per_source: u32, window: Duration, lockout: Duration) -> Self {
         Self {
@@ -109,13 +109,13 @@ fn prune_keys<K: Eq + Hash>(keys: &mut HashMap<K, KeyState>, now: Duration, wind
 /// The login limit state of this process. It is kept in memory only.
 #[derive(Debug)]
 pub struct LoginLimiter {
-    policy: LoginLimitPolicy,
+    policy: Policy,
     accounts: HashMap<String, KeyState>,
     sources: HashMap<PeerIp, KeyState>,
 }
 
 impl LoginLimiter {
-    pub fn new(policy: LoginLimitPolicy) -> Self {
+    pub fn new(policy: Policy) -> Self {
         Self {
             policy,
             accounts: HashMap::new(),
@@ -195,7 +195,7 @@ mod tests {
     /// spec: management.md:MGT-022 partial
     #[test]
     fn locks_on_the_failure_after_f_and_does_not_count_locked_attempts() {
-        let policy = LoginLimitPolicy::new(2, 100, secs(900), secs(60));
+        let policy = Policy::new(2, 100, secs(900), secs(60));
         let mut limiter = LoginLimiter::new(policy);
         assert!(
             limiter
@@ -237,7 +237,7 @@ mod tests {
 
     #[test]
     fn failures_older_than_the_window_do_not_count() {
-        let policy = LoginLimitPolicy::new(2, 100, secs(100), secs(60));
+        let policy = Policy::new(2, 100, secs(100), secs(60));
         let mut limiter = LoginLimiter::new(policy);
         assert!(
             limiter
@@ -261,7 +261,7 @@ mod tests {
     /// spec: management.md:MGT-022 partial
     #[test]
     fn same_source_is_locked_for_other_accounts_too() {
-        let policy = LoginLimitPolicy::new(100, 1, secs(900), secs(60));
+        let policy = Policy::new(100, 1, secs(900), secs(60));
         let mut limiter = LoginLimiter::new(policy);
         assert!(
             limiter
@@ -279,7 +279,7 @@ mod tests {
 
     #[test]
     fn prune_removes_keys_with_nothing_left() {
-        let policy = LoginLimitPolicy::new(5, 5, secs(100), secs(60));
+        let policy = Policy::new(5, 5, secs(100), secs(60));
         let mut limiter = LoginLimiter::new(policy);
         limiter.record_failure("gone", source(3), secs(0));
         limiter.prune(secs(100));

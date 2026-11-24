@@ -21,20 +21,20 @@ use axum::response::{IntoResponse, Response};
 use axum::serve::IncomingStream;
 use serde_json::{Value, json};
 use tokio::net::TcpListener;
-use vnc_relay_app::management::AdminAuth;
-use vnc_relay_app::management::config::ConfigService;
-use vnc_relay_app::management::query::ManagementQueryService;
-use vnc_relay_app::management::terminate::ManagementTerminateService;
-use vnc_relay_app::metrics::MetricsService;
-use vnc_relay_app::ports::EventSink;
-use vnc_relay_app::sources::SourcesService;
+use vnc_relay_application::management::AdminAuth;
+use vnc_relay_application::management::config::ConfigService;
+use vnc_relay_application::management::query::ManagementQueryService;
+use vnc_relay_application::management::terminate::ManagementTerminateService;
+use vnc_relay_application::metrics::MetricsService;
+use vnc_relay_application::ports::EventSink;
+use vnc_relay_application::sources::SourcesService;
 use vnc_relay_domain::budget::ConnectionBudget;
 use vnc_relay_domain::peer_ip::PeerIp;
 
 use crate::admission::AdmittingListener;
-use crate::dashboard_assets::{Asset, find_asset};
+use crate::dashboard_assets::{self, Asset};
 use crate::listener::Listener;
-use crate::request_deadline::{DeadlineListener, IdleControl};
+use crate::request_deadline::{DeadlineListener, IdleTimerHandle};
 use crate::tls::TlsSource;
 use crate::tls_listener::TlsListener;
 
@@ -74,7 +74,7 @@ pub struct ManagementListener<L = TcpListener> {
     listener: L,
     tls: Option<TlsSource>,
     admin_budget: Arc<ConnectionBudget>,
-    runtime: Arc<dyn vnc_relay_app::reload::ports::RuntimeSettingsSource>,
+    runtime: Arc<dyn vnc_relay_application::reload::ports::RuntimeSettingsSource>,
     services: ManagementServices,
     dashboard: DashboardHints,
 }
@@ -86,7 +86,7 @@ impl<L: Listener> ManagementListener<L> {
         listener: L,
         tls: Option<TlsSource>,
         admin_budget: Arc<ConnectionBudget>,
-        runtime: Arc<dyn vnc_relay_app::reload::ports::RuntimeSettingsSource>,
+        runtime: Arc<dyn vnc_relay_application::reload::ports::RuntimeSettingsSource>,
         dashboard: DashboardHints,
         services: ManagementServices,
     ) -> Self {
@@ -151,7 +151,7 @@ impl<L: Listener> ManagementListener<L> {
 #[derive(Debug, Clone)]
 struct PeerAddr {
     ip: PeerIp,
-    idle: IdleControl,
+    idle: IdleTimerHandle,
 }
 
 impl<L> Connected<IncomingStream<'_, DeadlineListener<L>>> for PeerAddr
@@ -171,7 +171,7 @@ where
 pub struct DashboardHints {
     poll_secs: u64,
     query_timeout_secs: u64,
-    runtime: Arc<dyn vnc_relay_app::reload::ports::RuntimeSettingsSource>,
+    runtime: Arc<dyn vnc_relay_application::reload::ports::RuntimeSettingsSource>,
 }
 
 impl DashboardHints {
@@ -179,7 +179,7 @@ impl DashboardHints {
     pub fn new(
         poll: Duration,
         query_timeout: Duration,
-        runtime: Arc<dyn vnc_relay_app::reload::ports::RuntimeSettingsSource>,
+        runtime: Arc<dyn vnc_relay_application::reload::ports::RuntimeSettingsSource>,
     ) -> Self {
         Self {
             poll_secs: poll.as_secs(),
@@ -253,7 +253,7 @@ fn static_answer(shared: &Shared, parts: &Parts) -> Response {
     {
         return redirect_to_login();
     }
-    match find_asset(path) {
+    match dashboard_assets::find_asset(path) {
         Some(asset) => static_file(asset, parts.method == Method::HEAD),
         None => not_found(),
     }
@@ -391,17 +391,19 @@ mod dashboard_hint_tests {
             std::path::Path::new("."),
         ).unwrap();
         settings.timeouts.close = std::time::Duration::from_secs(3);
-        let candidate = |settings| vnc_relay_app::reload::ConfigCandidate {
+        let candidate = |settings| vnc_relay_application::reload::ConfigCandidate {
             settings,
             presence: Default::default(),
         };
-        let source = std::sync::Arc::new(vnc_relay_app::reload::snapshot::ReloadCell::<()>::new(
-            vnc_relay_app::reload::snapshot::ReloadSnapshot::new(
-                candidate(settings.clone()),
-                None,
-                None,
+        let source = std::sync::Arc::new(
+            vnc_relay_application::reload::snapshot::ReloadCell::<()>::new(
+                vnc_relay_application::reload::snapshot::ReloadSnapshot::new(
+                    candidate(settings.clone()),
+                    None,
+                    None,
+                ),
             ),
-        ));
+        );
         let hints = super::DashboardHints::new(
             std::time::Duration::from_secs(2),
             std::time::Duration::from_secs(5),
@@ -409,11 +411,13 @@ mod dashboard_hint_tests {
         );
         assert_eq!(hints.terminate_timeout_secs(), 8);
         settings.timeouts.close = std::time::Duration::from_secs(13);
-        source.replace(vnc_relay_app::reload::snapshot::ReloadSnapshot::new(
-            candidate(settings),
-            None,
-            None,
-        ));
+        source.replace(
+            vnc_relay_application::reload::snapshot::ReloadSnapshot::new(
+                candidate(settings),
+                None,
+                None,
+            ),
+        );
         assert_eq!(hints.terminate_timeout_secs(), 18);
         assert_eq!(hints.poll_secs, 2);
         assert_eq!(hints.query_timeout_secs, 5);

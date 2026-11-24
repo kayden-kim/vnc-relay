@@ -8,10 +8,10 @@ use std::time::Duration;
 
 use serde_json::{Value, json};
 
-use super::live::{Browser, Fault, LIMIT, Server, must, wait_for};
-use super::settings::{
-    PendingFile, TICKET_JWKS, login_alice, open_settings, open_settings_edit, script_str,
-};
+use super::settings::{self, PendingFile, TICKET_JWKS};
+use vnc_relay_testkit::cdp::Browser;
+use vnc_relay_testkit::dashboard_proxy::Fault;
+use vnc_relay_testkit::live::{self, LIMIT, Server};
 
 const CONFIG: &str = "/api/v1/config";
 
@@ -27,11 +27,11 @@ fn refresh(browser: &mut Browser) {
 fn language(browser: &mut Browser, lang: &str) {
     browser.eval(&format!(
         "(() => {{ const s = document.querySelector('select'); s.value = {}; s.dispatchEvent(new Event('change', {{bubbles:true}})); }})()",
-        script_str(lang)
+        settings::script_str(lang)
     ));
     browser.wait(&format!(
         "document.documentElement.lang === {}",
-        script_str(lang)
+        settings::script_str(lang)
     ));
 }
 
@@ -92,7 +92,7 @@ fn assert_query_time(browser: &mut Browser, server: &Server) -> Value {
         .rev()
         .find(|r| r.method == "GET" && r.path == CONFIG && r.status == Some(200))
         .unwrap_or_else(|| panic!("successful browser config response missing"));
-    let raw: Value = must(serde_json::from_str(&response.response_body));
+    let raw: Value = live::must(serde_json::from_str(&response.response_body));
     assert_eq!(
         browser.eval(&format!(r#"(() => {{
             const d = new Date({}), pad = n => String(n).padStart(2, '0');
@@ -184,7 +184,7 @@ fn assert_nav(browser: &mut Browser, active: &str) {
                 (a.getAttribute('aria-current') === 'page') === (href === {});
         }}) && links.filter(a => a.getAttribute('aria-current') === 'page').length === 1;
     }})()"#,
-            script_str(active)
+            settings::script_str(active)
         )),
         json!(true)
     );
@@ -226,7 +226,7 @@ pub fn settings_navigation_and_protected_direct_routes() {
         "unauthenticated config GET must never succeed"
     );
     assert_eq!(server.request("GET", CONFIG, &[], b"").status, 401);
-    login_alice(&mut browser, &server);
+    settings::login_alice(&mut browser, &server);
     let admin = server.login();
     let pair = server.pair(&admin, "II", "42801");
     for width in [1280, 390] {
@@ -248,9 +248,9 @@ pub fn settings_navigation_and_protected_direct_routes() {
         assert_nav(&mut browser, "/#/sources");
         browser.click("a.navbar-item[href='/#/logs']");
         browser.wait("document.querySelector('#logs-download')?.disabled === false");
-        open_settings(&mut browser, &server);
+        settings::open_settings(&mut browser, &server);
         assert_nav(&mut browser, "/#/settings");
-        open_settings_edit(&mut browser, &server);
+        settings::open_settings_edit(&mut browser, &server);
         assert_nav(&mut browser, "/#/settings");
         browser.click("a.navbar-item[href='/']");
         browser.wait("document.querySelector('#operations-refresh')?.disabled === false");
@@ -258,7 +258,7 @@ pub fn settings_navigation_and_protected_direct_routes() {
         browser.navigate(&server.url(&format!("/#/sessions/{}", pair.sid)));
         browser.wait("document.querySelector('#session-terminate') !== null");
         assert_nav(&mut browser, "/");
-        open_settings(&mut browser, &server);
+        settings::open_settings(&mut browser, &server);
         assert_nav(&mut browser, "/#/settings");
         browser.click("a.navbar-item[href='/']");
         browser.wait("document.querySelector('#operations-refresh') !== null");
@@ -273,17 +273,17 @@ pub fn settings_view_displays_all_effective_values_in_contract_order() {
     let viewer_keys = format!("{}viewer-public.jwks", "public-key-path-".repeat(8));
     let server_keys = format!("{}server-public.jwks", "public-key-path-".repeat(8));
     let server = Server::start_with_config_transform("dash-029", None, true, |config, dir| {
-        must(fs::copy(dir.join("accounts.toml"), dir.join(&long)));
-        must(fs::write(
+        live::must(fs::copy(dir.join("accounts.toml"), dir.join(&long)));
+        live::must(fs::write(
             dir.join(&cert),
             "CERTIFICATE_CONTENT_MUST_NOT_APPEAR",
         ));
-        must(fs::write(
+        live::must(fs::write(
             dir.join(&key),
             "PRIVATE_KEY_CONTENT_MUST_NOT_APPEAR",
         ));
-        must(fs::write(dir.join(&viewer_keys), TICKET_JWKS));
-        must(fs::write(dir.join(&server_keys), TICKET_JWKS));
+        live::must(fs::write(dir.join(&viewer_keys), TICKET_JWKS));
+        live::must(fs::write(dir.join(&server_keys), TICKET_JWKS));
         config
             .replace(
                 "accounts_file = \"accounts.toml\"",
@@ -384,8 +384,8 @@ pub fn settings_view_displays_all_effective_values_in_contract_order() {
     assert_eq!(items[closed + 1]["key"], "recent_logs.max_entries");
     assert_eq!(items[closed + 1]["reload"], "restart");
     let mut browser = Browser::start("dash-029", &["ko-KR"]);
-    login_alice(&mut browser, &server);
-    open_settings(&mut browser, &server);
+    settings::login_alice(&mut browser, &server);
+    settings::open_settings(&mut browser, &server);
     for lang in ["ko", "en"] {
         language(&mut browser, lang);
         assert_rows(&mut browser, &raw, lang);
@@ -421,8 +421,8 @@ pub fn in_effect_and_pending_settings_allow_edit_without_polling() {
     let server = Server::start_with_config("dash-030", Some(1), true);
     let admin = server.login();
     let mut browser = Browser::start("dash-030", &["ko-KR"]);
-    login_alice(&mut browser, &server);
-    open_settings(&mut browser, &server);
+    settings::login_alice(&mut browser, &server);
+    settings::open_settings(&mut browser, &server);
     assert_eq!(server.proxy.count("GET", CONFIG), 1);
     let raw = server.query(&admin, CONFIG);
     assert_eq!(raw["file"]["state"], "in_effect");
@@ -468,7 +468,7 @@ pub fn in_effect_and_pending_settings_allow_edit_without_polling() {
             .filter(|r| r.path == CONFIG)
             .all(|r| !r.headers.to_ascii_lowercase().contains("x-relay-poll"))
     );
-    open_settings_edit(&mut browser, &server);
+    settings::open_settings_edit(&mut browser, &server);
     assert_eq!(server.proxy.count("GET", CONFIG), 3);
     assert!(
         browser
@@ -489,8 +489,8 @@ pub fn restart_pending_settings_show_keys_and_block_edit() {
     let server = Server::start_with_config("dash-031", None, true);
     let admin = server.login();
     let mut browser = Browser::start("dash-031", &["ko-KR"]);
-    login_alice(&mut browser, &server);
-    open_settings(&mut browser, &server);
+    settings::login_alice(&mut browser, &server);
+    settings::open_settings(&mut browser, &server);
     let before = server.query(&admin, CONFIG);
     server.config_write(
         server
@@ -537,8 +537,8 @@ pub fn invalid_and_unreadable_settings_keep_effective_values_and_localize_diagno
     let original = server.config_text();
     let before = server.query(&admin, CONFIG);
     let mut browser = Browser::start("dash-032", &["ko-KR"]);
-    login_alice(&mut browser, &server);
-    open_settings(&mut browser, &server);
+    settings::login_alice(&mut browser, &server);
+    settings::open_settings(&mut browser, &server);
     let cases = [
         (
             "config_missing_key",
@@ -688,7 +688,7 @@ pub fn invalid_and_unreadable_settings_keep_effective_values_and_localize_diagno
         assert!(browser.text().contains(key));
         blocked(&mut browser);
     }
-    must(fs::remove_file(server.config_path()));
+    live::must(fs::remove_file(server.config_path()));
     for route in ["/#/settings", "/#/settings/edit"] {
         browser.navigate(&server.url(route));
         ready(&mut browser);
@@ -723,8 +723,8 @@ pub fn settings_without_reload_history_show_no_history() {
     let raw = server.query(&server.login(), CONFIG);
     assert!(raw["last_reload"].is_null());
     let mut browser = Browser::start("dash-033", &["ko-KR"]);
-    login_alice(&mut browser, &server);
-    open_settings(&mut browser, &server);
+    settings::login_alice(&mut browser, &server);
+    settings::open_settings(&mut browser, &server);
     for (lang, message) in [
         ("ko", "이 프로세스의 재로드 이력이 없습니다."),
         ("en", "This process has no reload history."),
@@ -745,7 +745,7 @@ pub fn disabled_edit_direct_route_keeps_view_without_inputs() {
     let raw = server.query(&server.login(), CONFIG);
     assert_eq!(raw["edit_enabled"], false);
     let mut browser = Browser::start("dash-034", &["ko-KR"]);
-    login_alice(&mut browser, &server);
+    settings::login_alice(&mut browser, &server);
     for route in ["/#/settings", "/#/settings/edit"] {
         browser.navigate(&server.url(route));
         ready(&mut browser);
@@ -768,7 +768,7 @@ pub fn config_query_failures_keep_stale_values_and_never_show_empty_success() {
     let admin = server.login();
     let before = server.query(&admin, CONFIG);
     let mut browser = Browser::start("dash-048", &["ko-KR"]);
-    login_alice(&mut browser, &server);
+    settings::login_alice(&mut browser, &server);
     for route in ["/#/settings", "/#/settings/edit"] {
         // Hold the first real response to observe loading separately from failure.
         let hold_injections = server.proxy.injected_count("GET", CONFIG);
@@ -778,7 +778,7 @@ pub fn config_query_failures_keep_stale_values_and_never_show_empty_success() {
             .once("GET", CONFIG, Fault::Hold(Arc::clone(&released)));
         browser.navigate(&server.url(route));
         browser.wait("document.body.innerText.includes('조회 중')");
-        wait_for("initial config response held", LIMIT, || {
+        live::wait_for("initial config response held", LIMIT, || {
             server
                 .proxy
                 .traffic()
@@ -868,8 +868,8 @@ pub fn explicit_settings_refresh_after_repair_updates_values_revision_and_time()
     let original = server.config_text();
     let before = server.query(&admin, CONFIG);
     let mut browser = Browser::start("dash-049", &["ko-KR"]);
-    login_alice(&mut browser, &server);
-    open_settings(&mut browser, &server);
+    settings::login_alice(&mut browser, &server);
+    settings::open_settings(&mut browser, &server);
     server.config_write("[broken\n");
     refresh(&mut browser);
     assert!(browser.text().contains("설정 파일의 검증에 실패해"));
@@ -921,7 +921,7 @@ pub fn explicit_settings_refresh_after_repair_updates_values_revision_and_time()
         .proxy
         .once("GET", CONFIG, Fault::Hold(Arc::clone(&released)));
     browser.click("#settings-refresh");
-    wait_for("old config response held", LIMIT, || {
+    live::wait_for("old config response held", LIMIT, || {
         server
             .proxy
             .traffic()
@@ -946,7 +946,7 @@ pub fn explicit_settings_refresh_after_repair_updates_values_revision_and_time()
         "[...document.querySelectorAll('input[data-config-key],textarea[data-config-key]')].map(n => [n.dataset.configKey,n.type === 'checkbox' ? n.checked : n.value])",
     );
     released.store(true, Ordering::Release);
-    wait_for("held response completed", LIMIT, || {
+    live::wait_for("held response completed", LIMIT, || {
         server
             .proxy
             .traffic()
@@ -1000,7 +1000,7 @@ pub fn explicit_settings_refresh_after_repair_updates_values_revision_and_time()
         .into_iter()
         .find(|r| r.method == "PATCH" && r.path == CONFIG)
         .unwrap_or_else(|| panic!("browser PATCH missing"));
-    let sent: Value = must(serde_json::from_str(&patch.body));
+    let sent: Value = live::must(serde_json::from_str(&patch.body));
     assert_eq!(sent["revision"], latest["revision"]);
     assert_eq!(sent["changes"], json!({"limits.waiting":13}));
     assert_rows(&mut browser, &server.query(&admin, CONFIG), "ko");
@@ -1023,9 +1023,9 @@ pub fn explicit_settings_refresh_after_repair_updates_values_revision_and_time()
         body.as_bytes(),
     );
     assert_eq!(reply.status, 200);
-    let applied: Value = must(serde_json::from_str(&reply.body));
+    let applied: Value = live::must(serde_json::from_str(&reply.body));
     assert_eq!(applied["applied"], json!([]));
-    wait_for(
+    live::wait_for(
         "pending no-op file watch applies within poll plus settle",
         Duration::from_secs(11),
         || {

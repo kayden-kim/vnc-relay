@@ -1,15 +1,15 @@
 use std::pin::Pin;
 use std::task::{Context, Poll, Waker};
 
-use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf, duplex};
-use vnc_relay_app::events::ConnectionErrorKind;
-use vnc_relay_app::ports::{RelayCloseAction, RelayStream, RelayStreamError};
+use tokio::io::{self, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf};
+use vnc_relay_application::events::ConnectionErrorKind;
+use vnc_relay_application::ports::{RelayCloseAction, RelayStream, RelayStreamError};
 use vnc_relay_domain::session::Transport;
 
 use super::WsRelayStream;
 
-const KEEPALIVE: vnc_relay_app::settings::KeepaliveSettings =
-    vnc_relay_app::settings::KeepaliveSettings {
+const KEEPALIVE: vnc_relay_application::settings::KeepaliveSettings =
+    vnc_relay_application::settings::KeepaliveSettings {
         tcp_idle: std::time::Duration::from_secs(60),
         tcp_interval: std::time::Duration::from_secs(10),
         tcp_probes: 6,
@@ -22,18 +22,18 @@ fn noop_waker() -> Waker {
 }
 
 /// Wrapper around an AsyncWrite stream that restricts writes to at most `max_chunk` bytes.
-struct PartialStream<S> {
+struct FakePartialStream<S> {
     inner: S,
     max_chunk: usize,
 }
 
-impl<S> PartialStream<S> {
+impl<S> FakePartialStream<S> {
     fn new(inner: S, max_chunk: usize) -> Self {
         Self { inner, max_chunk }
     }
 }
 
-impl<S: AsyncRead + Unpin> AsyncRead for PartialStream<S> {
+impl<S: AsyncRead + Unpin> AsyncRead for FakePartialStream<S> {
     fn poll_read(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -43,7 +43,7 @@ impl<S: AsyncRead + Unpin> AsyncRead for PartialStream<S> {
     }
 }
 
-impl<S: AsyncWrite + Unpin> AsyncWrite for PartialStream<S> {
+impl<S: AsyncWrite + Unpin> AsyncWrite for FakePartialStream<S> {
     fn poll_write(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -109,9 +109,9 @@ fn client_binary_frame(payload: &[u8]) -> Vec<u8> {
 /// spec: relay.md:RLY-001 partial
 #[tokio::test]
 async fn sends_the_greeting_as_one_binary_message() {
-    let (client_io, server_io) = duplex(1024);
+    let (client_io, server_io) = io::duplex(1024);
     // Underlying transport only writes 3 bytes at a time
-    let partial_io = PartialStream::new(server_io, 3);
+    let partial_io = FakePartialStream::new(server_io, 3);
     let mut ws = WsRelayStream::new(
         partial_io,
         Vec::new(),
@@ -143,7 +143,7 @@ async fn sends_the_greeting_as_one_binary_message() {
 /// spec: websocket.md:WS-007 partial
 #[tokio::test]
 async fn keeps_initial_exchange_bytes_across_frames_and_messages() {
-    let (mut client_io, server_io) = duplex(4096);
+    let (mut client_io, server_io) = io::duplex(4096);
     let mut ws = WsRelayStream::new(
         server_io,
         Vec::new(),
@@ -185,7 +185,7 @@ async fn keeps_initial_exchange_bytes_across_frames_and_messages() {
 /// spec: relay.md:RLY-003 partial
 #[tokio::test]
 async fn preserves_initial_exchange_trailing_bytes_once_within_b() {
-    let (mut client_io, server_io) = duplex(4096);
+    let (mut client_io, server_io) = io::duplex(4096);
     let suffix_frame = client_binary_frame(b"head-suffix-data");
     let mut ws = WsRelayStream::new(
         server_io,
@@ -219,7 +219,7 @@ async fn streams_a_single_frame_larger_than_b_without_a_message_buffer() {
     let m_limit = 1024 * 1024; // 1 MiB
     let frame_len = 64 * 1024; // 64 KiB > B
 
-    let (mut client_io, server_io) = duplex(128 * 1024);
+    let (mut client_io, server_io) = io::duplex(128 * 1024);
     let mut ws = WsRelayStream::new(
         server_io,
         Vec::new(),
@@ -256,7 +256,7 @@ async fn streams_a_single_frame_larger_than_b_without_a_message_buffer() {
 #[tokio::test]
 async fn counts_m_across_fragments_and_rejects_m_plus_one() {
     let m = 100;
-    let (mut client_io, server_io) = duplex(4096);
+    let (mut client_io, server_io) = io::duplex(4096);
     let mut ws = WsRelayStream::new(
         server_io,
         Vec::new(),
@@ -295,7 +295,7 @@ async fn counts_m_across_fragments_and_rejects_m_plus_one() {
 async fn rejects_text_and_invalid_frames_with_typed_errors() {
     // 1. Text frame -> WsTextMessage (1003)
     {
-        let (mut client_io, server_io) = duplex(1024);
+        let (mut client_io, server_io) = io::duplex(1024);
         let mut ws = WsRelayStream::new(
             server_io,
             Vec::new(),
@@ -316,7 +316,7 @@ async fn rejects_text_and_invalid_frames_with_typed_errors() {
 
     // 2. Unmasked client frame -> WsProtocolError (1002)
     {
-        let (mut client_io, server_io) = duplex(1024);
+        let (mut client_io, server_io) = io::duplex(1024);
         let mut ws = WsRelayStream::new(
             server_io,
             Vec::new(),
@@ -338,7 +338,7 @@ async fn rejects_text_and_invalid_frames_with_typed_errors() {
 
     // 3. RSV1 != 0 -> WsProtocolError (1002)
     {
-        let (mut client_io, server_io) = duplex(1024);
+        let (mut client_io, server_io) = io::duplex(1024);
         let mut ws = WsRelayStream::new(
             server_io,
             Vec::new(),
@@ -359,7 +359,7 @@ async fn rejects_text_and_invalid_frames_with_typed_errors() {
 
     // 4. Unknown opcode (0x3) -> WsProtocolError (1002)
     {
-        let (mut client_io, server_io) = duplex(1024);
+        let (mut client_io, server_io) = io::duplex(1024);
         let mut ws = WsRelayStream::new(
             server_io,
             Vec::new(),
@@ -380,7 +380,7 @@ async fn rejects_text_and_invalid_frames_with_typed_errors() {
 
     // 5. Continuation when no message started -> WsProtocolError (1002)
     {
-        let (mut client_io, server_io) = duplex(1024);
+        let (mut client_io, server_io) = io::duplex(1024);
         let mut ws = WsRelayStream::new(
             server_io,
             Vec::new(),
@@ -402,7 +402,7 @@ async fn rejects_text_and_invalid_frames_with_typed_errors() {
 
     // 6. Fragmented control frame (FIN = 0) -> WsProtocolError (1002)
     {
-        let (mut client_io, server_io) = duplex(1024);
+        let (mut client_io, server_io) = io::duplex(1024);
         let mut ws = WsRelayStream::new(
             server_io,
             Vec::new(),
@@ -423,7 +423,7 @@ async fn rejects_text_and_invalid_frames_with_typed_errors() {
 
     // 7. Close payload length 1 -> WsProtocolError (1002)
     {
-        let (mut client_io, server_io) = duplex(1024);
+        let (mut client_io, server_io) = io::duplex(1024);
         let mut ws = WsRelayStream::new(
             server_io,
             Vec::new(),
@@ -444,7 +444,7 @@ async fn rejects_text_and_invalid_frames_with_typed_errors() {
 
     // 8. Close with invalid UTF-8 reason -> WsProtocolError (1002)
     {
-        let (mut client_io, server_io) = duplex(1024);
+        let (mut client_io, server_io) = io::duplex(1024);
         let mut ws = WsRelayStream::new(
             server_io,
             Vec::new(),
@@ -473,7 +473,7 @@ async fn rejects_text_and_invalid_frames_with_typed_errors() {
 /// spec: websocket.md:WS-009 partial
 #[tokio::test]
 async fn answers_interleaved_ping_without_forwarding_control_payload() {
-    let (mut client_io, server_io) = duplex(4096);
+    let (mut client_io, server_io) = io::duplex(4096);
     let mut ws = WsRelayStream::new(
         server_io,
         Vec::new(),
@@ -510,7 +510,7 @@ async fn answers_interleaved_ping_without_forwarding_control_payload() {
 #[tokio::test]
 async fn bounds_outbound_messages_and_counts_only_written_payload() {
     let m = 30;
-    let (mut client_io, server_io) = duplex(4096);
+    let (mut client_io, server_io) = io::duplex(4096);
     let mut ws = WsRelayStream::new(
         server_io,
         Vec::new(),
@@ -597,7 +597,7 @@ async fn close_mapping_for_every_relay_close_action() {
     ];
 
     for (action, expected_code, expected_reason) in cases {
-        let (mut client_io, server_io) = duplex(1024);
+        let (mut client_io, server_io) = io::duplex(1024);
         let mut ws = WsRelayStream::new(
             server_io,
             Vec::new(),
@@ -641,7 +641,7 @@ async fn close_mapping_for_every_relay_close_action() {
 
     // TlsFailed closes transport without sending Close frame
     {
-        let (mut client_io, server_io) = duplex(1024);
+        let (mut client_io, server_io) = io::duplex(1024);
         let mut ws = WsRelayStream::new(
             server_io,
             Vec::new(),
@@ -670,7 +670,7 @@ async fn rotates_the_mask_across_every_chunk_split() {
     let frame = make_client_frame(true, (false, false, false), 2, mask, payload);
 
     for chunk_size in [1, 2, 3, 4, 5, 7, 13] {
-        let (_client_io, server_io) = duplex(1024);
+        let (_client_io, server_io) = io::duplex(1024);
         let mut ws = WsRelayStream::new(
             server_io,
             frame.clone(),
@@ -697,7 +697,7 @@ async fn rotates_the_mask_across_every_chunk_split() {
 async fn keeps_upgrade_suffix_and_app_payload_under_one_b() {
     let b = 16 * 1024;
     let suffix = vec![0u8; 1023]; // maximum suffix
-    let (_client_io, server_io) = duplex(1024);
+    let (_client_io, server_io) = io::duplex(1024);
     let ws = WsRelayStream::new(server_io, suffix, 64 * 1024, b, Transport::Ws, KEEPALIVE);
 
     assert!(ws.holding_rx_bytes() <= b);
@@ -706,7 +706,7 @@ async fn keeps_upgrade_suffix_and_app_payload_under_one_b() {
 
 #[tokio::test]
 async fn yields_during_empty_message_and_control_floods() {
-    let (mut client_io, server_io) = duplex(16 * 1024);
+    let (mut client_io, server_io) = io::duplex(16 * 1024);
     let mut ws = WsRelayStream::new(
         server_io,
         Vec::new(),
@@ -737,7 +737,7 @@ async fn yields_during_empty_message_and_control_floods() {
 
 #[tokio::test]
 async fn close_actions_are_idempotent() {
-    let (mut client_io, server_io) = duplex(1024);
+    let (mut client_io, server_io) = io::duplex(1024);
     let mut ws = WsRelayStream::new(
         server_io,
         Vec::new(),
@@ -774,7 +774,7 @@ async fn close_actions_are_idempotent() {
 /// spec: websocket.md:WS-008 partial
 #[tokio::test]
 async fn terminal_close_discards_rejected_payload_before_releasing_the_transport() {
-    let (mut client_io, server_io) = duplex(1024);
+    let (mut client_io, server_io) = io::duplex(1024);
     let mut ws = WsRelayStream::new(
         server_io,
         Vec::new(),
@@ -814,7 +814,7 @@ async fn terminal_close_discards_rejected_payload_before_releasing_the_transport
 #[tokio::test]
 async fn shutdown_after_received_close_preserves_the_peer_code() {
     for code in [None, Some(3001_u16)] {
-        let (mut client_io, server_io) = duplex(1024);
+        let (mut client_io, server_io) = io::duplex(1024);
         let payload = code.map_or_else(Vec::new, |code| code.to_be_bytes().to_vec());
         let frame = make_client_frame(true, (false, false, false), 8, [1, 2, 3, 4], &payload);
         let mut ws = WsRelayStream::new(
@@ -850,9 +850,9 @@ async fn shutdown_after_received_close_preserves_the_peer_code() {
 /// spec: websocket.md:WS-017 partial
 #[tokio::test]
 async fn finishes_started_frames_before_replying_to_close_within_e() {
-    let (mut client_io, server_io) = duplex(4096);
+    let (mut client_io, server_io) = io::duplex(4096);
     // Partial write of 10 bytes max
-    let partial_io = PartialStream::new(server_io, 10);
+    let partial_io = FakePartialStream::new(server_io, 10);
     let mut ws = WsRelayStream::new(
         partial_io,
         Vec::new(),
@@ -929,13 +929,13 @@ struct WriteGate {
     error: Option<std::io::ErrorKind>,
 }
 
-struct ControlledIo {
+struct FakeControlledStream {
     inner: tokio::io::DuplexStream,
     gate: std::sync::Arc<std::sync::Mutex<WriteGate>>,
     read_chunk: usize,
 }
 
-impl ControlledIo {
+impl FakeControlledStream {
     fn new(
         inner: tokio::io::DuplexStream,
         allowance: usize,
@@ -966,7 +966,7 @@ fn grant_writes(gate: &std::sync::Mutex<WriteGate>, allowance: usize) {
     }
 }
 
-impl AsyncRead for ControlledIo {
+impl AsyncRead for FakeControlledStream {
     fn poll_read(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -986,7 +986,7 @@ impl AsyncRead for ControlledIo {
     }
 }
 
-impl AsyncWrite for ControlledIo {
+impl AsyncWrite for FakeControlledStream {
     fn poll_write(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -1035,9 +1035,9 @@ fn poll_idle_read<S: AsyncRead + AsyncWrite + Unpin + Send>(
 #[tokio::test]
 async fn reads_only_the_remaining_control_payload_before_the_next_frame() {
     for read_chunk in [1, 2, 125] {
-        let (mut peer, io) = duplex(4096);
+        let (mut peer, io) = io::duplex(4096);
         let ping = make_client_frame(true, (false, false, false), 9, [1, 2, 3, 4], b"0123456789");
-        let (mut io, _) = ControlledIo::new(io, usize::MAX);
+        let (mut io, _) = FakeControlledStream::new(io, usize::MAX);
         io.read_chunk = read_chunk;
         let mut ws = WsRelayStream::new(
             io,
@@ -1075,8 +1075,8 @@ async fn reads_only_the_remaining_control_payload_before_the_next_frame() {
 #[tokio::test]
 async fn emits_pong_only_after_partial_data_headers_and_payloads_finish() {
     for allowance in [1, 7] {
-        let (mut peer, io) = duplex(4096);
-        let (io, gate) = ControlledIo::new(io, allowance);
+        let (mut peer, io) = io::duplex(4096);
+        let (io, gate) = FakeControlledStream::new(io, allowance);
         let mut ws = WsRelayStream::new(io, Vec::new(), 65536, 16384, Transport::Ws, KEEPALIVE);
         let waker = noop_waker();
         let mut cx = Context::from_waker(&waker);
@@ -1119,8 +1119,8 @@ async fn emits_pong_only_after_partial_data_headers_and_payloads_finish() {
 #[tokio::test]
 async fn preserves_an_active_pong_and_coalesces_only_unsent_pongs() {
     for allowance in [0, 1] {
-        let (mut peer, io) = duplex(4096);
-        let (io, gate) = ControlledIo::new(io, allowance);
+        let (mut peer, io) = io::duplex(4096);
+        let (io, gate) = FakeControlledStream::new(io, allowance);
         let mut ws = WsRelayStream::new(io, Vec::new(), 65536, 16384, Transport::Ws, KEEPALIVE);
         let waker = noop_waker();
         let mut cx = Context::from_waker(&waker);
@@ -1154,8 +1154,8 @@ async fn preserves_an_active_pong_and_coalesces_only_unsent_pongs() {
 async fn finishes_active_controls_before_normal_and_terminal_close() {
     for terminal in [false, true] {
         for pong_first in [false, true] {
-            let (mut peer, io) = duplex(4096);
-            let (io, gate) = ControlledIo::new(io, 1);
+            let (mut peer, io) = io::duplex(4096);
+            let (io, gate) = FakeControlledStream::new(io, 1);
             let mut ws = WsRelayStream::new(io, Vec::new(), 65536, 16384, Transport::Ws, KEEPALIVE);
             let waker = noop_waker();
             let mut cx = Context::from_waker(&waker);
@@ -1226,8 +1226,8 @@ impl std::task::Wake for WakeCount {
 /// spec: websocket.md:WS-009 partial
 #[tokio::test]
 async fn retries_an_idle_pong_on_write_wake_without_application_writes() {
-    let (mut peer, io) = duplex(4096);
-    let (io, gate) = ControlledIo::new(io, 0);
+    let (mut peer, io) = io::duplex(4096);
+    let (io, gate) = FakeControlledStream::new(io, 0);
     let mut ws = WsRelayStream::new(io, Vec::new(), 65536, 16384, Transport::Ws, KEEPALIVE);
     let wakes = std::sync::Arc::new(WakeCount::default());
     let waker = Waker::from(wakes.clone());
@@ -1258,8 +1258,8 @@ async fn propagates_pong_write_errors_from_reads() {
         std::io::ErrorKind::WriteZero,
         std::io::ErrorKind::BrokenPipe,
     ] {
-        let (mut peer, io) = duplex(4096);
-        let (io, gate) = ControlledIo::new(io, 4096);
+        let (mut peer, io) = io::duplex(4096);
+        let (io, gate) = FakeControlledStream::new(io, 4096);
         gate.lock().expect("gate").error = Some(kind);
         let mut ws = WsRelayStream::new(io, Vec::new(), 65536, 16384, Transport::Ws, KEEPALIVE);
         peer.write_all(&make_client_frame(
@@ -1281,7 +1281,7 @@ async fn propagates_pong_write_errors_from_reads() {
 
 #[tokio::test]
 async fn flushes_idle_pongs_through_a_buffered_transport() {
-    let (mut peer, io) = duplex(4096);
+    let (mut peer, io) = io::duplex(4096);
     let mut ws = WsRelayStream::new(
         tokio::io::BufWriter::new(io),
         Vec::new(),
@@ -1312,7 +1312,7 @@ async fn flushes_idle_pongs_through_a_buffered_transport() {
 
 #[tokio::test]
 async fn rejects_new_data_after_sending_close() {
-    let (_peer, io) = duplex(4096);
+    let (_peer, io) = io::duplex(4096);
     let mut ws = WsRelayStream::new(io, Vec::new(), 65536, 16384, Transport::Ws, KEEPALIVE);
     let waker = noop_waker();
     let mut cx = Context::from_waker(&waker);
@@ -1333,7 +1333,7 @@ async fn terminal_close_completes_on_peer_close_without_transport_eof() {
         RelayCloseAction::StreamError(ConnectionErrorKind::IoError),
         RelayCloseAction::ServerShutdown,
     ] {
-        let (mut peer, io) = duplex(4096);
+        let (mut peer, io) = io::duplex(4096);
         let mut ws = WsRelayStream::new(io, Vec::new(), 65536, 16384, Transport::Ws, KEEPALIVE);
         let waker = noop_waker();
         let mut cx = Context::from_waker(&waker);
@@ -1368,7 +1368,7 @@ async fn terminal_close_completes_on_peer_close_without_transport_eof() {
 
 #[tokio::test]
 async fn valid_terminal_disposal_yields_during_a_data_flood() {
-    let (mut peer, io) = duplex(65536);
+    let (mut peer, io) = io::duplex(65536);
     let mut ws = WsRelayStream::new(io, Vec::new(), 65536, 16384, Transport::Ws, KEEPALIVE);
     let waker = noop_waker();
     let mut cx = Context::from_waker(&waker);
@@ -1410,7 +1410,7 @@ async fn valid_terminal_disposal_yields_during_a_data_flood() {
 
 #[tokio::test]
 async fn rejected_frame_disposal_waits_for_transport_eof_not_apparent_close_bytes() {
-    let (mut peer, io) = duplex(4096);
+    let (mut peer, io) = io::duplex(4096);
     let mut ws = WsRelayStream::new(io, Vec::new(), 65536, 16384, Transport::Ws, KEEPALIVE);
     let apparent_close = make_client_frame(true, (false, false, false), 8, [0; 4], &[3, 232]);
     peer.write_all(&make_client_frame(
@@ -1442,8 +1442,8 @@ async fn rejected_frame_disposal_waits_for_transport_eof_not_apparent_close_byte
 /// spec: operations.md:OPS-042 partial
 #[tokio::test]
 async fn shutdown_does_not_replace_an_echo_with_a_partial_header() {
-    let (mut peer, io) = duplex(4096);
-    let (io, gate) = ControlledIo::new(io, 1);
+    let (mut peer, io) = io::duplex(4096);
+    let (io, gate) = FakeControlledStream::new(io, 1);
     let close = make_client_frame(
         true,
         (false, false, false),
@@ -1471,8 +1471,8 @@ async fn shutdown_does_not_replace_an_echo_with_a_partial_header() {
     assert_eq!(wire, [0x88, 2, 0x0b, 0xb9]);
 }
 
-fn kw_settings() -> vnc_relay_app::settings::KeepaliveSettings {
-    vnc_relay_app::settings::KeepaliveSettings {
+fn kw_settings() -> vnc_relay_application::settings::KeepaliveSettings {
+    vnc_relay_application::settings::KeepaliveSettings {
         ws_ping: std::time::Duration::from_secs(5),
         ws_pong_timeout: std::time::Duration::from_secs(5),
         ..KEEPALIVE
@@ -1481,7 +1481,7 @@ fn kw_settings() -> vnc_relay_app::settings::KeepaliveSettings {
 
 #[tokio::test(start_paused = true)]
 async fn kw_expiry_is_codeless_but_other_endpoint_dead_connection_sends_4006() {
-    let (mut peer, io) = duplex(4096);
+    let (mut peer, io) = io::duplex(4096);
     let mut ws = WsRelayStream::new(io, Vec::new(), 65536, 16384, Transport::Ws, kw_settings());
     let mut cx = Context::from_waker(Waker::noop());
     assert!(Pin::new(&mut ws).poll_maintenance(&mut cx).is_pending());
@@ -1509,7 +1509,7 @@ async fn kw_expiry_is_codeless_but_other_endpoint_dead_connection_sends_4006() {
         0
     );
 
-    let (mut peer, io) = duplex(4096);
+    let (mut peer, io) = io::duplex(4096);
     let mut ws = WsRelayStream::new(io, Vec::new(), 65536, 16384, Transport::Ws, kw_settings());
     assert!(
         Pin::new(&mut ws)
@@ -1525,7 +1525,7 @@ async fn kw_expiry_is_codeless_but_other_endpoint_dead_connection_sends_4006() {
 
 #[tokio::test(start_paused = true)]
 async fn kw_keeps_deadlines_running_when_b_hides_a_pong() {
-    let (mut peer, io) = duplex(65536);
+    let (mut peer, io) = io::duplex(65536);
     let mut ws = WsRelayStream::new(io, Vec::new(), 65536, 16384, Transport::Ws, kw_settings());
     let mut cx = Context::from_waker(Waker::noop());
     tokio::time::advance(std::time::Duration::from_secs(5)).await;
@@ -1558,8 +1558,8 @@ async fn kw_keeps_deadlines_running_when_b_hides_a_pong() {
 #[tokio::test(start_paused = true)]
 async fn kw_waits_for_partial_data_and_flushes_ping_without_interleaving_controls() {
     for allowance in [1, 7] {
-        let (mut peer, io) = duplex(4096);
-        let (io, gate) = ControlledIo::new(io, allowance);
+        let (mut peer, io) = io::duplex(4096);
+        let (io, gate) = FakeControlledStream::new(io, allowance);
         let mut ws = WsRelayStream::new(io, Vec::new(), 65536, 16384, Transport::Ws, kw_settings());
         let mut cx = Context::from_waker(Waker::noop());
         let data = b"0123456789";
@@ -1581,8 +1581,8 @@ async fn kw_waits_for_partial_data_and_flushes_ping_without_interleaving_control
             .unwrap_or_else(|error| panic!("frame then Ping: {error}"));
         assert_eq!(&wire, b"\x82\x0a0123456789\x89\x00");
     }
-    let (mut peer, io) = duplex(4096);
-    let (io, gate) = ControlledIo::new(io, 1);
+    let (mut peer, io) = io::duplex(4096);
+    let (io, gate) = FakeControlledStream::new(io, 1);
     let mut ws = WsRelayStream::new(
         tokio::io::BufWriter::with_capacity(1, io),
         Vec::new(),
@@ -1618,8 +1618,8 @@ async fn kw_waits_for_partial_data_and_flushes_ping_without_interleaving_control
 
 #[tokio::test(start_paused = true)]
 async fn kw_finishes_a_started_ping_before_echoing_a_received_close() {
-    let (mut peer, io) = duplex(4096);
-    let (io, gate) = ControlledIo::new(io, 1);
+    let (mut peer, io) = io::duplex(4096);
+    let (io, gate) = FakeControlledStream::new(io, 1);
     let mut ws = WsRelayStream::new(io, Vec::new(), 65536, 16384, Transport::Ws, kw_settings());
     let mut cx = Context::from_waker(Waker::noop());
     tokio::time::advance(std::time::Duration::from_secs(5)).await;
@@ -1652,9 +1652,9 @@ async fn kw_finishes_a_started_ping_before_echoing_a_received_close() {
 #[cfg(target_os = "linux")]
 #[tokio::test]
 async fn classifies_underlying_ws_and_wss_socket_timeouts_without_changing_other_errors() {
-    struct FailedSocket(std::io::ErrorKind);
+    struct StubSocket(std::io::ErrorKind);
 
-    impl AsyncRead for FailedSocket {
+    impl AsyncRead for StubSocket {
         fn poll_read(
             self: Pin<&mut Self>,
             _: &mut Context<'_>,
@@ -1664,7 +1664,7 @@ async fn classifies_underlying_ws_and_wss_socket_timeouts_without_changing_other
         }
     }
 
-    impl AsyncWrite for FailedSocket {
+    impl AsyncWrite for StubSocket {
         fn poll_write(
             self: Pin<&mut Self>,
             _: &mut Context<'_>,
@@ -1713,7 +1713,7 @@ async fn classifies_underlying_ws_and_wss_socket_timeouts_without_changing_other
             std::io::ErrorKind::BrokenPipe,
         ] {
             let mut ws = WsRelayStream::new(
-                FailedSocket(kind),
+                StubSocket(kind),
                 Vec::new(),
                 65536,
                 16384,
@@ -1735,9 +1735,9 @@ async fn classifies_underlying_ws_and_wss_socket_timeouts_without_changing_other
 
 /// The `vnc_relay.websocket.ping_timeouts` points of `metrics` as
 /// `listener=count` lines.
-fn ping_timeouts(metrics: &std::sync::Arc<vnc_relay_app::metrics::Metrics>) -> Vec<String> {
-    use vnc_relay_app::metrics::snapshot::{Number, PointValue};
-    use vnc_relay_app::ports::{OpenCount, ProcessStats};
+fn ping_timeouts(metrics: &std::sync::Arc<vnc_relay_application::metrics::Metrics>) -> Vec<String> {
+    use vnc_relay_application::metrics::snapshot::{Number, PointValue};
+    use vnc_relay_application::ports::{OpenCount, ProcessStats};
 
     let unread = ProcessStats {
         cpu: None,
@@ -1770,21 +1770,21 @@ fn ping_timeouts(metrics: &std::sync::Arc<vnc_relay_app::metrics::Metrics>) -> V
 #[tokio::test(start_paused = true)]
 async fn counts_a_missed_pong_deadline_once_and_never_an_answered_ping() {
     use std::sync::Arc;
-    use vnc_relay_app::metrics::Metrics;
-    use vnc_relay_domain::entry_point::Listener;
+    use vnc_relay_application::metrics::Metrics;
+    use vnc_relay_domain::entry_point::ListenerKind;
 
     let metrics = Arc::new(Metrics::new(&crate::clock::SystemClock::new()));
     let mut cx = Context::from_waker(Waker::noop());
-    let (mut answering_peer, io) = duplex(4096);
+    let (mut answering_peer, io) = io::duplex(4096);
     let mut answered =
         WsRelayStream::new(io, Vec::new(), 65536, 16384, Transport::Wss, kw_settings())
-            .count_ping_timeouts(Arc::clone(&metrics), Listener::Wss);
-    let (mut silent_peer, io) = duplex(4096);
+            .count_ping_timeouts(Arc::clone(&metrics), ListenerKind::Wss);
+    let (mut silent_peer, io) = io::duplex(4096);
     let mut silent =
         WsRelayStream::new(io, Vec::new(), 65536, 16384, Transport::Wss, kw_settings())
-            .count_ping_timeouts(Arc::clone(&metrics), Listener::Wss);
+            .count_ping_timeouts(Arc::clone(&metrics), ListenerKind::Wss);
     // A stream that is not counted, as with TCP keepalive failures.
-    let (_quiet_peer, io) = duplex(4096);
+    let (_quiet_peer, io) = io::duplex(4096);
     let mut uncounted =
         WsRelayStream::new(io, Vec::new(), 65536, 16384, Transport::Ws, kw_settings());
 

@@ -10,10 +10,10 @@ use std::time::{Duration, SystemTime};
 
 use vnc_relay_domain::budget::ConnectionBudget;
 use vnc_relay_domain::peer_ip::PeerIp;
-use vnc_relay_domain::session::SessionState;
+use vnc_relay_domain::session::State;
 
 use crate::ports::{Clock, RelayLifecycle, RelayStateSource};
-use crate::relay::{ActiveSessionSnapshot, RelaySnapshot, milliseconds};
+use crate::relay::{self, ActiveSessionSnapshot, RelaySnapshot};
 
 /// One point-in-time server summary (management-api-v1 §1.6).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -272,7 +272,7 @@ impl ManagementQueryService {
                 target_transport: closed.target_transport.as_str(),
                 started_at: closed.started_at,
                 ended_at: closed.ended_at,
-                duration_ms: milliseconds(closed.duration),
+                duration_ms: relay::milliseconds(closed.duration),
                 bytes_viewer_to_target: closed.bytes_viewer_to_target,
                 bytes_target_to_viewer: closed.bytes_target_to_viewer,
                 viewer_address: closed.viewer_address,
@@ -292,8 +292,8 @@ impl ManagementQueryService {
 
     fn map_active_session(entry: ActiveSessionSnapshot) -> ActiveSessionItemView {
         let state = match entry.state {
-            SessionState::Closing | SessionState::Finished => "closing",
-            SessionState::Active => "active",
+            State::Closing | State::Finished => "closing",
+            State::Active => "active",
         };
         let target_address = entry.peer.target_address();
 
@@ -328,7 +328,7 @@ impl ManagementQueryService {
 mod tests {
     use super::*;
     use crate::events::RelayIdRef;
-    use crate::relay::test_support::TestSettings;
+    use crate::relay::test_support::FakeRuntimeSettingsSource;
     use crate::relay::{ClosedSessionSnapshot, ConnectionContext, RelayCounts, WaitingSnapshot};
     use std::sync::atomic::{AtomicI64, AtomicU64, Ordering};
     use vnc_relay_domain::conn_id::ConnId;
@@ -336,15 +336,15 @@ mod tests {
     use vnc_relay_domain::handshake::Mode;
     use vnc_relay_domain::peer_ip::PeerIp;
     use vnc_relay_domain::relay_id::RelayId;
-    use vnc_relay_domain::session::{CloseCause, SessionId, Transport};
+    use vnc_relay_domain::session::{CloseCause, Id, Transport};
 
-    struct TestClock {
+    struct FakeClock {
         mono: AtomicU64,
         wall_offset_sec: AtomicI64,
         base_wall: SystemTime,
     }
 
-    impl TestClock {
+    impl FakeClock {
         fn new() -> Self {
             Self {
                 mono: AtomicU64::new(10_000),
@@ -354,7 +354,7 @@ mod tests {
         }
     }
 
-    impl Clock for TestClock {
+    impl Clock for FakeClock {
         fn monotonic(&self) -> Duration {
             Duration::from_millis(self.mono.load(Ordering::Acquire))
         }
@@ -369,11 +369,11 @@ mod tests {
         }
     }
 
-    struct DummyRelaySource {
+    struct StubRelayStateSource {
         snapshot: std::sync::Mutex<RelaySnapshot>,
     }
 
-    impl DummyRelaySource {
+    impl StubRelayStateSource {
         fn new(snapshot: RelaySnapshot) -> Self {
             Self {
                 snapshot: std::sync::Mutex::new(snapshot),
@@ -381,7 +381,7 @@ mod tests {
         }
     }
 
-    impl RelayStateSource for DummyRelaySource {
+    impl RelayStateSource for StubRelayStateSource {
         fn snapshot(&self, _clock: &dyn Clock) -> RelaySnapshot {
             self.snapshot.lock().unwrap().clone()
         }
@@ -421,7 +421,7 @@ mod tests {
             }],
             active: vec![],
             recent_closed: vec![ClosedSessionSnapshot {
-                session_id: SessionId::parse("ses_aaaaaaaaaaaaaaaaaaaaaaaaaa").unwrap(),
+                session_id: Id::parse("ses_aaaaaaaaaaaaaaaaaaaaaaaaaa").unwrap(),
                 mode: Mode::Mode1,
                 viewer_transport: Transport::Tcp,
                 target_transport: Transport::Tcp,
@@ -446,7 +446,7 @@ mod tests {
     /// spec: operations.md:OPS-053 partial
     #[test]
     fn summary_reports_reloaded_limits_even_below_current_usage() {
-        let settings = TestSettings::new();
+        let settings = FakeRuntimeSettingsSource::new();
         let relay = ConnectionBudget::new();
         let admin = ConnectionBudget::new();
         let first = relay.try_acquire(20).expect("relay first");
@@ -454,10 +454,10 @@ mod tests {
         let admin_first = admin.try_acquire(10).expect("admin first");
         let admin_second = admin.try_acquire(10).expect("admin second");
         let service = ManagementQueryService::new(
-            Arc::new(DummyRelaySource::new(sample_snapshot())),
+            Arc::new(StubRelayStateSource::new(sample_snapshot())),
             relay.clone(),
             admin.clone(),
-            Arc::new(TestClock::new()),
+            Arc::new(FakeClock::new()),
             settings.clone(),
         );
         settings.change(|settings| {
@@ -490,17 +490,17 @@ mod tests {
     /// spec: management.md:MGT-007 partial
     #[test]
     fn elapsed_and_uptime_never_negative_on_backward_wall_clock_step() {
-        let clock = Arc::new(TestClock::new());
+        let clock = Arc::new(FakeClock::new());
         let relay_budget = ConnectionBudget::new();
         let admin_budget = ConnectionBudget::new();
-        let relay_source = Arc::new(DummyRelaySource::new(sample_snapshot()));
+        let relay_source = Arc::new(StubRelayStateSource::new(sample_snapshot()));
 
         let service = ManagementQueryService::new(
             relay_source,
             relay_budget,
             admin_budget,
             Arc::clone(&clock) as Arc<dyn Clock>,
-            TestSettings::new(),
+            FakeRuntimeSettingsSource::new(),
         );
 
         // Advance monotonic time by 5,000 ms, but move wall-clock BACKWARD by 3,600 seconds
@@ -522,20 +522,20 @@ mod tests {
     /// spec: management.md:MGT-026 partial
     #[test]
     fn query_summary_counts_and_usage() {
-        let clock = Arc::new(TestClock::new());
+        let clock = Arc::new(FakeClock::new());
         let relay_budget = ConnectionBudget::new();
         let admin_budget = ConnectionBudget::new();
         let _p1 = relay_budget.try_acquire(20);
         let _p2 = relay_budget.try_acquire(20);
         let _a1 = admin_budget.try_acquire(10);
 
-        let relay_source = Arc::new(DummyRelaySource::new(sample_snapshot()));
+        let relay_source = Arc::new(StubRelayStateSource::new(sample_snapshot()));
         let service = ManagementQueryService::new(
             relay_source,
             relay_budget,
             admin_budget,
             Arc::clone(&clock) as Arc<dyn Clock>,
-            TestSettings::new(),
+            FakeRuntimeSettingsSource::new(),
         );
 
         let summary = service.summary();
@@ -554,16 +554,16 @@ mod tests {
     /// spec: management.md:MGT-023 partial
     #[test]
     fn session_detail_validations() {
-        let clock = Arc::new(TestClock::new());
+        let clock = Arc::new(FakeClock::new());
         let relay_budget = ConnectionBudget::new();
         let admin_budget = ConnectionBudget::new();
-        let relay_source = Arc::new(DummyRelaySource::new(sample_snapshot()));
+        let relay_source = Arc::new(StubRelayStateSource::new(sample_snapshot()));
         let service = ManagementQueryService::new(
             relay_source,
             relay_budget,
             admin_budget,
             Arc::clone(&clock) as Arc<dyn Clock>,
-            TestSettings::new(),
+            FakeRuntimeSettingsSource::new(),
         );
 
         // Invalid IDs
@@ -621,11 +621,11 @@ mod tests {
                     proxied.then(|| PeerIp::new("::ffff:198.51.100.7".parse().unwrap()));
                 let expected = *context;
                 let service = ManagementQueryService::new(
-                    Arc::new(DummyRelaySource::new(snapshot)),
+                    Arc::new(StubRelayStateSource::new(snapshot)),
                     ConnectionBudget::new(),
                     ConnectionBudget::new(),
-                    Arc::new(TestClock::new()),
-                    TestSettings::new(),
+                    Arc::new(FakeClock::new()),
+                    FakeRuntimeSettingsSource::new(),
                 );
                 let list = service.waiting();
                 let item = &list.items[0];
@@ -667,11 +667,11 @@ mod tests {
             let expected_viewer_ip = closed.viewer_forwarded_ip;
             let expected_target_ip = closed.target_forwarded_ip;
             let service = ManagementQueryService::new(
-                Arc::new(DummyRelaySource::new(snapshot)),
+                Arc::new(StubRelayStateSource::new(snapshot)),
                 ConnectionBudget::new(),
                 ConnectionBudget::new(),
-                Arc::new(TestClock::new()),
-                TestSettings::new(),
+                Arc::new(FakeClock::new()),
+                FakeRuntimeSettingsSource::new(),
             );
             let view = service.closed_sessions();
             assert_eq!(view.items.len(), 1);

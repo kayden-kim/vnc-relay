@@ -3,11 +3,11 @@
 use std::fmt;
 use std::net::{IpAddr, Ipv6Addr};
 
-use crate::allow_list::parse_address;
+use crate::allow_list;
 use crate::entry_point::{EntryPoint, Role};
-use crate::origin::is_dns_name;
+use crate::origin;
 use crate::relay_id::RelayId;
-use crate::target_policy::parse_port;
+use crate::target_policy;
 
 /// Exact initial request length (repeater-handshake-v1 §1.2).
 pub const HANDSHAKE_REQUEST_LEN: usize = 250;
@@ -34,7 +34,7 @@ impl Mode {
 
 /// Enabled relay modes, checked before payload syntax (repeater-handshake-v1 §1.2).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct HandshakePolicy {
+pub struct Policy {
     pub mode1_enabled: bool,
     pub mode2_enabled: bool,
 }
@@ -80,7 +80,7 @@ impl TargetAddress {
                 if text.starts_with('0') {
                     return Err(HandshakeError::Invalid);
                 }
-                parse_port(text).map_err(|_| HandshakeError::Invalid)?
+                target_policy::parse_port(text).map_err(|_| HandshakeError::Invalid)?
             }
             None => 5900,
         };
@@ -95,10 +95,10 @@ impl TargetAddress {
         {
             // Keep numeric address ranges out of the DNS branch, as target
             // policy parsing does. Numeric-and-dot input never falls back to DNS.
-            TargetHost::Ip(parse_address(host).map_err(|_| HandshakeError::Invalid)?)
+            TargetHost::Ip(allow_list::parse_address(host).map_err(|_| HandshakeError::Invalid)?)
         } else {
             let name = host.strip_suffix('.').unwrap_or(host);
-            if !is_dns_name(name) {
+            if !origin::is_dns_name(name) {
                 return Err(HandshakeError::Invalid);
             }
             TargetHost::Name(name.to_ascii_lowercase())
@@ -194,7 +194,7 @@ impl HandshakeParser {
     pub fn finish(
         self,
         entry_point: EntryPoint,
-        modes: HandshakePolicy,
+        modes: Policy,
     ) -> Result<HandshakeRequest, HandshakeError> {
         if !self.is_complete() {
             return Err(HandshakeError::Incomplete);
@@ -249,7 +249,7 @@ mod tests {
     use super::*;
     use std::net::Ipv4Addr;
 
-    const ENABLED: HandshakePolicy = HandshakePolicy {
+    const ENABLED: Policy = Policy {
         mode1_enabled: true,
         mode2_enabled: true,
     };
@@ -264,7 +264,7 @@ mod tests {
     fn parse(
         value: &[u8],
         entry_point: EntryPoint,
-        modes: HandshakePolicy,
+        modes: Policy,
     ) -> Result<HandshakeRequest, HandshakeError> {
         let mut parser = HandshakeParser::new();
         assert_eq!(parser.feed(&request(value)), HANDSHAKE_REQUEST_LEN);
@@ -393,7 +393,7 @@ mod tests {
     fn rejects_disabled_modes_before_validating_their_payloads() {
         for mode1_enabled in [false, true] {
             for mode2_enabled in [false, true] {
-                let modes = HandshakePolicy {
+                let modes = Policy {
                     mode1_enabled,
                     mode2_enabled,
                 };
@@ -551,7 +551,7 @@ mod tests {
                 assert_eq!(
                     error_code(parser.finish(
                         entry_point,
-                        HandshakePolicy {
+                        Policy {
                             mode1_enabled: false,
                             mode2_enabled: false,
                         }

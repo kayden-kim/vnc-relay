@@ -4,8 +4,8 @@ use std::pin::Pin;
 use std::task::Context;
 use std::time::Duration;
 
-use tokio::time::{Instant, Sleep, sleep_until};
-use vnc_relay_app::settings::KeepaliveSettings;
+use tokio::time::{self, Instant, Sleep};
+use vnc_relay_application::settings::KeepaliveSettings;
 
 // ceil(300 / 5) + 1, from config-v3 §1.7. No per-Ping allocation.
 const MAX_DEADLINES: usize = 61;
@@ -38,7 +38,7 @@ impl Keepalive {
                 .as_nanos()
                 .div_ceil(settings.ws_ping.as_nanos()) as usize
                 + 1,
-            timer: Box::pin(sleep_until(next_ping)),
+            timer: Box::pin(time::sleep_until(next_ping)),
             pending_ping: None,
             expired: false,
         }

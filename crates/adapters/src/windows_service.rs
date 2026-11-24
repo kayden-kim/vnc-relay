@@ -195,7 +195,7 @@ impl Installed {
 
 /// A control from the SCM that asks the server to stop (cli-v1 §1.9).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum StopControl {
+pub enum StopRequest {
     /// Stop: the graceful shutdown with G.
     Stop,
     /// System shutdown: closing at once, as a closed console does (Q248).
@@ -205,7 +205,7 @@ pub enum StopControl {
 /// What the service body gets from the SCM.
 pub struct ServiceSession {
     /// Stop controls in arrival order. The sender lives until the process ends.
-    pub controls: mpsc::UnboundedReceiver<StopControl>,
+    pub controls: mpsc::UnboundedReceiver<StopRequest>,
     pub status: StatusReporter,
 }
 
@@ -255,11 +255,11 @@ extern "system" fn service_main(_argc: u32, _argv: *mut *mut u16) {
     let handler = move |control| match control {
         ServiceControl::Stop => {
             // The receiver closes only after the body returned.
-            let _ = sender.send(StopControl::Stop);
+            let _ = sender.send(StopRequest::Stop);
             ServiceControlHandlerResult::NoError
         }
         ServiceControl::Shutdown => {
-            let _ = sender.send(StopControl::SystemShutdown);
+            let _ = sender.send(StopRequest::SystemShutdown);
             ServiceControlHandlerResult::NoError
         }
         ServiceControl::Interrogate => ServiceControlHandlerResult::NoError,

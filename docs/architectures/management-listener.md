@@ -22,7 +22,7 @@
   - 요청 처리 순서(3·4절): `POST /api/v1/session`은 로그인이다. 세션을 보지 않고 로그인 처리로 넘긴다(관리 로그인과 세션 설계 4절). 나머지 `/api/v1/` 요청은 관리 세션을 먼저 본다. 세션이 없으면 경로·메서드와 관계없이 401을 준다(관리 API 계약 1.3절 2단계). 정적 경로는 1.11절 표를 따른다.
   - 응답 헤더: 모든 관리 응답에 `Cache-Control: no-store`를 붙인다(1.1절). 모든 401에 `WWW-Authenticate: Session realm="vnc-relay"`를 붙인다(2.1절). 쿠키가 있었던 401은 `relay_admin_session` 쿠키를 지운다(1.4.1절). HTTPS 리스너가 보낸 지우기 쿠키에는 `Secure`를 붙인다.
   - 상대 주소: 관리 응답에 들어가는 주소는 소켓의 실제 상대 주소다. 전달 헤더(`Forwarded`·`X-Forwarded-For`)는 읽지 않는다(1.1절, 관리 스펙 MGT-015).
-  - 요청 시간 제한: 접속마다 U(`[timeouts] tls_upgrade_secs`)를 건다. TLS 핸드셰이크와 첫 요청 머리가 끝날 때까지는 수락 때부터 잰 절대 기한이다. 그 뒤에는 읽기·쓰기가 있을 때마다 U를 다시 잰다. 기한이 지나면 평문 응답 없이 닫는다(4·6절). 검증·수락된 관리자 종료 요청이 정리 완료를 기다릴 때만 U를 멈추고 응답 쓰기부터 다시 잰다. `IdleControl::pause_for_termination`과 `Deadlined::resume_for_response`가 이 예외를 구현한다. 요청별·본문별 절대 기한은 없으므로 전송 간격이 U보다 짧으면 Lm 자리를 계속 점유할 수 있다.
+  - 요청 시간 제한: 접속마다 U(`[timeouts] tls_upgrade_secs`)를 건다. TLS 핸드셰이크와 첫 요청 머리가 끝날 때까지는 수락 때부터 잰 절대 기한이다. 그 뒤에는 읽기·쓰기가 있을 때마다 U를 다시 잰다. 기한이 지나면 평문 응답 없이 닫는다(4·6절). 검증·수락된 관리자 종료 요청이 정리 완료를 기다릴 때만 U를 멈추고 응답 쓰기부터 다시 잰다. `IdleTimerHandle::pause_for_termination`과 `Deadlined::resume_for_response`가 이 예외를 구현한다. 요청별·본문별 절대 기한은 없으므로 전송 간격이 U보다 짧으면 Lm 자리를 계속 점유할 수 있다.
   - 정적 파일 제공: 실행 파일에 넣은 대시보드 파일을 준다. 제공 경로와 Content-Type은 `dashboard_assets.rs` 표가 정한다(프런트엔드 컨벤션 1.2절). `/login/` 아래 파일은 세션 없이 받는다. `/`(`app/index.html`)와 `/app/` 아래 파일은 세션이 있어야 받는다. 없으면 `/login/`으로 303한다. 정적 요청의 세션 확인은 읽기만 하고 유휴 기한을 늘리지 않는다(계약 1.4.2절).
 - 맡지 않는 책임:
   - 로그인 처리와 관리 세션 발급([관리 로그인과 세션 설계](management-session.md)).
@@ -79,11 +79,11 @@ flowchart LR
 | --- | --- | --- | --- |
 | `ManagementListener` | listener, `tls: Option<TlsSource>`, admin budget, `Arc<dyn RuntimeSettingsSource>`, services, dashboard hints | 메모리, `run`이 소비 | TLS 존재 여부는 시작 때 정한다. 수락 시 Lm·U를 같은 runtime 세대에서 읽는다. |
 | `TlsListener<L>` | inner, `TlsSource`, log, listener name | 메모리 | 새 TLS 협상은 현재 스냅샷의 수락기를 쓴다. 진행 중인 협상의 수락기는 유지한다. |
-| `TlsIo<IO>` | `Handshaking(Handshake<IO>)`, `Established(TlsStream<Recorded<IO>>)`, `Failed(HandshakeFailure)` | 접속 하나의 `Io`값 | 상태는 앞으로만 간다: `Handshaking` → `Established` 또는 `Failed`. `Failed`에서는 되돌아가지 않는다. |
+| `TlsIo<IO>` | `Handshaking(Handshake<IO>)`, `Established(TlsStream<Recorded<IO>>)`, `Failed(TlsHandshakeError)` | 접속 하나의 `Io`값 | 상태는 앞으로만 간다: `Handshaking` → `Established` 또는 `Failed`. `Failed`에서는 되돌아가지 않는다. |
 | `Handshake<IO>` | `accept: Accept<Recorded<IO>>`, `capture: Capture`, `peer: PeerIp`, `log: Arc<dyn EventSink>`, `name: &'static str` | `TlsIo::Handshaking` 안 | 핸드셰이크가 끝나면 `Accept`를 버린다. 버전 거절을 기록할 때 `peer`를 쓴다. |
 | `Recorded<IO>` | `io: IO`, `capture: Capture`(`Arc<Mutex<Option<Vec<u8>>>>`) | 접속 하나. `Accept`가 읽는 `Io`를 감싼다 | 핸드셰이크 동안 읽은 바이트를 `capture`에 복사한다(최대 `CAPTURE_LIMIT` = 5 + 16 384 바이트). 핸드셰이크가 끝나면 `capture`를 `None`으로 바꾼다. |
-| `Admitted` | `stream: TcpStream`, `_permit: BudgetPermit` | 접속 하나 | `_permit`은 `Admitted`가 사라질 때 Lm으로 돌아간다. 핸드셰이크 중에도 자리를 든다. |
-| `Deadlined<IO>` | `io: IO`, `limit: Duration`(U), `timer: Pin<Box<Sleep>>`, `head_done: bool`, `window: u32`, `idle: IdleControl` | 접속 하나 | `head_done`은 `\r\n\r\n`을 읽으면 참이 되고 되돌아가지 않는다. `window`는 머리 끝을 찾는다. 기한이 지나면 읽기·쓰기가 `TimedOut`을 돌려준다. `idle`은 수락된 종료 완료 대기의 U 중지를 공유한다. |
+| `Admitted` | `stream: TcpStream`, `_permit: budget::Permit` | 접속 하나 | `_permit`은 `Admitted`가 사라질 때 Lm으로 돌아간다. 핸드셰이크 중에도 자리를 든다. |
+| `Deadlined<IO>` | `io: IO`, `limit: Duration`(U), `timer: Pin<Box<Sleep>>`, `head_done: bool`, `window: u32`, `idle: IdleTimerHandle` | 접속 하나 | `head_done`은 `\r\n\r\n`을 읽으면 참이 되고 되돌아가지 않는다. `window`는 머리 끝을 찾는다. 기한이 지나면 읽기·쓰기가 `TimedOut`을 돌려준다. `idle`은 수락된 종료 완료 대기의 U 중지를 공유한다. |
 | 관리 응답 본문 | `{"error":{"code":"unauthenticated","message":…}}`, `{"error":{"code":"not_found","message":…}}` | HTTP 응답 | 2.1절 형식만 쓴다. `message`는 요청 입력값을 담지 않는다. |
 | 지우기 쿠키 | `relay_admin_session=; Path=/; Max-Age=0; HttpOnly; SameSite=Strict` (HTTPS면 `; Secure` 추가) | `Set-Cookie` 헤더 | 1.4.1절 속성과 맞춘다. 값은 비운다. |
 | `Asset` | `path: &'static str`(제공 경로, 예: `/app/tokens.css`), `content_type: &'static str`, `body: &'static [u8]`(`include_bytes!`) | 실행 파일의 상수(`ASSETS`) | 경로는 `/login/`·`/app/`로 시작하거나 `/`(`app/index.html`에 대응)다. 확장자는 `.html`·`.css`·`.js`·`.woff2`(글꼴, `font/woff2`)만 쓴다. `preview/`·`tests/` 경로는 넣지 않는다. 대조 시험(`tests/dashboard_assets.rs`)이 표와 `web/dashboard/` 파일 목록을 비교한다. |
@@ -102,7 +102,7 @@ flowchart LR
 | 8 | `static_answer` 4단계, `dashboard_assets.rs` `find_asset` | 표에서 요청 경로와 정확히 같은 항목을 찾는다. 있으면 `200`: GET은 본문, HEAD는 본문 없이 같은 `Content-Length`. 헤더는 파일 응답 규칙(`Content-Type`, `Cache-Control`, 보안 헤더)을 따른다. 없으면 `404`와 JSON `not_found` 본문을 보낸다. 세션이 있는 `/`는 `app/index.html`을 제공한다. `/app/` 아래 하위 디렉터리 파일도 같은 표에서 찾는다. | 없음 | 응답 |
 | 9 | `management_http.rs` `answer` 4단계 | 나머지 경로는 메서드와 관계없이 `303`, `Location: /login/`, 본문 없음. 계약 1.11절 표는 존재하는 그 밖의 경로에 `404`를, 없는 경로에 `303`을 준다. 이 리스너에는 존재하는 그 밖의 경로가 없어 모두 `303`이다. | 없음 | 응답 |
 
-5단계에서 검증·수락된 terminate 요청이 정리 완료를 기다리는 동안만 연결의 U를 멈춘다. `terminate_api`가 수락 뒤 `IdleControl::pause_for_termination`을 부르고, `Deadlined::resume_for_response`가 첫 응답 쓰기에서 U를 다시 잰다(`crates/adapters/src/request_deadline.rs`). 인증·CSRF·경로·본문 검사와 그 밖의 요청에는 U를 적용한다. 기준은 [설정 계약 1.2절](../contracts/config-v4.md#12-키-표)과 [종료 설계 4.2절](management-terminate.md#42-중계-소유자의-정리와-알림)이다.
+5단계에서 검증·수락된 terminate 요청이 정리 완료를 기다리는 동안만 연결의 U를 멈춘다. `terminate_api`가 수락 뒤 `IdleTimerHandle::pause_for_termination`을 부르고, `Deadlined::resume_for_response`가 첫 응답 쓰기에서 U를 다시 잰다(`crates/adapters/src/request_deadline.rs`). 인증·CSRF·경로·본문 검사와 그 밖의 요청에는 U를 적용한다. 기준은 [설정 계약 1.2절](../contracts/config-v4.md#12-키-표)과 [종료 설계 4.2절](management-terminate.md#42-중계-소유자의-정리와-알림)이다.
 
 관리 응답은 모두 `Cache-Control: no-store`를 가진다. 로그인 화면의 정적 응답도 같다. 정적 보안 헤더(`X-Content-Type-Options`·`Referrer-Policy`·`Content-Security-Policy`, 계약 1.11절)는 정적 파일 응답(200)에만 붙인다. 303과 404 응답에는 보안 헤더를 붙이지 않는다.
 

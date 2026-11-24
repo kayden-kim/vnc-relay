@@ -15,7 +15,7 @@
 | 관련 ADR | [ADR-0003 단일 인스턴스·메모리 상태](../decisions/ADR-0003-single-instance-memory-state.md), [ADR-0006 설정 파일을 통한 편집](../decisions/ADR-0006-config-edit-through-file.md) |
 | 관련 문서 | [접속 ticket 모듈 설계](relay-access-ticket.md) |
 
-중계는 중계 리스너 네 개(`tcp_viewer`·`tcp_server`·`ws`·`wss`)와 진입점 여섯 개를 구분한다. `Settings::other_listeners`는 WS·WSS의 역할이 하나라도 켜져 있으면 공유 소켓을 한 번만 계획한다. WS·WSS의 부모 `listen`과 WSS 부모 TLS를 사용한다. `WsEntryPoint::new`에는 `Listener`, `TcpEntryPoint::new`에는 역할이 고정된 `EntryPoint`를 넘긴다. 같은 WSS 수락기를 두 역할이 공유한다.
+중계는 중계 리스너 네 개(`tcp_viewer`·`tcp_server`·`ws`·`wss`)와 진입점 여섯 개를 구분한다. `Settings::other_listeners`는 WS·WSS의 역할이 하나라도 켜져 있으면 공유 소켓을 한 번만 계획한다. WS·WSS의 부모 `listen`과 WSS 부모 TLS를 사용한다. `WsEntryPoint::new`에는 `ListenerKind`, `TcpEntryPoint::new`에는 역할이 고정된 `EntryPoint`를 넘긴다. 같은 WSS 수락기를 두 역할이 공유한다.
 
 `start`는 시작 설정의 `recent_logs.max_entries`로 `Arc<RecentLogs>`를 한 번 만든다. 이 참조를 `JsonLinesEventSink::with_recent_logs`와 `listen_until_shutdown`에 직접 넘긴다. 관리 서비스의 `logs`는 기록 싱크와 같은 버퍼다. `trusted_proxies`는 공유 재로드 설정을 통해 WS·WSS의 수락·업그레이드 검사에 전달한다. 최근 로그 구조와 잠금 순서는 [운영 로그 모듈](ops-log.md)을 따른다.
 
@@ -42,11 +42,11 @@
   - TCP 수락·WS 업그레이드·중계·설정 편집은 각 사용 사례/어댑터가 맡는다. 조립에 업무 규칙을 복제하지 않는다.
   - 비밀번호·로그인·계정 변경은 [계정 준비](admin-accounts.md)와 [관리 세션](management-session.md)이 맡는다.
 - 다른 모듈에 공개하는 기능:
-  - `vnc_relay_domain::account::{Account, AccountName, AccountNameError, PasswordHash, PasswordHashError, Argon2Params, Argon2ParamsError}`
-  - `vnc_relay_app::accounts::{ACCOUNTS_FILE_KEY, AccountsError, AccountsDiagnostic, AccountsWarning, LoadedAccounts, require_any}`
-  - `vnc_relay_app::settings::{ListenerPlan, Settings::status_listener, Settings::management_listener, Settings::other_listeners}`
+  - `vnc_relay_domain::account::{Account, Name, AccountNameError, PasswordHash, PasswordHashError, Argon2Params, Argon2ParamsError}`
+  - `vnc_relay_application::accounts::{ACCOUNTS_FILE_KEY, AccountsError, AccountsDiagnostic, AccountsWarning, LoadedAccounts, require_any}`
+  - `vnc_relay_application::settings::{ListenerPlan, Settings::status_listener, Settings::management_listener, Settings::other_listeners}`
   - `vnc_relay_adapters::accounts_file::{load, parse}`
-  - `vnc_relay_adapters::net::{bind, bind_one, BindFailure, BoundListener}`
+  - `vnc_relay_adapters::net::{bind, bind_one, BindError, BoundListener}`
 
 ## 2. 내부 구조
 
@@ -60,7 +60,7 @@ flowchart LR
     SERVE --> START
     START -->|"1 같은 바이트의 Settings·presence"| CFG["adapters config_file.rs<br/>load_candidate"]
     START -->|"2 호출"| ACC["adapters accounts_file.rs<br/>load"]
-    ACC -->|"호출"| DACC["domain account.rs<br/>AccountName·PasswordHash"]
+    ACC -->|"호출"| DACC["domain account.rs<br/>account::Name·PasswordHash"]
     START -->|"2 호출"| REQ["app accounts.rs<br/>require_any"]
     START -->|"4 호출"| PLAN["app settings.rs<br/>Settings::status_listener, management_listener, other_listeners"]
     START -->|"4 호출"| NET["adapters net.rs<br/>bind_one, bind"]
@@ -87,17 +87,17 @@ flowchart LR
 | `src/serve.rs` `config_management` | 설정 절대 경로와 base_dir를 정하고 `ConfigEditService`에 SharedReload·FsConfigFileStore·TomlConfigDocumentGateway·Clock·EventSink를 주입한다. 요청 전 파일을 열지 않는다. | reload 생성 뒤, 리스너 바인드 전 | app config·adapters config_edit |
 | `crates/app/src/reload/snapshot.rs` `ReloadCell`; `crates/app/src/reload.rs` `SharedReload` | cell은 reader, mutex service는 watcher와 설정 GET/PATCH가 공유한다. | TLS 검사 뒤 생성, 프로세스 수명 | Settings·presence·TLS |
 | `src/serve.rs` `ShutdownSignal::register`, `ShutdownSignal::wait`, `Requests::wait`, `HostStatus` | 터미널은 Ubuntu SIGINT·SIGTERM, Windows Ctrl+C·Ctrl+Break·콘솔 닫기를 처리한다. 바인드 전에 등록한다. 서비스는 콘솔 신호 대신 SCM 제어를 기다리고 준비·종료 상태를 SCM에 보고한다. | 4단계 처음 | tokio, Windows 서비스 어댑터 |
-| `crates/adapters/src/listener.rs` `Listener`, `SupervisedListener`, `ListenerFailure` | TCP 수락 포트와 최초 장애 보고. `serve`는 모든 필수 리스너를 이 래퍼로 감싼다. 분류는 [운영 정보 계약 1.12절](../contracts/ops-info-v2.md#112-상태-리스너와-엔드포인트)을 따른다. | 바인드 직후, 감독 채널은 프로세스마다 하나 | tokio, std |
+| `crates/adapters/src/listener.rs` `Listener`, `SupervisedListener`, `ListenerError` | TCP 수락 포트와 최초 장애 보고. `serve`는 모든 필수 리스너를 이 래퍼로 감싼다. 분류는 [운영 정보 계약 1.12절](../contracts/ops-info-v2.md#112-상태-리스너와-엔드포인트)을 따른다. | 바인드 직후, 감독 채널은 프로세스마다 하나 | tokio, std |
 | `src/serve.rs` `wait_for_shutdown`, `begin_process_shutdown` | 최초 종료 원인을 선택한다. 정상 요청은 기존 동작이다. 장애는 상태를 바꾸고 `shutdown_started(fatal_error,error)`를 시작한다. | 준비 뒤 감독 단계 | adapters, app |
 | `src/serve.rs` `tls_checks`, `tls_failure` | 활성화된 WSS 진입점과 관리 리스너의 TLS 파일 설정을 검사 목록으로 모은다. 파일 오류 한 건을 stderr 한 줄과 `startup_failed`로 쓴다. | 4단계 | adapters `tls.rs` |
-| `crates/domain/src/account.rs` `AccountName` | 1~32자, `a-z0-9._-`만 받는 계정 이름 값 타입 | 계정 파일을 읽을 때 | 없음 |
+| `crates/domain/src/account.rs` `account::Name` | 1~32자, `a-z0-9._-`만 받는 계정 이름 값 타입 | 계정 파일을 읽을 때 | 없음 |
 | `crates/domain/src/account.rs` `PasswordHash`, `PasswordHashError`, `Argon2Params`, `Argon2ParamsError` | PHC 문자열 해석(1.4절): 알고리즘·버전·`m,t,p` 순서·솔트 16바이트 이상·해시 32바이트·패딩 없는 표준 Base64. 승인 범위 상수(`MEMORY_KIB` 등)와 범위 판정(하한 미만이 상한 초과보다 먼저다). `Debug`는 해시 문자열을 `"<redacted>"`로 가린다. | 계정 파일을 읽을 때 | 없음 |
 | `crates/domain/src/account.rs` `Account` | 이름과 해시 한 쌍 | 계정 파일을 읽을 때, 호출한 쪽이 소유 | 위 두 타입 |
 | `crates/app/src/accounts.rs` `AccountsError`, `AccountsDiagnostic`, `AccountsWarning` | 계정 파일 오류 코드 5종(`accounts_file_missing`·`accounts_file_unreadable`·`accounts_file_invalid`·`accounts_hash_below_minimum`·`accounts_none`)과 경고 `accounts_file_permissive`, 진단 한 건(`error`, `key`, `message`) | 값 타입 | domain |
 | `crates/app/src/accounts.rs` `require_any` | 계정이 하나도 없으면 `accounts_none` 진단을 준다(운영 스펙 3.1절 5). | `serve` 2단계 | domain |
-| `crates/app/src/settings.rs` `ListenerPlan`, `Settings::status_listener`, `Settings::management_listener`, `Settings::other_listeners` | 바인드할 리스너 계획. 상태·관리 뒤 중계는 `tcp_viewer`, `tcp_server`, `ws`, `wss` 순서다. 공유 WS·WSS는 어느 역할이든 켜면 각각 한 항목만 만든다. 각 항목은 이름, 부모 listen 설정 키, 주소, `Option<Listener>`를 담는다. | 4단계 | domain |
+| `crates/app/src/settings.rs` `ListenerPlan`, `Settings::status_listener`, `Settings::management_listener`, `Settings::other_listeners` | 바인드할 리스너 계획. 상태·관리 뒤 중계는 `tcp_viewer`, `tcp_server`, `ws`, `wss` 순서다. 공유 WS·WSS는 어느 역할이든 켜면 각각 한 항목만 만든다. 각 항목은 이름, 부모 listen 설정 키, 주소, `Option<ListenerKind>`를 담는다. | 4단계 | domain |
 | `crates/adapters/src/accounts_file.rs` `load`, `parse` | 파일 읽기, UTF-8 확인, TOML 해석, `version`·`[[account]]` 키 검사, 중복 이름 검사, 해시 하한·상한 판정, Ubuntu 권한 경고. 모든 진단을 모은다. `LoadedAccounts`(app `accounts.rs`)를 돌려준다. | 호출마다 | toml, domain, app |
-| `crates/adapters/src/net.rs` `bind`, `bind_one`, `BindFailure`, `BoundListener` | `bind_one`은 `ListenerPlan` 하나를 tokio `TcpListener::bind`로 바인드한다. `bind`는 계획마다 `bind_one`을 부르고, 실패도 계속 시도해 모두 모은다. 하나라도 실패하면 성공한 리스너를 닫고 실패 목록을 돌려준다. 성공하면 계획과 리스너 쌍(`BoundListener`)을 돌려준다. 실패 원인은 주소를 뺀 한국어 문장이다. | 4단계 | tokio, app |
+| `crates/adapters/src/net.rs` `bind`, `bind_one`, `BindError`, `BoundListener` | `bind_one`은 `ListenerPlan` 하나를 tokio `TcpListener::bind`로 바인드한다. `bind`는 계획마다 `bind_one`을 부르고, 실패도 계속 시도해 모두 모은다. 하나라도 실패하면 성공한 리스너를 닫고 실패 목록을 돌려준다. 성공하면 계획과 리스너 쌍(`BoundListener`)을 돌려준다. 실패 원인은 주소를 뺀 한국어 문장이다. | 4단계 | tokio, app |
 | `crates/adapters/src/toml_text.rs` `error_position` | TOML 구문 오류의 행·열. 설정 파일과 계정 파일이 함께 쓴다. 파일 내용은 돌려주지 않는다. | 호출마다 | toml |
 | `crates/adapters/src/tls.rs` `load_acceptor`, `TlsError`, `TlsFile` | 인증서와 개인키 파일을 읽고 서로 맞는지 확인한 뒤 rustls 서버 설정을 만든다(암호 모듈 aws-lc-rs). 오류 코드는 모두 `tls_file_invalid`다. 설정 키의 파일 이름(`cert_file`·`key_file`)은 `TlsError::file`이 정한다. | 4단계, 검사마다 호출 | rustls, aws-lc-rs |
 
@@ -115,13 +115,13 @@ flowchart LR
 | 이름 | 필드·형태 | 저장 위치 | 제약과 항상 지켜야 할 조건 |
 | --- | --- | --- | --- |
 | `Command` | `Help`, `Version`, `Serve`, `Admin`, Windows 전용 `Service` | 메모리 | Help·Version은 다른 인수가 없을 때만 만든다. 나머지는 경로와 해석한 하위 명령을 전달한다. |
-| `AccountName` | `String` | `Account` | 1~32자, `a-z0-9._-` |
+| `account::Name` | `String` | `Account` | 1~32자, `a-z0-9._-` |
 | `PasswordHash` | 원문 PHC 문자열, `Argon2Params` | `Account` | 검증된 해시는 AdminAuth의 로그인 검사에 쓴다. Debug·진단에는 원문을 넣지 않는다. |
 | `Argon2Params` | `memory_kib`, `iterations`, `parallelism`: `u32` | `PasswordHash` | 승인 범위: 19456~1048576, 2~10, 1~16([설정 계약 1.2절](../contracts/config-v4.md#12-키-표)) |
 | `AccountsDiagnostic` | `error: AccountsError`, `key: String`, `message: String` | 반환 값 | `key` 규칙은 [CLI 계약 1.3절](../contracts/cli-v1.md#13-계정-파일-형식). 빈 문자열이면 출력에서 ` key=`를 뺀다. 메시지에 해시·파일 내용을 넣지 않는다. |
 | `LoadedAccounts` | `accounts: Vec<Account>`, `warnings: Vec<AccountsWarning>` | 반환 값 | 파일 순서를 유지한다. |
-| `ListenerPlan` | `name: &'static str`(운영 정보 계약의 `listener` 값), `key: &'static str`(설정 키), `addr: SocketAddr`, `listener: Option<Listener>`(상태·관리 리스너는 `None`) | 메모리 | 같은 주소가 두 번 나오지 않는다. WS·WSS의 역할별로 바인드 계획을 중복 생성하지 않는다. |
-| `BindFailure` | `plan: ListenerPlan`, `cause: String` | 반환 값 | `cause`는 주소를 뺀 원인 문장이다. 이미 사용 중이면 "이미 사용 중이다." stderr 메시지는 `serve`가 주소와 원인을 합쳐 만든다. 운영 로그의 `detail`에는 원인만 쓴다. |
+| `ListenerPlan` | `name: &'static str`(운영 정보 계약의 `listener` 값), `key: &'static str`(설정 키), `addr: SocketAddr`, `listener: Option<ListenerKind>`(상태·관리 리스너는 `None`) | 메모리 | 같은 주소가 두 번 나오지 않는다. WS·WSS의 역할별로 바인드 계획을 중복 생성하지 않는다. |
+| `BindError` | `plan: ListenerPlan`, `cause: String` | 반환 값 | `cause`는 주소를 뺀 원인 문장이다. 이미 사용 중이면 "이미 사용 중이다." stderr 메시지는 `serve`가 주소와 원인을 합쳐 만든다. 운영 로그의 `detail`에는 원인만 쓴다. |
 
 ## 4. 처리 순서
 
@@ -137,7 +137,7 @@ flowchart LR
 | 6 | `Settings::status_listener`, `net::bind_one`, `Settings::management_listener`, `Settings::other_listeners`, `net::bind` | 상태→관리→나머지 순으로 바인드한다. 상태 작업은 바인드 직후 시작한다. 상태와 관리는 같은 count-only Lm과 현재 값 source를 쓴다. 실패는 모두 모아 성공 리스너·상태·감시를 회수하고 listener_bind_failed·4로 끝난다. | 바인드한 리스너·상태 작업 | 7단계 |
 | 7 | `listen_until_shutdown`, `ManagementListener::new`, `TcpEntryPoint::run`, `WsEntryPoint::run` | ready 사건 뒤 count-only L/Lw, source를 가진 TcpTargetGateway·RelayRuntime·RelayService를 만든다. 관리 query/terminate/config와 DashboardHints를 주입하고 관리·중계·G 감독 작업을 실행한다. | 준비 상태·공유 runtime·작업 소유자 | 종료 감독 |
 
-`start` 시작 시 기동 벽시계를 잰다. `serve`는 `TicketUseTable` 하나를 만들고 WS·WSS의 `WsPolicy.ticket_uses`에 같은 `Arc<Mutex<_>>`를 넣는다. `WsPolicy.started_at`에는 기동 시각을 넣는다. 사용 기록은 재로드로 지우지 않는다. 시작의 `ticket_tcp_bypass`·`ticket_plaintext_ws` 경고는 `phase=startup`으로 쓴다([접속 ticket 모듈 설계](relay-access-ticket.md#41-시작)).
+`start` 시작 시 기동 벽시계를 잰다. `serve`는 `ticket::UseTable` 하나를 만들고 WS·WSS의 `WsPolicy.ticket_uses`에 같은 `Arc<Mutex<_>>`를 넣는다. `WsPolicy.started_at`에는 기동 시각을 넣는다. 사용 기록은 재로드로 지우지 않는다. 시작의 `ticket_tcp_bypass`·`ticket_plaintext_ws` 경고는 `phase=startup`으로 쓴다([접속 ticket 모듈 설계](relay-access-ticket.md#41-시작)).
 
 ### 4.1 종료 요청 뒤 소유자 정리
 

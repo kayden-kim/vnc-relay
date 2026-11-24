@@ -13,31 +13,29 @@ use serde_json::{Value, json};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::watch;
-use tokio::time::timeout;
+use tokio::time;
 use tokio_rustls::{TlsAcceptor, TlsConnector};
 use vnc_relay_adapters::crypto::{RelayIdKey, SessionIdKey};
 use vnc_relay_adapters::net::{AcceptPolicy, AllowSource};
-use vnc_relay_adapters::ops_log::format_line;
+use vnc_relay_adapters::ops_log;
 use vnc_relay_adapters::target::TcpTargetGateway;
 use vnc_relay_adapters::tls::{self, TlsSource};
 use vnc_relay_adapters::websocket::{WsEntryPoint, WsPolicy};
-use vnc_relay_app::events::{Event, RejectReason};
-use vnc_relay_app::metrics::Metrics;
-use vnc_relay_app::ports::{Clock, EventSink};
-use vnc_relay_app::relay::{RelayRuntime, RelayRuntimeConfig, RelayService};
-use vnc_relay_app::reload::ConfigCandidate;
-use vnc_relay_app::reload::ports::RuntimeSettingsSource;
-use vnc_relay_app::reload::snapshot::{ReloadCell, ReloadSnapshot};
-use vnc_relay_app::settings::{Settings, TicketRoleSettings};
+use vnc_relay_application::events::{Event, RejectReason};
+use vnc_relay_application::metrics::Metrics;
+use vnc_relay_application::ports::{Clock, EventSink};
+use vnc_relay_application::relay::{RelayRuntime, RelayRuntimeConfig, RelayService};
+use vnc_relay_application::reload::ConfigCandidate;
+use vnc_relay_application::reload::ports::RuntimeSettingsSource;
+use vnc_relay_application::reload::snapshot::{ReloadCell, ReloadSnapshot};
+use vnc_relay_application::settings::{Settings, TicketRoleSettings};
 use vnc_relay_domain::allow_list::{AllowList, IpItem};
 use vnc_relay_domain::budget::ConnectionBudget;
-use vnc_relay_domain::entry_point::{Listener, Role};
-use vnc_relay_domain::handshake::HandshakePolicy;
-use vnc_relay_domain::ticket::{TicketError, TicketUseTable};
+use vnc_relay_domain::entry_point::{ListenerKind, Role};
+use vnc_relay_domain::handshake::Policy;
+use vnc_relay_domain::ticket::{TicketError, UseTable};
 
-#[path = "common/ticket.rs"]
-mod ticket;
-use ticket::Signer;
+use vnc_relay_testkit::ticket::Signer;
 
 const LIMIT: Duration = Duration::from_secs(10);
 const NOW: u64 = 1_000;
@@ -57,12 +55,12 @@ fn role_settings(role: Role, signer: &Signer) -> TicketRoleSettings {
     }
 }
 
-struct TestClock {
+struct FakeClock {
     wall: AtomicU64,
     start: tokio::time::Instant,
 }
 
-impl Clock for TestClock {
+impl Clock for FakeClock {
     fn monotonic(&self) -> Duration {
         self.start.elapsed()
     }
@@ -72,13 +70,13 @@ impl Clock for TestClock {
 }
 
 #[derive(Default)]
-struct Recorder(Mutex<Vec<Event>>);
+struct SpyEventSink(Mutex<Vec<Event>>);
 
 #[expect(
     clippy::unwrap_used,
     reason = "test recorder: a poisoned lock fails the test"
 )]
-impl Recorder {
+impl SpyEventSink {
     fn events(&self) -> Vec<Event> {
         self.0.lock().unwrap().clone()
     }
@@ -88,7 +86,7 @@ impl Recorder {
     clippy::unwrap_used,
     reason = "test recorder: a poisoned lock fails the test"
 )]
-impl EventSink for Recorder {
+impl EventSink for SpyEventSink {
     fn record(&self, event: &Event) {
         self.0.lock().unwrap().push(event.clone());
     }
@@ -97,10 +95,10 @@ impl EventSink for Recorder {
 struct Running {
     addr: SocketAddr,
     wss_addr: SocketAddr,
-    events: Arc<Recorder>,
+    events: Arc<SpyEventSink>,
     cell: Arc<ReloadCell<TlsAcceptor>>,
-    clock: Arc<TestClock>,
-    uses: Arc<Mutex<TicketUseTable>>,
+    clock: Arc<FakeClock>,
+    uses: Arc<Mutex<UseTable>>,
     stop: watch::Sender<bool>,
     runtime: Arc<RelayRuntime<TcpTargetGateway>>,
     service: Arc<RelayService>,
@@ -175,13 +173,13 @@ impl Running {
             RelayRuntimeConfig { recent_closed: 16 },
             source.clone(),
         ));
-        let clock = Arc::new(TestClock {
+        let clock = Arc::new(FakeClock {
             wall: AtomicU64::new(NOW),
             start: tokio::time::Instant::now(),
         });
-        let events = Arc::new(Recorder::default());
+        let events = Arc::new(SpyEventSink::default());
         let service = Arc::new(RelayService::new(
-            HandshakePolicy {
+            Policy {
                 mode1_enabled: true,
                 mode2_enabled: true,
             },
@@ -190,16 +188,16 @@ impl Running {
             events.clone(),
             Arc::new(Metrics::new(clock.as_ref())),
         ));
-        let uses = Arc::new(Mutex::new(TicketUseTable::new()));
+        let uses = Arc::new(Mutex::new(UseTable::new()));
         let (stop, stopped) = watch::channel(false);
         let ws = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let wss = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = ws.local_addr().unwrap();
         let wss_addr = wss.local_addr().unwrap();
-        for (listener, socket) in [(Listener::Ws, ws), (Listener::Wss, wss)] {
+        for (listener, socket) in [(ListenerKind::Ws, ws), (ListenerKind::Wss, wss)] {
             let policy = WsPolicy {
                 accept: AcceptPolicy {
-                    allow: if listener == Listener::Ws {
+                    allow: if listener == ListenerKind::Ws {
                         AllowSource::ws(cell.clone())
                     } else {
                         AllowSource::wss(cell.clone())
@@ -213,7 +211,7 @@ impl Running {
                 WsEntryPoint::new(
                     listener,
                     socket,
-                    (listener == Listener::Wss).then(|| TlsSource::wss(cell.clone())),
+                    (listener == ListenerKind::Wss).then(|| TlsSource::wss(cell.clone())),
                     policy,
                     service.clone(),
                     runtime.clone(),
@@ -292,7 +290,7 @@ impl Running {
         );
         stream.write_all(request.as_bytes()).await.unwrap();
         let mut head = Vec::new();
-        timeout(LIMIT, async {
+        time::timeout(LIMIT, async {
             while !head.ends_with(b"\r\n\r\n") {
                 let mut byte = [0];
                 if stream.read(&mut byte).await.unwrap() == 0 {
@@ -333,7 +331,7 @@ impl Running {
             status == 401
         );
         let mut remainder = Vec::new();
-        timeout(LIMIT, stream.read_to_end(&mut remainder))
+        time::timeout(LIMIT, stream.read_to_end(&mut remainder))
             .await
             .unwrap()
             .unwrap();
@@ -373,7 +371,7 @@ fn assert_status(head: &str, status: u16) {
     reason = "test client: a failed read fails the test"
 )]
 async fn frame(stream: &mut Box<dyn Io>) -> (u8, Vec<u8>) {
-    timeout(LIMIT, async {
+    time::timeout(LIMIT, async {
         let mut header = [0; 2];
         stream.read_exact(&mut header).await.unwrap();
         assert!(header[1] < 126);
@@ -423,7 +421,7 @@ async fn initial_request(stream: &mut Box<dyn Io>, request: &str) {
     reason = "test helper: a missed event fails the test"
 )]
 async fn wait_for(running: &Running, predicate: impl Fn(&Event) -> bool) {
-    timeout(LIMIT, async {
+    time::timeout(LIMIT, async {
         while !running.events.events().iter().any(&predicate) {
             tokio::task::yield_now().await;
         }
@@ -476,7 +474,7 @@ async fn disabled_ticket_roles_keep_the_previous_subprotocol_behavior() {
 async fn valid_viewer_tickets_match_over_ws_and_wss_without_exposing_ticket_text() {
     // This fixture has no authenticated management HTTP listener; API secrecy is
     // checked separately by the management-contract owner.
-    let signer = Signer::new();
+    let signer = Signer::generate();
     let running = Running::start(Some(&signer), None, 900).await;
     for tls in [false, true] {
         let jti = if tls { "valid-wss" } else { "valid-ws" };
@@ -507,7 +505,14 @@ async fn valid_viewer_tickets_match_over_ws_and_wss_without_exposing_ticket_text
                 session_expires_at,
                 ..
             } => {
-                assert_eq!(*listener, if tls { Listener::Wss } else { Listener::Ws });
+                assert_eq!(
+                    *listener,
+                    if tls {
+                        ListenerKind::Wss
+                    } else {
+                        ListenerKind::Ws
+                    }
+                );
                 assert_eq!(*role, Role::Viewer);
                 assert_eq!(ticket_sub.as_deref(), Some("session-1"));
                 assert_eq!(
@@ -518,12 +523,12 @@ async fn valid_viewer_tickets_match_over_ws_and_wss_without_exposing_ticket_text
             _ => unreachable!(),
         }
         for event in events {
-            assert!(!format_line(&event, UNIX_EPOCH).contains(&ticket));
+            assert!(!ops_log::format_line(&event, UNIX_EPOCH).contains(&ticket));
         }
         // Avoid reusing the relay id before the previous pair has finished.
         drop(viewer);
         drop(server);
-        timeout(LIMIT, async {
+        time::timeout(LIMIT, async {
             while !running
                 .runtime
                 .snapshot(running.clock.as_ref())
@@ -541,7 +546,7 @@ async fn valid_viewer_tickets_match_over_ws_and_wss_without_exposing_ticket_text
 /// spec: websocket.md:WS-039
 #[tokio::test]
 async fn enabled_roles_require_ticket_and_binary_in_contract_order() {
-    let signer = Signer::new();
+    let signer = Signer::generate();
     let running = Running::start(Some(&signer), None, 900).await;
     for tls in [false, true] {
         for protocols in [None, Some("binary")] {
@@ -576,8 +581,8 @@ async fn enabled_roles_require_ticket_and_binary_in_contract_order() {
 /// spec: websocket.md:WS-040
 #[tokio::test]
 async fn invalid_ticket_forms_headers_signatures_and_claims_are_unauthorized() {
-    let signer = Signer::new();
-    let wrong = Signer::new();
+    let signer = Signer::generate();
+    let wrong = Signer::generate();
     let der = Signer::with_algorithm(&ECDSA_P256_SHA256_ASN1_SIGNING);
     let running = Running::start(Some(&signer), None, 900).await;
     let valid = claims(Role::Viewer, "invalid-case");
@@ -702,7 +707,7 @@ async fn invalid_ticket_forms_headers_signatures_and_claims_are_unauthorized() {
 /// spec: websocket.md:WS-041
 #[tokio::test]
 async fn expiry_boundaries_use_floored_wall_seconds_and_no_session_skew() {
-    let signer = Signer::new();
+    let signer = Signer::generate();
     let running = Running::start(Some(&signer), None, 900).await;
     for tls in [false, true] {
         for (suffix, exp, sx, status) in [
@@ -741,7 +746,7 @@ async fn expiry_boundaries_use_floored_wall_seconds_and_no_session_skew() {
 /// spec: websocket.md:WS-042
 #[tokio::test]
 async fn use_records_are_atomic_shared_by_ws_wss_and_expire_at_exp_plus_five() {
-    let signer = Signer::new();
+    let signer = Signer::generate();
     let running = Running::start(Some(&signer), None, 900).await;
     let ticket = signer.sign(&claims(Role::Viewer, "once"));
     assert_status(&running.ticket(false, Role::Viewer, &ticket).await.0, 101);
@@ -832,7 +837,7 @@ async fn use_records_are_atomic_shared_by_ws_wss_and_expire_at_exp_plus_five() {
 /// spec: websocket.md:WS-043
 #[tokio::test]
 async fn restart_rejects_tickets_issued_at_or_before_start_plus_five() {
-    let signer = Signer::new();
+    let signer = Signer::generate();
     let running = Running::start(Some(&signer), None, 990).await;
     for tls in [false, true] {
         for iat in [994, 995, 996] {
@@ -862,7 +867,7 @@ async fn restart_rejects_tickets_issued_at_or_before_start_plus_five() {
 /// spec: websocket.md:WS-044
 #[tokio::test]
 async fn origin_then_subprotocol_then_ticket_then_ip_decide_without_consuming_ticket() {
-    let signer = Signer::new();
+    let signer = Signer::generate();
     let running = Running::start(Some(&signer), None, 900).await;
     running.replace(|settings| {
         settings.relay.ws.viewer.allow = Some(allow("192.0.2.1"));
@@ -942,8 +947,8 @@ async fn origin_then_subprotocol_then_ticket_then_ip_decide_without_consuming_ti
 /// spec: websocket.md:WS-045
 #[tokio::test]
 async fn role_specific_issuers_keys_and_audiences_cannot_cross_paths() {
-    let viewer = Signer::new();
-    let server = Signer::new();
+    let viewer = Signer::generate();
+    let server = Signer::generate();
     let running = Running::start(Some(&viewer), Some(&server), 900).await;
     for tls in [false, true] {
         let viewer_ticket = viewer.sign(&claims(Role::Viewer, &format!("viewer-{tls}")));
@@ -978,8 +983,8 @@ async fn role_specific_issuers_keys_and_audiences_cannot_cross_paths() {
 #[tokio::test]
 async fn replacement_settings_apply_to_new_upgrades_and_preserve_bindings_and_use_records() {
     // Snapshot replacement exercises the cutover itself, not its management-API trigger.
-    let old = Signer::new();
-    let new = Signer::new();
+    let old = Signer::generate();
+    let new = Signer::generate();
     let running = Running::start(Some(&old), None, 900).await;
     let mut value = claims(Role::Viewer, "existing");
     value["sx"] = json!(NOW + 2);

@@ -138,9 +138,9 @@ flowchart LR
 | 5 | `xtask/src/scenarios.rs` `link` | 표식의 스펙 경로와 ID가 2단계 목록에 없으면 오류 | 시나리오별 테스트와 `Status` | 6단계 |
 | 6 | `xtask/src/scenarios/report.rs` `Report::render`, `verdict_text` | 판정 실패 사유: 오류, 실패 시나리오, `cargo test` 실패, `--require-all`이면 부분·미실행·미연결 | 보고서 파일 | 표준 출력에 요약·보고서 경로·판정, 종료 코드 0(통과) 또는 1(실패) |
 
-`cargo xtask layers`는 1단계 다음에 `layers::check`를 실행한다. 패키지마다 `RULES`의 허용 내부 crate와 외부 crate 규칙을 적용하고, 같은 외부 crate의 버전 요구가 패키지마다 다르면 위반으로 본다. `RULES`에 없는 패키지도 위반이다.
+`cargo xtask layers`는 1단계 다음에 `layers::check`를 실행한다. 패키지마다 `RULES`의 허용 내부 crate와 외부 crate 규칙을 적용하고, 같은 외부 crate의 버전 요구가 패키지마다 다르면 위반으로 본다. `RULES`에 없는 패키지도 위반이다. `Rule.internal_dev`는 개발 의존성일 때만 허용하는 내부 crate다. `vnc-relay-adapters`와 루트 `vnc-relay`가 `vnc-relay-testkit`을 개발 의존성으로 쓰는 것을 여기서 허용한다. `vnc-relay-testkit` 행은 내부 의존성을 domain·app·adapters로, 외부 의존성을 aws-lc-rs·serde_json·tokio·tokio-tungstenite로 제한한다.
 
-`RULES`의 `vnc-relay-tray` 행은 내부 의존성을 `vnc-relay-app`·`vnc-relay-adapters`로 제한한다. 외부 의존성은 tray-icon·windows-registry·windows-service·windows-sys만 받는다. tray-icon·windows-registry·windows-service는 `APPROVED`에도 있다. 규칙은 [코드 지도 레이어 표](code-map.md#레이어와-의존-방향)와 같은 변경에서 맞춘다.
+`RULES`의 `vnc-relay-tray` 행은 내부 의존성을 `vnc-relay-application`·`vnc-relay-adapters`로 제한한다. 외부 의존성은 tray-icon·windows-registry·windows-service·windows-sys만 받는다. tray-icon·windows-registry·windows-service는 `APPROVED`에도 있다. 규칙은 [코드 지도 레이어 표](code-map.md#레이어와-의존-방향)와 같은 변경에서 맞춘다.
 
 `cargo xtask tokens`와 `cargo xtask tokens --check`는 앞부분이 같다. `cargo metadata`로 루트를 찾고, DESIGN.md 머리말을 `parse_document`로 읽어 `tokens_from`으로 토큰 목록을 만든다(`version`·`name`·`description`·`components`는 뺀다). `render_css`가 `:root` 블록을 만든다. 기본 실행(`write_outputs`)은 토큰 CSS 두 파일과 `MOCKUP_PATHS`의 목업마다 `DESIGN-TOKENS:START`·`END` 표식 사이 블록을 쓴다(`replace_mockup_block`). `shared::write`가 로그인 공통 복사본도 함께 쓴다. `--check`(`check_outputs`)는 같은 곳을 비교하고 화면 CSS 검사를 더한다. 목업의 차이는 목업 파일 경로와 표식 사이 블록 안의 줄 번호로 알린다. 복사본은 `shared::check`가 원본과 비교하고, 복사 디렉터리에서 목록에 없는 파일을 찾는다. 차이는 한 건씩 출력하고 `tokens --check: 실패 (N건)`, 종료 코드 1이다. 차이가 없으면 `통과`, 종료 코드 0이다.
 
@@ -258,4 +258,4 @@ flowchart LR
 
 ## 8. 미결정 사항
 
-열린 항목은 없다. `tests/dashboard_browser.rs`와 `tests/dashboard_live.rs`의 `/// spec:` 표식이 DASH 시나리오를 연결한다. 브라우저 시험은 Windows와 WSL Ubuntu에서 실행한다. 시나리오별 현재 결과는 `cargo xtask scenarios`가 만드는 `scenario-report.md`와 CI에서 확인한다([테스트 컨벤션](../conventions/testing.md#7-테스트와-스펙-시나리오-연결)).
+열린 항목은 없다. `tests/dashboard_browser.rs`와 `tests/dashboard_live/main.rs`의 `/// spec:` 표식이 DASH 시나리오를 연결한다. 브라우저 시험은 Windows와 WSL Ubuntu에서 실행한다. 시나리오별 현재 결과는 `cargo xtask scenarios`가 만드는 `scenario-report.md`와 CI에서 확인한다([테스트 컨벤션](../conventions/testing.md#7-테스트와-스펙-시나리오-연결)).

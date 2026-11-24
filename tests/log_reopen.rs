@@ -10,8 +10,7 @@ use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 #[cfg(unix)]
-#[path = "common/log_reopen.rs"]
-mod log_reopen;
+use vnc_relay_testkit::log_reopen::{self, LogProcess};
 
 struct Server {
     child: Child,
@@ -67,7 +66,7 @@ impl Server {
 }
 
 #[cfg(unix)]
-impl log_reopen::LogProcess for Server {
+impl LogProcess for Server {
     fn start(config: &Path) -> Self {
         Self::start(config, None)
     }

@@ -1,4 +1,4 @@
-//! Test-only P-256 ticket signer, shared with the root system tests by path.
+//! Test-only P-256 ticket signer shared by adapter and system tests.
 
 use aws_lc_rs::rand::SystemRandom;
 use aws_lc_rs::signature::{
@@ -6,18 +6,18 @@ use aws_lc_rs::signature::{
 };
 use serde_json::{Value, json};
 use vnc_relay_adapters::ticket::TicketJwksStore;
-use vnc_relay_app::reload::ports::ReloadTicketKeyStore;
-use vnc_relay_domain::ticket::TicketKeyList;
+use vnc_relay_application::reload::ports::ReloadTicketKeyStore;
+use vnc_relay_domain::ticket::KeyList;
 
 /// Generates fresh keys in each test. Private key bytes never leave this helper.
 pub struct Signer {
     pair: EcdsaKeyPair,
-    pub keys: TicketKeyList,
+    pub keys: KeyList,
 }
 
 impl Signer {
     /// Generates a P-256 key that signs the ES256 fixed-width R||S format.
-    pub fn new() -> Self {
+    pub fn generate() -> Self {
         Self::with_algorithm(&ECDSA_P256_SHA256_FIXED_SIGNING)
     }
 
@@ -30,7 +30,7 @@ impl Signer {
         let pair = must(EcdsaKeyPair::from_pkcs8(algorithm, document.as_ref()));
         let mut signer = Self {
             pair,
-            keys: TicketKeyList::default(),
+            keys: KeyList::default(),
         };
         signer.keys = must(TicketJwksStore.parse(signer.jwks().as_bytes()));
         signer

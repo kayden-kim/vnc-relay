@@ -12,11 +12,11 @@ use axum::http::header::{CACHE_CONTROL, CONTENT_TYPE};
 use axum::http::request::Parts;
 use axum::http::{HeaderValue, Method, StatusCode};
 use axum::response::{IntoResponse, Response};
-use vnc_relay_app::management::query::ManagementQueryService;
-use vnc_relay_app::management::session::AuthorizedAdmin;
+use vnc_relay_application::management::query::ManagementQueryService;
+use vnc_relay_application::management::session::AuthorizedAdmin;
 
-use super::session_api::{media_type_allows, poll_flag};
-use super::{Shared, json_error, method_not_allowed};
+use super::Shared;
+use super::session_api;
 use crate::ops_log::LogsFilter;
 
 const POLL_MESSAGE: &str = "X-Relay-Poll은 값 1을 가진 GET 요청에만 쓸 수 있다.";
@@ -29,19 +29,19 @@ pub(super) async fn answer(
     body: Body,
 ) -> Response {
     if parts.method != Method::GET {
-        return method_not_allowed("GET", "이 경로는 GET 요청만 받는다.");
+        return super::method_not_allowed("GET", "이 경로는 GET 요청만 받는다.");
     }
 
-    match poll_flag(&parts.headers) {
-        None => return json_error(StatusCode::BAD_REQUEST, "invalid_request", POLL_MESSAGE),
+    match session_api::poll_flag(&parts.headers) {
+        None => return super::json_error(StatusCode::BAD_REQUEST, "invalid_request", POLL_MESSAGE),
         Some(false) => {
             shared.auth.touch(admin);
         }
         Some(true) => {}
     }
 
-    if !media_type_allows(body, &parts.headers).await {
-        return json_error(
+    if !session_api::media_type_allows(body, &parts.headers).await {
+        return super::json_error(
             StatusCode::UNSUPPORTED_MEDIA_TYPE,
             "invalid_request",
             MEDIA_TYPE_MESSAGE,
@@ -51,7 +51,7 @@ pub(super) async fn answer(
     let filter = match parse_query(parts.uri.query()) {
         Ok(filter) => filter,
         Err(message) => {
-            return json_error(StatusCode::BAD_REQUEST, "invalid_request", message);
+            return super::json_error(StatusCode::BAD_REQUEST, "invalid_request", message);
         }
     };
 

@@ -7,12 +7,12 @@ use std::io;
 use std::ptr;
 
 use windows_sys::Win32::Foundation::{
-    CloseHandle, GENERIC_READ, GENERIC_WRITE, HANDLE, INVALID_HANDLE_VALUE,
+    self, GENERIC_READ, GENERIC_WRITE, HANDLE, INVALID_HANDLE_VALUE,
 };
 use windows_sys::Win32::Storage::FileSystem::{
-    CreateFileW, FILE_SHARE_READ, FILE_SHARE_WRITE, OPEN_EXISTING,
+    self, FILE_SHARE_READ, FILE_SHARE_WRITE, OPEN_EXISTING,
 };
-use windows_sys::Win32::System::Console::{CONSOLE_MODE, GetConsoleMode, SetConsoleMode};
+use windows_sys::Win32::System::Console::{self, CONSOLE_MODE};
 
 /// The console input mode as it was before a hidden read, with the console
 /// input handle that was used to read it.
@@ -29,7 +29,7 @@ impl SavedInputMode {
         // whole call. The other arguments are flags, or null where CreateFileW
         // accepts null, as for opening a console device by name.
         let handle = unsafe {
-            CreateFileW(
+            FileSystem::CreateFileW(
                 path.as_ptr(),
                 GENERIC_READ | GENERIC_WRITE,
                 FILE_SHARE_READ | FILE_SHARE_WRITE,
@@ -45,10 +45,10 @@ impl SavedInputMode {
         let mut mode: CONSOLE_MODE = 0;
         // SAFETY: `handle` is the valid open handle from above, and `mode` is
         // a writable u32 for the duration of the call.
-        if unsafe { GetConsoleMode(handle, &mut mode) } == 0 {
+        if unsafe { Console::GetConsoleMode(handle, &mut mode) } == 0 {
             let error = io::Error::last_os_error();
             // SAFETY: `handle` was opened above and is closed only here.
-            let _ = unsafe { CloseHandle(handle) };
+            let _ = unsafe { Foundation::CloseHandle(handle) };
             return Err(error);
         }
         Ok(Self { handle, mode })
@@ -57,7 +57,7 @@ impl SavedInputMode {
     /// Sets the console input mode back to the saved one.
     pub fn restore(&self) -> io::Result<()> {
         // SAFETY: `self.handle` is open until `drop` runs, which is after this call.
-        if unsafe { SetConsoleMode(self.handle, self.mode) } == 0 {
+        if unsafe { Console::SetConsoleMode(self.handle, self.mode) } == 0 {
             return Err(io::Error::last_os_error());
         }
         Ok(())
@@ -67,6 +67,6 @@ impl SavedInputMode {
 impl Drop for SavedInputMode {
     fn drop(&mut self) {
         // SAFETY: `self.handle` was opened by `save` and is closed only here.
-        let _ = unsafe { CloseHandle(self.handle) };
+        let _ = unsafe { Foundation::CloseHandle(self.handle) };
     }
 }

@@ -25,7 +25,7 @@
   - TCP 진입점의 확인. TCP는 ticket을 받지 못하므로 경고만 한다.
   - 기존 업그레이드 검사(경로·헤더·주소·Origin·서브프로토콜·두 번째 IP 검사)와 기존 초기 요청 검사. [WebSocket 진입점 모듈 설계](websocket-entry-point.md)와 [초기 교환 처리 모듈 설계](initial-exchange.md)가 맡는다.
 - 다른 모듈에 공개하는 기능:
-  - domain: `ticket::TicketPolicy`, `TicketClaims`, `TicketKey`, `TicketKeyList`, `TicketUseTable`, `TicketError`, `TicketKeyError`, `decode_base64url`, `split_compact`, `audience`.
+  - domain: `ticket::Policy`, `ticket::Claims`, `ticket::Key`, `ticket::KeyList`, `ticket::UseTable`, `TicketError`, `TicketKeyError`, `decode_base64url`, `split_compact`, `audience`.
   - app: `settings::TicketSettings`·`TicketRoleSettings`, `reload::ports::ReloadTicketKeyStore`, `reload::ticket_keys::load`, `relay::TicketBinding`, 새 사건·원인 값.
   - adapters: `ticket::TicketJwksStore`, `ticket::jws::verify`.
 
@@ -50,9 +50,9 @@ flowchart LR
         SES["relay/session.rs run_session_controlled"]
     end
     subgraph domain
-        POL["ticket.rs TicketPolicy"]
-        KEYS["ticket.rs TicketKeyList"]
-        USE["ticket.rs TicketUseTable"]
+        POL["ticket.rs ticket::Policy"]
+        KEYS["ticket.rs ticket::KeyList"]
+        USE["ticket.rs ticket::UseTable"]
         SESSION["session.rs Session"]
     end
     SERVE -->|"시작 4단계"| LOAD
@@ -72,12 +72,12 @@ flowchart LR
 
 | 요소(파일·심볼) | 역할 | 만들어지는 시점과 소유자 | 의존 대상 |
 | --- | --- | --- | --- |
-| `crates/domain/src/ticket.rs` `TicketPolicy` | 클레임 대조와 시각 판정(1.9.3절 7~11번) | 업그레이드 검사마다 실행 중 설정에서 만든다. 검사 뒤 버린다. | `RelayId`, `Role` |
-| `crates/domain/src/ticket.rs` `TicketKeyList`·`TicketKey` | 역할의 공개 키 1~16개. `kid` 고유. 두 역할의 같은 키 판정 | 시작 4단계와 재로드 후보 검증 때 만든다. `Settings`가 소유한다. | 없음 |
-| `crates/domain/src/ticket.rs` `TicketUseTable` | (역할, `jti`) 사용 기록. 확인과 쓰기를 한 번에 한다. `exp + 5`에 지운다 | `serve` 시작 때 하나 만든다. WS·WSS 진입점이 `Arc<Mutex<_>>`로 함께 쓴다. 프로세스와 함께 없어진다. | `Role` |
+| `crates/domain/src/ticket.rs` `ticket::Policy` | 클레임 대조와 시각 판정(1.9.3절 7~11번) | 업그레이드 검사마다 실행 중 설정에서 만든다. 검사 뒤 버린다. | `RelayId`, `Role` |
+| `crates/domain/src/ticket.rs` `ticket::KeyList`·`ticket::Key` | 역할의 공개 키 1~16개. `kid` 고유. 두 역할의 같은 키 판정 | 시작 4단계와 재로드 후보 검증 때 만든다. `Settings`가 소유한다. | 없음 |
+| `crates/domain/src/ticket.rs` `ticket::UseTable` | (역할, `jti`) 사용 기록. 확인과 쓰기를 한 번에 한다. `exp + 5`에 지운다 | `serve` 시작 때 하나 만든다. WS·WSS 진입점이 `Arc<Mutex<_>>`로 함께 쓴다. 프로세스와 함께 없어진다. | `Role` |
 | `crates/domain/src/ticket.rs` `decode_base64url`·`split_compact`·`audience` | 패딩 없는 base64url 해독, JWS 세 부분 나누기, 역할별 `aud` 고정 값 | 함수 | 없음 |
-| `crates/app/src/settings.rs` `TicketSettings`·`TicketRoleSettings` | 역할별 `enabled`·`issuer`·`relay_host`·`public_keys_file`·최대 수명과 읽은 키 목록 | 설정 로더가 값을 채운다. 키 목록은 `reload::ticket_keys::load`가 채운다. | domain `TicketKeyList` |
-| `crates/app/src/reload/ports.rs` `ReloadTicketKeyStore` | 공개 키 파일 바이트를 키 목록으로 바꾸는 포트 | `serve`가 adapters 구현을 주입한다. | domain `TicketKeyList` |
+| `crates/app/src/settings.rs` `TicketSettings`·`TicketRoleSettings` | 역할별 `enabled`·`issuer`·`relay_host`·`public_keys_file`·최대 수명과 읽은 키 목록 | 설정 로더가 값을 채운다. 키 목록은 `reload::ticket_keys::load`가 채운다. | domain `ticket::KeyList` |
+| `crates/app/src/reload/ports.rs` `ReloadTicketKeyStore` | 공개 키 파일 바이트를 키 목록으로 바꾸는 포트 | `serve`가 adapters 구현을 주입한다. | domain `ticket::KeyList` |
 | `crates/app/src/reload/ticket_keys.rs` `load` | 켠 역할의 공개 키 파일을 읽고 해석한다. 두 역할의 같은 키를 거절한다. 진단을 만든다 | 함수. 시작과 재로드가 함께 쓴다. | `ReloadFileStore`, `ReloadTicketKeyStore` |
 | `crates/adapters/src/ticket/jwks.rs` `TicketJwksStore` | JWKS 형식 검사와 P-256 점 검사(aws-lc-rs) | `serve`가 만든다. | `aws-lc-rs`, `serde_json`, domain |
 | `crates/adapters/src/ticket/jws.rs` `verify` | 1.9.3절 2~11번. JSON 중복 멤버 검사, ES256 서명 확인, 클레임 자료형 | 함수 | `aws-lc-rs`, `serde_json`, domain |
@@ -91,12 +91,12 @@ flowchart LR
 
 | 이름 | 필드·형태 | 저장 위치 | 제약과 항상 지켜야 할 조건 |
 | --- | --- | --- | --- |
-| `TicketClaims` | `iss`·`aud`·`rh`: `String`, `rid`: `RelayId`, `jti`: `String`, `iat`·`exp`: `u64`, `sx`: `Option<u64>`, `sub`: `Option<String>` | 업그레이드 검사 중 메모리 | `jti`·`sub`는 1~128바이트. 숫자는 0 이상 정수만 받는다. `aud`는 문자열 하나다. |
-| `TicketPolicy` | `issuer`·`relay_host`: `&str`, `audience`: `&'static str`, `max_lifetime_secs`·`started_at_secs`: `u64` | 검사 중 메모리 | 시계 오차 5초 고정(`CLOCK_SKEW_SECS`). 실패 이유는 계약 순서로 하나만 낸다. |
-| `TicketKey` | `kid`: `String`, `x`·`y`: `[u8; 32]` | `Settings` | P-256 곡선 위의 점이다. 확인은 adapters가 만들 때 한다. |
-| `TicketKeyList` | 1~16개 `TicketKey`, `kid` 순으로 정렬 | `Settings` | `kid` 1~128바이트·고유. 꺼진 역할은 빈 목록이다. `Debug`는 키 수만 쓴다. |
-| `TicketUseTable` | `(Role, String)` 집합과 `(만료 초, Role, String)` 정렬 집합 | WS·WSS 진입점이 함께 쓰는 메모리 | 서명을 확인한 ticket만 든다. 기록은 `exp + 5`초에 지운다. 개수 상한이 없다. |
-| `TicketRoleSettings` | `enabled`: `bool`, `issuer`·`relay_host`: `Option<String>`, `public_keys_file`: `Option<PathBuf>`, `max_lifetime`: `Duration`, `keys`: `TicketKeyList` | 실행 중 설정 스냅샷 | `enabled = true`이면 앞 세 값이 있고 `keys`가 비어 있지 않다. 최대 수명은 10~600초, 기본 60초다. |
+| `ticket::Claims` | `iss`·`aud`·`rh`: `String`, `rid`: `RelayId`, `jti`: `String`, `iat`·`exp`: `u64`, `sx`: `Option<u64>`, `sub`: `Option<String>` | 업그레이드 검사 중 메모리 | `jti`·`sub`는 1~128바이트. 숫자는 0 이상 정수만 받는다. `aud`는 문자열 하나다. |
+| `ticket::Policy` | `issuer`·`relay_host`: `&str`, `audience`: `&'static str`, `max_lifetime_secs`·`started_at_secs`: `u64` | 검사 중 메모리 | 시계 오차 5초 고정(`CLOCK_SKEW_SECS`). 실패 이유는 계약 순서로 하나만 낸다. |
+| `ticket::Key` | `kid`: `String`, `x`·`y`: `[u8; 32]` | `Settings` | P-256 곡선 위의 점이다. 확인은 adapters가 만들 때 한다. |
+| `ticket::KeyList` | 1~16개 `ticket::Key`, `kid` 순으로 정렬 | `Settings` | `kid` 1~128바이트·고유. 꺼진 역할은 빈 목록이다. `Debug`는 키 수만 쓴다. |
+| `ticket::UseTable` | `(Role, String)` 집합과 `(만료 초, Role, String)` 정렬 집합 | WS·WSS 진입점이 함께 쓰는 메모리 | 서명을 확인한 ticket만 든다. 기록은 `exp + 5`초에 지운다. 개수 상한이 없다. |
+| `TicketRoleSettings` | `enabled`: `bool`, `issuer`·`relay_host`: `Option<String>`, `public_keys_file`: `Option<PathBuf>`, `max_lifetime`: `Duration`, `keys`: `ticket::KeyList` | 실행 중 설정 스냅샷 | `enabled = true`이면 앞 세 값이 있고 `keys`가 비어 있지 않다. 최대 수명은 10~600초, 기본 60초다. |
 | `TicketBinding` | `jti`: `String`, `relay_id`: `RelayId`, `session_deadline`: `Option<Duration>`(단조 시각) | 연결 작업 | `session_deadline`은 101 직후 한 번 정하며 재로드로 바뀌지 않는다. |
 | `TicketOffer` | `None` / `One(String)` / `Many` | 업그레이드 검사 중 | `ticket.` 접두어를 뗀 JWS만 담는다. 로그·응답에 쓰지 않는다. |
 
@@ -110,7 +110,7 @@ flowchart LR
 | 2 | `crates/adapters/src/config_file.rs` `read_relay` | `[relay.ticket.viewer]`·`[relay.ticket.server]`를 읽는다. 문자열 1~256바이트, 수명 10~600. `enabled = true`이면 `issuer`·`relay_host`·`public_keys_file` 필수(`config_missing_key`). 경로는 설정 파일 디렉터리 기준이다. | `TicketRoleSettings`(키 목록은 빈 값) | 설정 진단 |
 | 3 | `src/serve.rs` `run` → `reload::ticket_keys::load` | TLS 파일 검사 뒤 켠 역할의 공개 키 파일을 읽고 해석한다. 두 역할이 모두 켜져 있으면 같은 키를 검사한다. | `keys` 채움 | 실패하면 `error[ticket_keys_invalid]`와 `startup_failed`를 진단마다 쓰고 TLS 오류와 함께 종료 코드 3. 바인드 전이다. |
 | 4 | `crates/app/src/settings.rs` `Settings::warnings` | 켠 역할의 TCP 진입점이 켜져 있으면 `ticket_tcp_bypass`, `[relay.ws]`에서 그 역할이 켜져 있으면 `ticket_plaintext_ws` | 없음 | 시작 경고(`phase = startup`) |
-| 5 | `src/serve.rs` | `TicketUseTable` 하나를 만들어 WS·WSS `WsPolicy`에 같이 넣는다. 감시 대상에 켠 역할의 공개 키 파일을 더한다. | 사용 기록, 감시 경로 | 진입점, 파일 감지 |
+| 5 | `src/serve.rs` | `ticket::UseTable` 하나를 만들어 WS·WSS `WsPolicy`에 같이 넣는다. 감시 대상에 켠 역할의 공개 키 파일을 더한다. | 사용 기록, 감시 경로 | 진입점, 파일 감지 |
 
 ### 4.2 업그레이드(대표 시나리오 WS-038)
 
@@ -118,9 +118,9 @@ flowchart LR
 | --- | --- | --- | --- | --- |
 | 1 | `upgrade.rs` `check` | 기존 1~6번. 서브프로토콜 값에서 `ticket.` 접두어 값을 센다. 값이 있는데 `binary`가 없으면 기존 400이 먼저다. | `ValidUpgrade.ticket` | `check_upgrade` |
 | 2 | `websocket.rs` `check_upgrade` | 같은 `with_current` 안에서 역할의 ticket이 켜져 있으면 확인한다. 꺼져 있으면 2.0.0과 같다. | 없음 | 다음 순서 |
-| 3 | `ticket/jws.rs` `verify` | 개수 → JWS 구문(세 부분·base64url·JSON 객체·중복 멤버) → 헤더(`alg = ES256`, `kid` 1~128바이트, `crit` 없음) → `kid`의 키 → ES256 R‖S 64바이트 서명 → 클레임 자료형·`rid`·`jti`·`sub` → `TicketPolicy::check`(7~11번). 현재 시각은 `Clock::wall`을 Unix 초로 내린 값이다. | 없음 | 실패: `Refusal::Ticket{reason, jti}`. `jti`는 서명 통과 뒤 문법이 맞을 때만 담는다. |
+| 3 | `ticket/jws.rs` `verify` | 개수 → JWS 구문(세 부분·base64url·JSON 객체·중복 멤버) → 헤더(`alg = ES256`, `kid` 1~128바이트, `crit` 없음) → `kid`의 키 → ES256 R‖S 64바이트 서명 → 클레임 자료형·`rid`·`jti`·`sub` → `ticket::Policy::check`(7~11번). 현재 시각은 `Clock::wall`을 Unix 초로 내린 값이다. | 없음 | 실패: `Refusal::Ticket{reason, jti}`. `jti`는 서명 통과 뒤 문법이 맞을 때만 담는다. |
 | 4 | `websocket.rs` `check_upgrade` | 기존 두 번째 IP 검사(8번) | 없음 | 실패: 403 `Refusal::IpNotAllowed(jti)`. ticket을 켠 역할이면 확인을 통과한 ticket의 `jti`를 `ticket_jti`로 기록한다. 사용 기록은 쓰지 않는다 |
-| 5 | `websocket.rs` `check_upgrade` → `TicketUseTable::try_record` | 잠금 안에서 만료 기록을 지우고, 없으면 쓴다. | 사용 기록 | 실패: 401 `ticket_reused`(`ticket_jti` 기록) |
+| 5 | `websocket.rs` `check_upgrade` → `ticket::UseTable::try_record` | 잠금 안에서 만료 기록을 지우고, 없으면 쓴다. | 사용 기록 | 실패: 401 `ticket_reused`(`ticket_jti` 기록) |
 | 6 | `websocket.rs` `upgrade` | `ticket_accepted`(`info`)를 쓴 뒤 기존 U 재확인, 101 전송. 응답 서브프로토콜은 `binary`뿐이다. `sx`가 9999-12-31T23:59:59Z보다 늦으면 `session_expires_at`만 생략한다. | 없음 | 운영 로그, 클라이언트 |
 | 7 | `websocket.rs` `upgrade` → `session_deadline` | 101 flush 직후 `exchange_at`에 `sx − 현재 벽시계`(음수면 0)를 더해 세션 만료 기한을 정한다. 더하기는 최댓값에서 멈춘다. 그래서 `sx`가 있으면 기한이 항상 있다. 초기 교환·대기에서는 유한한 H·W와 비교한다. 활성 세션 타이머는 한 번에 최대 하루(`MAX_TIMER_STEP`)만 잠들고, 깨어나면 시계를 다시 읽는다. | `TicketBinding` | `RelayService::handle_connection` |
 
@@ -151,7 +151,7 @@ flowchart LR
 - 초기화·로딩 시점: 기동 시각과 사용 기록은 `serve` 시작 때 한 번 만든다. 공개 키는 시작 4단계와 재로드 후보 검증 때 읽는다. 업그레이드 검사는 파일을 읽지 않는다.
 - 상태 소유자와 제거 시점:
   - 공개 키: 설정 스냅샷이 소유한다. 새 스냅샷이 게시되면 다음 업그레이드부터 새 키를 쓴다.
-  - 사용 기록: `Arc<Mutex<TicketUseTable>>`. 기록을 쓸 때 만료 항목을 앞에서부터 지운다. 재로드·켜고 끄기·키 교체로 지우지 않는다. 재시작하면 사라진다.
+  - 사용 기록: `Arc<Mutex<ticket::UseTable>>`. 기록을 쓸 때 만료 항목을 앞에서부터 지운다. 재로드·켜고 끄기·키 교체로 지우지 않는다. 재시작하면 사라진다.
   - `TicketBinding`: 연결 작업이 소유한다. 세션이 끝나면 사라진다.
 - 동시 실행과 순서:
   - 사용 기록은 잠금 하나 안에서 확인과 쓰기를 한다. 같은 (역할, `jti`)로 동시에 온 요청 가운데 하나만 성공한다.
@@ -163,7 +163,7 @@ flowchart LR
 | 실패 지점 | 처리 방법 | 남는 상태 | 관련 스펙 시나리오 |
 | --- | --- | --- | --- |
 | `ticket/jws.rs` `verify` | 401과 `WWW-Authenticate: VncRelayTicket`. 사용 기록·대기 등록 없음 | 기록 없음. 같은 ticket은 다음 요청에서 다시 확인될 수 있다 | WS-039~041·043~045 |
-| `TicketUseTable::try_record` | 401 `ticket_reused` | 먼저 쓴 기록 유지 | WS-042 |
+| `ticket::UseTable::try_record` | 401 `ticket_reused` | 먼저 쓴 기록 유지 | WS-042 |
 | 101 전송 실패 | 기존처럼 연결을 닫는다 | 기록은 쓰인 채 남는다(계약 1.9.4절) | WS-042 |
 | `reload::ticket_keys::load`(시작) | 진단마다 오류 줄과 `startup_failed`. 종료 코드 3 | 바인드 전 종료 | OPS-070 |
 | `reload::ticket_keys::load`(재로드) | 후보 전체 거절 | 기존 설정·키·기록 유지 | OPS-072 |
@@ -200,7 +200,7 @@ flowchart LR
 - 날짜·대상: 2026-11-11.
 - 방법: 2~6절의 파일·심볼·처리 순서를 `crates/domain/src/ticket.rs`, `crates/app/src/settings.rs`·`reload/ticket_keys.rs`·`relay.rs`·`relay/handshake.rs`·`relay/matching.rs`·`relay/session.rs`, `crates/adapters/src/ticket.rs`·`ticket/jwks.rs`·`ticket/jws.rs`·`upgrade.rs`·`websocket.rs`, `src/serve.rs`와 읽어 대조했다. 환경은 저장소 소스 대조이며 OS 실행 관찰은 포함하지 않는다.
 - 결과: 2~6절과 코드 사이에 남은 차이가 없다.
-- 남은 한계: 사용 기록에는 개수 상한이 없다(3절 `TicketUseTable` 행). 실제 발급 쪽과 클라이언트의 연동은 이 저장소에서 실행하지 않았다.
+- 남은 한계: 사용 기록에는 개수 상한이 없다(3절 `ticket::UseTable` 행). 실제 발급 쪽과 클라이언트의 연동은 이 저장소에서 실행하지 않았다.
 - 구조 판정: `Current`·`Verified`.
 - 실행 결과: 시나리오별 현재 결과는 `cargo xtask scenarios`가 만드는 `scenario-report.md`와 CI에서 확인한다([테스트 컨벤션](../conventions/testing.md#7-테스트와-스펙-시나리오-연결)).
 

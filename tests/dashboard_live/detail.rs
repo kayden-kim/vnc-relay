@@ -4,7 +4,9 @@ use std::time::Duration;
 
 use serde_json::json;
 
-use super::live::{Browser, Fault, LIMIT, Server, must, wait_for};
+use vnc_relay_testkit::cdp::Browser;
+use vnc_relay_testkit::dashboard_proxy::Fault;
+use vnc_relay_testkit::live::{self, LIMIT, Server};
 
 const GONE: &str = "The current session was not found";
 const FAILED: &str = "Session termination failed. Check the status again.";
@@ -100,7 +102,7 @@ fn assert_terminate_traffic(
 }
 
 fn assert_closed_socket(stream: &mut TcpStream) {
-    must(stream.set_read_timeout(Some(LIMIT)));
+    live::must(stream.set_read_timeout(Some(LIMIT)));
     let mut byte = [0_u8; 1];
     match stream.read(&mut byte) {
         Ok(0) => {}
@@ -131,8 +133,8 @@ pub fn selected_detail_matches_real_session_and_returns_to_list() {
         assert_eq!(session["bytes_viewer_to_target"], json!(1536));
         assert_eq!(session["bytes_target_to_viewer"], json!(1_572_864));
         for (field, address) in [
-            ("viewer_address", must(pair.viewer.local_addr())),
-            ("target_address", must(pair.target.local_addr())),
+            ("viewer_address", live::must(pair.viewer.local_addr())),
+            ("target_address", live::must(pair.target.local_addr())),
         ] {
             assert_eq!(session[field]["ip"], json!(address.ip().to_string()));
             assert_eq!(session[field]["port"], json!(address.port()));
@@ -163,8 +165,8 @@ pub fn selected_detail_matches_real_session_and_returns_to_list() {
                 "TCP",
                 "TCP",
                 started,
-                must(pair.viewer.local_addr()).to_string(),
-                must(pair.target.local_addr()).to_string()
+                live::must(pair.viewer.local_addr()).to_string(),
+                live::must(pair.target.local_addr()).to_string()
             ])
         );
         assert_eq!(
@@ -207,7 +209,7 @@ pub fn disappeared_detail_before_read_or_during_refresh_is_gone() {
         browser.login(&server);
         if before_initial_read {
             pair.close();
-            wait_for("real target gone before detail read", LIMIT, || {
+            live::wait_for("real target gone before detail read", LIMIT, || {
                 server
                     .request("GET", &path, &[("Cookie", &admin.cookie)], &[])
                     .status
@@ -221,7 +223,7 @@ pub fn disappeared_detail_before_read_or_during_refresh_is_gone() {
                 .once("GET", &path, Fault::DelayBefore(Duration::from_secs(2)));
             let reads = server.proxy.count("GET", &path);
             browser.click("#session-refresh");
-            wait_for("refresh entered proxy", LIMIT, || {
+            live::wait_for("refresh entered proxy", LIMIT, || {
                 server.proxy.count("GET", &path) > reads
             });
             pair.close();
@@ -299,7 +301,7 @@ pub fn confirmed_termination_blocks_duplicates_then_refreshes_list() {
     open_confirmation(&mut browser, &pair.sid);
     browser.click(CONFIRM);
     browser.wait("document.querySelector('#session-terminate')?.disabled === true && document.querySelector('#session-terminate')?.textContent.includes('Terminating') && document.querySelector('#session-refresh')?.disabled === true");
-    wait_for("terminate forwarded while response held", LIMIT, || {
+    live::wait_for("terminate forwarded while response held", LIMIT, || {
         server
             .proxy
             .traffic()
@@ -353,7 +355,7 @@ pub fn natural_close_before_or_after_confirmation_never_targets_another_session(
             open_confirmation(&mut browser, &id);
             pair.close();
         }
-        wait_for(
+        live::wait_for(
             "natural close before confirming stale dialog",
             LIMIT,
             || {
@@ -420,7 +422,7 @@ pub fn injected_termination_failure_is_not_completion_and_offers_status_read() {
     );
     let reads = server.proxy.count("GET", &detail);
     browser.click(".session-notice button");
-    wait_for(
+    live::wait_for(
         "explicit status reread after injected failure",
         LIMIT,
         || server.proxy.count("GET", &detail) > reads,

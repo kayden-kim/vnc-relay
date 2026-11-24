@@ -9,17 +9,17 @@ use std::time::{Duration, SystemTime};
 use vnc_relay_domain::ip_info::{Asn, CountryCode, Provider};
 
 use super::{
-    Fingerprint, IpDbError, IpDbFailure, IpDbKey, IpDbMetadata, IpDbRead, IpDbState, IpInfoService,
-    IpLookup,
+    Fingerprint, IpDbError, IpDbKey, IpDbMetadata, IpDbRead, IpDbReadError, IpDbState,
+    IpInfoService, IpLookup,
 };
 use crate::events::{Event, Phase};
 use crate::ports::{Clock, EventSink, IpDbFileGateway, IpDbLookupGateway};
 
 const WALL: u64 = 1_790_000_000;
 
-struct FixedClock;
+struct StubClock;
 
-impl Clock for FixedClock {
+impl Clock for StubClock {
     fn monotonic(&self) -> Duration {
         Duration::ZERO
     }
@@ -30,28 +30,28 @@ impl Clock for FixedClock {
 }
 
 #[derive(Default)]
-struct Recorded(Mutex<Vec<Event>>);
+struct SpyEventSink(Mutex<Vec<Event>>);
 
-impl EventSink for Recorded {
+impl EventSink for SpyEventSink {
     fn record(&self, event: &Event) {
         self.0.lock().expect("events lock").push(event.clone());
     }
 }
 
-impl Recorded {
+impl SpyEventSink {
     fn take(&self) -> Vec<Event> {
         std::mem::take(&mut *self.0.lock().expect("events lock"))
     }
 }
 
 /// A database with one record for every address.
-struct OneRecord {
+struct StubIpDbLookupGateway {
     metadata: IpDbMetadata,
     country: Option<CountryCode>,
     asn: Option<(Asn, String)>,
 }
 
-impl IpDbLookupGateway for OneRecord {
+impl IpDbLookupGateway for StubIpDbLookupGateway {
     fn metadata(&self) -> &IpDbMetadata {
         &self.metadata
     }
@@ -78,7 +78,7 @@ impl IpDbLookupGateway for OneRecord {
 
 /// What each path holds now. Counts the reads.
 #[derive(Default)]
-struct Files {
+struct FakeIpDbFileGateway {
     content: Mutex<HashMap<PathBuf, Content>>,
     reads: Mutex<usize>,
 }
@@ -91,7 +91,7 @@ enum Content {
     Missing,
 }
 
-impl Files {
+impl FakeIpDbFileGateway {
     fn put(&self, path: &str, content: Content) {
         self.content
             .lock()
@@ -104,7 +104,7 @@ impl Files {
     }
 }
 
-impl IpDbFileGateway for Files {
+impl IpDbFileGateway for FakeIpDbFileGateway {
     fn read(&self, path: &Path) -> IpDbRead {
         *self.reads.lock().expect("reads lock") += 1;
         let content = self
@@ -117,7 +117,7 @@ impl IpDbFileGateway for Files {
         match content {
             Content::Db(hash, database_type, country, asn) => IpDbRead {
                 fingerprint: Fingerprint::Content(hash),
-                result: Ok(Arc::new(OneRecord {
+                result: Ok(Arc::new(StubIpDbLookupGateway {
                     metadata: IpDbMetadata::new(
                         database_type,
                         SystemTime::UNIX_EPOCH + Duration::from_secs(1_780_000_000),
@@ -130,15 +130,15 @@ impl IpDbFileGateway for Files {
             },
             Content::Broken(hash) => IpDbRead {
                 fingerprint: Fingerprint::Content(hash),
-                result: Err(IpDbError {
-                    failure: IpDbFailure::InvalidFormat,
+                result: Err(IpDbReadError {
+                    failure: IpDbError::InvalidFormat,
                     detail: Some("메타데이터를 찾지 못했다.".to_owned()),
                 }),
             },
             Content::Missing => IpDbRead {
                 fingerprint: Fingerprint::Unreadable,
-                result: Err(IpDbError {
-                    failure: IpDbFailure::FileUnreadable,
+                result: Err(IpDbReadError {
+                    failure: IpDbError::FileUnreadable,
                     detail: Some("파일을 찾을 수 없다.".to_owned()),
                 }),
             },
@@ -147,22 +147,22 @@ impl IpDbFileGateway for Files {
 }
 
 struct Fixture {
-    files: Arc<Files>,
+    files: Arc<FakeIpDbFileGateway>,
     lookup: Arc<IpLookup>,
-    log: Arc<Recorded>,
+    log: Arc<SpyEventSink>,
     service: IpInfoService,
 }
 
 fn fixture(country_db: Option<&str>, asn_db: Option<&str>) -> Fixture {
-    let files = Arc::new(Files::default());
+    let files = Arc::new(FakeIpDbFileGateway::default());
     let lookup = Arc::new(IpLookup::new());
-    let log = Arc::new(Recorded::default());
+    let log = Arc::new(SpyEventSink::default());
     let service = IpInfoService::new(
         country_db.map(PathBuf::from),
         asn_db.map(PathBuf::from),
         Arc::clone(&files) as Arc<dyn IpDbFileGateway>,
         Arc::clone(&lookup),
-        Arc::new(FixedClock),
+        Arc::new(StubClock),
         Arc::clone(&log) as Arc<dyn EventSink>,
     );
     Fixture {
@@ -253,7 +253,7 @@ fn missing_and_unsupported_files_warn_and_leave_values_empty() {
         vec![
             Event::IpDbUnavailable {
                 key: IpDbKey::Country,
-                reason: IpDbFailure::UnsupportedData,
+                reason: IpDbError::UnsupportedData,
                 phase: Phase::Startup,
                 detail: Some(
                     "국가 필드(country_code 또는 country.iso_code)를 찾지 못했다.".to_owned()
@@ -261,7 +261,7 @@ fn missing_and_unsupported_files_warn_and_leave_values_empty() {
             },
             Event::IpDbUnavailable {
                 key: IpDbKey::Asn,
-                reason: IpDbFailure::FileUnreadable,
+                reason: IpDbError::FileUnreadable,
                 phase: Phase::Startup,
                 detail: Some("파일을 찾을 수 없다.".to_owned()),
             },
@@ -270,8 +270,8 @@ fn missing_and_unsupported_files_warn_and_leave_values_empty() {
     assert_eq!(found(&fixture.lookup), (None, None));
     let status = fixture.service.status();
     assert_eq!(status[0].state, IpDbState::Unavailable);
-    assert_eq!(status[0].error, Some(IpDbFailure::UnsupportedData));
-    assert_eq!(status[1].error, Some(IpDbFailure::FileUnreadable));
+    assert_eq!(status[0].error, Some(IpDbError::UnsupportedData));
+    assert_eq!(status[1].error, Some(IpDbError::FileUnreadable));
     assert!(status.iter().all(|item| item.in_use.is_none()));
 }
 
@@ -329,7 +329,7 @@ fn a_bad_replacement_keeps_the_previous_database_and_warns_once() {
         fixture.log.take(),
         vec![Event::IpDbUnavailable {
             key: IpDbKey::Country,
-            reason: IpDbFailure::InvalidFormat,
+            reason: IpDbError::InvalidFormat,
             phase: Phase::Reload,
             detail: Some("메타데이터를 찾지 못했다.".to_owned()),
         }]
@@ -337,7 +337,7 @@ fn a_bad_replacement_keeps_the_previous_database_and_warns_once() {
     assert_eq!(found(&fixture.lookup).0, Some("US"));
     let status = fixture.service.status();
     assert_eq!(status[0].state, IpDbState::Stale);
-    assert_eq!(status[0].error, Some(IpDbFailure::InvalidFormat));
+    assert_eq!(status[0].error, Some(IpDbError::InvalidFormat));
     let in_use = status[0].in_use.as_ref().expect("previous database");
     assert_eq!(in_use.metadata.provider, Provider::Ipinfo);
 

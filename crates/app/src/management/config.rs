@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::SystemTime;
 
-use vnc_relay_domain::account::AccountName;
+use vnc_relay_domain::account::Name;
 use vnc_relay_domain::peer_ip::PeerIp;
 
 use crate::events::Event;
@@ -34,7 +34,7 @@ pub struct ConfigChange {
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ConfigActor {
-    pub admin_account: AccountName,
+    pub admin_account: Name,
     pub peer_ip: PeerIp,
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -52,7 +52,7 @@ pub struct ConfigView {
     pub items: Vec<ConfigItem>,
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ConfigEditResult {
+pub struct ConfigEditOutcome {
     pub as_of: SystemTime,
     pub revision: String,
     pub applied: Vec<String>,
@@ -119,7 +119,7 @@ pub trait ConfigService: Send + Sync {
         &self,
         actor: ConfigActor,
         request: ConfigPatch,
-    ) -> Result<ConfigEditResult, ConfigEditError>;
+    ) -> Result<ConfigEditOutcome, ConfigEditError>;
 }
 
 pub struct ConfigEditService<A> {
@@ -186,14 +186,14 @@ impl<A: Clone + Send + Sync + 'static> ConfigService for ConfigEditService<A> {
             edit_enabled: reload.running().management.config_edit,
             file,
             last_reload: reload.last_reload().cloned(),
-            items: config_items(reload.running(), reload.running_presence()),
+            items: items::config_items(reload.running(), reload.running_presence()),
         })
     }
     fn patch(
         &self,
         actor: ConfigActor,
         request: ConfigPatch,
-    ) -> Result<ConfigEditResult, ConfigEditError> {
+    ) -> Result<ConfigEditOutcome, ConfigEditError> {
         let mut reload = self.reload.lock().map_err(|_| ConfigEditError::Internal)?;
         // Step 1 is checked before the edit switch or any file access. The same
         // guard then covers steps 2–10 and cannot race a watcher or another edit.
@@ -277,7 +277,7 @@ impl<A: Clone + Send + Sync + 'static> ConfigService for ConfigEditService<A> {
             })
         })?;
         if next == bytes {
-            return Ok(ConfigEditResult {
+            return Ok(ConfigEditOutcome {
                 as_of: self.clock.wall(),
                 revision,
                 applied: vec![],
@@ -303,7 +303,7 @@ impl<A: Clone + Send + Sync + 'static> ConfigService for ConfigEditService<A> {
         let as_of = self.clock.wall();
         let applied = reload.commit_prepared(prepared, ReloadTrigger::ConfigEdit, as_of);
         self.events.record(&event);
-        Ok(ConfigEditResult {
+        Ok(ConfigEditOutcome {
             as_of,
             revision,
             applied,

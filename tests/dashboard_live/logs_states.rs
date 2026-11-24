@@ -5,34 +5,38 @@ use std::time::{Duration, Instant};
 
 use serde_json::json;
 
-use super::live::{Browser, Fault, wait_for};
-use super::logs::{API, items, last_reply, open, paths, pause, ready, refresh, search, start};
+use super::logs;
+use super::logs::API;
+use vnc_relay_testkit::cdp::Browser;
+use vnc_relay_testkit::dashboard_proxy::Fault;
+use vnc_relay_testkit::live;
+use vnc_relay_testkit::live::Server;
 
 pub fn disabled_empty_failures_recovery_and_real_idle_expiry() {
-    let disabled = start("dash-061-disabled", 1, 0);
+    let disabled = logs::start("dash-061-disabled", 1, 0);
     let mut browser = Browser::start("dash-061-disabled", &["ko-KR"]);
-    open(&mut browser, &disabled);
-    let raw = last_reply(&disabled).1;
-    assert!(items(&raw).is_empty());
+    logs::open(&mut browser, &disabled);
+    let raw = logs::last_reply(&disabled).1;
+    assert!(logs::items(&raw).is_empty());
     assert!(raw["oldest_seq"].is_null() && raw["latest_seq"].is_null());
     assert_eq!(raw["max_entries"], 0);
     assert!(
         browser.text().contains("recent_logs.max_entries") && browser.text().contains("재시작")
     );
     assert_eq!(browser.eval("[...document.querySelectorAll('#logs-level-info,#logs-event,#logs-q,#logs-search,#logs-download,#logs-auto-refresh')].every(e=>e.disabled)"),json!(true));
-    let before = paths(&disabled).len();
+    let before = logs::paths(&disabled).len();
     thread::sleep(Duration::from_millis(1300));
-    assert_eq!(paths(&disabled).len(), before);
+    assert_eq!(logs::paths(&disabled).len(), before);
     drop(browser);
 
-    let server = start("dash-061-failures", 60, 1000);
+    let server = logs::start("dash-061-failures", 60, 1000);
     let mut b = Browser::start("dash-061-failures", &["ko-KR"]);
-    open(&mut b, &server);
-    pause(&mut b);
-    search(&mut b, "no-recent-log-will-contain-this-value", true);
-    assert!(items(&last_reply(&server).1).is_empty());
+    logs::open(&mut b, &server);
+    logs::pause(&mut b);
+    logs::search(&mut b, "no-recent-log-will-contain-this-value", true);
+    assert!(logs::items(&logs::last_reply(&server).1).is_empty());
     assert!(b.text().contains("필터와 일치하는 최근 로그가 없습니다"));
-    search(&mut b, "", true);
+    logs::search(&mut b, "", true);
     for first in [true, false] {
         for (label, fault, fragment) in [
             (
@@ -92,24 +96,24 @@ pub fn disabled_empty_failures_recovery_and_real_idle_expiry() {
                 );
             }
             server.proxy.clear();
-            refresh(&mut b);
+            logs::refresh(&mut b);
             assert_eq!(
                 b.eval(
                     "document.querySelector('.logs-main > .alert[data-tone=destructive]')===null"
                 ),
                 json!(true)
             );
-            assert!(!items(&last_reply(&server).1).is_empty());
-            pause(&mut b);
+            assert!(!logs::items(&logs::last_reply(&server).1).is_empty());
+            logs::pause(&mut b);
         }
     }
     drop(b);
 
     // Si cannot be configured below 300 seconds. Observe the real deadline;
     // neither browser timers nor the server clock are replaced.
-    let idle = start("dash-061-idle", 1, 1000);
+    let idle = logs::start("dash-061-idle", 1, 1000);
     let mut actor = Browser::start("dash-061-idle", &["ko-KR"]);
-    open(&mut actor, &idle);
+    logs::open(&mut actor, &idle);
     let baseline = idle.proxy.traffic();
     let activity = baseline
         .iter()
@@ -127,7 +131,7 @@ pub fn disabled_empty_failures_recovery_and_real_idle_expiry() {
     // A DOM read is not a management request and does not touch the idle timer.
     let mut last_dom = Instant::now();
     let mut near_deadline = false;
-    wait_for(
+    live::wait_for(
         "logs real 300-second idle expiry",
         Duration::from_secs(325),
         || {
@@ -180,13 +184,13 @@ pub fn disabled_empty_failures_recovery_and_real_idle_expiry() {
         ),
         json!(0)
     );
-    let count = paths(&idle).len();
+    let count = logs::paths(&idle).len();
     thread::sleep(Duration::from_millis(1300));
-    assert_eq!(paths(&idle).len(), count, "401 stops log polling");
+    assert_eq!(logs::paths(&idle).len(), count, "401 stops log polling");
     ready_after_fresh_login(&mut actor, &idle);
 }
 
-fn ready_after_fresh_login(browser: &mut Browser, server: &super::live::Server) {
-    open(browser, server);
-    ready(browser);
+fn ready_after_fresh_login(browser: &mut Browser, server: &Server) {
+    logs::open(browser, server);
+    logs::ready(browser);
 }

@@ -9,16 +9,13 @@ use axum::http::request::Parts;
 use axum::http::{HeaderMap, HeaderValue, Method, StatusCode};
 use axum::response::{IntoResponse, Response};
 use serde_json::{Value, json};
-use vnc_relay_app::management::login::LoggedIn;
-use vnc_relay_app::management::session::AuthorizedAdmin;
-use vnc_relay_app::management::{AuthError, SessionView};
+use vnc_relay_application::management::login::LoggedIn;
+use vnc_relay_application::management::session::AuthorizedAdmin;
+use vnc_relay_application::management::{AuthError, SessionView};
 use vnc_relay_domain::peer_ip::PeerIp;
 
-use super::{
-    DashboardHints, PeerAddr, SESSION_COOKIE, Shared, clear_session_cookie, json_error,
-    json_response, method_not_allowed, session_cookie, unauthenticated, unauthorized,
-};
-use crate::clock::timestamp;
+use super::{DashboardHints, PeerAddr, SESSION_COOKIE, Shared};
+use crate::clock;
 
 const SESSION_PATH: &str = "/api/v1/session";
 
@@ -41,7 +38,7 @@ pub(super) async fn answer(shared: &Shared, peer: &PeerAddr, parts: Parts, body:
     if parts.uri.path() == SESSION_PATH && parts.method == Method::POST {
         return login(shared, peer.ip, &parts.headers, body).await;
     }
-    let mut admin = match shared.auth.authorize(session_cookie(&parts.headers)) {
+    let mut admin = match shared.auth.authorize(super::session_cookie(&parts.headers)) {
         Ok(admin) => admin,
         Err(error) => return refuse(error, shared.secure, &parts.headers),
     };
@@ -54,7 +51,7 @@ pub(super) async fn answer(shared: &Shared, peer: &PeerAddr, parts: Parts, body:
         return match parts.method {
             Method::GET => get_session(shared, &mut admin, &parts.headers, body).await,
             Method::DELETE => delete_session(shared, &admin, &parts.headers, body).await,
-            _ => method_not_allowed(
+            _ => super::method_not_allowed(
                 "GET, POST, DELETE",
                 "이 경로는 GET, POST, DELETE 요청만 받는다.",
             ),
@@ -94,7 +91,7 @@ async fn login(shared: &Shared, peer: PeerIp, headers: &HeaderMap, body: Body) -
     let Some((account, password)) = credentials(&bytes) else {
         return bad_request(BODY_MESSAGE);
     };
-    let prior = session_cookie(headers).map(str::to_owned);
+    let prior = super::session_cookie(headers).map(str::to_owned);
     let auth = Arc::clone(&shared.auth);
     let outcome = tokio::task::spawn_blocking(move || {
         auth.login(&account, &password, peer, prior.as_deref())
@@ -144,7 +141,7 @@ async fn delete_session(
     shared.auth.logout(admin);
     let mut response = StatusCode::NO_CONTENT.into_response();
     let response_headers = response.headers_mut();
-    response_headers.insert(SET_COOKIE, clear_session_cookie(shared.secure));
+    response_headers.insert(SET_COOKIE, super::clear_session_cookie(shared.secure));
     response_headers.insert(CACHE_CONTROL, HeaderValue::from_static("no-store"));
     response
 }
@@ -180,9 +177,9 @@ fn session_response(
 ) -> Response {
     let mut body = session_body(view, dashboard);
     if as_of {
-        body["as_of"] = json!(timestamp(view.as_of));
+        body["as_of"] = json!(clock::timestamp(view.as_of));
     }
-    json_response(status, &body)
+    super::json_response(status, &body)
 }
 
 /// The body of management-api-v1 §1.5. 구현 판단(사용자 결정 없음): the
@@ -192,8 +189,8 @@ fn session_body(view: &SessionView, dashboard: &DashboardHints) -> Value {
     json!({
         "account": view.account.as_str(),
         "csrf_token": view.csrf.as_str(),
-        "idle_expires_at": timestamp(view.idle_expires_at),
-        "absolute_expires_at": timestamp(view.absolute_expires_at),
+        "idle_expires_at": clock::timestamp(view.idle_expires_at),
+        "absolute_expires_at": clock::timestamp(view.absolute_expires_at),
         "dashboard": {
             "poll_secs": dashboard.poll_secs,
             "query_timeout_secs": dashboard.query_timeout_secs,
@@ -205,10 +202,10 @@ fn session_body(view: &SessionView, dashboard: &DashboardHints) -> Value {
 /// Maps a refused check to its error response (management-api-v1 §2.1).
 fn refuse(error: AuthError, secure: bool, headers: &HeaderMap) -> Response {
     match error {
-        AuthError::Unauthenticated => unauthenticated(secure, headers),
+        AuthError::Unauthenticated => super::unauthenticated(secure, headers),
         AuthError::CsrfInvalid => csrf_invalid(),
         AuthError::LoginFailed => {
-            unauthorized("login_failed", LOGIN_FAILED_MESSAGE, secure, headers)
+            super::unauthorized("login_failed", LOGIN_FAILED_MESSAGE, secure, headers)
         }
         AuthError::InvalidAccount => bad_request(ACCOUNT_MESSAGE),
         // The detail stays inside the process. Only the generic message leaves it.
@@ -276,11 +273,11 @@ pub(super) fn poll_flag(headers: &HeaderMap) -> Option<bool> {
 }
 
 fn bad_request(message: &str) -> Response {
-    json_error(StatusCode::BAD_REQUEST, "invalid_request", message)
+    super::json_error(StatusCode::BAD_REQUEST, "invalid_request", message)
 }
 
 fn unsupported_media_type() -> Response {
-    json_error(
+    super::json_error(
         StatusCode::UNSUPPORTED_MEDIA_TYPE,
         "invalid_request",
         MEDIA_TYPE_MESSAGE,
@@ -288,7 +285,7 @@ fn unsupported_media_type() -> Response {
 }
 
 fn csrf_invalid() -> Response {
-    json_error(
+    super::json_error(
         StatusCode::FORBIDDEN,
         "csrf_invalid",
         "CSRF 토큰이 없거나 맞지 않다.",
@@ -296,7 +293,7 @@ fn csrf_invalid() -> Response {
 }
 
 fn internal_error() -> Response {
-    json_error(
+    super::json_error(
         StatusCode::INTERNAL_SERVER_ERROR,
         "internal",
         "서버 내부 오류가 났다.",

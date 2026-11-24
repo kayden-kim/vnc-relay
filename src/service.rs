@@ -25,8 +25,8 @@ pub fn run(action: ServiceAction) -> ExitCode {
             let _ = writeln!(io::stdout().lock(), "서비스 '{SERVICE_NAME}'를 {done}.");
             ExitCode::SUCCESS
         }
-        Err(Failure::Reported(code)) => ExitCode::from(code),
-        Err(Failure::Error {
+        Err(ServiceError::Reported(code)) => ExitCode::from(code),
+        Err(ServiceError::Error {
             code,
             message,
             exit,
@@ -39,7 +39,7 @@ pub fn run(action: ServiceAction) -> ExitCode {
 
 /// Why a service command stopped.
 #[derive(Debug, PartialEq, Eq)]
-enum Failure {
+enum ServiceError {
     /// The file check already wrote its diagnostics.
     Reported(u8),
     /// One error line of cli-v1 §2.2 to write.
@@ -51,7 +51,7 @@ enum Failure {
 }
 
 /// `service install`, install steps 1 to 7 of cli-v1 §1.9.
-fn install(config: &Path, operators: &[String]) -> Result<&'static str, Failure> {
+fn install(config: &Path, operators: &[String]) -> Result<&'static str, ServiceError> {
     let scm = Scm::open_for_install().map_err(scm_failure)?;
     install_with(
         &scm,
@@ -64,7 +64,7 @@ fn install(config: &Path, operators: &[String]) -> Result<&'static str, Failure>
 }
 
 /// `service uninstall`, uninstall steps 1 to 4 of cli-v1 §1.9.
-fn uninstall() -> Result<&'static str, Failure> {
+fn uninstall() -> Result<&'static str, ServiceError> {
     let scm = Scm::open().map_err(scm_failure)?;
     scm.uninstall().map_err(|error| match error {
         UninstallError::NotFound => error_line(
@@ -158,7 +158,7 @@ fn install_with<I: ServiceInstallGateway>(
     names: &[String],
     exe: impl FnOnce() -> io::Result<PathBuf>,
     check: impl FnOnce(&Path) -> Result<(), u8>,
-) -> Result<(), Failure> {
+) -> Result<(), ServiceError> {
     if scm.service_exists().map_err(scm_failure)? {
         return Err(exists());
     }
@@ -167,7 +167,7 @@ fn install_with<I: ServiceInstallGateway>(
         match scm.lookup(name).map_err(scm_failure)? {
             Some(operator) => operators.push(operator),
             None => {
-                return Err(Failure::Error {
+                return Err(ServiceError::Error {
                     code: "service_operator_unknown",
                     message: format!(
                         "`--operator` 이름 `{name}`을(를) Windows 사용자나 그룹으로 찾지 못했다."
@@ -179,7 +179,7 @@ fn install_with<I: ServiceInstallGateway>(
     }
     // The check reports a path that cannot become absolute as it is.
     let config = std::path::absolute(config).unwrap_or_else(|_| config.to_path_buf());
-    check(&config).map_err(Failure::Reported)?;
+    check(&config).map_err(ServiceError::Reported)?;
     let exe = exe().map_err(|error| failed(os_code(&error)))?;
     let created = scm.create(&exe, &config).map_err(|error| {
         if error.is_service_exists() {
@@ -204,7 +204,7 @@ fn install_with<I: ServiceInstallGateway>(
     Ok(())
 }
 
-fn exists() -> Failure {
+fn exists() -> ServiceError {
     error_line(
         "service_exists",
         format!(
@@ -213,7 +213,7 @@ fn exists() -> Failure {
     )
 }
 
-fn access_denied() -> Failure {
+fn access_denied() -> ServiceError {
     error_line(
         "service_access_denied",
         "서비스를 다룰 권한이 없다. 관리자 권한 터미널에서 실행한다.".to_owned(),
@@ -221,7 +221,7 @@ fn access_denied() -> Failure {
 }
 
 /// Access denied, or any other SCM failure with its OS error number.
-fn scm_failure(error: ScmError) -> Failure {
+fn scm_failure(error: ScmError) -> ServiceError {
     if error.is_access_denied() {
         access_denied()
     } else {
@@ -229,15 +229,15 @@ fn scm_failure(error: ScmError) -> Failure {
     }
 }
 
-fn failed(code: i32) -> Failure {
+fn failed(code: i32) -> ServiceError {
     error_line(
         "service_failed",
         format!("SCM 호출이 실패했다(OS 오류 {code})."),
     )
 }
 
-fn error_line(code: &'static str, message: String) -> Failure {
-    Failure::Error {
+fn error_line(code: &'static str, message: String) -> ServiceError {
+    ServiceError::Error {
         code,
         message,
         exit: EXIT_RUNTIME,
@@ -308,7 +308,7 @@ mod tests {
         }
     }
 
-    fn install(scm: &FakeScm, names: &[&str], check: Result<(), u8>) -> Result<(), Failure> {
+    fn install(scm: &FakeScm, names: &[&str], check: Result<(), u8>) -> Result<(), ServiceError> {
         install_at(scm, Path::new(r"C:\relay\relay.toml"), names, check)
     }
 
@@ -317,7 +317,7 @@ mod tests {
         config: &Path,
         names: &[&str],
         check: Result<(), u8>,
-    ) -> Result<(), Failure> {
+    ) -> Result<(), ServiceError> {
         let names: Vec<String> = names.iter().map(|name| (*name).to_owned()).collect();
         install_with(
             scm,
@@ -333,9 +333,9 @@ mod tests {
         )
     }
 
-    fn code_of(result: &Result<(), Failure>) -> Option<(&'static str, u8)> {
+    fn code_of(result: &Result<(), ServiceError>) -> Option<(&'static str, u8)> {
         match result {
-            Err(Failure::Error { code, exit, .. }) => Some((code, *exit)),
+            Err(ServiceError::Error { code, exit, .. }) => Some((code, *exit)),
             _ => None,
         }
     }
@@ -393,7 +393,7 @@ mod tests {
         };
         let result = install(&scm, &["alice", "nobody"], Ok(()));
         assert_eq!(code_of(&result), Some(("service_operator_unknown", 2)));
-        let Err(Failure::Error { message, .. }) = &result else {
+        let Err(ServiceError::Error { message, .. }) = &result else {
             panic!("{result:?}");
         };
         assert!(message.contains("`nobody`"), "{message}");
@@ -401,7 +401,10 @@ mod tests {
 
         for exit in [EXIT_CONFIG, EXIT_ACCOUNTS] {
             let scm = FakeScm::default();
-            assert_eq!(install(&scm, &[], Err(exit)), Err(Failure::Reported(exit)));
+            assert_eq!(
+                install(&scm, &[], Err(exit)),
+                Err(ServiceError::Reported(exit))
+            );
             assert_eq!(scm.calls(), ["exists", r"check C:\relay\relay.toml"]);
         }
 
@@ -432,7 +435,7 @@ mod tests {
         };
         let result = install(&scm, &["alice"], Ok(()));
         assert_eq!(code_of(&result), Some(("service_failed", 1)));
-        let Err(Failure::Error { message, .. }) = &result else {
+        let Err(ServiceError::Error { message, .. }) = &result else {
             panic!("{result:?}");
         };
         assert!(message.contains("OS 오류 1332"), "{message}");
@@ -445,7 +448,7 @@ mod tests {
             ..FakeScm::default()
         };
         let result = install(&scm, &[], Ok(()));
-        let Err(Failure::Error { code, message, .. }) = &result else {
+        let Err(ServiceError::Error { code, message, .. }) = &result else {
             panic!("{result:?}");
         };
         assert_eq!(*code, "service_failed");
@@ -458,7 +461,7 @@ mod tests {
         use std::path::PathBuf;
 
         use crate::cli::{EXIT_ACCOUNTS, EXIT_CONFIG};
-        use crate::serve::check_service_files;
+        use crate::serve;
 
         const ACCOUNTS: &str = "version = 1\n\n[[account]]\nname = \"alice\"\npassword_hash = \"$argon2id$v=19$m=19456,t=2,p=1$AAAAAAAAAAAAAAAAAAAAAA$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\"\n";
 
@@ -520,7 +523,7 @@ mod tests {
             ];
             for (name, text, accounts, expected) in cases {
                 let (dir, path) = setup(name, &text, accounts);
-                assert_eq!(check_service_files(&path), expected, "{name}");
+                assert_eq!(serve::check_service_files(&path), expected, "{name}");
                 // The check opens no log file.
                 assert!(!dir.join("relay.log").exists(), "{name}");
                 let _ = std::fs::remove_dir_all(&dir);

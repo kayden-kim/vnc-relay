@@ -14,7 +14,7 @@
 
 ## 1. 대상과 영향
 
-- 대상: `web/dashboard/` 정적 파일, `docs/design/DESIGN.md`의 YAML 토큰, `docs/design/mockups/dashboard.html`·`help-site.html`의 토큰 블록, `tests/dashboard_assets.rs`·`tests/dashboard_browser.rs`·`tests/dashboard_live.rs`와 그 공통·화면별 본문.
+- 대상: `web/dashboard/` 정적 파일, `docs/design/DESIGN.md`의 YAML 토큰, `docs/design/mockups/dashboard.html`·`help-site.html`의 토큰 블록, `tests/dashboard_assets.rs`·`tests/dashboard_browser.rs`·`tests/dashboard_live/main.rs`와 그 공통·화면별 본문.
 - 예상 사용자 영향: 운영 서버를 멈추지 않는다. 실서버 시험은 OS 임시 폴더에 계정·설정·브라우저 프로필을 만들고, 임의 루프백 포트에 시험용 서버·전달 프록시·TCP 중계를 연다. 자신이 시작한 프로세스와 소켓만 종료한다. 기존 토큰·정적 검사는 파일을 읽고 `target/` 아래에 결과를 쓴다.
 - 작업 허용 시간: 자동 검사는 서버 중단이 필요 없다. 수동 검토(3.4~3.7절)는 검토자의 시간이 필요하다.
 
@@ -99,7 +99,7 @@
    cargo xtask scenarios
    ```
 
-   기대 결과: 자동으로 연결된 DASH 항목의 상태가 `통과`다. `부분` 표식이 붙으면 검증 기록에 이유를 적는다. `tests/dashboard_live.rs`의 비부분 행은 각 기대 결과 전체를 연결한다. 실행하지 않은 시험은 통과가 아니다. DASH-015·023의 수동 범위는 별도다([테스트 컨벤션 7절](../conventions/testing.md#7-테스트와-스펙-시나리오-연결)).
+   기대 결과: 자동으로 연결된 DASH 항목의 상태가 `통과`다. `부분` 표식이 붙으면 검증 기록에 이유를 적는다. `tests/dashboard_live/main.rs`의 비부분 행은 각 기대 결과 전체를 연결한다. 실행하지 않은 시험은 통과가 아니다. DASH-015·023의 수동 범위는 별도다([테스트 컨벤션 7절](../conventions/testing.md#7-테스트와-스펙-시나리오-연결)).
 
 ### 3.4 폭별 스크린샷과 시안 대조 (수동)
 

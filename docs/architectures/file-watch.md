@@ -114,7 +114,7 @@ IP 정보 DB 파일은 위 순서에 끼어든다. 1단계의 주기 확인(`pol
 소스에는 `ReloadService::arm_before_validation` 동기 일회 훅과 주입한 ReloadClock·ChangeFeed가 있다. 알림 차단, 검증 중 새 세대, TLS 한쪽 교체를 재현하는 경계다. 표식과 실행 범위는 [테스트 컨벤션](../conventions/testing.md#7-테스트와-스펙-시나리오-연결)을 따른다.
 
 - OPS-027의 검증 지연 경계는 대기하는 채널이 아니라 테스트 전용 동기 일회 훅이다. 단일 태스크의 `join!` 안에서 채널로 멈추면 교착한다. 실제 바이너리의 검증 지연 시험은 없다.
-- OPS-041의 `allow_change_is_applied_by_poll_when_the_notify_is_blocked`는 `SwitchFeed`·`ReloadWatcher::run`·주입한 시계로 주기 확인 감지(`poll`)와 적용을 확인한다. 읽기·검증·교체 시간은 주입하지 않는다. 이 시험의 D 상한 확인은 Q+G < 1초까지다. 바이너리에는 알림 차단 훅이 없다.
+- OPS-041의 `allow_change_is_applied_by_poll_when_the_notify_is_blocked`는 `FakeWatchGateway`·`ReloadWatcher::run`·주입한 시계로 주기 확인 감지(`poll`)와 적용을 확인한다. 읽기·검증·교체 시간은 주입하지 않는다. 이 시험의 D 상한 확인은 Q+G < 1초까지다. 바이너리에는 알림 차단 훅이 없다.
 
 ## 5. 상태와 초기화
 

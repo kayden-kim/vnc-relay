@@ -7,16 +7,18 @@ use axum::http::request::Parts;
 use axum::http::{Method, StatusCode};
 use axum::response::Response;
 use serde_json::{Map, Value, json};
-use vnc_relay_app::management::session::AuthorizedAdmin;
-use vnc_relay_app::metrics::history::{HISTORY_KEYS, HistoryPoint, HistoryView, HistoryWindow};
-use vnc_relay_app::metrics::snapshot::{
+use vnc_relay_application::management::session::AuthorizedAdmin;
+use vnc_relay_application::metrics::history::{
+    HISTORY_KEYS, HistoryPoint, HistoryView, HistoryWindow,
+};
+use vnc_relay_application::metrics::snapshot::{
     MetricFamily, MetricKind, MetricPoint, MetricsSnapshot, Number, PointValue,
 };
 
-use super::logs_api::percent_decode;
-use super::session_api::{media_type_allows, poll_flag};
-use super::{Shared, json_error, json_response, method_not_allowed};
-use crate::clock::timestamp;
+use super::Shared;
+use super::logs_api;
+use super::session_api;
+use crate::clock;
 
 const POLL_MESSAGE: &str = "X-Relay-Poll은 값 1을 가진 GET 요청에만 쓸 수 있다.";
 const MEDIA_TYPE_MESSAGE: &str = "요청 본문은 application/json이어야 한다.";
@@ -33,15 +35,15 @@ pub(super) async fn answer(
     body: Body,
 ) -> Response {
     if parts.method != Method::GET {
-        return method_not_allowed("GET", "이 경로는 GET 요청만 받는다.");
+        return super::method_not_allowed("GET", "이 경로는 GET 요청만 받는다.");
     }
-    match poll_flag(&parts.headers) {
-        None => return json_error(StatusCode::BAD_REQUEST, "invalid_request", POLL_MESSAGE),
+    match session_api::poll_flag(&parts.headers) {
+        None => return super::json_error(StatusCode::BAD_REQUEST, "invalid_request", POLL_MESSAGE),
         Some(false) => shared.auth.touch(admin),
         Some(true) => {}
     }
-    if !media_type_allows(body, &parts.headers).await {
-        return json_error(
+    if !session_api::media_type_allows(body, &parts.headers).await {
+        return super::json_error(
             StatusCode::UNSUPPORTED_MEDIA_TYPE,
             "invalid_request",
             MEDIA_TYPE_MESSAGE,
@@ -49,11 +51,13 @@ pub(super) async fn answer(
     }
     let (window, after) = match history_query(parts.uri.query()) {
         Ok(query) => query,
-        Err(message) => return json_error(StatusCode::BAD_REQUEST, "invalid_request", message),
+        Err(message) => {
+            return super::json_error(StatusCode::BAD_REQUEST, "invalid_request", message);
+        }
     };
     let snapshot = shared.metrics.snapshot();
     let history = shared.metrics.history_after(window, after);
-    json_response(StatusCode::OK, &metrics_json(&snapshot, window, &history))
+    super::json_response(StatusCode::OK, &metrics_json(&snapshot, window, &history))
 }
 
 /// `history_window` and `history_after` of management-api-v1 §1.16, each at
@@ -68,8 +72,8 @@ fn history_query(query: Option<&str>) -> Result<(HistoryWindow, Option<u64>), &'
             continue;
         }
         let (raw_key, raw_value) = pair.split_once('=').unwrap_or((pair, ""));
-        let key = percent_decode(raw_key).ok_or(ENCODING_MESSAGE)?;
-        let value = percent_decode(raw_value).ok_or(ENCODING_MESSAGE)?;
+        let key = logs_api::percent_decode(raw_key).ok_or(ENCODING_MESSAGE)?;
+        let value = logs_api::percent_decode(raw_value).ok_or(ENCODING_MESSAGE)?;
         match key.as_str() {
             "history_window" => {
                 if window.is_some() {
@@ -115,7 +119,10 @@ fn metrics_json(snapshot: &MetricsSnapshot, window: HistoryWindow, history: &His
         Value::Array(history.points.iter().map(history_point_json).collect()),
     );
     let mut body = Map::new();
-    body.insert("as_of".to_owned(), Value::from(timestamp(snapshot.as_of)));
+    body.insert(
+        "as_of".to_owned(),
+        Value::from(clock::timestamp(snapshot.as_of)),
+    );
     body.insert(
         "resource".to_owned(),
         json!({
@@ -179,7 +186,7 @@ fn history_point_json(point: &HistoryPoint) -> Value {
         .collect();
     let mut object = Map::new();
     object.insert("seq".to_owned(), Value::from(point.seq));
-    object.insert("at".to_owned(), Value::from(timestamp(point.at)));
+    object.insert("at".to_owned(), Value::from(clock::timestamp(point.at)));
     object.insert("values".to_owned(), Value::Object(values));
     Value::Object(object)
 }
@@ -196,17 +203,17 @@ mod tests {
     use std::sync::{Arc, Mutex};
     use std::time::{Duration, SystemTime};
 
-    use vnc_relay_app::metrics::Metrics;
-    use vnc_relay_app::ports::{Clock, CpuTimes, OpenCount, ProcessStats};
+    use vnc_relay_application::metrics::Metrics;
+    use vnc_relay_application::ports::{Clock, CpuTimes, OpenCount, ProcessStats};
     use vnc_relay_domain::session::Direction;
 
     use super::*;
     use crate::clock::SystemClock;
 
     /// Wall time the test sets; monotonic time stays at zero.
-    struct SetWall(Mutex<SystemTime>);
+    struct FakeClock(Mutex<SystemTime>);
 
-    impl Clock for SetWall {
+    impl Clock for FakeClock {
         fn monotonic(&self) -> Duration {
             Duration::ZERO
         }
@@ -317,7 +324,7 @@ mod tests {
     #[test]
     fn history_window_24h_answers_every_sixth_point_of_the_last_day() {
         let start = SystemTime::UNIX_EPOCH + Duration::from_secs(1_790_000_000);
-        let clock = Arc::new(SetWall(Mutex::new(start)));
+        let clock = Arc::new(FakeClock(Mutex::new(start)));
         let metrics = Arc::new(Metrics::new(&SystemClock::new()));
         let process = ProcessStats {
             cpu: None,
@@ -351,7 +358,7 @@ mod tests {
         let check = |history: &Value, index: usize, seq: u64| {
             let point = &history["points"][index];
             assert_eq!(point["seq"], seq, "24-hour point {seq}");
-            let at = timestamp(start + Duration::from_secs(60 * seq));
+            let at = clock::timestamp(start + Duration::from_secs(60 * seq));
             assert_eq!(point["at"], Value::from(at), "24-hour point {seq}");
             let bytes = &point["values"]["session_io_target_to_viewer"];
             assert_eq!(*bytes, 6 * seq, "24-hour point {seq}");

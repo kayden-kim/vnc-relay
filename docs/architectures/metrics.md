@@ -27,11 +27,11 @@
   - 설정 키 검증: [설정 로딩](config-loading.md)이 맡는다.
   - 화면 계산(비율·차이·p95 상한): 대시보드가 맡는다([화면 스펙 SCR-007](../specs/dashboard.md#scr-007-메트릭)).
 - 다른 모듈에 공개하는 기능:
-  - `vnc_relay_app::metrics::Metrics`: 기록 전용 저장소. `record_handshake`, `record_target_connect`, `add_io`, `record_ping_timeout`.
-  - `vnc_relay_app::metrics::MetricsSink`: `EventSink` 구현.
-  - `vnc_relay_app::metrics::MetricsService`: 읽기 전용. `snapshot`, `sample_history`, `history_after(기간, 순번)`.
-  - `vnc_relay_app::metrics::history::HistoryWindow`: 추이 기간(`Hour`·`Day`)과 기간별 간격·보관 개수.
-  - `vnc_relay_app::ports::ProcessStatsSource`와 `ProcessStats`, `AdminSessionSource`, `RelayStateSource::counts`.
+  - `vnc_relay_application::metrics::Metrics`: 기록 전용 저장소. `record_handshake`, `record_target_connect`, `add_io`, `record_ping_timeout`.
+  - `vnc_relay_application::metrics::MetricsSink`: `EventSink` 구현.
+  - `vnc_relay_application::metrics::MetricsService`: 읽기 전용. `snapshot`, `sample_history`, `history_after(기간, 순번)`.
+  - `vnc_relay_application::metrics::history::HistoryWindow`: 추이 기간(`Hour`·`Day`)과 기간별 간격·보관 개수.
+  - `vnc_relay_application::ports::ProcessStatsSource`와 `ProcessStats`, `AdminSessionSource`, `RelayStateSource::counts`.
   - `vnc_relay_adapters::metrics_text::encode`.
   - `vnc_relay_adapters::process_stats::OsProcessStats`.
   - `vnc_relay_adapters::websocket_stream::WsRelayStream::count_ping_timeouts`: WS·WSS 중계 연결이 ping 시간 초과를 세게 하는 선택 설정.
@@ -121,7 +121,7 @@ flowchart LR
 | 진행 중 연결·대기·활성 세션 수 | `RelayStateSource::counts`. 한 번의 짧은 잠금에서 단계·역할·전송 경로·모드별 수만 센다(`RelayCounts`). 목록을 복제하지 않는다 |
 | L·Lm 사용량 | `ConnectionBudget::current` |
 | L·Lm 상한 | `RuntimeSettingsSource::with_current`의 `limits` |
-| 관리 세션 수 | `AdminSessionSource::live_sessions`(구현은 `AdminAuth`). 그 시각에 유효한 세션만 센다(`AdminSessionTable::live_count`) |
+| 관리 세션 수 | `AdminSessionSource::live_sessions`(구현은 `AdminAuth`). 그 시각에 유효한 세션만 센다(`admin_session::Table::live_count`) |
 | 가동 시간 | `Metrics`를 만들 때 읽은 `Clock::monotonic`과 지금 값의 차이 |
 | 프로세스 값 | `ProcessStatsSource::read` |
 

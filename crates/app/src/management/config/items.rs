@@ -2,7 +2,7 @@
 use super::ConfigValue;
 use crate::reload::ConfigPresence;
 use crate::settings::{LogOutput, Settings, TicketSettings};
-use vnc_relay_domain::entry_point::{EntryPoint, Listener, Role};
+use vnc_relay_domain::entry_point::{EntryPoint, ListenerKind, Role};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ConfigReloadKind {
@@ -111,7 +111,10 @@ pub fn config_items(s: &Settings, presence: &ConfigPresence) -> Vec<ConfigItem> 
             s.relay.enabled(entry),
         ));
     }
-    for (listener, ws) in [(Listener::Ws, &s.relay.ws), (Listener::Wss, &s.relay.wss)] {
+    for (listener, ws) in [
+        (ListenerKind::Ws, &s.relay.ws),
+        (ListenerKind::Wss, &s.relay.wss),
+    ] {
         let prefix = format!("relay.{}", listener.name());
         out.push(item(
             format!("{prefix}.listen"),
@@ -135,7 +138,7 @@ pub fn config_items(s: &Settings, presence: &ConfigPresence) -> Vec<ConfigItem> 
             Dynamic,
             ws.enabled(),
         ));
-        if listener == Listener::Wss {
+        if listener == ListenerKind::Wss {
             for (suffix, path) in [
                 ("cert_file", ws.tls.as_ref().map(|tls| &tls.cert_file)),
                 ("key_file", ws.tls.as_ref().map(|tls| &tls.key_file)),

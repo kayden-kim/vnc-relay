@@ -10,9 +10,6 @@
 //! (docs/contracts/management-api-v1.md §1.11, docs/conventions/frontend.md
 //! §1.2). Keep the two in sync.
 
-#[path = "common/browser_port.rs"]
-mod browser_port;
-
 use std::fs::{self, File};
 use std::io::{self, Read, Write};
 use std::net::TcpStream;
@@ -22,6 +19,8 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Condvar, Mutex, PoisonError};
 use std::thread;
 use std::time::{Duration, Instant};
+
+use vnc_relay_testkit::browser_port;
 
 /// Same policy string as `xtask/src/dashboard_serve.rs` (frontend.md §1.2, Q37).
 const CSP: &str = "default-src 'self'; frame-ancestors 'none'";

@@ -6,9 +6,9 @@ use std::io;
 use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
 
-use tokio::net::{TcpStream, lookup_host};
-use vnc_relay_app::ports::{TargetError, TargetGateway};
-use vnc_relay_app::reload::ports::RuntimeSettingsSource;
+use tokio::net::{self, TcpStream};
+use vnc_relay_application::ports::{TargetError, TargetGateway};
+use vnc_relay_application::reload::ports::RuntimeSettingsSource;
 
 use crate::net::TcpRelayStream;
 
@@ -28,7 +28,7 @@ impl TargetGateway for TcpTargetGateway {
     type Stream = TcpRelayStream;
 
     async fn resolve(&self, name: &str) -> Result<Vec<IpAddr>, TargetError> {
-        let addresses = lookup_host((name, 0))
+        let addresses = net::lookup_host((name, 0))
             .await
             .map_err(|_| TargetError::ResolveFailed)?;
         Ok(addresses.map(|address| address.ip()).collect())

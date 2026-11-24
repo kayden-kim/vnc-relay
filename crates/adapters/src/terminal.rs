@@ -9,7 +9,7 @@ use std::sync::mpsc::{self, RecvTimeoutError};
 use std::thread;
 use std::time::Duration;
 
-use vnc_relay_app::ports::{AccountInputGateway, InputError};
+use vnc_relay_application::ports::{AccountInputGateway, InputError};
 
 #[cfg(windows)]
 #[expect(

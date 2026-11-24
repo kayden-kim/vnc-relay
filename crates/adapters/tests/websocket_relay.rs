@@ -17,25 +17,25 @@ use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::watch;
 use tokio::task::JoinHandle;
-use tokio::time::timeout;
+use tokio::time;
 use tokio_rustls::TlsConnector;
 use vnc_relay_adapters::clock::SystemClock;
 use vnc_relay_adapters::crypto::{RelayIdKey, SessionIdKey};
 use vnc_relay_adapters::net::{AcceptPolicy, AllowSource, TcpEntryPoint};
-use vnc_relay_adapters::ops_log::format_line;
+use vnc_relay_adapters::ops_log;
 use vnc_relay_adapters::target::TcpTargetGateway;
 use vnc_relay_adapters::tls::{self, TlsSource};
 use vnc_relay_adapters::websocket::{WsEntryPoint, WsPolicy};
-use vnc_relay_app::events::Event;
-use vnc_relay_app::metrics::Metrics;
-use vnc_relay_app::ports::{Clock, EventSink};
-use vnc_relay_app::relay::{RelayRuntime, RelayRuntimeConfig, RelayService};
-use vnc_relay_app::reload::snapshot::{ReloadCell, ReloadSnapshot};
-use vnc_relay_app::settings::KeepaliveSettings;
+use vnc_relay_application::events::Event;
+use vnc_relay_application::metrics::Metrics;
+use vnc_relay_application::ports::{Clock, EventSink};
+use vnc_relay_application::relay::{RelayRuntime, RelayRuntimeConfig, RelayService};
+use vnc_relay_application::reload::snapshot::{ReloadCell, ReloadSnapshot};
+use vnc_relay_application::settings::KeepaliveSettings;
 use vnc_relay_domain::allow_list::{AllowList, IpItem};
 use vnc_relay_domain::budget::ConnectionBudget;
 use vnc_relay_domain::entry_point::EntryPoint;
-use vnc_relay_domain::handshake::{HANDSHAKE_REQUEST_LEN, HandshakePolicy, VIEWER_GREETING};
+use vnc_relay_domain::handshake::{HANDSHAKE_REQUEST_LEN, Policy, VIEWER_GREETING};
 use vnc_relay_domain::target_policy::{TargetItem, TargetPolicy};
 
 const LIMIT: Duration = Duration::from_secs(10);
@@ -50,7 +50,7 @@ const KEEPALIVE: KeepaliveSettings = KeepaliveSettings {
 };
 
 async fn bounded<T>(future: impl Future<Output = T>) -> T {
-    timeout(LIMIT, future)
+    time::timeout(LIMIT, future)
         .await
         .unwrap_or_else(|error| panic!(concat!("exchange finishes", ": {:?}"), error))
 }
@@ -79,9 +79,9 @@ fn connector() -> TlsConnector {
 }
 
 #[derive(Default)]
-struct Recorder(Mutex<Vec<Value>>);
+struct SpyEventSink(Mutex<Vec<Value>>);
 
-impl Recorder {
+impl SpyEventSink {
     fn lock(&self) -> MutexGuard<'_, Vec<Value>> {
         self.0.lock().unwrap_or_else(PoisonError::into_inner)
     }
@@ -99,9 +99,9 @@ impl Recorder {
     }
 }
 
-impl EventSink for Recorder {
+impl EventSink for SpyEventSink {
     fn record(&self, event: &Event) {
-        let line = format_line(event, SystemTime::UNIX_EPOCH);
+        let line = ops_log::format_line(event, SystemTime::UNIX_EPOCH);
         assert_eq!(line.lines().count(), 1, "one JSON log line per event");
         self.lock().push(
             serde_json::from_str(&line)
@@ -114,7 +114,7 @@ struct Settings {
     places: u32,
     handshake: Duration,
     close: Duration,
-    modes: HandshakePolicy,
+    modes: Policy,
 }
 
 impl Default for Settings {
@@ -123,7 +123,7 @@ impl Default for Settings {
             places: 8,
             handshake: LIMIT,
             close: Duration::from_secs(3),
-            modes: HandshakePolicy {
+            modes: Policy {
                 mode1_enabled: true,
                 mode2_enabled: true,
             },
@@ -135,7 +135,7 @@ struct Running {
     addr: SocketAddr,
     server_addr: SocketAddr,
     secure: bool,
-    events: Arc<Recorder>,
+    events: Arc<SpyEventSink>,
     service: Arc<RelayService>,
     runtime: Arc<RelayRuntime<TcpTargetGateway>>,
     clock: Arc<dyn Clock>,
@@ -193,16 +193,17 @@ impl Running {
                 .unwrap_or_else(|error| panic!("loopback targets: {error:?}")),
         ]));
         let cell = Arc::new(ReloadCell::new(ReloadSnapshot::new(
-            vnc_relay_app::reload::ConfigCandidate {
+            vnc_relay_application::reload::ConfigCandidate {
                 settings: running,
                 presence: Default::default(),
             },
             acceptor,
             None,
         )));
-        let source: Arc<dyn vnc_relay_app::reload::ports::RuntimeSettingsSource> = cell.clone();
+        let source: Arc<dyn vnc_relay_application::reload::ports::RuntimeSettingsSource> =
+            cell.clone();
         let clock: Arc<dyn Clock> = Arc::new(SystemClock::new());
-        let events = Arc::new(Recorder::default());
+        let events = Arc::new(SpyEventSink::default());
         let log: Arc<dyn EventSink> = events.clone();
         let budget = ConnectionBudget::new();
         let runtime =
@@ -921,7 +922,7 @@ async fn disabled_modes_close_1008_before_registration_or_target_connect() {
             let running = Running::start(
                 secure,
                 Settings {
-                    modes: HandshakePolicy {
+                    modes: Policy {
                         mode1_enabled: !mode1,
                         mode2_enabled: mode1,
                     },
@@ -946,7 +947,7 @@ async fn disabled_modes_close_1008_before_registration_or_target_connect() {
                 initial_failure(&running, "connection_rejected", "mode_disabled", None).await;
             assert_eq!(line["mode"], if mode1 { "mode1" } else { "mode2" });
             assert!(
-                timeout(Duration::from_millis(30), target.accept())
+                time::timeout(Duration::from_millis(30), target.accept())
                     .await
                     .is_err(),
                 "disabled mode makes no target connection"
@@ -1072,7 +1073,7 @@ async fn mode_i_target_limit_after_101_closes_4011_and_preserves_existing_sessio
         assert_eq!(rejected["mode"], "mode1");
         assert_eq!(rejected["limit"], 3);
         assert!(
-            timeout(Duration::from_millis(30), denied_target.accept())
+            time::timeout(Duration::from_millis(30), denied_target.accept())
                 .await
                 .is_err(),
             "no out-of-budget target socket"

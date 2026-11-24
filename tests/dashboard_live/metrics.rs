@@ -8,8 +8,10 @@ use std::time::{Duration, Instant};
 
 use serde_json::json;
 
-use super::live::{Browser, Fault, LIMIT, Server, wait_for};
-use super::settings::{open_settings, open_settings_edit, set_field_value};
+use super::settings;
+use vnc_relay_testkit::cdp::Browser;
+use vnc_relay_testkit::dashboard_proxy::Fault;
+use vnc_relay_testkit::live::{self, LIMIT, Server};
 
 const API: &str = "/api/v1/metrics";
 const MENU: &str = "a.navbar-item[href='/#/metrics']";
@@ -46,9 +48,9 @@ pub fn menu_entry_automatic_polls_leaving_and_returning() {
     );
 
     // Real SCR-005 input is dropped by the menu: no confirmation and no PATCH.
-    open_settings(&mut browser, &server);
-    open_settings_edit(&mut browser, &server);
-    set_field_value(&mut browser, "limits.waiting", "7");
+    settings::open_settings(&mut browser, &server);
+    settings::open_settings_edit(&mut browser, &server);
+    settings::set_field_value(&mut browser, "limits.waiting", "7");
     browser.click(MENU);
     ready(&mut browser);
     assert_eq!(
@@ -71,7 +73,7 @@ pub fn menu_entry_automatic_polls_leaving_and_returning() {
         "the entry request is a user action: {}",
         entry[0].1
     );
-    wait_for("real automatic metrics poll", LIMIT, || {
+    live::wait_for("real automatic metrics poll", LIMIT, || {
         requests(&server)
             .iter()
             .any(|(path, headers)| path.contains("history_after=") && is_poll(headers))
@@ -112,7 +114,7 @@ pub fn menu_entry_automatic_polls_leaving_and_returning() {
         .once("GET", API, Fault::Hold(Arc::clone(&held)));
     let before = server.proxy.traffic().len();
     browser.click(MENU);
-    wait_for("metrics entry held", LIMIT, || {
+    live::wait_for("metrics entry held", LIMIT, || {
         server
             .proxy
             .traffic()
@@ -123,7 +125,7 @@ pub fn menu_entry_automatic_polls_leaving_and_returning() {
     browser.click("a.navbar-item[href='/#/logs']");
     browser.wait("document.querySelector('#logs-refresh') !== null");
     held.store(true, Ordering::Release);
-    wait_for("late metrics response released", LIMIT, || {
+    live::wait_for("late metrics response released", LIMIT, || {
         server
             .proxy
             .traffic()
@@ -167,7 +169,7 @@ pub fn unauthenticated_poll_removes_data_and_idle_expiry_is_not_extended() {
     // a management request and does not touch the idle timer.
     let mut last_dom = Instant::now();
     let mut near_deadline = false;
-    wait_for(
+    live::wait_for(
         "metrics real 300-second idle expiry",
         Duration::from_secs(325),
         || {

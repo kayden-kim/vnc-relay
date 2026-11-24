@@ -71,16 +71,16 @@ flowchart LR
 | `websocket.rs` `refuse` | `connection_rejected`(`stage` = `upgrade`, `conn_id` 있음)를 먼저 기록하고, 거절 응답을 최선으로 보낸 뒤 닫는다. | `connection`이 호출한다. | `app` |
 | `websocket_stream.rs` `WsRelayStream` | 101 뒤 연결의 전송 스트림이다. `connection`이 `suffix`, M, B, 전송 종류를 넘겨 만든다. | 101 뒤 연결마다 한 번. | 공통 서비스 |
 | `websocket.rs` `io_reason`, `log_abort` | 전송 I/O 오류를 `AbortReason`과 `ConnectionErrorKind`로 바꿔 `connection_aborted`를 쓴다. `VersionUnsupported`면 줄을 더 쓰지 않는다. TLS 계층이 이미 기록했다. | `connection`이 쓴다. | `app` |
-| `tls_listener.rs` `TlsIo` | WSS 협상을 한다. 첫 읽기·쓰기에서 협상이 돈다. TLS 1.2 미만은 `connection_rejected`(`stage` = `tls`, `reason` = `tls_version_unsupported`)를 스스로 쓰고 `HandshakeFailure::VersionUnsupported`를 준다. | WSS 연결마다. | [TLS 모듈 설계](tls.md) |
+| `tls_listener.rs` `TlsIo` | WSS 협상을 한다. 첫 읽기·쓰기에서 협상이 돈다. TLS 1.2 미만은 `connection_rejected`(`stage` = `tls`, `reason` = `tls_version_unsupported`)를 스스로 쓰고 `TlsHandshakeError::VersionUnsupported`를 준다. | WSS 연결마다. | [TLS 모듈 설계](tls.md) |
 | `domain/src/origin.rs` `Origin` | `Origin` 값의 문법과 정확 일치 비교다([설정 계약 1.4절](../contracts/config-v4.md#14-origin-값-문법과-비교)). | 설정 읽기와 `check`가 쓴다. | — |
-| `src/serve.rs` `listen_until_shutdown` | WS는 TLS 없이, WSS는 `TlsSource`를 받아 공유 리스너당 한 번 띄운다. `WsEntryPoint::new`는 `Listener`를 받는다. `WsPolicy`에는 `AllowSource::ws` 또는 `wss`와 공통 L 사용량을 넣는다. | 설정과 바인드가 끝난 뒤 한 번 | `websocket.rs`, app |
+| `src/serve.rs` `listen_until_shutdown` | WS는 TLS 없이, WSS는 `TlsSource`를 받아 공유 리스너당 한 번 띄운다. `WsEntryPoint::new`는 `ListenerKind`를 받는다. `WsPolicy`에는 `AllowSource::ws` 또는 `wss`와 공통 L 사용량을 넣는다. | 설정과 바인드가 끝난 뒤 한 번 | `websocket.rs`, app |
 
 ## 3. 데이터 모델
 
 | 이름 | 필드·형태 | 줄의 필드(순서대로) | 제약과 항상 지켜야 할 조건 |
 | --- | --- | --- | --- |
 | `Event::UpgradeRejected` | `listener`, `role: Option<Role>`, `conn_id`, `reason`, `peer_ip`, `forwarded_ip: Option<PeerIp>`, `origin`, `ticket_jti` | `listener`, 선택 `role`, `conn_id`, `stage=upgrade`, `reason`, `peer_ip`, 선택 `forwarded_ip`, 선택 `origin`·`ticket_jti` | 경로 판정 전·꺼진 경로는 role이 없다. 켜진 경로 판정 뒤의 거절은 role을 유지한다. 전달 주소 판정 성공 뒤 거절은 `forwarded_ip`를 유지하고, `forwarded_for_invalid`에는 없다. Origin 거절 원문은 문자 경계에서 최대 256바이트만 기록한다. `ticket_jti`는 서명을 확인한 뒤 유효한 값일 때만 쓴다. |
-| `Event::ConnectionAborted` | `conn_id`, `listener: Listener`, `role: Option<Role>`, `stage`, `reason`, `peer_ip`, `elapsed_ms` | 연결 정보, 선택 `role`, `stage`, `reason`, `elapsed_ms`, 선택 `error_kind` | TLS·경로 판정 전에는 role이 없다. 경로 판정 뒤와 101 뒤에는 선택한 role을 보존한다. |
+| `Event::ConnectionAborted` | `conn_id`, `listener: ListenerKind`, `role: Option<Role>`, `stage`, `reason`, `peer_ip`, `elapsed_ms` | 연결 정보, 선택 `role`, `stage`, `reason`, `elapsed_ms`, 선택 `error_kind` | TLS·경로 판정 전에는 role이 없다. 경로 판정 뒤와 101 뒤에는 선택한 role을 보존한다. |
 | `Stage`(WS에서 쓰는 값) | `Accept`, `InitialExchange`, `Tls`, `Upgrade` | `accept`, `initial_exchange`, `tls`, `upgrade` | WS 머리 단계는 `upgrade`, WSS 협상 단계는 `tls`다. |
 | `RejectReason`(WS에서 쓰는 값) | `InvalidUpgrade`, `ForwardedForInvalid`, `OriginNotAllowed`, `SubprotocolNotSupported`, `IpNotAllowed`, `TlsVersionUnsupported` | `invalid_upgrade`, `forwarded_for_invalid`, `origin_not_allowed`, `subprotocol_not_supported`, `ip_not_allowed`, `tls_version_unsupported` | `TlsVersionUnsupported`는 `tls` 단계의 거절이다([TLS 모듈 설계](tls.md)). |
 | `AbortReason`(WS에서 쓰는 값) | `TlsUpgradeTimeout`, `ServerShutdown`, `HandshakeTimeout`, `PeerEof`, `ConnectionError` | `tls_upgrade_timeout`(warn), `server_shutdown`, `handshake_timeout`, `peer_eof`, `connection_error` | `tls_upgrade_timeout`은 U 마감이다. `handshake_timeout`은 H 마감이다. |
@@ -88,7 +88,7 @@ flowchart LR
 | `Refusal` | `Invalid`, `NotFound`, `MethodNotAllowed`, `VersionUnsupported`, `ForwardedForInvalid`, `OriginNotAllowed(String)`, `SubprotocolNotSupported`, `IpNotAllowed(Option<String>)`, `Ticket { reason, jti }` | `reason()`: 기존 업그레이드 사유 또는 ticket 오류 코드. `ticket_jti()`: `Ticket`과 `IpNotAllowed`가 담은 서명 확인 뒤의 `jti`. `answer()`: 기존 `400`·`404`·`405`·`426`·`403` 또는 ticket의 `401 Unauthorized` + `WWW-Authenticate: VncRelayTicket` | 응답은 `Content-Length: 0`과 `Connection: close`를 붙인다. 본문이 없다([WebSocket 계약 2.1절](../contracts/websocket-relay-v2.md#21-http-단계의-거절)). ticket 오류는 [접속 ticket 모듈 설계](relay-access-ticket.md#42-업그레이드대표-시나리오-ws-038)를 따른다. |
 | `ValidUpgrade` | `accept_key: String`, `binary: bool`, `role: Role`, `ticket: TicketOffer` | 101 응답 값과 선택한 역할, ticket 제시 개수·값 | `EntryPoint::from_parts(listener, role)`로 공통 서비스 문맥의 진입점을 만든다. ticket 원문을 응답에 넣지 않는다. |
 | `HeadRead` | `Complete { head, suffix }`, `Eof`, `TooLarge` | 머리와 뒤따른 원시 바이트, 상대 닫힘, 상한 초과 | 빈 줄 뒤 바이트를 버리지 않고 스트림 어댑터로 옮긴다. |
-| `WsPolicy` | `accept: AcceptPolicy`, `ticket_uses: Arc<Mutex<TicketUseTable>>`, `started_at: SystemTime` | 접수 정책·현재 설정 원천·공유 사용 기록·기동 시각 | U/B/K는 수락 당시 값, Origin/ticket/IP/M/Kw는 업그레이드 당시 값이다. |
+| `WsPolicy` | `accept: AcceptPolicy`, `ticket_uses: Arc<Mutex<ticket::UseTable>>`, `started_at: SystemTime` | 접수 정책·현재 설정 원천·공유 사용 기록·기동 시각 | U/B/K는 수락 당시 값, Origin/ticket/IP/M/Kw는 업그레이드 당시 값이다. |
 
 ## 4. 처리 순서
 
@@ -134,7 +134,7 @@ flowchart LR
 
 - 초기화: `serve`는 설정과 바인드가 모두 성공한 뒤 진입점을 띄운다. WSS는 인증서와 키를 적재한 뒤 TLS 수락기를 넘긴다. 수락기가 없으면 진입점을 띄우지 않는다(평문으로 대신 열지 않는다).
 - 소유자: `WsEntryPoint`가 리스너, TLS 수락기(`Option`), `WsPolicy`를 소유한다. `run`이 만든 공유 상태(로그, 정책, TLS 수락기)를 연결 작업마다 넘긴다.
-- 연결 상태: 연결 작업 하나가 `Wire`, 자리(`BudgetPermit`), 수락 정보(`conn_id`, `peer_ip`, 수락 시각)를 가진다. 자리는 연결 작업이 끝날 때 돌려준다. 101 뒤에도 H가 끝날 때까지 자리를 쥔다.
+- 연결 상태: 연결 작업 하나가 `Wire`, 자리(`budget::Permit`), 수락 정보(`conn_id`, `peer_ip`, 수락 시각)를 가진다. 자리는 연결 작업이 끝날 때 돌려준다. 101 뒤에도 H가 끝날 때까지 자리를 쥔다.
 - 동시 실행: 진입점마다 접수 반복 하나가 돈다. 연결마다 작업 하나가 돈다. 한 연결의 사건은 그 작업이 순서대로 쓴다. `connection_accepted`는 같은 연결의 다른 사건보다 먼저 나온다.
 - 멈춤: 멈춤 신호를 받으면 새 접수를 멈추고 리스너를 닫는다. 새 접속은 TCP에서 거절되며 HTTP 503은 보내지 않는다. 101 전 연결은 응답 없이 닫고 `connection_aborted`(`reason` = `server_shutdown`)를 쓴다. `Wire::stage`에 따라 WS는 `upgrade`, WSS는 TLS 협상 완료 전 `tls`, 완료 뒤 `upgrade`다. 101 뒤 연결의 Close 1001 조건은 [WebSocket 계약 1.6절](../contracts/websocket-relay-v2.md#16-종료-의미)을 따른다.
 - `ConnId`는 TCP 진입점과 같은 프로세스 전역 카운터다([TCP 진입점 모듈 설계 5절](tcp-entry-point.md#5-상태와-초기화)).
