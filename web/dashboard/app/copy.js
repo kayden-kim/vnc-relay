@@ -56,10 +56,10 @@ export const COPY = {
     forwardedAddressLabel: '전달 주소', // CPY-199
     waitingEmpty: '대기 없음', // CPY-038
     activeTitle: '활성 세션', // CPY-039
-    activeColumns: ['세션', '모드', '전송 경로(Viewer → 대상)', '시작', 'Viewer->대상 / 대상->Viewer', '상대 주소', '상세'], // CPY-187 (replaces CPY-040)
+    activeColumns: ['세션', '모드', '전송 경로(Viewer → 대상)', '시작', 'Viewer -> Server / Server -> Viewer', '상대 주소', '상세'], // CPY-187 (replaces CPY-040)
     activeEmpty: '활성 없음', // CPY-041
     closedTitle: '최근 종료 목록', // CPY-042
-    closedColumns: ['세션', '종료 원인', '모드', '전송 경로(Viewer → 대상)', '시각', 'Viewer->대상 / 대상->Viewer', '상대 주소', '로그'], // CPY-198 (replaces CPY-043)
+    closedColumns: ['세션', '종료 원인', '모드', '전송 경로(Viewer → 대상)', '시각', 'Viewer -> Server / Server -> Viewer', '상대 주소', '로그'], // CPY-198 (replaces CPY-043)
     closedAtLabel: '종료 시각', // CPY-200
     durationLabel: '지속 시간', // CPY-201
     closedEmpty: '최근 종료 없음', // CPY-044
@@ -74,11 +74,9 @@ export const COPY = {
       session_expired: '세션 만료', // CPY-190
       ip_denied: '차단 목록으로 종료', // CPY-323
     },
-    directionViewerToTarget: 'Viewer->대상', // CPY-187·CPY-198 table lines, CPY-218 chart names (spec §9.3.2).
-    directionTargetToViewer: '대상->Viewer', // CPY-187·CPY-198 table lines, CPY-218 chart names (spec §9.3.2).
+    directionViewerToTarget: 'Viewer -> Server', // CPY-325: table lines, chart names (CPY-218) and the SCR-002 transfer label.
+    directionTargetToViewer: 'Server -> Viewer', // CPY-326: table lines, chart names (CPY-218) and the SCR-002 transfer label.
     dayUnit: '일', // DESIGN l.491 시간 길이 표시(D일 HH:MM:SS)의 단위.
-    sessionViewerToServer: 'Viewer -> Server', // CPY-325 SCR-002 transfer label (spec §9.3.3).
-    sessionServerToViewer: 'Server -> Viewer', // CPY-326 SCR-002 transfer label (spec §9.3.3).
     // SCR-002 session detail.
     sessionScreen: '세션 상세', // CPY-005
     sessionTitle: '세션 {session_id}', // CPY-051
@@ -373,10 +371,10 @@ export const COPY = {
     forwardedAddressLabel: 'Forwarded address', // CPY-199
     waitingEmpty: 'No waiting connections', // CPY-038
     activeTitle: 'Active sessions', // CPY-039
-    activeColumns: ['Session', 'Mode', 'Transport (Viewer → target)', 'Started', 'Viewer->target / target->Viewer', 'Peer address', 'Details'], // CPY-187 (replaces CPY-040)
+    activeColumns: ['Session', 'Mode', 'Transport (Viewer → target)', 'Started', 'Viewer -> Server / Server -> Viewer', 'Peer address', 'Details'], // CPY-187 (replaces CPY-040)
     activeEmpty: 'No active sessions', // CPY-041
     closedTitle: 'Recently closed sessions', // CPY-042
-    closedColumns: ['Session', 'Close reason', 'Mode', 'Transport (Viewer → target)', 'Time', 'Viewer->target / target->Viewer', 'Peer address', 'Logs'], // CPY-198 (replaces CPY-043)
+    closedColumns: ['Session', 'Close reason', 'Mode', 'Transport (Viewer → target)', 'Time', 'Viewer -> Server / Server -> Viewer', 'Peer address', 'Logs'], // CPY-198 (replaces CPY-043)
     closedAtLabel: 'Closed at', // CPY-200
     durationLabel: 'Duration', // CPY-201
     closedEmpty: 'No recently closed sessions', // CPY-044
@@ -391,11 +389,9 @@ export const COPY = {
       session_expired: 'Session expired', // CPY-190
       ip_denied: 'Closed by deny list', // CPY-323
     },
-    directionViewerToTarget: 'Viewer->target', // CPY-187·CPY-198 table lines, CPY-218 chart names (spec §9.3.2).
-    directionTargetToViewer: 'target->Viewer', // CPY-187·CPY-198 table lines, CPY-218 chart names (spec §9.3.2).
+    directionViewerToTarget: 'Viewer -> Server', // CPY-325: table lines, chart names (CPY-218) and the SCR-002 transfer label.
+    directionTargetToViewer: 'Server -> Viewer', // CPY-326: table lines, chart names (CPY-218) and the SCR-002 transfer label.
     dayUnit: 'd', // DESIGN l.491 duration unit ("Dd HH:MM:SS").
-    sessionViewerToServer: 'Viewer -> Server', // CPY-325 SCR-002 transfer label (spec §9.3.3).
-    sessionServerToViewer: 'Server -> Viewer', // CPY-326 SCR-002 transfer label (spec §9.3.3).
     // SCR-002 session detail.
     sessionScreen: 'Session details', // CPY-005
     sessionTitle: 'Session {session_id}', // CPY-051

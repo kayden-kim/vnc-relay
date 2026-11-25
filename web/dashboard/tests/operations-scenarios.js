@@ -52,10 +52,10 @@ const COPY = {
     causeInternalError: '내부 오류',
     causeSessionExpired: '세션 만료',
     causeIpDenied: '차단 목록으로 종료',
-    bytesHeader: 'Viewer->대상 / 대상->Viewer',
+    bytesHeader: 'Viewer -> Server / Server -> Viewer',
     details: '상세',
     waitingHeaders: ['역할', '중계 ID', '전송 경로', '상대 주소', '접속 시각', '대기 시간'],
-    closedHeaders: ['세션', '종료 원인', '모드', '전송 경로(Viewer → 대상)', '시각', 'Viewer->대상 / 대상->Viewer', '상대 주소', '로그'],
+    closedHeaders: ['세션', '종료 원인', '모드', '전송 경로(Viewer → 대상)', '시각', 'Viewer -> Server / Server -> Viewer', '상대 주소', '로그'],
     forwardedAddress: '전달 주소',
     startedAt: '시작 시각',
     closedAt: '종료 시각',
@@ -108,10 +108,10 @@ const COPY = {
     causeInternalError: 'Internal error',
     causeSessionExpired: 'Session expired',
     causeIpDenied: 'Closed by deny list',
-    bytesHeader: 'Viewer->target / target->Viewer',
+    bytesHeader: 'Viewer -> Server / Server -> Viewer',
     details: 'Details',
     waitingHeaders: ['Role', 'Relay ID', 'Transport', 'Peer address', 'Connected at', 'Waiting time'],
-    closedHeaders: ['Session', 'Close reason', 'Mode', 'Transport (Viewer → target)', 'Time', 'Viewer->target / target->Viewer', 'Peer address', 'Logs'],
+    closedHeaders: ['Session', 'Close reason', 'Mode', 'Transport (Viewer → target)', 'Time', 'Viewer -> Server / Server -> Viewer', 'Peer address', 'Logs'],
     forwardedAddress: 'Forwarded address',
     startedAt: 'Started at',
     closedAt: 'Closed at',
@@ -1358,7 +1358,7 @@ async function caseDash066() {
     for (const badge of card?.querySelectorAll('tbody td > .badge') ?? []) {
       check(`DASH-066: badge "${badge.textContent}" stays on one line`, textLines(badge) === 1);
     }
-    // The transport and bytes headers may wrap, but only between words ("대상->Viewer" stays whole).
+    // The transport and bytes headers may wrap, but only between words ("Viewer -> Server" stays whole).
     const words = [...(card?.querySelectorAll('thead th .data-table-nowrap') ?? [])];
     check('DASH-066: wrapping headers break only between words',
       words.length > 0 && words.every((word) => textLines(word) === 1));

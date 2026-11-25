@@ -14,6 +14,21 @@ function emptyRow(span, content) {
   return tr;
 }
 
+// Splits a header label into the words that may wrap apart: a space separates words, except around "->".
+function headerWords(label) {
+  const words = [];
+  let afterArrow = false;
+  for (const piece of label.split(' ')) {
+    if (words.length > 0 && (afterArrow || piece === '->')) {
+      words[words.length - 1] += ` ${piece}`;
+    } else {
+      words.push(piece);
+    }
+    afterArrow = piece === '->';
+  }
+  return words;
+}
+
 /**
  * @param {{caption?: string, columns: Array<{key: string, label: string, mobileHead?: 'primary' | 'secondary',
  *   wrapLabel?: boolean}>, rows?: Array<Array<unknown>>, emptyText?: string | Node, numericColumns?: string[]}} options
@@ -60,11 +75,11 @@ export function createDataTable({
     th.scope = 'col';
     th.textContent = column.label;
     if (numeric.has(column.key)) th.className = 'data-table-num';
-    // A long header may wrap so that the column can shrink to its data. It wraps only between words,
-    // so a word such as "대상->Viewer" never breaks after its hyphen.
+    // A long header may wrap so that the column can shrink to its data. It wraps only between words.
+    // An ASCII arrow keeps its neighbours, so "Viewer -> Server" stays whole and no line starts with "->".
     if (column.wrapLabel) {
       th.classList.add('data-table-wrap');
-      th.replaceChildren(...column.label.split(' ').flatMap((word, index) => {
+      th.replaceChildren(...headerWords(column.label).flatMap((word, index) => {
         const part = document.createElement('span');
         part.className = 'data-table-nowrap';
         part.textContent = word;

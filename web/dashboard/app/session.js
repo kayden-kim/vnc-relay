@@ -550,8 +550,8 @@ export function mountSession(root, id, deps = {}) {
       session ? { value: formatBytes(bytes) } : { value: t.loading, tone: 'info', badge: true };
     const block = el('div', 'card-stack');
     block.append(
-      directionStat(t.sessionViewerToServer, 'direction-mark-1', value(session?.bytesViewerToTarget)),
-      directionStat(t.sessionServerToViewer, 'direction-mark-2', value(session?.bytesTargetToViewer)),
+      directionStat(t.directionViewerToTarget, 'direction-mark-1', value(session?.bytesViewerToTarget)),
+      directionStat(t.directionTargetToViewer, 'direction-mark-2', value(session?.bytesTargetToViewer)),
     );
     return block;
   }
