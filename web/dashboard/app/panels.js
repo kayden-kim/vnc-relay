@@ -16,7 +16,6 @@ import {
   formatCount,
   formatDuration,
   formatMode,
-  formatRole,
   formatTime,
   formatTransport,
 } from './format.js';
@@ -285,11 +284,22 @@ function tableBlock(config) {
   return wrap;
 }
 
+// Known roles use translated copy (CPY-327, CPY-328). An unknown role is shown as received.
+function roleLabel(t, role) {
+  if (role === 'viewer') {
+    return t.roleViewer;
+  }
+  if (role === 'server') {
+    return t.roleServer;
+  }
+  return role;
+}
+
 export function waitingTable(t, items, emptyText) {
   return tableBlock({
     columns: columns(t.waitingColumns, WAITING_KEYS, 'relayId', 'role'),
     rows: items.map((item) => [
-      createBadge({ label: formatRole(item.role) }),
+      createBadge({ label: roleLabel(t, item.role) }),
       el('span', 'session-id', item.relayId),
       createBadge({ label: formatTransport(item.transport) }),
       waitingAddressCell(t, item),

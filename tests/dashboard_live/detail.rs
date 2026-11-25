@@ -608,7 +608,7 @@ pub(super) fn assert_real_transport_and_addresses(
             values.includes(address(s.viewer_address)) && values.includes(address(s.target_address)) &&
             [s.viewer_forwarded_ip,s.target_forwarded_ip].filter(v=>v!==null).every(v=>values.includes(v)) &&
             text.includes('Viewer forwarded address')===(s.viewer_forwarded_ip!==null) &&
-            text.includes('Server/target forwarded address')===(s.target_forwarded_ip!==null) &&
+            text.includes('Server forwarded address')===(s.target_forwarded_ip!==null) &&
             text.includes('Addresses are socket peer addresses. Forwarded addresses are shown separately when a trusted proxy is used.');
     }})()"#)),json!(true),"detail preserves socket peers and displays only present forwarded addresses");
 }

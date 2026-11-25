@@ -341,13 +341,13 @@ fn close_mode2(
 // Copy from dashboard.md §9.3: CPY-055·056·057·180·181·182·199·200·201 and the day unit.
 fn copy(language: &str) -> Value {
     if language == "ko" {
-        json!({"started": "시작 시각", "closed": "종료 시각", "duration": "지속 시간", "viewer": "Viewer 주소",
-            "target": "Server/대상 주소", "viewerForwarded": "Viewer 전달 주소", "targetForwarded": "Server/대상 전달 주소",
+        json!({"started": "시작 시각", "closed": "종료 시각", "duration": "지속 시간", "viewer": "뷰어 주소",
+            "target": "서버 주소", "viewerForwarded": "뷰어 전달 주소", "targetForwarded": "서버 전달 주소",
             "logs": "로그 보기", "forwarded": "전달 주소", "day": "일"})
     } else {
         json!({"started": "Started at", "closed": "Closed at", "duration": "Duration", "viewer": "Viewer address",
-            "target": "Server/target address", "viewerForwarded": "Viewer forwarded address",
-            "targetForwarded": "Server/target forwarded address", "logs": "View logs", "forwarded": "Forwarded address",
+            "target": "Server address", "viewerForwarded": "Viewer forwarded address",
+            "targetForwarded": "Server forwarded address", "logs": "View logs", "forwarded": "Forwarded address",
             "day": "d"})
     }
 }

@@ -54,12 +54,14 @@ export const COPY = {
     waitingTitle: '대기 연결', // CPY-036
     waitingColumns: ['역할', '중계 ID', '전송 경로', '상대 주소', '접속 시각', '대기 시간'], // CPY-197 (replaces CPY-037)
     forwardedAddressLabel: '전달 주소', // CPY-199
+    roleViewer: '뷰어', // CPY-327
+    roleServer: '서버', // CPY-328
     waitingEmpty: '대기 없음', // CPY-038
     activeTitle: '활성 세션', // CPY-039
-    activeColumns: ['세션', '모드', '전송 경로(Viewer → 대상)', '시작', 'Viewer -> Server / Server -> Viewer', '상대 주소', '상세'], // CPY-187 (replaces CPY-040)
+    activeColumns: ['세션', '모드', '전송 경로(뷰어 → 서버)', '시작', '뷰어 -> 서버 / 서버 -> 뷰어', '상대 주소', '상세'], // CPY-187 (replaces CPY-040)
     activeEmpty: '활성 없음', // CPY-041
     closedTitle: '최근 종료 목록', // CPY-042
-    closedColumns: ['세션', '종료 원인', '모드', '전송 경로(Viewer → 대상)', '시각', 'Viewer -> Server / Server -> Viewer', '상대 주소', '로그'], // CPY-198 (replaces CPY-043)
+    closedColumns: ['세션', '종료 원인', '모드', '전송 경로(뷰어 → 서버)', '시각', '뷰어 -> 서버 / 서버 -> 뷰어', '상대 주소', '로그'], // CPY-198 (replaces CPY-043)
     closedAtLabel: '종료 시각', // CPY-200
     durationLabel: '지속 시간', // CPY-201
     closedEmpty: '최근 종료 없음', // CPY-044
@@ -74,8 +76,8 @@ export const COPY = {
       session_expired: '세션 만료', // CPY-190
       ip_denied: '차단 목록으로 종료', // CPY-323
     },
-    directionViewerToTarget: 'Viewer -> Server', // CPY-325: table lines, chart names (CPY-218) and the SCR-002 transfer label.
-    directionTargetToViewer: 'Server -> Viewer', // CPY-326: table lines, chart names (CPY-218) and the SCR-002 transfer label.
+    directionViewerToTarget: '뷰어 -> 서버', // CPY-325: table lines, chart names (CPY-218) and the SCR-002 transfer label.
+    directionTargetToViewer: '서버 -> 뷰어', // CPY-326: table lines, chart names (CPY-218) and the SCR-002 transfer label.
     dayUnit: '일', // DESIGN l.491 시간 길이 표시(D일 HH:MM:SS)의 단위.
     // SCR-002 session detail.
     sessionScreen: '세션 상세', // CPY-005
@@ -86,15 +88,15 @@ export const COPY = {
     sessionInfoTitle: '세션 정보', // CPY-081
     transferTitle: '전송량', // CPY-082
     modeLabel: '모드', // CPY-053
-    transportLabel: 'Viewer 전송 경로', // CPY-054
+    transportLabel: '뷰어 전송 경로', // CPY-054
     startedLabel: '시작 시각', // CPY-055
-    viewerAddressLabel: 'Viewer 주소', // CPY-056
-    targetAddressLabel: 'Server/대상 주소', // CPY-057
+    viewerAddressLabel: '뷰어 주소', // CPY-056
+    targetAddressLabel: '서버 주소', // CPY-057
     addressNote: '주소는 소켓 상대 주소입니다. 신뢰 프록시를 거쳤으면 전달 주소를 따로 표시합니다.', // CPY-188 (replaces CPY-058)
     notFound: '현재 세션을 찾을 수 없음', // CPY-059
     terminate: '세션 종료', // CPY-060
     terminateTitle: '세션 종료 확인', // CPY-061
-    terminateBody: '세션 {session_id}의 연결을 종료합니다. Viewer와 Server 또는 Mode I 대상 사이의 중계가 멈춥니다. 종료한 세션은 다시 이어지지 않습니다.', // CPY-062
+    terminateBody: '세션 {session_id}의 연결을 종료합니다. 뷰어와 서버 또는 Mode I 대상 사이의 중계가 멈춥니다. 종료한 세션은 다시 이어지지 않습니다.', // CPY-062
     terminateConfirm: '종료 확인', // CPY-063
     terminating: '종료 요청 중…', // CPY-064
     terminateFailed: '세션 종료에 실패했습니다. 상태를 다시 확인하십시오.', // CPY-065
@@ -169,9 +171,9 @@ export const COPY = {
       config_deny_overlaps_proxy: '차단 항목이 신뢰 프록시 주소와 겹칩니다. 프록시 주소는 차단할 수 없습니다.', // CPY-322
     },
     // SCR-002 labels & link
-    targetTransportLabel: 'Server/대상 전송 경로', // CPY-179
-    viewerForwardedAddressLabel: 'Viewer 전달 주소', // CPY-180
-    targetForwardedAddressLabel: 'Server/대상 전달 주소', // CPY-181
+    targetTransportLabel: '서버 전송 경로', // CPY-179
+    viewerForwardedAddressLabel: '뷰어 전달 주소', // CPY-180
+    targetForwardedAddressLabel: '서버 전달 주소', // CPY-181
     viewLogs: '로그 보기', // CPY-182
     // SCR-005 warnings & help
     emptyTrustedProxiesWarning: '빈 trusted_proxies 목록은 전달 헤더를 신뢰하지 않습니다. 소켓 상대 IP로 클라이언트 주소를 검사합니다.', // CPY-183
@@ -293,7 +295,7 @@ export const COPY = {
     ipDbUnsupportedData: '이 DB에 필요한 국가 또는 ASN 값이 없음', // CPY-275
     addressTitle: '주소별', // CPY-279
     addressColumns: ['주소', '국가', 'ASN', '연결 시도', '거절', '중단', '세션', '마지막 사건', '차단 상태'], // CPY-280·295
-    clientAddressNote: '클라이언트 주소는 신뢰 프록시가 전달한 주소가 있으면 그 주소이고, 없으면 소켓 상대 주소입니다. 세션 열은 그 주소가 Viewer 또는 Mode II Server로 참여한 세션 수입니다.', // CPY-281
+    clientAddressNote: '클라이언트 주소는 신뢰 프록시가 전달한 주소가 있으면 그 주소이고, 없으면 소켓 상대 주소입니다. 세션 열은 그 주소가 뷰어 또는 Mode II 서버로 참여한 세션 수입니다.', // CPY-281
     localAddress: '로컬', // CPY-282
     localAddressNote: '로컬 주소(루프백·사설·링크 로컬·공유 주소)는 IP 정보 DB에서 찾지 않고 조회 링크도 없습니다.', // CPY-283
     countryTitle: '국가별', // CPY-284
@@ -369,12 +371,14 @@ export const COPY = {
     waitingTitle: 'Waiting connections', // CPY-036
     waitingColumns: ['Role', 'Relay ID', 'Transport', 'Peer address', 'Connected at', 'Waiting time'], // CPY-197 (replaces CPY-037)
     forwardedAddressLabel: 'Forwarded address', // CPY-199
+    roleViewer: 'Viewer', // CPY-327
+    roleServer: 'Server', // CPY-328
     waitingEmpty: 'No waiting connections', // CPY-038
     activeTitle: 'Active sessions', // CPY-039
-    activeColumns: ['Session', 'Mode', 'Transport (Viewer → target)', 'Started', 'Viewer -> Server / Server -> Viewer', 'Peer address', 'Details'], // CPY-187 (replaces CPY-040)
+    activeColumns: ['Session', 'Mode', 'Transport (Viewer → Server)', 'Started', 'Viewer -> Server / Server -> Viewer', 'Peer address', 'Details'], // CPY-187 (replaces CPY-040)
     activeEmpty: 'No active sessions', // CPY-041
     closedTitle: 'Recently closed sessions', // CPY-042
-    closedColumns: ['Session', 'Close reason', 'Mode', 'Transport (Viewer → target)', 'Time', 'Viewer -> Server / Server -> Viewer', 'Peer address', 'Logs'], // CPY-198 (replaces CPY-043)
+    closedColumns: ['Session', 'Close reason', 'Mode', 'Transport (Viewer → Server)', 'Time', 'Viewer -> Server / Server -> Viewer', 'Peer address', 'Logs'], // CPY-198 (replaces CPY-043)
     closedAtLabel: 'Closed at', // CPY-200
     durationLabel: 'Duration', // CPY-201
     closedEmpty: 'No recently closed sessions', // CPY-044
@@ -404,7 +408,7 @@ export const COPY = {
     transportLabel: 'Viewer transport', // CPY-054
     startedLabel: 'Started at', // CPY-055
     viewerAddressLabel: 'Viewer address', // CPY-056
-    targetAddressLabel: 'Server/target address', // CPY-057
+    targetAddressLabel: 'Server address', // CPY-057
     addressNote: 'Addresses are socket peer addresses. Forwarded addresses are shown separately when a trusted proxy is used.', // CPY-188 (replaces CPY-058)
     notFound: 'The current session was not found', // CPY-059
     terminate: 'Terminate session', // CPY-060
@@ -484,9 +488,9 @@ export const COPY = {
       config_deny_overlaps_proxy: 'A deny entry overlaps a trusted proxy address. Proxy addresses cannot be blocked.', // CPY-322
     },
     // SCR-002 labels & link
-    targetTransportLabel: 'Server/target transport', // CPY-179
+    targetTransportLabel: 'Server transport', // CPY-179
     viewerForwardedAddressLabel: 'Viewer forwarded address', // CPY-180
-    targetForwardedAddressLabel: 'Server/target forwarded address', // CPY-181
+    targetForwardedAddressLabel: 'Server forwarded address', // CPY-181
     viewLogs: 'View logs', // CPY-182
     // SCR-005 warnings & help
     emptyTrustedProxiesWarning: 'An empty trusted_proxies list does not trust forwarded headers. The socket peer IP is used as the client address.', // CPY-183

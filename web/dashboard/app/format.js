@@ -12,11 +12,6 @@ const TRANSPORT_LABELS = new Map([
   ['wss', 'WSS'],
 ]);
 
-const ROLE_LABELS = new Map([
-  ['viewer', 'Viewer'],
-  ['server', 'Server'],
-]);
-
 const KIB = 1024n;
 const MIB = 1048576n;
 
@@ -77,10 +72,6 @@ export function formatMode(mode) {
 
 export function formatTransport(transport) {
   return TRANSPORT_LABELS.get(transport) ?? transport;
-}
-
-export function formatRole(role) {
-  return ROLE_LABELS.get(role) ?? role;
 }
 
 // Address as ip:port. IPv6 addresses are wrapped in brackets: [ip]:port.

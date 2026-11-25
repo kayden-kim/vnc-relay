@@ -52,18 +52,20 @@ const COPY = {
     causeInternalError: '내부 오류',
     causeSessionExpired: '세션 만료',
     causeIpDenied: '차단 목록으로 종료',
-    bytesHeader: 'Viewer -> Server / Server -> Viewer',
+    bytesHeader: '뷰어 -> 서버 / 서버 -> 뷰어',
     details: '상세',
     waitingHeaders: ['역할', '중계 ID', '전송 경로', '상대 주소', '접속 시각', '대기 시간'],
-    closedHeaders: ['세션', '종료 원인', '모드', '전송 경로(Viewer → 대상)', '시각', 'Viewer -> Server / Server -> Viewer', '상대 주소', '로그'],
+    closedHeaders: ['세션', '종료 원인', '모드', '전송 경로(뷰어 → 서버)', '시각', '뷰어 -> 서버 / 서버 -> 뷰어', '상대 주소', '로그'],
     forwardedAddress: '전달 주소',
+    roleViewer: '뷰어',
+    roleServer: '서버',
     startedAt: '시작 시각',
     closedAt: '종료 시각',
     duration: '지속 시간',
-    viewerAddress: 'Viewer 주소',
-    targetAddress: 'Server/대상 주소',
-    viewerForwarded: 'Viewer 전달 주소',
-    targetForwarded: 'Server/대상 전달 주소',
+    viewerAddress: '뷰어 주소',
+    targetAddress: '서버 주소',
+    viewerForwarded: '뷰어 전달 주소',
+    targetForwarded: '서버 전달 주소',
     viewLogs: '로그 보기',
     dayDuration: '1일 02:02:00',
   },
@@ -111,15 +113,17 @@ const COPY = {
     bytesHeader: 'Viewer -> Server / Server -> Viewer',
     details: 'Details',
     waitingHeaders: ['Role', 'Relay ID', 'Transport', 'Peer address', 'Connected at', 'Waiting time'],
-    closedHeaders: ['Session', 'Close reason', 'Mode', 'Transport (Viewer → target)', 'Time', 'Viewer -> Server / Server -> Viewer', 'Peer address', 'Logs'],
+    closedHeaders: ['Session', 'Close reason', 'Mode', 'Transport (Viewer → Server)', 'Time', 'Viewer -> Server / Server -> Viewer', 'Peer address', 'Logs'],
     forwardedAddress: 'Forwarded address',
+    roleViewer: 'Viewer',
+    roleServer: 'Server',
     startedAt: 'Started at',
     closedAt: 'Closed at',
     duration: 'Duration',
     viewerAddress: 'Viewer address',
-    targetAddress: 'Server/target address',
+    targetAddress: 'Server address',
     viewerForwarded: 'Viewer forwarded address',
-    targetForwarded: 'Server/target forwarded address',
+    targetForwarded: 'Server forwarded address',
     viewLogs: 'View logs',
     dayDuration: '1d 02:02:00',
   },
@@ -487,7 +491,7 @@ async function caseDash001() {
       && TIME_IN.test(waitingRows[0].textContent)
       && waitingRows[0].textContent.includes('00:01:02'),
   );
-  check('DASH-001: waiting role uses a neutral badge without an icon', waitingRows[0]?.cells[0].querySelector('.badge[data-tone="neutral"]')?.textContent === 'Viewer'
+  check('DASH-001: waiting role uses a neutral badge without an icon', waitingRows[0]?.cells[0].querySelector('.badge[data-tone="neutral"]')?.textContent === t.roleViewer
     && waitingRows[0]?.cells[0].querySelector('svg') === null);
   checkDataValue('DASH-001 relay ID', waitingRows[0]?.querySelector('.session-id'), 'relay-7');
 
@@ -1010,7 +1014,7 @@ async function caseDash021() {
   const waitingRows = dataRowsOf(cardOf(root, t.waitingTitle));
   const activeRows = dataRowsOf(cardOf(root, t.activeTitle));
   for (const [label, row, column, text] of [
-    ['known server role', waitingRows[0], 0, 'Server'],
+    ['known server role', waitingRows[0], 0, t.roleServer],
     ['unknown role', waitingRows[1], 0, 'future_role'],
     ['known Mode II', activeRows[0], 1, 'Mode II'],
     ['known TCP transport', activeRows[0], 2, 'TCP'],
