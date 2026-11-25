@@ -8,7 +8,7 @@
 
 접속 ticket은 외부 발급 쪽이 서명한 일회용 접속 허가 값이다. VNC Relay는 역할별 공개 키 파일로 서명을 확인한다. 켠 역할의 WS·WSS 업그레이드는 유효한 ticket을 반드시 보내야 한다. ticket이 있을 때만 확인하는 방식은 없다.
 
-한 ticket은 한 역할과 한 중계 ID에 묶인다. Viewer용 ticket으로 Server 역할에 접속할 수 없다. 업그레이드 뒤 초기 교환의 중계 ID도 ticket의 `rid`와 같아야 한다. 중계 ID는 짝을 찾는 값이지 접속 권한을 증명하는 비밀값이 아니다.
+한 ticket은 한 역할과 한 중계 ID에 묶인다. 뷰어용 ticket으로 서버 역할에 접속할 수 없다. 업그레이드 뒤 초기 교환의 중계 ID도 ticket의 `rid`와 같아야 한다. 중계 ID는 짝을 찾는 값이지 접속 권한을 증명하는 비밀값이 아니다.
 
 ticket은 관리 세션과 무관하다. 관리자 로그인 쿠키로 대신할 수 없다. 출발지 IP 허용 목록·차단 목록과 Origin 검사도 계속 적용한다. 개념과 용어는 [용어집](https://github.com/kayden-kim/vnc-relay/blob/main/GLOSSARY.md), 결정 배경은 [ADR-0009](https://github.com/kayden-kim/vnc-relay/blob/main/docs/decisions/ADR-0009-optional-relay-access-ticket.md)를 따른다.
 
@@ -31,7 +31,7 @@ TCP 진입점은 ticket을 확인하지 못한다. ticket을 켠 역할의 TCP �
 - 헤더에는 `alg = ES256`과 공개 키를 고르는 `kid`가 필요하다.
 - 내용에는 `iss`, `aud`, `rh`, `rid`, `jti`, `iat`, `exp`가 필요하다.
 - `iss`는 역할의 `issuer`, `rh`는 역할의 `relay_host`와 같아야 한다. `rh`는 요청의 `Host`와 비교하지 않는다.
-- `aud`는 Viewer에서 `vnc-relay/viewer`, Server에서 `vnc-relay/server`다.
+- `aud`는 뷰어에서 `vnc-relay/viewer`, 서버에서 `vnc-relay/server`다.
 - `jti`는 ticket마다 128비트 이상 난수로 만들어야 한다. 사용 기록은 역할과 `jti`의 조합으로 같은 ticket의 두 번째 사용을 거절한다.
 - `iat`와 `exp`는 발급·접속 만료 시각이다. 0 이상인 Unix 초 정수로 적는다. `iat < exp`여야 한다. `exp − iat`는 그 역할의 `max_lifetime_secs` 이하여야 한다.
 - 선택 값 `sx`는 세션 만료 시각이다. 0 이상인 Unix 초 정수로 적는다. 업그레이드 때 현재 시각이 `sx`보다 작아야 하며 5초 오차를 허용하지 않는다. 이 시각이 되면 초기 교환·대기·활성 상태에 있는 연결을 끝낸다. `exp`와 달리 업그레이드 뒤에도 종료 시각으로 작용한다. `sx`가 없으면 ticket이 연결 종료 시각을 정하지 않는다.
@@ -45,7 +45,7 @@ TCP 진입점은 ticket을 확인하지 못한다. ticket을 켠 역할의 TCP �
 
 ## 역할별 확인 켜기
 
-발급 쪽과 ticket을 전송할 클라이언트를 먼저 준비해야 한다. 기존에 ticket 없이 접속하던 클라이언트는 확인을 켠 뒤 거절된다. 아래는 Viewer 설정 부분이다. Server는 `[relay.ticket.server]`에 같은 종류의 설정을 두되 다른 서명 키의 공개 키 파일을 써야 한다. 두 역할을 함께 켠 전체 설정과 발급 쪽·클라이언트 구성 예는 [추천 구성 사례](recommended-setup.md)에 있다.
+발급 쪽과 ticket을 전송할 클라이언트를 먼저 준비해야 한다. 기존에 ticket 없이 접속하던 클라이언트는 확인을 켠 뒤 거절된다. 아래는 뷰어 설정 부분이다. 서버는 `[relay.ticket.server]`에 같은 종류의 설정을 두되 다른 서명 키의 공개 키 파일을 써야 한다. 두 역할을 함께 켠 전체 설정과 발급 쪽·클라이언트 구성 예는 [추천 구성 사례](recommended-setup.md)에 있다.
 
 1. 해당 역할의 공개 키 파일을 준비한다.
 2. 설정 파일에 역할별 ticket 테이블을 추가한다.
@@ -89,7 +89,7 @@ TCP 진입점은 ticket을 확인하지 못한다. ticket을 켠 역할의 TCP �
 
 ticket 없음·무효·만료·기동 전 발급·재사용은 101 전에 HTTP 401로 거절한다. 응답에는 `WWW-Authenticate: VncRelayTicket`이 있다. 다만 요청 구문·경로·Origin·서브프로토콜 같은 앞선 검사에서 실패하면 그 검사의 응답이 먼저다. `binary` 없이 ticket만 보내면 HTTP 400이다.
 
-ticket으로 업그레이드한 연결이 초기 교환에서 다른 중계 ID를 보내면 Close 4012 `ticket_relay_mismatch`로 거절한다. Viewer Mode I도 허용하지 않는다. Mode I가 꺼져 있으면 기존 모드 거절 Close 1008이 먼저다. Mode I가 켜져 있고 기존 문법 검사를 통과한 요청은 Close 4012다. 대상 연결을 시도하지 않는다.
+ticket으로 업그레이드한 연결이 초기 교환에서 다른 중계 ID를 보내면 Close 4012 `ticket_relay_mismatch`로 거절한다. 뷰어 Mode I도 허용하지 않는다. Mode I가 꺼져 있으면 기존 모드 거절 Close 1008이 먼저다. Mode I가 켜져 있고 기존 문법 검사를 통과한 요청은 Close 4012다. 대상 연결을 시도하지 않는다.
 
 `sx`에 도달하면 WS·WSS 쪽에 Close 4013 `session_expired`를 보낸다. 활성 세션의 반대쪽 연결도 끝낸다. 양쪽 ticket에 `sx`가 있으면 더 이른 시각을 쓴다. 활성 세션은 정리가 끝난 뒤 종료 원인 `session_expired`로 최근 종료 목록에 오른다. 대기 연결의 만료는 운영 로그에 남는다.
 

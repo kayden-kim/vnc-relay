@@ -33,12 +33,12 @@
 
 ## 리스너와 역할
 
-TCP Viewer와 TCP Server는 각각 별도 리스너를 쓴다. `[relay.tcp_viewer]`와 `[relay.tcp_server]`에서 `enabled`, `listen`, `allow`를 정한다. `listen`은 IP 주소를 써야 한다. 호스트 이름은 받지 않는다. IPv6 주소에 포트를 붙일 때는 대괄호로 묶는다.
+TCP 뷰어와 TCP 서버는 각각 별도 리스너를 쓴다. `[relay.tcp_viewer]`와 `[relay.tcp_server]`에서 `enabled`, `listen`, `allow`를 정한다. `listen`은 IP 주소를 써야 한다. 호스트 이름은 받지 않는다. IPv6 주소에 포트를 붙일 때는 대괄호로 묶는다.
 
 WS와 WSS는 리스너 하나에서 두 역할을 함께 받는다. `[relay.ws]` 또는 `[relay.wss]`에 `listen`을 둔다. 하위 역할 테이블에서 역할마다 켠다. 역할이 하나라도 켜지면 리스너가 열린다.
 
-- `/relay/viewer`: Viewer 역할이다. ticket을 켜지 않았으면 Mode I·II를 받는다.
-- `/relay/server`: Server 역할이다. Mode II만 받는다.
+- `/relay/viewer`: 뷰어 역할이다. ticket을 켜지 않았으면 Mode I·II를 받는다.
+- `/relay/server`: 서버 역할이다. Mode II만 받는다.
 
 두 역할은 같은 주소·포트를 쓰지만 접근 정책은 따로 둔다. WS·WSS의 `listen`에는 포트를 반드시 적어야 한다. [VNC 연결 구성](connect.md)에서 클라이언트 구성을 확인할 수 있다.
 
@@ -66,7 +66,7 @@ TCP는 실제 소켓 상대 IP를 검사한다. WS·WSS는 수락 때 신뢰 프
 
 ## 출발지 IP 차단 목록
 
-`[relay.deny]`의 `sources`는 차단 목록이다. 문제가 있는 출발지를 한 곳에서 막는다. 중계 진입점 여섯 곳(TCP·WS·WSS의 Viewer·Server)이 이 목록 하나를 함께 쓴다. 관리 리스너와 상태 리스너에는 적용하지 않는다.
+`[relay.deny]`의 `sources`는 차단 목록이다. 문제가 있는 출발지를 한 곳에서 막는다. 중계 진입점 여섯 곳(TCP·WS·WSS의 뷰어·서버)이 이 목록 하나를 함께 쓴다. 관리 리스너와 상태 리스너에는 적용하지 않는다.
 
 ```toml
 [relay.deny]
@@ -99,7 +99,7 @@ sources = ["198.51.100.7", "203.0.113.64/26", "2001:db8:bad::/48"]
 
 - 새 값은 다음 수락·업그레이드·등록 검사부터 적용한다.
 - 목록이 바뀌면 항목과 일치하는 주소의 열린 활성 세션과 대기 연결을 바로 끊는다. 허용 목록을 바꿀 때 열린 연결을 유지하는 것과 다르다.
-- 활성 세션은 Viewer 또는 Mode II Server의 클라이언트 주소가 차단되면 세션 전체를 끊는다. Mode I 대상 주소는 보지 않는다.
+- 활성 세션은 뷰어 또는 Mode II 서버의 클라이언트 주소가 차단되면 세션 전체를 끊는다. Mode I 대상 주소는 보지 않는다.
 - 목록이 그대로이거나 항목을 지우기만 하면 끊을 연결이 없다. 끊은 연결은 되살아나지 않는다. 항목을 지운 뒤의 새 접속부터 다시 허용 목록으로 판정한다.
 
 > **주의:** 재시작이 필요한 차이가 파일에 남아 있으면 재로드 후보 전체를 거절한다. 그동안은 차단 변경도 적용되지 않는다. [부분 재로드와 동적 설정 편집](#부분-재로드와-동적-설정-편집)을 확인한다.
@@ -212,4 +212,4 @@ v4는 이전 `[relay.ws_viewer]`와 `[relay.wss_viewer]`를 받지 않는다. �
 4. v4 파일과 새 실행파일로 함께 교체한다.
 5. 새 설정으로 서버를 시작한다.
 
-Viewer 경로도 실행파일의 WebSocket 계약에 맞춰야 한다. `main`은 `/relay/viewer`다. 롤백도 같은 계약 절의 절차를 따른다. 접속 ticket 구성은 [접속 ticket](access-ticket.md)을 따른다.
+뷰어 경로도 실행파일의 WebSocket 계약에 맞춰야 한다. `main`은 `/relay/viewer`다. 롤백도 같은 계약 절의 절차를 따른다. 접속 ticket 구성은 [접속 ticket](access-ticket.md)을 따른다.

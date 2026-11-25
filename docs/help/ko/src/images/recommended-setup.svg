@@ -20,7 +20,7 @@
   <text x="120" y="198" text-anchor="middle" font-size="15" font-weight="600" fill="#0d1a15">원격 지원 웹</text>
   <text x="120" y="221" text-anchor="middle" font-size="13" fill="#58665f">브라우저 · noVNC</text>
   <rect x="88" y="234" width="64" height="24" rx="12" fill="#e3f2f5" stroke="#b3dbe4"/>
-  <text x="120" y="251" text-anchor="middle" font-size="12.5" font-weight="600" fill="#0b6173">Viewer</text>
+  <text x="120" y="251" text-anchor="middle" font-size="12.5" font-weight="600" fill="#0b6173">뷰어</text>
 
   <!-- VNC Relay -->
   <rect x="280" y="150" width="200" height="140" rx="12" fill="#12352b"/>
@@ -38,15 +38,15 @@
   <rect x="556" y="230" width="168" height="64" rx="8" fill="#ffffff" stroke="#e1e7e4"/>
   <text x="640" y="253" text-anchor="middle" font-size="13" font-weight="600" fill="#0d1a15">droidVNC-NG 수정판</text>
   <rect x="608" y="264" width="64" height="22" rx="11" fill="#e3f2f5" stroke="#b3dbe4"/>
-  <text x="640" y="280" text-anchor="middle" font-size="12.5" font-weight="600" fill="#0b6173">Server</text>
+  <text x="640" y="280" text-anchor="middle" font-size="12.5" font-weight="600" fill="#0b6173">서버</text>
   <line x1="640" y1="204" x2="640" y2="228" stroke="#58665f" stroke-width="1.5" marker-end="url(#arrow-control)"/>
   <text x="650" y="221" font-size="12" fill="#58665f">Intent</text>
 
   <!-- ticket 전달 -->
   <path d="M250 56 H120 V166" fill="none" stroke="#58665f" stroke-width="1.5" marker-end="url(#arrow-control)"/>
-  <text x="185" y="47" text-anchor="middle" font-size="12.5" fill="#58665f">Viewer용 ticket</text>
+  <text x="185" y="47" text-anchor="middle" font-size="12.5" fill="#58665f">뷰어용 ticket</text>
   <path d="M510 56 H700 V162" fill="none" stroke="#58665f" stroke-width="1.5" marker-end="url(#arrow-control)"/>
-  <text x="605" y="47" text-anchor="middle" font-size="12.5" fill="#58665f">Server용 ticket</text>
+  <text x="605" y="47" text-anchor="middle" font-size="12.5" fill="#58665f">서버용 ticket</text>
 
   <!-- 공개 키 파일 배포 -->
   <line x1="380" y1="92" x2="380" y2="148" stroke="#58665f" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#arrow-control)"/>

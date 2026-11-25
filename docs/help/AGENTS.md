@@ -31,6 +31,7 @@
 | 한국어(용어집) | 영어 페이지 |
 | --- | --- |
 | VNC Relay, `vnc-relay` | VNC Relay, `vnc-relay`(실행파일) |
+| 뷰어, 서버 | Viewer, Server |
 | 중계 ID | relay ID |
 | 진입점 | entry point |
 | 리스너, 관리 리스너, 상태 리스너 | listener, management listener, status listener |

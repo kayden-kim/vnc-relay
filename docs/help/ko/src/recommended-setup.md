@@ -1,6 +1,6 @@
 # 추천 구성 사례
 
-이 페이지로 브라우저의 noVNC를 Viewer로, Android 기기의 [droidVNC-NG 수정판](https://github.com/kayden-kim/droidVNC-NG)을 Server로 쓰는 원격 지원 구성을 만들 수 있다. 두 역할은 모두 WSS로 접속하고 접속 ticket을 확인한다. VNC Relay 설정, ticket 발급과 확인 예시, 두 클라이언트의 준비, 운영할 때 주의할 점을 다룬다. [VNC 연결 구성](connect.md), [설정](configure.md), [접속 ticket](access-ticket.md)의 내용을 함께 쓴다.
+이 페이지로 브라우저의 noVNC를 뷰어로, Android 기기의 [droidVNC-NG 수정판](https://github.com/kayden-kim/droidVNC-NG)을 서버로 쓰는 원격 지원 구성을 만들 수 있다. 두 역할은 모두 WSS로 접속하고 접속 ticket을 확인한다. VNC Relay 설정, ticket 발급과 확인 예시, 두 클라이언트의 준비, 운영할 때 주의할 점을 다룬다. [VNC 연결 구성](connect.md), [설정](configure.md), [접속 ticket](access-ticket.md)의 내용을 함께 쓴다.
 
 ## 이 구성을 쓰는 경우
 
@@ -8,7 +8,7 @@
 
 이 구성을 권장하는 이유는 다음과 같다.
 
-- Viewer와 Server가 WSS 리스너 하나를 함께 쓴다. 인터넷에 여는 중계 포트가 하나다.
+- 뷰어와 서버가 WSS 리스너 하나를 함께 쓴다. 인터넷에 여는 중계 포트가 하나다.
 - 두 구간을 모두 TLS로 보호한다. 다만 VNC Relay 안에서는 복호화한 바이트를 중계하므로 종단 간 암호화는 아니다.
 - 출발지 IP를 미리 알 수 없는 기기도 받을 수 있다. 그래도 백엔드가 권한을 확인하고 발급한 ticket이 있어야 접속한다.
 - 원격 지원 세션이 만료되면 VNC Relay가 연결을 끝낸다.
@@ -16,14 +16,14 @@
 
 ## 구성 요소
 
-![구성도: 백엔드 API가 원격 지원 웹에 Viewer용 ticket을, 기기 앱에 Server용 ticket을 준다. 기기 앱은 Intent로 droidVNC-NG 수정판에 연결을 지시한다. noVNC는 /relay/viewer로, droidVNC-NG 수정판은 /relay/server로 VNC Relay의 WSS 리스너에 접속한다. 백엔드 API는 역할별 공개 키 파일을 VNC Relay에 배포한다.](images/recommended-setup.svg)
+![구성도: 백엔드 API가 원격 지원 웹에 뷰어용 ticket을, 기기 앱에 서버용 ticket을 준다. 기기 앱은 Intent로 droidVNC-NG 수정판에 연결을 지시한다. noVNC는 /relay/viewer로, droidVNC-NG 수정판은 /relay/server로 VNC Relay의 WSS 리스너에 접속한다. 백엔드 API는 역할별 공개 키 파일을 VNC Relay에 배포한다.](images/recommended-setup.svg)
 
 | 구성요소 | 실행 위치 | 하는 일 |
 | --- | --- | --- |
-| 원격 지원 웹 | 지원 담당자의 브라우저 | noVNC를 Viewer로 쓴다. 화면을 열 때마다 백엔드 API에서 접속 정보와 Viewer용 ticket을 받는다. |
+| 원격 지원 웹 | 지원 담당자의 브라우저 | noVNC를 뷰어로 쓴다. 화면을 열 때마다 백엔드 API에서 접속 정보와 뷰어용 ticket을 받는다. |
 | 백엔드 API(발급 쪽) | 서버 | 지원 담당자와 기기를 인증하고 원격 지원 세션을 관리한다. 역할마다 다른 키로 ticket에 서명한다. |
-| 기기 앱 | Android 기기 | 원격 지원 요청을 받는다. Server용 ticket을 받아 droidVNC-NG 수정판에 연결을 지시한다. |
-| droidVNC-NG 수정판 | Android 기기 | 기기 화면을 보내는 VNC Server다. WSS로 VNC Relay에 역접속한다. |
+| 기기 앱 | Android 기기 | 원격 지원 요청을 받는다. 서버용 ticket을 받아 droidVNC-NG 수정판에 연결을 지시한다. |
+| droidVNC-NG 수정판 | Android 기기 | 기기 화면을 보내는 VNC 서버다. WSS로 VNC Relay에 역접속한다. |
 | VNC Relay | 두 역할이 접속할 수 있는 호스트 | WSS 리스너 하나로 두 역할을 받고 역할별 ticket을 확인한다. 같은 중계 ID의 두 연결을 Mode II로 짝짓는다. 발급 쪽에 요청하지 않고 역할별 공개 키 파일로만 서명을 확인한다. |
 
 ## 연결 순서
@@ -31,15 +31,15 @@
 1. 지원 담당자가 원격 지원 웹에서 원격 지원 세션을 시작한다. 백엔드 API는 세션마다 중계 ID를 새로 정하고 세션 만료 시각을 정한다.
 2. 기기 앱이 기존 기기 관리 채널로 원격 지원 요청을 받는다. 이 요청에는 ticket을 넣지 않는다.
 3. 기기 앱이 droidVNC-NG 수정판의 VNC 서버를 시작한다.
-4. 기기 앱이 백엔드 API에 Server용 ticket을 요청한다. ticket 수명이 60초뿐이므로 연결 직전에 요청한다. 백엔드 API는 기기를 인증하고 세션이 유효한지 확인한 뒤 ticket과 WSS 주소를 준다.
+4. 기기 앱이 백엔드 API에 서버용 ticket을 요청한다. ticket 수명이 60초뿐이므로 연결 직전에 요청한다. 백엔드 API는 기기를 인증하고 세션이 유효한지 확인한 뒤 ticket과 WSS 주소를 준다.
 5. 기기 앱이 droidVNC-NG 수정판에 WSS 주소, 중계 ID, ticket을 넘겨 연결을 지시한다.
 6. droidVNC-NG 수정판이 `/relay/server`로 업그레이드하고 `ID:` 초기 요청을 보낸다. VNC Relay는 ticket을 확인한 뒤 이 연결을 대기 연결로 둔다.
-7. 지원 담당자가 원격 화면을 열면 원격 지원 웹이 백엔드 API에 접속 정보를 요청한다. 백엔드 API는 권한과 세션 상태를 확인한 뒤 WSS 주소, 중계 ID, VNC 비밀번호, 새 Viewer용 ticket을 준다.
-8. noVNC가 `/relay/viewer`로 접속한다. VNC Relay는 출발지 IP, Origin, ticket을 확인한 뒤 같은 중계 ID의 Server와 짝짓는다.
+7. 지원 담당자가 원격 화면을 열면 원격 지원 웹이 백엔드 API에 접속 정보를 요청한다. 백엔드 API는 권한과 세션 상태를 확인한 뒤 WSS 주소, 중계 ID, VNC 비밀번호, 새 뷰어용 ticket을 준다.
+8. noVNC가 `/relay/viewer`로 접속한다. VNC Relay는 출발지 IP, Origin, ticket을 확인한 뒤 같은 중계 ID의 서버와 짝짓는다.
 9. noVNC와 droidVNC-NG 수정판이 VNC 인증을 거쳐 화면을 주고받는다. VNC Relay는 RFB 내용을 해석하지 않고 전달한다.
 10. 세션 만료 시각이 되면 VNC Relay가 두 연결에 Close 4013을 보내고 활성 세션을 끝낸다.
 
-지원 담당자가 화면을 닫으면 VNC Relay의 활성 세션이 끝나고 Server 쪽 연결도 닫힌다. VNC Relay는 끝난 연결을 다시 짝짓지 않는다. 같은 화면을 다시 열려면 기기도 새 Server용 ticket으로 새 연결을 시작해야 한다. droidVNC-NG는 연결이 끊겨도 기기 앱에 알리지 않는다. 끊김을 감지하려면 기기 앱이 `ACTION_GET_CLIENTS`로 연결 상태를 조회해야 한다. 이 사례의 기기 앱은 연결이 성공한 뒤의 끊김을 감지하지 않는다. 그래서 백엔드가 기기에 새 연결을 지시해야 한다. 예를 들어 원격 지원 세션을 새로 시작한다.
+지원 담당자가 화면을 닫으면 VNC Relay의 활성 세션이 끝나고 서버 쪽 연결도 닫힌다. VNC Relay는 끝난 연결을 다시 짝짓지 않는다. 같은 화면을 다시 열려면 기기도 새 서버용 ticket으로 새 연결을 시작해야 한다. droidVNC-NG는 연결이 끊겨도 기기 앱에 알리지 않는다. 끊김을 감지하려면 기기 앱이 `ACTION_GET_CLIENTS`로 연결 상태를 조회해야 한다. 이 사례의 기기 앱은 연결이 성공한 뒤의 끊김을 감지하지 않는다. 그래서 백엔드가 기기에 새 연결을 지시해야 한다. 예를 들어 원격 지원 세션을 새로 시작한다.
 
 ## VNC Relay 설정
 
@@ -97,13 +97,13 @@ output = "relay.log"
 | 설정 | 이 구성에서 정한 이유 |
 | --- | --- |
 | TCP 진입점 표 없음 | TCP 진입점은 기본으로 꺼져 있다. TCP는 ticket을 확인하지 못하므로 열지 않는다. |
-| Viewer `allow` | 지원 담당자가 접속하는 망으로 좁힌다. 이 예시는 `203.0.113.0/24`다. |
-| Server `allow` | 기기는 주소를 미리 알 수 없는 여러 망에서 접속한다. 그래서 모든 IPv4 출발지를 허용하고 접속 통제는 Server용 ticket에 맡긴다. 시작 때 `allow_all_source` 경고가 남는다. |
-| Viewer `allowed_origins` | 원격 지원 웹의 origin만 허용한다. |
-| Server `allowed_origins` | droidVNC-NG 수정판은 `Origin` 헤더를 보내지 않으므로 빈 목록으로 둔다. |
+| 뷰어 `allow` | 지원 담당자가 접속하는 망으로 좁힌다. 이 예시는 `203.0.113.0/24`다. |
+| 서버 `allow` | 기기는 주소를 미리 알 수 없는 여러 망에서 접속한다. 그래서 모든 IPv4 출발지를 허용하고 접속 통제는 서버용 ticket에 맡긴다. 시작 때 `allow_all_source` 경고가 남는다. |
+| 뷰어 `allowed_origins` | 원격 지원 웹의 origin만 허용한다. |
+| 서버 `allowed_origins` | droidVNC-NG 수정판은 `Origin` 헤더를 보내지 않으므로 빈 목록으로 둔다. |
 | 두 ticket 표 | `issuer`와 `relay_host`는 같고 공개 키 파일은 다르다. 두 파일에 같은 공개 키가 있으면 거절한다. |
 | `relay_host` | 요청의 `Host`와 비교하지 않는다. VNC Relay의 접속 이름이 여러 개여도 고정 이름 하나를 쓸 수 있다. |
-| `timeouts.wait_secs` | 대기 연결이 상대를 기다리는 최대 시간이다. 이 구성은 기기가 먼저 접속해 지원 담당자를 기다리므로 원격 지원 세션의 최대 길이 이상으로 두기를 권장한다. 그러면 Viewer가 오지 않은 대기 연결은 `sx`에 끝난다. 예시의 3600초는 기본값이다. |
+| `timeouts.wait_secs` | 대기 연결이 상대를 기다리는 최대 시간이다. 이 구성은 기기가 먼저 접속해 지원 담당자를 기다리므로 원격 지원 세션의 최대 길이 이상으로 두기를 권장한다. 그러면 뷰어가 오지 않은 대기 연결은 `sx`에 끝난다. 예시의 3600초는 기본값이다. |
 
 `cert_file`에는 브라우저와 Android가 모두 신뢰하는 공인 CA 인증서를 쓴다. droidVNC-NG 수정판은 Android 시스템 신뢰 저장소와 호스트 이름으로 인증서를 확인한다.
 
@@ -112,13 +112,13 @@ output = "relay.log"
 3. VNC Relay 호스트의 시계를 NTP로 맞춘다.
 4. [빠른 시작](quick-start.md)에 따라 관리자 계정을 만든다.
 5. [운영](operate.md)에 따라 VNC Relay를 시작한다.
-6. 운영 로그에서 `server_ready`와 Server 역할의 `allow_all_source` 경고를 확인한다.
+6. 운영 로그에서 `server_ready`와 서버 역할의 `allow_all_source` 경고를 확인한다.
 
 ## ticket 발급 예시
 
 백엔드 API는 역할마다 다른 P-256 서명 키를 쓴다. 이 사례는 개인키를 클라우드 키 관리 서비스(KMS)에 두고 서명만 요청한다. 공개 키는 역할별 JWKS 파일로 내보내 VNC Relay에 둔다. `kid`에는 키 관리 서비스의 키 식별자를 쓴다. 파일 형식과 키 교체는 [접속 ticket](access-ticket.md#공개-키-파일-구조)을 따른다.
 
-백엔드 API는 Viewer용 ticket을 접속 정보 요청마다, Server용 ticket을 기기의 연결 시도마다 새로 발급한다. ticket 원문은 백엔드의 DB와 로그에 남기지 않는다.
+백엔드 API는 뷰어용 ticket을 접속 정보 요청마다, 서버용 ticket을 기기의 연결 시도마다 새로 발급한다. ticket 원문은 백엔드의 DB와 로그에 남기지 않는다.
 
 | 클레임 | 이 사례의 값 |
 | --- | --- |
@@ -290,7 +290,7 @@ if __name__ == "__main__":
     print(json.dumps(verify(sys.argv[1], sys.argv[2]), indent=2, ensure_ascii=False))
 ```
 
-`ticket_issue.py`와 같은 디렉터리에서 Server용 ticket을 발급하고 확인한다. `482913`은 시험용 중계 ID다.
+`ticket_issue.py`와 같은 디렉터리에서 서버용 ticket을 발급하고 확인한다. `482913`은 시험용 중계 ID다.
 
 Windows:
 
@@ -312,7 +312,7 @@ python3 ticket_verify.py server-public.jwks.json "$t"
 
 VNC Relay가 ticket을 받아들이는지는 WebSocket 업그레이드 요청을 직접 보내 확인한다. VNC Relay가 시작한 지 5초가 지난 뒤에 실행해야 한다. 그 전에 발급한 ticket은 `ticket_issued_before_start`로 거절된다. 실제 발급 쪽을 쓰면 예시 스크립트 대신 그 API가 준 ticket을 `t`에 넣는다.
 
-1. Server용 ticket을 발급하고 `/relay/server`로 업그레이드 요청을 보낸다.
+1. 서버용 ticket을 발급하고 `/relay/server`로 업그레이드 요청을 보낸다.
 
    Windows:
 
@@ -334,13 +334,13 @@ VNC Relay가 ticket을 받아들이는지는 WebSocket 업그레이드 요청을
 
    기대 결과: HTTP 401과 `WWW-Authenticate: VncRelayTicket`이 출력된다. 운영 로그의 `connection_rejected`에 `ticket_reused`가 남는다.
 
-3. Viewer `allow`에 든 주소의 컴퓨터에서 Viewer를 확인한다. 1단계의 두 줄에서 `issue`의 역할을 `viewer`로, 경로를 `/relay/viewer`로 바꾸고 `-H "Origin: https://viewer.example.test"`를 더해 실행한다.
+3. 뷰어 `allow`에 든 주소의 컴퓨터에서 뷰어를 확인한다. 1단계의 두 줄에서 `issue`의 역할을 `viewer`로, 경로를 `/relay/viewer`로 바꾸고 `-H "Origin: https://viewer.example.test"`를 더해 실행한다.
 
-   기대 결과: 101 응답 뒤에 VNC Relay가 보낸 첫 WebSocket 프레임이 `RFB 000.000`과 함께 보인다. 운영 로그에 Viewer 역할의 `ticket_accepted`가 남는다.
+   기대 결과: 101 응답 뒤에 VNC Relay가 보낸 첫 WebSocket 프레임이 `RFB 000.000`과 함께 보인다. 운영 로그에 뷰어 역할의 `ticket_accepted`가 남는다.
 
 거절되면 운영 로그 `connection_rejected`의 `reason`을 확인한다. 이유별 조치는 [문제 해결](troubleshooting.md#접속-ticket이-http-401로-거절된다)을 따른다.
 
-## Viewer 쪽: noVNC
+## 뷰어 쪽: noVNC
 
 `vnc.html` URL로는 ticket을 보낼 수 없다. 원격 지원 웹은 noVNC의 `RFB` 객체를 직접 만들고 `wsProtocols`로 ticket을 넘긴다. 예시는 noVNC 1.7.0 패키지 기준이다.
 
@@ -357,7 +357,7 @@ const rfb = new RFB(screen, connection.relayUrl, {
 - `RFB` 객체를 만들 때마다 접속 정보를 새로 받는다. 이미 쓴 ticket으로 다시 연결하지 않는다.
 - ticket과 VNC 비밀번호를 URL, 화면, 브라우저 저장소, 로그에 남기지 않는다.
 
-## Server 쪽: droidVNC-NG 수정판과 기기 앱
+## 서버 쪽: droidVNC-NG 수정판과 기기 앱
 
 원본 droidVNC-NG는 Repeater에 TCP로만 역접속한다. [droidVNC-NG 수정판](https://github.com/kayden-kim/droidVNC-NG)은 droidVNC-NG 2.22.3 기반이며 다음 기능을 제공한다.
 
@@ -374,7 +374,7 @@ const rfb = new RFB(screen, connection.relayUrl, {
 기기 앱은 다음 일을 맡는다.
 
 - 설치된 droidVNC-NG가 WebSocket을 지원하는 수정판인지 확인한 뒤 WSS 주소를 넘긴다. 수정판이 원본과 같은 버전 번호를 쓸 수 있으므로 버전 번호만으로 판단하지 않는다.
-- 연결 시도마다 백엔드 API에서 새 Server용 ticket을 받는다. ticket 요청이나 연결 지시가 실패하면 간격을 늘리며 새 ticket으로 다시 시도한다. 연결이 성공한 뒤의 끊김은 이 재시도 대상이 아니다.
+- 연결 시도마다 백엔드 API에서 새 서버용 ticket을 받는다. ticket 요청이나 연결 지시가 실패하면 간격을 늘리며 새 ticket으로 다시 시도한다. 연결이 성공한 뒤의 끊김은 이 재시도 대상이 아니다.
 - WSS 연결이 실패해도 ticket 없는 TCP로 되돌아가지 않는다.
 - ticket을 로그에 남기지 않는다.
 
@@ -384,7 +384,7 @@ const rfb = new RFB(screen, connection.relayUrl, {
 
 ## 운영할 때 주의할 점
 
-- 옛 기기를 옮기는 동안 TCP Server 진입점을 함께 열 수 있다. 이 경로는 ticket을 확인하지 않으며 `ticket_tcp_bypass` 경고가 남는다. 옮기기를 마치면 닫는다.
+- 옛 기기를 옮기는 동안 TCP 서버 진입점을 함께 열 수 있다. 이 경로는 ticket을 확인하지 않으며 `ticket_tcp_bypass` 경고가 남는다. 옮기기를 마치면 닫는다.
 - ticket은 접속할 때만 확인한다. 백엔드에서 세션을 일찍 끝내도 이미 열린 연결은 `sx`까지 남는다. 활성 세션은 [대시보드](dashboard.md#세션-상세와-관리자-종료)의 관리자 종료로 바로 끝낼 수 있다.
 - VNC Relay를 재시작하면 모든 연결이 끊긴다. `iat`가 기동 시각 + 5초 이하인 ticket은 거절한다. 재시작 직후에는 잠시 기다린 뒤 새 ticket으로 다시 접속해야 한다.
 - 역할마다 `issuer`와 `relay_host`는 하나뿐이다. 여러 환경(예: 개발·운영)이 한 VNC Relay를 같이 쓰면 역할별 공개 키 파일이 모든 환경의 키를 믿는다. 이때 다른 환경의 ticket도 중계 ID가 같으면 접속할 수 있다. 환경을 격리하려면 환경마다 VNC Relay를 따로 둔다.

@@ -144,9 +144,9 @@ Ubuntu:
 
 ### WS·WSS 경로가 틀리거나 역할이 꺼져 있다
 
-HTTP 404이면 URL 경로와 역할의 `enabled`를 확인한다. `main`의 Viewer 경로는 `/relay/viewer`, Server 경로는 `/relay/server`다. 끝에 `/`를 붙이지 않는다. 꺼진 역할도 404다.
+HTTP 404이면 URL 경로와 역할의 `enabled`를 확인한다. `main`의 뷰어 경로는 `/relay/viewer`, 서버 경로는 `/relay/server`다. 끝에 `/`를 붙이지 않는다. 꺼진 역할도 404다.
 
-Viewer의 `/relay` 요청도 거절한다. `main` 빌드는 다음 릴리스 전까지 최신 Release와 같은 버전을 출력한다. 버전 문자열뿐 아니라 묶음 출처나 빌드 커밋을 확인해야 한다. 서버와 모든 Viewer URL을 함께 맞춘다.
+뷰어의 `/relay` 요청도 거절한다. `main` 빌드는 다음 릴리스 전까지 최신 Release와 같은 버전을 출력한다. 버전 문자열뿐 아니라 묶음 출처나 빌드 커밋을 확인해야 한다. 서버와 모든 뷰어 URL을 함께 맞춘다.
 
 `connection_rejected`의 `reason = invalid_upgrade`는 다른 잘못된 요청에도 쓰인다. 로그에 요청 경로가 없으므로 이 원인만으로 이전 URL 사용을 단정하지 않는다. [VNC 연결 구성](connect.md)과 [운영](operate.md)의 이관 안내를 따른다.
 
@@ -154,7 +154,7 @@ Viewer의 `/relay` 요청도 거절한다. `main` 빌드는 다음 릴리스 전
 
 `duplicate_id`이면 같은 역할이 같은 중계 ID로 이미 대기 중이거나 활성 세션이 사용 중이다. 후발 TCP 연결은 FIN으로 닫고 WS·WSS는 close 4004로 거절한다. 기존 연결은 교체하지 않는다.
 
-클라이언트가 이중 실행되었는지 확인한다. 새 연결에 다른 중계 ID가 필요하면 Viewer와 Server 양쪽을 같은 새 값으로 맞춘다. 기존 활성 세션을 끝내야 한다면 대시보드에서 대상을 확인하고 관리자 종료한다. 중계 ID는 비밀번호나 접속 권한 증명이 아니다.
+클라이언트가 이중 실행되었는지 확인한다. 새 연결에 다른 중계 ID가 필요하면 뷰어와 서버 양쪽을 같은 새 값으로 맞춘다. 기존 활성 세션을 끝내야 한다면 대시보드에서 대상을 확인하고 관리자 종료한다. 중계 ID는 비밀번호나 접속 권한 증명이 아니다.
 
 ### Mode I 대상이 허용되지 않는다
 
@@ -174,7 +174,7 @@ close 4010(`waiting_full`)이면 새 대기 등록 상한에 걸린 것이다. �
 
 발급 쪽과 서버의 시계, 역할별 설정과 공개 키를 확인한다. 재시작 뒤에는 새 ticket이 필요하다. 같은 ticket을 다시 보내지 말고 발급 쪽에서 새 값을 받아야 한다. 관리자 로그인을 해도 중계용 ticket 실패는 해결되지 않는다. 공개 키 파일로 서명을 확인하고 클레임을 보려면 [ticket 확인 예시](recommended-setup.md#ticket-확인-예시)를 쓸 수 있다.
 
-101 뒤 close 4012(`ticket_relay_mismatch`)이면 초기 요청의 중계 ID를 ticket의 `rid`와 바이트 단위로 맞춘다. `0123`과 `123`은 다르다. 기존 모드·초기 요청 검사를 통과한 Viewer Mode I 요청도 4012로 거절한다. Mode I이 꺼져 있으면 `mode_disabled`(1008)가 먼저다. 전체 조건은 [접속 ticket](access-ticket.md)을 따른다. ticket 원문을 로그나 보고서에 붙이지 않는다.
+101 뒤 close 4012(`ticket_relay_mismatch`)이면 초기 요청의 중계 ID를 ticket의 `rid`와 바이트 단위로 맞춘다. `0123`과 `123`은 다르다. 기존 모드·초기 요청 검사를 통과한 뷰어 Mode I 요청도 4012로 거절한다. Mode I이 꺼져 있으면 `mode_disabled`(1008)가 먼저다. 전체 조건은 [접속 ticket](access-ticket.md)을 따른다. ticket 원문을 로그나 보고서에 붙이지 않는다.
 
 HTTP 거절과 close 코드의 전체 기준은 [WebSocket 계약 1.5절·2절](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/websocket-relay-v2.md)을 따른다.
 
@@ -187,7 +187,7 @@ HTTP 거절과 close 코드의 전체 기준은 [WebSocket 계약 1.5절·2절](
 - `dead_connection`은 응답 없는 상대를 keepalive나 ping으로 감지한 경우다. 네트워크와 클라이언트 응답을 확인한다. 응답하는 유휴 연결은 화면 데이터가 없다는 이유만으로 끊지 않는다.
 - `admin_terminated`이면 `admin_terminate` 사건에서 수행 계정을 확인한다. WS·WSS에는 close 4005를 보낸다.
 - `session_expired`이면 접속 ticket의 세션 만료 시각 `sx`에 도달한 것이다. WS·WSS에는 close 4013을 보낸다. 양쪽에 만료 시각이 있으면 이른 시각에 끝낸다. 발급 쪽의 세션 수명 정책을 확인한다.
-- `ip_denied`이면 차단 목록이 바뀌어 Viewer 또는 Mode II Server의 클라이언트 주소가 항목과 일치한 것이다. 최근 종료 목록에는 "차단 목록으로 종료"로 나온다. WS·WSS에는 close 4014를 보낸다. 같은 시각의 `reload_applied`에서 `relay.deny.sources`가 바뀌었는지 확인한다. 의도한 차단이 아니면 목록에서 항목을 지운다. 끊은 세션은 되살아나지 않으므로 클라이언트가 새로 접속해야 한다.
+- `ip_denied`이면 차단 목록이 바뀌어 뷰어 또는 Mode II 서버의 클라이언트 주소가 항목과 일치한 것이다. 최근 종료 목록에는 "차단 목록으로 종료"로 나온다. WS·WSS에는 close 4014를 보낸다. 같은 시각의 `reload_applied`에서 `relay.deny.sources`가 바뀌었는지 확인한다. 의도한 차단이 아니면 목록에서 항목을 지운다. 끊은 세션은 되살아나지 않으므로 클라이언트가 새로 접속해야 한다.
 - `close_timeout`이면 `timeouts.close_secs`(E) 안에 반대 방향 전달이나 종료 교환을 마치지 못했다. 상대 응답과 네트워크를 확인한다. 관리자 종료에서도 정리 시간이 지나면 이 원인이 될 수 있다.
 - `server_shutdown`이면 종료 유예 만료나 즉시 강제 정리 등 서버 종료 과정을 확인한다. `shutdown_started`와 `shutdown_forced`를 함께 찾는다.
 - `internal_error`이면 서버 내부 버그로 세션 소유 작업이 끝났을 수 있다. 전후 로그와 배포 버전을 보존해 보고한다. close 1011은 예약 코드이며 현재 구현이 보내지 않는다.

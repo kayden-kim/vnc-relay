@@ -52,10 +52,10 @@ Ubuntu bash:
 
 | 경로 | 역할 |
 | --- | --- |
-| `/relay/viewer` | Viewer. ticket을 켜지 않았으면 Mode I·II를 받는다. |
-| `/relay/server` | Server. Mode II만 받는다. |
+| `/relay/viewer` | 뷰어. ticket을 켜지 않았으면 Mode I·II를 받는다. |
+| `/relay/server` | 서버. Mode II만 받는다. |
 
-WS와 WSS는 같은 경로를 쓴다. 쿼리는 대상이나 중계 ID를 선택하지 않는다. 꺼진 역할과 다른 경로는 HTTP 404다. 끝 슬래시는 다른 경로다. Viewer의 `/relay` 요청도 404로 거절한다.
+WS와 WSS는 같은 경로를 쓴다. 쿼리는 대상이나 중계 ID를 선택하지 않는다. 꺼진 역할과 다른 경로는 HTTP 404다. 끝 슬래시는 다른 경로다. 뷰어의 `/relay` 요청도 404로 거절한다.
 
 클라이언트 구성은 [VNC 연결 구성](connect.md)을 따른다.
 
@@ -71,17 +71,17 @@ WS와 WSS는 같은 경로를 쓴다. 쿼리는 대상이나 중계 ID를 선택
 | --- | --- |
 | `[admin]` | 관리자 계정 파일 경로 |
 | `[admin.argon2]` | 새 비밀번호 해시의 매개변수 |
-| `[relay.tcp_viewer]` | TCP Viewer 진입점 |
-| `[relay.tcp_server]` | TCP Server 진입점 |
+| `[relay.tcp_viewer]` | TCP 뷰어 진입점 |
+| `[relay.tcp_server]` | TCP 서버 진입점 |
 | `[relay.ws]` | 평문 WS 공유 리스너와 신뢰 프록시 |
 | `[relay.wss]` | WSS 공유 리스너, 신뢰 프록시와 TLS 파일 |
-| `[relay.ws.viewer]` | WS Viewer 역할의 활성화·IP·Origin 정책 |
-| `[relay.ws.server]` | WS Server 역할의 활성화·IP·Origin 정책 |
-| `[relay.wss.viewer]` | WSS Viewer 역할의 활성화·IP·Origin 정책 |
-| `[relay.wss.server]` | WSS Server 역할의 활성화·IP·Origin 정책 |
+| `[relay.ws.viewer]` | WS 뷰어 역할의 활성화·IP·Origin 정책 |
+| `[relay.ws.server]` | WS 서버 역할의 활성화·IP·Origin 정책 |
+| `[relay.wss.viewer]` | WSS 뷰어 역할의 활성화·IP·Origin 정책 |
+| `[relay.wss.server]` | WSS 서버 역할의 활성화·IP·Origin 정책 |
 | `[relay.deny]` | 중계 진입점 여섯 곳이 함께 쓰는 출발지 IP 차단 목록 |
-| `[relay.ticket.viewer]` | WS·WSS Viewer의 접속 ticket 확인 |
-| `[relay.ticket.server]` | WS·WSS Server의 접속 ticket 확인 |
+| `[relay.ticket.viewer]` | WS·WSS 뷰어의 접속 ticket 확인 |
+| `[relay.ticket.server]` | WS·WSS 서버의 접속 ticket 확인 |
 | `[mode1]` | Mode I 활성화와 대상 허용 정책 |
 | `[mode2]` | Mode II 활성화 |
 | `[limits]` | 연결·대기·버퍼·WebSocket 메시지 상한 |

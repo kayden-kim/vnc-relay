@@ -249,7 +249,7 @@ classDiagram
 
 | 용어 | 종류 | 코드 심볼 | 파일 | 다른 레이어의 표현 |
 | --- | --- | --- | --- | --- |
-| [Viewer·Server·역할(role)](../../GLOSSARY.md) | 구분 없음 | `Role::Viewer` `Role::Server` | `crates/domain/src/entry_point.rs` | 운영 로그 `role` 값([운영 정보 계약](../contracts/ops-info-v2.md)) |
+| [뷰어·서버·역할(role)](../../GLOSSARY.md) | 구분 없음 | `Role::Viewer` `Role::Server` | `crates/domain/src/entry_point.rs` | 운영 로그 `role` 값([운영 정보 계약](../contracts/ops-info-v2.md)) |
 | [Mode I(mode1)·Mode II(mode2)](../../GLOSSARY.md) | 구분 없음 | `Mode::Mode1` `Mode::Mode2`, 초기 요청 `HandshakeRequest::Mode1(TargetAddress)` `HandshakeRequest::Mode2(RelayId)` | `crates/domain/src/handshake.rs` | 문자열 `mode1`·`mode2`(`Mode::as_str`) |
 | [역접속](../../GLOSSARY.md) | 구분 없음 | 전용 타입 없음. `Role::Server` 연결이 `HandshakeRequest::Mode2`를 보내는 경우다([5절](#5-용어집스펙과-코드의-차이)) | `crates/domain/src/{entry_point,handshake}.rs` | 없음 |
 | [Mode I 대상(target)](../../GLOSSARY.md) | 구분 없음 | `TargetAddress`(필드 `host: TargetHost`, `port`). 연결한 뒤의 상대는 `ActivePeer::Target(SocketAddr)` | `crates/domain/src/handshake.rs`, `crates/app/src/relay.rs` | 관리 조회 `target_address`(`ActiveSessionItemView`, `crates/app/src/management/query.rs`) |
@@ -261,7 +261,7 @@ classDiagram
 | [세션 식별자(session_id)](../../GLOSSARY.md) | 구분 없음 | `session::Id`(`ses_`와 소문자 base32 26자). 값을 만드는 포트는 `SessionIdSource`, 키는 `SessionIdKey` | `crates/domain/src/session.rs`, `crates/app/src/ports.rs`, `crates/adapters/src/crypto.rs` | 관리 조회 `session_id` |
 | [연결 식별자(conn_id)](../../GLOSSARY.md) | 구분 없음 | `ConnId` | `crates/domain/src/conn_id.rs` | 운영 로그 사건의 `conn_id`([관리 스펙 MGT-047](../specs/management.md)) |
 | [중계 스트림(relay_stream)](../../GLOSSARY.md) | 구분 없음 | 트레이트 `RelayStream`. 구현은 `TcpRelayStream`과 `WsRelayStream` | `crates/app/src/ports.rs`, `crates/adapters/src/net.rs`, `crates/adapters/src/websocket_stream.rs` | 없음 |
-| [Viewer 전송 경로(viewer_transport)](../../GLOSSARY.md) | 구분 없음 | `Transport::Tcp` `Transport::Ws` `Transport::Wss`. `Session`의 필드 `viewer_transport`가 Viewer 쪽, `target_transport`가 상대 쪽을 담는다 | `crates/domain/src/session.rs` | 관리 조회 `viewer_transport` 문자열 |
+| [뷰어 전송 경로(viewer_transport)](../../GLOSSARY.md) | 구분 없음 | `Transport::Tcp` `Transport::Ws` `Transport::Wss`. `Session`의 필드 `viewer_transport`가 뷰어 쪽, `target_transport`가 상대 쪽을 담는다 | `crates/domain/src/session.rs` | 관리 조회 `viewer_transport` 문자열 |
 | [접속 ticket(ticket)](../../GLOSSARY.md) | 구분 없음 | 클레임 `ticket::Claims`(필드 `iss` `aud` `rh` `rid` `jti` `iat` `exp` `sx` `sub`), 판정 `ticket::Policy`, 키 `ticket::Key` `ticket::KeyList`. 연결에 붙은 값은 `TicketBinding` | `crates/domain/src/ticket.rs`, `crates/app/src/relay.rs` | [WebSocket 계약 1.9절](../contracts/websocket-relay-v2.md#19-접속-ticket), 설정 `relay.ticket.viewer`·`relay.ticket.server` |
 | [발급 쪽(issuer)](../../GLOSSARY.md) | 구분 없음 | 전용 타입 없음. 클레임 `ticket::Claims.iss`와 설정 `TicketRoleSettings.issuer`가 이름을 담는다 | `crates/domain/src/ticket.rs`, `crates/app/src/settings.rs` | 설정 `issuer` |
 | [사용 기록](../../GLOSSARY.md) | 구분 없음 | `ticket::UseTable`(역할별 `jti` 집합) | `crates/domain/src/ticket.rs` | 없음 |

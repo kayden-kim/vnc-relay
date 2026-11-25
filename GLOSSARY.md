@@ -15,31 +15,31 @@ _Avoid_: 중계기, 중계 서버
 **UltraVNC Repeater**:
 호환 대상인 기존 중계 프로그램이다. VNC Relay와 구분한다.
 
-**Viewer(viewer)**:
+**뷰어(viewer)**:
 원격 화면을 받고 사용자 입력을 보내는 VNC 클라이언트 역할이다.
 
-**Server(server)**:
+**서버(server)**:
 원격 화면을 제공하고 사용자 입력을 처리하는 VNC 서버 역할이다. VNC Relay와 구분한다.
 
 **역할(role)**:
-중계 연결에서 Viewer 또는 Server가 맡는 쪽이다. 전송 방식이나 리스너와 구분한다.
+중계 연결에서 뷰어 또는 서버가 맡는 쪽이다. 전송 방식이나 리스너와 구분한다.
 
 **역접속**:
-Mode II에서 Server가 VNC Relay에 먼저 연결해 오는 방식이다.
+Mode II에서 서버가 VNC Relay에 먼저 연결해 오는 방식이다.
 
 ### 중계 방식과 세션
 
 **Mode I(mode1)**:
-Viewer가 지정한 VNC Server 주소로 VNC Relay가 연결하는 중계 방식이다.
+뷰어가 지정한 VNC 서버 주소로 VNC Relay가 연결하는 중계 방식이다.
 
 **Mode II(mode2)**:
-Viewer와 Server가 각각 VNC Relay에 연결하고 같은 중계 ID로 짝을 이루는 중계 방식이다.
+뷰어와 서버가 각각 VNC Relay에 연결하고 같은 중계 ID로 짝을 이루는 중계 방식이다.
 
 **Mode I 대상(target)**:
-Mode I에서 Viewer가 지정해 VNC Relay가 연결하는 VNC Server다. VNC Relay가 이 대상으로 여는 연결을 대상 연결이라 한다.
+Mode I에서 뷰어가 지정해 VNC Relay가 연결하는 VNC 서버다. VNC Relay가 이 대상으로 여는 연결을 대상 연결이라 한다.
 
 **중계 ID(relay_id)**:
-Mode II에서 Viewer와 Server의 짝을 찾는 값이다. 접속 권한을 증명하는 비밀값과는 다르다.
+Mode II에서 뷰어와 서버의 짝을 찾는 값이다. 접속 권한을 증명하는 비밀값과는 다르다.
 _Avoid_: 매칭 ID, 인증 ID, 인증 토큰
 
 **초기 교환(handshake)**:
@@ -50,7 +50,7 @@ _Avoid_: 핸드셰이크(Repeater의 이 절차를 가리킬 때)
 Mode II에서 짝이 되는 상대 연결을 기다리는 연결이다.
 
 **활성 세션(session)**:
-Viewer와 Server 또는 Mode I 대상 사이의 중계가 시작되어 아직 정리되지 않은 연결 쌍이다.
+뷰어와 서버 또는 Mode I 대상 사이의 중계가 시작되어 아직 정리되지 않은 연결 쌍이다.
 
 **세션 식별자(session_id)**:
 중계 중인 한 연결 쌍을 다른 연결 쌍과 구분하는 값이다. 중계 ID와 구분하며, 관리자 종료의 대상을 가리킨다.
@@ -61,11 +61,11 @@ Viewer와 Server 또는 Mode I 대상 사이의 중계가 시작되어 아직 �
 **중계 스트림(relay_stream)**:
 Repeater의 초기 교환 절차가 처리된 뒤 양 끝점 사이에 전달하는 바이트 흐름이다. VNC 인증과 화면 데이터의 해석은 양 끝점이 맡는다.
 
-**Viewer 전송 경로(viewer_transport)**:
-Viewer가 들어온 전송 방식(TCP·WS·WSS)이다.
+**뷰어 전송 경로(viewer_transport)**:
+뷰어가 들어온 전송 방식(TCP·WS·WSS)이다.
 
 **전송량(bytes_viewer_to_target, bytes_target_to_viewer)**:
-활성 세션에서 Viewer → Server/Mode I 대상 방향과 그 반대 방향으로 나누어 센 바이트 수다. 세는 기준은 [관리 스펙](docs/specs/management.md#21-전송량의-의미)이 정한다.
+활성 세션에서 뷰어 → 서버/Mode I 대상 방향과 그 반대 방향으로 나누어 센 바이트 수다. 세는 기준은 [관리 스펙](docs/specs/management.md#21-전송량의-의미)이 정한다.
 
 **끊긴 연결(dead_connection)**:
 상대가 응답하지 않아 끊어진 것으로 판정한 대기·활성 연결이다. 데이터가 오가지 않아도 상대가 응답하는 유휴 연결과 다르다.
@@ -73,10 +73,10 @@ Viewer가 들어온 전송 방식(TCP·WS·WSS)이다.
 ### 접근 경계
 
 **리스너(listener)**:
-접속을 받도록 바인드한 소켓 하나다. 중계 리스너는 TCP Viewer·TCP Server·WS·WSS이며, 관리·상태 리스너와 구분한다.
+접속을 받도록 바인드한 소켓 하나다. 중계 리스너는 TCP 뷰어·TCP 서버·WS·WSS이며, 관리·상태 리스너와 구분한다.
 
 **진입점(entry_point)**:
-중계 연결이 들어오는 리스너와 역할의 조합이다(TCP Viewer·TCP Server·WS Viewer·WS Server·WSS Viewer·WSS Server). TCP 리스너는 역할이 고정되며, WS·WSS 리스너는 `/relay/viewer`와 `/relay/server` 경로로 역할을 구분한다.
+중계 연결이 들어오는 리스너와 역할의 조합이다(TCP 뷰어·TCP 서버·WS 뷰어·WS 서버·WSS 뷰어·WSS 서버). TCP 리스너는 역할이 고정되며, WS·WSS 리스너는 `/relay/viewer`와 `/relay/server` 경로로 역할을 구분한다.
 _Avoid_: 진입 경로, 리스너(진입점을 가리킬 때)
 
 **출발지 IP(peer_ip)**:
@@ -95,7 +95,7 @@ WS·WSS 업그레이드 때 역할별 출발지 IP 허용 목록과 대조하는
 진입점마다 중계 접속을 허용할 IP를 적은 목록이다. WS·WSS에서는 클라이언트 주소와 대조하며, 항목은 단일 IP·CIDR·범위(`a-b`) 중 하나다.
 
 **차단 목록(source deny list, deny)**:
-중계 진입점 여섯 곳(TCP·WS·WSS의 Viewer·Server)이 함께 쓰는 출발지 IP 목록이다. 설정 `[relay.deny]`의 `sources`이며, 클라이언트 주소가 항목에 들면 허용 목록과 관계없이 거절한다. 만료가 없고, 목록이 바뀌면 그 주소의 열린 세션과 대기 연결을 끊는다. 빈 목록은 아무것도 차단하지 않는다. 출발지 IP 허용 목록과 구분한다.
+중계 진입점 여섯 곳(TCP·WS·WSS의 뷰어·서버)이 함께 쓰는 출발지 IP 목록이다. 설정 `[relay.deny]`의 `sources`이며, 클라이언트 주소가 항목에 들면 허용 목록과 관계없이 거절한다. 만료가 없고, 목록이 바뀌면 그 주소의 열린 세션과 대기 연결을 끊는다. 빈 목록은 아무것도 차단하지 않는다. 출발지 IP 허용 목록과 구분한다.
 _Avoid_: 블랙리스트, 금지 목록
 
 **전체 허용 항목(allow_all)**:
