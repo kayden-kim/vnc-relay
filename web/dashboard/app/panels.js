@@ -49,14 +49,10 @@ export function statusBadge(t, kind) {
   return spec ? createBadge({ tone: spec[0], label: t[spec[1]] }) : null;
 }
 
-// Alert for a query that failed. Stale data shows the last successful time.
-export function statusAlert(t, kind, lastSuccessAt) {
+// Alert for a query that failed. The last successful time is in the page head (CPY-015), not in the alert.
+export function statusAlert(t, kind) {
   if (kind === 'stale') {
-    return createAlert({
-      tone: 'destructive',
-      title: t.failed,
-      message: fill(t.staleMessage, { time: formatTime(lastSuccessAt) }),
-    });
+    return createAlert({ tone: 'destructive', title: t.failed, message: t.staleMessage });
   }
   if (kind === 'failed') {
     return createAlert({ tone: 'destructive', title: t.failed, message: t.failedMessage });
@@ -410,15 +406,14 @@ export function applyListCount(slots, count, t) {
   }
 }
 
-// Updates the badge and alert only when the view or the last success time changes.
-export function applyChrome(slots, query, view, t) {
-  const key = [view, query.lastSuccessAt].join('|');
-  if (slots.chromeKey === key) {
+// Updates the badge and alert only when the view changes.
+export function applyChrome(slots, view, t) {
+  if (slots.chromeKey === view) {
     return;
   }
-  slots.chromeKey = key;
+  slots.chromeKey = view;
   const badge = statusBadge(t, view);
-  const alert = statusAlert(t, view, query.lastSuccessAt);
+  const alert = statusAlert(t, view);
   slots.badgeSlot.replaceChildren(...(badge ? [badge] : []));
   slots.alertSlot.replaceChildren(...(alert ? [alert] : []));
 }

@@ -175,7 +175,7 @@ function checkLoadingMarks(label, root) {
     facts.every((row) => isInfoBadge(row.querySelector('.fact-value > .badge'))));
   const stats = [...root.querySelectorAll('.stat')];
   check(`${label}: both byte directions shown while loading`, stats.length === 2
-    && [t.directionViewerToTarget, t.directionTargetToViewer].every((name) => stats.some((s) => s.textContent.includes(name))));
+    && [t.sessionViewerToServer, t.sessionServerToViewer].every((name) => stats.some((s) => s.textContent.includes(name))));
   check(`${label}: every byte value is the loading badge`,
     stats.every((stat) => isInfoBadge(stat.querySelector('.stat-value > .badge'))));
   const marks = [...root.querySelectorAll('.badge')].filter((node) => node.textContent.trim() === t.loading);
@@ -241,8 +241,8 @@ async function caseDash006() {
     'DASH-006: target address',
     factValue(root, t.targetAddressLabel) === formatAddress({ ip: '198.51.100.5', port: 5900 }),
   );
-  check('DASH-006: viewer to target bytes in KiB', statValue(root, t.directionViewerToTarget) === '1.5 KiB');
-  check('DASH-006: target to viewer bytes in MiB', statValue(root, t.directionTargetToViewer) === '1.0 MiB');
+  check('DASH-006: viewer to target bytes in KiB', statValue(root, t.sessionViewerToServer) === '1.5 KiB');
+  check('DASH-006: target to viewer bytes in MiB', statValue(root, t.sessionServerToViewer) === '1.0 MiB');
   check(
     'DASH-006: terminate sits in the info card footer',
     terminateOf(root)?.parentElement?.classList.contains('card-foot') === true,
@@ -456,11 +456,11 @@ async function caseDash016() {
       }),
   });
   const { root, handle } = mount(api);
-  await waitFor(() => statValue(root, t.directionViewerToTarget) === '1.5 KiB');
-  check('DASH-016: bytes before the change', statValue(root, t.directionViewerToTarget) === '1.5 KiB');
-  await waitFor(() => statValue(root, t.directionViewerToTarget) === '4.0 KiB');
-  check('DASH-016: changed viewer to target bytes shown after the next poll', statValue(root, t.directionViewerToTarget) === '4.0 KiB');
-  check('DASH-016: changed target to viewer bytes shown', statValue(root, t.directionTargetToViewer) === '2.0 MiB');
+  await waitFor(() => statValue(root, t.sessionViewerToServer) === '1.5 KiB');
+  check('DASH-016: bytes before the change', statValue(root, t.sessionViewerToServer) === '1.5 KiB');
+  await waitFor(() => statValue(root, t.sessionViewerToServer) === '4.0 KiB');
+  check('DASH-016: changed viewer to target bytes shown after the next poll', statValue(root, t.sessionViewerToServer) === '4.0 KiB');
+  check('DASH-016: changed target to viewer bytes shown', statValue(root, t.sessionServerToViewer) === '2.0 MiB');
   check('DASH-016: the change arrived through a poll', api.calls.filter((c) => c.key === DETAIL).at(-1)?.poll === true);
   check('DASH-016: last success time shown', isFilledTemplate(metaOf(root), t.lastSuccess));
   const actionLabels = [...root.querySelectorAll('button')]
@@ -585,7 +585,7 @@ async function caseDash024() {
     check(`${label}: started time shown`, TIME_IN.test(factValue(root, copy.startedLabel) ?? ''));
     check(
       `${label}: byte format is the same`,
-      statValue(root, copy.directionViewerToTarget) === '1.5 KiB' && statValue(root, copy.directionTargetToViewer) === '1.0 MiB',
+      statValue(root, copy.sessionViewerToServer) === '1.5 KiB' && statValue(root, copy.sessionServerToViewer) === '1.0 MiB',
     );
     check(`${label}: nothing saved before a choice`, items.size === 0);
     handle.dispose();

@@ -37,7 +37,7 @@ fn open_confirmation(browser: &mut Browser, id: &str) {
     let description =
         browser.eval("document.querySelector('dialog .dialog-description')?.textContent");
     let expected = format!(
-        "The connection for session {id} will close. The relay between the Viewer and the Server or Mode I target will stop. A closed session does not resume."
+        "The connection for session {id} will be terminated. The relay between the Viewer and the Server or Mode I target will stop. A terminated session does not resume."
     );
     assert_eq!(description, json!(expected));
 }

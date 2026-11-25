@@ -913,8 +913,7 @@ export function mountLogs(root, deps = {}, { sessionId = null } = {}) {
       } else if (state.lastError?.status === 405) {
         message = copyObj.logsMethodNotAllowed;
       } else if (state.lastSuccessAt !== null) {
-        const timeStr = state.lastSuccessAt ? formatTime(state.lastSuccessAt) : copyObj.unavailable;
-        message = fill(copyObj.staleMessage, { time: timeStr });
+        message = copyObj.staleMessage;
       }
       const failAlert = createAlert({
         tone: 'destructive',

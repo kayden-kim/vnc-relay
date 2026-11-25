@@ -31,7 +31,7 @@ export const COPY = {
     refreshing: '갱신 중', // CPY-017
     failed: '조회 실패', // CPY-018
     stale: '오래된 데이터', // CPY-019
-    staleMessage: '조회에 실패했습니다. 아래 값은 마지막 성공 시각 {time}의 이전 데이터입니다.', // CPY-020
+    staleMessage: '조회에 실패했습니다. 아래 값은 이전 데이터입니다.', // CPY-020
     failedMessage: '조회에 실패했습니다. 새로고침으로 다시 시도하십시오.', // CPY-021
     unavailable: '확인 불가', // CPY-035
     limit: '상한 {n}', // CPY-079
@@ -74,9 +74,11 @@ export const COPY = {
       session_expired: '세션 만료', // CPY-190
       ip_denied: '차단 목록으로 종료', // CPY-323
     },
-    directionViewerToTarget: 'Viewer->대상', // CPY-040·CPY-043 table headers (spec §9.3.2).
-    directionTargetToViewer: '대상->Viewer', // CPY-040·CPY-043 table headers (spec §9.3.2).
+    directionViewerToTarget: 'Viewer->대상', // CPY-187·CPY-198 table lines, CPY-218 chart names (spec §9.3.2).
+    directionTargetToViewer: '대상->Viewer', // CPY-187·CPY-198 table lines, CPY-218 chart names (spec §9.3.2).
     dayUnit: '일', // DESIGN l.491 시간 길이 표시(D일 HH:MM:SS)의 단위.
+    sessionViewerToServer: 'Viewer -> Server', // CPY-325 SCR-002 transfer label (spec §9.3.3).
+    sessionServerToViewer: 'Server -> Viewer', // CPY-326 SCR-002 transfer label (spec §9.3.3).
     // SCR-002 session detail.
     sessionScreen: '세션 상세', // CPY-005
     sessionTitle: '세션 {session_id}', // CPY-051
@@ -94,7 +96,7 @@ export const COPY = {
     notFound: '현재 세션을 찾을 수 없음', // CPY-059
     terminate: '세션 종료', // CPY-060
     terminateTitle: '세션 종료 확인', // CPY-061
-    terminateBody: '세션 {session_id}의 연결을 끊습니다. Viewer와 Server 또는 Mode I 대상 사이의 중계가 멈춥니다. 끊긴 세션은 다시 이어지지 않습니다.', // CPY-062
+    terminateBody: '세션 {session_id}의 연결을 종료합니다. Viewer와 Server 또는 Mode I 대상 사이의 중계가 멈춥니다. 종료한 세션은 다시 이어지지 않습니다.', // CPY-062
     terminateConfirm: '종료 확인', // CPY-063
     terminating: '종료 요청 중…', // CPY-064
     terminateFailed: '세션 종료에 실패했습니다. 상태를 다시 확인하십시오.', // CPY-065
@@ -276,7 +278,7 @@ export const COPY = {
     sourcesDropped: '보관 상한에 이르러 {time}까지의 사건을 버렸습니다. 이 기간의 앞부분은 수에 들어 있지 않습니다.', // CPY-258
     sourcesSummaryTitle: '요약', // CPY-259
     sourcesSummaryNames: ['연결 시도', '거절', '중단', '시작한 세션', '주소', '국가', 'ASN'], // CPY-260
-    sourcesSummaryNote: '연결 시도는 중계 리스너가 받아들인 연결과 수락 단계에서 거절한 연결의 수입니다. 거절과 중단은 모든 단계에서 센 수입니다. 시작한 세션은 이 기간에 시작한 중계 세션 수입니다.', // CPY-261
+    sourcesSummaryNote: '연결 시도는 중계 리스너가 받아들인 연결과 수락 단계에서 거절한 연결의 수입니다. 거절과 중단은 모든 단계에서 센 수입니다.', // CPY-261
     ipDbTitle: 'IP 정보 DB', // CPY-262
     ipDbNames: ['국가 DB', 'ASN DB'], // CPY-263
     ipDbNotConfigured: '설정 안 됨', // CPY-264
@@ -323,7 +325,7 @@ export const COPY = {
     denyUnblockBody: '이 주소의 새 접속을 다시 허용 목록으로 판정합니다. 끊은 연결은 되살아나지 않습니다.', // CPY-309
     denyUnblocking: '차단 해제 중…', // CPY-310
     denyBlockDone: '주소를 차단했습니다: {address}', // CPY-311
-    denyUnblockDone: '차단 목록에서 이 주소의 항목을 지웠습니다: {address}', // CPY-312
+    denyUnblockDone: '차단을 해제했습니다: {address}', // CPY-312
     denyConflict: '설정 파일이 바뀌어 차단 목록을 바꾸지 못했습니다. 새로고침으로 다시 조회한 뒤 다시 시도하십시오.', // CPY-313
     denyFileState: '설정 파일 상태 때문에 차단 목록을 바꾸지 못했습니다. 설정 보기에서 파일 상태를 확인하십시오.', // CPY-314
     denyInvalid: '차단 목록을 바꾸지 못했습니다. 원인: {diagnostic}', // CPY-315
@@ -346,7 +348,7 @@ export const COPY = {
     refreshing: 'Updating', // CPY-017
     failed: 'Failed to load', // CPY-018
     stale: 'Stale data', // CPY-019
-    staleMessage: 'Loading failed. The values below are from the last successful update at {time}.', // CPY-020
+    staleMessage: 'Loading failed. The values below are from an earlier update.', // CPY-020
     failedMessage: 'Loading failed. Use Refresh to try again.', // CPY-021
     unavailable: 'Unavailable', // CPY-035
     limit: 'Limit {n}', // CPY-079
@@ -389,9 +391,11 @@ export const COPY = {
       session_expired: 'Session expired', // CPY-190
       ip_denied: 'Closed by deny list', // CPY-323
     },
-    directionViewerToTarget: 'Viewer->target', // CPY-040·CPY-043 table headers (spec §9.3.2).
-    directionTargetToViewer: 'target->Viewer', // CPY-040·CPY-043 table headers (spec §9.3.2).
+    directionViewerToTarget: 'Viewer->target', // CPY-187·CPY-198 table lines, CPY-218 chart names (spec §9.3.2).
+    directionTargetToViewer: 'target->Viewer', // CPY-187·CPY-198 table lines, CPY-218 chart names (spec §9.3.2).
     dayUnit: 'd', // DESIGN l.491 duration unit ("Dd HH:MM:SS").
+    sessionViewerToServer: 'Viewer -> Server', // CPY-325 SCR-002 transfer label (spec §9.3.3).
+    sessionServerToViewer: 'Server -> Viewer', // CPY-326 SCR-002 transfer label (spec §9.3.3).
     // SCR-002 session detail.
     sessionScreen: 'Session details', // CPY-005
     sessionTitle: 'Session {session_id}', // CPY-051
@@ -409,7 +413,7 @@ export const COPY = {
     notFound: 'The current session was not found', // CPY-059
     terminate: 'Terminate session', // CPY-060
     terminateTitle: 'Confirm session termination', // CPY-061
-    terminateBody: 'The connection for session {session_id} will close. The relay between the Viewer and the Server or Mode I target will stop. A closed session does not resume.', // CPY-062
+    terminateBody: 'The connection for session {session_id} will be terminated. The relay between the Viewer and the Server or Mode I target will stop. A terminated session does not resume.', // CPY-062
     terminateConfirm: 'Confirm termination', // CPY-063
     terminating: 'Terminating…', // CPY-064
     terminateFailed: 'Session termination failed. Check the status again.', // CPY-065
@@ -591,7 +595,7 @@ export const COPY = {
     sourcesDropped: 'The storage limit was reached, so events up to {time} were dropped. The start of this period is not counted.', // CPY-258
     sourcesSummaryTitle: 'Summary', // CPY-259
     sourcesSummaryNames: ['Connection attempts', 'Rejected', 'Aborted', 'Sessions started', 'Addresses', 'Countries', 'ASNs'], // CPY-260
-    sourcesSummaryNote: 'Connection attempts are connections that relay listeners accepted or rejected at the accept stage. Rejected and aborted include all stages. Sessions started is the number of relay sessions that started in this period.', // CPY-261
+    sourcesSummaryNote: 'Connection attempts are connections that relay listeners accepted or rejected at the accept stage. Rejected and aborted include all stages.', // CPY-261
     ipDbTitle: 'IP information databases', // CPY-262
     ipDbNames: ['Country database', 'ASN database'], // CPY-263
     ipDbNotConfigured: 'Not configured', // CPY-264
@@ -638,7 +642,7 @@ export const COPY = {
     denyUnblockBody: 'New connections from this address are checked against the allow lists again. Connections that were closed do not come back.', // CPY-309
     denyUnblocking: 'Unblocking…', // CPY-310
     denyBlockDone: 'Blocked address: {address}', // CPY-311
-    denyUnblockDone: 'Removed the deny list entries for: {address}', // CPY-312
+    denyUnblockDone: 'Unblocked address: {address}', // CPY-312
     denyConflict: 'The deny list was not changed because the configuration file changed. Use Refresh and try again.', // CPY-313
     denyFileState: 'The deny list was not changed because of the state of the configuration file. Check the file state in View settings.', // CPY-314
     denyInvalid: 'The deny list was not changed. Cause: {diagnostic}', // CPY-315

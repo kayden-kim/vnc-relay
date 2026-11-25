@@ -474,7 +474,7 @@ async function case086More() {
   const time = timeText();
   await waitFor(() => status() === t.stale, 3000);
   check('086 stale: CPY-019 and CPY-020 with the values and time kept', status() === t.stale
-    && alertOf()?.textContent.includes(t.staleMessage.split('{time}')[0]) && metricOf('attempts') === formatCount(1234)
+    && alertOf()?.textContent.includes(t.staleMessage) && metricOf('attempts') === formatCount(1234)
     && timeText() === time && rangeText() === rangeOf('1h'));
   await waitFor(() => metricOf('attempts') === '7', 3000);
   check('086 stale: the next poll recovers and clears the notice', status() === '' && alertOf() === null && timeText() !== time);
@@ -594,7 +594,7 @@ async function case087() {
   choosePeriod('24h');
   await waitFor(() => f.api.calls.length === 2 && settled());
   check('087 failed: CPY-019 and CPY-020 while the last hour stays', status() === t.stale
-    && alertOf()?.textContent.includes(t.staleMessage.split('{time}')[0]) && rangeText() === rangeOf('1h') && periodSelect().value === '24h');
+    && alertOf()?.textContent.includes(t.staleMessage) && rangeText() === rangeOf('1h') && periodSelect().value === '24h');
   await waitFor(() => rangeText() === rangeOf('24h'), 3000);
   check('087 failed: the next automatic poll asks for the chosen period', isPoll(f.api.calls[2]) && windowOf(f.api.calls[2]) === '24h'
     && status() === '' && alertOf() === null);

@@ -423,7 +423,7 @@ export function mountMetrics(root, deps = {}) {
     }
     let message = copy.failedMessage;
     if (state.rejected) message = copy.metricsRejected;
-    else if (state.data) message = fill(copy.staleMessage, { time: formatTime(state.lastSuccessAt) });
+    else if (state.data) message = copy.staleMessage;
     const action = refreshButton('metrics-alert-refresh', busy ? 'refreshing' : 'ok');
     const hadFocus = ui.alerts.contains(document.activeElement);
     ui.alerts.replaceChildren(createAlert({ tone: 'destructive', title: message, action }));

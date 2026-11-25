@@ -273,7 +273,7 @@ export function mountSettings(root, deps = {}, { edit = false, applied = null } 
     main.append(header.head);
     if (applied !== null && !edit) main.append(alert(fill(t().settingsApplied, { n: applied }), 'success'));
     if (state.loading) main.append(statusBadge(t(), state.config ? 'refreshing' : 'loading'));
-    if (state.failed) main.append(statusAlert(t(), state.config ? 'stale' : 'failed', state.config?.as_of));
+    if (state.failed) main.append(statusAlert(t(), state.config ? 'stale' : 'failed'));
     if (state.saving) main.append(alert(t().settingsSaving, 'info'));
     if (state.notice) {
       main.append(alert(t()[state.notice], ['settingsConflict', 'settingsUnknown'].includes(state.notice) ?

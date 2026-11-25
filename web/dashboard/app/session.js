@@ -550,8 +550,8 @@ export function mountSession(root, id, deps = {}) {
       session ? { value: formatBytes(bytes) } : { value: t.loading, tone: 'info', badge: true };
     const block = el('div', 'card-stack');
     block.append(
-      directionStat(t.directionViewerToTarget, 'direction-mark-1', value(session?.bytesViewerToTarget)),
-      directionStat(t.directionTargetToViewer, 'direction-mark-2', value(session?.bytesTargetToViewer)),
+      directionStat(t.sessionViewerToServer, 'direction-mark-1', value(session?.bytesViewerToTarget)),
+      directionStat(t.sessionServerToViewer, 'direction-mark-2', value(session?.bytesTargetToViewer)),
     );
     return block;
   }
@@ -585,7 +585,7 @@ export function mountSession(root, id, deps = {}) {
     const loading = !state.gone && view === 'loading';
     if (showInfo) {
       // Gone has no badge or alert. The notice above the grid carries that state.
-      applyChrome(page.info, query, state.gone ? 'gone' : view, t);
+      applyChrome(page.info, state.gone ? 'gone' : view, t);
       setContent(page.info, contentKey(query, state.gone ? 'gone' : view, state.lang), () => {
         if (query.data) return factsBlock(t, query.data.session);
         return loading ? loadingFactsBlock(t) : null;

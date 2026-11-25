@@ -20,7 +20,7 @@ const COPY = {
     refreshing: '갱신 중',
     failed: '조회 실패',
     stale: '오래된 데이터',
-    staleMessage: '조회에 실패했습니다. 아래 값은 마지막 성공 시각 {시각}의 이전 데이터입니다.',
+    staleMessage: '조회에 실패했습니다. 아래 값은 이전 데이터입니다.',
     failedMessage: '조회에 실패했습니다. 새로고침으로 다시 시도하십시오.',
     summaryTitle: '서버 요약',
     serverState: '실행 상태',
@@ -76,7 +76,7 @@ const COPY = {
     refreshing: 'Updating',
     failed: 'Failed to load',
     stale: 'Stale data',
-    staleMessage: 'Loading failed. The values below are from the last successful update at {time}.',
+    staleMessage: 'Loading failed. The values below are from an earlier update.',
     failedMessage: 'Loading failed. Use Refresh to try again.',
     summaryTitle: 'Server summary',
     serverState: 'Server state',
@@ -657,7 +657,7 @@ async function caseDash003() {
   check('DASH-003 stale: stale badge shown', badgeOf(staleCard) === t.stale);
   const staleAlert = alertOf(staleCard);
   check('DASH-003 stale: failure alert title shown', staleAlert?.title === t.failed);
-  check('DASH-003 stale: alert names the last successful time', isFilledTemplate(staleAlert?.message ?? '', t.staleMessage));
+  check('DASH-003 stale: alert shows CPY-020 and the head keeps the last successful time', staleAlert?.message === t.staleMessage && isFilledTemplate(metaText(stale.root), t.lastSuccess));
   check(
     'DASH-003 stale: previous rows kept',
     dataRowsOf(staleCard).some((row) => row.textContent.includes('relay-7')),

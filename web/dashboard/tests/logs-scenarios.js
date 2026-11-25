@@ -158,7 +158,7 @@ async function case055() {
   event.value = 'server_ready';
   event.dispatchEvent(new Event('change'));
   await waitFor(ready);
-  check('055: failed filter snapshot keeps old rows as stale', same(rows(), [100]) && text().includes(t.staleMessage.split('{')[0]));
+  check('055: failed filter snapshot keeps old rows as stale', same(rows(), [100]) && text().includes(t.staleMessage));
   await waitFor(() => recoveryApi.calls.length >= 3 && ready());
   pause();
   const retry = recoveryApi.calls[2];
@@ -362,7 +362,7 @@ async function case061() {
   const time = host.querySelector('.log-meta').textContent;
   host.querySelector('#logs-refresh').click();
   await waitFor(ready);
-  check('061: stale rows and timestamp preserved', same(rows(), [4, 3, 2, 1]) && host.querySelector('.log-meta').textContent === time && text().includes(t.staleMessage.split('{')[0]));
+  check('061: stale rows and timestamp preserved', same(rows(), [4, 3, 2, 1]) && host.querySelector('.log-meta').textContent === time && text().includes(t.staleMessage));
   host.querySelector('#logs-refresh').click();
   await waitFor(ready);
   check('061: manual recovery removes failure', !host.querySelector('.alert[data-tone="destructive"]'));

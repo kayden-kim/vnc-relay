@@ -990,7 +990,7 @@ async function case048() {
     buttonOf(stale.root, 'refresh').click();
     await waitFor(() => has(stale.root, t.failed));
     check('DASH-048: stale values keep last success timestamp', has(stale.root, formatTime(AS_OF)));
-    check('DASH-048: stale state explicitly marked', has(stale.root, t.staleMessage.replace('{time}', formatTime(AS_OF))));
+    check('DASH-048: stale state explicitly marked', has(stale.root, t.staleMessage));
     check('DASH-048: stale read blocks edit/apply', !active(buttonOf(stale.root, 'edit')) && !canReview(stale.root));
     if (!edit) check('DASH-048: previous effective value retained', rowOf(stale.root, WAITING)?.textContent.includes('200'));
   }

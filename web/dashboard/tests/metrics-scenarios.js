@@ -482,8 +482,8 @@ async function case073() {
   await waitFor(settled);
   const before = { time: timeText(), range: host.querySelector('#metrics-range').textContent, figures: chartIds().join('|') };
   await waitFor(() => status() === t.stale, 4000);
-  check('073 stale: warning badge and message with the last success time', status() === t.stale
-    && host.querySelector('.metrics-alerts .alert')?.textContent.includes(t.staleMessage.split('{time}')[0]));
+  check('073 stale: warning badge and CPY-020 message', status() === t.stale
+    && host.querySelector('.metrics-alerts .alert')?.textContent.includes(t.staleMessage));
   check('073 stale: values, trend and time are kept', metricOf('active') === '3' && timeText() === before.time
     && host.querySelector('#metrics-range').textContent === before.range && chartIds().join('|') === before.figures);
   check('073 stale: automatic polls continue', m.api.calls.length >= 2);
@@ -750,7 +750,7 @@ async function case080() {
   choosePeriod('24h');
   await waitFor(() => f.api.calls.length === 2 && settled());
   check('080 failed: stale badge and notice while the last hour stays', status() === t.stale
-    && host.querySelector('.metrics-alerts .alert')?.textContent.includes(t.staleMessage.split('{time}')[0])
+    && host.querySelector('.metrics-alerts .alert')?.textContent.includes(t.staleMessage)
     && rangeText() === fill(t.metricsRange, { n: 5 }) && trendsTitle() === t.trendsTitle);
   check('080 failed: the select keeps the chosen window', periodSelect().value === '24h');
   await waitFor(() => rangeText() === fill(t.metricsRange24h, { n: 8 }), 3000);

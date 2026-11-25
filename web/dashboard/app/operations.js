@@ -109,7 +109,7 @@ export function mountOperations(root, deps = {}) {
   function renderSummary(t) {
     const query = queries.summary;
     const view = viewOf(query);
-    applyChrome(page.summary, query, view, t);
+    applyChrome(page.summary, view, t);
     const key = contentKey(query, view, state.lang);
     setContent(page.summary, key, () => summaryGrid(t, query.data, view));
     setContent(page.relay, key, () =>
@@ -126,7 +126,7 @@ export function mountOperations(root, deps = {}) {
     const query = queries[key];
     const view = viewOf(query);
     const slots = page[key];
-    applyChrome(slots, query, view, t);
+    applyChrome(slots, view, t);
     applyListCount(slots, query.data ? query.data.items.length : null, t);
     setContent(slots, contentKey(query, view, state.lang), () => {
       if (query.data) {

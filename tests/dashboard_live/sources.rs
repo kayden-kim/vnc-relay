@@ -629,7 +629,7 @@ pub fn block_and_unblock_one_address() {
     assert_eq!(deny_value(&server, &admin), json!([]));
     assert_eq!(
         browser.eval("document.querySelector('.sources-result .alert')?.textContent"),
-        json!("차단 목록에서 이 주소의 항목을 지웠습니다: 198.51.100.7")
+        json!("차단을 해제했습니다: 198.51.100.7")
     );
     assert!(
         ws_reply_line(&server, IP).starts_with("HTTP/1.1 101"),
