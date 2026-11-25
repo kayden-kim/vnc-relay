@@ -144,7 +144,7 @@ cargo test --test help_site
 
 ### 3.4 화면 캡처 갱신
 
-대시보드 화면이 바뀌면 두 책의 `src/images/`에 있는 캡처 여섯 장(`login`, `operations`, `session`, `logs`, `settings`, `settings-edit`)을 다시 만든다. 캡처 도구는 실제 VNC Relay를 쓰는 대시보드 시험의 하네스로 VNC Relay를 띄운다. VNC Relay는 루프백 주소와 시험 계정(`alice`)만 쓰고, 종료한 세션 1개·활성 세션 2개·대기 연결 1개를 만든다. 화면 언어마다 1280×800 크기로 찍는다.
+대시보드 화면이 바뀌면 두 책의 `src/images/`에 있는 캡처 여섯 장(`login`, `operations`, `session`, `logs`, `settings`, `settings-edit`)을 다시 만든다. 캡처 도구는 실제 VNC Relay를 쓰는 대시보드 시험의 하네스로 VNC Relay를 띄운다. VNC Relay는 루프백 주소와 시험 계정(`alice`)만 쓰고, 종료한 세션 1개·활성 세션 2개·대기 연결 1개를 만든다. 화면 언어마다 1280×800 크기로 찍는다. 운영 현황 그림만 1440×800 크기로 찍는다. 활성 세션·최근 종료 목록은 폭 1440px 이상에서 표이고 그보다 좁으면 카드이므로, 도움말이 설명하는 열이 한눈에 보이게 한다.
 
 캡처는 Ubuntu에서만 실행한다. 설정 보기 화면이 VNC Relay 디렉터리의 절대 경로(`admin.accounts_file`)를 보여 주기 때문이다. Windows의 기본 임시 디렉터리 경로에는 사용자 이름이 들어간다. Ubuntu에서 `TMPDIR`을 정하지 않으면 그림에는 `/tmp/vnc-relay-dashboard-live-…/accounts.toml` 같은 시험 경로만 보인다.
 

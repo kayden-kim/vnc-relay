@@ -198,7 +198,7 @@ web/dashboard/
 | 구현과 실행 위치 | `web/dashboard/preview/` 아래 정적 HTML 페이지. 실행은 `cargo xtask dashboard-serve`로 하는 로컬 전용 서버로 한다. 브라우저는 모듈 스크립트를 `file://`로 읽지 않으므로 서버가 필요하다 |
 | 재사용 대상 | `web/dashboard/app/components/`, `web/dashboard/app/tokens.css`, `web/dashboard/app/styles/`. 원본은 한 곳이다 |
 | 확인할 상태 | DESIGN.md 컴포넌트 표의 항목별 기본·호버·비활성·포커스 상태. 오류·빈 값·긴 한글·긴 영문·긴 숫자(`data` 단계) 상태 |
-| 확인 환경 | 폭 1280·1024·1023·768·390·320px, 한국어·영어 문구, 라이트 테마 |
+| 확인 환경 | 폭 1440·1280·1024·1023·768·390·320px, 한국어·영어 문구, 라이트 테마 |
 | 배포·공유 범위 | 실행 파일에 넣지 않는다. 제공 표에 없다(1.2절 대조 테스트가 확인한다) |
 | 검증과 증거 | 테스트 페이지의 결과(`data-result`), 폭별 스크린샷(저장소에 넣지 않고 `target/`에 둔다), 검증 기록 |
 
@@ -221,7 +221,7 @@ web/dashboard/
 | 키보드와 포커스 | 포커스 표시는 토큰 `spacing.focus-ring-width`와 `spacing.focus-ring-offset`, 링 색 `colors.ring`(상단 막대 안은 `colors.navbar-ring`). 대화상자 포커스 규칙은 [화면 스펙 6절](../specs/dashboard.md#6-화면-크기와-접근성) | 자동: 포커스 순서, 대화상자 열기·닫기 뒤 포커스 위치. 수동: Tab 순회, Esc로 닫기, 기록 |
 | 이름과 의미 | 시맨틱 HTML. 상단 막대 메뉴는 `nav`(이름 "주 메뉴"), 본문은 `main`. 카드 배치에서도 `table`·`row`·`cell`·`columnheader` 역할을 명시한다([DESIGN.md 중단점 절](../design/DESIGN.md#중단점과-모바일-배치)) | 자동: 역할과 이름. 수동: 접근성 트리 확인 |
 | 대비와 의미 전달 | DESIGN.md [대비 기준](../design/DESIGN.md#대비-기준) 표. 상태는 글씨 레이블과 도형으로 구분한다 | 토큰 쌍은 WCAG 상대 휘도 공식으로 다시 계산하고 값을 검증 기록에 적는다. 색 외 표시는 수동 확인 |
-| 반응형과 확대 | 폭 1280·1024·1023·768·390·320px. 200% 확대는 640px과 같다([DESIGN.md 중단점 절](../design/DESIGN.md#중단점과-모바일-배치)) | 자동: 폭별로 Chromium을 열어 `scrollWidth`가 `clientWidth`를 넘지 않는지 확인. 대상 크기는 수동 측정 |
+| 반응형과 확대 | 폭 1440·1280·1024·1023·768·390·320px. 200% 확대는 640px과 같다([DESIGN.md 중단점 절](../design/DESIGN.md#중단점과-모바일-배치)) | 자동: 폭별로 Chromium을 열어 `scrollWidth`가 `clientWidth`를 넘지 않는지 확인. 대상 크기는 수동 측정 |
 | 모션 | 없다([DESIGN.md 모션 절](../design/DESIGN.md#모션)). 모션을 추가하기 전에 DESIGN.md를 먼저 고친다 | 해당 없음. 추가하면 움직임 감소 설정 처리를 이 표에 추가한다 |
 | 성능 | 성능 지표와 예산을 두지 않는다. PRD에 대시보드 성능 요구가 없고, 대시보드는 루프백·소수 관리자용이다. 성능 통과 조건은 없다 | 해당 없음 |
 

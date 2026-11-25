@@ -55,11 +55,11 @@ flowchart LR
 | `app/components/gauge.js` `createGauge` | 원형 게이지를 `progressbar` 역할로 만든다. 값을 모르면 가운데에 공통 배지를 둔다. | `badge.js` |
 | `app/components/navbar.js` `createNavbar` | 상단 막대와 호출자가 준 레이블의 `nav`를 만든다. | `link.js`, `icons.js` |
 | `app/components/language-select.js` `createLanguageSelect` | 레이블이 있는 네이티브 `select`를 만든다. 지구본과 화살표 아이콘을 붙인다. | `icons.js` |
-| `app/components/data-table.js` `createDataTable` | 명시적 표 역할을 가진 네이티브 표를 만든다. `mobileHead`로 모바일 첫 줄을, `wrapLabel`로 줄바꿈할 열 머리글을 지정한다. 나머지 셀은 `data-label`을 레이블로 쓴다. | 없음 |
+| `app/components/data-table.js` `createDataTable` | 명시적 표 역할을 가진 네이티브 표를 만든다. `mobileHead`로 모바일 첫 줄을, `wrapLabel`로 줄바꿈할 열 머리글을 지정한다. `labelPrimary`는 카드 첫 줄의 값 앞에 열 레이블을 남기고(대기 연결의 중계 ID), `wide`는 표를 모바일 폭이 아니라 콘텐츠 폭 1440px 미만에서 카드로 바꾼다(활성 세션·최근 종료). 나머지 셀은 `data-label`을 레이블로 쓴다. | 없음 |
 | `app/components/link.js` `createLink` | 링크 `a`를 만든다. | `icons.js` |
 | `app/components/dialog.js` `createDialog` | 네이티브 `dialog`로 확인 대화상자를 만든다. | `button.js` |
 | `app/styles/base.css` | `color-scheme`, 본문 글꼴, 포커스 링, 화면 밖 글 클래스 | `tokens.css` |
-| `app/styles/components.css` | 조각별 클래스와 상태 선택자. 화면 배치 클래스(`.grid`, `.span-3`·`.span-4`·`.span-6`·`.span-8`·`.span-12`, `.fact-list`·`.fact`, `.page-actions`)와 단일 중단점 `max-width: 1023.98px` 블록. `app.css`에는 `@media`가 없다 | `tokens.css` |
+| `app/styles/components.css` | 조각별 클래스와 상태 선택자. 화면 배치 클래스(`.grid`, `.span-3`·`.span-4`·`.span-6`·`.span-8`·`.span-12`, `.fact-list`·`.fact`, `.page-actions`)와 중단점 블록 둘: 배치 전체의 `max-width: 1023.98px`, 넓은 표(`.data-table-wide`)만의 `max-width: 1439.98px`. `app.css`에는 `@media`가 없다 | `tokens.css` |
 | `app/query.js` `newQuery`, `clearTimer`, `viewOf`, `contentKey` | 조회 상태(진행 중, 세대, 데이터, 오류)와 갱신 타이머를 DOM 없이 다룬다. 운영 현황과 세션 상세가 같이 쓴다. | 없음 |
 | `app/shell.js` `buildNavbar`, `signOutUrl`, `defaultStorage`, `LOGIN_URL` | 모든 보호 화면의 운영 현황·로그·설정 상단 막대와 로그아웃 결과 판정을 만든다. `active`로 현재 항목을 고른다. `lang`과 번역 문구로 도움말 링크를 만들고 `createNavbar`의 `help` 슬롯에 넘긴다. | `components/navbar.js`, `components/link.js`, `components/language-select.js`, `components/button.js`, `api.js`, `model.js`, `copy.js`, `language.js` |
 | `app/session.js` `mountSession` | SCR-002를 조립한다. 양쪽 전송 경로와 값이 있는 전달 주소, 세션 필터 로그 링크를 표시한다. 세션 확인·상세 조회·종료 확인·결과 분류·대상 소멸을 맡는다. | `components/alert.js`, `button.js`, `dialog.js`, `link.js`, `stat.js`, `api.js`, `copy.js`, `format.js`, `language.js`, `model.js`, `panels.js`, `query.js`, `shell.js` |
@@ -108,7 +108,7 @@ flowchart LR
 - 네이티브 `table`에는 `role="table"`, `thead`·`tbody`에는 `role="rowgroup"`을 붙인다. 머리글·본문·빈 행의 `tr`에는 `role="row"`, `th`에는 `role="columnheader"`, 일반·빈 셀의 `td`에는 `role="cell"`을 붙인다. CSS가 `display`를 바꿔도 역할을 생략하지 않는다.
 - `mobileHead: 'primary'` 셀에는 `.data-table-head-primary`, `'secondary'` 셀에는 `.data-table-head-secondary`를 붙인다. 두 셀은 모바일 격자의 첫 행(`grid-row: 1`)을 공유한다. 첫 줄 셀은 `::before` 레이블 없이 값만 보인다.
 - 일반 셀은 `data-label`과 CSS 가상 요소로 열 이름을 보인다. 가상 요소의 대체 텍스트는 비워 중복 읽기를 막는다(DESIGN 566행). 열 머리글은 화면에서만 숨기고 접근성 트리에는 남긴다.
-- 데스크톱 폭의 열 머리글은 한 줄이다. `data-table-wrap` 머리글만 낱말 사이에서 줄바꿈한다. 공백으로 나눈 낱말을 쓰되 `->` 앞뒤의 공백은 낱말을 나누지 않는다. 그래서 "뷰어 -> 서버" 같은 방향 이름은 화살표에서 끊기지 않고 `->`로 시작하는 줄도 생기지 않는다. 칸 바로 아래의 배지(`td > .badge`)와 `data-table-nowrap` 클래스를 붙인 글씨도 한 줄을 유지한다(DESIGN의 배지 한 줄 규칙과 시각 값의 날짜·시각 두 줄 규칙). 호출자도 셀 값에 이 클래스를 쓸 수 있다. 모바일 폭에서는 320px 넘침을 막으려고 배지와 `data-table-nowrap` 글씨를 다시 줄바꿈한다.
+- 데스크톱 폭의 열 머리글은 한 줄이다. `data-table-wrap` 머리글만 낱말 사이에서 줄바꿈한다. 공백으로 나눈 낱말을 쓰되 `→` 앞뒤의 공백은 낱말을 나누지 않는다. 그래서 "전송 경로(뷰어 → 서버)"의 "(뷰어 → 서버)"는 화살표에서 끊기지 않고 `→`로 시작하는 줄도 생기지 않는다. 칸 바로 아래의 배지(`td > .badge`)와 `data-table-nowrap` 클래스를 붙인 글씨도 한 줄을 유지한다(DESIGN의 배지 한 줄 규칙과 시각 값의 날짜·시각 두 줄 규칙). 호출자도 셀 값에 이 클래스를 쓸 수 있다. 모바일 폭에서는 320px 넘침을 막으려고 배지와 `data-table-nowrap` 글씨를 다시 줄바꿈한다.
 
 ### 도움말 링크 조립
 
@@ -148,7 +148,7 @@ flowchart LR
 | --- | --- | --- | --- |
 | 조각의 형태 | 요소를 돌려주는 함수 | 빌드와 프레임워크가 없다. 요소를 직접 검사하기 쉽다. | 사용자 정의 요소(`customElements`). 생명주기와 공개 표면이 늘어난다. |
 | 스타일 위치 | `app/styles/` CSS 파일에 클래스로 둔다 | 미리보기와 화면이 같은 CSS를 직접 가져온다. | 조각마다 스타일 문자열을 넣는다. CSP가 막는다. |
-| 화면 배치 규칙 위치 | 배치 클래스와 중단점 블록을 `app/styles/components.css`에 같이 둔다. 중단점은 `max-width: 1023.98px` 하나다 | `app.css`는 `components.css` 뒤에 로드되므로(`app/index.html`) 배치 기본 규칙을 거기 두면 중단점 블록을 덮는다. 같은 파일에 두면 소스 순서로 재정의가 지켜진다. | `app.css`에 배치 규칙을 두는 것. 767px 별도 블록을 두는 것(중단점이 둘이 된다). |
+| 화면 배치 규칙 위치 | 배치 클래스와 중단점 블록을 `app/styles/components.css`에 같이 둔다. 중단점은 배치 전체의 `max-width: 1023.98px`와 넓은 표만의 `max-width: 1439.98px` 둘이다 | `app.css`는 `components.css` 뒤에 로드되므로(`app/index.html`) 배치 기본 규칙을 거기 두면 중단점 블록을 덮는다. 같은 파일에 두면 소스 순서로 재정의가 지켜진다. 두 번째 중단점은 실제 중계로 잰 값에서 왔다. 활성 세션·최근 종료 표의 30자 세션 식별자와 주소가 영어에서 1440px 미만이면 표 안에서 중간이 끊긴다. 모바일 폭 하나를 1440px로 올리면 내비게이션·카드 격자까지 바뀌므로 그 두 표만 따로 바꾼다(사용자 결정 2026-11-25). | `app.css`에 배치 규칙을 두는 것. 767px 별도 블록을 두는 것. 모바일 폭 하나를 1440px로 올리는 것(노트북 폭의 배치 전체가 모바일이 된다). |
 | 미리보기 배치 | `preview.js`의 `renderGroup`은 공유 `.grid`와 `.span-12`·`.span-6`·`.span-4`를 쓴다. 견본 1개는 전체 폭, 2개는 2열, 3개 이상은 3열이다. 5개는 3개와 2개로 나눈다. `preview.css`에는 미디어 쿼리가 없고 여백은 모든 폭에서 `spacing.lg`다. | 단일 중단점과 12열 격자를 공유하며 견본을 빠뜨리지 않는다. | 미리보기 전용 중단점·5열 |
 | 상태 미리보기 | `is-hover`·`is-focus` 클래스 | 호버와 포커스를 재현할 수 있고 복제 CSS가 없다. | 미리보기 전용 CSS 복사본. 두 곳을 맞춰야 한다. |
 | 좁은 폭의 표 | CSS로 카드처럼 배치하고 표 역할은 유지 | 역할과 읽기 순서를 그대로 쓴다. | 폭마다 다른 마크업. |
@@ -181,3 +181,4 @@ flowchart LR
 | 날짜 | 대상 | 환경 | 확인 방법 | 실제 결과 |
 | --- | --- | --- | --- | --- |
 | 2026-11-17 | 작업 트리의 SCR-001 목록 정보 확대와 공통 표 | 대시보드 소스와 시안 | 최근 종료 표 8열을 시안의 `th.wrap`·`.badge`·`.t`와 비교했다. `wrapLabel`과 배지·`data-table-nowrap`의 데스크톱 한 줄 규칙을 대조했다. | 배지·날짜 중간 줄바꿈, 카드 폭 넘침 위험, 하이픈 뒤 머리글 줄바꿈의 차이를 해소했다. 실제 화면의 폭별 결과와 남은 한계는 프런트엔드 검증 기록을 따른다. |
+| 2026-11-26 | `data-table.js`의 `labelPrimary`·`wide` 옵션과 `headerWords`의 `→` 결합, `components.css`의 두 번째 카드 구간 | 대시보드 소스와 실제 VNC Relay 화면 | 옵션 두 개가 만드는 클래스(`data-table-label-primary`·`data-table-wide`)와 `max-width: 1439.98px` 구간의 규칙을 DESIGN 중단점 절과 대조했다. 영문·한글 화면에서 폭 1024~1600px의 끊긴 토큰을 쟀다. | `wide` 표가 1439.98px 이하에서 카드, `labelPrimary` 표가 모바일 폭에서 첫 줄 값 앞에 레이블을 둔다. 끊긴 토큰 0개. 자세한 폭별 결과는 [시각 대조 기록](../how-to/verify-dashboard-frontend.md#41-시각-대조-기록)을 따른다. |

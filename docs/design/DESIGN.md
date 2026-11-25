@@ -437,7 +437,7 @@ components:
 | `colors.navbar-accent` / `colors.navbar-primary` | 상단 막대 활성 항목 | `navbar-accent`는 활성 항목·hover 바탕과 상단 막대 브랜드 표식 바탕, `navbar-primary`는 활성 항목 아래 표시 막대다 | 글씨 레이블 |
 | `colors.navbar-ring` | 상단 막대 포커스 링 | 상단 막대 안 조작 요소의 `:focus-visible` 윤곽선 | `spacing.focus-ring-width` |
 | `colors.navbar-brand` | 브랜드 표식 선 | 상단 막대와 로그인 화면의 브랜드 표식 화살표 선. 순백색이다. 글씨에는 쓰지 않는다 | 브랜드 이름 글씨 |
-| `colors.chart-1` / `colors.chart-2` | 방향 표식 | 방향별 바이트 레이블 앞의 작은 사각형이다. 뷰어 -> 서버는 `chart-1`(청록), 서버 -> 뷰어는 `chart-2`(녹색)다. 장식이며 글씨 레이블이 뜻을 전한다 | 방향 이름 글씨 |
+| `colors.chart-1` / `colors.chart-2` | 방향 표식 | 방향별 바이트 레이블 앞의 작은 사각형이다. 뷰어 → 서버는 `chart-1`(청록), 서버 → 뷰어는 `chart-2`(녹색)다. 장식이며 글씨 레이블이 뜻을 전한다 | 방향 이름 글씨 |
 | `colors.chart-line-1` / `chart-line-2` / `chart-line-3` | 추이 차트 선, 분포 막대·수 막대 채움 | SCR-007 추이 차트의 계열 선과 범례 선 견본에 쓴다. 한 차트에서 계열 순서대로 1(청록)·2(녹색)·3(황갈색)을 쓴다. 색과 함께 선 모양(실선·파선·점선)과 범례 글씨로 구분한다. `chart-line-1`은 분포 막대와 수 막대의 채움에도 쓴다([메트릭 화면 확장](#메트릭-화면-확장)) | `colors.card`에서 3:1 이상. 선 모양·범례 글씨. 막대는 숫자 글씨가 값을 전한다 |
 | `colors.gauge` / `colors.gauge-track` | 사용량 고리 | `gauge`는 채움 호, `gauge-track`은 트랙이다. 중계 연결·관리 연결 고리에만 쓴다 | 현재·상한 값을 글씨로 함께 쓴다 |
 | `colors.overlay` | 대화상자 뒤 가림막 | 모달 대화상자가 열린 동안 | 반투명 값. 대비 기준 대상이 아니다 |
@@ -616,7 +616,7 @@ components:
 - 공통 콘텐츠 폭: 본문은 `spacing.content-max` 이하다. 좁은 화면에서는 전체 폭을 쓴다.
 - 바깥 여백과 간격: 간격은 `spacing.xs`~`spacing.2xl` 척도만 쓴다. 데스크톱 폭의 본문 바깥 여백은 `spacing.2xl`(세로)·`spacing.xl`(가로)이다. 머리말·안내·카드 줄 사이와 카드 사이는 `spacing.lg`다. 카드 제목 줄의 안쪽 여백은 `spacing.lg`(세로)·`spacing.xl`(가로), 카드 본문은 `spacing.xl`이다. 표가 들어간 카드 본문은 가로 여백을 `spacing.md`로 줄이고, 표 칸 안쪽은 `spacing.sm`(세로)·`spacing.md`(가로)다. 첫 열 글씨가 카드 제목과 왼쪽 선이 맞는다. 모바일 폭의 본문 바깥 여백은 `spacing.lg`, 카드 본문은 `spacing.lg`다.
 - 밀도 변형: 없음. 하나의 밀도만 쓴다. 모바일 폭에서는 조작 요소 높이만 `spacing.control-height-touch`로 키운다.
-- 콘텐츠 경계 조건: 긴 중계 ID·IPv6 주소·세션 식별자는 줄바꿈해 모두 보여준다. 영어 1024px 최근 종료 표에서 가장 긴 종료 원인(CPY-047)이 주소 열을 좁히면 IPv4 주소도 값 안에서 줄바꿈한다. 이 줄바꿈은 허용한다. 시각 값은 폭이 모자라면 날짜와 시각 두 줄로 나눈다. 대기 연결 표의 접속 시각과 활성 세션 표의 시작 시각은 폭과 관계없이 날짜와 시각 두 줄이다. 빈 목록은 스펙의 빈 목록 안내를 표 자리에 보이고 열 머리글은 유지한다. 알 수 없는 상태 값은 받은 그대로 보여준다.
+- 콘텐츠 경계 조건: 긴 중계 ID·IPv6 주소·세션 식별자는 줄바꿈해 모두 보여준다. 활성 세션·최근 종료 표는 콘텐츠 폭 1440px 미만에서 카드 목록이므로, 표로 보이는 폭에서는 30자 세션 식별자와 IPv4 주소·포트를 값 안에서 줄바꿈하지 않는다. IPv6 주소처럼 더 긴 값만 표 안에서 값 안 줄바꿈을 허용한다. 시각 값은 폭이 모자라면 날짜와 시각 두 줄로 나눈다. 대기 연결 표의 접속 시각과 활성 세션 표의 시작 시각은 폭과 관계없이 날짜와 시각 두 줄이다. 빈 목록은 스펙의 빈 목록 안내를 표 자리에 보이고 열 머리글은 유지한다. 알 수 없는 상태 값은 받은 그대로 보여준다.
 
 ### 중단점과 모바일 배치
 
@@ -624,10 +624,11 @@ components:
 
 | 이름 | 조건 | 적용 |
 | --- | --- | --- |
-| 모바일 폭 | 뷰포트 폭 1023.98px 이하(`@media (max-width: 1023.98px)`) | 브랜드 이름 글씨를 감춘다. 다섯 내비게이션 항목은 둘째 줄에 표시한다. 카드를 한 열로 쌓는다. 표를 카드 목록으로 바꾼다. 조작 요소 높이는 `spacing.control-height-touch`다 |
-| 데스크톱 폭 | 뷰포트 폭 1024px 이상 | 상단 막대 전체 항목, 12열 격자, 표를 쓴다. 조작 요소 높이는 `spacing.control-height`다 |
+| 모바일 폭 | 뷰포트 폭 1023.98px 이하(`@media (max-width: 1023.98px)`) | 브랜드 이름 글씨를 감춘다. 다섯 내비게이션 항목은 둘째 줄에 표시한다. 카드를 한 열로 쌓는다. 모든 표를 카드 목록으로 바꾼다. 조작 요소 높이는 `spacing.control-height-touch`다 |
+| 넓은 표 폭 | 뷰포트 폭 1439.98px 이하(`@media (max-width: 1439.98px)`) | 활성 세션·최근 종료 표만 카드 목록으로 바꾼다. 나머지 배치와 조작 요소 높이는 데스크톱 폭과 같다. 1023.98px 이하에서는 모바일 폭이 함께 적용된다 |
+| 데스크톱 폭 | 뷰포트 폭 1024px 이상 | 상단 막대 전체 항목, 12열 격자, 표를 쓴다. 활성 세션·최근 종료 표는 1440px 이상에서만 표다. 조작 요소 높이는 `spacing.control-height`다 |
 
-중단점은 하나만 둔다. CSS 미디어 쿼리에는 사용자 정의 속성을 쓸 수 없으므로 값 1024px를 CSS 한 곳에서만 쓴다. 1024px에서 본문 여백을 뺀 카드 안 표 영역은 시안에서 956px이고, 활성 세션 7열 표의 최소 내용 폭은 753px이다. 최근 종료 8열 표는 시안에서 최소 내용 폭이 한국어 817px, 영어 885px이며 956px 안에 들어간다. 최소 지원 폭은 320px이다.
+중단점은 둘이다. 모바일 폭 1024px는 배치 전체를 바꾸고, 넓은 표 폭 1440px는 활성 세션·최근 종료 표만 카드로 바꾼다. 1440px는 `spacing.content-max`와 같다. CSS 미디어 쿼리에는 사용자 정의 속성을 쓸 수 없으므로 두 값을 CSS 한 곳씩에서만 쓴다. 넓은 표 폭의 근거는 실제 중계로 잰 값이다. 세션 식별자 30자와 IPv4 주소·5자리 포트가 있는 행으로 쟀을 때 영어 최근 종료 표는 1366px에서 값이 중간에서 끊기고 1440px에서 끊기지 않았다. 한국어는 1280px부터, 영어 활성 세션 표는 1160px부터 끊기지 않았다. 두 표는 같은 폭에서 바꾼다. 대기 연결 표는 1024px에서도 끊기지 않아 모바일 폭에서만 카드다. 최소 지원 폭은 320px이다.
 
 | 구성 | 데스크톱 폭 | 모바일 폭 |
 | --- | --- | --- |
@@ -635,9 +636,9 @@ components:
 | 페이지 머리말 | 왼쪽에 제목·갱신 시각, 오른쪽에 [새로고침]을 한 줄에 둔다 | 제목, 갱신 시각, 전체 폭 [새로고침] 순서로 쌓는다 |
 | VNC Relay 요약 | 카드 안 값 격자 3열 | 실행 상태와 가동 시간은 각각 한 줄 전체 폭, 나머지 네 값은 2열. 320px에서도 같다. 순서는 데스크톱과 같다 |
 | 중계 연결·관리 연결 사용량 | 카드 둘, 각 3열 | 각각 전체 폭 카드. 고리와 값은 가운데 정렬을 유지한다 |
-| 대기 연결 표 | 6열 표(역할·중계 ID·전송 경로·상대 주소·접속 시각·대기 시간). 상대 주소 칸은 소켓 주소 아래에 있는 전달 주소만 레이블과 함께 보인다. 레이블은 값 위 줄에 둔다. 접속 시각 칸은 날짜 아래 줄에 시각(시간대 포함)을 둔다(시안의 `.wd`·`.wt`) | 행마다 첫 줄에 중계 ID와 역할 배지, 아래에 레이블·값 쌍(전송 경로, 상대 주소, 접속 시각, 대기 시간) |
-| 활성 세션 표 | 7열 표(세션·모드·전송 경로·시작·방향별 바이트·상대 주소·상세). 시작 칸은 날짜 아래 줄에 시각(시간대 포함)을 둔다(시안의 `.wd`·`.wt`). 상대 주소 칸의 레이블은 값 위 줄에 둔다(시안의 `.addr .k`) | 행마다 첫 줄에 세션 식별자 링크와 [상세] 버튼, 아래에 레이블·값 쌍(모드, 전송 경로, 시작, 방향별 바이트 2줄, 상대 주소) |
-| 최근 종료 표 | 8열 표(세션·종료 원인·모드·전송 경로·시각·방향별 바이트·상대 주소·로그). 시각 칸은 시작 시각·종료 시각·지속 시간 세 줄이고, 로그 칸은 [로그 보기] outline 버튼이다. 시각 줄은 레이블, 날짜, 시각(시간대 포함)을 이어 쓴다. 폭이 모자라면 시각부터 다음 줄로 넘기고, 날짜와 시각은 각각 통째로 넘긴다. 1280px에서는 날짜가 레이블 옆에 온다. 상대 주소 칸의 레이블은 값 위 줄에 둔다. 전송 경로와 방향별 바이트 머리글은 낱말 사이에서 줄바꿈을 허용한다(시안의 `.tl`·`.addr .k`·`th.wrap`) | 행마다 첫 줄에 세션 식별자와 종료 원인 배지, 아래에 레이블·값 쌍(모드, 전송 경로, 시각 3줄, 방향별 바이트 2줄, 상대 주소, [로그 보기]) |
+| 대기 연결 표 | 6열 표(역할·중계 ID·전송 경로·상대 주소·접속 시각·대기 시간). 상대 주소 칸은 소켓 주소 아래에 있는 전달 주소만 레이블과 함께 보인다. 레이블은 값 위 줄에 둔다. 접속 시각 칸은 날짜 아래 줄에 시각(시간대 포함)을 둔다(시안의 `.wd`·`.wt`) | 행마다 첫 줄에 `중계 ID` 레이블과 중계 ID, 역할 배지(레이블 없음), 아래에 레이블·값 쌍(전송 경로, 상대 주소, 접속 시각, 대기 시간) |
+| 활성 세션 표 | 1440px 이상에서 7열 표(세션·모드·전송 경로·시작·전송량·상대 주소·상세). 시작 칸은 날짜 아래 줄에 시각(시간대 포함)을 둔다(시안의 `.wd`·`.wt`). 전송량 칸은 방향 이름과 값을 두 줄로 보인다. 상대 주소 칸의 레이블은 값 위 줄에 둔다(시안의 `.addr .k`) | 행마다 첫 줄에 세션 식별자 링크와 [상세] 버튼, 아래에 레이블·값 쌍(모드, 전송 경로, 시작, 전송량 2줄, 상대 주소). 1440px 미만이면 같은 카드 |
+| 최근 종료 표 | 1440px 이상에서 8열 표(세션·종료 원인·모드·전송 경로·시각·전송량·상대 주소·로그). 시각 칸은 시작 시각·종료 시각·지속 시간 세 줄이고, 로그 칸은 [로그 보기] outline 버튼이다. 시각 줄은 레이블, 날짜, 시각(시간대 포함)을 이어 쓴다. 폭이 모자라면 시각부터 다음 줄로 넘기고, 날짜와 시각은 각각 통째로 넘긴다. 1440px에서는 날짜가 레이블 옆에 온다. 상대 주소 칸의 레이블은 값 위 줄에 둔다. 전송 경로 머리글은 낱말 사이에서 줄바꿈을 허용하며 화살표는 앞뒤 낱말과 붙는다(시안의 `.tl`·`.addr .k`·`th.wrap`) | 행마다 첫 줄에 세션 식별자와 종료 원인 배지, 아래에 레이블·값 쌍(모드, 전송 경로, 시각 3줄, 전송량 2줄, 상대 주소, [로그 보기]). 1440px 미만이면 같은 카드 |
 | 세션 상세 | 세션 정보 카드(레이블·값 두 열 목록)와 전송량 카드를 나란히 둔다. [세션 종료]는 세션 정보 카드 바닥 오른쪽 | 두 카드를 쌓는다. 레이블·값 한 열 목록. [세션 종료]는 전체 폭 |
 | 종료 확인·주소 차단·해제 확인 대화상자 | 최대 폭 `spacing.dialog-max`, 가운데. 버튼은 가로로 [취소][종료 확인]([취소][차단]·[취소][차단 해제]) | 뷰포트 폭에서 가로 여백 `spacing.md`씩 뺀 폭. 버튼은 세로로 쌓고 전체 폭이며 [취소]가 위에 온다 |
 | 로그인 | 최대 폭 `spacing.login-max` 카드, 가운데. 입력과 [로그인] 버튼은 전체 폭 | 전체 폭 카드. 같음 |
@@ -649,7 +650,7 @@ components:
 
 표를 카드로 바꾸는 규칙:
 
-- 모바일 폭에서도 정보를 숨기거나 말줄임하지 않는다. 카드 첫 줄의 값(세션 식별자·중계 ID·역할·종료 원인·[상세])은 레이블 없이 제목처럼 보인다. 나머지 값은 같은 열 머리글 이름을 앞에 레이블로 보인다. 레이블은 `typography.label`과 `colors.muted-foreground`다.
+- 모바일 폭에서도 정보를 숨기거나 말줄임하지 않는다. 카드 첫 줄의 값(세션 식별자·중계 ID·역할·종료 원인·[상세])은 레이블 없이 제목처럼 보인다. 예외로 대기 연결 카드의 중계 ID는 숫자뿐이라 무엇인지 알 수 없으므로 `중계 ID` 레이블을 값 앞에 보인다(사용자 결정 2026-11-25). 역할 배지에는 레이블을 붙이지 않는다. 나머지 값은 같은 열 머리글 이름을 앞에 레이블로 보인다. 레이블은 `typography.label`과 `colors.muted-foreground`다. 넓은 표 폭의 카드도 같은 규칙이다.
 - 가로 스크롤 표를 쓰지 않는다. 320px 폭에서 페이지에 가로 스크롤이 생기면 안 된다(WCAG 1.4.10).
 - 표의 `display`를 바꾸면 일부 브라우저가 표 의미를 잃는다. 카드 배치에서도 `table`·`row`·`cell`·`columnheader` 역할을 명시해 보조 기술이 표로 읽게 한다. 열 머리글은 화면에서만 감추고 접근성 트리에는 남긴다.
 - 레이블을 CSS 가상 요소로 만들면 보조 기술이 레이블을 두 번 읽을 수 있다. 가상 요소의 대체 텍스트를 비운다.
@@ -732,7 +733,7 @@ shadcn/ui처럼 경계선과 얕은 그림자로 층을 나눈다.
 | Gauge | 없음(중계 연결·관리 연결 공통) | 정적 | 지름 `spacing.gauge-size`, 선 두께 `spacing.gauge-stroke`의 고리. 트랙 `colors.gauge-track`, 채움 호 `colors.gauge`, 12시 방향에서 시계 방향으로 채운다. 채움 비율은 현재/상한이며 100%를 넘지 않는다. 현재 값이 0이면 채움을 그리지 않는다. 가운데 현재 값(`typography.metric`)과 "상한 n"(`typography.label`, `colors.muted-foreground`). 임계값에 따른 색 변화는 없다(스펙에 임계값이 없다). 값을 확인하지 못하면 고리 없이 "확인 불가" 중립 배지를 쓴다. 첫 조회 전이면 "조회 중" 정보 배지를 쓴다. 접근 가능한 이름은 카드 제목과 "사용량"이다 | DASH-021 |
 | Navbar | 상단 막대(모든 폭) | 항목: 기본·hover(`navbar-accent` 바탕)·활성(`navbar-accent` 바탕, 아래 `navbar-primary` 표시 막대, `navbar-foreground` 글씨)·focus-visible(`navbar-ring`) | 높이 `spacing.appbar-height`. 항목은 아이콘 + 글씨 한 줄, 높이 `spacing.control-height`, 가로 안쪽 `spacing.md`, `rounded.md`. 활성 표시 막대는 두께 `spacing.indicator-width`이고 상단 막대 아래 끝에 붙는다. 브랜드 표식은 `spacing.brand-size` 정사각형, `navbar-accent` 바탕에 `navbar-brand`(순백색) 선 | DASH-019 |
 | Language select | 상단 막대형(`lang-select`, 어두운 바탕)·로그인형(밝은 바탕) | 기본·hover·focus-visible | 브라우저 기본 `<select>`. 왼쪽에 지구 아이콘, 오른쪽에 펼침 아이콘. 상단 막대형은 `navbar` 바탕·`navbar-foreground` 글씨·`navbar-muted-foreground` 경계, 로그인형은 `card` 바탕·`foreground` 글씨·`input` 경계. 높이는 버튼과 같다. 선택한 언어 이름을 보인다 | DASH-024·DASH-025 |
-| Data table | 표(데스크톱 폭)·카드 목록(모바일 폭) | 행 hover(`colors.muted`), 링크 hover·focus-visible | 머리글 `typography.label`·`colors.muted-foreground`, 바탕 없음, 아래에 `colors.border` 선. 행은 `colors.border` 선으로 나눈다. 숫자 열은 오른쪽 정렬한다. 방향별 바이트는 줄마다 방향 표식 + 흐린 방향 이름 + 값이다 | DASH-001·DASH-015 |
+| Data table | 표(데스크톱 폭)·카드 목록(모바일 폭). 활성 세션·최근 종료 표는 콘텐츠 폭 1440px 미만에서 카드 목록 | 행 hover(`colors.muted`), 링크 hover·focus-visible | 머리글 `typography.label`·`colors.muted-foreground`, 바탕 없음, 아래에 `colors.border` 선. 행은 `colors.border` 선으로 나눈다. 숫자 열은 오른쪽 정렬한다. 전송량은 줄마다 방향 표식 + 흐린 방향 이름 + 값이다 | DASH-001·DASH-015 |
 | Link | 세션 식별자 | 기본(밑줄)·hover·focus-visible | `colors.link`, 밑줄, `typography.data` | DASH-006 |
 | Dialog | 종료 확인, 주소 차단 확인, 주소 차단 해제 확인 | 열림·닫힘 | `<dialog>` 모달 기준. 제목 `typography.heading-card`, 설명 `typography.body`, 바닥에 오른쪽 정렬 버튼. 폭은 위 [배치](#중단점과-모바일-배치)를 따른다 | DASH-009·DASH-089·DASH-090 |
 | Metric card | 값 하나(활성 세션 수·대기 연결 수·거절한 연결·CPU 사용률·메모리 사용량), 방향 두 줄(처리량), Gauge(중계 연결·관리 연결) | 정적. 값 상태는 값 있음·확인 불가·수집 중·조회 중이다 | Card·Stat·Gauge 재사용. 제목 줄 `typography.heading-card`(설명이 있으면 `typography.label`·`colors.muted-foreground`), 본문 가운데 값 `typography.metric`. 격자는 한 줄 최대 4개이고 카드 최소 폭은 `spacing.metric-card-min`이다. 상세는 [메트릭 화면 확장](#메트릭-화면-확장) | DASH-068·DASH-069·DASH-072 |
@@ -753,7 +754,7 @@ shadcn/ui처럼 경계선과 얕은 그림자로 층을 나눈다.
 | 여러 줄 목록 입력 | Input과 같은 바탕·경계·모서리·포커스. 채택한 단계 `typography.input-data`(고정폭 16px·행간 150%). 안쪽은 세로 `spacing.xs`·가로 `spacing.sm`, 최소 높이 `spacing.control-height`의 3배 | 세로 크기 조절 가능. 모든 폭에서 너비 100%, 가로로 늘리지 않음. 한 항목 한 줄. 원문 줄을 유지하며 긴 문자열은 시각적으로 줄바꿈. 오류는 destructive 경계와 아래 글씨 | Accepted |
 | 단위 있는 숫자 입력 | 기존 `typography.input`(16px). 옆 단위는 `typography.label`·`muted-foreground`. 범위는 도움말. 안쪽은 여러 줄 입력과 같음 | 입력과 단위를 같은 행에 놓고 입력은 남는 폭 사용. 도움말은 다음 줄. 초·바이트·개수. 모바일 입력 높이 `control-height-touch` 유지 | Accepted |
 | 설정 불리언 입력 | 수준 체크 그룹의 체크박스 상자를 재사용: `card` 바탕, `input` 경계, `radius-md`, 최소 높이 `control-height`(모바일 `control-height-touch`), 체크박스는 `icon-size`·`primary`. 상자 안 label은 설정 키 이름(`typography.data`)이며 수준 배지는 없음 | 키 하나가 상자 하나다(`relay.ticket.<role>.enabled`). 상자는 격자 칸 전체 폭이다. 데스크톱에서는 옆 칸 입력과 높이를 맞추려고 키 이름 한 줄 높이(`typography.data`)와 `spacing.xs`만큼 내려 놓고, 모바일 1열에서는 내리지 않음. 저장 중·결과 불명처럼 입력을 잠그는 상태에서는 체크박스도 `disabled` | Accepted |
-| 입력 도움말·오류 | 설정 키 라벨은 `typography.data`. 도움말은 `typography.label`·`muted-foreground`. 오류는 `typography.body`·`destructive`와 위험 아이콘. 간격 `spacing.xs` | 보이는 label에 키 포함. 보기 목록·입력 라벨·확인 대화상자의 키 이름은 같은 고정폭 단계. 도움말·오류 모두 입력과 연결. 오류는 색 외에 문장·줄 번호 포함. 첫 오류 초점은 스펙 6절 | Accepted |
+| 입력 도움말·오류 | 설정 키 라벨은 `typography.data`. 도움말은 `typography.label`·`muted-foreground`. 오류는 `typography.body`·`destructive`와 위험 아이콘. 간격 `spacing.xs` | 보이는 label에 키 포함. 보기 목록·입력 라벨·확인 대화상자의 키 이름은 같은 고정폭 단계. 도움말·오류 모두 입력과 연결. 목록 입력 도움말(CPY-119)은 목록 입력이 있는 구역 맨 위에 한 번만 두고 그 구역의 목록 입력이 모두 연결한다(사용자 결정 2026-11-25). 오류는 색 외에 문장·줄 번호 포함. 첫 오류 초점은 스펙 6절 | Accepted |
 | 적용 구분 표시 | dynamic은 `badge-info`, restart는 `badge-neutral`. 글씨와 정보 아이콘/재시작 필요 글씨로 구분. 기존 배지 형태 | 값 자체에 상태 배지를 붙이지 않음. 적용 구분은 별도 자리. 긴 영어 구분 문구는 배지 전체를 다음 줄로 보냄 | Accepted |
 | 키·값 목록 | Card 안 항목별 `colors.border` 구분선, 안쪽 `spacing.lg`, 항목 사이 `spacing.md`. 키·문자열 값은 `typography.data`, 정수·불리언 값은 `typography.body-numeric`, 구분은 Badge | 데스크톱은 같은 너비 3열(키·값·적용 구분). 모바일은 키·값·구분 순서 1열. 배열은 항목별 줄, 빈 목록·null은 글씨로 구분. 긴 키·경로는 `overflow-wrap:anywhere`. 잘라 숨기지 않음 | Accepted |
 | 화면 상단 안내 | 기존 Alert의 info·warning·destructive·neutral 재사용. 성공은 `colors.success-bg`·`success-border`·`success`, 설명은 `foreground`, 아이콘은 원 안 체크. 간격·모서리는 기존 Alert와 같음 | 머리말 아래 전체 폭. 저장 성공은 success, pending·충돌·결과 불명은 warning, 검증·쓰기 실패는 destructive, 꺼짐은 neutral. 파일 상태는 제목·본문·키·진단으로 표시 | Accepted |
@@ -903,7 +904,7 @@ shadcn/ui처럼 경계선과 얕은 그림자로 층을 나눈다.
 | 결과 알림 영역 | 머리말 바로 아래, 상태 안내 자리(위 "상태 안내"와 같은 자리). `alert-*` 하나만 보인다. 제목 없이 문장만 쓴다. 주소는 `typography.data` | 성공(CPY-311 차단, CPY-312 해제)은 `alert-success`와 체크 아이콘, `role="status"`. 충돌(CPY-313)·파일 상태(CPY-314)·결과 불명(CPY-317)·해제할 항목이 현재 목록에 없음(CPY-324, PATCH 없이 한 번 다시 조회)은 `alert-warning`, `role="alert"`. 검증 거부(CPY-315, 뒤에 VNC Relay 진단. 신뢰 프록시 겹침은 CPY-322)·요청 오류(CPY-316)·설정 읽기 실패(CPY-318)는 `alert-destructive`, `role="alert"`. 편집 꺼짐(CPY-097)은 `alert-neutral`, `role="status"`. 닫기 버튼이 없다. 알림을 지우는 시점은 스펙에 없어 구현에서 정한다. 어떤 실패도 성공 색으로 보이지 않는다 | SCR-005의 결과 알림 색 배정(충돌·결과 불명은 warning, 검증·쓰기 실패는 destructive, 꺼짐은 neutral)을 그대로 따른다. 새 변형이 없다(결정 8·9·10) | Accepted |
 | 모바일 카드의 차단 상태 | 표를 카드로 바꾸는 규칙을 그대로 쓴다. 카드 첫 줄은 주소(와 로컬 배지)다. 차단 상태는 마지막에 레이블 "차단 상태"(CPY-295)와 값 쌍으로 둔다. 값 안은 배지·버튼·안내이고 버튼 높이는 44px다 | 1023.98px 이하. 칸이 비면 그 줄을 두지 않는다(`td:empty{display:none}`). `data-label`·`role` 속성을 유지한다. 가로 스크롤이 없다 | 다른 열과 같은 규칙이라 읽는 순서가 일정하다(결정 5) | Accepted |
 | SCR-004 [relay.deny] 카드 | 기존 설정 카드(`card-head`에 `[relay.deny]` `typography.heading-card`, 본문 `config-list`). 행은 키 `relay.deny.sources`(`typography.data`), 값(항목마다 한 줄, `typography.data`), `badge-info` "재시작 없이 적용" | 카드 순서는 `[relay.ticket.server]`, `[relay.deny]`, `[mode1]`이다(설정 계약 순서). 빈 목록은 기존 키처럼 "빈 목록 []"이고 경고하지 않는다 | 동적 키 표시(DASH-091)는 기존 `relay.ticket.*`와 같은 배지다 | Accepted |
-| SCR-005 차단 목록 입력 | 접근 정책 카드의 목록 입력(`textarea.input.list-input`, `typography.input-data`). 라벨 한 줄에 이름(CPY-319, `typography.label`)과 키 `relay.deny.sources`(`typography.data`)를 간격 `spacing.sm`으로 둔다. 도움말 두 줄: CPY-119 다음 CPY-320(`typography.label`·`colors.muted-foreground`). 순서는 `mode1.allow_targets` 앞이다 | 문법 오류는 기존 줄 오류(`p.err`, 위치 "n줄:"과 `relay.deny.sources[i]`)이고 입력란은 `aria-invalid="true"`다. 신뢰 프록시와 겹치면 같은 자리에 CPY-322를 보인다. 빈 목록에는 경고(CPY-105)가 없다 | 다른 목록 입력란과 같은 컴포넌트다. 이름을 앞에 둔 점만 다르다(결정 12) | Accepted |
+| SCR-005 차단 목록 입력 | 접근 정책 카드의 목록 입력(`textarea.input.list-input`, `typography.input-data`). 라벨 한 줄에 이름(CPY-319, `typography.label`)과 키 `relay.deny.sources`(`typography.data`)를 간격 `spacing.sm`으로 둔다. 입력란 아래 도움말은 CPY-320 한 줄이다(`typography.label`·`colors.muted-foreground`). CPY-119는 구역 맨 위의 공통 도움말이 맡는다. 순서는 `mode1.allow_targets` 앞이다 | 문법 오류는 기존 줄 오류(`p.err`, 위치 "n줄:"과 `relay.deny.sources[i]`)이고 입력란은 `aria-invalid="true"`다. 신뢰 프록시와 겹치면 같은 자리에 CPY-322를 보인다. 빈 목록에는 경고(CPY-105)가 없다 | 다른 목록 입력란과 같은 컴포넌트다. 이름을 앞에 둔 점만 다르다(결정 12) | Accepted |
 | SCR-005 확인 대화상자의 경고 | 키별 변경 카드 안에 `alert-warning`(경고 아이콘)과 CPY-321("예외: 차단 목록에 새로 넣거나 바꾼 항목에 해당하는 주소의 열린 세션과 대기 연결은 저장 직후 끊깁니다.")을 넣는다. CPY-194(ticket.enabled)와 같은 방식이다. 이전 값 / 새 값, 추가한 항목이 그 위에 있다 | 새 값에 옛 값에 없던 항목 글씨가 있을 때(항목을 더했거나 바꿨을 때)만 보인다. 늘기만 하는 경우로 한정하지 않는다. 뺀 항목만 있으면 경고가 없다. `role="alert"` | 이미 있는 키별 경고 패턴이다. 대화상자 설명(CPY-189)의 "기존 중계 세션은 계속 동작합니다"는 그대로 두고, 이 키의 예외는 CPY-321이 알린다(결정 13) | Accepted |
 | 종료 원인 `ip_denied` | SCR-001 최근 종료 목록의 종료 원인 칸. `badge-neutral`, 글씨만(CPY-323) | 다른 종료 원인 배지와 같은 칸·같은 위치다. 아이콘이 없다. 글씨가 뜻을 전한다 | 운영자가 일부러 끊은 일이라 `admin_terminated`·`session_expired`(중립)와 같은 계열이다. 실패 색은 장애로 읽힌다(결정 11) | Accepted |
 
