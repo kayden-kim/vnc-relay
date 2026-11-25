@@ -1,6 +1,6 @@
 # 관리 조회 API 모듈 설계
 
-관리 리스너(`[management] listen`)에서 인증된 관리자에게 서버 요약, 대기 연결 목록, 활성 세션 목록·상세, 최근 종료 목록을 제공하는 조회 API의 구조와 데이터 흐름을 정의한다. 중계 상태는 메모리 락 안에서 복사하고, 인증·HTTP 직렬화·소켓 I/O는 그 락 밖에서 처리한다.
+관리 리스너(`[management] listen`)에서 인증된 관리자에게 VNC Relay 요약, 대기 연결 목록, 활성 세션 목록·상세, 최근 종료 목록을 제공하는 조회 API의 구조와 데이터 흐름을 정의한다. 중계 상태는 메모리 락 안에서 복사하고, 인증·HTTP 직렬화·소켓 I/O는 그 락 밖에서 처리한다.
 
 | 항목 | 값 |
 | --- | --- |
@@ -10,7 +10,7 @@
 | 코드 위치 | `crates/app/src/management/query.rs`, `crates/adapters/src/management_http/query_api.rs`, `crates/domain/src/budget.rs` |
 | 코드 지도 | [코드 지도 2절](code-map.md#2-코드-위치와-구성요소) |
 | 관련 스펙 | [관리 스펙](../specs/management.md) MGT-001~007, MGT-013, MGT-015, MGT-016, MGT-021, MGT-023~024, MGT-026, MGT-051, MGT-054~055, [운영 스펙](../specs/operations.md) OPS-033 |
-| 관련 계약 | [관리 API 계약 1.6~1.10·1.12절](../contracts/management-api-v1.md#16-서버-요약-get-apiv1summary)(1.9절은 종료 응답 `closed_session`), [2.1절](../contracts/management-api-v1.md#21-오류-본문과-상태-코드), [설정 계약 1.2절](../contracts/config-v4.md#12-키-표)(P, R), [운영 정보 계약 1.5절](../contracts/ops-info-v2.md#15-사건-목록) |
+| 관련 계약 | [관리 API 계약 1.6~1.10·1.12절](../contracts/management-api-v1.md#16-vnc-relay-요약-get-apiv1summary)(1.9절은 종료 응답 `closed_session`), [2.1절](../contracts/management-api-v1.md#21-오류-본문과-상태-코드), [설정 계약 1.2절](../contracts/config-v4.md#12-키-표)(P, R), [운영 정보 계약 1.5절](../contracts/ops-info-v2.md#15-사건-목록) |
 | 관련 ADR | [ADR-0003 단일 인스턴스·메모리 상태](../decisions/ADR-0003-single-instance-memory-state.md), [ADR-0004 tokio·rustls](../decisions/ADR-0004-tokio-rustls.md) |
 | 관련 문서 | [접속 ticket 모듈 설계](relay-access-ticket.md) |
 
@@ -20,7 +20,7 @@
   - 인증 우선 검증: 공통 `session_api::answer`가 유효한 관리 세션 쿠키를 검증한다. 경로·메서드·형식 검사보다 인증이 우선하며, 실패하면 즉시 `401 unauthenticated`를 반환한다([관리 API 계약 2.1절](../contracts/management-api-v1.md#21-오류-본문과-상태-코드)).
   - 조회 경로 라우팅: 인증 통과 후 다섯 조회 엔드포인트(`GET /api/v1/summary`, `GET /api/v1/waiting`, `GET /api/v1/sessions`, `GET /api/v1/sessions/{session_id}`, `GET /api/v1/closed-sessions`)를 처리한다. 조회 경로는 `GET`만 허용하며, 다른 메서드는 `405`(`Allow: GET`, `code: "invalid_request"`)로 거절한다.
   - 세션 인증 및 유휴 갱신 연계: `X-Relay-Poll` 헤더는 오직 `GET` 요청에서 값 `1`만 유효하며, 다른 값이나 다른 메서드에 포함되면 `400 invalid_request`를 반환한다. 오직 헤더가 없을 때만 사용자 행동으로 간주하여 관리 세션 유휴 만료 시각을 연장한다(`AdminAuth::touch`). 자동 폴링 요청(`X-Relay-Poll: 1`)은 유휴 만료를 연장하지 않는다.
-  - 스냅샷 일관성 보장(MGT-016): 한 요청에서 `RelayRuntime`의 `std::sync::Mutex<relay::State>`를 한 번만 짧게 획득해 대기·활성·최근 종료 상태를 복사한다. 바로 뒤에 기준 시점(`as_of_wall`, `as_of_mono`)을 읽는다. 집계와 목록은 이 복사본에서 만든다. 서버 요약의 L·Lm 사용량은 잠금 밖에서 `ConnectionBudget::current()`로 따로 읽으므로, 연결이 바뀌는 동안 같은 응답의 집계와 잠깐 어긋날 수 있다. 이는 스펙 2.2절이 허용한 동작이다.
+  - 스냅샷 일관성 보장(MGT-016): 한 요청에서 `RelayRuntime`의 `std::sync::Mutex<relay::State>`를 한 번만 짧게 획득해 대기·활성·최근 종료 상태를 복사한다. 바로 뒤에 기준 시점(`as_of_wall`, `as_of_mono`)을 읽는다. 집계와 목록은 이 복사본에서 만든다. VNC Relay 요약의 L·Lm 사용량은 잠금 밖에서 `ConnectionBudget::current()`로 따로 읽으므로, 연결이 바뀌는 동안 같은 응답의 집계와 잠깐 어긋날 수 있다. 이는 스펙 2.2절이 허용한 동작이다.
   - 활성 세션 상태 및 포함 범위: `closing` 상태인 세션도 정리가 완료되기 전까지는 활성 세션 목록에 포함되고 `counts.active`에 집계된다(스펙 §2, §3.2).
   - 식별자 기준 상세 조회: 세션 상세 조회는 오직 `session_id`로만 대상을 찾으며, 동일한 중계 ID(`relay_id`)를 가진 다른 세션으로 대체하지 않는다(MGT-R02, MGT-R07).
   - 세션 식별자 형식 검증: `GET /api/v1/sessions/{session_id}` 요청 시 정규식 크레이트 없이 ASCII 조건문(`len 1~64`, 영문 대소문자·숫자·밑줄·하이픈)으로 검증한다. 잘못된 형식이면 즉시 `400 invalid_request`를 반환하고, 형식은 올바르나 활성 세션 표에 없으면(최근 종료 목록에 있는 경우 포함) `404 not_found`를 반환한다(스펙 §2.3, MGT-023).
@@ -60,7 +60,7 @@ flowchart LR
 
 | 요소(파일·심볼) | 역할 | 만들어지는 시점과 소유자 | 의존 대상 |
 | --- | --- | --- | --- |
-| `crates/app/src/management/query.rs` `ManagementQueryService` | 서버 요약, 대기 목록, 활성 세션, 최근 종료 목록의 응용 뷰를 생성한다. L/Lm은 runtime source에서 한 번에 읽는다. | 시작 시 `src/serve.rs`가 생성하고 `ManagementListener`에 전달한다. | `RelayStateSource`, `ConnectionBudget`, `Clock`, `RuntimeSettingsSource` |
+| `crates/app/src/management/query.rs` `ManagementQueryService` | VNC Relay 요약, 대기 목록, 활성 세션, 최근 종료 목록의 응용 뷰를 생성한다. L/Lm은 runtime source에서 한 번에 읽는다. | 시작 시 `src/serve.rs`가 생성하고 `ManagementListener`에 전달한다. | `RelayStateSource`, `ConnectionBudget`, `Clock`, `RuntimeSettingsSource` |
 | `crates/adapters/src/management_http/query_api.rs` `answer` | 요약·대기·활성 목록·상세·최근 종료 요청을 분기하고 JSON 응답을 구성한다. | `session_api::answer`가 인증 뒤 전달한다. | `ManagementQueryService`, `AdminAuth`, `serde_json`, `axum` |
 | `crates/domain/src/budget.rs` `ConnectionBudget::current` | L 및 Lm의 현재 점유 카운트(`used`)를 원자적으로 읽는다. | 시작 시 `src/serve.rs`가 예산을 생성한다. | `AtomicU32` |
 | `crates/app/src/ports.rs` `RelayStateSource` | 중계 런타임 상태 스냅샷을 조회하는 포트 trait이다. | `ManagementQueryService`가 주입받고 `RelayRuntime`이 구현한다. | `Clock`, `RelaySnapshot` |
@@ -71,7 +71,7 @@ flowchart LR
 
 ## 3. 데이터 모델
 
-외부 교환 형식은 [관리 API 계약 1.6~1.8·1.10절](../contracts/management-api-v1.md#16-서버-요약-get-apiv1summary)을 준수하며, 아래는 내부 응용 및 어댑터 모델이다.
+외부 교환 형식은 [관리 API 계약 1.6~1.8·1.10절](../contracts/management-api-v1.md#16-vnc-relay-요약-get-apiv1summary)을 준수하며, 아래는 내부 응용 및 어댑터 모델이다.
 
 | 이름 | 필드·형태 | 저장 위치 | 제약과 항상 지켜야 할 조건 |
 | --- | --- | --- | --- |
@@ -81,7 +81,7 @@ flowchart LR
 | `UsageView` | `relay_connections: ResourceUsageView`, `admin_connections: ResourceUsageView` | `SummaryView` 내부 | L과 Lm의 사용량은 서로 독립적으로 산출된다. |
 | `ResourceUsageView` | `current: u64`, `limit: u64` | `UsageView` 내부 | current는 budget 원자 계수, limit는 현재 runtime 값이다. 상한을 낮춘 직후에는 `current > limit`도 유효하며 기존 점유를 취소하지 않는다. 직렬화는 정수와 계약의 null 사유 필드를 제공한다. |
 | `WaitingItemView` | `role: &'static str` (`viewer` \| `server`), `relay_id: String`, `connected_at: SystemTime`, `waited_ms: u64`, `transport: &'static str`, `address: SocketAddr`, `forwarded_ip: Option<PeerIp>` | `WaitingListView.items` 배열 | `relay_id`는 1~247자의 숫자 원문 문자열을 보존한다. `waited_ms`는 `as_of`까지의 단조 시간 경과다. `address`는 실제 소켓 상대 주소다. `forwarded_ip`는 신뢰 프록시 판정 결과이며 TCP는 항상 `null`이다. |
-| `ActiveSessionItemView` | `session_id`, `state`, `mode`, `viewer_transport`, `target_transport`, `viewer_forwarded_ip`, `target_forwarded_ip`, `started_at`, 양방향 `bytes_*`, `viewer_address`, `target_address` | `SessionListView.items` 및 `SessionDetailView.session` | 양쪽 전송은 `tcp`·`ws`·`wss`다. Mode I의 target은 `tcp`, Mode II는 실제 Server 전송이다. 전달 주소는 신뢰 프록시 판정 결과 또는 `null`이다. Mode I의 대상 전달 주소와 직접 연결의 전달 주소는 `null`이다. `closing`도 활성 목록에 포함한다. |
+| `ActiveSessionItemView` | `session_id`, `state`, `mode`, `viewer_transport`, `target_transport`, `viewer_forwarded_ip`, `target_forwarded_ip`, `started_at`, 양방향 `bytes_*`, `viewer_address`, `target_address` | `SessionListView.items` 및 `SessionDetailView.session` | 양쪽 전송은 `tcp`·`ws`·`wss`다. Mode I의 target은 `tcp`, Mode II는 실제 서버 전송이다. 전달 주소는 신뢰 프록시 판정 결과 또는 `null`이다. Mode I의 대상 전달 주소와 직접 연결의 전달 주소는 `null`이다. `closing`도 활성 목록에 포함한다. |
 | `ClosedSessionsView` | `as_of: SystemTime`, `max_entries: u64`, `items: Vec<ClosedSessionItemView>` | 응용 조회 결과 | `max_entries`는 설정된 R 값이다. `items`는 정리가 끝난 활성 세션만 담는다. |
 | `ClosedSessionItemView` | `session_id`, `mode`, `viewer_transport`, `target_transport`, `started_at`, `ended_at`, `duration_ms`, 양방향 `bytes_*`, `viewer_address`, `target_address`, `viewer_forwarded_ip`, `target_forwarded_ip`, `close_cause` | `ClosedSessionsView.items` | 양쪽 전송과 `session_expired`를 포함한 종료 원인을 반환한다. 초기 교환·대기 중 만료는 넣지 않는다. 주소는 종료 직전 활성 항목의 값이다. `duration_ms`는 `milliseconds(ClosedSession::duration())`이며 `session_closed` 로그와 같은 단조 시계 값이다. 최대 R개이며 오래된 항목부터 제거한다. |
 | 주소 직렬화 | `SocketAddr` → `{"ip": String, "port": u16}` | `query_api::format_address` | 실제 소켓 주소를 쓴다. `format_ip`가 `IpAddr::to_canonical()`을 적용하므로 IPv4 매핑 IPv6는 `a.b.c.d`로 쓴다. |
@@ -108,7 +108,7 @@ flowchart LR
 대시보드 화면이 조회를 주기적으로 수행하기 위한 설정값(P, 조회 제한 시간, 종료 대기 한도)은 `GET /api/v1/summary`에 포함되지 않는다.
 1. 관리자가 로그인하거나 세션 정보를 복구할 때(`POST /api/v1/session` 또는 `GET /api/v1/session`), 응답 본문의 `dashboard.poll_secs`(P), `dashboard.query_timeout_secs`, `dashboard.terminate_timeout_secs`가 클라이언트에 전달된다([관리 API 계약 1.5·1.12절](../contracts/management-api-v1.md#112-폴링-주기와-조회-제한-시간의-전달)).
 2. 대시보드 클라이언트는 이 주기 P를 바탕으로 타이머를 가동하여 `GET /api/v1/summary`, `GET /api/v1/waiting`, `GET /api/v1/sessions`, `GET /api/v1/closed-sessions` 요청에 `X-Relay-Poll: 1` 헤더를 붙여 전송한다.
-3. 서버의 조회 핸들러는 `X-Relay-Poll: 1` 헤더를 감지하여 세션 유휴 기한 연장(`touch`)을 건너뛴다(MGT-025).
+3. VNC Relay의 조회 핸들러는 `X-Relay-Poll: 1` 헤더를 감지하여 세션 유휴 기한 연장(`touch`)을 건너뛴다(MGT-025).
 
 ## 5. 상태와 초기화
 
@@ -194,7 +194,7 @@ flowchart LR
 
 설정 GET은 [ConfigEditService](config-edit.md#3-데이터-모델과-get)가 맡는다. `ManagementQueryService`에는 파일 I/O를 넣지 않는다. `src/serve.rs`는 watcher·설정 편집과 같은 `reload::snapshot::Cell`을 `Arc<dyn RuntimeSettingsSource>`로 주입한다. `summary`는 `with_current` 한 번으로 같은 세대의 L/Lm을 읽는다. budget은 사용량의 원자 계수만 제공한다([동적 상한 설계](connection-limits.md), [설정 재로드 구분](../contracts/config-v4.md#18-재로드-구분)).
 
-## 서버 종료 항목의 조회
+## VNC Relay 종료 항목의 조회
 
 `src/serve.rs`는 `finish_relay_shutdown`으로 중계 작업이 합류한 뒤 관리 리스너를 멈춘다. 따라서 Grace → Force로 세션을 정리한 뒤 관리 리스너가 끝나기 전까지 `GET /api/v1/closed-sessions`에서 `server_shutdown`을 관찰할 수 있다. `completion_mgt023_shutdown_history_is_queryable_and_preserves_prior_eof_cause`는 이 구간과 먼저 EOF 정리를 시작한 세션의 `peer_eof` 유지를 확인한다.
 

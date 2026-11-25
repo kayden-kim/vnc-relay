@@ -146,7 +146,7 @@ Linux 전용 `tests/relay_dead_peer_linux.rs`는 사용자·네트워크 네임�
    cargo test --test relay_dead_peer_linux -- --nocapture
    ```
 
-   기대 결과: 대기 Server와 활성 세션의 Viewer·Server·Mode I 대상에 실제 DROP을 적용한 시험 2건이 통과한다. 한 번 실행에 약 47초 걸린다. K는 설정 최솟값인 11초다. Linux 타이머·스케줄링 오차는 최대 5초로 제한한다(DROP 직전 시각 기준 최대 16초). 이 오차를 K 설정값에 더하지는 않는다.
+   기대 결과: 대기 서버와 활성 세션의 뷰어·서버·Mode I 대상에 실제 DROP을 적용한 시험 2건이 통과한다. 한 번 실행에 약 47초 걸린다. K는 설정 최솟값인 11초다. Linux 타이머·스케줄링 오차는 최대 5초로 제한한다(DROP 직전 시각 기준 최대 16초). 이 오차를 K 설정값에 더하지는 않는다.
 
    시험은 DROP 직전 시각과 정리 사건 줄을 읽은 시각을 단조 시계(`Instant`)로 비교한다. 로그 `ts`는 벽시계라서 쓰지 않는다. WSL2는 실행 중에 벽시계를 보정할 수 있어 경과 시간이 왜곡될 수 있다. 로그를 읽는 지연(10ms 주기 확인)은 측정값을 늘리기만 하므로 상한 판정을 느슨하게 하지 않는다. 마지막 활동 이후 9초 이상이라는 하한 판정은 그 지연만큼 느슨해진다.
 
@@ -209,7 +209,7 @@ Linux 전용 `tests/relay_dead_peer_linux.rs`는 사용자·네트워크 네임�
    | `docs/design/DESIGN.md` YAML, `web/dashboard/` | `cargo xtask tokens --check`, 브라우저 테스트는 `cargo xtask scenarios`가 함께 실행한다([대시보드 프런트엔드 검증 how-to](verify-dashboard-frontend.md)) | `tokens --check: 통과`, 종료 코드 0 |
    | `docs/help/`, `web/help/`, 도움말 도구(`xtask/src/help_site.rs`·`help_site/`·`help_serve.rs`·`static_server.rs`), `.github/workflows/help.yml` | `cargo xtask help-site`, `cargo test --test help_site`, `web/help/` CSS를 바꾸면 `cargo xtask tokens --check`. 워크플로를 바꾸면 push 뒤 `help` 실행 결과를 확인한다([도움말 게시 how-to](publish-help.md)) | `help-site: 통과`, 시험 17개 통과, `help` 결론 `success` |
    | 배포 묶음(`xtask/src/package.rs`), GitHub Actions 워크플로(`.github/workflows/`), 작업 공간 버전 | `cargo xtask package`, `cargo test --package xtask`. 워크플로를 바꾸면 push 뒤 `ci` 실행 결과를 확인한다([릴리스 how-to](release.md)) | 종료 코드 0, `package:`·`sha256:` 줄, `ci` 결론 `success` |
-   | 시험용 접속 ticket 도구(`xtask/src/ticket.rs`) | `cargo test --package xtask`. 실제 서버로 확인할 때는 [수동 운영 안내 3.10.1절](operate-relay.md#3101-시험용-키와-ticket으로-확인하기)을 따른다 | 종료 코드 0, 3.10.1절의 기대 결과 |
+   | 시험용 접속 ticket 도구(`xtask/src/ticket.rs`) | `cargo test --package xtask`. 실제 VNC Relay로 확인할 때는 [수동 운영 안내 3.10.1절](operate-relay.md#3101-시험용-키와-ticket으로-확인하기)을 따른다 | 종료 코드 0, 3.10.1절의 기대 결과 |
    | 문서만 | 이 절차의 명령은 필요 없다. 문서 유형별 작성 규칙과 링크를 확인한다. | — |
 
    한 crate만 빠르게 확인할 때는 `cargo test --package <패키지 이름>`을 쓸 수 있다. 완료 보고 전에는 6단계를 실행해야 한다.
@@ -263,7 +263,7 @@ wsl -d Ubuntu -u root -- bash -lc 'cd /tmp && wget -q https://dl.google.com/linu
 | --- | --- |
 | DASH-015·023의 실제 키 입력·브라우저 흐름과 화면 시안 대조 | [대시보드 프런트엔드 검증](verify-dashboard-frontend.md). 실제 Safari, 최신 안정판 브라우저, 실기기, 스크린 리더의 확인 범위를 구분한다 |
 | OPS-017·018의 성능 측정 | [성능 측정](measure-performance.md). v4 설정의 재측정은 미실행이다 |
-| OPS-020, RLY-006·010·011, WS-025의 실제 UltraVNC·noVNC 상호운용 | [호환성 검증 기록](../contracts/repeater-compat-record.md), [UltraVNC 수동 확인](verify-ultravnc-manually.md). Windows VNC Relay와 UltraVNC 1.8.3.0·noVNC 1.7.0의 확인 범위를 따른다. Ubuntu VNC Relay와 실제 UltraVNC, WS·WSS Server 역할의 실제 클라이언트 조합은 미실행이다 |
+| OPS-020, RLY-006·010·011, WS-025의 실제 UltraVNC·noVNC 상호운용 | [호환성 검증 기록](../contracts/repeater-compat-record.md), [UltraVNC 수동 확인](verify-ultravnc-manually.md). Windows VNC Relay와 UltraVNC 1.8.3.0·noVNC 1.7.0의 확인 범위를 따른다. Ubuntu VNC Relay와 실제 UltraVNC, WS·WSS 서버 역할의 실제 클라이언트 조합은 미실행이다 |
 | OPS-021의 출처·프로젝트 LICENSE 수동 검토 | [의존성 라이선스 검사](check-dependency-licenses.md). 자동 고지 대조와 수동 검토를 구분한다 |
 | OPS-031의 배포 묶음 운영, 설정 이관·롤백, 접속 ticket 운영 | [수동 운영 안내](operate-relay.md). v3→v4 이관은 Windows에서 관리 재로그인을 빼고 실행했다. 롤백과 Ubuntu 이관은 미실행이다. ticket 켜기·공개 키 교체·끄기는 두 OS의 Release `v2026.11.3` 묶음으로 실행했다 |
 | OPS-096·097의 실제 IP 정보 DB 파일 읽기 | [수동 운영 안내 4절](operate-relay.md#4-검증). Windows debug 실행파일로 DB-IP Lite, IPinfo Lite 견본, GeoLite 시험 파일 조합의 시작 시 읽기를 확인했다. IPinfo Lite·GeoLite 전체 파일, 실행 중 교체(OPS-097), Release 묶음, Ubuntu는 미실행이다 |
@@ -275,9 +275,9 @@ OPS-050의 Windows 시험은 수락·대상 소켓의 K 값을 다시 읽어 대
 
 다음 수동 확인에는 별도 환경이나 승인이 필요하다. 담당은 프로젝트 관리자이며, 저장소 밖의 연결 확인은 사용처 담당자가 맡는다.
 
-- Nginx 실제 배치의 TLS 종료, 공유 WSS Viewer·Server, 최근 로그 운영 절차.
-- 두 OS의 Viewer 경로 이전·롤백과 사용처 페이지의 접속 URL 변경 뒤 실제 연결.
-- 실제 발급 쪽과 noVNC·VNC Server 클라이언트가 ticket을 보내는 연결.
+- Nginx 실제 배치의 TLS 종료, 공유 WSS 뷰어·서버, 최근 로그 운영 절차.
+- 두 OS의 뷰어 경로 이전·롤백과 사용처 페이지의 접속 URL 변경 뒤 실제 연결.
+- 실제 발급 쪽과 noVNC·VNC 서버 클라이언트가 ticket을 보내는 연결.
 - 별도 서비스 로그온 계정의 설정 디렉터리 생성·쓰기·교체 권한. 자동 시험은 시험 실행 계정에서만 확인한다.
 
 ### 4.3 Windows 서비스·트레이 수동 근거

@@ -12,19 +12,19 @@
 | [Windows 서비스 모듈 설계](windows-service.md) | 설치·해제·SCM 실행이 `serve` 검사·시작·종료와 어떻게 연결되고 실패한 등록을 어떻게 되돌리는가 | Current | Draft | 파일·심볼 대조 — [대조 기록](windows-service.md#8-코드-대조와-시험-범위) |
 | [Windows 트레이 앱 모듈 설계](windows-tray.md) | UI·작업 스레드가 서비스 상태·메뉴·준비 상태 조회·로그인할 때 시작을 어떻게 나누는가 | Current | Draft | 파일·심볼 대조 — [대조 기록](windows-tray.md#코드-대조-기록) |
 | [운영 로그 모듈 설계](ops-log.md) | 운영 로그 사건을 어떤 타입으로 만들고, 어떤 형식으로 어디에 쓰며, 쓰기 실패와 비밀 값을 어떻게 다루는가 | Current | Draft | Verified — [대조 기록](ops-log.md#대조-기록) |
-| [TCP 진입점 모듈 설계](tcp-entry-point.md) | TCP Viewer·Server 진입점이 접속을 어떻게 받고, 데이터를 읽기 전에 출발지 IP를 어떻게 판정하며, 허용·거절·종료를 어떻게 기록하는가 | Current | Draft | Verified — [대조 기록](tcp-entry-point.md#대조-기록) |
-| [WebSocket 진입점 모듈 설계](websocket-entry-point.md) | WS·WSS Viewer·Server 진입점이 접속을 어떻게 받고, WSS 협상과 제한 시간 U를 어떻게 적용하며, 업그레이드 요청을 어떤 순서로 검사해 101로 답하거나 거절하고, 101 뒤를 공통 중계로 어떻게 넘기는가 | Current | Draft | Verified — [대조 기록](websocket-entry-point.md#대조-기록) |
+| [TCP 진입점 모듈 설계](tcp-entry-point.md) | TCP 뷰어·서버 진입점이 접속을 어떻게 받고, 데이터를 읽기 전에 출발지 IP를 어떻게 판정하며, 허용·거절·종료를 어떻게 기록하는가 | Current | Draft | Verified — [대조 기록](tcp-entry-point.md#대조-기록) |
+| [WebSocket 진입점 모듈 설계](websocket-entry-point.md) | WS·WSS 뷰어·서버 진입점이 접속을 어떻게 받고, WSS 협상과 제한 시간 U를 어떻게 적용하며, 업그레이드 요청을 어떤 순서로 검사해 101로 답하거나 거절하고, 101 뒤를 공통 중계로 어떻게 넘기는가 | Current | Draft | Verified — [대조 기록](websocket-entry-point.md#대조-기록) |
 | [WebSocket 스트림 어댑터 모듈 설계](websocket-stream.md) | 101 뒤 바이너리 페이로드를 공통 RelayStream으로 옮기고, M·B·초기 교환·Close·Kw 진행을 어떻게 연결하는가 | Current | Draft | Verified — [대조 기록](websocket-stream.md#대조-기록) |
 | [접속 ticket 모듈 설계](relay-access-ticket.md) | 선택형 접속 ticket을 어느 레이어에서 확인하고, 공개 키·사용 기록·세션 만료 시각을 누가 소유하며, 101 뒤 중계 ID 대조와 세션 만료에 어떻게 잇는가 | Current | Draft | Verified — [대조 기록](relay-access-ticket.md#구조-대조-기록) |
 | [연결 상한과 시간 제한 모듈 설계](connection-limits.md) | 연결 상한 L·Lm·Lw를 어떻게 세고, TCP 진입점이 수락한 연결에 초기 교환 시간 H와 TCP keepalive를 어떻게 적용하는가 | Current | Draft | Verified — [대조 기록](connection-limits.md#대조-기록) |
-| [초기 교환 처리 모듈 설계](initial-exchange.md) | 250바이트 요청과 Viewer 시작 바이트를 어떻게 처리하고, H·오류 사건·후속 바이트·B·L 자리를 어떻게 이어 관리하는가 | Current | Draft | Verified — [대조 기록](initial-exchange.md#대조-기록) |
+| [초기 교환 처리 모듈 설계](initial-exchange.md) | 250바이트 요청과 뷰어 시작 바이트를 어떻게 처리하고, H·오류 사건·후속 바이트·B·L 자리를 어떻게 이어 관리하는가 | Current | Draft | Verified — [대조 기록](initial-exchange.md#대조-기록) |
 | [대상 연결·매칭·중계 수명 모듈 설계](relay-session.md) | 유효한 PreparedConnection을 어떻게 대상 연결 또는 상대 매칭에 넘기고, B·C·W·E·G와 연결 예산을 지키며 세션 정리까지 이어 가는가 | Current | Draft | Verified — [대조 기록](relay-session.md#대조-기록) |
 | [상태 리스너와 준비 상태 모듈 설계](status-listener.md) | 상태 리스너가 `/livez`·`/readyz`에 어떻게 답하고, 준비 상태를 언제 바꾸며, 상태 연결을 Lm으로 어떻게 세는가 | Current | Draft | Verified — [대조 기록](status-listener.md#대조-기록) |
 | [관리자 계정 준비 CLI 모듈 설계](admin-accounts.md) | `vnc-relay admin add\|passwd\|remove\|list`가 관리자 계정 파일을 어떻게 읽고 잠금 파일로 보호해 원자적으로 바꾸며, 비밀번호를 어떻게 입력받고 해시하는가 | Current | Draft | Verified — [대조 기록](admin-accounts.md#대조-기록) |
 | [내장 TLS 모듈 설계](tls.md) | PEM 인증서·개인키를 읽어 TLS 1.2·1.3 서버 설정을 만들고, 시작 때 WSS·관리 TLS 파일을 어떻게 검사하는가 | Current | Draft | Verified — [대조 기록](tls.md#대조-기록) |
 | [관리 리스너 모듈 설계](management-listener.md) | 관리 리스너가 관리 HTTPS와 루프백 평문 HTTP 접속을 어떻게 받고, Lm을 어떻게 세며, TLS 1.2 미만 거절을 어떻게 기록하고, 요청 경로 순서를 어떻게 처리하는가 | Current | Draft | Verified — [대조 기록](management-listener.md#대조-기록) |
 | [관리 로그인과 세션 모듈 설계](management-session.md) | 관리자 로그인이 계정과 비밀번호를 어떻게 검증하고, 실패를 계정별·출발지별로 어떻게 세어 로그인을 제한하며, 관리 세션과 CSRF 토큰을 어떻게 만들고 검사·연장·무효화하는가 | Current | Draft | Verified — [대조 기록](management-session.md#대조-기록) |
-| [관리 조회 API 모듈 설계](management-query.md) | 인증된 관리자에게 서버 요약·대기 연결·활성 세션·최근 종료 목록을 어떻게 제공하고, 중계 스트림 멈춤 없이 단일 기준 시점 스냅샷을 어떻게 구성하는가 | Current | Draft | Verified — [대조 기록](management-query.md#대조-기록) |
+| [관리 조회 API 모듈 설계](management-query.md) | 인증된 관리자에게 VNC Relay 요약·대기 연결·활성 세션·최근 종료 목록을 어떻게 제공하고, 중계 스트림 멈춤 없이 단일 기준 시점 스냅샷을 어떻게 구성하는가 | Current | Draft | Verified — [대조 기록](management-query.md#대조-기록) |
 | [관리자 종료 API 모듈 설계](management-terminate.md) | 인증된 관리자가 지정한 활성 세션만 종료하고, 중계 작업을 막지 않으며 정리 완료·경합 결과·계정명 사건을 어떻게 전달받는가 | Current | Active | Verified — [대조 기록](management-terminate.md#8-현재-구조와-검증-범위) |
 | [메트릭 모듈 설계](metrics.md) | 메트릭 값을 어디에서 기록하고, 응답할 때 현재 값과 프로세스 값을 어떻게 읽으며, 추이를 어떻게 보관하고, 상태 리스너와 관리 API가 같은 값을 어떻게 내보내는가 | Current | Draft | Verified — [대조 기록](metrics.md#대조-기록) |
 | [접속 출처 모듈 설계](source-stats.md) | 중계 연결 사건을 클라이언트 주소마다 어떻게 세어 보관하고, 국가·ASN을 로컬 IP 정보 DB에서 어떻게 찾으며, DB 파일을 어떻게 읽고 다시 읽고, 관리 API가 기간별 집계를 어떻게 만드는가 | Target | Draft | 미대조 |

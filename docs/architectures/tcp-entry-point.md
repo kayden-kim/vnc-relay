@@ -1,7 +1,7 @@
 # TCP 진입점 모듈 설계
 
 
-TCP Viewer·TCP Server 진입점이 접속을 수락하고, 데이터를 읽기 전에 그 진입점의 출발지 IP 허용 목록으로 판정하는 구조를 다룬다. WS·WSS 진입점도 같은 수락 반복과 같은 판정을 쓰며, 101 응답까지의 처리는 [WebSocket 진입점 모듈 설계](websocket-entry-point.md)가 다룬다. TCP 연결은 허용되면 연결 상한 L의 자리를 잡고, 연결 식별자(`conn_id`)를 받고, 초기 교환 단계에 들어간다. 초기 교환 읽기와 해석은 `RelayService::handle_connection`이 맡는다. 초기 교환 형식은 [Repeater 초기 교환 계약](../contracts/repeater-handshake-v1.md)을 따른다. 초기 교환은 H 만료, 바이트 전 상대 종료, 연결 재설정, 서버 종료 중 먼저 오는 것으로 끝난다. L·H·TCP keepalive의 규칙은 [연결 상한과 시간 제한 모듈 설계](connection-limits.md)가 다룬다.
+TCP 뷰어·TCP 서버 진입점이 접속을 수락하고, 데이터를 읽기 전에 그 진입점의 출발지 IP 허용 목록으로 판정하는 구조를 다룬다. WS·WSS 진입점도 같은 수락 반복과 같은 판정을 쓰며, 101 응답까지의 처리는 [WebSocket 진입점 모듈 설계](websocket-entry-point.md)가 다룬다. TCP 연결은 허용되면 연결 상한 L의 자리를 잡고, 연결 식별자(`conn_id`)를 받고, 초기 교환 단계에 들어간다. 초기 교환 읽기와 해석은 `RelayService::handle_connection`이 맡는다. 초기 교환 형식은 [Repeater 초기 교환 계약](../contracts/repeater-handshake-v1.md)을 따른다. 초기 교환은 H 만료, 바이트 전 상대 종료, 연결 재설정, VNC Relay 종료 중 먼저 오는 것으로 끝난다. L·H·TCP keepalive의 규칙은 [연결 상한과 시간 제한 모듈 설계](connection-limits.md)가 다룬다.
 
 | 항목 | 값 |
 | --- | --- |
@@ -23,7 +23,7 @@ TCP Viewer·TCP Server 진입점이 접속을 수락하고, 데이터를 읽기 
   - L: 허용한 연결은 L 예산의 자리를 잡는다. 자리가 없으면 `connection_rejected`(`reason` = `relay_connection_limit`, `limit`)를 기록하고 닫는다. 출발지 IP 판정이 먼저다.
   - 수락: `conn_id`를 붙이고 TCP keepalive를 설정하고 `connection_accepted`를 기록한다. `role`은 진입점이 정한다(`tcp_viewer`는 `viewer`, `tcp_server`는 `server`).
   - 초기 교환 끝: H 만료(`handshake_timeout`), 바이트 전 상대 종료(`peer_eof`), 연결 재설정(`connection_error`) 중 먼저 오는 것에서 소켓을 닫고 자리를 돌려준 뒤 `connection_aborted`(`stage` = `initial_exchange`)를 기록한다.
-  - 서버 종료: 새 접속 수락을 멈추고, 초기 교환 중인 연결을 닫고, 연결마다 `connection_aborted`(`stage` = `initial_exchange`, `reason` = `server_shutdown`, `elapsed_ms`)를 기록한다. 모든 연결의 기록이 끝난 뒤 `serve`가 `server_stopped`를 쓴다.
+  - VNC Relay 종료: 새 접속 수락을 멈추고, 초기 교환 중인 연결을 닫고, 연결마다 `connection_aborted`(`stage` = `initial_exchange`, `reason` = `server_shutdown`, `elapsed_ms`)를 기록한다. 모든 연결의 기록이 끝난 뒤 `serve`가 `server_stopped`를 쓴다.
 - 맡지 않는 책임:
   - 초기 교환 읽기·해석. `RelayService::handle_connection`(app)이 맡는다. 이 진입점은 `TcpRelayStream`으로 감싼 소켓을 넘기고, 준비된 연결을 `dispatch`로 잇는다.
   - L 예산·H·keepalive 값과 끊긴 연결 판정 규칙. [연결 상한과 시간 제한 모듈 설계](connection-limits.md)가 맡는다.
@@ -91,7 +91,7 @@ flowchart LR
 
 `ListenerKind`는 중계 소켓 네 개를, `EntryPoint`는 리스너·역할 조합 여섯 개를 나타낸다. TCP는 `ListenerKind::fixed_role()`로 수락 때 역할을 안다. WS·WSS는 소켓 상대가 `trusted_proxies`에 속하거나 켜진 역할 allow의 합집합을 통과하면 수락한다. 역할과 전달 주소는 업그레이드에서 판정한다. `AllowSource::ws`·`wss`는 리스너별 현재 설정을 읽는다. `ListenerPlan::listener`가 바인드 소켓을 나타낸다.
 
-대표 시나리오는 RLY-024다. Viewer 진입점 목록에만 있는 IP가 Server 진입점에 접속한다.
+대표 시나리오는 RLY-024다. 뷰어 진입점 목록에만 있는 IP가 서버 진입점에 접속한다.
 
 | 순서 | 코드 위치(파일·심볼) | 조건·계산 | 바뀌는 상태 | 결과를 쓰는 곳 |
 | --- | --- | --- | --- | --- |
@@ -101,7 +101,7 @@ flowchart LR
 | 4 | `EventSink::record`, 소켓 닫기 | `connection_rejected`(`listener` = `tcp_server`, `stage` = `accept`, `reason` = `ip_not_allowed`, `peer_ip`)를 기록한 뒤 소켓을 닫는다. 상대는 연결 끊김을 본다. | 없음 | 운영 로그 |
 | 5 | 2~3과 같은 경로 | 같은 IP가 `tcp_viewer`에 접속하면 허용이다. | 없음 | 6단계 |
 | 6 | `ConnectionBudget::try_acquire`, `ConnId::next`, `EventSink::record`, `TcpRelayStream`, `RelayService::handle_connection` | L의 자리를 잡고, `conn_id`를 받고, `connection_accepted`(`role` = `viewer`)를 기록한다. 소켓을 `TcpRelayStream`으로 감싸 `handle_connection`에 자리(permit)와 함께 넘긴다. 초기 교환을 H 안에 읽는다(`crates/app/src/relay/handshake.rs` `exchange`). | 초기 교환 중인 연결 하나 | 운영 로그 |
-| 7 | 종료 상태(`RelayLifecycle`), `handshake::exchange`, `RelayService::prepare` | 서버가 종료 중이면 초기 교환을 멈추고 소켓을 닫는다. 기록은 `connection_aborted`(`server_shutdown`)다. H가 먼저 지나거나 상대가 먼저 닫으면 그 원인으로 같은 정리를 한다([연결 상한과 시간 제한 모듈 설계 4절](connection-limits.md#4-처리-순서)). | 초기 교환 중인 연결 없음 | 운영 로그 |
+| 7 | 종료 상태(`RelayLifecycle`), `handshake::exchange`, `RelayService::prepare` | VNC Relay가 종료 중이면 초기 교환을 멈추고 소켓을 닫는다. 기록은 `connection_aborted`(`server_shutdown`)다. H가 먼저 지나거나 상대가 먼저 닫으면 그 원인으로 같은 정리를 한다([연결 상한과 시간 제한 모듈 설계 4절](connection-limits.md#4-처리-순서)). | 초기 교환 중인 연결 없음 | 운영 로그 |
 | 8 | `listen_until_shutdown` | 진입점 작업이 모두 끝나면 나머지 리스너를 닫고 `server_stopped`를 기록한다. | 없음 | 운영 로그, 종료 코드 0 |
 
 거절 사건을 소켓을 닫기 전에 기록한다. 상대가 연결 끊김을 보았을 때 그 줄이 이미 로그에 있게 하기 위해서다. 시스템 테스트가 이 순서에 기댄다.
@@ -126,7 +126,7 @@ flowchart LR
 
 | 선택 | 이유 | 검토한 다른 방법 | 근거 |
 | --- | --- | --- | --- |
-| 허용한 연결은 `RelayService::handle_connection`이 초기 교환을 읽는다. H 만료, 바이트 전 상대 종료, 서버 종료 중 먼저 오는 것으로 끝난다. | 초기 교환 형식을 이 진입점이 추정하지 않는다. H와 상대 종료로 끝내야 L 자리가 돌아온다. | 읽어서 해석 없이 보관(I 초과 처리를 미리 정해야 한다), 수락 직후 닫기(수락하지 않은 것과 구분되지 않는다), 서버 종료까지만 보류(L 자리가 돌아오지 않는다) | [Repeater 초기 교환 계약](../contracts/repeater-handshake-v1.md) |
+| 허용한 연결은 `RelayService::handle_connection`이 초기 교환을 읽는다. H 만료, 바이트 전 상대 종료, VNC Relay 종료 중 먼저 오는 것으로 끝난다. | 초기 교환 형식을 이 진입점이 추정하지 않는다. H와 상대 종료로 끝내야 L 자리가 돌아온다. | 읽어서 해석 없이 보관(I 초과 처리를 미리 정해야 한다), 수락 직후 닫기(수락하지 않은 것과 구분되지 않는다), VNC Relay 종료까지만 보류(L 자리가 돌아오지 않는다) | [Repeater 초기 교환 계약](../contracts/repeater-handshake-v1.md) |
 | `conn_id`는 `c`와 10진 순번이다(`c1`, `c2`, …). | 짧고 읽기 쉽다. 접두사가 있어 다른 숫자 필드·`session_id`와 섞이지 않는다. | 순번만, 무작위 16진수 | [운영 정보 계약 1.4절](../contracts/ops-info-v2.md#14-필드-사전) |
 | 순번은 domain의 프로세스 전역 원자 변수(`ConnId::next`)다. | 계약이 프로세스 안의 유일성을 요구한다. WS·WSS 진입점도 같은 순번을 쓴다. 값을 넘겨받는 생성기 객체를 두면 모든 진입점 조립이 그 객체를 받아야 한다. | `serve`가 만든 생성기 객체를 진입점마다 넘기기 | [rust.md 7절](../conventions/rust.md) `Id` suffix |
 | 허용 판정은 `PeerIp`를 받는다. | `PeerIp`가 IPv4-mapped 주소를 IPv4로 바꾼다. 설정 항목에는 IPv4-mapped 주소가 없으므로(설정 계약 1.3절) 바꾸지 않은 주소로 판정하면 이중 스택 리스너의 IPv4 상대를 잘못 거절한다. | `IpAddr`를 받고 호출하는 쪽이 바꾸기 | [운영 정보 계약 1.10절](../contracts/ops-info-v2.md#110-상대-주소-표기) |

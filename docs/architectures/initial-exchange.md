@@ -1,7 +1,7 @@
 # 초기 교환 처리 모듈 설계
 
 
-이 문서는 초기 요청을 모으고 해석한 뒤 다음 중계 단계에 넘기는 현재 구조를 설명한다. 예를 들어 Viewer가 `ID:0123`을 보내면 Mode II 요청과 중계 ID `0123`을 얻는다. 요청 뒤의 바이트는 상대에게 보낼 데이터로 남긴다. TCP·WS·WSS 진입점은 공통 `handle_connection`을 호출한 뒤 유효 요청을 `dispatch`에 넘긴다.
+이 문서는 초기 요청을 모으고 해석한 뒤 다음 중계 단계에 넘기는 현재 구조를 설명한다. 예를 들어 뷰어가 `ID:0123`을 보내면 Mode II 요청과 중계 ID `0123`을 얻는다. 요청 뒤의 바이트는 상대에게 보낼 데이터로 남긴다. TCP·WS·WSS 진입점은 공통 `handle_connection`을 호출한 뒤 유효 요청을 `dispatch`에 넘긴다.
 
 | 항목 | 값 |
 | --- | --- |
@@ -19,11 +19,11 @@
 ## 1. 책임과 경계
 
 - domain은 초기 요청의 길이·값·모드·대상 문법·중계 ID를 판정한다. 소켓과 시계를 알지 못한다.
-- app의 `RelayService::handle_connection`은 Viewer 시작 바이트, 요청 읽기, H, 종료 알림, 오류 기록, 소유권 이전을 다룬다.
+- app의 `RelayService::handle_connection`은 뷰어 시작 바이트, 요청 읽기, H, 종료 알림, 오류 기록, 소유권 이전을 다룬다.
 - adapters는 TCP 수락, 출발지 IP 검사, L 확보, TCP keepalive를 유지한다. 허용 판정 전에 시작 바이트를 보내거나 요청을 읽지 않는다.
 - Mode I 주소 해석·정책·대상 연결은 `relay/target.rs`가 맡는다. Mode II 등록·매칭·W·Lw는 `relay/matching.rs`가 맡는다. 양방향 중계·EOF 뒤 E·전송량은 `relay/session.rs`가 맡는다.
 - 초기 교환은 대상 연결이나 대기 등록을 만들지 않는다. TCP·WS·WSS 연결 작업이 반환값을 `RelayService::dispatch`에 넘긴다. 후속 단계의 책임과 연결 순서는 [대상 연결·매칭·중계 수명 설계 8절](relay-session.md#8-현재-코드와의-차이와-연결-순서)을 따른다.
-- domain 파서는 여섯 `EntryPoint`의 `role()`만 사용한다. TCP는 리스너, WS·WSS는 101 전 경로 검사에서 역할을 정한다. `/relay/server`는 Server로서 시작 바이트 없이 `ID:` 요청만 보낸다. WS·WSS Server의 Mode I 요청도 TCP Server와 같이 `handshake_invalid`다. 요청 250바이트의 형식은 [Repeater 계약](../contracts/repeater-handshake-v1.md)을 따른다.
+- domain 파서는 여섯 `EntryPoint`의 `role()`만 사용한다. TCP는 리스너, WS·WSS는 101 전 경로 검사에서 역할을 정한다. `/relay/server`는 서버로서 시작 바이트 없이 `ID:` 요청만 보낸다. WS·WSS 서버의 Mode I 요청도 TCP 서버와 같이 `handshake_invalid`다. 요청 250바이트의 형식은 [Repeater 계약](../contracts/repeater-handshake-v1.md)을 따른다.
 - 초기 교환 사건은 `EntryPoint`의 `listener()`·`role()`을 사용한다. 전송은 양쪽 역할에 공통인 `session::Transport`로 나타낸다.
 - 업무 용어는 [용어집](../../GLOSSARY.md#중계-방식과-세션)을 따른다. 새 업무 용어를 정하지 않는다.
 
@@ -64,7 +64,7 @@ tokio 금지 항목에는 `allow-invalid = true`를 둔다. 플랫폼 전용 경
 
 ## 3. domain API와 데이터 모델
 
-domain API는 다음과 같다. 공개 상수는 `HANDSHAKE_REQUEST_LEN = 250`과 `VIEWER_GREETING: &[u8; 12]`다. app 서비스는 Viewer 스트림에 시작 바이트를 쓰고 flush한다. TCP·WS·WSS 진입점 모두 이 서비스를 호출한다.
+domain API는 다음과 같다. 공개 상수는 `HANDSHAKE_REQUEST_LEN = 250`과 `VIEWER_GREETING: &[u8; 12]`다. app 서비스는 뷰어 스트림에 시작 바이트를 쓰고 flush한다. TCP·WS·WSS 진입점 모두 이 서비스를 호출한다.
 
 | API | 입력·출력 | 보장 |
 | --- | --- | --- |
@@ -81,7 +81,7 @@ domain API는 다음과 같다. 공개 상수는 `HANDSHAKE_REQUEST_LEN = 250`�
 
 `TargetAddress`는 단일 `IpAddr` 또는 정규화한 DNS 이름과 `u16` 포트다. DNS 이름만 소문자화하고 끝의 점을 지운다. ID에는 이 처리를 하지 않는다. `RelayId`는 검증된 `String`을 소유한다. 요청 읽기 버퍼가 사라진 뒤에도 ID가 살아야 하므로 이 소유용 복사는 필요하다. 요청 전체나 채움 바이트는 결과에 복제하지 않는다. ID와 초기 요청의 `Debug` 출력에는 원문을 넣지 않는다.
 
-`HandshakeError`는 `Incomplete`, `Invalid`, `ModeDisabled(Mode)`를 구분한다. 계약 코드 함수는 각각 `handshake_incomplete`, `handshake_invalid`, `mode_disabled`를 준다. H·I/O·서버 종료는 app의 결과다. domain 오류에 시계나 소켓 오류를 넣지 않는다. 오류의 `Display`는 초기 요청이나 ID를 포함하지 않는다.
+`HandshakeError`는 `Incomplete`, `Invalid`, `ModeDisabled(Mode)`를 구분한다. 계약 코드 함수는 각각 `handshake_incomplete`, `handshake_invalid`, `mode_disabled`를 준다. H·I/O·VNC Relay 종료는 app의 결과다. domain 오류에 시계나 소켓 오류를 넣지 않는다. 오류의 `Display`는 초기 요청이나 ID를 포함하지 않는다.
 
 ### 기존 파서 재사용
 
@@ -103,12 +103,12 @@ domain API는 다음과 같다. 공개 상수는 `HANDSHAKE_REQUEST_LEN = 250`�
 
 1. 250바이트가 모였는지 확인한다.
 2. 첫 NUL 앞의 값을 선택한다. NUL이 없으면 전체를 값으로 쓴다. NUL 뒤는 검사하지 않는다.
-3. Viewer는 빈 값도 모드부터 판정한다. TCP·WS·WSS Server는 `ID:` 접두어를 먼저 검사한다. 빈 값·비접두어는 `handshake_invalid`다. 아래 4~6단계는 이 순서를 따른다.
-4. Viewer는 대문자 `ID:`로 시작하면 Mode II다. 그 밖은 Mode I이다. Server는 `ID:`가 아니면 `handshake_invalid`다.
+3. 뷰어는 빈 값도 모드부터 판정한다. TCP·WS·WSS 서버는 `ID:` 접두어를 먼저 검사한다. 빈 값·비접두어는 `handshake_invalid`다. 아래 4~6단계는 이 순서를 따른다.
+4. 뷰어는 대문자 `ID:`로 시작하면 Mode II다. 그 밖은 Mode I이다. 서버는 `ID:`가 아니면 `handshake_invalid`다.
 5. 판정한 모드가 꺼져 있으면 `mode_disabled`다. 그 모드의 ID·대상 문법은 더 검사하지 않는다. 예를 들어 Mode II가 꺼졌으면 `ID:abc`도 `mode_disabled`다.
 6. 켜진 모드는 ID 또는 Mode I 대상을 검사한다. 기본 포트는 5900이다. 공백·와일드카드·CIDR·주소 범위·포트 범위·대괄호 없는 IPv6를 거절한다.
 
-Viewer의 빈 요청은 Mode I이 꺼졌으면 `mode_disabled`, 켜졌으면 `handshake_invalid`다. Server의 빈 값·비접두어는 항상 `handshake_invalid`다. `ID:`만 있는 값은 Mode II가 꺼졌으면 `mode_disabled`, 켜졌으면 빈 ID라 `handshake_invalid`다.
+뷰어의 빈 요청은 Mode I이 꺼졌으면 `mode_disabled`, 켜졌으면 `handshake_invalid`다. 서버의 빈 값·비접두어는 항상 `handshake_invalid`다. `ID:`만 있는 값은 Mode II가 꺼졌으면 `mode_disabled`, 켜졌으면 빈 ID라 `handshake_invalid`다.
 
 ## 4. app 처리 순서와 H
 
@@ -119,7 +119,7 @@ Viewer의 빈 요청은 Mode I이 꺼졌으면 `mode_disabled`, 켜졌으면 `ha
 | 1 | `src/serve.rs`가 `RelayService`를 조립한다. | 시작 모드, 실행 설정 소스, 공유 `EventSink`·`Clock` |
 | 2 | `net.rs`의 `accept_connections`가 IP → L → `conn_id` → `connection_accepted` → K 순서를 유지한다. | 수락 B/H/U/K, 소켓과 기존 `budget::Permit` 하나 |
 | 3 | TCP·WS·WSS 연결 작업이 `ConnectionContext`와 스트림을 `handle_connection`에 넘긴다. | 실제 상대 주소·수락 시각·초기 교환 진입 시각·수락 B·시작 H와 종료 알림. ticket 업그레이드는 별도 `Option<TicketBinding>`도 넘긴다. TCP는 `None`이다. |
-| 4 | app이 H의 절대 기한을 만든다. ticket에 `sx`가 있으면 단조 세션 만료 기한과 비교한다. Viewer면 즉시 `RFB 000.000\n`을 한 번 쓰고 flush한다. Server에는 쓰지 않는다. | 쓰기·flush와 읽기는 더 이른 기한을 따른다. 두 기한이 같으면 H가 우선한다(구현 판단). 이후 H를 다시 시작하지 않는다. |
+| 4 | app이 H의 절대 기한을 만든다. ticket에 `sx`가 있으면 단조 세션 만료 기한과 비교한다. 뷰어면 즉시 `RFB 000.000\n`을 한 번 쓰고 flush한다. 서버에는 쓰지 않는다. | 쓰기·flush와 읽기는 더 이른 기한을 따른다. 두 기한이 같으면 H가 우선한다(구현 판단). 이후 H를 다시 시작하지 않는다. |
 | 5 | 요청을 읽어 `feed`에 넣는다. 매번 소비 길이와 완료 여부를 확인한다. | 250바이트 미만이면 같은 기한으로 계속 읽는다. |
 | 6 | 250바이트가 H 안에 모였으면 `finish`를 부른다. | 잘못된 값·꺼진 모드는 6절로 간다. 유효 요청이면 H 감시를 끝낸다. |
 | 7 | 결과·스트림·후속 데이터·문맥·`budget::Permit`을 `PreparedConnection<S>`로 묶는다. | `handle_connection`은 유효 요청을 호출자에게 반환한다. 임시 보류·닫기·가짜 인계를 하지 않는다. TCP·WS·WSS 호출자가 `dispatch`를 실행한다([연결 순서](relay-session.md#8-현재-코드와의-차이와-연결-순서)). |
@@ -136,7 +136,7 @@ app은 기존 `Clock` 포트를 재사용한다. `tokio::time::sleep`에는 남�
 
 ## 5. 후속 바이트와 B
 
-`feed`가 소비한 길이까지만 초기 요청이다. 입력의 나머지는 다음 스트림의 앞부분이다. 초기 요청 250바이트는 상대에게 보내지 않는다. 시작 바이트 12바이트도 상대 Server에 전달하지 않는다.
+`feed`가 소비한 길이까지만 초기 요청이다. 입력의 나머지는 다음 스트림의 앞부분이다. 초기 요청 250바이트는 상대에게 보내지 않는다. 시작 바이트 12바이트도 상대 서버에 전달하지 않는다.
 
 - 읽기는 고정 크기 작업 공간을 쓴다. 읽을 수 있는 길이는 남은 요청 길이와 B를 더한 값 이하다. 한 번에 더 읽었어도 초기 요청 뒤의 보존 데이터가 B를 넘지 않는다. 같은 쓰기에 붙었지만 읽지 않은 바이트는 스트림에 남는다.
 - `feed`가 소비하지 않은 슬라이스는 후속 데이터로 보관한다. `PreparedConnection`은 이 데이터와 B를 함께 소유한다. 후속 데이터 조회, 보관한 길이, 남은 B, 연결 요소를 이동하는 API를 제공한다. 호출자가 보관 데이터를 직접 늘리지 못하게 한다.
@@ -160,7 +160,7 @@ app의 일반 tokio 기능은 `time`, `sync`, `io-util`뿐이다. `macros`, `rt`
 | H 만료 | 같은 중단 사건, `reason = handshake_timeout`, `warn` | TCP FIN |
 | H보다 이른 세션 만료 기한 도달 | `connection_aborted`, `stage = initial_exchange`, `reason = session_expired`, `info` | WS·WSS Close 4013 `session_expired`. H와 기한이 같으면 기존 H 만료다. |
 | 시작 바이트 쓰기·flush·요청 읽기 오류 | 같은 중단 사건. typed 오류는 `connection_error`와 원래 `error_kind`를 보존한다. 응답 없는 연결은 `dead_connection`이다. | 해당 연결만 정리 |
-| 서버 종료 알림 | 같은 중단 사건, `reason = server_shutdown`, `info` | 미완성 연결 정리 |
+| VNC Relay 종료 알림 | 같은 중단 사건, `reason = server_shutdown`, `info` | 미완성 연결 정리 |
 | 유효 요청 | 새 성공 사건을 만들지 않는다. | 다음 단계의 등록·연결·세션 사건은 각 작업이 만든다. |
 
 기존 `Event::ConnectionRejected`에는 `conn_id`·`mode`가 없다. 수락 뒤 거절을 나타내는 `Event::HandshakeRejected`를 별도로 쓴다. 이 사건은 `conn_id`, `entry_point`, `peer_ip`, `reason`, `mode: Option<Mode>`를 받는다. JSON 사건 이름은 `connection_rejected`이고 `stage`는 항상 `initial_exchange`다. `RejectReason::HandshakeInvalid`·`ModeDisabled`를 쓴다. `ModeDisabled`일 때 `Some(Mode)`를 주는 책임은 호출자에게 있다. 모드를 확정하지 못했으면 생략한다. `AbortReason::PeerEof`와 `HandshakeTimeout`은 그대로 쓴다. `handshake_incomplete`라는 로그 사유는 쓰지 않는다. 실제 연결에서는 `relay.rs`의 `handle_connection` 실패 경로가 이 사건을 쓴다.

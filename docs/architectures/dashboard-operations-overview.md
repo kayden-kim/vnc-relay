@@ -17,7 +17,7 @@
 
 - SCR-001 운영 현황과 앱 셸은 진입점·관리 세션 확인·언어 선택·로그아웃을 제공한다.
 - SCR-002는 본문·상세 조회·종료 흐름과 해시 라우터를 쓴다. SCR-001 목록 링크는 계약 1.11절의 `/#/sessions/{session_id}`다.
-- 해시(`#/sessions/…`)는 서버로 가지 않는다. 서버는 `/`와 같은 응답을 준다: 세션이 있으면 200 HTML, 없으면 303 `/login/`. 404 JSON이 아니다.
+- 해시(`#/sessions/…`)는 VNC Relay로 가지 않는다. VNC Relay는 `/`와 같은 응답을 준다: 세션이 있으면 200 HTML, 없으면 303 `/login/`. 404 JSON이 아니다.
 - `router.js`는 세션 상세·설정 보기·설정 편집·최근 로그·메트릭·접속 출처 해시를 각 화면으로 보낸다. 그 밖의 해시는 운영 현황으로 보낸다. `#/logs?session_id=…`의 값은 `logs.js`가 API 요청 전에 검사한다.
 - 이 문서가 정하지 않는 것: 관리 API 필드 의미(계약), 화면 문구(스펙 9절), 색과 간격 토큰(DESIGN.md).
 
@@ -41,7 +41,7 @@ web/dashboard/app/
 ├── shell.js           보호 화면의 상단 막대, 언어 선택, 로그아웃 결과 판정
 ├── query.js           DOM 없는 조회 상태와 갱신 타이머
 ├── model.js           응답 검증. 맞지 않으면 invalid
-├── panels.js          서버 요약·연결·목록 카드, 상태 안내, 공유 카드 틀과 갱신
+├── panels.js          VNC Relay 요약·연결·목록 카드, 상태 안내, 공유 카드 틀과 갱신
 ├── api.js             fetch 헤더, 시간 제한, 오류 분류
 ├── format.js          시각, 기간, 바이트, 숫자, 알 수 없는 값
 ├── copy.js            한국어·English 문구. 키는 CPY ID
@@ -67,7 +67,7 @@ web/dashboard/app/
 | `operations.js` | `mountOperations(root, deps)`: 세션 확인(`GET /api/v1/session`), 네 조회 루프, 세대 번호, 로그아웃, 언어 상태 | `request`(fetch 대체), `storage`, `preferredLanguages`, `navigate`(페이지 이동 대체) |
 | `model.js` | 응답 검증: `parseSession`·`parseSummary`·`parseWaiting`·`parseSessions`·`parseClosed`. 맞지 않으면 `invalid` 오류 | 없음 |
 | `api.js` | 요청 헤더, 시간 제한(AbortController), 응답을 `ApiError`의 kind로 분류. 로그아웃은 204만 성공 | `request` 인자로 받음 |
-| `panels.js` | SCR-001 카드 조립: 서버 요약, 연결 카드, 목록 카드 세 개와 목록 상태 안내 | 없음 |
+| `panels.js` | SCR-001 카드 조립: VNC Relay 요약, 연결 카드, 목록 카드 세 개와 목록 상태 안내 | 없음 |
 | `format.js` | 시각·기간·바이트·숫자 표시, 역할·모드·전송 경로 표시 이름 | 없음 (`Intl`과 `Date`만 사용) |
 | `copy.js` | `ko`·`en` 문구 객체. 각 키에 CPY ID 주석 | 없음 |
 | `language.js` | `LANGUAGES`, `chooseLanguage`, `readSavedLanguage`, `saveLanguage` (login과 같은 저장 키). login/language.js는 이 파일의 복사본 | `storage`, `preferredLanguages` |
@@ -82,7 +82,7 @@ web/dashboard/app/
 
 ### 설정 보기·편집
 
-- SCR-004는 v4 계약의 테이블 순서를 유지하며 ticket 키도 `[relay.ticket.viewer]`·`[relay.ticket.server]`로 묶고, 차단 목록 `relay.deny.sources`는 `[relay.deny]` 표에 둔다. SCR-005의 `editableItems`는 allow 6개 → trusted_proxies 2개 → allowed_origins 4개 → 차단 목록 → Mode I 목록 → 상한·제한 시간·연결 유지 → 접속 ticket 순서다. 마지막 구역은 Viewer 다음 Server이며 각 역할의 `enabled`·`issuer`·`relay_host`·`max_lifetime_secs` 순서다. 비활성 진입점의 편집 불가 키와 공개 키 파일 경로는 입력 목록에서 빠진다. 차단 목록은 중계 진입점이 꺼져 있어도 `editable`이면 접근 정책 구역에 입력란이 있다. 라벨은 이름(CPY-319)과 키를 한 줄에 두고, 도움말은 CPY-119 다음 CPY-320이다. 확인 대화상자는 허용 목록·프록시 목록·Origin 목록의 빈 값 경고(CPY-105·183·192)를 각각 고른다. 차단 목록은 빈 값이어도 CPY-105를 쓰지 않는다. 처음 값에 없던 항목 글자가 하나라도 있으면(항목 수가 같아도) 그 키의 변경 항목 안에 CPY-321을 둔다. ticket `enabled`의 false→true 경고(CPY-194)도 그 키의 변경 항목 안에 둔다. 서버 진단 `config_deny_overlaps_proxy`는 CPY-322로 번역한다.
+- SCR-004는 v4 계약의 테이블 순서를 유지하며 ticket 키도 `[relay.ticket.viewer]`·`[relay.ticket.server]`로 묶고, 차단 목록 `relay.deny.sources`는 `[relay.deny]` 표에 둔다. SCR-005의 `editableItems`는 allow 6개 → trusted_proxies 2개 → allowed_origins 4개 → 차단 목록 → Mode I 목록 → 상한·제한 시간·연결 유지 → 접속 ticket 순서다. 마지막 구역은 뷰어 다음 서버이며 각 역할의 `enabled`·`issuer`·`relay_host`·`max_lifetime_secs` 순서다. 비활성 진입점의 편집 불가 키와 공개 키 파일 경로는 입력 목록에서 빠진다. 차단 목록은 중계 진입점이 꺼져 있어도 `editable`이면 접근 정책 구역에 입력란이 있다. 라벨은 이름(CPY-319)과 키를 한 줄에 두고, 도움말은 CPY-119 다음 CPY-320이다. 확인 대화상자는 허용 목록·프록시 목록·Origin 목록의 빈 값 경고(CPY-105·183·192)를 각각 고른다. 차단 목록은 빈 값이어도 CPY-105를 쓰지 않는다. 처음 값에 없던 항목 글자가 하나라도 있으면(항목 수가 같아도) 그 키의 변경 항목 안에 CPY-321을 둔다. ticket `enabled`의 false→true 경고(CPY-194)도 그 키의 변경 항목 안에 둔다. VNC Relay 진단 `config_deny_overlaps_proxy`는 CPY-322로 번역한다.
 
 ## 4. 화면 골격 (SCR-001)
 
@@ -90,7 +90,7 @@ web/dashboard/app/
 - 랜드마크: 상단 막대는 `nav`, 본문은 `main`이다. `nav` 이름은 CPY-078 한국어 "주 메뉴", English "Main menu"다.
 - 페이지 머리말: 제목 "운영 현황"(CPY-004), 줄 "마지막 성공 갱신: {시각}"(CPY-015), [새로고침] 버튼(CPY-008).
 - 상태 안내는 각 목록 카드 맨 위에 둔다(`operations.js`의 `applyChrome`). 머리말 아래 전체 폭 안내는 두지 않는다.
-- 서버 요약 카드(6열): 실행 상태, 가동 시간, 대기 연결 수, 활성 세션 수, 초기 교환 중, Mode I 대상 연결 중. 모바일은 실행 상태·가동 시간을 한 줄 전체 폭, 나머지는 2열이다.
+- VNC Relay 요약 카드(6열): 실행 상태, 가동 시간, 대기 연결 수, 활성 세션 수, 초기 교환 중, Mode I 대상 연결 중. 모바일은 실행 상태·가동 시간을 한 줄 전체 폭, 나머지는 2열이다.
 - 연결 카드 두 개(각 3열): 중계 연결, 관리 연결. `panelCard`는 CPY-032·034를 `createCard({description})`에 넘긴다. 설명은 `.card-head` 제목 아래 `p.card-description`이다. `usageGauge({t, title, usage, kind})`는 고리만 만들며 `note`를 받지 않는다. `createGauge`로 현재 수와 `상한 {n}`(CPY-079)을 보인다. 상한이 없으면 CPY-080 `상한 확인 불가`다.
 - 목록 카드 세 개(전체 폭, 이 순서): 대기 연결(CPY-036), 활성 세션(CPY-039), 최근 종료 목록(CPY-042).
 - 목록 제목 옆 개수는 CPY-084·085다. `operations.js`의 `renderList`는 마지막 성공 응답 `query.data.items.length`를 `applyListCount(slots, count, t)`에 넘긴다. 성공 데이터가 없으면 `count=null`로 배지를 숨긴다. 요약 수를 가져오지 않으므로 독립 갱신·오래된 목록에서도 개수와 표가 같은 응답을 따른다.
@@ -125,7 +125,7 @@ Query = { data,          // 마지막 성공 응답의 값 (없을 수 있음)
 
 - 오래된 데이터와 조회 실패 안내는 `createAlert`, 조회 중·갱신 중 표시는 `createBadge`로 그린다 (`panels.js`의 `statusAlert`·`statusBadge`).
 - 조회 중·갱신 중은 info, 오래된 데이터는 warning, 조회 실패는 destructive다.
-- "조회 중"은 카드 머리, 서버 요약 값(`summaryGrid`), 사용량 고리 가운데, 목록 빈 행 모두 같은 info 배지다. `usageGauge`는 `createGauge`에 `unknownTone: 'info'`를 넘긴다. "확인 불가"는 neutral 배지다.
+- "조회 중"은 카드 머리, VNC Relay 요약 값(`summaryGrid`), 사용량 고리 가운데, 목록 빈 행 모두 같은 info 배지다. `usageGauge`는 `createGauge`에 `unknownTone: 'info'`를 넘긴다. "확인 불가"는 neutral 배지다.
 - SCR-002 첫 조회 중에는 `loadingFactsBlock`이 모드·양쪽 전송 경로·시작 시각·양쪽 소켓 주소의 여섯 줄을 조회 중 배지로 그린다. 전달 주소는 응답 전에는 유무를 모르므로 행을 만들지 않는다. `bytesBlock(t, null)`은 두 방향 이름·표식·정보 배지를 그린다. 첫 조회 실패와 사라진 세션은 값을 그리지 않는다.
 - 페이지 머리말의 "마지막 성공 갱신"은 네 조회의 `lastSuccessAt` 중 가장 최근 값이다 (구현 판단).
 - 개수 배지도 같은 `data`를 따른다. 첫 성공 전에는 숨긴다. 성공한 빈 목록은 0건/0 items다. 갱신 중·실패 때 이전 표를 유지하면 그 개수도 유지한다. 첫 조회 실패를 0건으로 바꾸지 않는다.
@@ -155,7 +155,7 @@ Query = { data,          // 마지막 성공 응답의 값 (없을 수 있음)
 | 2xx지만 JSON이 맞지 않음 | 실패로 처리, 이전 데이터 유지 (구현 판단) | CPY-076 경로 (204 외) | 실패 안내 |
 
 - 이 표는 SCR-001을 다룬다. 로그인은 `web/dashboard/login/`이 맡는다.
-- 로그아웃은 204이면 완료이고 401이면 이미 세션이 없어 정상 이동한다. 그 밖의 응답·응답 없음·시간 초과는 CPY-076 경로다. 403에서도 서버의 관리 세션은 유지되며 Si나 Sa까지 남을 수 있다(계약 1.4.3·2.3절).
+- 로그아웃은 204이면 완료이고 401이면 이미 세션이 없어 정상 이동한다. 그 밖의 응답·응답 없음·시간 초과는 CPY-076 경로다. 403에서도 VNC Relay의 관리 세션은 유지되며 Si나 Sa까지 남을 수 있다(계약 1.4.3·2.3절).
 - 로그아웃 시간 제한은 `app/api.js`의 별도 10초 상수다. `login/login.js`의 `DEFAULT_TIMEOUT_MS`(10000)와 값은 같지만 공유하지 않는다. 세션 응답의 `query_timeout_secs`·`terminate_timeout_secs`는 조회·종료에만 적용한다.
 
 ## 8. 로그아웃 (SCR-001)
@@ -193,14 +193,14 @@ CSRF 토큰은 메모리에만 둔다. 저장소(localStorage, sessionStorage)�
 | `waiting.items[]`: `role`, `relay_id`, `transport`, `address`, `forwarded_ip`, `connected_at`, `waited_ms` | 대기 연결(CPY-036·037·197·199·327·328) | 머리글은 CPY-197이다. `relay_id`는 `.session-id`와 `mobileHead: 'primary'`, 역할은 아이콘 없는 중립 배지와 `'secondary'`다. 역할 글씨는 `roleLabel`이 `viewer`·`server`를 CPY-327·328로 바꾸고 다른 값은 받은 그대로 둔다. 전송도 중립 배지다. `waitingAddressCell`은 레이블 없는 실제 소켓 주소와 값이 있을 때만 CPY-199 전달 주소 줄을 만든다. `addressLine`은 레이블을 값 위에 두며 두 주소 모두 `.fact-address`다. `timeStack`은 `timeParts`의 날짜와 시각·시간대를 폭과 관계없이 두 줄로 쌓는다. 글씨는 `formatTime` 결과다. 빈 목록은 CPY-038이다. |
 | `sessions.items[]`: `session_id`, `mode`, `viewer_transport`, `target_transport`, `started_at`, 방향별 바이트·소켓 주소 | 활성 세션(CPY-039·187) | 링크는 `/#/sessions/${encodeURIComponent(sessionId)}`다. 전송은 뷰어 → 서버 순서의 두 중립 배지다. 주소·바이트 방향을 유지한다. 시작 시각은 `timeStack`이다. `peerCell`은 CPY-056·057과 `addressLine`으로 레이블을 값 위에 두며 두 주소 모두 `.fact-address`다. 빈 목록은 CPY-041이다. |
 | `sessions.items[].state` | 없음 | `closing` 배지를 표시하지 않는다. 머리글은 CPY-187이다. |
-| `closed-sessions.items[]`: `session_id`, `close_cause`, `mode`, `viewer_transport`, `target_transport`, `started_at`, `ended_at`, `duration_ms`, 방향별 바이트, 양 끝 주소·전달 주소 | 최근 종료 목록(CPY-042·043·198·200·201) | 머리글은 CPY-198이며 전송·바이트는 `wrapLabel`로 낱말 사이에서 줄바꿈한다. ID는 `.session-id`·`mobileHead: 'primary'`, 원인 배지는 `'secondary'`다. 원인은 CPY-045~050·083으로 매핑하고 목록 밖 값은 원문이다. `connection_error`·`internal_error`는 destructive, `dead_connection`·`close_timeout`은 warning, 나머지는 neutral이다. 모드·전송은 중립 배지다. `closedTimeCell`은 CPY-055 시작, CPY-200 종료, CPY-201 지속 시간 세 줄이다. `timeLine`의 `timeParts`는 날짜·시각을 `data-table-nowrap` 인라인 블록으로 나눈다. 폭이 되면 날짜는 레이블 옆에, 부족하면 시각부터 다음 줄에 놓인다(`cell-line-flow`). 글씨는 `formatTime` 결과다. 지속 시간은 서버 `duration_ms`이며 시각 차이로 계산하지 않는다. `closedAddressCell`은 뷰어 주소(CPY-056)·뷰어 전달 주소(CPY-180)·서버 주소(CPY-057)·서버 전달 주소(CPY-181) 순서다. null 전달 주소 줄은 없다. 레이블은 `addressLine`으로 값 위에 둔다. `logsLink`의 CPY-182 링크는 `/#/logs?session_id=${encodeURIComponent(sessionId)}`다. 빈 목록은 CPY-044이며 `max_entries`는 표시하지 않는다. |
+| `closed-sessions.items[]`: `session_id`, `close_cause`, `mode`, `viewer_transport`, `target_transport`, `started_at`, `ended_at`, `duration_ms`, 방향별 바이트, 양 끝 주소·전달 주소 | 최근 종료 목록(CPY-042·043·198·200·201) | 머리글은 CPY-198이며 전송·바이트는 `wrapLabel`로 낱말 사이에서 줄바꿈한다. ID는 `.session-id`·`mobileHead: 'primary'`, 원인 배지는 `'secondary'`다. 원인은 CPY-045~050·083으로 매핑하고 목록 밖 값은 원문이다. `connection_error`·`internal_error`는 destructive, `dead_connection`·`close_timeout`은 warning, 나머지는 neutral이다. 모드·전송은 중립 배지다. `closedTimeCell`은 CPY-055 시작, CPY-200 종료, CPY-201 지속 시간 세 줄이다. `timeLine`의 `timeParts`는 날짜·시각을 `data-table-nowrap` 인라인 블록으로 나눈다. 폭이 되면 날짜는 레이블 옆에, 부족하면 시각부터 다음 줄에 놓인다(`cell-line-flow`). 글씨는 `formatTime` 결과다. 지속 시간은 VNC Relay의 `duration_ms`이며 시각 차이로 계산하지 않는다. `closedAddressCell`은 뷰어 주소(CPY-056)·뷰어 전달 주소(CPY-180)·서버 주소(CPY-057)·서버 전달 주소(CPY-181) 순서다. null 전달 주소 줄은 없다. 레이블은 `addressLine`으로 값 위에 둔다. `logsLink`의 CPY-182 링크는 `/#/logs?session_id=${encodeURIComponent(sessionId)}`다. 빈 목록은 CPY-044이며 `max_entries`는 표시하지 않는다. |
 
 - 응답의 `as_of`는 화면에 쓰지 않는다. "마지막 성공 갱신"은 클라이언트가 응답을 적용한 시각이다 (구현 판단).
-- 방향별 바이트는 두 줄이다. 각 줄은 `.direction-mark.direction-mark-1` 또는 `.direction-mark.direction-mark-2`, 흐린 방향 이름, 값 순서다. 표식은 `aria-hidden="true"`인 장식이다. Viewer→대상은 `chart-1`, 대상→Viewer는 `chart-2`다(DESIGN 378·643행).
+- 방향별 바이트는 두 줄이다. 각 줄은 `.direction-mark.direction-mark-1` 또는 `.direction-mark.direction-mark-2`, 흐린 방향 이름, 값 순서다. 표식은 `aria-hidden="true"`인 장식이다. 뷰어→대상은 `chart-1`, 대상→뷰어는 `chart-2`다(DESIGN 378·643행).
 - 활성 세션의 열 이름은 CPY-187이다. [상세] 링크는 `.button.button-outline`과 오른쪽 꺾쇠를 쓴다. 표 안 최소 높이는 데스크톱 `spacing.control-height-sm`, 모바일 `spacing.control-height-touch`다.
 - 역할·모드·전송 경로와 중립 종료 원인 배지는 아이콘이 없다. warning·destructive 종료 원인 배지는 상태 아이콘을 함께 쓴다(DESIGN 608·622~626·636행).
 
-## 11. 정적 제공과 서버 변경
+## 11. 정적 제공과 VNC Relay 변경
 
 - `crates/adapters/src/dashboard_assets.rs`의 `ASSETS`는 정확한 제공 경로를 지정한다. `/`는 `app/index.html`이며 앱 모듈·CSS·공통 조각·글꼴을 `/app/` 아래에 제공한다. `/app/index.html`은 제공하지 않는다.
 - `management_http.rs`의 `static_answer`는 `/`에 세션이 있으면 200 HTML, 없으면 303 `/login/`을 준다.
@@ -210,20 +210,20 @@ CSRF 토큰은 메모리에만 둔다. 저장소(localStorage, sessionStorage)�
 
 ## 12. 시험 설계
 
-### 실서버 브라우저 시험
+### VNC Relay를 사용하는 브라우저 시험
 
 - 시험 전용 CDP(Chrome DevTools Protocol) 클라이언트가 `--remote-debugging-port`로 Chrome·Edge를 조작한다. 루트 개발 의존성 `tokio-tungstenite`·`serde_json`을 쓴다. 외부 드라이버나 새 crate는 필요 없다.
-- `crates/testkit/src/live.rs`는 실제 계정 해시·설정·`vnc-relay serve`·TCP 중계 연결을 준비한다. 시험 서버의 루프백 포트 다섯 개는 예약 소켓으로 고른다. 전달 프록시를 바인드한 뒤 예약을 놓고 `serve`를 시작한다. 놓은 포트를 병렬 시험의 다른 소켓이 먼저 가져가면 `serve`가 `listener_bind_failed`(종료 코드 4)로 끝난다. 이때만 같은 디렉터리에서 그 다섯 포트를 새 포트로 바꿔 최대 두 번 다시 시작한다. 새 포트는 설정 파일에 아직 없는 포트만 쓴다. 실패한 시작이 놓은 포트를 다시 받으면, 포트를 차례로 바꾸는 중에 두 리스너가 같은 포트로 바뀔 수 있기 때문이다. 다른 종료는 시험 실패다. `crates/testkit/src/cdp.rs`는 브라우저 실행·CDP 명령·탐색·DOM 조건 대기를 맡는 공통 클라이언트다. WebSocket 브라우저 시험(`tests/websocket_browser.rs`)도 같은 파일을 쓴다. `crates/testkit/src/dashboard_cdp.rs`는 같은 `Browser`에 입력·클릭·새로고침·화면 폭·로그인 동작을 더한다. `crates/testkit/src/dashboard_proxy.rs`는 전달과 장애 주입을 맡는다. `tests/dashboard_live/main.rs`의 25개 함수가 각각 한 행 전체의 표식을 소유한다. 화면별 본문은 `tests/dashboard_live/{login,overview,detail,cross}.rs`에 둔다. 공통 모듈과 하위 본문에는 표식을 붙이지 않는다.
-- 시험 TCP 프록시는 실제 관리 리스너로 전달한다. 데이터와 쿠키는 서버 원본이다. 지연·응답 유실·연결 종료·계약 모양 500만 시험 쪽에서 주입한다. 요청 시각·동시 처리 수·실제 전달 수·주입 수를 구분하며 주입 오류를 서버 500의 증거로 쓰지 않는다.
+- `crates/testkit/src/live.rs`는 실제 계정 해시·설정·`vnc-relay serve`·TCP 중계 연결을 준비한다. 시험 VNC Relay의 루프백 포트 다섯 개는 예약 소켓으로 고른다. 전달 프록시를 바인드한 뒤 예약을 놓고 `serve`를 시작한다. 놓은 포트를 병렬 시험의 다른 소켓이 먼저 가져가면 `serve`가 `listener_bind_failed`(종료 코드 4)로 끝난다. 이때만 같은 디렉터리에서 그 다섯 포트를 새 포트로 바꿔 최대 두 번 다시 시작한다. 새 포트는 설정 파일에 아직 없는 포트만 쓴다. 실패한 시작이 놓은 포트를 다시 받으면, 포트를 차례로 바꾸는 중에 두 리스너가 같은 포트로 바뀔 수 있기 때문이다. 다른 종료는 시험 실패다. `crates/testkit/src/cdp.rs`는 브라우저 실행·CDP 명령·탐색·DOM 조건 대기를 맡는 공통 클라이언트다. WebSocket 브라우저 시험(`tests/websocket_browser.rs`)도 같은 파일을 쓴다. `crates/testkit/src/dashboard_cdp.rs`는 같은 `Browser`에 입력·클릭·새로고침·화면 폭·로그인 동작을 더한다. `crates/testkit/src/dashboard_proxy.rs`는 전달과 장애 주입을 맡는다. `tests/dashboard_live/main.rs`의 25개 함수가 각각 한 행 전체의 표식을 소유한다. 화면별 본문은 `tests/dashboard_live/{login,overview,detail,cross}.rs`에 둔다. 공통 모듈과 하위 본문에는 표식을 붙이지 않는다.
+- 시험 TCP 프록시는 실제 관리 리스너로 전달한다. 데이터와 쿠키는 VNC Relay 원본이다. 지연·응답 유실·연결 종료·계약 모양 500만 시험 쪽에서 주입한다. 요청 시각·동시 처리 수·실제 전달 수·주입 수를 구분하며 주입 오류를 VNC Relay 500의 증거로 쓰지 않는다.
 - DASH-008은 `Si=300s`를 실제로 기다린다. 독립 쿠키의 운영 현황·상세 브라우저를 동시에 관찰한다. 각 쿠키의 마지막 수동 요청 시각부터 300초 이전에는 실제 401이 없어야 한다. 297초 뒤에도 정상 자동 폴링과 보호된 DOM을 확인한다. 그 뒤 첫 실제 401, 보호 데이터 제거, 로그인 이동과 폴링 중단을 확인한다. 단순히 301초 잠든 뒤 401이 있는지만 검사하지 않는다. CDP 명령마다 제한 시간을 두되 브라우저 전체에 60초 기한을 두지 않는다.
-- `P` 기본값·설정값은 서로 다른 실제 프로세스에서 관찰한다. 긴 응답과 늦은 응답은 프록시의 실제 전송 지연으로 만든다. 시험 페이지의 fetch 교체는 실서버 증거로 세지 않는다.
+- `P` 기본값·설정값은 서로 다른 실제 프로세스에서 관찰한다. 긴 응답과 늦은 응답은 프록시의 실제 전송 지연으로 만든다. 시험 페이지의 fetch 교체는 실제 VNC Relay 동작의 증거로 세지 않는다.
 - 초기 로딩 관찰은 `Fault::Hold`로 실제 응답을 보관한다. 세 응답이 보관 경계에 도달한 뒤 로딩·개수 배지 없음 검사를 마치고 하나의 플래그로 해제한다. 고정 지연 만료와 검사 사이의 경합을 피하기 위한 시험 구성이다. 보관 대기도 기존 LIMIT와 프록시 종료 신호를 따른다. 제품의 제한 시간·응답은 바꾸지 않는다.
 - dump-dom 시험은 빠른 컴포넌트·형식 부분 증거다. DASH-015의 수동 접근성과 DASH-023의 네 브라우저 호환성은 별도로 확인한다.
-- DASH-001·021의 확인 불가 값은 실제 조회 전달 실패로 만든다. 정상 서버의 정수 필드를 null로 위조하지 않는다. DASH-025의 미래 enum 값은 생산자가 낼 수 없는 입력이다. 일반 데이터·탐색은 실제 서버로 확인하고, 미래 값만 실제 브라우저에서 제품 파서·표 컴포넌트에 별도 Consumer 계약 입력으로 준다. 두 언어의 원문 값 보존과 번역된 머리글·행동을 확인한다. 이 입력은 API 응답이나 프록시 본문이 아니다.
+- DASH-001·021의 확인 불가 값은 실제 조회 전달 실패로 만든다. 정상 VNC Relay의 정수 필드를 null로 위조하지 않는다. DASH-025의 미래 enum 값은 생산자가 낼 수 없는 입력이다. 일반 데이터·탐색은 실제 VNC Relay로 확인하고, 미래 값만 실제 브라우저에서 제품 파서·표 컴포넌트에 별도 Consumer 계약 입력으로 준다. 두 언어의 원문 값 보존과 번역된 머리글·행동을 확인한다. 이 입력은 API 응답이나 프록시 본문이 아니다.
 - 한 시험 바이너리 안의 행은 직렬로 실행한다. 서로 다른 행의 브라우저 부하가 폴링 시각 관찰을 흔들지 않게 하기 위해서다. DASH-008의 운영 현황·상세 브라우저 두 개는 같은 행에서 동시에 실행한다.
 - 원시 조회의 관찰 계정은 `bob`, 브라우저 계정은 `alice`다. 역할을 분리하기 위한 시험 구성이다. 같은 계정의 독립 세션을 금지하는 제품 정책은 아니다. 전달 프록시는 `Content-Length`·chunked·본문 없는 상태의 HTTP 프레이밍으로 응답 완료를 판정한다. 완전한 응답을 읽은 뒤 TCP FIN을 추가로 기다리거나, 후속 연결 reset 때문에 그 응답을 폐기하지 않는다.
 - 프록시 accept 루프만 비차단이다. 수락 소켓은 제한 시간이 있는 차단 모드로 바꾼다. Windows는 비차단 모드를 상속하므로 그대로 쓰면 브라우저 사전 연결에서 요청 도착 전 `WouldBlock`(10035)로 소켓을 닫을 수 있다.
-- 실패 진단은 프록시 전송 단계·상태·소요 시간·OS 오류, CDP 네트워크 실패·응답 상태, 서버 사건의 열거 값만 남긴다. 요청·응답 본문, 쿠키·비밀번호·토큰·헤더 값은 출력하지 않는다.
+- 실패 진단은 프록시 전송 단계·상태·소요 시간·OS 오류, CDP 네트워크 실패·응답 상태, VNC Relay 사건의 열거 값만 남긴다. 요청·응답 본문, 쿠키·비밀번호·토큰·헤더 값은 출력하지 않는다.
 
 ### 가짜 응답 시험
 
@@ -232,7 +232,7 @@ CSRF 토큰은 메모리에만 둔다. 저장소(localStorage, sessionStorage)�
 - 세션 상세 시험 페이지: `web/dashboard/tests/session.html`과 `session-scenarios.js`. 가짜 응답으로 사례를 돌리고, 결과는 `data-result`에 쓴다.
 - 라우터 시험 페이지는 `web/dashboard/tests/router.html`·`router-scenarios.js`다. 제품 `mountRouter`와 목록 링크 `href`를 확인하고 같은 해시로 상세와 목록 복귀를 확인한다(DASH-006).
 - SCR-001 부분 사례는 dash-001·002·003·004·005·008·016·019·020·021·022·024·025다. 로그아웃은 성공·확인 못함·403을 포함한다.
-- SCR-002 부분 사례는 dash-006·007·009·010·011·012·013·014·016·019·022·024·025·026이다. DASH-006은 상세 값과 라우터를 나누어 확인한다. DASH-024·025의 SCR-003 부분은 로그인 시험이 맡는다. 가짜 응답 결과는 실서버 증거가 아니다.
+- SCR-002 부분 사례는 dash-006·007·009·010·011·012·013·014·016·019·022·024·025·026이다. DASH-006은 상세 값과 라우터를 나누어 확인한다. DASH-024·025의 SCR-003 부분은 로그인 시험이 맡는다. 가짜 응답 결과는 실제 VNC Relay 동작의 증거가 아니다.
 - 형식 시험은 `0`, `256`, `1536`, `1048575`, `1572864`와 2^53−1을 BigInt 기대값과 비교한다. `JSON.parse('9007199254740993')`가 2^53이며 2^53 이상 2^70 미만의 표시 오차가 한 칸 이내인지 확인한다. 2^70 이상은 시험하지 않는다.
 - `tests/dashboard_browser.rs`: 사례마다 `/// spec: dashboard.md:DASH-0xx` 마커를 붙인다. 마커 표기와 ` partial` 접미사는 `docs/conventions/testing.md` 7절을 따른다.
 - 로그인 쿼리 시험은 `notice=logout-unconfirmed`의 CPY-076, `replaceState` 뒤 쿼리 제거, 다시 로드한 CPY-075, 알 수 없는 쿼리 값의 CPY-075와 제거를 확인한다.
@@ -254,7 +254,7 @@ CSRF 토큰은 메모리에만 둔다. 저장소(localStorage, sessionStorage)�
 - 머리말에는 `목록으로`와 CPY-008 `새로고침`을 둔다. 알림 조치의 재조회는 CPY-014다.
 - 정보 카드 8열과 전송량 카드 4열을 나란히 둔다. 1023.98px 이하에서는 카드와 `.fact` 행이 한 열로 쌓인다. 종료 버튼은 정보 카드 바닥(`card-foot`)이다.
 - 정보는 `dl.fact-list`·`dt`·`dd`로 만들며 주소는 `.fact-address`다. 모드·전송은 아이콘 없는 중립 배지다. `state` 행은 표시하지 않는다.
-- 전송량은 `directionStat`과 `createStat`으로 두 방향을 구분한다. chart-1은 Viewer→대상, chart-2는 대상→Viewer다. 표식은 10px 장식 정사각형이다.
+- 전송량은 `directionStat`과 `createStat`으로 두 방향을 구분한다. chart-1은 뷰어→대상, chart-2는 대상→뷰어다. 표식은 10px 장식 정사각형이다.
 - 종료 버튼은 `cancel` 아이콘을 유지하며 `.button-label`만 갱신한다. 조회 실패 중에는 이전 데이터가 있어도 `canTerminate`가 거짓이다.
 - 대상 없음은 CPY-059 한 문장과 CPY-010 `목록으로` 조치다. 정보 카드 제목은 남고 본문은 비운다. 종료는 비활성이다. 전송량 카드·머리말 새로고침은 숨기며 포커스는 알림의 목록 링크로 옮긴다. 같은 중계 ID의 다른 세션으로 대체하지 않는다.
 - 세션 식별자는 `.session-id`의 데이터 글꼴을 쓴다. 카드 제목은 CPY-081·082다.
@@ -280,7 +280,7 @@ router.js mountRouter → logs.js mountLogs
 - `logs.js`의 `state`는 필터, 정렬한 항목, 펼친 seq 집합, 보관 범위, 마지막 성공 시각과 마지막 확인 seq를 소유한다. `api.js`는 헤더·제한 시간·오류 분류만 맡는다. `parseLogs`는 필수 응답 필드를 검사한다.
 - 첫 성공 전에는 수를 만들지 않는다. 보관 상태는 조회 중 또는 확인 불가 배지다. 시각은 CPY-035다. 실패는 기존 목록과 성공 시각을 유지하며 빈 결과로 바꾸지 않는다.
 - 첫 조회·수동 갱신·필터 변경은 커서 없는 요청이다. `snapshotReady`는 현재 필터의 첫 조회가 성공했는지 나타낸다. 필터 변경은 이 값을 끄고 이전 요청을 중단하며 `epoch`를 올린다. 실패하면 이전 목록·시각은 오래된 값으로 유지한다. 첫 조회가 성공하기 전의 자동 복구도 커서 없이 다시 읽는다. 성공한 새 스냅숏으로 목록을 교체한 뒤에만 증분을 합친다. 세션 필터 해제는 URL에서 그 값만 지우고 수준·사건·적용한 검색을 유지한다.
-- `schedulePoll`은 서버가 준 `pollMs` 뒤에 한 번 실행한다. `fetchInitialLogs({ poll })`가 커서 없는 요청의 출처를 받는다. 자동 재시도·seq 재시작 복구는 `poll: true`로 호출한다. 증분 요청과 이어지는 페이지도 `X-Relay-Poll: 1`을 쓴다. `has_more`가 끝나면 응답의 `latest_seq`까지 확인한 것으로 기록한다. 재시작으로 seq가 작아지면 이전 목록과 커서를 버리고 폴링 표시가 있는 커서 없는 요청으로 다시 읽는다.
+- `schedulePoll`은 VNC Relay가 준 `pollMs` 뒤에 한 번 실행한다. `fetchInitialLogs({ poll })`가 커서 없는 요청의 출처를 받는다. 자동 재시도·seq 재시작 복구는 `poll: true`로 호출한다. 증분 요청과 이어지는 페이지도 `X-Relay-Poll: 1`을 쓴다. `has_more`가 끝나면 응답의 `latest_seq`까지 확인한 것으로 기록한다. 재시작으로 seq가 작아지면 이전 목록과 커서를 버리고 폴링 표시가 있는 커서 없는 요청으로 다시 읽는다.
 - 이전 페이지는 가장 오래된 표시 seq를 `before`로 보낸다. 수집 결과는 seq로 중복을 제거하고 최신 순으로 합친다. 이전 페이지·다운로드 중에는 자동 조회가 겹치지 않는다.
 - `400`·`405` 뒤에는 같은 자동 요청을 반복하지 않는다. `500`·응답 없음은 켜짐 상태에서 다음 주기에 다시 조회한다. `401`·로그아웃·화면 이탈은 `dispose`로 요청·타이머·로그·펼친 상세·다운로드 버퍼와 보호 DOM을 제거한다.
 - 언어 변경·갱신 렌더는 조작 요소 ID·상세 행 ID·링크 목적지로 초점을 복원한다. 검색 버튼에는 안정된 ID를 준다. 입력 선택 범위·작성 중인 검색어·펼친 상세도 유지한다. 표 본문은 라이브 영역이 아니다. 표·행·열·셀 역할과 상세의 `aria-expanded`·`aria-controls`를 명시한다.
@@ -291,11 +291,11 @@ router.js mountRouter → logs.js mountLogs
 
 ### 관련 화면과 시험
 
-- SCR-001의 `panels.js` `transportCell`은 Viewer·대상 중립 배지와 화살표를 조합한다. SCR-002는 `target_transport`와 값이 있는 전달 주소를 따로 표시하고 세션 필터 로그 링크를 만든다. 필수 필드 누락은 응답 형식 오류이며 TCP로 대체하지 않는다.
-- SCR-004는 v4 계약의 테이블 순서를 유지하며 ticket 키도 `[relay.ticket.viewer]`·`[relay.ticket.server]`로 묶는다. SCR-005의 `editableItems`는 allow 6개 → trusted_proxies 2개 → allowed_origins 4개 → Mode I 목록 → 상한·제한 시간·연결 유지 → 접속 ticket 순서다. 마지막 구역은 Viewer 다음 Server이며 각 역할의 `enabled`·`issuer`·`relay_host`·`max_lifetime_secs` 순서다. 비활성 진입점의 편집 불가 키와 공개 키 파일 경로는 입력 목록에서 빠진다. 확인 대화상자는 허용 목록·프록시 목록·Origin 목록의 빈 값 경고(CPY-105·183·192)를 각각 고른다. ticket `enabled`의 false→true 경고(CPY-194)는 그 키의 변경 항목 안에 둔다.
-- `web/dashboard/tests/logs.html`의 `dash-054`~`dash-061`·`dash-063`은 가짜 API 부분 증거다. Rust 실행 함수의 표식은 `partial`이다. 실제 로그 보관·세션 연관 검색·유휴 만료·중계 전송 조합의 전체 증거는 실서버 시험이 맡는다.
-- SCR-006 실서버 실행기는 `tests/dashboard_live/main.rs`의 DASH-054~063 함수다. `logs.rs`는 실제 Repeater 거절·세션 사건과 `GET /api/v1/logs`를 화면과 대조한다. 설정 파일을 잠시 디렉터리로 바꿔 실제 `reload_watch_failed(level=error)`를 만든 뒤 원래 파일을 복구한다. 일반 로그 응답은 만들거나 바꾸지 않는다.
-- `logs_download.rs`는 1000건을 넘는 필터 결과의 모든 페이지를 모은 실제 브라우저 다운로드를 읽는다. CDP `Browser.downloadProgress(state=completed)`까지 기다려 파일 이동·닫힘과 시험의 파일 제거가 경합하지 않게 한다. `logs_states.rs`는 별도 서버의 보관 0·빈 필터 결과·실패와 복구, 실제 300초 유휴 만료를 맡는다.
+- SCR-001의 `panels.js` `transportCell`은 뷰어·대상 중립 배지와 화살표를 조합한다. SCR-002는 `target_transport`와 값이 있는 전달 주소를 따로 표시하고 세션 필터 로그 링크를 만든다. 필수 필드 누락은 응답 형식 오류이며 TCP로 대체하지 않는다.
+- SCR-004는 v4 계약의 테이블 순서를 유지하며 ticket 키도 `[relay.ticket.viewer]`·`[relay.ticket.server]`로 묶는다. SCR-005의 `editableItems`는 allow 6개 → trusted_proxies 2개 → allowed_origins 4개 → Mode I 목록 → 상한·제한 시간·연결 유지 → 접속 ticket 순서다. 마지막 구역은 뷰어 다음 서버이며 각 역할의 `enabled`·`issuer`·`relay_host`·`max_lifetime_secs` 순서다. 비활성 진입점의 편집 불가 키와 공개 키 파일 경로는 입력 목록에서 빠진다. 확인 대화상자는 허용 목록·프록시 목록·Origin 목록의 빈 값 경고(CPY-105·183·192)를 각각 고른다. ticket `enabled`의 false→true 경고(CPY-194)는 그 키의 변경 항목 안에 둔다.
+- `web/dashboard/tests/logs.html`의 `dash-054`~`dash-061`·`dash-063`은 가짜 API 부분 증거다. Rust 실행 함수의 표식은 `partial`이다. 실제 로그 보관·세션 연관 검색·유휴 만료·중계 전송 조합의 전체 증거는 실제 VNC Relay를 사용하는 시험이 맡는다.
+- SCR-006에서 VNC Relay를 사용하는 실행기는 `tests/dashboard_live/main.rs`의 DASH-054~063 함수다. `logs.rs`는 실제 Repeater 거절·세션 사건과 `GET /api/v1/logs`를 화면과 대조한다. 설정 파일을 잠시 디렉터리로 바꿔 실제 `reload_watch_failed(level=error)`를 만든 뒤 원래 파일을 복구한다. 일반 로그 응답은 만들거나 바꾸지 않는다.
+- `logs_download.rs`는 1000건을 넘는 필터 결과의 모든 페이지를 모은 실제 브라우저 다운로드를 읽는다. CDP `Browser.downloadProgress(state=completed)`까지 기다려 파일 이동·닫힘과 시험의 파일 제거가 경합하지 않게 한다. `logs_states.rs`는 별도 VNC Relay의 보관 0·빈 필터 결과·실패와 복구, 실제 300초 유휴 만료를 맡는다.
 - `logs_accessibility.rs`는 1280·390px × ko·en에서 실제 CDP 키 입력으로 조작한다. `transports.rs`는 실제 TCP·WS·WSS와 시험 TLS 인증서로 Mode II 양쪽 9조합과 전달 주소 0·1·2개를 만든다. 활성 목록·상세 대조는 `overview.rs`·`detail.rs`가 제공한다. 자동 결과는 시나리오 보고서, 수동 다른 엔진의 결과와 한계는 [키보드·다른 엔진 확인 기록](../how-to/verify-dashboard-frontend.md#42-키보드다른-엔진-확인-기록)을 따른다.
 - F-C 재현은 같은 페이지의 `shot-<상태>&lang=ko|en`을 쓴다. `loading`, `normal`, `empty`, `disabled`, `failed`, `failed-first`, `invalid-session`, `gap`, `paused`, `session`, `download`, `download-failed`, `refreshing`, `input-error`, `request-rejected`, `expired`를 제공한다. 실제 화면 함수와 공통 CSS를 쓰며 제품에 넣지 않는다.
 
@@ -389,9 +389,9 @@ DESIGN.md가 정한 대로 0이 아닌 값의 막대는 `spacing.chart-stroke`(2
 
 ### 시험
 
-- `web/dashboard/tests/metrics.html`·`metrics-scenarios.js`가 가짜 API로 dash-028·064·068~075·077~081과 최소 막대 크기(`bars`), y축 위쪽 끝(`axis`) 사례를 돌린다. 결과는 `data-result`다. `?case=…&lang=ko|en`을 쓴다. 가짜 응답 결과는 실서버 증거가 아니다. dash-077은 시간이 길어 `dash-077`과 `dash-077-more` 두 사례로 나눈다. `dump-dom`이 가상 시간 10초에서 멈추기 때문이다.
+- `web/dashboard/tests/metrics.html`·`metrics-scenarios.js`가 가짜 API로 dash-028·064·068~075·077~081과 최소 막대 크기(`bars`), y축 위쪽 끝(`axis`) 사례를 돌린다. 결과는 `data-result`다. `?case=…&lang=ko|en`을 쓴다. 가짜 응답 결과는 실제 VNC Relay 동작의 증거가 아니다. dash-077은 시간이 길어 `dash-077`과 `dash-077-more` 두 사례로 나눈다. `dump-dom`이 가상 시간 10초에서 멈추기 때문이다.
 - `tests/dashboard_browser.rs`가 이 사례를 실행하고 마커를 가진다. 가짜 응답이 증명하지 못하는 부분은 마커에 `partial`을 붙인다.
-- `tests/dashboard_live/metrics.rs`는 실제 서버와 프록시로 DASH-068(SCR-005 입력 버림, 진입 요청 모양, 떠난 뒤 자동 조회 중단, 붙잡아 둔 늦은 응답)과 DASH-076(401, 자동 조회의 유휴 만료 비연장)을 확인한다. 두 마커는 `partial`이 아니다.
+- `tests/dashboard_live/metrics.rs`는 실제 VNC Relay와 프록시로 DASH-068(SCR-005 입력 버림, 진입 요청 모양, 떠난 뒤 자동 조회 중단, 붙잡아 둔 늦은 응답)과 DASH-076(401, 자동 조회의 유휴 만료 비연장)을 확인한다. 두 마커는 `partial`이 아니다.
 - F-C 재현은 `metrics.html?case=shot-<상태>&lang=ko|en`이다. `loading`, `collecting`, `normal`, `partial`, `failed`, `failed-first`, `refreshing`, `rejected`를 제공한다. `partial`은 메모리 메트릭이 `available = false`이고 추이 값 일부가 `null`인 상태다. 제품에 넣지 않는다.
 
 ## 18. 접속 출처 (SCR-008)
@@ -448,7 +448,7 @@ router.js mountRouter → sources.js mountSources
 ### 시험
 
 - `web/dashboard/tests/sources.html`·`sources-scenarios.js`·`sources-fixture.js`가 가짜 API로 dash-028·064·082~090을 돌린다. dash-086은 시간이 길어 `dash-086`·`dash-086-more`·`dash-086-rejected`·`dash-086-busy`로, dash-090은 `dash-090`·`dash-090-errors`로 나눈다. 가짜 API는 `config` 인자로 `/api/v1/config` 요청을 받고 요청 순서(`log`)를 남긴다. 차단 목록 서버(`denyServer`)는 목록을 들고 있다가 조회마다 `deny_entries`를 계산하므로, 확인 사이에 목록을 바꾸면 다른 관리자의 변경을 흉내 낸다. `tests/dashboard_browser.rs`의 표식은 `partial`이다.
-- `tests/dashboard_live/sources.rs`는 실제 서버로 DASH-082 전체(메뉴 순서, SCR-005 입력 버림, 진입 요청 모양, 떠난 뒤 자동 조회 중단, 늦은 응답, 돌아오면 최근 1시간, 세션 없는 직접 진입)를 확인한다. 생성한 MMDB와 신뢰 프록시 뒤 WebSocket 클라이언트로 DASH-083~085 일부도 확인한다. 같은 파일의 차단 시험은 실제 설정 파일 변경, 차단된 주소의 연결 거절, 범위 항목과 편집 꺼짐 표시, SCR-005 차단 목록 입력(DASH-091), 차단으로 끊긴 세션의 `ip_denied` 표시(DASH-020)를 확인한다.
+- `tests/dashboard_live/sources.rs`는 실제 VNC Relay로 DASH-082 전체(메뉴 순서, SCR-005 입력 버림, 진입 요청 모양, 떠난 뒤 자동 조회 중단, 늦은 응답, 돌아오면 최근 1시간, 세션 없는 직접 진입)를 확인한다. 생성한 MMDB와 신뢰 프록시 뒤 WebSocket 클라이언트로 DASH-083~085 일부도 확인한다. 같은 파일의 차단 시험은 실제 설정 파일 변경, 차단된 주소의 연결 거절, 범위 항목과 편집 꺼짐 표시, SCR-005 차단 목록 입력(DASH-091), 차단으로 끊긴 세션의 `ip_denied` 표시(DASH-020)를 확인한다.
 - F-C 재현은 `sources.html?case=shot-<상태>&lang=ko|en`이다. `loading`, `normal`, `empty`, `db-mixed`, `db-failed`, `storage-limit`, `refreshing`, `failed`, `failed-first`, `rejected`를 제공한다. 주소·ASN 표는 시안처럼 7행이다. 차단 화면은 `shot-deny-editable`, `deny-edit-off`, `deny-block-dialog`, `deny-unblock-dialog`, `deny-busy`, `deny-success`, `deny-unblock-success`, `deny-conflict`, `deny-file-state`, `deny-invalid`, `deny-request-failed`, `deny-read-failed`, `deny-unknown`, `deny-edit-disabled`, `deny-nothing`이다. 제품에 넣지 않는다.
 
 ## 15. 열린 항목
@@ -466,7 +466,7 @@ router.js mountRouter → sources.js mountSources
 | 2026-11-17 | `9d43e3e`의 대기·활성·최근 종료 표 | Windows의 에이전트 조작 Chromium 탭. 버전은 원 기록에 없다. | `cargo xtask dashboard-serve`의 제품 화면과 파일 시안을 1280·1100·1024·1023·768·390·320px × ko·en으로 대조했다. | 가로 넘침 0건. 대기·활성 시각은 날짜와 시각·시간대 두 줄이며 주소 레이블은 값 위에 있다. 범위별 실제 결과와 허용 차이는 [시각 대조 기록](../how-to/verify-dashboard-frontend.md#41-시각-대조-기록)을 따른다. |
 | 2026-11-19 | `metrics.js`·`metrics-model.js`·`app.css`의 SCR-007 구현 | Windows 10.0.26200 x64, Chrome 157.0.8103.79, 에이전트 조작 탭 | 이 문서 17절의 규칙과 시안 SCR-007 프레임의 마크업·CSS를 코드와 비교했다. `cargo xtask dashboard-serve`의 시험 페이지와 시안 값의 가짜 API로 화면을 시안과 대조했다. | 남은 차이는 제목 단계(h2·h3), 조회 중의 핸들 행 생략, 클래스 이름(시안 `xfer`·`kv`는 `kpi-xfer`·`kv-list`)이다. 외부 수집 안내 아이콘은 구현을, 빈 원인 표 정렬과 모바일 배지 폭은 시안을 고쳤다. 폭별 결과는 [시각 대조 기록](../how-to/verify-dashboard-frontend.md#41-시각-대조-기록)을 따른다. |
 | 2026-11-20 | `sources.js`·`sources-model.js`·`app.css`의 SCR-008 구현 | Windows 10.0.26200 x64, Chrome, CDP 기기 크기 지정 | `sources.html?case=shot-<상태>`를 1280·1024·390·320px × ko·en(80장)으로 찍어 채택 시안 그림(`target/scr008-shots/`)과 대조했다. | 가로 넘침 0건, 콘솔 오류 0건. 남은 차이는 제목 단계(h1·h2·h3), 시험 값, 표 개수 배지의 표시 행 수(시안은 7행에 "상위 100개")다. |
-| 2026-11-23 | `sources.js`·`sources-deny.js`·`settings.js`·`app.css`의 주소 차단 구현 | Windows 10.0.26200 x64, Chrome 157.0.8103.79 헤드리스, CDP 기기 크기 지정 | `sources.html?case=shot-deny-<상태>`·`settings.html?case=shot-scr005-deny-<상태>`를 1280·390px × ko·en으로 찍어 채택 시안 프레임과 대조했다. 가로 넘침은 1280~320px에서 쟀다. | 가로 넘침 0건. 구현을 고친 차이는 행 버튼 안쪽 여백(16px → 시안 12px) 한 건이다. 남은 차이는 중립 알림 아이콘, 설정 확인의 세로 배치, 서버 진단 키 줄 생략이다. 자세한 내용은 [시각 대조 기록](../how-to/verify-dashboard-frontend.md#41-시각-대조-기록)을 따른다. |
+| 2026-11-23 | `sources.js`·`sources-deny.js`·`settings.js`·`app.css`의 주소 차단 구현 | Windows 10.0.26200 x64, Chrome 157.0.8103.79 헤드리스, CDP 기기 크기 지정 | `sources.html?case=shot-deny-<상태>`·`settings.html?case=shot-scr005-deny-<상태>`를 1280·390px × ko·en으로 찍어 채택 시안 프레임과 대조했다. 가로 넘침은 1280~320px에서 쟀다. | 가로 넘침 0건. 구현을 고친 차이는 행 버튼 안쪽 여백(16px → 시안 12px) 한 건이다. 남은 차이는 중립 알림 아이콘, 설정 확인의 세로 배치, VNC Relay 진단 키 줄 생략이다. 자세한 내용은 [시각 대조 기록](../how-to/verify-dashboard-frontend.md#41-시각-대조-기록)을 따른다. |
 
 전체 화면 시안 대조·개수 배지·도움말 링크의 최신 기록도 같은 시각 대조 표에서 관리한다. 키보드·다른 엔진의 수동 결과는 [별도 기록](../how-to/verify-dashboard-frontend.md#42-키보드다른-엔진-확인-기록)을 따른다.
 

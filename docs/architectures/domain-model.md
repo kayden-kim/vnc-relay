@@ -308,7 +308,7 @@ classDiagram
 
 | 용어 | 종류 | 코드 심볼 | 파일 | 다른 레이어의 표현 |
 | --- | --- | --- | --- | --- |
-| [관리자 종료·세션 만료·서버 종료](../../GLOSSARY.md) | 구분 없음 | `CloseCause::AdminTerminated` `CloseCause::SessionExpired` `CloseCause::ServerShutdown`. [2.1절](#21-중계-핵심)의 종료 원인 행과 같다 | `crates/domain/src/session.rs` | 문자열 `admin_terminated` `session_expired` `server_shutdown` |
+| [관리자 종료·세션 만료·VNC Relay 종료](../../GLOSSARY.md) | 구분 없음 | `CloseCause::AdminTerminated` `CloseCause::SessionExpired` `CloseCause::ServerShutdown`. [2.1절](#21-중계-핵심)의 종료 원인 행과 같다 | `crates/domain/src/session.rs` | 문자열 `admin_terminated` `session_expired` `server_shutdown` |
 | [최근 종료 목록(recent_closed)](../../GLOSSARY.md) | 구분 없음 | `recent_closed::List`(`entries`, 최대 개수 `max_entries`), `ClosedSession`. 응답용 요약은 `ClosedSessionSnapshot`, 끝점 주소는 `ClosedMetadata`가 따로 보관한다 | `crates/domain/src/recent_closed.rs`, `crates/domain/src/session.rs`, `crates/app/src/relay.rs` | 설정 `[recent_closed] max_entries`, 관리 조회 [관리 API 계약 1.10절](../contracts/management-api-v1.md) |
 | [운영 로그(log)](../../GLOSSARY.md) | 구분 없음 | 전용 도메인 타입 없음(출력 형식). `JsonLinesEventSink`, `LogEntry`, `format_line`이 한 줄 JSON을 만든다 | `crates/adapters/src/ops_log.rs` | JSON Lines 필드 `ts` `level` `event`, 계약 [운영 정보 계약](../contracts/ops-info-v2.md) |
 | [최근 로그(recent_logs)](../../GLOSSARY.md) | 구분 없음 | `RecentLogs`, `RecentLogItem`(`seq`, `entry`), 조회 `LogsFilter` `LogsResponse`. 앱 계층이 아니라 어댑터에 있다 | `crates/adapters/src/ops_log.rs` | 설정 `[recent_logs] max_entries`, `GET /api/v1/logs` |
@@ -354,7 +354,7 @@ classDiagram
 | --- | --- | --- | --- | --- |
 | `RelayId` → 점유(대기·짝 맞춤·세션) | 0..1 | 맵. 한 중계 ID에 점유 하나 | `crates/domain/src/matching.rs` `WaitingTable.entries: HashMap<RelayId, IdOccupancy>` | [중계 2.2절](../specs/relay.md#22-업무-관계)의 중계 ID 두 관계, RLY-R10·RLY-R20 |
 | `RelayId` → `WaitingConnection` | 0..1 | 맵 | `crates/app/src/relay.rs` `relay::State.waiting` | 같은 표의 중계 ID → 대기 연결 |
-| `IdOccupancy::Session` → 두 연결 | 2 (Viewer 1, Server 1) | 연결 식별자 필드 둘 | `crates/domain/src/matching.rs` `IdOccupancy::Session { viewer_conn_id, server_conn_id }` | [중계 2.2절](../specs/relay.md#22-업무-관계)의 활성 세션 → 연결과 연결 → 활성 세션, RLY-R08 |
+| `IdOccupancy::Session` → 두 연결 | 2 (뷰어 1, 서버 1) | 연결 식별자 필드 둘 | `crates/domain/src/matching.rs` `IdOccupancy::Session { viewer_conn_id, server_conn_id }` | [중계 2.2절](../specs/relay.md#22-업무-관계)의 활성 세션 → 연결과 연결 → 활성 세션, RLY-R08 |
 | `session::Id` → 실행 중 세션 요약 | 1:1 | 맵 | `crates/app/src/relay.rs` `relay::State.active: HashMap<session::Id, ActiveSessionSnapshot>` | [중계 2.2절](../specs/relay.md#22-업무-관계)의 활성 세션 → 세션 식별자, RLY-R11 |
 | `Session` → `CloseCause` | 0..1 (정리 전), 1 (정리 뒤) | `Session.close_cause`는 `Option`, `ClosedSession.close_cause`는 값 하나 | `crates/domain/src/session.rs` `Session` `ClosedSession` | [관리 2.7절](../specs/management.md#27-업무-관계)의 활성 세션 → 종료 원인, MGT-R39 |
 | `PreparedConnection` → `TicketBinding` | 0..1 | `Option` | `crates/app/src/relay.rs` `PreparedConnection.ticket` | [WS·WSS 2.1절](../specs/websocket.md#21-업무-관계)의 역할 → ticket 설정, WS-R20 |

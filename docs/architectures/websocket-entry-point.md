@@ -1,7 +1,7 @@
 # WebSocket 진입점 모듈 설계
 
 
-이 문서는 공유 WS·WSS 리스너가 Viewer·Server 접속을 받은 뒤의 흐름을 다룬다. 접속을 받고, 켜진 역할 허용 목록의 합집합과 L을 거치고, TLS(WSS)를 협상한다. HTTP 경로로 역할을 정한 뒤 역할별 Origin·서브프로토콜·ticket·IP를 검사하고 101 응답을 보낸다. 101 뒤는 WS 스트림과 공통 서비스가 맡는다. 수락 반복은 TCP와 같은 `accept_connections`다.
+이 문서는 공유 WS·WSS 리스너가 뷰어·서버 접속을 받은 뒤의 흐름을 다룬다. 접속을 받고, 켜진 역할 허용 목록의 합집합과 L을 거치고, TLS(WSS)를 협상한다. HTTP 경로로 역할을 정한 뒤 역할별 Origin·서브프로토콜·ticket·IP를 검사하고 101 응답을 보낸다. 101 뒤는 WS 스트림과 공통 서비스가 맡는다. 수락 반복은 TCP와 같은 `accept_connections`다.
 
 101 뒤 연결은 `connection`이 `WsRelayStream`으로 감싸 공통 서비스(`handle_connection` → `dispatch`)에 넘긴다. H는 101 응답 전송 완료 시각(`ConnectionContext.exchange_at`)부터 잰다. 머리 뒤 바이트는 `suffix`로 보존한다.
 
@@ -26,7 +26,7 @@
   - 업그레이드 요청의 머리를 U 안에 읽고 `check`로 검사한다. 거절하면 사건을 쓰고 HTTP 거절 응답을 보낸 뒤 닫는다.
   - 업그레이드 경로로 켜진 역할을 정한다. 신뢰 프록시 연결이면 전달 주소를 판정한다. 역할별 Origin·서브프로토콜·ticket·클라이언트 주소 IP 순서로 검사한다. 재로드는 새 검사부터 적용한다.
   - 통과하면 `101 Switching Protocols`를 보낸다.
-  - 101 뒤에는 `WsRelayStream`으로 감싸 공통 서비스에 넘긴다. H는 101 응답 뒤 `exchange_at`부터 잰다. 상대 종료·서버 멈춤의 Close 처리는 [WS 스트림 어댑터 설계](websocket-stream.md)와 [세션 설계](relay-session.md)가 맡는다.
+  - 101 뒤에는 `WsRelayStream`으로 감싸 공통 서비스에 넘긴다. H는 101 응답 뒤 `exchange_at`부터 잰다. 상대 종료·VNC Relay 멈춤의 Close 처리는 [WS 스트림 어댑터 설계](websocket-stream.md)와 [세션 설계](relay-session.md)가 맡는다.
 - 맡지 않는 책임:
   - 101 뒤의 프레임 읽기·쓰기와 Repeater 초기 교환(공통 서비스와 WS 스트림 어댑터가 맡는다).
   - TLS 설정 읽기, 인증서 적재, TLS 1.2 판정 규칙([TLS 모듈 설계](tls.md)).
@@ -39,7 +39,7 @@
 
 ## 2. 내부 구조
 
-수락·TLS·경로 판정 전에는 역할이 없다. `upgrade.rs`의 `VIEWER_PATH`는 `/relay/viewer`다. `/relay/server`는 Server이며 Mode II 요청만 받고 시작 바이트를 보내지 않는다. 꺼진 역할이나 다른 경로는 404 `invalid_upgrade`다.
+수락·TLS·경로 판정 전에는 역할이 없다. `upgrade.rs`의 `VIEWER_PATH`는 `/relay/viewer`다. `/relay/server`는 서버이며 Mode II 요청만 받고 시작 바이트를 보내지 않는다. 꺼진 역할이나 다른 경로는 404 `invalid_upgrade`다.
 
 신뢰 프록시의 `X-Forwarded-For`는 오른쪽부터 검사한다. 헤더가 없거나 비었거나 검사 중 잘못된 요소가 있거나 모든 요소가 신뢰 프록시면 400 `forwarded_for_invalid`다. 비신뢰 상대의 헤더는 무시한다. 역할 allow는 클라이언트 주소를 검사한다. 전달 주소는 `ConnectionContext`와 사건의 `forwarded_ip`로 넘긴다.
 
@@ -106,7 +106,7 @@ flowchart LR
 | 8 | `upgrade.rs` `check` | 아래 검사 순서를 따른다. 신뢰 프록시의 전달 주소를 판정한다. 실패는 `Refusal`이다. | 없음 | 거절이면 `refuse`, 통과면 9 |
 | 9 | `websocket.rs` `check_upgrade` | 역할의 ticket이 켜졌으면 ticket을 확인한다. 실패는 401과 `WWW-Authenticate: VncRelayTicket`이다. 이어 역할의 `allow`로 클라이언트 주소를 재검사한다. 실패는 role이 있는 403 `ip_not_allowed`다. 통과하면 사용 기록을 원자적으로 쓴다. 이미 쓴 ticket은 401 `ticket_reused`다. Origin·ticket·IP·M/Kw는 같은 현재 설정 callback에서 읽는다. | 선택한 role, ticket 사용 기록 | 10 또는 거절 |
 | 10 | `websocket.rs` `upgrade`, `upgrade.rs` `switching_protocols` | ticket 확인 성공이면 `ticket_accepted`를 먼저 쓴다. 기존 U 재확인 뒤 101 응답을 쓰고 flush한다. 응답 서브프로토콜은 `binary`뿐이다. | 연결 상태 `Switched` | 11 |
-| 11 | `websocket.rs` `connection` | 101 뒤 `WsRelayStream`을 만들고 `EntryPoint::from_parts(listener, role)`과 `exchange_at`을 `ConnectionContext`에 담는다. ticket의 `jti`·`rid`·단조 세션 만료 기한은 별도 `TicketBinding`으로 넘긴다. | Viewer 또는 Server의 공통 서비스 연결 하나 | 12 |
+| 11 | `websocket.rs` `connection` | 101 뒤 `WsRelayStream`을 만들고 `EntryPoint::from_parts(listener, role)`과 `exchange_at`을 `ConnectionContext`에 담는다. ticket의 `jti`·`rid`·단조 세션 만료 기한은 별도 `TicketBinding`으로 넘긴다. | 뷰어 또는 서버의 공통 서비스 연결 하나 | 12 |
 | 12 | `app` `RelayService::handle_connection` | 초기 교환 H는 `exchange_at`부터 잰다. ticket의 세션 만료 기한이 더 이르면 그 기한을 쓴다. 실패는 사유에 맞는 close action과 사건으로 끝난다. 전송과 자리를 돌려준 뒤 사건을 쓴다. | 없음 | 운영 로그 |
 
 거절 경로는 `refuse`가 맡는다. `connection_rejected`(`stage` = `upgrade`, `conn_id` 있음)를 먼저 쓰고, 거절 응답을 최선으로 보낸 뒤 닫는다. 연결 중단은 `connection`이 맡는다. 전송과 자리를 돌려준 뒤 `connection_aborted`를 쓴다. 이 순서는 [TCP 진입점 모듈 설계 4절](tcp-entry-point.md#4-처리-순서)과 같다.
@@ -116,7 +116,7 @@ flowchart LR
 `check`는 아래 순서로 본다. 처음 실패한 항목이 응답을 정한다.
 
 1. 요청 줄과 헤더 줄의 구문. 요청 줄은 세 부분이어야 하고, 제어 문자가 없어야 한다. 헤더 이름은 토큰이어야 하고, 헤더 값에는 제어 문자가 없어야 한다. 실패는 `Invalid`(400).
-2. 쿼리를 뺀 경로가 정확히 `/relay/viewer` 또는 `/relay/server`이고 해당 역할이 켜졌는가. 실패는 `NotFound`(404)이며 role은 없다. 통과하면 role을 보관한다. 끝의 `/`는 다른 경로다. 1.x의 Viewer 경로 `/relay`도 `NotFound`다.
+2. 쿼리를 뺀 경로가 정확히 `/relay/viewer` 또는 `/relay/server`이고 해당 역할이 켜졌는가. 실패는 `NotFound`(404)이며 role은 없다. 통과하면 role을 보관한다. 끝의 `/`는 다른 경로다. 1.x의 뷰어 경로 `/relay`도 `NotFound`다.
 3. 메서드가 GET인가. 실패는 `MethodNotAllowed`(405).
 4. HTTP 버전이 1.1 이상인가. 실패는 `Invalid`(400).
 5. `Host`가 있고, `Upgrade`가 `websocket`이며, `Connection`에 `upgrade` 토큰이 있는가. 실패는 `Invalid`(400).
@@ -158,8 +158,8 @@ flowchart LR
 | 머리 읽기 중 상대가 U 안에 먼저 닫음 | `connection_aborted`(`peer_eof`)를 쓴다. `stage`는 TLS 중이면 `tls`, 아니면 `upgrade`다. | 없음 | 단위 테스트 `read_head_reports_a_closed_peer`(읽기 결과만). 사건 테스트 없음 |
 | 그 밖의 전송 I/O 오류 | `connection_aborted`(`connection_error`, `error_kind` = `io_error`)를 쓴다. TLS 버전 거절이면 줄을 더 쓰지 않는다. | 없음 | 테스트 없음 |
 | 101 뒤 H 만료 | 공통 `handle_connection`이 `HandshakeTimeout`을 내고, `websocket_stream.rs`가 Close 4009(`handshake_timeout`)로 보낸다. 사건은 `connection_aborted`(`stage` = `initial_exchange`, `handshake_timeout`). | 없음 | 테스트 없음(WS 경로) |
-| 101 뒤 서버 멈춤 | Close 1001(`server_shutdown`)을 보내고 `connection_aborted`(`server_shutdown`)를 쓴다. | 없음 | 테스트 없음(WS 경로) |
-| 101 전 서버 멈춤 | 응답 없이 닫고 `connection_aborted`(`server_shutdown`)를 쓴다. | 없음 | WebSocket 계약 2.1절 |
+| 101 뒤 VNC Relay 멈춤 | Close 1001(`server_shutdown`)을 보내고 `connection_aborted`(`server_shutdown`)를 쓴다. | 없음 | 테스트 없음(WS 경로) |
+| 101 전 VNC Relay 멈춤 | 응답 없이 닫고 `connection_aborted`(`server_shutdown`)를 쓴다. | 없음 | WebSocket 계약 2.1절 |
 
 ## 7. 설계 선택
 
@@ -179,7 +179,7 @@ flowchart LR
 | 거절 사건을 응답보다 먼저 쓴다. | 응답 쓰기가 실패해도 거절 사건이 남는다. | 응답 뒤에 쓰기 | 구현 판단. [TCP 진입점 모듈 설계 4절](tcp-entry-point.md#4-처리-순서)과 같은 방식. |
 | 거절 사건의 `origin`은 256바이트까지 쓰고 문자 경계에서 자른다. 자르기 전 원문은 `Refusal::OriginNotAllowed`에 남는다. | 운영 정보 계약 1.1절이 `origin`의 길이를 256바이트로 정했다. | 상한 없이 원문 쓰기, 정규화된 값만 쓰기 | 운영 정보 계약 1.1절 기준. 원문을 `Refusal`에 남기는 방식은 구현 판단. |
 | 서브프로토콜 토큰을 제시했으면 `binary`가 있어야 한다. 없으면 400이다. | Repeater 초기 교환은 바이너리 프레임으로 가정한다. 계약 1.2절이 서브프로토콜 응답을 정한다. | 서브프로토콜 없이 받기, 426으로 거절하기 | [WebSocket 계약 1.2절](../contracts/websocket-relay-v2.md#12-업그레이드-응답과-서브프로토콜). |
-| 서버 멈춤 Close는 1001(`CloseCode::Away`), H 만료는 4009다. | 계약 1.5절의 코드 뜻과 맞춘다. | 다른 코드 | [WebSocket 계약 1.5절](../contracts/websocket-relay-v2.md#15-close-코드) |
+| VNC Relay 멈춤 Close는 1001(`CloseCode::Away`), H 만료는 4009다. | 계약 1.5절의 코드 뜻과 맞춘다. | 다른 코드 | [WebSocket 계약 1.5절](../contracts/websocket-relay-v2.md#15-close-코드) |
 | 평문 WS 시작 경고는 설정 검사가 만든다. | 설정이 평문 WS를 켰는지는 설정 단계에서만 알 수 있다. | 접수 때마다 경고 | 구현 판단. [운영 스펙 OPS-016](../specs/operations.md#7-수용-테스트)·WS-024. |
 
 ## 대조 기록

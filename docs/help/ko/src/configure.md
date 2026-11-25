@@ -4,7 +4,7 @@
 
 ## 설정 파일 읽기
 
-설정은 UTF-8 TOML 파일 하나로 관리한다. 서버를 시작할 때 `--config`로 파일을 지정한다. 설정용 환경 변수나 명령행 값 덮어쓰기는 없다.
+설정은 UTF-8 TOML 파일 하나로 관리한다. VNC Relay를 시작할 때 `--config`로 파일을 지정한다. 설정용 환경 변수나 명령행 값 덮어쓰기는 없다.
 
 상대 경로는 실행 위치가 아니라 설정 파일이 있는 디렉터리를 기준으로 한다. Windows 경로는 `/` 또는 TOML 작은따옴표 문자열을 쓰기를 권장한다. 시간은 정수 초, 크기는 정수 바이트로 적는다. 알 수 없는 키나 잘못된 자료형은 오류다.
 
@@ -125,7 +125,7 @@ allowed_origins = ["https://viewer.example.test"]
 
 WSS 역할을 하나라도 켜면 `[relay.wss]`에 `cert_file`과 `key_file`이 모두 있어야 한다. 관리 HTTPS도 `[management]`에 같은 두 키를 쓴다.
 
-`cert_file`은 PEM 인증서 체인이다. 첫 인증서는 서버 인증서이고, 뒤에 중간 인증서를 둔다. `key_file`은 그 인증서와 맞는 PEM 개인키다. PKCS#8을 권장한다. 개인키 내용은 설정 파일에 넣지 않는다. 서버 실행 계정만 읽도록 권한을 제한하기를 권장한다. 파일 형식은 [설정 계약 1.9절](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/config-v4.md)을 따른다.
+`cert_file`은 PEM 인증서 체인이다. 첫 인증서는 서버 인증서이고, 뒤에 중간 인증서를 둔다. `key_file`은 그 인증서와 맞는 PEM 개인키다. PKCS#8을 권장한다. 개인키 내용은 설정 파일에 넣지 않는다. VNC Relay 실행 계정만 읽도록 권한을 제한하기를 권장한다. 파일 형식은 [설정 계약 1.9절](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/config-v4.md)을 따른다.
 
 중계 WS·WSS 앞에서 프록시가 TLS를 종료할 수 있다. 해당 리스너의 `trusted_proxies`에는 프록시 IP만 넣어야 한다. 클라이언트 범위를 넣으면 안 된다. 문법은 `allow`와 같다. 빈 목록이면 전달 헤더를 신뢰하지 않는다.
 
@@ -167,7 +167,7 @@ IP로 지정한 대상은 IP·포트 항목과 일치해야 한다. DNS 이름�
 
 상태 리스너는 평문 HTTP로 `/livez`와 `/readyz`를 제공한다. 인증은 없다. 세션·중계 ID·상대 주소는 응답하지 않는다. 루프백을 쓰기를 권장한다. 배포 예시는 관리 `127.0.0.1:18080`, 상태 `127.0.0.1:18081`을 쓴다. 기본 주소를 뜻하지 않는다.
 
-`[metrics] enabled = true`이면 상태 리스너에 `GET /metrics`도 제공한다. 기본은 `false`이며 꺼져 있으면 404다. 바꾸려면 외부 편집기로 설정 파일을 고치고 서버를 재시작해야 한다. 재로드나 동적 설정 편집 대상은 아니다. 대시보드와 관리 API의 메트릭은 이 값과 관계없이 로그인 뒤 쓸 수 있다. 상태 리스너를 외부에서 읽어야 하면 모니터링 네트워크에서만 접근하도록 제한한다. 수집 설정 예시는 [운영의 메트릭 수집](operate.md#메트릭-수집)을 따른다.
+`[metrics] enabled = true`이면 상태 리스너에 `GET /metrics`도 제공한다. 기본은 `false`이며 꺼져 있으면 404다. 바꾸려면 외부 편집기로 설정 파일을 고치고 VNC Relay를 재시작해야 한다. 재로드나 동적 설정 편집 대상은 아니다. 대시보드와 관리 API의 메트릭은 이 값과 관계없이 로그인 뒤 쓸 수 있다. 상태 리스너를 외부에서 읽어야 하면 모니터링 네트워크에서만 접근하도록 제한한다. 수집 설정 예시는 [운영의 메트릭 수집](operate.md#메트릭-수집)을 따른다.
 
 `log.output`은 `"stdout"` 또는 파일 경로다. 기본값은 `"stdout"`이다. 운영 로그는 JSON Lines다. 파일에는 이어 쓴다. 운영자가 파일을 교체하면 같은 경로를 다시 연다. 회전과 장기 보관은 운영자 책임이다.
 
@@ -184,13 +184,13 @@ IP로 지정한 대상은 IP·포트 항목과 일치해야 한다. DNS 이름�
 | `ip_info.country_db` | 국가를 찾을 MMDB 파일 경로 |
 | `ip_info.asn_db` | ASN을 찾을 MMDB 파일 경로. `country_db`와 같은 경로여도 된다 |
 
-상대 경로는 설정 파일의 디렉터리를 기준으로 푼다. 빈 문자열은 `config_value_out_of_range`, 문자열이 아닌 값은 `config_type_mismatch`로 시작을 거절한다. 파일이 없거나 형식이 맞지 않는 것은 설정 오류가 아니다. 서버는 경고 `ip_db_unavailable`을 남기고 그 정보 없이 시작한다.
+상대 경로는 설정 파일의 디렉터리를 기준으로 푼다. 빈 문자열은 `config_value_out_of_range`, 문자열이 아닌 값은 `config_type_mismatch`로 시작을 거절한다. 파일이 없거나 형식이 맞지 않는 것은 설정 오류가 아니다. VNC Relay는 경고 `ip_db_unavailable`을 남기고 그 정보 없이 시작한다.
 
 경로를 바꾸면 재시작해야 한다. 대시보드에서 편집할 수 없고 "설정 보기"에만 나온다. 같은 경로의 파일 내용을 바꾸면 재시작 없이 다시 읽는다. 지원하는 제공자, 파일 준비와 갱신 절차는 [운영의 IP 정보 DB 준비와 갱신](operate.md#ip-정보-db-준비와-갱신)을 따른다. 파일 형식 규칙은 [설정 계약 1.12절](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/config-v4.md)을 따른다.
 
 ## 부분 재로드와 동적 설정 편집
 
-서버는 설정 파일과 사용 중인 TLS 파일, 켠 ticket 표의 공개 키 파일 변경을 자동 감지한다. 재로드 대상은 44개다. IP·Origin·신뢰 프록시 정책, 출발지 IP 차단 목록, TLS 파일, ticket 설정, Mode I 대상 허용 정책, 상한·시간·연결 유지 값이 포함된다. 정확한 목록과 적용 시점은 [설정 계약 1.8절](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/config-v4.md)을 따른다.
+VNC Relay는 설정 파일과 사용 중인 TLS 파일, 켠 ticket 표의 공개 키 파일 변경을 자동 감지한다. 재로드 대상은 44개다. IP·Origin·신뢰 프록시 정책, 출발지 IP 차단 목록, TLS 파일, ticket 설정, Mode I 대상 허용 정책, 상한·시간·연결 유지 값이 포함된다. 정확한 목록과 적용 시점은 [설정 계약 1.8절](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/config-v4.md)을 따른다.
 
 새 값은 키별 다음 검사·요청부터 적용한다. 이미 통과한 검사, 시작한 타이머, 설정한 소켓 옵션은 유지한다. 기존 중계 세션은 계속 동작한다. 차단 목록만 예외다. 목록이 바뀌면 그 주소의 열린 세션과 대기 연결을 바로 끊는다.
 
@@ -198,7 +198,7 @@ IP로 지정한 대상은 IP·포트 항목과 일치해야 한다. DNS 이름�
 
 편집 대상은 38개다. 재로드 대상에서 TLS 경로 4개와 ticket 공개 키 파일 경로 2개를 제외한다. 이 경로는 보기에만 나온다. 인증서·공개 키 갱신은 같은 경로의 파일 내용을 교체한다. 역할·모드에 속한 키는 계약에서 정한 활성화 조건도 만족해야 편집할 수 있다. `relay.deny.sources`는 중계 진입점이 꺼져 있어도 편집할 수 있다. 화면 절차는 [대시보드](dashboard.md)를 따른다.
 
-> **주의:** 유효한 설정 파일에 재시작이 필요한 값의 차이가 하나라도 남아 있으면 파일 감지는 후보 전체를 `reload_restart_required`로 거절한다. 그 차이를 남기면 이후 인증서·공개 키 교체도 거절한다. 동적 설정 편집은 HTTP 409 `config_restart_pending`으로 거절한다([관리 API 계약 1.14절](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/management-api-v1.md)). 해당 값을 되돌리거나 서버를 정상 종료하고 다시 시작해야 한다.
+> **주의:** 유효한 설정 파일에 재시작이 필요한 값의 차이가 하나라도 남아 있으면 파일 감지는 후보 전체를 `reload_restart_required`로 거절한다. 그 차이를 남기면 이후 인증서·공개 키 교체도 거절한다. 동적 설정 편집은 HTTP 409 `config_restart_pending`으로 거절한다([관리 API 계약 1.14절](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/management-api-v1.md)). 해당 값을 되돌리거나 VNC Relay를 정상 종료하고 다시 시작해야 한다.
 
 리스너 주소, 리스너·역할·모드 활성화, 관리 HTTP·HTTPS 전환, 계정 설정, 관리 로그인 제한·관리 세션 수명, `management.config_edit`, `metrics.enabled`, `[ip_info]` 경로, 대시보드·기록 보관·로그·감지 설정 등은 재시작이 필요하다. ticket 표의 `enabled`는 예외로 재로드 대상이다. 후보 검증 실패는 `reload_rejected`로 기록하고 이전 유효 설정과 연결을 유지한다.
 
@@ -208,8 +208,8 @@ v4는 이전 `[relay.ws_viewer]`와 `[relay.wss_viewer]`를 받지 않는다. �
 
 1. 실행 중인 파일과 별도로 사본을 준비한다.
 2. [설정 계약 3.3절](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/config-v4.md)의 대응표대로 사본을 고친다.
-3. 서버를 정상 종료한다.
+3. VNC Relay를 정상 종료한다.
 4. v4 파일과 새 실행파일로 함께 교체한다.
-5. 새 설정으로 서버를 시작한다.
+5. 새 설정으로 VNC Relay를 시작한다.
 
 뷰어 경로도 실행파일의 WebSocket 계약에 맞춰야 한다. `main`은 `/relay/viewer`다. 롤백도 같은 계약 절의 절차를 따른다. 접속 ticket 구성은 [접속 ticket](access-ticket.md)을 따른다.

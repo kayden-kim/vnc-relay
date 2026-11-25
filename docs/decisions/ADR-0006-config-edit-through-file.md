@@ -93,7 +93,7 @@
 | 가설·결정 요인 | 검증 방법 | 합격 기준 | 증거 |
 | --- | --- | --- | --- |
 | 같은 파일과 재시작 지속성 | 편집 API 통합 시험과 재시작 뒤 조회 | 파일에 바뀐 값이 남고 재시작 뒤 같은 값 | 통과. `tests/management_query.rs`의 `config_edit_preserves_document_applies_once_and_survives_restart`(커밋 `eae442f`의 두 OS 게이트). [관리 스펙 수용 테스트](../specs/management.md#7-수용-테스트) |
-| 파일 저장과 실행 값의 일치 | 파일 감지와 편집의 직렬화·쓰기 실패·뒤따른 알림 시험 | 성공 때 같은 후보를 한 번 적용. 쓰기 실패 때 파일·실행 값 유지 | 통과. 위 재시작 시험, `crates/adapters/tests/management.rs`의 `temporary_write_and_replace_failures_keep_original_bytes_and_running_values`, `tests/relay_log_scenarios.rs`의 `file_watch_and_config_edit_log_distinct_triggers_and_actual_applied_keys`, DASH-044·045 실서버 시험(두 OS 게이트). [운영 스펙 수용 테스트](../specs/operations.md#7-수용-테스트) |
+| 파일 저장과 실행 값의 일치 | 파일 감지와 편집의 직렬화·쓰기 실패·뒤따른 알림 시험 | 성공 때 같은 후보를 한 번 적용. 쓰기 실패 때 파일·실행 값 유지 | 통과. 위 재시작 시험, `crates/adapters/tests/management.rs`의 `temporary_write_and_replace_failures_keep_original_bytes_and_running_values`, `tests/relay_log_scenarios.rs`의 `file_watch_and_config_edit_log_distinct_triggers_and_actual_applied_keys`, DASH-044·045 실제 VNC Relay 시험(두 OS 게이트). [운영 스펙 수용 테스트](../specs/operations.md#7-수용-테스트) |
 | 파일 내용 보존 | 주석·공백·키 순서·LF·CRLF가 있는 파일 편집 전후 대조 | 바뀐 키의 값 밖 내용 유지 | 통과. `crates/adapters/tests/config_edit_document.rs`의 `scalar_edits_preserve_bom_comments_decor_and_mixed_newlines_exactly`·`array_value_edits_keep_internal_comments_spacing_and_each_newline`, 위 재시작 시험의 LF·CRLF 파일(두 OS 게이트). [관리 API 계약 5절](../contracts/management-api-v1.md#5-예제와-계약-테스트) |
 | 의존성 허용 범위 | 두 OS 의존성 라이선스·고지 검사 | PRD 허용 목록 준수와 고지 갱신 | 통과. 새 패키지 `toml_edit 0.25.17+spec-1.1.0`(MIT OR Apache-2.0). 두 OS deny `licenses ok`, 고지 대조 시험 통과. [라이선스 검사 실행 기록 9](../how-to/check-dependency-licenses.md#4-검증) |
 

@@ -1,6 +1,6 @@
 # Windows 서비스 모듈 설계
 
-Windows 서비스는 같은 서버 시작 경로를 터미널 대신 서비스 제어 관리자(SCM)에 연결한다. `service install`은 필요한 파일을 검사한 뒤 서비스를 등록한다. `service run`은 SCM의 중지·시스템 종료 요청을 서버에 전달하고 서버 상태를 SCM에 보고한다. 예를 들어 설정 오류로 시작하지 못하면 실행 중을 보고하지 않고 종료 코드 3을 서비스 고유 종료 코드로 남긴다.
+Windows 서비스는 같은 VNC Relay 시작 경로를 터미널 대신 서비스 제어 관리자(SCM)에 연결한다. `service install`은 필요한 파일을 검사한 뒤 서비스를 등록한다. `service run`은 SCM의 중지·시스템 종료 요청을 VNC Relay에 전달하고 VNC Relay 상태를 SCM에 보고한다. 예를 들어 설정 오류로 시작하지 못하면 실행 중을 보고하지 않고 종료 코드 3을 서비스 고유 종료 코드로 남긴다.
 
 | 항목 | 값 |
 | --- | --- |
@@ -44,8 +44,8 @@ flowchart LR
 | --- | --- | --- | --- |
 | `src/main.rs` `main`; `src/cli.rs` `parse`, `parse_service`, `ServiceAction` | 명령을 해석하고 `service::run`에 넘긴다. | 프로세스 진입 | clap·service |
 | `src/service.rs` `run`, `install`, `install_with`, `ServiceInstallGateway` | 설치 순서를 수행하고 등록 후 실패를 되돌린다. `impl ServiceInstallGateway for Scm`이 실제 SCM 호출을 연결한다. | 설치 명령 동안 | cli·serve·adapters |
-| `src/service.rs` `uninstall`, `run_service` | 중지된 서비스만 해제하거나 SCM dispatcher에 서버 body를 등록한다. | 각 명령 동안 | Scm·adapters `run` |
-| `src/serve.rs` `Host`, `start`, `check_service_files`, `Requests`, `HostStatus` | 시작 경로를 공유하고 종료 요청 출처와 보고 대상을 바꾼다. | 서버 실행 또는 설치 전 검사 | 기존 서버 구성요소 |
+| `src/service.rs` `uninstall`, `run_service` | 중지된 서비스만 해제하거나 SCM dispatcher에 VNC Relay body를 등록한다. | 각 명령 동안 | Scm·adapters `run` |
+| `src/serve.rs` `Host`, `start`, `check_service_files`, `Requests`, `HostStatus` | 시작 경로를 공유하고 종료 요청 출처와 보고 대상을 바꾼다. | VNC Relay 실행 또는 설치 전 검사 | 기존 VNC Relay 구성요소 |
 | `crates/adapters/src/windows_service.rs` `Scm`, `Installed`, `lookup_operator` | SCM 핸들·등록 핸들을 소유하고 안전한 API로 설치·해제를 수행한다. | 명령 동안 | windows-service·security |
 | 같은 파일의 `run`, `service_main`, `ServiceSession` | dispatcher와 서비스 스레드를 잇고 제어 채널·상태 보고자를 body에 넘긴다. | SCM 실행 동안 | windows-service·tokio mpsc |
 | 같은 파일의 `StatusReporter`, `Reporter`, `Progress` | 상태 잠금을 공유하고 시작·중지 중 checkpoint를 갱신한다. | 처리기 등록 뒤부터 Stopped까지 | std 동기화·windows-service |
@@ -61,7 +61,7 @@ flowchart LR
 | `ServiceError` | `Reported(u8)` 또는 `Error { code, message, exit }` | 명령 반환 값 | 이미 출력한 파일 진단은 다시 출력하지 않는다. |
 | `Operator` | 정렬을 보장하는 `Vec<u32>` SID와 trustee 종류 | 설치 동안 | 사용자·그룹 종류만 받는다. |
 | `ScmError` | 원시 OS 번호 `i32` | 오류 반환 값 | OS 번호 없는 라이브러리 오류는 87이다. |
-| `ServiceSession` | `controls`, `status` | 서버 body | 제어 수신기와 복제 가능한 상태 보고자를 전달한다. |
+| `ServiceSession` | `controls`, `status` | VNC Relay body | 제어 수신기와 복제 가능한 상태 보고자를 전달한다. |
 | `StopRequest` | `Stop`, `SystemShutdown` | 무제한 mpsc 채널 | 도착 순서대로 처리한다. |
 | `Progress` | `state`, `checkpoint` | `Reporter`의 Mutex | Stopped 뒤에는 다른 상태로 바꾸지 않는다. |
 | `BODY`, `OUTCOME` | 서비스 body와 반환 결과의 `Mutex<Option<_>>` | 프로세스 정적 메모리 | dispatcher가 요구하는 일반 함수와 main 스레드를 잇는다. 한 프로세스의 서비스 실행 한 번을 전제로 한다. |
@@ -88,10 +88,10 @@ flowchart LR
 
 1. `run_service`가 adapters의 `run`에 body를 넘긴다. dispatcher가 `service_main`을 호출하면 제어 처리기를 등록하고 StartPending을 보고한다.
 2. body는 `cli::silence`를 호출한 뒤 `serve::start(config, Host::Service(session))`를 실행한다. 설정 오류와 로그 열기 전 실패도 stdout·stderr에 쓰지 않는다.
-3. `start`는 `serve`와 같은 순서로 서버를 준비한다. 서비스에서 `log.output = "stdout"`은 거절한다. 로그 파일을 연 뒤의 시작 오류는 운영 로그에 남긴다.
-4. 서버가 준비됨에 들어가면 `HostStatus::ready`가 `StatusReporter::running`을 부른다. 시작 실패이면 이 단계를 거치지 않는다.
+3. `start`는 `serve`와 같은 순서로 VNC Relay를 준비한다. 서비스에서 `log.output = "stdout"`은 거절한다. 로그 파일을 연 뒤의 시작 오류는 운영 로그에 남긴다.
+4. VNC Relay가 준비됨에 들어가면 `HostStatus::ready`가 `StatusReporter::running`을 부른다. 시작 실패이면 이 단계를 거치지 않는다.
 5. 처리기는 Stop을 `StopRequest::Stop`, Shutdown을 `StopRequest::SystemShutdown`으로 보낸다. Interrogate에는 성공으로 답하고 그 밖의 제어는 NotImplemented다. `Requests::wait`는 각각 `ShutdownRequest::Requested`, `CloseNow`로 바꾼다. 콘솔 신호는 등록하지 않는다.
-6. 서버가 종료를 시작하면 `HostStatus::stopping`이 StopPending을 보고한다. Stop은 현재 G를 적용한다. SystemShutdown은 기존 콘솔 닫기와 같은 즉시 강제 정리 경로를 쓴다.
+6. VNC Relay가 종료를 시작하면 `HostStatus::stopping`이 StopPending을 보고한다. Stop은 현재 G를 적용한다. SystemShutdown은 기존 콘솔 닫기와 같은 즉시 강제 정리 경로를 쓴다.
 7. body가 반환하면 `service_main`이 Stopped를 보고한다. 0은 NO_ERROR, 그 밖은 `ServiceSpecific(code)`다. dispatcher가 돌아오면 프로세스도 그 코드로 끝난다.
 
 StopPending은 STOP을 받지 않는다. 따라서 두 번째 `sc.exe stop`은 서비스의 두 번째 정상 종료 요청이 되지 않는다. 이 제어 경계의 실행 관찰과 1061 결과는 [Windows 서비스 시험](../how-to/set-up-and-verify.md#windows-서비스-시험)에 있다.
@@ -125,16 +125,16 @@ StopPending은 STOP을 받지 않는다. 따라서 두 번째 `sc.exe stop`은 �
 | 등록 뒤 configure 실패 | `service_failed`, 종료 1, 새 등록 삭제 시도 | 삭제 실패 때만 등록 잔류 가능 | OPS-075 |
 | 해제 대상 없음·중지됨 아님 | `service_not_found` 또는 `service_running`, 종료 1 | 기존 상태 유지 | OPS-080 |
 | 그 밖의 SCM·실행파일 경로 오류 | `service_failed`와 OS 번호, 종료 1 | 실패 단계에 따름 | OPS-075·080 |
-| dispatcher의 SCM 연결 없음 1063 | `DispatchError::NotService` → `service_controller_unavailable` 한 줄, 종료 2 | 서버를 시작하지 않음 | OPS-081 |
-| 그 밖의 dispatcher·처리기 등록 실패 | `DispatchError::Failed`, 출력 없이 종료 1 | 서버 미시작 또는 SCM에 상태 미보고 | OPS-081 일부 |
-| 서버 시작 실패 | Running 없이 Stopped와 기존 서버 종료 코드 보고 | 확보한 서버 자원 회수 | OPS-077 |
+| dispatcher의 SCM 연결 없음 1063 | `DispatchError::NotService` → `service_controller_unavailable` 한 줄, 종료 2 | VNC Relay를 시작하지 않음 | OPS-081 |
+| 그 밖의 dispatcher·처리기 등록 실패 | `DispatchError::Failed`, 출력 없이 종료 1 | VNC Relay 미시작 또는 SCM에 상태 미보고 | OPS-081 일부 |
+| VNC Relay 시작 실패 | Running 없이 Stopped와 기존 VNC Relay 종료 코드 보고 | 확보한 VNC Relay 자원 회수 | OPS-077 |
 
 ## 7. 설계 선택
 
 | 선택 | 이유 | 검토한 다른 방법 | 근거 |
 | --- | --- | --- | --- |
 | 등록·해제 조립과 SCM API를 분리하고 `ServiceInstallGateway`로 설치 순서를 시험한다. | 실제 서비스 등록 없이 실패 단계·되돌림을 확인한다. | 각 단위 시험이 실제 SCM을 바꾸면 승격과 고정 서비스 이름이 필요하다. | 없음 |
-| `Host`로 시작 경로를 공유한다. | 서비스와 터미널에서 파일 검사·리스너·중계 종료 규칙을 따로 구현하지 않는다. | 서비스용 서버 시작 코드를 복제하면 검사 순서가 갈릴 수 있다. | [CLI 계약 1.9절](../contracts/cli-v1.md#19-windows-서비스-실행) |
+| `Host`로 시작 경로를 공유한다. | 서비스와 터미널에서 파일 검사·리스너·중계 종료 규칙을 따로 구현하지 않는다. | 서비스용 VNC Relay 시작 코드를 복제하면 검사 순서가 갈릴 수 있다. | [CLI 계약 1.9절](../contracts/cli-v1.md#19-windows-서비스-실행) |
 | `windows-service`가 등록 명령의 인수를 인용하게 한다. | Windows용 인수 전달을 라이브러리에 맡긴다. 공백 없는 경로는 따옴표 없이 등록될 수 있다. | 따옴표를 인수에 미리 넣으면 중복 인용이 된다. | 정확한 형식은 CLI 계약 1.9절 |
 | 서비스 계정·지연 시작·복구 없음·운영자 권한·한 서비스 이름을 고정한다. | 채택된 서비스 운영 범위를 따른다. | 이 모듈에서 별도 선택하지 않는다. | ADR-0010 |
 | 제어와 상태는 adapters 값으로 넘기고 `serve`가 종료 의미를 결정한다. | SCM 호출과 중계 수명 규칙의 경계를 유지한다. | 처리기에서 직접 중계 상태를 바꾸면 app 규칙을 OS 어댑터가 소유하게 된다. | 없음 |

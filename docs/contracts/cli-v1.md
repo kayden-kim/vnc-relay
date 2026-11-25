@@ -1,6 +1,6 @@
 # CLI와 관리자 계정 파일 v1 계약
 
-`vnc-relay` 실행파일의 하위 명령·옵션·종료 코드·출력 규칙과, `vnc-relay admin` 명령이 쓰고 `vnc-relay serve`가 읽는 관리자 계정 파일 형식을 정한다. 서버 실행과 관리자 계정 준비는 같은 실행파일의 서로 다른 하위 명령이다. Windows 11의 서비스 설치·해제·실행 하위 명령도 정한다(1.9절). 외부 동작은 [운영 스펙](../specs/operations.md)이 정하고, 설정 파일 키는 [설정 파일 계약](config-v4.md)이 정한다.
+`vnc-relay` 실행파일의 하위 명령·옵션·종료 코드·출력 규칙과, `vnc-relay admin` 명령이 쓰고 `vnc-relay serve`가 읽는 관리자 계정 파일 형식을 정한다. VNC Relay 실행과 관리자 계정 준비는 같은 실행파일의 서로 다른 하위 명령이다. Windows 11의 서비스 설치·해제·실행 하위 명령도 정한다(1.9절). 외부 동작은 [운영 스펙](../specs/operations.md)이 정하고, 설정 파일 키는 [설정 파일 계약](config-v4.md)이 정한다.
 
 이 계약은 Active다. 실행 명령은 `serve`, `admin add|passwd|remove|list`, `--help`·`--version`과 Windows 전용 `service install|uninstall|run`(1.9절)이다. 6절에는 아직 남은 확인·채택 항목을 둔다.
 
@@ -30,7 +30,7 @@
 
 | 명령 | 하는 일 | 입력 | stdout |
 | --- | --- | --- | --- |
-| `vnc-relay serve --config <path>` | 서버를 포그라운드로 실행한다(1.8절). | 설정 파일, 계정 파일 | 운영 로그(`log.output = "stdout"`일 때만) |
+| `vnc-relay serve --config <path>` | VNC Relay를 포그라운드로 실행한다(1.8절). | 설정 파일, 계정 파일 | 운영 로그(`log.output = "stdout"`일 때만) |
 | `vnc-relay admin add <account> --config <path>` | 계정을 추가한다. | 숨김 입력: 비밀번호, 비밀번호 확인 | 성공 문장 한 줄 |
 | `vnc-relay admin passwd <account> --config <path>` | 기존 계정의 비밀번호를 바꾼다. | 숨김 입력: 새 비밀번호, 확인 | 성공 문장 한 줄 |
 | `vnc-relay admin remove <account> [--yes] --config <path>` | 계정을 삭제한다. | 확인 입력(`--yes`로 생략할 수 있다) | 성공 문장 한 줄 |
@@ -93,7 +93,7 @@ $argon2id$v=19$m=<memory_kib>,t=<iterations>,p=<parallelism>$<솔트>$<해시>
 | 해시 | 32바이트. 솔트·해시의 인코딩은 패딩 없는 표준 Base64다. |
 
 - 새 해시는 설정의 `admin.argon2` 값으로 만든다. 생략하면 설정 계약의 기본값을 쓴다.
-- 서버는 저장된 해시의 `m`·`t`·`p`로 검증한다. 설정 값이 바뀌어도 기존 해시는 그대로 검증된다. 서버는 해시를 다시 쓰지 않는다.
+- VNC Relay는 저장된 해시의 `m`·`t`·`p`로 검증한다. 설정 값이 바뀌어도 기존 해시는 그대로 검증된다. VNC Relay는 해시를 다시 쓰지 않는다.
 - 이 문서의 예제 해시는 자리표시자다. 실제 해시를 문서에 넣지 않는다.
 
 ### 1.5 입력과 출력 규칙
@@ -108,8 +108,8 @@ $argon2id$v=19$m=<memory_kib>,t=<iterations>,p=<parallelism>$<솔트>$<해시>
 | 숨김 입력 | 입력한 글자를 화면에 표시하지 않는다. 표준 입력이 터미널이어야 한다. 터미널이 아니면 입력을 받지 않고 `not_interactive`로 끝난다. 종료할 때(취소 포함) 터미널의 표시 설정을 되돌린다. Windows에서는 입력을 읽기 전에 콘솔 입력 모드를 저장하고, 끝날 때(취소 포함) 저장한 모드로 되돌린다. 저장하거나 되돌리지 못하면 `runtime_unavailable`로 끝나고 계정 파일을 바꾸지 않는다(2.2절, 6절). |
 | 취소 | 비밀번호 입력 중 Ctrl+C 또는 입력 끝(EOF)은 취소다. `input_canceled`로 끝나고 계정 파일을 바꾸지 않는다. Windows 숨김 입력의 입력 끝 키는 Ctrl+D다. 빈 입력에서 Ctrl+D를 누르면 취소다. Ctrl+Z 뒤 Enter는 입력 끝이 아니다. 빈 줄로 받아 `password_invalid`(종료 코드 1)로 끝나고 계정 파일을 바꾸지 않는다. |
 | 삭제 확인 | `admin remove`는 `계정 '<account>'을(를) 삭제할까요? [y/N]`을 stderr에 쓰고 한 줄을 읽는다. `y` 또는 `yes`(대소문자 무시)만 승인이다. 그 밖의 입력은 취소다. `--yes`가 있으면 묻지 않는다. 터미널이 아니고 `--yes`도 없으면 `not_interactive`다. |
-| 반영 안내 | 계정을 바꾸는 명령은 성공한 뒤 stderr에 `notice`를 한 줄 쓴다: 실행 중인 서버에는 반영되지 않으며 서버를 정상 종료하고 다시 시작해야 한다(1.7절). |
-| 마지막 계정 삭제 | 허용한다. 삭제 뒤 계정이 0개면 경고 `last_account_removed`를 stderr에 쓴다. 서버는 이 상태로 시작하지 않는다. |
+| 반영 안내 | 계정을 바꾸는 명령은 성공한 뒤 stderr에 `notice`를 한 줄 쓴다: `실행 중인 VNC Relay에는 반영되지 않는다. VNC Relay를 정상 종료하고 다시 시작해야 한다.` (1.7절) |
+| 마지막 계정 삭제 | 허용한다. 삭제 뒤 계정이 0개면 경고 `last_account_removed`를 stderr에 쓴다. VNC Relay는 이 상태로 시작하지 않는다. |
 | 계정 파일이 없을 때 | `add`는 새 파일을 만든다. 상위 디렉터리는 만들지 않는다. `list`는 stdout을 비우고 stderr에 안내 한 줄을 쓰며 종료 코드 0이다. `passwd`·`remove`는 `account_not_found`다. `serve`는 `accounts_file_missing`이다. |
 | 글자 인코딩 | UTF-8. Windows 숨김 입력은 UTF-8 바이트를 쓴다. 콘솔 코드 페이지 949에서의 한글 오류 출력은 [수동 실행 기록](#계약-테스트-실행-기록)을 따른다. 파이프·파일 출력은 UTF-8 바이트다. 읽는 쪽은 UTF-8로 해석해야 한다(PowerShell은 `[Console]::OutputEncoding`을 UTF-8로 맞춘다). |
 
@@ -142,17 +142,17 @@ $argon2id$v=19$m=<memory_kib>,t=<iterations>,p=<parallelism>$<솔트>$<해시>
 
 | OS | 권장 |
 | --- | --- |
-| Ubuntu 24.04 LTS | 계정 파일 권한 `0600`, 소유자는 서버를 실행하는 OS 계정. 상위 디렉터리를 다른 계정이 쓰지 못하게 한다. CLI는 새 파일을 `0600`으로 만든다. 읽을 때 그룹·기타 권한이 있으면 경고 `accounts_file_permissive`를 쓴다. 경고만 하고 계속한다. |
-| Windows 11 | 서버를 실행하는 OS 계정과 관리자만 읽고 쓰도록 운영자가 디렉터리의 접근 제어 목록을 제한한다. CLI는 접근 제어 목록을 바꾸지 않고 권한 경고도 쓰지 않는다. 새 파일은 디렉터리의 접근 제어 목록을 물려받는다. |
+| Ubuntu 24.04 LTS | 계정 파일 권한 `0600`, 소유자는 VNC Relay를 실행하는 OS 계정. 상위 디렉터리를 다른 계정이 쓰지 못하게 한다. CLI는 새 파일을 `0600`으로 만든다. 읽을 때 그룹·기타 권한이 있으면 경고 `accounts_file_permissive`를 쓴다. 경고만 하고 계속한다. |
+| Windows 11 | VNC Relay를 실행하는 OS 계정과 관리자만 읽고 쓰도록 운영자가 디렉터리의 접근 제어 목록을 제한한다. CLI는 접근 제어 목록을 바꾸지 않고 권한 경고도 쓰지 않는다. 새 파일은 디렉터리의 접근 제어 목록을 물려받는다. |
 
 설정 파일의 `key_file`도 같은 원칙으로 권한을 제한하기를 권장한다. 계정 파일·개인키 파일은 버전 관리에 넣지 않는다.
 
-### 1.7 서버 실행 중 계정 파일 변경
+### 1.7 VNC Relay 실행 중 계정 파일 변경
 
 - `serve`는 시작 때 listener를 열기 전에 계정 파일을 한 번 읽는다. 읽은 계정 집합을 메모리에 둔다.
-- 서버는 계정 파일을 감시하지 않는다. 운영 스펙의 재로드 범위에 계정이 없다([운영 스펙 3.3절](../specs/operations.md#33-파일-변경-자동-감지와-부분-재로드)). 실행 중에 계정을 바꾸는 네트워크 API도 없다([운영 스펙 3.2절](../specs/operations.md#32-로컬-cli-계정-준비)).
-- 따라서 계정 추가·삭제·비밀번호 변경은 서버를 정상 종료하고 `admin` 명령을 실행한 뒤 다시 시작해야 적용된다. 실행 중 `admin` 명령은 파일을 안전하게 교체하지만 실행 중인 서버에는 반영되지 않는다.
-- 삭제한 계정으로 이미 발급된 관리 세션과 바꾸기 전 비밀번호로 만든 관리 세션은 서버를 재시작하기 전까지 유효하다. 재시작하면 모든 관리 세션이 무효가 된다([관리 스펙 3.0절](../specs/management.md#30-관리자-로그인과-세션)). 즉시 막으려면 서버를 재시작해야 한다.
+- VNC Relay는 계정 파일을 감시하지 않는다. 운영 스펙의 재로드 범위에 계정이 없다([운영 스펙 3.3절](../specs/operations.md#33-파일-변경-자동-감지와-부분-재로드)). 실행 중에 계정을 바꾸는 네트워크 API도 없다([운영 스펙 3.2절](../specs/operations.md#32-로컬-cli-계정-준비)).
+- 따라서 계정 추가·삭제·비밀번호 변경은 VNC Relay를 정상 종료하고 `admin` 명령을 실행한 뒤 다시 시작해야 적용된다. 실행 중 `admin` 명령은 파일을 안전하게 교체하지만 실행 중인 VNC Relay에는 반영되지 않는다.
+- 삭제한 계정으로 이미 발급된 관리 세션과 바꾸기 전 비밀번호로 만든 관리 세션은 VNC Relay를 재시작하기 전까지 유효하다. 재시작하면 모든 관리 세션이 무효가 된다([관리 스펙 3.0절](../specs/management.md#30-관리자-로그인과-세션)). 즉시 막으려면 VNC Relay를 재시작해야 한다.
 - 계정 파일 변경은 설정 재로드 후보 비교에 영향을 주지 않는다. 계정 파일 경로(`admin.accounts_file`) 값의 변경만 재시작 필요 변경이다.
 
 ### 1.8 수동 시작과 종료
@@ -191,7 +191,7 @@ Windows 11에서 `vnc-relay`를 Windows 서비스로 등록하고 실행하는 �
 | 설치 순서 | (1) SCM을 서비스 만들기 권한으로 연다. 권한이 없으면 `service_access_denied`다. (2) 같은 이름의 서비스가 있으면 `service_exists`다. (3) `--operator` 이름을 Windows 계정으로 바꾼다. 찾지 못하면 `service_operator_unknown`이다. (4) `--config` 경로를 절대 경로로 바꾸고 파일을 검사한다. 검사는 1.8절 시작 순서의 1·2단계와 4단계의 인증서·개인키·접속 ticket 공개 키 파일 검사이며 오류 코드도 같다. 로그 파일은 열지 않는다. `log.output = "stdout"`이면 1단계의 설정 오류로 `service_log_stdout`을 함께 보고한다. (5) 서비스를 등록하고 지연 시작을 설정한다. (6) 서비스 운영자 권한을 더한다. (7) 성공 문장을 쓴다. 등록 뒤 설정 단계가 실패하면 만든 서비스를 지우고 `service_failed`를 보고한다. 지우기도 실패하면 같은 오류에 그 OS 오류 번호와 관리자 권한 터미널에서 `sc.exe delete vnc-relay`로 지우라는 안내를 더한다. 설치는 서비스를 시작하지 않는다. 검사 범위·되돌리기·시작하지 않음은 제안이다. |
 | 해제 순서 | (1) SCM을 연다. (2) 서비스가 없으면 `service_not_found`, 지울 권한이 없으면 `service_access_denied`다. (3) 서비스가 중지됨이 아니면 `service_running`이다. (4) 서비스를 지우고 성공 문장을 쓴다. 다른 프로그램이 서비스 핸들을 열고 있으면 Windows는 그 핸들이 닫힌 뒤 등록을 지운다. 그 사이에 다시 설치하면 `service_failed`다. 설정·계정·로그 파일은 지우지 않는다. 중지됨만 지우는 규칙은 제안이다. |
 | `service run` | SCM이 시작한 프로세스에서만 동작한다. SCM이 시작한 프로세스가 아니면(터미널에서 직접 실행) 리스너를 열지 않고 stderr에 `error[service_controller_unavailable]`을 쓰고 종료 코드 2로 끝난다. 그 밖의 서비스 디스패처 실패는 stdout·stderr를 쓰지 않고 종료 코드 1로 끝난다. SCM 아래에서는 stdout·stderr를 쓰지 않는다. 종료 요청은 SCM의 중지·시스템 종료 제어로만 받는다. 1.8절의 콘솔 종료 신호(Ctrl+C·Ctrl+Break·콘솔 창 닫기)는 종료 요청으로 쓰지 않는다(제안). 그 밖의 시작 순서는 1.8절과 같다. |
-| 상태 보고 | 시작 순서 동안 시작 중, 준비됨에 들어간 뒤 실행 중, 종료 유예와 정리 동안 중지 중, 프로세스가 끝나기 직전 중지됨을 보고한다. 관리자 종료나 리스너 장애로 서버가 스스로 종료를 시작해도 중지 중을 보고한다. 일시 중지는 받지 않는다. 시작 중·중지 중에는 1초마다 진행 표시(checkpoint)를 올린다. 이 행은 제안이다. |
+| 상태 보고 | 시작 순서 동안 시작 중, 준비됨에 들어간 뒤 실행 중, 종료 유예와 정리 동안 중지 중, 프로세스가 끝나기 직전 중지됨을 보고한다. 관리자 종료나 리스너 장애로 VNC Relay가 스스로 종료를 시작해도 중지 중을 보고한다. 일시 중지는 받지 않는다. 시작 중·중지 중에는 1초마다 진행 표시(checkpoint)를 올린다. 이 행은 제안이다. |
 | 서비스 종료 코드 | 2.1절의 CLI 종료 코드가 0이면 오류 없음으로, 0이 아니면 그 값을 서비스 고유 종료 코드로 보고한다. `sc.exe query vnc-relay`의 `SERVICE_EXIT_CODE`에서 볼 수 있다(제안). |
 | 중지 요청 | 정상 종료 요청이다. `shutdown_started(trigger=requested)`를 쓰고 `timeouts.shutdown_grace_secs`(G)를 적용한다. 중지 중에는 시스템 종료 제어만 받는다. 두 번째 중지 요청은 SCM이 오류 1061(`ERROR_SERVICE_CANNOT_ACCEPT_CTRL`)로 거절하므로 서비스에 전달되지 않는다. 따라서 서비스 중지에는 1.8절의 "두 번째 종료 요청"이 없다. 시스템 종료 알림이 없으면 유예는 활성 세션 종료나 G 경과로 끝난다. |
 | 시스템 종료 알림 | 1.8절의 콘솔 창 닫기와 같다. G 없이 남은 세션을 즉시 강제 정리하고, OS가 프로세스를 끝내기 전에 종료 기록을 마친다. 사건 순서는 [운영 정보 계약 1.5절](ops-info-v2.md#15-사건-목록)의 순서 규칙을 따른다. 시간 한도는 [운영 스펙 OPS-TBD-014](../specs/operations.md#8-미결정-사항)다. 사용자 로그오프는 서비스를 멈추지 않는다(제안). |
@@ -205,7 +205,7 @@ Windows 11에서 `vnc-relay`를 Windows 서비스로 등록하고 실행하는 �
 | 코드 | 이름 | 의미 |
 | --- | --- | --- |
 | `0` | 성공 | 명령이 끝났다. `serve`는 정상 종료 요청의 정리가 끝났다(유예 만료·두 번째 종료 요청으로 강제 정리한 경우 포함). `--help`·`--version`·`admin list`(계정 0개 포함)도 해당한다. |
-| `1` | 실행 중 오류 | 명령을 실행하는 중에 실패했다. 입력 취소, 비밀번호 검사 실패, 계정 중복·없음, 변경 감지 준비 불가, 비동기 런타임·종료 신호 처리기 준비 불가, 서버가 계속 운영할 수 없는 실패, 정리 실패가 해당한다. Windows 서비스 명령의 권한 없음, 같은 이름 있음, 서비스 없음, 서비스 실행 중, 그 밖의 SCM 호출 실패도 해당한다(1.9절). |
+| `1` | 실행 중 오류 | 명령을 실행하는 중에 실패했다. 입력 취소, 비밀번호 검사 실패, 계정 중복·없음, 변경 감지 준비 불가, 비동기 런타임·종료 신호 처리기 준비 불가, VNC Relay가 계속 운영할 수 없는 실패, 정리 실패가 해당한다. Windows 서비스 명령의 권한 없음, 같은 이름 있음, 서비스 없음, 서비스 실행 중, 그 밖의 SCM 호출 실패도 해당한다(1.9절). |
 | `2` | 사용법 오류 | 알 수 없는 하위 명령·옵션, `--config` 누락·중복, 인수 개수 오류, 계정 이름 규칙 위반, 터미널이 아닌 입력. Ubuntu의 `service` 하위 명령, SCM 밖에서 실행한 `service run`, 찾지 못한 `--operator` 이름도 해당한다(1.9절). 사용법은 `usage_error`일 때만 stderr에 쓴다. |
 | `3` | 설정 오류 | 설정 파일의 읽기·구문·키·값 오류 전체, 인증서·개인키 파일 오류(경로·형식 오류, 인증서와 개인키가 맞지 않음), 접속 ticket 공개 키 파일 오류, 로그 파일을 열 수 없음, Windows 서비스의 `log.output = "stdout"`. 시작 실패 포함. 코드는 [설정 파일 계약 2.1절](config-v4.md#21-설정-오류와-준비-실패)의 `config_*`·`tls_file_invalid`·`ticket_keys_invalid`·`log_file_unavailable`과 이 문서의 `service_log_stdout`이다. |
 | `4` | 리스너 준비 실패 | 리스너 바인드 실패(이미 사용 중인 주소 포함). |
@@ -276,7 +276,7 @@ $ vnc-relay admin add alice --config ./relay.toml
 비밀번호:
 비밀번호 확인:
 계정 'alice'을(를) 추가했다.
-notice: 실행 중인 서버에는 반영되지 않는다. 서버를 정상 종료하고 다시 시작해야 한다.
+notice: 실행 중인 VNC Relay에는 반영되지 않는다. VNC Relay를 정상 종료하고 다시 시작해야 한다.
 ```
 
 ```text
@@ -318,7 +318,7 @@ error[account_name_invalid]: 계정 이름은 소문자 영문·숫자·점·밑
 | Consumer·`src/serve/listener_tests.rs` `listener_failures_retry_then_drive_fatal_grace_cleanup_and_preserve_requested_races` | 실행 중 리스너 장애가 먼저이면 G·정리 뒤 1, 정상 요청이 먼저이면 기존 0과 유예 보존(1.8·2.1절). 실제 TCP·상태 HTTP와 `serve` 감독 함수를 쓴다. [OPS-046](../specs/operations.md#7-수용-테스트). |
 | Consumer·`tests/serve.rs` `fails_with_exit_code_3_when_the_log_file_cannot_be_opened`, `warns_once_when_log_writes_fail_and_keeps_running`, `writes_the_log_to_the_configured_file_from_start_to_stop` | 시작 순서 1단계의 로그 출력 열기: 열 수 없으면 `error[log_file_unavailable] key=log.output`과 종료 코드 3, 실패 줄은 stdout에 쓴다. `log.output`이 파일이면 stdout은 비어 있다. 로그 쓰기 실패는 `warning[log_write_failed]`를 한 번만 쓰고 계속 실행한다(1.5·1.8·2절). |
 | Consumer·`tests/unix_shutdown.rs`와 `tests/windows_console.rs`의 `stop_unfinished_work`·`active_session_finishes_in_grace`·`grace_expiry_cleans_session`·`restart_has_fresh_state`·`second_request_forces_cleanup`. Windows는 `ctrl_c_stops_gracefully_with_exit_code_zero`·`ctrl_break_stops_gracefully_with_exit_code_zero`·`console_close_forces_cleanup`도 확인한다. | 유예 안 자발 종료·유예 만료, 유예 중 두 번째 종료 요청의 즉시 강제 정리, Windows의 Ctrl+C·Ctrl+Break, Windows 콘솔 창 닫기의 즉시 강제 정리(1.8절). [OPS-007](../specs/operations.md#7-수용-테스트)~[OPS-010](../specs/operations.md#7-수용-테스트), [OPS-042](../specs/operations.md#7-수용-테스트), [OPS-044](../specs/operations.md#7-수용-테스트). [OPS-019](../specs/operations.md#7-수용-테스트)는 두 OS의 종료 부분만 이 행에 해당한다. |
-| Consumer·`tests/reload.rs` `restart_only_change_applies_at_the_next_start`(계정 파일 경로 변경), `tests/management_session.rs` `account_file_content_changes_apply_only_after_restart`(같은 경로의 내용 변경) | 실행 중 계정 파일 변경이 서버에 반영되지 않고 재시작 뒤 반영(1.7절). [OPS-003](../specs/operations.md#7-수용-테스트), [OPS-029](../specs/operations.md#7-수용-테스트) |
+| Consumer·`tests/reload.rs` `restart_only_change_applies_at_the_next_start`(계정 파일 경로 변경), `tests/management_session.rs` `account_file_content_changes_apply_only_after_restart`(같은 경로의 내용 변경) | 실행 중 계정 파일 변경이 VNC Relay에 반영되지 않고 재시작 뒤 반영(1.7절). [OPS-003](../specs/operations.md#7-수용-테스트), [OPS-029](../specs/operations.md#7-수용-테스트) |
 | Producer·`tests/distribution.rs` `repository_example_loads_without_secrets`, `example_cli_account_relay_reload_and_graceful_stop`(Linux), `tests/windows_console.rs`의 같은 실행파일 시험(Windows), [수동 운영 안내](../how-to/operate-relay.md) 두 OS 실행 기록 | 배포 예시에 실제 비밀값·기본 비밀번호가 없다. 실제 터미널의 숨김 입력으로 `admin add`를 실행한 뒤 예시 복사본으로 시작·중계·재로드·정상 종료한다. 자동 시험은 debug 실행파일의 부분 증거다. release 묶음과 안내 전체는 두 OS 수동 기록으로 판정한다. [OPS-031](../specs/operations.md#7-수용-테스트) |
 | Consumer / 접속 ticket 시작 실패 계약 시험 | 접속 ticket 공개 키 파일 오류를 리스너 바인드 전에 `ticket_keys_invalid`와 종료 코드 3으로 보고한다(1.8·2.1·2.2절). 파일 내용은 진단에 넣지 않는다. [OPS-070](../specs/operations.md#7-수용-테스트) |
 | Producer·Consumer / Windows 서비스 계약 시험 | `service install`·`service uninstall`·`service run`의 순서·권한·오류 코드·종료 코드, 서비스 상태 보고와 서비스 종료 코드, 중지 요청과 시스템 종료 알림(1.9·2.1·2.2절). [OPS-074](../specs/operations.md#7-수용-테스트)~[OPS-081](../specs/operations.md#7-수용-테스트) |
@@ -331,8 +331,8 @@ error[account_name_invalid]: 계정 이름은 소문자 영문·숫자·점·밑
 | 실행일 미기록 | `ed68104` 기반 관리자 CLI 작업 트리 | Windows 11 Pro 10.0.26200 x64, 콘솔 코드 페이지 949 | 새 콘솔에서 `WriteConsoleInputW`로 한글 비밀번호 입력. argon2-cffi로 UTF-8·cp949·UTF-16LE 바이트 대조 | UTF-8 바이트 검증만 통과했다. cp949·UTF-16LE 검증은 실패했다. 한글 오류 줄은 콘솔에서 바르게 보였다. |
 | 2026-10-21 | `f21a6bc`와 같은 콘솔 코드를 쓰는 `ec2e6e6` 실행파일 | Windows 11 Pro 10.0.26200 x64, 코드 페이지 949, cmd·PowerShell | `CREATE_NEW_CONSOLE`, `AttachConsole`, `WriteConsoleInputW`, `GenerateConsoleCtrlEvent`로 입력. 실행 전후 `GetConsoleMode(CONIN$)`와 계정 파일 SHA-256 측정 | 취소 18회(Ctrl+C 16회·빈 입력 Ctrl+D 2회)는 `input_canceled`, 종료 코드 1, 계정 파일 불변, 0.56~0.62초였다. 정상 입력 1회는 종료 코드 0이었다. 19회 모두 입력 모드가 시작 값(cmd `0x1E7`, PowerShell `0x1E4`)으로 돌아왔다. |
 | 실행일 미기록 | `1aed781` 기반 관리자 CLI 작업 트리 | Windows 11 Pro 10.0.26200 x64, `target\debug\vnc-relay.exe` | 새 cmd 콘솔에서 `WriteConsoleInputW`로 Ctrl+Z·Ctrl+D 뒤 Enter 입력 | 숨김 입력의 Ctrl+Z는 2회 모두 `password_invalid`(1), Ctrl+D는 2회 모두 `input_canceled`(1)였다. 삭제 확인의 Ctrl+Z는 3회 모두 `input_canceled`(1)였다. 계정 파일은 모두 불변이었다. |
-| 2026-11-05 | 커밋 `1c7c7a9`의 release 묶음(`cargo build --release --locked` 1분 10초, `vnc-relay 0.1.0`, SHA-256 `120f319ae67bc1907a3f1e7fcfdb7d5f425e84778a554e8747c8dfbf3e667278`). 묶음: 실행파일, `relay.toml`(예시 그대로), `docs/how-to/operate-relay.md`, `THIRD-PARTY-NOTICES.txt`. `LICENSE` 없음 | Windows 11 Pro 10.0.26200 x64, Rust 1.99.1(`x86_64-pc-windows-msvc`) | [운영 안내](../how-to/operate-relay.md) 3.1~3.8절 명령을 에이전트가 차례로 실행했다(2026-11-05). 숨김 입력은 도구의 의사 터미널로 입력했다. Ctrl+C는 도우미 프로세스가 서버 콘솔에 붙어 `GenerateConsoleCtrlEvent(CTRL_C_EVENT)`로 보냈다 | 통과. `cargo xtask notices --check`: `notices --check: 통과 (THIRD-PARTY-NOTICES.txt)`. `admin add opsadmin`: 프롬프트 `비밀번호:`·`비밀번호 확인:`, 입력 글자 표시 없음, 종료 코드 0. 계정 파일에 입력 문자열 없음, Argon2id `m=19456,t=2,p=1`. `admin list`: `opsadmin`. `/livez` 200 `{"status":"alive"}`, `/readyz` 200 `{"status":"ready"}`. 브라우저 로그인 뒤 운영 개요의 서버 상태 `Ready`. `check-relay.py`: `Mode II: both directions passed`. `relay.tcp_viewer.allow` 저장 뒤 0.6초 안에 `reload_change_detected`(`os_notify`)→`reload_applied`(`relay.tcp_viewer.allow`), 중계 재확인 통과. `relay.log`를 `relay.previous.log`로 바꾼 뒤 원래 경로에 새 파일이 생겼다. 회전 뒤 중계 사건 5개는 새 파일에만, 앞선 사건은 이전 파일에만 있었다. Ctrl+C: `shutdown_started`(`trigger=requested`, `grace_secs=30`, `active_sessions=0`)→`server_stopped`, 종료 코드 0. 첫 시도는 도구의 의사 터미널 안에서 서버를 띄워 래퍼가 512를 보고했다. 서버 자체의 값이 아닌 래퍼 값으로 본다 `[INFERENCE]`. 그래서 독립 콘솔에서 다시 시작해 종료 코드 0을 직접 읽었다 |
-| 2026-11-05 | 커밋 `1c7c7a9`의 release 묶음(`cargo build --release --locked` 58.7초, `vnc-relay 0.1.0`, SHA-256 `dc7da5485cbf722381aaa8932051c34bb0cc58b475999e313107904c21749c40`). 묶음 구성은 위와 같다. 묶음 디렉터리 `~/bundle-wsl`은 `0700` | Ubuntu 24.04.4 LTS x86_64(WSL2), Rust 1.99.1 | [운영 안내](../how-to/operate-relay.md) 3.1~3.8절 실행(2026-11-05). 숨김 입력은 도구의 의사 터미널로 입력했다. 브라우저 로그인은 Windows 브라우저가 WSL localhost 전달로 접속했다 | 통과. 고지 검사 통과. 첫 `admin add`는 도구가 확인 입력에 빈 줄을 보내 `error[password_mismatch]`(종료 코드 1)였고 계정 파일은 생기지 않았다. 다시 입력해 종료 코드 0. 계정 파일 `0600`, 입력 문자열 없음, Argon2id `m=19456,t=2,p=1`. `admin list`: `opsadmin`. 상태 조회 200 두 건, 브라우저 로그인 뒤 서버 상태 `Ready`, 중계 통과. 재로드는 0.6초 안에 `reload_applied`, 중계 재확인 통과. 로그 회전 결과는 Windows와 같았다. 새 로그 파일 권한은 `0644`(umask `022`). 종료의 첫 시도는 하네스 실수였다. `cd … && ./vnc-relay serve … &`로 띄워 `$!`가 서버가 아닌 subshell의 PID였다. SIGINT는 subshell이 무시했고, SIGTERM은 subshell만 끝냈다(`143`). 이때 서버 종료 기록은 없고, 그 뒤 남은 서버 프로세스도 없었다(서버가 끝난 원인은 확인하지 못함). 같은 release 실행파일을 올바른 PID로 다시 띄웠다. `/proc/<pid>/status`의 `SigCgt`가 SIGINT·SIGTERM을 잡았다(debug 실행파일도 같음). SIGINT(Ctrl+C가 앞단 작업에 보내는 신호) 뒤 `shutdown_started`→`server_stopped`, 종료 코드 0 |
+| 2026-11-05 | 커밋 `1c7c7a9`의 release 묶음(`cargo build --release --locked` 1분 10초, `vnc-relay 0.1.0`, SHA-256 `120f319ae67bc1907a3f1e7fcfdb7d5f425e84778a554e8747c8dfbf3e667278`). 묶음: 실행파일, `relay.toml`(예시 그대로), `docs/how-to/operate-relay.md`, `THIRD-PARTY-NOTICES.txt`. `LICENSE` 없음 | Windows 11 Pro 10.0.26200 x64, Rust 1.99.1(`x86_64-pc-windows-msvc`) | [운영 안내](../how-to/operate-relay.md) 3.1~3.8절 명령을 에이전트가 차례로 실행했다(2026-11-05). 숨김 입력은 도구의 의사 터미널로 입력했다. Ctrl+C는 도우미 프로세스가 VNC Relay 콘솔에 붙어 `GenerateConsoleCtrlEvent(CTRL_C_EVENT)`로 보냈다 | 통과. `cargo xtask notices --check`: `notices --check: 통과 (THIRD-PARTY-NOTICES.txt)`. `admin add opsadmin`: 프롬프트 `비밀번호:`·`비밀번호 확인:`, 입력 글자 표시 없음, 종료 코드 0. 계정 파일에 입력 문자열 없음, Argon2id `m=19456,t=2,p=1`. `admin list`: `opsadmin`. `/livez` 200 `{"status":"alive"}`, `/readyz` 200 `{"status":"ready"}`. 브라우저 로그인 뒤 운영 개요의 VNC Relay 상태 `Ready`. `check-relay.py`: `Mode II: both directions passed`. `relay.tcp_viewer.allow` 저장 뒤 0.6초 안에 `reload_change_detected`(`os_notify`)→`reload_applied`(`relay.tcp_viewer.allow`), 중계 재확인 통과. `relay.log`를 `relay.previous.log`로 바꾼 뒤 원래 경로에 새 파일이 생겼다. 회전 뒤 중계 사건 5개는 새 파일에만, 앞선 사건은 이전 파일에만 있었다. Ctrl+C: `shutdown_started`(`trigger=requested`, `grace_secs=30`, `active_sessions=0`)→`server_stopped`, 종료 코드 0. 첫 시도는 도구의 의사 터미널 안에서 VNC Relay를 띄워 래퍼가 512를 보고했다. VNC Relay 자체의 값이 아닌 래퍼 값으로 본다 `[INFERENCE]`. 그래서 독립 콘솔에서 다시 시작해 종료 코드 0을 직접 읽었다 |
+| 2026-11-05 | 커밋 `1c7c7a9`의 release 묶음(`cargo build --release --locked` 58.7초, `vnc-relay 0.1.0`, SHA-256 `dc7da5485cbf722381aaa8932051c34bb0cc58b475999e313107904c21749c40`). 묶음 구성은 위와 같다. 묶음 디렉터리 `~/bundle-wsl`은 `0700` | Ubuntu 24.04.4 LTS x86_64(WSL2), Rust 1.99.1 | [운영 안내](../how-to/operate-relay.md) 3.1~3.8절 실행(2026-11-05). 숨김 입력은 도구의 의사 터미널로 입력했다. 브라우저 로그인은 Windows 브라우저가 WSL localhost 전달로 접속했다 | 통과. 고지 검사 통과. 첫 `admin add`는 도구가 확인 입력에 빈 줄을 보내 `error[password_mismatch]`(종료 코드 1)였고 계정 파일은 생기지 않았다. 다시 입력해 종료 코드 0. 계정 파일 `0600`, 입력 문자열 없음, Argon2id `m=19456,t=2,p=1`. `admin list`: `opsadmin`. 상태 조회 200 두 건, 브라우저 로그인 뒤 VNC Relay 상태 `Ready`, 중계 통과. 재로드는 0.6초 안에 `reload_applied`, 중계 재확인 통과. 로그 회전 결과는 Windows와 같았다. 새 로그 파일 권한은 `0644`(umask `022`). 종료의 첫 시도는 하네스 실수였다. `cd … && ./vnc-relay serve … &`로 띄워 `$!`가 VNC Relay가 아닌 subshell의 PID였다. SIGINT는 subshell이 무시했고, SIGTERM은 subshell만 끝냈다(`143`). 이때 VNC Relay 종료 기록은 없고, 그 뒤 남은 VNC Relay 프로세스도 없었다(VNC Relay가 끝난 원인은 확인하지 못함). 같은 release 실행파일을 올바른 PID로 다시 띄웠다. `/proc/<pid>/status`의 `SigCgt`가 SIGINT·SIGTERM을 잡았다(debug 실행파일도 같음). SIGINT(Ctrl+C가 앞단 작업에 보내는 신호) 뒤 `shutdown_started`→`server_stopped`, 종료 코드 0 |
 
 ## 6. 초안을 확정하기 전에 해결할 사항
 

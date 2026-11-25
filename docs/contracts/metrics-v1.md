@@ -52,17 +52,17 @@ VNC Relay가 내보내는 메트릭의 이름·종류·단위·속성과 두 표
 | 이름 | 종류 | 단위 | 속성 | 의미·기록 시점 |
 | --- | --- | --- | --- | --- |
 | `vnc_relay.connection.accepted` | `counter` | `{connection}` | `listener` | 중계 리스너가 수락한 연결 수. 로그 사건 `connection_accepted`마다 1. |
-| `vnc_relay.connection.rejected` | `counter` | `{connection}` | `listener`, `stage`, `reason` | 서버가 정책·제한·형식 때문에 거절한 연결 수. 로그 사건 `connection_rejected`마다 1. 관리·상태 리스너의 거절도 센다. |
+| `vnc_relay.connection.rejected` | `counter` | `{connection}` | `listener`, `stage`, `reason` | VNC Relay가 정책·제한·형식 때문에 거절한 연결 수. 로그 사건 `connection_rejected`마다 1. 관리·상태 리스너의 거절도 센다. |
 | `vnc_relay.connection.aborted` | `counter` | `{connection}` | `listener`, `stage`, `reason` | 대기 등록이나 세션 시작 전에 끝난 연결 수. 로그 사건 `connection_aborted`마다 1. |
-| `vnc_relay.connection.in_progress` | `updowncounter` | `{connection}` | `stage` | 지금 초기 교환 중인 연결 수와 Mode I 대상 연결 중인 연결 수. [관리 API 계약 1.6절](management-api-v1.md#16-서버-요약-get-apiv1summary)의 `counts.handshaking`·`counts.target_connecting`과 같은 값이다. |
-| `vnc_relay.relay_connection.usage` | `updowncounter` | `{connection}` | 없음 | 중계 연결 상한 L의 현재 사용량. 서버 요약의 `usage.relay_connections.current`와 같다. |
+| `vnc_relay.connection.in_progress` | `updowncounter` | `{connection}` | `stage` | 지금 초기 교환 중인 연결 수와 Mode I 대상 연결 중인 연결 수. [관리 API 계약 1.6절](management-api-v1.md#16-vnc-relay-요약-get-apiv1summary)의 `counts.handshaking`·`counts.target_connecting`과 같은 값이다. |
+| `vnc_relay.relay_connection.usage` | `updowncounter` | `{connection}` | 없음 | 중계 연결 상한 L의 현재 사용량. VNC Relay 요약의 `usage.relay_connections.current`와 같다. |
 | `vnc_relay.relay_connection.limit` | `updowncounter` | `{connection}` | 없음 | 실행 중 L(`limits.relay_connections`). 재로드하면 새 값이다. |
 | `vnc_relay.admin_connection.usage` | `updowncounter` | `{connection}` | 없음 | 관리·상태 연결 상한 Lm의 현재 사용량. 이 응답을 받는 연결도 포함한다. |
 | `vnc_relay.admin_connection.limit` | `updowncounter` | `{connection}` | 없음 | 실행 중 Lm(`limits.admin_connections`). |
 | `vnc_relay.handshake.duration` | `histogram` | `s` | `listener`, `mode` | Repeater 초기 교환 시간. 초기 교환 제한 시간 H를 시작한 때부터 유효한 초기 요청을 판정한 때까지다. 성공한 초기 교환만 기록한다. 시간 초과·형식 오류는 `vnc_relay.connection.aborted`·`rejected`로 센다. |
-| `vnc_relay.waiting.count` | `updowncounter` | `{connection}` | `role`, `transport` | 지금 대기 중인 Mode II 연결 수. 서버 요약의 `counts.waiting`을 역할·전송 경로로 나눈 값이다. |
+| `vnc_relay.waiting.count` | `updowncounter` | `{connection}` | `role`, `transport` | 지금 대기 중인 Mode II 연결 수. VNC Relay 요약의 `counts.waiting`을 역할·전송 경로로 나눈 값이다. |
 | `vnc_relay.waiting.duration` | `histogram` | `s` | `result` | 대기 연결이 대기를 끝낸 시간. 매칭은 로그 사건 `session_started`(Mode II)의 `waited_ms`, 만료는 `waiting_expired`의 `waited_ms`, 그 밖의 제거는 `waiting_removed`의 `waited_ms`를 기록한다. |
-| `vnc_relay.session.count` | `updowncounter` | `{session}` | `mode`, `viewer_transport`, `target_transport` | 지금 활성 세션 수. 정리 중인 세션도 정리가 끝날 때까지 포함한다. 서버 요약의 `counts.active`를 나눈 값이다. |
+| `vnc_relay.session.count` | `updowncounter` | `{session}` | `mode`, `viewer_transport`, `target_transport` | 지금 활성 세션 수. 정리 중인 세션도 정리가 끝날 때까지 포함한다. VNC Relay 요약의 `counts.active`를 나눈 값이다. |
 | `vnc_relay.session.started` | `counter` | `{session}` | `mode`, `viewer_transport`, `target_transport` | 시작한 활성 세션 수. 로그 사건 `session_started`마다 1. |
 | `vnc_relay.session.closed` | `counter` | `{session}` | `mode`, `close_cause` | 정리가 끝난 활성 세션 수. 로그 사건 `session_closed`마다 1. |
 | `vnc_relay.session.duration` | `histogram` | `s` | `mode` | 활성 세션의 지속 시간. 로그 사건 `session_closed`의 `duration_ms`를 기록한다. |
@@ -213,14 +213,14 @@ VNC Relay가 내보내는 메트릭의 이름·종류·단위·속성과 두 표
 
 ### 1.8 추이
 
-추이(history)는 서버가 고정 간격으로 찍은 일부 값의 기록이다. 대시보드가 최근 1시간이나 최근 24시간의 차트를 그리는 데 쓴다. 외부 수집 도구용 장기 기록이 아니다. 관리 API는 요청이 고른 기간의 추이 하나를 준다([관리 API 계약 1.16절](management-api-v1.md#116-메트릭-get-apiv1metrics)).
+추이(history)는 VNC Relay가 고정 간격으로 찍은 일부 값의 기록이다. 대시보드가 최근 1시간이나 최근 24시간의 차트를 그리는 데 쓴다. 외부 수집 도구용 장기 기록이 아니다. 관리 API는 요청이 고른 기간의 추이 하나를 준다([관리 API 계약 1.16절](management-api-v1.md#116-메트릭-get-apiv1metrics)).
 
 | 항목 | 규칙 |
 | --- | --- |
 | 기간 | 최근 1시간(`1h`)과 최근 24시간(`24h`) 두 가지다. 기간마다 점을 따로 보관하고 순번을 따로 센다. |
 | 간격과 개수 | `1h`는 10초마다 한 점을 찍고 최근 360개만 메모리에 둔다. `24h`는 `1h` 점 6개마다 한 점, 곧 1분마다 한 점을 찍고 최근 1440개만 메모리에 둔다. 가득 차면 가장 오래된 점부터 지운다. 설정 키는 없다. |
 | 두 기간의 관계 | `24h`의 점은 `seq`가 6의 배수인 `1h` 점과 같은 시각에 찍으며 값도 같다. 여러 점의 평균이나 합을 내지 않는다. 기록이 늦어 `1h`의 간격이 길어지면 `24h`의 간격도 함께 길어진다. |
-| 첫 점 | 서버가 준비됨이 된 때 두 기간의 첫 점을 함께 찍는다. 그 전에는 점이 없다. 정상 종료 유예 중에도 계속 찍는다. |
+| 첫 점 | VNC Relay가 준비됨이 된 때 두 기간의 첫 점을 함께 찍는다. 그 전에는 점이 없다. 정상 종료 유예 중에도 계속 찍는다. |
 | 순번 | 각 점의 `seq`는 기간마다 0부터 시작해 점마다 1씩 늘어난다. 지운 점의 순번을 다시 쓰지 않는다. 재시작하면 두 추이를 비우고 0부터 다시 센다. |
 | 값 | 한 점의 값은 그 시점에 1.7절 응답을 만들 때와 같은 방법으로 읽는다. 읽지 못한 값은 `null`이다. |
 

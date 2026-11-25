@@ -77,11 +77,11 @@ VNC Relay가 운영자에게 내보내는 두 가지 정보의 교환 형식을 
 | `listener` | 문자열 | 소켓 단위의 리스너. `tcp_viewer`, `tcp_server`, `ws`, `wss`, `management`, `status` 중 하나다. 중계 진입점은 `listener`와 `role`의 쌍이다. |
 | `role` | 문자열 | `viewer` 또는 `server`. TCP 중계 리스너의 역할은 고정이다. `ws`·`wss`에서는 경로가 역할을 정한 뒤에만 쓴다. 수락·TLS·경로 판정 전 업그레이드 단계에서는 생략한다. |
 | `mode` | 문자열 | `mode1` 또는 `mode2`. 초기 교환으로 모드를 알게 된 뒤의 사건에만 쓴다. |
-| `viewer_transport` | 문자열 | Viewer 전송 경로. `tcp`, `ws`, `wss`. 관리 API 계약의 `viewer_transport`와 같은 이름·값이다. |
-| `server_transport` | 문자열 | Mode II Server 전송 경로. `tcp`, `ws`, `wss` 중 하나다. Mode I에서는 생략한다. |
+| `viewer_transport` | 문자열 | 뷰어 전송 경로. `tcp`, `ws`, `wss`. 관리 API 계약의 `viewer_transport`와 같은 이름·값이다. |
+| `server_transport` | 문자열 | Mode II 서버 전송 경로. `tcp`, `ws`, `wss` 중 하나다. Mode I에서는 생략한다. |
 | `peer_ip` | 문자열 | 실제 소켓 상대 IP. 표기는 1.10절을 따른다. |
 | `forwarded_ip` | 문자열 | 신뢰 프록시의 전달 주소. WS·WSS 연결에서 주소 도출에 성공한 뒤 `peer_ip`를 가진 모든 사건에 쓴다. 그 전이나 프록시를 신뢰하지 않으면 생략한다. 표기는 1.10절을 따른다. |
-| `viewer_forwarded_ip`, `server_forwarded_ip` | 문자열 | 각각 Viewer·Mode II Server의 전달 주소. 해당 쪽의 `viewer_peer_ip`·`server_peer_ip`가 있는 사건에 주소를 도출한 경우에만 함께 쓴다. Mode I에서는 `server_forwarded_ip`를 생략한다. |
+| `viewer_forwarded_ip`, `server_forwarded_ip` | 문자열 | 각각 뷰어·Mode II 서버의 전달 주소. 해당 쪽의 `viewer_peer_ip`·`server_peer_ip`가 있는 사건에 주소를 도출한 경우에만 함께 쓴다. Mode I에서는 `server_forwarded_ip`를 생략한다. |
 | `relay_id_ref` | 문자열 | 중계 ID의 참조 값. 중계 ID 원문이 아니다. 1.9절을 따른다. |
 | `ticket_jti` | 문자열 | 접속 ticket의 `jti`. `ticket_accepted`에서 필수다. 거절 사건의 기록 조건은 1.5·1.6절을 따른다. |
 | `ticket_sub` | 문자열 | 접속 ticket의 선택 클레임 `sub`. 값이 없으면 생략한다. 발급 쪽은 비밀이나 개인정보를 넣으면 안 된다([WebSocket 계약 1.9.7절](websocket-relay-v2.md#197-발급-쪽과-클라이언트의-의무)). |
@@ -187,8 +187,8 @@ IP 정보 DB 파일의 읽기는 설정 재로드와 따로 한다([설정 계�
 | --- | --- | --- | --- | --- |
 | `connection_accepted` | `info` | 중계 리스너가 접속을 수락하고 수락 단계의 IP 검사와 L 검사를 통과했을 때 | `conn_id`, `listener`(`tcp_viewer`·`tcp_server`·`ws`·`wss`), `peer_ip`. `role`은 TCP에서 필수이고 WS·WSS에서는 생략한다. 이 시점에는 `forwarded_ip`도 없다. | RLY-001, OPS-037, OPS-069, WS-021 |
 | `ticket_accepted` | `info` | ticket을 켠 역할의 업그레이드가 ticket 확인과 사용 기록 쓰기를 통과했을 때. 101 전이다. | `conn_id`, `listener`(`ws`·`wss`), `role`, `peer_ip`, `forwarded_ip?`, `ticket_jti`, `ticket_sub?`, `session_expires_at?` | WS-038, WS-045 |
-| `connection_rejected` | `warn` | 서버가 정책·제한·형식 때문에 접속을 거절했을 때 | `listener`(1.4절의 6개 값), `stage`, `reason`, `peer_ip`. 선택: `conn_id`, `role`, `mode`, `relay_id_ref`, `limit`, `origin`, `target_host`, `target_ip`, `target_port`, `forwarded_ip`, `ticket_jti`. WS·WSS의 `role`은 경로 판정 뒤에만 쓴다. `forwarded_ip`는 주소 도출에 성공한 뒤에만 쓴다. `ticket_jti`는 ticket의 서명을 확인한 뒤의 거절과 `ticket_relay_mismatch`에만 쓴다. 값 목록은 1.6절. | RLY-004, RLY-007, RLY-008, RLY-022, RLY-023, RLY-029, RLY-030, RLY-032, OPS-004, OPS-005, OPS-023, OPS-036, OPS-037, WS-012, WS-014, WS-015, WS-022, WS-023, WS-027, WS-032, WS-033, WS-036, WS-039~045 |
-| `connection_aborted` | `warn`. `reason`이 `peer_eof`, `server_shutdown`, `session_expired`이면 `info` | 수락한 연결이 대기 등록이나 세션 시작 전에 끝났을 때. 서버가 정책으로 거절한 경우는 제외한다. | `conn_id`, `listener`(`tcp_viewer`·`tcp_server`·`ws`·`wss`), `stage`, `reason`, `peer_ip`, `elapsed_ms`. 선택: `role`, `mode`, `error_kind`, `forwarded_ip`. WS·WSS의 `role`은 경로 판정 뒤에만 쓴다. `forwarded_ip`는 주소 도출에 성공한 뒤에만 쓴다. 값 목록은 1.6절. | RLY-005, RLY-031, OPS-006, OPS-007, WS-019, WS-023, WS-032 |
+| `connection_rejected` | `warn` | VNC Relay가 정책·제한·형식 때문에 접속을 거절했을 때 | `listener`(1.4절의 6개 값), `stage`, `reason`, `peer_ip`. 선택: `conn_id`, `role`, `mode`, `relay_id_ref`, `limit`, `origin`, `target_host`, `target_ip`, `target_port`, `forwarded_ip`, `ticket_jti`. WS·WSS의 `role`은 경로 판정 뒤에만 쓴다. `forwarded_ip`는 주소 도출에 성공한 뒤에만 쓴다. `ticket_jti`는 ticket의 서명을 확인한 뒤의 거절과 `ticket_relay_mismatch`에만 쓴다. 값 목록은 1.6절. | RLY-004, RLY-007, RLY-008, RLY-022, RLY-023, RLY-029, RLY-030, RLY-032, OPS-004, OPS-005, OPS-023, OPS-036, OPS-037, WS-012, WS-014, WS-015, WS-022, WS-023, WS-027, WS-032, WS-033, WS-036, WS-039~045 |
+| `connection_aborted` | `warn`. `reason`이 `peer_eof`, `server_shutdown`, `session_expired`이면 `info` | 수락한 연결이 대기 등록이나 세션 시작 전에 끝났을 때. VNC Relay가 정책으로 거절한 경우는 제외한다. | `conn_id`, `listener`(`tcp_viewer`·`tcp_server`·`ws`·`wss`), `stage`, `reason`, `peer_ip`, `elapsed_ms`. 선택: `role`, `mode`, `error_kind`, `forwarded_ip`. WS·WSS의 `role`은 경로 판정 뒤에만 쓴다. `forwarded_ip`는 주소 도출에 성공한 뒤에만 쓴다. 값 목록은 1.6절. | RLY-005, RLY-031, OPS-006, OPS-007, WS-019, WS-023, WS-032 |
 
 `conn_id`는 `connection_accepted`를 기록한 연결에만 있다. 접속 수락 단계에서 거절한 연결(`stage`가 `accept`)은 수락 사건이 없으므로 `conn_id`도 없다.
 
@@ -280,7 +280,7 @@ WS·WSS의 수락·TLS·경로 판정 전 업그레이드 거절·중단에는 `
 | `upgrade` | WebSocket 업그레이드 직전 | `ticket_reused` | 같은 역할의 `jti`가 사용 기록에 있음. HTTP 401이다. | WS-042 |
 | `initial_exchange` | Repeater 초기 교환 | `handshake_invalid` | 초기 요청의 형식 오류. [Repeater 계약 2절](repeater-handshake-v1.md#2-오류)의 같은 이름 코드다. | RLY-004 |
 | `initial_exchange` | Repeater 초기 교환 | `mode_disabled` | 설정으로 끈 모드의 요청. `mode`를 쓴다. | RLY-022 |
-| `initial_exchange` | Repeater 초기 교환 | `ticket_relay_mismatch` | 기존 초기 요청 검사를 통과했으나 중계 ID가 ticket의 `rid`와 다르거나 Viewer Mode I 요청임. Close 4012다. `mode`, `ticket_jti`를 쓰며 Mode II이면 `relay_id_ref`도 쓴다. 대기 등록·대상 연결은 없다. | RLY-029, RLY-030, RLY-032 |
+| `initial_exchange` | Repeater 초기 교환 | `ticket_relay_mismatch` | 기존 초기 요청 검사를 통과했으나 중계 ID가 ticket의 `rid`와 다르거나 뷰어 Mode I 요청임. Close 4012다. `mode`, `ticket_jti`를 쓰며 Mode II이면 `relay_id_ref`도 쓴다. 대기 등록·대상 연결은 없다. | RLY-029, RLY-030, RLY-032 |
 | `register` | 대기 등록 | `waiting_full` | 대기 상한 Lw에 도달함. `limit`을 쓴다. | OPS-005 |
 | `register` | 대기 등록 | `duplicate_id` | 같은 중계 ID와 같은 역할이 이미 대기 중이거나 활성 세션이 점유함. 후발 연결을 거절한다. `relay_id_ref`를 쓴다. | [중계 스펙 3.3절](../specs/relay.md#33-mode-ii) 4항, RLY-015 |
 | `register` | 대기 등록 | `ip_denied` | 초기 교환 뒤 대기 등록·매칭·Mode I 대상 연결 전에 현재 차단 목록으로 다시 검사한 클라이언트 주소가 차단됨. 교체 전에 수락돼 초기 교환 중이던 연결이 해당한다. TCP는 닫고 WS·WSS는 Close 4014로 닫는다. | RLY-033, WS-048 |
@@ -292,7 +292,7 @@ ticket 업그레이드 거절은 `connection_rejected`의 `warn`과 공통 필�
 #### `connection_aborted`의 `stage`와 `reason`
 
 `stage`는 `tls`, `upgrade`, `initial_exchange`, `register`, `target_connect` 중 하나다.
-`register`는 초기 교환을 마쳤으나 대기 등록이 완료되기 전에 서버 종료로 끝난 Mode II 연결이다. 이때 `reason`은 `server_shutdown`이다. 매칭되었으나 아직 활성화되지 않은 상태에서 서버가 종료되면 이미 등록되어 있던 쪽은 `waiting_removed(reason=server_shutdown)`로, 도착하여 등록 중이던 쪽은 `connection_aborted(stage=register, reason=server_shutdown)`로 기록한다. Mode I의 대응 단계는 `target_connect`를 유지한다.
+`register`는 초기 교환을 마쳤으나 대기 등록이 완료되기 전에 VNC Relay 종료로 끝난 Mode II 연결이다. 이때 `reason`은 `server_shutdown`이다. 매칭되었으나 아직 활성화되지 않은 상태에서 VNC Relay가 종료되면 이미 등록되어 있던 쪽은 `waiting_removed(reason=server_shutdown)`로, 도착하여 등록 중이던 쪽은 `connection_aborted(stage=register, reason=server_shutdown)`로 기록한다. Mode I의 대응 단계는 `target_connect`를 유지한다.
 
 수락한 TCP·WS·WSS 소켓의 TCP keepalive 설정이 실패하면 `reason=connection_error`, `error_kind=io_error`로 중단한다. 같은 단계에서 켜는 `TCP_NODELAY`의 설정 실패도 같다. `stage`는 현재 단계인 TCP의 `initial_exchange`, WS의 `upgrade`, WSS의 `tls`다. `conn_id`를 가진 중단 사건을 남기기 위해 `connection_accepted`를 먼저 기록하고 keepalive를 설정한다. 실패하면 `connection_aborted`를 기록한 뒤 소켓을 닫고 L 자리를 돌려준다.
 
@@ -320,11 +320,11 @@ ticket 업그레이드 거절은 `connection_rejected`의 `warn`과 공통 필�
 | `server_shutdown` | `warn` | 없음 | 정상 종료의 강제 정리 또는 Grace·Force 중 소유 작업 취소 때 기존 원인이 없는 세션에만 쓴다. Running 중 소유 작업의 버그 종료는 제외한다. | OPS-009, OPS-042 |
 | `internal_error` | `warn`(1.3절의 서비스가 계속되는 비정상 종료 원인) | 없음 | 없음 | [관리 API 계약 1.10절](management-api-v1.md#110-최근-종료-목록-get-apiv1closed-sessions) |
 | `session_expired` | `info` | 없음 | ticket의 `sx`에 도달해 끝낸 세션이다. 양쪽에 `sx`가 있으면 이른 시각을 쓴다. | RLY-031, MGT-052 |
-| `ip_denied` | `info` | 없음 | 차단 목록이 바뀐 직후 Viewer 또는 Mode II Server의 클라이언트 주소가 항목과 일치해 세션 전체를 끊었다. `admin_account`는 없다. 이미 정리 중인 세션은 기존 원인을 유지한다. | RLY-034, WS-048, OPS-101 |
+| `ip_denied` | `info` | 없음 | 차단 목록이 바뀐 직후 뷰어 또는 Mode II 서버의 클라이언트 주소가 항목과 일치해 세션 전체를 끊었다. `admin_account`는 없다. 이미 정리 중인 세션은 기존 원인을 유지한다. | RLY-034, WS-048, OPS-101 |
 
 한 세션의 `close_cause`는 정리를 시작하게 한 첫 원인이다. 그 뒤 생긴 정리 오류로 바꾸지 않는다. 단, 한쪽 EOF 뒤 또는 관리자 종료로 시작한 정리에서 E가 지나면 `close_cause`는 `close_timeout`이다. 관리자 정리에서 EOF를 관찰하지 않았으면 `side`를 생략한다. 이때 `session_closed`에는 `admin_account`를 넣지 않으며, 같은 `session_id`의 `admin_terminate`로 수행 계정을 추적한다. G 만료나 유예 중 두 번째 종료 요청으로 인한 강제 정리(`shutdown_forced`) 때도, 이미 정리를 시작한 세션(한쪽 EOF 관찰, I/O 오류, `dead_connection`, 관리자 종료 시작)은 최초 정리 시작 원인을 유지하며 `server_shutdown`으로 덮어쓰지 않는다. 아직 정리를 시작하지 않은 세션만 `close_cause=server_shutdown`이 된다.
 
-서버가 Running일 때 세션 소유 작업이 panic 등 버그로 끝났고 기존 종료 원인이 없으면 `internal_error`를 쓴다. 정상 종료 중(Grace·Force)에 소유 작업이 취소되면 기존 원인이 없는 경우 `server_shutdown`을 쓴다. 어느 경우에도 기존 원인은 덮어쓰지 않는다.
+VNC Relay가 Running일 때 세션 소유 작업이 panic 등 버그로 끝났고 기존 종료 원인이 없으면 `internal_error`를 쓴다. 정상 종료 중(Grace·Force)에 소유 작업이 취소되면 기존 원인이 없는 경우 `server_shutdown`을 쓴다. 어느 경우에도 기존 원인은 덮어쓰지 않는다.
 
 ### 1.7 `error_kind` 값
 
@@ -464,15 +464,15 @@ Lm 상한에서 거절한 연결은 HTTP 응답을 받지 못하고 연결이 �
 
 | 1.x의 값·규칙 | 2.0.0의 값·규칙 |
 | --- | --- |
-| `listener = ws_viewer` | `listener = ws`. 경로 판정 뒤 Viewer 사건이면 `role = viewer`다. |
-| `listener = wss_viewer` | `listener = wss`. 경로 판정 뒤 Viewer 사건이면 `role = viewer`다. |
+| `listener = ws_viewer` | `listener = ws`. 경로 판정 뒤 뷰어 사건이면 `role = viewer`다. |
+| `listener = wss_viewer` | `listener = wss`. 경로 판정 뒤 뷰어 사건이면 `role = viewer`다. |
 | WS·WSS `connection_accepted`의 `role = viewer` | `role`이 없다. 수락 시점에는 역할을 알 수 없다. |
 | WS·WSS 경로 판정 전 `connection_rejected`·`connection_aborted`의 `role` | `role`이 없다. `accept`·`tls`·경로 판정 전 `upgrade`가 해당한다. |
 | `server_starting.log_contract = ops-info/1.3.0` | `ops-info/2.0.0`. 이 값으로 파서를 고른다. |
 
 먼저 소비자가 1.x와 2.x를 구분하게 바꾼다. `listener`만으로 WS·WSS의 역할을 단정하지 않아야 한다. `server_ready.listeners[].name`도 같은 새 이름을 쓴다. 재로드·편집 키를 수집하면 1.5절의 v4 키 이름으로 바꾼다. 그 뒤 설정 파일을 [v4로 옮기고](config-v4.md#33-v3-파일을-v4로-옮기기) 2.0.0 Producer를 배포한다.
 
-롤백할 때는 이전 서버와 그 서버가 읽는 설정 파일로 되돌린다. 설정 파일의 롤백 조건은 설정 계약 3.3절을 따른다. 이전 서버는 1.3.0 로그를 내므로 소비자의 1.x 파서는 유지한다. 2.0.0 서버가 1.x 형식으로 출력하는 호환 모드는 없다.
+롤백할 때는 이전 VNC Relay와 그 VNC Relay가 읽는 설정 파일로 되돌린다. 설정 파일의 롤백 조건은 설정 계약 3.3절을 따른다. 이전 VNC Relay는 1.3.0 로그를 내므로 소비자의 1.x 파서는 유지한다. 2.0.0 VNC Relay가 1.x 형식으로 출력하는 호환 모드는 없다.
 
 ## 4. 버전과 지원 단계
 

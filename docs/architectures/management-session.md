@@ -1,6 +1,6 @@
 # 관리 로그인과 세션 모듈 설계
 
-관리자 로그인(`POST /api/v1/session`)을 처리하고, 관리 세션 쿠키와 CSRF 토큰을 검사하며, 로그인 실패를 계정별·출발지별로 세어 제한 시간 동안 로그인을 거절한다. 관리 세션은 서버 메모리에만 두며 프로세스를 재시작하면 모두 무효다. 조회·종료·설정 GET/PATCH가 이 문서의 공통 인증 경계를 쓴다. 각 업무 처리와 정적 파일·화면 구현은 맡지 않는다.
+관리자 로그인(`POST /api/v1/session`)을 처리하고, 관리 세션 쿠키와 CSRF 토큰을 검사하며, 로그인 실패를 계정별·출발지별로 세어 제한 시간 동안 로그인을 거절한다. 관리 세션은 VNC Relay 메모리에만 두며 프로세스를 재시작하면 모두 무효다. 조회·종료·설정 GET/PATCH가 이 문서의 공통 인증 경계를 쓴다. 각 업무 처리와 정적 파일·화면 구현은 맡지 않는다.
 
 | 항목 | 값 |
 | --- | --- |
@@ -70,7 +70,7 @@ flowchart LR
 
 | 이름 | 필드·형태 | 저장 위치 | 제약과 항상 지켜야 할 조건 |
 | --- | --- | --- | --- |
-| `admin_session::Token` | 문자열(64자 소문자 16진수) | 쿠키 값으로 클라이언트에만 있음. 서버는 `admin_session::Table`의 키로 든다 | 32바이트 무작위 값에서 만든다. 형식이 틀리면 조회하지 않고 `unauthenticated`다. 로그에 쓰지 않는다. `Debug`는 `<redacted>`만 찍는다 |
+| `admin_session::Token` | 문자열(64자 소문자 16진수) | 쿠키 값으로 클라이언트에만 있음. VNC Relay는 `admin_session::Table`의 키로 든다 | 32바이트 무작위 값에서 만든다. 형식이 틀리면 조회하지 않고 `unauthenticated`다. 로그에 쓰지 않는다. `Debug`는 `<redacted>`만 찍는다 |
 | `AdminCsrfToken` | 문자열(64자 소문자 16진수) | 세션 값의 한 필드. 로그인 응답 본문과 세션 정보로만 나간다 | 세션마다 하나다. 세션 전체 수명 동안 바뀌지 않는다. 로그에 쓰지 않는다. `Debug`는 `<redacted>` |
 | `AdminSession` | `account: account::Name`, `csrf: AdminCsrfToken`, `idle_deadline`·`absolute_deadline: Duration`(단조, 만료 판정), `idle_wall`·`absolute_wall: SystemTime`(벽시계, 발급·연장 때 정한 값) | `admin_session::Table`(메모리) | 단조 기한은 `idle_deadline ≤ absolute_deadline`이다. 벽시계 값도 `idle_wall ≤ absolute_wall`이다. `absolute_*`는 로그인 뒤 바뀌지 않는다. `idle_*`는 유휴 연장 때만 바뀐다. 조회 때 다시 계산하지 않는다. 응답의 `idle_expires_at`·`absolute_expires_at`은 `idle_wall()`·`absolute_wall()` 값이다 |
 | `admin_session::Table` | 토큰 문자열 → `AdminSession` 맵 | 메모리 | 만료되거나 로그아웃된 항목은 로그인과 조회 때 지운다. 프로세스 재시작 때 비운다(ADR-0003) |
@@ -111,7 +111,7 @@ flowchart LR
 
 `X-Relay-Poll: 1`이 있는 `GET`(자동 폴링)은 5단계를 건너뛴다. 헤더 없는 `GET`은 사용자 행동으로 보고 연장한다.
 
-설정 GET은 성공 뒤에만 `touch`하며 `X-Relay-Poll: 1`이면 연장하지 않는다. 화면은 설정 진입·명시 새로고침 때만 GET하고 자동 폴링하지 않는다. PATCH는 성공(no-op 포함) 뒤에만 연장하며 인증·CSRF·입력·파일·충돌·쓰기 실패는 연장하지 않는다. 파일 트랜잭션은 `spawn_blocking`에서 끝까지 수행하므로 응답 연결이 사라져도 서버의 저장·commit을 취소하지 않는다([설정 보기·편집 §6](config-edit.md#6-http시간-제한종료-유예)).
+설정 GET은 성공 뒤에만 `touch`하며 `X-Relay-Poll: 1`이면 연장하지 않는다. 화면은 설정 진입·명시 새로고침 때만 GET하고 자동 폴링하지 않는다. PATCH는 성공(no-op 포함) 뒤에만 연장하며 인증·CSRF·입력·파일·충돌·쓰기 실패는 연장하지 않는다. 파일 트랜잭션은 `spawn_blocking`에서 끝까지 수행하므로 응답 연결이 사라져도 VNC Relay의 저장·commit을 취소하지 않는다([설정 보기·편집 §6](config-edit.md#6-http시간-제한종료-유예)).
 
 로그인과 세션 GET 응답의 `session_body`는 `DashboardHints::terminate_timeout_secs()`로 현재 E+5를 읽는다. P와 query timeout은 시작값이다. 이 힌트 변경은 이미 시작한 종료 교환의 타이머를 바꾸지 않는다. `management.config_edit` 활성화에는 재시작이 필요하므로 기존 세션을 재사용하지 않고 다시 로그인한다.
 
@@ -134,7 +134,7 @@ flowchart LR
 | 계정 없음·틀린 비밀번호(`AdminAuth::login`) | `401 login_failed`, 본문과 헤더는 제한 중과 같다. 실패를 두 키에 적는다 | 실패 기록 추가 | MGT-018, MGT-022 |
 | 제한 중(`LoginLimiter::check`) | `401 login_failed`(같은 본문). 실패를 세지 않고 제한을 늘리지 않는다 | 변화 없음 | MGT-022 |
 | 해시 검증 실패(`Argon2PasswordVerifyGateway`, OS 오류) | `500 internal`. 세션을 만들지 않고 실패를 세지 않는다. 운영 정보 계약에 내부 오류 사건이 없어 사건을 기록하지 않는다. | 변화 없음 | 계약 2.1절 |
-| 더미 해시 만들기 실패(시작) | 서버 시작을 실패로 끝낸다(종료 코드 1, 런타임 오류). | 없음 | 관리 API 계약 1.5절 |
+| 더미 해시 만들기 실패(시작) | VNC Relay 시작을 실패로 끝낸다(종료 코드 1, 런타임 오류). | 없음 | 관리 API 계약 1.5절 |
 | 세션 없음·만료·로그아웃·재시작 뒤(`authorize`) | `401 unauthenticated` + `WWW-Authenticate`. 요청에 쿠키가 있었으면 쿠키 지우기 `Set-Cookie`도 보낸다 | 만료 항목 삭제 | MGT-019, MGT-020, MGT-027 |
 | CSRF 불일치·없음(`AdminAuth::check_csrf`) | `403 csrf_invalid`. 세션 유지 | 변화 없음 | MGT-014 |
 | 로그인 사건 기록 실패 | 기록기가 흡수한다([운영 로그 모듈 설계](ops-log.md)). 흐름을 바꾸지 않는다 | 변화 없음 | OPS-029 |

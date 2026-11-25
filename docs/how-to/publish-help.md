@@ -144,9 +144,9 @@ cargo test --test help_site
 
 ### 3.4 화면 캡처 갱신
 
-대시보드 화면이 바뀌면 두 책의 `src/images/`에 있는 캡처 여섯 장(`login`, `operations`, `session`, `logs`, `settings`, `settings-edit`)을 다시 만든다. 캡처 도구는 실서버 대시보드 시험의 하네스로 서버를 띄운다. 서버는 루프백 주소와 시험 계정(`alice`)만 쓰고, 종료한 세션 1개·활성 세션 2개·대기 연결 1개를 만든다. 화면 언어마다 1280×800 크기로 찍는다.
+대시보드 화면이 바뀌면 두 책의 `src/images/`에 있는 캡처 여섯 장(`login`, `operations`, `session`, `logs`, `settings`, `settings-edit`)을 다시 만든다. 캡처 도구는 실제 VNC Relay를 쓰는 대시보드 시험의 하네스로 VNC Relay를 띄운다. VNC Relay는 루프백 주소와 시험 계정(`alice`)만 쓰고, 종료한 세션 1개·활성 세션 2개·대기 연결 1개를 만든다. 화면 언어마다 1280×800 크기로 찍는다.
 
-캡처는 Ubuntu에서만 실행한다. 설정 보기 화면이 서버 디렉터리의 절대 경로(`admin.accounts_file`)를 보여 주기 때문이다. Windows의 기본 임시 디렉터리 경로에는 사용자 이름이 들어간다. Ubuntu에서 `TMPDIR`을 정하지 않으면 그림에는 `/tmp/vnc-relay-dashboard-live-…/accounts.toml` 같은 시험 경로만 보인다.
+캡처는 Ubuntu에서만 실행한다. 설정 보기 화면이 VNC Relay 디렉터리의 절대 경로(`admin.accounts_file`)를 보여 주기 때문이다. Windows의 기본 임시 디렉터리 경로에는 사용자 이름이 들어간다. Ubuntu에서 `TMPDIR`을 정하지 않으면 그림에는 `/tmp/vnc-relay-dashboard-live-…/accounts.toml` 같은 시험 경로만 보인다.
 
 1. Ubuntu bash에서 `TMPDIR`이 비어 있는지 확인한다.
 
@@ -154,7 +154,7 @@ cargo test --test help_site
    echo "${TMPDIR:-unset}"
    ```
 
-   기대 결과: `unset`. 값이 있으면 `unset TMPDIR`을 실행한다. 서버 디렉터리가 `/tmp` 아래가 아니면 캡처 도구는 그림을 쓰기 전에 실패한다.
+   기대 결과: `unset`. 값이 있으면 `unset TMPDIR`을 실행한다. VNC Relay 디렉터리가 `/tmp` 아래가 아니면 캡처 도구는 그림을 쓰기 전에 실패한다.
 
 2. 캡처를 실행한다.
 
@@ -228,7 +228,7 @@ cargo test --test help_site
 | 공개 사이트 수동 확인 | 3.5절 4·5단계 기대 결과 | 커밋 `92749c8`의 Pages 사이트. Windows 11 Pro 10.0.26200, 영어 브라우저로 루트·두 책·검색·없는 경로를 열고 `gh repo view --json homepageUrl`로 About 주소를 확인했다 | 통과(2026-11-12). 루트는 200과 HLP-002이며 브라우저에서 `/vnc-relay/en/`로 이동했다. `ko/`·`en/`·장 페이지·`assets/`는 200, 없는 경로는 404와 HLP-003이었다. 한국어 책에서 "ticket 공개 키" 검색 결과는 17건이었고 콘솔 오류는 없었다. `homepageUrl`이 Pages 주소였다 | 이 표 |
 | 게시된 화면 캡처 확인 | 게시한 그림이 저장소의 대상 파일과 같다 | GitHub Pages, 커밋 `8169bbf`·`a94058d`의 게시본. 두 언어의 책과 `images/operations.png`를 내려받아 HTTP 상태와 SHA-256을 저장소 파일과 대조했다 | 통과(2026-11-17). `ko/`·`en/`과 두 언어의 `images/operations.png`는 200이었다. 두 그림의 SHA-256이 저장소 파일과 같았다. 게시된 한국어 대시보드 장에 대기 연결의 전송 경로·상대 주소 설명이 있었다 | 이 표 |
 | 화면 캡처 | 3.4절 2·3단계 기대 결과 | 3.4절. WSL2 Ubuntu, 대기·활성 표 통일 작업 트리(`web/dashboard/app/panels.js`·`app.css`), `TMPDIR` 없음 | 통과(2026-11-17). 시험 1개 통과, 두 책의 PNG 열두 장을 모두 열어 확인했다. 보이는 값은 시험 계정 `alice`, 루프백 주소, `/tmp` 아래 시험 경로, 시험 세션 식별자뿐이다 | `docs/help/*/src/images/`, [대시보드 검증 기록](verify-dashboard-frontend.md) |
-| 추천 구성 사례의 예시 | 두 책 `recommended-setup.md`의 "ticket 발급 예시"·"ticket 확인 예시" 기대 결과 | 한국어 책의 코드 블록을 그대로 꺼내 실행했다. 영어 책의 Python 코드는 한국어 책과 문자열만 다르고(AST 대조) 나머지 코드 블록은 같다. 영어 책의 스크립트도 Windows에서 키 생성·발급·서명 확인을 실행했다. VNC Relay는 페이지의 `relay.toml`에서 리스너를 루프백 시험 포트로 바꾸고 Viewer `allow`에 `127.0.0.1`을 더했다. 인증서는 `relay.example.test`의 자체 서명 인증서다. curl 줄에는 `--resolve`와 `--cacert`를 더했고, 인증서 확인을 끄는 `-k`는 쓰지 않았다. 그 밖에는 진행 표시를 끄는 `-sS`(Ubuntu)와 3단계 바이트를 보기 위한 출력 저장(Windows `-o`, Ubuntu `od`)만 붙였다. Windows 11 Pro 10.0.26200: Windows PowerShell, Python 3.14.6, `cryptography` 50.0.2, curl 8.22.0, `vnc-relay 2026.11.6` 디버그 빌드. WSL2 Ubuntu 24.04.4: Python 3.12.3, `python3-cryptography` 41.0.7, curl 8.5.0, `vnc-relay 2026.11.5` 디버그 빌드(이후 `crates/`·`src/` 변경은 트레이 아이콘뿐) | 통과(2026-11-18). 두 OS에서 키 파일 두 쌍이 생겼고 서명 확인이 `aud = vnc-relay/server`, `rid = 482913`인 클레임을 출력했다. 1단계는 101과 `Sec-WebSocket-Protocol: binary`, curl 종료 코드 28, `ticket_accepted`(server). 2단계는 401과 `WWW-Authenticate: VncRelayTicket`, `ticket_reused`. 3단계는 101 뒤 첫 프레임 `82 0c`와 `RFB 000.000\n`, `ticket_accepted`(viewer). Windows에서 다른 역할의 공개 키 파일, DER 서명, 같은 `kid`의 다른 키는 각각 kid 없음 메시지, 71바이트 서명 메시지, `InvalidSignature`로 끝났다 | 이 표 |
+| 추천 구성 사례의 예시 | 두 책 `recommended-setup.md`의 "ticket 발급 예시"·"ticket 확인 예시" 기대 결과 | 한국어 책의 코드 블록을 그대로 꺼내 실행했다. 영어 책의 Python 코드는 한국어 책과 문자열만 다르고(AST 대조) 나머지 코드 블록은 같다. 영어 책의 스크립트도 Windows에서 키 생성·발급·서명 확인을 실행했다. VNC Relay는 페이지의 `relay.toml`에서 리스너를 루프백 시험 포트로 바꾸고 뷰어 `allow`에 `127.0.0.1`을 더했다. 인증서는 `relay.example.test`의 자체 서명 인증서다. curl 줄에는 `--resolve`와 `--cacert`를 더했고, 인증서 확인을 끄는 `-k`는 쓰지 않았다. 그 밖에는 진행 표시를 끄는 `-sS`(Ubuntu)와 3단계 바이트를 보기 위한 출력 저장(Windows `-o`, Ubuntu `od`)만 붙였다. Windows 11 Pro 10.0.26200: Windows PowerShell, Python 3.14.6, `cryptography` 50.0.2, curl 8.22.0, `vnc-relay 2026.11.6` 디버그 빌드. WSL2 Ubuntu 24.04.4: Python 3.12.3, `python3-cryptography` 41.0.7, curl 8.5.0, `vnc-relay 2026.11.5` 디버그 빌드(이후 `crates/`·`src/` 변경은 트레이 아이콘뿐) | 통과(2026-11-18). 두 OS에서 키 파일 두 쌍이 생겼고 서명 확인이 `aud = vnc-relay/server`, `rid = 482913`인 클레임을 출력했다. 1단계는 101과 `Sec-WebSocket-Protocol: binary`, curl 종료 코드 28, `ticket_accepted`(server). 2단계는 401과 `WWW-Authenticate: VncRelayTicket`, `ticket_reused`. 3단계는 101 뒤 첫 프레임 `82 0c`와 `RFB 000.000\n`, `ticket_accepted`(viewer). Windows에서 다른 역할의 공개 키 파일, DER 서명, 같은 `kid`의 다른 키는 각각 kid 없음 메시지, 71바이트 서명 메시지, `InvalidSignature`로 끝났다 | 이 표 |
 | 추천 구성 사례 페이지와 구성도 | [도움말 작성 규칙](../help/AGENTS.md#구성도)의 구성도 규칙 | Windows 11 Pro 10.0.26200, `vnc-relay 2026.11.6` 작업 트리. 3.2절 미리보기(`--port 18790`)를 헤드리스 WebKit으로 열어 두 언어의 페이지를 1280px·360px 폭에서 봤다 | 통과(2026-11-18). 구성도(760×380)는 1280px에서 692×346, 360px에서 292×146으로 줄었고 페이지 가로 스크롤은 없었다. 두 언어 모두 글씨가 상자 안에 있다. 360px에서는 글씨가 작다. 콘솔 오류는 0건이다 | 이 표. 화면 캡처는 파일로 남기지 않았다 |
 | VNC 연결 구성의 방식 구성도와 상단 막대 | [도움말 작성 규칙](../help/AGENTS.md#구성도)의 구성도 규칙, [도움말 스펙](../specs/help-site.md)의 상단 막대 구성 | Windows 11 Pro 10.0.26200, 커밋 `c0fa253` 위 작업 트리. 3.2절 미리보기(`--port 18093`)를 ego lite 0.6.3.14(DOM 측정)와 헤드리스 Chrome 157.0.8103.79(CDP 폭 지정 캡처)로 열어 두 언어의 `connect.html`·`index.html`을 1280px·360px 폭에서 봤다 | 통과(2026-11-19). 구성도(760×490)는 1280px에서 695×448, 360px에서 279×181로 줄었고 페이지 가로 스크롤은 없었다. 두 언어 모두 글씨가 상자 안에 있다. 360px에서는 글씨가 작다. 상단 막대에는 목차·사이트 이름·검색·언어만 있고 `main 기준` 링크가 없다. 소개 페이지의 절은 세 개이며 기준 버전 절이 없다. 콘솔 오류는 확인하지 않았다 | 이 표. 화면 캡처는 저장소 밖 `D:/vr-tools/tmp/shots/`에 있다 |
 

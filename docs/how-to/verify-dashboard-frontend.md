@@ -15,8 +15,8 @@
 ## 1. 대상과 영향
 
 - 대상: `web/dashboard/` 정적 파일, `docs/design/DESIGN.md`의 YAML 토큰, `docs/design/mockups/dashboard.html`·`help-site.html`의 토큰 블록, `tests/dashboard_assets.rs`·`tests/dashboard_browser.rs`·`tests/dashboard_live/main.rs`와 그 공통·화면별 본문.
-- 예상 사용자 영향: 운영 서버를 멈추지 않는다. 실서버 시험은 OS 임시 폴더에 계정·설정·브라우저 프로필을 만들고, 임의 루프백 포트에 시험용 서버·전달 프록시·TCP 중계를 연다. 자신이 시작한 프로세스와 소켓만 종료한다. 기존 토큰·정적 검사는 파일을 읽고 `target/` 아래에 결과를 쓴다.
-- 작업 허용 시간: 자동 검사는 서버 중단이 필요 없다. 수동 검토(3.4~3.7절)는 검토자의 시간이 필요하다.
+- 예상 사용자 영향: 운영 중인 VNC Relay를 멈추지 않는다. 실제 VNC Relay 시험은 OS 임시 폴더에 계정·설정·브라우저 프로필을 만들고, 임의 루프백 포트에 시험용 VNC Relay·전달 프록시·TCP 중계를 연다. 자신이 시작한 프로세스와 소켓만 종료한다. 기존 토큰·정적 검사는 파일을 읽고 `target/` 아래에 결과를 쓴다.
+- 작업 허용 시간: 자동 검사는 VNC Relay 중단이 필요 없다. 수동 검토(3.4~3.7절)는 검토자의 시간이 필요하다.
 
 ## 2. 전제 조건
 
@@ -34,7 +34,7 @@
 - 실행 환경: Ubuntu 24.04 LTS x64는 bash, Windows 11 x64는 PowerShell을 쓴다. 지원 환경은 [개발 환경·검증 how-to 2절](set-up-and-verify.md#2-전제-조건)을 따른다.
 - 실행 위치: 저장소 루트
 - 바꿔 넣을 값: `DASHBOARD_BROWSER`에는 Chromium 실행 파일 경로를 넣는다. 확인하려면 경로를 직접 실행해 `--version`이 버전을 출력하는지 본다. 경로에 공백이 있으면 큰따옴표로 감싼다.
-- 최대 대기 시간: 일반 자동 명령은 10분을 기본값으로 쓴다. 실서버 브라우저 묶음과 전체 게이트는 `Si=300s` 실제 만료를 포함하므로 20분 이상 허용한다. 수동 검토에는 시간 한도가 없다.
+- 최대 대기 시간: 일반 자동 명령은 10분을 기본값으로 쓴다. 실제 VNC Relay 브라우저 시험 묶음과 전체 게이트는 `Si=300s` 실제 만료를 포함하므로 20분 이상 허용한다. 수동 검토에는 시간 한도가 없다.
 
 ### 3.1 토큰과 문서 확인
 
@@ -82,13 +82,13 @@
 
    기대 결과: `test result: ok.` 줄이 나온다. 각 테스트 페이지의 `data-result` 값이 `pass`다. `DASHBOARD_BROWSER`가 없거나 실행되지 않으면 테스트가 실패해야 한다.
 
-   실제 서버·CDP 수용 시험도 실행한다.
+   실제 VNC Relay·CDP 수용 시험도 실행한다.
 
    ```shell
    cargo test --test dashboard_live
    ```
 
-   일반 API 데이터는 실제 `serve`에서 얻는다. 시험 TCP 프록시의 지연·유실·계약 모양 500은 전달·주입 카운터로 구분한다. 주입한 500을 서버 자체 실패 증거라고 적지 않는다. DASH-008은 운영 현황과 상세에서 `Si=300s`를 실제로 기다린다. 이 명령을 60초에 끊지 않는다. Chrome·Edge 경로 탐색은 기존 `DASHBOARD_BROWSER` 규칙과 같다. 브라우저·서버·프록시는 시험 종료 시 정리한다. DASH-015·023의 수동 확인은 이 명령으로 대체하지 않는다.
+   일반 API 데이터는 실제 `serve`에서 얻는다. 시험 TCP 프록시의 지연·유실·계약 모양 500은 전달·주입 카운터로 구분한다. 주입한 500을 VNC Relay 자체 실패 증거라고 적지 않는다. DASH-008은 운영 현황과 상세에서 `Si=300s`를 실제로 기다린다. 이 명령을 60초에 끊지 않는다. Chrome·Edge 경로 탐색은 기존 `DASHBOARD_BROWSER` 규칙과 같다. 브라우저·VNC Relay·프록시는 시험 종료 시 정리한다. DASH-015·023의 수동 확인은 이 명령으로 대체하지 않는다.
 
 
 2. 시나리오 보고서를 갱신한다.
@@ -213,7 +213,7 @@
 | 도움말 캡처의 내용·비밀 값, 2026-11-17 | `9d43e3e`의 표 배치를 담은 ko·en 도움말 캡처 12장 | Ubuntu에서 [도움말 게시 절차](publish-help.md#34-화면-캡처-갱신)로 만든 그림 12장을 모두 열었다 | 통과. 운영 현황 그림에 표 배치가 보인다. 시험 계정 `alice`, 루프백 주소, `/tmp` 아래 시험 경로와 시험 세션 식별자만 보였다 | [도움말 화면 캡처](publish-help.md#34-화면-캡처-갱신)의 산출물 |
 | SCR-007 메트릭, 2026-11-19 | `456c206` 위 SCR-007 작업 트리와 채택 시안 SCR-007 | Windows 10.0.26200 x64, Chrome 157.0.8103.79, Asia/Seoul, 높이 900px, 에이전트 조작 탭. `cargo xtask dashboard-serve --port 34131`과 `file:///` 시안을 썼다. (1) 그림 대조: `/tests/metrics.html?case=shot-<상태>&lang=<언어>`와 시안의 같은 상태를 같은 이름의 10쌍으로 열었다. 정상 ko 1280px의 핵심 지표·추이·시간 분포·원인별 수, 부분·수집 중 ko 1280px의 추이, 첫 조회 실패 ko 1280px, 정상 en 390px의 추이·시간 분포·원인별 수다. (2) 시안 값 대조: 시안 값의 계약 모양 가짜 API로 실제 `mountMetrics`를 마운트한 그림 5장(ko 1280px 시간 분포·추이·원인별 수, en 390px 시간 분포·원인별 수)을 시안 그림과 열었다. 이 API는 [메트릭 계약](../contracts/metrics-v1.md) 1.5절 경계, 시안의 분포 11행·원인 표 행, 합성한 360점 추이를 쓴다. (3) 자동 측정: 같은 데이터로 320·390·768·1023·1024·1280px × ko·en의 가로 넘침, 1023·1024px 카드 폭, 빈 표 행 상자, 배지 폭을 구현과 시안에서 쟀다 | 통과(대조 범위). 카드 순서·간격, 축 눈금과 단위, 범례 문구, 계열별 선 스타일(실선·긴 점선·점선)과 색, 분포 막대·수 막대, 배지가 시안과 같다. 추이 선의 값 모양은 합성 데이터라 대조하지 않았다. 분포 11행의 개수·평균·p95 상한 글씨(`> 7일 00:00:00` 포함)가 시안과 같다. 가로 넘침 0건. 구현과 시안 모두 1023px에서 추이·원인 카드가 한 열, 1024px에서 두 열이다. 외부 수집 안내 아이콘은 DESIGN의 원 안 느낌표로 고쳤다(`createAlert`의 `icon` 옵션). 시안 CSS를 두 곳 고쳤다. 빈 원인 표의 "기록 없음"은 공통 표 빈 행처럼 가운데 정렬이다. 모바일 종료 원인 배지는 공통 배지처럼 글자 폭이다. 빈 행 선택자에 맞는 칸은 SCR-007의 20칸뿐이다. 배지 규칙을 끄고 켠 측정에서 폭이 바뀐 배지는 356개 중 SCR-007의 50개뿐이다. 로딩·갱신 중·조회 실패·요청 거절 프레임은 그림으로 대조하지 않았다. 요청 거절은 구현 그림만 열었다. 사람의 검토는 미실행이다 | `target/dashboard-shots/scr007/mock/` 10장, `impl/` 18장(같은 이름 10쌍, 시안 값 화면 `mock-*` 5장, 구현만 연 `normal-ko-process`·`partial-ko-kpi`·`rejected-ko-main`). `SHA256SUMS.txt`의 SHA-256은 `55e3faff68c12db6158f119a693b31de8d8e8f635430168d170320c52a6cca53` |
 | SCR-007 추이 기간 선택, 2026-11-19 | `8b24e36` 위 24시간 추이 작업 트리와 채택 시안 SCR-007(추이 기간 선택 포함) | Windows 10.0.26200 x64, Chrome 157.0.8103.79, Asia/Seoul, 에이전트 조작 탭. `cargo xtask dashboard-serve --port 34132`와 `file:///` 시안을 썼다. (1) 자동 측정: `/tests/metrics.html?case=shot-<normal|refreshing|loading|failed-first|rejected>&lang=<언어>`와 시안의 같은 상태 프레임을 1280·1024·1023·768·390·320px × ko·en의 60쌍으로 열었다. 시안 뷰포트는 1023px만 1023px이고 나머지는 18px 넓다. 선택 상자와 [새로고침]의 폭·높이, 레이블 간격, 아래 끝 차이, 배치, 글자 크기, 꺾쇠 위치를 쟀다. (2) 그림 대조: 갱신 중 ko 1280px와 정상 en 390px의 머리말 2쌍을 열었다. (3) 24시간 추이: 같은 시험 페이지에서 제품 `mountMetrics`를 마운트했다. 가짜 API는 `metrics-fixture.js`로 1분 간격 1440점을 준다. 선택 상자에서 "최근 24시간"을 고른 뒤 ko 1280px·en 390px 추이 구역을 열었다 | 통과(대조 범위). 데스크톱(1280·1024px)에서 선택 상자는 [새로고침] 왼쪽 8px 간격에 있고 두 요소의 아래 끝이 같다. 높이는 둘 다 36px다. 1023px 이하에서는 선택 상자가 [새로고침] 위 8px 간격에 전체 폭으로 놓이고 높이는 44px다. 레이블은 선택 상자 위 4px 간격이며 12px·400이다. 선택 상자 글자는 16px다. 다섯 상태 모두 선택 상자가 활성이다. 구현의 가로 넘침은 0건이다. 시안과 다른 값은 꺾쇠 오른쪽 여백(구현 12px, 시안 8px)과 그에 따른 데스크톱 선택 상자 폭(ko 113px·en 129px, 시안 115px·131px)이다. 1023px의 폭 차이는 시안 틀 여백 때문이다. 첫 조회 실패의 768px 이하 폭 15px 차이는 구현 페이지에 세로 스크롤 막대가 없기 때문이다. 24시간 추이는 범위 "추이: 최근 24시간, 1분 간격 · 점 1440/1440개", 제목 "추이(최근 24시간)", x축 눈금 `19:00 01:00 07:00 13:00 19:00`(6시간 간격)을 보이고 두 폭에서 가로 넘침이 없다. 이번 변경 전부터 있던 차이: 정상 상태에서 빈 상태 칸(`#metrics-status`)과 16px 간격 때문에 "마지막 성공 갱신"이 16px 들여 쓰인다. 고치지 않았다. 사람의 검토는 미실행이다 | `target/dashboard-shots/scr007-period/results.json`(60쌍 측정값), `impl/` 4장(`head-refreshing-ko-1280`, `head-normal-en-390`, `trends-24h-ko-1280`, `trends-24h-en-390`), `mock/` 2장(`head-refreshing-ko-1280`, `head-normal-en-390`). `SHA256SUMS.txt`의 SHA-256은 `dfff2be9eb53de765edbe470c9999e6a3cec16df5aa2e9641feb1f0db036af64` |
-| SCR-008 접속 출처, 2026-11-20 | `40c67bb` 위 접속 출처 작업 트리와 채택 시안 SCR-008 | Windows 10.0.26200 x64, Chrome 157.0.8103.79 헤드리스, Asia/Seoul. 시험 페이지 `/tests/sources.html`의 가짜 API로 10상태(정상·DB 상태 섞임·DB 읽기 실패·사건 없음·조회 중·갱신 중·첫 조회 실패·조회 실패·요청 거절·보관 상한)를 1280·1024·390·320px × ko·en의 80장으로 찍었다. 390·320px은 브라우저의 기기 크기 설정으로 찍었다. 채택 시안 그림 8장(정상 ko 1280px·en 390px, DB 상태 ko 1280px, 사건 없음·조회 중 ko 1280px, 첫 조회 실패·보관 상한 ko 390px, en 1024px 상단 막대)과 같은 상태의 구현 그림을 나란히 열었다 | 통과(대조 범위). 요약 카드 7개의 배치, IP 정보 DB 행의 배지·종류·시각·안내·출처 표시, 세 표의 열 순서·조회 링크 아이콘·로컬 배지·"알 수 없음", en 1024px 상단 막대의 "Overview"가 시안과 같다. 80장 모두 가로 넘침이 없었다. 한계: 이 PC의 헤드리스 Chrome은 `--window-size=320,800`에서도 `innerWidth`가 512였다. `tests/dashboard_browser.rs`는 `--window-size`로 폭을 정하므로 Windows의 390·320px 실행은 512px 배치다. 실서버 시험(`tests/dashboard_live/`)은 기기 크기 설정(`set_width`)을 쓴다. 키보드·스크린 리더·다른 엔진은 미실행이다 | `target/scr008-impl/`(커밋하지 않음), `tests/dashboard_browser.rs`의 DASH-082~088 |
+| SCR-008 접속 출처, 2026-11-20 | `40c67bb` 위 접속 출처 작업 트리와 채택 시안 SCR-008 | Windows 10.0.26200 x64, Chrome 157.0.8103.79 헤드리스, Asia/Seoul. 시험 페이지 `/tests/sources.html`의 가짜 API로 10상태(정상·DB 상태 섞임·DB 읽기 실패·사건 없음·조회 중·갱신 중·첫 조회 실패·조회 실패·요청 거절·보관 상한)를 1280·1024·390·320px × ko·en의 80장으로 찍었다. 390·320px은 브라우저의 기기 크기 설정으로 찍었다. 채택 시안 그림 8장(정상 ko 1280px·en 390px, DB 상태 ko 1280px, 사건 없음·조회 중 ko 1280px, 첫 조회 실패·보관 상한 ko 390px, en 1024px 상단 막대)과 같은 상태의 구현 그림을 나란히 열었다 | 통과(대조 범위). 요약 카드 7개의 배치, IP 정보 DB 행의 배지·종류·시각·안내·출처 표시, 세 표의 열 순서·조회 링크 아이콘·로컬 배지·"알 수 없음", en 1024px 상단 막대의 "Overview"가 시안과 같다. 80장 모두 가로 넘침이 없었다. 한계: 이 PC의 헤드리스 Chrome은 `--window-size=320,800`에서도 `innerWidth`가 512였다. `tests/dashboard_browser.rs`는 `--window-size`로 폭을 정하므로 Windows의 390·320px 실행은 512px 배치다. 실제 VNC Relay 시험(`tests/dashboard_live/`)은 기기 크기 설정(`set_width`)을 쓴다. 키보드·스크린 리더·다른 엔진은 미실행이다 | `target/scr008-impl/`(커밋하지 않음), `tests/dashboard_browser.rs`의 DASH-082~088 |
 | SCR-008 주소 차단과 해제·SCR-004/005 차단 목록, 2026-11-20 | `4ab4d8f` 위 주소 차단 작업 트리의 접속 출처·설정 구현과 채택 시안(DESIGN.md "주소 차단 확장"의 `scr008-deny-*`·`scr004-deny-*`·`scr005-deny-*`) | Windows 10.0.26200 x64, Chrome 157.0.8103.79 헤드리스, 높이 900px(모바일 844px), 배율 1. 저장소 밖 스크립트가 시험 페이지(`/tests/sources.html?case=shot-deny-<상태>`, `/tests/settings.html?case=shot-scr005-deny-<상태>`)와 `file:///` 시안을 열었다. 390px은 기기 크기 지정으로 찍었다. (1) 구현 15상태 × 1280·390px × ko·en 60장과 설정 5상태 × 같은 조합 20장. (2) 시안과 나란히 연 그림: 차단 가능 표 ko 1280px·390px, 차단 확인 대화상자, 결과 알림 한 묶음, 설정 차단 목록 입력·오류, 변경 확인(항목 추가). (3) 자동 측정: 차단 5상태 × 1280·1024·768·390·320px × ko·en의 가로 넘침 | 통과(대조 범위). 가로 넘침 0건. 상태 열의 배지·버튼·범위 안내 배치, 대화상자, 알림 어조(success·warning·destructive·neutral)와 문구, 주소가 고정폭인 점, 설정 입력의 이름·키·도움말 두 줄이 시안과 같다. 구현을 고친 차이는 한 건이다. 행 버튼의 좌우 안쪽 여백이 16px이라 시안의 `.btn.sm` 12px보다 넓었고 12px로 고쳤다. 비교하지 않은 상태: 차단 해제 확인·처리 중·편집 꺼짐 상태의 그림, 설정 확인의 항목 삭제, SCR-001 `ip_denied` 행(자동 시험으로 확인했다). 사람의 검토는 미실행이다 | `target/deny-impl/` 그림 전부(`<상태>-<언어>-<폭>.png`, `cmp-*`·`mock-*`·`fld-*`·`dlg-*`) |
 
 #### 허용하는 시안 차이
@@ -224,7 +224,7 @@
 - 인증 만료는 보호 데이터를 제거하고 로그인으로 이동한다. 시안의 보호 화면 안 작은 로그인 견본과 구분한다.
 - SCR-001·002의 조회 중 안내는 전체 폭 배너 대신 카드 머리와 값 자리의 공통 정보 배지다. CPY에 없는 설명은 넣지 않는다. SCR-001 조회 실패는 요청별 카드에서 실패와 이전 데이터를 구분한다.
 - SCR-002의 대상 없음·잘못된 식별자·종료 결과는 스펙이 정한 행동·톤·복구 안내를 쓴다. 정보의 키·값은 공통 `fact` 행 구분선·안쪽 여백·모바일 한 열을 쓴다.
-- 설정 파일 상태는 상태 제목·본문·키·번역한 진단을 안내 안에 둔다. `invalid`·`unreadable`은 위험 톤이다. 서버 진단에는 알려진 코드의 번역한 줄 오류를 쓰며 원문 키를 따로 덧붙이지 않는다.
+- 설정 파일 상태는 상태 제목·본문·키·번역한 진단을 안내 안에 둔다. `invalid`·`unreadable`은 위험 톤이다. VNC Relay 진단에는 알려진 코드의 번역한 줄 오류를 쓰며 원문 키를 따로 덧붙이지 않는다.
 - 설정 확인의 이전 값·새 값·목록 추가·삭제는 세로로 쌓는다. 계약과 입력 순서를 따르고 정수는 `typography.body-numeric`을 쓴다. 실제 대화상자는 뷰포트 가운데에 놓고 내부에서 스크롤한다. 초기 초점은 취소다.
 - 설정 카드·표·구역은 모두 펼친다. 모바일 페이지 행동은 전체 폭으로 세로로 쌓는다. 취소·설정 보기 행동과 CPY-189 안내는 스펙 상태에 맞게 유지한다. 변경 없음 안내 CPY-106은 확인 대화상자 안에 있고 적용 시 PATCH 없이 설정 보기로 돌아간다.
 - 최근 로그의 첫 성공 전 시각은 CPY-035 “확인 불가”·“Unavailable”이다. 다운로드 수집 중에는 시작 필터를 고정하고 입력·필터·수동 조회를 잠시 비활성화한다. 언어·이동·상세 조작은 유지한다.
@@ -233,7 +233,7 @@
 - SCR-007의 제목 단계는 시안의 h5·h6 대신 h2·h3이다. 조회 중에는 프로세스 카드의 핸들·fd 행을 생략한다. 시험 페이지 가짜 API의 적은 추이 점, 긴 원인 값의 줄바꿈 위치는 데이터와 열 폭에 따른 차이다.
 - 모바일 빈 표 행의 높이는 시안 77px, 구현 53px다. 시안은 행 여백 12px 안에 칸 여백 16px을 두고, 구현은 행 여백 16px만 둔다. 같은 차이가 SCR-001 빈 목록에도 있다(2026-11-19 390px 측정). 글씨는 둘 다 가운데다.
 - 추이 기간 선택의 꺾쇠 오른쪽 여백은 시안 8px(`spacing.sm`), 구현 12px(`spacing.md`)다. 선택 상자의 오른쪽 안쪽 여백은 시안 26px, 구현 24px(`spacing.xl`)다. 그래서 데스크톱 선택 상자가 시안보다 2px 좁다. DESIGN은 이 선택을 SCR-006 사건 선택과 같은 변형으로 정했고, 구현은 사건 선택의 규칙을 그대로 쓴다. 같은 차이가 SCR-006 사건 선택에도 있다(2026-11-19 1280px 측정).
-- 차단 표시: 결과 알림의 중립 톤(CPY-097)은 시안의 느낌표 원 아이콘 대신 공통 알림 컴포넌트의 중립 아이콘을 쓴다. 같은 차이가 다른 중립 알림에도 있다. 설정 변경 확인의 차단 목록은 시안처럼 한 줄 화살표 대신 이전 값·새 값·추가한 항목·뺀 항목을 세로로 쌓는다(위 설정 확인 항목과 같은 이유). 서버 진단 키(`relay.deny.sources[1]`)는 위 설정 파일 상태 항목처럼 덧붙이지 않고 오류가 난 줄을 선택한다. 결과 알림은 `scrollIntoView({ block: 'nearest' })`로 보이게 하고, 포커스는 호출한 버튼으로 돌아가며 버튼이 사라지면 알림 영역으로 간다(DESIGN.md 결정 8의 구현).
+- 차단 표시: 결과 알림의 중립 톤(CPY-097)은 시안의 느낌표 원 아이콘 대신 공통 알림 컴포넌트의 중립 아이콘을 쓴다. 같은 차이가 다른 중립 알림에도 있다. 설정 변경 확인의 차단 목록은 시안처럼 한 줄 화살표 대신 이전 값·새 값·추가한 항목·뺀 항목을 세로로 쌓는다(위 설정 확인 항목과 같은 이유). VNC Relay 진단 키(`relay.deny.sources[1]`)는 위 설정 파일 상태 항목처럼 덧붙이지 않고 오류가 난 줄을 선택한다. 결과 알림은 `scrollIntoView({ block: 'nearest' })`로 보이게 하고, 포커스는 호출한 버튼으로 돌아가며 버튼이 사라지면 알림 영역으로 간다(DESIGN.md 결정 8의 구현).
 
 ### 4.2 키보드·다른 엔진 확인 기록
 
@@ -243,26 +243,26 @@
 | --- | --- | --- | --- | --- |
 | 로그인 Tab·대화상자·320px 흐름, 2026-11-07 | 제품 `ae4e98b`, debug 빌드 복사본. Windows 10.0.26200 x64의 Chrome 157.0.8103.38·Edge 156.0.4314.58·WebKit 27.2(Playwright v2370), WSL Ubuntu 24.04.4 snap Firefox 159.0. Playwright 1.64.1(Python 3.14.6), Firefox는 Bun·WebDriver BiDi | 실제 Mode II 활성 세션·대기 연결을 만들고 1280·390·320px × ko·en으로 로그인 → 목록 → 상세 → 종료 취소·확인 → 목록 → 로그아웃을 엔진별 6회 실행했다. ko 1280·390px에서는 실제 Tab·Enter·Escape를 보냈다 | 통과(범위 한정). 로그인 Tab은 언어 → 계정 → 비밀번호 → 로그인이다. 링은 실선 2px·간격 2px, 로그인 링 색은 미판정이다. 대화상자 Tab 순환과 Escape 뒤 종료 버튼 초점 복귀·세션 유지가 맞았다. 24회에서 가림·가로 넘침 0건. Firefox 페이지 오류는 수집하지 않았다. WebKit은 Tab·Alt+Tab이 링크를 건너뛰어 스크립트로 초점을 준 뒤 Enter로 상세를 열었다. 설치 버전은 당시 최신 안정판 Chrome 158·Edge 157·Firefox 159.0.1보다 낮았다 | `target/q412-close/<엔진>/results-b.json`의 `login_tab`·`keyboard`, Firefox의 `login_tab_after_logout`, `shots/` |
 | 포커스 링 색, 2026-10-23 | `8f3c20f` 위 표·버튼 줄바꿈 수정 작업 트리. Firefox 158.0.1(WSL2 Ubuntu 24.04.4), Edge 155.0.4283.62(Windows 10.0.26200), 헤드리스·높이 900px·DPR 1 | 실제 앱·라우터 API fixture에서 BiDi `input.performActions`·CDP `Input.dispatchKeyEvent`로 1280·390px의 세션 ID 링크에 Tab으로 이동했다 | 통과. 두 브라우저·두 폭 모두 `:focus-visible=true`, outline 2px·offset 2px·`rgb(18,53,43)`으로 `colors.ring`과 같다. ID 링크는 같은 행의 상세보다 먼저 오고 Enter가 해당 상세를 열었다. Firefox 로그인 버튼·계정 입력과 상단 링은 `154d3ec` 위 요약 격자 수정 작업 트리에서 각각 `#12352b`·`#ffffff`와 대조했다. 실제 인증·세션 조회 시험은 아니다 | `target/firefox-417/firefox.json`, `edge-final.json`, `*-link-focus-<폭>.png`; 로그인·상단 색은 `target/firefox-412/keyboard.json` |
-| 설정 적용·서버 진단, 2026-11-08 | `7ce077f`와 같은 소스의 Windows debug 서버. Windows 10.0.26200 x64, Chrome 157.0.8103.38·Edge 156.0.4314.58·Playwright Firefox 157.0(빌드 1555)·WebKit 27.2(빌드 2370) | 1280·390px × ko·en 16회. 실제 키 입력으로 로그인·보기·편집·확인 취소·적용·서버 진단·로그아웃을 실행했다 | 통과. `limits.waiting` 8→10과 `relay.tcp_viewer.allow`의 `10.0.0.1`을 적용해 실제 파일과 “설정 2개를 적용했습니다.”·“Applied 2 settings.”를 확인했다. `not-an-ip`의 3줄 오류는 입력으로 초점을 옮기고 해당 줄을 선택했다. 대화상자 초기 초점·Tab 순환·Escape 복귀가 맞고 가로 넘침 0건. WebKit CSP 보고는 네이티브 select와 캡처 스타일 보고를 포함하며 정확한 일대일 대응은 확인하지 못했다 | `target/settings-engines/results.json`, `shots/` 48장 |
-| 로그·공통 셸·상세·설정 탐색, 2026-11-09 | `f001385` 위 로그·공통 스타일·실서버 시험 작업 트리(`3df0693`에 포함). Windows 10.0.26200 x64, WSL Ubuntu 24.04.4 UID 1000. Chrome 157.0.8103.38·Edge 156.0.4314.58·snap Firefox 159.0·WebKit 27.2(v2370). Node 26.7.0, Playwright `1.64.0-beta-1791568591000`, WSL Bun 1.3.11, 높이 900px·Asia/Seoul·헤드리스 | Windows `node target/logs-engines/runner.js chrome`·`msedge`·`webkit`, Firefox `wsl -d Ubuntu -- bash -c 'TZ=Asia/Seoul bun /mnt/d/Workspace/vnc-relay/target/logs-engines/runner.js'`. 실제 TCP Viewer·WS Server와 양방향 11바이트, 실제 거절 사건 1050개로 1280·390px × ko·en 16회를 실행했다 | 통과. 240개 관찰점·720개 요소 검사에서 가림·화면 밖·크기 0·가로 넘침·페이지 오류 모두 0건이다. 로그 필터·검색·상세·더 보기·자동 갱신·다운로드, 설정 보기·편집·확인 취소, 세션 종료 취소·확인, 로그아웃이 동작했다. 실제 Safari·실기기·사람 판정은 미실행이다. 버전은 당시 최신 안정판 Chrome 158.0.8127.18·Edge 157.0.4341.42·Firefox 159.0.1보다 낮다 | `target/logs-engines/summary.json`, 엔진별 `results.json`, 관찰점 PNG 240장, `provenance.json`, `environment.json`, `latest-versions.json` |
+| 설정 적용·VNC Relay 진단, 2026-11-08 | `7ce077f`와 같은 소스의 Windows debug VNC Relay. Windows 10.0.26200 x64, Chrome 157.0.8103.38·Edge 156.0.4314.58·Playwright Firefox 157.0(빌드 1555)·WebKit 27.2(빌드 2370) | 1280·390px × ko·en 16회. 실제 키 입력으로 로그인·보기·편집·확인 취소·적용·VNC Relay 진단·로그아웃을 실행했다 | 통과. `limits.waiting` 8→10과 `relay.tcp_viewer.allow`의 `10.0.0.1`을 적용해 실제 파일과 “설정 2개를 적용했습니다.”·“Applied 2 settings.”를 확인했다. `not-an-ip`의 3줄 오류는 입력으로 초점을 옮기고 해당 줄을 선택했다. 대화상자 초기 초점·Tab 순환·Escape 복귀가 맞고 가로 넘침 0건. WebKit CSP 보고는 네이티브 select와 캡처 스타일 보고를 포함하며 정확한 일대일 대응은 확인하지 못했다 | `target/settings-engines/results.json`, `shots/` 48장 |
+| 로그·공통 셸·상세·설정 탐색, 2026-11-09 | `f001385` 위 로그·공통 스타일·실제 VNC Relay 시험 작업 트리(`3df0693`에 포함). Windows 10.0.26200 x64, WSL Ubuntu 24.04.4 UID 1000. Chrome 157.0.8103.38·Edge 156.0.4314.58·snap Firefox 159.0·WebKit 27.2(v2370). Node 26.7.0, Playwright `1.64.0-beta-1791568591000`, WSL Bun 1.3.11, 높이 900px·Asia/Seoul·헤드리스 | Windows `node target/logs-engines/runner.js chrome`·`msedge`·`webkit`, Firefox `wsl -d Ubuntu -- bash -c 'TZ=Asia/Seoul bun /mnt/d/Workspace/vnc-relay/target/logs-engines/runner.js'`. 실제 TCP 뷰어·WS 서버와 양방향 11바이트, 실제 거절 사건 1050개로 1280·390px × ko·en 16회를 실행했다 | 통과. 240개 관찰점·720개 요소 검사에서 가림·화면 밖·크기 0·가로 넘침·페이지 오류 모두 0건이다. 로그 필터·검색·상세·더 보기·자동 갱신·다운로드, 설정 보기·편집·확인 취소, 세션 종료 취소·확인, 로그아웃이 동작했다. 실제 Safari·실기기·사람 판정은 미실행이다. 버전은 당시 최신 안정판 Chrome 158.0.8127.18·Edge 157.0.4341.42·Firefox 159.0.1보다 낮다 | `target/logs-engines/summary.json`, 엔진별 `results.json`, 관찰점 PNG 240장, `provenance.json`, `environment.json`, `latest-versions.json` |
 
 최신 로그·공통 셸 확인의 상세 결과는 다음과 같다.
 
-- 실제 응답의 제품 JS·CSS는 실행마다 현재 소스와 바이트가 같았다. 서버·전체 소스 해시는 `provenance.json`에 있다.
+- 실제 응답의 제품 JS·CSS는 실행마다 현재 소스와 바이트가 같았다. VNC Relay·전체 소스 해시는 `provenance.json`에 있다.
 - 상세에는 `TCP → WS`, 대상 WS와 전달 주소 `192.0.2.20`이 보였다. 로그의 세션 필터는 해당 ID와 같고 해제하면 칩·URL에서 사라졌다.
 - warn·`connection_rejected`·`forwarded_for_invalid` 검색은 검색어가 든 실제 GET과 200행을 확인했다. 더 보기는 200→400행, 상세 펼침은 `aria-expanded` true→false, 자동 갱신은 `aria-checked` false→true였다.
-- 다운로드 파일은 실제 API 5페이지의 모든 entry와 같았다. Chrome·Edge·WebKit은 4977줄, Firefox는 4975줄이다. UTF-8·LF·마지막 LF도 맞았다. 각 실행의 서버·필터 결과와 대조했으며 서로 다른 실행의 파일 내용 일치를 요구하지 않았다.
+- 다운로드 파일은 실제 API 5페이지의 모든 entry와 같았다. Chrome·Edge·WebKit은 4977줄, Firefox는 4975줄이다. UTF-8·LF·마지막 LF도 맞았다. 각 실행의 VNC Relay 응답·필터 결과와 대조했으며 서로 다른 실행의 파일 내용 일치를 요구하지 않았다.
 - 취소 뒤 실제 상세 GET은 200이고 초점은 종료 버튼으로 돌아왔다. 종료 확인 완료 안내 뒤 GET은 404였다. 로그아웃은 `/login/`으로 이동하고 보호 화면·로그 행·설정 입력을 제거했다.
 - Chrome·Edge는 CSP 0건, 콘솔은 종료 확인 GET의 예상된 404 한 건이다. Firefox는 CSP·콘솔 오류 0건이다.
 - WebKit은 실행마다 select 생성의 `style-src-attr` 64건과 캡처의 `style-src-elem` 15건을 보고했다. 콘솔은 이 거부 79건과 예상된 404 한 건이다. `select-probe.json`의 분리 재현에서 스타일 속성 없는 select만 보고를 만들고 div는 만들지 않았다. 캡처 직전·직후 차이로 캡처 보고를 구분했다. 제품 CSP는 완화하지 않았다. 제품 style 요소·속성은 0개이고 필수 행동은 모두 동작했다.
-- 증거 목록 `target/logs-engines/SHA256SUMS`는 351개 파일·98,271,828바이트이며 SHA-256은 `23e767997a7911d8a11b2bc50005e12067ffe15027efda6dc941741efe0a670e`다. 초기 시도 파일도 포함하므로 최종 16회 수와 구분한다. 시험 서버·실행파일 복사본·계정 파일·임시 비밀번호·Firefox 프로필은 제거했다.
+- 증거 목록 `target/logs-engines/SHA256SUMS`는 351개 파일·98,271,828바이트이며 SHA-256은 `23e767997a7911d8a11b2bc50005e12067ffe15027efda6dc941741efe0a670e`다. 초기 시도 파일도 포함하므로 최종 16회 수와 구분한다. 시험용 VNC Relay·실행파일 복사본·계정 파일·임시 비밀번호·Firefox 프로필은 제거했다.
 
 ### 4.3 WebKit 인증·CSRF 관찰 기록
 
 - 날짜·대상: 2026-11-07, `e71dcee` 위 대화상자 포커스 복귀 변경 작업 트리의 관리 API 인증 경로. 인증·CSRF 관찰은 대화상자 코드를 쓰지 않는다.
-- 환경: Windows 10.0.26200 x64, Python 3.14.6, Playwright 1.64.1, WebKit 27.2(빌드 v2370), argon2-cffi 25.1.0. 루프백 debug 서버와 로컬 공격·대조 페이지를 썼다.
+- 환경: Windows 10.0.26200 x64, Python 3.14.6, Playwright 1.64.1, WebKit 27.2(빌드 v2370), argon2-cffi 25.1.0. 루프백에서 실행한 debug VNC Relay와 로컬 공격·대조 페이지를 썼다.
 - 방법: 저장소 밖 `D:/vr-tools/webkit-q135/check_auth.py`로 `Session`·`Basic` 401 탐색, 다른 사이트의 JSON·`no-cors`·폼 로그인, 정상 로그인 뒤 다른 사이트 조회·종료 요청을 관찰했다.
-- 결과: JSON 로그인은 OPTIONS 401·CORS 헤더 없음 뒤 `TypeError`로 막혔다. `no-cors`의 `text/plain`과 폼 POST는 415였고 `Set-Cookie`가 없었다. 공격 뒤 쿠키는 0개였다. 정상 로그인 뒤 서버가 `SameSite=Strict`를 보냈지만 이 빌드는 `sameSite=None`으로 저장해 다른 사이트 GET 두 건에 쿠키를 실었고 200을 받았다. 공격 페이지는 불투명 응답만 받았다. 쿠키가 실린 종료 요청도 `X-CSRF-Token`이 없어 403이며 세션은 유지됐다. `text/plain` POST는 415였다.
+- 결과: JSON 로그인은 OPTIONS 401·CORS 헤더 없음 뒤 `TypeError`로 막혔다. `no-cors`의 `text/plain`과 폼 POST는 415였고 `Set-Cookie`가 없었다. 공격 뒤 쿠키는 0개였다. 정상 로그인 뒤 VNC Relay가 `SameSite=Strict`를 보냈지만 이 빌드는 `sameSite=None`으로 저장해 다른 사이트 GET 두 건에 쿠키를 실었고 200을 받았다. 공격 페이지는 불투명 응답만 받았다. 쿠키가 실린 종료 요청도 `X-CSRF-Token`이 없어 403이며 세션은 유지됐다. `text/plain` POST는 415였다.
 - 판정 한계: `Session`·`Basic` 401 모두 JSON 본문을 보여 기본 인증 창 대조가 성립하지 않았다. 실제 Safari의 인증 창·SameSite 동작은 판정하지 못했다. Windows용 WebKit의 쿠키 처리 한계라는 해석은 추정이다.
 - 증거: `target/webkit-q135/results-auth.json`, `relay-auth-run.jsonl`, 저장소 밖 `D:/vr-tools/webkit-q135/check_auth.py`와 `repro/`.
 

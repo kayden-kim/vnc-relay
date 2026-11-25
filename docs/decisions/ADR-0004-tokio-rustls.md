@@ -20,7 +20,7 @@
 
 ## 2. 배경
 
-[ADR-0001](ADR-0001-built-in-tls.md)에 따라 서버가 TLS를 직접 종료한다. 그러려면 TLS 라이브러리가 필요하다. Windows와 Ubuntu 양쪽에서 같은 동작을 보여야 한다.
+[ADR-0001](ADR-0001-built-in-tls.md)에 따라 VNC Relay가 TLS를 직접 종료한다. 그러려면 TLS 라이브러리가 필요하다. Windows와 Ubuntu 양쪽에서 같은 동작을 보여야 한다.
 
 - 맥락 없이 보면 의외인 점: Windows에는 OS가 제공하는 TLS(SChannel)와 인증서 저장소가 있다. Ubuntu에는 시스템 OpenSSL이 있다. 이 프로젝트는 두 OS의 기본 TLS를 쓰지 않고 Rust로 작성된 TLS 라이브러리를 가져온다. 코드를 읽는 사람은 "OS가 이미 가진 TLS를 왜 쓰지 않나"라고 물을 수 있다. Windows에서 인증서를 OS 저장소에 설치하지 않고 파일로 두는 점도 Windows 관례와 다르다.
 - 되돌리기 어려운 이유: TLS 라이브러리는 인증서 형식, 재로드 방식, 오류 모델, 빌드 체인, 라이선스 고지에 스며든다. 나중에 바꾸면 설정 계약의 인증서 항목과 TLS 테스트 전체가 영향을 받는다.

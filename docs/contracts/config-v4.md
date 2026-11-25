@@ -8,15 +8,15 @@
 | --- | --- |
 | 이름과 버전 | `vnc-relay-config` 4.4.0. 출발지 IP 차단 목록을 담는 선택 표 `[relay.deny]`와 키 `sources`, 차단 항목과 신뢰 프록시 항목의 겹침 검사(1.6절), 재로드·편집 대상 키 추가(1.8절)를 더한 호환 변경이다. |
 | 상태 | Active |
-| 이전 버전 이력 | 4.3.0: 국가·ASN 조회용 IP 정보 DB 파일 경로를 담는 선택 표 `[ip_info]`와 그 파일 형식(1.12절) 추가. 호환 변경이다. 4.2.0: 기본으로 꺼진 `[metrics] enabled` 선택 키 추가. 호환 변경이다. 4.1.0: 기본으로 꺼진 역할별 접속 ticket 표와 공개 키 파일 형식, 재로드·편집 구분 추가. 호환 변경이다. 4.0.0: WS·WSS 리스너 표와 역할 표 분리, Server 역할·신뢰 프록시·최근 로그 보관과 재로드·편집 구분 추가. 호환성을 깨는 변경이다. 3.0.0: 재로드 대상 8개에서 27개로 확대, `management.config_edit`와 관리 API 파일 쓰기 추가. 2.0.0: `limits.initial_message_bytes`(I)와 관계 I ≤ B 삭제. B와 M 사이에는 대소 제약이 없다. 1.1.0: `log_file_unavailable` 추가. 1.2.0: 관리 TLS·첫 요청 머리 읽기에 U 적용, 감시 대상 명확화. |
+| 이전 버전 이력 | 4.3.0: 국가·ASN 조회용 IP 정보 DB 파일 경로를 담는 선택 표 `[ip_info]`와 그 파일 형식(1.12절) 추가. 호환 변경이다. 4.2.0: 기본으로 꺼진 `[metrics] enabled` 선택 키 추가. 호환 변경이다. 4.1.0: 기본으로 꺼진 역할별 접속 ticket 표와 공개 키 파일 형식, 재로드·편집 구분 추가. 호환 변경이다. 4.0.0: WS·WSS 리스너 표와 역할 표 분리, 서버 역할·신뢰 프록시·최근 로그 보관과 재로드·편집 구분 추가. 호환성을 깨는 변경이다. 3.0.0: 재로드 대상 8개에서 27개로 확대, `management.config_edit`와 관리 API 파일 쓰기 추가. 2.0.0: `limits.initial_message_bytes`(I)와 관계 I ≤ B 삭제. B와 M 사이에는 대소 제약이 없다. 1.1.0: `log_file_unavailable` 추가. 1.2.0: 관리 TLS·첫 요청 머리 읽기에 U 적용, 감시 대상 명확화. |
 | 소유자 | vnc-relay 프로젝트 관리자 |
 | 만드는 쪽(Producer) | 운영자(설정 파일 작성자), 편집 기능을 켰을 때의 관리 API |
 | 사용하는 쪽(Consumer) | `vnc-relay serve`(시작 검증·자동 재로드·관리 API 편집 적용). Windows의 `vnc-relay service run`도 `serve`와 같이 읽고, `vnc-relay service install`은 등록 전에 같은 검증을 한다([CLI 계약 1.9절](cli-v1.md#19-windows-서비스-실행)). `vnc-relay admin` 하위 명령은 `[admin]` 테이블만 읽는다. Windows 트레이 앱은 `management.listen`·`management.cert_file`·`status.listen`·`log.output`만 쓴다([Windows 트레이 앱 스펙](../specs/windows-tray.md)). |
-| 방향 | 운영자가 쓴 파일을 서버가 읽는다. `management.config_edit = true`이면 관리 API도 같은 파일을 쓴다(1.10절). |
+| 방향 | 운영자가 쓴 파일을 VNC Relay가 읽는다. `management.config_edit = true`이면 관리 API도 같은 파일을 쓴다(1.10절). |
 | 스키마 기준 파일 | 없음. 이 문서의 Markdown 표가 형식의 기준이다. |
 | 기준 스펙 | [설정·프로세스 수명·운영 보안 스펙](../specs/operations.md) |
 | 관련 요구사항 | [PRD](../requirements/PRD.md) FR-02·FR-05·FR-06·FR-07·FR-08, [7절 보안 및 신뢰 경계](../requirements/PRD.md#7-보안-및-신뢰-경계). |
-| 호환성 범위 | 설정 파일 v4(`vnc-relay-config` 4.4.0). Windows 11 x64·Ubuntu 24.04 LTS x64. 파일 안에 형식 버전 키는 없다. v1→v2는 3.1절, v2→v3는 3.2절, v3→v4와 롤백은 3.3절을 따른다. v4 서버는 v3 표를 읽지 않는다. ticket 표나 `[metrics]`·`[ip_info]`·`[relay.deny]` 표를 쓴 파일을 이전 4.x 서버로 되돌리는 방법은 3절을 따른다. |
+| 호환성 범위 | 설정 파일 v4(`vnc-relay-config` 4.4.0). Windows 11 x64·Ubuntu 24.04 LTS x64. 파일 안에 형식 버전 키는 없다. v1→v2는 3.1절, v2→v3는 3.2절, v3→v4와 롤백은 3.3절을 따른다. v4 VNC Relay는 v3 표를 읽지 않는다. ticket 표나 `[metrics]`·`[ip_info]`·`[relay.deny]` 표를 쓴 파일을 이전 4.x VNC Relay로 되돌리는 방법은 3절을 따른다. |
 | 관련 테스트 | [운영 스펙 수용 테스트](../specs/operations.md#7-수용-테스트) OPS-001~006·OPS-016·OPS-023~027·OPS-031·OPS-034~042·OPS-047~073·OPS-092·OPS-095~097·OPS-100·OPS-101, [WS·WSS 스펙](../specs/websocket.md#7-수용-테스트) WS-015·WS-022·WS-024·WS-027~046, [중계 스펙](../specs/relay.md#7-수용-테스트) RLY-007·RLY-008·RLY-022~027. 계약 시험은 5절에 연결한다. |
 
 용어는 [VNC Relay 용어집](../../GLOSSARY.md)을 따른다. 테스트·검증 기호 L~Dp 등은 [운영 스펙 2절](../specs/operations.md#2-상태와-검증-매개변수)의 기호이며, 이 계약이 각 기호를 키에 연결한다.
@@ -72,7 +72,7 @@ TCP 리스너는 역할 하나를 고정해 받는다. 두 테이블의 키는 �
 
 #### WS·WSS 리스너: `[relay.ws]`, `[relay.wss]`
 
-한 리스너가 Viewer·Server 역할을 함께 받는다. 경로 `/relay/viewer`는 Viewer, `/relay/server`는 Server를 고른다. 경로 규칙은 [WebSocket 계약 1.7절](websocket-relay-v2.md#17-경로와-역할)이 정한다. 어느 역할이든 켜면 리스너를 연다. 기본 포트는 없다.
+한 리스너가 뷰어·서버 역할을 함께 받는다. 경로 `/relay/viewer`는 뷰어, `/relay/server`는 서버를 고른다. 경로 규칙은 [WebSocket 계약 1.7절](websocket-relay-v2.md#17-경로와-역할)이 정한다. 어느 역할이든 켜면 리스너를 연다. 기본 포트는 없다.
 
 | 키 | 자료형 | 필수 여부 | 기본값 | 유효 범위·의미 | 재로드 |
 | --- | --- | --- | --- | --- | --- |
@@ -126,7 +126,7 @@ TCP 테이블은 `allowed_origins`·`trusted_proxies`·`cert_file`·`key_file`�
 
 #### 차단 목록: `[relay.deny]`
 
-차단 목록은 중계 진입점 6개(TCP Viewer, TCP Server, WS Viewer, WS Server, WSS Viewer, WSS Server)가 하나를 함께 쓴다. 기본은 빈 목록이다. 관리 리스너와 상태 리스너에는 적용하지 않는다. 만료는 없다. 운영자가 항목을 지울 때까지 차단한다.
+차단 목록은 중계 진입점 6개(TCP 뷰어, TCP 서버, WS 뷰어, WS 서버, WSS 뷰어, WSS 서버)가 하나를 함께 쓴다. 기본은 빈 목록이다. 관리 리스너와 상태 리스너에는 적용하지 않는다. 만료는 없다. 운영자가 항목을 지울 때까지 차단한다.
 
 | 키 | 자료형 | 필수 여부 | 기본값 | 유효 범위·의미 | 재로드 |
 | --- | --- | --- | --- | --- | --- |
@@ -204,7 +204,7 @@ K의 감지 시간은 `tcp_idle_secs + tcp_interval_secs × tcp_probes`다. 기�
 
 | 키(기호) | 자료형 | 필수 여부 | 기본값 | 유효 범위·의미 |
 | --- | --- | --- | --- | --- |
-| `dashboard.poll_secs`(P) | 정수(초) | 아님 | 2 | 1~60. 대시보드 폴링 주기. 화면은 서버의 값을 따른다. |
+| `dashboard.poll_secs`(P) | 정수(초) | 아님 | 2 | 1~60. 대시보드 폴링 주기. 화면은 VNC Relay의 값을 따른다. |
 | `dashboard.query_timeout_secs` | 정수(초) | 아님 | 5 | 1~60. 폴링 조회의 제한 시간. |
 | `recent_closed.max_entries`(R) | 정수 | 아님 | 100 | 0~10000. 최근 종료 목록의 최대 항목 수. 0이면 목록을 보관하지 않는다. |
 | `recent_logs.max_entries` | 정수 | 아님 | 1000 | 0~10000. 메모리에 보관할 최근 운영 로그 사건 수. 0이면 보관하지 않는다. 재시작하면 목록이 빈다. `log.output`이나 출력 쓰기 성공 여부와 무관하다. |
@@ -244,7 +244,7 @@ K의 감지 시간은 `tcp_idle_secs + tcp_interval_secs × tcp_probes`다. 기�
 | 범위의 시작이 끝보다 큼 | `config_ip_range_reversed` |
 | 범위의 두 주소가 서로 다른 체계(IPv4와 IPv6) | `config_ip_range_family_mixed` |
 
-항목의 주소가 `::ffff:0:0/96`(IPv4-mapped IPv6) 안에 있으면 `config_ip_item_invalid`다. 서버는 이 대역의 상대 주소를 IPv4 주소로 바꿔 비교한다. 겹치거나 중복된 항목은 오류도 경고도 아니다. 상대 IP가 항목 중 하나라도 일치하면 허용이다.
+항목의 주소가 `::ffff:0:0/96`(IPv4-mapped IPv6) 안에 있으면 `config_ip_item_invalid`다. VNC Relay는 이 대역의 상대 주소를 IPv4 주소로 바꿔 비교한다. 겹치거나 중복된 항목은 오류도 경고도 아니다. 상대 IP가 항목 중 하나라도 일치하면 허용이다.
 
 `relay.deny.sources`는 같은 문법과 같은 오류 코드를 쓴다. 진단 `key`는 `relay.deny.sources[i]`다. 이 목록에서는 상대 IP가 항목 중 하나라도 일치하면 거절이다. 빈 배열은 아무것도 차단하지 않는다. 한 체계 전체를 덮는 항목(`0.0.0.0/0`, `::/0`)에 대한 특별한 경고나 오류는 없다.
 
@@ -264,7 +264,7 @@ K의 감지 시간은 `tcp_idle_secs + tcp_interval_secs × tcp_probes`다. 기�
 | `port` | 생략하거나 1~65535의 십진수. |
 | 오류 | 위 규칙에 맞지 않으면 `config_origin_invalid`. 값 `null`도 받지 않는다. |
 
-비교 규칙. 이 절이 Origin 값 문법과 정규화의 유일한 기준이며 [WebSocket 중계 계약 1.3절](websocket-relay-v2.md#13-origin-비교)은 이 규칙을 인용한다. 서버는 허용 값과 요청의 `Origin` 헤더 값을 같은 방식으로 정규화한 뒤 비교한다.
+비교 규칙. 이 절이 Origin 값 문법과 정규화의 유일한 기준이며 [WebSocket 중계 계약 1.3절](websocket-relay-v2.md#13-origin-비교)은 이 규칙을 인용한다. VNC Relay는 허용 값과 요청의 `Origin` 헤더 값을 같은 방식으로 정규화한 뒤 비교한다.
 
 1. 스킴과 호스트는 ASCII 소문자로 바꿔 비교한다. 요청 값에 비ASCII 문자가 있으면 일치하지 않는다.
 2. 기본 포트(http 80, https 443)를 생략한 표기는 그 포트를 명시한 표기와 같은 값이다. 그 밖의 포트는 숫자가 같을 때만 일치한다.
@@ -296,7 +296,7 @@ K의 감지 시간은 `tcp_idle_secs + tcp_interval_secs × tcp_probes`다. 기�
 
 판정은 최종 연결 IP에도 적용한다([PRD FR-02](../requirements/PRD.md#fr-02-mode-i--대상-지정-중계), [중계 스펙 3.2절](../specs/relay.md#32-mode-i)). 판정 순서는 다음과 같다.
 
-| Viewer가 지정한 대상 | 허용 조건 |
+| 뷰어가 지정한 대상 | 허용 조건 |
 | --- | --- |
 | IP | 그 IP와 포트가 IP 항목 중 하나와 일치한다. |
 | DNS 이름 | (1) 이름과 포트가 이름 항목 중 하나와 일치하고, (2) 주소 해석 결과 중 실제로 연결할 IP와 포트가 IP 항목 중 하나와 일치한다. |
@@ -341,8 +341,8 @@ K의 감지 시간은 `tcp_idle_secs + tcp_interval_secs × tcp_probes`다. 기�
 
 | 재로드 대상 | 적용 시점 |
 | --- | --- |
-| `relay.tcp_viewer.allow` | 새 TCP Viewer 접속부터 |
-| `relay.tcp_server.allow` | 새 TCP Server 접속부터 |
+| `relay.tcp_viewer.allow` | 새 TCP 뷰어 접속부터 |
+| `relay.tcp_server.allow` | 새 TCP 서버 접속부터 |
 | `relay.ws.trusted_proxies` | 교체 뒤 다음 수락 시점 또는 업그레이드 시점 검사부터. 이미 통과한 검사의 결과는 유지한다. |
 | `relay.wss.trusted_proxies` | 교체 뒤 다음 수락 시점 또는 업그레이드 시점 검사부터. 이미 통과한 검사의 결과는 유지한다. |
 | `relay.ws.viewer.allow` | 교체 뒤 새 수락 시점의 켜진 역할 합집합 검사와 새 업그레이드 시점의 역할 검사부터 |
@@ -353,7 +353,7 @@ K의 감지 시간은 `tcp_idle_secs + tcp_interval_secs × tcp_probes`다. 기�
 | `relay.ws.server.allowed_origins` | 교체 뒤 Origin 검사를 받는 새 업그레이드 요청부터 |
 | `relay.wss.viewer.allowed_origins` | 교체 뒤 Origin 검사를 받는 새 업그레이드 요청부터 |
 | `relay.wss.server.allowed_origins` | 교체 뒤 Origin 검사를 받는 새 업그레이드 요청부터 |
-| `relay.deny.sources` | 교체 뒤 새 수락·새 업그레이드·새 등록부터. 교체 직후에는 열린 활성 세션과 대기 연결도 검사한다. 목록 값이 이전과 다르면, 클라이언트 주소가 항목과 일치하는 대기 연결과 활성 세션(세션 전체)을 바로 끊는다. 활성 세션은 Viewer나 Mode II Server의 클라이언트 주소로 판정하며 Mode I 대상 주소는 보지 않는다. 이미 정리 중인 세션은 기존 종료 원인을 유지한다. 목록이 그대로이거나 줄기만 하면 끊을 연결이 없다. 끊김의 원인·코드는 [ops-info](ops-info-v2.md#16-원인-코드)·[WebSocket 계약](websocket-relay-v2.md#15-close-코드)이 정한다. |
+| `relay.deny.sources` | 교체 뒤 새 수락·새 업그레이드·새 등록부터. 교체 직후에는 열린 활성 세션과 대기 연결도 검사한다. 목록 값이 이전과 다르면, 클라이언트 주소가 항목과 일치하는 대기 연결과 활성 세션(세션 전체)을 바로 끊는다. 활성 세션은 뷰어나 Mode II 서버의 클라이언트 주소로 판정하며 Mode I 대상 주소는 보지 않는다. 이미 정리 중인 세션은 기존 종료 원인을 유지한다. 목록이 그대로이거나 줄기만 하면 끊을 연결이 없다. 끊김의 원인·코드는 [ops-info](ops-info-v2.md#16-원인-코드)·[WebSocket 계약](websocket-relay-v2.md#15-close-코드)이 정한다. |
 | `relay.wss.cert_file` | 경로 값과 파일 내용. 새 TLS 핸드셰이크부터. 기존 TLS 연결 유지 |
 | `relay.wss.key_file` | 경로 값과 파일 내용. 새 TLS 핸드셰이크부터. 기존 TLS 연결 유지 |
 | `management.cert_file` | 경로 값과 파일 내용. 새 TLS 핸드셰이크부터. 기존 TLS 연결 유지 |
@@ -369,7 +369,7 @@ K의 감지 시간은 `tcp_idle_secs + tcp_interval_secs × tcp_probes`다. 기�
 | `relay.ticket.server.public_keys_file` | 경로 값과 파일 내용. 교체 뒤 새 ticket 확인부터 |
 | `relay.ticket.server.max_lifetime_secs` | 교체 뒤 ticket 확인을 시작하는 새 업그레이드 요청부터 |
 | `mode1.allow_targets` | 교체 뒤 시작하는 Mode I 대상 연결의 허용 판정부터. 이미 성립한 세션 유지 |
-| `limits.relay_connections`(L), `limits.admin_connections`(Lm) | 교체 뒤 새 연결 수락 판정부터. 올리면 바로 적용한다. 낮춘 뒤 사용량이 새 상한 이상이면 기존 연결은 유지하고, 사용량이 새 상한 아래로 내려갈 때까지 새 연결을 거절한다. 서버 요약의 상한도 새 값 |
+| `limits.relay_connections`(L), `limits.admin_connections`(Lm) | 교체 뒤 새 연결 수락 판정부터. 올리면 바로 적용한다. 낮춘 뒤 사용량이 새 상한 이상이면 기존 연결은 유지하고, 사용량이 새 상한 아래로 내려갈 때까지 새 연결을 거절한다. VNC Relay 요약의 상한도 새 값 |
 | `limits.waiting`(Lw) | 교체 뒤 새 대기 등록부터. 새 상한을 넘는 기존 대기도 유지 |
 | `limits.buffer_bytes`(B) | 교체 뒤 수락하는 연결부터 |
 | `limits.ws_message_bytes`(M) | 교체 뒤 업그레이드하는 WS·WSS 연결부터 |
@@ -386,7 +386,7 @@ K의 감지 시간은 `tcp_idle_secs + tcp_interval_secs × tcp_probes`다. 기�
 
 규칙:
 
-1. 감시 대상은 설정 파일과, 역할이 하나라도 켜진 WSS 리스너·관리 리스너가 쓰는 `cert_file`·`key_file`, `enabled = true`인 ticket 표의 `public_keys_file`이 가리키는 파일이다. 모든 WSS 역할이 꺼져 있으면 그 리스너의 TLS 파일은 감시하지 않는다. 계정 파일은 감시하지 않는다([CLI·계정 파일 계약 1.7절](cli-v1.md#17-서버-실행-중-계정-파일-변경)).
+1. 감시 대상은 설정 파일과, 역할이 하나라도 켜진 WSS 리스너·관리 리스너가 쓰는 `cert_file`·`key_file`, `enabled = true`인 ticket 표의 `public_keys_file`이 가리키는 파일이다. 모든 WSS 역할이 꺼져 있으면 그 리스너의 TLS 파일은 감시하지 않는다. 계정 파일은 감시하지 않는다([CLI·계정 파일 계약 1.7절](cli-v1.md#17-vnc-relay-실행-중-계정-파일-변경)).
 2. 후보는 파일을 읽어 기본값을 채운 유효 설정이다. 설정 값이 같으면 주석·공백·키 순서·기본값 명시 여부가 달라도 차이가 없다.
 3. 후보 검증은 이 문서 1.1~1.7절과 접속 ticket 공개 키 파일 검사(1.11절)를 모두 포함한다. 알 수 없는 키와 모든 필수 키 검사도 같다. 인증서·개인키 쌍은 개인키가 인증서에 맞아야 한다. 한쪽 파일만 바뀌어 맞지 않으면 후보는 유효하지 않다.
 4. 재로드 대상이 아닌 값이 실행 중 값과 다르면 후보 전체를 `reload_restart_required`로 거절한다. 그 차이가 파일에 남아 있는 동안 이후 재로드 대상 변경(IP·인증서·관리 API 편집 포함)도 모두 거절한다.
@@ -400,14 +400,14 @@ K의 감지 시간은 `tcp_idle_secs + tcp_interval_secs × tcp_probes`다. 기�
 
 ### 1.9 인증서·개인키 파일 형식
 
-PEM을 쓴다. 파일 내용 검증은 서버가 한다.
+PEM을 쓴다. 파일 내용 검증은 VNC Relay가 한다.
 
 | 키 | 형식 |
 | --- | --- |
 | `cert_file` | PEM 인코딩 X.509 인증서 한 개 이상. 첫 번째가 서버(리프) 인증서이고 뒤에 중간 인증서를 이어 붙인다. |
 | `key_file` | 위 서버 인증서의 개인키 한 개를 담은 PEM. PKCS#8(`BEGIN PRIVATE KEY`)을 권장한다. 지원하는 키는 RSA(PKCS#1·PKCS#8), ECDSA P-256·P-384·P-521(SEC1·PKCS#8), Ed25519(PKCS#8)다. 그 밖의 키(X25519 등)와 손상된 키는 `tls_file_invalid`로 거절한다. |
 
-TLS 1.2 미만은 거절한다. 허용 암호 스위트는 rustls의 aws-lc-rs 암호 모듈(CryptoProvider)이 제공하는 rustls 기본 목록이다. 설정 키가 없으므로 운영자가 바꿀 수 없다. 개인키 파일은 서버를 실행하는 OS 계정만 읽도록 권한을 제한하기를 권장한다. 인증서·개인키 내용은 로그·오류 메시지에 쓰지 않는다.
+TLS 1.2 미만은 거절한다. 허용 암호 스위트는 rustls의 aws-lc-rs 암호 모듈(CryptoProvider)이 제공하는 rustls 기본 목록이다. 설정 키가 없으므로 운영자가 바꿀 수 없다. 개인키 파일은 VNC Relay를 실행하는 OS 계정만 읽도록 권한을 제한하기를 권장한다. 인증서·개인키 내용은 로그·오류 메시지에 쓰지 않는다.
 
 ### 1.10 관리 API 편집의 파일 쓰기
 
@@ -442,7 +442,7 @@ TLS 1.2 미만은 거절한다. 허용 암호 스위트는 rustls의 aws-lc-rs �
 
 ### 1.12 IP 정보 DB 파일 형식
 
-`ip_info.country_db`·`ip_info.asn_db`가 가리키는 파일은 [MaxMind DB 파일 형식](https://maxmind.github.io/MaxMind-DB/) 2.x(MMDB) 파일이다. 운영자가 제공자 사이트에서 내려받아 둔다. 서버는 이 파일을 읽기만 하며, IP 정보를 찾으려고 외부에 요청하지 않는다. 지원하는 제공자는 DB-IP Lite(국가·ASN), IPinfo Lite(국가와 ASN을 담은 한 파일), MaxMind GeoLite(Country·City·ASN)와 같은 필드를 쓰는 GeoIP2 파일이다.
+`ip_info.country_db`·`ip_info.asn_db`가 가리키는 파일은 [MaxMind DB 파일 형식](https://maxmind.github.io/MaxMind-DB/) 2.x(MMDB) 파일이다. 운영자가 제공자 사이트에서 내려받아 둔다. VNC Relay는 이 파일을 읽기만 하며, IP 정보를 찾으려고 외부에 요청하지 않는다. 지원하는 제공자는 DB-IP Lite(국가·ASN), IPinfo Lite(국가와 ASN을 담은 한 파일), MaxMind GeoLite(Country·City·ASN)와 같은 필드를 쓰는 GeoIP2 파일이다.
 
 | 항목 | 규칙 |
 | --- | --- |
@@ -518,7 +518,7 @@ UTF-8이 아닌 파일도 `config_file_unreadable` 진단에 해당한다. 관�
 | `trust_all_proxies` | `trusted_proxies`에 한 체계 전체를 덮는 항목이 있다. 시작·재로드 때 `listener`, `item`, `phase`를 기록한다. | OPS-067 |
 | `allow_all_target` | `mode1.allow_targets`에 한 체계 전체를 덮는 IP 항목이 있다. 시작·재로드 때(`phase` = `startup` 또는 `reload`). | RLY-007, OPS-058 |
 | `status_listen_not_loopback` | `status.listen`이 루프백이 아니다. 시작 때. | OPS-032 |
-| `ticket_tcp_bypass` | ticket을 켠 역할의 TCP 진입점이 켜져 있다(Viewer ↔ `relay.tcp_viewer.enabled`, Server ↔ `relay.tcp_server.enabled`). 시작·재로드 때 `role`, `listener`, `phase`를 기록한다. | OPS-071 |
+| `ticket_tcp_bypass` | ticket을 켠 역할의 TCP 진입점이 켜져 있다(뷰어 ↔ `relay.tcp_viewer.enabled`, 서버 ↔ `relay.tcp_server.enabled`). 시작·재로드 때 `role`, `listener`, `phase`를 기록한다. | OPS-071 |
 | `ticket_plaintext_ws` | ticket을 켠 역할이 `[relay.ws]` 리스너에서 켜져 있다. 그 구간은 믿을 수 있는 망 안에 있어야 한다. 시작·재로드 때 `role`, `listener = ws`, `phase`를 기록한다. | OPS-071 |
 | `ip_db_unavailable` | `ip_info.country_db` 또는 `ip_info.asn_db`가 가리키는 IP 정보 DB 파일을 쓸 수 없다(1.12절). 시작 때와 실행 중 파일 내용이 바뀌었을 때. `config_key`, `reason`, `phase`를 기록한다. 그 정보 없이, 또는 이전 DB로 계속 운영한다. | OPS-096, OPS-097 |
 
@@ -535,9 +535,9 @@ UTF-8이 아닌 파일도 `config_file_unreadable` 진단에 해당한다. 관�
 
 ## 3. 호환성 규칙
 
-- 서버는 알 수 없는 테이블·키를 `config_unknown_key` 오류로 거절해야 한다. 허용 형식 밖의 값(예: 허용하지 않는 Origin 스킴)은 해당 값의 오류 코드(`config_origin_invalid` 등)로 거절해야 한다. 무시하거나 경고만 하지 않는다.
-- 호환 변경(minor 올림): 기본값이 있고 생략해도 기존 동작이 같은 새 선택 키 추가, 유효 범위 넓힘, 오류 메시지 문구 변경. 새 키를 쓴 파일은 그 키를 모르는 이전 서버가 거절한다. 그래서 새 키를 쓰려면 서버를 먼저 올린다. 4.1.0의 `[relay.ticket.*]` 표는 이 범위다. 이 표를 쓴 파일은 4.0.0 서버가 `config_unknown_key`로 거절하므로, 실행파일을 되돌리기 전에 표를 지운다. 4.2.0의 `[metrics]` 표도 이 범위다. 이 표를 쓴 파일은 4.1.0 이하 서버가 `config_unknown_key`로 거절하므로, 되돌리기 전에 표를 지운다. 4.3.0의 `[ip_info]` 표도 이 범위다. 이 표를 쓴 파일은 4.2.0 이하 서버가 `config_unknown_key`로 거절하므로, 되돌리기 전에 표를 지운다. DB 파일은 남겨도 된다. 4.4.0의 `[relay.deny]` 표도 이 범위다. 이 표를 쓴 파일은 4.3.0 이하 서버가 `config_unknown_key`로 거절하므로, 되돌리기 전에 표를 지운다. 표를 지우면 그 차단도 없어진다.
-- 호환성을 깨는 변경(새 major 버전): 키 이름·자료형·단위 변경이나 삭제, 필수 키 추가, 기본값 변경, 유효 범위 좁힘, 재로드 구분 변경, 항목 문법 변경, 보안 검사 완화. major를 올리고 마이그레이션(이전 파일을 새 형식으로 바꾸는 방법)과 롤백(새 형식 파일을 이전 서버로 되돌리는 방법) 계획을 함께 작성한다. 2.0.0의 계획은 3.1절, 3.0.0은 3.2절, 4.0.0은 3.3절에 있다.
+- VNC Relay는 알 수 없는 테이블·키를 `config_unknown_key` 오류로 거절해야 한다. 허용 형식 밖의 값(예: 허용하지 않는 Origin 스킴)은 해당 값의 오류 코드(`config_origin_invalid` 등)로 거절해야 한다. 무시하거나 경고만 하지 않는다.
+- 호환 변경(minor 올림): 기본값이 있고 생략해도 기존 동작이 같은 새 선택 키 추가, 유효 범위 넓힘, 오류 메시지 문구 변경. 새 키를 쓴 파일은 그 키를 모르는 이전 VNC Relay가 거절한다. 그래서 새 키를 쓰려면 VNC Relay를 먼저 올린다. 4.1.0의 `[relay.ticket.*]` 표는 이 범위다. 이 표를 쓴 파일은 4.0.0 VNC Relay가 `config_unknown_key`로 거절하므로, 실행파일을 되돌리기 전에 표를 지운다. 4.2.0의 `[metrics]` 표도 이 범위다. 이 표를 쓴 파일은 4.1.0 이하 VNC Relay가 `config_unknown_key`로 거절하므로, 되돌리기 전에 표를 지운다. 4.3.0의 `[ip_info]` 표도 이 범위다. 이 표를 쓴 파일은 4.2.0 이하 VNC Relay가 `config_unknown_key`로 거절하므로, 되돌리기 전에 표를 지운다. DB 파일은 남겨도 된다. 4.4.0의 `[relay.deny]` 표도 이 범위다. 이 표를 쓴 파일은 4.3.0 이하 VNC Relay가 `config_unknown_key`로 거절하므로, 되돌리기 전에 표를 지운다. 표를 지우면 그 차단도 없어진다.
+- 호환성을 깨는 변경(새 major 버전): 키 이름·자료형·단위 변경이나 삭제, 필수 키 추가, 기본값 변경, 유효 범위 좁힘, 재로드 구분 변경, 항목 문법 변경, 보안 검사 완화. major를 올리고 마이그레이션(이전 파일을 새 형식으로 바꾸는 방법)과 롤백(새 형식 파일을 이전 VNC Relay로 되돌리는 방법) 계획을 함께 작성한다. 2.0.0의 계획은 3.1절, 3.0.0은 3.2절, 4.0.0은 3.3절에 있다.
 - 모든 값의 의미는 키 표에 있다. 키 순서와 주석은 의미가 없다.
 
 ### 3.1 v1 파일을 v2로 옮기기
@@ -545,30 +545,30 @@ UTF-8이 아닌 파일도 `config_file_unreadable` 진단에 해당한다. 관�
 | 항목 | 내용 |
 | --- | --- |
 | 바뀐 점 | `limits.initial_message_bytes`(I) 키와 관계 I ≤ B를 지웠다. 다른 키·기본값·유효 범위·문법·재로드 구분은 1.2.0과 같다. |
-| v2 서버가 v1 파일을 읽을 때 | `initial_message_bytes`가 없는 파일은 그대로 읽는다. 있으면 `config_unknown_key`로 시작하지 않는다. 실행 중 재로드 후보이면 `reload_rejected`로 거절한다. |
-| 마이그레이션 | 1. `[limits]`에서 `initial_message_bytes` 줄을 지운다. 2. 서버를 새 버전으로 재시작한다. 고친 파일은 v1 서버도 읽으므로 이 순서에서는 시작 실패가 없다. 지운 값이 4096이 아니었다면, 실행 중인 v1 서버는 그 변경을 `reload_restart_required`로 거절한다. 다음 재시작에서 해소된다. |
-| 롤백 | v2 파일은 v1 서버(1.2.0)도 그대로 읽는다. v1에서 I는 선택 키이므로 생략하면 기본값 4096을 쓴다. 서버만 이전 버전으로 되돌린다. |
-| 지원 기간 | 두지 않는다. v2 서버는 v1 전용 키를 받지 않으며 이 계약이 v1을 대체한다. |
+| v2 VNC Relay가 v1 파일을 읽을 때 | `initial_message_bytes`가 없는 파일은 그대로 읽는다. 있으면 `config_unknown_key`로 시작하지 않는다. 실행 중 재로드 후보이면 `reload_rejected`로 거절한다. |
+| 마이그레이션 | 1. `[limits]`에서 `initial_message_bytes` 줄을 지운다. 2. VNC Relay를 새 버전으로 재시작한다. 고친 파일은 v1 VNC Relay도 읽으므로 이 순서에서는 시작 실패가 없다. 지운 값이 4096이 아니었다면, 실행 중인 v1 VNC Relay는 그 변경을 `reload_restart_required`로 거절한다. 다음 재시작에서 해소된다. |
+| 롤백 | v2 파일은 v1 VNC Relay(1.2.0)도 그대로 읽는다. v1에서 I는 선택 키이므로 생략하면 기본값 4096을 쓴다. VNC Relay만 이전 버전으로 되돌린다. |
+| 지원 기간 | 두지 않는다. v2 VNC Relay는 v1 전용 키를 받지 않으며 이 계약이 v1을 대체한다. |
 
 ### 3.2 v2 파일을 v3로 옮기기
 
 | 항목 | 내용 |
 | --- | --- |
 | 바뀐 점 | 재로드 대상 19개를 더해 총 27개로 넓혔다. `management.config_edit` 선택 키를 더했다(기본 `false`, 재시작 필요). 다른 기존 키의 뜻·기본값·유효 범위·문법은 같다. |
-| v3 서버가 v2 파일을 읽을 때 | 모든 v2 파일을 고치지 않고 같은 뜻으로 읽는다. 파일에 버전 키를 더하지 않는다. |
-| 마이그레이션 | 파일 수정 없이 v3 서버로 재시작한다. 다만 19개 키를 다음 재시작용으로 미리 고쳐 두면 이제 자동 적용된다. 이를 원하지 않는 운영자는 사본에서 고친 뒤 재시작할 때 파일을 바꿔 넣는다. |
-| 롤백 | `management.config_edit`를 쓰지 않은 v3 파일은 v2 서버(릴리스 v2026.11.0)가 그대로 읽는다. 이 키를 썼으면 해당 줄을 지운 뒤 v2 서버로 되돌린다. 줄을 남기면 v2 서버는 `config_unknown_key`로 시작하지 않는다. |
-| 지원 기간 | 두지 않는다. v3 서버가 모든 v2 파일을 같은 뜻으로 읽기 때문이다. |
+| v3 VNC Relay가 v2 파일을 읽을 때 | 모든 v2 파일을 고치지 않고 같은 뜻으로 읽는다. 파일에 버전 키를 더하지 않는다. |
+| 마이그레이션 | 파일 수정 없이 v3 VNC Relay로 재시작한다. 다만 19개 키를 다음 재시작용으로 미리 고쳐 두면 이제 자동 적용된다. 이를 원하지 않는 운영자는 사본에서 고친 뒤 재시작할 때 파일을 바꿔 넣는다. |
+| 롤백 | `management.config_edit`를 쓰지 않은 v3 파일은 v2 VNC Relay(릴리스 v2026.11.0)가 그대로 읽는다. 이 키를 썼으면 해당 줄을 지운 뒤 v2 VNC Relay로 되돌린다. 줄을 남기면 v2 VNC Relay는 `config_unknown_key`로 시작하지 않는다. |
+| 지원 기간 | 두지 않는다. v3 VNC Relay가 모든 v2 파일을 같은 뜻으로 읽기 때문이다. |
 
 ### 3.3 v3 파일을 v4로 옮기기
 
 | 항목 | 내용 |
 | --- | --- |
-| 바뀐 점 | WS·WSS의 리스너·역할 표를 나눴다. Server 역할과 `trusted_proxies`, `[recent_logs]`를 더했다. 재로드 대상은 33개, 편집 대상은 29개다. |
-| v4 서버가 v3 파일을 읽을 때 | `[relay.ws_viewer]`·`[relay.wss_viewer]`가 있으면 `config_unknown_key`로 시작하지 않는다. 재로드 후보이면 `reload_rejected`다. 이 표들이 없는 파일은 다른 v4 규칙을 만족하면 읽는다. |
-| 마이그레이션 | 서버를 시작하기 전에 아래 대응표대로 파일을 옮겨야 한다. 실행 중인 v3 서버가 읽는 파일은 그대로 두고 사본을 준비한 뒤, 서버를 멈추고 v4 파일·서버로 함께 바꾼다. Viewer 동작은 같다. Viewer 경로는 새 서버가 구현한 WebSocket 계약을 따른다. `websocket-relay` 2.0.0부터는 `/relay/viewer`다([WebSocket 계약 3.1절](websocket-relay-v2.md#31-1x-클라이언트를-200으로-옮기기)). 로그 `listener` 표기는 ops-info 2.0.0에 맞춰 바뀐다. |
-| 롤백 | Server 역할 표, `trusted_proxies`, `[recent_logs]`를 쓰지 않는 v4 파일은 아래 대응표를 거꾸로 적용하면 v3 서버(릴리스 v2026.11.1)가 읽는다. 새 기능을 쓰고 있으면 그 사용을 멈추고 해당 표·키를 제거한 사본을 준비해야 한다. v4 서버를 멈춘 뒤 v3 파일·서버로 함께 되돌린다. v3는 새 표·키를 남기면 `config_unknown_key`로 시작하지 않는다. |
-| 지원 기간 | 두지 않는다. v4 서버는 v3 전용 표를 읽지 않는다. |
+| 바뀐 점 | WS·WSS의 리스너·역할 표를 나눴다. 서버 역할과 `trusted_proxies`, `[recent_logs]`를 더했다. 재로드 대상은 33개, 편집 대상은 29개다. |
+| v4 VNC Relay가 v3 파일을 읽을 때 | `[relay.ws_viewer]`·`[relay.wss_viewer]`가 있으면 `config_unknown_key`로 시작하지 않는다. 재로드 후보이면 `reload_rejected`다. 이 표들이 없는 파일은 다른 v4 규칙을 만족하면 읽는다. |
+| 마이그레이션 | VNC Relay를 시작하기 전에 아래 대응표대로 파일을 옮겨야 한다. 실행 중인 v3 VNC Relay가 읽는 파일은 그대로 두고 사본을 준비한 뒤, VNC Relay를 멈추고 v4 파일·VNC Relay로 함께 바꾼다. 뷰어 동작은 같다. 뷰어 경로는 새 VNC Relay가 구현한 WebSocket 계약을 따른다. `websocket-relay` 2.0.0부터는 `/relay/viewer`다([WebSocket 계약 3.1절](websocket-relay-v2.md#31-1x-클라이언트를-200으로-옮기기)). 로그 `listener` 표기는 ops-info 2.0.0에 맞춰 바뀐다. |
+| 롤백 | 서버 역할 표, `trusted_proxies`, `[recent_logs]`를 쓰지 않는 v4 파일은 아래 대응표를 거꾸로 적용하면 v3 VNC Relay(릴리스 v2026.11.1)가 읽는다. 새 기능을 쓰고 있으면 그 사용을 멈추고 해당 표·키를 제거한 사본을 준비해야 한다. v4 VNC Relay를 멈춘 뒤 v3 파일·VNC Relay로 함께 되돌린다. v3는 새 표·키를 남기면 `config_unknown_key`로 시작하지 않는다. |
+| 지원 기간 | 두지 않는다. v4 VNC Relay는 v3 전용 표를 읽지 않는다. |
 
 | v3 | v4 |
 | --- | --- |
@@ -596,7 +596,7 @@ UTF-8이 아닌 파일도 `config_file_unreadable` 진단에 해당한다. 관�
 
 배포 설정 예시는 [`examples/relay.toml`](../../examples/relay.toml)에 둔다. 루프백 TCP Mode II와 루프백 관리 HTTP로 시작하며 평문 WS는 끈다. 공개 배치의 주소·IP 정책·TLS 파일은 운영자가 준비한다. 이 예시 구성은 제안이다. 예시는 1.2절의 모든 키를 한 번씩 담는다. 예시가 정한 값은 활성 줄로 쓰고 나머지는 `# 키 = 값` 주석 줄로 쓴다. 주석 값은 기본값이다. 기본값이 없는 키는 루프백 주소나 문서용 이름의 예시 값을 쓴다. 설명 주석은 `# 키 = 값` 모양을 쓰지 않는다. 이 표기 방식은 제안이다. 실제 로더·비밀 검사와 키 목록 대조는 아래 배포 시험으로 확인한다.
 
-최소 예제(TCP Viewer·TCP Server·Mode II, 평문 루프백 관리 리스너):
+최소 예제(TCP 뷰어·TCP 서버·Mode II, 평문 루프백 관리 리스너):
 
 ```toml
 [admin]
@@ -676,7 +676,7 @@ output = "stdout"
 
 두 번째 예제의 `192.0.2.0/24:5900-5905`와 `[2001:db8::/32]:5900`는 최종 연결 IP 항목이다. `pc1.example:5900`은 이름 항목이다. `pc1.example`이 이 두 IP 항목 밖의 주소로 해석되면 연결하지 않는다.
 
-두 번째 예제에서 Viewer 접속 ticket을 켜려면 다음 표를 더한다. 값은 문서용이다. 공개 키 파일은 1.11절 형식으로 별도 준비한다. 이 표는 WSS Viewer 역할에 적용하며, TCP 진입점에는 적용하지 않는다.
+두 번째 예제에서 뷰어 접속 ticket을 켜려면 다음 표를 더한다. 값은 문서용이다. 공개 키 파일은 1.11절 형식으로 별도 준비한다. 이 표는 WSS 뷰어 역할에 적용하며, TCP 진입점에는 적용하지 않는다.
 
 ```toml
 [relay.ticket.viewer]
@@ -701,10 +701,10 @@ sources = ["198.51.100.7", "203.0.113.64/26", "2001:db8:bad::/48"]
 | Consumer·계약 테스트 파일 `reports_every_problem_in_one_pass`, `rejects_syntax_errors_and_duplicate_keys_with_one_diagnostic`, `rejects_missing_unreadable_and_non_utf8_files`, `rejects_non_table_values_in_place_of_tables` | 구문 오류, 알 수 없는 키, 자료형 오류, 필수 키 누락(1.1·1.7절)을 모두 모아 진단으로 돌려준다. [OPS-001](../specs/operations.md#7-수용-테스트)의 설정 검증 부분 |
 | Consumer·`tests/serve.rs` `rejects_invalid_config_with_exit_code_3_and_every_cause`, `rejects_toml_syntax_error_and_missing_config_file_with_exit_code_3` | 위 진단이 시작 실패(종료 코드 3)와 비밀 없는 원인 표시(`error[<code>] key=<key>: <message>`)로 이어진다. stdout에는 진단마다 운영 로그 `startup_failed` 줄이 있고 설정 값은 없다. [OPS-001](../specs/operations.md#7-수용-테스트) |
 | Consumer·계약 테스트 파일 `accepts_minimal_example_and_fills_every_default`, `checks_every_numeric_key_at_its_bounds`, `checks_relations_between_values` | 승인 수치의 기본값, 최소·최대와 그 바깥(1.2절). Lw ≤ L, Si ≤ Sa(1.6절). 지운 키 `initial_message_bytes`는 `config_unknown_key`(3.1절). 수치가 각 기능에 주는 효과는 [OPS-004~006](../specs/operations.md#7-수용-테스트)·[OPS-023](../specs/operations.md#7-수용-테스트)의 기능 시험에서 확인한다. |
-| Consumer·`tests/serve.rs` `initial_tls_and_upgrade_deadlines_have_distinct_causes_and_release_capacity` | H=1초·U=2초 설정을 실제 실행파일에 적용한다. TCP Viewer·TCP Server·WS·WSS 초기 교환은 H를, WS 업그레이드와 WSS TLS·업그레이드는 U를 적용한다. 원인·단계·통신 응답을 구분하고 L=2의 두 자리가 다시 수락되는지 확인한다. [OPS-006](../specs/operations.md#7-수용-테스트)(비부분) |
+| Consumer·`tests/serve.rs` `initial_tls_and_upgrade_deadlines_have_distinct_causes_and_release_capacity` | H=1초·U=2초 설정을 실제 실행파일에 적용한다. TCP 뷰어·TCP 서버·WS·WSS 초기 교환은 H를, WS 업그레이드와 WSS TLS·업그레이드는 U를 적용한다. 원인·단계·통신 응답을 구분하고 L=2의 두 자리가 다시 수락되는지 확인한다. [OPS-006](../specs/operations.md#7-수용-테스트)(비부분) |
 | Consumer·계약 테스트 파일 `applies_default_ports_only_to_tcp_entry_points`, `rejects_listen_conflicts_after_default_ports` | 기본 포트: 주소만 쓴 `tcp_viewer`는 5901, `tcp_server`는 5500, IPv6는 대괄호 필수. `relay.ws`·`relay.wss`·관리·상태 `listen`의 포트 생략은 `config_listen_invalid`. 충돌 검사는 기본 포트를 붙인 뒤 적용(1.2·1.6절). [OPS-001](../specs/operations.md#7-수용-테스트) |
 | Consumer·`crates/domain/src/allow_list.rs` 단위 테스트, 계약 테스트 파일 `accepts_single_cidr_and_range_items_of_both_families`, `rejects_bad_ip_items_with_their_own_codes`, `requires_allow_list_only_for_enabled_entry_points`, `accepts_an_empty_allow_list`, `accepts_items_covering_a_whole_family_with_warnings` | IP 항목: 단일·CIDR·범위 해석, 역순 범위·체계 혼합·표기 오류의 코드, 목록 누락은 오류, 빈 목록은 받음, 전체 허용 항목의 경고 대상 계산(1.3·2절). [OPS-038](../specs/operations.md#7-수용-테스트), [OPS-040](../specs/operations.md#7-수용-테스트)의 설정 검증 부분 |
-| Consumer·`tests/serve.rs` `every_relay_entry_point_accepts_only_its_own_source_ip`, `applies_item_boundaries_and_an_empty_list_at_accept`, `tests/reload.rs` `allow_list_modes_hold_at_start_and_at_reload` | 경계 주소의 허용·거절, 빈 목록의 모든 출발지 거절, 진입점별 목록, 전체 허용 경고 기록(1.3·2절). 첫 시험은 TCP Viewer·TCP Server·WS Viewer·WSS Viewer의 서로 다른 출발지 IP 4개로 16쌍을 검사한다. [OPS-037](../specs/operations.md#7-수용-테스트)(비부분), [OPS-038](../specs/operations.md#7-수용-테스트), [OPS-040](../specs/operations.md#7-수용-테스트) |
+| Consumer·`tests/serve.rs` `every_relay_entry_point_accepts_only_its_own_source_ip`, `applies_item_boundaries_and_an_empty_list_at_accept`, `tests/reload.rs` `allow_list_modes_hold_at_start_and_at_reload` | 경계 주소의 허용·거절, 빈 목록의 모든 출발지 거절, 진입점별 목록, 전체 허용 경고 기록(1.3·2절). 첫 시험은 TCP 뷰어·TCP 서버·WS 뷰어·WSS 뷰어의 서로 다른 출발지 IP 4개로 16쌍을 검사한다. [OPS-037](../specs/operations.md#7-수용-테스트)(비부분), [OPS-038](../specs/operations.md#7-수용-테스트), [OPS-040](../specs/operations.md#7-수용-테스트) |
 | Consumer·`crates/domain/src/origin.rs` 단위 테스트, 계약 테스트 파일 `checks_origin_values_and_entry_point_specific_keys` | Origin 문법과 정규화·정확 일치(1.4절). 진입점별로 쓸 수 있는 키 |
 | Consumer·`crates/adapters/tests/websocket.rs` `origin_must_equal_the_allowed_value`, `origin_must_equal_the_allowed_value_on_wss`, `allowed_source_with_disallowed_origin_is_refused_with_403`, `allowed_source_with_disallowed_origin_is_refused_with_403_on_wss` | 업그레이드 요청의 Origin 비교. [WS-027](../specs/websocket.md#7-수용-테스트), [WS-015](../specs/websocket.md#7-수용-테스트) |
 | Consumer·`crates/domain/src/target_policy.rs` 단위 테스트, 계약 테스트 파일 `checks_mode1_targets`, `accepts_tls_example_and_resolves_relative_paths` | Mode I 대상 항목 문법과 세부 원인(1.5절), `mode1.enabled = true`일 때 필수 |
@@ -722,11 +722,11 @@ sources = ["198.51.100.7", "203.0.113.64/26", "2001:db8:bad::/48"]
 | 주체·테스트 위치 | 확인할 계약 규칙 |
 | --- | --- |
 | Producer·Consumer / v4 설정 로더·시작 계약 시험 | TCP·리스너·역할 표, 역할 하나 이상일 때 리스너 열기, 켠 역할의 `allow`, WSS 파일 필수, 꺼진 역할 형식·범위 검사, WS·WSS 포트 필수와 중복 검사(1.2·1.6·1.7절). [OPS-065](../specs/operations.md#7-수용-테스트) |
-| Producer·Consumer / v3 마이그레이션·롤백 계약 시험 | v3 전용 표는 `config_unknown_key`. 3.3절 대응표로 옮긴 Viewer의 동작 유지. Viewer 경로는 [WebSocket 계약 1.7절](websocket-relay-v2.md#17-경로와-역할)을 따른다. 새 기능 표·키를 제거하고 역변환한 파일은 v3로 롤백 가능. [OPS-066](../specs/operations.md#7-수용-테스트) |
+| Producer·Consumer / v3 마이그레이션·롤백 계약 시험 | v3 전용 표는 `config_unknown_key`. 3.3절 대응표로 옮긴 뷰어의 동작 유지. 뷰어 경로는 [WebSocket 계약 1.7절](websocket-relay-v2.md#17-경로와-역할)을 따른다. 새 기능 표·키를 제거하고 역변환한 파일은 v3로 롤백 가능. [OPS-066](../specs/operations.md#7-수용-테스트) |
 | Producer·Consumer / v4 재로드·편집 계약 시험 | 44개 재로드·38개 편집 대상, TLS 경로 4개·공개 키 경로 2개 편집 불가, `trusted_proxies`와 역할 키의 적용 시점, 기존 연결 유지, 전체 범위 경고 `trust_all_proxies`. [OPS-067](../specs/operations.md#7-수용-테스트) |
 | Consumer / 최근 로그 계약 시험 | 기본 1000, 0·10000 경계와 범위 밖 거절, 0이면 보관 안 함, 재시작 필요·목록 초기화, 기록 순서와 오래된 항목 제거, 출력 경로·쓰기 성공과 독립. [OPS-068](../specs/operations.md#7-수용-테스트) |
 | Consumer / 설정 경고·사건 계약 시험 | ops-info 2.0.0의 `ws`·`wss` 리스너 값, 역할 확정 전 `role` 없음, `allow_all_source.role`, `plaintext_ws_enabled.listener = ws`. [OPS-069](../specs/operations.md#7-수용-테스트) |
-| Consumer / WS·WSS 역할·프록시 계약 시험 | Server 경로·Mode II, 경로별 역할·IP·Origin, 신뢰 프록시의 전달 주소, 잘못된 헤더와 모든 요소가 신뢰 프록시인 체인의 400, 비신뢰 헤더 무시, 프록시 TLS 종료 배치. [WS-028~036](../specs/websocket.md#7-수용-테스트) |
+| Consumer / WS·WSS 역할·프록시 계약 시험 | 서버 경로·Mode II, 경로별 역할·IP·Origin, 신뢰 프록시의 전달 주소, 잘못된 헤더와 모든 요소가 신뢰 프록시인 체인의 400, 비신뢰 헤더 무시, 프록시 TLS 종료 배치. [WS-028~036](../specs/websocket.md#7-수용-테스트) |
 
 | 주체·테스트 위치 | 확인할 계약 규칙 |
 | --- | --- |

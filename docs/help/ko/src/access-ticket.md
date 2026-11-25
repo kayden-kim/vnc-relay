@@ -37,7 +37,7 @@ TCP 진입점은 ticket을 확인하지 못한다. ticket을 켠 역할의 TCP �
 - 선택 값 `sx`는 세션 만료 시각이다. 0 이상인 Unix 초 정수로 적는다. 업그레이드 때 현재 시각이 `sx`보다 작아야 하며 5초 오차를 허용하지 않는다. 이 시각이 되면 초기 교환·대기·활성 상태에 있는 연결을 끝낸다. `exp`와 달리 업그레이드 뒤에도 종료 시각으로 작용한다. `sx`가 없으면 ticket이 연결 종료 시각을 정하지 않는다.
 - 선택 값 `sub`는 운영 로그에 남을 수 있다. 비밀이나 개인정보를 넣으면 안 된다.
 
-발급 쪽과 VNC Relay의 시계는 5초 안으로 맞춰야 한다. 확인 때 `iat ≤ 현재 시각 + 5초`이고 `현재 시각 < exp + 5초`여야 한다. 서버는 `iat ≤ 프로세스 기동 시각 + 5초`인 ticket을 거절한다. 시작·재시작 뒤에는 `iat > 프로세스 기동 시각 + 5초`인 새 ticket을 발급받아야 한다. 부분 재로드는 기동 시각을 바꾸지 않는다.
+발급 쪽과 VNC Relay의 시계는 5초 안으로 맞춰야 한다. 확인 때 `iat ≤ 현재 시각 + 5초`이고 `현재 시각 < exp + 5초`여야 한다. VNC Relay는 `iat ≤ 프로세스 기동 시각 + 5초`인 ticket을 거절한다. 시작·재시작 뒤에는 `iat > 프로세스 기동 시각 + 5초`인 새 ticket을 발급받아야 한다. 부분 재로드는 기동 시각을 바꾸지 않는다.
 
 전체 형식과 확인 순서는 [WebSocket 계약 1.9.2~1.9.4절](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/websocket-relay-v2.md)을 따른다.
 
@@ -59,7 +59,7 @@ TCP 진입점은 ticket을 확인하지 못한다. ticket을 켠 역할의 TCP �
    max_lifetime_secs = 60
    ```
 
-3. 서버가 실행 중이면 파일 변경 감지의 부분 재로드 결과를 기다린다. 실행 중이 아니면 [운영](operate.md) 절차로 시작한다.
+3. VNC Relay가 실행 중이면 파일 변경 감지의 부분 재로드 결과를 기다린다. 실행 중이 아니면 [운영](operate.md) 절차로 시작한다.
 4. 운영 로그의 `reload_applied` 또는 시작 때의 `server_ready`를 확인한다.
 5. 준비한 클라이언트로 새 ticket을 받아 접속한다.
 
@@ -81,7 +81,7 @@ TCP 진입점은 ticket을 확인하지 못한다. ticket을 켠 역할의 TCP �
 
 클라이언트는 업그레이드 요청의 `Sec-WebSocket-Protocol`에 두 값을 함께 보낸다. 하나는 `binary`다. 다른 하나는 정확히 소문자 `ticket.` 뒤에 JWS 압축 형식을 붙인 값 하나다. 자리표시자로 나타내면 헤더 구조는 `Sec-WebSocket-Protocol: binary, ticket.<JWS>`다. `<JWS>`는 실제 요청에 그대로 쓰는 값이 아니다.
 
-브라우저 noVNC는 `wsProtocols` 옵션으로 두 값을 보낸다. ticket은 URL 쿼리, `Authorization`, 관리자 쿠키에 싣지 않는다. 서버는 성공 응답에서 `binary`만 고른다. ticket 값은 응답에 돌려주지 않는다.
+브라우저 noVNC는 `wsProtocols` 옵션으로 두 값을 보낸다. ticket은 URL 쿼리, `Authorization`, 관리자 쿠키에 싣지 않는다. VNC Relay는 성공 응답에서 `binary`만 고른다. ticket 값은 응답에 돌려주지 않는다.
 
 재시도를 포함한 연결 시도마다 새 ticket을 써야 한다. 401 뒤에는 같은 ticket을 다시 보내면 안 된다. 사용 기록을 쓴 뒤 101 응답 전송이 실패해도 ticket은 사용한 것으로 남는다. 클라이언트 교환 형식은 [WebSocket 계약 1.9.1·1.9.7절](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/websocket-relay-v2.md)을 따른다.
 
@@ -97,7 +97,7 @@ ticket으로 업그레이드한 연결이 초기 교환에서 다른 중계 ID�
 
 ## 공개 키 교체
 
-서버는 켠 역할의 공개 키 파일 변경을 감지해 부분 재로드한다. 두 역할의 공개 키 파일 경로와 내용 모두 재로드 대상이다. 대시보드에서는 경로를 편집할 수 없다.
+VNC Relay는 켠 역할의 공개 키 파일 변경을 감지해 부분 재로드한다. 두 역할의 공개 키 파일 경로와 내용 모두 재로드 대상이다. 대시보드에서는 경로를 편집할 수 없다.
 
 1. 같은 경로의 공개 키 파일에 새 공개 키를 추가한다.
 2. `reload_applied`로 새 공개 키 반영을 확인한다.

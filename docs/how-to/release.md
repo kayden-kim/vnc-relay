@@ -31,8 +31,8 @@ Windows 11 x64와 Ubuntu 24.04 LTS x64용 배포 묶음을 만들고, 버전 태
 
 | 대상 | 묶음 | 내용 |
 | --- | --- | --- |
-| Windows 11 x64 | `vnc-relay-<버전>-windows-x64.zip` | `vnc-relay-<버전>-windows-x64/` 디렉터리 하나. 그 안에 서버 `vnc-relay.exe`, 트레이 앱 `vnc-relay-tray.exe`와 [수동 운영 안내 3.1절](operate-relay.md#31-release-빌드와-묶음)의 공통 파일 |
-| Ubuntu 24.04 LTS x64 | `vnc-relay-<버전>-linux-x64.tar.gz` | 서버 `vnc-relay`와 같은 공통 파일. 트레이 앱은 넣지 않는다 |
+| Windows 11 x64 | `vnc-relay-<버전>-windows-x64.zip` | `vnc-relay-<버전>-windows-x64/` 디렉터리 하나. 그 안에 VNC Relay 실행파일 `vnc-relay.exe`, 트레이 앱 `vnc-relay-tray.exe`와 [수동 운영 안내 3.1절](operate-relay.md#31-release-빌드와-묶음)의 공통 파일 |
+| Ubuntu 24.04 LTS x64 | `vnc-relay-<버전>-linux-x64.tar.gz` | VNC Relay 실행파일 `vnc-relay`와 같은 공통 파일. 트레이 앱은 넣지 않는다 |
 
 묶음마다 `<묶음 파일 이름>.sha256`이 함께 생긴다. 한 줄에 `<SHA-256 16진수>  <묶음 파일 이름>`을 쓴다. `sha256sum -c`가 읽는 형식이다.
 
@@ -164,7 +164,7 @@ Windows 11 x64와 Ubuntu 24.04 LTS x64용 배포 묶음을 만들고, 버전 태
 
 | 대상·날짜 | 환경·방법 | 실제 결과 |
 | --- | --- | --- |
-| Release `v2026.11.10`, 커밋 `42d3f89`, 2026-11-21 | Windows 11 Pro 10.0.26200 x64(PowerShell 7, Git), WSL2 Ubuntu 24.04.4 LTS x64(GNU coreutils `sha256sum` 9.4). [Release](https://github.com/kayden-kim/vnc-relay/releases/tag/v2026.11.10)와 묶음 두 개·`.sha256` 두 개를 확인했다. 내려받은 묶음의 해시를 독립 계산하고, 풀어서 파일 구성·권한·`--version`을 확인했다. `docs/`는 `git archive v2026.11.10 docs`로 푼 태그 파일과 바이트 단위로 비교했다 | 통과. Linux SHA-256 `79579495926744d82df8386ccb9fb8709f4787c88d48457ed9cc3140c6dd6e10`, Windows `612e4d4e9c74629db08432bbf17cced4b86a6ec7237d41ec63876b86b44d4658`. 각 `.sha256`과 같고 WSL `sha256sum -c`는 `OK`였다. tar.gz 파일 160개는 `-rw-r--r--`, 실행파일 1개는 `-rwxr-xr-x`, 디렉터리 21개는 `drwxr-xr-x`, 소유자는 `0/0`이다. tar.gz의 최상위 디렉터리는 하나다. 두 묶음 모두 태그와 경로가 같은 `docs/` 파일 154개를 담았다. Linux 묶음의 `docs/`는 태그와 바이트까지 같다. Windows 묶음의 `docs/`에서 PNG 12개는 바이트까지 같고, 텍스트 파일 142개는 CR 바이트를 빼면 같다. 최상위 항목은 Linux 8종(`README.ko.md` 추가), Windows는 트레이 앱을 포함한 9종이다. 두 서버 실행파일은 `vnc-relay 2026.11.10`을 출력했다. 같은 Release로 바꾼 Windows 서비스의 기록은 [수동 운영 안내 4절](operate-relay.md#4-검증)에 있다 |
+| Release `v2026.11.10`, 커밋 `42d3f89`, 2026-11-21 | Windows 11 Pro 10.0.26200 x64(PowerShell 7, Git), WSL2 Ubuntu 24.04.4 LTS x64(GNU coreutils `sha256sum` 9.4). [Release](https://github.com/kayden-kim/vnc-relay/releases/tag/v2026.11.10)와 묶음 두 개·`.sha256` 두 개를 확인했다. 내려받은 묶음의 해시를 독립 계산하고, 풀어서 파일 구성·권한·`--version`을 확인했다. `docs/`는 `git archive v2026.11.10 docs`로 푼 태그 파일과 바이트 단위로 비교했다 | 통과. Linux SHA-256 `79579495926744d82df8386ccb9fb8709f4787c88d48457ed9cc3140c6dd6e10`, Windows `612e4d4e9c74629db08432bbf17cced4b86a6ec7237d41ec63876b86b44d4658`. 각 `.sha256`과 같고 WSL `sha256sum -c`는 `OK`였다. tar.gz 파일 160개는 `-rw-r--r--`, 실행파일 1개는 `-rwxr-xr-x`, 디렉터리 21개는 `drwxr-xr-x`, 소유자는 `0/0`이다. tar.gz의 최상위 디렉터리는 하나다. 두 묶음 모두 태그와 경로가 같은 `docs/` 파일 154개를 담았다. Linux 묶음의 `docs/`는 태그와 바이트까지 같다. Windows 묶음의 `docs/`에서 PNG 12개는 바이트까지 같고, 텍스트 파일 142개는 CR 바이트를 빼면 같다. 최상위 항목은 Linux 8종(`README.ko.md` 추가), Windows는 트레이 앱을 포함한 9종이다. 두 VNC Relay 실행파일은 `vnc-relay 2026.11.10`을 출력했다. 같은 Release로 바꾼 Windows 서비스의 기록은 [수동 운영 안내 4절](operate-relay.md#4-검증)에 있다 |
 
 Windows에서는 PowerShell 7의 `Get-FileHash`나 `certutil -hashfile <파일> SHA256`으로 해시를 확인하기를 권장한다. Git Bash의 `sha256sum 0.8.0`은 CR 바이트가 든 해시 파일을 `-c`로 확인할 때 실제 해시가 같아도 `FAILED`로 보고할 수 있다. Ubuntu의 GNU coreutils `sha256sum`을 쓰거나 해시 값을 직접 비교한다.
 

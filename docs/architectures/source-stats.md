@@ -106,7 +106,7 @@ flowchart LR
 `SourcesSink::record`는 사건을 `SourceStats::record`에 넘긴 뒤 감싼 기록부에 넘긴다.
 
 1. 사건 종류로 고른다([운영 스펙 3.9절](../specs/operations.md#39-접속-출처-통계) 규칙 2). `connection_rejected`의 `ConnectionRejected` 변형은 `listener`가 중계 리스너 이름일 때만 본다.
-2. 사건에 `conn_id`가 있고 그 ID가 보류 표에 있으면 꺼낸다. 이 사건의 전달 주소가 있으면 그 주소, 없으면 보류한 소켓 상대 IP로 `Attempt`를 수락 시각에 넣는다. `SessionStarted`는 Viewer·Server 쪽 ID를 따로 꺼낸다. WSS의 TLS 단계 거절도 `conn_id`를 가진다.
+2. 사건에 `conn_id`가 있고 그 ID가 보류 표에 있으면 꺼낸다. 이 사건의 전달 주소가 있으면 그 주소, 없으면 보류한 소켓 상대 IP로 `Attempt`를 수락 시각에 넣는다. `SessionStarted`는 뷰어·서버 쪽 ID를 따로 꺼낸다. WSS의 TLS 단계 거절도 `conn_id`를 가진다.
 3. 사건 자체를 센다. TCP `connection_accepted`는 곧바로 `Attempt`다. WS·WSS `connection_accepted`는 보류 표에 넣는다. 표가 65,536개를 넘으면 가장 작은 `ConnId`를 꺼내 소켓 상대 IP로 `Attempt`를 넣는다. 수락 단계 `connection_rejected`는 `Attempt`와 `Rejected`를 함께 넣는다. 다른 거절은 `Rejected`, 중단은 `Aborted`, `session_started`는 쪽마다 세션 사건이다.
 4. 넣을 사건마다 `IpLookup::find`로 국가·ASN을 찾는다. 로컬 주소면 찾지 않는다. 같은 사건에서 같은 주소를 두 번 넣으면(수락 단계 거절의 `Attempt`와 `Rejected`) 한 번만 찾는다. 찾기는 잠금 밖에서 한다. 보관 잠금은 보류 표를 바꿀 때와 넣을 때만 잡는다.
 5. 사건을 시각 순서 자리에 넣는다. 버퍼의 사건은 늘 시각 오름차순이다. 보류한 수락은 그 연결의 다음 사건보다 이른 시각으로 들어오고, 여러 스레드가 동시에 기록하므로 늦게 도착한 사건이 더 이른 시각일 수 있기 때문이다. 자리는 이진 탐색(`partition_point`)으로 찾는다. 들어오는 사건은 대개 끝 가까이에 들어가므로 `VecDeque::insert`가 옮기는 사건 수가 적다.

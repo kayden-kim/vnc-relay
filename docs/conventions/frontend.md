@@ -244,7 +244,7 @@ web/dashboard/
 
 - 실행 환경: [개발 환경·검증 how-to](../how-to/set-up-and-verify.md)의 [전제 조건](../how-to/set-up-and-verify.md#2-전제-조건)이 정한 지원 환경(Windows 11 x64·PowerShell, Ubuntu 24.04 LTS x64·bash)과 고정 Rust 툴체인(1.99.1). Chromium(Chrome 또는 Edge)은 두 OS 모두에 필수다. 없거나 실행되지 않으면 브라우저 시험은 실패한다. Chromium 실행 파일 경로는 환경 변수 `DASHBOARD_BROWSER`로 준다. Node.js는 선택 항목인 DESIGN lint에만 필요하다.
 - 실행 위치: 저장소 루트.
-- 명령 확인 근거: `xtask/src/main.rs`에 `tokens [--check]`와 `dashboard-serve`가 있다. `tests/dashboard_browser.rs`는 컴포넌트·목 응답 시험을 맡는다. 실서버 화면 시험은 CDP(Chromium의 원격 조작 프로토콜)로 헤드리스 브라우저를 조작한다. `tokio-tungstenite`를 개발 의존성으로 재사용하며 새 crate나 외부 드라이버는 추가하지 않는다. 제공 표 대조는 `tests/dashboard_assets.rs`가 맡는다.
+- 명령 확인 근거: `xtask/src/main.rs`에 `tokens [--check]`와 `dashboard-serve`가 있다. `tests/dashboard_browser.rs`는 컴포넌트·목 응답 시험을 맡는다. 실제 VNC Relay 화면 시험은 CDP(Chromium의 원격 조작 프로토콜)로 헤드리스 브라우저를 조작한다. `tokio-tungstenite`를 개발 의존성으로 재사용하며 새 crate나 외부 드라이버는 추가하지 않는다. 제공 표 대조는 `tests/dashboard_assets.rs`가 맡는다.
 - 브라우저 범위: 자동 검증은 Chromium을 쓴다. Firefox는 수동으로 확인하고 버전을 기록한다. Safari 확인은 저장소 밖 검증 도구인 Playwright의 WebKit 자동 확인으로 대신한다. Playwright를 프로젝트 의존성에 넣지 않는다. 이 엔진은 실제 Safari와 같은 빌드가 아니므로 결과를 "WebKit 대체 확인"으로 적고 Safari 통과로 적지 않는다.
 - 실기기 모바일 확인: 변경마다 필수는 아니다. 릴리스 전에 한 번 확인하고 기록한다.
 
@@ -253,7 +253,7 @@ web/dashboard/
 | 디자인 토큰·문서 | `cargo xtask tokens --check`. 선택: DESIGN.md lint(`@google/design.md`, 고정 버전) | 종료 코드 0. 차이 0건, 금지 항목 0건. lint 오류 0건. 경고 수는 기록한다 | [검증 how-to 3.1절](../how-to/verify-dashboard-frontend.md) |
 | 정적 파일과 내장 | 제공 표 대조 테스트(`tests/dashboard_assets.rs`) | 실제 파일과 표가 일치한다. 금지 경로가 없다 | [검증 how-to 3.2절](../how-to/verify-dashboard-frontend.md) |
 | 컴포넌트·스타일 | 브라우저 테스트(`tests/dashboard_browser.rs`)와 화면 CSS 검사(2.2절) | 테스트 페이지의 `data-result`가 `pass`다 | [검증 how-to 3.3절](../how-to/verify-dashboard-frontend.md) |
-| 사용자 동작 | 브라우저 테스트와 `cargo xtask scenarios` | 시나리오의 모든 기대 결과를 확인해야 비부분 표식을 붙인다. 실서버 시험은 실제 로그인·조회·중계·종료 경로를 연결한다. 실패·지연·응답 유실은 시험용 전달 프록시로 만든다. 관리 세션 Si 만료는 실제 300초를 기다린다. 일반 데이터는 실서버 응답을 쓰며, 주입한 오류 응답을 제품에서 발생한 오류로 보고하지 않는다. 설정 화면 시험은 정상 화면 흐름에서 실서버가 만들 수 없는 계약 모양 4xx 응답도 주입할 수 있다. DASH-040의 PATCH 진단 코드와 DASH-043의 `409`·`403`이 해당한다. DASH-043은 같은 실서버에 원시 요청을 보내 얻은 실제 본문을 재생한다. 주입 수를 기록하고 제품에서 발생한 증거로 세지 않는다. 정상 응답 본문은 바꾸지 않는다. 브라우저별 호환성과 사람의 접근성 확인은 DASH-015·DASH-023의 별도 확인 범위다 | [테스트 컨벤션 7절](testing.md#7-테스트와-스펙-시나리오-연결), `.work/reports/scenario-report.md` |
+| 사용자 동작 | 브라우저 테스트와 `cargo xtask scenarios` | 시나리오의 모든 기대 결과를 확인해야 비부분 표식을 붙인다. 실제 VNC Relay 시험은 실제 로그인·조회·중계·종료 경로를 연결한다. 실패·지연·응답 유실은 시험용 전달 프록시로 만든다. 관리 세션 Si 만료는 실제 300초를 기다린다. 일반 데이터는 실제 VNC Relay 응답을 쓰며, 주입한 오류 응답을 제품에서 발생한 오류로 보고하지 않는다. 설정 화면 시험은 정상 화면 흐름에서 실제 VNC Relay가 만들 수 없는 계약 모양 4xx 응답도 주입할 수 있다. DASH-040의 PATCH 진단 코드와 DASH-043의 `409`·`403`이 해당한다. DASH-043은 같은 VNC Relay 인스턴스에 원시 요청을 보내 얻은 실제 본문을 재생한다. 주입 수를 기록하고 제품에서 발생한 증거로 세지 않는다. 정상 응답 본문은 바꾸지 않는다. 브라우저별 호환성과 사람의 접근성 확인은 DASH-015·DASH-023의 별도 확인 범위다 | [테스트 컨벤션 7절](testing.md#7-테스트와-스펙-시나리오-연결), `.work/reports/scenario-report.md` |
 | 시각 결과·접근성 | 폭별 스크린샷, 시안과 나란히 대조, 키보드·스크린 리더 수동 확인 | 스펙과 DESIGN.md 기준을 만족한다. 검토자가 기록한다 | [검증 how-to 3.4~3.7절](../how-to/verify-dashboard-frontend.md) |
 | 도움말 사이트 | `cargo xtask help-site`(mdBook 0.5.4, 환경 변수 `MDBOOK` 또는 `PATH`)와 브라우저 시험(`tests/help_site.rs`), 시안 대조 | 빌드·검사의 종료 코드 0. HELP-001~012·014~018 시험 통과. 시안과의 차이는 기준에 맞게 고치거나 기록한다 | [도움말 게시 how-to 3~4절](../how-to/publish-help.md) |
 | 전체 완료 | [개발 환경·검증 how-to 3.4절](../how-to/set-up-and-verify.md)의 명령과 위 명령 | 모든 필수 검사가 종료 코드 0이다 | [개발 환경·검증 how-to](../how-to/set-up-and-verify.md) |

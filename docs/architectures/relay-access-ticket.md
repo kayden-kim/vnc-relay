@@ -182,7 +182,7 @@ flowchart LR
 | JSON 중복 멤버는 `serde_json`으로 구문을 확인한 뒤 멤버 이름만 훑어 찾는다 | 새 직접 의존성(`serde`) 없이 이스케이프를 해독한 이름으로 비교한다 | `serde` visitor: adapters 직접 의존성과 레이어 허용 목록이 바뀐다 | 없음 |
 | base64url·JWS 나누기·클레임 판정·키 목록·사용 기록은 domain | 외부 crate 없이 시험할 수 있는 계약 규칙이다 | adapters에 모두 두기: 규칙 시험이 I/O 시험에 섞인다 | [코드 지도 레이어 표](code-map.md) |
 | 101 뒤에는 `TicketBinding`만 `handle_connection`의 새 인자로 넘긴다 | 중계 서비스는 JWS를 몰라도 된다. `ConnectionContext`는 `Copy`로 유지한다 | `ConnectionContext`에 넣기: `Copy`가 깨지고 TCP 경로까지 바뀐다 | 없음 |
-| 두 역할의 같은 키는 Server 쪽 `relay.ticket.server.public_keys_file` 진단으로 낸다 | 진단 하나가 한 키를 가리켜야 한다. 키 순서상 뒤 키다 | 두 키 모두에 진단: 같은 원인이 두 번 보인다 | 없음 |
+| 두 역할의 같은 키는 서버 쪽 `relay.ticket.server.public_keys_file` 진단으로 낸다 | 진단 하나가 한 키를 가리켜야 한다. 키 순서상 뒤 키다 | 두 키 모두에 진단: 같은 원인이 두 번 보인다 | 없음 |
 | 재로드 경고는 `applied`에 그 역할의 `enabled`가 있을 때만 다시 쓴다 | 기존 `allow_all_target`·`trust_all_proxies`처럼 바뀐 키에만 경고한다 | 재로드마다 쓰기: 바뀌지 않은 설정의 경고가 반복된다 | 없음 |
 | 세션 만료로 시작한 정리는 E가 지나도 `session_expired`를 유지한다 | 계약이 `close_timeout`으로 바꾸는 예외를 EOF·관리자 종료로만 정했다 | `close_timeout`으로 바꾸기: 계약 문장과 다르다 | [운영 정보 계약](../contracts/ops-info-v2.md) `session_closed` 절 |
 | 이미 정리를 시작한 세션에는 만료가 원인을 바꾸지 않는다 | 첫 원인 규칙을 따른다. 정리는 이미 E로 제한된다 | 즉시 강제 종료: 정리 규칙이 둘이 된다 | 없음 |

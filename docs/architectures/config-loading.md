@@ -71,7 +71,7 @@ flowchart LR
 | `crates/adapters/src/config_file/reader.rs` `Section`, `Field`, `Diagnostics` | 한 TOML 테이블의 키를 읽고 읽은 키를 기록한다. 끝에서 읽지 않은 키를 `config_unknown_key`로 보고한다. 자료형·범위 오류를 진단으로 남긴다. `Field`는 키 상태(생략·무효·값)다. | 테이블마다 | toml, app |
 | `crates/adapters/src/config_file/listen.rs` `parse_listen` | `"IP:포트"`, `"[IPv6]:포트"`, 기본 포트가 있을 때 주소만 쓴 형식. 호스트 이름·영역 ID·포트 0을 거절한다. | 호출마다 | 호출한 쪽이 `ListenerKind::default_port()`를 넘긴다. |
 
-v4의 `config_file.rs`는 `read_tcp_listener(ListenerKind)`와 `read_websocket_listener(ListenerKind)`를 나눈다. 뒤 함수는 부모 listen·trusted_proxies·TLS를 읽고 `read_websocket_role`로 Viewer·Server 자식을 읽는다. `read_allow_list`가 allow와 trusted_proxies의 IP 항목 검증을 공유한다. `read_recent_logs`는 max_entries를 읽는다. 주소 충돌은 `check_listen_conflicts`가 `ListenerKind::ALL`을 한 번 순회하므로 공유 리스너를 역할 수만큼 중복 검사하지 않는다.
+v4의 `config_file.rs`는 `read_tcp_listener(ListenerKind)`와 `read_websocket_listener(ListenerKind)`를 나눈다. 뒤 함수는 부모 listen·trusted_proxies·TLS를 읽고 `read_websocket_role`로 뷰어·서버 자식을 읽는다. `read_allow_list`가 allow와 trusted_proxies의 IP 항목 검증을 공유한다. `read_recent_logs`는 max_entries를 읽는다. 주소 충돌은 `check_listen_conflicts`가 `ListenerKind::ALL`을 한 번 순회하므로 공유 리스너를 역할 수만큼 중복 검사하지 않는다.
 
 `read_relay`는 `[relay.ticket.viewer]`·`[relay.ticket.server]`도 읽는다. 각 역할의 `enabled`는 기본 `false`다. `issuer`·`relay_host`는 1~256바이트 문자열이다. `max_lifetime_secs`는 10~600초이며 기본 60초다. `enabled = true`이면 `issuer`·`relay_host`·`public_keys_file`이 필수다. 빠진 값은 `config_missing_key`다. 공개 키 경로는 설정 파일 디렉터리 기준으로 푼다. 꺼진 역할도 명시한 값의 자료형·범위를 검사한다. 로더는 키 파일을 읽지 않는다([접속 ticket 모듈 설계](relay-access-ticket.md#41-시작)).
 
@@ -92,7 +92,7 @@ v4의 `config_file.rs`는 `read_tcp_listener(ListenerKind)`와 `read_websocket_l
 | `EntryPointSettings` | `enabled`, `listen: Option<SocketAddr>`, `allow: Option<AllowList>` | TCP 두 칸 | 켜진 TCP 진입점의 `listen`·`allow`는 필수다. |
 | `WsListenerSettings` | `listen`, `trusted_proxies: AllowList`, `tls: Option<TlsFiles>`, `viewer`, `server`: `WsRoleSettings` | WS·WSS 두 칸 | `enabled()`는 두 역할의 OR다. 어느 역할이든 켜면 부모의 `listen`이 필수다. WSS는 부모 TLS 두 경로도 필수다. WS에는 TLS 키를 받지 않는다. |
 | `WsRoleSettings` | `enabled`, `allow: Option<AllowList>`, `allowed_origins: Vec<Origin>` | 공유 리스너 아래 역할 두 칸 | 켜진 역할의 `allow`만 필수다. 꺼진 역할도 명시한 값의 형식·범위를 검사한다. |
-| `TicketSettings`·`TicketRoleSettings` | Viewer·Server별 `enabled`, `issuer`, `relay_host`, `public_keys_file`, `max_lifetime`, `keys` | `Settings.relay.ticket` | 로더는 빈 키 목록을 만든다. 시작·재로드가 파일을 검사해 실행 스냅샷의 키 목록을 채운다. |
+| `TicketSettings`·`TicketRoleSettings` | 뷰어·서버별 `enabled`, `issuer`, `relay_host`, `public_keys_file`, `max_lifetime`, `keys` | `Settings.relay.ticket` | 로더는 빈 키 목록을 만든다. 시작·재로드가 파일을 검사해 실행 스냅샷의 키 목록을 채운다. |
 | `RecentLogsSettings` | `max_entries: u32` | `Settings.recent_logs` | 기본 1000, 범위 0~10000. 변경은 재시작 필요다. 버퍼 생성은 `serve`와 운영 로그가 맡는다. |
 | `IpInfoSettings` | `country_db`, `asn_db`: `Option<PathBuf>` | `Settings.ip_info` | `read_ip_info`가 읽는다. 설정 파일 디렉터리 기준으로 푼 경로이며 생략하면 `None`이다. 로더는 파일을 열지 않는다. 파일 읽기와 형식 검사는 [접속 출처 모듈](source-stats.md)이 맡는다. 두 키 모두 변경은 재시작 필요다. |
 | `Mode1Settings` | `enabled`, `allow_targets: Option<TargetPolicy>` | `Settings.mode1` | `enabled = true`이면 `allow_targets`가 있다. |

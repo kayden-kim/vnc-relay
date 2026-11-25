@@ -8,7 +8,7 @@
 
 | 인수 | 하는 일 |
 | --- | --- |
-| `serve --config <path>` | 서버를 포그라운드로 실행한다. |
+| `serve --config <path>` | VNC Relay를 포그라운드로 실행한다. |
 | `admin add <account> --config <path>` | 관리자 계정을 추가한다. 비밀번호와 확인 값을 숨김 입력으로 받는다. |
 | `admin passwd <account> --config <path>` | 기존 계정의 비밀번호를 바꾼다. 새 비밀번호와 확인 값을 숨김 입력으로 받는다. |
 | `admin remove <account> [--yes] --config <path>` | 계정을 삭제한다. `--yes`는 삭제 확인을 생략한다. |
@@ -16,7 +16,7 @@
 | `--help` 또는 `-h` | 사용법을 출력한다. 다른 인수와 함께 쓰지 않는다. |
 | `--version` 또는 `-V` | 실행파일 버전을 출력한다. 다른 인수와 함께 쓰지 않는다. |
 
-`--config`는 `serve`와 모든 `admin` 명령에서 필수다. 비밀번호는 명령행·환경 변수로 받지 않는다. 계정 변경은 실행 중 서버에 반영되지 않는다. 정상 종료하고 다시 시작해야 한다.
+`--config`는 `serve`와 모든 `admin` 명령에서 필수다. 비밀번호는 명령행·환경 변수로 받지 않는다. 계정 변경은 실행 중인 VNC Relay에 반영되지 않는다. 정상 종료하고 다시 시작해야 한다.
 
 압축을 푼 묶음의 실행파일 디렉터리에서, 준비한 설정 파일이 `relay.toml`일 때 다음과 같이 실행한다.
 
@@ -44,7 +44,7 @@ Ubuntu bash:
 | 상태 | `GET /readyz` | 준비됨이면 `200`과 `status: ready`를 반환한다. 준비되지 않았으면 `503`과 `status: not_ready`를 반환한다. |
 | 상태 | `GET /metrics` | `metrics.enabled = true`일 때만 Prometheus 텍스트 0.0.4 메트릭을 제공한다. 꺼져 있으면 `404`다. |
 | 관리 | `/` | 내장 대시보드를 제공한다. |
-| 관리 | `/api/v1/` 아래 | 관리자 로그인·로그아웃, 서버·연결·세션·설정·로그·메트릭·접속 출처 조회, 관리자 종료와 동적 설정 편집 API다. |
+| 관리 | `/api/v1/` 아래 | 관리자 로그인·로그아웃, VNC Relay 요약·연결·세션·설정·로그·메트릭·접속 출처 조회, 관리자 종료와 동적 설정 편집 API다. |
 
 상태 리스너에는 인증이 없으며 평문 HTTP를 쓴다. 루프백에 두거나 모니터링 네트워크에서만 접근하도록 제한한다. 관리 리스너는 HTTPS가 원칙이며 평문 HTTP는 루프백에서만 허용한다. 관리 API의 개별 경로·인증·CSRF 요구는 [관리 API 계약 1.2절](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/management-api-v1.md)을 따른다. 생존과 준비의 차이와 전체 응답 형식은 [운영 정보 계약 1.12절](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/ops-info-v2.md)을, 메트릭 형식은 [메트릭 계약](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/metrics-v1.md)을 따른다. 수집 절차는 [메트릭 수집](operate.md#메트릭-수집)을 따른다.
 
@@ -112,7 +112,7 @@ WS와 WSS는 같은 경로를 쓴다. 쿼리는 대상이나 중계 ID를 선택
 | `ip_denied` | "차단 목록으로 종료" |
 | `dead_connection` | "끊긴 연결 감지" |
 | `close_timeout` | "정리 제한 시간 초과" |
-| `server_shutdown` | "서버 종료" |
+| `server_shutdown` | "VNC Relay 종료" |
 | `internal_error` | "내부 오류" |
 
 이 값은 WebSocket close 코드나 접속 거절의 `reason` 전체 목록과 다르다. 대기 연결은 활성 세션이 아니므로 대기 만료를 최근 종료 목록에서 찾지 않는다. 값과 의미의 기준은 [관리 API 계약 1.10절](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/management-api-v1.md)이다. 로그의 수준과 추가 필드는 [운영 정보 계약 1.6절](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/ops-info-v2.md)을 따른다. 화면 문구의 기준은 [대시보드 스펙 9절](https://github.com/kayden-kim/vnc-relay/blob/main/docs/specs/dashboard.md)과 [copy.js](https://github.com/kayden-kim/vnc-relay/blob/main/web/dashboard/app/copy.js)다.

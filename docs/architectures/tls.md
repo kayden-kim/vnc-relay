@@ -17,7 +17,7 @@
 ## 1. 책임과 경계
 
 - 맡는 책임: PEM 인증서 체인과 개인키를 읽어 rustls 서버 설정을 만든다. TLS 1.2·1.3만 협상하도록 설정한다. 파일 오류를 `TlsError`로 알린다.
-- TLS 설정은 역할이 아니라 리스너에 속한다. WSS Viewer·Server가 `relay.wss.cert_file`·`relay.wss.key_file` 한 쌍과 수락기 하나를 공유한다. 어느 역할이든 켜면 시작·재로드 때 검사한다. 두 역할이 모두 꺼졌으면 명시한 경로 문자열만 검증하고 참조 파일은 읽거나 감시하지 않는다. WS 부모의 TLS 키는 설정 로더가 거절한다.
+- TLS 설정은 역할이 아니라 리스너에 속한다. WSS 뷰어·서버가 `relay.wss.cert_file`·`relay.wss.key_file` 한 쌍과 수락기 하나를 공유한다. 어느 역할이든 켜면 시작·재로드 때 검사한다. 두 역할이 모두 꺼졌으면 명시한 경로 문자열만 검증하고 참조 파일은 읽거나 감시하지 않는다. WS 부모의 TLS 키는 설정 로더가 거절한다.
 - 새 TLS 협상은 `TlsSource`로 현재 snapshot의 수락기를 고른다. WSS의 TLS 단계에는 역할이 없으므로 사건에 `listener=wss`만 쓰고 `role`은 생략한다.
 - 맡지 않는 책임: 설정 파일 읽기와 설정 키 이름 붙이기([설정 로딩](config-loading.md)), 리스너 바인드와 접속 수락([`serve` 시작](serve-startup.md); WSS 진입점은 [WebSocket 진입점 설계](websocket-entry-point.md), 관리 리스너는 [관리 리스너 모듈 설계](management-listener.md)가 맡는다), TLS 협상 실패의 운영 로그 기록(리스너가 기록한다), 재로드 판정과 교체([파일 변경 감지 모듈 설계](file-watch.md)), 파일 변경 감시([파일 변경 감지 모듈 설계](file-watch.md)).
 - 다른 모듈에 공개하는 기능: `tls::load_acceptor(cert_file, key_file)`, `tls::acceptor_from_pem(cert_pem, key_pem)`(재로드 후보), `tls::RustlsTlsStore`(`ReloadTlsStore` 구현), `TlsError`, `TlsError::code()`.

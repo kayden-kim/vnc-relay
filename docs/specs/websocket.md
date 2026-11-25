@@ -1,6 +1,6 @@
 # WS·WSS 전송 스펙
 
-외부 Viewer·Server가 WS·WSS로 중계 스트림에 접속하는 동작을 정의한다. 내장 WSS와 릴레이 리스너 앞의 역방향 프록시 TLS 종료를 지원한다. 중계 접근은 관리자 로그인과 분리한 진입점별 IP 허용 정책을 따른다. 중계 진입점 공통의 출발지 IP 차단 목록이 허용 정책보다 먼저 판정한다. 접속 ticket 확인은 기본으로 꺼져 있고, 설정으로 켠 역할에만 더한다. 신뢰 프록시를 거치면 전달 주소로 클라이언트 주소를 판정한다.
+외부 뷰어·서버가 WS·WSS로 중계 스트림에 접속하는 동작을 정의한다. 내장 WSS와 릴레이 리스너 앞의 역방향 프록시 TLS 종료를 지원한다. 중계 접근은 관리자 로그인과 분리한 진입점별 IP 허용 정책을 따른다. 중계 진입점 공통의 출발지 IP 차단 목록이 허용 정책보다 먼저 판정한다. 접속 ticket 확인은 기본으로 꺼져 있고, 설정으로 켠 역할에만 더한다. 신뢰 프록시를 거치면 전달 주소로 클라이언트 주소를 판정한다.
 
 | 항목 | 값 |
 | --- | --- |
@@ -14,9 +14,9 @@
 ## 1. 범위와 적용 상태
 
 - WS(`ws://`)·WSS(`wss://`)를 지원한다.
-- 공유 WS·WSS 리스너는 Viewer·Server 역할을 제공한다. `/relay/viewer`는 Viewer, `/relay/server`는 Server다. 별도 Server 리스너는 만들지 않는다.
+- 공유 WS·WSS 리스너는 뷰어·서버 역할을 제공한다. `/relay/viewer`는 뷰어, `/relay/server`는 서버다. 별도 서버 리스너는 만들지 않는다.
 - `/relay`는 다른 미지원 경로와 같이 404다. 현재 `websocket-relay` 계약은 2.2.0이다. 1.x 클라이언트의 이전·롤백은 [WebSocket 계약 3.1절](../contracts/websocket-relay-v2.md#31-1x-클라이언트를-200으로-옮기기)을 따른다.
-- Viewer는 Mode I·II, Server는 TCP Server와 같이 Mode II만 지원한다. 접속 ticket을 켠 Viewer 역할은 Mode I을 거절한다. WS·WSS Server와 TCP·WS·WSS Viewer의 모든 조합을 양 접속 순서로 검증한다.
+- 뷰어는 Mode I·II, 서버는 TCP 서버와 같이 Mode II만 지원한다. 접속 ticket을 켠 뷰어 역할은 Mode I을 거절한다. WS·WSS 서버와 TCP·WS·WSS 뷰어의 모든 조합을 양 접속 순서로 검증한다.
 - 평문 WS 리스너는 기본 비활성이다. 설정에서 명시적으로 켠 경우에만 연다(WS-R12, WS-024). 테스트에서는 WS 리스너를 켜고 검증한다.
 - noVNC, websockify 실행 파일, 원격 화면 렌더러를 의존성으로 추가하지 않는다. noVNC는 번들·배포물에도 넣지 않고 외부 상호운용 검증 대상으로만 쓴다.
 - 검증 대상은 검증 시작 시 고정한 noVNC 버전의 [`repeaterID` 옵션](https://novnc.com/noVNC/docs/API.html)으로 접속하는 WS·WSS Mode II다(WS-025). Mode I은 대상이 아니다. 수용 판정은 매칭 성립과 noVNC의 RFB 연결 완료 관찰이다. noVNC 화면 렌더링은 수용 기준이 아니다.
@@ -40,7 +40,7 @@ TLS 협상과 HTTP 업그레이드 단계의 연결은 중계 연결 상한 L에
 
 내장 WSS에서는 VNC Relay가 리스너·인증서를 직접 관리하며 클라이언트부터 VNC Relay까지 TLS가 보호한다. 역방향 프록시가 TLS를 종료하면 클라이언트부터 프록시까지 TLS가 보호한다. 프록시에서 WS 리스너까지의 평문 구간은 별도다. 평문 WS 리스너는 기본 비활성이고, 역할을 하나라도 켜면 시작 경고를 기록한다. 보호 구간과 프록시 배치의 책임은 운영자에게 있다.
 
-WS Viewer·WS Server·WSS Viewer·WSS Server는 각각 자기 진입점의 `allow`와 `allowed_origins`를 가진다. 켠 역할의 `allow`가 없으면 시작에 실패하고, 명시적으로 빈 목록이면 그 역할의 모든 클라이언트 주소를 거절한다([운영 스펙](operations.md#4-보안과-신뢰-경계)). accept에서는 역할이 아직 없으므로 소켓 상대를 켠 역할의 `allow` 합집합 또는 해당 리스너의 `trusted_proxies`와 대조한다. 업그레이드에서는 선택한 역할의 `allow`를 클라이언트 주소와 대조한다. 신뢰 프록시는 [계약 1.8절](../contracts/websocket-relay-v2.md#18-신뢰-프록시와-x-forwarded-for)로 주소를 전달한다. 신뢰하지 않는 상대의 헤더는 무시하며 소켓 상대 IP가 클라이언트 주소다.
+WS 뷰어·WS 서버·WSS 뷰어·WSS 서버는 각각 자기 진입점의 `allow`와 `allowed_origins`를 가진다. 켠 역할의 `allow`가 없으면 시작에 실패하고, 명시적으로 빈 목록이면 그 역할의 모든 클라이언트 주소를 거절한다([운영 스펙](operations.md#4-보안과-신뢰-경계)). accept에서는 역할이 아직 없으므로 소켓 상대를 켠 역할의 `allow` 합집합 또는 해당 리스너의 `trusted_proxies`와 대조한다. 업그레이드에서는 선택한 역할의 `allow`를 클라이언트 주소와 대조한다. 신뢰 프록시는 [계약 1.8절](../contracts/websocket-relay-v2.md#18-신뢰-프록시와-x-forwarded-for)로 주소를 전달한다. 신뢰하지 않는 상대의 헤더는 무시하며 소켓 상대 IP가 클라이언트 주소다.
 
 목록의 IP 문법과 전체 허용 항목 경고는 [설정 계약](../contracts/config-v4.md)이 정한다. 관리자 로그인 쿠키와 중계 ID는 IP 제한을 우회하지 못한다. IP 정책은 같은 공인 IP를 공유하는 개별 사용자를 식별하지 않는다. `trusted_proxies`에는 프록시 주소만 넣어야 하며 클라이언트 범위를 넣어서는 안 된다. 모든 XFF 요소가 신뢰 프록시이면 주소를 대신 고르지 않고 거절한다(WS-036).
 
@@ -50,7 +50,7 @@ IP 허용 목록·`trusted_proxies`·인증서 재로드는 [운영 스펙](oper
 
 업그레이드에서는 클라이언트 주소를 역할별 `allow` 검사 바로 앞에서 차단 목록으로 검사한다. 차단이면 HTTP 403 `ip_denied`로 거절하고 `connection_rejected`(stage `upgrade`, reason `ip_denied`)를 기록한다. ticket은 소비하지 않는다. 초기 교환을 마친 뒤 등록 직전에는 현재 차단 목록으로 클라이언트 주소를 다시 검사한다. 차단이면 close 4014 `ip_denied`로 닫고 `connection_rejected`(stage `register`, reason `ip_denied`)를 기록한다. 대기 등록·매칭·Mode I 대상 연결은 만들지 않는다.
 
-차단 목록 값이 바뀌면 교체 직후 열린 WS·WSS 연결도 검사한다. 허용 목록과 달리 업그레이드를 마친 대기 연결과 활성 세션도 끊는다. 대기 연결은 클라이언트 주소(신뢰 프록시를 거쳤으면 전달 주소)가 차단되면 close 4014 `ip_denied`로 닫는다. 활성 세션은 WS·WSS Viewer 또는 Server의 클라이언트 주소가 차단되면 세션 전체를 끊는다. 그 연결에는 close 4014 `ip_denied`를 보내고 반대쪽 연결도 닫는다. 종료 원인은 `ip_denied`다. 규칙은 [운영 스펙 3.10절](operations.md#310-출발지-ip-차단-목록)을 따른다.
+차단 목록 값이 바뀌면 교체 직후 열린 WS·WSS 연결도 검사한다. 허용 목록과 달리 업그레이드를 마친 대기 연결과 활성 세션도 끊는다. 대기 연결은 클라이언트 주소(신뢰 프록시를 거쳤으면 전달 주소)가 차단되면 close 4014 `ip_denied`로 닫는다. 활성 세션은 WS·WSS 뷰어 또는 서버의 클라이언트 주소가 차단되면 세션 전체를 끊는다. 그 연결에는 close 4014 `ip_denied`를 보내고 반대쪽 연결도 닫는다. 종료 원인은 `ip_denied`다. 규칙은 [운영 스펙 3.10절](operations.md#310-출발지-ip-차단-목록)을 따른다.
 
 Origin 정책: Origin 헤더가 있으면 해당 역할의 `allowed_origins`와 일치할 때만 업그레이드한다. 허용 값은 `scheme://host[:port]` 형식이며 정확 일치로 비교한다. 와일드카드는 없다. 스킴·호스트·포트 중 하나라도 다르면 거절한다. 하위 도메인은 다른 호스트다. 정규화 세부는 [설정 계약 1.4절](../contracts/config-v4.md#14-origin-값-문법과-비교)이 정하고, 비교 결과의 처리는 [WebSocket 계약 1.3절](../contracts/websocket-relay-v2.md#13-origin-비교)이 정한다. Origin 헤더가 없어도 클라이언트 주소가 해당 역할의 `allow`에 있어야 한다. Origin은 사용자 인증 수단이 아니다.
 
@@ -62,7 +62,7 @@ Origin 정책: Origin 헤더가 있으면 해당 역할의 `allowed_origins`와 
 
 | 관계 | 개수 | 뜻 |
 | --- | --- | --- |
-| 역할 → ticket 설정 | 1 : 0..1 | Viewer·Server 역할마다 ticket 설정(`issuer`·공개 키·`relay_host`·`max_lifetime_secs`)을 따로 켠다. 켜지 않은 역할에는 ticket을 요구하지 않는다. 켠 역할은 다른 역할의 ticket을 받지 않는다(WS-R20, WS-037·WS-045). |
+| 역할 → ticket 설정 | 1 : 0..1 | 뷰어·서버 역할마다 ticket 설정(`issuer`·공개 키·`relay_host`·`max_lifetime_secs`)을 따로 켠다. 켜지 않은 역할에는 ticket을 요구하지 않는다. 켠 역할은 다른 역할의 ticket을 받지 않는다(WS-R20, WS-037·WS-045). |
 | ticket → 업그레이드 연결 | 1 : 0..1 | ticket 하나로 연 연결은 하나다. 같은 ticket의 두 번째 사용은 거절한다. 업그레이드 검사에서 거절한 요청은 ticket을 쓰지 않은 것으로 본다(WS-R21, WS-042·WS-044). |
 | ticket → 중계 ID | 1 : 1 | ticket은 `rid`로 중계 ID 하나를 묶는다. 초기 요청의 중계 ID와 비교하는 규칙은 [중계 스펙 2.1절](relay.md#21-판정-가능한-규칙)의 RLY-R21이 정한다. |
 | ticket → 세션 만료 시각 | 1 : 0..1 | `sx`는 선택이다. `sx`에 연결·세션을 끝내는 규칙은 [중계 스펙 2.1절](relay.md#21-판정-가능한-규칙)의 RLY-R22가 정한다. |
@@ -72,7 +72,7 @@ Origin 정책: Origin 헤더가 있으면 해당 역할의 `allowed_origins`와 
 1. WSS는 TLS가 성립한 뒤 HTTP 업그레이드를 진행한다. WS는 TLS 없이 업그레이드를 진행한다.
 2. accept IP 검사를 통과한 뒤 요청 경로로 역할을 고른다. 클라이언트 주소·역할별 Origin·서브프로토콜·켠 역할의 ticket·차단 목록·역할별 IP 재검사 순서로 검사한다. 거절 우선순위는 Origin 403 → 서브프로토콜 400 → ticket 401 → IP 재검사 403이다. IP 재검사는 차단 목록, 역할별 `allow` 순서다. 모두 통과한 뒤 사용 기록을 쓰고 `101`을 보낸다. 앞 검사에서 거절한 요청은 ticket을 소비하지 않는다. 세부 순서는 [계약 1.1절](../contracts/websocket-relay-v2.md#11-업그레이드-요청)이 정한다.
 3. WebSocket 연결 뒤 바이너리 메시지의 페이로드를 선택한 역할의 연속 바이트 스트림으로 취급한다.
-4. Viewer에는 `101` 응답 직후 시작 바이트를 보낸다. Server에는 보내지 않으며 Server가 `ID:` 초기 요청을 먼저 보낸다. [중계 스펙](relay.md#3-정상-흐름)의 초기 교환으로 대상 주소 또는 ID를 얻는다. 형식은 [Repeater 초기 교환 계약](../contracts/repeater-handshake-v1.md)을 따른다. 계약 밖의 별도 선택 단계를 만들지 않는다.
+4. 뷰어에는 `101` 응답 직후 시작 바이트를 보낸다. 서버에는 보내지 않으며 서버가 `ID:` 초기 요청을 먼저 보낸다. [중계 스펙](relay.md#3-정상-흐름)의 초기 교환으로 대상 주소 또는 ID를 얻는다. 형식은 [Repeater 초기 교환 계약](../contracts/repeater-handshake-v1.md)을 따른다. 계약 밖의 별도 선택 단계를 만들지 않는다.
 5. 상대 TCP·WS·WSS 스트림은 바이너리 메시지로 전달한다. 출력 메시지 크기나 경계가 입력과 같을 필요는 없다.
 
 ticket을 켠 역할은 `binary`와 `ticket.` 뒤에 JWS 압축 형식을 붙인 값 하나를 함께 받아야 한다. `binary` 없이 다른 값이 있으면 먼저 HTTP 400으로 거절한다. 헤더가 없거나 ticket 값이 없으면 HTTP 401로 거절한다. ticket 값이 둘 이상이어도 HTTP 401로 거절한다. 수락 응답은 `Sec-WebSocket-Protocol: binary`만 고른다. ticket을 켜지 않은 역할은 기존 서브프로토콜 판정을 유지하며 ticket 값을 확인·기록하지 않는다([계약 1.9.1절](../contracts/websocket-relay-v2.md#191-서브프로토콜에-싣는-값)).
@@ -91,8 +91,8 @@ ticket을 켠 역할은 `binary`와 `ticket.` 뒤에 JWS 압축 형식을 붙인
 | WS-R10 | 7절 | accept에서는 당시 유효한 켠 역할의 `allow` 합집합 또는 리스너의 `trusted_proxies`에 소켓 상대 IP가 있는지 검사해야 한다. 실패하면 TLS·HTTP 전에 닫아야 한다. 업그레이드 직전에는 클라이언트 주소를 선택한 역할의 당시 유효한 `allow`와 대조해야 한다. 해당 역할의 Origin 정책도 업그레이드에서 검사해야 한다. 실패한 연결은 중계 등록 전에 거절해야 한다. |
 | WS-R11 | FR-04·FR-05 | 연결 종료 후 WebSocket과 상대 TCP 연결의 자원을 정리해야 한다. |
 | WS-R12 | 7절 | 평문 WS 리스너는 설정에서 명시적으로 켠 경우에만 열어야 한다. |
-| WS-R13 | FR-05 | WS·WSS 연결에 Kw 주기로 ping을 보내고, Kw의 응답 제한 안에 pong이 없으면 끊긴 연결로 처리해 정리해야 한다. 서버 ping·pong은 WS-R05에 따라 TCP 중계 스트림에 섞어서는 안 된다. |
-| WS-R14 | FR-05 | 공유 리스너의 정확한 `/relay/viewer`는 Viewer, `/relay/server`는 Server로 정해야 한다. Server는 Mode II만 받고 시작 바이트를 보내서는 안 된다. |
+| WS-R13 | FR-05 | WS·WSS 연결에 Kw 주기로 ping을 보내고, Kw의 응답 제한 안에 pong이 없으면 끊긴 연결로 처리해 정리해야 한다. VNC Relay ping·pong은 WS-R05에 따라 TCP 중계 스트림에 섞어서는 안 된다. |
+| WS-R14 | FR-05 | 공유 리스너의 정확한 `/relay/viewer`는 뷰어, `/relay/server`는 서버로 정해야 한다. 서버는 Mode II만 받고 시작 바이트를 보내서는 안 된다. |
 | WS-R15 | 7절 | 리스너의 당시 유효한 `trusted_proxies`에 소켓 상대가 있을 때만 `X-Forwarded-For`를 읽어야 한다. 주소 판정은 [계약 1.8절](../contracts/websocket-relay-v2.md#18-신뢰-프록시와-x-forwarded-for)의 1~8단계를 따라야 한다. 신뢰하지 않는 상대의 전달 헤더로 클라이언트 주소를 바꾸어서는 안 된다. |
 | WS-R16 | FR-05 | 알 수 없는 경로와 해당 리스너에서 꺼진 역할의 경로는 HTTP 404로 거절하고 `invalid_upgrade`를 기록해야 한다. 쿼리 문자열은 무시하고 끝 슬래시는 다른 경로로 보아야 한다. |
 | WS-R17 | 7절 | 신뢰 프록시의 전달 주소 판정 실패는 HTTP 400 `forwarded_for_invalid`로 거절해야 한다. 헤더 누락·빈 값, 잘못된 검사 대상 요소, 모든 요소가 신뢰 프록시인 체인이 해당한다. 등록과 `forwarded_ip`를 남겨서는 안 된다. |
@@ -127,17 +127,17 @@ ticket을 켠 역할은 `binary`와 `ticket.` 뒤에 JWS 압축 형식을 붙인
 | 잘못된 프레임·논리 메시지 M 초과 | 프로토콜·크기 오류로 종료 | 원인 구분, 추가 전달 중지, 자원 회수 |
 | Repeater 초기 교환 오류·시간 초과 | 호환 계약에 따른 종료 | 해당 대기·대상 연결 정리 |
 | 101 성공 후 Mode I 대상 연결용 L 상한 도달 | 중계 상한 도달(close 4011)로 종료 | 대상 연결을 만들지 않고 해당 연결 정리 |
-| ticket 연결의 중계 ID 불일치 또는 ticket을 켠 Viewer의 유효한 Mode I 요청 | close 4012 `ticket_relay_mismatch`([계약 1.9.5절](../contracts/websocket-relay-v2.md#195-101-뒤의-중계-id-대조와-세션-만료)) | 기존 초기 요청 검사를 통과한 뒤 거절. 대기 등록·대상 연결 없음, 기다리던 상대 연결 유지 |
+| ticket 연결의 중계 ID 불일치 또는 ticket을 켠 뷰어의 유효한 Mode I 요청 | close 4012 `ticket_relay_mismatch`([계약 1.9.5절](../contracts/websocket-relay-v2.md#195-101-뒤의-중계-id-대조와-세션-만료)) | 기존 초기 요청 검사를 통과한 뒤 거절. 대기 등록·대상 연결 없음, 기다리던 상대 연결 유지 |
 | ticket의 세션 만료 시각(`sx`) 도달 | WS·WSS 쪽 close 4013 `session_expired`. 활성 세션의 TCP 쪽은 소켓 닫힘([계약 1.9.5절](../contracts/websocket-relay-v2.md#195-101-뒤의-중계-id-대조와-세션-만료)) | 해당 연결·대기·세션 정리. 활성 세션의 종료 원인은 `session_expired`. 남은 데이터 전달은 보장하지 않음 |
 | WebSocket close 수신 | 전체 WebSocket 종료 시작 | 상대 TCP에 EOF 의미 전달 후 제한 시간 안에 정리 |
 | TCP 정상 EOF | WebSocket 종료 시작 | 이미 수락한 TCP 데이터 소진 후 close, 소진 불가 시 중단 원인 기록 |
 | 네트워크 오류·종료 교환 시간 초과 | 비정상 종료 | 상대와 등록 자원 회수 |
-| pong 응답 없음 | Kw의 응답 제한이 지난 뒤 비정상 종료. 서버 ping은 TCP 스트림에 전달하지 않음(WS-R05) | 끊긴 연결로 처리해 상대 TCP와 등록 자원 회수, 규칙 WS-R13 |
+| pong 응답 없음 | Kw의 응답 제한이 지난 뒤 비정상 종료. VNC Relay ping은 TCP 스트림에 전달하지 않음(WS-R05) | 끊긴 연결로 처리해 상대 TCP와 등록 자원 회수, 규칙 WS-R13 |
 | 관리자 종료·프로세스 유예 만료·유예 중 두 번째 종료 요청 | 해당 세션의 양쪽 경로 종료. 두 번째 종료 요청은 남은 유예 없이 바로 종료([운영 스펙 3.4절](operations.md#34-정상-종료와-재시작)). 아직 정리를 시작하지 않은 활성 세션에 close 1001을 보냄 | 완전한 잔여 데이터 전달은 보장하지 않음 |
 
 WebSocket에는 TCP와 같은 독립적인 양방향 half-close가 없다. 따라서 WS·WSS가 포함된 연결은 한쪽 스트림 EOF 이후 반대 방향을 무기한 유지하지 않는다. 이 종료 의미와 오류별 HTTP 상태·close 코드의 대응은 [WebSocket 계약](../contracts/websocket-relay-v2.md)이 정한다. 코드 번호는 이 스펙이 아니라 그 계약이 기준이다.
 
-서버가 자동으로 세션을 재접속·재매칭하지 않는다. 새 접속은 새로운 연결 수명이다.
+VNC Relay가 자동으로 세션을 재접속·재매칭하지 않는다. 새 접속은 새로운 연결 수명이다.
 
 ## 5. 항상 지켜야 할 규칙과 비보장 범위
 
@@ -146,28 +146,28 @@ WebSocket에는 TCP와 같은 독립적인 양방향 half-close가 없다. 따�
 - 바이너리 페이로드 안의 RFB 인증·화면 데이터를 로그로 남겨서는 안 된다.
 - 접속 ticket 원문을 운영 로그·관리 API에 남겨서는 안 된다. 응답의 서브프로토콜에도 넣어서는 안 된다([계약 1.9절](../contracts/websocket-relay-v2.md#19-접속-ticket)).
 - 임의의 기존 WebSocket VNC 클라이언트가 호환된다고 보장하지 않는다. Repeater 초기 교환을 수행하는 클라이언트 계약이 필요하다. 다만 검증 시작 시 고정한 noVNC 버전의 `repeaterID`로 접속하는 WS·WSS Mode II는 검증 대상이다(WS-025). 이 검증은 그 버전과 테스트 환경에 한정한다.
-- WS·WSS는 Viewer·Server의 스트림 진입 방식이다. 원격 화면 표시 기능을 제공하지 않는다.
+- WS·WSS는 뷰어·서버의 스트림 진입 방식이다. 원격 화면 표시 기능을 제공하지 않는다.
 
 ## 6. 전송·모드 검증 조합
 
 아래 조합은 모두 검증 대상이다. noVNC 행은 외부 상호운용 검증이며 제품 의존성이 아니다. 일부 조합의 성공으로 전체 지원을 대체하지 않는다. TCP 전용 실제 화면·입력 테스트는 [중계 수용 테스트](relay.md#7-수용-테스트)이 소유한다.
 
-| Viewer 진입 | 모드 | 상대·접속 순서 | 수용 시나리오 |
+| 뷰어 진입 | 모드 | 상대·접속 순서 | 수용 시나리오 |
 | --- | --- | --- | --- |
 | WS | Mode I | 허용된 TCP 대상 | WS-001 |
 | WSS | Mode I | 허용된 TCP 대상 | WS-002 |
-| WS | Mode II | TCP Server 선접속 | WS-003 |
-| WS | Mode II | WS Viewer 선접속 | WS-004 |
-| WSS | Mode II | TCP Server 선접속 | WS-005 |
-| WSS | Mode II | WSS Viewer 선접속 | WS-006 |
-| WS | Mode II | noVNC `repeaterID`, TCP Server 선접속·후접속 | WS-025 |
-| WSS | Mode II | noVNC `repeaterID`, TCP Server 선접속·후접속 | WS-025 |
-| TCP·WS·WSS | Mode II | WS·WSS Server × Viewer의 모든 조합, 양 접속 순서 | WS-028 |
-| 프록시 뒤 WS | Mode II | TLS 종료 프록시를 통한 Viewer·Server | WS-035 |
+| WS | Mode II | TCP 서버 선접속 | WS-003 |
+| WS | Mode II | WS 뷰어 선접속 | WS-004 |
+| WSS | Mode II | TCP 서버 선접속 | WS-005 |
+| WSS | Mode II | WSS 뷰어 선접속 | WS-006 |
+| WS | Mode II | noVNC `repeaterID`, TCP 서버 선접속·후접속 | WS-025 |
+| WSS | Mode II | noVNC `repeaterID`, TCP 서버 선접속·후접속 | WS-025 |
+| TCP·WS·WSS | Mode II | WS·WSS 서버 × 뷰어의 모든 조합, 양 접속 순서 | WS-028 |
+| 프록시 뒤 WS | Mode II | TLS 종료 프록시를 통한 뷰어·서버 | WS-035 |
 
 ## 7. 수용 테스트
 
-WS-007 이후의 공통 중계 테스트는 WS·WSS 각각에 적용한다. 내장 TLS 전용 테스트는 서버 내장 WSS에 적용하고, 프록시 TLS 종료는 WS-035로 검증한다. WS 테스트는 평문 WS 리스너를 명시적으로 켠 설정에서 실행한다(WS-024). 테스트 코드는 `specs/`를 기준으로 한 이 문서의 상대 경로와 시나리오 ID를 메타 정보에 기록한다(예: `websocket.md:WS-001`). 연결 방식은 [검증 기록](../AGENTS.md#검증-기록)을 따른다. 테스트 위치와 결과는 이 문서에 적지 않는다.
+WS-007 이후의 공통 중계 테스트는 WS·WSS 각각에 적용한다. 내장 TLS 전용 테스트는 VNC Relay에 내장된 WSS에 적용하고, 프록시 TLS 종료는 WS-035로 검증한다. WS 테스트는 평문 WS 리스너를 명시적으로 켠 설정에서 실행한다(WS-024). 테스트 코드는 `specs/`를 기준으로 한 이 문서의 상대 경로와 시나리오 ID를 메타 정보에 기록한다(예: `websocket.md:WS-001`). 연결 방식은 [검증 기록](../AGENTS.md#검증-기록)을 따른다. 테스트 위치와 결과는 이 문서에 적지 않는다.
 
 별도 조건이 없는 기존 시나리오는 접속 ticket을 끈 상태에 적용한다. 접속 ticket 시나리오는 [PRD AC-49](../requirements/PRD.md)와 [계약 1.9절](../contracts/websocket-relay-v2.md#19-접속-ticket)을 따른다.
 
@@ -175,10 +175,10 @@ WS-007 이후의 공통 중계 테스트는 WS·WSS 각각에 적용한다. 내�
 | --- | --- | --- | --- |
 | WS-001 | FR-05 / WS-R01 | WS Mode I로 실제 TCP 대상에 접속 | 알려진 양방향 바이트 정확히 일치 |
 | WS-002 | FR-05 / WS-R01 | WSS Mode I로 실제 TCP 대상에 접속 | 양방향 일치, VNC Relay까지 TLS 암호화 |
-| WS-003 | FR-05 / WS-R01 | TCP Server 선접속 후 WS Mode II Viewer | 같은 ID 매칭 뒤 양방향 바이트 일치 |
-| WS-004 | FR-05 / WS-R01 | WS Mode II Viewer 선접속 후 TCP Server | 반대 접속 순서에서도 양방향 일치 |
-| WS-005 | FR-05 / WS-R01 | TCP Server 선접속 후 WSS Mode II Viewer | 양방향 일치, WSS 구간 TLS 성립 |
-| WS-006 | FR-05 / WS-R01 | WSS Mode II Viewer 선접속 후 TCP Server | 반대 접속 순서에서도 양방향 일치 |
+| WS-003 | FR-05 / WS-R01 | TCP 서버 선접속 후 WS Mode II 뷰어 | 같은 ID 매칭 뒤 양방향 바이트 일치 |
+| WS-004 | FR-05 / WS-R01 | WS Mode II 뷰어 선접속 후 TCP 서버 | 반대 접속 순서에서도 양방향 일치 |
+| WS-005 | FR-05 / WS-R01 | TCP 서버 선접속 후 WSS Mode II 뷰어 | 양방향 일치, WSS 구간 TLS 성립 |
+| WS-006 | FR-05 / WS-R01 | WSS Mode II 뷰어 선접속 후 TCP 서버 | 반대 접속 순서에서도 양방향 일치 |
 | WS-007 | FR-05 / WS-R02·WS-R03 | 같은 스트림의 메시지·프레임 경계를 바꿔 전송 | 상대가 받은 전체 바이트 내용·순서 동일 |
 | WS-008 | FR-05 / WS-R04 | 텍스트 데이터 메시지 전송 | 미지원 데이터로 종료, 텍스트는 TCP에 도착하지 않음 |
 | WS-009 | FR-05 / WS-R05 | 분할 바이너리 전송 중 ping·pong 삽입 | 제어 교환 처리, 스트림에 제어 바이트 없음 |
@@ -197,30 +197,30 @@ WS-007 이후의 공통 중계 테스트는 WS·WSS 각각에 적용한다. 내�
 | WS-022 | FR-05·FR-07 / WS-R10 | 역할별 `allow`에서 IP 제거 전 업그레이드 완료한 중계와 업그레이드 전 HTTP·TLS 연결을 유지. accept에서는 켠 역할의 목록 합집합을 통과 | 기존 중계는 계속 전달. 제거 뒤 새 업그레이드는 클라이언트 주소를 요청 역할의 유효 목록으로 재검사해 403. |
 | WS-023 | 7절 / WS-R10 | 신뢰 프록시가 아니며 켠 역할의 `allow` 합집합에도 없는 IP가 WSS에 접속 | TLS 협상 전 연결 종료, U 동안 L을 점유하지 않음. |
 | WS-024 | 7절 / WS-R12 | 기본 설정 뒤 `[relay.ws.viewer]` 또는 `[relay.ws.server]`의 역할 하나 이상을 명시적으로 켜고 재시작 | 기본: WS 리스너 없음. 하나 이상 켬: 공유 WS 리스너 열림, `plaintext_ws_enabled(listener=ws)` 경고. |
-| WS-025 | FR-05 / WS-R01 | 검증 시작 시 고정한 noVNC 버전의 repeaterID로 WS·WSS Mode II에 접속, TCP Server 선접속·후접속 각각 | 같은 ID로 매칭 성립, noVNC의 RFB 연결 완료 관찰. 화면 렌더링은 수용 기준이 아님 |
-| WS-026 | FR-05 / WS-R13 | pong에 응답하지 않는 WS·WSS 클라이언트와 pong에 응답하는 유휴 클라이언트를 각각 둠 | 응답 없는 클라이언트: Kw 뒤 종료, 상대 TCP와 등록 자원 회수. 응답하는 유휴 클라이언트: 연결 유지. 서버 ping 바이트는 TCP 스트림에 섞이지 않음(WS-R05) |
+| WS-025 | FR-05 / WS-R01 | 검증 시작 시 고정한 noVNC 버전의 repeaterID로 WS·WSS Mode II에 접속, TCP 서버 선접속·후접속 각각 | 같은 ID로 매칭 성립, noVNC의 RFB 연결 완료 관찰. 화면 렌더링은 수용 기준이 아님 |
+| WS-026 | FR-05 / WS-R13 | pong에 응답하지 않는 WS·WSS 클라이언트와 pong에 응답하는 유휴 클라이언트를 각각 둠 | 응답 없는 클라이언트: Kw 뒤 종료, 상대 TCP와 등록 자원 회수. 응답하는 유휴 클라이언트: 연결 유지. VNC Relay ping 바이트는 TCP 스트림에 섞이지 않음(WS-R05) |
 | WS-027 | FR-05·7절 / WS-R10 | 허용 Origin 값으로 `https://a.example:8443`을 설정하고 `https://a.example:8443`, 스킴만 다른 Origin, 포트만 다른 Origin, 하위 도메인 `https://x.a.example:8443`으로 각각 업그레이드 요청 | 같은 값은 업그레이드. 스킴만 다름·포트만 다름·하위 도메인은 업그레이드 전에 거절 |
-| WS-028 | FR-03·FR-05 / WS-R01·WS-R14 | WS·WSS `/relay/server`의 Server와 TCP·WS·WSS Viewer를 Mode II로 조합. 각 조합에서 양 접속 순서 | 같은 ID 매칭, 양방향 바이트 일치. 운영 로그 `server_transport`와 관리 API `target_transport`는 Server 전송 경로와 일치 |
-| WS-029 | FR-05 / WS-R14·WS-R16 | `/relay/viewer`, `/relay/server`, 꺼진 역할의 경로와 그 밖의 경로를 요청. 1.x의 Viewer 경로 `/relay`도 요청. 쿼리·끝 슬래시도 비교 | 두 정확한 경로는 각각 Viewer·Server. 쿼리는 무시. 꺼진 역할·다른 경로·`/relay`·끝 슬래시는 404 `invalid_upgrade`, 등록 없음. |
-| WS-030 | 7절 / WS-R10 | Viewer `allow`에만 있는 비프록시 IP가 accept 뒤 `/relay/server` 요청. 켠 역할 어느 목록에도 없는 비프록시 IP도 접속 | 첫 연결은 accept를 통과하지만 Server 업그레이드에서 403 `ip_not_allowed`. 둘째 연결은 TLS·HTTP 전에 닫힘 |
-| WS-031 | FR-05·7절 / WS-R10·WS-R14 | `/relay/server`에 Server 역할의 허용·비허용 Origin을 보냄. Viewer와 Server의 목록은 다르게 설정 | Server `allowed_origins`만 적용. 허용 값은 진행, 비허용 값은 403, Viewer 목록으로 우회 불가 |
+| WS-028 | FR-03·FR-05 / WS-R01·WS-R14 | WS·WSS `/relay/server`의 서버와 TCP·WS·WSS 뷰어를 Mode II로 조합. 각 조합에서 양 접속 순서 | 같은 ID 매칭, 양방향 바이트 일치. 운영 로그 `server_transport`와 관리 API `target_transport`는 서버 전송 경로와 일치 |
+| WS-029 | FR-05 / WS-R14·WS-R16 | `/relay/viewer`, `/relay/server`, 꺼진 역할의 경로와 그 밖의 경로를 요청. 1.x의 뷰어 경로 `/relay`도 요청. 쿼리·끝 슬래시도 비교 | 두 정확한 경로는 각각 뷰어·서버. 쿼리는 무시. 꺼진 역할·다른 경로·`/relay`·끝 슬래시는 404 `invalid_upgrade`, 등록 없음. |
+| WS-030 | 7절 / WS-R10 | 뷰어 `allow`에만 있는 비프록시 IP가 accept 뒤 `/relay/server` 요청. 켠 역할 어느 목록에도 없는 비프록시 IP도 접속 | 첫 연결은 accept를 통과하지만 서버 업그레이드에서 403 `ip_not_allowed`. 둘째 연결은 TLS·HTTP 전에 닫힘 |
+| WS-031 | FR-05·7절 / WS-R10·WS-R14 | `/relay/server`에 서버 역할의 허용·비허용 Origin을 보냄. 뷰어와 서버의 목록은 다르게 설정 | 서버 `allowed_origins`만 적용. 허용 값은 진행, 비허용 값은 403, 뷰어 목록으로 우회 불가 |
 | WS-032 | 7절 / WS-R10·WS-R15·WS-R18 | 신뢰 프록시가 여러 XFF 필드와 SP·HTAB, 신뢰 중간 프록시, 가장 오른쪽 비신뢰 IP, 그 왼쪽 위조 요소를 전달. IPv4·IPv6·mapped 표기도 비교 | 가장 오른쪽 비신뢰 정규 IP가 클라이언트 주소. 왼쪽 요소는 검사하지 않음. 역할 `allow`에 사용, `peer_ip`는 소켓 주소 유지, `forwarded_ip`와 관리 API의 해당 `*_forwarded_ip`에 전달 주소 표시 |
 | WS-033 | 7절 / WS-R15·WS-R17 | 신뢰 프록시의 XFF 없음·빈 값 또는 검사 대상에 포트·영역 ID·unknown·난독화 토큰·빈 요소·잘못된 IP | HTTP 400 `forwarded_for_invalid`, 등록·대상 연결·`forwarded_ip` 없음 |
 | WS-034 | 7절 / WS-R10·WS-R15 | 신뢰하지 않는 상대가 허용 주소를 주장하는 XFF 전송 | XFF 무시. 소켓 IP가 판정 기준이며 `forwarded_ip` 없음 |
-| WS-035 | FR-03·FR-05·7절 / WS-R14·WS-R15·WS-R18 | TLS 종료 시험 프록시 앞에 Viewer·Server를 두고 평문 WS 리스너로 Mode II 연결. 프록시 주소는 `trusted_proxies`에 등록 | 두 역할 매칭과 양방향 전달. 클라이언트 주소는 각 전달 주소이며 역할별 `allow`에 사용. TLS 구간은 클라이언트~프록시로 표시 |
+| WS-035 | FR-03·FR-05·7절 / WS-R14·WS-R15·WS-R18 | TLS 종료 시험 프록시 앞에 뷰어·서버를 두고 평문 WS 리스너로 Mode II 연결. 프록시 주소는 `trusted_proxies`에 등록 | 두 역할 매칭과 양방향 전달. 클라이언트 주소는 각 전달 주소이며 역할별 `allow`에 사용. TLS 구간은 클라이언트~프록시로 표시 |
 | WS-036 | 7절 / WS-R15·WS-R17 | 신뢰 프록시의 XFF 요소가 모두 `trusted_proxies`에 속함. 프록시 자신의 주소 하나인 경우와 역할 `allow`에도 그 주소가 있는 경우 포함 | HTTP 400 `forwarded_for_invalid`. 프록시 주소를 클라이언트 주소로 대신 쓰지 않음. 등록·`forwarded_ip` 없음 |
 | WS-037 | FR-05·7절·AC-49 / WS-R19·WS-R22 | ticket을 켜지 않은 역할의 기본 설정에서 `binary`와 ticket 값을 함께, 헤더 없이, `binary`만 각각 전송 | 모두 2.0.0과 같이 `101`. 응답 서브프로토콜은 `binary`이며 요청 헤더가 없으면 생략. ticket 값은 응답에 없고 `ticket_accepted`도 없음 |
-| WS-038 | FR-05·7절·AC-49 / WS-R20·WS-R22 | Viewer ticket을 켠 WS·WSS 리스너에 유효한 Viewer ticket(`sub`·`sx` 포함)과 `binary` 전송. 이후 같은 `rid`의 Mode II 초기 요청 | `101`, 응답 `Sec-WebSocket-Protocol: binary`. `ticket_accepted`에 `ticket_jti`·`ticket_sub`·`session_expires_at` 기록. ticket 원문은 응답·운영 로그·관리 API에 없음. 같은 중계 ID의 상대와 정상 매칭 |
+| WS-038 | FR-05·7절·AC-49 / WS-R20·WS-R22 | 뷰어 ticket을 켠 WS·WSS 리스너에 유효한 뷰어 ticket(`sub`·`sx` 포함)과 `binary` 전송. 이후 같은 `rid`의 Mode II 초기 요청 | `101`, 응답 `Sec-WebSocket-Protocol: binary`. `ticket_accepted`에 `ticket_jti`·`ticket_sub`·`session_expires_at` 기록. ticket 원문은 응답·운영 로그·관리 API에 없음. 같은 중계 ID의 상대와 정상 매칭 |
 | WS-039 | FR-05·7절·AC-49 / WS-R20 | ticket을 켠 역할에 헤더 없음, `binary`만, `binary` 없이 ticket만 각각 전송 | 앞 둘은 HTTP 401과 `WWW-Authenticate: VncRelayTicket`, `reason=ticket_missing`. 셋째는 HTTP 400 `subprotocol_not_supported`. 대기 등록·대상 연결·`ticket_accepted` 없음 |
 | WS-040 | FR-05·7절·AC-49 / WS-R20 | `binary`와 함께 ticket 두 개, JWS 구문 오류, `alg ≠ ES256`, `kid` 없음·모름, `crit` 있음, 서명 불일치·DER 서명, 필수 클레임 누락·자료형 오류, `iss`·`aud`·`rh` 불일치(배열 `aud` 포함), `exp ≤ iat`, `exp − iat > max_lifetime_secs`, `iat > 현재 + 5`를 각각 전송 | 모두 HTTP 401과 `WWW-Authenticate: VncRelayTicket`, `reason=ticket_invalid`. 사용 기록·대기 등록·대상 연결 없음 |
 | WS-041 | FR-05·7절·AC-49 / WS-R20 | 다른 검사를 통과하는 새 ticket마다 현재 시각을 `exp + 5` 직전·도달로 두고 요청. 별도로 `sx`를 현재보다 1초 늦음·같음으로 두고 요청 | `exp + 5` 직전과 `sx = 현재 + 1`은 `101`. `exp + 5` 도달과 `sx ≤ 현재`는 HTTP 401과 `WWW-Authenticate: VncRelayTicket`, `reason=ticket_expired`. `sx`에는 시계 오차를 허용하지 않음 |
 | WS-042 | FR-05·7절·AC-49 / WS-R21 | 같은 ticket으로 두 번 업그레이드. 별도로 새 ticket 하나로 두 요청을 동시에 보냄. 또 업그레이드 직전 IP 재검사에서 403으로 거절한 요청의 ticket을 IP 허용 뒤 다시 사용. 사용 기록 만료 시각도 관찰 | 첫 성공 뒤 두 번째는 HTTP 401 `ticket_reused`와 `WWW-Authenticate: VncRelayTicket`. 동시에 보낸 두 요청은 하나만 `101`이고 다른 하나는 HTTP 401 `ticket_reused`. 403 요청은 사용 기록을 쓰지 않아 같은 ticket으로 다음 요청이 `101`. 기록은 `exp + 5`에 사라지며 그 뒤 요청은 `ticket_expired`로 거절 |
 | WS-043 | FR-05·7절·AC-49 / WS-R21 | 재시작 뒤 다른 검사를 통과하는 ticket의 `iat`를 기동 시각 + 5 이하·초과로 각각 두고 요청 | 이하는 HTTP 401과 `WWW-Authenticate: VncRelayTicket`, `reason=ticket_issued_before_start`. 초과는 `101` |
 | WS-044 | FR-05·7절·AC-49 / WS-R20·WS-R21 | Origin·서브프로토콜·ticket·업그레이드 직전 IP 재검사를 함께 어기는 요청을 조합별로 전송. 앞 검사를 하나씩 통과시킴 | [계약 1.1절](../contracts/websocket-relay-v2.md#11-업그레이드-요청) 순서로 먼저 걸린 상태 하나만 응답: Origin 403 → 서브프로토콜 400 → ticket 401 → IP 재검사 403. 거절한 요청은 ticket을 소비하지 않음 |
-| WS-045 | FR-05·7절·AC-49 / WS-R20·WS-R22 | 역할마다 다른 `issuer`·공개 키로 ticket을 켬. `/relay/server`에 Server·Viewer ticket을 각각 전송하고 Viewer 역할에도 Server ticket 전송 | 자기 역할 ticket만 `101`, `ticket_accepted.role`이 요청 역할과 일치. 다른 역할 ticket은 HTTP 401과 `WWW-Authenticate: VncRelayTicket`, `reason=ticket_invalid` |
+| WS-045 | FR-05·7절·AC-49 / WS-R20·WS-R22 | 역할마다 다른 `issuer`·공개 키로 ticket을 켬. `/relay/server`에 서버·뷰어 ticket을 각각 전송하고 뷰어 역할에도 서버 ticket 전송 | 자기 역할 ticket만 `101`, `ticket_accepted.role`이 요청 역할과 일치. 다른 역할 ticket은 HTTP 401과 `WWW-Authenticate: VncRelayTicket`, `reason=ticket_invalid` |
 | WS-046 | FR-05·7절·AC-49 / WS-R23 | 재로드·관리 API 편집으로 `enabled`를 켜고 끔. `issuer`·`relay_host`·`max_lifetime_secs`와 공개 키 파일 내용을 교체. 이미 `101`을 보낸 연결과 사용 기록을 유지 | 새 업그레이드 요청부터 교체 값으로 판정. 이미 `101`을 보낸 연결의 중계 ID 대조와 `sx` 타이머는 이전 값 유지. 사용 기록은 설정을 끄고 켜거나 공개 키를 교체해도 유지되며, 확인을 통과하는 같은 ticket의 재사용은 401 `ticket_reused`. ticket을 끈 뒤 ticket 없는 유효 요청은 `101` |
 | WS-047 | FR-05·7절·AC-66 / WS-R24 | 소켓 상대가 신뢰 프록시인 연결, 신뢰 프록시가 아니고 차단 목록과 역할 `allow`에 모두 있는 주소(203.0.113.9)의 직접 연결, 신뢰 프록시가 전달한 클라이언트 주소가 차단 목록과 역할 `allow`에 모두 있는 업그레이드, 차단되지 않은 전달 주소(198.51.100.7)의 업그레이드. ticket을 켠 역할에서 유효한 ticket으로 차단 주소의 업그레이드를 시도한 뒤 차단을 풀고 같은 ticket으로 다시 시도. Origin·서브프로토콜·ticket 검사에서 먼저 걸리는 요청도 차단 주소로 전송 | 신뢰 프록시 소켓은 accept의 차단 검사를 건너뜀. 직접 연결한 차단 주소는 TLS·HTTP 처리 전에 닫히고 `connection_rejected(stage=accept, reason=ip_denied)`. 전달 주소가 차단되면 HTTP 403 `ip_denied`와 `connection_rejected(stage=upgrade, reason=ip_denied)`에 `forwarded_ip` 기록. 차단 검사가 역할별 `allow` 검사보다 앞서 허용 목록에 있어도 거절. 차단되지 않은 전달 주소는 통과. ticket은 소비되지 않아 차단을 푼 뒤 같은 ticket으로 `101`. Origin 403 → 서브프로토콜 400 → ticket 401 → IP 재검사 403 순서는 유지됨 |
-| WS-048 | FR-03·FR-05·7절·AC-66 / WS-R24 | WS·WSS Viewer·Server의 대기 연결(직접 연결과 신뢰 프록시를 거친 연결)과 활성 세션(차단 주소가 WS Viewer인 경우, WSS Server인 경우, 반대쪽이 TCP인 경우)을 둠. 다른 주소의 연결도 둠. 그 주소를 차단 목록에 더해 교체(재로드·편집). 별도로 교체 전에 수락돼 초기 교환 중이던 WS·WSS 연결이 교체 뒤 초기 요청을 마침 | 대기 연결은 close 4014 `ip_denied`로 닫히고 `waiting_removed.reason=ip_denied`. 활성 세션은 세션 전체가 끊겨 WS·WSS 쪽은 close 4014 `ip_denied`, TCP 쪽은 소켓 닫힘, `session_closed.close_cause=ip_denied`. 신뢰 프록시를 거친 연결은 전달 주소로 판정. 다른 주소의 연결은 유지. 교체 전에 수락돼 초기 교환 중이던 연결은 등록 직전에 close 4014와 `connection_rejected(stage=register, reason=ip_denied)`, 대기 등록 없음 |
+| WS-048 | FR-03·FR-05·7절·AC-66 / WS-R24 | WS·WSS 뷰어·서버의 대기 연결(직접 연결과 신뢰 프록시를 거친 연결)과 활성 세션(차단 주소가 WS 뷰어인 경우, WSS 서버인 경우, 반대쪽이 TCP인 경우)을 둠. 다른 주소의 연결도 둠. 그 주소를 차단 목록에 더해 교체(재로드·편집). 별도로 교체 전에 수락돼 초기 교환 중이던 WS·WSS 연결이 교체 뒤 초기 요청을 마침 | 대기 연결은 close 4014 `ip_denied`로 닫히고 `waiting_removed.reason=ip_denied`. 활성 세션은 세션 전체가 끊겨 WS·WSS 쪽은 close 4014 `ip_denied`, TCP 쪽은 소켓 닫힘, `session_closed.close_cause=ip_denied`. 신뢰 프록시를 거친 연결은 전달 주소로 판정. 다른 주소의 연결은 유지. 교체 전에 수락돼 초기 교환 중이던 연결은 등록 직전에 close 4014와 `connection_rejected(stage=register, reason=ip_denied)`, 대기 등록 없음 |
 
 ## 8. 미결정 사항
 

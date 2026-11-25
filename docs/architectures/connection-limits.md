@@ -15,7 +15,7 @@
 
 동적 상한·소비 경계는 [§10](#10-current--동적-상한과-시간-제한)에 정리한다.
 
-중계는 리스너 네 개와 진입점 여섯 개에서 같은 L 예산을 쓴다. WS·WSS는 켜진 역할 `allow` 합집합 검사 뒤에 소켓당 permit 하나를 잡는다. 경로로 역할을 정해도 추가 L 자리를 얻지 않는다. Mode II의 WS·WSS Server도 수락 때 얻은 permit을 대기·활성·정리까지 옮긴다. 역할이 다른 두 연결의 B·M·Kw는 각 연결이 받은 값을 유지한다.
+중계는 리스너 네 개와 진입점 여섯 개에서 같은 L 예산을 쓴다. WS·WSS는 켜진 역할 `allow` 합집합 검사 뒤에 소켓당 permit 하나를 잡는다. 경로로 역할을 정해도 추가 L 자리를 얻지 않는다. Mode II의 WS·WSS 서버도 수락 때 얻은 permit을 대기·활성·정리까지 옮긴다. 역할이 다른 두 연결의 B·M·Kw는 각 연결이 받은 값을 유지한다.
 
 WS·WSS 수락·TLS·경로 판정 전 중단에는 role이 없다. 켜진 경로 판정 뒤에는 role을 보존한다. 수락 시 신뢰 프록시는 역할 allow 합집합 검사를 우회하며, 업그레이드 때 전달 주소를 도출해 선택한 역할의 allow와 비교한다.
 
@@ -70,7 +70,7 @@ flowchart LR
 | `crates/app/src/events.rs` `AbortReason`, `ConnectionErrorKind` | `handshake_timeout`·`peer_eof`·`connection_error`·`server_shutdown`과 `level`. `connection_error`만 `error_kind`를 가진다. | 연결이 끝날 때 | 없음 |
 | `crates/adapters/src/net.rs` `AcceptPolicy` | 진입점 허용 판정의 `AllowSource`와 공유 L 예산 | `serve`가 진입점마다 만든다 | domain, app |
 | `crates/adapters/src/net.rs` `set_keepalive` | socket2 `SockRef`로 `SO_KEEPALIVE`와 유휴 시간·탐색 간격·탐색 횟수를 설정한다. 이어 `TCP_NODELAY`를 켠다. 중계는 읽은 바이트를 바로 쓰므로, Nagle이 켜져 있으면 작은 쓰기 뒤의 다음 쓰기가 상대의 지연 ACK를 기다릴 수 있다. | 자리를 잡은 연결마다, Mode I 대상 연결마다(`TcpRelayStream::with_keepalive`) | socket2, tokio |
-| `crates/app/src/relay.rs` `RelayService::handle_connection`, `crates/app/src/relay/handshake.rs` `exchange`, `read_request` | 허용한 TCP 연결의 초기 교환을 H 안에 읽는다. H 만료, 상대 종료, 서버 종료, 연결 재설정 중 먼저 오는 것으로 끝낸다. 실패하면 `RelayCloseAction`을 정해 소켓을 닫고, 자리를 버린 뒤 사건을 기록한다. | 허용한 TCP 연결마다, `TcpEntryPoint::run`의 serve 작업이 부른다 | tokio, app, domain |
+| `crates/app/src/relay.rs` `RelayService::handle_connection`, `crates/app/src/relay/handshake.rs` `exchange`, `read_request` | 허용한 TCP 연결의 초기 교환을 H 안에 읽는다. H 만료, 상대 종료, VNC Relay 종료, 연결 재설정 중 먼저 오는 것으로 끝낸다. 실패하면 `RelayCloseAction`을 정해 소켓을 닫고, 자리를 버린 뒤 사건을 기록한다. | 허용한 TCP 연결마다, `TcpEntryPoint::run`의 serve 작업이 부른다 | tokio, app, domain |
 | `crates/adapters/src/net.rs` `accept_connections` | TCP·WS·WSS가 함께 쓰는 수락 반복. IP 검사 뒤 L 자리를 잡는다. 자리가 없으면 `connection_rejected`(`relay_connection_limit`)를 기록하고 닫는다. 있으면 K를 설정하고 `budget::Permit`을 연결 작업에 넘긴다. | 진입점 `run`마다 하나 | tokio, socket2, app, domain |
 | `crates/adapters/src/websocket.rs` `WsPolicy` | `accept: AcceptPolicy`. U·B는 수락 메타데이터, Origin·M·Kw는 업그레이드 판정의 실행 설정에서 얻는다. | `serve`가 WS·WSS 진입점마다 만든다 | adapters |
 | `crates/adapters/src/websocket.rs` `connection` | `connection`은 U 안에서 WSS의 TLS 핸드셰이크와 업그레이드 요청을 끝낸다. 101 뒤 `WsRelayStream`을 만들어 `RelayService::handle_connection`에 넘기고, H는 `handle_connection`이 `exchange_at`부터 잰다. 자리는 연결 작업이 받아 `handle_connection`에 넘기고, 연결을 끝낸 뒤 돌려준다. | 허용한 WS·WSS 연결마다 | tokio, tokio-rustls, tokio-tungstenite, app, domain |
@@ -100,7 +100,7 @@ flowchart LR
 | 6 | `RelayService::prepare` | 소켓을 닫고 `budget::Permit`을 버린 뒤 `connection_aborted`(`peer_eof`)를 기록한다. 줄을 본 클라이언트가 바로 다시 접속해도 자리가 있다. | 자리 하나 반환 | 운영 로그 |
 | 7 | 2~4와 같은 경로 | 다음 접속이 자리를 잡고 수락된다. | 초기 교환 중인 연결 | 운영 로그 |
 
-H가 먼저 지나면 5~6단계 대신 `handshake_timeout`(`warn`)으로, 서버가 종료하면 `server_shutdown`(`info`)으로 같은 정리를 한다.
+H가 먼저 지나면 5~6단계 대신 `handshake_timeout`(`warn`)으로, VNC Relay가 종료하면 `server_shutdown`(`info`)으로 같은 정리를 한다.
 
 WS·WSS는 자리를 잡은 뒤 U 안에서 TLS 핸드셰이크(WSS)와 업그레이드 요청을 끝낸다. 끝내지 못하면 `connection_aborted`(`tls_upgrade_timeout`, `warn`)를 기록하고 닫는다. 101 응답 뒤에는 H를 잰다. H가 지나면 4009 닫기 코드로 닫고 `connection_aborted`(`handshake_timeout`)를 기록한다.
 
@@ -132,7 +132,7 @@ WS·WSS는 자리를 잡은 뒤 U 안에서 TLS 핸드셰이크(WSS)와 업그�
 | 출발지 IP를 L보다 먼저 판정한다. | 목록 밖 출발지는 자리를 쓰지 않고, L이 찼는지도 알 수 없다. 코드 지도 4절 1단계의 순서와 같다. | L을 먼저 확인. 목록 밖 출발지가 상한 상태를 알게 된다. | [운영 정보 계약 1.5절](../contracts/ops-info-v2.md#15-사건-목록) `connection_accepted` 조건 |
 | L·Lm·Lw를 같은 `ConnectionBudget` 타입으로 센다. 각 예산은 독립된 사용량을 보유한다. | 세 상한은 상한까지 잡고 끝나면 반환하는 같은 규칙을 쓴다. | 상한마다 다른 타입 | 없음 |
 | 자리 수는 `AtomicU32`의 비교·교환으로 센다. | 잠금 없이 상한을 지킨다. domain은 외부 crate를 쓰지 않는다. | `tokio::sync::Semaphore`. domain이 tokio에 의존하게 된다. | [코드 지도 레이어 표](code-map.md#레이어와-의존-방향) |
-| 초기 교환 중인 TCP 연결에도 H를 적용한다. | TCP 연결은 수락 직후 초기 교환 상태다. 시간 제한이 없으면 서버 종료 전까지 L 자리가 돌아오지 않는다. | 서버 종료까지 시간 제한 없이 두기 | 없음 |
+| 초기 교환 중인 TCP 연결에도 H를 적용한다. | TCP 연결은 수락 직후 초기 교환 상태다. 시간 제한이 없으면 VNC Relay 종료 전까지 L 자리가 돌아오지 않는다. | VNC Relay 종료까지 시간 제한 없이 두기 | 없음 |
 | 초기 교환 중 상대 종료는 읽기 결과로 확인한다. | 읽기가 0바이트를 주면 상대가 닫은 것이다. 확인 작업을 따로 두지 않는다. | `peek`로 따로 확인하기(확인 코드와 읽기 코드를 둘 다 두게 된다), H 만료까지 기다리기(떠난 클라이언트의 자리가 H 동안 남는다) | `crates/app/src/relay/handshake.rs` `read_request` |
 | keepalive 매개변수는 socket2로 설정한다. | tokio·std에는 유휴 시간·탐색 간격·탐색 횟수를 정하는 API가 없다. `unsafe`는 금지다. socket2는 tokio가 이미 쓰는 crate다(MIT OR Apache-2.0). | keepalive 매개변수를 지정하지 않기 | [PRD "구현 기술" 행](../requirements/PRD.md#확정-기준) |
 | 자리를 돌려준 뒤 사건을 기록한다. | 줄을 본 클라이언트가 바로 다시 접속할 때 자리가 있어야 한다. 시스템 테스트가 이 순서에 기댄다. | 기록 뒤 반환 | 없음 |

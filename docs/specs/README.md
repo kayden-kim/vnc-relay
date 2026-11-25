@@ -4,8 +4,8 @@
 
 | 문서 | 상태 | 외부 동작 | 관련 요구사항 |
 | --- | --- | --- | --- |
-| [TCP 중계와 연결 매칭](relay.md) | Active | 초기 교환, 진입점별 IP 검사, Mode I·II, 바이트 보존, 끊긴 연결 감지, 대기·종료. WS·WSS Server도 같은 Mode II·중복 ID 규칙 적용. 접속 ticket 연결의 중계 ID 대조와 세션 만료 | FR-01~04·FR-05 |
-| [WS·WSS 전송](websocket.md) | Active | 공유 리스너 경로별 Viewer·Server, 수락 합집합·업그레이드 역할별 IP·Origin 검사, 역할별 선택형 접속 ticket 확인, 내장 TLS와 중계 프록시 TLS 종료, 프레임·오류·종료 | FR-05, 보안 |
+| [TCP 중계와 연결 매칭](relay.md) | Active | 초기 교환, 진입점별 IP 검사, Mode I·II, 바이트 보존, 끊긴 연결 감지, 대기·종료. WS·WSS 서버도 같은 Mode II·중복 ID 규칙 적용. 접속 ticket 연결의 중계 ID 대조와 세션 만료 | FR-01~04·FR-05 |
+| [WS·WSS 전송](websocket.md) | Active | 공유 리스너 경로별 뷰어·서버, 수락 합집합·업그레이드 역할별 IP·Origin 검사, 역할별 선택형 접속 ticket 확인, 내장 TLS와 중계 프록시 TLS 종료, 프레임·오류·종료 | FR-05, 보안 |
 | [관리 조회와 세션 종료](management.md) | Active | 내장 로그인·관리 세션·실패 제한, 설정 보기·편집, 조회·전송량·양쪽 전송 경로·전달 주소, 최근 종료 목록·최근 로그, 메트릭·접속 출처 조회, 정리 후 응답하는 관리자 종료 | FR-06·FR-08 |
 | [운영 대시보드 화면](dashboard.md) | Active | 정적 HTML·JS, 데스크톱·모바일, 로그인·현황·상세·설정 보기·편집·SCR-006 로그·SCR-007 메트릭·SCR-008 접속 출처와 주소 차단·해제, 폴링·필터·검색·JSON Lines 내려받기 | FR-06 |
 | [설정·프로세스 수명·운영 보안](operations.md) | Active | 로컬 계정 준비, 단일 인스턴스, 상태·연결 상한, 설정 v4 이전, 44개 키 재로드·38개 키 편집, 접속 ticket 설정 검증·경고, 최근 로그 보관, 메트릭, IP 정보 DB 읽기와 접속 출처 통계, 출발지 IP 차단 목록, ops-info 2.3.0, 시작·종료·부하·배포, Windows 서비스 설치·실행·해제 | FR-06~08·FR-10, PRD 7~9절 |
@@ -23,11 +23,11 @@
 - 수용 테스트 표는 시나리오와 기대 결과만 정의한다. 시나리오와 테스트의 연결은 테스트 소스 코드의 메타 정보로, 커버리지·결과는 메타 정보에서 생성한 보고서로 관리한다([검증 기록](../AGENTS.md#검증-기록)). 메타 정보 문법과 보고 명령은 [테스트 컨벤션](../conventions/testing.md)이 정한다. 보고서는 `cargo xtask scenarios`가 저장소 루트의 `.work/reports/scenario-report.md`로 만든다. 시나리오별 연결과 결과는 이 보고서에서 확인하며 이 문서에는 적지 않는다. 테스트와 연결되지 않은 시나리오는 보고서에 `미연결`로 나온다. 문서 검증을 통신·UI·호환성 테스트 통과로 간주하지 않는다.
 - 교환 계약 7건은 [계약 목록](../contracts/README.md)에 Active로 등록되어 있다. 정확한 형식과 호환성은 각 계약이 정한다. 계약 테스트의 연결과 실행 방법도 각 계약에서 관리한다. 기본값·유효 범위·기본 포트는 [설정 계약](../contracts/config-v4.md), Rust 라이브러리는 [PRD 확정 기준](../requirements/PRD.md#확정-기준)의 "구현 기술" 행이 기준이다. rustls 암호 모듈은 aws-lc-rs이며 허용 암호 스위트는 그 모듈의 rustls 기본 목록이다. 시각 기준은 [디자인 기준](../design/DESIGN.md)을 따른다.
 
-- 현재 계약 버전은 [vnc-relay-config 4.4.0](../contracts/config-v4.md), [websocket-relay 2.2.0](../contracts/websocket-relay-v2.md), [ops-info 2.3.0](../contracts/ops-info-v2.md), [management-api 1.5.0](../contracts/management-api-v1.md), [vnc-relay-metrics 1.2.0](../contracts/metrics-v1.md)이다. v4 서버는 v3 설정 파일을 거절한다. 설정 이전·롤백은 [설정 계약 3.3절](../contracts/config-v4.md#33-v3-파일을-v4로-옮기기)을 따른다. 고정 상호운용 대상과 관찰 결과는 [호환성 검증 기록](../contracts/repeater-compat-record.md), 성능 합격 기준은 [운영 스펙 6절](operations.md#6-비기능호환성출처-수용-조건), 출처·MIT 고지는 [라이선스 검토 기록](../how-to/check-dependency-licenses.md)을 따른다.
+- 현재 계약 버전은 [vnc-relay-config 4.4.0](../contracts/config-v4.md), [websocket-relay 2.2.0](../contracts/websocket-relay-v2.md), [ops-info 2.3.0](../contracts/ops-info-v2.md), [management-api 1.5.0](../contracts/management-api-v1.md), [vnc-relay-metrics 1.2.0](../contracts/metrics-v1.md)이다. v4 설정을 쓰는 VNC Relay는 v3 설정 파일을 거절한다. 설정 이전·롤백은 [설정 계약 3.3절](../contracts/config-v4.md#33-v3-파일을-v4로-옮기기)을 따른다. 고정 상호운용 대상과 관찰 결과는 [호환성 검증 기록](../contracts/repeater-compat-record.md), 성능 합격 기준은 [운영 스펙 6절](operations.md#6-비기능호환성출처-수용-조건), 출처·MIT 고지는 [라이선스 검토 기록](../how-to/check-dependency-licenses.md)을 따른다.
 
 | 수용 범위 | 시나리오 | PRD 연결 |
 | --- | --- | --- |
-| 공유 리스너·Server·신뢰 프록시 | [WS-028~036](websocket.md#7-수용-테스트), [RLY-028](relay.md#7-수용-테스트) | AC-44~45 |
+| 공유 리스너·서버·신뢰 프록시 | [WS-028~036](websocket.md#7-수용-테스트), [RLY-028](relay.md#7-수용-테스트) | AC-44~45 |
 | 설정 v4·신뢰 목록 재로드·최근 로그 보관·로그 v2 | [OPS-065~069](operations.md#7-수용-테스트) | AC-13·AC-45~47 |
 | 최근 로그 API·양쪽 전송 경로·전달 주소 | [MGT-046~051](management.md#7-수용-테스트) | AC-45~46·AC-48 |
 | 최근 로그 화면·기존 화면의 양쪽 전송 경로 | [DASH-054~063](dashboard.md#7-수용-테스트) | AC-46·AC-48 |

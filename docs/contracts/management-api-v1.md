@@ -1,6 +1,6 @@
 # 관리 API v1 계약
 
-관리 리스너가 제공하는 JSON over HTTP 관리 API의 경로·메서드·요청·응답·오류와 로그인 교환 형식을 정한다. 내장 대시보드(정적 HTML·JS)가 이 API로 서버 요약·대기 연결·활성 세션·최근 종료 목록·최근 로그·메트릭·접속 출처와 설정을 조회하고, 동적 설정을 편집하고, 활성 세션을 종료하고, 관리자 로그인·로그아웃을 한다. 이 문서는 [관리 스펙](../specs/management.md)과 [화면 스펙](../specs/dashboard.md)의 동작을 바꾸지 않는다. 스펙과 다르면 스펙을 따른다.
+관리 리스너가 제공하는 JSON over HTTP 관리 API의 경로·메서드·요청·응답·오류와 로그인 교환 형식을 정한다. 내장 대시보드(정적 HTML·JS)가 이 API로 VNC Relay 요약·대기 연결·활성 세션·최근 종료 목록·최근 로그·메트릭·접속 출처와 설정을 조회하고, 동적 설정을 편집하고, 활성 세션을 종료하고, 관리자 로그인·로그아웃을 한다. 이 문서는 [관리 스펙](../specs/management.md)과 [화면 스펙](../specs/dashboard.md)의 동작을 바꾸지 않는다. 스펙과 다르면 스펙을 따른다.
 
 | 항목 | 값 |
 | --- | --- |
@@ -14,7 +14,7 @@
 | 스키마 기준 파일 | 없음. 스키마 파일을 만들지 않는다. 1절의 표가 형식의 기준이다. |
 | 기준 스펙 | [관리 조회와 세션 종료](../specs/management.md), [운영 대시보드 화면](../specs/dashboard.md). L·Lm·E·P 등 매개변수 정의는 [운영 스펙 2절](../specs/operations.md#2-상태와-검증-매개변수)을 따른다. |
 | 관련 요구사항 | [PRD](../requirements/PRD.md) FR-06·FR-07·FR-08(비밀 비노출), 7절 보안 경계, AC-09·AC-10·AC-19~AC-21·AC-52 |
-| 호환성 범위 | 경로 접두사 `/api/v1/`. 같은 릴리스의 서버와 내장 대시보드. HTTPS 관리 리스너와 평문 HTTP 루프백 관리 리스너. |
+| 호환성 범위 | 경로 접두사 `/api/v1/`. 같은 릴리스의 VNC Relay와 내장 대시보드. HTTPS 관리 리스너와 평문 HTTP 루프백 관리 리스너. |
 | 관련 테스트 | [관리 스펙 7절](../specs/management.md#7-수용-테스트) MGT-001~MGT-055, [화면 스펙 7절](../specs/dashboard.md#7-수용-테스트), [운영 스펙 7절](../specs/operations.md#7-수용-테스트) OPS-043. 계약 테스트와 현재 결과 확인 방법은 5절을 따른다. |
 | 접속 ticket 관련 테스트 | [관리 스펙 7절](../specs/management.md#7-수용-테스트) MGT-052~053. |
 | 목록 필드 관련 테스트 | [관리 스펙 7절](../specs/management.md#7-수용-테스트) MGT-054~055, [화면 스펙 7절](../specs/dashboard.md#7-수용-테스트) DASH-065~066. 시험 위치와 현재 결과 확인 방법은 5절을 따른다. |
@@ -29,7 +29,7 @@
 - 관리 API는 JSON over HTTP이고 경로 접두사는 `/api/v1/`이다.
 - 시각은 UTC ISO 8601 문자열이고, 전송량은 바이트 정수다. 화면이 현지 시각과 KiB/MiB로 바꿔 표시한다.
 - 관리 세션 쿠키는 HttpOnly·SameSite=Strict이고, HTTPS에서는 Secure를 붙인다. 평문 HTTP 루프백 관리 리스너에서만 Secure를 뺀다. CSRF 방어를 별도로 유지한다.
-- 관리 세션은 서버 메모리에 두며, 재시작하면 모두 무효다.
+- 관리 세션은 VNC Relay 메모리에 두며, 재시작하면 모두 무효다.
 - 종료 요청은 정리가 끝난 뒤 응답한다. 별도의 "처리 중" 응답은 없다.
 - 폴링 주기 P(`dashboard.poll_secs`)와 폴링 조회 제한 시간(`dashboard.query_timeout_secs`)의 기본값·유효 범위는 [설정 계약 1.2절](config-v4.md#12-키-표)이 정한다. 이 문서는 수치를 반복하지 않는다.
 
@@ -45,8 +45,8 @@
 | 필드 이름 | 소문자 `snake_case`다. |
 | 시각(`timestamp`) | 문자열. UTC ISO 8601. 형식은 `YYYY-MM-DDThh:mm:ss.sssZ`다. 밀리초를 항상 3자리로 쓰고, 오프셋은 항상 `Z`다. 현지 시각 변환은 Consumer가 한다. |
 | 전송량(`bytes`) | 정수. 0 이상. 단위는 바이트다. 단위를 바꾸거나 반올림한 값을 넣지 않는다. 의미는 [관리 스펙 2.1절](../specs/management.md#21-전송량의-의미)을 따른다. |
-| 경과 시간(`duration_ms`) | 정수. 0 이상. 단위는 밀리초다. 서버가 단조 시계로 계산한다. 시스템 시각을 보정해도 음수가 되지 않는다. |
-| 기준 시점 | 모든 `GET` 성공 응답은 최상위 `as_of`(`timestamp`)를 가진다. 한 응답 안의 집계와 목록은 `as_of` 시점에 일관된다. 서로 다른 요청의 결과가 같은 시점이라고 보장하지 않는다. 서버 요약의 `usage`(L·Lm 사용량)는 이 일관성의 대상이 아니며, 연결이 바뀌는 동안 같은 응답의 `counts`와 잠깐 어긋날 수 있다([관리 스펙 2.2절](../specs/management.md#22-주소와-스냅샷)). |
+| 경과 시간(`duration_ms`) | 정수. 0 이상. 단위는 밀리초다. VNC Relay가 단조 시계로 계산한다. 시스템 시각을 보정해도 음수가 되지 않는다. |
+| 기준 시점 | 모든 `GET` 성공 응답은 최상위 `as_of`(`timestamp`)를 가진다. 한 응답 안의 집계와 목록은 `as_of` 시점에 일관된다. 서로 다른 요청의 결과가 같은 시점이라고 보장하지 않는다. VNC Relay 요약의 `usage`(L·Lm 사용량)는 이 일관성의 대상이 아니며, 연결이 바뀌는 동안 같은 응답의 `counts`와 잠깐 어긋날 수 있다([관리 스펙 2.2절](../specs/management.md#22-주소와-스냅샷)). |
 | 목록 | 목록은 항상 `items` 배열이다. 정상적으로 조회한 빈 목록은 `200`과 `"items": []`다. 조회 실패나 인증 실패로 대신하지 않는다. |
 | 정렬 | `waiting`·`sessions`는 오래된 항목이 먼저다(`connected_at`·`started_at` 오름차순). `closed-sessions`는 최근 종료가 먼저다(`ended_at` 내림차순). 같은 시각 항목의 순서는 정하지 않는다. |
 | null과 확인 불가 | 값을 읽지 못하면 0으로 대신하지 않는다. 그 필드를 `null`로 주고, 같은 객체의 `<필드>_unavailable_reason`에 사유 문자열을 준다. 값이 있으면 사유는 `null`이다. 이 규칙은 1.6절 표가 "확인 불가 가능"으로 표시한 필드에만 적용한다. 설정 보기의 `revision`·`last_reload`·`items[].value`는 1.13절, 전달 주소는 1.8절, 최근 로그의 순번 경계는 1.15절의 별도 `null` 규칙을 따른다. 그 밖의 필드는 항상 값을 가진다. |
@@ -84,7 +84,7 @@
 | `POST /api/v1/session` | 불필요 | 불필요 | `200` 세션 정보(1.5절) + `Set-Cookie` | 관리자 로그인([관리 3.0절](../specs/management.md#30-관리자-로그인과-세션), MGT-R12·R14) |
 | `GET /api/v1/session` | 필요 | 불필요 | `200` 세션 정보(1.5절) | 화면 진입·새로고침 때 유효한 관리 세션 확인과 CSRF 토큰 복구(SCR-001 진입 조건, [화면 2절](../specs/dashboard.md#2-화면-흐름)) |
 | `DELETE /api/v1/session` | 필요 | 필요 | `204` 본문 없음 + 쿠키 삭제 | 로그아웃(MGT-R13·R09, DASH-019) |
-| `GET /api/v1/summary` | 필요 | 불필요 | `200` 서버 요약(1.6절) | 서버 요약(MGT-R01·R17) |
+| `GET /api/v1/summary` | 필요 | 불필요 | `200` VNC Relay 요약(1.6절) | VNC Relay 요약(MGT-R01·R17) |
 | `GET /api/v1/waiting` | 필요 | 불필요 | `200` 대기 연결 목록(1.7절) | 대기 연결 목록(MGT-R01) |
 | `GET /api/v1/sessions` | 필요 | 불필요 | `200` 활성 세션 목록(1.8절) | 활성 세션 목록(MGT-R01) |
 | `GET /api/v1/sessions/{session_id}` | 필요 | 불필요 | `200` 활성 세션 상세(1.8절) | 세션 상세(MGT-R02) |
@@ -102,7 +102,7 @@
 
 ### 1.3 요청 처리 순서
 
-서버는 `/api/v1/` 요청을 다음 순서로 판정한다. 앞 단계에서 거절하면 뒤 단계는 하지 않는다.
+VNC Relay는 `/api/v1/` 요청을 다음 순서로 판정한다. 앞 단계에서 거절하면 뒤 단계는 하지 않는다.
 
 1. `POST /api/v1/session`이면 5단계의 로그인 처리로 간다. 그 밖의 요청은 2단계로 간다.
 2. 쿠키로 관리 세션을 찾는다. 유효하지 않으면 `401 unauthenticated`다. 경로·메서드가 틀려도 같다. 인증 없는 호출자가 경로 존재 여부를 알 수 없게 한다.
@@ -117,14 +117,14 @@
 | 속성 | HTTPS 관리 리스너 | 평문 HTTP 루프백 관리 리스너 |
 | --- | --- | --- |
 | 이름 | `relay_admin_session` | 같음 |
-| 값 | 불투명 식별자. 서버 메모리의 관리 세션을 가리킨다. 128비트 이상 무작위 값이다. 계정명·비밀번호·시각을 담지 않는다. | 같음 |
+| 값 | 불투명 식별자. VNC Relay 메모리의 관리 세션을 가리킨다. 128비트 이상 무작위 값이다. 계정명·비밀번호·시각을 담지 않는다. | 같음 |
 | `HttpOnly` | 있음 | 있음 |
 | `SameSite` | `Strict` | `Strict` |
 | `Secure` | 있음 | 없음(이 경우에만 뺀다) |
 | `Path` | `/` | `/` |
-| `Domain`·`Expires`·`Max-Age` | 없음(호스트 전용 세션 쿠키). 만료는 서버가 Si·Sa로 판정한다. | 같음 |
+| `Domain`·`Expires`·`Max-Age` | 없음(호스트 전용 세션 쿠키). 만료는 VNC Relay가 Si·Sa로 판정한다. | 같음 |
 
-- 서버는 쿠키에 비밀번호를 넣지 않고, URL에도 넣지 않는다.
+- VNC Relay는 쿠키에 비밀번호를 넣지 않고, URL에도 넣지 않는다.
 - 로그아웃과 `401` 응답(쿠키가 있었던 경우)은 같은 이름·`Path`로 `Max-Age=0`인 `Set-Cookie`를 보내 쿠키를 지운다.
 - 유효한 관리 세션은 다음 조건을 모두 만족한다. 이 프로세스가 발급했다. 로그아웃되지 않았다. 유휴 만료 Si 전이다. 절대 최대 수명 Sa 전이다. 프로세스를 재시작하면 이전 관리 세션은 모두 무효다(MGT-R18).
 - 로그인이 성공하면 항상 새 관리 세션을 만든다. 요청에 유효한 이전 쿠키가 있으면 그 관리 세션을 무효로 한다.
@@ -143,14 +143,14 @@
 - 절대 최대 수명 Sa는 헤더와 활동에 관계없이 `absolute_expires_at`에 무효가 된다.
 - 연장은 인증과 CSRF 검증을 통과한 요청만 일으킨다. 거절된 요청은 연장하지 않는다. 정적 파일 요청도 연장하지 않는다.
 - Consumer는 자동 폴링에만 헤더를 붙인다. 어떤 화면 행동이 사용자 행동인지는 Consumer가 정한다.
-- 서버는 유휴 만료·절대 만료·로그아웃·재시작 뒤 쿠키를 모두 같은 `401 unauthenticated`로 거절한다. 원인을 구분해 알려주지 않는다.
+- VNC Relay는 유휴 만료·절대 만료·로그아웃·재시작 뒤 쿠키를 모두 같은 `401 unauthenticated`로 거절한다. 원인을 구분해 알려주지 않는다.
 
 #### 1.4.3 CSRF 방어
 
 - 로그인과 `GET /api/v1/session` 응답의 `csrf_token`은 그 관리 세션이 끝날 때까지 같은 값이다.
 - Consumer는 로그인 이외의 `POST`·`PATCH`·`DELETE` 요청마다 헤더 `X-CSRF-Token: <csrf_token>`을 보낸다.
-- 서버는 헤더가 없거나 값이 다르면 `403 csrf_invalid`로 거절한다. 관리 세션은 유지하고 대상 상태를 바꾸지 않는다.
-- 로그인 요청은 관리 세션이 없으므로 CSRF 토큰이 없다. 대신 `Content-Type: application/json`을 요구한다. 서버는 CORS 헤더를 보내지 않는다. 쿠키는 `SameSite=Strict`다.
+- VNC Relay는 헤더가 없거나 값이 다르면 `403 csrf_invalid`로 거절한다. 관리 세션은 유지하고 대상 상태를 바꾸지 않는다.
+- 로그인 요청은 관리 세션이 없으므로 CSRF 토큰이 없다. 대신 `Content-Type: application/json`을 요구한다. VNC Relay는 CORS 헤더를 보내지 않는다. 쿠키는 `SameSite=Strict`다.
 - `csrf_token`은 URL이나 로그에 쓰지 않는다. 쿠키로 보내지 않는다.
 
 ### 1.5 로그인과 세션 정보
@@ -168,7 +168,7 @@
 - 계정이 없거나, 비밀번호가 틀리거나, 제한 중이면 모두 같은 `401 login_failed`다. 본문·헤더·상태 코드가 같다. 계정 존재 여부를 알 수 있는 차이를 두지 않는다.
 - 계정이 없을 때도 있는 계정과 같은 비용의 비밀번호 검증을 수행하는 것을 권장한다. 응답 시간으로 존재 여부를 알 수 없어야 한다.
 - 실패는 계정명과 실제 소켓 출발지 IP로 센다. 없는 계정명도 센다. 기준 F(`per_account`·`per_source`·`window_secs`·`lockout_secs`)를 넘으면 제한 시간 동안 로그인 시도를 `login_failed`로 거절한다. 제한 중에는 올바른 비밀번호도 거절한다. 같은 출발지의 다른 계정 시도도 제한을 받는다(MGT-022).
-- 서버는 `Retry-After`를 보내지 않는다. 제한 중인지 실패인지 알려주지 않는다.
+- VNC Relay는 `Retry-After`를 보내지 않는다. 제한 중인지 실패인지 알려주지 않는다.
 
 #### 세션 정보(`POST /api/v1/session`과 `GET /api/v1/session`의 200 응답 본문)
 
@@ -183,9 +183,9 @@
 | `dashboard.query_timeout_secs` | 정수 | 필수, null 불가 | 조회 제한 시간과 설정 편집 응답 대기 한도(초). 설정 `[dashboard] query_timeout_secs`의 값이다. 기본값·범위는 [설정 계약](config-v4.md#12-키-표). |
 | `dashboard.terminate_timeout_secs` | 정수 | 필수, null 불가 | 종료 요청의 응답 대기 한도(초). 응답 때의 실행 중 `[timeouts] close_secs`(E)에 5초를 더한 값이다. E는 재로드 대상이다. |
 
-폴링 주기 P와 `query_timeout_secs`는 재시작이 필요한 설정이므로 관리 세션이 살아 있는 동안 바뀌지 않는다. 화면은 로그인 직후와 새로고침 직후 세션 정보로 이 값을 받아 쓴다. 서버 요약에는 P를 넣지 않는다. E는 재로드 대상이므로 이후 세션 정보 응답의 `terminate_timeout_secs`는 새 E + 5초가 된다. 이미 시작한 종료 교환의 기한은 이전 E를 유지한다([설정 계약 1.8절](config-v4.md#18-재로드-구분)).
+폴링 주기 P와 `query_timeout_secs`는 재시작이 필요한 설정이므로 관리 세션이 살아 있는 동안 바뀌지 않는다. 화면은 로그인 직후와 새로고침 직후 세션 정보로 이 값을 받아 쓴다. VNC Relay 요약에는 P를 넣지 않는다. E는 재로드 대상이므로 이후 세션 정보 응답의 `terminate_timeout_secs`는 새 E + 5초가 된다. 이미 시작한 종료 교환의 기한은 이전 E를 유지한다([설정 계약 1.8절](config-v4.md#18-재로드-구분)).
 
-### 1.6 서버 요약 `GET /api/v1/summary`
+### 1.6 VNC Relay 요약 `GET /api/v1/summary`
 
 | 필드·메시지 | 자료형 | 필수 여부·null 허용 여부 | 의미·제약 |
 | --- | --- | --- | --- |
@@ -241,15 +241,15 @@
 | `session_id` | 문자열 | 필수, null 불가 | 세션 식별자. 중계 ID와 다른 값이다. |
 | `state` | 문자열 | 필수, null 불가 | `active`(중계 중), `closing`(종료 중, 정리가 끝나기 전). 종료 중인 세션도 활성 수에 포함한다. 알 수 없는 값은 받은 그대로 표시한다. |
 | `mode` | 문자열 | 필수, null 불가 | `mode1`(Mode I) 또는 `mode2`(Mode II) |
-| `viewer_transport` | 문자열 | 필수, null 불가 | Viewer 전송 경로. `tcp`, `ws`, `wss`. |
-| `target_transport` | 문자열 | 필수, null 불가 | Server/Mode I 대상 전송 경로. `tcp`, `ws`, `wss`. Mode I은 항상 `tcp`이고, Mode II는 Server의 전송 경로다. |
+| `viewer_transport` | 문자열 | 필수, null 불가 | 뷰어 전송 경로. `tcp`, `ws`, `wss`. |
+| `target_transport` | 문자열 | 필수, null 불가 | 서버/Mode I 대상 전송 경로. `tcp`, `ws`, `wss`. Mode I은 항상 `tcp`이고, Mode II는 서버의 전송 경로다. |
 | `started_at` | `timestamp` | 필수, null 불가 | 중계 시작 시각 |
-| `bytes_viewer_to_target` | `bytes` | 필수, null 불가 | Viewer → Server/Mode I 대상 방향의 누적 바이트 |
-| `bytes_target_to_viewer` | `bytes` | 필수, null 불가 | Server/Mode I 대상 → Viewer 방향의 누적 바이트 |
-| `viewer_address` | `address` | 필수, null 불가 | Viewer 쪽 상대 주소 |
-| `target_address` | `address` | 필수, null 불가 | Server(Mode II) 또는 Mode I 대상 쪽 상대 주소 |
-| `viewer_forwarded_ip` | 문자열 | 필수, null 허용 | Viewer가 신뢰 프록시를 거친 경우의 전달 주소. 없으면 `null`이다. |
-| `target_forwarded_ip` | 문자열 | 필수, null 허용 | Mode II Server가 신뢰 프록시를 거친 경우의 전달 주소. Mode I 또는 전달 주소가 없으면 `null`이다. |
+| `bytes_viewer_to_target` | `bytes` | 필수, null 불가 | 뷰어 → 서버/Mode I 대상 방향의 누적 바이트 |
+| `bytes_target_to_viewer` | `bytes` | 필수, null 불가 | 서버/Mode I 대상 → 뷰어 방향의 누적 바이트 |
+| `viewer_address` | `address` | 필수, null 불가 | 뷰어 쪽 상대 주소 |
+| `target_address` | `address` | 필수, null 불가 | 서버(Mode II) 또는 Mode I 대상 쪽 상대 주소 |
+| `viewer_forwarded_ip` | 문자열 | 필수, null 허용 | 뷰어가 신뢰 프록시를 거친 경우의 전달 주소. 없으면 `null`이다. |
+| `target_forwarded_ip` | 문자열 | 필수, null 허용 | Mode II 서버가 신뢰 프록시를 거친 경우의 전달 주소. Mode I 또는 전달 주소가 없으면 `null`이다. |
 
 - 누적 바이트는 한 세션 안에서 줄거나 순환하지 않는다. 재접속 세션은 새 `session_id`와 0에서 시작한다(MGT-007).
 - `session_id`가 위 형식을 만족하지 않으면 `400 invalid_request`다(잘못된 대상).
@@ -259,9 +259,9 @@
 
 ### 1.9 관리자 종료 `POST /api/v1/sessions/{session_id}/terminate`
 
-요청: 관리 세션 쿠키와 `X-CSRF-Token`이 필요하다. 본문은 없다. 본문이 있으면 `Content-Type`과 관계없이 `400 invalid_request`다. 이 경로별 규칙은 1.1절의 415 규칙보다 우선한다. 서버는 지정한 `session_id`의 세션에만 영향을 준다.
+요청: 관리 세션 쿠키와 `X-CSRF-Token`이 필요하다. 본문은 없다. 본문이 있으면 `Content-Type`과 관계없이 `400 invalid_request`다. 이 경로별 규칙은 1.1절의 415 규칙보다 우선한다. VNC Relay는 지정한 `session_id`의 세션에만 영향을 준다.
 
-서버는 그 세션의 신규 데이터 수락을 멈추고 양 끝점을 종료한다. 자원 정리가 끝난 뒤에 응답한다. 응답 시간은 최대 정리 제한 시간 E까지 길어질 수 있다. 검증·수락된 종료 요청이 완료를 기다리는 동안만 관리 연결의 U를 멈춰 연결을 유지한다. 응답 쓰기부터 U를 다시 잰다([설정 계약 1.2절](config-v4.md#12-키-표)의 관리 연결 U 예외). 정리 중에는 그 세션이 `counts.active`와 `GET /api/v1/sessions`에 `closing`으로 남는다.
+VNC Relay는 그 세션의 신규 데이터 수락을 멈추고 양 끝점을 종료한다. 자원 정리가 끝난 뒤에 응답한다. 응답 시간은 최대 정리 제한 시간 E까지 길어질 수 있다. 검증·수락된 종료 요청이 완료를 기다리는 동안만 관리 연결의 U를 멈춰 연결을 유지한다. 응답 쓰기부터 U를 다시 잰다([설정 계약 1.2절](config-v4.md#12-키-표)의 관리 연결 U 예외). 정리 중에는 그 세션이 `counts.active`와 `GET /api/v1/sessions`에 `closing`으로 남는다.
 
 성공 응답 `200`의 본문:
 
@@ -282,7 +282,7 @@
 | 양 끝점 정리에 실패했다 | `500 terminate_failed` | 세션이 종료됐다고 확인하지 못했다. 성공으로 표시하지 않는다. 재조회로 실제 상태를 확인한다. |
 
 - 요청마다 `session_id`로 활성 세션을 찾는다. 같은 중계 ID를 다시 찾아 종료하지 않는다. 오래된 요청이 같은 중계 ID의 새 세션을 종료하지 못한다(MGT-010).
-- 서버는 종료 사건 로그에 수행한 관리자 계정명을 기록한다([운영 스펙](../specs/operations.md)의 OPS-011, 사건 형식은 [운영 정보 계약](ops-info-v2.md)의 `admin_terminate`). 계정명은 이 응답에 넣지 않는다.
+- VNC Relay는 종료 사건 로그에 수행한 관리자 계정명을 기록한다([운영 스펙](../specs/operations.md)의 OPS-011, 사건 형식은 [운영 정보 계약](ops-info-v2.md)의 `admin_terminate`). 계정명은 이 응답에 넣지 않는다.
 
 응답 유실 때 Consumer 규칙:
 
@@ -303,19 +303,19 @@
 | `items[].session_id` | 문자열 | 필수, null 불가 | 세션 식별자. 이 값으로 상세·종료를 요청하면 `404 not_found`다. |
 | `items[].mode` | 문자열 | 필수, null 불가 | `mode1` 또는 `mode2` |
 | `items[].viewer_transport` | 문자열 | 필수, null 불가 | `tcp`, `ws`, `wss` |
-| `items[].target_transport` | 문자열 | 필수, null 불가 | `tcp`, `ws`, `wss`. Mode I은 `tcp`, Mode II는 Server의 전송 경로다. |
+| `items[].target_transport` | 문자열 | 필수, null 불가 | `tcp`, `ws`, `wss`. Mode I은 `tcp`, Mode II는 서버의 전송 경로다. |
 | `items[].started_at` | `timestamp` | 필수, null 불가 | 중계 시작 시각 |
 | `items[].ended_at` | `timestamp` | 필수, null 불가 | 정리 완료 시각. `started_at` 이상이다. |
 | `items[].duration_ms` | `duration_ms` | 필수, null 불가 | 중계 시작부터 정리 완료까지의 경과 시간. 같은 세션의 운영 로그 `session_closed`의 `duration_ms`와 같다. 단조 시계 값이므로 `ended_at`과 `started_at`의 차이와 다를 수 있다. |
-| `items[].bytes_viewer_to_target` | `bytes` | 필수, null 불가 | Viewer → Server/Mode I 대상 방향의 최종 누적 바이트 |
-| `items[].bytes_target_to_viewer` | `bytes` | 필수, null 불가 | Server/Mode I 대상 → Viewer 방향의 최종 누적 바이트 |
-| `items[].viewer_address` | `address` | 필수, null 불가 | 종료 전 Viewer 쪽 상대 주소. 의미는 1.8절과 같다. |
-| `items[].target_address` | `address` | 필수, null 불가 | 종료 전 Server(Mode II) 또는 Mode I 대상 쪽 상대 주소. 의미는 1.8절과 같다. |
-| `items[].viewer_forwarded_ip` | 문자열 | 필수, null 허용 | 종료 전 Viewer의 전달 주소. 없으면 `null`이다. 의미는 1.8절과 같다. |
-| `items[].target_forwarded_ip` | 문자열 | 필수, null 허용 | 종료 전 Mode II Server의 전달 주소. Mode I 또는 전달 주소가 없으면 `null`이다. 의미는 1.8절과 같다. |
+| `items[].bytes_viewer_to_target` | `bytes` | 필수, null 불가 | 뷰어 → 서버/Mode I 대상 방향의 최종 누적 바이트 |
+| `items[].bytes_target_to_viewer` | `bytes` | 필수, null 불가 | 서버/Mode I 대상 → 뷰어 방향의 최종 누적 바이트 |
+| `items[].viewer_address` | `address` | 필수, null 불가 | 종료 전 뷰어 쪽 상대 주소. 의미는 1.8절과 같다. |
+| `items[].target_address` | `address` | 필수, null 불가 | 종료 전 서버(Mode II) 또는 Mode I 대상 쪽 상대 주소. 의미는 1.8절과 같다. |
+| `items[].viewer_forwarded_ip` | 문자열 | 필수, null 허용 | 종료 전 뷰어의 전달 주소. 없으면 `null`이다. 의미는 1.8절과 같다. |
+| `items[].target_forwarded_ip` | 문자열 | 필수, null 허용 | 종료 전 Mode II 서버의 전달 주소. Mode I 또는 전달 주소가 없으면 `null`이다. 의미는 1.8절과 같다. |
 | `items[].close_cause` | 문자열 | 필수, null 불가 | 종료 원인. 아래 표를 따른다. |
 
-종료 원인 `close_cause`의 값 목록은 [관리 스펙 2.3절](../specs/management.md#23-최근-종료-목록)을 따른다. 운영 로그·WebSocket close 사유 설명과 같은 이름을 쓴다. 한 세션의 `close_cause`는 정리를 시작하게 한 첫 원인이다. 강제 정리 시점에 이미 정리를 시작한 세션은 최초 원인을 유지한다. 기존 원인 없이 소유 작업이 끝나면 서버가 Running일 때는 `internal_error`, 정상 종료 중(Grace·Force)의 취소일 때는 `server_shutdown`을 쓴다.
+종료 원인 `close_cause`의 값 목록은 [관리 스펙 2.3절](../specs/management.md#23-최근-종료-목록)을 따른다. 운영 로그·WebSocket close 사유 설명과 같은 이름을 쓴다. 한 세션의 `close_cause`는 정리를 시작하게 한 첫 원인이다. 강제 정리 시점에 이미 정리를 시작한 세션은 최초 원인을 유지한다. 기존 원인 없이 소유 작업이 끝나면 VNC Relay가 Running일 때는 `internal_error`, 정상 종료 중(Grace·Force)의 취소일 때는 `server_shutdown`을 쓴다.
 
 | 값 | 의미 |
 | --- | --- |
@@ -325,9 +325,9 @@
 | `dead_connection` | 끊긴 연결 감지. 응답하지 않는 상대를 TCP keepalive나 WebSocket ping으로 판정해 종료했다. |
 | `close_timeout` | 정리 제한 시간 E 초과. E 안에 정리가 끝나지 않아 강제로 정리했다. |
 | `server_shutdown` | 정상 종료 유예 G가 지나거나 유예 중 두 번째 종료 요청을 받아 강제로 정리했다. 정상 종료 중(Grace·Force)에 세션 소유 작업이 취소된 경우도 포함한다. 기존 종료 원인이 없는 세션에만 기록한다. Running 중 소유 작업이 버그로 끝난 경우는 포함하지 않는다. |
-| `internal_error` | 내부 오류. 서버가 Running일 때 세션 소유 작업이 panic 등 버그로 끝났고 기존 종료 원인이 없었다. 기존 원인은 이 값으로 바꾸지 않는다. |
-| `session_expired` | 접속 ticket의 세션 만료 시각(`sx`)이 되어 서버가 세션을 끝냈다([WebSocket 계약 1.9.5절](websocket-relay-v2.md#195-101-뒤의-중계-id-대조와-세션-만료)). |
-| `ip_denied` | 출발지 IP 차단. 차단 목록(`relay.deny.sources`)이 바뀐 직후 Viewer 또는 Mode II Server의 클라이언트 주소가 항목과 일치해 서버가 세션 전체를 끝냈다. 관리자 계정은 없다. |
+| `internal_error` | 내부 오류. VNC Relay가 Running일 때 세션 소유 작업이 panic 등 버그로 끝났고 기존 종료 원인이 없었다. 기존 원인은 이 값으로 바꾸지 않는다. |
+| `session_expired` | 접속 ticket의 세션 만료 시각(`sx`)이 되어 VNC Relay가 세션을 끝냈다([WebSocket 계약 1.9.5절](websocket-relay-v2.md#195-101-뒤의-중계-id-대조와-세션-만료)). |
+| `ip_denied` | 출발지 IP 차단. 차단 목록(`relay.deny.sources`)이 바뀐 직후 뷰어 또는 Mode II 서버의 클라이언트 주소가 항목과 일치해 VNC Relay가 세션 전체를 끝냈다. 관리자 계정은 없다. |
 
 - Consumer는 목록에 없는 값을 받으면 받은 그대로 표시하고 오류로 처리하지 않는다.
 - 목록은 보관 개수 R을 넘으면 가장 오래된 항목부터 제거한다(MGT-024).
@@ -351,9 +351,9 @@
 - 정적 경로의 `404`는 2.1절 형식의 JSON 본문과 `not_found`를 유지한다. 정적 `303`·`404`를 API와 나누는 예외는 경로 범위에 관한 것이다. `404`의 JSON 본문을 없애는 뜻이 아니다.
 - 로그인 화면 파일에는 운영 데이터·계정 정보·설정 값을 넣지 않는다.
 - 로그인 성공 뒤 화면은 `/`로 이동한다.
-- 화면 URL: SCR-003은 `/login/`, SCR-001은 `/`, SCR-002는 `/#/sessions/{session_id}`, SCR-004는 `/#/settings`, SCR-005는 `/#/settings/edit`, SCR-006은 `/#/logs`, SCR-007은 `/#/metrics`, SCR-008은 `/#/sources`다. URL의 조각(`#` 뒤)은 서버로 전송되지 않고 서버 접근 로그에 남지 않는다. 서버는 이 조각을 해석하지 않는다.
+- 화면 URL: SCR-003은 `/login/`, SCR-001은 `/`, SCR-002는 `/#/sessions/{session_id}`, SCR-004는 `/#/settings`, SCR-005는 `/#/settings/edit`, SCR-006은 `/#/logs`, SCR-007은 `/#/metrics`, SCR-008은 `/#/sources`다. URL의 조각(`#` 뒤)은 VNC Relay로 전송되지 않고 VNC Relay 접근 로그에 남지 않는다. VNC Relay는 이 조각을 해석하지 않는다.
 - 화면은 URL의 `session_id`가 1.8절 형식을 만족하는지 먼저 확인한다. 형식이 틀리면 요청을 보내지 않고 "잘못된 세션 식별자"를 표시한다. SCR-002에서 형식이 맞으면 상세를 조회하고, `404`이면 "대상 없음"을 표시한다. SCR-006의 세션 필터 URL은 `/#/logs?session_id={session_id}`다. 이 형식도 요청 전에 같은 형식 검사를 한다. 형식이 맞지만 일치하는 로그가 없으면 `200`의 빈 결과다.
-- 보호된 정적 응답과 API 응답에 `Cache-Control: no-store`를 붙인다. 로그인 화면 정적 응답에도 같은 헤더를 붙인다. 서버를 갱신한 뒤 브라우저가 이전 버전의 화면 코드를 다시 쓰지 않게 하기 위해서다.
+- 보호된 정적 응답과 API 응답에 `Cache-Control: no-store`를 붙인다. 로그인 화면 정적 응답에도 같은 헤더를 붙인다. VNC Relay를 갱신한 뒤 브라우저가 이전 버전의 화면 코드를 다시 쓰지 않게 하기 위해서다.
 - 정적 응답에 `X-Content-Type-Options: nosniff`와 `Referrer-Policy: no-referrer`를 권장한다. `Content-Security-Policy: default-src 'self'; frame-ancestors 'none'`은 필수다. 대시보드는 인라인 스크립트와 인라인 스타일(`<style>`, `style` 속성)을 쓰지 않는다.
 
 ### 1.12 폴링 주기와 조회 제한 시간의 전달
@@ -371,11 +371,11 @@
 - 종료 요청에는 폴링 조회 제한 시간을 쓰지 않는다. 정리가 최대 E까지 걸릴 수 있기 때문이다. `terminate_timeout_secs`를 쓴다.
 - E를 교체한 뒤 세션 정보를 응답하면 새 E + 5초를 전달한다. 이미 시작한 종료 교환의 기한은 바꾸지 않는다. P와 `query_timeout_secs`는 재시작 필요로 남는다.
 - `GET /api/v1/config`는 사용자 행동 조회이며 자동 폴링하지 않는다. `PATCH /api/v1/config`도 사용자 행동 요청이다. 두 요청은 성공한 사용자 행동의 유휴 만료 연장 규칙을 따른다. 응답 대기 한도는 2.3절을 따른다.
-- 서버는 일반 조회를 제한 시간 안에 응답하도록 만든다. 서버 내부 처리 제한은 이 계약이 정하지 않는다.
+- VNC Relay는 일반 조회를 제한 시간 안에 응답하도록 만든다. VNC Relay 내부 처리 제한은 이 계약이 정하지 않는다.
 
 ### 1.13 설정 보기 `GET /api/v1/config`
 
-유효한 관리 세션이 필요하다. CSRF 토큰은 필요하지 않다. `management.config_edit`가 꺼져 있어도 조회할 수 있다. 서버는 요청 때 `serve`가 읽는 설정 파일을 다시 읽어 실행 중 유효 설정과 비교한다. 파일을 읽지 못하거나 검증에 실패해도 실행 중 값은 조회할 수 있으므로 `200`으로 파일 상태를 반환한다.
+유효한 관리 세션이 필요하다. CSRF 토큰은 필요하지 않다. `management.config_edit`가 꺼져 있어도 조회할 수 있다. VNC Relay는 요청 때 `serve`가 읽는 설정 파일을 다시 읽어 실행 중 유효 설정과 비교한다. 파일을 읽지 못하거나 검증에 실패해도 실행 중 값은 조회할 수 있으므로 `200`으로 파일 상태를 반환한다.
 
 | 필드·메시지 | 자료형 | 필수 여부·null 허용 여부 | 의미·제약 |
 | --- | --- | --- | --- |
@@ -398,7 +398,7 @@
 | `items[].editable` | 불리언 | 필수, null 불가 | 편집 대상이고 해당 진입점·모드가 켜져 있으면 `true`. `edit_enabled`와는 별개다. 예외로 `relay.deny.sources`는 중계 진입점이 모두 꺼져 있어도 항상 `true`다. |
 | `items[].min`·`items[].max` | 정수 | 정수 키에 필수, null 불가. 그 밖의 키에는 없음 | 설정 계약의 정적 범위. Lw의 `max`는 65535이며 Lw ≤ L 관계 검사는 따로 한다. |
 
-`items`에는 접속 ticket 키 10개도 포함한다. Viewer는 `relay.ticket.viewer.enabled`·`relay.ticket.viewer.issuer`·`relay.ticket.viewer.relay_host`·`relay.ticket.viewer.public_keys_file`·`relay.ticket.viewer.max_lifetime_secs`다. Server는 `relay.ticket.server.enabled`·`relay.ticket.server.issuer`·`relay.ticket.server.relay_host`·`relay.ticket.server.public_keys_file`·`relay.ticket.server.max_lifetime_secs`다. 모두 `reload = dynamic`이다. `public_keys_file` 2개는 항상 `editable = false`다. 나머지 8개는 그 역할이 WS 또는 WSS 리스너에서 하나라도 켜져 있을 때만 `editable = true`다. `enabled`의 기본값은 `false`다. `max_lifetime_secs`의 기본값은 60이며 `min = 10`, `max = 600`이다([설정 계약 1.2절](config-v4.md#12-키-표)).
+`items`에는 접속 ticket 키 10개도 포함한다. 뷰어는 `relay.ticket.viewer.enabled`·`relay.ticket.viewer.issuer`·`relay.ticket.viewer.relay_host`·`relay.ticket.viewer.public_keys_file`·`relay.ticket.viewer.max_lifetime_secs`다. 서버는 `relay.ticket.server.enabled`·`relay.ticket.server.issuer`·`relay.ticket.server.relay_host`·`relay.ticket.server.public_keys_file`·`relay.ticket.server.max_lifetime_secs`다. 모두 `reload = dynamic`이다. `public_keys_file` 2개는 항상 `editable = false`다. 나머지 8개는 그 역할이 WS 또는 WSS 리스너에서 하나라도 켜져 있을 때만 `editable = true`다. `enabled`의 기본값은 `false`다. `max_lifetime_secs`의 기본값은 60이며 `min = 10`, `max = 600`이다([설정 계약 1.2절](config-v4.md#12-키-표)).
 
 `items`에는 `relay.deny.sources`(문자열 배열, `reload = dynamic`)도 포함한다. 기본값은 `[]`이며 아무것도 차단하지 않는다([설정 계약 1.2절](config-v4.md#12-키-표)).
 
@@ -410,7 +410,7 @@
 | `invalid` | 파일을 읽었으나 설정 검증에 실패했다. |
 | `unreadable` | 파일 바이트를 읽지 못했거나 UTF-8이 아니다. `diagnostics`는 빈 배열이다. 바이트 읽기에 성공한 비UTF-8 파일의 `revision`은 `null`이 아니다. |
 
-`last_reload`는 GET, 같은 후보를 다시 읽은 파일 변경 감지, 변경 없음·폐기된 파일 변경 감지 결과로 갱신하지 않는다. PATCH의 인증·본문·편집 꺼짐·충돌·파일 상태·후보 검증·쓰기 실패와 no-op도 이력을 갱신하지 않는다. `trigger = config_edit`와 `result = rejected`·`restart_required`의 조합은 스키마에서 허용하지만 현재 서버는 생성하지 않는다.
+`last_reload`는 GET, 같은 후보를 다시 읽은 파일 변경 감지, 변경 없음·폐기된 파일 변경 감지 결과로 갱신하지 않는다. PATCH의 인증·본문·편집 꺼짐·충돌·파일 상태·후보 검증·쓰기 실패와 no-op도 이력을 갱신하지 않는다. `trigger = config_edit`와 `result = rejected`·`restart_required`의 조합은 스키마에서 허용하지만 현재 VNC Relay는 생성하지 않는다.
 
 설정 파일에는 비밀이 없다([설정 계약 1.1절](config-v4.md#11-파일-규칙)). 설정 경로는 보여 주되 경로가 가리키는 파일 내용은 넣지 않는다. 인증서·개인키·계정 파일의 내용도 노출하지 않는다. 설정 보기에서 파일의 미적용 값은 반환하지 않는다.
 
@@ -434,7 +434,7 @@ JSON 정수는 `i64`나 `u64`로 읽을 수 있으면 정수로 받아 7단계�
 
 편집 대상은 출발지 IP 허용 목록 6개, WS·WSS 역할별 Origin 허용 목록 4개, 리스너별 `trusted_proxies` 2개, `mode1.allow_targets`, `[limits]` 5개, `[timeouts]` 6개, `[keepalive]` 5개, 접속 ticket 8개와 차단 목록 `relay.deny.sources`인 총 38개 키다. ticket 편집 대상은 `relay.ticket.viewer.enabled`·`relay.ticket.viewer.issuer`·`relay.ticket.viewer.relay_host`·`relay.ticket.viewer.max_lifetime_secs`·`relay.ticket.server.enabled`·`relay.ticket.server.issuer`·`relay.ticket.server.relay_host`·`relay.ticket.server.max_lifetime_secs`다. 목록과 적용 시점은 [설정 계약 1.8절](config-v4.md#18-재로드-구분)이 기준이다. 인증서·개인키 경로 4개는 편집 대상이 아니다. 접속 ticket 공개 키 파일 경로 2개도 편집할 수 없다. 이 경로 6개를 포함한 재로드 대상은 총 44개다. 공개 키 교체는 같은 경로의 파일 내용을 바꾸는 방식을 따른다([설정 계약 1.11절](config-v4.md#111-접속-ticket-공개-키-파일-형식)). 역할별 키는 그 역할이 켜져 있을 때만, `trusted_proxies`는 해당 리스너의 역할 중 하나 이상이 켜져 있을 때만 편집할 수 있다. ticket 키는 그 역할이 WS 또는 WSS 리스너에서 하나라도 켜져 있을 때만 편집할 수 있다. `mode1.allow_targets`는 `mode1.enabled = true`일 때만 편집할 수 있다. `relay.deny.sources`는 중계 진입점이 꺼져 있어도 항상 편집할 수 있다. `management.config_edit`와 `recent_logs.max_entries`를 비롯한 재시작 필요 키는 편집할 수 없다.
 
-서버는 재로드 서비스와 직렬화하여 다음 10단계를 순서대로 처리한다. 앞 단계에서 거절하면 뒤 단계는 하지 않는다.
+VNC Relay는 재로드 서비스와 직렬화하여 다음 10단계를 순서대로 처리한다. 앞 단계에서 거절하면 뒤 단계는 하지 않는다.
 
 1. 인증·CSRF·본문 형식을 공통 순서(1.3절)로 검사한다. 빈 `changes`, 편집 대상이 아니거나 지금 `editable`이 아닌 키, 맞지 않는 JSON 자료형은 `400 invalid_request`다. `PATCH`에 `X-Relay-Poll`이 있으면 `400 invalid_request`다.
 2. 실행 중 `management.config_edit`가 `false`이면 `403 config_edit_disabled`로 거절한다.
@@ -468,7 +468,7 @@ ticket 설정 변경은 새 업그레이드 요청부터 적용한다. 이미 10
 
 유효한 관리 세션이 필요하다. CSRF 토큰은 필요하지 않다. `X-Relay-Poll: 1`을 허용하며, 이 헤더가 있는 자동 갱신은 관리 세션의 유휴 만료를 연장하지 않는다. 헤더가 없으면 사용자 행동 요청이다(1.4.2절).
 
-서버는 메모리에 보관한 최근 운영 로그를 조회한다. 보관 수명과 출력 대상과의 관계는 [운영 스펙](../specs/operations.md)이 정한다. 각 `entry`는 [운영 정보 계약](ops-info-v2.md)의 JSON 로그 한 줄을 해석한 객체와 같아야 한다. 비밀을 담지 않으며 중계 ID는 원문 대신 `relay_id_ref`로만 나온다.
+VNC Relay는 메모리에 보관한 최근 운영 로그를 조회한다. 보관 수명과 출력 대상과의 관계는 [운영 스펙](../specs/operations.md)이 정한다. 각 `entry`는 [운영 정보 계약](ops-info-v2.md)의 JSON 로그 한 줄을 해석한 객체와 같아야 한다. 비밀을 담지 않으며 중계 ID는 원문 대신 `relay_id_ref`로만 나온다.
 
 모든 쿼리 매개변수는 선택이다. 여러 종류의 필터는 AND로 결합한다. `level`·`event` 목록 안에서는 OR로 결합한다.
 
@@ -489,8 +489,8 @@ ticket 설정 변경은 새 업그레이드 요청부터 적용한다. 이미 10
 - `q`는 `entry`의 문자열 값을 그대로 비교한다. 수는 JSON 로그 줄에 쓰인 10진 표기로 비교한다. 불리언은 `true`·`false`, `null`은 `null`로 비교한다. 배열 원소와 중첩 객체의 값도 같은 규칙을 따른다. 필드 이름과 응답의 조회용 `seq`는 검색하지 않는다.
 - `before`·`after`는 `[0-9]+` 표기만 받는다. 부호·공백·소수점·지수 표기는 거절한다. 64비트 부호 없는 정수의 최댓값을 넘거나 각 하한을 벗어나면 `400 invalid_request`다. 별도의 업무 상한은 없다.
 - 쿼리 문자열은 `application/x-www-form-urlencoded` 규칙으로 해석한다. `+`는 공백이고, `%XX`는 UTF-8 바이트다. 잘못된 퍼센트 인코딩과 UTF-8이 아닌 값은 `400 invalid_request`다. `=`가 없는 항목은 값이 빈 문자열인 매개변수로 본다. 그래서 위 표의 매개변수이면 빈 값 규칙에 따라 `400 invalid_request`다.
-- `level`·`event`를 여러 번 보내면 모든 값을 한 목록으로 합친다. `q`·`session_id`·`before`·`after`·`limit`를 두 번 이상 보내면 `400 invalid_request`다. 어느 값을 쓸지 서버가 추측하지 않기 위해서다.
-- 위 표에 없는 매개변수 이름은 무시한다. [3절](#3-호환성-규칙)의 Producer 규칙(요청의 알 수 없는 필드 무시)을 따른다. 그래서 이후 호환 버전이 선택 매개변수를 더해도 이전 서버가 요청을 거절하지 않는다.
+- `level`·`event`를 여러 번 보내면 모든 값을 한 목록으로 합친다. `q`·`session_id`·`before`·`after`·`limit`를 두 번 이상 보내면 `400 invalid_request`다. 어느 값을 쓸지 VNC Relay가 추측하지 않기 위해서다.
+- 위 표에 없는 매개변수 이름은 무시한다. [3절](#3-호환성-규칙)의 Producer 규칙(요청의 알 수 없는 필드 무시)을 따른다. 그래서 이후 호환 버전이 선택 매개변수를 더해도 이전 VNC Relay가 요청을 거절하지 않는다.
 
 페이지 선택과 정렬:
 
@@ -525,7 +525,7 @@ JSON Lines 다운로드는 Consumer가 만든다. 같은 필터로 커서 없이
 
 유효한 관리 세션이 필요하다. CSRF 토큰은 필요하지 않다. `X-Relay-Poll: 1`을 허용하며, 이 헤더가 있는 자동 갱신은 관리 세션의 유휴 만료를 연장하지 않는다. 헤더가 없으면 사용자 행동 요청이다(1.4.2절). `[metrics] enabled`와 관계없이 응답한다. 이 설정은 상태 리스너의 `/metrics`만 켜고 끈다.
 
-`200` 응답 본문은 [메트릭 계약 1.7절](metrics-v1.md#17-json-표현)의 JSON이다. `history`는 [메트릭 계약 1.8절](metrics-v1.md#18-추이)을 따른다. 값은 같은 시점의 상태 리스너 `/metrics`와 같다. 이 응답에는 `as_of` 외에 1.6절 서버 요약의 필드를 넣지 않는다.
+`200` 응답 본문은 [메트릭 계약 1.7절](metrics-v1.md#17-json-표현)의 JSON이다. `history`는 [메트릭 계약 1.8절](metrics-v1.md#18-추이)을 따른다. 값은 같은 시점의 상태 리스너 `/metrics`와 같다. 이 응답에는 `as_of` 외에 1.6절 VNC Relay 요약의 필드를 넣지 않는다.
 
 | 매개변수 | 형식·범위 | 의미 |
 | --- | --- | --- |
@@ -582,7 +582,7 @@ JSON Lines 다운로드는 Consumer가 만든다. 같은 필터로 커서 없이
 - `local`이 `true`이면 그 주소는 루프백, 사설(10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, fc00::/7), 링크 로컬(169.254.0.0/16, fe80::/10), 공유(100.64.0.0/10), 지정되지 않은 주소다. 이런 주소는 IP 정보 DB에서 찾지 않으므로 `country`·`asn`이 `null`이다.
 - 주소 항목의 `country`·`asn`은 그 주소의 가장 늦은 사건에서 찾은 값이다. 국가·ASN 항목은 사건마다 찾은 값으로 센다. DB를 바꾼 뒤에는 두 값이 다를 수 있다.
 - `as_name`은 응답 때 지금 쓰는 ASN DB에서 찾는다. 그 주소(ASN 항목이면 그 ASN의 가장 늦은 사건 주소)가 지금도 같은 ASN이면 이름을 넣고, 아니면 `null`이다.
-- `sessions`는 주소·국가·ASN 항목에서 그 주소가 Viewer 또는 Mode II Server로 참여한 세션 쪽 수다. `totals.sessions`는 시작한 세션 수이므로 항목 합과 다를 수 있다.
+- `sessions`는 주소·국가·ASN 항목에서 그 주소가 뷰어 또는 Mode II 서버로 참여한 세션 쪽 수다. `totals.sessions`는 시작한 세션 수이므로 항목 합과 다를 수 있다.
 - 주소 항목은 `attempts` 내림차순, 같으면 `last_seen_at` 내림차순, 같으면 IP 주소 오름차순(IPv4가 먼저, 같은 체계는 숫자 순)이다. 국가 항목과 ASN 항목은 `attempts` 내림차순, 같으면 코드·번호 오름차순이며 `null`은 같은 `attempts` 안에서 마지막이다.
 - 기간 안 사건이 없으면 `totals`는 모두 0이고 세 `items`는 빈 배열이다. 오류가 아니다.
 - `deny_entries`는 실행 중 차단 목록(`relay.deny.sources`)에서 이 주소를 덮는 항목을 파일에 적힌 글자 그대로, 목록 순서로 담는다. 비어 있으면 차단되지 않은 주소다. `local`이 `true`인 주소도 같다.
@@ -624,7 +624,7 @@ JSON Lines 다운로드는 Consumer가 만든다. 같은 필터로 커서 없이
 | `not_found` | `404`. 대상 없음. 형식은 맞지만 지금 활성 세션이 아닌 `session_id`(정리 완료·최근 종료 목록에 있음·처음부터 없음), 또는 알 수 없는 `/api/v1/` 경로. 다른 세션으로 대체하지 않는다. | [관리: MGT-010·MGT-011·MGT-023](../specs/management.md#7-수용-테스트), [화면: DASH-007·DASH-011](../specs/dashboard.md#7-수용-테스트), [관리 4절](../specs/management.md#4-오류와-복구) "상세 대상 소멸"·"종료 중 대상 소멸" |
 | `invalid_request` | `400`(본문·필드·`session_id` 형식·`X-Relay-Poll` 값 오류. `POST`·`PATCH`·`DELETE`의 `X-Relay-Poll`, 빈 `changes`·편집 불가 키·잘못된 JSON 자료형 포함. PATCH 본문 64 KiB(65536바이트) 초과도 포함하며 파일·실행 중 값 변경과 편집 사건이 없다. 로그인 상한은 16 KiB다), `405`(경로는 있으나 메서드가 다름, `Allow` 헤더 포함), `415`(본문이 있고 `Content-Type`이 `application/json`이 아님. 단, 1.9절의 terminate 본문은 항상 400). 잘못된 대상을 대상 없음(`not_found`)과 구분한다. 로그인 실패 횟수에 세지 않는다. | [화면 5절](../specs/dashboard.md#5-입력-검증과-종료-오류), [관리: MGT-025·MGT-013·MGT-037](../specs/management.md#7-수용-테스트) |
 | `terminate_failed` | `500`. 종료 요청은 유효했지만 양 끝점 정리에 실패해 종료를 확인하지 못했다. 완료로 표시하지 않는다. 재조회로 실제 상태를 확인한다. | [관리: MGT-012](../specs/management.md#7-수용-테스트), [화면: DASH-012](../specs/dashboard.md#7-수용-테스트), [관리 4절](../specs/management.md#4-오류와-복구) "종료 처리 실패" |
-| `internal` | `500`. 조회 처리 중 서버 내부 오류. 빈 성공 목록과 구분한다. 중계 영향은 없다. | [관리: MGT-004](../specs/management.md#7-수용-테스트), [화면: DASH-003](../specs/dashboard.md#7-수용-테스트), [관리 4절](../specs/management.md#4-오류와-복구) "조회 처리·통신 실패" |
+| `internal` | `500`. 조회 처리 중 VNC Relay 내부 오류. 빈 성공 목록과 구분한다. 중계 영향은 없다. | [관리: MGT-004](../specs/management.md#7-수용-테스트), [화면: DASH-003](../specs/dashboard.md#7-수용-테스트), [관리 4절](../specs/management.md#4-오류와-복구) "조회 처리·통신 실패" |
 | `config_invalid` | `400`. 고친 후보가 설정 검증에 실패했다. `diagnostics`를 포함한다. ticket을 켜는 후보의 필수 키 누락은 `config_missing_key` 진단으로 구분한다. 파일·실행 중 값을 바꾸지 않는다. | [관리: MGT-036·MGT-053](../specs/management.md#7-수용-테스트) |
 | `config_edit_disabled` | `403`. 실행 중 `management.config_edit = false`다. | [관리: MGT-030](../specs/management.md#7-수용-테스트) |
 | `config_conflict` | `409`. 요청의 `revision`이 지금 파일과 다르다. | [관리: MGT-033·MGT-043](../specs/management.md#7-수용-테스트) |
@@ -677,11 +677,11 @@ JSON Lines 다운로드는 Consumer가 만든다. 같은 필터로 커서 없이
 | `PATCH /api/v1/config`의 응답 없음·시간 초과·그 밖의 `5xx` | 결과 불명이다. 자동 재전송하지 않는다. `GET /api/v1/config`로 `revision`과 실행 중 값을 다시 확인한다. 확인 전 성공·실패로 단정하지 않는다. |
 | `GET /api/v1/config`의 `500`·응답 없음·시간 초과 | 조회 실패다. 이전 데이터는 마지막 성공 시각과 함께 오래된 값으로 표시하고 빈 설정으로 대신하지 않는다. |
 | 로그인 요청(`POST /api/v1/session`)의 `500`, 응답 없음, 시간 초과 | 로그인 요청 실패. 인증 실패(`401 login_failed`)의 공통 안내와 다른 안내를 표시한다. 관리 세션이 없는 상태로 SCR-003에 머문다. 문구는 [화면 스펙](../specs/dashboard.md#4-화면-상태와-갱신) SCR-003 "로그인 요청 실패" 행이 정한다. |
-| 로그아웃 요청(`DELETE /api/v1/session`)의 `403 csrf_invalid`, `500`, 응답 없음, 시간 초과 | 로그아웃을 완료로 표시하지 않는다. 보호된 데이터를 숨기고 SCR-003에 로그아웃 결과 확인 필요 안내를 보인다. 상태와 문구는 [화면 스펙](../specs/dashboard.md#4-화면-상태와-갱신) SCR-003 "로그아웃 결과 확인 필요" 행이 정한다. `403`도 같이 처리한다. 이때 서버는 관리 세션을 유지하므로(1.4.3절), 그 관리 세션은 유휴 만료 Si나 절대 만료 Sa까지 남는다. |
+| 로그아웃 요청(`DELETE /api/v1/session`)의 `403 csrf_invalid`, `500`, 응답 없음, 시간 초과 | 로그아웃을 완료로 표시하지 않는다. 보호된 데이터를 숨기고 SCR-003에 로그아웃 결과 확인 필요 안내를 보인다. 상태와 문구는 [화면 스펙](../specs/dashboard.md#4-화면-상태와-갱신) SCR-003 "로그아웃 결과 확인 필요" 행이 정한다. `403`도 같이 처리한다. 이때 VNC Relay는 관리 세션을 유지하므로(1.4.3절), 그 관리 세션은 유휴 만료 Si나 절대 만료 Sa까지 남는다. |
 | 그 밖의 조회 요청의 `500`, 응답 없음, 시간 초과 | 조회 실패. 이전 데이터는 마지막 성공 시각과 함께 오래된 값으로 표시한다. 빈 결과로 표시하지 않는다. |
 | 모르는 `code` | HTTP 상태 코드 범주로 처리한다(`401`은 관리 세션 무효, `4xx`는 요청 오류, `5xx`는 조회 실패). 단, 종료·설정 편집의 `5xx`는 결과 불명으로 재조회한다. `409`도 `4xx` 요청 오류 범주다. |
 
-설정 보기와 편집의 응답 대기 한도는 기존 세션 정보의 `dashboard.query_timeout_secs`를 쓴다. 파일 읽기·검증·로컬 원자적 교체는 종료 교환의 E 완료를 기다리지 않는다. 따라서 종료 전용 `terminate_timeout_secs`나 새 설정 키를 추가하지 않는다. 한도를 넘으면 GET은 조회 실패, PATCH는 결과 불명으로 처리한다. 클라이언트가 기다리기를 멈췄다는 사실만으로 서버의 편집 처리가 취소되었다고 판단하지 않는다. 재조회도 실패하면 결과 불명 상태를 유지한다.
+설정 보기와 편집의 응답 대기 한도는 기존 세션 정보의 `dashboard.query_timeout_secs`를 쓴다. 파일 읽기·검증·로컬 원자적 교체는 종료 교환의 E 완료를 기다리지 않는다. 따라서 종료 전용 `terminate_timeout_secs`나 새 설정 키를 추가하지 않는다. 한도를 넘으면 GET은 조회 실패, PATCH는 결과 불명으로 처리한다. 클라이언트가 기다리기를 멈췄다는 사실만으로 VNC Relay의 편집 처리가 취소되었다고 판단하지 않는다. 재조회도 실패하면 결과 불명 상태를 유지한다.
 
 ## 3. 호환성 규칙
 
@@ -697,9 +697,9 @@ JSON Lines 다운로드는 Consumer가 만든다. 같은 필터로 커서 없이
 - 접속 출처 경로·선택 매개변수·응답 본문은 1.4.0의 새 경로 추가 범위다. Consumer는 모르는 `state`·`provider`·`error` 값을 받은 그대로 표시한다.
 - `deny_editable`과 주소 항목의 `deny_entries`, 설정 보기·편집의 `relay.deny.sources`, 최근 종료 목록 `close_cause`의 `ip_denied`는 1.5.0의 응답 필드·허용 값·편집 대상 추가 범위다. 필드를 모르는 Consumer는 무시하고, 모르는 `close_cause`는 받은 그대로 표시한다.
 - 호환성을 깨는 변경(Breaking change): 필드나 경로를 삭제·이름 변경한다. 자료형·단위·시각 형식·`null` 의미를 바꾼다. 기존 조건의 HTTP 상태 코드나 오류 코드를 바꾼다. 요청 필드를 필수로 바꾼다. 쿠키 이름이나 헤더 이름·의미를 바꾼다. 쿠키 보안 속성을 약하게 바꾼다. 인증·CSRF 요구를 약하게 바꾼다. 위 변경은 새 major 버전(`/api/v2/`)으로 낸다.
-- 마이그레이션: 새 major 버전은 새 접두사로 제공하고, 같은 릴리스에서 대시보드를 새 버전으로 옮긴다. 대시보드는 같은 실행파일에 들어 있으므로 서버와 대시보드의 버전이 어긋나지 않는다. 외부 클라이언트가 있으면 이전 major를 한동안 함께 제공한다. 기간은 새 major 채택 때 정한다.
-- 롤백: 이전 릴리스 실행파일로 되돌리면 이전 major와 대시보드가 함께 돌아온다. 관리 세션은 서버 메모리에만 있으므로 되돌리는 시점에 모두 무효가 되고, 관리자는 다시 로그인한다. 최근 종료 목록도 비워진다.
-- 정적 응답이 `no-store`이므로 서버 갱신 뒤 브라우저가 이전 버전의 화면 코드를 재사용하지 않는다.
+- 마이그레이션: 새 major 버전은 새 접두사로 제공하고, 같은 릴리스에서 대시보드를 새 버전으로 옮긴다. 대시보드는 같은 실행파일에 들어 있으므로 VNC Relay와 대시보드의 버전이 어긋나지 않는다. 외부 클라이언트가 있으면 이전 major를 한동안 함께 제공한다. 기간은 새 major 채택 때 정한다.
+- 롤백: 이전 릴리스 실행파일로 되돌리면 이전 major와 대시보드가 함께 돌아온다. 관리 세션은 VNC Relay 메모리에만 있으므로 되돌리는 시점에 모두 무효가 되고, 관리자는 다시 로그인한다. 최근 종료 목록도 비워진다.
+- 정적 응답이 `no-store`이므로 VNC Relay 갱신 뒤 브라우저가 이전 버전의 화면 코드를 재사용하지 않는다.
 
 ## 4. 버전과 지원 단계
 
@@ -783,7 +783,7 @@ Set-Cookie: relay_admin_session=<불투명 식별자>; Path=/; HttpOnly; SameSit
 }
 ```
 
-자동 폴링 요청과 서버 요약(L 사용량을 읽지 못한 경우):
+자동 폴링 요청과 VNC Relay 요약(L 사용량을 읽지 못한 경우):
 
 ```http
 GET /api/v1/summary HTTP/1.1
@@ -948,10 +948,10 @@ X-Relay-Poll: 1
 | 차단 목록의 설정 편집·`deny_entries` | `crates/adapters/src/management_http/sources_api.rs`, `crates/app/src/management/config/tests.rs`, `crates/adapters/tests/management.rs`, `tests/sources.rs` |
 | 실행파일의 전송 경로·주소·대기·최근 종료 필드 | `tests/serve.rs`의 `refuses_public_plaintext_and_answers_login_less_queries_with_401_on_loopback`·`real_mode_i_and_proxied_ws_wss_sessions_expose_transport_and_forwarded_addresses`·`real_waiting_lists_preserve_all_entry_transports_and_proxy_addresses`·`real_closed_lists_and_termination_preserve_addresses_and_logged_monotonic_duration` |
 | 접속 ticket의 종료 원인·설정 | `tests/ticket_system/main.rs`, `crates/adapters/tests/management.rs` |
-| Consumer의 정적 파일·화면·실서버 교환 | `tests/dashboard_assets.rs`, `tests/dashboard_browser.rs`, `tests/dashboard_live/main.rs` |
+| Consumer의 정적 파일·화면·실제 VNC Relay와의 교환 | `tests/dashboard_assets.rs`, `tests/dashboard_browser.rs`, `tests/dashboard_live/main.rs` |
 | 단위 시험 | `crates/app/src/management/login.rs`·`session.rs`·`query.rs`·`terminate.rs`·`config/tests.rs`, `crates/adapters/src/management_http/query_api.rs`·`terminate_api.rs` |
 
-Consumer 실서버 시험은 일반 로그인·조회·종료·설정 데이터를 실제 실행파일과 설정 파일에서 얻는다. 확인 불가 상태는 실제 조회 전달 실패로 만든다. 미래 enum 값은 현재 Producer가 만들 수 없는 별도 Consumer 계약 입력이다. 지연·응답 유실·500·연결 종료는 시험 쪽에서 주입한다. DASH-040의 `config_missing_key`·`config_type_mismatch`·`config_relation_violated`와 모르는 코드는 계약 형식의 진단이다. 편집 가능한 키의 PATCH로는 서버가 이 코드를 내지 않는다. DASH-043의 편집 불가 오류는 실제 원시 PATCH 응답을 다시 보낸다. 이런 주입을 Producer 오류의 증거로 세지 않는다.
+Consumer 실제 VNC Relay 시험은 일반 로그인·조회·종료·설정 데이터를 실제 실행파일과 설정 파일에서 얻는다. 확인 불가 상태는 실제 조회 전달 실패로 만든다. 미래 enum 값은 현재 Producer가 만들 수 없는 별도 Consumer 계약 입력이다. 지연·응답 유실·500·연결 종료는 시험 쪽에서 주입한다. DASH-040의 `config_missing_key`·`config_type_mismatch`·`config_relation_violated`와 모르는 코드는 계약 형식의 진단이다. 편집 가능한 키의 PATCH로는 VNC Relay가 이 코드를 내지 않는다. DASH-043의 편집 불가 오류는 실제 원시 PATCH 응답을 다시 보낸다. 이런 주입을 Producer 오류의 증거로 세지 않는다.
 
 로그인 응답 시간의 계정 존재 비노출은 시간 측정 대신 `SpyCountingPasswordVerifier` 구조 시험으로 판정한다. 모든 로그인 시도가 비밀번호 검증을 정확히 한 번 하는지 센다. 계정 해시와 더미 해시의 Argon2 매개변수가 같은지는 확인하지 않았다.
 
