@@ -19,7 +19,7 @@ pub const EXIT_LISTENER: u8 = 4;
 pub const EXIT_ACCOUNTS: u8 = 5;
 
 const HELP_COMMANDS: &str = "\
-vnc-relay: UltraVNC Repeater 호환 TCP·WS·WSS VNC 중계 제품
+vnc-relay: UltraVNC Repeater 호환 TCP·WS·WSS 중계 서버
 
 사용법:
   vnc-relay serve --config <path>                  VNC Relay를 포그라운드로 실행한다.

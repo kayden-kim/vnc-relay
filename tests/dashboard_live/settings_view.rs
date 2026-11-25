@@ -755,7 +755,7 @@ pub fn disabled_edit_direct_route_keeps_view_without_inputs() {
                 assert_rows(&mut browser, &raw, lang);
             }
             let text = browser.text();
-            assert!(text.contains(if lang == "ko" {"편집 기능이 꺼져 있습니다. 설정 파일에서 management.config_edit = true로 바꾸고 VNC Relay를 재시작하십시오."} else {"Editing is disabled. Set management.config_edit = true in the configuration file and restart the server."}));
+            assert!(text.contains(if lang == "ko" {"편집 기능이 꺼져 있습니다. 설정 파일에서 management.config_edit = true로 바꾸고 VNC Relay를 재시작하십시오."} else {"Editing is disabled. Set management.config_edit = true in the configuration file and restart the VNC Relay."}));
             blocked(&mut browser);
         }
     }

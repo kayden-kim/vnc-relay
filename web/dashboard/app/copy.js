@@ -355,8 +355,8 @@ export const COPY = {
     limitUnknown: 'Limit unavailable', // CPY-080
     listCount: '{n} items', // CPY-084
     listCountOne: '1 item', // CPY-085
-    summaryTitle: 'Server summary', // CPY-022
-    serverState: 'Server state', // CPY-023
+    summaryTitle: 'VNC Relay summary', // CPY-022
+    serverState: 'VNC Relay state', // CPY-023
     stateReady: 'Ready', // CPY-024
     stateShutdownGrace: 'Shutting down (grace period)', // CPY-025
     uptime: 'Uptime', // CPY-026
@@ -388,7 +388,7 @@ export const COPY = {
       admin_terminated: 'Terminated by administrator', // CPY-047
       dead_connection: 'Dead connection detected', // CPY-048
       close_timeout: 'Cleanup time limit exceeded', // CPY-049
-      server_shutdown: 'Server shutdown', // CPY-050
+      server_shutdown: 'VNC Relay shutdown', // CPY-050
       internal_error: 'Internal error', // CPY-083
       session_expired: 'Session expired', // CPY-190
       ip_denied: 'Closed by deny list', // CPY-323
@@ -429,10 +429,10 @@ export const COPY = {
     apply: 'Apply', // CPY-091
     configInEffect: 'The configuration file matches the settings in effect.', // CPY-092
     configPending: 'The configuration file has changes that can be applied without a restart. The values shown are in effect now.', // CPY-093
-    configRestartRequired: 'The configuration file has changes that require a restart. Editing is blocked. Update the file or restart the server, then reload.', // CPY-094
+    configRestartRequired: 'The configuration file has changes that require a restart. Editing is blocked. Update the file or restart the VNC Relay, then reload.', // CPY-094
     configInvalid: 'The configuration file failed validation. Editing is blocked. Check the diagnostics, update the file, then reload.', // CPY-095
     configUnreadable: 'The configuration file could not be read. Editing is blocked. Restore file access, then reload.', // CPY-096
-    configEditDisabled: 'Editing is disabled. Set management.config_edit = true in the configuration file and restart the server.', // CPY-097
+    configEditDisabled: 'Editing is disabled. Set management.config_edit = true in the configuration file and restart the VNC Relay.', // CPY-097
     noReloadHistory: 'This process has no reload history.', // CPY-098
     settingsApplied: 'Applied {n} settings.', // CPY-099
     settingsApplyTiming: 'Changed values apply from the next check or request for each key. Completed checks, started timers, and configured socket options keep their previous results. Existing relay sessions continue.', // CPY-189 (replaces CPY-100)
@@ -521,7 +521,7 @@ export const COPY = {
     hideDetails: 'Hide details', // CPY-164
     searchLengthError: 'Enter a search value of 1–256 characters. To clear the search, search with an empty value.', // CPY-165
     logsEmpty: 'No recent logs match the filters.', // CPY-166
-    logsDisabled: 'Recent logs are not retained. To retain them, set recent_logs.max_entries to 1–10000 in the configuration file and restart the server.', // CPY-167
+    logsDisabled: 'Recent logs are not retained. To retain them, set recent_logs.max_entries to 1–10000 in the configuration file and restart the VNC Relay.', // CPY-167
     logsGapNotice: 'Some logs were removed from the retained list before they could be fetched. The displayed list is not a complete history.', // CPY-168
     logsPausedNotice: 'Auto refresh is paused. Refresh and filters are still available.', // CPY-169
     autoRefreshOn: 'On', // CPY-170
@@ -577,7 +577,7 @@ export const COPY = {
     handleCount: 'Open handles', // CPY-241
     descriptorCount: 'Open file descriptors', // CPY-242
     version: 'Version', // CPY-243
-    externalNote: 'External collectors read the same values from /metrics on the status listener. To turn it on, set [metrics] enabled = true in the configuration file and restart the server.', // CPY-244
+    externalNote: 'External collectors read the same values from /metrics on the status listener. To turn it on, set [metrics] enabled = true in the configuration file and restart the VNC Relay.', // CPY-244
     metricsRejected: 'The metrics request could not be processed. Use Refresh to query again.', // CPY-245
     secondsUnit: '{n} s', // CPY-246
     distBarName: 'Count per bucket: {items}', // CPY-247
@@ -603,7 +603,7 @@ export const COPY = {
     ipDbStale: 'Using previous file', // CPY-266
     ipDbUnavailable: 'Load failed', // CPY-267
     ipDbInfoLabels: ['Type', 'Built', 'Loaded'], // CPY-268
-    ipDbNotConfiguredNote: 'Set {key} in the configuration file to a database file path and restart the server to look up this information.', // CPY-269
+    ipDbNotConfiguredNote: 'Set {key} in the configuration file to a database file path and restart the VNC Relay to look up this information.', // CPY-269
     ipDbStaleNote: 'The file could not be read again, so the previous database is still in use. Cause: {reason}. The file is read again automatically after it is fixed.', // CPY-270
     ipDbUnavailableNote: 'The database file could not be read. Cause: {reason}. The file is read again automatically after it is fixed.', // CPY-271
     ipDbFileUnreadable: 'File missing or unreadable', // CPY-272
@@ -632,7 +632,7 @@ export const COPY = {
     denyUnblockName: 'Unblock {address}', // CPY-299
     denyBlocked: 'Blocked', // CPY-300
     denyRangeNote: 'Blocked by a range entry. Remove it in Settings.', // CPY-301
-    denyEditOff: 'To block addresses, set management.config_edit = true in the configuration file and restart the server.', // CPY-302
+    denyEditOff: 'To block addresses, set management.config_edit = true in the configuration file and restart the VNC Relay.', // CPY-302
     denyBlockTitle: 'Confirm blocking address', // CPY-303
     denyBlockLabel: 'Address to block', // CPY-304
     denyBlockBody: 'New connections from this address are rejected at all relay entry points, and its open sessions and waiting connections are closed immediately.', // CPY-305

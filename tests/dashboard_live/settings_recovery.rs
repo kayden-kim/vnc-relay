@@ -435,7 +435,7 @@ pub fn disabled_restart_pending_and_invalid_patch_results_remove_edit_actions() 
         assert!(text.contains(if lang == "ko" {
             "VNC Relay를 재시작하십시오"
         } else {
-            "restart the server"
+            "restart the VNC Relay"
         }));
     }
     // Keep the real candidate on disk while its real rejection is replayed.
@@ -526,7 +526,7 @@ pub fn disabled_restart_pending_and_invalid_patch_results_remove_edit_actions() 
                     text.contains(if lang == "ko" {
                         "재시작이 필요한 차이가 있어 편집할 수 없습니다"
                     } else {
-                        "Editing is blocked. Update the file or restart the server"
+                        "Editing is blocked. Update the file or restart the VNC Relay"
                     }),
                     "{text}"
                 );
