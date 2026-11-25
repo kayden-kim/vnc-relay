@@ -98,7 +98,7 @@ flowchart LR
 | 7 | `Argon2PasswordHashGateway::hash` | 16바이트 솔트와 설정 매개변수로 해시 | 없음 | 8단계 |
 | 8 | `AdminService::save`, `TerminalAccountInputGateway::canceled` | 저장 직전에 Ctrl+C가 왔으면 `input_canceled` | 없음 | 9단계 |
 | 9 | `AccountsFile::update` | 1.6절 1~7단계. 다시 읽은 목록에 같은 이름이 생겼으면 `account_exists`. 계정을 더해 이름순으로 쓴다. | 계정 파일 교체 | 10단계 |
-| 10 | `src/admin.rs` `run` | `계정 'alice'을(를) 추가했다.`를 stdout에, `notice: 실행 중인 서버에는 반영되지 않는다. …`를 stderr에 쓰고 종료 코드 0 | 없음 | stdout, stderr |
+| 10 | `src/admin.rs` `run` | `계정 'alice'을(를) 추가했다.`를 stdout에, `notice: 실행 중인 VNC Relay에는 반영되지 않는다. …`를 stderr에 쓰고 종료 코드 0 | 없음 | stdout, stderr |
 
 다른 명령의 차이:
 
