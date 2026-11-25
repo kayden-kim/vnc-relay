@@ -129,10 +129,10 @@ SCR-001·002·004·005·006·007·008의 상단 막대 도구 맨 앞과 SCR-003
 | 역할 | 중계 ID | 전송 경로 | 상대 주소 | 접속 시각 | 대기 시간                     |
 +--------------------------------------------------------------------------------------+
 | 활성 세션 [개수]                                                                 |
-| 세션 | 모드 | 전송 경로(Viewer → 대상) | 시작 | 방향별 바이트 | 상대 주소 | 상세 |
+| 세션 | 모드 | 전송 경로(뷰어 → 서버) | 시작 | 방향별 바이트 | 상대 주소 | 상세 |
 +--------------------------------------------------------------------------------------+
 | 최근 종료 목록 [개수]                                                            |
-| 세션 | 종료 원인 | 모드 | 전송 경로(Viewer → 대상) | 시각 | 방향별 바이트 | 상대 주소 | 로그 |
+| 세션 | 종료 원인 | 모드 | 전송 경로(뷰어 → 서버) | 시각 | 방향별 바이트 | 상대 주소 | 로그 |
 +--------------------------------------------------------------------------------------+
 | 목록별 조회 상태 또는 오류                                                       |
 +--------------------------------------------------------------------------------------+
@@ -144,11 +144,11 @@ SCR-001·002·004·005·006·007·008의 상단 막대 도구 맨 앞과 SCR-003
 | 마지막 성공 갱신·새로고침 | 성공한 응답을 반영한 시각(현지 시각과 시간대) | 새로고침 | 같은 조회가 진행 중이 아니면 재조회, 성공했을 때만 시각 갱신 | DASH-003·DASH-004·DASH-005 |
 | 서버 요약 | 실행 상태, 가동 시간, 대기 수, 활성 수 | 읽기 | 관리 스펙 값과 일치, 확인하지 못한 값은 0으로 표시하지 않음 | DASH-001·DASH-016 |
 | 연결 수·사용량 | 서버 요약의 초기 교환 중 연결 수, Mode I 대상 연결 중 연결 수, 중계 연결(L)·관리 연결(Lm)의 현재 사용량과 상한. 화면에는 기호 L·Lm 대신 "중계 연결"·"관리 연결" 이름과 무엇을 세는지 한 줄 설명을 쓴다. 의미는 [관리 스펙 2절](management.md#2-조회-대상과-상태)을 따른다 | 읽기 | 관리 스펙 값과 일치, 확인하지 못한 값은 0으로 표시하지 않음 | DASH-021 |
-| 대기 연결 목록 | 역할, 중계 ID, 전송 경로(`transport`), 상대 주소(`address`), 접속 시각, 대기 시간. 신뢰 프록시를 거친 연결은 상대 주소 칸에 전달 주소를 CPY-199 줄로 따로 표시하고, `forwarded_ip`가 `null`이면 그 줄을 숨긴다. 머리글은 CPY-197. 빈 목록은 "대기 없음" | 읽기 | 대기 연결에는 상세·종료 행동 없음. 소켓 주소를 전달 주소로 대체하지 않음 | DASH-001·DASH-002·DASH-065 |
+| 대기 연결 목록 | 역할(값은 CPY-327·CPY-328), 중계 ID, 전송 경로(`transport`), 상대 주소(`address`), 접속 시각, 대기 시간. 신뢰 프록시를 거친 연결은 상대 주소 칸에 전달 주소를 CPY-199 줄로 따로 표시하고, `forwarded_ip`가 `null`이면 그 줄을 숨긴다. 머리글은 CPY-197. 빈 목록은 "대기 없음" | 읽기 | 대기 연결에는 상세·종료 행동 없음. 소켓 주소를 전달 주소로 대체하지 않음 | DASH-001·DASH-002·DASH-065 |
 | 활성 세션 목록 | 세션 식별자, 모드, 양쪽 전송 경로(`viewer_transport → target_transport`), 시작 시각, 방향별 바이트, 상대 주소. 전송 경로는 TCP·WS·WSS이며 Mode I 대상은 TCP다. 빈 목록은 "활성 없음" | 상세 열기 | 선택한 식별자의 SCR-002로 이동. CPY-187 적용 | DASH-001·DASH-002·DASH-006·DASH-062 |
-| 최근 종료 목록 | 세션 식별자, 종료 원인, 모드, 양쪽 전송 경로(`viewer_transport → target_transport`), 시각, 방향별 바이트, 상대 주소, 로그 보기([관리 스펙 2.3절](management.md#23-최근-종료-목록)). 머리글은 CPY-198. 시각 칸은 시작 시각(CPY-055)·종료 시각(CPY-200)·지속 시간(CPY-201) 세 줄이다. 지속 시간은 API의 `duration_ms`를 쓰며 시작·종료 시각의 차이로 계산하지 않는다. 상대 주소 칸은 활성 세션 목록처럼 Viewer 주소(CPY-056)와 Server/대상 주소(CPY-057)를 쓰고, 전달 주소가 있으면 각 소켓 주소 다음 줄에 CPY-180·181로 따로 표시한다. 빈 목록은 "최근 종료 없음". 종료 원인 `session_expired`는 CPY-190과 중립 배지로 표시한다. 종료 원인 `ip_denied`는 CPY-323으로 표시한다 | 로그 보기(CPY-182) | SCR-006을 그 세션의 세션 필터(`/#/logs?session_id={session_id}`)로 연다. 종료·상세 행동 없음 | DASH-020·DASH-066 |
+| 최근 종료 목록 | 세션 식별자, 종료 원인, 모드, 양쪽 전송 경로(`viewer_transport → target_transport`), 시각, 방향별 바이트, 상대 주소, 로그 보기([관리 스펙 2.3절](management.md#23-최근-종료-목록)). 머리글은 CPY-198. 시각 칸은 시작 시각(CPY-055)·종료 시각(CPY-200)·지속 시간(CPY-201) 세 줄이다. 지속 시간은 API의 `duration_ms`를 쓰며 시작·종료 시각의 차이로 계산하지 않는다. 상대 주소 칸은 활성 세션 목록처럼 뷰어 주소(CPY-056)와 서버 주소(CPY-057)를 쓰고, 전달 주소가 있으면 각 소켓 주소 다음 줄에 CPY-180·181로 따로 표시한다. 빈 목록은 "최근 종료 없음". 종료 원인 `session_expired`는 CPY-190과 중립 배지로 표시한다. 종료 원인 `ip_denied`는 CPY-323으로 표시한다 | 로그 보기(CPY-182) | SCR-006을 그 세션의 세션 필터(`/#/logs?session_id={session_id}`)로 연다. 종료·상세 행동 없음 | DASH-020·DASH-066 |
 | 목록 개수 배지 | 대기 연결·활성 세션·최근 종료 목록의 제목 옆에 해당 목록의 표시 중인 응답 항목 수를 쓴다. 문구는 CPY-084·085다. 성공한 빈 목록은 0건이다. 첫 성공 전에는 배지를 숨긴다. 갱신 실패로 이전 목록을 유지하면 그 목록의 개수도 유지한다. 서버 요약의 수를 대신 쓰지 않는다. | 읽기 | 목록별 개수와 보이는 데이터가 같은 응답을 따른다. 언어 변경 때 개수 문구도 즉시 바뀐다. | DASH-001~004·DASH-020·DASH-025 |
-| 방향별 바이트 | 관리 스펙 2.1절의 누적 바이트(정수)를 KiB/MiB로 표시. 표는 방향을 Viewer->대상, 대상->Viewer로 줄여 쓴다 | 읽기 | 전송량 의미를 바꾸지 않음 | DASH-001·DASH-020 |
+| 방향별 바이트 | 관리 스펙 2.1절의 누적 바이트(정수)를 KiB/MiB로 표시. 표는 방향 이름을 CPY-325·CPY-326으로 쓴다 | 읽기 | 전송량 의미를 바꾸지 않음 | DASH-001·DASH-020 |
 | 목록별 조회 상태 | 조회 중·실패·오래된 성공 데이터 구분 | 재조회 | 실패를 빈 목록으로 표시하지 않음 | DASH-003·DASH-004 |
 | 언어 선택 | 현재 화면 언어 이름("한국어" 또는 "English") | 언어 선택 | 화면 문구를 즉시 바꾸고 선택을 브라우저에 저장 | DASH-024·DASH-025 |
 | 도움말 링크 | CPY-195와 새 탭 아이콘. 접근 가능한 이름은 CPY-195 뒤에 괄호로 CPY-196을 붙인다 | 선택 | 새 탭에서 현재 화면 언어의 도움말 첫 페이지를 연다. 현재 화면·입력·관리 세션은 그대로다 | DASH-064 |
@@ -160,9 +160,9 @@ SCR-001·002·004·005·006·007·008의 상단 막대 도구 맨 앞과 SCR-003
 +--------------------------------------------------------------+
 | VNC Relay [운영 현황: 활성] [메트릭] [접속 출처] [로그] [설정] [도움말] [언어] [로그아웃] |
 | [목록으로] 세션 [식별자]         마지막 성공 갱신: [시각]       |
-| 모드 [값] Viewer 전송 경로 [값] Server/대상 전송 경로 [값]     |
-| 시작 시각 [값] Viewer 주소 [값] Server/대상 주소 [값]          |
-| Viewer 전달 주소 [있을 때] Server/대상 전달 주소 [있을 때]     |
+| 모드 [값] 뷰어 전송 경로 [값] 서버 전송 경로 [값]               |
+| 시작 시각 [값] 뷰어 주소 [값] 서버 주소 [값]                    |
+| 뷰어 전달 주소 [있을 때] 서버 전달 주소 [있을 때]               |
 | 방향별 바이트 [값]                    [로그 보기] [세션 종료] |
 +--------------------------------------------------------------+
 | 확인 시: 종료할 세션 [식별자] [취소] [종료 확인]               |
@@ -174,7 +174,7 @@ SCR-001·002·004·005·006·007·008의 상단 막대 도구 맨 앞과 SCR-003
 | 상단 막대 내비게이션 | SCR-001과 같다. 운영 현황 활성 | 항목 선택 | SCR-001·SCR-007·SCR-008·SCR-006·SCR-004로 이동 | DASH-028 |
 | 목록으로 | 없음 | 선택 | SCR-001로 이동 | DASH-007 |
 | 마지막 성공 갱신 | 성공한 응답을 반영한 시각(현지 시각과 시간대) | 읽기 | 성공했을 때만 시각 갱신 | DASH-004·DASH-005 |
-| 세션 정보 | 세션 식별자, 모드, Viewer 전송 경로, Server/대상 전송 경로(`target_transport`), 시작 시각(현지 시각과 시간대) | 읽기 | 선택한 식별자의 값만 표시. Mode I 대상은 TCP, Mode II Server는 TCP·WS·WSS | DASH-006·DASH-062 |
+| 세션 정보 | 세션 식별자, 모드, 뷰어 전송 경로, 서버 전송 경로(`target_transport`), 시작 시각(현지 시각과 시간대) | 읽기 | 선택한 식별자의 값만 표시. Mode I 대상은 TCP, Mode II Server는 TCP·WS·WSS | DASH-006·DASH-062 |
 | 상대 주소·전달 주소 | `viewer_address`·`target_address`는 소켓 상대 주소다. `viewer_forwarded_ip`·`target_forwarded_ip`가 있으면 별도 행에 전달 주소를 표시한다. null인 전달 주소 행은 숨긴다 | 읽기 | 소켓 주소를 전달 주소로 대체하지 않음. 주소 설명은 CPY-188 적용 | DASH-006·DASH-062 |
 | 로그 보기 | 현재 `session_id` | 선택 | SCR-006에 세션 필터로 진입. URL은 `/#/logs?session_id={session_id}` | DASH-059 |
 | 방향별 바이트 | 관리 스펙 2.1절의 누적 바이트(정수)를 KiB/MiB로 표시. 방향 이름은 CPY-325·CPY-326 | 읽기 | 전송량 의미를 바꾸지 않음 | DASH-006 |
@@ -397,7 +397,7 @@ SCR-004는 [설정 v4 계약 1.2절](../contracts/config-v4.md#12-키-표)의 �
 | --- | --- | --- | --- |
 | 1 | CPY-214 | 활성 세션 수(CPY-028), 대기 연결 수(CPY-027) | `session_count`, `waiting_count` 그대로 |
 | 2 | CPY-215 | 수락·거절·중단(CPY-216) | `connection_accepted`·`connection_rejected`·`connection_aborted`의 1분당 증가량. 아래 연결 차트 규칙 |
-| 3 | CPY-217 | Viewer -> Server·Server -> Viewer(CPY-218) | `session_io_viewer_to_target`·`session_io_target_to_viewer`의 이웃한 두 점 차이 ÷ `at` 차이(초) |
+| 3 | CPY-217 | 뷰어 -> 서버·서버 -> 뷰어(CPY-218) | `session_io_viewer_to_target`·`session_io_target_to_viewer`의 이웃한 두 점 차이 ÷ `at` 차이(초) |
 | 4 | CPY-208 | 계열 하나. 범례 이름은 차트 제목과 같음 | `process_cpu_time`의 이웃한 두 점 차이 ÷ `at` 차이(초)의 백분율 |
 | 5 | CPY-210 | 계열 하나. 범례 이름은 차트 제목과 같음 | `process_memory_usage` 그대로 |
 
@@ -888,11 +888,11 @@ IP 정보 DB 행은 `databases.country`와 `databases.asn`을 이 순서로 보�
 | DASH-059 | FR-06 | SCR-002·SCR-006 | 상세의 로그 보기, 유효·잘못된 session_id URL, 필터 해제 | 해당 세션 필터 칩·세션/연결 사건 표시. 잘못된 값은 CPY-067·로그 API 요청 없음. 시작 사건 제거의 제한 안내. 해제하면 세션 필터만 제거하고 나머지 필터 유지. `/#/logs?session_id={session_id}` 형식 적용 |
 | DASH-060 | FR-06 | SCR-006 | 1000건을 넘는 현재 필터 결과에서 다운로드, 수집 중 새 사건·오류·화면 이탈 | limit=1000과 before로 has_more=false까지 모든 일치 결과 수집. entry 하나당 JSON 한 줄, seq 래퍼 없음, UTF-8·LF·seq 오름차순. 파일명은 vnc-relay-logs-<UTC yyyymmddThhmmssZ>.jsonl. 첫 페이지 뒤 새 사건 제외. 오류·이탈 시 부분 파일 완료 저장 없음 |
 | DASH-061 | FR-06 | SCR-006 | max_entries=0, 비어 있는 버퍼·필터 결과, 첫 조회·갱신 실패, 400·401·405·500·시간 초과, 실패 뒤 새로고침 | 꺼짐은 키·재시작 안내, 빈 결과와 실패 구분. 실패 시 이전 로그·성공 시각 유지. 오류 코드는 5.2절대로 처리. 성공 후 복구. 401은 로그·다운로드 버퍼·폴링 제거 뒤 로그인. 자동 조회로 유휴 만료 연장 없음 |
-| DASH-062 | FR-06 | SCR-001·SCR-002 | Mode I와 Mode II의 TCP·WS·WSS 조합, 양쪽 전달 주소 유무 | 활성 목록에 Viewer → 대상 양쪽 전송 경로. 상세에 Server/대상 전송 경로. Mode I 대상 TCP. 소켓 주소 유지, 있는 전달 주소만 별도 표시. CPY-187·188 적용 |
+| DASH-062 | FR-06 | SCR-001·SCR-002 | Mode I와 Mode II의 TCP·WS·WSS 조합, 양쪽 전달 주소 유무 | 활성 목록에 뷰어 → 서버 양쪽 전송 경로. 상세에 서버 전송 경로. Mode I 대상 TCP. 소켓 주소 유지, 있는 전달 주소만 별도 표시. CPY-187·188 적용 |
 | DASH-063 | FR-06 | SCR-006 | 데스크톱·모바일, ko/en에서 긴 로그·중첩 값·모든 상태를 키보드로 사용하고 언어 변경 | 필수 정보·필터·갱신·더 보기·다운로드·해제 접근 가능. 라벨·caption 또는 목록 제목·aria-expanded 연결. 새 로그마다 live region 알림 없음. 초점·입력·필터·펼친 상세 유지, 문서 언어 일치 |
 | DASH-064 | FR-09 | SCR-001~SCR-008 | 각 화면을 1280px·390px 폭과 ko/en으로 열어 도움말 링크를 확인한다. 언어를 바꾼 뒤 다시 확인한다 | SCR-001·002·004·005·006·007·008은 상단 막대 도구에, SCR-003은 언어 선택 앞에 CPY-195가 보인다. 접근 가능한 이름에 CPY-196이 들어 있다. 주소는 현재 화면 언어의 도움말 첫 페이지이고 `target="_blank"`·`rel="noopener noreferrer"`다. 언어를 바꾸면 주소와 문구가 바로 바뀐다. 대시보드가 도움말 주소로 요청을 보내지 않는다 |
 | DASH-065 | FR-06 | SCR-001 | TCP·WS·WSS 대기 연결, 전달 주소가 있는 연결과 없는 연결, 긴 IPv6 주소, 알 수 없는 전송 경로 값을 1280px·390px 폭과 ko/en으로 조회 | 머리글은 CPY-197. 대기 표에 전송 경로 배지와 소켓 상대 주소를 표시. 전달 주소가 있으면 CPY-199 줄로 따로 표시하고 `null`이면 줄이 없음. 알 수 없는 값은 받은 그대로 표시. 긴 주소는 줄바꿈하며 320px 폭에서도 가로 스크롤이 없음 |
-| DASH-066 | FR-06 | SCR-001·SCR-006 | Mode I·II, 양쪽 전송 경로, 전달 주소 유무, 하루를 넘는 지속 시간의 최근 종료 항목을 1280px·390px 폭과 ko/en으로 조회하고, 한 항목의 로그 보기를 키보드로 선택 | 머리글은 CPY-198. 모드 배지, Viewer → 대상 전송 경로, 시작·종료 시각(현지 시각과 시간대), `duration_ms`의 지속 시간(`D일 HH:MM:SS`), 양 끝 소켓 주소와 있는 전달 주소만 표시. 로그 보기는 이름이 CPY-182이며 SCR-006을 그 세션의 세션 필터로 연다. 320px 폭에서도 가로 스크롤이 없음 |
+| DASH-066 | FR-06 | SCR-001·SCR-006 | Mode I·II, 양쪽 전송 경로, 전달 주소 유무, 하루를 넘는 지속 시간의 최근 종료 항목을 1280px·390px 폭과 ko/en으로 조회하고, 한 항목의 로그 보기를 키보드로 선택 | 머리글은 CPY-198. 모드 배지, 뷰어 → 서버 전송 경로, 시작·종료 시각(현지 시각과 시간대), `duration_ms`의 지속 시간(`D일 HH:MM:SS`), 양 끝 소켓 주소와 있는 전달 주소만 표시. 로그 보기는 이름이 CPY-182이며 SCR-006을 그 세션의 세션 필터로 연다. 320px 폭에서도 가로 스크롤이 없음 |
 | DASH-067 | FR-06 | SCR-001·SCR-002·SCR-006 | 자동 폴링 응답이 1초 안에 옴. 자동 폴링 응답이 1초 넘게 걸림. 오래된 데이터 상태에서 자동 폴링이 1초 안에 다시 실패함. 자동 폴링 중 사용자가 새로고침을 고름 | 1초 안에 끝난 자동 폴링 동안 갱신 중·조회 중 배지와 새로고침 버튼 문구가 나타나지 않고 직전 상태(오래된 데이터 배지·경고 포함)가 그대로 보임. 1초가 지나도 끝나지 않으면 갱신 중을 보임. 사용자가 고른 새로고침은 바로 갱신 중을 보임. 같은 조회는 겹치지 않음 |
 | DASH-068 | FR-06 | SCR-007 | 관리 세션이 있는 상태에서 상단 막대의 메트릭을 고른 뒤 다른 화면으로 이동하고 다시 돌아옴. SCR-005에서 입력을 바꾼 뒤 메트릭을 고름 | `/#/metrics`로 이동하고 메트릭 항목이 활성(`aria-current="page"`)이다. 진입 때 `history_after`와 `X-Relay-Poll` 없이 한 번 조회한다. 떠나면 메트릭 자동 조회가 멈추고 늦은 응답이 새 화면을 덮지 않는다. 돌아오면 추이를 처음부터 다시 조회한다. SCR-005 입력은 이탈 확인 없이 버리고 PATCH를 보내지 않는다 |
 | DASH-069 | FR-06 | SCR-007 | 알려진 값의 메트릭 응답과 이웃한 추이 점 두 개 이상. 활성·대기 세션, L·Lm 사용량과 상한, 거절 누적, 방향별 바이트, CPU 시간, 메모리 값이 있음 | 핵심 지표 카드 8개가 응답 값과 같다. 활성·대기·거절은 모든 점의 합이다. 처리량은 가장 최근 이웃한 두 점의 방향별 차이를 시각 차이(초)로 나눈 값이며 CPY-206 형식이다. CPU 사용률은 같은 두 점의 CPU 시간 차이 비율을 백분율로 보인다. L·Lm은 Gauge와 CPY-079로 보인다. 외부 수집 안내 CPY-244가 보인다 |
@@ -1001,13 +1001,15 @@ IP 정보 DB 행은 `databases.country`와 `databases.asn`을 이 순서로 보�
 | CPY-037 | 사용하지 않음(CPY-197 사용) | 역할, 중계 ID, 접속 시각, 대기 시간 | Role, Relay ID, Connected at, Waiting time | 스펙 §3 표 |
 | CPY-197 | 대기 연결 표 머리글 | 역할, 중계 ID, 전송 경로, 상대 주소, 접속 시각, 대기 시간 | Role, Relay ID, Transport, Peer address, Connected at, Waiting time | 스펙 SCR-001·DASH-065 |
 | CPY-199 | 대기 연결 상대 주소 칸의 전달 주소 줄 라벨 | 전달 주소 | Forwarded address | 스펙 SCR-001·DASH-065 |
+| CPY-327 | 대기 연결 역할 값 `viewer` | 뷰어 | Viewer | 사용자 결정 2026-11-25. 목록에 없는 역할 값은 받은 그대로 보인다 |
+| CPY-328 | 대기 연결 역할 값 `server` | 서버 | Server | 사용자 결정 2026-11-25. 목록에 없는 역할 값은 받은 그대로 보인다 |
 | CPY-038 | 대기 연결 빈 목록 | 대기 없음 | No waiting connections | 스펙 §3, §4 |
 | CPY-039 | 활성 세션 목록 제목 | 활성 세션 | Active sessions | 스펙 SCR-001 |
 | CPY-040 | 사용하지 않음(CPY-187 사용) | 세션, 모드, 전송 경로, 시작, Viewer->대상 / 대상->Viewer, 상대 주소, 상세 | Session, Mode, Transport, Started, Viewer->target / target->Viewer, Peer address, Details | 스펙 §3 표 |
 | CPY-041 | 활성 세션 빈 목록 | 활성 없음 | No active sessions | 스펙 §3, §4 |
 | CPY-042 | 최근 종료 목록 제목 | 최근 종료 목록 | Recently closed sessions | 스펙 SCR-001, 용어집 |
 | CPY-043 | 사용하지 않음(CPY-198 사용) | 세션, 종료 원인, 종료 시각, Viewer->대상 / 대상->Viewer | Session, Close reason, Closed at, Viewer->target / target->Viewer | 스펙 §3 표 |
-| CPY-198 | 최근 종료 표 머리글 | 세션, 종료 원인, 모드, 전송 경로(Viewer → 대상), 시각, Viewer -> Server / Server -> Viewer, 상대 주소, 로그 | Session, Close reason, Mode, Transport (Viewer → target), Time, Viewer -> Server / Server -> Viewer, Peer address, Logs | 스펙 SCR-001·DASH-066. 방향 칸은 CPY-325·CPY-326 |
+| CPY-198 | 최근 종료 표 머리글 | 세션, 종료 원인, 모드, 전송 경로(뷰어 → 서버), 시각, 뷰어 -> 서버 / 서버 -> 뷰어, 상대 주소, 로그 | Session, Close reason, Mode, Transport (Viewer → Server), Time, Viewer -> Server / Server -> Viewer, Peer address, Logs | 스펙 SCR-001·DASH-066. 방향 칸은 CPY-325·CPY-326 |
 | CPY-200 | 최근 종료 시각 칸의 종료 시각 줄 라벨. 시작 줄은 CPY-055를 쓴다 | 종료 시각 | Closed at | 스펙 SCR-001·DASH-066 |
 | CPY-201 | 최근 종료 시각 칸의 지속 시간 줄 라벨 | 지속 시간 | Duration | 스펙 SCR-001·DASH-066 |
 | CPY-044 | 최근 종료 빈 목록 | 최근 종료 없음 | No recently closed sessions | 스펙 §3, §4 |
@@ -1024,7 +1026,7 @@ IP 정보 DB 행은 `databases.country`와 `databases.asn`을 이 순서로 보�
 | CPY-080 | 연결 사용량 상한을 읽지 못함 | 상한 확인 불가 | Limit unavailable | 관리 스펙 §2 (확인 불가, 0으로 표시하지 않음) |
 | CPY-084 | 세 목록 제목의 개수, n=0 또는 n≥2 | {n}건 | {n} items | DESIGN 개수 배지 |
 | CPY-085 | 세 목록 제목의 개수, n=1 | 1건 | 1 item | 영어 단수형 |
-| CPY-187 | 활성 세션 표 머리글 | 세션, 모드, 전송 경로(Viewer → 대상), 시작, Viewer -> Server / Server -> Viewer, 상대 주소, 상세 | Session, Mode, Transport (Viewer → target), Started, Viewer -> Server / Server -> Viewer, Peer address, Details | 스펙 SCR-001·DASH-062. 방향 칸은 CPY-325·CPY-326 |
+| CPY-187 | 활성 세션 표 머리글 | 세션, 모드, 전송 경로(뷰어 → 서버), 시작, 뷰어 -> 서버 / 서버 -> 뷰어, 상대 주소, 상세 | Session, Mode, Transport (Viewer → Server), Started, Viewer -> Server / Server -> Viewer, Peer address, Details | 스펙 SCR-001·DASH-062. 방향 칸은 CPY-325·CPY-326 |
 
 #### 9.3.3 SCR-002 세션 상세
 
@@ -1033,17 +1035,17 @@ IP 정보 DB 행은 `databases.country`와 `databases.asn`을 이 순서로 보�
 | CPY-051 | 화면 제목 | 세션 {식별자} | Session {session_id} | 스펙 SCR-002 |
 | CPY-052 | 마지막 성공 갱신 | 마지막 성공 갱신: {시각} | Last successful update: {time} | 스펙 SCR-002 |
 | CPY-053 | 모드 라벨 | 모드 | Mode | 스펙 SCR-002 |
-| CPY-054 | Viewer 전송 경로 라벨 | Viewer 전송 경로 | Viewer transport | 스펙 SCR-002 |
+| CPY-054 | 뷰어 전송 경로 라벨 | 뷰어 전송 경로 | Viewer transport | 스펙 SCR-002 |
 | CPY-055 | 시작 시각 라벨 | 시작 시각 | Started at | 스펙 SCR-002 |
-| CPY-056 | Viewer 주소 라벨 | Viewer 주소 | Viewer address | 스펙 SCR-002 |
-| CPY-057 | Server·대상 주소 라벨 | Server/대상 주소 | Server/target address | 스펙 SCR-002 |
-| CPY-325 | 방향 이름: Viewer에서 Server(Mode I은 대상)로 | Viewer -> Server | Viewer -> Server | 사용자 결정 2026-11-25. 표 머리글의 방향 칸(CPY-187·198)과 목록 행의 방향 줄, 처리량 범례(CPY-218), SCR-002 전송량이 같은 이름을 쓴다 |
-| CPY-326 | 방향 이름: Server(Mode I은 대상)에서 Viewer로 | Server -> Viewer | Server -> Viewer | 사용자 결정 2026-11-25. CPY-325와 같은 화면에서 쓴다 |
+| CPY-056 | 뷰어 주소 라벨 | 뷰어 주소 | Viewer address | 스펙 SCR-002 |
+| CPY-057 | 서버 주소 라벨 | 서버 주소 | Server address | 스펙 SCR-002. 사용자 결정 2026-11-25: "대상"을 쓰지 않는다 |
+| CPY-325 | 방향 이름: 뷰어에서 서버(Mode I은 대상)로 | 뷰어 -> 서버 | Viewer -> Server | 사용자 결정 2026-11-25. 표 머리글의 방향 칸(CPY-187·198)과 목록 행의 방향 줄, 처리량 범례(CPY-218), SCR-002 전송량이 같은 이름을 쓴다 |
+| CPY-326 | 방향 이름: 서버(Mode I은 대상)에서 뷰어로 | 서버 -> 뷰어 | Server -> Viewer | 사용자 결정 2026-11-25. CPY-325와 같은 화면에서 쓴다 |
 | CPY-058 | 사용하지 않음(CPY-188 사용) | 실제 소켓 상대 주소입니다. | Actual socket peer address. | 스펙 SCR-002 |
 | CPY-059 | 대상 없음 안내 | 현재 세션을 찾을 수 없음 | The current session was not found | 스펙 §4 (문구 그대로) |
 | CPY-060 | 세션 종료 버튼 | 세션 종료 | Terminate session | 디자인 기준 버튼 |
 | CPY-061 | 종료 확인 대화상자 제목 | 세션 종료 확인 | Confirm session termination | 스펙 SCR-002 대화상자 |
-| CPY-062 | 종료 확인 대화상자 본문 | 세션 {식별자}의 연결을 종료합니다. Viewer와 Server 또는 Mode I 대상 사이의 중계가 멈춥니다. 종료한 세션은 다시 이어지지 않습니다. | The connection for session {session_id} will be terminated. The relay between the Viewer and the Server or Mode I target will stop. A terminated session does not resume. | 스펙 §3 (끊김 영향), 관리 스펙 §4 (종료된 세션을 복원하지 않음), 사용자 결정 2026-11-25 |
+| CPY-062 | 종료 확인 대화상자 본문 | 세션 {식별자}의 연결을 종료합니다. 뷰어와 서버 또는 Mode I 대상 사이의 중계가 멈춥니다. 종료한 세션은 다시 이어지지 않습니다. | The connection for session {session_id} will be terminated. The relay between the Viewer and the Server or Mode I target will stop. A terminated session does not resume. | 스펙 §3 (끊김 영향), 관리 스펙 §4 (종료된 세션을 복원하지 않음), 사용자 결정 2026-11-25 |
 | CPY-063 | 종료 확인 버튼 | 종료 확인 | Confirm termination | 디자인 기준 버튼 |
 | CPY-064 | 종료 요청 중 버튼 | 종료 요청 중… | Terminating… | 스펙 §4 요청 중 |
 | CPY-065 | 종료 처리 실패 안내 | 세션 종료에 실패했습니다. 상태를 다시 확인하십시오. | Session termination failed. Check the status again. | 스펙 §4, DASH-012 (완료로 표시하지 않음) |
@@ -1052,9 +1054,9 @@ IP 정보 DB 행은 `databases.country`와 `databases.asn`을 이 순서로 보�
 | CPY-068 | 종료 요청 거절 (403) | 요청을 처리하지 못했습니다. 화면을 다시 확인한 뒤 종료를 다시 요청하십시오. | The request was not processed. Check the screen, then request termination again. | 계약 403 csrf_invalid 처리, 관리 스펙 §4, 스펙 4절 종료 실패·확인 불가 행 |
 | CPY-081 | 세션 정보 카드 제목 | 세션 정보 | Session information | 디자인 기준 SCR-002 배치(세션 정보 카드) |
 | CPY-082 | 전송량 카드 제목 | 전송량 | Transfer | 디자인 기준 카드 제목 목록(전송량) |
-| CPY-179 | SCR-002 대상 전송 경로 라벨 | Server/대상 전송 경로 | Server/target transport | 확정 |
-| CPY-180 | SCR-002 Viewer 전달 주소 라벨 | Viewer 전달 주소 | Viewer forwarded address | 확정 |
-| CPY-181 | SCR-002 대상 전달 주소 라벨 | Server/대상 전달 주소 | Server/target forwarded address | 확정 |
+| CPY-179 | SCR-002 서버 전송 경로 라벨 | 서버 전송 경로 | Server transport | 확정. 사용자 결정 2026-11-25: "대상"을 쓰지 않는다 |
+| CPY-180 | SCR-002 뷰어 전달 주소 라벨 | 뷰어 전달 주소 | Viewer forwarded address | 확정 |
+| CPY-181 | SCR-002 서버 전달 주소 라벨 | 서버 전달 주소 | Server forwarded address | 확정. 사용자 결정 2026-11-25: "대상"을 쓰지 않는다 |
 | CPY-182 | SCR-001·SCR-002 세션 필터 로그 이동 | 로그 보기 | View logs | 확정 |
 | CPY-188 | SCR-002 주소 설명 | 주소는 소켓 상대 주소입니다. 신뢰 프록시를 거쳤으면 전달 주소를 따로 표시합니다. | Addresses are socket peer addresses. Forwarded addresses are shown separately when a trusted proxy is used. | 스펙 SCR-002·DASH-062 |
 
@@ -1214,7 +1216,7 @@ IP 정보 DB 행은 `databases.country`와 `databases.asn`을 이 순서로 보�
 | CPY-215 | 차트 제목 | 연결(분당) | Connections (per minute) | 스펙 SCR-007 |
 | CPY-216 | 연결 차트 범례 | 수락 / 거절 / 중단 | Accepted / Rejected / Aborted | 메트릭 계약 1.8절 |
 | CPY-217 | 차트 제목 | 처리량(초당) | Throughput (per second) | 스펙 SCR-007 |
-| CPY-218 | 처리량 방향 이름(카드·범례) | Viewer -> Server / Server -> Viewer | Viewer -> Server / Server -> Viewer | 관리 스펙 2.1절. 방향 이름은 CPY-325·CPY-326 |
+| CPY-218 | 처리량 방향 이름(카드·범례) | 뷰어 -> 서버 / 서버 -> 뷰어 | Viewer -> Server / Server -> Viewer | 관리 스펙 2.1절. 방향 이름은 CPY-325·CPY-326 |
 | CPY-219 | 범례 값 | 현재 {current} · 최대 {max} | Now {current} · Max {max} | 스펙 SCR-007 |
 | CPY-220 | 보관한 점이 차트별 최소 수보다 적은 차트 자리(보이는 기간이 최근 1시간) | 추이를 모으는 중입니다. 10초마다 점이 하나씩 쌓입니다. | Collecting trend data. One point is added every 10 seconds. | 스펙 4절 |
 | CPY-221 | 시간 분포 구역 제목 | 시간 분포 | Duration distribution | 스펙 SCR-007 |
@@ -1286,7 +1288,7 @@ IP 정보 DB 행은 `databases.country`와 `databases.asn`을 이 순서로 보�
 | CPY-278 | `maxmind_geolite` 출처 표시. 주소 부분이 `https://www.maxmind.com` 링크 | This product includes GeoLite Data created by MaxMind, available from https://www.maxmind.com. | This product includes GeoLite Data created by MaxMind, available from https://www.maxmind.com. | GeoLite EULA |
 | CPY-279 | 주소별 표 제목·caption | 주소별 | By address | 스펙 SCR-008 |
 | CPY-280 | 주소별 표 머리글 | 주소, 국가, ASN, 연결 시도, 거절, 중단, 세션, 마지막 사건 | Address, Country, ASN, Attempts, Rejected, Aborted, Sessions, Last seen | 관리 API 계약 1.17절 |
-| CPY-281 | 주소별 설명 | 클라이언트 주소는 신뢰 프록시가 전달한 주소가 있으면 그 주소이고, 없으면 소켓 상대 주소입니다. 세션 열은 그 주소가 Viewer 또는 Mode II Server로 참여한 세션 수입니다. | The client address is the address forwarded by a trusted proxy, or the socket peer address when there is none. The Sessions column counts sessions that the address joined as a Viewer or Mode II Server. | 운영 스펙 3.9절, 관리 API 계약 1.17절 |
+| CPY-281 | 주소별 설명 | 클라이언트 주소는 신뢰 프록시가 전달한 주소가 있으면 그 주소이고, 없으면 소켓 상대 주소입니다. 세션 열은 그 주소가 뷰어 또는 Mode II 서버로 참여한 세션 수입니다. | The client address is the address forwarded by a trusted proxy, or the socket peer address when there is none. The Sessions column counts sessions that the address joined as a Viewer or Mode II Server. | 운영 스펙 3.9절, 관리 API 계약 1.17절 |
 | CPY-282 | 로컬 주소 배지(중립) | 로컬 | Local | 관리 API 계약 1.17절 `local` |
 | CPY-283 | 로컬 주소 설명 | 로컬 주소(루프백·사설·링크 로컬·공유 주소)는 IP 정보 DB에서 찾지 않고 조회 링크도 없습니다. | Local addresses (loopback, private, link-local, and shared) are not looked up in the IP information databases and have no lookup link. | 관리 API 계약 1.17절 |
 | CPY-284 | 국가별 표 제목·caption | 국가별 | By country | 스펙 SCR-008 |
