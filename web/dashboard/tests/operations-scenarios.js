@@ -52,10 +52,10 @@ const COPY = {
     causeInternalError: '내부 오류',
     causeSessionExpired: '세션 만료',
     causeIpDenied: '차단 목록으로 종료',
-    bytesHeader: '뷰어 -> 서버 / 서버 -> 뷰어',
+    bytesHeader: '전송량',
     details: '상세',
     waitingHeaders: ['역할', '중계 ID', '전송 경로', '상대 주소', '접속 시각', '대기 시간'],
-    closedHeaders: ['세션', '종료 원인', '모드', '전송 경로(뷰어 → 서버)', '시각', '뷰어 -> 서버 / 서버 -> 뷰어', '상대 주소', '로그'],
+    closedHeaders: ['세션', '종료 원인', '모드', '전송 경로(뷰어 → 서버)', '시각', '전송량', '상대 주소', '로그'],
     forwardedAddress: '전달 주소',
     roleViewer: '뷰어',
     roleServer: '서버',
@@ -110,10 +110,10 @@ const COPY = {
     causeInternalError: 'Internal error',
     causeSessionExpired: 'Session expired',
     causeIpDenied: 'Closed by deny list',
-    bytesHeader: 'Viewer -> Server / Server -> Viewer',
+    bytesHeader: 'Transfer',
     details: 'Details',
     waitingHeaders: ['Role', 'Relay ID', 'Transport', 'Peer address', 'Connected at', 'Waiting time'],
-    closedHeaders: ['Session', 'Close reason', 'Mode', 'Transport (Viewer → Server)', 'Time', 'Viewer -> Server / Server -> Viewer', 'Peer address', 'Logs'],
+    closedHeaders: ['Session', 'Close reason', 'Mode', 'Transport (Viewer → Server)', 'Time', 'Transfer', 'Peer address', 'Logs'],
     forwardedAddress: 'Forwarded address',
     roleViewer: 'Viewer',
     roleServer: 'Server',
@@ -256,22 +256,30 @@ function checkTableRoles(label, card) {
   check(`${label}: cells have explicit cell roles, including empty cells`, cells.length > 0 && cells.every((cell) => cell.getAttribute('role') === 'cell'));
 }
 
-function checkHeadCells(label, rows, primaryIndex, secondaryIndex) {
+// Card layouts: every table at the mobile width, and the `wide` session tables below the content width (DESIGN).
+const MOBILE_MAX = 1023.98;
+const WIDE_CARD_MAX = 1439.98;
+
+// `wide` marks the session tables, which become cards up to the content width. `labelPrimary` marks the table whose
+// card keeps the column label before its first-line value.
+function checkHeadCells(label, rows, primaryIndex, secondaryIndex, { wide = false, labelPrimary = false } = {}) {
   for (const [index, row] of rows.entries()) {
     const primary = row.cells[primaryIndex];
     const secondary = row.cells[secondaryIndex];
     check(`${label} row ${index}: primary head class`, primary?.classList.contains('data-table-head-primary'));
     check(`${label} row ${index}: secondary head class`, secondary?.classList.contains('data-table-head-secondary'));
-    if (window.innerWidth > 1023 || !primary || !secondary) continue;
-    check(`${label} row ${index}: mobile row uses a grid`, getComputedStyle(row).display === 'grid');
+    if (window.innerWidth > (wide ? WIDE_CARD_MAX : MOBILE_MAX) || !primary || !secondary) continue;
+    check(`${label} row ${index}: card row uses a grid`, getComputedStyle(row).display === 'grid');
     check(
-      `${label} row ${index}: both mobile heads share grid row one`,
+      `${label} row ${index}: both card heads share grid row one`,
       getComputedStyle(primary).gridRowStart === '1' && getComputedStyle(secondary).gridRowStart === '1'
         && Math.abs(primary.getBoundingClientRect().top - secondary.getBoundingClientRect().top) < 1,
     );
+    const generated = (cell) => getComputedStyle(cell, '::before').content;
     check(
-      `${label} row ${index}: mobile heads have no generated labels`,
-      [primary, secondary].every((cell) => ['none', 'normal', '""'].includes(getComputedStyle(cell, '::before').content)),
+      `${label} row ${index}: card heads have no generated labels except a labeled primary`,
+      ['none', 'normal', '""'].includes(generated(secondary))
+        && (labelPrimary ? generated(primary).includes(primary.dataset.label) : ['none', 'normal', '""'].includes(generated(primary))),
     );
   }
 }
@@ -524,7 +532,7 @@ async function caseDash001() {
       const badge = row.cells[column].querySelector('.badge');
       check(`DASH-001 active row ${index} column ${column}: neutral badge without an icon`,
         badge?.dataset.tone === 'neutral' && badge.textContent === text && badge.querySelector('svg') === null);
-      if (window.innerWidth <= 1023) {
+      if (window.innerWidth <= WIDE_CARD_MAX) {
         check(`DASH-001 active row ${index} column ${column}: badge keeps its content width`,
           !!badge && badge.getBoundingClientRect().width < row.cells[column].getBoundingClientRect().width / 2);
       }
@@ -549,14 +557,14 @@ async function caseDash001() {
       && TIME_IN.test(closedRows[0].textContent),
   );
   checkDataValue('DASH-001 closed session ID', closedRows[0]?.querySelector('.session-id'), 'sess_0');
-  for (const [title, rows, primary, secondary] of [
-    [t.waitingTitle, waitingRows, 1, 0],
-    [t.activeTitle, activeRows, 0, 6],
-    [t.closedTitle, closedRows, 0, 1],
+  for (const [title, rows, primary, secondary, options] of [
+    [t.waitingTitle, waitingRows, 1, 0, { labelPrimary: true }],
+    [t.activeTitle, activeRows, 0, 6, { wide: true }],
+    [t.closedTitle, closedRows, 0, 1, { wide: true }],
   ]) {
     const card = cardOf(root, title);
     checkTableRoles(`DASH-001 ${title}`, card);
-    checkHeadCells(`DASH-001 ${title}`, rows, primary, secondary);
+    checkHeadCells(`DASH-001 ${title}`, rows, primary, secondary, options);
     checkListCount(`DASH-001 ${title}`, card, rows.length);
   }
   for (const [title, rows, bytesIndex] of [[t.activeTitle, activeRows, 4], [t.closedTitle, closedRows, 5]]) {
@@ -932,7 +940,7 @@ async function caseDash020() {
     );
   }
   checkTableRoles('DASH-020 closed causes', card);
-  checkHeadCells('DASH-020 closed causes', rows, 0, 1);
+  checkHeadCells('DASH-020 closed causes', rows, 0, 1, { wide: true });
   check('DASH-020: viewer-to-target bytes in KiB', rows[1]?.textContent.includes('2.0 KiB'));
   check('DASH-020: target-to-viewer bytes in MiB', rows[0]?.textContent.includes('1.5 MiB'));
   check('DASH-020: end time shown in local time', TIME_IN.test(rows[0]?.textContent ?? ''));
@@ -1219,7 +1227,7 @@ async function caseDash065() {
   checkListCount('DASH-065', card, 4);
   checkColumns('DASH-065', card, rows, t.waitingHeaders);
   checkTableRoles('DASH-065', card);
-  checkHeadCells('DASH-065', rows, 1, 0);
+  checkHeadCells('DASH-065', rows, 1, 0, { labelPrimary: true });
   for (const [index, transport, socket, forwarded] of [
     [0, 'TCP', '198.51.100.7:51234', null],
     [1, 'WS', '192.0.2.10:44310', '203.0.113.195'],
@@ -1287,7 +1295,7 @@ async function caseDash066() {
   checkListCount('DASH-066', card, 3);
   checkColumns('DASH-066', card, rows, t.closedHeaders);
   checkTableRoles('DASH-066', card);
-  checkHeadCells('DASH-066', rows, 0, 1);
+  checkHeadCells('DASH-066', rows, 0, 1, { wide: true });
   for (const [index, mode, transports, duration, peers] of [
     [0, 'Mode II', ['WSS', 'WS'], '00:09:50',
       [[t.viewerAddress, '192.0.2.10:44310'], [t.targetAddress, '192.0.2.20:40022'], [t.targetForwarded, '192.0.2.42']]],
@@ -1327,12 +1335,12 @@ async function caseDash066() {
   }
   check('DASH-066: closed rows have no other actions', (card?.querySelectorAll('button').length ?? -1) === 0
     && card?.querySelectorAll('a').length === rows.length);
-  // The 8-column table must fit its card without squeezing values below a word (DESIGN: closed table fits at 1024px).
+  // The 8-column table must fit its card without squeezing values below a word (DESIGN: it is a table from 1440px up).
   const table = card?.querySelector('table');
   const area = card?.querySelector('.table-scroll');
   check('DASH-066: the closed table fits its card', !!table && !!area
     && table.getBoundingClientRect().width <= area.clientWidth + 0.5);
-  const desktop = window.innerWidth >= 1024;
+  const desktop = window.innerWidth > WIDE_CARD_MAX;
   for (const cell of card?.querySelectorAll('.cell-time') ?? []) {
     for (const [index, line] of [...cell.querySelectorAll('.cell-line')].entries()) {
       const value = line.querySelector('.cell-value');
@@ -1350,7 +1358,7 @@ async function caseDash066() {
         check(`DASH-066: duration "${value?.textContent}" breaks only between words`, !!value && textLines(value) <= words);
       }
       if (window.innerWidth >= 1280 && index < 2) {
-        // At 1280px the date follows its label on the same line (Q235 mockup `.tl`).
+        // From 1280px the date follows its label on the same line, in a card or in the table (Q235 mockup `.tl`).
         const label = line.querySelector('.cell-label')?.getBoundingClientRect();
         const date = parts[0]?.getClientRects()[0];
         check(`DASH-066: date "${parts[0]?.textContent}" follows its label`, !!label && !!date
@@ -1362,7 +1370,7 @@ async function caseDash066() {
     for (const badge of card?.querySelectorAll('tbody td > .badge') ?? []) {
       check(`DASH-066: badge "${badge.textContent}" stays on one line`, textLines(badge) === 1);
     }
-    // The transport and bytes headers may wrap, but only between words ("Viewer -> Server" stays whole).
+    // The transport header may wrap, but only between words ("(Viewer → Server)" stays whole).
     const words = [...(card?.querySelectorAll('thead th .data-table-nowrap') ?? [])];
     check('DASH-066: wrapping headers break only between words',
       words.length > 0 && words.every((word) => textLines(word) === 1));

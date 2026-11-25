@@ -1,5 +1,8 @@
 // Data table: native table with an optional caption, column headers, rows, and an empty row.
 // On narrow screens CSS turns each row into a card, reading the data-label attributes.
+// With `labelPrimary`, the card keeps the column label before its first-line value (the waiting list's relay ID).
+// With `wide`, the table turns into cards below the content width instead of the mobile width. The session lists use
+// it because 7 or 8 columns cannot keep a long session ID or address whole in a narrower table area.
 
 // `content` is the empty-list text, or a Node such as a status badge.
 function emptyRow(span, content) {
@@ -14,28 +17,29 @@ function emptyRow(span, content) {
   return tr;
 }
 
-// Splits a header label into the words that may wrap apart: a space separates words, except around "->".
+// Splits a header label into the words that may wrap apart: a space separates words, except around "→".
 function headerWords(label) {
   const words = [];
   let afterArrow = false;
   for (const piece of label.split(' ')) {
-    if (words.length > 0 && (afterArrow || piece === '->')) {
+    if (words.length > 0 && (afterArrow || piece === '→')) {
       words[words.length - 1] += ` ${piece}`;
     } else {
       words.push(piece);
     }
-    afterArrow = piece === '->';
+    afterArrow = piece === '→';
   }
   return words;
 }
 
 /**
  * @param {{caption?: string, columns: Array<{key: string, label: string, mobileHead?: 'primary' | 'secondary',
- *   wrapLabel?: boolean}>, rows?: Array<Array<unknown>>, emptyText?: string | Node, numericColumns?: string[]}} options
+ *   wrapLabel?: boolean}>, rows?: Array<Array<unknown>>, emptyText?: string | Node, numericColumns?: string[],
+ *   labelPrimary?: boolean, wide?: boolean}} options
  * @returns {HTMLTableElement}
  */
 export function createDataTable({
-  caption, columns, rows = [], emptyText = '', numericColumns = [],
+  caption, columns, rows = [], emptyText = '', numericColumns = [], labelPrimary = false, wide = false,
 } = {}) {
   if (!Array.isArray(columns) || columns.length === 0) {
     throw new TypeError('table columns are required');
@@ -58,7 +62,8 @@ export function createDataTable({
   const numeric = new Set(numericColumns);
 
   const table = document.createElement('table');
-  table.className = 'data-table';
+  table.className = ['data-table', wide ? 'data-table-wide' : '', labelPrimary ? 'data-table-label-primary' : '']
+    .filter(Boolean).join(' ');
   table.setAttribute('role', 'table');
   if (caption) {
     const captionEl = document.createElement('caption');
@@ -76,7 +81,7 @@ export function createDataTable({
     th.textContent = column.label;
     if (numeric.has(column.key)) th.className = 'data-table-num';
     // A long header may wrap so that the column can shrink to its data. It wraps only between words.
-    // An ASCII arrow keeps its neighbours, so "Viewer -> Server" stays whole and no line starts with "->".
+    // An arrow keeps its neighbours, so "(Viewer → Server)" stays whole and no line starts with "→".
     if (column.wrapLabel) {
       th.classList.add('data-table-wrap');
       th.replaceChildren(...headerWords(column.label).flatMap((word, index) => {

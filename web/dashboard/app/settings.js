@@ -154,7 +154,7 @@ export function mountSettings(root, deps = {}, { edit = false, applied = null } 
     return cards;
   }
 
-  function field(item) {
+  function field(item, listHelpId) {
     const boolean = typeof item.value === 'boolean';
     const integer = typeof item.value === 'number';
     const list = Array.isArray(item.value);
@@ -186,8 +186,7 @@ export function mountSettings(root, deps = {}, { edit = false, applied = null } 
     }
     input.addEventListener(boolean ? 'change' : 'input',
       () => state.inputs.set(item.key, boolean ? input.checked : input.value));
-    const help = list || integer ? el('p', 'config-help', list ? t().configListHelp :
-      fill(t().configRangeHelp, { min: item.min, max: item.max })) : null;
+    const help = integer ? el('p', 'config-help', fill(t().configRangeHelp, { min: item.min, max: item.max })) : null;
     if (help) help.id = `${id}-help`;
     let proxyHelp = null;
     if (item.key.endsWith('.trusted_proxies')) {
@@ -209,8 +208,8 @@ export function mountSettings(root, deps = {}, { edit = false, applied = null } 
       errorNode.append(message);
     }
     input.setAttribute('aria-invalid', String(errors.length > 0));
-    const describedBy = [help?.id, proxyHelp?.id, denyHelp?.id, errors.length ? errorNode.id : null]
-      .filter(Boolean).join(' ');
+    const describedBy = [list ? listHelpId : null, help?.id, proxyHelp?.id, denyHelp?.id,
+      errors.length ? errorNode.id : null].filter(Boolean).join(' ');
     if (describedBy) input.setAttribute('aria-describedby', describedBy);
     if (boolean) {
       label.append(input, el('span', '', item.key));
@@ -232,7 +231,14 @@ export function mountSettings(root, deps = {}, { edit = false, applied = null } 
       const items = editable.filter((item) => fieldGroup(item.key) === group);
       if (!items.length) continue;
       const fields = el('div', 'settings-fields');
-      fields.append(...items.map(field));
+      // CPY-119 shows once per group, above its list inputs. Each list input points to it.
+      const listHelpId = `config-${group}-list-help`;
+      if (items.some((item) => Array.isArray(item.value))) {
+        const listHelp = el('p', 'config-help config-group-help', t().configListHelp);
+        listHelp.id = listHelpId;
+        fields.append(listHelp);
+      }
+      fields.append(...items.map((item) => field(item, listHelpId)));
       cards.push(createCard({ title: t()[group], body: fields }));
     }
     return cards;

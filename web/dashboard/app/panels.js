@@ -308,6 +308,7 @@ export function waitingTable(t, items, emptyText) {
     ]),
     emptyText,
     numericColumns: ['waited'],
+    labelPrimary: true,
   });
 }
 
@@ -325,6 +326,7 @@ export function activeTable(t, items, emptyText) {
     ]),
     emptyText,
     numericColumns: ['bytes'],
+    wide: true,
   });
 }
 
@@ -349,7 +351,7 @@ export function closeCauseBadge(t, cause) {
 
 export function closedTable(t, items, emptyText) {
   return tableBlock({
-    columns: columns(t.closedColumns, CLOSED_KEYS, 'session', 'cause', ['transport', 'bytes']),
+    columns: columns(t.closedColumns, CLOSED_KEYS, 'session', 'cause', ['transport']),
     rows: items.map((item) => [
       el('span', 'session-id', item.sessionId),
       closeCauseBadge(t, item.closeCause),
@@ -362,6 +364,7 @@ export function closedTable(t, items, emptyText) {
     ]),
     emptyText,
     numericColumns: ['bytes'],
+    wide: true,
   });
 }
 

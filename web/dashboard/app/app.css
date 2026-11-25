@@ -326,6 +326,10 @@
   margin-top: calc(var(--type-data-size) * var(--type-data-line) + var(--space-xs));
 }
 
+.settings-fields > .config-group-help {
+  grid-column: 1 / -1;
+}
+
 .config-field-bool > .check {
   width: 100%;
 }

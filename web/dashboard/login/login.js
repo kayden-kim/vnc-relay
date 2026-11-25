@@ -26,7 +26,7 @@ const STRINGS = {
     passwordRequired: '비밀번호를 입력하십시오.', // CPY-072
     checking: '로그인을 확인하는 중입니다.', // CPY-073
     failed: '로그인할 수 없습니다. 계정명과 비밀번호를 확인한 뒤 다시 시도하십시오.', // CPY-074
-    required: '로그인이 필요합니다. 다시 로그인하십시오.', // CPY-075
+    required: '로그인이 필요합니다.', // CPY-075
     requestFailed: '로그인 요청을 처리하지 못했습니다. 잠시 뒤 다시 시도하십시오.', // CPY-077
     logoutUnconfirmed: '로그아웃이 끝났는지 확인하지 못했습니다. 이 화면의 관리 데이터는 숨겼습니다.', // CPY-076
     submit: '로그인', // CPY-012
@@ -42,7 +42,7 @@ const STRINGS = {
     passwordRequired: 'Enter a password.',
     checking: 'Checking sign-in.',
     failed: 'Sign-in failed. Check the account name and password, then try again.',
-    required: 'Sign-in is required. Sign in again.',
+    required: 'Sign-in is required.',
     requestFailed: 'The sign-in request could not be processed. Try again later.',
     logoutUnconfirmed: 'Could not confirm that sign-out finished. Management data is hidden in this screen.',
     submit: 'Sign in',

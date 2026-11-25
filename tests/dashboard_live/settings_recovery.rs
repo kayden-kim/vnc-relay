@@ -931,11 +931,7 @@ fn login_clean(browser: &mut Browser, expired: bool) {
     );
     assert!(!browser.text().contains("limits.waiting"));
     if expired {
-        assert!(
-            browser
-                .text()
-                .contains("로그인이 필요합니다. 다시 로그인하십시오.")
-        );
+        assert!(browser.text().contains("로그인이 필요합니다."));
     }
 }
 
@@ -1016,7 +1012,7 @@ pub fn settings_expiry_and_logout_remove_protected_values_and_leave_relays_alive
         } else {
             let text = browser.text();
             assert!(
-                text.contains("로그인이 필요합니다. 다시 로그인하십시오.")
+                text.contains("로그인이 필요합니다.")
                     && !text.contains(
                         "로그아웃이 끝났는지 확인하지 못했습니다. 이 화면의 관리 데이터는 숨겼습니다."
                     ),

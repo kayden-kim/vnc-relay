@@ -24,7 +24,7 @@ use vnc_relay_testkit::browser_port;
 
 /// Same policy string as `xtask/src/dashboard_serve.rs` (frontend.md §1.2, Q37).
 const CSP: &str = "default-src 'self'; frame-ancestors 'none'";
-const WIDTHS: [u32; 6] = [1280, 1024, 1023, 768, 390, 320];
+const WIDTHS: [u32; 7] = [1440, 1280, 1024, 1023, 768, 390, 320];
 const LANGS: [&str; 2] = ["ko", "en"];
 const RUN_LIMIT: Duration = Duration::from_secs(60);
 /// Browsers that run at once. Each run's `RUN_LIMIT` clock includes Chromium's

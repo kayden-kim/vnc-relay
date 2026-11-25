@@ -534,6 +534,17 @@ async function case035() {
       if (Array.isArray(item.value) || typeof item.value === 'number') check('DASH-035: connected help', help.length > 0);
       if (item.min !== undefined) check('DASH-035: min/max in help', help.includes(String(item.min)) && help.includes(String(item.max)));
     }
+    // CPY-119 shows once per group, above that group's list inputs, and every list input points to it.
+    for (const fields of m.root.querySelectorAll('.settings-fields')) {
+      const lists = [...fields.querySelectorAll('textarea')];
+      const hints = [...fields.querySelectorAll('.config-help')].filter((node) => node.textContent === w.listHelp);
+      check('DASH-035: CPY-119 appears once in a group with list inputs and not in one without', hints.length === (lists.length ? 1 : 0));
+      if (!lists.length) continue;
+      check('DASH-035: the group hint comes before its first list input', fields.firstElementChild === hints[0]
+        && (hints[0].compareDocumentPosition(lists[0]) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0);
+      check('DASH-035: every list input points to the group hint',
+        lists.every((list) => list.getAttribute('aria-describedby')?.split(/\s+/).includes(hints[0].id)));
+    }
     check('DASH-035: timing guidance', has(m.root, w.timing));
     checkLayout('DASH-035', m.root);
   }

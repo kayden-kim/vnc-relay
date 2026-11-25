@@ -58,10 +58,10 @@ export const COPY = {
     roleServer: '서버', // CPY-328
     waitingEmpty: '대기 없음', // CPY-038
     activeTitle: '활성 세션', // CPY-039
-    activeColumns: ['세션', '모드', '전송 경로(뷰어 → 서버)', '시작', '뷰어 -> 서버 / 서버 -> 뷰어', '상대 주소', '상세'], // CPY-187 (replaces CPY-040)
+    activeColumns: ['세션', '모드', '전송 경로(뷰어 → 서버)', '시작', '전송량', '상대 주소', '상세'], // CPY-187 (replaces CPY-040)
     activeEmpty: '활성 없음', // CPY-041
     closedTitle: '최근 종료 목록', // CPY-042
-    closedColumns: ['세션', '종료 원인', '모드', '전송 경로(뷰어 → 서버)', '시각', '뷰어 -> 서버 / 서버 -> 뷰어', '상대 주소', '로그'], // CPY-198 (replaces CPY-043)
+    closedColumns: ['세션', '종료 원인', '모드', '전송 경로(뷰어 → 서버)', '시각', '전송량', '상대 주소', '로그'], // CPY-198 (replaces CPY-043)
     closedAtLabel: '종료 시각', // CPY-200
     durationLabel: '지속 시간', // CPY-201
     closedEmpty: '최근 종료 없음', // CPY-044
@@ -76,8 +76,8 @@ export const COPY = {
       session_expired: '세션 만료', // CPY-190
       ip_denied: '차단 목록으로 종료', // CPY-323
     },
-    directionViewerToTarget: '뷰어 -> 서버', // CPY-325: table lines, chart names (CPY-218) and the SCR-002 transfer label.
-    directionTargetToViewer: '서버 -> 뷰어', // CPY-326: table lines, chart names (CPY-218) and the SCR-002 transfer label.
+    directionViewerToTarget: '뷰어 → 서버', // CPY-325: table lines, chart names (CPY-218) and the SCR-002 transfer label.
+    directionTargetToViewer: '서버 → 뷰어', // CPY-326: table lines, chart names (CPY-218) and the SCR-002 transfer label.
     dayUnit: '일', // DESIGN l.491 시간 길이 표시(D일 HH:MM:SS)의 단위.
     // SCR-002 session detail.
     sessionScreen: '세션 상세', // CPY-005
@@ -375,10 +375,10 @@ export const COPY = {
     roleServer: 'Server', // CPY-328
     waitingEmpty: 'No waiting connections', // CPY-038
     activeTitle: 'Active sessions', // CPY-039
-    activeColumns: ['Session', 'Mode', 'Transport (Viewer → Server)', 'Started', 'Viewer -> Server / Server -> Viewer', 'Peer address', 'Details'], // CPY-187 (replaces CPY-040)
+    activeColumns: ['Session', 'Mode', 'Transport (Viewer → Server)', 'Started', 'Transfer', 'Peer address', 'Details'], // CPY-187 (replaces CPY-040)
     activeEmpty: 'No active sessions', // CPY-041
     closedTitle: 'Recently closed sessions', // CPY-042
-    closedColumns: ['Session', 'Close reason', 'Mode', 'Transport (Viewer → Server)', 'Time', 'Viewer -> Server / Server -> Viewer', 'Peer address', 'Logs'], // CPY-198 (replaces CPY-043)
+    closedColumns: ['Session', 'Close reason', 'Mode', 'Transport (Viewer → Server)', 'Time', 'Transfer', 'Peer address', 'Logs'], // CPY-198 (replaces CPY-043)
     closedAtLabel: 'Closed at', // CPY-200
     durationLabel: 'Duration', // CPY-201
     closedEmpty: 'No recently closed sessions', // CPY-044
@@ -393,8 +393,8 @@ export const COPY = {
       session_expired: 'Session expired', // CPY-190
       ip_denied: 'Closed by deny list', // CPY-323
     },
-    directionViewerToTarget: 'Viewer -> Server', // CPY-325: table lines, chart names (CPY-218) and the SCR-002 transfer label.
-    directionTargetToViewer: 'Server -> Viewer', // CPY-326: table lines, chart names (CPY-218) and the SCR-002 transfer label.
+    directionViewerToTarget: 'Viewer → Server', // CPY-325: table lines, chart names (CPY-218) and the SCR-002 transfer label.
+    directionTargetToViewer: 'Server → Viewer', // CPY-326: table lines, chart names (CPY-218) and the SCR-002 transfer label.
     dayUnit: 'd', // DESIGN l.491 duration unit ("Dd HH:MM:SS").
     // SCR-002 session detail.
     sessionScreen: 'Session details', // CPY-005

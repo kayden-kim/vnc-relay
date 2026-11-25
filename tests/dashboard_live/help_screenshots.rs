@@ -16,6 +16,9 @@ use vnc_relay_testkit::live::Server;
 
 /// Size of every picture in CSS pixels, at device scale 1.
 const WIDTH: u32 = 1280;
+/// The operations lists are tables from this width and cards below it (DESIGN breakpoints), so
+/// the operations picture shows the columns that the help describes.
+const WIDE_WIDTH: u32 = 1440;
 const HEIGHT: u32 = 800;
 
 pub fn capture() {
@@ -44,10 +47,7 @@ pub fn capture() {
         let images = help.join(language).join("src").join("images");
         live::must(fs::create_dir_all(&images));
         let mut browser = Browser::start(&format!("help-capture-{language}"), &languages);
-        browser.command(
-            "Emulation.setDeviceMetricsOverride",
-            json!({"width":WIDTH,"height":HEIGHT,"deviceScaleFactor":1,"mobile":false}),
-        );
+        resize(&mut browser, WIDTH);
 
         browser.navigate(&server.url("/login/"));
         browser.fill("#login-account", "alice");
@@ -58,6 +58,7 @@ pub fn capture() {
         );
 
         browser.login(&server);
+        resize(&mut browser, WIDE_WIDTH);
         shoot(
             &mut browser,
             &images.join("operations.png"),
@@ -67,6 +68,7 @@ pub fn capture() {
                 mode2.sid
             ),
         );
+        resize(&mut browser, WIDTH);
 
         browser.navigate(&server.url(&format!("/#/sessions/{}", mode2.sid)));
         shoot(
@@ -98,6 +100,14 @@ pub fn capture() {
             "document.querySelector('#settings-review') !== null",
         );
     }
+}
+
+/// Sets the viewport to `width` × `HEIGHT` CSS pixels at device scale 1.
+fn resize(browser: &mut Browser, width: u32) {
+    browser.command(
+        "Emulation.setDeviceMetricsOverride",
+        json!({"width":width,"height":HEIGHT,"deviceScaleFactor":1,"mobile":false}),
+    );
 }
 
 /// Waits until `ready` holds, no screen is loading, and the fonts are loaded.

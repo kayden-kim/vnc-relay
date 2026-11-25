@@ -816,11 +816,9 @@ pub fn config_query_failures_keep_stale_values_and_never_show_empty_success() {
             .as_str()
             .unwrap_or("")
             .trim_start_matches("조회 시각: ");
+        // CPY-020 no longer carries the time. The last successful time stays visible as CPY-128.
         assert!(
-            !timestamp.is_empty()
-                && browser
-                    .text()
-                    .contains(&format!("마지막 성공 시각 {timestamp}"))
+            !timestamp.is_empty() && browser.text().contains(&format!("조회 시각: {timestamp}"))
         );
         if route == "/#/settings" {
             assert_rows(&mut browser, &before, "ko");

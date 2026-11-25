@@ -200,7 +200,7 @@ pub fn overview_known_data() {
             JSON.stringify(values(c[2], '.badge')) === JSON.stringify([item.viewer_transport.toUpperCase(), item.target_transport.toUpperCase()]) &&
             c[3].textContent === localTime(item.started_at) &&
             JSON.stringify(values(row, '.cell-bytes .cell-value')) === JSON.stringify([byteText(item.bytes_viewer_to_target), byteText(item.bytes_target_to_viewer)]) &&
-            JSON.stringify(values(row, '.cell-bytes .cell-label')) === JSON.stringify(['뷰어 -> 서버', '서버 -> 뷰어']) &&
+            JSON.stringify(values(row, '.cell-bytes .cell-label')) === JSON.stringify(['뷰어 → 서버', '서버 → 뷰어']) &&
             JSON.stringify(values(row, '.cell-peer .cell-value')) === JSON.stringify([address(item.viewer_address), address(item.target_address)]) &&
             c[0].querySelector('a')?.getAttribute('href') === '/#/sessions/' + item.session_id &&
             c[6].querySelector('a')?.getAttribute('href') === '/#/sessions/' + item.session_id;
@@ -561,7 +561,7 @@ pub fn overview_recent_closed() {
                 JSON.stringify([...row.querySelectorAll('.cell-bytes .cell-value')].map(n => n.textContent)) ===
                   JSON.stringify([bytes(item.bytes_viewer_to_target),bytes(item.bytes_target_to_viewer)]) &&
                 JSON.stringify([...row.querySelectorAll('.cell-bytes .cell-label')].map(n => n.textContent)) ===
-                  JSON.stringify(['뷰어 -> 서버','서버 -> 뷰어']) &&
+                  JSON.stringify(['뷰어 → 서버','서버 → 뷰어']) &&
                 !row.querySelector('button,[role=button]') && links.length === 1 &&
                 links[0].getAttribute('href') === '/#/logs?session_id=' + item.session_id;
             }});
@@ -592,7 +592,7 @@ pub fn overview_recent_closed() {
                 JSON.stringify([...row.querySelectorAll('.cell-bytes .cell-value')].map(n => n.textContent)) ===
                   JSON.stringify([bytes(item.bytes_viewer_to_target),bytes(item.bytes_target_to_viewer)]) &&
                 JSON.stringify([...row.querySelectorAll('.cell-bytes .cell-label')].map(n => n.textContent)) ===
-                  JSON.stringify(['Viewer -> Server','Server -> Viewer']) &&
+                  JSON.stringify(['Viewer → Server','Server → Viewer']) &&
                 !row.querySelector('button,[role=button]') && links.length === 1 &&
                 links[0].getAttribute('href') === '/#/logs?session_id=' + item.session_id;
             }});

@@ -1122,6 +1122,19 @@
     content: none;
   }
 
+  /* A relay ID is only digits. Its card keeps the column label before the first-line value. */
+  .data-table.data-table-label-primary td.data-table-head-primary {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0 var(--space-sm);
+  }
+
+  .data-table.data-table-label-primary td.data-table-head-primary::before {
+    content: attr(data-label);
+    content: attr(data-label) / "";
+  }
+
   .data-table tr.data-table-empty {
     display: block;
     padding: var(--space-lg) 0;
@@ -1208,5 +1221,113 @@
 
   .logs-main .log-detail dd {
     margin: 0 0 var(--space-sm);
+  }
+}
+
+/* The session lists (`wide` tables) have 7 or 8 columns with a 30-character session ID and one or two addresses per
+   row. Measured with real values, they keep every ID and address whole only from the content width
+   (`--space-content-max`, 1440px) up. Below it each row becomes a card, as in the mobile layout. Desktop control
+   sizes stay. */
+@media (max-width: 1439.98px) {
+  .data-table.data-table-wide,
+  .data-table.data-table-wide thead,
+  .data-table.data-table-wide tbody,
+  .data-table.data-table-wide tr,
+  .data-table.data-table-wide td {
+    display: block;
+  }
+
+  .data-table.data-table-wide thead {
+    position: absolute;
+    width: var(--space-border-width);
+    height: var(--space-border-width);
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+
+  .data-table.data-table-wide tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+    gap: var(--space-xs) var(--space-sm);
+    padding: var(--space-md) 0;
+    border-bottom: var(--space-border-width) solid var(--color-border);
+  }
+
+  .data-table.data-table-wide tbody tr:last-child {
+    border-bottom: 0;
+  }
+
+  .data-table.data-table-wide tbody tr:is(:hover, .is-hover) td {
+    background: transparent;
+  }
+
+  .data-table.data-table-wide td {
+    display: grid;
+    grid-column: 1 / -1;
+    grid-template-columns: var(--space-label-col) minmax(0, 1fr);
+    gap: var(--space-sm);
+    min-width: 0;
+    padding: var(--space-xs) 0;
+    border: 0;
+    text-align: left;
+    white-space: normal;
+  }
+
+  .data-table.data-table-wide td::before {
+    content: attr(data-label);
+    content: attr(data-label) / "";
+    color: var(--color-muted-foreground);
+    font-family: var(--type-label-family);
+    font-size: var(--type-label-size);
+    font-weight: var(--type-label-weight);
+    line-height: var(--type-label-line);
+    letter-spacing: var(--type-label-tracking);
+  }
+
+  .data-table.data-table-wide td.data-table-num {
+    text-align: left;
+    white-space: normal;
+  }
+
+  .data-table.data-table-wide td > .badge {
+    justify-self: start;
+  }
+
+  .data-table.data-table-wide td.data-table-head-primary,
+  .data-table.data-table-wide td.data-table-head-secondary {
+    grid-row: 1;
+    display: block;
+    padding: 0;
+  }
+
+  .data-table.data-table-wide td.data-table-head-primary {
+    grid-column: 1;
+  }
+
+  .data-table.data-table-wide td.data-table-head-secondary {
+    grid-column: 2;
+    text-align: right;
+    overflow-wrap: anywhere;
+  }
+
+  .data-table.data-table-wide td.data-table-head-primary::before,
+  .data-table.data-table-wide td.data-table-head-secondary::before {
+    content: none;
+  }
+
+  .data-table.data-table-wide tr.data-table-empty {
+    display: block;
+    padding: var(--space-lg) 0;
+  }
+
+  .data-table.data-table-wide tr.data-table-empty td {
+    display: block;
+    padding: 0;
+    text-align: center;
+  }
+
+  .data-table.data-table-wide tr.data-table-empty td::before {
+    content: none;
   }
 }
