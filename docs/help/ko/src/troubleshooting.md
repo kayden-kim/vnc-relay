@@ -187,7 +187,7 @@ HTTP 거절과 close 코드의 전체 기준은 [WebSocket 계약 1.5절·2절](
 - `dead_connection`은 응답 없는 상대를 keepalive나 ping으로 감지한 경우다. 네트워크와 클라이언트 응답을 확인한다. 응답하는 유휴 연결은 화면 데이터가 없다는 이유만으로 끊지 않는다.
 - `admin_terminated`이면 `admin_terminate` 사건에서 수행 계정을 확인한다. WS·WSS에는 close 4005를 보낸다.
 - `session_expired`이면 접속 ticket의 세션 만료 시각 `sx`에 도달한 것이다. WS·WSS에는 close 4013을 보낸다. 양쪽에 만료 시각이 있으면 이른 시각에 끝낸다. 발급 쪽의 세션 수명 정책을 확인한다.
-- `ip_denied`이면 차단 목록이 바뀌어 Viewer 또는 Mode II Server의 클라이언트 주소가 항목과 일치한 것이다. 최근 종료 목록에는 "차단 목록으로 끊음"으로 나온다. WS·WSS에는 close 4014를 보낸다. 같은 시각의 `reload_applied`에서 `relay.deny.sources`가 바뀌었는지 확인한다. 의도한 차단이 아니면 목록에서 항목을 지운다. 끊은 세션은 되살아나지 않으므로 클라이언트가 새로 접속해야 한다.
+- `ip_denied`이면 차단 목록이 바뀌어 Viewer 또는 Mode II Server의 클라이언트 주소가 항목과 일치한 것이다. 최근 종료 목록에는 "차단 목록으로 종료"로 나온다. WS·WSS에는 close 4014를 보낸다. 같은 시각의 `reload_applied`에서 `relay.deny.sources`가 바뀌었는지 확인한다. 의도한 차단이 아니면 목록에서 항목을 지운다. 끊은 세션은 되살아나지 않으므로 클라이언트가 새로 접속해야 한다.
 - `close_timeout`이면 `timeouts.close_secs`(E) 안에 반대 방향 전달이나 종료 교환을 마치지 못했다. 상대 응답과 네트워크를 확인한다. 관리자 종료에서도 정리 시간이 지나면 이 원인이 될 수 있다.
 - `server_shutdown`이면 종료 유예 만료나 즉시 강제 정리 등 서버 종료 과정을 확인한다. `shutdown_started`와 `shutdown_forced`를 함께 찾는다.
 - `internal_error`이면 서버 내부 버그로 세션 소유 작업이 끝났을 수 있다. 전후 로그와 배포 버전을 보존해 보고한다. close 1011은 예약 코드이며 현재 구현이 보내지 않는다.

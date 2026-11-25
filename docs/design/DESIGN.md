@@ -455,7 +455,7 @@ components:
 | 정보 | `colors.info`·`info-bg`·`info-border` | 최초 로딩·갱신 중·종료 요청 중 | 진행 중임을 나타낸다. 참고 이미지의 청록 계열이다 |
 | 경고 | `colors.warning`·`warning-bg`·`warning-border` | 서버 실행 상태 `shutdown_grace`(종료 유예 중), 세션 상태 `closing`(종료 중), 오래된 성공 데이터, 종료 결과 불명, 종료 원인 `dead_connection`·`close_timeout` | 주의가 필요하지만 실패는 아니다 |
 | 위험 | `colors.destructive`·`destructive-bg`·`destructive-border` | 조회 실패, 종료 실패, 로그인 실패 안내, 종료 원인 `connection_error`·`internal_error` | 실패를 뜻한다. 빈 목록과 구분한다 |
-| 중립 | `colors.neutral`·`neutral-bg`·`neutral-border` | 활성 세션 모드·전송 경로·역할, 확인 불가 값, 대상 없음, 권한 없음, 종료 원인 `peer_eof`·`admin_terminated`·`server_shutdown`, 목록에 없는 알 수 없는 값 | 알 수 없는 값은 받은 그대로 보여주고 오류 색을 쓰지 않는다([관리 API 계약](../contracts/management-api-v1.md) 3절) |
+| 중립 | `colors.neutral`·`neutral-bg`·`neutral-border` | 활성 세션 모드·전송 경로·역할, 확인 불가 값, 대상 없음, 인증 필요, 종료 원인 `peer_eof`·`admin_terminated`·`server_shutdown`, 목록에 없는 알 수 없는 값 | 알 수 없는 값은 받은 그대로 보여주고 오류 색을 쓰지 않는다([관리 API 계약](../contracts/management-api-v1.md) 3절) |
 
 세션 상태 `active`는 배지 없이 표시한다. 정상 상태를 모두 강조하면 예외가 보이지 않기 때문이다. 이 매핑은 시각 표현만 정한다. 상태의 의미는 스펙과 계약이 정한다.
 
@@ -586,7 +586,7 @@ components:
 +--------------------------------------------------------------------------+
 | 운영 현황                                                   [새로고침]   |
 | 마지막 성공 갱신: 2026-10-16 14:03:25 GMT+9                              |
-| (상태 안내: 조회 중·갱신 중·조회 실패·권한 없음일 때만)                   |
+| (상태 안내: 조회 중·갱신 중·조회 실패일 때만)                             |
 | +------------------------------+ +---------------+ +---------------+   |
 | | 서버 요약                    | | 중계 연결     | | 관리 연결     |   |
 | | 실행 상태  가동 시간  대기   | |   ( 312 )     | |   (  6  )     |   |

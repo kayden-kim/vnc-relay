@@ -53,7 +53,7 @@ If a query fails, the screen retains the previous successful data and its last s
 
 Inspect the session ID, mode, both transports, start time, and directional transfer counts. Peer addresses are actual socket addresses. Forwarded addresses appear separately when a trusted proxy is used. A session ID is not a relay ID.
 
-Termination by administrator stops the relay for that connection pair. A closed session does not resume.
+Termination by administrator stops the relay for that connection pair. A terminated session does not resume.
 
 1. Select "Details" for the intended session in "Active sessions".
 2. Confirm the target using its session ID and both addresses.
@@ -135,7 +135,7 @@ To unblock an address:
 1. In the row of an address blocked by a single-address entry, select "Unblock". A screen reader announces this button as "Unblock {address}".
 2. In "Confirm unblocking address", check "Address to unblock". The body reads "New connections from this address are checked against the allow lists again. Connections that were closed do not come back."
 3. Select "Unblock" to unblock. Select "Cancel" to send no request.
-4. Check the notice "Removed the deny list entries for: {address}". If another administrator changed the list in the meantime and there is no entry to remove, the notice is "The deny list has already changed and has no entry to remove. Check the refreshed result." If the refreshed row still shows "Blocked", another range entry covers the address; check it in Settings.
+4. Check the notice "Unblocked address: {address}". If another administrator changed the list in the meantime and there is no entry to remove, the notice is "The deny list has already changed and has no entry to remove. Check the refreshed result." If the refreshed row still shows "Blocked", another range entry covers the address; check it in Settings.
 
 You cannot unblock an address blocked by a CIDR or range entry on this screen. Open "Edit dynamic settings" under "Settings", find "Deny list" in "Access policies", and remove that entry.
 

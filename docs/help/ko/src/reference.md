@@ -109,7 +109,7 @@ WS와 WSS는 같은 경로를 쓴다. 쿼리는 대상이나 중계 ID를 선택
 | `connection_error` | "연결 오류" |
 | `admin_terminated` | "관리자 종료" |
 | `session_expired` | "세션 만료" |
-| `ip_denied` | "차단 목록으로 끊음" |
+| `ip_denied` | "차단 목록으로 종료" |
 | `dead_connection` | "끊긴 연결 감지" |
 | `close_timeout` | "정리 제한 시간 초과" |
 | `server_shutdown` | "서버 종료" |

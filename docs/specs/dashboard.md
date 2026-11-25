@@ -177,7 +177,7 @@ SCR-001·002·004·005·006·007·008의 상단 막대 도구 맨 앞과 SCR-003
 | 세션 정보 | 세션 식별자, 모드, Viewer 전송 경로, Server/대상 전송 경로(`target_transport`), 시작 시각(현지 시각과 시간대) | 읽기 | 선택한 식별자의 값만 표시. Mode I 대상은 TCP, Mode II Server는 TCP·WS·WSS | DASH-006·DASH-062 |
 | 상대 주소·전달 주소 | `viewer_address`·`target_address`는 소켓 상대 주소다. `viewer_forwarded_ip`·`target_forwarded_ip`가 있으면 별도 행에 전달 주소를 표시한다. null인 전달 주소 행은 숨긴다 | 읽기 | 소켓 주소를 전달 주소로 대체하지 않음. 주소 설명은 CPY-188 적용 | DASH-006·DASH-062 |
 | 로그 보기 | 현재 `session_id` | 선택 | SCR-006에 세션 필터로 진입. URL은 `/#/logs?session_id={session_id}` | DASH-059 |
-| 방향별 바이트 | 관리 스펙 2.1절의 누적 바이트(정수)를 KiB/MiB로 표시 | 읽기 | 전송량 의미를 바꾸지 않음 | DASH-006 |
+| 방향별 바이트 | 관리 스펙 2.1절의 누적 바이트(정수)를 KiB/MiB로 표시. 방향 이름은 CPY-325·CPY-326 | 읽기 | 전송량 의미를 바꾸지 않음 | DASH-006 |
 | 세션 종료 버튼 | 유효한 관리 세션이 있고 대상이 있을 때만 활성 | 선택 | 종료 확인 대화상자 열기, 요청은 보내지 않음 | DASH-009·DASH-014 |
 | 종료 확인 대화상자 | 종료할 세션 식별자와 연결이 끊긴다는 영향 | 취소·닫기 또는 종료 확인 | 취소·닫기는 요청 없음과 포커스 복귀, 확인은 현재 식별자로 요청 | DASH-009~013 |
 | 언어 선택 | SCR-001과 같다 | 언어 선택 | SCR-001과 같다 | DASH-024·DASH-025 |
@@ -575,7 +575,7 @@ IP 정보 DB 행은 `databases.country`와 `databases.asn`을 이 순서로 보�
 | SCR-002 | 종료 확인 | 정상 상태에서 세션 종료 버튼 선택 | 종료할 세션 식별자와 연결이 끊긴다는 영향, 취소·종료 확인 | 취소·닫기, 종료 확인 |
 | SCR-001·SCR-002 | 갱신 중 | 성공 데이터가 있는 상태에서 사용자가 새로고침·재조회를 고름. 또는 자동 폴링 조회가 시작 뒤 1초 안에 끝나지 않음([4.1절](#41-폴링)) | 이전 성공 데이터가 있으면 유지, 갱신 중 구분 | 화면 이동, 중복 갱신 방지 |
 | SCR-001·SCR-002 | 조회 실패 | 조회 오류 응답 또는 조회 제한 시간 초과 | 실패 표시, 이전 데이터는 마지막 성공 시각과 함께 표시 | 명시적 재조회 |
-| SCR-001·SCR-002 | 권한 없음·관리 세션 만료 | 인증 거절 응답, 또는 관리 세션의 유휴·최대 수명 경과 | 보호된 데이터 제거, 로그인 화면으로 이동 | 관리자 로그인 |
+| SCR-001·SCR-002 | 권한 없음·관리 세션 만료 | 인증 거절 응답, 또는 관리 세션의 유휴·최대 수명 경과 | 보호된 데이터 제거, SCR-003 CPY-075로 이동 | 로그인 |
 | SCR-002 | 대상 없음 | 상세 조회가 대상 없음 응답, 또는 종료 완료 | 현재 세션을 찾을 수 없음, 종료 비활성 | 목록으로 이동 |
 | SCR-002 | 잘못된 세션 식별자 | 상세 화면 URL의 세션 식별자 형식이 틀림. 요청을 보내지 않음 | 잘못된 세션 식별자 안내(CPY-067), 종료 행동 없음 | 목록으로 이동 |
 | SCR-002 | 종료 요청 중 | 종료 확인 선택 뒤 응답 전 | 요청 중 상태, 중복 종료 비활성 | 결과 대기, 다른 화면으로 이동 |
@@ -609,7 +609,7 @@ IP 정보 DB 행은 `databases.country`와 `databases.asn`을 이 순서로 보�
 | SCR-006 | 정상 | `max_entries > 0`, 필터에 맞는 항목이 있음 | 보관 상태·성공 시각, 최신 순 로그, 필터·갱신·다운로드 | 필터, 상세 펼치기, 이전 로그, 다운로드 |
 | SCR-006 | 빈 결과 | `max_entries > 0`, `items = []` | 필터와 일치하는 최근 로그 없음(CPY-166). 실패와 구분 | 필터 변경·해제, 새로고침 |
 | SCR-006 | 보관 꺼짐 | `max_entries = 0` | 보관하지 않음과 `recent_logs.max_entries`·재시작 안내(CPY-167). 이전 로그·다운로드 비활성 | 설정 보기, 새로고침 |
-| SCR-006 | 조회 실패·오래된 데이터 | 오류·응답 없음·시간 초과 | 이전 로그와 마지막 성공 시각 유지(CPY-020). 첫 성공 전이면 CPY-021이며, 보관 상태 자리는 CPY-035 배지, 마지막 성공 갱신의 시각 자리는 CPY-035다. 다운로드 실패는 CPY-175로 별도 표시 | 새로고침, 입력 수정 |
+| SCR-006 | 조회 실패·오래된 데이터 | 오류·응답 없음·시간 초과 | 이전 로그와 마지막 성공 시각 유지, 안내는 CPY-020. 첫 성공 전이면 CPY-021이며, 보관 상태 자리는 CPY-035 배지, 마지막 성공 갱신의 시각 자리는 CPY-035다. 다운로드 실패는 CPY-175로 별도 표시 | 새로고침, 입력 수정 |
 | SCR-006 | 관리 세션 만료 | `401 unauthenticated` 또는 유휴·최대 수명 경과 | 로그·상세·다운로드 버퍼·요청 제거, SCR-003 CPY-075로 이동 | 로그인 |
 | SCR-006 | 잘못된 세션 식별자 | URL의 `session_id`가 5.2절 형식에 맞지 않음 | CPY-067. 로그 API 요청·폴링·다운로드 없음 | 필터 해제, 화면 이동 |
 | SCR-006 | 누락 안내 | 증분 조회에서 `oldest_seq > 마지막으로 확인한 seq + 1` | 일부 로그가 조회 전에 제거됨(CPY-168). 현재 확보한 로그는 유지하며 완전한 이력으로 표시하지 않음 | 새로고침, 필터 변경 |
@@ -981,7 +981,7 @@ IP 정보 DB 행은 `databases.country`와 `databases.asn`을 이 순서로 보�
 | CPY-017 | 목록 상태 배지 | 갱신 중 | Updating | 스펙 §4 상태 이름 |
 | CPY-018 | 목록 상태 배지 | 조회 실패 | Failed to load | 스펙 §4 상태 이름 |
 | CPY-019 | 목록 상태 배지 | 오래된 데이터 | Stale data | 스펙 §3 "오래된 성공 데이터" |
-| CPY-020 | 조회 실패, 이전 데이터 있음 | 조회에 실패했습니다. 아래 값은 마지막 성공 시각 {시각}의 이전 데이터입니다. | Loading failed. The values below are from the last successful update at {time}. | 스펙 §4 (이전 데이터와 마지막 성공 시각) |
+| CPY-020 | 조회 실패, 이전 데이터 있음 | 조회에 실패했습니다. 아래 값은 이전 데이터입니다. | Loading failed. The values below are from an earlier update. | 스펙 §4 (이전 데이터 표시. 마지막 성공 시각은 CPY-015·052가 보인다), 사용자 결정 2026-11-25 |
 | CPY-021 | 조회 실패, 이전 데이터 없음 | 조회에 실패했습니다. 새로고침으로 다시 시도하십시오. | Loading failed. Use Refresh to try again. | 스펙 §4 (명시적 재조회) |
 | CPY-022 | 서버 요약 제목 | 서버 요약 | Server summary | 스펙 §3 |
 | CPY-023 | 실행 상태 라벨 | 실행 상태 | Server state | 스펙 §3, 계약 server.state |
@@ -1019,7 +1019,7 @@ IP 정보 DB 행은 `databases.country`와 `databases.asn`을 이 순서로 보�
 | CPY-050 | 종료 원인 `server_shutdown` | 서버 종료 | Server shutdown | 관리 스펙 §2.3, 용어집 |
 | CPY-083 | 종료 원인 `internal_error` | 내부 오류 | Internal error | 관리 스펙 §2.3 |
 | CPY-190 | 종료 원인 `session_expired`(중립 배지) | 세션 만료 | Session expired | 관리 스펙 MGT-052 |
-| CPY-323 | 종료 원인 `ip_denied` | 차단 목록으로 끊음 | Closed by deny list | 관리 스펙 §2.3, 운영 스펙 3.10절 |
+| CPY-323 | 종료 원인 `ip_denied` | 차단 목록으로 종료 | Closed by deny list | 관리 스펙 §2.3, 운영 스펙 3.10절, 사용자 결정 2026-11-25 |
 | CPY-079 | 연결 사용량 상한 | 상한 {n} | Limit {n} | 디자인 기준 Gauge("상한 n") |
 | CPY-080 | 연결 사용량 상한을 읽지 못함 | 상한 확인 불가 | Limit unavailable | 관리 스펙 §2 (확인 불가, 0으로 표시하지 않음) |
 | CPY-084 | 세 목록 제목의 개수, n=0 또는 n≥2 | {n}건 | {n} items | DESIGN 개수 배지 |
@@ -1037,11 +1037,13 @@ IP 정보 DB 행은 `databases.country`와 `databases.asn`을 이 순서로 보�
 | CPY-055 | 시작 시각 라벨 | 시작 시각 | Started at | 스펙 SCR-002 |
 | CPY-056 | Viewer 주소 라벨 | Viewer 주소 | Viewer address | 스펙 SCR-002 |
 | CPY-057 | Server·대상 주소 라벨 | Server/대상 주소 | Server/target address | 스펙 SCR-002 |
+| CPY-325 | 전송량 방향 이름: Viewer에서 Server·대상으로 | Viewer -> Server | Viewer -> Server | 사용자 결정 2026-11-25. 스펙 SCR-002. 표 머리글(CPY-187·198)과 달리 "대상"을 쓰지 않는다 |
+| CPY-326 | 전송량 방향 이름: Server·대상에서 Viewer로 | Server -> Viewer | Server -> Viewer | 사용자 결정 2026-11-25. 스펙 SCR-002 |
 | CPY-058 | 사용하지 않음(CPY-188 사용) | 실제 소켓 상대 주소입니다. | Actual socket peer address. | 스펙 SCR-002 |
 | CPY-059 | 대상 없음 안내 | 현재 세션을 찾을 수 없음 | The current session was not found | 스펙 §4 (문구 그대로) |
 | CPY-060 | 세션 종료 버튼 | 세션 종료 | Terminate session | 디자인 기준 버튼 |
 | CPY-061 | 종료 확인 대화상자 제목 | 세션 종료 확인 | Confirm session termination | 스펙 SCR-002 대화상자 |
-| CPY-062 | 종료 확인 대화상자 본문 | 세션 {식별자}의 연결을 끊습니다. Viewer와 Server 또는 Mode I 대상 사이의 중계가 멈춥니다. 끊긴 세션은 다시 이어지지 않습니다. | The connection for session {session_id} will close. The relay between the Viewer and the Server or Mode I target will stop. A closed session does not resume. | 스펙 §3 (끊김 영향), 관리 스펙 §4 (종료된 세션을 복원하지 않음) |
+| CPY-062 | 종료 확인 대화상자 본문 | 세션 {식별자}의 연결을 종료합니다. Viewer와 Server 또는 Mode I 대상 사이의 중계가 멈춥니다. 종료한 세션은 다시 이어지지 않습니다. | The connection for session {session_id} will be terminated. The relay between the Viewer and the Server or Mode I target will stop. A terminated session does not resume. | 스펙 §3 (끊김 영향), 관리 스펙 §4 (종료된 세션을 복원하지 않음), 사용자 결정 2026-11-25 |
 | CPY-063 | 종료 확인 버튼 | 종료 확인 | Confirm termination | 디자인 기준 버튼 |
 | CPY-064 | 종료 요청 중 버튼 | 종료 요청 중… | Terminating… | 스펙 §4 요청 중 |
 | CPY-065 | 종료 처리 실패 안내 | 세션 종료에 실패했습니다. 상태를 다시 확인하십시오. | Session termination failed. Check the status again. | 스펙 §4, DASH-012 (완료로 표시하지 않음) |
@@ -1264,7 +1266,7 @@ IP 정보 DB 행은 `databases.country`와 `databases.asn`을 이 순서로 보�
 | CPY-258 | 보관 상한 안내. {time}은 `dropped_before` | 보관 상한에 이르러 {time}까지의 사건을 버렸습니다. 이 기간의 앞부분은 수에 들어 있지 않습니다. | The storage limit was reached, so events up to {time} were dropped. The start of this period is not counted. | 운영 스펙 3.9절 |
 | CPY-259 | 요약 구역 제목 | 요약 | Summary | 스펙 SCR-008 |
 | CPY-260 | 요약 카드 이름 | 연결 시도 / 거절 / 중단 / 시작한 세션 / 주소 / 국가 / ASN | Connection attempts / Rejected / Aborted / Sessions started / Addresses / Countries / ASNs | 관리 API 계약 1.17절 |
-| CPY-261 | 요약 설명 | 연결 시도는 중계 리스너가 받아들인 연결과 수락 단계에서 거절한 연결의 수입니다. 거절과 중단은 모든 단계에서 센 수입니다. 시작한 세션은 이 기간에 시작한 중계 세션 수입니다. | Connection attempts are connections that relay listeners accepted or rejected at the accept stage. Rejected and aborted include all stages. Sessions started is the number of relay sessions that started in this period. | 운영 스펙 3.9절 |
+| CPY-261 | 요약 설명 | 연결 시도는 중계 리스너가 받아들인 연결과 수락 단계에서 거절한 연결의 수입니다. 거절과 중단은 모든 단계에서 센 수입니다. | Connection attempts are connections that relay listeners accepted or rejected at the accept stage. Rejected and aborted include all stages. | 운영 스펙 3.9절, 사용자 결정 2026-11-25 |
 | CPY-262 | IP 정보 DB 구역 제목 | IP 정보 DB | IP information databases | 설정 계약 1.12절 |
 | CPY-263 | DB 행 이름 | 국가 DB / ASN DB | Country database / ASN database | 설정 계약 1.2절 `[ip_info]` |
 | CPY-264 | DB 상태 `not_configured`(중립 배지) | 설정 안 됨 | Not configured | 관리 API 계약 1.17절 |
@@ -1314,7 +1316,7 @@ IP 정보 DB 행은 `databases.country`와 `databases.asn`을 이 순서로 보�
 | CPY-309 | 차단 해제 확인 대화상자 본문 | 이 주소의 새 접속을 다시 허용 목록으로 판정합니다. 끊은 연결은 되살아나지 않습니다. | New connections from this address are checked against the allow lists again. Connections that were closed do not come back. | 운영 스펙 3.10절 |
 | CPY-310 | 차단 해제 요청 중인 확인 버튼 | 차단 해제 중… | Unblocking… | 스펙 SCR-008 |
 | CPY-311 | 차단 성공 알림. {address}는 주소 | 주소를 차단했습니다: {address} | Blocked address: {address} | 스펙 SCR-008 |
-| CPY-312 | 차단 해제 성공 알림. {address}는 주소 | 차단 목록에서 이 주소의 항목을 지웠습니다: {address} | Removed the deny list entries for: {address} | 스펙 SCR-008 |
+| CPY-312 | 차단 해제 성공 알림. {address}는 주소 | 차단을 해제했습니다: {address} | Unblocked address: {address} | 스펙 SCR-008, 사용자 결정 2026-11-25 |
 | CPY-313 | `config_conflict` 알림 | 설정 파일이 바뀌어 차단 목록을 바꾸지 못했습니다. 새로고침으로 다시 조회한 뒤 다시 시도하십시오. | The deny list was not changed because the configuration file changed. Use Refresh and try again. | 스펙 5.5절 |
 | CPY-314 | 설정 파일 상태로 편집할 수 없을 때의 알림 | 설정 파일 상태 때문에 차단 목록을 바꾸지 못했습니다. 설정 보기에서 파일 상태를 확인하십시오. | The deny list was not changed because of the state of the configuration file. Check the file state in View settings. | 스펙 5.5절 |
 | CPY-315 | `config_invalid` 알림. {diagnostic}은 5.1절의 진단 문구 | 차단 목록을 바꾸지 못했습니다. 원인: {diagnostic} | The deny list was not changed. Cause: {diagnostic} | 스펙 5.5절 |
