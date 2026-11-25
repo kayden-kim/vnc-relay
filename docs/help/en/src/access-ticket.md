@@ -37,7 +37,7 @@ The issuer creates a compact JWS ticket signed with ES256. Its structure is a he
 - Optional `sx` is the session expiry time, written as nonnegative integer Unix seconds. At upgrade, the current time must be less than `sx`, with no five-second tolerance. It ends the connection even during the handshake, waiting, or active state. Unlike `exp`, it remains an end time after upgrade. Without `sx`, the ticket does not set a connection end time.
 - Optional `sub` can appear in operations logs. It must not contain secrets or personal information.
 
-The issuer and VNC Relay clocks must be within five seconds. Verification requires `iat ≤ current time + 5 seconds` and `current time < exp + 5 seconds`. The server rejects tickets with `iat ≤ process startup time + 5 seconds`. After startup or restart, obtain a new ticket with `iat > process startup time + 5 seconds`. Reload does not change the startup time.
+The issuer and VNC Relay clocks must be within five seconds. Verification requires `iat ≤ current time + 5 seconds` and `current time < exp + 5 seconds`. The VNC Relay rejects tickets with `iat ≤ process startup time + 5 seconds`. After startup or restart, obtain a new ticket with `iat > process startup time + 5 seconds`. Reload does not change the startup time.
 
 For the full format and verification order, use the [WebSocket contract, §§1.9.2–1.9.4](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/websocket-relay-v2.md).
 
@@ -59,7 +59,7 @@ Prepare the issuer and ticket-capable clients first. Existing clients that conne
    max_lifetime_secs = 60
    ```
 
-3. If the server is running, wait for the reload result from file-change detection. Otherwise, start it using [Operations](operate.md).
+3. If the VNC Relay is running, wait for the reload result from file-change detection. Otherwise, start it using [Operations](operate.md).
 4. Check for `reload_applied`, or `server_ready` at startup, in the operations log.
 5. Obtain a new ticket and connect with the prepared client.
 
@@ -81,7 +81,7 @@ If present, `use` must be `sig` and `alg` must be `ES256`. The private key membe
 
 The client sends two values in the upgrade request's `Sec-WebSocket-Protocol`. One is `binary`. The other is exactly one value containing lowercase `ticket.` followed by the compact JWS. With a placeholder, the header structure is `Sec-WebSocket-Protocol: binary, ticket.<JWS>`. Do not send the literal placeholder `<JWS>`.
 
-Browser noVNC sends the values through `wsProtocols`. Do not put the ticket in a URL query, `Authorization`, or an administrator cookie. The server selects only `binary` in a successful response. It does not echo the ticket value.
+Browser noVNC sends the values through `wsProtocols`. Do not put the ticket in a URL query, `Authorization`, or an administrator cookie. The VNC Relay selects only `binary` in a successful response. It does not echo the ticket value.
 
 Use a new ticket for every connection attempt, including retries. Do not resend the same ticket after a 401. A ticket remains consumed if sending 101 fails after the use record has been written. Client exchange rules follow the [WebSocket contract, §§1.9.1 and 1.9.7](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/websocket-relay-v2.md).
 
@@ -97,7 +97,7 @@ For all response and closure rules, use the [WebSocket contract, §§1.9.3–1.9
 
 ## Rotate public keys
 
-The server detects changes to enabled roles' public keys files and reloads them. Both roles' file paths and contents are reloadable. The dashboard cannot edit these paths.
+The VNC Relay detects changes to enabled roles' public keys files and reloads them. Both roles' file paths and contents are reloadable. The dashboard cannot edit these paths.
 
 1. Add the new public key to the file at the same path.
 2. Confirm `reload_applied` before using the new key.

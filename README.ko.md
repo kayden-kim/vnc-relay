@@ -2,7 +2,7 @@
 
 [English](README.md) | **한국어**
 
-`vnc-relay`는 UltraVNC Repeater와 호환되는 VNC 중계 제품이다. TCP·WS·WSS 중계와 웹 관리 대시보드를 실행파일 하나로 제공한다. Rust로 독립 구현했다.
+`vnc-relay`는 UltraVNC Repeater와 호환되는 VNC 중계 서버다. TCP·WS·WSS 중계와 웹 관리 대시보드를 실행파일 하나로 제공한다. Rust로 독립 구현했다.
 
 ![VNC Relay 운영 현황: VNC Relay 요약, 중계·관리 연결 게이지, 대기 연결, 활성 세션](docs/help/ko/src/images/operations.png)
 

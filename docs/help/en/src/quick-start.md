@@ -1,6 +1,6 @@
 # Quick start
 
-Use this page to run the loopback example, check readiness and dashboard sign-in, and stop the server gracefully.
+Use this page to run the loopback example, check readiness and dashboard sign-in, and stop the VNC Relay gracefully.
 
 ## Before you start
 
@@ -19,7 +19,7 @@ This example accepts connections only from the same PC. It enables TCP Mode II o
 
 ## 1. Create an administrator account
 
-Use an interactive terminal. `opsadmin` below is an example administrator account name. There is no default account or password. The server does not start without an administrator account.
+Use an interactive terminal. `opsadmin` below is an example administrator account name. There is no default account or password. The VNC Relay does not start without an administrator account.
 
 1. Add the administrator account.
 
@@ -40,9 +40,9 @@ Use an interactive terminal. `opsadmin` below is an example administrator accoun
 
 The password must contain 12–128 characters and use no more than 512 UTF-8 bytes. Control characters are not allowed. Do not put the password on the command line or pipe it into the command. On success, `admin-accounts.toml` appears beside `relay.toml`.
 
-## 2. Start the server
+## 2. Start the VNC Relay
 
-1. Start the server in a dedicated terminal in the same directory.
+1. Start the VNC Relay in a dedicated terminal in the same directory.
 
    Windows PowerShell:
 
@@ -56,7 +56,7 @@ The password must contain 12–128 characters and use no more than 512 UTF-8 byt
    ./vnc-relay serve --config ./relay.toml
    ```
 
-The process keeps the terminal occupied. The example configuration appends JSON Lines operations logs to `relay.log`. Do not consider the server ready before the `server_ready` event is recorded.
+The process keeps the terminal occupied. The example configuration appends JSON Lines operations logs to `relay.log`. Do not consider the VNC Relay ready before the `server_ready` event is recorded.
 
 ## 3. Check readiness
 
@@ -75,7 +75,7 @@ The process keeps the terminal occupied. The example configuration appends JSON 
    curl --fail http://127.0.0.1:18081/readyz
    ```
 
-When ready, the server returns HTTP 200 and `{"status":"ready"}`. The status listener requires no authentication. It is separate from the management listener that serves the dashboard.
+When ready, the VNC Relay returns HTTP 200 and `{"status":"ready"}`. The status listener requires no authentication. It is separate from the management listener that serves the dashboard.
 
 ## 4. Open the dashboard
 

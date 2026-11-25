@@ -8,7 +8,7 @@ The table lists arguments to append to the executable. In Windows PowerShell, ru
 
 | Arguments | Purpose |
 | --- | --- |
-| `serve --config <path>` | Run the server in the foreground. |
+| `serve --config <path>` | Run the VNC Relay in the foreground. |
 | `admin add <account> --config <path>` | Add an administrator account. Read the password and confirmation through hidden input. |
 | `admin passwd <account> --config <path>` | Change an existing account's password. Read the new password and confirmation through hidden input. |
 | `admin remove <account> [--yes] --config <path>` | Remove an account. `--yes` skips deletion confirmation. |
@@ -16,7 +16,7 @@ The table lists arguments to append to the executable. In Windows PowerShell, ru
 | `--help` or `-h` | Print usage. Do not combine with other arguments. |
 | `--version` or `-V` | Print the executable version. Do not combine with other arguments. |
 
-`--config` is required for `serve` and all `admin` commands. Passwords are not accepted through command-line arguments or environment variables. Account changes do not affect a running server. A graceful stop and restart is required.
+`--config` is required for `serve` and all `admin` commands. Passwords are not accepted through command-line arguments or environment variables. Account changes do not affect a running VNC Relay instance. A graceful stop and restart is required.
 
 From the extracted package's executable directory, run the following when the prepared configuration file is `relay.toml`.
 
@@ -44,7 +44,7 @@ The management, status, and relay WS/WSS listeners are separate. One port does n
 | Status | `GET /readyz` | Return `200` with `status: ready` when ready. Otherwise return `503` with `status: not_ready`. |
 | Status | `GET /metrics` | Serve Prometheus text format 0.0.4 metrics only when `metrics.enabled = true`. Return `404` when disabled. |
 | Management | `/` | Serve the embedded dashboard. |
-| Management | Under `/api/v1/` | Administrator sign-in/out, server/connection/session/settings/log/metrics/connection source queries, termination by administrator, and dynamic configuration editing. |
+| Management | Under `/api/v1/` | Administrator sign-in/out, VNC Relay summary/connection/session/settings/log/metrics/connection source queries, termination by administrator, and dynamic configuration editing. |
 
 The status listener needs no authentication and uses plain HTTP. Keep it on loopback or restrict access to the monitoring network. Management uses HTTPS as the rule; plain HTTP is allowed only on loopback. For individual management API paths, authentication, and CSRF requirements, use the [management API contract, §1.2](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/management-api-v1.md). For liveness versus readiness and full response formats, use the [operations information contract, §1.12](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/ops-info-v2.md). For metric formats, use the [metrics contract](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/metrics-v1.md). Follow [Collect metrics](operate.md#collect-metrics) for collection procedures.
 
@@ -112,7 +112,7 @@ A close reason explains why an active session ended after cleanup. The labels be
 | `ip_denied` | "Closed by deny list" |
 | `dead_connection` | "Dead connection detected" |
 | `close_timeout` | "Cleanup time limit exceeded" |
-| `server_shutdown` | "Server shutdown" |
+| `server_shutdown` | "VNC Relay shutdown" |
 | `internal_error` | "Internal error" |
 
 These values are not the full list of WebSocket close codes or connection rejection `reason` values. Waiting connections are not active sessions, so waiting expiry does not appear in recently closed sessions. Values and meanings follow the [management API contract, §1.10](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/management-api-v1.md). Log levels and additional fields follow the [operations information contract, §1.6](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/ops-info-v2.md). Labels follow the [dashboard specification, §9](https://github.com/kayden-kim/vnc-relay/blob/main/docs/specs/dashboard.md) and [copy.js](https://github.com/kayden-kim/vnc-relay/blob/main/web/dashboard/app/copy.js).

@@ -4,9 +4,9 @@ Check logs and status by symptom, then take the appropriate recovery action. If 
 
 First identify the failing stage. Process startup, administrator sign-in, relay connection rejection, and active session closure are different problems. HTTP status codes, WebSocket close codes, and CLI exit codes are also different. Check diagnostic codes and operations log events, not numbers alone.
 
-## The server does not start
+## The VNC Relay does not start
 
-For a manual `serve` run, check stderr in the server terminal for `error[<code>]` and `key`. Also check `startup_failed` in logs. Failures before configuration is read, or failures to open the log file, can be logged to standard output. A Windows service has no console; follow the service-error procedure below.
+For a manual `serve` run, check stderr in the VNC Relay terminal for `error[<code>]` and `key`. Also check `startup_failed` in logs. Failures before configuration is read, or failures to open the log file, can be logged to standard output. A Windows service has no console; follow the service-error procedure below.
 
 Read the exit code in the same terminal after the command returns.
 
@@ -30,9 +30,9 @@ Unreadable or invalid account files also produce exit code 5. Check `admin.accou
 
 ### A port is in use or this is a second instance
 
-`listener_bind_failed` with exit code 4 means that binding to the indicated `listen` address failed. Check the process using the port and the configured address. Check whether the server is already running.
+`listener_bind_failed` with exit code 4 means that binding to the indicated `listen` address failed. Check the process using the port and the configured address. Check whether the VNC Relay is already running.
 
-A second process using the same listener address fails. It does not replace the first process's waiting connections or active sessions. Do not stop the existing server unintentionally. Exactly duplicate listener addresses within one configuration can instead be rejected before binding with `config_listen_conflict`. Distinguish the diagnostic codes.
+A second process using the same listener address fails. It does not replace the first process's waiting connections or active sessions. Do not stop the existing VNC Relay instance unintentionally. Exactly duplicate listener addresses within one configuration can instead be rejected before binding with `config_listen_conflict`. Distinguish the diagnostic codes.
 
 ### Configuration, TLS, public key, or log files have errors
 
@@ -40,7 +40,7 @@ For exit code 3, inspect `config_*`, `tls_file_invalid`, `ticket_keys_invalid`, 
 
 1. Check the setting identified by the diagnostic's `key`.
 2. Resolve file paths from the configuration file directory.
-3. Check read access for the OS account running the server. Log files also require an existing parent directory and write access.
+3. Check read access for the OS account running the VNC Relay. Log files also require an existing parent directory and write access.
 4. Check TLS certificate and private key formats and that the pair matches.
 5. Correct the diagnostic and start again.
 
@@ -88,10 +88,10 @@ For installation and ACL recovery, follow [Operations guide §3.3.1](https://git
 An incorrect password, a missing account, and a login limit all return `401 login_failed`. Do not distinguish the cause from the screen message alone. Check `admin_login_failed` and `admin_login_limited` in the operations log.
 
 - During a login limit, even the correct password is rejected. Retry after the configured restriction period. A source IP limit can also affect other accounts from that source.
-- If you added an account or changed a password without restarting, the server still uses the previous account set. Shut it down gracefully and start it again.
+- If you added an account or changed a password without restarting, the VNC Relay still uses the previous account set. Shut it down gracefully and start it again.
 - Remote plain HTTP management is unsupported. Check that the management listener uses built-in HTTPS. Do not try to bypass the restriction with HTTPS only at a proxy.
 
-For a forgotten password, shut down the server gracefully. Run the following command in an interactive terminal in the deployment directory. Replace `opsadmin` with the account to recover.
+For a forgotten password, shut down the VNC Relay gracefully. Run the following command in an interactive terminal in the deployment directory. Replace `opsadmin` with the account to recover.
 
 Windows:
 
@@ -105,7 +105,7 @@ Ubuntu:
 ./vnc-relay admin passwd opsadmin --config ./relay.toml
 ```
 
-Enter the new hidden password twice. Start the server again, then sign in. Do not put the password on the command line. Restarting also invalidates previous management sessions.
+Enter the new hidden password twice. Start the VNC Relay again, then sign in. Do not put the password on the command line. Restarting also invalidates previous management sessions.
 
 Sign in again after idle expiry or the absolute maximum management session lifetime. Automatic polling does not extend idle expiry. See [Dashboard](dashboard.md) for session lifetime and sign-out behavior.
 
@@ -146,7 +146,7 @@ For `origin_not_allowed` and HTTP 403, compare the browser's Origin with that ro
 
 For HTTP 404, check the URL path and the role's `enabled` setting. On `main`, Viewers use `/relay/viewer` and Servers use `/relay/server`. Do not add a trailing `/`. Disabled roles also return 404.
 
-Viewer requests to `/relay` are also rejected. A `main` build prints the latest Release version until the next release. Check the package source or build commit, not just the version string. Match the server and all Viewer URLs.
+Viewer requests to `/relay` are also rejected. A `main` build prints the latest Release version until the next release. Check the package source or build commit, not just the version string. Match the VNC Relay and all Viewer URLs.
 
 The `connection_rejected` reason `invalid_upgrade` also covers other invalid requests. Logs do not contain the request path, so this reason alone does not prove use of the old URL. Follow [Connecting VNC clients](connect.md) and migration guidance in [Operations](operate.md).
 
@@ -170,9 +170,9 @@ Close 4010 (`waiting_full`) means that new waiting registration reached its limi
 
 ### An access ticket is rejected with HTTP 401
 
-Access ticket checks are off by default. An enabled role requires a valid access ticket. Check ticket-related `reason` values in `connection_rejected`. They distinguish missing tickets, invalid format/signature/claims, expiry, reuse, and failure of the startup-time condition. `ticket_issued_before_start` means that `iat` is at or before server startup time + 5 seconds. A ticket issued just after startup can also fail this condition.
+Access ticket checks are off by default. An enabled role requires a valid access ticket. Check ticket-related `reason` values in `connection_rejected`. They distinguish missing tickets, invalid format/signature/claims, expiry, reuse, and failure of the startup-time condition. `ticket_issued_before_start` means that `iat` is at or before VNC Relay's startup time + 5 seconds. A ticket issued just after startup can also fail this condition.
 
-Check issuer and server clocks, role settings, and public keys. A new ticket is needed after restart. Obtain a new value from the issuer instead of resending the same ticket. Administrator sign-in does not resolve a relay ticket failure. To check a signature with the public keys file and view the claims, you can use the [ticket verification example](recommended-setup.md#ticket-verification-example).
+Check issuer and VNC Relay clocks, role settings, and public keys. A new ticket is needed after restart. Obtain a new value from the issuer instead of resending the same ticket. Administrator sign-in does not resolve a relay ticket failure. To check a signature with the public keys file and view the claims, you can use the [ticket verification example](recommended-setup.md#ticket-verification-example).
 
 For close 4012 (`ticket_relay_mismatch`) after 101, match the initial request's relay ID to the ticket's `rid` byte for byte. `0123` and `123` differ. A Viewer Mode I request that passes existing mode and initial request checks is also rejected with 4012. If Mode I is disabled, `mode_disabled` (1008) takes precedence. See [Access tickets](access-ticket.md) for all conditions. Do not paste ticket contents into logs or reports.
 
@@ -189,10 +189,10 @@ Check the close reason in "Recently closed sessions" and `session_closed` events
 - `session_expired` means that an access ticket's session expiry time `sx` was reached. WS/WSS receives close 4013. If both sides have expiry times, the earlier time ends the session. Check the issuer's session lifetime policy.
 - For `ip_denied`, the deny list changed and the client address of the Viewer or the Mode II Server matched an entry. "Recently closed sessions" shows "Closed by deny list". WS/WSS receives close 4014. Check `reload_applied` at the same time to see whether `relay.deny.sources` changed. If the block was not intended, remove the entry from the list. A closed session does not come back, so the client must connect again.
 - `close_timeout` means that reverse-direction delivery or the closing exchange did not finish within `timeouts.close_secs` (E). Check peer responses and the network. Administrator termination can also produce this reason when cleanup times out.
-- For `server_shutdown`, check server shutdown activity such as grace expiry or immediate forced cleanup. Look for `shutdown_started` and `shutdown_forced`.
-- `internal_error` can indicate that a server bug ended the session owner task. Preserve surrounding logs and the deployment version for a report. Close 1011 is reserved and is not sent by the current implementation.
+- For `server_shutdown`, check VNC Relay shutdown activity such as grace expiry or immediate forced cleanup. Look for `shutdown_started` and `shutdown_forced`.
+- `internal_error` can indicate that a VNC Relay bug ended the session owner task. Preserve surrounding logs and the deployment version for a report. Close 1011 is reserved and is not sent by the current implementation.
 
-Do not infer the cause from a client-displayed 1006 alone. The server does not send close code 1006. Pong timeout and internal errors can close sockets without a Close frame.
+Do not infer the cause from a client-displayed 1006 alone. The VNC Relay does not send close code 1006. Pong timeout and internal errors can close sockets without a Close frame.
 
 If the connection was still waiting, find waiting time expiry in `waiting_expired` and other waiting removals in `waiting_removed`. `connection_aborted` records connections that ended before waiting registration or session startup. Close 4001 means that the Mode II peer did not arrive within the waiting time. Do not confuse this with an active session's close reason. See [Operations information contract §1.5 and §1.6](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/ops-info-v2.md) and [Management API contract §1.10](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/management-api-v1.md) for the detailed mapping.
 
@@ -212,7 +212,7 @@ Check "Configuration file status" and "Last reload" under dashboard "Settings". 
 - If the "Block" button is missing on "Sources", `management.config_edit` is off. Follow the note above the table: set `management.config_edit = true` with an external editor and restart.
 - For `config_restart_pending`, revert restart-required differences or restart first. For `config_file_invalid`, correct source file read or validation problems externally.
 - For `config_conflict`, another administrator or external editor changed the file. Comments and whitespace also cause conflicts. Select "Reload settings" to discard your input and load current settings, then edit again. Do not resend the old request automatically.
-- For `config_write_failed`, this request changed neither the file nor the values in effect. Check file read/replacement permissions, parent directory temporary-file creation/replacement permissions, and disk space for the server OS account. On Windows, check open file handles that block replacement. On Ubuntu, also check directory write/search permissions and read-only mounts.
+- For `config_write_failed`, this request changed neither the file nor the values in effect. Check file read/replacement permissions, parent directory temporary-file creation/replacement permissions, and disk space for the OS account running the VNC Relay. On Windows, check open file handles that block replacement. On Ubuntu, also check directory write/search permissions and read-only mounts.
 - For `config_deny_overlaps_proxy`, a deny entry overlaps a trusted proxy entry. A dashboard edit rejects the whole candidate (HTTP 400 `config_invalid`), and a file reload is recorded as `reload_rejected`. Fix the entry that the diagnostic `key` (`relay.deny.sources[i]`) points to. A proxy address cannot be blocked.
 - Certificate, private key, public key paths, and restart-required keys have no input fields. Keys for disabled roles, listeners, or Mode I are also not editable. The exception is `relay.deny.sources`, which is editable even when the relay entry points are disabled.
 
@@ -231,7 +231,7 @@ Do not treat a query failure as an empty result. Check "Stale data" and the last
 First check the state of that database row in "IP information databases" on the "Sources" screen.
 
 - "Not configured" means the configuration file has no `[ip_info]` path. Prepare the file, set the path, and restart. Follow [Prepare and update IP information databases](operate.md#prepare-and-update-ip-information-databases).
-- "Load failed" or "Using previous file": check the cause on the row or the `reason` of `ip_db_unavailable` in the operations log. Fix the path and permissions (`file_unreadable`), the 256 MiB limit (`file_too_large`), extraction or damage (`invalid_format`), or the key and file type (`unsupported_data`). The server reads the file again automatically after the fix.
+- "Load failed" or "Using previous file": check the cause on the row or the `reason` of `ip_db_unavailable` in the operations log. Fix the path and permissions (`file_unreadable`), the 256 MiB limit (`file_too_large`), extraction or damage (`invalid_format`), or the key and file type (`unsupported_data`). The VNC Relay reads the file again automatically after the fix.
 - If the row is "In use" but some cells are "Unknown", those addresses are not in the database. Free databases have limited coverage and accuracy. Loopback and private addresses with a "Local" badge are not looked up.
 - If old values remain after you replaced a database file, note that events already counted keep their country and ASN. The new file applies to later events.
 

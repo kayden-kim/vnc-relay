@@ -1,6 +1,6 @@
 # Operations
 
-Start and stop the server manually or as a Windows service, and check health, logs, and configuration changes. Use this page to replace certificates, public keys, and administrator accounts, and to prepare upgrades or rollbacks.
+Start and stop the VNC Relay manually or as a Windows service, and check health, logs, and configuration changes. Use this page to replace certificates, public keys, and administrator accounts, and to prepare upgrades or rollbacks.
 
 These procedures target PowerShell on Windows 11 x64 and bash on Ubuntu 24.04 LTS x64. Containers are out of scope. Run commands from the extracted deployment directory. First prepare settings and an administrator account as described in [Quick start](quick-start.md).
 
@@ -91,7 +91,7 @@ Metrics express connection, session, administration, and process resource activi
    enabled = true
    ```
 
-2. Shut down the server gracefully and start it again.
+2. Shut down the VNC Relay gracefully and start it again.
 3. Configure the collector to read `GET /metrics` on the status listener.
 
 The default is `false`, which returns 404 for `/metrics`. This key cannot be reloaded or edited through the dashboard. Values continue to be recorded when it is off. Signed-in administrators can always use the [Metrics screen](dashboard.md#metrics) and management API `GET /api/v1/metrics`.
@@ -135,11 +135,11 @@ receivers:
 
 For the full list, OpenTelemetry-to-Prometheus name mapping, units, and attributes, use the [metrics contract](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/metrics-v1.md). Unreadable process values have no samples; they are not replaced with zero.
 
-Metrics exist only in memory. Cumulative counts and duration distributions start again from zero after a server restart. Reloading does not clear values. Use the collector for long-term retention. Metrics contain no relay IDs, session IDs, addresses, or account names.
+Metrics exist only in memory. Cumulative counts and duration distributions start again from zero after a VNC Relay restart. Reloading does not clear values. Use the collector for long-term retention. Metrics contain no relay IDs, session IDs, addresses, or account names.
 
 ## Shut down and restart
 
-1. Press Ctrl+C once in the server terminal.
+1. Press Ctrl+C once in the VNC Relay terminal.
 2. Wait for the `server_stopped` event and for the command to return.
 3. Check the exit code in the same terminal.
 
@@ -188,15 +188,15 @@ The following procedure assumes `log.output = "relay.log"`. The archive name `re
 2. Create an operations log event, for example with a test connection.
 3. Confirm that new events appear at the original path, `relay.log`.
 
-The server reopens the original path after rename, deletion, or creation notifications. It also reopens it every `reload.poll_secs`, even if a notification was missed. Events written before reopening can remain in the old file. Do not use copytruncate for this rotation procedure.
+The VNC Relay reopens the original path after rename, deletion, or creation notifications. It also reopens it every `reload.poll_secs`, even if a notification was missed. Events written before reopening can remain in the old file. Do not use copytruncate for this rotation procedure.
 
-If reopening fails, the server keeps writing to the old file. It emits `log_reopen_failed` and a stderr warning when the failure begins. Restore the path and permissions, then check the next notification or periodic attempt. A failed line write emits a `log_write_failed` stderr warning only on the first failure. The server discards failed lines and continues service. Do not expect lost lines to be recovered automatically.
+If reopening fails, the VNC Relay keeps writing to the old file. It emits `log_reopen_failed` and a stderr warning when the failure begins. Restore the path and permissions, then check the next notification or periodic attempt. A failed line write emits a `log_write_failed` stderr warning only on the first failure. The VNC Relay discards failed lines and continues service. Do not expect lost lines to be recovered automatically.
 
 Rotation timing, retention, and access permissions are the operator's responsibility. Restrict logs and archives to approved operators. Monitoring disk space and stderr is recommended. [Dashboard recent logs](dashboard.md) are a separate in-memory list, not a replacement for file retention.
 
 ## Automatic reload on file changes
 
-The server detects changes to the configuration file, TLS files in use, and public key files for roles with access ticket checks enabled. It does not watch TLS files for a WSS listener whose roles are all disabled. Periodic checks supplement OS notifications. The defaults for `reload.poll_secs` (Dp) and `reload.settle_secs` (D) are 30 and 5 seconds. Once file changes stop, even a missed notification produces an application or failure result within Dp + D. With successive changes, the result for the latest stable files is due within D after the last detected change.
+The VNC Relay detects changes to the configuration file, TLS files in use, and public key files for roles with access ticket checks enabled. It does not watch TLS files for a WSS listener whose roles are all disabled. Periodic checks supplement OS notifications. The defaults for `reload.poll_secs` (Dp) and `reload.settle_secs` (D) are 30 and 5 seconds. Once file changes stop, even a missed notification produces an application or failure result within Dp + D. With successive changes, the result for the latest stable files is due within D after the last detected change.
 
 Reloadable settings include source IP, Origin, trusted proxy, and Mode I target policies; the source IP deny list; limits, timeouts, and keepalive; TLS paths and contents; and access ticket settings and public key files. See application timing by key in [Configuration contract §1.8](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/config-v4.md).
 
@@ -213,7 +213,7 @@ Listener addresses and ports, relay role and mode switches, management HTTP/HTTP
 
 Candidate validation failure produces `reload_rejected`. Watch failures produce `reload_watch_failed`. Failures retain the previous valid configuration and existing relays. There is no manual reload CLI or web reload API. You can also inspect file status and the last result in dashboard "View settings".
 
-The IP information database files named in `[ip_info]` are watched the same way, but they are not part of configuration reload. When a file's content changes, the server reads only that file again and writes `ip_db_loaded` or `ip_db_unavailable`. No `reload_applied` is written. See [Prepare and update IP information databases](#prepare-and-update-ip-information-databases).
+The IP information database files named in `[ip_info]` are watched the same way, but they are not part of configuration reload. When a file's content changes, the VNC Relay reads only that file again and writes `ip_db_loaded` or `ip_db_unavailable`. No `reload_applied` is written. See [Prepare and update IP information databases](#prepare-and-update-ip-information-databases).
 
 ## Replace certificate and public key files
 
@@ -222,7 +222,7 @@ The IP information database files named in `[ip_info]` are watched the same way,
 Use this procedure only when TLS is enabled. The certificate and private key must form a valid pair. Do not put private key contents in logs or command arguments.
 
 1. Prepare the new certificate chain and matching private key in protected new files.
-2. Confirm that the OS account running the server can read both files.
+2. Confirm that the OS account running the VNC Relay can read both files.
 3. Use an external editor to update the corresponding `cert_file` and `key_file` paths together and save.
 4. Check for `reload_applied`.
 5. Compare the public certificate's serial number or fingerprint on a new TLS connection.
@@ -245,7 +245,7 @@ Invalid public key files are rejected with `ticket_keys_invalid`, retaining the 
 
 ## Prepare and update IP information databases
 
-The country and ASN on the dashboard "Sources" screen come from IP information database files that the operator places on the server. An IP information database is an MMDB (MaxMind DB format) file that maps IP address ranges to a country or an ASN. The server and the per-address statistics work without these files. The server never sends requests to find IP information and never downloads database files. The distribution bundle does not contain database files.
+The country and ASN on the dashboard "Sources" screen come from IP information database files that the operator places on the machine running the VNC Relay. An IP information database is an MMDB (MaxMind DB format) file that maps IP address ranges to a country or an ASN. The VNC Relay and the per-address statistics work without these files. The VNC Relay never sends requests to find IP information and never downloads database files. The distribution bundle does not contain database files.
 
 The supported providers are listed below. The operator who downloads a file must follow its terms. Check the provider page for the current terms before downloading.
 
@@ -258,9 +258,9 @@ The supported providers are listed below. The operator who downloads a file must
 The dashboard identifies the provider from the database type in the file and shows the attribution that the provider requires.
 
 1. Create an `ipdb` directory in the operations directory.
-2. Download the MMDB files from the provider. If you received `.gz` or `.tar.gz` files, extract them and put the `.mmdb` files in `ipdb`. The server does not read compressed files. Each file must be 256 MiB or smaller.
-3. Confirm that the OS account running the server can read the files.
-4. Stop the server gracefully.
+2. Download the MMDB files from the provider. If you received `.gz` or `.tar.gz` files, extract them and put the `.mmdb` files in `ipdb`. The VNC Relay does not read compressed files. Each file must be 256 MiB or smaller.
+3. Confirm that the OS account running the VNC Relay can read the files.
+4. Stop the VNC Relay gracefully.
 5. Add `[ip_info]` to the configuration file. Relative paths are resolved from the configuration file's directory.
 
    ```toml
@@ -269,12 +269,12 @@ The dashboard identifies the provider from the database type in the file and sho
    asn_db = "ipdb/dbip-asn-lite.mmdb"
    ```
 
-   For IPinfo Lite, use the same path for both keys. The server reads that file once.
+   For IPinfo Lite, use the same path for both keys. The VNC Relay reads that file once.
 
-6. Start the server and confirm in the operations log that each key has an `ip_db_loaded` line before `server_ready`. The log shows `config_key` instead of the path.
+6. Start the VNC Relay and confirm in the operations log that each key has an `ip_db_loaded` line before `server_ready`. The log shows `config_key` instead of the path.
 7. On the dashboard "Sources" screen, confirm that both rows in "IP information databases" are "In use".
 
-If a file cannot be read, the server still starts and runs without that information. Use the `reason` of the `ip_db_unavailable` warning to find the cause.
+If a file cannot be read, the VNC Relay still starts and runs without that information. Use the `reason` of the `ip_db_unavailable` warning to find the cause.
 
 | `reason` | What to check |
 | --- | --- |
@@ -286,19 +286,19 @@ If a file cannot be read, the server still starts and runs without that informat
 To update a database, replace the file content at the same path. No restart is needed.
 
 1. Put the new file in the same directory under a temporary name, for example `ipdb/dbip-country-lite.mmdb.new`.
-2. Rename the temporary file over the existing file. Use `Move-Item -Force` in Windows PowerShell or `mv` on Ubuntu. A rename inside one directory completes in one step, so the server never reads a half-copied file.
+2. Rename the temporary file over the existing file. Use `Move-Item -Force` in Windows PowerShell or `mv` on Ubuntu. A rename inside one directory completes in one step, so the VNC Relay never reads a half-copied file.
 3. Check for `ip_db_loaded` (`phase = reload`) in the operations log. With the defaults, it appears within 35 seconds (Dp + D).
 
-If the new file cannot be read, the server keeps using the previous content and writes `ip_db_unavailable` (`phase = reload`). The screen row changes to "Using previous file". When you put a valid file back, the server reads it again automatically. Countries and ASNs of events that were already counted do not change. Changing a path requires a restart. For provider downloads and extraction commands, see the [manual operations guide, §3.11](https://github.com/kayden-kim/vnc-relay/blob/main/docs/how-to/operate-relay.md).
+If the new file cannot be read, the VNC Relay keeps using the previous content and writes `ip_db_unavailable` (`phase = reload`). The screen row changes to "Using previous file". When you put a valid file back, the VNC Relay reads it again automatically. Countries and ASNs of events that were already counted do not change. Changing a path requires a restart. For provider downloads and extraction commands, see the [manual operations guide, §3.11](https://github.com/kayden-kim/vnc-relay/blob/main/docs/how-to/operate-relay.md).
 
 ## Manage administrator accounts
 
 Use the local CLI to add accounts, change passwords, and remove accounts. There is no default account or password. Commands use `admin.accounts_file` from the configuration.
 
-1. Shut down the server gracefully.
+1. Shut down the VNC Relay gracefully.
 2. Run one required command.
 3. Use `admin list` to check remaining account names.
-4. Start the server again.
+4. Start the VNC Relay again.
 5. Sign in with a remaining account.
 
 Windows:
@@ -333,15 +333,15 @@ Restarting ends all connections and management sessions. Work during an approved
 4. Set all enabled listeners in the copy to distinct unused loopback ports. Set log output to `stdout`. Do not modify operational account or TLS files.
 5. Start the new executable with that copy. Check `server_ready` and HTTP 200 from the status listener's `/readyz`.
 6. Stop the trial process gracefully with Ctrl+C.
-7. Shut down the existing server gracefully during the maintenance window.
+7. Shut down the existing VNC Relay instance gracefully during the maintenance window.
 8. Install the new executable and validated configuration with **operational addresses**. Do not install the alternate-port copy.
 9. Check startup, health, management sign-in, actual relay traffic, and reload.
 
 There is no configuration-validation-only CLI. Starting on alternate ports does not validate operational ports, the firewall, or actual client relays. See the [Operations how-to](https://github.com/kayden-kim/vnc-relay/blob/main/docs/how-to/operate-relay.md) for source builds and detailed deployment procedures.
 
-> **Warning:** WS/WSS Viewers must use `/relay/viewer`. If clients use `/relay`, migrate the server and all Viewer URLs together. Do not change TCP or `/relay/server`. A `main` build prints the latest Release version until the next release, so `--version` alone cannot distinguish them. Record the deployment source and commit too.
+> **Warning:** WS/WSS Viewers must use `/relay/viewer`. If clients use `/relay`, migrate the VNC Relay and all Viewer URLs together. Do not change TCP or `/relay/server`. A `main` build prints the latest Release version until the next release, so `--version` alone cannot distinguish them. Record the deployment source and commit too.
 
-For rollback, stop the new server gracefully and restore the previous executable together with configuration compatible with it. Restore client URLs too when crossing Viewer path versions. Do not leave `[relay.ticket.*]` tables in configuration for a version without access ticket support. Do not leave an `[ip_info]` table in configuration for a version without connection source support. Restoring the protected v3 configuration is recommended when rolling back from v4 to v3. Before returning to a version without forwarded address checks, stop proxy access or switch to direct built-in WSS and actual socket IP policies. Do not allow the proxy IP as a substitute for every client.
+For rollback, stop the new VNC Relay instance gracefully and restore the previous executable together with configuration compatible with it. Restore client URLs too when crossing Viewer path versions. Do not leave `[relay.ticket.*]` tables in configuration for a version without access ticket support. Do not leave an `[ip_info]` table in configuration for a version without connection source support. Restoring the protected v3 configuration is recommended when rolling back from v4 to v3. Before returning to a version without forwarded address checks, stop proxy access or switch to direct built-in WSS and actual socket IP policies. Do not allow the proxy IP as a substitute for every client.
 
 After restoration, check startup, readiness, actual relay traffic, and management sign-in. Follow the version-specific migration and recovery steps in [Operations how-to §3.2 and §6](https://github.com/kayden-kim/vnc-relay/blob/main/docs/how-to/operate-relay.md).
 
@@ -355,7 +355,7 @@ After restoration, check startup, readiness, actual relay traffic, and managemen
 - Put only proxy addresses in `trusted_proxies`, not client ranges. An entry that overlaps a deny list entry is a configuration error.
 - Narrow Mode I `allow_targets` to required target IPs and ports.
 - Protect account files, private keys, configuration, public key files, and logs. Restrict public key write access to prevent tampering.
-- When configuration editing is enabled, check that the server OS account can read and replace the configuration file and create and replace temporary files in its parent directory. Block writes by other ordinary OS accounts.
+- When configuration editing is enabled, check that the OS account running the VNC Relay can read and replace the configuration file and create and replace temporary files in its parent directory. Block writes by other ordinary OS accounts.
 - To control a role's access only through access tickets, disable that role's TCP entry point. Tickets do not apply to TCP.
 - Selecting an ipinfo.io lookup link on the "Sources" screen sends that address or ASN to an external site. Check that your operations policy allows external lookups. Prevent other regular OS accounts from changing IP information database files.
 

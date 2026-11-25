@@ -4,7 +4,7 @@
 
 `vnc-relay` is a VNC relay server compatible with the UltraVNC Repeater. One executable provides TCP, WS, and WSS relaying and a web management dashboard. It is an independent implementation in Rust.
 
-![VNC Relay operations overview: server summary, relay and management connection gauges, waiting connections, and active sessions](docs/help/en/src/images/operations.png)
+![VNC Relay operations overview: VNC Relay summary, relay and management connection gauges, waiting connections, and active sessions](docs/help/en/src/images/operations.png)
 
 - Version: 2026.11.10. Versions use `year.month.sequence` ([release how-to](docs/how-to/release.md)).
 - Basis: this README describes the current source on `main`. An executable built from the current source prints the version above until the next release.
@@ -23,7 +23,7 @@
 
 ### Security and access control
 
-- **Built-in TLS.** The server handles TLS for WSS and management HTTPS itself and rejects versions below TLS 1.2. The operator supplies certificates.
+- **Built-in TLS.** The VNC Relay handles TLS for WSS and management HTTPS itself and rejects versions below TLS 1.2. The operator supplies certificates.
 - **Reverse proxy TLS termination.** A reverse proxy can end TLS in front of relay WS and WSS. The management listener does not support this layout ([ADR-0007](docs/decisions/ADR-0007-proxy-tls-termination.md)).
 - **Source IP allow lists.** Each entry point has an allow list of single IPs, CIDRs, and ranges. WS and WSS have separate IP and `Origin` allow lists per role.
 - **Trusted proxies.** For requests through a trusted proxy (`trusted_proxies`), vnc-relay checks the forwarded address in `X-Forwarded-For`.
@@ -33,7 +33,7 @@
 ### Web dashboard
 
 - **Built-in sign-in.** Accounts with Argon2id password hashes protect the dashboard and the management API (`/api/v1/`). There is no default account.
-- **Operations overview.** Server state, waiting connections, active sessions, and recently closed sessions. Session details show addresses and traffic, and an administrator can terminate an active session.
+- **Operations overview.** VNC Relay state, waiting connections, active sessions, and recently closed sessions. Session details show addresses and traffic, and an administrator can terminate an active session.
 - **Logs (`/#/logs`).** Filter, search, and auto-refresh recent operations logs. Download them as JSON Lines.
 - **Metrics (`/#/metrics`).** Key indicators, trend charts for the last hour or 24 hours, time distributions, counts by cause, and process resources.
 - **Sources (`/#/sources`).** Connection attempts, rejections, aborts, and sessions per client address, country, and ASN for the last hour or 24 hours, with an ipinfo.io lookup link. With config editing on, block or unblock an address from this screen.
@@ -47,7 +47,7 @@
 - **Operations logs.** JSON Lines to standard output or a file. The latest entries (default 1000, 0–10000, restart to change) stay in memory for the dashboard.
 - **Reload without restart.** 44 keys reload automatically when the configuration file changes, and 38 of them can be edited in the dashboard. On shutdown, active sessions get a grace period G.
 - **Prometheus metrics.** With `[metrics] enabled = true`, `/metrics` on the status listener serves metrics with OpenTelemetry names in Prometheus text format. Off by default; restart to change ([ADR-0011](docs/decisions/ADR-0011-pull-metrics-on-status-listener.md)).
-- **Local IP information.** Country and ASN come from DB-IP Lite, IPinfo Lite, or MaxMind GeoLite MMDB files that the operator downloads and sets in `[ip_info]`. The server sends no outside requests and rereads a file without restart when its content changes ([ADR-0012](docs/decisions/ADR-0012-local-ip-info-databases.md)).
+- **Local IP information.** Country and ASN come from DB-IP Lite, IPinfo Lite, or MaxMind GeoLite MMDB files that the operator downloads and sets in `[ip_info]`. The VNC Relay sends no outside requests and rereads a file without restart when its content changes ([ADR-0012](docs/decisions/ADR-0012-local-ip-info-databases.md)).
 
 ### Contract versions
 
@@ -69,13 +69,13 @@ These steps use the [example configuration](examples/relay.toml), which enables 
    The result is `vnc-relay-<version>-windows-x64.zip` or `vnc-relay-<version>-linux-x64.tar.gz` and its SHA-256 file in `target/package/`.
 
 3. Extract the bundle and go to the new `vnc-relay-<version>-<os>-x64/` directory. The executable and `relay.toml` are in it. Run the commands below in this directory.
-4. Create an administrator account. The password prompt is hidden and asks twice. There is no default account, and the server does not start without one.
+4. Create an administrator account. The password prompt is hidden and asks twice. There is no default account, and the VNC Relay does not start without one.
 
    ```shell
    ./vnc-relay admin add opsadmin --config ./relay.toml
    ```
 
-5. Start the server. The process keeps the terminal and writes operations logs to `relay.log`.
+5. Start the VNC Relay. The process keeps the terminal and writes operations logs to `relay.log`.
 
    ```shell
    ./vnc-relay serve --config ./relay.toml
@@ -88,11 +88,11 @@ These steps use the [example configuration](examples/relay.toml), which enables 
    ```
 
 7. Open `http://127.0.0.1:18080/` in a browser and sign in with the account.
-8. Stop the server with Ctrl+C.
+8. Stop the VNC Relay with Ctrl+C.
 
 In Windows PowerShell, use `.\vnc-relay.exe` instead of `./vnc-relay` and `curl.exe` instead of `curl`.
 
-To see operations logs in the terminal (standard output), set `output` in the `[log]` table of `relay.toml` to `"stdout"` before you start the server.
+To see operations logs in the terminal (standard output), set `output` in the `[log]` table of `relay.toml` to `"stdout"` before you start the VNC Relay.
 
 ## Example deployment
 
@@ -172,7 +172,7 @@ The [example configuration](examples/relay.toml) contains every configuration ke
 
 | Command | What it does |
 | --- | --- |
-| `vnc-relay serve --config <path>` | Runs the server in the foreground. |
+| `vnc-relay serve --config <path>` | Runs the VNC Relay in the foreground. |
 | `vnc-relay admin add <account> --config <path>` | Adds an administrator account. |
 | `vnc-relay admin passwd <account> --config <path>` | Changes a password. |
 | `vnc-relay admin remove <account> [--yes] --config <path>` | Removes an account. |
@@ -182,7 +182,7 @@ The [example configuration](examples/relay.toml) contains every configuration ke
 | `vnc-relay service run --config <path>` | Windows 11 only. The service control manager uses it to start the service. Do not run it yourself. |
 | `vnc-relay --help`, `vnc-relay --version` | Prints usage or the version. |
 
-Account changes take effect after a server restart. The [CLI contract](docs/contracts/cli-v1.md) defines options, exit codes, and input rules. The [configuration contract v4](docs/contracts/config-v4.md) defines configuration keys and defaults.
+Account changes take effect after a VNC Relay restart. The [CLI contract](docs/contracts/cli-v1.md) defines options, exit codes, and input rules. The [configuration contract v4](docs/contracts/config-v4.md) defines configuration keys and defaults.
 
 ## Development
 

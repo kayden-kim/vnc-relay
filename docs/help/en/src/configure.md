@@ -4,7 +4,7 @@ Use this page to understand the TOML configuration, configure listeners and acce
 
 ## Read the configuration file
 
-Settings come from one UTF-8 TOML file. Select it with `--config` when starting the server. There are no configuration environment variables or command-line value overrides.
+Settings come from one UTF-8 TOML file. Select it with `--config` when starting the VNC Relay. There are no configuration environment variables or command-line value overrides.
 
 Relative paths start at the configuration file's directory, not the working directory. On Windows, `/` or TOML single-quoted strings are recommended for paths. Write times as integer seconds and sizes as integer bytes. Unknown keys and incorrect types are errors.
 
@@ -125,7 +125,7 @@ Scheme and host comparisons are case-insensitive. Omitting a default port is equ
 
 When any WSS role is enabled, `[relay.wss]` must contain both `cert_file` and `key_file`. Management HTTPS uses the same two keys under `[management]`.
 
-`cert_file` is a PEM certificate chain. Put the server certificate first, followed by intermediate certificates. `key_file` is the matching PEM private key. PKCS#8 is recommended. Do not put private key contents in the configuration file. Restricting private key reads to the server's OS account is recommended. File formats follow the [configuration contract, §1.9](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/config-v4.md).
+`cert_file` is a PEM certificate chain. Put the server certificate first, followed by intermediate certificates. `key_file` is the matching PEM private key. PKCS#8 is recommended. Do not put private key contents in the configuration file. Restricting private key reads to VNC Relay's OS account is recommended. File formats follow the [configuration contract, §1.9](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/config-v4.md).
 
 A proxy can terminate TLS before relay WS or WSS. The listener's `trusted_proxies` must contain only proxy IPs, not client ranges. It uses the same item syntax as `allow`. An empty list trusts no forwarded headers.
 
@@ -167,7 +167,7 @@ The management listener serves the dashboard and management API. HTTPS is the ru
 
 The status listener serves `/livez` and `/readyz` over plain HTTP. It has no authentication. It does not return sessions, relay IDs, or peer addresses. Loopback is recommended. The distribution example uses management `127.0.0.1:18080` and status `127.0.0.1:18081`. These are example addresses, not defaults.
 
-Set `[metrics] enabled = true` to also serve `GET /metrics` on the status listener. The default is `false`; the disabled path returns 404. Use an external editor to change the configuration file, then restart the server. The key is neither reloadable nor editable through dynamic configuration editing. Dashboard and management API metrics remain available after sign-in regardless of this value. If an external collector must read the status listener, restrict access to the monitoring network. For collection configuration examples, see [Collect metrics](operate.md#collect-metrics).
+Set `[metrics] enabled = true` to also serve `GET /metrics` on the status listener. The default is `false`; the disabled path returns 404. Use an external editor to change the configuration file, then restart the VNC Relay. The key is neither reloadable nor editable through dynamic configuration editing. Dashboard and management API metrics remain available after sign-in regardless of this value. If an external collector must read the status listener, restrict access to the monitoring network. For collection configuration examples, see [Collect metrics](operate.md#collect-metrics).
 
 `log.output` is `"stdout"` or a file path. The default is `"stdout"`. Operations logs use JSON Lines. Files are appended to. When an operator replaces the file, the same path is reopened. Rotation and long-term retention are the operator's responsibility.
 
@@ -184,21 +184,21 @@ See [Operations](operate.md) for health checks, metric collection, and log reten
 | `ip_info.country_db` | Path of the MMDB file used to find countries |
 | `ip_info.asn_db` | Path of the MMDB file used to find ASNs. It may be the same path as `country_db` |
 
-Relative paths are resolved from the configuration file's directory. An empty string fails startup with `config_value_out_of_range`, and a value that is not a string fails with `config_type_mismatch`. A missing file or a file in the wrong format is not a configuration error. The server writes the warning `ip_db_unavailable` and starts without that information.
+Relative paths are resolved from the configuration file's directory. An empty string fails startup with `config_value_out_of_range`, and a value that is not a string fails with `config_type_mismatch`. A missing file or a file in the wrong format is not a configuration error. The VNC Relay writes the warning `ip_db_unavailable` and starts without that information.
 
-Changing a path requires a restart. The paths cannot be edited on the dashboard and appear only in "View settings". When the file content at the same path changes, the server reads it again without a restart. For supported providers and the procedures to prepare and update files, see [Prepare and update IP information databases](operate.md#prepare-and-update-ip-information-databases). For the file format rules, see the [configuration contract, §1.12](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/config-v4.md).
+Changing a path requires a restart. The paths cannot be edited on the dashboard and appear only in "View settings". When the file content at the same path changes, the VNC Relay reads it again without a restart. For supported providers and the procedures to prepare and update files, see [Prepare and update IP information databases](operate.md#prepare-and-update-ip-information-databases). For the file format rules, see the [configuration contract, §1.12](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/config-v4.md).
 
 ## Reload and dynamic configuration editing
 
-The server automatically detects changes to the configuration file, TLS files in use, and public keys files for enabled ticket tables. There are 44 reloadable keys. They include IP, Origin, and trusted proxy policies, the source IP deny list, TLS files, ticket settings, Mode I target policy, limits, timeouts, and keepalive. Use the [configuration contract, §1.8](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/config-v4.md) for the exact list and application boundaries.
+The VNC Relay automatically detects changes to the configuration file, TLS files in use, and public keys files for enabled ticket tables. There are 44 reloadable keys. They include IP, Origin, and trusted proxy policies, the source IP deny list, TLS files, ticket settings, Mode I target policy, limits, timeouts, and keepalive. Use the [configuration contract, §1.8](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/config-v4.md) for the exact list and application boundaries.
 
 New values apply from the next check or request for each key. Completed checks, started timers, and configured socket options retain their previous results. Existing relay sessions continue. The deny list is the only exception. When it changes, open sessions and waiting connections from the matching addresses are closed immediately.
 
-The dashboard's "View settings" shows settings in effect and file status. Set `management.config_edit = true` and restart to enable "Edit dynamic settings". Editing is off by default. Edits are saved to the same TOML file and applied to running settings. The server account needs permission to write the file and create temporary files and replace files in that directory.
+The dashboard's "View settings" shows settings in effect and file status. Set `management.config_edit = true` and restart to enable "Edit dynamic settings". Editing is off by default. Edits are saved to the same TOML file and applied to running settings. The OS account running the VNC Relay needs permission to write the file and create temporary files and replace files in that directory.
 
 There are 38 editable keys. They exclude four TLS paths and two ticket public keys file paths from the reloadable set. These paths are view-only. Renew certificates and public keys by replacing file contents at the same path. Keys owned by roles or modes also require the activation conditions defined by the contract. `relay.deny.sources` is editable even when the relay entry points are disabled. See [Dashboard](dashboard.md) for screen procedures.
 
-> **Warning:** If a valid configuration file retains even one restart-required difference, file-change detection rejects the entire candidate as `reload_restart_required`. Leaving that difference in the file also blocks later certificate and public key replacements. Dynamic configuration editing returns HTTP 409 `config_restart_pending` ([management API contract, §1.14](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/management-api-v1.md)). Revert the value or gracefully stop and restart the server.
+> **Warning:** If a valid configuration file retains even one restart-required difference, file-change detection rejects the entire candidate as `reload_restart_required`. Leaving that difference in the file also blocks later certificate and public key replacements. Dynamic configuration editing returns HTTP 409 `config_restart_pending` ([management API contract, §1.14](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/management-api-v1.md)). Revert the value or gracefully stop and restart the VNC Relay.
 
 Listener addresses, listener/role/mode enablement, management HTTP/HTTPS transitions, account settings, management login limits and session lifetimes, `management.config_edit`, `metrics.enabled`, `[ip_info]` paths, dashboard settings, retention settings, log settings, and file-watch settings require a restart. Ticket table `enabled` is an exception: it is reloadable. Invalid candidates produce `reload_rejected`; the previous valid settings and connections remain in use.
 
@@ -206,10 +206,10 @@ Listener addresses, listener/role/mode enablement, management HTTP/HTTPS transit
 
 v4 rejects the old `[relay.ws_viewer]` and `[relay.wss_viewer]` tables. Listener settings and role settings must be separated.
 
-1. Prepare a copy separate from the file used by the running server.
+1. Prepare a copy separate from the file used by the running VNC Relay.
 2. Update the copy using the mapping in the [configuration contract, §3.3](https://github.com/kayden-kim/vnc-relay/blob/main/docs/contracts/config-v4.md).
-3. Gracefully stop the server.
+3. Gracefully stop the VNC Relay.
 4. Replace the configuration and executable together with their v4 versions.
-5. Start the server with the new configuration.
+5. Start the VNC Relay with the new configuration.
 
 The Viewer path must also match the executable's WebSocket contract. `main` uses `/relay/viewer`. For rollback, follow the same contract section. See [Access tickets](access-ticket.md) for ticket configuration.

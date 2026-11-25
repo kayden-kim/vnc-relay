@@ -983,8 +983,8 @@ IP 정보 DB 행은 `databases.country`와 `databases.asn`을 이 순서로 보�
 | CPY-019 | 목록 상태 배지 | 오래된 데이터 | Stale data | 스펙 §3 "오래된 성공 데이터" |
 | CPY-020 | 조회 실패, 이전 데이터 있음 | 조회에 실패했습니다. 아래 값은 이전 데이터입니다. | Loading failed. The values below are from an earlier update. | 스펙 §4 (이전 데이터 표시. 마지막 성공 시각은 CPY-015·052가 보인다), 사용자 결정 2026-11-25 |
 | CPY-021 | 조회 실패, 이전 데이터 없음 | 조회에 실패했습니다. 새로고침으로 다시 시도하십시오. | Loading failed. Use Refresh to try again. | 스펙 §4 (명시적 재조회) |
-| CPY-022 | VNC Relay 요약 제목 | VNC Relay 요약 | Server summary | 스펙 §3 |
-| CPY-023 | 실행 상태 라벨 | 실행 상태 | Server state | 스펙 §3, 계약 server.state |
+| CPY-022 | VNC Relay 요약 제목 | VNC Relay 요약 | VNC Relay summary | 스펙 §3 |
+| CPY-023 | 실행 상태 라벨 | 실행 상태 | VNC Relay state | 스펙 §3, 계약 server.state |
 | CPY-024 | 실행 상태 값 `ready` | 준비됨 | Ready | 계약 server.state 설명 |
 | CPY-025 | 실행 상태 값 `shutdown_grace` | 종료 유예 중 | Shutting down (grace period) | 계약 server.state 설명 |
 | CPY-026 | 가동 시간 라벨 | 가동 시간 | Uptime | 스펙 §3 |
@@ -1018,7 +1018,7 @@ IP 정보 DB 행은 `databases.country`와 `databases.asn`을 이 순서로 보�
 | CPY-047 | 종료 원인 `admin_terminated` | 관리자 종료 | Terminated by administrator | 관리 스펙 §2.3, 용어집 |
 | CPY-048 | 종료 원인 `dead_connection` | 끊긴 연결 감지 | Dead connection detected | 관리 스펙 §2.3 |
 | CPY-049 | 종료 원인 `close_timeout` | 정리 제한 시간 초과 | Cleanup time limit exceeded | 관리 스펙 §2.3 |
-| CPY-050 | 종료 원인 `server_shutdown` | VNC Relay 종료 | Server shutdown | 관리 스펙 §2.3, 용어집 |
+| CPY-050 | 종료 원인 `server_shutdown` | VNC Relay 종료 | VNC Relay shutdown | 관리 스펙 §2.3, 용어집 |
 | CPY-083 | 종료 원인 `internal_error` | 내부 오류 | Internal error | 관리 스펙 §2.3 |
 | CPY-190 | 종료 원인 `session_expired`(중립 배지) | 세션 만료 | Session expired | 관리 스펙 MGT-052 |
 | CPY-323 | 종료 원인 `ip_denied` | 차단 목록으로 종료 | Closed by deny list | 관리 스펙 §2.3, 운영 스펙 3.10절, 사용자 결정 2026-11-25 |
@@ -1088,10 +1088,10 @@ IP 정보 DB 행은 `databases.country`와 `databases.asn`을 이 순서로 보�
 | CPY-091 | 적용 행동 | 적용 | Apply | 확정 |
 | CPY-092 | in_effect | 설정 파일과 실행 중인 설정이 같습니다. | The configuration file matches the settings in effect. | 확정 |
 | CPY-093 | pending | 설정 파일에 재시작 없이 적용할 차이가 있습니다. 표시 값은 실행 중인 설정입니다. | The configuration file has changes that can be applied without a restart. The values shown are in effect now. | 확정 |
-| CPY-094 | restart_required | 설정 파일에 재시작이 필요한 차이가 있어 편집할 수 없습니다. 파일을 수정하거나 VNC Relay를 재시작한 뒤 다시 불러오십시오. | The configuration file has changes that require a restart. Editing is blocked. Update the file or restart the server, then reload. | 확정 |
+| CPY-094 | restart_required | 설정 파일에 재시작이 필요한 차이가 있어 편집할 수 없습니다. 파일을 수정하거나 VNC Relay를 재시작한 뒤 다시 불러오십시오. | The configuration file has changes that require a restart. Editing is blocked. Update the file or restart the VNC Relay, then reload. | 확정 |
 | CPY-095 | invalid | 설정 파일의 검증에 실패해 편집할 수 없습니다. 진단을 확인하고 파일을 수정한 뒤 다시 불러오십시오. | The configuration file failed validation. Editing is blocked. Check the diagnostics, update the file, then reload. | 확정 |
 | CPY-096 | unreadable | 설정 파일을 읽지 못해 편집할 수 없습니다. 파일 접근을 복구한 뒤 다시 불러오십시오. | The configuration file could not be read. Editing is blocked. Restore file access, then reload. | 확정 |
-| CPY-097 | 편집 꺼짐 | 편집 기능이 꺼져 있습니다. 설정 파일에서 management.config_edit = true로 바꾸고 VNC Relay를 재시작하십시오. | Editing is disabled. Set management.config_edit = true in the configuration file and restart the server. | 확정 |
+| CPY-097 | 편집 꺼짐 | 편집 기능이 꺼져 있습니다. 설정 파일에서 management.config_edit = true로 바꾸고 VNC Relay를 재시작하십시오. | Editing is disabled. Set management.config_edit = true in the configuration file and restart the VNC Relay. | 확정 |
 | CPY-098 | 재로드 없음 | 이 프로세스의 재로드 이력이 없습니다. | This process has no reload history. | 확정 |
 | CPY-099 | 저장 성공 | 설정 {n}개를 적용했습니다. | Applied {n} settings. | 확정 |
 | CPY-100 | 사용하지 않음(CPY-189 사용) | 새 연결부터 적용됩니다. 기존 연결·이미 시작한 타이머·이미 설정한 소켓 옵션은 이전 값을 유지합니다. | Changes apply from new connections. Existing connections, started timers, and configured socket options keep their previous values. | 확정 |
@@ -1180,7 +1180,7 @@ IP 정보 DB 행은 `databases.country`와 `databases.asn`을 이 순서로 보�
 | CPY-164 | 상세 접기 행동 | 접기 | Hide details | 스펙 6절 |
 | CPY-165 | 검색 길이 오류 | 검색어는 1~256자로 입력하십시오. 검색을 해제하려면 빈 값으로 검색하십시오. | Enter a search value of 1–256 characters. To clear the search, search with an empty value. | 스펙 5.2절 |
 | CPY-166 | 정상 빈 결과 | 필터와 일치하는 최근 로그가 없습니다. | No recent logs match the filters. | 스펙 4절 |
-| CPY-167 | 보관 꺼짐 | 최근 로그를 보관하지 않습니다. 보관하려면 설정 파일의 recent_logs.max_entries를 1~10000으로 바꾸고 VNC Relay를 재시작하십시오. | Recent logs are not retained. To retain them, set recent_logs.max_entries to 1–10000 in the configuration file and restart the server. | 확정 |
+| CPY-167 | 보관 꺼짐 | 최근 로그를 보관하지 않습니다. 보관하려면 설정 파일의 recent_logs.max_entries를 1~10000으로 바꾸고 VNC Relay를 재시작하십시오. | Recent logs are not retained. To retain them, set recent_logs.max_entries to 1–10000 in the configuration file and restart the VNC Relay. | 확정 |
 | CPY-168 | 미조회 항목 제거 안내 | 조회하기 전에 일부 로그가 보관 목록에서 제거됐습니다. 표시한 목록은 전체 이력이 아닙니다. | Some logs were removed from the retained list before they could be fetched. The displayed list is not a complete history. | 스펙 4절 |
 | CPY-169 | 자동 갱신 일시정지 안내 | 자동 갱신을 일시정지했습니다. 새로고침과 필터는 계속 사용할 수 있습니다. | Auto refresh is paused. Refresh and filters are still available. | 스펙 4절 |
 | CPY-170 | 자동 갱신 켜짐 상태 | 켜짐 | On | 스펙 SCR-006 |
@@ -1242,7 +1242,7 @@ IP 정보 DB 행은 `databases.country`와 `databases.asn`을 이 순서로 보�
 | CPY-241 | 프로세스 핸들 라벨(Windows) | 열린 핸들 수 | Open handles | 메트릭 계약 1.3절 |
 | CPY-242 | 프로세스 파일 기술자 라벨(Linux) | 열린 파일 기술자 수 | Open file descriptors | 메트릭 계약 1.3절 |
 | CPY-243 | 프로세스 버전 라벨 | 버전 | Version | 메트릭 계약 1.2절 |
-| CPY-244 | 외부 수집 안내 | 외부 수집 도구는 상태 리스너의 /metrics에서 같은 값을 읽습니다. 켜려면 설정 파일에서 [metrics] enabled = true로 바꾸고 VNC Relay를 재시작하십시오. | External collectors read the same values from /metrics on the status listener. To turn it on, set [metrics] enabled = true in the configuration file and restart the server. | 운영 스펙 3.8절 |
+| CPY-244 | 외부 수집 안내 | 외부 수집 도구는 상태 리스너의 /metrics에서 같은 값을 읽습니다. 켜려면 설정 파일에서 [metrics] enabled = true로 바꾸고 VNC Relay를 재시작하십시오. | External collectors read the same values from /metrics on the status listener. To turn it on, set [metrics] enabled = true in the configuration file and restart the VNC Relay. | 운영 스펙 3.8절 |
 | CPY-245 | 400·405 안내 | 메트릭 조회 요청을 처리하지 못했습니다. 새로고침으로 다시 조회하십시오. | The metrics request could not be processed. Use Refresh to query again. | 스펙 5.3절 |
 | CPY-246 | 초 단위 표기 | {n}초 | {n} s | 스펙 3절 표시 형식 |
 | CPY-247 | 분포 막대의 접근 가능한 이름. {items}는 개수가 0이 아닌 구간을 순서대로 쉼표로 잇는다. 구간 하나는 CPY-224 형식의 경계와 개수다(ko `≤ 5 ms 3개`, en `≤ 5 ms: 3`) | 구간별 개수: {items} | Count per bucket: {items} | 스펙 SCR-007 |
@@ -1276,7 +1276,7 @@ IP 정보 DB 행은 `databases.country`와 `databases.asn`을 이 순서로 보�
 | CPY-266 | DB 상태 `stale`(경고 배지) | 이전 DB 사용 중 | Using previous file | 관리 API 계약 1.17절 |
 | CPY-267 | DB 상태 `unavailable`(오류 배지) | 읽기 실패 | Load failed | 관리 API 계약 1.17절 |
 | CPY-268 | DB 정보 라벨 | 종류 / 빌드 시각 / 읽은 시각 | Type / Built / Loaded | 관리 API 계약 1.17절 |
-| CPY-269 | `not_configured` 안내. {key}는 `ip_info.country_db` 또는 `ip_info.asn_db` | 설정 파일의 {key}에 DB 파일 경로를 넣고 VNC Relay를 재시작하면 이 정보를 찾습니다. | Set {key} in the configuration file to a database file path and restart the server to look up this information. | 설정 계약 1.2·1.8절 |
+| CPY-269 | `not_configured` 안내. {key}는 `ip_info.country_db` 또는 `ip_info.asn_db` | 설정 파일의 {key}에 DB 파일 경로를 넣고 VNC Relay를 재시작하면 이 정보를 찾습니다. | Set {key} in the configuration file to a database file path and restart the VNC Relay to look up this information. | 설정 계약 1.2·1.8절 |
 | CPY-270 | `stale` 안내. `error`가 `null`이면 원인 문장을 뺀다 | 파일을 다시 읽지 못해 이전 DB를 계속 씁니다. 원인: {reason}. 파일을 고치면 자동으로 다시 읽습니다. | The file could not be read again, so the previous database is still in use. Cause: {reason}. The file is read again automatically after it is fixed. | 설정 계약 1.12절 |
 | CPY-271 | `unavailable` 안내. `error`가 `null`이면 원인 문장을 뺀다 | DB 파일을 읽지 못했습니다. 원인: {reason}. 파일을 고치면 자동으로 다시 읽습니다. | The database file could not be read. Cause: {reason}. The file is read again automatically after it is fixed. | 설정 계약 1.12절 |
 | CPY-272 | 원인 `file_unreadable` | 파일이 없거나 읽을 수 없음 | File missing or unreadable | 설정 계약 1.12절 |
@@ -1308,7 +1308,7 @@ IP 정보 DB 행은 `databases.country`와 `databases.asn`을 이 순서로 보�
 | CPY-299 | [차단 해제] 버튼의 접근 가능한 이름. {address}는 행의 주소 | {address} 차단 해제 | Unblock {address} | 스펙 6절 |
 | CPY-300 | 차단됨 배지 | 차단됨 | Blocked | 스펙 SCR-008 |
 | CPY-301 | 범위 항목으로 차단된 주소의 안내 | 범위 항목으로 차단되어 있습니다. 설정에서 해제하십시오. | Blocked by a range entry. Remove it in Settings. | 관리 API 계약 1.17절 |
-| CPY-302 | `deny_editable = false`일 때 주소별 표 위의 안내 | 차단하려면 설정 파일에서 management.config_edit = true로 바꾸고 VNC Relay를 재시작하십시오. | To block addresses, set management.config_edit = true in the configuration file and restart the server. | ADR-0013 |
+| CPY-302 | `deny_editable = false`일 때 주소별 표 위의 안내 | 차단하려면 설정 파일에서 management.config_edit = true로 바꾸고 VNC Relay를 재시작하십시오. | To block addresses, set management.config_edit = true in the configuration file and restart the VNC Relay. | ADR-0013 |
 | CPY-303 | 차단 확인 대화상자 제목 | 주소 차단 확인 | Confirm blocking address | 스펙 SCR-008 |
 | CPY-304 | 차단 확인 대화상자의 주소 label | 차단할 주소 | Address to block | 스펙 SCR-008 |
 | CPY-305 | 차단 확인 대화상자 본문 | 이 주소의 새 접속을 모든 중계 진입점에서 거절하고, 열린 세션과 대기 연결을 바로 끊습니다. | New connections from this address are rejected at all relay entry points, and its open sessions and waiting connections are closed immediately. | 운영 스펙 3.10절 |

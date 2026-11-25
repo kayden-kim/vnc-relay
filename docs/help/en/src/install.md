@@ -99,11 +99,11 @@ Run subsequent commands in this directory, which contains the executable and `re
 | `LICENSE` | Project MIT license |
 | `THIRD-PARTY-NOTICES.txt` | Notices for third-party components included in the executable |
 
-The bundle contains no account file, private key, password, or operations log. With the example configuration, creating an administrator account creates `admin-accounts.toml`. Running the server writes operations logs to `relay.log`.
+The bundle contains no account file, private key, password, or operations log. With the example configuration, creating an administrator account creates `admin-accounts.toml`. Running the VNC Relay writes operations logs to `relay.log`.
 
 Relative paths inside the configuration resolve from the directory containing `relay.toml`, not the terminal's current directory. The example account file and log belong in that directory. If you enable TLS, you must provide the certificate and private key separately and set their paths in the configuration.
 
-You must restrict access to the account file, private key, and log directory. On Windows, it is recommended to restrict ACLs to the server's OS account and administrators. On Ubuntu, mode `0600` is recommended for account files and private keys. See section 3.2 of the [manual operations guide](https://github.com/kayden-kim/vnc-relay/blob/main/docs/how-to/operate-relay.md).
+You must restrict access to the account file, private key, and log directory. On Windows, it is recommended to restrict ACLs to VNC Relay's OS account and administrators. On Ubuntu, mode `0600` is recommended for account files and private keys. See section 3.2 of the [manual operations guide](https://github.com/kayden-kim/vnc-relay/blob/main/docs/how-to/operate-relay.md).
 
 ## Install and uninstall the Windows service
 
@@ -184,6 +184,6 @@ Bundle names, contents, and packaging procedures follow sections 1.2 and 3.1 of 
 - [ ] The executable and `relay.toml` are in the operational directory.
 - [ ] Required ports are available, and firewall and source IP policies have the intended scope.
 - [ ] Access to the account file, private key, and log directory is restricted.
-- [ ] Create an administrator account before starting the server. There is no default account or password. The server does not start without an account.
+- [ ] Create an administrator account before starting the VNC Relay. There is no default account or password. The VNC Relay does not start without an account.
 
 Continue with [Quick start](quick-start.md) to create the administrator account. Before public deployment, follow [Configuration](configure.md) and [Operations](operate.md).
