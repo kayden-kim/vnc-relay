@@ -108,7 +108,7 @@ flowchart LR
 - 네이티브 `table`에는 `role="table"`, `thead`·`tbody`에는 `role="rowgroup"`을 붙인다. 머리글·본문·빈 행의 `tr`에는 `role="row"`, `th`에는 `role="columnheader"`, 일반·빈 셀의 `td`에는 `role="cell"`을 붙인다. CSS가 `display`를 바꿔도 역할을 생략하지 않는다.
 - `mobileHead: 'primary'` 셀에는 `.data-table-head-primary`, `'secondary'` 셀에는 `.data-table-head-secondary`를 붙인다. 두 셀은 모바일 격자의 첫 행(`grid-row: 1`)을 공유한다. 첫 줄 셀은 `::before` 레이블 없이 값만 보인다.
 - 일반 셀은 `data-label`과 CSS 가상 요소로 열 이름을 보인다. 가상 요소의 대체 텍스트는 비워 중복 읽기를 막는다(DESIGN 566행). 열 머리글은 화면에서만 숨기고 접근성 트리에는 남긴다.
-- 데스크톱 폭의 열 머리글은 한 줄이다. `data-table-wrap` 머리글만 낱말 사이에서 줄바꿈한다. 그래서 "대상->Viewer" 같은 낱말은 하이픈 뒤에서 끊기지 않는다. 칸 바로 아래의 배지(`td > .badge`)와 `data-table-nowrap` 클래스를 붙인 글씨도 한 줄을 유지한다(DESIGN의 배지 한 줄 규칙과 시각 값의 날짜·시각 두 줄 규칙). 호출자도 셀 값에 이 클래스를 쓸 수 있다. 모바일 폭에서는 320px 넘침을 막으려고 배지와 `data-table-nowrap` 글씨를 다시 줄바꿈한다.
+- 데스크톱 폭의 열 머리글은 한 줄이다. `data-table-wrap` 머리글만 낱말 사이에서 줄바꿈한다. 공백으로 나눈 낱말을 쓰되 `->` 앞뒤의 공백은 낱말을 나누지 않는다. 그래서 "Viewer -> Server" 같은 방향 이름은 화살표에서 끊기지 않고 `->`로 시작하는 줄도 생기지 않는다. 칸 바로 아래의 배지(`td > .badge`)와 `data-table-nowrap` 클래스를 붙인 글씨도 한 줄을 유지한다(DESIGN의 배지 한 줄 규칙과 시각 값의 날짜·시각 두 줄 규칙). 호출자도 셀 값에 이 클래스를 쓸 수 있다. 모바일 폭에서는 320px 넘침을 막으려고 배지와 `data-table-nowrap` 글씨를 다시 줄바꿈한다.
 
 ### 도움말 링크 조립
 

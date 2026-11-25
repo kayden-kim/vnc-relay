@@ -397,7 +397,7 @@ SCR-004는 [설정 v4 계약 1.2절](../contracts/config-v4.md#12-키-표)의 �
 | --- | --- | --- | --- |
 | 1 | CPY-214 | 활성 세션 수(CPY-028), 대기 연결 수(CPY-027) | `session_count`, `waiting_count` 그대로 |
 | 2 | CPY-215 | 수락·거절·중단(CPY-216) | `connection_accepted`·`connection_rejected`·`connection_aborted`의 1분당 증가량. 아래 연결 차트 규칙 |
-| 3 | CPY-217 | Viewer->대상·대상->Viewer(CPY-218) | `session_io_viewer_to_target`·`session_io_target_to_viewer`의 이웃한 두 점 차이 ÷ `at` 차이(초) |
+| 3 | CPY-217 | Viewer -> Server·Server -> Viewer(CPY-218) | `session_io_viewer_to_target`·`session_io_target_to_viewer`의 이웃한 두 점 차이 ÷ `at` 차이(초) |
 | 4 | CPY-208 | 계열 하나. 범례 이름은 차트 제목과 같음 | `process_cpu_time`의 이웃한 두 점 차이 ÷ `at` 차이(초)의 백분율 |
 | 5 | CPY-210 | 계열 하나. 범례 이름은 차트 제목과 같음 | `process_memory_usage` 그대로 |
 
@@ -1007,7 +1007,7 @@ IP 정보 DB 행은 `databases.country`와 `databases.asn`을 이 순서로 보�
 | CPY-041 | 활성 세션 빈 목록 | 활성 없음 | No active sessions | 스펙 §3, §4 |
 | CPY-042 | 최근 종료 목록 제목 | 최근 종료 목록 | Recently closed sessions | 스펙 SCR-001, 용어집 |
 | CPY-043 | 사용하지 않음(CPY-198 사용) | 세션, 종료 원인, 종료 시각, Viewer->대상 / 대상->Viewer | Session, Close reason, Closed at, Viewer->target / target->Viewer | 스펙 §3 표 |
-| CPY-198 | 최근 종료 표 머리글 | 세션, 종료 원인, 모드, 전송 경로(Viewer → 대상), 시각, Viewer->대상 / 대상->Viewer, 상대 주소, 로그 | Session, Close reason, Mode, Transport (Viewer → target), Time, Viewer->target / target->Viewer, Peer address, Logs | 스펙 SCR-001·DASH-066 |
+| CPY-198 | 최근 종료 표 머리글 | 세션, 종료 원인, 모드, 전송 경로(Viewer → 대상), 시각, Viewer -> Server / Server -> Viewer, 상대 주소, 로그 | Session, Close reason, Mode, Transport (Viewer → target), Time, Viewer -> Server / Server -> Viewer, Peer address, Logs | 스펙 SCR-001·DASH-066. 방향 칸은 CPY-325·CPY-326 |
 | CPY-200 | 최근 종료 시각 칸의 종료 시각 줄 라벨. 시작 줄은 CPY-055를 쓴다 | 종료 시각 | Closed at | 스펙 SCR-001·DASH-066 |
 | CPY-201 | 최근 종료 시각 칸의 지속 시간 줄 라벨 | 지속 시간 | Duration | 스펙 SCR-001·DASH-066 |
 | CPY-044 | 최근 종료 빈 목록 | 최근 종료 없음 | No recently closed sessions | 스펙 §3, §4 |
@@ -1024,7 +1024,7 @@ IP 정보 DB 행은 `databases.country`와 `databases.asn`을 이 순서로 보�
 | CPY-080 | 연결 사용량 상한을 읽지 못함 | 상한 확인 불가 | Limit unavailable | 관리 스펙 §2 (확인 불가, 0으로 표시하지 않음) |
 | CPY-084 | 세 목록 제목의 개수, n=0 또는 n≥2 | {n}건 | {n} items | DESIGN 개수 배지 |
 | CPY-085 | 세 목록 제목의 개수, n=1 | 1건 | 1 item | 영어 단수형 |
-| CPY-187 | 활성 세션 표 머리글 | 세션, 모드, 전송 경로(Viewer → 대상), 시작, Viewer->대상 / 대상->Viewer, 상대 주소, 상세 | Session, Mode, Transport (Viewer → target), Started, Viewer->target / target->Viewer, Peer address, Details | 스펙 SCR-001·DASH-062 |
+| CPY-187 | 활성 세션 표 머리글 | 세션, 모드, 전송 경로(Viewer → 대상), 시작, Viewer -> Server / Server -> Viewer, 상대 주소, 상세 | Session, Mode, Transport (Viewer → target), Started, Viewer -> Server / Server -> Viewer, Peer address, Details | 스펙 SCR-001·DASH-062. 방향 칸은 CPY-325·CPY-326 |
 
 #### 9.3.3 SCR-002 세션 상세
 
@@ -1037,8 +1037,8 @@ IP 정보 DB 행은 `databases.country`와 `databases.asn`을 이 순서로 보�
 | CPY-055 | 시작 시각 라벨 | 시작 시각 | Started at | 스펙 SCR-002 |
 | CPY-056 | Viewer 주소 라벨 | Viewer 주소 | Viewer address | 스펙 SCR-002 |
 | CPY-057 | Server·대상 주소 라벨 | Server/대상 주소 | Server/target address | 스펙 SCR-002 |
-| CPY-325 | 전송량 방향 이름: Viewer에서 Server·대상으로 | Viewer -> Server | Viewer -> Server | 사용자 결정 2026-11-25. 스펙 SCR-002. 표 머리글(CPY-187·198)과 달리 "대상"을 쓰지 않는다 |
-| CPY-326 | 전송량 방향 이름: Server·대상에서 Viewer로 | Server -> Viewer | Server -> Viewer | 사용자 결정 2026-11-25. 스펙 SCR-002 |
+| CPY-325 | 방향 이름: Viewer에서 Server(Mode I은 대상)로 | Viewer -> Server | Viewer -> Server | 사용자 결정 2026-11-25. 표 머리글의 방향 칸(CPY-187·198)과 목록 행의 방향 줄, 처리량 범례(CPY-218), SCR-002 전송량이 같은 이름을 쓴다 |
+| CPY-326 | 방향 이름: Server(Mode I은 대상)에서 Viewer로 | Server -> Viewer | Server -> Viewer | 사용자 결정 2026-11-25. CPY-325와 같은 화면에서 쓴다 |
 | CPY-058 | 사용하지 않음(CPY-188 사용) | 실제 소켓 상대 주소입니다. | Actual socket peer address. | 스펙 SCR-002 |
 | CPY-059 | 대상 없음 안내 | 현재 세션을 찾을 수 없음 | The current session was not found | 스펙 §4 (문구 그대로) |
 | CPY-060 | 세션 종료 버튼 | 세션 종료 | Terminate session | 디자인 기준 버튼 |
@@ -1214,7 +1214,7 @@ IP 정보 DB 행은 `databases.country`와 `databases.asn`을 이 순서로 보�
 | CPY-215 | 차트 제목 | 연결(분당) | Connections (per minute) | 스펙 SCR-007 |
 | CPY-216 | 연결 차트 범례 | 수락 / 거절 / 중단 | Accepted / Rejected / Aborted | 메트릭 계약 1.8절 |
 | CPY-217 | 차트 제목 | 처리량(초당) | Throughput (per second) | 스펙 SCR-007 |
-| CPY-218 | 처리량 방향 이름(카드·범례) | Viewer->대상 / 대상->Viewer | Viewer->target / target->Viewer | 관리 스펙 2.1절 |
+| CPY-218 | 처리량 방향 이름(카드·범례) | Viewer -> Server / Server -> Viewer | Viewer -> Server / Server -> Viewer | 관리 스펙 2.1절. 방향 이름은 CPY-325·CPY-326 |
 | CPY-219 | 범례 값 | 현재 {current} · 최대 {max} | Now {current} · Max {max} | 스펙 SCR-007 |
 | CPY-220 | 보관한 점이 차트별 최소 수보다 적은 차트 자리(보이는 기간이 최근 1시간) | 추이를 모으는 중입니다. 10초마다 점이 하나씩 쌓입니다. | Collecting trend data. One point is added every 10 seconds. | 스펙 4절 |
 | CPY-221 | 시간 분포 구역 제목 | 시간 분포 | Duration distribution | 스펙 SCR-007 |
