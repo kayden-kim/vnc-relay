@@ -32,8 +32,7 @@ const HASH: &str = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
 const DEFAULT_PARAMS: &str = "m=19456,t=2,p=1";
 const OTHER_PARAMS: &str = "m=19456,t=3,p=1";
 
-const NOTICE: &str =
-    "notice: 실행 중인 서버에는 반영되지 않는다. 서버를 정상 종료하고 다시 시작해야 한다.";
+const NOTICE: &str = "notice: 실행 중인 VNC Relay에는 반영되지 않는다. VNC Relay를 정상 종료하고 다시 시작해야 한다.";
 
 #[cfg(target_os = "linux")]
 const PTY_TIMEOUT: Duration = Duration::from_secs(30);

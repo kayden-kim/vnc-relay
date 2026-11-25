@@ -641,8 +641,7 @@ pub fn block_and_unblock_one_address() {
 // and no button, a local address has no button, and a server with editing off has no buttons and the CPY-302 line.
 pub fn range_entries_local_rows_and_edit_off() {
     const RANGE_NOTE: &str = "범위 항목으로 차단되어 있습니다. 설정에서 해제하십시오.";
-    const EDIT_OFF: &str =
-        "차단하려면 설정 파일에서 management.config_edit = true로 바꾸고 서버를 재시작하십시오.";
+    const EDIT_OFF: &str = "차단하려면 설정 파일에서 management.config_edit = true로 바꾸고 VNC Relay를 재시작하십시오.";
     let server = Server::start_with_config_transform("dash-090", Some(1), true, with_databases);
     let admin = server.login();
     connect_clients(&server, &admin);
@@ -671,7 +670,7 @@ pub fn range_entries_local_rows_and_edit_off() {
     );
     assert_eq!(
         browser.eval(
-            "[...document.querySelectorAll('[data-sources-card=\"addresses\"] .card-head .card-description')].map(p => p.textContent).includes('차단하려면 설정 파일에서 management.config_edit = true로 바꾸고 서버를 재시작하십시오.')"
+            "[...document.querySelectorAll('[data-sources-card=\"addresses\"] .card-head .card-description')].map(p => p.textContent).includes('차단하려면 설정 파일에서 management.config_edit = true로 바꾸고 VNC Relay를 재시작하십시오.')"
         ),
         json!(false),
         "with editing on there is no CPY-302"

@@ -296,6 +296,6 @@ fn internal_error() -> Response {
     super::json_error(
         StatusCode::INTERNAL_SERVER_ERROR,
         "internal",
-        "서버 내부 오류가 났다.",
+        "VNC Relay 내부 오류가 났다.",
     )
 }

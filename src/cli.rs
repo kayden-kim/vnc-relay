@@ -19,10 +19,10 @@ pub const EXIT_LISTENER: u8 = 4;
 pub const EXIT_ACCOUNTS: u8 = 5;
 
 const HELP_COMMANDS: &str = "\
-vnc-relay: UltraVNC Repeater 호환 TCP·WS·WSS 중계 서버
+vnc-relay: UltraVNC Repeater 호환 TCP·WS·WSS VNC 중계 제품
 
 사용법:
-  vnc-relay serve --config <path>                  서버를 포그라운드로 실행한다.
+  vnc-relay serve --config <path>                  VNC Relay를 포그라운드로 실행한다.
   vnc-relay admin add <account> --config <path>    계정을 추가한다.
   vnc-relay admin passwd <account> --config <path> 계정의 비밀번호를 바꾼다.
   vnc-relay admin remove <account> [--yes] --config <path>
@@ -45,7 +45,7 @@ const HELP_REST: &str = "\
   vnc-relay --help, -h                             이 사용법을 쓴다.
   vnc-relay --version, -V                          버전을 쓴다.
 
-비밀번호는 터미널에서 숨김 입력으로만 받는다. admin 명령은 실행 중인 서버에 반영되지 않는다.
+비밀번호는 터미널에서 숨김 입력으로만 받는다. admin 명령은 실행 중인 VNC Relay에 반영되지 않는다.
 
 종료 코드: 0 성공, 1 실행 중 오류, 2 사용법 오류, 3 설정 오류, 4 리스너 준비 실패, 5 계정 파일 오류
 ";

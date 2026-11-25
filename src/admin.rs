@@ -15,7 +15,7 @@ use vnc_relay_domain::account::Name;
 use crate::cli::{self, AdminAction, EXIT_ACCOUNTS, EXIT_CONFIG, EXIT_RUNTIME, EXIT_USAGE};
 
 const RESTART_NOTICE: &str =
-    "실행 중인 서버에는 반영되지 않는다. 서버를 정상 종료하고 다시 시작해야 한다.";
+    "실행 중인 VNC Relay에는 반영되지 않는다. VNC Relay를 정상 종료하고 다시 시작해야 한다.";
 
 /// Runs one `admin` command and returns its exit code.
 pub fn run(config: &Path, action: &AdminAction) -> ExitCode {

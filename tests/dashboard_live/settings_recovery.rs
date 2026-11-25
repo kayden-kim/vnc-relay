@@ -433,7 +433,7 @@ pub fn disabled_restart_pending_and_invalid_patch_results_remove_edit_actions() 
             "{text}"
         );
         assert!(text.contains(if lang == "ko" {
-            "서버를 재시작하십시오"
+            "VNC Relay를 재시작하십시오"
         } else {
             "restart the server"
         }));

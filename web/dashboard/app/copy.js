@@ -38,7 +38,7 @@ export const COPY = {
     limitUnknown: '상한 확인 불가', // CPY-080
     listCount: '{n}건', // CPY-084
     listCountOne: '1건', // CPY-085
-    summaryTitle: '서버 요약', // CPY-022
+    summaryTitle: 'VNC Relay 요약', // CPY-022
     serverState: '실행 상태', // CPY-023
     stateReady: '준비됨', // CPY-024
     stateShutdownGrace: '종료 유예 중', // CPY-025
@@ -71,7 +71,7 @@ export const COPY = {
       admin_terminated: '관리자 종료', // CPY-047
       dead_connection: '끊긴 연결 감지', // CPY-048
       close_timeout: '정리 제한 시간 초과', // CPY-049
-      server_shutdown: '서버 종료', // CPY-050
+      server_shutdown: 'VNC Relay 종료', // CPY-050
       internal_error: '내부 오류', // CPY-083
       session_expired: '세션 만료', // CPY-190
       ip_denied: '차단 목록으로 종료', // CPY-323
@@ -112,10 +112,10 @@ export const COPY = {
     apply: '적용', // CPY-091
     configInEffect: '설정 파일과 실행 중인 설정이 같습니다.', // CPY-092
     configPending: '설정 파일에 재시작 없이 적용할 차이가 있습니다. 표시 값은 실행 중인 설정입니다.', // CPY-093
-    configRestartRequired: '설정 파일에 재시작이 필요한 차이가 있어 편집할 수 없습니다. 파일을 수정하거나 서버를 재시작한 뒤 다시 불러오십시오.', // CPY-094
+    configRestartRequired: '설정 파일에 재시작이 필요한 차이가 있어 편집할 수 없습니다. 파일을 수정하거나 VNC Relay를 재시작한 뒤 다시 불러오십시오.', // CPY-094
     configInvalid: '설정 파일의 검증에 실패해 편집할 수 없습니다. 진단을 확인하고 파일을 수정한 뒤 다시 불러오십시오.', // CPY-095
     configUnreadable: '설정 파일을 읽지 못해 편집할 수 없습니다. 파일 접근을 복구한 뒤 다시 불러오십시오.', // CPY-096
-    configEditDisabled: '편집 기능이 꺼져 있습니다. 설정 파일에서 management.config_edit = true로 바꾸고 서버를 재시작하십시오.', // CPY-097
+    configEditDisabled: '편집 기능이 꺼져 있습니다. 설정 파일에서 management.config_edit = true로 바꾸고 VNC Relay를 재시작하십시오.', // CPY-097
     noReloadHistory: '이 프로세스의 재로드 이력이 없습니다.', // CPY-098
     settingsApplied: '설정 {n}개를 적용했습니다.', // CPY-099
     settingsApplyTiming: '바뀐 값은 키별 다음 검사·요청부터 적용됩니다. 이미 끝난 검사·시작한 타이머·설정한 소켓 옵션은 이전 결과를 유지합니다. 기존 중계 세션은 계속 동작합니다.', // CPY-189 (replaces CPY-100)
@@ -204,7 +204,7 @@ export const COPY = {
     hideDetails: '접기', // CPY-164
     searchLengthError: '검색어는 1~256자로 입력하십시오. 검색을 해제하려면 빈 값으로 검색하십시오.', // CPY-165
     logsEmpty: '필터와 일치하는 최근 로그가 없습니다.', // CPY-166
-    logsDisabled: '최근 로그를 보관하지 않습니다. 보관하려면 설정 파일의 recent_logs.max_entries를 1~10000으로 바꾸고 서버를 재시작하십시오.', // CPY-167
+    logsDisabled: '최근 로그를 보관하지 않습니다. 보관하려면 설정 파일의 recent_logs.max_entries를 1~10000으로 바꾸고 VNC Relay를 재시작하십시오.', // CPY-167
     logsGapNotice: '조회하기 전에 일부 로그가 보관 목록에서 제거됐습니다. 표시한 목록은 전체 이력이 아닙니다.', // CPY-168
     logsPausedNotice: '자동 갱신을 일시정지했습니다. 새로고침과 필터는 계속 사용할 수 있습니다.', // CPY-169
     autoRefreshOn: '켜짐', // CPY-170
@@ -260,7 +260,7 @@ export const COPY = {
     handleCount: '열린 핸들 수', // CPY-241
     descriptorCount: '열린 파일 기술자 수', // CPY-242
     version: '버전', // CPY-243
-    externalNote: '외부 수집 도구는 상태 리스너의 /metrics에서 같은 값을 읽습니다. 켜려면 설정 파일에서 [metrics] enabled = true로 바꾸고 서버를 재시작하십시오.', // CPY-244
+    externalNote: '외부 수집 도구는 상태 리스너의 /metrics에서 같은 값을 읽습니다. 켜려면 설정 파일에서 [metrics] enabled = true로 바꾸고 VNC Relay를 재시작하십시오.', // CPY-244
     metricsRejected: '메트릭 조회 요청을 처리하지 못했습니다. 새로고침으로 다시 조회하십시오.', // CPY-245
     secondsUnit: '{n}초', // CPY-246
     distBarName: '구간별 개수: {items}', // CPY-247
@@ -286,7 +286,7 @@ export const COPY = {
     ipDbStale: '이전 DB 사용 중', // CPY-266
     ipDbUnavailable: '읽기 실패', // CPY-267
     ipDbInfoLabels: ['종류', '빌드 시각', '읽은 시각'], // CPY-268
-    ipDbNotConfiguredNote: '설정 파일의 {key}에 DB 파일 경로를 넣고 서버를 재시작하면 이 정보를 찾습니다.', // CPY-269
+    ipDbNotConfiguredNote: '설정 파일의 {key}에 DB 파일 경로를 넣고 VNC Relay를 재시작하면 이 정보를 찾습니다.', // CPY-269
     ipDbStaleNote: '파일을 다시 읽지 못해 이전 DB를 계속 씁니다. 원인: {reason}. 파일을 고치면 자동으로 다시 읽습니다.', // CPY-270
     ipDbUnavailableNote: 'DB 파일을 읽지 못했습니다. 원인: {reason}. 파일을 고치면 자동으로 다시 읽습니다.', // CPY-271
     ipDbFileUnreadable: '파일이 없거나 읽을 수 없음', // CPY-272
@@ -315,7 +315,7 @@ export const COPY = {
     denyUnblockName: '{address} 차단 해제', // CPY-299
     denyBlocked: '차단됨', // CPY-300
     denyRangeNote: '범위 항목으로 차단되어 있습니다. 설정에서 해제하십시오.', // CPY-301
-    denyEditOff: '차단하려면 설정 파일에서 management.config_edit = true로 바꾸고 서버를 재시작하십시오.', // CPY-302
+    denyEditOff: '차단하려면 설정 파일에서 management.config_edit = true로 바꾸고 VNC Relay를 재시작하십시오.', // CPY-302
     denyBlockTitle: '주소 차단 확인', // CPY-303
     denyBlockLabel: '차단할 주소', // CPY-304
     denyBlockBody: '이 주소의 새 접속을 모든 중계 진입점에서 거절하고, 열린 세션과 대기 연결을 바로 끊습니다.', // CPY-305
