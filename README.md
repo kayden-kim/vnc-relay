@@ -6,7 +6,7 @@
 
 ![VNC Relay operations overview: VNC Relay summary, relay and management connection gauges, waiting connections, and active sessions](docs/help/en/src/images/operations.png)
 
-- Version: 2026.11.10. Versions use `year.month.sequence` ([release how-to](docs/how-to/release.md)).
+- Version: 2026.11.11. Versions use `year.month.sequence` ([release how-to](docs/how-to/release.md)).
 - Basis: this README describes the current source on `main`. An executable built from the current source prints the version above until the next release.
 - Supported OS: Windows 11 x64 and Ubuntu 24.04 LTS x64. Windows Server and other OSes or architectures are outside the verified scope.
 - Operator help: [English](https://kayden-kim.github.io/vnc-relay/en/) · [한국어](https://kayden-kim.github.io/vnc-relay/ko/)
