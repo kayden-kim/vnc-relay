@@ -23,7 +23,8 @@ const TICK: Duration = Duration::from_secs(1);
 const LINE_STEPS: usize = 20;
 
 /// Without a terminal a progress line is also written after this long without one,
-/// so a single slow test does not leave the output silent.
+/// so a single slow test does not leave the output silent. Keep it well under 90 s: the
+/// omp 18.14.1 sources rewrite a job widget's rules when no line matched for that long.
 const LINE_HEARTBEAT: Duration = Duration::from_secs(30);
 
 /// True when stderr is a terminal and the status line may be rewritten in place.
