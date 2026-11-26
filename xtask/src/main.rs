@@ -2,6 +2,8 @@
 //!
 //! - `cargo xtask scenarios [--require-all]`: scenario coverage report
 //!   (docs/conventions/testing.md section 7).
+//! - `cargo xtask gate`: the full completion check, six checks in order, with progress on a
+//!   terminal (docs/how-to/set-up-and-verify.md section 3.4).
 //! - `cargo xtask layers`: layer dependency check (docs/architectures/code-map.md).
 //! - `cargo xtask tokens [--check]`: token CSS from DESIGN.md, and the sign-in page's copies of app components and styles
 //!   (docs/conventions/frontend.md section 2).
@@ -19,11 +21,13 @@
 
 mod cargo;
 mod dashboard_serve;
+mod gate;
 mod help_serve;
 mod help_site;
 mod layers;
 mod notices;
 mod package;
+mod progress;
 mod scenarios;
 mod static_server;
 mod ticket;
@@ -33,7 +37,9 @@ use std::fmt;
 use std::io::Write;
 use std::process::ExitCode;
 
-const USAGE: &str = "usage: cargo xtask scenarios [--require-all] | cargo xtask layers | cargo xtask tokens [--check] | cargo xtask dashboard-serve [--port N] | cargo xtask notices [--check] | cargo xtask package | cargo xtask help-site | cargo xtask help-serve [--port N] | cargo xtask ticket keys <viewer|server> [--dir DIR] | cargo xtask ticket issue <viewer|server> <RELAY-ID> [--dir DIR] [--issuer TEXT] [--relay-host TEXT] [--lifetime SECS] [--session SECS] [--subject TEXT]";
+use progress::StatusLine;
+
+const USAGE: &str = "usage: cargo xtask scenarios [--require-all] | cargo xtask gate | cargo xtask layers | cargo xtask tokens [--check] | cargo xtask dashboard-serve [--port N] | cargo xtask notices [--check] | cargo xtask package | cargo xtask help-site | cargo xtask help-serve [--port N] | cargo xtask ticket keys <viewer|server> [--dir DIR] | cargo xtask ticket issue <viewer|server> <RELAY-ID> [--dir DIR] [--issuer TEXT] [--relay-host TEXT] [--lifetime SECS] [--session SECS] [--subject TEXT]";
 
 /// Exit code for a usage error, same as the product CLI (cli-v1 §2.1).
 const EXIT_USAGE: u8 = 2;
@@ -58,8 +64,9 @@ fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let args: Vec<&str> = args.iter().map(String::as_str).collect();
     let result = match args.as_slice() {
-        ["scenarios"] => scenarios::run(false),
-        ["scenarios", "--require-all"] => scenarios::run(true),
+        ["scenarios"] => scenarios::run(false, &StatusLine::new("")),
+        ["scenarios", "--require-all"] => scenarios::run(true, &StatusLine::new("")),
+        ["gate"] => gate::run(),
         ["layers"] => layers::run(),
         ["tokens"] => tokens::run(false),
         ["tokens", "--check"] => tokens::run(true),

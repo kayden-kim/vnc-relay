@@ -12,6 +12,7 @@ use std::path::{Path, PathBuf};
 
 use crate::Error;
 use crate::cargo::{self, Package, Workspace};
+use crate::progress::StatusLine;
 use markers::Marker;
 use report::{Problem, Report, ScenarioRow, Status, TestEntry};
 use spec::Spec;
@@ -26,12 +27,12 @@ const REPORT_FILE: &str = "scenario-report.md";
 /// repository root (AGENTS.md, "부수 파일 위치"), not in the Cargo target directory.
 const REPORT_DIRS: [&str; 2] = [".work", "reports"];
 
-pub fn run(require_all: bool) -> Result<bool, Error> {
+pub fn run(require_all: bool, status: &StatusLine) -> Result<bool, Error> {
     let workspace = cargo::metadata()?;
     let mut problems = Vec::new();
     let specs = load_specs(&workspace.root, &mut problems)?;
     let tests = collect_marked_tests(&workspace, &mut problems)?;
-    let run = test_run::run(&workspace)?;
+    let run = test_run::run(&workspace, status)?;
     let rows = link(&specs, &tests, &run, &mut problems);
 
     let report = Report::new(&workspace.root, rows, problems, run.success, require_all);
