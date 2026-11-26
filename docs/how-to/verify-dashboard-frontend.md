@@ -131,7 +131,7 @@
 
    영향: `cargo xtask dashboard-serve`의 루프백 포트 하나를 쓴다. 관리 API 응답은 도구가 시안과 같은 값으로 준다.
 
-   기대 결과: 26개 프레임 × 6폭의 짝 156쌍이 모두 있고, 구현 쪽 가로 넘침·페이지 오류·응답 없는 API 요청이 0건이다. 차이의 판정은 사용자가 한다.
+   기대 결과: 26개 프레임 × 7폭의 짝 182쌍이 모두 있고, 구현 쪽 가로 넘침·페이지 오류·응답 없는 API 요청이 0건이다. 차이의 판정은 사용자가 한다.
 
 ### 3.5 키보드 확인 (수동)
 
@@ -178,7 +178,7 @@
    기대 결과: 결과가 Chromium과 같다. 차이가 있으면 검증 기록에 적는다.
 
 2. Safari 대신 Playwright WebKit으로 자동 확인한다. Playwright는 저장소 밖 Python 가상 환경에 설치한다. 프로젝트 의존성에 넣지 않는다. 다음 두 가지를 실행한다.
-   - `cargo xtask dashboard-serve`의 시험 페이지에서 `tests/dashboard_browser.rs`와 같은 사례를 6폭과 `lang=ko`·`lang=en`으로 연다. `data-result`, `data-failures`, CSP 위반 상세, 가로 넘침을 모은다.
+   - `cargo xtask dashboard-serve`의 시험 페이지에서 `tests/dashboard_browser.rs`와 같은 사례를 7폭과 `lang=ko`·`lang=en`으로 연다. `data-result`, `data-failures`, CSP 위반 상세, 가로 넘침을 모은다.
    - 루프백의 실제 `vnc-relay serve`와 실제 TCP 중계 세션으로 SCR-003 로그인 → SCR-001 → SCR-002 → 종료 취소·확인 → 로그아웃을 1280·390·320px, ko·en으로 실행한다. 필수 요소가 화면 안에 있고 가려지지 않는지 `elementFromPoint`로 확인한다.
 
    영향: 시험 계정·설정·운영 로그를 저장소 밖 임시 폴더에 만든다. 끝나면 실행 파일 복사본과 계정 파일을 지운다.
