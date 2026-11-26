@@ -1,6 +1,6 @@
 # xtask 개발 도구 모듈 설계
 
-`xtask`는 개발 전용 crate다. `cargo xtask scenarios`는 스펙 수용 테스트 표, 테스트 코드의 시나리오 표식, `cargo test` 결과를 대조해 시나리오별 상태 보고서를 만든다. `cargo xtask layers`는 `cargo metadata`의 crate 의존을 코드 지도의 레이어 표와 대조한다. 이 두 명령은 Cargo가 주는 정보(`cargo metadata`, 테스트 빌드 JSON 메시지, 테스트 출력)만 읽고 제품 crate를 링크하지 않는다. `cargo xtask tokens`는 DESIGN.md 머리말에서 토큰 CSS를 만들고 저장된 파일과 대조한다. `cargo xtask dashboard-serve`는 `web/dashboard/`를 `127.0.0.1`에서 제공하는 로컬 미리보기 서버다. `cargo xtask help-site`는 운영자 도움말 사이트를 만들고 검사한다. `cargo xtask help-serve`는 만든 도움말 사이트를 GitHub Pages와 같은 경로로 제공하는 로컬 미리보기 서버다. `cargo xtask ticket`은 접속 ticket을 손으로 확인할 때 외부 발급 쪽을 대신해 시험용 키와 ticket을 만든다. `cargo xtask gate`는 [전체 완료 검증](../how-to/set-up-and-verify.md#34-전체-완료-검증)의 여섯 검사를 차례로 실행하고, 터미널에서는 검사 번호와 시험 진행률을 한 줄로 보인다.
+`xtask`는 개발 전용 crate다. `cargo xtask scenarios`는 스펙 수용 테스트 표, 테스트 코드의 시나리오 표식, `cargo test` 결과를 대조해 시나리오별 상태 보고서를 만든다. `cargo xtask layers`는 `cargo metadata`의 crate 의존을 코드 지도의 레이어 표와 대조한다. 이 두 명령은 Cargo가 주는 정보(`cargo metadata`, 테스트 빌드 JSON 메시지, 테스트 출력)만 읽고 제품 crate를 링크하지 않는다. `cargo xtask tokens`는 DESIGN.md 머리말에서 토큰 CSS를 만들고 저장된 파일과 대조한다. `cargo xtask dashboard-serve`는 `web/dashboard/`를 `127.0.0.1`에서 제공하는 로컬 미리보기 서버다. `cargo xtask help-site`는 운영자 도움말 사이트를 만들고 검사한다. `cargo xtask help-serve`는 만든 도움말 사이트를 GitHub Pages와 같은 경로로 제공하는 로컬 미리보기 서버다. `cargo xtask ticket`은 접속 ticket을 손으로 확인할 때 외부 발급 쪽을 대신해 시험용 키와 ticket을 만든다. `cargo xtask gate`는 [전체 완료 검증](../how-to/set-up-and-verify.md#34-전체-완료-검증)의 여섯 검사를 차례로 실행하고 검사 번호와 시험 진행률을 보인다. 표준 오류가 터미널이면 진행률을 한 줄로 덮어쓰고, 터미널이 아니면 새 줄로 쓴다.
 
 `cargo xtask help-site`와 `cargo xtask help-serve`는 mdBook 0.5.4로 운영자 도움말 사이트를 만든다. 사이트 화면과 동작은 [도움말 사이트 화면 스펙](../specs/help-site.md), 설치·빌드·게시 절차는 [도움말을 빌드하고 게시하는 방법](../how-to/publish-help.md)을 따른다.
 
@@ -33,7 +33,7 @@ Windows의 `Platform.executables`는 `vnc-relay`·`vnc-relay-tray` 패키지와 
   - 도움말 사이트 생성과 정적 검사: 두 책을 mdBook으로 빌드하고 사이트 루트·토큰 CSS·글꼴을 더한 뒤 목차·제목·언어·링크·그림·외부 주소를 검사한다.
   - 로컬 미리보기 서버: 대시보드 파일과 만든 도움말 사이트를 `127.0.0.1`에서 제공한다. 두 명령은 한 정적 서버 구현(`static_server.rs`)을 함께 쓴다.
   - 접속 ticket 시험 도구: 역할의 P-256 키 쌍, 공개 키 JWKS 파일, 개인 JWK 파일, ES256 ticket을 만든다.
-  - 전체 완료 검증 실행: `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo xtask layers`, `cargo xtask tokens --check`, `cargo xtask scenarios`, `cargo deny check licenses`를 이 순서로 실행하고 첫 실패에서 멈춘다. 터미널에서는 검사 번호와 경과 시간 줄, 시험 완료 수·전체 수·실패 수·경과 시간을 한 줄로 보인다. 터미널이 아니면 진행 표시를 쓰지 않고 마지막 결과 한 줄만 쓴다.
+  - 전체 완료 검증 실행: `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo xtask layers`, `cargo xtask tokens --check`, `cargo xtask scenarios`, `cargo deny check licenses`를 이 순서로 실행하고 첫 실패에서 멈춘다. 검사 번호와 경과 시간 줄, 시험 완료 수·전체 수·실패 수·경과 시간을 보인다. 터미널이면 시험 진행을 마지막 줄 하나에 덮어쓰고, 터미널이 아니면 새 줄로 쓴다(시험 시작, 완료 비율 5%p마다, 30초마다). 마지막 결과 한 줄은 항상 쓴다.
 - 맡지 않는 책임:
   - 라이선스 검사. [의존성 라이선스 검사](../how-to/check-dependency-licenses.md)의 `cargo deny`가 맡는다.
   - 모듈 안의 입출력 타입 금지. `crates/app/clippy.toml`과 `cargo clippy`가 맡는다.
@@ -99,8 +99,8 @@ flowchart LR
 | `xtask/src/scenarios/spec.rs` `parse` | `## ` 제목에 "수용 테스트"가 들어간 절의 표에서 첫 칸이 `<접두어>-<숫자>`인 행을 시나리오로 읽는다. | 스펙 파일마다 | 없음 |
 | `xtask/src/scenarios/markers.rs` `scan`, `Marker` | 주석·문자열·문자 리터럴을 건너뛰는 작은 어휘 분석기로 `/// spec:` 표식, 테스트 속성, 인라인 `mod` 중첩, 함수 이름을 찾는다. 표식 끝의 ` partial`은 `Marker::partial`이 된다. 다른 낱말이 붙으면 표식 오류다. | `.rs` 파일마다 | `spec::is_scenario_id` |
 | `xtask/src/scenarios/test_run.rs` `run`, `list_counts` | 테스트 빌드 JSON에서 실행파일과 대상 소스 파일을 짝짓고, `cargo test` 출력에서 테스트별 결과를 읽는다. `list_counts`는 실행파일마다 `--list`로 시험 전체 수를 센다. 읽은 줄은 `StatusLine`으로 표준 오류에 쓰고, 결과 줄마다 `TestCount`를 갱신한다. | `scenarios` 실행마다 | `cargo`, `progress` |
-| `xtask/src/gate.rs` `run`, `CHECKS`, `Check` | `CHECKS`의 여섯 검사를 순서대로 실행한다. `fmt`·`clippy`·`deny`는 `cargo::command`의 자식 프로세스로 실행하고 표준 출력·오류를 그대로 잇는다. `layers`·`tokens --check`·`scenarios`는 같은 프로세스에서 `layers::run`·`tokens::run(true)`·`scenarios::run(false, …)`을 부른다. 터미널일 때만 검사마다 시작·끝 줄을 쓴다. 첫 실패에서 멈추고, 마지막에 결과 한 줄을 쓴다. | `gate` 실행마다 | `layers`, `tokens`, `scenarios`, `progress`, `cargo::command` |
-| `xtask/src/progress.rs` `StatusLine`, `TestCount` | `StatusLine`은 표준 오류가 터미널일 때만 마지막 줄에 상태를 그린다. `\r`과 공백으로 덮어쓰고, 로그 줄을 쓰기 전에 지운 뒤 쓰고 나서 다시 그린다. 1초마다 경과 시간만 다시 그린다. 터미널이 아니면 아무것도 그리지 않고 로그 줄만 그대로 쓴다. `TestCount`는 전체·완료·실패 수를 세고 상태 문자열(79열 이하)을 만든다. | 시험 진행을 보이는 명령마다 | std만 쓴다. |
+| `xtask/src/gate.rs` `run`, `CHECKS`, `Check` | `CHECKS`의 여섯 검사를 순서대로 실행한다. `fmt`·`clippy`·`deny`는 `cargo::command`의 자식 프로세스로 실행하고 표준 출력·오류를 그대로 잇는다. `layers`·`tokens --check`·`scenarios`는 같은 프로세스에서 `layers::run`·`tokens::run(true)`·`scenarios::run(false, …)`을 부른다. 터미널 여부와 관계없이 검사마다 시작·끝 줄을 쓴다. 첫 실패에서 멈추고, 마지막에 결과 한 줄을 쓴다. | `gate` 실행마다 | `layers`, `tokens`, `scenarios`, `progress`, `cargo::command` |
+| `xtask/src/progress.rs` `StatusLine`, `TestCount` | `StatusLine`은 표준 오류가 터미널이면 마지막 줄에 상태를 그린다. `\r`과 공백으로 덮어쓰고, 로그 줄을 쓰기 전에 지운 뒤 쓰고 나서 다시 그린다. 1초마다 경과 시간만 다시 그린다. 터미널이 아니면 같은 상태 문자열을 줄바꿈으로 끝내 쓴다. 시험 단계 시작, 완료 비율 5%p 증가, 직전 상태 줄 뒤 30초 경과 중 하나일 때만 쓰고, 로그 줄은 그대로 쓴다. `TestCount`는 전체·완료·실패 수를 세고 상태 문자열(79열 이하)을 만든다. | 시험 진행을 보이는 명령마다 | std만 쓴다. |
 | `xtask/src/scenarios/report.rs` `Report`, `Status` | 시나리오 상태 판정, 판정 사유, Markdown 보고서 작성 | `scenarios` 실행마다 | 없음 |
 | `xtask/src/layers.rs` `RULES`, `APPROVED`, `check` | 패키지별 허용 내부 crate·외부 crate 규칙, 같은 외부 crate의 버전 요구 일치 검사. 트레이 패키지는 app·adapters와 tray-icon·windows-registry·windows-service·windows-sys만 허용한다. | `layers` 실행마다 | `cargo` |
 | `xtask/src/tokens.rs` `run`, `tokens_from`, `render_css`, `write_outputs`, `check_outputs`, `token_css`, `MOCKUP_PATHS` | DESIGN.md 머리말의 `colors`·`spacing`·`rounded`·`typography`를 CSS 사용자 정의 속성 목록으로 바꾸고 `:root` 블록과 글꼴 `@font-face` 규칙을 만든다. `@font-face`의 `url()` 기준만 토큰 파일(`fonts`)과 목업(`../../../web/dashboard/fonts`)이 다르다. 기본 실행은 토큰 CSS 두 파일, `MOCKUP_PATHS`의 목업 두 개(`dashboard.html`·`help-site.html`)의 표식 사이 블록, 로그인 공통 복사본(`tokens/shared.rs`), 글꼴 복사본(`tokens/fonts.rs`)을 쓴다. `--check`는 같은 곳을 비교하고 화면 CSS 검사를 더한다. `token_css`는 토큰 파일과 같은 CSS를 돌려준다. `help_site`가 도움말 사이트의 `assets/tokens.css`로 쓴다. | 명령마다 | `tokens/front_matter.rs`, `tokens/screen_css.rs`, `tokens/shared.rs`, `tokens/fonts.rs`, `cargo.rs`의 `metadata` |
@@ -147,13 +147,13 @@ flowchart LR
 | 1 | `xtask/src/cargo.rs` `metadata` | `cargo metadata --format-version 1 --no-deps` | 작업 공간 루트, 대상 디렉터리, 패키지 목록 | 2~4단계 |
 | 2 | `xtask/src/scenarios.rs` `load_specs`, `spec::parse` | `docs/specs/` 아래 `.md` 중 `README.md`·`AGENTS.md`를 뺀 파일. 수용 테스트 절이 없거나, 시나리오가 없거나, ID가 중복되면 오류 | 스펙별 시나리오 ID 목록 | 5단계 |
 | 3 | `xtask/src/scenarios.rs` `collect_marked_tests`, `markers::scan`, `locate` | `xtask`를 뺀 패키지의 `src/`·`tests/` 아래 `.rs` 파일. 파일 위치로 테스트 대상과 모듈 경로를 정한다. `foo/mod.rs`는 `foo`다. | 표식이 붙은 테스트와 `TestKey`, 표식 오류 | 5단계 |
-| 4 | `xtask/src/scenarios/test_run.rs` `build`, `list_counts`, `run` | `cargo test --workspace --no-run --message-format=json-render-diagnostics`로 실행파일 이름을 대상 소스 파일에 짝짓고 실행파일 경로를 모은다. `list_counts`가 실행파일마다 `<실행파일> --list`를 실행해 `: test`로 끝나는 줄을 세어 전체 수를 정한다. 이어 `cargo test --workspace --no-fail-fast`를 실행하고 표준 출력과 표준 오류를 한 파이프로 읽는다. `Running ... (<실행파일>)` 줄이 다음 테스트 결과의 대상을 정한다. 문서 테스트는 건너뛴다. | `TestKey`별 `Outcome`, `TestCount`, `cargo test` 종료 상태 | 5단계. 출력은 표준 오류에 그대로 보인다. 터미널이면 마지막 줄에 진행 줄이 붙는다. |
+| 4 | `xtask/src/scenarios/test_run.rs` `build`, `list_counts`, `run` | `cargo test --workspace --no-run --message-format=json-render-diagnostics`로 실행파일 이름을 대상 소스 파일에 짝짓고 실행파일 경로를 모은다. `list_counts`가 실행파일마다 `<실행파일> --list`를 실행해 `: test`로 끝나는 줄을 세어 전체 수를 정한다. 이어 `cargo test --workspace --no-fail-fast`를 실행하고 표준 출력과 표준 오류를 한 파이프로 읽는다. `Running ... (<실행파일>)` 줄이 다음 테스트 결과의 대상을 정한다. 문서 테스트는 건너뛴다. | `TestKey`별 `Outcome`, `TestCount`, `cargo test` 종료 상태 | 5단계. 출력은 표준 오류에 그대로 보인다. 터미널이면 마지막 줄에 진행 줄이 붙고, 터미널이 아니면 진행 줄이 새 줄로 섞인다. |
 | 5 | `xtask/src/scenarios.rs` `link` | 표식의 스펙 경로와 ID가 2단계 목록에 없으면 오류 | 시나리오별 테스트와 `Status` | 6단계 |
 | 6 | `xtask/src/scenarios/report.rs` `Report::render`, `verdict_text` | 판정 실패 사유: 오류, 실패 시나리오, `cargo test` 실패, `--require-all`이면 부분·미실행·미연결 | 보고서 파일 | 표준 출력에 요약·보고서 경로·판정, 종료 코드 0(통과) 또는 1(실패) |
 
-`cargo xtask gate`는 `CHECKS`의 여섯 검사를 순서대로 실행한다. 표준 오류가 터미널이면 검사마다 `[n/6] <명령>` 줄을 쓰고, 실행한 뒤 `[n/6] 통과 (mm:ss)` 또는 `[n/6] 실패 (mm:ss)` 줄을 쓴다. 터미널이 아니면 이 줄을 쓰지 않는다. `fmt`·`clippy`·`deny`는 `cargo::command`로 자식 프로세스를 실행한다. `layers`·`tokens --check`·`scenarios`는 같은 프로세스에서 부른다. 검사가 `Ok(false)`나 `Err`로 끝나거나 자식 프로세스의 종료 코드가 0이 아니면 남은 검사를 실행하지 않는다. 그때 `gate: 실패 — [n/6] <명령> (mm:ss)`를 표준 오류에 쓰고 종료 코드 1이다. 여섯 검사가 모두 통과하면 `gate: 통과 (6검사, mm:ss)`를 표준 출력에 쓰고 종료 코드 0이다. 결과 줄은 터미널 여부와 관계없이 쓴다. 다른 xtask 명령의 결과 줄과 같다.
+`cargo xtask gate`는 `CHECKS`의 여섯 검사를 순서대로 실행한다. 검사마다 `[n/6] <명령>` 줄을 쓰고, 실행한 뒤 `[n/6] 통과 (mm:ss)` 또는 `[n/6] 실패 (mm:ss)` 줄을 쓴다. 이 줄은 표준 오류가 터미널인지와 관계없이 쓴다. `fmt`·`clippy`·`deny`는 `cargo::command`로 자식 프로세스를 실행한다. `layers`·`tokens --check`·`scenarios`는 같은 프로세스에서 부른다. 검사가 `Ok(false)`나 `Err`로 끝나거나 자식 프로세스의 종료 코드가 0이 아니면 남은 검사를 실행하지 않는다. 그때 `gate: 실패 — [n/6] <명령> (mm:ss)`를 표준 오류에 쓰고 종료 코드 1이다. 여섯 검사가 모두 통과하면 `gate: 통과 (6검사, mm:ss)`를 표준 출력에 쓰고 종료 코드 0이다. 결과 줄은 터미널 여부와 관계없이 쓴다. 다른 xtask 명령의 결과 줄과 같다.
 
-진행 줄은 표준 오류가 터미널일 때만 그린다. `scenarios` 검사의 시험 실행 구간에서 마지막 줄 하나에 `[5/6] 시험 412/1030 (40%) · 실패 0 · 08:12 · dashboard_browser.rs`를 쓴다. 전체 수를 모르면 `[5/6] 시험 412 완료 · 실패 0 · 08:12 · …`다. 줄은 79열을 넘지 않게 파일 이름을 줄인다. 로그 줄을 쓰기 전에 `\r`과 공백으로 줄을 지우고, 로그 줄을 쓴 뒤 다시 그린다. 1초마다 경과 시간을 다시 그리고, 시험이 끝나면 줄을 지운다. 터미널이 아니면 진행 줄도 검사 줄도 없고 결과 줄만 남는다. `cargo xtask scenarios`를 따로 실행해도 같은 진행 줄이 나오며 `[5/6]`만 빠진다. 그 줄이 보이는 구간은 `cargo test` 실행이다. 앞의 빌드는 Cargo가 자기 진행 막대로 보인다.
+시험 진행은 `scenarios` 검사의 시험 실행 구간에서 보인다. 표준 오류가 터미널이면 마지막 줄 하나에 `[5/6] 시험 412/1030 (40%) · 실패 0 · 08:12 · dashboard_browser.rs`를 쓴다. 전체 수를 모르면 `[5/6] 시험 412 완료 · 실패 0 · 08:12 · …`다. 줄은 79열을 넘지 않게 파일 이름을 줄인다. 로그 줄을 쓰기 전에 `\r`과 공백으로 줄을 지우고, 로그 줄을 쓴 뒤 다시 그린다. 1초마다 경과 시간을 다시 그리고, 시험이 끝나면 줄을 지운다. 터미널이 아니면 `\r`과 지우기 없이 같은 문자열을 새 줄로 쓴다. 쓰는 때는 시험 실행을 시작할 때(0개 완료), 완료 비율이 5%p 오를 때, 직전 진행 줄을 쓴 뒤 30초가 지났을 때다. 전체 수를 모르면 시작할 때와 30초마다 쓴다. 오래 걸리는 시험 하나만 도는 동안에도 30초마다 줄이 나온다. 전체가 1030개이면 비율에 따른 줄은 많아야 21개다. `cargo xtask scenarios`를 따로 실행해도 같은 진행 줄이 나오며 `[5/6]`만 빠진다. 그 줄이 보이는 구간은 `cargo test` 실행이다. 앞의 빌드는 Cargo가 자기 진행 막대로 보인다.
 
 `cargo xtask layers`는 1단계 다음에 `layers::check`를 실행한다. 패키지마다 `RULES`의 허용 내부 crate와 외부 crate 규칙을 적용하고, 같은 외부 crate의 버전 요구가 패키지마다 다르면 위반으로 본다. `RULES`에 없는 패키지도 위반이다. `Rule.internal_dev`는 개발 의존성일 때만 허용하는 내부 crate다. `vnc-relay-adapters`와 루트 `vnc-relay`가 `vnc-relay-testkit`을 개발 의존성으로 쓰는 것을 여기서 허용한다. `vnc-relay-testkit` 행은 내부 의존성을 domain·app·adapters로, 외부 의존성을 aws-lc-rs·serde_json·tokio·tokio-tungstenite로 제한한다.
 
@@ -183,7 +183,7 @@ flowchart LR
 
 - 초기화·로딩 시점: 명령 실행마다 처음부터 읽는다. 캐시는 없다.
 - 상태 소유자와 제거 시점: 모든 상태는 명령 실행 동안 메모리에만 있다. 보고서 파일, 도움말 사이트(`help-stage/`·`help-site/`), `ticket`의 키 파일만 남는다. 다음 `help-site` 실행이 도움말 사이트를 지우고 다시 만든다. 키 파일은 사용자가 지울 때까지 남는다.
-- 진행 줄: 명령이 끝나면 `StatusLine`을 버리면서 1초 갱신 스레드를 멈추고 줄을 지운다. 터미널이 아니면 스레드를 만들지 않는다.
+- 진행 줄: 명령이 끝나면 `StatusLine`을 버리면서 1초 갱신 스레드를 멈춘다. 터미널이면 줄을 지운다. 이 스레드는 터미널이면 줄을 다시 그리고, 터미널이 아니면 30초가 지났는지 보고 진행 줄을 쓴다.
 - 동시 실행과 순서: 같은 대상 디렉터리에서 두 번 동시에 실행하면 Cargo 빌드 잠금을 기다리고 보고서는 나중에 끝난 실행이 덮어쓴다. `help-site`가 `help-stage/`·`help-site/`를 지우고 다시 만드는 일은 이 잠금 밖에서 일어난다. 그래서 `help-site`를 동시에 두 번 실행하거나, `help-serve`나 도움말 시험(`tests/help_site.rs`)이 같은 대상 디렉터리의 사이트를 쓰는 동안 실행하면 서로의 산출물을 지울 수 있다. 이런 실행은 차례로 한다().
 
 ## 6. 오류 처리
@@ -221,7 +221,7 @@ flowchart LR
 | `gate`를 하위 명령으로 둔다 | 3.4절의 여섯 명령을 한 명령으로 묶어 검사 번호와 경과 시간을 남기고 첫 실패에서 멈춘다. 두 OS에서 같은 명령이다. | 셸·PowerShell 스크립트. 두 OS 스크립트가 갈린다. 문서의 명령 목록만 둔다. 진행을 볼 수 없다. |
 | `layers`·`tokens`·`scenarios`는 같은 프로세스에서 부르고 `fmt`·`clippy`·`deny`만 자식 프로세스로 실행한다 | `cargo xtask`를 중첩하면 실행 중인 xtask 실행파일을 다시 빌드하려 한다. Windows는 실행 중인 파일을 바꾸지 못한다. 세 검사는 이미 `run` 함수가 있다. | 모든 검사를 `cargo`로 실행한다. 위 문제가 있고, 시험 결과를 진행 줄로 직접 받지 못한다. |
 | 시험 전체 수는 실행파일의 `--list`로 센다 | libtest 안정판 출력만 쓴다. `--list`는 시험을 실행하지 않는다. 실행파일은 빌드 JSON에서 이미 얻는다. | 이전 실행의 개수를 저장한다. 시험이 바뀌면 틀린다. libtest JSON 출력. 불안정 옵션이다. |
-| 진행 표시는 터미널일 때만 한 줄로 덮어쓴다 | 사용자가 정했다(2026-11-26). 진행 줄과 검사 번호 줄은 표준 오류가 터미널일 때만 쓰므로 파일·CI 로그에 진행 표시가 남지 않는다. 결과 한 줄(`gate: 통과`·`gate: 실패`)은 다른 xtask 명령처럼 항상 쓴다. 결과 줄을 터미널 전용으로 줄이지 않는 것도 사용자가 확인했다(2026-11-26). `\r`과 공백만 쓰므로 ANSI 이스케이프를 켜지 않은 Windows 콘솔에서도 깨지지 않는다. | 줄 단위 진행 기록(비율이 5%p 오를 때, 30초마다). 로그가 길어진다. 사용자가 고르지 않았다. ANSI 이스케이프. 일부 Windows 콘솔이 글자로 보인다. |
+| 진행 표시는 터미널이면 한 줄로 덮어쓰고, 아니면 새 줄로 쓴다 | 사용자가 정했다(2026-11-26). 처음에는 터미널일 때만 덮어쓰는 한 줄을 골랐다. 이어 사용자가 Playwright 시험을 돌릴 때 omp에 진행률이 보이는 것처럼 검증 게이트도 보이기를 요청해(2026-11-26) 터미널이 아닐 때의 새 줄 진행을 더했다. omp의 bash 도구는 기본값(`pty` 끔)에서 표준 오류가 터미널이 아니고 `TERM=dumb`·`CI=true`다(2026-11-26 확인). 이 실행에서는 덮어쓰는 줄이 그려지지 않았다. 새 줄은 시작할 때, 5%p마다, 30초마다만 써서 줄 수를 제한한다. 검사 번호 줄도 터미널 여부와 관계없이 쓴다. `\r`에 기대지 않으므로 파이프·파일에서도 줄이 깨지지 않는다. 결과 한 줄(`gate: 통과`·`gate: 실패`)은 다른 xtask 명령처럼 항상 쓴다. 결과 줄을 터미널 전용으로 줄이지 않는 것도 사용자가 확인했다(2026-11-26). `\r`과 공백만 쓰므로 ANSI 이스케이프를 켜지 않은 Windows 콘솔에서도 깨지지 않는다. | 터미널일 때만 쓴다(이전 결정. omp 기본 실행에서는 진행이 보이지 않는다). 시험마다 한 줄 쓴다(1000줄이 넘게 쌓인다). 터미널이 아닐 때도 `\r`로 덮어쓴다(도구 화면이 `\r`을 어떻게 보이는지 확인하지 못했고, 파일 로그에서는 한 줄에 몰린다). ANSI 이스케이프. 일부 Windows 콘솔이 글자로 보인다. |
 | 남은 시간을 추정하지 않는다 | 브라우저 시험 몇 개가 전체 시간의 대부분을 차지해 완료 수 비율로 낸 추정이 크게 틀린다. | 지난 실행 시간 저장. 파일이 남고 환경마다 다르다. |
 | 표식을 직접 어휘 분석 | 외부 파서 crate 없이 주석·문자열 안의 중괄호를 구분하면 충분하다. 승인 목록 밖 crate(`syn`)를 직접 쓰지 않는다. | `syn`으로 구문 분석. PRD 승인 목록에 없다. |
 | 실행파일 이름으로 테스트 대상 식별 | `cargo test` 출력의 `Running` 줄은 패키지 기준 상대 경로만 보여 같은 이름의 테스트 파일을 구분하지 못한다. 실행파일 이름에는 해시가 붙어 유일하다. | 패키지마다 `cargo test -p` 실행. 빌드가 반복되고 기능 통합이 달라진다. |
@@ -288,6 +288,13 @@ flowchart LR
 - 환경·방법: Windows 11(10.0.26300), Rust 1.99.1, mdBook 0.5.4에서 표준 오류가 터미널이 아닌 상태로 `cargo xtask gate`를 끝까지 실행했다. 이어 같은 명령을 서식 위반 한 줄을 넣은 채로 실행했다. Ubuntu 24.04(WSL2)에서는 `script`로 만든 의사 터미널 안에서 `cargo xtask gate`를 실행하고, 출력 바이트를 파일에 받은 뒤 5번 검사 도중에 중단했다.
 - 결과: Windows 전체 실행은 검사 줄과 진행 줄 없이 각 검사의 출력만 내고 마지막에 `gate: 통과 (6검사, 54:31)`을 출력했다. 종료 코드는 0이었다. 서식 위반 실행은 1번 검사에서 멈추고 `gate: 실패 — [1/6] cargo fmt --all --check (00:02)`를 표준 오류에 썼으며 종료 코드는 1이었다. WSL 터미널 실행은 검사 1~4의 `[n/6] <명령>`·`[n/6] 통과 (mm:ss)` 줄을 냈다. 5번 검사는 `시험 0/1208`에서 시작해 진행 줄을 365번 다시 그렸고, 가장 긴 줄은 65자(한글을 두 칸으로 세면 69열 이하)였다. 로그 줄마다 이전 진행 줄을 `\r`과 공백으로 지운 뒤 로그 줄을 쓰고 새 진행 줄을 아래에 그렸다.
 - 한계: 실제 Windows 콘솔(conhost·Windows Terminal)에서 줄 덮어쓰기와 한글 폭은 보지 못했다. 작업 도구가 Windows 터미널을 제공하지 않는다. 전체 수를 모르는 경우의 표시는 단위 시험으로만 확인했고, `--list`가 실패하는 경우는 실행하지 않았다. WSL 실행은 중단해 `gate: 통과`를 확인하지 못했다.
+
+### 터미널이 아닌 출력의 진행 줄 수동 확인
+
+- 날짜·대상: 2026-11-26, 커밋 `e0c2081`에 `progress`의 새 줄 진행을 더한 작업 트리.
+- 환경·방법: omp bash 도구에서 `[ -t 2 ]`로 `pty`를 끈 실행은 표준 오류가 터미널이 아니고(`TERM=dumb`, `CI=true`), `pty: true` 실행은 터미널임을 먼저 확인했다. 이어 Windows 11(10.0.26300), Rust 1.99.1에서 표준 출력과 오류를 파일로 돌려 `cargo xtask gate`를 실행하고 약 3분 30초 뒤 중단했다. 파일은 `.work/reports/gate-lines/`에 두었고 커밋하지 않았다.
+- 결과: 검사 1~4의 `[n/6] <명령>`·`[n/6] 통과 (mm:ss)` 줄이 파일에 나왔다. 5번 검사는 `[5/6] 시험 0/1214 (0%) · 실패 0 · 00:00`으로 시작했고, 이후 30초마다 `[5/6] 시험 42/1214 (3%) · 실패 0 · 00:30 · tests\dashboard_browser.rs` 형식의 줄이 나왔다. 비율이 5%에 닿은 줄은 `(5%)`였다. 3분 30초 동안 진행 줄은 8개였다. 단위 시험 4건(`plain_lines_*`)은 시작·5%p·30초·전체 수 모름·전체 수 부족 경계를 확인한다.
+- 한계: 작업 도구 화면에서 사람이 보는 모습은 보지 못했고 파일에 쌓인 줄만 읽었다. 중단한 실행이라 이 실행으로 `gate: 통과`는 확인하지 못했다. 같은 변경 전 코드의 전체 실행은 `gate: 통과 (6검사, 52:27)`이었다.
 
 ## 8. 미결정 사항
 
