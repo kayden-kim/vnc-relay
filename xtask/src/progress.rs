@@ -22,14 +22,22 @@ const TICK: Duration = Duration::from_secs(1);
 /// points (100 / `LINE_STEPS`) of the listed tests.
 const LINE_STEPS: usize = 20;
 
-/// Without a terminal a progress line is also written after this long without one,
-/// so a single slow test does not leave the output silent. Keep it well under 90 s: the
-/// omp 18.14.1 sources rewrite a job widget's rules when no line matched for that long.
+/// How long plain progress can stay quiet while tests are running.
 const LINE_HEARTBEAT: Duration = Duration::from_secs(30);
+
+const TEST_PROGRESS_PREFIX: &str = "시험 진행:";
 
 /// True when stderr is a terminal and the status line may be rewritten in place.
 fn is_interactive() -> bool {
     io::stderr().is_terminal()
+}
+
+/// Makes the test percentage visible before earlier checks or the test build
+/// take over the output. Readers can use the same prefix on later updates.
+pub(crate) fn announce_pending_tests() {
+    if !is_interactive() {
+        let _ = writeln!(io::stderr(), "{TEST_PROGRESS_PREFIX} 0% · 전체 수 확인 전");
+    }
 }
 
 /// `mm:ss`. Minutes keep counting past 59.
@@ -58,15 +66,33 @@ impl TestCount {
             line.push(' ');
         }
         // Writing to a `String` cannot fail.
-        let _ = match self.total {
-            Some(total) => {
-                // A listing can undercount (for example generated tests); never show over 100%.
-                let total = total.max(self.done);
-                let percent = (self.done * 100).checked_div(total).unwrap_or(100);
-                write!(line, "시험 {}/{total} ({percent}%)", self.done)
-            }
+        let _ = match self.total_and_percent() {
+            Some((total, percent)) => write!(line, "시험 {}/{total} ({percent}%)", self.done),
             None => write!(line, "시험 {} 완료", self.done),
         };
+        self.append_details(&mut line, elapsed);
+        line
+    }
+
+    fn render_plain(&self, elapsed: Duration) -> String {
+        let mut line = String::with_capacity(MAX_COLUMNS);
+        line.push_str(TEST_PROGRESS_PREFIX);
+        let _ = match self.total_and_percent() {
+            Some((total, percent)) => write!(line, " {percent}% · 완료 {}/{total}", self.done),
+            None => write!(line, " 완료 {}", self.done),
+        };
+        self.append_details(&mut line, elapsed);
+        line
+    }
+
+    fn total_and_percent(&self) -> Option<(usize, usize)> {
+        // A listing can undercount (for example generated tests); never show over 100%.
+        let total = self.total?.max(self.done);
+        let percent = (self.done * 100).checked_div(total).unwrap_or(100);
+        Some((total, percent))
+    }
+
+    fn append_details(&self, line: &mut String, elapsed: Duration) {
         let _ = write!(
             line,
             " · 실패 {} · {}",
@@ -75,13 +101,12 @@ impl TestCount {
         );
         const SEPARATOR: &str = " · ";
         if !self.current.is_empty() {
-            let room = MAX_COLUMNS.saturating_sub(display_width(&line) + display_width(SEPARATOR));
+            let room = MAX_COLUMNS.saturating_sub(display_width(line) + display_width(SEPARATOR));
             if let Some(name) = fit(&self.current, room) {
                 line.push_str(SEPARATOR);
                 line.push_str(&name);
             }
         }
-        line
     }
 }
 
@@ -200,7 +225,7 @@ impl Screen {
             return None;
         }
         self.last_line = Some((elapsed, step));
-        Some(tests.render(&self.label, elapsed))
+        Some(tests.render_plain(elapsed))
     }
 }
 
@@ -468,14 +493,14 @@ mod tests {
         let mut screen = line_screen(count(Some(100), 0, 0, ""));
         assert_eq!(
             screen.due_line(Duration::ZERO).as_deref(),
-            Some("[5/6] 시험 0/100 (0%) · 실패 0 · 00:00")
+            Some("시험 진행: 0% · 완료 0/100 · 실패 0 · 00:00")
         );
         screen.tests = Some(count(Some(100), 4, 0, ""));
         assert_eq!(screen.due_line(Duration::from_secs(1)), None);
         screen.tests = Some(count(Some(100), 5, 0, ""));
         assert_eq!(
             screen.due_line(Duration::from_secs(2)).as_deref(),
-            Some("[5/6] 시험 5/100 (5%) · 실패 0 · 00:02")
+            Some("시험 진행: 5% · 완료 5/100 · 실패 0 · 00:02")
         );
         screen.tests = Some(count(Some(100), 9, 0, ""));
         assert_eq!(screen.due_line(Duration::from_secs(3)), None);
@@ -495,20 +520,23 @@ mod tests {
         let mut screen = line_screen(count(None, 0, 0, ""));
         assert_eq!(
             screen.due_line(Duration::ZERO).as_deref(),
-            Some("[5/6] 시험 0 완료 · 실패 0 · 00:00")
+            Some("시험 진행: 완료 0 · 실패 0 · 00:00")
         );
         screen.tests = Some(count(None, 500, 0, ""));
         assert_eq!(screen.due_line(Duration::from_secs(29)), None);
         assert_eq!(
             screen.due_line(Duration::from_secs(30)).as_deref(),
-            Some("[5/6] 시험 500 완료 · 실패 0 · 00:30")
+            Some("시험 진행: 완료 500 · 실패 0 · 00:30")
         );
     }
 
     #[test]
     fn plain_lines_stop_with_the_test_phase_and_accept_an_undercounted_total() {
         let mut screen = line_screen(count(Some(10), 12, 0, ""));
-        assert!(screen.due_line(Duration::ZERO).is_some());
+        assert_eq!(
+            screen.due_line(Duration::ZERO).as_deref(),
+            Some("시험 진행: 100% · 완료 12/12 · 실패 0 · 00:00")
+        );
         screen.tests = None;
         assert_eq!(screen.due_line(Duration::from_secs(60)), None);
     }

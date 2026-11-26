@@ -1,7 +1,7 @@
 //! `cargo xtask gate`: the full completion check of
 //! docs/how-to/set-up-and-verify.md section 3.4. It runs the six checks in
-//! order and stops at the first failure. Progress lines go to a terminal only,
-//! so redirected output and CI logs keep just the result line
+//! order and stops at the first failure. Test progress is drawn in place on
+//! a terminal or written as plain lines when redirected
 //! (docs/architectures/xtask.md, section 4).
 
 use std::io::Write;
@@ -79,6 +79,7 @@ impl Check {
 }
 
 pub fn run() -> Result<bool, Error> {
+    progress::announce_pending_tests();
     let workspace = cargo::metadata()?;
     let started = Instant::now();
     let count = CHECKS.len();
