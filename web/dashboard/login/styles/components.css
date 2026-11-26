@@ -1285,11 +1285,6 @@
     letter-spacing: var(--type-label-tracking);
   }
 
-  .data-table.data-table-wide td.data-table-num {
-    text-align: left;
-    white-space: normal;
-  }
-
   .data-table.data-table-wide td > .badge {
     justify-self: start;
   }
