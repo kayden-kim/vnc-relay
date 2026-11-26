@@ -165,6 +165,14 @@
   min-width: 0;
 }
 
+/* The transfer cell is a block of lines, not a number, so its header and values stay left-aligned.
+   In the table layout each direction line stays on one line; the card layout below 1440px lets it wrap. */
+@media (min-width: 1440px) {
+  .data-table-wide .cell-bytes {
+    white-space: nowrap;
+  }
+}
+
 /* Time values break between words, so the table never squeezes the time column below one date. */
 .cell-time .cell-value {
   overflow-wrap: break-word;

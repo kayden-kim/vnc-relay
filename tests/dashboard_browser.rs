@@ -25,6 +25,9 @@ use vnc_relay_testkit::browser_port;
 /// Same policy string as `xtask/src/dashboard_serve.rs` (frontend.md §1.2, Q37).
 const CSP: &str = "default-src 'self'; frame-ancestors 'none'";
 const WIDTHS: [u32; 7] = [1440, 1280, 1024, 1023, 768, 390, 320];
+/// Headless Chromium's inner width is about 22 px below `--window-size`, so the 1440 entry above still shows the card
+/// layout of the session tables. This width shows their table layout.
+const TABLE_LAYOUT_WIDTH: u32 = 1600;
 const LANGS: [&str; 2] = ["ko", "en"];
 const RUN_LIMIT: Duration = Duration::from_secs(60);
 /// Browsers that run at once. Each run's `RUN_LIMIT` clock includes Chromium's
@@ -456,6 +459,16 @@ fn operations_waiting_rows_show_transport_and_peer_addresses_in_browser() {
 fn operations_closed_rows_show_times_addresses_and_open_session_logs_in_browser() {
     check_localized_case("/tests/operations.html", "dash-066");
     check_localized_case("/tests/router.html", "dash-066");
+}
+
+/// spec: dashboard.md:DASH-001 partial
+/// spec: dashboard.md:DASH-020 partial
+/// spec: dashboard.md:DASH-066 partial
+#[test]
+fn operations_shows_the_session_tables_in_table_layout_in_browser() {
+    for case in ["dash-001", "dash-020", "dash-066"] {
+        check_localized_case_at("/tests/operations.html", case, &[TABLE_LAYOUT_WIDTH]);
+    }
 }
 
 /// spec: dashboard.md:DASH-067

@@ -569,6 +569,18 @@ async function caseDash001() {
   }
   for (const [title, rows, bytesIndex] of [[t.activeTitle, activeRows, 4], [t.closedTitle, closedRows, 5]]) {
     check(`DASH-001 ${title}: byte column keeps CPY-187/198 copy`, cardOf(root, title)?.querySelectorAll('th')[bytesIndex]?.textContent === t.bytesHeader);
+    if (window.innerWidth > WIDE_CARD_MAX) {
+      const head = cardOf(root, title).querySelectorAll('th')[bytesIndex];
+      const headText = document.createRange();
+      headText.selectNodeContents(head);
+      const headLeft = headText.getBoundingClientRect().left;
+      check(`DASH-001 ${title}: byte header and values share the left side`,
+        ['left', 'start'].includes(getComputedStyle(head).textAlign) && rows.every((row) => {
+          const value = row.querySelector('.cell-bytes');
+          return !!value && ['left', 'start'].includes(getComputedStyle(row.cells[bytesIndex]).textAlign)
+            && Math.abs(value.getBoundingClientRect().left - headLeft) < 1;
+        }));
+    }
     for (const [index, row] of rows.entries()) {
       const lines = row.querySelectorAll('.cell-bytes .cell-line');
       check(`DASH-001 ${title} row ${index}: two byte directions`, lines.length === 2);
@@ -578,6 +590,12 @@ async function caseDash001() {
           && marks[0].classList.contains(`direction-mark-${direction + 1}`) && marks[0].getAttribute('aria-hidden') === 'true');
       }
     }
+  }
+  if (window.innerWidth > MOBILE_MAX) {
+    const waitedHead = [...cardOf(root, t.waitingTitle).querySelectorAll('th')].at(-1);
+    check('DASH-001 waiting: waiting-time header and values stay right-aligned',
+      getComputedStyle(waitedHead).textAlign === 'right'
+        && waitingRows.every((row) => getComputedStyle(row.cells[row.cells.length - 1]).textAlign === 'right'));
   }
 
   check(

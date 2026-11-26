@@ -325,7 +325,6 @@ export function activeTable(t, items, emptyText) {
       detailsLink(t, item.sessionId),
     ]),
     emptyText,
-    numericColumns: ['bytes'],
     wide: true,
   });
 }
@@ -363,7 +362,6 @@ export function closedTable(t, items, emptyText) {
       logsLink(t, item.sessionId),
     ]),
     emptyText,
-    numericColumns: ['bytes'],
     wide: true,
   });
 }
