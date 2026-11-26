@@ -220,18 +220,26 @@ Linux 전용 `tests/relay_dead_peer_linux.rs`는 사용자·네트워크 네임�
 
 `Cargo.lock`이 바뀌었으면 6단계 전에 각 호스트에서 [의존성 라이선스 검사 3.1절](check-dependency-licenses.md#31-배포-고지-생성과-대조) 1단계로 두 대상의 crate를 받는다. `cargo xtask scenarios`가 실행하는 고지 시험(`tests/dependency_notices.rs`)은 네트워크 없이 실행되므로, 받지 않은 crate가 있으면 실패한다.
 
-6. 저장소 루트에서 다음 명령을 순서대로 실행한다. 하나라도 실패하면 멈추고 [5절](#5-중단-조건)을 따른다.
+6. 저장소 루트에서 다음 명령을 실행한다. 이 명령은 여섯 검사를 차례로 실행하고, 검사 하나라도 실패하면 거기서 멈춘다. 멈추면 [5절](#5-중단-조건)을 따른다.
 
    ```shell
-   cargo fmt --all --check
-   cargo clippy --workspace --all-targets -- -D warnings
-   cargo xtask layers
-   cargo xtask tokens --check
-   cargo xtask scenarios
-   cargo deny check licenses
+   cargo xtask gate
    ```
 
-   기대 결과: 여섯 명령 모두 종료 코드 0. `cargo xtask scenarios`가 `cargo test --workspace --no-fail-fast`를 함께 실행하므로 따로 실행하지 않는다. 대시보드 브라우저 테스트도 이때 실행되며 Chromium이 없으면 실패한다(2절). 도움말 브라우저 시험도 이때 실행되며 mdBook 0.5.4가 없으면 실패한다(2절). 출력 마지막에 `판정: 통과`, 라이선스 검사 마지막 줄에 `licenses ok`가 나온다. 보고서에 남은 `부분`·`미실행`·`미연결`은 자동 검사의 범위를 뜻한다. 해당 범위는 [4절의 수동 근거](#4-검증)와 대조하고, 확인하지 않은 분기는 통과로 합치지 않는다. `cargo xtask scenarios --require-all`은 완료 명령이 아니다. 남은 시나리오 수를 세는 진단용이며, 그런 시나리오가 하나라도 있으면 판정 실패와 종료 코드 1로 끝난다([테스트 컨벤션 5절](../conventions/testing.md#5-검증-명령과-통과-기준)).
+   검사는 다음 순서다. 같은 명령을 따로 실행해도 결과는 같다.
+
+   | 검사 | 명령 |
+   | --- | --- |
+   | 1 | `cargo fmt --all --check` |
+   | 2 | `cargo clippy --workspace --all-targets -- -D warnings` |
+   | 3 | `cargo xtask layers` |
+   | 4 | `cargo xtask tokens --check` |
+   | 5 | `cargo xtask scenarios` |
+   | 6 | `cargo deny check licenses` |
+
+   기대 결과: 마지막에 `gate: 통과 (6검사, mm:ss)`가 나온다. 종료 코드 0. 터미널이면 검사마다 `[n/6] <명령>` 줄과 `[n/6] 통과 (mm:ss)` 줄도 나온다. 5번 검사 `cargo xtask scenarios`가 `cargo test --workspace --no-fail-fast`를 함께 실행하므로 따로 실행하지 않는다. 대시보드 브라우저 테스트도 이때 실행되며 Chromium이 없으면 실패한다(2절). 도움말 브라우저 시험도 이때 실행되며 mdBook 0.5.4가 없으면 실패한다(2절). 5번 검사의 출력 마지막에 `판정: 통과`, 6번 검사의 마지막 줄에 `licenses ok`가 나온다. 보고서에 남은 `부분`·`미실행`·`미연결`은 자동 검사의 범위를 뜻한다. 해당 범위는 [4절의 수동 근거](#4-검증)와 대조하고, 확인하지 않은 분기는 통과로 합치지 않는다. `cargo xtask scenarios --require-all`은 완료 명령이 아니다. 남은 시나리오 수를 세는 진단용이며, 그런 시나리오가 하나라도 있으면 판정 실패와 종료 코드 1로 끝난다([테스트 컨벤션 5절](../conventions/testing.md#5-검증-명령과-통과-기준)).
+
+   진행 표시: 표준 오류가 터미널이면 5번 검사의 시험 실행 중 마지막 줄 하나가 갱신된다. 예: `[5/6] 시험 412/1030 (40%) · 실패 0 · 08:12 · dashboard_browser.rs`. 시험 완료 수, 전체 수, 실패 수, 시험 실행을 시작한 뒤 경과 시간, 지금 실행 중인 시험 파일이다. 출력을 파일로 돌리거나 CI처럼 터미널이 아니면 이 줄과 검사 줄은 나오지 않고 마지막 결과 줄만 남는다. 남은 시간은 보이지 않는다. 브라우저 시험 몇 개가 전체 시간의 대부분을 차지해 추정이 크게 틀리기 때문이다. 시험을 시작하기 전의 빌드에는 Cargo의 진행 막대가 보인다.
 
 7. 결과를 기록한다. 시나리오 보고서는 저장소 루트의 `.work/reports/scenario-report.md`다. Windows와 WSL이 같은 작업 트리를 쓰면 나중에 실행한 쪽이 보고서를 덮어쓴다. 각 OS의 결과는 실행 직후 기록한다. 완료 보고에는 대상 커밋, OS, 명령, 판정을 적는다([검증 기록](../AGENTS.md#검증-기록)).
 
@@ -334,7 +342,7 @@ D:(A;;CCLCSWRPWPDTLOCRRC;;;SY)(A;;CCDCLCSWRPWPDTLOCRSDRCWDWO;;;BA)(A;;CCLCSWLOCR
 
 - 1단계 Build Tools 설치가 1602로 끝나면 이후 단계를 진행하지 않는다. UAC를 승인할 수 있을 때 다시 실행한다.
 - 3단계 버전이 `rustc 1.99.1`이 아니면 진행하지 않는다. `rust-toolchain.toml`과 `rustup show active-toolchain` 출력을 확인한다.
-- 6단계 명령이 하나라도 실패하면 완료로 보고하지 않는다. 실패한 명령의 출력을 고친 뒤 6단계를 처음부터 다시 실행한다.
+- 6단계 `cargo xtask gate`가 검사 하나라도 실패하면 완료로 보고하지 않는다. 실패한 검사의 출력을 고친 뒤 6단계를 처음부터 다시 실행한다. 이때 마지막 줄 `gate: 실패 — [n/6] <명령>`이 실패한 검사를 알려 준다.
 
 ## 6. 롤백 또는 복구
 

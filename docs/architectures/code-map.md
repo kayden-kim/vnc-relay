@@ -94,7 +94,7 @@ flowchart LR
 | 실행파일 조립 | 루트 crate `vnc-relay`의 `src/` | CLI·종료 코드·런타임·OS 신호·객체 연결. 업무 규칙은 두지 않는다. | domain, app, adapters, clap, tokio. rustls는 개발 의존성이다. serde_json·tokio-tungstenite는 실제 VNC Relay로 대시보드를 시험할 때 CDP 통신에 쓴다. aws-lc-rs는 개발 의존성이며 실제 VNC Relay의 접속 ticket 시험에서 ES256 서명에만 쓴다. adapters가 이미 쓰는 [PRD 승인 라이브러리](../requirements/PRD.md#확정-기준)다. windows-sys는 Windows 전용 개발 의존성이며 ConPTY 시험만 쓴다([Rust 컨벤션 2절](../conventions/rust.md#2-규칙) "unsafe" 행). | 코드 리뷰, 컴파일, `cargo xtask layers` |
 | 트레이 실행파일 조립 | `crates/tray` (`vnc-relay-tray`) | Windows GUI·메뉴·SCM 제어·설정 읽기·준비 상태 조회·사용자 Run 값. | app, adapters. 외부 crate는 tray-icon, windows-registry, windows-service, windows-sys만 허용한다. | `cargo xtask layers`, [트레이 모듈 설계](windows-tray.md) |
 | 시험 도구 | `crates/testkit` (`vnc-relay-testkit`) | 통합 시험이 함께 쓰는 CDP 클라이언트·실제 VNC Relay 기동기·시험용 ticket 서명·MMDB 파일 생성·브라우저 포트 선택. 제품 코드가 아니다. | domain, app, adapters. 외부 crate는 aws-lc-rs, serde_json, tokio, tokio-tungstenite만 허용한다. adapters와 루트 crate는 이 crate를 개발 의존성으로만 쓴다. | `cargo xtask layers` |
-| 개발 도구 | `xtask/` | 시나리오 보고·레이어 검사·배포 고지 생성과 대조·토큰 생성과 대조·로컬 미리보기·시험용 접속 ticket 발급 | 제품 crate에 의존하지 않는다. | `cargo xtask layers` |
+| 개발 도구 | `xtask/` | 시나리오 보고·레이어 검사·배포 고지 생성과 대조·토큰 생성과 대조·로컬 미리보기·시험용 접속 ticket 발급·전체 완료 검증(`gate`)과 시험 진행 표시 | 제품 crate에 의존하지 않는다. | `cargo xtask layers` |
 | 정적 대시보드 | `web/dashboard/` | HTML·CSS·JS 화면·공통 컴포넌트·생성 복사본·미리보기·브라우저 시험 페이지 | 관리 API만 HTTP로 호출한다. JS 외부 의존성이 없다. | [프런트엔드 컨벤션](../conventions/frontend.md), [대시보드 검증](../how-to/verify-dashboard-frontend.md), `cargo xtask tokens --check` |
 
 ```mermaid
