@@ -80,12 +80,11 @@ impl Check {
 
 pub fn run() -> Result<bool, Error> {
     let workspace = cargo::metadata()?;
-    let interactive = progress::is_interactive();
     let started = Instant::now();
     let count = CHECKS.len();
     for (index, check) in CHECKS.iter().enumerate() {
         let label = format!("[{}/{count}]", index + 1);
-        progress_line(interactive, &format!("{label} {}", check.command));
+        progress_line(&format!("{label} {}", check.command));
         let check_started = Instant::now();
         let passed = match check.run(&workspace, &label) {
             Ok(passed) => passed,
@@ -96,7 +95,7 @@ pub fn run() -> Result<bool, Error> {
         };
         let result = if passed { "통과" } else { "실패" };
         let elapsed = progress::format_elapsed(check_started.elapsed());
-        progress_line(interactive, &format!("{label} {result} ({elapsed})"));
+        progress_line(&format!("{label} {result} ({elapsed})"));
         if !passed {
             let _ = writeln!(
                 std::io::stderr(),
@@ -115,11 +114,9 @@ pub fn run() -> Result<bool, Error> {
     Ok(true)
 }
 
-/// A line for the person watching the terminal. Nothing is written otherwise.
-fn progress_line(interactive: bool, text: &str) {
-    if interactive {
-        let _ = writeln!(std::io::stderr(), "{text}");
-    }
+/// A line for the person watching the output: the check number and its result.
+fn progress_line(text: &str) {
+    let _ = writeln!(std::io::stderr(), "{text}");
 }
 
 #[cfg(test)]

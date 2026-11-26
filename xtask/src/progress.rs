@@ -1,7 +1,8 @@
-//! Terminal progress for long commands: one status line that is rewritten in
-//! place while the command prints its normal output above it
-//! (docs/architectures/xtask.md, section 4). Nothing is drawn unless stderr is
-//! a terminal, so redirected output and CI logs stay plain.
+//! Progress for long commands. On a terminal it is one status line that is
+//! rewritten in place while the command prints its normal output above it.
+//! Without a terminal (a pipe, a file, an agent tool) it is plain lines,
+//! written when the test phase starts, at every 5 percentage points and every
+//! 30 seconds (docs/architectures/xtask.md, section 4).
 
 use std::fmt::Write as _;
 use std::io::{self, IsTerminal, Write};
@@ -17,8 +18,16 @@ const MAX_COLUMNS: usize = 79;
 /// How often the elapsed time is redrawn while no output arrives.
 const TICK: Duration = Duration::from_secs(1);
 
-/// True when stderr is a terminal and progress may be drawn.
-pub fn is_interactive() -> bool {
+/// Without a terminal a progress line is written at every step of 5 percentage
+/// points (100 / `LINE_STEPS`) of the listed tests.
+const LINE_STEPS: usize = 20;
+
+/// Without a terminal a progress line is also written after this long without one,
+/// so a single slow test does not leave the output silent.
+const LINE_HEARTBEAT: Duration = Duration::from_secs(30);
+
+/// True when stderr is a terminal and the status line may be rewritten in place.
+fn is_interactive() -> bool {
     io::stderr().is_terminal()
 }
 
@@ -127,6 +136,8 @@ struct Screen {
     drawn: usize,
     /// False after a log line that did not end with a newline.
     at_line_start: bool,
+    /// Elapsed time and percent step of the last plain progress line.
+    last_line: Option<(Duration, usize)>,
 }
 
 impl Screen {
@@ -137,6 +148,7 @@ impl Screen {
             started: None,
             drawn: 0,
             at_line_start: true,
+            last_line: None,
         }
     }
 
@@ -169,12 +181,32 @@ impl Screen {
             .map(|started| started.elapsed())
             .unwrap_or_default()
     }
+
+    /// The plain progress line to write now, if one is due: the first one, one
+    /// when the percent step grew, and one when `LINE_HEARTBEAT` passed since the last.
+    fn due_line(&mut self, elapsed: Duration) -> Option<String> {
+        let tests = self.tests.as_ref()?;
+        let step = tests.total.map_or(0, |total| {
+            tests.done * LINE_STEPS / total.max(tests.done).max(1)
+        });
+        let due = match self.last_line {
+            None => true,
+            Some((at, last_step)) => {
+                step > last_step || elapsed.saturating_sub(at) >= LINE_HEARTBEAT
+            }
+        };
+        if !due {
+            return None;
+        }
+        self.last_line = Some((elapsed, step));
+        Some(tests.render(&self.label, elapsed))
+    }
 }
 
-/// Status line of a command. Drawn only when stderr is a terminal; otherwise
-/// every method passes output through or does nothing.
+/// Progress of a command. On a terminal it draws the status line. Without one
+/// it writes plain progress lines. Log output passes through in both cases.
 pub struct StatusLine {
-    enabled: bool,
+    interactive: bool,
     screen: Arc<Mutex<Screen>>,
     stop: Option<Sender<()>>,
     ticker: Option<JoinHandle<()>>,
@@ -183,26 +215,25 @@ pub struct StatusLine {
 impl StatusLine {
     /// `label` starts the line, for example `[5/6]`. Empty for no label.
     pub fn new(label: &str) -> Self {
-        let enabled = is_interactive();
+        let interactive = is_interactive();
         let screen = Arc::new(Mutex::new(Screen::new(label)));
-        let (stop, ticker) = if enabled {
-            let (stop, signal) = mpsc::channel();
-            let shared = Arc::clone(&screen);
-            let ticker = std::thread::spawn(move || {
-                while let Err(RecvTimeoutError::Timeout) = signal.recv_timeout(TICK) {
-                    // A failed redraw is not worth stopping the command.
-                    let _ = write_frame(&shared, &[]);
-                }
-            });
-            (Some(stop), Some(ticker))
-        } else {
-            (None, None)
-        };
+        let (stop, signal) = mpsc::channel();
+        let shared = Arc::clone(&screen);
+        let ticker = std::thread::spawn(move || {
+            while let Err(RecvTimeoutError::Timeout) = signal.recv_timeout(TICK) {
+                // A failed write is not worth stopping the command.
+                let _ = if interactive {
+                    write_frame(&shared, &[])
+                } else {
+                    write_due_line(&shared)
+                };
+            }
+        });
         Self {
-            enabled,
+            interactive,
             screen,
-            stop,
-            ticker,
+            stop: Some(stop),
+            ticker: Some(ticker),
         }
     }
 
@@ -210,11 +241,13 @@ impl StatusLine {
     pub fn begin_tests(&self, total: Option<usize>) {
         self.update(|screen| {
             screen.started = Some(Instant::now());
+            screen.last_line = None;
             screen.tests = Some(TestCount {
                 total,
                 ..TestCount::default()
             });
         });
+        self.write_plain_line();
     }
 
     /// Names the test target that runs now. `None` when it is not a counted one.
@@ -226,7 +259,8 @@ impl StatusLine {
         });
     }
 
-    /// Counts one finished test. The next `log` call draws the new numbers.
+    /// Counts one finished test. On a terminal the next `log` call or tick
+    /// draws the new numbers. Without one a line is written if it is due.
     pub fn finish_test(&self, failed: bool) {
         self.update(|screen| {
             if let Some(tests) = &mut screen.tests {
@@ -234,28 +268,36 @@ impl StatusLine {
                 tests.failed += usize::from(failed);
             }
         });
+        self.write_plain_line();
     }
 
-    /// Ends the test phase and erases the status line.
+    /// Ends the test phase. On a terminal it erases the status line.
     pub fn end_tests(&self) {
         self.update(|screen| screen.tests = None);
-        // Nothing to draw anymore; only erase.
-        let _ = write_frame(&self.screen, &[]);
+        if self.interactive {
+            // Nothing to draw anymore; only erase.
+            let _ = write_frame(&self.screen, &[]);
+        }
     }
 
     /// Writes output (whole lines) to stderr above the status line.
     pub fn log(&self, bytes: &[u8]) -> io::Result<()> {
-        if self.enabled {
+        if self.interactive {
             write_frame(&self.screen, bytes)
         } else {
             io::stderr().lock().write_all(bytes)
         }
     }
 
-    fn update(&self, change: impl FnOnce(&mut Screen)) {
-        if self.enabled {
-            change(&mut self.screen.lock().unwrap_or_else(PoisonError::into_inner));
+    fn write_plain_line(&self) {
+        if !self.interactive {
+            // A failed write is not worth stopping the command.
+            let _ = write_due_line(&self.screen);
         }
+    }
+
+    fn update(&self, change: impl FnOnce(&mut Screen)) {
+        change(&mut self.screen.lock().unwrap_or_else(PoisonError::into_inner));
     }
 }
 
@@ -266,7 +308,7 @@ impl Drop for StatusLine {
         if let Some(ticker) = self.ticker.take() {
             let _ = ticker.join();
         }
-        if self.enabled {
+        if self.interactive {
             self.end_tests();
         }
     }
@@ -277,6 +319,16 @@ fn write_frame(screen: &Mutex<Screen>, text: &[u8]) -> io::Result<()> {
     let elapsed = screen.elapsed();
     let frame = screen.frame(text, elapsed);
     io::stderr().lock().write_all(&frame)
+}
+
+/// Writes the plain progress line, if one is due, as a whole line to stderr.
+fn write_due_line(screen: &Mutex<Screen>) -> io::Result<()> {
+    let mut screen = screen.lock().unwrap_or_else(PoisonError::into_inner);
+    let elapsed = screen.elapsed();
+    match screen.due_line(elapsed) {
+        Some(line) => writeln!(io::stderr().lock(), "{line}"),
+        None => Ok(()),
+    }
 }
 
 #[cfg(test)]
@@ -402,5 +454,61 @@ mod tests {
         assert!(erased.ends_with(b"\r"));
         assert!(erased[1..erased.len() - 1].iter().all(|&b| b == b' '));
         assert_eq!(screen.drawn, 0);
+    }
+
+    fn line_screen(tests: TestCount) -> Screen {
+        let mut screen = Screen::new("[5/6]");
+        screen.tests = Some(tests);
+        screen
+    }
+
+    #[test]
+    fn plain_lines_start_once_then_wait_for_the_next_five_percent() {
+        let mut screen = line_screen(count(Some(100), 0, 0, ""));
+        assert_eq!(
+            screen.due_line(Duration::ZERO).as_deref(),
+            Some("[5/6] 시험 0/100 (0%) · 실패 0 · 00:00")
+        );
+        screen.tests = Some(count(Some(100), 4, 0, ""));
+        assert_eq!(screen.due_line(Duration::from_secs(1)), None);
+        screen.tests = Some(count(Some(100), 5, 0, ""));
+        assert_eq!(
+            screen.due_line(Duration::from_secs(2)).as_deref(),
+            Some("[5/6] 시험 5/100 (5%) · 실패 0 · 00:02")
+        );
+        screen.tests = Some(count(Some(100), 9, 0, ""));
+        assert_eq!(screen.due_line(Duration::from_secs(3)), None);
+    }
+
+    #[test]
+    fn plain_lines_repeat_after_thirty_quiet_seconds() {
+        let mut screen = line_screen(count(Some(100), 1, 0, ""));
+        assert!(screen.due_line(Duration::from_secs(2)).is_some());
+        assert_eq!(screen.due_line(Duration::from_secs(31)), None);
+        assert!(screen.due_line(Duration::from_secs(32)).is_some());
+        assert_eq!(screen.due_line(Duration::from_secs(33)), None);
+    }
+
+    #[test]
+    fn plain_lines_without_a_total_come_at_the_start_and_every_thirty_seconds() {
+        let mut screen = line_screen(count(None, 0, 0, ""));
+        assert_eq!(
+            screen.due_line(Duration::ZERO).as_deref(),
+            Some("[5/6] 시험 0 완료 · 실패 0 · 00:00")
+        );
+        screen.tests = Some(count(None, 500, 0, ""));
+        assert_eq!(screen.due_line(Duration::from_secs(29)), None);
+        assert_eq!(
+            screen.due_line(Duration::from_secs(30)).as_deref(),
+            Some("[5/6] 시험 500 완료 · 실패 0 · 00:30")
+        );
+    }
+
+    #[test]
+    fn plain_lines_stop_with_the_test_phase_and_accept_an_undercounted_total() {
+        let mut screen = line_screen(count(Some(10), 12, 0, ""));
+        assert!(screen.due_line(Duration::ZERO).is_some());
+        screen.tests = None;
+        assert_eq!(screen.due_line(Duration::from_secs(60)), None);
     }
 }
