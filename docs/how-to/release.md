@@ -6,8 +6,8 @@ Windows 11 x64와 Ubuntu 24.04 LTS x64용 배포 묶음을 만들고, 버전 태
 | --- | --- |
 | 대상 독자 | 릴리스 담당자 |
 | 검증 상태 | Verified — 두 OS Release 묶음의 해시·내용·버전은 4절의 수동 기록으로 확인했다. 로컬 묶음 생성과 CI의 현재 결과는 3.1·3.2절로 확인한다. 6절 롤백은 미실행이다. |
-| 검증 환경·버전 | Windows 11 Pro 10.0.26200 x64(PowerShell 7, Python 3), WSL2 Ubuntu 24.04.4 LTS x64(GNU coreutils `sha256sum`), Rust 1.99.1, GitHub Actions 호스팅 러너 `windows-2025`·`ubuntu-24.04` |
-| 최종 검증일 | 2026-11-21 |
+| 검증 환경·버전 | Windows 11 10.0.26300 x64(PowerShell 7.6.10, Python 3), WSL2 Ubuntu 24.04.4 LTS x64(GNU coreutils `sha256sum` 9.4), Rust 1.99.1, GitHub Actions 호스팅 러너 `windows-2025`·`ubuntu-24.04` |
+| 최종 검증일 | 2026-11-27 |
 | 관련 기준 문서 | [PRD 확정 기준](../requirements/PRD.md#확정-기준)의 "배포 산출물"·"버전 규칙" 행, [수동 운영 안내 3.1절](operate-relay.md#31-release-빌드와-묶음), [xtask 모듈 설계](../architectures/xtask.md), [개발 환경·검증 how-to](set-up-and-verify.md) |
 
 ## 1. 대상과 영향
@@ -114,7 +114,7 @@ Windows 11 x64와 Ubuntu 24.04 LTS x64용 배포 묶음을 만들고, 버전 태
    cargo run --quiet -- --version
    ```
 
-   기대 결과: `vnc-relay <버전>`. `Cargo.lock`에서 작업 공간 패키지 다섯 개(`vnc-relay`, `vnc-relay-domain`, `vnc-relay-application`, `vnc-relay-adapters`, `vnc-relay-tray`)의 버전이 바뀐다.
+   기대 결과: `vnc-relay <버전>`. `Cargo.lock`에서 `version.workspace = true`를 쓰는 작업 공간 패키지의 버전이 바뀐다. `xtask`는 자체 버전을 쓰므로 바뀌지 않는다.
 
 4. 배포 고지를 다시 만든다. `THIRD-PARTY-NOTICES.txt`는 `Cargo.lock` 전체를 담으므로 버전을 바꾸면 반드시 달라진다.
 
@@ -164,7 +164,9 @@ Windows 11 x64와 Ubuntu 24.04 LTS x64용 배포 묶음을 만들고, 버전 태
 
 | 대상·날짜 | 환경·방법 | 실제 결과 |
 | --- | --- | --- |
-| Release `v2026.11.10`, 커밋 `42d3f89`, 2026-11-21 | Windows 11 Pro 10.0.26200 x64(PowerShell 7, Git), WSL2 Ubuntu 24.04.4 LTS x64(GNU coreutils `sha256sum` 9.4). [Release](https://github.com/kayden-kim/vnc-relay/releases/tag/v2026.11.10)와 묶음 두 개·`.sha256` 두 개를 확인했다. 내려받은 묶음의 해시를 독립 계산하고, 풀어서 파일 구성·권한·`--version`을 확인했다. `docs/`는 `git archive v2026.11.10 docs`로 푼 태그 파일과 바이트 단위로 비교했다 | 통과. Linux SHA-256 `79579495926744d82df8386ccb9fb8709f4787c88d48457ed9cc3140c6dd6e10`, Windows `612e4d4e9c74629db08432bbf17cced4b86a6ec7237d41ec63876b86b44d4658`. 각 `.sha256`과 같고 WSL `sha256sum -c`는 `OK`였다. tar.gz 파일 160개는 `-rw-r--r--`, 실행파일 1개는 `-rwxr-xr-x`, 디렉터리 21개는 `drwxr-xr-x`, 소유자는 `0/0`이다. tar.gz의 최상위 디렉터리는 하나다. 두 묶음 모두 태그와 경로가 같은 `docs/` 파일 154개를 담았다. Linux 묶음의 `docs/`는 태그와 바이트까지 같다. Windows 묶음의 `docs/`에서 PNG 12개는 바이트까지 같고, 텍스트 파일 142개는 CR 바이트를 빼면 같다. 최상위 항목은 Linux 8종(`README.ko.md` 추가), Windows는 트레이 앱을 포함한 9종이다. 두 VNC Relay 실행파일은 `vnc-relay 2026.11.10`을 출력했다. 같은 Release로 바꾼 Windows 서비스의 기록은 [수동 운영 안내 4절](operate-relay.md#4-검증)에 있다 |
+| Release `v2026.11.11`, 커밋 `98f050c`, 2026-11-27 | [Release](https://github.com/kayden-kim/vnc-relay/releases/tag/v2026.11.11)에서 두 묶음과 `.sha256` 두 개를 받았다. SHA-256·파일 구성·Linux 권한·두 OS의 `--version`을 확인했다. `docs/` 파일은 태그의 `git archive` 결과와 대조했다. | 통과. Linux SHA-256 `dc5e9486e7a8c2e3a4f4113028caa795460cb5c4f2a1207dbf3686677bcb56b4`, Windows `cdc2c8fe95570368715e72dc2e1d37160cd1086abf3f2f6685ab74c6308eb05c`가 각 `.sha256`과 일치했다. Linux 묶음은 파일 162개(`0644`), 실행파일 1개(`0755`), 디렉터리 21개(`0755`), 소유자 `0/0`이다. 두 묶음의 `docs/` 파일 156개는 각 OS의 줄 끝 설정으로 만든 태그 파일과 바이트 단위로 일치했다. 두 실행파일은 `vnc-relay 2026.11.11`을 출력했다. |
+
+`98f050c`에 담긴 작업 트리에서 Windows와 WSL Ubuntu의 `cargo xtask gate`가 각각 57분 13초와 49분 16초에 통과했다. 두 실행 모두 [개발 환경·검증 안내](set-up-and-verify.md#3-절차)의 10분 중단 기준을 적용하지 않았다. [main CI](https://github.com/kayden-kim/vnc-relay/actions/runs/45848088229), [도움말 게시](https://github.com/kayden-kim/vnc-relay/actions/runs/45848088666), [태그 CI와 릴리스 게시](https://github.com/kayden-kim/vnc-relay/actions/runs/45894490243)도 통과했다.
 
 Windows에서는 PowerShell 7의 `Get-FileHash`나 `certutil -hashfile <파일> SHA256`으로 해시를 확인하기를 권장한다. Git Bash의 `sha256sum 0.8.0`은 CR 바이트가 든 해시 파일을 `-c`로 확인할 때 실제 해시가 같아도 `FAILED`로 보고할 수 있다. Ubuntu의 GNU coreutils `sha256sum`을 쓰거나 해시 값을 직접 비교한다.
 
