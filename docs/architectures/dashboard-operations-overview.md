@@ -197,6 +197,7 @@ CSRF 토큰은 메모리에만 둔다. 저장소(localStorage, sessionStorage)�
 
 - 응답의 `as_of`는 화면에 쓰지 않는다. "마지막 성공 갱신"은 클라이언트가 응답을 적용한 시각이다 (구현 판단).
 - 방향별 바이트는 두 줄이다. 각 줄은 `.direction-mark.direction-mark-1` 또는 `.direction-mark.direction-mark-2`, 흐린 방향 이름, 값 순서다. 표식은 `aria-hidden="true"`인 장식이다. 뷰어→대상은 `chart-1`, 대상→뷰어는 `chart-2`다(DESIGN 378·643행).
+- 활성 세션·최근 종료 표의 전송량 칸(`bytesCell`)은 숫자 열이 아니라 두 줄 묶음이다. 두 표는 `numericColumns`를 쓰지 않아 머리글과 값이 모두 왼쪽이다(사용자 결정 2026-11-26). 이전에는 `numericColumns: ['bytes']`가 머리글만 칸의 오른쪽 끝으로 보냈다. 표 폭(1440px 이상)에서는 `.cell-bytes`가 줄바꿈을 막고, 카드에서는 막지 않는다.
 - 활성 세션의 열 이름은 CPY-187이다. [상세] 링크는 `.button.button-outline`과 오른쪽 꺾쇠를 쓴다. 표 안 최소 높이는 데스크톱 `spacing.control-height-sm`, 모바일 `spacing.control-height-touch`다.
 - 역할·모드·전송 경로와 중립 종료 원인 배지는 아이콘이 없다. warning·destructive 종료 원인 배지는 상태 아이콘을 함께 쓴다(DESIGN 608·622~626·636행).
 
